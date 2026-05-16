@@ -1,0 +1,161 @@
+from datetime import datetime, date, timezone
+from flask import Blueprint, request, jsonify, send_file
+from flask_jwt_extended import get_jwt_identity
+
+from app.services import stats_service
+from app.utils.permissions import require_permission, require_auth, Section, Bit
+
+bp = Blueprint("stats", __name__, url_prefix="/api/stats")
+
+_DEFAULT_FROM = datetime(date.today().year, 1, 1, tzinfo=timezone.utc)
+_DEFAULT_TO = datetime(date.today().year, 12, 31, 23, 59, 59, tzinfo=timezone.utc)
+
+
+def _parse_period(args) -> tuple[datetime, datetime]:
+    try:
+        from_str = args.get("from")
+        to_str = args.get("to")
+        period_start = datetime.fromisoformat(from_str) if from_str else _DEFAULT_FROM
+        period_end = datetime.fromisoformat(to_str) if to_str else _DEFAULT_TO
+        if period_start.tzinfo is None:
+            period_start = period_start.replace(tzinfo=timezone.utc)
+        if period_end.tzinfo is None:
+            period_end = period_end.replace(tzinfo=timezone.utc)
+        return period_start, period_end
+    except ValueError:
+        raise ValueError("Неверный формат даты. Используйте YYYY-MM-DD")
+
+
+@bp.get("/common")
+@require_permission(Section.STATS, Bit.VIEW)
+def get_common():
+    """
+    Общая статистика.
+    ---
+    tags: [stats]
+    security: [BearerAuth: []]
+    parameters:
+      - {in: query, name: from, schema: {type: string, format: date}, description: Начало периода}
+      - {in: query, name: to, schema: {type: string, format: date}, description: Конец периода}
+    responses:
+      200:
+        description: Общая статистика
+    """
+    try:
+        period_start, period_end = _parse_period(request.args)
+    except ValueError as e:
+        return jsonify({"error": "VALIDATION_ERROR", "message": str(e)}), 400
+
+    data = stats_service.get_common(period_start, period_end)
+    return jsonify(data), 200
+
+
+@bp.get("/extended")
+@require_permission(Section.STATS, Bit.VIEW)
+def get_extended():
+    """
+    Расширенная статистика.
+    ---
+    tags: [stats]
+    security: [BearerAuth: []]
+    parameters:
+      - {in: query, name: from, schema: {type: string, format: date}}
+      - {in: query, name: to, schema: {type: string, format: date}}
+    responses:
+      200:
+        description: Расширенная статистика
+    """
+    try:
+        period_start, period_end = _parse_period(request.args)
+    except ValueError as e:
+        return jsonify({"error": "VALIDATION_ERROR", "message": str(e)}), 400
+
+    data = stats_service.get_extended(period_start, period_end)
+    return jsonify(data), 200
+
+
+@bp.get("/common/export")
+@require_permission(Section.STATS, Bit.EXPORT_COMMON)
+def export_common():
+    """
+    Выгрузить общую статистику в XLSX.
+    ---
+    tags: [stats]
+    security: [BearerAuth: []]
+    parameters:
+      - {in: query, name: from, schema: {type: string, format: date}}
+      - {in: query, name: to, schema: {type: string, format: date}}
+    responses:
+      200:
+        description: XLSX-файл
+        content:
+          application/vnd.openxmlformats-officedocument.spreadsheetml.sheet: {}
+    """
+    try:
+        period_start, period_end = _parse_period(request.args)
+    except ValueError as e:
+        return jsonify({"error": "VALIDATION_ERROR", "message": str(e)}), 400
+
+    buf = stats_service.export_common_xlsx(period_start, period_end)
+    return send_file(
+        buf,
+        mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        as_attachment=True,
+        download_name=f"stats_common_{period_start.date()}_{period_end.date()}.xlsx",
+    )
+
+
+@bp.get("/extended/export")
+@require_permission(Section.STATS, Bit.EXPORT_USERS)
+def export_extended():
+    """
+    Выгрузить расширенную статистику в XLSX.
+    ---
+    tags: [stats]
+    security: [BearerAuth: []]
+    parameters:
+      - {in: query, name: from, schema: {type: string, format: date}}
+      - {in: query, name: to, schema: {type: string, format: date}}
+    responses:
+      200:
+        description: XLSX-файл
+        content:
+          application/vnd.openxmlformats-officedocument.spreadsheetml.sheet: {}
+    """
+    try:
+        period_start, period_end = _parse_period(request.args)
+    except ValueError as e:
+        return jsonify({"error": "VALIDATION_ERROR", "message": str(e)}), 400
+
+    buf = stats_service.export_extended_xlsx(period_start, period_end)
+    return send_file(
+        buf,
+        mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        as_attachment=True,
+        download_name=f"stats_extended_{period_start.date()}_{period_end.date()}.xlsx",
+    )
+
+
+@bp.get("/profile")
+@require_auth
+def get_profile():
+    """
+    Личная статистика текущего пользователя.
+    ---
+    tags: [stats]
+    security: [BearerAuth: []]
+    parameters:
+      - {in: query, name: from, schema: {type: string, format: date}}
+      - {in: query, name: to, schema: {type: string, format: date}}
+    responses:
+      200:
+        description: Личная статистика
+    """
+    try:
+        period_start, period_end = _parse_period(request.args)
+    except ValueError as e:
+        return jsonify({"error": "VALIDATION_ERROR", "message": str(e)}), 400
+
+    user_id = get_jwt_identity()
+    data = stats_service.get_profile(user_id, period_start, period_end)
+    return jsonify(data), 200

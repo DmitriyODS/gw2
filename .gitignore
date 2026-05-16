@@ -1,0 +1,45 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+*.egg
+*.egg-info/
+dist/
+build/
+.eggs/
+.venv/
+venv/
+env/
+
+# Env
+.env
+*.env.local
+
+# Flask
+instance/
+.flask_session/
+
+# Uploads
+back/uploads/
+
+# Node
+front/node_modules/
+front/dist/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Migrations generated files (keep versions/)
+# back/migrations/
+
+# Logs
+*.log
