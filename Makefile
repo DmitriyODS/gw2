@@ -58,22 +58,24 @@ dev-stop:
 # ── Деплой ───────────────────────────────────────────────────────
 .PHONY: deploy logs status restart shell
 
+COMPOSE_PROD := docker compose -f docker-compose.prod.yml
+
 deploy:
 	@printf "\033[1m▶ Пушу в GitHub...\033[0m\n"
 	git push
 	@printf "\033[1m▶ Деплою на $(SERVER_HOST)...\033[0m\n"
-	$(SSH) "cd $(SERVER_DIR) && git pull && cd deploy && docker compose up -d --build"
+	$(SSH) "cd $(SERVER_DIR) && git pull && cd deploy && $(COMPOSE_PROD) up -d --build"
 	@printf "\033[32m✓ Задеплоено на $(SERVER_HOST)\033[0m\n"
 
 logs:
-	$(SSH) "cd $(SERVER_DIR)/deploy && docker compose logs -f --tail=200 app"
+	$(SSH) "cd $(SERVER_DIR)/deploy && $(COMPOSE_PROD) logs -f --tail=200 app"
 
 status:
-	$(SSH) "cd $(SERVER_DIR)/deploy && docker compose ps"
+	$(SSH) "cd $(SERVER_DIR)/deploy && $(COMPOSE_PROD) ps"
 
 restart:
-	$(SSH) "cd $(SERVER_DIR)/deploy && docker compose restart app"
+	$(SSH) "cd $(SERVER_DIR)/deploy && $(COMPOSE_PROD) restart app"
 	@printf "\033[32m✓ app перезапущен\033[0m\n"
 
 shell:
-	$(SSH) "cd $(SERVER_DIR)/deploy && docker compose exec app bash"
+	$(SSH) "cd $(SERVER_DIR)/deploy && $(COMPOSE_PROD) exec app bash"

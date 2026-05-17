@@ -22,7 +22,7 @@ def _set_refresh_cookie(response, refresh_token: str):
         max_age=COOKIE_MAX_AGE,
         httponly=True,
         samesite="Strict",
-        secure=False,  # True в production за nginx
+        secure=True,
     )
 
 
