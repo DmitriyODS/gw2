@@ -321,7 +321,7 @@ function selectPeriod(value) {
   /* Боковая панель прячется по умолчанию */
   .task-filters {
     position: fixed;
-    bottom: 60px; /* высота bottom nav */
+    bottom: calc(60px + env(safe-area-inset-bottom, 0px));
     left: 0;
     right: 0;
     width: 100%;
@@ -332,14 +332,24 @@ function selectPeriod(value) {
     border-top: 1px solid var(--gw-border);
     border-radius: 20px 20px 0 0;
     z-index: 300;
-    transform: translateY(105%);
-    transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    transform: translateY(110%);
+    visibility: hidden;
+    transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1),
+                visibility 0s linear 0.3s;
     padding-bottom: 8px;
+  }
+
+  /* Сортировки на мобильном — в отдельной шторке */
+  .filter-section:first-child {
+    display: none;
   }
 
   /* Анимация появления */
   .task-filters.mobile-sheet--open {
     transform: translateY(0);
+    visibility: visible;
+    transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1),
+                visibility 0s linear 0s;
   }
 
   /* На мобильном кнопка закрытия видна */

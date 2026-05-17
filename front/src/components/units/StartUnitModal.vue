@@ -14,7 +14,7 @@
           v-model="form.name"
           placeholder="Введите название юнита"
           class="w-full"
-          :invalid="errors.name"
+          :invalid="!!errors.name"
         />
         <span v-if="errors.name" class="field-error">{{ errors.name }}</span>
       </div>
@@ -28,7 +28,7 @@
           option-value="id"
           placeholder="Выберите тип"
           class="w-full"
-          :invalid="errors.unit_type_id"
+          :invalid="!!errors.unit_type_id"
         />
         <span v-if="errors.unit_type_id" class="field-error">{{ errors.unit_type_id }}</span>
       </div>

@@ -86,6 +86,7 @@ function formatFullDate(d) {
   border-radius: 12px;
   background: var(--color-surface);
   border: 1px solid var(--gw-border);
+  box-shadow: var(--shadow-sm);
   overflow: hidden;
   margin-bottom: 8px;
 }

@@ -660,8 +660,8 @@ function onUnitStarted() {
   min-width: 0;
   display: flex;
   flex-direction: column;
-  background: var(--color-primary-container);
-  padding: 20px 20px 20px 20px;
+  background: var(--color-bg);
+  padding: 20px;
   gap: 14px;
 }
 
@@ -675,7 +675,7 @@ function onUnitStarted() {
 .units-title {
   font-size: 20px;
   font-weight: 700;
-  color: var(--gw-primary);
+  color: var(--gw-text);
   margin: 0;
 }
 
@@ -689,8 +689,8 @@ function onUnitStarted() {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  background: var(--color-tertiary);
-  color: var(--color-on-tertiary);
+  background: var(--gw-primary);
+  color: var(--color-on-primary);
   border: none;
   padding: 8px 16px;
   font-size: 13px;
@@ -701,7 +701,7 @@ function onUnitStarted() {
 }
 
 .btn-start-unit:hover {
-  background: var(--color-tertiary-hover);
+  background: var(--gw-primary-hover);
 }
 
 .btn-start-unit .material-symbols-outlined {
@@ -712,19 +712,20 @@ function onUnitStarted() {
   width: 40px;
   height: 40px;
   border-radius: 50%;
-  border: none;
-  background: var(--color-primary-container);
+  border: 1px solid var(--gw-border);
+  background: var(--color-surface);
   cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
-  color: var(--color-primary);
-  transition: background 0.12s;
+  color: var(--gw-text-secondary);
+  transition: background 0.12s, color 0.12s;
   flex-shrink: 0;
 }
 
 .btn-close-round:hover {
-  background: color-mix(in oklch, var(--color-primary-container) 80%, var(--color-primary));
+  background: var(--gw-primary-light);
+  color: var(--gw-primary);
 }
 
 .btn-close-round .material-symbols-outlined {

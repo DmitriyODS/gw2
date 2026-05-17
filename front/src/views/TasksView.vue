@@ -2,10 +2,11 @@
   <div class="tasks-view">
     <header class="tasks-header">
       <div class="tasks-header-top">
+        <!-- Кнопка «Добавить» — только на десктопе -->
         <button
           v-if="canCreateTask"
           data-tutorial="task-add-btn"
-          class="btn-primary"
+          class="btn-primary btn-add-desktop"
           @click="showCreateTask = true"
         >
           <span class="material-symbols-outlined">add</span>
@@ -22,8 +23,11 @@
           />
         </div>
 
-        <!-- Кнопка фильтров — только на мобильном -->
-        <button class="btn-filters-mobile" @click="showMobileFilters = true">
+        <!-- Кнопки только на мобильном -->
+        <button class="btn-mobile-icon" @click="showSortSheet = true" title="Сортировка">
+          <span class="material-symbols-outlined">sort</span>
+        </button>
+        <button class="btn-mobile-icon" @click="showMobileFilters = true" title="Фильтры">
           <span class="material-symbols-outlined">tune</span>
         </button>
       </div>
@@ -45,7 +49,7 @@
     <div class="tasks-body">
       <TaskFilters :mobile-visible="showMobileFilters" @close="showMobileFilters = false" />
 
-      <main class="cards-area">
+      <main ref="cardsAreaRef" class="cards-area" @scroll="onCardsScroll">
         <div v-if="tasksStore.loading" class="loading-state">
           <ProgressSpinner />
         </div>
@@ -92,6 +96,22 @@
       </main>
     </div>
 
+    <!-- FAB создания задачи — только на мобильном -->
+    <Teleport to="body">
+      <button
+        v-if="canCreateTask"
+        class="fab"
+        :class="{ 'fab--hidden': !fabVisible }"
+        @click="showCreateTask = true"
+        aria-label="Добавить задачу"
+      >
+        <span class="material-symbols-outlined">add</span>
+      </button>
+    </Teleport>
+
+    <!-- Шторка сортировки -->
+    <SortSheet :visible="showSortSheet" @close="showSortSheet = false" />
+
     <!-- Модалка просмотра задачи -->
     <TaskModal
       v-if="tasksStore.activeTask"
@@ -120,6 +140,7 @@ import TaskCard from '@/components/tasks/TaskCard.vue'
 import TaskFilters from '@/components/tasks/TaskFilters.vue'
 import TaskModal from '@/components/tasks/TaskModal.vue'
 import TaskForm from '@/components/tasks/TaskForm.vue'
+import SortSheet from '@/components/tasks/SortSheet.vue'
 import ProgressSpinner from 'primevue/progressspinner'
 
 const tasksStore = useTasksStore()
@@ -130,6 +151,19 @@ const { isAtLeast } = usePermission()
 const showCreateTask = ref(false)
 const searchQuery = ref('')
 const showMobileFilters = ref(false)
+const showSortSheet = ref(false)
+
+const cardsAreaRef = ref(null)
+const fabVisible = ref(true)
+let lastScrollTop = 0
+
+function onCardsScroll() {
+  const el = cardsAreaRef.value
+  if (!el) return
+  const st = el.scrollTop
+  fabVisible.value = st < lastScrollTop || st < 60
+  lastScrollTop = st
+}
 
 const canCreateTask = computed(() => isAtLeast(ROLES.EMPLOYEE))
 
@@ -278,8 +312,8 @@ onMounted(async () => {
   color: var(--gw-text-secondary);
 }
 
-/* Кнопка фильтров — скрыта на десктопе */
-.btn-filters-mobile {
+/* Мобильные иконки-кнопки — скрыты на десктопе */
+.btn-mobile-icon {
   display: none;
 }
 
@@ -422,7 +456,7 @@ onMounted(async () => {
 
 @media (max-width: 768px) {
   .cards-area {
-    padding-bottom: calc(60px + 20px + env(safe-area-inset-bottom, 0px));
+    padding-bottom: calc(60px + 80px + env(safe-area-inset-bottom, 0px));
   }
 
   .tasks-header {
@@ -432,8 +466,13 @@ onMounted(async () => {
     padding: 10px 12px;
   }
 
-  /* Кнопка фильтров — видна на мобильном */
-  .btn-filters-mobile {
+  /* Десктопная кнопка «Добавить» — скрыта на мобильном (есть FAB) */
+  .btn-add-desktop {
+    display: none;
+  }
+
+  /* Мобильные иконки — видны */
+  .btn-mobile-icon {
     display: flex;
     align-items: center;
     justify-content: center;
@@ -448,24 +487,13 @@ onMounted(async () => {
     transition: background 0.15s, color 0.15s;
   }
 
-  .btn-filters-mobile:active {
+  .btn-mobile-icon:active {
     background: var(--gw-primary-light);
     color: var(--gw-primary);
   }
 
-  .btn-filters-mobile .material-symbols-outlined {
+  .btn-mobile-icon .material-symbols-outlined {
     font-size: 20px;
-  }
-
-  /* Скрываем текст «Добавить», оставляем только иконку */
-  .btn-primary .btn-label {
-    display: none;
-  }
-
-  .btn-primary {
-    padding: 9px;
-    min-width: 40px;
-    justify-content: center;
   }
 
   .search-wrapper {
@@ -475,6 +503,49 @@ onMounted(async () => {
   /* На маленьких экранах карточки тоже уменьшаем */
   .cards-grid {
     grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  }
+
+  /* FAB */
+  .fab {
+    position: fixed;
+    right: 16px;
+    bottom: calc(60px + 16px + env(safe-area-inset-bottom, 0px));
+    width: 56px;
+    height: 56px;
+    border-radius: 50%;
+    border: none;
+    background: var(--gw-primary);
+    color: var(--color-on-primary);
+    box-shadow: 0 4px 14px color-mix(in oklch, var(--gw-primary) 50%, transparent);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 150;
+    transition: transform 0.28s cubic-bezier(0.4, 0, 0.2, 1),
+                opacity 0.28s cubic-bezier(0.4, 0, 0.2, 1),
+                background 0.15s;
+  }
+
+  .fab:active {
+    background: var(--gw-primary-hover);
+  }
+
+  .fab .material-symbols-outlined {
+    font-size: 24px;
+  }
+
+  .fab--hidden {
+    transform: translateY(calc(100% + 24px));
+    opacity: 0;
+    pointer-events: none;
+  }
+}
+
+/* На десктопе FAB не нужен */
+@media (min-width: 769px) {
+  .fab {
+    display: none;
   }
 }
 
