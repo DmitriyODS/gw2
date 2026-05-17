@@ -3,55 +3,68 @@
     <div class="cl-overlay" @click.self="$emit('close')">
       <div class="cl-modal">
 
-        <button class="cl-close" @click="$emit('close')" title="Закрыть">
-          <span class="material-symbols-outlined">close</span>
-        </button>
-
-        <div v-if="loading" class="cl-loading">
-          <span class="material-symbols-outlined spinning">progress_activity</span>
+        <!-- Хедер (не скроллится) -->
+        <div class="cl-header">
+          <span class="material-symbols-outlined cl-header-icon">new_releases</span>
+          <span class="cl-header-title">Что нового</span>
+          <button class="cl-close" @click="$emit('close')" title="Закрыть">
+            <span class="material-symbols-outlined">close</span>
+          </button>
         </div>
 
-        <div v-else-if="error" class="cl-error">
-          <span class="material-symbols-outlined">error_outline</span>
-          Не удалось загрузить список изменений
-        </div>
+        <!-- Скроллируемое тело -->
+        <div class="cl-scroll">
+          <div v-if="loading" class="cl-loading">
+            <span class="material-symbols-outlined spinning">progress_activity</span>
+          </div>
 
-        <template v-else>
-          <div v-for="ver in versions" :key="ver.version">
+          <div v-else-if="error" class="cl-error">
+            <span class="material-symbols-outlined">error_outline</span>
+            Не удалось загрузить изменения
+          </div>
 
-            <!-- Hero-шапка -->
-            <div class="cl-hero">
-              <div class="cl-hero-meta">
+          <template v-else>
+            <div v-for="ver in versions" :key="ver.version" class="cl-version">
+
+              <!-- Заголовок версии -->
+              <div class="cl-version-top">
                 <span class="cl-badge">v{{ ver.version }}</span>
                 <span class="cl-date">{{ formatDate(ver.date) }}</span>
               </div>
               <h2 class="cl-title">{{ ver.title }}</h2>
               <p v-if="ver.description" class="cl-desc">{{ ver.description }}</p>
-            </div>
 
-            <!-- Список изменений по группам -->
-            <div class="cl-body">
-              <div
-                v-for="group in groupChanges(ver.changes)"
-                :key="group.type"
-                class="cl-group"
-                :class="`cl-group--${group.type}`"
-              >
-                <div class="cl-group-head">
-                  <span class="material-symbols-outlined cl-group-icon">{{ groupMeta[group.type]?.icon }}</span>
-                  <span class="cl-group-label">{{ groupMeta[group.type]?.label }}</span>
-                  <span class="cl-group-count">{{ group.items.length }}</span>
+              <!-- Группы -->
+              <div class="cl-groups">
+                <div
+                  v-for="group in groupChanges(ver.changes)"
+                  :key="group.type"
+                  class="cl-group"
+                >
+                  <!-- Цветной чип-заголовок группы -->
+                  <div class="cl-chip" :class="`cl-chip--${group.type}`">
+                    <span class="material-symbols-outlined cl-chip-icon">{{ groupMeta[group.type]?.icon }}</span>
+                    <span class="cl-chip-label">{{ groupMeta[group.type]?.label }}</span>
+                    <span class="cl-chip-count">{{ group.items.length }}</span>
+                  </div>
+
+                  <!-- Пункты -->
+                  <ul class="cl-items">
+                    <li
+                      v-for="(change, i) in group.items"
+                      :key="i"
+                      class="cl-item"
+                      :class="`cl-item--${group.type}`"
+                    >
+                      {{ change.text }}
+                    </li>
+                  </ul>
                 </div>
-                <ul class="cl-items">
-                  <li v-for="(change, i) in group.items" :key="i" class="cl-item">
-                    {{ change.text }}
-                  </li>
-                </ul>
               </div>
-            </div>
 
-          </div>
-        </template>
+            </div>
+          </template>
+        </div>
 
       </div>
     </div>
@@ -64,16 +77,16 @@ import { changelogApi } from '@/api/changelog.js'
 
 defineEmits(['close'])
 
-const loading = ref(true)
-const error   = ref(false)
+const loading  = ref(true)
+const error    = ref(false)
 const versions = ref([])
 
 const groupMeta = {
-  new:      { icon: 'add_circle',              label: 'Добавили'  },
-  improved: { icon: 'upgrade',                 label: 'Улучшили'  },
-  fixed:    { icon: 'bug_report',              label: 'Исправили' },
-  changed:  { icon: 'published_with_changes',  label: 'Изменили'  },
-  removed:  { icon: 'remove_circle',           label: 'Убрали'    },
+  new:      { icon: 'add_circle',             label: 'Добавили'  },
+  improved: { icon: 'upgrade',                label: 'Улучшили'  },
+  fixed:    { icon: 'bug_report',             label: 'Исправили' },
+  changed:  { icon: 'published_with_changes', label: 'Изменили'  },
+  removed:  { icon: 'remove_circle',          label: 'Убрали'    },
 }
 
 const GROUP_ORDER = ['new', 'improved', 'fixed', 'changed', 'removed']
@@ -104,12 +117,12 @@ onMounted(async () => {
 </script>
 
 <style scoped>
-/* ── Оверлей ─────────────────────────────────────────────── */
+/* ── Оверлей ──────────────────────────────────────────────────── */
 .cl-overlay {
   position: fixed;
   inset: 0;
   background: var(--color-scrim);
-  backdrop-filter: blur(6px);
+  backdrop-filter: blur(4px);
   z-index: 9999;
   display: flex;
   align-items: center;
@@ -117,219 +130,209 @@ onMounted(async () => {
   padding: 16px;
 }
 
-/* ── Модалка ─────────────────────────────────────────────── */
+/* ── Модалка ──────────────────────────────────────────────────── */
 .cl-modal {
   background: var(--color-surface);
   border-radius: var(--radius-xl);
   box-shadow: var(--shadow-xl);
-  width: 600px;
+  width: 560px;
   max-width: 100%;
-  max-height: 88vh;
+  max-height: 86vh;
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  position: relative;
 }
 
-/* ── Кнопка закрытия ─────────────────────────────────────── */
+/* ── Хедер (не скроллится) ────────────────────────────────────── */
+.cl-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 18px 20px 16px;
+  border-bottom: 1px solid var(--color-outline-dim);
+  flex-shrink: 0;
+}
+
+.cl-header-icon {
+  font-size: 22px;
+  color: var(--color-primary);
+}
+
+.cl-header-title {
+  flex: 1;
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--color-text);
+}
+
 .cl-close {
-  position: absolute;
-  top: 14px;
-  right: 14px;
-  z-index: 2;
   width: 36px;
   height: 36px;
   border: none;
-  background: color-mix(in oklch, var(--color-primary-container) 60%, transparent);
-  color: var(--color-on-primary-container);
+  background: var(--color-surface-high);
+  color: var(--color-text-dim);
   cursor: pointer;
   border-radius: var(--radius-full);
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: background 0.15s;
+  transition: background 0.15s, color 0.15s;
+  flex-shrink: 0;
 }
 .cl-close:hover {
   background: var(--color-primary-container);
+  color: var(--color-on-primary-container);
 }
 .cl-close .material-symbols-outlined { font-size: 20px; }
 
-/* ── Hero-шапка ──────────────────────────────────────────── */
-.cl-hero {
-  background: var(--color-primary-container);
-  padding: 32px 28px 26px;
-  flex-shrink: 0;
+/* ── Скролл-область ───────────────────────────────────────────── */
+.cl-scroll {
+  flex: 1;
+  min-height: 0;          /* ← критично для скролла внутри flex */
+  overflow-y: auto;
+  padding: 24px 24px 32px;
 }
 
-.cl-hero-meta {
+/* ── Версия ───────────────────────────────────────────────────── */
+.cl-version-top {
   display: flex;
   align-items: center;
   gap: 10px;
-  margin-bottom: 14px;
+  margin-bottom: 10px;
 }
 
 .cl-badge {
   background: var(--color-primary);
   color: var(--color-on-primary);
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 800;
-  padding: 4px 14px;
+  padding: 3px 12px;
   border-radius: var(--radius-full);
-  letter-spacing: 0.6px;
+  letter-spacing: 0.5px;
   text-transform: uppercase;
 }
 
 .cl-date {
   font-size: 13px;
-  color: var(--color-on-primary-container);
-  opacity: 0.65;
+  color: var(--color-text-dim);
 }
 
 .cl-title {
-  font-size: 22px;
+  font-size: 26px;
   font-weight: 800;
-  color: var(--color-on-primary-container);
-  line-height: 1.3;
+  color: var(--color-text);
+  line-height: 1.25;
+  letter-spacing: -0.3px;
   margin-bottom: 12px;
 }
 
 .cl-desc {
   font-size: 14px;
-  color: var(--color-on-primary-container);
-  opacity: 0.8;
-  line-height: 1.65;
+  color: var(--color-text-dim);
+  line-height: 1.7;
+  padding-bottom: 4px;
 }
 
-/* ── Тело с группами ─────────────────────────────────────── */
-.cl-body {
-  overflow-y: auto;
-  padding: 20px 20px 24px;
+/* ── Группы ───────────────────────────────────────────────────── */
+.cl-groups {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 20px;
+  margin-top: 24px;
 }
 
-/* ── Группа изменений ────────────────────────────────────── */
 .cl-group {
-  border-radius: var(--radius-md);
-  overflow: hidden;
-  box-shadow: var(--shadow-sm);
-}
-
-.cl-group-head {
   display: flex;
-  align-items: center;
+  flex-direction: column;
   gap: 8px;
-  padding: 10px 14px;
 }
 
-.cl-group-icon {
-  font-size: 18px;
-  flex-shrink: 0;
+/* ── Чип-заголовок ────────────────────────────────────────────── */
+.cl-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 12px 5px 8px;
+  border-radius: var(--radius-full);
+  font-size: 12px;
+  font-weight: 700;
+  align-self: flex-start;
 }
-
-.cl-group-label {
-  flex: 1;
+.cl-chip-icon { font-size: 16px; }
+.cl-chip-label { letter-spacing: 0.3px; }
+.cl-chip-count {
   font-size: 11px;
   font-weight: 800;
-  letter-spacing: 0.8px;
-  text-transform: uppercase;
-}
-
-.cl-group-count {
-  font-size: 11px;
-  font-weight: 700;
-  min-width: 22px;
-  height: 22px;
-  padding: 0 7px;
+  background: color-mix(in oklch, currentColor 20%, transparent);
+  min-width: 20px;
+  height: 20px;
+  padding: 0 5px;
   border-radius: var(--radius-full);
-  background: color-mix(in oklch, currentColor 18%, transparent);
   display: flex;
   align-items: center;
   justify-content: center;
+  margin-left: 2px;
 }
 
-/* Цвета групп */
-.cl-group--new .cl-group-head {
-  background: var(--color-success-container);
-  color: var(--color-on-success-container);
-}
-.cl-group--new .cl-items {
-  background: color-mix(in oklch, var(--color-success-container) 35%, var(--color-surface));
-  border-left: 3px solid var(--color-success);
-}
+.cl-chip--new      { background: var(--color-success-container);   color: var(--color-on-success-container);   }
+.cl-chip--improved { background: var(--color-tertiary-container);  color: var(--color-on-tertiary-container);  }
+.cl-chip--fixed    { background: var(--color-warning-container);   color: var(--color-on-warning-container);   }
+.cl-chip--changed  { background: var(--color-secondary-container); color: var(--color-on-secondary-container); }
+.cl-chip--removed  { background: var(--color-error-container);     color: var(--color-on-error-container);     }
 
-.cl-group--improved .cl-group-head {
-  background: var(--color-tertiary-container);
-  color: var(--color-on-tertiary-container);
-}
-.cl-group--improved .cl-items {
-  background: color-mix(in oklch, var(--color-tertiary-container) 35%, var(--color-surface));
-  border-left: 3px solid var(--color-tertiary);
-}
-
-.cl-group--fixed .cl-group-head {
-  background: var(--color-warning-container);
-  color: var(--color-on-warning-container);
-}
-.cl-group--fixed .cl-items {
-  background: color-mix(in oklch, var(--color-warning-container) 35%, var(--color-surface));
-  border-left: 3px solid var(--color-warning);
-}
-
-.cl-group--changed .cl-group-head {
-  background: var(--color-secondary-container);
-  color: var(--color-on-secondary-container);
-}
-.cl-group--changed .cl-items {
-  background: color-mix(in oklch, var(--color-secondary-container) 35%, var(--color-surface));
-  border-left: 3px solid var(--color-secondary);
-}
-
-.cl-group--removed .cl-group-head {
-  background: var(--color-error-container);
-  color: var(--color-on-error-container);
-}
-.cl-group--removed .cl-items {
-  background: color-mix(in oklch, var(--color-error-container) 35%, var(--color-surface));
-  border-left: 3px solid var(--color-error);
-}
-
-/* ── Пункты изменений ────────────────────────────────────── */
+/* ── Пункты изменений ─────────────────────────────────────────── */
 .cl-items {
   list-style: none;
-  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  background: var(--color-outline-dim);   /* gap между строками через bg контейнера */
 }
 
 .cl-item {
-  padding: 10px 16px;
   font-size: 14px;
   color: var(--color-text);
   line-height: 1.6;
-  border-top: 1px solid var(--color-outline-dim);
-}
-.cl-item:first-child {
-  border-top: none;
+  padding: 10px 14px 10px 16px;
+  background: var(--color-surface-low);
+  position: relative;
 }
 
-/* ── Состояния загрузки / ошибки ─────────────────────────── */
+/* Цветная левая полоска через псевдоэлемент */
+.cl-item::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 3px;
+  border-radius: 0 2px 2px 0;
+}
+
+.cl-item--new::before      { background: var(--color-success);   }
+.cl-item--improved::before { background: var(--color-tertiary);  }
+.cl-item--fixed::before    { background: var(--color-warning);   }
+.cl-item--changed::before  { background: var(--color-secondary); }
+.cl-item--removed::before  { background: var(--color-error);     }
+
+/* ── Загрузка / ошибка ────────────────────────────────────────── */
 .cl-loading,
 .cl-error {
   display: flex;
   align-items: center;
   justify-content: center;
   gap: 8px;
-  padding: 60px 24px;
+  padding: 60px 0;
   color: var(--color-text-dim);
   font-size: 14px;
 }
 
-.spinning {
-  animation: spin 1s linear infinite;
-}
+.spinning { animation: spin 1s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
 
-/* ── Мобильный: bottom sheet ─────────────────────────────── */
+/* ── Мобильный: bottom sheet ──────────────────────────────────── */
 @media (max-width: 600px) {
   .cl-overlay {
     padding: 0;
@@ -338,20 +341,16 @@ onMounted(async () => {
 
   .cl-modal {
     width: 100%;
-    max-height: 92vh;
+    max-height: 90vh;
     border-radius: var(--radius-xl) var(--radius-xl) 0 0;
   }
 
-  .cl-hero {
-    padding: 24px 20px 20px;
-  }
-
   .cl-title {
-    font-size: 18px;
+    font-size: 20px;
   }
 
-  .cl-body {
-    padding: 16px 16px 20px;
+  .cl-scroll {
+    padding: 20px 16px 28px;
   }
 }
 </style>
