@@ -113,10 +113,10 @@ def upgrade():
         "ON CONFLICT (name) DO NOTHING"
     )
     # Seed: первый пользователь admin/admin с ролью Суперадминистратор (id=4)
-    # is_default_pass=FALSE — смена пароля при первом входе не требуется
+    # is_default_pass=TRUE — при первом входе обязательная смена логина и пароля
     op.execute(
         "INSERT INTO users (fio, login, hash_password, role_id, is_default_pass, is_hidden, created_at) "
-        "VALUES ('Администратор', 'admin', crypt('admin', gen_salt('bf')), 4, FALSE, FALSE, NOW()) "
+        "VALUES ('Администратор', 'admin', crypt('admin', gen_salt('bf')), 4, TRUE, FALSE, NOW()) "
         "ON CONFLICT (login) DO NOTHING"
     )
     # ### end Alembic commands ###
