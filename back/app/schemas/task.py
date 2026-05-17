@@ -32,13 +32,13 @@ class TaskCreateSchema(Schema):
     name = fields.Str(required=True, validate=validate.Length(min=1, max=500))
     link_yougile = fields.Str(validate=validate.Length(max=2000), load_default=None, allow_none=True)
     department_id = fields.Int(required=True)
-    received_at = fields.DateTime(load_default=None, allow_none=True)
-    deadline = fields.DateTime(load_default=None, allow_none=True)
+    received_at = fields.Date(load_default=None, allow_none=True)
+    deadline = fields.Date(load_default=None, allow_none=True)
 
 
 class TaskUpdateSchema(Schema):
     name = fields.Str(validate=validate.Length(min=1, max=500))
     link_yougile = fields.Str(validate=validate.Length(max=2000), allow_none=True)
     department_id = fields.Int()
-    received_at = fields.DateTime(allow_none=True)
-    deadline = fields.DateTime(allow_none=True)
+    received_at = fields.Date(allow_none=True)
+    deadline = fields.Date(allow_none=True)

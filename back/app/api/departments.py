@@ -4,7 +4,7 @@ from marshmallow import ValidationError
 from app.schemas.department import DepartmentSchema, DepartmentCreateSchema, DepartmentUpdateSchema
 from app.repositories import department_repo
 from app.extensions import db
-from app.utils.permissions import require_permission, Section, Bit
+from app.utils.permissions import require_role, EMPLOYEE, MANAGER
 
 bp = Blueprint("departments", __name__, url_prefix="/api/departments")
 
@@ -15,7 +15,7 @@ _update_schema = DepartmentUpdateSchema()
 
 
 @bp.get("")
-@require_permission(Section.DEPARTMENTS, Bit.VIEW)
+@require_role(EMPLOYEE)
 def list_departments():
     """
     Список отделов.
@@ -30,7 +30,7 @@ def list_departments():
 
 
 @bp.post("")
-@require_permission(Section.DEPARTMENTS, Bit.CREATE)
+@require_role(MANAGER)
 def create_department():
     """
     Создать отдел.
@@ -66,7 +66,7 @@ def create_department():
 
 
 @bp.patch("/<int:dept_id>")
-@require_permission(Section.DEPARTMENTS, Bit.EDIT)
+@require_role(MANAGER)
 def update_department(dept_id: int):
     """
     Изменить отдел.
@@ -110,7 +110,7 @@ def update_department(dept_id: int):
 
 
 @bp.delete("/<int:dept_id>")
-@require_permission(Section.DEPARTMENTS, Bit.DELETE)
+@require_role(MANAGER)
 def delete_department(dept_id: int):
     """
     Удалить отдел.

@@ -18,4 +18,6 @@ ENV PYTHONUNBUFFERED=1
 
 EXPOSE 5000
 
-CMD ["python", "wsgi.py"]
+RUN chmod +x entrypoint.sh
+
+CMD ["./entrypoint.sh"]

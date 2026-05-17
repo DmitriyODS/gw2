@@ -4,7 +4,7 @@ from marshmallow import Schema, fields, validate, validates, ValidationError
 class RoleRefSchema(Schema):
     id = fields.Int(dump_only=True)
     name = fields.Str(dump_only=True)
-    access = fields.Int(dump_only=True)
+    level = fields.Int(dump_only=True)
 
 
 class UserSchema(Schema):
@@ -24,13 +24,13 @@ class UserCreateSchema(Schema):
     login = fields.Str(required=True, validate=validate.Length(min=3, max=100))
     post = fields.Str(validate=validate.Length(max=255), load_default=None)
     role_id = fields.Int(required=True)
+    password = fields.Str(validate=validate.Length(min=8), load_default=None)
 
 
 class UserUpdateSchema(Schema):
     fio = fields.Str(validate=validate.Length(min=1, max=255))
     login = fields.Str(validate=validate.Length(min=3, max=100))
     post = fields.Str(validate=validate.Length(max=255), allow_none=True)
-    role_id = fields.Int()
 
 
 class UserMeUpdateSchema(Schema):

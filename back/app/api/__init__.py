@@ -8,6 +8,7 @@ from .departments import bp as departments_bp
 from .unit_types import bp as unit_types_bp
 from .stats import bp as stats_bp
 from .backup import bp as backup_bp
+from .changelog import bp as changelog_bp
 
 
 def register_blueprints(app: Flask) -> None:
@@ -20,3 +21,4 @@ def register_blueprints(app: Flask) -> None:
     app.register_blueprint(unit_types_bp)
     app.register_blueprint(stats_bp)
     app.register_blueprint(backup_bp)
+    app.register_blueprint(changelog_bp)

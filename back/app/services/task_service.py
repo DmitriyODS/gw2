@@ -39,19 +39,10 @@ def create_task(
     return task
 
 
-def update_task(task_id: int, current_user_id: int, current_user_access: int, **kwargs) -> object:
-    from app.utils.permissions import has_permission, Section, Bit
+def update_task(task_id: int, **kwargs) -> object:
     task = task_repo.get_by_id(task_id)
     if task is None:
         raise TaskServiceError("Задача не найдена", "NOT_FOUND", 404)
-
-    is_own = task.author_id == current_user_id
-    if is_own:
-        if not has_permission(current_user_access, Section.TASKS, Bit.OWN_EDIT):
-            raise TaskServiceError("Недостаточно прав", "FORBIDDEN", 403)
-    else:
-        if not has_permission(current_user_access, Section.TASKS, Bit.OTHER_EDIT):
-            raise TaskServiceError("Недостаточно прав", "FORBIDDEN", 403)
 
     if "department_id" in kwargs:
         dept = department_repo.get_by_id(kwargs["department_id"])
@@ -63,38 +54,23 @@ def update_task(task_id: int, current_user_id: int, current_user_access: int, **
     return task
 
 
-def delete_task(task_id: int, current_user_id: int, current_user_access: int) -> None:
-    from app.utils.permissions import has_permission, Section, Bit
+def delete_task(task_id: int) -> None:
     task = task_repo.get_by_id(task_id)
     if task is None:
         raise TaskServiceError("Задача не найдена", "NOT_FOUND", 404)
 
-    is_own = task.author_id == current_user_id
-    if is_own:
-        if not has_permission(current_user_access, Section.TASKS, Bit.OWN_DELETE):
-            raise TaskServiceError("Недостаточно прав", "FORBIDDEN", 403)
-    else:
-        if not has_permission(current_user_access, Section.TASKS, Bit.OTHER_DELETE):
-            raise TaskServiceError("Недостаточно прав", "FORBIDDEN", 403)
-
     task_repo.delete(task)
     db.session.commit()
-    logger.info("task.delete", extra={"extra": {"task_id": task_id, "user_id": current_user_id, "event": "task.delete"}})
+    logger.info("task.delete", extra={"extra": {"task_id": task_id, "event": "task.delete"}})
 
 
-def archive_task(task_id: int, current_user_id: int, current_user_access: int) -> object:
-    from app.utils.permissions import has_permission, Section, Bit
+def archive_task(task_id: int) -> object:
     task = task_repo.get_by_id(task_id)
     if task is None:
         raise TaskServiceError("Задача не найдена", "NOT_FOUND", 404)
 
     if task.is_archived:
         raise TaskServiceError("Задача уже архивирована", "ALREADY_ARCHIVED", 422)
-
-    is_own = task.author_id == current_user_id
-    perm = Bit.OWN_EDIT if is_own else Bit.OTHER_EDIT
-    if not has_permission(current_user_access, Section.TASKS, perm):
-        raise TaskServiceError("Недостаточно прав", "FORBIDDEN", 403)
 
     if task_repo.has_active_unit(task_id):
         raise TaskServiceError(
@@ -105,12 +81,11 @@ def archive_task(task_id: int, current_user_id: int, current_user_access: int) -
     now = datetime.now(timezone.utc)
     task_repo.update(task, is_archived=True, archived_at=now)
     db.session.commit()
-    logger.info("task.archive", extra={"extra": {"task_id": task_id, "user_id": current_user_id, "event": "task.archive"}})
+    logger.info("task.archive", extra={"extra": {"task_id": task_id, "event": "task.archive"}})
     return task
 
 
-def restore_task(task_id: int, current_user_id: int, current_user_access: int) -> object:
-    from app.utils.permissions import has_permission, Section, Bit
+def restore_task(task_id: int) -> object:
     task = task_repo.get_by_id(task_id)
     if task is None:
         raise TaskServiceError("Задача не найдена", "NOT_FOUND", 404)
@@ -118,14 +93,9 @@ def restore_task(task_id: int, current_user_id: int, current_user_access: int) -
     if not task.is_archived:
         raise TaskServiceError("Задача не архивирована", "NOT_ARCHIVED", 422)
 
-    is_own = task.author_id == current_user_id
-    perm = Bit.OWN_EDIT if is_own else Bit.OTHER_EDIT
-    if not has_permission(current_user_access, Section.TASKS, perm):
-        raise TaskServiceError("Недостаточно прав", "FORBIDDEN", 403)
-
     task_repo.update(task, is_archived=False, archived_at=None)
     db.session.commit()
-    logger.info("task.restore", extra={"extra": {"task_id": task_id, "user_id": current_user_id, "event": "task.restore"}})
+    logger.info("task.restore", extra={"extra": {"task_id": task_id, "event": "task.restore"}})
     return task
 
 

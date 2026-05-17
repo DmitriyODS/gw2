@@ -1,13 +1,1 @@
-Flask-Migrate / Alembic миграции.
-
-Инициализация (первый запуск):
-  cd back
-  pip install -r requirements.txt
-  export FLASK_APP=wsgi.py
-  flask db init        # только если папка migrations/ пуста
-  flask db migrate -m "initial"
-  flask db upgrade
-
-При изменении моделей:
-  flask db migrate -m "описание изменения"
-  flask db upgrade
+Single-database configuration for Flask.

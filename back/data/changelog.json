@@ -1,0 +1,21 @@
+{
+  "versions": [
+    {
+      "version": "2.0",
+      "date": "2026-05-16",
+      "title": "Полный перезапуск платформы",
+      "changes": [
+        { "type": "new", "text": "Новая архитектура: Flask 3 + Vue 3 + PostgreSQL 16" },
+        { "type": "new", "text": "Система прав на основе BIGINT (64-битные маски, 8 секций)" },
+        { "type": "new", "text": "Юниты — отрезки времени, привязанные к задачам" },
+        { "type": "new", "text": "WebSocket-уведомления в реальном времени через Flask-SocketIO" },
+        { "type": "new", "text": "JWT-авторизация: access 15 мин + refresh 30 дней (HttpOnly cookie)" },
+        { "type": "new", "text": "Identicon-аватары (5×5 GitHub-style) по умолчанию" },
+        { "type": "new", "text": "Статистика с экспортом и фильтрами по пользователям" },
+        { "type": "new", "text": "Резервное копирование и восстановление данных (ZIP)" },
+        { "type": "new", "text": "Темизация интерфейса через CSS-переменные" },
+        { "type": "new", "text": "Swagger UI на /apidocs" }
+      ]
+    }
+  ]
+}

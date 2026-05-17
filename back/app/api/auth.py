@@ -1,5 +1,5 @@
 from flask import Blueprint, request, jsonify, make_response
-from flask_jwt_extended import jwt_required, get_jwt_identity, verify_jwt_in_request, get_jwt
+from flask_jwt_extended import jwt_required, get_jwt_identity, get_jwt, decode_token
 from marshmallow import ValidationError
 
 from app.schemas import LoginSchema, ChangeDefaultSchema
@@ -87,12 +87,17 @@ def refresh():
       401:
         description: Невалидный или отсутствующий refresh token
     """
+    token = request.cookies.get(REFRESH_COOKIE)
+    if not token:
+        return jsonify({"error": "INVALID_TOKEN", "message": "Refresh token недействителен"}), 401
     try:
-        verify_jwt_in_request(locations=["cookies"], refresh=True, cookie_name=REFRESH_COOKIE)
+        decoded = decode_token(token)
+        if decoded.get("type") != "refresh":
+            raise ValueError("not a refresh token")
+        user_id = int(decoded["sub"])
     except Exception:
         return jsonify({"error": "INVALID_TOKEN", "message": "Refresh token недействителен"}), 401
 
-    user_id = get_jwt_identity()
     try:
         access_token = auth_service.refresh(user_id)
     except AuthError as e:
@@ -148,7 +153,7 @@ def change_default():
     except ValidationError as e:
         return jsonify({"error": "VALIDATION_ERROR", "message": e.messages}), 400
 
-    user_id = get_jwt_identity()
+    user_id = int(get_jwt_identity())
     try:
         result = auth_service.change_default_credentials(
             user_id, data["new_login"], data["new_password"], data["confirm_password"]

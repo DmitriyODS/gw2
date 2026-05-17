@@ -6,7 +6,7 @@ from app.schemas.unit import UnitSchema, UnitUpdateSchema
 from app.services import unit_service
 from app.services.unit_service import UnitServiceError
 from app.repositories import unit_repo, user_repo
-from app.utils.permissions import require_permission, require_auth, Section, Bit
+from app.utils.permissions import require_role, require_auth, EMPLOYEE, get_user_level
 
 bp = Blueprint("units", __name__, url_prefix="/api/units")
 
@@ -26,7 +26,7 @@ def get_active_unit():
       200:
         description: Активный юнит или null
     """
-    current_user_id = get_jwt_identity()
+    current_user_id = int(get_jwt_identity())
     unit = unit_repo.get_active_for_user(current_user_id)
     if unit is None:
         return jsonify(None), 200
@@ -34,7 +34,7 @@ def get_active_unit():
 
 
 @bp.patch("/<int:unit_id>")
-@require_permission(Section.UNITS, Bit.OWN_EDIT)
+@require_role(EMPLOYEE)
 def update_unit(unit_id: int):
     """
     Редактировать юнит.
@@ -66,11 +66,11 @@ def update_unit(unit_id: int):
     except ValidationError as e:
         return jsonify({"error": "VALIDATION_ERROR", "message": e.messages}), 400
 
-    current_user_id = get_jwt_identity()
+    current_user_id = int(get_jwt_identity())
     current_user = user_repo.get_by_id(current_user_id)
 
     try:
-        unit = unit_service.update_unit(unit_id, current_user_id, current_user.role.access, **data)
+        unit = unit_service.update_unit(unit_id, current_user_id, get_user_level(current_user), **data)
     except UnitServiceError as e:
         return jsonify({"error": e.code, "message": e.message}), e.http_status
 
@@ -82,7 +82,7 @@ def update_unit(unit_id: int):
 
 
 @bp.delete("/<int:unit_id>")
-@require_permission(Section.UNITS, Bit.OWN_DELETE)
+@require_role(EMPLOYEE)
 def delete_unit(unit_id: int):
     """
     Удалить юнит.
@@ -98,14 +98,14 @@ def delete_unit(unit_id: int):
       200:
         description: Юнит удалён
     """
-    current_user_id = get_jwt_identity()
+    current_user_id = int(get_jwt_identity())
     current_user = user_repo.get_by_id(current_user_id)
 
     unit = unit_repo.get_by_id(unit_id)
     task_id = unit.task_id if unit else None
 
     try:
-        unit_service.delete_unit(unit_id, current_user_id, current_user.role.access)
+        unit_service.delete_unit(unit_id, current_user_id, get_user_level(current_user))
     except UnitServiceError as e:
         return jsonify({"error": e.code, "message": e.message}), e.http_status
 
@@ -116,7 +116,7 @@ def delete_unit(unit_id: int):
 
 
 @bp.post("/<int:unit_id>/stop")
-@require_permission(Section.UNITS, Bit.OWN_EDIT)
+@require_role(EMPLOYEE)
 def stop_unit(unit_id: int):
     """
     Завершить юнит.
@@ -132,14 +132,14 @@ def stop_unit(unit_id: int):
       200:
         description: Юнит завершён
     """
-    current_user_id = get_jwt_identity()
+    current_user_id = int(get_jwt_identity())
     current_user = user_repo.get_by_id(current_user_id)
 
     unit_before = unit_repo.get_by_id(unit_id)
     owner_id = unit_before.user_id if unit_before else None
 
     try:
-        unit = unit_service.stop_unit(unit_id, current_user_id, current_user.role.access)
+        unit = unit_service.stop_unit(unit_id, current_user_id, get_user_level(current_user))
     except UnitServiceError as e:
         return jsonify({"error": e.code, "message": e.message}), e.http_status
 
@@ -150,7 +150,6 @@ def stop_unit(unit_id: int):
         "datetime_end": unit.datetime_end.isoformat(),
     }, room="all")
 
-    # Если остановил другой пользователь — личное уведомление
     if owner_id and owner_id != current_user_id:
         stopper = user_repo.get_by_id(current_user_id)
         socketio.emit("unit:force_stopped", {

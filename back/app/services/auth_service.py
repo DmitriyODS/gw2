@@ -25,8 +25,8 @@ def login(login: str, password: str) -> dict:
         raise AuthError("Неверный логин или пароль", "INVALID_CREDENTIALS", 401)
 
     additional_claims = {"force_change": user.is_default_pass}
-    access_token = create_access_token(identity=user.id, additional_claims=additional_claims)
-    refresh_token = create_refresh_token(identity=user.id)
+    access_token = create_access_token(identity=str(user.id), additional_claims=additional_claims)
+    refresh_token = create_refresh_token(identity=str(user.id))
 
     logger.info("auth.login", extra={"extra": {"user_id": user.id, "event": "auth.login"}})
 
@@ -44,7 +44,7 @@ def refresh(user_id: int) -> str:
         raise AuthError("Пользователь не найден", "NOT_FOUND", 401)
 
     additional_claims = {"force_change": user.is_default_pass}
-    return create_access_token(identity=user.id, additional_claims=additional_claims)
+    return create_access_token(identity=str(user.id), additional_claims=additional_claims)
 
 
 def change_default_credentials(user_id: int, new_login: str, new_password: str, confirm_password: str) -> dict:
@@ -67,8 +67,8 @@ def change_default_credentials(user_id: int, new_login: str, new_password: str, 
     db.session.commit()
 
     additional_claims = {"force_change": False}
-    access_token = create_access_token(identity=user.id, additional_claims=additional_claims)
-    refresh_token = create_refresh_token(identity=user.id)
+    access_token = create_access_token(identity=str(user.id), additional_claims=additional_claims)
+    refresh_token = create_refresh_token(identity=str(user.id))
 
     logger.info("auth.change_default", extra={"extra": {"user_id": user.id, "event": "auth.change_default"}})
 

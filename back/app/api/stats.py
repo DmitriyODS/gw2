@@ -3,7 +3,7 @@ from flask import Blueprint, request, jsonify, send_file
 from flask_jwt_extended import get_jwt_identity
 
 from app.services import stats_service
-from app.utils.permissions import require_permission, require_auth, Section, Bit
+from app.utils.permissions import require_role, require_auth, EMPLOYEE, MANAGER
 
 bp = Blueprint("stats", __name__, url_prefix="/api/stats")
 
@@ -27,7 +27,7 @@ def _parse_period(args) -> tuple[datetime, datetime]:
 
 
 @bp.get("/common")
-@require_permission(Section.STATS, Bit.VIEW)
+@require_role(EMPLOYEE)
 def get_common():
     """
     Общая статистика.
@@ -51,7 +51,7 @@ def get_common():
 
 
 @bp.get("/extended")
-@require_permission(Section.STATS, Bit.VIEW)
+@require_role(EMPLOYEE)
 def get_extended():
     """
     Расширенная статистика.
@@ -75,7 +75,7 @@ def get_extended():
 
 
 @bp.get("/common/export")
-@require_permission(Section.STATS, Bit.EXPORT_COMMON)
+@require_role(MANAGER)
 def export_common():
     """
     Выгрузить общую статистику в XLSX.
@@ -106,7 +106,7 @@ def export_common():
 
 
 @bp.get("/extended/export")
-@require_permission(Section.STATS, Bit.EXPORT_USERS)
+@require_role(MANAGER)
 def export_extended():
     """
     Выгрузить расширенную статистику в XLSX.
@@ -156,6 +156,6 @@ def get_profile():
     except ValueError as e:
         return jsonify({"error": "VALIDATION_ERROR", "message": str(e)}), 400
 
-    user_id = get_jwt_identity()
+    user_id = int(get_jwt_identity())
     data = stats_service.get_profile(user_id, period_start, period_end)
     return jsonify(data), 200

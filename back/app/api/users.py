@@ -7,7 +7,7 @@ from app.schemas import UserSchema, UserCreateSchema, UserUpdateSchema, UserMeUp
 from app.services import user_service
 from app.services.user_service import UserServiceError
 from app.repositories import user_repo
-from app.utils.permissions import require_permission, require_auth, Section, Bit
+from app.utils.permissions import require_role, require_auth, ADMIN, get_user_level
 from app.utils.avatar import generate_identicon
 
 bp = Blueprint("users", __name__, url_prefix="/api/users")
@@ -20,7 +20,7 @@ _me_schema = UserMeUpdateSchema()
 
 
 @bp.get("")
-@require_permission(Section.USERS, Bit.VIEW)
+@require_role(ADMIN)
 def list_users():
     """
     Список пользователей.
@@ -36,7 +36,7 @@ def list_users():
 
 
 @bp.post("")
-@require_permission(Section.USERS, Bit.CREATE)
+@require_role(ADMIN)
 def create_user():
     """
     Создать пользователя.
@@ -64,8 +64,10 @@ def create_user():
     except ValidationError as e:
         return jsonify({"error": "VALIDATION_ERROR", "message": e.messages}), 400
 
+    current_user_id = int(get_jwt_identity())
+    current_user = user_repo.get_by_id(current_user_id)
     try:
-        user = user_service.create_user(**data)
+        user = user_service.create_user(current_user_level=get_user_level(current_user), **data)
     except UserServiceError as e:
         return jsonify({"error": e.code, "message": e.message}), e.http_status
 
@@ -84,7 +86,7 @@ def get_me():
       200:
         description: Данные текущего пользователя
     """
-    user_id = get_jwt_identity()
+    user_id = int(get_jwt_identity())
     user = user_repo.get_by_id(user_id)
     if user is None:
         return jsonify({"error": "NOT_FOUND", "message": "Пользователь не найден"}), 404
@@ -121,7 +123,7 @@ def update_me():
     except ValidationError as e:
         return jsonify({"error": "VALIDATION_ERROR", "message": e.messages}), 400
 
-    user_id = get_jwt_identity()
+    user_id = int(get_jwt_identity())
     try:
         user = user_service.update_me(user_id=user_id, **data)
     except UserServiceError as e:
@@ -163,7 +165,7 @@ def upload_avatar():
     if len(file_bytes) > 2 * 1024 * 1024:
         return jsonify({"error": "FILE_TOO_LARGE", "message": "Файл превышает 2 МБ"}), 400
 
-    user_id = get_jwt_identity()
+    user_id = int(get_jwt_identity())
     try:
         user = user_service.upload_avatar(user_id, file_bytes)
     except (UserServiceError, ValueError) as e:
@@ -187,7 +189,7 @@ def delete_avatar():
       200:
         description: Аватарка удалена
     """
-    user_id = get_jwt_identity()
+    user_id = int(get_jwt_identity())
     try:
         user = user_service.delete_user_avatar(user_id)
     except UserServiceError as e:
@@ -197,7 +199,7 @@ def delete_avatar():
 
 
 @bp.get("/<int:user_id>")
-@require_permission(Section.USERS, Bit.VIEW)
+@require_role(ADMIN)
 def get_user(user_id: int):
     """
     Получить пользователя по ID.
@@ -222,7 +224,7 @@ def get_user(user_id: int):
 
 
 @bp.patch("/<int:user_id>")
-@require_permission(Section.USERS, Bit.EDIT)
+@require_role(ADMIN)
 def update_user(user_id: int):
     """
     Редактировать пользователя.
@@ -244,7 +246,6 @@ def update_user(user_id: int):
               fio: {type: string}
               login: {type: string}
               post: {type: string}
-              role_id: {type: integer}
     responses:
       200:
         description: Пользователь обновлён
@@ -254,7 +255,7 @@ def update_user(user_id: int):
     except ValidationError as e:
         return jsonify({"error": "VALIDATION_ERROR", "message": e.messages}), 400
 
-    current_user_id = get_jwt_identity()
+    current_user_id = int(get_jwt_identity())
     try:
         user = user_service.update_user(user_id, current_user_id, **data)
     except UserServiceError as e:
@@ -264,7 +265,7 @@ def update_user(user_id: int):
 
 
 @bp.delete("/<int:user_id>")
-@require_permission(Section.USERS, Bit.DELETE)
+@require_role(ADMIN)
 def hide_user(user_id: int):
     """
     Скрыть пользователя (soft delete).
@@ -282,9 +283,10 @@ def hide_user(user_id: int):
       422:
         description: Бизнес-правило нарушено
     """
-    current_user_id = get_jwt_identity()
+    current_user_id = int(get_jwt_identity())
+    current_user = user_repo.get_by_id(current_user_id)
     try:
-        user_service.hide_user(user_id, current_user_id)
+        user_service.hide_user(user_id, current_user_id, get_user_level(current_user))
     except UserServiceError as e:
         return jsonify({"error": e.code, "message": e.message}), e.http_status
 
@@ -292,7 +294,7 @@ def hide_user(user_id: int):
 
 
 @bp.patch("/<int:user_id>/role")
-@require_permission(Section.ROLES, Bit.ASSIGN)
+@require_role(ADMIN)
 def assign_role(user_id: int):
     """
     Назначить роль пользователю.
@@ -322,9 +324,10 @@ def assign_role(user_id: int):
     if not role_id:
         return jsonify({"error": "VALIDATION_ERROR", "message": "role_id обязателен"}), 400
 
-    current_user_id = get_jwt_identity()
+    current_user_id = int(get_jwt_identity())
+    current_user = user_repo.get_by_id(current_user_id)
     try:
-        user = user_service.assign_role(user_id, role_id, current_user_id)
+        user = user_service.assign_role(user_id, role_id, current_user_id, get_user_level(current_user))
     except UserServiceError as e:
         return jsonify({"error": e.code, "message": e.message}), e.http_status
 

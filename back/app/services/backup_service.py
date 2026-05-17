@@ -22,7 +22,7 @@ def _serialize_dt(dt) -> str | None:
 def export_zip(upload_folder: str) -> BytesIO:
     data = {
         "roles": [
-            {"id": r.id, "name": r.name, "access": r.access}
+            {"id": r.id, "name": r.name, "level": r.level}
             for r in db.session.execute(db.select(Role)).scalars().all()
         ],
         "users": [
@@ -97,7 +97,7 @@ def import_zip(zip_bytes: bytes, upload_folder: str) -> None:
 
     for r in data.get("roles", []):
         db.session.execute(
-            db.text("INSERT INTO roles (id, name, access) VALUES (:id, :name, :access)"),
+            db.text("INSERT INTO roles (id, name, level) VALUES (:id, :name, :level)"),
             r
         )
 

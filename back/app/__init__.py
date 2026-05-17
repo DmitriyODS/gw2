@@ -44,6 +44,16 @@ def _register_blueprints(app: Flask) -> None:
     from app.api import register_blueprints
     register_blueprints(app)
 
+    @app.route("/uploads/<path:filename>")
+    def serve_upload(filename):
+        from flask import send_from_directory
+        import os
+        folder = app.config["UPLOAD_FOLDER"]
+        if not os.path.isabs(folder):
+            # Разрешаем относительный путь от back/ (родитель пакета app)
+            folder = os.path.join(app.root_path, '..', folder)
+        return send_from_directory(os.path.abspath(folder), filename)
+
 
 def _register_socket_events(app: Flask) -> None:
     from app.sockets import register_events

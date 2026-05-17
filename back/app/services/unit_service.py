@@ -1,5 +1,6 @@
 from app.extensions import db
 from app.repositories import unit_repo, task_repo, unit_type_repo
+from app.utils.permissions import MANAGER
 from app.utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -36,19 +37,13 @@ def create_unit(task_id: int, name: str, unit_type_id: int, user_id: int) -> obj
     return unit
 
 
-def update_unit(unit_id: int, current_user_id: int, current_user_access: int, **kwargs) -> object:
-    from app.utils.permissions import has_permission, Section, Bit
+def update_unit(unit_id: int, current_user_id: int, current_user_level: int, **kwargs) -> object:
     unit = unit_repo.get_by_id(unit_id)
     if unit is None:
         raise UnitServiceError("Юнит не найден", "NOT_FOUND", 404)
 
-    is_own = unit.user_id == current_user_id
-    if is_own:
-        if not has_permission(current_user_access, Section.UNITS, Bit.OWN_EDIT):
-            raise UnitServiceError("Недостаточно прав", "FORBIDDEN", 403)
-    else:
-        if not has_permission(current_user_access, Section.UNITS, Bit.OTHER_EDIT):
-            raise UnitServiceError("Недостаточно прав", "FORBIDDEN", 403)
+    if unit.user_id != current_user_id and current_user_level < MANAGER:
+        raise UnitServiceError("Недостаточно прав для редактирования чужого юнита", "FORBIDDEN", 403)
 
     if "unit_type_id" in kwargs:
         unit_type = unit_type_repo.get_by_id(kwargs["unit_type_id"])
@@ -60,8 +55,7 @@ def update_unit(unit_id: int, current_user_id: int, current_user_access: int, **
     return unit
 
 
-def stop_unit(unit_id: int, current_user_id: int, current_user_access: int) -> object:
-    from app.utils.permissions import has_permission, Section, Bit
+def stop_unit(unit_id: int, current_user_id: int, current_user_level: int) -> object:
     unit = unit_repo.get_by_id(unit_id)
     if unit is None:
         raise UnitServiceError("Юнит не найден", "NOT_FOUND", 404)
@@ -69,13 +63,8 @@ def stop_unit(unit_id: int, current_user_id: int, current_user_access: int) -> o
     if unit.datetime_end is not None:
         raise UnitServiceError("Юнит уже завершён", "ALREADY_STOPPED", 422)
 
-    is_own = unit.user_id == current_user_id
-    if is_own:
-        if not has_permission(current_user_access, Section.UNITS, Bit.OWN_EDIT):
-            raise UnitServiceError("Недостаточно прав", "FORBIDDEN", 403)
-    else:
-        if not has_permission(current_user_access, Section.UNITS, Bit.OTHER_EDIT):
-            raise UnitServiceError("Недостаточно прав", "FORBIDDEN", 403)
+    if unit.user_id != current_user_id and current_user_level < MANAGER:
+        raise UnitServiceError("Недостаточно прав для остановки чужого юнита", "FORBIDDEN", 403)
 
     unit_repo.stop(unit)
     db.session.commit()
@@ -84,19 +73,13 @@ def stop_unit(unit_id: int, current_user_id: int, current_user_access: int) -> o
     return unit
 
 
-def delete_unit(unit_id: int, current_user_id: int, current_user_access: int) -> None:
-    from app.utils.permissions import has_permission, Section, Bit
+def delete_unit(unit_id: int, current_user_id: int, current_user_level: int) -> None:
     unit = unit_repo.get_by_id(unit_id)
     if unit is None:
         raise UnitServiceError("Юнит не найден", "NOT_FOUND", 404)
 
-    is_own = unit.user_id == current_user_id
-    if is_own:
-        if not has_permission(current_user_access, Section.UNITS, Bit.OWN_DELETE):
-            raise UnitServiceError("Недостаточно прав", "FORBIDDEN", 403)
-    else:
-        if not has_permission(current_user_access, Section.UNITS, Bit.OTHER_DELETE):
-            raise UnitServiceError("Недостаточно прав", "FORBIDDEN", 403)
+    if unit.user_id != current_user_id and current_user_level < MANAGER:
+        raise UnitServiceError("Недостаточно прав для удаления чужого юнита", "FORBIDDEN", 403)
 
     task_id = unit.task_id
     unit_repo.delete(unit)

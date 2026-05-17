@@ -7,8 +7,8 @@ from app.schemas import TaskSchema, TaskCreateSchema, TaskUpdateSchema
 from app.schemas.unit import UnitSchema
 from app.services import task_service
 from app.services.task_service import TaskServiceError
-from app.repositories import task_repo, unit_repo, user_repo
-from app.utils.permissions import require_permission, require_auth, Section, Bit
+from app.repositories import task_repo, unit_repo
+from app.utils.permissions import require_role, require_auth, EMPLOYEE
 
 bp = Blueprint("tasks", __name__, url_prefix="/api/tasks")
 
@@ -19,7 +19,6 @@ _update_schema = TaskUpdateSchema()
 
 
 def _enrich_task(task, current_user_id: int) -> dict:
-    """Добавить поля is_favorite и has_units к сериализованной задаче."""
     data = _task_schema.dump(task)
     data["is_favorite"] = task_repo.is_favorite(task.id, current_user_id)
     data["has_units"] = task_repo.has_any_units(task.id)
@@ -27,7 +26,7 @@ def _enrich_task(task, current_user_id: int) -> dict:
 
 
 @bp.get("")
-@require_permission(Section.TASKS, Bit.VIEW)
+@require_role(EMPLOYEE)
 def list_tasks():
     """
     Список задач с фильтрами и пагинацией.
@@ -49,7 +48,7 @@ def list_tasks():
         description: Список задач
     """
     args = request.args
-    current_user_id = get_jwt_identity()
+    current_user_id = int(get_jwt_identity())
 
     received_from = None
     received_to = None
@@ -84,7 +83,7 @@ def list_tasks():
 
 
 @bp.post("")
-@require_permission(Section.TASKS, Bit.OWN_CREATE)
+@require_role(EMPLOYEE)
 def create_task():
     """
     Создать задачу.
@@ -102,8 +101,8 @@ def create_task():
               name: {type: string}
               link_yougile: {type: string}
               department_id: {type: integer}
-              received_at: {type: string, format: date-time}
-              deadline: {type: string, format: date-time}
+              received_at: {type: string, format: date}
+              deadline: {type: string, format: date}
     responses:
       201:
         description: Задача создана
@@ -113,13 +112,12 @@ def create_task():
     except ValidationError as e:
         return jsonify({"error": "VALIDATION_ERROR", "message": e.messages}), 400
 
-    current_user_id = get_jwt_identity()
+    current_user_id = int(get_jwt_identity())
     try:
         task = task_service.create_task(author_id=current_user_id, **data)
     except TaskServiceError as e:
         return jsonify({"error": e.code, "message": e.message}), e.http_status
 
-    # WebSocket — broadcast
     from app.extensions import socketio
     task_data = _enrich_task(task, current_user_id)
     socketio.emit("task:created", task_data, room="all")
@@ -128,7 +126,7 @@ def create_task():
 
 
 @bp.get("/<int:task_id>")
-@require_permission(Section.TASKS, Bit.VIEW)
+@require_role(EMPLOYEE)
 def get_task(task_id: int):
     """
     Получить задачу по ID.
@@ -150,15 +148,15 @@ def get_task(task_id: int):
     if task is None:
         return jsonify({"error": "NOT_FOUND", "message": "Задача не найдена"}), 404
 
-    current_user_id = get_jwt_identity()
+    current_user_id = int(get_jwt_identity())
     return jsonify(_enrich_task(task, current_user_id)), 200
 
 
 @bp.patch("/<int:task_id>")
-@require_permission(Section.TASKS, Bit.OWN_EDIT)
+@require_role(EMPLOYEE)
 def update_task(task_id: int):
     """
-    Редактировать задачу (проверяются права OWN/OTHER).
+    Редактировать задачу.
     ---
     tags: [tasks]
     security: [BearerAuth: []]
@@ -177,8 +175,8 @@ def update_task(task_id: int):
               name: {type: string}
               link_yougile: {type: string}
               department_id: {type: integer}
-              received_at: {type: string, format: date-time}
-              deadline: {type: string, format: date-time}
+              received_at: {type: string, format: date}
+              deadline: {type: string, format: date}
     responses:
       200:
         description: Задача обновлена
@@ -188,11 +186,9 @@ def update_task(task_id: int):
     except ValidationError as e:
         return jsonify({"error": "VALIDATION_ERROR", "message": e.messages}), 400
 
-    current_user_id = get_jwt_identity()
-    current_user = user_repo.get_by_id(current_user_id)
-
+    current_user_id = int(get_jwt_identity())
     try:
-        task = task_service.update_task(task_id, current_user_id, current_user.role.access, **data)
+        task = task_service.update_task(task_id, **data)
     except TaskServiceError as e:
         return jsonify({"error": e.code, "message": e.message}), e.http_status
 
@@ -204,10 +200,10 @@ def update_task(task_id: int):
 
 
 @bp.delete("/<int:task_id>")
-@require_permission(Section.TASKS, Bit.OWN_DELETE)
+@require_role(EMPLOYEE)
 def delete_task(task_id: int):
     """
-    Удалить задачу (проверяются права OWN/OTHER).
+    Удалить задачу.
     ---
     tags: [tasks]
     security: [BearerAuth: []]
@@ -220,11 +216,9 @@ def delete_task(task_id: int):
       200:
         description: Задача удалена
     """
-    current_user_id = get_jwt_identity()
-    current_user = user_repo.get_by_id(current_user_id)
-
+    current_user_id = int(get_jwt_identity())
     try:
-        task_service.delete_task(task_id, current_user_id, current_user.role.access)
+        task_service.delete_task(task_id)
     except TaskServiceError as e:
         return jsonify({"error": e.code, "message": e.message}), e.http_status
 
@@ -235,7 +229,7 @@ def delete_task(task_id: int):
 
 
 @bp.post("/<int:task_id>/archive")
-@require_permission(Section.TASKS, Bit.OWN_EDIT)
+@require_role(EMPLOYEE)
 def archive_task(task_id: int):
     """
     Архивировать задачу.
@@ -253,11 +247,9 @@ def archive_task(task_id: int):
       422:
         description: У задачи есть активный юнит
     """
-    current_user_id = get_jwt_identity()
-    current_user = user_repo.get_by_id(current_user_id)
-
+    current_user_id = int(get_jwt_identity())
     try:
-        task = task_service.archive_task(task_id, current_user_id, current_user.role.access)
+        task = task_service.archive_task(task_id)
     except TaskServiceError as e:
         return jsonify({"error": e.code, "message": e.message}), e.http_status
 
@@ -268,7 +260,7 @@ def archive_task(task_id: int):
 
 
 @bp.post("/<int:task_id>/restore")
-@require_permission(Section.TASKS, Bit.OWN_EDIT)
+@require_role(EMPLOYEE)
 def restore_task(task_id: int):
     """
     Восстановить задачу из архива.
@@ -284,11 +276,9 @@ def restore_task(task_id: int):
       200:
         description: Задача восстановлена
     """
-    current_user_id = get_jwt_identity()
-    current_user = user_repo.get_by_id(current_user_id)
-
+    current_user_id = int(get_jwt_identity())
     try:
-        task = task_service.restore_task(task_id, current_user_id, current_user.role.access)
+        task = task_service.restore_task(task_id)
     except TaskServiceError as e:
         return jsonify({"error": e.code, "message": e.message}), e.http_status
 
@@ -315,7 +305,7 @@ def toggle_favorite(task_id: int):
       200:
         description: Статус избранного изменён
     """
-    current_user_id = get_jwt_identity()
+    current_user_id = int(get_jwt_identity())
     try:
         is_fav = task_service.toggle_favorite(task_id, current_user_id)
     except TaskServiceError as e:
@@ -325,7 +315,7 @@ def toggle_favorite(task_id: int):
 
 
 @bp.get("/<int:task_id>/units")
-@require_permission(Section.UNITS, Bit.VIEW)
+@require_role(EMPLOYEE)
 def get_task_units(task_id: int):
     """
     Список юнитов задачи.
@@ -350,7 +340,7 @@ def get_task_units(task_id: int):
 
 
 @bp.post("/<int:task_id>/units")
-@require_permission(Section.UNITS, Bit.OWN_CREATE)
+@require_role(EMPLOYEE)
 def create_unit(task_id: int):
     """
     Создать юнит для задачи.
@@ -387,7 +377,7 @@ def create_unit(task_id: int):
     except ValidationError as e:
         return jsonify({"error": "VALIDATION_ERROR", "message": e.messages}), 400
 
-    current_user_id = get_jwt_identity()
+    current_user_id = int(get_jwt_identity())
     try:
         unit = unit_service.create_unit(
             task_id=task_id,

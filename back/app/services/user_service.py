@@ -3,7 +3,7 @@ from app.extensions import db
 from app.repositories import user_repo, role_repo
 from app.utils.avatar import save_avatar, delete_avatar
 from app.utils.logger import get_logger
-from app.utils.permissions import BIGINT_MAX
+from app.utils.permissions import MANAGER, SUPERADMIN
 
 logger = get_logger(__name__)
 
@@ -16,17 +16,23 @@ class UserServiceError(Exception):
         super().__init__(message)
 
 
-def create_user(fio: str, login: str, role_id: int, post: str = None) -> object:
+def create_user(fio: str, login: str, role_id: int, current_user_level: int,
+                post: str = None, password: str = None) -> object:
     role = role_repo.get_by_id(role_id)
     if role is None:
         raise UserServiceError("Роль не найдена", "ROLE_NOT_FOUND", 404)
+
+    if current_user_level < SUPERADMIN and role.level > MANAGER:
+        raise UserServiceError("Нельзя создать пользователя с ролью выше менеджера", "ROLE_LEVEL_FORBIDDEN", 403)
 
     existing = user_repo.get_by_login(login)
     if existing:
         raise UserServiceError("Логин уже занят", "LOGIN_TAKEN", 409)
 
-    hashed = user_repo.hash_password_sql("admin")
-    user = user_repo.create(fio=fio, login=login, hashed_password=hashed, role_id=role_id, post=post)
+    is_default = password is None
+    hashed = user_repo.hash_password_sql(password if password else "admin")
+    user = user_repo.create(fio=fio, login=login, hashed_password=hashed, role_id=role_id, post=post,
+                            is_default_pass=is_default)
     db.session.commit()
 
     logger.info("user.create", extra={"extra": {"user_id": user.id, "event": "user.create"}})
@@ -48,7 +54,7 @@ def update_user(user_id: int, current_user_id: int, **kwargs) -> object:
     return user
 
 
-def hide_user(user_id: int, current_user_id: int) -> None:
+def hide_user(user_id: int, current_user_id: int, current_user_level: int) -> None:
     if user_id == current_user_id:
         raise UserServiceError("Нельзя скрыть самого себя", "SELF_HIDE", 422)
 
@@ -56,13 +62,16 @@ def hide_user(user_id: int, current_user_id: int) -> None:
     if user is None or user.is_hidden:
         raise UserServiceError("Пользователь не найден", "NOT_FOUND", 404)
 
-    role = role_repo.get_by_id(user.role_id)
-    if role and role.access == BIGINT_MAX:
-        almighty_count = user_repo.count_almighty_holders(role.id)
-        if almighty_count <= 1:
+    # Защита: нельзя скрыть пользователя с более высоким уровнем
+    if user.role.level >= current_user_level:
+        raise UserServiceError("Нельзя удалить пользователя с такой же или более высокой ролью", "ROLE_LEVEL_FORBIDDEN", 403)
+
+    # Защита последнего суперадминистратора
+    if user.role.level >= SUPERADMIN:
+        if user_repo.count_by_level(SUPERADMIN) <= 1:
             raise UserServiceError(
-                "Нельзя скрыть единственного носителя всесильной роли",
-                "LAST_ALMIGHTY_USER", 422
+                "Нельзя скрыть единственного суперадминистратора",
+                "LAST_SUPERADMIN", 422
             )
 
     user_repo.update(user, is_hidden=True)
@@ -136,7 +145,7 @@ def delete_user_avatar(user_id: int) -> object:
     return user
 
 
-def assign_role(user_id: int, role_id: int, current_user_id: int) -> object:
+def assign_role(user_id: int, role_id: int, current_user_id: int, current_user_level: int) -> object:
     if user_id == current_user_id:
         raise UserServiceError("Нельзя изменить свою роль", "SELF_ROLE_CHANGE", 422)
 
@@ -144,18 +153,21 @@ def assign_role(user_id: int, role_id: int, current_user_id: int) -> object:
     if user is None or user.is_hidden:
         raise UserServiceError("Пользователь не найден", "NOT_FOUND", 404)
 
-    old_role = role_repo.get_by_id(user.role_id)
-    if old_role and old_role.access == BIGINT_MAX:
-        almighty_count = user_repo.count_almighty_holders(old_role.id)
-        if almighty_count <= 1:
-            raise UserServiceError(
-                "Нельзя изменить роль единственного носителя всесильной роли",
-                "LAST_ALMIGHTY_USER", 422
-            )
-
     new_role = role_repo.get_by_id(role_id)
     if new_role is None:
         raise UserServiceError("Роль не найдена", "ROLE_NOT_FOUND", 404)
+
+    # Проверка уровня: нельзя назначить роль выше своего уровня
+    if new_role.level >= current_user_level:
+        raise UserServiceError("Нельзя назначить роль равную или выше собственной", "ROLE_LEVEL_FORBIDDEN", 403)
+
+    # Защита последнего суперадминистратора
+    if user.role.level >= SUPERADMIN:
+        if user_repo.count_by_level(SUPERADMIN) <= 1:
+            raise UserServiceError(
+                "Нельзя изменить роль единственного суперадминистратора",
+                "LAST_SUPERADMIN", 422
+            )
 
     user_repo.update(user, role_id=role_id)
     db.session.commit()

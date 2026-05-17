@@ -4,7 +4,7 @@ from marshmallow import ValidationError
 from app.schemas.unit_type import UnitTypeSchema, UnitTypeCreateSchema, UnitTypeUpdateSchema
 from app.repositories import unit_type_repo
 from app.extensions import db
-from app.utils.permissions import require_permission, Section, Bit
+from app.utils.permissions import require_role, EMPLOYEE, MANAGER
 
 bp = Blueprint("unit_types", __name__, url_prefix="/api/unit-types")
 
@@ -15,7 +15,7 @@ _update_schema = UnitTypeUpdateSchema()
 
 
 @bp.get("")
-@require_permission(Section.UNIT_TYPES, Bit.VIEW)
+@require_role(EMPLOYEE)
 def list_unit_types():
     """
     Список типов юнитов.
@@ -30,7 +30,7 @@ def list_unit_types():
 
 
 @bp.post("")
-@require_permission(Section.UNIT_TYPES, Bit.CREATE)
+@require_role(MANAGER)
 def create_unit_type():
     """
     Создать тип юнита.
@@ -66,7 +66,7 @@ def create_unit_type():
 
 
 @bp.patch("/<int:type_id>")
-@require_permission(Section.UNIT_TYPES, Bit.EDIT)
+@require_role(MANAGER)
 def update_unit_type(type_id: int):
     """
     Изменить тип юнита.
@@ -110,7 +110,7 @@ def update_unit_type(type_id: int):
 
 
 @bp.delete("/<int:type_id>")
-@require_permission(Section.UNIT_TYPES, Bit.DELETE)
+@require_role(MANAGER)
 def delete_unit_type(type_id: int):
     """
     Удалить тип юнита (каскадно удаляет все юниты с этим типом!).

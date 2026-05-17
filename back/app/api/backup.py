@@ -1,12 +1,12 @@
 from flask import Blueprint, request, jsonify, send_file, current_app
 from app.services import backup_service
-from app.utils.permissions import require_permission, Section, Bit
+from app.utils.permissions import require_role, SUPERADMIN
 
 bp = Blueprint("backup", __name__, url_prefix="/api/backup")
 
 
 @bp.get("/export")
-@require_permission(Section.BACKUP, Bit.EXPORT)
+@require_role(SUPERADMIN)
 def export_backup():
     """
     Скачать резервную копию (ZIP-архив).
@@ -30,7 +30,7 @@ def export_backup():
 
 
 @bp.post("/import")
-@require_permission(Section.BACKUP, Bit.IMPORT)
+@require_role(SUPERADMIN)
 def import_backup():
     """
     Восстановить из резервной копии (ZIP). ДЕСТРУКТИВНАЯ операция — полная замена данных!

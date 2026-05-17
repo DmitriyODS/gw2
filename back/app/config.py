@@ -16,6 +16,7 @@ class Config:
     JWT_ACCESS_TOKEN_EXPIRES = timedelta(minutes=15)
     JWT_REFRESH_TOKEN_EXPIRES = timedelta(days=30)
     JWT_TOKEN_LOCATION = ["headers"]
+    JWT_REFRESH_COOKIE_NAME = "refresh_token"
 
     REDIS_URL = os.environ.get("REDIS_URL", "redis://localhost:6379/0")
 
