@@ -42,5 +42,8 @@ Thumbs.db
 # Migrations generated files (keep versions/)
 # back/migrations/
 
+# Backup data (содержит реальные данные пользователей, не коммитим)
+backup.json
+
 # Logs
 *.log

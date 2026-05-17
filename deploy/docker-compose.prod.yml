@@ -41,6 +41,7 @@ services:
       UPLOAD_FOLDER: /app/uploads
     volumes:
       - uploads:/app/uploads
+      - /opt/gw2/backup.json:/app/backup.json:ro
     expose:
       - "5000"
 
