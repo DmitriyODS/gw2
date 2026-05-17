@@ -79,18 +79,57 @@ Routes (Blueprints) → Services (бизнес-логика) → Repositories (S
 
 Клиент передаёт access token в query param при handshake. Сервер присоединяет к комнатам `all` и `user_{id}`. Все мутации (задачи, юниты) излучают события в комнату `all`.
 
-## Запуск для разработки
+## Локальная разработка
 
 ```bash
-cd back
-pip install -r requirements.txt
-flask db upgrade        # применить миграции
-flask run --debug
+./dev.sh             # одна команда: DB+Redis в Docker, Flask :5001, Vite :5173
+# или по частям через Make:
+make dev-infra       # поднять DB + Redis
+make dev-migrate     # flask db upgrade
+make dev-back        # Flask :5001 (автоматически поднимает инфру и мигрирует)
+make dev-front       # Vite :5173 (второй терминал)
+make dev-stop        # остановить контейнеры
 ```
+
+Flask dev-сервер — порт **5001**. Vite — **5173**. `.flaskenv` содержит локальные настройки.
+
+**Если БД не принимает пароль** (pg_data volume от старого запуска):
+```bash
+docker exec deploy-db-1 psql -U grovework -d grovework \
+  -c "ALTER USER grovework WITH PASSWORD 'grovework_local';"
+make dev-migrate
+```
+
+## Деплой на сервер
+
+```bash
+cp .env.deploy.example .env.deploy   # один раз: заполнить SERVER_HOST, SSH_KEY
+make deploy    # git push → SSH на сервер → git pull → docker compose up --build
+make logs      # логи app-контейнера
+make status    # docker compose ps
+make restart   # перезапустить app без пересборки
+make shell     # bash внутри контейнера
+```
+
+Подробности — в `DEPLOY.md`. GitHub: https://github.com/DmitriyODS/gw2.git
+
+При деплое `entrypoint.sh` автоматически запускает `flask db upgrade`.
+Nginx собирает фронт сам через multi-stage `front/Dockerfile`.
+
+## Цветовая система фронтенда
+
+`front/src/assets/tokens.css` — Material You Expressive / M3, три слоя:
+1. `--ref-*-h/c` — параметры цвета (hue/chroma), пишет `theme.js`
+2. `--_p-*`, `--_s-*` — тональные палитры OKLCH
+3. `--color-*` — семантические токены (primary, surface, error, success…)
+
+`[data-dark="true"]` — тёмная тема. `--gw-*` — алиасы для совместимости.
+
+**Правило:** никаких `#hex` или `rgba()` в компонентах — только `--color-*` токены.
 
 ## Swagger UI
 
-Доступен на `http://localhost:5000/apidocs` при запущенном бэкенде.
+Доступен на `http://localhost:5001/apidocs` при запущенном dev-сервере.
 
 ## Логи
 
