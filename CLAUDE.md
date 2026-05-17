@@ -38,32 +38,33 @@ Routes (Blueprints) → Services (бизнес-логика) → Repositories (S
 - `schemas/` — marshmallow-схемы (валидация + сериализация)
 - `repositories/` — SQL-запросы через SQLAlchemy. Только I/O
 - `services/` — бизнес-логика. Чистые функции, без Flask-контекста
-- `api/` — Flask Blueprints, декоратор `@require_permission`
+- `api/` — Flask Blueprints, декоратор `@require_role(min_level)`
 - `sockets/` — Flask-SocketIO события
 - `utils/` — permissions, avatar, logger
 
-## Система прав (BIGINT, 64 бита, 8 секций по 8 бит)
+## Система прав (4 фиксированные роли)
 
-| Byte | Section | Биты |
+| Уровень | Роль | Доступ |
 |---|---|---|
-| 0 | TASKS | view=0, own_create=1, own_edit=2, own_delete=3, other_create=4, other_edit=5, other_delete=6 |
-| 1 | UNITS | аналогично TASKS |
-| 2 | USERS | view=0, create=1, edit=2, delete=3 |
-| 3 | ROLES | view=0, create=1, edit=2, delete=3, assign=4 |
-| 4 | STATS | view=0, view_users=1, export_common=2, export_users=3 |
-| 5 | BACKUP | view=0, export=1, import=2 |
-| 6 | DEPARTMENTS | view=0, create=1, edit=2, delete=3 |
-| 7 | UNIT_TYPES | view=0, create=1, edit=2, delete=3 |
+| 1 | Сотрудник | Задачи: CRUD любых. Юниты: создать/редактировать/остановить/удалить свои. Статистика: просмотр. Отделы/Типы юнитов: просмотр |
+| 2 | Менеджер | +управление чужими юнитами, CRUD отделов и типов юнитов, экспорт статистики |
+| 3 | Администратор | +управление пользователями (CRUD), назначение ролей ≤ менеджера |
+| 4 | Суперадминистратор | +назначение ролей любого уровня, бэкап |
 
-Хелпер: `app/utils/permissions.py` — `has_permission(access, section, bit)`, `@require_permission(section, bit)`
+Роли фиксированы в БД (4 строки, уровни 1-4), создавать/удалять нельзя.
+
+Хелпер: `app/utils/permissions.py` — константы `EMPLOYEE=1, MANAGER=2, ADMIN=3, SUPERADMIN=4`, декоратор `@require_role(min_level)`, функция `get_user_level(user)`
+
+Фронт: `composables/usePermission.js` — `const { isAtLeast, myLevel, ROLES } = usePermission()`
 
 ## Ключевые бизнес-правила
 
 - Пользователь с `is_default_pass=TRUE` получает `force_change: true` в JWT — все API кроме `/api/auth/change-default` возвращают 403
 - У пользователя единовременно только 1 активный юнит (`datetime_end IS NULL`)
 - Нельзя архивировать задачу с активным юнитом
-- Единственная всесильная роль (`access == BIGINT_MAX`) защищена от изменения/удаления
-- Единственный носитель всесильной роли защищён от скрытия и смены роли
+- Единственный суперадминистратор защищён от скрытия и смены роли
+- Нельзя назначить роль равную или выше собственной (нельзя создать пользователя выше себя)
+- Нельзя скрыть пользователя с ролью ≥ своей
 - `avatar_path = NULL` → identicon по `user.id` (GitHub-style 5×5)
 - Удаление типа юнита каскадно удаляет все юниты с этим типом
 
