@@ -69,6 +69,7 @@ async function handleExport() {
   flex-direction: column;
   gap: 14px;
   box-shadow: var(--gw-card-shadow);
+  max-height: var(--widget-max-height, 380px);
 }
 
 .widget-header {
@@ -76,6 +77,7 @@ async function handleExport() {
   align-items: center;
   justify-content: space-between;
   gap: 12px;
+  flex-shrink: 0;
 }
 
 .widget-header h3 {
@@ -112,5 +114,7 @@ async function handleExport() {
 
 .widget-body {
   flex: 1;
+  min-height: 0;
+  overflow-y: auto;
 }
 </style>

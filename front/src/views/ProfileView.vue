@@ -583,6 +583,7 @@ onMounted(() => {
 @media (max-width: 768px) {
   .profile-view {
     padding: 12px;
+    padding-bottom: calc(60px + 12px + env(safe-area-inset-bottom, 0px));
   }
 
   .profile-layout {

@@ -421,6 +421,10 @@ onMounted(async () => {
 }
 
 @media (max-width: 768px) {
+  .cards-area {
+    padding-bottom: calc(60px + 20px + env(safe-area-inset-bottom, 0px));
+  }
+
   .tasks-header {
     flex-direction: column;
     align-items: stretch;
@@ -482,6 +486,7 @@ onMounted(async () => {
 
   .cards-area {
     padding: 12px;
+    padding-bottom: calc(60px + 12px + env(safe-area-inset-bottom, 0px));
   }
 }
 </style>

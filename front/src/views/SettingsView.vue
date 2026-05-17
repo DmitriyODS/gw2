@@ -731,6 +731,8 @@ onMounted(() => {
   padding: 24px;
   max-width: 1200px;
   margin: 0 auto;
+  height: 100%;
+  overflow-y: auto;
 }
 
 .settings-view h1 {
@@ -1087,6 +1089,7 @@ onMounted(() => {
 @media (max-width: 768px) {
   .settings-view {
     padding: 12px;
+    padding-bottom: calc(60px + 12px + env(safe-area-inset-bottom, 0px));
   }
 
   .settings-view h1 {

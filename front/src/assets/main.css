@@ -30,18 +30,19 @@ body { font-family: 'Roboto', sans-serif; background: var(--color-bg); color: va
 
 .app-layout {
   display: flex;
-  min-height: 100vh;
+  height: 100vh;
+  overflow: hidden;
 }
 
 .main-content {
   flex: 1;
+  min-height: 0;
   overflow-y: auto;
-  min-height: 100vh;
 }
 
 @media (max-width: 768px) {
   .main-content {
-    /* Отступ под нижнюю навигацию */
+    /* Отступ под нижнюю навигацию — для вью без собственного скролла (Settings) */
     padding-bottom: calc(60px + env(safe-area-inset-bottom, 0px));
   }
 

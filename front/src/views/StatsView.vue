@@ -296,6 +296,7 @@ onMounted(() => {
 
 .stats-grid .full-width {
   grid-column: 1 / -1;
+  --widget-max-height: 520px;
 }
 
 /* Числа задач за период */
@@ -352,6 +353,7 @@ onMounted(() => {
 @media (max-width: 768px) {
   .stats-view {
     padding: 12px;
+    padding-bottom: calc(60px + 12px + env(safe-area-inset-bottom, 0px));
     gap: 12px;
   }
 
