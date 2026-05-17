@@ -26,7 +26,12 @@ printf "\033[1m▶ DB + Redis...\033[0m\n"
 (cd "$DEPLOY" && docker compose up -d db redis)
 printf "\033[32m  PostgreSQL :5432  Redis :6379\033[0m\n\n"
 
-# 2. Flask
+# 2. Миграции
+printf "\033[1m▶ Миграции...\033[0m\n"
+(cd "$BACK" && . venv/bin/activate && flask db upgrade)
+printf "\033[32m  Готово\033[0m\n\n"
+
+# 3. Flask
 printf "\033[1m▶ Flask :5001...\033[0m\n"
 (cd "$BACK" && . venv/bin/activate && flask run --debug --port 5001 2>&1 \
     | awk '{print "\033[36m[back]\033[0m  " $0; fflush()}') &

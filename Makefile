@@ -31,14 +31,19 @@ help:
 	@printf "\n\033[33mКонфигурация сервера:\033[0m cp .env.deploy.example .env.deploy\n\n"
 
 # ── Разработка ────────────────────────────────────────────────────
-.PHONY: dev-infra dev-back dev-front dev-stop
+.PHONY: dev-infra dev-migrate dev-back dev-front dev-stop
 
 dev-infra:
 	@printf "\033[1m▶ Запускаю DB + Redis...\033[0m\n"
 	cd deploy && docker compose up -d db redis
 	@printf "\033[32m✓ PostgreSQL :5432  Redis :6379\033[0m\n"
 
-dev-back: dev-infra
+dev-migrate: dev-infra
+	@printf "\033[1m▶ Применяю миграции...\033[0m\n"
+	cd back && . venv/bin/activate && flask db upgrade
+	@printf "\033[32m✓ Миграции применены\033[0m\n"
+
+dev-back: dev-migrate
 	@printf "\033[1m▶ Flask :5001\033[0m\n"
 	cd back && . venv/bin/activate && flask run --debug --port 5001
 
