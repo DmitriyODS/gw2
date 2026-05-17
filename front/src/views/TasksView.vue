@@ -193,8 +193,9 @@ onMounted(async () => {
 
 .tasks-header {
   display: flex;
-  flex-direction: column;
-  gap: 8px;
+  flex-direction: row;
+  align-items: center;
+  gap: 12px;
   padding: 12px 16px;
   background: var(--gw-surface);
   border-bottom: 1px solid var(--gw-border);
@@ -205,11 +206,14 @@ onMounted(async () => {
   display: flex;
   align-items: center;
   gap: 10px;
+  flex: 1;
+  min-width: 0;
 }
 
 .tasks-header-tabs {
   display: flex;
   gap: 4px;
+  flex-shrink: 0;
 }
 
 .btn-primary {
@@ -240,7 +244,6 @@ onMounted(async () => {
 .search-wrapper {
   flex: 1;
   min-width: 200px;
-  max-width: 420px;
   position: relative;
   display: flex;
   align-items: center;
@@ -419,6 +422,9 @@ onMounted(async () => {
 
 @media (max-width: 768px) {
   .tasks-header {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 8px;
     padding: 10px 12px;
   }
 
