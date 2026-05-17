@@ -1,0 +1,57 @@
+@import './tokens.css';
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: 'Roboto', sans-serif; background: var(--color-bg); color: var(--color-text); }
+
+/* ── Backward-compatibility aliases ──────────────────────────────
+   All --gw-* vars now resolve through the token layer.
+   Components may continue using them; new code should prefer --color-*.  */
+:root {
+  --gw-primary:        var(--color-primary);
+  --gw-primary-hover:  var(--color-primary-hover);
+  --gw-primary-light:  var(--color-primary-container);
+  --gw-accent:         var(--color-secondary);
+  --gw-bg:             var(--color-bg);
+  --gw-surface:        var(--color-surface);
+  --gw-sidebar-bg:     var(--color-surface-low);
+  --gw-text:           var(--color-text);
+  --gw-text-secondary: var(--color-text-dim);
+  --gw-border:         var(--color-outline-dim);
+  --gw-card-shadow:    var(--shadow-md);
+  --gw-radius:         var(--radius-md);
+  --gw-unit-active:    var(--color-secondary);
+  --gw-unit-done:      var(--color-text-dim);
+  --gw-danger:         var(--color-error);
+}
+
+.material-symbols-outlined {
+  font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+}
+
+.app-layout {
+  display: flex;
+  min-height: 100vh;
+}
+
+.main-content {
+  flex: 1;
+  overflow-y: auto;
+  min-height: 100vh;
+}
+
+@media (max-width: 768px) {
+  .main-content {
+    /* Отступ под нижнюю навигацию */
+    padding-bottom: calc(60px + env(safe-area-inset-bottom, 0px));
+  }
+
+  /* Увеличиваем минимальный размер tap target */
+  button, a, [role="button"] {
+    min-height: 36px;
+  }
+
+  /* Toast не перекрывается нижней навигацией */
+  .p-toast.p-toast-bottom-right {
+    bottom: calc(68px + env(safe-area-inset-bottom, 0px)) !important;
+  }
+}

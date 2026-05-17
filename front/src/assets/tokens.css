@@ -1,0 +1,245 @@
+/* ══════════════════════════════════════════════════════════════════
+   Groove Work — Material You Expressive Colour Token System
+
+   Three-layer architecture:
+     Layer 1  Reference palette params  --ref-*-h / --ref-*-c
+              Written by theme.js (JS hexToOklch → set H, C on root)
+     Layer 2  Tonal palettes            --_p-*, --_s-*, --_t-*, …
+              Derived purely in CSS via oklch() + calc()
+     Layer 3  Semantic roles            --color-*
+              Light values in :root, dark overrides in [data-dark="true"]
+     Layer 4  Utility tokens            --shadow-*, --radius-*, state
+══════════════════════════════════════════════════════════════════ */
+
+
+/* ── Layer 1: Key colour parameters ──────────────────────────────
+   Only H (hue °) and C (chroma) are stored — lightness is always
+   derived per-tone so that the full palette auto-generates.       */
+:root {
+  --ref-primary-h:    295;
+  --ref-primary-c:    0.26;
+
+  --ref-secondary-h:  177;
+  --ref-secondary-c:  0.18;
+
+  --ref-tertiary-h:   253;
+  --ref-tertiary-c:   0.27;
+
+  /* Fixed hues — unaffected by theme colour changes */
+  --ref-error-h:      22;
+  --ref-error-c:      0.25;
+
+  --ref-success-h:    142;
+  --ref-success-c:    0.20;
+
+  --ref-warning-h:    76;
+  --ref-warning-c:    0.18;
+}
+
+
+/* ── Layer 2: Tonal palettes ──────────────────────────────────────
+   Named --_<palette>-<M3-tone>.
+   Chroma is scaled toward 0 at the extremes (≈ M3 tonal behaviour).
+   Private vars (--_) are not for direct component use.            */
+:root {
+  /* Primary */
+  --_p-10: oklch(0.15 calc(var(--ref-primary-c) * 0.72) var(--ref-primary-h));
+  --_p-20: oklch(0.27 calc(var(--ref-primary-c) * 0.86) var(--ref-primary-h));
+  --_p-30: oklch(0.38 var(--ref-primary-c) var(--ref-primary-h));
+  --_p-40: oklch(0.50 var(--ref-primary-c) var(--ref-primary-h));
+  --_p-80: oklch(0.83 calc(var(--ref-primary-c) * 0.62) var(--ref-primary-h));
+  --_p-90: oklch(0.91 calc(var(--ref-primary-c) * 0.36) var(--ref-primary-h));
+  --_p-95: oklch(0.96 calc(var(--ref-primary-c) * 0.18) var(--ref-primary-h));
+  --_p-99: oklch(0.995 calc(var(--ref-primary-c) * 0.05) var(--ref-primary-h));
+
+  /* Secondary */
+  --_s-10: oklch(0.15 calc(var(--ref-secondary-c) * 0.72) var(--ref-secondary-h));
+  --_s-20: oklch(0.27 calc(var(--ref-secondary-c) * 0.86) var(--ref-secondary-h));
+  --_s-30: oklch(0.38 var(--ref-secondary-c) var(--ref-secondary-h));
+  --_s-40: oklch(0.50 var(--ref-secondary-c) var(--ref-secondary-h));
+  --_s-80: oklch(0.83 calc(var(--ref-secondary-c) * 0.62) var(--ref-secondary-h));
+  --_s-90: oklch(0.91 calc(var(--ref-secondary-c) * 0.36) var(--ref-secondary-h));
+
+  /* Tertiary */
+  --_t-10: oklch(0.15 calc(var(--ref-tertiary-c) * 0.72) var(--ref-tertiary-h));
+  --_t-20: oklch(0.27 calc(var(--ref-tertiary-c) * 0.86) var(--ref-tertiary-h));
+  --_t-30: oklch(0.38 var(--ref-tertiary-c) var(--ref-tertiary-h));
+  --_t-40: oklch(0.50 var(--ref-tertiary-c) var(--ref-tertiary-h));
+  --_t-80: oklch(0.83 calc(var(--ref-tertiary-c) * 0.62) var(--ref-tertiary-h));
+  --_t-90: oklch(0.91 calc(var(--ref-tertiary-c) * 0.36) var(--ref-tertiary-h));
+
+  /* Error (fixed red) */
+  --_e-10: oklch(0.15 calc(var(--ref-error-c) * 0.72) var(--ref-error-h));
+  --_e-20: oklch(0.27 calc(var(--ref-error-c) * 0.86) var(--ref-error-h));
+  --_e-30: oklch(0.38 var(--ref-error-c) var(--ref-error-h));
+  --_e-40: oklch(0.50 var(--ref-error-c) var(--ref-error-h));
+  --_e-80: oklch(0.83 calc(var(--ref-error-c) * 0.62) var(--ref-error-h));
+  --_e-90: oklch(0.91 calc(var(--ref-error-c) * 0.36) var(--ref-error-h));
+
+  /* Success (fixed green) */
+  --_ok-10: oklch(0.15 calc(var(--ref-success-c) * 0.72) var(--ref-success-h));
+  --_ok-20: oklch(0.27 calc(var(--ref-success-c) * 0.86) var(--ref-success-h));
+  --_ok-40: oklch(0.50 var(--ref-success-c) var(--ref-success-h));
+  --_ok-80: oklch(0.83 calc(var(--ref-success-c) * 0.62) var(--ref-success-h));
+  --_ok-90: oklch(0.91 calc(var(--ref-success-c) * 0.36) var(--ref-success-h));
+
+  /* Warning (fixed amber) */
+  --_w-20: oklch(0.27 calc(var(--ref-warning-c) * 0.86) var(--ref-warning-h));
+  --_w-40: oklch(0.50 var(--ref-warning-c) var(--ref-warning-h));
+  --_w-80: oklch(0.83 calc(var(--ref-warning-c) * 0.62) var(--ref-warning-h));
+  --_w-90: oklch(0.91 calc(var(--ref-warning-c) * 0.36) var(--ref-warning-h));
+
+  /* Neutral — primary hue, near-zero chroma (surfaces, text) */
+  --_n-10: oklch(0.15 0.009 var(--ref-primary-h));
+  --_n-20: oklch(0.27 0.008 var(--ref-primary-h));
+  --_n-90: oklch(0.91 0.004 var(--ref-primary-h));
+  --_n-94: oklch(0.945 0.003 var(--ref-primary-h));
+  --_n-96: oklch(0.962 0.003 var(--ref-primary-h));
+  --_n-99: oklch(0.991 0.002 var(--ref-primary-h));
+
+  /* Neutral-variant — slightly more chroma (outlines, on-surface-variant) */
+  --_nv-30: oklch(0.38 0.022 var(--ref-primary-h));
+  --_nv-50: oklch(0.58 0.018 var(--ref-primary-h));
+  --_nv-60: oklch(0.66 0.016 var(--ref-primary-h));
+  --_nv-80: oklch(0.83 0.012 var(--ref-primary-h));
+  --_nv-90: oklch(0.91 0.009 var(--ref-primary-h));
+}
+
+
+/* ── Layer 3: Semantic roles — LIGHT MODE ─────────────────────── */
+:root {
+  /* Primary */
+  --color-primary:                var(--_p-40);
+  --color-on-primary:             oklch(1 0 0);
+  --color-primary-container:      var(--_p-90);
+  --color-on-primary-container:   var(--_p-10);
+
+  /* Secondary */
+  --color-secondary:              var(--_s-40);
+  --color-on-secondary:           oklch(1 0 0);
+  --color-secondary-container:    var(--_s-90);
+  --color-on-secondary-container: var(--_s-10);
+
+  /* Tertiary */
+  --color-tertiary:               var(--_t-40);
+  --color-on-tertiary:            oklch(1 0 0);
+  --color-tertiary-container:     var(--_t-90);
+  --color-on-tertiary-container:  var(--_t-10);
+
+  /* Error */
+  --color-error:                  var(--_e-40);
+  --color-on-error:               oklch(1 0 0);
+  --color-error-container:        var(--_e-90);
+  --color-on-error-container:     var(--_e-10);
+
+  /* Success */
+  --color-success:                var(--_ok-40);
+  --color-on-success:             oklch(1 0 0);
+  --color-success-container:      var(--_ok-90);
+  --color-on-success-container:   var(--_ok-10);
+
+  /* Warning */
+  --color-warning:                var(--_w-40);
+  --color-on-warning:             oklch(1 0 0);
+  --color-warning-container:      var(--_w-90);
+  --color-on-warning-container:   var(--_w-20);
+
+  /* Surfaces (lowest → highest elevation) */
+  --color-bg:                     var(--_n-99);
+  --color-surface:                oklch(1 0 0);
+  --color-surface-low:            var(--_n-96);
+  --color-surface-high:           var(--_n-94);
+  --color-surface-highest:        var(--_n-90);
+
+  /* Text */
+  --color-text:                   var(--_n-10);
+  --color-text-dim:               var(--_nv-50);
+
+  /* Outlines */
+  --color-outline:                var(--_nv-50);
+  --color-outline-dim:            var(--_nv-80);
+
+  /* Misc */
+  --color-scrim:                  oklch(0 0 0 / 0.32);
+}
+
+
+/* ── Layer 3: Semantic roles — DARK MODE ──────────────────────── */
+[data-dark="true"] {
+  --color-primary:                var(--_p-80);
+  --color-on-primary:             var(--_p-20);
+  --color-primary-container:      var(--_p-30);
+  --color-on-primary-container:   var(--_p-90);
+
+  --color-secondary:              var(--_s-80);
+  --color-on-secondary:           var(--_s-20);
+  --color-secondary-container:    var(--_s-30);
+  --color-on-secondary-container: var(--_s-90);
+
+  --color-tertiary:               var(--_t-80);
+  --color-on-tertiary:            var(--_t-20);
+  --color-tertiary-container:     var(--_t-30);
+  --color-on-tertiary-container:  var(--_t-90);
+
+  --color-error:                  var(--_e-80);
+  --color-on-error:               var(--_e-20);
+  --color-error-container:        var(--_e-30);
+  --color-on-error-container:     var(--_e-90);
+
+  --color-success:                var(--_ok-80);
+  --color-on-success:             var(--_ok-20);
+  --color-success-container:      oklch(0.27 calc(var(--ref-success-c) * 0.86) var(--ref-success-h));
+  --color-on-success-container:   var(--_ok-90);
+
+  --color-warning:                var(--_w-80);
+  --color-on-warning:             var(--_w-20);
+  --color-warning-container:      oklch(0.27 calc(var(--ref-warning-c) * 0.86) var(--ref-warning-h));
+  --color-on-warning-container:   var(--_w-90);
+
+  --color-bg:                     var(--_n-10);
+  --color-surface:                oklch(0.14 0.008 var(--ref-primary-h));
+  --color-surface-low:            oklch(0.17 0.008 var(--ref-primary-h));
+  --color-surface-high:           oklch(0.20 0.008 var(--ref-primary-h));
+  --color-surface-highest:        oklch(0.25 0.008 var(--ref-primary-h));
+
+  --color-text:                   var(--_nv-90);
+  --color-text-dim:               var(--_nv-60);
+
+  --color-outline:                var(--_nv-60);
+  --color-outline-dim:            var(--_nv-30);
+}
+
+
+/* ── Layer 4: Utility / derived tokens ────────────────────────── */
+:root {
+  /* Hover: slightly towards black in light mode */
+  --color-primary-hover:   color-mix(in oklch, var(--color-primary)   85%, black);
+  --color-secondary-hover: color-mix(in oklch, var(--color-secondary) 85%, black);
+  --color-tertiary-hover:  color-mix(in oklch, var(--color-tertiary)  85%, black);
+  --color-error-hover:     color-mix(in oklch, var(--color-error)     85%, black);
+  --color-success-hover:   color-mix(in oklch, var(--color-success)   85%, black);
+
+  /* Tinted elevation shadows derived from primary */
+  --shadow-color: color-mix(in oklch, var(--color-primary) 18%, transparent);
+  --shadow-sm:    0 1px 3px var(--shadow-color);
+  --shadow-md:    0 2px 8px var(--shadow-color);
+  --shadow-lg:    0 4px 20px var(--shadow-color);
+  --shadow-xl:    0 8px 40px var(--shadow-color);
+
+  /* Border-radius scale */
+  --radius-xs:   4px;
+  --radius-sm:   8px;
+  --radius-md:   12px;
+  --radius-lg:   16px;
+  --radius-xl:   24px;
+  --radius-full: 999px;
+}
+
+[data-dark="true"] {
+  /* Hover: slightly towards white in dark mode */
+  --color-primary-hover:   color-mix(in oklch, var(--color-primary)   85%, white);
+  --color-secondary-hover: color-mix(in oklch, var(--color-secondary) 85%, white);
+  --color-tertiary-hover:  color-mix(in oklch, var(--color-tertiary)  85%, white);
+  --color-error-hover:     color-mix(in oklch, var(--color-error)     85%, white);
+  --color-success-hover:   color-mix(in oklch, var(--color-success)   85%, white);
+}
