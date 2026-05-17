@@ -16,6 +16,7 @@ env/
 # Env
 .env
 *.env.local
+.env.deploy
 
 # Flask
 instance/
