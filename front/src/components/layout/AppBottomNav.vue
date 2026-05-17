@@ -1,6 +1,7 @@
 <template>
   <nav class="bottom-nav">
     <button
+      data-tutorial="nav-tasks"
       class="bottom-nav-item"
       :class="{ active: route.path === '/tasks' }"
       @click="router.push('/tasks')"
@@ -12,6 +13,7 @@
 
     <button
       v-if="isAtLeast(ROLES.EMPLOYEE)"
+      data-tutorial="nav-stats"
       class="bottom-nav-item"
       :class="{ active: route.path === '/stats' }"
       @click="router.push('/stats')"
@@ -21,6 +23,7 @@
     </button>
 
     <button
+      data-tutorial="nav-settings"
       class="bottom-nav-item"
       :class="{ active: route.path === '/settings' }"
       @click="router.push('/settings')"
@@ -30,6 +33,7 @@
     </button>
 
     <button
+      data-tutorial="profile-avatar"
       class="bottom-nav-item"
       :class="{ active: route.path === '/profile' }"
       @click="router.push('/profile')"

@@ -371,18 +371,20 @@ const ALL_STEPS = [
 const activeSteps = computed(() => ALL_STEPS.filter(s => !s.check || s.check(isAtLeast)))
 
 // ─── Состояние ────────────────────────────────────────────────────────────
-const CARD_W      = 460
+const CARD_W        = 460
 const CARD_APPROX_H = 440
-const SPOT_PAD    = 10
-const CARD_GAP    = 24
+const SPOT_PAD      = 10
+const CARD_GAP      = 24
 
-const stepIndex   = ref(0)
-const spotRect    = ref(null)
+const stepIndex     = ref(0)
+const spotRect      = ref(null)
 const transitioning = ref(false)
+const windowWidth   = ref(window.innerWidth)
 
-const step    = computed(() => activeSteps.value[stepIndex.value] ?? activeSteps.value[0])
+const step      = computed(() => activeSteps.value[stepIndex.value] ?? activeSteps.value[0])
 const hasTarget = computed(() => !!step.value?.target)
-const isLast  = computed(() => stepIndex.value === activeSteps.value.length - 1)
+const isLast    = computed(() => stepIndex.value === activeSteps.value.length - 1)
+const isMobile  = computed(() => windowWidth.value <= 768)
 
 // ─── Стили ────────────────────────────────────────────────────────────────
 const spotStyle = computed(() => {
@@ -397,6 +399,15 @@ const spotStyle = computed(() => {
 })
 
 const cardStyle = computed(() => {
+  if (isMobile.value) return {
+    bottom: 'calc(60px + env(safe-area-inset-bottom, 0px))',
+    left: '0',
+    right: '0',
+    width: '100%',
+    borderRadius: '20px 20px 0 0',
+    maxHeight: '80dvh',
+  }
+
   if (step.value?.transparent) {
     return { bottom: '24px', right: '24px', width: `${CARD_W}px` }
   }
@@ -420,7 +431,6 @@ const cardStyle = computed(() => {
   } else if (fitsLeft) {
     cardLeft = spotLeft - CARD_GAP - CARD_W
   } else {
-    // Ни справа, ни слева не помещается — центрируем горизонтально
     cardLeft = Math.max(8, (window.innerWidth - CARD_W) / 2)
   }
 
@@ -480,14 +490,19 @@ function onKeydown(e) {
   if (e.key === 'ArrowLeft')  prev()
 }
 
+function onResize() {
+  windowWidth.value = window.innerWidth
+  updateSpotRect()
+}
+
 onMounted(async () => {
   await applyStep(0)
   window.addEventListener('keydown', onKeydown)
-  window.addEventListener('resize',  updateSpotRect)
+  window.addEventListener('resize',  onResize)
 })
 onUnmounted(() => {
   window.removeEventListener('keydown', onKeydown)
-  window.removeEventListener('resize',  updateSpotRect)
+  window.removeEventListener('resize',  onResize)
   cleanupAll()
 })
 </script>
@@ -735,5 +750,54 @@ onUnmounted(() => {
 .tut-fade-leave-to {
   opacity: 0;
   transform: translateY(-8px) scale(0.98);
+}
+
+/* ── Мобильная адаптация ────────────────────────── */
+@media (max-width: 768px) {
+  .tut-header {
+    padding: 16px 16px 12px;
+  }
+
+  .tut-icon-wrap {
+    width: 44px;
+    height: 44px;
+    border-radius: 12px;
+  }
+
+  .tut-icon {
+    font-size: 24px;
+  }
+
+  .tut-body {
+    padding: 16px 16px 12px;
+    gap: 10px;
+  }
+
+  .tut-title {
+    font-size: 18px;
+  }
+
+  .tut-footer {
+    padding: 12px 16px 14px;
+    gap: 8px;
+  }
+
+  .tut-dots {
+    display: none;
+  }
+
+  .tut-btn {
+    padding: 10px 16px;
+  }
+
+  .tut-fade-enter-from {
+    opacity: 0;
+    transform: translateY(24px) scale(0.99);
+  }
+
+  .tut-fade-leave-to {
+    opacity: 0;
+    transform: translateY(12px) scale(0.99);
+  }
 }
 </style>
