@@ -21,6 +21,9 @@ def _parse_period(args) -> tuple[datetime, datetime]:
             period_start = period_start.replace(tzinfo=timezone.utc)
         if period_end.tzinfo is None:
             period_end = period_end.replace(tzinfo=timezone.utc)
+        # date-only string → extend to end of day so the full day is included
+        if to_str and "T" not in to_str:
+            period_end = period_end.replace(hour=23, minute=59, second=59, microsecond=999999)
         return period_start, period_end
     except ValueError:
         raise ValueError("Неверный формат даты. Используйте YYYY-MM-DD")

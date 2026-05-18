@@ -1,15 +1,30 @@
 import { ref, computed } from 'vue'
 
 function formatDate(d) {
-  return d.toISOString().split('T')[0]
+  const year = d.getFullYear()
+  const month = String(d.getMonth() + 1).padStart(2, '0')
+  const day = String(d.getDate()).padStart(2, '0')
+  return `${year}-${month}-${day}`
+}
+
+function getMonday(d) {
+  const day = d.getDay()
+  const diff = day === 0 ? -6 : 1 - day
+  const monday = new Date(d)
+  monday.setDate(d.getDate() + diff)
+  monday.setHours(0, 0, 0, 0)
+  return monday
 }
 
 export function useStatsPeriod() {
-  const now = new Date()
-  const periodFrom = ref(new Date(now.getFullYear(), 0, 1))
-  const periodTo = ref(new Date(now.getFullYear(), 11, 31))
+  const currentMonday = getMonday(new Date())
+  const currentSunday = new Date(currentMonday)
+  currentSunday.setDate(currentMonday.getDate() + 6)
 
-  let mode = 'year'
+  const periodFrom = ref(currentMonday)
+  const periodTo = ref(currentSunday)
+
+  let mode = 'week'
 
   const fromStr = computed(() => formatDate(periodFrom.value))
   const toStr = computed(() => formatDate(periodTo.value))
@@ -22,10 +37,11 @@ export function useStatsPeriod() {
       periodTo.value = new Date(d)
     } else {
       mode = 'day'
-      const d = dir > 0 ? new Date(periodFrom.value) : new Date(periodFrom.value)
-      d.setDate(d.getDate() + (dir < 0 ? -1 : 0))
-      periodFrom.value = d
-      periodTo.value = new Date(d)
+      const today = new Date()
+      today.setHours(0, 0, 0, 0)
+      if (dir < 0) today.setDate(today.getDate() - 1)
+      periodFrom.value = today
+      periodTo.value = new Date(today)
     }
   }
 
@@ -39,10 +55,10 @@ export function useStatsPeriod() {
       periodTo.value = e
     } else {
       mode = 'week'
-      const d = new Date(periodFrom.value)
-      if (dir < 0) d.setDate(d.getDate() - 7)
-      periodFrom.value = d
-      const e = new Date(d)
+      const monday = getMonday(new Date())
+      if (dir < 0) monday.setDate(monday.getDate() - 7)
+      periodFrom.value = monday
+      const e = new Date(monday)
       e.setDate(e.getDate() + 6)
       periodTo.value = e
     }

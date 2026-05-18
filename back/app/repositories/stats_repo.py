@@ -31,7 +31,6 @@ def get_common_metrics(period_start: datetime, period_end: datetime) -> dict:
     remaining = db.session.execute(
         db.select(func.count(Task.id)).where(
             Task.is_archived.is_(False),
-            Task.received_at <= period_end,
         )
     ).scalar_one()
 

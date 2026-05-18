@@ -83,7 +83,7 @@
             >
               <span class="material-symbols-outlined">chevron_left</span>
             </button>
-            <span class="page-info">{{ tasksStore.filters.page }}</span>
+            <span class="page-info">{{ tasksStore.filters.page }} / {{ Math.ceil(tasksStore.total / tasksStore.filters.per_page) }}</span>
             <button
               class="page-btn"
               :disabled="tasksStore.tasks.length < tasksStore.filters.per_page"
