@@ -1,6 +1,16 @@
 import { defineStore } from 'pinia'
-import { ref, reactive } from 'vue'
+import { ref, reactive, watch } from 'vue'
 import * as tasksApi from '@/api/tasks.js'
+
+const STORAGE_KEY = 'gw2_tasks_filters'
+
+function loadSavedFilters() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY)
+    if (raw) return JSON.parse(raw)
+  } catch {}
+  return {}
+}
 
 export const useTasksStore = defineStore('tasks', () => {
   const tasks = ref([])
@@ -9,17 +19,26 @@ export const useTasksStore = defineStore('tasks', () => {
   const error = ref(null)
   const activeTask = ref(null)
 
+  const saved = loadSavedFilters()
+
   const filters = reactive({
-    tab: 'active',
-    search: '',
-    sort: 'last_activity',
-    dept_id: null,
-    received_from: null,
-    received_to: null,
-    has_units: null,
+    tab: saved.tab ?? 'active',
+    search: saved.search ?? '',
+    sort: saved.sort ?? 'last_activity',
+    dept_id: saved.dept_id ?? null,
+    received_from: saved.received_from ?? null,
+    received_to: saved.received_to ?? null,
+    has_units: saved.has_units ?? null,
+    period_preset: saved.period_preset ?? null,
     page: 1,
     per_page: 30,
   })
+
+  watch(filters, () => {
+    // eslint-disable-next-line no-unused-vars
+    const { page, per_page, ...toSave } = { ...filters }
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(toSave))
+  }, { deep: true })
 
   async function fetchTasks() {
     loading.value = true

@@ -61,13 +61,13 @@
         v-for="p in periods"
         :key="String(p.value)"
         class="filter-btn"
-        :class="{ active: activePeriod === p.value }"
+        :class="{ active: tasksStore.filters.period_preset === p.value }"
         @click="selectPeriod(p.value)"
       >
         {{ p.label }}
       </button>
 
-      <template v-if="activePeriod === 'custom'">
+      <template v-if="tasksStore.filters.period_preset === 'custom'">
         <div class="date-range">
           <label class="date-label">С</label>
           <input
@@ -119,7 +119,6 @@ const tasksStore = useTasksStore()
 const isMobileVisible = computed(() => props.mobileVisible)
 
 const departments = ref([])
-const activePeriod = ref(null)
 
 const sorts = [
   { label: 'Последняя активность', value: 'last_activity' },
@@ -151,7 +150,7 @@ onMounted(async () => {
 })
 
 function selectPeriod(value) {
-  activePeriod.value = value
+  tasksStore.filters.period_preset = value
 
   if (value === null) {
     tasksStore.setFilter('received_from', null)
@@ -160,7 +159,6 @@ function selectPeriod(value) {
   }
 
   if (value === 'custom') {
-    // Оставляем текущие значения дат
     return
   }
 

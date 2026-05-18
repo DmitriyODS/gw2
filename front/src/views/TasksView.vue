@@ -149,7 +149,7 @@ const notif = useNotificationsStore()
 const { isAtLeast } = usePermission()
 
 const showCreateTask = ref(false)
-const searchQuery = ref('')
+const searchQuery = ref(tasksStore.filters.search)
 const showMobileFilters = ref(false)
 const showSortSheet = ref(false)
 

@@ -7,6 +7,7 @@
         <div class="cl-header">
           <span class="material-symbols-outlined cl-header-icon">new_releases</span>
           <span class="cl-header-title">Что нового</span>
+          <span v-if="currentVersion" class="cl-current-version">Версия: {{ currentVersion }}</span>
           <button class="cl-close" @click="$emit('close')" title="Закрыть">
             <span class="material-symbols-outlined">close</span>
           </button>
@@ -72,7 +73,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { changelogApi } from '@/api/changelog.js'
 
 defineEmits(['close'])
@@ -80,6 +81,8 @@ defineEmits(['close'])
 const loading  = ref(true)
 const error    = ref(false)
 const versions = ref([])
+
+const currentVersion = computed(() => versions.value[0]?.version ?? null)
 
 const groupMeta = {
   new:      { icon: 'add_circle',             label: 'Добавили'  },
@@ -163,6 +166,17 @@ onMounted(async () => {
   font-size: 16px;
   font-weight: 700;
   color: var(--color-text);
+}
+
+.cl-current-version {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--color-text-dim);
+  background: var(--color-surface-high);
+  padding: 3px 10px;
+  border-radius: var(--radius-full);
+  white-space: nowrap;
+  margin-right: 4px;
 }
 
 .cl-close {

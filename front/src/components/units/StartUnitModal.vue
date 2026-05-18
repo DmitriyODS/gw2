@@ -29,6 +29,8 @@
           placeholder="Выберите тип"
           class="w-full"
           :invalid="!!errors.unit_type_id"
+          filter
+          filterPlaceholder="Поиск..."
         />
         <span v-if="errors.unit_type_id" class="field-error">{{ errors.unit_type_id }}</span>
       </div>

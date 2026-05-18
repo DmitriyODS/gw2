@@ -52,7 +52,7 @@ const elapsedDisplay = computed(() => {
 })
 
 function formatDuration(start) {
-  const totalSec = Math.floor((Date.now() - new Date(start)) / 1000)
+  const totalSec = Math.max(0, Math.floor((Date.now() - new Date(start)) / 1000))
   const h = Math.floor(totalSec / 3600)
   const m = Math.floor((totalSec % 3600) / 60)
   const s = totalSec % 60

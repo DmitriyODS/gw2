@@ -39,6 +39,8 @@
           class="w-full"
           :invalid="!!errors.department_id"
           :loading="depsLoading"
+          filter
+          filterPlaceholder="Поиск..."
         />
         <span v-if="errors.department_id" class="field-error">{{ errors.department_id }}</span>
       </div>
