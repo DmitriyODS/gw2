@@ -128,6 +128,7 @@ import { getDepartments } from '@/api/departments.js'
 import { getUnitTypes } from '@/api/unitTypes.js'
 import { createUnit } from '@/api/units.js'
 import { useNotificationsStore } from '@/stores/notifications.js'
+import { useUnitsStore } from '@/stores/units.js'
 
 const props = defineProps({
   task: {
@@ -139,6 +140,7 @@ const props = defineProps({
 const emit = defineEmits(['close', 'saved'])
 
 const notifications = useNotificationsStore()
+const unitsStore = useUnitsStore()
 
 const departments = ref([])
 const depsLoading = ref(false)
@@ -248,10 +250,11 @@ async function handleSubmit() {
       result = await createTask(payload)
       if (createFirstUnit.value && result?.id) {
         try {
-          await createUnit(result.id, {
+          const unit = await createUnit(result.id, {
             name: unitName.value.trim() || result.name,
             unit_type_id: unitTypeId.value,
           })
+          unitsStore.setActiveUnit(unit)
           notifications.success('Задача создана, юнит запущен')
         } catch (e) {
           notifications.success('Задача создана')
