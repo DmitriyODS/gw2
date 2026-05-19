@@ -208,6 +208,12 @@ onMounted(async () => {
 }
 
 /* ── Версия ───────────────────────────────────────────────────── */
+.cl-version + .cl-version {
+  margin-top: 40px;
+  padding-top: 36px;
+  border-top: 1px solid var(--color-outline-dim);
+}
+
 .cl-version-top {
   display: flex;
   align-items: center;
