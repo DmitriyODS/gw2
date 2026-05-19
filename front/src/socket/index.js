@@ -12,7 +12,8 @@ export function connectSocket() {
 
   socket = io('/', {
     auth: { token: auth.token },
-    transports: ['polling', 'websocket']
+    transports: ['polling', 'websocket'],
+    upgrade: !import.meta.env.DEV,
   })
 
   socket.on('connect', () => {
