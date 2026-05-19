@@ -74,7 +74,7 @@ function formatCellDate(dateStr) {
 }
 
 .stat-val.hours {
-  color: var(--gw-accent);
+  color: var(--color-tertiary);
 }
 
 .empty-calendar {

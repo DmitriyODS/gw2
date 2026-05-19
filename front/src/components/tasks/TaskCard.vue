@@ -106,8 +106,8 @@ function formatDate(d) {
 
 .dept-badge {
   display: inline-block;
-  background: var(--gw-primary-light);
-  color: var(--gw-primary);
+  background: var(--color-tertiary-container);
+  color: var(--color-on-tertiary-container);
   border-radius: 20px;
   padding: 3px 10px;
   font-size: 12px;

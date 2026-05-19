@@ -437,8 +437,8 @@ onMounted(() => {
 
 .role-tag {
   display: inline-block;
-  background: var(--gw-primary-light);
-  color: var(--gw-primary);
+  background: var(--color-tertiary-container);
+  color: var(--color-on-tertiary-container);
   border-radius: 20px;
   padding: 4px 14px;
   font-size: 12px;

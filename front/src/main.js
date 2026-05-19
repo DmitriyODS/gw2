@@ -13,32 +13,45 @@ import './assets/main.css'
 const GrovePreset = definePreset(Aura, {
   semantic: {
     primary: {
-      50: '#fce4ec', 100: '#f8bbd0', 200: '#f48fb1',
-      300: '#f06292', 400: '#ec407a', 500: '#e91e63',
-      600: '#d81b60', 700: '#c2185b', 800: '#ad1457',
-      900: '#880e4f', 950: '#560027'
+      50:  'var(--_p-99)',
+      100: 'var(--_p-95)',
+      200: 'var(--_p-90)',
+      300: 'var(--_p-80)',
+      400: 'var(--_p-40)',
+      500: 'var(--_p-40)',
+      600: 'var(--_p-30)',
+      700: 'var(--_p-20)',
+      800: 'var(--_p-20)',
+      900: 'var(--_p-10)',
+      950: 'var(--_p-10)',
     },
     colorScheme: {
       light: {
         primary: {
-          color: '#e040fb',
-          inverseColor: '#ffffff',
-          hoverColor: '#d500f9',
-          activeColor: '#aa00ff'
+          color:        'var(--color-primary)',
+          inverseColor: 'var(--color-on-primary)',
+          hoverColor:   'var(--color-primary-hover)',
+          activeColor:  'var(--color-primary-hover)',
         },
         highlight: {
-          background: '#fce4ec',
-          focusBackground: '#f8bbd0',
-          color: '#880e4f',
-          focusColor: '#560027'
+          background:      'var(--color-primary-container)',
+          focusBackground: 'var(--color-primary-container)',
+          color:           'var(--color-on-primary-container)',
+          focusColor:      'var(--color-on-primary-container)',
         }
       },
       dark: {
         primary: {
-          color: '#ce93d8',
-          inverseColor: '#1a1a2e',
-          hoverColor: '#ba68c8',
-          activeColor: '#ab47bc'
+          color:        'var(--color-primary)',
+          inverseColor: 'var(--color-on-primary)',
+          hoverColor:   'var(--color-primary-hover)',
+          activeColor:  'var(--color-primary-hover)',
+        },
+        highlight: {
+          background:      'var(--color-primary-container)',
+          focusBackground: 'var(--color-primary-container)',
+          color:           'var(--color-on-primary-container)',
+          focusColor:      'var(--color-on-primary-container)',
         }
       }
     }

@@ -11,6 +11,7 @@ const PRESETS = {
   orange:  { primary: '#fb8c00', secondary: '#ff6d00', tertiary: '#fdd835' },
   yellow:  { primary: '#f9a825', secondary: '#fb8c00', tertiary: '#43a047' },
   violet:  { primary: '#7c4dff', secondary: '#00b0ff', tertiary: '#e040fb' },
+  lilac:   { primary: '#9b59b6', secondary: '#c77daa', tertiary: '#7da87e' },
 }
 
 const PRESET_LABELS = {
@@ -22,6 +23,7 @@ const PRESET_LABELS = {
   orange:  'Оранжевая',
   yellow:  'Жёлтая',
   violet:  'Фиолетовая',
+  lilac:   'Весенняя сирень',
 }
 
 /* ── oklch conversion ────────────────────────────────────────────

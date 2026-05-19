@@ -412,7 +412,7 @@ onMounted(async () => {
 }
 
 .task-num.remaining .num {
-  color: var(--gw-accent);
+  color: var(--color-tertiary);
 }
 
 /* Горизонтальный скролл для таблиц */
