@@ -123,6 +123,7 @@ const departments = ref([])
 const sorts = [
   { label: 'Последняя активность', value: 'last_activity' },
   { label: 'Дата создания', value: 'created_at' },
+  { label: 'Дата поступления', value: 'received_at' },
   { label: 'Срок исполнения', value: 'deadline' },
 ]
 
