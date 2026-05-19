@@ -145,17 +145,6 @@ const depsLoading = ref(false)
 const submitting = ref(false)
 const serverError = ref('')
 
-const createFirstUnit = ref(false)
-const unitName = ref('')
-const unitNameEdited = ref(false)
-const unitTypeId = ref(null)
-const unitTypes = ref([])
-const unitTypesLoading = ref(false)
-
-watch(() => form.value?.name, (v) => {
-  if (!unitNameEdited.value) unitName.value = v || ''
-})
-
 const form = ref({
   name: props.task?.name || '',
   link_yougile: props.task?.link_yougile || '',
@@ -168,6 +157,17 @@ const errors = ref({
   name: '',
   department_id: '',
   received_at: ''
+})
+
+const createFirstUnit = ref(false)
+const unitName = ref('')
+const unitNameEdited = ref(false)
+const unitTypeId = ref(null)
+const unitTypes = ref([])
+const unitTypesLoading = ref(false)
+
+watch(() => form.value.name, (v) => {
+  if (!unitNameEdited.value) unitName.value = v || ''
 })
 
 onMounted(async () => {
