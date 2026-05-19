@@ -71,6 +71,8 @@ def get_list(
         q = q.order_by(desc(last_unit_subq).nulls_last(), desc(Task.created_at))
     elif sort == "created_at":
         q = q.order_by(desc(Task.created_at))
+    elif sort == "received_at":
+        q = q.order_by(desc(Task.received_at))
     elif sort == "deadline":
         q = q.order_by(asc(Task.deadline).nulls_last())
 
@@ -132,6 +134,31 @@ def has_any_units(task_id: int) -> bool:
     return db.session.execute(
         db.select(exists().where(Unit.task_id == task_id))
     ).scalar_one()
+
+
+def get_active_users(task_id: int) -> list[dict]:
+    from app.models import User as UserModel
+    rows = db.session.execute(
+        db.select(UserModel.id, UserModel.fio, UserModel.avatar_path)
+        .join(Unit, Unit.user_id == UserModel.id)
+        .where(Unit.task_id == task_id, Unit.datetime_end.is_(None))
+    ).all()
+    return [{"id": r.id, "fio": r.fio, "avatar_path": r.avatar_path} for r in rows]
+
+
+def get_active_users_by_task_ids(task_ids: list) -> dict:
+    if not task_ids:
+        return {}
+    from app.models import User as UserModel
+    rows = db.session.execute(
+        db.select(Unit.task_id, UserModel.id, UserModel.fio, UserModel.avatar_path)
+        .join(UserModel, Unit.user_id == UserModel.id)
+        .where(Unit.task_id.in_(task_ids), Unit.datetime_end.is_(None))
+    ).all()
+    result: dict = {}
+    for r in rows:
+        result.setdefault(r.task_id, []).append({"id": r.id, "fio": r.fio, "avatar_path": r.avatar_path})
+    return result
 
 
 def toggle_favorite(task_id: int, user_id: int) -> bool:

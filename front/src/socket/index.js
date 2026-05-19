@@ -60,12 +60,23 @@ export function connectSocket() {
     }
     const tasks = useTasksStore()
     tasks.upsertTask({ id: unit.task_id, has_units: true })
+    if (unit.user) {
+      tasks.addActiveUser(unit.task_id, {
+        id: unit.user.id,
+        fio: unit.user.fio,
+        avatar_path: unit.user.avatar_path ?? null,
+      })
+    }
   })
 
-  socket.on('unit:stopped', ({ unit_id, task_id, datetime_end }) => {
+  socket.on('unit:stopped', ({ unit_id, task_id, user_id, datetime_end }) => {
     const units = useUnitsStore()
     if (units.activeUnit?.id === unit_id) {
       units.clearActiveUnit()
+    }
+    if (task_id && user_id) {
+      const tasks = useTasksStore()
+      tasks.removeActiveUser(task_id, user_id)
     }
   })
 
@@ -76,10 +87,14 @@ export function connectSocket() {
     }
   })
 
-  socket.on('unit:deleted', ({ unit_id }) => {
+  socket.on('unit:deleted', ({ unit_id, task_id, user_id }) => {
     const units = useUnitsStore()
     if (units.activeUnit?.id === unit_id) {
       units.clearActiveUnit()
+    }
+    if (task_id && user_id) {
+      const tasks = useTasksStore()
+      tasks.removeActiveUser(task_id, user_id)
     }
   })
 

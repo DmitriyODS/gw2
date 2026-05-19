@@ -67,6 +67,40 @@
             </DataTable>
           </div>
         </StatsWidget>
+
+        <StatsWidget title="Задачи с участием сотрудника" class="full-width">
+          <div v-if="canSelectEmployee" class="employee-selector">
+            <Select
+              v-model="selectedEmployeeId"
+              :options="employees"
+              option-label="fio"
+              option-value="id"
+              placeholder="Выберите сотрудника"
+              class="employee-select"
+              filter
+              filterPlaceholder="Поиск..."
+              :loading="employeesLoading"
+              @change="loadUserTasks"
+            />
+          </div>
+          <div v-if="userTasksLoading" class="user-tasks-loading">
+            <ProgressSpinner style="width:28px;height:28px" />
+          </div>
+          <template v-else-if="userTasksData">
+            <div class="table-scroll">
+              <DataTable :value="userTasksData.tasks || []" size="small" :show-gridlines="false">
+                <Column field="task_name" header="Задача" />
+                <Column header="Время" style="width:110px">
+                  <template #body="{ data }">{{ roundHours(data.total_hours) }}</template>
+                </Column>
+              </DataTable>
+            </div>
+            <div class="user-tasks-total">
+              Всего задач: <strong>{{ userTasksData.tasks_count }}</strong>
+            </div>
+          </template>
+          <div v-else class="user-tasks-empty">Нет данных за выбранный период</div>
+        </StatsWidget>
       </div>
     </template>
 
@@ -124,12 +158,15 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue'
 import { usePermission, ROLES } from '@/composables/usePermission.js'
+import { useAuthStore } from '@/stores/auth.js'
 import { useNotificationsStore } from '@/stores/notifications.js'
 import {
   getStatsCommon,
   getStatsExtended,
   exportStatsCommon,
-  exportStatsExtended
+  exportStatsExtended,
+  getStatsUserTasks,
+  getStatsEmployees,
 } from '@/api/stats.js'
 import { formatHours } from '@/utils/time.js'
 import StatsPeriodControl from '@/components/stats/StatsPeriodControl.vue'
@@ -138,8 +175,10 @@ import CalendarGrid from '@/components/stats/CalendarGrid.vue'
 import DataTable from 'primevue/datatable'
 import Column from 'primevue/column'
 import ProgressSpinner from 'primevue/progressspinner'
+import Select from 'primevue/select'
 
 const { isAtLeast } = usePermission()
+const authStore = useAuthStore()
 const notif = useNotificationsStore()
 
 const mode = ref('common')
@@ -152,6 +191,13 @@ const currentTo = ref('')
 
 const canExport = computed(() => isAtLeast(ROLES.MANAGER))
 const canExportUsers = computed(() => isAtLeast(ROLES.MANAGER))
+const canSelectEmployee = computed(() => isAtLeast(ROLES.MANAGER))
+
+const userTasksData = ref(null)
+const userTasksLoading = ref(false)
+const employees = ref([])
+const employeesLoading = ref(false)
+const selectedEmployeeId = ref(null)
 
 const flatUserTypes = computed(() => {
   if (!extendedData.value?.by_unit_types_per_user) return []
@@ -187,6 +233,22 @@ async function loadData() {
   } finally {
     loading.value = false
   }
+  if (mode.value === 'common') {
+    loadUserTasks()
+  }
+}
+
+async function loadUserTasks() {
+  if (!currentFrom.value || !currentTo.value) return
+  userTasksLoading.value = true
+  try {
+    const uid = selectedEmployeeId.value ?? authStore.user?.id
+    userTasksData.value = await getStatsUserTasks(uid, currentFrom.value, currentTo.value)
+  } catch (e) {
+    notif.error(e.message || 'Ошибка загрузки задач сотрудника')
+  } finally {
+    userTasksLoading.value = false
+  }
 }
 
 function onPeriodChange({ from, to }) {
@@ -204,8 +266,17 @@ async function handleExportCommon() {
   return exportStatsCommon(currentFrom.value, currentTo.value)
 }
 
-onMounted(() => {
-  // данные загрузятся автоматически через @change от StatsPeriodControl
+onMounted(async () => {
+  if (canSelectEmployee.value) {
+    employeesLoading.value = true
+    try {
+      employees.value = await getStatsEmployees()
+    } catch {
+      employees.value = []
+    } finally {
+      employeesLoading.value = false
+    }
+  }
 })
 </script>
 
@@ -348,6 +419,39 @@ onMounted(() => {
 .table-scroll {
   overflow-x: auto;
   -webkit-overflow-scrolling: touch;
+}
+
+.employee-selector {
+  margin-bottom: 12px;
+}
+
+.employee-select {
+  width: 280px;
+  max-width: 100%;
+}
+
+.user-tasks-loading {
+  display: flex;
+  justify-content: center;
+  padding: 20px;
+}
+
+.user-tasks-total {
+  margin-top: 10px;
+  font-size: 13px;
+  color: var(--gw-text-secondary);
+  text-align: right;
+}
+
+.user-tasks-total strong {
+  color: var(--gw-text);
+}
+
+.user-tasks-empty {
+  text-align: center;
+  padding: 20px;
+  color: var(--gw-text-secondary);
+  font-size: 14px;
 }
 
 @media (max-width: 768px) {

@@ -18,10 +18,11 @@ _create_schema = TaskCreateSchema()
 _update_schema = TaskUpdateSchema()
 
 
-def _enrich_task(task, current_user_id: int) -> dict:
+def _enrich_task(task, current_user_id: int, active_users: list = None) -> dict:
     data = _task_schema.dump(task)
     data["is_favorite"] = task_repo.is_favorite(task.id, current_user_id)
     data["has_units"] = task_repo.has_any_units(task.id)
+    data["active_users"] = active_users if active_users is not None else task_repo.get_active_users(task.id)
     return data
 
 
@@ -73,7 +74,9 @@ def list_tasks():
         per_page=int(args.get("per_page", 30)),
     )
 
-    items = [_enrich_task(t, current_user_id) for t in result["items"]]
+    task_ids = [t.id for t in result["items"]]
+    active_users_map = task_repo.get_active_users_by_task_ids(task_ids)
+    items = [_enrich_task(t, current_user_id, active_users_map.get(t.id, [])) for t in result["items"]]
     return jsonify({
         "items": items,
         "total": result["total"],

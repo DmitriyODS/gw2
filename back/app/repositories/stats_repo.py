@@ -219,6 +219,34 @@ def get_calendar(period_start: datetime, period_end: datetime) -> list[dict]:
     return sorted(calendar.values(), key=lambda x: x["date"])
 
 
+def get_user_tasks_detail(user_id: int, period_start: datetime, period_end: datetime) -> dict:
+    rows = db.session.execute(
+        db.select(
+            Task.id,
+            Task.name,
+            func.coalesce(
+                func.sum(
+                    func.extract("epoch", func.coalesce(Unit.datetime_end, func.now()) - Unit.datetime_start) / 3600
+                ), 0
+            ).label("total_hours")
+        )
+        .join(Unit, Unit.task_id == Task.id)
+        .where(
+            Unit.user_id == user_id,
+            Unit.datetime_start >= period_start,
+            Unit.datetime_start <= period_end,
+        )
+        .group_by(Task.id, Task.name)
+        .order_by(func.sum(
+            func.extract("epoch", func.coalesce(Unit.datetime_end, func.now()) - Unit.datetime_start)
+        ).desc())
+    ).all()
+    return {
+        "tasks": [{"task_id": r.id, "task_name": r.name, "total_hours": round(float(r.total_hours), 2)} for r in rows],
+        "tasks_count": len(rows),
+    }
+
+
 def get_profile_stats(user_id: int, period_start: datetime, period_end: datetime) -> dict:
     total_hours = db.session.execute(
         db.select(

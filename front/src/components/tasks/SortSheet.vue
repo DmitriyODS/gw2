@@ -38,6 +38,7 @@ const tasksStore = useTasksStore()
 const sorts = [
   { label: 'Последняя активность', value: 'last_activity', icon: 'history' },
   { label: 'Дата создания',        value: 'created_at',    icon: 'calendar_today' },
+  { label: 'Дата поступления',     value: 'received_at',   icon: 'inbox' },
   { label: 'Срок исполнения',      value: 'deadline',      icon: 'event' },
 ]
 

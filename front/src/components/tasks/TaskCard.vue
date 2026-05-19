@@ -26,8 +26,26 @@
       </div>
     </div>
 
-    <div v-if="task.has_units" class="units-indicator" title="Есть юниты">
-      <span class="material-symbols-outlined">timer</span>
+    <div class="card-footer">
+      <div v-if="task.has_units" class="units-indicator" title="Есть юниты">
+        <span class="material-symbols-outlined">timer</span>
+      </div>
+      <div v-if="task.active_users?.length" class="active-users">
+        <div
+          v-for="user in task.active_users.slice(0, 4)"
+          :key="user.id"
+          class="active-avatar"
+          :title="user.fio"
+        >
+          <img
+            :src="user.avatar_path ? `/uploads/${user.avatar_path}` : `/api/users/${user.id}/identicon`"
+            :alt="user.fio"
+          />
+        </div>
+        <div v-if="task.active_users.length > 4" class="active-avatar active-avatar-more">
+          +{{ task.active_users.length - 4 }}
+        </div>
+      </div>
     </div>
   </div>
 </template>
@@ -157,14 +175,59 @@ function formatDate(d) {
   flex-shrink: 0;
 }
 
+.card-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 4px;
+}
+
 .units-indicator {
   display: flex;
   align-items: center;
-  margin-top: 4px;
 }
 
 .units-indicator .material-symbols-outlined {
   font-size: 16px;
   color: var(--gw-accent);
+}
+
+.active-users {
+  display: flex;
+  align-items: center;
+}
+
+.active-avatar {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  border: 2px solid var(--gw-surface);
+  overflow: hidden;
+  margin-left: -5px;
+  flex-shrink: 0;
+  box-shadow: 0 0 0 1px var(--gw-border);
+}
+
+.active-avatar:first-child {
+  margin-left: 0;
+}
+
+.active-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.active-avatar-more {
+  background: var(--gw-primary-light);
+  color: var(--gw-primary);
+  font-size: 9px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: visible;
 }
 </style>

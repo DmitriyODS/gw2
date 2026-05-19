@@ -3,7 +3,8 @@ from flask import Blueprint, request, jsonify, send_file
 from flask_jwt_extended import get_jwt_identity
 
 from app.services import stats_service
-from app.utils.permissions import require_role, require_auth, EMPLOYEE, MANAGER
+from app.repositories import user_repo
+from app.utils.permissions import require_role, require_auth, EMPLOYEE, MANAGER, get_user_level
 
 bp = Blueprint("stats", __name__, url_prefix="/api/stats")
 
@@ -137,6 +138,60 @@ def export_extended():
         as_attachment=True,
         download_name=f"stats_extended_{period_start.date()}_{period_end.date()}.xlsx",
     )
+
+
+@bp.get("/user-tasks")
+@require_role(EMPLOYEE)
+def get_user_tasks():
+    """
+    Задачи с участием сотрудника за период.
+    ---
+    tags: [stats]
+    security: [BearerAuth: []]
+    parameters:
+      - {in: query, name: user_id, schema: {type: integer}, description: ID пользователя (менеджер+ может запросить любого)}
+      - {in: query, name: from, schema: {type: string, format: date}}
+      - {in: query, name: to, schema: {type: string, format: date}}
+    responses:
+      200:
+        description: Список задач с суммарным временем
+    """
+    try:
+        period_start, period_end = _parse_period(request.args)
+    except ValueError as e:
+        return jsonify({"error": "VALIDATION_ERROR", "message": str(e)}), 400
+
+    current_user_id = int(get_jwt_identity())
+
+    user_id_str = request.args.get("user_id")
+    if user_id_str:
+        requested_user_id = int(user_id_str)
+        if requested_user_id != current_user_id:
+            current_user = user_repo.get_by_id(current_user_id)
+            if get_user_level(current_user) < MANAGER:
+                return jsonify({"error": "FORBIDDEN", "message": "Доступ запрещён"}), 403
+        target_user_id = requested_user_id
+    else:
+        target_user_id = current_user_id
+
+    data = stats_service.get_user_tasks(target_user_id, period_start, period_end)
+    return jsonify(data), 200
+
+
+@bp.get("/employees")
+@require_role(MANAGER)
+def get_employees():
+    """
+    Список сотрудников для выбора в статистике.
+    ---
+    tags: [stats]
+    security: [BearerAuth: []]
+    responses:
+      200:
+        description: Список пользователей (id, fio)
+    """
+    users = user_repo.get_all(include_hidden=False)
+    return jsonify([{"id": u.id, "fio": u.fio} for u in users]), 200
 
 
 @bp.get("/profile")

@@ -66,6 +66,43 @@
         />
       </div>
 
+      <template v-if="!task">
+        <div class="form-field">
+          <label class="checkbox-label">
+            <input type="checkbox" v-model="createFirstUnit" class="unit-checkbox" />
+            <span>Создать первый юнит</span>
+          </label>
+        </div>
+
+        <template v-if="createFirstUnit">
+          <div class="form-field">
+            <label class="form-label">Название юнита</label>
+            <InputText
+              v-model="unitName"
+              placeholder="Название юнита"
+              class="w-full"
+              @input="unitNameEdited = true"
+            />
+          </div>
+          <div class="form-field">
+            <label class="form-label">Тип юнита <span class="required">*</span></label>
+            <Select
+              v-model="unitTypeId"
+              :options="unitTypes"
+              option-label="name"
+              option-value="id"
+              placeholder="Выберите тип"
+              class="w-full"
+              :invalid="!!errors.unit_type_id"
+              :loading="unitTypesLoading"
+              filter
+              filterPlaceholder="Поиск..."
+            />
+            <span v-if="errors.unit_type_id" class="field-error">{{ errors.unit_type_id }}</span>
+          </div>
+        </template>
+      </template>
+
       <div v-if="serverError" class="server-error">{{ serverError }}</div>
 
       <div class="form-actions">
@@ -81,13 +118,15 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, watch, onMounted } from 'vue'
 import Dialog from 'primevue/dialog'
 import InputText from 'primevue/inputtext'
 import Select from 'primevue/select'
 import DatePicker from 'primevue/datepicker'
 import { createTask, updateTask } from '@/api/tasks.js'
 import { getDepartments } from '@/api/departments.js'
+import { getUnitTypes } from '@/api/unitTypes.js'
+import { createUnit } from '@/api/units.js'
 import { useNotificationsStore } from '@/stores/notifications.js'
 
 const props = defineProps({
@@ -105,6 +144,17 @@ const departments = ref([])
 const depsLoading = ref(false)
 const submitting = ref(false)
 const serverError = ref('')
+
+const createFirstUnit = ref(false)
+const unitName = ref('')
+const unitNameEdited = ref(false)
+const unitTypeId = ref(null)
+const unitTypes = ref([])
+const unitTypesLoading = ref(false)
+
+watch(() => form.value?.name, (v) => {
+  if (!unitNameEdited.value) unitName.value = v || ''
+})
 
 const form = ref({
   name: props.task?.name || '',
@@ -130,10 +180,20 @@ onMounted(async () => {
   } finally {
     depsLoading.value = false
   }
+
+  unitTypesLoading.value = true
+  try {
+    const data = await getUnitTypes()
+    unitTypes.value = Array.isArray(data) ? data : (data.unit_types ?? data.items ?? [])
+  } catch {
+    unitTypes.value = []
+  } finally {
+    unitTypesLoading.value = false
+  }
 })
 
 function validate() {
-  errors.value = { name: '', department_id: '', received_at: '' }
+  errors.value = { name: '', department_id: '', received_at: '', unit_type_id: '' }
   let valid = true
 
   if (!form.value.name.trim()) {
@@ -148,6 +208,11 @@ function validate() {
 
   if (!form.value.received_at) {
     errors.value.received_at = 'Укажите дату поступления'
+    valid = false
+  }
+
+  if (!props.task && createFirstUnit.value && !unitTypeId.value) {
+    errors.value.unit_type_id = 'Выберите тип юнита'
     valid = false
   }
 
@@ -181,7 +246,20 @@ async function handleSubmit() {
       notifications.success('Задача успешно обновлена')
     } else {
       result = await createTask(payload)
-      notifications.success('Задача успешно создана')
+      if (createFirstUnit.value && result?.id) {
+        try {
+          await createUnit(result.id, {
+            name: unitName.value.trim() || result.name,
+            unit_type_id: unitTypeId.value,
+          })
+          notifications.success('Задача создана, юнит запущен')
+        } catch (e) {
+          notifications.success('Задача создана')
+          notifications.error('Не удалось запустить юнит: ' + (e?.message || 'ошибка'))
+        }
+      } else {
+        notifications.success('Задача успешно создана')
+      }
     }
 
     emit('saved', result)
@@ -277,5 +355,24 @@ async function handleSubmit() {
 
 .w-full {
   width: 100%;
+}
+
+.checkbox-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--gw-text);
+  cursor: pointer;
+  user-select: none;
+}
+
+.unit-checkbox {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--gw-primary);
+  cursor: pointer;
+  flex-shrink: 0;
 }
 </style>

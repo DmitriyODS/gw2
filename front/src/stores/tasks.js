@@ -95,6 +95,24 @@ export const useTasksStore = defineStore('tasks', () => {
     if (activeTask.value?.id === taskId) activeTask.value = null
   }
 
+  function addActiveUser(taskId, user) {
+    const idx = tasks.value.findIndex(t => t.id === taskId)
+    if (idx >= 0) {
+      const existing = tasks.value[idx].active_users || []
+      if (!existing.find(u => u.id === user.id)) {
+        tasks.value[idx] = { ...tasks.value[idx], active_users: [...existing, user] }
+      }
+    }
+  }
+
+  function removeActiveUser(taskId, userId) {
+    const idx = tasks.value.findIndex(t => t.id === taskId)
+    if (idx >= 0) {
+      const existing = tasks.value[idx].active_users || []
+      tasks.value[idx] = { ...tasks.value[idx], active_users: existing.filter(u => u.id !== userId) }
+    }
+  }
+
   function archiveTask(taskId, archived_at) {
     if (filters.tab === 'active' || filters.tab === 'favorites') {
       removeTask(taskId)
@@ -114,6 +132,7 @@ export const useTasksStore = defineStore('tasks', () => {
   return {
     tasks, total, loading, error, filters, activeTask,
     fetchTasks, setFilter, setTab, openTask, closeTask,
-    upsertTask, removeTask, archiveTask, restoreTask
+    upsertTask, removeTask, archiveTask, restoreTask,
+    addActiveUser, removeActiveUser
   }
 })

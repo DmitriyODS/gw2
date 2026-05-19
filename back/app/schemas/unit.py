@@ -9,6 +9,7 @@ class UnitTypeRefSchema(Schema):
 class UserRefSchema(Schema):
     id = fields.Int(dump_only=True)
     fio = fields.Str(dump_only=True)
+    avatar_path = fields.Str(dump_only=True, allow_none=True)
 
 
 class UnitSchema(Schema):

@@ -67,6 +67,16 @@
           <h3>Смена пароля</h3>
           <form @submit.prevent="changePassword" class="profile-form">
             <div class="form-group">
+              <label>Текущий пароль</label>
+              <InputText
+                v-model="passwordForm.current"
+                type="password"
+                class="w-full"
+                placeholder="Введите текущий пароль"
+                autocomplete="current-password"
+              />
+            </div>
+            <div class="form-group">
               <label>Новый пароль</label>
               <InputText
                 v-model="passwordForm.password"
@@ -235,12 +245,16 @@ async function saveProfile() {
 }
 
 // ---- Password form ----
-const passwordForm = reactive({ password: '', confirm: '' })
+const passwordForm = reactive({ current: '', password: '', confirm: '' })
 const passwordError = ref('')
 const passwordLoading = ref(false)
 
 async function changePassword() {
   passwordError.value = ''
+  if (!passwordForm.current) {
+    passwordError.value = 'Введите текущий пароль'
+    return
+  }
   if (passwordForm.password.length < 8) {
     passwordError.value = 'Пароль должен содержать не менее 8 символов'
     return
@@ -251,8 +265,13 @@ async function changePassword() {
   }
   passwordLoading.value = true
   try {
-    await updateMe({ password: passwordForm.password })
+    await updateMe({
+      current_password: passwordForm.current,
+      new_password: passwordForm.password,
+      confirm_password: passwordForm.confirm,
+    })
     notif.success('Пароль изменён')
+    passwordForm.current = ''
     passwordForm.password = ''
     passwordForm.confirm = ''
   } catch (e) {
@@ -268,10 +287,12 @@ const profileStats = ref(null)
 const statsLoading = ref(false)
 
 function getDefaultPeriod() {
-  const to = new Date()
-  const from = new Date()
-  from.setDate(from.getDate() - 6)
-  return [from, to]
+  const today = new Date()
+  const day = today.getDay()
+  const monday = new Date(today)
+  monday.setDate(today.getDate() - (day === 0 ? 6 : day - 1))
+  monday.setHours(0, 0, 0, 0)
+  return [monday, today]
 }
 
 function formatDate(d) {

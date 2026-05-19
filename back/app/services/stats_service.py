@@ -26,6 +26,10 @@ def get_extended(period_start: datetime, period_end: datetime) -> dict:
     }
 
 
+def get_user_tasks(user_id: int, period_start: datetime, period_end: datetime) -> dict:
+    return stats_repo.get_user_tasks_detail(user_id, period_start, period_end)
+
+
 def get_profile(user_id: int, period_start: datetime, period_end: datetime) -> dict:
     data = stats_repo.get_profile_stats(user_id, period_start, period_end)
     return {

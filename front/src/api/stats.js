@@ -41,3 +41,14 @@ export const getStatsProfile = (from, to) => {
   const q = qs.toString() ? `?${qs}` : ''
   return apiRequest('/stats/profile' + q)
 }
+
+export const getStatsUserTasks = (userId, from, to) => {
+  const qs = new URLSearchParams()
+  if (userId != null) qs.set('user_id', userId)
+  if (from != null) qs.set('from', from)
+  if (to != null) qs.set('to', to)
+  const q = qs.toString() ? `?${qs}` : ''
+  return apiRequest('/stats/user-tasks' + q)
+}
+
+export const getStatsEmployees = () => apiRequest('/stats/employees')

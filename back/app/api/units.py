@@ -103,6 +103,7 @@ def delete_unit(unit_id: int):
 
     unit = unit_repo.get_by_id(unit_id)
     task_id = unit.task_id if unit else None
+    owner_id = unit.user_id if unit else None
 
     try:
         unit_service.delete_unit(unit_id, current_user_id, get_user_level(current_user))
@@ -110,7 +111,7 @@ def delete_unit(unit_id: int):
         return jsonify({"error": e.code, "message": e.message}), e.http_status
 
     from app.extensions import socketio
-    socketio.emit("unit:deleted", {"unit_id": unit_id, "task_id": task_id}, room="all")
+    socketio.emit("unit:deleted", {"unit_id": unit_id, "task_id": task_id, "user_id": owner_id}, room="all")
 
     return jsonify({"message": "Юнит удалён"}), 200
 
@@ -147,6 +148,7 @@ def stop_unit(unit_id: int):
     socketio.emit("unit:stopped", {
         "unit_id": unit.id,
         "task_id": unit.task_id,
+        "user_id": unit.user_id,
         "datetime_end": unit.datetime_end.isoformat(),
     }, room="all")
 
