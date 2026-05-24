@@ -89,6 +89,7 @@ function formatFullDate(d) {
   box-shadow: var(--shadow-sm);
   overflow: hidden;
   margin-bottom: 8px;
+  flex-shrink: 0;
 }
 
 .unit-item.edited {
