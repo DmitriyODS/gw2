@@ -125,7 +125,9 @@ Nginx собирает фронт сам через multi-stage `front/Dockerfil
 
 `[data-dark="true"]` — тёмная тема. `--gw-*` — алиасы для совместимости.
 
-**Правило:** никаких `#hex` или `rgba()` в компонентах — только `--color-*` токены.
+**Цвета-теги задач:** фиксированный набор из 8 пастельных цветов (`red, orange, amber, green, teal, blue, violet, pink`). Токены `--tag-<name>-surface/-border/-accent` в `tokens.css` (адаптированы под светлую/тёмную тему). Значение хранится в `tasks.color`, набор продублирован в `front/src/utils/taskColors.js` и `back/app/schemas/task.py` (`TASK_COLORS`).
+
+**Правило:** никаких `#hex` или `rgba()` в компонентах — только `--color-*` / `--tag-*` токены.
 
 ## Swagger UI
 

@@ -16,15 +16,17 @@ const router = createRouter({
   routes
 })
 
-router.beforeEach((to, from, next) => {
+router.beforeEach(async (to) => {
   const auth = useAuthStore()
+  // Ждём завершения восстановления сессии перед любым решением о доступе —
+  // иначе первый переход случается с ещё пустым token и кидает на /login.
+  await auth.ensureReady()
   if (!to.meta.public && !auth.token) {
-    return next('/login')
+    return '/login'
   }
   if (to.path === '/login' && auth.token) {
-    return next('/tasks')
+    return '/tasks'
   }
-  next()
 })
 
 export default router

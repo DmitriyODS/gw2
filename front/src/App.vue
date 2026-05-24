@@ -23,7 +23,6 @@
 
 <script setup>
 import { ref, watch, onMounted } from 'vue'
-import { useRouter } from 'vue-router'
 import { useToast } from 'primevue/usetoast'
 import { useAuthStore } from '@/stores/auth.js'
 import { useThemeStore } from '@/stores/theme.js'
@@ -31,7 +30,6 @@ import { useUnitsStore } from '@/stores/units.js'
 import { useNotificationsStore } from '@/stores/notifications.js'
 import { useTutorial } from '@/composables/useTutorial.js'
 import { connectSocket } from '@/socket/index.js'
-import { refreshToken } from '@/api/auth.js'
 import AppSidebar from '@/components/layout/AppSidebar.vue'
 import AppBottomNav from '@/components/layout/AppBottomNav.vue'
 import ActiveUnitModal from '@/components/layout/ActiveUnitModal.vue'
@@ -39,7 +37,6 @@ import AppTutorial from '@/components/layout/AppTutorial.vue'
 import Toast from 'primevue/toast'
 import ProgressSpinner from 'primevue/progressspinner'
 
-const router = useRouter()
 const authStore = useAuthStore()
 const themeStore = useThemeStore()
 const unitsStore = useUnitsStore()
@@ -63,44 +60,24 @@ themeStore.init()
 const initializing = ref(true)
 
 onMounted(async () => {
-
-  // Если токена нет в памяти — пробуем восстановить сессию через refresh cookie
-  if (!authStore.token) {
-    try {
-      const data = await refreshToken()
-      // Если сессия требует смены пароля — не восстанавливаем, пусть логинится заново
-      const payload = JSON.parse(atob(data.access_token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/')))
-      if (payload.force_change) {
-        router.push('/login')
-      } else {
-        authStore.setToken(data.access_token)
-        await authStore.loadMe()
-        connectSocket()
-        await unitsStore.fetchActiveUnit()
-        if (router.currentRoute.value.path === '/login') {
-          router.push('/tasks')
-        }
-      }
-    } catch {
-      // Нет валидного refresh cookie — останемся на /login
-      if (!router.currentRoute.value.meta?.public) {
-        router.push('/login')
-      }
-    }
-  } else {
+  // Восстановление сессии централизовано в auth-store и уже инициируется
+  // router guard'ом — здесь лишь дожидаемся его и поднимаем сокет/юнит.
+  await authStore.ensureReady()
+  if (authStore.token) {
     connectSocket()
     await unitsStore.fetchActiveUnit()
   }
-
   initializing.value = false
 })
 </script>
 
 <style>
 .app-loading {
+  flex: 1;
   display: flex;
   align-items: center;
   justify-content: center;
+  width: 100%;
   min-height: 100vh;
   background: var(--gw-bg);
 }

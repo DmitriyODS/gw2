@@ -1,16 +1,35 @@
 <template>
   <div
     class="task-card"
-    :class="{ favorite: task.is_favorite, archived: task.is_archived }"
+    :class="{ favorite: task.is_favorite, archived: task.is_archived, colored: !!task.color }"
+    :style="cardStyle"
     @click.stop="$emit('click', task)"
   >
     <div class="card-header">
       <span class="dept-badge">{{ task.department?.name || '—' }}</span>
-      <button class="favorite-btn" @click.stop="$emit('toggle-favorite', task)" :title="task.is_favorite ? 'Убрать из избранного' : 'Добавить в избранное'">
-        <span class="material-symbols-outlined" :class="{ filled: task.is_favorite }">
-          {{ task.is_favorite ? 'favorite' : 'favorite_border' }}
-        </span>
-      </button>
+      <div class="card-actions">
+        <div class="color-wrapper">
+          <button
+            class="card-action-btn"
+            :class="{ active: showColors }"
+            title="Цвет задачи"
+            @click.stop="showColors = !showColors"
+          >
+            <span class="material-symbols-outlined">palette</span>
+          </button>
+          <div v-if="showColors" class="color-popover" @click.stop>
+            <TaskColorPicker
+              :model-value="task.color || null"
+              @select="onSelectColor"
+            />
+          </div>
+        </div>
+        <button class="card-action-btn favorite-btn" @click.stop="$emit('toggle-favorite', task)" :title="task.is_favorite ? 'Убрать из избранного' : 'Добавить в избранное'">
+          <span class="material-symbols-outlined" :class="{ filled: task.is_favorite }">
+            {{ task.is_favorite ? 'favorite' : 'favorite_border' }}
+          </span>
+        </button>
+      </div>
     </div>
 
     <h3 class="task-name">{{ task.name }}</h3>
@@ -51,14 +70,37 @@
 </template>
 
 <script setup>
-defineProps({
+import { ref, computed, onBeforeUnmount } from 'vue'
+import TaskColorPicker from '@/components/tasks/TaskColorPicker.vue'
+import { cardColorStyle } from '@/utils/taskColors.js'
+
+const props = defineProps({
   task: {
     type: Object,
     required: true
   }
 })
 
-defineEmits(['click', 'toggle-favorite'])
+const emit = defineEmits(['click', 'toggle-favorite', 'set-color'])
+
+const showColors = ref(false)
+
+const cardStyle = computed(() => cardColorStyle(props.task.color))
+
+function onSelectColor(color) {
+  showColors.value = false
+  if ((props.task.color || null) === color) return
+  emit('set-color', { task: props.task, color })
+}
+
+function closeColors(e) {
+  if (!e.target.closest('.color-wrapper')) showColors.value = false
+}
+
+if (typeof document !== 'undefined') {
+  document.addEventListener('click', closeColors)
+  onBeforeUnmount(() => document.removeEventListener('click', closeColors))
+}
 
 function formatDate(d) {
   if (!d) return '—'
@@ -86,9 +128,10 @@ function formatDate(d) {
   transform: translateY(-2px);
 }
 
-.task-card.favorite {
-  background: var(--color-secondary-container);
-  border-color: var(--color-secondary);
+/* Окрашенная карточка — пастельный фон из выбранного тега */
+.task-card.colored {
+  background: var(--card-tag-surface);
+  border-color: var(--card-tag-border);
 }
 
 .task-card.archived {
@@ -102,6 +145,54 @@ function formatDate(d) {
   align-items: center;
   justify-content: space-between;
   gap: 8px;
+}
+
+.card-actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  flex-shrink: 0;
+}
+
+.color-wrapper {
+  position: relative;
+  display: flex;
+}
+
+.color-popover {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 50;
+  background: var(--color-surface);
+  border: 1px solid var(--gw-border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-lg);
+  padding: 10px;
+  width: 132px;
+}
+
+.card-action-btn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 4px;
+  color: var(--gw-text-secondary);
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  transition: color 0.15s, background 0.15s;
+  flex-shrink: 0;
+}
+
+.card-action-btn:hover,
+.card-action-btn.active {
+  color: var(--gw-primary);
+  background: color-mix(in oklch, var(--color-primary) 10%, transparent);
+}
+
+.card-action-btn .material-symbols-outlined {
+  font-size: 20px;
 }
 
 .dept-badge {
@@ -118,30 +209,18 @@ function formatDate(d) {
   max-width: 160px;
 }
 
-.favorite-btn {
-  background: none;
-  border: none;
-  cursor: pointer;
-  padding: 4px;
-  color: var(--gw-text-secondary);
-  border-radius: 6px;
-  display: flex;
-  align-items: center;
-  transition: color 0.15s;
-  flex-shrink: 0;
-}
-
 .favorite-btn:hover {
-  color: var(--color-secondary);
-}
-
-.favorite-btn .material-symbols-outlined {
-  font-size: 20px;
+  color: var(--color-error);
+  background: var(--color-error-container);
 }
 
 .favorite-btn .material-symbols-outlined.filled {
-  color: var(--color-secondary);
+  color: var(--color-error);
   font-variation-settings: 'FILL' 1;
+}
+
+.favorite-btn:hover .material-symbols-outlined.filled {
+  color: var(--color-error);
 }
 
 .task-name {

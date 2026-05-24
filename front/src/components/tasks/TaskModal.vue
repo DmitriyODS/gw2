@@ -36,6 +36,29 @@
         <div class="task-top-row">
           <span class="task-id-label">№{{ task.id }}</span>
           <div class="task-top-actions">
+            <button
+              class="icon-btn-round favorite"
+              :class="{ 'is-fav': task.is_favorite }"
+              @click="handleToggleFavorite"
+              :title="task.is_favorite ? 'Убрать из избранного' : 'Добавить в избранное'"
+            >
+              <span class="material-symbols-outlined" :class="{ filled: task.is_favorite }">
+                {{ task.is_favorite ? 'favorite' : 'favorite_border' }}
+              </span>
+            </button>
+            <div class="color-wrapper">
+              <button
+                class="icon-btn-round"
+                :class="{ active: showColorPicker }"
+                @click="showColorPicker = !showColorPicker"
+                title="Цвет задачи"
+              >
+                <span class="material-symbols-outlined">palette</span>
+              </button>
+              <div v-if="showColorPicker" class="color-popover" @click.stop>
+                <TaskColorPicker :model-value="task.color || null" @select="handleSetColor" />
+              </div>
+            </div>
             <button v-if="canEditTask" class="icon-btn-round" @click="showEditForm = true" title="Редактировать">
               <span class="material-symbols-outlined">edit</span>
             </button>
@@ -218,10 +241,11 @@ import Dialog from 'primevue/dialog'
 import { useBreakpoint } from '@/composables/useBreakpoint.js'
 import UnitListItem from '@/components/tasks/UnitListItem.vue'
 import TaskForm from '@/components/tasks/TaskForm.vue'
+import TaskColorPicker from '@/components/tasks/TaskColorPicker.vue'
 import StartUnitModal from '@/components/units/StartUnitModal.vue'
 import UnitEditModal from '@/components/units/UnitEditModal.vue'
 import { getUnits, deleteUnit } from '@/api/units.js'
-import { deleteTask, archiveTask, restoreTask } from '@/api/tasks.js'
+import { deleteTask, archiveTask, restoreTask, toggleFavorite as apiFavorite, updateTask } from '@/api/tasks.js'
 import { useTasksStore } from '@/stores/tasks.js'
 import { useUnitsStore } from '@/stores/units.js'
 import { useNotificationsStore } from '@/stores/notifications.js'
@@ -266,6 +290,7 @@ const units = ref([])
 const unitsLoading = ref(false)
 const showEditForm = ref(false)
 const showStartUnit = ref(false)
+const showColorPicker = ref(false)
 const editingUnit = ref(null)
 const actionLoading = ref(false)
 
@@ -430,7 +455,31 @@ function onTaskSaved(updatedTask) {
 function onUnitStarted() {
   showStartUnit.value = false
   loadUnits()
-  tasksStore.upsertTask({ id: props.task.id, has_units: true })
+  tasksStore.patchTask({ id: props.task.id, has_units: true })
+}
+
+async function handleToggleFavorite() {
+  const next = !props.task.is_favorite
+  tasksStore.patchTask({ id: props.task.id, is_favorite: next })
+  try {
+    await apiFavorite(props.task.id)
+  } catch (e) {
+    tasksStore.patchTask({ id: props.task.id, is_favorite: !next })
+    notifications.error(e?.message || 'Не удалось изменить избранное')
+  }
+}
+
+async function handleSetColor(color) {
+  showColorPicker.value = false
+  const prev = props.task.color ?? null
+  if (prev === color) return
+  tasksStore.patchTask({ id: props.task.id, color })
+  try {
+    await updateTask(props.task.id, { color })
+  } catch (e) {
+    tasksStore.patchTask({ id: props.task.id, color: prev })
+    notifications.error(e?.message || 'Не удалось изменить цвет')
+  }
 }
 </script>
 
@@ -495,8 +544,47 @@ function onUnitStarted() {
   border-color: color-mix(in oklch, var(--color-error) 40%, var(--color-outline-dim));
 }
 
+.icon-btn-round.active {
+  background: var(--gw-primary-light);
+  color: var(--gw-primary);
+  border-color: var(--gw-primary);
+}
+
+.icon-btn-round.favorite:hover {
+  background: var(--color-error-container);
+  color: var(--color-error);
+  border-color: color-mix(in oklch, var(--color-error) 40%, var(--color-outline-dim));
+}
+
+.icon-btn-round.favorite.is-fav {
+  border-color: color-mix(in oklch, var(--color-error) 40%, var(--color-outline-dim));
+}
+
 .icon-btn-round .material-symbols-outlined {
   font-size: 16px;
+}
+
+.icon-btn-round .material-symbols-outlined.filled {
+  color: var(--color-error);
+  font-variation-settings: 'FILL' 1;
+}
+
+.color-wrapper {
+  position: relative;
+  display: flex;
+}
+
+.color-popover {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 60;
+  background: var(--color-surface);
+  border: 1px solid var(--gw-border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-lg);
+  padding: 10px;
+  width: 132px;
 }
 
 .task-title {

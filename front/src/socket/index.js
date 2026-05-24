@@ -16,26 +16,32 @@ export function connectSocket() {
     upgrade: !import.meta.env.DEV,
   })
 
+  let hadConnected = false
+
   socket.on('connect', () => {
-    console.log('Socket connected')
+    // При переподключении локальное состояние могло разойтись с сервером
+    // (пропущенные события за время обрыва) — перечитываем активный юнит.
+    if (hadConnected) {
+      const units = useUnitsStore()
+      units.fetchActiveUnit()
+    }
+    hadConnected = true
   })
 
   socket.on('connect_error', (err) => {
     console.warn('Socket connection error:', err.message)
   })
 
-  socket.on('disconnect', () => {
-    console.log('Socket disconnected')
-  })
+  socket.on('disconnect', () => {})
 
   socket.on('task:created', (task) => {
     const tasks = useTasksStore()
-    tasks.upsertTask(task)
+    tasks.addTaskFromSocket(task)
   })
 
   socket.on('task:updated', (data) => {
     const tasks = useTasksStore()
-    tasks.upsertTask(data)
+    tasks.patchTask(data)
   })
 
   socket.on('task:archived', ({ task_id, archived_at }) => {
@@ -60,7 +66,7 @@ export function connectSocket() {
       units.setActiveUnit(unit)
     }
     const tasks = useTasksStore()
-    tasks.upsertTask({ id: unit.task_id, has_units: true })
+    tasks.patchTask({ id: unit.task_id, has_units: true })
     if (unit.user) {
       tasks.addActiveUser(unit.task_id, {
         id: unit.user.id,

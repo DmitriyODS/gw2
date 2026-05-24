@@ -15,6 +15,7 @@ class Task(db.Model):
     deadline = db.Column(db.DateTime(timezone=True))
     is_archived = db.Column(db.Boolean, nullable=False, default=False)
     archived_at = db.Column(db.DateTime(timezone=True))
+    color = db.Column(db.String(20))
 
     author = db.relationship("User", back_populates="tasks")
     department = db.relationship("Department", back_populates="tasks")

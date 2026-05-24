@@ -1,5 +1,9 @@
 from marshmallow import Schema, fields, validate
 
+# Фиксированный набор цветов-тегов задач (синхронизирован с
+# front/src/utils/taskColors.js и токенами --tag-* в tokens.css).
+TASK_COLORS = ["red", "orange", "amber", "green", "teal", "blue", "violet", "pink"]
+
 
 class DeptRefSchema(Schema):
     id = fields.Int(dump_only=True)
@@ -24,6 +28,7 @@ class TaskSchema(Schema):
     deadline = fields.DateTime(dump_only=True, allow_none=True)
     is_archived = fields.Bool(dump_only=True)
     archived_at = fields.DateTime(dump_only=True, allow_none=True)
+    color = fields.Str(dump_only=True, allow_none=True)
     is_favorite = fields.Bool(dump_only=True)
     has_units = fields.Bool(dump_only=True)
 
@@ -42,3 +47,4 @@ class TaskUpdateSchema(Schema):
     department_id = fields.Int()
     received_at = fields.Date(allow_none=True)
     deadline = fields.Date(allow_none=True)
+    color = fields.Str(allow_none=True, validate=validate.OneOf(TASK_COLORS))

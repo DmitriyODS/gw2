@@ -90,6 +90,32 @@ export const useTasksStore = defineStore('tasks', () => {
     }
   }
 
+  // Точечное обновление: применяется только если задача уже в списке/открыта.
+  // Никогда не вставляет новую запись — это защищает от «пустых карточек»,
+  // когда по сокету приходит частичный патч задачи не из текущей выборки.
+  function patchTask(patch) {
+    const idx = tasks.value.findIndex(t => t.id === patch.id)
+    if (idx >= 0) tasks.value[idx] = { ...tasks.value[idx], ...patch }
+    if (activeTask.value?.id === patch.id) {
+      activeTask.value = { ...activeTask.value, ...patch }
+    }
+  }
+
+  // Вставка полноценной задачи, пришедшей по сокету (task:created).
+  // Добавляем только на вкладке активных задач и только если её ещё нет —
+  // новые задачи всегда активные, в избранном/архиве им не место.
+  function addTaskFromSocket(task) {
+    if (!task || !task.id) return
+    const idx = tasks.value.findIndex(t => t.id === task.id)
+    if (idx >= 0) {
+      tasks.value[idx] = { ...tasks.value[idx], ...task }
+      return
+    }
+    if (filters.tab === 'active' && !task.is_archived) {
+      tasks.value.unshift(task)
+    }
+  }
+
   function removeTask(taskId) {
     tasks.value = tasks.value.filter(t => t.id !== taskId)
     if (activeTask.value?.id === taskId) activeTask.value = null
@@ -117,7 +143,7 @@ export const useTasksStore = defineStore('tasks', () => {
     if (filters.tab === 'active' || filters.tab === 'favorites') {
       removeTask(taskId)
     } else {
-      upsertTask({ id: taskId, is_archived: true, archived_at })
+      patchTask({ id: taskId, is_archived: true, archived_at })
     }
   }
 
@@ -125,14 +151,14 @@ export const useTasksStore = defineStore('tasks', () => {
     if (filters.tab === 'archive') {
       removeTask(taskId)
     } else {
-      upsertTask({ id: taskId, is_archived: false, archived_at: null })
+      patchTask({ id: taskId, is_archived: false, archived_at: null })
     }
   }
 
   return {
     tasks, total, loading, error, filters, activeTask,
     fetchTasks, setFilter, setTab, openTask, closeTask,
-    upsertTask, removeTask, archiveTask, restoreTask,
+    upsertTask, patchTask, addTaskFromSocket, removeTask, archiveTask, restoreTask,
     addActiveUser, removeActiveUser
   }
 })

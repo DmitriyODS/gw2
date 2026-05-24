@@ -66,7 +66,7 @@ const canDelete = computed(() => isOwnUnit.value || isAtLeast(ROLES.MANAGER))
 
 function formatDuration(start, end) {
   const ms = end ? new Date(end) - new Date(start) : Date.now() - new Date(start)
-  const totalMin = Math.floor(ms / 60000)
+  const totalMin = Math.max(0, Math.floor(ms / 60000))
   const h = Math.floor(totalMin / 60)
   const m = totalMin % 60
   return h > 0 ? `${h} ч ${m} мин` : `${totalMin} мин`

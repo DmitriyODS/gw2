@@ -243,3 +243,85 @@
   --color-error-hover:     color-mix(in oklch, var(--color-error)     85%, white);
   --color-success-hover:   color-mix(in oklch, var(--color-success)   85%, white);
 }
+
+
+/* ══════════════════════════════════════════════════════════════════
+   Task tag palette — 8 fixed pastel colours
+
+   Per colour three roles are exposed:
+     --tag-<name>-surface  pastel card background (theme-adapted)
+     --tag-<name>-border   muted outline for the coloured card
+     --tag-<name>-accent   saturated swatch/dot for pickers
+   Hue is fixed per colour; lightness/chroma differ per theme so the
+   set stays soft in light mode and legible on dark surfaces.
+══════════════════════════════════════════════════════════════════ */
+:root {
+  --tag-red-h:    25;
+  --tag-orange-h: 55;
+  --tag-amber-h:  90;
+  --tag-green-h:  145;
+  --tag-teal-h:   195;
+  --tag-blue-h:   250;
+  --tag-violet-h: 300;
+  --tag-pink-h:   345;
+}
+
+/* Light mode — soft pastel fills */
+:root {
+  --tag-red-surface:    oklch(0.955 0.035 var(--tag-red-h));
+  --tag-orange-surface: oklch(0.955 0.035 var(--tag-orange-h));
+  --tag-amber-surface:  oklch(0.960 0.038 var(--tag-amber-h));
+  --tag-green-surface:  oklch(0.955 0.035 var(--tag-green-h));
+  --tag-teal-surface:   oklch(0.955 0.032 var(--tag-teal-h));
+  --tag-blue-surface:   oklch(0.955 0.032 var(--tag-blue-h));
+  --tag-violet-surface: oklch(0.955 0.034 var(--tag-violet-h));
+  --tag-pink-surface:   oklch(0.955 0.035 var(--tag-pink-h));
+
+  --tag-red-border:    oklch(0.85 0.075 var(--tag-red-h));
+  --tag-orange-border: oklch(0.85 0.075 var(--tag-orange-h));
+  --tag-amber-border:  oklch(0.86 0.080 var(--tag-amber-h));
+  --tag-green-border:  oklch(0.85 0.070 var(--tag-green-h));
+  --tag-teal-border:   oklch(0.85 0.065 var(--tag-teal-h));
+  --tag-blue-border:   oklch(0.85 0.065 var(--tag-blue-h));
+  --tag-violet-border: oklch(0.85 0.070 var(--tag-violet-h));
+  --tag-pink-border:   oklch(0.85 0.072 var(--tag-pink-h));
+
+  --tag-red-accent:    oklch(0.64 0.150 var(--tag-red-h));
+  --tag-orange-accent: oklch(0.68 0.140 var(--tag-orange-h));
+  --tag-amber-accent:  oklch(0.74 0.140 var(--tag-amber-h));
+  --tag-green-accent:  oklch(0.66 0.130 var(--tag-green-h));
+  --tag-teal-accent:   oklch(0.66 0.110 var(--tag-teal-h));
+  --tag-blue-accent:   oklch(0.62 0.130 var(--tag-blue-h));
+  --tag-violet-accent: oklch(0.62 0.140 var(--tag-violet-h));
+  --tag-pink-accent:   oklch(0.66 0.140 var(--tag-pink-h));
+}
+
+/* Dark mode — deeper fills that keep text readable */
+[data-dark="true"] {
+  --tag-red-surface:    oklch(0.30 0.045 var(--tag-red-h));
+  --tag-orange-surface: oklch(0.30 0.045 var(--tag-orange-h));
+  --tag-amber-surface:  oklch(0.30 0.048 var(--tag-amber-h));
+  --tag-green-surface:  oklch(0.30 0.045 var(--tag-green-h));
+  --tag-teal-surface:   oklch(0.30 0.040 var(--tag-teal-h));
+  --tag-blue-surface:   oklch(0.30 0.042 var(--tag-blue-h));
+  --tag-violet-surface: oklch(0.30 0.045 var(--tag-violet-h));
+  --tag-pink-surface:   oklch(0.30 0.045 var(--tag-pink-h));
+
+  --tag-red-border:    oklch(0.45 0.060 var(--tag-red-h));
+  --tag-orange-border: oklch(0.45 0.060 var(--tag-orange-h));
+  --tag-amber-border:  oklch(0.46 0.062 var(--tag-amber-h));
+  --tag-green-border:  oklch(0.45 0.055 var(--tag-green-h));
+  --tag-teal-border:   oklch(0.45 0.050 var(--tag-teal-h));
+  --tag-blue-border:   oklch(0.45 0.052 var(--tag-blue-h));
+  --tag-violet-border: oklch(0.45 0.058 var(--tag-violet-h));
+  --tag-pink-border:   oklch(0.45 0.058 var(--tag-pink-h));
+
+  --tag-red-accent:    oklch(0.78 0.110 var(--tag-red-h));
+  --tag-orange-accent: oklch(0.80 0.110 var(--tag-orange-h));
+  --tag-amber-accent:  oklch(0.85 0.110 var(--tag-amber-h));
+  --tag-green-accent:  oklch(0.80 0.100 var(--tag-green-h));
+  --tag-teal-accent:   oklch(0.80 0.085 var(--tag-teal-h));
+  --tag-blue-accent:   oklch(0.78 0.100 var(--tag-blue-h));
+  --tag-violet-accent: oklch(0.78 0.105 var(--tag-violet-h));
+  --tag-pink-accent:   oklch(0.80 0.105 var(--tag-pink-h));
+}
