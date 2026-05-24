@@ -28,6 +28,7 @@ help:
 	@printf "  make status       docker compose ps на сервере\n"
 	@printf "  make restart      Перезапустить app без пересборки\n"
 	@printf "  make shell        bash внутри app-контейнера на сервере\n"
+	@printf "  make reset NEWPASS='...'  Сбросить пароль суперадмина на сервере\n"
 	@printf "\n\033[33mКонфигурация сервера:\033[0m cp .env.deploy.example .env.deploy\n\n"
 
 # ── Разработка ────────────────────────────────────────────────────
@@ -79,3 +80,16 @@ restart:
 
 shell:
 	$(SSH) "cd $(SERVER_DIR)/deploy && $(COMPOSE_PROD) exec app bash"
+
+# ── Сброс пароля суперадмина ─────────────────────────────────────
+# Использование: make reset NEWPASS='новый-пароль'
+# Меняет hash_password у системного суперадмина (минимальный id среди
+# пользователей с role.level=4) и сбрасывает is_default_pass=FALSE.
+.PHONY: reset
+reset:
+	@if [ -z "$(NEWPASS)" ]; then \
+		printf "\033[31m✗ Передайте новый пароль:\033[0m  make reset NEWPASS='новый-пароль'\n"; \
+		exit 2; \
+	fi
+	@printf "\033[1m▶ Сбрасываю пароль суперадмина на $(SERVER_HOST)...\033[0m\n"
+	@scripts/reset_superadmin_password.sh "$(SERVER_USER)@$(SERVER_HOST)" "$(SSH_KEY)" "$(SERVER_DIR)" "$(NEWPASS)"
