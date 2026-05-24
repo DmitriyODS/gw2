@@ -11,6 +11,7 @@
       <AppBottomNav />
       <ActiveUnitModal v-if="unitsStore.activeUnit" />
       <AppTutorial v-if="isTutorialOpen" />
+      <ChangelogModal v-if="isChangelogOpen" @close="closeChangelog" />
     </template>
     <template v-else>
       <main class="main-content">
@@ -29,11 +30,13 @@ import { useThemeStore } from '@/stores/theme.js'
 import { useUnitsStore } from '@/stores/units.js'
 import { useNotificationsStore } from '@/stores/notifications.js'
 import { useTutorial } from '@/composables/useTutorial.js'
+import { useChangelog } from '@/composables/useChangelog.js'
 import { connectSocket } from '@/socket/index.js'
 import AppSidebar from '@/components/layout/AppSidebar.vue'
 import AppBottomNav from '@/components/layout/AppBottomNav.vue'
 import ActiveUnitModal from '@/components/layout/ActiveUnitModal.vue'
 import AppTutorial from '@/components/layout/AppTutorial.vue'
+import ChangelogModal from '@/components/layout/ChangelogModal.vue'
 import Toast from 'primevue/toast'
 import ProgressSpinner from 'primevue/progressspinner'
 
@@ -43,6 +46,7 @@ const unitsStore = useUnitsStore()
 const notif = useNotificationsStore()
 // isOpen деструктурирован как топ-левел ref — Vue auto-unwraps в шаблоне
 const { isOpen: isTutorialOpen, open: openTutorial, shouldAutoShow } = useTutorial()
+const { isOpen: isChangelogOpen, close: closeChangelog, checkForNewVersion } = useChangelog()
 
 watch(() => authStore.user, (user, prev) => {
   if (user && !prev && shouldAutoShow()) {
@@ -66,6 +70,11 @@ onMounted(async () => {
   if (authStore.token) {
     connectSocket()
     await unitsStore.fetchActiveUnit()
+    // Лог версий показываем существующим пользователям; новичкам сначала тур,
+    // а лог всплывёт при следующем входе.
+    if (!shouldAutoShow()) {
+      checkForNewVersion()
+    }
   }
   initializing.value = false
 })

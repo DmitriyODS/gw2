@@ -254,7 +254,7 @@ async function handleSubmit() {
             name: unitName.value.trim() || result.name,
             unit_type_id: unitTypeId.value,
           })
-          unitsStore.setActiveUnit(unit)
+          unitsStore.startUnit(unit)
           notifications.success('Задача создана, юнит запущен')
         } catch (e) {
           notifications.success('Задача создана')

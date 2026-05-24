@@ -430,17 +430,25 @@ function confirmDeleteUnit(unit) {
     title: 'Удалить юнит',
     message: `Вы уверены, что хотите удалить юнит "${unit.name}"?`,
     confirmLabel: 'Удалить',
-    onConfirm: () => handleDeleteUnit(unit.id)
+    onConfirm: () => handleDeleteUnit(unit)
   }
 }
 
-async function handleDeleteUnit(unitId) {
+async function handleDeleteUnit(unit) {
   try {
-    await deleteUnit(unitId)
-    units.value = units.value.filter(u => u.id !== unitId)
+    await deleteUnit(unit.id)
+    units.value = units.value.filter(u => u.id !== unit.id)
     notifications.success('Юнит удалён')
-    if (unitsStore.activeUnit?.id === unitId) {
+    if (unitsStore.activeUnit?.id === unit.id) {
       unitsStore.clearActiveUnit()
+    }
+    // Сразу актуализируем карточку: убираем аватарку, если удалён активный
+    // юнит, и снимаем индикатор юнитов, если их больше не осталось.
+    if (!unit.datetime_end && unit.user_id != null) {
+      tasksStore.removeActiveUser(props.task.id, unit.user_id)
+    }
+    if (units.value.length === 0) {
+      tasksStore.patchTask({ id: props.task.id, has_units: false })
     }
   } catch (e) {
     notifications.error(e?.message || 'Не удалось удалить юнит')
@@ -455,16 +463,14 @@ function onTaskSaved(updatedTask) {
 function onUnitStarted() {
   showStartUnit.value = false
   loadUnits()
-  tasksStore.patchTask({ id: props.task.id, has_units: true })
+  // Карточку задачи (индикатор юнита + аватарку) обновляет unitsStore.startUnit.
 }
 
 async function handleToggleFavorite() {
-  const next = !props.task.is_favorite
-  tasksStore.patchTask({ id: props.task.id, is_favorite: next })
   try {
     await apiFavorite(props.task.id)
+    tasksStore.setFavorite(props.task.id, !props.task.is_favorite)
   } catch (e) {
-    tasksStore.patchTask({ id: props.task.id, is_favorite: !next })
     notifications.error(e?.message || 'Не удалось изменить избранное')
   }
 }

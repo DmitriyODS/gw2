@@ -1,6 +1,6 @@
 <template>
   <nav class="sidebar">
-    <div class="sidebar-logo" data-tutorial="logo" @click="showChangelog = true" title="Что нового">
+    <div class="sidebar-logo" data-tutorial="logo" @click="openChangelog" title="Что нового">
       <img src="/logo.svg" alt="Groove Work" class="sidebar-logo-img" />
     </div>
 
@@ -48,23 +48,21 @@
       />
     </div>
 
-    <ChangelogModal v-if="showChangelog" @close="showChangelog = false" />
   </nav>
 </template>
 
 <script setup>
-import { ref, computed } from 'vue'
+import { computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth.js'
 import { usePermission, ROLES } from '@/composables/usePermission.js'
-import ChangelogModal from './ChangelogModal.vue'
+import { useChangelog } from '@/composables/useChangelog.js'
 
 const route = useRoute()
 const router = useRouter()
 const authStore = useAuthStore()
 const { isAtLeast } = usePermission()
-
-const showChangelog = ref(false)
+const { open: openChangelog } = useChangelog()
 
 const avatarSrc = computed(() => {
   const user = authStore.user

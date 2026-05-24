@@ -196,7 +196,7 @@ async function openTask(task) {
 async function toggleFavorite(task) {
   try {
     await apiFavorite(task.id)
-    tasksStore.patchTask({ id: task.id, is_favorite: !task.is_favorite })
+    tasksStore.setFavorite(task.id, !task.is_favorite)
   } catch (e) {
     notif.error(e.message || 'Ошибка')
   }
@@ -216,6 +216,9 @@ async function setColor({ task, color }) {
 function onTaskCreated(task) {
   showCreateTask.value = false
   tasksStore.upsertTask(task)
+  // Фоновая сверка с сервером: подтянет актуальное состояние всех карточек
+  // (в т.ч. запущенный вместе с задачей юнит — индикатор и аватарку).
+  tasksStore.fetchTasks({ silent: true }).catch(() => {})
 }
 
 onMounted(async () => {

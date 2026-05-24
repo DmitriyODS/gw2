@@ -40,8 +40,8 @@ export const useTasksStore = defineStore('tasks', () => {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(toSave))
   }, { deep: true })
 
-  async function fetchTasks() {
-    loading.value = true
+  async function fetchTasks({ silent = false } = {}) {
+    if (!silent) loading.value = true
     error.value = null
     try {
       const params = {}
@@ -62,7 +62,7 @@ export const useTasksStore = defineStore('tasks', () => {
       error.value = e.message || 'Ошибка загрузки задач'
       throw e
     } finally {
-      loading.value = false
+      if (!silent) loading.value = false
     }
   }
 
@@ -155,10 +155,20 @@ export const useTasksStore = defineStore('tasks', () => {
     }
   }
 
+  // Учитывает вкладку: снятие отметки на вкладке «Избранное» сразу убирает
+  // карточку из списка. activeTask не трогаем (фильтруем только массив),
+  // чтобы открытая модалка задачи не закрывалась при переключении отметки.
+  function setFavorite(taskId, isFav) {
+    patchTask({ id: taskId, is_favorite: isFav })
+    if (!isFav && filters.tab === 'favorites') {
+      tasks.value = tasks.value.filter(t => t.id !== taskId)
+    }
+  }
+
   return {
     tasks, total, loading, error, filters, activeTask,
     fetchTasks, setFilter, setTab, openTask, closeTask,
     upsertTask, patchTask, addTaskFromSocket, removeTask, archiveTask, restoreTask,
-    addActiveUser, removeActiveUser
+    setFavorite, addActiveUser, removeActiveUser
   }
 })

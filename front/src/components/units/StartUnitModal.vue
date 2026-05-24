@@ -122,7 +122,7 @@ async function handleSubmit() {
       name: form.value.name.trim(),
       unit_type_id: form.value.unit_type_id
     })
-    unitsStore.setActiveUnit(unit)
+    unitsStore.startUnit(unit)
     notifications.success('Юнит успешно запущен')
     emit('started', unit)
   } catch (e) {
