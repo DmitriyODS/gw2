@@ -493,6 +493,8 @@ async function handleSetColor(color) {
 .task-modal-body {
   display: flex;
   min-height: 520px;
+  max-height: 85vh;
+  overflow: hidden;
 }
 
 /* ─── Левая панель ─── */
@@ -505,6 +507,8 @@ async function handleSetColor(color) {
   padding: 24px 24px 24px 28px;
   background: var(--color-surface);
   border-right: 1px solid var(--gw-border);
+  overflow-y: auto;
+  min-height: 0;
 }
 
 .task-top-row {
@@ -752,11 +756,13 @@ async function handleSetColor(color) {
 .task-right {
   flex: 1;
   min-width: 0;
+  min-height: 0;
   display: flex;
   flex-direction: column;
   background: var(--color-bg);
   padding: 20px;
   gap: 14px;
+  overflow: hidden;
 }
 
 .units-header {
@@ -764,6 +770,7 @@ async function handleSetColor(color) {
   align-items: center;
   justify-content: space-between;
   gap: 8px;
+  flex-shrink: 0;
 }
 
 .units-title {
@@ -849,6 +856,9 @@ async function handleSetColor(color) {
   flex-direction: column;
   overflow-y: auto;
   flex: 1;
+  min-height: 0;
+  padding-right: 4px;
+  margin-right: -4px;
 }
 
 .no-units {
@@ -974,6 +984,7 @@ async function handleSetColor(color) {
 .mobile-layout {
   flex-direction: column;
   min-height: unset;
+  max-height: unset;
   height: 100%;
 }
 
@@ -983,11 +994,13 @@ async function handleSetColor(color) {
   border-bottom: none;
   overflow-y: auto;
   flex: 1;
+  min-height: 0;
 }
 
 .mobile-layout .task-right {
   flex: 1;
-  overflow-y: auto;
+  min-height: 0;
+  overflow: hidden;
 }
 
 .hidden {
