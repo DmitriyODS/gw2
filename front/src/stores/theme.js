@@ -1,7 +1,11 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
 
-/* ── Built-in presets (primary / secondary / tertiary hex) ──────── */
+/* ── Built-in presets ────────────────────────────────────────────
+   primary / secondary / tertiary — три «ручки» интерфейса.
+   neutral (необязательно) — задаёт цветную гамму фонов и поверхностей.
+   Если neutral не задан, фон следует за основным цветом с едва заметным
+   тоном (как было до появления нейтральной гаммы). */
 const PRESETS = {
   classic: { primary: '#e040fb', secondary: '#00bfa5', tertiary: '#3d6ce7' },
   blue:    { primary: '#1e88e5', secondary: '#00acc1', tertiary: '#7e57c2' },
@@ -12,6 +16,7 @@ const PRESETS = {
   yellow:  { primary: '#f9a825', secondary: '#fb8c00', tertiary: '#43a047' },
   violet:  { primary: '#7c4dff', secondary: '#00b0ff', tertiary: '#e040fb' },
   lilac:   { primary: '#9b59b6', secondary: '#c77daa', tertiary: '#7da87e' },
+  sunset:  { primary: '#e8806e', secondary: '#e8a07a', tertiary: '#db8398', neutral: '#f0e9dd' },
 }
 
 const PRESET_LABELS = {
@@ -24,6 +29,7 @@ const PRESET_LABELS = {
   yellow:  'Жёлтая',
   violet:  'Фиолетовая',
   lilac:   'Весенняя сирень',
+  sunset:  'Тёплый закат',
 }
 
 /* ── oklch conversion ────────────────────────────────────────────
@@ -50,11 +56,71 @@ function hexToOklch(hex) {
   return { C, H }
 }
 
-/* Writes --ref-*-h and --ref-*-c CSS vars for a single palette key. */
+/* Writes --ref-*-h and --ref-*-c CSS vars for an accent palette key.
+   Насыщенность нормализуется в коридор [0.06 … 0.33]: это снимает «запрет»
+   на очень тёмные и очень светлые цвета — из них извлекается почти серый
+   оттенок, и без нижнего порога палитра выглядела бы выцветшей. Светлоту же
+   движок задаёт сам по тонам, поэтому кнопки/панели остаются читаемыми на
+   любом фоне в обеих темах. */
 function applyPaletteKey(root, name, hex) {
   const { C, H } = hexToOklch(hex)
+  const c = Math.min(Math.max(C, 0.06), 0.33)
   root.style.setProperty(`--ref-${name}-h`, H.toFixed(1))
-  root.style.setProperty(`--ref-${name}-c`, C.toFixed(4))
+  root.style.setProperty(`--ref-${name}-c`, c.toFixed(4))
+}
+
+/* Нейтральный (фоновый) цвет особый: его оттенок задаёт гамму фона, а из
+   насыщенности выводится множитель тинта (--ref-neutral-c). Эталон 0.012 ≈
+   множитель 1 (текущий едва заметный тон); чем сочнее выбранный цвет —
+   тем заметнее цветная гамма фонов. Кламп до 4, чтобы фон не «кричал». */
+function applyNeutral(root, hex) {
+  const { C, H } = hexToOklch(hex)
+  const mult = Math.min(Math.max(C / 0.012, 0), 4)
+  root.style.setProperty('--ref-neutral-h', H.toFixed(1))
+  root.style.setProperty('--ref-neutral-c', mult.toFixed(3))
+}
+
+/* HSL → hex. Используется генератором случайных тем: цвета удобнее задавать
+   в HSL (управляем оттенком/насыщенностью/светлотой), а движок сам извлечёт
+   из hex параметры OKLCH. */
+function hslToHex(h, s, l) {
+  h = ((h % 360) + 360) % 360
+  const c = (1 - Math.abs(2 * l - 1)) * s
+  const x = c * (1 - Math.abs(((h / 60) % 2) - 1))
+  const m = l - c / 2
+  let r = 0, g = 0, b = 0
+  if (h < 60) { r = c; g = x } else if (h < 120) { r = x; g = c }
+  else if (h < 180) { g = c; b = x } else if (h < 240) { g = x; b = c }
+  else if (h < 300) { r = x; b = c } else { r = c; b = x }
+  const to = v => Math.round((v + m) * 255).toString(16).padStart(2, '0')
+  return `#${to(r)}${to(g)}${to(b)}`
+}
+
+const rand = (min, max) => Math.random() * (max - min) + min
+const pickOne = arr => arr[Math.floor(Math.random() * arr.length)]
+
+/* Случайная, но гармоничная тема: базовый оттенок + смещения по одной из
+   схем цветовой гармонии (аналоговая/триада/комплемент/сплит-комплемент),
+   умеренная насыщенность. Работает и в светлой, и в тёмной теме, т.к. движок
+   выводит тона автоматически. Нейтраль — мягкий тинт того же базового тона. */
+function randomTheme() {
+  const base = Math.random() * 360
+  const schemes = [
+    [0, 30, -30],   // аналоговая
+    [0, 120, -120], // триада
+    [0, 25, 180],   // комплемент с тёплым акцентом
+    [0, 150, 210],  // сплит-комплемент
+    [0, -40, 40],   // расширенная аналоговая
+  ]
+  const off = pickOne(schemes)
+  const sat = rand(0.55, 0.72)
+  const lig = rand(0.54, 0.63)
+  return {
+    primary:   hslToHex(base + off[0], sat, lig),
+    secondary: hslToHex(base + off[1], sat * rand(0.85, 1), lig + rand(0, 0.06)),
+    tertiary:  hslToHex(base + off[2], sat * rand(0.85, 1), lig + rand(-0.04, 0.06)),
+    neutral:   hslToHex(base + rand(-25, 25), rand(0.10, 0.24), 0.92),
+  }
 }
 
 export const useThemeStore = defineStore('theme', () => {
@@ -84,6 +150,14 @@ export const useThemeStore = defineStore('theme', () => {
     applyPaletteKey(root, 'primary',   vars.primary)
     applyPaletteKey(root, 'secondary', vars.secondary)
     applyPaletteKey(root, 'tertiary',  vars.tertiary)
+    // Нейтральная гамма фона. Без явного цвета — сбрасываем переопределение,
+    // тогда фон следует за основным цветом с дефолтным тоном (как раньше).
+    if (vars.neutral) {
+      applyNeutral(root, vars.neutral)
+    } else {
+      root.style.removeProperty('--ref-neutral-h')
+      root.style.removeProperty('--ref-neutral-c')
+    }
   }
 
   function applyTheme(name) {
@@ -123,12 +197,13 @@ export const useThemeStore = defineStore('theme', () => {
   function importTheme(json) {
     const parsed = typeof json === 'string' ? JSON.parse(json) : json
     const { name, vars } = parsed
-    /* Accept both old format (has bg/surface/…) and new format (primary/secondary/tertiary) */
+    /* Accept both old format (has bg/surface/…) and new format (primary/secondary/tertiary[/neutral]) */
     const normalised = {
       primary:   vars.primary   || '#e040fb',
       secondary: vars.secondary || vars.accent || '#00bfa5',
       tertiary:  vars.tertiary  || '#3d6ce7',
     }
+    if (vars.neutral) normalised.neutral = vars.neutral
     saveCustomTheme(name, normalised)
     applyTheme(name)
   }
@@ -143,6 +218,6 @@ export const useThemeStore = defineStore('theme', () => {
     presetNames: Object.keys(PRESETS),
     presetLabels: PRESET_LABELS,
     applyTheme, applyVars, toggleDark, saveCustomTheme, deleteCustomTheme,
-    exportTheme, importTheme, init, getVars,
+    exportTheme, importTheme, init, getVars, randomTheme,
   }
 })

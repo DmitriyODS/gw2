@@ -43,8 +43,16 @@
     <section class="theme-section">
       <h4>Конструктор тем</h4>
       <p class="builder-hint">
-        Выберите три ключевых цвета — вся палитра приложения пересчитывается автоматически.
+        Выберите ключевые цвета — вся палитра пересчитывается автоматически. Основной,
+        вторичный и третичный задают кнопки и акценты; «Фон / нейтральный» — общую гамму
+        фонов и поверхностей (работает и в светлой, и в тёмной теме).
       </p>
+      <div class="builder-actions">
+        <button class="btn-lucky" @click="surpriseMe" title="Случайная гармоничная тема">
+          <span class="material-symbols-outlined">casino</span>
+          Мне повезёт
+        </button>
+      </div>
       <div class="color-pickers">
         <div
           v-for="(label, key) in colorLabels"
@@ -109,12 +117,16 @@ const colorLabels = {
   primary:   'Основной цвет',
   secondary: 'Вторичный (акцент)',
   tertiary:  'Третичный',
+  neutral:   'Фон / нейтральный',
 }
+
+const DEFAULT_NEUTRAL = '#e8e6ea'
 
 const customVars = reactive({
   primary:   '#e040fb',
   secondary: '#00bfa5',
   tertiary:  '#3d6ce7',
+  neutral:   DEFAULT_NEUTRAL,
 })
 
 const customThemeName = ref('')
@@ -125,11 +137,19 @@ watch(
   (preset) => {
     const vars = themeStore.getVars(preset)
     Object.assign(customVars, vars)
+    // Пресет без своей нейтрали — показываем дефолтный нейтральный в пикере.
+    if (!vars.neutral) customVars.neutral = DEFAULT_NEUTRAL
   },
   { immediate: true }
 )
 
 function onLivePreview() {
+  themeStore.applyVars({ ...customVars })
+}
+
+function surpriseMe() {
+  const t = themeStore.randomTheme()
+  Object.assign(customVars, t)
   themeStore.applyVars({ ...customVars })
 }
 
@@ -259,6 +279,39 @@ function importTheme(event) {
   font-size: 13px;
   color: var(--gw-text-secondary);
   line-height: 1.5;
+}
+
+.builder-actions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.btn-lucky {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 18px;
+  border: none;
+  border-radius: 10px;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--color-on-tertiary);
+  background: linear-gradient(120deg, var(--color-primary), var(--color-tertiary));
+  transition: opacity 0.15s, transform 0.1s;
+}
+
+.btn-lucky:hover {
+  opacity: 0.9;
+}
+
+.btn-lucky:active {
+  transform: scale(0.98);
+}
+
+.btn-lucky .material-symbols-outlined {
+  font-size: 18px;
 }
 
 /* Color pickers */

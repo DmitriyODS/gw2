@@ -34,6 +34,14 @@
 
   --ref-warning-h:    76;
   --ref-warning-c:    0.18;
+
+  /* Neutral tint — задаёт общую гамму фонов и нейтральных поверхностей.
+     -h: оттенок тинта (по умолчанию следует за основным цветом).
+     -c: множитель насыщенности тинта (1 = едва заметный, как было;
+         0 = чистый серый/белый; 2–4 = выраженная цветная гамма фона).
+     theme.js перезаписывает их при выборе нейтрального цвета темы. */
+  --ref-neutral-h:    var(--ref-primary-h);
+  --ref-neutral-c:    1;
 }
 
 
@@ -89,20 +97,23 @@
   --_w-80: oklch(0.83 calc(var(--ref-warning-c) * 0.62) var(--ref-warning-h));
   --_w-90: oklch(0.91 calc(var(--ref-warning-c) * 0.36) var(--ref-warning-h));
 
-  /* Neutral — primary hue, near-zero chroma (surfaces, text) */
-  --_n-10: oklch(0.15 0.009 var(--ref-primary-h));
-  --_n-20: oklch(0.27 0.008 var(--ref-primary-h));
-  --_n-90: oklch(0.91 0.004 var(--ref-primary-h));
-  --_n-94: oklch(0.945 0.003 var(--ref-primary-h));
-  --_n-96: oklch(0.962 0.003 var(--ref-primary-h));
-  --_n-99: oklch(0.991 0.002 var(--ref-primary-h));
+  /* Neutral — тинт фонов/поверхностей. Хрома = базовое значение тона ×
+     множитель --ref-neutral-c, оттенок = --ref-neutral-h.
+     Базовые значения чуть подняты у светлых тонов, чтобы цветная гамма
+     фона была заметна при выборе тёплого/холодного нейтрального цвета. */
+  --_n-10: oklch(0.15 calc(0.011 * var(--ref-neutral-c)) var(--ref-neutral-h));
+  --_n-20: oklch(0.27 calc(0.010 * var(--ref-neutral-c)) var(--ref-neutral-h));
+  --_n-90: oklch(0.91 calc(0.006 * var(--ref-neutral-c)) var(--ref-neutral-h));
+  --_n-94: oklch(0.945 calc(0.005 * var(--ref-neutral-c)) var(--ref-neutral-h));
+  --_n-96: oklch(0.962 calc(0.004 * var(--ref-neutral-c)) var(--ref-neutral-h));
+  --_n-99: oklch(0.991 calc(0.003 * var(--ref-neutral-c)) var(--ref-neutral-h));
 
   /* Neutral-variant — slightly more chroma (outlines, on-surface-variant) */
-  --_nv-30: oklch(0.38 0.022 var(--ref-primary-h));
-  --_nv-50: oklch(0.58 0.018 var(--ref-primary-h));
-  --_nv-60: oklch(0.66 0.016 var(--ref-primary-h));
-  --_nv-80: oklch(0.83 0.012 var(--ref-primary-h));
-  --_nv-90: oklch(0.91 0.009 var(--ref-primary-h));
+  --_nv-30: oklch(0.38 calc(0.022 * var(--ref-neutral-c)) var(--ref-neutral-h));
+  --_nv-50: oklch(0.58 calc(0.018 * var(--ref-neutral-c)) var(--ref-neutral-h));
+  --_nv-60: oklch(0.66 calc(0.016 * var(--ref-neutral-c)) var(--ref-neutral-h));
+  --_nv-80: oklch(0.83 calc(0.012 * var(--ref-neutral-c)) var(--ref-neutral-h));
+  --_nv-90: oklch(0.91 calc(0.009 * var(--ref-neutral-c)) var(--ref-neutral-h));
 }
 
 
@@ -146,7 +157,7 @@
 
   /* Surfaces (lowest → highest elevation) */
   --color-bg:                     var(--_n-99);
-  --color-surface:                oklch(1 0 0);
+  --color-surface:                oklch(0.995 calc(0.003 * var(--ref-neutral-c)) var(--ref-neutral-h));
   --color-surface-low:            var(--_n-96);
   --color-surface-high:           var(--_n-94);
   --color-surface-highest:        var(--_n-90);
@@ -197,10 +208,10 @@
   --color-on-warning-container:   var(--_w-90);
 
   --color-bg:                     var(--_n-10);
-  --color-surface:                oklch(0.14 0.008 var(--ref-primary-h));
-  --color-surface-low:            oklch(0.17 0.008 var(--ref-primary-h));
-  --color-surface-high:           oklch(0.20 0.008 var(--ref-primary-h));
-  --color-surface-highest:        oklch(0.25 0.008 var(--ref-primary-h));
+  --color-surface:                oklch(0.14 calc(0.010 * var(--ref-neutral-c)) var(--ref-neutral-h));
+  --color-surface-low:            oklch(0.17 calc(0.010 * var(--ref-neutral-c)) var(--ref-neutral-h));
+  --color-surface-high:           oklch(0.20 calc(0.010 * var(--ref-neutral-c)) var(--ref-neutral-h));
+  --color-surface-highest:        oklch(0.25 calc(0.010 * var(--ref-neutral-c)) var(--ref-neutral-h));
 
   --color-text:                   var(--_nv-90);
   --color-text-dim:               var(--_nv-60);
