@@ -282,7 +282,7 @@ const dialogPt = computed(() => ({
   content: {
     style: isMobile.value
       ? 'padding:0; overflow:hidden; border-radius:0; height:100%; display:flex; flex-direction:column'
-      : 'padding:0; overflow:hidden; border-radius:20px'
+      : 'padding:0; overflow:hidden; border-radius:20px; display:flex; flex-direction:column'
   }
 }))
 
@@ -492,6 +492,7 @@ async function handleSetColor(color) {
 <style scoped>
 .task-modal-body {
   display: flex;
+  flex: 1;
   min-height: 520px;
   max-height: 85vh;
   overflow: hidden;

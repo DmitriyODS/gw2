@@ -126,7 +126,9 @@ function randomTheme() {
 export const useThemeStore = defineStore('theme', () => {
   /* Resolve stored preset name — map legacy 'dark' to 'classic' */
   const storedPreset = localStorage.getItem('gw_theme') || 'classic'
-  const resolvedPreset = PRESETS[storedPreset] ? storedPreset : 'classic'
+  const storedCustomThemes = JSON.parse(localStorage.getItem('gw_custom_themes') || '[]')
+  const isKnownPreset = PRESETS[storedPreset] || storedCustomThemes.some(t => t.name === storedPreset)
+  const resolvedPreset = isKnownPreset ? storedPreset : 'classic'
 
   const currentPreset = ref(resolvedPreset)
   const dark = ref(localStorage.getItem('gw_dark') === 'true')
@@ -137,7 +139,7 @@ export const useThemeStore = defineStore('theme', () => {
     localStorage.setItem('gw_dark', 'true')
   }
 
-  const customThemes = ref(JSON.parse(localStorage.getItem('gw_custom_themes') || '[]'))
+  const customThemes = ref(storedCustomThemes)
 
   function getVars(name) {
     if (PRESETS[name]) return PRESETS[name]
