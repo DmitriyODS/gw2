@@ -31,6 +31,20 @@
               Пройти обучение
             </button>
           </div>
+
+          <div class="tutorial-card">
+            <div class="tutorial-card-info">
+              <span class="material-symbols-outlined tutorial-icon">newsmode</span>
+              <div>
+                <h4>Что нового</h4>
+                <p>История обновлений платформы.<template v-if="appVersion"> Текущая версия: {{ appVersion }}.</template></p>
+              </div>
+            </div>
+            <button class="btn-primary" @click="changelog.open()">
+              <span class="material-symbols-outlined">newsmode</span>
+              История версий
+            </button>
+          </div>
         </TabPanel>
 
         <!-- Пользователи -->
@@ -363,6 +377,8 @@ import { ref, reactive, computed, onMounted, watch } from 'vue'
 import { usePermission, ROLES } from '@/composables/usePermission.js'
 import { useNotificationsStore } from '@/stores/notifications.js'
 import { useTutorial } from '@/composables/useTutorial.js'
+import { useChangelog } from '@/composables/useChangelog.js'
+import { version as appVersion } from '../../package.json'
 import {
   getUsers, createUser, updateUser, deleteUser, assignRole
 } from '@/api/users.js'
@@ -391,6 +407,7 @@ import ProgressSpinner from 'primevue/progressspinner'
 const { isAtLeast, myLevel } = usePermission()
 const notif = useNotificationsStore()
 const tutorial = useTutorial()
+const changelog = useChangelog()
 
 const activeTab = ref('theme')
 const listsTab = ref('departments')
