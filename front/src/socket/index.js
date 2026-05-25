@@ -7,25 +7,61 @@ import { useMessengerStore } from '@/stores/messenger.js'
 import { showSystemNotification, playNotifySound } from '@/utils/systemNotify.js'
 
 let socket = null
+let visibilityHookInstalled = false
+
+/* Подтягивает состояние мессенджера с сервера. Используется при reconnect
+   сокета и при возврате вкладки в фокус — закрывает дыру, если событие
+   message:new/message:deleted/conversation:* потерялось при polling-обрыве
+   или пока вкладка была в фоне. */
+function resyncMessenger() {
+  try {
+    const messenger = useMessengerStore()
+    messenger.fetchConversations()
+    if (messenger.activeConversationId) {
+      messenger.fetchMessages(messenger.activeConversationId)
+    }
+    messenger.fetchUnreadCount()
+  } catch {}
+}
+
+function installVisibilityResync() {
+  if (visibilityHookInstalled || typeof document === 'undefined') return
+  visibilityHookInstalled = true
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible' && socket?.connected) {
+      resyncMessenger()
+    }
+  })
+  window.addEventListener('focus', () => {
+    if (socket?.connected) resyncMessenger()
+  })
+}
 
 export function connectSocket() {
   const auth = useAuthStore()
   if (!auth.token || socket?.connected) return
 
+  // upgrade: true даже в dev — иначе при двух открытых вкладках polling
+  // упирается в лимит одновременных HTTP-коннектов браузера на origin,
+  // и реалтайм-события у второй вкладки начинают теряться/запаздывать.
   socket = io('/', {
     auth: { token: auth.token },
     transports: ['polling', 'websocket'],
-    upgrade: !import.meta.env.DEV,
+    upgrade: true,
   })
+
+  installVisibilityResync()
 
   let hadConnected = false
 
   socket.on('connect', () => {
     // При переподключении локальное состояние могло разойтись с сервером
-    // (пропущенные события за время обрыва) — перечитываем активный юнит.
+    // (пропущенные события за время обрыва) — перечитываем активный юнит,
+    // список диалогов и сообщения активного чата.
     if (hadConnected) {
       const units = useUnitsStore()
       units.fetchActiveUnit()
+      resyncMessenger()
     }
     hadConnected = true
   })
