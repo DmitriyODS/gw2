@@ -24,7 +24,7 @@
         <router-view />
       </main>
     </template>
-    <Toast :position="isMobile ? 'top-center' : 'bottom-right'" />
+    <Toast :position="isMobile ? 'top-center' : 'top-right'" />
   </div>
 </template>
 

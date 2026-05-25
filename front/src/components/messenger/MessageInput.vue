@@ -183,7 +183,9 @@ function iconFor(mime) {
   position: relative;
   border-top: 1px solid var(--color-outline-dim);
   background: var(--color-surface);
-  padding: 10px 14px env(safe-area-inset-bottom, 10px);
+  /* Нижний отступ приподнимает поле от края: фиксированные 16px + safe-area
+     (на десктопе env() = 0, поэтому без слагаемого поле прижималось к низу). */
+  padding: 10px 14px calc(16px + env(safe-area-inset-bottom, 0px));
 }
 
 .reply-banner {

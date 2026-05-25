@@ -51,11 +51,6 @@ body { font-family: 'Roboto', sans-serif; background: var(--color-bg); color: va
     min-height: 36px;
   }
 
-  /* Toast не перекрывается нижней навигацией */
-  .p-toast.p-toast-bottom-right {
-    bottom: calc(68px + env(safe-area-inset-bottom, 0px)) !important;
-  }
-
   /* На мобильном тосты показываем сверху — снизу их прятала нижняя навигация.
      Прижимаем под статус-бар/вырез и растягиваем по ширине экрана. */
   .p-toast.p-toast-top-center {
