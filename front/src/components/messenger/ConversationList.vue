@@ -61,14 +61,14 @@
             class="conv-action"
             :class="{ active: c.is_pinned }"
             :title="c.is_pinned ? 'Открепить' : 'Закрепить'"
-            @click="$emit('toggle-pin', c.id)"
+            @click="$emit('toggle-pin', c.id); $event.currentTarget.blur()"
           >
             <span class="material-symbols-outlined">{{ c.is_pinned ? 'keep_off' : 'keep' }}</span>
           </button>
           <button
             class="conv-action danger"
             title="Удалить чат"
-            @click="$emit('delete', c)"
+            @click="$emit('delete', c); $event.currentTarget.blur()"
           >
             <span class="material-symbols-outlined">delete</span>
           </button>
