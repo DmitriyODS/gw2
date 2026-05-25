@@ -23,6 +23,27 @@
     </button>
 
     <button
+      class="bottom-nav-item"
+      :class="{ active: route.path === '/employees' }"
+      @click="router.push('/employees')"
+    >
+      <span class="material-symbols-outlined">groups</span>
+      <span class="bottom-nav-label">Люди</span>
+    </button>
+
+    <button
+      class="bottom-nav-item"
+      :class="{ active: route.path.startsWith('/messenger') }"
+      @click="router.push('/messenger')"
+    >
+      <span class="material-symbols-outlined">chat</span>
+      <span class="bottom-nav-label">Чаты</span>
+      <span v-if="messenger.totalUnread" class="bottom-badge">
+        {{ messenger.totalUnread > 99 ? '99+' : messenger.totalUnread }}
+      </span>
+    </button>
+
+    <button
       data-tutorial="nav-settings"
       class="bottom-nav-item"
       :class="{ active: route.path === '/settings' }"
@@ -49,12 +70,14 @@ import { computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth.js'
 import { useUnitsStore } from '@/stores/units.js'
+import { useMessengerStore } from '@/stores/messenger.js'
 import { usePermission, ROLES } from '@/composables/usePermission.js'
 
 const route = useRoute()
 const router = useRouter()
 const authStore = useAuthStore()
 const unitsStore = useUnitsStore()
+const messenger = useMessengerStore()
 const { isAtLeast } = usePermission()
 
 const avatarSrc = computed(() => {
@@ -131,6 +154,24 @@ const avatarSrc = computed(() => {
   border-radius: 50%;
   object-fit: cover;
   border: 2px solid currentColor;
+}
+
+.bottom-badge {
+  position: absolute;
+  top: 4px;
+  right: calc(50% - 18px);
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  border-radius: var(--radius-full);
+  background: var(--color-error);
+  color: var(--color-on-error);
+  font-size: 10px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 2px solid var(--color-surface);
 }
 
 .unit-dot {

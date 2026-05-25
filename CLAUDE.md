@@ -137,6 +137,18 @@ Nginx собирает фронт сам через multi-stage `front/Dockerfil
 
 Хранится в Redis (`gw2:bf:attempts:{login}` и `gw2:bf:locked_until:{login}`). После каждых 5 неудачных подряд попыток ставится блокировка на `10 * 2**(steps-1)` секунд (10с, 20с, 40с…). Удачный логин обнуляет счётчик. Бэк отвечает `429 {retry_after_sec}`, фронт показывает таймер на `LoginView`. Логика — `back/app/services/login_throttle.py`.
 
+## Раздел «Сотрудники» и мессенджер (v2.4.0)
+
+**Каталог сотрудников.** `GET /api/users/directory?q=...&exclude_self=true` — публичный для любого авторизованного, отдаёт `UserDirectorySchema` (без `is_default_pass`/`is_hidden`). `GET /api/users/directory/<id>` — одиночный публичный профиль. Поиск идёт case-insensitive по `fio`+`login`. Фронт: `EmployeesView.vue` (карточки + модалка профиля с кнопкой «Написать», ведущей в `/messenger/<id>`).
+
+**Мессенджер 1:1.** Таблицы `conversations` (user_a_id < user_b_id, уникальная пара), `messages` (text + read_at), `message_attachments` (file_path в `UPLOAD_FOLDER/messages/YYYY/MM/`, message_id nullable до момента отправки). Миграция `d3e4f5a6b7c8`. API в `back/app/api/messenger.py` (`/api/messenger/...`): list/open conversations, list/post messages (курсор по before_id), POST `/uploads` (multipart, 25 МБ макс. — `MESSENGER_ATTACHMENT_MAX`), POST `/read`, GET `/unread`. WebSocket: при отправке `socketio.emit('message:new', ...)` в комнаты `user_{recipient}` и `user_{sender}` (эхо для других вкладок). При пометке прочитанным — `message:read` собеседнику.
+
+**Фронт мессенджера.** `MessengerView.vue` (двухпанельный, на мобильном — единый экран со списком/диалогом), `components/messenger/{ConversationList,MessageBubble,MessageInput,AttachmentView,NewChatDialog}.vue`. Store `stores/messenger.js`: список диалогов, кеш сообщений по convId, общий счётчик непрочитанных, методы `openWith/setActive/send/applyIncomingMessage/applyReadReceipt`. API клиент — `api/messenger.js`. Сокет-handlers подключены в `socket/index.js`. Бейджи непрочитанных — в `AppSidebar.vue` и `AppBottomNav.vue`.
+
+**Уведомления и звук.** `utils/systemNotify.js` — Web Notifications API + Web Audio API (двухтональный «бип», без mp3-файла). Запрос разрешения происходит при первом заходе в `/messenger`. Уведомление не показывается, если страница в фокусе И активен этот диалог. Клик по уведомлению фокусирует окно и эмитит `messenger:open-conversation` (CustomEvent, ловит `MessengerView`).
+
+**Фикс «светлых цветов на кнопках» (v2.4.0).** `theme.js → hexToOklch` теперь возвращает `L`, `applyPaletteKey` пишет `--ref-{name}-l` (с клампом 0.30–0.92) и `--color-on-{name}-user` (белый или тёмный по порогу L≥0.65). В `tokens.css` тон `--_p-40 / --_s-40 / --_t-40` использует `var(--ref-*-l)` вместо фиксированных 0.50; светлая тема `--color-on-{primary,secondary,tertiary}` → `var(--color-on-*-user)`. Дефолты сохранены (0.50/белый) — пресеты без явного L работают как раньше.
+
 ## Swagger UI
 
 Доступен на `http://localhost:5001/apidocs` при запущенном dev-сервере.

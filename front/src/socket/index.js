@@ -3,6 +3,8 @@ import { useAuthStore } from '@/stores/auth.js'
 import { useTasksStore } from '@/stores/tasks.js'
 import { useUnitsStore } from '@/stores/units.js'
 import { useNotificationsStore } from '@/stores/notifications.js'
+import { useMessengerStore } from '@/stores/messenger.js'
+import { showSystemNotification, playNotifySound } from '@/utils/systemNotify.js'
 
 let socket = null
 
@@ -103,6 +105,34 @@ export function connectSocket() {
       const tasks = useTasksStore()
       tasks.removeActiveUser(task_id, user_id)
     }
+  })
+
+  socket.on('message:new', ({ conversation_id, message, from_user_id }) => {
+    const messenger = useMessengerStore()
+    const authS = useAuthStore()
+    const fromMe = from_user_id === authS.user?.id
+    messenger.applyIncomingMessage(conversation_id, message, fromMe)
+
+    if (!fromMe) {
+      const isActive = messenger.activeConversationId === conversation_id
+                       && document.visibilityState === 'visible'
+                       && document.hasFocus()
+      if (!isActive) {
+        const conv = messenger.conversations.find(c => c.id === conversation_id)
+        const fio = conv?.other_user?.fio || 'Сотрудник'
+        const body = message.text || (message.attachments?.length ? 'Прислал(а) вложение' : 'Новое сообщение')
+        showSystemNotification(fio, body, () => {
+          window.focus()
+          window.dispatchEvent(new CustomEvent('messenger:open-conversation', { detail: { conversation_id } }))
+        })
+        playNotifySound()
+      }
+    }
+  })
+
+  socket.on('message:read', ({ conversation_id, reader_id }) => {
+    const messenger = useMessengerStore()
+    messenger.applyReadReceipt(conversation_id, reader_id)
   })
 
   socket.on('unit:force_stopped', ({ unit_id, stopped_by_fio }) => {

@@ -47,26 +47,35 @@ function hexToOklch(hex) {
   const m_ = Math.cbrt(0.2119034982 * rl + 0.6806995451 * gl + 0.1073969566 * bl)
   const s_ = Math.cbrt(0.0883024619 * rl + 0.2817188376 * gl + 0.6299787005 * bl)
 
+  const L  =  0.2104542553 * l_ + 0.7936177850 * m_ - 0.0040720468 * s_
   const a  =  1.9779984951 * l_ - 2.4285922050 * m_ + 0.4505937099 * s_
   const bv =  0.0259040371 * l_ + 0.7827717662 * m_ - 0.8086757660 * s_
 
   const C = Math.sqrt(a * a + bv * bv)
   const H = ((Math.atan2(bv, a) * 180 / Math.PI) + 360) % 360
 
-  return { C, H }
+  return { L, C, H }
 }
 
-/* Writes --ref-*-h and --ref-*-c CSS vars for an accent palette key.
+/* Writes --ref-*-h, --ref-*-c, --ref-*-l CSS vars for an accent palette key.
    Насыщенность нормализуется в коридор [0.06 … 0.33]: это снимает «запрет»
    на очень тёмные и очень светлые цвета — из них извлекается почти серый
-   оттенок, и без нижнего порога палитра выглядела бы выцветшей. Светлоту же
-   движок задаёт сам по тонам, поэтому кнопки/панели остаются читаемыми на
-   любом фоне в обеих темах. */
+   оттенок, и без нижнего порога палитра выглядела бы выцветшей.
+   Светлота сохраняется (с безопасным клампом 0.30…0.92), чтобы выбор очень
+   светлого hex действительно красил кнопку в светлый цвет; на контрастный
+   текст (--color-on-{name}) ставим белый или тёмный по порогу 0.65.        */
 function applyPaletteKey(root, name, hex) {
-  const { C, H } = hexToOklch(hex)
+  const { L, C, H } = hexToOklch(hex)
   const c = Math.min(Math.max(C, 0.06), 0.33)
+  const l = Math.min(Math.max(L, 0.30), 0.92)
   root.style.setProperty(`--ref-${name}-h`, H.toFixed(1))
   root.style.setProperty(`--ref-${name}-c`, c.toFixed(4))
+  root.style.setProperty(`--ref-${name}-l`, l.toFixed(4))
+  // Контрастный текст на цветной плашке: светлая плашка → тёмный текст.
+  const onColor = l >= 0.65
+    ? `oklch(0.18 ${(c * 0.6).toFixed(4)} ${H.toFixed(1)})`
+    : 'oklch(0.995 0 0)'
+  root.style.setProperty(`--color-on-${name}-user`, onColor)
 }
 
 /* Нейтральный (фоновый) цвет особый: его оттенок задаёт гамму фона, а из

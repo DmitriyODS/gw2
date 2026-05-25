@@ -25,3 +25,14 @@ export const getUser = (userId) => apiRequest(`/users/${userId}`)
 export const updateUser = (userId, data) => apiRequest(`/users/${userId}`, { method: 'PATCH', body: data })
 
 export const assignRole = (userId, data) => apiRequest(`/users/${userId}/role`, { method: 'PATCH', body: data })
+
+// Каталог сотрудников — доступно любому авторизованному.
+export const getDirectory = (q = '', excludeSelf = false) => {
+  const params = new URLSearchParams()
+  if (q) params.set('q', q)
+  if (excludeSelf) params.set('exclude_self', 'true')
+  const qs = params.toString()
+  return apiRequest(`/users/directory${qs ? '?' + qs : ''}`)
+}
+
+export const getDirectoryUser = (userId) => apiRequest(`/users/directory/${userId}`)

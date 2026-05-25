@@ -7,6 +7,13 @@ const routes = [
   { path: '/stats', component: () => import('@/views/StatsView.vue'), meta: { requiresAuth: true } },
   { path: '/settings', component: () => import('@/views/SettingsView.vue'), meta: { requiresAuth: true } },
   { path: '/profile', component: () => import('@/views/ProfileView.vue'), meta: { requiresAuth: true } },
+  { path: '/employees', component: () => import('@/views/EmployeesView.vue'), meta: { requiresAuth: true } },
+  {
+    path: '/messenger/:conversationId(\\d+)?',
+    component: () => import('@/views/MessengerView.vue'),
+    meta: { requiresAuth: true },
+    props: true,
+  },
   { path: '/tv', component: () => import('@/views/TvView.vue'), meta: { requiresAuth: true, fullscreen: true } },
   { path: '/', redirect: '/tasks' },
   { path: '/:pathMatch(.*)*', redirect: '/tasks' }

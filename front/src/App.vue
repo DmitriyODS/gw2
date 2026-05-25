@@ -34,6 +34,7 @@ import { useToast } from 'primevue/usetoast'
 import { useAuthStore } from '@/stores/auth.js'
 import { useThemeStore } from '@/stores/theme.js'
 import { useUnitsStore } from '@/stores/units.js'
+import { useMessengerStore } from '@/stores/messenger.js'
 import { useNotificationsStore } from '@/stores/notifications.js'
 import { useTutorial } from '@/composables/useTutorial.js'
 import { useChangelog } from '@/composables/useChangelog.js'
@@ -49,6 +50,7 @@ import ProgressSpinner from 'primevue/progressspinner'
 const authStore = useAuthStore()
 const themeStore = useThemeStore()
 const unitsStore = useUnitsStore()
+const messengerStore = useMessengerStore()
 const notif = useNotificationsStore()
 const route = useRoute()
 
@@ -79,6 +81,9 @@ onMounted(async () => {
   if (authStore.token) {
     connectSocket()
     await unitsStore.fetchActiveUnit()
+    // Счётчик непрочитанных нужен для бейджа в навигации сразу после входа,
+    // не дожидаясь захода в раздел мессенджера.
+    messengerStore.fetchUnreadCount()
     // Лог версий показываем существующим пользователям; новичкам сначала тур,
     // а лог всплывёт при следующем входе.
     if (!shouldAutoShow()) {
@@ -86,6 +91,13 @@ onMounted(async () => {
     }
   }
   initializing.value = false
+})
+
+// Сброс данных мессенджера при логауте, чтобы не утекли между сессиями.
+watch(() => authStore.user, (user) => {
+  if (!user) {
+    messengerStore.reset()
+  }
 })
 </script>
 

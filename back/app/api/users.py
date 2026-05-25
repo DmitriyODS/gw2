@@ -3,7 +3,7 @@ from flask_jwt_extended import get_jwt_identity
 from marshmallow import ValidationError
 from io import BytesIO
 
-from app.schemas import UserSchema, UserCreateSchema, UserUpdateSchema, UserMeUpdateSchema
+from app.schemas import UserSchema, UserCreateSchema, UserUpdateSchema, UserMeUpdateSchema, UserDirectorySchema
 from app.services import user_service
 from app.services.user_service import UserServiceError
 from app.repositories import user_repo
@@ -17,6 +17,8 @@ _users_schema = UserSchema(many=True)
 _create_schema = UserCreateSchema()
 _update_schema = UserUpdateSchema()
 _me_schema = UserMeUpdateSchema()
+_directory_schema = UserDirectorySchema()
+_directory_list_schema = UserDirectorySchema(many=True)
 
 
 @bp.get("")
@@ -72,6 +74,60 @@ def create_user():
         return jsonify({"error": e.code, "message": e.message}), e.http_status
 
     return jsonify(_user_schema.dump(user)), 201
+
+
+@bp.get("/directory")
+@require_auth
+def list_directory():
+    """
+    Каталог видимых сотрудников. Доступно любому авторизованному.
+    ---
+    tags: [users]
+    security: [BearerAuth: []]
+    parameters:
+      - in: query
+        name: q
+        schema: {type: string}
+        required: false
+        description: Поиск по логину или ФИО (ILIKE)
+      - in: query
+        name: exclude_self
+        schema: {type: boolean}
+        required: false
+    responses:
+      200:
+        description: Список сотрудников
+    """
+    q = request.args.get("q", type=str)
+    exclude_self = request.args.get("exclude_self", default="false").lower() in ("1", "true", "yes")
+    exclude_id = int(get_jwt_identity()) if exclude_self else None
+    users = user_repo.search_directory(query=q, exclude_id=exclude_id)
+    return jsonify(_directory_list_schema.dump(users)), 200
+
+
+@bp.get("/directory/<int:user_id>")
+@require_auth
+def get_directory_user(user_id: int):
+    """
+    Публичный профиль сотрудника по id.
+    ---
+    tags: [users]
+    security: [BearerAuth: []]
+    parameters:
+      - in: path
+        name: user_id
+        schema: {type: integer}
+        required: true
+    responses:
+      200:
+        description: Публичный профиль
+      404:
+        description: Не найден
+    """
+    user = user_repo.get_by_id(user_id)
+    if user is None or user.is_hidden:
+        return jsonify({"error": "NOT_FOUND", "message": "Сотрудник не найден"}), 404
+    return jsonify(_directory_schema.dump(user)), 200
 
 
 @bp.get("/me")

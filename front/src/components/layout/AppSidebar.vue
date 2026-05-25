@@ -27,6 +27,27 @@
       </button>
 
       <button
+        class="nav-btn"
+        :class="{ active: route.path === '/employees' }"
+        @click="router.push('/employees')"
+        title="Сотрудники"
+      >
+        <span class="material-symbols-outlined">groups</span>
+      </button>
+
+      <button
+        class="nav-btn"
+        :class="{ active: route.path.startsWith('/messenger') }"
+        @click="router.push('/messenger')"
+        title="Мессенджер"
+      >
+        <span class="material-symbols-outlined">chat</span>
+        <span v-if="messenger.totalUnread" class="nav-badge">
+          {{ messenger.totalUnread > 99 ? '99+' : messenger.totalUnread }}
+        </span>
+      </button>
+
+      <button
         data-tutorial="nav-settings"
         class="nav-btn"
         :class="{ active: route.path === '/settings' }"
@@ -55,12 +76,14 @@
 import { computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth.js'
+import { useMessengerStore } from '@/stores/messenger.js'
 import { usePermission, ROLES } from '@/composables/usePermission.js'
 import { useChangelog } from '@/composables/useChangelog.js'
 
 const route = useRoute()
 const router = useRouter()
 const authStore = useAuthStore()
+const messenger = useMessengerStore()
 const { isAtLeast } = usePermission()
 const { open: openChangelog } = useChangelog()
 
@@ -152,6 +175,24 @@ const avatarSrc = computed(() => {
 
 .nav-btn .material-symbols-outlined {
   font-size: 24px;
+}
+
+.nav-badge {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: var(--radius-full);
+  background: var(--color-error);
+  color: var(--color-on-error);
+  font-size: 10px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 2px solid var(--gw-sidebar-bg, var(--color-surface));
 }
 
 

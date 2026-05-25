@@ -18,12 +18,18 @@
 :root {
   --ref-primary-h:    295;
   --ref-primary-c:    0.26;
+  /* --ref-*-l — реальная светлота выбранного цвета (OKLCH L).
+     Используется в светлой теме для тона 40, чтобы светлый/тёмный hex
+     действительно влиял на цвет кнопки. Дефолт 0.50 ≈ старое поведение. */
+  --ref-primary-l:    0.50;
 
   --ref-secondary-h:  177;
   --ref-secondary-c:  0.18;
+  --ref-secondary-l:  0.50;
 
   --ref-tertiary-h:   253;
   --ref-tertiary-c:   0.27;
+  --ref-tertiary-l:   0.50;
 
   /* Fixed hues — unaffected by theme colour changes */
   --ref-error-h:      22;
@@ -50,11 +56,13 @@
    Chroma is scaled toward 0 at the extremes (≈ M3 tonal behaviour).
    Private vars (--_) are not for direct component use.            */
 :root {
-  /* Primary */
+  /* Primary. Тон 40 использует реальную L пользователя (--ref-primary-l), чтобы
+     выбор светлого цвета действительно красил кнопку в светлый цвет. Остальные
+     тона по-прежнему по фиксированным L — нужны как контейнеры/полтона/тёмная тема. */
   --_p-10: oklch(0.15 calc(var(--ref-primary-c) * 0.72) var(--ref-primary-h));
   --_p-20: oklch(0.27 calc(var(--ref-primary-c) * 0.86) var(--ref-primary-h));
   --_p-30: oklch(0.38 var(--ref-primary-c) var(--ref-primary-h));
-  --_p-40: oklch(0.50 var(--ref-primary-c) var(--ref-primary-h));
+  --_p-40: oklch(var(--ref-primary-l) var(--ref-primary-c) var(--ref-primary-h));
   --_p-80: oklch(0.83 calc(var(--ref-primary-c) * 0.62) var(--ref-primary-h));
   --_p-90: oklch(0.91 calc(var(--ref-primary-c) * 0.36) var(--ref-primary-h));
   --_p-95: oklch(0.96 calc(var(--ref-primary-c) * 0.18) var(--ref-primary-h));
@@ -64,7 +72,7 @@
   --_s-10: oklch(0.15 calc(var(--ref-secondary-c) * 0.72) var(--ref-secondary-h));
   --_s-20: oklch(0.27 calc(var(--ref-secondary-c) * 0.86) var(--ref-secondary-h));
   --_s-30: oklch(0.38 var(--ref-secondary-c) var(--ref-secondary-h));
-  --_s-40: oklch(0.50 var(--ref-secondary-c) var(--ref-secondary-h));
+  --_s-40: oklch(var(--ref-secondary-l) var(--ref-secondary-c) var(--ref-secondary-h));
   --_s-80: oklch(0.83 calc(var(--ref-secondary-c) * 0.62) var(--ref-secondary-h));
   --_s-90: oklch(0.91 calc(var(--ref-secondary-c) * 0.36) var(--ref-secondary-h));
 
@@ -72,7 +80,7 @@
   --_t-10: oklch(0.15 calc(var(--ref-tertiary-c) * 0.72) var(--ref-tertiary-h));
   --_t-20: oklch(0.27 calc(var(--ref-tertiary-c) * 0.86) var(--ref-tertiary-h));
   --_t-30: oklch(0.38 var(--ref-tertiary-c) var(--ref-tertiary-h));
-  --_t-40: oklch(0.50 var(--ref-tertiary-c) var(--ref-tertiary-h));
+  --_t-40: oklch(var(--ref-tertiary-l) var(--ref-tertiary-c) var(--ref-tertiary-h));
   --_t-80: oklch(0.83 calc(var(--ref-tertiary-c) * 0.62) var(--ref-tertiary-h));
   --_t-90: oklch(0.91 calc(var(--ref-tertiary-c) * 0.36) var(--ref-tertiary-h));
 
@@ -119,21 +127,26 @@
 
 /* ── Layer 3: Semantic roles — LIGHT MODE ─────────────────────── */
 :root {
-  /* Primary */
+  /* Primary. --color-on-*-user пишет theme.js (белый/тёмный по L выбранного
+     цвета) — если переменная не задана, остаётся прежний белый. */
+  --color-on-primary-user:        oklch(1 0 0);
+  --color-on-secondary-user:      oklch(1 0 0);
+  --color-on-tertiary-user:       oklch(1 0 0);
+
   --color-primary:                var(--_p-40);
-  --color-on-primary:             oklch(1 0 0);
+  --color-on-primary:             var(--color-on-primary-user);
   --color-primary-container:      var(--_p-90);
   --color-on-primary-container:   var(--_p-10);
 
   /* Secondary */
   --color-secondary:              var(--_s-40);
-  --color-on-secondary:           oklch(1 0 0);
+  --color-on-secondary:           var(--color-on-secondary-user);
   --color-secondary-container:    var(--_s-90);
   --color-on-secondary-container: var(--_s-10);
 
   /* Tertiary */
   --color-tertiary:               var(--_t-40);
-  --color-on-tertiary:            oklch(1 0 0);
+  --color-on-tertiary:            var(--color-on-tertiary-user);
   --color-tertiary-container:     var(--_t-90);
   --color-on-tertiary-container:  var(--_t-10);
 

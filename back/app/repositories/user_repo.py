@@ -11,6 +11,22 @@ def get_all(include_hidden: bool = False) -> list[User]:
     return db.session.execute(q.order_by(User.id)).scalars().all()
 
 
+def search_directory(query: Optional[str] = None, exclude_id: Optional[int] = None) -> list[User]:
+    """Каталог сотрудников: только видимые, опционально фильтр по login/fio (ILIKE)."""
+    q = db.select(User).join(User.role).where(User.is_hidden.is_(False))
+    if exclude_id is not None:
+        q = q.where(User.id != exclude_id)
+    if query:
+        like = f"%{query.strip().lower()}%"
+        q = q.where(
+            db.or_(
+                db.func.lower(User.fio).like(like),
+                db.func.lower(User.login).like(like),
+            )
+        )
+    return db.session.execute(q.order_by(User.fio.asc())).scalars().all()
+
+
 def get_by_id(user_id: int) -> Optional[User]:
     return db.session.execute(
         db.select(User).join(User.role).where(User.id == user_id)

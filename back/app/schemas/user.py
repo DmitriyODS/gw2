@@ -19,6 +19,17 @@ class UserSchema(Schema):
     created_at = fields.DateTime(dump_only=True)
 
 
+class UserDirectorySchema(Schema):
+    """Публичный профиль для каталога сотрудников и мессенджера —
+    без is_default_pass и прочих внутренних полей."""
+    id = fields.Int(dump_only=True)
+    fio = fields.Str(dump_only=True)
+    login = fields.Str(dump_only=True)
+    post = fields.Str(dump_only=True, allow_none=True)
+    role = fields.Nested(RoleRefSchema, dump_only=True)
+    avatar_path = fields.Str(dump_only=True, allow_none=True)
+
+
 class UserCreateSchema(Schema):
     fio = fields.Str(required=True, validate=validate.Length(min=1, max=255))
     login = fields.Str(required=True, validate=validate.Length(min=3, max=100))
