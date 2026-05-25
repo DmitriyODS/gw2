@@ -55,4 +55,14 @@ body { font-family: 'Roboto', sans-serif; background: var(--color-bg); color: va
   .p-toast.p-toast-bottom-right {
     bottom: calc(68px + env(safe-area-inset-bottom, 0px)) !important;
   }
+
+  /* На мобильном тосты показываем сверху — снизу их прятала нижняя навигация.
+     Прижимаем под статус-бар/вырез и растягиваем по ширине экрана. */
+  .p-toast.p-toast-top-center {
+    top: calc(12px + env(safe-area-inset-top, 0px)) !important;
+    left: 50% !important;
+    transform: translateX(-50%) !important;
+    width: calc(100vw - 24px) !important;
+    max-width: 420px !important;
+  }
 }

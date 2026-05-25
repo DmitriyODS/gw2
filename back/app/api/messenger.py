@@ -5,7 +5,7 @@ from marshmallow import ValidationError
 from app.schemas import (
     MessageSchema, AttachmentSchema, ConversationListItemSchema,
     ConversationSchema, MessageCreateSchema, ConversationCreateSchema,
-    UserDirectorySchema,
+    UserDirectorySchema, ForwardSchema,
 )
 from app.services import messenger_service
 from app.services.messenger_service import MessengerServiceError
@@ -21,6 +21,7 @@ _conv_list = ConversationListItemSchema(many=True)
 _conv = ConversationSchema()
 _msg_create = MessageCreateSchema()
 _conv_create = ConversationCreateSchema()
+_forward = ForwardSchema()
 _dir = UserDirectorySchema()
 
 
@@ -156,6 +157,7 @@ def post_message(conversation_id: int):
             conversation_id, me,
             text=data.get("text"),
             attachment_ids=data.get("attachment_ids") or [],
+            reply_to_id=data.get("reply_to_id"),
         )
     except MessengerServiceError as e:
         return jsonify({"error": e.code, "message": e.message}), e.http_status
@@ -178,6 +180,64 @@ def post_message(conversation_id: int):
     }, room=f"user_{me}")
 
     return jsonify(payload), 201
+
+
+@bp.post("/forward")
+@require_auth
+def forward_message_endpoint():
+    """
+    Переслать сообщение в один или несколько диалогов / пользователям.
+    ---
+    tags: [messenger]
+    security: [BearerAuth: []]
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [message_id]
+            properties:
+              message_id: {type: integer}
+              conversation_ids:
+                type: array
+                items: {type: integer}
+              user_ids:
+                type: array
+                items: {type: integer}
+    responses:
+      201:
+        description: Сообщение переслано
+    """
+    try:
+        data = _forward.load(request.get_json(silent=True) or {})
+    except ValidationError as e:
+        return jsonify({"error": "VALIDATION_ERROR", "message": e.messages}), 400
+
+    me = int(get_jwt_identity())
+    try:
+        results = messenger_service.forward_message(
+            data["message_id"], me,
+            conversation_ids=data.get("conversation_ids") or [],
+            user_ids=data.get("user_ids") or [],
+        )
+    except MessengerServiceError as e:
+        return jsonify({"error": e.code, "message": e.message}), e.http_status
+
+    from app.extensions import socketio
+    out = []
+    for conv, msg in results:
+        payload = _msg.dump(msg)
+        out.append({"conversation_id": conv.id, "message": payload})
+        recipient_id = conv.other_user_id(me)
+        for room in (f"user_{recipient_id}", f"user_{me}"):
+            socketio.emit("message:new", {
+                "conversation_id": conv.id,
+                "message": payload,
+                "from_user_id": me,
+            }, room=room)
+
+    return jsonify({"forwarded": out}), 201
 
 
 @bp.post("/conversations/<int:conversation_id>/read")

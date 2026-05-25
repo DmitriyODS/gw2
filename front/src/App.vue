@@ -17,13 +17,14 @@
       <ActiveUnitModal v-if="unitsStore.activeUnit" />
       <AppTutorial v-if="isTutorialOpen" />
       <ChangelogModal v-if="isChangelogOpen" @close="closeChangelog" />
+      <MiniMessenger />
     </template>
     <template v-else>
       <main class="main-content">
         <router-view />
       </main>
     </template>
-    <Toast position="bottom-right" />
+    <Toast :position="isMobile ? 'top-center' : 'bottom-right'" />
   </div>
 </template>
 
@@ -36,14 +37,19 @@ import { useThemeStore } from '@/stores/theme.js'
 import { useUnitsStore } from '@/stores/units.js'
 import { useMessengerStore } from '@/stores/messenger.js'
 import { useNotificationsStore } from '@/stores/notifications.js'
+import { useBreakpoint } from '@/composables/useBreakpoint.js'
 import { useTutorial } from '@/composables/useTutorial.js'
 import { useChangelog } from '@/composables/useChangelog.js'
 import { connectSocket } from '@/socket/index.js'
+import {
+  registerNotifyServiceWorker, installNotifyUnlock,
+} from '@/utils/systemNotify.js'
 import AppSidebar from '@/components/layout/AppSidebar.vue'
 import AppBottomNav from '@/components/layout/AppBottomNav.vue'
 import ActiveUnitModal from '@/components/layout/ActiveUnitModal.vue'
 import AppTutorial from '@/components/layout/AppTutorial.vue'
 import ChangelogModal from '@/components/layout/ChangelogModal.vue'
+import MiniMessenger from '@/components/messenger/MiniMessenger.vue'
 import Toast from 'primevue/toast'
 import ProgressSpinner from 'primevue/progressspinner'
 
@@ -53,6 +59,7 @@ const unitsStore = useUnitsStore()
 const messengerStore = useMessengerStore()
 const notif = useNotificationsStore()
 const route = useRoute()
+const { isMobile } = useBreakpoint()
 
 const isFullscreenRoute = computed(() => !!route.meta?.fullscreen && !!authStore.user)
 // isOpen деструктурирован как топ-левел ref — Vue auto-unwraps в шаблоне
@@ -81,9 +88,13 @@ onMounted(async () => {
   if (authStore.token) {
     connectSocket()
     await unitsStore.fetchActiveUnit()
-    // Счётчик непрочитанных нужен для бейджа в навигации сразу после входа,
-    // не дожидаясь захода в раздел мессенджера.
-    messengerStore.fetchUnreadCount()
+    // Уведомления: регистрируем SW (нужен для OS-уведомлений на мобильных) и
+    // вешаем «разогрев» аудио + запрос разрешения по первому жесту.
+    registerNotifyServiceWorker()
+    installNotifyUnlock()
+    // Список диалогов нужен сразу после входа: бейдж непрочитанных, мини-чат
+    // и корректный заголовок в push-уведомлении (иначе fio неизвестно).
+    messengerStore.fetchConversations()
     // Лог версий показываем существующим пользователям; новичкам сначала тур,
     // а лог всплывёт при следующем входе.
     if (!shouldAutoShow()) {

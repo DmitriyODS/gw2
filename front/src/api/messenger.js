@@ -18,6 +18,12 @@ export const listMessages = (conversationId, { beforeId = null, afterId = null, 
 export const sendMessage = (conversationId, payload) =>
   apiRequest(`/messenger/conversations/${conversationId}/messages`, { method: 'POST', body: payload })
 
+export const forwardMessage = (messageId, { conversationIds = [], userIds = [] } = {}) =>
+  apiRequest('/messenger/forward', {
+    method: 'POST',
+    body: { message_id: messageId, conversation_ids: conversationIds, user_ids: userIds },
+  })
+
 export const markRead = (conversationId) =>
   apiRequest(`/messenger/conversations/${conversationId}/read`, { method: 'POST' })
 

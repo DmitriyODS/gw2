@@ -11,7 +11,18 @@
       @delete="askDeleteConversation"
     />
 
-    <section class="chat-panel" :class="{ 'is-mobile-hidden': isMobile && !activeId }">
+    <section
+      class="chat-panel"
+      :class="{ 'is-mobile-hidden': isMobile && !activeId }"
+      @dragenter.prevent="onDragEnter"
+      @dragover.prevent="onDragOver"
+      @dragleave.prevent="onDragLeave"
+      @drop.prevent="onDrop"
+    >
+      <div v-if="dragOver && active" class="chat-drop-overlay">
+        <span class="material-symbols-outlined">upload_file</span>
+        <span>Отпустите файл — он прикрепится к сообщению</span>
+      </div>
       <header v-if="active" class="chat-header">
         <button v-if="isMobile" class="back-btn" @click="goBack" title="Назад">
           <span class="material-symbols-outlined">arrow_back</span>
@@ -63,18 +74,42 @@
             :message="m"
             :is-mine="m.sender_id === authStore.user?.id"
             @delete="askDeleteMessage"
+            @reply="startReply"
+            @forward="startForward"
           />
         </template>
       </div>
 
       <MessageInput
         v-if="active"
+        ref="messageInputRef"
         :sending="messenger.sending"
+        :reply-to="replyTo"
         @send="onSend"
+        @cancel-reply="replyTo = null"
       />
     </section>
 
+    <!-- FAB «новый чат» — только на мобильном и только в режиме списка -->
+    <Teleport to="body">
+      <button
+        v-if="isMobile && !activeId"
+        class="fab"
+        @click="newChatOpen = true"
+        aria-label="Новый чат"
+      >
+        <span class="material-symbols-outlined">edit_square</span>
+      </button>
+    </Teleport>
+
     <NewChatDialog v-model="newChatOpen" @pick="startWith" />
+
+    <ForwardDialog
+      ref="forwardDialogRef"
+      v-model="forwardOpen"
+      :message="forwardSource"
+      @confirm="onForwardConfirm"
+    />
 
     <DeleteScopeDialog
       v-model="deleteDialogOpen"
@@ -101,6 +136,7 @@ import MessageBubble from '@/components/messenger/MessageBubble.vue'
 import MessageInput from '@/components/messenger/MessageInput.vue'
 import NewChatDialog from '@/components/messenger/NewChatDialog.vue'
 import DeleteScopeDialog from '@/components/messenger/DeleteScopeDialog.vue'
+import ForwardDialog from '@/components/messenger/ForwardDialog.vue'
 import ProgressSpinner from 'primevue/progressspinner'
 
 const route = useRoute()
@@ -111,6 +147,69 @@ const { isMobile } = useBreakpoint()
 
 const newChatOpen = ref(false)
 const messagesEl = ref(null)
+const messageInputRef = ref(null)
+const dragOver = ref(false)
+let dragDepth = 0
+const replyTo = ref(null)
+
+function dragHasFiles(e) {
+  const types = e.dataTransfer?.types
+  return types && Array.from(types).includes('Files')
+}
+
+function onDragEnter(e) {
+  if (!active.value || !dragHasFiles(e)) return
+  dragDepth++
+  dragOver.value = true
+}
+
+function onDragOver(e) {
+  if (active.value && dragHasFiles(e)) e.dataTransfer.dropEffect = 'copy'
+}
+
+function onDragLeave() {
+  dragDepth = Math.max(0, dragDepth - 1)
+  if (dragDepth === 0) dragOver.value = false
+}
+
+async function onDrop(e) {
+  dragDepth = 0
+  dragOver.value = false
+  if (!active.value) return
+  const files = Array.from(e.dataTransfer?.files || [])
+  if (files.length) messageInputRef.value?.addFiles(files)
+}
+const forwardOpen = ref(false)
+const forwardSource = ref(null)
+const forwardDialogRef = ref(null)
+
+function startReply(message) {
+  replyTo.value = {
+    id: message.id,
+    sender_fio: message.sender_id === authStore.user?.id
+      ? 'Вы'
+      : (active.value?.other_user?.fio || ''),
+    text: message.text,
+    has_attachments: !!message.attachments?.length,
+  }
+}
+
+function startForward(message) {
+  forwardSource.value = message
+  forwardOpen.value = true
+}
+
+async function onForwardConfirm({ userIds }) {
+  try {
+    await messenger.forwardMessage(forwardSource.value.id, { userIds })
+  } catch (e) {
+    console.error('forward failed', e)
+  } finally {
+    forwardDialogRef.value?.stopSending()
+    forwardOpen.value = false
+    forwardSource.value = null
+  }
+}
 
 const deleteDialogOpen = ref(false)
 const deleteDialog = ref({
@@ -182,6 +281,7 @@ function avatarOf(u) {
 }
 
 async function selectConversation(id) {
+  replyTo.value = null
   await messenger.setActive(id)
   router.replace(`/messenger/${id}`)
   await nextTick()
@@ -197,6 +297,7 @@ async function startWith(user) {
 
 async function onSend(payload) {
   await messenger.send(activeId.value, payload)
+  replyTo.value = null
   await nextTick()
   scrollToBottom()
 }
@@ -299,7 +400,7 @@ watch(() => route.params.conversationId, async (id) => {
 <style scoped>
 .messenger {
   display: flex;
-  height: calc(100vh - 0px);
+  height: 100%;
   min-height: 0;
   background: var(--color-bg);
 }
@@ -310,7 +411,31 @@ watch(() => route.params.conversationId, async (id) => {
   flex-direction: column;
   min-width: 0;
   min-height: 0;
+  position: relative;
 }
+
+/* Зона сброса файлов — на всю область чата, а не только на поле ввода. */
+.chat-drop-overlay {
+  position: absolute;
+  inset: 8px;
+  z-index: 50;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  background: color-mix(in oklch, var(--color-primary-container) 90%, transparent);
+  border: 2px dashed var(--color-primary);
+  border-radius: var(--radius-lg);
+  color: var(--color-on-primary-container);
+  font-size: 15px;
+  font-weight: 600;
+  text-align: center;
+  padding: 16px;
+  pointer-events: none;
+}
+
+.chat-drop-overlay .material-symbols-outlined { font-size: 44px; }
 
 .chat-header {
   display: flex;
@@ -449,15 +574,61 @@ watch(() => route.params.conversationId, async (id) => {
 .is-mobile-hidden { display: none; }
 
 @media (max-width: 768px) {
+  /* Статичный полноэкранный макет: фиксируем к вьюпорту, чтобы экран не «ёрзал»
+     при показе/скрытии адресной строки браузера. Нижняя навигация (z-index 200)
+     остаётся поверх; снизу резервируем под неё высоту. */
+  .messenger {
+    position: fixed;
+    inset: 0;
+    height: auto;
+    z-index: 100;
+  }
+
   .chat-panel {
     position: fixed;
     inset: 0;
     z-index: 150;
     background: var(--color-bg);
-    padding-bottom: 60px;
+    padding-bottom: calc(60px + env(safe-area-inset-bottom, 0px));
   }
   .messenger.mobile-chat-open .chat-panel {
     display: flex;
+  }
+}
+
+/* Мобильный FAB «новый чат» — поведение и вид как на экране задач. */
+.fab {
+  display: none;
+}
+
+@media (max-width: 768px) {
+  .fab {
+    position: fixed;
+    right: 16px;
+    bottom: calc(60px + 16px + env(safe-area-inset-bottom, 0px));
+    width: 56px;
+    height: 56px;
+    border-radius: 50%;
+    border: none;
+    background: var(--gw-primary);
+    color: var(--color-on-primary);
+    box-shadow: 0 4px 14px color-mix(in oklch, var(--gw-primary) 50%, transparent);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 210;
+    transition: transform 0.28s cubic-bezier(0.4, 0, 0.2, 1),
+                background 0.15s;
+  }
+
+  .fab:active {
+    background: var(--gw-primary-hover);
+    transform: scale(0.96);
+  }
+
+  .fab .material-symbols-outlined {
+    font-size: 24px;
   }
 }
 </style>

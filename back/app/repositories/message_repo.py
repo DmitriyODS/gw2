@@ -151,11 +151,14 @@ def list_messages(conversation_id: int, user_id: int, before_id: Optional[int] =
 
 
 def create_message(conversation_id: int, sender_id: int, text: Optional[str],
-                   attachment_ids: list[int]) -> Message:
+                   attachment_ids: list[int], reply_to_id: Optional[int] = None,
+                   forwarded_from_user_id: Optional[int] = None) -> Message:
     msg = Message(
         conversation_id=conversation_id,
         sender_id=sender_id,
         text=text or None,
+        reply_to_id=reply_to_id,
+        forwarded_from_user_id=forwarded_from_user_id,
     )
     db.session.add(msg)
     db.session.flush()

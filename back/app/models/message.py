@@ -18,9 +18,19 @@ class Message(db.Model):
     # физически удаляется фоновой проверкой (см. messenger_service).
     hidden_for_a = db.Column(db.Boolean, nullable=False, default=False, server_default="false")
     hidden_for_b = db.Column(db.Boolean, nullable=False, default=False, server_default="false")
+    # Ответ на сообщение того же диалога. SET NULL при удалении исходного —
+    # цитата просто пропадёт, само сообщение-ответ останется.
+    reply_to_id = db.Column(db.Integer, db.ForeignKey("messages.id", ondelete="SET NULL"),
+                            nullable=True)
+    # Если сообщение переслано — сюда пишется автор оригинала (для метки
+    # «Переслано от …»). При пересылке текст и файлы копируются.
+    forwarded_from_user_id = db.Column(db.Integer, db.ForeignKey("users.id", ondelete="SET NULL"),
+                                       nullable=True)
 
     conversation = db.relationship("Conversation", back_populates="messages")
-    sender = db.relationship("User")
+    sender = db.relationship("User", foreign_keys=[sender_id])
+    reply_to = db.relationship("Message", remote_side=[id], foreign_keys=[reply_to_id])
+    forwarded_from = db.relationship("User", foreign_keys=[forwarded_from_user_id])
     # selectin вместо joined: joined-load на коллекцию заставляет вызывать
     # .unique() на каждом Result, что ломает list_user_conversations.
     attachments = db.relationship("MessageAttachment", back_populates="message",

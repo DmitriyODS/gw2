@@ -49,7 +49,8 @@ def get_conversation_for_user(conversation_id: int, user_id: int):
 
 
 def send_message(conversation_id: int, sender_id: int,
-                 text: Optional[str], attachment_ids: list[int]):
+                 text: Optional[str], attachment_ids: list[int],
+                 reply_to_id: Optional[int] = None):
     conv = get_conversation_for_user(conversation_id, sender_id)
     text = (text or "").strip() or None
     attachment_ids = attachment_ids or []
@@ -62,13 +63,98 @@ def send_message(conversation_id: int, sender_id: int,
         if att is None or att.uploader_id != sender_id or att.message_id is not None:
             raise MessengerServiceError("Недопустимое вложение", "BAD_ATTACHMENT", 400)
 
-    msg = message_repo.create_message(conversation_id, sender_id, text, attachment_ids)
+    # Ответ должен указывать на сообщение этого же диалога.
+    if reply_to_id is not None:
+        target = message_repo.get_message(reply_to_id)
+        if target is None or target.conversation_id != conv.id:
+            raise MessengerServiceError("Недопустимый ответ", "BAD_REPLY", 400)
+
+    msg = message_repo.create_message(conversation_id, sender_id, text, attachment_ids,
+                                      reply_to_id=reply_to_id)
     db.session.commit()
     logger.info("message.send", extra={"extra": {
         "event": "message.send", "conversation_id": conversation_id,
         "sender_id": sender_id, "message_id": msg.id,
     }})
     return conv, msg
+
+
+def forward_message(source_message_id: int, sender_id: int,
+                    conversation_ids: list[int], user_ids: list[int]):
+    """Пересылает сообщение в один или несколько диалогов. Текст и файлы
+    копируются (файлы — физически, чтобы удаление одной копии не задевало
+    другую). user_ids — адресаты, для которых диалог создаётся при отсутствии.
+    Возвращает список (conversation, message) по каждому адресату."""
+    src = message_repo.get_message(source_message_id)
+    if src is None:
+        raise MessengerServiceError("Сообщение не найдено", "MSG_NOT_FOUND", 404)
+    src_conv = message_repo.get_conversation(src.conversation_id)
+    if src_conv is None or sender_id not in (src_conv.user_a_id, src_conv.user_b_id):
+        raise MessengerServiceError("Нет доступа к сообщению", "FORBIDDEN", 403)
+
+    # Соберём целевые диалоги: явные id + диалоги с указанными пользователями.
+    target_convs: list = []
+    seen_ids: set[int] = set()
+    for cid in conversation_ids or []:
+        conv = get_conversation_for_user(cid, sender_id)
+        if conv.id not in seen_ids:
+            target_convs.append(conv)
+            seen_ids.add(conv.id)
+    for uid in user_ids or []:
+        conv = open_conversation(sender_id, uid)
+        if conv.id not in seen_ids:
+            target_convs.append(conv)
+            seen_ids.add(conv.id)
+
+    if not target_convs:
+        raise MessengerServiceError("Не выбран получатель", "NO_TARGET", 400)
+
+    # Автор оригинала — кого показать в метке «Переслано от …».
+    origin_user_id = src.forwarded_from_user_id or src.sender_id
+
+    results = []
+    for conv in target_convs:
+        new_att_ids = []
+        for att in src.attachments:
+            copied = _copy_attachment(att, sender_id)
+            new_att_ids.append(copied.id)
+        msg = message_repo.create_message(
+            conv.id, sender_id, src.text, new_att_ids,
+            forwarded_from_user_id=origin_user_id,
+        )
+        results.append((conv, msg))
+
+    db.session.commit()
+    logger.info("message.forward", extra={"extra": {
+        "event": "message.forward", "source_message_id": source_message_id,
+        "sender_id": sender_id, "targets": [c.id for c in target_convs],
+    }})
+    return results
+
+
+def _copy_attachment(att, uploader_id: int):
+    """Физически копирует файл вложения и регистрирует новую запись (message_id
+    проставится при create_message). Возвращает новый attachment."""
+    src_abs = _abs_upload_path(att.file_path)
+    ext = os.path.splitext(att.file_path)[1].lower()[:16]
+    safe_name = f"{uuid.uuid4().hex}{ext}"
+    rel_dir = os.path.join("messages", datetime.now(timezone.utc).strftime("%Y/%m"))
+    abs_dir = _abs_upload_path(rel_dir)
+    os.makedirs(abs_dir, exist_ok=True)
+    rel_path = os.path.join(rel_dir, safe_name).replace(os.sep, "/")
+    dst_abs = os.path.join(abs_dir, safe_name)
+    try:
+        with open(src_abs, "rb") as fsrc, open(dst_abs, "wb") as fdst:
+            fdst.write(fsrc.read())
+    except OSError as e:
+        raise MessengerServiceError("Не удалось скопировать вложение", "COPY_FAILED", 500) from e
+    return message_repo.create_attachment(
+        uploader_id=uploader_id,
+        file_path=rel_path,
+        file_name=att.file_name,
+        mime_type=att.mime_type,
+        size_bytes=att.size_bytes,
+    )
 
 
 def mark_conversation_read(conversation_id: int, user_id: int) -> int:

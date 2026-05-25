@@ -7,6 +7,7 @@
 
 let warned = false
 let audioCtx = null
+let unlockInstalled = false
 
 function getCtx() {
   if (audioCtx) return audioCtx
@@ -18,6 +19,29 @@ function getCtx() {
     audioCtx = null
   }
   return audioCtx
+}
+
+/* Браузеры блокируют Web Audio и (в Safari) Notification.requestPermission до
+   первого пользовательского жеста. Вешаем одноразовые слушатели: при первом
+   клике/нажатии «разогреваем» AudioContext, чтобы фоновый «бип» о новом
+   сообщении точно проигрывался, и заодно тихо просим разрешение на уведомления,
+   если оно ещё не выдано. Это закрывает «иногда приходит, иногда нет». */
+export function installNotifyUnlock() {
+  if (unlockInstalled || typeof window === 'undefined') return
+  unlockInstalled = true
+  const handler = () => {
+    const ctx = getCtx()
+    if (ctx && ctx.state === 'suspended') {
+      ctx.resume().catch(() => {})
+    }
+    if ('Notification' in window && Notification.permission === 'default') {
+      requestNotificationPermission()
+    }
+    window.removeEventListener('pointerdown', handler)
+    window.removeEventListener('keydown', handler)
+  }
+  window.addEventListener('pointerdown', handler, { passive: true })
+  window.addEventListener('keydown', handler, { passive: true })
 }
 
 function playBeep() {
@@ -45,6 +69,30 @@ function playBeep() {
   } catch {}
 }
 
+let swRegistration = null
+
+/* Регистрируем service worker — нужен для OS-уведомлений на мобильных
+   (Android Chrome запрещает new Notification(), только showNotification
+   через регистрацию SW). Вызывается один раз при старте приложения. */
+export async function registerNotifyServiceWorker() {
+  if (typeof navigator === 'undefined' || !('serviceWorker' in navigator)) return
+  try {
+    await navigator.serviceWorker.register('/sw.js')
+    swRegistration = await navigator.serviceWorker.ready
+    // Клик по уведомлению из SW → открываем нужный чат во вкладке.
+    navigator.serviceWorker.addEventListener('message', (e) => {
+      if (e.data?.type === 'open-conversation') {
+        window.focus?.()
+        window.dispatchEvent(new CustomEvent('messenger:open-conversation', {
+          detail: { conversation_id: e.data.conversation_id },
+        }))
+      }
+    })
+  } catch (e) {
+    if (!warned) { console.warn('SW register failed', e); warned = true }
+  }
+}
+
 export function notificationsAllowed() {
   return typeof window !== 'undefined'
     && 'Notification' in window
@@ -63,25 +111,42 @@ export async function requestNotificationPermission() {
   }
 }
 
-export function showSystemNotification(title, body, onClick) {
-  if (!notificationsAllowed()) return null
-  try {
-    const n = new Notification(title, {
-      body,
-      icon: '/favicon.svg',
-      silent: true, // звук проигрываем сами, чтобы не задвоился
-      tag: 'gw2-message',
-      renotify: true,
+/* Показывает OS-уведомление. data — произвольные данные (передаём
+   conversation_id, чтобы клик открыл нужный чат). Сначала пробуем путь через
+   service worker (единственный рабочий на Android), затем — конструктор
+   Notification (десктоп). */
+export function showSystemNotification(title, body, { onClick, data } = {}) {
+  if (!notificationsAllowed()) return
+
+  const options = {
+    body,
+    icon: '/logo.svg',
+    badge: '/logo.svg',
+    tag: 'gw2-message',
+    renotify: true,
+    data: data || {},
+  }
+
+  if (swRegistration && typeof swRegistration.showNotification === 'function') {
+    swRegistration.showNotification(title, options).catch((e) => {
+      if (!warned) { console.warn('SW notification failed', e); warned = true }
+      _fallbackNotification(title, options, onClick)
     })
+    return
+  }
+  _fallbackNotification(title, options, onClick)
+}
+
+function _fallbackNotification(title, options, onClick) {
+  try {
+    const n = new Notification(title, { ...options, silent: true })
     if (onClick) {
       n.onclick = () => {
         try { onClick() } finally { n.close() }
       }
     }
-    return n
   } catch (e) {
     if (!warned) { console.warn('Notification failed', e); warned = true }
-    return null
   }
 }
 

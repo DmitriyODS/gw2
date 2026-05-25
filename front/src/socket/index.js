@@ -163,9 +163,12 @@ export function connectSocket() {
         const conv = messenger.conversations.find(c => c.id === conversation_id)
         const fio = conv?.other_user?.fio || 'Сотрудник'
         const body = message.text || (message.attachments?.length ? 'Прислал(а) вложение' : 'Новое сообщение')
-        showSystemNotification(fio, body, () => {
-          window.focus()
-          window.dispatchEvent(new CustomEvent('messenger:open-conversation', { detail: { conversation_id } }))
+        showSystemNotification(fio, body, {
+          data: { conversation_id },
+          onClick: () => {
+            window.focus()
+            window.dispatchEvent(new CustomEvent('messenger:open-conversation', { detail: { conversation_id } }))
+          },
         })
         playNotifySound()
       }

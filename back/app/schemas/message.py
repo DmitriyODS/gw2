@@ -14,6 +14,26 @@ class AttachmentSchema(Schema):
         return f"/uploads/{obj.file_path}"
 
 
+class ReplyPreviewSchema(Schema):
+    """Краткая выжимка сообщения, на которое отвечают (без рекурсии в reply_to)."""
+    id = fields.Int(dump_only=True)
+    sender_id = fields.Int(dump_only=True)
+    sender_fio = fields.Method("get_sender_fio", dump_only=True)
+    text = fields.Method("get_text", dump_only=True, allow_none=True)
+    has_attachments = fields.Method("get_has_att", dump_only=True)
+
+    def get_sender_fio(self, obj):
+        return obj.sender.fio if obj.sender else None
+
+    def get_text(self, obj):
+        if not obj.text:
+            return None
+        return obj.text[:140]
+
+    def get_has_att(self, obj):
+        return bool(obj.attachments)
+
+
 class MessageSchema(Schema):
     id = fields.Int(dump_only=True)
     conversation_id = fields.Int(dump_only=True)
@@ -22,6 +42,13 @@ class MessageSchema(Schema):
     created_at = fields.DateTime(dump_only=True)
     read_at = fields.DateTime(dump_only=True, allow_none=True)
     attachments = fields.List(fields.Nested(AttachmentSchema), dump_only=True)
+    reply_to = fields.Nested(ReplyPreviewSchema, dump_only=True, allow_none=True)
+    forwarded_from = fields.Method("get_forwarded_from", dump_only=True, allow_none=True)
+
+    def get_forwarded_from(self, obj):
+        if not obj.forwarded_from:
+            return None
+        return {"id": obj.forwarded_from.id, "fio": obj.forwarded_from.fio}
 
 
 class ConversationListItemSchema(Schema):
@@ -55,7 +82,14 @@ class ConversationSchema(Schema):
 class MessageCreateSchema(Schema):
     text = fields.Str(load_default=None, allow_none=True, validate=validate.Length(max=10000))
     attachment_ids = fields.List(fields.Int(), load_default=list)
+    reply_to_id = fields.Int(load_default=None, allow_none=True)
 
 
 class ConversationCreateSchema(Schema):
     user_id = fields.Int(required=True)
+
+
+class ForwardSchema(Schema):
+    message_id = fields.Int(required=True)
+    conversation_ids = fields.List(fields.Int(), load_default=list)
+    user_ids = fields.List(fields.Int(), load_default=list)

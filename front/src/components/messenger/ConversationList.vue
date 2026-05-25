@@ -475,8 +475,13 @@ function formatTime(iso) {
 @media (max-width: 768px) {
   .conv-list {
     width: 100%;
+    height: 100%;
     border-right: none;
   }
   .conv-list.is-mobile-hidden { display: none; }
+  /* Последние диалоги не должны прятаться за нижней навигацией и FAB. */
+  .conv-items {
+    padding-bottom: calc(60px + 16px + env(safe-area-inset-bottom, 0px));
+  }
 }
 </style>

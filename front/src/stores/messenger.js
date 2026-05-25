@@ -139,12 +139,13 @@ export const useMessengerStore = defineStore('messenger', () => {
     } catch {}
   }
 
-  async function send(conversationId, { text, attachment_ids }) {
+  async function send(conversationId, { text, attachment_ids, reply_to_id }) {
     sending.value = true
     try {
       const msg = await api.sendMessage(conversationId, {
         text: text || null,
         attachment_ids: attachment_ids || [],
+        reply_to_id: reply_to_id || null,
       })
       // Локально добавим сразу (сокет-эхо проигнорируется по id)
       applyIncomingMessage(conversationId, msg, /* fromMe */ true)
@@ -154,14 +155,31 @@ export const useMessengerStore = defineStore('messenger', () => {
     }
   }
 
+  async function forwardMessage(messageId, { conversationIds = [], userIds = [] } = {}) {
+    // Сервер разошлёт message:new и нашим вкладкам тоже — список/треды
+    // обновятся через applyIncomingMessage. Достаточно дождаться ответа.
+    return api.forwardMessage(messageId, { conversationIds, userIds })
+  }
+
+  /* «Активно смотрю на чат» — открыт И вкладка в фокусе. Только в этом случае
+     входящее считается сразу прочитанным; иначе растёт счётчик непрочитанных. */
+  function isViewingActively(conversationId) {
+    return conversationId === activeConversationId.value
+      && typeof document !== 'undefined'
+      && document.visibilityState === 'visible'
+      && (typeof document.hasFocus !== 'function' || document.hasFocus())
+  }
+
+  /* Помечает входящие прочитанными на сервере (всегда, без локального
+     guard'а — иначе сообщения, пришедшие в открытый чат, оставались
+     непрочитанными на сервере, и бейдж скакал после refetch). */
   async function markRead(conversationId) {
-    const conv = conversations.value.find(c => c.id === conversationId)
-    if (!conv || conv.unread_count === 0) return
     try {
       await api.markRead(conversationId)
-      conv.unread_count = 0
-      recomputeUnread()
     } catch {}
+    const conv = conversations.value.find(c => c.id === conversationId)
+    if (conv) conv.unread_count = 0
+    recomputeUnread()
   }
 
   /* Обработка входящего сообщения (своего эхо или собеседника). */
@@ -174,8 +192,14 @@ export const useMessengerStore = defineStore('messenger', () => {
     if (conv) {
       conv.last_message = msg
       conv.last_message_at = msg.created_at
-      if (!fromMe && conversationId !== activeConversationId.value) {
-        conv.unread_count = (conv.unread_count || 0) + 1
+      if (!fromMe) {
+        if (isViewingActively(conversationId)) {
+          // Сразу гасим на сервере — собеседник увидит «прочитано»,
+          // а локальный счётчик не растёт.
+          markRead(conversationId)
+        } else {
+          conv.unread_count = (conv.unread_count || 0) + 1
+        }
       }
       // Пересортируем с учётом нового времени (закреплённые остаются вверху).
       conversations.value = sortConversations(conversations.value)
@@ -282,7 +306,7 @@ export const useMessengerStore = defineStore('messenger', () => {
     activeConversation, activeMessages,
     fetchConversations, fetchUnreadCount, openWith, setActive, fetchMessages,
     pollNewMessages, hasMoreHistory,
-    send, markRead,
+    send, forwardMessage, markRead,
     applyIncomingMessage, applyReadReceipt,
     applyMessageDeleted, applyConversationDeleted, applyPinChange,
     deleteMessage, deleteConversationAction, togglePinAction,

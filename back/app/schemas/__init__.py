@@ -12,6 +12,7 @@ from .stats import StatsCommonSchema, StatsExtendedSchema, StatsProfileSchema
 from .message import (
     MessageSchema, AttachmentSchema, ConversationListItemSchema,
     ConversationSchema, MessageCreateSchema, ConversationCreateSchema,
+    ForwardSchema,
 )
 
 __all__ = [
@@ -26,4 +27,5 @@ __all__ = [
     "StatsCommonSchema", "StatsExtendedSchema", "StatsProfileSchema",
     "MessageSchema", "AttachmentSchema", "ConversationListItemSchema",
     "ConversationSchema", "MessageCreateSchema", "ConversationCreateSchema",
+    "ForwardSchema",
 ]
