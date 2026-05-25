@@ -60,20 +60,26 @@ function hexToOklch(hex) {
 /* Writes --ref-*-h, --ref-*-c, --ref-*-l CSS vars for an accent palette key.
    Насыщенность нормализуется в коридор [0.06 … 0.33]: это снимает «запрет»
    на очень тёмные и очень светлые цвета — из них извлекается почти серый
-   оттенок, и без нижнего порога палитра выглядела бы выцветшей.
+   оттенок, и без нижнего порога палитра выглядела бы выцветшей. Но если
+   хрома исходного hex ниже NEUTRAL_C_THRESHOLD (фактически нейтральный
+   цвет — белый, чёрный, серый), нижний порог НЕ применяем: иначе у белого
+   atan2(0, 0) даёт случайный H ≈ 90° и кнопка получается «песочной».
    Светлота сохраняется (с безопасным клампом 0.30…0.92), чтобы выбор очень
    светлого hex действительно красил кнопку в светлый цвет; на контрастный
    текст (--color-on-{name}) ставим белый или тёмный по порогу 0.65.        */
+const NEUTRAL_C_THRESHOLD = 0.015
+
 function applyPaletteKey(root, name, hex) {
   const { L, C, H } = hexToOklch(hex)
-  const c = Math.min(Math.max(C, 0.06), 0.33)
+  const c = C < NEUTRAL_C_THRESHOLD ? C : Math.min(Math.max(C, 0.06), 0.33)
   const l = Math.min(Math.max(L, 0.30), 0.92)
   root.style.setProperty(`--ref-${name}-h`, H.toFixed(1))
   root.style.setProperty(`--ref-${name}-c`, c.toFixed(4))
   root.style.setProperty(`--ref-${name}-l`, l.toFixed(4))
   // Контрастный текст на цветной плашке: светлая плашка → тёмный текст.
+  // Для нейтральных цветов on-color делаем без хромы, чтобы текст не уезжал в оттенок.
   const onColor = l >= 0.65
-    ? `oklch(0.18 ${(c * 0.6).toFixed(4)} ${H.toFixed(1)})`
+    ? `oklch(0.18 ${c < NEUTRAL_C_THRESHOLD ? 0 : (c * 0.6).toFixed(4)} ${H.toFixed(1)})`
     : 'oklch(0.995 0 0)'
   root.style.setProperty(`--color-on-${name}-user`, onColor)
 }
