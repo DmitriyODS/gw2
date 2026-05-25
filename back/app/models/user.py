@@ -15,6 +15,9 @@ class User(db.Model):
     is_default_pass = db.Column(db.Boolean, nullable=False, default=True)
     is_hidden = db.Column(db.Boolean, nullable=False, default=False)
     created_at = db.Column(db.DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc))
+    # Время последнего выхода из сети (обновляется при дисконнекте всех сокетов).
+    # NULL — пользователь ещё ни разу не был онлайн в текущей версии.
+    last_seen_at = db.Column(db.DateTime(timezone=True), nullable=True)
 
     role = db.relationship("Role", back_populates="users")
     tasks = db.relationship("Task", back_populates="author", lazy="dynamic")

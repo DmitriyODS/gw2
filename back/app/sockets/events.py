@@ -27,8 +27,13 @@ def register_events(socketio: SocketIO) -> None:
 
         join_room("all")
         join_room(f"user_{user_id}")
+        from app.sockets import presence
+        presence.on_connect(flask_request.sid, user_id)
         logger.info("ws.connect", extra={"extra": {"user_id": user_id, "event": "ws.connect"}})
 
     @socketio.on("disconnect")
     def on_disconnect():
+        from flask import request as flask_request
+        from app.sockets import presence
+        presence.on_disconnect(flask_request.sid)
         logger.info("ws.disconnect", extra={"extra": {"event": "ws.disconnect"}})

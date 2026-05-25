@@ -36,6 +36,10 @@ export const useMessengerStore = defineStore('messenger', () => {
   const loadingList = ref(false)
   const loadingMessages = ref(false)
   const sending = ref(false)
+  // Присутствие: множество id онлайн-пользователей и живые last_seen
+  // (приходят в presence:update при выходе из сети — точнее, чем в профиле).
+  const onlineIds = ref(new Set())
+  const lastSeenById = ref({})
 
   const activeConversation = computed(() =>
     conversations.value.find(c => c.id === activeConversationId.value) || null
@@ -149,6 +153,9 @@ export const useMessengerStore = defineStore('messenger', () => {
       })
       // Локально добавим сразу (сокет-эхо проигнорируется по id)
       applyIncomingMessage(conversationId, msg, /* fromMe */ true)
+      // Раз пользователь отвечает в этот диалог — все входящие здесь точно
+      // прочитаны. Гасим непрочитанные на сервере (и шлём read-receipt).
+      markRead(conversationId)
       return msg
     } finally {
       sending.value = false
@@ -292,17 +299,45 @@ export const useMessengerStore = defineStore('messenger', () => {
     })
   }
 
+  async function fetchPresence() {
+    try {
+      const r = await api.getPresence()
+      onlineIds.value = new Set(r?.online || [])
+    } catch {}
+  }
+
+  function applyPresence({ user_id, online, last_seen_at }) {
+    const s = new Set(onlineIds.value)
+    if (online) s.add(user_id)
+    else s.delete(user_id)
+    onlineIds.value = s
+    if (last_seen_at) {
+      lastSeenById.value = { ...lastSeenById.value, [user_id]: last_seen_at }
+    }
+  }
+
+  function isOnline(userId) {
+    return userId != null && onlineIds.value.has(userId)
+  }
+
+  function lastSeenOf(userId, fallback = null) {
+    return lastSeenById.value[userId] || fallback
+  }
+
   function reset() {
     conversations.value = []
     activeConversationId.value = null
     messagesByConv.value = {}
     hasMoreHistoryByConv.value = {}
     totalUnread.value = 0
+    onlineIds.value = new Set()
+    lastSeenById.value = {}
   }
 
   return {
     conversations, activeConversationId, messagesByConv, totalUnread,
     loadingList, loadingMessages, sending,
+    onlineIds, lastSeenById,
     activeConversation, activeMessages,
     fetchConversations, fetchUnreadCount, openWith, setActive, fetchMessages,
     pollNewMessages, hasMoreHistory,
@@ -310,6 +345,7 @@ export const useMessengerStore = defineStore('messenger', () => {
     applyIncomingMessage, applyReadReceipt,
     applyMessageDeleted, applyConversationDeleted, applyPinChange,
     deleteMessage, deleteConversationAction, togglePinAction,
+    fetchPresence, applyPresence, isOnline, lastSeenOf,
     reset,
   }
 })

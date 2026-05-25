@@ -36,6 +36,9 @@ export const uploadAttachment = (file) => {
 export const getUnreadCount = () =>
   apiRequest('/messenger/unread')
 
+export const getPresence = () =>
+  apiRequest('/messenger/presence')
+
 export const deleteMessage = (messageId, scope = 'me') =>
   apiRequest(`/messenger/messages/${messageId}?scope=${scope}`, { method: 'DELETE' })
 

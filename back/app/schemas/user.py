@@ -28,6 +28,7 @@ class UserDirectorySchema(Schema):
     post = fields.Str(dump_only=True, allow_none=True)
     role = fields.Nested(RoleRefSchema, dump_only=True)
     avatar_path = fields.Str(dump_only=True, allow_none=True)
+    last_seen_at = fields.DateTime(dump_only=True, allow_none=True)
 
 
 class UserCreateSchema(Schema):

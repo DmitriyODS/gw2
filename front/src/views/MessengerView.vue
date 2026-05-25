@@ -27,10 +27,15 @@
         <button v-if="isMobile" class="back-btn" @click="goBack" title="Назад">
           <span class="material-symbols-outlined">arrow_back</span>
         </button>
-        <img class="chat-avatar" :src="avatarOf(active.other_user)" :alt="active.other_user?.fio" />
+        <div class="chat-avatar-wrap">
+          <img class="chat-avatar" :src="avatarOf(active.other_user)" :alt="active.other_user?.fio" />
+          <span v-if="otherOnline" class="online-dot" title="В сети"></span>
+        </div>
         <div class="chat-title">
           <div class="chat-fio">{{ active.other_user?.fio }}</div>
-          <div class="chat-meta">@{{ active.other_user?.login }} · {{ active.other_user?.post || active.other_user?.role?.name }}</div>
+          <div class="chat-status" :class="{ online: otherOnline }">
+            {{ otherOnline ? 'в сети' : lastSeenText }}
+          </div>
         </div>
         <div class="chat-tools">
           <button
@@ -131,6 +136,7 @@ import { useBreakpoint } from '@/composables/useBreakpoint.js'
 import {
   requestNotificationPermission, notificationsAllowed,
 } from '@/utils/systemNotify.js'
+import { formatLastSeen } from '@/utils/presence.js'
 import ConversationList from '@/components/messenger/ConversationList.vue'
 import MessageBubble from '@/components/messenger/MessageBubble.vue'
 import MessageInput from '@/components/messenger/MessageInput.vue'
@@ -274,6 +280,13 @@ async function onTogglePin(conversationId) {
 
 const activeId = computed(() => messenger.activeConversationId)
 const active = computed(() => messenger.activeConversation)
+
+const otherOnline = computed(() => messenger.isOnline(active.value?.other_user?.id))
+const lastSeenText = computed(() => {
+  const u = active.value?.other_user
+  if (!u) return ''
+  return formatLastSeen(messenger.lastSeenOf(u.id, u.last_seen_at))
+})
 
 function avatarOf(u) {
   if (!u) return ''
@@ -456,14 +469,41 @@ watch(() => route.params.conversationId, async (id) => {
   align-items: center;
 }
 
+.chat-avatar-wrap {
+  position: relative;
+  flex-shrink: 0;
+}
+
 .chat-avatar {
   width: 40px;
   height: 40px;
   border-radius: 50%;
   object-fit: cover;
+  display: block;
+}
+
+.chat-avatar-wrap .online-dot {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  width: 11px;
+  height: 11px;
+  border-radius: 50%;
+  background: var(--color-success);
+  border: 2px solid var(--color-surface);
 }
 
 .chat-title { min-width: 0; flex: 1; }
+
+.chat-status {
+  font-size: 12px;
+  color: var(--color-text-dim);
+}
+
+.chat-status.online {
+  color: var(--color-success);
+  font-weight: 600;
+}
 
 .chat-tools {
   display: flex;

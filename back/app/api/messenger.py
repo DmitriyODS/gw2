@@ -430,6 +430,22 @@ def toggle_pin(conversation_id: int):
     return jsonify({"is_pinned": pinned}), 200
 
 
+@bp.get("/presence")
+@require_auth
+def presence_list():
+    """
+    Список id пользователей, которые сейчас онлайн.
+    ---
+    tags: [messenger]
+    security: [BearerAuth: []]
+    responses:
+      200:
+        description: Онлайн-пользователи
+    """
+    from app.sockets import presence
+    return jsonify({"online": presence.online_user_ids()}), 200
+
+
 @bp.get("/unread")
 @require_auth
 def unread_count():

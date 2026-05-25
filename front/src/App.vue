@@ -42,7 +42,7 @@ import { useTutorial } from '@/composables/useTutorial.js'
 import { useChangelog } from '@/composables/useChangelog.js'
 import { connectSocket } from '@/socket/index.js'
 import {
-  registerNotifyServiceWorker, installNotifyUnlock,
+  registerNotifyServiceWorker, installNotifyUnlock, requestNotificationPermission,
 } from '@/utils/systemNotify.js'
 import AppSidebar from '@/components/layout/AppSidebar.vue'
 import AppBottomNav from '@/components/layout/AppBottomNav.vue'
@@ -88,9 +88,11 @@ onMounted(async () => {
   if (authStore.token) {
     connectSocket()
     await unitsStore.fetchActiveUnit()
-    // Уведомления: регистрируем SW (нужен для OS-уведомлений на мобильных) и
-    // вешаем «разогрев» аудио + запрос разрешения по первому жесту.
+    // Уведомления: регистрируем SW (нужен для OS-уведомлений на мобильных),
+    // сразу просим разрешение (Chrome/Firefox показывают prompt без жеста) и
+    // вешаем «разогрев» аудио + повторный запрос по первому жесту (для Safari).
     registerNotifyServiceWorker()
+    requestNotificationPermission()
     installNotifyUnlock()
     // Список диалогов нужен сразу после входа: бейдж непрочитанных, мини-чат
     // и корректный заголовок в push-уведомлении (иначе fio неизвестно).

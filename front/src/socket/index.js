@@ -24,16 +24,35 @@ function resyncMessenger() {
   } catch {}
 }
 
+/* Когда вкладка снова в фокусе и открыт какой-то чат — сразу помечаем его
+   прочитанным (пользователь его видит). Раньше прочтение происходило только
+   при открытии чата, и сообщения, пришедшие пока вкладка была в фоне,
+   оставались непрочитанными до клика. */
+function markActiveReadOnFocus() {
+  try {
+    const messenger = useMessengerStore()
+    if (messenger.activeConversationId
+        && document.visibilityState === 'visible'
+        && (typeof document.hasFocus !== 'function' || document.hasFocus())) {
+      messenger.markRead(messenger.activeConversationId)
+    }
+  } catch {}
+}
+
 function installVisibilityResync() {
   if (visibilityHookInstalled || typeof document === 'undefined') return
   visibilityHookInstalled = true
   document.addEventListener('visibilitychange', () => {
     if (document.visibilityState === 'visible' && socket?.connected) {
       resyncMessenger()
+      markActiveReadOnFocus()
     }
   })
   window.addEventListener('focus', () => {
-    if (socket?.connected) resyncMessenger()
+    if (socket?.connected) {
+      resyncMessenger()
+      markActiveReadOnFocus()
+    }
   })
 }
 
@@ -61,6 +80,9 @@ export function connectSocket() {
   let hadConnected = false
 
   socket.on('connect', () => {
+    // Свежий снимок онлайн-статусов при каждом (пере)подключении — события
+    // presence:update, прошедшие до коннекта, мы не услышали.
+    try { useMessengerStore().fetchPresence() } catch {}
     // При переподключении локальное состояние могло разойтись с сервером
     // (пропущенные события за время обрыва) — перечитываем активный юнит,
     // список диалогов и сообщения активного чата.
@@ -193,6 +215,10 @@ export function connectSocket() {
   socket.on('conversation:pin', ({ conversation_id, is_pinned }) => {
     const messenger = useMessengerStore()
     messenger.applyPinChange(conversation_id, is_pinned)
+  })
+
+  socket.on('presence:update', (p) => {
+    useMessengerStore().applyPresence(p)
   })
 
   socket.on('unit:force_stopped', ({ unit_id, stopped_by_fio }) => {

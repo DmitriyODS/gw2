@@ -42,7 +42,10 @@
         :class="{ active: c.id === activeId, unread: c.unread_count > 0, pinned: c.is_pinned }"
         @click="$emit('select', c.id)"
       >
-        <img class="conv-avatar" :src="avatarOf(c.other_user)" :alt="c.other_user?.fio" />
+        <div class="conv-avatar-wrap">
+          <img class="conv-avatar" :src="avatarOf(c.other_user)" :alt="c.other_user?.fio" />
+          <span v-if="messenger.isOnline(c.other_user?.id)" class="online-dot" title="В сети"></span>
+        </div>
         <div class="conv-body">
           <div class="conv-top">
             <span class="conv-name">{{ c.other_user?.fio }}</span>
@@ -81,6 +84,9 @@
 <script setup>
 import { ref, computed } from 'vue'
 import ProgressSpinner from 'primevue/progressspinner'
+import { useMessengerStore } from '@/stores/messenger.js'
+
+const messenger = useMessengerStore()
 
 const props = defineProps({
   conversations: { type: Array, required: true },
@@ -346,12 +352,28 @@ function formatTime(iso) {
   border-left-color: var(--color-tertiary);
 }
 
+.conv-avatar-wrap {
+  position: relative;
+  flex-shrink: 0;
+}
+
 .conv-avatar {
   width: 44px;
   height: 44px;
   border-radius: 50%;
   object-fit: cover;
-  flex-shrink: 0;
+  display: block;
+}
+
+.online-dot {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--color-success);
+  border: 2px solid var(--color-surface);
 }
 
 .conv-body { flex: 1; min-width: 0; }

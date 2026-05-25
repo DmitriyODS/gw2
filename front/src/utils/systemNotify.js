@@ -34,8 +34,12 @@ export function installNotifyUnlock() {
     if (ctx && ctx.state === 'suspended') {
       ctx.resume().catch(() => {})
     }
+    // Разрешение просим только пока оно «default». Слушатели снимаем лишь когда
+    // вопрос решён (granted/denied) — иначе, если пользователь отмахнулся от
+    // первого prompt, уведомления уже не запросятся никогда.
     if ('Notification' in window && Notification.permission === 'default') {
       requestNotificationPermission()
+      return
     }
     window.removeEventListener('pointerdown', handler)
     window.removeEventListener('keydown', handler)
@@ -112,9 +116,10 @@ export async function requestNotificationPermission() {
 }
 
 /* Показывает OS-уведомление. data — произвольные данные (передаём
-   conversation_id, чтобы клик открыл нужный чат). Сначала пробуем путь через
-   service worker (единственный рабочий на Android), затем — конструктор
-   Notification (десктоп). */
+   conversation_id, чтобы клик открыл нужный чат).
+   На десктопе используем конструктор Notification (самый надёжный путь, он же
+   даёт onclick). Если конструктор недоступен (Android Chrome запрещает
+   `new Notification` — бросает исключение), уходим в service worker. */
 export function showSystemNotification(title, body, { onClick, data } = {}) {
   if (!notificationsAllowed()) return
 
@@ -127,26 +132,25 @@ export function showSystemNotification(title, body, { onClick, data } = {}) {
     data: data || {},
   }
 
-  if (swRegistration && typeof swRegistration.showNotification === 'function') {
-    swRegistration.showNotification(title, options).catch((e) => {
-      if (!warned) { console.warn('SW notification failed', e); warned = true }
-      _fallbackNotification(title, options, onClick)
-    })
-    return
-  }
-  _fallbackNotification(title, options, onClick)
-}
-
-function _fallbackNotification(title, options, onClick) {
   try {
     const n = new Notification(title, { ...options, silent: true })
     if (onClick) {
       n.onclick = () => {
-        try { onClick() } finally { n.close() }
+        try { window.focus?.(); onClick() } finally { n.close() }
       }
     }
+    return
   } catch (e) {
-    if (!warned) { console.warn('Notification failed', e); warned = true }
+    // Конструктор недоступен (мобильный Chrome) — пробуем через SW.
+  }
+
+  if (swRegistration && typeof swRegistration.showNotification === 'function') {
+    swRegistration.showNotification(title, options).catch((e) => {
+      if (!warned) { console.warn('SW notification failed', e); warned = true }
+    })
+  } else if (!warned) {
+    console.warn('Notification: нет ни конструктора, ни активного service worker')
+    warned = true
   }
 }
 
