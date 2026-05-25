@@ -110,7 +110,7 @@ def list_messages(conversation_id: int):
 
     before_id = request.args.get("before_id", type=int)
     limit = min(int(request.args.get("limit", 50)), 200)
-    msgs = message_repo.list_messages(conv.id, before_id=before_id, limit=limit)
+    msgs = message_repo.list_messages(conv.id, user_id=me, before_id=before_id, limit=limit)
     return jsonify(_msgs.dump(msgs)), 200
 
 
@@ -244,6 +244,127 @@ def upload_attachment():
         return jsonify({"error": e.code, "message": e.message}), e.http_status
 
     return jsonify(_att.dump(att)), 201
+
+
+@bp.delete("/messages/<int:message_id>")
+@require_auth
+def delete_message_endpoint(message_id: int):
+    """
+    Удалить сообщение. scope=me (скрыть у себя) или all (удалить у всех —
+    только своё). При scope=all — broadcast message:deleted обоим участникам.
+    ---
+    tags: [messenger]
+    security: [BearerAuth: []]
+    parameters:
+      - in: path
+        name: message_id
+        schema: {type: integer}
+        required: true
+      - in: query
+        name: scope
+        schema: {type: string, enum: [me, all], default: me}
+    responses:
+      200:
+        description: Сообщение удалено
+    """
+    scope = (request.args.get("scope") or "me").lower()
+    me = int(get_jwt_identity())
+    try:
+        conv_id, for_all = messenger_service.delete_message(message_id, me, scope)
+    except MessengerServiceError as e:
+        return jsonify({"error": e.code, "message": e.message}), e.http_status
+
+    if for_all:
+        from app.extensions import socketio
+        conv = message_repo.get_conversation(conv_id)
+        if conv:
+            other_id = conv.other_user_id(me)
+            payload = {"conversation_id": conv_id, "message_id": message_id}
+            socketio.emit("message:deleted", payload, room=f"user_{other_id}")
+            socketio.emit("message:deleted", payload, room=f"user_{me}")
+
+    return jsonify({"deleted": True, "scope": scope, "for_all": for_all}), 200
+
+
+@bp.delete("/conversations/<int:conversation_id>")
+@require_auth
+def delete_conversation_endpoint(conversation_id: int):
+    """
+    Удалить диалог. scope=me (скрыть у себя — собеседник продолжит видеть
+    переписку) или all (удалить у обоих — широковещательно).
+    ---
+    tags: [messenger]
+    security: [BearerAuth: []]
+    parameters:
+      - in: path
+        name: conversation_id
+        schema: {type: integer}
+        required: true
+      - in: query
+        name: scope
+        schema: {type: string, enum: [me, all], default: me}
+    responses:
+      200:
+        description: Диалог удалён
+    """
+    scope = (request.args.get("scope") or "me").lower()
+    me = int(get_jwt_identity())
+
+    # Запомним собеседника ДО удаления, чтобы было кому слать broadcast.
+    conv = message_repo.get_conversation(conversation_id)
+    other_id = conv.other_user_id(me) if conv and me in (conv.user_a_id, conv.user_b_id) else None
+
+    try:
+        physical = messenger_service.delete_conversation(conversation_id, me, scope)
+    except MessengerServiceError as e:
+        return jsonify({"error": e.code, "message": e.message}), e.http_status
+
+    if scope == 'all' and other_id is not None:
+        from app.extensions import socketio
+        payload = {"conversation_id": conversation_id}
+        socketio.emit("conversation:deleted", payload, room=f"user_{other_id}")
+        socketio.emit("conversation:deleted", payload, room=f"user_{me}")
+    elif physical and other_id is not None:
+        # Обе стороны независимо нажали «у себя» — физического чата больше нет,
+        # уведомим самого пользователя на другие вкладки (собеседнику уже не нужно).
+        from app.extensions import socketio
+        socketio.emit("conversation:deleted",
+                      {"conversation_id": conversation_id},
+                      room=f"user_{me}")
+
+    return jsonify({"deleted": True, "scope": scope, "physical": physical}), 200
+
+
+@bp.post("/conversations/<int:conversation_id>/pin")
+@require_auth
+def toggle_pin(conversation_id: int):
+    """
+    Закрепить/открепить диалог (личное действие).
+    ---
+    tags: [messenger]
+    security: [BearerAuth: []]
+    parameters:
+      - in: path
+        name: conversation_id
+        schema: {type: integer}
+        required: true
+    responses:
+      200:
+        description: Закрепление переключено
+    """
+    me = int(get_jwt_identity())
+    try:
+        pinned = messenger_service.toggle_pin(conversation_id, me)
+    except MessengerServiceError as e:
+        return jsonify({"error": e.code, "message": e.message}), e.http_status
+
+    # Эхо в другие вкладки этого же пользователя
+    from app.extensions import socketio
+    socketio.emit("conversation:pin",
+                  {"conversation_id": conversation_id, "is_pinned": pinned},
+                  room=f"user_{me}")
+
+    return jsonify({"is_pinned": pinned}), 200
 
 
 @bp.get("/unread")

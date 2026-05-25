@@ -3,6 +3,22 @@ import { ref, computed } from 'vue'
 import * as api from '@/api/messenger.js'
 import { useAuthStore } from './auth.js'
 
+/* Сортировка: закреплённые сверху (по pinned_at desc), затем по
+   last_message_at desc. Чистая функция, чтобы переиспользовать после каждого
+   изменения списка. */
+function sortConversations(list) {
+  return [...list].sort((a, b) => {
+    const ap = a.is_pinned ? new Date(a.pinned_at || 0).getTime() : 0
+    const bp = b.is_pinned ? new Date(b.pinned_at || 0).getTime() : 0
+    if (ap && !bp) return -1
+    if (!ap && bp) return 1
+    if (ap && bp) return bp - ap
+    const at = a.last_message_at ? new Date(a.last_message_at).getTime() : 0
+    const bt = b.last_message_at ? new Date(b.last_message_at).getTime() : 0
+    return bt - at
+  })
+}
+
 /* Состояние мессенджера.
    conversations — список диалогов (для левой панели).
    activeConversationId — открытый диалог (для правой панели).
@@ -28,7 +44,7 @@ export const useMessengerStore = defineStore('messenger', () => {
   async function fetchConversations() {
     loadingList.value = true
     try {
-      conversations.value = await api.listConversations()
+      conversations.value = sortConversations(await api.listConversations())
       recomputeUnread()
     } finally {
       loadingList.value = false
@@ -51,13 +67,18 @@ export const useMessengerStore = defineStore('messenger', () => {
     // upsert в список
     const existing = conversations.value.find(c => c.id === data.id)
     if (!existing) {
-      conversations.value.unshift({
-        id: data.id,
-        other_user: data.other_user,
-        last_message: null,
-        unread_count: 0,
-        last_message_at: data.last_message_at,
-      })
+      conversations.value = sortConversations([
+        {
+          id: data.id,
+          other_user: data.other_user,
+          last_message: null,
+          unread_count: 0,
+          last_message_at: data.last_message_at,
+          is_pinned: false,
+          pinned_at: null,
+        },
+        ...conversations.value,
+      ])
     }
     activeConversationId.value = data.id
     if (!messagesByConv.value[data.id]) {
@@ -127,13 +148,81 @@ export const useMessengerStore = defineStore('messenger', () => {
       if (!fromMe && conversationId !== activeConversationId.value) {
         conv.unread_count = (conv.unread_count || 0) + 1
       }
-      // Поднимаем диалог наверх
-      conversations.value = [conv, ...conversations.value.filter(c => c.id !== conv.id)]
+      // Пересортируем с учётом нового времени (закреплённые остаются вверху).
+      conversations.value = sortConversations(conversations.value)
     } else {
-      // Диалог появился впервые — перезапрашиваем список
+      // Диалог появился впервые (или вернулся из «скрытых») — перезапрос.
       fetchConversations()
     }
     recomputeUnread()
+  }
+
+  function applyMessageDeleted(conversationId, messageId) {
+    const arr = messagesByConv.value[conversationId]
+    if (arr) {
+      messagesByConv.value[conversationId] = arr.filter(m => m.id !== messageId)
+    }
+    const conv = conversations.value.find(c => c.id === conversationId)
+    if (conv && conv.last_message?.id === messageId) {
+      const left = messagesByConv.value[conversationId] || []
+      conv.last_message = left.length ? left[left.length - 1] : null
+      conv.last_message_at = conv.last_message?.created_at || null
+      conversations.value = sortConversations(conversations.value)
+    }
+  }
+
+  function applyConversationDeleted(conversationId) {
+    conversations.value = conversations.value.filter(c => c.id !== conversationId)
+    delete messagesByConv.value[conversationId]
+    if (activeConversationId.value === conversationId) {
+      activeConversationId.value = null
+    }
+    recomputeUnread()
+  }
+
+  function applyPinChange(conversationId, isPinned) {
+    const conv = conversations.value.find(c => c.id === conversationId)
+    if (!conv) return
+    conv.is_pinned = isPinned
+    conv.pinned_at = isPinned ? new Date().toISOString() : null
+    conversations.value = sortConversations(conversations.value)
+  }
+
+  async function deleteMessage(messageId, scope = 'me') {
+    // Локально убираем сразу — UI плавнее.
+    const convId = activeConversationId.value
+    if (convId) applyMessageDeleted(convId, messageId)
+    try {
+      await api.deleteMessage(messageId, scope)
+    } catch (e) {
+      // Если не получилось — откатываемся перезагрузкой.
+      if (convId) await fetchMessages(convId)
+      throw e
+    }
+  }
+
+  async function deleteConversationAction(conversationId, scope = 'me') {
+    try {
+      await api.deleteConversation(conversationId, scope)
+    } finally {
+      applyConversationDeleted(conversationId)
+    }
+  }
+
+  async function togglePinAction(conversationId) {
+    const conv = conversations.value.find(c => c.id === conversationId)
+    if (!conv) return
+    const optimisticPinned = !conv.is_pinned
+    applyPinChange(conversationId, optimisticPinned)
+    try {
+      const r = await api.togglePin(conversationId)
+      if (r.is_pinned !== optimisticPinned) {
+        applyPinChange(conversationId, r.is_pinned)
+      }
+    } catch (e) {
+      applyPinChange(conversationId, !optimisticPinned)
+      throw e
+    }
   }
 
   function applyReadReceipt(conversationId, readerId) {
@@ -161,6 +250,10 @@ export const useMessengerStore = defineStore('messenger', () => {
     loadingList, loadingMessages, sending,
     activeConversation, activeMessages,
     fetchConversations, fetchUnreadCount, openWith, setActive, fetchMessages,
-    send, markRead, applyIncomingMessage, applyReadReceipt, reset,
+    send, markRead,
+    applyIncomingMessage, applyReadReceipt,
+    applyMessageDeleted, applyConversationDeleted, applyPinChange,
+    deleteMessage, deleteConversationAction, togglePinAction,
+    reset,
   }
 })

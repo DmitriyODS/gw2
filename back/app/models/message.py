@@ -13,6 +13,11 @@ class Message(db.Model):
     created_at = db.Column(db.DateTime(timezone=True), nullable=False,
                            default=lambda: datetime.now(timezone.utc))
     read_at = db.Column(db.DateTime(timezone=True), nullable=True)
+    # Скрыто стороной (для «удалить только у себя»). Стороны определяются
+    # по conversation.user_a_id / user_b_id. Когда оба true — сообщение
+    # физически удаляется фоновой проверкой (см. messenger_service).
+    hidden_for_a = db.Column(db.Boolean, nullable=False, default=False, server_default="false")
+    hidden_for_b = db.Column(db.Boolean, nullable=False, default=False, server_default="false")
 
     conversation = db.relationship("Conversation", back_populates="messages")
     sender = db.relationship("User")

@@ -31,12 +31,17 @@ class ConversationListItemSchema(Schema):
     last_message = fields.Nested(MessageSchema, dump_only=True, allow_none=True)
     unread_count = fields.Int(dump_only=True)
     last_message_at = fields.Method("get_last_at", dump_only=True)
+    is_pinned = fields.Bool(dump_only=True)
+    pinned_at = fields.Method("get_pinned_at", dump_only=True)
 
     def get_id(self, obj):
         return obj["conversation"].id
 
     def get_last_at(self, obj):
         return obj["conversation"].last_message_at.isoformat() if obj["conversation"].last_message_at else None
+
+    def get_pinned_at(self, obj):
+        return obj["pinned_at"].isoformat() if obj.get("pinned_at") else None
 
 
 class ConversationSchema(Schema):

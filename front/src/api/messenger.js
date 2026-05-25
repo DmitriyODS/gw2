@@ -28,3 +28,12 @@ export const uploadAttachment = (file) => {
 
 export const getUnreadCount = () =>
   apiRequest('/messenger/unread')
+
+export const deleteMessage = (messageId, scope = 'me') =>
+  apiRequest(`/messenger/messages/${messageId}?scope=${scope}`, { method: 'DELETE' })
+
+export const deleteConversation = (conversationId, scope = 'me') =>
+  apiRequest(`/messenger/conversations/${conversationId}?scope=${scope}`, { method: 'DELETE' })
+
+export const togglePin = (conversationId) =>
+  apiRequest(`/messenger/conversations/${conversationId}/pin`, { method: 'POST' })

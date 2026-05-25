@@ -34,46 +34,73 @@ def get_conversation(conversation_id: int) -> Optional[Conversation]:
 
 def list_user_conversations(user_id: int) -> list[dict]:
     """Список диалогов пользователя с информацией о собеседнике, последнем
-    сообщении и количестве непрочитанных. Возвращает list[dict] для
-    удобства сериализации."""
+    сообщении и количестве непрочитанных. Скрытые «у себя» — не показываются.
+    Сортировка: закреплённые (по pinned_at сторонним DESC) → остальные
+    (по last_message_at DESC)."""
+    # Фильтр «не скрыто на моей стороне»
+    not_hidden = or_(
+        and_(Conversation.user_a_id == user_id, Conversation.hidden_for_a.is_(False)),
+        and_(Conversation.user_b_id == user_id, Conversation.hidden_for_b.is_(False)),
+    )
     convs = db.session.execute(
         db.select(Conversation).where(
-            or_(Conversation.user_a_id == user_id, Conversation.user_b_id == user_id)
+            or_(Conversation.user_a_id == user_id, Conversation.user_b_id == user_id),
+            not_hidden,
         ).order_by(Conversation.last_message_at.desc().nullslast(), Conversation.created_at.desc())
     ).scalars().all()
 
     if not convs:
         return []
 
+    # Доп. сортировка в Python: pinned-первыми по pinned_at_<side> DESC.
+    convs.sort(key=lambda c: (
+        c.pinned_at_for(user_id) is None,
+        # для не-pinned ставим минимальный datetime, чтобы они шли после
+        -((c.pinned_at_for(user_id) or _MIN_DT).timestamp()),
+    ))
+
     conv_ids = [c.id for c in convs]
     other_ids = [c.other_user_id(user_id) for c in convs]
 
-    # Последние сообщения
-    last_msg_subq = (
-        db.select(
-            Message.conversation_id,
-            func.max(Message.id).label("last_id"),
-        )
-        .where(Message.conversation_id.in_(conv_ids))
-        .group_by(Message.conversation_id)
-        .subquery()
-    )
-    last_msgs = db.session.execute(
-        db.select(Message).join(last_msg_subq, Message.id == last_msg_subq.c.last_id)
-    ).scalars().all()
-    last_msg_by_conv = {m.conversation_id: m for m in last_msgs}
+    # Последнее сообщение, не скрытое на моей стороне. Берём пары (conv_id, side)
+    # и для каждой ищем максимальный id среди non-hidden_for_<side>.
+    # Делаем двумя запросами по сторонам — проще, чем case-выражение.
+    a_conv_ids = [c.id for c in convs if c.side(user_id) == 'a']
+    b_conv_ids = [c.id for c in convs if c.side(user_id) == 'b']
 
-    # Непрочитанные (от собеседника, read_at IS NULL)
-    unread_rows = db.session.execute(
-        db.select(Message.conversation_id, func.count(Message.id))
-        .where(
-            Message.conversation_id.in_(conv_ids),
-            Message.sender_id != user_id,
-            Message.read_at.is_(None),
+    last_msg_by_conv: dict[int, Message] = {}
+    for ids, hidden_col in ((a_conv_ids, Message.hidden_for_a), (b_conv_ids, Message.hidden_for_b)):
+        if not ids:
+            continue
+        sub = (
+            db.select(Message.conversation_id, func.max(Message.id).label("last_id"))
+            .where(Message.conversation_id.in_(ids), hidden_col.is_(False))
+            .group_by(Message.conversation_id)
+            .subquery()
         )
-        .group_by(Message.conversation_id)
-    ).all()
-    unread_by_conv = {row[0]: row[1] for row in unread_rows}
+        rows = db.session.execute(
+            db.select(Message).join(sub, Message.id == sub.c.last_id)
+        ).scalars().all()
+        for m in rows:
+            last_msg_by_conv[m.conversation_id] = m
+
+    # Непрочитанные (от собеседника, read_at IS NULL, не скрытые на моей стороне)
+    unread_by_conv: dict[int, int] = {}
+    for ids, hidden_col in ((a_conv_ids, Message.hidden_for_a), (b_conv_ids, Message.hidden_for_b)):
+        if not ids:
+            continue
+        rows = db.session.execute(
+            db.select(Message.conversation_id, func.count(Message.id))
+            .where(
+                Message.conversation_id.in_(ids),
+                Message.sender_id != user_id,
+                Message.read_at.is_(None),
+                hidden_col.is_(False),
+            )
+            .group_by(Message.conversation_id)
+        ).all()
+        for cid, n in rows:
+            unread_by_conv[cid] = n
 
     # Профили собеседников
     others = db.session.execute(
@@ -89,13 +116,26 @@ def list_user_conversations(user_id: int) -> list[dict]:
             "other_user": other,
             "last_message": last_msg_by_conv.get(c.id),
             "unread_count": unread_by_conv.get(c.id, 0),
+            "is_pinned": c.pinned_at_for(user_id) is not None,
+            "pinned_at": c.pinned_at_for(user_id),
         })
     return result
 
 
-def list_messages(conversation_id: int, before_id: Optional[int] = None,
+_MIN_DT = datetime(1970, 1, 1, tzinfo=timezone.utc)
+
+
+def list_messages(conversation_id: int, user_id: int, before_id: Optional[int] = None,
                   limit: int = 50) -> list[Message]:
-    q = db.select(Message).where(Message.conversation_id == conversation_id)
+    """Сообщения диалога без тех, что скрыты на стороне user_id."""
+    conv = get_conversation(conversation_id)
+    if conv is None:
+        return []
+    hidden_col = Message.hidden_for_a if conv.side(user_id) == 'a' else Message.hidden_for_b
+    q = db.select(Message).where(
+        Message.conversation_id == conversation_id,
+        hidden_col.is_(False),
+    )
     if before_id is not None:
         q = q.where(Message.id < before_id)
     q = q.order_by(Message.id.desc()).limit(limit)
@@ -125,11 +165,13 @@ def create_message(conversation_id: int, sender_id: int, text: Optional[str],
             .values(message_id=msg.id)
         )
 
-    # Обновим last_message_at у диалога
+    # Обновим last_message_at у диалога. Заодно «возвращаем» диалог обеим
+    # сторонам, если кто-то его раньше скрыл у себя: новое сообщение должно
+    # снова показаться у получателя.
     db.session.execute(
         db.update(Conversation)
         .where(Conversation.id == conversation_id)
-        .values(last_message_at=msg.created_at)
+        .values(last_message_at=msg.created_at, hidden_for_a=False, hidden_for_b=False)
     )
     db.session.flush()
     return msg
@@ -166,12 +208,23 @@ def create_attachment(uploader_id: int, file_path: str, file_name: str,
 
 
 def total_unread(user_id: int) -> int:
-    """Общее число непрочитанных сообщений у пользователя по всем диалогам."""
+    """Общее число непрочитанных сообщений у пользователя по всем не скрытым
+    диалогам, без сообщений, скрытых на его стороне."""
+    side_a = and_(
+        Conversation.user_a_id == user_id,
+        Conversation.hidden_for_a.is_(False),
+        Message.hidden_for_a.is_(False),
+    )
+    side_b = and_(
+        Conversation.user_b_id == user_id,
+        Conversation.hidden_for_b.is_(False),
+        Message.hidden_for_b.is_(False),
+    )
     return db.session.execute(
         db.select(func.count(Message.id))
         .join(Conversation, Conversation.id == Message.conversation_id)
         .where(
-            or_(Conversation.user_a_id == user_id, Conversation.user_b_id == user_id),
+            or_(side_a, side_b),
             Message.sender_id != user_id,
             Message.read_at.is_(None),
         )
@@ -180,3 +233,79 @@ def total_unread(user_id: int) -> int:
 
 def get_attachment(attachment_id: int) -> Optional[MessageAttachment]:
     return db.session.get(MessageAttachment, attachment_id)
+
+
+def get_message(message_id: int) -> Optional[Message]:
+    return db.session.get(Message, message_id)
+
+
+def delete_message(message: Message) -> None:
+    """Удаляет сообщение. Вложения каскадно уходят через FK ondelete=CASCADE.
+    Файлы на диске удаляются вызывающей стороной до commit."""
+    db.session.delete(message)
+    db.session.flush()
+
+
+def recompute_last_message_at(conversation_id: int) -> None:
+    """Пересчитать last_message_at у диалога после удаления сообщения."""
+    last = db.session.execute(
+        db.select(func.max(Message.created_at)).where(Message.conversation_id == conversation_id)
+    ).scalar_one()
+    db.session.execute(
+        db.update(Conversation)
+        .where(Conversation.id == conversation_id)
+        .values(last_message_at=last)
+    )
+    db.session.flush()
+
+
+def list_attachment_paths_of_conversation(conversation_id: int) -> list[str]:
+    return list(db.session.execute(
+        db.select(MessageAttachment.file_path)
+        .join(Message, Message.id == MessageAttachment.message_id)
+        .where(Message.conversation_id == conversation_id)
+    ).scalars().all())
+
+
+def delete_conversation(conversation: Conversation) -> None:
+    db.session.delete(conversation)
+    db.session.flush()
+
+
+def hide_message_for(message: Message, side: str) -> bool:
+    """Помечает сообщение скрытым на указанной стороне ('a' или 'b').
+    Возвращает True, если после операции сообщение скрыто обеими сторонами
+    (вызывающий должен физически удалить вместе с файлами)."""
+    if side == 'a':
+        message.hidden_for_a = True
+    else:
+        message.hidden_for_b = True
+    db.session.flush()
+    return bool(message.hidden_for_a and message.hidden_for_b)
+
+
+def hide_conversation_for(conversation: Conversation, side: str) -> bool:
+    """Помечает диалог скрытым на указанной стороне. Также скрывает все
+    сообщения на этой стороне (чтобы при возврате/повторном открытии собеседник
+    не видел старую переписку, которую другая сторона стёрла). Возвращает True,
+    если оба пользователя теперь скрыли диалог — вызывающий удаляет физически."""
+    if side == 'a':
+        conversation.hidden_for_a = True
+    else:
+        conversation.hidden_for_b = True
+
+    col = Message.hidden_for_a if side == 'a' else Message.hidden_for_b
+    db.session.execute(
+        db.update(Message).where(Message.conversation_id == conversation.id).values({col: True})
+    )
+    db.session.flush()
+    return bool(conversation.hidden_for_a and conversation.hidden_for_b)
+
+
+def set_pin(conversation: Conversation, side: str, pinned: bool) -> None:
+    now = datetime.now(timezone.utc) if pinned else None
+    if side == 'a':
+        conversation.pinned_at_a = now
+    else:
+        conversation.pinned_at_b = now
+    db.session.flush()

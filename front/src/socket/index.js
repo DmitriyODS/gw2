@@ -135,6 +135,21 @@ export function connectSocket() {
     messenger.applyReadReceipt(conversation_id, reader_id)
   })
 
+  socket.on('message:deleted', ({ conversation_id, message_id }) => {
+    const messenger = useMessengerStore()
+    messenger.applyMessageDeleted(conversation_id, message_id)
+  })
+
+  socket.on('conversation:deleted', ({ conversation_id }) => {
+    const messenger = useMessengerStore()
+    messenger.applyConversationDeleted(conversation_id)
+  })
+
+  socket.on('conversation:pin', ({ conversation_id, is_pinned }) => {
+    const messenger = useMessengerStore()
+    messenger.applyPinChange(conversation_id, is_pinned)
+  })
+
   socket.on('unit:force_stopped', ({ unit_id, stopped_by_fio }) => {
     const units = useUnitsStore()
     const notif = useNotificationsStore()

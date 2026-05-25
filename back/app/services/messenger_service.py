@@ -78,6 +78,116 @@ def mark_conversation_read(conversation_id: int, user_id: int) -> int:
     return n
 
 
+def _abs_upload_path(rel_path: str) -> str:
+    upload_folder = current_app.config["UPLOAD_FOLDER"]
+    if not os.path.isabs(upload_folder):
+        upload_folder = os.path.join(current_app.root_path, "..", upload_folder)
+    return os.path.abspath(os.path.join(upload_folder, rel_path))
+
+
+def _delete_attachment_files(paths: list[str]) -> None:
+    for p in paths:
+        if not p:
+            continue
+        try:
+            abs_path = _abs_upload_path(p)
+            if os.path.isfile(abs_path):
+                os.remove(abs_path)
+        except OSError as e:
+            logger.warning("attachment.unlink_failed", extra={"extra": {"path": p, "error": str(e)}})
+
+
+def delete_message(message_id: int, user_id: int, scope: str) -> tuple[int, bool]:
+    """Удаляет сообщение. scope: 'me' (скрыть на своей стороне) или 'all'
+    (физически удалить — только для своих сообщений).
+    Возвращает (conversation_id, deleted_for_all_now)."""
+    msg = message_repo.get_message(message_id)
+    if msg is None:
+        raise MessengerServiceError("Сообщение не найдено", "MSG_NOT_FOUND", 404)
+    conv = message_repo.get_conversation(msg.conversation_id)
+    if conv is None or user_id not in (conv.user_a_id, conv.user_b_id):
+        raise MessengerServiceError("Нет доступа к сообщению", "FORBIDDEN", 403)
+
+    physically_removed = False
+
+    if scope == 'all':
+        if msg.sender_id != user_id:
+            raise MessengerServiceError(
+                "Удалить «для всех» можно только своё сообщение", "FORBIDDEN", 403,
+            )
+        paths = [a.file_path for a in msg.attachments]
+        message_repo.delete_message(msg)
+        physically_removed = True
+        message_repo.recompute_last_message_at(conv.id)
+        db.session.commit()
+        _delete_attachment_files(paths)
+    elif scope == 'me':
+        side = conv.side(user_id)
+        both = message_repo.hide_message_for(msg, side)
+        if both:
+            paths = [a.file_path for a in msg.attachments]
+            message_repo.delete_message(msg)
+            physically_removed = True
+            message_repo.recompute_last_message_at(conv.id)
+            db.session.commit()
+            _delete_attachment_files(paths)
+        else:
+            db.session.commit()
+    else:
+        raise MessengerServiceError("Неверный scope", "BAD_SCOPE", 400)
+
+    logger.info("message.delete", extra={"extra": {
+        "event": "message.delete", "message_id": message_id,
+        "user_id": user_id, "scope": scope,
+    }})
+    return conv.id, (scope == 'all') or physically_removed
+
+
+def delete_conversation(conversation_id: int, user_id: int, scope: str) -> bool:
+    """Удаляет диалог. scope: 'me' (скрыть у себя — собеседник продолжит
+    видеть переписку до своего удаления) или 'all' (физически удалить
+    у обоих). Возвращает True, если диалог физически удалён."""
+    conv = get_conversation_for_user(conversation_id, user_id)
+
+    if scope == 'all':
+        paths = message_repo.list_attachment_paths_of_conversation(conv.id)
+        message_repo.delete_conversation(conv)
+        db.session.commit()
+        _delete_attachment_files(paths)
+        physically_removed = True
+    elif scope == 'me':
+        side = conv.side(user_id)
+        both = message_repo.hide_conversation_for(conv, side)
+        if both:
+            paths = message_repo.list_attachment_paths_of_conversation(conv.id)
+            message_repo.delete_conversation(conv)
+            db.session.commit()
+            _delete_attachment_files(paths)
+            physically_removed = True
+        else:
+            db.session.commit()
+            physically_removed = False
+    else:
+        raise MessengerServiceError("Неверный scope", "BAD_SCOPE", 400)
+
+    logger.info("conversation.delete", extra={"extra": {
+        "event": "conversation.delete", "conversation_id": conversation_id,
+        "user_id": user_id, "scope": scope, "physical": physically_removed,
+    }})
+    return physically_removed
+
+
+def toggle_pin(conversation_id: int, user_id: int) -> bool:
+    """Переключает закрепление диалога у пользователя. Возвращает новое
+    состояние (True = закреплён)."""
+    conv = get_conversation_for_user(conversation_id, user_id)
+    side = conv.side(user_id)
+    current = conv.pinned_at_for(user_id)
+    message_repo.set_pin(conv, side, pinned=current is None)
+    db.session.commit()
+    return current is None
+
+
 def upload_attachment(uploader_id: int, file_storage) -> dict:
     """Сохраняет файл на диск, регистрирует attachment, возвращает запись.
     file_storage — werkzeug FileStorage из request.files."""
@@ -99,11 +209,7 @@ def upload_attachment(uploader_id: int, file_storage) -> dict:
     ext = os.path.splitext(original)[1].lower()[:16]
     safe_name = f"{uuid.uuid4().hex}{ext}"
     rel_dir = os.path.join("messages", datetime.now(timezone.utc).strftime("%Y/%m"))
-
-    upload_folder = current_app.config["UPLOAD_FOLDER"]
-    if not os.path.isabs(upload_folder):
-        upload_folder = os.path.join(current_app.root_path, "..", upload_folder)
-    abs_dir = os.path.abspath(os.path.join(upload_folder, rel_dir))
+    abs_dir = _abs_upload_path(rel_dir)
     os.makedirs(abs_dir, exist_ok=True)
     abs_path = os.path.join(abs_dir, safe_name)
     with open(abs_path, "wb") as f:

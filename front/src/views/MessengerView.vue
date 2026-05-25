@@ -7,6 +7,8 @@
       :hide-on-mobile="isMobile && !!activeId"
       @select="selectConversation"
       @new-chat="newChatOpen = true"
+      @toggle-pin="onTogglePin"
+      @delete="askDeleteConversation"
     />
 
     <section class="chat-panel" :class="{ 'is-mobile-hidden': isMobile && !activeId }">
@@ -19,14 +21,30 @@
           <div class="chat-fio">{{ active.other_user?.fio }}</div>
           <div class="chat-meta">@{{ active.other_user?.login }} · {{ active.other_user?.post || active.other_user?.role?.name }}</div>
         </div>
+        <div class="chat-tools">
+          <button
+            class="chat-tool"
+            :class="{ active: active.is_pinned }"
+            :title="active.is_pinned ? 'Открепить' : 'Закрепить'"
+            @click="onTogglePin(active.id)"
+          >
+            <span class="material-symbols-outlined">{{ active.is_pinned ? 'keep_off' : 'keep' }}</span>
+          </button>
+          <button
+            class="chat-tool danger"
+            title="Удалить чат"
+            @click="askDeleteConversation(active)"
+          >
+            <span class="material-symbols-outlined">delete</span>
+          </button>
+        </div>
       </header>
       <div v-else class="chat-empty">
-        <span class="material-symbols-outlined">chat</span>
-        <p>Выберите чат слева или начните новый</p>
-        <button class="btn-primary" @click="newChatOpen = true">
-          <span class="material-symbols-outlined">edit_square</span>
-          Новый чат
-        </button>
+        <div class="chat-empty-icon">
+          <span class="material-symbols-outlined">chat</span>
+        </div>
+        <h3 class="chat-empty-title">Выберите чат</h3>
+        <p class="chat-empty-text">Откройте беседу слева — или начните новую из списка.</p>
       </div>
 
       <div
@@ -44,6 +62,7 @@
             :key="m.id"
             :message="m"
             :is-mine="m.sender_id === authStore.user?.id"
+            @delete="askDeleteMessage"
           />
         </template>
       </div>
@@ -56,6 +75,15 @@
     </section>
 
     <NewChatDialog v-model="newChatOpen" @pick="startWith" />
+
+    <DeleteScopeDialog
+      v-model="deleteDialogOpen"
+      :title="deleteDialog.title"
+      :text="deleteDialog.text"
+      :can-for-all="deleteDialog.canForAll"
+      :other-name="deleteDialog.otherName"
+      @confirm="onDeleteConfirm"
+    />
   </div>
 </template>
 
@@ -72,6 +100,7 @@ import ConversationList from '@/components/messenger/ConversationList.vue'
 import MessageBubble from '@/components/messenger/MessageBubble.vue'
 import MessageInput from '@/components/messenger/MessageInput.vue'
 import NewChatDialog from '@/components/messenger/NewChatDialog.vue'
+import DeleteScopeDialog from '@/components/messenger/DeleteScopeDialog.vue'
 import ProgressSpinner from 'primevue/progressspinner'
 
 const route = useRoute()
@@ -82,6 +111,67 @@ const { isMobile } = useBreakpoint()
 
 const newChatOpen = ref(false)
 const messagesEl = ref(null)
+
+const deleteDialogOpen = ref(false)
+const deleteDialog = ref({
+  title: '',
+  text: '',
+  canForAll: true,
+  otherName: '',
+  payload: null,        // { kind: 'message' | 'conversation', id }
+})
+
+function askDeleteMessage(message) {
+  const isMine = message.sender_id === authStore.user?.id
+  const other = active.value?.other_user?.fio || ''
+  deleteDialog.value = {
+    title: 'Удалить сообщение?',
+    text: isMine
+      ? 'Сообщение исчезнет у вас. Можно также удалить его у собеседника.'
+      : 'Сообщение скроется только у вас — у собеседника останется.',
+    canForAll: isMine,
+    otherName: other,
+    payload: { kind: 'message', id: message.id },
+  }
+  deleteDialogOpen.value = true
+}
+
+function askDeleteConversation(conv) {
+  const other = conv?.other_user?.fio || ''
+  deleteDialog.value = {
+    title: 'Удалить чат?',
+    text: 'Чат пропадёт у вас. Можно также удалить его у собеседника — переписка исчезнет у обоих.',
+    canForAll: true,
+    otherName: other,
+    payload: { kind: 'conversation', id: conv.id },
+  }
+  deleteDialogOpen.value = true
+}
+
+async function onDeleteConfirm({ scope }) {
+  const p = deleteDialog.value.payload
+  if (!p) return
+  try {
+    if (p.kind === 'message') {
+      await messenger.deleteMessage(p.id, scope)
+    } else if (p.kind === 'conversation') {
+      await messenger.deleteConversationAction(p.id, scope)
+      if (activeId.value === p.id) {
+        router.replace('/messenger')
+      }
+    }
+  } catch (e) {
+    console.error('delete failed', e)
+  }
+}
+
+async function onTogglePin(conversationId) {
+  try {
+    await messenger.togglePinAction(conversationId)
+  } catch (e) {
+    console.error('pin failed', e)
+  }
+}
 
 const activeId = computed(() => messenger.activeConversationId)
 const active = computed(() => messenger.activeConversation)
@@ -222,7 +312,44 @@ watch(() => route.params.conversationId, async (id) => {
   object-fit: cover;
 }
 
-.chat-title { min-width: 0; }
+.chat-title { min-width: 0; flex: 1; }
+
+.chat-tools {
+  display: flex;
+  gap: 2px;
+  margin-left: auto;
+  flex-shrink: 0;
+}
+
+.chat-tool {
+  width: 40px;
+  height: 40px;
+  border: none;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--color-text-dim);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.15s, color 0.15s;
+}
+
+.chat-tool:hover {
+  background: var(--color-surface-low);
+  color: var(--color-text);
+}
+
+.chat-tool.active {
+  color: var(--color-tertiary);
+}
+
+.chat-tool.danger:hover {
+  background: var(--color-error-container);
+  color: var(--color-on-error-container);
+}
+
+.chat-tool .material-symbols-outlined { font-size: 20px; }
 
 .chat-fio {
   font-size: 15px;
@@ -241,29 +368,43 @@ watch(() => route.params.conversationId, async (id) => {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 12px;
+  gap: 10px;
   color: var(--color-text-dim);
   text-align: center;
   padding: 24px;
 }
 
-.chat-empty .material-symbols-outlined { font-size: 64px; }
-
-.btn-primary {
-  display: inline-flex;
+.chat-empty-icon {
+  width: 96px;
+  height: 96px;
+  border-radius: 50%;
+  background: var(--color-surface-high);
+  color: var(--color-primary);
+  display: flex;
   align-items: center;
-  gap: 8px;
-  background: var(--color-primary);
-  color: var(--color-on-primary);
-  border: none;
-  padding: 10px 18px;
-  border-radius: var(--radius-md);
-  font-size: 14px;
-  font-weight: 600;
-  cursor: pointer;
+  justify-content: center;
+  margin-bottom: 6px;
 }
 
-.btn-primary:hover { background: var(--color-primary-hover); }
+.chat-empty-icon .material-symbols-outlined {
+  font-size: 48px;
+  font-variation-settings: 'FILL' 1, 'wght' 400, 'GRAD' 0, 'opsz' 48;
+}
+
+.chat-empty-title {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--color-text);
+}
+
+.chat-empty-text {
+  margin: 0;
+  font-size: 13.5px;
+  line-height: 1.45;
+  color: var(--color-text-dim);
+  max-width: 320px;
+}
 
 .messages-area {
   flex: 1;

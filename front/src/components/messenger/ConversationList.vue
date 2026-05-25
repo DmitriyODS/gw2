@@ -19,17 +19,27 @@
     <div v-if="loading" class="conv-empty">
       <ProgressSpinner />
     </div>
-    <div v-else-if="!visible.length" class="conv-empty">
-      <span class="material-symbols-outlined">forum</span>
-      <p>{{ filter ? 'Никого не нашли' : 'Здесь будут ваши чаты' }}</p>
-      <button class="btn-text" @click="$emit('new-chat')">Начать переписку</button>
+    <div v-else-if="!visible.length" class="conv-empty conv-empty--rich">
+      <div class="empty-icon">
+        <span class="material-symbols-outlined">{{ filter ? 'person_search' : 'forum' }}</span>
+      </div>
+      <h3 class="empty-title">{{ filter ? 'Никого не нашли' : 'Тут пока тишина' }}</h3>
+      <p class="empty-sub">
+        {{ filter
+          ? 'Попробуйте другое имя или логин.'
+          : 'Напишите коллеге — обсудите задачу, поделитесь файлом или просто поздоровайтесь.' }}
+      </p>
+      <button v-if="!filter" class="btn-filled-tonal" @click="$emit('new-chat')">
+        <span class="material-symbols-outlined">edit_square</span>
+        Начать переписку
+      </button>
     </div>
     <ul v-else class="conv-items">
       <li
         v-for="c in visible"
         :key="c.id"
         class="conv-item"
-        :class="{ active: c.id === activeId, unread: c.unread_count > 0 }"
+        :class="{ active: c.id === activeId, unread: c.unread_count > 0, pinned: c.is_pinned }"
         @click="$emit('select', c.id)"
       >
         <img class="conv-avatar" :src="avatarOf(c.other_user)" :alt="c.other_user?.fio" />
@@ -41,7 +51,27 @@
           <div class="conv-bottom">
             <span class="conv-preview">{{ preview(c.last_message) }}</span>
             <span v-if="c.unread_count" class="conv-badge">{{ c.unread_count }}</span>
+            <span v-else-if="c.is_pinned" class="conv-pin-mark" title="Закреплён">
+              <span class="material-symbols-outlined">keep</span>
+            </span>
           </div>
+        </div>
+        <div class="conv-actions" @click.stop>
+          <button
+            class="conv-action"
+            :class="{ active: c.is_pinned }"
+            :title="c.is_pinned ? 'Открепить' : 'Закрепить'"
+            @click="$emit('toggle-pin', c.id)"
+          >
+            <span class="material-symbols-outlined">{{ c.is_pinned ? 'keep_off' : 'keep' }}</span>
+          </button>
+          <button
+            class="conv-action danger"
+            title="Удалить чат"
+            @click="$emit('delete', c)"
+          >
+            <span class="material-symbols-outlined">delete</span>
+          </button>
         </div>
       </li>
     </ul>
@@ -59,7 +89,7 @@ const props = defineProps({
   hideOnMobile: { type: Boolean, default: false },
 })
 
-defineEmits(['select', 'new-chat'])
+defineEmits(['select', 'new-chat', 'toggle-pin', 'delete'])
 
 const filter = ref('')
 
@@ -182,16 +212,107 @@ function formatTime(iso) {
   text-align: center;
 }
 
-.conv-empty .material-symbols-outlined {
-  font-size: 48px;
+/* M3 Expressive empty state: иконка в круглом tinted container,
+   крупный заголовок, мягкая подпись и filled-tonal pill-кнопка с иконкой.
+   Все цвета — через семантические токены, чтобы тёмная тема и кастомные
+   палитры подхватывались автоматически. */
+.conv-empty--rich {
+  gap: 14px;
+  padding: 48px 24px;
+  flex: 1;
+  justify-content: center;
 }
 
-.btn-text {
-  background: none;
-  border: none;
-  color: var(--color-primary);
+.empty-icon {
+  width: 80px;
+  height: 80px;
+  border-radius: 50%;
+  background: var(--color-primary-container);
+  color: var(--color-on-primary-container);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 4px;
+  box-shadow: var(--shadow-sm);
+  transition: transform 0.25s ease, box-shadow 0.25s ease;
+}
+
+.empty-icon:hover {
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-md);
+}
+
+.empty-icon .material-symbols-outlined {
+  font-size: 40px;
+  font-variation-settings: 'FILL' 1, 'wght' 400, 'GRAD' 0, 'opsz' 40;
+}
+
+.empty-title {
+  margin: 0;
+  font-size: 18px;
   font-weight: 600;
+  letter-spacing: -0.1px;
+  color: var(--color-text);
+}
+
+.empty-sub {
+  margin: 0 0 4px;
+  font-size: 13.5px;
+  line-height: 1.45;
+  color: var(--color-text-dim);
+  max-width: 260px;
+}
+
+/* M3 filled tonal button: secondary container fill, pill-shape,
+   state layer на hover/active, лёгкий лифт по shadow. */
+.btn-filled-tonal {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 44px;
+  padding: 0 22px 0 18px;
+  border: none;
+  border-radius: var(--radius-full);
+  background: var(--color-secondary-container);
+  color: var(--color-on-secondary-container);
+  font: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: 0.1px;
   cursor: pointer;
+  position: relative;
+  overflow: hidden;
+  isolation: isolate;
+  transition: box-shadow 0.2s ease, transform 0.15s ease;
+}
+
+.btn-filled-tonal::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: currentColor;
+  opacity: 0;
+  transition: opacity 0.18s ease;
+  z-index: -1;
+}
+
+.btn-filled-tonal:hover {
+  box-shadow: var(--shadow-sm);
+}
+
+.btn-filled-tonal:hover::before { opacity: 0.08; }
+.btn-filled-tonal:focus-visible::before { opacity: 0.12; }
+.btn-filled-tonal:active::before { opacity: 0.16; }
+.btn-filled-tonal:active { transform: scale(0.98); }
+
+.btn-filled-tonal:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
+}
+
+.btn-filled-tonal .material-symbols-outlined {
+  font-size: 20px;
+  font-variation-settings: 'FILL' 0, 'wght' 500, 'GRAD' 0, 'opsz' 24;
 }
 
 .conv-items {
@@ -210,6 +331,7 @@ function formatTime(iso) {
   align-items: center;
   border-left: 3px solid transparent;
   transition: background 0.12s;
+  position: relative;
 }
 
 .conv-item:hover { background: var(--color-surface-low); }
@@ -217,6 +339,11 @@ function formatTime(iso) {
 .conv-item.active {
   background: var(--color-surface-low);
   border-left-color: var(--color-primary);
+}
+
+/* Закреплённый — мягкий tertiary-accent на левой границе */
+.conv-item.pinned:not(.active) {
+  border-left-color: var(--color-tertiary);
 }
 
 .conv-avatar {
@@ -281,6 +408,68 @@ function formatTime(iso) {
   border-radius: var(--radius-full);
   min-width: 20px;
   text-align: center;
+}
+
+.conv-pin-mark {
+  display: inline-flex;
+  align-items: center;
+  color: var(--color-tertiary);
+}
+
+.conv-pin-mark .material-symbols-outlined {
+  font-size: 16px;
+  font-variation-settings: 'FILL' 1, 'wght' 500, 'GRAD' 0, 'opsz' 20;
+}
+
+/* Действия на карточке диалога — показываются на hover, на тач-устройствах
+   видны всегда (по media (hover: none)). */
+.conv-actions {
+  display: flex;
+  gap: 2px;
+  opacity: 0;
+  transition: opacity 0.15s;
+  flex-shrink: 0;
+}
+
+.conv-item:hover .conv-actions,
+.conv-item:focus-within .conv-actions {
+  opacity: 1;
+}
+
+.conv-action {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  border: none;
+  background: transparent;
+  color: var(--color-text-dim);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.15s, color 0.15s;
+}
+
+.conv-action:hover {
+  background: var(--color-surface-high);
+  color: var(--color-text);
+}
+
+.conv-action.active {
+  color: var(--color-tertiary);
+}
+
+.conv-action.danger:hover {
+  background: var(--color-error-container);
+  color: var(--color-on-error-container);
+}
+
+.conv-action .material-symbols-outlined {
+  font-size: 18px;
+}
+
+@media (hover: none) {
+  .conv-actions { opacity: 1; }
 }
 
 @media (max-width: 768px) {

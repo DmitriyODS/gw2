@@ -1,5 +1,12 @@
 <template>
   <div class="msg-row" :class="{ outgoing: isMine }">
+    <button
+      class="msg-delete"
+      :title="isMine ? 'Удалить' : 'Удалить у меня'"
+      @click="$emit('delete', message)"
+    >
+      <span class="material-symbols-outlined">delete</span>
+    </button>
     <div class="msg-bubble">
       <div v-if="message.attachments?.length" class="msg-attachments">
         <component
@@ -31,6 +38,8 @@ const props = defineProps({
   isMine: { type: Boolean, default: false },
 })
 
+defineEmits(['delete'])
+
 function attachmentTag() { return AttachmentView }
 
 function formatTime(iso) {
@@ -42,12 +51,54 @@ function formatTime(iso) {
 <style scoped>
 .msg-row {
   display: flex;
+  align-items: center;
+  gap: 4px;
   margin-bottom: 8px;
 }
 
 .msg-row.outgoing { justify-content: flex-end; }
 
+/* Кнопка удаления у bubble — показывается на hover. Слева для своих,
+   справа для входящих, чтобы не мешать чтению. */
+.msg-delete {
+  order: 1;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  border: none;
+  background: transparent;
+  color: var(--color-text-dim);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  transition: opacity 0.15s, background 0.15s, color 0.15s;
+  flex-shrink: 0;
+}
+
+.msg-delete:hover {
+  background: var(--color-error-container);
+  color: var(--color-on-error-container);
+}
+
+.msg-delete .material-symbols-outlined { font-size: 16px; }
+
+.msg-row:hover .msg-delete,
+.msg-row:focus-within .msg-delete {
+  opacity: 1;
+}
+
+.msg-row.outgoing .msg-delete {
+  order: 0;
+}
+
+@media (hover: none) {
+  .msg-delete { opacity: 0.5; }
+}
+
 .msg-bubble {
+  order: 0;
   max-width: 70%;
   background: var(--color-surface-high);
   color: var(--color-text);
