@@ -28,6 +28,10 @@ export const useMessengerStore = defineStore('messenger', () => {
   const conversations = ref([])
   const activeConversationId = ref(null)
   const messagesByConv = ref({})
+  // hasMoreHistoryByConv[convId] = false означает «вся история уже подгружена»,
+  // больше не нужно дёргать /messages?before_id — иначе скролл «примагничивается»
+  // к верху, бесконечно повторяя пустой запрос.
+  const hasMoreHistoryByConv = ref({})
   const totalUnread = ref(0)
   const loadingList = ref(false)
   const loadingMessages = ref(false)
@@ -102,12 +106,23 @@ export const useMessengerStore = defineStore('messenger', () => {
       const existing = messagesByConv.value[conversationId] || []
       if (beforeId) {
         messagesByConv.value[conversationId] = [...msgs, ...existing]
+        // Если страница вернулась короче лимита (или пустая) — история закончилась.
+        if (msgs.length < 50) {
+          hasMoreHistoryByConv.value[conversationId] = false
+        }
       } else {
         messagesByConv.value[conversationId] = msgs
+        // Первая загрузка: если меньше лимита — старых сообщений больше нет.
+        hasMoreHistoryByConv.value[conversationId] = msgs.length >= 50
       }
+      return msgs
     } finally {
       loadingMessages.value = false
     }
+  }
+
+  function hasMoreHistory(conversationId) {
+    return hasMoreHistoryByConv.value[conversationId] !== false
   }
 
   /* Тихий polling-fallback: подтягивает только сообщения новее последнего
@@ -188,6 +203,7 @@ export const useMessengerStore = defineStore('messenger', () => {
   function applyConversationDeleted(conversationId) {
     conversations.value = conversations.value.filter(c => c.id !== conversationId)
     delete messagesByConv.value[conversationId]
+    delete hasMoreHistoryByConv.value[conversationId]
     if (activeConversationId.value === conversationId) {
       activeConversationId.value = null
     }
@@ -256,6 +272,7 @@ export const useMessengerStore = defineStore('messenger', () => {
     conversations.value = []
     activeConversationId.value = null
     messagesByConv.value = {}
+    hasMoreHistoryByConv.value = {}
     totalUnread.value = 0
   }
 
@@ -264,7 +281,7 @@ export const useMessengerStore = defineStore('messenger', () => {
     loadingList, loadingMessages, sending,
     activeConversation, activeMessages,
     fetchConversations, fetchUnreadCount, openWith, setActive, fetchMessages,
-    pollNewMessages,
+    pollNewMessages, hasMoreHistory,
     send, markRead,
     applyIncomingMessage, applyReadReceipt,
     applyMessageDeleted, applyConversationDeleted, applyPinChange,

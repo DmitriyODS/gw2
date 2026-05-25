@@ -212,17 +212,36 @@ function scrollToBottom() {
   el.scrollTop = el.scrollHeight
 }
 
+// Локальный гард, чтобы scroll-событие не запускало вторую подгрузку,
+// пока первая ещё в полёте, и не падало в бесконечный «магнит» к верху,
+// если страница вернулась пустой.
+let loadingOlder = false
+
 async function onScroll() {
   const el = messagesEl.value
-  if (!el || messenger.loadingMessages) return
+  if (!el || loadingOlder) return
   if (el.scrollTop > 80) return
+  if (!messenger.hasMoreHistory(activeId.value)) return
   const arr = messenger.activeMessages
   if (!arr.length) return
-  const firstId = arr[0].id
-  const prevHeight = el.scrollHeight
-  await messenger.fetchMessages(activeId.value, firstId)
-  await nextTick()
-  el.scrollTop = el.scrollHeight - prevHeight
+
+  loadingOlder = true
+  try {
+    const firstId = arr[0].id
+    const prevHeight = el.scrollHeight
+    const prevTop = el.scrollTop
+    const added = await messenger.fetchMessages(activeId.value, firstId)
+    if (!added || !added.length) return
+    await nextTick()
+    // Сохраняем визуальную позицию: пиксель, на который смотрел пользователь,
+    // должен остаться на том же месте после вставки старых сообщений сверху.
+    const delta = el.scrollHeight - prevHeight
+    if (delta > 0) {
+      el.scrollTop = prevTop + delta
+    }
+  } finally {
+    loadingOlder = false
+  }
 }
 
 function handleExternalOpen(e) {
@@ -250,14 +269,21 @@ onBeforeUnmount(() => {
   window.removeEventListener('messenger:open-conversation', handleExternalOpen)
 })
 
-watch(() => messenger.activeMessages.length, async (n, prev) => {
-  if (n > prev) {
-    await nextTick()
-    const el = messagesEl.value
-    if (!el) return
-    const nearBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 200
-    if (nearBottom) scrollToBottom()
-  }
+/* Скроллим вниз только когда появилось НОВОЕ сообщение снизу (lastId вырос),
+   а не любая мутация длины: подгрузка старых сверху тоже увеличивает length,
+   но скроллить в конец тогда нельзя — пользователь читает историю. */
+const lastMessageId = computed(() => {
+  const arr = messenger.activeMessages
+  return arr.length ? arr[arr.length - 1].id : 0
+})
+
+watch(lastMessageId, async (id, prevId) => {
+  if (!id || id <= prevId) return
+  await nextTick()
+  const el = messagesEl.value
+  if (!el) return
+  const nearBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 200
+  if (nearBottom) scrollToBottom()
 })
 
 watch(() => route.params.conversationId, async (id) => {
