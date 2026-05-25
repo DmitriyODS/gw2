@@ -225,32 +225,39 @@ async function loadSlide(slide, { silent = false } = {}) {
   }
 }
 
+// Бэк отдаёт total_hours как Decimal → строка в JSON. Везде приводим к Number.
+function num(v) {
+  const n = Number(v)
+  return Number.isFinite(n) ? n : 0
+}
+
 const topEmployees = computed(() => {
   const list = commonData.value?.tasks_by_employees || []
-  return [...list].sort((a, b) => (b.total_hours || 0) - (a.total_hours || 0)).slice(0, 7)
+  return [...list].sort((a, b) => num(b.total_hours) - num(a.total_hours)).slice(0, 7)
 })
 
 const topTasks = computed(() => {
   const list = commonData.value?.tasks_by_hours || []
-  return [...list].sort((a, b) => (b.total_hours || 0) - (a.total_hours || 0)).slice(0, 7)
+  return [...list].sort((a, b) => num(b.total_hours) - num(a.total_hours)).slice(0, 7)
 })
 
 const deptList = computed(() => {
   const list = extendedData.value?.by_departments || []
-  return [...list].sort((a, b) => (b.tasks_count || 0) - (a.tasks_count || 0)).slice(0, 8)
+  return [...list].sort((a, b) => num(b.tasks_count) - num(a.tasks_count)).slice(0, 8)
 })
 
-const employeesMax = computed(() => Math.max(1, ...topEmployees.value.map(e => e.total_hours || 0)))
-const tasksMax = computed(() => Math.max(1, ...topTasks.value.map(t => t.total_hours || 0)))
+const employeesMax = computed(() => Math.max(1, ...topEmployees.value.map(e => num(e.total_hours))))
+const tasksMax = computed(() => Math.max(1, ...topTasks.value.map(t => num(t.total_hours))))
 
 const totalHours = computed(() => {
   const list = commonData.value?.tasks_by_employees || []
-  return list.reduce((acc, e) => acc + (e.total_hours || 0), 0)
+  return list.reduce((acc, e) => acc + num(e.total_hours), 0)
 })
 
 function formatHoursShort(val) {
-  if (val === null || val === undefined) return '0 ч'
-  const totalMinutes = Math.round(val * 60)
+  const hours = num(val)
+  if (hours <= 0) return '0 ч'
+  const totalMinutes = Math.round(hours * 60)
   const h = Math.floor(totalMinutes / 60)
   const m = totalMinutes % 60
   if (h === 0) return `${m} мин`
@@ -259,8 +266,9 @@ function formatHoursShort(val) {
 }
 
 function percent(val, max) {
-  if (!max) return 0
-  return Math.max(4, Math.round(((val || 0) / max) * 100))
+  const m = num(max)
+  if (!m) return 0
+  return Math.max(4, Math.round((num(val) / m) * 100))
 }
 
 let slideTimer = null
