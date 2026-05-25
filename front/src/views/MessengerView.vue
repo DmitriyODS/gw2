@@ -232,39 +232,6 @@ function handleExternalOpen(e) {
   }
 }
 
-/* Safety net поверх сокета: пока пользователь на /messenger, раз в ~5 сек
-   подтягиваем свежие данные с сервера. Если сокет-событие потерялось
-   (polling-разрыв в dev, проблема Vite proxy и т.п.) — пользователь увидит
-   обновления с задержкой до 5 секунд вместо «до перезагрузки страницы». */
-const POLL_INTERVAL_MS = 5000
-let pollTimer = null
-
-async function pollTick() {
-  try {
-    // Запросы независимы; pollNewMessages мерджит только новые id, не сбрасывая
-    // подгруженную историю и не показывая спиннер.
-    const tasks = [messenger.fetchConversations()]
-    if (activeId.value) {
-      tasks.push(messenger.pollNewMessages(activeId.value))
-    }
-    await Promise.allSettled(tasks)
-  } catch {}
-}
-
-function startPolling() {
-  stopPolling()
-  pollTimer = setInterval(() => {
-    if (document.visibilityState === 'visible') pollTick()
-  }, POLL_INTERVAL_MS)
-}
-
-function stopPolling() {
-  if (pollTimer) {
-    clearInterval(pollTimer)
-    pollTimer = null
-  }
-}
-
 onMounted(async () => {
   await messenger.fetchConversations()
   if (notificationsAllowed() === false) {
@@ -277,12 +244,10 @@ onMounted(async () => {
   await nextTick()
   scrollToBottom()
   window.addEventListener('messenger:open-conversation', handleExternalOpen)
-  startPolling()
 })
 
 onBeforeUnmount(() => {
   window.removeEventListener('messenger:open-conversation', handleExternalOpen)
-  stopPolling()
 })
 
 watch(() => messenger.activeMessages.length, async (n, prev) => {

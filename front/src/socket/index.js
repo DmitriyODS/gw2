@@ -41,14 +41,13 @@ export function connectSocket() {
   const auth = useAuthStore()
   if (!auth.token || socket?.connected) return
 
-  // В dev оставляем polling без upgrade — Vite proxy + WS upgrade ведёт себя
-  // нестабильно в некоторых окружениях, а полная потеря сокета хуже
-  // лимита HTTP-коннектов. Multi-tab надёжность обеспечивает polling-fallback
-  // в MessengerView (каждые ~5 сек) и resync при visibility/reconnect.
+  // upgrade на WebSocket: один long-lived коннект на вкладку, не упирается
+  // в HTTP-лимит браузера при нескольких вкладках. Vite proxy сконфигурирован
+  // с ws: true, так что upgrade корректно проходит через dev-сервер.
   socket = io('/', {
     auth: { token: auth.token },
     transports: ['polling', 'websocket'],
-    upgrade: !import.meta.env.DEV,
+    upgrade: true,
     reconnection: true,
     reconnectionAttempts: Infinity,
     reconnectionDelay: 1000,

@@ -28,9 +28,15 @@ def _init_extensions(app: Flask) -> None:
     migrate.init_app(app, db)
     jwt.init_app(app)
     limiter.init_app(app)
+    # message_queue нужен ТОЛЬКО при нескольких процессах socketio (горизонтальное
+    # масштабирование через Redis pubsub). У нас один процесс и в dev, и в prod —
+    # с message_queue эмит уходит в Redis-канал, а локальный subscriber-loop в
+    # eventlet поднимается не всегда корректно, из-за чего сокеты в том же
+    # процессе теряют события. Включать имеет смысл только при WEB_CONCURRENCY > 1.
+    use_mq = os.getenv("SOCKETIO_MESSAGE_QUEUE", "false").lower() in ("1", "true", "yes")
     socketio.init_app(
         app,
-        message_queue=app.config["REDIS_URL"],
+        message_queue=app.config["REDIS_URL"] if use_mq else None,
         cors_allowed_origins="*",
         async_mode="eventlet",
     )
