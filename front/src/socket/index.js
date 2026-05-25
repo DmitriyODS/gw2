@@ -41,12 +41,14 @@ export function connectSocket() {
   const auth = useAuthStore()
   if (!auth.token || socket?.connected) return
 
-  // upgrade на WebSocket: один long-lived коннект на вкладку, не упирается
-  // в HTTP-лимит браузера при нескольких вкладках. Vite proxy сконфигурирован
-  // с ws: true, так что upgrade корректно проходит через dev-сервер.
-  socket = io('/', {
+  // В dev подключаемся напрямую к Flask (5001), минуя Vite proxy:
+  // Vite ws-проксирование (http-proxy ws: true) нестабильно при upgrade
+  // и часто роняет WS-handshake. На бэке cors_allowed_origins="*", так что
+  // прямой коннект работает без CORS-проблем. В prod (один origin) — '/'.
+  const target = import.meta.env.DEV ? 'http://localhost:5001' : '/'
+  socket = io(target, {
     auth: { token: auth.token },
-    transports: ['polling', 'websocket'],
+    transports: ['websocket', 'polling'],
     upgrade: true,
     reconnection: true,
     reconnectionAttempts: Infinity,
