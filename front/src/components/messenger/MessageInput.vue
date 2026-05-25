@@ -1,7 +1,7 @@
 <template>
   <div class="msg-input">
     <div v-if="pending.length" class="pending-attachments">
-      <div v-for="(p, i) in pending" :key="p.id ?? ('tmp-' + i)" class="pending-att">
+      <div v-for="p in pending" :key="p._key" class="pending-att">
         <span v-if="p.uploading" class="pending-name uploading">
           <ProgressSpinner style="width:16px;height:16px" />
           {{ p.file_name }}
@@ -10,7 +10,7 @@
           <span class="material-symbols-outlined att-ico">{{ iconFor(p.mime_type) }}</span>
           <span class="pending-name">{{ p.file_name }}</span>
         </template>
-        <button class="remove-att" @click="removePending(i)" title="Убрать">
+        <button class="remove-att" @click="removePending(p._key)" title="Убрать">
           <span class="material-symbols-outlined">close</span>
         </button>
       </div>
@@ -76,30 +76,38 @@ function autoresize() {
   el.style.height = Math.min(el.scrollHeight, 180) + 'px'
 }
 
+/* Заметка по реактивности: pending хранит plain-objects, но при push() в ref
+   они оборачиваются Proxy. Мутация исходной ссылки `tmp` не доходит до Proxy,
+   и спиннер на чипе зависает, а canSend не разрешает отправку. Поэтому после
+   загрузки находим элемент по локальному ключу и заменяем его новым объектом. */
 async function onFiles(e) {
   const files = Array.from(e.target.files || [])
   e.target.value = ''
   for (const file of files) {
-    const tmp = {
+    const key = `${Date.now()}-${Math.random().toString(36).slice(2)}`
+    pending.value.push({
+      _key: key,
       file_name: file.name,
       mime_type: file.type,
       size_bytes: file.size,
       uploading: true,
-    }
-    pending.value.push(tmp)
+    })
     try {
       const att = await uploadAttachment(file)
-      Object.assign(tmp, att, { uploading: false })
+      const idx = pending.value.findIndex(p => p._key === key)
+      if (idx !== -1) {
+        pending.value[idx] = { ...pending.value[idx], ...att, uploading: false }
+      }
     } catch (err) {
-      pending.value = pending.value.filter(p => p !== tmp)
+      pending.value = pending.value.filter(p => p._key !== key)
       console.error('upload failed', err)
       window.alert(err?.message || 'Не удалось загрузить файл')
     }
   }
 }
 
-function removePending(i) {
-  pending.value.splice(i, 1)
+function removePending(key) {
+  pending.value = pending.value.filter(p => p._key !== key)
 }
 
 async function submit() {
