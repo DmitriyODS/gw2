@@ -16,8 +16,10 @@ class Message(db.Model):
 
     conversation = db.relationship("Conversation", back_populates="messages")
     sender = db.relationship("User")
+    # selectin вместо joined: joined-load на коллекцию заставляет вызывать
+    # .unique() на каждом Result, что ломает list_user_conversations.
     attachments = db.relationship("MessageAttachment", back_populates="message",
-                                  cascade="all, delete-orphan", lazy="joined")
+                                  cascade="all, delete-orphan", lazy="selectin")
 
     __table_args__ = (
         db.Index("idx_msg_conv_created", "conversation_id", "created_at"),
