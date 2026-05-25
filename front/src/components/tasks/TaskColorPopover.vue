@@ -31,9 +31,21 @@ const popoverRef = ref(null)
 const anchorRect = ref(null)
 const positionStyle = ref({})
 
-const POPOVER_WIDTH = 220
 const SCREEN_PADDING = 12
 const GAP = 8
+
+// Подбираем ширину так, чтобы 9 свотчей (28 или 36 пкс + 8px gap) разложились
+// аккуратной сеткой. 3 ряда по 3 на десктопе, 3 ряда по 3 на мобильном.
+function pickPopoverWidth(vw) {
+  const mobile = vw <= 768
+  const swatch = mobile ? 36 : 28
+  const cols = 3
+  const padding = 12 * 2
+  return Math.min(
+    vw - SCREEN_PADDING * 2,
+    swatch * cols + GAP * (cols - 1) + padding,
+  )
+}
 
 function recompute() {
   if (!props.anchor) {
@@ -44,9 +56,10 @@ function recompute() {
   anchorRect.value = rect
   const vw = window.innerWidth
   const vh = window.innerHeight
+  const width = pickPopoverWidth(vw)
 
   // По умолчанию выравниваем правый край попапа с правым краем кнопки
-  let left = Math.min(rect.right - POPOVER_WIDTH, vw - POPOVER_WIDTH - SCREEN_PADDING)
+  let left = Math.min(rect.right - width, vw - width - SCREEN_PADDING)
   left = Math.max(SCREEN_PADDING, left)
 
   // По вертикали — снизу под кнопкой, либо сверху если внизу не помещается
@@ -58,7 +71,7 @@ function recompute() {
   positionStyle.value = {
     left: `${Math.round(left)}px`,
     top: `${Math.round(top)}px`,
-    width: `${POPOVER_WIDTH}px`,
+    width: `${Math.round(width)}px`,
   }
 }
 

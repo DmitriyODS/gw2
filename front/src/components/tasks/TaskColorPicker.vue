@@ -49,6 +49,7 @@ function select(id) {
 .color-swatch {
   width: 28px;
   height: 28px;
+  min-height: 28px;
   border-radius: 50%;
   border: 2px solid transparent;
   background: var(--swatch);
@@ -58,8 +59,21 @@ function select(id) {
   justify-content: center;
   padding: 0;
   flex-shrink: 0;
+  flex-grow: 0;
+  box-sizing: border-box;
+  aspect-ratio: 1 / 1;
   transition: transform 0.12s, border-color 0.12s;
   box-shadow: var(--shadow-sm);
+}
+
+/* На мобильных глобально включён min-height: 36px для тап-таргетов —
+   синхронизируем ширину/высоту, чтобы свотчи оставались круглыми. */
+@media (max-width: 768px) {
+  .color-swatch {
+    width: 36px;
+    height: 36px;
+    min-height: 36px;
+  }
 }
 
 .color-swatch:hover {
