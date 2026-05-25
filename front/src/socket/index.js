@@ -41,14 +41,14 @@ export function connectSocket() {
   const auth = useAuthStore()
   if (!auth.token || socket?.connected) return
 
-  // В dev подключаемся напрямую к Flask (5001), минуя Vite proxy:
-  // Vite ws-проксирование (http-proxy ws: true) нестабильно при upgrade
-  // и часто роняет WS-handshake. На бэке cors_allowed_origins="*", так что
-  // прямой коннект работает без CORS-проблем. В prod (один origin) — '/'.
+  // В dev подключаемся напрямую к Flask (5001), минуя Vite proxy.
+  // Порядок transports важен: ['polling', 'websocket'] = стандартный socket.io
+  // flow — сначала HTTP polling устанавливает sid, затем upgrade на WS.
+  // Прямой WS без polling часто фейлится handshake'ом.
   const target = import.meta.env.DEV ? 'http://localhost:5001' : '/'
   socket = io(target, {
     auth: { token: auth.token },
-    transports: ['websocket', 'polling'],
+    transports: ['polling', 'websocket'],
     upgrade: true,
     reconnection: true,
     reconnectionAttempts: Infinity,
