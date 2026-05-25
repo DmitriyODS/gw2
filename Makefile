@@ -45,8 +45,11 @@ dev-migrate: dev-infra
 	@printf "\033[32m✓ Миграции применены\033[0m\n"
 
 dev-back: dev-migrate
-	@printf "\033[1m▶ Flask :5001\033[0m\n"
-	cd back && . venv/bin/activate && flask run --debug --port 5001
+	@printf "\033[1m▶ Flask + eventlet :5001\033[0m\n"
+	@# Запускаем через wsgi.py (eventlet). Werkzeug-сервер из flask run
+	@# не поддерживает WebSocket — поэтому socket.io WS-upgrade на нём фейлится.
+	@# Auto-reload в dev отсутствует: перезапускайте процесс после изменений.
+	cd back && . venv/bin/activate && PORT=5001 python wsgi.py
 
 dev-front:
 	@printf "\033[1m▶ Vite :5173\033[0m\n"

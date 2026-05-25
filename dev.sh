@@ -31,9 +31,10 @@ printf "\033[1m▶ Миграции...\033[0m\n"
 (cd "$BACK" && . venv/bin/activate && flask db upgrade)
 printf "\033[32m  Готово\033[0m\n\n"
 
-# 3. Flask
-printf "\033[1m▶ Flask :5001...\033[0m\n"
-(cd "$BACK" && . venv/bin/activate && flask run --debug --port 5001 2>&1 \
+# 3. Flask + eventlet (через wsgi.py) — werkzeug-сервер flask run не
+#    поддерживает WebSocket, для socket.io WS обязателен eventlet.
+printf "\033[1m▶ Flask + eventlet :5001...\033[0m\n"
+(cd "$BACK" && . venv/bin/activate && PORT=5001 python wsgi.py 2>&1 \
     | awk '{print "\033[36m[back]\033[0m  " $0; fflush()}') &
 BACK_PID=$!
 

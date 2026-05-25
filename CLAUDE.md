@@ -91,7 +91,9 @@ make dev-front       # Vite :5173 (второй терминал)
 make dev-stop        # остановить контейнеры
 ```
 
-Flask dev-сервер — порт **5001**. Vite — **5173**. `.flaskenv` содержит локальные настройки.
+Flask dev-сервер — порт **5001** (запускается через `python wsgi.py`, **eventlet**). Vite — **5173**. `.flaskenv` содержит локальные настройки.
+
+**Важно про WebSocket:** dev-команды НЕ используют `flask run` — werkzeug-сервер не поддерживает WS-upgrade, и socket.io падает с `You need to use the eventlet server`. Правильный запуск — `python wsgi.py` (там `eventlet.monkey_patch()` + `socketio.run(app, debug=False)`). Платой за это стало отсутствие auto-reload: после правки бэк-кода процесс нужно перезапустить вручную (Ctrl+C → запустить снова). В `wsgi.py` `debug=False` намеренно — `socketio.run(..., debug=True)` переключает на werkzeug, который опять же ломает WS.
 
 **Если БД не принимает пароль** (pg_data volume от старого запуска):
 ```bash
