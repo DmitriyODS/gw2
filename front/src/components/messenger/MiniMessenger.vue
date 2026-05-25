@@ -97,6 +97,7 @@ import { ref, computed, watch, nextTick } from 'vue'
 import { useRoute } from 'vue-router'
 import { useMessengerStore } from '@/stores/messenger.js'
 import { useAuthStore } from '@/stores/auth.js'
+import { useBreakpoint } from '@/composables/useBreakpoint.js'
 import MessageBubble from './MessageBubble.vue'
 import MessageInput from './MessageInput.vue'
 import ProgressSpinner from 'primevue/progressspinner'
@@ -104,6 +105,7 @@ import ProgressSpinner from 'primevue/progressspinner'
 const route = useRoute()
 const messenger = useMessengerStore()
 const authStore = useAuthStore()
+const { isMobile } = useBreakpoint()
 
 const open = ref(false)
 const threadId = ref(null)
@@ -141,7 +143,9 @@ async function onDrop(e) {
 }
 
 // На полном экране мессенджера FAB не нужен — там есть всё то же самое.
-const hidden = computed(() => route.path.startsWith('/messenger'))
+// На мобильном тоже скрываем: есть вкладка «Чаты» в нижней навигации, а FAB
+// налезал бы на кнопку создания задачи и прочие действия.
+const hidden = computed(() => isMobile.value || route.path.startsWith('/messenger'))
 
 const threadConv = computed(() =>
   messenger.conversations.find(c => c.id === threadId.value) || null

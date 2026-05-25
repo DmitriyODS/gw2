@@ -423,17 +423,29 @@ function formatTime(iso) {
 
 /* Действия на карточке диалога — показываются на hover, на тач-устройствах
    видны всегда (по media (hover: none)). */
+/* Абсолютно позиционируем, чтобы вне ховера действия не «съедали» ширину
+   карточки (раньше прозрачные кнопки оставляли пустоту справа). На ховере
+   выезжают плавающим чипом поверх правого края. */
 .conv-actions {
+  position: absolute;
+  right: 10px;
+  top: 50%;
+  transform: translateY(-50%);
   display: flex;
   gap: 2px;
+  padding: 2px;
+  border-radius: var(--radius-full);
+  background: var(--color-surface-high);
+  box-shadow: var(--shadow-sm);
   opacity: 0;
+  pointer-events: none;
   transition: opacity 0.15s;
-  flex-shrink: 0;
 }
 
 .conv-item:hover .conv-actions,
 .conv-item:focus-within .conv-actions {
   opacity: 1;
+  pointer-events: auto;
 }
 
 .conv-action {
@@ -469,7 +481,17 @@ function formatTime(iso) {
 }
 
 @media (hover: none) {
-  .conv-actions { opacity: 1; }
+  /* На тач-устройствах кнопки видны всегда и встроены в поток (без наложения
+     на время/бейдж). */
+  .conv-actions {
+    position: static;
+    transform: none;
+    background: transparent;
+    box-shadow: none;
+    opacity: 1;
+    pointer-events: auto;
+    flex-shrink: 0;
+  }
 }
 
 @media (max-width: 768px) {
