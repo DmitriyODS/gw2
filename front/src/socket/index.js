@@ -41,13 +41,18 @@ export function connectSocket() {
   const auth = useAuthStore()
   if (!auth.token || socket?.connected) return
 
-  // upgrade: true даже в dev — иначе при двух открытых вкладках polling
-  // упирается в лимит одновременных HTTP-коннектов браузера на origin,
-  // и реалтайм-события у второй вкладки начинают теряться/запаздывать.
+  // В dev оставляем polling без upgrade — Vite proxy + WS upgrade ведёт себя
+  // нестабильно в некоторых окружениях, а полная потеря сокета хуже
+  // лимита HTTP-коннектов. Multi-tab надёжность обеспечивает polling-fallback
+  // в MessengerView (каждые ~5 сек) и resync при visibility/reconnect.
   socket = io('/', {
     auth: { token: auth.token },
     transports: ['polling', 'websocket'],
-    upgrade: true,
+    upgrade: !import.meta.env.DEV,
+    reconnection: true,
+    reconnectionAttempts: Infinity,
+    reconnectionDelay: 1000,
+    reconnectionDelayMax: 5000,
   })
 
   installVisibilityResync()

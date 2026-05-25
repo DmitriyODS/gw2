@@ -126,8 +126,10 @@ _MIN_DT = datetime(1970, 1, 1, tzinfo=timezone.utc)
 
 
 def list_messages(conversation_id: int, user_id: int, before_id: Optional[int] = None,
-                  limit: int = 50) -> list[Message]:
-    """Сообщения диалога без тех, что скрыты на стороне user_id."""
+                  after_id: Optional[int] = None, limit: int = 50) -> list[Message]:
+    """Сообщения диалога без тех, что скрыты на стороне user_id.
+    - before_id: пагинация назад в историю (для подгрузки старых сообщений).
+    - after_id: только новые сообщения с момента last seen id (для silent poll)."""
     conv = get_conversation(conversation_id)
     if conv is None:
         return []
@@ -138,9 +140,13 @@ def list_messages(conversation_id: int, user_id: int, before_id: Optional[int] =
     )
     if before_id is not None:
         q = q.where(Message.id < before_id)
+    if after_id is not None:
+        q = q.where(Message.id > after_id)
+        # При after_id возвращаем в прямом порядке (старые → новые), без переворота
+        rows = db.session.execute(q.order_by(Message.id.asc()).limit(limit)).scalars().all()
+        return list(rows)
     q = q.order_by(Message.id.desc()).limit(limit)
     rows = db.session.execute(q).scalars().all()
-    # Возвращаем в хронологическом порядке (старые → новые)
     return list(reversed(rows))
 
 

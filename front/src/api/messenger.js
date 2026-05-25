@@ -6,9 +6,10 @@ export const listConversations = () =>
 export const openConversation = (userId) =>
   apiRequest('/messenger/conversations', { method: 'POST', body: { user_id: userId } })
 
-export const listMessages = (conversationId, beforeId = null, limit = 50) => {
+export const listMessages = (conversationId, { beforeId = null, afterId = null, limit = 50 } = {}) => {
   const params = new URLSearchParams()
   if (beforeId) params.set('before_id', String(beforeId))
+  if (afterId) params.set('after_id', String(afterId))
   if (limit) params.set('limit', String(limit))
   const qs = params.toString()
   return apiRequest(`/messenger/conversations/${conversationId}/messages${qs ? '?' + qs : ''}`)

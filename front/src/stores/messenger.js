@@ -98,7 +98,7 @@ export const useMessengerStore = defineStore('messenger', () => {
   async function fetchMessages(conversationId, beforeId = null) {
     loadingMessages.value = true
     try {
-      const msgs = await api.listMessages(conversationId, beforeId)
+      const msgs = await api.listMessages(conversationId, { beforeId })
       const existing = messagesByConv.value[conversationId] || []
       if (beforeId) {
         messagesByConv.value[conversationId] = [...msgs, ...existing]
@@ -108,6 +108,20 @@ export const useMessengerStore = defineStore('messenger', () => {
     } finally {
       loadingMessages.value = false
     }
+  }
+
+  /* Тихий polling-fallback: подтягивает только сообщения новее последнего
+     известного id. Не трогает loadingMessages и не сбрасывает скролл/историю. */
+  async function pollNewMessages(conversationId) {
+    const existing = messagesByConv.value[conversationId] || []
+    const lastId = existing.length ? existing[existing.length - 1].id : 0
+    try {
+      const fresh = await api.listMessages(conversationId, { afterId: lastId, limit: 100 })
+      if (!fresh.length) return
+      for (const m of fresh) {
+        applyIncomingMessage(conversationId, m, m.sender_id === useAuthStore().user?.id)
+      }
+    } catch {}
   }
 
   async function send(conversationId, { text, attachment_ids }) {
@@ -250,6 +264,7 @@ export const useMessengerStore = defineStore('messenger', () => {
     loadingList, loadingMessages, sending,
     activeConversation, activeMessages,
     fetchConversations, fetchUnreadCount, openWith, setActive, fetchMessages,
+    pollNewMessages,
     send, markRead,
     applyIncomingMessage, applyReadReceipt,
     applyMessageDeleted, applyConversationDeleted, applyPinChange,

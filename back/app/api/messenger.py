@@ -109,8 +109,11 @@ def list_messages(conversation_id: int):
         return jsonify({"error": e.code, "message": e.message}), e.http_status
 
     before_id = request.args.get("before_id", type=int)
+    after_id = request.args.get("after_id", type=int)
     limit = min(int(request.args.get("limit", 50)), 200)
-    msgs = message_repo.list_messages(conv.id, user_id=me, before_id=before_id, limit=limit)
+    msgs = message_repo.list_messages(
+        conv.id, user_id=me, before_id=before_id, after_id=after_id, limit=limit,
+    )
     return jsonify(_msgs.dump(msgs)), 200
 
 
