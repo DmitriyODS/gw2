@@ -2,9 +2,21 @@
   <div class="stats-view">
     <header class="stats-header">
       <h1>Статистика</h1>
-      <div class="stats-mode-toggle">
-        <button data-tutorial="stats-tab-common" :class="{ active: mode === 'common' }" @click="switchMode('common')">Общая</button>
-        <button data-tutorial="stats-tab-extended" :class="{ active: mode === 'extended' }" @click="switchMode('extended')">Расширенная</button>
+      <div class="stats-header-actions">
+        <a
+          href="/tv"
+          target="_blank"
+          rel="noopener"
+          class="tv-link-btn"
+          title="Открыть ТВ-режим в новой вкладке"
+        >
+          <span class="material-symbols-outlined">tv</span>
+          ТВ-режим
+        </a>
+        <div class="stats-mode-toggle">
+          <button data-tutorial="stats-tab-common" :class="{ active: mode === 'common' }" @click="switchMode('common')">Общая</button>
+          <button data-tutorial="stats-tab-extended" :class="{ active: mode === 'extended' }" @click="switchMode('extended')">Расширенная</button>
+        </div>
       </div>
     </header>
 
@@ -303,6 +315,39 @@ onMounted(async () => {
   font-size: 24px;
   font-weight: 800;
   color: var(--gw-text);
+}
+
+.stats-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.tv-link-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 16px;
+  border: 1px solid var(--color-outline-dim);
+  border-radius: 999px;
+  background: var(--color-surface);
+  color: var(--color-text);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  text-decoration: none;
+  transition: background 0.12s, color 0.12s, border-color 0.12s;
+}
+
+.tv-link-btn:hover {
+  background: var(--color-primary);
+  color: var(--color-on-primary);
+  border-color: var(--color-primary);
+}
+
+.tv-link-btn .material-symbols-outlined {
+  font-size: 18px;
 }
 
 .stats-mode-toggle {

@@ -2,7 +2,7 @@ from datetime import datetime
 from typing import Optional
 from sqlalchemy import desc, asc, func, exists, and_
 from app.extensions import db
-from app.models import Task, Unit, Favorite
+from app.models import Task, Unit, Favorite, UserTaskColor
 
 
 def get_by_id(task_id: int) -> Optional[Task]:
@@ -176,3 +176,41 @@ def toggle_favorite(task_id: int, user_id: int) -> bool:
         db.session.add(Favorite(task_id=task_id, user_id=user_id))
         db.session.flush()
         return True
+
+
+def get_user_color(task_id: int, user_id: int) -> Optional[str]:
+    return db.session.execute(
+        db.select(UserTaskColor.color).where(
+            UserTaskColor.task_id == task_id, UserTaskColor.user_id == user_id
+        )
+    ).scalar_one_or_none()
+
+
+def get_user_colors_by_task_ids(task_ids: list, user_id: int) -> dict:
+    if not task_ids:
+        return {}
+    rows = db.session.execute(
+        db.select(UserTaskColor.task_id, UserTaskColor.color).where(
+            UserTaskColor.user_id == user_id,
+            UserTaskColor.task_id.in_(task_ids),
+        )
+    ).all()
+    return {r.task_id: r.color for r in rows}
+
+
+def set_user_color(task_id: int, user_id: int, color: Optional[str]) -> None:
+    rec = db.session.execute(
+        db.select(UserTaskColor).where(
+            UserTaskColor.task_id == task_id, UserTaskColor.user_id == user_id
+        )
+    ).scalar_one_or_none()
+    if color is None:
+        if rec is not None:
+            db.session.delete(rec)
+            db.session.flush()
+        return
+    if rec is None:
+        db.session.add(UserTaskColor(task_id=task_id, user_id=user_id, color=color))
+    else:
+        rec.color = color
+    db.session.flush()

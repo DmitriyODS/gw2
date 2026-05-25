@@ -14,8 +14,9 @@
               v-model="loginForm.login"
               type="text"
               class="pill-input"
-              :disabled="loading"
+              :disabled="isLoginDisabled"
               autocomplete="username"
+              placeholder="Введите логин"
             />
           </div>
           <div class="form-group">
@@ -25,8 +26,9 @@
                 v-model="loginForm.password"
                 :type="showLoginPassword ? 'text' : 'password'"
                 class="pill-input"
-                :disabled="loading"
+                :disabled="isLoginDisabled"
                 autocomplete="current-password"
+                placeholder="Введите пароль"
               />
               <button type="button" class="eye-btn" @click="showLoginPassword = !showLoginPassword" tabindex="-1">
                 <svg v-if="!showLoginPassword" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
@@ -34,9 +36,16 @@
               </button>
             </div>
           </div>
-          <p v-if="loginError" class="error-msg">{{ loginError }}</p>
-          <button type="submit" class="btn-login" :disabled="loading">
-            {{ loading ? 'Входим...' : 'Войти' }}
+          <div v-if="cooldownSec > 0" class="cooldown-box" role="status" aria-live="polite">
+            <span class="material-symbols-outlined">lock_clock</span>
+            <div class="cooldown-text">
+              <div class="cooldown-title">Слишком много неудачных попыток</div>
+              <div class="cooldown-sub">Попробуйте снова через {{ formattedCooldown }}</div>
+            </div>
+          </div>
+          <p v-else-if="loginError" class="error-msg">{{ loginError }}</p>
+          <button type="submit" class="btn-login" :disabled="isLoginDisabled">
+            {{ loginButtonLabel }}
           </button>
         </form>
       </div>
@@ -63,6 +72,7 @@
             type="text"
             class="pill-input"
             autocomplete="new-username"
+            placeholder="Не короче 3 символов"
           />
         </div>
         <div class="form-group">
@@ -73,6 +83,7 @@
               :type="showNewPassword ? 'text' : 'password'"
               class="pill-input"
               autocomplete="new-password"
+              placeholder="Не короче 8 символов"
             />
             <button type="button" class="eye-btn" @click="showNewPassword = !showNewPassword" tabindex="-1">
               <svg v-if="!showNewPassword" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
@@ -88,6 +99,7 @@
               :type="showConfirmPassword ? 'text' : 'password'"
               class="pill-input"
               autocomplete="new-password"
+              placeholder="Повторите новый пароль"
             />
             <button type="button" class="eye-btn" @click="showConfirmPassword = !showConfirmPassword" tabindex="-1">
               <svg v-if="!showConfirmPassword" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
@@ -105,7 +117,7 @@
 </template>
 
 <script setup>
-import { ref, reactive, onMounted } from 'vue'
+import { ref, reactive, computed, onMounted, onBeforeUnmount } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth.js'
 import { useThemeStore } from '@/stores/theme.js'
@@ -122,18 +134,56 @@ const loading = ref(false)
 const showChangeModal = ref(false)
 const showLoginPassword = ref(false)
 
+// Брутфорс-блокировка: бэк отвечает 429 + retry_after_sec, локально
+// тикаем секунды и блокируем форму до конца таймера.
+const cooldownSec = ref(0)
+let cooldownTimer = null
+
 const changeForm = reactive({ login: '', password: '', confirmPassword: '' })
 const changeError = ref('')
 const changeLoading = ref(false)
 const showNewPassword = ref(false)
 const showConfirmPassword = ref(false)
 
+const isLoginDisabled = computed(() => loading.value || cooldownSec.value > 0)
+
+const formattedCooldown = computed(() => {
+  const s = cooldownSec.value
+  if (s < 60) return `${s} с`
+  const m = Math.floor(s / 60)
+  const rest = s % 60
+  return rest > 0 ? `${m} мин ${rest} с` : `${m} мин`
+})
+
+const loginButtonLabel = computed(() => {
+  if (cooldownSec.value > 0) return `Подождите ${formattedCooldown.value}`
+  return loading.value ? 'Входим...' : 'Войти'
+})
+
+function startCooldown(seconds) {
+  cooldownSec.value = Math.max(0, Math.floor(seconds))
+  if (cooldownTimer) clearInterval(cooldownTimer)
+  if (cooldownSec.value <= 0) return
+  cooldownTimer = setInterval(() => {
+    cooldownSec.value -= 1
+    if (cooldownSec.value <= 0) {
+      clearInterval(cooldownTimer)
+      cooldownTimer = null
+    }
+  }, 1000)
+}
+
 onMounted(() => {
   themeStore.init()
 })
 
+onBeforeUnmount(() => {
+  if (cooldownTimer) clearInterval(cooldownTimer)
+})
+
 async function handleLogin() {
   loginError.value = ''
+  if (cooldownSec.value > 0) return
   if (!loginForm.login || !loginForm.password) {
     loginError.value = 'Введите логин и пароль'
     return
@@ -147,8 +197,12 @@ async function handleLogin() {
       connectSocket()
       router.push('/tasks')
     }
-  } catch {
-    loginError.value = 'Неверный логин или пароль'
+  } catch (e) {
+    if (e?.status === 429 && e?.retry_after_sec) {
+      startCooldown(e.retry_after_sec)
+    } else {
+      loginError.value = e?.message || 'Неверный логин или пароль'
+    }
   } finally {
     loading.value = false
   }
@@ -317,6 +371,41 @@ async function handleChangeDefault() {
   border-radius: 999px;
   border: 1px solid color-mix(in oklch, var(--color-error) 30%, var(--color-outline-dim));
   text-align: center;
+}
+
+.cooldown-box {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  border-radius: var(--radius-lg);
+  background: var(--color-error-container);
+  color: var(--color-on-error-container);
+  border: 1px solid color-mix(in oklch, var(--color-error) 30%, var(--color-outline-dim));
+}
+
+.cooldown-box .material-symbols-outlined {
+  font-size: 26px;
+  flex-shrink: 0;
+}
+
+.cooldown-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.cooldown-title {
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.3;
+}
+
+.cooldown-sub {
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+  opacity: 0.9;
 }
 
 .btn-login {

@@ -21,3 +21,7 @@ export const archiveTask = (taskId) => apiRequest(`/tasks/${taskId}/archive`, { 
 export const toggleFavorite = (taskId) => apiRequest(`/tasks/${taskId}/favorite`, { method: 'POST' })
 
 export const restoreTask = (taskId) => apiRequest(`/tasks/${taskId}/restore`, { method: 'POST' })
+
+// Индивидуальный цвет карточки для текущего пользователя (передать color=null чтобы снять)
+export const setTaskColor = (taskId, color) =>
+  apiRequest(`/tasks/${taskId}/color`, { method: 'PUT', body: { color } })

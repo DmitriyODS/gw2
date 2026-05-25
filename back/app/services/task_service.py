@@ -107,3 +107,12 @@ def toggle_favorite(task_id: int, user_id: int) -> bool:
     is_fav = task_repo.toggle_favorite(task_id, user_id)
     db.session.commit()
     return is_fav
+
+
+def set_user_color(task_id: int, user_id: int, color):
+    task = task_repo.get_by_id(task_id)
+    if task is None:
+        raise TaskServiceError("Задача не найдена", "NOT_FOUND", 404)
+
+    task_repo.set_user_color(task_id, user_id, color)
+    db.session.commit()

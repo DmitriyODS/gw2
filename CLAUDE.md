@@ -125,9 +125,17 @@ Nginx собирает фронт сам через multi-stage `front/Dockerfil
 
 `[data-dark="true"]` — тёмная тема. `--gw-*` — алиасы для совместимости.
 
-**Цвета-теги задач:** фиксированный набор из 8 пастельных цветов (`red, orange, amber, green, teal, blue, violet, pink`). Токены `--tag-<name>-surface/-border/-accent` в `tokens.css` (адаптированы под светлую/тёмную тему). Значение хранится в `tasks.color`, набор продублирован в `front/src/utils/taskColors.js` и `back/app/schemas/task.py` (`TASK_COLORS`).
+**Цвета-теги задач:** фиксированный набор из 8 пастельных цветов (`red, orange, amber, green, teal, blue, violet, pink`). Токены `--tag-<name>-surface/-border/-accent` в `tokens.css` (адаптированы под светлую/тёмную тему). Цвет **индивидуален для пользователя** — хранится в таблице `user_task_colors (user_id, task_id, color)`. Управление: `PUT /api/tasks/:id/color` с `{color}`. В ответах `_enrich_task` подставляет цвет именно текущего пользователя; в сокет-броадкастах `task:created`/`task:updated` поле `color` вырезается, чтобы чужие клиенты не перезаписали свой цвет. Старый столбец `tasks.color` оставлен как технический архив. Набор продублирован в `front/src/utils/taskColors.js` и `back/app/schemas/task.py` (`TASK_COLORS`).
 
 **Правило:** никаких `#hex` или `rgba()` в компонентах — только `--color-*` / `--tag-*` токены.
+
+## ТВ-режим
+
+Маршрут `/tv` (фронт). Открывается в новой вкладке кнопкой на экране статистики, рендерится без сайдбара/нижней навигации (роут с `meta.fullscreen=true`, App.vue смотрит на `route.meta.fullscreen`). Три слайда — день/неделя/месяц — листаются автоматически каждые 10 секунд (`SLIDE_MS`). Данные тянутся из `/api/stats/common` и `/api/stats/extended`, обновляются раз в минуту (`REFRESH_MS`). Внизу — кнопки prev/pause/next и переключение полноэкранного режима (Fullscreen API).
+
+## Защита от подбора пароля
+
+Хранится в Redis (`gw2:bf:attempts:{login}` и `gw2:bf:locked_until:{login}`). После каждых 5 неудачных подряд попыток ставится блокировка на `10 * 2**(steps-1)` секунд (10с, 20с, 40с…). Удачный логин обнуляет счётчик. Бэк отвечает `429 {retry_after_sec}`, фронт показывает таймер на `LoginView`. Логика — `back/app/services/login_throttle.py`.
 
 ## Swagger UI
 

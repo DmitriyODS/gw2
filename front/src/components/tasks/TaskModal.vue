@@ -46,19 +46,21 @@
                 {{ task.is_favorite ? 'favorite' : 'favorite_border' }}
               </span>
             </button>
-            <div class="color-wrapper">
-              <button
-                class="icon-btn-round"
-                :class="{ active: showColorPicker }"
-                @click="showColorPicker = !showColorPicker"
-                title="Цвет задачи"
-              >
-                <span class="material-symbols-outlined">palette</span>
-              </button>
-              <div v-if="showColorPicker" class="color-popover" @click.stop>
-                <TaskColorPicker :model-value="task.color || null" @select="handleSetColor" />
-              </div>
-            </div>
+            <button
+              ref="colorBtnRef"
+              class="icon-btn-round"
+              :class="{ active: showColorPicker }"
+              @click="showColorPicker = !showColorPicker"
+              title="Цвет задачи"
+            >
+              <span class="material-symbols-outlined">palette</span>
+            </button>
+            <TaskColorPopover
+              v-model="showColorPicker"
+              :anchor="colorBtnRef"
+              :value="task.color || null"
+              @select="handleSetColor"
+            />
             <button v-if="canEditTask" class="icon-btn-round" @click="showEditForm = true" title="Редактировать">
               <span class="material-symbols-outlined">edit</span>
             </button>
@@ -241,11 +243,11 @@ import Dialog from 'primevue/dialog'
 import { useBreakpoint } from '@/composables/useBreakpoint.js'
 import UnitListItem from '@/components/tasks/UnitListItem.vue'
 import TaskForm from '@/components/tasks/TaskForm.vue'
-import TaskColorPicker from '@/components/tasks/TaskColorPicker.vue'
+import TaskColorPopover from '@/components/tasks/TaskColorPopover.vue'
 import StartUnitModal from '@/components/units/StartUnitModal.vue'
 import UnitEditModal from '@/components/units/UnitEditModal.vue'
 import { getUnits, deleteUnit } from '@/api/units.js'
-import { deleteTask, archiveTask, restoreTask, toggleFavorite as apiFavorite, updateTask } from '@/api/tasks.js'
+import { deleteTask, archiveTask, restoreTask, toggleFavorite as apiFavorite, setTaskColor } from '@/api/tasks.js'
 import { useTasksStore } from '@/stores/tasks.js'
 import { useUnitsStore } from '@/stores/units.js'
 import { useNotificationsStore } from '@/stores/notifications.js'
@@ -293,6 +295,7 @@ const showStartUnit = ref(false)
 const showColorPicker = ref(false)
 const editingUnit = ref(null)
 const actionLoading = ref(false)
+const colorBtnRef = ref(null)
 
 const confirmDialog = ref({
   visible: false,
@@ -481,7 +484,7 @@ async function handleSetColor(color) {
   if (prev === color) return
   tasksStore.patchTask({ id: props.task.id, color })
   try {
-    await updateTask(props.task.id, { color })
+    await setTaskColor(props.task.id, color)
   } catch (e) {
     tasksStore.patchTask({ id: props.task.id, color: prev })
     notifications.error(e?.message || 'Не удалось изменить цвет')
@@ -578,24 +581,6 @@ async function handleSetColor(color) {
 .icon-btn-round .material-symbols-outlined.filled {
   color: var(--color-error);
   font-variation-settings: 'FILL' 1;
-}
-
-.color-wrapper {
-  position: relative;
-  display: flex;
-}
-
-.color-popover {
-  position: absolute;
-  top: calc(100% + 6px);
-  right: 0;
-  z-index: 60;
-  background: var(--color-surface);
-  border: 1px solid var(--gw-border);
-  border-radius: var(--radius-md);
-  box-shadow: var(--shadow-lg);
-  padding: 10px;
-  width: 132px;
 }
 
 .task-title {

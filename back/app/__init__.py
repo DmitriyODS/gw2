@@ -37,7 +37,7 @@ def _init_extensions(app: Flask) -> None:
 
     # Импорт моделей чтобы Alembic их видел
     with app.app_context():
-        from app.models import Role, User, Department, Task, Favorite, UnitType, Unit  # noqa
+        from app.models import Role, User, Department, Task, Favorite, UnitType, Unit, UserTaskColor  # noqa
 
 
 def _register_blueprints(app: Flask) -> None:
@@ -125,7 +125,7 @@ def _init_swagger(app: Flask) -> None:
         "info": {
             "title": "Grove Work API",
             "description": "REST API платформы учёта задач и времени Grove Work v2.0",
-            "version": "2.0.0",
+            "version": "2.3.0",
         },
         "securityDefinitions": {
             "BearerAuth": {

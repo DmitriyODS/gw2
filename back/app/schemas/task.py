@@ -47,4 +47,7 @@ class TaskUpdateSchema(Schema):
     department_id = fields.Int()
     received_at = fields.Date(allow_none=True)
     deadline = fields.Date(allow_none=True)
-    color = fields.Str(allow_none=True, validate=validate.OneOf(TASK_COLORS))
+
+
+class TaskColorSchema(Schema):
+    color = fields.Str(allow_none=True, load_default=None, validate=validate.OneOf(TASK_COLORS))

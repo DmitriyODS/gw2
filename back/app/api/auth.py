@@ -64,7 +64,10 @@ def login():
     try:
         result = auth_service.login(data["login"], data["password"])
     except AuthError as e:
-        return jsonify({"error": e.code, "message": e.message}), e.http_status
+        body = {"error": e.code, "message": e.message}
+        if getattr(e, "extra", None):
+            body.update(e.extra)
+        return jsonify(body), e.http_status
 
     resp = make_response(jsonify({
         "access_token": result["access_token"],

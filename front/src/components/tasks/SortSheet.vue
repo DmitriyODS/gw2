@@ -17,6 +17,10 @@
           <span v-if="tasksStore.filters.sort === s.value" class="material-symbols-outlined sort-check">check</span>
         </button>
       </div>
+      <button class="reset-btn" @click="resetAll">
+        <span class="material-symbols-outlined">restart_alt</span>
+        Сбросить сортировку
+      </button>
     </div>
   </Teleport>
 </template>
@@ -44,6 +48,11 @@ const sorts = [
 
 function select(value) {
   tasksStore.setFilter('sort', value)
+  emit('close')
+}
+
+function resetAll() {
+  tasksStore.resetFilters()
   emit('close')
 }
 </script>
@@ -141,5 +150,32 @@ function select(value) {
 .sort-check {
   font-size: 18px !important;
   color: var(--gw-primary);
+}
+
+.reset-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  margin-top: 8px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  border: 1px solid var(--gw-border);
+  background: transparent;
+  color: var(--gw-text);
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.12s, color 0.12s, border-color 0.12s;
+}
+
+.reset-btn:hover {
+  background: var(--color-error-container);
+  color: var(--color-on-error-container);
+  border-color: color-mix(in oklch, var(--color-error) 40%, var(--color-outline-dim));
+}
+
+.reset-btn .material-symbols-outlined {
+  font-size: 18px;
 }
 </style>

@@ -136,7 +136,7 @@ import { useTasksStore } from '@/stores/tasks.js'
 import { useUnitsStore } from '@/stores/units.js'
 import { useNotificationsStore } from '@/stores/notifications.js'
 import { usePermission, ROLES } from '@/composables/usePermission.js'
-import { toggleFavorite as apiFavorite, updateTask } from '@/api/tasks.js'
+import { toggleFavorite as apiFavorite, setTaskColor } from '@/api/tasks.js'
 import TaskCard from '@/components/tasks/TaskCard.vue'
 import TaskFilters from '@/components/tasks/TaskFilters.vue'
 import TaskModal from '@/components/tasks/TaskModal.vue'
@@ -206,7 +206,7 @@ async function setColor({ task, color }) {
   const prev = task.color ?? null
   tasksStore.patchTask({ id: task.id, color })
   try {
-    await updateTask(task.id, { color })
+    await setTaskColor(task.id, color)
   } catch (e) {
     tasksStore.patchTask({ id: task.id, color: prev })
     notif.error(e.message || 'Не удалось изменить цвет')

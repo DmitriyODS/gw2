@@ -7,6 +7,7 @@ const routes = [
   { path: '/stats', component: () => import('@/views/StatsView.vue'), meta: { requiresAuth: true } },
   { path: '/settings', component: () => import('@/views/SettingsView.vue'), meta: { requiresAuth: true } },
   { path: '/profile', component: () => import('@/views/ProfileView.vue'), meta: { requiresAuth: true } },
+  { path: '/tv', component: () => import('@/views/TvView.vue'), meta: { requiresAuth: true, fullscreen: true } },
   { path: '/', redirect: '/tasks' },
   { path: '/:pathMatch(.*)*', redirect: '/tasks' }
 ]

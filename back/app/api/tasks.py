@@ -3,7 +3,7 @@ from flask import Blueprint, request, jsonify
 from flask_jwt_extended import get_jwt_identity
 from marshmallow import ValidationError
 
-from app.schemas import TaskSchema, TaskCreateSchema, TaskUpdateSchema
+from app.schemas import TaskSchema, TaskCreateSchema, TaskUpdateSchema, TaskColorSchema
 from app.schemas.unit import UnitSchema
 from app.services import task_service
 from app.services.task_service import TaskServiceError
@@ -16,13 +16,16 @@ _task_schema = TaskSchema()
 _unit_schema = UnitSchema(many=True)
 _create_schema = TaskCreateSchema()
 _update_schema = TaskUpdateSchema()
+_color_schema = TaskColorSchema()
 
 
-def _enrich_task(task, current_user_id: int, active_users: list = None) -> dict:
+def _enrich_task(task, current_user_id: int, active_users: list = None, user_color: str = None) -> dict:
     data = _task_schema.dump(task)
     data["is_favorite"] = task_repo.is_favorite(task.id, current_user_id)
     data["has_units"] = task_repo.has_any_units(task.id)
     data["active_users"] = active_users if active_users is not None else task_repo.get_active_users(task.id)
+    # Цвет — индивидуальный для каждого пользователя (см. user_task_colors).
+    data["color"] = user_color if user_color is not None else task_repo.get_user_color(task.id, current_user_id)
     return data
 
 
@@ -76,7 +79,15 @@ def list_tasks():
 
     task_ids = [t.id for t in result["items"]]
     active_users_map = task_repo.get_active_users_by_task_ids(task_ids)
-    items = [_enrich_task(t, current_user_id, active_users_map.get(t.id, [])) for t in result["items"]]
+    user_colors_map = task_repo.get_user_colors_by_task_ids(task_ids, current_user_id)
+    items = [
+        _enrich_task(
+            t, current_user_id,
+            active_users_map.get(t.id, []),
+            user_colors_map.get(t.id),
+        )
+        for t in result["items"]
+    ]
     return jsonify({
         "items": items,
         "total": result["total"],
@@ -123,7 +134,9 @@ def create_task():
 
     from app.extensions import socketio
     task_data = _enrich_task(task, current_user_id)
-    socketio.emit("task:created", task_data, room="all")
+    # Цвет — личный, не транслируем (получатели применят свой при следующем fetch).
+    broadcast = {k: v for k, v in task_data.items() if k != "color"}
+    socketio.emit("task:created", broadcast, room="all")
 
     return jsonify(task_data), 201
 
@@ -197,7 +210,9 @@ def update_task(task_id: int):
 
     from app.extensions import socketio
     task_data = _enrich_task(task, current_user_id)
-    socketio.emit("task:updated", task_data, room="all")
+    # Цвет — индивидуальный, не транслируем чужим клиентам.
+    broadcast = {k: v for k, v in task_data.items() if k != "color"}
+    socketio.emit("task:updated", broadcast, room="all")
 
     return jsonify(task_data), 200
 
@@ -289,6 +304,56 @@ def restore_task(task_id: int):
     socketio.emit("task:restored", {"task_id": task_id}, room="all")
 
     return jsonify(_task_schema.dump(task)), 200
+
+
+@bp.put("/<int:task_id>/color")
+@require_role(EMPLOYEE)
+def set_task_color(task_id: int):
+    """
+    Установить или снять цвет карточки задачи для текущего пользователя.
+    Цвет индивидуален: одна и та же задача может выглядеть у разных
+    пользователей в разный цвет.
+    ---
+    tags: [tasks]
+    security: [BearerAuth: []]
+    parameters:
+      - in: path
+        name: task_id
+        schema: {type: integer}
+        required: true
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              color:
+                type: string
+                nullable: true
+                description: id цвета из набора или null чтобы убрать
+    responses:
+      200:
+        description: Цвет применён
+      404:
+        description: Задача не найдена
+    """
+    try:
+        data = _color_schema.load(request.get_json(silent=True) or {})
+    except ValidationError as e:
+        return jsonify({"error": "VALIDATION_ERROR", "message": e.messages}), 400
+
+    task = task_repo.get_by_id(task_id)
+    if task is None:
+        return jsonify({"error": "NOT_FOUND", "message": "Задача не найдена"}), 404
+
+    current_user_id = int(get_jwt_identity())
+    try:
+        task_service.set_user_color(task_id, current_user_id, data.get("color"))
+    except TaskServiceError as e:
+        return jsonify({"error": e.code, "message": e.message}), e.http_status
+
+    return jsonify({"task_id": task_id, "color": data.get("color")}), 200
 
 
 @bp.post("/<int:task_id>/favorite")

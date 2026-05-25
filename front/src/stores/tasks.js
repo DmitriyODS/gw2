@@ -78,6 +78,19 @@ export const useTasksStore = defineStore('tasks', () => {
     fetchTasks().catch(() => {})
   }
 
+  // Сбрасывает сортировки и фильтры (поиск/вкладку не трогаем — это другая
+  // ось состояния) к значениям по умолчанию.
+  function resetFilters() {
+    filters.sort = 'last_activity'
+    filters.dept_id = null
+    filters.received_from = null
+    filters.received_to = null
+    filters.has_units = null
+    filters.period_preset = null
+    filters.page = 1
+    fetchTasks().catch(() => {})
+  }
+
   function openTask(task) { activeTask.value = task }
   function closeTask() { activeTask.value = null }
 
@@ -167,7 +180,7 @@ export const useTasksStore = defineStore('tasks', () => {
 
   return {
     tasks, total, loading, error, filters, activeTask,
-    fetchTasks, setFilter, setTab, openTask, closeTask,
+    fetchTasks, setFilter, setTab, resetFilters, openTask, closeTask,
     upsertTask, patchTask, addTaskFromSocket, removeTask, archiveTask, restoreTask,
     setFavorite, addActiveUser, removeActiveUser
   }

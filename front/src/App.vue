@@ -3,6 +3,11 @@
     <div v-if="initializing" class="app-loading">
       <ProgressSpinner />
     </div>
+    <template v-else-if="isFullscreenRoute">
+      <main class="main-content fullscreen-content">
+        <router-view />
+      </main>
+    </template>
     <template v-else-if="authStore.user">
       <AppSidebar />
       <main class="main-content">
@@ -23,7 +28,8 @@
 </template>
 
 <script setup>
-import { ref, watch, onMounted } from 'vue'
+import { ref, computed, watch, onMounted } from 'vue'
+import { useRoute } from 'vue-router'
 import { useToast } from 'primevue/usetoast'
 import { useAuthStore } from '@/stores/auth.js'
 import { useThemeStore } from '@/stores/theme.js'
@@ -44,6 +50,9 @@ const authStore = useAuthStore()
 const themeStore = useThemeStore()
 const unitsStore = useUnitsStore()
 const notif = useNotificationsStore()
+const route = useRoute()
+
+const isFullscreenRoute = computed(() => !!route.meta?.fullscreen && !!authStore.user)
 // isOpen деструктурирован как топ-левел ref — Vue auto-unwraps в шаблоне
 const { isOpen: isTutorialOpen, open: openTutorial, shouldAutoShow } = useTutorial()
 const { isOpen: isChangelogOpen, close: closeChangelog, checkForNewVersion } = useChangelog()
@@ -89,5 +98,10 @@ onMounted(async () => {
   width: 100%;
   min-height: 100vh;
   background: var(--gw-bg);
+}
+
+.fullscreen-content {
+  width: 100vw;
+  min-height: 100vh;
 }
 </style>
