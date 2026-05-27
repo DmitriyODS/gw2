@@ -148,10 +148,13 @@ export const useThemeStore = defineStore('theme', () => {
   const currentPreset = ref(resolvedPreset)
   const dark = ref(localStorage.getItem('gw_dark') === 'true')
 
-  /* If the old 'dark' preset was active, enable dark mode automatically */
+  /* If the old 'dark' preset was active, enable dark mode automatically.
+     localStorage.setItem может бросить в приватном режиме старого iOS Safari —
+     это код инициализации store, исключение здесь рушит монтирование приложения
+     (белый экран). Оборачиваем в try/catch. */
   if (storedPreset === 'dark' && !dark.value) {
     dark.value = true
-    localStorage.setItem('gw_dark', 'true')
+    try { localStorage.setItem('gw_dark', 'true') } catch {}
   }
 
   const customThemes = ref(storedCustomThemes)

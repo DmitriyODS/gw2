@@ -1,8 +1,8 @@
-# Grove Work v2.0 — Руководство по проекту
+# Groove Work v2.0 — Руководство по проекту
 
 ## Что это
 
-Grove Work — внутренняя платформа для учёта времени задач и аналитики. Команды с разграниченными ролями ведут задачи и трекают время работы через «юниты» (отрезки времени).
+Groove Work — внутренняя платформа для учёта времени задач и аналитики. Команды с разграниченными ролями ведут задачи и трекают время работы через «юниты» (отрезки времени).
 
 ## Стек
 
@@ -172,6 +172,20 @@ Nginx собирает фронт сам через multi-stage `front/Dockerfil
 **Drag-drop / paste файлов.** Drop обрабатывается на **всей области чата**, а не только на поле ввода: обработчики `@drop/@dragover/@dragenter/@dragleave` на `.chat-panel` (`MessengerView`) и на `.mini-thread` (`MiniMessenger`), оверлей на всю зону. `MessageInput` экспонирует `addFiles(files)` (`defineExpose`), который родитель вызывает на drop; в самом `MessageInput` остаётся только `@paste` на textarea (берёт `clipboardData.items` типа file — скриншоты) и кнопка-скрепка. Общий `uploadFiles(files)` переиспользуется всеми тремя путями.
 
 **Мобильная адаптивность.** `.messenger` на ≤768px — `position: fixed; inset:0; z-index:100` (статичный полноэкранный, не «ёрзает» при показе/скрытии адресной строки); нижняя навигация (z-200) поверх, списку диалогов дан `padding-bottom` под неё. Мобильный FAB «новый чат» в `MessengerView` (`Teleport to body`, `.fab`, как на экране задач). Toast: в `App.vue` позиция адаптивная — на мобильном `top-center` (снизу прятала нижняя навигация), на десктопе `bottom-right`; CSS для `.p-toast-top-center` в `main.css`.
+
+## v2.5.0 — присутствие на «Сотрудниках», давние задачи, Safari-фолбэк
+
+**Присутствие через видимость вкладки.** Онлайн-статус теперь драйвится видимостью, а не только наличием сокет-соединения. Клиент шлёт `presence:visibility {visible}` на `visibilitychange`/`focus`/`pagehide` (`socket/index.js`). Сервер (`app/sockets/presence.py`) держит `_sid_user` + `_sid_visible` + множество `_online`; пользователь онлайн, пока есть хотя бы одно соединение с видимой вкладкой (`_has_visible_connection`). Статус и `last_seen_at` меняются только на ПЕРЕХОДЕ (`_set_online`) — это лечит мобильные: при сворачивании/блокировке экрана сокет «замораживается», дисконнект приходит поздно/теряется, а раньше last_seen проставлялся с большим запозданием. Теперь уход в фон сразу даёт точный last_seen. Сокет-хэндлер `presence:visibility` — в `events.py`.
+
+**Онлайн/last seen на вкладке «Сотрудники».** `EmployeesView.vue` переиспользует presence из messenger-store (`isOnline`/`lastSeenOf`/`fetchPresence`): зелёная точка `.online-dot` на аватаре карточки и профиля, статус «в сети»/`formatLastSeen()` под именем. Живые обновления — через глобальный сокет-хэндлер `presence:update`.
+
+**Мини-чат как полноценный.** `MiniMessenger.vue` теперь показывает онлайн-точку в списке и в шапке треда + last seen в шапке (`threadOnline`/`threadLastSeen`). Прочтение работает как в основном: общий `activeConversationId` + `setActive()`/`isViewingActively()`. `fetchPresence()` дёргается при открытии панели.
+
+**Напоминание о давних задачах.** `GET /api/tasks/stale?days=7` (`task_repo.get_stale(threshold)` — активные не-архивные задачи с `received_at` старше порога, сначала самые старые; в ответе `days_pending`). Фронт: composable `useStaleReminder.js` (singleton, раз в день — localStorage `gw2_stale_reminder_shown_date`), компонент `StaleTasksModal.vue` (M3, токены). Монтируется в `App.vue` после входа с задержкой 1.2с и только если не открыты тур/лог версий. Клик по задаче → `/tasks?open=<id>`; `TasksView` в `onMounted` читает `route.query.open` и открывает задачу, затем чистит query.
+
+**Safari-фикс «белый экран».** Вся палитра — на `oklch()`/`color-mix()` (Safari 15.4+/16.2+). На старых iOS (старые iPhone на iOS 15.x) токены становятся невалидными при вычислении → пустой экран. Решение: `@supports not (color: oklch(0 0 0))` в КОНЦЕ `tokens.css` (после всех oklch-правил, чтобы перекрыть их) — плоский hex-фолбэк дефолтной классической темы для светлой и тёмной темы (семантические `--color-*`, `--tag-*`, scrim/shadow). Кастомные акценты на таких устройствах не применяются, но платформа видима и читаема. Доп. усиление: `viewport-fit=cover` в `index.html`, try/catch вокруг `localStorage.setItem` при init `theme.js`.
+
+**Ребрендинг Grove → Groove.** Проект называется **Groove Work** (с двумя «о»). Заменены бренд/тексты/доки/заголовки swagger/alt логотипа/`GroovePreset` в `main.js`. DB-идентификаторы postgres `grovework` (имя БД/пользователь) НЕ трогали — их смена сломала бы существующий деплой.
 
 ## Swagger UI
 

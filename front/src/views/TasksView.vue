@@ -132,6 +132,7 @@
 
 <script setup>
 import { ref, computed, onMounted } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import { useTasksStore } from '@/stores/tasks.js'
 import { useUnitsStore } from '@/stores/units.js'
 import { useNotificationsStore } from '@/stores/notifications.js'
@@ -144,6 +145,8 @@ import TaskForm from '@/components/tasks/TaskForm.vue'
 import SortSheet from '@/components/tasks/SortSheet.vue'
 import ProgressSpinner from 'primevue/progressspinner'
 
+const route = useRoute()
+const router = useRouter()
 const tasksStore = useTasksStore()
 const unitsStore = useUnitsStore()
 const notif = useNotificationsStore()
@@ -230,6 +233,13 @@ onMounted(async () => {
   try {
     await unitsStore.fetchActiveUnit()
   } catch {}
+  // Открытие конкретной задачи по ссылке (например из напоминания о давних).
+  const openId = route.query.open
+  if (openId) {
+    openTask({ id: Number(openId) })
+    // Убираем query, чтобы повторное открытие/обновление не дёргало модалку.
+    router.replace({ path: '/tasks' })
+  }
 })
 </script>
 

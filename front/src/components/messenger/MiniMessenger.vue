@@ -23,7 +23,10 @@
               :class="{ unread: c.unread_count > 0 }"
               @click="openThread(c.id)"
             >
-              <img class="mini-avatar" :src="avatarOf(c.other_user)" :alt="c.other_user?.fio" />
+              <div class="mini-avatar-wrap">
+                <img class="mini-avatar" :src="avatarOf(c.other_user)" :alt="c.other_user?.fio" />
+                <span v-if="messenger.isOnline(c.other_user?.id)" class="online-dot mini-list-dot" title="В сети"></span>
+              </div>
               <div class="mini-conv-body">
                 <div class="mini-conv-name">{{ c.other_user?.fio }}</div>
                 <div class="mini-conv-preview">{{ preview(c.last_message) }}</div>
@@ -39,8 +42,16 @@
             <button class="mini-icon" title="Назад" @click="closeThread">
               <span class="material-symbols-outlined">arrow_back</span>
             </button>
-            <img class="mini-head-avatar" :src="avatarOf(threadConv?.other_user)" :alt="threadConv?.other_user?.fio" />
-            <span class="mini-title mini-title--name">{{ threadConv?.other_user?.fio }}</span>
+            <div class="mini-head-avatar-wrap">
+              <img class="mini-head-avatar" :src="avatarOf(threadConv?.other_user)" :alt="threadConv?.other_user?.fio" />
+              <span v-if="threadOnline" class="online-dot mini-head-dot" title="В сети"></span>
+            </div>
+            <div class="mini-head-title">
+              <span class="mini-title--name">{{ threadConv?.other_user?.fio }}</span>
+              <span class="mini-head-status" :class="{ online: threadOnline }">
+                {{ threadOnline ? 'в сети' : threadLastSeen }}
+              </span>
+            </div>
             <button class="mini-icon" title="Свернуть" @click="open = false">
               <span class="material-symbols-outlined">close</span>
             </button>
@@ -98,6 +109,7 @@ import { useRoute } from 'vue-router'
 import { useMessengerStore } from '@/stores/messenger.js'
 import { useAuthStore } from '@/stores/auth.js'
 import { useBreakpoint } from '@/composables/useBreakpoint.js'
+import { formatLastSeen } from '@/utils/presence.js'
 import MessageBubble from './MessageBubble.vue'
 import MessageInput from './MessageInput.vue'
 import ProgressSpinner from 'primevue/progressspinner'
@@ -151,10 +163,19 @@ const threadConv = computed(() =>
   messenger.conversations.find(c => c.id === threadId.value) || null
 )
 
+const threadOnline = computed(() => messenger.isOnline(threadConv.value?.other_user?.id))
+const threadLastSeen = computed(() => {
+  const u = threadConv.value?.other_user
+  if (!u) return ''
+  return formatLastSeen(messenger.lastSeenOf(u.id, u.last_seen_at))
+})
+
 function toggle() {
   open.value = !open.value
-  if (open.value && !messenger.conversations.length) {
-    messenger.fetchConversations()
+  if (open.value) {
+    if (!messenger.conversations.length) messenger.fetchConversations()
+    // Свежий снимок онлайн-статусов при открытии.
+    messenger.fetchPresence()
   }
 }
 
@@ -325,6 +346,13 @@ if (typeof window !== 'undefined') {
   overflow: hidden;
   text-overflow: ellipsis;
   font-size: 14px;
+  font-weight: 700;
+  color: var(--color-text);
+}
+
+.mini-head-avatar-wrap {
+  position: relative;
+  flex-shrink: 0;
 }
 
 .mini-head-avatar {
@@ -332,7 +360,39 @@ if (typeof window !== 'undefined') {
   height: 32px;
   border-radius: 50%;
   object-fit: cover;
-  flex-shrink: 0;
+  display: block;
+}
+
+.online-dot {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--color-success);
+  border: 2px solid var(--color-surface);
+}
+
+.mini-head-title {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.mini-head-status {
+  font-size: 11px;
+  color: var(--color-text-dim);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.mini-head-status.online {
+  color: var(--color-success);
+  font-weight: 600;
 }
 
 .mini-icon {
@@ -371,12 +431,22 @@ if (typeof window !== 'undefined') {
 
 .mini-conv:hover { background: var(--color-surface-low); }
 
+.mini-avatar-wrap {
+  position: relative;
+  flex-shrink: 0;
+}
+
 .mini-avatar {
   width: 40px;
   height: 40px;
   border-radius: 50%;
   object-fit: cover;
-  flex-shrink: 0;
+  display: block;
+}
+
+.mini-list-dot {
+  width: 11px;
+  height: 11px;
 }
 
 .mini-conv-body { flex: 1; min-width: 0; }

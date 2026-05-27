@@ -10,7 +10,7 @@ import App from './App.vue'
 import router from './router/index.js'
 import './assets/main.css'
 
-const GrovePreset = definePreset(Aura, {
+const GroovePreset = definePreset(Aura, {
   semantic: {
     primary: {
       50:  'var(--_p-99)',
@@ -64,7 +64,7 @@ app.use(createPinia())
 app.use(router)
 app.use(PrimeVue, {
   theme: {
-    preset: GrovePreset,
+    preset: GroovePreset,
     options: {
       prefix: 'p',
       darkModeSelector: '[data-dark="true"]',

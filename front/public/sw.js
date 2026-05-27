@@ -1,4 +1,4 @@
-/* Минимальный service worker Grove Work.
+/* Минимальный service worker Groove Work.
    Нужен ради ServiceWorkerRegistration.showNotification — на Android Chrome
    конструктор new Notification() запрещён, OS-уведомления показываются только
    через SW. Push здесь нет (нет сервера рассылки): уведомления показываются,

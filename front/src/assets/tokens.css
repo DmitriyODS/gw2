@@ -349,3 +349,142 @@
   --tag-violet-accent: oklch(0.78 0.105 var(--tag-violet-h));
   --tag-pink-accent:   oklch(0.80 0.105 var(--tag-pink-h));
 }
+
+
+/* ══════════════════════════════════════════════════════════════════
+   Fallback для браузеров без поддержки oklch()/color-mix()
+   (мобильный Safari старше 15.4 / 16.2 — старые iPhone, застрявшие на
+   iOS 15.x). Вся палитра выше построена на oklch, поэтому без поддержки
+   все семантические токены становятся «невалидными при вычислении»:
+   фон/текст/спиннер пропадают и платформа показывает пустой экран.
+
+   Здесь даём плоский hex-фолбэк дефолтной (классической) темы для светлого
+   и тёмного режима — приложение остаётся видимым и читаемым. Кастомные
+   акценты из конструктора тем на таких устройствах не применяются (палитра
+   выводится через oklch), но базовая работоспособность восстанавливается.
+   Блок стоит ПОСЛЕ всех oklch-правил, чтобы перекрыть их для таких браузеров.
+══════════════════════════════════════════════════════════════════ */
+@supports not (color: oklch(0 0 0)) {
+  :root {
+    --color-primary:                #b425c9;
+    --color-on-primary:             #ffffff;
+    --color-primary-container:      #fbd6ff;
+    --color-on-primary-container:   #3a0048;
+    --color-primary-hover:          #9b1fae;
+
+    --color-secondary:              #00897b;
+    --color-on-secondary:           #ffffff;
+    --color-secondary-container:    #a7f3e8;
+    --color-on-secondary-container: #00201c;
+    --color-secondary-hover:        #006b60;
+
+    --color-tertiary:               #3d6ce7;
+    --color-on-tertiary:            #ffffff;
+    --color-tertiary-container:     #dbe4ff;
+    --color-on-tertiary-container:  #001a43;
+    --color-tertiary-hover:         #3057c0;
+
+    --color-error:                  #d32f2f;
+    --color-on-error:               #ffffff;
+    --color-error-container:        #ffdad6;
+    --color-on-error-container:     #410002;
+    --color-error-hover:            #b3261e;
+
+    --color-success:                #2e7d32;
+    --color-on-success:             #ffffff;
+    --color-success-container:      #c7f0c9;
+    --color-on-success-container:   #002106;
+    --color-success-hover:          #1b5e20;
+
+    --color-warning:                #a47b00;
+    --color-on-warning:             #ffffff;
+    --color-warning-container:      #ffe08a;
+    --color-on-warning-container:   #261a00;
+
+    --color-bg:                     #faf7fb;
+    --color-surface:                #ffffff;
+    --color-surface-low:            #f4f0f5;
+    --color-surface-high:           #ece7ee;
+    --color-surface-highest:        #e4dee6;
+
+    --color-text:                   #1c1b1f;
+    --color-text-dim:               #5d5a63;
+
+    --color-outline:                #79747e;
+    --color-outline-dim:            #cac4d0;
+
+    --color-scrim:                  rgba(0, 0, 0, 0.32);
+    --shadow-color:                 rgba(60, 0, 70, 0.12);
+
+    /* Цвета-теги задач — мягкие пастельные заливки */
+    --tag-red-surface: #fbeae8;    --tag-red-border: #f3c3bc;    --tag-red-accent: #d35344;
+    --tag-orange-surface: #fbeede; --tag-orange-border: #f0d0a3; --tag-orange-accent: #c5803a;
+    --tag-amber-surface: #faf2d8;  --tag-amber-border: #ecd99a;  --tag-amber-accent: #b5912f;
+    --tag-green-surface: #e6f4e7;  --tag-green-border: #b9dcbb;  --tag-green-accent: #4f9a52;
+    --tag-teal-surface: #e2f2f1;   --tag-teal-border: #abdad6;   --tag-teal-accent: #3f9690;
+    --tag-blue-surface: #e6edfb;   --tag-blue-border: #bcccf0;   --tag-blue-accent: #4071c9;
+    --tag-violet-surface: #f1e8fa; --tag-violet-border: #d5bcf0; --tag-violet-accent: #8a4fc9;
+    --tag-pink-surface: #fbe8f1;   --tag-pink-border: #f0bcd5;   --tag-pink-accent: #c94f8a;
+  }
+
+  [data-dark="true"] {
+    --color-primary:                #edaffb;
+    --color-on-primary:             #4a0050;
+    --color-primary-container:      #6d2178;
+    --color-on-primary-container:   #fbd6ff;
+    --color-primary-hover:          #f3c2fc;
+
+    --color-secondary:              #5fd9c8;
+    --color-on-secondary:           #00382f;
+    --color-secondary-container:    #005046;
+    --color-on-secondary-container: #a7f3e8;
+    --color-secondary-hover:        #79e0d2;
+
+    --color-tertiary:               #adc6ff;
+    --color-on-tertiary:            #002e6b;
+    --color-tertiary-container:     #234578;
+    --color-on-tertiary-container:  #dbe4ff;
+    --color-tertiary-hover:         #c2d4ff;
+
+    --color-error:                  #ffb4ab;
+    --color-on-error:               #690005;
+    --color-error-container:        #93000a;
+    --color-on-error-container:     #ffdad6;
+    --color-error-hover:            #ffc6bf;
+
+    --color-success:                #7dd182;
+    --color-on-success:             #00390a;
+    --color-success-container:      #1f5023;
+    --color-on-success-container:   #c7f0c9;
+    --color-success-hover:          #95dd99;
+
+    --color-warning:                #e6c454;
+    --color-on-warning:             #3d2f00;
+    --color-warning-container:      #5c4800;
+    --color-on-warning-container:   #ffe08a;
+
+    --color-bg:                     #141218;
+    --color-surface:                #1c1b1f;
+    --color-surface-low:            #211f26;
+    --color-surface-high:           #2b2930;
+    --color-surface-highest:        #36343b;
+
+    --color-text:                   #e6e1e9;
+    --color-text-dim:               #cac4d0;
+
+    --color-outline:                #938f99;
+    --color-outline-dim:            #49454f;
+
+    --color-scrim:                  rgba(0, 0, 0, 0.5);
+    --shadow-color:                 rgba(0, 0, 0, 0.4);
+
+    --tag-red-surface: #3a2422;    --tag-red-border: #5e3a35;    --tag-red-accent: #f0a59a;
+    --tag-orange-surface: #3a2c1a; --tag-orange-border: #5e482c; --tag-orange-accent: #e8b87e;
+    --tag-amber-surface: #352c14;  --tag-amber-border: #564824;  --tag-amber-accent: #e8cf7e;
+    --tag-green-surface: #1f3320;  --tag-green-border: #355538;  --tag-green-accent: #92dd96;
+    --tag-teal-surface: #16302d;   --tag-teal-border: #2c504b;   --tag-teal-accent: #7ed8d0;
+    --tag-blue-surface: #1c2740;   --tag-blue-border: #344568;   --tag-blue-accent: #9db8f0;
+    --tag-violet-surface: #2c1f3d; --tag-violet-border: #483563; --tag-violet-accent: #c79df0;
+    --tag-pink-surface: #3a1f2e;   --tag-pink-border: #5e354b;   --tag-pink-accent: #f09dc7;
+  }
+}

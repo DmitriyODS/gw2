@@ -2,8 +2,8 @@
   <div class="tv-view" :data-dark="themeStore.dark">
     <header class="tv-header">
       <div class="tv-logo">
-        <img src="/logo.svg" alt="Grove Work" />
-        <span class="tv-title">Grove Work</span>
+        <img src="/logo.svg" alt="Groove Work" />
+        <span class="tv-title">Groove Work</span>
       </div>
       <div class="tv-slide-name">{{ currentSlide.title }}</div>
       <div class="tv-clock">{{ clock }}</div>

@@ -17,6 +17,7 @@
       <ActiveUnitModal v-if="unitsStore.activeUnit" />
       <AppTutorial v-if="isTutorialOpen" />
       <ChangelogModal v-if="isChangelogOpen" @close="closeChangelog" />
+      <StaleTasksModal v-if="isStaleOpen" :tasks="staleTasks" @close="closeStale" />
       <MiniMessenger />
     </template>
     <template v-else>
@@ -40,6 +41,7 @@ import { useNotificationsStore } from '@/stores/notifications.js'
 import { useBreakpoint } from '@/composables/useBreakpoint.js'
 import { useTutorial } from '@/composables/useTutorial.js'
 import { useChangelog } from '@/composables/useChangelog.js'
+import { useStaleReminder } from '@/composables/useStaleReminder.js'
 import { connectSocket } from '@/socket/index.js'
 import {
   registerNotifyServiceWorker, installNotifyUnlock, requestNotificationPermission,
@@ -49,6 +51,7 @@ import AppBottomNav from '@/components/layout/AppBottomNav.vue'
 import ActiveUnitModal from '@/components/layout/ActiveUnitModal.vue'
 import AppTutorial from '@/components/layout/AppTutorial.vue'
 import ChangelogModal from '@/components/layout/ChangelogModal.vue'
+import StaleTasksModal from '@/components/tasks/StaleTasksModal.vue'
 import MiniMessenger from '@/components/messenger/MiniMessenger.vue'
 import Toast from 'primevue/toast'
 import ProgressSpinner from 'primevue/progressspinner'
@@ -65,6 +68,7 @@ const isFullscreenRoute = computed(() => !!route.meta?.fullscreen && !!authStore
 // isOpen деструктурирован как топ-левел ref — Vue auto-unwraps в шаблоне
 const { isOpen: isTutorialOpen, open: openTutorial, shouldAutoShow } = useTutorial()
 const { isOpen: isChangelogOpen, close: closeChangelog, checkForNewVersion } = useChangelog()
+const { isOpen: isStaleOpen, tasks: staleTasks, close: closeStale, check: checkStaleTasks } = useStaleReminder()
 
 watch(() => authStore.user, (user, prev) => {
   if (user && !prev && shouldAutoShow()) {
@@ -102,6 +106,13 @@ onMounted(async () => {
     if (!shouldAutoShow()) {
       checkForNewVersion()
     }
+    // Напоминание о давних задачах — раз в день, и только если не показываем
+    // тур/лог версий (чтобы не громоздить модалки друг на друга).
+    setTimeout(() => {
+      if (!isTutorialOpen.value && !isChangelogOpen.value) {
+        checkStaleTasks()
+      }
+    }, 1200)
   }
   initializing.value = false
 })

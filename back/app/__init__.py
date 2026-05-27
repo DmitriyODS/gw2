@@ -132,9 +132,9 @@ def _init_swagger(app: Flask) -> None:
     template = {
         "swagger": "2.0",
         "info": {
-            "title": "Grove Work API",
-            "description": "REST API платформы учёта задач и времени Grove Work v2.0",
-            "version": "2.4.1",
+            "title": "Groove Work API",
+            "description": "REST API платформы учёта задач и времени Groove Work v2.0",
+            "version": "2.5.0",
         },
         "securityDefinitions": {
             "BearerAuth": {

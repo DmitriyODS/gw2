@@ -30,9 +30,9 @@ class Config:
     RATELIMIT_STORAGE_URI = os.environ.get("REDIS_URL", "redis://localhost:6379/1")
 
     SWAGGER = {
-        "title": "Grove Work API",
+        "title": "Groove Work API",
         "version": "2.0.0",
-        "description": "REST API платформы учёта задач и времени Grove Work",
+        "description": "REST API платформы учёта задач и времени Groove Work",
         "uiversion": 3,
         "specs_route": "/apidocs/",
     }

@@ -1,4 +1,4 @@
-# Implementation Log — Grove Work v2.0
+# Implementation Log — Groove Work v2.0
 
 > Краткий журнал того, что уже реализовано. Обновляется после каждой сессии.
 

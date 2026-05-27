@@ -84,6 +84,19 @@ def get_list(
     return {"items": tasks, "total": total, "page": page, "per_page": per_page}
 
 
+def get_stale(threshold: datetime, limit: int = 100) -> list[Task]:
+    """Активные (не в архиве) задачи, поступившие раньше threshold — те, что
+    «висят» дольше порога. Сначала самые старые, чтобы напоминание подсвечивало
+    залежавшиеся в первую очередь."""
+    q = (
+        db.select(Task)
+        .where(Task.is_archived.is_(False), Task.received_at < threshold)
+        .order_by(asc(Task.received_at))
+        .limit(limit)
+    )
+    return db.session.execute(q).scalars().all()
+
+
 def create(
     name: str,
     author_id: int,

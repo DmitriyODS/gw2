@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from flask import Blueprint, request, jsonify
 from flask_jwt_extended import get_jwt_identity
 from marshmallow import ValidationError
@@ -94,6 +94,43 @@ def list_tasks():
         "page": result["page"],
         "per_page": result["per_page"],
     }), 200
+
+
+@bp.get("/stale")
+@require_role(EMPLOYEE)
+def stale_tasks():
+    """
+    Активные задачи, «висящие» дольше недели (по дате поступления).
+    Используется для ежедневного напоминания «пора закрыть».
+    ---
+    tags: [tasks]
+    security: [BearerAuth: []]
+    parameters:
+      - {in: query, name: days, schema: {type: integer, default: 7}, description: Порог «давности» в днях}
+    responses:
+      200:
+        description: Список давних задач
+    """
+    try:
+        days = max(1, int(request.args.get("days", 7)))
+    except (TypeError, ValueError):
+        days = 7
+
+    now = datetime.now(timezone.utc)
+    threshold = now - timedelta(days=days)
+    tasks = task_repo.get_stale(threshold)
+
+    items = []
+    for t in tasks:
+        data = _task_schema.dump(t)
+        received = t.received_at
+        # received_at хранится timezone-aware; на всякий случай нормализуем.
+        if received.tzinfo is None:
+            received = received.replace(tzinfo=timezone.utc)
+        data["days_pending"] = (now - received).days
+        items.append(data)
+
+    return jsonify({"items": items, "days": days, "total": len(items)}), 200
 
 
 @bp.post("")

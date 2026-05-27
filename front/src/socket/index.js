@@ -39,21 +39,35 @@ function markActiveReadOnFocus() {
   } catch {}
 }
 
+/* Сообщаем серверу о видимости вкладки — это драйвер онлайн-статуса.
+   На мобильных дисконнект при сворачивании/блокировке приходит с задержкой
+   или теряется, поэтому явный сигнал даёт точный last_seen и честный «в сети». */
+function emitVisibility(visible) {
+  if (socket?.connected) {
+    try { socket.emit('presence:visibility', { visible }) } catch {}
+  }
+}
+
 function installVisibilityResync() {
   if (visibilityHookInstalled || typeof document === 'undefined') return
   visibilityHookInstalled = true
   document.addEventListener('visibilitychange', () => {
-    if (document.visibilityState === 'visible' && socket?.connected) {
+    const visible = document.visibilityState === 'visible'
+    emitVisibility(visible)
+    if (visible && socket?.connected) {
       resyncMessenger()
       markActiveReadOnFocus()
     }
   })
   window.addEventListener('focus', () => {
+    emitVisibility(true)
     if (socket?.connected) {
       resyncMessenger()
       markActiveReadOnFocus()
     }
   })
+  // pagehide — последний надёжный момент на мобильных, чтобы пометить «ушёл».
+  window.addEventListener('pagehide', () => emitVisibility(false))
 }
 
 export function connectSocket() {
