@@ -4,10 +4,15 @@ import { useTasksStore } from '@/stores/tasks.js'
 import { useUnitsStore } from '@/stores/units.js'
 import { useNotificationsStore } from '@/stores/notifications.js'
 import { useMessengerStore } from '@/stores/messenger.js'
+import { useCallStore } from '@/stores/call.js'
 import { showSystemNotification, playNotifySound } from '@/utils/systemNotify.js'
 
 let socket = null
 let visibilityHookInstalled = false
+
+export function getSocket() {
+  return socket
+}
 
 /* Подтягивает состояние мессенджера с сервера. Используется при reconnect
    сокета и при возврате вкладки в фокус — закрывает дыру, если событие
@@ -233,6 +238,59 @@ export function connectSocket() {
 
   socket.on('presence:update', (p) => {
     useMessengerStore().applyPresence(p)
+  })
+
+  // ── Звонки ────────────────────────────────────────────────────
+  socket.on('call:incoming', (call) => {
+    useCallStore().handleIncoming(call)
+    // Рингтон + системное уведомление, если вкладка не в фокусе
+    if (document.visibilityState !== 'visible' || !document.hasFocus()) {
+      const initiator = call.participants?.find(p => p.role === 'initiator')
+      showSystemNotification(
+        'Входящий звонок',
+        `${initiator?.fio || 'Сотрудник'} зовёт вас в звонок`,
+        { onClick: () => window.focus() },
+      )
+    }
+    // Звук «бип» из мессенджера используем как рингтон-сигнал; полноценный
+    // циклический рингтон — в IncomingCallToast (Web Audio loop).
+    playNotifySound()
+  })
+
+  socket.on('call:started', (call) => {
+    useCallStore().handleStarted(call)
+  })
+
+  socket.on('call:accepted', (data) => {
+    useCallStore().handleAccepted(data)
+  })
+
+  socket.on('call:participant-joined', (data) => {
+    useCallStore().handleParticipantJoined(data)
+  })
+
+  socket.on('call:participant-left', (data) => {
+    useCallStore().handleParticipantLeft(data)
+  })
+
+  socket.on('call:participant-declined', (data) => {
+    useCallStore().handleParticipantDeclined(data)
+  })
+
+  socket.on('call:ended', () => {
+    useCallStore().handleEnded()
+  })
+
+  socket.on('webrtc:signal', (data) => {
+    useCallStore().handleSignal(data)
+  })
+
+  socket.on('call:media-state', (data) => {
+    useCallStore().handleMediaState(data)
+  })
+
+  socket.on('call:error', (data) => {
+    useCallStore().handleError(data)
   })
 
   socket.on('unit:force_stopped', ({ unit_id, stopped_by_fio }) => {

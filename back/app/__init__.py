@@ -46,6 +46,7 @@ def _init_extensions(app: Flask) -> None:
         from app.models import (  # noqa
             Role, User, Department, Task, Favorite, UnitType, Unit, UserTaskColor,
             Conversation, Message, MessageAttachment,
+            Call, CallParticipant,
         )
 
 
@@ -134,7 +135,7 @@ def _init_swagger(app: Flask) -> None:
         "info": {
             "title": "Groove Work API",
             "description": "REST API платформы учёта задач и времени Groove Work v2.0",
-            "version": "2.5.0",
+            "version": "2.6.0",
         },
         "securityDefinitions": {
             "BearerAuth": {

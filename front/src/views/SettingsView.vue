@@ -1,418 +1,561 @@
 <template>
-  <div class="settings-view">
-    <h1>Настройки</h1>
+  <div class="settings-shell" :class="{ 'is-mobile-section': isMobile && activeSection }">
+    <!-- Левая колонка: список секций. На мобильном — отдельный экран. -->
+    <aside class="settings-nav" :class="{ 'mobile-hidden': isMobile && activeSection }">
+      <header class="settings-nav-header">
+        <h1>Настройки</h1>
+        <p class="settings-nav-sub">Настройте платформу под себя</p>
+      </header>
 
-    <Tabs v-model:value="activeTab">
-      <TabList>
-        <Tab value="theme" data-tutorial="settings-tab-theme">Персонализация</Tab>
-        <Tab v-if="isAtLeast(ROLES.ADMIN)" value="users">Пользователи</Tab>
-        <Tab
-          v-if="isAtLeast(ROLES.EMPLOYEE)"
-          value="lists"
-        >Списки</Tab>
-        <Tab v-if="isAtLeast(ROLES.SUPERADMIN)" value="backup">Копирование</Tab>
-      </TabList>
+      <div class="settings-search">
+        <span class="material-symbols-outlined">search</span>
+        <input
+          v-model="searchQuery"
+          type="search"
+          placeholder="Найти настройку…"
+        />
+        <button
+          v-if="searchQuery"
+          class="settings-search-clear"
+          title="Очистить"
+          @click="searchQuery = ''"
+        >
+          <span class="material-symbols-outlined">close</span>
+        </button>
+      </div>
 
-      <TabPanels>
-        <!-- Персонализация -->
-        <TabPanel value="theme">
+      <nav class="settings-sections">
+        <template v-for="group in visibleGroups" :key="group.key">
+          <div class="settings-group-label">{{ group.label }}</div>
+          <button
+            v-for="section in group.sections"
+            :key="section.key"
+            class="settings-nav-item"
+            :class="{ active: !isMobile && activeSection === section.key }"
+            @click="openSection(section.key)"
+          >
+            <span class="nav-icon" :data-tone="section.tone || 'primary'">
+              <span class="material-symbols-outlined">{{ section.icon }}</span>
+            </span>
+            <span class="nav-text">
+              <span class="nav-title">{{ section.title }}</span>
+              <span class="nav-desc">{{ section.desc }}</span>
+            </span>
+            <span class="material-symbols-outlined nav-chevron">chevron_right</span>
+          </button>
+        </template>
+      </nav>
+
+      <div class="settings-nav-footer">
+        <span class="material-symbols-outlined">stadia_controller</span>
+        <div>
+          <div class="footer-name">Groove Work</div>
+          <div class="footer-version" v-if="appVersion">v{{ appVersion }}</div>
+        </div>
+      </div>
+    </aside>
+
+    <!-- Правая колонка: контент активной секции. -->
+    <section
+      v-if="activeSection || !isMobile"
+      class="settings-pane"
+      :class="{ 'mobile-full': isMobile && activeSection }"
+    >
+      <header class="settings-pane-header">
+        <button
+          v-if="isMobile"
+          class="settings-back"
+          @click="activeSection = null"
+          title="Назад к списку"
+        >
+          <span class="material-symbols-outlined">arrow_back</span>
+        </button>
+        <div class="pane-title-wrap">
+          <h2 class="pane-title">{{ activeSectionMeta?.title || 'Настройки' }}</h2>
+          <p v-if="activeSectionMeta?.desc" class="pane-sub">{{ activeSectionMeta.desc }}</p>
+        </div>
+      </header>
+
+      <div class="settings-pane-body">
+        <!-- Внешний вид -->
+        <div v-show="activeSection === 'theme'" class="pane-block">
           <ThemeBuilder />
+        </div>
 
-          <div class="tutorial-card">
-            <div class="tutorial-card-info">
-              <span class="material-symbols-outlined tutorial-icon">school</span>
-              <div>
-                <h4>Обучение</h4>
-                <p>Повторно пройдите интерактивное знакомство с платформой.</p>
-              </div>
+        <!-- Обучение -->
+        <div v-show="activeSection === 'tutorial'" class="pane-block">
+          <div class="settings-card settings-card--hero">
+            <div class="hero-icon" data-tone="primary">
+              <span class="material-symbols-outlined">school</span>
             </div>
-            <button class="btn-primary" @click="tutorial.open()">
-              <span class="material-symbols-outlined">play_circle</span>
-              Пройти обучение
-            </button>
+            <div class="card-text">
+              <h3>Интерактивный тур</h3>
+              <p>Пробежимся по основным экранам и подскажем, с чего удобно начать работу. Займёт пару минут.</p>
+            </div>
+            <div class="card-actions">
+              <button class="btn-filled" @click="tutorial.open()">
+                <span class="material-symbols-outlined">play_circle</span>
+                Пройти тур
+              </button>
+            </div>
           </div>
+        </div>
 
-          <div class="tutorial-card">
-            <div class="tutorial-card-info">
-              <span class="material-symbols-outlined tutorial-icon">newsmode</span>
-              <div>
-                <h4>Что нового</h4>
-                <p>История обновлений платформы.<template v-if="appVersion"> Текущая версия: {{ appVersion }}.</template></p>
-              </div>
-            </div>
-            <button class="btn-primary" @click="changelog.open()">
+        <!-- История версий -->
+        <div v-show="activeSection === 'changelog'" class="pane-block">
+          <div class="settings-card settings-card--hero">
+            <div class="hero-icon" data-tone="secondary">
               <span class="material-symbols-outlined">newsmode</span>
-              История версий
-            </button>
+            </div>
+            <div class="card-text">
+              <h3>История версий</h3>
+              <p>
+                Что добавлено, исправлено и улучшено в каждом обновлении платформы.
+                <template v-if="appVersion">Текущая версия — <b>{{ appVersion }}</b>.</template>
+              </p>
+            </div>
+            <div class="card-actions">
+              <button class="btn-filled-tonal" @click="changelog.open()">
+                <span class="material-symbols-outlined">newsmode</span>
+                Открыть лог
+              </button>
+            </div>
           </div>
-        </TabPanel>
+        </div>
 
         <!-- Пользователи -->
-        <TabPanel value="users">
-          <div class="panel-toolbar">
+        <div v-show="activeSection === 'users'" class="pane-block">
+          <div class="pane-toolbar">
             <div class="search-wrapper">
               <span class="material-symbols-outlined search-icon">search</span>
               <input
                 v-model="userSearch"
                 class="search-input"
-                placeholder="Поиск по ФИО..."
+                placeholder="Поиск по ФИО или логину…"
                 @input="onUserSearch"
               />
             </div>
-            <button
-              class="btn-primary"
-              @click="openUserDialog(null)"
-            >
+            <button class="btn-filled" @click="openUserDialog(null)">
               <span class="material-symbols-outlined">person_add</span>
-              Создать пользователя
+              Создать
             </button>
           </div>
 
-          <div class="table-scroll">
-          <DataTable :value="users" :loading="usersLoading" size="small" class="settings-table">
-            <Column header="Аватар" style="width:56px">
-              <template #body="{ data }">
-                <img :src="getUserAvatar(data)" class="user-avatar-sm" :alt="data.fio" />
+          <div class="users-grid">
+            <div
+              v-for="u in users"
+              :key="u.id"
+              class="user-card"
+              :class="{ 'is-me': u.id === authStore.user?.id }"
+            >
+              <img class="user-card-avatar" :src="getUserAvatar(u)" :alt="u.fio" />
+              <div class="user-card-text">
+                <div class="user-card-name">{{ u.fio }}</div>
+                <div class="user-card-login">@{{ u.login }}</div>
+                <div v-if="u.post" class="user-card-post">{{ u.post }}</div>
+                <span class="user-card-role" :data-level="u.role?.level || 1">
+                  <span class="material-symbols-outlined">{{ roleIcon(u.role?.level) }}</span>
+                  {{ u.role?.name || '—' }}
+                </span>
+              </div>
+              <div class="user-card-actions">
+                <button class="icon-btn" title="Редактировать" @click="openUserDialog(u)">
+                  <span class="material-symbols-outlined">edit</span>
+                </button>
+                <button class="icon-btn danger" title="Удалить" @click="confirmDeleteUser(u)">
+                  <span class="material-symbols-outlined">delete</span>
+                </button>
+              </div>
+            </div>
+            <div v-if="!usersLoading && !users.length" class="settings-empty">
+              <div class="empty-icon" data-tone="primary">
+                <span class="material-symbols-outlined">person_search</span>
+              </div>
+              <h4>Никого не нашли</h4>
+              <p>Попробуйте другой запрос или создайте нового сотрудника.</p>
+            </div>
+          </div>
+        </div>
+
+        <!-- Отделы -->
+        <div v-show="activeSection === 'departments'" class="pane-block">
+          <div class="pane-toolbar">
+            <p class="pane-toolbar-hint">Используются для группировки сотрудников и в статистике.</p>
+            <button
+              v-if="isAtLeast(ROLES.MANAGER)"
+              class="btn-filled"
+              @click="startAddDept"
+            >
+              <span class="material-symbols-outlined">add</span>
+              Добавить отдел
+            </button>
+          </div>
+
+          <div class="chip-list">
+            <div v-if="addingDept" class="chip-row editing">
+              <span class="material-symbols-outlined chip-icon">apartment</span>
+              <input
+                v-model="newDeptName"
+                class="chip-input"
+                placeholder="Название отдела"
+                autofocus
+                @keyup.enter="saveDept"
+                @keyup.escape="addingDept = false"
+              />
+              <button class="icon-btn success" @click="saveDept" title="Сохранить">
+                <span class="material-symbols-outlined">check</span>
+              </button>
+              <button class="icon-btn" @click="addingDept = false" title="Отмена">
+                <span class="material-symbols-outlined">close</span>
+              </button>
+            </div>
+
+            <div v-for="dept in departments" :key="dept.id" class="chip-row">
+              <template v-if="editingDeptId === dept.id">
+                <span class="material-symbols-outlined chip-icon">apartment</span>
+                <input
+                  v-model="editingDeptName"
+                  class="chip-input"
+                  @keyup.enter="updateDept(dept)"
+                  @keyup.escape="editingDeptId = null"
+                />
+                <button class="icon-btn success" @click="updateDept(dept)" title="Сохранить">
+                  <span class="material-symbols-outlined">check</span>
+                </button>
+                <button class="icon-btn" @click="editingDeptId = null" title="Отмена">
+                  <span class="material-symbols-outlined">close</span>
+                </button>
               </template>
-            </Column>
-            <Column field="fio" header="ФИО" />
-            <Column field="login" header="Логин" />
-            <Column field="post" header="Должность" />
-            <Column header="Роль">
-              <template #body="{ data }">
-                {{ data.role?.name || '—' }}
-              </template>
-            </Column>
-            <Column header="" style="width:100px">
-              <template #body="{ data }">
-                <div class="row-actions">
-                  <button
-                    class="icon-btn"
-                    title="Редактировать"
-                    @click="openUserDialog(data)"
-                  >
+              <template v-else>
+                <span class="material-symbols-outlined chip-icon">apartment</span>
+                <span class="chip-name">{{ dept.name }}</span>
+                <div v-if="isAtLeast(ROLES.MANAGER)" class="row-actions">
+                  <button class="icon-btn" title="Редактировать" @click="startEditDept(dept)">
                     <span class="material-symbols-outlined">edit</span>
                   </button>
-                  <button
-                    class="icon-btn danger"
-                    title="Удалить"
-                    @click="confirmDeleteUser(data)"
-                  >
+                  <button class="icon-btn danger" title="Удалить" @click="confirmDeleteDept(dept)">
                     <span class="material-symbols-outlined">delete</span>
                   </button>
                 </div>
               </template>
-            </Column>
-          </DataTable>
+            </div>
+            <div v-if="!departments.length && !addingDept" class="settings-empty">
+              <div class="empty-icon" data-tone="secondary">
+                <span class="material-symbols-outlined">apartment</span>
+              </div>
+              <h4>Отделов пока нет</h4>
+              <p>Создайте первый — он появится в фильтрах и статистике.</p>
+            </div>
+          </div>
+        </div>
+
+        <!-- Типы юнитов -->
+        <div v-show="activeSection === 'unit-types'" class="pane-block">
+          <div class="pane-toolbar">
+            <p class="pane-toolbar-hint">Категории работы — встреча, дизайн, написание кода и т. п.</p>
+            <button
+              v-if="isAtLeast(ROLES.MANAGER)"
+              class="btn-filled"
+              @click="startAddUnitType"
+            >
+              <span class="material-symbols-outlined">add</span>
+              Добавить тип
+            </button>
           </div>
 
-          <!-- Диалог создания/редактирования пользователя -->
-          <Dialog
-            v-model:visible="showUserDialog"
-            :header="editingUser ? 'Редактирование пользователя' : 'Создать пользователя'"
-            modal
-            style="width:480px"
-          >
-            <form @submit.prevent="saveUser" class="dialog-form">
-              <div class="form-group">
-                <label>ФИО</label>
-                <InputText v-model="userForm.fio" class="w-full" placeholder="Иванов Иван Иванович" />
-              </div>
-              <div class="form-group">
-                <label>Логин</label>
-                <InputText v-model="userForm.login" class="w-full" placeholder="ivanov" />
-              </div>
-              <div v-if="!editingUser" class="form-group">
-                <label>Пароль</label>
-                <InputText v-model="userForm.password" type="password" class="w-full" placeholder="Минимум 8 символов" />
-              </div>
-              <div class="form-group">
-                <label>Должность</label>
-                <InputText v-model="userForm.post" class="w-full" placeholder="Менеджер" />
-              </div>
-              <div class="form-group">
-                <label>Роль</label>
-                <Select
-                  v-model="userForm.role_id"
-                  :options="assignableRoles"
-                  option-label="name"
-                  option-value="id"
-                  placeholder="Выберите роль"
-                  class="w-full"
-                />
-              </div>
-              <p v-if="userFormError" class="error-msg">{{ userFormError }}</p>
-              <div class="dialog-footer">
-                <button type="button" class="btn-secondary" @click="showUserDialog = false">Отмена</button>
-                <button type="submit" class="btn-primary" :disabled="userFormLoading">
-                  {{ userFormLoading ? 'Сохраняем...' : 'Сохранить' }}
-                </button>
-              </div>
-            </form>
-          </Dialog>
-
-          <!-- Подтверждение удаления пользователя -->
-          <ConfirmDialog
-            :visible="!!deletingUser"
-            header="Удалить пользователя"
-            :message="`Удалить пользователя «${deletingUser?.fio}»? Данные задач и юнитов сохраняются.`"
-            confirm-label="Удалить"
-            :danger-confirm="true"
-            @confirm="doDeleteUser"
-            @cancel="deletingUser = null"
-          />
-        </TabPanel>
-
-        <!-- Списки (отделы и типы юнитов) -->
-        <TabPanel value="lists">
-          <Tabs v-model:value="listsTab">
-            <TabList>
-              <Tab value="departments">Отделы</Tab>
-              <Tab value="unit-types">Типы юнитов</Tab>
-            </TabList>
-            <TabPanels>
-              <!-- Отделы -->
-              <TabPanel value="departments">
-                <div class="panel-toolbar">
-                  <h4 class="panel-title">Отделы</h4>
-                  <button
-                    v-if="isAtLeast(ROLES.MANAGER)"
-                    class="btn-primary"
-                    @click="startAddDept"
-                  >
-                    <span class="material-symbols-outlined">add</span>
-                    Добавить
-                  </button>
-                </div>
-
-                <div class="inline-list">
-                  <!-- Новая строка -->
-                  <div v-if="addingDept" class="inline-list-row editing">
-                    <InputText v-model="newDeptName" placeholder="Название отдела" class="flex-input" @keyup.enter="saveDept" @keyup.escape="addingDept = false" />
-                    <button class="icon-btn success" @click="saveDept" title="Сохранить">
-                      <span class="material-symbols-outlined">check</span>
-                    </button>
-                    <button class="icon-btn" @click="addingDept = false" title="Отмена">
-                      <span class="material-symbols-outlined">close</span>
-                    </button>
-                  </div>
-
-                  <div v-for="dept in departments" :key="dept.id" class="inline-list-row">
-                    <template v-if="editingDeptId === dept.id">
-                      <InputText v-model="editingDeptName" class="flex-input" @keyup.enter="updateDept(dept)" @keyup.escape="editingDeptId = null" />
-                      <button class="icon-btn success" @click="updateDept(dept)" title="Сохранить">
-                        <span class="material-symbols-outlined">check</span>
-                      </button>
-                      <button class="icon-btn" @click="editingDeptId = null" title="Отмена">
-                        <span class="material-symbols-outlined">close</span>
-                      </button>
-                    </template>
-                    <template v-else>
-                      <span class="list-item-name">{{ dept.name }}</span>
-                      <div v-if="isAtLeast(ROLES.MANAGER)" class="row-actions">
-                        <button
-                          class="icon-btn"
-                          title="Редактировать"
-                          @click="startEditDept(dept)"
-                        >
-                          <span class="material-symbols-outlined">edit</span>
-                        </button>
-                        <button
-                          class="icon-btn danger"
-                          title="Удалить"
-                          @click="confirmDeleteDept(dept)"
-                        >
-                          <span class="material-symbols-outlined">delete</span>
-                        </button>
-                      </div>
-                    </template>
-                  </div>
-                  <div v-if="departments.length === 0 && !addingDept" class="empty-inline">Отделы не добавлены</div>
-                </div>
-
-                <ConfirmDialog
-                  :visible="!!deletingDept"
-                  header="Удалить отдел"
-                  :message="`Удалить отдел «${deletingDept?.name}»?`"
-                  confirm-label="Удалить"
-                  :danger-confirm="true"
-                  @confirm="doDeleteDept"
-                  @cancel="deletingDept = null"
-                />
-              </TabPanel>
-
-              <!-- Типы юнитов -->
-              <TabPanel value="unit-types">
-                <div class="panel-toolbar">
-                  <h4 class="panel-title">Типы юнитов</h4>
-                  <button
-                    v-if="isAtLeast(ROLES.MANAGER)"
-                    class="btn-primary"
-                    @click="startAddUnitType"
-                  >
-                    <span class="material-symbols-outlined">add</span>
-                    Добавить
-                  </button>
-                </div>
-
-                <div class="inline-list">
-                  <!-- Новая строка -->
-                  <div v-if="addingUnitType" class="inline-list-row editing">
-                    <InputText v-model="newUnitTypeName" placeholder="Название типа" class="flex-input" @keyup.enter="saveUnitType" @keyup.escape="addingUnitType = false" />
-                    <button class="icon-btn success" @click="saveUnitType" title="Сохранить">
-                      <span class="material-symbols-outlined">check</span>
-                    </button>
-                    <button class="icon-btn" @click="addingUnitType = false" title="Отмена">
-                      <span class="material-symbols-outlined">close</span>
-                    </button>
-                  </div>
-
-                  <div v-for="ut in unitTypes" :key="ut.id" class="inline-list-row">
-                    <template v-if="editingUnitTypeId === ut.id">
-                      <InputText v-model="editingUnitTypeName" class="flex-input" @keyup.enter="updateUnitType(ut)" @keyup.escape="editingUnitTypeId = null" />
-                      <button class="icon-btn success" @click="updateUnitType(ut)" title="Сохранить">
-                        <span class="material-symbols-outlined">check</span>
-                      </button>
-                      <button class="icon-btn" @click="editingUnitTypeId = null" title="Отмена">
-                        <span class="material-symbols-outlined">close</span>
-                      </button>
-                    </template>
-                    <template v-else>
-                      <span class="list-item-name">{{ ut.name }}</span>
-                      <div v-if="isAtLeast(ROLES.MANAGER)" class="row-actions">
-                        <button
-                          class="icon-btn"
-                          title="Редактировать"
-                          @click="startEditUnitType(ut)"
-                        >
-                          <span class="material-symbols-outlined">edit</span>
-                        </button>
-                        <button
-                          class="icon-btn danger"
-                          title="Удалить"
-                          @click="confirmDeleteUnitType(ut)"
-                        >
-                          <span class="material-symbols-outlined">delete</span>
-                        </button>
-                      </div>
-                    </template>
-                  </div>
-                  <div v-if="unitTypes.length === 0 && !addingUnitType" class="empty-inline">Типы юнитов не добавлены</div>
-                </div>
-
-                <ConfirmDialog
-                  :visible="!!deletingUnitType"
-                  header="Удалить тип юнита"
-                  :message="`Удалить тип «${deletingUnitType?.name}»? Все юниты этого типа будут удалены безвозвратно.`"
-                  confirm-label="Удалить"
-                  :danger-confirm="true"
-                  @confirm="doDeleteUnitType"
-                  @cancel="deletingUnitType = null"
-                />
-              </TabPanel>
-            </TabPanels>
-          </Tabs>
-        </TabPanel>
-
-        <!-- Копирование -->
-        <TabPanel value="backup">
-          <div class="backup-panel">
-            <div class="backup-card">
-              <div class="backup-card-info">
-                <span class="material-symbols-outlined backup-icon">backup</span>
-                <div>
-                  <h4>Резервная копия</h4>
-                  <p>Скачать полную резервную копию базы данных в формате JSON.</p>
-                </div>
-              </div>
-              <button class="btn-primary" @click="doExportBackup" :disabled="backupExporting">
-                <span class="material-symbols-outlined">download</span>
-                {{ backupExporting ? 'Создание...' : 'Создать резервную копию' }}
+          <div class="chip-list">
+            <div v-if="addingUnitType" class="chip-row editing">
+              <span class="material-symbols-outlined chip-icon">category</span>
+              <input
+                v-model="newUnitTypeName"
+                class="chip-input"
+                placeholder="Название типа"
+                autofocus
+                @keyup.enter="saveUnitType"
+                @keyup.escape="addingUnitType = false"
+              />
+              <button class="icon-btn success" @click="saveUnitType" title="Сохранить">
+                <span class="material-symbols-outlined">check</span>
+              </button>
+              <button class="icon-btn" @click="addingUnitType = false" title="Отмена">
+                <span class="material-symbols-outlined">close</span>
               </button>
             </div>
 
-            <div class="backup-card">
-              <div class="backup-card-info">
-                <span class="material-symbols-outlined backup-icon">restore</span>
-                <div>
-                  <h4>Восстановление</h4>
-                  <p>Восстановить систему из резервной копии. Текущие данные будут заменены.</p>
+            <div v-for="ut in unitTypes" :key="ut.id" class="chip-row">
+              <template v-if="editingUnitTypeId === ut.id">
+                <span class="material-symbols-outlined chip-icon">category</span>
+                <input
+                  v-model="editingUnitTypeName"
+                  class="chip-input"
+                  @keyup.enter="updateUnitType(ut)"
+                  @keyup.escape="editingUnitTypeId = null"
+                />
+                <button class="icon-btn success" @click="updateUnitType(ut)" title="Сохранить">
+                  <span class="material-symbols-outlined">check</span>
+                </button>
+                <button class="icon-btn" @click="editingUnitTypeId = null" title="Отмена">
+                  <span class="material-symbols-outlined">close</span>
+                </button>
+              </template>
+              <template v-else>
+                <span class="material-symbols-outlined chip-icon">category</span>
+                <span class="chip-name">{{ ut.name }}</span>
+                <div v-if="isAtLeast(ROLES.MANAGER)" class="row-actions">
+                  <button class="icon-btn" title="Редактировать" @click="startEditUnitType(ut)">
+                    <span class="material-symbols-outlined">edit</span>
+                  </button>
+                  <button class="icon-btn danger" title="Удалить" @click="confirmDeleteUnitType(ut)">
+                    <span class="material-symbols-outlined">delete</span>
+                  </button>
                 </div>
+              </template>
+            </div>
+            <div v-if="!unitTypes.length && !addingUnitType" class="settings-empty">
+              <div class="empty-icon" data-tone="tertiary">
+                <span class="material-symbols-outlined">category</span>
               </div>
-              <label class="btn-secondary file-btn">
+              <h4>Типов юнитов пока нет</h4>
+              <p>Без них юниты создавать нельзя — добавьте хотя бы один.</p>
+            </div>
+          </div>
+        </div>
+
+        <!-- Резервная копия -->
+        <div v-show="activeSection === 'backup'" class="pane-block">
+          <div class="settings-card">
+            <div class="hero-icon" data-tone="primary">
+              <span class="material-symbols-outlined">backup</span>
+            </div>
+            <div class="card-text">
+              <h3>Создать резервную копию</h3>
+              <p>Полный архив базы данных и вложений в одном файле. Сохраняйте регулярно — на всякий случай.</p>
+            </div>
+            <div class="card-actions">
+              <button class="btn-filled" @click="doExportBackup" :disabled="backupExporting">
+                <span class="material-symbols-outlined">download</span>
+                {{ backupExporting ? 'Готовим архив…' : 'Скачать копию' }}
+              </button>
+            </div>
+          </div>
+
+          <div class="settings-card settings-card--danger">
+            <div class="hero-icon" data-tone="error">
+              <span class="material-symbols-outlined">restore</span>
+            </div>
+            <div class="card-text">
+              <h3>Восстановление</h3>
+              <p>Полная замена текущих данных на содержимое архива. Действие необратимо — мы дважды переспросим.</p>
+            </div>
+            <div class="card-actions">
+              <label class="btn-outlined danger file-btn">
                 <span class="material-symbols-outlined">upload</span>
                 Выбрать файл
                 <input type="file" accept=".zip" @change="onImportFileSelect" style="display:none" />
               </label>
             </div>
           </div>
+        </div>
+      </div>
+    </section>
 
-          <!-- Двойное подтверждение импорта -->
-          <ConfirmDialog
-            :visible="showImportConfirm1"
-            header="Восстановление из резервной копии"
-            message="Вы уверены? Текущие данные будут полностью заменены данными из файла резервной копии."
-            confirm-label="Продолжить"
-            :danger-confirm="true"
-            @confirm="showImportConfirm1 = false; showImportConfirm2 = true"
-            @cancel="showImportConfirm1 = false; importFile = null"
+    <!-- Диалоги — общие для всех секций -->
+    <Dialog
+      v-model:visible="showUserDialog"
+      :header="editingUser ? 'Редактирование пользователя' : 'Новый пользователь'"
+      modal
+      :draggable="false"
+      style="width:480px"
+    >
+      <form @submit.prevent="saveUser" class="dialog-form">
+        <div class="form-group">
+          <label>ФИО</label>
+          <InputText v-model="userForm.fio" class="w-full" placeholder="Иванов Иван Иванович" />
+        </div>
+        <div class="form-group">
+          <label>Логин</label>
+          <InputText v-model="userForm.login" class="w-full" placeholder="ivanov" />
+        </div>
+        <div v-if="!editingUser" class="form-group">
+          <label>Пароль</label>
+          <InputText v-model="userForm.password" type="password" class="w-full" placeholder="Минимум 8 символов" />
+        </div>
+        <div class="form-group">
+          <label>Должность</label>
+          <InputText v-model="userForm.post" class="w-full" placeholder="Менеджер" />
+        </div>
+        <div class="form-group">
+          <label>Роль</label>
+          <Select
+            v-model="userForm.role_id"
+            :options="assignableRoles"
+            option-label="name"
+            option-value="id"
+            placeholder="Выберите роль"
+            class="w-full"
           />
-          <ConfirmDialog
-            :visible="showImportConfirm2"
-            header="Подтвердите восстановление"
-            message="Это последнее предупреждение. Все текущие данные будут безвозвратно заменены. Продолжить?"
-            confirm-label="Да, восстановить"
-            :danger-confirm="true"
-            @confirm="doImportBackup"
-            @cancel="showImportConfirm2 = false; importFile = null"
-          />
-        </TabPanel>
-      </TabPanels>
-    </Tabs>
+        </div>
+        <p v-if="userFormError" class="error-msg">{{ userFormError }}</p>
+        <div class="dialog-footer">
+          <button type="button" class="btn-text" @click="showUserDialog = false">Отмена</button>
+          <button type="submit" class="btn-filled" :disabled="userFormLoading">
+            {{ userFormLoading ? 'Сохраняем…' : 'Сохранить' }}
+          </button>
+        </div>
+      </form>
+    </Dialog>
+
+    <ConfirmDialog
+      :visible="!!deletingUser"
+      header="Удалить пользователя"
+      :message="`Удалить пользователя «${deletingUser?.fio}»? Данные задач и юнитов сохраняются.`"
+      confirm-label="Удалить"
+      :danger-confirm="true"
+      @confirm="doDeleteUser"
+      @cancel="deletingUser = null"
+    />
+    <ConfirmDialog
+      :visible="!!deletingDept"
+      header="Удалить отдел"
+      :message="`Удалить отдел «${deletingDept?.name}»?`"
+      confirm-label="Удалить"
+      :danger-confirm="true"
+      @confirm="doDeleteDept"
+      @cancel="deletingDept = null"
+    />
+    <ConfirmDialog
+      :visible="!!deletingUnitType"
+      header="Удалить тип юнита"
+      :message="`Удалить тип «${deletingUnitType?.name}»? Все юниты этого типа будут удалены безвозвратно.`"
+      confirm-label="Удалить"
+      :danger-confirm="true"
+      @confirm="doDeleteUnitType"
+      @cancel="deletingUnitType = null"
+    />
+    <ConfirmDialog
+      :visible="showImportConfirm1"
+      header="Восстановление из резервной копии"
+      message="Вы уверены? Текущие данные будут полностью заменены данными из файла резервной копии."
+      confirm-label="Продолжить"
+      :danger-confirm="true"
+      @confirm="showImportConfirm1 = false; showImportConfirm2 = true"
+      @cancel="showImportConfirm1 = false; importFile = null"
+    />
+    <ConfirmDialog
+      :visible="showImportConfirm2"
+      header="Подтвердите восстановление"
+      message="Это последнее предупреждение. Все текущие данные будут безвозвратно заменены. Продолжить?"
+      confirm-label="Да, восстановить"
+      :danger-confirm="true"
+      @confirm="doImportBackup"
+      @cancel="showImportConfirm2 = false; importFile = null"
+    />
   </div>
 </template>
 
 <script setup>
 import { ref, reactive, computed, onMounted, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import { usePermission, ROLES } from '@/composables/usePermission.js'
 import { useNotificationsStore } from '@/stores/notifications.js'
+import { useAuthStore } from '@/stores/auth.js'
 import { useTutorial } from '@/composables/useTutorial.js'
 import { useChangelog } from '@/composables/useChangelog.js'
+import { useBreakpoint } from '@/composables/useBreakpoint.js'
 import { version as appVersion } from '../../package.json'
 import {
-  getUsers, createUser, updateUser, deleteUser, assignRole
+  getUsers, createUser, updateUser, deleteUser, assignRole,
 } from '@/api/users.js'
 import { getRoles } from '@/api/roles.js'
 import {
-  getDepartments, createDepartment, updateDepartment, deleteDepartment
+  getDepartments, createDepartment, updateDepartment, deleteDepartment,
 } from '@/api/departments.js'
 import {
-  getUnitTypes, createUnitType, updateUnitType as apiUpdateUnitType, deleteUnitType
+  getUnitTypes, createUnitType, updateUnitType as apiUpdateUnitType, deleteUnitType,
 } from '@/api/unitTypes.js'
 import { exportBackup, importBackup } from '@/api/backup.js'
 import ThemeBuilder from '@/components/settings/ThemeBuilder.vue'
 import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
-import Tabs from 'primevue/tabs'
-import TabList from 'primevue/tablist'
-import Tab from 'primevue/tab'
-import TabPanels from 'primevue/tabpanels'
-import TabPanel from 'primevue/tabpanel'
 import Dialog from 'primevue/dialog'
-import DataTable from 'primevue/datatable'
-import Column from 'primevue/column'
 import InputText from 'primevue/inputtext'
 import Select from 'primevue/select'
-import ProgressSpinner from 'primevue/progressspinner'
 
 const { isAtLeast, myLevel } = usePermission()
 const notif = useNotificationsStore()
+const authStore = useAuthStore()
 const tutorial = useTutorial()
 const changelog = useChangelog()
+const { isMobile } = useBreakpoint()
+const route = useRoute()
+const router = useRouter()
 
-const activeTab = ref('theme')
-const listsTab = ref('departments')
+const searchQuery = ref('')
+const activeSection = ref(null) // null = показывать список секций (на мобильном)
 
-// ---- Пользователи ----
+/* ── Конфигурация разделов ─────────────────────────────────────── */
+const allGroups = computed(() => [
+  {
+    key: 'personal',
+    label: 'Персонализация',
+    sections: [
+      { key: 'theme', title: 'Внешний вид', desc: 'Цвета, тёмная тема и стиль интерфейса', icon: 'palette', tone: 'primary' },
+      { key: 'tutorial', title: 'Обучение', desc: 'Запустить интерактивный тур заново', icon: 'school', tone: 'secondary' },
+      { key: 'changelog', title: 'История версий', desc: 'Что нового в каждом обновлении', icon: 'newsmode', tone: 'tertiary' },
+    ],
+  },
+  {
+    key: 'admin',
+    label: 'Администрирование',
+    visible: () => isAtLeast(ROLES.EMPLOYEE),
+    sections: [
+      ...(isAtLeast(ROLES.ADMIN) ? [
+        { key: 'users', title: 'Пользователи', desc: 'Создание сотрудников и управление ролями', icon: 'group', tone: 'primary' },
+      ] : []),
+      { key: 'departments', title: 'Отделы', desc: 'Группировка сотрудников для статистики', icon: 'apartment', tone: 'secondary' },
+      { key: 'unit-types', title: 'Типы юнитов', desc: 'Категории работы для учёта времени', icon: 'category', tone: 'tertiary' },
+    ],
+  },
+  ...(isAtLeast(ROLES.SUPERADMIN) ? [{
+    key: 'system',
+    label: 'Система',
+    sections: [
+      { key: 'backup', title: 'Резервная копия', desc: 'Экспорт и восстановление базы данных', icon: 'backup', tone: 'error' },
+    ],
+  }] : []),
+])
+
+const visibleGroups = computed(() => {
+  const q = searchQuery.value.trim().toLowerCase()
+  return allGroups.value
+    .filter(g => !g.visible || g.visible())
+    .map(g => ({
+      ...g,
+      sections: g.sections.filter(s => !q || [s.title, s.desc].some(x => x.toLowerCase().includes(q))),
+    }))
+    .filter(g => g.sections.length)
+})
+
+const sectionByKey = computed(() => {
+  const map = {}
+  allGroups.value.forEach(g => g.sections.forEach(s => { map[s.key] = s }))
+  return map
+})
+
+const activeSectionMeta = computed(() => activeSection.value ? sectionByKey.value[activeSection.value] : null)
+
+function openSection(key) {
+  activeSection.value = key
+  router.replace({ query: { ...route.query, section: key } }).catch(() => {})
+}
+
+function roleIcon(level) {
+  if (level >= 4) return 'workspace_premium'
+  if (level >= 3) return 'shield_person'
+  if (level >= 2) return 'badge'
+  return 'person'
+}
+
+/* ── Пользователи ──────────────────────────────────────────────── */
 const users = ref([])
 const usersLoading = ref(false)
 const userSearch = ref('')
@@ -423,18 +566,13 @@ const userFormLoading = ref(false)
 const userFormError = ref('')
 const userForm = reactive({ fio: '', login: '', password: '', post: '', role_id: null })
 
-// ---- Роли (только для dropdown) ----
 const roles = ref([])
-
 const assignableRoles = computed(() => {
   const level = myLevel()
-  // Суперадмин может назначить любую роль ниже своей
-  // Админ может назначить только сотрудника и менеджера
   return roles.value.filter(r => r.level < level)
 })
 
 let userSearchTimer = null
-
 function onUserSearch() {
   clearTimeout(userSearchTimer)
   userSearchTimer = setTimeout(() => loadUsers(), 400)
@@ -442,21 +580,14 @@ function onUserSearch() {
 
 async function loadUsers() {
   usersLoading.value = true
-  try {
-    users.value = await getUsers(userSearch.value)
-  } catch (e) {
-    notif.error(e.message || 'Ошибка загрузки пользователей')
-  } finally {
-    usersLoading.value = false
-  }
+  try { users.value = await getUsers(userSearch.value) }
+  catch (e) { notif.error(e.message || 'Ошибка загрузки пользователей') }
+  finally { usersLoading.value = false }
 }
 
 async function loadRoles() {
-  try {
-    roles.value = await getRoles()
-  } catch (e) {
-    notif.error(e.message || 'Ошибка загрузки ролей')
-  }
+  try { roles.value = await getRoles() }
+  catch (e) { notif.error(e.message || 'Ошибка загрузки ролей') }
 }
 
 function getUserAvatar(user) {
@@ -473,7 +604,7 @@ function openUserDialog(user) {
       login: user.login || '',
       password: '',
       post: user.post || '',
-      role_id: user.role?.id || null
+      role_id: user.role?.id || null,
     })
   } else {
     Object.assign(userForm, { fio: '', login: '', password: '', post: '', role_id: null })
@@ -494,11 +625,7 @@ async function saveUser() {
   userFormLoading.value = true
   try {
     if (editingUser.value) {
-      const payload = {
-        fio: userForm.fio.trim(),
-        login: userForm.login.trim(),
-        post: userForm.post.trim()
-      }
+      const payload = { fio: userForm.fio.trim(), login: userForm.login.trim(), post: userForm.post.trim() }
       await updateUser(editingUser.value.id, payload)
       if (userForm.role_id && userForm.role_id !== editingUser.value.role?.id) {
         await assignRole(editingUser.value.id, { role_id: userForm.role_id })
@@ -506,42 +633,30 @@ async function saveUser() {
       notif.success('Пользователь обновлён')
     } else {
       const payload = {
-        fio: userForm.fio.trim(),
-        login: userForm.login.trim(),
-        post: userForm.post.trim(),
-        password: userForm.password,
-        role_id: userForm.role_id
+        fio: userForm.fio.trim(), login: userForm.login.trim(), post: userForm.post.trim(),
+        password: userForm.password, role_id: userForm.role_id,
       }
       await createUser(payload)
       notif.success('Пользователь создан')
     }
     showUserDialog.value = false
     loadUsers()
-  } catch (e) {
-    userFormError.value = e.message || 'Ошибка сохранения'
-  } finally {
-    userFormLoading.value = false
-  }
+  } catch (e) { userFormError.value = e.message || 'Ошибка сохранения' }
+  finally { userFormLoading.value = false }
 }
 
-function confirmDeleteUser(user) {
-  deletingUser.value = user
-}
-
+function confirmDeleteUser(user) { deletingUser.value = user }
 async function doDeleteUser() {
   if (!deletingUser.value) return
   try {
     await deleteUser(deletingUser.value.id)
     notif.success('Пользователь удалён')
     users.value = users.value.filter(u => u.id !== deletingUser.value.id)
-  } catch (e) {
-    notif.error(e.message || 'Ошибка удаления')
-  } finally {
-    deletingUser.value = null
-  }
+  } catch (e) { notif.error(e.message || 'Ошибка удаления') }
+  finally { deletingUser.value = null }
 }
 
-// ---- Отделы ----
+/* ── Отделы ────────────────────────────────────────────────────── */
 const departments = ref([])
 const addingDept = ref(false)
 const newDeptName = ref('')
@@ -550,65 +665,42 @@ const editingDeptName = ref('')
 const deletingDept = ref(null)
 
 async function loadDepartments() {
-  try {
-    departments.value = await getDepartments()
-  } catch (e) {
-    notif.error(e.message || 'Ошибка загрузки отделов')
-  }
+  try { departments.value = await getDepartments() }
+  catch (e) { notif.error(e.message || 'Ошибка загрузки отделов') }
 }
 
-function startAddDept() {
-  addingDept.value = true
-  newDeptName.value = ''
-}
+function startAddDept() { addingDept.value = true; newDeptName.value = '' }
 
 async function saveDept() {
   if (!newDeptName.value.trim()) return
   try {
     await createDepartment({ name: newDeptName.value.trim() })
-    notif.success('Отдел создан')
-    addingDept.value = false
-    loadDepartments()
-  } catch (e) {
-    notif.error(e.message || 'Ошибка создания отдела')
-  }
+    notif.success('Отдел создан'); addingDept.value = false; loadDepartments()
+  } catch (e) { notif.error(e.message || 'Ошибка создания отдела') }
 }
 
-function startEditDept(dept) {
-  editingDeptId.value = dept.id
-  editingDeptName.value = dept.name
-}
+function startEditDept(dept) { editingDeptId.value = dept.id; editingDeptName.value = dept.name }
 
 async function updateDept(dept) {
   if (!editingDeptName.value.trim()) return
   try {
     await updateDepartment(dept.id, { name: editingDeptName.value.trim() })
-    notif.success('Отдел обновлён')
-    editingDeptId.value = null
-    loadDepartments()
-  } catch (e) {
-    notif.error(e.message || 'Ошибка обновления')
-  }
+    notif.success('Отдел обновлён'); editingDeptId.value = null; loadDepartments()
+  } catch (e) { notif.error(e.message || 'Ошибка обновления') }
 }
 
-function confirmDeleteDept(dept) {
-  deletingDept.value = dept
-}
-
+function confirmDeleteDept(dept) { deletingDept.value = dept }
 async function doDeleteDept() {
   if (!deletingDept.value) return
   try {
     await deleteDepartment(deletingDept.value.id)
     notif.success('Отдел удалён')
     departments.value = departments.value.filter(d => d.id !== deletingDept.value.id)
-  } catch (e) {
-    notif.error(e.message || 'Ошибка удаления')
-  } finally {
-    deletingDept.value = null
-  }
+  } catch (e) { notif.error(e.message || 'Ошибка удаления') }
+  finally { deletingDept.value = null }
 }
 
-// ---- Типы юнитов ----
+/* ── Типы юнитов ───────────────────────────────────────────────── */
 const unitTypes = ref([])
 const addingUnitType = ref(false)
 const newUnitTypeName = ref('')
@@ -617,65 +709,42 @@ const editingUnitTypeName = ref('')
 const deletingUnitType = ref(null)
 
 async function loadUnitTypes() {
-  try {
-    unitTypes.value = await getUnitTypes()
-  } catch (e) {
-    notif.error(e.message || 'Ошибка загрузки типов юнитов')
-  }
+  try { unitTypes.value = await getUnitTypes() }
+  catch (e) { notif.error(e.message || 'Ошибка загрузки типов юнитов') }
 }
 
-function startAddUnitType() {
-  addingUnitType.value = true
-  newUnitTypeName.value = ''
-}
+function startAddUnitType() { addingUnitType.value = true; newUnitTypeName.value = '' }
 
 async function saveUnitType() {
   if (!newUnitTypeName.value.trim()) return
   try {
     await createUnitType({ name: newUnitTypeName.value.trim() })
-    notif.success('Тип юнита создан')
-    addingUnitType.value = false
-    loadUnitTypes()
-  } catch (e) {
-    notif.error(e.message || 'Ошибка создания')
-  }
+    notif.success('Тип юнита создан'); addingUnitType.value = false; loadUnitTypes()
+  } catch (e) { notif.error(e.message || 'Ошибка создания') }
 }
 
-function startEditUnitType(ut) {
-  editingUnitTypeId.value = ut.id
-  editingUnitTypeName.value = ut.name
-}
+function startEditUnitType(ut) { editingUnitTypeId.value = ut.id; editingUnitTypeName.value = ut.name }
 
 async function updateUnitType(ut) {
   if (!editingUnitTypeName.value.trim()) return
   try {
     await apiUpdateUnitType(ut.id, { name: editingUnitTypeName.value.trim() })
-    notif.success('Тип юнита обновлён')
-    editingUnitTypeId.value = null
-    loadUnitTypes()
-  } catch (e) {
-    notif.error(e.message || 'Ошибка обновления')
-  }
+    notif.success('Тип юнита обновлён'); editingUnitTypeId.value = null; loadUnitTypes()
+  } catch (e) { notif.error(e.message || 'Ошибка обновления') }
 }
 
-function confirmDeleteUnitType(ut) {
-  deletingUnitType.value = ut
-}
-
+function confirmDeleteUnitType(ut) { deletingUnitType.value = ut }
 async function doDeleteUnitType() {
   if (!deletingUnitType.value) return
   try {
     await deleteUnitType(deletingUnitType.value.id)
     notif.success('Тип юнита удалён')
     unitTypes.value = unitTypes.value.filter(u => u.id !== deletingUnitType.value.id)
-  } catch (e) {
-    notif.error(e.message || 'Ошибка удаления')
-  } finally {
-    deletingUnitType.value = null
-  }
+  } catch (e) { notif.error(e.message || 'Ошибка удаления') }
+  finally { deletingUnitType.value = null }
 }
 
-// ---- Backup ----
+/* ── Backup ────────────────────────────────────────────────────── */
 const backupExporting = ref(false)
 const showImportConfirm1 = ref(false)
 const showImportConfirm2 = ref(false)
@@ -686,27 +755,18 @@ async function doExportBackup() {
   try {
     const response = await exportBackup()
     let blob
-    if (response instanceof Blob) {
-      blob = response
-    } else if (response && typeof response.blob === 'function') {
-      blob = await response.blob()
-    } else {
-      blob = new Blob([JSON.stringify(response)], { type: 'application/json' })
-    }
+    if (response instanceof Blob) blob = response
+    else if (response && typeof response.blob === 'function') blob = await response.blob()
+    else blob = new Blob([JSON.stringify(response)], { type: 'application/json' })
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
     a.href = url
     a.download = `backup_${new Date().toISOString().split('T')[0]}.zip`
-    document.body.appendChild(a)
-    a.click()
-    document.body.removeChild(a)
+    document.body.appendChild(a); a.click(); document.body.removeChild(a)
     URL.revokeObjectURL(url)
     notif.success('Резервная копия создана')
-  } catch (e) {
-    notif.error(e.message || 'Ошибка создания резервной копии')
-  } finally {
-    backupExporting.value = false
-  }
+  } catch (e) { notif.error(e.message || 'Ошибка создания резервной копии') }
+  finally { backupExporting.value = false }
 }
 
 function onImportFileSelect(event) {
@@ -724,63 +784,326 @@ async function doImportBackup() {
     await importBackup(importFile.value)
     notif.success('База данных восстановлена. Страница перезагрузится.')
     setTimeout(() => window.location.reload(), 2000)
-  } catch (e) {
-    notif.error(e.message || 'Ошибка восстановления')
-  } finally {
-    importFile.value = null
-  }
+  } catch (e) { notif.error(e.message || 'Ошибка восстановления') }
+  finally { importFile.value = null }
 }
 
-// ---- Загрузка данных при смене вкладки ----
-watch(activeTab, (tab) => {
-  if (tab === 'users') { loadUsers(); loadRoles() }
-  if (tab === 'lists') { loadDepartments(); loadUnitTypes() }
+/* ── Загрузка при смене секции ─────────────────────────────────── */
+watch(activeSection, (key) => {
+  if (key === 'users') { loadUsers(); loadRoles() }
+  if (key === 'departments') loadDepartments()
+  if (key === 'unit-types') loadUnitTypes()
 })
 
 onMounted(() => {
   loadRoles()
-  if (isAtLeast(ROLES.ADMIN)) loadUsers()
+  // Стартовая секция: ?section=… или дефолт
+  const requested = route.query.section
+  const initial = (requested && sectionByKey.value[requested]) ? requested : (isMobile.value ? null : 'theme')
+  if (initial) {
+    activeSection.value = initial
+  } else if (!isMobile.value) {
+    activeSection.value = 'theme'
+  }
 })
+
+// Если стартовали на десктопе и потом перешли на мобильный/обратно — никаких
+// особенных действий не нужно, layout сам реагирует.
 </script>
 
 <style scoped>
-.settings-view {
+/* ──────────────────────────────────────────────────────────────────
+   M3 Expressive Settings Layout
+   - Слева sidebar секций (десктоп) / список (мобильный)
+   - Справа панель активной секции
+   - Карточки настроек со state-layer hover
+────────────────────────────────────────────────────────────────── */
+.settings-shell {
+  display: grid;
+  grid-template-columns: 340px 1fr;
+  gap: 24px;
   padding: 24px;
-  max-width: 1200px;
+  max-width: 1400px;
   margin: 0 auto;
   height: 100%;
+  min-height: 0;
+  overflow: hidden;
+}
+
+/* ── Левая колонка ──────────────────────────────────────────── */
+.settings-nav {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  background: var(--color-surface-low);
+  border: 1px solid var(--color-outline-dim);
+  border-radius: 24px;
+  padding: 20px 14px;
   overflow-y: auto;
+  min-height: 0;
 }
 
-.settings-view h1 {
-  margin: 0 0 20px;
-  font-size: 24px;
+.settings-nav-header h1 {
+  margin: 0 0 4px;
+  padding: 0 10px;
+  font-size: 22px;
   font-weight: 800;
-  color: var(--gw-text);
+  color: var(--color-text);
+  letter-spacing: -0.01em;
 }
 
-/* Panel toolbar */
-.panel-toolbar {
+.settings-nav-sub {
+  margin: 0;
+  padding: 0 10px;
+  font-size: 13px;
+  color: var(--color-text-dim);
+}
+
+.settings-search {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 4px;
+  padding: 0 14px;
+  background: var(--color-surface-high);
+  border: 1px solid transparent;
+  border-radius: 999px;
+  transition: border-color 0.15s, background 0.15s;
+}
+
+.settings-search:focus-within {
+  background: var(--color-surface);
+  border-color: var(--color-primary);
+}
+
+.settings-search > .material-symbols-outlined {
+  font-size: 20px;
+  color: var(--color-text-dim);
+}
+
+.settings-search input {
+  flex: 1;
+  min-width: 0;
+  background: transparent;
+  border: 0;
+  outline: 0;
+  padding: 11px 0;
+  font-size: 14px;
+  color: var(--color-text);
+}
+
+.settings-search input::placeholder { color: var(--color-text-dim); }
+
+.settings-search-clear {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  border: 0;
+  background: transparent;
+  display: grid;
+  place-items: center;
+  color: var(--color-text-dim);
+  cursor: pointer;
+}
+
+.settings-search-clear:hover { background: var(--color-surface); color: var(--color-text); }
+.settings-search-clear .material-symbols-outlined { font-size: 16px; }
+
+.settings-sections {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1;
+}
+
+.settings-group-label {
+  margin: 12px 14px 4px;
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--color-text-dim);
+  font-weight: 700;
+}
+
+.settings-nav-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  background: transparent;
+  border: 0;
+  border-radius: 16px;
+  cursor: pointer;
+  text-align: left;
+  transition: background 0.15s;
+  position: relative;
+}
+
+.settings-nav-item:hover {
+  background: var(--color-surface);
+}
+
+.settings-nav-item.active {
+  background: var(--color-primary-container);
+}
+
+.settings-nav-item.active .nav-title { color: var(--color-on-primary-container); }
+.settings-nav-item.active .nav-desc { color: color-mix(in oklch, var(--color-on-primary-container) 70%, transparent); }
+
+.nav-icon {
+  flex-shrink: 0;
+  width: 40px;
+  height: 40px;
+  border-radius: 12px;
+  display: grid;
+  place-items: center;
+  background: var(--tone-bg, var(--color-primary-container));
+  color: var(--tone-fg, var(--color-on-primary-container));
+}
+
+.nav-icon[data-tone="primary"]   { --tone-bg: var(--color-primary-container);   --tone-fg: var(--color-on-primary-container); }
+.nav-icon[data-tone="secondary"] { --tone-bg: var(--color-secondary-container); --tone-fg: var(--color-on-secondary-container); }
+.nav-icon[data-tone="tertiary"]  { --tone-bg: var(--color-tertiary-container);  --tone-fg: var(--color-on-tertiary-container); }
+.nav-icon[data-tone="error"]     { --tone-bg: var(--color-error-container);     --tone-fg: var(--color-on-error-container); }
+
+.nav-icon .material-symbols-outlined { font-size: 22px; }
+
+.nav-text {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.nav-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--color-text);
+  line-height: 1.2;
+}
+
+.nav-desc {
+  font-size: 12px;
+  color: var(--color-text-dim);
+  line-height: 1.3;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.nav-chevron {
+  font-size: 18px;
+  color: var(--color-text-dim);
+  opacity: 0.7;
+}
+
+.settings-nav-footer {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  background: var(--color-surface);
+  border-radius: 16px;
+  font-size: 12px;
+  color: var(--color-text-dim);
+}
+
+.settings-nav-footer .material-symbols-outlined {
+  color: var(--color-primary);
+  font-size: 22px;
+}
+
+.footer-name { font-weight: 700; color: var(--color-text); }
+.footer-version { color: var(--color-text-dim); margin-top: 1px; }
+
+/* ── Правая колонка ───────────────────────────────────────────── */
+.settings-pane {
+  display: flex;
+  flex-direction: column;
+  background: var(--color-surface-low);
+  border: 1px solid var(--color-outline-dim);
+  border-radius: 24px;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.settings-pane-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 20px 24px;
+  border-bottom: 1px solid var(--color-outline-dim);
+}
+
+.settings-back {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  border: 0;
+  background: transparent;
+  color: var(--color-text);
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.settings-back:hover { background: var(--color-surface); }
+
+.pane-title-wrap { min-width: 0; }
+
+.pane-title {
+  margin: 0;
+  font-size: 22px;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+  color: var(--color-text);
+  line-height: 1.2;
+}
+
+.pane-sub {
+  margin: 4px 0 0;
+  font-size: 13px;
+  color: var(--color-text-dim);
+}
+
+.settings-pane-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 24px;
+}
+
+.pane-block {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  max-width: 880px;
+}
+
+/* ── Toolbar inside section ───────────────────────────────────── */
+.pane-toolbar {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  margin-bottom: 16px;
   flex-wrap: wrap;
 }
 
-.panel-title {
+.pane-toolbar-hint {
   margin: 0;
-  font-size: 16px;
-  font-weight: 700;
-  color: var(--gw-text);
+  font-size: 13px;
+  color: var(--color-text-dim);
+  flex: 1;
+  min-width: 200px;
 }
 
-/* Search */
 .search-wrapper {
   flex: 1;
   min-width: 200px;
-  max-width: 320px;
+  max-width: 360px;
   position: relative;
   display: flex;
   align-items: center;
@@ -788,136 +1111,388 @@ onMounted(() => {
 
 .search-icon {
   position: absolute;
-  left: 10px;
+  left: 14px;
   font-size: 18px;
-  color: var(--gw-text-secondary);
+  color: var(--color-text-dim);
   pointer-events: none;
 }
 
 .search-input {
   width: 100%;
-  padding: 8px 12px 8px 36px;
-  border: 1px solid var(--gw-border);
-  border-radius: 10px;
+  padding: 11px 14px 11px 40px;
+  border: 1px solid transparent;
+  border-radius: 999px;
   font-size: 14px;
-  background: var(--gw-bg);
-  color: var(--gw-text);
+  background: var(--color-surface-high);
+  color: var(--color-text);
   outline: none;
-  transition: border-color 0.15s;
+  transition: border-color 0.15s, background 0.15s;
 }
 
 .search-input:focus {
-  border-color: var(--gw-primary);
+  border-color: var(--color-primary);
+  background: var(--color-surface);
 }
 
-/* Buttons */
-.btn-primary {
-  display: flex;
+/* ── Кнопки M3 ─────────────────────────────────────────────────── */
+.btn-filled, .btn-filled-tonal, .btn-outlined, .btn-text {
+  display: inline-flex;
   align-items: center;
-  gap: 6px;
-  background: var(--gw-primary);
-  color: var(--color-on-primary);
-  border: none;
-  border-radius: 10px;
-  padding: 9px 18px;
+  gap: 8px;
+  padding: 10px 22px;
+  border-radius: 999px;
   font-size: 14px;
   font-weight: 600;
   cursor: pointer;
-  transition: background 0.15s;
   white-space: nowrap;
+  transition: background 0.15s, color 0.15s, border-color 0.15s, box-shadow 0.15s;
+  border: 1px solid transparent;
 }
 
-.btn-primary:hover:not(:disabled) {
-  background: var(--gw-primary-hover);
+.btn-filled {
+  background: var(--color-primary);
+  color: var(--color-on-primary);
+}
+.btn-filled:hover:not(:disabled) {
+  background: color-mix(in oklch, var(--color-primary) 88%, var(--color-on-primary) 12%);
+}
+.btn-filled:disabled { opacity: 0.55; cursor: not-allowed; }
+.btn-filled .material-symbols-outlined { font-size: 18px; }
+
+.btn-filled-tonal {
+  background: var(--color-secondary-container);
+  color: var(--color-on-secondary-container);
+}
+.btn-filled-tonal:hover {
+  background: color-mix(in oklch, var(--color-secondary-container) 80%, var(--color-on-secondary-container) 20%);
+}
+.btn-filled-tonal .material-symbols-outlined { font-size: 18px; }
+
+.btn-outlined {
+  background: transparent;
+  color: var(--color-primary);
+  border-color: var(--color-outline);
+}
+.btn-outlined:hover {
+  background: color-mix(in oklch, var(--color-primary) 8%, transparent);
+}
+.btn-outlined.danger {
+  color: var(--color-error);
+  border-color: color-mix(in oklch, var(--color-error) 40%, var(--color-outline-dim));
+}
+.btn-outlined.danger:hover {
+  background: color-mix(in oklch, var(--color-error) 8%, transparent);
+}
+.btn-outlined .material-symbols-outlined { font-size: 18px; }
+
+.btn-text {
+  background: transparent;
+  color: var(--color-primary);
+  padding: 10px 18px;
+}
+.btn-text:hover {
+  background: color-mix(in oklch, var(--color-primary) 8%, transparent);
 }
 
-.btn-primary:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
-}
-
-.btn-primary .material-symbols-outlined {
-  font-size: 18px;
-}
-
-.btn-secondary {
+/* ── Карточки настроек ──────────────────────────────────────── */
+.settings-card {
   display: flex;
   align-items: center;
-  gap: 6px;
-  padding: 9px 18px;
-  border-radius: 10px;
+  gap: 18px;
+  padding: 20px 22px;
+  background: var(--color-surface);
+  border: 1px solid var(--color-outline-dim);
+  border-radius: 20px;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+
+.settings-card:hover {
+  border-color: color-mix(in oklch, var(--color-primary) 30%, var(--color-outline-dim));
+}
+
+.settings-card--hero {
+  padding: 24px;
+  border-radius: 24px;
+}
+
+.settings-card--danger {
+  border-color: color-mix(in oklch, var(--color-error) 28%, var(--color-outline-dim));
+}
+
+.hero-icon {
+  flex-shrink: 0;
+  width: 56px;
+  height: 56px;
+  border-radius: 16px;
+  display: grid;
+  place-items: center;
+  background: var(--tone-bg, var(--color-primary-container));
+  color: var(--tone-fg, var(--color-on-primary-container));
+}
+
+.hero-icon[data-tone="primary"]   { --tone-bg: var(--color-primary-container);   --tone-fg: var(--color-on-primary-container); }
+.hero-icon[data-tone="secondary"] { --tone-bg: var(--color-secondary-container); --tone-fg: var(--color-on-secondary-container); }
+.hero-icon[data-tone="tertiary"]  { --tone-bg: var(--color-tertiary-container);  --tone-fg: var(--color-on-tertiary-container); }
+.hero-icon[data-tone="error"]     { --tone-bg: var(--color-error-container);     --tone-fg: var(--color-on-error-container); }
+
+.hero-icon .material-symbols-outlined { font-size: 28px; }
+
+.card-text { flex: 1; min-width: 0; }
+
+.card-text h3 {
+  margin: 0 0 4px;
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--color-text);
+}
+
+.card-text p {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--color-text-dim);
+}
+
+.card-text b { color: var(--color-text); }
+
+.card-actions {
+  flex-shrink: 0;
+}
+
+/* ── Users grid ─────────────────────────────────────────────── */
+.users-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 12px;
+}
+
+.user-card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px;
+  background: var(--color-surface);
+  border: 1px solid var(--color-outline-dim);
+  border-radius: 18px;
+  transition: border-color 0.15s, transform 0.15s;
+  position: relative;
+}
+
+.user-card:hover {
+  border-color: color-mix(in oklch, var(--color-primary) 30%, var(--color-outline-dim));
+}
+
+.user-card.is-me {
+  background: var(--color-primary-container);
+  border-color: color-mix(in oklch, var(--color-primary) 50%, transparent);
+}
+.user-card.is-me .user-card-name { color: var(--color-on-primary-container); }
+
+.user-card-avatar {
+  width: 52px;
+  height: 52px;
+  border-radius: 50%;
+  object-fit: cover;
+  flex-shrink: 0;
+  border: 2px solid var(--color-surface-low);
+}
+
+.user-card-text {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.user-card-name {
   font-size: 14px;
-  cursor: pointer;
-  border: 1px solid var(--gw-border);
-  background: var(--gw-surface);
-  color: var(--gw-text);
-  transition: background 0.15s, border-color 0.15s;
+  font-weight: 700;
+  color: var(--color-text);
+  overflow: hidden;
+  text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.btn-secondary:hover {
-  background: var(--gw-bg);
-  border-color: var(--gw-primary);
-  color: var(--gw-primary);
+.user-card-login {
+  font-size: 12px;
+  color: var(--color-text-dim);
 }
 
-/* Table */
-.settings-table {
-  width: 100%;
+.user-card-post {
+  font-size: 12px;
+  color: var(--color-text-dim);
+  font-style: italic;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-.user-avatar-sm {
-  width: 36px;
-  height: 36px;
-  border-radius: 50%;
-  object-fit: cover;
-  display: block;
-  border: 2px solid var(--gw-border);
+.user-card-role {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 6px;
+  padding: 3px 10px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+  background: var(--color-surface-high);
+  color: var(--color-text-dim);
+  width: max-content;
+  max-width: 100%;
 }
 
-/* Row actions */
+.user-card-role .material-symbols-outlined { font-size: 13px; }
+
+.user-card-role[data-level="2"] {
+  background: var(--color-secondary-container);
+  color: var(--color-on-secondary-container);
+}
+.user-card-role[data-level="3"] {
+  background: var(--color-tertiary-container);
+  color: var(--color-on-tertiary-container);
+}
+.user-card-role[data-level="4"] {
+  background: var(--color-primary-container);
+  color: var(--color-on-primary-container);
+}
+
+.user-card-actions {
+  display: flex;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+/* ── Chip list (отделы/типы) ───────────────────────────────── */
+.chip-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.chip-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 14px;
+  background: var(--color-surface);
+  border: 1px solid var(--color-outline-dim);
+  border-radius: 14px;
+  transition: border-color 0.15s, background 0.15s;
+}
+
+.chip-row:hover { border-color: color-mix(in oklch, var(--color-primary) 30%, var(--color-outline-dim)); }
+
+.chip-row.editing {
+  background: var(--color-primary-container);
+  border-color: var(--color-primary);
+}
+
+.chip-row.editing .chip-icon { color: var(--color-on-primary-container); }
+
+.chip-icon {
+  font-size: 20px;
+  color: var(--color-text-dim);
+}
+
+.chip-name {
+  flex: 1;
+  font-size: 14px;
+  color: var(--color-text);
+  font-weight: 500;
+}
+
+.chip-input {
+  flex: 1;
+  background: transparent;
+  border: 0;
+  outline: 0;
+  padding: 4px 0;
+  font-size: 14px;
+  color: var(--color-text);
+}
+
+/* ── Icon buttons ───────────────────────────────────────────── */
 .row-actions {
   display: flex;
   gap: 4px;
-  justify-content: flex-end;
 }
 
 .icon-btn {
-  width: 32px;
-  height: 32px;
-  border: 1px solid var(--gw-border);
-  border-radius: 8px;
+  width: 36px;
+  height: 36px;
+  border: 0;
+  border-radius: 50%;
   background: transparent;
   cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: var(--gw-text-secondary);
-  transition: background 0.15s, color 0.15s, border-color 0.15s;
+  display: grid;
+  place-items: center;
+  color: var(--color-text-dim);
+  transition: background 0.15s, color 0.15s;
 }
 
 .icon-btn:hover {
-  background: var(--gw-bg);
-  color: var(--gw-text);
+  background: var(--color-surface-high);
+  color: var(--color-text);
 }
 
 .icon-btn.danger:hover {
   background: var(--color-error-container);
-  border-color: color-mix(in oklch, var(--color-error) 30%, var(--color-outline-dim));
-  color: var(--color-error);
+  color: var(--color-on-error-container);
 }
 
 .icon-btn.success:hover {
   background: var(--color-success-container);
-  border-color: color-mix(in oklch, var(--color-success) 30%, var(--color-outline-dim));
-  color: var(--color-success);
+  color: var(--color-on-success-container);
 }
 
-.icon-btn .material-symbols-outlined {
+.icon-btn .material-symbols-outlined { font-size: 18px; }
+
+/* ── Empty state ────────────────────────────────────────────── */
+.settings-empty {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 40px 20px;
+  text-align: center;
+}
+
+.settings-empty .empty-icon {
+  width: 72px;
+  height: 72px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background: var(--tone-bg, var(--color-primary-container));
+  color: var(--tone-fg, var(--color-on-primary-container));
+  margin-bottom: 4px;
+}
+
+.settings-empty .empty-icon[data-tone="primary"]   { --tone-bg: var(--color-primary-container);   --tone-fg: var(--color-on-primary-container); }
+.settings-empty .empty-icon[data-tone="secondary"] { --tone-bg: var(--color-secondary-container); --tone-fg: var(--color-on-secondary-container); }
+.settings-empty .empty-icon[data-tone="tertiary"]  { --tone-bg: var(--color-tertiary-container);  --tone-fg: var(--color-on-tertiary-container); }
+
+.settings-empty .empty-icon .material-symbols-outlined { font-size: 30px; }
+
+.settings-empty h4 {
+  margin: 0;
   font-size: 16px;
+  font-weight: 700;
+  color: var(--color-text);
 }
 
-/* Dialog */
+.settings-empty p {
+  margin: 0;
+  font-size: 13px;
+  color: var(--color-text-dim);
+  max-width: 320px;
+  line-height: 1.5;
+}
+
+/* ── Dialog form ────────────────────────────────────────────── */
 .dialog-form {
   display: flex;
   flex-direction: column;
@@ -933,204 +1508,101 @@ onMounted(() => {
 .form-group label {
   font-size: 13px;
   font-weight: 600;
-  color: var(--gw-text-secondary);
+  color: var(--color-text-dim);
 }
 
-.w-full {
-  width: 100%;
-}
+.w-full { width: 100%; }
 
 .error-msg {
   margin: 0;
   font-size: 13px;
   color: var(--color-on-error-container);
-  padding: 8px 12px;
+  padding: 10px 14px;
   background: var(--color-error-container);
-  border-radius: 8px;
-  border: 1px solid color-mix(in oklch, var(--color-error) 30%, var(--color-outline-dim));
+  border-radius: 12px;
 }
 
 .dialog-footer {
   display: flex;
   justify-content: flex-end;
-  gap: 10px;
-  padding-top: 8px;
-  border-top: 1px solid var(--gw-border);
-}
-
-/* Inline list (отделы, типы юнитов) */
-.inline-list {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  max-width: 600px;
-}
-
-.inline-list-row {
-  display: flex;
-  align-items: center;
   gap: 8px;
-  padding: 8px 12px;
-  background: var(--gw-bg);
-  border-radius: 8px;
-  border: 1px solid var(--gw-border);
+  padding-top: 8px;
 }
 
-.inline-list-row.editing {
-  background: var(--gw-surface);
-  border-color: var(--gw-primary);
-}
-
-.list-item-name {
-  flex: 1;
-  font-size: 14px;
-  color: var(--gw-text);
-}
-
-.flex-input {
-  flex: 1;
-}
-
-.empty-inline {
-  padding: 24px;
-  text-align: center;
-  color: var(--gw-text-secondary);
-  font-size: 14px;
-}
-
-.loading-inline {
-  display: flex;
-  justify-content: center;
-  padding: 32px;
-}
-
-/* Backup */
-.backup-panel {
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-  max-width: 600px;
-}
-
-.backup-card {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  padding: 20px;
-  background: var(--gw-bg);
-  border: 1px solid var(--gw-border);
-  border-radius: var(--gw-radius);
-  flex-wrap: wrap;
-}
-
-.backup-card-info {
-  display: flex;
-  align-items: flex-start;
-  gap: 14px;
-  flex: 1;
-}
-
-.backup-icon {
-  font-size: 32px;
-  color: var(--gw-primary);
-  flex-shrink: 0;
-}
-
-.backup-card-info h4 {
-  margin: 0 0 4px;
-  font-size: 15px;
-  font-weight: 700;
-  color: var(--gw-text);
-}
-
-.backup-card-info p {
-  margin: 0;
-  font-size: 13px;
-  color: var(--gw-text-secondary);
-  line-height: 1.4;
-}
-
-.file-btn {
-  cursor: pointer;
-}
-
-/* Горизонтальный скролл для таблиц */
-.table-scroll {
-  overflow-x: auto;
-  -webkit-overflow-scrolling: touch;
-}
-
-/* Tutorial card */
-.tutorial-card {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  padding: 20px;
-  margin-top: 24px;
-  max-width: 600px;
-  background: var(--gw-bg);
-  border: 1px solid var(--gw-border);
-  border-radius: var(--gw-radius);
-  flex-wrap: wrap;
-}
-
-.tutorial-card-info {
-  display: flex;
-  align-items: flex-start;
-  gap: 14px;
-  flex: 1;
-}
-
-.tutorial-icon {
-  font-size: 32px;
-  color: var(--gw-primary);
-  flex-shrink: 0;
-}
-
-.tutorial-card-info h4 {
-  margin: 0 0 4px;
-  font-size: 15px;
-  font-weight: 700;
-  color: var(--gw-text);
-}
-
-.tutorial-card-info p {
-  margin: 0;
-  font-size: 13px;
-  color: var(--gw-text-secondary);
-  line-height: 1.4;
+/* ── Mobile ─────────────────────────────────────────────────── */
+@media (max-width: 1024px) {
+  .settings-shell {
+    grid-template-columns: 280px 1fr;
+    padding: 16px;
+    gap: 16px;
+  }
 }
 
 @media (max-width: 768px) {
-  .settings-view {
+  .settings-shell {
+    grid-template-columns: 1fr;
     padding: 12px;
+    gap: 0;
+    height: auto;
+    overflow: visible;
     padding-bottom: calc(60px + 12px + env(safe-area-inset-bottom, 0px));
   }
 
-  .settings-view h1 {
-    font-size: 20px;
-    margin-bottom: 12px;
+  /* Когда выбрана секция — список секций прячется */
+  .settings-nav.mobile-hidden { display: none; }
+  .settings-pane.mobile-full {
+    border-radius: 0;
+    border: 0;
+    background: transparent;
   }
 
-  .backup-panel,
-  .inline-list {
-    max-width: 100%;
+  .settings-pane {
+    display: flex;
   }
 
-  .backup-card {
+  .settings-pane-header {
+    padding: 8px 4px 16px;
+    border-bottom: 0;
+  }
+
+  .pane-title { font-size: 20px; }
+
+  .settings-pane-body {
+    padding: 0 4px;
+  }
+
+  .settings-nav {
+    padding: 16px 10px;
+    border-radius: 18px;
+    overflow: visible;
+  }
+
+  .settings-nav-header h1 { font-size: 20px; }
+
+  .users-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .settings-card,
+  .settings-card--hero {
     flex-direction: column;
     align-items: flex-start;
+    text-align: left;
+    padding: 18px;
+    gap: 12px;
   }
 
-  .tutorial-card {
-    flex-direction: column;
-    align-items: flex-start;
-    max-width: 100%;
+  .settings-card .card-actions {
+    width: 100%;
   }
 
-  /* Диалог пользователя — полная ширина */
+  .settings-card .card-actions .btn-filled,
+  .settings-card .card-actions .btn-filled-tonal,
+  .settings-card .card-actions .btn-outlined {
+    width: 100%;
+    justify-content: center;
+  }
+
   :deep(.p-dialog) {
     width: 95vw !important;
     max-width: 95vw !important;

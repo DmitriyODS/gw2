@@ -6,6 +6,8 @@ logger = get_logger(__name__)
 
 
 def register_events(socketio: SocketIO) -> None:
+    from app.sockets.call_events import register_call_events
+    register_call_events(socketio)
 
     @socketio.on("connect")
     def on_connect(auth):
@@ -35,7 +37,14 @@ def register_events(socketio: SocketIO) -> None:
     def on_disconnect():
         from flask import request as flask_request
         from app.sockets import presence
+        from app.sockets.presence import _sid_user
+        user_id = _sid_user.get(flask_request.sid)
         presence.on_disconnect(flask_request.sid)
+        # Если у пользователя не осталось активных видимых соединений и он был
+        # в звонке — выкинуть его оттуда и уведомить остальных.
+        if user_id is not None and not presence._has_visible_connection(user_id):
+            from app.sockets.call_events import cleanup_call_on_disconnect
+            cleanup_call_on_disconnect(socketio, user_id)
         logger.info("ws.disconnect", extra={"extra": {"event": "ws.disconnect"}})
 
     @socketio.on("presence:visibility")

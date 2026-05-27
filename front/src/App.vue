@@ -19,6 +19,8 @@
       <ChangelogModal v-if="isChangelogOpen" @close="closeChangelog" />
       <StaleTasksModal v-if="isStaleOpen" :tasks="staleTasks" @close="closeStale" />
       <MiniMessenger />
+      <IncomingCallOverlay @accept="callStore.accept()" @decline="callStore.decline()" />
+      <CallView />
     </template>
     <template v-else>
       <main class="main-content">
@@ -37,6 +39,7 @@ import { useAuthStore } from '@/stores/auth.js'
 import { useThemeStore } from '@/stores/theme.js'
 import { useUnitsStore } from '@/stores/units.js'
 import { useMessengerStore } from '@/stores/messenger.js'
+import { useCallStore } from '@/stores/call.js'
 import { useNotificationsStore } from '@/stores/notifications.js'
 import { useBreakpoint } from '@/composables/useBreakpoint.js'
 import { useTutorial } from '@/composables/useTutorial.js'
@@ -53,6 +56,8 @@ import AppTutorial from '@/components/layout/AppTutorial.vue'
 import ChangelogModal from '@/components/layout/ChangelogModal.vue'
 import StaleTasksModal from '@/components/tasks/StaleTasksModal.vue'
 import MiniMessenger from '@/components/messenger/MiniMessenger.vue'
+import IncomingCallOverlay from '@/components/call/IncomingCallOverlay.vue'
+import CallView from '@/components/call/CallView.vue'
 import Toast from 'primevue/toast'
 import ProgressSpinner from 'primevue/progressspinner'
 
@@ -60,6 +65,7 @@ const authStore = useAuthStore()
 const themeStore = useThemeStore()
 const unitsStore = useUnitsStore()
 const messengerStore = useMessengerStore()
+const callStore = useCallStore()
 const notif = useNotificationsStore()
 const route = useRoute()
 const { isMobile } = useBreakpoint()

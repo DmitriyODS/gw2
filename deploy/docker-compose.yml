@@ -39,6 +39,14 @@ services:
       JWT_SECRET_KEY: ${JWT_SECRET_KEY}
       SECRET_KEY: ${SECRET_KEY}
       UPLOAD_FOLDER: /app/uploads
+      # WebRTC TURN — для звонков через NAT (если TURN_HOST не задан, используются
+      # только публичные STUN-серверы Google и звонки между разными сетями могут
+      # не пробиться).
+      TURN_HOST: ${TURN_HOST:-}
+      TURN_PORT: ${TURN_PORT:-3478}
+      TURN_SECRET: ${TURN_SECRET:-}
+      TURN_REALM: ${TURN_REALM:-grovework}
+      TURN_TTL: "3600"
     volumes:
       - uploads:/app/uploads
     expose:
@@ -56,6 +64,33 @@ services:
     volumes:
       - ./nginx/nginx.conf:/etc/nginx/conf.d/default.conf
       - uploads:/app/uploads:ro
+
+  # TURN-сервер для WebRTC. Запускается только если задан TURN_SECRET в .env
+  # (использовать `docker compose --profile calls up -d` для активации).
+  # 3478 — основной порт STUN/TURN; 49152-49200 — диапазон relay (умышленно
+  # небольшой, чтобы не открывать на сервере 10k портов; хватает на десятки
+  # параллельных звонков). На сервере нужно открыть эти порты в firewall.
+  coturn:
+    image: coturn/coturn:latest
+    restart: unless-stopped
+    profiles: ["calls"]
+    network_mode: host
+    command:
+      - -n
+      - --realm=${TURN_REALM:-grovework}
+      - --use-auth-secret
+      - --static-auth-secret=${TURN_SECRET}
+      - --listening-port=${TURN_PORT:-3478}
+      - --min-port=49152
+      - --max-port=49200
+      - --no-tls
+      - --no-dtls
+      - --no-cli
+      - --fingerprint
+      - --lt-cred-mech
+      - --no-multicast-peers
+      - --no-loopback-peers
+      - --external-ip=${TURN_HOST}
 
 volumes:
   pg_data:

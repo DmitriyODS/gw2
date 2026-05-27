@@ -8,8 +8,10 @@ from .unit import Unit
 from .user_task_color import UserTaskColor
 from .conversation import Conversation
 from .message import Message, MessageAttachment
+from .call import Call, CallParticipant
 
 __all__ = [
     "Role", "User", "Department", "Task", "Favorite", "UnitType", "Unit", "UserTaskColor",
     "Conversation", "Message", "MessageAttachment",
+    "Call", "CallParticipant",
 ]

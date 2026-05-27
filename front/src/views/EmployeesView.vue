@@ -67,6 +67,23 @@
             <span class="material-symbols-outlined">chat</span>
             Написать
           </button>
+          <button
+            v-if="selected.id !== authStore.user?.id"
+            class="btn-tonal profile-call"
+            title="Видеозвонок"
+            @click="callTo(selected, 'video')"
+          >
+            <span class="material-symbols-outlined">videocam</span>
+            Видеозвонок
+          </button>
+          <button
+            v-if="selected.id !== authStore.user?.id"
+            class="btn-tonal profile-call audio"
+            title="Аудиозвонок"
+            @click="callTo(selected, 'audio')"
+          >
+            <span class="material-symbols-outlined">call</span>
+          </button>
           <button class="btn-secondary" @click="profileOpen = false">Закрыть</button>
         </div>
       </div>
@@ -80,6 +97,7 @@ import { useRouter } from 'vue-router'
 import { getDirectory } from '@/api/users.js'
 import { useAuthStore } from '@/stores/auth.js'
 import { useMessengerStore } from '@/stores/messenger.js'
+import { useCallStore } from '@/stores/call.js'
 import { formatLastSeen } from '@/utils/presence.js'
 import InputText from 'primevue/inputtext'
 import Dialog from 'primevue/dialog'
@@ -88,6 +106,7 @@ import ProgressSpinner from 'primevue/progressspinner'
 const router = useRouter()
 const authStore = useAuthStore()
 const messenger = useMessengerStore()
+const callStore = useCallStore()
 
 const users = ref([])
 const loading = ref(false)
@@ -138,6 +157,13 @@ async function writeTo(user) {
   profileOpen.value = false
   const convId = await messenger.openWith(user.id)
   router.push(`/messenger/${convId}`)
+}
+
+async function callTo(user, media) {
+  profileOpen.value = false
+  try {
+    await callStore.startCall({ userIds: [user.id], media })
+  } catch {/* ошибка отображена в store.error */}
 }
 
 watch(profileOpen, (open) => { if (!open) selected.value = null })
@@ -394,6 +420,37 @@ watch(profileOpen, (open) => { if (!open) selected.value = null })
 .btn-secondary:hover {
   background: var(--color-surface-low);
 }
+
+.btn-tonal {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 18px;
+  border-radius: var(--radius-md);
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  background: var(--color-secondary-container);
+  color: var(--color-on-secondary-container);
+  border: 0;
+  transition: background 0.15s;
+}
+
+.btn-tonal:hover {
+  background: color-mix(in oklch, var(--color-secondary-container) 80%, var(--color-on-secondary-container) 20%);
+}
+
+.btn-tonal.audio {
+  background: var(--color-tertiary-container);
+  color: var(--color-on-tertiary-container);
+  padding: 10px;
+}
+
+.btn-tonal.audio:hover {
+  background: color-mix(in oklch, var(--color-tertiary-container) 80%, var(--color-on-tertiary-container) 20%);
+}
+
+.profile-call .material-symbols-outlined { font-size: 18px; }
 
 @media (max-width: 768px) {
   .employees-view {

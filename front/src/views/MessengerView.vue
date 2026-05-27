@@ -39,6 +39,20 @@
         </div>
         <div class="chat-tools">
           <button
+            class="chat-tool call"
+            title="Аудиозвонок"
+            @click="startCall('audio')"
+          >
+            <span class="material-symbols-outlined">call</span>
+          </button>
+          <button
+            class="chat-tool call"
+            title="Видеозвонок"
+            @click="startCall('video')"
+          >
+            <span class="material-symbols-outlined">videocam</span>
+          </button>
+          <button
             class="chat-tool"
             :class="{ active: active.is_pinned }"
             :title="active.is_pinned ? 'Открепить' : 'Закрепить'"
@@ -132,6 +146,7 @@ import { ref, computed, watch, onMounted, onBeforeUnmount, nextTick } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useMessengerStore } from '@/stores/messenger.js'
 import { useAuthStore } from '@/stores/auth.js'
+import { useCallStore } from '@/stores/call.js'
 import { useBreakpoint } from '@/composables/useBreakpoint.js'
 import {
   requestNotificationPermission, notificationsAllowed,
@@ -148,6 +163,15 @@ import ProgressSpinner from 'primevue/progressspinner'
 const route = useRoute()
 const router = useRouter()
 const messenger = useMessengerStore()
+const callStore = useCallStore()
+
+async function startCall(media) {
+  const other = active.value?.other_user
+  if (!other) return
+  try {
+    await callStore.startCall({ userIds: [other.id], media, conversationId: active.value.id })
+  } catch {/* ошибка отображена в store.error */}
+}
 const authStore = useAuthStore()
 const { isMobile } = useBreakpoint()
 
@@ -538,6 +562,11 @@ watch(() => route.params.conversationId, async (id) => {
 .chat-tool.danger:hover {
   background: var(--color-error-container);
   color: var(--color-on-error-container);
+}
+
+.chat-tool.call:hover {
+  background: var(--color-success-container);
+  color: var(--color-on-success-container);
 }
 
 .chat-tool .material-symbols-outlined { font-size: 20px; }
