@@ -3,6 +3,23 @@
 * { box-sizing: border-box; margin: 0; padding: 0; }
 body { font-family: 'Roboto', sans-serif; background: var(--color-bg); color: var(--color-text); }
 
+/* Скрываем нативный крестик-очистку у <input type="search"> во всех браузерах.
+   У нас везде свой кастомный крестик (`.users-search-clear` и аналоги),
+   а нативный (синий в WebKit, серый в других) поверх него выглядит как баг. */
+input[type="search"]::-webkit-search-cancel-button,
+input[type="search"]::-webkit-search-decoration,
+input[type="search"]::-webkit-search-results-button,
+input[type="search"]::-webkit-search-results-decoration {
+  -webkit-appearance: none;
+  appearance: none;
+}
+input[type="search"]::-ms-clear,
+input[type="search"]::-ms-reveal {
+  display: none;
+  width: 0;
+  height: 0;
+}
+
 /* ── Backward-compatibility aliases ──────────────────────────────
    All --gw-* vars now resolve through the token layer.
    Components may continue using them; new code should prefer --color-*.  */
