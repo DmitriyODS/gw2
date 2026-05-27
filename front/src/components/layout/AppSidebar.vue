@@ -27,6 +27,7 @@
       </button>
 
       <button
+        data-tutorial="nav-employees"
         class="nav-btn"
         :class="{ active: route.path === '/employees' }"
         @click="router.push('/employees')"
@@ -36,6 +37,7 @@
       </button>
 
       <button
+        data-tutorial="nav-messenger"
         class="nav-btn"
         :class="{ active: route.path.startsWith('/messenger') }"
         @click="router.push('/messenger')"

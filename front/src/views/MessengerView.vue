@@ -37,9 +37,10 @@
             {{ otherOnline ? 'в сети' : lastSeenText }}
           </div>
         </div>
-        <div class="chat-tools">
+        <div class="chat-tools" data-tutorial="chat-tools">
           <button
             class="chat-tool call"
+            data-tutorial="chat-call-audio"
             title="Аудиозвонок"
             @click="startCall('audio')"
           >
@@ -47,6 +48,7 @@
           </button>
           <button
             class="chat-tool call"
+            data-tutorial="chat-call-video"
             title="Видеозвонок"
             @click="startCall('video')"
           >

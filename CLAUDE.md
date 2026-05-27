@@ -173,6 +173,27 @@ Nginx собирает фронт сам через multi-stage `front/Dockerfil
 
 **Мобильная адаптивность.** `.messenger` на ≤768px — `position: fixed; inset:0; z-index:100` (статичный полноэкранный, не «ёрзает» при показе/скрытии адресной строки); нижняя навигация (z-200) поверх, списку диалогов дан `padding-bottom` под неё. Мобильный FAB «новый чат» в `MessengerView` (`Teleport to body`, `.fab`, как на экране задач). Toast: в `App.vue` позиция адаптивная — на мобильном `top-center` (снизу прятала нижняя навигация), на десктопе `bottom-right`; CSS для `.p-toast-top-center` в `main.css`.
 
+## v2.6 — итерации редизайна настроек, ThemeBuilder, Help Center
+
+**Адаптивность настроек (SettingsView).** Раскладка теперь: десктоп — sidebar 340px + pane, оба со своим внутренним scroll, общая шелла `height: 100%; overflow: hidden` (главный main-content не скроллит). Брейкпойнты: ≤1100 sidebar 280px и `nav-desc` скрывается; 769–900 sidebar превращается в icon-rail (88px, только иконки + подсветка активной 3px-ободком); ≤768 drill-down — список секций обычным flow, при выборе `settings-pane.mobile-full` становится `position: fixed; inset: 0; z-index: 90` со sticky-шапкой и safe-area отступом под нижнюю навигацию. На очень узких <380 — `pane-sub` скрыт. `Transition name="pane-swap"` между секциями (translate-X + opacity 0.18s). В шапке секции — `pane-title-icon` (tone-вариант). В sidebar добавлен `data-tutorial="settings-section-{key}"` на каждый пункт и `nav-empty` при пустом поиске.
+
+**Карточки пользователей.** Плашка роли (`.user-card-role`) — `align-self: flex-start; max-width: 100%; overflow: hidden; white-space: nowrap; text-overflow: ellipsis` (раньше `width: max-content` срезал фон у длинных названий). На мобильном — компактнее: padding 12px, avatar 44px, actions в столбик иконок (32×32) справа без border-top, шрифты на 1px меньше.
+
+**Новые встроенные темы.** Каждая тема теперь несёт собственный `neutral` (фоновый тон в той же гамме). Раньше нейтральный был только у `sunset` — поэтому остальные темы выглядели на нейтрально-сером фоне. Сейчас 15 пресетов с единой палитрой акцент+фон: classic/blue/pink/red/green/orange/yellow/violet/lilac/sunset/ocean/mint/coffee/midnight/forest. Primary у classic заменён `#e040fb → #9b4dff` для лучшего контраста на светлом фоне; primary у некоторых тем (green/orange/yellow/pink) тоже сдвинуты к более насыщенным/тёмным для читабельности кнопок.
+
+**ThemeBuilder редизайн.** Полная переработка `front/src/components/settings/ThemeBuilder.vue`:
+- Hero-блок с градиентом (primary-container → tertiary-container), внутри mock-превью интерфейса (сайдбар + карточка с pill'ами и тегами — все цвета через токены, обновляются мгновенно при смене темы). Кнопки «Мне повезёт» (gradient primary→tertiary) и «Сбросить» (ghost).
+- Сегментированный переключатель «Светлая/Тёмная» в стиле iOS: фон-track, animated indicator с `transform: translateX` (0.3s cubic-bezier) и box-shadow.
+- Галерея пресетов: карточки 16:10 aspect-ratio с тремя цветными полосами (primary > secondary > tertiary; flex 1.6/1/0.8), фон карточки = neutral темы, активная — с обводкой primary 4px + checkmark в углу.
+- Color-swatches: круглые плашки 52px с inset shadow, edit-icon-pill, скрытый `<input type=color>` поверх (occupied via opacity 0). Live-preview onInput.
+- Save-row: pill-input + filled-кнопка с bookmark_add.
+- «Мои темы»: tiles с превью + кнопками «Применить» / удалить.
+- Импорт/экспорт: tonal-кнопки. Все breakpoints (≤900 / ≤600) — карточки в один столбец, кнопки full-width.
+
+**Help Center.** `front/src/components/settings/HelpCenter.vue` — интерактивная справка по всем разделам. Каталог из 5 групп: «Основная работа», «Общение», «Личное и настройки», «Администрирование» (от admin), «Система» (от superadmin). Каждая статья: title, subtitle, icon+tone, paragraphs, steps (numbered), tips (с иконкой tips_and_updates), route (кнопка «Перейти в раздел») и tourTarget (id шага в туре → «Показать в туре» открывает тур с этого шага). Поиск работает по всему тексту статей. Доступ — секция `help` в Настройках (добавлена в группу «Персонализация»).
+
+**Тур: новые разделы и startAt.** В `useTutorial.js` добавлен `startAtId` ref + `open({ startAt })`. В `AppTutorial.vue` `onMounted` ищет шаг по `startAtId` и стартует с него (используется из Help Center). Новые шаги между `tab-archive` и `stats-nav`: `employees-nav` (целит на `nav-employees`), `messenger-nav` (целит на `nav-messenger`), `calls-info` (без target, описательный). Шаг `settings-theme` теперь целит на `settings-section-theme` (а не на старый `settings-tab-theme`). Добавлен шаг `settings-help`. В сайдбаре и нижней навигации проставлены `data-tutorial="nav-employees"` и `data-tutorial="nav-messenger"`.
+
 ## v2.6.0 — звонки/видеоконференции и редизайн настроек
 
 **Звонки (WebRTC, P2P + mesh-группы).** Бэк: модели `Call` (id, kind p2p|group, status ringing|active|missed|ended, media audio|video, started_at/ended_at, conversation_id) и `CallParticipant` (call_id, user_id, role initiator|invitee, invited_at/joined_at/left_at, declined). Миграция `b1c2d3e4f5a6`. Сервис `app/services/call_service.py` — start/accept/decline/leave/end_by_initiator/cleanup_user_on_disconnect, валидация занятости (in-memory) и прав. In-memory state в `app/sockets/call_state.py` (`_calls: call_id → {invited, joined, declined, initiator_id, kind, media}`, `_user_call: user_id → call_id`); пока один app-контейнер с eventlet — этого достаточно, при горизонтальном масштабировании выносить в Redis.

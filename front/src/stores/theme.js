@@ -6,17 +6,25 @@ import { ref } from 'vue'
    neutral (необязательно) — задаёт цветную гамму фонов и поверхностей.
    Если neutral не задан, фон следует за основным цветом с едва заметным
    тоном (как было до появления нейтральной гаммы). */
+/* Каждая тема теперь включает neutral — фоновый оттенок в той же гамме,
+   что и акценты. Это даёт «единое лицо» интерфейса: и кнопки, и фоны
+   живут в одной палитре, а не на нейтрально-сером заднике. */
 const PRESETS = {
-  classic: { primary: '#e040fb', secondary: '#00bfa5', tertiary: '#3d6ce7' },
-  blue:    { primary: '#1e88e5', secondary: '#00acc1', tertiary: '#7e57c2' },
-  pink:    { primary: '#f06292', secondary: '#e91e63', tertiary: '#ce93d8' },
-  red:     { primary: '#e53935', secondary: '#ff7043', tertiary: '#f06292' },
-  green:   { primary: '#43a047', secondary: '#00897b', tertiary: '#26a69a' },
-  orange:  { primary: '#fb8c00', secondary: '#ff6d00', tertiary: '#fdd835' },
-  yellow:  { primary: '#f9a825', secondary: '#fb8c00', tertiary: '#43a047' },
-  violet:  { primary: '#7c4dff', secondary: '#00b0ff', tertiary: '#e040fb' },
-  lilac:   { primary: '#9b59b6', secondary: '#c77daa', tertiary: '#7da87e' },
-  sunset:  { primary: '#e8806e', secondary: '#e8a07a', tertiary: '#db8398', neutral: '#f0e9dd' },
+  classic: { primary: '#9b4dff', secondary: '#00bfa5', tertiary: '#3d6ce7', neutral: '#ece8f2' },
+  blue:    { primary: '#1e88e5', secondary: '#00acc1', tertiary: '#7e57c2', neutral: '#e6ecf4' },
+  pink:    { primary: '#ec4899', secondary: '#e91e63', tertiary: '#ce93d8', neutral: '#f5e8ee' },
+  red:     { primary: '#e53935', secondary: '#ff7043', tertiary: '#f06292', neutral: '#f4e6e3' },
+  green:   { primary: '#2e7d32', secondary: '#00897b', tertiary: '#26a69a', neutral: '#e6eee7' },
+  orange:  { primary: '#ef6c00', secondary: '#ff6d00', tertiary: '#fdd835', neutral: '#f5ebde' },
+  yellow:  { primary: '#c98300', secondary: '#fb8c00', tertiary: '#43a047', neutral: '#f4eedb' },
+  violet:  { primary: '#7c4dff', secondary: '#00b0ff', tertiary: '#e040fb', neutral: '#ebe6f5' },
+  lilac:   { primary: '#9b59b6', secondary: '#c77daa', tertiary: '#7da87e', neutral: '#f0e8ef' },
+  sunset:  { primary: '#e8806e', secondary: '#e8a07a', tertiary: '#db8398', neutral: '#f1e9dc' },
+  ocean:   { primary: '#0277bd', secondary: '#26c6da', tertiary: '#5e92f3', neutral: '#e3edf2' },
+  mint:    { primary: '#16a085', secondary: '#1abc9c', tertiary: '#7fb3a4', neutral: '#e4efea' },
+  coffee:  { primary: '#795548', secondary: '#a1887f', tertiary: '#d4a373', neutral: '#efe8e0' },
+  midnight:{ primary: '#5e7fff', secondary: '#7c3aed', tertiary: '#2dd4bf', neutral: '#e6e9f2' },
+  forest:  { primary: '#2f7d4f', secondary: '#558b2f', tertiary: '#a5a96d', neutral: '#e6ece2' },
 }
 
 const PRESET_LABELS = {
@@ -30,6 +38,11 @@ const PRESET_LABELS = {
   violet:  'Фиолетовая',
   lilac:   'Весенняя сирень',
   sunset:  'Тёплый закат',
+  ocean:   'Океан',
+  mint:    'Мята',
+  coffee:  'Кофе с молоком',
+  midnight:'Полночь',
+  forest:  'Лесная',
 }
 
 /* ── oklch conversion ────────────────────────────────────────────

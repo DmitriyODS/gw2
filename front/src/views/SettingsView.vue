@@ -1,7 +1,7 @@
 <template>
   <div class="settings-shell" :class="{ 'is-mobile-section': isMobile && activeSection }">
     <!-- Левая колонка: список секций. На мобильном — отдельный экран. -->
-    <aside class="settings-nav" :class="{ 'mobile-hidden': isMobile && activeSection }">
+    <aside class="settings-nav" :class="{ 'mobile-hidden': isMobile && activeSection }" data-tutorial="settings-nav">
       <header class="settings-nav-header">
         <h1>Настройки</h1>
         <p class="settings-nav-sub">Настройте платформу под себя</p>
@@ -32,6 +32,7 @@
             :key="section.key"
             class="settings-nav-item"
             :class="{ active: !isMobile && activeSection === section.key }"
+            :data-tutorial="`settings-section-${section.key}`"
             @click="openSection(section.key)"
           >
             <span class="nav-icon" :data-tone="section.tone || 'primary'">
@@ -44,6 +45,10 @@
             <span class="material-symbols-outlined nav-chevron">chevron_right</span>
           </button>
         </template>
+        <div v-if="!visibleGroups.length && searchQuery" class="settings-nav-empty">
+          <span class="material-symbols-outlined">search_off</span>
+          <p>Ничего не нашли. Попробуйте другие слова.</p>
+        </div>
       </nav>
 
       <div class="settings-nav-footer">
@@ -56,27 +61,33 @@
     </aside>
 
     <!-- Правая колонка: контент активной секции. -->
-    <section
-      v-if="activeSection || !isMobile"
-      class="settings-pane"
-      :class="{ 'mobile-full': isMobile && activeSection }"
-    >
-      <header class="settings-pane-header">
-        <button
-          v-if="isMobile"
-          class="settings-back"
-          @click="activeSection = null"
-          title="Назад к списку"
-        >
-          <span class="material-symbols-outlined">arrow_back</span>
-        </button>
-        <div class="pane-title-wrap">
-          <h2 class="pane-title">{{ activeSectionMeta?.title || 'Настройки' }}</h2>
-          <p v-if="activeSectionMeta?.desc" class="pane-sub">{{ activeSectionMeta.desc }}</p>
-        </div>
-      </header>
+    <Transition name="pane-swap" mode="out-in">
+      <section
+        v-if="activeSection || !isMobile"
+        :key="activeSection || 'empty'"
+        class="settings-pane"
+        :class="{ 'mobile-full': isMobile && activeSection }"
+      >
+        <header class="settings-pane-header">
+          <button
+            v-if="isMobile"
+            class="settings-back"
+            @click="activeSection = null"
+            title="Назад к списку"
+            aria-label="Назад"
+          >
+            <span class="material-symbols-outlined">arrow_back</span>
+          </button>
+          <div class="pane-title-icon" v-if="activeSectionMeta" :data-tone="activeSectionMeta.tone || 'primary'">
+            <span class="material-symbols-outlined">{{ activeSectionMeta.icon }}</span>
+          </div>
+          <div class="pane-title-wrap">
+            <h2 class="pane-title">{{ activeSectionMeta?.title || 'Настройки' }}</h2>
+            <p v-if="activeSectionMeta?.desc" class="pane-sub">{{ activeSectionMeta.desc }}</p>
+          </div>
+        </header>
 
-      <div class="settings-pane-body">
+        <div class="settings-pane-body">
         <!-- Внешний вид -->
         <div v-show="activeSection === 'theme'" class="pane-block">
           <ThemeBuilder />
@@ -356,8 +367,14 @@
             </div>
           </div>
         </div>
-      </div>
-    </section>
+
+        <!-- Справка -->
+        <div v-show="activeSection === 'help'" class="pane-block">
+          <HelpCenter />
+        </div>
+        </div>
+      </section>
+    </Transition>
 
     <!-- Диалоги — общие для всех секций -->
     <Dialog
@@ -475,6 +492,7 @@ import {
 } from '@/api/unitTypes.js'
 import { exportBackup, importBackup } from '@/api/backup.js'
 import ThemeBuilder from '@/components/settings/ThemeBuilder.vue'
+import HelpCenter from '@/components/settings/HelpCenter.vue'
 import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
 import Dialog from 'primevue/dialog'
 import InputText from 'primevue/inputtext'
@@ -499,8 +517,9 @@ const allGroups = computed(() => [
     label: 'Персонализация',
     sections: [
       { key: 'theme', title: 'Внешний вид', desc: 'Цвета, тёмная тема и стиль интерфейса', icon: 'palette', tone: 'primary' },
-      { key: 'tutorial', title: 'Обучение', desc: 'Запустить интерактивный тур заново', icon: 'school', tone: 'secondary' },
-      { key: 'changelog', title: 'История версий', desc: 'Что нового в каждом обновлении', icon: 'newsmode', tone: 'tertiary' },
+      { key: 'help', title: 'Справка', desc: 'Как пользоваться разделами платформы', icon: 'help_center', tone: 'secondary' },
+      { key: 'tutorial', title: 'Обучение', desc: 'Запустить интерактивный тур заново', icon: 'school', tone: 'tertiary' },
+      { key: 'changelog', title: 'История версий', desc: 'Что нового в каждом обновлении', icon: 'newsmode', tone: 'primary' },
     ],
   },
   {
@@ -814,9 +833,11 @@ onMounted(() => {
 <style scoped>
 /* ──────────────────────────────────────────────────────────────────
    M3 Expressive Settings Layout
-   - Слева sidebar секций (десктоп) / список (мобильный)
-   - Справа панель активной секции
-   - Карточки настроек со state-layer hover
+   Десктоп: фиксированный двухколоночный layout, каждая колонка имеет
+            собственный scroll, общий main-content не скроллит.
+   Планшет (≤1024): sidebar сужается, описания скрываются.
+   Мобильный (≤768): drill-down. Список секций — обычный flow.
+            При выборе секции — fixed fullscreen pane со sticky header.
 ────────────────────────────────────────────────────────────────── */
 .settings-shell {
   display: grid;
@@ -825,6 +846,9 @@ onMounted(() => {
   padding: 24px;
   max-width: 1400px;
   margin: 0 auto;
+  /* Берём всю доступную высоту main-content (он flex:1; min-height:0; overflow:auto).
+     overflow:hidden на самой шелле — чтобы общий main-content scroll не активировался;
+     внутренний scroll живёт на settings-nav и settings-pane-body. */
   height: 100%;
   min-height: 0;
   overflow: hidden;
@@ -1331,19 +1355,23 @@ onMounted(() => {
 .user-card-role {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
+  gap: 5px;
   margin-top: 6px;
-  padding: 3px 10px;
+  padding: 4px 12px 4px 8px;
   border-radius: 999px;
   font-size: 11px;
   font-weight: 600;
   background: var(--color-surface-high);
   color: var(--color-text-dim);
-  width: max-content;
+  align-self: flex-start;
   max-width: 100%;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  line-height: 1.4;
 }
 
-.user-card-role .material-symbols-outlined { font-size: 13px; }
+.user-card-role .material-symbols-outlined { font-size: 14px; flex-shrink: 0; }
 
 .user-card-role[data-level="2"] {
   background: var(--color-secondary-container);
@@ -1529,59 +1557,187 @@ onMounted(() => {
   padding-top: 8px;
 }
 
-/* ── Mobile ─────────────────────────────────────────────────── */
-@media (max-width: 1024px) {
+/* ── Pane title icon (в шапке секции) ───────────────────────── */
+.pane-title-icon {
+  flex-shrink: 0;
+  width: 44px;
+  height: 44px;
+  border-radius: 14px;
+  display: grid;
+  place-items: center;
+  background: var(--tone-bg, var(--color-primary-container));
+  color: var(--tone-fg, var(--color-on-primary-container));
+}
+
+.pane-title-icon[data-tone="primary"]   { --tone-bg: var(--color-primary-container);   --tone-fg: var(--color-on-primary-container); }
+.pane-title-icon[data-tone="secondary"] { --tone-bg: var(--color-secondary-container); --tone-fg: var(--color-on-secondary-container); }
+.pane-title-icon[data-tone="tertiary"]  { --tone-bg: var(--color-tertiary-container);  --tone-fg: var(--color-on-tertiary-container); }
+.pane-title-icon[data-tone="error"]     { --tone-bg: var(--color-error-container);     --tone-fg: var(--color-on-error-container); }
+
+.pane-title-icon .material-symbols-outlined { font-size: 24px; }
+
+/* ── Empty state в навигации (пустой поиск) ─────────────────── */
+.settings-nav-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 28px 16px;
+  text-align: center;
+  color: var(--color-text-dim);
+}
+
+.settings-nav-empty .material-symbols-outlined {
+  font-size: 32px;
+  opacity: 0.5;
+}
+
+.settings-nav-empty p {
+  margin: 0;
+  font-size: 13px;
+}
+
+/* ── Transition между секциями (десктоп) ────────────────────── */
+.pane-swap-enter-active, .pane-swap-leave-active {
+  transition: opacity 0.18s ease, transform 0.18s ease;
+}
+.pane-swap-enter-from { opacity: 0; transform: translateX(8px); }
+.pane-swap-leave-to   { opacity: 0; transform: translateX(-8px); }
+
+/* ── Adaptive: планшет 1024px ───────────────────────────────── */
+@media (max-width: 1100px) {
   .settings-shell {
     grid-template-columns: 280px 1fr;
     padding: 16px;
     gap: 16px;
   }
+  .nav-desc { display: none; }
+  .settings-nav-item { padding: 12px 12px; }
+  .settings-pane-header { padding: 16px 20px; }
+  .settings-pane-body { padding: 20px; }
 }
 
+/* ── Adaptive: 768-880px — узкий десктоп, sidebar становится rail ─ */
+@media (max-width: 900px) and (min-width: 769px) {
+  .settings-shell {
+    grid-template-columns: 88px 1fr;
+    gap: 12px;
+  }
+  .settings-nav { padding: 14px 8px; }
+  .settings-nav-header,
+  .settings-search,
+  .settings-group-label,
+  .settings-nav-footer,
+  .nav-text,
+  .nav-chevron { display: none; }
+  .settings-nav-item {
+    padding: 8px;
+    justify-content: center;
+  }
+  .settings-nav-item .nav-icon {
+    width: 48px;
+    height: 48px;
+    border-radius: 14px;
+  }
+  .settings-nav-item .nav-icon .material-symbols-outlined { font-size: 24px; }
+  .settings-nav-item.active .nav-icon {
+    box-shadow: 0 0 0 3px var(--color-primary);
+  }
+}
+
+/* ── Adaptive: мобильный ≤768 ───────────────────────────────── */
 @media (max-width: 768px) {
   .settings-shell {
     grid-template-columns: 1fr;
-    padding: 12px;
+    padding: 0;
     gap: 0;
     height: auto;
+    min-height: 100%;
     overflow: visible;
+    max-width: 100%;
     padding-bottom: calc(60px + 12px + env(safe-area-inset-bottom, 0px));
   }
 
-  /* Когда выбрана секция — список секций прячется */
+  /* Когда выбрана секция — список секций прячется, контент секции
+     становится full-screen, шапка липкая. */
   .settings-nav.mobile-hidden { display: none; }
-  .settings-pane.mobile-full {
+
+  .settings-nav {
+    padding: 16px 12px;
     border-radius: 0;
     border: 0;
     background: transparent;
-  }
-
-  .settings-pane {
-    display: flex;
-  }
-
-  .settings-pane-header {
-    padding: 8px 4px 16px;
-    border-bottom: 0;
-  }
-
-  .pane-title { font-size: 20px; }
-
-  .settings-pane-body {
-    padding: 0 4px;
-  }
-
-  .settings-nav {
-    padding: 16px 10px;
-    border-radius: 18px;
     overflow: visible;
   }
 
-  .settings-nav-header h1 { font-size: 20px; }
+  .settings-nav-header h1 { font-size: 22px; }
 
-  .users-grid {
-    grid-template-columns: 1fr;
+  .settings-sections { gap: 4px; }
+
+  /* На мобильном — карточки секций крупнее и видимее */
+  .settings-nav-item {
+    background: var(--color-surface);
+    border: 1px solid var(--color-outline-dim);
+    padding: 14px 14px;
+    border-radius: 18px;
+    min-height: 64px;
   }
+
+  .settings-nav-item:active {
+    background: var(--color-surface-high);
+    transform: scale(0.985);
+  }
+
+  .nav-desc {
+    display: block;
+    white-space: normal;
+    overflow: visible;
+    -webkit-line-clamp: 2;
+    line-clamp: 2;
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+  }
+
+  .settings-pane.mobile-full {
+    position: fixed;
+    inset: 0;
+    z-index: 90;
+    background: var(--color-bg);
+    border-radius: 0;
+    border: 0;
+    display: flex;
+    flex-direction: column;
+    /* Учитываем нижнюю навигацию */
+    padding-bottom: calc(60px + env(safe-area-inset-bottom, 0px));
+  }
+
+  .settings-pane.mobile-full .settings-pane-header {
+    position: sticky;
+    top: 0;
+    z-index: 2;
+    padding: 12px 12px 12px;
+    background: var(--color-bg);
+    border-bottom: 1px solid var(--color-outline-dim);
+    padding-top: calc(12px + env(safe-area-inset-top, 0px));
+  }
+
+  .settings-pane.mobile-full .pane-title-icon {
+    width: 40px;
+    height: 40px;
+    border-radius: 12px;
+  }
+
+  .settings-pane.mobile-full .pane-title-icon .material-symbols-outlined { font-size: 22px; }
+
+  .pane-title { font-size: 18px; }
+  .pane-sub { font-size: 12px; }
+
+  .settings-pane.mobile-full .settings-pane-body {
+    padding: 16px 12px 24px;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .users-grid { grid-template-columns: 1fr; }
 
   .settings-card,
   .settings-card--hero {
@@ -1590,11 +1746,10 @@ onMounted(() => {
     text-align: left;
     padding: 18px;
     gap: 12px;
+    border-radius: 20px;
   }
 
-  .settings-card .card-actions {
-    width: 100%;
-  }
+  .settings-card .card-actions { width: 100%; }
 
   .settings-card .card-actions .btn-filled,
   .settings-card .card-actions .btn-filled-tonal,
@@ -1603,9 +1758,66 @@ onMounted(() => {
     justify-content: center;
   }
 
+  /* Toolbar на мобильном: hint выше кнопки */
+  .pane-toolbar {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .pane-toolbar .btn-filled {
+    width: 100%;
+    justify-content: center;
+  }
+
+  .search-wrapper { max-width: 100%; }
+
+  /* User card: компактный однострочный layout на мобильном.
+     actions справа в столбик икон, чтобы не уезжали и не делали карточку
+     слишком высокой; имя/логин/роль занимают центр. */
+  .user-card {
+    padding: 12px;
+    border-radius: 16px;
+    gap: 10px;
+    align-items: center;
+  }
+
+  .user-card-avatar { width: 44px; height: 44px; }
+
+  .user-card-name { font-size: 13px; }
+  .user-card-login,
+  .user-card-post { font-size: 11px; }
+
+  .user-card-role {
+    padding: 3px 10px 3px 6px;
+    font-size: 10px;
+    margin-top: 4px;
+  }
+
+  .user-card-role .material-symbols-outlined { font-size: 12px; }
+
+  .user-card-actions {
+    flex-direction: column;
+    gap: 2px;
+  }
+
+  .user-card-actions .icon-btn { width: 32px; height: 32px; }
+  .user-card-actions .icon-btn .material-symbols-outlined { font-size: 16px; }
+
+  /* Chip-row: тоже растягиваем на всю ширину */
+  .chip-row {
+    padding: 12px 14px;
+  }
+
   :deep(.p-dialog) {
     width: 95vw !important;
     max-width: 95vw !important;
   }
+}
+
+/* ── Adaptive: очень узкий мобильный <380 ───────────────────── */
+@media (max-width: 380px) {
+  .pane-title { font-size: 17px; }
+  .pane-sub { display: none; }
+  .settings-pane.mobile-full .pane-title-icon { width: 36px; height: 36px; }
 }
 </style>

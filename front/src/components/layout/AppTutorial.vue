@@ -104,7 +104,7 @@ import { getDepartments } from '@/api/departments.js'
 import { getUnitTypes } from '@/api/unitTypes.js'
 import { useUnitsStore } from '@/stores/units.js'
 
-const { close } = useTutorial()
+const { close, startAtId } = useTutorial()
 const router = useRouter()
 const { isAtLeast } = usePermission()
 const tasksStore = useTasksStore()
@@ -283,6 +283,36 @@ const ALL_STEPS = [
     check: (isAtLeast) => isAtLeast(ROLES.EMPLOYEE),
   },
   {
+    id: 'employees-nav',
+    icon: 'group',
+    ...C.primary,
+    title: 'Сотрудники — все коллеги в одном месте',
+    text: 'Раздел «Сотрудники» — доска со всеми коллегами компании. Видно, кто сейчас в сети (зелёная точка на аватаре) и когда последний раз заходил тот, кого нет. Удобно, когда нужно быстро понять, кому написать или позвонить.',
+    tip: 'Карточка коллеги открывает профиль, оттуда — кнопки «Написать» и «Позвонить».',
+    target: '[data-tutorial="nav-employees"]',
+    navigateTo: '/employees',
+    onEnter: async () => { await cleanupAll() },
+  },
+  {
+    id: 'messenger-nav',
+    icon: 'chat',
+    ...C.secondary,
+    title: 'Мессенджер — переписка прямо в платформе',
+    text: 'Встроенный чат: текст, картинки, видео, документы. Можно отвечать на конкретное сообщение, пересылать, удалять у себя или у обоих. Маленький мини-чат в углу экрана работает даже поверх запущенного юнита.',
+    tip: 'Файл можно бросить перетаскиванием в любое место чата или вставить из буфера (Ctrl+V для скриншотов).',
+    target: '[data-tutorial="nav-messenger"]',
+    navigateTo: '/messenger',
+  },
+  {
+    id: 'calls-info',
+    icon: 'videocam',
+    ...C.tertiary,
+    title: 'Звонки и видеоконференции',
+    text: 'Голосом или с видео, один на один или вшестером — прямо в платформе, без Zoom и Telegram. В шапке любого чата и в карточке коллеги есть две кнопки: трубка (аудио) и камера (видео). У собеседника всплывёт входящий звонок с вашим именем и аватаром.',
+    tip: 'Звонок можно свернуть в маленькое окошко в углу и продолжать листать задачи — собеседник останется на связи. Микрофон и камеру можно выключать в любой момент.',
+    target: null,
+  },
+  {
     id: 'stats-nav',
     icon: 'query_stats',
     ...C.secondary,
@@ -331,11 +361,20 @@ const ALL_STEPS = [
     id: 'settings-theme',
     icon: 'palette',
     ...C.tertiary,
-    title: 'Персонализация',
-    text: 'Во вкладке «Персонализация» выберите основной цвет интерфейса и переключите тёмную или светлую тему. Все изменения применяются мгновенно — попробуйте прямо сейчас.',
-    tip: null,
-    target: '[data-tutorial="settings-tab-theme"]',
-    onEnter: () => document.querySelector('[data-tutorial="settings-tab-theme"]')?.click(),
+    title: 'Внешний вид и темы',
+    text: 'В разделе «Внешний вид» можно выбрать готовую тему или собрать свою из четырёх ключевых цветов. Палитра пересчитывается мгновенно — попробуйте кнопку «Мне повезёт».',
+    tip: 'Светлая или тёмная тема переключается отдельным сегментом — внешний вид меняется одним кликом.',
+    target: '[data-tutorial="settings-section-theme"]',
+    onEnter: () => document.querySelector('[data-tutorial="settings-section-theme"]')?.click(),
+  },
+  {
+    id: 'settings-help',
+    icon: 'help_center',
+    ...C.secondary,
+    title: 'Справка по всем разделам',
+    text: 'В справке собраны подробные описания всех разделов платформы с примерами и подсказками. Если что-то непонятно — заходите туда, можно искать по словам.',
+    tip: 'Из карточки раздела в справке можно сразу перейти к этому шагу в туре — кнопка «Показать в туре».',
+    target: '[data-tutorial="settings-section-help"]',
   },
   {
     id: 'profile',
@@ -496,7 +535,12 @@ function onResize() {
 }
 
 onMounted(async () => {
-  await applyStep(0)
+  // Если тур открыт «прыжком» из справки на конкретный шаг — стартуем оттуда.
+  if (startAtId.value) {
+    const idx = activeSteps.value.findIndex(s => s.id === startAtId.value)
+    if (idx >= 0) stepIndex.value = idx
+  }
+  await applyStep(stepIndex.value)
   window.addEventListener('keydown', onKeydown)
   window.addEventListener('resize',  onResize)
 })
