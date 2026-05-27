@@ -1,9 +1,9 @@
 <template>
   <div class="profile-view">
-    <div class="profile-layout">
-      <!-- Sidebar -->
-      <aside class="profile-sidebar">
-        <div class="avatar-section">
+    <div class="profile-container">
+      <!-- Hero-шапка профиля -->
+      <section class="profile-hero">
+        <div class="hero-avatar-block">
           <div class="avatar-wrapper">
             <img :src="avatarSrc" class="profile-avatar" :alt="authStore.user?.fio" />
           </div>
@@ -23,24 +23,27 @@
           </div>
         </div>
 
-        <div class="user-info">
-          <h2>{{ authStore.user?.fio }}</h2>
-          <p class="user-post">{{ authStore.user?.post || 'Должность не указана' }}</p>
-          <span v-if="authStore.user?.role?.name" class="role-tag">
-            {{ authStore.user.role.name }}
-          </span>
+        <div class="hero-info">
+          <h1 class="hero-name">{{ authStore.user?.fio }}</h1>
+          <p class="hero-post">{{ authStore.user?.post || 'Должность не указана' }}</p>
+          <div class="hero-meta">
+            <span v-if="authStore.user?.role?.name" class="role-tag">
+              {{ authStore.user.role.name }}
+            </span>
+            <span v-if="authStore.user?.login" class="hero-login">@{{ authStore.user.login }}</span>
+          </div>
         </div>
 
         <button class="btn-logout" @click="authStore.logout()">
           <span class="material-symbols-outlined">logout</span>
-          Выйти
+          <span class="btn-logout-label">Выйти</span>
         </button>
-      </aside>
+      </section>
 
-      <!-- Main -->
-      <main class="profile-main">
+      <!-- Адаптивная сетка карточек -->
+      <div class="profile-grid">
         <!-- Редактирование профиля -->
-        <section class="profile-section">
+        <section class="profile-card">
           <h3>Редактирование профиля</h3>
           <form @submit.prevent="saveProfile" class="profile-form">
             <div class="form-group">
@@ -63,7 +66,7 @@
         </section>
 
         <!-- Смена пароля -->
-        <section class="profile-section">
+        <section class="profile-card">
           <h3>Смена пароля</h3>
           <form @submit.prevent="changePassword" class="profile-form">
             <div class="form-group">
@@ -104,7 +107,7 @@
         </section>
 
         <!-- Личная статистика -->
-        <section class="profile-section">
+        <section class="profile-card profile-card--wide">
           <h3>Личная статистика</h3>
           <DateRangePicker v-model="statsPeriod" @update:model-value="loadStats" />
 
@@ -142,7 +145,7 @@
             Нет данных за выбранный период
           </div>
         </section>
-      </main>
+      </div>
     </div>
 
     <!-- Диалог кроппера аватарки -->
@@ -331,30 +334,32 @@ onMounted(() => {
   overflow-y: auto;
 }
 
-.profile-layout {
-  display: flex;
-  gap: 28px;
-  max-width: 1000px;
+.profile-container {
+  max-width: 1100px;
   margin: 0 auto;
-  align-items: flex-start;
-}
-
-/* Sidebar */
-.profile-sidebar {
-  width: 240px;
-  flex-shrink: 0;
   display: flex;
   flex-direction: column;
-  gap: 20px;
-  position: sticky;
-  top: 0;
+  gap: 24px;
 }
 
-.avatar-section {
+/* ── Hero-шапка ──────────────────────────────────────────────── */
+.profile-hero {
+  display: flex;
+  align-items: center;
+  gap: 28px;
+  background: var(--color-surface);
+  border: 1px solid var(--color-outline-dim);
+  border-radius: var(--radius-xl);
+  padding: 28px;
+  box-shadow: var(--shadow-sm);
+}
+
+.hero-avatar-block {
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: 12px;
+  flex-shrink: 0;
 }
 
 .avatar-wrapper {
@@ -413,52 +418,68 @@ onMounted(() => {
   font-size: 14px;
 }
 
-.user-info {
+.hero-info {
+  flex: 1;
+  min-width: 0;
   display: flex;
   flex-direction: column;
-  align-items: center;
   gap: 6px;
-  text-align: center;
 }
 
-.user-info h2 {
+.hero-name {
   margin: 0;
-  font-size: 18px;
-  font-weight: 700;
-  color: var(--gw-text);
-  line-height: 1.3;
+  font-size: 26px;
+  font-weight: 800;
+  letter-spacing: -0.3px;
+  color: var(--color-text);
+  line-height: 1.2;
 }
 
-.user-post {
+.hero-post {
   margin: 0;
+  font-size: 15px;
+  color: var(--color-text-dim);
+}
+
+.hero-meta {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-top: 4px;
+}
+
+.hero-login {
   font-size: 13px;
-  color: var(--gw-text-secondary);
+  color: var(--color-text-dim);
 }
 
 .role-tag {
   display: inline-block;
   background: var(--color-tertiary-container);
   color: var(--color-on-tertiary-container);
-  border-radius: 20px;
+  border-radius: var(--radius-full);
   padding: 4px 14px;
   font-size: 12px;
   font-weight: 600;
 }
 
 .btn-logout {
-  display: flex;
+  display: inline-flex;
   align-items: center;
   justify-content: center;
   gap: 8px;
-  padding: 10px;
+  padding: 10px 18px;
   border: 1px solid color-mix(in oklch, var(--color-error) 30%, var(--color-outline-dim));
-  border-radius: 10px;
+  border-radius: var(--radius-full);
   background: transparent;
   color: var(--color-error);
   font-size: 14px;
+  font-weight: 600;
   cursor: pointer;
   transition: background 0.15s;
-  width: 100%;
+  flex-shrink: 0;
+  align-self: flex-start;
 }
 
 .btn-logout:hover {
@@ -469,32 +490,36 @@ onMounted(() => {
   font-size: 18px;
 }
 
-/* Main */
-.profile-main {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
+/* ── Адаптивная сетка карточек ───────────────────────────────── */
+.profile-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
   gap: 24px;
-  min-width: 0;
+  align-items: start;
 }
 
-.profile-section {
-  background: var(--gw-surface);
-  border: 1px solid var(--gw-border);
-  border-radius: var(--gw-radius);
-  padding: 20px;
+.profile-card {
+  background: var(--color-surface);
+  border: 1px solid var(--color-outline-dim);
+  border-radius: var(--radius-lg);
+  padding: 22px;
   display: flex;
   flex-direction: column;
   gap: 16px;
 }
 
-.profile-section h3 {
+/* Карточка во всю ширину сетки (статистика) */
+.profile-card--wide {
+  grid-column: 1 / -1;
+}
+
+.profile-card h3 {
   margin: 0;
   font-size: 16px;
   font-weight: 700;
-  color: var(--gw-text);
+  color: var(--color-text);
   padding-bottom: 12px;
-  border-bottom: 1px solid var(--gw-border);
+  border-bottom: 1px solid var(--color-outline-dim);
 }
 
 .profile-form {
@@ -600,21 +625,36 @@ onMounted(() => {
   font-size: 14px;
 }
 
-/* Responsive */
+/* ── Адаптив ─────────────────────────────────────────────────── */
 @media (max-width: 768px) {
   .profile-view {
     padding: 12px;
     padding-bottom: calc(60px + 12px + env(safe-area-inset-bottom, 0px));
   }
 
-  .profile-layout {
+  .profile-hero {
     flex-direction: column;
+    text-align: center;
+    padding: 24px 16px;
     gap: 16px;
   }
 
-  .profile-sidebar {
-    width: 100%;
-    position: static;
+  .hero-info {
+    align-items: center;
+  }
+
+  .hero-meta {
+    justify-content: center;
+  }
+
+  .btn-logout {
+    align-self: stretch;
+  }
+
+  /* На узком экране карточки всегда в одну колонку на всю ширину */
+  .profile-grid {
+    grid-template-columns: 1fr;
+    gap: 16px;
   }
 
   /* Горизонтальный скролл для таблицы статистики */
