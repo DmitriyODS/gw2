@@ -51,13 +51,18 @@
         </div>
       </nav>
 
-      <div class="settings-nav-footer">
-        <span class="material-symbols-outlined">stadia_controller</span>
+      <button
+        class="settings-nav-footer"
+        @click="changelog.open()"
+        title="Открыть историю версий"
+      >
+        <span class="material-symbols-outlined">auto_awesome</span>
         <div>
           <div class="footer-name">Groove Work</div>
-          <div class="footer-version" v-if="appVersion">v{{ appVersion }}</div>
+          <div class="footer-version" v-if="appVersion">v{{ appVersion }} · что нового</div>
         </div>
-      </div>
+        <span class="material-symbols-outlined footer-chev">chevron_right</span>
+      </button>
     </aside>
 
     <!-- Правая колонка: контент активной секции. -->
@@ -93,47 +98,6 @@
           <ThemeBuilder />
         </div>
 
-        <!-- Обучение -->
-        <div v-show="activeSection === 'tutorial'" class="pane-block">
-          <div class="settings-card settings-card--hero">
-            <div class="hero-icon" data-tone="primary">
-              <span class="material-symbols-outlined">school</span>
-            </div>
-            <div class="card-text">
-              <h3>Интерактивный тур</h3>
-              <p>Пробежимся по основным экранам и подскажем, с чего удобно начать работу. Займёт пару минут.</p>
-            </div>
-            <div class="card-actions">
-              <button class="btn-filled" @click="tutorial.open()">
-                <span class="material-symbols-outlined">play_circle</span>
-                Пройти тур
-              </button>
-            </div>
-          </div>
-        </div>
-
-        <!-- История версий -->
-        <div v-show="activeSection === 'changelog'" class="pane-block">
-          <div class="settings-card settings-card--hero">
-            <div class="hero-icon" data-tone="secondary">
-              <span class="material-symbols-outlined">newsmode</span>
-            </div>
-            <div class="card-text">
-              <h3>История версий</h3>
-              <p>
-                Что добавлено, исправлено и улучшено в каждом обновлении платформы.
-                <template v-if="appVersion">Текущая версия — <b>{{ appVersion }}</b>.</template>
-              </p>
-            </div>
-            <div class="card-actions">
-              <button class="btn-filled-tonal" @click="changelog.open()">
-                <span class="material-symbols-outlined">newsmode</span>
-                Открыть лог
-              </button>
-            </div>
-          </div>
-        </div>
-
         <!-- Пользователи -->
         <div v-show="activeSection === 'users'" class="pane-block">
           <div class="pane-toolbar">
@@ -154,7 +118,7 @@
 
           <div class="users-grid">
             <div
-              v-for="u in users"
+              v-for="u in filteredUsers"
               :key="u.id"
               class="user-card"
               :class="{ 'is-me': u.id === authStore.user?.id }"
@@ -178,12 +142,12 @@
                 </button>
               </div>
             </div>
-            <div v-if="!usersLoading && !users.length" class="settings-empty">
+            <div v-if="!usersLoading && !filteredUsers.length" class="settings-empty">
               <div class="empty-icon" data-tone="primary">
                 <span class="material-symbols-outlined">person_search</span>
               </div>
               <h4>Никого не нашли</h4>
-              <p>Попробуйте другой запрос или создайте нового сотрудника.</p>
+              <p>{{ userSearch ? 'Попробуйте другой запрос.' : 'Создайте первого сотрудника — кнопка справа сверху.' }}</p>
             </div>
           </div>
         </div>
@@ -518,8 +482,6 @@ const allGroups = computed(() => [
     sections: [
       { key: 'theme', title: 'Внешний вид', desc: 'Цвета, тёмная тема и стиль интерфейса', icon: 'palette', tone: 'primary' },
       { key: 'help', title: 'Справка', desc: 'Как пользоваться разделами платформы', icon: 'help_center', tone: 'secondary' },
-      { key: 'tutorial', title: 'Обучение', desc: 'Запустить интерактивный тур заново', icon: 'school', tone: 'tertiary' },
-      { key: 'changelog', title: 'История версий', desc: 'Что нового в каждом обновлении', icon: 'newsmode', tone: 'primary' },
     ],
   },
   {
@@ -591,15 +553,25 @@ const assignableRoles = computed(() => {
   return roles.value.filter(r => r.level < level)
 })
 
-let userSearchTimer = null
-function onUserSearch() {
-  clearTimeout(userSearchTimer)
-  userSearchTimer = setTimeout(() => loadUsers(), 400)
-}
+// getUsers() не принимает поисковую строку (бэк отдаёт всех админу) —
+// фильтруем на клиенте по ФИО/логину/должности. Это и быстрее: нет
+// сетевого round-trip на каждый ввод.
+function onUserSearch() { /* фильтрация делает computed filteredUsers */ }
+
+const filteredUsers = computed(() => {
+  const q = userSearch.value.trim().toLowerCase()
+  if (!q) return users.value
+  return users.value.filter(u =>
+    (u.fio || '').toLowerCase().includes(q)
+    || (u.login || '').toLowerCase().includes(q)
+    || (u.post || '').toLowerCase().includes(q)
+    || (u.role?.name || '').toLowerCase().includes(q)
+  )
+})
 
 async function loadUsers() {
   usersLoading.value = true
-  try { users.value = await getUsers(userSearch.value) }
+  try { users.value = await getUsers() }
   catch (e) { notif.error(e.message || 'Ошибка загрузки пользователей') }
   finally { usersLoading.value = false }
 }
@@ -1029,14 +1001,33 @@ onMounted(() => {
   gap: 10px;
   padding: 10px 14px;
   background: var(--color-surface);
+  border: 0;
   border-radius: 16px;
   font-size: 12px;
   color: var(--color-text-dim);
+  cursor: pointer;
+  width: 100%;
+  text-align: left;
+  transition: background 0.15s, transform 0.1s;
 }
+
+.settings-nav-footer:hover {
+  background: var(--color-surface-high);
+}
+
+.settings-nav-footer:active { transform: scale(0.99); }
+
+.settings-nav-footer > div { flex: 1; min-width: 0; }
 
 .settings-nav-footer .material-symbols-outlined {
   color: var(--color-primary);
   font-size: 22px;
+}
+
+.settings-nav-footer .footer-chev {
+  color: var(--color-text-dim);
+  opacity: 0.6;
+  font-size: 18px;
 }
 
 .footer-name { font-weight: 700; color: var(--color-text); }
@@ -1364,10 +1355,10 @@ onMounted(() => {
   background: var(--color-surface-high);
   color: var(--color-text-dim);
   align-self: flex-start;
+  /* Текст роли всегда виден целиком — не обрезаем; если родитель уже —
+     плашка перенесёт всё на новую строку. */
   max-width: 100%;
-  overflow: hidden;
   white-space: nowrap;
-  text-overflow: ellipsis;
   line-height: 1.4;
 }
 

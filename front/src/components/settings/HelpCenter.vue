@@ -85,7 +85,7 @@
 
       <!-- Каталог разделов -->
       <div v-else key="list" class="hc-list">
-        <header class="hc-intro">
+        <header class="hc-intro hc-intro--spaced">
           <div class="hc-intro-icon">
             <span class="material-symbols-outlined">help_center</span>
           </div>
@@ -518,6 +518,17 @@ function startFullTour() {
 .btn-filled .material-symbols-outlined { font-size: 18px; }
 
 /* ── Intro card ──────────────────────────────────────────────── */
+/* hc-list (контейнер списка групп) — отдельный увеличенный gap, чтобы
+   между intro-карточкой и первым лейблом группы была заметная воздушная
+   пауза. .hc используется и в article-режиме, поэтому общий gap не растим. */
+.hc-list {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+.hc-intro--spaced { margin-bottom: 6px; }
+
 .hc-intro {
   display: flex;
   align-items: center;
