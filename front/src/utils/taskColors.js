@@ -20,5 +20,6 @@ export function cardColorStyle(color) {
   return {
     '--card-tag-surface': `var(--tag-${color}-surface)`,
     '--card-tag-border': `var(--tag-${color}-border)`,
+    '--card-tag-accent': `var(--tag-${color}-accent)`,
   }
 }

@@ -6,76 +6,96 @@
     @click="$emit('close')"
   />
 
-  <aside class="task-filters" :class="{ 'mobile-sheet': true, 'mobile-sheet--open': isMobileVisible }">
-    <!-- Сортировки -->
-    <section class="filter-section">
-      <h4 class="filter-title">Сортировки</h4>
-      <button
-        v-for="s in sorts"
-        :key="s.value"
-        class="filter-btn"
-        :class="{ active: tasksStore.filters.sort === s.value }"
-        @click="tasksStore.setFilter('sort', s.value)"
-      >
-        {{ s.label }}
-      </button>
-    </section>
+  <aside class="task-filters" :class="{ 'mobile-sheet--open': isMobileVisible }">
+    <div class="filters-handle" />
 
-    <!-- Фильтры по юнитам -->
-    <section class="filter-section">
-      <h4 class="filter-title">Фильтры</h4>
-      <button
-        v-for="f in unitFilters"
-        :key="String(f.value)"
-        class="filter-btn"
-        :class="{ active: tasksStore.filters.has_units === f.value }"
-        @click="tasksStore.setFilter('has_units', f.value)"
-      >
-        {{ f.label }}
-      </button>
-    </section>
+    <div class="filters-head">
+      <h3 class="filters-head-title">
+        <span class="material-symbols-outlined">tune</span>
+        Фильтры
+      </h3>
+      <span class="filters-count">{{ tasksStore.total }}</span>
+    </div>
 
-    <!-- От отдела -->
-    <section class="filter-section">
-      <h4 class="filter-title">От отдела</h4>
-      <Select
-        :model-value="tasksStore.filters.dept_id"
-        :options="deptOptions"
-        option-label="name"
-        option-value="id"
-        placeholder="Все отделы"
-        class="dept-select w-full"
-        :filter="departments.length > 5"
-        filter-placeholder="Поиск по названию..."
-        show-clear
-        scroll-height="280px"
-        empty-message="Отделы не загружены"
-        empty-filter-message="Ничего не найдено"
-        @update:model-value="onDeptChange"
-      />
-    </section>
+    <div class="filters-scroll">
+      <!-- Сортировки (на мобильном — в отдельной шторке) -->
+      <section class="filter-section sort-section">
+        <h4 class="filter-title">Сортировка</h4>
+        <div class="chip-group">
+          <button
+            v-for="s in sorts"
+            :key="s.value"
+            class="chip"
+            :class="{ active: tasksStore.filters.sort === s.value }"
+            @click="tasksStore.setFilter('sort', s.value)"
+          >
+            <span class="material-symbols-outlined">{{ s.icon }}</span>
+            {{ s.label }}
+          </button>
+        </div>
+      </section>
 
-    <!-- Период поступления -->
-    <section class="filter-section">
-      <h4 class="filter-title">Период поступления</h4>
-      <button
-        v-for="p in periods"
-        :key="String(p.value)"
-        class="filter-btn"
-        :class="{ active: tasksStore.filters.period_preset === p.value }"
-        @click="selectPeriod(p.value)"
-      >
-        {{ p.label }}
-      </button>
+      <!-- Фильтры по юнитам -->
+      <section class="filter-section">
+        <h4 class="filter-title">Участие</h4>
+        <div class="chip-group">
+          <button
+            v-for="f in unitFilters"
+            :key="String(f.value)"
+            class="chip"
+            :class="{ active: tasksStore.filters.has_units === f.value }"
+            @click="tasksStore.setFilter('has_units', f.value)"
+          >
+            <span class="material-symbols-outlined">{{ f.icon }}</span>
+            {{ f.label }}
+          </button>
+        </div>
+      </section>
 
-      <div
-        v-if="tasksStore.filters.period_preset === 'custom' && (tasksStore.filters.received_from || tasksStore.filters.received_to)"
-        class="custom-range-label"
-      >
-        <span class="material-symbols-outlined">date_range</span>
-        {{ formatCustomLabel }}
-      </div>
-    </section>
+      <!-- От отдела -->
+      <section class="filter-section">
+        <h4 class="filter-title">Заказчик</h4>
+        <Select
+          :model-value="tasksStore.filters.dept_id"
+          :options="deptOptions"
+          option-label="name"
+          option-value="id"
+          placeholder="Все отделы"
+          class="dept-select w-full"
+          :filter="departments.length > 5"
+          filter-placeholder="Поиск по названию…"
+          show-clear
+          scroll-height="280px"
+          empty-message="Отделы не загружены"
+          empty-filter-message="Ничего не найдено"
+          @update:model-value="onDeptChange"
+        />
+      </section>
+
+      <!-- Период поступления -->
+      <section class="filter-section">
+        <h4 class="filter-title">Период поступления</h4>
+        <div class="chip-group">
+          <button
+            v-for="p in periods"
+            :key="String(p.value)"
+            class="chip"
+            :class="{ active: tasksStore.filters.period_preset === p.value }"
+            @click="selectPeriod(p.value)"
+          >
+            {{ p.label }}
+          </button>
+        </div>
+
+        <div
+          v-if="tasksStore.filters.period_preset === 'custom' && (tasksStore.filters.received_from || tasksStore.filters.received_to)"
+          class="custom-range-label"
+        >
+          <span class="material-symbols-outlined">date_range</span>
+          {{ formatCustomLabel }}
+        </div>
+      </section>
+    </div>
 
     <!-- Модалка выбора произвольного периода -->
     <Dialog
@@ -97,42 +117,26 @@
       </div>
       <template #footer>
         <div class="custom-range-footer">
-          <button
-            type="button"
-            class="btn-secondary"
-            @click="closeCustomDialog"
-          >Отмена</button>
-          <button
-            type="button"
-            class="btn-primary"
-            :disabled="!customRangeValid"
-            @click="applyCustomRange"
-          >Применить</button>
+          <button type="button" class="btn-outlined" @click="closeCustomDialog">Отмена</button>
+          <button type="button" class="btn-filled" :disabled="!customRangeValid" @click="applyCustomRange">Применить</button>
         </div>
       </template>
     </Dialog>
 
-    <!-- Кнопка сброса -->
-    <button
-      class="reset-btn"
-      :disabled="!hasActiveFilters"
-      @click="tasksStore.resetFilters()"
-      title="Сбросить сортировку и фильтры"
-    >
-      <span class="material-symbols-outlined">restart_alt</span>
-      Сбросить
-    </button>
-
-    <!-- Счётчик -->
-    <div class="filter-count">
-      Кол-во: <strong>{{ tasksStore.total }}</strong>
+    <div class="filters-foot">
+      <button
+        class="reset-btn"
+        :disabled="!hasActiveFilters"
+        @click="tasksStore.resetFilters()"
+        title="Сбросить сортировку и фильтры"
+      >
+        <span class="material-symbols-outlined">restart_alt</span>
+        Сбросить всё
+      </button>
+      <button class="filters-close-btn" @click="$emit('close')">
+        Показать результаты
+      </button>
     </div>
-
-    <!-- Кнопка закрытия на мобильном -->
-    <button class="filters-close-btn" @click="$emit('close')">
-      <span class="material-symbols-outlined">close</span>
-      Закрыть
-    </button>
   </aside>
 </template>
 
@@ -175,16 +179,16 @@ function onDeptChange(value) {
 }
 
 const sorts = [
-  { label: 'Последняя активность', value: 'last_activity' },
-  { label: 'Дата создания', value: 'created_at' },
-  { label: 'Дата поступления', value: 'received_at' },
-  { label: 'Срок исполнения', value: 'deadline' },
+  { label: 'Последняя активность', value: 'last_activity', icon: 'history' },
+  { label: 'Дата создания', value: 'created_at', icon: 'calendar_today' },
+  { label: 'Дата поступления', value: 'received_at', icon: 'inbox' },
+  { label: 'Срок исполнения', value: 'deadline', icon: 'event' },
 ]
 
 const unitFilters = [
-  { label: 'Без фильтров', value: null },
-  { label: 'Не приступали', value: 'none' },
-  { label: 'Уже работал', value: 'mine' },
+  { label: 'Все', value: null, icon: 'apps' },
+  { label: 'Не приступали', value: 'none', icon: 'radio_button_unchecked' },
+  { label: 'Уже работал', value: 'mine', icon: 'task_alt' },
 ]
 
 const periods = [
@@ -234,7 +238,6 @@ function dateToStr(d) {
 
 function selectPeriod(value) {
   if (value === 'custom') {
-    // Открываем модалку выбора диапазона — фильтр применится после «Применить».
     const from = tasksStore.filters.received_from
     const to = tasksStore.filters.received_to
     customRange.value = from && to ? [new Date(from), new Date(to)] : null
@@ -281,81 +284,140 @@ function applyCustomRange() {
 
 function closeCustomDialog() {
   showCustomDialog.value = false
-  // Если диапазон не задан и пресет ещё не равен custom — ничего не меняем,
-  // пользователь просто закрыл модалку без выбора.
 }
 </script>
 
 <style scoped>
 .task-filters {
-  width: 220px;
-  min-width: 220px;
-  background: var(--gw-surface);
-  border-right: 1px solid var(--gw-border);
-  padding: 16px;
+  width: 256px;
+  min-width: 256px;
+  background: var(--color-surface);
+  border-right: 1px solid var(--color-outline-dim);
   display: flex;
   flex-direction: column;
-  gap: 24px;
   height: 100%;
+  overflow: hidden;
+}
+
+.filters-handle {
+  display: none;
+}
+
+.filters-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 18px 18px 12px;
+  flex-shrink: 0;
+}
+
+.filters-head-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--color-text);
+}
+
+.filters-head-title .material-symbols-outlined {
+  font-size: 20px;
+  color: var(--color-primary);
+}
+
+.filters-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 28px;
+  height: 24px;
+  padding: 0 8px;
+  border-radius: var(--radius-full);
+  background: var(--color-primary-container);
+  color: var(--color-on-primary-container);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.filters-scroll {
+  flex: 1;
   overflow-y: auto;
+  padding: 0 18px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
 }
 
 .filter-section {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 10px;
 }
 
 .filter-title {
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 700;
-  color: var(--gw-text-secondary);
+  color: var(--color-text-dim);
   text-transform: uppercase;
-  letter-spacing: 0.5px;
-  margin: 0 0 4px 0;
+  letter-spacing: 0.6px;
+  margin: 0;
 }
 
-.filter-btn {
-  background: transparent;
+.chip-group {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  background: var(--color-surface-high);
   border: 1px solid transparent;
-  border-radius: 8px;
-  padding: 7px 10px;
+  border-radius: var(--radius-full);
+  padding: 7px 13px;
   font-size: 13px;
-  color: var(--gw-text);
-  cursor: pointer;
-  text-align: left;
-  transition: background 0.12s, color 0.12s;
-}
-
-.filter-btn:hover {
-  background: var(--gw-primary-light);
-  color: var(--gw-primary);
-}
-
-.filter-btn.active {
-  background: var(--gw-primary);
-  color: var(--color-on-primary);
   font-weight: 600;
+  color: var(--color-text);
+  cursor: pointer;
+  transition: background 0.14s, color 0.14s, border-color 0.14s;
 }
 
-/* PrimeVue Select подгоняем под визуал боковой панели фильтров */
+.chip .material-symbols-outlined {
+  font-size: 16px;
+}
+
+.chip:hover {
+  background: var(--color-surface-highest);
+}
+
+.chip.active {
+  background: var(--color-primary-container);
+  color: var(--color-on-primary-container);
+  border-color: color-mix(in oklch, var(--color-primary) 35%, transparent);
+}
+
+/* PrimeVue Select под визуал панели */
 :deep(.dept-select.p-select) {
   width: 100%;
   font-size: 13px;
-  border-radius: 8px;
+  border-radius: var(--radius-md);
+  background: var(--color-surface-high);
+  border-color: transparent;
 }
 
 :deep(.dept-select .p-select-label) {
-  padding: 7px 10px;
+  padding: 9px 12px;
 }
 
 .custom-range-label {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  margin-top: 6px;
-  padding: 6px 10px;
-  border-radius: 8px;
+  padding: 7px 12px;
+  border-radius: var(--radius-md);
   background: var(--color-primary-container);
   color: var(--color-on-primary-container);
   font-size: 12px;
@@ -378,10 +440,10 @@ function closeCustomDialog() {
   gap: 8px;
 }
 
-.btn-secondary,
-.btn-primary {
-  border-radius: 999px;
-  padding: 8px 18px;
+.btn-outlined,
+.btn-filled {
+  border-radius: var(--radius-full);
+  padding: 9px 18px;
   font-size: 13px;
   font-weight: 600;
   cursor: pointer;
@@ -389,41 +451,48 @@ function closeCustomDialog() {
   border: none;
 }
 
-.btn-secondary {
+.btn-outlined {
   background: transparent;
-  border: 1px solid var(--gw-border);
-  color: var(--gw-text);
+  border: 1px solid var(--color-outline-dim);
+  color: var(--color-text);
 }
 
-.btn-secondary:hover {
-  background: var(--gw-bg);
+.btn-outlined:hover {
+  background: var(--color-surface-high);
 }
 
-.btn-primary {
-  background: var(--gw-primary);
+.btn-filled {
+  background: var(--color-primary);
   color: var(--color-on-primary);
 }
 
-.btn-primary:disabled {
+.btn-filled:disabled {
   opacity: 0.5;
   cursor: not-allowed;
 }
 
-.btn-primary:not(:disabled):hover {
-  background: var(--gw-primary-hover);
+.btn-filled:not(:disabled):hover {
+  background: var(--color-primary-hover);
+}
+
+/* Подвал */
+.filters-foot {
+  flex-shrink: 0;
+  padding: 12px 18px;
+  border-top: 1px solid var(--color-outline-dim);
 }
 
 .reset-btn {
-  margin-top: auto;
+  width: 100%;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   gap: 6px;
-  padding: 8px 12px;
-  border: 1px solid var(--gw-border);
-  border-radius: 999px;
+  padding: 10px 12px;
+  border: 1px solid var(--color-outline-dim);
+  border-radius: var(--radius-full);
   background: var(--color-surface);
-  color: var(--gw-text);
+  color: var(--color-text);
   font-size: 13px;
   font-weight: 600;
   cursor: pointer;
@@ -445,18 +514,6 @@ function closeCustomDialog() {
   font-size: 18px;
 }
 
-.filter-count {
-  padding-top: 12px;
-  border-top: 1px solid var(--gw-border);
-  font-size: 14px;
-  color: var(--gw-text-secondary);
-}
-
-.filter-count strong {
-  color: var(--gw-primary);
-}
-
-/* ── Кнопка закрытия — скрыта на десктопе ── */
 .filters-close-btn {
   display: none;
 }
@@ -467,16 +524,14 @@ function closeCustomDialog() {
 }
 
 @media (max-width: 768px) {
-  /* На мобильном filters-backdrop показываем */
   .filters-backdrop {
     display: block;
     position: fixed;
     inset: 0;
-    background: rgba(0, 0, 0, 0.4);
+    background: var(--color-scrim);
     z-index: 299;
   }
 
-  /* Боковая панель прячется по умолчанию */
   .task-filters {
     position: fixed;
     bottom: calc(60px + env(safe-area-inset-bottom, 0px));
@@ -484,25 +539,32 @@ function closeCustomDialog() {
     right: 0;
     width: 100%;
     min-width: unset;
-    max-height: 78dvh;
-    overflow-y: auto;
+    max-height: 80dvh;
     border-right: none;
-    border-top: 1px solid var(--gw-border);
-    border-radius: 20px 20px 0 0;
+    border-top: 1px solid var(--color-outline-dim);
+    border-radius: var(--radius-xl) var(--radius-xl) 0 0;
     z-index: 300;
     transform: translateY(110%);
     visibility: hidden;
     transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1),
                 visibility 0s linear 0.3s;
-    padding-bottom: 8px;
   }
 
-  /* Сортировки на мобильном — в отдельной шторке */
-  .filter-section:first-child {
+  .filters-handle {
+    display: block;
+    width: 36px;
+    height: 4px;
+    border-radius: 2px;
+    background: var(--color-outline-dim);
+    margin: 10px auto 2px;
+    flex-shrink: 0;
+  }
+
+  /* Сортировки на мобильном — в отдельной шторке SortSheet */
+  .sort-section {
     display: none;
   }
 
-  /* Анимация появления */
   .task-filters.mobile-sheet--open {
     transform: translateY(0);
     visibility: visible;
@@ -510,26 +572,18 @@ function closeCustomDialog() {
                 visibility 0s linear 0s;
   }
 
-  /* На мобильном кнопка закрытия видна */
   .filters-close-btn {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 6px;
+    display: block;
     width: 100%;
-    padding: 10px;
     margin-top: 8px;
-    border: 1px solid var(--gw-border);
-    border-radius: 10px;
-    background: var(--gw-bg);
-    color: var(--gw-text);
+    padding: 12px;
+    border: none;
+    border-radius: var(--radius-full);
+    background: var(--color-primary);
+    color: var(--color-on-primary);
     font-size: 14px;
-    font-weight: 500;
+    font-weight: 650;
     cursor: pointer;
-  }
-
-  .filters-close-btn .material-symbols-outlined {
-    font-size: 18px;
   }
 }
 </style>

@@ -1,38 +1,68 @@
 <template>
   <div class="tasks-view">
     <header class="tasks-header">
-      <div class="tasks-header-top">
-        <!-- Кнопка «Добавить» — только на десктопе -->
-        <button
-          v-if="canCreateTask"
-          data-tutorial="task-add-btn"
-          class="btn-primary btn-add-desktop"
-          @click="showCreateTask = true"
-        >
-          <span class="material-symbols-outlined">add</span>
-          <span class="btn-label">Добавить</span>
-        </button>
-
+      <!-- Панель инструментов -->
+      <div class="tasks-toolbar">
         <div class="search-wrapper">
           <span class="material-symbols-outlined search-icon">search</span>
           <input
             v-model="searchQuery"
             class="search-input"
-            placeholder="Поиск по названию задачи..."
+            placeholder="Поиск по названию задачи…"
             @input="onSearch"
           />
+          <button v-if="searchQuery" class="search-clear" @click="clearSearch" title="Очистить">
+            <span class="material-symbols-outlined">close</span>
+          </button>
         </div>
 
-        <!-- Кнопки только на мобильном -->
-        <button class="btn-mobile-icon" @click="showSortSheet = true" title="Сортировка">
+        <!-- Переключатель вида: сетка / список -->
+        <div class="view-toggle" role="group" aria-label="Вид отображения">
+          <button
+            class="view-toggle-btn"
+            :class="{ active: viewMode === 'grid' }"
+            @click="setViewMode('grid')"
+            title="Карточки"
+          >
+            <span class="material-symbols-outlined">grid_view</span>
+          </button>
+          <button
+            class="view-toggle-btn"
+            :class="{ active: viewMode === 'list' }"
+            @click="setViewMode('list')"
+            title="Список"
+          >
+            <span class="material-symbols-outlined">view_list</span>
+          </button>
+        </div>
+
+        <!-- Мобильные иконки сортировки/фильтров -->
+        <button class="btn-icon mobile-only" @click="showSortSheet = true" title="Сортировка">
           <span class="material-symbols-outlined">sort</span>
         </button>
-        <button class="btn-mobile-icon" @click="showMobileFilters = true" title="Фильтры">
+        <button
+          class="btn-icon mobile-only"
+          :class="{ 'has-dot': hasActiveFilters }"
+          @click="showMobileFilters = true"
+          title="Фильтры"
+        >
           <span class="material-symbols-outlined">tune</span>
+        </button>
+
+        <!-- Кнопка «Добавить» — десктоп -->
+        <button
+          v-if="canCreateTask"
+          data-tutorial="task-add-btn"
+          class="btn-add desktop-only"
+          @click="showCreateTask = true"
+        >
+          <span class="material-symbols-outlined">add</span>
+          <span class="btn-add-label">Добавить</span>
         </button>
       </div>
 
-      <div class="tasks-header-tabs">
+      <!-- Сегментированные вкладки -->
+      <div class="tasks-tabs">
         <button
           v-for="tab in tabs"
           :key="tab.value"
@@ -41,7 +71,8 @@
           :class="{ active: tasksStore.filters.tab === tab.value }"
           @click="tasksStore.setTab(tab.value)"
         >
-          {{ tab.label }}
+          <span class="material-symbols-outlined">{{ tab.icon }}</span>
+          <span class="tab-label">{{ tab.label }}</span>
         </button>
       </div>
     </header>
@@ -50,33 +81,39 @@
       <TaskFilters :mobile-visible="showMobileFilters" @close="showMobileFilters = false" />
 
       <main ref="cardsAreaRef" class="cards-area" @scroll="onCardsScroll">
-        <div v-if="tasksStore.loading" class="loading-state">
+        <div v-if="tasksStore.loading" class="state-block">
           <ProgressSpinner />
         </div>
         <template v-else>
-          <div v-if="tasksStore.error" class="empty-state error-state">
+          <div v-if="tasksStore.error" class="state-block empty-state error-state">
             <span class="material-symbols-outlined">error_outline</span>
             <p>{{ tasksStore.error }}</p>
             <button class="btn-retry" @click="tasksStore.fetchTasks()">Повторить</button>
           </div>
-          <div v-else-if="tasksStore.tasks.length === 0" class="empty-state">
-            <span class="material-symbols-outlined">inbox</span>
-            <p>Задач не найдено</p>
+          <div v-else-if="tasksStore.tasks.length === 0" class="state-block empty-state">
+            <span class="empty-icon material-symbols-outlined">{{ emptyIcon }}</span>
+            <p class="empty-title">{{ emptyTitle }}</p>
+            <p class="empty-sub">{{ emptySub }}</p>
+            <button v-if="canCreateTask && tasksStore.filters.tab === 'active'" class="btn-add" @click="showCreateTask = true">
+              <span class="material-symbols-outlined">add</span>
+              Создать задачу
+            </button>
           </div>
-          <div v-else class="cards-grid">
+          <div v-else :class="viewMode === 'grid' ? 'cards-grid' : 'cards-list'">
             <TaskCard
               v-for="task in tasksStore.tasks"
               :key="task.id"
               :task="task"
+              :view="viewMode"
               @click="openTask(task)"
               @toggle-favorite="toggleFavorite"
               @set-color="setColor"
+              @start-unit="onStartUnit"
+              @stop-unit="onStopUnit"
             />
           </div>
-          <div
-            v-if="tasksStore.total > tasksStore.filters.per_page"
-            class="pagination"
-          >
+
+          <div v-if="tasksStore.total > tasksStore.filters.per_page" class="pagination">
             <button
               class="page-btn"
               :disabled="tasksStore.filters.page === 1"
@@ -84,7 +121,7 @@
             >
               <span class="material-symbols-outlined">chevron_left</span>
             </button>
-            <span class="page-info">{{ tasksStore.filters.page }} / {{ Math.ceil(tasksStore.total / tasksStore.filters.per_page) }}</span>
+            <span class="page-info">{{ tasksStore.filters.page }} / {{ totalPages }}</span>
             <button
               class="page-btn"
               :disabled="tasksStore.tasks.length < tasksStore.filters.per_page"
@@ -97,7 +134,7 @@
       </main>
     </div>
 
-    <!-- FAB создания задачи — только на мобильном -->
+    <!-- FAB создания — мобильный -->
     <Teleport to="body">
       <button
         v-if="canCreateTask"
@@ -110,22 +147,27 @@
       </button>
     </Teleport>
 
-    <!-- Шторка сортировки -->
     <SortSheet :visible="showSortSheet" @close="showSortSheet = false" />
 
-    <!-- Модалка просмотра задачи -->
     <TaskModal
       v-if="tasksStore.activeTask"
       :task="tasksStore.activeTask"
       @close="tasksStore.closeTask()"
     />
 
-    <!-- Модалка создания задачи -->
     <TaskForm
       v-if="showCreateTask"
       :task="null"
       @close="showCreateTask = false"
       @saved="onTaskCreated"
+    />
+
+    <!-- Быстрый старт юнита прямо с карточки -->
+    <StartUnitModal
+      v-if="startUnitTaskId != null"
+      :task-id="startUnitTaskId"
+      @close="startUnitTaskId = null"
+      @started="startUnitTaskId = null"
     />
   </div>
 </template>
@@ -143,7 +185,10 @@ import TaskFilters from '@/components/tasks/TaskFilters.vue'
 import TaskModal from '@/components/tasks/TaskModal.vue'
 import TaskForm from '@/components/tasks/TaskForm.vue'
 import SortSheet from '@/components/tasks/SortSheet.vue'
+import StartUnitModal from '@/components/units/StartUnitModal.vue'
 import ProgressSpinner from 'primevue/progressspinner'
+
+const VIEW_KEY = 'gw2_tasks_view'
 
 const route = useRoute()
 const router = useRouter()
@@ -156,6 +201,13 @@ const showCreateTask = ref(false)
 const searchQuery = ref(tasksStore.filters.search)
 const showMobileFilters = ref(false)
 const showSortSheet = ref(false)
+const startUnitTaskId = ref(null)
+
+const viewMode = ref(localStorage.getItem(VIEW_KEY) === 'list' ? 'list' : 'grid')
+function setViewMode(mode) {
+  viewMode.value = mode
+  try { localStorage.setItem(VIEW_KEY, mode) } catch {}
+}
 
 const cardsAreaRef = ref(null)
 const fabVisible = ref(true)
@@ -170,12 +222,32 @@ function onCardsScroll() {
 }
 
 const canCreateTask = computed(() => isAtLeast(ROLES.EMPLOYEE))
+const totalPages = computed(() => Math.ceil(tasksStore.total / tasksStore.filters.per_page))
+
+const hasActiveFilters = computed(() => {
+  const f = tasksStore.filters
+  return f.sort !== 'last_activity'
+    || f.dept_id != null
+    || f.has_units != null
+    || f.period_preset != null
+    || f.received_from
+    || f.received_to
+})
 
 const tabs = [
-  { value: 'active', label: 'Активные' },
-  { value: 'favorites', label: 'Избранное' },
-  { value: 'archive', label: 'Архив' }
+  { value: 'active', label: 'Активные', icon: 'checklist' },
+  { value: 'favorites', label: 'Избранное', icon: 'star' },
+  { value: 'archive', label: 'Архив', icon: 'inventory_2' }
 ]
+
+const emptyMeta = {
+  active: { icon: 'task_alt', title: 'Активных задач нет', sub: 'Создайте новую задачу или измените фильтры.' },
+  favorites: { icon: 'star', title: 'В избранном пусто', sub: 'Отметьте задачу звёздочкой, чтобы она появилась здесь.' },
+  archive: { icon: 'inventory_2', title: 'Архив пуст', sub: 'Завершённые задачи будут храниться здесь.' }
+}
+const emptyIcon = computed(() => emptyMeta[tasksStore.filters.tab]?.icon ?? 'inbox')
+const emptyTitle = computed(() => (searchQuery.value ? 'Ничего не найдено' : emptyMeta[tasksStore.filters.tab]?.title ?? 'Задач не найдено'))
+const emptySub = computed(() => (searchQuery.value ? 'Попробуйте изменить запрос или сбросить фильтры.' : emptyMeta[tasksStore.filters.tab]?.sub ?? ''))
 
 let searchTimeout = null
 
@@ -184,6 +256,11 @@ function onSearch() {
   searchTimeout = setTimeout(() => {
     tasksStore.setFilter('search', searchQuery.value)
   }, 400)
+}
+
+function clearSearch() {
+  searchQuery.value = ''
+  tasksStore.setFilter('search', '')
 }
 
 async function openTask(task) {
@@ -216,11 +293,22 @@ async function setColor({ task, color }) {
   }
 }
 
+function onStartUnit(task) {
+  startUnitTaskId.value = task.id
+}
+
+async function onStopUnit() {
+  try {
+    await unitsStore.stop()
+    notif.success('Юнит остановлен')
+  } catch (e) {
+    notif.error(e.message || 'Не удалось остановить юнит')
+  }
+}
+
 function onTaskCreated(task) {
   showCreateTask.value = false
   tasksStore.upsertTask(task)
-  // Фоновая сверка с сервером: подтянет актуальное состояние всех карточек
-  // (в т.ч. запущенный вместе с задачей юнит — индикатор и аватарку).
   tasksStore.fetchTasks({ silent: true }).catch(() => {})
 }
 
@@ -233,11 +321,9 @@ onMounted(async () => {
   try {
     await unitsStore.fetchActiveUnit()
   } catch {}
-  // Открытие конкретной задачи по ссылке (например из напоминания о давних).
   const openId = route.query.open
   if (openId) {
     openTask({ id: Number(openId) })
-    // Убираем query, чтобы повторное открытие/обновление не дёргало модалку.
     router.replace({ path: '/tasks' })
   }
 })
@@ -250,59 +336,26 @@ onMounted(async () => {
   height: 100%;
 }
 
+/* ─── Шапка ─── */
 .tasks-header {
   display: flex;
-  flex-direction: row;
-  align-items: center;
+  flex-direction: column;
   gap: 12px;
-  padding: 12px 16px;
-  background: var(--gw-surface);
-  border-bottom: 1px solid var(--gw-border);
+  padding: 14px 24px;
+  background: var(--color-surface);
+  border-bottom: 1px solid var(--color-outline-dim);
   flex-shrink: 0;
 }
 
-.tasks-header-top {
+.tasks-toolbar {
   display: flex;
   align-items: center;
   gap: 10px;
-  flex: 1;
-  min-width: 0;
-}
-
-.tasks-header-tabs {
-  display: flex;
-  gap: 4px;
-  flex-shrink: 0;
-}
-
-.btn-primary {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  background: var(--gw-primary);
-  color: var(--color-on-primary);
-  border: none;
-  border-radius: 10px;
-  padding: 9px 18px;
-  font-size: 14px;
-  font-weight: 600;
-  cursor: pointer;
-  transition: background 0.15s;
-  white-space: nowrap;
-  flex-shrink: 0;
-}
-
-.btn-primary:hover {
-  background: var(--gw-primary-hover);
-}
-
-.btn-primary .material-symbols-outlined {
-  font-size: 18px;
 }
 
 .search-wrapper {
   flex: 1;
-  min-width: 200px;
+  min-width: 0;
   position: relative;
   display: flex;
   align-items: center;
@@ -310,60 +363,203 @@ onMounted(async () => {
 
 .search-icon {
   position: absolute;
-  left: 10px;
-  font-size: 18px;
-  color: var(--gw-text-secondary);
+  left: 12px;
+  font-size: 20px;
+  color: var(--color-text-dim);
   pointer-events: none;
 }
 
 .search-input {
   width: 100%;
-  padding: 8px 12px 8px 36px;
-  border: 1px solid var(--gw-border);
-  border-radius: 10px;
+  padding: 10px 38px 10px 40px;
+  border: 1px solid var(--color-outline-dim);
+  border-radius: var(--radius-full);
   font-size: 14px;
-  background: var(--gw-bg);
-  color: var(--gw-text);
+  background: var(--color-surface-low);
+  color: var(--color-text);
   outline: none;
-  transition: border-color 0.15s;
+  transition: border-color 0.15s, background 0.15s, box-shadow 0.15s;
 }
 
 .search-input:focus {
-  border-color: var(--gw-primary);
-  background: var(--gw-surface);
+  border-color: var(--color-primary);
+  background: var(--color-surface);
+  box-shadow: 0 0 0 3px color-mix(in oklch, var(--color-primary) 16%, transparent);
 }
 
 .search-input::placeholder {
-  color: var(--gw-text-secondary);
+  color: var(--color-text-dim);
 }
 
-/* Мобильные иконки-кнопки — скрыты на десктопе */
-.btn-mobile-icon {
-  display: none;
-}
-
-.tab-btn {
-  padding: 8px 16px;
+.search-clear {
+  position: absolute;
+  right: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
   border: none;
-  border-radius: 8px;
+  border-radius: 50%;
   background: transparent;
-  color: var(--gw-text-secondary);
-  font-size: 14px;
+  color: var(--color-text-dim);
   cursor: pointer;
   transition: background 0.15s, color 0.15s;
 }
 
-.tab-btn.active {
-  background: var(--gw-primary);
+.search-clear:hover {
+  background: var(--color-surface-highest);
+  color: var(--color-text);
+}
+
+.search-clear .material-symbols-outlined {
+  font-size: 18px;
+}
+
+/* Переключатель вида */
+.view-toggle {
+  display: flex;
+  background: var(--color-surface-high);
+  border-radius: var(--radius-full);
+  padding: 3px;
+  gap: 2px;
+  flex-shrink: 0;
+}
+
+.view-toggle-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 32px;
+  border: none;
+  border-radius: var(--radius-full);
+  background: transparent;
+  color: var(--color-text-dim);
+  cursor: pointer;
+  transition: background 0.18s, color 0.18s;
+}
+
+.view-toggle-btn:hover {
+  color: var(--color-text);
+}
+
+.view-toggle-btn.active {
+  background: var(--color-surface);
+  color: var(--color-primary);
+  box-shadow: var(--shadow-sm);
+}
+
+.view-toggle-btn .material-symbols-outlined {
+  font-size: 20px;
+}
+
+/* Кнопки-иконки (мобильные) */
+.btn-icon {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 42px;
+  height: 42px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--color-outline-dim);
+  background: var(--color-surface-low);
+  color: var(--color-text);
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: background 0.15s, color 0.15s;
+}
+
+.btn-icon:active {
+  background: var(--color-primary-container);
+  color: var(--color-on-primary-container);
+}
+
+.btn-icon .material-symbols-outlined {
+  font-size: 22px;
+}
+
+.btn-icon.has-dot::after {
+  content: '';
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--color-primary);
+  border: 2px solid var(--color-surface);
+}
+
+/* Кнопка «Добавить» */
+.btn-add {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--color-primary);
   color: var(--color-on-primary);
+  border: none;
+  border-radius: var(--radius-full);
+  padding: 10px 20px;
+  font-size: 14px;
+  font-weight: 650;
+  cursor: pointer;
+  transition: background 0.15s, box-shadow 0.15s;
+  white-space: nowrap;
+  flex-shrink: 0;
+  box-shadow: var(--shadow-sm);
+}
+
+.btn-add:hover {
+  background: var(--color-primary-hover);
+  box-shadow: var(--shadow-md);
+}
+
+.btn-add .material-symbols-outlined {
+  font-size: 20px;
+}
+
+/* Сегментированные вкладки */
+.tasks-tabs {
+  display: inline-flex;
+  align-self: flex-start;
+  gap: 2px;
+  background: var(--color-surface-high);
+  border-radius: var(--radius-full);
+  padding: 4px;
+}
+
+.tab-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 18px;
+  border: none;
+  border-radius: var(--radius-full);
+  background: transparent;
+  color: var(--color-text-dim);
+  font-size: 14px;
   font-weight: 600;
+  cursor: pointer;
+  transition: background 0.18s, color 0.18s;
+}
+
+.tab-btn .material-symbols-outlined {
+  font-size: 18px;
 }
 
 .tab-btn:hover:not(.active) {
-  background: var(--gw-bg);
-  color: var(--gw-text);
+  color: var(--color-text);
 }
 
+.tab-btn.active {
+  background: var(--color-surface);
+  color: var(--color-primary);
+  box-shadow: var(--shadow-sm);
+}
+
+/* ─── Тело ─── */
 .tasks-body {
   display: flex;
   flex: 1;
@@ -373,87 +569,113 @@ onMounted(async () => {
 .cards-area {
   flex: 1;
   overflow-y: auto;
-  padding: 20px 24px;
+  padding: 22px 24px;
   display: flex;
   flex-direction: column;
   gap: 16px;
 }
 
-.loading-state {
+.cards-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(248px, 1fr));
+  gap: 16px;
+}
+
+.cards-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+/* Состояния */
+.state-block {
   display: flex;
   justify-content: center;
   align-items: center;
-  padding: 60px;
+  padding: 48px;
 }
 
 .empty-state {
-  display: flex;
   flex-direction: column;
-  align-items: center;
-  gap: 12px;
-  padding: 60px;
-  color: var(--gw-text-secondary);
+  gap: 8px;
+  color: var(--color-text-dim);
   text-align: center;
+  margin: auto;
 }
 
-.empty-state .material-symbols-outlined {
-  font-size: 48px;
-  color: var(--gw-border);
+.empty-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 88px;
+  height: 88px;
+  border-radius: 50%;
+  background: var(--color-primary-container);
+  color: var(--color-on-primary-container);
+  font-size: 44px;
+  margin-bottom: 8px;
 }
 
-.empty-state p {
+.empty-title {
   margin: 0;
-  font-size: 15px;
+  font-size: 17px;
+  font-weight: 650;
+  color: var(--color-text);
 }
 
+.empty-sub {
+  margin: 0 0 8px;
+  font-size: 14px;
+  max-width: 320px;
+}
+
+.error-state .empty-icon,
 .error-state .material-symbols-outlined {
-  color: var(--gw-danger);
+  background: var(--color-error-container);
+  color: var(--color-on-error-container);
+  font-size: 48px;
 }
 
 .btn-retry {
   margin-top: 4px;
-  padding: 8px 20px;
-  border: 1px solid var(--gw-border);
-  border-radius: 8px;
-  background: var(--gw-surface);
-  color: var(--gw-text);
+  padding: 9px 22px;
+  border: 1px solid var(--color-outline-dim);
+  border-radius: var(--radius-full);
+  background: var(--color-surface);
+  color: var(--color-text);
   font-size: 14px;
+  font-weight: 600;
   cursor: pointer;
   transition: background 0.15s;
 }
 
 .btn-retry:hover {
-  background: var(--gw-primary);
-  border-color: var(--gw-primary);
+  background: var(--color-primary);
+  border-color: var(--color-primary);
   color: var(--color-on-primary);
 }
 
-.cards-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
-  gap: 14px;
-}
-
+/* Пагинация */
 .pagination {
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 8px;
-  padding: 8px 0;
+  gap: 10px;
+  padding: 8px 0 4px;
 }
 
 .page-btn {
-  width: 36px;
-  height: 36px;
-  border: 1px solid var(--gw-border);
-  border-radius: 8px;
-  background: var(--gw-surface);
+  width: 40px;
+  height: 40px;
+  border: 1px solid var(--color-outline-dim);
+  border-radius: var(--radius-full);
+  background: var(--color-surface);
   cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
-  color: var(--gw-text);
-  transition: background 0.15s;
+  color: var(--color-text);
+  transition: background 0.15s, border-color 0.15s;
 }
 
 .page-btn:disabled {
@@ -462,75 +684,68 @@ onMounted(async () => {
 }
 
 .page-btn:not(:disabled):hover {
-  background: var(--gw-primary);
-  border-color: var(--gw-primary);
+  background: var(--color-primary);
+  border-color: var(--color-primary);
   color: var(--color-on-primary);
 }
 
 .page-btn .material-symbols-outlined {
-  font-size: 20px;
+  font-size: 22px;
 }
 
 .page-info {
-  min-width: 36px;
+  min-width: 48px;
   text-align: center;
   font-size: 14px;
-  font-weight: 600;
-  color: var(--gw-text);
+  font-weight: 650;
+  color: var(--color-text);
 }
 
+/* Видимость по платформе */
+.mobile-only {
+  display: none;
+}
+
+/* ─── Мобильная адаптивность ─── */
 @media (max-width: 768px) {
-  .cards-area {
-    padding-bottom: calc(60px + 80px + env(safe-area-inset-bottom, 0px));
-  }
-
   .tasks-header {
-    flex-direction: column;
-    align-items: stretch;
-    gap: 8px;
     padding: 10px 12px;
+    gap: 10px;
   }
 
-  /* Десктопная кнопка «Добавить» — скрыта на мобильном (есть FAB) */
-  .btn-add-desktop {
+  .desktop-only {
     display: none;
   }
 
-  /* Мобильные иконки — видны */
-  .btn-mobile-icon {
+  .mobile-only {
     display: flex;
-    align-items: center;
-    justify-content: center;
-    width: 40px;
-    height: 40px;
-    border-radius: 10px;
-    border: 1px solid var(--gw-border);
-    background: var(--gw-bg);
-    color: var(--gw-text);
-    cursor: pointer;
-    flex-shrink: 0;
-    transition: background 0.15s, color 0.15s;
   }
 
-  .btn-mobile-icon:active {
-    background: var(--gw-primary-light);
-    color: var(--gw-primary);
-  }
-
-  .btn-mobile-icon .material-symbols-outlined {
-    font-size: 20px;
-  }
-
-  .search-wrapper {
-    max-width: unset;
-  }
-
-  /* На маленьких экранах карточки тоже уменьшаем */
   .cards-grid {
     grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+    gap: 12px;
   }
 
-  /* FAB */
+  .cards-area {
+    padding: 14px 12px;
+    padding-bottom: calc(60px + 80px + env(safe-area-inset-bottom, 0px));
+  }
+
+  .tab-btn {
+    flex: 1;
+    justify-content: center;
+    padding: 8px 10px;
+  }
+
+  .tasks-tabs {
+    align-self: stretch;
+    display: flex;
+  }
+
+  .tab-label {
+    font-size: 13px;
+  }
+
   .fab {
     position: fixed;
     right: 16px;
@@ -539,9 +754,9 @@ onMounted(async () => {
     height: 56px;
     border-radius: 50%;
     border: none;
-    background: var(--gw-primary);
+    background: var(--color-primary);
     color: var(--color-on-primary);
-    box-shadow: 0 4px 14px color-mix(in oklch, var(--gw-primary) 50%, transparent);
+    box-shadow: 0 4px 16px color-mix(in oklch, var(--color-primary) 50%, transparent);
     cursor: pointer;
     display: flex;
     align-items: center;
@@ -553,11 +768,11 @@ onMounted(async () => {
   }
 
   .fab:active {
-    background: var(--gw-primary-hover);
+    background: var(--color-primary-hover);
   }
 
   .fab .material-symbols-outlined {
-    font-size: 24px;
+    font-size: 26px;
   }
 
   .fab--hidden {
@@ -567,7 +782,6 @@ onMounted(async () => {
   }
 }
 
-/* На десктопе FAB не нужен */
 @media (min-width: 769px) {
   .fab {
     display: none;
@@ -575,14 +789,16 @@ onMounted(async () => {
 }
 
 @media (max-width: 480px) {
-  /* На телефонах — 1 колонка */
   .cards-grid {
     grid-template-columns: 1fr;
   }
 
-  .cards-area {
-    padding: 12px;
-    padding-bottom: calc(60px + 12px + env(safe-area-inset-bottom, 0px));
+  .tab-label {
+    display: none;
+  }
+
+  .tab-btn {
+    padding: 9px;
   }
 }
 </style>

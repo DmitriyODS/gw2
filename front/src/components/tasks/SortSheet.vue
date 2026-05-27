@@ -61,7 +61,7 @@ function resetAll() {
 .sort-backdrop {
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.4);
+  background: var(--color-scrim);
   z-index: 399;
 }
 
@@ -70,9 +70,9 @@ function resetAll() {
   bottom: 0;
   left: 0;
   right: 0;
-  background: var(--gw-surface);
-  border-top: 1px solid var(--gw-border);
-  border-radius: 20px 20px 0 0;
+  background: var(--color-surface);
+  border-top: 1px solid var(--color-outline-dim);
+  border-radius: var(--radius-xl) var(--radius-xl) 0 0;
   z-index: 400;
   padding: 12px 16px calc(16px + env(safe-area-inset-bottom, 0px));
   display: flex;
@@ -90,7 +90,7 @@ function resetAll() {
   width: 36px;
   height: 4px;
   border-radius: 2px;
-  background: var(--gw-border);
+  background: var(--color-outline-dim);
   margin: 0 auto 12px;
   flex-shrink: 0;
 }
@@ -98,7 +98,7 @@ function resetAll() {
 .sort-sheet-title {
   font-size: 13px;
   font-weight: 700;
-  color: var(--gw-text-secondary);
+  color: var(--color-text-dim);
   text-transform: uppercase;
   letter-spacing: 0.5px;
   margin: 0 0 6px;
@@ -115,11 +115,11 @@ function resetAll() {
   display: flex;
   align-items: center;
   gap: 12px;
-  padding: 12px 14px;
-  border-radius: 12px;
+  padding: 13px 14px;
+  border-radius: var(--radius-md);
   border: 1px solid transparent;
   background: transparent;
-  color: var(--gw-text);
+  color: var(--color-text);
   font-size: 15px;
   cursor: pointer;
   text-align: left;
@@ -127,14 +127,13 @@ function resetAll() {
 }
 
 .sort-btn:hover {
-  background: var(--gw-primary-light);
-  color: var(--gw-primary);
+  background: var(--color-surface-high);
 }
 
 .sort-btn.active {
-  background: var(--gw-primary-light);
-  color: var(--gw-primary);
-  border-color: color-mix(in oklch, var(--gw-primary) 30%, transparent);
+  background: var(--color-primary-container);
+  color: var(--color-on-primary-container);
+  border-color: color-mix(in oklch, var(--color-primary) 30%, transparent);
   font-weight: 600;
 }
 
@@ -149,7 +148,7 @@ function resetAll() {
 
 .sort-check {
   font-size: 18px !important;
-  color: var(--gw-primary);
+  color: var(--color-primary);
 }
 
 .reset-btn {
@@ -158,11 +157,11 @@ function resetAll() {
   justify-content: center;
   gap: 8px;
   margin-top: 8px;
-  padding: 12px 14px;
-  border-radius: 12px;
-  border: 1px solid var(--gw-border);
+  padding: 13px 14px;
+  border-radius: var(--radius-full);
+  border: 1px solid var(--color-outline-dim);
   background: transparent;
-  color: var(--gw-text);
+  color: var(--color-text);
   font-size: 14px;
   font-weight: 600;
   cursor: pointer;
