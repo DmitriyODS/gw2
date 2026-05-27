@@ -99,56 +99,99 @@
         </div>
 
         <!-- Пользователи -->
-        <div v-show="activeSection === 'users'" class="pane-block">
-          <div class="pane-toolbar">
-            <div class="search-wrapper">
-              <span class="material-symbols-outlined search-icon">search</span>
+        <div v-show="activeSection === 'users'" class="pane-block users-block">
+          <!-- Тулбар: поиск + кнопка «Создать». Адаптивный. -->
+          <div class="users-toolbar">
+            <div class="users-search">
+              <span class="material-symbols-outlined">search</span>
               <input
                 v-model="userSearch"
-                class="search-input"
-                placeholder="Поиск по ФИО или логину…"
-                @input="onUserSearch"
+                type="search"
+                placeholder="Поиск по ФИО, логину, должности или роли"
               />
+              <button
+                v-if="userSearch"
+                class="users-search-clear"
+                title="Очистить"
+                @click="userSearch = ''"
+              >
+                <span class="material-symbols-outlined">close</span>
+              </button>
             </div>
-            <button class="btn-filled" @click="openUserDialog(null)">
+            <button class="btn-filled users-add" @click="openUserDialog(null)">
               <span class="material-symbols-outlined">person_add</span>
-              Создать
+              <span class="users-add-label">Создать</span>
             </button>
           </div>
 
-          <div class="users-grid">
+          <!-- Счётчик + быстрая статистика -->
+          <div v-if="!usersLoading" class="users-count">
+            <span v-if="userSearch">
+              Найдено: <b>{{ filteredUsers.length }}</b> из {{ users.length }}
+            </span>
+            <span v-else>
+              Всего сотрудников: <b>{{ users.length }}</b>
+            </span>
+          </div>
+
+          <!-- Список пользователей. На десктопе — таблица-row, на мобильном —
+               вертикальные карточки. Один компонент с responsive CSS. -->
+          <div v-if="!usersLoading && filteredUsers.length" class="users-list">
             <div
               v-for="u in filteredUsers"
               :key="u.id"
-              class="user-card"
+              class="urow"
               :class="{ 'is-me': u.id === authStore.user?.id }"
             >
-              <img class="user-card-avatar" :src="getUserAvatar(u)" :alt="u.fio" />
-              <div class="user-card-text">
-                <div class="user-card-name">{{ u.fio }}</div>
-                <div class="user-card-login">@{{ u.login }}</div>
-                <div v-if="u.post" class="user-card-post">{{ u.post }}</div>
-                <span class="user-card-role" :data-level="u.role?.level || 1">
-                  <span class="material-symbols-outlined">{{ roleIcon(u.role?.level) }}</span>
-                  {{ u.role?.name || '—' }}
-                </span>
+              <div class="urow-avatar-wrap">
+                <img class="urow-avatar" :src="getUserAvatar(u)" :alt="u.fio" />
+                <span v-if="u.id === authStore.user?.id" class="urow-me-dot" title="Это вы"></span>
               </div>
-              <div class="user-card-actions">
-                <button class="icon-btn" title="Редактировать" @click="openUserDialog(u)">
+
+              <div class="urow-main">
+                <div class="urow-name-line">
+                  <span class="urow-name">{{ u.fio }}</span>
+                  <span v-if="u.id === authStore.user?.id" class="urow-me-chip">Это вы</span>
+                </div>
+                <div class="urow-meta">
+                  <span class="urow-login">@{{ u.login }}</span>
+                  <span v-if="u.post" class="urow-dot">·</span>
+                  <span v-if="u.post" class="urow-post">{{ u.post }}</span>
+                </div>
+              </div>
+
+              <span class="urow-role" :data-level="u.role?.level || 1">
+                <span class="material-symbols-outlined">{{ roleIcon(u.role?.level) }}</span>
+                <span class="urow-role-text">{{ u.role?.name || '—' }}</span>
+              </span>
+
+              <div class="urow-actions">
+                <button class="urow-action" title="Редактировать" @click="openUserDialog(u)">
                   <span class="material-symbols-outlined">edit</span>
                 </button>
-                <button class="icon-btn danger" title="Удалить" @click="confirmDeleteUser(u)">
+                <button class="urow-action danger" title="Удалить" @click="confirmDeleteUser(u)">
                   <span class="material-symbols-outlined">delete</span>
                 </button>
               </div>
             </div>
-            <div v-if="!usersLoading && !filteredUsers.length" class="settings-empty">
-              <div class="empty-icon" data-tone="primary">
-                <span class="material-symbols-outlined">person_search</span>
-              </div>
-              <h4>Никого не нашли</h4>
-              <p>{{ userSearch ? 'Попробуйте другой запрос.' : 'Создайте первого сотрудника — кнопка справа сверху.' }}</p>
+          </div>
+
+          <!-- Loading state -->
+          <div v-else-if="usersLoading" class="users-loading">
+            <ProgressSpinner style="width:32px;height:32px" />
+          </div>
+
+          <!-- Empty state -->
+          <div v-else class="settings-empty">
+            <div class="empty-icon" data-tone="primary">
+              <span class="material-symbols-outlined">{{ userSearch ? 'search_off' : 'person_add' }}</span>
             </div>
+            <h4>{{ userSearch ? 'Никого не нашли' : 'Пока ни одного сотрудника' }}</h4>
+            <p>
+              {{ userSearch
+                ? 'Попробуйте другой запрос — ищем по ФИО, логину, должности и роли.'
+                : 'Создайте первого сотрудника — кнопка наверху справа.' }}
+            </p>
           </div>
         </div>
 
@@ -461,6 +504,7 @@ import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
 import Dialog from 'primevue/dialog'
 import InputText from 'primevue/inputtext'
 import Select from 'primevue/select'
+import ProgressSpinner from 'primevue/progressspinner'
 
 const { isAtLeast, myLevel } = usePermission()
 const notif = useNotificationsStore()
@@ -1274,113 +1318,269 @@ onMounted(() => {
   flex-shrink: 0;
 }
 
-/* ── Users grid ─────────────────────────────────────────────── */
-.users-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
-  gap: 12px;
+/* ── Users: toolbar ─────────────────────────────────────────── */
+.users-block {
+  gap: 14px;
+  max-width: 100%;
 }
 
-.user-card {
+.users-toolbar {
   display: flex;
   align-items: center;
-  gap: 12px;
-  padding: 14px;
+  gap: 10px;
+}
+
+.users-search {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 14px;
   background: var(--color-surface);
   border: 1px solid var(--color-outline-dim);
-  border-radius: 18px;
-  transition: border-color 0.15s, transform 0.15s;
-  position: relative;
+  border-radius: 999px;
+  transition: border-color 0.15s, background 0.15s;
+  min-width: 0;
 }
 
-.user-card:hover {
+.users-search:focus-within {
+  border-color: var(--color-primary);
+  background: var(--color-surface-low);
+}
+
+.users-search > .material-symbols-outlined {
+  font-size: 20px;
+  color: var(--color-text-dim);
+  flex-shrink: 0;
+}
+
+.users-search input {
+  flex: 1;
+  min-width: 0;
+  background: transparent;
+  border: 0;
+  outline: 0;
+  padding: 11px 0;
+  font-size: 14px;
+  color: var(--color-text);
+}
+
+.users-search input::placeholder { color: var(--color-text-dim); }
+.users-search input::-webkit-search-cancel-button { display: none; }
+
+.users-search-clear {
+  width: 28px;
+  height: 28px;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--color-text-dim);
+  cursor: pointer;
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+}
+
+.users-search-clear:hover { background: var(--color-surface-high); color: var(--color-text); }
+.users-search-clear .material-symbols-outlined { font-size: 16px; }
+
+.users-add {
+  flex-shrink: 0;
+}
+
+.users-count {
+  font-size: 12px;
+  color: var(--color-text-dim);
+  padding: 0 4px;
+}
+
+.users-count b { color: var(--color-text); }
+
+/* ── Users: list rows ───────────────────────────────────────── */
+.users-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.urow {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 14px;
+  padding: 12px 16px;
+  background: var(--color-surface);
+  border: 1px solid var(--color-outline-dim);
+  border-radius: 16px;
+  transition: border-color 0.15s, background 0.15s, transform 0.15s;
+}
+
+.urow:hover {
   border-color: color-mix(in oklch, var(--color-primary) 30%, var(--color-outline-dim));
+  background: var(--color-surface-low);
 }
 
-.user-card.is-me {
-  background: var(--color-primary-container);
-  border-color: color-mix(in oklch, var(--color-primary) 50%, transparent);
+.urow.is-me {
+  background: color-mix(in oklch, var(--color-primary-container) 60%, var(--color-surface));
+  border-color: color-mix(in oklch, var(--color-primary) 35%, var(--color-outline-dim));
 }
-.user-card.is-me .user-card-name { color: var(--color-on-primary-container); }
 
-.user-card-avatar {
-  width: 52px;
-  height: 52px;
+.urow-avatar-wrap {
+  position: relative;
+  flex-shrink: 0;
+}
+
+.urow-avatar {
+  width: 44px;
+  height: 44px;
   border-radius: 50%;
   object-fit: cover;
-  flex-shrink: 0;
+  display: block;
   border: 2px solid var(--color-surface-low);
 }
 
-.user-card-text {
-  flex: 1;
+.urow.is-me .urow-avatar { border-color: var(--color-primary); }
+
+.urow-me-dot {
+  position: absolute;
+  right: -2px;
+  bottom: -2px;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--color-primary);
+  border: 2px solid var(--color-surface);
+}
+
+.urow-main {
   min-width: 0;
   display: flex;
   flex-direction: column;
   gap: 2px;
 }
 
-.user-card-name {
+.urow-name-line {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.urow-name {
   font-size: 14px;
   font-weight: 700;
   color: var(--color-text);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  min-width: 0;
 }
 
-.user-card-login {
-  font-size: 12px;
-  color: var(--color-text-dim);
+.urow-me-chip {
+  flex-shrink: 0;
+  font-size: 10px;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--color-primary);
+  color: var(--color-on-primary);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
 }
 
-.user-card-post {
+.urow-meta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
   font-size: 12px;
   color: var(--color-text-dim);
-  font-style: italic;
+  min-width: 0;
+}
+
+.urow-login {
+  font-family: ui-monospace, SFMono-Regular, 'SF Mono', monospace;
+  flex-shrink: 0;
+}
+
+.urow-dot { opacity: 0.5; flex-shrink: 0; }
+
+.urow-post {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  min-width: 0;
 }
 
-.user-card-role {
+.urow-role {
   display: inline-flex;
   align-items: center;
-  gap: 5px;
-  margin-top: 6px;
-  padding: 4px 12px 4px 8px;
+  gap: 6px;
+  padding: 5px 12px 5px 9px;
   border-radius: 999px;
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 600;
   background: var(--color-surface-high);
   color: var(--color-text-dim);
-  align-self: flex-start;
-  /* Текст роли всегда виден целиком — не обрезаем; если родитель уже —
-     плашка перенесёт всё на новую строку. */
-  max-width: 100%;
   white-space: nowrap;
   line-height: 1.4;
+  flex-shrink: 0;
 }
 
-.user-card-role .material-symbols-outlined { font-size: 14px; flex-shrink: 0; }
+.urow-role .material-symbols-outlined { font-size: 15px; }
 
-.user-card-role[data-level="2"] {
+.urow-role[data-level="2"] {
   background: var(--color-secondary-container);
   color: var(--color-on-secondary-container);
 }
-.user-card-role[data-level="3"] {
+.urow-role[data-level="3"] {
   background: var(--color-tertiary-container);
   color: var(--color-on-tertiary-container);
 }
-.user-card-role[data-level="4"] {
+.urow-role[data-level="4"] {
   background: var(--color-primary-container);
   color: var(--color-on-primary-container);
 }
 
-.user-card-actions {
+.urow-actions {
   display: flex;
-  gap: 4px;
+  gap: 2px;
   flex-shrink: 0;
+}
+
+.urow-action {
+  width: 36px;
+  height: 36px;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--color-text-dim);
+  cursor: pointer;
+  display: grid;
+  place-items: center;
+  transition: background 0.15s, color 0.15s;
+}
+
+.urow-action:hover {
+  background: var(--color-surface-high);
+  color: var(--color-text);
+}
+
+.urow-action.danger:hover {
+  background: var(--color-error-container);
+  color: var(--color-on-error-container);
+}
+
+.urow-action .material-symbols-outlined { font-size: 18px; }
+
+.urow.is-me .urow-action:hover {
+  background: color-mix(in oklch, var(--color-primary) 18%, transparent);
+}
+
+/* Loading state */
+.users-loading {
+  display: grid;
+  place-items: center;
+  padding: 60px 0;
 }
 
 /* ── Chip list (отделы/типы) ───────────────────────────────── */
@@ -1728,7 +1928,39 @@ onMounted(() => {
     -webkit-overflow-scrolling: touch;
   }
 
-  .users-grid { grid-template-columns: 1fr; }
+  /* Users — на мобильном раскладываем строку в 2 линии:
+       row1: avatar | main | actions
+       row2:           | role-pill (растянута), без actions
+     Это даёт компактные карточки, видна вся роль, кнопки рядом с аватаром. */
+  .users-toolbar { flex-direction: column; align-items: stretch; gap: 8px; }
+  .users-add { width: 100%; justify-content: center; }
+
+  .urow {
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    grid-template-areas:
+      "avatar main actions"
+      "role   role role";
+    gap: 8px 12px;
+    padding: 12px;
+    border-radius: 18px;
+  }
+
+  .urow-avatar-wrap { grid-area: avatar; }
+  .urow-main { grid-area: main; }
+  .urow-actions { grid-area: actions; }
+  .urow-role {
+    grid-area: role;
+    justify-self: start;
+    margin-top: 2px;
+  }
+
+  .urow-avatar { width: 40px; height: 40px; }
+  .urow-name { font-size: 14px; }
+  .urow-meta { font-size: 11px; flex-wrap: wrap; }
+  .urow-role { font-size: 11px; padding: 4px 11px 4px 7px; }
+  .urow-role .material-symbols-outlined { font-size: 13px; }
+  .urow-action { width: 34px; height: 34px; }
+  .urow-action .material-symbols-outlined { font-size: 16px; }
 
   .settings-card,
   .settings-card--hero {
