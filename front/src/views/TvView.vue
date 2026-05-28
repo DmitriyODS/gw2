@@ -264,7 +264,7 @@
             <div class="tv-brand-glow"></div>
             <img class="tv-brand-big-logo" src="/logo.svg" alt="" />
             <div class="tv-brand-big-name">Groove Work</div>
-            <div class="tv-brand-quote">«Команда — это сила»</div>
+            <div class="tv-brand-quote">«{{ brandQuote }}»</div>
             <div class="tv-brand-date">{{ longDateLabel }}</div>
           </div>
 
@@ -353,6 +353,36 @@ const themeStore = useThemeStore()
 const SLIDE_MS = 8_000
 const REFRESH_MS = 60_000
 const CONTROLS_HIDE_MS = 2_500
+
+// ─── Цитаты для брендового слайда ────────────────────────────────────────
+// Шуточные и тёплые, в разном настроении — выбираем случайную при каждом
+// показе слайда (через :key на section мы заново монтируемся → новый ребус).
+const BRAND_QUOTES = [
+  'Команда — это сила',
+  'Лучшая задача — закрытая задача',
+  'Сегодня было неплохо. А завтра будет ещё лучше.',
+  'Каждый юнит — кусочек большого дела',
+  'Кофе допит, дедлайны побеждены',
+  'Закрывайте задачи, как двери — с уверенностью',
+  'Делаем — значит делаем хорошо',
+  'Если задача не двигается, значит она копит энергию',
+  'Один за всех — и все на одном Groove',
+  'Сегодня выложились — завтра выложимся ещё',
+  'Пусть бэклог тает, как снег весной',
+  'Кто рано встал — тот рано закрыл',
+  'Не бывает маленьких задач — бывают большие закрытия',
+  'Считаем не часы, а сделанное. Но часы тоже считаем.',
+  'Время — деньги. У нас в платформе и то и другое под учётом.',
+  'Лучший юнит — тот, который начат',
+  'Помните: даже Эйнштейн делал ошибки в дедлайнах',
+  'Релиз ближе, чем кажется',
+  'Хорошего дня, хорошей команды и хорошего кофе',
+  'Дисциплина — это когда ты закрываешь юнит до обеда',
+]
+
+function pickRandomQuote() {
+  return BRAND_QUOTES[Math.floor(Math.random() * BRAND_QUOTES.length)]
+}
 
 // ─── Каталог пользователей для аватарок ──────────────────────────────────
 const userMap = ref(new Map())
@@ -472,6 +502,7 @@ const isFullscreen = ref(false)
 const clock = ref('')
 const todayLabel = ref('')
 const longDateLabel = ref('')
+const brandQuote = ref(pickRandomQuote())
 
 const commonByPeriod = ref({})   // { day: {...}, week: {...}, month: {...} }
 const extendedByPeriod = ref({}) // { day: {...}, week: {...}, month: {...} }
@@ -702,9 +733,23 @@ function plural(n, one, few, many) {
 }
 
 // ─── Форматирование часов (для рендера и aside-sub) ──────────────────────
+// При больших объёмах команды «440 ч» выглядит абстрактно — переводим в
+// рабочие дни (по 8 часов) с порога 40 ч (5 рабочих дней): становится
+// «55 дн» или «55 дн 4 ч», что куда нагляднее на табло.
+const HOURS_PER_DAY = 8
+const DAY_THRESHOLD = 40
+
 function formatHoursShort(val) {
   const hours = num(val)
   if (hours <= 0) return '0 ч'
+
+  if (hours >= DAY_THRESHOLD) {
+    const days = Math.floor(hours / HOURS_PER_DAY)
+    const remainHours = Math.round(hours - days * HOURS_PER_DAY)
+    if (remainHours === 0) return `${days} дн`
+    return `${days} дн ${remainHours} ч`
+  }
+
   const totalMinutes = Math.round(hours * 60)
   const h = Math.floor(totalMinutes / 60)
   const m = totalMinutes % 60
@@ -816,6 +861,8 @@ async function goTo(idx) {
   activeIdx.value = idx
   const period = slides[idx].period
   if (!commonByPeriod.value[period]) await loadPeriod(period)
+  // При каждом заходе на брендовый слайд — берём новую цитату.
+  if (slides[idx].kind === 'brand') brandQuote.value = pickRandomQuote()
 }
 
 async function next() {
