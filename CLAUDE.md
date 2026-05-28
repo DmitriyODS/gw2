@@ -131,9 +131,29 @@ Nginx собирает фронт сам через multi-stage `front/Dockerfil
 
 **Правило:** никаких `#hex` или `rgba()` в компонентах — только `--color-*` / `--tag-*` токены.
 
-## ТВ-режим
+## ТВ-режим (v2.6.1 — Live-newsroom)
 
-Маршрут `/tv` (фронт). Открывается в новой вкладке кнопкой на экране статистики, рендерится без сайдбара/нижней навигации (роут с `meta.fullscreen=true`, App.vue смотрит на `route.meta.fullscreen`). Три слайда — день/неделя/месяц — листаются автоматически каждые 10 секунд (`SLIDE_MS`). Данные тянутся из `/api/stats/common` и `/api/stats/extended`, обновляются раз в минуту (`REFRESH_MS`). Внизу — кнопки prev/pause/next и переключение полноэкранного режима (Fullscreen API).
+Маршрут `/tv` (фронт). Открывается в новой вкладке кнопкой на экране статистики, рендерится без сайдбара/нижней навигации (роут с `meta.fullscreen=true`, App.vue смотрит на `route.meta.fullscreen`).
+
+**Архитектура.** Каркас grid 4-rows: `header / progress / canvas / ticker`. Canvas — grid 3-cols: `KPI rail (clamp 220–320px) | stage (1fr) | aside (clamp 240–340px)`. Все размеры через `clamp()` + `vmin`-единицы — гарантия что НИКОГДА не появятся скроллы при любых пропорциях экрана (от 4K до вертикального табло). На portrait-ориентации (`max-aspect-ratio: 1/1`) KPI rail превращается в горизонтальную полосу сверху, aside уезжает вниз.
+
+**Слайды (8 штук, `SLIDE_MS=8000`).** Каждый описывается объектом в массиве `slides[]` с полями: `id, period (day|week|month), kind, icon, periodLabel, heroIcon/heroEyebrow/heroKey/heroFormat/tone, secondaries[], asideTone/asideIcon/asideTitle/asideKind`. Поддерживаемые `kind`: `hero-number` (1 огромное число + 2 secondary), `podium` (топ-3 на ступенях с медалями), `ranking` (top-5 список с барами), `departments` (горизонтальные бары по отделам), `quad` (4 крупные KPI-плитки), `brand` (брендовый слайд с пульсирующим логотипом). Цикл: today-closed → today-podium → today-departments → week-hours → week-ranking → month-quad → month-podium → brand.
+
+**KPI rail.** Всегда видим (слева, 4 чипа): «Поступило / Закрыто / В работе / Часы команды» по периоду текущего слайда. При смене периода числа плавно «доезжают» к новому значению (watch внутри inline-компонента `TvCount`).
+
+**Aside.** Контекстная карточка справа, разная для каждого слайда (`asideKind`): hours-today / hours-period / closed-today / top-dept / sparkline-closed / sparkline-hours / today-snapshot. Спарклайн — SVG-полилиния по `extendedData.calendar` (закрытия по дням или часы по дням).
+
+**Анимации.** (1) Count-up: inline-компонент `TvCount` (`defineComponent` в script setup) — `onMounted` запускает rAF от 0 до value (ease-out-cubic, 900мс), `watch(value)` плавно переезжает на новое значение. Используется и в stage (через `:key="currentSlide.id"` на section перезапускается от 0), и в KPI rail (без key — smooth-transition). (2) Springy bars: CSS `@keyframes tv-bar-fill` `cubic-bezier(0.34, 1.56, 0.64, 1)` от 0 до `var(--bar-width)` (передаётся через `:style="{ '--bar-width': barPercent + '%' }"`). (3) Фоновое сияние: `radial-gradient` в `::before` под `tv-hero-number` (color-mix от текущего tone). (4) Огонёк у топ-1 на подиуме и в ranking: иконка `local_fire_department` (FILL=1), keyframe-pulse 1.4с с поворотом и scale. (5) Подиум: разные `animation-delay` для колонок (1-я в центре, выше; 2-я слева; 3-я справа, ниже) — поднимаются с springy easing. (6) Ranking: каждая строка въезжает слева с `--row-delay = i*80ms`. (7) Quad-плитки: scale-in с шахматной задержкой. (8) Brand-логотип: pulse-анимация с drop-shadow primary-color. (9) Переходы между слайдами: `<transition name="tv-stage">` — `translateX + scale(0.98) + filter: blur(6px)` 550мс.
+
+**Тикер.** Бегущая строка снизу. Items генерируются из `commonByPeriod['day'|'week'|'month']` и `extendedByPeriod['day'|'week']`: «Сегодня закрыто N задач», «Лидер дня — <fio>», «Активный отдел дня — <name>», «За неделю команда отработала <часов>», «Главный тип работ недели — <name>». Дорожка дублируется (`tickerItemsX2`), `keyframe translateX(0 → -50%)` в линейной бесконечной анимации, `tickerDuration = max(20, items.length * 6)` секунд. Mask-image для плавного fade на краях viewport.
+
+**Контролы (auto-hide).** `prev/pause/next/fullscreen` в круглом плавающем «пилюле» (position: fixed, right+bottom). Скрыты по умолчанию (это табло на стене). Появляются при `mousemove`/`touchstart`, прячутся через 2.5 сек (`CONTROLS_HIDE_MS`). Управляется `bumpControls()` + setTimeout.
+
+**Данные.** `commonByPeriod`/`extendedByPeriod` — кеши по периоду. `loadPeriod(period)` грузит обе порции параллельно. При `goTo(idx)`: если period текущего слайда ещё не загружен — грузим, иначе показываем мгновенно. Refresh всех периодов каждые 60 сек (`REFRESH_MS`) silent-режимом.
+
+**Аватары.** `loadUsers()` при mount грузит `/api/users/directory`, заполняет `userMap` (id → user). `avatarOf(uid)` отдаёт `/uploads/${avatar_path}` или `/api/users/${uid}/identicon` если нет фотографии.
+
+**Палитра.** Все цвета — только семантические токены `--color-primary/secondary/tertiary/success/warning/error` + `*-container` + `--color-on-*`. Полная поддержка тёмной темы (наследуется через `data-dark` на `.tv`). Никаких hex/rgba.
 
 ## Защита от подбора пароля
 
