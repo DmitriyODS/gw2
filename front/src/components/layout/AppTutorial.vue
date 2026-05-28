@@ -438,13 +438,28 @@ const spotStyle = computed(() => {
 })
 
 const cardStyle = computed(() => {
-  if (isMobile.value) return {
-    bottom: 'calc(60px + env(safe-area-inset-bottom, 0px))',
-    left: '0',
-    right: '0',
-    width: '100%',
-    borderRadius: '20px 20px 0 0',
-    maxHeight: '80dvh',
+  if (isMobile.value) {
+    // На мобильном карточка по умолчанию снизу; если spotlight в нижней половине
+    // экрана (например, кнопка нижней навигации или FAB) — поднимаем карточку
+    // наверх, чтобы она не закрывала подсвеченную кнопку.
+    const rect = spotRect.value
+    const placeAtTop = rect && (rect.top + rect.height / 2) > window.innerHeight / 2
+    if (placeAtTop) return {
+      top: 'calc(env(safe-area-inset-top, 0px) + 12px)',
+      left: '0',
+      right: '0',
+      width: '100%',
+      borderRadius: '0 0 20px 20px',
+      maxHeight: '70dvh',
+    }
+    return {
+      bottom: 'calc(60px + env(safe-area-inset-bottom, 0px) + 12px)',
+      left: '0',
+      right: '0',
+      width: '100%',
+      borderRadius: '20px 20px 0 0',
+      maxHeight: '70dvh',
+    }
   }
 
   if (step.value?.transparent) {
@@ -477,12 +492,37 @@ const cardStyle = computed(() => {
 })
 
 // ─── Логика шагов ─────────────────────────────────────────────────────────
+// Возвращаем первый ВИДИМЫЙ элемент по селектору. Один и тот же data-tutorial
+// часто есть и в боковой панели, и в нижней навигации — на мобильном sidebar
+// display:none, и querySelector возвращал бы скрытый узел с rect 0×0.
+function findVisible(selector) {
+  const list = document.querySelectorAll(selector)
+  for (const el of list) {
+    const r = el.getBoundingClientRect()
+    if (r.width > 0 && r.height > 0) return el
+  }
+  return null
+}
+
 async function updateSpotRect() {
   await nextTick()
   const target = step.value?.target
   if (!target) { spotRect.value = null; return }
-  const el = document.querySelector(target)
-  spotRect.value = el ? el.getBoundingClientRect() : null
+  const el = findVisible(target)
+  if (!el) { spotRect.value = null; return }
+
+  // Подскролл к элементу, если он за пределами экрана (часто на мобильном).
+  const rect0 = el.getBoundingClientRect()
+  const outside = rect0.bottom < 0 || rect0.top > window.innerHeight
+                  || rect0.right < 0 || rect0.left > window.innerWidth
+  if (outside) {
+    el.scrollIntoView({ block: 'center', inline: 'center', behavior: 'smooth' })
+    await new Promise(r => setTimeout(r, 220))
+  }
+
+  const rect = el.getBoundingClientRect()
+  if (rect.width === 0 || rect.height === 0) { spotRect.value = null; return }
+  spotRect.value = rect
 }
 
 async function applyStep(idx) {

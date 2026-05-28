@@ -44,7 +44,11 @@
       modal
       :draggable="false"
       :show-header="false"
-      :pt="{ root: { class: 'employee-dialog' } }"
+      :style="{ width: '420px', maxWidth: 'calc(100vw - 24px)' }"
+      :pt="{
+        root: { class: 'employee-dialog' },
+        content: { style: 'overflow-x: hidden; padding: 0;' },
+      }"
     >
       <div v-if="selected" class="employee-profile">
         <div class="profile-avatar-wrap">
@@ -83,6 +87,7 @@
             @click="callTo(selected, 'audio')"
           >
             <span class="material-symbols-outlined">call</span>
+            <span class="audio-label">Аудиозвонок</span>
           </button>
           <button class="btn-secondary" @click="profileOpen = false">Закрыть</button>
         </div>
@@ -316,8 +321,23 @@ watch(profileOpen, (open) => { if (!open) selected.value = null })
   align-items: center;
   text-align: center;
   padding: 32px 24px 24px;
-  min-width: 320px;
+  width: min(420px, calc(100vw - 32px));
+  max-width: 100%;
+  box-sizing: border-box;
+  overflow-x: hidden;
 }
+
+.employee-profile > * { max-width: 100%; }
+
+.profile-name,
+.profile-post,
+.profile-role,
+.profile-login {
+  word-break: break-word;
+  overflow-wrap: anywhere;
+}
+
+.audio-label { display: none; }
 
 .profile-avatar-wrap {
   position: relative;
@@ -381,10 +401,13 @@ watch(profileOpen, (open) => { if (!open) selected.value = null })
 
 .profile-actions {
   display: flex;
-  gap: 12px;
+  flex-wrap: wrap;
+  gap: 10px;
   width: 100%;
   justify-content: center;
 }
+
+.profile-actions > * { flex: 1 1 auto; }
 
 .profile-write {
   display: inline-flex;
@@ -465,8 +488,27 @@ watch(profileOpen, (open) => { if (!open) selected.value = null })
     height: 72px;
   }
   .employee-profile {
-    min-width: unset;
-    padding: 24px 16px 16px;
+    width: calc(100vw - 24px);
+    max-width: calc(100vw - 24px);
+    padding: 24px 18px 18px;
   }
+  .profile-avatar {
+    width: 104px;
+    height: 104px;
+  }
+  .profile-name { font-size: 18px; }
+  .profile-actions {
+    flex-direction: column;
+    gap: 8px;
+  }
+  .profile-actions > * {
+    width: 100%;
+    flex: 0 0 auto;
+    justify-content: center;
+  }
+  .btn-tonal.audio {
+    padding: 10px 18px;
+  }
+  .audio-label { display: inline; }
 }
 </style>

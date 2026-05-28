@@ -102,13 +102,15 @@ const avatarSrc = computed(() => {
     bottom: 0;
     left: 0;
     right: 0;
-    height: 60px;
+    min-height: calc(64px + env(safe-area-inset-bottom, 0px));
     background: var(--gw-surface);
     border-top: 1px solid var(--gw-border);
     display: flex;
     align-items: stretch;
     z-index: 200;
-    padding-bottom: env(safe-area-inset-bottom, 0);
+    padding-top: 6px;
+    padding-bottom: max(8px, env(safe-area-inset-bottom, 0px));
+    box-sizing: border-box;
   }
 }
 
@@ -118,14 +120,14 @@ const avatarSrc = computed(() => {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 2px;
+  gap: 3px;
   border: none;
   background: transparent;
   cursor: pointer;
   color: var(--gw-text-secondary);
   position: relative;
   transition: color 0.15s;
-  padding: 6px 4px;
+  padding: 4px 2px;
   min-width: 0;
 }
 
@@ -142,8 +144,9 @@ const avatarSrc = computed(() => {
 }
 
 .bottom-nav-label {
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 500;
+  line-height: 1.1;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;

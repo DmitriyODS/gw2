@@ -37,38 +37,54 @@
             {{ otherOnline ? 'в сети' : lastSeenText }}
           </div>
         </div>
-        <div class="chat-tools" data-tutorial="chat-tools">
-          <button
-            class="chat-tool call"
-            data-tutorial="chat-call-audio"
-            title="Аудиозвонок"
-            @click="startCall('audio')"
-          >
-            <span class="material-symbols-outlined">call</span>
-          </button>
-          <button
-            class="chat-tool call"
-            data-tutorial="chat-call-video"
-            title="Видеозвонок"
-            @click="startCall('video')"
-          >
-            <span class="material-symbols-outlined">videocam</span>
-          </button>
+        <div class="chat-tools" data-tutorial="chat-tools" ref="toolsRef">
           <button
             class="chat-tool"
-            :class="{ active: active.is_pinned }"
-            :title="active.is_pinned ? 'Открепить' : 'Закрепить'"
-            @click="onTogglePin(active.id)"
+            :class="{ active: chatMenuOpen }"
+            title="Действия"
+            aria-haspopup="menu"
+            :aria-expanded="chatMenuOpen"
+            @click="chatMenuOpen = !chatMenuOpen"
           >
-            <span class="material-symbols-outlined">{{ active.is_pinned ? 'keep_off' : 'keep' }}</span>
+            <span class="material-symbols-outlined">more_vert</span>
           </button>
-          <button
-            class="chat-tool danger"
-            title="Удалить чат"
-            @click="askDeleteConversation(active)"
-          >
-            <span class="material-symbols-outlined">delete</span>
-          </button>
+          <Transition name="chat-menu">
+            <div v-if="chatMenuOpen" class="chat-menu" role="menu">
+              <button
+                class="chat-menu-item"
+                data-tutorial="chat-call-audio"
+                @click="onMenuAction(() => startCall('audio'))"
+              >
+                <span class="material-symbols-outlined chat-menu-ico tone-success">call</span>
+                <span>Аудиозвонок</span>
+              </button>
+              <button
+                class="chat-menu-item"
+                data-tutorial="chat-call-video"
+                @click="onMenuAction(() => startCall('video'))"
+              >
+                <span class="material-symbols-outlined chat-menu-ico tone-success">videocam</span>
+                <span>Видеозвонок</span>
+              </button>
+              <button
+                class="chat-menu-item"
+                @click="onMenuAction(() => onTogglePin(active.id))"
+              >
+                <span class="material-symbols-outlined chat-menu-ico" :class="{ 'tone-tertiary': active.is_pinned }">
+                  {{ active.is_pinned ? 'keep_off' : 'keep' }}
+                </span>
+                <span>{{ active.is_pinned ? 'Открепить чат' : 'Закрепить чат' }}</span>
+              </button>
+              <div class="chat-menu-divider" />
+              <button
+                class="chat-menu-item danger"
+                @click="onMenuAction(() => askDeleteConversation(active))"
+              >
+                <span class="material-symbols-outlined chat-menu-ico tone-error">delete</span>
+                <span>Удалить чат</span>
+              </button>
+            </div>
+          </Transition>
         </div>
       </header>
       <div v-else class="chat-empty">
@@ -188,6 +204,24 @@ const messageInputRef = ref(null)
 const dragOver = ref(false)
 let dragDepth = 0
 const replyTo = ref(null)
+
+const chatMenuOpen = ref(false)
+const toolsRef = ref(null)
+
+function onMenuAction(fn) {
+  chatMenuOpen.value = false
+  fn()
+}
+
+function handleOutsideMenu(e) {
+  if (!chatMenuOpen.value) return
+  const root = toolsRef.value
+  if (root && !root.contains(e.target)) chatMenuOpen.value = false
+}
+
+// При переключении диалога закрываем меню действий — иначе оно остаётся открытым
+// поверх шапки нового чата.
+watch(() => messenger.activeConversationId, () => { chatMenuOpen.value = false })
 
 function dragHasFiles(e) {
   const types = e.dataTransfer?.types
@@ -408,10 +442,14 @@ onMounted(async () => {
   await nextTick()
   scrollToBottom()
   window.addEventListener('messenger:open-conversation', handleExternalOpen)
+  document.addEventListener('mousedown', handleOutsideMenu)
+  document.addEventListener('touchstart', handleOutsideMenu, { passive: true })
 })
 
 onBeforeUnmount(() => {
   window.removeEventListener('messenger:open-conversation', handleExternalOpen)
+  document.removeEventListener('mousedown', handleOutsideMenu)
+  document.removeEventListener('touchstart', handleOutsideMenu)
 })
 
 /* Скроллим вниз только когда появилось НОВОЕ сообщение снизу (lastId вырос),
@@ -537,6 +575,7 @@ watch(() => route.params.conversationId, async (id) => {
 }
 
 .chat-tools {
+  position: relative;
   display: flex;
   gap: 2px;
   margin-left: auto;
@@ -563,20 +602,82 @@ watch(() => route.params.conversationId, async (id) => {
 }
 
 .chat-tool.active {
-  color: var(--color-tertiary);
+  background: var(--color-surface-low);
+  color: var(--color-text);
 }
 
-.chat-tool.danger:hover {
+.chat-tool .material-symbols-outlined { font-size: 22px; }
+
+/* Выпадающее меню действий по чату */
+.chat-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  min-width: 220px;
+  background: var(--color-surface);
+  border: 1px solid var(--color-outline-dim);
+  border-radius: var(--radius-md);
+  padding: 6px;
+  box-shadow: var(--shadow-lg);
+  z-index: 60;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.chat-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border: none;
+  background: transparent;
+  color: var(--color-text);
+  font-size: 14px;
+  font-weight: 500;
+  text-align: left;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+
+.chat-menu-item:hover {
+  background: var(--color-surface-low);
+}
+
+.chat-menu-item.danger { color: var(--color-error); }
+
+.chat-menu-item.danger:hover {
   background: var(--color-error-container);
   color: var(--color-on-error-container);
 }
 
-.chat-tool.call:hover {
-  background: var(--color-success-container);
-  color: var(--color-on-success-container);
+.chat-menu-ico {
+  font-size: 20px;
+  color: var(--color-text-dim);
 }
 
-.chat-tool .material-symbols-outlined { font-size: 20px; }
+.chat-menu-ico.tone-success { color: var(--color-success); }
+.chat-menu-ico.tone-tertiary { color: var(--color-tertiary); }
+.chat-menu-ico.tone-error { color: var(--color-error); }
+
+.chat-menu-divider {
+  height: 1px;
+  background: var(--color-outline-dim);
+  margin: 4px 4px;
+}
+
+.chat-menu-enter-active,
+.chat-menu-leave-active {
+  transition: opacity 0.15s ease, transform 0.15s ease;
+  transform-origin: top right;
+}
+
+.chat-menu-enter-from,
+.chat-menu-leave-to {
+  opacity: 0;
+  transform: scale(0.96) translateY(-4px);
+}
 
 .chat-fio {
   font-size: 15px;
@@ -665,7 +766,9 @@ watch(() => route.params.conversationId, async (id) => {
     inset: 0;
     z-index: 150;
     background: var(--color-bg);
-    padding-bottom: calc(60px + env(safe-area-inset-bottom, 0px));
+    /* Резерв ровно под нижнюю навигацию (её высота = 64px + safe-area внутри),
+       без лишнего «воздуха» под полем ввода. */
+    padding-bottom: calc(64px + env(safe-area-inset-bottom, 0px));
   }
   .messenger.mobile-chat-open .chat-panel {
     display: flex;
@@ -681,7 +784,7 @@ watch(() => route.params.conversationId, async (id) => {
   .fab {
     position: fixed;
     right: 16px;
-    bottom: calc(60px + 16px + env(safe-area-inset-bottom, 0px));
+    bottom: calc(64px + 16px + env(safe-area-inset-bottom, 0px));
     width: 56px;
     height: 56px;
     border-radius: 50%;
