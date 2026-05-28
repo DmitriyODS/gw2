@@ -80,7 +80,7 @@
 </template>
 
 <script setup>
-import { computed, onMounted, onBeforeUnmount, ref } from 'vue'
+import { computed, onMounted, onBeforeUnmount, ref, watch } from 'vue'
 import { useCallStore } from '@/stores/call.js'
 import { useAuthStore } from '@/stores/auth.js'
 import ParticipantTile from './ParticipantTile.vue'
@@ -89,6 +89,7 @@ const callStore = useCallStore()
 const authStore = useAuthStore()
 
 const visible = computed(() => callStore.phase === 'active' || callStore.phase === 'outgoing')
+const isRinging = computed(() => callStore.phase === 'outgoing')
 
 const statusText = computed(() => {
   if (callStore.phase === 'outgoing') return 'Звоним…'
@@ -149,7 +150,83 @@ const elapsed = computed(() => {
 })
 
 onMounted(startTimer)
-onBeforeUnmount(stopTimer)
+onBeforeUnmount(() => {
+  stopTimer()
+  stopRingback()
+})
+
+/* Ringback tone — гудки «туу...туу...» пока звоним и собеседник не ответил.
+   Стандарт: 425 Гц, 1с звук + 4с тишина (российский тип) либо 440Гц 2с/4с
+   (US). Берём что-то в духе российской АТС: чистый тон 425Гц, длительность
+   1с, период 5с. Останавливаем как только phase != outgoing (accepted или
+   hangup). Защита от suspended AudioContext — как в IncomingCallOverlay:
+   первый жест разогревает звук. */
+let ringCtx = null
+let ringTimer = null
+let pendingGesture = null
+
+function playOneBeep() {
+  if (!ringCtx) return
+  try {
+    if (ringCtx.state === 'suspended') ringCtx.resume()
+    const now = ringCtx.currentTime
+    const osc = ringCtx.createOscillator()
+    const gain = ringCtx.createGain()
+    osc.type = 'sine'
+    osc.frequency.value = 425
+    gain.gain.setValueAtTime(0, now)
+    gain.gain.linearRampToValueAtTime(0.18, now + 0.05)
+    gain.gain.setValueAtTime(0.18, now + 0.95)
+    gain.gain.exponentialRampToValueAtTime(0.0001, now + 1.0)
+    osc.connect(gain).connect(ringCtx.destination)
+    osc.start(now)
+    osc.stop(now + 1.02)
+  } catch {}
+}
+
+function installRingbackGestureRetry() {
+  if (pendingGesture) return
+  pendingGesture = () => {
+    pendingGesture = null
+    if (ringCtx && ringCtx.state === 'suspended') {
+      ringCtx.resume().catch(() => {})
+    }
+    window.removeEventListener('pointerdown', pendingGesture, true)
+    window.removeEventListener('keydown', pendingGesture, true)
+  }
+  window.addEventListener('pointerdown', pendingGesture, true)
+  window.addEventListener('keydown', pendingGesture, true)
+}
+
+function startRingback() {
+  if (ringTimer) return
+  try {
+    const Ctx = window.AudioContext || window.webkitAudioContext
+    if (!Ctx) return
+    ringCtx = new Ctx()
+    if (ringCtx.state === 'suspended') {
+      ringCtx.resume().catch(() => {})
+      installRingbackGestureRetry()
+    }
+  } catch { return }
+  playOneBeep()
+  ringTimer = setInterval(() => playOneBeep(), 5000)
+}
+
+function stopRingback() {
+  if (ringTimer) { clearInterval(ringTimer); ringTimer = null }
+  if (ringCtx) { try { ringCtx.close() } catch {}; ringCtx = null }
+  if (pendingGesture) {
+    window.removeEventListener('pointerdown', pendingGesture, true)
+    window.removeEventListener('keydown', pendingGesture, true)
+    pendingGesture = null
+  }
+}
+
+watch(isRinging, (v) => {
+  if (v) startRingback()
+  else stopRingback()
+}, { immediate: true })
 </script>
 
 <style scoped>

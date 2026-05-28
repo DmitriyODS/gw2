@@ -244,6 +244,9 @@ export function connectSocket() {
 
   // ── Звонки ────────────────────────────────────────────────────
   socket.on('call:incoming', (call) => {
+    // Диагностический лог — видно в DevTools Console у получателя. Если
+    // лога нет — пакет не дошёл (получатель не в комнате `user_{id}`).
+    console.info('[gw2 call] incoming', call)
     const callStore = useCallStore()
     // Если уже в звонке, store сам пошлёт decline — уведомление не нужно.
     if (callStore.phase !== 'idle') {

@@ -62,9 +62,18 @@ def register_call_events(socketio: SocketIO) -> None:
         payload = _call_schema.dump(call)
         # Инициатору — подтверждение
         socketio.emit("call:started", payload, room=f"user_{me}")
-        # Приглашённым — входящий звонок
+        # Приглашённым — входящий звонок. Диагностика «звонок ушёл, но
+        # получатель ничего не видит»: логируем, сколько сокетов сейчас
+        # в комнате user_{id}. Если 0 — получатель не онлайн (или его
+        # вкладка не сделала connect), пакет потеряется без push-сервера.
+        from app.sockets.presence import _sid_user
         for part in call.participants:
             if part.role == "invitee":
+                sockets_in_room = sum(1 for uid in _sid_user.values() if uid == part.user_id)
+                logger.info("call.incoming_emit", extra={"extra": {
+                    "call_id": call.id, "to_user_id": part.user_id,
+                    "sockets_in_room": sockets_in_room,
+                }})
                 socketio.emit("call:incoming", payload, room=f"user_{part.user_id}")
 
     @socketio.on("call:accept")
