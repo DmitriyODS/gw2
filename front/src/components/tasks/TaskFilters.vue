@@ -534,12 +534,22 @@ function closeCustomDialog() {
 
   .task-filters {
     position: fixed;
-    bottom: calc(60px + env(safe-area-inset-bottom, 0px));
+    /* Прижимаем к нижней кромке экрана — нижняя навигация перекрывается
+       шторкой так же, как в SortSheet. Если оставлять зазор (bottom: 60px),
+       шторка «висит в воздухе» и выглядит оторванной. */
+    bottom: 0;
     left: 0;
     right: 0;
     width: 100%;
     min-width: unset;
+    /* Переопределяем десктопный height: 100% — иначе шторка тянется на весь
+       экран даже если фильтров всего пара. Высота — по содержимому, ограничена
+       максимумом, чтобы при большом количестве фильтров можно было скроллить. */
+    height: auto;
     max-height: 80dvh;
+    /* safe-area-inset-bottom — это нижний «вырез» (iPhone home indicator).
+       Добавляем как padding, а не offset — шторка по-прежнему касается низа. */
+    padding-bottom: calc(16px + env(safe-area-inset-bottom, 0px));
     border-right: none;
     border-top: 1px solid var(--color-outline-dim);
     border-radius: var(--radius-xl) var(--radius-xl) 0 0;
