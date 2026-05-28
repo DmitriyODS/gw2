@@ -173,7 +173,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useTasksStore } from '@/stores/tasks.js'
 import { useUnitsStore } from '@/stores/units.js'
@@ -312,6 +312,15 @@ function onTaskCreated(task) {
   tasksStore.fetchTasks({ silent: true }).catch(() => {})
 }
 
+function consumeOpenQuery() {
+  const openId = route.query.open
+  if (!openId) return
+  openTask({ id: Number(openId) })
+  // Чистим query, чтобы повторный клик на ту же задачу (или возврат через
+  // history.back) сработал ещё раз.
+  router.replace({ path: '/tasks' })
+}
+
 onMounted(async () => {
   try {
     await tasksStore.fetchTasks()
@@ -321,11 +330,14 @@ onMounted(async () => {
   try {
     await unitsStore.fetchActiveUnit()
   } catch {}
-  const openId = route.query.open
-  if (openId) {
-    openTask({ id: Number(openId) })
-    router.replace({ path: '/tasks' })
-  }
+  consumeOpenQuery()
+})
+
+/* Если пользователь уже на /tasks и кликнул задачу в StaleTasksModal,
+   роутер делает push с тем же path и другим query — компонент НЕ пересоздаётся,
+   onMounted не повторяется. Поэтому слушаем сам query.open и реагируем здесь. */
+watch(() => route.query.open, (v) => {
+  if (v) consumeOpenQuery()
 })
 </script>
 
