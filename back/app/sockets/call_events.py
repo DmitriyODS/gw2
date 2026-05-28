@@ -37,13 +37,23 @@ def register_call_events(socketio: SocketIO) -> None:
         me = _resolve_user_id_from_sid(flask_request.sid)
         if me is None:
             return
-        user_ids = (data or {}).get("user_ids") or []
+        raw_ids = (data or {}).get("user_ids") or []
+        try:
+            user_ids = [int(uid) for uid in raw_ids if uid is not None]
+        except (TypeError, ValueError):
+            user_ids = []
         media = (data or {}).get("media") or "video"
+        logger.info("call.start", extra={"extra": {
+            "initiator_id": me, "user_ids": user_ids, "media": media,
+        }})
 
         try:
             with current_app.app_context():
                 call = call_service.start_call(me, user_ids, media=media)
         except CallServiceError as e:
+            logger.warning("call.start_failed", extra={"extra": {
+                "initiator_id": me, "code": e.code, "message": e.message,
+            }})
             socketio.emit("call:error",
                           {"code": e.code, "message": e.message},
                           room=f"user_{me}")
@@ -192,14 +202,19 @@ def register_call_events(socketio: SocketIO) -> None:
         me = _resolve_user_id_from_sid(flask_request.sid)
         if me is None:
             return
-        call_id = (data or {}).get("call_id")
-        to_user_id = (data or {}).get("to_user_id")
-        if not call_id or not to_user_id:
+        try:
+            call_id = int((data or {}).get("call_id"))
+            to_user_id = int((data or {}).get("to_user_id"))
+        except (TypeError, ValueError):
             return
         # Проверяем, что оба в одном звонке (или приглашены — для случая первого
         # offer'а до accept в редком race).
         state = call_state.get_call(call_id)
         if not state or me not in state["invited"] or to_user_id not in state["invited"]:
+            logger.debug("webrtc.signal_rejected", extra={"extra": {
+                "from": me, "to": to_user_id, "call_id": call_id,
+                "kind": (data or {}).get("kind"),
+            }})
             return
 
         socketio.emit("webrtc:signal", {

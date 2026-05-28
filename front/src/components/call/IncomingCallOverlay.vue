@@ -67,9 +67,15 @@ const subtitle = computed(() => {
 const tagLabel = computed(() => callStore.media === 'audio' ? 'Входящий аудиозвонок' : 'Входящий видеозвонок')
 const mediaIcon = computed(() => callStore.media === 'audio' ? 'call' : 'videocam')
 
-/* Рингтон — двухтональный loop, пока показывается overlay. */
+/* Рингтон — двухтональный loop, пока показывается overlay.
+   AudioContext'ы созданные ДО первого жеста пользователя оказываются в
+   состоянии 'suspended' и звук молчит. Поэтому делаем 2 страховки:
+   1) перед playOneRing() пытаемся resume();
+   2) если контекст так и не разогрелся, при следующем pointerdown/keydown
+      повторим попытку (одноразовый слушатель). */
 let ringCtx = null
 let ringTimer = null
+let pendingGesture = null
 
 function playOneRing() {
   if (!ringCtx) return
@@ -95,12 +101,32 @@ function playOneRing() {
   } catch {}
 }
 
+function installGestureRetry() {
+  if (pendingGesture) return
+  pendingGesture = () => {
+    pendingGesture = null
+    if (ringCtx && ringCtx.state === 'suspended') {
+      ringCtx.resume().catch(() => {})
+    }
+    window.removeEventListener('pointerdown', pendingGesture, true)
+    window.removeEventListener('keydown', pendingGesture, true)
+  }
+  window.addEventListener('pointerdown', pendingGesture, true)
+  window.addEventListener('keydown', pendingGesture, true)
+}
+
 function startRing() {
   if (ringTimer) return
   try {
     const Ctx = window.AudioContext || window.webkitAudioContext
     if (!Ctx) return
     ringCtx = new Ctx()
+    // Если AudioContext «застрял» в suspended — попытаемся разбудить, а
+    // также подвесим одноразовый retry на первый пользовательский жест.
+    if (ringCtx.state === 'suspended') {
+      ringCtx.resume().catch(() => {})
+      installGestureRetry()
+    }
   } catch { return }
   playOneRing()
   ringTimer = setInterval(() => playOneRing(), 1700)
@@ -109,6 +135,11 @@ function startRing() {
 function stopRing() {
   if (ringTimer) { clearInterval(ringTimer); ringTimer = null }
   if (ringCtx) { try { ringCtx.close() } catch {}; ringCtx = null }
+  if (pendingGesture) {
+    window.removeEventListener('pointerdown', pendingGesture, true)
+    window.removeEventListener('keydown', pendingGesture, true)
+    pendingGesture = null
+  }
 }
 
 watch(show, (v) => {

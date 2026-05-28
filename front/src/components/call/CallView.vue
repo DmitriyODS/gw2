@@ -37,6 +37,7 @@
             :key="uid"
             :name="p.fio"
             :stream="p.stream"
+            :stream-tick="p.streamTick"
             :audio-enabled="p.audio"
             :video-enabled="p.video"
             :avatar="avatarOf(p)"

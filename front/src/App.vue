@@ -32,7 +32,7 @@
 </template>
 
 <script setup>
-import { ref, computed, watch, onMounted } from 'vue'
+import { ref, computed, watch, onMounted, onBeforeUnmount } from 'vue'
 import { useRoute } from 'vue-router'
 import { useToast } from 'primevue/usetoast'
 import { useAuthStore } from '@/stores/auth.js'
@@ -128,6 +128,20 @@ watch(() => authStore.user, (user) => {
   if (!user) {
     messengerStore.reset()
   }
+})
+
+/* Клик по системному уведомлению о звонке (через service worker) приходит
+   сюда — фокусируем окно и разворачиваем CallView, если звонок уже принят
+   и был свёрнут в мини-режим. Сам входящий overlay уже виден сам по себе
+   (он на phase === 'incoming'). */
+function onCallFocusOverlay() {
+  if (callStore.isMinimized) callStore.expand()
+}
+onMounted(() => {
+  window.addEventListener('call:focus-overlay', onCallFocusOverlay)
+})
+onBeforeUnmount(() => {
+  window.removeEventListener('call:focus-overlay', onCallFocusOverlay)
 })
 </script>
 

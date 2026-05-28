@@ -3,6 +3,8 @@ import { getIceServers } from '@/api/calls.js'
 import { WebRTCManager } from '@/services/webrtc.js'
 import { getSocket } from '@/socket/index.js'
 import { useAuthStore } from './auth.js'
+import { useNotificationsStore } from './notifications.js'
+import { requestNotificationPermission } from '@/utils/systemNotify.js'
 
 /**
  * Store текущего звонка. В каждый момент времени активный звонок один.
@@ -22,7 +24,7 @@ export const useCallStore = defineStore('call', {
     /** Метаданные текущего звонка с бэка (CallSchema). */
     call: null,
     /** Удалённые потоки и их состояние. Не reactive внутри (stream — raw). */
-    remoteStreams: {}, // userId -> { stream, fio, avatar_path, audio, video }
+    remoteStreams: {}, // userId -> { stream, fio, avatar_path, audio, video, streamTick }
     /** Локальный поток (raw MediaStream). Не реактивен — Vue с ним не дружит. */
     localStream: null,
     /** Локальные настройки. */
@@ -63,14 +65,17 @@ export const useCallStore = defineStore('call', {
         this.localStream = e.detail
       })
       rtc.addEventListener('remote-stream', (e) => {
-        const { userId, stream } = e.detail
+        const { userId, stream, tick } = e.detail
         const existing = this.remoteStreams[userId] || {}
         const part = (this.call?.participants || []).find(p => p.user_id === userId)
+        // streamTick меняется при каждом добавлении трека — без этого Vue не
+        // среагирует на «доехал второй track» (ссылка на stream та же).
         this.remoteStreams = {
           ...this.remoteStreams,
           [userId]: {
             ...existing,
             stream,
+            streamTick: tick || Date.now(),
             fio: existing.fio || part?.fio || 'Участник',
             avatar_path: existing.avatar_path ?? part?.avatar_path ?? null,
             audio: existing.audio ?? true,
@@ -103,11 +108,17 @@ export const useCallStore = defineStore('call', {
       this.phase = 'outgoing'
       this.error = null
 
+      // Жест клика «позвонить» — самый надёжный момент попросить разрешение
+      // на OS-уведомления (нужны собеседнику; здесь это безопасный no-op,
+      // если уже выдано/отказано). Без жеста Safari/Firefox запрос игнорируют.
+      requestNotificationPermission().catch(() => {})
+
       try {
         const rtc = await this._initWebRTC()
         await rtc.start(media)
       } catch (e) {
-        this.error = 'Не удалось получить доступ к камере или микрофону'
+        this.error = 'Не удалось получить доступ к камере или микрофону. Разрешите доступ в настройках браузера.'
+        try { useNotificationsStore().warn(this.error) } catch {}
         this.phase = 'idle'
         throw e
       }
@@ -143,7 +154,10 @@ export const useCallStore = defineStore('call', {
     /** Мне позвонили. Не запускаем камеру — только пока пользователь не accept'нет. */
     handleIncoming(callPayload) {
       if (this.phase !== 'idle') {
-        // Уже в звонке — автоматически отклоняем (бэк не блокирует, но мы не примем)
+        // Я уже в звонке — отказываем сразу автоматически, чтобы у звонящего
+        // звонок не висел в ringing до таймаута.
+        const socket = getSocket()
+        socket?.emit('call:decline', { call_id: callPayload.id })
         return
       }
       this.call = callPayload
@@ -160,12 +174,18 @@ export const useCallStore = defineStore('call', {
         this.audioEnabled = true
         this.videoEnabled = this.media === 'video'
       } catch (e) {
-        this.error = 'Не удалось получить доступ к камере или микрофону'
+        const msg = 'Не удалось получить доступ к камере или микрофону. Разрешите доступ в настройках браузера.'
+        this.error = msg
+        try { useNotificationsStore().warn(msg) } catch {}
         this.decline()
         return
       }
       const socket = getSocket()
-      if (!socket) return
+      if (!socket) {
+        this.error = 'Нет соединения с сервером'
+        this.reset()
+        return
+      }
       socket.emit('call:accept', { call_id: this.call.id })
       // Сервер ответит call:accepted со списком existing_participants —
       // тогда мы начнём offer'ы.
@@ -251,10 +271,17 @@ export const useCallStore = defineStore('call', {
 
     /** WebRTC offer/answer/ice от другого участника. */
     async handleSignal({ from_user_id, kind, payload }) {
+      // Защитная мера: если по какой-то причине store пустой (например, пришёл
+      // сигнал между accept и phase=active), все равно поднимаем RTC, потому
+      // что иначе offer/ICE будут потеряны.
       const rtc = await this._initWebRTC()
-      if (kind === 'offer') await rtc.handleOffer(from_user_id, payload)
-      else if (kind === 'answer') await rtc.handleAnswer(from_user_id, payload)
-      else if (kind === 'ice') await rtc.handleRemoteIce(from_user_id, payload)
+      try {
+        if (kind === 'offer') await rtc.handleOffer(from_user_id, payload)
+        else if (kind === 'answer') await rtc.handleAnswer(from_user_id, payload)
+        else if (kind === 'ice') await rtc.handleRemoteIce(from_user_id, payload)
+      } catch (e) {
+        console.warn('webrtc signal error', kind, e)
+      }
     },
 
     handleMediaState({ user_id, audio, video }) {
@@ -306,8 +333,12 @@ export const useCallStore = defineStore('call', {
     },
 
     handleError({ code, message }) {
-      this.error = message || 'Ошибка звонка'
-      // Если ошибка случилась до active — сразу выходим
+      const text = message || 'Ошибка звонка'
+      this.error = text
+      // Toast — иначе после reset error в store потеряется, и пользователь
+      // ничего не увидит (CallView в этот момент уже размонтирован).
+      try { useNotificationsStore().warn(text) } catch {}
+      // Если ошибка случилась до active — сразу выходим.
       if (this.phase === 'outgoing' || this.phase === 'incoming') {
         this.reset()
       }

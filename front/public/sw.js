@@ -19,6 +19,18 @@ self.addEventListener('notificationclick', (event) => {
   event.waitUntil((async () => {
     const all = await self.clients.matchAll({ type: 'window', includeUncontrolled: true })
     const target = all.find((c) => 'focus' in c)
+    // Уведомление о звонке: focus + сообщение основному потоку, чтобы тот
+    // показал/развернул overlay с принятым/входящим вызовом.
+    if (data.kind === 'call') {
+      if (target) {
+        await target.focus()
+        target.postMessage({ type: 'focus-call', call_id: data.call_id })
+        return
+      }
+      if (self.clients.openWindow) await self.clients.openWindow('/')
+      return
+    }
+    // Сообщение мессенджера: открыть конкретный чат
     if (target) {
       await target.focus()
       target.postMessage({ type: 'open-conversation', conversation_id: data.conversation_id })

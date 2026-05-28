@@ -33,6 +33,11 @@ import { ref, watch, onMounted } from 'vue'
 const props = defineProps({
   name: { type: String, required: true },
   stream: { type: Object, default: null },
+  /* Меняется при каждом ontrack — поднимает watch, даже когда сам объект
+     MediaStream остался прежним (его наполняют новыми треками по мере того,
+     как WebRTC «прорастает»). Без этого watch на stream срабатывает только
+     один раз и второй трек (видео) тихо не подхватится. */
+  streamTick: { type: Number, default: 0 },
   audioEnabled: { type: Boolean, default: true },
   videoEnabled: { type: Boolean, default: true },
   isLocal: { type: Boolean, default: false },
@@ -43,14 +48,19 @@ const props = defineProps({
 const videoEl = ref(null)
 
 function attach() {
-  if (videoEl.value && props.stream && videoEl.value.srcObject !== props.stream) {
+  if (!videoEl.value || !props.stream) return
+  if (videoEl.value.srcObject !== props.stream) {
     videoEl.value.srcObject = props.stream
-    // На iOS Safari нужен принудительный play() после установки srcObject
-    videoEl.value.play?.().catch(() => {})
   }
+  // На iOS Safari нужен принудительный play() после установки srcObject;
+  // на десктопе play() возвращает Promise, который мы безопасно игнорируем,
+  // если он отвергнут (например, video.muted=false без жеста — но у нас
+  // всё видео без аудио-направления, аудио — на отдельном audio-элементе
+  // браузера через тот же stream).
+  videoEl.value.play?.().catch(() => {})
 }
 
-watch(() => props.stream, attach)
+watch(() => [props.stream, props.streamTick], attach)
 onMounted(attach)
 </script>
 

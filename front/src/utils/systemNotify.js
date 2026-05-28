@@ -1,4 +1,4 @@
-/* Системные уведомления браузера и звук для мессенджера.
+/* Системные уведомления браузера и звук для мессенджера/звонков.
 
    Требует разрешения пользователя (Notification.requestPermission).
    Звук генерируется через Web Audio API (короткий двухтональный «бип»),
@@ -8,6 +8,10 @@
 let warned = false
 let audioCtx = null
 let unlockInstalled = false
+// Открытое сейчас уведомление о звонке (десктоп — конструктор Notification).
+let activeCallNotification = null
+// На SW-варианте тег используется для перезаписи и закрытия.
+const CALL_NOTIF_TAG = 'gw2-call'
 
 function getCtx() {
   if (audioCtx) return audioCtx
@@ -83,12 +87,18 @@ export async function registerNotifyServiceWorker() {
   try {
     await navigator.serviceWorker.register('/sw.js')
     swRegistration = await navigator.serviceWorker.ready
-    // Клик по уведомлению из SW → открываем нужный чат во вкладке.
+    // Клик по уведомлению из SW → открываем нужный чат / фокусируем звонок.
     navigator.serviceWorker.addEventListener('message', (e) => {
-      if (e.data?.type === 'open-conversation') {
+      const t = e.data?.type
+      if (t === 'open-conversation') {
         window.focus?.()
         window.dispatchEvent(new CustomEvent('messenger:open-conversation', {
           detail: { conversation_id: e.data.conversation_id },
+        }))
+      } else if (t === 'focus-call') {
+        window.focus?.()
+        window.dispatchEvent(new CustomEvent('call:focus-overlay', {
+          detail: { call_id: e.data.call_id },
         }))
       }
     })
@@ -151,6 +161,63 @@ export function showSystemNotification(title, body, { onClick, data } = {}) {
   } else if (!warned) {
     console.warn('Notification: нет ни конструктора, ни активного service worker')
     warned = true
+  }
+}
+
+/* Уведомление о входящем звонке. Отличается от сообщений отдельным `tag`
+   (чтобы не перезаписывало последнее сообщение и наоборот), `requireInteraction:
+   true` (на десктопе ОС не скроет его автоматически через 5 секунд) и тем,
+   что мы сохраняем reference и умеем явно закрыть его, когда звонок принят
+   или завершён. */
+export function showCallNotification(title, body, { callId, onClick } = {}) {
+  if (!notificationsAllowed()) return
+  closeCallNotification()
+
+  const options = {
+    body,
+    icon: '/logo.svg',
+    badge: '/logo.svg',
+    tag: CALL_NOTIF_TAG,
+    renotify: true,
+    requireInteraction: true,
+    silent: true,
+    data: { call_id: callId, kind: 'call' },
+  }
+
+  try {
+    const n = new Notification(title, options)
+    activeCallNotification = n
+    n.onclick = () => {
+      try { window.focus?.(); onClick?.() } finally { n.close(); activeCallNotification = null }
+    }
+    n.onclose = () => { activeCallNotification = null }
+    return
+  } catch (e) {
+    // Конструктор недоступен — Android Chrome и т. п.
+  }
+
+  if (swRegistration && typeof swRegistration.showNotification === 'function') {
+    swRegistration.showNotification(title, options).catch((e) => {
+      if (!warned) { console.warn('SW notification failed', e); warned = true }
+    })
+  } else if (!warned) {
+    console.warn('Notification: нет ни конструктора, ни активного service worker')
+    warned = true
+  }
+}
+
+export function closeCallNotification() {
+  if (activeCallNotification) {
+    try { activeCallNotification.close() } catch {}
+    activeCallNotification = null
+  }
+  // SW-вариант закрываем через getNotifications по тегу.
+  if (swRegistration && typeof swRegistration.getNotifications === 'function') {
+    swRegistration.getNotifications({ tag: CALL_NOTIF_TAG }).then((list) => {
+      for (const n of list || []) {
+        try { n.close() } catch {}
+      }
+    }).catch(() => {})
   }
 }
 

@@ -5,7 +5,9 @@ import { useUnitsStore } from '@/stores/units.js'
 import { useNotificationsStore } from '@/stores/notifications.js'
 import { useMessengerStore } from '@/stores/messenger.js'
 import { useCallStore } from '@/stores/call.js'
-import { showSystemNotification, playNotifySound } from '@/utils/systemNotify.js'
+import {
+  showSystemNotification, showCallNotification, closeCallNotification, playNotifySound,
+} from '@/utils/systemNotify.js'
 
 let socket = null
 let visibilityHookInstalled = false
@@ -242,18 +244,32 @@ export function connectSocket() {
 
   // ── Звонки ────────────────────────────────────────────────────
   socket.on('call:incoming', (call) => {
-    useCallStore().handleIncoming(call)
-    // Рингтон + системное уведомление, если вкладка не в фокусе
-    if (document.visibilityState !== 'visible' || !document.hasFocus()) {
-      const initiator = call.participants?.find(p => p.role === 'initiator')
-      showSystemNotification(
-        'Входящий звонок',
-        `${initiator?.fio || 'Сотрудник'} зовёт вас в звонок`,
-        { onClick: () => window.focus() },
-      )
+    const callStore = useCallStore()
+    // Если уже в звонке, store сам пошлёт decline — уведомление не нужно.
+    if (callStore.phase !== 'idle') {
+      callStore.handleIncoming(call)
+      return
     }
-    // Звук «бип» из мессенджера используем как рингтон-сигнал; полноценный
-    // циклический рингтон — в IncomingCallToast (Web Audio loop).
+    callStore.handleIncoming(call)
+    // Системное OS-уведомление о входящем звонке — показываем ВСЕГДА (даже
+    // когда вкладка в фокусе, потому что overlay появляется через event loop
+    // и пользователь мог быть в другой панели/мониторе). Уведомление с
+    // действиями «Принять» / «Отклонить», тег `gw2-call` — чтобы новое
+    // входящее перезаписало старое.
+    const initiator = call.participants?.find(p => p.role === 'initiator')
+    const initiatorName = initiator?.fio || 'Сотрудник'
+    const mediaText = call.media === 'audio' ? 'аудиозвонок' : 'видеозвонок'
+    showCallNotification(
+      `Входящий ${mediaText}`,
+      `${initiatorName} звонит вам`,
+      {
+        callId: call.id,
+        onClick: () => window.focus?.(),
+      },
+    )
+    // Короткий «бип» подстраховывает рингтон в overlay: если AudioContext
+    // ещё не разогрет жестом, хотя бы вот этот звук пройдёт после первого
+    // взаимодействия пользователя (installNotifyUnlock).
     playNotifySound()
   })
 
@@ -262,6 +278,7 @@ export function connectSocket() {
   })
 
   socket.on('call:accepted', (data) => {
+    closeCallNotification()
     useCallStore().handleAccepted(data)
   })
 
@@ -278,6 +295,7 @@ export function connectSocket() {
   })
 
   socket.on('call:ended', () => {
+    closeCallNotification()
     useCallStore().handleEnded()
   })
 
@@ -290,6 +308,7 @@ export function connectSocket() {
   })
 
   socket.on('call:error', (data) => {
+    closeCallNotification()
     useCallStore().handleError(data)
   })
 
