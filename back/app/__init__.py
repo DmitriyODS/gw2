@@ -162,10 +162,17 @@ def _finalize_stuck_calls(app: Flask) -> None:
     'active' → 'ended' (длительность как была на момент крэша)."""
     from datetime import datetime, timezone
     from app.models import Call, CallParticipant
+    from app.utils.logger import get_logger
+    # Если таблицы ещё не созданы (первый деплой, миграции не применены
+    # до вызова create_app) — просто пропускаем, не роняем старт.
     with app.app_context():
-        stuck = db.session.execute(
-            db.select(Call).where(Call.status.in_(["ringing", "active"]))
-        ).scalars().all()
+        try:
+            stuck = db.session.execute(
+                db.select(Call).where(Call.status.in_(["ringing", "active"]))
+            ).scalars().all()
+        except Exception:
+            db.session.rollback()
+            return
         if not stuck:
             return
         now = datetime.now(timezone.utc)
@@ -181,9 +188,8 @@ def _finalize_stuck_calls(app: Flask) -> None:
                 p.left_at = c.ended_at
         try:
             db.session.commit()
+            get_logger(__name__).info("calls.startup_cleanup",
+                                      extra={"extra": {"count": len(stuck)}})
         except Exception:
             db.session.rollback()
-        from app.utils.logger import get_logger
-        get_logger(__name__).info("calls.startup_cleanup",
-                                   extra={"extra": {"count": len(stuck)}})
 
