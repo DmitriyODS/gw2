@@ -8,7 +8,8 @@ from datetime import datetime, timezone
 from typing import Optional
 
 from app.extensions import db
-from app.models import Call, CallParticipant, User, Conversation
+from app.models import Call, CallParticipant, User, Conversation, Message
+from app.repositories import message_repo
 from app.sockets import call_state
 
 
@@ -56,11 +57,13 @@ def start_call(initiator_id: int, invitee_ids: list[int],
     kind = "p2p" if len(invitee_ids) == 1 else "group"
 
     # Парная привязка к диалогу — только для p2p, чтобы в истории можно было
-    # быстро открыть переписку с тем же собеседником.
+    # быстро открыть переписку с тем же собеседником. Для p2p создаём
+    # диалог сразу, даже если его не было — иначе негде хранить системное
+    # сообщение о звонке.
     conv_id = None
     if kind == "p2p":
-        conv = _find_conversation(initiator_id, invitee_ids[0])
-        conv_id = conv.id if conv else None
+        conv = message_repo.get_or_create_conversation(initiator_id, invitee_ids[0])
+        conv_id = conv.id
 
     call = Call(
         initiator_id=initiator_id,
@@ -81,9 +84,25 @@ def start_call(initiator_id: int, invitee_ids: list[int],
         db.session.add(CallParticipant(
             call_id=call.id, user_id=uid, role="invitee", invited_at=_now(),
         ))
+
+    # Системное сообщение в чате (только p2p). Создаётся в статусе ringing —
+    # фронт рендерит плашку «Идёт звонок · Присоединиться» для приглашённого
+    # и «Звоните…» для инициатора. После _finalize call обновится в БД
+    # (status, ended_at), фронту прилетит message:updated.
+    sys_msg_id = None
+    if kind == "p2p" and conv_id:
+        sys_msg = message_repo.create_call_message(conv_id, initiator_id, call.id)
+        sys_msg_id = sys_msg.id
+
     db.session.commit()
 
     call_state.create_call(call.id, initiator_id, invitee_ids, kind, media)
+    # Запомним id системного сообщения и conv_id — нужны при _finalize, чтобы
+    # эмитить message:updated в комнаты обоих сторон.
+    state = call_state.get_call(call.id)
+    if state is not None:
+        state["system_message_id"] = sys_msg_id
+        state["conversation_id"] = conv_id
     return call
 
 
@@ -214,6 +233,12 @@ def _find_conversation(a: int, b: int) -> Optional[Conversation]:
         db.select(Conversation)
         .where(Conversation.user_a_id == lo, Conversation.user_b_id == hi)
     ).scalar_one_or_none()
+
+
+def get_system_call_message(message_id: int) -> Optional[Message]:
+    """Перечитать системное сообщение о звонке — для эмита message:updated
+    в сокет после изменения статуса/длительности звонка."""
+    return db.session.get(Message, message_id)
 
 
 def _get_call(call_id: int) -> Call:

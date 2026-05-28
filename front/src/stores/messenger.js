@@ -217,6 +217,26 @@ export const useMessengerStore = defineStore('messenger', () => {
     recomputeUnread()
   }
 
+  /* Обновление существующего сообщения. Используется для системной плашки
+     звонка (kind='call'), которая при start статус 'ringing', а потом
+     обновляется до 'active' (приняли) / 'ended' (положили) / 'missed'
+     (никто не ответил). */
+  function applyMessageUpdated(conversationId, msg) {
+    const arr = messagesByConv.value[conversationId]
+    if (arr) {
+      const idx = arr.findIndex(m => m.id === msg.id)
+      if (idx !== -1) {
+        const next = [...arr]
+        next[idx] = msg
+        messagesByConv.value[conversationId] = next
+      }
+    }
+    const conv = conversations.value.find(c => c.id === conversationId)
+    if (conv && conv.last_message?.id === msg.id) {
+      conv.last_message = msg
+    }
+  }
+
   function applyMessageDeleted(conversationId, messageId) {
     const arr = messagesByConv.value[conversationId]
     if (arr) {
@@ -342,7 +362,7 @@ export const useMessengerStore = defineStore('messenger', () => {
     fetchConversations, fetchUnreadCount, openWith, setActive, fetchMessages,
     pollNewMessages, hasMoreHistory,
     send, forwardMessage, markRead,
-    applyIncomingMessage, applyReadReceipt,
+    applyIncomingMessage, applyReadReceipt, applyMessageUpdated,
     applyMessageDeleted, applyConversationDeleted, applyPinChange,
     deleteMessage, deleteConversationAction, togglePinAction,
     fetchPresence, applyPresence, isOnline, lastSeenOf,

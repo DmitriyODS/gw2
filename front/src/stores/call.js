@@ -191,6 +191,26 @@ export const useCallStore = defineStore('call', {
       // тогда мы начнём offer'ы.
     },
 
+    /** Присоединение к уже идущему звонку из чата (по callId из системной
+     *  плашки). Эквивалентно accept — сервер сам проверит, что я в списке
+     *  приглашённых. Эта функция нужна когда у меня overlay входящего звонка
+     *  уже не открыт (закрыл/пропустил), но звонок ещё активен и я хочу
+     *  присоединиться. */
+    async joinExistingCall(callPayload) {
+      if (this.phase !== 'idle') return
+      const callId = callPayload?.id || callPayload?.call_id || callPayload
+      if (!callId) return
+      const media = callPayload?.media || 'video'
+      this.call = { id: callId, media }
+      this.media = media
+      this.audioEnabled = true
+      this.videoEnabled = media === 'video'
+      this.phase = 'incoming'
+      this.error = null
+      // Дальше тем же путём, что обычный accept (через accept action).
+      await this.accept()
+    },
+
     /** Я отклоняю входящий. */
     decline() {
       if (!this.call) {

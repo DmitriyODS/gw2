@@ -34,6 +34,23 @@ class ReplyPreviewSchema(Schema):
         return bool(obj.attachments)
 
 
+class CallInfoSchema(Schema):
+    """Краткая информация о звонке для плашки в чате (kind='call')."""
+    id = fields.Int(dump_only=True)
+    kind = fields.Str(dump_only=True)        # p2p | group
+    media = fields.Str(dump_only=True)       # audio | video
+    status = fields.Str(dump_only=True)      # ringing | active | ended | missed
+    started_at = fields.DateTime(dump_only=True)
+    ended_at = fields.DateTime(dump_only=True, allow_none=True)
+    initiator_id = fields.Int(dump_only=True)
+    duration_sec = fields.Method("get_duration", dump_only=True, allow_none=True)
+
+    def get_duration(self, obj):
+        if obj.ended_at and obj.started_at:
+            return int((obj.ended_at - obj.started_at).total_seconds())
+        return None
+
+
 class MessageSchema(Schema):
     id = fields.Int(dump_only=True)
     conversation_id = fields.Int(dump_only=True)
@@ -44,6 +61,10 @@ class MessageSchema(Schema):
     attachments = fields.List(fields.Nested(AttachmentSchema), dump_only=True)
     reply_to = fields.Nested(ReplyPreviewSchema, dump_only=True, allow_none=True)
     forwarded_from = fields.Method("get_forwarded_from", dump_only=True, allow_none=True)
+    # 'text' — обычное; 'call' — системная плашка о звонке (фронт рендерит
+    # отдельным компонентом, текст игнорируется, данные берутся из `call`).
+    kind = fields.Str(dump_only=True)
+    call = fields.Nested(CallInfoSchema, dump_only=True, allow_none=True)
 
     def get_forwarded_from(self, obj):
         if not obj.forwarded_from:

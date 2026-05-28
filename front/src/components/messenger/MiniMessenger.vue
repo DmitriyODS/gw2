@@ -79,6 +79,7 @@
               :show-forward="false"
               :show-delete="false"
               @reply="startReply"
+              @join-call="onJoinCall"
             />
           </div>
           <MessageInput
@@ -108,6 +109,7 @@ import { ref, computed, watch, nextTick } from 'vue'
 import { useRoute } from 'vue-router'
 import { useMessengerStore } from '@/stores/messenger.js'
 import { useAuthStore } from '@/stores/auth.js'
+import { useCallStore } from '@/stores/call.js'
 import { useBreakpoint } from '@/composables/useBreakpoint.js'
 import { formatLastSeen } from '@/utils/presence.js'
 import MessageBubble from './MessageBubble.vue'
@@ -117,7 +119,13 @@ import ProgressSpinner from 'primevue/progressspinner'
 const route = useRoute()
 const messenger = useMessengerStore()
 const authStore = useAuthStore()
+const callStore = useCallStore()
 const { isMobile } = useBreakpoint()
+
+async function onJoinCall(callInfo) {
+  await callStore.joinExistingCall(callInfo)
+  open.value = false
+}
 
 const open = ref(false)
 const threadId = ref(null)

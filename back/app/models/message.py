@@ -26,11 +26,21 @@ class Message(db.Model):
     # «Переслано от …»). При пересылке текст и файлы копируются.
     forwarded_from_user_id = db.Column(db.Integer, db.ForeignKey("users.id", ondelete="SET NULL"),
                                        nullable=True)
+    # 'text' — обычное пользовательское сообщение; 'call' — системная плашка
+    # о завершённом звонке (длительность, статус, тип), создаётся из
+    # call_service после _finalize. text при kind='call' пустой; данные
+    # фронт берёт из nested call (см. MessageSchema).
+    kind = db.Column(db.String(16), nullable=False, default="text", server_default="text")
+    # Для kind='call' — ссылка на запись звонка. SET NULL: если запись
+    # звонка когда-то удалят, плашка останется в чате, но без деталей.
+    call_id = db.Column(db.Integer, db.ForeignKey("calls.id", ondelete="SET NULL"),
+                        nullable=True)
 
     conversation = db.relationship("Conversation", back_populates="messages")
     sender = db.relationship("User", foreign_keys=[sender_id])
     reply_to = db.relationship("Message", remote_side=[id], foreign_keys=[reply_to_id])
     forwarded_from = db.relationship("User", foreign_keys=[forwarded_from_user_id])
+    call = db.relationship("Call", foreign_keys=[call_id])
     # selectin вместо joined: joined-load на коллекцию заставляет вызывать
     # .unique() на каждом Result, что ломает list_user_conversations.
     attachments = db.relationship("MessageAttachment", back_populates="message",

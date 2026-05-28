@@ -97,6 +97,7 @@
             @delete="askDeleteMessage"
             @reply="startReply"
             @forward="startForward"
+            @join-call="onJoinCall"
           />
         </template>
       </div>
@@ -173,6 +174,10 @@ async function startCall(media) {
   try {
     await callStore.startCall({ userIds: [other.id], media, conversationId: active.value.id })
   } catch {/* ошибка отображена в store.error */}
+}
+
+async function onJoinCall(callInfo) {
+  await callStore.joinExistingCall(callInfo)
 }
 const authStore = useAuthStore()
 const { isMobile } = useBreakpoint()

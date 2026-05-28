@@ -223,6 +223,11 @@ export function connectSocket() {
     messenger.applyReadReceipt(conversation_id, reader_id)
   })
 
+  socket.on('message:updated', ({ conversation_id, message }) => {
+    const messenger = useMessengerStore()
+    messenger.applyMessageUpdated(conversation_id, message)
+  })
+
   socket.on('message:deleted', ({ conversation_id, message_id }) => {
     const messenger = useMessengerStore()
     messenger.applyMessageDeleted(conversation_id, message_id)

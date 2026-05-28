@@ -150,6 +150,32 @@ def list_messages(conversation_id: int, user_id: int, before_id: Optional[int] =
     return list(reversed(rows))
 
 
+def create_call_message(conversation_id: int, sender_id: int, call_id: int) -> Message:
+    """Системная плашка о звонке в чате (kind='call').
+
+    Текст пустой — фронт рендерит специальной плашкой по nested полю `call`.
+    last_message_at и hidden_for_* обновляем как у обычного сообщения, чтобы
+    диалог поднялся в списке и «вернулся» обеим сторонам, если был скрыт.
+    """
+    msg = Message(
+        conversation_id=conversation_id,
+        sender_id=sender_id,
+        text=None,
+        kind="call",
+        call_id=call_id,
+    )
+    db.session.add(msg)
+    db.session.flush()
+
+    db.session.execute(
+        db.update(Conversation)
+        .where(Conversation.id == conversation_id)
+        .values(last_message_at=msg.created_at, hidden_for_a=False, hidden_for_b=False)
+    )
+    db.session.flush()
+    return msg
+
+
 def create_message(conversation_id: int, sender_id: int, text: Optional[str],
                    attachment_ids: list[int], reply_to_id: Optional[int] = None,
                    forwarded_from_user_id: Optional[int] = None) -> Message:

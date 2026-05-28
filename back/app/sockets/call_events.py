@@ -11,7 +11,7 @@ RTCPeerConnection с каждым другим участником. Когда 
 """
 from flask_socketio import SocketIO
 from app.utils.logger import get_logger
-from app.schemas import CallSchema, CallParticipantBriefSchema
+from app.schemas import CallSchema, CallParticipantBriefSchema, MessageSchema
 from app.services import call_service
 from app.services.call_service import CallServiceError
 from app.sockets import call_state
@@ -19,11 +19,65 @@ from app.sockets import call_state
 logger = get_logger(__name__)
 _call_schema = CallSchema()
 _part_schema = CallParticipantBriefSchema()
+_msg_schema = MessageSchema()
 
 
 def _resolve_user_id_from_sid(sid: str) -> int | None:
     from app.sockets.presence import _sid_user
     return _sid_user.get(sid)
+
+
+def _emit_call_system_message_update(socketio: SocketIO, call_id: int) -> None:
+    """Перечитать системное сообщение о звонке и эмитить message:updated
+    в комнаты обоих участников парного диалога. Вызывается после изменения
+    статуса звонка (ringing → active → ended / missed). Безопасно если
+    `system_message_id` нет (group-звонок) — просто выходит."""
+    from flask import current_app
+    from app.extensions import db
+    from app.models import Conversation
+
+    state = call_state.get_call(call_id)
+    msg_id = state.get("system_message_id") if state else None
+    conv_id = state.get("conversation_id") if state else None
+    if not msg_id or not conv_id:
+        # state мог уже почиститься (звонок завершён) — попробуем найти
+        # через БД: для каждого Call.conversation_id берём последнее
+        # сообщение kind='call' с этим call_id.
+        from app.models import Message, Call
+        with current_app.app_context():
+            call = db.session.get(Call, call_id)
+            if not call or not call.conversation_id:
+                return
+            conv_id = call.conversation_id
+            msg = db.session.execute(
+                db.select(Message).where(
+                    Message.call_id == call_id, Message.kind == "call",
+                ).order_by(Message.id.desc()).limit(1)
+            ).scalar_one_or_none()
+            if not msg:
+                return
+            conv = db.session.get(Conversation, conv_id)
+            payload = _msg_schema.dump(msg)
+            user_a = conv.user_a_id
+            user_b = conv.user_b_id
+    else:
+        with current_app.app_context():
+            msg = call_service.get_system_call_message(msg_id)
+            if not msg:
+                return
+            conv = db.session.get(Conversation, conv_id)
+            if not conv:
+                return
+            payload = _msg_schema.dump(msg)
+            user_a = conv.user_a_id
+            user_b = conv.user_b_id
+
+    event = {
+        "conversation_id": conv_id,
+        "message": payload,
+    }
+    for uid in (user_a, user_b):
+        socketio.emit("message:updated", event, room=f"user_{uid}")
 
 
 def register_call_events(socketio: SocketIO) -> None:
@@ -58,6 +112,17 @@ def register_call_events(socketio: SocketIO) -> None:
                     (p.user_id, p.role) for p in call.participants
                 ]
                 call_id = call.id
+                # Системное сообщение о звонке (для p2p) — нужно эмитить
+                # как обычное message:new в комнаты обеих сторон чата,
+                # чтобы плашка тут же появилась в открытой переписке.
+                sys_state = call_state.get_call(call_id) or {}
+                sys_msg_id = sys_state.get("system_message_id")
+                sys_conv_id = sys_state.get("conversation_id")
+                sys_payload = None
+                if sys_msg_id and sys_conv_id:
+                    sys_msg = call_service.get_system_call_message(sys_msg_id)
+                    if sys_msg:
+                        sys_payload = _msg_schema.dump(sys_msg)
         except CallServiceError as e:
             logger.warning("call.start_failed", extra={"extra": {
                 "initiator_id": me, "code": e.code, "message": e.message,
@@ -82,6 +147,22 @@ def register_call_events(socketio: SocketIO) -> None:
                     "sockets_in_room": sockets_in_room,
                 }})
                 socketio.emit("call:incoming", payload, room=f"user_{user_id}")
+
+        # Плашка о звонке в чате — эмитим как message:new (как обычное
+        # сообщение). Фронт сам отрендерит её специально по kind='call'.
+        if sys_payload and sys_conv_id:
+            for user_id, _role in invitees:
+                socketio.emit("message:new", {
+                    "conversation_id": sys_conv_id,
+                    "message": sys_payload,
+                    "from_user_id": me,
+                }, room=f"user_{user_id}")
+            # И инициатору тоже (тогда плашка появится и в его открытом чате).
+            socketio.emit("message:new", {
+                "conversation_id": sys_conv_id,
+                "message": sys_payload,
+                "from_user_id": me,
+            }, room=f"user_{me}")
 
     @socketio.on("call:accept")
     def on_accept(data):
@@ -123,6 +204,9 @@ def register_call_events(socketio: SocketIO) -> None:
                 "user_id": me,
             }, room=f"user_{uid}")
 
+        # Обновим плашку в чате: status ringing → active.
+        _emit_call_system_message_update(socketio, call_id)
+
     @socketio.on("call:decline")
     def on_decline(data):
         from flask import request as flask_request
@@ -155,6 +239,8 @@ def register_call_events(socketio: SocketIO) -> None:
             ended_payload = {"call_id": call_id, "status": call_status}
             for uid in (*targets, me):
                 socketio.emit("call:ended", ended_payload, room=f"user_{uid}")
+        # Плашка в чате обновится: status → missed/ended.
+        _emit_call_system_message_update(socketio, call_id)
 
     @socketio.on("call:leave")
     def on_leave(data):
@@ -186,6 +272,7 @@ def register_call_events(socketio: SocketIO) -> None:
             ended_payload = {"call_id": call_id, "status": call_status}
             for uid in (*targets, me):
                 socketio.emit("call:ended", ended_payload, room=f"user_{uid}")
+        _emit_call_system_message_update(socketio, call_id)
 
     @socketio.on("call:end")
     def on_end(data):
@@ -212,6 +299,7 @@ def register_call_events(socketio: SocketIO) -> None:
             socketio.emit("call:ended",
                           {"call_id": call_id, "status": call_status},
                           room=f"user_{uid}")
+        _emit_call_system_message_update(socketio, call_id)
 
     # ── WebRTC сигналинг ─────────────────────────────────────────
     # Просто маршрутизация offer/answer/ice от одного участника к другому.
@@ -288,3 +376,4 @@ def cleanup_call_on_disconnect(socketio: SocketIO, user_id: int) -> None:
             socketio.emit("call:ended",
                           {"call_id": call_id, "status": "ended"},
                           room=f"user_{uid}")
+    _emit_call_system_message_update(socketio, call_id)
