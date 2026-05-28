@@ -19,6 +19,7 @@ def create_app(config_name: str = None) -> Flask:
     _register_error_handlers(app)
     _register_security_headers(app)
     _init_swagger(app)
+    _finalize_stuck_calls(app)
 
     return app
 
@@ -149,3 +150,40 @@ def _init_swagger(app: Flask) -> None:
         "produces": ["application/json"],
     }
     Swagger(app, config=swagger_config, template=template)
+
+
+def _finalize_stuck_calls(app: Flask) -> None:
+    """При старте процесса финализируем все звонки, оставшиеся в БД со
+    статусом 'ringing' или 'active'. Они физически не могут быть «активны»
+    — `call_state` живёт в памяти процесса и теряется при рестарте; без
+    очистки системные плашки в чате (kind='call') вечно показывают
+    «Идёт вызов / Идёт сейчас», и кнопка «Присоединиться» зовёт в
+    несуществующий звонок. 'ringing' → 'missed' (никто не успел поднять),
+    'active' → 'ended' (длительность как была на момент крэша)."""
+    from datetime import datetime, timezone
+    from app.models import Call, CallParticipant
+    with app.app_context():
+        stuck = db.session.execute(
+            db.select(Call).where(Call.status.in_(["ringing", "active"]))
+        ).scalars().all()
+        if not stuck:
+            return
+        now = datetime.now(timezone.utc)
+        for c in stuck:
+            c.status = "missed" if c.status == "ringing" else "ended"
+            c.ended_at = c.started_at if c.status == "missed" else now
+            for p in db.session.execute(
+                db.select(CallParticipant).where(
+                    CallParticipant.call_id == c.id,
+                    CallParticipant.left_at.is_(None),
+                )
+            ).scalars().all():
+                p.left_at = c.ended_at
+        try:
+            db.session.commit()
+        except Exception:
+            db.session.rollback()
+        from app.utils.logger import get_logger
+        get_logger(__name__).info("calls.startup_cleanup",
+                                   extra={"extra": {"count": len(stuck)}})
+
