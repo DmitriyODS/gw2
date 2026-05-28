@@ -47,9 +47,17 @@ def register_call_events(socketio: SocketIO) -> None:
             "initiator_id": me, "user_ids": user_ids, "media": media,
         }})
 
+        # ВАЖНО: marshmallow dump() и доступ к call.participants/initiator —
+        # это lazy-load relationships, нужна активная SQLAlchemy session.
+        # Делаем всё внутри app_context, чтобы не словить DetachedInstanceError.
         try:
             with current_app.app_context():
                 call = call_service.start_call(me, user_ids, media=media)
+                payload = _call_schema.dump(call)
+                invitees = [
+                    (p.user_id, p.role) for p in call.participants
+                ]
+                call_id = call.id
         except CallServiceError as e:
             logger.warning("call.start_failed", extra={"extra": {
                 "initiator_id": me, "code": e.code, "message": e.message,
@@ -59,7 +67,6 @@ def register_call_events(socketio: SocketIO) -> None:
                           room=f"user_{me}")
             return
 
-        payload = _call_schema.dump(call)
         # Инициатору — подтверждение
         socketio.emit("call:started", payload, room=f"user_{me}")
         # Приглашённым — входящий звонок. Диагностика «звонок ушёл, но
@@ -67,14 +74,14 @@ def register_call_events(socketio: SocketIO) -> None:
         # в комнате user_{id}. Если 0 — получатель не онлайн (или его
         # вкладка не сделала connect), пакет потеряется без push-сервера.
         from app.sockets.presence import _sid_user
-        for part in call.participants:
-            if part.role == "invitee":
-                sockets_in_room = sum(1 for uid in _sid_user.values() if uid == part.user_id)
+        for user_id, role in invitees:
+            if role == "invitee":
+                sockets_in_room = sum(1 for uid in _sid_user.values() if uid == user_id)
                 logger.info("call.incoming_emit", extra={"extra": {
-                    "call_id": call.id, "to_user_id": part.user_id,
+                    "call_id": call_id, "to_user_id": user_id,
                     "sockets_in_room": sockets_in_room,
                 }})
-                socketio.emit("call:incoming", payload, room=f"user_{part.user_id}")
+                socketio.emit("call:incoming", payload, room=f"user_{user_id}")
 
     @socketio.on("call:accept")
     def on_accept(data):
@@ -91,6 +98,9 @@ def register_call_events(socketio: SocketIO) -> None:
         try:
             with current_app.app_context():
                 call = call_service.accept_call(call_id, me)
+                # dump внутри app_context — иначе DetachedInstanceError при
+                # lazy-load initiator/participants
+                call_payload = _call_schema.dump(call)
         except CallServiceError as e:
             socketio.emit("call:error",
                           {"code": e.code, "message": e.message},
@@ -103,7 +113,7 @@ def register_call_events(socketio: SocketIO) -> None:
         socketio.emit("call:accepted", {
             "call_id": call_id,
             "existing_participants": existing,
-            "call": _call_schema.dump(call),
+            "call": call_payload,
         }, room=f"user_{me}")
 
         # Остальным — кто к ним присоединился (они должны принять offer от него).
@@ -131,6 +141,8 @@ def register_call_events(socketio: SocketIO) -> None:
 
         with current_app.app_context():
             call = call_service.decline_call(call_id, me)
+            # Берём поля, пока сессия жива (избегаем DetachedInstanceError).
+            call_status = call.status if call is not None else None
 
         if call is None:
             return
@@ -140,7 +152,7 @@ def register_call_events(socketio: SocketIO) -> None:
             socketio.emit("call:participant-declined", payload, room=f"user_{uid}")
         # Если звонок завершён (p2p отказ или последний отказался) — сообщим всем
         if call_state.get_call(call_id) is None:
-            ended_payload = {"call_id": call_id, "status": call.status}
+            ended_payload = {"call_id": call_id, "status": call_status}
             for uid in (*targets, me):
                 socketio.emit("call:ended", ended_payload, room=f"user_{uid}")
 
@@ -160,6 +172,7 @@ def register_call_events(socketio: SocketIO) -> None:
 
         with current_app.app_context():
             call = call_service.leave_call(call_id, me)
+            call_status = call.status if call is not None else None
 
         if call is None:
             return
@@ -170,7 +183,7 @@ def register_call_events(socketio: SocketIO) -> None:
                           room=f"user_{uid}")
 
         if call_state.get_call(call_id) is None:
-            ended_payload = {"call_id": call_id, "status": call.status}
+            ended_payload = {"call_id": call_id, "status": call_status}
             for uid in (*targets, me):
                 socketio.emit("call:ended", ended_payload, room=f"user_{uid}")
 
@@ -191,12 +204,13 @@ def register_call_events(socketio: SocketIO) -> None:
 
         with current_app.app_context():
             call = call_service.end_call_by_initiator(call_id, me)
+            call_status = call.status if call is not None else None
         if call is None:
             return
 
         for uid in targets:
             socketio.emit("call:ended",
-                          {"call_id": call_id, "status": call.status},
+                          {"call_id": call_id, "status": call_status},
                           room=f"user_{uid}")
 
     # ── WebRTC сигналинг ─────────────────────────────────────────
