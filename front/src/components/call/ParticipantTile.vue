@@ -22,7 +22,7 @@
       </div>
       <div v-if="pending" class="tile-status">
         <span class="material-symbols-outlined spin">progress_activity</span>
-        Подключается…
+        {{ connLabel }}
       </div>
     </div>
 
@@ -34,7 +34,7 @@
 </template>
 
 <script setup>
-import { ref, watch, onMounted } from 'vue'
+import { ref, watch, onMounted, computed } from 'vue'
 
 const props = defineProps({
   name: { type: String, required: true },
@@ -49,34 +49,50 @@ const props = defineProps({
   isLocal: { type: Boolean, default: false },
   avatar: { type: String, default: null },
   pending: { type: Boolean, default: false },
+  /* Состояние RTCPeerConnection.connectionState — для диагностики прямо на
+     плитке: видно, встало ли соединение или зависло на подключении (тогда,
+     скорее всего, нужен TURN). */
+  connState: { type: String, default: null },
 })
 
 const videoEl = ref(null)
 const audioEl = ref(null)
 
-function attach() {
-  // Видео — без звука (см. шаблон). На iOS Safari нужен принудительный play()
-  // после установки srcObject; play() возвращает Promise, который безопасно
-  // игнорируем при отказе.
-  if (videoEl.value && props.stream) {
-    if (videoEl.value.srcObject !== props.stream) {
-      videoEl.value.srcObject = props.stream
-    }
-    videoEl.value.play?.().catch(() => {})
+const connLabel = computed(() => {
+  switch (props.connState) {
+    case 'connected': return 'Соединение есть, ждём видео…'
+    case 'failed': return 'Не удалось соединиться (нужен TURN)'
+    case 'disconnected': return 'Связь прервалась…'
+    default: return 'Подключается…'
   }
+})
+
+function bindEl(el, stream, force) {
+  if (!el || !stream) return
+  // Принудительное переподключение: когда трек добавляется в уже привязанный
+  // MediaStream (тот же объект), некоторые браузеры не начинают его
+  // воспроизводить без повторного присвоения srcObject. На смену streamTick
+  // (force) обнуляем и заново ставим источник — гарантированный re-render.
+  if (force && el.srcObject) el.srcObject = null
+  if (el.srcObject !== stream) el.srcObject = stream
+  // play() возвращает Promise, безопасно игнорируем отказ (autoplay-политика).
+  el.play?.().catch(() => {})
+}
+
+let lastTick = 0
+function attach() {
+  const force = props.streamTick !== lastTick
+  lastTick = props.streamTick
+  // Видео — без звука (см. шаблон).
+  bindEl(videoEl.value, props.stream, force)
   // Аудио удалённого участника — на отдельном элементе, чтобы звук шёл даже
   // при выключенной камере. play() уже разрешён жестом accept/«позвонить».
-  if (!props.isLocal && audioEl.value && props.stream) {
-    if (audioEl.value.srcObject !== props.stream) {
-      audioEl.value.srcObject = props.stream
-    }
-    audioEl.value.play?.().catch(() => {})
-  }
+  if (!props.isLocal) bindEl(audioEl.value, props.stream, force)
 }
 
 // streamTick меняется при каждом ontrack — пере-attach подхватывает поздно
 // прибывший трек (видео/аудио приходят независимо).
-watch(() => [props.stream, props.streamTick], attach)
+watch(() => [props.stream, props.streamTick], attach, { flush: 'post' })
 onMounted(attach)
 </script>
 

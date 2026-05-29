@@ -87,6 +87,15 @@ export const useCallStore = defineStore('call', {
           },
         }
       })
+      rtc.addEventListener('peer-state', (e) => {
+        const { userId, state } = e.detail
+        const existing = this.remoteStreams[userId]
+        if (!existing) return
+        this.remoteStreams = {
+          ...this.remoteStreams,
+          [userId]: { ...existing, conn: state },
+        }
+      })
       rtc.addEventListener('local-signal', (e) => {
         const { toUserId, kind, payload } = e.detail
         const socket = getSocket()

@@ -42,6 +42,7 @@
             :video-enabled="p.video"
             :avatar="avatarOf(p)"
             :pending="!p.stream"
+            :conn-state="p.conn"
           />
         </div>
 

@@ -37,6 +37,13 @@ export class WebRTCManager extends EventTarget {
     this.localStream = null
     this.peers = new Map() // userId -> peer entry
     this.myUserId = null
+    // Диагностика в консоли — чтобы видеть, где рвётся медиа (ICE не встал →
+    // нужен TURN; или треки не доехали). Видно в DevTools под [gw2 webrtc].
+    this._log('config iceServers:', JSON.stringify(this.config.iceServers))
+  }
+
+  _log(...args) {
+    try { console.info('[gw2 webrtc]', ...args) } catch { /* нет консоли */ }
   }
 
   /** Получаем доступ к камере/микрофону. media: 'audio' | 'video' */
@@ -55,6 +62,8 @@ export class WebRTCManager extends EventTarget {
         throw e
       }
     }
+    this._log('getUserMedia ok, local tracks:',
+      this.localStream.getTracks().map(t => `${t.kind}:${t.readyState}`).join(', '))
     // Если peers были созданы раньше localStream — добавим треки во все.
     for (const entry of this.peers.values()) {
       this._attachLocalTracks(entry.pc)
@@ -68,14 +77,19 @@ export class WebRTCManager extends EventTarget {
   }
 
   _attachLocalTracks(pc) {
-    if (!this.localStream) return
+    if (!this.localStream) {
+      this._log('attachLocalTracks: НЕТ localStream — треки не добавлены!')
+      return
+    }
     const senders = pc.getSenders()
+    let added = 0
     for (const track of this.localStream.getTracks()) {
       const already = senders.some(s => s.track === track)
       if (!already) {
-        try { pc.addTrack(track, this.localStream) } catch { /* уже добавлен */ }
+        try { pc.addTrack(track, this.localStream); added++ } catch { /* уже добавлен */ }
       }
     }
+    if (added) this._log('attachLocalTracks: добавлено треков', added)
   }
 
   /** Начать соединение с участником: создаём peer и вешаем локальные треки.
@@ -115,6 +129,7 @@ export class WebRTCManager extends EventTarget {
     this.peers.set(remoteUserId, entry)
 
     pc.ontrack = (event) => {
+      this._log(`ontrack от ${remoteUserId}: ${event.track?.kind} (${event.track?.readyState})`)
       try { entry.remoteStream.addTrack(event.track) } catch { /* дубликат */ }
       this._emitRemoteStream(remoteUserId, entry, event.track?.kind)
       event.track.onended = () => {
@@ -139,13 +154,17 @@ export class WebRTCManager extends EventTarget {
     }
 
     pc.oniceconnectionstatechange = () => {
+      this._log(`ICE ${remoteUserId}: ${pc.iceConnectionState}`)
       if (pc.iceConnectionState === 'failed') {
-        // Сеть «провалилась» — пробуем перезапустить ICE, а не висеть вечно.
+        // Сеть «провалилась» — частый случай: STUN-only не пробил NAT и нужен
+        // TURN. Пробуем перезапустить ICE, а не висеть вечно.
+        this._log(`ICE ${remoteUserId} FAILED — вероятно нужен TURN (STUN не пробил NAT). restartIce()`)
         try { pc.restartIce() } catch { /* старый браузер */ }
       }
     }
 
     pc.onconnectionstatechange = () => {
+      this._log(`peer ${remoteUserId}: ${pc.connectionState}`)
       this.dispatchEvent(new CustomEvent('peer-state', {
         detail: { userId: remoteUserId, state: pc.connectionState },
       }))
@@ -160,11 +179,12 @@ export class WebRTCManager extends EventTarget {
     try {
       entry.makingOffer = true
       await entry.pc.setLocalDescription() // implicit-offer
+      this._log(`→ offer для ${remoteUserId} (senders: ${entry.pc.getSenders().filter(s => s.track).length})`)
       this.dispatchEvent(new CustomEvent('local-signal', {
         detail: { toUserId: remoteUserId, kind: 'sdp', payload: entry.pc.localDescription },
       }))
     } catch (e) {
-      console.warn('[webrtc] makeOffer error', e)
+      console.warn('[gw2 webrtc] makeOffer error', e)
     } finally {
       entry.makingOffer = false
     }
@@ -180,12 +200,14 @@ export class WebRTCManager extends EventTarget {
   async handleDescription(fromUserId, description) {
     const entry = this._ensurePeer(fromUserId)
     const pc = entry.pc
+    this._log(`← ${description.type} от ${fromUserId} (signalingState: ${pc.signalingState})`)
     const offerCollision = description.type === 'offer'
       && (entry.makingOffer || pc.signalingState !== 'stable')
 
     entry.ignoreOffer = !entry.polite && offerCollision
     if (entry.ignoreOffer) {
       // Невежливый peer при коллизии игнорирует чужой offer — продолжит свой.
+      this._log(`ignore offer от ${fromUserId} (glare, impolite)`)
       return
     }
 
@@ -195,6 +217,7 @@ export class WebRTCManager extends EventTarget {
 
     if (description.type === 'offer') {
       await pc.setLocalDescription() // implicit-answer
+      this._log(`→ answer для ${fromUserId} (senders: ${pc.getSenders().filter(s => s.track).length})`)
       this.dispatchEvent(new CustomEvent('local-signal', {
         detail: { toUserId: fromUserId, kind: 'sdp', payload: pc.localDescription },
       }))
