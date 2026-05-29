@@ -39,6 +39,14 @@ services:
       JWT_SECRET_KEY: ${JWT_SECRET_KEY}
       SECRET_KEY: ${SECRET_KEY}
       UPLOAD_FOLDER: /app/uploads
+      # WebRTC TURN — без него звонки между разными сетями (мобильный интернет,
+      # домашний NAT) НЕ пробиваются: ICE застревает на «checking». /api/calls/
+      # ice-servers отдаёт TURN-сервер клиенту только если заданы TURN_HOST+SECRET.
+      TURN_HOST: ${TURN_HOST:-}
+      TURN_PORT: ${TURN_PORT:-3478}
+      TURN_SECRET: ${TURN_SECRET:-}
+      TURN_REALM: ${TURN_REALM:-grovework}
+      TURN_TTL: "3600"
     volumes:
       - uploads:/app/uploads
       - /opt/gw2/backup.json:/app/backup.json:ro
@@ -68,6 +76,34 @@ services:
       - certbot-www:/var/www/certbot
     entrypoint: "/bin/sh -c 'trap exit TERM; while :; do certbot renew --webroot -w /var/www/certbot --quiet; sleep 12h & wait $${!}; done;'"
     restart: always
+
+  # TURN-сервер для WebRTC (coturn). Запускается на проде ВСЕГДА (без него
+  # звонки между разными сетями не работают). Обязательно задать в .env:
+  #   TURN_HOST   — ПУБЛИЧНЫЙ IP сервера (именно IP, не домен — клиент идёт на
+  #                 turn:<IP>:3478 напрямую, и coturn анонсирует этот же IP).
+  #   TURN_SECRET — случайная строка (python3 -c "import secrets;print(secrets.token_hex(32))").
+  # На сервере открыть в firewall: 3478/UDP, 3478/TCP и UDP 49152-49200.
+  # network_mode: host — coturn нужны множественные UDP-порты relay напрямую.
+  coturn:
+    image: coturn/coturn:latest
+    restart: unless-stopped
+    network_mode: host
+    command:
+      - -n
+      - --realm=${TURN_REALM:-grovework}
+      - --use-auth-secret
+      - --static-auth-secret=${TURN_SECRET}
+      - --listening-port=${TURN_PORT:-3478}
+      - --min-port=49152
+      - --max-port=49200
+      - --no-tls
+      - --no-dtls
+      - --no-cli
+      - --fingerprint
+      - --lt-cred-mech
+      - --no-multicast-peers
+      - --no-loopback-peers
+      - --external-ip=${TURN_HOST}
 
 volumes:
   pg_data:
