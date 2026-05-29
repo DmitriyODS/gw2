@@ -223,6 +223,9 @@ export const useCallStore = defineStore('call', {
     async joinExistingCall(callPayload) {
       const callId = callPayload?.id || callPayload?.call_id || callPayload
       if (!callId) return
+      // Возвращаемся в звонок через плашку в чате — баннер «Вернуться к звонку»
+      // (rejoinCall) больше не нужен, иначе он останется висеть toast'ом.
+      this.rejoinCall = null
       // Уже в этом звонке (например, инициатор кликнул по своей плашке) —
       // просто разворачиваем окно звонка, а не присоединяемся заново.
       if (this.call?.id === callId && this.phase !== 'idle') {
@@ -357,23 +360,24 @@ export const useCallStore = defineStore('call', {
       this.reset()
     },
 
-    /** Серверный accept мой: подключаемся к существующим участникам.
-     *  С perfect negotiation достаточно начать соединение (connectTo) — offer
-     *  уйдёт автоматически из negotiationneeded; glare разрулится politeness. */
+    /** Серверный accept мой: я «новенький» — инициирую offer к каждому уже
+     *  подключённому участнику (offerer:true). Они в ответ только примут offer
+     *  и пришлют answer — так на пару ровно один offer, без glare. */
     async handleAccepted({ call_id, existing_participants, call }) {
       if (!this.call || this.call.id !== call_id) return
       this._clearOutgoingTimeout()
+      this.rejoinCall = null // вошли в звонок — баннер «Вернуться» больше не нужен
       this.call = call || this.call
       this.phase = 'active'
       const rtc = await this._initWebRTC()
       for (const uid of existing_participants || []) {
-        rtc.connectTo(uid)
+        rtc.connectTo(uid, { offerer: true })
       }
     },
 
-    /** К нам кто-то присоединился. Поднимаем к нему соединение (connectTo) —
-     *  обе стороны делают это симметрично, perfect negotiation разрулит. При
-     *  rejoin сначала дропаем устаревший peer, потом создаём свежий. */
+    /** К нам кто-то присоединился. Мы — «существующий», поэтому только
+     *  готовимся ОТВЕТИТЬ на его offer (connectTo без offerer). При rejoin
+     *  сначала дропаем устаревший peer, потом создаём свежий. */
     async handleParticipantJoined({ user_id, rejoin }) {
       if (this.phase === 'outgoing') {
         this.phase = 'active'
@@ -391,7 +395,7 @@ export const useCallStore = defineStore('call', {
       }
       const rtc = await this._initWebRTC()
       if (rejoin) rtc.removePeer(user_id) // мёртвое соединение после reload собеседника
-      rtc.connectTo(user_id)
+      rtc.connectTo(user_id) // мы отвечающая сторона — offer пришлёт он
     },
 
     handleParticipantLeft({ user_id }) {

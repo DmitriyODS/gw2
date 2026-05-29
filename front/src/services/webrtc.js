@@ -3,19 +3,19 @@
  * (по одному с каждым другим участником). Не зависит от Vue/Pinia — чистый
  * EventTarget с методами, которые дёргает call-store.
  *
- * Реализован паттерн «Perfect Negotiation» (W3C/MDN) — канонический способ
- * надёжно поднять соединение и без гонок разрулить «glare» (когда обе стороны
- * шлют offer одновременно):
+ * Модель сигналинга — детерминированная, без glare:
  *
- *  - Как только мы узнаём об участнике (existing_participants при accept или
- *    participant-joined), мы вызываем connectTo(uid): создаём peer, вешаем
- *    локальные треки. Добавление треков само инициирует `negotiationneeded`,
- *    внутри которого мы делаем `setLocalDescription()` (implicit-offer) и шлём
- *    его. Так делают ОБЕ стороны — поэтому возможна коллизия offer'ов.
- *  - Коллизию решает роль polite/impolite: «вежливый» peer при коллизии
- *    откатывает свой offer и принимает чужой; «невежливый» — игнорирует чужой
- *    и продолжает свой. Роль детерминирована сравнением user_id (у меньшего id
- *    — polite), поэтому обе стороны всегда согласны, кто кому уступает.
+ *  - На каждую пару участников ровно ОДИН offerer. Им всегда выступает
+ *    «новенький»: тот, кто только что вошёл в звонок (accept/rejoin), получает
+ *    список уже подключённых и шлёт им offer — connectTo(uid, {offerer:true}).
+ *    Уже находящиеся в звонке узнают о нём через participant-joined и лишь
+ *    ОТВЕЧАЮТ — connectTo(uid) без offerer. Так на пару приходится один offer,
+ *    нет коллизий и лишних renegotiation (именно из-за них раньше соединение
+ *    вставало, но медиа не шло).
+ *  - На случай редкой настоящей коллизии (двое вошли одновременно и видят друг
+ *    друга в existing) оставлен страховочный perfect-negotiation: роль
+ *    polite/impolite по сравнению user_id — «вежливый» при коллизии откатывает
+ *    свой offer и принимает чужой, «невежливый» игнорирует чужой.
  *  - ICE-кандидаты, прилетевшие до setRemoteDescription, копим в очереди и
  *    применяем после (иначе addIceCandidate бросает InvalidStateError).
  *  - На `iceConnectionState === 'failed'` делаем restartIce() — соединение
@@ -79,9 +79,23 @@ export class WebRTCManager extends EventTarget {
   }
 
   /** Начать соединение с участником: создаём peer и вешаем локальные треки.
-   *  Добавление треков триггерит negotiationneeded → offer. Идемпотентно. */
-  connectTo(remoteUserId) {
-    return this._ensurePeer(remoteUserId)
+   *  Если offerer=true — мы инициируем offer (мы «новенький» в этой паре);
+   *  иначе только готовимся отвечать на чужой offer. Идемпотентно. */
+  connectTo(remoteUserId, { offerer = false } = {}) {
+    const existed = this.peers.has(remoteUserId)
+    const entry = this._ensurePeer(remoteUserId)
+    if (offerer) {
+      // Помечаем себя инициатором. Для СВЕЖЕГО peer offer уйдёт сам: добавление
+      // локальных треков в _ensurePeer поднимет negotiationneeded, а тот увидит
+      // флаг (он ставится синхронно, до асинхронного negotiationneeded). Если
+      // peer уже существовал (треки добавлены раньше — negotiationneeded
+      // больше не выстрелит) — инициируем offer вручную.
+      entry.isOfferer = true
+      if (existed && entry.pc.signalingState === 'stable') {
+        this._makeOffer(remoteUserId, entry)
+      }
+    }
+    return entry
   }
 
   _ensurePeer(remoteUserId) {
@@ -90,11 +104,12 @@ export class WebRTCManager extends EventTarget {
 
     const pc = new RTCPeerConnection(this.config)
     // Politeness детерминированно: у кого id меньше — polite (уступает при
-    // коллизии). Обе стороны вычисляют одинаково.
+    // коллизии). Обе стороны вычисляют одинаково. Нужно только как страховка
+    // от редкого настоящего glare (двое вошли одновременно).
     const polite = Number(this.myUserId) < Number(remoteUserId)
     entry = {
       pc, remoteStream: new MediaStream(), polite,
-      makingOffer: false, ignoreOffer: false,
+      isOfferer: false, makingOffer: false, ignoreOffer: false,
       pendingIce: [], remoteSet: false,
     }
     this.peers.set(remoteUserId, entry)
@@ -116,19 +131,11 @@ export class WebRTCManager extends EventTarget {
       }
     }
 
-    // Perfect negotiation: при добавлении треков/renegotiation сами делаем offer.
-    pc.onnegotiationneeded = async () => {
-      try {
-        entry.makingOffer = true
-        await pc.setLocalDescription()
-        this.dispatchEvent(new CustomEvent('local-signal', {
-          detail: { toUserId: remoteUserId, kind: 'sdp', payload: pc.localDescription },
-        }))
-      } catch (e) {
-        console.warn('[webrtc] negotiationneeded error', e)
-      } finally {
-        entry.makingOffer = false
-      }
+    // Offer шлёт ТОЛЬКО назначенный инициатор пары (offerer). Отвечающая
+    // сторона ждёт чужой offer — так нет glare и лишних renegotiation.
+    pc.onnegotiationneeded = () => {
+      if (!entry.isOfferer) return
+      this._makeOffer(remoteUserId, entry)
     }
 
     pc.oniceconnectionstatechange = () => {
@@ -146,6 +153,21 @@ export class WebRTCManager extends EventTarget {
 
     this._attachLocalTracks(pc) // → negotiationneeded → offer
     return entry
+  }
+
+  async _makeOffer(remoteUserId, entry) {
+    if (entry.makingOffer) return
+    try {
+      entry.makingOffer = true
+      await entry.pc.setLocalDescription() // implicit-offer
+      this.dispatchEvent(new CustomEvent('local-signal', {
+        detail: { toUserId: remoteUserId, kind: 'sdp', payload: entry.pc.localDescription },
+      }))
+    } catch (e) {
+      console.warn('[webrtc] makeOffer error', e)
+    } finally {
+      entry.makingOffer = false
+    }
   }
 
   _emitRemoteStream(userId, entry, trackKind, ended = false) {
