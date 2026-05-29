@@ -1,5 +1,5 @@
 import { defineStore } from 'pinia'
-import { getIceServers } from '@/api/calls.js'
+import { getIceServers, getActiveCall } from '@/api/calls.js'
 import { WebRTCManager } from '@/services/webrtc.js'
 import { getSocket } from '@/socket/index.js'
 import { useAuthStore } from './auth.js'
@@ -35,6 +35,10 @@ export const useCallStore = defineStore('call', {
     /** UI-флаги. */
     isMinimized: false,
     error: null,
+    /** Звонок, к которому можно вернуться после перезагрузки страницы
+     *  (заполняется из /api/calls/active). Пока не null — показываем баннер
+     *  «Вернуться к звонку». */
+    rejoinCall: null,
   }),
 
   getters: {
@@ -211,6 +215,77 @@ export const useCallStore = defineStore('call', {
       await this.accept()
     },
 
+    /** Проверить на сервере, не остался ли у меня активный звонок (например,
+     *  после перезагрузки страницы). Если да — показываем баннер «Вернуться».
+     *  Не трогаем, если я уже в каком-то звонке. */
+    async checkRejoin() {
+      if (this.phase !== 'idle' || this.rejoinCall) return
+      try {
+        const { call } = await getActiveCall()
+        if (call && call.status !== 'ended' && call.status !== 'missed') {
+          this.rejoinCall = call
+        }
+      } catch { /* нет активного звонка или сервер недоступен — игнорируем */ }
+    },
+
+    dismissRejoin() {
+      const call = this.rejoinCall
+      this.rejoinCall = null
+      // Явно «не возвращаюсь» — выходим из звонка на сервере, чтобы он не
+      // висел и не держал собеседника в ожидании.
+      if (call) {
+        const socket = getSocket()
+        socket?.emit('call:leave', { call_id: call.id })
+      }
+    },
+
+    /** Пользователь нажал «Вернуться к звонку» (это и есть user-gesture,
+     *  поэтому здесь безопасно запрашивать камеру/микрофон). Поднимаем медиа
+     *  заново и шлём call:rejoin — сервер вернёт список участников. */
+    async confirmRejoin() {
+      const call = this.rejoinCall
+      this.rejoinCall = null
+      if (!call) return
+
+      this.call = call
+      this.media = call.media || 'video'
+      this.audioEnabled = true
+      this.videoEnabled = this.media === 'video'
+      this.error = null
+
+      // Плитки-плейсхолдеры для остальных участников (ещё в звонке).
+      const auth = useAuthStore()
+      const others = (call.participants || [])
+        .filter(p => p.user_id !== auth.user?.id && !p.left_at)
+      const next = {}
+      for (const p of others) {
+        next[p.user_id] = {
+          stream: null, fio: p.fio, avatar_path: p.avatar_path, audio: true, video: true,
+        }
+      }
+      this.remoteStreams = next
+
+      try {
+        const rtc = await this._initWebRTC()
+        await rtc.start(this.media)
+      } catch (e) {
+        const msg = 'Не удалось получить доступ к камере или микрофону. Разрешите доступ в настройках браузера.'
+        this.error = msg
+        try { useNotificationsStore().warn(msg) } catch {}
+        this.reset()
+        return
+      }
+
+      this.phase = 'active'
+      const socket = getSocket()
+      if (!socket) {
+        this.error = 'Нет соединения с сервером'
+        this.reset()
+        return
+      }
+      socket.emit('call:rejoin', { call_id: call.id })
+    },
+
     /** Я отклоняю входящий. */
     decline() {
       if (!this.call) {
@@ -253,23 +328,29 @@ export const useCallStore = defineStore('call', {
     },
 
     /** К нам кто-то присоединился (не мы accept'нули — кто-то другой). Ждём offer от него. */
-    handleParticipantJoined({ user_id }) {
+    handleParticipantJoined({ user_id, rejoin }) {
       if (this.phase === 'outgoing') {
         this.phase = 'active'
       }
-      // Добавим плитку с placeholder'ом
-      if (!this.remoteStreams[user_id]) {
-        const part = (this.call?.participants || []).find(p => p.user_id === user_id)
-        this.remoteStreams = {
-          ...this.remoteStreams,
-          [user_id]: {
-            stream: null,
-            fio: part?.fio || 'Участник',
-            avatar_path: part?.avatar_path || null,
-            audio: true, video: true,
-          },
-        }
+      // Сбрасываем устаревший peer: при обычном join его и так нет, а при
+      // rejoin (собеседник перезагрузил страницу) старое соединение мертво —
+      // дропаем, чтобы свежий offer от него поднял новое. Плитку при этом
+      // переводим в «подключается» (stream → null).
+      if (this._rtc) this._rtc.removePeer(user_id)
+      const part = (this.call?.participants || []).find(p => p.user_id === user_id)
+      const existing = this.remoteStreams[user_id]
+      this.remoteStreams = {
+        ...this.remoteStreams,
+        [user_id]: {
+          stream: null,
+          fio: existing?.fio || part?.fio || 'Участник',
+          avatar_path: existing?.avatar_path ?? part?.avatar_path ?? null,
+          audio: true, video: true,
+        },
       }
+      // rejoin не несёт нового смысла для UI кроме сброса peer выше — флаг
+      // оставлен для читаемости/возможной диагностики.
+      void rejoin
     },
 
     handleParticipantLeft({ user_id }) {
@@ -350,6 +431,7 @@ export const useCallStore = defineStore('call', {
       this.media = 'video'
       this.isMinimized = false
       this.error = null
+      this.rejoinCall = null
     },
 
     handleError({ code, message }) {
@@ -358,8 +440,9 @@ export const useCallStore = defineStore('call', {
       // Toast — иначе после reset error в store потеряется, и пользователь
       // ничего не увидит (CallView в этот момент уже размонтирован).
       try { useNotificationsStore().warn(text) } catch {}
-      // Если ошибка случилась до active — сразу выходим.
-      if (this.phase === 'outgoing' || this.phase === 'incoming') {
+      // Если ошибка случилась до active — сразу выходим. NOT_IN_CALL приходит
+      // при попытке вернуться в уже завершённый звонок (rejoin) — тоже выходим.
+      if (this.phase === 'outgoing' || this.phase === 'incoming' || code === 'NOT_IN_CALL') {
         this.reset()
       }
     },

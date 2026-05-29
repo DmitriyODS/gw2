@@ -1,13 +1,19 @@
 <template>
   <div class="tile" :class="{ local: isLocal, no_video: !videoEnabled || !stream, audio_off: !audioEnabled }">
+    <!-- Видео всегда muted: звук удалённого участника воспроизводит отдельный
+         <audio> ниже. Так аудио не пропадает, когда собеседник выключает
+         камеру (тогда <video> прячется через v-show, но звук продолжает идти). -->
     <video
       v-show="videoEnabled && stream"
       ref="videoEl"
       class="tile-video"
       autoplay
       playsinline
-      :muted="isLocal"
+      muted
     />
+    <!-- Аудио удалённого участника на отдельном элементе (для своего потока не
+         нужно — себя не слушаем). -->
+    <audio v-if="!isLocal" ref="audioEl" autoplay playsinline />
 
     <div v-show="!videoEnabled || !stream" class="tile-placeholder">
       <div class="tile-avatar">
@@ -46,20 +52,30 @@ const props = defineProps({
 })
 
 const videoEl = ref(null)
+const audioEl = ref(null)
 
 function attach() {
-  if (!videoEl.value || !props.stream) return
-  if (videoEl.value.srcObject !== props.stream) {
-    videoEl.value.srcObject = props.stream
+  // Видео — без звука (см. шаблон). На iOS Safari нужен принудительный play()
+  // после установки srcObject; play() возвращает Promise, который безопасно
+  // игнорируем при отказе.
+  if (videoEl.value && props.stream) {
+    if (videoEl.value.srcObject !== props.stream) {
+      videoEl.value.srcObject = props.stream
+    }
+    videoEl.value.play?.().catch(() => {})
   }
-  // На iOS Safari нужен принудительный play() после установки srcObject;
-  // на десктопе play() возвращает Promise, который мы безопасно игнорируем,
-  // если он отвергнут (например, video.muted=false без жеста — но у нас
-  // всё видео без аудио-направления, аудио — на отдельном audio-элементе
-  // браузера через тот же stream).
-  videoEl.value.play?.().catch(() => {})
+  // Аудио удалённого участника — на отдельном элементе, чтобы звук шёл даже
+  // при выключенной камере. play() уже разрешён жестом accept/«позвонить».
+  if (!props.isLocal && audioEl.value && props.stream) {
+    if (audioEl.value.srcObject !== props.stream) {
+      audioEl.value.srcObject = props.stream
+    }
+    audioEl.value.play?.().catch(() => {})
+  }
 }
 
+// streamTick меняется при каждом ontrack — пере-attach подхватывает поздно
+// прибывший трек (видео/аудио приходят независимо).
 watch(() => [props.stream, props.streamTick], attach)
 onMounted(attach)
 </script>

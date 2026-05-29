@@ -61,7 +61,14 @@
           :att="att"
         />
       </div>
-      <div v-if="message.text" class="msg-text">{{ message.text }}</div>
+      <div v-if="message.text" class="msg-text"><template v-for="(part, i) in textParts" :key="i"><a
+          v-if="part.type === 'link'"
+          :href="part.href"
+          class="msg-link"
+          target="_blank"
+          rel="noopener noreferrer"
+          @click.stop
+        >{{ part.value }}</a><template v-else>{{ part.value }}</template></template></div>
       <div class="msg-meta">
         <span class="msg-time">{{ formatTime(message.created_at) }}</span>
         <span v-if="isMine" class="msg-read">
@@ -77,6 +84,7 @@
 <script setup>
 import { computed } from 'vue'
 import AttachmentView from './AttachmentView.vue'
+import { linkifyParts } from '@/utils/linkify.js'
 
 const props = defineProps({
   message: { type: Object, required: true },
@@ -89,6 +97,9 @@ const props = defineProps({
 defineEmits(['delete', 'reply', 'forward', 'join-call'])
 
 function attachmentTag() { return AttachmentView }
+
+/* Текст сообщения с распознанными ссылками: обычный текст + кликабельные <a>. */
+const textParts = computed(() => linkifyParts(props.message.text))
 
 function formatTime(iso) {
   if (!iso) return ''
@@ -298,6 +309,27 @@ const joinLabel = computed(() => 'Присоединиться')
   white-space: pre-wrap;
   font-size: 14px;
   line-height: 1.4;
+}
+
+/* Кликабельные ссылки внутри текста. Цвет — через токены, чтобы корректно
+   читаться на светлой/тёмной/любой кастомной теме. На исходящем пузыре фон
+   уже акцентный (primary-container), поэтому ссылка наследует контрастный
+   on-цвет, оставаясь подчёркнутой. */
+.msg-link {
+  color: var(--color-primary);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  word-break: break-word;
+  overflow-wrap: anywhere;
+  cursor: pointer;
+}
+
+.msg-link:hover {
+  text-decoration-thickness: 2px;
+}
+
+.msg-row.outgoing .msg-link {
+  color: var(--color-on-primary-container);
 }
 
 .msg-attachments {

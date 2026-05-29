@@ -9,6 +9,8 @@ RTCPeerConnection с каждым другим участником. Когда 
 вступает в звонок (accept), он получает список уже подключённых и сам
 инициирует offer к каждому из них.
 """
+import os
+
 from flask_socketio import SocketIO
 from app.utils.logger import get_logger
 from app.schemas import CallSchema, CallParticipantBriefSchema, MessageSchema
@@ -20,6 +22,10 @@ logger = get_logger(__name__)
 _call_schema = CallSchema()
 _part_schema = CallParticipantBriefSchema()
 _msg_schema = MessageSchema()
+
+# Сколько секунд держать пользователя в звонке после обрыва сокета, давая ему
+# шанс переподключиться (перезагрузка вкладки, кратковременная потеря сети).
+CALL_REJOIN_GRACE_SEC = int(os.getenv("CALL_REJOIN_GRACE_SEC", "15"))
 
 
 def _resolve_user_id_from_sid(sid: str) -> int | None:
@@ -207,6 +213,58 @@ def register_call_events(socketio: SocketIO) -> None:
         # Обновим плашку в чате: status ringing → active.
         _emit_call_system_message_update(socketio, call_id)
 
+    @socketio.on("call:rejoin")
+    def on_rejoin(data):
+        """Возврат к звонку после перезагрузки вкладки. Пользователь всё ещё
+        числится в звонке (благодаря grace-окну на disconnect). Заново отдаём
+        ему список уже подключённых (он переинициирует offer'ы), а остальным
+        шлём participant-joined с флагом rejoin — чтобы они сбросили устаревший
+        peer и приняли свежий offer."""
+        from flask import request as flask_request
+        from flask import current_app
+
+        me = _resolve_user_id_from_sid(flask_request.sid)
+        if me is None:
+            return
+        try:
+            call_id = int((data or {}).get("call_id"))
+        except (TypeError, ValueError):
+            return
+
+        state = call_state.get_call(call_id)
+        if not state or me not in state["invited"]:
+            socketio.emit("call:error",
+                          {"code": "NOT_IN_CALL", "message": "Звонок уже завершён"},
+                          room=f"user_{me}")
+            return
+
+        try:
+            with current_app.app_context():
+                call = call_service.accept_call(call_id, me)  # идемпотентно
+                call_payload = _call_schema.dump(call)
+        except CallServiceError as e:
+            socketio.emit("call:error",
+                          {"code": e.code, "message": e.message},
+                          room=f"user_{me}")
+            return
+
+        existing = [uid for uid in call_state.get_participants(call_id) if uid != me]
+        # Сначала просим существующих сбросить устаревший peer (participant-joined
+        # с rejoin), и только потом отдаём вернувшемуся список — чтобы его свежий
+        # offer не пришёл к ним раньше, чем они дропнули мёртвое соединение.
+        for uid in existing:
+            socketio.emit("call:participant-joined", {
+                "call_id": call_id,
+                "user_id": me,
+                "rejoin": True,
+            }, room=f"user_{uid}")
+        socketio.emit("call:accepted", {
+            "call_id": call_id,
+            "existing_participants": existing,
+            "call": call_payload,
+        }, room=f"user_{me}")
+        _emit_call_system_message_update(socketio, call_id)
+
     @socketio.on("call:decline")
     def on_decline(data):
         from flask import request as flask_request
@@ -359,8 +417,31 @@ def register_call_events(socketio: SocketIO) -> None:
 
 
 def cleanup_call_on_disconnect(socketio: SocketIO, user_id: int) -> None:
-    """Дёргается из presence.on_disconnect, когда у пользователя не осталось
-    активных видимых соединений: убираем его из звонка."""
+    """Дёргается из presence.on_disconnect. НЕ убираем пользователя из звонка
+    сразу: при перезагрузке вкладки/смене сети сокет рвётся на пару секунд и
+    тут же переустанавливается. Планируем отложенную проверку — и только если
+    за grace-окно пользователь так и не вернулся (нет ни одного соединения),
+    окончательно выводим его из звонка и уведомляем остальных."""
+    call_id = call_state.get_user_active_call(user_id)
+    if call_id is None:
+        return
+
+    def _delayed_cleanup():
+        socketio.sleep(CALL_REJOIN_GRACE_SEC)
+        from app.sockets import presence
+        # Вернулся (переподключился) — оставляем в звонке как есть.
+        if presence.has_any_connection(user_id):
+            return
+        # За время ожидания мог сменить/завершить звонок.
+        if call_state.get_user_active_call(user_id) != call_id:
+            return
+        _finalize_disconnect(socketio, user_id, call_id)
+
+    socketio.start_background_task(_delayed_cleanup)
+
+
+def _finalize_disconnect(socketio: SocketIO, user_id: int, call_id: int) -> None:
+    """Окончательно убрать отвалившегося пользователя из звонка."""
     from flask import current_app
     with current_app.app_context():
         result = call_service.cleanup_user_on_disconnect(user_id)

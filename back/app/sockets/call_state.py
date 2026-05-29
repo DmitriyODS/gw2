@@ -92,6 +92,10 @@ def remove_user_from_call(call_id: int, user_id: int) -> None:
     if not state:
         return
     state["joined"].discard(user_id)
+    # Убираем и из invited: иначе ушедший участник навсегда считается
+    # «ожидающим присоединения» (pending) и should_end никогда не вернёт True,
+    # из-за чего p2p-звонок не завершается, когда собеседник кладёт трубку.
+    state["invited"].discard(user_id)
     if _user_call.get(user_id) == call_id:
         _user_call.pop(user_id, None)
 
@@ -105,6 +109,7 @@ def remove_user_from_any_call(user_id: int) -> Optional[int]:
     state = _calls.get(call_id)
     if state:
         state["joined"].discard(user_id)
+        state["invited"].discard(user_id)
     return call_id
 
 

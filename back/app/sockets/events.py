@@ -40,9 +40,13 @@ def register_events(socketio: SocketIO) -> None:
         from app.sockets.presence import _sid_user
         user_id = _sid_user.get(flask_request.sid)
         presence.on_disconnect(flask_request.sid)
-        # Если у пользователя не осталось активных видимых соединений и он был
-        # в звонке — выкинуть его оттуда и уведомить остальных.
-        if user_id is not None and not presence._has_visible_connection(user_id):
+        # Если пользователь был в звонке — НЕ завершаем его мгновенно. При
+        # перезагрузке вкладки (F5) или смене сети сокет на пару секунд рвётся
+        # и тут же переустанавливается. Даём grace-окно на возврат: если за это
+        # время пользователь не вернётся (нет ни одного соединения) — только
+        # тогда убираем его из звонка. Так звонок «переживает» reload, и к нему
+        # можно вернуться через call:rejoin.
+        if user_id is not None:
             from app.sockets.call_events import cleanup_call_on_disconnect
             cleanup_call_on_disconnect(socketio, user_id)
         logger.info("ws.disconnect", extra={"extra": {"event": "ws.disconnect"}})

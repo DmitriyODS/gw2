@@ -21,6 +21,7 @@
       <MiniMessenger />
       <IncomingCallOverlay @accept="callStore.accept()" @decline="callStore.decline()" />
       <CallView />
+      <ReturnCallBanner />
     </template>
     <template v-else>
       <main class="main-content">
@@ -58,6 +59,7 @@ import StaleTasksModal from '@/components/tasks/StaleTasksModal.vue'
 import MiniMessenger from '@/components/messenger/MiniMessenger.vue'
 import IncomingCallOverlay from '@/components/call/IncomingCallOverlay.vue'
 import CallView from '@/components/call/CallView.vue'
+import ReturnCallBanner from '@/components/call/ReturnCallBanner.vue'
 import Toast from 'primevue/toast'
 import ProgressSpinner from 'primevue/progressspinner'
 
@@ -107,6 +109,9 @@ onMounted(async () => {
     // Список диалогов нужен сразу после входа: бейдж непрочитанных, мини-чат
     // и корректный заголовок в push-уведомлении (иначе fio неизвестно).
     messengerStore.fetchConversations()
+    // Если страницу перезагрузили во время звонка — звонок ещё «жив» на
+    // сервере (grace-окно). Предложим вернуться к нему.
+    callStore.checkRejoin()
     // Лог версий показываем существующим пользователям; новичкам сначала тур,
     // а лог всплывёт при следующем входе.
     if (!shouldAutoShow()) {

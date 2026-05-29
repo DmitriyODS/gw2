@@ -258,10 +258,13 @@ watch(isRinging, (v) => {
   align-items: center;
   justify-content: space-between;
   padding: 14px 22px;
+  padding-top: calc(14px + env(safe-area-inset-top, 0px));
   background: color-mix(in oklch, var(--color-surface) 80%, transparent);
   border-bottom: 1px solid var(--color-outline-dim);
   flex-shrink: 0;
 }
+
+.callview.mini .callview-header { padding-top: 8px; }
 
 .callview.mini .callview-header {
   padding: 8px 12px;
@@ -336,6 +339,16 @@ watch(isRinging, (v) => {
 @media (max-width: 720px) {
   .g-2, .g-4 { grid-template-columns: 1fr; }
   .g-many { grid-template-columns: 1fr 1fr; }
+}
+
+/* На мобильном свёрнутый режим поднимаем над нижней навигацией и сужаем,
+   чтобы окошко не перекрывало панель навигации и safe-area. */
+@media (max-width: 600px) {
+  .callview.mini {
+    inset: auto 12px calc(76px + env(safe-area-inset-bottom, 0px)) 12px;
+    width: auto;
+    height: 200px;
+  }
 }
 
 .g-mini { grid-template-columns: 1fr; }

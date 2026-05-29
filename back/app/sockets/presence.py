@@ -41,6 +41,14 @@ def _has_visible_connection(user_id: int) -> bool:
     )
 
 
+def has_any_connection(user_id: int) -> bool:
+    """Есть ли у пользователя хоть одно живое сокет-соединение (видимое или
+    нет). Для звонков важно именно это: при перезагрузке вкладки/смене сети
+    соединение на мгновение рвётся и переустанавливается, но в фоне сокет
+    тоже валиден — звонок не должен завершаться, пока есть любой коннект."""
+    return any(uid == user_id for uid in _sid_user.values())
+
+
 def _persist_last_seen(user_id: int) -> datetime:
     now = datetime.now(timezone.utc)
     try:
