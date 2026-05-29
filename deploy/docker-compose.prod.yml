@@ -102,7 +102,15 @@ services:
       - --fingerprint
       - --lt-cred-mech
       - --no-multicast-peers
-      - --no-loopback-peers
+      # Запрещаем relay во внутренние/приватные сети — иначе авторизованный
+      # пользователь мог бы через TURN достучаться до БД/redis/docker-сети
+      # сервера. Участники звонков всегда на публичных IP, поэтому это не мешает.
+      - --denied-peer-ip=0.0.0.0-0.255.255.255
+      - --denied-peer-ip=10.0.0.0-10.255.255.255
+      - --denied-peer-ip=127.0.0.0-127.255.255.255
+      - --denied-peer-ip=169.254.0.0-169.254.255.255
+      - --denied-peer-ip=172.16.0.0-172.31.255.255
+      - --denied-peer-ip=192.168.0.0-192.168.255.255
       - --external-ip=${TURN_HOST}
 
 volumes:
