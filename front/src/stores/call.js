@@ -138,6 +138,26 @@ export const useCallStore = defineStore('call', {
         media,
         conversation_id: conversationId,
       })
+      this._armOutgoingTimeout()
+    },
+
+    /** Если за разумное время никто не поднял — завершаем «не дозвонился»,
+     *  чтобы звонок не висел вечно в outgoing и не блокировал новые. */
+    _armOutgoingTimeout() {
+      this._clearOutgoingTimeout()
+      this._outgoingTimer = setTimeout(() => {
+        if (this.phase === 'outgoing') {
+          try { useNotificationsStore().info('Абонент не отвечает') } catch {}
+          this.hangup()
+        }
+      }, 45000)
+    },
+
+    _clearOutgoingTimeout() {
+      if (this._outgoingTimer) {
+        clearTimeout(this._outgoingTimer)
+        this._outgoingTimer = null
+      }
     },
 
     /** Сервер подтвердил, что звонок зарегистрирован (после call:start). */
@@ -201,9 +221,15 @@ export const useCallStore = defineStore('call', {
      *  уже не открыт (закрыл/пропустил), но звонок ещё активен и я хочу
      *  присоединиться. */
     async joinExistingCall(callPayload) {
-      if (this.phase !== 'idle') return
       const callId = callPayload?.id || callPayload?.call_id || callPayload
       if (!callId) return
+      // Уже в этом звонке (например, инициатор кликнул по своей плашке) —
+      // просто разворачиваем окно звонка, а не присоединяемся заново.
+      if (this.call?.id === callId && this.phase !== 'idle') {
+        this.expand()
+        return
+      }
+      if (this.phase !== 'idle') return
       const media = callPayload?.media || 'video'
       this.call = { id: callId, media }
       this.media = media
@@ -215,17 +241,33 @@ export const useCallStore = defineStore('call', {
       await this.accept()
     },
 
-    /** Проверить на сервере, не остался ли у меня активный звонок (например,
-     *  после перезагрузки страницы). Если да — показываем баннер «Вернуться».
-     *  Не трогаем, если я уже в каком-то звонке. */
+    /** Синхронизировать состояние звонка с сервером (при загрузке страницы и
+     *  каждом переподключении сокета). Лечит два класса зависаний:
+     *   - я «в звонке», а сервер о нём не знает (пропустил call:ended за время
+     *     обрыва) → сбрасываем зависший phase, иначе новые звонки молча
+     *     отклоняются как «занято»;
+     *   - я в idle, но на сервере остался мой активный звонок (перезагрузка
+     *     посреди разговора) → показываем баннер «Вернуться к звонку». */
     async checkRejoin() {
-      if (this.phase !== 'idle' || this.rejoinCall) return
+      let call
       try {
-        const { call } = await getActiveCall()
-        if (call && call.status !== 'ended' && call.status !== 'missed') {
-          this.rejoinCall = call
+        ({ call } = await getActiveCall())
+      } catch { return } // сервер недоступен — не трогаем состояние
+      const live = (call && call.status !== 'ended' && call.status !== 'missed') ? call : null
+
+      if (this.phase !== 'idle') {
+        // Я считаю, что в звонке. Если сервер не подтверждает (или это уже
+        // другой звонок) — моё состояние зависло, сбрасываем.
+        if (!live || live.id !== this.call?.id) {
+          this.reset()
+          if (live) this.rejoinCall = live
         }
-      } catch { /* нет активного звонка или сервер недоступен — игнорируем */ }
+        return
+      }
+      // phase === 'idle'
+      if (live && !this.rejoinCall) {
+        this.rejoinCall = live
+      }
     },
 
     dismissRejoin() {
@@ -315,28 +357,27 @@ export const useCallStore = defineStore('call', {
       this.reset()
     },
 
-    /** Серверный accept мой: подключаемся к существующим участникам через WebRTC offer. */
+    /** Серверный accept мой: подключаемся к существующим участникам.
+     *  С perfect negotiation достаточно начать соединение (connectTo) — offer
+     *  уйдёт автоматически из negotiationneeded; glare разрулится politeness. */
     async handleAccepted({ call_id, existing_participants, call }) {
       if (!this.call || this.call.id !== call_id) return
+      this._clearOutgoingTimeout()
       this.call = call || this.call
       this.phase = 'active'
       const rtc = await this._initWebRTC()
-      // Мы — новый участник; шлём offer всем, кто уже в звонке.
-      for (const uid of existing_participants) {
-        rtc.createOfferTo(uid).catch(() => {})
+      for (const uid of existing_participants || []) {
+        rtc.connectTo(uid)
       }
     },
 
-    /** К нам кто-то присоединился (не мы accept'нули — кто-то другой). Ждём offer от него. */
-    handleParticipantJoined({ user_id, rejoin }) {
+    /** К нам кто-то присоединился. Поднимаем к нему соединение (connectTo) —
+     *  обе стороны делают это симметрично, perfect negotiation разрулит. При
+     *  rejoin сначала дропаем устаревший peer, потом создаём свежий. */
+    async handleParticipantJoined({ user_id, rejoin }) {
       if (this.phase === 'outgoing') {
         this.phase = 'active'
       }
-      // Сбрасываем устаревший peer: при обычном join его и так нет, а при
-      // rejoin (собеседник перезагрузил страницу) старое соединение мертво —
-      // дропаем, чтобы свежий offer от него поднял новое. Плитку при этом
-      // переводим в «подключается» (stream → null).
-      if (this._rtc) this._rtc.removePeer(user_id)
       const part = (this.call?.participants || []).find(p => p.user_id === user_id)
       const existing = this.remoteStreams[user_id]
       this.remoteStreams = {
@@ -348,9 +389,9 @@ export const useCallStore = defineStore('call', {
           audio: true, video: true,
         },
       }
-      // rejoin не несёт нового смысла для UI кроме сброса peer выше — флаг
-      // оставлен для читаемости/возможной диагностики.
-      void rejoin
+      const rtc = await this._initWebRTC()
+      if (rejoin) rtc.removePeer(user_id) // мёртвое соединение после reload собеседника
+      rtc.connectTo(user_id)
     },
 
     handleParticipantLeft({ user_id }) {
@@ -370,16 +411,16 @@ export const useCallStore = defineStore('call', {
       this.reset()
     },
 
-    /** WebRTC offer/answer/ice от другого участника. */
+    /** WebRTC сигнал от другого участника: kind 'sdp' (offer/answer) или 'ice'. */
     async handleSignal({ from_user_id, kind, payload }) {
-      // Защитная мера: если по какой-то причине store пустой (например, пришёл
-      // сигнал между accept и phase=active), все равно поднимаем RTC, потому
-      // что иначе offer/ICE будут потеряны.
+      // Защитная мера: даже если store «между» состояниями, поднимаем RTC —
+      // иначе offer/ICE потеряются.
       const rtc = await this._initWebRTC()
       try {
-        if (kind === 'offer') await rtc.handleOffer(from_user_id, payload)
-        else if (kind === 'answer') await rtc.handleAnswer(from_user_id, payload)
+        if (kind === 'sdp') await rtc.handleDescription(from_user_id, payload)
         else if (kind === 'ice') await rtc.handleRemoteIce(from_user_id, payload)
+        // 'offer'/'answer' — обратная совместимость со старым клиентом.
+        else if (kind === 'offer' || kind === 'answer') await rtc.handleDescription(from_user_id, payload)
       } catch (e) {
         console.warn('webrtc signal error', kind, e)
       }
@@ -420,6 +461,7 @@ export const useCallStore = defineStore('call', {
     expand() { this.isMinimized = false },
 
     reset() {
+      this._clearOutgoingTimeout()
       try { this._rtc?.stop() } catch {}
       this._rtc = null
       this.localStream = null
@@ -435,14 +477,31 @@ export const useCallStore = defineStore('call', {
     },
 
     handleError({ code, message }) {
-      const text = message || 'Ошибка звонка'
+      // Звонок уже завершён, а мы пытались принять/присоединиться/вернуться по
+      // устаревшей плашке. Сбрасываем и обновляем переписку, чтобы плашка
+      // перерисовалась в «завершён» (иначе кнопка «Присоединиться» снова зовёт
+      // в несуществующий звонок).
+      const isStale = code === 'NOT_INVITED' || code === 'NOT_IN_CALL'
+      const text = isStale
+        ? 'Звонок уже завершён'
+        : (message || 'Ошибка звонка')
       this.error = text
       // Toast — иначе после reset error в store потеряется, и пользователь
       // ничего не увидит (CallView в этот момент уже размонтирован).
       try { useNotificationsStore().warn(text) } catch {}
-      // Если ошибка случилась до active — сразу выходим. NOT_IN_CALL приходит
-      // при попытке вернуться в уже завершённый звонок (rejoin) — тоже выходим.
-      if (this.phase === 'outgoing' || this.phase === 'incoming' || code === 'NOT_IN_CALL') {
+      if (isStale) {
+        this.reset()
+        // Перечитать сообщения активного чата — обновит статус плашки.
+        import('@/stores/messenger.js').then(({ useMessengerStore }) => {
+          try {
+            const m = useMessengerStore()
+            if (m.activeConversationId) m.fetchMessages(m.activeConversationId)
+          } catch { /* мессенджер не инициализирован */ }
+        }).catch(() => {})
+        return
+      }
+      // Прочие ошибки до active — выходим.
+      if (this.phase === 'outgoing' || this.phase === 'incoming') {
         this.reset()
       }
     },

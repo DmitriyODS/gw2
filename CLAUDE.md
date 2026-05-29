@@ -228,6 +228,24 @@ Nginx собирает фронт сам через multi-stage `front/Dockerfil
 
 **Тесты.** `back/tests/` + `pytest.ini` (`pythonpath=.`). `test_call_state.py` — 8 юнит-тестов состояния (create/join/decline/leave/should_end/busy/grace/rejoin-идемпотентность). `test_call_flow.py` — E2E через `SocketIOTestClient`: start → incoming → accept → accepted/participant-joined → disconnect → `call:rejoin` → accepted с теми же участниками + `participant-joined {rejoin:true}` у инициатора. `conftest.py` поднимает реальный `create_app("production")` поверх dev-БД/Redis (env проставляются в conftest), `app`-фикстура skip'ается если БД недоступна. Запуск: `cd back && ./venv/bin/pytest -q`. **Важно: pytest требует проброшенных портов БД/Redis (`make dev-infra` поднимает с `docker-compose.override.yml`); чистый deploy-стек порты на хост не публикует.**
 
+### v2.6.2 — итерация 2: «звонки реально не работали» (perfect negotiation + самолечение)
+
+После первой итерации пользователь сообщил, что звонки всё равно не работают: соединение висит на «Подключается», уведомление о входящем приходит только после reload, иногда «вы не приглашены», звук/видео не идут. **Диагностика.** Сервер-сигналинг проверен реальным сетевым репро (два `python-socketio` клиента против живого `wsgi.py`) — `call:incoming/accepted/participant-joined/message:updated` доставляются идеально. **Важный вывод про окружение:** локальный deploy-`db`/`redis` контейнеры периодически останавливаются и **не публикуют порты** (нужен `make dev-infra` с override) — если БД лежит, `call:start` молча падает (socketio глотает исключение) и НИЧЕГО не эмитится; это давало ложную картину «ничего не работает». Реальные баги были на клиенте:
+
+1. **Корень «toast только после reload»:** `handleIncoming` молча авто-отклонял входящий при `phase !== 'idle'`. Если предыдущий звонок завис (медиа не поднялось, нет таймаута, потерян `call:ended`), store застревал в `active/outgoing` → ВСЕ новые звонки тихо отклонялись; reload сбрасывал phase. Лечение: см. п. 3–4.
+
+2. **Медиа не соединялось — `services/webrtc.js` полностью переписан на Perfect Negotiation** (канонический W3C/MDN паттерн). Раньше answerer добавлял локальные треки ДО `setRemoteDescription` (лишние трансиверы, рассинхрон m-line) + ручной `createOfferTo` без обработки glare. Теперь: `connectTo(uid)` создаёт peer и вешает треки → `onnegotiationneeded` сам делает `setLocalDescription()` (implicit-offer); роль `polite = myId < remoteId` (детерминированно, противоположна у сторон); при коллизии polite откатывается и отвечает, impolite игнорирует чужой offer. ICE до SRD копится в `pendingIce`. На `iceConnectionState==='failed'` → `restartIce()` (не висит вечно). Сигналы унифицированы: `kind:'sdp'` (offer/answer) и `kind:'ice'` (старые `offer`/`answer` поддержаны для совместимости). Store: `handleAccepted`/`handleParticipantJoined` зовут `rtc.connectTo(uid)` (обе стороны симметрично — glare разруливается), `handleSignal` маршрутизирует sdp/ice. Смоук-тест `front/tests/webrtc.test.mjs` (node + моки RTCPeerConnection) проверяет, что glare сходится в `stable` и politeness противоположен.
+
+3. **Таймаут исходящего:** `_armOutgoingTimeout()` (45 c) — если никто не поднял, `hangup()` + toast «Абонент не отвечает». Не зависаем в `outgoing`.
+
+4. **Самолечение состояния (`checkRejoin`, переименовано из старой версии):** вызывается на mount (App.vue) И на каждый reconnect сокета (`socket/index.js`). Сверяется с `/api/calls/active`: если я «в звонке», а сервер не подтверждает (или это другой звонок) — сбрасываю зависший phase; если я в idle, а на сервере мой живой звонок — показываю баннер «Вернуться». Это чинит «застрял и не принимаю новые звонки».
+
+5. **`NOT_INVITED`/`NOT_IN_CALL` (клик по устаревшей плашке):** `handleError` теперь трактует их как «звонок уже завершён» — reset + перечитывает сообщения активного чата (плашка перерисуется из live в ended).
+
+6. **Кликабельная плашка звонка (`MessageBubble`):** вся `.call-pill` кликабельна, пока звонок live (`role=button`, `tabindex`, Enter). Собеседник → join, инициатор → `joinExistingCall` видит `this.call.id === callId` и просто `expand()` (возврат в своё окно). Лейбл кнопки: «Вернуться» для своего, «Присоединиться» для чужого.
+
+`_finalize_stuck_calls(app)` на старте (уже был) гасит зависшие в БД `ringing/active` → `missed/ended`, чтобы после рестарта сервера плашки не звали в несуществующий звонок. Версия осталась **2.6.2** (это фиксы того же релиза, новую мини-версию не плодим — changelog 2.6.2 уже описывает пользовательский результат корректно).
+
 ## v2.6.1 — мобильная уборка (bottom-nav, профиль сотрудника, тур, поле ввода, three-dots в чате)
 
 **AppBottomNav.** На мобильном `min-height: calc(64px + env(safe-area-inset-bottom, 0px))` (вместо фикс `height: 60px`) + `padding-bottom: max(8px, env(safe-area-inset-bottom, 0px))` внутри панели. Иначе safe-area-зона у iPhone «съедала» подписи. `bottom-nav-label` 11px / line-height 1.1.

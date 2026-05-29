@@ -1,7 +1,14 @@
 <template>
   <!-- Системное сообщение о звонке: плашка по центру с иконкой, статусом и длительностью. -->
   <div v-if="message.kind === 'call'" class="call-row">
-    <div class="call-pill" :class="callClass">
+    <div
+      class="call-pill"
+      :class="[callClass, { clickable: isLive }]"
+      :role="isLive ? 'button' : null"
+      :tabindex="isLive ? 0 : null"
+      @click="isLive && $emit('join-call', message.call)"
+      @keydown.enter="isLive && $emit('join-call', message.call)"
+    >
       <div class="call-icon">
         <span class="material-symbols-outlined">{{ callIcon }}</span>
       </div>
@@ -16,10 +23,10 @@
         </div>
       </div>
       <button
-        v-if="canJoin"
+        v-if="isLive"
         class="call-join"
-        :title="isMine ? 'Звонок ещё идёт' : 'Присоединиться'"
-        @click="$emit('join-call', message.call)"
+        :title="joinLabel"
+        @click.stop="$emit('join-call', message.call)"
       >
         <span class="material-symbols-outlined">{{ joinIcon }}</span>
         <span class="call-join-label">{{ joinLabel }}</span>
@@ -124,7 +131,8 @@ const isVideo = computed(() => callInfo.value.media === 'video')
 const isLive = computed(() => callStatus.value === 'ringing' || callStatus.value === 'active')
 const isMissed = computed(() => callStatus.value === 'missed'
   || (callStatus.value === 'ended' && !callInfo.value.duration_sec))
-const canJoin = computed(() => isLive.value && !props.isMine)
+// Плашка кликабельна, пока звонок «живой»: собеседник присоединяется,
+// инициатор — возвращается в свой звонок.
 
 const callIcon = computed(() => {
   if (isMissed.value) return isVideo.value ? 'videocam_off' : 'phone_missed'
@@ -165,7 +173,7 @@ const callDurationText = computed(() => {
 })
 
 const joinIcon = computed(() => isVideo.value ? 'videocam' : 'call')
-const joinLabel = computed(() => 'Присоединиться')
+const joinLabel = computed(() => props.isMine ? 'Вернуться' : 'Присоединиться')
 </script>
 
 <style scoped>
@@ -393,6 +401,21 @@ const joinLabel = computed(() => 'Присоединиться')
   background: var(--color-primary-container);
   border-color: var(--color-primary);
   color: var(--color-on-primary-container);
+}
+
+.call-pill.clickable {
+  cursor: pointer;
+  transition: transform 0.12s, box-shadow 0.15s;
+}
+
+.call-pill.clickable:hover {
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-sm);
+}
+
+.call-pill.clickable:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
 }
 
 .call-pill.missed {

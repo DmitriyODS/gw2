@@ -113,6 +113,10 @@ export function connectSocket() {
       resyncMessenger()
     }
     hadConnected = true
+    // Синхронизируем состояние звонка с сервером: лечит зависший phase после
+    // обрыва (пропущенный call:ended) и предлагает вернуться к звонку, если он
+    // ещё идёт на сервере.
+    try { useCallStore().checkRejoin() } catch {}
   })
 
   socket.on('connect_error', (err) => {

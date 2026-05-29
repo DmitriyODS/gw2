@@ -1,24 +1,29 @@
 /**
  * WebRTC manager: одна сущность на звонок, держит mesh RTCPeerConnection'ов
  * (по одному с каждым другим участником). Не зависит от Vue/Pinia — чистый
- * EventEmitter с методами, которые дёргает call-store.
+ * EventTarget с методами, которые дёргает call-store.
  *
- * Архитектура:
- *  - localStream  — наш getUserMedia (audio + видео-трек, который можно gate'ить через .enabled)
- *  - peers Map<userId, { pc, remoteStream }> — соединения с каждым участником
- *  - на каждом pc: ontrack → emit('remote-stream'), onicecandidate → emit('local-ice')
+ * Реализован паттерн «Perfect Negotiation» (W3C/MDN) — канонический способ
+ * надёжно поднять соединение и без гонок разрулить «glare» (когда обе стороны
+ * шлют offer одновременно):
  *
- * Кто кому шлёт offer:
- *  - При accept'е новый участник получает existing_participants и сам инициирует
- *    offer к каждому. Существующие узлы получают call:participant-joined и ждут offer.
- *  - Это симметрично решает «glare» (offer collision): у каждой пары один заведомый
- *    инициатор — тот, кто пришёл позже.
+ *  - Как только мы узнаём об участнике (existing_participants при accept или
+ *    participant-joined), мы вызываем connectTo(uid): создаём peer, вешаем
+ *    локальные треки. Добавление треков само инициирует `negotiationneeded`,
+ *    внутри которого мы делаем `setLocalDescription()` (implicit-offer) и шлём
+ *    его. Так делают ОБЕ стороны — поэтому возможна коллизия offer'ов.
+ *  - Коллизию решает роль polite/impolite: «вежливый» peer при коллизии
+ *    откатывает свой offer и принимает чужой; «невежливый» — игнорирует чужой
+ *    и продолжает свой. Роль детерминирована сравнением user_id (у меньшего id
+ *    — polite), поэтому обе стороны всегда согласны, кто кому уступает.
+ *  - ICE-кандидаты, прилетевшие до setRemoteDescription, копим в очереди и
+ *    применяем после (иначе addIceCandidate бросает InvalidStateError).
+ *  - На `iceConnectionState === 'failed'` делаем restartIce() — соединение
+ *    пере-устанавливается, а не висит вечно.
  *
- * ICE candidate queue:
- *  - addIceCandidate() требует уже установленного remoteDescription. Если ICE
- *    прилетел раньше (что бывает, когда offer/answer и первые кандидаты идут
- *    в одной пачке по сокету), мы складываем его в очередь и применяем после
- *    setRemoteDescription. Без очереди ICE теряются → соединение не поднимается.
+ * Сигналинг: наружу через событие 'local-signal' летят два вида сообщений —
+ * kind:'sdp' (offer/answer как RTCSessionDescription) и kind:'ice'. Сервер
+ * маршрутизирует их «как есть», не разбирая содержимое.
  */
 
 const PC_CONFIG_DEFAULT = {
@@ -28,9 +33,9 @@ const PC_CONFIG_DEFAULT = {
 export class WebRTCManager extends EventTarget {
   constructor({ iceServers } = {}) {
     super()
-    this.config = iceServers ? { iceServers } : PC_CONFIG_DEFAULT
+    this.config = (iceServers && iceServers.length) ? { iceServers } : PC_CONFIG_DEFAULT
     this.localStream = null
-    this.peers = new Map() // userId -> { pc, remoteStream, audio, video, pendingIce[], remoteSet }
+    this.peers = new Map() // userId -> peer entry
     this.myUserId = null
   }
 
@@ -43,19 +48,14 @@ export class WebRTCManager extends EventTarget {
     try {
       this.localStream = await navigator.mediaDevices.getUserMedia(constraints)
     } catch (e) {
-      // Если запросили видео, но камеры нет — пробуем только аудио
+      // Если запросили видео, но камеры нет — пробуем только аудио.
       if (media === 'video') {
-        try {
-          this.localStream = await navigator.mediaDevices.getUserMedia({ audio: true })
-        } catch (e2) {
-          throw e2
-        }
+        this.localStream = await navigator.mediaDevices.getUserMedia({ audio: true })
       } else {
         throw e
       }
     }
-    // Если peers были созданы раньше localStream (теоретический race) —
-    // добавим треки во все существующие соединения.
+    // Если peers были созданы раньше localStream — добавим треки во все.
     for (const entry of this.peers.values()) {
       this._attachLocalTracks(entry.pc)
     }
@@ -73,126 +73,124 @@ export class WebRTCManager extends EventTarget {
     for (const track of this.localStream.getTracks()) {
       const already = senders.some(s => s.track === track)
       if (!already) {
-        try { pc.addTrack(track, this.localStream) } catch {}
+        try { pc.addTrack(track, this.localStream) } catch { /* уже добавлен */ }
       }
     }
   }
 
-  /** Получаем или создаём peer connection с указанным пользователем. */
+  /** Начать соединение с участником: создаём peer и вешаем локальные треки.
+   *  Добавление треков триггерит negotiationneeded → offer. Идемпотентно. */
+  connectTo(remoteUserId) {
+    return this._ensurePeer(remoteUserId)
+  }
+
   _ensurePeer(remoteUserId) {
     let entry = this.peers.get(remoteUserId)
     if (entry) return entry
+
     const pc = new RTCPeerConnection(this.config)
+    // Politeness детерминированно: у кого id меньше — polite (уступает при
+    // коллизии). Обе стороны вычисляют одинаково.
+    const polite = Number(this.myUserId) < Number(remoteUserId)
+    entry = {
+      pc, remoteStream: new MediaStream(), polite,
+      makingOffer: false, ignoreOffer: false,
+      pendingIce: [], remoteSet: false,
+    }
+    this.peers.set(remoteUserId, entry)
 
-    this._attachLocalTracks(pc)
-
-    const remoteStream = new MediaStream()
     pc.ontrack = (event) => {
-      // Берём track напрямую — если использовать event.streams[0], при
-      // renegotiation возможны лишние «пустые» stream'ы.
-      try { remoteStream.addTrack(event.track) } catch {}
-      // Каждый ontrack — отдельный track (audio/video приходят независимо).
-      // Чтобы Vue гарантированно среагировал на «доехал второй трек» (тот же
-      // объект stream — без подмены ссылки watch не сработает), эмитим event
-      // с уникальным маркером в detail.
-      this.dispatchEvent(new CustomEvent('remote-stream', {
-        detail: {
-          userId: remoteUserId,
-          stream: remoteStream,
-          trackKind: event.track?.kind,
-          tick: Date.now(),
-        },
-      }))
-      // Track сам сигналит, когда «закончился» — это значит peer выключил
-      // дорожку (не renegotiate-вытащил). Чистим, чтобы placeholder показался.
+      try { entry.remoteStream.addTrack(event.track) } catch { /* дубликат */ }
+      this._emitRemoteStream(remoteUserId, entry, event.track?.kind)
       event.track.onended = () => {
-        try { remoteStream.removeTrack(event.track) } catch {}
-        this.dispatchEvent(new CustomEvent('remote-stream', {
-          detail: {
-            userId: remoteUserId,
-            stream: remoteStream,
-            trackKind: event.track?.kind,
-            tick: Date.now(),
-            ended: true,
-          },
-        }))
+        try { entry.remoteStream.removeTrack(event.track) } catch { /* нет трека */ }
+        this._emitRemoteStream(remoteUserId, entry, event.track?.kind, true)
       }
     }
 
     pc.onicecandidate = (event) => {
       if (event.candidate) {
         this.dispatchEvent(new CustomEvent('local-signal', {
-          detail: {
-            toUserId: remoteUserId,
-            kind: 'ice',
-            payload: event.candidate.toJSON(),
-          },
+          detail: { toUserId: remoteUserId, kind: 'ice', payload: event.candidate.toJSON() },
         }))
+      }
+    }
+
+    // Perfect negotiation: при добавлении треков/renegotiation сами делаем offer.
+    pc.onnegotiationneeded = async () => {
+      try {
+        entry.makingOffer = true
+        await pc.setLocalDescription()
+        this.dispatchEvent(new CustomEvent('local-signal', {
+          detail: { toUserId: remoteUserId, kind: 'sdp', payload: pc.localDescription },
+        }))
+      } catch (e) {
+        console.warn('[webrtc] negotiationneeded error', e)
+      } finally {
+        entry.makingOffer = false
+      }
+    }
+
+    pc.oniceconnectionstatechange = () => {
+      if (pc.iceConnectionState === 'failed') {
+        // Сеть «провалилась» — пробуем перезапустить ICE, а не висеть вечно.
+        try { pc.restartIce() } catch { /* старый браузер */ }
       }
     }
 
     pc.onconnectionstatechange = () => {
-      const st = pc.connectionState
-      if (st === 'failed' || st === 'disconnected' || st === 'closed') {
-        this.dispatchEvent(new CustomEvent('peer-state', {
-          detail: { userId: remoteUserId, state: st },
-        }))
-      }
-      if (st === 'connected') {
-        this.dispatchEvent(new CustomEvent('peer-state', {
-          detail: { userId: remoteUserId, state: 'connected' },
-        }))
-      }
+      this.dispatchEvent(new CustomEvent('peer-state', {
+        detail: { userId: remoteUserId, state: pc.connectionState },
+      }))
     }
 
-    entry = { pc, remoteStream, audio: true, video: true, pendingIce: [], remoteSet: false }
-    this.peers.set(remoteUserId, entry)
+    this._attachLocalTracks(pc) // → negotiationneeded → offer
     return entry
   }
 
-  /** Инициируем offer к существующему участнику звонка. */
-  async createOfferTo(remoteUserId) {
-    const { pc } = this._ensurePeer(remoteUserId)
-    const offer = await pc.createOffer()
-    await pc.setLocalDescription(offer)
-    this.dispatchEvent(new CustomEvent('local-signal', {
-      detail: { toUserId: remoteUserId, kind: 'offer', payload: offer },
+  _emitRemoteStream(userId, entry, trackKind, ended = false) {
+    this.dispatchEvent(new CustomEvent('remote-stream', {
+      detail: { userId, stream: entry.remoteStream, trackKind, tick: Date.now(), ended },
     }))
   }
 
-  /** Принимаем offer и отдаём answer. */
-  async handleOffer(fromUserId, offer) {
+  /** Принять SDP (offer или answer) с учётом politeness. */
+  async handleDescription(fromUserId, description) {
     const entry = this._ensurePeer(fromUserId)
-    await entry.pc.setRemoteDescription(new RTCSessionDescription(offer))
-    entry.remoteSet = true
-    await this._flushPendingIce(entry)
-    const answer = await entry.pc.createAnswer()
-    await entry.pc.setLocalDescription(answer)
-    this.dispatchEvent(new CustomEvent('local-signal', {
-      detail: { toUserId: fromUserId, kind: 'answer', payload: answer },
-    }))
-  }
+    const pc = entry.pc
+    const offerCollision = description.type === 'offer'
+      && (entry.makingOffer || pc.signalingState !== 'stable')
 
-  async handleAnswer(fromUserId, answer) {
-    const entry = this.peers.get(fromUserId)
-    if (!entry) return
-    await entry.pc.setRemoteDescription(new RTCSessionDescription(answer))
+    entry.ignoreOffer = !entry.polite && offerCollision
+    if (entry.ignoreOffer) {
+      // Невежливый peer при коллизии игнорирует чужой offer — продолжит свой.
+      return
+    }
+
+    await pc.setRemoteDescription(description)
     entry.remoteSet = true
     await this._flushPendingIce(entry)
+
+    if (description.type === 'offer') {
+      await pc.setLocalDescription() // implicit-answer
+      this.dispatchEvent(new CustomEvent('local-signal', {
+        detail: { toUserId: fromUserId, kind: 'sdp', payload: pc.localDescription },
+      }))
+    }
   }
 
   async handleRemoteIce(fromUserId, candidate) {
     const entry = this._ensurePeer(fromUserId)
-    // Пока не установили remoteDescription — кандидаты копим. addIceCandidate
-    // до setRemoteDescription выкидывает InvalidStateError и кандидат теряется.
     if (!entry.remoteSet) {
+      // remoteDescription ещё не установлен — копим кандидата.
       entry.pendingIce.push(candidate)
       return
     }
     try {
       await entry.pc.addIceCandidate(new RTCIceCandidate(candidate))
-    } catch {
-      // Дубликаты/уже неактуальные кандидаты — не критично.
+    } catch (e) {
+      // Кандидат от offer'а, который мы проигнорировали (glare) — не критично.
+      if (!entry.ignoreOffer) console.debug('[webrtc] addIceCandidate', e?.name)
     }
   }
 
@@ -200,44 +198,38 @@ export class WebRTCManager extends EventTarget {
     if (!entry.pendingIce.length) return
     const queue = entry.pendingIce.splice(0)
     for (const cand of queue) {
-      try {
-        await entry.pc.addIceCandidate(new RTCIceCandidate(cand))
-      } catch {}
+      try { await entry.pc.addIceCandidate(new RTCIceCandidate(cand)) } catch { /* устарел */ }
     }
   }
 
   removePeer(userId) {
     const entry = this.peers.get(userId)
     if (!entry) return
-    try { entry.pc.close() } catch {}
+    try { entry.pc.close() } catch { /* уже закрыт */ }
     this.peers.delete(userId)
   }
 
   /** Локальный mute/unmute микрофона. */
   setAudioEnabled(enabled) {
     if (!this.localStream) return
-    for (const track of this.localStream.getAudioTracks()) {
-      track.enabled = enabled
-    }
+    for (const track of this.localStream.getAudioTracks()) track.enabled = enabled
   }
 
   /** Локальное вкл/выкл камеры. */
   setVideoEnabled(enabled) {
     if (!this.localStream) return
-    for (const track of this.localStream.getVideoTracks()) {
-      track.enabled = enabled
-    }
+    for (const track of this.localStream.getVideoTracks()) track.enabled = enabled
   }
 
   /** Завершаем звонок: закрываем peer'ы и отпускаем камеру/микрофон. */
   stop() {
     for (const { pc } of this.peers.values()) {
-      try { pc.close() } catch {}
+      try { pc.close() } catch { /* уже закрыт */ }
     }
     this.peers.clear()
     if (this.localStream) {
       for (const track of this.localStream.getTracks()) {
-        try { track.stop() } catch {}
+        try { track.stop() } catch { /* уже остановлен */ }
       }
       this.localStream = null
     }
