@@ -47,3 +47,9 @@ export const deleteConversation = (conversationId, scope = 'me') =>
 
 export const togglePin = (conversationId) =>
   apiRequest(`/messenger/conversations/${conversationId}/pin`, { method: 'POST' })
+
+export const togglePinMessage = (messageId) =>
+  apiRequest(`/messenger/messages/${messageId}/pin`, { method: 'POST' })
+
+export const listPinnedMessages = (conversationId) =>
+  apiRequest(`/messenger/conversations/${conversationId}/pinned`)

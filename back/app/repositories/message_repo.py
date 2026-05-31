@@ -344,3 +344,31 @@ def set_pin(conversation: Conversation, side: str, pinned: bool) -> None:
     else:
         conversation.pinned_at_b = now
     db.session.flush()
+
+
+def set_message_pin(message: Message, pinned: bool, by_id: Optional[int]) -> None:
+    """Закрепить/открепить сообщение. Закрепление общее для обоих участников."""
+    if pinned:
+        message.pinned_at = datetime.now(timezone.utc)
+        message.pinned_by_id = by_id
+    else:
+        message.pinned_at = None
+        message.pinned_by_id = None
+    db.session.flush()
+
+
+def list_pinned_messages(conversation_id: int, user_id: int) -> list[Message]:
+    """Закреплённые сообщения диалога, не скрытые на стороне user_id.
+    Самое свежее закрепление — первым."""
+    conv = get_conversation(conversation_id)
+    if conv is None:
+        return []
+    hidden_col = Message.hidden_for_a if conv.side(user_id) == 'a' else Message.hidden_for_b
+    rows = db.session.execute(
+        db.select(Message).where(
+            Message.conversation_id == conversation_id,
+            Message.pinned_at.isnot(None),
+            hidden_col.is_(False),
+        ).order_by(Message.pinned_at.desc())
+    ).scalars().all()
+    return list(rows)

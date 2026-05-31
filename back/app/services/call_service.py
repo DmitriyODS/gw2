@@ -106,6 +106,63 @@ def start_call(initiator_id: int, invitee_ids: list[int],
     return call
 
 
+def invite_to_call(call_id: int, inviter_id: int, invitee_ids: list[int]) -> tuple[Call, list[int]]:
+    """Пригласить новых участников в уже идущий звонок. Любой участник может
+    позвать ещё людей. Возвращает (call, новые_приглашённые_ids).
+
+    Валидация:
+    - звонок должен существовать и инициатор приглашения — быть в нём;
+    - новые приглашённые должны существовать, не быть скрыты и не быть заняты;
+    - тех, кто уже в этом звонке, молча пропускаем.
+    """
+    state = call_state.get_call(call_id)
+    if not state or inviter_id not in state["invited"]:
+        raise CallServiceError("NOT_IN_CALL", "Вы не в этом звонке", 404)
+
+    already = state["invited"]
+    invitee_ids = list({uid for uid in invitee_ids
+                        if uid != inviter_id and uid not in already})
+    if not invitee_ids:
+        return _get_call(call_id), []
+
+    if len(already) + len(invitee_ids) > 9:  # инициатор + до 8 приглашённых
+        raise CallServiceError("TOO_MANY_INVITEES",
+                               "В звонке слишком много участников", 400)
+
+    busy = [uid for uid in invitee_ids if call_state.is_user_busy(uid)]
+    if busy:
+        raise CallServiceError("INVITEE_BUSY",
+                               "Один из приглашённых уже разговаривает", 409)
+
+    users = db.session.execute(
+        db.select(User).where(User.id.in_(invitee_ids), User.is_hidden.is_(False))
+    ).scalars().all()
+    if len(users) != len(invitee_ids):
+        raise CallServiceError("USER_NOT_FOUND", "Один из участников не найден", 404)
+
+    call = _get_call(call_id)
+    for uid in invitee_ids:
+        # CallParticipant мог остаться от прежнего выхода — переиспользуем.
+        part = _get_participant(call_id, uid)
+        if part is None:
+            db.session.add(CallParticipant(
+                call_id=call_id, user_id=uid, role="invitee", invited_at=_now(),
+            ))
+        else:
+            part.invited_at = _now()
+            part.left_at = None
+            part.declined = False
+        call_state.add_invitee(call_id, uid)
+
+    # Звонок на двоих превратился в групповой.
+    if call.kind == "p2p":
+        call.kind = "group"
+        call_state.set_kind(call_id, "group")
+
+    db.session.commit()
+    return call, invitee_ids
+
+
 def accept_call(call_id: int, user_id: int) -> Call:
     state = call_state.get_call(call_id)
     if not state or user_id not in state["invited"]:

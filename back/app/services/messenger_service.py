@@ -274,6 +274,31 @@ def toggle_pin(conversation_id: int, user_id: int) -> bool:
     return current is None
 
 
+def toggle_message_pin(message_id: int, user_id: int):
+    """Закрепить/открепить сообщение в диалоге. Закрепление общее: видят оба
+    участника. Возвращает (conversation, message, pinned)."""
+    msg = message_repo.get_message(message_id)
+    if msg is None:
+        raise MessengerServiceError("Сообщение не найдено", "MSG_NOT_FOUND", 404)
+    conv = message_repo.get_conversation(msg.conversation_id)
+    if conv is None or user_id not in (conv.user_a_id, conv.user_b_id):
+        raise MessengerServiceError("Нет доступа к сообщению", "FORBIDDEN", 403)
+    # Системные плашки звонка закреплять незачем.
+    if msg.kind != "text":
+        raise MessengerServiceError("Это сообщение нельзя закрепить", "BAD_PIN", 400)
+
+    pinned = msg.pinned_at is None
+    message_repo.set_message_pin(msg, pinned=pinned, by_id=user_id if pinned else None)
+    db.session.commit()
+    return conv, msg, pinned
+
+
+def list_pinned_messages(conversation_id: int, user_id: int):
+    """Закреплённые сообщения диалога (для баннера сверху)."""
+    get_conversation_for_user(conversation_id, user_id)
+    return message_repo.list_pinned_messages(conversation_id, user_id)
+
+
 def upload_attachment(uploader_id: int, file_storage) -> dict:
     """Сохраняет файл на диск, регистрирует attachment, возвращает запись.
     file_storage — werkzeug FileStorage из request.files."""

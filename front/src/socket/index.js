@@ -247,6 +247,11 @@ export function connectSocket() {
     messenger.applyPinChange(conversation_id, is_pinned)
   })
 
+  socket.on('message:pin', ({ conversation_id, message_id, pinned, message }) => {
+    const messenger = useMessengerStore()
+    messenger.applyMessagePin(conversation_id, message_id, pinned, message)
+  })
+
   socket.on('presence:update', (p) => {
     useMessengerStore().applyPresence(p)
   })
@@ -296,6 +301,10 @@ export function connectSocket() {
 
   socket.on('call:participant-joined', (data) => {
     useCallStore().handleParticipantJoined(data)
+  })
+
+  socket.on('call:invited', (data) => {
+    useCallStore().handleInvited(data)
   })
 
   socket.on('call:participant-left', (data) => {

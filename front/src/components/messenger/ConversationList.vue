@@ -115,6 +115,10 @@ function avatarOf(u) {
 
 function preview(msg) {
   if (!msg) return 'Нет сообщений'
+  // Системная плашка звонка: показываем тип звонка вместо пустой строки.
+  if (msg.kind === 'call') {
+    return msg.call?.media === 'audio' ? '📞 Аудиозвонок' : '📹 Видеозвонок'
+  }
   if (msg.text) return msg.text
   if (msg.attachments?.length) {
     const a = msg.attachments[0]

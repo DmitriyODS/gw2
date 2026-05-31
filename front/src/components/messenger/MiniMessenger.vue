@@ -78,6 +78,7 @@
               :is-mine="m.sender_id === authStore.user?.id"
               :show-forward="false"
               :show-delete="false"
+              :show-pin="false"
               @reply="startReply"
               @join-call="onJoinCall"
             />
@@ -232,6 +233,9 @@ function avatarOf(u) {
 
 function preview(msg) {
   if (!msg) return 'Нет сообщений'
+  if (msg.kind === 'call') {
+    return msg.call?.media === 'audio' ? '📞 Аудиозвонок' : '📹 Видеозвонок'
+  }
   if (msg.text) return msg.text
   if (msg.attachments?.length) return 'Вложение'
   return ''

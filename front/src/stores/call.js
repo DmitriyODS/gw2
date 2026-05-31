@@ -407,6 +407,34 @@ export const useCallStore = defineStore('call', {
       rtc.connectTo(user_id) // мы отвечающая сторона — offer пришлёт он
     },
 
+    /** Я приглашаю ещё людей в текущий звонок. */
+    inviteToCall(userIds) {
+      if (!this.call || !userIds?.length) return
+      const socket = getSocket()
+      socket?.emit('call:invite', { call_id: this.call.id, user_ids: userIds })
+    },
+
+    /** Сервер сообщил, что в звонок позвали новых людей (эхо приходит и
+     *  пригласившему, и остальным участникам). Обновляем метаданные звонка и
+     *  показываем плитки-плейсхолдеры приглашённых — пока они не приняли. */
+    handleInvited({ call_id, user_ids, call }) {
+      if (!this.call || this.call.id !== call_id) return
+      if (call) this.call = call
+      const auth = useAuthStore()
+      const next = { ...this.remoteStreams }
+      for (const uid of user_ids || []) {
+        if (uid === auth.user?.id || next[uid]) continue
+        const part = (call?.participants || []).find(p => p.user_id === uid)
+        next[uid] = {
+          stream: null,
+          fio: part?.fio || 'Участник',
+          avatar_path: part?.avatar_path ?? null,
+          audio: true, video: true,
+        }
+      }
+      this.remoteStreams = next
+    },
+
     handleParticipantLeft({ user_id }) {
       if (this._rtc) this._rtc.removePeer(user_id)
       const next = { ...this.remoteStreams }

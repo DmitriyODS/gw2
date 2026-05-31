@@ -69,6 +69,22 @@ def create_call(call_id: int, initiator_id: int, invitee_ids: list[int],
         _user_call[uid] = call_id
 
 
+def add_invitee(call_id: int, user_id: int) -> None:
+    """Добавить нового приглашённого в уже идущий звонок (call:invite).
+    Он висит в invited до accept, как и при первоначальном старте."""
+    state = _calls.get(call_id)
+    if not state:
+        return
+    state["invited"].add(user_id)
+    _user_call[user_id] = call_id
+
+
+def set_kind(call_id: int, kind: str) -> None:
+    state = _calls.get(call_id)
+    if state:
+        state["kind"] = kind
+
+
 def mark_joined(call_id: int, user_id: int) -> None:
     state = _calls.get(call_id)
     if not state or user_id not in state["invited"]:

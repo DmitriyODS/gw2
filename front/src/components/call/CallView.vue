@@ -5,9 +5,14 @@
         v-if="visible"
         class="callview"
         :class="{ mini: callStore.isMinimized, audio: callStore.media === 'audio' }"
+        :style="miniStyle"
       >
-        <!-- Шапка -->
-        <header class="callview-header">
+        <!-- Шапка. В свёрнутом окне служит «ручкой» для перетаскивания. -->
+        <header
+          class="callview-header"
+          :class="{ 'mini-handle': callStore.isMinimized }"
+          @pointerdown="onMiniDragStart"
+        >
           <div class="header-left">
             <span class="status-dot" :class="callStore.phase"></span>
             <span class="status-text">{{ statusText }}</span>
@@ -22,8 +27,10 @@
 
         <!-- Сетка участников -->
         <div class="callview-grid" :class="gridClass">
-          <!-- Локальное превью -->
+          <!-- Локальное превью. В свёрнутом окне его прячем, если есть
+               собеседник — там показываем именно его (а не себя). -->
           <ParticipantTile
+            v-if="!callStore.isMinimized || !primaryRemoteId"
             :name="'Вы'"
             :stream="callStore.localStream"
             :audio-enabled="callStore.audioEnabled"
@@ -33,7 +40,7 @@
           />
           <!-- Удалённые участники -->
           <ParticipantTile
-            v-for="(p, uid) in callStore.remoteStreams"
+            v-for="(p, uid) in visibleRemotes"
             :key="uid"
             :name="p.fio"
             :stream="p.stream"
@@ -66,6 +73,14 @@
             <span class="material-symbols-outlined">{{ callStore.videoEnabled ? 'videocam' : 'videocam_off' }}</span>
           </button>
           <button
+            v-if="callStore.phase === 'active'"
+            class="ctrl-btn"
+            title="Пригласить участника"
+            @click="inviteOpen = true"
+          >
+            <span class="material-symbols-outlined">person_add</span>
+          </button>
+          <button
             class="ctrl-btn hangup"
             title="Завершить звонок"
             @click="callStore.hangup()"
@@ -77,6 +92,12 @@
         <div v-if="callStore.error" class="callview-error">{{ callStore.error }}</div>
       </div>
     </Transition>
+
+    <InviteToCallDialog
+      v-model="inviteOpen"
+      :exclude-ids="participantIds"
+      @confirm="onInviteConfirm"
+    />
   </Teleport>
 </template>
 
@@ -85,9 +106,17 @@ import { computed, onMounted, onBeforeUnmount, ref, watch } from 'vue'
 import { useCallStore } from '@/stores/call.js'
 import { useAuthStore } from '@/stores/auth.js'
 import ParticipantTile from './ParticipantTile.vue'
+import InviteToCallDialog from './InviteToCallDialog.vue'
 
 const callStore = useCallStore()
 const authStore = useAuthStore()
+
+const inviteOpen = ref(false)
+const participantIds = computed(() => Object.keys(callStore.remoteStreams).map(Number))
+
+function onInviteConfirm({ userIds }) {
+  callStore.inviteToCall(userIds)
+}
 
 const visible = computed(() => callStore.phase === 'active' || callStore.phase === 'outgoing')
 const isRinging = computed(() => callStore.phase === 'outgoing')
@@ -119,10 +148,79 @@ const gridClass = computed(() => {
   return 'g-many'
 })
 
+/* В свёрнутом окне показываем собеседника, а не себя: берём первого
+   удалённого участника, у которого уже есть поток (видео/аудио), иначе —
+   просто первого в списке. */
+const primaryRemoteId = computed(() => {
+  const entries = Object.entries(callStore.remoteStreams)
+  if (!entries.length) return null
+  const withStream = entries.find(([, p]) => p.stream)
+  return (withStream || entries[0])[0]
+})
+
+const visibleRemotes = computed(() => {
+  if (!callStore.isMinimized) return callStore.remoteStreams
+  const id = primaryRemoteId.value
+  if (!id) return {}
+  return { [id]: callStore.remoteStreams[id] }
+})
+
 function toggleMin() {
   if (callStore.isMinimized) callStore.expand()
   else callStore.minimize()
 }
+
+/* ── Перетаскивание свёрнутого окна ───────────────────────────────
+   По умолчанию мини-окно прижато к правому-нижнему углу (CSS). Как только
+   пользователь потянул его за шапку — переключаемся на абсолютные left/top
+   и держим окно в пределах вьюпорта. */
+const miniPos = ref(null) // { left, top } в px, либо null = угол по CSS
+let dragging = false
+let dragOffset = { x: 0, y: 0 }
+
+const miniStyle = computed(() => {
+  if (!callStore.isMinimized || !miniPos.value) return null
+  return {
+    left: `${miniPos.value.left}px`,
+    top: `${miniPos.value.top}px`,
+    right: 'auto',
+    bottom: 'auto',
+  }
+})
+
+function onMiniDragStart(e) {
+  if (!callStore.isMinimized) return
+  // Клик по кнопке (свернуть/развернуть) не должен начинать перетаскивание.
+  if (e.target.closest('button')) return
+  const el = e.currentTarget.closest('.callview')
+  if (!el) return
+  const rect = el.getBoundingClientRect()
+  dragOffset = { x: e.clientX - rect.left, y: e.clientY - rect.top }
+  miniPos.value = { left: rect.left, top: rect.top }
+  dragging = true
+  window.addEventListener('pointermove', onMiniDragMove)
+  window.addEventListener('pointerup', onMiniDragEnd)
+  e.preventDefault()
+}
+
+function onMiniDragMove(e) {
+  if (!dragging) return
+  const el = document.querySelector('.callview.mini')
+  const w = el?.offsetWidth || 320
+  const h = el?.offsetHeight || 240
+  const left = Math.max(8, Math.min(e.clientX - dragOffset.x, window.innerWidth - w - 8))
+  const top = Math.max(8, Math.min(e.clientY - dragOffset.y, window.innerHeight - h - 8))
+  miniPos.value = { left, top }
+}
+
+function onMiniDragEnd() {
+  dragging = false
+  window.removeEventListener('pointermove', onMiniDragMove)
+  window.removeEventListener('pointerup', onMiniDragEnd)
+}
+
+// Новый звонок начинается со штатного угла — сбрасываем позицию при закрытии.
+watch(visible, (v) => { if (!v) miniPos.value = null })
 
 /* Таймер длительности звонка */
 const elapsedSec = ref(0)
@@ -154,6 +252,7 @@ onMounted(startTimer)
 onBeforeUnmount(() => {
   stopTimer()
   stopRingback()
+  onMiniDragEnd()
 })
 
 /* Ringback tone — гудки «туу...туу...» пока звоним и собеседник не ответил.
@@ -270,6 +369,17 @@ watch(isRinging, (v) => {
 .callview.mini .callview-header {
   padding: 8px 12px;
   font-size: 12px;
+}
+
+/* Шапка свёрнутого окна — «ручка» для перетаскивания. */
+.callview-header.mini-handle {
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+}
+
+.callview-header.mini-handle:active {
+  cursor: grabbing;
 }
 
 .header-left { display: flex; align-items: center; gap: 10px; min-width: 0; }

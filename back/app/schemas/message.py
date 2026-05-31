@@ -65,6 +65,9 @@ class MessageSchema(Schema):
     # отдельным компонентом, текст игнорируется, данные берутся из `call`).
     kind = fields.Str(dump_only=True)
     call = fields.Nested(CallInfoSchema, dump_only=True, allow_none=True)
+    # Закрепление (общее для обоих участников диалога).
+    pinned_at = fields.DateTime(dump_only=True, allow_none=True)
+    pinned_by_id = fields.Int(dump_only=True, allow_none=True)
 
     def get_forwarded_from(self, obj):
         if not obj.forwarded_from:

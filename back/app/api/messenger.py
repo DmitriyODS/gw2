@@ -430,6 +430,67 @@ def toggle_pin(conversation_id: int):
     return jsonify({"is_pinned": pinned}), 200
 
 
+@bp.post("/messages/<int:message_id>/pin")
+@require_auth
+def toggle_message_pin_endpoint(message_id: int):
+    """
+    Закрепить/открепить сообщение в диалоге (видят оба участника).
+    ---
+    tags: [messenger]
+    security: [BearerAuth: []]
+    parameters:
+      - in: path
+        name: message_id
+        schema: {type: integer}
+        required: true
+    responses:
+      200:
+        description: Закрепление переключено
+    """
+    me = int(get_jwt_identity())
+    try:
+        conv, msg, pinned = messenger_service.toggle_message_pin(message_id, me)
+    except MessengerServiceError as e:
+        return jsonify({"error": e.code, "message": e.message}), e.http_status
+
+    from app.extensions import socketio
+    payload = {
+        "conversation_id": conv.id,
+        "message_id": message_id,
+        "pinned": pinned,
+        "message": _msg.dump(msg),
+    }
+    socketio.emit("message:pin", payload, room=f"user_{conv.user_a_id}")
+    socketio.emit("message:pin", payload, room=f"user_{conv.user_b_id}")
+
+    return jsonify({"pinned": pinned, "message": _msg.dump(msg)}), 200
+
+
+@bp.get("/conversations/<int:conversation_id>/pinned")
+@require_auth
+def list_pinned_endpoint(conversation_id: int):
+    """
+    Закреплённые сообщения диалога.
+    ---
+    tags: [messenger]
+    security: [BearerAuth: []]
+    parameters:
+      - in: path
+        name: conversation_id
+        schema: {type: integer}
+        required: true
+    responses:
+      200:
+        description: Список закреплённых сообщений
+    """
+    me = int(get_jwt_identity())
+    try:
+        msgs = messenger_service.list_pinned_messages(conversation_id, me)
+    except MessengerServiceError as e:
+        return jsonify({"error": e.code, "message": e.message}), e.http_status
+    return jsonify(_msgs.dump(msgs)), 200
+
+
 @bp.get("/presence")
 @require_auth
 def presence_list():

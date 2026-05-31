@@ -33,6 +33,8 @@ export const useMessengerStore = defineStore('messenger', () => {
   // к верху, бесконечно повторяя пустой запрос.
   const hasMoreHistoryByConv = ref({})
   const totalUnread = ref(0)
+  // Закреплённые сообщения по диалогам { [convId]: Message[] } (свежее — первым).
+  const pinnedByConv = ref({})
   const loadingList = ref(false)
   const loadingMessages = ref(false)
   const sending = ref(false)
@@ -47,6 +49,10 @@ export const useMessengerStore = defineStore('messenger', () => {
 
   const activeMessages = computed(() =>
     activeConversationId.value ? (messagesByConv.value[activeConversationId.value] || []) : []
+  )
+
+  const activePinned = computed(() =>
+    activeConversationId.value ? (pinnedByConv.value[activeConversationId.value] || []) : []
   )
 
   async function fetchConversations() {
@@ -100,7 +106,17 @@ export const useMessengerStore = defineStore('messenger', () => {
     if (!messagesByConv.value[conversationId]) {
       await fetchMessages(conversationId)
     }
+    fetchPinned(conversationId)
     await markRead(conversationId)
+  }
+
+  async function fetchPinned(conversationId) {
+    try {
+      pinnedByConv.value = {
+        ...pinnedByConv.value,
+        [conversationId]: await api.listPinnedMessages(conversationId),
+      }
+    } catch {}
   }
 
   async function fetchMessages(conversationId, beforeId = null) {
@@ -242,6 +258,14 @@ export const useMessengerStore = defineStore('messenger', () => {
     if (arr) {
       messagesByConv.value[conversationId] = arr.filter(m => m.id !== messageId)
     }
+    // Удалённое сообщение не должно оставаться в закреплённых.
+    const pinned = pinnedByConv.value[conversationId]
+    if (pinned?.some(m => m.id === messageId)) {
+      pinnedByConv.value = {
+        ...pinnedByConv.value,
+        [conversationId]: pinned.filter(m => m.id !== messageId),
+      }
+    }
     const conv = conversations.value.find(c => c.id === conversationId)
     if (conv && conv.last_message?.id === messageId) {
       const left = messagesByConv.value[conversationId] || []
@@ -306,6 +330,36 @@ export const useMessengerStore = defineStore('messenger', () => {
     }
   }
 
+  /* Закрепление сообщения изменилось (своё действие или эхо собеседника).
+     Обновляем флаг в кеше сообщений и список закреплённых. */
+  function applyMessagePin(conversationId, messageId, pinned, message) {
+    const arr = messagesByConv.value[conversationId]
+    if (arr) {
+      const idx = arr.findIndex(m => m.id === messageId)
+      if (idx !== -1) {
+        const next = [...arr]
+        next[idx] = { ...next[idx], pinned_at: message?.pinned_at ?? (pinned ? new Date().toISOString() : null), pinned_by_id: message?.pinned_by_id ?? null }
+        messagesByConv.value[conversationId] = next
+      }
+    }
+    const current = pinnedByConv.value[conversationId] || []
+    let nextPinned
+    if (pinned) {
+      const item = message || arr?.find(m => m.id === messageId)
+      nextPinned = item ? [item, ...current.filter(m => m.id !== messageId)] : current
+    } else {
+      nextPinned = current.filter(m => m.id !== messageId)
+    }
+    pinnedByConv.value = { ...pinnedByConv.value, [conversationId]: nextPinned }
+  }
+
+  async function togglePinMessageAction(messageId) {
+    const r = await api.togglePinMessage(messageId)
+    const convId = activeConversationId.value
+    if (convId) applyMessagePin(convId, messageId, r.pinned, r.message)
+    return r
+  }
+
   function applyReadReceipt(conversationId, readerId) {
     const auth = useAuthStore()
     if (readerId === auth.user?.id) return
@@ -349,6 +403,7 @@ export const useMessengerStore = defineStore('messenger', () => {
     activeConversationId.value = null
     messagesByConv.value = {}
     hasMoreHistoryByConv.value = {}
+    pinnedByConv.value = {}
     totalUnread.value = 0
     onlineIds.value = new Set()
     lastSeenById.value = {}
@@ -356,14 +411,16 @@ export const useMessengerStore = defineStore('messenger', () => {
 
   return {
     conversations, activeConversationId, messagesByConv, totalUnread,
+    pinnedByConv,
     loadingList, loadingMessages, sending,
     onlineIds, lastSeenById,
-    activeConversation, activeMessages,
+    activeConversation, activeMessages, activePinned,
     fetchConversations, fetchUnreadCount, openWith, setActive, fetchMessages,
-    pollNewMessages, hasMoreHistory,
+    fetchPinned, pollNewMessages, hasMoreHistory,
     send, forwardMessage, markRead,
     applyIncomingMessage, applyReadReceipt, applyMessageUpdated,
     applyMessageDeleted, applyConversationDeleted, applyPinChange,
+    applyMessagePin, togglePinMessageAction,
     deleteMessage, deleteConversationAction, togglePinAction,
     fetchPresence, applyPresence, isOnline, lastSeenOf,
     reset,

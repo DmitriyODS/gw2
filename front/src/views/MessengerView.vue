@@ -95,6 +95,24 @@
         <p class="chat-empty-text">Откройте беседу слева — или начните новую из списка.</p>
       </div>
 
+      <!-- Баннер закреплённых сообщений. Клик по тексту прокручивает к
+           сообщению и листает закреплённые; кнопка справа — открепить. -->
+      <div v-if="active && pinnedMessages.length" class="pinned-bar" @click="cyclePinned">
+        <span class="material-symbols-outlined pinned-bar-icon">keep</span>
+        <div class="pinned-bar-body">
+          <div class="pinned-bar-title">
+            Закреплённое
+            <span v-if="pinnedMessages.length > 1" class="pinned-bar-count">
+              {{ pinnedIndex + 1 }}/{{ pinnedMessages.length }}
+            </span>
+          </div>
+          <div class="pinned-bar-text">{{ pinnedPreview }}</div>
+        </div>
+        <button class="pinned-bar-unpin" title="Открепить" @click.stop="unpinMessage(currentPinned)">
+          <span class="material-symbols-outlined">close</span>
+        </button>
+      </div>
+
       <div
         v-if="active"
         ref="messagesEl"
@@ -113,6 +131,7 @@
             @delete="askDeleteMessage"
             @reply="startReply"
             @forward="startForward"
+            @pin="onTogglePinMessage"
             @join-call="onJoinCall"
           />
         </template>
@@ -341,6 +360,50 @@ async function onTogglePin(conversationId) {
   } catch (e) {
     console.error('pin failed', e)
   }
+}
+
+/* ── Закреплённые сообщения ─────────────────────────────────────── */
+const pinnedMessages = computed(() => messenger.activePinned)
+const pinnedIndex = ref(0)
+const currentPinned = computed(() => pinnedMessages.value[pinnedIndex.value] || null)
+const pinnedPreview = computed(() => {
+  const m = currentPinned.value
+  if (!m) return ''
+  if (m.text) return m.text
+  if (m.attachments?.length) return 'Вложение'
+  return 'Сообщение'
+})
+
+// При смене чата/списка закреплённых держим индекс в границах.
+watch(pinnedMessages, (list) => {
+  if (pinnedIndex.value >= list.length) pinnedIndex.value = 0
+})
+
+async function onTogglePinMessage(message) {
+  try {
+    await messenger.togglePinMessageAction(message.id)
+  } catch (e) {
+    console.error('pin message failed', e)
+  }
+}
+
+function scrollToMessage(id) {
+  const el = messagesEl.value?.querySelector(`[data-msg-id="${id}"]`)
+  if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' })
+}
+
+function cyclePinned() {
+  const list = pinnedMessages.value
+  if (!list.length) return
+  const m = list[pinnedIndex.value]
+  if (m) scrollToMessage(m.id)
+  // Следующий клик — к следующему закреплённому.
+  pinnedIndex.value = (pinnedIndex.value + 1) % list.length
+}
+
+async function unpinMessage(message) {
+  if (!message) return
+  await onTogglePinMessage(message)
 }
 
 const activeId = computed(() => messenger.activeConversationId)
@@ -741,6 +804,75 @@ watch(() => route.params.conversationId, async (id) => {
   background: var(--color-bg);
   min-height: 0;
 }
+
+/* Баннер закреплённых сообщений — между шапкой и лентой. */
+.pinned-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 16px;
+  background: var(--color-surface);
+  border-bottom: 1px solid var(--color-outline-dim);
+  border-left: 3px solid var(--color-tertiary);
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: background 0.15s;
+}
+
+.pinned-bar:hover { background: var(--color-surface-low); }
+
+.pinned-bar-icon {
+  font-size: 20px;
+  color: var(--color-tertiary);
+  flex-shrink: 0;
+  font-variation-settings: 'FILL' 1, 'wght' 500, 'GRAD' 0, 'opsz' 24;
+}
+
+.pinned-bar-body { flex: 1; min-width: 0; }
+
+.pinned-bar-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--color-tertiary);
+}
+
+.pinned-bar-count {
+  font-weight: 600;
+  color: var(--color-text-dim);
+}
+
+.pinned-bar-text {
+  font-size: 13px;
+  color: var(--color-text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.pinned-bar-unpin {
+  width: 32px;
+  height: 32px;
+  border: none;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--color-text-dim);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  transition: background 0.15s, color 0.15s;
+}
+
+.pinned-bar-unpin:hover {
+  background: var(--color-surface-high);
+  color: var(--color-text);
+}
+
+.pinned-bar-unpin .material-symbols-outlined { font-size: 18px; }
 
 .msg-loading {
   display: flex;

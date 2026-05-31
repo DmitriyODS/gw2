@@ -170,6 +170,52 @@ def register_call_events(socketio: SocketIO) -> None:
                 "from_user_id": me,
             }, room=f"user_{me}")
 
+    @socketio.on("call:invite")
+    def on_invite(data):
+        """Любой участник зовёт ещё людей в идущий звонок.
+        data = {call_id, user_ids: [...]}."""
+        from flask import request as flask_request
+        from flask import current_app
+
+        me = _resolve_user_id_from_sid(flask_request.sid)
+        if me is None:
+            return
+        try:
+            call_id = int((data or {}).get("call_id"))
+        except (TypeError, ValueError):
+            return
+        raw_ids = (data or {}).get("user_ids") or []
+        try:
+            invitee_ids = [int(uid) for uid in raw_ids if uid is not None]
+        except (TypeError, ValueError):
+            invitee_ids = []
+        if not invitee_ids:
+            return
+
+        try:
+            with current_app.app_context():
+                call, new_ids = call_service.invite_to_call(call_id, me, invitee_ids)
+                payload = _call_schema.dump(call)
+        except CallServiceError as e:
+            socketio.emit("call:error",
+                          {"code": e.code, "message": e.message},
+                          room=f"user_{me}")
+            return
+
+        logger.info("call.invite", extra={"extra": {
+            "call_id": call_id, "inviter_id": me, "new_ids": new_ids,
+        }})
+        # Новым приглашённым — входящий звонок (тот же путь, что обычный invite).
+        for uid in new_ids:
+            socketio.emit("call:incoming", payload, room=f"user_{uid}")
+        # Уже находящимся в звонке — обновить метаданные (новые плитки-плейсхолдеры).
+        for uid in call_state.get_participants(call_id):
+            socketio.emit("call:invited", {
+                "call_id": call_id,
+                "user_ids": new_ids,
+                "call": payload,
+            }, room=f"user_{uid}")
+
     @socketio.on("call:accept")
     def on_accept(data):
         from flask import request as flask_request

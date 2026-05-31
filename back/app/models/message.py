@@ -35,11 +35,18 @@ class Message(db.Model):
     # звонка когда-то удалят, плашка останется в чате, но без деталей.
     call_id = db.Column(db.Integer, db.ForeignKey("calls.id", ondelete="SET NULL"),
                         nullable=True)
+    # Закрепление сообщения. Общее для обоих участников диалога (как в
+    # Telegram): закрепил один — закреплённое видят оба. pinned_at — момент
+    # закрепления (для сортировки и метки), pinned_by_id — кто закрепил.
+    pinned_at = db.Column(db.DateTime(timezone=True), nullable=True)
+    pinned_by_id = db.Column(db.Integer, db.ForeignKey("users.id", ondelete="SET NULL"),
+                             nullable=True)
 
     conversation = db.relationship("Conversation", back_populates="messages")
     sender = db.relationship("User", foreign_keys=[sender_id])
     reply_to = db.relationship("Message", remote_side=[id], foreign_keys=[reply_to_id])
     forwarded_from = db.relationship("User", foreign_keys=[forwarded_from_user_id])
+    pinned_by = db.relationship("User", foreign_keys=[pinned_by_id])
     call = db.relationship("Call", foreign_keys=[call_id])
     # selectin вместо joined: joined-load на коллекцию заставляет вызывать
     # .unique() на каждом Result, что ломает list_user_conversations.

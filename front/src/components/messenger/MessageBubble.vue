@@ -1,6 +1,6 @@
 <template>
   <!-- Системное сообщение о звонке: плашка по центру с иконкой, статусом и длительностью. -->
-  <div v-if="message.kind === 'call'" class="call-row">
+  <div v-if="message.kind === 'call'" class="call-row" :data-msg-id="message.id">
     <div
       class="call-pill"
       :class="[callClass, { clickable: isLive }]"
@@ -34,10 +34,19 @@
     </div>
   </div>
 
-  <div v-else class="msg-row" :class="{ outgoing: isMine }">
+  <div v-else class="msg-row" :class="{ outgoing: isMine }" :data-msg-id="message.id">
     <div class="msg-actions">
       <button v-if="showReply" class="msg-action" title="Ответить" @click="$emit('reply', message)">
         <span class="material-symbols-outlined">reply</span>
+      </button>
+      <button
+        v-if="showPin"
+        class="msg-action"
+        :class="{ active: isPinned }"
+        :title="isPinned ? 'Открепить' : 'Закрепить'"
+        @click="$emit('pin', message)"
+      >
+        <span class="material-symbols-outlined">{{ isPinned ? 'keep_off' : 'keep' }}</span>
       </button>
       <button v-if="showForward" class="msg-action" title="Переслать" @click="$emit('forward', message)">
         <span class="material-symbols-outlined">forward</span>
@@ -51,7 +60,11 @@
         <span class="material-symbols-outlined">delete</span>
       </button>
     </div>
-    <div class="msg-bubble">
+    <div class="msg-bubble" :class="{ pinned: isPinned }">
+      <div v-if="isPinned" class="msg-pinned-mark" title="Закреплено">
+        <span class="material-symbols-outlined">keep</span>
+        Закреплено
+      </div>
       <div v-if="message.forwarded_from" class="msg-forwarded">
         <span class="material-symbols-outlined">forward</span>
         Переслано от {{ message.forwarded_from.fio }}
@@ -99,9 +112,12 @@ const props = defineProps({
   showReply: { type: Boolean, default: true },
   showForward: { type: Boolean, default: true },
   showDelete: { type: Boolean, default: true },
+  showPin: { type: Boolean, default: true },
 })
 
-defineEmits(['delete', 'reply', 'forward', 'join-call'])
+defineEmits(['delete', 'reply', 'forward', 'join-call', 'pin'])
+
+const isPinned = computed(() => !!props.message.pinned_at)
 
 function attachmentTag() { return AttachmentView }
 
@@ -222,7 +238,31 @@ const joinLabel = computed(() => props.isMine ? 'Вернуться' : 'Прис
   color: var(--color-on-error-container);
 }
 
+.msg-action.active { color: var(--color-tertiary); }
+
 .msg-action .material-symbols-outlined { font-size: 16px; }
+
+/* Метка «Закреплено» внутри пузыря */
+.msg-pinned-mark {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--color-tertiary);
+  margin-bottom: 4px;
+}
+
+.msg-row.outgoing .msg-pinned-mark { color: var(--color-on-primary-container); }
+
+.msg-pinned-mark .material-symbols-outlined {
+  font-size: 14px;
+  font-variation-settings: 'FILL' 1, 'wght' 500, 'GRAD' 0, 'opsz' 20;
+}
+
+.msg-bubble.pinned {
+  box-shadow: var(--shadow-sm), inset 2px 0 0 0 var(--color-tertiary);
+}
 
 .msg-row:hover .msg-actions,
 .msg-row:focus-within .msg-actions {
