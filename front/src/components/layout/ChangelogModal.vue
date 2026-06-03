@@ -361,8 +361,12 @@ onMounted(async () => {
 
   .cl-modal {
     width: 100%;
-    max-height: 90vh;
+    /* vh считается от «большого» viewport (без адресной строки) на мобильных —
+       используем dvh (реальная видимая высота) с запасом 56px сверху */
+    max-height: calc(100vh - 56px);
+    max-height: calc(100dvh - 56px);
     border-radius: var(--radius-xl) var(--radius-xl) 0 0;
+    padding-bottom: env(safe-area-inset-bottom, 0px);
   }
 
   .cl-title {
@@ -371,6 +375,8 @@ onMounted(async () => {
 
   .cl-scroll {
     padding: 20px 16px 28px;
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior: contain;
   }
 }
 </style>
