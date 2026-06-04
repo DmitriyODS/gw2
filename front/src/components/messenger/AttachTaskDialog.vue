@@ -61,6 +61,10 @@ import { TASK_COLOR_IDS } from '@/utils/taskColors.js'
 
 const props = defineProps({
   modelValue: { type: Boolean, default: false },
+  // company_id диалога — задачу можно прикрепить только из той же компании,
+  // что и сам диалог (бизнес-правило бэка). Для Администратора системы
+  // явный company_id перебивает выбранную в селекторе компанию.
+  companyId: { type: Number, default: null },
 })
 
 const emit = defineEmits(['update:modelValue', 'pick'])
@@ -73,7 +77,9 @@ let debounceTimer = null
 async function search() {
   loading.value = true
   try {
-    const data = await getTasks({ q: q.value.trim(), per_page: 20 })
+    const params = { search: q.value.trim(), per_page: 20 }
+    if (props.companyId != null) params.company_id = props.companyId
+    const data = await getTasks(params)
     // Сервер отдаёт пагинированный ответ; на разных страницах формат
     // отличается, поддержим оба.
     results.value = Array.isArray(data) ? data : (data.items || [])
@@ -118,11 +124,21 @@ function pick(t) {
 </script>
 
 <style scoped>
+/* Контейнер модалки: фикс. высота с flex-row layout — строка поиска
+   закреплена сверху, список задач скроллится отдельно. */
+.attach-task {
+  display: flex;
+  flex-direction: column;
+  max-height: 70vh;
+  min-height: 320px;
+}
+
 .attach-task-search {
   position: relative;
   display: flex;
   align-items: center;
   margin-bottom: 12px;
+  flex-shrink: 0;
 }
 
 .attach-task-search .material-symbols-outlined {
@@ -149,9 +165,10 @@ function pick(t) {
 
 .attach-task-results {
   list-style: none;
-  padding: 0;
+  padding: 0 4px 4px 0;
   margin: 0;
-  max-height: 55vh;
+  flex: 1;
+  min-height: 0;
   overflow-y: auto;
   display: flex;
   flex-direction: column;
@@ -159,6 +176,9 @@ function pick(t) {
 }
 
 .attach-task-item {
+  /* flex-shrink: 0 обязателен — иначе как flex-дети внутри scroll-контейнера
+     элементы сжимаются по высоте, лишь бы все вместить, и скролл не появляется. */
+  flex-shrink: 0;
   display: flex;
   gap: 0;
   align-items: stretch;

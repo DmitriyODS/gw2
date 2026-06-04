@@ -195,7 +195,11 @@
       @confirm="onDeleteConfirm"
     />
 
-    <AttachTaskDialog v-model="attachTaskOpen" @pick="onPickTask" />
+    <AttachTaskDialog
+      v-model="attachTaskOpen"
+      :company-id="active?.company_id ?? null"
+      @pick="onPickTask"
+    />
 
     <AvatarLightbox
       v-if="active && !active.is_dev_chat && active.other_user"
@@ -225,6 +229,7 @@ import { ref, computed, watch, onMounted, onBeforeUnmount, nextTick } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useMessengerStore } from '@/stores/messenger.js'
 import { useAuthStore } from '@/stores/auth.js'
+import { useNotificationsStore } from '@/stores/notifications.js'
 import { useCallStore } from '@/stores/call.js'
 import { useBreakpoint } from '@/composables/useBreakpoint.js'
 import {
@@ -546,10 +551,18 @@ async function startWith(user) {
 }
 
 async function onSend(payload) {
-  await messenger.send(activeId.value, payload)
-  replyTo.value = null
-  await nextTick()
-  scrollToBottom()
+  try {
+    await messenger.send(activeId.value, payload)
+    replyTo.value = null
+    await nextTick()
+    scrollToBottom()
+  } catch (e) {
+    const code = e?.error
+    const msg = code === 'TASK_WRONG_COMPANY'
+      ? 'Задача относится к другой компании'
+      : (e?.message || 'Не удалось отправить сообщение')
+    useNotificationsStore().error(msg)
+  }
 }
 
 function goBack() {
