@@ -4,9 +4,15 @@
       <!-- Hero-шапка профиля -->
       <section class="profile-hero">
         <div class="hero-avatar-block">
-          <div class="avatar-wrapper">
+          <button
+            type="button"
+            class="avatar-wrapper"
+            :title="hasAvatar ? 'Открыть фото' : ''"
+            :disabled="!hasAvatar"
+            @click="hasAvatar && (lightboxOpen = true)"
+          >
             <img :src="avatarSrc" class="profile-avatar" :alt="authStore.user?.fio" />
-          </div>
+          </button>
           <div class="avatar-actions">
             <button class="btn-sm" @click="showCropper = true">
               <span class="material-symbols-outlined">photo_camera</span>
@@ -57,6 +63,20 @@
             <div class="form-group">
               <label>Должность</label>
               <InputText v-model="profileForm.post" class="w-full" placeholder="Менеджер" />
+            </div>
+            <div class="form-group">
+              <label>Телефон</label>
+              <PhoneInput v-model="profileForm.phone" />
+            </div>
+            <div class="form-group">
+              <label>Email</label>
+              <InputText
+                v-model="profileForm.email"
+                class="w-full"
+                type="email"
+                inputmode="email"
+                placeholder="you@example.com"
+              />
             </div>
             <p v-if="profileError" class="error-msg">{{ profileError }}</p>
             <button type="submit" class="btn-primary" :disabled="profileLoading">
@@ -159,6 +179,13 @@
     >
       <AvatarCropper @cropped="onCropped" @cancel="showCropper = false" />
     </Dialog>
+
+    <AvatarLightbox
+      v-model="lightboxOpen"
+      :src="avatarSrc"
+      :alt="authStore.user?.fio"
+      :caption="authStore.user?.fio"
+    />
   </div>
 </template>
 
@@ -170,6 +197,8 @@ import { updateMe, uploadAvatar, deleteAvatar } from '@/api/users.js'
 import { getStatsProfile } from '@/api/stats.js'
 import { formatHours } from '@/utils/time.js'
 import AvatarCropper from '@/components/settings/AvatarCropper.vue'
+import AvatarLightbox from '@/components/common/AvatarLightbox.vue'
+import PhoneInput from '@/components/common/PhoneInput.vue'
 import DateRangePicker from '@/components/common/DateRangePicker.vue'
 import InputText from 'primevue/inputtext'
 import Dialog from 'primevue/dialog'
@@ -182,6 +211,7 @@ const notif = useNotificationsStore()
 
 // ---- Avatar ----
 const showCropper = ref(false)
+const lightboxOpen = ref(false)
 
 const avatarSrc = computed(() => {
   const user = authStore.user
@@ -189,6 +219,8 @@ const avatarSrc = computed(() => {
   if (user.avatar_path) return `/uploads/${user.avatar_path}`
   return `/api/users/${user.id}/identicon`
 })
+
+const hasAvatar = computed(() => !!authStore.user?.avatar_path)
 
 async function onCropped(blob) {
   showCropper.value = false
@@ -212,7 +244,7 @@ async function handleDeleteAvatar() {
 }
 
 // ---- Profile form ----
-const profileForm = reactive({ fio: '', login: '', post: '' })
+const profileForm = reactive({ fio: '', login: '', post: '', phone: '', email: '' })
 const profileError = ref('')
 const profileLoading = ref(false)
 
@@ -222,6 +254,8 @@ function syncProfileForm() {
     profileForm.fio = user.fio || ''
     profileForm.login = user.login || ''
     profileForm.post = user.post || ''
+    profileForm.phone = user.phone || ''
+    profileForm.email = user.email || ''
   }
 }
 
@@ -236,7 +270,9 @@ async function saveProfile() {
     await updateMe({
       fio: profileForm.fio.trim(),
       login: profileForm.login.trim(),
-      post: profileForm.post.trim()
+      post: profileForm.post.trim(),
+      phone: profileForm.phone.trim() || null,
+      email: profileForm.email.trim() || null,
     })
     await authStore.loadMe()
     notif.success('Профиль обновлён')
@@ -370,6 +406,18 @@ onMounted(() => {
   border: 3px solid var(--gw-primary);
   box-shadow: 0 0 0 4px var(--gw-bg);
   flex-shrink: 0;
+  padding: 0;
+  background: transparent;
+  cursor: pointer;
+  transition: transform 0.15s;
+}
+
+.avatar-wrapper:not(:disabled):hover {
+  transform: scale(1.03);
+}
+
+.avatar-wrapper:disabled {
+  cursor: default;
 }
 
 .profile-avatar {

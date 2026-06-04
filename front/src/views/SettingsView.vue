@@ -138,6 +138,11 @@
         <div v-show="activeSection === 'help'" class="pane-block">
           <HelpCenter />
         </div>
+
+        <!-- О приложении -->
+        <div v-show="activeSection === 'about'" class="pane-block">
+          <AboutApp />
+        </div>
         </div>
       </section>
     </Transition>
@@ -176,6 +181,7 @@ import { version as appVersion } from '../../package.json'
 import { exportBackup, importBackup } from '@/api/backup.js'
 import ThemeBuilder from '@/components/settings/ThemeBuilder.vue'
 import HelpCenter from '@/components/settings/HelpCenter.vue'
+import AboutApp from '@/components/settings/AboutApp.vue'
 import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
 
 const { isAtLeast } = usePermission()
@@ -198,16 +204,7 @@ const allGroups = computed(() => [
     sections: [
       { key: 'theme', title: 'Внешний вид', desc: 'Цвета, тёмная тема и стиль интерфейса', icon: 'palette', tone: 'primary' },
       { key: 'help', title: 'Справка', desc: 'Как пользоваться разделами платформы', icon: 'help_center', tone: 'secondary' },
-    ],
-  },
-  {
-    key: 'admin',
-    label: 'Администрирование',
-    visible: () => isAtLeast(ROLES.EMPLOYEE),
-    sections: [
-      // CRUD сотрудников переехал в /employees (раздел «Сотрудники») —
-      // здесь больше нечего показывать «обычному» Менеджеру, поэтому группа
-      // пустая. visibleGroups отфильтрует её автоматически.
+      { key: 'about', title: 'О приложении', desc: 'Версия, тур, написать в техподдержку', icon: 'info', tone: 'tertiary' },
     ],
   },
   ...(isAtLeast(ROLES.ADMIN) ? [{

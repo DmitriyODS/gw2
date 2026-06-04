@@ -4,7 +4,7 @@
   <nav class="sidebar">
     <div class="sidebar-inner" :class="{ expanded }" @mouseenter="hovered = true" @mouseleave="hovered = false">
       <div class="sidebar-logo" data-tutorial="logo" @click="openChangelog" title="Что нового">
-        <img src="/logo.svg" alt="Groove Work" class="sidebar-logo-img" />
+        <Logo class="sidebar-logo-img" :size="40" />
         <span class="sidebar-logo-text">Groove Work</span>
       </div>
 
@@ -58,6 +58,7 @@ import { useMessengerStore } from '@/stores/messenger.js'
 import { usePermission, ROLES } from '@/composables/usePermission.js'
 import { useChangelog } from '@/composables/useChangelog.js'
 import CompanySelect from '@/components/common/CompanySelect.vue'
+import Logo from '@/components/common/Logo.vue'
 
 const route = useRoute()
 const router = useRouter()

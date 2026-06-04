@@ -35,29 +35,27 @@
               <h2 class="cl-title">{{ ver.title }}</h2>
               <p v-if="ver.description" class="cl-desc">{{ ver.description }}</p>
 
-              <!-- Группы -->
+              <!-- Группы: Добавили / Улучшили / Исправили -->
               <div class="cl-groups">
                 <div
-                  v-for="group in groupChanges(ver.changes)"
+                  v-for="group in groupsOf(ver)"
                   :key="group.type"
                   class="cl-group"
                 >
-                  <!-- Цветной чип-заголовок группы -->
                   <div class="cl-chip" :class="`cl-chip--${group.type}`">
                     <span class="material-symbols-outlined cl-chip-icon">{{ groupMeta[group.type]?.icon }}</span>
                     <span class="cl-chip-label">{{ groupMeta[group.type]?.label }}</span>
                     <span class="cl-chip-count">{{ group.items.length }}</span>
                   </div>
 
-                  <!-- Пункты -->
                   <ul class="cl-items">
                     <li
-                      v-for="(change, i) in group.items"
+                      v-for="(text, i) in group.items"
                       :key="i"
                       class="cl-item"
                       :class="`cl-item--${group.type}`"
                     >
-                      {{ change.text }}
+                      {{ text }}
                     </li>
                   </ul>
                 </div>
@@ -85,21 +83,17 @@ const versions = ref([])
 const currentVersion = computed(() => versions.value[0]?.version ?? null)
 
 const groupMeta = {
-  new:      { icon: 'add_circle',             label: 'Добавили'  },
-  improved: { icon: 'upgrade',                label: 'Улучшили'  },
-  fixed:    { icon: 'bug_report',             label: 'Исправили' },
-  changed:  { icon: 'published_with_changes', label: 'Изменили'  },
-  removed:  { icon: 'remove_circle',          label: 'Убрали'    },
+  added:    { icon: 'add_circle', label: 'Добавили'  },
+  improved: { icon: 'upgrade',    label: 'Улучшили'  },
+  fixed:    { icon: 'bug_report', label: 'Исправили' },
 }
 
-const GROUP_ORDER = ['new', 'improved', 'fixed', 'changed', 'removed']
+const GROUP_ORDER = ['added', 'improved', 'fixed']
 
-function groupChanges(changes) {
-  const map = {}
-  for (const c of changes) {
-    ;(map[c.type] ??= []).push(c)
-  }
-  return GROUP_ORDER.filter(t => map[t]).map(t => ({ type: t, items: map[t] }))
+function groupsOf(ver) {
+  return GROUP_ORDER
+    .filter(t => Array.isArray(ver[t]) && ver[t].length)
+    .map(t => ({ type: t, items: ver[t] }))
 }
 
 function formatDate(str) {
@@ -294,11 +288,9 @@ onMounted(async () => {
   margin-left: 2px;
 }
 
-.cl-chip--new      { background: var(--color-success-container);   color: var(--color-on-success-container);   }
-.cl-chip--improved { background: var(--color-tertiary-container);  color: var(--color-on-tertiary-container);  }
-.cl-chip--fixed    { background: var(--color-warning-container);   color: var(--color-on-warning-container);   }
-.cl-chip--changed  { background: var(--color-secondary-container); color: var(--color-on-secondary-container); }
-.cl-chip--removed  { background: var(--color-error-container);     color: var(--color-on-error-container);     }
+.cl-chip--added    { background: var(--color-success-container);  color: var(--color-on-success-container);  }
+.cl-chip--improved { background: var(--color-tertiary-container); color: var(--color-on-tertiary-container); }
+.cl-chip--fixed    { background: var(--color-warning-container);  color: var(--color-on-warning-container);  }
 
 /* ── Пункты изменений ─────────────────────────────────────────── */
 .cl-items {
@@ -331,11 +323,9 @@ onMounted(async () => {
   border-radius: 0 2px 2px 0;
 }
 
-.cl-item--new::before      { background: var(--color-success);   }
-.cl-item--improved::before { background: var(--color-tertiary);  }
-.cl-item--fixed::before    { background: var(--color-warning);   }
-.cl-item--changed::before  { background: var(--color-secondary); }
-.cl-item--removed::before  { background: var(--color-error);     }
+.cl-item--added::before    { background: var(--color-success);  }
+.cl-item--improved::before { background: var(--color-tertiary); }
+.cl-item--fixed::before    { background: var(--color-warning);  }
 
 /* ── Загрузка / ошибка ────────────────────────────────────────── */
 .cl-loading,

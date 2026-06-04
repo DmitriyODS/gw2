@@ -108,6 +108,7 @@ def hide_user(user_id: int, current_user_id: int, current_user_level: int) -> No
 
 
 def update_me(user_id: int, fio: str = None, login: str = None, post: str = None,
+              phone: str = None, email: str = None,
               current_password: str = None, new_password: str = None, confirm_password: str = None) -> object:
     user = user_repo.get_by_id(user_id)
     if user is None:
@@ -120,6 +121,17 @@ def update_me(user_id: int, fio: str = None, login: str = None, post: str = None
 
     if post is not None:
         updates["post"] = post
+
+    if phone is not None:
+        updates["phone"] = phone or None
+
+    if email is not None:
+        normalized = (email or "").strip() or None
+        if normalized:
+            existing = user_repo.get_by_email(normalized)
+            if existing and existing.id != user_id:
+                raise UserServiceError("Email уже используется", "EMAIL_TAKEN", 409)
+        updates["email"] = normalized
 
     if login is not None:
         existing = user_repo.get_by_login(login)

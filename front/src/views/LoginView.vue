@@ -3,7 +3,7 @@
     <div class="login-wrapper">
       <!-- Лого выше карточки, перекрывает её верхний край -->
       <div class="login-logo-wrap">
-        <img src="/logo.svg" alt="Groove Work" class="login-logo-img" />
+        <Logo class="login-logo-img" :size="80" />
       </div>
 
       <div class="login-card">
@@ -123,6 +123,7 @@ import { useAuthStore } from '@/stores/auth.js'
 import { useThemeStore } from '@/stores/theme.js'
 import { connectSocket } from '@/socket/index.js'
 import Dialog from 'primevue/dialog'
+import Logo from '@/components/common/Logo.vue'
 
 const router = useRouter()
 const authStore = useAuthStore()
