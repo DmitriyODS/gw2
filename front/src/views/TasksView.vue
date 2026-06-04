@@ -89,7 +89,12 @@
     <div class="tasks-body">
       <TaskFilters :mobile-visible="showMobileFilters" @close="showMobileFilters = false" />
 
-      <main ref="cardsAreaRef" class="cards-area" @scroll="onCardsScroll">
+      <main
+        ref="cardsAreaRef"
+        class="cards-area"
+        :class="{ 'cards-area--board': viewMode === 'board' }"
+        @scroll="onCardsScroll"
+      >
         <div v-if="tasksStore.loading" class="state-block">
           <ProgressSpinner />
         </div>
@@ -130,7 +135,7 @@
             />
           </div>
 
-          <div v-if="tasksStore.total > tasksStore.filters.per_page" class="pagination">
+          <div v-if="viewMode !== 'board' && tasksStore.total > tasksStore.filters.per_page" class="pagination">
             <button
               class="page-btn"
               :disabled="tasksStore.filters.page === 1"
@@ -241,6 +246,19 @@ function setViewMode(mode) {
 watch(canShowKanban, (v) => {
   if (!v && viewMode.value === 'board') viewMode.value = 'grid'
 })
+
+// Канбан показывает все задачи сразу (без пагинации) — каждая колонка
+// прокручивается отдельно. В сетке/списке возвращаем стандартный шаг 30,
+// чтобы не грузить лишнее. immediate: true — синхронизировать состояние
+// фильтра при первичном монтировании с восстановленным viewMode.
+const PER_PAGE_GRID = 30
+const PER_PAGE_BOARD = 1000
+watch(viewMode, (m) => {
+  const target = m === 'board' ? PER_PAGE_BOARD : PER_PAGE_GRID
+  if (tasksStore.filters.per_page !== target) {
+    tasksStore.setFilter('per_page', target)
+  }
+}, { immediate: true })
 
 const cardsAreaRef = ref(null)
 const fabVisible = ref(true)
@@ -618,7 +636,14 @@ watch(() => route.query.open, (v) => {
   display: flex;
   flex-direction: column;
   gap: 16px;
+  min-height: 0;
 }
+
+/* В режиме канбана общий вертикальный скролл выключаем — прокрутка живёт
+   внутри каждой колонки. Дочерний TaskKanban растягивается на всю высоту
+   области, чтобы колонкам было где скроллиться. */
+.cards-area--board { overflow-y: hidden; }
+.cards-area--board > .kanban { flex: 1; min-height: 0; }
 
 .cards-grid {
   display: grid;
