@@ -54,6 +54,21 @@ def start_call(initiator_id: int, invitee_ids: list[int],
         raise CallServiceError("USER_NOT_FOUND",
                                "Один из участников не найден", 404)
 
+    # Multi-tenancy: звонок принадлежит конкретной компании. Берём company_id
+    # инициатора; если инициатор — Администратор системы (без компании), —
+    # из первого приглашённого. Все участники должны быть из одной компании.
+    initiator = db.session.get(User, initiator_id)
+    company_id = initiator.company_id if initiator else None
+    if company_id is None:
+        company_id = invitees[0].company_id if invitees else None
+    if company_id is None:
+        raise CallServiceError("NO_COMPANY",
+                               "Звонок возможен только в рамках компании", 400)
+    for u in invitees:
+        if u.company_id != company_id:
+            raise CallServiceError("CROSS_COMPANY",
+                                   "Все участники должны быть из одной компании", 422)
+
     kind = "p2p" if len(invitee_ids) == 1 else "group"
 
     # Парная привязка к диалогу — только для p2p, чтобы в истории можно было
@@ -67,6 +82,7 @@ def start_call(initiator_id: int, invitee_ids: list[int],
 
     call = Call(
         initiator_id=initiator_id,
+        company_id=company_id,
         kind=kind,
         status="ringing",
         media=media,

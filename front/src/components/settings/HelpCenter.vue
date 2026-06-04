@@ -324,7 +324,7 @@ const GROUPS = computed(() => [
       },
     ],
   },
-  ...(isAtLeast(ROLES.ADMIN) ? [{
+  ...(isAtLeast(ROLES.DIRECTOR) ? [{
     key: 'admin',
     label: 'Администрирование',
     articles: [
@@ -368,7 +368,7 @@ const GROUPS = computed(() => [
       },
     ],
   }] : []),
-  ...(isAtLeast(ROLES.SUPERADMIN) ? [{
+  ...(isAtLeast(ROLES.ADMIN) ? [{
     key: 'system',
     label: 'Система',
     articles: [

@@ -11,6 +11,7 @@ from .backup import bp as backup_bp
 from .changelog import bp as changelog_bp
 from .messenger import bp as messenger_bp
 from .calls import bp as calls_bp
+from .companies import bp as companies_bp
 
 
 def register_blueprints(app: Flask) -> None:
@@ -26,3 +27,4 @@ def register_blueprints(app: Flask) -> None:
     app.register_blueprint(changelog_bp)
     app.register_blueprint(messenger_bp)
     app.register_blueprint(calls_bp)
+    app.register_blueprint(companies_bp)

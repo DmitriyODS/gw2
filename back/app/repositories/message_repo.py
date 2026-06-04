@@ -22,7 +22,15 @@ def get_or_create_conversation(user_a: int, user_b: int) -> Conversation:
     if conv:
         return conv
     a, b = _pair(user_a, user_b)
-    conv = Conversation(user_a_id=a, user_b_id=b)
+    # Multi-tenancy: компания диалога = компания собеседника, в чью «комнату»
+    # этот чат попадает. Берём company_id любого из участников (они должны
+    # быть из одной компании — это валидируется выше по стеку). Если оба
+    # без company_id (Администратор системы пишет Администратору системы) —
+    # берём первого попавшегося. На практике этого не должно происходить.
+    ua = db.session.get(User, a)
+    ub = db.session.get(User, b)
+    company_id = ua.company_id if ua and ua.company_id else (ub.company_id if ub else None)
+    conv = Conversation(user_a_id=a, user_b_id=b, company_id=company_id)
     db.session.add(conv)
     db.session.flush()
     return conv

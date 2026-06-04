@@ -533,14 +533,14 @@ const allGroups = computed(() => [
     label: 'Администрирование',
     visible: () => isAtLeast(ROLES.EMPLOYEE),
     sections: [
-      ...(isAtLeast(ROLES.ADMIN) ? [
+      ...(isAtLeast(ROLES.DIRECTOR) ? [
         { key: 'users', title: 'Пользователи', desc: 'Создание сотрудников и управление ролями', icon: 'group', tone: 'primary' },
       ] : []),
       { key: 'departments', title: 'Отделы', desc: 'Группировка сотрудников для статистики', icon: 'apartment', tone: 'secondary' },
       { key: 'unit-types', title: 'Типы юнитов', desc: 'Категории работы для учёта времени', icon: 'category', tone: 'tertiary' },
     ],
   },
-  ...(isAtLeast(ROLES.SUPERADMIN) ? [{
+  ...(isAtLeast(ROLES.ADMIN) ? [{
     key: 'system',
     label: 'Система',
     sections: [

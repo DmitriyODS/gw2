@@ -7,7 +7,7 @@ from app.schemas import UserSchema, UserCreateSchema, UserUpdateSchema, UserMeUp
 from app.services import user_service
 from app.services.user_service import UserServiceError
 from app.repositories import user_repo
-from app.utils.permissions import require_role, require_auth, ADMIN, get_user_level
+from app.utils.permissions import require_role, require_auth, DIRECTOR, get_user_level
 from app.utils.avatar import generate_identicon
 
 bp = Blueprint("users", __name__, url_prefix="/api/users")
@@ -22,7 +22,7 @@ _directory_list_schema = UserDirectorySchema(many=True)
 
 
 @bp.get("")
-@require_role(ADMIN)
+@require_role(DIRECTOR)
 def list_users():
     """
     Список пользователей.
@@ -38,7 +38,7 @@ def list_users():
 
 
 @bp.post("")
-@require_role(ADMIN)
+@require_role(DIRECTOR)
 def create_user():
     """
     Создать пользователя.
@@ -255,7 +255,7 @@ def delete_avatar():
 
 
 @bp.get("/<int:user_id>")
-@require_role(ADMIN)
+@require_role(DIRECTOR)
 def get_user(user_id: int):
     """
     Получить пользователя по ID.
@@ -280,7 +280,7 @@ def get_user(user_id: int):
 
 
 @bp.patch("/<int:user_id>")
-@require_role(ADMIN)
+@require_role(DIRECTOR)
 def update_user(user_id: int):
     """
     Редактировать пользователя.
@@ -321,7 +321,7 @@ def update_user(user_id: int):
 
 
 @bp.delete("/<int:user_id>")
-@require_role(ADMIN)
+@require_role(DIRECTOR)
 def hide_user(user_id: int):
     """
     Скрыть пользователя (soft delete).
@@ -350,7 +350,7 @@ def hide_user(user_id: int):
 
 
 @bp.patch("/<int:user_id>/role")
-@require_role(ADMIN)
+@require_role(DIRECTOR)
 def assign_role(user_id: int):
     """
     Назначить роль пользователю.

@@ -1,3 +1,7 @@
+from .company import (
+    CompanySchema, CompanyCreateSchema, CompanyUpdateSchema,
+    CompanyToggleActiveSchema, CompanySettingsSchema, CompanyDirectorRefSchema,
+)
 from .role import RoleSchema
 from .user import (
     UserSchema, UserCreateSchema, UserUpdateSchema,
@@ -17,6 +21,8 @@ from .message import (
 from .call import CallSchema, CallStartSchema, CallParticipantBriefSchema
 
 __all__ = [
+    "CompanySchema", "CompanyCreateSchema", "CompanyUpdateSchema",
+    "CompanyToggleActiveSchema", "CompanySettingsSchema", "CompanyDirectorRefSchema",
     "RoleSchema",
     "UserSchema", "UserCreateSchema", "UserUpdateSchema",
     "UserMeUpdateSchema", "ChangeDefaultSchema", "LoginSchema",

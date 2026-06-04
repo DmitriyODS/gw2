@@ -18,6 +18,7 @@ def create_task(
     name: str,
     author_id: int,
     department_id: int,
+    company_id: int,
     received_at: datetime = None,
     link_yougile: str = None,
     deadline: datetime = None,
@@ -25,11 +26,14 @@ def create_task(
     dept = department_repo.get_by_id(department_id)
     if dept is None:
         raise TaskServiceError("Отдел не найден", "DEPT_NOT_FOUND", 404)
+    if dept.company_id != company_id:
+        raise TaskServiceError("Отдел принадлежит другой компании", "DEPT_FOREIGN", 422)
 
     task = task_repo.create(
         name=name,
         author_id=author_id,
         department_id=department_id,
+        company_id=company_id,
         received_at=received_at,
         link_yougile=link_yougile,
         deadline=deadline,
@@ -48,6 +52,8 @@ def update_task(task_id: int, **kwargs) -> object:
         dept = department_repo.get_by_id(kwargs["department_id"])
         if dept is None:
             raise TaskServiceError("Отдел не найден", "DEPT_NOT_FOUND", 404)
+        if dept.company_id != task.company_id:
+            raise TaskServiceError("Отдел принадлежит другой компании", "DEPT_FOREIGN", 422)
 
     task_repo.update(task, **kwargs)
     db.session.commit()

@@ -1,5 +1,5 @@
 from datetime import datetime, timedelta, timezone
-from flask import Blueprint, request, jsonify
+from flask import Blueprint, request, jsonify, g
 from flask_jwt_extended import get_jwt_identity
 from marshmallow import ValidationError
 
@@ -8,7 +8,7 @@ from app.schemas.unit import UnitSchema
 from app.services import task_service
 from app.services.task_service import TaskServiceError
 from app.repositories import task_repo, unit_repo
-from app.utils.permissions import require_role, require_auth, EMPLOYEE
+from app.utils.permissions import require_role, require_auth, require_company_scope, EMPLOYEE
 
 bp = Blueprint("tasks", __name__, url_prefix="/api/tasks")
 
@@ -31,6 +31,7 @@ def _enrich_task(task, current_user_id: int, active_users: list = None, user_col
 
 @bp.get("")
 @require_role(EMPLOYEE)
+@require_company_scope
 def list_tasks():
     """
     Список задач с фильтрами и пагинацией.
@@ -66,6 +67,7 @@ def list_tasks():
 
     result = task_repo.get_list(
         current_user_id=current_user_id,
+        company_id=g.company_id,
         tab=args.get("tab", "active"),
         search=args.get("search"),
         sort=args.get("sort", "last_activity"),
@@ -98,6 +100,7 @@ def list_tasks():
 
 @bp.get("/stale")
 @require_role(EMPLOYEE)
+@require_company_scope
 def stale_tasks():
     """
     Активные задачи, «висящие» дольше недели (по дате поступления).
@@ -118,7 +121,7 @@ def stale_tasks():
 
     now = datetime.now(timezone.utc)
     threshold = now - timedelta(days=days)
-    tasks = task_repo.get_stale(threshold)
+    tasks = task_repo.get_stale(threshold, company_id=g.company_id)
 
     items = []
     for t in tasks:
@@ -135,6 +138,7 @@ def stale_tasks():
 
 @bp.post("")
 @require_role(EMPLOYEE)
+@require_company_scope
 def create_task():
     """
     Создать задачу.
@@ -165,7 +169,11 @@ def create_task():
 
     current_user_id = int(get_jwt_identity())
     try:
-        task = task_service.create_task(author_id=current_user_id, **data)
+        task = task_service.create_task(
+            author_id=current_user_id,
+            company_id=g.company_id,
+            **data,
+        )
     except TaskServiceError as e:
         return jsonify({"error": e.code, "message": e.message}), e.http_status
 

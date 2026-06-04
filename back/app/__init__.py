@@ -45,6 +45,7 @@ def _init_extensions(app: Flask) -> None:
     # Импорт моделей чтобы Alembic их видел
     with app.app_context():
         from app.models import (  # noqa
+            Company,
             Role, User, Department, Task, Favorite, UnitType, Unit, UserTaskColor,
             Conversation, Message, MessageAttachment,
             Call, CallParticipant,

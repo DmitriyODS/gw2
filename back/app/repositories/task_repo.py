@@ -13,6 +13,7 @@ def get_by_id(task_id: int) -> Optional[Task]:
 
 def get_list(
     current_user_id: int,
+    company_id: Optional[int],
     tab: str = "active",
     search: Optional[str] = None,
     sort: str = "last_activity",
@@ -24,6 +25,12 @@ def get_list(
     per_page: int = 30,
 ) -> dict:
     q = db.select(Task)
+    # Multi-tenancy: основной фильтр. None означает «во всех компаниях»
+    # (доступно только Администратору системы, без явно выбранной компании
+    # в селекторе) — на практике обработчик должен либо требовать
+    # company_id, либо явно решать.
+    if company_id is not None:
+        q = q.where(Task.company_id == company_id)
 
     # Вкладка
     if tab == "active":
@@ -84,7 +91,8 @@ def get_list(
     return {"items": tasks, "total": total, "page": page, "per_page": per_page}
 
 
-def get_stale(threshold: datetime, limit: int = 100) -> list[Task]:
+def get_stale(threshold: datetime, company_id: Optional[int] = None,
+              limit: int = 100) -> list[Task]:
     """Активные (не в архиве) задачи, поступившие раньше threshold — те, что
     «висят» дольше порога. Сначала самые старые, чтобы напоминание подсвечивало
     залежавшиеся в первую очередь."""
@@ -94,6 +102,8 @@ def get_stale(threshold: datetime, limit: int = 100) -> list[Task]:
         .order_by(asc(Task.received_at))
         .limit(limit)
     )
+    if company_id is not None:
+        q = q.where(Task.company_id == company_id)
     return db.session.execute(q).scalars().all()
 
 
@@ -101,6 +111,7 @@ def create(
     name: str,
     author_id: int,
     department_id: int,
+    company_id: int,
     received_at: Optional[datetime] = None,
     link_yougile: Optional[str] = None,
     deadline: Optional[datetime] = None,
@@ -109,6 +120,7 @@ def create(
         name=name,
         author_id=author_id,
         department_id=department_id,
+        company_id=company_id,
         link_yougile=link_yougile,
         deadline=deadline,
     )
@@ -117,6 +129,13 @@ def create(
     db.session.add(task)
     db.session.flush()
     return task
+
+
+def count_by_company(company_id: int) -> int:
+    """Кол-во задач (включая архивные) — для статистики таблицы компаний."""
+    return db.session.execute(
+        db.select(db.func.count(Task.id)).where(Task.company_id == company_id)
+    ).scalar_one()
 
 
 def update(task: Task, **kwargs) -> Task:

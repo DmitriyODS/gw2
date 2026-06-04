@@ -8,9 +8,10 @@ export const useAuthStore = defineStore('auth', () => {
   const user = ref(null)
   const token = ref(null)
   const forceChange = ref(false)
-  // ready=true означает, что попытка восстановить сессию из refresh-cookie
-  // завершена (успешно или нет). До этого момента маршрутизация ждёт.
   const ready = ref(false)
+  // Сообщение от backend о блокировке компании. Если не null — глобальный
+  // обработчик показывает экран блокировки вместо обычного приложения.
+  const companyDisabled = ref(null)
   let _restorePromise = null
 
   const isAuth = computed(() => !!token.value)
@@ -22,15 +23,31 @@ export const useAuthStore = defineStore('auth', () => {
     } catch { return {} }
   }
 
+  // Доп. клеймы из JWT — companyId/companyName/isRootAdmin/roleLevel.
+  const tokenClaims = computed(() => token.value ? decodeToken(token.value) : {})
+  const companyId = computed(() => tokenClaims.value.company_id ?? null)
+  const companyName = computed(() => tokenClaims.value.company_name ?? null)
+  const isRootAdmin = computed(() => !!tokenClaims.value.is_root_admin)
+
   async function login(loginVal, password) {
-    const data = await apiLogin({ login: loginVal, password })
-    token.value = data.access_token
-    const payload = decodeToken(data.access_token)
-    forceChange.value = !!payload.force_change
-    if (!forceChange.value) {
-      await loadMe()
+    try {
+      const data = await apiLogin({ login: loginVal, password })
+      token.value = data.access_token
+      const payload = decodeToken(data.access_token)
+      forceChange.value = !!payload.force_change
+      if (!forceChange.value) {
+        await loadMe()
+      }
+      companyDisabled.value = null
+      return forceChange.value
+    } catch (e) {
+      // 403 COMPANY_DISABLED — бэк сообщил, что компания отключена.
+      // client.js уже выставил флаг — добиваем здесь на случай прямого fetch.
+      if (e?.error === 'COMPANY_DISABLED') {
+        companyDisabled.value = e?.company_name || true
+      }
+      throw e
     }
-    return forceChange.value
   }
 
   async function loadMe() {
@@ -59,6 +76,7 @@ export const useAuthStore = defineStore('auth', () => {
     user.value = null
     token.value = null
     forceChange.value = false
+    companyDisabled.value = null
   }
 
   function setToken(t) {
@@ -72,8 +90,6 @@ export const useAuthStore = defineStore('auth', () => {
     try {
       const data = await refreshToken()
       const payload = decodeToken(data.access_token)
-      // Пользователь с дефолтным паролем должен залогиниться заново и
-      // сменить пароль — сессию не восстанавливаем.
       if (!payload.force_change) {
         setToken(data.access_token)
         await loadMe()
@@ -85,13 +101,15 @@ export const useAuthStore = defineStore('auth', () => {
     }
   }
 
-  // Гарантирует, что восстановление сессии выполнено ровно один раз.
-  // Вызывается из router guard до разрешения первого перехода, чтобы
-  // не мигать экраном логина при наличии активной сессии.
   function ensureReady() {
     if (!_restorePromise) _restorePromise = _restore()
     return _restorePromise
   }
 
-  return { user, token, forceChange, isAuth, ready, ensureReady, login, logout, loadMe, clearAuth, setToken, changeDefaultCredentials }
+  return {
+    user, token, forceChange, isAuth, ready,
+    companyId, companyName, isRootAdmin, companyDisabled,
+    ensureReady, login, logout, loadMe, clearAuth, setToken,
+    changeDefaultCredentials,
+  }
 })

@@ -38,15 +38,19 @@ def app():
 
 @pytest.fixture
 def two_users(app):
-    """Берём двух реально существующих не скрытых пользователей из dev-БД."""
+    """Берём двух реально существующих не скрытых пользователей из ОДНОЙ компании
+    (multi-tenancy v3.0: звонки запрещены между разными компаниями)."""
     from app.extensions import db
     from app.models import User
     with app.app_context():
         rows = db.session.execute(
-            db.select(User.id).where(User.is_hidden.is_(False)).order_by(User.id).limit(2)
+            db.select(User.id).where(
+                User.is_hidden.is_(False),
+                User.company_id.isnot(None),
+            ).order_by(User.company_id, User.id).limit(2)
         ).scalars().all()
     if len(rows) < 2:
-        pytest.skip("В БД меньше двух пользователей для теста звонка")
+        pytest.skip("В БД меньше двух сотрудников компании для теста звонка")
     return rows[0], rows[1]
 
 

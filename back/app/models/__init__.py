@@ -1,3 +1,4 @@
+from .company import Company
 from .role import Role
 from .user import User
 from .department import Department
@@ -11,6 +12,7 @@ from .message import Message, MessageAttachment
 from .call import Call, CallParticipant
 
 __all__ = [
+    "Company",
     "Role", "User", "Department", "Task", "Favorite", "UnitType", "Unit", "UserTaskColor",
     "Conversation", "Message", "MessageAttachment",
     "Call", "CallParticipant",

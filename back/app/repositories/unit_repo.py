@@ -23,12 +23,13 @@ def get_active_for_user(user_id: int) -> Optional[Unit]:
     ).scalar_one_or_none()
 
 
-def create(name: str, user_id: int, unit_type_id: int, task_id: int) -> Unit:
+def create(name: str, user_id: int, unit_type_id: int, task_id: int, company_id: int) -> Unit:
     unit = Unit(
         name=name,
         user_id=user_id,
         unit_type_id=unit_type_id,
         task_id=task_id,
+        company_id=company_id,
     )
     db.session.add(unit)
     db.session.flush()

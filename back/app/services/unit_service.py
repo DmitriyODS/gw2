@@ -25,12 +25,19 @@ def create_unit(task_id: int, name: str, unit_type_id: int, user_id: int) -> obj
     unit_type = unit_type_repo.get_by_id(unit_type_id)
     if unit_type is None:
         raise UnitServiceError("Тип юнита не найден", "TYPE_NOT_FOUND", 404)
+    # Тип юнита должен принадлежать той же компании, что и задача — иначе
+    # это нарушение multi-tenancy (нельзя «протащить» чужой тип к задаче).
+    if unit_type.company_id != task.company_id:
+        raise UnitServiceError("Тип юнита принадлежит другой компании", "TYPE_FOREIGN", 422)
 
     active = unit_repo.get_active_for_user(user_id)
     if active is not None:
         raise UnitServiceError("У вас уже есть активный юнит", "ACTIVE_UNIT_EXISTS", 409)
 
-    unit = unit_repo.create(name=name, user_id=user_id, unit_type_id=unit_type_id, task_id=task_id)
+    unit = unit_repo.create(
+        name=name, user_id=user_id, unit_type_id=unit_type_id,
+        task_id=task_id, company_id=task.company_id,
+    )
     db.session.commit()
 
     logger.info("unit.start", extra={"extra": {"unit_id": unit.id, "task_id": task_id, "user_id": user_id, "event": "unit.start"}})
