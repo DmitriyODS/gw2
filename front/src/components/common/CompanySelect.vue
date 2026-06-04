@@ -1,22 +1,39 @@
 <template>
   <!-- Селектор активной компании для Администратора системы. У обычных ролей
        компания фиксирована (по auth.companyId), и этот компонент рендерит
-       статичный чип. -->
-  <div v-if="!fixed" class="company-select" :class="{ compact }">
-    <span class="material-symbols-outlined company-icon">domain</span>
-    <select
-      :value="companies.activeCompanyId ?? ''"
-      class="company-native-select"
-      @change="onChange"
-      :aria-label="'Компания'"
-    >
-      <option value="">Все компании</option>
-      <option v-for="c in companies.items" :key="c.id" :value="c.id">
-        {{ c.name }}
-      </option>
-    </select>
-    <span class="material-symbols-outlined chevron">expand_more</span>
-  </div>
+       статичный чип. Стилистически — единый PrimeVue Select, как и все
+       остальные выпадашки в проекте. -->
+  <Select
+    v-if="!fixed"
+    :model-value="companies.activeCompanyId"
+    :options="options"
+    option-label="name"
+    option-value="id"
+    :placeholder="placeholder"
+    :class="['company-select', { compact }]"
+    show-clear
+    :filter="companies.items.length > 6"
+    filter-placeholder="Поиск компании…"
+    scroll-height="320px"
+    empty-message="Компании не загружены"
+    empty-filter-message="Ничего не найдено"
+    @update:model-value="onChange"
+  >
+    <template #value="slotProps">
+      <span class="company-value">
+        <span class="material-symbols-outlined company-icon">domain</span>
+        <span class="company-value-label">
+          {{ labelOf(slotProps.value) || placeholder }}
+        </span>
+      </span>
+    </template>
+    <template #option="slotProps">
+      <span class="company-option">
+        <span class="material-symbols-outlined company-icon">domain</span>
+        <span class="company-option-label">{{ slotProps.option.name }}</span>
+      </span>
+    </template>
+  </Select>
 
   <div v-else class="company-chip" :title="companyLabel">
     <span class="material-symbols-outlined company-icon">domain</span>
@@ -26,11 +43,13 @@
 
 <script setup>
 import { computed, onMounted } from 'vue'
+import Select from 'primevue/select'
 import { useAuthStore } from '@/stores/auth.js'
 import { useCompaniesStore } from '@/stores/companies.js'
 
 const props = defineProps({
   compact: { type: Boolean, default: false },
+  placeholder: { type: String, default: 'Все компании' },
 })
 
 const auth = useAuthStore()
@@ -39,55 +58,77 @@ const companies = useCompaniesStore()
 const fixed = computed(() => auth.companyId != null)
 const companyLabel = computed(() => auth.companyName || 'Без компании')
 
+const options = computed(() => companies.items)
+
+function labelOf(id) {
+  if (id == null) return null
+  const c = companies.items.find((x) => x.id === id)
+  return c?.name ?? null
+}
+
 onMounted(() => {
   if (!fixed.value) companies.load()
 })
 
-function onChange(e) {
-  const v = e.target.value
-  companies.setActive(v === '' ? null : Number(v))
+function onChange(value) {
+  // null приходит при show-clear → «Все компании»
+  companies.setActive(value ?? null)
 }
 </script>
 
 <style scoped>
-.company-select {
+/* Внутренние подписи value/option — общие для обоих слотов. */
+.company-value,
+.company-option {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  position: relative;
-  height: 36px;
-  padding: 0 12px 0 10px;
-  border-radius: var(--radius-full, 999px);
-  background: var(--color-surface-high, var(--gw-surface));
-  border: 1px solid var(--color-outline-variant, var(--gw-border));
-  color: var(--color-text);
-  font-weight: 600;
-  font-size: 13px;
-  transition: background 0.15s, border-color 0.15s;
-  cursor: pointer;
+  gap: 8px;
+  min-width: 0;
 }
 
-.company-select:hover {
+.company-icon {
+  font-size: 18px;
+  opacity: 0.75;
+  flex-shrink: 0;
+}
+
+.company-value-label,
+.company-option-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* PrimeVue Select под единый стиль выпадашек проекта (как dept-select). */
+:deep(.company-select.p-select) {
+  font-size: 13px;
+  border-radius: var(--radius-full);
+  background: var(--color-surface-high);
+  border-color: transparent;
+  min-width: 200px;
+  max-width: 280px;
+  font-weight: 600;
+}
+
+:deep(.company-select.p-select:hover) {
   background: var(--color-primary-container);
-  border-color: var(--color-primary);
   color: var(--color-on-primary-container);
 }
 
-.company-select.compact { height: 32px; padding: 0 10px 0 8px; font-size: 12px; }
+:deep(.company-select .p-select-label) {
+  padding: 8px 12px;
+  display: flex;
+  align-items: center;
+}
 
-.company-icon, .chevron { font-size: 18px; line-height: 1; opacity: 0.7; pointer-events: none; }
-
-.company-native-select {
-  appearance: none;
-  -webkit-appearance: none;
-  background: transparent;
-  border: none;
-  outline: none;
-  font: inherit;
-  color: inherit;
-  padding-right: 4px;
-  cursor: pointer;
+:deep(.company-select.compact.p-select) {
+  font-size: 12px;
+  min-width: 180px;
   max-width: 240px;
+}
+
+:deep(.company-select.compact .p-select-label) {
+  padding: 6px 10px;
 }
 
 .company-chip {

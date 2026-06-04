@@ -48,7 +48,7 @@
         <div class="switch-list">
           <label class="switch-row">
             <span class="switch-text">
-              <span class="material-symbols-rounded">view_kanban</span>
+              <span class="material-symbols-outlined">view_kanban</span>
               <span>
                 <strong>Этапы задач</strong>
                 <small>Канбан-режим, цветные теги этапов в карточках</small>
@@ -58,7 +58,7 @@
           </label>
           <label class="switch-row">
             <span class="switch-text">
-              <span class="material-symbols-rounded">link</span>
+              <span class="material-symbols-outlined">link</span>
               <span>
                 <strong>Интеграция YouGile</strong>
                 <small>Поле «Ссылка на YouGile» в форме задачи</small>
@@ -68,7 +68,7 @@
           </label>
           <label class="switch-row">
             <span class="switch-text">
-              <span class="material-symbols-rounded">call</span>
+              <span class="material-symbols-outlined">call</span>
               <span>
                 <strong>Аудио/видео-звонки</strong>
                 <small>Кнопки звонка в мессенджере и профилях</small>
@@ -85,7 +85,7 @@
     <template #footer>
       <button class="btn-text" :disabled="saving" @click="onClose">Отмена</button>
       <button class="btn-filled" :disabled="!canSave || saving" @click="save">
-        <span v-if="saving" class="material-symbols-rounded spin">progress_activity</span>
+        <span v-if="saving" class="material-symbols-outlined spin">progress_activity</span>
         {{ isEdit ? 'Сохранить' : 'Создать' }}
       </button>
     </template>
@@ -249,7 +249,7 @@ select.ctl {
   gap: 12px;
   min-width: 0;
 }
-.switch-text .material-symbols-rounded {
+.switch-text .material-symbols-outlined {
   display: grid;
   place-items: center;
   width: 36px;
@@ -263,32 +263,42 @@ select.ctl {
 .switch-text strong { display: block; font-size: 14px; color: var(--color-on-surface); }
 .switch-text small { display: block; font-size: 12px; color: var(--color-on-surface-variant); }
 
+/* M3 Expressive switch — синхронизирован с .toggle в CompaniesView. */
 .switch {
   appearance: none;
-  width: 40px;
-  height: 22px;
+  width: 44px;
+  height: 24px;
   border-radius: 999px;
-  background: var(--color-surface-high);
+  background: var(--color-surface-highest, var(--color-surface-high));
+  border: 2px solid var(--color-outline, var(--color-outline-variant));
+  box-sizing: border-box;
   position: relative;
   cursor: pointer;
   outline: none;
-  transition: background .15s;
+  transition: background .18s, border-color .18s;
   flex: none;
 }
 .switch::after {
   content: '';
   position: absolute;
-  top: 3px;
-  left: 3px;
+  top: 50%;
+  left: 4px;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--color-outline, var(--color-on-surface-variant));
+  transform: translateY(-50%);
+  transition: transform .2s cubic-bezier(0.4, 0, 0.2, 1),
+              background .2s, width .2s, height .2s, left .2s;
+}
+.switch:checked {
+  background: var(--color-primary);
+  border-color: var(--color-primary);
+}
+.switch:checked::after {
   width: 16px;
   height: 16px;
-  border-radius: 50%;
-  background: var(--color-on-surface-variant);
-  transition: transform .18s, background .18s;
-}
-.switch:checked { background: var(--color-primary); }
-.switch:checked::after {
-  transform: translateX(18px);
+  left: 24px;
   background: var(--color-on-primary);
 }
 

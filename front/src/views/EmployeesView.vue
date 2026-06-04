@@ -6,25 +6,25 @@
         <div class="emp-title-actions">
           <CompanySelect v-if="auth.isRootAdmin" />
           <button v-if="canCreate" class="btn-filled" @click="openCreate">
-            <span class="material-symbols-rounded">person_add</span>
+            <span class="material-symbols-outlined">person_add</span>
             Добавить
           </button>
         </div>
       </div>
       <div class="emp-controls">
         <div class="emp-search">
-          <span class="material-symbols-rounded">search</span>
+          <span class="material-symbols-outlined">search</span>
           <input v-model.trim="search" placeholder="Поиск по ФИО или логину" />
           <button v-if="search" class="search-clear" @click="search = ''" aria-label="Очистить">
-            <span class="material-symbols-rounded">close</span>
+            <span class="material-symbols-outlined">close</span>
           </button>
         </div>
         <div v-if="auth.isRootAdmin" class="view-toggle">
           <button :class="['vt-btn', { active: view === 'cards' }]" @click="view = 'cards'" title="Карточки">
-            <span class="material-symbols-rounded">grid_view</span>
+            <span class="material-symbols-outlined">grid_view</span>
           </button>
           <button :class="['vt-btn', { active: view === 'table' }]" @click="view = 'table'" title="Таблица">
-            <span class="material-symbols-rounded">list</span>
+            <span class="material-symbols-outlined">list</span>
           </button>
         </div>
       </div>
@@ -36,7 +36,7 @@
 
     <div v-else-if="!filtered.length" class="emp-empty">
       <div class="empty-icon">
-        <span class="material-symbols-rounded">{{ search ? 'search_off' : 'person_off' }}</span>
+        <span class="material-symbols-outlined">{{ search ? 'search_off' : 'person_off' }}</span>
       </div>
       <h3>{{ search ? 'Никого не нашли' : 'Сотрудников пока нет' }}</h3>
       <p v-if="!search && canCreate">Добавьте первого — кнопка справа сверху.</p>
@@ -66,7 +66,7 @@
                 </div>
                 <span class="user-fio">{{ u.fio }}</span>
                 <span v-if="u.is_root_admin" class="root-badge" title="Корневой Администратор системы">
-                  <span class="material-symbols-rounded">verified</span>
+                  <span class="material-symbols-outlined">verified</span>
                 </span>
               </div>
             </td>
@@ -84,10 +84,10 @@
             </td>
             <td class="td-act">
               <button v-if="canEdit(u)" class="icon-btn" title="Редактировать" @click="openEdit(u)">
-                <span class="material-symbols-rounded">edit</span>
+                <span class="material-symbols-outlined">edit</span>
               </button>
               <button v-if="canDelete(u)" class="icon-btn danger" title="Скрыть" @click="askDelete(u)">
-                <span class="material-symbols-rounded">delete</span>
+                <span class="material-symbols-outlined">delete</span>
               </button>
             </td>
           </tr>
@@ -105,7 +105,7 @@
           <img :src="avatarOf(u)" :alt="u.fio" />
           <span v-if="messenger.isOnline(u.id)" class="online-dot"></span>
           <span v-if="u.is_root_admin" class="root-badge corner" title="Корневой Администратор системы">
-            <span class="material-symbols-rounded">verified</span>
+            <span class="material-symbols-outlined">verified</span>
           </span>
         </div>
         <div class="card-name">{{ u.fio }}</div>
@@ -137,23 +137,23 @@
         </div>
         <div class="profile-meta">
           <div v-if="selected.post" class="meta-line">
-            <span class="material-symbols-rounded">badge</span>
+            <span class="material-symbols-outlined">badge</span>
             {{ selected.post }}
           </div>
           <div class="meta-line">
-            <span class="material-symbols-rounded">alternate_email</span>
+            <span class="material-symbols-outlined">alternate_email</span>
             @{{ selected.login }}
           </div>
           <div v-if="selected.phone" class="meta-line">
-            <span class="material-symbols-rounded">phone</span>
+            <span class="material-symbols-outlined">phone</span>
             <a :href="`tel:${selected.phone}`">{{ fmtPhone(selected.phone) }}</a>
           </div>
           <div v-if="selected.email" class="meta-line">
-            <span class="material-symbols-rounded">mail</span>
+            <span class="material-symbols-outlined">mail</span>
             <a :href="`mailto:${selected.email}`">{{ selected.email }}</a>
           </div>
           <div v-if="companyOf(selected)" class="meta-line">
-            <span class="material-symbols-rounded">domain</span>
+            <span class="material-symbols-outlined">domain</span>
             {{ companyOf(selected) }}
           </div>
         </div>
@@ -165,14 +165,14 @@
             class="btn-filled"
             @click="writeTo(selected)"
           >
-            <span class="material-symbols-rounded">chat</span> Написать
+            <span class="material-symbols-outlined">chat</span> Написать
           </button>
           <button
             v-if="selected.id !== auth.user?.id && callsOn"
             class="btn-tonal"
             @click="callTo(selected, 'video')"
           >
-            <span class="material-symbols-rounded">videocam</span>
+            <span class="material-symbols-outlined">videocam</span>
             <span class="hide-narrow">Видео</span>
           </button>
           <button
@@ -180,16 +180,16 @@
             class="btn-tonal tertiary"
             @click="callTo(selected, 'audio')"
           >
-            <span class="material-symbols-rounded">call</span>
+            <span class="material-symbols-outlined">call</span>
             <span class="hide-narrow">Аудио</span>
           </button>
         </div>
         <div v-if="canEdit(selected) || canDelete(selected)" class="profile-admin">
           <button v-if="canEdit(selected)" class="btn-outlined" @click="openEdit(selected)">
-            <span class="material-symbols-rounded">edit</span> Редактировать
+            <span class="material-symbols-outlined">edit</span> Редактировать
           </button>
           <button v-if="canDelete(selected)" class="btn-outlined danger" @click="askDelete(selected)">
-            <span class="material-symbols-rounded">delete</span> Скрыть
+            <span class="material-symbols-outlined">delete</span> Скрыть
           </button>
         </div>
       </div>
@@ -455,7 +455,7 @@ const SortIcon = {
       const active = p.sort.col === p.col
       const ic = active ? (p.sort.dir === 'asc' ? 'arrow_upward' : 'arrow_downward') : 'unfold_more'
       return h('span', { class: ['sort-ic', { active }] }, [
-        h('span', { class: 'material-symbols-rounded' }, ic),
+        h('span', { class: 'material-symbols-outlined' }, ic),
       ])
     }
   },
@@ -516,7 +516,7 @@ const RolePill = {
   background: var(--color-surface);
   border-color: var(--color-primary);
 }
-.emp-search .material-symbols-rounded { color: var(--color-on-surface-variant); font-size: 20px; }
+.emp-search .material-symbols-outlined { color: var(--color-on-surface-variant); font-size: 20px; }
 .emp-search input {
   flex: 1;
   border: none;
@@ -537,7 +537,7 @@ const RolePill = {
   cursor: pointer;
   color: var(--color-on-surface-variant);
 }
-.search-clear .material-symbols-rounded { font-size: 14px; }
+.search-clear .material-symbols-outlined { font-size: 14px; }
 
 .view-toggle {
   display: inline-flex;
@@ -559,7 +559,7 @@ const RolePill = {
   color: var(--color-on-surface-variant);
 }
 .vt-btn.active { background: var(--color-primary); color: var(--color-on-primary); }
-.vt-btn .material-symbols-rounded { font-size: 18px; }
+.vt-btn .material-symbols-outlined { font-size: 18px; }
 
 .emp-loading { display: grid; place-items: center; min-height: 240px; }
 
@@ -582,7 +582,7 @@ const RolePill = {
   display: grid;
   place-items: center;
 }
-.empty-icon .material-symbols-rounded { font-size: 32px; }
+.empty-icon .material-symbols-outlined { font-size: 32px; }
 .emp-empty h3 { margin: 0; color: var(--color-on-surface); }
 .emp-empty p { margin: 0; color: var(--color-on-surface-variant); font-size: 14px; }
 
@@ -641,7 +641,7 @@ const RolePill = {
   height: 18px;
   color: var(--color-tertiary);
 }
-.root-badge .material-symbols-rounded { font-size: 18px; font-variation-settings: 'FILL' 1; }
+.root-badge .material-symbols-outlined { font-size: 18px; font-variation-settings: 'FILL' 1; }
 .root-badge.corner {
   position: absolute;
   top: 0;
@@ -652,7 +652,7 @@ const RolePill = {
   border-radius: 50%;
   border: 2px solid var(--color-surface);
 }
-.root-badge.corner .material-symbols-rounded { font-size: 14px; }
+.root-badge.corner .material-symbols-outlined { font-size: 14px; }
 
 /* Роль-плашка */
 .role-pill {
@@ -727,11 +727,11 @@ const RolePill = {
 }
 .icon-btn:hover { background: var(--color-surface-high); color: var(--color-on-surface); }
 .icon-btn.danger:hover { background: var(--color-error-container); color: var(--color-on-error-container); }
-.icon-btn .material-symbols-rounded { font-size: 18px; }
+.icon-btn .material-symbols-outlined { font-size: 18px; }
 
 .sort-ic { display: inline-flex; vertical-align: middle; opacity: .4; margin-left: 2px; }
 .sort-ic.active { opacity: 1; color: var(--color-primary); }
-.sort-ic .material-symbols-rounded { font-size: 14px; }
+.sort-ic .material-symbols-outlined { font-size: 14px; }
 
 /* Профиль */
 .emp-profile {
@@ -788,7 +788,7 @@ const RolePill = {
   font-size: 14px;
   color: var(--color-on-surface);
 }
-.meta-line .material-symbols-rounded { font-size: 18px; color: var(--color-on-surface-variant); }
+.meta-line .material-symbols-outlined { font-size: 18px; color: var(--color-on-surface-variant); }
 .meta-line a { color: var(--color-primary); text-decoration: none; }
 .meta-line a:hover { text-decoration: underline; }
 
@@ -833,9 +833,9 @@ const RolePill = {
 .btn-outlined:hover { background: var(--color-surface-container); }
 .btn-outlined.danger { color: var(--color-error); border-color: var(--color-error); }
 .btn-outlined.danger:hover { background: var(--color-error-container); color: var(--color-on-error-container); }
-.btn-filled .material-symbols-rounded,
-.btn-tonal .material-symbols-rounded,
-.btn-outlined .material-symbols-rounded { font-size: 18px; }
+.btn-filled .material-symbols-outlined,
+.btn-tonal .material-symbols-outlined,
+.btn-outlined .material-symbols-outlined { font-size: 18px; }
 
 @media (max-width: 768px) {
   .employees-view { padding: 16px 12px 80px; }

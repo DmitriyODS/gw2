@@ -148,6 +148,7 @@ import { createUnit } from '@/api/units.js'
 import { getStages } from '@/api/stages.js'
 import { useNotificationsStore } from '@/stores/notifications.js'
 import { useUnitsStore } from '@/stores/units.js'
+import { useAuthStore } from '@/stores/auth.js'
 import { useCompanySettings } from '@/composables/useCompanySettings.js'
 import UserPicker from '@/components/common/UserPicker.vue'
 
@@ -162,6 +163,7 @@ const emit = defineEmits(['close', 'saved'])
 
 const notifications = useNotificationsStore()
 const unitsStore = useUnitsStore()
+const auth = useAuthStore()
 const { usesYougile, usesStages } = useCompanySettings()
 
 const departments = ref([])
@@ -177,7 +179,9 @@ const form = ref({
   department_id: props.task?.department?.id || props.task?.department_id || null,
   received_at: props.task?.received_at ? new Date(props.task.received_at) : new Date(),
   deadline: props.task?.deadline ? new Date(props.task.deadline) : null,
-  responsible_user_id: props.task?.responsible_user_id ?? props.task?.responsible?.id ?? null,
+  responsible_user_id: props.task?.responsible_user_id
+    ?? props.task?.responsible?.id
+    ?? (props.task ? null : auth.user?.id ?? null),
   stage_id: props.task?.stage_id ?? props.task?.stage?.id ?? null,
 })
 

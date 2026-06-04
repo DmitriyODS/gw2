@@ -79,7 +79,7 @@
               v-model="form.role_id"
               :disabled="r.locked"
             />
-            <span class="material-symbols-rounded">{{ roleIcon(r.level) }}</span>
+            <span class="material-symbols-outlined">{{ roleIcon(r.level) }}</span>
             <span>{{ r.name }}</span>
           </label>
         </div>
@@ -92,7 +92,7 @@
     <template #footer>
       <button class="btn-text" :disabled="saving" @click="onClose">Отмена</button>
       <button class="btn-filled" :disabled="!canSave || saving" @click="save">
-        <span v-if="saving" class="material-symbols-rounded spin">progress_activity</span>
+        <span v-if="saving" class="material-symbols-outlined spin">progress_activity</span>
         {{ isEdit ? 'Сохранить' : 'Создать' }}
       </button>
     </template>
@@ -289,13 +289,13 @@ select.ctl {
   transition: background .12s, border-color .12s;
 }
 .role-chip input { display: none; }
-.role-chip .material-symbols-rounded { font-size: 18px; color: var(--color-on-surface-variant); }
+.role-chip .material-symbols-outlined { font-size: 18px; color: var(--color-on-surface-variant); }
 .role-chip.active {
   background: var(--color-primary-container);
   color: var(--color-on-primary-container);
   border-color: var(--color-primary);
 }
-.role-chip.active .material-symbols-rounded { color: var(--color-on-primary-container); }
+.role-chip.active .material-symbols-outlined { color: var(--color-on-primary-container); }
 .role-chip.locked { opacity: .5; cursor: not-allowed; }
 
 .btn-text, .btn-filled {

@@ -11,7 +11,14 @@
       </button>
     </div>
 
-    <div v-if="pending.length" class="pending-attachments">
+    <div v-if="pending.length || attachedTask" class="pending-attachments">
+      <div v-if="attachedTask" class="pending-att pending-task">
+        <span class="material-symbols-outlined att-ico">task</span>
+        <span class="pending-name">{{ attachedTask.name }}</span>
+        <button class="remove-att" @click="attachedTask = null" title="Убрать">
+          <span class="material-symbols-outlined">close</span>
+        </button>
+      </div>
       <div v-for="p in pending" :key="p._key" class="pending-att">
         <span v-if="p.uploading" class="pending-name uploading">
           <ProgressSpinner style="width:16px;height:16px" />
@@ -37,6 +44,15 @@
           style="display:none"
         />
       </label>
+      <button
+        v-if="canAttachTask"
+        class="attach-btn"
+        title="Прикрепить задачу"
+        type="button"
+        @click="$emit('attach-task')"
+      >
+        <span class="material-symbols-outlined">task</span>
+      </button>
       <textarea
         ref="textarea"
         v-model="text"
@@ -46,6 +62,7 @@
         @keydown.enter.exact.prevent="submit"
         @input="autoresize"
         @paste="onPaste"
+        @contextmenu="onTextContextMenu"
       />
       <button
         class="send-btn"
@@ -56,11 +73,28 @@
         <span class="material-symbols-outlined">send</span>
       </button>
     </div>
+
+    <Teleport to="body">
+      <Transition name="md-toolbar">
+        <div
+          v-if="mdToolbar.visible"
+          class="md-toolbar"
+          :style="mdToolbar.style"
+          @mousedown.prevent
+        >
+          <button v-for="t in MD_TOOLS" :key="t.key" class="md-tool"
+                  :title="t.label"
+                  @click="applyMarkdown(t)">
+            <span class="material-symbols-outlined">{{ t.icon }}</span>
+          </button>
+        </div>
+      </Transition>
+    </Teleport>
   </div>
 </template>
 
 <script setup>
-import { ref, computed, nextTick } from 'vue'
+import { ref, computed, nextTick, onMounted, onBeforeUnmount, watch } from 'vue'
 import { uploadAttachment } from '@/api/messenger.js'
 import ProgressSpinner from 'primevue/progressspinner'
 
@@ -68,18 +102,106 @@ const props = defineProps({
   placeholder: { type: String, default: 'Напишите сообщение…' },
   sending: { type: Boolean, default: false },
   replyTo: { type: Object, default: null },
+  attachedTask: { type: Object, default: null },
+  canAttachTask: { type: Boolean, default: true },
 })
 
-const emit = defineEmits(['send', 'cancel-reply'])
+const emit = defineEmits(['send', 'cancel-reply', 'attach-task', 'update:attachedTask'])
 
 const text = ref('')
 const pending = ref([])
 const textarea = ref(null)
 
+const attachedTask = computed({
+  get: () => props.attachedTask,
+  set: (v) => emit('update:attachedTask', v),
+})
+
 const canSend = computed(() => {
   if (props.sending) return false
   if (pending.value.some(p => p.uploading)) return false
-  return Boolean(text.value.trim()) || pending.value.length > 0
+  return Boolean(text.value.trim()) || pending.value.length > 0 || !!attachedTask.value
+})
+
+/* ── Контекстное меню Markdown по правому клику на выделении ── */
+const MD_TOOLS = [
+  { key: 'bold', label: 'Жирный', icon: 'format_bold', wrap: '**' },
+  { key: 'italic', label: 'Курсив', icon: 'format_italic', wrap: '*' },
+  { key: 'strike', label: 'Зачёркнутый', icon: 'format_strikethrough', wrap: '~~' },
+  { key: 'code', label: 'Код', icon: 'code', wrap: '`' },
+  { key: 'h1', label: 'Заголовок', icon: 'title', prefix: '# ' },
+  { key: 'h2', label: 'Подзаголовок', icon: 'format_h2', prefix: '## ' },
+  { key: 'link', label: 'Ссылка', icon: 'link', linkify: true },
+]
+
+const mdToolbar = ref({ visible: false, x: 0, y: 0, range: null })
+const mdStyle = computed(() => ({
+  position: 'fixed',
+  left: mdToolbar.value.x + 'px',
+  top: mdToolbar.value.y + 'px',
+  zIndex: 12000,
+}))
+mdToolbar.value.style = mdStyle.value
+
+watch([() => mdToolbar.value.x, () => mdToolbar.value.y], () => {
+  mdToolbar.value.style = mdStyle.value
+})
+
+function onTextContextMenu(e) {
+  const el = textarea.value
+  if (!el) return
+  const start = el.selectionStart
+  const end = el.selectionEnd
+  if (start === end) return  // нет выделения — не перехватываем стандартное меню
+  e.preventDefault()
+  mdToolbar.value = {
+    visible: true,
+    x: e.clientX,
+    y: e.clientY,
+    range: { start, end },
+    style: { position: 'fixed', left: e.clientX + 'px', top: e.clientY + 'px', zIndex: 12000 },
+  }
+}
+
+function closeMdToolbar() { mdToolbar.value = { ...mdToolbar.value, visible: false } }
+
+function applyMarkdown(tool) {
+  const range = mdToolbar.value.range
+  if (!range) return closeMdToolbar()
+  const before = text.value.slice(0, range.start)
+  const sel = text.value.slice(range.start, range.end)
+  const after = text.value.slice(range.end)
+  let replaced
+  if (tool.wrap) {
+    replaced = `${tool.wrap}${sel}${tool.wrap}`
+  } else if (tool.prefix) {
+    replaced = `${tool.prefix}${sel}`
+  } else if (tool.linkify) {
+    const url = window.prompt('Адрес ссылки (URL)', 'https://')
+    if (!url) return closeMdToolbar()
+    replaced = `[${sel}](${url})`
+  }
+  text.value = before + replaced + after
+  closeMdToolbar()
+  nextTick(() => {
+    textarea.value?.focus()
+    autoresize()
+  })
+}
+
+function onDocClickClose(e) {
+  if (!mdToolbar.value.visible) return
+  // Кнопки в Teleport-tooltip имеют .md-tool — игнорируем клики по ним.
+  if (e.target.closest?.('.md-toolbar')) return
+  closeMdToolbar()
+}
+
+onMounted(() => {
+  document.addEventListener('mousedown', onDocClickClose, true)
+})
+
+onBeforeUnmount(() => {
+  document.removeEventListener('mousedown', onDocClickClose, true)
 })
 
 const replyAuthor = computed(() => props.replyTo?.sender_fio || '')
@@ -161,10 +283,12 @@ async function submit() {
     text: text.value.trim(),
     attachment_ids: pending.value.filter(p => p.id).map(p => p.id),
     reply_to_id: props.replyTo?.id || null,
+    task_id: attachedTask.value?.id || null,
   }
   emit('send', payload)
   text.value = ''
   pending.value = []
+  emit('update:attachedTask', null)
   await nextTick()
   autoresize()
 }
@@ -357,5 +481,51 @@ function iconFor(mime) {
 
 .send-btn:not(:disabled):hover {
   background: var(--color-primary-hover);
+}
+
+/* Прикреплённая задача — чип того же стиля, что и файловые вложения,
+   но с акцентом — primary-container. */
+.pending-att.pending-task {
+  background: var(--color-primary-container);
+  color: var(--color-on-primary-container);
+  border-color: var(--color-primary);
+}
+
+.pending-att.pending-task .att-ico { color: var(--color-on-primary-container); }
+</style>
+
+<style>
+/* Контекстное Markdown-меню (Teleport в body — без scoped). */
+.md-toolbar {
+  display: flex;
+  gap: 2px;
+  padding: 4px;
+  background: var(--color-surface);
+  border: 1px solid var(--color-outline-dim);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-lg);
+}
+
+.md-tool {
+  width: 32px;
+  height: 32px;
+  border-radius: var(--radius-sm);
+  border: none;
+  background: transparent;
+  color: var(--color-text);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.15s;
+}
+.md-tool:hover { background: var(--color-surface-low); }
+.md-tool .material-symbols-outlined { font-size: 18px; }
+
+.md-toolbar-enter-active, .md-toolbar-leave-active {
+  transition: opacity 0.12s, transform 0.12s;
+}
+.md-toolbar-enter-from, .md-toolbar-leave-to {
+  opacity: 0; transform: translateY(-4px);
 }
 </style>

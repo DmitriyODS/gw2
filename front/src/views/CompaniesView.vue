@@ -4,7 +4,7 @@
       <div class="cmp-title-row">
         <h1 class="cmp-title">Компании</h1>
         <button class="btn-filled" @click="openCreate">
-          <span class="material-symbols-rounded">add</span>
+          <span class="material-symbols-outlined">add</span>
           Новая компания
         </button>
       </div>
@@ -14,10 +14,10 @@
       </p>
       <div class="cmp-search-row">
         <div class="cmp-search">
-          <span class="material-symbols-rounded">search</span>
+          <span class="material-symbols-outlined">search</span>
           <input v-model.trim="search" placeholder="Поиск по названию или директору" />
           <button v-if="search" class="cmp-search-clear" @click="search = ''" aria-label="Очистить">
-            <span class="material-symbols-rounded">close</span>
+            <span class="material-symbols-outlined">close</span>
           </button>
         </div>
         <div class="cmp-summary">
@@ -34,12 +34,12 @@
 
     <div v-else-if="!visible.length" class="cmp-empty-state">
       <div class="empty-icon">
-        <span class="material-symbols-rounded">domain</span>
+        <span class="material-symbols-outlined">domain</span>
       </div>
       <h3>{{ search ? 'Ничего не найдено' : 'Компаний пока нет' }}</h3>
       <p v-if="!search">Создайте первую компанию, чтобы начать работу.</p>
       <button v-if="!search" class="btn-filled" @click="openCreate">
-        <span class="material-symbols-rounded">add</span> Создать компанию
+        <span class="material-symbols-outlined">add</span> Создать компанию
       </button>
     </div>
 
@@ -68,7 +68,7 @@
           <tr v-for="c in visible" :key="c.id" :class="{ off: !c.is_active }">
             <td>
               <div class="cmp-name">
-                <span class="material-symbols-rounded cmp-icon" :class="{ off: !c.is_active }">
+                <span class="material-symbols-outlined cmp-icon" :class="{ off: !c.is_active }">
                   domain
                 </span>
                 <div>
@@ -101,10 +101,10 @@
             </td>
             <td class="td-actions">
               <button class="icon-btn" title="Редактировать" @click="openEdit(c)">
-                <span class="material-symbols-rounded">edit</span>
+                <span class="material-symbols-outlined">edit</span>
               </button>
               <button class="icon-btn danger" title="Удалить" @click="askDelete(c)">
-                <span class="material-symbols-rounded">delete</span>
+                <span class="material-symbols-outlined">delete</span>
               </button>
             </td>
           </tr>
@@ -126,7 +126,7 @@
       :show-header="false"
     >
       <div class="confirm-body">
-        <div class="confirm-icon"><span class="material-symbols-rounded">warning</span></div>
+        <div class="confirm-icon"><span class="material-symbols-outlined">warning</span></div>
         <h3>Удалить компанию «{{ deleteTarget?.name }}»?</h3>
         <p v-if="deleteTarget?.employees_count || deleteTarget?.tasks_count" class="confirm-warn">
           В компании остаются
@@ -141,7 +141,7 @@
       <template #footer>
         <button class="btn-text" :disabled="deleting" @click="confirmOpen = false">Отмена</button>
         <button class="btn-filled danger" :disabled="deleting" @click="doDelete">
-          <span v-if="deleting" class="material-symbols-rounded spin">progress_activity</span>
+          <span v-if="deleting" class="material-symbols-outlined spin">progress_activity</span>
           Удалить
         </button>
       </template>
@@ -293,7 +293,7 @@ const SortIcon = {
       const active = p.sort.col === p.col
       const ic = active ? (p.sort.dir === 'asc' ? 'arrow_upward' : 'arrow_downward') : 'unfold_more'
       return h('span', { class: ['sort-ic', { active }] }, [
-        h('span', { class: 'material-symbols-rounded' }, ic),
+        h('span', { class: 'material-symbols-outlined' }, ic),
       ])
     }
   },
@@ -347,7 +347,7 @@ const SortIcon = {
   background: var(--color-surface);
   border-color: var(--color-primary);
 }
-.cmp-search .material-symbols-rounded { color: var(--color-on-surface-variant); font-size: 20px; }
+.cmp-search .material-symbols-outlined { color: var(--color-on-surface-variant); font-size: 20px; }
 .cmp-search input {
   flex: 1;
   border: none;
@@ -368,7 +368,7 @@ const SortIcon = {
   cursor: pointer;
   color: var(--color-on-surface-variant);
 }
-.cmp-search-clear .material-symbols-rounded { font-size: 14px; }
+.cmp-search-clear .material-symbols-outlined { font-size: 14px; }
 
 .cmp-summary { display: inline-flex; gap: 6px; }
 .chip {
@@ -406,7 +406,7 @@ const SortIcon = {
   display: grid;
   place-items: center;
 }
-.empty-icon .material-symbols-rounded { font-size: 32px; }
+.empty-icon .material-symbols-outlined { font-size: 32px; }
 .cmp-empty-state h3 { margin: 0; font-size: 18px; color: var(--color-on-surface); }
 .cmp-empty-state p { margin: 0; color: var(--color-on-surface-variant); font-size: 14px; }
 
@@ -483,36 +483,50 @@ const SortIcon = {
 .director-name { font-size: 13px; }
 .muted { color: var(--color-on-surface-variant); font-style: italic; font-size: 13px; }
 
+/* M3 Expressive switch:
+   off  → track surface-container-highest + видимая outline-рамка, thumb
+          уменьшен и в тон outline (всегда виден на любом фоне);
+   on   → track primary, thumb on-primary, увеличивается до полного размера. */
 .toggle {
   display: inline-flex;
   align-items: center;
-  gap: 8px;
+  gap: 10px;
   cursor: pointer;
   user-select: none;
 }
 .toggle input { display: none; }
 .toggle-track {
   position: relative;
-  width: 40px;
-  height: 22px;
+  width: 44px;
+  height: 24px;
   border-radius: 999px;
-  background: var(--color-surface-high);
-  transition: background .15s;
+  background: var(--color-surface-highest, var(--color-surface-high));
+  border: 2px solid var(--color-outline, var(--color-outline-variant));
+  box-sizing: border-box;
+  transition: background .18s, border-color .18s;
 }
 .toggle-track::after {
   content: '';
   position: absolute;
-  top: 3px;
-  left: 3px;
+  top: 50%;
+  left: 4px;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--color-outline, var(--color-on-surface-variant));
+  transform: translateY(-50%);
+  transition: transform .2s cubic-bezier(0.4, 0, 0.2, 1),
+              background .2s, width .2s, height .2s, left .2s;
+}
+.toggle input:checked + .toggle-track {
+  background: var(--color-primary);
+  border-color: var(--color-primary);
+}
+.toggle input:checked + .toggle-track::after {
+  /* при включении: thumb растёт и сдвигается вправо */
   width: 16px;
   height: 16px;
-  border-radius: 50%;
-  background: var(--color-on-surface-variant);
-  transition: transform .18s, background .18s;
-}
-.toggle input:checked + .toggle-track { background: var(--color-primary); }
-.toggle input:checked + .toggle-track::after {
-  transform: translateX(18px);
+  left: 24px;
   background: var(--color-on-primary);
 }
 .toggle-label { font-size: 12px; color: var(--color-on-surface-variant); }
@@ -533,11 +547,11 @@ const SortIcon = {
 }
 .icon-btn:hover { background: var(--color-surface-container); color: var(--color-on-surface); }
 .icon-btn.danger:hover { background: var(--color-error-container); color: var(--color-on-error-container); }
-.icon-btn .material-symbols-rounded { font-size: 20px; }
+.icon-btn .material-symbols-outlined { font-size: 20px; }
 
 .sort-ic { display: inline-flex; vertical-align: middle; opacity: .4; margin-left: 2px; }
 .sort-ic.active { opacity: 1; color: var(--color-primary); }
-.sort-ic .material-symbols-rounded { font-size: 14px; }
+.sort-ic .material-symbols-outlined { font-size: 14px; }
 
 .btn-filled, .btn-text {
   appearance: none;
@@ -575,7 +589,7 @@ const SortIcon = {
   display: grid;
   place-items: center;
 }
-.confirm-icon .material-symbols-rounded { font-size: 28px; }
+.confirm-icon .material-symbols-outlined { font-size: 28px; }
 .confirm-body h3 { margin: 0; font-size: 18px; color: var(--color-on-surface); }
 .confirm-body p { margin: 0; color: var(--color-on-surface-variant); font-size: 14px; line-height: 1.5; }
 .confirm-warn { color: var(--color-on-surface); }

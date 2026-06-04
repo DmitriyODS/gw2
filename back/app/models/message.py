@@ -35,6 +35,10 @@ class Message(db.Model):
     # звонка когда-то удалят, плашка останется в чате, но без деталей.
     call_id = db.Column(db.Integer, db.ForeignKey("calls.id", ondelete="SET NULL"),
                         nullable=True)
+    # Для kind='task' — ссылка на прикреплённую задачу. SET NULL: если задачу
+    # удалят, превью в чате схлопнется в плашку «Задача удалена».
+    task_id = db.Column(db.Integer, db.ForeignKey("tasks.id", ondelete="SET NULL"),
+                        nullable=True)
     # Закрепление сообщения. Общее для обоих участников диалога (как в
     # Telegram): закрепил один — закреплённое видят оба. pinned_at — момент
     # закрепления (для сортировки и метки), pinned_by_id — кто закрепил.
@@ -48,6 +52,7 @@ class Message(db.Model):
     forwarded_from = db.relationship("User", foreign_keys=[forwarded_from_user_id])
     pinned_by = db.relationship("User", foreign_keys=[pinned_by_id])
     call = db.relationship("Call", foreign_keys=[call_id])
+    task = db.relationship("Task", foreign_keys=[task_id])
     # selectin вместо joined: joined-load на коллекцию заставляет вызывать
     # .unique() на каждом Result, что ломает list_user_conversations.
     attachments = db.relationship("MessageAttachment", back_populates="message",

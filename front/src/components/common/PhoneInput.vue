@@ -15,7 +15,7 @@
     />
     <button v-if="display && !disabled" type="button"
             class="phone-clear" @click="clear" aria-label="Очистить">
-      <span class="material-symbols-rounded">close</span>
+      <span class="material-symbols-outlined">close</span>
     </button>
   </div>
 </template>
@@ -137,5 +137,5 @@ watch(() => props.modelValue, () => {})
   cursor: pointer;
 }
 .phone-clear:hover { background: var(--color-surface-high); }
-.phone-clear .material-symbols-rounded { font-size: 16px; }
+.phone-clear .material-symbols-outlined { font-size: 16px; }
 </style>

@@ -4,7 +4,11 @@ from flask_jwt_extended import get_jwt_identity
 
 from app.services import stats_service
 from app.repositories import user_repo
-from app.utils.permissions import require_role, require_auth, EMPLOYEE, MANAGER, get_user_level
+from app.utils.permissions import (
+    require_role, require_auth, EMPLOYEE, MANAGER,
+    get_user_level, resolve_company_scope,
+)
+from flask import g
 
 bp = Blueprint("stats", __name__, url_prefix="/api/stats")
 
@@ -50,7 +54,8 @@ def get_common():
     except ValueError as e:
         return jsonify({"error": "VALIDATION_ERROR", "message": str(e)}), 400
 
-    data = stats_service.get_common(period_start, period_end)
+    company_id = resolve_company_scope(g.current_user)
+    data = stats_service.get_common(period_start, period_end, company_id)
     return jsonify(data), 200
 
 
@@ -74,7 +79,8 @@ def get_extended():
     except ValueError as e:
         return jsonify({"error": "VALIDATION_ERROR", "message": str(e)}), 400
 
-    data = stats_service.get_extended(period_start, period_end)
+    company_id = resolve_company_scope(g.current_user)
+    data = stats_service.get_extended(period_start, period_end, company_id)
     return jsonify(data), 200
 
 
@@ -100,7 +106,8 @@ def export_common():
     except ValueError as e:
         return jsonify({"error": "VALIDATION_ERROR", "message": str(e)}), 400
 
-    buf = stats_service.export_common_xlsx(period_start, period_end)
+    company_id = resolve_company_scope(g.current_user)
+    buf = stats_service.export_common_xlsx(period_start, period_end, company_id)
     return send_file(
         buf,
         mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
@@ -131,7 +138,8 @@ def export_extended():
     except ValueError as e:
         return jsonify({"error": "VALIDATION_ERROR", "message": str(e)}), 400
 
-    buf = stats_service.export_extended_xlsx(period_start, period_end)
+    company_id = resolve_company_scope(g.current_user)
+    buf = stats_service.export_extended_xlsx(period_start, period_end, company_id)
     return send_file(
         buf,
         mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
@@ -170,6 +178,13 @@ def get_user_tasks():
             current_user = user_repo.get_by_id(current_user_id)
             if get_user_level(current_user) < MANAGER:
                 return jsonify({"error": "FORBIDDEN", "message": "Доступ запрещён"}), 403
+            target = user_repo.get_by_id(requested_user_id)
+            if target is None:
+                return jsonify({"error": "NOT_FOUND", "message": "Сотрудник не найден"}), 404
+            # Менеджер/Руководитель могут смотреть только в своей компании.
+            # Администратор системы (company_id=None) — кого угодно.
+            if current_user.company_id is not None and target.company_id != current_user.company_id:
+                return jsonify({"error": "FORBIDDEN", "message": "Доступ запрещён"}), 403
         target_user_id = requested_user_id
     else:
         target_user_id = current_user_id
@@ -190,8 +205,28 @@ def get_employees():
       200:
         description: Список пользователей (id, fio)
     """
-    users = user_repo.get_all(include_hidden=False)
+    company_id = resolve_company_scope(g.current_user)
+    users = user_repo.get_all(include_hidden=False, company_id=company_id)
     return jsonify([{"id": u.id, "fio": u.fio} for u in users]), 200
+
+
+@bp.get("/responsibles")
+@require_role(EMPLOYEE)
+def get_responsibles():
+    """
+    Сотрудники-ответственные — список с количеством открытых/закрытых задач.
+    ---
+    tags: [stats]
+    security: [BearerAuth: []]
+    parameters:
+      - {in: query, name: company_id, schema: {type: integer}, required: false}
+    responses:
+      200:
+        description: Список ответственных
+    """
+    company_id = resolve_company_scope(g.current_user)
+    data = stats_service.get_responsibles(company_id)
+    return jsonify(data), 200
 
 
 @bp.get("/profile")

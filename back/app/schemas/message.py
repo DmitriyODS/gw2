@@ -34,6 +34,22 @@ class ReplyPreviewSchema(Schema):
         return bool(obj.attachments)
 
 
+class TaskPreviewSchema(Schema):
+    """Краткое превью задачи для прикрепления к сообщению (kind='task')."""
+    id = fields.Int(dump_only=True)
+    name = fields.Str(dump_only=True)
+    is_archived = fields.Bool(dump_only=True)
+    color = fields.Method("get_color", dump_only=True, allow_none=True)
+    responsible_fio = fields.Method("get_responsible_fio", dump_only=True, allow_none=True)
+    deadline = fields.DateTime(dump_only=True, allow_none=True)
+
+    def get_color(self, obj):
+        return obj.color
+
+    def get_responsible_fio(self, obj):
+        return obj.responsible.fio if obj.responsible else None
+
+
 class CallInfoSchema(Schema):
     """Краткая информация о звонке для плашки в чате (kind='call')."""
     id = fields.Int(dump_only=True)
@@ -65,6 +81,7 @@ class MessageSchema(Schema):
     # отдельным компонентом, текст игнорируется, данные берутся из `call`).
     kind = fields.Str(dump_only=True)
     call = fields.Nested(CallInfoSchema, dump_only=True, allow_none=True)
+    task = fields.Nested(TaskPreviewSchema, dump_only=True, allow_none=True)
     # Закрепление (общее для обоих участников диалога).
     pinned_at = fields.DateTime(dump_only=True, allow_none=True)
     pinned_by_id = fields.Int(dump_only=True, allow_none=True)
@@ -84,6 +101,9 @@ class ConversationListItemSchema(Schema):
     last_message_at = fields.Method("get_last_at", dump_only=True)
     is_pinned = fields.Bool(dump_only=True)
     pinned_at = fields.Method("get_pinned_at", dump_only=True)
+    is_dev_chat = fields.Method("get_is_dev_chat", dump_only=True)
+    company_id = fields.Method("get_company_id", dump_only=True, allow_none=True)
+    company_name = fields.Method("get_company_name", dump_only=True, allow_none=True)
 
     def get_id(self, obj):
         return obj["conversation"].id
@@ -94,19 +114,32 @@ class ConversationListItemSchema(Schema):
     def get_pinned_at(self, obj):
         return obj["pinned_at"].isoformat() if obj.get("pinned_at") else None
 
+    def get_is_dev_chat(self, obj):
+        return bool(obj["conversation"].is_dev_chat)
+
+    def get_company_id(self, obj):
+        return obj["conversation"].company_id
+
+    def get_company_name(self, obj):
+        c = obj["conversation"]
+        return c.company.name if c.company else None
+
 
 class ConversationSchema(Schema):
     id = fields.Int(dump_only=True)
-    user_a_id = fields.Int(dump_only=True)
-    user_b_id = fields.Int(dump_only=True)
+    user_a_id = fields.Int(dump_only=True, allow_none=True)
+    user_b_id = fields.Int(dump_only=True, allow_none=True)
     created_at = fields.DateTime(dump_only=True)
     last_message_at = fields.DateTime(dump_only=True, allow_none=True)
+    is_dev_chat = fields.Bool(dump_only=True)
+    company_id = fields.Int(dump_only=True, allow_none=True)
 
 
 class MessageCreateSchema(Schema):
     text = fields.Str(load_default=None, allow_none=True, validate=validate.Length(max=10000))
     attachment_ids = fields.List(fields.Int(), load_default=list)
     reply_to_id = fields.Int(load_default=None, allow_none=True)
+    task_id = fields.Int(load_default=None, allow_none=True)
 
 
 class ConversationCreateSchema(Schema):

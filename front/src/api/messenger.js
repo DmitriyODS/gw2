@@ -53,3 +53,11 @@ export const togglePinMessage = (messageId) =>
 
 export const listPinnedMessages = (conversationId) =>
   apiRequest(`/messenger/conversations/${conversationId}/pinned`)
+
+export const openDevChat = (companyId = null) => {
+  const qs = companyId ? `?company_id=${companyId}` : ''
+  return apiRequest(`/messenger/dev-chat${qs}`)
+}
+
+export const listDevChats = () =>
+  apiRequest('/messenger/dev-chats')

@@ -76,6 +76,33 @@ export const useMessengerStore = defineStore('messenger', () => {
     totalUnread.value = conversations.value.reduce((s, c) => s + (c.unread_count || 0), 0)
   }
 
+  async function openDevChat(companyId = null) {
+    const data = await api.openDevChat(companyId)
+    const existing = conversations.value.find(c => c.id === data.id)
+    if (!existing) {
+      conversations.value = sortConversations([
+        {
+          id: data.id,
+          other_user: null,
+          last_message: null,
+          unread_count: 0,
+          last_message_at: data.last_message_at,
+          is_pinned: false,
+          pinned_at: null,
+          is_dev_chat: true,
+          company_id: data.company_id,
+          company_name: null,
+        },
+        ...conversations.value,
+      ])
+    }
+    activeConversationId.value = data.id
+    if (!messagesByConv.value[data.id]) {
+      await fetchMessages(data.id)
+    }
+    return data.id
+  }
+
   async function openWith(userId) {
     const data = await api.openConversation(userId)
     // upsert в список
@@ -159,13 +186,14 @@ export const useMessengerStore = defineStore('messenger', () => {
     } catch {}
   }
 
-  async function send(conversationId, { text, attachment_ids, reply_to_id }) {
+  async function send(conversationId, { text, attachment_ids, reply_to_id, task_id }) {
     sending.value = true
     try {
       const msg = await api.sendMessage(conversationId, {
         text: text || null,
         attachment_ids: attachment_ids || [],
         reply_to_id: reply_to_id || null,
+        task_id: task_id || null,
       })
       // Локально добавим сразу (сокет-эхо проигнорируется по id)
       applyIncomingMessage(conversationId, msg, /* fromMe */ true)
@@ -415,7 +443,7 @@ export const useMessengerStore = defineStore('messenger', () => {
     loadingList, loadingMessages, sending,
     onlineIds, lastSeenById,
     activeConversation, activeMessages, activePinned,
-    fetchConversations, fetchUnreadCount, openWith, setActive, fetchMessages,
+    fetchConversations, fetchUnreadCount, openWith, openDevChat, setActive, fetchMessages,
     fetchPinned, pollNewMessages, hasMoreHistory,
     send, forwardMessage, markRead,
     applyIncomingMessage, applyReadReceipt, applyMessageUpdated,

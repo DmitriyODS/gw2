@@ -20,14 +20,14 @@
         role="tab"
         @click="tab = t.key"
       >
-        <span class="material-symbols-rounded">{{ t.icon }}</span>
+        <span class="material-symbols-outlined">{{ t.icon }}</span>
         <span>{{ t.label }}</span>
         <span class="tab-count">{{ counts[t.key] }}</span>
       </button>
     </nav>
 
     <div v-if="!effectiveCompanyId && auth.isRootAdmin" class="placeholder">
-      <div class="placeholder-icon"><span class="material-symbols-rounded">domain</span></div>
+      <div class="placeholder-icon"><span class="material-symbols-outlined">domain</span></div>
       <h3>Выберите компанию</h3>
       <p>Списки ведутся внутри компании. Выберите её в селекторе сверху, чтобы продолжить.</p>
     </div>
@@ -39,21 +39,21 @@
           <div class="pane-toolbar">
             <p class="hint">Используются для группировки сотрудников и в статистике.</p>
             <button v-if="canEdit" class="btn-filled" @click="addItem('departments')">
-              <span class="material-symbols-rounded">add</span> Добавить
+              <span class="material-symbols-outlined">add</span> Добавить
             </button>
           </div>
           <div class="rows">
             <div v-if="adding === 'departments'" class="row editing">
-              <span class="material-symbols-rounded row-icon">apartment</span>
+              <span class="material-symbols-outlined row-icon">apartment</span>
               <input
                 v-model="newName" class="row-input" placeholder="Название отдела"
                 autofocus @keyup.enter="saveNew('departments')" @keyup.escape="cancelAdd"
               />
               <button class="icon-btn success" @click="saveNew('departments')" title="Сохранить">
-                <span class="material-symbols-rounded">check</span>
+                <span class="material-symbols-outlined">check</span>
               </button>
               <button class="icon-btn" @click="cancelAdd" title="Отмена">
-                <span class="material-symbols-rounded">close</span>
+                <span class="material-symbols-outlined">close</span>
               </button>
             </div>
             <ListRow
@@ -79,21 +79,21 @@
           <div class="pane-toolbar">
             <p class="hint">Категории работы — встреча, дизайн, написание кода и т. п.</p>
             <button v-if="canEdit" class="btn-filled" @click="addItem('unit-types')">
-              <span class="material-symbols-rounded">add</span> Добавить
+              <span class="material-symbols-outlined">add</span> Добавить
             </button>
           </div>
           <div class="rows">
             <div v-if="adding === 'unit-types'" class="row editing">
-              <span class="material-symbols-rounded row-icon">category</span>
+              <span class="material-symbols-outlined row-icon">category</span>
               <input
                 v-model="newName" class="row-input" placeholder="Название типа"
                 autofocus @keyup.enter="saveNew('unit-types')" @keyup.escape="cancelAdd"
               />
               <button class="icon-btn success" @click="saveNew('unit-types')" title="Сохранить">
-                <span class="material-symbols-rounded">check</span>
+                <span class="material-symbols-outlined">check</span>
               </button>
               <button class="icon-btn" @click="cancelAdd" title="Отмена">
-                <span class="material-symbols-rounded">close</span>
+                <span class="material-symbols-outlined">close</span>
               </button>
             </div>
             <ListRow
@@ -121,22 +121,22 @@
               Колонки канбан-режима задач. Порядок здесь определяет порядок колонок.
             </p>
             <button v-if="canEdit" class="btn-filled" @click="addItem('stages')">
-              <span class="material-symbols-rounded">add</span> Добавить
+              <span class="material-symbols-outlined">add</span> Добавить
             </button>
           </div>
 
           <div v-if="adding === 'stages'" class="row editing stage-add">
-            <span class="material-symbols-rounded row-icon">flag</span>
+            <span class="material-symbols-outlined row-icon">flag</span>
             <input
               v-model="newName" class="row-input" placeholder="Название этапа"
               autofocus @keyup.enter="saveNew('stages')" @keyup.escape="cancelAdd"
             />
             <ColorDots v-model="newColor" />
             <button class="icon-btn success" @click="saveNew('stages')" title="Сохранить">
-              <span class="material-symbols-rounded">check</span>
+              <span class="material-symbols-outlined">check</span>
             </button>
             <button class="icon-btn" @click="cancelAdd" title="Отмена">
-              <span class="material-symbols-rounded">close</span>
+              <span class="material-symbols-outlined">close</span>
             </button>
           </div>
 
@@ -398,7 +398,7 @@ const Empty = {
   setup(p) {
     return () => h('div', { class: 'empty' }, [
       h('div', { class: 'empty-icon' }, [
-        h('span', { class: 'material-symbols-rounded' }, p.icon),
+        h('span', { class: 'material-symbols-outlined' }, p.icon),
       ]),
       h('h4', p.title),
       h('p', p.text),
@@ -418,7 +418,7 @@ const ListRow = {
     })
     return () => props.editing
       ? h('div', { class: 'row editing' }, [
-          h('span', { class: 'material-symbols-rounded row-icon' }, props.icon),
+          h('span', { class: 'material-symbols-outlined row-icon' }, props.icon),
           h('input', {
             class: 'row-input',
             value: editName.value,
@@ -431,21 +431,21 @@ const ListRow = {
           h('button', {
             class: 'icon-btn success', title: 'Сохранить',
             onClick: () => emit('save', editName.value),
-          }, [h('span', { class: 'material-symbols-rounded' }, 'check')]),
+          }, [h('span', { class: 'material-symbols-outlined' }, 'check')]),
           h('button', {
             class: 'icon-btn', title: 'Отмена', onClick: () => emit('cancel'),
-          }, [h('span', { class: 'material-symbols-rounded' }, 'close')]),
+          }, [h('span', { class: 'material-symbols-outlined' }, 'close')]),
         ])
       : h('div', { class: 'row' }, [
-          h('span', { class: 'material-symbols-rounded row-icon' }, props.icon),
+          h('span', { class: 'material-symbols-outlined row-icon' }, props.icon),
           h('span', { class: 'row-name' }, props.item.name),
           props.canEdit ? h('div', { class: 'row-actions' }, [
             h('button', {
               class: 'icon-btn', title: 'Редактировать', onClick: () => emit('start'),
-            }, [h('span', { class: 'material-symbols-rounded' }, 'edit')]),
+            }, [h('span', { class: 'material-symbols-outlined' }, 'edit')]),
             h('button', {
               class: 'icon-btn danger', title: 'Удалить', onClick: () => emit('delete'),
-            }, [h('span', { class: 'material-symbols-rounded' }, 'delete')]),
+            }, [h('span', { class: 'material-symbols-outlined' }, 'delete')]),
           ]) : null,
         ])
   },
@@ -492,14 +492,14 @@ const StageRow = {
           h('button', {
             class: 'icon-btn success', title: 'Сохранить',
             onClick: () => emit('save', { name: editName.value, color: editColor.value }),
-          }, [h('span', { class: 'material-symbols-rounded' }, 'check')]),
+          }, [h('span', { class: 'material-symbols-outlined' }, 'check')]),
           h('button', {
             class: 'icon-btn', title: 'Отмена', onClick: () => emit('cancel'),
-          }, [h('span', { class: 'material-symbols-rounded' }, 'close')]),
+          }, [h('span', { class: 'material-symbols-outlined' }, 'close')]),
         ])
       : h('div', { class: 'row stage-row' }, [
           props.canEdit ? h('span', {
-            class: 'drag-grip material-symbols-rounded', title: 'Перетащить',
+            class: 'drag-grip material-symbols-outlined', title: 'Перетащить',
           }, 'drag_indicator') : null,
           h('span', { class: ['stage-dot', `tag-${props.stage.color}`] }),
           h('span', { class: 'row-name' }, props.stage.name),
@@ -507,10 +507,10 @@ const StageRow = {
           props.canEdit ? h('div', { class: 'row-actions' }, [
             h('button', {
               class: 'icon-btn', title: 'Редактировать', onClick: () => emit('start'),
-            }, [h('span', { class: 'material-symbols-rounded' }, 'edit')]),
+            }, [h('span', { class: 'material-symbols-outlined' }, 'edit')]),
             h('button', {
               class: 'icon-btn danger', title: 'Удалить', onClick: () => emit('delete'),
-            }, [h('span', { class: 'material-symbols-rounded' }, 'delete')]),
+            }, [h('span', { class: 'material-symbols-outlined' }, 'delete')]),
           ]) : null,
         ])
   },
@@ -564,7 +564,7 @@ const StageRow = {
   transition: background .12s, color .12s;
   white-space: nowrap;
 }
-.tab .material-symbols-rounded { font-size: 18px; }
+.tab .material-symbols-outlined { font-size: 18px; }
 .tab:hover { color: var(--color-on-surface); }
 .tab.active { background: var(--color-primary); color: var(--color-on-primary); }
 .tab-count {
@@ -599,7 +599,7 @@ const StageRow = {
   display: grid;
   place-items: center;
 }
-.placeholder-icon .material-symbols-rounded { font-size: 32px; }
+.placeholder-icon .material-symbols-outlined { font-size: 32px; }
 .placeholder h3 { margin: 0; color: var(--color-on-surface); }
 .placeholder p { margin: 0; color: var(--color-on-surface-variant); font-size: 14px; }
 
@@ -688,7 +688,7 @@ const StageRow = {
 .icon-btn:hover { background: var(--color-surface-high); color: var(--color-on-surface); }
 .icon-btn.success:hover { background: var(--color-primary-container); color: var(--color-on-primary-container); }
 .icon-btn.danger:hover { background: var(--color-error-container); color: var(--color-on-error-container); }
-.icon-btn .material-symbols-rounded { font-size: 18px; }
+.icon-btn .material-symbols-outlined { font-size: 18px; }
 
 .color-dots { display: inline-flex; gap: 4px; flex-wrap: wrap; }
 .color-dot {
@@ -759,7 +759,7 @@ const StageRow = {
   display: grid;
   place-items: center;
 }
-.empty .empty-icon .material-symbols-rounded { font-size: 28px; }
+.empty .empty-icon .material-symbols-outlined { font-size: 28px; }
 .empty h4 { margin: 0; font-size: 16px; color: var(--color-on-surface); }
 .empty p { margin: 0; font-size: 13px; color: var(--color-on-surface-variant); max-width: 360px; }
 
@@ -785,6 +785,6 @@ const StageRow = {
 @media (max-width: 600px) {
   .lists-view { padding: 16px; }
   .pane-toolbar { flex-direction: column; align-items: stretch; gap: 10px; }
-  .tab span:not(.material-symbols-rounded):not(.tab-count) { display: none; }
+  .tab span:not(.material-symbols-outlined):not(.tab-count) { display: none; }
 }
 </style>

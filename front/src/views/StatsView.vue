@@ -3,6 +3,11 @@
     <header class="stats-header">
       <h1>Статистика</h1>
       <div class="stats-header-actions">
+        <CompanySelect
+          v-if="authStore.isRootAdmin"
+          placeholder="Все компании"
+          class="company-pill"
+        />
         <a
           href="/tv"
           target="_blank"
@@ -78,6 +83,35 @@
               </Column>
             </DataTable>
           </div>
+        </StatsWidget>
+
+        <StatsWidget title="Ответственные по задачам">
+          <div v-if="responsiblesData.length" class="table-scroll">
+            <DataTable :value="responsiblesData" size="small" :show-gridlines="false">
+              <Column field="fio" header="Сотрудник">
+                <template #body="{ data }">
+                  <div class="resp-cell">
+                    <img class="resp-ava" :src="avatarOf(data)" :alt="data.fio" />
+                    <div class="resp-info">
+                      <div class="resp-fio">{{ data.fio }}</div>
+                      <div v-if="data.post" class="resp-post">{{ data.post }}</div>
+                    </div>
+                  </div>
+                </template>
+              </Column>
+              <Column header="Открытые" style="width:120px">
+                <template #body="{ data }">
+                  <span class="resp-num open">{{ data.open_count }}</span>
+                </template>
+              </Column>
+              <Column header="Закрытые" style="width:120px">
+                <template #body="{ data }">
+                  <span class="resp-num closed">{{ data.closed_count }}</span>
+                </template>
+              </Column>
+            </DataTable>
+          </div>
+          <div v-else class="user-tasks-empty">Нет назначенных ответственных</div>
         </StatsWidget>
 
         <StatsWidget title="Задачи с участием сотрудника" class="full-width">
@@ -168,7 +202,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import { usePermission, ROLES } from '@/composables/usePermission.js'
 import { useAuthStore } from '@/stores/auth.js'
 import { useNotificationsStore } from '@/stores/notifications.js'
@@ -179,11 +213,14 @@ import {
   exportStatsExtended,
   getStatsUserTasks,
   getStatsEmployees,
+  getStatsResponsibles,
 } from '@/api/stats.js'
 import { formatHours } from '@/utils/time.js'
+import { useCompaniesStore } from '@/stores/companies.js'
 import StatsPeriodControl from '@/components/stats/StatsPeriodControl.vue'
 import StatsWidget from '@/components/stats/StatsWidget.vue'
 import CalendarGrid from '@/components/stats/CalendarGrid.vue'
+import CompanySelect from '@/components/common/CompanySelect.vue'
 import DataTable from 'primevue/datatable'
 import Column from 'primevue/column'
 import ProgressSpinner from 'primevue/progressspinner'
@@ -210,6 +247,15 @@ const userTasksLoading = ref(false)
 const employees = ref([])
 const employeesLoading = ref(false)
 const selectedEmployeeId = ref(null)
+const responsiblesData = ref([])
+
+const companies = useCompaniesStore()
+const activeCompanyId = computed(() =>
+  authStore.isRootAdmin ? companies.activeCompanyId : authStore.companyId)
+
+function avatarOf(u) {
+  return u.avatar_path ? `/uploads/${u.avatar_path}` : `/api/users/${u.user_id || u.id}/identicon`
+}
 
 const flatUserTypes = computed(() => {
   if (!extendedData.value?.by_unit_types_per_user) return []
@@ -234,11 +280,12 @@ function roundHours(val) {
 async function loadData() {
   if (!currentFrom.value || !currentTo.value) return
   loading.value = true
+  const cid = activeCompanyId.value
   try {
     if (mode.value === 'common') {
-      commonData.value = await getStatsCommon(currentFrom.value, currentTo.value)
+      commonData.value = await getStatsCommon(currentFrom.value, currentTo.value, cid)
     } else {
-      extendedData.value = await getStatsExtended(currentFrom.value, currentTo.value)
+      extendedData.value = await getStatsExtended(currentFrom.value, currentTo.value, cid)
     }
   } catch (e) {
     notif.error(e.message || 'Ошибка загрузки статистики')
@@ -247,6 +294,7 @@ async function loadData() {
   }
   if (mode.value === 'common') {
     loadUserTasks()
+    loadResponsibles()
   }
 }
 
@@ -263,6 +311,14 @@ async function loadUserTasks() {
   }
 }
 
+async function loadResponsibles() {
+  try {
+    responsiblesData.value = await getStatsResponsibles(activeCompanyId.value)
+  } catch {
+    responsiblesData.value = []
+  }
+}
+
 function onPeriodChange({ from, to }) {
   currentFrom.value = from
   currentTo.value = to
@@ -275,20 +331,31 @@ function switchMode(m) {
 }
 
 async function handleExportCommon() {
-  return exportStatsCommon(currentFrom.value, currentTo.value)
+  return exportStatsCommon(currentFrom.value, currentTo.value, activeCompanyId.value)
 }
 
-onMounted(async () => {
-  if (canSelectEmployee.value) {
-    employeesLoading.value = true
-    try {
-      employees.value = await getStatsEmployees()
-    } catch {
-      employees.value = []
-    } finally {
-      employeesLoading.value = false
-    }
+async function loadEmployees() {
+  if (!canSelectEmployee.value) return
+  employeesLoading.value = true
+  try {
+    employees.value = await getStatsEmployees(activeCompanyId.value)
+  } catch {
+    employees.value = []
+  } finally {
+    employeesLoading.value = false
   }
+}
+
+watch(activeCompanyId, () => {
+  loadData()
+  loadEmployees()
+})
+
+onMounted(async () => {
+  if (authStore.isRootAdmin) {
+    await companies.load()
+  }
+  loadEmployees()
 })
 </script>
 
@@ -383,6 +450,56 @@ onMounted(async () => {
   justify-content: center;
   align-items: center;
   padding: 80px;
+}
+
+.company-pill { min-width: 180px; }
+
+.resp-cell {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.resp-ava {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  object-fit: cover;
+  flex-shrink: 0;
+}
+.resp-info { min-width: 0; }
+.resp-fio {
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--color-text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.resp-post {
+  font-size: 11.5px;
+  color: var(--color-text-dim);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.resp-num {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 36px;
+  height: 26px;
+  padding: 0 10px;
+  border-radius: 13px;
+  font-weight: 700;
+  font-size: 13px;
+}
+.resp-num.open {
+  background: var(--color-primary-container);
+  color: var(--color-on-primary-container);
+}
+.resp-num.closed {
+  background: var(--color-success-container, var(--color-surface-high));
+  color: var(--color-on-success-container, var(--color-success));
 }
 
 .empty-state {

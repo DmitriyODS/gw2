@@ -3,7 +3,7 @@
     <transition name="lb">
       <div v-if="modelValue" class="avatar-lb" @click.self="close">
         <button class="lb-close" @click="close" aria-label="Закрыть">
-          <span class="material-symbols-rounded">close</span>
+          <span class="material-symbols-outlined">close</span>
         </button>
         <div class="lb-stage">
           <img :src="src" :alt="alt || 'Фото'" class="lb-img" @click.stop />
@@ -77,7 +77,7 @@ onBeforeUnmount(() => {
   cursor: pointer;
   backdrop-filter: blur(8px);
 }
-.lb-close .material-symbols-rounded { font-size: 24px; }
+.lb-close .material-symbols-outlined { font-size: 24px; }
 .lb-close:hover { background: var(--color-surface); }
 
 .lb-stage {

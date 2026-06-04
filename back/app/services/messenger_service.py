@@ -27,15 +27,63 @@ _ALLOWED_MIME_PREFIXES = ("image/", "audio/", "video/", "application/", "text/")
 def open_conversation(current_user_id: int, other_user_id: int):
     if current_user_id == other_user_id:
         raise MessengerServiceError("Нельзя написать самому себе", "SELF_CONVERSATION", 400)
+    me = user_repo.get_by_id(current_user_id)
     other = user_repo.get_by_id(other_user_id)
     if other is None or other.is_hidden:
         raise MessengerServiceError("Собеседник не найден", "USER_NOT_FOUND", 404)
+    # Multi-tenancy: вне компании писать нельзя. Администратор системы
+    # (company_id IS NULL) может писать любому сотруднику любой компании.
+    # Сотрудник может писать только тем, кто в его же компании или
+    # Администратору системы.
+    if me is not None and me.company_id is not None and other.company_id is not None:
+        if me.company_id != other.company_id:
+            raise MessengerServiceError(
+                "Нельзя писать сотруднику другой компании", "CROSS_COMPANY", 403,
+            )
     conv = message_repo.get_or_create_conversation(current_user_id, other_user_id)
     db.session.commit()
     return conv
 
 
+def open_dev_chat(current_user_id: int):
+    """Открыть/создать спец-чат компании с разработчиками. У каждого сотрудника
+    свой спец-чат через его company. Администратор системы вызывать не должен
+    (он использует list_dev_chats / открывает чат конкретной компании)."""
+    me = user_repo.get_by_id(current_user_id)
+    if me is None:
+        raise MessengerServiceError("Пользователь не найден", "USER_NOT_FOUND", 404)
+    if me.company_id is None:
+        raise MessengerServiceError(
+            "У Администратора системы нет своего спец-чата",
+            "ADMIN_HAS_NO_DEVCHAT", 400,
+        )
+    conv = message_repo.get_or_create_dev_chat(me.company_id)
+    db.session.commit()
+    return conv
+
+
+def open_dev_chat_for_company(current_user_id: int, company_id: int):
+    """Открыть/создать спец-чат для компании от имени Администратора системы."""
+    me = user_repo.get_by_id(current_user_id)
+    if me is None or me.company_id is not None:
+        raise MessengerServiceError("Только Администратор системы", "FORBIDDEN", 403)
+    conv = message_repo.get_or_create_dev_chat(company_id)
+    db.session.commit()
+    return conv
+
+
 def _ensure_member(conv, user_id: int):
+    """Проверяет доступ к диалогу. Для p2p — только участники. Для dev-чата —
+    сотрудники компании chat'а + Администраторы системы."""
+    if conv.is_dev_chat:
+        user = user_repo.get_by_id(user_id)
+        if user is None:
+            raise MessengerServiceError("Нет доступа к диалогу", "FORBIDDEN", 403)
+        if user.company_id is None:
+            return  # Администратор системы
+        if user.company_id != conv.company_id:
+            raise MessengerServiceError("Нет доступа к диалогу", "FORBIDDEN", 403)
+        return
     if user_id not in (conv.user_a_id, conv.user_b_id):
         raise MessengerServiceError("Нет доступа к диалогу", "FORBIDDEN", 403)
 
@@ -50,11 +98,12 @@ def get_conversation_for_user(conversation_id: int, user_id: int):
 
 def send_message(conversation_id: int, sender_id: int,
                  text: Optional[str], attachment_ids: list[int],
-                 reply_to_id: Optional[int] = None):
+                 reply_to_id: Optional[int] = None,
+                 task_id: Optional[int] = None):
     conv = get_conversation_for_user(conversation_id, sender_id)
     text = (text or "").strip() or None
     attachment_ids = attachment_ids or []
-    if not text and not attachment_ids:
+    if not text and not attachment_ids and task_id is None:
         raise MessengerServiceError("Пустое сообщение", "EMPTY_MESSAGE", 400)
 
     # Проверим, что все вложения принадлежат отправителю и ещё не привязаны
@@ -69,8 +118,29 @@ def send_message(conversation_id: int, sender_id: int,
         if target is None or target.conversation_id != conv.id:
             raise MessengerServiceError("Недопустимый ответ", "BAD_REPLY", 400)
 
+    # Прикреплённая задача: должна быть из той же компании, что и диалог.
+    kind = "text"
+    if task_id is not None:
+        from app.repositories import task_repo
+        task = task_repo.get_by_id(task_id)
+        if task is None:
+            raise MessengerServiceError("Задача не найдена", "TASK_NOT_FOUND", 404)
+        if conv.company_id and task.company_id != conv.company_id:
+            raise MessengerServiceError(
+                "Задача из другой компании", "TASK_WRONG_COMPANY", 400,
+            )
+        kind = "task"
+
+    # В dev-чате ответ Администратора системы получает специальный kind —
+    # фронт рисует «Разработчики» badge. Для kind='task' это правило не
+    # применяется (плашка задачи имеет приоритет).
+    if conv.is_dev_chat and kind == "text":
+        sender = user_repo.get_by_id(sender_id)
+        if sender is not None and sender.company_id is None:
+            kind = "system_dev_reply"
+
     msg = message_repo.create_message(conversation_id, sender_id, text, attachment_ids,
-                                      reply_to_id=reply_to_id)
+                                      reply_to_id=reply_to_id, kind=kind, task_id=task_id)
     db.session.commit()
     logger.info("message.send", extra={"extra": {
         "event": "message.send", "conversation_id": conversation_id,
@@ -97,11 +167,14 @@ def forward_message(source_message_id: int, sender_id: int,
     seen_ids: set[int] = set()
     for cid in conversation_ids or []:
         conv = get_conversation_for_user(cid, sender_id)
+        # Пересылать в dev-чат смысла нет (это поток в техподдержку).
+        if conv.is_dev_chat:
+            continue
         if conv.id not in seen_ids:
             target_convs.append(conv)
             seen_ids.add(conv.id)
     for uid in user_ids or []:
-        conv = open_conversation(sender_id, uid)
+        conv = open_conversation(sender_id, uid)  # внутри проверка company scope
         if conv.id not in seen_ids:
             target_convs.append(conv)
             seen_ids.add(conv.id)

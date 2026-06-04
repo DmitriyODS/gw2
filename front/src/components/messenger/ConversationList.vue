@@ -2,9 +2,19 @@
   <aside class="conv-list" :class="{ 'is-mobile-hidden': hideOnMobile }">
     <div class="conv-list-header">
       <h2>Чаты</h2>
-      <button class="new-btn" @click="$emit('new-chat')" title="Новый чат">
-        <span class="material-symbols-outlined">edit_square</span>
-      </button>
+      <div class="header-actions">
+        <button
+          v-if="showDevChatButton"
+          class="dev-btn"
+          title="Спец-чат с разработчиками"
+          @click="$emit('open-dev-chat')"
+        >
+          <span class="material-symbols-outlined">support_agent</span>
+        </button>
+        <button class="new-btn" @click="$emit('new-chat')" title="Новый чат">
+          <span class="material-symbols-outlined">edit_square</span>
+        </button>
+      </div>
     </div>
 
     <div class="conv-search">
@@ -42,13 +52,21 @@
         :class="{ active: c.id === activeId, unread: c.unread_count > 0, pinned: c.is_pinned }"
         @click="$emit('select', c.id)"
       >
-        <div class="conv-avatar-wrap">
+        <div v-if="c.is_dev_chat" class="conv-avatar-wrap dev">
+          <span class="material-symbols-outlined">support_agent</span>
+        </div>
+        <div v-else class="conv-avatar-wrap">
           <img class="conv-avatar" :src="avatarOf(c.other_user)" :alt="c.other_user?.fio" />
           <span v-if="messenger.isOnline(c.other_user?.id)" class="online-dot" title="В сети"></span>
         </div>
         <div class="conv-body">
           <div class="conv-top">
-            <span class="conv-name">{{ c.other_user?.fio }}</span>
+            <span class="conv-name">
+              <template v-if="c.is_dev_chat">
+                {{ c.company_name ? `${c.company_name} — Разработчики` : 'Разработчики' }}
+              </template>
+              <template v-else>{{ c.other_user?.fio }}</template>
+            </span>
             <span v-if="c.last_message_at" class="conv-time">{{ formatTime(c.last_message_at) }}</span>
           </div>
           <div class="conv-bottom">
@@ -93,19 +111,25 @@ const props = defineProps({
   activeId: { type: Number, default: null },
   loading: { type: Boolean, default: false },
   hideOnMobile: { type: Boolean, default: false },
+  showDevChatButton: { type: Boolean, default: false },
 })
 
-defineEmits(['select', 'new-chat', 'toggle-pin', 'delete'])
+defineEmits(['select', 'new-chat', 'toggle-pin', 'delete', 'open-dev-chat'])
 
 const filter = ref('')
 
 const visible = computed(() => {
   const q = filter.value.trim().toLowerCase()
   if (!q) return props.conversations
-  return props.conversations.filter(c =>
-    c.other_user?.fio?.toLowerCase().includes(q) ||
-    c.other_user?.login?.toLowerCase().includes(q)
-  )
+  return props.conversations.filter(c => {
+    if (c.is_dev_chat) {
+      return 'разработчики'.includes(q) || (c.company_name || '').toLowerCase().includes(q)
+    }
+    return (
+      c.other_user?.fio?.toLowerCase().includes(q) ||
+      c.other_user?.login?.toLowerCase().includes(q)
+    )
+  })
 })
 
 function avatarOf(u) {
@@ -181,6 +205,35 @@ function formatTime(iso) {
 }
 
 .new-btn:hover { background: var(--color-surface-low); }
+
+.header-actions { display: flex; align-items: center; gap: 4px; }
+
+.dev-btn {
+  background: var(--color-tertiary-container);
+  color: var(--color-on-tertiary-container);
+  border: none;
+  cursor: pointer;
+  padding: 6px;
+  border-radius: var(--radius-sm);
+  display: inline-flex;
+}
+.dev-btn:hover { filter: brightness(0.95); }
+.dev-btn .material-symbols-outlined { font-size: 20px; }
+
+.conv-avatar-wrap.dev {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background: var(--color-tertiary-container);
+  color: var(--color-on-tertiary-container);
+  flex-shrink: 0;
+}
+.conv-avatar-wrap.dev .material-symbols-outlined {
+  font-size: 22px;
+  font-variation-settings: 'FILL' 1;
+}
 
 .conv-search {
   padding: 8px 16px 12px;

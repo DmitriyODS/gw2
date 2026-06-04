@@ -5,6 +5,7 @@ import { useAuthStore } from '@/stores/auth.js'
 import { useNotificationsStore } from '@/stores/notifications.js'
 import { usePermission, ROLES } from '@/composables/usePermission.js'
 import MarkdownView from '@/components/common/MarkdownView.vue'
+import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
 
 const props = defineProps({
   taskId: { type: Number, required: true },
@@ -21,6 +22,7 @@ const sending = ref(false)
 const editingId = ref(null)
 const editText = ref('')
 const listEl = ref(null)
+const deletingId = ref(null)
 
 const list = computed(() => tasks.commentsByTask[props.taskId] || [])
 
@@ -83,10 +85,16 @@ async function saveEdit() {
   }
 }
 
-async function remove(c) {
-  if (!confirm('Удалить комментарий?')) return
+function remove(c) {
+  deletingId.value = c.id
+}
+
+async function confirmDelete() {
+  const id = deletingId.value
+  if (id == null) return
+  deletingId.value = null
   try {
-    await tasks.deleteComment(props.taskId, c.id)
+    await tasks.deleteComment(props.taskId, id)
   } catch (e) {
     notify.error(e?.message || 'Не удалось удалить')
   }
@@ -154,6 +162,16 @@ onMounted(load)
         </div>
       </div>
     </div>
+
+    <ConfirmDialog
+      :visible="deletingId != null"
+      header="Удалить комментарий"
+      message="Это действие нельзя отменить. Удалить комментарий?"
+      confirm-label="Удалить"
+      danger-confirm
+      @confirm="confirmDelete"
+      @cancel="deletingId = null"
+    />
 
     <div class="comment-input">
       <textarea

@@ -158,28 +158,45 @@ def post_message(conversation_id: int):
             text=data.get("text"),
             attachment_ids=data.get("attachment_ids") or [],
             reply_to_id=data.get("reply_to_id"),
+            task_id=data.get("task_id"),
         )
     except MessengerServiceError as e:
         return jsonify({"error": e.code, "message": e.message}), e.http_status
 
     payload = _msg.dump(msg)
 
-    # WebSocket: уведомим обе стороны
     from app.extensions import socketio
-    recipient_id = conv.other_user_id(me)
-    socketio.emit("message:new", {
+    payload_event = {
         "conversation_id": conv.id,
         "message": payload,
         "from_user_id": me,
-    }, room=f"user_{recipient_id}")
-    # Эхо отправителю — чтобы другие его вкладки/устройства тоже обновились
-    socketio.emit("message:new", {
-        "conversation_id": conv.id,
-        "message": payload,
-        "from_user_id": me,
-    }, room=f"user_{me}")
+    }
+    if conv.is_dev_chat:
+        # Спец-чат компании: уведомляем всех сотрудников компании и всех
+        # Администраторов системы (личные комнаты `user_{id}`).
+        for uid in _dev_chat_user_ids(conv):
+            socketio.emit("message:new", payload_event, room=f"user_{uid}")
+    else:
+        recipient_id = conv.other_user_id(me)
+        socketio.emit("message:new", payload_event, room=f"user_{recipient_id}")
+        # Эхо отправителю — чтобы другие его вкладки/устройства тоже обновились
+        socketio.emit("message:new", payload_event, room=f"user_{me}")
 
     return jsonify(payload), 201
+
+
+def _dev_chat_user_ids(conv) -> list[int]:
+    """Все пользователи, видимые dev-чату конкретной компании: сотрудники этой
+    компании + все Администраторы системы (`company_id IS NULL`)."""
+    from app.models import User
+    from app.extensions import db
+    rows = db.session.execute(
+        db.select(User.id).where(
+            User.is_hidden.is_(False),
+            db.or_(User.company_id == conv.company_id, User.company_id.is_(None)),
+        )
+    ).scalars().all()
+    return list(rows)
 
 
 @bp.post("/forward")
@@ -505,6 +522,85 @@ def presence_list():
     """
     from app.sockets import presence
     return jsonify({"online": presence.online_user_ids()}), 200
+
+
+@bp.get("/dev-chat")
+@require_auth
+def open_dev_chat():
+    """
+    Открыть/создать спец-чат компании с разработчиками. Для сотрудника —
+    его собственный спец-чат (по его company_id). Возвращает Conversation.
+    Администратор системы должен использовать /dev-chats (или передавать
+    ?company_id).
+    ---
+    tags: [messenger]
+    security: [BearerAuth: []]
+    parameters:
+      - in: query
+        name: company_id
+        schema: {type: integer}
+        required: false
+    responses:
+      200:
+        description: Спец-чат
+    """
+    me = int(get_jwt_identity())
+    raw_company = request.args.get("company_id")
+    try:
+        if raw_company:
+            conv = messenger_service.open_dev_chat_for_company(me, int(raw_company))
+        else:
+            conv = messenger_service.open_dev_chat(me)
+    except MessengerServiceError as e:
+        return jsonify({"error": e.code, "message": e.message}), e.http_status
+    return jsonify(_conv.dump(conv)), 200
+
+
+@bp.get("/dev-chats")
+@require_auth
+def list_dev_chats():
+    """
+    Список спец-чатов всех компаний. Только для Администратора системы.
+    ---
+    tags: [messenger]
+    security: [BearerAuth: []]
+    responses:
+      200:
+        description: Список dev-чатов компаний
+    """
+    me = int(get_jwt_identity())
+    me_user = user_repo.get_by_id(me)
+    if me_user is None or me_user.company_id is not None:
+        return jsonify({"error": "FORBIDDEN", "message": "Только Администратор системы"}), 403
+
+    convs = message_repo.list_dev_chats()
+    me_id = me
+
+    items = []
+    for c in convs:
+        last = None
+        last_rows = message_repo.list_messages(c.id, user_id=me_id, limit=1)
+        if last_rows:
+            last = last_rows[-1]
+        # Непрочитанные сообщения от сотрудников (не Администратора системы).
+        from app.extensions import db
+        from app.models import Message
+        unread = db.session.execute(
+            db.select(db.func.count(Message.id)).where(
+                Message.conversation_id == c.id,
+                Message.sender_id != me_id,
+                Message.read_at.is_(None),
+            )
+        ).scalar_one() or 0
+        items.append({
+            "conversation": c,
+            "other_user": None,
+            "last_message": last,
+            "unread_count": unread,
+            "is_pinned": False,
+            "pinned_at": None,
+        })
+    return jsonify(_conv_list.dump(items)), 200
 
 
 @bp.get("/unread")

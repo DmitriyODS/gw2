@@ -36,6 +36,35 @@ def get_or_create_conversation(user_a: int, user_b: int) -> Conversation:
     return conv
 
 
+def get_dev_chat(company_id: int) -> Optional[Conversation]:
+    return db.session.execute(
+        db.select(Conversation).where(
+            Conversation.is_dev_chat.is_(True),
+            Conversation.company_id == company_id,
+        )
+    ).scalar_one_or_none()
+
+
+def get_or_create_dev_chat(company_id: int) -> Conversation:
+    conv = get_dev_chat(company_id)
+    if conv:
+        return conv
+    conv = Conversation(user_a_id=None, user_b_id=None,
+                        company_id=company_id, is_dev_chat=True)
+    db.session.add(conv)
+    db.session.flush()
+    return conv
+
+
+def list_dev_chats() -> list[Conversation]:
+    """Все спец-чаты компаний (для Администратора системы)."""
+    return list(db.session.execute(
+        db.select(Conversation).where(Conversation.is_dev_chat.is_(True))
+        .order_by(Conversation.last_message_at.desc().nullslast(),
+                  Conversation.created_at.desc())
+    ).scalars().all())
+
+
 def get_conversation(conversation_id: int) -> Optional[Conversation]:
     return db.session.get(Conversation, conversation_id)
 
@@ -43,8 +72,10 @@ def get_conversation(conversation_id: int) -> Optional[Conversation]:
 def list_user_conversations(user_id: int) -> list[dict]:
     """Список диалогов пользователя с информацией о собеседнике, последнем
     сообщении и количестве непрочитанных. Скрытые «у себя» — не показываются.
-    Сортировка: закреплённые (по pinned_at сторонним DESC) → остальные
-    (по last_message_at DESC)."""
+    Спец-чат компании (`is_dev_chat`) добавляется отдельно — для сотрудника
+    он один, для Администратора системы dev-чаты выгружаются отдельным
+    эндпоинтом (`list_dev_chats`). Сортировка: закреплённые (по pinned_at
+    сторонним DESC) → остальные (по last_message_at DESC)."""
     # Фильтр «не скрыто на моей стороне»
     not_hidden = or_(
         and_(Conversation.user_a_id == user_id, Conversation.hidden_for_a.is_(False)),
@@ -52,6 +83,7 @@ def list_user_conversations(user_id: int) -> list[dict]:
     )
     convs = db.session.execute(
         db.select(Conversation).where(
+            Conversation.is_dev_chat.is_(False),
             or_(Conversation.user_a_id == user_id, Conversation.user_b_id == user_id),
             not_hidden,
         ).order_by(Conversation.last_message_at.desc().nullslast(), Conversation.created_at.desc())
@@ -186,13 +218,16 @@ def create_call_message(conversation_id: int, sender_id: int, call_id: int) -> M
 
 def create_message(conversation_id: int, sender_id: int, text: Optional[str],
                    attachment_ids: list[int], reply_to_id: Optional[int] = None,
-                   forwarded_from_user_id: Optional[int] = None) -> Message:
+                   forwarded_from_user_id: Optional[int] = None,
+                   kind: str = "text", task_id: Optional[int] = None) -> Message:
     msg = Message(
         conversation_id=conversation_id,
         sender_id=sender_id,
         text=text or None,
         reply_to_id=reply_to_id,
         forwarded_from_user_id=forwarded_from_user_id,
+        kind=kind,
+        task_id=task_id,
     )
     db.session.add(msg)
     db.session.flush()

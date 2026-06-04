@@ -5,8 +5,10 @@
       :active-id="activeId"
       :loading="messenger.loadingList"
       :hide-on-mobile="isMobile && !!activeId"
+      :show-dev-chat-button="!authStore.isRootAdmin"
       @select="selectConversation"
       @new-chat="newChatOpen = true"
+      @open-dev-chat="openDevChat"
       @toggle-pin="onTogglePin"
       @delete="askDeleteConversation"
     />
@@ -27,14 +29,25 @@
         <button v-if="isMobile" class="back-btn" @click="goBack" title="Назад">
           <span class="material-symbols-outlined">arrow_back</span>
         </button>
-        <div class="chat-avatar-wrap">
+        <button
+          v-if="!active.is_dev_chat"
+          class="chat-avatar-wrap as-btn"
+          aria-label="Открыть фото"
+          @click="lightboxOpen = true"
+        >
           <img class="chat-avatar" :src="avatarOf(active.other_user)" :alt="active.other_user?.fio" />
           <span v-if="otherOnline" class="online-dot" title="В сети"></span>
+        </button>
+        <div v-else class="chat-avatar-wrap dev">
+          <span class="material-symbols-outlined">support_agent</span>
         </div>
         <div class="chat-title">
-          <div class="chat-fio">{{ active.other_user?.fio }}</div>
+          <div class="chat-fio">
+            {{ active.is_dev_chat ? 'Разработчики' : active.other_user?.fio }}
+          </div>
           <div class="chat-status" :class="{ online: otherOnline }">
-            {{ otherOnline ? 'в сети' : lastSeenText }}
+            <template v-if="active.is_dev_chat">Спец-чат компании</template>
+            <template v-else>{{ otherOnline ? 'в сети' : lastSeenText }}</template>
           </div>
         </div>
         <div class="chat-tools" data-tutorial="chat-tools" ref="toolsRef">
@@ -128,11 +141,14 @@
             :key="m.id"
             :message="m"
             :is-mine="m.sender_id === authStore.user?.id"
+            :sender-name="senderNameFor(m)"
             @delete="askDeleteMessage"
             @reply="startReply"
             @forward="startForward"
             @pin="onTogglePinMessage"
             @join-call="onJoinCall"
+            @open-task="openTask"
+            @context-menu="openContextMenu"
           />
         </template>
       </div>
@@ -142,8 +158,10 @@
         ref="messageInputRef"
         :sending="messenger.sending"
         :reply-to="replyTo"
+        v-model:attached-task="attachedTask"
         @send="onSend"
         @cancel-reply="replyTo = null"
+        @attach-task="attachTaskOpen = true"
       />
     </section>
 
@@ -176,6 +194,29 @@
       :other-name="deleteDialog.otherName"
       @confirm="onDeleteConfirm"
     />
+
+    <AttachTaskDialog v-model="attachTaskOpen" @pick="onPickTask" />
+
+    <AvatarLightbox
+      v-if="active && !active.is_dev_chat && active.other_user"
+      v-model="lightboxOpen"
+      :src="avatarOf(active.other_user)"
+      :alt="active.other_user.fio"
+      :caption="active.other_user.fio"
+    />
+
+    <MessageContextMenu
+      :visible="ctxMenu.visible"
+      :x="ctxMenu.x"
+      :y="ctxMenu.y"
+      :is-pinned="!!ctxMenu.message?.pinned_at"
+      :show-pin="!active?.is_dev_chat"
+      :show-forward="ctxMenu.message?.kind !== 'call' && !active?.is_dev_chat"
+      :show-copy="!!ctxMenu.message?.text"
+      :show-delete="ctxMenu.message?.kind !== 'call'"
+      @close="ctxMenu.visible = false"
+      @action="onCtxAction"
+    />
   </div>
 </template>
 
@@ -196,6 +237,9 @@ import MessageInput from '@/components/messenger/MessageInput.vue'
 import NewChatDialog from '@/components/messenger/NewChatDialog.vue'
 import DeleteScopeDialog from '@/components/messenger/DeleteScopeDialog.vue'
 import ForwardDialog from '@/components/messenger/ForwardDialog.vue'
+import AttachTaskDialog from '@/components/messenger/AttachTaskDialog.vue'
+import MessageContextMenu from '@/components/messenger/MessageContextMenu.vue'
+import AvatarLightbox from '@/components/common/AvatarLightbox.vue'
 import ProgressSpinner from 'primevue/progressspinner'
 
 const route = useRoute()
@@ -218,11 +262,70 @@ const authStore = useAuthStore()
 const { isMobile } = useBreakpoint()
 
 const newChatOpen = ref(false)
+const attachTaskOpen = ref(false)
+const attachedTask = ref(null)
+const lightboxOpen = ref(false)
+const ctxMenu = ref({ visible: false, x: 0, y: 0, message: null })
 const messagesEl = ref(null)
 const messageInputRef = ref(null)
 const dragOver = ref(false)
 let dragDepth = 0
 const replyTo = ref(null)
+
+function openContextMenu({ x, y, message }) {
+  ctxMenu.value = { visible: true, x, y, message }
+}
+
+function onCtxAction(action) {
+  const m = ctxMenu.value.message
+  if (!m) return
+  if (action === 'reply') startReply(m)
+  else if (action === 'forward') startForward(m)
+  else if (action === 'pin') onTogglePinMessage(m)
+  else if (action === 'delete') askDeleteMessage(m)
+  else if (action === 'copy') copyMessageText(m)
+}
+
+function copyMessageText(m) {
+  if (!m.text) return
+  if (navigator.clipboard?.writeText) {
+    navigator.clipboard.writeText(m.text).catch(() => {/* no-op */})
+  }
+}
+
+function onPickTask(task) { attachedTask.value = task }
+
+function openTask(taskId) {
+  router.push({ path: '/tasks', query: { open: taskId } })
+}
+
+async function openDevChat() {
+  const id = await messenger.openDevChat()
+  router.replace(`/messenger/${id}`)
+  await nextTick()
+  scrollToBottom()
+}
+
+function senderNameFor(m) {
+  // В dev-чате под чужими сообщениями показываем ФИО автора —
+  // в обычных p2p-диалогах это лишнее.
+  if (!active.value?.is_dev_chat) return ''
+  if (m.sender_id === authStore.user?.id) return ''
+  return devSenders.value[m.sender_id] || ''
+}
+
+const devSenders = ref({})
+
+// При входе в dev-чат подтягиваем каталог сотрудников компании,
+// чтобы подписывать сообщения ФИО автора.
+watch(() => active.value?.is_dev_chat && active.value?.id, async (isDev) => {
+  if (!isDev) return
+  try {
+    const { getDirectory } = await import('@/api/users.js')
+    const users = await getDirectory('', false)
+    devSenders.value = Object.fromEntries(users.map(u => [u.id, u.fio]))
+  } catch {/* без имён в шапке тоже жить можно */}
+})
 
 const chatMenuOpen = ref(false)
 const toolsRef = ref(null)
@@ -605,6 +708,24 @@ watch(() => route.params.conversationId, async (id) => {
   position: relative;
   flex-shrink: 0;
 }
+
+.chat-avatar-wrap.as-btn {
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+}
+
+.chat-avatar-wrap.dev {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background: var(--color-tertiary-container);
+  color: var(--color-on-tertiary-container);
+}
+.chat-avatar-wrap.dev .material-symbols-outlined { font-size: 22px; }
 
 .chat-avatar {
   width: 40px;
