@@ -18,6 +18,8 @@
     empty-message="Компании не загружены"
     empty-filter-message="Ничего не найдено"
     @update:model-value="onChange"
+    @show="emit('show')"
+    @hide="emit('hide')"
   >
     <template #value="slotProps">
       <span class="company-value">
@@ -51,6 +53,11 @@ const props = defineProps({
   compact: { type: Boolean, default: false },
   placeholder: { type: String, default: 'Все компании' },
 })
+
+// show/hide прокидываем наверх, чтобы родитель мог удержать своё состояние,
+// пока открыта overlay-выпадашка (см. AppSidebar — он сворачивается на
+// mouseleave, но не должен делать этого, пока курсор в выпадашке).
+const emit = defineEmits(['show', 'hide'])
 
 const auth = useAuthStore()
 const companies = useCompaniesStore()

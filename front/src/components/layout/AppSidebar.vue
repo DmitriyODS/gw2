@@ -2,14 +2,17 @@
   <!-- Внешний .sidebar резервирует 72px в потоке; внутренний разворачивается
        поверх контента при наведении (см. v2.7.0). Пункты — данными по ролям. -->
   <nav class="sidebar">
-    <div class="sidebar-inner" :class="{ expanded: hovered }" @mouseenter="hovered = true" @mouseleave="hovered = false">
+    <div class="sidebar-inner" :class="{ expanded }" @mouseenter="hovered = true" @mouseleave="hovered = false">
       <div class="sidebar-logo" data-tutorial="logo" @click="openChangelog" title="Что нового">
         <img src="/logo.svg" alt="Groove Work" class="sidebar-logo-img" />
         <span class="sidebar-logo-text">Groove Work</span>
       </div>
 
-      <div v-if="hovered" class="sidebar-company">
-        <CompanySelect compact />
+      <!-- v-show, не v-if: PrimeVue Select рендерит overlay через Teleport,
+           размонтирование компонента уничтожает overlay и закрывает выпадашку
+           до того, как пользователь дойдёт до пункта. -->
+      <div v-show="expanded" class="sidebar-company">
+        <CompanySelect compact @show="companyDropdownOpen = true" @hide="companyDropdownOpen = false" />
       </div>
 
       <div class="sidebar-nav">
@@ -64,6 +67,13 @@ const { isAtLeast } = usePermission()
 const { open: openChangelog } = useChangelog()
 
 const hovered = ref(false)
+const companyDropdownOpen = ref(false)
+
+// Сайдбар развёрнут, пока курсор на нём — ИЛИ пока открыта overlay-выпадашка
+// CompanySelect: пользователь уже навёл курсор на пункт в overlay-панели,
+// которая расположена ПРАВЕЕ сайдбара (за пределами .sidebar-inner). На mouseleave
+// сайдбар бы свернулся, выпадашка пропала бы. Держим его развёрнутым по флагу.
+const expanded = computed(() => hovered.value || companyDropdownOpen.value)
 
 // Состав боковой панели по ролям (см. PLAN_V3.md):
 //   Сотрудник/Менеджер/Руководитель: Задачи, Статистика, Мессенджер,
