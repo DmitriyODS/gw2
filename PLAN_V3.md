@@ -103,29 +103,29 @@
 > Самый объёмный этап по функционалу — переписывается карточка задачи, добавляются режимы, добавляется коллаборация.
 
 **Backend**
-- [ ] Поле `tasks.responsible_user_id` (FK users, NULL только на старых задачах; новые — обязательно). По умолчанию = создатель.
-- [ ] Поле `tasks.stage_id` (FK stages, NULL).
-- [ ] Условное поле `tasks.yougile_url` (уже есть в проекте — оставляем; в API отдаём в зависимости от `company.settings.uses_yougile`).
-- [ ] Модель `Comment`: id, task_id, author_id, text (MD), created_at, updated_at, deleted_at. Soft-delete.
-- [ ] Сервис прав: comment.edit/delete = автор или роль ≥ Менеджер (по факту, спецификация: автор, Менеджер, Руководитель, Администратор).
-- [ ] API: `POST/GET/PATCH/DELETE /api/tasks/<id>/comments`. Сокет-броадкаст `comment:new/updated/deleted` в комнату задачи.
-- [ ] API: `PATCH /api/tasks/<id>/stage`, `PATCH /api/tasks/<id>/responsible`. Сокет-броадкаст `task:updated`.
-- [ ] Endpoint «работали над задачей»: `GET /api/tasks/<id>/contributors` — distinct user_id из юнитов по задаче.
+- [x] Поле `tasks.responsible_user_id` (FK users, NULL только на старых задачах; новые — обязательно). По умолчанию = создатель.
+- [x] Поле `tasks.stage_id` (FK stages, NULL).
+- [x] Условное поле `tasks.yougile_url` (уже есть в проекте — оставляем; в API отдаём в зависимости от `company.settings.uses_yougile`).
+- [x] Модель `Comment`: id, task_id, author_id, text (MD), created_at, updated_at, deleted_at. Soft-delete.
+- [x] Сервис прав: comment.edit/delete = автор или роль ≥ Менеджер (по факту, спецификация: автор, Менеджер, Руководитель, Администратор).
+- [x] API: `POST/GET/PATCH/DELETE /api/tasks/<id>/comments`. Сокет-броадкаст `comment:new/updated/deleted` в комнату задачи.
+- [x] API: `PATCH /api/tasks/<id>/stage`, `PATCH /api/tasks/<id>/responsible`. Сокет-броадкаст `task:updated`.
+- [x] Endpoint «работали над задачей»: `GET /api/tasks/<id>/contributors` — distinct user_id из юнитов по задаче.
 
 **Frontend**
-- [ ] `TaskCard.vue` / `TaskModal.vue` / `TaskForm.vue` — добавить поле «Ответственный» (PrimeVue Select с поиском по сотрудникам компании, аватар + ФИО).
-- [ ] Поле YouGile показываем условно (`companyStore.activeCompany.settings.uses_yougile`).
-- [ ] Селектор «Этап» в форме задачи (условно по `uses_stages`).
-- [ ] **Третий режим отображения «Этапы»** (только если `uses_stages` и не вкладка «Архив»): канбан-доска, колонки = этапы компании, drag-and-drop задач между колонками (HTML5 DnD, без сторонних либ — самостоятельно через `pointer`-события или подключим VueDraggable, выбор зафиксировать).
-- [ ] Тег этапа на карточке (цвет из палитры `--tag-*`, по `stage.color`).
-- [ ] Фильтр по этапам в `TaskFilters.vue` (чипы) — условно.
-- [ ] `components/tasks/TaskComments.vue` — список + форма; рендер markdown (используем существующий механизм / добавим `marked` + санитизацию).
-- [ ] `components/tasks/TaskContributors.vue` — горизонтальный список аватарок сотрудников, работавших по задаче.
-- [ ] Расширение `stores/tasks.js`: `assignResponsible`, `setStage`, `dragMoveStage`, `comments`-CRUD.
+- [x] `TaskCard.vue` / `TaskModal.vue` / `TaskForm.vue` — добавить поле «Ответственный» (PrimeVue Select с поиском по сотрудникам компании, аватар + ФИО).
+- [x] Поле YouGile показываем условно (`companyStore.activeCompany.settings.uses_yougile`).
+- [x] Селектор «Этап» в форме задачи (условно по `uses_stages`).
+- [x] **Третий режим отображения «Этапы»** (только если `uses_stages` и не вкладка «Архив»): канбан-доска, колонки = этапы компании, drag-and-drop задач между колонками (HTML5 DnD, без сторонних либ — самостоятельно через `pointer`-события или подключим VueDraggable, выбор зафиксировать).
+- [x] Тег этапа на карточке (цвет из палитры `--tag-*`, по `stage.color`).
+- [x] Фильтр по этапам в `TaskFilters.vue` (чипы) — условно.
+- [x] `components/tasks/TaskComments.vue` — список + форма; рендер markdown (используем существующий механизм / добавим `marked` + санитизацию).
+- [x] `components/tasks/TaskContributors.vue` — горизонтальный список аватарок сотрудников, работавших по задаче.
+- [x] Расширение `stores/tasks.js`: `assignResponsible`, `setStage`, `dragMoveStage`, `comments`-CRUD.
 
 **Общий компонент**
-- [ ] `components/common/MarkdownView.vue` — отрисовка markdown + кликабельные ссылки (одна реализация для комментариев и для мессенджера в Этапе 4).
-- [ ] `components/common/UserPicker.vue` — селект пользователя из компании с поиском, аватаром, последней активностью.
+- [x] `components/common/MarkdownView.vue` — отрисовка markdown + кликабельные ссылки (одна реализация для комментариев и для мессенджера в Этапе 4).
+- [x] `components/common/UserPicker.vue` — селект пользователя из компании с поиском, аватаром, последней активностью.
 
 ---
 

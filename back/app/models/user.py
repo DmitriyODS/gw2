@@ -28,7 +28,8 @@ class User(db.Model):
 
     role = db.relationship("Role", back_populates="users")
     company = db.relationship("Company", foreign_keys=[company_id])
-    tasks = db.relationship("Task", back_populates="author", lazy="dynamic")
+    tasks = db.relationship("Task", back_populates="author", lazy="dynamic",
+                            foreign_keys="Task.author_id")
     units = db.relationship("Unit", back_populates="user", lazy="dynamic")
     favorites = db.relationship("Favorite", back_populates="user", lazy="dynamic")
 

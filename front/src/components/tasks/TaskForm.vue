@@ -19,12 +19,30 @@
         <span v-if="errors.name" class="field-error">{{ errors.name }}</span>
       </div>
 
-      <div class="form-field">
+      <div v-if="usesYougile" class="form-field">
         <label class="form-label">Ссылка на YouGile</label>
         <InputText
           v-model="form.link_yougile"
           placeholder="https://yougile.com/..."
           class="w-full"
+        />
+      </div>
+
+      <div class="form-field">
+        <label class="form-label">Ответственный</label>
+        <UserPicker v-model="form.responsible_user_id" placeholder="Не назначен" />
+      </div>
+
+      <div v-if="usesStages" class="form-field">
+        <label class="form-label">Этап</label>
+        <Select
+          v-model="form.stage_id"
+          :options="stages"
+          option-label="name"
+          option-value="id"
+          placeholder="Без этапа"
+          class="w-full"
+          show-clear
         />
       </div>
 
@@ -127,8 +145,11 @@ import { createTask, updateTask } from '@/api/tasks.js'
 import { getDepartments } from '@/api/departments.js'
 import { getUnitTypes } from '@/api/unitTypes.js'
 import { createUnit } from '@/api/units.js'
+import { getStages } from '@/api/stages.js'
 import { useNotificationsStore } from '@/stores/notifications.js'
 import { useUnitsStore } from '@/stores/units.js'
+import { useCompanySettings } from '@/composables/useCompanySettings.js'
+import UserPicker from '@/components/common/UserPicker.vue'
 
 const props = defineProps({
   task: {
@@ -141,18 +162,23 @@ const emit = defineEmits(['close', 'saved'])
 
 const notifications = useNotificationsStore()
 const unitsStore = useUnitsStore()
+const { usesYougile, usesStages } = useCompanySettings()
 
 const departments = ref([])
 const depsLoading = ref(false)
 const submitting = ref(false)
 const serverError = ref('')
 
+const stages = ref([])
+
 const form = ref({
   name: props.task?.name || '',
   link_yougile: props.task?.link_yougile || '',
   department_id: props.task?.department?.id || props.task?.department_id || null,
   received_at: props.task?.received_at ? new Date(props.task.received_at) : new Date(),
-  deadline: props.task?.deadline ? new Date(props.task.deadline) : null
+  deadline: props.task?.deadline ? new Date(props.task.deadline) : null,
+  responsible_user_id: props.task?.responsible_user_id ?? props.task?.responsible?.id ?? null,
+  stage_id: props.task?.stage_id ?? props.task?.stage?.id ?? null,
 })
 
 const errors = ref({
@@ -191,6 +217,15 @@ onMounted(async () => {
     unitTypes.value = []
   } finally {
     unitTypesLoading.value = false
+  }
+
+  if (usesStages.value) {
+    try {
+      const data = await getStages()
+      stages.value = Array.isArray(data) ? data : (data.items ?? [])
+    } catch {
+      stages.value = []
+    }
   }
 })
 
@@ -241,8 +276,10 @@ async function handleSubmit() {
       name: form.value.name.trim(),
       department_id: form.value.department_id,
       received_at: toDateStr(form.value.received_at),
-      link_yougile: form.value.link_yougile?.trim() || null,
-      deadline: form.value.deadline ? toDateStr(form.value.deadline) : null
+      link_yougile: usesYougile.value ? (form.value.link_yougile?.trim() || null) : null,
+      deadline: form.value.deadline ? toDateStr(form.value.deadline) : null,
+      responsible_user_id: form.value.responsible_user_id ?? null,
+      stage_id: usesStages.value ? (form.value.stage_id ?? null) : null,
     }
 
     let result

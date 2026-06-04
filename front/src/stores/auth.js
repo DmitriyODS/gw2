@@ -27,6 +27,7 @@ export const useAuthStore = defineStore('auth', () => {
   const tokenClaims = computed(() => token.value ? decodeToken(token.value) : {})
   const companyId = computed(() => tokenClaims.value.company_id ?? null)
   const companyName = computed(() => tokenClaims.value.company_name ?? null)
+  const companySettings = computed(() => tokenClaims.value.company_settings ?? null)
   const isRootAdmin = computed(() => !!tokenClaims.value.is_root_admin)
 
   async function login(loginVal, password) {
@@ -108,7 +109,7 @@ export const useAuthStore = defineStore('auth', () => {
 
   return {
     user, token, forceChange, isAuth, ready,
-    companyId, companyName, isRootAdmin, companyDisabled,
+    companyId, companyName, companySettings, isRootAdmin, companyDisabled,
     ensureReady, login, logout, loadMe, clearAuth, setToken,
     changeDefaultCredentials,
   }

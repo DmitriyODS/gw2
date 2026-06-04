@@ -18,10 +18,14 @@ class Task(db.Model):
     is_archived = db.Column(db.Boolean, nullable=False, default=False)
     archived_at = db.Column(db.DateTime(timezone=True))
     color = db.Column(db.String(20))
+    responsible_user_id = db.Column(db.Integer, db.ForeignKey("users.id", ondelete="SET NULL"))
+    stage_id = db.Column(db.Integer, db.ForeignKey("stages.id", ondelete="SET NULL"))
 
-    author = db.relationship("User", back_populates="tasks")
+    author = db.relationship("User", back_populates="tasks", foreign_keys=[author_id])
+    responsible = db.relationship("User", foreign_keys=[responsible_user_id])
     company = db.relationship("Company", foreign_keys=[company_id])
     department = db.relationship("Department", back_populates="tasks")
+    stage = db.relationship("Stage", foreign_keys=[stage_id])
     units = db.relationship("Unit", back_populates="task", lazy="dynamic", cascade="all, delete-orphan")
     favorites = db.relationship("Favorite", back_populates="task", lazy="dynamic", cascade="all, delete-orphan")
 
@@ -31,6 +35,8 @@ class Task(db.Model):
         db.Index("idx_tasks_dept", "department_id"),
         db.Index("idx_tasks_archived", "is_archived"),
         db.Index("idx_tasks_received", "received_at"),
+        db.Index("idx_tasks_responsible", "responsible_user_id"),
+        db.Index("idx_tasks_stage", "stage_id"),
         db.Index("idx_tasks_archived_at", "archived_at",
                  postgresql_where=db.text("is_archived = TRUE")),
     )

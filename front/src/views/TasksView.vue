@@ -16,7 +16,7 @@
           </button>
         </div>
 
-        <!-- Переключатель вида: сетка / список -->
+        <!-- Переключатель вида: сетка / список / канбан -->
         <div class="view-toggle" role="group" aria-label="Вид отображения">
           <button
             class="view-toggle-btn"
@@ -33,6 +33,15 @@
             title="Список"
           >
             <span class="material-symbols-outlined">view_list</span>
+          </button>
+          <button
+            v-if="canShowKanban"
+            class="view-toggle-btn"
+            :class="{ active: viewMode === 'board' }"
+            @click="setViewMode('board')"
+            title="Канбан по этапам"
+          >
+            <span class="material-symbols-outlined">view_kanban</span>
           </button>
         </div>
 
@@ -99,6 +108,14 @@
               Создать задачу
             </button>
           </div>
+          <TaskKanban
+            v-else-if="viewMode === 'board'"
+            @open-task="openTask"
+            @toggle-favorite="toggleFavorite"
+            @set-color="setColor"
+            @start-unit="onStartUnit"
+            @stop-unit="onStopUnit"
+          />
           <div v-else :class="viewMode === 'grid' ? 'cards-grid' : 'cards-list'">
             <TaskCard
               v-for="task in tasksStore.tasks"
@@ -184,9 +201,11 @@ import TaskCard from '@/components/tasks/TaskCard.vue'
 import TaskFilters from '@/components/tasks/TaskFilters.vue'
 import TaskModal from '@/components/tasks/TaskModal.vue'
 import TaskForm from '@/components/tasks/TaskForm.vue'
+import TaskKanban from '@/components/tasks/TaskKanban.vue'
 import SortSheet from '@/components/tasks/SortSheet.vue'
 import StartUnitModal from '@/components/units/StartUnitModal.vue'
 import ProgressSpinner from 'primevue/progressspinner'
+import { useCompanySettings } from '@/composables/useCompanySettings.js'
 
 const VIEW_KEY = 'gw2_tasks_view'
 
@@ -203,11 +222,25 @@ const showMobileFilters = ref(false)
 const showSortSheet = ref(false)
 const startUnitTaskId = ref(null)
 
-const viewMode = ref(localStorage.getItem(VIEW_KEY) === 'list' ? 'list' : 'grid')
+const { usesStages } = useCompanySettings()
+
+// Канбан доступен только если у компании включены этапы и мы не в архиве.
+const canShowKanban = computed(() =>
+  usesStages.value && tasksStore.filters.tab !== 'archive'
+)
+
+const _saved = localStorage.getItem(VIEW_KEY)
+const viewMode = ref(_saved === 'list' || _saved === 'board' ? _saved : 'grid')
+
 function setViewMode(mode) {
   viewMode.value = mode
   try { localStorage.setItem(VIEW_KEY, mode) } catch {}
 }
+
+// Если перешли в архив, а активный режим — канбан, переключаемся на сетку.
+watch(canShowKanban, (v) => {
+  if (!v && viewMode.value === 'board') viewMode.value = 'grid'
+})
 
 const cardsAreaRef = ref(null)
 const fabVisible = ref(true)

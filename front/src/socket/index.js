@@ -150,6 +150,16 @@ export function connectSocket() {
     tasks.removeTask(task_id)
   })
 
+  socket.on('comment:new', (payload) => {
+    useTasksStore().applyCommentSocket('new', payload)
+  })
+  socket.on('comment:updated', (payload) => {
+    useTasksStore().applyCommentSocket('updated', payload)
+  })
+  socket.on('comment:deleted', (payload) => {
+    useTasksStore().applyCommentSocket('deleted', payload)
+  })
+
   socket.on('unit:started', (unit) => {
     const units = useUnitsStore()
     const auth = useAuthStore()

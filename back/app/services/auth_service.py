@@ -29,12 +29,16 @@ def _raise_locked(seconds: int):
 def _build_claims(user) -> dict:
     """Полезные клеймы для фронта/декораторов. company_* у Администратора
     системы (без компании) — None; фронт это интерпретирует как «работа от
-    лица системы», и в шапке появляется селектор компаний."""
+    лица системы», и в шапке появляется селектор компаний.
+
+    company_settings прокидываем в JWT, чтобы фронт мог скрывать поля
+    (YouGile/Этапы) без отдельного запроса /companies/me."""
     company = user.company
     return {
         "force_change": user.is_default_pass,
         "company_id": user.company_id,
         "company_name": company.name if company else None,
+        "company_settings": company.settings if company else None,
         "role_level": user.role.level if user.role else 0,
         "is_root_admin": bool(user.is_root_admin),
     }

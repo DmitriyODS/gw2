@@ -72,6 +72,31 @@
         />
       </section>
 
+      <!-- Этапы (условно) -->
+      <section v-if="usesStages && stages.length" class="filter-section">
+        <h4 class="filter-title">Этап</h4>
+        <div class="chip-group">
+          <button
+            class="chip"
+            :class="{ active: tasksStore.filters.stage_id == null }"
+            @click="tasksStore.setFilter('stage_id', null)"
+          >
+            Все
+          </button>
+          <button
+            v-for="s in stages"
+            :key="s.id"
+            class="chip stage-chip-filter"
+            :class="{ active: tasksStore.filters.stage_id === s.id }"
+            :style="stageChipStyle(s)"
+            @click="tasksStore.setFilter('stage_id', s.id)"
+          >
+            <span class="stage-chip-dot" :style="{ background: `var(--tag-${s.color}-accent)` }" />
+            {{ s.name }}
+          </button>
+        </div>
+      </section>
+
       <!-- Период поступления -->
       <section class="filter-section">
         <h4 class="filter-title">Период поступления</h4>
@@ -147,6 +172,8 @@ import Dialog from 'primevue/dialog'
 import DatePicker from 'primevue/datepicker'
 import { useTasksStore } from '@/stores/tasks.js'
 import { getDepartments } from '@/api/departments.js'
+import { getStages } from '@/api/stages.js'
+import { useCompanySettings } from '@/composables/useCompanySettings.js'
 
 const props = defineProps({
   mobileVisible: {
@@ -158,16 +185,27 @@ const props = defineProps({
 defineEmits(['close'])
 
 const tasksStore = useTasksStore()
+const { usesStages } = useCompanySettings()
 
 const isMobileVisible = computed(() => props.mobileVisible)
 
 const departments = ref([])
 const deptOptions = computed(() => departments.value)
+const stages = ref([])
+
+function stageChipStyle(s) {
+  if (!s?.color) return {}
+  return {
+    background: `var(--tag-${s.color}-surface)`,
+    color: `var(--tag-${s.color}-accent)`,
+  }
+}
 
 const hasActiveFilters = computed(() => {
   const f = tasksStore.filters
   return f.sort !== 'last_activity'
     || f.dept_id != null
+    || f.stage_id != null
     || f.has_units != null
     || f.period_preset != null
     || f.received_from
@@ -205,6 +243,14 @@ onMounted(async () => {
     departments.value = Array.isArray(data) ? data : (data.departments ?? data.items ?? [])
   } catch {
     departments.value = []
+  }
+  if (usesStages.value) {
+    try {
+      const data = await getStages()
+      stages.value = Array.isArray(data) ? data : (data.items ?? [])
+    } catch {
+      stages.value = []
+    }
   }
 })
 
@@ -397,6 +443,17 @@ function closeCustomDialog() {
   background: var(--color-primary-container);
   color: var(--color-on-primary-container);
   border-color: color-mix(in oklch, var(--color-primary) 35%, transparent);
+}
+
+.stage-chip-filter.active {
+  outline: 2px solid currentColor;
+  outline-offset: -2px;
+}
+
+.stage-chip-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
 }
 
 /* PrimeVue Select под визуал панели */

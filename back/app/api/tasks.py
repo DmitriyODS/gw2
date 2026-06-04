@@ -3,11 +3,16 @@ from flask import Blueprint, request, jsonify, g
 from flask_jwt_extended import get_jwt_identity
 from marshmallow import ValidationError
 
-from app.schemas import TaskSchema, TaskCreateSchema, TaskUpdateSchema, TaskColorSchema
+from app.schemas import (
+    TaskSchema, TaskCreateSchema, TaskUpdateSchema, TaskColorSchema,
+    TaskResponsibleSchema, TaskStageSchema,
+    CommentSchema, CommentCreateSchema, CommentUpdateSchema,
+)
 from app.schemas.unit import UnitSchema
-from app.services import task_service
+from app.services import task_service, comment_service
 from app.services.task_service import TaskServiceError
-from app.repositories import task_repo, unit_repo
+from app.services.comment_service import CommentServiceError
+from app.repositories import task_repo, unit_repo, comment_repo, company_repo
 from app.utils.permissions import require_role, require_auth, require_company_scope, EMPLOYEE
 
 bp = Blueprint("tasks", __name__, url_prefix="/api/tasks")
@@ -17,6 +22,21 @@ _unit_schema = UnitSchema(many=True)
 _create_schema = TaskCreateSchema()
 _update_schema = TaskUpdateSchema()
 _color_schema = TaskColorSchema()
+_responsible_schema = TaskResponsibleSchema()
+_stage_schema = TaskStageSchema()
+_comment_schema = CommentSchema()
+_comments_schema = CommentSchema(many=True)
+_comment_create_schema = CommentCreateSchema()
+_comment_update_schema = CommentUpdateSchema()
+
+
+def _yougile_enabled(company_id):
+    if company_id is None:
+        return True
+    company = company_repo.get_by_id(company_id)
+    if company is None or not company.settings:
+        return True
+    return bool(company.settings.get("uses_yougile", True))
 
 
 def _enrich_task(task, current_user_id: int, active_users: list = None, user_color: str = None) -> dict:
@@ -26,6 +46,9 @@ def _enrich_task(task, current_user_id: int, active_users: list = None, user_col
     data["active_users"] = active_users if active_users is not None else task_repo.get_active_users(task.id)
     # Цвет — индивидуальный для каждого пользователя (см. user_task_colors).
     data["color"] = user_color if user_color is not None else task_repo.get_user_color(task.id, current_user_id)
+    # YouGile-ссылку отдаём только если в компании включена эта интеграция.
+    if not _yougile_enabled(task.company_id):
+        data["link_yougile"] = None
     return data
 
 
@@ -72,6 +95,8 @@ def list_tasks():
         search=args.get("search"),
         sort=args.get("sort", "last_activity"),
         dept_id=int(args["dept_id"]) if args.get("dept_id") else None,
+        stage_id=int(args["stage_id"]) if args.get("stage_id") else None,
+        responsible_user_id=int(args["responsible_id"]) if args.get("responsible_id") else None,
         received_from=received_from,
         received_to=received_to,
         has_units=args.get("has_units"),
@@ -506,3 +531,223 @@ def create_unit(task_id: int):
     socketio.emit("unit:started", unit_data, room="all")
 
     return jsonify(unit_data), 201
+
+
+# === v3: ответственный, этап, контрибьюторы, комментарии ===========================
+
+
+@bp.patch("/<int:task_id>/responsible")
+@require_role(EMPLOYEE)
+def set_task_responsible(task_id: int):
+    """
+    Назначить ответственного по задаче.
+    ---
+    tags: [tasks]
+    security: [BearerAuth: []]
+    parameters:
+      - {in: path, name: task_id, schema: {type: integer}, required: true}
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              responsible_user_id: {type: integer, nullable: true}
+    responses:
+      200: {description: Ответственный обновлён}
+    """
+    try:
+        data = _responsible_schema.load(request.get_json(silent=True) or {})
+    except ValidationError as e:
+        return jsonify({"error": "VALIDATION_ERROR", "message": e.messages}), 400
+
+    current_user_id = int(get_jwt_identity())
+    try:
+        task = task_service.set_responsible(task_id, data["responsible_user_id"])
+    except TaskServiceError as e:
+        return jsonify({"error": e.code, "message": e.message}), e.http_status
+
+    from app.extensions import socketio
+    task_data = _enrich_task(task, current_user_id)
+    broadcast = {k: v for k, v in task_data.items() if k != "color"}
+    socketio.emit("task:updated", broadcast, room="all")
+    return jsonify(task_data), 200
+
+
+@bp.patch("/<int:task_id>/stage")
+@require_role(EMPLOYEE)
+def set_task_stage(task_id: int):
+    """
+    Установить этап задачи (канбан / drag-drop).
+    ---
+    tags: [tasks]
+    security: [BearerAuth: []]
+    parameters:
+      - {in: path, name: task_id, schema: {type: integer}, required: true}
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              stage_id: {type: integer, nullable: true}
+    responses:
+      200: {description: Этап обновлён}
+    """
+    try:
+        data = _stage_schema.load(request.get_json(silent=True) or {})
+    except ValidationError as e:
+        return jsonify({"error": "VALIDATION_ERROR", "message": e.messages}), 400
+
+    current_user_id = int(get_jwt_identity())
+    try:
+        task = task_service.set_stage(task_id, data["stage_id"])
+    except TaskServiceError as e:
+        return jsonify({"error": e.code, "message": e.message}), e.http_status
+
+    from app.extensions import socketio
+    task_data = _enrich_task(task, current_user_id)
+    broadcast = {k: v for k, v in task_data.items() if k != "color"}
+    socketio.emit("task:updated", broadcast, room="all")
+    return jsonify(task_data), 200
+
+
+@bp.get("/<int:task_id>/contributors")
+@require_role(EMPLOYEE)
+def get_task_contributors(task_id: int):
+    """
+    Сотрудники, работавшие над задачей (distinct по юнитам).
+    ---
+    tags: [tasks]
+    security: [BearerAuth: []]
+    parameters:
+      - {in: path, name: task_id, schema: {type: integer}, required: true}
+    responses:
+      200: {description: Список сотрудников}
+    """
+    task = task_repo.get_by_id(task_id)
+    if task is None:
+        return jsonify({"error": "NOT_FOUND", "message": "Задача не найдена"}), 404
+    return jsonify({"items": task_repo.get_contributors(task_id)}), 200
+
+
+@bp.get("/<int:task_id>/comments")
+@require_role(EMPLOYEE)
+def list_task_comments(task_id: int):
+    """
+    Список комментариев задачи.
+    ---
+    tags: [tasks]
+    security: [BearerAuth: []]
+    parameters:
+      - {in: path, name: task_id, schema: {type: integer}, required: true}
+    responses:
+      200: {description: Список комментариев}
+    """
+    try:
+        comments = comment_service.list_comments(task_id)
+    except CommentServiceError as e:
+        return jsonify({"error": e.code, "message": e.message}), e.http_status
+    return jsonify({"items": _comments_schema.dump(comments)}), 200
+
+
+@bp.post("/<int:task_id>/comments")
+@require_role(EMPLOYEE)
+def create_task_comment(task_id: int):
+    """
+    Создать комментарий.
+    ---
+    tags: [tasks]
+    security: [BearerAuth: []]
+    parameters:
+      - {in: path, name: task_id, schema: {type: integer}, required: true}
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [text]
+            properties:
+              text: {type: string}
+    responses:
+      201: {description: Комментарий создан}
+    """
+    try:
+        data = _comment_create_schema.load(request.get_json(silent=True) or {})
+    except ValidationError as e:
+        return jsonify({"error": "VALIDATION_ERROR", "message": e.messages}), 400
+
+    current_user_id = int(get_jwt_identity())
+    try:
+        comment = comment_service.create_comment(task_id, current_user_id, data["text"])
+    except CommentServiceError as e:
+        return jsonify({"error": e.code, "message": e.message}), e.http_status
+
+    from app.extensions import socketio
+    payload = _comment_schema.dump(comment)
+    socketio.emit("comment:new", payload, room="all")
+    return jsonify(payload), 201
+
+
+@bp.patch("/<int:task_id>/comments/<int:comment_id>")
+@require_role(EMPLOYEE)
+def update_task_comment(task_id: int, comment_id: int):
+    """
+    Редактировать комментарий.
+    ---
+    tags: [tasks]
+    security: [BearerAuth: []]
+    parameters:
+      - {in: path, name: task_id, schema: {type: integer}, required: true}
+      - {in: path, name: comment_id, schema: {type: integer}, required: true}
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema: {type: object, required: [text], properties: {text: {type: string}}}
+    responses:
+      200: {description: Обновлён}
+    """
+    try:
+        data = _comment_update_schema.load(request.get_json(silent=True) or {})
+    except ValidationError as e:
+        return jsonify({"error": "VALIDATION_ERROR", "message": e.messages}), 400
+
+    current_user_id = int(get_jwt_identity())
+    try:
+        comment = comment_service.update_comment(comment_id, current_user_id, data["text"])
+    except CommentServiceError as e:
+        return jsonify({"error": e.code, "message": e.message}), e.http_status
+
+    from app.extensions import socketio
+    payload = _comment_schema.dump(comment)
+    socketio.emit("comment:updated", payload, room="all")
+    return jsonify(payload), 200
+
+
+@bp.delete("/<int:task_id>/comments/<int:comment_id>")
+@require_role(EMPLOYEE)
+def delete_task_comment(task_id: int, comment_id: int):
+    """
+    Удалить (soft-delete) комментарий.
+    ---
+    tags: [tasks]
+    security: [BearerAuth: []]
+    parameters:
+      - {in: path, name: task_id, schema: {type: integer}, required: true}
+      - {in: path, name: comment_id, schema: {type: integer}, required: true}
+    responses:
+      200: {description: Удалён}
+    """
+    current_user_id = int(get_jwt_identity())
+    try:
+        comment_service.delete_comment(comment_id, current_user_id)
+    except CommentServiceError as e:
+        return jsonify({"error": e.code, "message": e.message}), e.http_status
+
+    from app.extensions import socketio
+    socketio.emit("comment:deleted", {"task_id": task_id, "comment_id": comment_id}, room="all")
+    return jsonify({"message": "Удалён"}), 200

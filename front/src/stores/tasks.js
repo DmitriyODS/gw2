@@ -26,6 +26,8 @@ export const useTasksStore = defineStore('tasks', () => {
     search: saved.search ?? '',
     sort: saved.sort ?? 'last_activity',
     dept_id: saved.dept_id ?? null,
+    stage_id: saved.stage_id ?? null,
+    responsible_id: saved.responsible_id ?? null,
     received_from: saved.received_from ?? null,
     received_to: saved.received_to ?? null,
     has_units: saved.has_units ?? null,
@@ -33,6 +35,11 @@ export const useTasksStore = defineStore('tasks', () => {
     page: 1,
     per_page: 30,
   })
+
+  // Карта комментариев: task_id → массив комментариев (упорядочены по created_at).
+  const commentsByTask = reactive({})
+  // Карта контрибьюторов: task_id → массив { id, fio, avatar_path }.
+  const contributorsByTask = reactive({})
 
   watch(filters, () => {
     // eslint-disable-next-line no-unused-vars
@@ -49,6 +56,8 @@ export const useTasksStore = defineStore('tasks', () => {
       if (filters.search) params.search = filters.search
       if (filters.sort) params.sort = filters.sort
       if (filters.dept_id) params.dept_id = filters.dept_id
+      if (filters.stage_id) params.stage_id = filters.stage_id
+      if (filters.responsible_id) params.responsible_id = filters.responsible_id
       if (filters.received_from) params.received_from = filters.received_from
       if (filters.received_to) params.received_to = filters.received_to
       if (filters.has_units) params.has_units = filters.has_units
@@ -83,12 +92,90 @@ export const useTasksStore = defineStore('tasks', () => {
   function resetFilters() {
     filters.sort = 'last_activity'
     filters.dept_id = null
+    filters.stage_id = null
+    filters.responsible_id = null
     filters.received_from = null
     filters.received_to = null
     filters.has_units = null
     filters.period_preset = null
     filters.page = 1
     fetchTasks().catch(() => {})
+  }
+
+  // === v3: ответственный, этап, контрибьюторы, комментарии ===
+  async function assignResponsible(taskId, userId) {
+    const updated = await tasksApi.setTaskResponsible(taskId, userId)
+    patchTask(updated)
+    return updated
+  }
+
+  async function setStage(taskId, stageId) {
+    const updated = await tasksApi.setTaskStage(taskId, stageId)
+    patchTask(updated)
+    return updated
+  }
+
+  // Оптимистичный drag-drop между колонками канбана.
+  async function dragMoveStage(taskId, newStageId) {
+    const idx = tasks.value.findIndex((t) => t.id === taskId)
+    const prevStageId = idx >= 0 ? tasks.value[idx].stage_id : null
+    patchTask({ id: taskId, stage_id: newStageId })
+    try {
+      await tasksApi.setTaskStage(taskId, newStageId)
+    } catch (e) {
+      patchTask({ id: taskId, stage_id: prevStageId })
+      throw e
+    }
+  }
+
+  async function loadComments(taskId) {
+    const data = await tasksApi.listTaskComments(taskId)
+    commentsByTask[taskId] = data.items || []
+    return commentsByTask[taskId]
+  }
+
+  async function addComment(taskId, text) {
+    const created = await tasksApi.createTaskComment(taskId, text)
+    if (!commentsByTask[taskId]) commentsByTask[taskId] = []
+    if (!commentsByTask[taskId].find((c) => c.id === created.id)) {
+      commentsByTask[taskId].push(created)
+    }
+    return created
+  }
+
+  async function editComment(taskId, commentId, text) {
+    const updated = await tasksApi.updateTaskComment(taskId, commentId, text)
+    const list = commentsByTask[taskId] || []
+    const i = list.findIndex((c) => c.id === commentId)
+    if (i >= 0) list[i] = { ...list[i], ...updated }
+    return updated
+  }
+
+  async function deleteComment(taskId, commentId) {
+    await tasksApi.deleteTaskComment(taskId, commentId)
+    commentsByTask[taskId] = (commentsByTask[taskId] || []).filter((c) => c.id !== commentId)
+  }
+
+  // Применить сокет-событие комментария (приходит из socket/index.js).
+  function applyCommentSocket(kind, payload) {
+    if (!payload) return
+    const taskId = payload.task_id ?? payload.id // у delete-payload — { task_id, comment_id }
+    if (!commentsByTask[taskId]) return // в кэше нет — пропускаем (загрузится при openTask)
+    const list = commentsByTask[taskId]
+    if (kind === 'new') {
+      if (!list.find((c) => c.id === payload.id)) list.push(payload)
+    } else if (kind === 'updated') {
+      const i = list.findIndex((c) => c.id === payload.id)
+      if (i >= 0) list[i] = { ...list[i], ...payload }
+    } else if (kind === 'deleted') {
+      commentsByTask[taskId] = list.filter((c) => c.id !== payload.comment_id)
+    }
+  }
+
+  async function loadContributors(taskId) {
+    const data = await tasksApi.getTaskContributors(taskId)
+    contributorsByTask[taskId] = data.items || []
+    return contributorsByTask[taskId]
   }
 
   function openTask(task) { activeTask.value = task }
@@ -180,8 +267,12 @@ export const useTasksStore = defineStore('tasks', () => {
 
   return {
     tasks, total, loading, error, filters, activeTask,
+    commentsByTask, contributorsByTask,
     fetchTasks, setFilter, setTab, resetFilters, openTask, closeTask,
     upsertTask, patchTask, addTaskFromSocket, removeTask, archiveTask, restoreTask,
-    setFavorite, addActiveUser, removeActiveUser
+    setFavorite, addActiveUser, removeActiveUser,
+    assignResponsible, setStage, dragMoveStage,
+    loadComments, addComment, editComment, deleteComment, applyCommentSocket,
+    loadContributors,
   }
 })

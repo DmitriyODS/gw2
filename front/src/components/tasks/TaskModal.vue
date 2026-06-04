@@ -20,11 +20,19 @@
         </button>
         <button
           class="mobile-tab-btn"
-          :class="{ active: mobileTab === 'units' }"
-          @click="mobileTab = 'units'"
+          :class="{ active: mobileTab === 'units' && rightTab === 'units' }"
+          @click="mobileTab = 'units'; rightTab = 'units'"
         >
           <span class="material-symbols-outlined">timer</span>
           Юниты
+        </button>
+        <button
+          class="mobile-tab-btn"
+          :class="{ active: mobileTab === 'units' && rightTab === 'comments' }"
+          @click="mobileTab = 'units'; rightTab = 'comments'"
+        >
+          <span class="material-symbols-outlined">forum</span>
+          Чат
         </button>
         <button class="mobile-close-btn" @click="$emit('close')">
           <span class="material-symbols-outlined">close</span>
@@ -97,7 +105,7 @@
         </div>
 
         <!-- YouGile -->
-        <div v-if="task.link_yougile" class="field-box">
+        <div v-if="usesYougile && task.link_yougile" class="field-box">
           <div class="field-label">
             <span class="material-symbols-outlined field-label-icon">link</span>
             YouGile
@@ -111,6 +119,30 @@
               <span class="material-symbols-outlined">open_in_new</span>
             </a>
           </div>
+        </div>
+
+        <!-- Ответственный -->
+        <div class="field-box">
+          <div class="field-label">Ответственный</div>
+          <UserPicker
+            :model-value="task.responsible_user_id"
+            @change="onResponsibleChange"
+          />
+        </div>
+
+        <!-- Этап -->
+        <div v-if="usesStages" class="field-box">
+          <div class="field-label">Этап</div>
+          <Select
+            :model-value="task.stage_id"
+            :options="stages"
+            option-label="name"
+            option-value="id"
+            placeholder="Без этапа"
+            class="w-full"
+            show-clear
+            @update:model-value="onStageChange"
+          />
         </div>
 
         <!-- Дедлайн -->
@@ -127,6 +159,9 @@
           <div class="field-label">Создатель задачи</div>
           <div class="field-value">{{ task.author?.fio || '—' }}</div>
         </div>
+
+        <!-- Работали над задачей -->
+        <TaskContributors :task-id="task.id" />
 
         <!-- Нижние кнопки -->
         <div class="task-bottom-actions">
@@ -151,43 +186,62 @@
         </div>
       </div>
 
-      <!-- Правая панель (юниты) -->
-      <div class="task-right" :class="{ hidden: isMobile && mobileTab !== 'units' }">
+      <!-- Правая панель (юниты / комментарии) -->
+      <div class="task-right" :class="{ hidden: isMobile && mobileTab === 'details' }">
         <div class="units-header">
-          <h3 class="units-title">Юниты</h3>
+          <div class="right-tabs">
+            <button
+              class="right-tab"
+              :class="{ active: rightTab === 'units' }"
+              @click="rightTab = 'units'"
+            >
+              <span class="material-symbols-outlined">timer</span>
+              Юниты
+            </button>
+            <button
+              class="right-tab"
+              :class="{ active: rightTab === 'comments' }"
+              @click="rightTab = 'comments'"
+            >
+              <span class="material-symbols-outlined">forum</span>
+              Комментарии
+            </button>
+          </div>
           <div class="units-header-actions">
             <button
-              v-if="canStartUnit"
+              v-if="rightTab === 'units' && canStartUnit"
               class="btn-start-unit pill"
               @click="showStartUnit = true"
             >
               <span class="material-symbols-outlined">add</span>
               Начать юнит
             </button>
-            <button class="btn-close-round" @click="$emit('close')" title="Закрыть">
+            <button v-if="!isMobile" class="btn-close-round" @click="$emit('close')" title="Закрыть">
               <span class="material-symbols-outlined">close</span>
             </button>
           </div>
         </div>
 
-        <div v-if="unitsLoading" class="units-loading">
-          <span class="material-symbols-outlined spinning">progress_activity</span>
-          Загрузка юнитов...
-        </div>
-
-        <div v-else class="units-list">
-          <UnitListItem
-            v-for="unit in units"
-            :key="unit.id"
-            :unit="unit"
-            @edit="openEditUnit"
-            @delete="confirmDeleteUnit"
-          />
-          <div v-if="units.length === 0" class="no-units">
-            <span class="material-symbols-outlined">hourglass_empty</span>
-            Юнитов пока нет
+        <template v-if="rightTab === 'units'">
+          <div v-if="unitsLoading" class="units-loading">
+            <span class="material-symbols-outlined spinning">progress_activity</span>
+            Загрузка юнитов...
           </div>
-        </div>
+          <div v-else class="units-list">
+            <UnitListItem
+              v-for="unit in units"
+              :key="unit.id"
+              :unit="unit"
+              @edit="openEditUnit"
+              @delete="confirmDeleteUnit"
+            />
+            <div v-if="units.length === 0" class="no-units">
+              <span class="material-symbols-outlined">hourglass_empty</span>
+              Юнитов пока нет
+            </div>
+          </div>
+        </template>
+        <TaskComments v-else :task-id="task.id" />
       </div>
     </div>
 
@@ -240,10 +294,16 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue'
 import Dialog from 'primevue/dialog'
+import Select from 'primevue/select'
 import { useBreakpoint } from '@/composables/useBreakpoint.js'
 import UnitListItem from '@/components/tasks/UnitListItem.vue'
 import TaskForm from '@/components/tasks/TaskForm.vue'
 import TaskColorPopover from '@/components/tasks/TaskColorPopover.vue'
+import TaskComments from '@/components/tasks/TaskComments.vue'
+import TaskContributors from '@/components/tasks/TaskContributors.vue'
+import UserPicker from '@/components/common/UserPicker.vue'
+import { useCompanySettings } from '@/composables/useCompanySettings.js'
+import { getStages } from '@/api/stages.js'
 import StartUnitModal from '@/components/units/StartUnitModal.vue'
 import UnitEditModal from '@/components/units/UnitEditModal.vue'
 import { getUnits, deleteUnit } from '@/api/units.js'
@@ -271,6 +331,9 @@ const { isAtLeast } = usePermission()
 const { isMobile } = useBreakpoint()
 
 const mobileTab = ref('details')
+const rightTab = ref('units')
+const stages = ref([])
+const { usesYougile, usesStages } = useCompanySettings()
 
 const dialogStyle = computed(() => {
   if (isMobile.value) {
@@ -324,7 +387,37 @@ const isOverdue = computed(() => {
 
 onMounted(() => {
   loadUnits()
+  if (usesStages.value) loadStages()
 })
+
+async function loadStages() {
+  try {
+    const data = await getStages()
+    stages.value = Array.isArray(data) ? data : (data.items ?? [])
+  } catch {
+    stages.value = []
+  }
+}
+
+async function onResponsibleChange(user) {
+  const userId = user?.id ?? null
+  if (userId === (props.task.responsible_user_id ?? null)) return
+  try {
+    await tasksStore.assignResponsible(props.task.id, userId)
+  } catch (e) {
+    notifications.error(e?.message || 'Не удалось назначить ответственного')
+  }
+}
+
+async function onStageChange(stageId) {
+  const id = stageId ?? null
+  if (id === (props.task.stage_id ?? null)) return
+  try {
+    await tasksStore.setStage(props.task.id, id)
+  } catch (e) {
+    notifications.error(e?.message || 'Не удалось изменить этап')
+  }
+}
 
 async function loadUnits() {
   unitsLoading.value = true
@@ -765,6 +858,38 @@ async function handleSetColor(color) {
   color: var(--gw-text);
   margin: 0;
 }
+
+.right-tabs {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px;
+  background: var(--color-surface-high);
+  border-radius: var(--radius-full, 999px);
+}
+.right-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 14px;
+  background: transparent;
+  border: none;
+  border-radius: var(--radius-full, 999px);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--color-on-surface-variant);
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+.right-tab:hover { color: var(--color-on-surface); }
+.right-tab.active {
+  background: var(--color-primary);
+  color: var(--color-on-primary);
+}
+.right-tab .material-symbols-outlined { font-size: 16px; }
+
+.w-full { width: 100%; }
 
 .units-header-actions {
   display: flex;

@@ -1,11 +1,11 @@
 from . import (
     auth_service, user_service, task_service, unit_service, stats_service,
     backup_service, messenger_service, call_service, company_service,
-    stage_service,
+    stage_service, comment_service,
 )
 
 __all__ = [
     "auth_service", "user_service", "task_service", "unit_service",
     "stats_service", "backup_service", "messenger_service", "call_service",
-    "company_service", "stage_service",
+    "company_service", "stage_service", "comment_service",
 ]

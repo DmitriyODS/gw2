@@ -48,6 +48,15 @@
 
       <div class="task-meta">
         <span
+          v-if="task.stage"
+          class="meta-chip stage-chip"
+          :style="stageChipStyle"
+          :title="`Этап: ${task.stage.name}`"
+        >
+          <span class="stage-dot" :style="stageDotStyle" />
+          {{ task.stage.name }}
+        </span>
+        <span
           v-if="deadlineInfo"
           class="meta-chip"
           :class="`deadline-${deadlineInfo.level}`"
@@ -78,6 +87,17 @@
             <span class="material-symbols-outlined">timer</span>
           </span>
         </div>
+
+        <span
+          v-if="task.responsible"
+          class="responsible-ava"
+          :title="`Ответственный: ${task.responsible.fio}`"
+        >
+          <img
+            :src="task.responsible.avatar_path ? `/uploads/${task.responsible.avatar_path}` : `/api/users/${task.responsible.id}/identicon`"
+            :alt="task.responsible.fio"
+          />
+        </span>
 
         <div v-if="task.active_users?.length" class="active-users">
           <span
@@ -125,6 +145,22 @@ const showColors = ref(false)
 const colorBtnRef = ref(null)
 
 const cardStyle = computed(() => cardColorStyle(props.task.color))
+
+const stageChipStyle = computed(() => {
+  const color = props.task.stage?.color
+  if (!color) return {}
+  return {
+    background: `var(--tag-${color}-surface)`,
+    color: `var(--tag-${color}-accent)`,
+    borderColor: `var(--tag-${color}-border)`,
+  }
+})
+
+const stageDotStyle = computed(() => {
+  const color = props.task.stage?.color
+  if (!color) return {}
+  return { background: `var(--tag-${color}-accent)` }
+})
 
 const isRunningHere = computed(() => unitsStore.activeUnit?.task_id === props.task.id)
 
@@ -335,6 +371,38 @@ function formatDate(d) {
 .deadline-normal {
   background: var(--color-surface-high);
   color: var(--color-text-dim);
+}
+
+.stage-chip {
+  border: 1px solid transparent;
+}
+
+.stage-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+.responsible-ava {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  overflow: hidden;
+  flex-shrink: 0;
+  box-shadow: 0 0 0 2px var(--color-surface), 0 0 0 3px var(--color-outline-dim);
+  margin-right: 6px;
+}
+
+.task-card.colored .responsible-ava {
+  box-shadow: 0 0 0 2px var(--card-tag-surface), 0 0 0 3px var(--card-tag-border);
+}
+
+.responsible-ava img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
 }
 
 .card-footer {
