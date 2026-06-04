@@ -1,9 +1,10 @@
 from flask import current_app
 from app.extensions import db
+from app.models import Company
 from app.repositories import user_repo, role_repo
 from app.utils.avatar import save_avatar, delete_avatar
 from app.utils.logger import get_logger
-from app.utils.permissions import MANAGER, ADMIN
+from app.utils.permissions import MANAGER, ADMIN, DIRECTOR
 
 logger = get_logger(__name__)
 
@@ -24,10 +25,10 @@ def create_user(fio: str, login: str, role_id: int, current_user_level: int,
     if role is None:
         raise UserServiceError("Роль не найдена", "ROLE_NOT_FOUND", 404)
 
-    # Нельзя назначить роль равную или выше своей. Раньше было "выше менеджера
-    # без супер-админа"; теперь общее правило: своя роль — потолок.
-    if role.level >= current_user_level:
-        raise UserServiceError("Нельзя назначить роль равную или выше собственной",
+    # Нельзя назначить роль выше своей. Равную — можно (например, Админ системы
+    # может создать ещё одного Админа системы; см. v3-план «Сотрудники»).
+    if role.level > current_user_level:
+        raise UserServiceError("Нельзя назначить роль выше собственной",
                                "ROLE_LEVEL_FORBIDDEN", 403)
 
     if login and user_repo.get_by_login(login):
@@ -71,9 +72,10 @@ def hide_user(user_id: int, current_user_id: int, current_user_level: int) -> No
     if user is None or user.is_hidden:
         raise UserServiceError("Пользователь не найден", "NOT_FOUND", 404)
 
-    # Защита: нельзя скрыть пользователя с более высоким уровнем
-    if user.role.level >= current_user_level:
-        raise UserServiceError("Нельзя удалить пользователя с такой же или более высокой ролью", "ROLE_LEVEL_FORBIDDEN", 403)
+    # Защита: нельзя скрыть пользователя с более высоким уровнем; равный
+    # уровень допускаем (Админ системы может удалить другого Админа системы).
+    if user.role.level > current_user_level:
+        raise UserServiceError("Нельзя удалить пользователя с более высокой ролью", "ROLE_LEVEL_FORBIDDEN", 403)
 
     # Защита корневого Администратора системы (is_root_admin) — его нельзя
     # скрыть никому. Запасная защита: если в системе всего один Администратор,
@@ -88,6 +90,16 @@ def hide_user(user_id: int, current_user_id: int, current_user_level: int) -> No
             raise UserServiceError(
                 "Нельзя скрыть единственного Администратора системы",
                 "LAST_ADMIN", 422
+            )
+
+    # Корневого Руководителя компании может скрыть только Админ системы.
+    if user.role.level >= DIRECTOR:
+        company_q = db.select(Company).where(Company.director_id == user.id)
+        is_root_director = db.session.execute(company_q).scalar_one_or_none() is not None
+        if is_root_director and current_user_level < ADMIN:
+            raise UserServiceError(
+                "Корневого Руководителя компании может удалить только Администратор системы",
+                "ROOT_DIRECTOR", 422,
             )
 
     user_repo.update(user, is_hidden=True)
@@ -173,9 +185,10 @@ def assign_role(user_id: int, role_id: int, current_user_id: int, current_user_l
     if new_role is None:
         raise UserServiceError("Роль не найдена", "ROLE_NOT_FOUND", 404)
 
-    # Проверка уровня: нельзя назначить роль выше своего уровня
-    if new_role.level >= current_user_level:
-        raise UserServiceError("Нельзя назначить роль равную или выше собственной", "ROLE_LEVEL_FORBIDDEN", 403)
+    # Проверка уровня: нельзя назначить роль выше своего уровня; равную —
+    # можно (Админ системы → Админ системы).
+    if new_role.level > current_user_level:
+        raise UserServiceError("Нельзя назначить роль выше собственной", "ROLE_LEVEL_FORBIDDEN", 403)
 
     # Корневого Администратора системы (is_root_admin) разжаловать нельзя
     # никому. И защита: последний Администратор системы остаётся в роли.
@@ -189,6 +202,18 @@ def assign_role(user_id: int, role_id: int, current_user_id: int, current_user_l
             raise UserServiceError(
                 "Нельзя изменить роль единственного Администратора системы",
                 "LAST_ADMIN", 422
+            )
+
+    # Корневой Руководитель компании (companies.director_id == user.id) —
+    # только Администратор системы может его разжаловать. Это страхует
+    # компанию от внутреннего «дворцового переворота».
+    if user.role.level >= DIRECTOR and new_role.level < DIRECTOR:
+        company_q = db.select(Company).where(Company.director_id == user.id)
+        is_root_director = db.session.execute(company_q).scalar_one_or_none() is not None
+        if is_root_director and current_user_level < ADMIN:
+            raise UserServiceError(
+                "Корневого Руководителя компании может разжаловать только Администратор системы",
+                "ROOT_DIRECTOR", 422,
             )
 
     user_repo.update(user, role_id=role_id)

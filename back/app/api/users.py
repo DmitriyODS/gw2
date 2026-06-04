@@ -101,7 +101,15 @@ def list_directory():
     q = request.args.get("q", type=str)
     exclude_self = request.args.get("exclude_self", default="false").lower() in ("1", "true", "yes")
     exclude_id = int(get_jwt_identity()) if exclude_self else None
-    users = user_repo.search_directory(query=q, exclude_id=exclude_id)
+    # company_id: для обычных сотрудников = их компания (бэк навяжет);
+    # для Администратора системы — то, что прилетело в query, или None (=все).
+    me = user_repo.get_by_id(int(get_jwt_identity()))
+    if me and me.company_id is not None:
+        company_id = me.company_id
+    else:
+        raw = request.args.get("company_id")
+        company_id = int(raw) if raw not in (None, "") else None
+    users = user_repo.search_directory(query=q, exclude_id=exclude_id, company_id=company_id)
     return jsonify(_directory_list_schema.dump(users)), 200
 
 

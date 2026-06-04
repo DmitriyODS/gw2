@@ -1,6 +1,12 @@
 import { defineStore } from 'pinia'
 import { ref, computed, watch } from 'vue'
-import { listCompanies as apiList } from '@/api/companies.js'
+import {
+  listCompanies as apiList,
+  createCompany as apiCreate,
+  updateCompany as apiUpdate,
+  toggleCompanyActive as apiToggle,
+  deleteCompany as apiDelete,
+} from '@/api/companies.js'
 import { useAuthStore } from '@/stores/auth.js'
 
 const STORAGE_KEY = 'gw_active_company_id'
@@ -27,7 +33,6 @@ export const useCompaniesStore = defineStore('companies', () => {
   })
 
   const effectiveCompanyId = computed(() => {
-    // Сотрудник/Менеджер/Руководитель — всегда своя компания, селектор скрыт.
     if (auth.companyId != null) return auth.companyId
     return activeCompanyId.value
   })
@@ -48,7 +53,6 @@ export const useCompaniesStore = defineStore('companies', () => {
       const res = await apiList()
       items.value = res.items || []
       loaded.value = true
-      // Если выбранной компании больше нет (удалили) — сбрасываем.
       if (activeCompanyId.value != null &&
           !items.value.some(c => c.id === activeCompanyId.value)) {
         setActive(null)
@@ -58,17 +62,58 @@ export const useCompaniesStore = defineStore('companies', () => {
     }
   }
 
+  function _replace(updated) {
+    const idx = items.value.findIndex(c => c.id === updated.id)
+    if (idx >= 0) items.value.splice(idx, 1, updated)
+    else items.value.unshift(updated)
+  }
+
+  async function create(payload) {
+    const c = await apiCreate(payload)
+    _replace(c)
+    return c
+  }
+
+  async function update(id, payload) {
+    const c = await apiUpdate(id, payload)
+    _replace(c)
+    return c
+  }
+
+  async function toggleActive(id, isActive) {
+    // Оптимистичное обновление: обновляем флаг сразу, при ошибке откатываем.
+    const idx = items.value.findIndex(c => c.id === id)
+    if (idx < 0) return
+    const prev = items.value[idx].is_active
+    items.value[idx] = { ...items.value[idx], is_active: isActive }
+    try {
+      const c = await apiToggle(id, isActive)
+      _replace(c)
+      return c
+    } catch (e) {
+      items.value[idx] = { ...items.value[idx], is_active: prev }
+      throw e
+    }
+  }
+
+  async function remove(id) {
+    await apiDelete(id)
+    const idx = items.value.findIndex(c => c.id === id)
+    if (idx >= 0) items.value.splice(idx, 1)
+    if (activeCompanyId.value === id) setActive(null)
+  }
+
   function clear() {
     items.value = []
     loaded.value = false
     setActive(null)
   }
 
-  // При смене auth.token сбрасываем — после logout не должны храниться чужие данные.
   watch(() => auth.token, (t) => { if (!t) clear() })
 
   return {
     items, loading, loaded, activeCompanyId, activeCompany,
     effectiveCompanyId, setActive, load, clear,
+    create, update, toggleActive, remove,
   }
 })

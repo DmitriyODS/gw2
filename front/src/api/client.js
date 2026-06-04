@@ -8,7 +8,7 @@ let refreshQueue = []
 // системы (без своей company_id) — автоматически добавляем
 // ?company_id=<выбранный в селекторе>, чтобы бэк понял scope.
 const COMPANY_SCOPED_PREFIXES = [
-  '/tasks', '/units', '/departments', '/unit-types',
+  '/tasks', '/units', '/departments', '/unit-types', '/stages',
   '/stats', '/messenger', '/calls', '/users/directory',
 ]
 

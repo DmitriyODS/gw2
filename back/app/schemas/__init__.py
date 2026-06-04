@@ -12,6 +12,7 @@ from .task import TaskSchema, TaskCreateSchema, TaskUpdateSchema, TaskColorSchem
 from .unit import UnitSchema, UnitCreateSchema, UnitUpdateSchema
 from .department import DepartmentSchema, DepartmentCreateSchema, DepartmentUpdateSchema
 from .unit_type import UnitTypeSchema, UnitTypeCreateSchema, UnitTypeUpdateSchema
+from .stage import StageSchema, StageCreateSchema, StageUpdateSchema, StageReorderSchema, STAGE_COLORS
 from .stats import StatsCommonSchema, StatsExtendedSchema, StatsProfileSchema
 from .message import (
     MessageSchema, AttachmentSchema, ConversationListItemSchema,
@@ -31,6 +32,7 @@ __all__ = [
     "UnitSchema", "UnitCreateSchema", "UnitUpdateSchema",
     "DepartmentSchema", "DepartmentCreateSchema", "DepartmentUpdateSchema",
     "UnitTypeSchema", "UnitTypeCreateSchema", "UnitTypeUpdateSchema",
+    "StageSchema", "StageCreateSchema", "StageUpdateSchema", "StageReorderSchema", "STAGE_COLORS",
     "StatsCommonSchema", "StatsExtendedSchema", "StatsProfileSchema",
     "MessageSchema", "AttachmentSchema", "ConversationListItemSchema",
     "ConversationSchema", "MessageCreateSchema", "ConversationCreateSchema",
