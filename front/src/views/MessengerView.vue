@@ -306,26 +306,20 @@ async function openDevChat() {
   scrollToBottom()
 }
 
+const devSenders = ref({})
+
 function senderNameFor(m) {
   // В dev-чате под чужими сообщениями показываем ФИО автора —
   // в обычных p2p-диалогах это лишнее.
-  if (!active.value?.is_dev_chat) return ''
+  if (!activeRef.value?.is_dev_chat) return ''
   if (m.sender_id === authStore.user?.id) return ''
   return devSenders.value[m.sender_id] || ''
 }
 
-const devSenders = ref({})
-
-// При входе в dev-чат подтягиваем каталог сотрудников компании,
-// чтобы подписывать сообщения ФИО автора.
-watch(() => active.value?.is_dev_chat && active.value?.id, async (isDev) => {
-  if (!isDev) return
-  try {
-    const { getDirectory } = await import('@/api/users.js')
-    const users = await getDirectory('', false)
-    devSenders.value = Object.fromEntries(users.map(u => [u.id, u.fio]))
-  } catch {/* без имён в шапке тоже жить можно */}
-})
+// Ref-плейсхолдер для активного диалога — заполняется ниже, после объявления
+// computed `active`. Используется в senderNameFor, чтобы избежать TDZ-доступа
+// к `active` из template'а до его инициализации.
+const activeRef = ref(null)
 
 const chatMenuOpen = ref(false)
 const toolsRef = ref(null)
@@ -511,6 +505,18 @@ async function unpinMessage(message) {
 
 const activeId = computed(() => messenger.activeConversationId)
 const active = computed(() => messenger.activeConversation)
+
+// Подтягиваем каталог сотрудников компании, когда заходим в dev-чат —
+// чтобы подписывать чужие сообщения ФИО автора (там не один собеседник).
+watch(active, async (a) => {
+  activeRef.value = a
+  if (!a?.is_dev_chat) return
+  try {
+    const { getDirectory } = await import('@/api/users.js')
+    const users = await getDirectory('', false)
+    devSenders.value = Object.fromEntries(users.map(u => [u.id, u.fio]))
+  } catch {/* без имён в шапке тоже жить можно */}
+}, { immediate: true })
 
 const otherOnline = computed(() => messenger.isOnline(active.value?.other_user?.id))
 const lastSeenText = computed(() => {
