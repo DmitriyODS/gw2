@@ -144,10 +144,17 @@ const hasHeader = computed(() =>
 )
 
 const SIZE_WIDTH = { sm: '380px', md: '520px', lg: '720px', xl: '920px' }
+const SIZE_MAX_H = {
+  sm: 'calc(100vh - 48px)',
+  md: 'calc(100vh - 48px)',
+  lg: 'calc(100vh - 48px)',
+  xl: 'calc(100vh - 32px)',
+}
 
 const rootStyle = computed(() => ({
   width: SIZE_WIDTH[props.size],
   maxWidth: 'calc(100vw - 24px)',
+  maxHeight: SIZE_MAX_H[props.size],
 }))
 
 const rootPt = computed(() => ({
@@ -200,7 +207,7 @@ function actionClass(a) {
   display: flex;
   flex-direction: column;
   min-height: 0;
-  max-height: calc(100vh - 48px);
+  flex: 1 1 auto;
   border-radius: var(--radius-xl, 28px);
   background: var(--color-surface);
   overflow: hidden;
@@ -418,10 +425,6 @@ function actionClass(a) {
   to { transform: rotate(360deg); }
 }
 
-/* Размеры — управляются shellом через width в style, но max-height
-   адаптируется. */
-.app-dialog.size-xl { max-height: calc(100vh - 32px); }
-
 /* Мобильная адаптация: на ≤600 — bottom sheet (по умолчанию),
    полный экран (mobile="full") или авто (sheet). */
 @media (max-width: 600px) {
@@ -445,6 +448,8 @@ function actionClass(a) {
   border: 1px solid var(--color-outline-dim) !important;
   box-shadow: var(--shadow-xl, 0 24px 60px rgba(0, 0, 0, 0.25)) !important;
   overflow: hidden !important;
+  display: flex !important;
+  flex-direction: column !important;
 }
 
 .app-dialog-mask {
@@ -457,6 +462,10 @@ function actionClass(a) {
   background: transparent !important;
   border-radius: var(--radius-xl, 28px) !important;
   overflow: hidden !important;
+  flex: 1 1 auto !important;
+  min-height: 0 !important;
+  display: flex !important;
+  flex-direction: column !important;
 }
 
 /* На мобильном — bottom sheet: прижимаем диалог к низу, скругление сверху. */
