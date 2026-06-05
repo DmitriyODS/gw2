@@ -22,10 +22,49 @@ def get_or_create_conversation(user_a: int, user_b: int) -> Conversation:
     if conv:
         return conv
     a, b = _pair(user_a, user_b)
-    conv = Conversation(user_a_id=a, user_b_id=b)
+    # Multi-tenancy: компания диалога = компания собеседника, в чью «комнату»
+    # этот чат попадает. Берём company_id любого из участников (они должны
+    # быть из одной компании — это валидируется выше по стеку). Если оба
+    # без company_id (Администратор системы пишет Администратору системы) —
+    # берём первого попавшегося. На практике этого не должно происходить.
+    ua = db.session.get(User, a)
+    ub = db.session.get(User, b)
+    company_id = ua.company_id if ua and ua.company_id else (ub.company_id if ub else None)
+    conv = Conversation(user_a_id=a, user_b_id=b, company_id=company_id)
     db.session.add(conv)
     db.session.flush()
     return conv
+
+
+def get_dev_chat_for_user(user_id: int) -> Optional[Conversation]:
+    """Личный чат пользователя с техподдержкой (один на пользователя)."""
+    return db.session.execute(
+        db.select(Conversation).where(
+            Conversation.is_dev_chat.is_(True),
+            Conversation.user_a_id == user_id,
+        )
+    ).scalar_one_or_none()
+
+
+def get_or_create_dev_chat_for_user(user_id: int, company_id: int) -> Conversation:
+    conv = get_dev_chat_for_user(user_id)
+    if conv:
+        return conv
+    conv = Conversation(user_a_id=user_id, user_b_id=None,
+                        company_id=company_id, is_dev_chat=True)
+    db.session.add(conv)
+    db.session.flush()
+    return conv
+
+
+def list_dev_chats() -> list[Conversation]:
+    """Все личные чаты пользователей с техподдержкой (для Администратора системы).
+    Сортировка: сначала с непрочитанными/свежим сообщением, потом пустые."""
+    return list(db.session.execute(
+        db.select(Conversation).where(Conversation.is_dev_chat.is_(True))
+        .order_by(Conversation.last_message_at.desc().nullslast(),
+                  Conversation.created_at.desc())
+    ).scalars().all())
 
 
 def get_conversation(conversation_id: int) -> Optional[Conversation]:
@@ -35,8 +74,11 @@ def get_conversation(conversation_id: int) -> Optional[Conversation]:
 def list_user_conversations(user_id: int) -> list[dict]:
     """Список диалогов пользователя с информацией о собеседнике, последнем
     сообщении и количестве непрочитанных. Скрытые «у себя» — не показываются.
-    Сортировка: закреплённые (по pinned_at сторонним DESC) → остальные
-    (по last_message_at DESC)."""
+    Для пользователя с company_id — dev_chat компании добавляется первым
+    (если существует). Для Администратора системы — dev-чаты выгружаются
+    отдельным эндпоинтом. Сортировка: закреплённые → остальные (по last_message_at)."""
+    me = db.session.get(User, user_id)
+
     # Фильтр «не скрыто на моей стороне»
     not_hidden = or_(
         and_(Conversation.user_a_id == user_id, Conversation.hidden_for_a.is_(False)),
@@ -44,13 +86,14 @@ def list_user_conversations(user_id: int) -> list[dict]:
     )
     convs = db.session.execute(
         db.select(Conversation).where(
+            Conversation.is_dev_chat.is_(False),
             or_(Conversation.user_a_id == user_id, Conversation.user_b_id == user_id),
             not_hidden,
         ).order_by(Conversation.last_message_at.desc().nullslast(), Conversation.created_at.desc())
     ).scalars().all()
 
     if not convs:
-        return []
+        convs = []
 
     # Доп. сортировка в Python: pinned-первыми по pinned_at_<side> DESC.
     convs.sort(key=lambda c: (
@@ -119,6 +162,38 @@ def list_user_conversations(user_id: int) -> list[dict]:
             "is_pinned": c.pinned_at_for(user_id) is not None,
             "pinned_at": c.pinned_at_for(user_id),
         })
+
+    # Добавляем личный dev_chat пользователя первым (если он сотрудник компании
+    # и чат уже существует — создание делает сервис до вызова list).
+    # Администратор системы (company_id=None) видит все dev-чаты пользователей
+    # через отдельный эндпоинт /dev-chats (support inbox).
+    if me is not None and me.company_id is not None:
+        dev = get_dev_chat_for_user(user_id)
+        if dev is not None:
+            # Последнее сообщение dev_chat (не скрытое нет понятия «стороны»)
+            dev_last = db.session.execute(
+                db.select(Message)
+                .where(Message.conversation_id == dev.id)
+                .order_by(Message.id.desc())
+                .limit(1)
+            ).scalar_one_or_none()
+            dev_unread = db.session.execute(
+                db.select(func.count(Message.id))
+                .where(
+                    Message.conversation_id == dev.id,
+                    Message.sender_id != user_id,
+                    Message.read_at.is_(None),
+                )
+            ).scalar_one() or 0
+            result.insert(0, {
+                "conversation": dev,
+                "other_user": None,
+                "last_message": dev_last,
+                "unread_count": dev_unread,
+                "is_pinned": False,
+                "pinned_at": None,
+            })
+
     return result
 
 
@@ -178,13 +253,16 @@ def create_call_message(conversation_id: int, sender_id: int, call_id: int) -> M
 
 def create_message(conversation_id: int, sender_id: int, text: Optional[str],
                    attachment_ids: list[int], reply_to_id: Optional[int] = None,
-                   forwarded_from_user_id: Optional[int] = None) -> Message:
+                   forwarded_from_user_id: Optional[int] = None,
+                   kind: str = "text", task_id: Optional[int] = None) -> Message:
     msg = Message(
         conversation_id=conversation_id,
         sender_id=sender_id,
         text=text or None,
         reply_to_id=reply_to_id,
         forwarded_from_user_id=forwarded_from_user_id,
+        kind=kind,
+        task_id=task_id,
     )
     db.session.add(msg)
     db.session.flush()

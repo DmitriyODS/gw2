@@ -1,9 +1,10 @@
 from flask import current_app
 from app.extensions import db
+from app.models import Company
 from app.repositories import user_repo, role_repo
 from app.utils.avatar import save_avatar, delete_avatar
 from app.utils.logger import get_logger
-from app.utils.permissions import MANAGER, SUPERADMIN
+from app.utils.permissions import MANAGER, ADMIN, DIRECTOR
 
 logger = get_logger(__name__)
 
@@ -17,22 +18,31 @@ class UserServiceError(Exception):
 
 
 def create_user(fio: str, login: str, role_id: int, current_user_level: int,
-                post: str = None, password: str = None) -> object:
+                company_id: int = None,
+                post: str = None, password: str = None,
+                phone: str = None, email: str = None) -> object:
     role = role_repo.get_by_id(role_id)
     if role is None:
         raise UserServiceError("Роль не найдена", "ROLE_NOT_FOUND", 404)
 
-    if current_user_level < SUPERADMIN and role.level > MANAGER:
-        raise UserServiceError("Нельзя создать пользователя с ролью выше менеджера", "ROLE_LEVEL_FORBIDDEN", 403)
+    # Нельзя назначить роль выше своей. Равную — можно (например, Админ системы
+    # может создать ещё одного Админа системы; см. v3-план «Сотрудники»).
+    if role.level > current_user_level:
+        raise UserServiceError("Нельзя назначить роль выше собственной",
+                               "ROLE_LEVEL_FORBIDDEN", 403)
 
-    existing = user_repo.get_by_login(login)
-    if existing:
+    if login and user_repo.get_by_login(login):
         raise UserServiceError("Логин уже занят", "LOGIN_TAKEN", 409)
+    if email and user_repo.get_by_email(email):
+        raise UserServiceError("Email уже используется", "EMAIL_TAKEN", 409)
 
     is_default = password is None
-    hashed = user_repo.hash_password_sql(password if password else "admin")
-    user = user_repo.create(fio=fio, login=login, hashed_password=hashed, role_id=role_id, post=post,
-                            is_default_pass=is_default)
+    hashed = user_repo.hash_password_sql(password if password else f"{login}123")
+    user = user_repo.create(
+        fio=fio, login=login, hashed_password=hashed, role_id=role_id,
+        company_id=company_id, post=post, phone=phone, email=email,
+        is_default_pass=is_default,
+    )
     db.session.commit()
 
     logger.info("user.create", extra={"extra": {"user_id": user.id, "event": "user.create"}})
@@ -62,16 +72,34 @@ def hide_user(user_id: int, current_user_id: int, current_user_level: int) -> No
     if user is None or user.is_hidden:
         raise UserServiceError("Пользователь не найден", "NOT_FOUND", 404)
 
-    # Защита: нельзя скрыть пользователя с более высоким уровнем
-    if user.role.level >= current_user_level:
-        raise UserServiceError("Нельзя удалить пользователя с такой же или более высокой ролью", "ROLE_LEVEL_FORBIDDEN", 403)
+    # Защита: нельзя скрыть пользователя с более высоким уровнем; равный
+    # уровень допускаем (Админ системы может удалить другого Админа системы).
+    if user.role.level > current_user_level:
+        raise UserServiceError("Нельзя удалить пользователя с более высокой ролью", "ROLE_LEVEL_FORBIDDEN", 403)
 
-    # Защита последнего суперадминистратора
-    if user.role.level >= SUPERADMIN:
-        if user_repo.count_by_level(SUPERADMIN) <= 1:
+    # Защита корневого Администратора системы (is_root_admin) — его нельзя
+    # скрыть никому. Запасная защита: если в системе всего один Администратор,
+    # его тоже нельзя скрыть.
+    if user.is_root_admin:
+        raise UserServiceError(
+            "Корневого Администратора системы нельзя удалить",
+            "ROOT_ADMIN", 422,
+        )
+    if user.role.level >= ADMIN:
+        if user_repo.count_by_level(ADMIN) <= 1:
             raise UserServiceError(
-                "Нельзя скрыть единственного суперадминистратора",
-                "LAST_SUPERADMIN", 422
+                "Нельзя скрыть единственного Администратора системы",
+                "LAST_ADMIN", 422
+            )
+
+    # Корневого Руководителя компании может скрыть только Админ системы.
+    if user.role.level >= DIRECTOR:
+        company_q = db.select(Company).where(Company.director_id == user.id)
+        is_root_director = db.session.execute(company_q).scalar_one_or_none() is not None
+        if is_root_director and current_user_level < ADMIN:
+            raise UserServiceError(
+                "Корневого Руководителя компании может удалить только Администратор системы",
+                "ROOT_DIRECTOR", 422,
             )
 
     user_repo.update(user, is_hidden=True)
@@ -80,6 +108,7 @@ def hide_user(user_id: int, current_user_id: int, current_user_level: int) -> No
 
 
 def update_me(user_id: int, fio: str = None, login: str = None, post: str = None,
+              phone: str = None, email: str = None,
               current_password: str = None, new_password: str = None, confirm_password: str = None) -> object:
     user = user_repo.get_by_id(user_id)
     if user is None:
@@ -92,6 +121,17 @@ def update_me(user_id: int, fio: str = None, login: str = None, post: str = None
 
     if post is not None:
         updates["post"] = post
+
+    if phone is not None:
+        updates["phone"] = phone or None
+
+    if email is not None:
+        normalized = (email or "").strip() or None
+        if normalized:
+            existing = user_repo.get_by_email(normalized)
+            if existing and existing.id != user_id:
+                raise UserServiceError("Email уже используется", "EMAIL_TAKEN", 409)
+        updates["email"] = normalized
 
     if login is not None:
         existing = user_repo.get_by_login(login)
@@ -145,6 +185,24 @@ def delete_user_avatar(user_id: int) -> object:
     return user
 
 
+def reset_password(user_id: int, current_user_id: int, current_user_level: int) -> None:
+    if user_id == current_user_id:
+        raise UserServiceError("Нельзя сбросить собственный пароль", "SELF_RESET", 422)
+
+    user = user_repo.get_by_id(user_id)
+    if user is None or user.is_hidden:
+        raise UserServiceError("Пользователь не найден", "NOT_FOUND", 404)
+
+    if user.role.level > current_user_level:
+        raise UserServiceError("Нельзя сбросить пароль пользователю с более высокой ролью",
+                               "ROLE_LEVEL_FORBIDDEN", 403)
+
+    hashed = user_repo.hash_password_sql(f"{user.login}123")
+    user_repo.update(user, hash_password=hashed, is_default_pass=True)
+    db.session.commit()
+    logger.info("user.reset_password", extra={"extra": {"user_id": user_id, "event": "user.reset_password"}})
+
+
 def assign_role(user_id: int, role_id: int, current_user_id: int, current_user_level: int) -> object:
     if user_id == current_user_id:
         raise UserServiceError("Нельзя изменить свою роль", "SELF_ROLE_CHANGE", 422)
@@ -157,16 +215,35 @@ def assign_role(user_id: int, role_id: int, current_user_id: int, current_user_l
     if new_role is None:
         raise UserServiceError("Роль не найдена", "ROLE_NOT_FOUND", 404)
 
-    # Проверка уровня: нельзя назначить роль выше своего уровня
-    if new_role.level >= current_user_level:
-        raise UserServiceError("Нельзя назначить роль равную или выше собственной", "ROLE_LEVEL_FORBIDDEN", 403)
+    # Проверка уровня: нельзя назначить роль выше своего уровня; равную —
+    # можно (Админ системы → Админ системы).
+    if new_role.level > current_user_level:
+        raise UserServiceError("Нельзя назначить роль выше собственной", "ROLE_LEVEL_FORBIDDEN", 403)
 
-    # Защита последнего суперадминистратора
-    if user.role.level >= SUPERADMIN:
-        if user_repo.count_by_level(SUPERADMIN) <= 1:
+    # Корневого Администратора системы (is_root_admin) разжаловать нельзя
+    # никому. И защита: последний Администратор системы остаётся в роли.
+    if user.is_root_admin:
+        raise UserServiceError(
+            "Корневому Администратору системы нельзя сменить роль",
+            "ROOT_ADMIN", 422,
+        )
+    if user.role.level >= ADMIN:
+        if user_repo.count_by_level(ADMIN) <= 1:
             raise UserServiceError(
-                "Нельзя изменить роль единственного суперадминистратора",
-                "LAST_SUPERADMIN", 422
+                "Нельзя изменить роль единственного Администратора системы",
+                "LAST_ADMIN", 422
+            )
+
+    # Корневой Руководитель компании (companies.director_id == user.id) —
+    # только Администратор системы может его разжаловать. Это страхует
+    # компанию от внутреннего «дворцового переворота».
+    if user.role.level >= DIRECTOR and new_role.level < DIRECTOR:
+        company_q = db.select(Company).where(Company.director_id == user.id)
+        is_root_director = db.session.execute(company_q).scalar_one_or_none() is not None
+        if is_root_director and current_user_level < ADMIN:
+            raise UserServiceError(
+                "Корневого Руководителя компании может разжаловать только Администратор системы",
+                "ROOT_DIRECTOR", 422,
             )
 
     user_repo.update(user, role_id=role_id)

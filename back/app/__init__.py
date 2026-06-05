@@ -45,6 +45,7 @@ def _init_extensions(app: Flask) -> None:
     # Импорт моделей чтобы Alembic их видел
     with app.app_context():
         from app.models import (  # noqa
+            Company,
             Role, User, Department, Task, Favorite, UnitType, Unit, UserTaskColor,
             Conversation, Message, MessageAttachment,
             Call, CallParticipant,
@@ -135,8 +136,8 @@ def _init_swagger(app: Flask) -> None:
         "swagger": "2.0",
         "info": {
             "title": "Groove Work API",
-            "description": "REST API платформы учёта задач и времени Groove Work v2.0",
-            "version": "2.7.2",
+            "description": "REST API платформы учёта задач, времени и общения Groove Work v3.0",
+            "version": "3.0.0",
         },
         "securityDefinitions": {
             "BearerAuth": {

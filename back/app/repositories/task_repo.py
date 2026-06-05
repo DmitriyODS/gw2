@@ -13,10 +13,13 @@ def get_by_id(task_id: int) -> Optional[Task]:
 
 def get_list(
     current_user_id: int,
+    company_id: Optional[int],
     tab: str = "active",
     search: Optional[str] = None,
     sort: str = "last_activity",
     dept_id: Optional[int] = None,
+    stage_id: Optional[int] = None,
+    responsible_user_id: Optional[int] = None,
     received_from: Optional[datetime] = None,
     received_to: Optional[datetime] = None,
     has_units: Optional[str] = None,
@@ -24,6 +27,12 @@ def get_list(
     per_page: int = 30,
 ) -> dict:
     q = db.select(Task)
+    # Multi-tenancy: основной фильтр. None означает «во всех компаниях»
+    # (доступно только Администратору системы, без явно выбранной компании
+    # в селекторе) — на практике обработчик должен либо требовать
+    # company_id, либо явно решать.
+    if company_id is not None:
+        q = q.where(Task.company_id == company_id)
 
     # Вкладка
     if tab == "active":
@@ -45,6 +54,14 @@ def get_list(
     # Фильтр по отделу
     if dept_id:
         q = q.where(Task.department_id == dept_id)
+
+    # Фильтр по этапу
+    if stage_id is not None:
+        q = q.where(Task.stage_id == stage_id)
+
+    # Фильтр по ответственному
+    if responsible_user_id is not None:
+        q = q.where(Task.responsible_user_id == responsible_user_id)
 
     # Период поступления
     if received_from:
@@ -84,7 +101,8 @@ def get_list(
     return {"items": tasks, "total": total, "page": page, "per_page": per_page}
 
 
-def get_stale(threshold: datetime, limit: int = 100) -> list[Task]:
+def get_stale(threshold: datetime, company_id: Optional[int] = None,
+              limit: int = 100) -> list[Task]:
     """Активные (не в архиве) задачи, поступившие раньше threshold — те, что
     «висят» дольше порога. Сначала самые старые, чтобы напоминание подсвечивало
     залежавшиеся в первую очередь."""
@@ -94,6 +112,8 @@ def get_stale(threshold: datetime, limit: int = 100) -> list[Task]:
         .order_by(asc(Task.received_at))
         .limit(limit)
     )
+    if company_id is not None:
+        q = q.where(Task.company_id == company_id)
     return db.session.execute(q).scalars().all()
 
 
@@ -101,22 +121,48 @@ def create(
     name: str,
     author_id: int,
     department_id: int,
+    company_id: int,
     received_at: Optional[datetime] = None,
     link_yougile: Optional[str] = None,
     deadline: Optional[datetime] = None,
+    responsible_user_id: Optional[int] = None,
+    stage_id: Optional[int] = None,
 ) -> Task:
     task = Task(
         name=name,
         author_id=author_id,
         department_id=department_id,
+        company_id=company_id,
         link_yougile=link_yougile,
         deadline=deadline,
+        responsible_user_id=responsible_user_id,
+        stage_id=stage_id,
     )
     if received_at:
         task.received_at = received_at
     db.session.add(task)
     db.session.flush()
     return task
+
+
+def get_contributors(task_id: int) -> list[dict]:
+    """Сотрудники, у которых хоть когда-либо был юнит по задаче (distinct)."""
+    from app.models import User as UserModel
+    rows = db.session.execute(
+        db.select(UserModel.id, UserModel.fio, UserModel.avatar_path)
+        .join(Unit, Unit.user_id == UserModel.id)
+        .where(Unit.task_id == task_id)
+        .distinct()
+        .order_by(UserModel.fio.asc())
+    ).all()
+    return [{"id": r.id, "fio": r.fio, "avatar_path": r.avatar_path} for r in rows]
+
+
+def count_by_company(company_id: int) -> int:
+    """Кол-во задач (включая архивные) — для статистики таблицы компаний."""
+    return db.session.execute(
+        db.select(db.func.count(Task.id)).where(Task.company_id == company_id)
+    ).scalar_one()
 
 
 def update(task: Task, **kwargs) -> Task:

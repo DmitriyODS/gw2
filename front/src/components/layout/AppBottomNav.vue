@@ -1,68 +1,24 @@
 <template>
   <nav class="bottom-nav">
     <button
-      data-tutorial="nav-tasks"
+      v-for="item in items"
+      :key="item.path"
+      :data-tutorial="item.tutorial"
       class="bottom-nav-item"
-      :class="{ active: route.path === '/tasks' }"
-      @click="router.push('/tasks')"
+      :class="{ active: item.active() }"
+      @click="router.push(item.path)"
     >
-      <span class="material-symbols-outlined">grid_view</span>
-      <span class="bottom-nav-label">Задачи</span>
-      <span v-if="unitsStore.activeUnit" class="unit-dot" />
-    </button>
-
-    <button
-      v-if="isAtLeast(ROLES.EMPLOYEE)"
-      data-tutorial="nav-stats"
-      class="bottom-nav-item"
-      :class="{ active: route.path === '/stats' }"
-      @click="router.push('/stats')"
-    >
-      <span class="material-symbols-outlined">query_stats</span>
-      <span class="bottom-nav-label">Статистика</span>
-    </button>
-
-    <button
-      data-tutorial="nav-employees"
-      class="bottom-nav-item"
-      :class="{ active: route.path === '/employees' }"
-      @click="router.push('/employees')"
-    >
-      <span class="material-symbols-outlined">groups</span>
-      <span class="bottom-nav-label">Люди</span>
-    </button>
-
-    <button
-      data-tutorial="nav-messenger"
-      class="bottom-nav-item"
-      :class="{ active: route.path.startsWith('/messenger') }"
-      @click="router.push('/messenger')"
-    >
-      <span class="material-symbols-outlined">chat</span>
-      <span class="bottom-nav-label">Чаты</span>
-      <span v-if="messenger.totalUnread" class="bottom-badge">
-        {{ messenger.totalUnread > 99 ? '99+' : messenger.totalUnread }}
-      </span>
-    </button>
-
-    <button
-      data-tutorial="nav-settings"
-      class="bottom-nav-item"
-      :class="{ active: route.path === '/settings' }"
-      @click="router.push('/settings')"
-    >
-      <span class="material-symbols-outlined">settings</span>
-      <span class="bottom-nav-label">Настройки</span>
-    </button>
-
-    <button
-      data-tutorial="profile-avatar"
-      class="bottom-nav-item"
-      :class="{ active: route.path === '/profile' }"
-      @click="router.push('/profile')"
-    >
-      <img class="bottom-nav-avatar" :src="avatarSrc" :alt="authStore.user?.fio" />
-      <span class="bottom-nav-label">Профиль</span>
+      <template v-if="item.avatar">
+        <img class="bottom-nav-avatar" :src="avatarSrc" :alt="authStore.user?.fio" />
+      </template>
+      <template v-else>
+        <span class="material-symbols-outlined">{{ item.icon }}</span>
+        <span v-if="item.badge && item.badge()" class="bottom-badge">
+          {{ item.badge() > 99 ? '99+' : item.badge() }}
+        </span>
+        <span v-if="item.dot && item.dot()" class="unit-dot" />
+      </template>
+      <span class="bottom-nav-label">{{ item.label }}</span>
     </button>
   </nav>
 </template>
@@ -82,6 +38,33 @@ const unitsStore = useUnitsStore()
 const messenger = useMessengerStore()
 const { isAtLeast } = usePermission()
 
+// На мобильной нижней навигации помещается ~5 пунктов. Списки/Компании
+// прячем под кнопкой "Ещё" в Этапе 2; пока — выводим базовые 5.
+const items = computed(() => {
+  const arr = [
+    { path: '/tasks', icon: 'grid_view', label: 'Задачи', tutorial: 'nav-tasks',
+      active: () => route.path === '/tasks',
+      dot: () => !!unitsStore.activeUnit },
+    { path: '/stats', icon: 'query_stats', label: 'Статистика', tutorial: 'nav-stats',
+      active: () => route.path === '/stats' },
+    { path: '/employees', icon: 'groups', label: 'Люди', tutorial: 'nav-employees',
+      active: () => route.path === '/employees' },
+    { path: '/messenger', icon: 'chat', label: 'Чаты', tutorial: 'nav-messenger',
+      active: () => route.path.startsWith('/messenger'),
+      badge: () => messenger.totalUnread },
+  ]
+  if (isAtLeast(ROLES.ADMIN)) {
+    arr.push({ path: '/companies', icon: 'domain', label: 'Компании', tutorial: 'nav-companies',
+      active: () => route.path.startsWith('/companies') })
+  } else {
+    arr.push({ path: '/settings', icon: 'settings', label: 'Настройки', tutorial: 'nav-settings',
+      active: () => route.path === '/settings' })
+  }
+  arr.push({ path: '/profile', avatar: true, label: 'Профиль', tutorial: 'profile-avatar',
+    active: () => route.path === '/profile' })
+  return arr
+})
+
 const avatarSrc = computed(() => {
   const user = authStore.user
   if (!user) return ''
@@ -91,10 +74,7 @@ const avatarSrc = computed(() => {
 </script>
 
 <style scoped>
-/* По умолчанию скрыта — показывается только на мобильном */
-.bottom-nav {
-  display: none;
-}
+.bottom-nav { display: none; }
 
 @media (max-width: 768px) {
   .bottom-nav {
@@ -131,17 +111,10 @@ const avatarSrc = computed(() => {
   min-width: 0;
 }
 
-.bottom-nav-item:active {
-  background: var(--gw-primary-light);
-}
+.bottom-nav-item:active { background: var(--gw-primary-light); }
+.bottom-nav-item.active { color: var(--gw-primary); }
 
-.bottom-nav-item.active {
-  color: var(--gw-primary);
-}
-
-.bottom-nav-item .material-symbols-outlined {
-  font-size: 22px;
-}
+.bottom-nav-item .material-symbols-outlined { font-size: 22px; }
 
 .bottom-nav-label {
   font-size: 11px;

@@ -1,54 +1,38 @@
-// Сгенерировано из /apispec.json — не редактировать вручную
-// Перегенерировать: npm run gen:api
+// Тонкая обёртка над /api/stats/*. Все эндпоинты принимают опциональный
+// companyId — для Администратора системы (Сотрудники-менеджеры получают
+// данные строго своей компании, фильтрация на бэке).
 import { apiRequest } from './client.js'
 
-export const getStatsCommon = (from, to) => {
-  const qs = new URLSearchParams()
-  if (from != null) qs.set('from', from)
-  if (to != null) qs.set('to', to)
-  const q = qs.toString() ? `?${qs}` : ''
-  return apiRequest('/stats/common' + q)
+function qs({ from, to, companyId, userId } = {}) {
+  const p = new URLSearchParams()
+  if (from != null) p.set('from', from)
+  if (to != null) p.set('to', to)
+  if (companyId != null) p.set('company_id', companyId)
+  if (userId != null) p.set('user_id', userId)
+  const s = p.toString()
+  return s ? `?${s}` : ''
 }
 
-export const exportStatsCommon = (from, to) => {
-  const qs = new URLSearchParams()
-  if (from != null) qs.set('from', from)
-  if (to != null) qs.set('to', to)
-  const q = qs.toString() ? `?${qs}` : ''
-  return apiRequest('/stats/common/export' + q, { blob: true })
-}
+export const getStatsCommon = (from, to, companyId = null) =>
+  apiRequest('/stats/common' + qs({ from, to, companyId }))
 
-export const getStatsExtended = (from, to) => {
-  const qs = new URLSearchParams()
-  if (from != null) qs.set('from', from)
-  if (to != null) qs.set('to', to)
-  const q = qs.toString() ? `?${qs}` : ''
-  return apiRequest('/stats/extended' + q)
-}
+export const exportStatsCommon = (from, to, companyId = null) =>
+  apiRequest('/stats/common/export' + qs({ from, to, companyId }), { blob: true })
 
-export const exportStatsExtended = (from, to) => {
-  const qs = new URLSearchParams()
-  if (from != null) qs.set('from', from)
-  if (to != null) qs.set('to', to)
-  const q = qs.toString() ? `?${qs}` : ''
-  return apiRequest('/stats/extended/export' + q, { blob: true })
-}
+export const getStatsExtended = (from, to, companyId = null) =>
+  apiRequest('/stats/extended' + qs({ from, to, companyId }))
 
-export const getStatsProfile = (from, to) => {
-  const qs = new URLSearchParams()
-  if (from != null) qs.set('from', from)
-  if (to != null) qs.set('to', to)
-  const q = qs.toString() ? `?${qs}` : ''
-  return apiRequest('/stats/profile' + q)
-}
+export const exportStatsExtended = (from, to, companyId = null) =>
+  apiRequest('/stats/extended/export' + qs({ from, to, companyId }), { blob: true })
 
-export const getStatsUserTasks = (userId, from, to) => {
-  const qs = new URLSearchParams()
-  if (userId != null) qs.set('user_id', userId)
-  if (from != null) qs.set('from', from)
-  if (to != null) qs.set('to', to)
-  const q = qs.toString() ? `?${qs}` : ''
-  return apiRequest('/stats/user-tasks' + q)
-}
+export const getStatsProfile = (from, to) =>
+  apiRequest('/stats/profile' + qs({ from, to }))
 
-export const getStatsEmployees = () => apiRequest('/stats/employees')
+export const getStatsUserTasks = (userId, from, to) =>
+  apiRequest('/stats/user-tasks' + qs({ userId, from, to }))
+
+export const getStatsEmployees = (companyId = null) =>
+  apiRequest('/stats/employees' + qs({ companyId }))
+
+export const getStatsResponsibles = (companyId = null) =>
+  apiRequest('/stats/responsibles' + qs({ companyId }))

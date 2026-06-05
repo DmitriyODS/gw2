@@ -98,247 +98,6 @@
           <ThemeBuilder />
         </div>
 
-        <!-- Пользователи -->
-        <div v-show="activeSection === 'users'" class="pane-block users-block">
-          <!-- Тулбар: поиск + кнопка «Создать». Адаптивный. -->
-          <div class="users-toolbar">
-            <div class="users-search">
-              <span class="material-symbols-outlined">search</span>
-              <input
-                v-model="userSearch"
-                type="search"
-                placeholder="Поиск по ФИО, логину, должности или роли"
-              />
-              <button
-                v-if="userSearch"
-                class="users-search-clear"
-                title="Очистить"
-                @click="userSearch = ''"
-              >
-                <span class="material-symbols-outlined">close</span>
-              </button>
-            </div>
-            <button class="btn-filled users-add" @click="openUserDialog(null)">
-              <span class="material-symbols-outlined">person_add</span>
-              <span class="users-add-label">Создать</span>
-            </button>
-          </div>
-
-          <!-- Счётчик + быстрая статистика -->
-          <div v-if="!usersLoading" class="users-count">
-            <span v-if="userSearch">
-              Найдено: <b>{{ filteredUsers.length }}</b> из {{ users.length }}
-            </span>
-            <span v-else>
-              Всего сотрудников: <b>{{ users.length }}</b>
-            </span>
-          </div>
-
-          <!-- Список пользователей. На десктопе — таблица-row, на мобильном —
-               вертикальные карточки. Один компонент с responsive CSS. -->
-          <div v-if="!usersLoading && filteredUsers.length" class="users-list">
-            <div
-              v-for="u in filteredUsers"
-              :key="u.id"
-              class="urow"
-              :class="{ 'is-me': u.id === authStore.user?.id }"
-            >
-              <div class="urow-avatar-wrap">
-                <img class="urow-avatar" :src="getUserAvatar(u)" :alt="u.fio" />
-                <span v-if="u.id === authStore.user?.id" class="urow-me-dot" title="Это вы"></span>
-              </div>
-
-              <div class="urow-main">
-                <div class="urow-name-line">
-                  <span class="urow-name">{{ u.fio }}</span>
-                  <span v-if="u.id === authStore.user?.id" class="urow-me-chip">Это вы</span>
-                </div>
-                <div class="urow-meta">
-                  <span class="urow-login">@{{ u.login }}</span>
-                  <span v-if="u.post" class="urow-dot">·</span>
-                  <span v-if="u.post" class="urow-post">{{ u.post }}</span>
-                </div>
-              </div>
-
-              <span class="urow-role" :data-level="u.role?.level || 1">
-                <span class="material-symbols-outlined">{{ roleIcon(u.role?.level) }}</span>
-                <span class="urow-role-text">{{ u.role?.name || '—' }}</span>
-              </span>
-
-              <div class="urow-actions">
-                <button class="urow-action" title="Редактировать" @click="openUserDialog(u)">
-                  <span class="material-symbols-outlined">edit</span>
-                </button>
-                <button class="urow-action danger" title="Удалить" @click="confirmDeleteUser(u)">
-                  <span class="material-symbols-outlined">delete</span>
-                </button>
-              </div>
-            </div>
-          </div>
-
-          <!-- Loading state -->
-          <div v-else-if="usersLoading" class="users-loading">
-            <ProgressSpinner style="width:32px;height:32px" />
-          </div>
-
-          <!-- Empty state -->
-          <div v-else class="settings-empty">
-            <div class="empty-icon" data-tone="primary">
-              <span class="material-symbols-outlined">{{ userSearch ? 'search_off' : 'person_add' }}</span>
-            </div>
-            <h4>{{ userSearch ? 'Никого не нашли' : 'Пока ни одного сотрудника' }}</h4>
-            <p>
-              {{ userSearch
-                ? 'Попробуйте другой запрос — ищем по ФИО, логину, должности и роли.'
-                : 'Создайте первого сотрудника — кнопка наверху справа.' }}
-            </p>
-          </div>
-        </div>
-
-        <!-- Отделы -->
-        <div v-show="activeSection === 'departments'" class="pane-block">
-          <div class="pane-toolbar">
-            <p class="pane-toolbar-hint">Используются для группировки сотрудников и в статистике.</p>
-            <button
-              v-if="isAtLeast(ROLES.MANAGER)"
-              class="btn-filled"
-              @click="startAddDept"
-            >
-              <span class="material-symbols-outlined">add</span>
-              Добавить отдел
-            </button>
-          </div>
-
-          <div class="chip-list">
-            <div v-if="addingDept" class="chip-row editing">
-              <span class="material-symbols-outlined chip-icon">apartment</span>
-              <input
-                v-model="newDeptName"
-                class="chip-input"
-                placeholder="Название отдела"
-                autofocus
-                @keyup.enter="saveDept"
-                @keyup.escape="addingDept = false"
-              />
-              <button class="icon-btn success" @click="saveDept" title="Сохранить">
-                <span class="material-symbols-outlined">check</span>
-              </button>
-              <button class="icon-btn" @click="addingDept = false" title="Отмена">
-                <span class="material-symbols-outlined">close</span>
-              </button>
-            </div>
-
-            <div v-for="dept in departments" :key="dept.id" class="chip-row">
-              <template v-if="editingDeptId === dept.id">
-                <span class="material-symbols-outlined chip-icon">apartment</span>
-                <input
-                  v-model="editingDeptName"
-                  class="chip-input"
-                  @keyup.enter="updateDept(dept)"
-                  @keyup.escape="editingDeptId = null"
-                />
-                <button class="icon-btn success" @click="updateDept(dept)" title="Сохранить">
-                  <span class="material-symbols-outlined">check</span>
-                </button>
-                <button class="icon-btn" @click="editingDeptId = null" title="Отмена">
-                  <span class="material-symbols-outlined">close</span>
-                </button>
-              </template>
-              <template v-else>
-                <span class="material-symbols-outlined chip-icon">apartment</span>
-                <span class="chip-name">{{ dept.name }}</span>
-                <div v-if="isAtLeast(ROLES.MANAGER)" class="row-actions">
-                  <button class="icon-btn" title="Редактировать" @click="startEditDept(dept)">
-                    <span class="material-symbols-outlined">edit</span>
-                  </button>
-                  <button class="icon-btn danger" title="Удалить" @click="confirmDeleteDept(dept)">
-                    <span class="material-symbols-outlined">delete</span>
-                  </button>
-                </div>
-              </template>
-            </div>
-            <div v-if="!departments.length && !addingDept" class="settings-empty">
-              <div class="empty-icon" data-tone="secondary">
-                <span class="material-symbols-outlined">apartment</span>
-              </div>
-              <h4>Отделов пока нет</h4>
-              <p>Создайте первый — он появится в фильтрах и статистике.</p>
-            </div>
-          </div>
-        </div>
-
-        <!-- Типы юнитов -->
-        <div v-show="activeSection === 'unit-types'" class="pane-block">
-          <div class="pane-toolbar">
-            <p class="pane-toolbar-hint">Категории работы — встреча, дизайн, написание кода и т. п.</p>
-            <button
-              v-if="isAtLeast(ROLES.MANAGER)"
-              class="btn-filled"
-              @click="startAddUnitType"
-            >
-              <span class="material-symbols-outlined">add</span>
-              Добавить тип
-            </button>
-          </div>
-
-          <div class="chip-list">
-            <div v-if="addingUnitType" class="chip-row editing">
-              <span class="material-symbols-outlined chip-icon">category</span>
-              <input
-                v-model="newUnitTypeName"
-                class="chip-input"
-                placeholder="Название типа"
-                autofocus
-                @keyup.enter="saveUnitType"
-                @keyup.escape="addingUnitType = false"
-              />
-              <button class="icon-btn success" @click="saveUnitType" title="Сохранить">
-                <span class="material-symbols-outlined">check</span>
-              </button>
-              <button class="icon-btn" @click="addingUnitType = false" title="Отмена">
-                <span class="material-symbols-outlined">close</span>
-              </button>
-            </div>
-
-            <div v-for="ut in unitTypes" :key="ut.id" class="chip-row">
-              <template v-if="editingUnitTypeId === ut.id">
-                <span class="material-symbols-outlined chip-icon">category</span>
-                <input
-                  v-model="editingUnitTypeName"
-                  class="chip-input"
-                  @keyup.enter="updateUnitType(ut)"
-                  @keyup.escape="editingUnitTypeId = null"
-                />
-                <button class="icon-btn success" @click="updateUnitType(ut)" title="Сохранить">
-                  <span class="material-symbols-outlined">check</span>
-                </button>
-                <button class="icon-btn" @click="editingUnitTypeId = null" title="Отмена">
-                  <span class="material-symbols-outlined">close</span>
-                </button>
-              </template>
-              <template v-else>
-                <span class="material-symbols-outlined chip-icon">category</span>
-                <span class="chip-name">{{ ut.name }}</span>
-                <div v-if="isAtLeast(ROLES.MANAGER)" class="row-actions">
-                  <button class="icon-btn" title="Редактировать" @click="startEditUnitType(ut)">
-                    <span class="material-symbols-outlined">edit</span>
-                  </button>
-                  <button class="icon-btn danger" title="Удалить" @click="confirmDeleteUnitType(ut)">
-                    <span class="material-symbols-outlined">delete</span>
-                  </button>
-                </div>
-              </template>
-            </div>
-            <div v-if="!unitTypes.length && !addingUnitType" class="settings-empty">
-              <div class="empty-icon" data-tone="tertiary">
-                <span class="material-symbols-outlined">category</span>
-              </div>
-              <h4>Типов юнитов пока нет</h4>
-              <p>Без них юниты создавать нельзя — добавьте хотя бы один.</p>
-            </div>
-          </div>
-        </div>
-
         <!-- Резервная копия -->
         <div v-show="activeSection === 'backup'" class="pane-block">
           <div class="settings-card">
@@ -379,83 +138,15 @@
         <div v-show="activeSection === 'help'" class="pane-block">
           <HelpCenter />
         </div>
+
+        <!-- О приложении -->
+        <div v-show="activeSection === 'about'" class="pane-block">
+          <AboutApp />
+        </div>
         </div>
       </section>
     </Transition>
 
-    <!-- Диалоги — общие для всех секций -->
-    <Dialog
-      v-model:visible="showUserDialog"
-      :header="editingUser ? 'Редактирование пользователя' : 'Новый пользователь'"
-      modal
-      :draggable="false"
-      style="width:480px"
-    >
-      <form @submit.prevent="saveUser" class="dialog-form">
-        <div class="form-group">
-          <label>ФИО</label>
-          <InputText v-model="userForm.fio" class="w-full" placeholder="Иванов Иван Иванович" />
-        </div>
-        <div class="form-group">
-          <label>Логин</label>
-          <InputText v-model="userForm.login" class="w-full" placeholder="ivanov" />
-        </div>
-        <div v-if="!editingUser" class="form-group">
-          <label>Пароль</label>
-          <InputText v-model="userForm.password" type="password" class="w-full" placeholder="Минимум 8 символов" />
-        </div>
-        <div class="form-group">
-          <label>Должность</label>
-          <InputText v-model="userForm.post" class="w-full" placeholder="Менеджер" />
-        </div>
-        <div class="form-group">
-          <label>Роль</label>
-          <Select
-            v-model="userForm.role_id"
-            :options="assignableRoles"
-            option-label="name"
-            option-value="id"
-            placeholder="Выберите роль"
-            class="w-full"
-          />
-        </div>
-        <p v-if="userFormError" class="error-msg">{{ userFormError }}</p>
-        <div class="dialog-footer">
-          <button type="button" class="btn-text" @click="showUserDialog = false">Отмена</button>
-          <button type="submit" class="btn-filled" :disabled="userFormLoading">
-            {{ userFormLoading ? 'Сохраняем…' : 'Сохранить' }}
-          </button>
-        </div>
-      </form>
-    </Dialog>
-
-    <ConfirmDialog
-      :visible="!!deletingUser"
-      header="Удалить пользователя"
-      :message="`Удалить пользователя «${deletingUser?.fio}»? Данные задач и юнитов сохраняются.`"
-      confirm-label="Удалить"
-      :danger-confirm="true"
-      @confirm="doDeleteUser"
-      @cancel="deletingUser = null"
-    />
-    <ConfirmDialog
-      :visible="!!deletingDept"
-      header="Удалить отдел"
-      :message="`Удалить отдел «${deletingDept?.name}»?`"
-      confirm-label="Удалить"
-      :danger-confirm="true"
-      @confirm="doDeleteDept"
-      @cancel="deletingDept = null"
-    />
-    <ConfirmDialog
-      :visible="!!deletingUnitType"
-      header="Удалить тип юнита"
-      :message="`Удалить тип «${deletingUnitType?.name}»? Все юниты этого типа будут удалены безвозвратно.`"
-      confirm-label="Удалить"
-      :danger-confirm="true"
-      @confirm="doDeleteUnitType"
-      @cancel="deletingUnitType = null"
-    />
     <ConfirmDialog
       :visible="showImportConfirm1"
       header="Восстановление из резервной копии"
@@ -478,7 +169,7 @@
 </template>
 
 <script setup>
-import { ref, reactive, computed, onMounted, watch } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { usePermission, ROLES } from '@/composables/usePermission.js'
 import { useNotificationsStore } from '@/stores/notifications.js'
@@ -487,26 +178,13 @@ import { useTutorial } from '@/composables/useTutorial.js'
 import { useChangelog } from '@/composables/useChangelog.js'
 import { useBreakpoint } from '@/composables/useBreakpoint.js'
 import { version as appVersion } from '../../package.json'
-import {
-  getUsers, createUser, updateUser, deleteUser, assignRole,
-} from '@/api/users.js'
-import { getRoles } from '@/api/roles.js'
-import {
-  getDepartments, createDepartment, updateDepartment, deleteDepartment,
-} from '@/api/departments.js'
-import {
-  getUnitTypes, createUnitType, updateUnitType as apiUpdateUnitType, deleteUnitType,
-} from '@/api/unitTypes.js'
 import { exportBackup, importBackup } from '@/api/backup.js'
 import ThemeBuilder from '@/components/settings/ThemeBuilder.vue'
 import HelpCenter from '@/components/settings/HelpCenter.vue'
+import AboutApp from '@/components/settings/AboutApp.vue'
 import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
-import Dialog from 'primevue/dialog'
-import InputText from 'primevue/inputtext'
-import Select from 'primevue/select'
-import ProgressSpinner from 'primevue/progressspinner'
 
-const { isAtLeast, myLevel } = usePermission()
+const { isAtLeast } = usePermission()
 const notif = useNotificationsStore()
 const authStore = useAuthStore()
 const tutorial = useTutorial()
@@ -526,21 +204,10 @@ const allGroups = computed(() => [
     sections: [
       { key: 'theme', title: 'Внешний вид', desc: 'Цвета, тёмная тема и стиль интерфейса', icon: 'palette', tone: 'primary' },
       { key: 'help', title: 'Справка', desc: 'Как пользоваться разделами платформы', icon: 'help_center', tone: 'secondary' },
+      { key: 'about', title: 'О приложении', desc: 'Версия, тур, написать в техподдержку', icon: 'info', tone: 'tertiary' },
     ],
   },
-  {
-    key: 'admin',
-    label: 'Администрирование',
-    visible: () => isAtLeast(ROLES.EMPLOYEE),
-    sections: [
-      ...(isAtLeast(ROLES.ADMIN) ? [
-        { key: 'users', title: 'Пользователи', desc: 'Создание сотрудников и управление ролями', icon: 'group', tone: 'primary' },
-      ] : []),
-      { key: 'departments', title: 'Отделы', desc: 'Группировка сотрудников для статистики', icon: 'apartment', tone: 'secondary' },
-      { key: 'unit-types', title: 'Типы юнитов', desc: 'Категории работы для учёта времени', icon: 'category', tone: 'tertiary' },
-    ],
-  },
-  ...(isAtLeast(ROLES.SUPERADMIN) ? [{
+  ...(isAtLeast(ROLES.ADMIN) ? [{
     key: 'system',
     label: 'Система',
     sections: [
@@ -571,212 +238,6 @@ const activeSectionMeta = computed(() => activeSection.value ? sectionByKey.valu
 function openSection(key) {
   activeSection.value = key
   router.replace({ query: { ...route.query, section: key } }).catch(() => {})
-}
-
-function roleIcon(level) {
-  if (level >= 4) return 'workspace_premium'
-  if (level >= 3) return 'shield_person'
-  if (level >= 2) return 'badge'
-  return 'person'
-}
-
-/* ── Пользователи ──────────────────────────────────────────────── */
-const users = ref([])
-const usersLoading = ref(false)
-const userSearch = ref('')
-const showUserDialog = ref(false)
-const editingUser = ref(null)
-const deletingUser = ref(null)
-const userFormLoading = ref(false)
-const userFormError = ref('')
-const userForm = reactive({ fio: '', login: '', password: '', post: '', role_id: null })
-
-const roles = ref([])
-const assignableRoles = computed(() => {
-  const level = myLevel()
-  return roles.value.filter(r => r.level < level)
-})
-
-// getUsers() не принимает поисковую строку (бэк отдаёт всех админу) —
-// фильтруем на клиенте по ФИО/логину/должности. Это и быстрее: нет
-// сетевого round-trip на каждый ввод.
-function onUserSearch() { /* фильтрация делает computed filteredUsers */ }
-
-const filteredUsers = computed(() => {
-  const q = userSearch.value.trim().toLowerCase()
-  if (!q) return users.value
-  return users.value.filter(u =>
-    (u.fio || '').toLowerCase().includes(q)
-    || (u.login || '').toLowerCase().includes(q)
-    || (u.post || '').toLowerCase().includes(q)
-    || (u.role?.name || '').toLowerCase().includes(q)
-  )
-})
-
-async function loadUsers() {
-  usersLoading.value = true
-  try { users.value = await getUsers() }
-  catch (e) { notif.error(e.message || 'Ошибка загрузки пользователей') }
-  finally { usersLoading.value = false }
-}
-
-async function loadRoles() {
-  try { roles.value = await getRoles() }
-  catch (e) { notif.error(e.message || 'Ошибка загрузки ролей') }
-}
-
-function getUserAvatar(user) {
-  if (user.avatar_path) return `/uploads/${user.avatar_path}`
-  return `/api/users/${user.id}/identicon`
-}
-
-function openUserDialog(user) {
-  editingUser.value = user
-  userFormError.value = ''
-  if (user) {
-    Object.assign(userForm, {
-      fio: user.fio || '',
-      login: user.login || '',
-      password: '',
-      post: user.post || '',
-      role_id: user.role?.id || null,
-    })
-  } else {
-    Object.assign(userForm, { fio: '', login: '', password: '', post: '', role_id: null })
-  }
-  showUserDialog.value = true
-}
-
-async function saveUser() {
-  userFormError.value = ''
-  if (!userForm.fio.trim() || !userForm.login.trim()) {
-    userFormError.value = 'ФИО и логин обязательны'
-    return
-  }
-  if (!editingUser.value && userForm.password.length < 8) {
-    userFormError.value = 'Пароль должен содержать не менее 8 символов'
-    return
-  }
-  userFormLoading.value = true
-  try {
-    if (editingUser.value) {
-      const payload = { fio: userForm.fio.trim(), login: userForm.login.trim(), post: userForm.post.trim() }
-      await updateUser(editingUser.value.id, payload)
-      if (userForm.role_id && userForm.role_id !== editingUser.value.role?.id) {
-        await assignRole(editingUser.value.id, { role_id: userForm.role_id })
-      }
-      notif.success('Пользователь обновлён')
-    } else {
-      const payload = {
-        fio: userForm.fio.trim(), login: userForm.login.trim(), post: userForm.post.trim(),
-        password: userForm.password, role_id: userForm.role_id,
-      }
-      await createUser(payload)
-      notif.success('Пользователь создан')
-    }
-    showUserDialog.value = false
-    loadUsers()
-  } catch (e) { userFormError.value = e.message || 'Ошибка сохранения' }
-  finally { userFormLoading.value = false }
-}
-
-function confirmDeleteUser(user) { deletingUser.value = user }
-async function doDeleteUser() {
-  if (!deletingUser.value) return
-  try {
-    await deleteUser(deletingUser.value.id)
-    notif.success('Пользователь удалён')
-    users.value = users.value.filter(u => u.id !== deletingUser.value.id)
-  } catch (e) { notif.error(e.message || 'Ошибка удаления') }
-  finally { deletingUser.value = null }
-}
-
-/* ── Отделы ────────────────────────────────────────────────────── */
-const departments = ref([])
-const addingDept = ref(false)
-const newDeptName = ref('')
-const editingDeptId = ref(null)
-const editingDeptName = ref('')
-const deletingDept = ref(null)
-
-async function loadDepartments() {
-  try { departments.value = await getDepartments() }
-  catch (e) { notif.error(e.message || 'Ошибка загрузки отделов') }
-}
-
-function startAddDept() { addingDept.value = true; newDeptName.value = '' }
-
-async function saveDept() {
-  if (!newDeptName.value.trim()) return
-  try {
-    await createDepartment({ name: newDeptName.value.trim() })
-    notif.success('Отдел создан'); addingDept.value = false; loadDepartments()
-  } catch (e) { notif.error(e.message || 'Ошибка создания отдела') }
-}
-
-function startEditDept(dept) { editingDeptId.value = dept.id; editingDeptName.value = dept.name }
-
-async function updateDept(dept) {
-  if (!editingDeptName.value.trim()) return
-  try {
-    await updateDepartment(dept.id, { name: editingDeptName.value.trim() })
-    notif.success('Отдел обновлён'); editingDeptId.value = null; loadDepartments()
-  } catch (e) { notif.error(e.message || 'Ошибка обновления') }
-}
-
-function confirmDeleteDept(dept) { deletingDept.value = dept }
-async function doDeleteDept() {
-  if (!deletingDept.value) return
-  try {
-    await deleteDepartment(deletingDept.value.id)
-    notif.success('Отдел удалён')
-    departments.value = departments.value.filter(d => d.id !== deletingDept.value.id)
-  } catch (e) { notif.error(e.message || 'Ошибка удаления') }
-  finally { deletingDept.value = null }
-}
-
-/* ── Типы юнитов ───────────────────────────────────────────────── */
-const unitTypes = ref([])
-const addingUnitType = ref(false)
-const newUnitTypeName = ref('')
-const editingUnitTypeId = ref(null)
-const editingUnitTypeName = ref('')
-const deletingUnitType = ref(null)
-
-async function loadUnitTypes() {
-  try { unitTypes.value = await getUnitTypes() }
-  catch (e) { notif.error(e.message || 'Ошибка загрузки типов юнитов') }
-}
-
-function startAddUnitType() { addingUnitType.value = true; newUnitTypeName.value = '' }
-
-async function saveUnitType() {
-  if (!newUnitTypeName.value.trim()) return
-  try {
-    await createUnitType({ name: newUnitTypeName.value.trim() })
-    notif.success('Тип юнита создан'); addingUnitType.value = false; loadUnitTypes()
-  } catch (e) { notif.error(e.message || 'Ошибка создания') }
-}
-
-function startEditUnitType(ut) { editingUnitTypeId.value = ut.id; editingUnitTypeName.value = ut.name }
-
-async function updateUnitType(ut) {
-  if (!editingUnitTypeName.value.trim()) return
-  try {
-    await apiUpdateUnitType(ut.id, { name: editingUnitTypeName.value.trim() })
-    notif.success('Тип юнита обновлён'); editingUnitTypeId.value = null; loadUnitTypes()
-  } catch (e) { notif.error(e.message || 'Ошибка обновления') }
-}
-
-function confirmDeleteUnitType(ut) { deletingUnitType.value = ut }
-async function doDeleteUnitType() {
-  if (!deletingUnitType.value) return
-  try {
-    await deleteUnitType(deletingUnitType.value.id)
-    notif.success('Тип юнита удалён')
-    unitTypes.value = unitTypes.value.filter(u => u.id !== deletingUnitType.value.id)
-  } catch (e) { notif.error(e.message || 'Ошибка удаления') }
-  finally { deletingUnitType.value = null }
 }
 
 /* ── Backup ────────────────────────────────────────────────────── */
@@ -823,15 +284,7 @@ async function doImportBackup() {
   finally { importFile.value = null }
 }
 
-/* ── Загрузка при смене секции ─────────────────────────────────── */
-watch(activeSection, (key) => {
-  if (key === 'users') { loadUsers(); loadRoles() }
-  if (key === 'departments') loadDepartments()
-  if (key === 'unit-types') loadUnitTypes()
-})
-
 onMounted(() => {
-  loadRoles()
   // Стартовая секция: ?section=… или дефолт
   const requested = route.query.section
   const initial = (requested && sectionByKey.value[requested]) ? requested : (isMobile.value ? null : 'theme')

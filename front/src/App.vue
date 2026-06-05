@@ -3,6 +3,7 @@
     <div v-if="initializing" class="app-loading">
       <ProgressSpinner />
     </div>
+    <CompanyDisabledScreen v-else-if="authStore.companyDisabled" />
     <template v-else-if="isFullscreenRoute">
       <main class="main-content fullscreen-content">
         <router-view />
@@ -52,6 +53,7 @@ import {
 } from '@/utils/systemNotify.js'
 import AppSidebar from '@/components/layout/AppSidebar.vue'
 import AppBottomNav from '@/components/layout/AppBottomNav.vue'
+import CompanyDisabledScreen from '@/components/layout/CompanyDisabledScreen.vue'
 import ActiveUnitModal from '@/components/layout/ActiveUnitModal.vue'
 import AppTutorial from '@/components/layout/AppTutorial.vue'
 import ChangelogModal from '@/components/layout/ChangelogModal.vue'

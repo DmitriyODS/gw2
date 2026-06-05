@@ -11,6 +11,10 @@ class Call(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     initiator_id = db.Column(db.Integer, db.ForeignKey("users.id", ondelete="CASCADE"),
                              nullable=False)
+    # Компания, в рамках которой состоялся звонок. Все участники должны быть
+    # из этой же компании (бизнес-инвариант).
+    company_id = db.Column(db.Integer, db.ForeignKey("companies.id", ondelete="CASCADE"),
+                           nullable=False)
     # 'p2p' (1:1) или 'group' (3+ участника). p2p начинается с двух участников,
     # group — с initiator + список приглашённых.
     kind = db.Column(db.String(16), nullable=False, default="p2p", server_default="p2p")
@@ -35,6 +39,7 @@ class Call(db.Model):
     __table_args__ = (
         db.Index("idx_call_started", "started_at"),
         db.Index("idx_call_status", "status"),
+        db.Index("idx_call_company", "company_id"),
     )
 
 

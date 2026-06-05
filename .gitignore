@@ -32,6 +32,7 @@ front/dist/
 # IDE
 .vscode/
 .idea/
+.claude/
 *.swp
 *.swo
 

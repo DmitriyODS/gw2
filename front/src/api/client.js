@@ -1,7 +1,27 @@
 import { useAuthStore } from '@/stores/auth'
+import { useCompaniesStore } from '@/stores/companies'
 
 let isRefreshing = false
 let refreshQueue = []
+
+// Эндпоинты, работающие в рамках конкретной компании. Для Администратора
+// системы (без своей company_id) — автоматически добавляем
+// ?company_id=<выбранный в селекторе>, чтобы бэк понял scope.
+const COMPANY_SCOPED_PREFIXES = [
+  '/tasks', '/units', '/departments', '/unit-types', '/stages',
+  '/stats', '/messenger', '/calls', '/users/directory',
+]
+
+function _injectCompanyParam(path, companyId) {
+  if (companyId == null) return path
+  if (!COMPANY_SCOPED_PREFIXES.some(p => path === p || path.startsWith(p + '/') || path.startsWith(p + '?'))) {
+    return path
+  }
+  // Уже передан явно — не перезаписываем.
+  if (/[?&]company_id=/.test(path)) return path
+  const sep = path.includes('?') ? '&' : '?'
+  return `${path}${sep}company_id=${companyId}`
+}
 
 function fetchWithTimeout(url, options = {}, ms = 8000) {
   const ctrl = new AbortController()
@@ -25,6 +45,15 @@ export async function apiRequest(path, options = {}) {
   }
   if (auth.token) {
     headers['Authorization'] = `Bearer ${auth.token}`
+  }
+
+  // Если пользователь — Администратор системы (нет своей company_id),
+  // подмешиваем выбранную в селекторе компанию для всех scope-эндпоинтов.
+  if (auth.token && auth.companyId == null) {
+    try {
+      const companies = useCompaniesStore()
+      path = _injectCompanyParam(path, companies.activeCompanyId)
+    } catch { /* пиния ещё не готова — пропускаем */ }
   }
 
   let resp
@@ -70,6 +99,11 @@ export async function apiRequest(path, options = {}) {
   if (!resp.ok) {
     let err = { status: resp.status, error: 'unknown', message: 'Ошибка сервера' }
     try { err = { ...err, ...await resp.json() } } catch {}
+    // COMPANY_DISABLED — глобальная блокировка: компания пользователя
+    // отключена. Поднимаем флаг в auth-store, App.vue показывает экран.
+    if (err.error === 'COMPANY_DISABLED') {
+      auth.companyDisabled = err.company_name || true
+    }
     throw err
   }
 

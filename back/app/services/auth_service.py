@@ -26,6 +26,39 @@ def _raise_locked(seconds: int):
     )
 
 
+def _build_claims(user) -> dict:
+    """Полезные клеймы для фронта/декораторов. company_* у Администратора
+    системы (без компании) — None; фронт это интерпретирует как «работа от
+    лица системы», и в шапке появляется селектор компаний.
+
+    company_settings прокидываем в JWT, чтобы фронт мог скрывать поля
+    (YouGile/Этапы) без отдельного запроса /companies/me."""
+    company = user.company
+    return {
+        "force_change": user.is_default_pass,
+        "company_id": user.company_id,
+        "company_name": company.name if company else None,
+        "company_settings": company.settings if company else None,
+        "role_level": user.role.level if user.role else 0,
+        "is_root_admin": bool(user.is_root_admin),
+    }
+
+
+def _ensure_company_active(user):
+    """Если у пользователя есть привязка к компании — она должна быть активна.
+    Администраторы системы (без company_id) не блокируются."""
+    if user.company_id is None:
+        return
+    company = user.company
+    if company is None or not company.is_active:
+        raise AuthError(
+            "Ваша компания отключена. Обратитесь к администратору.",
+            "COMPANY_DISABLED",
+            403,
+            {"company_name": company.name if company else None},
+        )
+
+
 def login(login: str, password: str) -> dict:
     # Активная блокировка — даже не проверяем пароль.
     locked_for = login_throttle.get_lock_remaining(login)
@@ -47,8 +80,12 @@ def login(login: str, password: str) -> dict:
         raise AuthError("Неверный логин или пароль", "INVALID_CREDENTIALS", 401)
 
     login_throttle.register_success(login)
+    # Пароль верный — проверяем доступ компании. Делаем ПОСЛЕ верификации
+    # пароля, чтобы по ответу нельзя было узнать, к какой компании
+    # принадлежит чужой логин.
+    _ensure_company_active(user)
 
-    additional_claims = {"force_change": user.is_default_pass}
+    additional_claims = _build_claims(user)
     access_token = create_access_token(identity=str(user.id), additional_claims=additional_claims)
     refresh_token = create_refresh_token(identity=str(user.id))
 
@@ -66,8 +103,9 @@ def refresh(user_id: int) -> str:
     user = user_repo.get_by_id(user_id)
     if user is None or user.is_hidden:
         raise AuthError("Пользователь не найден", "NOT_FOUND", 401)
+    _ensure_company_active(user)
 
-    additional_claims = {"force_change": user.is_default_pass}
+    additional_claims = _build_claims(user)
     return create_access_token(identity=str(user.id), additional_claims=additional_claims)
 
 
@@ -90,7 +128,11 @@ def change_default_credentials(user_id: int, new_login: str, new_password: str, 
     user_repo.update(user, login=new_login, hash_password=hashed, is_default_pass=False)
     db.session.commit()
 
-    additional_claims = {"force_change": False}
+    # Перечитываем пользователя через repo, чтобы получить актуальные значения
+    # для клеймов (post-change role/company не изменились, но используем общий
+    # _build_claims, чтобы клеймы оставались согласованы с login/refresh).
+    user = user_repo.get_by_id(user_id)
+    additional_claims = _build_claims(user)
     access_token = create_access_token(identity=str(user.id), additional_claims=additional_claims)
     refresh_token = create_refresh_token(identity=str(user.id))
 

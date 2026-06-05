@@ -4,9 +4,17 @@
       <!-- Hero-шапка профиля -->
       <section class="profile-hero">
         <div class="hero-avatar-block">
-          <div class="avatar-wrapper">
+          <button
+            type="button"
+            class="avatar-wrapper"
+            title="Открыть фото"
+            @click="lightboxOpen = true"
+          >
             <img :src="avatarSrc" class="profile-avatar" :alt="authStore.user?.fio" />
-          </div>
+            <span class="avatar-zoom-overlay" aria-hidden="true">
+              <span class="material-symbols-outlined">zoom_in</span>
+            </span>
+          </button>
           <div class="avatar-actions">
             <button class="btn-sm" @click="showCropper = true">
               <span class="material-symbols-outlined">photo_camera</span>
@@ -57,6 +65,20 @@
             <div class="form-group">
               <label>Должность</label>
               <InputText v-model="profileForm.post" class="w-full" placeholder="Менеджер" />
+            </div>
+            <div class="form-group">
+              <label>Телефон</label>
+              <PhoneInput v-model="profileForm.phone" />
+            </div>
+            <div class="form-group">
+              <label>Email</label>
+              <InputText
+                v-model="profileForm.email"
+                class="w-full"
+                type="email"
+                inputmode="email"
+                placeholder="you@example.com"
+              />
             </div>
             <p v-if="profileError" class="error-msg">{{ profileError }}</p>
             <button type="submit" class="btn-primary" :disabled="profileLoading">
@@ -149,16 +171,24 @@
     </div>
 
     <!-- Диалог кроппера аватарки -->
-    <Dialog
+    <AppDialog
       v-if="showCropper"
-      :visible="true"
-      @update:visible="showCropper = false"
-      modal
-      header="Загрузка аватарки"
-      style="width:520px"
+      model-value
+      tone="primary"
+      icon="account_circle"
+      size="md"
+      title="Загрузка аватарки"
+      @update:model-value="showCropper = false"
     >
       <AvatarCropper @cropped="onCropped" @cancel="showCropper = false" />
-    </Dialog>
+    </AppDialog>
+
+    <AvatarLightbox
+      v-model="lightboxOpen"
+      :src="avatarSrc"
+      :alt="authStore.user?.fio"
+      :caption="authStore.user?.fio"
+    />
   </div>
 </template>
 
@@ -170,9 +200,11 @@ import { updateMe, uploadAvatar, deleteAvatar } from '@/api/users.js'
 import { getStatsProfile } from '@/api/stats.js'
 import { formatHours } from '@/utils/time.js'
 import AvatarCropper from '@/components/settings/AvatarCropper.vue'
+import AvatarLightbox from '@/components/common/AvatarLightbox.vue'
+import PhoneInput from '@/components/common/PhoneInput.vue'
 import DateRangePicker from '@/components/common/DateRangePicker.vue'
 import InputText from 'primevue/inputtext'
-import Dialog from 'primevue/dialog'
+import AppDialog from '@/components/common/AppDialog.vue'
 import DataTable from 'primevue/datatable'
 import Column from 'primevue/column'
 import ProgressSpinner from 'primevue/progressspinner'
@@ -182,6 +214,7 @@ const notif = useNotificationsStore()
 
 // ---- Avatar ----
 const showCropper = ref(false)
+const lightboxOpen = ref(false)
 
 const avatarSrc = computed(() => {
   const user = authStore.user
@@ -189,6 +222,8 @@ const avatarSrc = computed(() => {
   if (user.avatar_path) return `/uploads/${user.avatar_path}`
   return `/api/users/${user.id}/identicon`
 })
+
+const hasAvatar = computed(() => !!authStore.user?.avatar_path)
 
 async function onCropped(blob) {
   showCropper.value = false
@@ -212,7 +247,7 @@ async function handleDeleteAvatar() {
 }
 
 // ---- Profile form ----
-const profileForm = reactive({ fio: '', login: '', post: '' })
+const profileForm = reactive({ fio: '', login: '', post: '', phone: '', email: '' })
 const profileError = ref('')
 const profileLoading = ref(false)
 
@@ -222,6 +257,8 @@ function syncProfileForm() {
     profileForm.fio = user.fio || ''
     profileForm.login = user.login || ''
     profileForm.post = user.post || ''
+    profileForm.phone = user.phone || ''
+    profileForm.email = user.email || ''
   }
 }
 
@@ -236,7 +273,9 @@ async function saveProfile() {
     await updateMe({
       fio: profileForm.fio.trim(),
       login: profileForm.login.trim(),
-      post: profileForm.post.trim()
+      post: profileForm.post.trim(),
+      phone: profileForm.phone.trim() || null,
+      email: profileForm.email.trim() || null,
     })
     await authStore.loadMe()
     notif.success('Профиль обновлён')
@@ -363,14 +402,37 @@ onMounted(() => {
 }
 
 .avatar-wrapper {
+  position: relative;
   width: 120px;
   height: 120px;
   border-radius: 50%;
   overflow: hidden;
-  border: 3px solid var(--gw-primary);
-  box-shadow: 0 0 0 4px var(--gw-bg);
+  border: 3px solid var(--color-primary);
+  box-shadow: 0 0 0 4px var(--color-surface);
   flex-shrink: 0;
+  padding: 0;
+  background: transparent;
+  cursor: zoom-in;
+  transition: transform .18s, box-shadow .18s;
 }
+
+.avatar-wrapper:hover {
+  transform: scale(1.03);
+  box-shadow: 0 0 0 4px var(--color-surface), var(--shadow-md);
+}
+
+.avatar-zoom-overlay {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  background: color-mix(in oklch, var(--color-scrim) 70%, transparent);
+  color: var(--color-on-primary);
+  opacity: 0;
+  transition: opacity .15s;
+}
+.avatar-wrapper:hover .avatar-zoom-overlay { opacity: 1; }
+.avatar-zoom-overlay .material-symbols-outlined { font-size: 32px; }
 
 .profile-avatar {
   width: 100%;
@@ -395,14 +457,14 @@ onMounted(() => {
   font-size: 12px;
   font-weight: 500;
   cursor: pointer;
-  border: 1px solid var(--gw-border);
-  background: var(--gw-surface);
-  color: var(--gw-text);
+  border: 1px solid var(--color-outline-dim);
+  background: var(--color-surface);
+  color: var(--color-text);
   transition: background 0.15s, color 0.15s;
 }
 
 .btn-sm:hover {
-  background: var(--gw-bg);
+  background: var(--color-surface-low);
 }
 
 .btn-sm.danger {
@@ -537,7 +599,7 @@ onMounted(() => {
 .form-group label {
   font-size: 13px;
   font-weight: 600;
-  color: var(--gw-text-secondary);
+  color: var(--color-text-dim);
 }
 
 .w-full {
@@ -556,7 +618,7 @@ onMounted(() => {
 
 .btn-primary {
   align-self: flex-start;
-  background: var(--gw-primary);
+  background: var(--color-primary);
   color: var(--color-on-primary);
   border: none;
   border-radius: 10px;
@@ -568,7 +630,7 @@ onMounted(() => {
 }
 
 .btn-primary:hover:not(:disabled) {
-  background: var(--gw-primary-hover);
+  background: var(--color-primary-hover);
 }
 
 .btn-primary:disabled {
@@ -591,21 +653,21 @@ onMounted(() => {
   align-items: center;
   gap: 4px;
   padding: 16px;
-  background: var(--gw-bg);
-  border: 1px solid var(--gw-border);
+  background: var(--color-surface-low);
+  border: 1px solid var(--color-outline-dim);
   border-radius: 10px;
 }
 
 .stat-value {
   font-size: 28px;
   font-weight: 800;
-  color: var(--gw-primary);
+  color: var(--color-primary);
   line-height: 1;
 }
 
 .stat-label {
   font-size: 12px;
-  color: var(--gw-text-secondary);
+  color: var(--color-text-dim);
 }
 
 .stats-table {
@@ -621,7 +683,7 @@ onMounted(() => {
 .empty-stats {
   text-align: center;
   padding: 24px;
-  color: var(--gw-text-secondary);
+  color: var(--color-text-dim);
   font-size: 14px;
 }
 

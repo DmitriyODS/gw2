@@ -48,6 +48,15 @@
 
       <div class="task-meta">
         <span
+          v-if="task.stage"
+          class="meta-chip stage-chip"
+          :style="stageChipStyle"
+          :title="`Этап: ${task.stage.name}`"
+        >
+          <span class="stage-dot" :style="stageDotStyle" />
+          {{ task.stage.name }}
+        </span>
+        <span
           v-if="deadlineInfo"
           class="meta-chip"
           :class="`deadline-${deadlineInfo.level}`"
@@ -78,6 +87,17 @@
             <span class="material-symbols-outlined">timer</span>
           </span>
         </div>
+
+        <span
+          v-if="task.responsible"
+          class="responsible-ava"
+          :title="`Ответственный: ${task.responsible.fio}`"
+        >
+          <img
+            :src="task.responsible.avatar_path ? `/uploads/${task.responsible.avatar_path}` : `/api/users/${task.responsible.id}/identicon`"
+            :alt="task.responsible.fio"
+          />
+        </span>
 
         <div v-if="task.active_users?.length" class="active-users">
           <span
@@ -125,6 +145,22 @@ const showColors = ref(false)
 const colorBtnRef = ref(null)
 
 const cardStyle = computed(() => cardColorStyle(props.task.color))
+
+const stageChipStyle = computed(() => {
+  const color = props.task.stage?.color
+  if (!color) return {}
+  return {
+    background: `var(--tag-${color}-surface)`,
+    color: `var(--tag-${color}-accent)`,
+    borderColor: `var(--tag-${color}-border)`,
+  }
+})
+
+const stageDotStyle = computed(() => {
+  const color = props.task.stage?.color
+  if (!color) return {}
+  return { background: `var(--tag-${color}-accent)` }
+})
 
 const isRunningHere = computed(() => unitsStore.activeUnit?.task_id === props.task.id)
 
@@ -337,6 +373,38 @@ function formatDate(d) {
   color: var(--color-text-dim);
 }
 
+.stage-chip {
+  border: 1px solid transparent;
+}
+
+.stage-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+.responsible-ava {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  overflow: hidden;
+  flex-shrink: 0;
+  box-shadow: 0 0 0 2px var(--color-surface), 0 0 0 3px var(--color-outline-dim);
+  margin-right: 6px;
+}
+
+.task-card.colored .responsible-ava {
+  box-shadow: 0 0 0 2px var(--card-tag-surface), 0 0 0 3px var(--card-tag-border);
+}
+
+.responsible-ava img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
 .card-footer {
   display: flex;
   align-items: center;
@@ -505,6 +573,104 @@ function formatDate(d) {
   }
   .task-card.view-list .task-meta {
     display: none;
+  }
+}
+
+/* ═══════════════ Мобильная адаптация карточки ═══════════════ */
+@media (max-width: 768px) {
+  /* Hover-эффект — лишний на тач-устройствах, на тапе у нас уже :active. */
+  .task-card:hover {
+    transform: none;
+    box-shadow: var(--shadow-sm);
+    border-color: var(--color-outline-dim);
+  }
+
+  .task-card:active {
+    transform: scale(0.985);
+    box-shadow: var(--shadow-md);
+  }
+
+  .card-main {
+    padding: 14px 14px 12px;
+    gap: 8px;
+  }
+
+  .task-name {
+    font-size: 14.5px;
+    -webkit-line-clamp: 2;
+    line-height: 1.35;
+  }
+
+  /* Тач-зоны action-кнопок — минимум 40×40 px. */
+  .card-action-btn {
+    padding: 8px;
+    min-width: 40px;
+    min-height: 40px;
+    justify-content: center;
+  }
+
+  .card-action-btn .material-symbols-outlined {
+    font-size: 22px;
+  }
+
+  .dept-badge {
+    font-size: 11.5px;
+    padding: 3px 9px 3px 7px;
+  }
+
+  /* Чипы метаданных чуть компактнее — на узких экранах хорошо умещаются в ряд. */
+  .meta-chip {
+    font-size: 11.5px;
+    padding: 3px 8px;
+  }
+
+  .meta-chip .material-symbols-outlined {
+    font-size: 13px;
+  }
+
+  /* «В работу» — крупная тач-зона, без сжатия. */
+  .work-btn {
+    padding: 8px 14px 8px 10px;
+    font-size: 13px;
+    min-height: 36px;
+  }
+
+  .work-btn .material-symbols-outlined {
+    font-size: 20px;
+  }
+
+  /* Аватарки чуть крупнее — лучше различимы на маленьких экранах. */
+  .responsible-ava {
+    width: 28px;
+    height: 28px;
+    margin-right: 4px;
+  }
+
+  .active-avatar {
+    width: 26px;
+    height: 26px;
+  }
+}
+
+@media (max-width: 360px) {
+  .card-main {
+    padding: 12px 12px 10px;
+  }
+
+  .dept-badge {
+    max-width: 60%;
+  }
+
+  /* На самых узких экранах — скрываем подпись «В работу», остаётся круглая
+     кнопка-играть. Чтение названия задачи важнее. */
+  .work-btn-label {
+    display: none;
+  }
+
+  .work-btn {
+    padding: 8px;
+    border-radius: 50%;
+    min-width: 36px;
   }
 }
 </style>

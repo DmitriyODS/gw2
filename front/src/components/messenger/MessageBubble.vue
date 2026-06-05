@@ -34,36 +34,29 @@
     </div>
   </div>
 
-  <div v-else class="msg-row" :class="{ outgoing: isMine }" :data-msg-id="message.id">
-    <div class="msg-actions">
-      <button v-if="showReply" class="msg-action" title="Ответить" @click="$emit('reply', message)">
-        <span class="material-symbols-outlined">reply</span>
-      </button>
-      <button
-        v-if="showPin"
-        class="msg-action"
-        :class="{ active: isPinned }"
-        :title="isPinned ? 'Открепить' : 'Закрепить'"
-        @click="$emit('pin', message)"
-      >
-        <span class="material-symbols-outlined">{{ isPinned ? 'keep_off' : 'keep' }}</span>
-      </button>
-      <button v-if="showForward" class="msg-action" title="Переслать" @click="$emit('forward', message)">
-        <span class="material-symbols-outlined">forward</span>
-      </button>
-      <button
-        v-if="showDelete"
-        class="msg-action danger"
-        :title="isMine ? 'Удалить' : 'Удалить у меня'"
-        @click="$emit('delete', message)"
-      >
-        <span class="material-symbols-outlined">delete</span>
-      </button>
-    </div>
-    <div class="msg-bubble" :class="{ pinned: isPinned }">
+  <div
+    v-else
+    class="msg-row"
+    :class="{ outgoing: isMine, swiping: swipeDx > 0 }"
+    :data-msg-id="message.id"
+    :style="rowStyle"
+    @contextmenu.prevent="onContextMenu"
+    @pointerdown="onPointerDown"
+    @pointermove="onPointerMove"
+    @pointerup="onPointerUp"
+    @pointercancel="onPointerUp"
+  >
+    <span class="swipe-reply-hint" aria-hidden="true">
+      <span class="material-symbols-outlined">reply</span>
+    </span>
+    <div class="msg-bubble" :class="bubbleClass">
       <div v-if="isPinned" class="msg-pinned-mark" title="Закреплено">
         <span class="material-symbols-outlined">keep</span>
         Закреплено
+      </div>
+      <div v-if="isDevReply" class="msg-dev-badge" title="Сообщение от разработчиков">
+        <span class="material-symbols-outlined">support_agent</span>
+        Разработчики
       </div>
       <div v-if="message.forwarded_from" class="msg-forwarded">
         <span class="material-symbols-outlined">forward</span>
@@ -81,15 +74,32 @@
           :att="att"
         />
       </div>
-      <div v-if="message.text" class="msg-text"><template v-for="(part, i) in textParts" :key="i"><a
-          v-if="part.type === 'link'"
-          :href="part.href"
-          class="msg-link"
-          target="_blank"
-          rel="noopener noreferrer"
-          @click.stop
-        >{{ part.value }}</a><template v-else>{{ part.value }}</template></template></div>
+      <button
+        v-if="message.kind === 'task' && message.task"
+        class="task-pill"
+        :class="taskPillClass"
+        :style="taskPillStyle"
+        @click="$emit('open-task', message.task.id)"
+      >
+        <span class="material-symbols-outlined task-pill-icon">task</span>
+        <div class="task-pill-body">
+          <div class="task-pill-name">{{ message.task.name }}</div>
+          <div v-if="message.task.responsible_fio" class="task-pill-sub">
+            <span class="material-symbols-outlined">person</span>
+            {{ message.task.responsible_fio }}
+          </div>
+        </div>
+      </button>
+      <div
+        v-else-if="message.kind === 'task'"
+        class="task-pill missing"
+      >
+        <span class="material-symbols-outlined">task_alt</span>
+        Задача удалена
+      </div>
+      <MarkdownView v-if="message.text" class="msg-text" :source="message.text" />
       <div class="msg-meta">
+        <span v-if="senderName" class="msg-sender">{{ senderName }}</span>
         <span class="msg-time">{{ formatTime(message.created_at) }}</span>
         <span v-if="isMine" class="msg-read">
           <span class="material-symbols-outlined" :class="{ seen: message.read_at }">
@@ -102,27 +112,35 @@
 </template>
 
 <script setup>
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 import AttachmentView from './AttachmentView.vue'
-import { linkifyParts } from '@/utils/linkify.js'
+import MarkdownView from '@/components/common/MarkdownView.vue'
 
 const props = defineProps({
   message: { type: Object, required: true },
   isMine: { type: Boolean, default: false },
+  senderName: { type: String, default: '' },
   showReply: { type: Boolean, default: true },
   showForward: { type: Boolean, default: true },
   showDelete: { type: Boolean, default: true },
   showPin: { type: Boolean, default: true },
 })
 
-defineEmits(['delete', 'reply', 'forward', 'join-call', 'pin'])
+const emit = defineEmits(['delete', 'reply', 'forward', 'join-call', 'pin', 'open-task', 'context-menu'])
 
 const isPinned = computed(() => !!props.message.pinned_at)
+// Сообщение от техподдержки: новое серверное поле is_from_support либо старый
+// kind='system_dev_reply' (на случай миграции старых сообщений).
+const isDevReply = computed(() =>
+  !!props.message.is_from_support || props.message.kind === 'system_dev_reply'
+)
+
+const bubbleClass = computed(() => ({
+  pinned: isPinned.value,
+  'dev-reply': isDevReply.value,
+}))
 
 function attachmentTag() { return AttachmentView }
-
-/* Текст сообщения с распознанными ссылками: обычный текст + кликабельные <a>. */
-const textParts = computed(() => linkifyParts(props.message.text))
 
 function formatTime(iso) {
   if (!iso) return ''
@@ -135,20 +153,96 @@ function quotePreview(reply) {
   return 'Сообщение'
 }
 
-/* Системная плашка звонка. status:
-   - 'ringing' — идёт звон, никто не принял
-   - 'active'  — разговор идёт прямо сейчас
-   - 'ended'   — нормально завершён (есть длительность)
-   - 'missed'  — никто не ответил (длительности нет)
-*/
+/* ── Прикреплённая задача — pill с цветом из палитры тегов. ── */
+const taskPillClass = computed(() => {
+  const color = props.message.task?.color
+  return color ? `tag-${color}` : ''
+})
+const taskPillStyle = computed(() => {
+  const color = props.message.task?.color
+  return color ? {
+    background: `var(--tag-${color}-surface)`,
+    borderColor: `var(--tag-${color}-border)`,
+    color: 'var(--color-text)',
+  } : {}
+})
+
+/* ── Контекстное меню (правый клик / long-press) ── */
+function onContextMenu(e) {
+  emit('context-menu', { x: e.clientX, y: e.clientY, message: props.message })
+}
+
+let longPressTimer = null
+let longPressFired = false
+const swipeDx = ref(0)
+let swipeStartX = 0
+let swipeStartY = 0
+let swipeActive = false
+let pointerActiveId = null
+
+const rowStyle = computed(() =>
+  swipeDx.value > 0 ? { transform: `translateX(${swipeDx.value}px)` } : {})
+
+function onPointerDown(e) {
+  if (e.button === 2) return  // ПКМ обрабатывается contextmenu
+  pointerActiveId = e.pointerId
+  longPressFired = false
+  swipeStartX = e.clientX
+  swipeStartY = e.clientY
+  swipeActive = false
+  swipeDx.value = 0
+  // long-press → контекстное меню (на тач-устройствах). 500 мс.
+  longPressTimer = setTimeout(() => {
+    longPressFired = true
+    if (navigator.vibrate) {
+      try { navigator.vibrate(15) } catch {/* iOS Safari */}
+    }
+    emit('context-menu', { x: e.clientX, y: e.clientY, message: props.message })
+  }, 500)
+}
+
+function onPointerMove(e) {
+  if (pointerActiveId !== e.pointerId) return
+  const dx = e.clientX - swipeStartX
+  const dy = e.clientY - swipeStartY
+
+  if (!swipeActive && Math.abs(dy) > 8 && Math.abs(dy) > Math.abs(dx)) {
+    // Вертикальный скролл — это не свайп. Отменяем long-press.
+    clearTimeout(longPressTimer)
+    return
+  }
+  if (Math.abs(dx) > 6) {
+    swipeActive = true
+    clearTimeout(longPressTimer)
+  }
+
+  if (swipeActive && dx > 0) {
+    // Свайп ВПРАВО → ответ. Лимит 96px (потом плавное затухание).
+    const limit = 96
+    swipeDx.value = Math.min(dx, limit)
+  }
+}
+
+function onPointerUp(e) {
+  if (pointerActiveId !== null && pointerActiveId !== e.pointerId) return
+  pointerActiveId = null
+  clearTimeout(longPressTimer)
+  if (swipeActive) {
+    const dx = swipeDx.value
+    swipeDx.value = 0
+    if (dx > 60 && !longPressFired) {
+      emit('reply', props.message)
+    }
+  }
+}
+
+/* ── Системная плашка звонка. ── */
 const callInfo = computed(() => props.message.call || {})
 const callStatus = computed(() => callInfo.value.status)
 const isVideo = computed(() => callInfo.value.media === 'video')
 const isLive = computed(() => callStatus.value === 'ringing' || callStatus.value === 'active')
 const isMissed = computed(() => callStatus.value === 'missed'
   || (callStatus.value === 'ended' && !callInfo.value.duration_sec))
-// Плашка кликабельна, пока звонок «живой»: собеседник присоединяется,
-// инициатор — возвращается в свой звонок.
 
 const callIcon = computed(() => {
   if (isMissed.value) return isVideo.value ? 'videocam_off' : 'phone_missed'
@@ -194,53 +288,45 @@ const joinLabel = computed(() => props.isMine ? 'Вернуться' : 'Прис
 
 <style scoped>
 .msg-row {
+  position: relative;
   display: flex;
   align-items: center;
   gap: 4px;
   margin-bottom: 8px;
+  transition: transform 0.18s ease;
+  touch-action: pan-y;
 }
 
 .msg-row.outgoing { justify-content: flex-end; }
 
-/* Панель действий у bubble (ответить / переслать / удалить) — показывается
-   на hover. Слева для своих, справа для входящих, чтобы не мешать чтению. */
-.msg-actions {
-  order: 1;
-  display: flex;
-  align-items: center;
-  gap: 2px;
-  opacity: 0;
-  transition: opacity 0.15s;
-  flex-shrink: 0;
+.msg-row.swiping {
+  transition: none;
 }
 
-.msg-action {
-  width: 28px;
-  height: 28px;
-  border-radius: 50%;
-  border: none;
-  background: transparent;
-  color: var(--color-text-dim);
-  cursor: pointer;
+/* Иконка-подсказка свайпа ответом — проявляется при свайпе вправо. */
+.swipe-reply-hint {
+  position: absolute;
+  left: -42px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 32px;
+  height: 32px;
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: background 0.15s, color 0.15s;
+  border-radius: 50%;
+  background: var(--color-primary-container);
+  color: var(--color-on-primary-container);
+  opacity: 0;
+  transition: opacity 0.15s;
+  pointer-events: none;
 }
 
-.msg-action:hover {
-  background: var(--color-surface-high);
-  color: var(--color-text);
+.msg-row.swiping .swipe-reply-hint {
+  opacity: 1;
 }
 
-.msg-action.danger:hover {
-  background: var(--color-error-container);
-  color: var(--color-on-error-container);
-}
-
-.msg-action.active { color: var(--color-tertiary); }
-
-.msg-action .material-symbols-outlined { font-size: 16px; }
+.swipe-reply-hint .material-symbols-outlined { font-size: 18px; }
 
 /* Метка «Закреплено» внутри пузыря */
 .msg-pinned-mark {
@@ -264,17 +350,24 @@ const joinLabel = computed(() => props.isMine ? 'Вернуться' : 'Прис
   box-shadow: var(--shadow-sm), inset 2px 0 0 0 var(--color-tertiary);
 }
 
-.msg-row:hover .msg-actions,
-.msg-row:focus-within .msg-actions {
-  opacity: 1;
+/* Сообщение «Разработчиков» в dev-чате: акцентный значок + фон. */
+.msg-dev-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11.5px;
+  font-weight: 700;
+  color: var(--color-tertiary);
+  margin-bottom: 4px;
+  letter-spacing: 0.02em;
 }
-
-.msg-row.outgoing .msg-actions {
-  order: 0;
+.msg-dev-badge .material-symbols-outlined {
+  font-size: 14px;
+  font-variation-settings: 'FILL' 1;
 }
-
-@media (hover: none) {
-  .msg-actions { opacity: 0.55; }
+.msg-bubble.dev-reply {
+  background: var(--color-tertiary-container);
+  color: var(--color-on-tertiary-container);
 }
 
 /* Метка пересланного сообщения */
@@ -335,7 +428,6 @@ const joinLabel = computed(() => props.isMine ? 'Вернуться' : 'Прис
 }
 
 .msg-bubble {
-  order: 0;
   max-width: 70%;
   background: var(--color-surface-high);
   color: var(--color-text);
@@ -354,31 +446,64 @@ const joinLabel = computed(() => props.isMine ? 'Вернуться' : 'Прис
 }
 
 .msg-text {
-  white-space: pre-wrap;
   font-size: 14px;
   line-height: 1.4;
 }
 
-/* Кликабельные ссылки внутри текста. Цвет — через токены, чтобы корректно
-   читаться на светлой/тёмной/любой кастомной теме. На исходящем пузыре фон
-   уже акцентный (primary-container), поэтому ссылка наследует контрастный
-   on-цвет, оставаясь подчёркнутой. */
-.msg-link {
-  color: var(--color-primary);
-  text-decoration: underline;
-  text-underline-offset: 2px;
-  word-break: break-word;
-  overflow-wrap: anywhere;
+/* Прикреплённая задача — плашка с цветом из палитры. */
+.task-pill {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border: 1px solid var(--color-outline-dim);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  color: var(--color-text);
   cursor: pointer;
+  width: 100%;
+  text-align: left;
+  margin-bottom: 6px;
+  font: inherit;
+  transition: transform 0.12s, box-shadow 0.15s;
 }
 
-.msg-link:hover {
-  text-decoration-thickness: 2px;
+.task-pill:hover {
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-sm);
 }
 
-.msg-row.outgoing .msg-link {
-  color: var(--color-on-primary-container);
+.task-pill.missing {
+  cursor: default;
+  color: var(--color-text-dim);
+  font-style: italic;
 }
+
+.task-pill-icon {
+  font-size: 22px;
+  color: var(--color-primary);
+  flex-shrink: 0;
+  font-variation-settings: 'FILL' 1;
+}
+
+.task-pill-body { min-width: 0; flex: 1; }
+
+.task-pill-name {
+  font-size: 13.5px;
+  font-weight: 700;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.task-pill-sub {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  color: var(--color-text-dim);
+}
+.task-pill-sub .material-symbols-outlined { font-size: 14px; }
 
 .msg-attachments {
   display: flex;
@@ -394,6 +519,16 @@ const joinLabel = computed(() => props.isMine ? 'Вернуться' : 'Прис
   gap: 4px;
   margin-top: 4px;
 }
+
+/* В dev-чате под сообщением — имя автора (для контекста, у кого спросить). */
+.msg-sender {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--color-primary);
+  margin-right: auto;
+}
+
+.msg-row.outgoing .msg-sender { color: var(--color-on-primary-container); }
 
 .msg-time {
   font-size: 11px;
@@ -414,11 +549,7 @@ const joinLabel = computed(() => props.isMine ? 'Вернуться' : 'Прис
   .msg-bubble { max-width: 85%; }
 }
 
-/* ─── Системная плашка звонка ─────────────────────────────────────
-   Центрируется на всю ширину как «системное» сообщение, чтобы её
-   нельзя было перепутать с обычной репликой. Все цвета — только
-   через семантические токены, чтобы корректно работать со светлой/
-   тёмной/любой кастомной темой. */
+/* ─── Системная плашка звонка ───────────────────────────────────── */
 .call-row {
   display: flex;
   justify-content: center;

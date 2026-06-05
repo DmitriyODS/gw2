@@ -1,17 +1,31 @@
 <template>
   <aside class="conv-list" :class="{ 'is-mobile-hidden': hideOnMobile }">
     <div class="conv-list-header">
-      <h2>Чаты</h2>
-      <button class="new-btn" @click="$emit('new-chat')" title="Новый чат">
-        <span class="material-symbols-outlined">edit_square</span>
-      </button>
+      <h2>{{ headerTitle }}</h2>
+      <div class="header-actions">
+        <button v-if="tab !== 'support'" class="new-btn" @click="$emit('new-chat')" title="Новый чат">
+          <span class="material-symbols-outlined">edit_square</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- Сегментированные табы «Чаты / Техподдержка». Для рут-админа во вкладке
+         «Техподдержка» — inbox обращений; для всех остальных — личный dev-чат
+         с командой разработки. -->
+    <div v-if="showSupportTab" class="conv-tabs-wrap">
+      <SegmentedTabs
+        :model-value="tab"
+        :tabs="tabItems"
+        full-width
+        @update:model-value="onTab"
+      />
     </div>
 
     <div class="conv-search">
       <span class="material-symbols-outlined">search</span>
       <input
         v-model="filter"
-        placeholder="Поиск по чатам"
+        :placeholder="tab === 'support' ? 'Поиск по пользователям' : 'Поиск по чатам'"
         class="conv-search-input"
       />
     </div>
@@ -21,15 +35,19 @@
     </div>
     <div v-else-if="!visible.length" class="conv-empty conv-empty--rich">
       <div class="empty-icon">
-        <span class="material-symbols-outlined">{{ filter ? 'person_search' : 'forum' }}</span>
+        <span class="material-symbols-outlined">
+          {{ filter ? 'person_search' : (tab === 'support' ? 'support_agent' : 'forum') }}
+        </span>
       </div>
-      <h3 class="empty-title">{{ filter ? 'Никого не нашли' : 'Тут пока тишина' }}</h3>
-      <p class="empty-sub">
+      <h3 class="empty-title">
         {{ filter
-          ? 'Попробуйте другое имя или логин.'
-          : 'Напишите коллеге — обсудите задачу, поделитесь файлом или просто поздоровайтесь.' }}
+          ? 'Никого не нашли'
+          : (tab === 'support' ? 'Обращений пока нет' : 'Тут пока тишина') }}
+      </h3>
+      <p class="empty-sub">
+        {{ emptySub }}
       </p>
-      <button v-if="!filter" class="btn-filled-tonal" @click="$emit('new-chat')">
+      <button v-if="!filter && tab !== 'support'" class="btn-filled-tonal" @click="$emit('new-chat')">
         <span class="material-symbols-outlined">edit_square</span>
         Начать переписку
       </button>
@@ -42,24 +60,49 @@
         :class="{ active: c.id === activeId, unread: c.unread_count > 0, pinned: c.is_pinned }"
         @click="$emit('select', c.id)"
       >
-        <div class="conv-avatar-wrap">
+        <!-- Аватар. В support-inbox у админа аватар = фото владельца, не
+             support_agent (иконка дублировала бы вкладку). У владельца —
+             всегда иконка техподдержки. -->
+        <div v-if="tab === 'support' && c.owner_user" class="conv-avatar-wrap">
+          <img class="conv-avatar" :src="avatarOf(c.owner_user)" :alt="c.owner_user?.fio" />
+          <span v-if="messenger.isOnline(c.owner_user?.id)" class="online-dot" title="В сети"></span>
+        </div>
+        <div v-else-if="c.is_dev_chat" class="conv-avatar-wrap dev">
+          <span class="material-symbols-outlined">support_agent</span>
+        </div>
+        <div v-else class="conv-avatar-wrap">
           <img class="conv-avatar" :src="avatarOf(c.other_user)" :alt="c.other_user?.fio" />
           <span v-if="messenger.isOnline(c.other_user?.id)" class="online-dot" title="В сети"></span>
         </div>
         <div class="conv-body">
           <div class="conv-top">
-            <span class="conv-name">{{ c.other_user?.fio }}</span>
+            <span class="conv-name">
+              <template v-if="tab === 'support' && c.owner_user">
+                {{ c.owner_user.fio }}
+              </template>
+              <template v-else-if="c.is_dev_chat">Техподдержка</template>
+              <template v-else>{{ c.other_user?.fio }}</template>
+            </span>
             <span v-if="c.last_message_at" class="conv-time">{{ formatTime(c.last_message_at) }}</span>
           </div>
           <div class="conv-bottom">
-            <span class="conv-preview">{{ preview(c.last_message) }}</span>
+            <span class="conv-preview">
+              <template v-if="tab === 'support' && c.company_name">
+                <span class="conv-company">{{ c.company_name }}</span>
+                <span class="conv-dot">·</span>
+              </template>
+              {{ preview(c.last_message) }}
+            </span>
             <span v-if="c.unread_count" class="conv-badge">{{ c.unread_count }}</span>
             <span v-else-if="c.is_pinned" class="conv-pin-mark" title="Закреплён">
               <span class="material-symbols-outlined">keep</span>
             </span>
           </div>
         </div>
-        <div class="conv-actions" @click.stop>
+        <!-- Действия pin/delete — только на обычных диалогах. Чат техподдержки
+             (и у владельца, и у админа в инбоксе) нельзя ни закрепить, ни
+             удалить. -->
+        <div v-if="!c.is_dev_chat" class="conv-actions" @click.stop>
           <button
             class="conv-action"
             :class="{ active: c.is_pinned }"
@@ -84,6 +127,7 @@
 <script setup>
 import { ref, computed } from 'vue'
 import ProgressSpinner from 'primevue/progressspinner'
+import SegmentedTabs from '@/components/common/SegmentedTabs.vue'
 import { useMessengerStore } from '@/stores/messenger.js'
 
 const messenger = useMessengerStore()
@@ -93,19 +137,67 @@ const props = defineProps({
   activeId: { type: Number, default: null },
   loading: { type: Boolean, default: false },
   hideOnMobile: { type: Boolean, default: false },
+  // Включает вкладку «Техподдержка» (для Администратора системы).
+  showSupportTab: { type: Boolean, default: false },
+  // Активная вкладка ('chats' | 'support'). Управляется родителем, потому что
+  // от неё зависит, какой список передавать в `conversations`.
+  tab: { type: String, default: 'chats' },
+  supportUnread: { type: Number, default: 0 },
 })
 
-defineEmits(['select', 'new-chat', 'toggle-pin', 'delete'])
+const emit = defineEmits(['select', 'new-chat', 'toggle-pin', 'delete', 'change-tab'])
 
 const filter = ref('')
+
+function onTab(t) {
+  if (t !== props.tab) {
+    filter.value = ''
+    emit('change-tab', t)
+  }
+}
+
+const tabItems = computed(() => ([
+  { value: 'chats', label: 'Чаты', icon: 'chat' },
+  {
+    value: 'support',
+    label: 'Техподдержка',
+    icon: 'support_agent',
+    badge: props.supportUnread || null,
+  },
+]))
+
+const headerTitle = computed(() =>
+  props.tab === 'support' ? 'Техподдержка' : 'Чаты'
+)
+
+const emptySub = computed(() => {
+  if (filter.value) return 'Попробуйте другое имя или логин.'
+  if (props.tab === 'support') {
+    return 'Здесь появятся обращения пользователей в техподдержку. Все ответы отправятся от имени «Техподдержки» — ФИО админа скрыто.'
+  }
+  return 'Напишите коллеге — обсудите задачу, поделитесь файлом или просто поздоровайтесь.'
+})
 
 const visible = computed(() => {
   const q = filter.value.trim().toLowerCase()
   if (!q) return props.conversations
-  return props.conversations.filter(c =>
-    c.other_user?.fio?.toLowerCase().includes(q) ||
-    c.other_user?.login?.toLowerCase().includes(q)
-  )
+  return props.conversations.filter(c => {
+    if (props.tab === 'support') {
+      const owner = c.owner_user
+      return (
+        owner?.fio?.toLowerCase().includes(q) ||
+        owner?.login?.toLowerCase().includes(q) ||
+        (c.company_name || '').toLowerCase().includes(q)
+      )
+    }
+    if (c.is_dev_chat) {
+      return 'техподдержка'.includes(q)
+    }
+    return (
+      c.other_user?.fio?.toLowerCase().includes(q) ||
+      c.other_user?.login?.toLowerCase().includes(q)
+    )
+  })
 })
 
 function avatarOf(u) {
@@ -181,6 +273,43 @@ function formatTime(iso) {
 }
 
 .new-btn:hover { background: var(--color-surface-low); }
+
+.header-actions { display: flex; align-items: center; gap: 4px; }
+
+/* На мобиле создание чата делает FAB — дублирующая кнопка в шапке не нужна. */
+@media (max-width: 768px) {
+  .new-btn { display: none; }
+}
+
+/* Обёртка для SegmentedTabs «Чаты / Техподдержка». */
+.conv-tabs-wrap {
+  padding: 0 16px 8px;
+}
+
+.conv-company {
+  font-weight: 600;
+  color: var(--color-text);
+}
+
+.conv-dot {
+  margin: 0 4px;
+  color: var(--color-text-dim);
+}
+
+.conv-avatar-wrap.dev {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background: var(--color-tertiary-container);
+  color: var(--color-on-tertiary-container);
+  flex-shrink: 0;
+}
+.conv-avatar-wrap.dev .material-symbols-outlined {
+  font-size: 22px;
+  font-variation-settings: 'FILL' 1;
+}
 
 .conv-search {
   padding: 8px 16px 12px;
@@ -527,9 +656,46 @@ function formatTime(iso) {
     border-right: none;
   }
   .conv-list.is-mobile-hidden { display: none; }
-  /* Последние диалоги не должны прятаться за нижней навигацией и FAB. */
+
+  .conv-list-header {
+    padding: 14px 12px 6px;
+    padding-top: calc(14px + env(safe-area-inset-top, 0px));
+  }
+  .conv-list-header h2 { font-size: 20px; font-weight: 800; }
+
+  .conv-tabs-wrap { padding: 0 12px 8px; }
+
+  .conv-search { padding: 6px 12px 10px; }
+  .conv-search .material-symbols-outlined { left: 24px; }
+  .conv-search-input {
+    height: 44px;
+    border-radius: var(--radius-full);
+    padding-left: 40px;
+    background: var(--color-surface-high);
+    border-color: transparent;
+    font-size: 14.5px;
+  }
+
   .conv-items {
-    padding-bottom: calc(60px + 16px + env(safe-area-inset-bottom, 0px));
+    padding: 0 4px;
+    padding-bottom: calc(60px + 96px + env(safe-area-inset-bottom, 0px));
+  }
+  .conv-item {
+    border-radius: var(--radius-lg);
+    padding: 12px;
+    margin: 2px 4px;
+  }
+  .conv-avatar-wrap, .conv-avatar { width: 48px !important; height: 48px !important; }
+  .conv-name { font-size: 15px; font-weight: 700; }
+  .conv-time { font-size: 11.5px; }
+  .conv-preview { font-size: 13px; }
+
+  /* На тач-экранах кнопки pin/delete должны быть всегда видны:
+     рендерим их фиксированной полосой действий при свайпе нет, но через
+     toolbar при тапе — упрощение: всегда видны как иконки справа. */
+  .conv-actions {
+    opacity: 1 !important;
+    pointer-events: auto !important;
   }
 }
 </style>

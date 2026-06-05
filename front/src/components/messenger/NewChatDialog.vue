@@ -1,51 +1,50 @@
 <template>
-  <Dialog
-    :visible="modelValue"
-    @update:visible="$emit('update:modelValue', $event)"
-    modal
-    header="Новый чат"
-    :draggable="false"
-    :style="{ width: '420px', maxWidth: '92vw' }"
+  <AppDialog
+    :model-value="modelValue"
+    tone="primary"
+    icon="edit_square"
+    size="sm"
+    title="Новый чат"
+    subtitle="Найдите коллегу по фамилии или логину."
+    @update:model-value="$emit('update:modelValue', $event)"
   >
-    <div class="newchat">
-      <div class="newchat-search">
-        <span class="material-symbols-outlined">search</span>
-        <input
-          v-model="q"
-          placeholder="Логин или фамилия"
-          class="newchat-input"
-          autofocus
-        />
-      </div>
-      <div v-if="loading" class="newchat-empty">
-        <ProgressSpinner style="width:32px;height:32px" />
-      </div>
-      <div v-else-if="!results.length" class="newchat-empty">
-        <span class="material-symbols-outlined">person_search</span>
-        <p>{{ q ? 'Никого не нашли' : 'Начните вводить' }}</p>
-      </div>
-      <ul v-else class="newchat-results">
-        <li
-          v-for="u in results"
-          :key="u.id"
-          class="newchat-item"
-          @click="pick(u)"
-        >
-          <img class="newchat-avatar" :src="avatarOf(u)" :alt="u.fio" />
-          <div class="newchat-info">
-            <div class="newchat-name">{{ u.fio }}</div>
-            <div class="newchat-meta">@{{ u.login }} · {{ u.post || u.role?.name }}</div>
-          </div>
-        </li>
-      </ul>
+    <div class="newchat-search">
+      <span class="material-symbols-outlined">search</span>
+      <input
+        v-model="q"
+        placeholder="Логин или фамилия"
+        class="newchat-input"
+        autofocus
+      />
     </div>
-  </Dialog>
+    <div v-if="loading" class="newchat-empty">
+      <ProgressSpinner style="width:32px;height:32px" />
+    </div>
+    <div v-else-if="!results.length" class="newchat-empty">
+      <span class="material-symbols-outlined">person_search</span>
+      <p>{{ q ? 'Никого не нашли' : 'Начните вводить' }}</p>
+    </div>
+    <ul v-else class="newchat-results">
+      <li
+        v-for="u in results"
+        :key="u.id"
+        class="newchat-item"
+        @click="pick(u)"
+      >
+        <img class="newchat-avatar" :src="avatarOf(u)" :alt="u.fio" />
+        <div class="newchat-info">
+          <div class="newchat-name">{{ u.fio }}</div>
+          <div class="newchat-meta">@{{ u.login }} · {{ u.post || u.role?.name }}</div>
+        </div>
+      </li>
+    </ul>
+  </AppDialog>
 </template>
 
 <script setup>
 import { ref, watch } from 'vue'
-import Dialog from 'primevue/dialog'
 import ProgressSpinner from 'primevue/progressspinner'
+import AppDialog from '@/components/common/AppDialog.vue'
 import { getDirectory } from '@/api/users.js'
 
 const props = defineProps({

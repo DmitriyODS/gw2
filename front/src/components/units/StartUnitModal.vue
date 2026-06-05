@@ -1,11 +1,19 @@
 <template>
-  <Dialog
-    :visible="true"
-    @update:visible="$emit('close')"
-    modal
-    header="Начать юнит"
-    style="width: 420px; max-width: 95vw"
-    :closable="true"
+  <AppDialog
+    model-value
+    tone="primary"
+    icon="play_circle"
+    size="sm"
+    title="Начать юнит"
+    subtitle="Зафиксируйте время работы над задачей."
+    :busy="submitting"
+    :closable="!submitting"
+    :actions="[
+      { kind: 'cancel', label: 'Отмена', disabled: submitting },
+      { kind: 'confirm', label: 'Начать', icon: 'play_arrow', disabled: submitting },
+    ]"
+    @update:model-value="(v) => !v && $emit('close')"
+    @confirm="handleSubmit"
   >
     <form class="unit-form" @submit.prevent="handleSubmit">
       <div class="form-field">
@@ -36,34 +44,22 @@
       </div>
 
       <div v-if="serverError" class="server-error">{{ serverError }}</div>
-
-      <div class="form-actions">
-        <button type="button" class="btn-secondary" @click="$emit('close')" :disabled="submitting">
-          Отмена
-        </button>
-        <button type="submit" class="btn-primary" :disabled="submitting">
-          {{ submitting ? 'Запуск...' : 'Начать' }}
-        </button>
-      </div>
     </form>
-  </Dialog>
+  </AppDialog>
 </template>
 
 <script setup>
 import { ref, onMounted } from 'vue'
-import Dialog from 'primevue/dialog'
 import InputText from 'primevue/inputtext'
 import Select from 'primevue/select'
+import AppDialog from '@/components/common/AppDialog.vue'
 import { createUnit } from '@/api/units.js'
 import { getUnitTypes } from '@/api/unitTypes.js'
 import { useUnitsStore } from '@/stores/units.js'
 import { useNotificationsStore } from '@/stores/notifications.js'
 
 const props = defineProps({
-  taskId: {
-    type: Number,
-    required: true
-  }
+  taskId: { type: Number, required: true },
 })
 
 const emit = defineEmits(['close', 'started'])
@@ -75,15 +71,8 @@ const unitTypes = ref([])
 const submitting = ref(false)
 const serverError = ref('')
 
-const form = ref({
-  name: '',
-  unit_type_id: null
-})
-
-const errors = ref({
-  name: '',
-  unit_type_id: ''
-})
+const form = ref({ name: '', unit_type_id: null })
+const errors = ref({ name: '', unit_type_id: '' })
 
 onMounted(async () => {
   try {
@@ -97,30 +86,25 @@ onMounted(async () => {
 function validate() {
   errors.value = { name: '', unit_type_id: '' }
   let valid = true
-
   if (!form.value.name.trim()) {
     errors.value.name = 'Введите название юнита'
     valid = false
   }
-
   if (!form.value.unit_type_id) {
     errors.value.unit_type_id = 'Выберите тип юнита'
     valid = false
   }
-
   return valid
 }
 
 async function handleSubmit() {
   if (!validate()) return
-
   submitting.value = true
   serverError.value = ''
-
   try {
     const unit = await createUnit(props.taskId, {
       name: form.value.name.trim(),
-      unit_type_id: form.value.unit_type_id
+      unit_type_id: form.value.unit_type_id,
     })
     unitsStore.startUnit(unit)
     notifications.success('Юнит успешно запущен')
@@ -142,7 +126,6 @@ async function handleSubmit() {
   display: flex;
   flex-direction: column;
   gap: 16px;
-  padding: 8px 0;
 }
 
 .form-field {
@@ -154,12 +137,10 @@ async function handleSubmit() {
 .form-label {
   font-size: 13px;
   font-weight: 600;
-  color: var(--gw-text);
+  color: var(--color-text);
 }
 
-.required {
-  color: var(--color-secondary);
-}
+.required { color: var(--color-error); }
 
 .field-error {
   font-size: 12px;
@@ -169,57 +150,11 @@ async function handleSubmit() {
 .server-error {
   background: var(--color-error-container);
   color: var(--color-on-error-container);
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   padding: 10px 14px;
   font-size: 13px;
   font-weight: 500;
 }
 
-.form-actions {
-  display: flex;
-  justify-content: flex-end;
-  gap: 10px;
-  padding-top: 8px;
-}
-
-.btn-secondary {
-  background: transparent;
-  border: 1px solid var(--gw-border);
-  border-radius: 8px;
-  padding: 9px 20px;
-  font-size: 14px;
-  color: var(--gw-text);
-  cursor: pointer;
-  transition: background 0.12s;
-}
-
-.btn-secondary:hover:not(:disabled) {
-  background: var(--gw-bg);
-}
-
-.btn-primary {
-  background: var(--gw-primary);
-  border: none;
-  border-radius: 8px;
-  padding: 9px 20px;
-  font-size: 14px;
-  font-weight: 600;
-  color: var(--color-on-primary);
-  cursor: pointer;
-  transition: opacity 0.12s;
-}
-
-.btn-primary:hover:not(:disabled) {
-  opacity: 0.88;
-}
-
-.btn-primary:disabled,
-.btn-secondary:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
-.w-full {
-  width: 100%;
-}
+.w-full { width: 100%; }
 </style>

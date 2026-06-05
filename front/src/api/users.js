@@ -36,3 +36,6 @@ export const getDirectory = (q = '', excludeSelf = false) => {
 }
 
 export const getDirectoryUser = (userId) => apiRequest(`/users/directory/${userId}`)
+
+export const resetUserPassword = (userId) =>
+  apiRequest(`/users/${userId}/reset-password`, { method: 'POST' })

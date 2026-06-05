@@ -27,15 +27,53 @@ _ALLOWED_MIME_PREFIXES = ("image/", "audio/", "video/", "application/", "text/")
 def open_conversation(current_user_id: int, other_user_id: int):
     if current_user_id == other_user_id:
         raise MessengerServiceError("Нельзя написать самому себе", "SELF_CONVERSATION", 400)
+    me = user_repo.get_by_id(current_user_id)
     other = user_repo.get_by_id(other_user_id)
     if other is None or other.is_hidden:
         raise MessengerServiceError("Собеседник не найден", "USER_NOT_FOUND", 404)
+    # Multi-tenancy: вне компании писать нельзя. Администратор системы
+    # (company_id IS NULL) может писать любому сотруднику любой компании.
+    # Сотрудник может писать только тем, кто в его же компании или
+    # Администратору системы.
+    if me is not None and me.company_id is not None and other.company_id is not None:
+        if me.company_id != other.company_id:
+            raise MessengerServiceError(
+                "Нельзя писать сотруднику другой компании", "CROSS_COMPANY", 403,
+            )
     conv = message_repo.get_or_create_conversation(current_user_id, other_user_id)
     db.session.commit()
     return conv
 
 
+def open_dev_chat(current_user_id: int):
+    """Открыть/создать ЛИЧНЫЙ чат пользователя с техподдержкой. У каждого
+    сотрудника — свой dev-чат. Администратор системы своего чата не имеет
+    (он отвечает в чужие через support-inbox)."""
+    me = user_repo.get_by_id(current_user_id)
+    if me is None:
+        raise MessengerServiceError("Пользователь не найден", "USER_NOT_FOUND", 404)
+    if me.company_id is None:
+        raise MessengerServiceError(
+            "У Администратора системы нет своего чата с техподдержкой",
+            "ADMIN_HAS_NO_DEVCHAT", 400,
+        )
+    conv = message_repo.get_or_create_dev_chat_for_user(me.id, me.company_id)
+    db.session.commit()
+    return conv
+
+
 def _ensure_member(conv, user_id: int):
+    """Проверяет доступ к диалогу. Для p2p — только участники. Для dev-чата —
+    владелец (user_a_id) + любой Администратор системы."""
+    if conv.is_dev_chat:
+        if conv.user_a_id == user_id:
+            return  # владелец
+        user = user_repo.get_by_id(user_id)
+        if user is None:
+            raise MessengerServiceError("Нет доступа к диалогу", "FORBIDDEN", 403)
+        if user.company_id is None:
+            return  # Администратор системы (техподдержка)
+        raise MessengerServiceError("Нет доступа к диалогу", "FORBIDDEN", 403)
     if user_id not in (conv.user_a_id, conv.user_b_id):
         raise MessengerServiceError("Нет доступа к диалогу", "FORBIDDEN", 403)
 
@@ -50,11 +88,12 @@ def get_conversation_for_user(conversation_id: int, user_id: int):
 
 def send_message(conversation_id: int, sender_id: int,
                  text: Optional[str], attachment_ids: list[int],
-                 reply_to_id: Optional[int] = None):
+                 reply_to_id: Optional[int] = None,
+                 task_id: Optional[int] = None):
     conv = get_conversation_for_user(conversation_id, sender_id)
     text = (text or "").strip() or None
     attachment_ids = attachment_ids or []
-    if not text and not attachment_ids:
+    if not text and not attachment_ids and task_id is None:
         raise MessengerServiceError("Пустое сообщение", "EMPTY_MESSAGE", 400)
 
     # Проверим, что все вложения принадлежат отправителю и ещё не привязаны
@@ -69,8 +108,29 @@ def send_message(conversation_id: int, sender_id: int,
         if target is None or target.conversation_id != conv.id:
             raise MessengerServiceError("Недопустимый ответ", "BAD_REPLY", 400)
 
+    # Прикреплённая задача: должна быть из той же компании, что и диалог.
+    kind = "text"
+    if task_id is not None:
+        from app.repositories import task_repo
+        task = task_repo.get_by_id(task_id)
+        if task is None:
+            raise MessengerServiceError("Задача не найдена", "TASK_NOT_FOUND", 404)
+        if conv.company_id and task.company_id != conv.company_id:
+            raise MessengerServiceError(
+                "Задача из другой компании", "TASK_WRONG_COMPANY", 400,
+            )
+        kind = "task"
+
+    # В dev-чате ответ Администратора системы получает специальный kind —
+    # фронт рисует «Разработчики» badge. Для kind='task' это правило не
+    # применяется (плашка задачи имеет приоритет).
+    if conv.is_dev_chat and kind == "text":
+        sender = user_repo.get_by_id(sender_id)
+        if sender is not None and sender.company_id is None:
+            kind = "system_dev_reply"
+
     msg = message_repo.create_message(conversation_id, sender_id, text, attachment_ids,
-                                      reply_to_id=reply_to_id)
+                                      reply_to_id=reply_to_id, kind=kind, task_id=task_id)
     db.session.commit()
     logger.info("message.send", extra={"extra": {
         "event": "message.send", "conversation_id": conversation_id,
@@ -89,19 +149,23 @@ def forward_message(source_message_id: int, sender_id: int,
     if src is None:
         raise MessengerServiceError("Сообщение не найдено", "MSG_NOT_FOUND", 404)
     src_conv = message_repo.get_conversation(src.conversation_id)
-    if src_conv is None or sender_id not in (src_conv.user_a_id, src_conv.user_b_id):
-        raise MessengerServiceError("Нет доступа к сообщению", "FORBIDDEN", 403)
+    if src_conv is None:
+        raise MessengerServiceError("Диалог не найден", "CONV_NOT_FOUND", 404)
+    _ensure_member(src_conv, sender_id)
 
     # Соберём целевые диалоги: явные id + диалоги с указанными пользователями.
     target_convs: list = []
     seen_ids: set[int] = set()
     for cid in conversation_ids or []:
         conv = get_conversation_for_user(cid, sender_id)
+        # Пересылать в dev-чат смысла нет (это поток в техподдержку).
+        if conv.is_dev_chat:
+            continue
         if conv.id not in seen_ids:
             target_convs.append(conv)
             seen_ids.add(conv.id)
     for uid in user_ids or []:
-        conv = open_conversation(sender_id, uid)
+        conv = open_conversation(sender_id, uid)  # внутри проверка company scope
         if conv.id not in seen_ids:
             target_convs.append(conv)
             seen_ids.add(conv.id)
@@ -191,8 +255,9 @@ def delete_message(message_id: int, user_id: int, scope: str) -> tuple[int, bool
     if msg is None:
         raise MessengerServiceError("Сообщение не найдено", "MSG_NOT_FOUND", 404)
     conv = message_repo.get_conversation(msg.conversation_id)
-    if conv is None or user_id not in (conv.user_a_id, conv.user_b_id):
-        raise MessengerServiceError("Нет доступа к сообщению", "FORBIDDEN", 403)
+    if conv is None:
+        raise MessengerServiceError("Диалог не найден", "CONV_NOT_FOUND", 404)
+    _ensure_member(conv, user_id)
 
     physically_removed = False
 
@@ -234,6 +299,11 @@ def delete_conversation(conversation_id: int, user_id: int, scope: str) -> bool:
     видеть переписку до своего удаления) или 'all' (физически удалить
     у обоих). Возвращает True, если диалог физически удалён."""
     conv = get_conversation_for_user(conversation_id, user_id)
+    # Чат техподдержки удалять нельзя — он живёт сколько живёт владелец.
+    if conv.is_dev_chat:
+        raise MessengerServiceError(
+            "Чат техподдержки удалить нельзя", "DEV_CHAT_UNDELETABLE", 400,
+        )
 
     if scope == 'all':
         paths = message_repo.list_attachment_paths_of_conversation(conv.id)
@@ -281,8 +351,9 @@ def toggle_message_pin(message_id: int, user_id: int):
     if msg is None:
         raise MessengerServiceError("Сообщение не найдено", "MSG_NOT_FOUND", 404)
     conv = message_repo.get_conversation(msg.conversation_id)
-    if conv is None or user_id not in (conv.user_a_id, conv.user_b_id):
-        raise MessengerServiceError("Нет доступа к сообщению", "FORBIDDEN", 403)
+    if conv is None:
+        raise MessengerServiceError("Диалог не найден", "CONV_NOT_FOUND", 404)
+    _ensure_member(conv, user_id)
     # Системные плашки звонка закреплять незачем.
     if msg.kind != "text":
         raise MessengerServiceError("Это сообщение нельзя закрепить", "BAD_PIN", 400)

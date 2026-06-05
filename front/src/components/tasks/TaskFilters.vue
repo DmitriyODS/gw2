@@ -72,6 +72,31 @@
         />
       </section>
 
+      <!-- Этапы (условно) -->
+      <section v-if="usesStages && stages.length" class="filter-section">
+        <h4 class="filter-title">Этап</h4>
+        <div class="chip-group">
+          <button
+            class="chip"
+            :class="{ active: tasksStore.filters.stage_id == null }"
+            @click="tasksStore.setFilter('stage_id', null)"
+          >
+            Все
+          </button>
+          <button
+            v-for="s in stages"
+            :key="s.id"
+            class="chip stage-chip-filter"
+            :class="{ active: tasksStore.filters.stage_id === s.id }"
+            :style="stageChipStyle(s)"
+            @click="tasksStore.setFilter('stage_id', s.id)"
+          >
+            <span class="stage-chip-dot" :style="{ background: `var(--tag-${s.color}-accent)` }" />
+            {{ s.name }}
+          </button>
+        </div>
+      </section>
+
       <!-- Период поступления -->
       <section class="filter-section">
         <h4 class="filter-title">Период поступления</h4>
@@ -129,9 +154,10 @@
         :disabled="!hasActiveFilters"
         @click="tasksStore.resetFilters()"
         title="Сбросить сортировку и фильтры"
+        aria-label="Сбросить сортировку и фильтры"
       >
         <span class="material-symbols-outlined">restart_alt</span>
-        Сбросить всё
+        <span class="reset-btn-label">Сбросить всё</span>
       </button>
       <button class="filters-close-btn" @click="$emit('close')">
         Показать результаты
@@ -147,6 +173,8 @@ import Dialog from 'primevue/dialog'
 import DatePicker from 'primevue/datepicker'
 import { useTasksStore } from '@/stores/tasks.js'
 import { getDepartments } from '@/api/departments.js'
+import { getStages } from '@/api/stages.js'
+import { useCompanySettings } from '@/composables/useCompanySettings.js'
 
 const props = defineProps({
   mobileVisible: {
@@ -158,16 +186,27 @@ const props = defineProps({
 defineEmits(['close'])
 
 const tasksStore = useTasksStore()
+const { usesStages } = useCompanySettings()
 
 const isMobileVisible = computed(() => props.mobileVisible)
 
 const departments = ref([])
 const deptOptions = computed(() => departments.value)
+const stages = ref([])
+
+function stageChipStyle(s) {
+  if (!s?.color) return {}
+  return {
+    background: `var(--tag-${s.color}-surface)`,
+    color: `var(--tag-${s.color}-accent)`,
+  }
+}
 
 const hasActiveFilters = computed(() => {
   const f = tasksStore.filters
   return f.sort !== 'last_activity'
     || f.dept_id != null
+    || f.stage_id != null
     || f.has_units != null
     || f.period_preset != null
     || f.received_from
@@ -205,6 +244,14 @@ onMounted(async () => {
     departments.value = Array.isArray(data) ? data : (data.departments ?? data.items ?? [])
   } catch {
     departments.value = []
+  }
+  if (usesStages.value) {
+    try {
+      const data = await getStages()
+      stages.value = Array.isArray(data) ? data : (data.items ?? [])
+    } catch {
+      stages.value = []
+    }
   }
 })
 
@@ -399,6 +446,17 @@ function closeCustomDialog() {
   border-color: color-mix(in oklch, var(--color-primary) 35%, transparent);
 }
 
+.stage-chip-filter.active {
+  outline: 2px solid currentColor;
+  outline-offset: -2px;
+}
+
+.stage-chip-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+}
+
 /* PrimeVue Select под визуал панели */
 :deep(.dept-select.p-select) {
   width: 100%;
@@ -530,6 +588,13 @@ function closeCustomDialog() {
     inset: 0;
     background: var(--color-scrim);
     z-index: 299;
+    opacity: 0;
+    transition: opacity 0.25s ease;
+  }
+
+  .task-filters.mobile-sheet--open ~ .filters-backdrop,
+  .filters-backdrop {
+    opacity: 1;
   }
 
   .task-filters {
@@ -543,23 +608,23 @@ function closeCustomDialog() {
     width: 100%;
     min-width: unset;
     /* Переопределяем десктопный height: 100% — иначе шторка тянется на весь
-       экран даже если фильтров всего пара. Высота — по содержимому, ограничена
-       максимумом, чтобы при большом количестве фильтров можно было скроллить. */
+       экран даже если фильтров всего пара. Максимум 85dvh, минимум — чтобы
+       поместился sticky-header и хоть одна секция. */
     height: auto;
-    max-height: 80dvh;
-    /* safe-area-inset-bottom — это нижний «вырез» (iPhone home indicator).
-       Добавляем как padding, а не offset — шторка по-прежнему касается низа. */
-    padding-bottom: calc(16px + env(safe-area-inset-bottom, 0px));
+    max-height: 85dvh;
     border-right: none;
     border-top: 1px solid var(--color-outline-dim);
-    border-radius: var(--radius-xl) var(--radius-xl) 0 0;
+    border-radius: 24px 24px 0 0;
     z-index: 300;
     transform: translateY(110%);
     visibility: hidden;
-    transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1),
-                visibility 0s linear 0.3s;
+    transition: transform 0.32s cubic-bezier(0.4, 0, 0.2, 1),
+                visibility 0s linear 0.32s;
+    box-shadow: 0 -8px 24px color-mix(in oklch, var(--color-scrim) 60%, transparent);
   }
 
+  /* На мобильном — handle, sticky header и sticky footer.
+     Padding-bottom safe-area уезжает в footer. */
   .filters-handle {
     display: block;
     width: 36px;
@@ -570,6 +635,36 @@ function closeCustomDialog() {
     flex-shrink: 0;
   }
 
+  .filters-head {
+    padding: 6px 18px 12px;
+    border-bottom: 1px solid var(--color-outline-dim);
+  }
+
+  .filters-scroll {
+    padding: 16px 18px 8px;
+    gap: 18px;
+    /* Включаем плавный momentum-скролл в шторке на iOS. */
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior: contain;
+  }
+
+  /* Чипы крупнее — тач-зона ≥40px. */
+  .chip {
+    padding: 9px 14px;
+    font-size: 13.5px;
+    min-height: 40px;
+  }
+
+  .chip .material-symbols-outlined {
+    font-size: 17px;
+  }
+
+  /* PrimeVue Select тоже подрастает. */
+  :deep(.dept-select .p-select-label) {
+    padding: 12px 12px;
+    font-size: 14px;
+  }
+
   /* Сортировки на мобильном — в отдельной шторке SortSheet */
   .sort-section {
     display: none;
@@ -578,22 +673,58 @@ function closeCustomDialog() {
   .task-filters.mobile-sheet--open {
     transform: translateY(0);
     visibility: visible;
-    transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1),
+    transition: transform 0.32s cubic-bezier(0.4, 0, 0.2, 1),
                 visibility 0s linear 0s;
+  }
+
+  .filters-foot {
+    display: flex;
+    gap: 10px;
+    padding: 12px 16px calc(12px + env(safe-area-inset-bottom, 0px));
+    background: var(--color-surface);
+  }
+
+  .filters-foot .reset-btn {
+    flex: 0 0 auto;
+    width: auto;
+    padding: 11px 16px;
+  }
+
+  .filters-foot .reset-btn .material-symbols-outlined {
+    font-size: 20px;
+  }
+
+  /* На очень узких — скрываем подпись reset, остаётся только иконка-круг. */
+  .filters-foot .reset-btn-label {
+    display: inline;
   }
 
   .filters-close-btn {
     display: block;
-    width: 100%;
-    margin-top: 8px;
-    padding: 12px;
+    flex: 1;
+    padding: 12px 16px;
     border: none;
     border-radius: var(--radius-full);
     background: var(--color-primary);
     color: var(--color-on-primary);
-    font-size: 14px;
+    font-size: 14.5px;
     font-weight: 650;
     cursor: pointer;
+    min-height: 44px;
+    transition: background 0.15s;
+  }
+
+  .filters-close-btn:active {
+    background: var(--color-primary-hover);
+  }
+}
+
+@media (max-width: 380px) {
+  .filters-foot .reset-btn {
+    padding: 11px;
+  }
+  .filters-foot .reset-btn-label {
+    display: none;
   }
 }
 </style>

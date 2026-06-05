@@ -7,6 +7,7 @@
         class="export-btn"
         @click="handleExport"
         title="Скачать XLSX"
+        aria-label="Скачать XLSX"
       >
         <span class="material-symbols-outlined">download</span>
       </button>
@@ -61,14 +62,14 @@ async function handleExport() {
 
 <style scoped>
 .stats-widget {
-  background: var(--gw-surface);
-  border: 1px solid var(--gw-border);
-  border-radius: var(--gw-radius);
+  background: var(--color-surface);
+  border: 1px solid var(--color-outline-dim);
+  border-radius: var(--radius-xl, 20px);
   padding: 20px;
   display: flex;
   flex-direction: column;
   gap: 14px;
-  box-shadow: var(--gw-card-shadow);
+  box-shadow: var(--shadow-sm);
   max-height: var(--widget-max-height, 380px);
 }
 
@@ -84,37 +85,56 @@ async function handleExport() {
   margin: 0;
   font-size: 16px;
   font-weight: 700;
-  color: var(--gw-text);
+  letter-spacing: -0.01em;
+  color: var(--color-text);
 }
 
 .export-btn {
-  background: none;
-  border: 1px solid var(--gw-border);
-  border-radius: 8px;
-  width: 34px;
-  height: 34px;
+  background: var(--color-surface-high);
+  border: none;
+  border-radius: var(--radius-full);
+  width: 40px;
+  height: 40px;
   cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
-  color: var(--gw-text-secondary);
-  transition: background 0.15s, color 0.15s, border-color 0.15s;
+  color: var(--color-text-dim);
+  transition: background 0.15s, color 0.15s;
   flex-shrink: 0;
 }
 
 .export-btn:hover {
-  background: var(--gw-primary);
-  border-color: var(--gw-primary);
+  background: var(--color-primary);
   color: var(--color-on-primary);
 }
 
 .export-btn .material-symbols-outlined {
-  font-size: 18px;
+  font-size: 20px;
 }
 
 .widget-body {
   flex: 1;
   min-height: 0;
   overflow-y: auto;
+}
+
+@media (max-width: 768px) {
+  .stats-widget {
+    padding: 16px;
+    gap: 12px;
+    border-radius: var(--radius-lg, 16px);
+    max-height: var(--widget-max-height, 420px);
+  }
+  .widget-header h3 {
+    font-size: 15px;
+  }
+  .export-btn {
+    width: 36px;
+    height: 36px;
+  }
+  .export-btn .material-symbols-outlined {
+    font-size: 18px;
+  }
 }
 </style>

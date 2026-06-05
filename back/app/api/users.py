@@ -7,7 +7,7 @@ from app.schemas import UserSchema, UserCreateSchema, UserUpdateSchema, UserMeUp
 from app.services import user_service
 from app.services.user_service import UserServiceError
 from app.repositories import user_repo
-from app.utils.permissions import require_role, require_auth, ADMIN, get_user_level
+from app.utils.permissions import require_role, require_auth, DIRECTOR, get_user_level
 from app.utils.avatar import generate_identicon
 
 bp = Blueprint("users", __name__, url_prefix="/api/users")
@@ -22,7 +22,7 @@ _directory_list_schema = UserDirectorySchema(many=True)
 
 
 @bp.get("")
-@require_role(ADMIN)
+@require_role(DIRECTOR)
 def list_users():
     """
     Список пользователей.
@@ -38,7 +38,7 @@ def list_users():
 
 
 @bp.post("")
-@require_role(ADMIN)
+@require_role(DIRECTOR)
 def create_user():
     """
     Создать пользователя.
@@ -101,7 +101,15 @@ def list_directory():
     q = request.args.get("q", type=str)
     exclude_self = request.args.get("exclude_self", default="false").lower() in ("1", "true", "yes")
     exclude_id = int(get_jwt_identity()) if exclude_self else None
-    users = user_repo.search_directory(query=q, exclude_id=exclude_id)
+    # company_id: для обычных сотрудников = их компания (бэк навяжет);
+    # для Администратора системы — то, что прилетело в query, или None (=все).
+    me = user_repo.get_by_id(int(get_jwt_identity()))
+    if me and me.company_id is not None:
+        company_id = me.company_id
+    else:
+        raw = request.args.get("company_id")
+        company_id = int(raw) if raw not in (None, "") else None
+    users = user_repo.search_directory(query=q, exclude_id=exclude_id, company_id=company_id)
     return jsonify(_directory_list_schema.dump(users)), 200
 
 
@@ -255,7 +263,7 @@ def delete_avatar():
 
 
 @bp.get("/<int:user_id>")
-@require_role(ADMIN)
+@require_role(DIRECTOR)
 def get_user(user_id: int):
     """
     Получить пользователя по ID.
@@ -280,7 +288,7 @@ def get_user(user_id: int):
 
 
 @bp.patch("/<int:user_id>")
-@require_role(ADMIN)
+@require_role(DIRECTOR)
 def update_user(user_id: int):
     """
     Редактировать пользователя.
@@ -321,7 +329,7 @@ def update_user(user_id: int):
 
 
 @bp.delete("/<int:user_id>")
-@require_role(ADMIN)
+@require_role(DIRECTOR)
 def hide_user(user_id: int):
     """
     Скрыть пользователя (soft delete).
@@ -350,7 +358,7 @@ def hide_user(user_id: int):
 
 
 @bp.patch("/<int:user_id>/role")
-@require_role(ADMIN)
+@require_role(DIRECTOR)
 def assign_role(user_id: int):
     """
     Назначить роль пользователю.
@@ -388,6 +396,38 @@ def assign_role(user_id: int):
         return jsonify({"error": e.code, "message": e.message}), e.http_status
 
     return jsonify(_user_schema.dump(user)), 200
+
+
+@bp.post("/<int:user_id>/reset-password")
+@require_role(DIRECTOR)
+def reset_user_password(user_id: int):
+    """
+    Сбросить пароль пользователя на дефолтный (admin).
+    При следующем входе пользователь будет обязан сменить пароль.
+    ---
+    tags: [users]
+    security: [BearerAuth: []]
+    parameters:
+      - in: path
+        name: user_id
+        schema: {type: integer}
+        required: true
+    responses:
+      200:
+        description: Пароль сброшен
+      403:
+        description: Нет прав
+      422:
+        description: Бизнес-правило нарушено
+    """
+    current_user_id = int(get_jwt_identity())
+    current_user = user_repo.get_by_id(current_user_id)
+    try:
+        user_service.reset_password(user_id, current_user_id, get_user_level(current_user))
+    except UserServiceError as e:
+        return jsonify({"error": e.code, "message": e.message}), e.http_status
+
+    return jsonify({"message": "Пароль сброшен"}), 200
 
 
 @bp.get("/<int:user_id>/identicon")

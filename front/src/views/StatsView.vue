@@ -1,27 +1,34 @@
 <template>
   <div class="stats-view">
-    <header class="stats-header">
-      <h1>Статистика</h1>
-      <div class="stats-header-actions">
-        <a
-          href="/tv"
-          target="_blank"
-          rel="noopener"
-          class="tv-link-btn"
-          title="Открыть ТВ-режим в новой вкладке"
-        >
-          <span class="material-symbols-outlined">tv</span>
-          ТВ-режим
-        </a>
-        <div class="stats-mode-toggle">
-          <button data-tutorial="stats-tab-common" :class="{ active: mode === 'common' }" @click="switchMode('common')">Общая</button>
-          <button data-tutorial="stats-tab-extended" :class="{ active: mode === 'extended' }" @click="switchMode('extended')">Расширенная</button>
+    <div class="stats-sticky">
+      <header class="stats-header">
+        <div class="stats-title-row">
+          <h1>Статистика</h1>
+          <a
+            href="/tv"
+            target="_blank"
+            rel="noopener"
+            class="tv-link-btn"
+            :title="isMobile ? 'ТВ-режим' : 'Открыть ТВ-режим в новой вкладке'"
+            :aria-label="'ТВ-режим'"
+          >
+            <span class="material-symbols-outlined">tv</span>
+            <span class="tv-link-label">ТВ-режим</span>
+          </a>
         </div>
-      </div>
-    </header>
 
-    <StatsPeriodControl @change="onPeriodChange" />
+        <SegmentedTabs
+          :model-value="mode"
+          :tabs="modeTabs"
+          :full-width="isMobile"
+          @update:model-value="switchMode($event)"
+        />
+      </header>
 
+      <StatsPeriodControl @change="onPeriodChange" />
+    </div>
+
+    <div class="stats-scroll">
     <div v-if="loading" class="loading-state">
       <ProgressSpinner />
     </div>
@@ -30,22 +37,26 @@
     <template v-else-if="mode === 'common' && commonData">
       <div class="stats-grid">
         <StatsWidget title="Задачи за период" :export-fn="canExport ? handleExportCommon : null">
-          <div class="task-numbers">
-            <div class="task-num debt">
-              <span class="num">{{ commonData.tasks?.debt ?? 0 }}</span>
-              <span class="label">Долг</span>
+          <div class="task-tiles">
+            <div class="task-tile tone-warning">
+              <span class="material-symbols-outlined tile-icon">hourglass_top</span>
+              <span class="tile-num">{{ commonData.tasks?.debt ?? 0 }}</span>
+              <span class="tile-label">Долг</span>
             </div>
-            <div class="task-num positive">
-              <span class="num">+{{ commonData.tasks?.received ?? 0 }}</span>
-              <span class="label">Поступило</span>
+            <div class="task-tile tone-success">
+              <span class="material-symbols-outlined tile-icon">trending_up</span>
+              <span class="tile-num">+{{ commonData.tasks?.received ?? 0 }}</span>
+              <span class="tile-label">Поступило</span>
             </div>
-            <div class="task-num negative">
-              <span class="num">-{{ commonData.tasks?.closed ?? 0 }}</span>
-              <span class="label">Закрыто</span>
+            <div class="task-tile tone-error">
+              <span class="material-symbols-outlined tile-icon">task_alt</span>
+              <span class="tile-num">−{{ commonData.tasks?.closed ?? 0 }}</span>
+              <span class="tile-label">Закрыто</span>
             </div>
-            <div class="task-num remaining">
-              <span class="num">{{ commonData.tasks?.remaining ?? 0 }}</span>
-              <span class="label">Осталось</span>
+            <div class="task-tile tone-tertiary">
+              <span class="material-symbols-outlined tile-icon">pending_actions</span>
+              <span class="tile-num">{{ commonData.tasks?.remaining ?? 0 }}</span>
+              <span class="tile-label">Осталось</span>
             </div>
           </div>
         </StatsWidget>
@@ -54,7 +65,23 @@
           title="Отработка задач по сотрудникам"
           :export-fn="canExportUsers ? handleExportCommon : null"
         >
-          <div class="table-scroll">
+          <!-- Мобильный card-list -->
+          <ul v-if="isMobile" class="m-list">
+            <li
+              v-for="(row, i) in commonData.tasks_by_employees || []"
+              :key="i"
+              class="m-row"
+            >
+              <div class="m-row-main">
+                <span class="m-row-title">{{ row.fio }}</span>
+                <span class="m-row-sub">{{ row.tasks_count }} задач</span>
+              </div>
+              <span class="m-chip chip-tertiary">{{ roundHours(row.total_hours) }}</span>
+            </li>
+            <li v-if="!(commonData.tasks_by_employees || []).length" class="m-empty">Нет данных</li>
+          </ul>
+          <!-- Десктоп таблица -->
+          <div v-else class="table-scroll">
             <DataTable :value="commonData.tasks_by_employees || []" size="small" :show-gridlines="false">
               <Column field="fio" header="Сотрудник" />
               <Column field="tasks_count" header="Задачи" style="width:100px" />
@@ -68,7 +95,20 @@
         </StatsWidget>
 
         <StatsWidget title="Задачи по часам">
-          <div class="table-scroll">
+          <ul v-if="isMobile" class="m-list">
+            <li
+              v-for="(row, i) in commonData.tasks_by_hours || []"
+              :key="i"
+              class="m-row"
+            >
+              <div class="m-row-main">
+                <span class="m-row-title">{{ row.name }}</span>
+              </div>
+              <span class="m-chip chip-tertiary">{{ roundHours(row.total_hours) }}</span>
+            </li>
+            <li v-if="!(commonData.tasks_by_hours || []).length" class="m-empty">Нет данных</li>
+          </ul>
+          <div v-else class="table-scroll">
             <DataTable :value="commonData.tasks_by_hours || []" size="small" :show-gridlines="false">
               <Column field="name" header="Задача" />
               <Column header="Время" style="width:100px">
@@ -78,6 +118,50 @@
               </Column>
             </DataTable>
           </div>
+        </StatsWidget>
+
+        <StatsWidget title="Ответственные по задачам">
+          <ul v-if="isMobile && responsiblesData.length" class="m-list">
+            <li v-for="r in responsiblesData" :key="r.user_id || r.id" class="m-row">
+              <div class="m-row-main">
+                <img class="m-avatar" :src="avatarOf(r)" :alt="r.fio" />
+                <div class="m-row-text">
+                  <span class="m-row-title">{{ r.fio }}</span>
+                  <span v-if="r.post" class="m-row-sub">{{ r.post }}</span>
+                </div>
+              </div>
+              <div class="m-row-tail">
+                <span class="m-chip chip-primary" :title="'Открытые'">{{ r.open_count }}</span>
+                <span class="m-chip chip-success" :title="'Закрытые'">{{ r.closed_count }}</span>
+              </div>
+            </li>
+          </ul>
+          <div v-else-if="responsiblesData.length" class="table-scroll">
+            <DataTable :value="responsiblesData" size="small" :show-gridlines="false">
+              <Column field="fio" header="Сотрудник">
+                <template #body="{ data }">
+                  <div class="resp-cell">
+                    <img class="resp-ava" :src="avatarOf(data)" :alt="data.fio" />
+                    <div class="resp-info">
+                      <div class="resp-fio">{{ data.fio }}</div>
+                      <div v-if="data.post" class="resp-post">{{ data.post }}</div>
+                    </div>
+                  </div>
+                </template>
+              </Column>
+              <Column header="Открытые" style="width:120px">
+                <template #body="{ data }">
+                  <span class="resp-num open">{{ data.open_count }}</span>
+                </template>
+              </Column>
+              <Column header="Закрытые" style="width:120px">
+                <template #body="{ data }">
+                  <span class="resp-num closed">{{ data.closed_count }}</span>
+                </template>
+              </Column>
+            </DataTable>
+          </div>
+          <div v-else class="user-tasks-empty">Нет назначенных ответственных</div>
         </StatsWidget>
 
         <StatsWidget title="Задачи с участием сотрудника" class="full-width">
@@ -99,7 +183,20 @@
             <ProgressSpinner style="width:28px;height:28px" />
           </div>
           <template v-else-if="userTasksData">
-            <div class="table-scroll">
+            <ul v-if="isMobile" class="m-list">
+              <li
+                v-for="(row, i) in userTasksData.tasks || []"
+                :key="i"
+                class="m-row"
+              >
+                <div class="m-row-main">
+                  <span class="m-row-title">{{ row.task_name }}</span>
+                </div>
+                <span class="m-chip chip-tertiary">{{ roundHours(row.total_hours) }}</span>
+              </li>
+              <li v-if="!(userTasksData.tasks || []).length" class="m-empty">Нет данных</li>
+            </ul>
+            <div v-else class="table-scroll">
               <DataTable :value="userTasksData.tasks || []" size="small" :show-gridlines="false">
                 <Column field="task_name" header="Задача" />
                 <Column header="Время" style="width:110px">
@@ -120,7 +217,21 @@
     <template v-else-if="mode === 'extended' && extendedData">
       <div class="stats-grid">
         <StatsWidget title="По типам юнитов">
-          <div class="table-scroll">
+          <ul v-if="isMobile" class="m-list">
+            <li
+              v-for="(row, i) in extendedData.by_unit_types || []"
+              :key="i"
+              class="m-row"
+            >
+              <div class="m-row-main">
+                <span class="m-row-title">{{ row.name }}</span>
+                <span class="m-row-sub">{{ row.tasks_count }} задач</span>
+              </div>
+              <span class="m-chip chip-tertiary">{{ roundHours(row.total_hours) }}</span>
+            </li>
+            <li v-if="!(extendedData.by_unit_types || []).length" class="m-empty">Нет данных</li>
+          </ul>
+          <div v-else class="table-scroll">
             <DataTable :value="extendedData.by_unit_types || []" size="small" :show-gridlines="false">
               <Column field="name" header="Тип" />
               <Column header="Время" style="width:100px">
@@ -132,7 +243,20 @@
         </StatsWidget>
 
         <StatsWidget title="По отделам">
-          <div class="table-scroll">
+          <ul v-if="isMobile" class="m-list">
+            <li
+              v-for="(row, i) in extendedData.by_departments || []"
+              :key="i"
+              class="m-row"
+            >
+              <div class="m-row-main">
+                <span class="m-row-title">{{ row.name }}</span>
+              </div>
+              <span class="m-chip chip-primary">{{ row.tasks_count }}</span>
+            </li>
+            <li v-if="!(extendedData.by_departments || []).length" class="m-empty">Нет данных</li>
+          </ul>
+          <div v-else class="table-scroll">
             <DataTable :value="extendedData.by_departments || []" size="small" :show-gridlines="false">
               <Column field="name" header="Отдел" />
               <Column field="tasks_count" header="Задачи" style="width:100px" />
@@ -141,7 +265,21 @@
         </StatsWidget>
 
         <StatsWidget title="По типам юнитов для пользователей" class="full-width">
-          <div class="table-scroll">
+          <ul v-if="isMobile" class="m-list">
+            <li
+              v-for="(row, i) in flatUserTypes"
+              :key="i"
+              class="m-row"
+            >
+              <div class="m-row-main">
+                <span class="m-row-title">{{ row.fio }}</span>
+                <span class="m-row-sub">{{ row.type_name }} • {{ row.tasks_count }} задач</span>
+              </div>
+              <span class="m-chip chip-tertiary">{{ roundHours(row.hours) }}</span>
+            </li>
+            <li v-if="!flatUserTypes.length" class="m-empty">Нет данных</li>
+          </ul>
+          <div v-else class="table-scroll">
             <DataTable :value="flatUserTypes" size="small" :show-gridlines="false">
               <Column field="fio" header="Пользователь" />
               <Column field="type_name" header="Тип" />
@@ -164,14 +302,16 @@
       <span class="material-symbols-outlined">bar_chart</span>
       <p>Нет данных за выбранный период</p>
     </div>
+    </div>
   </div>
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import { usePermission, ROLES } from '@/composables/usePermission.js'
 import { useAuthStore } from '@/stores/auth.js'
 import { useNotificationsStore } from '@/stores/notifications.js'
+import { useBreakpoint } from '@/composables/useBreakpoint.js'
 import {
   getStatsCommon,
   getStatsExtended,
@@ -179,11 +319,14 @@ import {
   exportStatsExtended,
   getStatsUserTasks,
   getStatsEmployees,
+  getStatsResponsibles,
 } from '@/api/stats.js'
 import { formatHours } from '@/utils/time.js'
+import { useCompaniesStore } from '@/stores/companies.js'
 import StatsPeriodControl from '@/components/stats/StatsPeriodControl.vue'
 import StatsWidget from '@/components/stats/StatsWidget.vue'
 import CalendarGrid from '@/components/stats/CalendarGrid.vue'
+import SegmentedTabs from '@/components/common/SegmentedTabs.vue'
 import DataTable from 'primevue/datatable'
 import Column from 'primevue/column'
 import ProgressSpinner from 'primevue/progressspinner'
@@ -192,6 +335,7 @@ import Select from 'primevue/select'
 const { isAtLeast } = usePermission()
 const authStore = useAuthStore()
 const notif = useNotificationsStore()
+const { isMobile } = useBreakpoint()
 
 const mode = ref('common')
 const loading = ref(false)
@@ -205,11 +349,25 @@ const canExport = computed(() => isAtLeast(ROLES.MANAGER))
 const canExportUsers = computed(() => isAtLeast(ROLES.MANAGER))
 const canSelectEmployee = computed(() => isAtLeast(ROLES.MANAGER))
 
+const modeTabs = [
+  { value: 'common', label: 'Общая', icon: 'dashboard', tutorial: 'stats-tab-common' },
+  { value: 'extended', label: 'Расширенная', icon: 'analytics', tutorial: 'stats-tab-extended' },
+]
+
 const userTasksData = ref(null)
 const userTasksLoading = ref(false)
 const employees = ref([])
 const employeesLoading = ref(false)
 const selectedEmployeeId = ref(null)
+const responsiblesData = ref([])
+
+const companies = useCompaniesStore()
+const activeCompanyId = computed(() =>
+  authStore.isRootAdmin ? companies.activeCompanyId : authStore.companyId)
+
+function avatarOf(u) {
+  return u.avatar_path ? `/uploads/${u.avatar_path}` : `/api/users/${u.user_id || u.id}/identicon`
+}
 
 const flatUserTypes = computed(() => {
   if (!extendedData.value?.by_unit_types_per_user) return []
@@ -234,11 +392,12 @@ function roundHours(val) {
 async function loadData() {
   if (!currentFrom.value || !currentTo.value) return
   loading.value = true
+  const cid = activeCompanyId.value
   try {
     if (mode.value === 'common') {
-      commonData.value = await getStatsCommon(currentFrom.value, currentTo.value)
+      commonData.value = await getStatsCommon(currentFrom.value, currentTo.value, cid)
     } else {
-      extendedData.value = await getStatsExtended(currentFrom.value, currentTo.value)
+      extendedData.value = await getStatsExtended(currentFrom.value, currentTo.value, cid)
     }
   } catch (e) {
     notif.error(e.message || 'Ошибка загрузки статистики')
@@ -247,6 +406,7 @@ async function loadData() {
   }
   if (mode.value === 'common') {
     loadUserTasks()
+    loadResponsibles()
   }
 }
 
@@ -263,6 +423,14 @@ async function loadUserTasks() {
   }
 }
 
+async function loadResponsibles() {
+  try {
+    responsiblesData.value = await getStatsResponsibles(activeCompanyId.value)
+  } catch {
+    responsiblesData.value = []
+  }
+}
+
 function onPeriodChange({ from, to }) {
   currentFrom.value = from
   currentTo.value = to
@@ -275,20 +443,31 @@ function switchMode(m) {
 }
 
 async function handleExportCommon() {
-  return exportStatsCommon(currentFrom.value, currentTo.value)
+  return exportStatsCommon(currentFrom.value, currentTo.value, activeCompanyId.value)
 }
 
-onMounted(async () => {
-  if (canSelectEmployee.value) {
-    employeesLoading.value = true
-    try {
-      employees.value = await getStatsEmployees()
-    } catch {
-      employees.value = []
-    } finally {
-      employeesLoading.value = false
-    }
+async function loadEmployees() {
+  if (!canSelectEmployee.value) return
+  employeesLoading.value = true
+  try {
+    employees.value = await getStatsEmployees(activeCompanyId.value)
+  } catch {
+    employees.value = []
+  } finally {
+    employeesLoading.value = false
   }
+}
+
+watch(activeCompanyId, () => {
+  loadData()
+  loadEmployees()
+})
+
+onMounted(async () => {
+  if (authStore.isRootAdmin) {
+    await companies.load()
+  }
+  loadEmployees()
 })
 </script>
 
@@ -296,13 +475,39 @@ onMounted(async () => {
 .stats-view {
   display: flex;
   flex-direction: column;
-  gap: 20px;
-  padding: 24px;
   height: 100%;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.stats-sticky {
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 24px 24px 12px;
+  background: var(--color-bg, var(--color-surface));
+  border-bottom: 1px solid var(--color-outline-dim);
+  z-index: 2;
+}
+
+.stats-scroll {
+  flex: 1;
+  min-height: 0;
   overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 20px 24px;
 }
 
 .stats-header {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.stats-title-row {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -310,72 +515,40 @@ onMounted(async () => {
   flex-wrap: wrap;
 }
 
-.stats-header h1 {
+.stats-title-row h1 {
   margin: 0;
   font-size: 24px;
   font-weight: 800;
-  color: var(--gw-text);
-}
-
-.stats-header-actions {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  flex-wrap: wrap;
+  letter-spacing: -0.02em;
+  color: var(--color-text);
 }
 
 .tv-link-btn {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  padding: 8px 16px;
+  gap: 8px;
+  padding: 10px 18px;
+  min-height: 44px;
   border: 1px solid var(--color-outline-dim);
-  border-radius: 999px;
+  border-radius: var(--radius-full);
   background: var(--color-surface);
   color: var(--color-text);
   font-size: 13px;
   font-weight: 600;
   cursor: pointer;
   text-decoration: none;
-  transition: background 0.12s, color 0.12s, border-color 0.12s;
+  transition: background 0.15s, color 0.15s, border-color 0.15s, box-shadow 0.15s;
 }
 
 .tv-link-btn:hover {
   background: var(--color-primary);
   color: var(--color-on-primary);
   border-color: var(--color-primary);
+  box-shadow: var(--shadow-sm);
 }
 
 .tv-link-btn .material-symbols-outlined {
-  font-size: 18px;
-}
-
-.stats-mode-toggle {
-  display: flex;
-  border: 1px solid var(--gw-border);
-  border-radius: 10px;
-  overflow: hidden;
-}
-
-.stats-mode-toggle button {
-  padding: 8px 24px;
-  background: transparent;
-  border: none;
-  cursor: pointer;
-  font-size: 14px;
-  color: var(--gw-text-secondary);
-  transition: background 0.15s, color 0.15s;
-}
-
-.stats-mode-toggle button.active {
-  background: var(--gw-primary);
-  color: var(--color-on-primary);
-  font-weight: 600;
-}
-
-.stats-mode-toggle button:hover:not(.active) {
-  background: var(--gw-bg);
-  color: var(--gw-text);
+  font-size: 20px;
 }
 
 .loading-state {
@@ -385,18 +558,66 @@ onMounted(async () => {
   padding: 80px;
 }
 
+.resp-cell {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.resp-ava {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  object-fit: cover;
+  flex-shrink: 0;
+}
+.resp-info { min-width: 0; }
+.resp-fio {
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--color-text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.resp-post {
+  font-size: 11.5px;
+  color: var(--color-text-dim);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.resp-num {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 36px;
+  height: 26px;
+  padding: 0 10px;
+  border-radius: 13px;
+  font-weight: 700;
+  font-size: 13px;
+}
+.resp-num.open {
+  background: var(--color-primary-container);
+  color: var(--color-on-primary-container);
+}
+.resp-num.closed {
+  background: var(--color-success-container, var(--color-surface-high));
+  color: var(--color-on-success-container, var(--color-success));
+}
+
 .empty-state {
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: 12px;
   padding: 80px;
-  color: var(--gw-text-secondary);
+  color: var(--color-text-dim);
 }
 
 .empty-state .material-symbols-outlined {
   font-size: 56px;
-  color: var(--gw-border);
+  color: var(--color-outline-dim);
 }
 
 .empty-state p {
@@ -415,49 +636,167 @@ onMounted(async () => {
   --widget-max-height: 520px;
 }
 
-/* Числа задач за период */
-.task-numbers {
-  display: flex;
-  gap: 24px;
-  flex-wrap: wrap;
-  padding: 8px 0;
+/* === Задачи за период — M3 Expressive tiles === */
+.task-tiles {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: 12px;
+  padding: 4px 0;
 }
 
-.task-num {
+.task-tile {
+  position: relative;
   display: flex;
   flex-direction: column;
-  align-items: center;
-  gap: 4px;
-  min-width: 80px;
+  align-items: flex-start;
+  gap: 6px;
+  padding: 16px 18px;
+  border-radius: var(--radius-xl, 20px);
+  background: var(--tone-bg, var(--color-surface-high));
+  color: var(--tone-fg, var(--color-text));
+  min-height: 96px;
+  overflow: hidden;
+  transition: transform 0.18s, box-shadow 0.18s;
 }
 
-.task-num .num {
-  font-size: 28px;
+.task-tile:hover {
+  box-shadow: var(--shadow-sm);
+}
+
+.task-tile .tile-icon {
+  font-size: 22px;
+  font-variation-settings: 'FILL' 1, 'wght' 500, 'GRAD' 0, 'opsz' 24;
+  opacity: 0.85;
+}
+
+.task-tile .tile-num {
+  font-size: 32px;
   font-weight: 800;
   line-height: 1;
-  color: var(--gw-text);
+  letter-spacing: -0.02em;
 }
 
-.task-num .label {
+.task-tile .tile-label {
+  font-size: 12.5px;
+  font-weight: 600;
+  opacity: 0.78;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.task-tile.tone-warning {
+  --tone-bg: var(--color-warning-container, var(--color-tertiary-container));
+  --tone-fg: var(--color-on-warning-container, var(--color-on-tertiary-container));
+}
+.task-tile.tone-success {
+  --tone-bg: var(--color-success-container);
+  --tone-fg: var(--color-on-success-container);
+}
+.task-tile.tone-error {
+  --tone-bg: var(--color-error-container);
+  --tone-fg: var(--color-on-error-container);
+}
+.task-tile.tone-tertiary {
+  --tone-bg: var(--color-tertiary-container);
+  --tone-fg: var(--color-on-tertiary-container);
+}
+
+/* === Мобильные list-row карточки === */
+.m-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.m-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  min-height: 56px;
+  background: var(--color-surface-high);
+  border-radius: var(--radius-lg, 16px);
+}
+
+.m-row-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.m-row-text {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.m-row-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--color-text);
+  word-break: break-word;
+  overflow-wrap: anywhere;
+  line-height: 1.25;
+}
+
+.m-row-sub {
   font-size: 12px;
-  color: var(--gw-text-secondary);
+  color: var(--color-text-dim);
+  line-height: 1.2;
+}
+
+.m-row-tail {
+  display: flex;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.m-avatar {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  object-fit: cover;
+  flex-shrink: 0;
+}
+
+.m-chip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 44px;
+  height: 30px;
+  padding: 0 12px;
+  border-radius: var(--radius-full);
+  font-weight: 700;
+  font-size: 13px;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.m-chip.chip-primary {
+  background: var(--color-primary-container);
+  color: var(--color-on-primary-container);
+}
+.m-chip.chip-success {
+  background: var(--color-success-container);
+  color: var(--color-on-success-container);
+}
+.m-chip.chip-tertiary {
+  background: var(--color-tertiary-container);
+  color: var(--color-on-tertiary-container);
+}
+
+.m-empty {
+  padding: 24px 12px;
   text-align: center;
-}
-
-.task-num.positive .num {
-  color: var(--color-success);
-}
-
-.task-num.negative .num {
-  color: var(--color-error);
-}
-
-.task-num.debt .num {
-  color: var(--gw-primary);
-}
-
-.task-num.remaining .num {
-  color: var(--color-tertiary);
+  color: var(--color-text-dim);
+  font-size: 13px;
 }
 
 /* Горизонтальный скролл для таблиц */
@@ -484,42 +823,110 @@ onMounted(async () => {
 .user-tasks-total {
   margin-top: 10px;
   font-size: 13px;
-  color: var(--gw-text-secondary);
+  color: var(--color-text-dim);
   text-align: right;
 }
 
 .user-tasks-total strong {
-  color: var(--gw-text);
+  color: var(--color-text);
 }
 
 .user-tasks-empty {
   text-align: center;
   padding: 20px;
-  color: var(--gw-text-secondary);
+  color: var(--color-text-dim);
   font-size: 14px;
 }
 
 @media (max-width: 768px) {
-  .stats-view {
-    padding: 12px;
-    padding-bottom: calc(60px + 12px + env(safe-area-inset-bottom, 0px));
+  .stats-sticky {
+    padding: 12px 14px 10px;
+    gap: 6px;
+  }
+
+  .stats-scroll {
+    padding: 12px 14px;
+    padding-bottom: calc(64px + 12px + env(safe-area-inset-bottom, 0px));
     gap: 12px;
   }
 
-  .stats-header h1 {
-    font-size: 20px;
+  .stats-title-row h1 {
+    font-size: 22px;
   }
 
   .stats-grid {
     grid-template-columns: 1fr;
-  }
-
-  .task-numbers {
     gap: 12px;
   }
 
-  .task-num .num {
-    font-size: 24px;
+  .task-tiles {
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+  }
+
+  .task-tile {
+    padding: 14px;
+    min-height: 92px;
+  }
+
+  .task-tile .tile-num {
+    font-size: 28px;
+  }
+}
+
+@media (max-width: 480px) {
+  .stats-sticky {
+    padding: 10px 12px 8px;
+  }
+
+  .stats-scroll {
+    padding: 10px 12px;
+    padding-bottom: calc(64px + 12px + env(safe-area-inset-bottom, 0px));
+  }
+
+  .stats-title-row h1 {
+    font-size: 20px;
+  }
+
+  .tv-link-btn {
+    padding: 0;
+    width: 44px;
+    height: 44px;
+    min-height: 44px;
+    justify-content: center;
+    gap: 0;
+  }
+
+  .tv-link-label {
+    display: none;
+  }
+
+  .task-tile {
+    padding: 12px;
+    min-height: 88px;
+  }
+
+  .task-tile .tile-num {
+    font-size: 26px;
+  }
+
+  .task-tile .tile-label {
+    font-size: 11px;
+  }
+
+  .m-row {
+    padding: 10px 12px;
+  }
+
+  .m-avatar {
+    width: 32px;
+    height: 32px;
+  }
+}
+
+@media (max-width: 360px) {
+  .task-tiles {
+    grid-template-columns: 1fr;
   }
 }
 </style>

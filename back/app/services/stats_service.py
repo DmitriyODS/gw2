@@ -1,14 +1,15 @@
 from datetime import datetime
+from typing import Optional
 from io import BytesIO
 import openpyxl
-from openpyxl.styles import Font, Alignment
 from app.repositories import stats_repo
 
 
-def get_common(period_start: datetime, period_end: datetime) -> dict:
-    metrics = stats_repo.get_common_metrics(period_start, period_end)
-    by_hours = stats_repo.get_tasks_by_hours(period_start, period_end)
-    by_employees = stats_repo.get_tasks_by_employees(period_start, period_end)
+def get_common(period_start: datetime, period_end: datetime,
+               company_id: Optional[int] = None) -> dict:
+    metrics = stats_repo.get_common_metrics(period_start, period_end, company_id)
+    by_hours = stats_repo.get_tasks_by_hours(period_start, period_end, company_id)
+    by_employees = stats_repo.get_tasks_by_employees(period_start, period_end, company_id)
     return {
         "period": {"from": period_start.date().isoformat(), "to": period_end.date().isoformat()},
         "tasks": metrics,
@@ -17,13 +18,18 @@ def get_common(period_start: datetime, period_end: datetime) -> dict:
     }
 
 
-def get_extended(period_start: datetime, period_end: datetime) -> dict:
+def get_extended(period_start: datetime, period_end: datetime,
+                 company_id: Optional[int] = None) -> dict:
     return {
-        "by_unit_types": stats_repo.get_by_unit_types(period_start, period_end),
-        "by_departments": stats_repo.get_by_departments(period_start, period_end),
-        "by_unit_types_per_user": stats_repo.get_by_unit_types_per_user(period_start, period_end),
-        "calendar": stats_repo.get_calendar(period_start, period_end),
+        "by_unit_types": stats_repo.get_by_unit_types(period_start, period_end, company_id),
+        "by_departments": stats_repo.get_by_departments(period_start, period_end, company_id),
+        "by_unit_types_per_user": stats_repo.get_by_unit_types_per_user(period_start, period_end, company_id),
+        "calendar": stats_repo.get_calendar(period_start, period_end, company_id),
     }
+
+
+def get_responsibles(company_id: Optional[int] = None) -> list[dict]:
+    return stats_repo.get_responsibles(company_id)
 
 
 def get_user_tasks(user_id: int, period_start: datetime, period_end: datetime) -> dict:
@@ -38,8 +44,9 @@ def get_profile(user_id: int, period_start: datetime, period_end: datetime) -> d
     }
 
 
-def export_common_xlsx(period_start: datetime, period_end: datetime) -> BytesIO:
-    data = get_common(period_start, period_end)
+def export_common_xlsx(period_start: datetime, period_end: datetime,
+                       company_id: Optional[int] = None) -> BytesIO:
+    data = get_common(period_start, period_end, company_id)
     wb = openpyxl.Workbook()
 
     ws1 = wb.active
@@ -66,8 +73,9 @@ def export_common_xlsx(period_start: datetime, period_end: datetime) -> BytesIO:
     return buf
 
 
-def export_extended_xlsx(period_start: datetime, period_end: datetime) -> BytesIO:
-    data = get_extended(period_start, period_end)
+def export_extended_xlsx(period_start: datetime, period_end: datetime,
+                         company_id: Optional[int] = None) -> BytesIO:
+    data = get_extended(period_start, period_end, company_id)
     wb = openpyxl.Workbook()
 
     ws1 = wb.active
