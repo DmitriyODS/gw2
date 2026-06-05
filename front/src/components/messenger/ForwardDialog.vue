@@ -1,71 +1,64 @@
 <template>
-  <Dialog
-    :visible="modelValue"
-    @update:visible="$emit('update:modelValue', $event)"
-    modal
-    header="Переслать сообщение"
-    :draggable="false"
-    :style="{ width: '440px', maxWidth: '92vw' }"
+  <AppDialog
+    :model-value="modelValue"
+    tone="primary"
+    icon="forward"
+    size="sm"
+    title="Переслать сообщение"
+    :busy="sending"
+    :actions="dialogActions"
+    @update:model-value="$emit('update:modelValue', $event)"
+    @confirm="confirm"
   >
-    <div class="fwd">
-      <div v-if="preview" class="fwd-preview">
-        <span class="material-symbols-outlined">forward</span>
-        <span class="fwd-preview-text">{{ preview }}</span>
-      </div>
-
-      <div class="fwd-search">
-        <span class="material-symbols-outlined">search</span>
-        <input
-          v-model="q"
-          placeholder="Кому переслать — имя или логин"
-          class="fwd-input"
-          autofocus
-        />
-      </div>
-
-      <div v-if="loading" class="fwd-empty">
-        <ProgressSpinner style="width:32px;height:32px" />
-      </div>
-      <div v-else-if="!items.length" class="fwd-empty">
-        <span class="material-symbols-outlined">person_search</span>
-        <p>{{ q ? 'Никого не нашли' : 'Начните вводить' }}</p>
-      </div>
-      <ul v-else class="fwd-list">
-        <li
-          v-for="u in items"
-          :key="u.id"
-          class="fwd-item"
-          :class="{ selected: selectedIds.has(u.id) }"
-          @click="toggle(u.id)"
-        >
-          <img class="fwd-avatar" :src="avatarOf(u)" :alt="u.fio" />
-          <div class="fwd-info">
-            <div class="fwd-name">{{ u.fio }}</div>
-            <div class="fwd-meta">@{{ u.login }} · {{ u.post || u.role?.name }}</div>
-          </div>
-          <span class="fwd-check">
-            <span class="material-symbols-outlined">
-              {{ selectedIds.has(u.id) ? 'check_circle' : 'radio_button_unchecked' }}
-            </span>
-          </span>
-        </li>
-      </ul>
-
-      <div class="fwd-actions">
-        <button class="btn-text" @click="cancel">Отмена</button>
-        <button class="btn-filled" :disabled="!selectedIds.size || sending" @click="confirm">
-          <span class="material-symbols-outlined">send</span>
-          Переслать{{ selectedIds.size ? ` (${selectedIds.size})` : '' }}
-        </button>
-      </div>
+    <div v-if="preview" class="fwd-preview">
+      <span class="material-symbols-outlined">forward</span>
+      <span class="fwd-preview-text">{{ preview }}</span>
     </div>
-  </Dialog>
+
+    <div class="fwd-search">
+      <span class="material-symbols-outlined">search</span>
+      <input
+        v-model="q"
+        placeholder="Кому переслать — имя или логин"
+        class="fwd-input"
+        autofocus
+      />
+    </div>
+
+    <div v-if="loading" class="fwd-empty">
+      <ProgressSpinner style="width:32px;height:32px" />
+    </div>
+    <div v-else-if="!items.length" class="fwd-empty">
+      <span class="material-symbols-outlined">person_search</span>
+      <p>{{ q ? 'Никого не нашли' : 'Начните вводить' }}</p>
+    </div>
+    <ul v-else class="fwd-list">
+      <li
+        v-for="u in items"
+        :key="u.id"
+        class="fwd-item"
+        :class="{ selected: selectedIds.has(u.id) }"
+        @click="toggle(u.id)"
+      >
+        <img class="fwd-avatar" :src="avatarOf(u)" :alt="u.fio" />
+        <div class="fwd-info">
+          <div class="fwd-name">{{ u.fio }}</div>
+          <div class="fwd-meta">@{{ u.login }} · {{ u.post || u.role?.name }}</div>
+        </div>
+        <span class="fwd-check">
+          <span class="material-symbols-outlined">
+            {{ selectedIds.has(u.id) ? 'check_circle' : 'radio_button_unchecked' }}
+          </span>
+        </span>
+      </li>
+    </ul>
+  </AppDialog>
 </template>
 
 <script setup>
 import { ref, computed, watch } from 'vue'
-import Dialog from 'primevue/dialog'
 import ProgressSpinner from 'primevue/progressspinner'
+import AppDialog from '@/components/common/AppDialog.vue'
 import { getDirectory } from '@/api/users.js'
 
 const props = defineProps({
@@ -91,6 +84,16 @@ const preview = computed(() => {
   if (m.attachments?.length) return 'Вложение'
   return 'Сообщение'
 })
+
+const dialogActions = computed(() => [
+  { kind: 'cancel', label: 'Отмена' },
+  {
+    kind: 'confirm',
+    label: 'Переслать' + (selectedIds.value.size ? ` (${selectedIds.value.size})` : ''),
+    icon: 'send',
+    disabled: !selectedIds.value.size || sending.value,
+  },
+])
 
 async function search() {
   loading.value = true
@@ -124,10 +127,6 @@ function toggle(id) {
 
 function avatarOf(u) {
   return u.avatar_path ? `/uploads/${u.avatar_path}` : `/api/users/${u.id}/identicon`
-}
-
-function cancel() {
-  emit('update:modelValue', false)
 }
 
 async function confirm() {
@@ -259,44 +258,4 @@ defineExpose({ stopSending: () => { sending.value = false } })
 }
 
 .fwd-empty .material-symbols-outlined { font-size: 40px; }
-
-.fwd-actions {
-  display: flex;
-  justify-content: flex-end;
-  gap: 6px;
-}
-
-.btn-text {
-  background: none;
-  border: none;
-  color: var(--color-primary);
-  font: inherit;
-  font-size: 14px;
-  font-weight: 600;
-  padding: 10px 16px;
-  border-radius: var(--radius-full);
-  cursor: pointer;
-}
-
-.btn-text:hover { background: var(--color-surface-low); }
-
-.btn-filled {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  border: none;
-  background: var(--color-primary);
-  color: var(--color-on-primary);
-  font: inherit;
-  font-size: 14px;
-  font-weight: 600;
-  padding: 10px 18px 10px 14px;
-  border-radius: var(--radius-full);
-  cursor: pointer;
-  transition: background 0.15s, opacity 0.15s;
-}
-
-.btn-filled:disabled { opacity: 0.5; cursor: not-allowed; }
-.btn-filled:not(:disabled):hover { background: var(--color-primary-hover); }
-.btn-filled .material-symbols-outlined { font-size: 18px; }
 </style>

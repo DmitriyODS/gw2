@@ -23,8 +23,8 @@
           <span class="material-symbols-outlined">support_agent</span>
         </div>
         <div class="about-card-text">
-          <h4>Написать в техподдержку</h4>
-          <p>Сообщить разработчикам об ошибке или предложить улучшение. Ответ придёт прямо в мессенджер.</p>
+          <h4>Чат с техподдержкой</h4>
+          <p>Личный диалог с командой разработчиков. Опишите проблему или предложите улучшение — ответ придёт прямо сюда, в мессенджер.</p>
         </div>
         <span class="material-symbols-outlined about-card-chev">chevron_right</span>
       </button>
@@ -47,13 +47,14 @@
 import { ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { version as appVersion } from '../../../package.json'
-import { openDevChat } from '@/api/messenger.js'
+import { useMessengerStore } from '@/stores/messenger.js'
 import { useNotificationsStore } from '@/stores/notifications.js'
 import { useChangelog } from '@/composables/useChangelog.js'
 import { useTutorial } from '@/composables/useTutorial.js'
 import Logo from '@/components/common/Logo.vue'
 
 const router = useRouter()
+const messenger = useMessengerStore()
 const notif = useNotificationsStore()
 const changelog = useChangelog()
 const tutorial = useTutorial()
@@ -63,8 +64,10 @@ const opening = ref(false)
 async function openSupport() {
   opening.value = true
   try {
-    const conv = await openDevChat()
-    router.push(`/messenger/${conv.id}`)
+    // Открываем личный dev-чат пользователя — бэк создаёт его при первом
+    // обращении. id возвращается сразу, навигация — на /messenger/<id>.
+    const convId = await messenger.openDevChat()
+    router.push(`/messenger/${convId}`)
   } catch (e) {
     notif.error(e.message || 'Не удалось открыть чат техподдержки')
   } finally {

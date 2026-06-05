@@ -46,44 +46,34 @@ def open_conversation(current_user_id: int, other_user_id: int):
 
 
 def open_dev_chat(current_user_id: int):
-    """Открыть/создать спец-чат компании с разработчиками. У каждого сотрудника
-    свой спец-чат через его company. Администратор системы вызывать не должен
-    (он использует list_dev_chats / открывает чат конкретной компании)."""
+    """Открыть/создать ЛИЧНЫЙ чат пользователя с техподдержкой. У каждого
+    сотрудника — свой dev-чат. Администратор системы своего чата не имеет
+    (он отвечает в чужие через support-inbox)."""
     me = user_repo.get_by_id(current_user_id)
     if me is None:
         raise MessengerServiceError("Пользователь не найден", "USER_NOT_FOUND", 404)
     if me.company_id is None:
         raise MessengerServiceError(
-            "У Администратора системы нет своего спец-чата",
+            "У Администратора системы нет своего чата с техподдержкой",
             "ADMIN_HAS_NO_DEVCHAT", 400,
         )
-    conv = message_repo.get_or_create_dev_chat(me.company_id)
-    db.session.commit()
-    return conv
-
-
-def open_dev_chat_for_company(current_user_id: int, company_id: int):
-    """Открыть/создать спец-чат для компании от имени Администратора системы."""
-    me = user_repo.get_by_id(current_user_id)
-    if me is None or me.company_id is not None:
-        raise MessengerServiceError("Только Администратор системы", "FORBIDDEN", 403)
-    conv = message_repo.get_or_create_dev_chat(company_id)
+    conv = message_repo.get_or_create_dev_chat_for_user(me.id, me.company_id)
     db.session.commit()
     return conv
 
 
 def _ensure_member(conv, user_id: int):
     """Проверяет доступ к диалогу. Для p2p — только участники. Для dev-чата —
-    сотрудники компании chat'а + Администраторы системы."""
+    владелец (user_a_id) + любой Администратор системы."""
     if conv.is_dev_chat:
+        if conv.user_a_id == user_id:
+            return  # владелец
         user = user_repo.get_by_id(user_id)
         if user is None:
             raise MessengerServiceError("Нет доступа к диалогу", "FORBIDDEN", 403)
         if user.company_id is None:
-            return  # Администратор системы
-        if user.company_id != conv.company_id:
-            raise MessengerServiceError("Нет доступа к диалогу", "FORBIDDEN", 403)
-        return
+            return  # Администратор системы (техподдержка)
+        raise MessengerServiceError("Нет доступа к диалогу", "FORBIDDEN", 403)
     if user_id not in (conv.user_a_id, conv.user_b_id):
         raise MessengerServiceError("Нет доступа к диалогу", "FORBIDDEN", 403)
 
@@ -159,8 +149,9 @@ def forward_message(source_message_id: int, sender_id: int,
     if src is None:
         raise MessengerServiceError("Сообщение не найдено", "MSG_NOT_FOUND", 404)
     src_conv = message_repo.get_conversation(src.conversation_id)
-    if src_conv is None or sender_id not in (src_conv.user_a_id, src_conv.user_b_id):
-        raise MessengerServiceError("Нет доступа к сообщению", "FORBIDDEN", 403)
+    if src_conv is None:
+        raise MessengerServiceError("Диалог не найден", "CONV_NOT_FOUND", 404)
+    _ensure_member(src_conv, sender_id)
 
     # Соберём целевые диалоги: явные id + диалоги с указанными пользователями.
     target_convs: list = []
@@ -264,8 +255,9 @@ def delete_message(message_id: int, user_id: int, scope: str) -> tuple[int, bool
     if msg is None:
         raise MessengerServiceError("Сообщение не найдено", "MSG_NOT_FOUND", 404)
     conv = message_repo.get_conversation(msg.conversation_id)
-    if conv is None or user_id not in (conv.user_a_id, conv.user_b_id):
-        raise MessengerServiceError("Нет доступа к сообщению", "FORBIDDEN", 403)
+    if conv is None:
+        raise MessengerServiceError("Диалог не найден", "CONV_NOT_FOUND", 404)
+    _ensure_member(conv, user_id)
 
     physically_removed = False
 
@@ -307,6 +299,11 @@ def delete_conversation(conversation_id: int, user_id: int, scope: str) -> bool:
     видеть переписку до своего удаления) или 'all' (физически удалить
     у обоих). Возвращает True, если диалог физически удалён."""
     conv = get_conversation_for_user(conversation_id, user_id)
+    # Чат техподдержки удалять нельзя — он живёт сколько живёт владелец.
+    if conv.is_dev_chat:
+        raise MessengerServiceError(
+            "Чат техподдержки удалить нельзя", "DEV_CHAT_UNDELETABLE", 400,
+        )
 
     if scope == 'all':
         paths = message_repo.list_attachment_paths_of_conversation(conv.id)
@@ -354,8 +351,9 @@ def toggle_message_pin(message_id: int, user_id: int):
     if msg is None:
         raise MessengerServiceError("Сообщение не найдено", "MSG_NOT_FOUND", 404)
     conv = message_repo.get_conversation(msg.conversation_id)
-    if conv is None or user_id not in (conv.user_a_id, conv.user_b_id):
-        raise MessengerServiceError("Нет доступа к сообщению", "FORBIDDEN", 403)
+    if conv is None:
+        raise MessengerServiceError("Диалог не найден", "CONV_NOT_FOUND", 404)
+    _ensure_member(conv, user_id)
     # Системные плашки звонка закреплять незачем.
     if msg.kind != "text":
         raise MessengerServiceError("Это сообщение нельзя закрепить", "BAD_PIN", 400)

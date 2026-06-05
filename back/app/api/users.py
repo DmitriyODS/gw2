@@ -398,6 +398,38 @@ def assign_role(user_id: int):
     return jsonify(_user_schema.dump(user)), 200
 
 
+@bp.post("/<int:user_id>/reset-password")
+@require_role(DIRECTOR)
+def reset_user_password(user_id: int):
+    """
+    Сбросить пароль пользователя на дефолтный (admin).
+    При следующем входе пользователь будет обязан сменить пароль.
+    ---
+    tags: [users]
+    security: [BearerAuth: []]
+    parameters:
+      - in: path
+        name: user_id
+        schema: {type: integer}
+        required: true
+    responses:
+      200:
+        description: Пароль сброшен
+      403:
+        description: Нет прав
+      422:
+        description: Бизнес-правило нарушено
+    """
+    current_user_id = int(get_jwt_identity())
+    current_user = user_repo.get_by_id(current_user_id)
+    try:
+        user_service.reset_password(user_id, current_user_id, get_user_level(current_user))
+    except UserServiceError as e:
+        return jsonify({"error": e.code, "message": e.message}), e.http_status
+
+    return jsonify({"message": "Пароль сброшен"}), 200
+
+
 @bp.get("/<int:user_id>/identicon")
 def get_identicon(user_id: int):
     """

@@ -54,10 +54,8 @@ export const togglePinMessage = (messageId) =>
 export const listPinnedMessages = (conversationId) =>
   apiRequest(`/messenger/conversations/${conversationId}/pinned`)
 
-export const openDevChat = (companyId = null) => {
-  const qs = companyId ? `?company_id=${companyId}` : ''
-  return apiRequest(`/messenger/dev-chat${qs}`)
-}
+// Личный чат с техподдержкой текущего пользователя.
+export const openDevChat = () => apiRequest('/messenger/dev-chat')
 
-export const listDevChats = () =>
-  apiRequest('/messenger/dev-chats')
+// Для Администратора системы: список чатов техподдержки всех пользователей.
+export const listSupportInbox = () => apiRequest('/messenger/support-inbox')

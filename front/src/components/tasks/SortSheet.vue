@@ -72,14 +72,15 @@ function resetAll() {
   right: 0;
   background: var(--color-surface);
   border-top: 1px solid var(--color-outline-dim);
-  border-radius: var(--radius-xl) var(--radius-xl) 0 0;
+  border-radius: 24px 24px 0 0;
   z-index: 400;
   padding: 12px 16px calc(16px + env(safe-area-inset-bottom, 0px));
   display: flex;
   flex-direction: column;
   gap: 6px;
   transform: translateY(105%);
-  transition: transform 0.28s cubic-bezier(0.4, 0, 0.2, 1);
+  transition: transform 0.32s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: 0 -8px 24px color-mix(in oklch, var(--color-scrim) 60%, transparent);
 }
 
 .sort-sheet--open {
@@ -114,16 +115,21 @@ function resetAll() {
 .sort-btn {
   display: flex;
   align-items: center;
-  gap: 12px;
-  padding: 13px 14px;
-  border-radius: var(--radius-md);
+  gap: 14px;
+  padding: 14px 14px;
+  border-radius: var(--radius-lg);
   border: 1px solid transparent;
   background: transparent;
   color: var(--color-text);
   font-size: 15px;
   cursor: pointer;
   text-align: left;
+  min-height: 52px;
   transition: background 0.12s, color 0.12s;
+}
+
+.sort-btn:active {
+  background: color-mix(in oklch, var(--color-primary) 12%, transparent);
 }
 
 .sort-btn:hover {

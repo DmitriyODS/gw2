@@ -8,11 +8,15 @@
         <span class="sidebar-logo-text">Groove Work</span>
       </div>
 
-      <!-- v-show, не v-if: PrimeVue Select рендерит overlay через Teleport,
-           размонтирование компонента уничтожает overlay и закрывает выпадашку
-           до того, как пользователь дойдёт до пункта. -->
+      <!-- v-show, не v-if: overlay компании теплепортится в body; размонтирование
+           компонента уничтожает overlay и закрывает выпадашку до того, как
+           пользователь дойдёт до пункта. -->
       <div v-show="expanded" class="sidebar-company">
-        <CompanySelect compact @show="companyDropdownOpen = true" @hide="companyDropdownOpen = false" />
+        <CompanySelect
+          variant="row"
+          @show="companyDropdownOpen = true"
+          @hide="companyDropdownOpen = false"
+        />
       </div>
 
       <div class="sidebar-nav">
@@ -167,10 +171,11 @@ const avatarSrc = computed(() => {
 }
 
 .sidebar-company {
-  padding: 4px 4px 8px;
+  padding: 0 4px 12px;
   display: flex;
-  justify-content: flex-start;
 }
+
+.sidebar-company > * { flex: 1; min-width: 0; }
 
 .sidebar-nav { display: flex; flex-direction: column; gap: 6px; flex: 1; }
 

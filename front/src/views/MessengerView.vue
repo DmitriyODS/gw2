@@ -1,16 +1,18 @@
 <template>
   <div class="messenger" :class="{ 'mobile-chat-open': isMobile && activeId }">
     <ConversationList
-      :conversations="messenger.conversations"
+      :conversations="visibleConversations"
       :active-id="activeId"
-      :loading="messenger.loadingList"
+      :loading="listLoading"
       :hide-on-mobile="isMobile && !!activeId"
-      :show-dev-chat-button="!authStore.isRootAdmin"
+      :show-support-tab="true"
+      :tab="listTab"
+      :support-unread="supportTabUnread"
       @select="selectConversation"
       @new-chat="newChatOpen = true"
-      @open-dev-chat="openDevChat"
       @toggle-pin="onTogglePin"
       @delete="askDeleteConversation"
+      @change-tab="onChangeTab"
     />
 
     <section
@@ -29,8 +31,23 @@
         <button v-if="isMobile" class="back-btn" @click="goBack" title="Назад">
           <span class="material-symbols-outlined">arrow_back</span>
         </button>
+        <!-- 3 варианта шапки: обычный диалог (фото собеседника), dev-чат
+             у владельца (иконка support_agent), dev-чат у админа в support-inbox
+             (фото пользователя, который написал в поддержку). -->
         <button
-          v-if="!active.is_dev_chat"
+          v-if="active.is_dev_chat && devChatOwner"
+          class="chat-avatar-wrap as-btn"
+          aria-label="Открыть фото пользователя"
+          @click="lightboxOpen = true"
+        >
+          <img class="chat-avatar" :src="avatarOf(devChatOwner)" :alt="devChatOwner.fio" />
+          <span v-if="messenger.isOnline(devChatOwner.id)" class="online-dot" title="В сети"></span>
+        </button>
+        <div v-else-if="active.is_dev_chat" class="chat-avatar-wrap dev">
+          <span class="material-symbols-outlined">support_agent</span>
+        </div>
+        <button
+          v-else
           class="chat-avatar-wrap as-btn"
           aria-label="Открыть фото"
           @click="lightboxOpen = true"
@@ -38,15 +55,21 @@
           <img class="chat-avatar" :src="avatarOf(active.other_user)" :alt="active.other_user?.fio" />
           <span v-if="otherOnline" class="online-dot" title="В сети"></span>
         </button>
-        <div v-else class="chat-avatar-wrap dev">
-          <span class="material-symbols-outlined">support_agent</span>
-        </div>
         <div class="chat-title">
           <div class="chat-fio">
-            {{ active.is_dev_chat ? 'Разработчики' : active.other_user?.fio }}
+            <template v-if="active.is_dev_chat && devChatOwner">{{ devChatOwner.fio }}</template>
+            <template v-else-if="active.is_dev_chat">Техподдержка</template>
+            <template v-else>{{ active.other_user?.fio }}</template>
           </div>
-          <div class="chat-status" :class="{ online: otherOnline }">
-            <template v-if="active.is_dev_chat">Спец-чат компании</template>
+          <div class="chat-status" :class="{ online: chatOnline }">
+            <template v-if="active.is_dev_chat && devChatOwner">
+              <span v-if="active.company_name">{{ active.company_name }} · </span>
+              <template v-if="chatOnline">в сети</template>
+              <template v-else>{{ ownerLastSeenText }}</template>
+            </template>
+            <template v-else-if="active.is_dev_chat">
+              Личный чат с командой разработчиков
+            </template>
             <template v-else>{{ otherOnline ? 'в сети' : lastSeenText }}</template>
           </div>
         </div>
@@ -64,6 +87,7 @@
           <Transition name="chat-menu">
             <div v-if="chatMenuOpen" class="chat-menu" role="menu">
               <button
+                v-if="!active.is_dev_chat"
                 class="chat-menu-item"
                 data-tutorial="chat-call-audio"
                 @click="onMenuAction(() => startCall('audio'))"
@@ -72,6 +96,7 @@
                 <span>Аудиозвонок</span>
               </button>
               <button
+                v-if="!active.is_dev_chat"
                 class="chat-menu-item"
                 data-tutorial="chat-call-video"
                 @click="onMenuAction(() => startCall('video'))"
@@ -88,14 +113,16 @@
                 </span>
                 <span>{{ active.is_pinned ? 'Открепить чат' : 'Закрепить чат' }}</span>
               </button>
-              <div class="chat-menu-divider" />
-              <button
-                class="chat-menu-item danger"
-                @click="onMenuAction(() => askDeleteConversation(active))"
-              >
-                <span class="material-symbols-outlined chat-menu-ico tone-error">delete</span>
-                <span>Удалить чат</span>
-              </button>
+              <template v-if="!active.is_dev_chat">
+                <div class="chat-menu-divider" />
+                <button
+                  class="chat-menu-item danger"
+                  @click="onMenuAction(() => askDeleteConversation(active))"
+                >
+                  <span class="material-symbols-outlined chat-menu-ico tone-error">delete</span>
+                  <span>Удалить чат</span>
+                </button>
+              </template>
             </div>
           </Transition>
         </div>
@@ -165,17 +192,13 @@
       />
     </section>
 
-    <!-- FAB «новый чат» — только на мобильном и только в режиме списка -->
-    <Teleport to="body">
-      <button
-        v-if="isMobile && !activeId"
-        class="fab"
-        @click="newChatOpen = true"
-        aria-label="Новый чат"
-      >
-        <span class="material-symbols-outlined">edit_square</span>
-      </button>
-    </Teleport>
+    <AppFab
+      :visible="isMobile && !activeId && listTab === 'chats'"
+      icon="edit_square"
+      tone="tertiary"
+      aria-label="Новый чат"
+      @click="newChatOpen = true"
+    />
 
     <NewChatDialog v-model="newChatOpen" @pick="startWith" />
 
@@ -202,11 +225,11 @@
     />
 
     <AvatarLightbox
-      v-if="active && !active.is_dev_chat && active.other_user"
+      v-if="lightboxUser"
       v-model="lightboxOpen"
-      :src="avatarOf(active.other_user)"
-      :alt="active.other_user.fio"
-      :caption="active.other_user.fio"
+      :src="avatarOf(lightboxUser)"
+      :alt="lightboxUser.fio"
+      :caption="lightboxUser.fio"
     />
 
     <MessageContextMenu
@@ -245,6 +268,7 @@ import ForwardDialog from '@/components/messenger/ForwardDialog.vue'
 import AttachTaskDialog from '@/components/messenger/AttachTaskDialog.vue'
 import MessageContextMenu from '@/components/messenger/MessageContextMenu.vue'
 import AvatarLightbox from '@/components/common/AvatarLightbox.vue'
+import AppFab from '@/components/common/AppFab.vue'
 import ProgressSpinner from 'primevue/progressspinner'
 
 const route = useRoute()
@@ -304,27 +328,13 @@ function openTask(taskId) {
   router.push({ path: '/tasks', query: { open: taskId } })
 }
 
-async function openDevChat() {
-  const id = await messenger.openDevChat()
-  router.replace(`/messenger/${id}`)
-  await nextTick()
-  scrollToBottom()
-}
-
-const devSenders = ref({})
-
 function senderNameFor(m) {
-  // В dev-чате под чужими сообщениями показываем ФИО автора —
-  // в обычных p2p-диалогах это лишнее.
-  if (!activeRef.value?.is_dev_chat) return ''
-  if (m.sender_id === authStore.user?.id) return ''
-  return devSenders.value[m.sender_id] || ''
+  // В dev-чате сообщения от админа техподдержки всегда подписываются
+  // «Техподдержка» — ФИО админа намеренно скрыто (как у Telegram support-ботов).
+  // В обычных p2p-диалогах подпись не нужна — там и так только один собеседник.
+  if (m.is_from_support) return 'Техподдержка'
+  return ''
 }
-
-// Ref-плейсхолдер для активного диалога — заполняется ниже, после объявления
-// computed `active`. Используется в senderNameFor, чтобы избежать TDZ-доступа
-// к `active` из template'а до его инициализации.
-const activeRef = ref(null)
 
 const chatMenuOpen = ref(false)
 const toolsRef = ref(null)
@@ -511,23 +521,74 @@ async function unpinMessage(message) {
 const activeId = computed(() => messenger.activeConversationId)
 const active = computed(() => messenger.activeConversation)
 
-// Подтягиваем каталог сотрудников компании, когда заходим в dev-чат —
-// чтобы подписывать чужие сообщения ФИО автора (там не один собеседник).
-watch(active, async (a) => {
-  activeRef.value = a
-  if (!a?.is_dev_chat) return
-  try {
-    const { getDirectory } = await import('@/api/users.js')
-    const users = await getDirectory('', false)
-    devSenders.value = Object.fromEntries(users.map(u => [u.id, u.fio]))
-  } catch {/* без имён в шапке тоже жить можно */}
-}, { immediate: true })
+// Активная вкладка списка слева: 'chats' | 'support'. Вторая доступна
+// только Администратору системы (он отвечает в чужие чаты техподдержки).
+const listTab = ref('chats')
+
+/* Для рут-админа техподдержка — это inbox (входящие из чужих компаний).
+   Для обычного пользователя — личные dev-чаты с командой разработчиков
+   (обычно ровно один). На вкладке «Чаты» dev-чаты скрываем — они живут
+   в своей вкладке, чтобы UX был как Telegram-style чат с поддержкой. */
+const visibleConversations = computed(() => {
+  if (listTab.value === 'support') {
+    return authStore.isRootAdmin
+      ? messenger.supportInbox
+      : messenger.conversations.filter(c => c.is_dev_chat)
+  }
+  return messenger.conversations.filter(c => !c.is_dev_chat)
+})
+
+const listLoading = computed(() =>
+  listTab.value === 'support' && authStore.isRootAdmin
+    ? messenger.loadingSupportInbox
+    : messenger.loadingList
+)
+
+const supportTabUnread = computed(() => {
+  if (authStore.isRootAdmin) return messenger.supportUnread
+  return messenger.conversations
+    .filter(c => c.is_dev_chat)
+    .reduce((s, c) => s + (c.unread_count || 0), 0)
+})
+
+async function onChangeTab(t) {
+  listTab.value = t
+  if (t === 'support' && authStore.isRootAdmin && !messenger.supportInbox.length) {
+    await messenger.fetchSupportInbox()
+  }
+}
 
 const otherOnline = computed(() => messenger.isOnline(active.value?.other_user?.id))
 const lastSeenText = computed(() => {
   const u = active.value?.other_user
   if (!u) return ''
   return formatLastSeen(messenger.lastSeenOf(u.id, u.last_seen_at))
+})
+
+// Владелец dev-чата (для админа в support-inbox): данные кладутся бэком
+// в поле owner_user. У собственного dev-чата сотрудника поля нет.
+const devChatOwner = computed(() => active.value?.owner_user || null)
+
+const chatOnline = computed(() => {
+  if (active.value?.is_dev_chat) {
+    return devChatOwner.value ? messenger.isOnline(devChatOwner.value.id) : false
+  }
+  return otherOnline.value
+})
+
+const ownerLastSeenText = computed(() => {
+  const u = devChatOwner.value
+  if (!u) return ''
+  return formatLastSeen(messenger.lastSeenOf(u.id, u.last_seen_at))
+})
+
+// Чьё фото открывать в лайтбоксе. У обычного диалога — собеседник. У dev-чата
+// в support-inbox — владелец чата. У своего dev-чата фото нет (там иконка).
+const lightboxUser = computed(() => {
+  const a = active.value
+  if (!a) return null
+  if (a.is_dev_chat) return devChatOwner.value
+  return a.other_user || null
 })
 
 function avatarOf(u) {
@@ -617,6 +678,12 @@ function handleExternalOpen(e) {
 
 onMounted(async () => {
   await messenger.fetchConversations()
+  if (authStore.isRootAdmin) {
+    // Грузим support-inbox параллельно с открытием чата — нужен и для
+    // бейджа на вкладке, и чтобы при глубокой ссылке /messenger/<dev-id>
+    // active вычислился (он смотрит в conversations).
+    messenger.fetchSupportInbox()
+  }
   if (notificationsAllowed() === false) {
     requestNotificationPermission()
   }
@@ -1038,48 +1105,70 @@ watch(() => route.params.conversationId, async (id) => {
     inset: 0;
     z-index: 150;
     background: var(--color-bg);
-    /* Резерв ровно под нижнюю навигацию (её высота = 64px + safe-area внутри),
-       без лишнего «воздуха» под полем ввода. */
     padding-bottom: calc(64px + env(safe-area-inset-bottom, 0px));
   }
   .messenger.mobile-chat-open .chat-panel {
     display: flex;
   }
-}
 
-/* Мобильный FAB «новый чат» — поведение и вид как на экране задач. */
-.fab {
-  display: none;
-}
-
-@media (max-width: 768px) {
-  .fab {
-    position: fixed;
-    right: 16px;
-    bottom: calc(64px + 16px + env(safe-area-inset-bottom, 0px));
-    width: 56px;
-    height: 56px;
+  /* ===== Шапка активного чата ===== */
+  .chat-header {
+    padding: 8px 12px !important;
+    gap: 10px !important;
+    min-height: 56px;
+    padding-top: calc(8px + env(safe-area-inset-top, 0px)) !important;
+  }
+  .back-btn {
+    width: 40px;
+    height: 40px;
     border-radius: 50%;
+    background: transparent;
     border: none;
-    background: var(--gw-primary);
-    color: var(--color-on-primary);
-    box-shadow: 0 4px 14px color-mix(in oklch, var(--gw-primary) 50%, transparent);
+    color: var(--color-text);
+    display: grid;
+    place-items: center;
+    flex-shrink: 0;
     cursor: pointer;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    z-index: 210;
-    transition: transform 0.28s cubic-bezier(0.4, 0, 0.2, 1),
-                background 0.15s;
+  }
+  .back-btn:active { background: var(--color-surface-high); }
+  .back-btn .material-symbols-outlined { font-size: 22px; }
+
+  .chat-avatar-wrap, .chat-avatar { width: 40px; height: 40px; }
+  .chat-fio { font-size: 15px; font-weight: 700; }
+  .chat-status { font-size: 11.5px; }
+
+  .chat-tool {
+    width: 40px;
+    height: 40px;
+  }
+  .chat-tool .material-symbols-outlined { font-size: 22px; }
+
+  /* Закреплённое сообщение — компактнее. */
+  .pinned-bar {
+    padding: 8px 12px;
+    gap: 8px;
+  }
+  .pinned-bar-icon { font-size: 18px; }
+  .pinned-bar-title { font-size: 11px; }
+  .pinned-bar-text { font-size: 12px; }
+
+  /* Лента сообщений — крупнее, удобнее. */
+  .messages-area {
+    padding: 12px 10px !important;
+    gap: 4px !important;
   }
 
-  .fab:active {
-    background: var(--gw-primary-hover);
-    transform: scale(0.96);
+  /* Empty-state правой панели (только если активен чат — на мобиле не виден,
+     но дополнительно поджимаем шрифт). */
+  .chat-empty {
+    padding: 32px 18px;
   }
-
-  .fab .material-symbols-outlined {
-    font-size: 24px;
+  .chat-empty-icon {
+    width: 72px;
+    height: 72px;
   }
+  .chat-empty-title { font-size: 17px; }
+  .chat-empty-text { font-size: 13px; }
 }
+
 </style>

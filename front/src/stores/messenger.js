@@ -76,8 +76,10 @@ export const useMessengerStore = defineStore('messenger', () => {
     totalUnread.value = conversations.value.reduce((s, c) => s + (c.unread_count || 0), 0)
   }
 
-  async function openDevChat(companyId = null) {
-    const data = await api.openDevChat(companyId)
+  async function openDevChat() {
+    // Личный чат техподдержки текущего пользователя. Бэк гарантирует, что чат
+    // существует — get-or-create.
+    const data = await api.openDevChat()
     const existing = conversations.value.find(c => c.id === data.id)
     if (!existing) {
       conversations.value = sortConversations([
@@ -102,6 +104,40 @@ export const useMessengerStore = defineStore('messenger', () => {
     }
     return data.id
   }
+
+  // Support-inbox (для Администратора системы): отдельный список чатов
+  // техподдержки всех пользователей. Не сливается с conversations, чтобы
+  // не путать обычные диалоги и техподдержку — у них разные вкладки в UI.
+  const supportInbox = ref([])
+  const loadingSupportInbox = ref(false)
+
+  async function fetchSupportInbox() {
+    loadingSupportInbox.value = true
+    try {
+      const items = await api.listSupportInbox()
+      supportInbox.value = items
+      // Сразу разовьём конверсейшны в общий кеш — иначе при открытии чата
+      // activeConversation вычислится как null (он смотрит в conversations).
+      const known = new Set(conversations.value.map(c => c.id))
+      const merge = items.filter(c => !known.has(c.id))
+      if (merge.length) {
+        conversations.value = [...conversations.value, ...merge]
+      } else {
+        // Обновим записи, что уже есть, актуальными значениями
+        // (last_message/unread).
+        const byId = Object.fromEntries(items.map(c => [c.id, c]))
+        conversations.value = conversations.value.map(c =>
+          byId[c.id] ? { ...c, ...byId[c.id] } : c,
+        )
+      }
+    } finally {
+      loadingSupportInbox.value = false
+    }
+  }
+
+  const supportUnread = computed(() =>
+    supportInbox.value.reduce((s, c) => s + (c.unread_count || 0), 0)
+  )
 
   async function openWith(userId) {
     const data = await api.openConversation(userId)
@@ -257,6 +293,29 @@ export const useMessengerStore = defineStore('messenger', () => {
     } else {
       // Диалог появился впервые (или вернулся из «скрытых») — перезапрос.
       fetchConversations()
+    }
+    // Если этот чат лежит и в support-inbox (админ техподдержки) — обновим
+    // запись там, чтобы вкладка «Техподдержка» сразу показала свежий
+    // last_message и счётчик непрочитанных.
+    const inboxIdx = supportInbox.value.findIndex(c => c.id === conversationId)
+    if (inboxIdx !== -1) {
+      const cur = supportInbox.value[inboxIdx]
+      const nextItem = {
+        ...cur,
+        last_message: msg,
+        last_message_at: msg.created_at,
+      }
+      // Непрочитанные в инбоксе считаем только по сообщениям от владельца чата
+      // (т.е. от пользователя — админ их и должен прочесть).
+      if (!fromMe && msg.sender_id === cur.other_user?.id /* not used */ ) {
+        // not used — оставляем счётчик из API recompute через fetchSupportInbox
+      }
+      if (!fromMe && !isViewingActively(conversationId)) {
+        nextItem.unread_count = (cur.unread_count || 0) + 1
+      }
+      const next = [...supportInbox.value]
+      next[inboxIdx] = nextItem
+      supportInbox.value = next
     }
     recomputeUnread()
   }
@@ -440,10 +499,12 @@ export const useMessengerStore = defineStore('messenger', () => {
   return {
     conversations, activeConversationId, messagesByConv, totalUnread,
     pinnedByConv,
+    supportInbox, loadingSupportInbox, supportUnread,
     loadingList, loadingMessages, sending,
     onlineIds, lastSeenById,
     activeConversation, activeMessages, activePinned,
-    fetchConversations, fetchUnreadCount, openWith, openDevChat, setActive, fetchMessages,
+    fetchConversations, fetchUnreadCount, openWith, openDevChat,
+    fetchSupportInbox, setActive, fetchMessages,
     fetchPinned, pollNewMessages, hasMoreHistory,
     send, forwardMessage, markRead,
     applyIncomingMessage, applyReadReceipt, applyMessageUpdated,

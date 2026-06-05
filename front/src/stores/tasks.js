@@ -1,6 +1,8 @@
 import { defineStore } from 'pinia'
 import { ref, reactive, watch } from 'vue'
 import * as tasksApi from '@/api/tasks.js'
+import { useAuthStore } from '@/stores/auth.js'
+import { useCompaniesStore } from '@/stores/companies.js'
 
 const STORAGE_KEY = 'gw2_tasks_filters'
 
@@ -47,7 +49,19 @@ export const useTasksStore = defineStore('tasks', () => {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(toSave))
   }, { deep: true })
 
+  function _hasCompanyScope() {
+    const auth = useAuthStore()
+    if (auth.companyId != null) return true
+    const companies = useCompaniesStore()
+    return companies.activeCompanyId != null
+  }
+
   async function fetchTasks({ silent = false } = {}) {
+    if (!_hasCompanyScope()) {
+      tasks.value = []
+      total.value = 0
+      return
+    }
     if (!silent) loading.value = true
     error.value = null
     try {

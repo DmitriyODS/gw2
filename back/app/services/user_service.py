@@ -37,7 +37,7 @@ def create_user(fio: str, login: str, role_id: int, current_user_level: int,
         raise UserServiceError("Email уже используется", "EMAIL_TAKEN", 409)
 
     is_default = password is None
-    hashed = user_repo.hash_password_sql(password if password else "admin")
+    hashed = user_repo.hash_password_sql(password if password else f"{login}123")
     user = user_repo.create(
         fio=fio, login=login, hashed_password=hashed, role_id=role_id,
         company_id=company_id, post=post, phone=phone, email=email,
@@ -183,6 +183,24 @@ def delete_user_avatar(user_id: int) -> object:
         db.session.commit()
 
     return user
+
+
+def reset_password(user_id: int, current_user_id: int, current_user_level: int) -> None:
+    if user_id == current_user_id:
+        raise UserServiceError("Нельзя сбросить собственный пароль", "SELF_RESET", 422)
+
+    user = user_repo.get_by_id(user_id)
+    if user is None or user.is_hidden:
+        raise UserServiceError("Пользователь не найден", "NOT_FOUND", 404)
+
+    if user.role.level > current_user_level:
+        raise UserServiceError("Нельзя сбросить пароль пользователю с более высокой ролью",
+                               "ROLE_LEVEL_FORBIDDEN", 403)
+
+    hashed = user_repo.hash_password_sql(f"{user.login}123")
+    user_repo.update(user, hash_password=hashed, is_default_pass=True)
+    db.session.commit()
+    logger.info("user.reset_password", extra={"extra": {"user_id": user_id, "event": "user.reset_password"}})
 
 
 def assign_role(user_id: int, role_id: int, current_user_id: int, current_user_level: int) -> object:

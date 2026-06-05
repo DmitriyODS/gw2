@@ -52,18 +52,16 @@
     </div>
 
     <!-- Неклозабельная модалка смены учётных данных -->
-    <Dialog
+    <AppDialog
       v-if="showChangeModal"
-      :visible="true"
+      model-value
+      tone="warning"
+      icon="lock_reset"
+      size="sm"
+      title="Смена учётных данных"
+      subtitle="Пожалуйста, смените логин и пароль перед началом работы."
       :closable="false"
-      :modal="true"
-      :close-on-escape="false"
-      header="Смена учётных данных"
-      style="width:460px"
     >
-      <p class="change-hint">
-        Пожалуйста, смените логин и пароль перед началом работы.
-      </p>
       <form @submit.prevent="handleChangeDefault" class="change-form">
         <div class="form-group">
           <label>Новый логин</label>
@@ -112,7 +110,7 @@
           {{ changeLoading ? 'Сохраняем...' : 'Сохранить и войти' }}
         </button>
       </form>
-    </Dialog>
+    </AppDialog>
   </div>
 </template>
 
@@ -122,7 +120,7 @@ import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth.js'
 import { useThemeStore } from '@/stores/theme.js'
 import { connectSocket } from '@/socket/index.js'
-import Dialog from 'primevue/dialog'
+import AppDialog from '@/components/common/AppDialog.vue'
 import Logo from '@/components/common/Logo.vue'
 
 const router = useRouter()

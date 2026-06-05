@@ -1,11 +1,12 @@
 <template>
-  <Dialog
-    :visible="modelValue"
-    @update:visible="$emit('update:modelValue', $event)"
-    modal
-    header="Прикрепить задачу"
-    :draggable="false"
-    :style="{ width: '480px', maxWidth: '92vw' }"
+  <AppDialog
+    :model-value="modelValue"
+    tone="tertiary"
+    icon="task"
+    size="md"
+    title="Прикрепить задачу"
+    subtitle="Можно прикрепить только задачу из той же компании, что и диалог."
+    @update:model-value="$emit('update:modelValue', $event)"
   >
     <div class="attach-task">
       <div class="attach-task-search">
@@ -49,13 +50,13 @@
         </li>
       </ul>
     </div>
-  </Dialog>
+  </AppDialog>
 </template>
 
 <script setup>
 import { ref, watch } from 'vue'
-import Dialog from 'primevue/dialog'
 import ProgressSpinner from 'primevue/progressspinner'
+import AppDialog from '@/components/common/AppDialog.vue'
 import { getTasks } from '@/api/tasks.js'
 import { TASK_COLOR_IDS } from '@/utils/taskColors.js'
 

@@ -1,178 +1,352 @@
 <template>
-  <div class="lists-view">
-    <header class="lists-header">
-      <div class="lists-title-row">
-        <h1 class="lists-title">Списки</h1>
-        <CompanySelect v-if="auth.isRootAdmin" />
+  <div class="admin-page">
+    <header class="admin-sticky">
+      <div class="page-head">
+        <div class="page-head-text">
+          <h1 class="page-head-title">Списки</h1>
+          <div class="page-head-meta">
+            <span class="meta-stat">
+              <span class="material-symbols-outlined">apartment</span>
+              <strong>{{ departments.length }}</strong> отд.
+            </span>
+            <span class="meta-stat">
+              <span class="material-symbols-outlined">category</span>
+              <strong>{{ unitTypes.length }}</strong> типов
+            </span>
+            <span class="meta-stat">
+              <span class="material-symbols-outlined">flag</span>
+              <strong>{{ stages.length }}</strong> этапов
+            </span>
+          </div>
+        </div>
+        <button
+          v-if="canEdit && effectiveCompanyId != null"
+          class="btn-filled desktop-only"
+          @click="addItem(tab)"
+        >
+          <span class="material-symbols-outlined">add</span>
+          <span>Добавить</span>
+        </button>
       </div>
-      <p class="lists-subtitle">
-        Справочники компании: отделы, типы юнитов и этапы задач.
-        У каждой компании — свой набор.
-      </p>
+
+      <div class="admin-toolbar">
+        <SegmentedTabs
+          v-model="tab"
+          :tabs="tabsForUi"
+          full-width
+        />
+      </div>
     </header>
 
-    <nav class="lists-tabs" role="tablist">
-      <button
-        v-for="t in tabs"
-        :key="t.key"
-        class="tab"
-        :class="{ active: tab === t.key }"
-        role="tab"
-        @click="tab = t.key"
+    <div ref="bodyRef" class="admin-body">
+      <!-- Системный администратор без выбранной компании — placeholder. -->
+      <div
+        v-if="!effectiveCompanyId && auth.isRootAdmin"
+        class="placeholder"
       >
-        <span class="material-symbols-outlined">{{ t.icon }}</span>
-        <span>{{ t.label }}</span>
-        <span class="tab-count">{{ counts[t.key] }}</span>
-      </button>
-    </nav>
-
-    <div v-if="!effectiveCompanyId && auth.isRootAdmin" class="placeholder">
-      <div class="placeholder-icon"><span class="material-symbols-outlined">domain</span></div>
-      <h3>Выберите компанию</h3>
-      <p>Списки ведутся внутри компании. Выберите её в селекторе сверху, чтобы продолжить.</p>
-    </div>
-
-    <section v-else class="lists-pane">
-      <transition name="pane-swap" mode="out-in">
-        <!-- Отделы -->
-        <div v-if="tab === 'departments'" key="departments" class="pane">
-          <div class="pane-toolbar">
-            <p class="hint">Используются для группировки сотрудников и в статистике.</p>
-            <button v-if="canEdit" class="btn-filled" @click="addItem('departments')">
-              <span class="material-symbols-outlined">add</span> Добавить
-            </button>
-          </div>
-          <div class="rows">
-            <div v-if="adding === 'departments'" class="row editing">
-              <span class="material-symbols-outlined row-icon">apartment</span>
-              <input
-                v-model="newName" class="row-input" placeholder="Название отдела"
-                autofocus @keyup.enter="saveNew('departments')" @keyup.escape="cancelAdd"
-              />
-              <button class="icon-btn success" @click="saveNew('departments')" title="Сохранить">
-                <span class="material-symbols-outlined">check</span>
-              </button>
-              <button class="icon-btn" @click="cancelAdd" title="Отмена">
-                <span class="material-symbols-outlined">close</span>
-              </button>
-            </div>
-            <ListRow
-              v-for="d in departments" :key="d.id"
-              :item="d" icon="apartment"
-              :editing="editing === `d-${d.id}`"
-              :can-edit="canEdit"
-              @start="startEdit('d', d)"
-              @save="saveEdit('departments', d, $event)"
-              @cancel="editing = null"
-              @delete="askDelete('departments', d)"
-            />
-            <Empty
-              v-if="!departments.length && adding !== 'departments'"
-              icon="apartment" title="Отделов пока нет"
-              text="Создайте первый — он появится в фильтрах задач и статистике."
-            />
-          </div>
+        <div class="placeholder-icon">
+          <span class="material-symbols-outlined">domain</span>
         </div>
+        <h3>Выберите компанию</h3>
+        <p>
+          Списки ведутся внутри компании. Откройте «Сменить компанию»
+          в боковом меню, чтобы продолжить.
+        </p>
+      </div>
 
-        <!-- Типы юнитов -->
-        <div v-else-if="tab === 'unit-types'" key="unit-types" class="pane">
-          <div class="pane-toolbar">
-            <p class="hint">Категории работы — встреча, дизайн, написание кода и т. п.</p>
-            <button v-if="canEdit" class="btn-filled" @click="addItem('unit-types')">
-              <span class="material-symbols-outlined">add</span> Добавить
-            </button>
+      <template v-else>
+        <!-- ===== Мобильное представление: компактные строки ===== -->
+        <div v-if="isMobile" class="pane">
+          <div class="pane-hint">
+            <span class="material-symbols-outlined">info</span>
+            {{ mobileHint }}
           </div>
-          <div class="rows">
-            <div v-if="adding === 'unit-types'" class="row editing">
-              <span class="material-symbols-outlined row-icon">category</span>
-              <input
-                v-model="newName" class="row-input" placeholder="Название типа"
-                autofocus @keyup.enter="saveNew('unit-types')" @keyup.escape="cancelAdd"
-              />
-              <button class="icon-btn success" @click="saveNew('unit-types')" title="Сохранить">
-                <span class="material-symbols-outlined">check</span>
-              </button>
-              <button class="icon-btn" @click="cancelAdd" title="Отмена">
-                <span class="material-symbols-outlined">close</span>
-              </button>
+
+          <div v-if="!currentItems.length" class="m-empty">
+            <div class="empty-icon-circle">
+              <span class="material-symbols-outlined">{{ mobileEmptyIcon }}</span>
             </div>
-            <ListRow
-              v-for="ut in unitTypes" :key="ut.id"
-              :item="ut" icon="category"
-              :editing="editing === `u-${ut.id}`"
-              :can-edit="canEdit"
-              @start="startEdit('u', ut)"
-              @save="saveEdit('unit-types', ut, $event)"
-              @cancel="editing = null"
-              @delete="askDelete('unit-types', ut)"
-            />
-            <Empty
-              v-if="!unitTypes.length && adding !== 'unit-types'"
-              icon="category" title="Типов юнитов пока нет"
-              text="Без типов нельзя создавать юниты. Добавьте хотя бы один."
-            />
-          </div>
-        </div>
-
-        <!-- Этапы -->
-        <div v-else key="stages" class="pane">
-          <div class="pane-toolbar">
-            <p class="hint">
-              Колонки канбан-режима задач. Порядок здесь определяет порядок колонок.
-            </p>
-            <button v-if="canEdit" class="btn-filled" @click="addItem('stages')">
-              <span class="material-symbols-outlined">add</span> Добавить
-            </button>
+            <h3>{{ mobileEmptyTitle }}</h3>
           </div>
 
-          <div v-if="adding === 'stages'" class="row editing stage-add">
-            <span class="material-symbols-outlined row-icon">flag</span>
-            <input
-              v-model="newName" class="row-input" placeholder="Название этапа"
-              autofocus @keyup.enter="saveNew('stages')" @keyup.escape="cancelAdd"
-            />
-            <ColorDots v-model="newColor" />
-            <button class="icon-btn success" @click="saveNew('stages')" title="Сохранить">
-              <span class="material-symbols-outlined">check</span>
-            </button>
-            <button class="icon-btn" @click="cancelAdd" title="Отмена">
-              <span class="material-symbols-outlined">close</span>
-            </button>
-          </div>
-
-          <div class="rows" @dragover.prevent>
-            <div
-              v-for="(s, idx) in stages"
-              :key="s.id"
-              :draggable="canEdit && editing !== `s-${s.id}`"
-              :class="['drag-slot', { 'drop-before': dragOverIdx === idx && dragFromIdx > idx,
-                                     'drop-after':  dragOverIdx === idx && dragFromIdx < idx,
-                                     'dragging': dragFromIdx === idx }]"
-              @dragstart="onDragStart(idx, $event)"
-              @dragover.prevent="dragOverIdx = idx"
-              @dragend="onDragEnd"
-              @drop="onDrop(idx)"
+          <ul v-else class="m-list">
+            <li
+              v-for="item in currentItems"
+              :key="item.id"
+              class="m-row"
+              :class="{ editing: isEditingMobile(item) }"
             >
-              <StageRow
-                :stage="s"
-                :editing="editing === `s-${s.id}`"
-                :can-edit="canEdit"
-                @start="startEdit('s', s)"
-                @save="saveStage(s, $event)"
-                @cancel="editing = null"
-                @delete="askDelete('stages', s)"
+              <span v-if="tab !== 'stages'" class="row-ico" data-tone="primary">
+                <span class="material-symbols-outlined">{{ tabIcon }}</span>
+              </span>
+              <span
+                v-else
+                :class="['stage-chip', `tag-${stageDisplayColor(item)}`]"
               />
-            </div>
+
+              <div class="m-row-body">
+                <template v-if="isEditingMobile(item)">
+                  <input
+                    :ref="bindEditInput"
+                    :value="rowEditValue(rowPrefix, item)"
+                    class="row-input"
+                    :placeholder="mobilePlaceholder"
+                    @click.stop
+                    @input="setRowEditValue($event.target.value)"
+                    @keyup.enter="commitMobile(item)"
+                    @keyup.escape="cancelRow"
+                  />
+                  <div v-if="tab === 'stages'" class="color-dots" @click.stop>
+                    <button
+                      v-for="c in STAGE_COLORS"
+                      :key="c"
+                      type="button"
+                      :class="['color-dot', `tag-${c}`, { selected: editColor === c }]"
+                      :title="c"
+                      @click.stop="editColor = c"
+                    />
+                  </div>
+                </template>
+                <template v-else>
+                  <span class="row-name">{{ item.name }}</span>
+                  <div v-if="tab === 'stages'" class="m-row-meta">
+                    <span :class="['mini-tag', `tag-${item.color}`]">{{ item.color }}</span>
+                    <span class="order-badge">#{{ item.order }}</span>
+                  </div>
+                </template>
+              </div>
+
+              <div class="m-row-actions" @click.stop>
+                <template v-if="isEditingMobile(item)">
+                  <button class="icon-btn primary" :title="item.__draft ? 'Создать' : 'Сохранить'" @click="commitMobile(item)">
+                    <span class="material-symbols-outlined">check</span>
+                  </button>
+                  <button class="icon-btn" title="Отмена" @click="cancelRow">
+                    <span class="material-symbols-outlined">close</span>
+                  </button>
+                </template>
+                <template v-else-if="canEdit">
+                  <button class="icon-btn" title="Редактировать" @click="startEditMobile(item)">
+                    <span class="material-symbols-outlined">edit</span>
+                  </button>
+                  <button class="icon-btn danger" :title="`Удалить`" @click="askDelete(tab, item)">
+                    <span class="material-symbols-outlined">delete</span>
+                  </button>
+                </template>
+              </div>
+            </li>
+          </ul>
+        </div>
+
+        <div v-else-if="tab === 'departments'" class="pane">
+          <div class="pane-hint">
+            <span class="material-symbols-outlined">info</span>
+            Группировка сотрудников и сегмент в статистике.
           </div>
 
-          <Empty
-            v-if="!stages.length && adding !== 'stages'"
-            icon="flag" title="Этапов пока нет"
-            text="Добавьте, например: «К работе», «В работе», «На проверке», «Готово»."
-          />
+          <AppDataTable
+            :value="displayDepartments"
+            empty-message="Отделов пока нет"
+          >
+            <Column header="" style="width: 60px">
+              <template #body>
+                <span class="row-ico" data-tone="primary">
+                  <span class="material-symbols-outlined">apartment</span>
+                </span>
+              </template>
+            </Column>
+            <Column header="Название">
+              <template #body="{ data }">
+                <template v-if="isEditingRow('d', data)">
+                  <input
+                    :ref="bindEditInput"
+                    :value="rowEditValue('d', data)"
+                    class="row-input"
+                    placeholder="Название отдела"
+                    @click.stop
+                    @input="setRowEditValue($event.target.value)"
+                    @keyup.enter="commitRowEdit('departments', data)"
+                    @keyup.escape="cancelRow"
+                  />
+                </template>
+                <span v-else class="row-name">{{ data.name }}</span>
+              </template>
+            </Column>
+            <Column header="" style="width: 220px" body-style="text-align: right">
+              <template #body="{ data }">
+                <div class="row-actions" @click.stop>
+                  <template v-if="isEditingRow('d', data)">
+                    <button class="pill-btn primary" @click="commitRowEdit('departments', data)">
+                      <span class="material-symbols-outlined">check</span>
+                      {{ data.__draft ? 'Создать' : 'Сохранить' }}
+                    </button>
+                    <button class="icon-btn" title="Отмена" @click="cancelRow">
+                      <span class="material-symbols-outlined">close</span>
+                    </button>
+                  </template>
+                  <template v-else-if="canEdit">
+                    <button class="icon-btn" title="Редактировать" @click="startEdit('d', data)">
+                      <span class="material-symbols-outlined">edit</span>
+                    </button>
+                    <button class="icon-btn danger" title="Удалить" @click="askDelete('departments', data)">
+                      <span class="material-symbols-outlined">delete</span>
+                    </button>
+                  </template>
+                </div>
+              </template>
+            </Column>
+          </AppDataTable>
         </div>
-      </transition>
-    </section>
+
+        <div v-else-if="tab === 'unit-types'" class="pane">
+          <div class="pane-hint">
+            <span class="material-symbols-outlined">info</span>
+            Категории работы — встреча, дизайн, написание кода и т. п.
+          </div>
+
+          <AppDataTable
+            :value="displayUnitTypes"
+            empty-message="Типов юнитов пока нет"
+          >
+            <Column header="" style="width: 60px">
+              <template #body>
+                <span class="row-ico" data-tone="primary">
+                  <span class="material-symbols-outlined">category</span>
+                </span>
+              </template>
+            </Column>
+            <Column header="Название">
+              <template #body="{ data }">
+                <template v-if="isEditingRow('u', data)">
+                  <input
+                    :ref="bindEditInput"
+                    :value="rowEditValue('u', data)"
+                    class="row-input"
+                    placeholder="Название типа"
+                    @click.stop
+                    @input="setRowEditValue($event.target.value)"
+                    @keyup.enter="commitRowEdit('unit-types', data)"
+                    @keyup.escape="cancelRow"
+                  />
+                </template>
+                <span v-else class="row-name">{{ data.name }}</span>
+              </template>
+            </Column>
+            <Column header="" style="width: 220px" body-style="text-align: right">
+              <template #body="{ data }">
+                <div class="row-actions" @click.stop>
+                  <template v-if="isEditingRow('u', data)">
+                    <button class="pill-btn primary" @click="commitRowEdit('unit-types', data)">
+                      <span class="material-symbols-outlined">check</span>
+                      {{ data.__draft ? 'Создать' : 'Сохранить' }}
+                    </button>
+                    <button class="icon-btn" title="Отмена" @click="cancelRow">
+                      <span class="material-symbols-outlined">close</span>
+                    </button>
+                  </template>
+                  <template v-else-if="canEdit">
+                    <button class="icon-btn" title="Редактировать" @click="startEdit('u', data)">
+                      <span class="material-symbols-outlined">edit</span>
+                    </button>
+                    <button class="icon-btn danger" title="Удалить" @click="askDelete('unit-types', data)">
+                      <span class="material-symbols-outlined">delete</span>
+                    </button>
+                  </template>
+                </div>
+              </template>
+            </Column>
+          </AppDataTable>
+        </div>
+
+        <div v-else class="pane">
+          <div class="pane-hint">
+            <span class="material-symbols-outlined">info</span>
+            Колонки канбан-режима задач. Порядок — drag-and-drop.
+          </div>
+
+          <AppDataTable
+            :value="displayStages"
+            empty-message="Этапов пока нет"
+            @row-reorder="onStageReorder"
+          >
+            <Column row-reorder :reorderable-column="false" header="" style="width: 36px" />
+            <Column header="" style="width: 50px">
+              <template #body="{ data }">
+                <span :class="['stage-chip', `tag-${stageDisplayColor(data)}`]" />
+              </template>
+            </Column>
+            <Column header="Этап">
+              <template #body="{ data }">
+                <template v-if="isEditingRow('s', data)">
+                  <input
+                    :ref="bindEditInput"
+                    :value="rowEditValue('s', data)"
+                    class="row-input"
+                    placeholder="Название этапа"
+                    @click.stop
+                    @input="setRowEditValue($event.target.value)"
+                    @keyup.enter="commitStageEdit(data)"
+                    @keyup.escape="cancelRow"
+                  />
+                </template>
+                <span v-else class="row-name">{{ data.name }}</span>
+              </template>
+            </Column>
+            <Column header="Цвет" style="width: 260px">
+              <template #body="{ data }">
+                <div
+                  v-if="isEditingRow('s', data)"
+                  class="color-dots"
+                  @click.stop
+                  @mousedown.stop
+                >
+                  <button
+                    v-for="c in STAGE_COLORS"
+                    :key="c"
+                    type="button"
+                    :class="['color-dot', `tag-${c}`, { selected: editColor === c }]"
+                    :title="c"
+                    draggable="false"
+                    @dragstart.prevent.stop
+                    @mousedown.stop
+                    @click.stop="editColor = c"
+                  />
+                </div>
+                <span v-else :class="['mini-tag', `tag-${data.color}`]">{{ data.color }}</span>
+              </template>
+            </Column>
+            <Column header="Порядок" style="width: 100px">
+              <template #body="{ data }">
+                <span v-if="!data.__draft" class="order-badge">#{{ data.order }}</span>
+              </template>
+            </Column>
+            <Column header="" style="width: 220px" body-style="text-align: right">
+              <template #body="{ data }">
+                <div class="row-actions" @click.stop>
+                  <template v-if="isEditingRow('s', data)">
+                    <button class="pill-btn primary" @click="commitStageEdit(data)">
+                      <span class="material-symbols-outlined">check</span>
+                      {{ data.__draft ? 'Создать' : 'Сохранить' }}
+                    </button>
+                    <button class="icon-btn" title="Отмена" @click="cancelRow">
+                      <span class="material-symbols-outlined">close</span>
+                    </button>
+                  </template>
+                  <template v-else-if="canEdit">
+                    <button class="icon-btn" title="Редактировать" @click="startEdit('s', data)">
+                      <span class="material-symbols-outlined">edit</span>
+                    </button>
+                    <button class="icon-btn danger" title="Удалить" @click="askDelete('stages', data)">
+                      <span class="material-symbols-outlined">delete</span>
+                    </button>
+                  </template>
+                </div>
+              </template>
+            </Column>
+          </AppDataTable>
+        </div>
+      </template>
+    </div>
 
     <ConfirmDialog
       :visible="deleteDlg.open"
@@ -183,13 +357,31 @@
       @confirm="doDelete"
       @cancel="deleteDlg.open = false"
     />
+
+    <AppFab
+      :visible="canEdit && effectiveCompanyId != null"
+      icon="add"
+      label="Добавить"
+      :collapsed="isCompact"
+      :aria-label="`Добавить в ${tab}`"
+      @click="addItem(tab)"
+    />
   </div>
 </template>
 
 <script setup>
-import { ref, computed, watch, onMounted, h } from 'vue'
-import CompanySelect from '@/components/common/CompanySelect.vue'
+import { ref, computed, watch, nextTick, onMounted } from 'vue'
+import Column from 'primevue/column'
 import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
+import AppDataTable from '@/components/common/AppDataTable.vue'
+import AppFab from '@/components/common/AppFab.vue'
+import SegmentedTabs from '@/components/common/SegmentedTabs.vue'
+import { useBreakpoint } from '@/composables/useBreakpoint.js'
+import { useScrollCollapse } from '@/composables/useScrollCollapse.js'
+
+const { isMobile } = useBreakpoint()
+const bodyRef = ref(null)
+const { isCompact } = useScrollCollapse(bodyRef)
 import { useAuthStore } from '@/stores/auth.js'
 import { useCompaniesStore } from '@/stores/companies.js'
 import { useNotificationsStore } from '@/stores/notifications.js'
@@ -203,6 +395,8 @@ import {
 import {
   getStages, createStage, updateStage, deleteStage, reorderStages, STAGE_COLORS,
 } from '@/api/stages.js'
+
+// STAGE_COLORS используется в шаблоне (auto-imported в setup-биндинги).
 
 const auth = useAuthStore()
 const companies = useCompaniesStore()
@@ -218,6 +412,63 @@ const tabs = [
 ]
 const tab = ref('departments')
 
+const tabsForUi = computed(() => tabs.map(t => ({
+  value: t.key,
+  label: t.label,
+  icon: t.icon,
+  badge: counts.value[t.key] || null,
+})))
+
+/* ---------- helpers для мобильного представления ---------- */
+const rowPrefix = computed(() =>
+  tab.value === 'departments' ? 'd' : tab.value === 'unit-types' ? 'u' : 's'
+)
+
+const currentItems = computed(() => {
+  if (tab.value === 'departments') return displayDepartments.value
+  if (tab.value === 'unit-types') return displayUnitTypes.value
+  return displayStages.value
+})
+
+const tabIcon = computed(() => {
+  if (tab.value === 'departments') return 'apartment'
+  if (tab.value === 'unit-types') return 'category'
+  return 'flag'
+})
+
+const mobileHint = computed(() => {
+  if (tab.value === 'departments') return 'Группировка сотрудников и сегмент в статистике.'
+  if (tab.value === 'unit-types') return 'Категории работы — встреча, дизайн, написание кода и т. п.'
+  return 'Колонки канбан-режима задач.'
+})
+
+const mobilePlaceholder = computed(() => {
+  if (tab.value === 'departments') return 'Название отдела'
+  if (tab.value === 'unit-types') return 'Название типа'
+  return 'Название этапа'
+})
+
+const mobileEmptyTitle = computed(() => {
+  if (tab.value === 'departments') return 'Отделов пока нет'
+  if (tab.value === 'unit-types') return 'Типов юнитов пока нет'
+  return 'Этапов пока нет'
+})
+
+const mobileEmptyIcon = computed(() => tabIcon.value)
+
+function isEditingMobile(item) {
+  return isEditingRow(rowPrefix.value, item)
+}
+
+function startEditMobile(item) {
+  startEdit(rowPrefix.value, item)
+}
+
+function commitMobile(item) {
+  if (tab.value === 'stages') commitStageEdit(item)
+  else commitRowEdit(tab.value, item)
+}
+
 const departments = ref([])
 const unitTypes = ref([])
 const stages = ref([])
@@ -230,11 +481,57 @@ const counts = computed(() => ({
 
 const effectiveCompanyId = computed(() => companies.effectiveCompanyId)
 
-const adding = ref(null)
-const newName = ref('')
-const newColor = ref('blue')
-const editing = ref(null)
+/* ---------- state редактирования / добавления ----------
+   Создание и редактирование делается прямо в строке таблицы.
+   Для создания добавляется временный объект {__draft: true} в начало списка. */
+const editing = ref(null) // 'd-<id>' | 'u-<id>' | 's-<id>' | 'd-draft' | 'u-draft' | 's-draft'
+const editName = ref('')
+const editColor = ref('blue')
+const draftActive = ref(null) // 'departments' | 'unit-types' | 'stages' | null
 
+function isEditingRow(prefix, data) {
+  if (data.__draft) return editing.value === `${prefix}-draft`
+  return editing.value === `${prefix}-${data.id}`
+}
+function rowEditValue(prefix, data) {
+  return editing.value === `${prefix}-${data.__draft ? 'draft' : data.id}` ? editName.value : data.name
+}
+function setRowEditValue(v) { editName.value = v }
+
+function bindEditInput(el) {
+  if (el && el.focus) nextTick(() => el.focus())
+}
+
+function stageDisplayColor(s) {
+  return isEditingRow('s', s) ? editColor.value : s.color
+}
+
+const draftItem = computed(() => {
+  if (!draftActive.value) return null
+  if (draftActive.value === 'stages') {
+    return { id: '__draft__', __draft: true, name: '', color: 'blue', order: 0 }
+  }
+  return { id: '__draft__', __draft: true, name: '' }
+})
+
+const displayDepartments = computed(() => {
+  if (draftActive.value === 'departments') return [draftItem.value, ...departments.value]
+  return departments.value
+})
+const displayUnitTypes = computed(() => {
+  if (draftActive.value === 'unit-types') return [draftItem.value, ...unitTypes.value]
+  return unitTypes.value
+})
+const displayStages = computed(() => {
+  if (draftActive.value === 'stages') return [draftItem.value, ...stages.value]
+  return stages.value
+})
+
+watch(tab, () => {
+  cancelRow()
+})
+
+/* ---------- delete dialog ---------- */
 const deleteDlg = ref({ open: false, kind: null, item: null })
 const deleteMessage = computed(() => {
   const k = deleteDlg.value.kind
@@ -263,68 +560,73 @@ async function loadAll() {
 }
 
 function addItem(kind) {
-  adding.value = kind
-  newName.value = ''
-  newColor.value = 'blue'
+  cancelRow()
+  draftActive.value = kind
+  editName.value = ''
+  editColor.value = 'blue'
+  const prefix = kind === 'departments' ? 'd' : kind === 'unit-types' ? 'u' : 's'
+  editing.value = `${prefix}-draft`
+}
+
+function cancelRow() {
   editing.value = null
-}
-
-function cancelAdd() {
-  adding.value = null
-  newName.value = ''
-}
-
-async function saveNew(kind) {
-  const name = newName.value.trim()
-  if (!name) return
-  try {
-    if (kind === 'departments') {
-      const d = await createDepartment({ name })
-      departments.value.push(d)
-    } else if (kind === 'unit-types') {
-      const u = await createUnitType({ name })
-      unitTypes.value.push(u)
-    } else if (kind === 'stages') {
-      const s = await createStage({ name, color: newColor.value })
-      stages.value.push(s)
-    }
-    notif.success('Добавлено')
-    cancelAdd()
-  } catch (e) {
-    notif.error(e?.message || 'Не удалось создать')
-  }
+  editName.value = ''
+  draftActive.value = null
 }
 
 function startEdit(prefix, item) {
+  draftActive.value = null
   editing.value = `${prefix}-${item.id}`
+  editName.value = item.name
+  if (prefix === 's') editColor.value = item.color
 }
 
-async function saveEdit(kind, item, name) {
-  const trimmed = name.trim()
-  if (!trimmed || trimmed === item.name) { editing.value = null; return }
+async function commitRowEdit(kind, item) {
+  const name = editName.value.trim()
+  if (!name) return
   try {
-    if (kind === 'departments') {
-      const upd = await updateDepartment(item.id, { name: trimmed })
-      _replace(departments.value, upd)
+    if (item.__draft) {
+      // create
+      if (kind === 'departments') {
+        const d = await createDepartment({ name })
+        departments.value.push(d)
+      } else {
+        const u = await createUnitType({ name })
+        unitTypes.value.push(u)
+      }
+      notif.success('Добавлено')
     } else {
-      const upd = await updateUnitType(item.id, { name: trimmed })
-      _replace(unitTypes.value, upd)
+      // update
+      if (name === item.name) { cancelRow(); return }
+      if (kind === 'departments') {
+        const upd = await updateDepartment(item.id, { name })
+        _replace(departments.value, upd)
+      } else {
+        const upd = await updateUnitType(item.id, { name })
+        _replace(unitTypes.value, upd)
+      }
+      notif.success('Сохранено')
     }
-    editing.value = null
-    notif.success('Сохранено')
+    cancelRow()
   } catch (e) {
     notif.error(e?.message || 'Не удалось сохранить')
   }
 }
 
-async function saveStage(item, payload) {
-  const trimmed = payload.name.trim()
-  if (!trimmed) { editing.value = null; return }
+async function commitStageEdit(item) {
+  const name = editName.value.trim()
+  if (!name) return
   try {
-    const upd = await updateStage(item.id, { name: trimmed, color: payload.color })
-    _replace(stages.value, upd)
-    editing.value = null
-    notif.success('Сохранено')
+    if (item.__draft) {
+      const s = await createStage({ name, color: editColor.value })
+      stages.value.push(s)
+      notif.success('Добавлено')
+    } else {
+      const upd = await updateStage(item.id, { name, color: editColor.value })
+      _replace(stages.value, upd)
+      notif.success('Сохранено')
+    }
+    cancelRow()
   } catch (e) {
     notif.error(e?.message || 'Не удалось сохранить')
   }
@@ -360,340 +662,271 @@ async function doDelete() {
   }
 }
 
-// Нативный HTML5 DnD — без сторонних либ (см. PLAN_V3.md, Этап 3).
-const dragFromIdx = ref(-1)
-const dragOverIdx = ref(-1)
-
-function onDragStart(idx, ev) {
-  if (!canEdit.value) return
-  dragFromIdx.value = idx
-  try { ev.dataTransfer.effectAllowed = 'move' } catch {}
-}
-
-function onDragEnd() {
-  dragFromIdx.value = -1
-  dragOverIdx.value = -1
-}
-
-async function onDrop(toIdx) {
-  const from = dragFromIdx.value
-  onDragEnd()
-  if (from < 0 || from === toIdx) return
-  const next = [...stages.value]
-  const [moved] = next.splice(from, 1)
-  next.splice(toIdx, 0, moved)
-  stages.value = next
+/* ---------- DnD для этапов (через PrimeVue row-reorder) ---------- */
+async function onStageReorder(e) {
+  // При активном draft событие не корректно — порядок включает draft.
+  if (draftActive.value === 'stages') return
+  const reordered = e.value
+  stages.value = reordered
   try {
-    const upd = await reorderStages(next.map(s => s.id))
+    const upd = await reorderStages(reordered.map(s => s.id))
     stages.value = upd
-  } catch (e) {
-    notif.error(e?.message || 'Не удалось применить порядок')
+  } catch (err) {
+    notif.error(err?.message || 'Не удалось применить порядок')
     loadAll()
   }
 }
 
-// Inline-компоненты
-const Empty = {
-  props: ['icon', 'title', 'text'],
-  setup(p) {
-    return () => h('div', { class: 'empty' }, [
-      h('div', { class: 'empty-icon' }, [
-        h('span', { class: 'material-symbols-outlined' }, p.icon),
-      ]),
-      h('h4', p.title),
-      h('p', p.text),
-    ])
-  },
-}
-
-const ListRow = {
-  props: {
-    item: Object, icon: String, editing: Boolean, canEdit: Boolean,
-  },
-  emits: ['start', 'save', 'cancel', 'delete'],
-  setup(props, { emit }) {
-    const editName = ref('')
-    watch(() => props.editing, (v) => {
-      if (v) editName.value = props.item.name
-    })
-    return () => props.editing
-      ? h('div', { class: 'row editing' }, [
-          h('span', { class: 'material-symbols-outlined row-icon' }, props.icon),
-          h('input', {
-            class: 'row-input',
-            value: editName.value,
-            onInput: e => editName.value = e.target.value,
-            onKeyup: (e) => {
-              if (e.key === 'Enter') emit('save', editName.value)
-              else if (e.key === 'Escape') emit('cancel')
-            },
-          }),
-          h('button', {
-            class: 'icon-btn success', title: 'Сохранить',
-            onClick: () => emit('save', editName.value),
-          }, [h('span', { class: 'material-symbols-outlined' }, 'check')]),
-          h('button', {
-            class: 'icon-btn', title: 'Отмена', onClick: () => emit('cancel'),
-          }, [h('span', { class: 'material-symbols-outlined' }, 'close')]),
-        ])
-      : h('div', { class: 'row' }, [
-          h('span', { class: 'material-symbols-outlined row-icon' }, props.icon),
-          h('span', { class: 'row-name' }, props.item.name),
-          props.canEdit ? h('div', { class: 'row-actions' }, [
-            h('button', {
-              class: 'icon-btn', title: 'Редактировать', onClick: () => emit('start'),
-            }, [h('span', { class: 'material-symbols-outlined' }, 'edit')]),
-            h('button', {
-              class: 'icon-btn danger', title: 'Удалить', onClick: () => emit('delete'),
-            }, [h('span', { class: 'material-symbols-outlined' }, 'delete')]),
-          ]) : null,
-        ])
-  },
-}
-
-const ColorDots = {
-  props: ['modelValue'],
-  emits: ['update:modelValue'],
-  setup(props, { emit }) {
-    return () => h('div', { class: 'color-dots' },
-      STAGE_COLORS.map(c => h('button', {
-        type: 'button',
-        class: ['color-dot', `tag-${c}`, { selected: props.modelValue === c }],
-        title: c,
-        onClick: () => emit('update:modelValue', c),
-      })))
-  },
-}
-
-const StageRow = {
-  props: { stage: Object, editing: Boolean, canEdit: Boolean },
-  emits: ['start', 'save', 'cancel', 'delete'],
-  setup(props, { emit }) {
-    const editName = ref('')
-    const editColor = ref('blue')
-    watch(() => props.editing, (v) => {
-      if (v) { editName.value = props.stage.name; editColor.value = props.stage.color }
-    })
-    return () => props.editing
-      ? h('div', { class: 'row editing' }, [
-          h('span', { class: ['stage-dot', `tag-${editColor.value}`] }),
-          h('input', {
-            class: 'row-input', value: editName.value,
-            onInput: e => editName.value = e.target.value,
-            onKeyup: (e) => {
-              if (e.key === 'Enter') emit('save', { name: editName.value, color: editColor.value })
-              else if (e.key === 'Escape') emit('cancel')
-            },
-          }),
-          h(ColorDots, {
-            modelValue: editColor.value,
-            'onUpdate:modelValue': (v) => editColor.value = v,
-          }),
-          h('button', {
-            class: 'icon-btn success', title: 'Сохранить',
-            onClick: () => emit('save', { name: editName.value, color: editColor.value }),
-          }, [h('span', { class: 'material-symbols-outlined' }, 'check')]),
-          h('button', {
-            class: 'icon-btn', title: 'Отмена', onClick: () => emit('cancel'),
-          }, [h('span', { class: 'material-symbols-outlined' }, 'close')]),
-        ])
-      : h('div', { class: 'row stage-row' }, [
-          props.canEdit ? h('span', {
-            class: 'drag-grip material-symbols-outlined', title: 'Перетащить',
-          }, 'drag_indicator') : null,
-          h('span', { class: ['stage-dot', `tag-${props.stage.color}`] }),
-          h('span', { class: 'row-name' }, props.stage.name),
-          h('span', { class: 'order-badge' }, `#${props.stage.order}`),
-          props.canEdit ? h('div', { class: 'row-actions' }, [
-            h('button', {
-              class: 'icon-btn', title: 'Редактировать', onClick: () => emit('start'),
-            }, [h('span', { class: 'material-symbols-outlined' }, 'edit')]),
-            h('button', {
-              class: 'icon-btn danger', title: 'Удалить', onClick: () => emit('delete'),
-            }, [h('span', { class: 'material-symbols-outlined' }, 'delete')]),
-          ]) : null,
-        ])
-  },
-}
 </script>
 
 <style scoped>
-.lists-view {
-  padding: 24px;
-  max-width: 980px;
-  margin: 0 auto;
-  display: flex;
-  flex-direction: column;
-  gap: 18px;
-}
-
-.lists-header { display: flex; flex-direction: column; gap: 8px; }
-.lists-title-row {
+/* ============ Шапка ============ */
+.page-head {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
+  gap: 16px;
   flex-wrap: wrap;
 }
-.lists-title { font-size: 28px; font-weight: 700; margin: 0; color: var(--color-on-surface); }
-.lists-subtitle { margin: 0; font-size: 14px; color: var(--color-on-surface-variant); }
-
-.lists-tabs {
-  display: inline-flex;
-  background: var(--color-surface-container);
-  padding: 4px;
-  border-radius: var(--radius-full, 999px);
-  gap: 2px;
-  width: max-content;
-  max-width: 100%;
-  overflow-x: auto;
+.page-head-text { min-width: 0; }
+.page-head-title {
+  margin: 0 0 6px;
+  font-size: 24px;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+  color: var(--color-text);
 }
-.tab {
+.page-head-meta {
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  font-size: 13px;
+  color: var(--color-text-dim);
+}
+.page-head-meta .meta-stat {
+  background: var(--color-surface-high);
+  color: var(--color-text);
+}
+
+/* ============ Placeholder ============ */
+.placeholder {
+  padding: 56px 20px;
+  text-align: center;
+  background: var(--color-surface-high);
+  border-radius: var(--radius-xl);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+}
+.placeholder-icon {
+  width: 84px;
+  height: 84px;
+  border-radius: var(--radius-xl);
+  background: var(--color-primary-container);
+  color: var(--color-on-primary-container);
+  display: grid;
+  place-items: center;
+}
+.placeholder-icon .material-symbols-outlined { font-size: 40px; }
+.placeholder h3 { margin: 0; color: var(--color-text); font-size: 18px; font-weight: 700; }
+.placeholder p { margin: 0; color: var(--color-text-dim); font-size: 14px; max-width: 420px; }
+
+/* ============ Pane ============ */
+.pane {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  height: 100%;
+  min-height: 0;
+}
+
+.pane-hint {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 14px;
+  border-radius: var(--radius-full);
+  background: var(--color-secondary-container);
+  color: var(--color-on-secondary-container);
+  font-size: 12.5px;
+  font-weight: 500;
+  align-self: flex-start;
+  max-width: 100%;
+}
+.pane-hint .material-symbols-outlined { font-size: 16px; opacity: 0.8; }
+
+/* ============ Ячейки таблицы ============ */
+.row-ico {
+  width: 36px;
+  height: 36px;
+  border-radius: var(--radius-md);
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+}
+.row-ico[data-tone="primary"] {
+  background: var(--color-primary-container);
+  color: var(--color-on-primary-container);
+}
+.row-ico .material-symbols-outlined { font-size: 20px; }
+
+.row-name {
+  font-weight: 600;
+  color: var(--color-text);
+  font-size: 14px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.row-input {
+  border: none;
+  outline: none;
+  background: var(--color-surface);
+  font: inherit;
+  font-weight: 600;
+  font-size: 14px;
+  color: var(--color-text);
+  padding: 8px 14px;
+  border-radius: var(--radius-full);
+  min-width: 0;
+  width: 100%;
+  box-shadow: inset 0 0 0 2px var(--color-primary);
+}
+
+.row-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  justify-content: flex-end;
+}
+
+/* ============ Кнопки ============ */
+.pill-btn {
   appearance: none;
   border: none;
-  background: transparent;
   cursor: pointer;
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  padding: 8px 16px;
+  padding: 8px 14px;
+  border-radius: var(--radius-full);
   font: inherit;
+  font-size: 12.5px;
   font-weight: 600;
-  color: var(--color-on-surface-variant);
-  border-radius: var(--radius-full, 999px);
-  transition: background .12s, color .12s;
-  white-space: nowrap;
+  transition: background .14s, color .14s, box-shadow .14s;
 }
-.tab .material-symbols-outlined { font-size: 18px; }
-.tab:hover { color: var(--color-on-surface); }
-.tab.active { background: var(--color-primary); color: var(--color-on-primary); }
-.tab-count {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-width: 22px;
-  height: 22px;
-  padding: 0 6px;
-  border-radius: 999px;
-  background: color-mix(in oklab, currentColor 18%, transparent);
-  font-size: 11px;
-  font-weight: 700;
+.pill-btn.primary {
+  background: var(--color-primary);
+  color: var(--color-on-primary);
 }
+.pill-btn.primary:hover {
+  background: var(--color-primary-hover);
+  box-shadow: var(--shadow-sm);
+}
+.pill-btn .material-symbols-outlined { font-size: 16px; }
 
-.placeholder {
-  padding: 48px 20px;
-  text-align: center;
-  background: var(--color-surface-container);
-  border-radius: var(--radius-lg, 16px);
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 8px;
-}
-.placeholder-icon {
-  width: 64px;
-  height: 64px;
-  border-radius: 50%;
-  background: var(--color-primary-container);
-  color: var(--color-on-primary-container);
-  display: grid;
-  place-items: center;
-}
-.placeholder-icon .material-symbols-outlined { font-size: 32px; }
-.placeholder h3 { margin: 0; color: var(--color-on-surface); }
-.placeholder p { margin: 0; color: var(--color-on-surface-variant); font-size: 14px; }
-
-.lists-pane {
-  background: var(--color-surface);
-  border: 1px solid var(--color-outline-variant);
-  border-radius: var(--radius-lg, 16px);
-  padding: 16px;
-}
-
-.pane-toolbar {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  padding-bottom: 12px;
-  margin-bottom: 12px;
-  border-bottom: 1px dashed var(--color-outline-variant);
-}
-.hint { margin: 0; font-size: 13px; color: var(--color-on-surface-variant); }
-
-.rows { display: flex; flex-direction: column; gap: 6px; }
-
-.row {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 10px 12px;
-  background: var(--color-surface-container);
-  border-radius: var(--radius-md, 12px);
-}
-.row.editing { background: var(--color-surface-high); }
-.row.stage-add { background: var(--color-surface-high); }
-
-.row-icon, .stage-dot {
-  display: grid;
-  place-items: center;
-  width: 32px;
-  height: 32px;
-  border-radius: var(--radius-md, 12px);
-  background: var(--color-primary-container);
-  color: var(--color-on-primary-container);
-  font-size: 18px;
-  flex: none;
-}
-
-.stage-dot {
-  background: var(--tag-surface);
-  border: 2px solid var(--tag-border);
-}
-.stage-dot.tag-red    { --tag-surface: var(--tag-red-surface);    --tag-border: var(--tag-red-border); }
-.stage-dot.tag-orange { --tag-surface: var(--tag-orange-surface); --tag-border: var(--tag-orange-border); }
-.stage-dot.tag-amber  { --tag-surface: var(--tag-amber-surface);  --tag-border: var(--tag-amber-border); }
-.stage-dot.tag-green  { --tag-surface: var(--tag-green-surface);  --tag-border: var(--tag-green-border); }
-.stage-dot.tag-teal   { --tag-surface: var(--tag-teal-surface);   --tag-border: var(--tag-teal-border); }
-.stage-dot.tag-blue   { --tag-surface: var(--tag-blue-surface);   --tag-border: var(--tag-blue-border); }
-.stage-dot.tag-violet { --tag-surface: var(--tag-violet-surface); --tag-border: var(--tag-violet-border); }
-.stage-dot.tag-pink   { --tag-surface: var(--tag-pink-surface);   --tag-border: var(--tag-pink-border); }
-
-.row-name { flex: 1; font-weight: 500; color: var(--color-on-surface); min-width: 0; }
-.row-input {
-  flex: 1;
-  border: none;
-  outline: none;
-  background: transparent;
-  font: inherit;
-  color: var(--color-on-surface);
-  border-bottom: 2px solid var(--color-primary);
-  padding: 4px 0;
-}
-
-.row-actions { display: flex; gap: 2px; }
 .icon-btn {
   appearance: none;
   border: none;
   background: transparent;
-  width: 32px;
-  height: 32px;
+  width: 34px;
+  height: 34px;
   display: grid;
   place-items: center;
   border-radius: 50%;
-  color: var(--color-on-surface-variant);
+  color: var(--color-text-dim);
   cursor: pointer;
-  transition: background .12s, color .12s;
+  transition: background .14s, color .14s;
 }
-.icon-btn:hover { background: var(--color-surface-high); color: var(--color-on-surface); }
-.icon-btn.success:hover { background: var(--color-primary-container); color: var(--color-on-primary-container); }
-.icon-btn.danger:hover { background: var(--color-error-container); color: var(--color-on-error-container); }
+.icon-btn:hover {
+  background: var(--color-surface-high);
+  color: var(--color-text);
+}
+.icon-btn.danger:hover {
+  background: var(--color-error-container);
+  color: var(--color-on-error-container);
+}
 .icon-btn .material-symbols-outlined { font-size: 18px; }
 
-.color-dots { display: inline-flex; gap: 4px; flex-wrap: wrap; }
+.btn-filled {
+  appearance: none;
+  border: none;
+  cursor: pointer;
+  background: var(--color-primary);
+  color: var(--color-on-primary);
+  border-radius: var(--radius-full);
+  padding: 10px 18px;
+  font: inherit;
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  box-shadow: var(--shadow-sm);
+  transition: background .14s, box-shadow .14s;
+}
+.btn-filled:hover { background: var(--color-primary-hover); }
+.btn-filled .material-symbols-outlined { font-size: 18px; }
+
+/* ============ Этапы: chip + порядок + цвет ============ */
+.stage-chip {
+  width: 24px;
+  height: 24px;
+  border-radius: var(--radius-full);
+  background: var(--tag-surface);
+  border: 2.5px solid var(--tag-accent, var(--tag-border));
+  flex-shrink: 0;
+  display: inline-block;
+}
+.stage-chip.tag-red    { --tag-surface: var(--tag-red-surface);    --tag-border: var(--tag-red-border);    --tag-accent: var(--tag-red-accent); }
+.stage-chip.tag-orange { --tag-surface: var(--tag-orange-surface); --tag-border: var(--tag-orange-border); --tag-accent: var(--tag-orange-accent); }
+.stage-chip.tag-amber  { --tag-surface: var(--tag-amber-surface);  --tag-border: var(--tag-amber-border);  --tag-accent: var(--tag-amber-accent); }
+.stage-chip.tag-green  { --tag-surface: var(--tag-green-surface);  --tag-border: var(--tag-green-border);  --tag-accent: var(--tag-green-accent); }
+.stage-chip.tag-teal   { --tag-surface: var(--tag-teal-surface);   --tag-border: var(--tag-teal-border);   --tag-accent: var(--tag-teal-accent); }
+.stage-chip.tag-blue   { --tag-surface: var(--tag-blue-surface);   --tag-border: var(--tag-blue-border);   --tag-accent: var(--tag-blue-accent); }
+.stage-chip.tag-violet { --tag-surface: var(--tag-violet-surface); --tag-border: var(--tag-violet-border); --tag-accent: var(--tag-violet-accent); }
+.stage-chip.tag-pink   { --tag-surface: var(--tag-pink-surface);   --tag-border: var(--tag-pink-border);   --tag-accent: var(--tag-pink-accent); }
+
+.mini-tag {
+  padding: 3px 12px;
+  border-radius: var(--radius-full);
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  background: var(--tag-surface);
+  color: var(--tag-accent);
+  border: 1px solid var(--tag-border);
+}
+.mini-tag.tag-red    { --tag-surface: var(--tag-red-surface);    --tag-border: var(--tag-red-border);    --tag-accent: var(--tag-red-accent); }
+.mini-tag.tag-orange { --tag-surface: var(--tag-orange-surface); --tag-border: var(--tag-orange-border); --tag-accent: var(--tag-orange-accent); }
+.mini-tag.tag-amber  { --tag-surface: var(--tag-amber-surface);  --tag-border: var(--tag-amber-border);  --tag-accent: var(--tag-amber-accent); }
+.mini-tag.tag-green  { --tag-surface: var(--tag-green-surface);  --tag-border: var(--tag-green-border);  --tag-accent: var(--tag-green-accent); }
+.mini-tag.tag-teal   { --tag-surface: var(--tag-teal-surface);   --tag-border: var(--tag-teal-border);   --tag-accent: var(--tag-teal-accent); }
+.mini-tag.tag-blue   { --tag-surface: var(--tag-blue-surface);   --tag-border: var(--tag-blue-border);   --tag-accent: var(--tag-blue-accent); }
+.mini-tag.tag-violet { --tag-surface: var(--tag-violet-surface); --tag-border: var(--tag-violet-border); --tag-accent: var(--tag-violet-accent); }
+.mini-tag.tag-pink   { --tag-surface: var(--tag-pink-surface);   --tag-border: var(--tag-pink-border);   --tag-accent: var(--tag-pink-accent); }
+
+.order-badge {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--color-text-dim);
+  background: var(--color-surface-high);
+  padding: 3px 10px;
+  border-radius: var(--radius-full);
+  font-variant-numeric: tabular-nums;
+}
+
+.color-dots {
+  display: inline-flex;
+  gap: 4px;
+  flex-wrap: wrap;
+}
 .color-dot {
   appearance: none;
-  border: 2px solid var(--tag-border);
+  border: 2.5px solid var(--tag-accent, var(--tag-border));
   background: var(--tag-surface);
   width: 22px;
   height: 22px;
@@ -702,89 +935,125 @@ const StageRow = {
   transition: transform .12s, box-shadow .12s;
   padding: 0;
 }
-.color-dot:hover { transform: scale(1.1); }
+.color-dot:hover { transform: scale(1.12); }
 .color-dot.selected {
   box-shadow: 0 0 0 2px var(--color-surface), 0 0 0 4px var(--color-primary);
-  transform: scale(1.1);
+  transform: scale(1.12);
 }
-.color-dot.tag-red    { --tag-surface: var(--tag-red-surface);    --tag-border: var(--tag-red-border); }
-.color-dot.tag-orange { --tag-surface: var(--tag-orange-surface); --tag-border: var(--tag-orange-border); }
-.color-dot.tag-amber  { --tag-surface: var(--tag-amber-surface);  --tag-border: var(--tag-amber-border); }
-.color-dot.tag-green  { --tag-surface: var(--tag-green-surface);  --tag-border: var(--tag-green-border); }
-.color-dot.tag-teal   { --tag-surface: var(--tag-teal-surface);   --tag-border: var(--tag-teal-border); }
-.color-dot.tag-blue   { --tag-surface: var(--tag-blue-surface);   --tag-border: var(--tag-blue-border); }
-.color-dot.tag-violet { --tag-surface: var(--tag-violet-surface); --tag-border: var(--tag-violet-border); }
-.color-dot.tag-pink   { --tag-surface: var(--tag-pink-surface);   --tag-border: var(--tag-pink-border); }
+.color-dot.tag-red    { --tag-surface: var(--tag-red-surface);    --tag-border: var(--tag-red-border);    --tag-accent: var(--tag-red-accent); }
+.color-dot.tag-orange { --tag-surface: var(--tag-orange-surface); --tag-border: var(--tag-orange-border); --tag-accent: var(--tag-orange-accent); }
+.color-dot.tag-amber  { --tag-surface: var(--tag-amber-surface);  --tag-border: var(--tag-amber-border);  --tag-accent: var(--tag-amber-accent); }
+.color-dot.tag-green  { --tag-surface: var(--tag-green-surface);  --tag-border: var(--tag-green-border);  --tag-accent: var(--tag-green-accent); }
+.color-dot.tag-teal   { --tag-surface: var(--tag-teal-surface);   --tag-border: var(--tag-teal-border);   --tag-accent: var(--tag-teal-accent); }
+.color-dot.tag-blue   { --tag-surface: var(--tag-blue-surface);   --tag-border: var(--tag-blue-border);   --tag-accent: var(--tag-blue-accent); }
+.color-dot.tag-violet { --tag-surface: var(--tag-violet-surface); --tag-border: var(--tag-violet-border); --tag-accent: var(--tag-violet-accent); }
+.color-dot.tag-pink   { --tag-surface: var(--tag-pink-surface);   --tag-border: var(--tag-pink-border);   --tag-accent: var(--tag-pink-accent); }
 
-.drag-grip {
-  cursor: grab;
-  color: var(--color-on-surface-variant);
-  font-size: 18px;
-  opacity: .55;
-  transition: opacity .12s;
+/* ===== Мобильные списковые карточки ===== */
+.m-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
 }
-.drag-grip:active { cursor: grabbing; }
-.row:hover .drag-grip { opacity: 1; }
 
-.drag-slot { transition: transform .12s; }
-.drag-slot[draggable="true"] { cursor: grab; }
-.drag-slot[draggable="true"]:active { cursor: grabbing; }
-.drag-slot.dragging { opacity: .4; }
-.drag-slot.drop-before { box-shadow: inset 0 3px 0 var(--color-primary); border-radius: var(--radius-md, 12px); }
-.drag-slot.drop-after  { box-shadow: inset 0 -3px 0 var(--color-primary); border-radius: var(--radius-md, 12px); }
-
-.order-badge {
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--color-on-surface-variant);
+.m-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
   background: var(--color-surface);
-  padding: 2px 8px;
-  border-radius: 999px;
+  border: 1px solid var(--color-outline-dim);
+  border-radius: var(--radius-lg);
+  padding: 12px 14px;
+  min-height: 60px;
 }
 
-.empty {
-  text-align: center;
-  padding: 28px 12px;
+.m-row.editing {
+  border-color: var(--color-primary);
+  background: var(--color-surface-high);
+}
+
+.m-row .row-ico {
+  width: 40px;
+  height: 40px;
+  border-radius: var(--radius-md);
+  flex-shrink: 0;
+}
+
+.m-row .stage-chip {
+  width: 28px;
+  height: 28px;
+  flex-shrink: 0;
+}
+
+.m-row-body {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.m-row-body .row-name {
+  white-space: normal;
+  word-break: break-word;
+}
+
+.m-row-meta {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.m-row-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.m-row-actions .icon-btn {
+  width: 40px;
+  height: 40px;
+  background: var(--color-surface-high);
+}
+.m-row-actions .icon-btn.primary {
+  background: var(--color-primary);
+  color: var(--color-on-primary);
+}
+.m-row-actions .icon-btn.primary:hover {
+  background: var(--color-primary-hover);
+}
+
+.m-empty {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 8px;
+  gap: 10px;
+  padding: 48px 20px;
+  text-align: center;
 }
-.empty .empty-icon {
-  width: 56px;
-  height: 56px;
-  border-radius: 50%;
+.empty-icon-circle {
+  width: 80px;
+  height: 80px;
+  border-radius: var(--radius-xl);
   background: var(--color-primary-container);
   color: var(--color-on-primary-container);
   display: grid;
   place-items: center;
 }
-.empty .empty-icon .material-symbols-outlined { font-size: 28px; }
-.empty h4 { margin: 0; font-size: 16px; color: var(--color-on-surface); }
-.empty p { margin: 0; font-size: 13px; color: var(--color-on-surface-variant); max-width: 360px; }
+.empty-icon-circle .material-symbols-outlined { font-size: 36px; }
+.m-empty h3 { margin: 0; color: var(--color-text); font-size: 16px; font-weight: 700; }
 
-.btn-filled {
-  appearance: none;
-  border: none;
-  cursor: pointer;
-  background: var(--color-primary);
-  color: var(--color-on-primary);
-  border-radius: var(--radius-full, 999px);
-  padding: 9px 16px;
-  font: inherit;
-  font-weight: 600;
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-}
-.btn-filled:hover { filter: brightness(.94); }
+@media (max-width: 768px) {
+  .hide-narrow { display: none; }
+  .desktop-only { display: none; }
 
-.pane-swap-enter-active, .pane-swap-leave-active { transition: opacity .15s, transform .15s; }
-.pane-swap-enter-from, .pane-swap-leave-to { opacity: 0; transform: translateX(8px); }
-
-@media (max-width: 600px) {
-  .lists-view { padding: 16px; }
-  .pane-toolbar { flex-direction: column; align-items: stretch; gap: 10px; }
-  .tab span:not(.material-symbols-outlined):not(.tab-count) { display: none; }
+  .page-head-title { font-size: 20px; }
+  .page-head-meta { font-size: 12px; }
+  .pane-hint { font-size: 12px; padding: 6px 12px; }
 }
 </style>

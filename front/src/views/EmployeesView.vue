@@ -1,174 +1,347 @@
 <template>
-  <div class="employees-view">
-    <header class="emp-header">
-      <div class="emp-title-row">
-        <h1 class="emp-title">Сотрудники</h1>
-        <div class="emp-title-actions">
-          <CompanySelect v-if="auth.isRootAdmin" />
-          <button v-if="canCreate" class="btn-filled" @click="openCreate">
-            <span class="material-symbols-outlined">person_add</span>
-            Добавить
-          </button>
+  <div class="admin-page">
+    <header class="admin-sticky">
+      <div class="page-head">
+        <div class="page-head-text">
+          <h1 class="page-head-title">{{ pageTitle }}</h1>
+          <div class="page-head-meta">
+            <span class="meta-stat">
+              <span class="material-symbols-outlined">groups</span>
+              <strong>{{ scopedUsers.length }}</strong>
+              {{ pluralPeople(scopedUsers.length) }}
+            </span>
+            <span class="meta-dot" aria-hidden="true">·</span>
+            <span class="meta-stat online">
+              <span class="presence-pulse" />
+              <strong>{{ onlineCount }}</strong> в сети
+            </span>
+          </div>
         </div>
+        <button v-if="canCreate" class="btn-filled desktop-only" @click="openCreate">
+          <span class="material-symbols-outlined">person_add</span>
+          <span>Добавить</span>
+        </button>
       </div>
-      <div class="emp-controls">
+
+      <div class="admin-toolbar">
         <div class="emp-search">
           <span class="material-symbols-outlined">search</span>
-          <input v-model.trim="search" placeholder="Поиск по ФИО или логину" />
+          <input v-model.trim="search" placeholder="Поиск по ФИО, логину, должности" />
           <button v-if="search" class="search-clear" @click="search = ''" aria-label="Очистить">
             <span class="material-symbols-outlined">close</span>
           </button>
         </div>
-        <div v-if="auth.isRootAdmin" class="view-toggle">
-          <button :class="['vt-btn', { active: view === 'cards' }]" @click="view = 'cards'" title="Карточки">
+
+        <div v-if="roleFilters.length > 1" class="emp-chips" role="tablist">
+          <button
+            v-for="f in roleFilters"
+            :key="f.key"
+            :class="['chip', { active: roleFilter === f.key }]"
+            @click="roleFilter = f.key"
+            role="tab"
+            :aria-selected="roleFilter === f.key"
+          >
+            <span v-if="f.icon" class="material-symbols-outlined">{{ f.icon }}</span>
+            {{ f.label }}
+            <span class="chip-count">{{ f.count }}</span>
+          </button>
+        </div>
+
+        <div class="view-toggle" role="group" aria-label="Вид">
+          <button
+            :class="['vt-btn', { active: view === 'cards' }]"
+            @click="setView('cards')"
+            title="Карточки"
+            aria-label="Карточки"
+          >
             <span class="material-symbols-outlined">grid_view</span>
           </button>
-          <button :class="['vt-btn', { active: view === 'table' }]" @click="view = 'table'" title="Таблица">
-            <span class="material-symbols-outlined">list</span>
+          <button
+            :class="['vt-btn', { active: view === 'table' }]"
+            @click="setView('table')"
+            title="Таблица"
+            aria-label="Таблица"
+          >
+            <span class="material-symbols-outlined">view_list</span>
           </button>
         </div>
       </div>
     </header>
 
-    <div v-if="loading" class="emp-loading">
-      <ProgressSpinner />
-    </div>
-
-    <div v-else-if="!filtered.length" class="emp-empty">
-      <div class="empty-icon">
-        <span class="material-symbols-outlined">{{ search ? 'search_off' : 'person_off' }}</span>
-      </div>
-      <h3>{{ search ? 'Никого не нашли' : 'Сотрудников пока нет' }}</h3>
-      <p v-if="!search && canCreate">Добавьте первого — кнопка справа сверху.</p>
-    </div>
-
-    <!-- Таблица (для Админа системы) -->
-    <div v-else-if="view === 'table'" class="emp-table-wrap">
-      <table class="emp-table">
-        <thead>
-          <tr>
-            <th @click="setSort('fio')">ФИО <SortIcon col="fio" :sort="sort" /></th>
-            <th @click="setSort('login')">Логин <SortIcon col="login" :sort="sort" /></th>
-            <th>Должность</th>
-            <th>Роль</th>
-            <th>Компания</th>
-            <th>Статус</th>
-            <th class="th-act"></th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr v-for="u in filtered" :key="u.id">
-            <td>
-              <div class="cell-user" @click="openProfile(u)">
-                <div class="avatar-wrap small">
-                  <img :src="avatarOf(u)" :alt="u.fio" />
-                  <span v-if="messenger.isOnline(u.id)" class="online-dot"></span>
-                </div>
-                <span class="user-fio">{{ u.fio }}</span>
-                <span v-if="u.is_root_admin" class="root-badge" title="Корневой Администратор системы">
-                  <span class="material-symbols-outlined">verified</span>
-                </span>
-              </div>
-            </td>
-            <td class="td-mono">@{{ u.login }}</td>
-            <td>{{ u.post || '—' }}</td>
-            <td><RolePill :level="u.role?.level" :name="u.role?.name" /></td>
-            <td>
-              <span v-if="companyOf(u)" class="company-chip">{{ companyOf(u) }}</span>
-              <span v-else class="muted">—</span>
-            </td>
-            <td>
-              <span :class="['status', messenger.isOnline(u.id) ? 'on' : 'off']">
-                {{ statusOf(u) }}
-              </span>
-            </td>
-            <td class="td-act">
-              <button v-if="canEdit(u)" class="icon-btn" title="Редактировать" @click="openEdit(u)">
-                <span class="material-symbols-outlined">edit</span>
-              </button>
-              <button v-if="canDelete(u)" class="icon-btn danger" title="Скрыть" @click="askDelete(u)">
-                <span class="material-symbols-outlined">delete</span>
-              </button>
-            </td>
-          </tr>
-        </tbody>
-      </table>
-    </div>
-
-    <!-- Карточки -->
-    <div v-else class="emp-grid">
-      <button
-        v-for="u in filtered" :key="u.id"
-        class="emp-card" @click="openProfile(u)"
-      >
-        <div class="avatar-wrap big">
-          <img :src="avatarOf(u)" :alt="u.fio" />
-          <span v-if="messenger.isOnline(u.id)" class="online-dot"></span>
-          <span v-if="u.is_root_admin" class="root-badge corner" title="Корневой Администратор системы">
+    <div ref="bodyRef" class="admin-body">
+      <!-- Карточки -->
+      <div v-if="effectiveView === 'cards'" class="emp-grid">
+        <article
+          v-for="u in filtered"
+          :key="u.id"
+          class="emp-card"
+          :class="{ online: messenger.isOnline(u.id), 'is-me': u.id === auth.user?.id }"
+          tabindex="0"
+          @click="openProfile(u)"
+          @keydown.enter.prevent="openProfile(u)"
+          @keydown.space.prevent="openProfile(u)"
+        >
+          <span
+            v-if="u.is_root_admin"
+            class="root-corner"
+            title="Корневой Администратор системы"
+          >
             <span class="material-symbols-outlined">verified</span>
           </span>
+
+          <div class="emp-card-avatar-wrap">
+            <span class="avatar avatar-lg" :class="presenceClass(u)">
+              <img :src="avatarOf(u)" :alt="u.fio" />
+            </span>
+          </div>
+
+          <h3 class="emp-card-name">
+            {{ u.fio }}
+            <span v-if="u.id === auth.user?.id" class="me-tag">это вы</span>
+          </h3>
+          <p class="emp-card-post" :title="u.post || ''">
+            {{ u.post || '—' }}
+          </p>
+
+          <RolePill :level="u.role?.level" :name="u.role?.name" />
+
+          <p class="emp-card-status" :class="{ on: messenger.isOnline(u.id) }">
+            {{ statusOf(u) }}
+          </p>
+
+          <div
+            v-if="u.id !== auth.user?.id"
+            class="emp-card-actions"
+            @click.stop
+          >
+            <button
+              class="card-act"
+              title="Написать"
+              @click="writeTo(u)"
+              :aria-label="`Написать ${u.fio}`"
+            >
+              <span class="material-symbols-outlined">chat_bubble</span>
+            </button>
+            <button
+              v-if="callsOn"
+              class="card-act"
+              title="Видеозвонок"
+              @click="callTo(u, 'video')"
+              :aria-label="`Видеозвонок: ${u.fio}`"
+            >
+              <span class="material-symbols-outlined">videocam</span>
+            </button>
+            <button
+              v-if="callsOn"
+              class="card-act"
+              title="Аудиозвонок"
+              @click="callTo(u, 'audio')"
+              :aria-label="`Аудиозвонок: ${u.fio}`"
+            >
+              <span class="material-symbols-outlined">call</span>
+            </button>
+          </div>
+        </article>
+
+        <div v-if="!filtered.length" class="emp-grid-empty">
+          <div class="empty-icon">
+            <span class="material-symbols-outlined">
+              {{ search ? 'search_off' : 'person_off' }}
+            </span>
+          </div>
+          <h3>{{ search ? 'Никого не нашли' : 'Сотрудников пока нет' }}</h3>
+          <p v-if="search">Попробуйте уточнить запрос или сбросить фильтры.</p>
         </div>
-        <div class="card-name">{{ u.fio }}</div>
-        <div class="card-post">{{ u.post || '—' }}</div>
-        <RolePill :level="u.role?.level" :name="u.role?.name" />
-        <div :class="['card-status', { on: messenger.isOnline(u.id) }]">
-          {{ statusOf(u) }}
-        </div>
-      </button>
+      </div>
+
+      <!-- Таблица -->
+      <AppDataTable
+        v-else
+        :value="filtered"
+        :loading="loading"
+        v-model:sort-field="sortField"
+        v-model:sort-order="sortOrder"
+        :row-class="() => 'row-clickable'"
+        empty-message="Сотрудников не найдено"
+        @row-click="onRowClick"
+      >
+        <Column field="fio" header="ФИО" sortable :sort-field="(d) => (d.fio || '').toLowerCase()" style="min-width: 240px">
+          <template #body="{ data }">
+            <div class="cell-user">
+              <span class="avatar avatar-sm" :class="presenceClass(data)">
+                <img :src="avatarOf(data)" :alt="data.fio" />
+              </span>
+              <span class="user-fio">{{ data.fio }}</span>
+              <span
+                v-if="data.is_root_admin"
+                class="root-badge"
+                title="Корневой Администратор системы"
+              >
+                <span class="material-symbols-outlined">verified</span>
+              </span>
+              <span v-if="data.id === auth.user?.id" class="me-tag">это вы</span>
+            </div>
+          </template>
+        </Column>
+
+        <Column field="login" header="Логин" sortable style="width: 160px">
+          <template #body="{ data }">
+            <span class="td-mono">@{{ data.login }}</span>
+          </template>
+        </Column>
+
+        <Column field="post" header="Должность" style="min-width: 180px">
+          <template #body="{ data }">
+            <span>{{ data.post || '—' }}</span>
+          </template>
+        </Column>
+
+        <Column header="Роль" style="width: 170px">
+          <template #body="{ data }">
+            <RolePill :level="data.role?.level" :name="data.role?.name" />
+          </template>
+        </Column>
+
+        <Column v-if="auth.isRootAdmin" header="Компания" style="min-width: 160px">
+          <template #body="{ data }">
+            <span v-if="companyOf(data)" class="company-chip">{{ companyOf(data) }}</span>
+            <span v-else class="muted">—</span>
+          </template>
+        </Column>
+
+        <Column header="Статус" style="width: 170px">
+          <template #body="{ data }">
+            <span :class="['status', messenger.isOnline(data.id) ? 'on' : 'off']">
+              <span class="status-dot" />
+              {{ statusOf(data) }}
+            </span>
+          </template>
+        </Column>
+
+        <Column header="" style="width: 88px" body-style="text-align: right">
+          <template #body="{ data }">
+            <div class="row-actions" @click.stop>
+              <button v-if="canEdit(data)" class="icon-btn" title="Редактировать" @click="openEdit(data)">
+                <span class="material-symbols-outlined">edit</span>
+              </button>
+              <button v-if="canDelete(data)" class="icon-btn danger" title="Скрыть" @click="askDelete(data)">
+                <span class="material-symbols-outlined">delete</span>
+              </button>
+            </div>
+          </template>
+        </Column>
+      </AppDataTable>
     </div>
 
-    <!-- Профиль (модалка) -->
+    <!-- Профиль сотрудника. -->
     <Dialog
       v-model:visible="profileOpen"
       modal
       :draggable="false"
       :show-header="false"
-      :style="{ width: '440px', maxWidth: 'calc(100vw - 24px)' }"
-      :pt="{ root: { class: 'emp-dialog' }, content: { style: 'overflow-x: hidden; padding: 0' } }"
+      :dismissable-mask="true"
+      :style="{ width: '460px', maxWidth: 'calc(100vw - 24px)' }"
+      :pt="{
+        root: { class: 'emp-dialog' },
+        content: { style: 'overflow-x: hidden; padding: 0; background: transparent' },
+        mask: { style: 'background: var(--color-scrim)' },
+      }"
     >
       <div v-if="selected" class="emp-profile">
-        <button class="avatar-zoom" @click="lightboxOpen = true" aria-label="Открыть фото">
-          <img class="profile-avatar" :src="avatarOf(selected)" :alt="selected.fio" />
-          <span v-if="messenger.isOnline(selected.id)" class="online-dot profile-dot"></span>
+        <button class="profile-close" @click="profileOpen = false" aria-label="Закрыть">
+          <span class="material-symbols-outlined">close</span>
         </button>
-        <h2 class="profile-name">{{ selected.fio }}</h2>
-        <div :class="['profile-status', { on: messenger.isOnline(selected.id) }]">
-          {{ statusOf(selected) }}
-        </div>
-        <div class="profile-meta">
-          <div v-if="selected.post" class="meta-line">
-            <span class="material-symbols-outlined">badge</span>
-            {{ selected.post }}
-          </div>
-          <div class="meta-line">
-            <span class="material-symbols-outlined">alternate_email</span>
-            @{{ selected.login }}
-          </div>
-          <div v-if="selected.phone" class="meta-line">
-            <span class="material-symbols-outlined">phone</span>
-            <a :href="`tel:${selected.phone}`">{{ fmtPhone(selected.phone) }}</a>
-          </div>
-          <div v-if="selected.email" class="meta-line">
-            <span class="material-symbols-outlined">mail</span>
-            <a :href="`mailto:${selected.email}`">{{ selected.email }}</a>
-          </div>
-          <div v-if="companyOf(selected)" class="meta-line">
-            <span class="material-symbols-outlined">domain</span>
-            {{ companyOf(selected) }}
-          </div>
-        </div>
-        <RolePill :level="selected.role?.level" :name="selected.role?.name" />
 
-        <div class="profile-actions">
-          <button
-            v-if="selected.id !== auth.user?.id"
-            class="btn-filled"
-            @click="writeTo(selected)"
+        <div class="profile-hero">
+          <button class="profile-avatar-btn" @click="lightboxOpen = true" aria-label="Открыть фото">
+            <span class="avatar avatar-xl" :class="presenceClass(selected)">
+              <img :src="avatarOf(selected)" :alt="selected.fio" />
+            </span>
+          </button>
+          <h2 class="profile-name">
+            {{ selected.fio }}
+            <span
+              v-if="selected.is_root_admin"
+              class="root-badge inline"
+              title="Корневой Администратор системы"
+            >
+              <span class="material-symbols-outlined">verified</span>
+            </span>
+          </h2>
+          <div class="profile-tags">
+            <RolePill :level="selected.role?.level" :name="selected.role?.name" />
+            <span :class="['profile-status', { on: messenger.isOnline(selected.id) }]">
+              <span class="status-dot" />
+              {{ statusOf(selected) }}
+            </span>
+          </div>
+        </div>
+
+        <div class="profile-list">
+          <div v-if="selected.post" class="profile-row">
+            <span class="row-ico" data-tone="primary">
+              <span class="material-symbols-outlined">badge</span>
+            </span>
+            <span class="row-text">
+              <span class="row-label">Должность</span>
+              <span class="row-value">{{ selected.post }}</span>
+            </span>
+          </div>
+          <div class="profile-row">
+            <span class="row-ico" data-tone="secondary">
+              <span class="material-symbols-outlined">alternate_email</span>
+            </span>
+            <span class="row-text">
+              <span class="row-label">Логин</span>
+              <span class="row-value">@{{ selected.login }}</span>
+            </span>
+          </div>
+          <a
+            v-if="selected.phone"
+            class="profile-row link"
+            :href="`tel:${selected.phone}`"
           >
-            <span class="material-symbols-outlined">chat</span> Написать
+            <span class="row-ico" data-tone="tertiary">
+              <span class="material-symbols-outlined">phone</span>
+            </span>
+            <span class="row-text">
+              <span class="row-label">Телефон</span>
+              <span class="row-value">{{ fmtPhone(selected.phone) }}</span>
+            </span>
+            <span class="material-symbols-outlined row-chev">arrow_outward</span>
+          </a>
+          <a
+            v-if="selected.email"
+            class="profile-row link"
+            :href="`mailto:${selected.email}`"
+          >
+            <span class="row-ico" data-tone="tertiary">
+              <span class="material-symbols-outlined">mail</span>
+            </span>
+            <span class="row-text">
+              <span class="row-label">Email</span>
+              <span class="row-value">{{ selected.email }}</span>
+            </span>
+            <span class="material-symbols-outlined row-chev">arrow_outward</span>
+          </a>
+          <div v-if="companyOf(selected)" class="profile-row">
+            <span class="row-ico" data-tone="primary">
+              <span class="material-symbols-outlined">domain</span>
+            </span>
+            <span class="row-text">
+              <span class="row-label">Компания</span>
+              <span class="row-value">{{ companyOf(selected) }}</span>
+            </span>
+          </div>
+        </div>
+
+        <div v-if="selected.id !== auth.user?.id" class="profile-actions">
+          <button class="btn-filled" @click="writeTo(selected)">
+            <span class="material-symbols-outlined">chat</span>
+            Написать
           </button>
           <button
-            v-if="selected.id !== auth.user?.id && callsOn"
+            v-if="callsOn"
             class="btn-tonal"
             @click="callTo(selected, 'video')"
           >
@@ -176,7 +349,7 @@
             <span class="hide-narrow">Видео</span>
           </button>
           <button
-            v-if="selected.id !== auth.user?.id && callsOn"
+            v-if="callsOn"
             class="btn-tonal tertiary"
             @click="callTo(selected, 'audio')"
           >
@@ -184,12 +357,18 @@
             <span class="hide-narrow">Аудио</span>
           </button>
         </div>
-        <div v-if="canEdit(selected) || canDelete(selected)" class="profile-admin">
+
+        <div
+          v-if="canEdit(selected) || canDelete(selected)"
+          class="profile-admin"
+        >
           <button v-if="canEdit(selected)" class="btn-outlined" @click="openEdit(selected)">
-            <span class="material-symbols-outlined">edit</span> Редактировать
+            <span class="material-symbols-outlined">edit</span>
+            Редактировать
           </button>
           <button v-if="canDelete(selected)" class="btn-outlined danger" @click="askDelete(selected)">
-            <span class="material-symbols-outlined">delete</span> Скрыть
+            <span class="material-symbols-outlined">delete</span>
+            Скрыть
           </button>
         </div>
       </div>
@@ -220,6 +399,15 @@
       @confirm="doDelete"
       @cancel="deleteDlg.open = false"
     />
+
+    <AppFab
+      :visible="canCreate"
+      icon="person_add"
+      label="Добавить"
+      :collapsed="isCompact"
+      aria-label="Добавить сотрудника"
+      @click="openCreate"
+    />
   </div>
 </template>
 
@@ -227,7 +415,7 @@
 import { ref, computed, onMounted, watch, h } from 'vue'
 import { useRouter } from 'vue-router'
 import Dialog from 'primevue/dialog'
-import ProgressSpinner from 'primevue/progressspinner'
+import Column from 'primevue/column'
 import {
   getDirectory, getUsers, createUser, updateUser, deleteUser, assignRole,
 } from '@/api/users.js'
@@ -239,10 +427,19 @@ import { useCallStore } from '@/stores/call.js'
 import { useNotificationsStore } from '@/stores/notifications.js'
 import { usePermission } from '@/composables/usePermission.js'
 import { formatLastSeen } from '@/utils/presence.js'
-import CompanySelect from '@/components/common/CompanySelect.vue'
 import AvatarLightbox from '@/components/common/AvatarLightbox.vue'
 import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
+import AppDataTable from '@/components/common/AppDataTable.vue'
+import AppFab from '@/components/common/AppFab.vue'
 import EmployeeFormDialog from '@/components/employees/EmployeeFormDialog.vue'
+import { useBreakpoint } from '@/composables/useBreakpoint.js'
+import { useScrollCollapse } from '@/composables/useScrollCollapse.js'
+
+const { isMobile } = useBreakpoint()
+const pageTitle = computed(() => (isMobile.value ? 'Люди' : 'Сотрудники'))
+
+const bodyRef = ref(null)
+const { isCompact } = useScrollCollapse(bodyRef)
 
 const router = useRouter()
 const auth = useAuthStore()
@@ -256,7 +453,20 @@ const users = ref([])
 const roles = ref([])
 const loading = ref(false)
 const search = ref('')
-const view = ref(auth.isRootAdmin ? 'cards' : 'cards')
+const roleFilter = ref('all')
+const sortField = ref('fio')
+const sortOrder = ref(1)
+
+const VIEW_KEY = 'gw2_employees_view'
+const view = ref((typeof localStorage !== 'undefined' && localStorage.getItem(VIEW_KEY)) || 'cards')
+function setView(v) {
+  view.value = v
+  try { localStorage.setItem(VIEW_KEY, v) } catch {}
+}
+
+/* На мобильном table-вид непригоден (горизонтальный скролл, мелкий шрифт),
+   принудительно показываем карточки независимо от сохранённого выбора. */
+const effectiveView = computed(() => (isMobile.value ? 'cards' : view.value))
 
 const profileOpen = ref(false)
 const selected = ref(null)
@@ -267,7 +477,6 @@ const editTarget = ref(null)
 const formDlgRef = ref(null)
 
 const deleteDlg = ref({ open: false, user: null })
-const sort = ref({ col: 'fio', dir: 'asc' })
 
 const canCreate = computed(() => isAtLeast(ROLES.DIRECTOR))
 const callsOn = computed(() => {
@@ -278,7 +487,6 @@ const callsOn = computed(() => {
 function canEdit(u) {
   if (!isAtLeast(ROLES.DIRECTOR)) return false
   if (!auth.isRootAdmin && u.company_id !== auth.companyId) return false
-  // Не давать редактировать пользователя с ролью выше своей.
   if ((u.role?.level ?? 0) > myLevel()) return false
   return true
 }
@@ -293,8 +501,6 @@ function canDelete(u) {
 async function load() {
   loading.value = true
   try {
-    // Админу системы нужны полные карточки (с phone/email/is_root_admin),
-    // а обычные роли получают каталог через /directory.
     if (auth.isRootAdmin) {
       users.value = await getUsers()
     } else {
@@ -309,7 +515,7 @@ async function load() {
 
 async function loadRoles() {
   try { roles.value = await getRoles() }
-  catch {/* без ролей не сможем редактировать, но просмотр работает */}
+  catch { /* без ролей: просмотр работает, редактирование — нет */ }
 }
 
 onMounted(() => {
@@ -319,9 +525,6 @@ onMounted(() => {
   if (auth.isRootAdmin) companies.load()
 })
 
-// Перезагружаем при смене активной компании (для Админа системы — он
-// получит сотрудников только выбранной компании, т.к. /users тоже надо
-// фильтровать; см. ниже filtered).
 watch(() => companies.activeCompanyId, () => {
   if (auth.isRootAdmin) load()
 })
@@ -333,6 +536,13 @@ function statusOf(u) {
 
 function avatarOf(u) {
   return u.avatar_path ? `/uploads/${u.avatar_path}` : `/api/users/${u.id}/identicon`
+}
+
+function presenceClass(u) {
+  return {
+    online: messenger.isOnline(u.id),
+    offline: !messenger.isOnline(u.id),
+  }
 }
 
 function companyOf(u) {
@@ -347,12 +557,51 @@ function fmtPhone(p) {
   return `+7 (${d.slice(0, 3)}) ${d.slice(3, 6)}-${d.slice(6, 8)}-${d.slice(8, 10)}`
 }
 
+function pluralPeople(n) {
+  const m10 = n % 10
+  const m100 = n % 100
+  if (m10 === 1 && m100 !== 11) return 'сотрудник'
+  if ([2, 3, 4].includes(m10) && ![12, 13, 14].includes(m100)) return 'сотрудника'
+  return 'сотрудников'
+}
+
+const scopedUsers = computed(() => {
+  const cid = auth.isRootAdmin ? companies.activeCompanyId : auth.companyId
+  if (cid == null) return users.value
+  return users.value.filter(u => u.company_id === cid)
+})
+
+const onlineCount = computed(() =>
+  scopedUsers.value.reduce((s, u) => s + (messenger.isOnline(u.id) ? 1 : 0), 0)
+)
+
+const roleFilters = computed(() => {
+  const counters = new Map()
+  for (const u of scopedUsers.value) {
+    const lvl = u.role?.level
+    if (lvl == null) continue
+    counters.set(lvl, (counters.get(lvl) || 0) + 1)
+  }
+  const names = {
+    1: 'Сотрудники',
+    2: 'Менеджеры',
+    3: 'Руководители',
+    4: 'Администраторы',
+  }
+  const items = [{ key: 'all', label: 'Все', icon: 'groups', count: scopedUsers.value.length }]
+  for (const [lvl, count] of [...counters.entries()].sort((a, b) => a[0] - b[0])) {
+    items.push({ key: String(lvl), label: names[lvl] || `Уровень ${lvl}`, count })
+  }
+  return items
+})
+
 const filtered = computed(() => {
   const q = search.value.toLowerCase()
-  // Для Админа системы доступна фильтрация по выбранной компании.
-  const cid = auth.isRootAdmin ? companies.activeCompanyId : auth.companyId
-  let arr = users.value
-  if (cid != null) arr = arr.filter(u => u.company_id === cid)
+  let arr = scopedUsers.value
+  if (roleFilter.value !== 'all') {
+    const lvl = Number(roleFilter.value)
+    arr = arr.filter(u => u.role?.level === lvl)
+  }
   if (q) {
     arr = arr.filter(u =>
       (u.fio || '').toLowerCase().includes(q) ||
@@ -360,18 +609,11 @@ const filtered = computed(() => {
       (u.post || '').toLowerCase().includes(q),
     )
   }
-  if (view.value === 'table') {
-    const sign = sort.value.dir === 'asc' ? 1 : -1
-    arr = [...arr].sort((a, b) =>
-      sign * String(a[sort.value.col] || '').localeCompare(String(b[sort.value.col] || ''), 'ru'),
-    )
-  }
   return arr
 })
 
-function setSort(col) {
-  if (sort.value.col === col) sort.value.dir = sort.value.dir === 'asc' ? 'desc' : 'asc'
-  else sort.value = { col, dir: 'asc' }
+function onRowClick(e) {
+  openProfile(e.data)
 }
 
 function openProfile(u) { selected.value = u; profileOpen.value = true }
@@ -385,7 +627,7 @@ async function writeTo(u) {
 async function callTo(u, media) {
   profileOpen.value = false
   try { await callStore.startCall({ userIds: [u.id], media }) }
-  catch {/* error в store */}
+  catch { /* ошибка в store */ }
 }
 
 function openCreate() {
@@ -446,20 +688,9 @@ async function doDelete() {
   }
 }
 
-watch(profileOpen, (open) => { if (!open) { selected.value = null; lightboxOpen.value = false } })
-
-const SortIcon = {
-  props: ['col', 'sort'],
-  setup(p) {
-    return () => {
-      const active = p.sort.col === p.col
-      const ic = active ? (p.sort.dir === 'asc' ? 'arrow_upward' : 'arrow_downward') : 'unfold_more'
-      return h('span', { class: ['sort-ic', { active }] }, [
-        h('span', { class: 'material-symbols-outlined' }, ic),
-      ])
-    }
-  },
-}
+watch(profileOpen, (open) => {
+  if (!open) { selected.value = null; lightboxOpen.value = false }
+})
 
 const RolePill = {
   props: ['level', 'name'],
@@ -472,81 +703,443 @@ const RolePill = {
 </script>
 
 <style scoped>
-.employees-view {
-  padding: 24px;
-  max-width: 1280px;
-  margin: 0 auto;
-  display: flex;
-  flex-direction: column;
-  gap: 18px;
-}
-
-.emp-header { display: flex; flex-direction: column; gap: 14px; }
-.emp-title-row {
+/* ============ Шапка страницы ============ */
+.page-head {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
+  gap: 16px;
   flex-wrap: wrap;
 }
-.emp-title { font-size: 28px; font-weight: 700; margin: 0; color: var(--color-on-surface); }
-.emp-title-actions { display: inline-flex; gap: 10px; align-items: center; flex-wrap: wrap; }
-
-.emp-controls {
-  display: flex;
+.page-head-text { min-width: 0; }
+.page-head-title {
+  margin: 0 0 6px;
+  font-size: 24px;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+  color: var(--color-text);
+}
+.page-head-meta {
+  display: inline-flex;
   align-items: center;
-  gap: 12px;
   flex-wrap: wrap;
+  gap: 10px;
+  font-size: 13px;
+  color: var(--color-text-dim);
+}
+.page-head-meta .meta-stat {
+  background: var(--color-surface-high);
+  color: var(--color-text);
+}
+.page-head-meta .meta-stat.online {
+  background: color-mix(in oklch, var(--color-success) 18%, transparent);
+  color: var(--color-text);
 }
 
 .emp-search {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  height: 40px;
-  padding: 0 10px 0 12px;
-  background: var(--color-surface-container);
+  height: 44px;
+  padding: 0 10px 0 14px;
+  background: var(--color-surface-high);
   border: 1px solid transparent;
-  border-radius: var(--radius-full, 999px);
+  border-radius: var(--radius-full);
   flex: 1 1 280px;
-  max-width: 480px;
-  transition: border-color .12s, background .12s;
+  max-width: 540px;
+  min-width: 0;
+  transition: border-color .12s, background .12s, box-shadow .12s;
 }
 .emp-search:focus-within {
   background: var(--color-surface);
   border-color: var(--color-primary);
+  box-shadow: 0 0 0 3px color-mix(in oklch, var(--color-primary) 18%, transparent);
 }
-.emp-search .material-symbols-outlined { color: var(--color-on-surface-variant); font-size: 20px; }
+.emp-search > .material-symbols-outlined {
+  color: var(--color-text-dim);
+  font-size: 20px;
+}
 .emp-search input {
   flex: 1;
   border: none;
   outline: none;
   background: transparent;
-  color: var(--color-on-surface);
+  color: var(--color-text);
   font: inherit;
   min-width: 0;
 }
 .search-clear {
   border: none;
-  background: var(--color-surface-high);
-  width: 24px;
-  height: 24px;
+  background: var(--color-surface-highest);
+  width: 26px;
+  height: 26px;
   border-radius: 50%;
   display: grid;
   place-items: center;
   cursor: pointer;
-  color: var(--color-on-surface-variant);
+  color: var(--color-text-dim);
+  transition: background .12s, color .12s;
 }
+.search-clear:hover { background: var(--color-primary-container); color: var(--color-on-primary-container); }
 .search-clear .material-symbols-outlined { font-size: 14px; }
 
+.emp-chips {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  scrollbar-width: thin;
+  scroll-snap-type: x proximity;
+  padding-bottom: 2px;
+  max-width: 100%;
+  min-width: 0;
+  flex: 0 1 auto;
+}
+.emp-chips::-webkit-scrollbar { height: 4px; }
+.emp-chips::-webkit-scrollbar-thumb { background: var(--color-outline-dim); border-radius: 999px; }
+
+.chip {
+  appearance: none;
+  border: 1px solid var(--color-outline-dim);
+  background: transparent;
+  color: var(--color-text);
+  padding: 8px 14px;
+  height: 36px;
+  border-radius: var(--radius-full);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+  scroll-snap-align: start;
+  transition: background .12s, color .12s, border-color .12s, box-shadow .12s;
+}
+.chip:hover { background: var(--color-surface-high); }
+.chip .material-symbols-outlined { font-size: 18px; opacity: 0.8; }
+.chip-count {
+  min-width: 18px;
+  padding: 0 6px;
+  height: 18px;
+  border-radius: var(--radius-full);
+  background: var(--color-surface-high);
+  color: var(--color-text-dim);
+  font-size: 11px;
+  font-weight: 700;
+  display: inline-grid;
+  place-items: center;
+}
+.chip.active {
+  background: var(--color-secondary-container);
+  color: var(--color-on-secondary-container);
+  border-color: transparent;
+  box-shadow: var(--shadow-sm);
+}
+.chip.active .chip-count {
+  background: color-mix(in oklch, var(--color-on-secondary-container) 18%, transparent);
+  color: var(--color-on-secondary-container);
+}
+
+/* ============ Переключатель вида ============ */
 .view-toggle {
   display: inline-flex;
   padding: 3px;
-  background: var(--color-surface-container);
-  border-radius: var(--radius-full, 999px);
+  background: var(--color-surface-high);
+  border-radius: var(--radius-full);
   gap: 2px;
+  margin-left: auto;
 }
 .vt-btn {
+  appearance: none;
+  border: none;
+  background: transparent;
+  width: 38px;
+  height: 38px;
+  display: grid;
+  place-items: center;
+  border-radius: var(--radius-full);
+  cursor: pointer;
+  color: var(--color-text-dim);
+  transition: background .12s, color .12s;
+}
+.vt-btn:hover { color: var(--color-text); }
+.vt-btn.active {
+  background: var(--color-primary);
+  color: var(--color-on-primary);
+  box-shadow: var(--shadow-sm);
+}
+.vt-btn .material-symbols-outlined { font-size: 20px; }
+
+/* ============ Сетка карточек ============ */
+.emp-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(212px, 1fr));
+  gap: 16px;
+}
+.emp-card {
+  position: relative;
+  background: var(--color-surface);
+  border: 1px solid var(--color-outline-dim);
+  border-radius: var(--radius-xl);
+  padding: 24px 16px 16px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  cursor: pointer;
+  gap: 8px;
+  color: var(--color-text);
+  outline: none;
+  transition: border-color .16s, transform .16s, box-shadow .16s, background .16s;
+  overflow: hidden;
+}
+.emp-card:hover,
+.emp-card:focus-visible {
+  border-color: transparent;
+  background: var(--color-surface-high);
+  box-shadow: var(--shadow-md);
+  transform: translateY(-2px);
+}
+.emp-card:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
+}
+.emp-card.is-me { border-color: var(--color-primary); }
+
+.emp-card-avatar-wrap {
+  position: relative;
+  margin-bottom: 4px;
+}
+.avatar-lg { width: 88px; height: 88px; }
+
+.emp-card-name {
+  font-size: 15px;
+  font-weight: 700;
+  line-height: 1.25;
+  margin: 0;
+  color: var(--color-text);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+.emp-card-post {
+  font-size: 12.5px;
+  color: var(--color-text-dim);
+  margin: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+}
+.emp-card-status {
+  font-size: 11.5px;
+  color: var(--color-text-dim);
+  margin: 4px 0 0;
+}
+.emp-card-status.on {
+  color: var(--color-success);
+  font-weight: 700;
+}
+
+.emp-card-actions {
+  position: absolute;
+  left: 8px;
+  right: 8px;
+  bottom: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  padding: 6px;
+  border-radius: var(--radius-lg);
+  background: var(--color-surface);
+  border: 1px solid var(--color-outline-dim);
+  box-shadow: var(--shadow-md);
+  opacity: 0;
+  transform: translateY(8px);
+  pointer-events: none;
+  transition: opacity .18s, transform .18s;
+}
+.emp-card:hover .emp-card-actions,
+.emp-card:focus-within .emp-card-actions {
+  opacity: 1;
+  transform: translateY(0);
+  pointer-events: auto;
+}
+@media (hover: none) {
+  .emp-card-actions {
+    position: static;
+    opacity: 1;
+    transform: none;
+    pointer-events: auto;
+    margin-top: 6px;
+    background: var(--color-surface-high);
+    border: none;
+    box-shadow: none;
+  }
+}
+.card-act {
+  appearance: none;
+  border: none;
+  background: transparent;
+  width: 36px;
+  height: 36px;
+  border-radius: var(--radius-full);
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  color: var(--color-text);
+  transition: background .12s, color .12s;
+}
+.card-act:hover {
+  background: var(--color-primary-container);
+  color: var(--color-on-primary-container);
+}
+.card-act .material-symbols-outlined { font-size: 20px; }
+
+.root-corner {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  width: 28px;
+  height: 28px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--color-tertiary-container);
+  color: var(--color-on-tertiary-container);
+  box-shadow: var(--shadow-sm);
+  z-index: 1;
+}
+.root-corner .material-symbols-outlined { font-size: 16px; font-variation-settings: 'FILL' 1; }
+
+.emp-grid-empty {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  padding: 56px 20px;
+  background: var(--color-surface-high);
+  border-radius: var(--radius-xl);
+  text-align: center;
+}
+.empty-icon {
+  width: 84px;
+  height: 84px;
+  border-radius: var(--radius-xl);
+  background: var(--color-primary-container);
+  color: var(--color-on-primary-container);
+  display: grid;
+  place-items: center;
+}
+.empty-icon .material-symbols-outlined { font-size: 40px; }
+.emp-grid-empty h3 {
+  margin: 4px 0 0;
+  color: var(--color-text);
+  font-size: 18px;
+  font-weight: 700;
+}
+.emp-grid-empty p { margin: 0; color: var(--color-text-dim); font-size: 14px; max-width: 360px; }
+
+/* ============ Аватары с presence-ring ============ */
+.avatar {
+  position: relative;
+  display: inline-grid;
+  place-items: center;
+  flex-shrink: 0;
+  border-radius: 50%;
+  isolation: isolate;
+}
+.avatar img {
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  object-fit: cover;
+  display: block;
+}
+.avatar-sm { width: 32px; height: 32px; }
+.avatar-xl { width: 116px; height: 116px; }
+
+.avatar::before {
+  content: '';
+  position: absolute;
+  inset: -3px;
+  border-radius: 50%;
+  border: 2px solid var(--color-outline-dim);
+  z-index: -1;
+  transition: border-color .18s, box-shadow .18s;
+}
+.avatar-xl::before { inset: -5px; border-width: 4px; }
+.avatar.online::before {
+  border-color: var(--color-success);
+  box-shadow: 0 0 0 2px color-mix(in oklch, var(--color-success) 22%, transparent);
+}
+
+/* ============ Ячейки таблицы ============ */
+.cell-user {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+.user-fio {
+  font-weight: 600;
+  color: var(--color-text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.me-tag {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  padding: 2px 8px;
+  border-radius: var(--radius-full);
+  background: var(--color-primary-container);
+  color: var(--color-on-primary-container);
+  flex-shrink: 0;
+}
+.td-mono { color: var(--color-text-dim); font-variant-numeric: tabular-nums; }
+.company-chip {
+  display: inline-block;
+  padding: 3px 10px;
+  background: var(--color-surface-high);
+  border-radius: var(--radius-full);
+  font-size: 12px;
+}
+.muted { color: var(--color-text-dim); font-style: italic; }
+
+.status {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 600;
+  font-size: 13px;
+}
+.status .status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--color-outline-dim);
+}
+.status.on { color: var(--color-success); }
+.status.on .status-dot { background: var(--color-success); }
+.status.off { color: var(--color-text-dim); }
+
+.row-actions {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 4px;
+}
+.icon-btn {
   appearance: none;
   border: none;
   background: transparent;
@@ -554,85 +1147,14 @@ const RolePill = {
   height: 34px;
   display: grid;
   place-items: center;
-  border-radius: 999px;
-  cursor: pointer;
-  color: var(--color-on-surface-variant);
-}
-.vt-btn.active { background: var(--color-primary); color: var(--color-on-primary); }
-.vt-btn .material-symbols-outlined { font-size: 18px; }
-
-.emp-loading { display: grid; place-items: center; min-height: 240px; }
-
-.emp-empty {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 10px;
-  padding: 48px 20px;
-  background: var(--color-surface-container);
-  border-radius: var(--radius-lg, 16px);
-  text-align: center;
-}
-.empty-icon {
-  width: 64px;
-  height: 64px;
   border-radius: 50%;
-  background: var(--color-primary-container);
-  color: var(--color-on-primary-container);
-  display: grid;
-  place-items: center;
-}
-.empty-icon .material-symbols-outlined { font-size: 32px; }
-.emp-empty h3 { margin: 0; color: var(--color-on-surface); }
-.emp-empty p { margin: 0; color: var(--color-on-surface-variant); font-size: 14px; }
-
-/* Карточки */
-.emp-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(212px, 1fr));
-  gap: 14px;
-}
-.emp-card {
-  appearance: none;
-  background: var(--color-surface);
-  border: 1px solid var(--color-outline-variant);
-  border-radius: var(--radius-lg, 16px);
-  padding: 18px 14px 16px;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  text-align: center;
+  color: var(--color-text-dim);
   cursor: pointer;
-  gap: 6px;
-  color: var(--color-on-surface);
-  transition: border-color .12s, transform .12s, box-shadow .12s;
+  transition: background .12s, color .12s;
 }
-.emp-card:hover {
-  border-color: var(--color-primary);
-  box-shadow: var(--shadow-md);
-  transform: translateY(-2px);
-}
-.card-name { font-size: 15px; font-weight: 600; }
-.card-post { font-size: 13px; color: var(--color-on-surface-variant); }
-.card-status { font-size: 11px; color: var(--color-on-surface-variant); margin-top: 2px; }
-.card-status.on { color: var(--color-primary); font-weight: 600; }
-
-.avatar-wrap { position: relative; display: inline-block; }
-.avatar-wrap.big img { width: 88px; height: 88px; border: 2px solid var(--color-outline-variant); margin-bottom: 8px; }
-.avatar-wrap.small img { width: 36px; height: 36px; border: 1.5px solid var(--color-outline-variant); }
-.avatar-wrap img { border-radius: 50%; object-fit: cover; display: block; }
-
-.online-dot {
-  position: absolute;
-  right: 2px;
-  bottom: 2px;
-  width: 14px;
-  height: 14px;
-  border-radius: 50%;
-  background: var(--color-success);
-  border: 2.5px solid var(--color-surface);
-}
-.avatar-wrap.big .online-dot { right: 4px; bottom: 10px; width: 16px; height: 16px; }
+.icon-btn:hover { background: var(--color-surface-high); color: var(--color-text); }
+.icon-btn.danger:hover { background: var(--color-error-container); color: var(--color-on-error-container); }
+.icon-btn .material-symbols-outlined { font-size: 18px; }
 
 .root-badge {
   display: inline-grid;
@@ -640,218 +1162,319 @@ const RolePill = {
   width: 18px;
   height: 18px;
   color: var(--color-tertiary);
+  flex-shrink: 0;
 }
 .root-badge .material-symbols-outlined { font-size: 18px; font-variation-settings: 'FILL' 1; }
-.root-badge.corner {
-  position: absolute;
-  top: 0;
-  right: 0;
-  width: 24px;
-  height: 24px;
+.root-badge.inline {
+  width: 22px;
+  height: 22px;
   background: var(--color-tertiary-container);
+  color: var(--color-on-tertiary-container);
   border-radius: 50%;
-  border: 2px solid var(--color-surface);
+  margin-left: 4px;
 }
-.root-badge.corner .material-symbols-outlined { font-size: 14px; }
+.root-badge.inline .material-symbols-outlined { font-size: 14px; }
 
-/* Роль-плашка */
+/* ============ Role pill ============ */
 .role-pill {
   display: inline-flex;
   align-items: center;
-  padding: 2px 10px;
-  border-radius: var(--radius-full, 999px);
+  padding: 3px 12px;
+  border-radius: var(--radius-full);
   font-size: 11px;
   font-weight: 700;
   text-transform: uppercase;
-  letter-spacing: 0.05em;
+  letter-spacing: 0.06em;
+  line-height: 1.4;
 }
-.role-pill.lvl-1 { background: var(--color-surface-high); color: var(--color-on-surface-variant); }
+.role-pill.lvl-1 { background: var(--color-surface-high); color: var(--color-text-dim); }
 .role-pill.lvl-2 { background: var(--color-secondary-container); color: var(--color-on-secondary-container); }
 .role-pill.lvl-3 { background: var(--color-tertiary-container); color: var(--color-on-tertiary-container); }
 .role-pill.lvl-4 { background: var(--color-primary-container); color: var(--color-on-primary-container); }
 
-/* Таблица */
-.emp-table-wrap {
+/* ============ Profile dialog ============ */
+.emp-profile {
+  display: flex;
+  flex-direction: column;
   background: var(--color-surface);
-  border-radius: var(--radius-lg, 16px);
-  border: 1px solid var(--color-outline-variant);
-  overflow: hidden;
+  width: 100%;
+  box-sizing: border-box;
+  position: relative;
 }
-.emp-table { width: 100%; border-collapse: collapse; }
-.emp-table thead { background: var(--color-surface-container); }
-.emp-table th, .emp-table td {
-  padding: 10px 14px;
-  text-align: left;
-  font-size: 13px;
-  border-bottom: 1px solid var(--color-outline-variant);
-  vertical-align: middle;
-}
-.emp-table th {
-  font-weight: 600;
-  color: var(--color-on-surface-variant);
-  text-transform: uppercase;
-  font-size: 11px;
-  letter-spacing: 0.05em;
-  cursor: pointer;
-  user-select: none;
-}
-.emp-table tbody tr:last-child td { border-bottom: none; }
-.emp-table tbody tr:hover { background: var(--color-surface-container); }
-.cell-user { display: inline-flex; align-items: center; gap: 8px; cursor: pointer; }
-.user-fio { font-weight: 600; color: var(--color-on-surface); }
-.td-mono { color: var(--color-on-surface-variant); font-variant-numeric: tabular-nums; }
-.company-chip {
-  display: inline-block;
-  padding: 2px 10px;
-  background: var(--color-surface-container);
-  border-radius: 999px;
-  font-size: 12px;
-}
-.muted { color: var(--color-on-surface-variant); font-style: italic; }
-.status.on { color: var(--color-primary); font-weight: 600; }
-.status.off { color: var(--color-on-surface-variant); }
-.th-act, .td-act { width: 96px; text-align: right; }
-.td-act { display: flex; gap: 2px; justify-content: flex-end; }
-.icon-btn {
-  appearance: none;
+.profile-close {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  z-index: 2;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
   border: none;
-  background: transparent;
-  width: 32px;
-  height: 32px;
+  background: color-mix(in oklch, var(--color-surface) 60%, transparent);
+  color: var(--color-on-primary-container);
   display: grid;
   place-items: center;
-  border-radius: 50%;
-  color: var(--color-on-surface-variant);
   cursor: pointer;
+  backdrop-filter: blur(8px);
   transition: background .12s, color .12s;
 }
-.icon-btn:hover { background: var(--color-surface-high); color: var(--color-on-surface); }
-.icon-btn.danger:hover { background: var(--color-error-container); color: var(--color-on-error-container); }
-.icon-btn .material-symbols-outlined { font-size: 18px; }
+.profile-close:hover {
+  background: var(--color-surface);
+  color: var(--color-text);
+}
+.profile-close .material-symbols-outlined { font-size: 20px; }
 
-.sort-ic { display: inline-flex; vertical-align: middle; opacity: .4; margin-left: 2px; }
-.sort-ic.active { opacity: 1; color: var(--color-primary); }
-.sort-ic .material-symbols-outlined { font-size: 14px; }
-
-/* Профиль */
-.emp-profile {
+.profile-hero {
   display: flex;
   flex-direction: column;
   align-items: center;
   text-align: center;
-  padding: 28px 22px 22px;
-  gap: 8px;
-  width: min(440px, calc(100vw - 24px));
-  box-sizing: border-box;
+  padding: 36px 22px 22px;
+  gap: 10px;
+  background:
+    radial-gradient(
+      130% 80% at 50% 0%,
+      color-mix(in oklch, var(--color-tertiary-container) 65%, transparent) 0%,
+      transparent 70%
+    ),
+    linear-gradient(
+      170deg,
+      var(--color-primary-container) 0%,
+      color-mix(in oklch, var(--color-primary-container) 50%, var(--color-surface)) 100%
+    );
+  color: var(--color-on-primary-container);
 }
-.avatar-zoom {
+.profile-avatar-btn {
   appearance: none;
   border: none;
   background: transparent;
   padding: 0;
   cursor: zoom-in;
-  position: relative;
-  margin-bottom: 6px;
+  margin-bottom: 4px;
 }
-.profile-avatar {
-  width: 128px;
-  height: 128px;
-  border-radius: 50%;
-  object-fit: cover;
-  border: 3px solid var(--color-primary);
-  display: block;
-}
-.profile-dot { right: 8px; bottom: 8px; width: 20px; height: 20px; }
 .profile-name {
-  font-size: 20px;
-  font-weight: 700;
   margin: 0;
-  color: var(--color-on-surface);
+  font-size: 22px;
+  font-weight: 800;
+  line-height: 1.2;
+  letter-spacing: -0.01em;
+  color: var(--color-on-primary-container);
   word-break: break-word;
   overflow-wrap: anywhere;
-}
-.profile-status { font-size: 12px; color: var(--color-on-surface-variant); }
-.profile-status.on { color: var(--color-primary); font-weight: 600; }
-
-.profile-meta {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  margin: 12px 0 8px;
-  width: 100%;
-  align-items: flex-start;
-}
-.meta-line {
   display: inline-flex;
   align-items: center;
-  gap: 8px;
-  font-size: 14px;
-  color: var(--color-on-surface);
+  gap: 6px;
+  justify-content: center;
+  flex-wrap: wrap;
 }
-.meta-line .material-symbols-outlined { font-size: 18px; color: var(--color-on-surface-variant); }
-.meta-line a { color: var(--color-primary); text-decoration: none; }
-.meta-line a:hover { text-decoration: underline; }
+.profile-tags {
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 4px;
+}
+.profile-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 12px;
+  border-radius: var(--radius-full);
+  font-size: 12px;
+  font-weight: 600;
+  background: color-mix(in oklch, var(--color-on-primary-container) 10%, transparent);
+  color: var(--color-on-primary-container);
+}
+.profile-status .status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--color-outline-dim);
+}
+.profile-status.on {
+  background: color-mix(in oklch, var(--color-success) 22%, transparent);
+}
+.profile-status.on .status-dot { background: var(--color-success); }
+
+.profile-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 16px;
+  background: var(--color-surface);
+}
+.profile-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  border-radius: var(--radius-lg);
+  text-decoration: none;
+  color: var(--color-text);
+  background: var(--color-surface-low);
+  transition: background .12s;
+}
+.profile-row.link { cursor: pointer; }
+.profile-row.link:hover { background: var(--color-surface-high); }
+.row-ico {
+  width: 40px;
+  height: 40px;
+  border-radius: var(--radius-md);
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+}
+.row-ico[data-tone="primary"] {
+  background: var(--color-primary-container);
+  color: var(--color-on-primary-container);
+}
+.row-ico[data-tone="secondary"] {
+  background: var(--color-secondary-container);
+  color: var(--color-on-secondary-container);
+}
+.row-ico[data-tone="tertiary"] {
+  background: var(--color-tertiary-container);
+  color: var(--color-on-tertiary-container);
+}
+.row-ico .material-symbols-outlined { font-size: 20px; }
+
+.row-text {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+.row-label {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--color-text-dim);
+}
+.row-value {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--color-text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.row-chev {
+  font-size: 18px;
+  color: var(--color-text-dim);
+  flex-shrink: 0;
+}
 
 .profile-actions, .profile-admin {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
-  margin-top: 14px;
-  width: 100%;
-  justify-content: center;
+  padding: 0 16px 16px;
 }
 .profile-admin {
-  margin-top: 8px;
-  padding-top: 12px;
-  border-top: 1px solid var(--color-outline-variant);
+  padding-top: 14px;
+  margin-top: 4px;
+  border-top: 1px solid var(--color-outline-dim);
+  padding-bottom: 18px;
 }
-.profile-actions > *, .profile-admin > * { flex: 1 1 120px; justify-content: center; }
+.profile-actions > *, .profile-admin > * {
+  flex: 1 1 120px;
+  justify-content: center;
+}
 
-/* Кнопки */
-.btn-filled, .btn-tonal, .btn-outlined, .btn-text {
+/* ============ Кнопки ============ */
+.btn-filled, .btn-tonal, .btn-outlined {
   appearance: none;
   border: none;
   cursor: pointer;
-  border-radius: var(--radius-full, 999px);
+  border-radius: var(--radius-full);
   padding: 10px 18px;
   font: inherit;
   font-weight: 600;
   display: inline-flex;
   align-items: center;
   gap: 6px;
+  transition: background .12s, color .12s, border-color .12s, box-shadow .12s, transform .12s;
 }
-.btn-filled { background: var(--color-primary); color: var(--color-on-primary); }
-.btn-filled:hover { filter: brightness(.94); }
-.btn-tonal { background: var(--color-secondary-container); color: var(--color-on-secondary-container); }
-.btn-tonal.tertiary { background: var(--color-tertiary-container); color: var(--color-on-tertiary-container); }
+.btn-filled {
+  background: var(--color-primary);
+  color: var(--color-on-primary);
+  box-shadow: var(--shadow-sm);
+}
+.btn-filled:hover { background: var(--color-primary-hover); }
+.btn-filled .material-symbols-outlined { font-size: 18px; }
+.btn-tonal {
+  background: var(--color-secondary-container);
+  color: var(--color-on-secondary-container);
+}
+.btn-tonal.tertiary {
+  background: var(--color-tertiary-container);
+  color: var(--color-on-tertiary-container);
+}
 .btn-tonal:hover { filter: brightness(.96); }
 .btn-outlined {
   background: transparent;
-  border: 1px solid var(--color-outline-variant);
-  color: var(--color-on-surface);
+  border: 1px solid var(--color-outline-dim);
+  color: var(--color-text);
 }
-.btn-outlined:hover { background: var(--color-surface-container); }
+.btn-outlined:hover { background: var(--color-surface-high); }
 .btn-outlined.danger { color: var(--color-error); border-color: var(--color-error); }
-.btn-outlined.danger:hover { background: var(--color-error-container); color: var(--color-on-error-container); }
-.btn-filled .material-symbols-outlined,
+.btn-outlined.danger:hover {
+  background: var(--color-error-container);
+  color: var(--color-on-error-container);
+}
 .btn-tonal .material-symbols-outlined,
 .btn-outlined .material-symbols-outlined { font-size: 18px; }
 
 @media (max-width: 768px) {
-  .employees-view { padding: 16px 12px 80px; }
-  .emp-table thead { display: none; }
-  .emp-table, .emp-table tbody, .emp-table tr, .emp-table td { display: block; }
-  .emp-table tr {
-    background: var(--color-surface);
-    border: 1px solid var(--color-outline-variant);
-    border-radius: var(--radius-lg, 16px);
-    margin-bottom: 10px;
-  }
-  .emp-table td {
-    border: none;
-    padding: 6px 14px;
-  }
-  .td-act { justify-content: flex-end; }
   .hide-narrow { display: none; }
+  .desktop-only { display: none; }
+
+  .page-head-title { font-size: 20px; }
+  .page-head-meta { font-size: 12px; }
+  .meta-dot { display: none; }
+
+  /* Поиск во всю ширину — view-toggle уходит на отдельную строку. */
+  .emp-search { flex: 1 1 100%; max-width: 100%; }
+  .view-toggle { display: none; }
+
+  /* Сетка карточек 2 колонки. */
+  .emp-grid {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 10px;
+  }
+  .emp-card {
+    padding: 16px 10px 12px;
+    gap: 6px;
+  }
+  .avatar-lg { width: 64px; height: 64px; }
+  .emp-card-name { font-size: 13.5px; }
+  .emp-card-post { font-size: 11.5px; }
+  .emp-card-status { font-size: 10.5px; }
+
+  /* На тач-экранах actions всегда видны под карточкой. */
+  .emp-card-actions {
+    position: static;
+    opacity: 1;
+    transform: none;
+    pointer-events: auto;
+    margin-top: 4px;
+    padding: 0;
+    background: transparent;
+    border: none;
+    box-shadow: none;
+  }
+  .card-act { width: 34px; height: 34px; }
+  .card-act .material-symbols-outlined { font-size: 18px; }
+
+  /* Профиль-модалка адаптивная. */
+  .profile-list { padding: 12px; }
+  .profile-actions, .profile-admin { padding-left: 12px; padding-right: 12px; }
+}
+
+@media (max-width: 420px) {
+  /* Очень узкие — 1 колонка, чтобы ФИО не обрезалось. */
+  .emp-grid { grid-template-columns: 1fr; }
 }
 </style>

@@ -67,6 +67,269 @@ input[type="search"]::-ms-reveal {
   z-index: 11000 !important;
 }
 
+/* ── Глобальный стайлинг полей ввода ────────────────────────────────
+   В светлой теме --color-surface близок к чисто-белому, и инпут с фоном
+   surface внутри диалога (тоже surface) теряется визуально. Правим тоном
+   ниже — --color-surface-low даёт лёгкий step-down контраст; в тёмной
+   теме surface-low тоже на ступень светлее surface — эффект симметричен.
+   Border делаем плотным (--color-outline-dim), фокус — primary с ring'ом.
+   Применяется ко всем PrimeVue-инпутам и нашим кастомным `.ctl`/`.input`.
+   Внутри PrimeVue Select часть детишек используют свой p-inputtext —
+   их перекрываем по контексту, чтобы трэк-овалы и пилюли не сломались. */
+/* !important нужны, чтобы перекрыть scoped-стили компонентов: scoped
+   `.ctl[data-v-xxxx]` имеет специфичность (0,2,0), а наш `input.ctl` —
+   (0,1,1). Без !important глобальный fix не побеждает. Это базовый дизайн-
+   токен поля ввода — экранировать его компоненту не нужно. */
+.p-inputtext:not(.p-select-label):not(.p-multiselect-label),
+.p-textarea,
+.p-password-input,
+.p-inputnumber-input,
+.p-select,
+.p-multiselect,
+.p-datepicker-input,
+.p-treeselect,
+input.ctl,
+select.ctl,
+textarea.ctl,
+input.input,
+select.input,
+textarea.input {
+  background: var(--color-surface-low) !important;
+  border: 1px solid var(--color-outline-dim) !important;
+  color: var(--color-text) !important;
+  border-radius: var(--radius-md);
+  transition: border-color .15s, box-shadow .15s, background .15s;
+}
+
+.p-inputtext:not(.p-select-label):not(.p-multiselect-label):focus,
+.p-textarea:focus,
+.p-password-input:focus,
+.p-inputnumber-input:focus,
+.p-select:not(.p-disabled).p-focus,
+.p-multiselect:not(.p-disabled).p-focus,
+.p-datepicker-input:focus,
+input.ctl:focus,
+select.ctl:focus,
+textarea.ctl:focus,
+input.input:focus,
+select.input:focus,
+textarea.input:focus {
+  outline: none;
+  border-color: var(--color-primary) !important;
+  background: var(--color-surface) !important;
+  box-shadow: 0 0 0 3px color-mix(in oklch, var(--color-primary) 18%, transparent) !important;
+}
+
+.p-inputtext:not(.p-select-label):not(.p-multiselect-label):hover:not(:focus):not(:disabled),
+.p-select:not(.p-disabled):not(.p-focus):hover,
+.p-multiselect:not(.p-disabled):not(.p-focus):hover,
+input.ctl:hover:not(:focus):not(:disabled),
+select.ctl:hover:not(:focus):not(:disabled),
+textarea.ctl:hover:not(:focus):not(:disabled) {
+  border-color: var(--color-outline);
+}
+
+/* Disabled state */
+.p-inputtext:disabled,
+.p-select.p-disabled,
+.p-multiselect.p-disabled,
+.p-datepicker-input:disabled,
+input.ctl:disabled,
+select.ctl:disabled,
+textarea.ctl:disabled {
+  background: var(--color-surface-high) !important;
+  color: var(--color-text-dim) !important;
+  cursor: not-allowed;
+  border-color: var(--color-outline-dim) !important;
+}
+
+/* Invalid state */
+.p-inputtext.p-invalid:not(.p-select-label),
+.p-select.p-invalid,
+.p-multiselect.p-invalid,
+.p-datepicker-input.p-invalid,
+input.ctl.invalid,
+select.ctl.invalid,
+textarea.ctl.invalid {
+  border-color: var(--color-error) !important;
+}
+.p-inputtext.p-invalid:not(.p-select-label):focus,
+.p-select.p-invalid.p-focus,
+input.ctl.invalid:focus,
+select.ctl.invalid:focus,
+textarea.ctl.invalid:focus {
+  box-shadow: 0 0 0 3px color-mix(in oklch, var(--color-error) 18%, transparent);
+}
+
+/* PrimeVue Select / Datepicker панели overlay — пусть лежат на surface
+   (повыше фона), чтобы выделялись на фоне страницы. */
+.p-select-overlay,
+.p-multiselect-overlay,
+.p-datepicker-panel,
+.p-autocomplete-overlay {
+  background: var(--color-surface);
+  border: 1px solid var(--color-outline-dim);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lg);
+  color: var(--color-text);
+}
+
+.p-select-option,
+.p-multiselect-option,
+.p-autocomplete-option {
+  color: var(--color-text);
+}
+.p-select-option:hover,
+.p-multiselect-option:hover,
+.p-autocomplete-option:hover {
+  background: var(--color-surface-high);
+}
+.p-select-option.p-select-option-selected,
+.p-multiselect-option.p-multiselect-option-selected {
+  background: var(--color-primary-container);
+  color: var(--color-on-primary-container);
+}
+
+.p-select-label,
+.p-multiselect-label {
+  color: var(--color-text);
+}
+
+/* Диалоги PrimeVue — единый фон, скругления углов у крайних секций.
+   Дочерние элементы имеют явный background, поэтому они перекрывают
+   border-radius родителя. Решение — не overflow:hidden (ломает выпадашки),
+   а явные скругления у шапки (верх) и футера/контента (низ). */
+.p-dialog,
+.p-dialog .p-dialog-header,
+.p-dialog .p-dialog-content,
+.p-dialog .p-dialog-footer {
+  background: var(--color-surface);
+  color: var(--color-text);
+}
+.p-dialog .p-dialog-header {
+  border-bottom: 1px solid var(--color-outline-dim);
+  border-radius: var(--radius-xl) var(--radius-xl) 0 0;
+}
+.p-dialog .p-dialog-footer {
+  border-top: 1px solid var(--color-outline-dim);
+  border-radius: 0 0 var(--radius-xl) var(--radius-xl);
+}
+/* Если футера нет — скругляем низ у content. */
+.p-dialog .p-dialog-content:last-child {
+  border-radius: 0 0 var(--radius-xl) var(--radius-xl);
+}
+
+/* Модалка профиля сотрудника — без шапки PrimeVue, контент заполняет
+   весь dialog. Overflow hidden клипует градиентный hero к скруглениям. */
+.emp-dialog.p-dialog {
+  border-radius: var(--radius-xl) !important;
+  overflow: hidden !important;
+  background: var(--color-surface) !important;
+  box-shadow: var(--shadow-lg) !important;
+  padding: 0 !important;
+}
+.emp-dialog .p-dialog-content {
+  padding: 0 !important;
+  background: transparent !important;
+  overflow: visible !important;
+}
+
+/* ── Единый shell для админ-разделов ────────────────────────────────
+   Sticky hero+toolbar поверх, скроллируемое тело снизу. Используется
+   в Сотрудники / Компании / Списки — единый layout для одинакового
+   ощущения переходов и для длинных таблиц. */
+.admin-page {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  max-width: 1320px;
+  margin: 0 auto;
+  width: 100%;
+  padding: 0 24px;
+  box-sizing: border-box;
+}
+.admin-sticky {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  padding: 20px 0 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  background: var(--color-bg);
+}
+.admin-sticky::after {
+  content: '';
+  position: absolute;
+  left: 0; right: 0; bottom: -1px;
+  height: 1px;
+  background: var(--color-outline-dim);
+  opacity: 0.6;
+  pointer-events: none;
+}
+.admin-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 18px 0 24px;
+}
+.admin-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+/* Meta-чипы для hero (счётчики, presence) и presence-точка. */
+.meta-stat {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  background: color-mix(in oklch, var(--color-on-primary-container) 8%, transparent);
+  border-radius: var(--radius-full);
+}
+.meta-stat strong { font-weight: 700; }
+.meta-stat .material-symbols-outlined { font-size: 18px; opacity: 0.85; }
+.meta-stat.online {
+  background: color-mix(in oklch, var(--color-success) 22%, transparent);
+}
+.meta-stat.warning {
+  background: color-mix(in oklch, var(--color-warning) 22%, transparent);
+}
+.meta-stat.error {
+  background: color-mix(in oklch, var(--color-error) 22%, transparent);
+}
+.meta-dot { opacity: 0.55; }
+.presence-pulse {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--color-success);
+  box-shadow: 0 0 0 0 color-mix(in oklch, var(--color-success) 60%, transparent);
+  animation: presence-pulse 1.8s ease-out infinite;
+  flex-shrink: 0;
+}
+@keyframes presence-pulse {
+  0% { box-shadow: 0 0 0 0 color-mix(in oklch, var(--color-success) 60%, transparent); }
+  70% { box-shadow: 0 0 0 8px color-mix(in oklch, var(--color-success) 0%, transparent); }
+  100% { box-shadow: 0 0 0 0 color-mix(in oklch, var(--color-success) 0%, transparent); }
+}
+
+@media (max-width: 900px) {
+  .admin-page { padding: 0 16px; }
+}
+@media (max-width: 768px) {
+  .admin-page { padding: 0 12px; }
+  .admin-sticky { padding-top: 14px; }
+  /* Резерв под нижнюю навигацию (60–64px) + extended FAB (~72px вместе
+     с отступом). Применяется ко всем admin-страницам с собственным скроллом. */
+  .admin-body {
+    padding-bottom: calc(64px + 96px + env(safe-area-inset-bottom, 0px));
+  }
+}
+
 .app-layout {
   display: flex;
   height: 100vh;

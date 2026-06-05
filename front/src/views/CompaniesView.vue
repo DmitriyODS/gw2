@@ -1,115 +1,258 @@
 <template>
-  <div class="cmp-view">
-    <header class="cmp-header">
-      <div class="cmp-title-row">
-        <h1 class="cmp-title">Компании</h1>
-        <button class="btn-filled" @click="openCreate">
+  <div class="admin-page">
+    <header class="admin-sticky">
+      <div class="page-head">
+        <div class="page-head-text">
+          <h1 class="page-head-title">Компании</h1>
+          <div class="page-head-meta">
+            <span class="meta-stat">
+              <span class="material-symbols-outlined">domain</span>
+              <strong>{{ companies.items.length }}</strong> всего
+            </span>
+            <span class="meta-dot" aria-hidden="true">·</span>
+            <span class="meta-stat online">
+              <span class="presence-pulse" />
+              <strong>{{ activeCount }}</strong> активных
+            </span>
+            <template v-if="disabledCount">
+              <span class="meta-dot" aria-hidden="true">·</span>
+              <span class="meta-stat error">
+                <strong>{{ disabledCount }}</strong> отключённых
+              </span>
+            </template>
+          </div>
+        </div>
+        <button class="btn-filled desktop-only" @click="openCreate">
           <span class="material-symbols-outlined">add</span>
-          Новая компания
+          <span>Новая компания</span>
         </button>
       </div>
-      <p class="cmp-subtitle">
-        Управление компаниями платформы. Отключённая компания блокирует вход
-        всем своим сотрудникам.
-      </p>
-      <div class="cmp-search-row">
+
+      <div class="admin-toolbar">
         <div class="cmp-search">
           <span class="material-symbols-outlined">search</span>
-          <input v-model.trim="search" placeholder="Поиск по названию или директору" />
-          <button v-if="search" class="cmp-search-clear" @click="search = ''" aria-label="Очистить">
+          <input
+            v-model.trim="search"
+            placeholder="Поиск по названию или руководителю"
+          />
+          <button
+            v-if="search"
+            class="cmp-search-clear"
+            @click="search = ''"
+            aria-label="Очистить"
+          >
             <span class="material-symbols-outlined">close</span>
           </button>
-        </div>
-        <div class="cmp-summary">
-          <span class="chip">Всего: <strong>{{ companies.items.length }}</strong></span>
-          <span class="chip on">Активных: <strong>{{ activeCount }}</strong></span>
-          <span v-if="disabledCount" class="chip off">Отключённых: <strong>{{ disabledCount }}</strong></span>
         </div>
       </div>
     </header>
 
-    <div v-if="loading" class="cmp-loading">
-      <ProgressSpinner />
-    </div>
-
-    <div v-else-if="!visible.length" class="cmp-empty-state">
-      <div class="empty-icon">
-        <span class="material-symbols-outlined">domain</span>
-      </div>
-      <h3>{{ search ? 'Ничего не найдено' : 'Компаний пока нет' }}</h3>
-      <p v-if="!search">Создайте первую компанию, чтобы начать работу.</p>
-      <button v-if="!search" class="btn-filled" @click="openCreate">
-        <span class="material-symbols-outlined">add</span> Создать компанию
-      </button>
-    </div>
-
-    <div v-else class="cmp-table-wrap">
-      <table class="cmp-table">
-        <thead>
-          <tr>
-            <th class="th-sort" @click="setSort('name')">
-              Название <SortIcon :col="'name'" :sort="sort" />
-            </th>
-            <th class="th-sort" @click="setSort('created_at')">
-              Дата создания <SortIcon :col="'created_at'" :sort="sort" />
-            </th>
-            <th class="th-sort" @click="setSort('employees_count')">
-              Сотрудников <SortIcon :col="'employees_count'" :sort="sort" />
-            </th>
-            <th class="th-sort" @click="setSort('tasks_count')">
-              Задач <SortIcon :col="'tasks_count'" :sort="sort" />
-            </th>
-            <th>Руководитель</th>
-            <th>Статус</th>
-            <th class="th-actions"></th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr v-for="c in visible" :key="c.id" :class="{ off: !c.is_active }">
-            <td>
-              <div class="cmp-name">
-                <span class="material-symbols-outlined cmp-icon" :class="{ off: !c.is_active }">
-                  domain
-                </span>
-                <div>
-                  <div class="cmp-name-main">{{ c.name }}</div>
-                  <div v-if="c.description" class="cmp-name-sub">{{ c.description }}</div>
-                </div>
+    <div ref="bodyRef" class="admin-body">
+      <!-- Мобильное представление: карточки вместо таблицы.
+           AppDataTable горизонтально скроллится на узких экранах — UX плохой,
+           и поэтому на ≤768px рендерим компактные карточки с теми же данными
+           и действиями. -->
+      <div v-if="isMobile" class="cmp-cards">
+        <div v-if="loading" class="state-block">
+          <ProgressSpinner />
+        </div>
+        <div v-else-if="!visible.length" class="cmp-cards-empty">
+          <div class="empty-icon-circle">
+            <span class="material-symbols-outlined">{{ search ? 'search_off' : 'domain' }}</span>
+          </div>
+          <h3>{{ search ? 'Ничего не нашли' : 'Компаний пока нет' }}</h3>
+          <p v-if="search">Попробуйте уточнить запрос.</p>
+        </div>
+        <template v-else>
+          <article
+            v-for="c in visible"
+            :key="c.id"
+            class="cmp-card"
+            :class="{ off: !c.is_active }"
+            tabindex="0"
+            @click="openEdit(c)"
+            @keydown.enter.prevent="openEdit(c)"
+          >
+            <div class="cmp-card-top">
+              <span
+                class="cmp-avatar"
+                :class="['tone-' + toneOf(c)]"
+              >{{ initials(c.name) }}</span>
+              <div class="cmp-card-text">
+                <div class="cmp-card-name">{{ c.name }}</div>
+                <div v-if="c.description" class="cmp-card-desc">{{ c.description }}</div>
               </div>
-            </td>
-            <td class="td-mono">{{ fmtDate(c.created_at) }}</td>
-            <td class="td-num">{{ c.employees_count }}</td>
-            <td class="td-num">{{ c.tasks_count }}</td>
-            <td>
-              <div v-if="c.director" class="director-cell">
-                <span class="director-avatar">{{ initials(c.director.fio) }}</span>
-                <span class="director-name">{{ c.director.fio }}</span>
-              </div>
-              <span v-else class="muted">не назначен</span>
-            </td>
-            <td>
-              <label class="toggle">
+              <label class="toggle" @click.stop>
                 <input
                   type="checkbox"
                   :checked="c.is_active"
                   :disabled="togglingId === c.id"
                   @change="onToggle(c)"
                 />
-                <span class="toggle-track"></span>
-                <span class="toggle-label">{{ c.is_active ? 'Активна' : 'Отключена' }}</span>
+                <span class="toggle-track" />
               </label>
-            </td>
-            <td class="td-actions">
-              <button class="icon-btn" title="Редактировать" @click="openEdit(c)">
+            </div>
+
+            <div class="cmp-card-stats">
+              <span class="stat">
+                <span class="material-symbols-outlined">groups</span>
+                <strong>{{ c.employees_count }}</strong>
+              </span>
+              <span class="stat">
+                <span class="material-symbols-outlined">checklist</span>
+                <strong>{{ c.tasks_count }}</strong>
+              </span>
+              <span class="stat date">
+                <span class="material-symbols-outlined">event</span>
+                {{ fmtDate(c.created_at) }}
+              </span>
+            </div>
+
+            <div v-if="c.director" class="cmp-card-director">
+              <span class="director-avatar">{{ initials(c.director.fio) }}</span>
+              <span class="director-name">{{ c.director.fio }}</span>
+            </div>
+            <div v-else class="cmp-card-director muted">
+              <span class="material-symbols-outlined">person_off</span>
+              Руководитель не назначен
+            </div>
+
+            <div class="cmp-card-actions" @click.stop>
+              <button class="card-act" title="Редактировать" @click="openEdit(c)">
                 <span class="material-symbols-outlined">edit</span>
               </button>
-              <button class="icon-btn danger" title="Удалить" @click="askDelete(c)">
+              <button class="card-act danger" title="Удалить" @click="askDelete(c)">
                 <span class="material-symbols-outlined">delete</span>
               </button>
-            </td>
-          </tr>
-        </tbody>
-      </table>
+            </div>
+          </article>
+        </template>
+      </div>
+
+      <AppDataTable
+        v-else
+        :value="visible"
+        :loading="loading"
+        v-model:sort-field="sortField"
+        v-model:sort-order="sortOrder"
+        :row-class="() => 'row-clickable'"
+        empty-message="Компаний не найдено"
+        @row-click="onRowClick"
+      >
+        <Column field="name" header="Компания" sortable :sort-field="(d) => d.name?.toLowerCase()">
+          <template #body="{ data }">
+            <div class="cell-company">
+              <span
+                class="cmp-avatar"
+                :class="['tone-' + toneOf(data)]"
+                :title="data.name"
+              >
+                {{ initials(data.name) }}
+              </span>
+              <div class="cmp-name-text">
+                <div class="cmp-name-main" :class="{ off: !data.is_active }">
+                  {{ data.name }}
+                </div>
+                <div v-if="data.description" class="cmp-name-sub">
+                  {{ data.description }}
+                </div>
+              </div>
+            </div>
+          </template>
+        </Column>
+
+        <Column field="created_at" header="Создана" sortable style="width: 140px">
+          <template #body="{ data }">
+            <span class="mono">{{ fmtDate(data.created_at) }}</span>
+          </template>
+        </Column>
+
+        <Column
+          field="employees_count"
+          header="Сотрудников"
+          sortable
+          style="width: 200px"
+        >
+          <template #body="{ data }">
+            <div class="num-cell">
+              <span class="num-bar">
+                <span
+                  class="num-bar-fill"
+                  :style="{ width: barWidth(data.employees_count, maxEmployees) + '%' }"
+                />
+              </span>
+              <span class="num-val">{{ data.employees_count }}</span>
+            </div>
+          </template>
+        </Column>
+
+        <Column
+          field="tasks_count"
+          header="Задач"
+          sortable
+          style="width: 200px"
+        >
+          <template #body="{ data }">
+            <div class="num-cell">
+              <span class="num-bar tasks">
+                <span
+                  class="num-bar-fill"
+                  :style="{ width: barWidth(data.tasks_count, maxTasks) + '%' }"
+                />
+              </span>
+              <span class="num-val">{{ data.tasks_count }}</span>
+            </div>
+          </template>
+        </Column>
+
+        <Column header="Руководитель" style="min-width: 200px">
+          <template #body="{ data }">
+            <div v-if="data.director" class="director-cell">
+              <span class="director-avatar">{{ initials(data.director.fio) }}</span>
+              <span class="director-name">{{ data.director.fio }}</span>
+            </div>
+            <span v-else class="muted">не назначен</span>
+          </template>
+        </Column>
+
+        <Column header="Статус" style="width: 170px">
+          <template #body="{ data }">
+            <label class="toggle" :title="data.is_active ? 'Активна' : 'Отключена'" @click.stop>
+              <input
+                type="checkbox"
+                :checked="data.is_active"
+                :disabled="togglingId === data.id"
+                @change="onToggle(data)"
+              />
+              <span class="toggle-track" />
+              <span :class="['toggle-label', { on: data.is_active }]">
+                {{ data.is_active ? 'Активна' : 'Отключена' }}
+              </span>
+            </label>
+          </template>
+        </Column>
+
+        <Column header="" style="width: 96px" body-style="text-align: right">
+          <template #body="{ data }">
+            <div class="row-actions" @click.stop>
+              <button
+                class="icon-btn"
+                title="Редактировать"
+                @click="openEdit(data)"
+              >
+                <span class="material-symbols-outlined">edit</span>
+              </button>
+              <button
+                class="icon-btn danger"
+                title="Удалить"
+                @click="askDelete(data)"
+              >
+                <span class="material-symbols-outlined">delete</span>
+              </button>
+            </div>
+          </template>
+        </Column>
+      </AppDataTable>
     </div>
 
     <CompanyFormDialog
@@ -119,50 +262,65 @@
       @save="onSave"
     />
 
-    <Dialog
-      v-model:visible="confirmOpen"
-      modal
-      :style="{ width: '440px' }"
-      :show-header="false"
+    <AppDialog
+      v-model="confirmOpen"
+      tone="danger"
+      icon="warning"
+      size="sm"
+      :title="`Удалить компанию «${deleteTarget?.name}»?`"
+      :busy="deleting"
+      :closable="!deleting"
+      :actions="[
+        { kind: 'cancel', label: 'Отмена', disabled: deleting },
+        { kind: 'confirm', label: 'Удалить', icon: 'delete', disabled: deleting },
+      ]"
+      @confirm="doDelete"
     >
-      <div class="confirm-body">
-        <div class="confirm-icon"><span class="material-symbols-outlined">warning</span></div>
-        <h3>Удалить компанию «{{ deleteTarget?.name }}»?</h3>
-        <p v-if="deleteTarget?.employees_count || deleteTarget?.tasks_count" class="confirm-warn">
-          В компании остаются
-          <strong v-if="deleteTarget?.employees_count">{{ deleteTarget.employees_count }} сотрудник(а/ов)</strong>
-          <template v-if="deleteTarget?.employees_count && deleteTarget?.tasks_count">, </template>
-          <strong v-if="deleteTarget?.tasks_count">{{ deleteTarget.tasks_count }} задач(и)</strong>.
-          Все данные будут <strong>удалены каскадно</strong>: задачи, юниты, чаты, звонки.
-          Восстановить будет нельзя.
-        </p>
-        <p v-else>Компания пустая — данных не пострадает.</p>
-      </div>
-      <template #footer>
-        <button class="btn-text" :disabled="deleting" @click="confirmOpen = false">Отмена</button>
-        <button class="btn-filled danger" :disabled="deleting" @click="doDelete">
-          <span v-if="deleting" class="material-symbols-outlined spin">progress_activity</span>
-          Удалить
-        </button>
-      </template>
-    </Dialog>
+      <p v-if="deleteTarget?.employees_count || deleteTarget?.tasks_count" class="confirm-warn">
+        В компании остаются
+        <strong v-if="deleteTarget?.employees_count">{{ deleteTarget.employees_count }} сотрудник(а/ов)</strong>
+        <template v-if="deleteTarget?.employees_count && deleteTarget?.tasks_count">, </template>
+        <strong v-if="deleteTarget?.tasks_count">{{ deleteTarget.tasks_count }} задач(и)</strong>.
+        Все данные будут <strong>удалены каскадно</strong>: задачи, юниты, чаты, звонки.
+        Восстановить будет нельзя.
+      </p>
+      <p v-else>Компания пустая — данных не пострадает.</p>
+    </AppDialog>
+
+    <AppFab
+      icon="add"
+      label="Создать"
+      :collapsed="isCompact"
+      aria-label="Новая компания"
+      @click="openCreate"
+    />
   </div>
 </template>
 
 <script setup>
-import { ref, computed, onMounted, h } from 'vue'
-import Dialog from 'primevue/dialog'
+import { ref, computed, onMounted } from 'vue'
+import Column from 'primevue/column'
 import ProgressSpinner from 'primevue/progressspinner'
+import AppDialog from '@/components/common/AppDialog.vue'
+import AppDataTable from '@/components/common/AppDataTable.vue'
+import AppFab from '@/components/common/AppFab.vue'
 import { useCompaniesStore } from '@/stores/companies.js'
 import { useNotificationsStore } from '@/stores/notifications.js'
+import { useBreakpoint } from '@/composables/useBreakpoint.js'
+import { useScrollCollapse } from '@/composables/useScrollCollapse.js'
 import CompanyFormDialog from '@/components/companies/CompanyFormDialog.vue'
+
+const { isMobile } = useBreakpoint()
+const bodyRef = ref(null)
+const { isCompact } = useScrollCollapse(bodyRef)
 
 const companies = useCompaniesStore()
 const notif = useNotificationsStore()
 
 const loading = computed(() => companies.loading && !companies.loaded)
 const search = ref('')
-const sort = ref({ col: 'created_at', dir: 'desc' })
+const sortField = ref('created_at')
+const sortOrder = ref(-1)
 
 const formOpen = ref(false)
 const editTarget = ref(null)
@@ -180,50 +338,47 @@ const disabledCount = computed(() => companies.items.filter(c => !c.is_active).l
 
 const visible = computed(() => {
   const q = search.value.toLowerCase()
-  const filtered = q
+  return q
     ? companies.items.filter(c =>
         c.name.toLowerCase().includes(q) ||
         (c.director?.fio || '').toLowerCase().includes(q),
       )
-    : [...companies.items]
-  const { col, dir } = sort.value
-  const sign = dir === 'asc' ? 1 : -1
-  filtered.sort((a, b) => {
-    const va = _val(a, col)
-    const vb = _val(b, col)
-    if (va == null && vb == null) return 0
-    if (va == null) return 1
-    if (vb == null) return -1
-    if (typeof va === 'string') return sign * va.localeCompare(vb, 'ru')
-    if (va instanceof Date && vb instanceof Date) return sign * (va - vb)
-    return sign * (va - vb)
-  })
-  return filtered
+    : companies.items
 })
 
-function _val(c, col) {
-  if (col === 'created_at') return c.created_at ? new Date(c.created_at) : null
-  if (col === 'name') return c.name || ''
-  return c[col] ?? 0
-}
+const maxEmployees = computed(() =>
+  Math.max(1, ...companies.items.map(c => c.employees_count || 0))
+)
+const maxTasks = computed(() =>
+  Math.max(1, ...companies.items.map(c => c.tasks_count || 0))
+)
 
-function setSort(col) {
-  if (sort.value.col === col) {
-    sort.value.dir = sort.value.dir === 'asc' ? 'desc' : 'asc'
-  } else {
-    sort.value = { col, dir: col === 'name' ? 'asc' : 'desc' }
-  }
+function barWidth(value, max) {
+  if (!max) return 0
+  return Math.min(100, Math.round(((value || 0) / max) * 100))
 }
 
 function fmtDate(s) {
   if (!s) return '—'
-  return new Date(s).toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric' })
+  return new Date(s).toLocaleDateString('ru-RU', {
+    day: '2-digit', month: '2-digit', year: 'numeric',
+  })
 }
 
-function initials(fio) {
-  if (!fio) return '?'
-  const parts = fio.trim().split(/\s+/).slice(0, 2)
+function initials(name) {
+  if (!name) return '?'
+  const parts = name.trim().split(/\s+/).slice(0, 2)
   return parts.map(p => p[0]).join('').toUpperCase()
+}
+
+/* Тон аватара компании — детерминированно из её id. */
+const TONES = ['primary', 'secondary', 'tertiary']
+function toneOf(c) {
+  return TONES[(c.id || 0) % TONES.length]
+}
+
+function onRowClick(e) {
+  openEdit(e.data)
 }
 
 function openCreate() {
@@ -284,191 +439,187 @@ async function doDelete() {
     deleting.value = false
   }
 }
-
-// Inline-компонент стрелки сортировки.
-const SortIcon = {
-  props: ['col', 'sort'],
-  setup(p) {
-    return () => {
-      const active = p.sort.col === p.col
-      const ic = active ? (p.sort.dir === 'asc' ? 'arrow_upward' : 'arrow_downward') : 'unfold_more'
-      return h('span', { class: ['sort-ic', { active }] }, [
-        h('span', { class: 'material-symbols-outlined' }, ic),
-      ])
-    }
-  },
-}
 </script>
 
 <style scoped>
-.cmp-view {
-  padding: 24px;
-  max-width: 1280px;
-  margin: 0 auto;
-  display: flex;
-  flex-direction: column;
-  gap: 20px;
-}
-
-.cmp-header { display: flex; flex-direction: column; gap: 14px; }
-
-.cmp-title-row {
+.page-head {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
+  gap: 16px;
   flex-wrap: wrap;
 }
-.cmp-title { font-size: 28px; font-weight: 700; margin: 0; color: var(--color-on-surface); }
-.cmp-subtitle { font-size: 14px; color: var(--color-on-surface-variant); margin: 0; }
-
-.cmp-search-row {
-  display: flex;
+.page-head-text { min-width: 0; }
+.page-head-title {
+  margin: 0 0 6px;
+  font-size: 24px;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+  color: var(--color-text);
+}
+.page-head-meta {
+  display: inline-flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 12px;
   flex-wrap: wrap;
+  gap: 10px;
+  font-size: 13px;
+  color: var(--color-text-dim);
+}
+.page-head-meta .meta-stat {
+  background: var(--color-surface-high);
+  color: var(--color-text);
+}
+.page-head-meta .meta-stat.online {
+  background: color-mix(in oklch, var(--color-success) 18%, transparent);
+  color: var(--color-text);
+}
+.page-head-meta .meta-stat.error {
+  background: color-mix(in oklch, var(--color-error) 18%, transparent);
+  color: var(--color-text);
 }
 
 .cmp-search {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  height: 40px;
-  padding: 0 10px 0 12px;
-  background: var(--color-surface-container);
+  height: 44px;
+  padding: 0 10px 0 14px;
+  background: var(--color-surface-high);
   border: 1px solid transparent;
-  border-radius: var(--radius-full, 999px);
-  flex: 1 1 280px;
-  max-width: 420px;
-  transition: border-color .12s, background .12s;
+  border-radius: var(--radius-full);
+  flex: 1 1 320px;
+  max-width: 520px;
+  min-width: 0;
+  transition: border-color .12s, background .12s, box-shadow .12s;
 }
 .cmp-search:focus-within {
   background: var(--color-surface);
   border-color: var(--color-primary);
+  box-shadow: 0 0 0 3px color-mix(in oklch, var(--color-primary) 18%, transparent);
 }
-.cmp-search .material-symbols-outlined { color: var(--color-on-surface-variant); font-size: 20px; }
+.cmp-search > .material-symbols-outlined { color: var(--color-text-dim); font-size: 20px; }
 .cmp-search input {
   flex: 1;
   border: none;
   outline: none;
   background: transparent;
-  color: var(--color-on-surface);
+  color: var(--color-text);
   font: inherit;
   min-width: 0;
 }
 .cmp-search-clear {
   border: none;
-  background: var(--color-surface-high);
-  width: 24px;
-  height: 24px;
+  background: var(--color-surface-highest);
+  width: 26px;
+  height: 26px;
   border-radius: 50%;
   display: grid;
   place-items: center;
   cursor: pointer;
-  color: var(--color-on-surface-variant);
+  color: var(--color-text-dim);
+  transition: background .12s, color .12s;
+}
+.cmp-search-clear:hover {
+  background: var(--color-primary-container);
+  color: var(--color-on-primary-container);
 }
 .cmp-search-clear .material-symbols-outlined { font-size: 14px; }
 
-.cmp-summary { display: inline-flex; gap: 6px; }
-.chip {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 4px 12px;
-  background: var(--color-surface-container);
-  color: var(--color-on-surface-variant);
-  border-radius: var(--radius-full, 999px);
-  font-size: 12px;
-}
-.chip strong { color: var(--color-on-surface); }
-.chip.on { background: var(--color-primary-container); color: var(--color-on-primary-container); }
-.chip.off { background: var(--color-error-container); color: var(--color-on-error-container); }
-
-.cmp-loading { display: grid; place-items: center; min-height: 240px; }
-
-.cmp-empty-state {
+/* ============ Ячейки таблицы ============ */
+.cell-company {
   display: flex;
-  flex-direction: column;
   align-items: center;
   gap: 12px;
-  padding: 48px 20px;
-  background: var(--color-surface-container);
-  border-radius: var(--radius-lg, 16px);
-  text-align: center;
+  min-width: 0;
 }
-.empty-icon {
-  width: 64px;
-  height: 64px;
-  border-radius: 50%;
-  background: var(--color-primary-container);
-  color: var(--color-on-primary-container);
+.cmp-avatar {
+  width: 38px;
+  height: 38px;
+  border-radius: var(--radius-md);
   display: grid;
   place-items: center;
+  font-weight: 800;
+  font-size: 13px;
+  letter-spacing: 0.02em;
+  flex-shrink: 0;
 }
-.empty-icon .material-symbols-outlined { font-size: 32px; }
-.cmp-empty-state h3 { margin: 0; font-size: 18px; color: var(--color-on-surface); }
-.cmp-empty-state p { margin: 0; color: var(--color-on-surface-variant); font-size: 14px; }
-
-.cmp-table-wrap {
-  background: var(--color-surface);
-  border-radius: var(--radius-lg, 16px);
-  border: 1px solid var(--color-outline-variant);
-  overflow: hidden;
+.cmp-avatar.tone-primary {
+  background: var(--color-primary-container);
+  color: var(--color-on-primary-container);
 }
-
-.cmp-table { width: 100%; border-collapse: collapse; }
-.cmp-table thead {
-  background: var(--color-surface-container);
+.cmp-avatar.tone-secondary {
+  background: var(--color-secondary-container);
+  color: var(--color-on-secondary-container);
 }
-.cmp-table th, .cmp-table td {
-  padding: 12px 14px;
-  text-align: left;
+.cmp-avatar.tone-tertiary {
+  background: var(--color-tertiary-container);
+  color: var(--color-on-tertiary-container);
+}
+.cmp-name-text { min-width: 0; }
+.cmp-name-main {
   font-size: 14px;
-  border-bottom: 1px solid var(--color-outline-variant);
+  font-weight: 700;
+  color: var(--color-text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
-.cmp-table th {
-  font-weight: 600;
-  color: var(--color-on-surface-variant);
-  font-size: 12px;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  user-select: none;
-}
-.th-sort { cursor: pointer; }
-.th-sort:hover { color: var(--color-on-surface); }
-.th-actions { width: 96px; }
-.cmp-table tbody tr:last-child td { border-bottom: none; }
-.cmp-table tbody tr:hover { background: var(--color-surface-container); }
-.cmp-table tr.off td:not(.td-actions) { opacity: .58; }
-
-.cmp-name { display: flex; align-items: center; gap: 10px; min-width: 0; }
-.cmp-icon {
-  display: grid;
-  place-items: center;
-  width: 36px;
-  height: 36px;
-  border-radius: var(--radius-md, 12px);
-  background: var(--color-primary-container);
-  color: var(--color-on-primary-container);
-  font-size: 20px;
-  flex: none;
-}
-.cmp-icon.off { background: var(--color-surface-high); color: var(--color-on-surface-variant); }
-.cmp-name-main { font-weight: 600; color: var(--color-on-surface); }
+.cmp-name-main.off { opacity: 0.55; }
 .cmp-name-sub {
   font-size: 12px;
-  color: var(--color-on-surface-variant);
+  color: var(--color-text-dim);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
   max-width: 340px;
+  margin-top: 1px;
 }
 
-.td-mono { font-variant-numeric: tabular-nums; color: var(--color-on-surface-variant); }
-.td-num { font-variant-numeric: tabular-nums; font-weight: 600; }
+.mono {
+  font-variant-numeric: tabular-nums;
+  color: var(--color-text-dim);
+  font-size: 13px;
+  font-weight: 500;
+}
 
-.director-cell { display: inline-flex; align-items: center; gap: 8px; }
+.num-cell {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  justify-content: flex-end;
+}
+.num-bar {
+  flex: 1;
+  height: 6px;
+  border-radius: var(--radius-full);
+  background: var(--color-surface-highest);
+  overflow: hidden;
+  min-width: 32px;
+  max-width: 120px;
+}
+.num-bar-fill {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--color-primary);
+  transition: width .3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+.num-bar.tasks .num-bar-fill { background: var(--color-tertiary); }
+.num-val {
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+  font-size: 13.5px;
+  color: var(--color-text);
+  min-width: 28px;
+  text-align: right;
+}
+
+.director-cell {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
 .director-avatar {
   display: grid;
   place-items: center;
@@ -477,16 +628,25 @@ const SortIcon = {
   border-radius: 50%;
   background: var(--color-tertiary-container);
   color: var(--color-on-tertiary-container);
-  font-size: 12px;
-  font-weight: 700;
+  font-size: 11px;
+  font-weight: 800;
+  flex-shrink: 0;
 }
-.director-name { font-size: 13px; }
-.muted { color: var(--color-on-surface-variant); font-style: italic; font-size: 13px; }
+.director-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--color-text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.muted {
+  color: var(--color-text-dim);
+  font-style: italic;
+  font-size: 13px;
+}
 
-/* M3 Expressive switch:
-   off  → track surface-container-highest + видимая outline-рамка, thumb
-          уменьшен и в тон outline (всегда виден на любом фоне);
-   on   → track primary, thumb on-primary, увеличивается до полного размера. */
+/* M3 Expressive toggle. */
 .toggle {
   display: inline-flex;
   align-items: center;
@@ -499,11 +659,12 @@ const SortIcon = {
   position: relative;
   width: 44px;
   height: 24px;
-  border-radius: 999px;
-  background: var(--color-surface-highest, var(--color-surface-high));
-  border: 2px solid var(--color-outline, var(--color-outline-variant));
+  border-radius: var(--radius-full);
+  background: var(--color-surface-highest);
+  border: 2px solid var(--color-outline);
   box-sizing: border-box;
   transition: background .18s, border-color .18s;
+  flex-shrink: 0;
 }
 .toggle-track::after {
   content: '';
@@ -513,118 +674,234 @@ const SortIcon = {
   width: 12px;
   height: 12px;
   border-radius: 50%;
-  background: var(--color-outline, var(--color-on-surface-variant));
+  background: var(--color-outline);
   transform: translateY(-50%);
   transition: transform .2s cubic-bezier(0.4, 0, 0.2, 1),
               background .2s, width .2s, height .2s, left .2s;
 }
 .toggle input:checked + .toggle-track {
-  background: var(--color-primary);
-  border-color: var(--color-primary);
+  background: var(--color-success);
+  border-color: var(--color-success);
 }
 .toggle input:checked + .toggle-track::after {
-  /* при включении: thumb растёт и сдвигается вправо */
   width: 16px;
   height: 16px;
   left: 24px;
-  background: var(--color-on-primary);
+  background: var(--color-on-success);
 }
-.toggle-label { font-size: 12px; color: var(--color-on-surface-variant); }
-.toggle input:checked ~ .toggle-label { color: var(--color-primary); font-weight: 600; }
+.toggle-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--color-text-dim);
+}
+.toggle-label.on { color: var(--color-success); }
 
-.td-actions { display: flex; gap: 4px; justify-content: flex-end; }
+.row-actions {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 4px;
+}
 .icon-btn {
+  appearance: none;
   border: none;
   background: transparent;
-  width: 36px;
-  height: 36px;
+  width: 34px;
+  height: 34px;
   display: grid;
   place-items: center;
   border-radius: 50%;
-  color: var(--color-on-surface-variant);
+  color: var(--color-text-dim);
   cursor: pointer;
-  transition: background .12s, color .12s;
+  transition: background .14s, color .14s;
 }
-.icon-btn:hover { background: var(--color-surface-container); color: var(--color-on-surface); }
-.icon-btn.danger:hover { background: var(--color-error-container); color: var(--color-on-error-container); }
-.icon-btn .material-symbols-outlined { font-size: 20px; }
+.icon-btn:hover {
+  background: var(--color-primary-container);
+  color: var(--color-on-primary-container);
+}
+.icon-btn.danger:hover {
+  background: var(--color-error-container);
+  color: var(--color-on-error-container);
+}
+.icon-btn .material-symbols-outlined { font-size: 18px; }
 
-.sort-ic { display: inline-flex; vertical-align: middle; opacity: .4; margin-left: 2px; }
-.sort-ic.active { opacity: 1; color: var(--color-primary); }
-.sort-ic .material-symbols-outlined { font-size: 14px; }
-
-.btn-filled, .btn-text {
+/* Кнопки */
+.btn-filled {
   appearance: none;
   border: none;
   cursor: pointer;
-  border-radius: var(--radius-full, 999px);
+  border-radius: var(--radius-full);
   padding: 10px 18px;
   font: inherit;
   font-weight: 600;
   display: inline-flex;
   align-items: center;
   gap: 6px;
+  background: var(--color-primary);
+  color: var(--color-on-primary);
+  box-shadow: var(--shadow-sm);
+  transition: background .14s, box-shadow .14s;
 }
-.btn-filled { background: var(--color-primary); color: var(--color-on-primary); }
-.btn-filled:hover { filter: brightness(.94); }
-.btn-filled.danger { background: var(--color-error); color: var(--color-on-error); }
-.btn-text { background: transparent; color: var(--color-on-surface-variant); }
-.btn-text:hover { background: var(--color-surface-container); color: var(--color-on-surface); }
-.btn-filled:disabled, .btn-text:disabled { opacity: .55; cursor: not-allowed; }
+.btn-filled:hover { background: var(--color-primary-hover); }
+.btn-filled .material-symbols-outlined { font-size: 18px; }
 
-.confirm-body {
+.confirm-warn { color: var(--color-text); }
+.confirm-warn strong { color: var(--color-error); }
+
+/* ===== Мобильные карточки компаний ===== */
+.cmp-cards {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.cmp-card {
+  background: var(--color-surface);
+  border: 1px solid var(--color-outline-dim);
+  border-radius: var(--radius-lg);
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  cursor: pointer;
+  outline: none;
+  transition: background .16s, border-color .16s, box-shadow .16s;
+}
+
+.cmp-card:hover, .cmp-card:focus-visible {
+  background: var(--color-surface-high);
+  box-shadow: var(--shadow-sm);
+}
+
+.cmp-card.off { opacity: 0.65; }
+
+.cmp-card-top {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.cmp-card-top .cmp-avatar { width: 44px; height: 44px; border-radius: var(--radius-md); flex-shrink: 0; }
+
+.cmp-card-text { flex: 1; min-width: 0; }
+.cmp-card-name {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--color-text);
+  line-height: 1.3;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.cmp-card-desc {
+  font-size: 12.5px;
+  color: var(--color-text-dim);
+  margin-top: 2px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cmp-card-stats {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.cmp-card-stats .stat {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 10px;
+  background: var(--color-surface-high);
+  border-radius: var(--radius-full);
+  font-size: 12.5px;
+  color: var(--color-text);
+}
+.cmp-card-stats .stat .material-symbols-outlined { font-size: 15px; color: var(--color-text-dim); }
+.cmp-card-stats .stat.date { color: var(--color-text-dim); }
+.cmp-card-stats .stat strong { font-weight: 700; font-variant-numeric: tabular-nums; }
+
+.cmp-card-director {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  background: var(--color-surface-low);
+  border-radius: var(--radius-md);
+  font-size: 13px;
+  color: var(--color-text);
+}
+.cmp-card-director.muted {
+  color: var(--color-text-dim);
+  font-style: italic;
+}
+.cmp-card-director.muted .material-symbols-outlined { font-size: 16px; }
+
+.cmp-card-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 4px;
+  border-top: 1px solid var(--color-outline-dim);
+  padding-top: 10px;
+  margin-top: -2px;
+}
+
+.card-act {
+  appearance: none;
+  border: none;
+  background: var(--color-surface-high);
+  width: 40px;
+  height: 40px;
+  border-radius: var(--radius-full);
+  display: grid;
+  place-items: center;
+  color: var(--color-text);
+  cursor: pointer;
+  transition: background .14s, color .14s;
+}
+.card-act:hover {
+  background: var(--color-primary-container);
+  color: var(--color-on-primary-container);
+}
+.card-act.danger:hover {
+  background: var(--color-error-container);
+  color: var(--color-on-error-container);
+}
+.card-act .material-symbols-outlined { font-size: 20px; }
+
+.cmp-cards-empty {
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: 10px;
-  padding: 24px 16px 8px;
+  padding: 56px 20px;
+  background: var(--color-surface-high);
+  border-radius: var(--radius-xl);
   text-align: center;
 }
-.confirm-icon {
-  width: 56px;
-  height: 56px;
-  border-radius: 50%;
-  background: var(--color-error-container);
-  color: var(--color-on-error-container);
+.empty-icon-circle {
+  width: 84px;
+  height: 84px;
+  border-radius: var(--radius-xl);
+  background: var(--color-primary-container);
+  color: var(--color-on-primary-container);
   display: grid;
   place-items: center;
 }
-.confirm-icon .material-symbols-outlined { font-size: 28px; }
-.confirm-body h3 { margin: 0; font-size: 18px; color: var(--color-on-surface); }
-.confirm-body p { margin: 0; color: var(--color-on-surface-variant); font-size: 14px; line-height: 1.5; }
-.confirm-warn { color: var(--color-on-surface); }
-.confirm-warn strong { color: var(--color-error); }
+.empty-icon-circle .material-symbols-outlined { font-size: 40px; }
+.cmp-cards-empty h3 { margin: 4px 0 0; color: var(--color-text); font-size: 18px; font-weight: 700; }
+.cmp-cards-empty p { margin: 0; color: var(--color-text-dim); font-size: 14px; max-width: 320px; }
 
-.spin { animation: spin 1s linear infinite; font-size: 18px; }
-@keyframes spin { to { transform: rotate(360deg); } }
+.state-block { display: grid; place-items: center; padding: 48px; }
 
-:deep(.p-dialog-footer) { display: flex; justify-content: flex-end; gap: 8px; padding-top: 14px; }
+@media (max-width: 768px) {
+  .hide-narrow { display: none; }
+  .desktop-only { display: none; }
 
-@media (max-width: 900px) {
-  .cmp-view { padding: 16px; }
-  .cmp-table thead { display: none; }
-  .cmp-table, .cmp-table tbody, .cmp-table tr, .cmp-table td { display: block; }
-  .cmp-table tr {
-    background: var(--color-surface);
-    border: 1px solid var(--color-outline-variant);
-    border-radius: var(--radius-lg, 16px);
-    padding: 4px;
-    margin-bottom: 10px;
-  }
-  .cmp-table tbody tr:hover { background: var(--color-surface); }
-  .cmp-table td {
-    border: none;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 12px;
-    padding: 6px 12px;
-  }
-  .cmp-table td::before {
-    content: attr(data-label);
-    font-size: 12px;
-    color: var(--color-on-surface-variant);
-  }
-  .td-actions { justify-content: flex-end; }
+  .page-head-title { font-size: 20px; }
+  .page-head-meta { font-size: 12px; }
+  .meta-dot { display: none; }
+
+  .cmp-search { flex: 1 1 100%; max-width: 100%; }
 }
 </style>

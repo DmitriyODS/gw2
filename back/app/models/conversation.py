@@ -5,9 +5,10 @@ from app.extensions import db
 class Conversation(db.Model):
     """Личный диалог двух пользователей. Хранится в нормализованном виде:
     user_a_id < user_b_id, чтобы пара была уникальной независимо от того,
-    кто инициировал переписку. Особый случай — спец-чат компании с разработчиками
-    (`is_dev_chat=TRUE`): пара user_a/user_b отсутствует (NULL), участников —
-    все сотрудники этой компании + все Администраторы системы."""
+    кто инициировал переписку. Особый случай — личный чат пользователя с
+    техподдержкой (`is_dev_chat=TRUE`): user_a_id = id владельца чата,
+    user_b_id = NULL. Видят такой чат только владелец и все Администраторы
+    системы; ответы Администраторов отображаются от имени «Техподдержки»."""
     __tablename__ = "conversations"
 
     id = db.Column(db.Integer, primary_key=True)
@@ -46,7 +47,9 @@ class Conversation(db.Model):
         db.Index("idx_conv_company", "company_id"),
         db.Index("idx_conv_last_msg", "last_message_at"),
         db.CheckConstraint(
-            "is_dev_chat OR (user_a_id IS NOT NULL AND user_b_id IS NOT NULL AND user_a_id < user_b_id)",
+            "(is_dev_chat AND user_a_id IS NOT NULL AND user_b_id IS NULL) "
+            "OR (NOT is_dev_chat AND user_a_id IS NOT NULL AND user_b_id IS NOT NULL "
+            "    AND user_a_id < user_b_id)",
             name="ck_conversation_pair_order",
         ),
     )
@@ -58,10 +61,16 @@ class Conversation(db.Model):
 
     def side(self, user_id: int) -> str:
         """'a' если user_id == user_a_id, иначе 'b'. Для dev-чата возвращает 'a'
-        (по факту он не имеет «сторон», но методу нужен детерминированный ответ)."""
+        (владельцем является user_a, у dev-чата нет «другой стороны»)."""
         if self.is_dev_chat:
             return 'a'
         return 'a' if self.user_a_id == user_id else 'b'
+
+    @property
+    def owner_user_id(self):
+        """Только для dev-чата: id владельца (пользователя, который написал в
+        техподдержку). У обычного диалога — None."""
+        return self.user_a_id if self.is_dev_chat else None
 
     def is_hidden_for(self, user_id: int) -> bool:
         if self.is_dev_chat:

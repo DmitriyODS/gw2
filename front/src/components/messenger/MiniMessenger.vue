@@ -23,12 +23,18 @@
               :class="{ unread: c.unread_count > 0 }"
               @click="openThread(c.id)"
             >
-              <div class="mini-avatar-wrap">
+              <div v-if="c.is_dev_chat" class="mini-avatar-wrap mini-avatar-wrap--dev">
+                <span class="material-symbols-outlined">support_agent</span>
+              </div>
+              <div v-else class="mini-avatar-wrap">
                 <img class="mini-avatar" :src="avatarOf(c.other_user)" :alt="c.other_user?.fio" />
                 <span v-if="messenger.isOnline(c.other_user?.id)" class="online-dot mini-list-dot" title="В сети"></span>
               </div>
               <div class="mini-conv-body">
-                <div class="mini-conv-name">{{ c.other_user?.fio }}</div>
+                <div class="mini-conv-name">
+                  <template v-if="c.is_dev_chat">Техподдержка</template>
+                  <template v-else>{{ c.other_user?.fio }}</template>
+                </div>
                 <div class="mini-conv-preview">{{ preview(c.last_message) }}</div>
               </div>
               <span v-if="c.unread_count" class="mini-badge">{{ c.unread_count }}</span>
@@ -42,14 +48,21 @@
             <button class="mini-icon" title="Назад" @click="closeThread">
               <span class="material-symbols-outlined">arrow_back</span>
             </button>
-            <div class="mini-head-avatar-wrap">
+            <div v-if="threadConv?.is_dev_chat" class="mini-head-avatar-wrap mini-head-avatar-wrap--dev">
+              <span class="material-symbols-outlined">support_agent</span>
+            </div>
+            <div v-else class="mini-head-avatar-wrap">
               <img class="mini-head-avatar" :src="avatarOf(threadConv?.other_user)" :alt="threadConv?.other_user?.fio" />
               <span v-if="threadOnline" class="online-dot mini-head-dot" title="В сети"></span>
             </div>
             <div class="mini-head-title">
-              <span class="mini-title--name">{{ threadConv?.other_user?.fio }}</span>
+              <span class="mini-title--name">
+                <template v-if="threadConv?.is_dev_chat">Техподдержка</template>
+                <template v-else>{{ threadConv?.other_user?.fio }}</template>
+              </span>
               <span class="mini-head-status" :class="{ online: threadOnline }">
-                {{ threadOnline ? 'в сети' : threadLastSeen }}
+                <template v-if="threadConv?.is_dev_chat">Поддержка Groove Work</template>
+                <template v-else>{{ threadOnline ? 'в сети' : threadLastSeen }}</template>
               </span>
             </div>
             <button class="mini-icon" title="Свернуть" @click="open = false">
@@ -374,6 +387,20 @@ if (typeof window !== 'undefined') {
   object-fit: cover;
   display: block;
 }
+
+.mini-head-avatar-wrap--dev,
+.mini-avatar-wrap--dev {
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--color-tertiary-container);
+  color: var(--color-on-tertiary-container);
+  flex-shrink: 0;
+}
+.mini-head-avatar-wrap--dev { width: 32px; height: 32px; }
+.mini-head-avatar-wrap--dev .material-symbols-outlined { font-size: 18px; font-variation-settings: 'FILL' 1; }
+.mini-avatar-wrap--dev { width: 40px; height: 40px; }
+.mini-avatar-wrap--dev .material-symbols-outlined { font-size: 22px; font-variation-settings: 'FILL' 1; }
 
 .online-dot {
   position: absolute;

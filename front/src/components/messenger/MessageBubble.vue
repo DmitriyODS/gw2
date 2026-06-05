@@ -129,7 +129,11 @@ const props = defineProps({
 const emit = defineEmits(['delete', 'reply', 'forward', 'join-call', 'pin', 'open-task', 'context-menu'])
 
 const isPinned = computed(() => !!props.message.pinned_at)
-const isDevReply = computed(() => props.message.kind === 'system_dev_reply')
+// Сообщение от техподдержки: новое серверное поле is_from_support либо старый
+// kind='system_dev_reply' (на случай миграции старых сообщений).
+const isDevReply = computed(() =>
+  !!props.message.is_from_support || props.message.kind === 'system_dev_reply'
+)
 
 const bubbleClass = computed(() => ({
   pinned: isPinned.value,

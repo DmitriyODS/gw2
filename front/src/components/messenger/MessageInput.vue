@@ -46,7 +46,7 @@
       </label>
       <button
         v-if="canAttachTask"
-        class="attach-btn"
+        class="attach-btn attach-btn--task"
         title="Прикрепить задачу"
         type="button"
         @click="$emit('attach-task')"
@@ -426,20 +426,43 @@ function iconFor(mime) {
   gap: 8px;
 }
 
+/* M3 Expressive icon-button: tonal hover, круглая форма,
+   semantic-токены — без серых «безликих» иконок. Базовый тон — secondary
+   (для файлов); модификатор --task — tertiary (задача семантически другой
+   тип вложения). */
 .attach-btn {
+  appearance: none;
+  border: none;
   width: 40px;
   height: 40px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  display: grid;
+  place-items: center;
   cursor: pointer;
-  color: var(--color-text-dim);
-  border-radius: var(--radius-md);
+  border-radius: 50%;
+  background: var(--color-surface-high);
+  color: var(--color-text);
+  flex-shrink: 0;
+  transition: background 0.15s, color 0.15s, transform 0.12s;
 }
 
 .attach-btn:hover {
-  background: var(--color-surface-low);
-  color: var(--color-primary);
+  background: var(--color-secondary-container);
+  color: var(--color-on-secondary-container);
+}
+.attach-btn:active { transform: scale(0.94); }
+
+.attach-btn .material-symbols-outlined { font-size: 20px; }
+
+.attach-btn--task {
+  background: var(--color-tertiary-container);
+  color: var(--color-on-tertiary-container);
+}
+.attach-btn--task:hover {
+  background: color-mix(in oklch, var(--color-tertiary) 26%, var(--color-tertiary-container));
+  color: var(--color-on-tertiary-container);
+}
+.attach-btn--task .material-symbols-outlined {
+  font-variation-settings: 'FILL' 1, 'wght' 500;
 }
 
 .text-area {
@@ -483,15 +506,28 @@ function iconFor(mime) {
   background: var(--color-primary-hover);
 }
 
-/* Прикреплённая задача — чип того же стиля, что и файловые вложения,
-   но с акцентом — primary-container. */
+/* Прикреплённая задача — pill с tertiary-tone, в одной гамме с
+   .attach-btn--task. Чтобы файл и задача визуально отличались, файловый
+   чип остаётся surface, а задача — окрашенный pill. */
 .pending-att.pending-task {
-  background: var(--color-primary-container);
-  color: var(--color-on-primary-container);
-  border-color: var(--color-primary);
+  background: var(--color-tertiary-container);
+  color: var(--color-on-tertiary-container);
+  border-color: transparent;
+  border-radius: var(--radius-full);
+  padding: 6px 10px 6px 8px;
+  font-weight: 600;
 }
 
-.pending-att.pending-task .att-ico { color: var(--color-on-primary-container); }
+.pending-att.pending-task .att-ico {
+  color: var(--color-on-tertiary-container);
+  font-variation-settings: 'FILL' 1, 'wght' 500;
+}
+
+.pending-att.pending-task .remove-att {
+  color: var(--color-on-tertiary-container);
+  opacity: 0.85;
+}
+.pending-att.pending-task .remove-att:hover { opacity: 1; }
 </style>
 
 <style>

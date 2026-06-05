@@ -7,11 +7,13 @@
           <button
             type="button"
             class="avatar-wrapper"
-            :title="hasAvatar ? 'Открыть фото' : ''"
-            :disabled="!hasAvatar"
-            @click="hasAvatar && (lightboxOpen = true)"
+            title="Открыть фото"
+            @click="lightboxOpen = true"
           >
             <img :src="avatarSrc" class="profile-avatar" :alt="authStore.user?.fio" />
+            <span class="avatar-zoom-overlay" aria-hidden="true">
+              <span class="material-symbols-outlined">zoom_in</span>
+            </span>
           </button>
           <div class="avatar-actions">
             <button class="btn-sm" @click="showCropper = true">
@@ -169,16 +171,17 @@
     </div>
 
     <!-- Диалог кроппера аватарки -->
-    <Dialog
+    <AppDialog
       v-if="showCropper"
-      :visible="true"
-      @update:visible="showCropper = false"
-      modal
-      header="Загрузка аватарки"
-      style="width:520px"
+      model-value
+      tone="primary"
+      icon="account_circle"
+      size="md"
+      title="Загрузка аватарки"
+      @update:model-value="showCropper = false"
     >
       <AvatarCropper @cropped="onCropped" @cancel="showCropper = false" />
-    </Dialog>
+    </AppDialog>
 
     <AvatarLightbox
       v-model="lightboxOpen"
@@ -201,7 +204,7 @@ import AvatarLightbox from '@/components/common/AvatarLightbox.vue'
 import PhoneInput from '@/components/common/PhoneInput.vue'
 import DateRangePicker from '@/components/common/DateRangePicker.vue'
 import InputText from 'primevue/inputtext'
-import Dialog from 'primevue/dialog'
+import AppDialog from '@/components/common/AppDialog.vue'
 import DataTable from 'primevue/datatable'
 import Column from 'primevue/column'
 import ProgressSpinner from 'primevue/progressspinner'
@@ -399,26 +402,37 @@ onMounted(() => {
 }
 
 .avatar-wrapper {
+  position: relative;
   width: 120px;
   height: 120px;
   border-radius: 50%;
   overflow: hidden;
-  border: 3px solid var(--gw-primary);
-  box-shadow: 0 0 0 4px var(--gw-bg);
+  border: 3px solid var(--color-primary);
+  box-shadow: 0 0 0 4px var(--color-surface);
   flex-shrink: 0;
   padding: 0;
   background: transparent;
-  cursor: pointer;
-  transition: transform 0.15s;
+  cursor: zoom-in;
+  transition: transform .18s, box-shadow .18s;
 }
 
-.avatar-wrapper:not(:disabled):hover {
+.avatar-wrapper:hover {
   transform: scale(1.03);
+  box-shadow: 0 0 0 4px var(--color-surface), var(--shadow-md);
 }
 
-.avatar-wrapper:disabled {
-  cursor: default;
+.avatar-zoom-overlay {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  background: color-mix(in oklch, var(--color-scrim) 70%, transparent);
+  color: var(--color-on-primary);
+  opacity: 0;
+  transition: opacity .15s;
 }
+.avatar-wrapper:hover .avatar-zoom-overlay { opacity: 1; }
+.avatar-zoom-overlay .material-symbols-outlined { font-size: 32px; }
 
 .profile-avatar {
   width: 100%;
@@ -443,14 +457,14 @@ onMounted(() => {
   font-size: 12px;
   font-weight: 500;
   cursor: pointer;
-  border: 1px solid var(--gw-border);
-  background: var(--gw-surface);
-  color: var(--gw-text);
+  border: 1px solid var(--color-outline-dim);
+  background: var(--color-surface);
+  color: var(--color-text);
   transition: background 0.15s, color 0.15s;
 }
 
 .btn-sm:hover {
-  background: var(--gw-bg);
+  background: var(--color-surface-low);
 }
 
 .btn-sm.danger {
@@ -585,7 +599,7 @@ onMounted(() => {
 .form-group label {
   font-size: 13px;
   font-weight: 600;
-  color: var(--gw-text-secondary);
+  color: var(--color-text-dim);
 }
 
 .w-full {
@@ -604,7 +618,7 @@ onMounted(() => {
 
 .btn-primary {
   align-self: flex-start;
-  background: var(--gw-primary);
+  background: var(--color-primary);
   color: var(--color-on-primary);
   border: none;
   border-radius: 10px;
@@ -616,7 +630,7 @@ onMounted(() => {
 }
 
 .btn-primary:hover:not(:disabled) {
-  background: var(--gw-primary-hover);
+  background: var(--color-primary-hover);
 }
 
 .btn-primary:disabled {
@@ -639,21 +653,21 @@ onMounted(() => {
   align-items: center;
   gap: 4px;
   padding: 16px;
-  background: var(--gw-bg);
-  border: 1px solid var(--gw-border);
+  background: var(--color-surface-low);
+  border: 1px solid var(--color-outline-dim);
   border-radius: 10px;
 }
 
 .stat-value {
   font-size: 28px;
   font-weight: 800;
-  color: var(--gw-primary);
+  color: var(--color-primary);
   line-height: 1;
 }
 
 .stat-label {
   font-size: 12px;
-  color: var(--gw-text-secondary);
+  color: var(--color-text-dim);
 }
 
 .stats-table {
@@ -669,7 +683,7 @@ onMounted(() => {
 .empty-stats {
   text-align: center;
   padding: 24px;
-  color: var(--gw-text-secondary);
+  color: var(--color-text-dim);
   font-size: 14px;
 }
 

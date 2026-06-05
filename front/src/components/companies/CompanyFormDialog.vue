@@ -1,11 +1,18 @@
 <template>
-  <Dialog
-    :visible="modelValue"
-    @update:visible="onClose"
-    :header="isEdit ? 'Редактирование компании' : 'Новая компания'"
-    modal
-    :style="{ width: '560px' }"
-    :pt="{ content: { style: 'overflow: visible' } }"
+  <AppDialog
+    :model-value="modelValue"
+    tone="primary"
+    :icon="isEdit ? 'edit' : 'add_business'"
+    size="md"
+    :title="isEdit ? 'Редактирование компании' : 'Новая компания'"
+    :busy="saving"
+    :closable="!saving"
+    :actions="[
+      { kind: 'cancel', label: 'Отмена', disabled: saving },
+      { kind: 'confirm', label: isEdit ? 'Сохранить' : 'Создать', disabled: !canSave || saving },
+    ]"
+    @update:model-value="onClose"
+    @confirm="save"
   >
     <div class="form-body">
       <div class="field">
@@ -81,20 +88,12 @@
 
       <div v-if="serverError" class="form-err">{{ serverError }}</div>
     </div>
-
-    <template #footer>
-      <button class="btn-text" :disabled="saving" @click="onClose">Отмена</button>
-      <button class="btn-filled" :disabled="!canSave || saving" @click="save">
-        <span v-if="saving" class="material-symbols-outlined spin">progress_activity</span>
-        {{ isEdit ? 'Сохранить' : 'Создать' }}
-      </button>
-    </template>
-  </Dialog>
+  </AppDialog>
 </template>
 
 <script setup>
 import { ref, computed, watch } from 'vue'
-import Dialog from 'primevue/dialog'
+import AppDialog from '@/components/common/AppDialog.vue'
 import { getCompanyDirectory } from '@/api/companies.js'
 
 const props = defineProps({
@@ -302,26 +301,4 @@ select.ctl {
   background: var(--color-on-primary);
 }
 
-.btn-text, .btn-filled {
-  appearance: none;
-  border: none;
-  cursor: pointer;
-  border-radius: var(--radius-full, 999px);
-  padding: 8px 18px;
-  font: inherit;
-  font-weight: 600;
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-}
-.btn-text { background: transparent; color: var(--color-on-surface-variant); }
-.btn-text:hover { background: var(--color-surface-container); color: var(--color-on-surface); }
-.btn-filled { background: var(--color-primary); color: var(--color-on-primary); }
-.btn-filled:hover { filter: brightness(.94); }
-.btn-filled:disabled, .btn-text:disabled { opacity: .55; cursor: not-allowed; }
-
-.spin { animation: spin 1s linear infinite; font-size: 18px; }
-@keyframes spin { to { transform: rotate(360deg); } }
-
-:deep(.p-dialog-footer) { display: flex; justify-content: flex-end; gap: 8px; padding-top: 14px; }
 </style>

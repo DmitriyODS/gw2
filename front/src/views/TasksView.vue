@@ -1,6 +1,6 @@
 <template>
   <div class="tasks-view">
-    <header class="tasks-header">
+    <header class="tasks-header" :class="{ 'is-compact': isCompact }">
       <!-- Панель инструментов -->
       <div class="tasks-toolbar">
         <div class="search-wrapper">
@@ -16,8 +16,8 @@
           </button>
         </div>
 
-        <!-- Переключатель вида: сетка / список / канбан -->
-        <div class="view-toggle" role="group" aria-label="Вид отображения">
+        <!-- Переключатель вида: сетка / список / канбан (только десктоп) -->
+        <div class="view-toggle desktop-only" role="group" aria-label="Вид отображения">
           <button
             class="view-toggle-btn"
             :class="{ active: viewMode === 'grid' }"
@@ -46,7 +46,7 @@
         </div>
 
         <!-- Мобильные иконки сортировки/фильтров -->
-        <button class="btn-icon mobile-only" @click="showSortSheet = true" title="Сортировка">
+        <button class="btn-icon mobile-only" @click="showSortSheet = true" title="Сортировка" aria-label="Сортировка">
           <span class="material-symbols-outlined">sort</span>
         </button>
         <button
@@ -54,6 +54,7 @@
           :class="{ 'has-dot': hasActiveFilters }"
           @click="showMobileFilters = true"
           title="Фильтры"
+          aria-label="Фильтры"
         >
           <span class="material-symbols-outlined">tune</span>
         </button>
@@ -70,30 +71,30 @@
         </button>
       </div>
 
-      <!-- Сегментированные вкладки -->
-      <div class="tasks-tabs">
-        <button
-          v-for="tab in tabs"
-          :key="tab.value"
-          :data-tutorial="`tab-${tab.value}`"
-          class="tab-btn"
-          :class="{ active: tasksStore.filters.tab === tab.value }"
-          @click="tasksStore.setTab(tab.value)"
-        >
-          <span class="material-symbols-outlined">{{ tab.icon }}</span>
-          <span class="tab-label">{{ tab.label }}</span>
-        </button>
-      </div>
+      <SegmentedTabs
+        :model-value="tasksStore.filters.tab"
+        :tabs="tabs"
+        :full-width="isMobile"
+        :dense="isCompact"
+        @update:model-value="tasksStore.setTab($event)"
+      />
     </header>
 
     <div class="tasks-body">
+      <!-- Рут-админ без выбранной компании -->
+      <div v-if="auth.isRootAdmin && !companiesStore.effectiveCompanyId" class="state-block empty-state">
+        <span class="material-symbols-outlined empty-icon">domain</span>
+        <p class="empty-title">Выберите компанию</p>
+        <p class="empty-sub">Задачи ведутся в рамках компании. Выберите её в боковом меню.</p>
+      </div>
+
+      <template v-else>
       <TaskFilters :mobile-visible="showMobileFilters" @close="showMobileFilters = false" />
 
       <main
         ref="cardsAreaRef"
         class="cards-area"
         :class="{ 'cards-area--board': viewMode === 'board' }"
-        @scroll="onCardsScroll"
       >
         <div v-if="tasksStore.loading" class="state-block">
           <ProgressSpinner />
@@ -154,20 +155,17 @@
           </div>
         </template>
       </main>
+      </template>
     </div>
 
-    <!-- FAB создания — мобильный -->
-    <Teleport to="body">
-      <button
-        v-if="canCreateTask"
-        class="fab"
-        :class="{ 'fab--hidden': !fabVisible }"
-        @click="showCreateTask = true"
-        aria-label="Добавить задачу"
-      >
-        <span class="material-symbols-outlined">add</span>
-      </button>
-    </Teleport>
+    <AppFab
+      :visible="canCreateTask"
+      icon="add"
+      label="Создать"
+      :collapsed="isCompact"
+      aria-label="Создать задачу"
+      @click="showCreateTask = true"
+    />
 
     <SortSheet :visible="showSortSheet" @close="showSortSheet = false" />
 
@@ -201,6 +199,8 @@ import { useTasksStore } from '@/stores/tasks.js'
 import { useUnitsStore } from '@/stores/units.js'
 import { useNotificationsStore } from '@/stores/notifications.js'
 import { usePermission, ROLES } from '@/composables/usePermission.js'
+import { useAuthStore } from '@/stores/auth.js'
+import { useCompaniesStore } from '@/stores/companies.js'
 import { toggleFavorite as apiFavorite, setTaskColor } from '@/api/tasks.js'
 import TaskCard from '@/components/tasks/TaskCard.vue'
 import TaskFilters from '@/components/tasks/TaskFilters.vue'
@@ -209,13 +209,19 @@ import TaskForm from '@/components/tasks/TaskForm.vue'
 import TaskKanban from '@/components/tasks/TaskKanban.vue'
 import SortSheet from '@/components/tasks/SortSheet.vue'
 import StartUnitModal from '@/components/units/StartUnitModal.vue'
+import AppFab from '@/components/common/AppFab.vue'
+import SegmentedTabs from '@/components/common/SegmentedTabs.vue'
 import ProgressSpinner from 'primevue/progressspinner'
 import { useCompanySettings } from '@/composables/useCompanySettings.js'
+import { useScrollCollapse } from '@/composables/useScrollCollapse.js'
+import { useBreakpoint } from '@/composables/useBreakpoint.js'
 
 const VIEW_KEY = 'gw2_tasks_view'
 
 const route = useRoute()
 const router = useRouter()
+const auth = useAuthStore()
+const companiesStore = useCompaniesStore()
 const tasksStore = useTasksStore()
 const unitsStore = useUnitsStore()
 const notif = useNotificationsStore()
@@ -261,16 +267,8 @@ watch(viewMode, (m) => {
 }, { immediate: true })
 
 const cardsAreaRef = ref(null)
-const fabVisible = ref(true)
-let lastScrollTop = 0
-
-function onCardsScroll() {
-  const el = cardsAreaRef.value
-  if (!el) return
-  const st = el.scrollTop
-  fabVisible.value = st < lastScrollTop || st < 60
-  lastScrollTop = st
-}
+const { isCompact } = useScrollCollapse(cardsAreaRef)
+const { isMobile } = useBreakpoint()
 
 const canCreateTask = computed(() => isAtLeast(ROLES.EMPLOYEE))
 const totalPages = computed(() => Math.ceil(tasksStore.total / tasksStore.filters.per_page))
@@ -286,9 +284,9 @@ const hasActiveFilters = computed(() => {
 })
 
 const tabs = [
-  { value: 'active', label: 'Активные', icon: 'checklist' },
-  { value: 'favorites', label: 'Избранное', icon: 'star' },
-  { value: 'archive', label: 'Архив', icon: 'inventory_2' }
+  { value: 'active', label: 'Активные', icon: 'checklist', tutorial: 'tab-active' },
+  { value: 'favorites', label: 'Избранное', icon: 'star', tutorial: 'tab-favorites' },
+  { value: 'archive', label: 'Архив', icon: 'inventory_2', tutorial: 'tab-archive' },
 ]
 
 const emptyMeta = {
@@ -390,6 +388,11 @@ onMounted(async () => {
 watch(() => route.query.open, (v) => {
   if (v) consumeOpenQuery()
 })
+
+// Рут-админ переключил компанию — перезагружаем задачи.
+watch(() => companiesStore.effectiveCompanyId, () => {
+  tasksStore.fetchTasks().catch(() => {})
+})
 </script>
 
 <style scoped>
@@ -408,6 +411,8 @@ watch(() => route.query.open, (v) => {
   background: var(--color-surface);
   border-bottom: 1px solid var(--color-outline-dim);
   flex-shrink: 0;
+  transition: padding 0.22s cubic-bezier(0.4, 0, 0.2, 1),
+              gap 0.22s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .tasks-toolbar {
@@ -583,45 +588,6 @@ watch(() => route.query.open, (v) => {
   font-size: 20px;
 }
 
-/* Сегментированные вкладки */
-.tasks-tabs {
-  display: inline-flex;
-  align-self: flex-start;
-  gap: 2px;
-  background: var(--color-surface-high);
-  border-radius: var(--radius-full);
-  padding: 4px;
-}
-
-.tab-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 8px 18px;
-  border: none;
-  border-radius: var(--radius-full);
-  background: transparent;
-  color: var(--color-text-dim);
-  font-size: 14px;
-  font-weight: 600;
-  cursor: pointer;
-  transition: background 0.18s, color 0.18s;
-}
-
-.tab-btn .material-symbols-outlined {
-  font-size: 18px;
-}
-
-.tab-btn:hover:not(.active) {
-  color: var(--color-text);
-}
-
-.tab-btn.active {
-  background: var(--color-surface);
-  color: var(--color-primary);
-  box-shadow: var(--shadow-sm);
-}
-
 /* ─── Тело ─── */
 .tasks-body {
   display: flex;
@@ -779,8 +745,16 @@ watch(() => route.query.open, (v) => {
 /* ─── Мобильная адаптивность ─── */
 @media (max-width: 768px) {
   .tasks-header {
-    padding: 10px 12px;
+    padding: 10px 12px 8px;
     gap: 10px;
+  }
+
+  /* Компактный режим при скролле вниз — экономим вертикальное место,
+     контент не «дёргается»: шапка сжимается плавно. */
+  .tasks-header.is-compact {
+    padding-top: 6px;
+    padding-bottom: 4px;
+    gap: 6px;
   }
 
   .desktop-only {
@@ -788,87 +762,49 @@ watch(() => route.query.open, (v) => {
   }
 
   .mobile-only {
-    display: flex;
+    display: inline-flex;
+  }
+
+  /* Поисковая строка — мобильная высота 44px (минимум для тача). */
+  .search-input {
+    padding: 11px 38px 11px 40px;
+    font-size: 14px;
+    background: var(--color-surface-high);
+    border-color: transparent;
+  }
+
+  .search-input:focus {
+    background: var(--color-surface);
+  }
+
+  .btn-icon {
+    width: 44px;
+    height: 44px;
+    background: var(--color-surface-high);
+    border-color: transparent;
+  }
+
+  .btn-icon.has-dot::after {
+    border-color: var(--color-surface-high);
   }
 
   .cards-grid {
-    grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
-    gap: 12px;
+    grid-template-columns: 1fr;
+    gap: 10px;
   }
 
   .cards-area {
+    /* Резервируем место под нижнюю навигацию (64px) + extended FAB (~72px вместе
+       с отступом). safe-area-inset-bottom — для iPhone home indicator. */
     padding: 14px 12px;
-    padding-bottom: calc(60px + 80px + env(safe-area-inset-bottom, 0px));
+    padding-bottom: calc(64px + 96px + env(safe-area-inset-bottom, 0px));
   }
 
-  .tab-btn {
-    flex: 1;
-    justify-content: center;
-    padding: 8px 10px;
-  }
-
-  .tasks-tabs {
-    align-self: stretch;
-    display: flex;
-  }
-
-  .tab-label {
-    font-size: 13px;
-  }
-
-  .fab {
-    position: fixed;
-    right: 16px;
-    bottom: calc(60px + 16px + env(safe-area-inset-bottom, 0px));
-    width: 56px;
-    height: 56px;
-    border-radius: 50%;
-    border: none;
-    background: var(--color-primary);
-    color: var(--color-on-primary);
-    box-shadow: 0 4px 16px color-mix(in oklch, var(--color-primary) 50%, transparent);
-    cursor: pointer;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    z-index: 150;
-    transition: transform 0.28s cubic-bezier(0.4, 0, 0.2, 1),
-                opacity 0.28s cubic-bezier(0.4, 0, 0.2, 1),
-                background 0.15s;
-  }
-
-  .fab:active {
-    background: var(--color-primary-hover);
-  }
-
-  .fab .material-symbols-outlined {
-    font-size: 26px;
-  }
-
-  .fab--hidden {
-    transform: translateY(calc(100% + 24px));
-    opacity: 0;
-    pointer-events: none;
-  }
-}
-
-@media (min-width: 769px) {
-  .fab {
-    display: none;
-  }
 }
 
 @media (max-width: 480px) {
-  .cards-grid {
-    grid-template-columns: 1fr;
-  }
-
-  .tab-label {
-    display: none;
-  }
-
-  .tab-btn {
-    padding: 9px;
+  .tasks-header {
+    padding: 8px 10px 6px;
   }
 }
 </style>

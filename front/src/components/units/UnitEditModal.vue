@@ -1,11 +1,18 @@
 <template>
-  <Dialog
-    :visible="true"
-    @update:visible="$emit('close')"
-    modal
-    header="Редактировать юнит"
-    style="width: 480px; max-width: 95vw"
-    :closable="true"
+  <AppDialog
+    model-value
+    tone="primary"
+    icon="edit"
+    size="sm"
+    title="Редактировать юнит"
+    :busy="submitting"
+    :closable="!submitting"
+    :actions="[
+      { kind: 'cancel', label: 'Отмена', disabled: submitting },
+      { kind: 'confirm', label: 'Сохранить', disabled: submitting },
+    ]"
+    @update:model-value="(v) => !v && $emit('close')"
+    @confirm="handleSubmit"
   >
     <form class="unit-form" @submit.prevent="handleSubmit">
       <div class="form-field">
@@ -62,34 +69,22 @@
       </div>
 
       <div v-if="serverError" class="server-error">{{ serverError }}</div>
-
-      <div class="form-actions">
-        <button type="button" class="btn-secondary" @click="$emit('close')" :disabled="submitting">
-          Отмена
-        </button>
-        <button type="submit" class="btn-primary" :disabled="submitting">
-          {{ submitting ? 'Сохранение...' : 'Сохранить' }}
-        </button>
-      </div>
     </form>
-  </Dialog>
+  </AppDialog>
 </template>
 
 <script setup>
 import { ref, onMounted } from 'vue'
-import Dialog from 'primevue/dialog'
 import InputText from 'primevue/inputtext'
 import Select from 'primevue/select'
 import DatePicker from 'primevue/datepicker'
+import AppDialog from '@/components/common/AppDialog.vue'
 import { updateUnit } from '@/api/units.js'
 import { getUnitTypes } from '@/api/unitTypes.js'
 import { useNotificationsStore } from '@/stores/notifications.js'
 
 const props = defineProps({
-  unit: {
-    type: Object,
-    required: true
-  }
+  unit: { type: Object, required: true },
 })
 
 const emit = defineEmits(['close', 'saved'])
@@ -104,15 +99,10 @@ const form = ref({
   name: props.unit.name || '',
   unit_type_id: props.unit.unit_type_id || null,
   datetime_start: props.unit.datetime_start ? new Date(props.unit.datetime_start) : null,
-  datetime_end: props.unit.datetime_end ? new Date(props.unit.datetime_end) : null
+  datetime_end: props.unit.datetime_end ? new Date(props.unit.datetime_end) : null,
 })
 
-const errors = ref({
-  name: '',
-  unit_type_id: '',
-  datetime_start: '',
-  datetime_end: ''
-})
+const errors = ref({ name: '', unit_type_id: '', datetime_start: '', datetime_end: '' })
 
 onMounted(async () => {
   try {
@@ -126,29 +116,24 @@ onMounted(async () => {
 function validate() {
   errors.value = { name: '', unit_type_id: '', datetime_start: '', datetime_end: '' }
   let valid = true
-
   if (!form.value.name.trim()) {
     errors.value.name = 'Введите название юнита'
     valid = false
   }
-
   if (!form.value.unit_type_id) {
     errors.value.unit_type_id = 'Выберите тип юнита'
     valid = false
   }
-
   if (!form.value.datetime_start) {
     errors.value.datetime_start = 'Укажите дату начала'
     valid = false
   }
-
   if (props.unit.datetime_end && form.value.datetime_end && form.value.datetime_start) {
     if (new Date(form.value.datetime_end) <= new Date(form.value.datetime_start)) {
       errors.value.datetime_end = 'Дата окончания должна быть позже даты начала'
       valid = false
     }
   }
-
   return valid
 }
 
@@ -159,21 +144,17 @@ function toISOLocal(d) {
 
 async function handleSubmit() {
   if (!validate()) return
-
   submitting.value = true
   serverError.value = ''
-
   try {
     const payload = {
       name: form.value.name.trim(),
       unit_type_id: form.value.unit_type_id,
-      datetime_start: toISOLocal(form.value.datetime_start)
+      datetime_start: toISOLocal(form.value.datetime_start),
     }
-
     if (props.unit.datetime_end) {
       payload.datetime_end = toISOLocal(form.value.datetime_end)
     }
-
     await updateUnit(props.unit.id, payload)
     notifications.success('Юнит успешно обновлён')
     emit('saved')
@@ -191,7 +172,6 @@ async function handleSubmit() {
   display: flex;
   flex-direction: column;
   gap: 16px;
-  padding: 8px 0;
 }
 
 .form-field {
@@ -203,12 +183,10 @@ async function handleSubmit() {
 .form-label {
   font-size: 13px;
   font-weight: 600;
-  color: var(--gw-text);
+  color: var(--color-text);
 }
 
-.required {
-  color: var(--color-secondary);
-}
+.required { color: var(--color-error); }
 
 .field-error {
   font-size: 12px;
@@ -218,57 +196,11 @@ async function handleSubmit() {
 .server-error {
   background: var(--color-error-container);
   color: var(--color-on-error-container);
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   padding: 10px 14px;
   font-size: 13px;
   font-weight: 500;
 }
 
-.form-actions {
-  display: flex;
-  justify-content: flex-end;
-  gap: 10px;
-  padding-top: 8px;
-}
-
-.btn-secondary {
-  background: transparent;
-  border: 1px solid var(--gw-border);
-  border-radius: 8px;
-  padding: 9px 20px;
-  font-size: 14px;
-  color: var(--gw-text);
-  cursor: pointer;
-  transition: background 0.12s;
-}
-
-.btn-secondary:hover:not(:disabled) {
-  background: var(--gw-bg);
-}
-
-.btn-primary {
-  background: var(--gw-primary);
-  border: none;
-  border-radius: 8px;
-  padding: 9px 20px;
-  font-size: 14px;
-  font-weight: 600;
-  color: var(--color-on-primary);
-  cursor: pointer;
-  transition: opacity 0.12s;
-}
-
-.btn-primary:hover:not(:disabled) {
-  opacity: 0.88;
-}
-
-.btn-primary:disabled,
-.btn-secondary:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
-.w-full {
-  width: 100%;
-}
+.w-full { width: 100%; }
 </style>

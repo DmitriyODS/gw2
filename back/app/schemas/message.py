@@ -85,11 +85,22 @@ class MessageSchema(Schema):
     # Закрепление (общее для обоих участников диалога).
     pinned_at = fields.DateTime(dump_only=True, allow_none=True)
     pinned_by_id = fields.Int(dump_only=True, allow_none=True)
+    # True, если сообщение в чате техподдержки и его автор — Администратор
+    # системы (фронт подписывает такие сообщения «Техподдержка», скрывая ФИО).
+    is_from_support = fields.Method("get_is_from_support", dump_only=True)
 
     def get_forwarded_from(self, obj):
         if not obj.forwarded_from:
             return None
         return {"id": obj.forwarded_from.id, "fio": obj.forwarded_from.fio}
+
+    def get_is_from_support(self, obj):
+        conv = obj.conversation
+        if conv is None or not conv.is_dev_chat:
+            return False
+        # Автор — это «техподдержка», если он не владелец чата (владелец =
+        # пользователь, которому принадлежит этот dev-чат).
+        return obj.sender_id != conv.user_a_id
 
 
 class ConversationListItemSchema(Schema):
@@ -104,6 +115,9 @@ class ConversationListItemSchema(Schema):
     is_dev_chat = fields.Method("get_is_dev_chat", dump_only=True)
     company_id = fields.Method("get_company_id", dump_only=True, allow_none=True)
     company_name = fields.Method("get_company_name", dump_only=True, allow_none=True)
+    # Владелец dev-чата (заполняется только в support-inbox админа — это
+    # пользователь, которому этот чат принадлежит). У обычных диалогов = None.
+    owner_user = fields.Nested(UserDirectorySchema, dump_only=True, allow_none=True)
 
     def get_id(self, obj):
         return obj["conversation"].id

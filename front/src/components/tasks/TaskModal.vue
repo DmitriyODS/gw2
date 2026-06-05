@@ -8,11 +8,71 @@
     :pt="dialogPt"
   >
     <div class="task-modal-body" :class="{ 'mobile-layout': isMobile }">
-      <!-- Мобильные вкладки -->
-      <div v-if="isMobile" class="mobile-tabs">
+      <!-- ─── Мобильная шапка: M3 Top App Bar ─── -->
+      <header v-if="isMobile" class="mobile-topbar">
+        <button class="topbar-icon-btn" @click="$emit('close')" aria-label="Закрыть">
+          <span class="material-symbols-outlined">arrow_back</span>
+        </button>
+        <div class="topbar-title-wrap">
+          <span class="topbar-eyebrow">Задача №{{ task.id }}</span>
+          <span class="topbar-title">{{ task.name }}</span>
+        </div>
+        <button
+          class="topbar-icon-btn"
+          :class="{ 'is-fav': task.is_favorite }"
+          @click="handleToggleFavorite"
+          :aria-label="task.is_favorite ? 'Убрать из избранного' : 'Добавить в избранное'"
+        >
+          <span class="material-symbols-outlined" :class="{ filled: task.is_favorite }">
+            {{ task.is_favorite ? 'favorite' : 'favorite_border' }}
+          </span>
+        </button>
+        <button
+          class="topbar-icon-btn"
+          :class="{ active: showMobileMenu }"
+          @click="showMobileMenu = !showMobileMenu"
+          aria-label="Дополнительно"
+        >
+          <span class="material-symbols-outlined">more_vert</span>
+        </button>
+
+        <TaskColorPopover
+          v-model="showColorPicker"
+          :anchor="colorBtnRef"
+          :value="task.color || null"
+          @select="handleSetColor"
+        />
+      </header>
+
+      <!-- Overflow-меню действий (вынесено в body через Teleport, чтобы не
+           обрезалось overflow:hidden у PrimeVue Dialog content). -->
+      <Teleport to="body">
+        <div v-if="isMobile && showMobileMenu" class="mobile-menu-backdrop" @click="showMobileMenu = false" />
+        <Transition name="mobile-menu">
+          <div v-if="isMobile && showMobileMenu" class="mobile-menu" @click.stop>
+            <button class="mm-item" ref="colorBtnRef" @click="onMobileMenuAction('color')">
+              <span class="material-symbols-outlined">palette</span>
+              Цвет задачи
+            </button>
+            <button v-if="canEditTask" class="mm-item" @click="onMobileMenuAction('edit')">
+              <span class="material-symbols-outlined">edit</span>
+              Редактировать
+            </button>
+            <button v-if="canDeleteTask" class="mm-item danger" @click="onMobileMenuAction('delete')">
+              <span class="material-symbols-outlined">delete</span>
+              Удалить
+            </button>
+          </div>
+        </Transition>
+      </Teleport>
+
+      <!-- ─── Мобильные табы (3 шт., без дубля закрытия) ─── -->
+      <div v-if="isMobile" class="mobile-tabs" role="tablist">
         <button
           class="mobile-tab-btn"
           :class="{ active: mobileTab === 'details' }"
+          role="tab"
+          :aria-selected="mobileTab === 'details'"
           @click="mobileTab = 'details'"
         >
           <span class="material-symbols-outlined">info</span>
@@ -21,6 +81,8 @@
         <button
           class="mobile-tab-btn"
           :class="{ active: mobileTab === 'units' && rightTab === 'units' }"
+          role="tab"
+          :aria-selected="mobileTab === 'units' && rightTab === 'units'"
           @click="mobileTab = 'units'; rightTab = 'units'"
         >
           <span class="material-symbols-outlined">timer</span>
@@ -29,19 +91,19 @@
         <button
           class="mobile-tab-btn"
           :class="{ active: mobileTab === 'units' && rightTab === 'comments' }"
+          role="tab"
+          :aria-selected="mobileTab === 'units' && rightTab === 'comments'"
           @click="mobileTab = 'units'; rightTab = 'comments'"
         >
           <span class="material-symbols-outlined">forum</span>
-          Чат
-        </button>
-        <button class="mobile-close-btn" @click="$emit('close')">
-          <span class="material-symbols-outlined">close</span>
+          Комментарии
         </button>
       </div>
 
       <!-- Левая панель (детали задачи) -->
       <div class="task-left" :class="{ hidden: isMobile && mobileTab !== 'details' }">
-        <div class="task-top-row">
+        <!-- На мобильном эти actions уехали в Top App Bar — здесь они скрыты. -->
+        <div v-if="!isMobile" class="task-top-row">
           <span class="task-id-label">№{{ task.id }}</span>
           <div class="task-top-actions">
             <button
@@ -78,7 +140,8 @@
           </div>
         </div>
 
-        <h2 class="task-title">{{ task.name }}</h2>
+        <!-- Название задачи: на мобильном — уже в Top App Bar, повторно не показываем. -->
+        <h2 v-if="!isMobile" class="task-title">{{ task.name }}</h2>
 
         <!-- Заказчик -->
         <div class="field-box">
@@ -163,8 +226,9 @@
         <!-- Работали над задачей -->
         <TaskContributors :task-id="task.id" />
 
-        <!-- Нижние кнопки -->
-        <div class="task-bottom-actions">
+        <!-- Нижние кнопки — только на десктопе. На мобильном они вынесены
+             в sticky bottom action bar (см. ниже). -->
+        <div v-if="!isMobile" class="task-bottom-actions">
           <button
             v-if="!task.is_archived && canEditTask"
             class="btn-full pill primary-btn"
@@ -188,7 +252,11 @@
 
       <!-- Правая панель (юниты / комментарии) -->
       <div class="task-right" :class="{ hidden: isMobile && mobileTab === 'details' }">
-        <div class="units-header">
+        <!-- units-header — только на десктопе. На мобильном:
+             - переключение юниты/комментарии — в верхних табах
+             - «Начать юнит» — в sticky bottom action bar
+             - закрытие — в Top App Bar -->
+        <div v-if="!isMobile" class="units-header">
           <div class="right-tabs">
             <button
               class="right-tab"
@@ -216,7 +284,7 @@
               <span class="material-symbols-outlined">add</span>
               Начать юнит
             </button>
-            <button v-if="!isMobile" class="btn-close-round" @click="$emit('close')" title="Закрыть">
+            <button class="btn-close-round" @click="$emit('close')" title="Закрыть">
               <span class="material-symbols-outlined">close</span>
             </button>
           </div>
@@ -243,6 +311,19 @@
         </template>
         <TaskComments v-else :task-id="task.id" />
       </div>
+
+      <!-- ─── Sticky bottom action bar (только мобильный) ─── -->
+      <div v-if="isMobile && mobileBottomAction" class="mobile-bottom-bar">
+        <button
+          class="bottom-action-btn"
+          :class="mobileBottomAction.cls"
+          :disabled="actionLoading"
+          @click="mobileBottomAction.onClick"
+        >
+          <span class="material-symbols-outlined">{{ mobileBottomAction.icon }}</span>
+          {{ mobileBottomAction.label }}
+        </button>
+      </div>
     </div>
 
     <!-- Вложенные модалки -->
@@ -268,26 +349,20 @@
     />
 
     <!-- Диалог подтверждения -->
-    <Dialog
+    <AppDialog
       v-if="confirmDialog.visible"
-      :visible="confirmDialog.visible"
-      @update:visible="confirmDialog.visible = false"
-      modal
-      :header="confirmDialog.title"
-      style="width: 380px"
-    >
-      <p class="confirm-text">{{ confirmDialog.message }}</p>
-      <template #footer>
-        <button class="btn-secondary" @click="confirmDialog.visible = false">Отмена</button>
-        <button
-          class="btn-danger"
-          @click="confirmDialog.onConfirm(); confirmDialog.visible = false"
-          :disabled="actionLoading"
-        >
-          {{ confirmDialog.confirmLabel || 'Подтвердить' }}
-        </button>
-      </template>
-    </Dialog>
+      v-model="confirmDialog.visible"
+      tone="danger"
+      icon="warning"
+      size="sm"
+      :title="confirmDialog.title"
+      :subtitle="confirmDialog.message"
+      :actions="[
+        { kind: 'cancel', label: 'Отмена' },
+        { kind: 'confirm', label: confirmDialog.confirmLabel || 'Подтвердить', disabled: actionLoading },
+      ]"
+      @confirm="confirmDialog.onConfirm(); confirmDialog.visible = false"
+    />
   </Dialog>
 </template>
 
@@ -295,6 +370,7 @@
 import { ref, computed, onMounted } from 'vue'
 import Dialog from 'primevue/dialog'
 import Select from 'primevue/select'
+import AppDialog from '@/components/common/AppDialog.vue'
 import { useBreakpoint } from '@/composables/useBreakpoint.js'
 import UnitListItem from '@/components/tasks/UnitListItem.vue'
 import TaskForm from '@/components/tasks/TaskForm.vue'
@@ -332,6 +408,7 @@ const { isMobile } = useBreakpoint()
 
 const mobileTab = ref('details')
 const rightTab = ref('units')
+const showMobileMenu = ref(false)
 const stages = ref([])
 const { usesYougile, usesStages } = useCompanySettings()
 
@@ -384,6 +461,54 @@ const isOverdue = computed(() => {
   if (!props.task.deadline) return false
   return new Date(props.task.deadline) < new Date()
 })
+
+/* Действие в sticky-баре зависит от активной мобильной вкладки.
+   - Детали: «Завершить задачу» (или «Вернуть из архива»)
+   - Юниты: «Начать юнит» (если разрешено и нет активного)
+   - Чат: нет sticky-кнопки (у комментариев свой инпут) */
+const mobileBottomAction = computed(() => {
+  if (mobileTab.value === 'details') {
+    if (props.task.is_archived && canEditTask.value) {
+      return {
+        icon: 'unarchive',
+        label: 'Вернуть из архива',
+        cls: 'tone-tertiary',
+        onClick: handleRestore,
+      }
+    }
+    if (!props.task.is_archived && canEditTask.value) {
+      return {
+        icon: 'check_circle',
+        label: 'Завершить задачу',
+        cls: 'tone-primary',
+        onClick: confirmArchive,
+      }
+    }
+    return null
+  }
+  if (mobileTab.value === 'units' && rightTab.value === 'units' && canStartUnit.value) {
+    return {
+      icon: 'play_arrow',
+      label: 'Начать юнит',
+      cls: 'tone-secondary',
+      onClick: () => { showStartUnit.value = true },
+    }
+  }
+  return null
+})
+
+function onMobileMenuAction(action) {
+  showMobileMenu.value = false
+  if (action === 'color') {
+    // Открываем popover чуть позже — после закрытия меню, чтобы anchor
+    // успел смонтироваться/закрепиться.
+    setTimeout(() => { showColorPicker.value = true }, 50)
+  } else if (action === 'edit') {
+    showEditForm.value = true
+  } else if (action === 'delete') {
+    confirmDelete()
+  }
+}
 
 onMounted(() => {
   loadUnits()
@@ -1031,67 +1156,7 @@ async function handleSetColor(color) {
   cursor: not-allowed;
 }
 
-/* ── Мобильный layout ── */
-.mobile-tabs {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  padding: 10px 12px;
-  background: var(--color-surface);
-  border-bottom: 1px solid var(--gw-border);
-  flex-shrink: 0;
-}
-
-.mobile-tab-btn {
-  flex: 1;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  padding: 8px 12px;
-  border: none;
-  border-radius: 8px;
-  background: transparent;
-  color: var(--gw-text-secondary);
-  font-size: 14px;
-  font-weight: 500;
-  cursor: pointer;
-  transition: background 0.15s, color 0.15s;
-}
-
-.mobile-tab-btn.active {
-  background: var(--gw-primary);
-  color: var(--color-on-primary);
-}
-
-.mobile-tab-btn .material-symbols-outlined {
-  font-size: 18px;
-}
-
-.mobile-close-btn {
-  width: 36px;
-  height: 36px;
-  border-radius: 50%;
-  border: 1px solid var(--gw-border);
-  background: transparent;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: var(--gw-text-secondary);
-  flex-shrink: 0;
-  margin-left: auto;
-  transition: background 0.12s;
-}
-
-.mobile-close-btn:active {
-  background: var(--gw-bg);
-}
-
-.mobile-close-btn .material-symbols-outlined {
-  font-size: 20px;
-}
-
+/* ═══════════════ Мобильный layout (M3) ═══════════════ */
 .mobile-layout {
   flex-direction: column;
   min-height: unset;
@@ -1106,15 +1171,319 @@ async function handleSetColor(color) {
   overflow-y: auto;
   flex: 1;
   min-height: 0;
+  padding: 16px 16px 24px;
+  gap: 14px;
 }
 
 .mobile-layout .task-right {
   flex: 1;
   min-height: 0;
   overflow: hidden;
+  padding: 12px 16px 16px;
+  gap: 10px;
 }
 
 .hidden {
   display: none !important;
+}
+
+/* ── Top App Bar (M3) ── */
+.mobile-topbar {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 4px 6px 4px;
+  padding-top: calc(6px + env(safe-area-inset-top, 0px));
+  background: var(--color-surface);
+  border-bottom: 1px solid var(--color-outline-dim);
+  flex-shrink: 0;
+  min-height: 56px;
+}
+
+.topbar-icon-btn {
+  width: 44px;
+  height: 44px;
+  flex-shrink: 0;
+  border: none;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--color-text);
+  cursor: pointer;
+  display: grid;
+  place-items: center;
+  transition: background 0.15s, color 0.15s;
+}
+
+.topbar-icon-btn:active {
+  background: color-mix(in oklch, var(--color-primary) 16%, transparent);
+}
+
+.topbar-icon-btn.active {
+  background: var(--color-primary-container);
+  color: var(--color-on-primary-container);
+}
+
+.topbar-icon-btn .material-symbols-outlined {
+  font-size: 24px;
+}
+
+.topbar-icon-btn.is-fav {
+  color: var(--color-error);
+}
+
+.topbar-icon-btn .material-symbols-outlined.filled {
+  font-variation-settings: 'FILL' 1;
+}
+
+.topbar-title-wrap {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  padding: 0 2px;
+  line-height: 1.15;
+}
+
+.topbar-eyebrow {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--color-text-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  font-variant-numeric: tabular-nums;
+}
+
+.topbar-title {
+  font-size: 15px;
+  font-weight: 650;
+  color: var(--color-text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+}
+
+/* стиль .mobile-menu вынесен в global <style> (Teleport уносит его в body,
+   scoped-стили туда не доедут) */
+
+/* ── Tabs (M3 secondary tabs) ── */
+.mobile-tabs {
+  display: flex;
+  align-items: stretch;
+  gap: 0;
+  padding: 0;
+  background: var(--color-surface);
+  border-bottom: 1px solid var(--color-outline-dim);
+  flex-shrink: 0;
+}
+
+.mobile-tab-btn {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  padding: 10px 8px 11px;
+  border: none;
+  background: transparent;
+  color: var(--color-text-dim);
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+  position: relative;
+  min-height: 56px;
+  transition: color 0.18s;
+}
+
+.mobile-tab-btn:active {
+  background: color-mix(in oklch, var(--color-primary) 10%, transparent);
+}
+
+.mobile-tab-btn.active {
+  color: var(--color-primary);
+}
+
+/* M3 indicator: подчёркивающая полоска снизу под активной вкладкой. */
+.mobile-tab-btn.active::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  bottom: 0;
+  transform: translateX(-50%);
+  width: 60%;
+  height: 3px;
+  background: var(--color-primary);
+  border-radius: 3px 3px 0 0;
+}
+
+.mobile-tab-btn .material-symbols-outlined {
+  font-size: 22px;
+}
+
+/* ── Sticky bottom action bar ── */
+.mobile-bottom-bar {
+  flex-shrink: 0;
+  padding: 12px 16px calc(12px + env(safe-area-inset-bottom, 0px));
+  background: var(--color-surface);
+  border-top: 1px solid var(--color-outline-dim);
+  display: flex;
+  gap: 8px;
+}
+
+.bottom-action-btn {
+  flex: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 14px 18px;
+  border: none;
+  border-radius: var(--radius-full);
+  font-size: 15px;
+  font-weight: 650;
+  cursor: pointer;
+  min-height: 52px;
+  transition: background 0.15s, transform 0.1s, opacity 0.15s;
+}
+
+.bottom-action-btn:active {
+  transform: scale(0.98);
+}
+
+.bottom-action-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.bottom-action-btn .material-symbols-outlined {
+  font-size: 22px;
+}
+
+.bottom-action-btn.tone-primary {
+  background: var(--color-primary);
+  color: var(--color-on-primary);
+  box-shadow: var(--shadow-sm);
+}
+
+.bottom-action-btn.tone-tertiary {
+  background: var(--color-tertiary);
+  color: var(--color-on-tertiary);
+}
+
+.bottom-action-btn.tone-secondary {
+  background: var(--color-secondary);
+  color: var(--color-on-secondary);
+}
+
+/* ── Подкрутка полей в мобильном (более плотный M3-вид) ── */
+.mobile-layout .field-label {
+  font-size: 12px;
+  color: var(--color-text-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  font-weight: 700;
+}
+
+.mobile-layout .field-value {
+  font-size: 14px;
+  padding: 10px 12px;
+  min-height: 44px;
+  border-radius: var(--radius-md);
+  background: var(--color-surface-high);
+  border-color: transparent;
+}
+
+.mobile-layout .fields-row {
+  flex-direction: column;
+  gap: 14px;
+}
+
+.mobile-layout .field-box.half {
+  width: 100%;
+}
+
+.mobile-layout :deep(.p-select) {
+  background: var(--color-surface-high);
+  border-color: transparent;
+}
+
+.mobile-layout :deep(.p-select-label) {
+  padding: 12px 12px;
+  font-size: 14px;
+}
+</style>
+
+<!-- Global (un-scoped) — нужно, чтобы стили доехали до Teleport.to=body. -->
+<style>
+.mobile-menu {
+  position: fixed;
+  top: calc(56px + env(safe-area-inset-top, 0px) + 6px);
+  right: 8px;
+  z-index: 10001;
+  min-width: 220px;
+  padding: 6px;
+  background: var(--color-surface);
+  border-radius: var(--radius-lg, 16px);
+  box-shadow: var(--shadow-lg, 0 12px 32px rgba(0, 0, 0, 0.18));
+  border: 1px solid var(--color-outline-dim);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.mobile-menu-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 10000;
+  background: transparent;
+}
+
+.mobile-menu .mm-item {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 12px 14px;
+  border: none;
+  border-radius: var(--radius-md, 12px);
+  background: transparent;
+  color: var(--color-text);
+  font: inherit;
+  font-size: 14.5px;
+  font-weight: 500;
+  cursor: pointer;
+  text-align: left;
+  min-height: 48px;
+  transition: background 0.12s;
+}
+
+.mobile-menu .mm-item:active {
+  background: color-mix(in oklch, var(--color-primary) 14%, transparent);
+}
+
+.mobile-menu .mm-item.danger {
+  color: var(--color-error);
+}
+
+.mobile-menu .mm-item.danger:active {
+  background: color-mix(in oklch, var(--color-error) 14%, transparent);
+}
+
+.mobile-menu .mm-item .material-symbols-outlined {
+  font-size: 22px;
+}
+
+.mobile-menu-enter-active,
+.mobile-menu-leave-active {
+  transition: opacity 0.16s ease, transform 0.18s cubic-bezier(0.4, 0, 0.2, 1);
+  transform-origin: top right;
+}
+
+.mobile-menu-enter-from,
+.mobile-menu-leave-to {
+  opacity: 0;
+  transform: scale(0.95) translateY(-4px);
 }
 </style>

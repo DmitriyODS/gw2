@@ -1,77 +1,63 @@
 <template>
-  <Teleport to="body">
-    <div class="cl-overlay" @click.self="$emit('close')">
-      <div class="cl-modal">
-
-        <!-- Хедер (не скроллится) -->
-        <div class="cl-header">
-          <span class="material-symbols-outlined cl-header-icon">new_releases</span>
-          <span class="cl-header-title">Что нового</span>
-          <span v-if="currentVersion" class="cl-current-version">Версия: {{ currentVersion }}</span>
-          <button class="cl-close" @click="$emit('close')" title="Закрыть">
-            <span class="material-symbols-outlined">close</span>
-          </button>
-        </div>
-
-        <!-- Скроллируемое тело -->
-        <div class="cl-scroll">
-          <div v-if="loading" class="cl-loading">
-            <span class="material-symbols-outlined spinning">progress_activity</span>
-          </div>
-
-          <div v-else-if="error" class="cl-error">
-            <span class="material-symbols-outlined">error_outline</span>
-            Не удалось загрузить изменения
-          </div>
-
-          <template v-else>
-            <div v-for="ver in versions" :key="ver.version" class="cl-version">
-
-              <!-- Заголовок версии -->
-              <div class="cl-version-top">
-                <span class="cl-badge">v{{ ver.version }}</span>
-                <span class="cl-date">{{ formatDate(ver.date) }}</span>
-              </div>
-              <h2 class="cl-title">{{ ver.title }}</h2>
-              <p v-if="ver.description" class="cl-desc">{{ ver.description }}</p>
-
-              <!-- Группы: Добавили / Улучшили / Исправили -->
-              <div class="cl-groups">
-                <div
-                  v-for="group in groupsOf(ver)"
-                  :key="group.type"
-                  class="cl-group"
-                >
-                  <div class="cl-chip" :class="`cl-chip--${group.type}`">
-                    <span class="material-symbols-outlined cl-chip-icon">{{ groupMeta[group.type]?.icon }}</span>
-                    <span class="cl-chip-label">{{ groupMeta[group.type]?.label }}</span>
-                    <span class="cl-chip-count">{{ group.items.length }}</span>
-                  </div>
-
-                  <ul class="cl-items">
-                    <li
-                      v-for="(text, i) in group.items"
-                      :key="i"
-                      class="cl-item"
-                      :class="`cl-item--${group.type}`"
-                    >
-                      {{ text }}
-                    </li>
-                  </ul>
-                </div>
-              </div>
-
-            </div>
-          </template>
-        </div>
-
-      </div>
+  <AppDialog
+    model-value
+    tone="primary"
+    icon="new_releases"
+    size="lg"
+    title="Что нового"
+    :subtitle="currentVersion ? `Текущая версия: ${currentVersion}` : ''"
+    @update:model-value="(v) => !v && $emit('close')"
+  >
+    <div v-if="loading" class="cl-loading">
+      <span class="material-symbols-outlined spinning">progress_activity</span>
     </div>
-  </Teleport>
+
+    <div v-else-if="error" class="cl-error">
+      <span class="material-symbols-outlined">error_outline</span>
+      Не удалось загрузить изменения
+    </div>
+
+    <template v-else>
+      <div v-for="ver in versions" :key="ver.version" class="cl-version">
+        <div class="cl-version-top">
+          <span class="cl-badge">v{{ ver.version }}</span>
+          <span class="cl-date">{{ formatDate(ver.date) }}</span>
+        </div>
+        <h2 class="cl-title">{{ ver.title }}</h2>
+        <p v-if="ver.description" class="cl-desc">{{ ver.description }}</p>
+
+        <div class="cl-groups">
+          <div
+            v-for="group in groupsOf(ver)"
+            :key="group.type"
+            class="cl-group"
+          >
+            <div class="cl-chip" :class="`cl-chip--${group.type}`">
+              <span class="material-symbols-outlined cl-chip-icon">{{ groupMeta[group.type]?.icon }}</span>
+              <span class="cl-chip-label">{{ groupMeta[group.type]?.label }}</span>
+              <span class="cl-chip-count">{{ group.items.length }}</span>
+            </div>
+
+            <ul class="cl-items">
+              <li
+                v-for="(text, i) in group.items"
+                :key="i"
+                class="cl-item"
+                :class="`cl-item--${group.type}`"
+              >
+                {{ text }}
+              </li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </template>
+  </AppDialog>
 </template>
 
 <script setup>
 import { ref, computed, onMounted } from 'vue'
+import AppDialog from '@/components/common/AppDialog.vue'
 import { changelogApi } from '@/api/changelog.js'
 
 defineEmits(['close'])
@@ -114,97 +100,9 @@ onMounted(async () => {
 </script>
 
 <style scoped>
-/* ── Оверлей ──────────────────────────────────────────────────── */
-.cl-overlay {
-  position: fixed;
-  inset: 0;
-  background: var(--color-scrim);
-  backdrop-filter: blur(4px);
-  z-index: 9999;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 16px;
-}
-
-/* ── Модалка ──────────────────────────────────────────────────── */
-.cl-modal {
-  background: var(--color-surface);
-  border-radius: var(--radius-xl);
-  box-shadow: var(--shadow-xl);
-  width: 560px;
-  max-width: 100%;
-  max-height: 86vh;
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-}
-
-/* ── Хедер (не скроллится) ────────────────────────────────────── */
-.cl-header {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 18px 20px 16px;
-  border-bottom: 1px solid var(--color-outline-dim);
-  flex-shrink: 0;
-}
-
-.cl-header-icon {
-  font-size: 22px;
-  color: var(--color-primary);
-}
-
-.cl-header-title {
-  flex: 1;
-  font-size: 16px;
-  font-weight: 700;
-  color: var(--color-text);
-}
-
-.cl-current-version {
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--color-text-dim);
-  background: var(--color-surface-high);
-  padding: 3px 10px;
-  border-radius: var(--radius-full);
-  white-space: nowrap;
-  margin-right: 4px;
-}
-
-.cl-close {
-  width: 36px;
-  height: 36px;
-  border: none;
-  background: var(--color-surface-high);
-  color: var(--color-text-dim);
-  cursor: pointer;
-  border-radius: var(--radius-full);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transition: background 0.15s, color 0.15s;
-  flex-shrink: 0;
-}
-.cl-close:hover {
-  background: var(--color-primary-container);
-  color: var(--color-on-primary-container);
-}
-.cl-close .material-symbols-outlined { font-size: 20px; }
-
-/* ── Скролл-область ───────────────────────────────────────────── */
-.cl-scroll {
-  flex: 1;
-  min-height: 0;          /* ← критично для скролла внутри flex */
-  overflow-y: auto;
-  padding: 24px 24px 32px;
-}
-
-/* ── Версия ───────────────────────────────────────────────────── */
 .cl-version + .cl-version {
-  margin-top: 40px;
-  padding-top: 36px;
+  margin-top: 32px;
+  padding-top: 28px;
   border-top: 1px solid var(--color-outline-dim);
 }
 
@@ -232,27 +130,26 @@ onMounted(async () => {
 }
 
 .cl-title {
-  font-size: 26px;
+  font-size: 24px;
   font-weight: 800;
   color: var(--color-text);
   line-height: 1.25;
   letter-spacing: -0.3px;
-  margin-bottom: 12px;
+  margin: 0 0 12px;
 }
 
 .cl-desc {
   font-size: 14px;
   color: var(--color-text-dim);
   line-height: 1.7;
-  padding-bottom: 4px;
+  margin: 0 0 4px;
 }
 
-/* ── Группы ───────────────────────────────────────────────────── */
 .cl-groups {
   display: flex;
   flex-direction: column;
-  gap: 20px;
-  margin-top: 24px;
+  gap: 18px;
+  margin-top: 18px;
 }
 
 .cl-group {
@@ -261,7 +158,6 @@ onMounted(async () => {
   gap: 8px;
 }
 
-/* ── Чип-заголовок ────────────────────────────────────────────── */
 .cl-chip {
   display: inline-flex;
   align-items: center;
@@ -292,15 +188,16 @@ onMounted(async () => {
 .cl-chip--improved { background: var(--color-tertiary-container); color: var(--color-on-tertiary-container); }
 .cl-chip--fixed    { background: var(--color-warning-container);  color: var(--color-on-warning-container);  }
 
-/* ── Пункты изменений ─────────────────────────────────────────── */
 .cl-items {
   list-style: none;
+  margin: 0;
+  padding: 0;
   display: flex;
   flex-direction: column;
   gap: 1px;
   border-radius: var(--radius-md);
   overflow: hidden;
-  background: var(--color-outline-dim);   /* gap между строками через bg контейнера */
+  background: var(--color-outline-dim);
 }
 
 .cl-item {
@@ -312,7 +209,6 @@ onMounted(async () => {
   position: relative;
 }
 
-/* Цветная левая полоска через псевдоэлемент */
 .cl-item::before {
   content: '';
   position: absolute;
@@ -327,7 +223,6 @@ onMounted(async () => {
 .cl-item--improved::before { background: var(--color-tertiary); }
 .cl-item--fixed::before    { background: var(--color-warning);  }
 
-/* ── Загрузка / ошибка ────────────────────────────────────────── */
 .cl-loading,
 .cl-error {
   display: flex;
@@ -342,31 +237,7 @@ onMounted(async () => {
 .spinning { animation: spin 1s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
 
-/* ── Мобильный: bottom sheet ──────────────────────────────────── */
 @media (max-width: 600px) {
-  .cl-overlay {
-    padding: 0;
-    align-items: flex-end;
-  }
-
-  .cl-modal {
-    width: 100%;
-    /* vh считается от «большого» viewport (без адресной строки) на мобильных —
-       используем dvh (реальная видимая высота) с запасом 56px сверху */
-    max-height: calc(100vh - 56px);
-    max-height: calc(100dvh - 56px);
-    border-radius: var(--radius-xl) var(--radius-xl) 0 0;
-    padding-bottom: env(safe-area-inset-bottom, 0px);
-  }
-
-  .cl-title {
-    font-size: 20px;
-  }
-
-  .cl-scroll {
-    padding: 20px 16px 28px;
-    -webkit-overflow-scrolling: touch;
-    overscroll-behavior: contain;
-  }
+  .cl-title { font-size: 20px; }
 }
 </style>

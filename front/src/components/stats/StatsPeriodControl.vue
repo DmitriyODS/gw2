@@ -1,12 +1,12 @@
 <template>
   <div class="period-control">
-    <div class="period-display" @click="showPicker = !showPicker">
+    <div ref="displayRef" class="period-display" @click="openPicker">
       <span class="material-symbols-outlined">calendar_month</span>
       {{ period.displayLabel.value }}
     </div>
 
-    <div v-if="showPicker" class="period-picker-overlay" @click.self="showPicker = false">
-      <div class="period-picker">
+    <Teleport to="body">
+      <div v-if="showPicker" class="period-picker" :style="pickerStyle">
         <DatePicker
           v-model="customRange"
           selection-mode="range"
@@ -15,7 +15,7 @@
           @update:model-value="onCustomRange"
         />
       </div>
-    </div>
+    </Teleport>
 
     <div class="period-buttons">
       <div class="period-modes">
@@ -53,7 +53,7 @@
 </template>
 
 <script setup>
-import { ref, computed, watch } from 'vue'
+import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
 import DatePicker from 'primevue/datepicker'
 import { useStatsPeriod } from '@/composables/useStatsPeriod.js'
 
@@ -62,6 +62,34 @@ const emit = defineEmits(['change'])
 const period = useStatsPeriod()
 const showPicker = ref(false)
 const customRange = ref(null)
+const displayRef = ref(null)
+const pickerPos = ref({ top: 0, left: 0 })
+
+function openPicker() {
+  const rect = displayRef.value?.getBoundingClientRect()
+  if (rect) {
+    const pickerWidth = 580
+    const left = Math.max(8, Math.min(rect.left, window.innerWidth - pickerWidth - 8))
+    pickerPos.value = { top: rect.bottom + 8, left }
+  }
+  showPicker.value = !showPicker.value
+}
+
+function onDocClick(e) {
+  if (!showPicker.value) return
+  if (displayRef.value?.contains(e.target)) return
+  const pickerEl = document.querySelector('.period-picker')
+  if (pickerEl && pickerEl.contains(e.target)) return
+  showPicker.value = false
+}
+
+onMounted(() => document.addEventListener('mousedown', onDocClick, true))
+onUnmounted(() => document.removeEventListener('mousedown', onDocClick, true))
+
+const pickerStyle = computed(() => ({
+  top: `${pickerPos.value.top}px`,
+  left: `${pickerPos.value.left}px`,
+}))
 
 const modes = [
   { value: 'day', label: 'День' },
@@ -95,7 +123,7 @@ watch(
   align-items: center;
   gap: 16px;
   flex-wrap: wrap;
-  padding: 12px 0;
+  padding: 4px 0;
   position: relative;
 }
 
@@ -103,45 +131,36 @@ watch(
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 8px 16px;
-  border: 1px solid var(--gw-border);
-  border-radius: 20px;
+  padding: 10px 16px;
+  min-height: 44px;
+  border: 1px solid var(--color-outline-dim);
+  border-radius: var(--radius-full);
   cursor: pointer;
-  background: var(--gw-surface);
+  background: var(--color-surface);
   font-size: 14px;
-  color: var(--gw-text);
+  font-weight: 600;
+  color: var(--color-text);
   transition: border-color 0.15s, background 0.15s;
   user-select: none;
   white-space: nowrap;
 }
 
 .period-display:hover {
-  border-color: var(--gw-primary);
-  background: var(--gw-bg);
+  border-color: var(--color-primary);
+  background: var(--color-surface-high);
 }
 
 .period-display .material-symbols-outlined {
   font-size: 18px;
-  color: var(--gw-primary);
-}
-
-.period-picker-overlay {
-  position: fixed;
-  inset: 0;
-  z-index: 1000;
-  display: flex;
-  align-items: flex-start;
-  justify-content: flex-start;
+  color: var(--color-primary);
 }
 
 .period-picker {
-  position: absolute;
-  top: 56px;
-  left: 0;
+  position: fixed;
   z-index: 1001;
-  background: var(--gw-surface);
-  border: 1px solid var(--gw-border);
-  border-radius: var(--gw-radius);
+  background: var(--color-surface);
+  border: 1px solid var(--color-outline-dim);
+  border-radius: var(--radius-xl, 20px);
   box-shadow: var(--shadow-lg);
   padding: 8px;
 }
@@ -154,36 +173,35 @@ watch(
 }
 
 .period-modes {
-  display: flex;
-  border: 1px solid var(--gw-border);
-  border-radius: 10px;
-  overflow: hidden;
+  display: inline-flex;
+  background: var(--color-surface-high);
+  border-radius: var(--radius-full);
+  padding: 4px;
+  gap: 2px;
 }
 
 .mode-btn {
-  padding: 7px 14px;
-  background: var(--gw-surface);
+  padding: 8px 14px;
+  min-height: 36px;
+  background: transparent;
   border: none;
-  border-right: 1px solid var(--gw-border);
-  color: var(--gw-text-secondary);
+  border-radius: var(--radius-full);
+  color: var(--color-text-dim);
   font-size: 13px;
+  font-weight: 600;
   cursor: pointer;
-  transition: background 0.15s, color 0.15s;
-}
-
-.mode-btn:last-child {
-  border-right: none;
+  transition: background 0.15s, color 0.15s, box-shadow 0.15s;
 }
 
 .mode-btn:hover:not(.active) {
-  background: var(--gw-bg);
-  color: var(--gw-text);
+  color: var(--color-text);
 }
 
 .mode-btn.active {
-  background: var(--gw-primary);
-  color: var(--color-on-primary);
-  font-weight: 600;
+  background: var(--color-surface);
+  color: var(--color-primary);
+  font-weight: 700;
+  box-shadow: var(--shadow-sm);
 }
 
 .period-shift {
@@ -193,12 +211,12 @@ watch(
 }
 
 .period-btn {
-  width: 32px;
-  height: 32px;
-  border: 1px solid var(--gw-border);
-  border-radius: 8px;
-  background: var(--gw-surface);
-  color: var(--gw-text);
+  width: 40px;
+  height: 40px;
+  border: 1px solid var(--color-outline-dim);
+  border-radius: var(--radius-full);
+  background: var(--color-surface);
+  color: var(--color-text);
   cursor: pointer;
   display: flex;
   align-items: center;
@@ -209,8 +227,8 @@ watch(
 }
 
 .period-btn:hover:not(:disabled) {
-  background: var(--gw-primary);
-  border-color: var(--gw-primary);
+  background: var(--color-primary);
+  border-color: var(--color-primary);
   color: var(--color-on-primary);
 }
 
@@ -227,26 +245,28 @@ watch(
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  padding: 7px 14px;
-  border: 1px solid var(--gw-border);
-  border-radius: 10px;
-  background: var(--gw-surface);
-  color: var(--gw-text);
+  padding: 10px 16px;
+  min-height: 40px;
+  border: 1px solid var(--color-outline-dim);
+  border-radius: var(--radius-full);
+  background: var(--color-surface);
+  color: var(--color-text);
   font-size: 13px;
+  font-weight: 600;
   cursor: pointer;
   transition: background 0.15s, border-color 0.15s, color 0.15s;
 }
 
 .all-time-btn:hover:not(.active) {
-  background: var(--gw-bg);
-  border-color: var(--gw-primary);
+  background: var(--color-surface-high);
+  border-color: var(--color-primary);
 }
 
 .all-time-btn.active {
-  background: var(--color-tertiary);
-  border-color: var(--color-tertiary);
-  color: var(--color-on-tertiary);
-  font-weight: 600;
+  background: var(--color-tertiary-container);
+  border-color: var(--color-tertiary-container);
+  color: var(--color-on-tertiary-container);
+  font-weight: 700;
 }
 
 .all-time-btn .material-symbols-outlined {
@@ -256,31 +276,49 @@ watch(
 @media (max-width: 768px) {
   .period-control {
     gap: 10px;
-    padding: 8px 0;
+    padding: 4px 0;
   }
 
   .period-display {
-    padding: 7px 12px;
+    padding: 10px 14px;
     font-size: 13px;
+    width: 100%;
+    justify-content: center;
   }
 
   .period-buttons {
     gap: 8px;
+    width: 100%;
+    justify-content: space-between;
+  }
+
+  .period-modes {
+    flex: 1;
+    justify-content: center;
   }
 
   .mode-btn {
-    padding: 6px 11px;
-    font-size: 12px;
+    flex: 1;
+    padding: 10px 8px;
+    min-height: 40px;
+    font-size: 13px;
   }
 
   .period-btn {
-    width: 30px;
-    height: 30px;
+    width: 40px;
+    height: 40px;
   }
 
   .all-time-btn {
-    padding: 6px 11px;
-    font-size: 12px;
+    padding: 10px 14px;
+    font-size: 13px;
+    min-height: 40px;
+  }
+}
+
+@media (max-width: 480px) {
+  .all-time-btn .material-symbols-outlined {
+    margin: 0;
   }
 }
 </style>

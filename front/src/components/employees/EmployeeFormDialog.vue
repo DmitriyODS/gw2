@@ -1,11 +1,18 @@
 <template>
-  <Dialog
-    :visible="modelValue"
-    @update:visible="onClose"
-    :header="isEdit ? 'Редактирование сотрудника' : 'Новый сотрудник'"
-    modal
-    :style="{ width: '520px' }"
-    :pt="{ content: { style: 'overflow: visible' } }"
+  <AppDialog
+    :model-value="modelValue"
+    tone="primary"
+    :icon="isEdit ? 'edit' : 'person_add'"
+    size="lg"
+    :title="isEdit ? 'Редактирование сотрудника' : 'Новый сотрудник'"
+    :busy="saving"
+    :closable="!saving"
+    :actions="[
+      { kind: 'cancel', label: 'Отмена', disabled: saving },
+      { kind: 'confirm', label: isEdit ? 'Сохранить' : 'Создать', disabled: !canSave || saving },
+    ]"
+    @update:model-value="onClose"
+    @confirm="save"
   >
     <div class="form">
       <div class="grid-2">
@@ -47,19 +54,18 @@
       <div class="grid-2">
         <div v-if="canPickCompany" class="field">
           <label class="lbl">Компания</label>
-          <select v-model="form.company_id" class="ctl">
-            <option :value="null">— без компании —</option>
-            <option v-for="c in companies.items" :key="c.id" :value="c.id">
-              {{ c.name }}
-            </option>
-          </select>
+          <CompanySelect
+            v-model="form.company_id"
+            variant="form"
+            placeholder="Без компании"
+          />
         </div>
         <div v-if="!isEdit" class="field">
           <label class="lbl">Пароль</label>
           <input v-model="form.password" type="password" class="ctl"
                  :class="{ invalid: errors.password }" placeholder="Минимум 8 символов" />
           <div class="hint">
-            Пусто — выдадим пароль по умолчанию, человек сменит его при первом входе.
+            Пусто — пароль будет <strong>логин&nbsp;+&nbsp;123</strong> (например <code>{{ form.login || 'ivan.ivanov' }}123</code>). При первом входе потребуется сменить.
           </div>
           <div v-if="errors.password" class="err">{{ errors.password }}</div>
         </div>
@@ -86,26 +92,39 @@
         <div v-if="errors.role_id" class="err">{{ errors.role_id }}</div>
       </div>
 
+      <!-- Сброс пароля — только при редактировании -->
+      <div v-if="isEdit" class="reset-pass-row">
+        <div class="reset-pass-info">
+          <span class="material-symbols-outlined">lock_reset</span>
+          <span>Пароль будет сброшен на <code>{{ user?.login }}123</code>. При следующем входе сотрудник будет обязан его сменить.</span>
+        </div>
+        <button
+          type="button"
+          class="btn-reset"
+          :disabled="resetting"
+          @click="doResetPassword"
+        >
+          <span v-if="resetting" class="material-symbols-outlined spin">progress_activity</span>
+          <span v-else class="material-symbols-outlined">lock_reset</span>
+          {{ resetting ? 'Сброс…' : 'Сбросить пароль' }}
+        </button>
+      </div>
+
       <div v-if="serverError" class="form-err">{{ serverError }}</div>
     </div>
-
-    <template #footer>
-      <button class="btn-text" :disabled="saving" @click="onClose">Отмена</button>
-      <button class="btn-filled" :disabled="!canSave || saving" @click="save">
-        <span v-if="saving" class="material-symbols-outlined spin">progress_activity</span>
-        {{ isEdit ? 'Сохранить' : 'Создать' }}
-      </button>
-    </template>
-  </Dialog>
+  </AppDialog>
 </template>
 
 <script setup>
 import { ref, computed, watch } from 'vue'
-import Dialog from 'primevue/dialog'
+import AppDialog from '@/components/common/AppDialog.vue'
 import PhoneInput from '@/components/common/PhoneInput.vue'
+import CompanySelect from '@/components/common/CompanySelect.vue'
 import { useAuthStore } from '@/stores/auth.js'
 import { useCompaniesStore } from '@/stores/companies.js'
 import { usePermission } from '@/composables/usePermission.js'
+import { useNotificationsStore } from '@/stores/notifications.js'
+import { resetUserPassword } from '@/api/users.js'
 
 const props = defineProps({
   modelValue: { type: Boolean, required: true },
@@ -116,6 +135,7 @@ const emit = defineEmits(['update:modelValue', 'save'])
 
 const auth = useAuthStore()
 const companies = useCompaniesStore()
+const notif = useNotificationsStore()
 const { myLevel } = usePermission()
 
 const isEdit = computed(() => !!props.user?.id)
@@ -125,6 +145,7 @@ const form = ref(_blank())
 const errors = ref({})
 const serverError = ref('')
 const saving = ref(false)
+const resetting = ref(false)
 
 function _blank() {
   return {
@@ -223,6 +244,19 @@ function save() {
   })
 }
 
+async function doResetPassword() {
+  if (!props.user?.id || resetting.value) return
+  resetting.value = true
+  try {
+    await resetUserPassword(props.user.id)
+    notif.success(`Пароль сброшен. ${props.user.fio} сменит его при следующем входе.`)
+  } catch (e) {
+    notif.error(e?.message || 'Не удалось сбросить пароль')
+  } finally {
+    resetting.value = false
+  }
+}
+
 function onClose() {
   if (saving.value) return
   emit('update:modelValue', false)
@@ -255,8 +289,8 @@ defineExpose({
 .ctl {
   appearance: none;
   width: 100%;
-  border: 1px solid var(--color-outline-variant);
-  background: var(--color-surface);
+  border: 1px solid var(--color-outline-dim);
+  background: var(--color-surface-high);
   color: var(--color-on-surface);
   padding: 10px 12px;
   border-radius: var(--radius-md, 12px);
@@ -268,12 +302,8 @@ defineExpose({
   border-color: var(--color-primary);
   box-shadow: 0 0 0 3px color-mix(in oklab, var(--color-primary) 18%, transparent);
 }
-.ctl:disabled { background: var(--color-surface-container); cursor: not-allowed; }
+.ctl:disabled { background: var(--color-surface-low); opacity: 0.7; cursor: not-allowed; }
 .ctl.invalid { border-color: var(--color-error); }
-select.ctl {
-  background: var(--color-surface) url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='10' height='6'><path d='M0 0l5 6 5-6z' fill='%23999'/></svg>") no-repeat right 12px center;
-  padding-right: 32px;
-}
 
 .role-chips { display: flex; flex-wrap: wrap; gap: 6px; }
 .role-chip {
@@ -282,11 +312,19 @@ select.ctl {
   gap: 6px;
   padding: 8px 14px;
   border-radius: var(--radius-full, 999px);
-  background: var(--color-surface-container);
+  background: var(--color-surface-high);
   color: var(--color-on-surface);
   cursor: pointer;
-  border: 1px solid transparent;
-  transition: background .12s, border-color .12s;
+  border: 1.5px solid var(--color-outline-variant);
+  transition: background .12s, border-color .12s, color .12s;
+}
+.role-chip:not(.locked):not(.active):hover {
+  background: var(--color-secondary-container);
+  border-color: var(--color-outline);
+  color: var(--color-on-secondary-container);
+}
+.role-chip:not(.locked):not(.active):hover .material-symbols-outlined {
+  color: var(--color-on-secondary-container);
 }
 .role-chip input { display: none; }
 .role-chip .material-symbols-outlined { font-size: 18px; color: var(--color-on-surface-variant); }
@@ -298,26 +336,61 @@ select.ctl {
 .role-chip.active .material-symbols-outlined { color: var(--color-on-primary-container); }
 .role-chip.locked { opacity: .5; cursor: not-allowed; }
 
-.btn-text, .btn-filled {
+.reset-pass-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 14px;
+  border-radius: var(--radius-lg, 14px);
+  background: var(--color-surface-high);
+  border: 1px solid var(--color-outline-dim);
+  flex-wrap: wrap;
+}
+.reset-pass-info {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--color-on-surface-variant);
+  flex: 1;
+  min-width: 0;
+}
+.reset-pass-info .material-symbols-outlined {
+  font-size: 18px;
+  flex-shrink: 0;
+  margin-top: 1px;
+  color: var(--color-on-surface-variant);
+}
+.reset-pass-info code {
+  font-family: monospace;
+  background: var(--color-surface-container);
+  padding: 1px 5px;
+  border-radius: 4px;
+  font-size: 12px;
+}
+.btn-reset {
   appearance: none;
   border: none;
   cursor: pointer;
   border-radius: var(--radius-full, 999px);
-  padding: 8px 18px;
+  padding: 8px 16px;
   font: inherit;
   font-weight: 600;
+  font-size: 13px;
   display: inline-flex;
   align-items: center;
   gap: 6px;
+  background: var(--color-error-container);
+  color: var(--color-on-error-container);
+  transition: filter .12s;
+  flex-shrink: 0;
 }
-.btn-text { background: transparent; color: var(--color-on-surface-variant); }
-.btn-text:hover { background: var(--color-surface-container); color: var(--color-on-surface); }
-.btn-filled { background: var(--color-primary); color: var(--color-on-primary); }
-.btn-filled:hover { filter: brightness(.94); }
-.btn-filled:disabled, .btn-text:disabled { opacity: .55; cursor: not-allowed; }
+.btn-reset:hover:not(:disabled) { filter: brightness(.92); }
+.btn-reset:disabled { opacity: .55; cursor: not-allowed; }
+.btn-reset .material-symbols-outlined { font-size: 18px; }
 
 .spin { animation: spin 1s linear infinite; font-size: 18px; }
 @keyframes spin { to { transform: rotate(360deg); } }
 
-:deep(.p-dialog-footer) { display: flex; justify-content: flex-end; gap: 8px; padding-top: 14px; }
 </style>

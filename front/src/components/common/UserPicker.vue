@@ -1,6 +1,6 @@
 <script setup>
 import { ref, computed, onMounted, watch, onBeforeUnmount } from 'vue'
-import { getDirectory } from '@/api/users.js'
+import { getDirectory, getDirectoryUser } from '@/api/users.js'
 import { formatLastSeen } from '@/utils/presence.js'
 import { useMessengerStore } from '@/stores/messenger.js'
 
@@ -40,14 +40,27 @@ async function load() {
   try {
     const data = await getDirectory()
     users.value = Array.isArray(data) ? data : (data?.items || [])
-    syncSelected()
+    await syncSelected()
   } finally {
     loading.value = false
   }
 }
 
-function syncSelected() {
-  selected.value = users.value.find((u) => u.id === props.modelValue) || null
+/* Подбираем «выбранного» пользователя по props.modelValue. Сначала ищем в уже
+   загруженной директории; если нет (например, пользователь — Администратор
+   системы и не входит в company-скоупленный каталог) — добираем одиночным
+   запросом, чтобы корректно показать имя и аватар. */
+async function syncSelected() {
+  const id = props.modelValue
+  if (id == null) { selected.value = null; return }
+  const inList = users.value.find((u) => u.id === id)
+  if (inList) { selected.value = inList; return }
+  if (selected.value?.id === id) return
+  try {
+    selected.value = await getDirectoryUser(id)
+  } catch {
+    selected.value = null
+  }
 }
 
 function avatarOf(u) {
@@ -82,7 +95,11 @@ function onClickOutside(e) {
 
 onMounted(() => {
   document.addEventListener('mousedown', onClickOutside)
-  if (props.modelValue != null) load()
+  if (props.modelValue != null) {
+    // Сразу подгружаем профиль выбранного — чтобы триггер сразу показал имя
+    // и аватар, не дожидаясь открытия выпадашки и полной загрузки директории.
+    syncSelected()
+  }
 })
 onBeforeUnmount(() => document.removeEventListener('mousedown', onClickOutside))
 

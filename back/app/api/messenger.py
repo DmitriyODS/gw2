@@ -38,6 +38,16 @@ def list_conversations():
         description: Список диалогов с последним сообщением и счётчиком непрочитанных
     """
     user_id = int(get_jwt_identity())
+    # Гарантируем, что личный чат техподдержки существует у сотрудника
+    # компании — он должен быть всегда первым в списке, даже без переписки.
+    # У Администратора системы своего dev-чата нет (он отвечает в чужие
+    # через /support-inbox).
+    me = user_repo.get_by_id(user_id)
+    if me is not None and me.company_id is not None:
+        try:
+            messenger_service.open_dev_chat(user_id)
+        except MessengerServiceError:
+            pass  # не валим листинг, если создание чем-то заблокировано
     items = message_repo.list_user_conversations(user_id)
     return jsonify(_conv_list.dump(items)), 200
 
@@ -186,14 +196,14 @@ def post_message(conversation_id: int):
 
 
 def _dev_chat_user_ids(conv) -> list[int]:
-    """Все пользователи, видимые dev-чату конкретной компании: сотрудники этой
-    компании + все Администраторы системы (`company_id IS NULL`)."""
+    """Все, кому надо уведомить о новом сообщении в dev-чате:
+    владелец чата + все Администраторы системы (`company_id IS NULL`)."""
     from app.models import User
     from app.extensions import db
     rows = db.session.execute(
         db.select(User.id).where(
             User.is_hidden.is_(False),
-            db.or_(User.company_id == conv.company_id, User.company_id.is_(None)),
+            db.or_(User.id == conv.user_a_id, User.company_id.is_(None)),
         )
     ).scalars().all()
     return list(rows)
@@ -283,11 +293,16 @@ def mark_read(conversation_id: int):
     if n > 0:
         from app.extensions import socketio
         conv = message_repo.get_conversation(conversation_id)
-        other_id = conv.other_user_id(me)
-        socketio.emit("message:read", {
-            "conversation_id": conversation_id,
-            "reader_id": me,
-        }, room=f"user_{other_id}")
+        payload = {"conversation_id": conversation_id, "reader_id": me}
+        if conv.is_dev_chat:
+            # В dev-чате о прочтении надо знать всем, кто видит эту переписку:
+            # владельцу и всем Администраторам системы.
+            for uid in _dev_chat_user_ids(conv):
+                if uid != me:
+                    socketio.emit("message:read", payload, room=f"user_{uid}")
+        else:
+            other_id = conv.other_user_id(me)
+            socketio.emit("message:read", payload, room=f"user_{other_id}")
 
     return jsonify({"updated": n}), 200
 
@@ -528,73 +543,64 @@ def presence_list():
 @require_auth
 def open_dev_chat():
     """
-    Открыть/создать спец-чат компании с разработчиками. Для сотрудника —
-    его собственный спец-чат (по его company_id). Возвращает Conversation.
-    Администратор системы должен использовать /dev-chats (или передавать
-    ?company_id).
+    Открыть/создать ЛИЧНЫЙ чат пользователя с техподдержкой. У каждого
+    сотрудника свой чат. Администратор системы своего чата не имеет —
+    он отвечает в чужие через /support-inbox.
     ---
     tags: [messenger]
     security: [BearerAuth: []]
-    parameters:
-      - in: query
-        name: company_id
-        schema: {type: integer}
-        required: false
     responses:
       200:
-        description: Спец-чат
+        description: Чат с техподдержкой
     """
     me = int(get_jwt_identity())
-    raw_company = request.args.get("company_id")
     try:
-        if raw_company:
-            conv = messenger_service.open_dev_chat_for_company(me, int(raw_company))
-        else:
-            conv = messenger_service.open_dev_chat(me)
+        conv = messenger_service.open_dev_chat(me)
     except MessengerServiceError as e:
         return jsonify({"error": e.code, "message": e.message}), e.http_status
     return jsonify(_conv.dump(conv)), 200
 
 
-@bp.get("/dev-chats")
+@bp.get("/support-inbox")
 @require_auth
-def list_dev_chats():
+def support_inbox():
     """
-    Список спец-чатов всех компаний. Только для Администратора системы.
+    Список всех личных чатов пользователей с техподдержкой. Только для
+    Администратора системы — он видит вкладку «Техподдержка» в мессенджере.
     ---
     tags: [messenger]
     security: [BearerAuth: []]
     responses:
       200:
-        description: Список dev-чатов компаний
+        description: Список dev-чатов всех пользователей
     """
     me = int(get_jwt_identity())
     me_user = user_repo.get_by_id(me)
     if me_user is None or me_user.company_id is not None:
         return jsonify({"error": "FORBIDDEN", "message": "Только Администратор системы"}), 403
 
-    convs = message_repo.list_dev_chats()
-    me_id = me
+    from app.extensions import db
+    from app.models import Message
 
+    convs = message_repo.list_dev_chats()
     items = []
     for c in convs:
-        last = None
-        last_rows = message_repo.list_messages(c.id, user_id=me_id, limit=1)
-        if last_rows:
-            last = last_rows[-1]
-        # Непрочитанные сообщения от сотрудников (не Администратора системы).
-        from app.extensions import db
-        from app.models import Message
+        last_rows = message_repo.list_messages(c.id, user_id=me, limit=1)
+        last = last_rows[-1] if last_rows else None
+        # Непрочитанные = сообщения ОТ владельца (от пользователя в техподдержку),
+        # не прочитанные техподдержкой. Ответы админа не считаются.
         unread = db.session.execute(
             db.select(db.func.count(Message.id)).where(
                 Message.conversation_id == c.id,
-                Message.sender_id != me_id,
+                Message.sender_id == c.user_a_id,
                 Message.read_at.is_(None),
             )
         ).scalar_one() or 0
+        owner = user_repo.get_by_id(c.user_a_id) if c.user_a_id else None
         items.append({
             "conversation": c,
             "other_user": None,
+            "owner_user": owner,
             "last_message": last,
             "unread_count": unread,
             "is_pinned": False,
