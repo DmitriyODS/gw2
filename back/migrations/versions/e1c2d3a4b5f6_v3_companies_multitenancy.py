@@ -30,7 +30,8 @@ branch_labels = None
 depends_on = None
 
 
-DEFAULT_COMPANY_NAME = 'Главная компания'
+DEFAULT_COMPANY_NAME = 'ОРК (УИП)'
+DEFAULT_COMPANY_DESCRIPTION = 'Основная компания'
 DEFAULT_SETTINGS_JSON = (
     '{"uses_yougile": true, "uses_stages": false, "uses_calls": true}'
 )
@@ -84,7 +85,7 @@ def upgrade():
     #    Создаём дефолтную компанию; директор пока NULL — назначим ниже.
     op.execute(f"""
         INSERT INTO companies (name, description, is_active, settings, created_at)
-        VALUES ('{DEFAULT_COMPANY_NAME}', 'Создана автоматически при переходе на v3.0',
+        VALUES ('{DEFAULT_COMPANY_NAME}', '{DEFAULT_COMPANY_DESCRIPTION}',
                 TRUE, '{DEFAULT_SETTINGS_JSON}'::jsonb, NOW())
     """)
 
