@@ -60,3 +60,11 @@ def register_events(socketio: SocketIO) -> None:
         from app.sockets import presence
         visible = bool((data or {}).get("visible", True))
         presence.on_visibility(flask_request.sid, visible)
+
+    @socketio.on("presence:heartbeat")
+    def on_heartbeat(_data=None):
+        """Регулярный пинг от живой вкладки. Если за `STALE_AFTER` секунд
+        от sid не было heartbeat'а — sweep пометит его «не в сети»."""
+        from flask import request as flask_request
+        from app.sockets import presence
+        presence.on_heartbeat(flask_request.sid)

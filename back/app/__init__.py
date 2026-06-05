@@ -20,8 +20,16 @@ def create_app(config_name: str = None) -> Flask:
     _register_security_headers(app)
     _init_swagger(app)
     _finalize_stuck_calls(app)
+    _start_presence_sweeper(app)
 
     return app
+
+
+def _start_presence_sweeper(app: Flask) -> None:
+    """Фоновая задача presence — раз в SWEEP_INTERVAL чистит соединения, от
+    которых давно не было heartbeat'а (мобильные в фоне, мёртвые сокеты)."""
+    from app.sockets.presence import start_sweeper
+    start_sweeper(app)
 
 
 def _init_extensions(app: Flask) -> None:
@@ -137,7 +145,7 @@ def _init_swagger(app: Flask) -> None:
         "info": {
             "title": "Groove Work API",
             "description": "REST API платформы учёта задач, времени и общения Groove Work v3.0",
-            "version": "3.0.1",
+            "version": "3.0.2",
         },
         "securityDefinitions": {
             "BearerAuth": {

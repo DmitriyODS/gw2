@@ -1,7 +1,7 @@
 <template>
   <nav class="bottom-nav">
     <button
-      v-for="item in items"
+      v-for="item in mainItems"
       :key="item.path"
       :data-tutorial="item.tutorial"
       class="bottom-nav-item"
@@ -20,11 +20,44 @@
       </template>
       <span class="bottom-nav-label">{{ item.label }}</span>
     </button>
+
+    <!-- «Ещё» — выпадающий лист с остальными разделами. Так нижняя
+         навигация не превращается в кашу из 6 крошечных кнопок. -->
+    <button
+      v-if="moreItems.length"
+      class="bottom-nav-item"
+      :class="{ active: moreOpen || moreActive }"
+      @click="moreOpen = !moreOpen"
+      aria-label="Ещё"
+    >
+      <span class="material-symbols-outlined">{{ moreOpen ? 'close' : 'more_horiz' }}</span>
+      <span class="bottom-nav-label">Ещё</span>
+    </button>
   </nav>
+
+  <Teleport to="body">
+    <div v-if="moreOpen" class="more-backdrop" @click="moreOpen = false" />
+    <Transition name="more-sheet">
+      <div v-if="moreOpen" class="more-sheet" @click.stop>
+        <div class="more-handle" />
+        <button
+          v-for="item in moreItems"
+          :key="item.path"
+          class="more-item"
+          :class="{ active: item.active() }"
+          @click="goMore(item)"
+        >
+          <span class="more-item-ico material-symbols-outlined">{{ item.icon }}</span>
+          <span class="more-item-label">{{ item.label }}</span>
+          <span v-if="item.active()" class="material-symbols-outlined more-item-check">check</span>
+        </button>
+      </div>
+    </Transition>
+  </Teleport>
 </template>
 
 <script setup>
-import { computed } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth.js'
 import { useUnitsStore } from '@/stores/units.js'
@@ -38,32 +71,45 @@ const unitsStore = useUnitsStore()
 const messenger = useMessengerStore()
 const { isAtLeast } = usePermission()
 
-// На мобильной нижней навигации помещается ~5 пунктов. Списки/Компании
-// прячем под кнопкой "Ещё" в Этапе 2; пока — выводим базовые 5.
-const items = computed(() => {
+const moreOpen = ref(false)
+watch(() => route.path, () => { moreOpen.value = false })
+
+// 4 главные кнопки слева — самые частые сценарии. Всё прочее уходит в «Ещё».
+const mainItems = computed(() => [
+  { path: '/tasks', icon: 'grid_view', label: 'Задачи', tutorial: 'nav-tasks',
+    active: () => route.path === '/tasks',
+    dot: () => !!unitsStore.activeUnit },
+  { path: '/messenger', icon: 'chat', label: 'Чаты', tutorial: 'nav-messenger',
+    active: () => route.path.startsWith('/messenger'),
+    badge: () => messenger.totalUnread },
+  { path: '/stats', icon: 'query_stats', label: 'Статистика', tutorial: 'nav-stats',
+    active: () => route.path === '/stats' },
+  { path: '/profile', avatar: true, label: 'Профиль', tutorial: 'profile-avatar',
+    active: () => route.path === '/profile' },
+])
+
+const moreItems = computed(() => {
   const arr = [
-    { path: '/tasks', icon: 'grid_view', label: 'Задачи', tutorial: 'nav-tasks',
-      active: () => route.path === '/tasks',
-      dot: () => !!unitsStore.activeUnit },
-    { path: '/stats', icon: 'query_stats', label: 'Статистика', tutorial: 'nav-stats',
-      active: () => route.path === '/stats' },
-    { path: '/employees', icon: 'groups', label: 'Люди', tutorial: 'nav-employees',
+    { path: '/employees', icon: 'groups', label: 'Сотрудники',
       active: () => route.path === '/employees' },
-    { path: '/messenger', icon: 'chat', label: 'Чаты', tutorial: 'nav-messenger',
-      active: () => route.path.startsWith('/messenger'),
-      badge: () => messenger.totalUnread },
+    { path: '/settings', icon: 'settings', label: 'Настройки',
+      active: () => route.path === '/settings' },
   ]
   if (isAtLeast(ROLES.ADMIN)) {
-    arr.push({ path: '/companies', icon: 'domain', label: 'Компании', tutorial: 'nav-companies',
+    arr.splice(1, 0, { path: '/companies', icon: 'domain', label: 'Компании',
       active: () => route.path.startsWith('/companies') })
-  } else {
-    arr.push({ path: '/settings', icon: 'settings', label: 'Настройки', tutorial: 'nav-settings',
-      active: () => route.path === '/settings' })
+    arr.push({ path: '/lists', icon: 'view_list', label: 'Списки',
+      active: () => route.path.startsWith('/lists') })
   }
-  arr.push({ path: '/profile', avatar: true, label: 'Профиль', tutorial: 'profile-avatar',
-    active: () => route.path === '/profile' })
   return arr
 })
+
+const moreActive = computed(() => moreItems.value.some((i) => i.active()))
+
+function goMore(item) {
+  moreOpen.value = false
+  router.push(item.path)
+}
 
 const avatarSrc = computed(() => {
   const user = authStore.user
@@ -161,5 +207,90 @@ const avatarSrc = computed(() => {
   border-radius: 50%;
   background: var(--gw-accent);
   border: 2px solid var(--gw-surface);
+}
+</style>
+
+<!-- Не scoped — Teleport уносит элементы в body. -->
+<style>
+.more-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 250;
+  background: var(--color-scrim, color-mix(in oklch, black 45%, transparent));
+}
+
+.more-sheet {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 251;
+  background: var(--color-surface);
+  border-top-left-radius: 20px;
+  border-top-right-radius: 20px;
+  padding: 10px 12px calc(16px + env(safe-area-inset-bottom, 0px));
+  box-shadow: 0 -8px 24px color-mix(in oklch, black 18%, transparent);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.more-handle {
+  align-self: center;
+  width: 36px;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--color-outline-dim, color-mix(in oklch, currentColor 25%, transparent));
+  margin: 2px 0 8px;
+}
+
+.more-item {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 14px 12px;
+  border: none;
+  background: transparent;
+  color: var(--color-on-surface);
+  cursor: pointer;
+  border-radius: 14px;
+  font: inherit;
+  font-size: 15px;
+  font-weight: 500;
+  text-align: left;
+  min-height: 52px;
+}
+
+.more-item:active {
+  background: color-mix(in oklch, var(--color-primary) 14%, transparent);
+}
+
+.more-item.active {
+  background: var(--color-primary-container);
+  color: var(--color-on-primary-container);
+}
+
+.more-item-ico {
+  font-size: 24px;
+}
+
+.more-item-label {
+  flex: 1;
+}
+
+.more-item-check {
+  font-size: 20px;
+  opacity: 0.8;
+}
+
+.more-sheet-enter-active,
+.more-sheet-leave-active {
+  transition: transform 0.22s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.18s;
+}
+
+.more-sheet-enter-from,
+.more-sheet-leave-to {
+  transform: translateY(100%);
+  opacity: 0;
 }
 </style>

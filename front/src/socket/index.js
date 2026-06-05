@@ -11,6 +11,8 @@ import {
 
 let socket = null
 let visibilityHookInstalled = false
+let heartbeatTimer = null
+const HEARTBEAT_MS = 25_000
 
 export function getSocket() {
   return socket
@@ -52,6 +54,31 @@ function markActiveReadOnFocus() {
 function emitVisibility(visible) {
   if (socket?.connected) {
     try { socket.emit('presence:visibility', { visible }) } catch {}
+  }
+  if (visible) startHeartbeat()
+  else stopHeartbeat()
+}
+
+/* Heartbeat для presence: подтверждает серверу, что вкладка реально жива.
+   Если на серверной стороне heartbeat не приходил дольше ~60с, sweep
+   пометит соединение «не в сети». На мобильных это лечит долгие
+   зависшие сокеты, которые иначе оставляют пользователя «онлайн». */
+function sendHeartbeat() {
+  if (!socket?.connected) return
+  if (typeof document !== 'undefined' && document.visibilityState !== 'visible') return
+  try { socket.emit('presence:heartbeat') } catch {}
+}
+
+function startHeartbeat() {
+  stopHeartbeat()
+  sendHeartbeat()
+  heartbeatTimer = setInterval(sendHeartbeat, HEARTBEAT_MS)
+}
+
+function stopHeartbeat() {
+  if (heartbeatTimer) {
+    clearInterval(heartbeatTimer)
+    heartbeatTimer = null
   }
 }
 
@@ -104,6 +131,11 @@ export function connectSocket() {
     // Свежий снимок онлайн-статусов при каждом (пере)подключении — события
     // presence:update, прошедшие до коннекта, мы не услышали.
     try { useMessengerStore().fetchPresence() } catch {}
+    // Heartbeat presence — пока вкладка видима, шлём пинг каждые 25с;
+    // sweep на сервере опускает «зависшие» сокеты в офлайн через 60с.
+    if (typeof document === 'undefined' || document.visibilityState === 'visible') {
+      startHeartbeat()
+    }
     // При переподключении локальное состояние могло разойтись с сервером
     // (пропущенные события за время обрыва) — перечитываем активный юнит,
     // список диалогов и сообщения активного чата.
@@ -123,7 +155,7 @@ export function connectSocket() {
     console.warn('Socket connection error:', err.message)
   })
 
-  socket.on('disconnect', () => {})
+  socket.on('disconnect', () => { stopHeartbeat() })
 
   socket.on('task:created', (task) => {
     const tasks = useTasksStore()

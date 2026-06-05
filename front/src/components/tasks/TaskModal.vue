@@ -184,28 +184,28 @@
           </div>
         </div>
 
-        <!-- Ответственный -->
+        <!-- Ответственный (read-only — редактируется в режиме «Редактировать») -->
         <div class="field-box">
           <div class="field-label">Ответственный</div>
-          <UserPicker
-            :model-value="task.responsible_user_id"
-            @change="onResponsibleChange"
-          />
+          <div class="field-value responsible-value">
+            <template v-if="responsibleDisplay">
+              <img :src="responsibleAvatar" class="responsible-avatar" alt="" />
+              <span class="responsible-name">{{ responsibleDisplay.fio }}</span>
+            </template>
+            <template v-else>
+              <span class="material-symbols-outlined field-icon">person_off</span>
+              <span class="text-dim">Не назначен</span>
+            </template>
+          </div>
         </div>
 
-        <!-- Этап -->
+        <!-- Этап (read-only — редактируется в режиме «Редактировать») -->
         <div v-if="usesStages" class="field-box">
           <div class="field-label">Этап</div>
-          <Select
-            :model-value="task.stage_id"
-            :options="stages"
-            option-label="name"
-            option-value="id"
-            placeholder="Без этапа"
-            class="w-full"
-            show-clear
-            @update:model-value="onStageChange"
-          />
+          <div class="field-value">
+            <template v-if="currentStage">{{ currentStage.name }}</template>
+            <span v-else class="text-dim">Без этапа</span>
+          </div>
         </div>
 
         <!-- Дедлайн -->
@@ -367,9 +367,8 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import Dialog from 'primevue/dialog'
-import Select from 'primevue/select'
 import AppDialog from '@/components/common/AppDialog.vue'
 import { useBreakpoint } from '@/composables/useBreakpoint.js'
 import UnitListItem from '@/components/tasks/UnitListItem.vue'
@@ -377,9 +376,9 @@ import TaskForm from '@/components/tasks/TaskForm.vue'
 import TaskColorPopover from '@/components/tasks/TaskColorPopover.vue'
 import TaskComments from '@/components/tasks/TaskComments.vue'
 import TaskContributors from '@/components/tasks/TaskContributors.vue'
-import UserPicker from '@/components/common/UserPicker.vue'
 import { useCompanySettings } from '@/composables/useCompanySettings.js'
 import { getStages } from '@/api/stages.js'
+import { getDirectoryUser } from '@/api/users.js'
 import StartUnitModal from '@/components/units/StartUnitModal.vue'
 import UnitEditModal from '@/components/units/UnitEditModal.vue'
 import { getUnits, deleteUnit } from '@/api/units.js'
@@ -462,6 +461,35 @@ const isOverdue = computed(() => {
   return new Date(props.task.deadline) < new Date()
 })
 
+const responsibleDirectory = ref(null)
+const responsibleDisplay = computed(() => {
+  const t = props.task
+  if (!t.responsible_user_id) return null
+  if (t.responsible && t.responsible.fio) return t.responsible
+  return responsibleDirectory.value
+})
+const responsibleAvatar = computed(() => {
+  const u = responsibleDisplay.value
+  if (!u) return ''
+  return u.avatar_path ? `/uploads/${u.avatar_path}` : `/api/users/${u.id}/identicon`
+})
+watch(
+  () => props.task.responsible_user_id,
+  async (id) => {
+    if (!id) { responsibleDirectory.value = null; return }
+    if (props.task.responsible?.fio) { responsibleDirectory.value = null; return }
+    try { responsibleDirectory.value = await getDirectoryUser(id) }
+    catch { responsibleDirectory.value = null }
+  },
+  { immediate: true },
+)
+
+const currentStage = computed(() => {
+  const sid = props.task.stage_id
+  if (!sid) return null
+  return stages.value.find((s) => s.id === sid) || null
+})
+
 /* Действие в sticky-баре зависит от активной мобильной вкладки.
    - Детали: «Завершить задачу» (или «Вернуть из архива»)
    - Юниты: «Начать юнит» (если разрешено и нет активного)
@@ -521,26 +549,6 @@ async function loadStages() {
     stages.value = Array.isArray(data) ? data : (data.items ?? [])
   } catch {
     stages.value = []
-  }
-}
-
-async function onResponsibleChange(user) {
-  const userId = user?.id ?? null
-  if (userId === (props.task.responsible_user_id ?? null)) return
-  try {
-    await tasksStore.assignResponsible(props.task.id, userId)
-  } catch (e) {
-    notifications.error(e?.message || 'Не удалось назначить ответственного')
-  }
-}
-
-async function onStageChange(stageId) {
-  const id = stageId ?? null
-  if (id === (props.task.stage_id ?? null)) return
-  try {
-    await tasksStore.setStage(props.task.id, id)
-  } catch (e) {
-    notifications.error(e?.message || 'Не удалось изменить этап')
   }
 }
 
@@ -854,6 +862,29 @@ async function handleSetColor(color) {
 
 .field-value.with-icon {
   gap: 6px;
+}
+
+.responsible-value {
+  gap: 10px;
+}
+
+.responsible-avatar {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  object-fit: cover;
+  flex-shrink: 0;
+}
+
+.responsible-name {
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.text-dim {
+  color: var(--gw-text-secondary);
 }
 
 .field-icon {

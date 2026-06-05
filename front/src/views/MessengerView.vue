@@ -5,7 +5,7 @@
       :active-id="activeId"
       :loading="listLoading"
       :hide-on-mobile="isMobile && !!activeId"
-      :show-support-tab="true"
+      :show-support-tab="authStore.isRootAdmin"
       :tab="listTab"
       :support-unread="supportTabUnread"
       @select="selectConversation"
@@ -525,17 +525,14 @@ const active = computed(() => messenger.activeConversation)
 // только Администратору системы (он отвечает в чужие чаты техподдержки).
 const listTab = ref('chats')
 
-/* Для рут-админа техподдержка — это inbox (входящие из чужих компаний).
-   Для обычного пользователя — личные dev-чаты с командой разработчиков
-   (обычно ровно один). На вкладке «Чаты» dev-чаты скрываем — они живут
-   в своей вкладке, чтобы UX был как Telegram-style чат с поддержкой. */
+/* Для рут-админа техподдержка — отдельный inbox (входящие из чужих компаний),
+   отображается на собственной вкладке. У обычных пользователей dev-чат с
+   техподдержкой — это обычный диалог в общем списке, без отдельной вкладки. */
 const visibleConversations = computed(() => {
-  if (listTab.value === 'support') {
-    return authStore.isRootAdmin
-      ? messenger.supportInbox
-      : messenger.conversations.filter(c => c.is_dev_chat)
+  if (authStore.isRootAdmin && listTab.value === 'support') {
+    return messenger.supportInbox
   }
-  return messenger.conversations.filter(c => !c.is_dev_chat)
+  return messenger.conversations
 })
 
 const listLoading = computed(() =>
@@ -544,12 +541,9 @@ const listLoading = computed(() =>
     : messenger.loadingList
 )
 
-const supportTabUnread = computed(() => {
-  if (authStore.isRootAdmin) return messenger.supportUnread
-  return messenger.conversations
-    .filter(c => c.is_dev_chat)
-    .reduce((s, c) => s + (c.unread_count || 0), 0)
-})
+const supportTabUnread = computed(() =>
+  authStore.isRootAdmin ? messenger.supportUnread : 0
+)
 
 async function onChangeTab(t) {
   listTab.value = t

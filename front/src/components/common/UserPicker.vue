@@ -164,28 +164,34 @@ watch(() => props.modelValue, syncSelected)
 <style scoped>
 .user-picker { position: relative; }
 
+/* Стилизация под PrimeVue Select (см. поле «Заказчик» в той же форме):
+   та же высота, скругление, рамка и поведение hover. */
 .picker-control {
   display: inline-flex;
   align-items: center;
   gap: 10px;
   width: 100%;
   min-height: 40px;
-  padding: 4px 10px 4px 6px;
-  border-radius: var(--radius-full, 999px);
-  background: var(--color-surface-high);
+  padding: 4px 12px 4px 10px;
+  border-radius: var(--radius-md, 10px);
+  background: var(--color-surface);
   border: 1px solid var(--color-outline-variant);
   color: var(--color-on-surface);
   cursor: pointer;
   text-align: left;
   font: inherit;
-  transition: background 0.15s, border-color 0.15s;
+  transition: background 0.15s, border-color 0.15s, box-shadow 0.15s;
 }
 .picker-control:hover {
-  background: var(--color-primary-container);
   border-color: var(--color-primary);
 }
+.picker-control:focus-visible {
+  outline: none;
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 2px color-mix(in oklch, var(--color-primary) 25%, transparent);
+}
 
-.ava { width: 32px; height: 32px; border-radius: 50%; object-fit: cover; }
+.ava { width: 26px; height: 26px; border-radius: 50%; object-fit: cover; }
 .ava-sm { width: 28px; height: 28px; border-radius: 50%; object-fit: cover; }
 
 .picker-name { font-weight: 600; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -196,18 +202,18 @@ watch(() => props.modelValue, syncSelected)
 .picker-pop {
   position: absolute;
   z-index: 60;
-  top: calc(100% + 6px);
+  top: calc(100% + 4px);
   left: 0;
   right: 0;
   min-width: 260px;
   background: var(--color-surface);
-  border-radius: var(--radius-lg, 16px);
+  border-radius: var(--radius-md, 10px);
   box-shadow: var(--shadow-lg);
   border: 1px solid var(--color-outline-variant);
-  padding: 8px;
+  padding: 6px;
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 4px;
 }
 
 .picker-search {
@@ -215,8 +221,9 @@ watch(() => props.modelValue, syncSelected)
   align-items: center;
   gap: 6px;
   padding: 6px 10px;
-  background: var(--color-surface-high);
-  border-radius: var(--radius-full, 999px);
+  background: var(--color-surface);
+  border: 1px solid var(--color-outline-variant);
+  border-radius: var(--radius-sm, 8px);
 }
 .search-ico { font-size: 18px; opacity: 0.6; }
 .picker-search input {

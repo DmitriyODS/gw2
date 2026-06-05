@@ -1,23 +1,38 @@
 <template>
   <Teleport to="body">
-    <div
-      v-if="modelValue && anchorRect"
-      ref="popoverRef"
-      class="task-color-popover"
-      :style="positionStyle"
-      @click.stop
-    >
-      <TaskColorPicker
-        :model-value="value"
-        @select="onSelect"
-      />
-    </div>
+    <!-- На мобильном — центрированный bottom-sheet поверх диалога задачи.
+         На десктопе — popover, привязанный к anchor-кнопке. -->
+    <template v-if="modelValue">
+      <div v-if="isMobile" class="task-color-backdrop" @click="close">
+        <div class="task-color-sheet" @click.stop>
+          <div class="sheet-header">
+            <span class="sheet-title">Цвет задачи</span>
+            <button class="sheet-close" @click="close" aria-label="Закрыть">
+              <span class="material-symbols-outlined">close</span>
+            </button>
+          </div>
+          <TaskColorPicker :model-value="value" @select="onSelect" />
+        </div>
+      </div>
+      <div
+        v-else-if="anchorRect"
+        ref="popoverRef"
+        class="task-color-popover"
+        :style="positionStyle"
+        @click.stop
+      >
+        <TaskColorPicker :model-value="value" @select="onSelect" />
+      </div>
+    </template>
   </Teleport>
 </template>
 
 <script setup>
 import { computed, ref, onMounted, onBeforeUnmount, nextTick, watch } from 'vue'
 import TaskColorPicker from '@/components/tasks/TaskColorPicker.vue'
+import { useBreakpoint } from '@/composables/useBreakpoint.js'
+
+const { isMobile } = useBreakpoint()
 
 const props = defineProps({
   modelValue: { type: Boolean, default: false },
@@ -77,6 +92,8 @@ function recompute() {
 
 watch(() => props.modelValue, async (v) => {
   if (!v) return
+  // На мобильном — bottom-sheet без anchor-позиционирования.
+  if (isMobile.value) { anchorRect.value = null; return }
   await nextTick()
   recompute()
   // Пересчёт после следующего тика — попап уже отрендерился, известна высота
@@ -90,6 +107,9 @@ function onWindowChange() {
 
 function onDocClick(e) {
   if (!props.modelValue) return
+  // На мобильном закрытием управляет backdrop — onDocClick не нужен и
+  // может срабатывать раньше монтирования sheet.
+  if (isMobile.value) return
   const inPopover = popoverRef.value && popoverRef.value.contains(e.target)
   const inAnchor = props.anchor && props.anchor.contains(e.target)
   if (!inPopover && !inAnchor) {
@@ -113,17 +133,79 @@ function onSelect(color) {
   emit('select', color)
   emit('update:modelValue', false)
 }
+
+function close() {
+  emit('update:modelValue', false)
+}
 </script>
 
 <style scoped>
 .task-color-popover {
   position: fixed;
-  z-index: 1200;
+  /* Выше PrimeVue Dialog (~1100) и мобильного меню действий внутри TaskModal
+     (z-index 10001), чтобы попап не прятался под открытым диалогом. */
+  z-index: 10200;
   background: var(--color-surface);
   border: 1px solid var(--color-outline-dim);
   border-radius: var(--radius-md);
   box-shadow: var(--shadow-lg);
   padding: 12px;
   box-sizing: border-box;
+}
+
+.task-color-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 10200;
+  background: var(--color-scrim, color-mix(in oklch, black 50%, transparent));
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  padding: 16px;
+  padding-bottom: max(16px, env(safe-area-inset-bottom, 0px));
+}
+
+.task-color-sheet {
+  width: 100%;
+  max-width: 420px;
+  background: var(--color-surface);
+  border-radius: var(--radius-lg, 20px);
+  box-shadow: var(--shadow-lg);
+  padding: 16px 18px 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.sheet-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.sheet-title {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--color-text, var(--gw-text));
+}
+
+.sheet-close {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  border: none;
+  background: transparent;
+  color: var(--color-text-dim, var(--gw-text-secondary));
+  cursor: pointer;
+  display: grid;
+  place-items: center;
+}
+
+.sheet-close:active {
+  background: color-mix(in oklch, var(--color-primary) 12%, transparent);
+}
+
+.sheet-close .material-symbols-outlined {
+  font-size: 22px;
 }
 </style>
