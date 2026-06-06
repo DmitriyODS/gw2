@@ -4,6 +4,7 @@ import { WebRTCManager } from '@/services/webrtc.js'
 import { getSocket } from '@/socket/index.js'
 import { useAuthStore } from './auth.js'
 import { useNotificationsStore } from './notifications.js'
+import { useMessengerStore } from './messenger.js'
 import { requestNotificationPermission } from '@/utils/systemNotify.js'
 
 /**
@@ -532,13 +533,10 @@ export const useCallStore = defineStore('call', {
       try { useNotificationsStore().warn(text) } catch {}
       if (isStale) {
         this.reset()
-        // Перечитать сообщения активного чата — обновит статус плашки.
-        import('@/stores/messenger.js').then(({ useMessengerStore }) => {
-          try {
-            const m = useMessengerStore()
-            if (m.activeConversationId) m.fetchMessages(m.activeConversationId)
-          } catch { /* мессенджер не инициализирован */ }
-        }).catch(() => {})
+        try {
+          const m = useMessengerStore()
+          if (m.activeConversationId) m.fetchMessages(m.activeConversationId)
+        } catch { /* мессенджер не инициализирован */ }
         return
       }
       // Прочие ошибки до active — выходим.
