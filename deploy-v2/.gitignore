@@ -1,0 +1,13 @@
+# Локальные секреты
+.env
+.env.local
+.env.deploy
+
+# Данные постгреса (если кто-то случайно сделает bind-mount в текущей папке)
+postgres_data/
+
+# Бэкапы
+*.dump
+*.sql.gz
+
+.DS_Store

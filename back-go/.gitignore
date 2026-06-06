@@ -1,0 +1,25 @@
+# Бинари сборки
+/bin/
+*.exe
+*.test
+*.out
+
+# Go-инструменты
+/vendor/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+.DS_Store
+
+# Локальные секреты
+.env
+.env.local
+
+# Coverage
+coverage.out
+coverage.html
+
+# Профили
+*.prof
