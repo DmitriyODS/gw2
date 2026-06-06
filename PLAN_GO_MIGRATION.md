@@ -150,52 +150,57 @@ back-go/
 
 ---
 
-# Этап 0 — Подготовка (S, ~3 дня)
+# Этап 0 — Подготовка (S, ~3 дня) ✅ ЗАКРЫТ
 
 **Backend**
-- [ ] Создать этот файл `PLAN_GO_MIGRATION.md` (✅ создан)
+- [x] Создать этот файл `PLAN_GO_MIGRATION.md`
 - [ ] Создать ярлык/метку `GW2-V4` в трекере для всех задач, связанных с миграцией
 - [ ] Заморозить новые фичи в текущем Python-бэке (только баг-фиксы)
-- [ ] Создать папку `back-go/` рядом с `back/`
-- [ ] Поднять отдельную dev-БД `gw2_v4_dev` (не трогаем существующую `grovework`)
-- [ ] Поставить инструменты: Go 1.25, `buf`, `goose`, `protoc-gen-go`, `protoc-gen-go-grpc`, `protovalidate-go`
+- [x] Создать папку `back-go/` рядом с `back/`
+- [x] Поднять отдельную dev-БД (через docker-compose pgvector/pgvector:pg18 в `deploy-v2/`)
+- [x] Поставить инструменты: Go 1.26, `buf` 1.70, `goose` 3.27, `protoc-gen-go`, `protoc-gen-go-grpc`
 
 **Frontend / DevOps**
-- [ ] Создать папку `deploy-v2/` (новый docker-compose со всеми 6 сервисами)
-- [ ] Подготовить `back-go/.gitignore`, `Makefile`-заготовку
+- [x] Создать папку `deploy-v2/`
+- [x] Подготовить `back-go/.gitignore`, `Makefile`-заготовку
 
 ---
 
-# Этап 1 — Каркас + proto-контракты (M, ~5 дней)
+# Этап 1 — Каркас + proto-контракты (M, ~5 дней) ✅ ЗАКРЫТ
 
-> Все 6 сервисов поднимаются в docker-compose и отвечают `GET /health`. Никакой бизнес-логики, только инфра.
+> Все 6 сервисов поднимаются в docker-compose и отвечают `GET /v1/health`. Никакой бизнес-логики, только инфра. **Смок-условие выполнено** — `make dev/health` отдаёт `{"status":"ok"}` от всех 6 сервисов.
 
 **`back-go/` каркас**
-- [ ] `go.work` с `use ./shared/pkg` и всеми `./services/*`
-- [ ] `Makefile` верхнего уровня: `build/test/audit/lint/fmt/gen` — таргеты универсальные, рекурсивно по всем сервисам
-- [ ] `shared/pkg/logger/` (slog JSON, `New(level string) *slog.Logger`)
-- [ ] `shared/pkg/httperr/` (общий маппер domain.Error → HTTP-статус + JSON-DTO)
-- [ ] `shared/pkg/pgxhelp/` (`TxManager.Do(ctx, fn)`, `Querier`-интерфейс, `q(ctx, pool)`)
-- [ ] `shared/pkg/tenancy/` (Fiber middleware: достаёт `company_id` из PASETO и кладёт в ctx)
-- [ ] `shared/pkg/paseto/` (issue/verify v4 local)
-- [ ] `shared/pkg/uuidv7/` (генерация на Go)
+- [x] `go.work` с `use ./shared/pkg`, `./gen/proto` и всеми `./services/*`
+- [x] `Makefile` верхнего уровня: `build/test/audit/lint/fmt/gen/proto` — таргеты универсальные, рекурсивно по всем сервисам
+- [x] `shared/pkg/logger/` (slog JSON, `New(level string) *slog.Logger`)
+- [x] `shared/pkg/httperr/` (формат Response + Validation helpers; конкретные маппинги — в transport каждого сервиса)
+- [x] `shared/pkg/uuidv7/` (генерация на Go)
+- [ ] `shared/pkg/pgxhelp/` (`TxManager.Do(ctx, fn)`, `Querier`-интерфейс) — на Этапе 2 вместе с первой БД-логикой
+- [ ] `shared/pkg/paseto/` — на Этапе 2 (только auth его использует)
+- [ ] `shared/pkg/tenancy/` — на Этапе 3 (нужен после первого реального бизнес-сервиса)
+- [ ] `shared/pkg/wssub/` — на Этапе 5 (нужен с появлением messenger WS)
 
 **Proto-контракты (ВСЕ сразу, как заголовочные RPC)**
-- [ ] `proto/auth/v1/auth.proto` — `VerifySession`, `IssueServiceToken` (для serv-to-serv auth)
-- [ ] `proto/users/v1/users.proto` — `GetProfile`, `GetDirectory`, `GetEmployees`, `PresenceSnapshot`
-- [ ] `proto/tasks/v1/tasks.proto` — `GetTaskByID`, `ListTasksByIDs`, `GetActiveUnit`
-- [ ] `proto/messenger/v1/messenger.proto` — `SendSystemMessage`
-- [ ] `proto/calls/v1/calls.proto` — `GetActiveCall`
-- [ ] `proto/ai/v1/ai.proto` — `IndexTask`, `SearchSimilarTasks`, `ReindexCompany`
-- [ ] `buf.yaml`, `buf.gen.yaml`, `make gen/proto`
+- [x] `proto/auth/v1/auth.proto` — `VerifySession`
+- [x] `proto/users/v1/users.proto` — `GetProfile`, `GetProfilesByIDs`, `GetDirectory`, `PresenceSnapshot`
+- [x] `proto/tasks/v1/tasks.proto` — `GetTaskByID`, `ListTasksByIDs`, `GetActiveUnit`
+- [x] `proto/messenger/v1/messenger.proto` — `SendSystemMessage`
+- [x] `proto/calls/v1/calls.proto` — `GetActiveCall`
+- [x] `proto/ai/v1/ai.proto` — `IndexTask`, `SearchSimilarTasks`, `ReindexCompany`
+- [x] `buf.yaml`, `buf.gen.yaml`, `make gen/proto`; сгенерённый код коммитим в `gen/proto/` (отдельный go-модуль)
 
 **Сервисные заготовки**
-- [ ] Для каждого из 6 сервисов: `main.go`, пустой `bootstrap`, gRPC-server-заглушка, REST `/v1/health`, `Dockerfile` (distroless)
+- [x] Для каждого из 6 сервисов: `main.go` с graceful shutdown, `bootstrap.New()`, `config.Load()` (caarlos0/env/v11), REST `/v1/health`, gRPC-сервер с `UnimplementedXxxServer`-стабом
+- [x] `Dockerfile` один общий multistage (`golang:1.25-alpine3.21` → `distroless/static:nonroot`), параметризован build-arg `SERVICE`
 
 **Deploy**
-- [ ] `deploy-v2/docker-compose.yml`: postgres 18 (init.sql с расширениями `pgcrypto`, `citext`, `pgvector`, схемы), redis, mailhog, swagger-ui, goose-migrate, и 6 сервисов
-- [ ] `deploy-v2/Makefile`: `dev/up`, `dev/down`, `dev/fresh`, `dev/migrate`, `dev/logs/<svc>`, `dev/psql`, `dev/gen-key`
-- [ ] Smoke: все 6 `/v1/health` отвечают, все gRPC-серверы слушают
+- [x] `deploy-v2/docker-compose.yml`: `pgvector/pgvector:pg18` (PG18 + pgvector в одном образе), redis 7.4, mailhog, 6 сервисов на хост-портах 8081-8086 (REST), gRPC :9090 внутри сети
+- [x] `deploy-v2/Makefile`: `dev/up`, `dev/down`, `dev/fresh`, `dev/logs/<svc>`, `dev/restart/<svc>`, `dev/rebuild/<svc>`, `dev/health`, `dev/psql`, `dev/infra` (только инфра)
+- [x] `deploy-v2/postgres/init/`: создание расширений (pgcrypto, citext, vector) и 6 схем (auth, users, tasks, messenger, calls, ai)
+- [x] Smoke: все 6 `/v1/health` отвечают `{"status":"ok"}`, схемы и расширения на месте
+- [ ] goose-migrate контейнер — добавится на Этапе 2 с первыми реальными миграциями
+- [ ] swagger-ui контейнер — добавится после первого openapi.yaml на Этапе 2
 
 ---
 
