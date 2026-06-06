@@ -1,0 +1,44 @@
+syntax = "proto3";
+
+package groovework.ai.v1;
+
+// AIService — обёртка над OpenAI: embeddings, поиск похожих задач, переиндексация.
+// Потребитель: tasks (после Create/Update/Archive — outbox-event → IndexTask).
+service AIService {
+  rpc IndexTask(IndexTaskRequest) returns (IndexTaskResponse);
+  rpc SearchSimilarTasks(SearchSimilarTasksRequest) returns (SearchSimilarTasksResponse);
+  rpc ReindexCompany(ReindexCompanyRequest) returns (ReindexCompanyResponse);
+}
+
+message IndexTaskRequest {
+  string task_id     = 1;
+  string company_id  = 2;
+  string text        = 3;  // title + description (формат задаёт вызывающая сторона)
+}
+
+message IndexTaskResponse {
+  bool indexed = 1;  // false если ai отключен в company_settings — не ошибка
+}
+
+message SearchSimilarTasksRequest {
+  string company_id = 1;
+  string query      = 2;
+  int32  top_k      = 3;  // дефолт 10
+}
+
+message SearchSimilarTasksResponse {
+  repeated SimilarTask tasks = 1;
+}
+
+message SimilarTask {
+  string task_id  = 1;
+  float  score    = 2;  // 0..1, чем выше — тем ближе
+}
+
+message ReindexCompanyRequest {
+  string company_id = 1;
+}
+
+message ReindexCompanyResponse {
+  int32 queued_tasks = 1;
+}

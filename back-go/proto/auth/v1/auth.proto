@@ -1,0 +1,23 @@
+syntax = "proto3";
+
+package groovework.auth.v1;
+
+// AuthService — внутренний RPC для остальных сервисов.
+// Публичные методы (login/refresh/me) — REST через transport/http, здесь их нет.
+service AuthService {
+  // VerifySession проверяет PASETO access-токен. Дёргается middleware'ом
+  // каждого защищённого endpoint'а в users/tasks/messenger/calls/ai.
+  rpc VerifySession(VerifySessionRequest) returns (VerifySessionResponse);
+}
+
+message VerifySessionRequest {
+  string access_token = 1;
+}
+
+message VerifySessionResponse {
+  string credential_id = 1;  // uuidv7 строкой
+  string session_id    = 2;  // uuidv7 строкой
+  string company_id    = 3;  // uuidv7; пусто для root-admin без компании
+  int32  role_level    = 4;  // 1..4
+  bool   email_verified = 5;
+}

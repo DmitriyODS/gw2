@@ -1,0 +1,61 @@
+syntax = "proto3";
+
+package groovework.tasks.v1;
+
+// TasksService — внутренний RPC. Потребители: ai (читает текст задачи для
+// индексации), messenger (показ плашки задачи в сообщении — на будущее).
+service TasksService {
+  rpc GetTaskByID(GetTaskByIDRequest) returns (GetTaskByIDResponse);
+  rpc ListTasksByIDs(ListTasksByIDsRequest) returns (ListTasksByIDsResponse);
+  rpc GetActiveUnit(GetActiveUnitRequest) returns (GetActiveUnitResponse);
+}
+
+message Task {
+  string id             = 1;
+  string company_id     = 2;
+  string department_id  = 3;
+  string stage_id       = 4;
+  string responsible_id = 5;
+  string title          = 6;
+  string description    = 7;
+  int64  deadline       = 8;   // unix-epoch sec, 0 = нет
+  int64  received_at    = 9;
+  int64  archived_at    = 10;  // 0 = не архивирована
+  int64  created_at     = 11;
+  int64  updated_at     = 12;
+}
+
+message GetTaskByIDRequest {
+  string task_id = 1;
+}
+
+message GetTaskByIDResponse {
+  Task task = 1;
+}
+
+message ListTasksByIDsRequest {
+  repeated string task_ids = 1;
+}
+
+message ListTasksByIDsResponse {
+  repeated Task tasks = 1;
+}
+
+message GetActiveUnitRequest {
+  string user_id = 1;
+}
+
+// GetActiveUnitResponse — Unit пуст (id == "") если у юзера нет активного юнита.
+message GetActiveUnitResponse {
+  Unit unit = 1;
+}
+
+message Unit {
+  string id            = 1;
+  string task_id       = 2;
+  string user_id       = 3;
+  string unit_type_id  = 4;
+  int64  datetime_start = 5;
+  int64  datetime_end   = 6;  // 0 = активный
+  string comment       = 7;
+}

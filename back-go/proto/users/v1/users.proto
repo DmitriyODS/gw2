@@ -1,0 +1,60 @@
+syntax = "proto3";
+
+package groovework.users.v1;
+
+// UsersService — каталог сотрудников, профили, presence.
+// Потребители: messenger (fio для бейджей), tasks (responsibles), calls (плашки),
+// ai (компании, settings).
+service UsersService {
+  rpc GetProfile(GetProfileRequest) returns (GetProfileResponse);
+  rpc GetProfilesByIDs(GetProfilesByIDsRequest) returns (GetProfilesByIDsResponse);
+  rpc GetDirectory(GetDirectoryRequest) returns (GetDirectoryResponse);
+  rpc PresenceSnapshot(PresenceSnapshotRequest) returns (PresenceSnapshotResponse);
+}
+
+message Profile {
+  string id            = 1;  // uuidv7
+  string auth_id       = 2;  // FK auth.credentials.id
+  string company_id    = 3;
+  string fio           = 4;
+  string position      = 5;
+  int32  role_level    = 6;
+  string avatar_path   = 7;  // пусто = identicon
+  bool   is_hidden     = 8;
+  int64  last_seen_at  = 9;  // unix-epoch sec, 0 = никогда
+}
+
+message GetProfileRequest {
+  string user_id = 1;
+}
+
+message GetProfileResponse {
+  Profile profile = 1;
+}
+
+message GetProfilesByIDsRequest {
+  repeated string user_ids = 1;
+}
+
+message GetProfilesByIDsResponse {
+  repeated Profile profiles = 1;
+}
+
+message GetDirectoryRequest {
+  string company_id    = 1;
+  string query         = 2;  // подстрока в fio/login
+  bool   exclude_self  = 3;
+  string self_id       = 4;  // если exclude_self=true
+}
+
+message GetDirectoryResponse {
+  repeated Profile profiles = 1;
+}
+
+message PresenceSnapshotRequest {
+  string company_id = 1;
+}
+
+message PresenceSnapshotResponse {
+  repeated string online_user_ids = 1;
+}

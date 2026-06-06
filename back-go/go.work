@@ -1,0 +1,12 @@
+go 1.25.0
+
+use (
+	./gen/proto
+	./services/ai
+	./services/auth
+	./services/calls
+	./services/messenger
+	./services/tasks
+	./services/users
+	./shared/pkg
+)

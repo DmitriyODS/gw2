@@ -1,0 +1,27 @@
+syntax = "proto3";
+
+package groovework.messenger.v1;
+
+// MessengerService — RPC для отправки системных сообщений (call:start,
+// call:end, и т.д.). Обычные сообщения отправляются юзерами через REST/WS.
+service MessengerService {
+  rpc SendSystemMessage(SendSystemMessageRequest) returns (SendSystemMessageResponse);
+}
+
+message SendSystemMessageRequest {
+  // sender_id и recipient_id определяют диалог. Диалог создаётся если ещё нет.
+  string sender_id     = 1;
+  string recipient_id  = 2;
+
+  // kind — машинно-читаемый тип: "call.started", "call.ended", "task.assigned"…
+  // Фронт рендерит спец-плашку по этому полю.
+  string kind          = 3;
+
+  // payload — JSON-объект с метаданными (call_id, task_id, …). Сохраняется в БД as-is.
+  string payload_json  = 4;
+}
+
+message SendSystemMessageResponse {
+  string message_id      = 1;
+  string conversation_id = 2;
+}

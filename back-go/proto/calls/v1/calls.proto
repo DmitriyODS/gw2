@@ -1,0 +1,29 @@
+syntax = "proto3";
+
+package groovework.calls.v1;
+
+// CallsService — внутренний RPC. Потребитель: фронт-бэннер «Вернуться в звонок»
+// узнаёт через REST, но messenger дёргает это для системной плашки.
+service CallsService {
+  rpc GetActiveCall(GetActiveCallRequest) returns (GetActiveCallResponse);
+}
+
+message GetActiveCallRequest {
+  string user_id = 1;
+}
+
+// GetActiveCallResponse — Call пуст (id == "") если активного звонка нет.
+message GetActiveCallResponse {
+  Call call = 1;
+}
+
+message Call {
+  string id              = 1;
+  string kind            = 2;  // "p2p" | "group"
+  string status          = 3;  // "ringing" | "active"
+  string media           = 4;  // "audio" | "video"
+  string conversation_id = 5;
+  string initiator_id    = 6;
+  int64  started_at      = 7;
+  repeated string participant_ids = 8;
+}

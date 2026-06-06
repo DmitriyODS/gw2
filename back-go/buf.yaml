@@ -1,0 +1,13 @@
+version: v2
+modules:
+  - path: proto
+lint:
+  use:
+    - STANDARD
+  except:
+    # Мы используем package формата groovework.<svc>.v1 — STANDARD требует
+    # совпадения с file path, но у нас path = proto/<svc>/v1, без префикса.
+    - PACKAGE_DIRECTORY_MATCH
+breaking:
+  use:
+    - FILE
