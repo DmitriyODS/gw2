@@ -89,7 +89,8 @@
             <span>{{ r.name }}</span>
           </label>
         </div>
-        <div v-if="errors.role_id" class="err">{{ errors.role_id }}</div>
+        <div v-if="isSelf" class="hint">Нельзя изменить собственную роль.</div>
+        <div v-else-if="errors.role_id" class="err">{{ errors.role_id }}</div>
       </div>
 
       <!-- Сброс пароля — только при редактировании -->
@@ -139,6 +140,7 @@ const notif = useNotificationsStore()
 const { myLevel } = usePermission()
 
 const isEdit = computed(() => !!props.user?.id)
+const isSelf = computed(() => isEdit.value && props.user?.id === auth.user?.id)
 const canPickCompany = computed(() => auth.isRootAdmin)
 
 const form = ref(_blank())
@@ -180,7 +182,7 @@ const assignableRoles = computed(() => {
   const lvl = myLevel()
   return props.roles
     .filter(r => r.level <= lvl)
-    .map(r => ({ ...r, locked: false }))
+    .map(r => ({ ...r, locked: isSelf.value }))
     .sort((a, b) => a.level - b.level)
 })
 
@@ -239,7 +241,8 @@ function save() {
     isEdit: isEdit.value,
     userId: props.user?.id ?? null,
     // Для существующего пользователя — отдельный апдейт роли (отдельный endpoint).
-    newRoleId: isEdit.value && form.value.role_id !== props.user?.role?.id
+    // Себе роль менять нельзя.
+    newRoleId: isEdit.value && !isSelf.value && form.value.role_id !== props.user?.role?.id
       ? form.value.role_id : null,
   })
 }
