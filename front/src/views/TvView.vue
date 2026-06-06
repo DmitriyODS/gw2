@@ -1835,31 +1835,32 @@ onBeforeUnmount(() => {
   position: relative;
   display: inline-flex;
   align-items: center;
-  gap: 8px;
-  font-size: clamp(14px, 1.8vmin, 22px);
+  gap: 10px;
+  font-size: clamp(14px, 1.8vmin, 20px);
   font-weight: 700;
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: var(--color-tertiary);
+  color: var(--color-text);
 }
 .tv-ai-fact-eyebrow .material-symbols-outlined {
-  font-size: clamp(22px, 2.6vmin, 32px);
+  font-size: clamp(22px, 2.6vmin, 30px);
   font-variation-settings: 'FILL' 1;
+  color: var(--color-tertiary);
   animation: tv-ai-fact-pulse 2.4s ease-in-out infinite;
 }
 
 @keyframes tv-ai-fact-pulse {
-  0%, 100% { transform: scale(1); filter: drop-shadow(0 0 6px color-mix(in oklch, var(--color-tertiary) 50%, transparent)); }
-  50%      { transform: scale(1.08); filter: drop-shadow(0 0 14px color-mix(in oklch, var(--color-tertiary) 75%, transparent)); }
+  0%, 100% { transform: scale(1); filter: drop-shadow(0 0 6px color-mix(in oklch, var(--color-tertiary) 45%, transparent)); }
+  50%      { transform: scale(1.06); filter: drop-shadow(0 0 12px color-mix(in oklch, var(--color-tertiary) 65%, transparent)); }
 }
 
 .tv-ai-fact-text {
   position: relative;
-  font-size: clamp(28px, 4.6vmin, 72px);
-  line-height: 1.18;
-  font-weight: 800;
+  font-size: clamp(20px, 2.8vmin, 40px);
+  line-height: 1.4;
+  font-weight: 500;
   color: var(--color-text);
-  max-width: 22ch;
+  max-width: 36ch;
   text-wrap: balance;
   animation: tv-ai-fact-rise 0.7s cubic-bezier(0.16, 1, 0.3, 1);
 }
