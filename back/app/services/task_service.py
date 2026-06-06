@@ -1,9 +1,15 @@
 from datetime import datetime, timezone
 from app.extensions import db
 from app.repositories import task_repo, department_repo, user_repo, stage_repo
+from app.services.task_embedding_service import schedule_reindex
 from app.utils.logger import get_logger
 
 logger = get_logger(__name__)
+
+
+# Какие поля задачи влияют на текст эмбеддинга (см. `_build_text_for_task`).
+# При изменении любого из них в update_task — перегенерим эмбеддинг.
+_REINDEX_FIELDS = frozenset({"name", "department_id", "responsible_user_id"})
 
 
 class TaskServiceError(Exception):
@@ -70,6 +76,7 @@ def create_task(
     )
     db.session.commit()
     logger.info("task.create", extra={"extra": {"task_id": task.id, "author_id": author_id, "event": "task.create"}})
+    schedule_reindex(task.id)
     return task
 
 
@@ -93,6 +100,8 @@ def update_task(task_id: int, **kwargs) -> object:
 
     task_repo.update(task, **kwargs)
     db.session.commit()
+    if _REINDEX_FIELDS.intersection(kwargs.keys()):
+        schedule_reindex(task.id)
     return task
 
 
@@ -103,6 +112,7 @@ def set_responsible(task_id: int, responsible_user_id):
     _validate_responsible(responsible_user_id, task.company_id)
     task_repo.update(task, responsible_user_id=responsible_user_id)
     db.session.commit()
+    schedule_reindex(task.id)
     return task
 
 

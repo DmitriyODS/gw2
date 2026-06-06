@@ -4,3 +4,4 @@ DATABASE_URL=postgresql://grovework:grovework_local@localhost:5432/grovework
 REDIS_URL=redis://localhost:6379/0
 JWT_SECRET_KEY=dev-jwt-secret-key-min-32-chars-local-xxxx
 SECRET_KEY=dev-flask-secret-key-min-32-chars-local-xxxx
+AI_KEY_ENCRYPTION_KEY=X3hFOVZ6XbAzlaygv2PfLbnmBIaH373CK8MqrrAhr8k=

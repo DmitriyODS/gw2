@@ -134,6 +134,11 @@
           </div>
         </div>
 
+        <!-- ИИ-настройки (Руководитель своей компании / Администратор системы) -->
+        <div v-show="activeSection === 'ai'" class="pane-block">
+          <AiSettings />
+        </div>
+
         <!-- Справка -->
         <div v-show="activeSection === 'help'" class="pane-block">
           <HelpCenter />
@@ -182,6 +187,7 @@ import { exportBackup, importBackup } from '@/api/backup.js'
 import ThemeBuilder from '@/components/settings/ThemeBuilder.vue'
 import HelpCenter from '@/components/settings/HelpCenter.vue'
 import AboutApp from '@/components/settings/AboutApp.vue'
+import AiSettings from '@/components/settings/AiSettings.vue'
 import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
 
 const { isAtLeast } = usePermission()
@@ -207,6 +213,13 @@ const allGroups = computed(() => [
       { key: 'about', title: 'О приложении', desc: 'Версия, тур, написать в техподдержку', icon: 'info', tone: 'tertiary' },
     ],
   },
+  ...(isAtLeast(ROLES.DIRECTOR) ? [{
+    key: 'admin',
+    label: 'Администрирование',
+    sections: [
+      { key: 'ai', title: 'Искусственный интеллект', desc: 'Подключение ProxyAPI: факт дня и семантический поиск', icon: 'smart_toy', tone: 'tertiary' },
+    ],
+  }] : []),
   ...(isAtLeast(ROLES.ADMIN) ? [{
     key: 'system',
     label: 'Система',

@@ -26,7 +26,13 @@ def get_list(
     author_id: Optional[int] = None,
     page: int = 1,
     per_page: int = 30,
+    ordered_ids: Optional[list] = None,
 ) -> dict:
+    # Если задан ordered_ids — это семантическая выдача от AI: id уже
+    # отсортированы по релевантности. Игнорируем `search` (он там был
+    # источником этих id) и `sort` (релевантность важнее даты).
+    if ordered_ids is not None and not ordered_ids:
+        return {"items": [], "total": 0, "page": page, "per_page": per_page}
     q = db.select(Task)
     # Multi-tenancy: основной фильтр. None означает «во всех компаниях»
     # (доступно только Администратору системы, без явно выбранной компании
@@ -48,9 +54,13 @@ def get_list(
     elif tab == "archive":
         q = q.where(Task.is_archived.is_(True))
 
-    # Поиск
-    if search:
+    # Поиск (LIKE) — отключаем, если задан семантический отсортированный набор.
+    if search and not ordered_ids:
         q = q.where(Task.name.ilike(f"%{search}%"))
+
+    # Семантическая выдача: фиксированный набор id с заранее заданным порядком.
+    if ordered_ids:
+        q = q.where(Task.id.in_(ordered_ids))
 
     # Фильтр по отделу
     if dept_id:
@@ -82,8 +92,12 @@ def get_list(
             exists().where(and_(Unit.task_id == Task.id, Unit.user_id == current_user_id))
         )
 
-    # Сортировка
-    if sort == "last_activity":
+    # Сортировка. Семантический режим — по позиции в ordered_ids (релевантность).
+    if ordered_ids:
+        # array_position возвращает 1-based индекс; nulls last не нужен,
+        # потому что мы уже отфильтровали по in_(ordered_ids).
+        q = q.order_by(func.array_position(ordered_ids, Task.id))
+    elif sort == "last_activity":
         last_unit_subq = (
             db.select(func.max(Unit.datetime_start))
             .where(Unit.task_id == Task.id)
@@ -104,6 +118,21 @@ def get_list(
     tasks = db.session.execute(q.offset(offset).limit(per_page)).scalars().all()
 
     return {"items": tasks, "total": total, "page": page, "per_page": per_page}
+
+
+def search_ids_by_name(company_id: int, q: str, limit: int = 30,
+                       exclude_ids: Optional[list] = None) -> list[int]:
+    """LIKE-добор для семантического поиска: id задач компании, чьи названия
+    содержат подстроку. Сортировка — по убыванию `created_at` (новые первее).
+    """
+    stmt = (db.select(Task.id)
+            .where(Task.company_id == company_id,
+                   Task.name.ilike(f"%{q}%"))
+            .order_by(desc(Task.created_at))
+            .limit(limit))
+    if exclude_ids:
+        stmt = stmt.where(~Task.id.in_(exclude_ids))
+    return [int(r) for r in db.session.execute(stmt).scalars().all()]
 
 
 def get_stale(threshold: datetime, company_id: Optional[int] = None,

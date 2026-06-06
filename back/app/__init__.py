@@ -21,8 +21,25 @@ def create_app(config_name: str = None) -> Flask:
     _init_swagger(app)
     _finalize_stuck_calls(app)
     _start_presence_sweeper(app)
+    _start_tv_facts_loop(app)
+    _register_cli(app)
 
     return app
+
+
+def _register_cli(app: Flask) -> None:
+    from app.cli import register_cli
+    register_cli(app)
+
+
+def _start_tv_facts_loop(app: Flask) -> None:
+    """Фоновая генерация TV-факта дня для компаний с включённым AI.
+
+    Поднимаем через socketio.start_background_task (eventlet-greenlet под
+    капотом). Цикл сам считает, когда ближайший слот, и спит до него.
+    """
+    from app.services.tv_facts_service import run_tv_facts_loop
+    socketio.start_background_task(run_tv_facts_loop, app)
 
 
 def _start_presence_sweeper(app: Flask) -> None:

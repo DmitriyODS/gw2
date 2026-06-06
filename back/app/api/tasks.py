@@ -89,11 +89,31 @@ def list_tasks():
     except ValueError:
         return jsonify({"error": "VALIDATION_ERROR", "message": "Неверный формат даты"}), 400
 
+    # Поиск. Если у компании включён AI — целиком семантический по всем
+    # проиндексированным задачам. Иначе — обычный LIKE по названию.
+    # Никаких гибридов: пользователь либо ищет «по смыслу», либо нет.
+    search_q = (args.get("search") or "").strip()
+    ordered_ids = None
+    if search_q and g.company_id is not None:
+        from app.services.ai_client import get_ai_client
+        if get_ai_client(g.company_id) is not None:
+            from app.services.task_embedding_service import semantic_search
+            try:
+                hits = semantic_search(g.company_id, search_q)
+            except Exception:
+                hits = []
+            # При включённом AI всегда отдаём семантическую выдачу — даже
+            # пустую. Если задача не проиндексирована, LIKE её всё равно
+            # бы нашёл «не туда»: запрос «исправить логику авторизации»
+            # не должен матчить «логирование событий». Правильный путь —
+            # бэкфилл индексов, кнопка для него есть в настройках AI.
+            ordered_ids = [tid for tid, _ in hits]
+
     result = task_repo.get_list(
         current_user_id=current_user_id,
         company_id=g.company_id,
         tab=args.get("tab", "active"),
-        search=args.get("search"),
+        search=search_q or None,
         sort=args.get("sort", "last_activity"),
         dept_id=int(args["dept_id"]) if args.get("dept_id") else None,
         stage_id=int(args["stage_id"]) if args.get("stage_id") else None,
@@ -104,6 +124,7 @@ def list_tasks():
         author_id=current_user_id if args.get("created_by_me") == "1" else None,
         page=int(args.get("page", 1)),
         per_page=int(args.get("per_page", 30)),
+        ordered_ids=ordered_ids,
     )
 
     task_ids = [t.id for t in result["items"]]

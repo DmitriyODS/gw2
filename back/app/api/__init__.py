@@ -13,6 +13,8 @@ from .messenger import bp as messenger_bp
 from .calls import bp as calls_bp
 from .companies import bp as companies_bp
 from .stages import bp as stages_bp
+from .ai_settings import bp as ai_settings_bp
+from .ai_tv import bp as ai_tv_bp
 
 
 def register_blueprints(app: Flask) -> None:
@@ -30,3 +32,5 @@ def register_blueprints(app: Flask) -> None:
     app.register_blueprint(calls_bp)
     app.register_blueprint(companies_bp)
     app.register_blueprint(stages_bp)
+    app.register_blueprint(ai_settings_bp)
+    app.register_blueprint(ai_tv_bp)

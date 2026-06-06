@@ -28,6 +28,18 @@ class Company(db.Model):
     created_at = db.Column(db.DateTime(timezone=True), nullable=False,
                            default=lambda: datetime.now(timezone.utc))
 
+    # AI / ProxyAPI. Ключ хранится зашифрованным (Fernet, ключ шифрования —
+    # AI_KEY_ENCRYPTION_KEY в env). hint — открытая маска для UI.
+    ai_enabled = db.Column(db.Boolean, nullable=False, default=False,
+                           server_default='false')
+    ai_api_key_enc = db.Column(db.LargeBinary, nullable=True)
+    ai_key_hint = db.Column(db.String(16), nullable=True)
+    ai_model_chat = db.Column(db.String(64), nullable=False,
+                              default='gpt-4o-mini', server_default='gpt-4o-mini')
+    ai_model_embedding = db.Column(db.String(64), nullable=False,
+                                   default='text-embedding-3-small',
+                                   server_default='text-embedding-3-small')
+
     director = db.relationship("User", foreign_keys=[director_id], post_update=True)
 
     __table_args__ = (

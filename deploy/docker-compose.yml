@@ -2,7 +2,10 @@ version: "3.9"
 
 services:
   db:
-    image: postgres:16-alpine
+    # pgvector/pgvector:pg16 — Postgres 16 + предустановленное расширение
+    # vector (нужно для семантического поиска задач). Образ обратно совместим
+    # с volume от postgres:16-alpine — формат данных одинаковый.
+    image: pgvector/pgvector:pg16
     restart: unless-stopped
     environment:
       POSTGRES_DB: ${DB_NAME}
@@ -47,6 +50,8 @@ services:
       TURN_SECRET: ${TURN_SECRET:-}
       TURN_REALM: ${TURN_REALM:-grovework}
       TURN_TTL: "3600"
+      # AI / ProxyAPI — ключ шифрования API-ключей компаний.
+      AI_KEY_ENCRYPTION_KEY: ${AI_KEY_ENCRYPTION_KEY:-}
     volumes:
       - uploads:/app/uploads
     expose:

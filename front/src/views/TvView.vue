@@ -259,7 +259,16 @@
             </div>
           </div>
 
-          <!-- BRAND SLIDE ───────────────────────────────────────────── -->
+          <!-- BRAND / AI-FACT SLIDE ─────────────────────────────────── -->
+          <div v-else-if="currentSlide.kind === 'brand' && aiFact" class="tv-ai-fact-stage">
+            <div class="tv-ai-fact-glow"></div>
+            <div class="tv-ai-fact-eyebrow">
+              <span class="material-symbols-outlined">lightbulb_2</span>
+              Факт дня
+            </div>
+            <div class="tv-ai-fact-text">{{ aiFact.text }}</div>
+            <div class="tv-ai-fact-foot">{{ longDateLabel }} · Groove Work</div>
+          </div>
           <div v-else-if="currentSlide.kind === 'brand'" class="tv-brand-stage">
             <div class="tv-brand-glow"></div>
             <img class="tv-brand-big-logo" src="/logo.svg" alt="" />
@@ -347,6 +356,7 @@ import ProgressSpinner from 'primevue/progressspinner'
 import { useThemeStore } from '@/stores/theme.js'
 import { getStatsCommon, getStatsExtended } from '@/api/stats.js'
 import { getDirectory } from '@/api/users.js'
+import { getTvFact } from '@/api/ai.js'
 
 const themeStore = useThemeStore()
 
@@ -503,6 +513,13 @@ const clock = ref('')
 const todayLabel = ref('')
 const longDateLabel = ref('')
 const brandQuote = ref(pickRandomQuote())
+const aiFact = ref(null)   // {text, generated_at, kind, slot} | null
+
+async function loadAiFact() {
+  try {
+    aiFact.value = await getTvFact()   // null если AI выключен / не сгенерён
+  } catch { /* фолбэк на brand-цитату */ }
+}
 
 const commonByPeriod = ref({})   // { day: {...}, week: {...}, month: {...} }
 const extendedByPeriod = ref({}) // { day: {...}, week: {...}, month: {...} }
@@ -847,6 +864,7 @@ async function loadPeriod(period, { silent = false } = {}) {
 let slideTimer = null
 let refreshTimer = null
 let clockTimer = null
+let aiFactTimer = null
 
 function scheduleNext() {
   clearTimeout(slideTimer)
@@ -924,6 +942,11 @@ onMounted(async () => {
     loadPeriod('month', { silent: true })
   }, REFRESH_MS)
 
+  // AI-факт обновляется на сервере до 6 раз в день — раз в час хватит,
+  // чтобы поймать новый слот.
+  loadAiFact()
+  aiFactTimer = setInterval(loadAiFact, 60 * 60 * 1000)
+
   scheduleNext()
 })
 
@@ -931,6 +954,7 @@ onBeforeUnmount(() => {
   clearTimeout(slideTimer)
   clearInterval(refreshTimer)
   clearInterval(clockTimer)
+  clearInterval(aiFactTimer)
   clearTimeout(controlsTimer)
   document.removeEventListener('fullscreenchange', onFsChange)
 })
@@ -1779,6 +1803,75 @@ onBeforeUnmount(() => {
 .tv-brand-date {
   position: relative;
   font-size: clamp(14px, 1.8vmin, 22px);
+  color: var(--color-text-dim);
+  text-transform: capitalize;
+  font-weight: 600;
+}
+
+/* ════════════════ AI FACT SLIDE ═════════════════════════════════════ */
+.tv-ai-fact-stage {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: clamp(20px, 2.6vmin, 36px);
+  padding: clamp(24px, 3vmin, 56px);
+  position: relative;
+  text-align: center;
+}
+
+.tv-ai-fact-glow {
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(ellipse at 50% 50%,
+    color-mix(in oklch, var(--color-tertiary) 28%, transparent),
+    transparent 65%);
+  filter: blur(28px);
+  pointer-events: none;
+}
+
+.tv-ai-fact-eyebrow {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: clamp(14px, 1.8vmin, 22px);
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--color-tertiary);
+}
+.tv-ai-fact-eyebrow .material-symbols-outlined {
+  font-size: clamp(22px, 2.6vmin, 32px);
+  font-variation-settings: 'FILL' 1;
+  animation: tv-ai-fact-pulse 2.4s ease-in-out infinite;
+}
+
+@keyframes tv-ai-fact-pulse {
+  0%, 100% { transform: scale(1); filter: drop-shadow(0 0 6px color-mix(in oklch, var(--color-tertiary) 50%, transparent)); }
+  50%      { transform: scale(1.08); filter: drop-shadow(0 0 14px color-mix(in oklch, var(--color-tertiary) 75%, transparent)); }
+}
+
+.tv-ai-fact-text {
+  position: relative;
+  font-size: clamp(28px, 4.6vmin, 72px);
+  line-height: 1.18;
+  font-weight: 800;
+  color: var(--color-text);
+  max-width: 22ch;
+  text-wrap: balance;
+  animation: tv-ai-fact-rise 0.7s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes tv-ai-fact-rise {
+  from { opacity: 0; transform: translateY(14px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.tv-ai-fact-foot {
+  position: relative;
+  font-size: clamp(13px, 1.6vmin, 20px);
   color: var(--color-text-dim);
   text-transform: capitalize;
   font-weight: 600;
