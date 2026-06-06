@@ -52,6 +52,21 @@
         </div>
       </section>
 
+      <!-- Автор -->
+      <section class="filter-section">
+        <h4 class="filter-title">Авторство</h4>
+        <div class="chip-group">
+          <button
+            class="chip"
+            :class="{ active: tasksStore.filters.created_by_me }"
+            @click="tasksStore.setFilter('created_by_me', !tasksStore.filters.created_by_me)"
+          >
+            <span class="material-symbols-outlined">edit_note</span>
+            Создано мной
+          </button>
+        </div>
+      </section>
+
       <!-- От отдела -->
       <section class="filter-section">
         <h4 class="filter-title">Заказчик</h4>
@@ -211,6 +226,7 @@ const hasActiveFilters = computed(() => {
     || f.period_preset != null
     || f.received_from
     || f.received_to
+    || f.created_by_me
 })
 
 function onDeptChange(value) {

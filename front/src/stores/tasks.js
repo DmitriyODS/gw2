@@ -34,6 +34,7 @@ export const useTasksStore = defineStore('tasks', () => {
     received_to: saved.received_to ?? null,
     has_units: saved.has_units ?? null,
     period_preset: saved.period_preset ?? null,
+    created_by_me: saved.created_by_me ?? false,
     page: 1,
     per_page: 30,
   })
@@ -75,6 +76,7 @@ export const useTasksStore = defineStore('tasks', () => {
       if (filters.received_from) params.received_from = filters.received_from
       if (filters.received_to) params.received_to = filters.received_to
       if (filters.has_units) params.has_units = filters.has_units
+      if (filters.created_by_me) params.created_by_me = '1'
       params.page = filters.page
       params.per_page = filters.per_page
 
@@ -112,6 +114,7 @@ export const useTasksStore = defineStore('tasks', () => {
     filters.received_to = null
     filters.has_units = null
     filters.period_preset = null
+    filters.created_by_me = false
     filters.page = 1
     fetchTasks().catch(() => {})
   }

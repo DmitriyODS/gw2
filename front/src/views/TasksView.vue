@@ -281,6 +281,7 @@ const hasActiveFilters = computed(() => {
     || f.period_preset != null
     || f.received_from
     || f.received_to
+    || f.created_by_me
 })
 
 const tabs = [
@@ -359,6 +360,7 @@ function onTaskCreated(task) {
   showCreateTask.value = false
   tasksStore.upsertTask(task)
   tasksStore.fetchTasks({ silent: true }).catch(() => {})
+  openTask(task)
 }
 
 function consumeOpenQuery() {

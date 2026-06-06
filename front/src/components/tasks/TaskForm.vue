@@ -39,7 +39,18 @@
 
       <div class="form-field">
         <label class="form-label">Ответственный</label>
-        <UserPicker v-model="form.responsible_user_id" placeholder="Не назначен" />
+        <Select
+          v-model="form.responsible_user_id"
+          :options="responsibles"
+          option-label="fio"
+          option-value="id"
+          placeholder="Не назначен"
+          class="w-full"
+          :loading="responsiblesLoading"
+          filter
+          filterPlaceholder="Поиск сотрудника..."
+          show-clear
+        />
       </div>
 
       <div v-if="usesStages" class="form-field">
@@ -150,7 +161,7 @@ import { useNotificationsStore } from '@/stores/notifications.js'
 import { useUnitsStore } from '@/stores/units.js'
 import { useAuthStore } from '@/stores/auth.js'
 import { useCompanySettings } from '@/composables/useCompanySettings.js'
-import UserPicker from '@/components/common/UserPicker.vue'
+import { getDirectory, getDirectoryUser } from '@/api/users.js'
 
 const props = defineProps({
   task: {
@@ -172,6 +183,9 @@ const submitting = ref(false)
 const serverError = ref('')
 
 const stages = ref([])
+
+const responsibles = ref([])
+const responsiblesLoading = ref(false)
 
 const form = ref({
   name: props.task?.name || '',
@@ -254,6 +268,27 @@ onMounted(async () => {
     } catch {
       stages.value = []
     }
+  }
+
+  responsiblesLoading.value = true
+  try {
+    const data = await getDirectory()
+    const list = Array.isArray(data) ? data : (data?.items || [])
+    responsibles.value = list
+    /* Если выбранного ответственного нет в директории (например, он —
+       Администратор системы вне scope'нутой компанией директории),
+       докидываем его одиночным запросом, чтобы Select показал имя. */
+    const rid = form.value.responsible_user_id
+    if (rid != null && !list.some((u) => u.id === rid)) {
+      try {
+        const extra = await getDirectoryUser(rid)
+        if (extra) responsibles.value = [extra, ...list]
+      } catch { /* ignore */ }
+    }
+  } catch {
+    responsibles.value = []
+  } finally {
+    responsiblesLoading.value = false
   }
 })
 

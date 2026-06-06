@@ -69,6 +69,7 @@ def list_tasks():
       - {in: query, name: received_from, schema: {type: string, format: date}}
       - {in: query, name: received_to, schema: {type: string, format: date}}
       - {in: query, name: has_units, schema: {type: string, enum: [none, mine]}}
+      - {in: query, name: created_by_me, schema: {type: integer, enum: [0, 1]}, description: Только созданные текущим пользователем}
       - {in: query, name: page, schema: {type: integer, default: 1}}
       - {in: query, name: per_page, schema: {type: integer, default: 30}}
     responses:
@@ -100,6 +101,7 @@ def list_tasks():
         received_from=received_from,
         received_to=received_to,
         has_units=args.get("has_units"),
+        author_id=current_user_id if args.get("created_by_me") == "1" else None,
         page=int(args.get("page", 1)),
         per_page=int(args.get("per_page", 30)),
     )

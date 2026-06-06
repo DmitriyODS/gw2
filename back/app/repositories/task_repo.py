@@ -23,6 +23,7 @@ def get_list(
     received_from: Optional[datetime] = None,
     received_to: Optional[datetime] = None,
     has_units: Optional[str] = None,
+    author_id: Optional[int] = None,
     page: int = 1,
     per_page: int = 30,
 ) -> dict:
@@ -68,6 +69,10 @@ def get_list(
         q = q.where(Task.received_at >= received_from)
     if received_to:
         q = q.where(Task.received_at <= received_to)
+
+    # Фильтр по автору
+    if author_id is not None:
+        q = q.where(Task.author_id == author_id)
 
     # Фильтр по юнитам
     if has_units == "none":
