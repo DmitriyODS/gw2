@@ -217,7 +217,7 @@ const allGroups = computed(() => [
     key: 'admin',
     label: 'Администрирование',
     sections: [
-      { key: 'ai', title: 'Искусственный интеллект', desc: 'Подключение ProxyAPI: факт дня и семантический поиск', icon: 'smart_toy', tone: 'tertiary' },
+      { key: 'ai', title: 'Нейро-функции', desc: 'Подключение ProxyAPI: факт дня и семантический поиск', icon: 'smart_toy', tone: 'tertiary' },
     ],
   }] : []),
   ...(isAtLeast(ROLES.ADMIN) ? [{

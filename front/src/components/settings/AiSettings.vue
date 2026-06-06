@@ -664,4 +664,97 @@ onBeforeUnmount(() => {
   color: var(--color-text-dim);
 }
 .ai-feat-list li b { color: var(--color-text); }
+
+/* ── Adaptive: мобильный ≤768 ───────────────────────────────── */
+@media (max-width: 768px) {
+  .ai-settings { gap: 12px; }
+
+  .settings-card {
+    padding: 16px;
+    gap: 12px;
+    border-radius: 18px;
+  }
+
+  /* Шапка главной карточки: иконка + текст в столбик слева */
+  .ai-card { gap: 14px; }
+  .ai-card-head {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 12px;
+  }
+
+  .hero-icon {
+    width: 48px;
+    height: 48px;
+    border-radius: 14px;
+  }
+  .hero-icon .material-symbols-outlined { font-size: 24px; }
+
+  .card-text h3 { font-size: 15px; }
+  .card-text p { font-size: 12px; }
+
+  .ai-form { gap: 14px; }
+
+  /* Switch-row: текст уже плотнее, иконка-плашка чуть меньше */
+  .switch-row { padding: 10px; }
+  .switch-text { gap: 10px; }
+  .switch-text .material-symbols-outlined {
+    width: 32px;
+    height: 32px;
+    font-size: 18px;
+  }
+  .switch-text strong { font-size: 13px; }
+  .switch-text small { font-size: 11px; }
+
+  /* Кнопки действий — на всю ширину в столбик */
+  .ai-actions {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 8px;
+  }
+  .ai-actions .btn-filled,
+  .ai-actions .btn-outlined {
+    width: 100%;
+  }
+
+  /* Карточка индексации — иконка сверху, текст и кнопка ниже */
+  .ai-index-card {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+  .ai-index-card .card-actions { width: 100%; }
+  .ai-index-card .card-actions .btn-filled { width: 100%; }
+  .index-stats { gap: 6px; }
+  .stat-pill { font-size: 11px; padding: 5px 10px; }
+
+  /* Карточка-подсказка — иконка сверху */
+  .ai-hint-card {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+  .ai-feat-list { padding-left: 16px; }
+  .ai-feat-list li { font-size: 12px; }
+
+  /* Empty-state */
+  .ai-empty {
+    flex-direction: column;
+    text-align: center;
+    align-items: center;
+  }
+
+  .ai-test-result {
+    width: 100%;
+    box-sizing: border-box;
+    font-size: 13px;
+  }
+}
+
+/* ── Adaptive: очень узкий мобильный <380 ───────────────────── */
+@media (max-width: 380px) {
+  .settings-card { padding: 14px; }
+  .card-text h3 { font-size: 14px; }
+  .card-text p { font-size: 11.5px; }
+  .ctl { padding: 9px 11px; font-size: 13px; }
+  .icon-btn { width: 36px; min-height: 36px; }
+}
 </style>
