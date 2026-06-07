@@ -83,32 +83,57 @@
       <div class="yg-form">
         <div class="field">
           <label class="lbl">Проект</label>
-          <select class="ctl" :value="settings?.yg_project_id || ''"
-                  :disabled="busy || projectsLoading" @change="onPickProject($event)">
-            <option value="">— не выбран —</option>
-            <option v-for="p in yg.ygProjects" :key="p.id" :value="p.id">{{ p.title }}</option>
-          </select>
+          <Select
+            :model-value="settings?.yg_project_id || null"
+            :options="yg.ygProjects"
+            option-label="title"
+            option-value="id"
+            placeholder="Выберите проект"
+            class="w-full"
+            :disabled="busy || projectsLoading"
+            :loading="projectsLoading"
+            filter
+            filterPlaceholder="Поиск..."
+            show-clear
+            @update:model-value="onPickProject"
+          />
         </div>
         <div class="field">
           <label class="lbl">Доска</label>
-          <select class="ctl" :value="settings?.yg_board_id || ''"
-                  :disabled="busy || boardsLoading || !settings?.yg_project_id"
-                  @change="onPickBoard($event)">
-            <option value="">— не выбрана —</option>
-            <option v-for="b in yg.ygBoards" :key="b.id" :value="b.id">{{ b.title }}</option>
-          </select>
+          <Select
+            :model-value="settings?.yg_board_id || null"
+            :options="yg.ygBoards"
+            option-label="title"
+            option-value="id"
+            placeholder="Выберите доску"
+            class="w-full"
+            :disabled="busy || boardsLoading || !settings?.yg_project_id"
+            :loading="boardsLoading"
+            filter
+            filterPlaceholder="Поиск..."
+            show-clear
+            @update:model-value="onPickBoard"
+          />
           <div v-if="settings?.yg_first_column_id" class="hint">
             Новые задачи → первая колонка доски.
           </div>
         </div>
         <div class="field">
           <label class="lbl">Колонка для «выполнено» (необязательно)</label>
-          <select class="ctl" :value="settings?.yg_completed_column_id || ''"
-                  :disabled="busy || columnsLoading || !settings?.yg_board_id"
-                  @change="onPickCompleted($event)">
-            <option value="">— не использовать —</option>
-            <option v-for="c in yg.ygColumns" :key="c.id" :value="c.id">{{ c.title }}</option>
-          </select>
+          <Select
+            :model-value="settings?.yg_completed_column_id || null"
+            :options="yg.ygColumns"
+            option-label="title"
+            option-value="id"
+            placeholder="Не использовать"
+            class="w-full"
+            :disabled="busy || columnsLoading || !settings?.yg_board_id"
+            :loading="columnsLoading"
+            filter
+            filterPlaceholder="Поиск..."
+            show-clear
+            @update:model-value="onPickCompleted"
+          />
           <div class="hint">
             Если задана, при архивации задачи в Groove Work карточка в YouGile
             переезжает сюда.
@@ -125,6 +150,7 @@
 
 <script setup>
 import { reactive, ref, computed, onMounted } from 'vue'
+import Select from 'primevue/select'
 import { useYougileStore } from '@/stores/yougile.js'
 import { useNotificationsStore } from '@/stores/notifications.js'
 
@@ -189,8 +215,7 @@ async function loadProjects() {
   finally { projectsLoading.value = false }
 }
 
-async function onPickProject(ev) {
-  const id = ev.target.value || null
+async function onPickProject(id) {
   const title = id ? (yg.ygProjects.find(p => p.id === id)?.title || null) : null
   busy.value = true
   try {
@@ -211,8 +236,7 @@ async function onPickProject(ev) {
   }
 }
 
-async function onPickBoard(ev) {
-  const id = ev.target.value || null
+async function onPickBoard(id) {
   const title = id ? (yg.ygBoards.find(b => b.id === id)?.title || null) : null
   busy.value = true
   try {
@@ -232,11 +256,10 @@ async function onPickBoard(ev) {
   }
 }
 
-async function onPickCompleted(ev) {
-  const id = ev.target.value || null
+async function onPickCompleted(id) {
   busy.value = true
   try {
-    await yg.updateCompanySettings({ yg_completed_column_id: id })
+    await yg.updateCompanySettings({ yg_completed_column_id: id || null })
   } catch (e) {
     notif.error(e?.data?.message || 'Не удалось сохранить выбор колонки')
   } finally {

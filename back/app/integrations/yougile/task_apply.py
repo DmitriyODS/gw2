@@ -110,6 +110,10 @@ def _apply_updated(company: Company, task: Task, data: dict[str, Any]) -> dict:
     if new_col and new_col != task.yougile_column_id:
         fields["yougile_column_id"] = new_col
 
+    new_id_short = data.get("idTaskProject") or data.get("idTaskCommon")
+    if new_id_short and new_id_short != task.yougile_id_short:
+        fields["yougile_id_short"] = new_id_short
+
     # Архивация по «выполнено» — два сигнала: completed=True, либо move в
     # yg_completed_column_id. Любого хватит.
     should_archive = incoming_completed or (
@@ -150,6 +154,7 @@ def _apply_deleted(task: Task) -> dict:
         task,
         link_yougile=None,
         yougile_task_id=None,
+        yougile_id_short=None,
         yougile_project_id=None,
         yougile_board_id=None,
         yougile_column_id=None,

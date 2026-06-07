@@ -24,6 +24,7 @@ class Task(db.Model):
     # YouGile-привязка. link_yougile выше — это URL для UI; ниже структурное
     # представление, заполняется при привязке через /api/yougile.
     yougile_task_id = db.Column(db.String(64))
+    yougile_id_short = db.Column(db.String(64))
     yougile_project_id = db.Column(db.String(64))
     yougile_board_id = db.Column(db.String(64))
     yougile_column_id = db.Column(db.String(64))

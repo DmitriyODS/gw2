@@ -165,6 +165,41 @@ class YougileClient:
     def update_task(self, task_id: str, body: dict) -> dict:
         return self._request("PUT", f"/tasks/{task_id}", json=body)
 
+    def find_task_by_short_id(self, *, board_id: str, short_id: str,
+                              column_ids: list[str] | None = None) -> dict | None:
+        """Резолв человекочитаемого id карточки (`OIP1-2454`) в UUID.
+
+        YouGile API v2 не даёт фильтр `/tasks?idTaskProject=...` (400), и сам
+        `/tasks?boardId=...` тоже не работает — только `columnId`. Поэтому
+        перебираем колонки доски и страницы внутри.
+
+        Возвращает task-объект (dict) или None.
+        """
+        if column_ids is None:
+            column_ids = [c.get("id") for c in self.list_columns(board_id) if c.get("id")]
+        target = (short_id or "").strip().upper()
+        if not target:
+            return None
+        for col_id in column_ids:
+            offset = 0
+            page_size = 1000
+            while True:
+                data = self._request(
+                    "GET", "/tasks",
+                    params={"columnId": col_id, "limit": page_size, "offset": offset,
+                            "includeDeleted": "false"},
+                )
+                content = data.get("content", []) if isinstance(data, dict) else (data or [])
+                for t in content:
+                    if str(t.get("idTaskProject") or "").upper() == target:
+                        return t
+                    if str(t.get("idTaskCommon") or "").upper() == target:
+                        return t
+                if len(content) < page_size:
+                    break
+                offset += page_size
+        return None
+
     # ── чат задачи ───────────────────────────────────────────────────────
 
     def post_chat_message(self, chat_id: str, body: dict) -> dict:

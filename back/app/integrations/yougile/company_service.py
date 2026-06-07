@@ -185,7 +185,16 @@ def update_settings(actor: User, company: Company, payload: dict) -> CompanyYoug
     # Webhook'и регистрируем/снимаем синхронно с переключением флага. Это
     # ОК для нашего объёма (одно действие в минуту максимум); сетевые ошибки
     # YG логируем, но не блокируем сохранение настроек.
-    if enabled_changed_to is True:
+    # Дополнительно — самолечение: если интеграция уже включена, доска
+    # выбрана, а yg_webhook_id ещё пуст (например, при первом включении
+    # YOUGILE_WEBHOOK_PUBLIC_BASE не было задано), пытаемся зарегистрировать
+    # на каждое сохранение настроек. Идемпотентно: при наличии id делаем PUT
+    # на тот же id (см. ensure_registered).
+    is_enabled_now = bool((company.settings or {}).get("uses_yougile"))
+    if enabled_changed_to is True or (
+        is_enabled_now and not company.yg_webhook_id
+        and company.yg_board_id and company.yg_company_id
+    ):
         try:
             wh_register(actor, company)
         except YougileWebhookError as e:

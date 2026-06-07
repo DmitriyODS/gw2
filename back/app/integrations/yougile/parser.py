@@ -1,14 +1,20 @@
 """Извлечение YouGile task_id из URL карточки.
 
-В UI YouGile открытая карточка даёт несколько форматов ссылок:
+YouGile показывает три практических формата ссылок:
 
-  - https://ru.yougile.com/team/<companyId>/#tasks?task=<taskId>
-  - https://yougile.com/board/<...>#task-<taskId>
-  - https://yougile.com/team/<companyId>/?board=<boardId>#task-<taskId>
+  1. Длинный (старый):
+     `https://ru.yougile.com/team/<companyUUID>/#tasks?task=<taskUUID>`
+  2. Длинный с board (редко):
+     `https://yougile.com/team/<companyUUID>/?board=<boardUUID>#task-<taskUUID>`
+  3. Короткий (сейчас дефолт в адресной строке и кнопке «Скопировать»):
+     `https://yougile.com/team/<shortTeamId>/#<idTaskProject>`
+     Где `shortTeamId` — последние 12 hex-символов UUID компании
+     (`773aa0c0-0966-4d40-8540-ed7037760782` → `ed7037760782`), а
+     `idTaskProject` — человекочитаемый id карточки `OIP1-2454`.
 
-Все вариации сводятся к одному правилу: в строке после хеша/в query есть
-UUID — это taskId. Дополнительно дёргаем companyId из path'а, если он там
-есть — пригодится при показе ошибки «эта карточка из другой компании».
+Для (1)/(2) парсер сразу отдаёт `task_id` (UUID). Для (3) UUID в URL нет —
+отдаём `short_task_id` и `short_team_id`, а вызывающий код резолвит UUID
+через YouGile API (см. `client.find_task_by_short_id`).
 """
 from __future__ import annotations
 
@@ -21,21 +27,28 @@ _UUID_RE = re.compile(
     r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}",
     re.IGNORECASE,
 )
-_TEAM_RE = re.compile(r"/team/([0-9a-f-]{36})/?", re.IGNORECASE)
+_TEAM_UUID_RE = re.compile(r"/team/([0-9a-f-]{36})/?", re.IGNORECASE)
+_TEAM_SHORT_RE = re.compile(r"/team/([0-9a-f]{12})/?", re.IGNORECASE)
+# `OIP1-2454`, `ABC-1`, `Z9-100500` — буквы (минимум одна) + опц. цифры,
+# дефис, цифры. Строго ALPHA-NUM до дефиса (без _), чтобы не словить UUID
+# по ошибке.
+_SHORT_TASK_RE = re.compile(r"^([A-Za-z][A-Za-z0-9]*-\d+)$")
 
 
 @dataclass
 class ParsedYougileUrl:
-    task_id: str
-    company_id: str | None = None
+    task_id: str | None = None         # UUID карточки (если разобрали сразу)
+    company_id: str | None = None      # UUID компании (длинный)
+    short_team_id: str | None = None   # 12-hex (короткий формат)
+    short_task_id: str | None = None   # `OIP1-2454`
 
 
 def parse_task_url(url: str) -> ParsedYougileUrl | None:
-    """Вытащить task_id (и опц. companyId) из ссылки на карточку.
+    """Разобрать ссылку на YG-карточку.
 
-    Возвращает None, если разобрать не удалось — вызывающая сторона показывает
-    «не похоже на ссылку YouGile». Никаких исключений наружу, чтобы UI мог
-    спокойно сообщить пользователю о проблеме.
+    Возвращает `None`, если в строке ничего YG-подобного. На уровне вызова
+    решают: есть UUID → импортируем напрямую; есть только short_task_id →
+    идём в API искать UUID.
     """
     if not url or not isinstance(url, str):
         return None
@@ -49,22 +62,19 @@ def parse_task_url(url: str) -> ParsedYougileUrl | None:
     if "yougile" not in (parsed.netloc or "").lower():
         return None
 
-    # Сначала пробуем явное `?task=<uuid>` (как в hash после ?).
-    # urlparse не парсит query внутри fragment'а, поэтому делаем это вручную.
+    # 1. UUID карточки явным образом (?task=UUID или #...task=UUID, #task-UUID).
     candidates: list[str] = []
     if parsed.query:
         for v in parse_qs(parsed.query).get("task", []):
             candidates.append(v)
     if parsed.fragment:
-        # Хеш может быть `tasks?task=<uuid>` или `task-<uuid>`.
         frag = parsed.fragment
         if "?" in frag:
             _, q = frag.split("?", 1)
             for v in parse_qs(q).get("task", []):
                 candidates.append(v)
         if "task-" in frag:
-            after = frag.split("task-", 1)[1]
-            candidates.append(after)
+            candidates.append(frag.split("task-", 1)[1])
 
     task_id: str | None = None
     for c in candidates:
@@ -72,19 +82,39 @@ def parse_task_url(url: str) -> ParsedYougileUrl | None:
         if m:
             task_id = m.group(0)
             break
-
-    # Fallback: первый UUID в URL вообще.
     if not task_id:
+        # Fallback: первый UUID где-нибудь в URL.
         m = _UUID_RE.search(url)
         if m:
             task_id = m.group(0)
 
-    if not task_id:
+    # 2. companyId из path: либо полный UUID, либо 12-hex короткий.
+    company_id: str | None = None
+    short_team_id: str | None = None
+    path = parsed.path or ""
+    m_full = _TEAM_UUID_RE.search(path)
+    if m_full:
+        company_id = m_full.group(1)
+    else:
+        m_short = _TEAM_SHORT_RE.search(path)
+        if m_short:
+            short_team_id = m_short.group(1).lower()
+
+    # 3. Короткий taskId в hash'е (`#OIP1-2454`). Не пытаемся, если уже есть UUID.
+    short_task_id: str | None = None
+    if task_id is None and parsed.fragment:
+        # фрагмент может быть `OIP1-2454`, либо `tasks?...`, либо `task-...`.
+        frag = parsed.fragment.split("?", 1)[0]
+        m = _SHORT_TASK_RE.match(frag)
+        if m:
+            short_task_id = m.group(1).upper()
+
+    if not (task_id or short_task_id):
         return None
 
-    company_id: str | None = None
-    team_m = _TEAM_RE.search(parsed.path or "")
-    if team_m:
-        company_id = team_m.group(1)
-
-    return ParsedYougileUrl(task_id=task_id.lower(), company_id=company_id)
+    return ParsedYougileUrl(
+        task_id=task_id.lower() if task_id else None,
+        company_id=company_id,
+        short_team_id=short_team_id,
+        short_task_id=short_task_id,
+    )

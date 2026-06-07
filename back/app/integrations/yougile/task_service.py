@@ -70,13 +70,33 @@ def _require_user_connected(user: User):
     return client
 
 
-def _yg_task_url(yg_company_id: str, yg_task_id: str) -> str:
+def _short_team_id(yg_company_id: str | None) -> str | None:
+    """`773aa0c0-0966-4d40-8540-ed7037760782` → `ed7037760782`.
+
+    YouGile в адресной строке использует последние 12 hex-символов UUID компании.
+    Если UUID не разбирается — возвращаем None.
+    """
+    if not yg_company_id:
+        return None
+    clean = yg_company_id.replace("-", "")
+    if len(clean) >= 12:
+        return clean[-12:].lower()
+    return None
+
+
+def _yg_task_url(yg_company_id: str, yg_task_id: str,
+                 id_short: str | None = None) -> str:
     """Канонический URL карточки в YouGile.
 
-    Формат `team/<companyId>/#tasks?task=<taskId>` — у YG несколько вариантов,
-    но этот точно работает и совпадает с тем, который сам YG показывает при
-    открытой карточке.
+    Если есть `idTaskProject` (`OIP1-2454`) — отдаём короткую ссылку, как
+    видит её пользователь в адресной строке:
+        `https://ru.yougile.com/team/<shortTeamId>/#OIP1-2454`
+    Иначе fallback на формат с UUID:
+        `https://ru.yougile.com/team/<companyUUID>/#tasks?task=<taskUUID>`
     """
+    short_team = _short_team_id(yg_company_id)
+    if id_short and short_team:
+        return f"https://ru.yougile.com/team/{short_team}/#{id_short}"
     return f"https://ru.yougile.com/team/{yg_company_id}/#tasks?task={yg_task_id}"
 
 
@@ -178,36 +198,65 @@ def import_from_url(user: User, payload: ImportPayload, *,
                                "Не удалось разобрать ссылку на YouGile-карточку")
 
     # Проверим, что карточка действительно в той же компании YG.
-    # parser достаёт company_id только из team-URL — на ?task= формат не
-    # обязан попасть, поэтому если parsed.company_id is None — просто
-    # верим тому, что вернёт API; собственно `client` уже привязан к нужной
-    # компании ключом.
+    # Длинный URL даёт полный UUID компании, короткий — последние 12 hex.
+    # Если в ссылке вообще нет company-части, верим клиенту (он привязан к
+    # компании ключом).
     if parsed.company_id and parsed.company_id != company.yg_company_id:
         raise YougileTaskError(
             "FOREIGN_COMPANY",
             "Эта карточка из другой компании YouGile",
         )
+    if parsed.short_team_id and _short_team_id(company.yg_company_id) \
+            and parsed.short_team_id != _short_team_id(company.yg_company_id):
+        raise YougileTaskError(
+            "FOREIGN_COMPANY",
+            "Эта карточка из другой компании YouGile",
+        )
+
+    # Короткая ссылка — резолвим idTaskProject в UUID через перебор колонок.
+    yg: dict | None = None
+    task_uuid = parsed.task_id
+    if not task_uuid and parsed.short_task_id:
+        try:
+            yg = client.find_task_by_short_id(
+                board_id=company.yg_board_id,
+                short_id=parsed.short_task_id,
+            )
+        except YougileAuthError:
+            raise YougileTaskError("BAD_KEY", "Ключ YouGile недействителен, переподключите аккаунт")
+        except YougileError as e:
+            raise YougileTaskError("YOUGILE_ERROR", f"YouGile: {e}")
+        if not yg or not yg.get("id"):
+            raise YougileTaskError(
+                "NOT_FOUND_IN_YG",
+                f"Карточка {parsed.short_task_id} не найдена на выбранной доске YouGile",
+            )
+        task_uuid = str(yg["id"]).lower()
 
     # Уже привязана? Тогда возвращаем существующую GW-задачу.
     existing = Task.query.filter_by(
         company_id=company.id,
-        yougile_task_id=parsed.task_id,
+        yougile_task_id=task_uuid,
     ).first()
     if existing is not None:
         return existing
 
-    try:
-        yg = client.get_task(parsed.task_id)
-    except YougileAuthError:
-        raise YougileTaskError("BAD_KEY", "Ключ YouGile недействителен, переподключите аккаунт")
-    except YougileError as e:
-        raise YougileTaskError("YOUGILE_ERROR", f"YouGile: {e}")
+    if yg is None:
+        try:
+            yg = client.get_task(task_uuid)
+        except YougileAuthError:
+            raise YougileTaskError("BAD_KEY", "Ключ YouGile недействителен, переподключите аккаунт")
+        except YougileError as e:
+            raise YougileTaskError("YOUGILE_ERROR", f"YouGile: {e}")
 
     title = (yg.get("title") or "").strip() or "Без названия"
+    id_short = (yg.get("idTaskProject") or yg.get("idTaskCommon") or None)
     yg_deadline = None
     if payload.pull_deadline:
         dl = yg.get("deadline") or {}
         yg_deadline = _ts_to_dt(dl.get("deadline"))
+
+    yg_url = _yg_task_url(company.yg_company_id, task_uuid, id_short=id_short)
 
     # Сначала создаём GW-задачу.
     task = task_service.create_task(
@@ -215,7 +264,7 @@ def import_from_url(user: User, payload: ImportPayload, *,
         author_id=user.id,
         department_id=payload.department_id,
         company_id=company.id,
-        link_yougile=_yg_task_url(company.yg_company_id, parsed.task_id),
+        link_yougile=yg_url,
         deadline=yg_deadline,
         responsible_user_id=payload.responsible_user_id,
         stage_id=payload.stage_id,
@@ -224,7 +273,8 @@ def import_from_url(user: User, payload: ImportPayload, *,
     # И заполняем структурные YG-поля + sync_hash.
     task_repo.update(
         task,
-        yougile_task_id=parsed.task_id,
+        yougile_task_id=task_uuid,
+        yougile_id_short=id_short,
         yougile_column_id=yg.get("columnId"),
         # project/board id напрямую YG не отдаёт в /tasks/{id}; кешируем то,
         # что задано в компании (обычно карточка живёт в нашей же доске).
@@ -241,14 +291,14 @@ def import_from_url(user: User, payload: ImportPayload, *,
 
     # Системные сообщения: в YG-карточке — ссылка на GW; в GW-чате —
     # ссылка на YG.
-    _post_yg_link_back(client, parsed.task_id, _gw_task_url(task, origin=origin))
+    _post_yg_link_back(client, task_uuid, _gw_task_url(task, origin=origin))
     _post_system_comment(
         task, user,
         f"🔗 Связано с YouGile: {task.link_yougile}",
     )
 
     logger.info("yougile.imported",
-                extra={"task_id": task.id, "yougile_task_id": parsed.task_id})
+                extra={"task_id": task.id, "yougile_task_id": task_uuid})
     return task
 
 
@@ -295,11 +345,22 @@ def export_to_yougile(user: User, gw_task_id: int, *,
     if not yg_task_id:
         raise YougileTaskError("YOUGILE_ERROR", "YouGile не вернул id новой карточки")
 
-    yg_url = _yg_task_url(company.yg_company_id, yg_task_id)
+    # idTaskProject обычно есть сразу в ответе POST /tasks; если вдруг нет —
+    # перечитаем GET'ом (короткая ссылка без него работать не будет).
+    id_short = yg.get("idTaskProject") or yg.get("idTaskCommon")
+    if not id_short:
+        try:
+            id_short = (client.get_task(yg_task_id).get("idTaskProject")
+                        or client.get_task(yg_task_id).get("idTaskCommon"))
+        except YougileError:
+            id_short = None
+
+    yg_url = _yg_task_url(company.yg_company_id, yg_task_id, id_short=id_short)
     task_repo.update(
         task,
         link_yougile=yg_url,
         yougile_task_id=yg_task_id,
+        yougile_id_short=id_short,
         yougile_project_id=company.yg_project_id,
         yougile_board_id=company.yg_board_id,
         yougile_column_id=company.yg_first_column_id,
@@ -335,6 +396,7 @@ def unlink_task(user: User, gw_task_id: int) -> Task:
         task,
         link_yougile=None,
         yougile_task_id=None,
+        yougile_id_short=None,
         yougile_project_id=None,
         yougile_board_id=None,
         yougile_column_id=None,

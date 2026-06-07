@@ -47,6 +47,7 @@ class TaskSchema(Schema):
     # YouGile-привязка: id карточки + структурные id (для бейджа на карточке
     # и подсветки колонки). Полный URL остаётся в link_yougile.
     yougile_task_id = fields.Str(dump_only=True, allow_none=True)
+    yougile_id_short = fields.Str(dump_only=True, allow_none=True)
     yougile_project_id = fields.Str(dump_only=True, allow_none=True)
     yougile_board_id = fields.Str(dump_only=True, allow_none=True)
     yougile_column_id = fields.Str(dump_only=True, allow_none=True)
