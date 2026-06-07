@@ -67,8 +67,8 @@
             <span class="switch-text">
               <span class="material-symbols-outlined">link</span>
               <span>
-                <strong>Интеграция YouGile</strong>
-                <small>Поле «Ссылка на YouGile» в форме задачи</small>
+                <strong>Интеграция с YouGile</strong>
+                <small>Импорт/экспорт карточек, бейдж и кнопки в задачах. Если выключено — остаётся обычное поле «Ссылка на YouGile»</small>
               </span>
             </span>
             <input type="checkbox" v-model="form.settings.uses_yougile" class="switch" />

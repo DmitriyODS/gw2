@@ -50,6 +50,10 @@
         <div v-if="isMobile && showMobileMenu" class="mobile-menu-backdrop" @click="showMobileMenu = false" />
         <Transition name="mobile-menu">
           <div v-if="isMobile && showMobileMenu" class="mobile-menu" @click.stop>
+            <button class="mm-item" @click="onMobileMenuAction('copy-link')">
+              <span class="material-symbols-outlined">link</span>
+              Скопировать ссылку
+            </button>
             <button class="mm-item" ref="colorBtnRef" @click="onMobileMenuAction('color')">
               <span class="material-symbols-outlined">palette</span>
               Цвет задачи
@@ -117,6 +121,13 @@
               </span>
             </button>
             <button
+              class="icon-btn-round"
+              @click="copySelfLink"
+              title="Скопировать ссылку на задачу"
+            >
+              <span class="material-symbols-outlined">link</span>
+            </button>
+            <button
               ref="colorBtnRef"
               class="icon-btn-round"
               :class="{ active: showColorPicker }"
@@ -168,12 +179,13 @@
         </div>
 
         <!-- YouGile -->
-        <div v-if="usesYougile && task.link_yougile" class="field-box">
+        <div v-if="usesYougile && (task.link_yougile || yougileAvailable)" class="field-box">
           <div class="field-label">
             <span class="material-symbols-outlined field-label-icon">link</span>
             YouGile
           </div>
-          <div class="field-value yougile-value">
+          <!-- Связь есть -->
+          <div v-if="task.link_yougile" class="field-value yougile-value">
             <span class="yougile-url">{{ task.link_yougile }}</span>
             <button class="action-btn-round" @click="copyLink" title="Скопировать ссылку">
               <span class="material-symbols-outlined">content_copy</span>
@@ -181,6 +193,18 @@
             <a :href="task.link_yougile" target="_blank" class="action-btn-round" title="Открыть в новой вкладке">
               <span class="material-symbols-outlined">open_in_new</span>
             </a>
+            <button v-if="yougileAvailable" class="action-btn-round danger"
+                    :disabled="ygBusy" @click="onUnlinkYg" title="Отвязать от YouGile">
+              <span class="material-symbols-outlined">link_off</span>
+            </button>
+          </div>
+          <!-- Связи нет, но интеграция доступна — предлагаем создать -->
+          <div v-else-if="yougileAvailable" class="field-value yougile-empty">
+            <span class="text-dim">Карточка не привязана</span>
+            <button class="btn-tonal" :disabled="ygBusy" @click="onExportYg">
+              <span class="material-symbols-outlined">cloud_upload</span>
+              {{ ygBusy ? 'Создаём…' : 'Создать в YouGile' }}
+            </button>
           </div>
         </div>
 
@@ -383,6 +407,8 @@ import StartUnitModal from '@/components/units/StartUnitModal.vue'
 import UnitEditModal from '@/components/units/UnitEditModal.vue'
 import { getUnits, deleteUnit } from '@/api/units.js'
 import { deleteTask, archiveTask, restoreTask, toggleFavorite as apiFavorite, setTaskColor } from '@/api/tasks.js'
+import { exportYougileTask, unlinkYougileTask } from '@/api/yougile.js'
+import { useYougileStore } from '@/stores/yougile.js'
 import { useTasksStore } from '@/stores/tasks.js'
 import { useUnitsStore } from '@/stores/units.js'
 import { useNotificationsStore } from '@/stores/notifications.js'
@@ -410,6 +436,36 @@ const rightTab = ref('units')
 const showMobileMenu = ref(false)
 const stages = ref([])
 const { usesYougile, usesStages } = useCompanySettings()
+
+const yougileStore = useYougileStore()
+const yougileAvailable = computed(() => yougileStore.isAvailable)
+const ygBusy = ref(false)
+
+async function onExportYg() {
+  ygBusy.value = true
+  try {
+    const updated = await exportYougileTask({ gw_task_id: props.task.id })
+    tasksStore.upsertTask(updated)
+    notifications.success('Карточка создана в YouGile')
+  } catch (e) {
+    notifications.error(e?.data?.message || e?.message || 'Не удалось создать в YouGile')
+  } finally {
+    ygBusy.value = false
+  }
+}
+
+async function onUnlinkYg() {
+  ygBusy.value = true
+  try {
+    const updated = await unlinkYougileTask(props.task.id)
+    tasksStore.upsertTask(updated)
+    notifications.success('Связь с YouGile разорвана')
+  } catch (e) {
+    notifications.error(e?.data?.message || e?.message || 'Не удалось отвязать')
+  } finally {
+    ygBusy.value = false
+  }
+}
 
 const dialogStyle = computed(() => {
   if (isMobile.value) {
@@ -535,6 +591,8 @@ function onMobileMenuAction(action) {
     showEditForm.value = true
   } else if (action === 'delete') {
     confirmDelete()
+  } else if (action === 'copy-link') {
+    copySelfLink()
   }
 }
 
@@ -578,6 +636,18 @@ async function copyLink() {
   try {
     await navigator.clipboard.writeText(props.task.link_yougile)
     notifications.success('Ссылка скопирована')
+  } catch {
+    notifications.error('Не удалось скопировать ссылку')
+  }
+}
+
+async function copySelfLink() {
+  // Canonical-ссылка на задачу внутри GW. Используем абсолютный URL, чтобы её
+  // можно было сразу скинуть в мессенджер/почту.
+  const url = `${window.location.origin}/tasks/${props.task.id}`
+  try {
+    await navigator.clipboard.writeText(url)
+    notifications.success('Ссылка на задачу скопирована')
   } catch {
     notifications.error('Не удалось скопировать ссылку')
   }
@@ -934,6 +1004,25 @@ async function handleSetColor(color) {
   background: var(--gw-primary-light);
   color: var(--gw-primary);
 }
+
+.action-btn-round.danger { color: var(--color-error); border-color: var(--color-error); }
+.action-btn-round.danger:hover { background: var(--color-error-container); color: var(--color-on-error-container); }
+
+.yougile-empty {
+  display: flex; gap: 10px; align-items: center; flex-wrap: wrap;
+}
+.btn-tonal {
+  display: inline-flex; align-items: center; gap: 6px;
+  height: 32px; padding: 0 14px; border-radius: 16px;
+  background: var(--color-secondary-container);
+  color: var(--color-on-secondary-container);
+  border: none; cursor: pointer; font: inherit; font-weight: 600;
+}
+.btn-tonal:hover:not(:disabled) {
+  background: color-mix(in oklch, var(--color-secondary-container) 92%, black);
+}
+.btn-tonal:disabled { opacity: 0.5; cursor: not-allowed; }
+.btn-tonal .material-symbols-outlined { font-size: 18px; }
 
 .action-btn-round .material-symbols-outlined {
   font-size: 14px;

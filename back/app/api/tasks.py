@@ -301,6 +301,15 @@ def update_task(task_id: int):
     except TaskServiceError as e:
         return jsonify({"error": e.code, "message": e.message}), e.http_status
 
+    # Двусторонняя синхра с YouGile: если задача связана и пользователь
+    # подключён, пушим изменения в YG. Best-effort — внутри функции
+    # все ошибки логируются и НЕ пробрасываются.
+    try:
+        from app.integrations.yougile.task_push import push_after_update
+        push_after_update(g.current_user, task, set(data.keys()))
+    except Exception:  # noqa: BLE001
+        pass
+
     from app.extensions import socketio
     task_data = _enrich_task(task, current_user_id)
     # Цвет — индивидуальный, не транслируем чужим клиентам.
@@ -364,6 +373,12 @@ def archive_task(task_id: int):
     except TaskServiceError as e:
         return jsonify({"error": e.code, "message": e.message}), e.http_status
 
+    try:
+        from app.integrations.yougile.task_push import push_after_archive
+        push_after_archive(g.current_user, task, archived=True)
+    except Exception:  # noqa: BLE001
+        pass
+
     from app.extensions import socketio
     socketio.emit("task:archived", {"task_id": task_id, "archived_at": task.archived_at.isoformat()}, room="all")
 
@@ -392,6 +407,12 @@ def restore_task(task_id: int):
         task = task_service.restore_task(task_id)
     except TaskServiceError as e:
         return jsonify({"error": e.code, "message": e.message}), e.http_status
+
+    try:
+        from app.integrations.yougile.task_push import push_after_archive
+        push_after_archive(g.current_user, task, archived=False)
+    except Exception:  # noqa: BLE001
+        pass
 
     from app.extensions import socketio
     socketio.emit("task:restored", {"task_id": task_id}, room="all")

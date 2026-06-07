@@ -44,6 +44,12 @@ class TaskSchema(Schema):
     is_favorite = fields.Bool(dump_only=True)
     has_units = fields.Bool(dump_only=True)
     company_id = fields.Int(dump_only=True)
+    # YouGile-привязка: id карточки + структурные id (для бейджа на карточке
+    # и подсветки колонки). Полный URL остаётся в link_yougile.
+    yougile_task_id = fields.Str(dump_only=True, allow_none=True)
+    yougile_project_id = fields.Str(dump_only=True, allow_none=True)
+    yougile_board_id = fields.Str(dump_only=True, allow_none=True)
+    yougile_column_id = fields.Str(dump_only=True, allow_none=True)
 
 
 class TaskCreateSchema(Schema):

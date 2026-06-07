@@ -16,6 +16,17 @@
         </span>
 
         <div class="card-actions">
+          <a
+            v-if="task.yougile_task_id && task.link_yougile"
+            class="yg-badge"
+            :href="task.link_yougile"
+            target="_blank"
+            rel="noopener"
+            @click.stop
+            title="Открыть карточку в YouGile"
+          >
+            <span class="material-symbols-outlined">sync_alt</span>
+          </a>
           <button
             ref="colorBtnRef"
             class="card-action-btn"
@@ -316,6 +327,17 @@ function formatDate(d) {
 .favorite-btn .material-symbols-outlined.filled {
   font-variation-settings: 'FILL' 1;
 }
+
+.yg-badge {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 26px; height: 26px; border-radius: var(--radius-full);
+  background: var(--color-tertiary-container);
+  color: var(--color-on-tertiary-container);
+  text-decoration: none;
+  transition: background 0.15s;
+}
+.yg-badge:hover { background: color-mix(in oklch, var(--color-tertiary-container) 88%, black); }
+.yg-badge .material-symbols-outlined { font-size: 16px; }
 
 .task-name {
   font-size: 15px;

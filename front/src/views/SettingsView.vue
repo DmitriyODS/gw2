@@ -139,6 +139,16 @@
           <AiSettings />
         </div>
 
+        <!-- YouGile — личный коннект (любой авторизованный) -->
+        <div v-show="activeSection === 'yougile'" class="pane-block">
+          <YougileUserSettings />
+        </div>
+
+        <!-- YouGile — настройки компании (Руководитель+) -->
+        <div v-show="activeSection === 'yougile-company'" class="pane-block">
+          <YougileCompanySettings />
+        </div>
+
         <!-- Справка -->
         <div v-show="activeSection === 'help'" class="pane-block">
           <HelpCenter />
@@ -188,6 +198,8 @@ import ThemeBuilder from '@/components/settings/ThemeBuilder.vue'
 import HelpCenter from '@/components/settings/HelpCenter.vue'
 import AboutApp from '@/components/settings/AboutApp.vue'
 import AiSettings from '@/components/settings/AiSettings.vue'
+import YougileUserSettings from '@/components/settings/YougileUserSettings.vue'
+import YougileCompanySettings from '@/components/settings/YougileCompanySettings.vue'
 import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
 
 const { isAtLeast } = usePermission()
@@ -202,6 +214,11 @@ const router = useRouter()
 const searchQuery = ref('')
 const activeSection = ref(null) // null = показывать список секций (на мобильном)
 
+// Root-админ системы — без company_id. YouGile-разделы (личный и
+// «Интеграция с YouGile») в этом случае не показываем: они привязаны к
+// конкретной компании.
+const hasCompany = computed(() => authStore.companyId != null)
+
 /* ── Конфигурация разделов ─────────────────────────────────────── */
 const allGroups = computed(() => [
   {
@@ -209,6 +226,12 @@ const allGroups = computed(() => [
     label: 'Персонализация',
     sections: [
       { key: 'theme', title: 'Внешний вид', desc: 'Цвета, тёмная тема и стиль интерфейса', icon: 'palette', tone: 'primary' },
+      // YouGile (личный) — только для НЕ-директоров и только для тех, кто
+      // привязан к компании. Root-администратор системы (без company_id)
+      // эту настройку видеть не должен: она бессмысленна без компании.
+      ...((!isAtLeast(ROLES.DIRECTOR) && hasCompany.value) ? [
+        { key: 'yougile', title: 'YouGile', desc: 'Подключение личного аккаунта для импорта и создания карточек', icon: 'sync_alt', tone: 'secondary' },
+      ] : []),
       { key: 'help', title: 'Справка', desc: 'Как пользоваться разделами платформы', icon: 'help_center', tone: 'secondary' },
       { key: 'about', title: 'О приложении', desc: 'Версия, тур, написать в техподдержку', icon: 'info', tone: 'tertiary' },
     ],
@@ -218,6 +241,13 @@ const allGroups = computed(() => [
     label: 'Администрирование',
     sections: [
       { key: 'ai', title: 'Нейро-функции', desc: 'Подключение ProxyAPI: факт дня и семантический поиск', icon: 'smart_toy', tone: 'tertiary' },
+      // Интеграция с YouGile завязана на конкретную компанию. Root-админ
+      // системы (без company_id) не настраивает её — это делает директор
+      // конкретной компании. Поэтому пункт показываем только если
+      // hasCompany.
+      ...(hasCompany.value ? [
+        { key: 'yougile-company', title: 'Интеграция с YouGile', desc: 'Личный коннект директора + выбор компании, проекта и доски', icon: 'integration_instructions', tone: 'primary' },
+      ] : []),
     ],
   }] : []),
   ...(isAtLeast(ROLES.ADMIN) ? [{

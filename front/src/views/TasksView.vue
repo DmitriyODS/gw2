@@ -59,6 +59,17 @@
           <span class="material-symbols-outlined">tune</span>
         </button>
 
+        <!-- Кнопка «Из YouGile» — десктоп, видна только если интеграция доступна -->
+        <button
+          v-if="canCreateTask && yougileAvailable"
+          class="btn-add desktop-only btn-yougile"
+          @click="showImportYg = true"
+          title="Импортировать карточку из YouGile"
+        >
+          <span class="material-symbols-outlined">sync_alt</span>
+          <span class="btn-add-label">Из YouGile</span>
+        </button>
+
         <!-- Кнопка «Добавить» — десктоп -->
         <button
           v-if="canCreateTask"
@@ -182,6 +193,12 @@
       @saved="onTaskCreated"
     />
 
+    <ImportFromYougileDialog
+      :visible="showImportYg"
+      @close="showImportYg = false"
+      @imported="onYgImported"
+    />
+
     <!-- Быстрый старт юнита прямо с карточки -->
     <StartUnitModal
       v-if="startUnitTaskId != null"
@@ -206,6 +223,8 @@ import TaskCard from '@/components/tasks/TaskCard.vue'
 import TaskFilters from '@/components/tasks/TaskFilters.vue'
 import TaskModal from '@/components/tasks/TaskModal.vue'
 import TaskForm from '@/components/tasks/TaskForm.vue'
+import ImportFromYougileDialog from '@/components/tasks/ImportFromYougileDialog.vue'
+import { useYougileStore } from '@/stores/yougile.js'
 import TaskKanban from '@/components/tasks/TaskKanban.vue'
 import SortSheet from '@/components/tasks/SortSheet.vue'
 import StartUnitModal from '@/components/units/StartUnitModal.vue'
@@ -228,6 +247,10 @@ const notif = useNotificationsStore()
 const { isAtLeast } = usePermission()
 
 const showCreateTask = ref(false)
+const showImportYg = ref(false)
+
+const yougileStore = useYougileStore()
+const yougileAvailable = computed(() => yougileStore.isAvailable)
 const searchQuery = ref(tasksStore.filters.search)
 const showMobileFilters = ref(false)
 const showSortSheet = ref(false)
@@ -363,12 +386,21 @@ function onTaskCreated(task) {
   openTask(task)
 }
 
+function onYgImported(task) {
+  showImportYg.value = false
+  tasksStore.upsertTask(task)
+  tasksStore.fetchTasks({ silent: true }).catch(() => {})
+  openTask(task)
+}
+
 function consumeOpenQuery() {
-  const openId = route.query.open
+  // Источника два: canonical `/tasks/:id` (params.id) и legacy `/tasks?open=…`.
+  // Второй вариант оставлен для StaleTasksModal/уведомлений/совместимости.
+  const openId = route.params.id || route.query.open
   if (!openId) return
   openTask({ id: Number(openId) })
-  // Чистим query, чтобы повторный клик на ту же задачу (или возврат через
-  // history.back) сработал ещё раз.
+  // Сворачиваем URL обратно к /tasks, чтобы повторный клик на ту же задачу
+  // (или history.back) снова открыл модалку.
   router.replace({ path: '/tasks' })
 }
 
@@ -381,6 +413,8 @@ onMounted(async () => {
   try {
     await unitsStore.fetchActiveUnit()
   } catch {}
+  // Статус YouGile подгружаем фоном — нужен только для показа/скрытия кнопок.
+  yougileStore.refreshStatus().catch(() => {})
   consumeOpenQuery()
 })
 
@@ -388,6 +422,11 @@ onMounted(async () => {
    роутер делает push с тем же path и другим query — компонент НЕ пересоздаётся,
    onMounted не повторяется. Поэтому слушаем сам query.open и реагируем здесь. */
 watch(() => route.query.open, (v) => {
+  if (v) consumeOpenQuery()
+})
+// То же и для canonical-маршрута: если перейти с `/tasks/5` на `/tasks/8`
+// уже находясь на `/tasks/:id`, компонент не пересоздаётся.
+watch(() => route.params.id, (v) => {
   if (v) consumeOpenQuery()
 })
 

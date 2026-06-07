@@ -40,6 +40,21 @@ class Company(db.Model):
                                    default='text-embedding-3-small',
                                    server_default='text-embedding-3-small')
 
+    # YouGile-интеграция. Включается флагом settings.uses_yougile +
+    # необходимы yg_company_id/project/board. Колонка для новых задач —
+    # yg_first_column_id (первая колонка выбранной доски); yg_completed_column_id
+    # опционален и используется для синка статуса.
+    yg_company_id = db.Column(db.String(64))
+    yg_company_name = db.Column(db.String(255))
+    yg_project_id = db.Column(db.String(64))
+    yg_project_title = db.Column(db.String(255))
+    yg_board_id = db.Column(db.String(64))
+    yg_board_title = db.Column(db.String(255))
+    yg_first_column_id = db.Column(db.String(64))
+    yg_completed_column_id = db.Column(db.String(64))
+    yg_webhook_id = db.Column(db.String(64))
+    yg_webhook_secret = db.Column(db.String(64))
+
     director = db.relationship("User", foreign_keys=[director_id], post_update=True)
 
     __table_args__ = (

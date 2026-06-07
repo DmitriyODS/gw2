@@ -21,6 +21,17 @@ class Task(db.Model):
     responsible_user_id = db.Column(db.Integer, db.ForeignKey("users.id", ondelete="SET NULL"))
     stage_id = db.Column(db.Integer, db.ForeignKey("stages.id", ondelete="SET NULL"))
 
+    # YouGile-привязка. link_yougile выше — это URL для UI; ниже структурное
+    # представление, заполняется при привязке через /api/yougile.
+    yougile_task_id = db.Column(db.String(64))
+    yougile_project_id = db.Column(db.String(64))
+    yougile_board_id = db.Column(db.String(64))
+    yougile_column_id = db.Column(db.String(64))
+    # Антицикл: хеш последнего state'а, который мы сами пушнули в YG. Если
+    # webhook вернёт такой же — игнорируем (см. integrations/yougile/sync).
+    yougile_synced_at = db.Column(db.DateTime(timezone=True))
+    yougile_sync_hash = db.Column(db.String(64))
+
     author = db.relationship("User", back_populates="tasks", foreign_keys=[author_id])
     responsible = db.relationship("User", foreign_keys=[responsible_user_id])
     company = db.relationship("Company", foreign_keys=[company_id])

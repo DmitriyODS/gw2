@@ -22,11 +22,28 @@ cp deploy/.env.example deploy/.env
 | `DB_PASSWORD` | Сильный пароль (минимум 20 символов) |
 | `JWT_SECRET_KEY` | Случайная строка ≥ 32 символа |
 | `SECRET_KEY` | Случайная строка ≥ 32 символа |
+| `AI_KEY_ENCRYPTION_KEY` | Fernet-ключ для шифрования AI-ключей компаний |
+| `YOUGILE_ENC_KEY` | Fernet-ключ для шифрования персональных YouGile-ключей пользователей |
+| `YOUGILE_WEBHOOK_PUBLIC_BASE` | Публичный URL приложения (например `https://gw.example.com`) — нужен для регистрации webhook'а YouGile. Без него двусторонняя синхра не подключится, но импорт/экспорт работают. |
 
-Сгенерировать случайные ключи:
+Сгенерировать случайные секреты:
 ```bash
+# JWT_SECRET_KEY / SECRET_KEY:
 python3 -c "import secrets; print(secrets.token_hex(32))"
+# AI_KEY_ENCRYPTION_KEY / YOUGILE_ENC_KEY:
+python3 -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
 ```
+
+### YouGile-интеграция: сетевые требования
+
+| Что нужно открыть | Зачем |
+|---|---|
+| **Egress** на `https://ru.yougile.com:443` из app-контейнера | Все исходящие вызовы YouGile API (auth, проекты, задачи, чат карточек, регистрация webhook). |
+| **Ingress** на `<YOUGILE_WEBHOOK_PUBLIC_BASE>/api/yougile/webhook/*` снаружи (TLS!) | YouGile стучится сюда событиями `task-*`. Nginx уже проксирует `/api/*` в Flask — отдельного `location`-блока добавлять не нужно. |
+
+Что НЕ нужно: специально открывать порты на `coturn` для YG (это для звонков), отдельный route в nginx, отдельный subdomain.
+
+Авторизация ingress'а — через `secret`, который мы сами генерируем при включении интеграции и подставляем в URL webhook'а (`/webhook/<companyId>/<secret>`). Утечка `secret` ≡ возможность писать в чужие задачи; ключи компании это не вскрывает.
 
 ### 2. Запустить
 

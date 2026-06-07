@@ -105,6 +105,12 @@
       </div>
 
       <template v-if="!task">
+        <div v-if="yougileAvailable" class="form-field">
+          <label class="checkbox-label">
+            <input type="checkbox" v-model="alsoExportToYg" class="unit-checkbox" />
+            <span>Создать также карточку в YouGile</span>
+          </label>
+        </div>
         <div class="form-field">
           <label class="checkbox-label">
             <input type="checkbox" v-model="createFirstUnit" class="unit-checkbox" />
@@ -147,7 +153,7 @@
 </template>
 
 <script setup>
-import { ref, watch, onMounted } from 'vue'
+import { ref, computed, watch, onMounted } from 'vue'
 import AppDialog from '@/components/common/AppDialog.vue'
 import InputText from 'primevue/inputtext'
 import Select from 'primevue/select'
@@ -162,6 +168,8 @@ import { useUnitsStore } from '@/stores/units.js'
 import { useAuthStore } from '@/stores/auth.js'
 import { useCompanySettings } from '@/composables/useCompanySettings.js'
 import { getDirectory, getDirectoryUser } from '@/api/users.js'
+import { exportYougileTask } from '@/api/yougile.js'
+import { useYougileStore } from '@/stores/yougile.js'
 
 const props = defineProps({
   task: {
@@ -176,6 +184,12 @@ const notifications = useNotificationsStore()
 const unitsStore = useUnitsStore()
 const auth = useAuthStore()
 const { usesYougile, usesStages } = useCompanySettings()
+
+const yougileStore = useYougileStore()
+const yougileAvailable = computed(() => yougileStore.isAvailable)
+// Тумблер «также создать в YouGile». Виден только при создании и только если
+// YG включён и юзер подключён.
+const alsoExportToYg = ref(false)
 
 const departments = ref([])
 const depsLoading = ref(false)
@@ -351,6 +365,16 @@ async function handleSubmit() {
       notifications.success('Задача успешно обновлена')
     } else {
       result = await createTask(payload)
+      // Если включён тумблер YG — заводим карточку в YouGile и подменяем
+      // result обновлённой задачей (там уже yougile_task_id+link_yougile).
+      if (alsoExportToYg.value && yougileAvailable.value && result?.id) {
+        try {
+          result = await exportYougileTask({ gw_task_id: result.id })
+        } catch (e) {
+          notifications.error('Задача создана, но в YouGile не получилось: '
+            + (e?.data?.message || e?.message || 'ошибка'))
+        }
+      }
       if (createFirstUnit.value && result?.id) {
         try {
           const unit = await createUnit(result.id, {

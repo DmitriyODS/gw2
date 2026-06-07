@@ -52,6 +52,14 @@ services:
       TURN_TTL: "3600"
       # AI / ProxyAPI — ключ шифрования API-ключей компаний.
       AI_KEY_ENCRYPTION_KEY: ${AI_KEY_ENCRYPTION_KEY:-}
+      # YouGile-интеграция:
+      #   YOUGILE_ENC_KEY — Fernet для шифрования персональных ключей юзеров.
+      #     Без него вся /api/yougile/* отдаст 500 ENC_KEY_MISCONFIGURED.
+      #   YOUGILE_WEBHOOK_PUBLIC_BASE — публичный URL приложения
+      #     (https://gw.example.com). Без него регистрация webhook'а упадёт,
+      #     импорт/экспорт продолжают работать.
+      YOUGILE_ENC_KEY: ${YOUGILE_ENC_KEY:-}
+      YOUGILE_WEBHOOK_PUBLIC_BASE: ${YOUGILE_WEBHOOK_PUBLIC_BASE:-}
     volumes:
       - uploads:/app/uploads
       - /opt/gw2/backup.json:/app/backup.json:ro

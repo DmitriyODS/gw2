@@ -12,10 +12,12 @@ from .user_task_color import UserTaskColor
 from .conversation import Conversation
 from .message import Message, MessageAttachment
 from .call import Call, CallParticipant
+from .user_yougile_account import UserYougileAccount
 
 __all__ = [
     "Company",
     "Role", "User", "Department", "Task", "Favorite", "UnitType", "Unit", "Stage", "Comment", "UserTaskColor",
     "Conversation", "Message", "MessageAttachment",
     "Call", "CallParticipant",
+    "UserYougileAccount",
 ]
