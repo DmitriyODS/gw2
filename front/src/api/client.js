@@ -83,7 +83,7 @@ export async function apiRequest(path, options = {}) {
       headers,
       body: options.body instanceof FormData ? options.body :
             options.body ? JSON.stringify(options.body) : undefined,
-    })
+    }, options.timeout ?? 8000)
   } catch (e) {
     if (e?.name === 'AbortError' || options.signal?.aborted) {
       throw { status: 0, error: 'ABORTED', message: 'Запрос отменён' }
