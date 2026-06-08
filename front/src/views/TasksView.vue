@@ -409,6 +409,10 @@ function consumeOpenQuery() {
 
 onMounted(async () => {
   initialFetchDone = true
+  // Первичная загрузка задач. Watch на viewMode с immediate:true дёргает
+  // setFilter только если per_page реально меняется (для board-режима);
+  // при дефолтном grid условие ложно — поэтому fetch нужен здесь явно.
+  tasksStore.fetchTasks().catch(() => {})
   try {
     await unitsStore.fetchActiveUnit()
   } catch {}
