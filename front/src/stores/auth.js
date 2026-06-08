@@ -1,8 +1,9 @@
 import { defineStore } from 'pinia'
-import { ref, computed } from 'vue'
+import { ref, computed, watch } from 'vue'
 import { getMe } from '@/api/users.js'
 import { login as apiLogin, logout as apiLogout, changeDefault as apiChangeDefault, refreshToken } from '@/api/auth.js'
 import router from '@/router/index.js'
+import { disconnectSocket, updateSocketAuth } from '@/socket/index.js'
 
 export const useAuthStore = defineStore('auth', () => {
   const user = ref(null)
@@ -13,6 +14,10 @@ export const useAuthStore = defineStore('auth', () => {
   // обработчик показывает экран блокировки вместо обычного приложения.
   const companyDisabled = ref(null)
   let _restorePromise = null
+
+  watch(token, (t) => {
+    updateSocketAuth(t)
+  })
 
   const isAuth = computed(() => !!token.value)
 
@@ -74,6 +79,7 @@ export const useAuthStore = defineStore('auth', () => {
   }
 
   function clearAuth() {
+    disconnectSocket()
     user.value = null
     token.value = null
     forceChange.value = false

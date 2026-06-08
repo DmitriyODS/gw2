@@ -79,10 +79,13 @@ const isFullscreenRoute = computed(() => !!route.meta?.fullscreen && !!authStore
 const { isOpen: isTutorialOpen, open: openTutorial, shouldAutoShow } = useTutorial()
 const { isOpen: isChangelogOpen, close: closeChangelog, checkForNewVersion } = useChangelog()
 const { isOpen: isStaleOpen, tasks: staleTasks, close: closeStale, check: checkStaleTasks } = useStaleReminder()
+let tutorialTimer = null
+let staleTimer = null
 
 watch(() => authStore.user, (user, prev) => {
   if (user && !prev && shouldAutoShow()) {
-    setTimeout(() => openTutorial(), 600)
+    clearTimeout(tutorialTimer)
+    tutorialTimer = setTimeout(() => openTutorial(), 600)
   }
 })
 
@@ -110,7 +113,7 @@ onMounted(async () => {
     installNotifyUnlock()
     // Список диалогов нужен сразу после входа: бейдж непрочитанных, мини-чат
     // и корректный заголовок в push-уведомлении (иначе fio неизвестно).
-    messengerStore.fetchConversations()
+    await messengerStore.fetchConversations().catch(() => {})
     // Если страницу перезагрузили во время звонка — звонок ещё «жив» на
     // сервере (grace-окно). Предложим вернуться к нему.
     callStore.checkRejoin()
@@ -121,7 +124,8 @@ onMounted(async () => {
     }
     // Напоминание о давних задачах — раз в день, и только если не показываем
     // тур/лог версий (чтобы не громоздить модалки друг на друга).
-    setTimeout(() => {
+    clearTimeout(staleTimer)
+    staleTimer = setTimeout(() => {
       if (!isTutorialOpen.value && !isChangelogOpen.value) {
         checkStaleTasks()
       }
@@ -149,6 +153,8 @@ onMounted(() => {
 })
 onBeforeUnmount(() => {
   window.removeEventListener('call:focus-overlay', onCallFocusOverlay)
+  clearTimeout(tutorialTimer)
+  clearTimeout(staleTimer)
 })
 </script>
 

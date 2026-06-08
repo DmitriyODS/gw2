@@ -1,5 +1,6 @@
 import { ref } from 'vue'
 import { getStaleTasks } from '@/api/tasks.js'
+import { storageGet, storageSet } from '@/utils/storage.js'
 
 const STORAGE_KEY = 'gw2_stale_reminder_shown_date'
 
@@ -19,8 +20,7 @@ function close() {
 
 // Раз в день проверяет давние задачи и показывает напоминание, если они есть.
 async function check() {
-  let shown = null
-  try { shown = localStorage.getItem(STORAGE_KEY) } catch {}
+  const shown = storageGet(STORAGE_KEY, null)
   if (shown === todayKey()) return
 
   try {
@@ -28,7 +28,7 @@ async function check() {
     const items = data?.items || []
     // Отмечаем сегодняшний показ независимо от результата — чтобы не дёргать
     // эндпоинт повторно при каждом возврате на вкладку в течение дня.
-    try { localStorage.setItem(STORAGE_KEY, todayKey()) } catch {}
+    storageSet(STORAGE_KEY, todayKey())
     if (items.length) {
       tasks.value = items
       isOpen.value = true

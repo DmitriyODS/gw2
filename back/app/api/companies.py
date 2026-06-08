@@ -37,7 +37,15 @@ def list_companies():
     responses:
       200: {description: Список компаний}
     """
-    items = [_enrich(c) for c in company_repo.get_all()]
+    companies = company_repo.get_all()
+    stats_map = company_repo.stats_by_company_ids([c.id for c in companies])
+    items = []
+    for c in companies:
+        data = _schema.dump(c)
+        stats = stats_map.get(c.id, {"employees": 0, "tasks": 0})
+        data["employees_count"] = stats["employees"]
+        data["tasks_count"] = stats["tasks"]
+        items.append(data)
     return jsonify({"items": items, "total": len(items)}), 200
 
 

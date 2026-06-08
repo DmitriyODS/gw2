@@ -1,18 +1,18 @@
 import { apiRequest } from './client.js'
 
-export const listConversations = () =>
-  apiRequest('/messenger/conversations')
+export const listConversations = (options = {}) =>
+  apiRequest('/messenger/conversations', options)
 
 export const openConversation = (userId) =>
   apiRequest('/messenger/conversations', { method: 'POST', body: { user_id: userId } })
 
-export const listMessages = (conversationId, { beforeId = null, afterId = null, limit = 50 } = {}) => {
+export const listMessages = (conversationId, { beforeId = null, afterId = null, limit = 50, signal = null } = {}) => {
   const params = new URLSearchParams()
   if (beforeId) params.set('before_id', String(beforeId))
   if (afterId) params.set('after_id', String(afterId))
   if (limit) params.set('limit', String(limit))
   const qs = params.toString()
-  return apiRequest(`/messenger/conversations/${conversationId}/messages${qs ? '?' + qs : ''}`)
+  return apiRequest(`/messenger/conversations/${conversationId}/messages${qs ? '?' + qs : ''}`, { signal })
 }
 
 export const sendMessage = (conversationId, payload) =>
@@ -58,4 +58,4 @@ export const listPinnedMessages = (conversationId) =>
 export const openDevChat = () => apiRequest('/messenger/dev-chat')
 
 // Для Администратора системы: список чатов техподдержки всех пользователей.
-export const listSupportInbox = () => apiRequest('/messenger/support-inbox')
+export const listSupportInbox = (options = {}) => apiRequest('/messenger/support-inbox', options)

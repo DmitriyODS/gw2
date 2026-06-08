@@ -1,11 +1,15 @@
 from typing import Optional
 from sqlalchemy import text
+from sqlalchemy.orm import selectinload
 from app.extensions import db
 from app.models import User, Role
 
 
 def get_all(include_hidden: bool = False, company_id: Optional[int] = None) -> list[User]:
-    q = db.select(User).join(User.role)
+    q = db.select(User).options(
+        selectinload(User.role),
+        selectinload(User.company),
+    )
     if not include_hidden:
         q = q.where(User.is_hidden.is_(False))
     if company_id is not None:
@@ -18,7 +22,10 @@ def search_directory(query: Optional[str] = None, exclude_id: Optional[int] = No
     """Каталог сотрудников: только видимые, опционально фильтр по login/fio
     (ILIKE) и по компании. company_id=None — без фильтра по компании
     (используется только Администратором системы)."""
-    q = db.select(User).join(User.role).where(User.is_hidden.is_(False))
+    q = db.select(User).options(
+        selectinload(User.role),
+        selectinload(User.company),
+    ).where(User.is_hidden.is_(False))
     if exclude_id is not None:
         q = q.where(User.id != exclude_id)
     if company_id is not None:
@@ -36,13 +43,19 @@ def search_directory(query: Optional[str] = None, exclude_id: Optional[int] = No
 
 def get_by_id(user_id: int) -> Optional[User]:
     return db.session.execute(
-        db.select(User).join(User.role).where(User.id == user_id)
+        db.select(User).options(
+            selectinload(User.role),
+            selectinload(User.company),
+        ).where(User.id == user_id)
     ).scalar_one_or_none()
 
 
 def get_by_login(login: str) -> Optional[User]:
     return db.session.execute(
-        db.select(User).join(User.role).where(User.login == login)
+        db.select(User).options(
+            selectinload(User.role),
+            selectinload(User.company),
+        ).where(User.login == login)
     ).scalar_one_or_none()
 
 

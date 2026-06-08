@@ -8,6 +8,7 @@ import {
   deleteCompany as apiDelete,
 } from '@/api/companies.js'
 import { useAuthStore } from '@/stores/auth.js'
+import { storageGet, storageRemove, storageSet } from '@/utils/storage.js'
 
 const STORAGE_KEY = 'gw_active_company_id'
 
@@ -21,10 +22,8 @@ export const useCompaniesStore = defineStore('companies', () => {
   const activeCompanyId = ref(_initActive())
 
   function _initActive() {
-    try {
-      const raw = localStorage.getItem(STORAGE_KEY)
-      return raw ? Number(raw) : null
-    } catch { return null }
+    const raw = storageGet(STORAGE_KEY, '')
+    return raw ? Number(raw) : null
   }
 
   const activeCompany = computed(() => {
@@ -39,10 +38,8 @@ export const useCompaniesStore = defineStore('companies', () => {
 
   function setActive(companyId) {
     activeCompanyId.value = companyId
-    try {
-      if (companyId == null) localStorage.removeItem(STORAGE_KEY)
-      else localStorage.setItem(STORAGE_KEY, String(companyId))
-    } catch {}
+    if (companyId == null) storageRemove(STORAGE_KEY)
+    else storageSet(STORAGE_KEY, String(companyId))
   }
 
   async function load(force = false) {

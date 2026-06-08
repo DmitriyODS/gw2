@@ -579,30 +579,65 @@ def support_inbox():
     if me_user is None or me_user.company_id is not None:
         return jsonify({"error": "FORBIDDEN", "message": "Только Администратор системы"}), 403
 
+    from sqlalchemy.orm import selectinload
     from app.extensions import db
-    from app.models import Message
+    from app.models import Message, User
 
     convs = message_repo.list_dev_chats()
+    conv_ids = [c.id for c in convs]
+    owner_ids = [c.user_a_id for c in convs if c.user_a_id is not None]
+
+    last_msg_by_conv: dict[int, Message] = {}
+    unread_by_conv: dict[int, int] = {}
+    if conv_ids:
+        last_sub = (
+            db.select(Message.conversation_id, db.func.max(Message.id).label("last_id"))
+            .where(Message.conversation_id.in_(conv_ids))
+            .group_by(Message.conversation_id)
+            .subquery()
+        )
+        for msg in db.session.execute(
+            db.select(Message)
+            .options(
+                selectinload(Message.attachments),
+                selectinload(Message.sender),
+                selectinload(Message.reply_to).selectinload(Message.sender),
+                selectinload(Message.reply_to).selectinload(Message.attachments),
+                selectinload(Message.forwarded_from),
+                selectinload(Message.pinned_by),
+                selectinload(Message.call),
+                selectinload(Message.task),
+                selectinload(Message.conversation),
+            )
+            .join(last_sub, Message.id == last_sub.c.last_id)
+        ).scalars().all():
+            last_msg_by_conv[msg.conversation_id] = msg
+
+        unread_rows = db.session.execute(
+            db.select(
+                Message.conversation_id,
+                db.func.count(Message.id).label("unread"),
+            ).where(
+                Message.conversation_id.in_(conv_ids),
+                Message.sender_id.in_(owner_ids),
+                Message.read_at.is_(None),
+            ).group_by(Message.conversation_id)
+        ).all()
+        unread_by_conv = {row.conversation_id: int(row.unread) for row in unread_rows}
+
+    owners = db.session.execute(
+        db.select(User).where(User.id.in_(owner_ids))
+    ).scalars().all()
+    owner_by_id = {u.id: u for u in owners}
+
     items = []
     for c in convs:
-        last_rows = message_repo.list_messages(c.id, user_id=me, limit=1)
-        last = last_rows[-1] if last_rows else None
-        # Непрочитанные = сообщения ОТ владельца (от пользователя в техподдержку),
-        # не прочитанные техподдержкой. Ответы админа не считаются.
-        unread = db.session.execute(
-            db.select(db.func.count(Message.id)).where(
-                Message.conversation_id == c.id,
-                Message.sender_id == c.user_a_id,
-                Message.read_at.is_(None),
-            )
-        ).scalar_one() or 0
-        owner = user_repo.get_by_id(c.user_a_id) if c.user_a_id else None
         items.append({
             "conversation": c,
             "other_user": None,
-            "owner_user": owner,
-            "last_message": last,
-            "unread_count": unread,
+            "owner_user": owner_by_id.get(c.user_a_id),
+            "last_message": last_msg_by_conv.get(c.id),
+            "unread_count": unread_by_conv.get(c.id, 0),
             "is_pinned": False,
             "pinned_at": None,
         })

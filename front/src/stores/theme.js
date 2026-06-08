@@ -1,5 +1,8 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
+import {
+  storageGet, storageGetJSON, storageSet, storageSetJSON,
+} from '@/utils/storage.js'
 
 /* ── Built-in presets ────────────────────────────────────────────
    primary / secondary / tertiary — три «ручки» интерфейса.
@@ -153,13 +156,13 @@ function randomTheme() {
 
 export const useThemeStore = defineStore('theme', () => {
   /* Resolve stored preset name — map legacy 'dark' to 'classic' */
-  const storedPreset = localStorage.getItem('gw_theme') || 'classic'
-  const storedCustomThemes = JSON.parse(localStorage.getItem('gw_custom_themes') || '[]')
+  const storedPreset = storageGet('gw_theme', 'classic')
+  const storedCustomThemes = storageGetJSON('gw_custom_themes', [])
   const isKnownPreset = PRESETS[storedPreset] || storedCustomThemes.some(t => t.name === storedPreset)
   const resolvedPreset = isKnownPreset ? storedPreset : 'classic'
 
   const currentPreset = ref(resolvedPreset)
-  const dark = ref(localStorage.getItem('gw_dark') === 'true')
+  const dark = ref(storageGet('gw_dark', 'false') === 'true')
 
   /* If the old 'dark' preset was active, enable dark mode automatically.
      localStorage.setItem может бросить в приватном режиме старого iOS Safari —
@@ -167,7 +170,7 @@ export const useThemeStore = defineStore('theme', () => {
      (белый экран). Оборачиваем в try/catch. */
   if (storedPreset === 'dark' && !dark.value) {
     dark.value = true
-    try { localStorage.setItem('gw_dark', 'true') } catch {}
+    storageSet('gw_dark', 'true')
   }
 
   const customThemes = ref(storedCustomThemes)
@@ -195,13 +198,13 @@ export const useThemeStore = defineStore('theme', () => {
 
   function applyTheme(name) {
     currentPreset.value = name
-    localStorage.setItem('gw_theme', name)
+    storageSet('gw_theme', name)
     applyVars(getVars(name))
   }
 
   function toggleDark() {
     dark.value = !dark.value
-    localStorage.setItem('gw_dark', dark.value)
+    storageSet('gw_dark', dark.value)
     document.documentElement.setAttribute('data-dark', dark.value)
   }
 
@@ -209,12 +212,12 @@ export const useThemeStore = defineStore('theme', () => {
     const idx = customThemes.value.findIndex(t => t.name === name)
     if (idx >= 0) customThemes.value[idx] = { name, vars }
     else customThemes.value.push({ name, vars })
-    localStorage.setItem('gw_custom_themes', JSON.stringify(customThemes.value))
+    storageSetJSON('gw_custom_themes', customThemes.value)
   }
 
   function deleteCustomTheme(name) {
     customThemes.value = customThemes.value.filter(t => t.name !== name)
-    localStorage.setItem('gw_custom_themes', JSON.stringify(customThemes.value))
+    storageSetJSON('gw_custom_themes', customThemes.value)
     if (currentPreset.value === name) applyTheme('classic')
   }
 

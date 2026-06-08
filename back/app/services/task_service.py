@@ -26,6 +26,8 @@ def _validate_responsible(user_id, company_id):
     user = user_repo.get_by_id(user_id)
     if user is None:
         raise TaskServiceError("Сотрудник не найден", "USER_NOT_FOUND", 404)
+    if user.is_hidden:
+        raise TaskServiceError("Сотрудник не найден", "USER_NOT_FOUND", 404)
     if user.company_id is not None and user.company_id != company_id:
         raise TaskServiceError("Сотрудник из другой компании", "USER_FOREIGN", 422)
 

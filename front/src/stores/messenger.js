@@ -42,9 +42,21 @@ export const useMessengerStore = defineStore('messenger', () => {
   // (приходят в presence:update при выходе из сети — точнее, чем в профиле).
   const onlineIds = ref(new Set())
   const lastSeenById = ref({})
+  let listSeq = 0
+  let supportSeq = 0
+  let listCtrl = null
+  let supportCtrl = null
+  const messagesCtrlByConv = new Map()
+  const messagesSeqByConv = new Map()
+
+  const conversationById = computed(() => {
+    const map = new Map()
+    for (const c of conversations.value) map.set(c.id, c)
+    return map
+  })
 
   const activeConversation = computed(() =>
-    conversations.value.find(c => c.id === activeConversationId.value) || null
+    conversationById.value.get(activeConversationId.value) || null
   )
 
   const activeMessages = computed(() =>
@@ -56,12 +68,22 @@ export const useMessengerStore = defineStore('messenger', () => {
   )
 
   async function fetchConversations() {
+    const seq = ++listSeq
+    listCtrl?.abort()
+    listCtrl = new AbortController()
     loadingList.value = true
     try {
-      conversations.value = sortConversations(await api.listConversations())
+      const items = await api.listConversations({ signal: listCtrl.signal })
+      if (seq !== listSeq) return
+      conversations.value = sortConversations(items)
       recomputeUnread()
+    } catch (e) {
+      if (e?.error !== 'ABORTED') throw e
     } finally {
-      loadingList.value = false
+      if (seq === listSeq) {
+        listCtrl = null
+        loadingList.value = false
+      }
     }
   }
 
@@ -80,7 +102,7 @@ export const useMessengerStore = defineStore('messenger', () => {
     // Личный чат техподдержки текущего пользователя. Бэк гарантирует, что чат
     // существует — get-or-create.
     const data = await api.openDevChat()
-    const existing = conversations.value.find(c => c.id === data.id)
+    const existing = conversationById.value.get(data.id)
     if (!existing) {
       conversations.value = sortConversations([
         {
@@ -112,9 +134,13 @@ export const useMessengerStore = defineStore('messenger', () => {
   const loadingSupportInbox = ref(false)
 
   async function fetchSupportInbox() {
+    const seq = ++supportSeq
+    supportCtrl?.abort()
+    supportCtrl = new AbortController()
     loadingSupportInbox.value = true
     try {
-      const items = await api.listSupportInbox()
+      const items = await api.listSupportInbox({ signal: supportCtrl.signal })
+      if (seq !== supportSeq) return
       supportInbox.value = items
       // Сразу разовьём конверсейшны в общий кеш — иначе при открытии чата
       // activeConversation вычислится как null (он смотрит в conversations).
@@ -130,8 +156,13 @@ export const useMessengerStore = defineStore('messenger', () => {
           byId[c.id] ? { ...c, ...byId[c.id] } : c,
         )
       }
+    } catch (e) {
+      if (e?.error !== 'ABORTED') throw e
     } finally {
-      loadingSupportInbox.value = false
+      if (seq === supportSeq) {
+        supportCtrl = null
+        loadingSupportInbox.value = false
+      }
     }
   }
 
@@ -142,7 +173,7 @@ export const useMessengerStore = defineStore('messenger', () => {
   async function openWith(userId) {
     const data = await api.openConversation(userId)
     // upsert в список
-    const existing = conversations.value.find(c => c.id === data.id)
+    const existing = conversationById.value.get(data.id)
     if (!existing) {
       conversations.value = sortConversations([
         {
@@ -183,9 +214,17 @@ export const useMessengerStore = defineStore('messenger', () => {
   }
 
   async function fetchMessages(conversationId, beforeId = null) {
+    const seq = beforeId ? null : (messagesSeqByConv.get(conversationId) || 0) + 1
+    if (!beforeId) messagesSeqByConv.set(conversationId, seq)
+    if (!beforeId) {
+      messagesCtrlByConv.get(conversationId)?.abort()
+      messagesCtrlByConv.set(conversationId, new AbortController())
+    }
     loadingMessages.value = true
     try {
-      const msgs = await api.listMessages(conversationId, { beforeId })
+      const signal = beforeId ? null : messagesCtrlByConv.get(conversationId)?.signal
+      const msgs = await api.listMessages(conversationId, { beforeId, signal })
+      if (!beforeId && messagesSeqByConv.get(conversationId) !== seq) return msgs
       const existing = messagesByConv.value[conversationId] || []
       if (beforeId) {
         messagesByConv.value[conversationId] = [...msgs, ...existing]
@@ -199,8 +238,14 @@ export const useMessengerStore = defineStore('messenger', () => {
         hasMoreHistoryByConv.value[conversationId] = msgs.length >= 50
       }
       return msgs
+    } catch (e) {
+      if (e?.error === 'ABORTED') return []
+      throw e
     } finally {
-      loadingMessages.value = false
+      if (beforeId || messagesSeqByConv.get(conversationId) === seq) {
+        if (!beforeId) messagesCtrlByConv.delete(conversationId)
+        loadingMessages.value = false
+      }
     }
   }
 
@@ -264,7 +309,7 @@ export const useMessengerStore = defineStore('messenger', () => {
     try {
       await api.markRead(conversationId)
     } catch {}
-    const conv = conversations.value.find(c => c.id === conversationId)
+    const conv = conversationById.value.get(conversationId)
     if (conv) conv.unread_count = 0
     recomputeUnread()
   }
@@ -275,7 +320,7 @@ export const useMessengerStore = defineStore('messenger', () => {
     if (arr.some(m => m.id === msg.id)) return
     messagesByConv.value[conversationId] = [...arr, msg]
 
-    let conv = conversations.value.find(c => c.id === conversationId)
+    let conv = conversationById.value.get(conversationId)
     if (conv) {
       conv.last_message = msg
       conv.last_message_at = msg.created_at
@@ -334,7 +379,7 @@ export const useMessengerStore = defineStore('messenger', () => {
         messagesByConv.value[conversationId] = next
       }
     }
-    const conv = conversations.value.find(c => c.id === conversationId)
+    const conv = conversationById.value.get(conversationId)
     if (conv && conv.last_message?.id === msg.id) {
       conv.last_message = msg
     }
@@ -353,7 +398,7 @@ export const useMessengerStore = defineStore('messenger', () => {
         [conversationId]: pinned.filter(m => m.id !== messageId),
       }
     }
-    const conv = conversations.value.find(c => c.id === conversationId)
+    const conv = conversationById.value.get(conversationId)
     if (conv && conv.last_message?.id === messageId) {
       const left = messagesByConv.value[conversationId] || []
       conv.last_message = left.length ? left[left.length - 1] : null
@@ -364,8 +409,12 @@ export const useMessengerStore = defineStore('messenger', () => {
 
   function applyConversationDeleted(conversationId) {
     conversations.value = conversations.value.filter(c => c.id !== conversationId)
+    supportInbox.value = supportInbox.value.filter(c => c.id !== conversationId)
     delete messagesByConv.value[conversationId]
     delete hasMoreHistoryByConv.value[conversationId]
+    messagesSeqByConv.delete(conversationId)
+    messagesCtrlByConv.get(conversationId)?.abort()
+    messagesCtrlByConv.delete(conversationId)
     if (activeConversationId.value === conversationId) {
       activeConversationId.value = null
     }
@@ -373,7 +422,7 @@ export const useMessengerStore = defineStore('messenger', () => {
   }
 
   function applyPinChange(conversationId, isPinned) {
-    const conv = conversations.value.find(c => c.id === conversationId)
+    const conv = conversationById.value.get(conversationId)
     if (!conv) return
     conv.is_pinned = isPinned
     conv.pinned_at = isPinned ? new Date().toISOString() : null
@@ -492,12 +541,22 @@ export const useMessengerStore = defineStore('messenger', () => {
     hasMoreHistoryByConv.value = {}
     pinnedByConv.value = {}
     totalUnread.value = 0
+    supportInbox.value = []
     onlineIds.value = new Set()
     lastSeenById.value = {}
+    listSeq = 0
+    supportSeq = 0
+    listCtrl?.abort()
+    supportCtrl?.abort()
+    listCtrl = null
+    supportCtrl = null
+    messagesCtrlByConv.forEach(ctrl => ctrl.abort())
+    messagesCtrlByConv.clear()
+    messagesSeqByConv.clear()
   }
 
   return {
-    conversations, activeConversationId, messagesByConv, totalUnread,
+    conversations, conversationById, activeConversationId, messagesByConv, totalUnread,
     pinnedByConv,
     supportInbox, loadingSupportInbox, supportUnread,
     loadingList, loadingMessages, sending,

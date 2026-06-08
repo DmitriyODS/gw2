@@ -354,9 +354,9 @@
 import { ref, computed, onMounted, onBeforeUnmount, h, defineComponent, watch } from 'vue'
 import ProgressSpinner from 'primevue/progressspinner'
 import { useThemeStore } from '@/stores/theme.js'
-import { getStatsCommon, getStatsExtended } from '@/api/stats.js'
 import { getDirectory } from '@/api/users.js'
 import { getTvFact } from '@/api/ai.js'
+import { useTvPeriodData } from '@/composables/useTvPeriodData.js'
 
 const themeStore = useThemeStore()
 
@@ -521,11 +521,14 @@ async function loadAiFact() {
   } catch { /* фолбэк на brand-цитату */ }
 }
 
-const commonByPeriod = ref({})   // { day: {...}, week: {...}, month: {...} }
-const extendedByPeriod = ref({}) // { day: {...}, week: {...}, month: {...} }
-const slideLoading = ref(false)
 const controlsVisible = ref(false)
 let controlsTimer = null
+const {
+  commonByPeriod,
+  extendedByPeriod,
+  loading: slideLoading,
+  loadPeriod,
+} = useTvPeriodData(makeRange)
 
 const currentSlide = computed(() => slides[activeIdx.value])
 const commonData = computed(() => commonByPeriod.value[currentSlide.value.period])
@@ -843,23 +846,6 @@ const TvKpiTile = defineComponent({
     ])
   },
 })
-
-// ─── Loading & navigation ────────────────────────────────────────────────
-async function loadPeriod(period, { silent = false } = {}) {
-  const { from, to } = makeRange(period)
-  if (!silent) slideLoading.value = true
-  try {
-    const [common, extended] = await Promise.all([
-      getStatsCommon(from, to),
-      getStatsExtended(from, to),
-    ])
-    commonByPeriod.value = { ...commonByPeriod.value, [period]: common }
-    extendedByPeriod.value = { ...extendedByPeriod.value, [period]: extended }
-  } catch { /* табло на стене — молчим */ }
-  finally {
-    if (!silent) slideLoading.value = false
-  }
-}
 
 let slideTimer = null
 let refreshTimer = null

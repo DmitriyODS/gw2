@@ -434,6 +434,7 @@ import AppFab from '@/components/common/AppFab.vue'
 import EmployeeFormDialog from '@/components/employees/EmployeeFormDialog.vue'
 import { useBreakpoint } from '@/composables/useBreakpoint.js'
 import { useScrollCollapse } from '@/composables/useScrollCollapse.js'
+import { storageGet, storageSet } from '@/utils/storage.js'
 
 const { isMobile } = useBreakpoint()
 const pageTitle = computed(() => (isMobile.value ? 'Люди' : 'Сотрудники'))
@@ -458,10 +459,10 @@ const sortField = ref('fio')
 const sortOrder = ref(1)
 
 const VIEW_KEY = 'gw2_employees_view'
-const view = ref((typeof localStorage !== 'undefined' && localStorage.getItem(VIEW_KEY)) || 'cards')
+const view = ref(storageGet(VIEW_KEY, 'cards'))
 function setView(v) {
   view.value = v
-  try { localStorage.setItem(VIEW_KEY, v) } catch {}
+  storageSet(VIEW_KEY, v)
 }
 
 /* На мобильном table-вид непригоден (горизонтальный скролл, мелкий шрифт),

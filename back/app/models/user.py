@@ -37,6 +37,8 @@ class User(db.Model):
         db.Index("idx_users_login", "login"),
         db.Index("idx_users_role", "role_id"),
         db.Index("idx_users_company", "company_id"),
+        db.Index("idx_users_company_visible", "company_id",
+                 postgresql_where=db.text("is_hidden = FALSE")),
         db.Index("idx_users_visible", "is_hidden",
                  postgresql_where=db.text("is_hidden = FALSE")),
         db.Index("uq_users_email_lower", db.func.lower(db.text("email")),

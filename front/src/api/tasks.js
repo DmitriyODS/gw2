@@ -2,10 +2,10 @@
 // Перегенерировать: npm run gen:api
 import { apiRequest } from './client.js'
 
-export const getTasks = (params = {}) => {
+export const getTasks = (params = {}, options = {}) => {
   const qs = new URLSearchParams()
   Object.entries(params).forEach(([k, v]) => { if (v != null && v !== '') qs.set(k, v) })
-  return apiRequest('/tasks' + '?' + qs)
+  return apiRequest('/tasks' + '?' + qs, options)
 }
 
 export const createTask = (data) => apiRequest('/tasks', { method: 'POST', body: data })

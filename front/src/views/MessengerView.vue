@@ -166,6 +166,7 @@
           <MessageBubble
             v-for="m in messenger.activeMessages"
             :key="m.id"
+            v-memo="[m.id, m.updated_at, m.read_at, m.pinned_at, authStore.user?.id, active?.is_dev_chat]"
             :message="m"
             :is-mine="m.sender_id === authStore.user?.id"
             :sender-name="senderNameFor(m)"
@@ -255,6 +256,7 @@ import { useAuthStore } from '@/stores/auth.js'
 import { useNotificationsStore } from '@/stores/notifications.js'
 import { useCallStore } from '@/stores/call.js'
 import { useBreakpoint } from '@/composables/useBreakpoint.js'
+import { useFileDrop } from '@/composables/useFileDrop.js'
 import {
   requestNotificationPermission, notificationsAllowed,
 } from '@/utils/systemNotify.js'
@@ -297,9 +299,17 @@ const lightboxOpen = ref(false)
 const ctxMenu = ref({ visible: false, x: 0, y: 0, message: null })
 const messagesEl = ref(null)
 const messageInputRef = ref(null)
-const dragOver = ref(false)
-let dragDepth = 0
 const replyTo = ref(null)
+const {
+  dragOver,
+  onDragEnter,
+  onDragOver,
+  onDragLeave,
+  onDrop,
+} = useFileDrop({
+  canDrop: () => !!active.value,
+  onFiles: files => messageInputRef.value?.addFiles(files),
+})
 
 function openContextMenu({ x, y, message }) {
   ctxMenu.value = { visible: true, x, y, message }
@@ -350,37 +360,24 @@ function handleOutsideMenu(e) {
   if (root && !root.contains(e.target)) chatMenuOpen.value = false
 }
 
+async function activateRouteConversation() {
+  const rawId = route.params.conversationId
+  const n = Number(rawId)
+  if (!n) return
+  const known = messenger.conversations.some(c => c.id === n)
+    || (authStore.isRootAdmin && messenger.supportInbox.some(c => c.id === n))
+  if (!known) return
+  if (messenger.activeConversationId !== n) {
+    await messenger.setActive(n)
+    await nextTick()
+    scrollToBottom()
+  }
+}
+
 // При переключении диалога закрываем меню действий — иначе оно остаётся открытым
 // поверх шапки нового чата.
 watch(() => messenger.activeConversationId, () => { chatMenuOpen.value = false })
 
-function dragHasFiles(e) {
-  const types = e.dataTransfer?.types
-  return types && Array.from(types).includes('Files')
-}
-
-function onDragEnter(e) {
-  if (!active.value || !dragHasFiles(e)) return
-  dragDepth++
-  dragOver.value = true
-}
-
-function onDragOver(e) {
-  if (active.value && dragHasFiles(e)) e.dataTransfer.dropEffect = 'copy'
-}
-
-function onDragLeave() {
-  dragDepth = Math.max(0, dragDepth - 1)
-  if (dragDepth === 0) dragOver.value = false
-}
-
-async function onDrop(e) {
-  dragDepth = 0
-  dragOver.value = false
-  if (!active.value) return
-  const files = Array.from(e.dataTransfer?.files || [])
-  if (files.length) messageInputRef.value?.addFiles(files)
-}
 const forwardOpen = ref(false)
 const forwardSource = ref(null)
 const forwardDialogRef = ref(null)
@@ -671,20 +668,17 @@ function handleExternalOpen(e) {
 }
 
 onMounted(async () => {
-  await messenger.fetchConversations()
+  await messenger.fetchConversations().catch(() => {})
   if (authStore.isRootAdmin) {
     // Грузим support-inbox параллельно с открытием чата — нужен и для
     // бейджа на вкладке, и чтобы при глубокой ссылке /messenger/<dev-id>
     // active вычислился (он смотрит в conversations).
-    messenger.fetchSupportInbox()
+    await messenger.fetchSupportInbox().catch(() => {})
   }
   if (notificationsAllowed() === false) {
     requestNotificationPermission()
   }
-  const urlId = Number(route.params.conversationId)
-  if (urlId && messenger.conversations.some(c => c.id === urlId)) {
-    await messenger.setActive(urlId)
-  }
+  await activateRouteConversation()
   await nextTick()
   scrollToBottom()
   window.addEventListener('messenger:open-conversation', handleExternalOpen)
@@ -716,12 +710,8 @@ watch(lastMessageId, async (id, prevId) => {
 })
 
 watch(() => route.params.conversationId, async (id) => {
-  const n = Number(id)
-  if (n && n !== messenger.activeConversationId) {
-    await messenger.setActive(n)
-    await nextTick()
-    scrollToBottom()
-  }
+  if (!id) return
+  await activateRouteConversation()
 })
 </script>
 

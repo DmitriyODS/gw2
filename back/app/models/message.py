@@ -61,6 +61,8 @@ class Message(db.Model):
     __table_args__ = (
         db.Index("idx_msg_conv_created", "conversation_id", "created_at"),
         db.Index("idx_msg_unread_recipient", "conversation_id", "read_at"),
+        db.Index("idx_msg_conv_unread", "conversation_id",
+                 postgresql_where=db.text("read_at IS NULL")),
     )
 
 

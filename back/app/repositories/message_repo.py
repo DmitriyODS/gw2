@@ -1,6 +1,8 @@
 from datetime import datetime, timezone
 from typing import Optional
 from sqlalchemy import or_, and_, func
+from sqlalchemy.exc import IntegrityError
+from sqlalchemy.orm import selectinload
 
 from app.extensions import db
 from app.models import Conversation, Message, MessageAttachment, User
@@ -32,8 +34,15 @@ def get_or_create_conversation(user_a: int, user_b: int) -> Conversation:
     company_id = ua.company_id if ua and ua.company_id else (ub.company_id if ub else None)
     conv = Conversation(user_a_id=a, user_b_id=b, company_id=company_id)
     db.session.add(conv)
-    db.session.flush()
-    return conv
+    try:
+        db.session.flush()
+        return conv
+    except IntegrityError:
+        db.session.rollback()
+        existing = get_conversation_between(user_a, user_b)
+        if existing is None:
+            raise
+        return existing
 
 
 def get_dev_chat_for_user(user_id: int) -> Optional[Conversation]:
@@ -53,15 +62,23 @@ def get_or_create_dev_chat_for_user(user_id: int, company_id: int) -> Conversati
     conv = Conversation(user_a_id=user_id, user_b_id=None,
                         company_id=company_id, is_dev_chat=True)
     db.session.add(conv)
-    db.session.flush()
-    return conv
+    try:
+        db.session.flush()
+        return conv
+    except IntegrityError:
+        db.session.rollback()
+        existing = get_dev_chat_for_user(user_id)
+        if existing is None:
+            raise
+        return existing
 
 
 def list_dev_chats() -> list[Conversation]:
     """Все личные чаты пользователей с техподдержкой (для Администратора системы).
     Сортировка: сначала с непрочитанными/свежим сообщением, потом пустые."""
     return list(db.session.execute(
-        db.select(Conversation).where(Conversation.is_dev_chat.is_(True))
+        db.select(Conversation).options(selectinload(Conversation.company))
+        .where(Conversation.is_dev_chat.is_(True))
         .order_by(Conversation.last_message_at.desc().nullslast(),
                   Conversation.created_at.desc())
     ).scalars().all())
@@ -85,7 +102,7 @@ def list_user_conversations(user_id: int) -> list[dict]:
         and_(Conversation.user_b_id == user_id, Conversation.hidden_for_b.is_(False)),
     )
     convs = db.session.execute(
-        db.select(Conversation).where(
+        db.select(Conversation).options(selectinload(Conversation.company)).where(
             Conversation.is_dev_chat.is_(False),
             or_(Conversation.user_a_id == user_id, Conversation.user_b_id == user_id),
             not_hidden,
@@ -122,7 +139,19 @@ def list_user_conversations(user_id: int) -> list[dict]:
             .subquery()
         )
         rows = db.session.execute(
-            db.select(Message).join(sub, Message.id == sub.c.last_id)
+            db.select(Message)
+            .options(
+                selectinload(Message.attachments),
+                selectinload(Message.sender).selectinload(User.role),
+                selectinload(Message.reply_to).selectinload(Message.sender),
+                selectinload(Message.reply_to).selectinload(Message.attachments),
+                selectinload(Message.forwarded_from),
+                selectinload(Message.pinned_by),
+                selectinload(Message.call),
+                selectinload(Message.task),
+                selectinload(Message.conversation),
+            )
+            .join(sub, Message.id == sub.c.last_id)
         ).scalars().all()
         for m in rows:
             last_msg_by_conv[m.conversation_id] = m
@@ -147,7 +176,7 @@ def list_user_conversations(user_id: int) -> list[dict]:
 
     # Профили собеседников
     others = db.session.execute(
-        db.select(User).join(User.role).where(User.id.in_(other_ids))
+        db.select(User).options(selectinload(User.role)).where(User.id.in_(other_ids))
     ).scalars().all()
     other_by_id = {u.id: u for u in others}
 
@@ -173,6 +202,17 @@ def list_user_conversations(user_id: int) -> list[dict]:
             # Последнее сообщение dev_chat (не скрытое нет понятия «стороны»)
             dev_last = db.session.execute(
                 db.select(Message)
+                .options(
+                    selectinload(Message.attachments),
+                    selectinload(Message.sender).selectinload(User.role),
+                    selectinload(Message.reply_to).selectinload(Message.sender),
+                    selectinload(Message.reply_to).selectinload(Message.attachments),
+                    selectinload(Message.forwarded_from),
+                    selectinload(Message.pinned_by),
+                    selectinload(Message.call),
+                    selectinload(Message.task),
+                    selectinload(Message.conversation),
+                )
                 .where(Message.conversation_id == dev.id)
                 .order_by(Message.id.desc())
                 .limit(1)

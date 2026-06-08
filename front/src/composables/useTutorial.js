@@ -1,4 +1,5 @@
 import { ref } from 'vue'
+import { storageGet, storageSet } from '@/utils/storage.js'
 
 const STORAGE_KEY = 'gw_tutorial_done'
 
@@ -15,13 +16,13 @@ export function useTutorial() {
   }
 
   function close() {
-    localStorage.setItem(STORAGE_KEY, '1')
+    storageSet(STORAGE_KEY, '1')
     isOpen.value = false
     startAtId.value = null
   }
 
   function shouldAutoShow() {
-    return !localStorage.getItem(STORAGE_KEY)
+    return !storageGet(STORAGE_KEY, '')
   }
 
   return { isOpen, startAtId, open, close, shouldAutoShow }

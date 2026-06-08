@@ -23,10 +23,29 @@ function _injectCompanyParam(path, companyId) {
   return `${path}${sep}company_id=${companyId}`
 }
 
+function anySignal(signals) {
+  const list = signals.filter(Boolean)
+  if (!list.length) return undefined
+  if (list.length === 1) return list[0]
+  if (AbortSignal.any) return AbortSignal.any(list)
+
+  const ctrl = new AbortController()
+  const abort = () => ctrl.abort()
+  for (const signal of list) {
+    if (signal.aborted) {
+      abort()
+      break
+    }
+    signal.addEventListener('abort', abort, { once: true })
+  }
+  return ctrl.signal
+}
+
 function fetchWithTimeout(url, options = {}, ms = 8000) {
   const ctrl = new AbortController()
   const id = setTimeout(() => ctrl.abort(), ms)
-  return fetch(url, { ...options, signal: ctrl.signal }).finally(() => clearTimeout(id))
+  const signal = anySignal([options.signal, ctrl.signal])
+  return fetch(url, { ...options, signal }).finally(() => clearTimeout(id))
 }
 
 async function refreshToken() {
@@ -66,6 +85,9 @@ export async function apiRequest(path, options = {}) {
             options.body ? JSON.stringify(options.body) : undefined,
     })
   } catch (e) {
+    if (e?.name === 'AbortError' || options.signal?.aborted) {
+      throw { status: 0, error: 'ABORTED', message: 'Запрос отменён' }
+    }
     throw { status: 0, error: 'NETWORK_ERROR', message: 'Сервер недоступен' }
   }
 

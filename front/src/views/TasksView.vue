@@ -137,6 +137,7 @@
             <TaskCard
               v-for="task in tasksStore.tasks"
               :key="task.id"
+              v-memo="[task, viewMode, unitsStore.activeUnit?.id]"
               :task="task"
               :view="viewMode"
               @click="openTask(task)"
@@ -234,6 +235,7 @@ import ProgressSpinner from 'primevue/progressspinner'
 import { useCompanySettings } from '@/composables/useCompanySettings.js'
 import { useScrollCollapse } from '@/composables/useScrollCollapse.js'
 import { useBreakpoint } from '@/composables/useBreakpoint.js'
+import { storageGet, storageSet } from '@/utils/storage.js'
 
 const VIEW_KEY = 'gw2_tasks_view'
 
@@ -263,12 +265,12 @@ const canShowKanban = computed(() =>
   usesStages.value && tasksStore.filters.tab !== 'archive'
 )
 
-const _saved = localStorage.getItem(VIEW_KEY)
+const _saved = storageGet(VIEW_KEY, '')
 const viewMode = ref(_saved === 'list' || _saved === 'board' ? _saved : 'grid')
 
 function setViewMode(mode) {
   viewMode.value = mode
-  try { localStorage.setItem(VIEW_KEY, mode) } catch {}
+  storageSet(VIEW_KEY, mode)
 }
 
 // Если перешли в архив, а активный режим — канбан, переключаемся на сетку.
@@ -323,6 +325,7 @@ const emptyTitle = computed(() => (searchQuery.value ? 'Ничего не най
 const emptySub = computed(() => (searchQuery.value ? 'Попробуйте изменить запрос или сбросить фильтры.' : emptyMeta[tasksStore.filters.tab]?.sub ?? ''))
 
 let searchTimeout = null
+let initialFetchDone = false
 
 function onSearch() {
   clearTimeout(searchTimeout)
@@ -405,11 +408,7 @@ function consumeOpenQuery() {
 }
 
 onMounted(async () => {
-  try {
-    await tasksStore.fetchTasks()
-  } catch (e) {
-    notif.error(e.message || 'Не удалось загрузить задачи')
-  }
+  initialFetchDone = true
   try {
     await unitsStore.fetchActiveUnit()
   } catch {}
@@ -432,6 +431,7 @@ watch(() => route.params.id, (v) => {
 
 // Рут-админ переключил компанию — перезагружаем задачи.
 watch(() => companiesStore.effectiveCompanyId, () => {
+  if (!initialFetchDone) return
   tasksStore.fetchTasks().catch(() => {})
 })
 </script>

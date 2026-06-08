@@ -9,29 +9,38 @@ def _apply_company(q, company_id: Optional[int], col):
     return q.where(col == company_id) if company_id is not None else q
 
 
+def _hours_expr():
+    return func.extract("epoch", func.coalesce(Unit.datetime_end, func.now()) - Unit.datetime_start) / 3600
+
+
 def get_common_metrics(period_start: datetime, period_end: datetime,
                        company_id: Optional[int] = None) -> dict:
-    debt_q = db.select(func.count(Task.id)).where(
-        Task.is_archived.is_(False),
-        Task.received_at < period_start,
+    q = db.select(
+        func.count(Task.id).filter(
+            Task.is_archived.is_(False),
+            Task.received_at < period_start,
+        ).label("debt"),
+        func.count(Task.id).filter(
+            Task.received_at >= period_start,
+            Task.received_at <= period_end,
+        ).label("received"),
+        func.count(Task.id).filter(
+            Task.is_archived.is_(True),
+            Task.archived_at >= period_start,
+            Task.archived_at <= period_end,
+        ).label("closed"),
+        func.count(Task.id).filter(
+            Task.is_archived.is_(False),
+        ).label("remaining"),
     )
-    received_q = db.select(func.count(Task.id)).where(
-        Task.received_at >= period_start,
-        Task.received_at <= period_end,
-    )
-    closed_q = db.select(func.count(Task.id)).where(
-        Task.is_archived.is_(True),
-        Task.archived_at >= period_start,
-        Task.archived_at <= period_end,
-    )
-    remaining_q = db.select(func.count(Task.id)).where(Task.is_archived.is_(False))
-
-    debt = db.session.execute(_apply_company(debt_q, company_id, Task.company_id)).scalar_one()
-    received = db.session.execute(_apply_company(received_q, company_id, Task.company_id)).scalar_one()
-    closed = db.session.execute(_apply_company(closed_q, company_id, Task.company_id)).scalar_one()
-    remaining = db.session.execute(_apply_company(remaining_q, company_id, Task.company_id)).scalar_one()
-
-    return {"debt": debt, "received": received, "closed": closed, "remaining": remaining}
+    q = _apply_company(q, company_id, Task.company_id)
+    row = db.session.execute(q).one()
+    return {
+        "debt": row.debt,
+        "received": row.received,
+        "closed": row.closed,
+        "remaining": row.remaining,
+    }
 
 
 def get_tasks_by_hours(period_start: datetime, period_end: datetime,
@@ -41,12 +50,10 @@ def get_tasks_by_hours(period_start: datetime, period_end: datetime,
             Task.id,
             Task.name,
             func.coalesce(
-                func.sum(
-                    func.extract("epoch", func.coalesce(Unit.datetime_end, func.now()) - Unit.datetime_start) / 3600
-                ), 0
+                func.sum(_hours_expr()), 0
             ).label("total_hours")
         )
-        .join(Unit, Unit.task_id == Task.id, isouter=True)
+        .join(Unit, Unit.task_id == Task.id)
         .where(
             and_(
                 Unit.datetime_start >= period_start,
@@ -54,9 +61,7 @@ def get_tasks_by_hours(period_start: datetime, period_end: datetime,
             )
         )
         .group_by(Task.id, Task.name)
-        .order_by(func.sum(
-            func.extract("epoch", func.coalesce(Unit.datetime_end, func.now()) - Unit.datetime_start)
-        ).desc())
+        .order_by(func.sum(_hours_expr()).desc())
     )
     rows = db.session.execute(_apply_company(q, company_id, Task.company_id)).all()
     return [{"task_id": r.id, "name": r.name, "total_hours": round(r.total_hours, 2)} for r in rows]
@@ -70,9 +75,7 @@ def get_tasks_by_employees(period_start: datetime, period_end: datetime,
             User.fio,
             func.count(distinct(Unit.task_id)).label("tasks_count"),
             func.coalesce(
-                func.sum(
-                    func.extract("epoch", func.coalesce(Unit.datetime_end, func.now()) - Unit.datetime_start) / 3600
-                ), 0
+                func.sum(_hours_expr()), 0
             ).label("total_hours")
         )
         .join(Unit, Unit.user_id == User.id)
@@ -81,9 +84,7 @@ def get_tasks_by_employees(period_start: datetime, period_end: datetime,
             Unit.datetime_start <= period_end,
         )
         .group_by(User.id, User.fio)
-        .order_by(func.sum(
-            func.extract("epoch", func.coalesce(Unit.datetime_end, func.now()) - Unit.datetime_start)
-        ).desc())
+        .order_by(func.sum(_hours_expr()).desc())
     )
     rows = db.session.execute(_apply_company(q, company_id, User.company_id)).all()
     return [{"user_id": r.id, "fio": r.fio, "tasks_count": r.tasks_count, "total_hours": round(r.total_hours, 2)} for r in rows]
@@ -96,9 +97,7 @@ def get_by_unit_types(period_start: datetime, period_end: datetime,
             UnitType.id,
             UnitType.name,
             func.coalesce(
-                func.sum(
-                    func.extract("epoch", func.coalesce(Unit.datetime_end, func.now()) - Unit.datetime_start) / 3600
-                ), 0
+                func.sum(_hours_expr()), 0
             ).label("total_hours"),
             func.count(distinct(Unit.task_id)).label("tasks_count")
         )
@@ -108,9 +107,7 @@ def get_by_unit_types(period_start: datetime, period_end: datetime,
             Unit.datetime_start <= period_end,
         )
         .group_by(UnitType.id, UnitType.name)
-        .order_by(func.sum(
-            func.extract("epoch", func.coalesce(Unit.datetime_end, func.now()) - Unit.datetime_start)
-        ).desc())
+        .order_by(func.sum(_hours_expr()).desc())
     )
     rows = db.session.execute(_apply_company(q, company_id, UnitType.company_id)).all()
     return [{"type_id": r.id, "name": r.name, "total_hours": round(r.total_hours, 2), "tasks_count": r.tasks_count} for r in rows]
@@ -145,9 +142,7 @@ def get_by_unit_types_per_user(period_start: datetime, period_end: datetime,
             UnitType.id.label("type_id"),
             UnitType.name.label("type_name"),
             func.coalesce(
-                func.sum(
-                    func.extract("epoch", func.coalesce(Unit.datetime_end, func.now()) - Unit.datetime_start) / 3600
-                ), 0
+                func.sum(_hours_expr()), 0
             ).label("hours"),
             func.count(distinct(Unit.task_id)).label("tasks_count")
         )
@@ -201,7 +196,7 @@ def get_calendar(period_start: datetime, period_end: datetime,
         db.select(
             func.date(Unit.datetime_start).label("date"),
             func.sum(
-                func.extract("epoch", func.coalesce(Unit.datetime_end, func.now()) - Unit.datetime_start) / 3600
+                _hours_expr()
             ).label("total_hours")
         )
         .where(Unit.datetime_start >= period_start, Unit.datetime_start <= period_end)
@@ -240,9 +235,7 @@ def get_user_tasks_detail(user_id: int, period_start: datetime, period_end: date
             Task.id,
             Task.name,
             func.coalesce(
-                func.sum(
-                    func.extract("epoch", func.coalesce(Unit.datetime_end, func.now()) - Unit.datetime_start) / 3600
-                ), 0
+                func.sum(_hours_expr()), 0
             ).label("total_hours")
         )
         .join(Unit, Unit.task_id == Task.id)
@@ -252,9 +245,7 @@ def get_user_tasks_detail(user_id: int, period_start: datetime, period_end: date
             Unit.datetime_start <= period_end,
         )
         .group_by(Task.id, Task.name)
-        .order_by(func.sum(
-            func.extract("epoch", func.coalesce(Unit.datetime_end, func.now()) - Unit.datetime_start)
-        ).desc())
+        .order_by(func.sum(_hours_expr()).desc())
     ).all()
     return {
         "tasks": [{"task_id": r.id, "task_name": r.name, "total_hours": round(float(r.total_hours), 2)} for r in rows],

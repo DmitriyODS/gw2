@@ -39,7 +39,8 @@ def _yougile_enabled(company_id):
     return bool(company.settings.get("uses_yougile", True))
 
 
-def _enrich_task(task, current_user_id: int, active_users: list = None, user_color: str = None) -> dict:
+def _enrich_task(task, current_user_id: int, active_users: list = None, user_color: str = None,
+                 yougile_enabled: bool | None = None) -> dict:
     data = _task_schema.dump(task)
     data["is_favorite"] = task_repo.is_favorite(task.id, current_user_id)
     data["has_units"] = task_repo.has_any_units(task.id)
@@ -47,7 +48,8 @@ def _enrich_task(task, current_user_id: int, active_users: list = None, user_col
     # Цвет — индивидуальный для каждого пользователя (см. user_task_colors).
     data["color"] = user_color if user_color is not None else task_repo.get_user_color(task.id, current_user_id)
     # YouGile-ссылку отдаём только если в компании включена эта интеграция.
-    if not _yougile_enabled(task.company_id):
+    enabled = yougile_enabled if yougile_enabled is not None else _yougile_enabled(task.company_id)
+    if not enabled:
         data["link_yougile"] = None
     return data
 
@@ -130,11 +132,13 @@ def list_tasks():
     task_ids = [t.id for t in result["items"]]
     active_users_map = task_repo.get_active_users_by_task_ids(task_ids)
     user_colors_map = task_repo.get_user_colors_by_task_ids(task_ids, current_user_id)
+    yougile_enabled = _yougile_enabled(g.company_id)
     items = [
         _enrich_task(
             t, current_user_id,
             active_users_map.get(t.id, []),
             user_colors_map.get(t.id),
+            yougile_enabled,
         )
         for t in result["items"]
     ]

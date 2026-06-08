@@ -44,6 +44,12 @@ class Task(db.Model):
     __table_args__ = (
         db.Index("idx_tasks_author", "author_id"),
         db.Index("idx_tasks_company", "company_id"),
+        db.Index("idx_tasks_company_author", "company_id", "author_id"),
+        db.Index("idx_tasks_company_department", "company_id", "department_id"),
+        db.Index("idx_tasks_company_responsible", "company_id", "responsible_user_id"),
+        db.Index("idx_tasks_company_stage", "company_id", "stage_id"),
+        db.Index("idx_tasks_company_active_received", "company_id", "received_at",
+                 postgresql_where=db.text("is_archived = FALSE")),
         db.Index("idx_tasks_dept", "department_id"),
         db.Index("idx_tasks_archived", "is_archived"),
         db.Index("idx_tasks_received", "received_at"),

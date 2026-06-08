@@ -1,13 +1,22 @@
 from datetime import datetime
 from typing import Optional
 from sqlalchemy import desc, asc, func, exists, and_
+from sqlalchemy.orm import selectinload
 from app.extensions import db
 from app.models import Task, Unit, Favorite, UserTaskColor
 
 
+_TASK_LOAD_OPTIONS = (
+    selectinload(Task.author),
+    selectinload(Task.responsible),
+    selectinload(Task.department),
+    selectinload(Task.stage),
+)
+
+
 def get_by_id(task_id: int) -> Optional[Task]:
     return db.session.execute(
-        db.select(Task).where(Task.id == task_id)
+        db.select(Task).options(*_TASK_LOAD_OPTIONS).where(Task.id == task_id)
     ).scalar_one_or_none()
 
 
@@ -33,7 +42,7 @@ def get_list(
     # источником этих id) и `sort` (релевантность важнее даты).
     if ordered_ids is not None and not ordered_ids:
         return {"items": [], "total": 0, "page": page, "per_page": per_page}
-    q = db.select(Task)
+    q = db.select(Task).options(*_TASK_LOAD_OPTIONS)
     # Multi-tenancy: основной фильтр. None означает «во всех компаниях»
     # (доступно только Администратору системы, без явно выбранной компании
     # в селекторе) — на практике обработчик должен либо требовать
@@ -56,7 +65,8 @@ def get_list(
 
     # Поиск (LIKE) — отключаем, если задан семантический отсортированный набор.
     if search and not ordered_ids:
-        q = q.where(Task.name.ilike(f"%{search}%"))
+        like = f"%{search.strip().lower()}%"
+        q = q.where(func.lower(Task.name).like(like))
 
     # Семантическая выдача: фиксированный набор id с заранее заданным порядком.
     if ordered_ids:
@@ -127,7 +137,7 @@ def search_ids_by_name(company_id: int, q: str, limit: int = 30,
     """
     stmt = (db.select(Task.id)
             .where(Task.company_id == company_id,
-                   Task.name.ilike(f"%{q}%"))
+                   func.lower(Task.name).like(f"%{q.strip().lower()}%"))
             .order_by(desc(Task.created_at))
             .limit(limit))
     if exclude_ids:
@@ -141,7 +151,7 @@ def get_stale(threshold: datetime, company_id: Optional[int] = None,
     «висят» дольше порога. Сначала самые старые, чтобы напоминание подсвечивало
     залежавшиеся в первую очередь."""
     q = (
-        db.select(Task)
+        db.select(Task).options(*_TASK_LOAD_OPTIONS)
         .where(Task.is_archived.is_(False), Task.received_at < threshold)
         .order_by(asc(Task.received_at))
         .limit(limit)

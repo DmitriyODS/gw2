@@ -1,17 +1,20 @@
 import { defineStore } from 'pinia'
-import { ref, reactive, watch } from 'vue'
+import { ref, reactive, watch, computed } from 'vue'
 import * as tasksApi from '@/api/tasks.js'
 import { useAuthStore } from '@/stores/auth.js'
 import { useCompaniesStore } from '@/stores/companies.js'
+import { storageGet, storageSet } from '@/utils/storage.js'
 
 const STORAGE_KEY = 'gw2_tasks_filters'
 
 function loadSavedFilters() {
+  const raw = storageGet(STORAGE_KEY, '')
+  if (!raw) return {}
   try {
-    const raw = localStorage.getItem(STORAGE_KEY)
-    if (raw) return JSON.parse(raw)
-  } catch {}
-  return {}
+    return JSON.parse(raw)
+  } catch {
+    return {}
+  }
 }
 
 export const useTasksStore = defineStore('tasks', () => {
@@ -20,6 +23,11 @@ export const useTasksStore = defineStore('tasks', () => {
   const loading = ref(false)
   const error = ref(null)
   const activeTask = ref(null)
+  const taskById = computed(() => {
+    const map = new Map()
+    for (const task of tasks.value) map.set(task.id, task)
+    return map
+  })
 
   const saved = loadSavedFilters()
 
@@ -43,11 +51,13 @@ export const useTasksStore = defineStore('tasks', () => {
   const commentsByTask = reactive({})
   // Карта контрибьюторов: task_id → массив { id, fio, avatar_path }.
   const contributorsByTask = reactive({})
+  let fetchSeq = 0
+  let fetchCtrl = null
 
   watch(filters, () => {
     // eslint-disable-next-line no-unused-vars
     const { page, per_page, ...toSave } = { ...filters }
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(toSave))
+    storageSet(STORAGE_KEY, JSON.stringify(toSave))
   }, { deep: true })
 
   function _hasCompanyScope() {
@@ -63,6 +73,9 @@ export const useTasksStore = defineStore('tasks', () => {
       total.value = 0
       return
     }
+    const seq = ++fetchSeq
+    fetchCtrl?.abort()
+    fetchCtrl = new AbortController()
     if (!silent) loading.value = true
     error.value = null
     try {
@@ -80,14 +93,19 @@ export const useTasksStore = defineStore('tasks', () => {
       params.page = filters.page
       params.per_page = filters.per_page
 
-      const data = await tasksApi.getTasks(params)
+      const data = await tasksApi.getTasks(params, { signal: fetchCtrl.signal })
+      if (seq !== fetchSeq) return
       tasks.value = data.tasks ?? data.items ?? data
       total.value = data.total ?? tasks.value.length
     } catch (e) {
+      if (e?.error === 'ABORTED') return
       error.value = e.message || 'Ошибка загрузки задач'
       throw e
     } finally {
-      if (!silent) loading.value = false
+      if (seq === fetchSeq) {
+        fetchCtrl = null
+        if (!silent) loading.value = false
+      }
     }
   }
 
@@ -134,8 +152,7 @@ export const useTasksStore = defineStore('tasks', () => {
 
   // Оптимистичный drag-drop между колонками канбана.
   async function dragMoveStage(taskId, newStageId) {
-    const idx = tasks.value.findIndex((t) => t.id === taskId)
-    const prevStageId = idx >= 0 ? tasks.value[idx].stage_id : null
+    const prevStageId = taskById.value.get(taskId)?.stage_id ?? null
     patchTask({ id: taskId, stage_id: newStageId })
     try {
       await tasksApi.setTaskStage(taskId, newStageId)
@@ -283,7 +300,7 @@ export const useTasksStore = defineStore('tasks', () => {
   }
 
   return {
-    tasks, total, loading, error, filters, activeTask,
+    tasks, taskById, total, loading, error, filters, activeTask,
     commentsByTask, contributorsByTask,
     fetchTasks, setFilter, setTab, resetFilters, openTask, closeTask,
     upsertTask, patchTask, addTaskFromSocket, removeTask, archiveTask, restoreTask,

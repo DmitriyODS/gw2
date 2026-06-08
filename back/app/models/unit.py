@@ -28,6 +28,9 @@ class Unit(db.Model):
         db.Index("idx_units_user", "user_id"),
         db.Index("idx_units_task", "task_id"),
         db.Index("idx_units_company", "company_id"),
+        db.Index("idx_units_company_user_active", "company_id", "user_id",
+                 postgresql_where=db.text("datetime_end IS NULL")),
+        db.Index("idx_units_company_start", "company_id", "datetime_start"),
         db.Index("idx_units_active", "user_id",
                  postgresql_where=db.text("datetime_end IS NULL")),
     )

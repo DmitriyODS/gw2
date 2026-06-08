@@ -13,14 +13,14 @@ function qs({ from, to, companyId, userId } = {}) {
   return s ? `?${s}` : ''
 }
 
-export const getStatsCommon = (from, to, companyId = null) =>
-  apiRequest('/stats/common' + qs({ from, to, companyId }))
+export const getStatsCommon = (from, to, companyId = null, options = {}) =>
+  apiRequest('/stats/common' + qs({ from, to, companyId }), options)
 
 export const exportStatsCommon = (from, to, companyId = null) =>
   apiRequest('/stats/common/export' + qs({ from, to, companyId }), { blob: true })
 
-export const getStatsExtended = (from, to, companyId = null) =>
-  apiRequest('/stats/extended' + qs({ from, to, companyId }))
+export const getStatsExtended = (from, to, companyId = null, options = {}) =>
+  apiRequest('/stats/extended' + qs({ from, to, companyId }), options)
 
 export const exportStatsExtended = (from, to, companyId = null) =>
   apiRequest('/stats/extended/export' + qs({ from, to, companyId }), { blob: true })

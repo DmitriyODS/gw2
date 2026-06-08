@@ -1,5 +1,6 @@
 import { ref } from 'vue'
 import { changelogApi } from '@/api/changelog.js'
+import { storageGet, storageSet } from '@/utils/storage.js'
 
 const STORAGE_KEY = 'gw2_last_seen_version'
 
@@ -16,7 +17,7 @@ function close() {
   isOpen.value = false
   // Запоминаем просмотренную версию, чтобы лог не всплывал повторно.
   if (latestVersion.value) {
-    try { localStorage.setItem(STORAGE_KEY, latestVersion.value) } catch {}
+    storageSet(STORAGE_KEY, latestVersion.value)
   }
 }
 
@@ -29,8 +30,7 @@ async function checkForNewVersion() {
     if (!latest) return
     latestVersion.value = latest
 
-    let seen = null
-    try { seen = localStorage.getItem(STORAGE_KEY) } catch {}
+    const seen = storageGet(STORAGE_KEY, null)
 
     if (seen !== latest) {
       isOpen.value = true
