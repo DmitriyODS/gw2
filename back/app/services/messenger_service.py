@@ -25,6 +25,17 @@ _ALLOWED_MIME_PREFIXES = ("image/", "audio/", "video/", "application/", "text/")
 
 
 def open_conversation(current_user_id: int, other_user_id: int):
+    conv = _ensure_conversation(current_user_id, other_user_id)
+    db.session.commit()
+    return conv
+
+
+def _ensure_conversation(current_user_id: int, other_user_id: int):
+    """Логика open_conversation без commit'а — для вызывающих, которым нужна
+    атомарная транзакция, охватывающая и создание диалога, и создание
+    сообщений (например, forward_message: иначе при ошибке create_message
+    в БД остаётся пустой диалог, и у получателя нет переслданного сообщения,
+    а у отправителя чат всплывает «без последнего сообщения»)."""
     if current_user_id == other_user_id:
         raise MessengerServiceError("Нельзя написать самому себе", "SELF_CONVERSATION", 400)
     me = user_repo.get_by_id(current_user_id)
@@ -40,9 +51,7 @@ def open_conversation(current_user_id: int, other_user_id: int):
             raise MessengerServiceError(
                 "Нельзя писать сотруднику другой компании", "CROSS_COMPANY", 403,
             )
-    conv = message_repo.get_or_create_conversation(current_user_id, other_user_id)
-    db.session.commit()
-    return conv
+    return message_repo.get_or_create_conversation(current_user_id, other_user_id)
 
 
 def open_dev_chat(current_user_id: int):
@@ -165,7 +174,10 @@ def forward_message(source_message_id: int, sender_id: int,
             target_convs.append(conv)
             seen_ids.add(conv.id)
     for uid in user_ids or []:
-        conv = open_conversation(sender_id, uid)  # внутри проверка company scope
+        # Без commit'а — общий commit в конце forward_message сохранит и
+        # диалоги, и сообщения атомарно. Иначе ошибка в create_message или
+        # _copy_attachment оставляла бы в БД пустой диалог без сообщений.
+        conv = _ensure_conversation(sender_id, uid)
         if conv.id not in seen_ids:
             target_convs.append(conv)
             seen_ids.add(conv.id)

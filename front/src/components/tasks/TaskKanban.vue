@@ -5,7 +5,7 @@ import { useNotificationsStore } from '@/stores/notifications.js'
 import { getStages } from '@/api/stages.js'
 import TaskCard from '@/components/tasks/TaskCard.vue'
 
-const emit = defineEmits(['open-task', 'toggle-favorite', 'set-color', 'start-unit', 'stop-unit'])
+const emit = defineEmits(['open-task', 'toggle-favorite', 'set-color', 'start-unit', 'stop-unit', 'context-menu'])
 
 const tasks = useTasksStore()
 const notify = useNotificationsStore()
@@ -123,6 +123,7 @@ onMounted(load)
             @set-color="emit('set-color', $event)"
             @start-unit="emit('start-unit', $event)"
             @stop-unit="emit('stop-unit', $event)"
+            @context-menu="emit('context-menu', $event)"
           />
         </div>
         <div v-if="!tasksOf(col.id).length" class="kanban-col-empty">

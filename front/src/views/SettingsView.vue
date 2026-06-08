@@ -134,19 +134,24 @@
           </div>
         </div>
 
-        <!-- ИИ-настройки (Руководитель своей компании / Администратор системы) -->
+        <!-- ИИ-настройки (Руководитель своей компании / Администратор системы).
+             Монтируем только если у пользователя есть права И раздел открыт —
+             иначе onMounted дёргает /api/ai/settings, бэк отдаёт 403, а
+             notif.error превращается в спам при заходе в Настройки. -->
         <div v-show="activeSection === 'ai'" class="pane-block">
-          <AiSettings />
+          <AiSettings v-if="isAtLeast(ROLES.DIRECTOR) && activeSection === 'ai'" />
         </div>
 
-        <!-- YouGile — личный коннект (любой авторизованный) -->
+        <!-- YouGile — личный коннект (любой авторизованный с компанией). -->
         <div v-show="activeSection === 'yougile'" class="pane-block">
-          <YougileUserSettings />
+          <YougileUserSettings v-if="hasCompany && activeSection === 'yougile'" />
         </div>
 
-        <!-- YouGile — настройки компании (Руководитель+) -->
+        <!-- YouGile — настройки компании (Руководитель+). Тот же приём:
+             без v-if не-директор всё равно получал бы 403 от
+             /yougile/company-settings при заходе в любой другой раздел. -->
         <div v-show="activeSection === 'yougile-company'" class="pane-block">
-          <YougileCompanySettings />
+          <YougileCompanySettings v-if="isAtLeast(ROLES.DIRECTOR) && hasCompany && activeSection === 'yougile-company'" />
         </div>
 
         <!-- Справка -->

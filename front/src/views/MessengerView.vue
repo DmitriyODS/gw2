@@ -364,9 +364,9 @@ async function activateRouteConversation() {
   const rawId = route.params.conversationId
   const n = Number(rawId)
   if (!n) return
-  const known = messenger.conversations.some(c => c.id === n)
-    || (authStore.isRootAdmin && messenger.supportInbox.some(c => c.id === n))
-  if (!known) return
+  // Проверяем по объединённому индексу (обычные диалоги + support-inbox у
+  // рут-админа) — иначе глубокая ссылка на support-чат не активировалась.
+  if (!messenger.conversationById.get(n)) return
   if (messenger.activeConversationId !== n) {
     await messenger.setActive(n)
     await nextTick()
@@ -401,8 +401,10 @@ function startForward(message) {
 async function onForwardConfirm({ userIds }) {
   try {
     await messenger.forwardMessage(forwardSource.value.id, { userIds })
+    useNotificationsStore().success('Сообщение переслано')
   } catch (e) {
     console.error('forward failed', e)
+    useNotificationsStore().error(e?.message || 'Не удалось переслать сообщение')
   } finally {
     forwardDialogRef.value?.stopSending()
     forwardOpen.value = false
@@ -668,13 +670,14 @@ function handleExternalOpen(e) {
 }
 
 onMounted(async () => {
-  await messenger.fetchConversations().catch(() => {})
+  // Грузим оба списка параллельно: для рут-админа support-inbox нужен сразу
+  // (бейдж непрочитанных, активация глубокой ссылки на support-чат), но
+  // не должен задерживать первичный рендер обычных диалогов.
+  const tasks = [messenger.fetchConversations().catch(() => {})]
   if (authStore.isRootAdmin) {
-    // Грузим support-inbox параллельно с открытием чата — нужен и для
-    // бейджа на вкладке, и чтобы при глубокой ссылке /messenger/<dev-id>
-    // active вычислился (он смотрит в conversations).
-    await messenger.fetchSupportInbox().catch(() => {})
+    tasks.push(messenger.fetchSupportInbox().catch(() => {}))
   }
+  await Promise.all(tasks)
   if (notificationsAllowed() === false) {
     requestNotificationPermission()
   }

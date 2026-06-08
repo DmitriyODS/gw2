@@ -41,7 +41,7 @@
       >
         <div
           class="tv-progress-fill"
-          :style="i === activeIdx && !paused ? { animationDuration: SLIDE_MS + 'ms' } : {}"
+          :style="i === activeIdx && !paused ? { animationDuration: slideDuration(i) + 'ms' } : {}"
         ></div>
       </div>
     </div>
@@ -361,8 +361,15 @@ import { useTvPeriodData } from '@/composables/useTvPeriodData.js'
 const themeStore = useThemeStore()
 
 const SLIDE_MS = 8_000
+// Брендовый слайд (последний, с цитатой и логотипом) держим дольше —
+// зрители обычно подходят рассмотреть надпись/цитату, а 8с слишком мало.
+const SLIDE_MS_BRAND = 30_000
 const REFRESH_MS = 60_000
 const CONTROLS_HIDE_MS = 2_500
+
+function slideDuration(idx) {
+  return slides[idx]?.kind === 'brand' ? SLIDE_MS_BRAND : SLIDE_MS
+}
 
 // ─── Цитаты для брендового слайда ────────────────────────────────────────
 // Шуточные и тёплые, в разном настроении — выбираем случайную при каждом
@@ -858,7 +865,7 @@ function scheduleNext() {
   slideTimer = setTimeout(async () => {
     await goTo((activeIdx.value + 1) % slides.length)
     scheduleNext()
-  }, SLIDE_MS)
+  }, slideDuration(activeIdx.value))
 }
 
 async function goTo(idx) {

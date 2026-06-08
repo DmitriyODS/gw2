@@ -89,10 +89,11 @@
               :key="m.id"
               :message="m"
               :is-mine="m.sender_id === authStore.user?.id"
-              :show-forward="false"
-              :show-delete="false"
               :show-pin="false"
               @reply="startReply"
+              @forward="startForward"
+              @delete="askDeleteMessage"
+              @context-menu="openContextMenu"
               @join-call="onJoinCall"
             />
           </div>
@@ -107,6 +108,35 @@
         </template>
       </div>
     </transition>
+
+    <ForwardDialog
+      ref="forwardDialogRef"
+      v-model="forwardOpen"
+      :message="forwardSource"
+      @confirm="onForwardConfirm"
+    />
+
+    <DeleteScopeDialog
+      v-model="deleteDialogOpen"
+      :title="deleteDialog.title"
+      :text="deleteDialog.text"
+      :can-for-all="deleteDialog.canForAll"
+      :other-name="deleteDialog.otherName"
+      @confirm="onDeleteConfirm"
+    />
+
+    <MessageContextMenu
+      :visible="ctxMenu.visible"
+      :x="ctxMenu.x"
+      :y="ctxMenu.y"
+      :is-pinned="!!ctxMenu.message?.pinned_at"
+      :show-pin="false"
+      :show-forward="ctxMenu.message?.kind !== 'call' && !threadConv?.is_dev_chat"
+      :show-copy="!!ctxMenu.message?.text"
+      :show-delete="ctxMenu.message?.kind !== 'call'"
+      @close="ctxMenu.visible = false"
+      @action="onCtxAction"
+    />
 
     <!-- Кнопка-FAB -->
     <button class="mini-fab" :class="{ active: open }" @click="toggle" :title="open ? 'Свернуть чат' : 'Открыть чаты'">
@@ -124,16 +154,21 @@ import { useRoute } from 'vue-router'
 import { useMessengerStore } from '@/stores/messenger.js'
 import { useAuthStore } from '@/stores/auth.js'
 import { useCallStore } from '@/stores/call.js'
+import { useNotificationsStore } from '@/stores/notifications.js'
 import { useBreakpoint } from '@/composables/useBreakpoint.js'
 import { formatLastSeen } from '@/utils/presence.js'
 import MessageBubble from './MessageBubble.vue'
 import MessageInput from './MessageInput.vue'
+import ForwardDialog from './ForwardDialog.vue'
+import DeleteScopeDialog from './DeleteScopeDialog.vue'
+import MessageContextMenu from './MessageContextMenu.vue'
 import ProgressSpinner from 'primevue/progressspinner'
 
 const route = useRoute()
 const messenger = useMessengerStore()
 const authStore = useAuthStore()
 const callStore = useCallStore()
+const notif = useNotificationsStore()
 const { isMobile } = useBreakpoint()
 
 async function onJoinCall(callInfo) {
@@ -182,7 +217,7 @@ async function onDrop(e) {
 const hidden = computed(() => isMobile.value || route.path.startsWith('/messenger'))
 
 const threadConv = computed(() =>
-  messenger.conversations.find(c => c.id === threadId.value) || null
+  messenger.conversationById.get(threadId.value) || null
 )
 
 const threadOnline = computed(() => messenger.isOnline(threadConv.value?.other_user?.id))
@@ -224,6 +259,88 @@ function startReply(message) {
       : (threadConv.value?.other_user?.fio || ''),
     text: message.text,
     has_attachments: !!message.attachments?.length,
+  }
+}
+
+/* ── Пересылка ─────────────────────────────────────────────── */
+const forwardOpen = ref(false)
+const forwardSource = ref(null)
+const forwardDialogRef = ref(null)
+
+function startForward(message) {
+  forwardSource.value = message
+  forwardOpen.value = true
+}
+
+async function onForwardConfirm({ userIds }) {
+  try {
+    await messenger.forwardMessage(forwardSource.value.id, { userIds })
+    notif.success(userIds.length > 1 ? 'Сообщение переслано' : 'Сообщение переслано')
+  } catch (e) {
+    console.error('forward failed', e)
+    notif.error(e?.message || 'Не удалось переслать сообщение')
+  } finally {
+    forwardDialogRef.value?.stopSending()
+    forwardOpen.value = false
+    forwardSource.value = null
+  }
+}
+
+/* ── Удаление сообщения ────────────────────────────────────── */
+const deleteDialogOpen = ref(false)
+const deleteDialog = ref({
+  title: '',
+  text: '',
+  canForAll: true,
+  otherName: '',
+  payload: null,
+})
+
+function askDeleteMessage(message) {
+  const isMine = message.sender_id === authStore.user?.id
+  const other = threadConv.value?.other_user?.fio || ''
+  deleteDialog.value = {
+    title: 'Удалить сообщение?',
+    text: isMine
+      ? 'Сообщение исчезнет у вас. Можно также удалить его у собеседника.'
+      : 'Сообщение скроется только у вас — у собеседника останется.',
+    canForAll: isMine,
+    otherName: other,
+    payload: { id: message.id },
+  }
+  deleteDialogOpen.value = true
+}
+
+async function onDeleteConfirm({ scope }) {
+  const p = deleteDialog.value.payload
+  if (!p) return
+  try {
+    await messenger.deleteMessage(p.id, scope)
+  } catch (e) {
+    console.error('delete failed', e)
+  }
+}
+
+/* ── Контекстное меню (ПКМ / long-press) ───────────────────── */
+const ctxMenu = ref({ visible: false, x: 0, y: 0, message: null })
+
+function openContextMenu({ x, y, message }) {
+  ctxMenu.value = { visible: true, x, y, message }
+}
+
+function onCtxAction(action) {
+  const m = ctxMenu.value.message
+  if (!m) return
+  if (action === 'reply') startReply(m)
+  else if (action === 'forward') startForward(m)
+  else if (action === 'delete') askDeleteMessage(m)
+  else if (action === 'copy') copyMessageText(m)
+}
+
+function copyMessageText(m) {
+  if (!m?.text) return
+  if (navigator.clipboard?.writeText) {
+    navigator.clipboard.writeText(m.text).catch(() => {})
   }
 }
 

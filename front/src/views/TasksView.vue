@@ -132,6 +132,7 @@
             @set-color="setColor"
             @start-unit="onStartUnit"
             @stop-unit="onStopUnit"
+            @context-menu="openTaskContextMenu"
           />
           <div v-else :class="viewMode === 'grid' ? 'cards-grid' : 'cards-list'">
             <TaskCard
@@ -145,6 +146,7 @@
               @set-color="setColor"
               @start-unit="onStartUnit"
               @stop-unit="onStopUnit"
+              @context-menu="openTaskContextMenu"
             />
           </div>
 
@@ -207,6 +209,44 @@
       @close="startUnitTaskId = null"
       @started="startUnitTaskId = null"
     />
+
+    <!-- Редактирование задачи из контекстного меню -->
+    <TaskForm
+      v-if="editingTask"
+      :task="editingTask"
+      @close="editingTask = null"
+      @saved="onTaskEditedFromCtx"
+    />
+
+    <!-- Контекстное меню по ПКМ на карточке задачи -->
+    <TaskContextMenu
+      :visible="taskCtxMenu.visible"
+      :x="taskCtxMenu.x"
+      :y="taskCtxMenu.y"
+      :can-edit="taskCtxCanEdit"
+      :is-archived="!!taskCtxMenu.task?.is_archived"
+      :is-running="taskCtxIsRunning"
+      @close="taskCtxMenu.visible = false"
+      @action="onTaskCtxAction"
+    />
+
+    <!-- Диалог отправки задачи в чат -->
+    <SendTaskDialog
+      ref="sendTaskDialogRef"
+      v-model="sendTaskOpen"
+      :task="sendTaskSource"
+      @confirm="onSendTaskConfirm"
+    />
+
+    <!-- Подтверждение архивации из контекстного меню -->
+    <ConfirmDialog
+      :visible="archiveConfirm.visible"
+      header="Завершить задачу"
+      :message="archiveConfirm.message"
+      confirm-label="Завершить"
+      @confirm="doArchiveTask"
+      @cancel="archiveConfirm.visible = false"
+    />
   </div>
 </template>
 
@@ -219,7 +259,8 @@ import { useNotificationsStore } from '@/stores/notifications.js'
 import { usePermission, ROLES } from '@/composables/usePermission.js'
 import { useAuthStore } from '@/stores/auth.js'
 import { useCompaniesStore } from '@/stores/companies.js'
-import { toggleFavorite as apiFavorite, setTaskColor } from '@/api/tasks.js'
+import { toggleFavorite as apiFavorite, setTaskColor, archiveTask as apiArchiveTask, getTask } from '@/api/tasks.js'
+import { useMessengerStore } from '@/stores/messenger.js'
 import TaskCard from '@/components/tasks/TaskCard.vue'
 import TaskFilters from '@/components/tasks/TaskFilters.vue'
 import TaskModal from '@/components/tasks/TaskModal.vue'
@@ -229,6 +270,9 @@ import { useYougileStore } from '@/stores/yougile.js'
 import TaskKanban from '@/components/tasks/TaskKanban.vue'
 import SortSheet from '@/components/tasks/SortSheet.vue'
 import StartUnitModal from '@/components/units/StartUnitModal.vue'
+import TaskContextMenu from '@/components/tasks/TaskContextMenu.vue'
+import SendTaskDialog from '@/components/tasks/SendTaskDialog.vue'
+import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
 import AppFab from '@/components/common/AppFab.vue'
 import SegmentedTabs from '@/components/common/SegmentedTabs.vue'
 import ProgressSpinner from 'primevue/progressspinner'
@@ -341,7 +385,6 @@ function clearSearch() {
 
 async function openTask(task) {
   try {
-    const { getTask } = await import('@/api/tasks.js')
     const full = await getTask(task.id)
     tasksStore.openTask(full)
   } catch {
@@ -379,6 +422,108 @@ async function onStopUnit() {
     notif.success('Юнит остановлен')
   } catch (e) {
     notif.error(e.message || 'Не удалось остановить юнит')
+  }
+}
+
+/* ── Контекстное меню по ПКМ на карточке задачи ─────────────────── */
+const taskCtxMenu = ref({ visible: false, x: 0, y: 0, task: null })
+const editingTask = ref(null)
+const sendTaskOpen = ref(false)
+const sendTaskSource = ref(null)
+const sendTaskDialogRef = ref(null)
+const archiveConfirm = ref({ visible: false, taskId: null, message: '' })
+const messengerStore = useMessengerStore()
+
+const taskCtxCanEdit = computed(() => {
+  const t = taskCtxMenu.value.task
+  if (!t) return false
+  // Минимальная проверка прав. Серверная всё равно решающая, но в меню
+  // незачем светить «Изменить» и «В архив» рядовому сотруднику без прав.
+  if (auth.user?.id === t.responsible?.id || auth.user?.id === t.responsible_user_id) return true
+  return isAtLeast(ROLES.MANAGER)
+})
+
+const taskCtxIsRunning = computed(() => {
+  const t = taskCtxMenu.value.task
+  return !!t && unitsStore.activeUnit?.task_id === t.id
+})
+
+function openTaskContextMenu({ x, y, task }) {
+  taskCtxMenu.value = { visible: true, x, y, task }
+}
+
+function onTaskCtxAction(action) {
+  const task = taskCtxMenu.value.task
+  if (!task) return
+  if (action === 'open') openTask(task)
+  else if (action === 'edit') startEditTask(task)
+  else if (action === 'start-unit') onStartUnit(task)
+  else if (action === 'stop-unit') onStopUnit()
+  else if (action === 'send') startSendTask(task)
+  else if (action === 'archive') askArchiveTask(task)
+}
+
+async function startEditTask(task) {
+  // TaskForm ожидает полный объект — подтянем свежий, чтобы поля (описание,
+  // вложения, ответственный) точно были.
+  try {
+    editingTask.value = await getTask(task.id)
+  } catch {
+    editingTask.value = task
+  }
+}
+
+function onTaskEditedFromCtx(task) {
+  editingTask.value = null
+  tasksStore.upsertTask(task)
+}
+
+function startSendTask(task) {
+  sendTaskSource.value = task
+  sendTaskOpen.value = true
+}
+
+async function onSendTaskConfirm({ user, text }) {
+  try {
+    const convId = await messengerStore.openWith(user.id)
+    await messengerStore.send(convId, {
+      text: text || null,
+      attachment_ids: [],
+      reply_to_id: null,
+      task_id: sendTaskSource.value?.id || null,
+    })
+    notif.success(`Задача отправлена: ${user.fio}`)
+    sendTaskOpen.value = false
+    sendTaskSource.value = null
+  } catch (e) {
+    notif.error(e?.message || 'Не удалось отправить задачу')
+  } finally {
+    sendTaskDialogRef.value?.stopSending()
+  }
+}
+
+function askArchiveTask(task) {
+  archiveConfirm.value = {
+    visible: true,
+    taskId: task.id,
+    message: `Завершить задачу "${task.name}"? Задача будет перемещена в архив.`,
+  }
+}
+
+async function doArchiveTask() {
+  const id = archiveConfirm.value.taskId
+  archiveConfirm.value.visible = false
+  if (id == null) return
+  try {
+    const result = await apiArchiveTask(id)
+    tasksStore.archiveTask(id, result?.archived_at)
+    notif.success('Задача завершена и перемещена в архив')
+  } catch (e) {
+    if (e?.status === 409) {
+      notif.error('Нельзя архивировать задачу с активным юнитом')
+    } else {
+      notif.error(e?.message || 'Не удалось завершить задачу')
+    }
   }
 }
 

@@ -42,6 +42,11 @@ export const useMessengerStore = defineStore('messenger', () => {
   // (приходят в presence:update при выходе из сети — точнее, чем в профиле).
   const onlineIds = ref(new Set())
   const lastSeenById = ref({})
+  // Support-inbox (для Администратора системы): отдельный список чатов
+  // техподдержки всех пользователей. Не сливается с conversations, чтобы
+  // вкладка «Чаты» не видела сообщения из «Техподдержки».
+  const supportInbox = ref([])
+  const loadingSupportInbox = ref(false)
   let listSeq = 0
   let supportSeq = 0
   let listCtrl = null
@@ -49,8 +54,14 @@ export const useMessengerStore = defineStore('messenger', () => {
   const messagesCtrlByConv = new Map()
   const messagesSeqByConv = new Map()
 
+  // Индекс по id и в обычных диалогах, и в support-inbox: support-чаты у
+  // Администратора системы живут в отдельном списке (своя вкладка), но
+  // activeConversation/applyIncomingMessage должны находить их одинаково.
+  // conversations имеет приоритет — для обычного пользователя dev-чат лежит
+  // именно там, и у него актуальный unread_count/last_message.
   const conversationById = computed(() => {
     const map = new Map()
+    for (const c of supportInbox.value) map.set(c.id, c)
     for (const c of conversations.value) map.set(c.id, c)
     return map
   })
@@ -95,7 +106,9 @@ export const useMessengerStore = defineStore('messenger', () => {
   }
 
   function recomputeUnread() {
-    totalUnread.value = conversations.value.reduce((s, c) => s + (c.unread_count || 0), 0)
+    const convSum = conversations.value.reduce((s, c) => s + (c.unread_count || 0), 0)
+    const supportSum = supportInbox.value.reduce((s, c) => s + (c.unread_count || 0), 0)
+    totalUnread.value = convSum + supportSum
   }
 
   async function openDevChat() {
@@ -127,12 +140,6 @@ export const useMessengerStore = defineStore('messenger', () => {
     return data.id
   }
 
-  // Support-inbox (для Администратора системы): отдельный список чатов
-  // техподдержки всех пользователей. Не сливается с conversations, чтобы
-  // не путать обычные диалоги и техподдержку — у них разные вкладки в UI.
-  const supportInbox = ref([])
-  const loadingSupportInbox = ref(false)
-
   async function fetchSupportInbox() {
     const seq = ++supportSeq
     supportCtrl?.abort()
@@ -142,20 +149,6 @@ export const useMessengerStore = defineStore('messenger', () => {
       const items = await api.listSupportInbox({ signal: supportCtrl.signal })
       if (seq !== supportSeq) return
       supportInbox.value = items
-      // Сразу разовьём конверсейшны в общий кеш — иначе при открытии чата
-      // activeConversation вычислится как null (он смотрит в conversations).
-      const known = new Set(conversations.value.map(c => c.id))
-      const merge = items.filter(c => !known.has(c.id))
-      if (merge.length) {
-        conversations.value = [...conversations.value, ...merge]
-      } else {
-        // Обновим записи, что уже есть, актуальными значениями
-        // (last_message/unread).
-        const byId = Object.fromEntries(items.map(c => [c.id, c]))
-        conversations.value = conversations.value.map(c =>
-          byId[c.id] ? { ...c, ...byId[c.id] } : c,
-        )
-      }
     } catch (e) {
       if (e?.error !== 'ABORTED') throw e
     } finally {
@@ -288,9 +281,19 @@ export const useMessengerStore = defineStore('messenger', () => {
   }
 
   async function forwardMessage(messageId, { conversationIds = [], userIds = [] } = {}) {
-    // Сервер разошлёт message:new и нашим вкладкам тоже — список/треды
-    // обновятся через applyIncomingMessage. Достаточно дождаться ответа.
-    return api.forwardMessage(messageId, { conversationIds, userIds })
+    // Сервер разошлёт message:new и нашим вкладкам тоже, но на эхо нельзя
+    // полагаться: при пересылке новому собеседнику чат и сообщение появляются
+    // в одном HTTP-ответе, а emit к нашей же комнате `user_{me}` иногда
+    // обгоняет рендер списка (нужно ещё успеть подтянуть `conversations`).
+    // Поэтому применяем ответ сразу — applyIncomingMessage дедуп'ит по id,
+    // эхо просто не сработает повторно.
+    const r = await api.forwardMessage(messageId, { conversationIds, userIds })
+    for (const item of r?.forwarded || []) {
+      if (item?.conversation_id && item?.message) {
+        applyIncomingMessage(item.conversation_id, item.message, /* fromMe */ true)
+      }
+    }
+    return r
   }
 
   /* «Активно смотрю на чат» — открыт И вкладка в фокусе. Только в этом случае
@@ -320,12 +323,17 @@ export const useMessengerStore = defineStore('messenger', () => {
     if (arr.some(m => m.id === msg.id)) return
     messagesByConv.value[conversationId] = [...arr, msg]
 
-    let conv = conversationById.value.get(conversationId)
+    const auth = useAuthStore()
+    const inConversations = conversations.value.some(c => c.id === conversationId)
+    const inSupportInbox = supportInbox.value.some(c => c.id === conversationId)
+    const viewingActively = isViewingActively(conversationId)
+    const conv = conversationById.value.get(conversationId)
+
     if (conv) {
       conv.last_message = msg
       conv.last_message_at = msg.created_at
       if (!fromMe) {
-        if (isViewingActively(conversationId)) {
+        if (viewingActively) {
           // Сразу гасим на сервере — собеседник увидит «прочитано»,
           // а локальный счётчик не растёт.
           markRead(conversationId)
@@ -333,34 +341,21 @@ export const useMessengerStore = defineStore('messenger', () => {
           conv.unread_count = (conv.unread_count || 0) + 1
         }
       }
-      // Пересортируем с учётом нового времени (закреплённые остаются вверху).
-      conversations.value = sortConversations(conversations.value)
+      // Пересортируем тот список, где живёт запись (закреплённые остаются
+      // сверху). Support-inbox админ видит на своей вкладке, его сортировка
+      // та же — по last_message_at.
+      if (inConversations) {
+        conversations.value = sortConversations(conversations.value)
+      }
+      if (inSupportInbox) {
+        supportInbox.value = sortConversations(supportInbox.value)
+      }
     } else {
-      // Диалог появился впервые (или вернулся из «скрытых») — перезапрос.
-      fetchConversations()
-    }
-    // Если этот чат лежит и в support-inbox (админ техподдержки) — обновим
-    // запись там, чтобы вкладка «Техподдержка» сразу показала свежий
-    // last_message и счётчик непрочитанных.
-    const inboxIdx = supportInbox.value.findIndex(c => c.id === conversationId)
-    if (inboxIdx !== -1) {
-      const cur = supportInbox.value[inboxIdx]
-      const nextItem = {
-        ...cur,
-        last_message: msg,
-        last_message_at: msg.created_at,
-      }
-      // Непрочитанные в инбоксе считаем только по сообщениям от владельца чата
-      // (т.е. от пользователя — админ их и должен прочесть).
-      if (!fromMe && msg.sender_id === cur.other_user?.id /* not used */ ) {
-        // not used — оставляем счётчик из API recompute через fetchSupportInbox
-      }
-      if (!fromMe && !isViewingActively(conversationId)) {
-        nextItem.unread_count = (cur.unread_count || 0) + 1
-      }
-      const next = [...supportInbox.value]
-      next[inboxIdx] = nextItem
-      supportInbox.value = next
+      // Диалог появился впервые (или вернулся из «скрытых») — перезапрос
+      // правильного списка. Для рут-админа dev-чаты живут в support-inbox,
+      // для всех остальных — в обычном списке.
+      if (auth.isRootAdmin) fetchSupportInbox()
+      else fetchConversations()
     }
     recomputeUnread()
   }

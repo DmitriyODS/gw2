@@ -1,5 +1,5 @@
 <script setup>
-import { ref, computed, onMounted, nextTick } from 'vue'
+import { ref, computed, onMounted, onBeforeUnmount, nextTick } from 'vue'
 import { useTasksStore } from '@/stores/tasks.js'
 import { useAuthStore } from '@/stores/auth.js'
 import { useNotificationsStore } from '@/stores/notifications.js'
@@ -119,7 +119,109 @@ function onKeydown(e) {
   }
 }
 
-onMounted(load)
+/* ── Контекстное меню (long-press на тач / ПКМ на десктопе) ───────── */
+const ctxMenu = ref({ visible: false, x: 0, y: 0, comment: null })
+
+const ctxStyle = computed(() => ({
+  position: 'fixed',
+  left: ctxMenu.value.x + 'px',
+  top: ctxMenu.value.y + 'px',
+  zIndex: 12000,
+}))
+
+function openCtxMenu(x, y, comment) {
+  // Кламп в вьюпорт по приблизительному размеру меню (220×100), точнее
+  // выровняем после рендера в nextTick.
+  const pad = 8
+  const w = 220
+  const h = 108
+  if (x + w > window.innerWidth - pad) x = window.innerWidth - w - pad
+  if (y + h > window.innerHeight - pad) y = window.innerHeight - h - pad
+  if (x < pad) x = pad
+  if (y < pad) y = pad
+  ctxMenu.value = { visible: true, x, y, comment }
+}
+
+function closeCtxMenu() {
+  ctxMenu.value = { ...ctxMenu.value, visible: false }
+}
+
+function ctxAction(action) {
+  const c = ctxMenu.value.comment
+  closeCtxMenu()
+  if (!c) return
+  if (action === 'edit') startEdit(c)
+  else if (action === 'delete') remove(c)
+}
+
+let longPressTimer = null
+let longPressFired = false
+let pointerStartX = 0
+let pointerStartY = 0
+let pointerActiveId = null
+
+function onCommentPointerDown(e, c) {
+  // ПКМ обрабатывает @contextmenu; long-press — только основное касание/клик.
+  if (e.button === 2) return
+  if (!canEdit(c) || editingId.value === c.id) return
+  pointerActiveId = e.pointerId
+  longPressFired = false
+  pointerStartX = e.clientX
+  pointerStartY = e.clientY
+  clearTimeout(longPressTimer)
+  longPressTimer = setTimeout(() => {
+    longPressFired = true
+    if (navigator.vibrate) {
+      try { navigator.vibrate(15) } catch {/* iOS Safari */}
+    }
+    openCtxMenu(pointerStartX, pointerStartY, c)
+  }, 500)
+}
+
+function onCommentPointerMove(e) {
+  if (pointerActiveId == null || e.pointerId !== pointerActiveId) return
+  const dx = Math.abs(e.clientX - pointerStartX)
+  const dy = Math.abs(e.clientY - pointerStartY)
+  // Сдвиг больше 10px → отменяем long-press (это скролл/выделение).
+  if (dx > 10 || dy > 10) {
+    clearTimeout(longPressTimer)
+    pointerActiveId = null
+  }
+}
+
+function onCommentPointerUp(e) {
+  if (pointerActiveId != null && e?.pointerId !== pointerActiveId) return
+  clearTimeout(longPressTimer)
+  pointerActiveId = null
+}
+
+function onCommentContextMenu(e, c) {
+  if (!canEdit(c) || editingId.value === c.id) return
+  openCtxMenu(e.clientX, e.clientY, c)
+}
+
+function onDocPointerDown(e) {
+  if (!ctxMenu.value.visible) return
+  const root = document.querySelector('.cmt-ctx-menu')
+  if (!root || !root.contains(e.target)) closeCtxMenu()
+}
+
+function onDocScroll() { if (ctxMenu.value.visible) closeCtxMenu() }
+function onDocKey(e) { if (e.key === 'Escape' && ctxMenu.value.visible) closeCtxMenu() }
+
+onMounted(() => {
+  load()
+  document.addEventListener('pointerdown', onDocPointerDown, true)
+  document.addEventListener('scroll', onDocScroll, true)
+  document.addEventListener('keydown', onDocKey)
+})
+
+onBeforeUnmount(() => {
+  clearTimeout(longPressTimer)
+  document.removeEventListener('pointerdown', onDocPointerDown, true)
+  document.removeEventListener('scroll', onDocScroll, true)
+  document.removeEventListener('keydown', onDocKey)
+})
 </script>
 
 <template>
@@ -133,7 +235,16 @@ onMounted(load)
         <span class="material-symbols-outlined">forum</span>
         Комментариев пока нет
       </div>
-      <div v-for="c in list" :key="c.id" class="comment-item">
+      <div
+        v-for="c in list"
+        :key="c.id"
+        class="comment-item"
+        @pointerdown="onCommentPointerDown($event, c)"
+        @pointermove="onCommentPointerMove"
+        @pointerup="onCommentPointerUp"
+        @pointercancel="onCommentPointerUp"
+        @contextmenu.prevent="onCommentContextMenu($event, c)"
+      >
         <img :src="avatarOf(c.author)" class="comment-ava" :alt="c.author?.fio || ''" />
         <div class="comment-body">
           <div class="comment-head">
@@ -142,6 +253,8 @@ onMounted(load)
               {{ fmtTime(c.created_at) }}
               <span v-if="c.updated_at" class="comment-edited" title="отредактировано">·&nbsp;ред.</span>
             </span>
+            <!-- Hover-кнопки только для устройств с курсором (CSS гасит на тач);
+                 на мобильном — long-press открывает контекстное меню. -->
             <div class="comment-actions" v-if="canEdit(c) && editingId !== c.id">
               <button class="ca-btn" @click="startEdit(c)" title="Редактировать">
                 <span class="material-symbols-outlined">edit</span>
@@ -172,6 +285,29 @@ onMounted(load)
       @confirm="confirmDelete"
       @cancel="deletingId = null"
     />
+
+    <!-- Контекстное меню комментария (long-press на тач / правая кнопка мыши) -->
+    <Teleport to="body">
+      <Transition name="cmt-ctx">
+        <div
+          v-if="ctxMenu.visible"
+          class="cmt-ctx-menu"
+          :style="ctxStyle"
+          role="menu"
+          @click.stop
+        >
+          <button class="cmt-ctx-item" @click="ctxAction('edit')">
+            <span class="material-symbols-outlined">edit</span>
+            <span>Редактировать</span>
+          </button>
+          <div class="cmt-ctx-divider" />
+          <button class="cmt-ctx-item danger" @click="ctxAction('delete')">
+            <span class="material-symbols-outlined">delete</span>
+            <span>Удалить</span>
+          </button>
+        </div>
+      </Transition>
+    </Teleport>
 
     <div class="comment-input">
       <textarea
@@ -223,6 +359,7 @@ onMounted(load)
   display: flex;
   gap: 10px;
   align-items: flex-start;
+  position: relative;
 }
 .comment-ava { width: 36px; height: 36px; border-radius: 50%; object-fit: cover; flex-shrink: 0; }
 .comment-body { flex: 1; min-width: 0; }
@@ -237,8 +374,29 @@ onMounted(load)
 .comment-time { font-size: 11px; color: var(--color-on-surface-variant); }
 .comment-edited { font-style: italic; }
 
-.comment-actions { margin-left: auto; display: inline-flex; gap: 2px; opacity: 0; transition: opacity 0.15s; }
-.comment-item:hover .comment-actions { opacity: 1; }
+/* Actions вытащены из flex-потока — иначе они занимают место в flex и
+   при flex-wrap переносятся на следующую строку, создавая огромный отступ
+   между ФИО автора и текстом комментария. */
+.comment-actions {
+  position: absolute;
+  top: 0;
+  right: 0;
+  display: inline-flex;
+  gap: 2px;
+  opacity: 0;
+  transition: opacity 0.15s;
+  background: var(--color-surface);
+  border-radius: var(--radius-full, 999px);
+  padding: 2px;
+}
+.comment-item:hover .comment-actions,
+.comment-item:focus-within .comment-actions { opacity: 1; }
+
+/* На тач-устройствах кнопки скрыты — действия открываются long-press'ом
+   через контекстное меню (см. .cmt-ctx-menu). */
+@media (hover: none) {
+  .comment-actions { display: none; }
+}
 .ca-btn {
   background: transparent;
   border: none;
@@ -325,4 +483,57 @@ onMounted(load)
 
 .spinning { animation: cspin 1s linear infinite; }
 @keyframes cspin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+</style>
+
+<!-- Контекстное меню телепортируется в <body>, scoped-стили на него не
+     попадут. Используем обычный (нескоупированный) стиль с уникальным
+     префиксом cmt-ctx-, чтобы не задеть другие компоненты. -->
+<style>
+.cmt-ctx-menu {
+  min-width: 200px;
+  background: var(--color-surface);
+  border: 1px solid var(--color-outline-dim);
+  border-radius: var(--radius-md, 12px);
+  padding: 6px;
+  box-shadow: var(--shadow-lg);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.cmt-ctx-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border: none;
+  background: transparent;
+  color: var(--color-text);
+  font: inherit;
+  font-size: 14px;
+  font-weight: 500;
+  text-align: left;
+  border-radius: var(--radius-sm, 8px);
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+.cmt-ctx-item:hover { background: var(--color-surface-low); }
+.cmt-ctx-item.danger { color: var(--color-error); }
+.cmt-ctx-item.danger:hover {
+  background: var(--color-error-container);
+  color: var(--color-on-error-container);
+}
+.cmt-ctx-item .material-symbols-outlined { font-size: 18px; }
+.cmt-ctx-divider {
+  height: 1px;
+  background: var(--color-outline-dim);
+  margin: 4px 4px;
+}
+.cmt-ctx-enter-active, .cmt-ctx-leave-active {
+  transition: opacity 0.14s, transform 0.14s;
+  transform-origin: top left;
+}
+.cmt-ctx-enter-from, .cmt-ctx-leave-to {
+  opacity: 0;
+  transform: scale(0.96) translateY(-4px);
+}
 </style>

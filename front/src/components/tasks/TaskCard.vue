@@ -4,6 +4,7 @@
     :class="[`view-${view}`, { favorite: task.is_favorite, archived: task.is_archived, colored: !!task.color, running: isRunningHere }]"
     :style="cardStyle"
     @click.stop="$emit('click', task)"
+    @contextmenu.prevent="onContextMenu"
   >
     <!-- Цветовая полоса слева (если задан цвет-тег) -->
     <span v-if="task.color" class="color-stripe" aria-hidden="true" />
@@ -148,7 +149,11 @@ const props = defineProps({
   }
 })
 
-const emit = defineEmits(['click', 'toggle-favorite', 'set-color', 'start-unit', 'stop-unit'])
+const emit = defineEmits(['click', 'toggle-favorite', 'set-color', 'start-unit', 'stop-unit', 'context-menu'])
+
+function onContextMenu(e) {
+  emit('context-menu', { x: e.clientX, y: e.clientY, task: props.task })
+}
 
 const unitsStore = useUnitsStore()
 
