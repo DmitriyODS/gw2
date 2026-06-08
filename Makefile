@@ -23,7 +23,7 @@ help:
 	@printf "  make dev-front    Vite dev-сервер  :5173\n"
 	@printf "  make dev-stop     Остановить DB + Redis\n"
 	@printf "\n\033[1mДеплой (сервер):\033[0m\n"
-	@printf "  make deploy       git push → git pull на сервере → docker compose up --build\n"
+	@printf "  make deploy       git push → fetch+reset на сервере → docker compose up --build\n"
 	@printf "  make logs         Стримить логи app-контейнера (Ctrl+C выйти)\n"
 	@printf "  make status       docker compose ps на сервере\n"
 	@printf "  make restart      Перезапустить app без пересборки\n"
@@ -68,7 +68,7 @@ deploy:
 	@printf "\033[1m▶ Пушу в GitHub...\033[0m\n"
 	git push
 	@printf "\033[1m▶ Деплою на $(SERVER_HOST)...\033[0m\n"
-	$(SSH) "cd $(SERVER_DIR) && git pull && cd deploy && $(COMPOSE_PROD) up -d --build"
+	$(SSH) "cd $(SERVER_DIR) && git fetch origin && git reset --hard origin/main && cd deploy && $(COMPOSE_PROD) up -d --build"
 	@printf "\033[32m✓ Задеплоено на $(SERVER_HOST)\033[0m\n"
 
 logs:
