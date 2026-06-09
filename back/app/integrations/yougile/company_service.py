@@ -13,7 +13,9 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from app.extensions import db
-from app.integrations.yougile.account_service import build_client_for_user
+from app.integrations.yougile.account_service import (
+    build_client_for_user, disconnect as acc_disconnect,
+)
 from app.integrations.yougile.client import (
     YougileAuthError, YougileError,
 )
@@ -191,10 +193,18 @@ def update_settings(actor: User, company: Company, payload: dict) -> CompanyYoug
     # на каждое сохранение настроек. Идемпотентно: при наличии id делаем PUT
     # на тот же id (см. ensure_registered).
     is_enabled_now = bool((company.settings or {}).get("uses_yougile"))
-    if enabled_changed_to is True or (
-        is_enabled_now and not company.yg_webhook_id
-        and company.yg_board_id and company.yg_company_id
-    ):
+    # Регистрируем/обновляем webhook когда:
+    #  - только что включили интеграцию;
+    #  - интеграция включена, но webhook ещё не создан (первое включение без
+    #    PUBLIC_BASE, самолечение);
+    #  - сменили доску при уже зарегистрированном webhook — иначе фильтр
+    #    `location` остаётся на старой доске и события с новой не приходят.
+    needs_register = is_enabled_now and company.yg_board_id and company.yg_company_id and (
+        enabled_changed_to is True
+        or not company.yg_webhook_id
+        or changed_board
+    )
+    if needs_register:
         try:
             wh_register(actor, company)
         except YougileWebhookError as e:
@@ -208,5 +218,53 @@ def update_settings(actor: User, company: Company, payload: dict) -> CompanyYoug
                            extra={"company_id": company.id, "err": e.message})
 
     logger.info("yougile.company_settings_updated",
+                extra={"company_id": company.id, "actor_id": actor.id})
+    return get_settings(company)
+
+
+def reset_integration(actor: User, company: Company) -> CompanyYougileSettings:
+    """Полный сброс интеграции «начать заново» (для руководителя компании).
+
+    Делаем в строгом порядке, пока ключ ещё на руках:
+      1. Снимаем webhook в YouGile (нужен живой клиент актора).
+      2. Чистим всю конфигурацию компании (компания/проект/доска/колонки) и
+         гасим флаг uses_yougile.
+      3. Отвязываем личный YouGile-аккаунт самого руководителя (отзыв ключа
+         в YG + удаление локальной записи).
+
+    Каждый внешний шаг best-effort: даже если YouGile недоступен, локальное
+    состояние всё равно обнуляется — кнопка обязана сработать.
+    """
+    # 1. Webhook — до отвязки аккаунта, иначе нечем стучаться в YG для отписки.
+    try:
+        wh_deregister(actor, company)
+    except Exception as e:  # noqa: BLE001
+        logger.warning("yougile.reset_webhook_failed",
+                       extra={"company_id": company.id, "err": str(e)})
+
+    # 2. Конфигурация компании.
+    company.yg_company_id = None
+    company.yg_company_name = None
+    company.yg_project_id = None
+    company.yg_project_title = None
+    company.yg_board_id = None
+    company.yg_board_title = None
+    company.yg_first_column_id = None
+    company.yg_completed_column_id = None
+    company.yg_webhook_id = None
+    company.yg_webhook_secret = None
+    s = dict(company.settings or {})
+    s["uses_yougile"] = False
+    company.settings = s
+    db.session.commit()
+
+    # 3. Личный аккаунт руководителя.
+    try:
+        acc_disconnect(actor)
+    except Exception as e:  # noqa: BLE001
+        logger.warning("yougile.reset_account_disconnect_failed",
+                       extra={"company_id": company.id, "actor_id": actor.id, "err": str(e)})
+
+    logger.info("yougile.integration_reset",
                 extra={"company_id": company.id, "actor_id": actor.id})
     return get_settings(company)

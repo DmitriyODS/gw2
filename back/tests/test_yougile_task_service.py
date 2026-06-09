@@ -54,9 +54,9 @@ def _make_task(**overrides):
 # ── чистые функции ────────────────────────────────────────────────────────
 
 def test_sync_hash_stable_and_distinct():
-    a = _sync_hash(title="A", description=None, deadline_ms=None, completed=False)
-    b = _sync_hash(title="A", description=None, deadline_ms=None, completed=False)
-    c = _sync_hash(title="A", description=None, deadline_ms=None, completed=True)
+    a = _sync_hash(title="A", deadline_ms=None, completed=False)
+    b = _sync_hash(title="A", deadline_ms=None, completed=False)
+    c = _sync_hash(title="A", deadline_ms=None, completed=True)
     assert a == b
     assert a != c
     assert len(a) == 40  # sha1 hex

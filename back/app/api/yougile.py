@@ -16,7 +16,7 @@ from app.integrations.yougile.account_service import (
 )
 from app.integrations.yougile.company_service import (
     YougileCompanyError, get_settings, list_boards, list_columns,
-    list_projects, update_settings,
+    list_projects, reset_integration, update_settings,
 )
 from app.integrations.yougile.crypto import YougileSecretMisconfigured
 from app.integrations.yougile.task_service import (
@@ -77,6 +77,22 @@ def _err_account(e: YougileAccountError):
 
 def _err_company(e: YougileCompanyError):
     return jsonify({"error": e.code, "message": e.message}), 400
+
+
+def _dump_settings(s) -> dict:
+    """Сериализация CompanyYougileSettings в ответ API (общая для get/put/reset)."""
+    return _settings_schema.dump({
+        "enabled": s.enabled,
+        "yg_company_id": s.yg_company_id,
+        "yg_company_name": s.yg_company_name,
+        "yg_project_id": s.yg_project_id,
+        "yg_project_title": s.yg_project_title,
+        "yg_board_id": s.yg_board_id,
+        "yg_board_title": s.yg_board_title,
+        "yg_first_column_id": s.yg_first_column_id,
+        "yg_completed_column_id": s.yg_completed_column_id,
+        "webhook_registered": s.webhook_registered,
+    })
 
 
 def _err_misconfig(e: YougileSecretMisconfigured):
@@ -267,18 +283,7 @@ def get_company_settings():
         # фронт мог нормально открыть страницу и предложить настройку.
         return jsonify(_settings_schema.dump(_empty_settings_payload())), 200
     s = get_settings(company)
-    return jsonify(_settings_schema.dump({
-        "enabled": s.enabled,
-        "yg_company_id": s.yg_company_id,
-        "yg_company_name": s.yg_company_name,
-        "yg_project_id": s.yg_project_id,
-        "yg_project_title": s.yg_project_title,
-        "yg_board_id": s.yg_board_id,
-        "yg_board_title": s.yg_board_title,
-        "yg_first_column_id": s.yg_first_column_id,
-        "yg_completed_column_id": s.yg_completed_column_id,
-        "webhook_registered": s.webhook_registered,
-    })), 200
+    return jsonify(_dump_settings(s)), 200
 
 
 @bp.put("/company-settings")
@@ -297,18 +302,25 @@ def put_company_settings():
         return _err_company(e)
     except YougileSecretMisconfigured as e:
         return _err_misconfig(e)
-    return jsonify(_settings_schema.dump({
-        "enabled": s.enabled,
-        "yg_company_id": s.yg_company_id,
-        "yg_company_name": s.yg_company_name,
-        "yg_project_id": s.yg_project_id,
-        "yg_project_title": s.yg_project_title,
-        "yg_board_id": s.yg_board_id,
-        "yg_board_title": s.yg_board_title,
-        "yg_first_column_id": s.yg_first_column_id,
-        "yg_completed_column_id": s.yg_completed_column_id,
-        "webhook_registered": s.webhook_registered,
-    })), 200
+    return jsonify(_dump_settings(s)), 200
+
+
+@bp.post("/reset")
+@require_role(DIRECTOR)
+def reset_company_integration():
+    """Полный сброс интеграции «начать заново» (руководитель компании).
+
+    Снимает webhook, чистит конфигурацию компании и отвязывает личный
+    YouGile-аккаунт инициатора. После — визард открывается с чистого листа.
+    """
+    company = _own_company_or_403()
+    if isinstance(company, tuple):
+        return company
+    try:
+        s = reset_integration(g.current_user, company)
+    except YougileSecretMisconfigured as e:
+        return _err_misconfig(e)
+    return jsonify(_dump_settings(s)), 200
 
 
 # ── импорт / экспорт / отвязка задачи ─────────────────────────────────────
@@ -407,9 +419,13 @@ def webhook_ingress(company_id: int, secret: str):
             results.append(apply_event(company, ev))
         except Exception as e:  # noqa: BLE001
             # Один сбойный event не должен ронять весь batch — логируем и
-            # отвечаем 200, иначе YG переотправит ВЕСЬ batch.
+            # отвечаем 200, иначе YG переотправит ВЕСЬ batch. Обязательный
+            # rollback: иначе грязная сессия после сбоя отравит commit'ы
+            # следующих событий батча.
+            db.session.rollback()
             logger.exception("yougile.webhook_apply_failed",
-                             extra={"company_id": company_id, "event": ev.get("event")})
+                             extra={"company_id": company_id,
+                                    "event": ev.get("event") if isinstance(ev, dict) else None})
             results.append({"status": "error", "message": str(e)})
     return jsonify({"results": results}), 200
 

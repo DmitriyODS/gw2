@@ -124,16 +124,18 @@ def _dt_to_ms(dt: datetime | None) -> int | None:
     return int(dt.timestamp() * 1000)
 
 
-def _sync_hash(*, title: str | None, description: str | None,
-               deadline_ms: int | None, completed: bool) -> str:
+def _sync_hash(*, title: str | None, deadline_ms: int | None, completed: bool) -> str:
     """Хеш «состояния, которое мы только что отправили в YG».
 
-    Если webhook вернёт payload с тем же хешем — игнор. Поля выбраны такие,
-    которыми реально обмениваемся (тайм-трекинг/чек-листы синкать не будем).
+    Если webhook вернёт payload с тем же хешем — игнор. Поля выбраны строго
+    те, которыми реально обмениваемся (title/deadline/completed). Описание,
+    тайм-трекинг и чек-листы мы НЕ синхронизируем — и сознательно НЕ включаем
+    их в хеш: иначе push (где описания нет) и приём webhook'а (где описание
+    карточки есть) давали бы разные хеши, и антицикл не ловил бы собственное
+    эхо.
     """
     parts = "|".join([
         (title or "").strip(),
-        (description or "").strip(),
         str(deadline_ms or ""),
         "1" if completed else "0",
     ])
@@ -282,7 +284,7 @@ def import_from_url(user: User, payload: ImportPayload, *,
         yougile_board_id=company.yg_board_id,
         yougile_synced_at=datetime.now(timezone.utc),
         yougile_sync_hash=_sync_hash(
-            title=title, description=yg.get("description"),
+            title=title,
             deadline_ms=_dt_to_ms(yg_deadline),
             completed=bool(yg.get("completed")),
         ),
@@ -366,7 +368,7 @@ def export_to_yougile(user: User, gw_task_id: int, *,
         yougile_column_id=company.yg_first_column_id,
         yougile_synced_at=datetime.now(timezone.utc),
         yougile_sync_hash=_sync_hash(
-            title=task.name, description=None,
+            title=task.name,
             deadline_ms=_dt_to_ms(task.deadline),
             completed=False,
         ),

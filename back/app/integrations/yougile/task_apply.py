@@ -82,7 +82,6 @@ def apply_event(company: Company, payload: dict[str, Any]) -> dict[str, Any]:
 def _apply_updated(company: Company, task: Task, data: dict[str, Any]) -> dict:
     """Применить изменения title/description/deadline/completed/columnId."""
     incoming_title = (data.get("title") or "").strip()
-    incoming_desc = data.get("description")
     incoming_deadline = None
     dl = data.get("deadline") or {}
     if isinstance(dl, dict):
@@ -91,7 +90,6 @@ def _apply_updated(company: Company, task: Task, data: dict[str, Any]) -> dict:
 
     incoming_hash = _sync_hash(
         title=incoming_title or task.name,
-        description=incoming_desc,
         deadline_ms=_dt_to_ms(incoming_deadline) if incoming_deadline else None,
         completed=incoming_completed,
     )
@@ -121,8 +119,15 @@ def _apply_updated(company: Company, task: Task, data: dict[str, Any]) -> dict:
         and new_col == company.yg_completed_column_id
     )
     if should_archive and not task.is_archived:
-        fields["is_archived"] = True
-        fields["archived_at"] = datetime.now(timezone.utc)
+        # Инвариант GW: нельзя архивировать задачу с активным юнитом. Если по
+        # ней сейчас кто-то работает — не архивируем (иначе юнит «повиснет» на
+        # архивной задаче). Пользователь закроет задачу сам, когда остановит юнит.
+        if task_repo.has_active_unit(task.id):
+            logger.info("yougile.webhook_archive_skipped_active_unit",
+                        extra={"task_id": task.id})
+        else:
+            fields["is_archived"] = True
+            fields["archived_at"] = datetime.now(timezone.utc)
     elif not incoming_completed and task.is_archived and not company.yg_completed_column_id:
         # Если завершённость снимали в YG (а у нас не задана completed-колонка
         # для авто-архива), отменяем archive.

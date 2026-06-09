@@ -145,12 +145,44 @@
     <p v-if="!canEnable && yg.status.connected" class="warn">
       Чтобы включить интеграцию, выберите компанию, проект и доску.
     </p>
+
+    <!-- Сброс интеграции «начать заново» -->
+    <div v-if="yg.status.connected || settings?.yg_company_id" class="settings-card danger-card">
+      <div class="hero-icon" data-tone="error">
+        <span class="material-symbols-outlined">logout</span>
+      </div>
+      <div class="card-text">
+        <h3>Выйти из аккаунта и сбросить</h3>
+        <p>
+          Отключит webhook, очистит выбор компании, проекта и доски и отвяжет ваш
+          личный YouGile-аккаунт. Карточки в YouGile не удаляются. После сброса
+          настройку можно начать заново.
+        </p>
+      </div>
+      <div class="card-actions">
+        <button class="btn-outlined danger" :disabled="busy" @click="showReset = true">
+          <span class="material-symbols-outlined">logout</span>
+          Выйти и сбросить
+        </button>
+      </div>
+    </div>
+
+    <ConfirmDialog
+      :visible="showReset"
+      header="Сбросить интеграцию YouGile"
+      message="Будут сброшены настройки интеграции компании и отвязан ваш личный YouGile-аккаунт. Связи существующих задач с карточками сохранятся, но создавать новые карточки будет нельзя, пока интеграцию не настроят заново. Это действие необратимо."
+      confirm-label="Выйти и сбросить"
+      danger-confirm
+      @confirm="onReset"
+      @cancel="showReset = false"
+    />
   </div>
 </template>
 
 <script setup>
 import { reactive, ref, computed, onMounted } from 'vue'
 import Select from 'primevue/select'
+import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
 import { useYougileStore } from '@/stores/yougile.js'
 import { useNotificationsStore } from '@/stores/notifications.js'
 
@@ -162,6 +194,7 @@ const ygCompanies = computed(() => yg.ygCompanies)
 const pickedCompanyId = ref(null)
 
 const busy = ref(false)
+const showReset = ref(false)
 const projectsLoading = ref(false)
 const boardsLoading = ref(false)
 const columnsLoading = ref(false)
@@ -286,6 +319,23 @@ async function onToggleEnabled(ev) {
   }
 }
 
+async function onReset() {
+  if (busy.value) return
+  busy.value = true
+  try {
+    await yg.resetIntegration()
+    pickedCompanyId.value = null
+    adminForm.login = ''
+    adminForm.password = ''
+    showReset.value = false
+    notif.success('Интеграция сброшена — можно настроить заново')
+  } catch (e) {
+    notif.error(e?.data?.message || 'Не удалось сбросить интеграцию')
+  } finally {
+    busy.value = false
+  }
+}
+
 onMounted(async () => {
   try {
     await Promise.all([yg.refreshStatus(), yg.loadCompanySettings()])
@@ -331,6 +381,7 @@ onMounted(async () => {
 .hero-icon[data-tone="primary"]   { --tone-bg: var(--color-primary-container);   --tone-fg: var(--color-on-primary-container); }
 .hero-icon[data-tone="secondary"] { --tone-bg: var(--color-secondary-container); --tone-fg: var(--color-on-secondary-container); }
 .hero-icon[data-tone="tertiary"]  { --tone-bg: var(--color-tertiary-container);  --tone-fg: var(--color-on-tertiary-container); }
+.hero-icon[data-tone="error"]     { --tone-bg: var(--color-error-container);     --tone-fg: var(--color-on-error-container); }
 .hero-icon .material-symbols-outlined { font-size: 28px; }
 
 .card-text { flex: 1; min-width: 0; }
@@ -387,5 +438,11 @@ onMounted(async () => {
 .btn-filled:hover:not(:disabled) { background: color-mix(in oklch, var(--color-primary) 90%, black); }
 .btn-outlined { background: transparent; border-color: var(--color-outline-variant); color: var(--color-text); }
 .btn-outlined:hover:not(:disabled) { background: var(--color-surface-high); }
+.btn-outlined.danger { color: var(--color-error); border-color: var(--color-error); }
+.btn-outlined.danger:hover:not(:disabled) { background: var(--color-error-container); color: var(--color-on-error-container); }
+.btn-text { background: transparent; color: var(--color-text); }
+.btn-text:hover:not(:disabled) { background: var(--color-surface-high); }
 button:disabled { opacity: 0.5; cursor: not-allowed; }
+
+.danger-card { align-items: center; flex-wrap: wrap; border-color: color-mix(in oklch, var(--color-error) 35%, var(--color-outline-dim)); }
 </style>

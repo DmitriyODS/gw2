@@ -48,6 +48,11 @@ export const getCompanyYougileSettings = () =>
 export const updateCompanyYougileSettings = (payload) =>
   ygReq('/yougile/company-settings', { method: 'PUT', body: payload })
 
+// Полный сброс интеграции «начать заново» (руководитель): снять webhook,
+// очистить настройки компании и отвязать личный аккаунт инициатора.
+export const resetCompanyYougileIntegration = () =>
+  ygReq('/yougile/reset', { method: 'POST' })
+
 // ── Импорт / экспорт / отвязка задачи ────────────────────────────────────
 
 export const importYougileTask = (payload) =>

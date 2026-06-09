@@ -72,6 +72,18 @@ export const useYougileStore = defineStore('yougile', () => {
     return companySettings.value
   }
 
+  async function resetIntegration() {
+    companySettings.value = await api.resetCompanyYougileIntegration()
+    // Аккаунт инициатора отвязан, флаги компании сброшены — обновляем статус
+    // и чистим короткоживущие кеши визарда.
+    await refreshStatus().catch(() => {})
+    ygCompanies.value = []
+    ygProjects.value = []
+    ygBoards.value = []
+    ygColumns.value = []
+    return companySettings.value
+  }
+
   async function lookupCompanies({ login, password }) {
     ygCompanies.value = await api.lookupYougileCompanies({ login, password })
     return ygCompanies.value
@@ -110,7 +122,7 @@ export const useYougileStore = defineStore('yougile', () => {
     ygCompanies, ygProjects, ygBoards, ygColumns,
     isAvailable,
     refreshStatus, connect, disconnect, rotate,
-    loadCompanySettings, updateCompanySettings,
+    loadCompanySettings, updateCompanySettings, resetIntegration,
     lookupCompanies, loadProjects, loadBoards, loadColumns,
     reset,
   }

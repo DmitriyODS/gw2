@@ -69,8 +69,8 @@ def test_apply_no_id_skipped():
 def test_self_echo_is_skipped():
     task = _make_task(
         name="Hello", deadline=None,
-        yougile_sync_hash=_sync_hash(title="Hello", description=None,
-                                     deadline_ms=None, completed=False),
+        yougile_sync_hash=_sync_hash(title="Hello", deadline_ms=None,
+                                     completed=False),
     )
     fake_q = MagicMock()
     fake_q.filter_by.return_value.first.return_value = task
@@ -142,6 +142,7 @@ def test_completed_triggers_archive():
          patch.object(apply_mod, "db"), \
          patch("app.api.tasks._enrich_task", return_value={}):
         Task_mod.query = fake_q
+        repo_mod.has_active_unit.return_value = False
         out = apply_mod.apply_event(task.company, {
             "event": "task-completed",
             "data": {"id": "yg-1", "title": "X", "completed": True},
@@ -150,6 +151,27 @@ def test_completed_triggers_archive():
         upd_kw = repo_mod.update.call_args.kwargs
         assert upd_kw["is_archived"] is True
         assert isinstance(upd_kw["archived_at"], datetime)
+
+
+def test_completed_with_active_unit_does_not_archive():
+    """Инвариант: задачу с активным юнитом не архивируем даже по completed из YG."""
+    task = _make_task(name="X")
+    fake_q = MagicMock()
+    fake_q.filter_by.return_value.first.return_value = task
+    with patch.object(apply_mod, "Task") as Task_mod, \
+         patch.object(apply_mod, "task_repo") as repo_mod, \
+         patch.object(apply_mod, "socketio"), \
+         patch.object(apply_mod, "db"), \
+         patch("app.api.tasks._enrich_task", return_value={}):
+        Task_mod.query = fake_q
+        repo_mod.has_active_unit.return_value = True
+        out = apply_mod.apply_event(task.company, {
+            "event": "task-completed",
+            "data": {"id": "yg-1", "title": "X", "completed": True},
+        })
+        # Архива нет: либо нет полей (no-changes), либо есть, но без is_archived.
+        upd_kw = repo_mod.update.call_args.kwargs if repo_mod.update.called else {}
+        assert "is_archived" not in upd_kw
 
 
 def test_move_to_completed_column_archives():
@@ -163,6 +185,7 @@ def test_move_to_completed_column_archives():
          patch.object(apply_mod, "db"), \
          patch("app.api.tasks._enrich_task", return_value={}):
         Task_mod.query = fake_q
+        repo_mod.has_active_unit.return_value = False
         out = apply_mod.apply_event(company, {
             "event": "task-moved",
             "data": {"id": "yg-1", "columnId": "done-col", "completed": False},
