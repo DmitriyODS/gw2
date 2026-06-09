@@ -100,17 +100,6 @@
           </span>
         </div>
 
-        <span
-          v-if="task.responsible"
-          class="responsible-ava"
-          :title="`Ответственный: ${task.responsible.fio}`"
-        >
-          <img
-            :src="task.responsible.avatar_path ? `/uploads/${task.responsible.avatar_path}` : `/api/users/${task.responsible.id}/identicon`"
-            :alt="task.responsible.fio"
-          />
-        </span>
-
         <div v-if="task.active_users?.length" class="active-users">
           <span
             v-for="user in task.active_users.slice(0, 4)"
@@ -411,27 +400,6 @@ function formatDate(d) {
   background: currentColor;
 }
 
-.responsible-ava {
-  width: 26px;
-  height: 26px;
-  border-radius: 50%;
-  overflow: hidden;
-  flex-shrink: 0;
-  box-shadow: 0 0 0 2px var(--color-surface), 0 0 0 3px var(--color-outline-dim);
-  margin-right: 6px;
-}
-
-.task-card.colored .responsible-ava {
-  box-shadow: 0 0 0 2px var(--card-tag-surface), 0 0 0 3px var(--card-tag-border);
-}
-
-.responsible-ava img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  display: block;
-}
-
 .card-footer {
   display: flex;
   align-items: center;
@@ -667,12 +635,6 @@ function formatDate(d) {
   }
 
   /* Аватарки чуть крупнее — лучше различимы на маленьких экранах. */
-  .responsible-ava {
-    width: 28px;
-    height: 28px;
-    margin-right: 4px;
-  }
-
   .active-avatar {
     width: 26px;
     height: 26px;

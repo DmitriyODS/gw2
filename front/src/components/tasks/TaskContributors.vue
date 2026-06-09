@@ -33,32 +33,73 @@ onMounted(load)
     <div class="contributors-label">Работали над задачей</div>
     <div v-if="loading" class="contributors-empty">…</div>
     <div v-else-if="!list.length" class="contributors-empty">Пока никто</div>
-    <div v-else class="contributors-list">
-      <span v-for="u in list" :key="u.id" class="contributor" :title="u.fio">
-        <img :src="avatarOf(u)" :alt="u.fio" />
+    <div v-else class="contributors-chips">
+      <span v-for="u in list" :key="u.id" class="contributor-chip" :title="u.fio">
+        <img class="chip-avatar" :src="avatarOf(u)" :alt="u.fio" />
+        <span class="chip-name">{{ u.fio }}</span>
       </span>
     </div>
   </div>
 </template>
 
 <style scoped>
-.contributors { display: flex; flex-direction: column; gap: 6px; }
+.contributors {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
 .contributors-label {
   font-size: 12px;
   font-weight: 600;
   color: var(--color-primary);
 }
-.contributors-empty { font-size: 12px; color: var(--color-on-surface-variant); }
-.contributors-list { display: flex; align-items: center; flex-wrap: wrap; gap: 2px; }
-.contributor {
-  width: 32px;
-  height: 32px;
-  border-radius: 50%;
-  overflow: hidden;
-  border: 2px solid var(--color-surface);
-  margin-left: -6px;
-  box-shadow: 0 0 0 1px var(--color-outline-dim);
+
+.contributors-empty {
+  font-size: 12px;
+  color: var(--color-text-dim);
 }
-.contributor:first-child { margin-left: 0; }
-.contributor img { width: 100%; height: 100%; object-fit: cover; display: block; }
+
+.contributors-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+/* M3 input-chip: аватар + ФИО */
+.contributor-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  max-width: 100%;
+  padding: 4px 12px 4px 4px;
+  border-radius: var(--radius-full);
+  background: var(--color-surface-high);
+  border: 1px solid var(--color-outline-dim);
+  color: var(--color-text);
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.contributor-chip:hover {
+  background: var(--color-surface-highest);
+  border-color: var(--color-outline);
+}
+
+.chip-avatar {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  object-fit: cover;
+  flex-shrink: 0;
+  display: block;
+}
+
+.chip-name {
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.2;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
 </style>

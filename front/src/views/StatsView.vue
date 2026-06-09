@@ -1,9 +1,18 @@
 <template>
   <div class="stats-view">
     <div class="stats-sticky">
-      <header class="stats-header">
-        <div class="stats-title-row">
-          <h1>Статистика</h1>
+      <div class="stats-title-row">
+        <h1>Статистика</h1>
+        <div class="stats-title-actions">
+          <button
+            class="reset-layout-btn"
+            title="Сбросить раскладку виджетов"
+            aria-label="Сбросить раскладку"
+            @click="resetLayout"
+          >
+            <span class="material-symbols-outlined">restart_alt</span>
+            <span class="reset-layout-label">Сбросить вид</span>
+          </button>
           <a
             href="/tv"
             target="_blank"
@@ -16,16 +25,19 @@
             <span class="tv-link-label">ТВ-режим</span>
           </a>
         </div>
+      </div>
 
+      <!-- Табы и выбор периода в одной строке; переносятся, когда не влезают. -->
+      <div class="stats-controls-row">
         <SegmentedTabs
+          class="stats-mode-tabs"
           :model-value="mode"
           :tabs="modeTabs"
           :full-width="isMobile"
           @update:model-value="switchMode($event)"
         />
-      </header>
-
-      <StatsPeriodControl @change="onPeriodChange" />
+        <StatsPeriodControl class="stats-period" @change="onPeriodChange" />
+      </div>
     </div>
 
     <div class="stats-scroll">
@@ -36,7 +48,7 @@
     <!-- Общая статистика -->
     <template v-else-if="mode === 'common' && commonData">
       <div class="stats-grid">
-        <StatsWidget title="Задачи за период" :export-fn="canExport ? handleExportCommon : null">
+        <StatsWidget widget-id="tasks-period" title="Задачи за период" :export-fn="canExport ? handleExportCommon : null">
           <div class="task-tiles">
             <div class="task-tile tone-warning">
               <span class="material-symbols-outlined tile-icon">hourglass_top</span>
@@ -62,6 +74,7 @@
         </StatsWidget>
 
         <StatsWidget
+          widget-id="by-employees"
           title="Отработка задач по сотрудникам"
           :export-fn="canExportUsers ? handleExportCommon : null"
         >
@@ -94,7 +107,7 @@
           </div>
         </StatsWidget>
 
-        <StatsWidget title="Задачи по часам">
+        <StatsWidget widget-id="by-hours" title="Задачи по часам">
           <ul v-if="isMobile" class="m-list">
             <li
               v-for="(row, i) in commonData.tasks_by_hours || []"
@@ -120,7 +133,7 @@
           </div>
         </StatsWidget>
 
-        <StatsWidget title="Ответственные по задачам">
+        <StatsWidget widget-id="responsibles" title="Ответственные по задачам">
           <ul v-if="isMobile && responsiblesData.length" class="m-list">
             <li v-for="r in responsiblesData" :key="r.user_id || r.id" class="m-row">
               <div class="m-row-main">
@@ -164,7 +177,7 @@
           <div v-else class="user-tasks-empty">Нет назначенных ответственных</div>
         </StatsWidget>
 
-        <StatsWidget title="Задачи с участием сотрудника" class="full-width">
+        <StatsWidget widget-id="user-tasks" title="Задачи с участием сотрудника">
           <div v-if="canSelectEmployee" class="employee-selector">
             <Select
               v-model="selectedEmployeeId"
@@ -216,7 +229,7 @@
     <!-- Расширенная статистика -->
     <template v-else-if="mode === 'extended' && extendedData">
       <div class="stats-grid">
-        <StatsWidget title="По типам юнитов">
+        <StatsWidget widget-id="unit-types" title="По типам юнитов">
           <ul v-if="isMobile" class="m-list">
             <li
               v-for="(row, i) in extendedData.by_unit_types || []"
@@ -242,7 +255,7 @@
           </div>
         </StatsWidget>
 
-        <StatsWidget title="По отделам">
+        <StatsWidget widget-id="departments" title="По отделам">
           <ul v-if="isMobile" class="m-list">
             <li
               v-for="(row, i) in extendedData.by_departments || []"
@@ -264,7 +277,7 @@
           </div>
         </StatsWidget>
 
-        <StatsWidget title="По типам юнитов для пользователей" class="full-width">
+        <StatsWidget widget-id="unit-types-per-user" title="По типам юнитов для пользователей">
           <ul v-if="isMobile" class="m-list">
             <li
               v-for="(row, i) in flatUserTypes"
@@ -291,7 +304,7 @@
           </div>
         </StatsWidget>
 
-        <StatsWidget title="Загруженность по дням" class="full-width">
+        <StatsWidget widget-id="calendar" title="Загруженность по дням">
           <CalendarGrid :data="extendedData.calendar || []" />
         </StatsWidget>
       </div>
@@ -312,6 +325,7 @@ import { usePermission, ROLES } from '@/composables/usePermission.js'
 import { useAuthStore } from '@/stores/auth.js'
 import { useNotificationsStore } from '@/stores/notifications.js'
 import { useBreakpoint } from '@/composables/useBreakpoint.js'
+import { useStatsLayout } from '@/composables/useStatsLayout.js'
 import {
   getStatsCommon,
   getStatsExtended,
@@ -336,6 +350,7 @@ const { isAtLeast } = usePermission()
 const authStore = useAuthStore()
 const notif = useNotificationsStore()
 const { isMobile } = useBreakpoint()
+const { reset: resetLayout } = useStatsLayout()
 
 const mode = ref('common')
 const loading = ref(false)
@@ -501,10 +516,18 @@ onMounted(async () => {
   padding: 20px 24px;
 }
 
-.stats-header {
+.stats-controls-row {
   display: flex;
-  flex-direction: column;
-  gap: 14px;
+  align-items: center;
+  gap: 12px 16px;
+  flex-wrap: wrap;
+  padding: 2px 0;
+}
+
+/* Период уезжает вправо, когда влезает в одну строку с табами;
+   при нехватке места переносится на следующую строку (flex-wrap). */
+.stats-period {
+  margin-left: auto;
 }
 
 .stats-title-row {
@@ -521,6 +544,38 @@ onMounted(async () => {
   font-weight: 800;
   letter-spacing: -0.02em;
   color: var(--color-text);
+}
+
+.stats-title-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.reset-layout-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 18px;
+  min-height: 44px;
+  border: 1px solid var(--color-outline-dim);
+  border-radius: var(--radius-full);
+  background: var(--color-surface);
+  color: var(--color-text-dim);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+}
+
+.reset-layout-btn:hover {
+  background: var(--color-surface-high);
+  color: var(--color-text);
+}
+
+.reset-layout-btn .material-symbols-outlined {
+  font-size: 20px;
 }
 
 .tv-link-btn {
@@ -627,13 +682,21 @@ onMounted(async () => {
 
 .stats-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 16px;
+  align-items: start;
 }
 
-.stats-grid .full-width {
-  grid-column: 1 / -1;
-  --widget-max-height: 520px;
+@media (max-width: 1280px) {
+  .stats-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 960px) {
+  .stats-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 }
 
 /* === Задачи за период — M3 Expressive tiles === */
@@ -805,6 +868,40 @@ onMounted(async () => {
   -webkit-overflow-scrolling: touch;
 }
 
+/* Таблицы внутри виджетов наследуют фон карточки — без своей подложки,
+   чтобы не выбиваться из surface (задача #2). Границы/текст — на токенах. */
+.table-scroll :deep(.p-datatable),
+.table-scroll :deep(.p-datatable-table-container),
+.table-scroll :deep(.p-datatable-header),
+.table-scroll :deep(.p-datatable-thead),
+.table-scroll :deep(.p-datatable-header-cell),
+.table-scroll :deep(.p-datatable-thead > tr > th),
+.table-scroll :deep(.p-datatable-tbody),
+.table-scroll :deep(.p-datatable-tbody > tr),
+.table-scroll :deep(.p-datatable-tbody > tr > td) {
+  background: transparent;
+  background-color: transparent;
+}
+
+.table-scroll :deep(.p-datatable-header-cell),
+.table-scroll :deep(.p-datatable-thead > tr > th) {
+  color: var(--color-text-dim);
+  border-color: var(--color-outline-dim);
+}
+
+.table-scroll :deep(.p-datatable-tbody > tr) {
+  color: var(--color-text);
+}
+
+.table-scroll :deep(.p-datatable-tbody > tr > td) {
+  border-color: var(--color-outline-dim);
+}
+
+.table-scroll :deep(.p-datatable-tbody > tr:hover),
+.table-scroll :deep(.p-datatable-tbody > tr.p-datatable-row-hover) {
+  background: color-mix(in oklch, var(--color-primary) 7%, transparent);
+}
+
 .employee-selector {
   margin-bottom: 12px;
 }
@@ -841,7 +938,17 @@ onMounted(async () => {
 @media (max-width: 768px) {
   .stats-sticky {
     padding: 12px 14px 10px;
-    gap: 6px;
+    gap: 8px;
+  }
+
+  .stats-controls-row {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 8px;
+  }
+
+  .stats-period {
+    margin-left: 0;
   }
 
   .stats-scroll {
@@ -888,7 +995,8 @@ onMounted(async () => {
     font-size: 20px;
   }
 
-  .tv-link-btn {
+  .tv-link-btn,
+  .reset-layout-btn {
     padding: 0;
     width: 44px;
     height: 44px;
@@ -897,7 +1005,8 @@ onMounted(async () => {
     gap: 0;
   }
 
-  .tv-link-label {
+  .tv-link-label,
+  .reset-layout-label {
     display: none;
   }
 
