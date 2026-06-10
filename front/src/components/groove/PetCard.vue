@@ -8,6 +8,8 @@
         <span v-if="hatEmoji" class="pet-hat">{{ hatEmoji }}</span>
         <span v-if="pet.sick" class="pet-sick-badge" title="Грувик болеет">🤒</span>
       </div>
+      <span v-if="xpGain" :key="xpGainTick" class="pet-xp-float">+{{ xpGain }} XP</span>
+      <span v-if="beansGain" :key="'b' + beansGainTick" class="pet-beans-float">+{{ beansGain }} 🫘</span>
 
       <transition name="phrase">
         <div v-if="phrase" class="pet-phrase">{{ phrase }}</div>
@@ -77,7 +79,7 @@
           :disabled="claiming"
           @click="claim"
         >Забрать награду</button>
-        <span v-else-if="quest.claimed" class="pet-quest-claimed">Награда забрана 🎉</span>
+        <span v-else-if="quest.claimed" class="pet-quest-claimed">Награда получена 🎉</span>
         <span v-else class="pet-quest-hint">{{ quest.hint }}</span>
       </div>
     </div>
@@ -87,8 +89,16 @@
         <span>{{ pet.stage >= maxStage ? 'Максимальная форма' : 'До эволюции' }}</span>
         <span v-if="pet.next_stage_xp">{{ pet.xp }} / {{ pet.next_stage_xp }} XP</span>
       </div>
-      <div class="pet-xp-bar">
-        <div class="pet-xp-fill" :style="{ width: xpPercent + '%' }"></div>
+      <div class="pet-xp-row">
+        <div class="pet-xp-bar">
+          <div class="pet-xp-fill" :style="{ width: xpPercent + '%' }"></div>
+        </div>
+        <span
+          v-if="pet.next_stage_xp"
+          class="pet-next"
+          :class="{ egg: pet.stage === 0 }"
+          :title="nextHint"
+        >{{ pet.stage === 0 ? '🐣' : '?' }}</span>
       </div>
     </div>
 
@@ -108,6 +118,18 @@
         <span class="material-symbols-outlined">restaurant</span>
         {{ pet.feeds_left }}/{{ feedsMax }}
       </span>
+    </div>
+
+    <div v-if="weekDays.length" class="pet-week" title="Кормления за последние 7 дней">
+      <div
+        v-for="d in weekDays"
+        :key="d.key"
+        class="pet-week-day"
+        :class="{ fed: d.fed, today: d.today }"
+      >
+        <span class="pet-week-dot"></span>
+        <span class="pet-week-label">{{ d.label }}</span>
+      </div>
     </div>
 
     <div class="pet-actions">
@@ -145,7 +167,7 @@
 </template>
 
 <script setup>
-import { computed, nextTick, ref } from 'vue'
+import { computed, nextTick, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { useGrooveStore } from '@/stores/groove.js'
 import { useMessengerStore } from '@/stores/messenger.js'
@@ -168,7 +190,22 @@ const claiming = ref(false)
 const renaming = ref(false)
 const newName = ref('')
 const nameInput = ref(null)
+const xpGain = ref(0)
+const xpGainTick = ref(0)
+const beansGain = ref(0)
+const beansGainTick = ref(0)
 let phraseTimer = null
+let xpGainTimer = null
+let beansGainTimer = null
+
+watch(() => pet.value?.beans, (val, old) => {
+  if (old != null && val != null && val > old) {
+    beansGain.value = val - old
+    beansGainTick.value++
+    clearTimeout(beansGainTimer)
+    beansGainTimer = setTimeout(() => { beansGain.value = 0 }, 1600)
+  }
+})
 
 const quest = computed(() => pet.value?.quest || null)
 const questPercent = computed(() => {
@@ -217,6 +254,45 @@ const xpPercent = computed(() => {
   return Math.min(100, Math.round((pet.value.xp / pet.value.next_stage_xp) * 100))
 })
 
+// Тизер эволюции: следующая форма — загадка (вид пересчитывается на эволюции).
+const nextHint = computed(() => {
+  const p = pet.value
+  if (!p?.next_stage_xp) return ''
+  if (p.stage === 0) return `Кто-то вылупится на ${p.next_stage_xp} XP`
+  if (p.stage === 1) return `Вид питомца проявится на ${p.next_stage_xp} XP`
+  return `Следующая форма откроется на ${p.next_stage_xp} XP`
+})
+
+// Календарь кормлений: последние 7 дней, «накормленные» восстанавливаются
+// из стрика — он по определению непрерывен и заканчивается в last_fed_date.
+const dateKey = (d) => `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`
+
+const weekDays = computed(() => {
+  const p = pet.value
+  if (!p) return []
+  const fed = new Set()
+  if (p.last_fed_date && p.feed_streak > 0) {
+    const [y, m, d] = String(p.last_fed_date).slice(0, 10).split('-').map(Number)
+    if (y && m && d) {
+      for (let i = 0; i < Math.min(p.feed_streak, 14); i++) {
+        fed.add(dateKey(new Date(y, m - 1, d - i)))
+      }
+    }
+  }
+  const now = new Date()
+  const out = []
+  for (let i = 6; i >= 0; i--) {
+    const dt = new Date(now.getFullYear(), now.getMonth(), now.getDate() - i)
+    out.push({
+      key: dateKey(dt),
+      label: dt.toLocaleDateString('ru-RU', { weekday: 'narrow' }),
+      fed: fed.has(dateKey(dt)),
+      today: i === 0,
+    })
+  }
+  return out
+})
+
 const canFeed = computed(() => {
   if (!pet.value) return false
   const cost = pet.value.sick ? 1 : 3
@@ -244,20 +320,28 @@ const feedHint = computed(() => {
 async function feed() {
   if (feeding.value) return
   feeding.value = true
+  const xpBefore = pet.value?.xp ?? 0
   try {
     const res = await groove.feedPet()
     justFed.value = true
     setTimeout(() => { justFed.value = false }, 700)
+    const gained = (res.xp ?? xpBefore) - xpBefore
+    if (gained > 0) {
+      xpGain.value = gained
+      xpGainTick.value++
+      clearTimeout(xpGainTimer)
+      xpGainTimer = setTimeout(() => { xpGain.value = 0 }, 1300)
+    }
     if (res.phrase) {
       phrase.value = res.phrase
       clearTimeout(phraseTimer)
       phraseTimer = setTimeout(() => { phrase.value = '' }, 6000)
     }
     if (res.evolved) {
-      notify.success(`«${res.name}» эволюционировал! Теперь это ${PET_STAGES[res.stage]} 🎉`)
+      groove.celebrate('pet_evolved', { pet_name: res.name, stage: res.stage, species: res.species })
     }
     if (res.recovered) {
-      notify.success(`«${res.name}» выздоровел! Вы отлично его выходили 💚`)
+      groove.celebrate('pet_recovered', { pet_name: res.name })
     }
   } catch (e) {
     notify.warn(e?.message || 'Покормить не получилось')
@@ -303,41 +387,80 @@ async function toggleEquip(item) {
   align-items: center;
   overflow: hidden;
 }
+/* «Сцена»: градиентный мир питомца с мягким свечением под ним. */
 .pet-stage-bg {
   position: absolute;
   inset: 0 0 auto 0;
-  height: 96px;
-  background: linear-gradient(180deg,
-    color-mix(in oklch, var(--color-primary-container) 55%, transparent),
-    transparent);
+  height: 132px;
+  background:
+    radial-gradient(100px 60px at 50% 84px,
+      color-mix(in oklch, var(--color-tertiary) 16%, transparent), transparent 72%),
+    linear-gradient(160deg,
+      color-mix(in oklch, var(--color-primary-container) 75%, transparent),
+      color-mix(in oklch, var(--color-tertiary-container) 45%, transparent) 62%,
+      transparent);
   pointer-events: none;
 }
 .pet-top { position: relative; display: flex; flex-direction: column; align-items: center; }
 .pet-figure {
   position: relative;
-  width: 86px;
-  height: 86px;
+  width: 96px;
+  height: 96px;
   border-radius: 50%;
-  background: var(--color-primary-container);
+  background: var(--color-surface);
   display: grid;
   place-items: center;
-  box-shadow: var(--shadow-sm, none);
+  box-shadow: 0 6px 18px color-mix(in oklch, var(--color-primary) 22%, transparent);
+  animation: pet-idle 3.8s ease-in-out infinite;
 }
 .pet-figure.bounce { animation: pet-bounce 0.65s cubic-bezier(0.34, 1.56, 0.64, 1); }
+.pet-figure.sick { animation: none; }
+@keyframes pet-idle {
+  0%, 100% { transform: translateY(0) scale(1); }
+  50% { transform: translateY(-4px) scale(1.015); }
+}
 @keyframes pet-bounce {
   0% { transform: scale(1); }
   35% { transform: scale(1.18) rotate(-4deg); }
   70% { transform: scale(0.96) rotate(2deg); }
   100% { transform: scale(1); }
 }
+@media (prefers-reduced-motion: reduce) {
+  .pet-figure { animation: none; }
+}
 .pet-figure.sick .pet-emoji { filter: grayscale(0.55) brightness(0.92); }
+.pet-xp-float {
+  position: absolute;
+  top: 4px;
+  right: -52px;
+  font-size: 13.5px;
+  font-weight: 800;
+  color: var(--color-success);
+  pointer-events: none;
+  animation: xp-rise 1.25s ease-out forwards;
+}
+.pet-beans-float {
+  position: absolute;
+  top: 4px;
+  left: -60px;
+  font-size: 13.5px;
+  font-weight: 800;
+  color: var(--color-warning);
+  pointer-events: none;
+  animation: xp-rise 1.5s ease-out forwards;
+}
+@keyframes xp-rise {
+  0% { transform: translateY(8px); opacity: 0; }
+  25% { opacity: 1; }
+  100% { transform: translateY(-20px); opacity: 0; }
+}
 .pet-sick-badge {
   position: absolute;
   bottom: -4px;
   left: -4px;
   font-size: 22px;
 }
-.pet-emoji { font-size: 46px; line-height: 1; }
+.pet-emoji { font-size: 52px; line-height: 1; }
 .pet-hat {
   position: absolute;
   top: -12px;
@@ -449,11 +572,32 @@ async function toggleEquip(item) {
   color: var(--color-text-dim);
   margin-bottom: 4px;
 }
+.pet-xp-row { display: flex; align-items: center; gap: 8px; }
 .pet-xp-bar {
+  flex: 1;
   height: 8px;
   border-radius: var(--radius-full);
   background: var(--color-surface-high);
   overflow: hidden;
+}
+.pet-next {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  border: 1.5px dashed var(--color-outline-dim);
+  background: var(--color-surface-high);
+  display: grid;
+  place-items: center;
+  font-size: 13px;
+  font-weight: 800;
+  color: var(--color-text-dim);
+  cursor: help;
+  flex-shrink: 0;
+}
+.pet-next.egg {
+  font-size: 14px;
+  filter: grayscale(1) brightness(0.6);
+  opacity: 0.85;
 }
 .pet-xp-fill {
   height: 100%;
@@ -477,6 +621,31 @@ async function toggleEquip(item) {
 .pet-chip.beans { background: color-mix(in oklch, var(--color-success) 18%, transparent); }
 .pet-chip.streak { background: color-mix(in oklch, var(--color-warning) 22%, transparent); }
 .pet-chip-emoji { font-size: 14px; }
+
+/* ── Календарь кормлений за неделю ─────────────────────────── */
+.pet-week { display: flex; gap: 9px; margin-top: 12px; }
+.pet-week-day { display: flex; flex-direction: column; align-items: center; gap: 3px; }
+.pet-week-dot {
+  width: 15px;
+  height: 15px;
+  border-radius: 50%;
+  background: var(--color-surface-high);
+  border: 1.5px solid var(--color-outline-dim);
+  transition: background 0.2s, border-color 0.2s;
+}
+.pet-week-day.fed .pet-week-dot {
+  background: color-mix(in oklch, var(--color-warning) 78%, transparent);
+  border-color: var(--color-warning);
+}
+.pet-week-day.today .pet-week-dot {
+  box-shadow: 0 0 0 2px color-mix(in oklch, var(--color-primary) 40%, transparent);
+}
+.pet-week-label {
+  font-size: 9.5px;
+  font-weight: 600;
+  text-transform: uppercase;
+  color: var(--color-text-dim);
+}
 
 .pet-actions { display: flex; gap: 8px; margin-top: 14px; width: 100%; }
 .pet-feed-btn {

@@ -5,7 +5,7 @@
         <span class="material-symbols-outlined">pets</span>
         Зоопарк команды
       </h3>
-      <span class="zoo-hint">Погладьте чужого Грувика — по груву обоим. Больных 🤒 поглаживание лечит</span>
+      <span class="zoo-hint">Нажмите на Грувика, чтобы посмотреть или погладить</span>
     </header>
 
     <div class="zoo-strip">
@@ -13,13 +13,12 @@
         <button
           class="zoo-figure"
           type="button"
-          :disabled="p.user_id === groove.myId || p.stroked_by_me"
-          :title="strokeTitle(p)"
-          @click="stroke(p)"
+          :title="figureTitle(p)"
+          @click="openPet(p)"
         >
           <span class="zoo-emoji" :class="{ sick: p.sick }">{{ petEmoji(p) }}</span>
           <span v-if="hatOf(p)" class="zoo-hat">{{ hatOf(p) }}</span>
-          <span v-if="p.sick" class="zoo-sick" title="Болеет — погладьте, это лечит">🤒</span>
+          <span v-if="p.sick" class="zoo-sick" title="Болеет — поглаживание лечит">🤒</span>
           <span
             v-if="p.user_id !== groove.myId"
             class="zoo-stroke-badge"
@@ -37,19 +36,27 @@
         Пока пусто — Грувики вылупляются при первом заходе хозяев в «Мой Groove»
       </p>
     </div>
+
+    <ColleaguePetModal
+      v-if="selectedPet"
+      :model-value="modalOpen"
+      :pet="selectedPet"
+      @update:model-value="modalOpen = $event"
+    />
   </section>
 </template>
 
 <script setup>
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 import { useGrooveStore } from '@/stores/groove.js'
-import { useNotificationsStore } from '@/stores/notifications.js'
 import { petEmoji, SHOP_ITEMS } from '@/utils/groove.js'
+import ColleaguePetModal from './ColleaguePetModal.vue'
 
 const groove = useGrooveStore()
-const notify = useNotificationsStore()
 
 const pets = computed(() => groove.zoo)
+const selectedPet = ref(null)
+const modalOpen = ref(false)
 
 const hatOf = (p) => (p.hat ? SHOP_ITEMS[p.hat]?.emoji : null)
 
@@ -59,18 +66,14 @@ function firstName(fio) {
   return parts.length > 1 ? `${parts[0]} ${parts[1]}` : fio
 }
 
-function strokeTitle(p) {
-  if (p.user_id === groove.myId) return 'Это ваш Грувик'
-  return p.stroked_by_me ? 'Сегодня уже погладили' : 'Погладить'
+function figureTitle(p) {
+  if (p.user_id === groove.myId) return 'Ваш Грувик'
+  return p.stroked_by_me ? `${p.name} — сегодня погладили ❤` : `Посмотреть на ${p.name}`
 }
 
-async function stroke(p) {
-  try {
-    await groove.strokePet(p.user_id)
-    notify.success(`Вы погладили «${p.name}» — вам обоим по груву ❤`)
-  } catch (e) {
-    notify.warn(e?.message || 'Не получилось погладить')
-  }
+function openPet(p) {
+  selectedPet.value = p
+  modalOpen.value = true
 }
 </script>
 

@@ -57,6 +57,7 @@ class PetSchema(Schema):
     hat = fields.Str(dump_only=True, allow_none=True)
     accessories = fields.List(fields.Str(), dump_only=True)
     feed_streak = fields.Int(dump_only=True)
+    last_fed_date = fields.Date(dump_only=True)
     user = fields.Nested(FeedUserRefSchema, dump_only=True)
 
 

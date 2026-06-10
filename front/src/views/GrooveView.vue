@@ -15,17 +15,32 @@
             </span>
           </div>
         </div>
-        <div class="head-actions">
+        <div class="head-actions desktop-only">
           <button class="wrapped-btn" @click="showWrapped = true">
             <span class="material-symbols-outlined">auto_awesome</span>
-            <span class="desktop-only-label">Моя неделя</span>
+            <span>Моя неделя</span>
           </button>
-          <button class="kudos-btn desktop-only" @click="showKudos = true">
+          <button class="kudos-btn" @click="showKudos = true">
             <span class="material-symbols-outlined">volunteer_activism</span>
             <span>Поблагодарить</span>
           </button>
         </div>
       </div>
+
+      <!-- Компактный питомец в шапке: появляется на узких экранах,
+           когда PetCard уезжает из вьюпорта. Тап возвращает к карточке. -->
+      <transition name="petstrip">
+        <button v-if="showPetStrip" class="pet-strip" type="button" @click="scrollToTop">
+          <span class="pet-strip-emoji">{{ petEmoji(pet) }}</span>
+          <span class="pet-strip-name">{{ pet.name }}</span>
+          <span v-if="pet.sick" class="pet-strip-sick" title="Грувик болеет">🤒</span>
+          <span class="pet-strip-chip">🫘 {{ pet.beans }}</span>
+          <span v-if="pet.feed_streak" class="pet-strip-chip">🔥 {{ pet.feed_streak }}</span>
+          <span class="pet-strip-bar" aria-hidden="true">
+            <span class="pet-strip-fill" :style="{ width: stripXpPercent + '%' }"></span>
+          </span>
+        </button>
+      </transition>
     </header>
 
     <div ref="bodyRef" class="admin-body">
@@ -33,12 +48,34 @@
 
       <div class="groove-layout">
         <aside class="groove-aside">
-          <PetCard @open-shop="showShop = true" />
+          <div ref="petBoxRef">
+            <PetCard @open-shop="showShop = true" />
+          </div>
           <RaidCard />
         </aside>
 
         <main class="groove-main">
           <ZooStrip />
+
+          <div v-if="newCount" class="feed-newpill-wrap">
+            <button class="feed-newpill" type="button" @click="scrollToTop">
+              <span class="material-symbols-outlined">arrow_upward</span>
+              Новые события<template v-if="newCount > 1"> · {{ newCount }}</template>
+            </button>
+          </div>
+
+          <div v-if="groove.events.length" class="feed-filters" role="tablist" aria-label="Фильтр ленты">
+            <button
+              v-for="f in FEED_FILTERS"
+              :key="f.key"
+              type="button"
+              class="feed-filter-chip"
+              :class="{ active: feedFilter === f.key }"
+              role="tab"
+              :aria-selected="feedFilter === f.key"
+              @click="feedFilter = f.key"
+            >{{ f.title }}</button>
+          </div>
 
           <div v-if="!groove.events.length && groove.loadingFeed" class="groove-empty">
             Загружаем ленту…
@@ -47,6 +84,11 @@
             <span class="groove-empty-icon">👾</span>
             <h3>Лента пока пуста</h3>
             <p>Запустите юнит или закройте задачу — здесь появится первая опорная точка</p>
+          </div>
+          <div v-else-if="!filteredEvents.length" class="groove-empty">
+            <span class="groove-empty-icon">🔍</span>
+            <h3>Ничего не нашлось</h3>
+            <p>В загруженной части ленты таких событий нет — листайте, история подгружается</p>
           </div>
 
           <!-- Река дня: дни — полноширинные секции, события внутри
@@ -65,39 +107,70 @@
                     <span class="material-symbols-outlined">{{ zone.icon }}</span>
                     {{ zone.title }}
                   </div>
-                  <FeedCard v-for="event in zone.events" :key="event.id" :event="event" />
+                  <FeedCard
+                    v-for="(event, i) in zone.events"
+                    :key="event.id"
+                    :event="event"
+                    :style="{ '--i': Math.min(i, 8) }"
+                  />
                 </template>
               </div>
             </section>
+          </div>
 
-            <div ref="sentinelEl" class="river-sentinel" aria-hidden="true">
-              <span v-if="groove.loadingFeed" class="river-loading">…</span>
-            </div>
+          <!-- Sentinel вне реки: продолжает подгрузку и когда фильтр
+               «спрятал» все загруженные события. -->
+          <div v-if="groove.events.length" ref="sentinelEl" class="river-sentinel" aria-hidden="true">
+            <span v-if="groove.loadingFeed" class="river-loading">…</span>
           </div>
         </main>
       </div>
     </div>
 
-    <AppFab
-      icon="volunteer_activism"
-      label="Спасибо"
-      aria-label="Поблагодарить коллегу"
-      :collapsed="isCompact"
-      @click="showKudos = true"
-    />
+    <!-- Мобильное FAB-меню: Спасибо / Моя неделя / Магазин -->
+    <Teleport to="body">
+      <transition name="gfab-back">
+        <div v-if="fabOpen" class="gfab-backdrop" @click="fabOpen = false"></div>
+      </transition>
+      <div class="gfab" :class="{ open: fabOpen }">
+        <div class="gfab-items">
+          <button class="gfab-item" type="button" @click="fabAction(() => showShop = true)">
+            <span class="gfab-item-label">Магазин</span>
+            <span class="gfab-item-btn"><span class="material-symbols-outlined">storefront</span></span>
+          </button>
+          <button class="gfab-item" type="button" @click="fabAction(() => showWrapped = true)">
+            <span class="gfab-item-label">Моя неделя</span>
+            <span class="gfab-item-btn"><span class="material-symbols-outlined">auto_awesome</span></span>
+          </button>
+          <button class="gfab-item" type="button" @click="fabAction(() => showKudos = true)">
+            <span class="gfab-item-label">Поблагодарить</span>
+            <span class="gfab-item-btn"><span class="material-symbols-outlined">volunteer_activism</span></span>
+          </button>
+        </div>
+        <button
+          class="gfab-main"
+          type="button"
+          :aria-expanded="fabOpen"
+          aria-label="Действия Groove"
+          @click="fabOpen = !fabOpen"
+        >
+          <span v-if="fabOpen" class="material-symbols-outlined">close</span>
+          <span v-else class="gfab-main-emoji">👾</span>
+        </button>
+      </div>
+    </Teleport>
 
     <PetShopDialog v-model="showShop" />
     <KudosDialog v-model="showKudos" />
     <WrappedDialog v-model="showWrapped" />
+    <GrooveCelebration />
   </div>
 </template>
 
 <script setup>
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useGrooveStore } from '@/stores/groove.js'
-import { useScrollCollapse } from '@/composables/useScrollCollapse.js'
-import { dayKey, dayTitle, timeZoneOf } from '@/utils/groove.js'
-import AppFab from '@/components/common/AppFab.vue'
+import { dayKey, dayTitle, petEmoji, timeZoneOf } from '@/utils/groove.js'
 import LiveNowBar from '@/components/groove/LiveNowBar.vue'
 import PetCard from '@/components/groove/PetCard.vue'
 import RaidCard from '@/components/groove/RaidCard.vue'
@@ -106,6 +179,7 @@ import FeedCard from '@/components/groove/FeedCard.vue'
 import PetShopDialog from '@/components/groove/PetShopDialog.vue'
 import KudosDialog from '@/components/groove/KudosDialog.vue'
 import WrappedDialog from '@/components/groove/WrappedDialog.vue'
+import GrooveCelebration from '@/components/groove/GrooveCelebration.vue'
 
 const groove = useGrooveStore()
 
@@ -115,17 +189,73 @@ const showWrapped = ref(false)
 const riverEl = ref(null)
 const sentinelEl = ref(null)
 const bodyRef = ref(null)
-
-// FAB «Спасибо» сворачивается в кружок при скролле вниз — текст не
-// мозолит глаза, но кнопка остаётся под рукой.
-const { isCompact } = useScrollCollapse(bodyRef)
+const petBoxRef = ref(null)
+const fabOpen = ref(false)
 
 const pet = computed(() => groove.pet)
+
+// ── Фильтр ленты (клиентский, по уже загруженным событиям) ────
+const FEED_FILTERS = [
+  { key: 'all', title: 'Все' },
+  { key: 'mine', title: 'Мои' },
+  { key: 'milestones', title: 'Вехи' },
+  { key: 'kudos', title: 'Спасибо' },
+]
+const MILESTONE_FILTER_KINDS = new Set([
+  'streak', 'pet_evolved', 'pet_recovered', 'raid_won', 'wrapped', 'quest_done',
+])
+const feedFilter = ref('all')
+
+const filteredEvents = computed(() => {
+  const list = groove.events
+  switch (feedFilter.value) {
+    case 'mine': return list.filter(e => e.user?.id === groove.myId)
+    case 'milestones': return list.filter(e => MILESTONE_FILTER_KINDS.has(e.kind))
+    case 'kudos': return list.filter(e => e.kind === 'kudos')
+    default: return list
+  }
+})
+
+// ── Pill «Новые события»: пришло по сокету, а лента проскроллена ──
+const newCount = ref(0)
+
+watch(() => groove.events[0]?.id, (id, old) => {
+  if (id == null || old == null || id === old) return
+  if (bodyRef.value?.scrollTop > 300) newCount.value++
+})
+
+function onBodyScroll() {
+  if (newCount.value && bodyRef.value && bodyRef.value.scrollTop < 200) newCount.value = 0
+}
+
+function scrollToTop() {
+  bodyRef.value?.scrollTo({ top: 0, behavior: 'smooth' })
+  newCount.value = 0
+}
+
+// ── Компактный питомец в шапке (узкие экраны) ─────────────────
+const isNarrow = ref(false)
+const petBoxVisible = ref(true)
+let narrowMq = null
+let petObserver = null
+
+const showPetStrip = computed(() => isNarrow.value && !petBoxVisible.value && !!pet.value)
+
+const stripXpPercent = computed(() => {
+  const p = pet.value
+  if (!p?.next_stage_xp) return 100
+  return Math.min(100, Math.round((p.xp / p.next_stage_xp) * 100))
+})
+
+function fabAction(open) {
+  fabOpen.value = false
+  open()
+}
 
 // События сгруппированы: день → временные зоны (Утро/День/Вечер).
 const days = computed(() => {
   const map = new Map()
-  for (const e of groove.events) {
+  for (const e of filteredEvents.value) {
     const key = dayKey(e.created_at)
     if (!map.has(key)) map.set(key, [])
     map.get(key).push(e)
@@ -158,6 +288,21 @@ function groupZones(events) {
 let observer = null
 
 onMounted(async () => {
+  bodyRef.value?.addEventListener('scroll', onBodyScroll, { passive: true })
+
+  narrowMq = window.matchMedia('(max-width: 1100px)')
+  isNarrow.value = narrowMq.matches
+  narrowMq.addEventListener('change', onNarrowChange)
+
+  // Полоска питомца в шапке появляется, когда PetCard скрылась за
+  // sticky-шапкой (rootMargin компенсирует её высоту).
+  if (typeof IntersectionObserver !== 'undefined' && petBoxRef.value) {
+    petObserver = new IntersectionObserver(([entry]) => {
+      petBoxVisible.value = entry.isIntersecting
+    }, { rootMargin: '-72px 0px 0px 0px' })
+    petObserver.observe(petBoxRef.value)
+  }
+
   await Promise.allSettled([
     groove.fetchFeed(),
     groove.fetchLive(),
@@ -167,6 +312,10 @@ onMounted(async () => {
   ])
   setupObserver()
 })
+
+function onNarrowChange(e) {
+  isNarrow.value = e.matches
+}
 
 // Sentinel в конце реки: виден — догружаем старое (работает и для
 // горизонтального, и для вертикального скролла — clipping учитывается).
@@ -189,6 +338,10 @@ watch(sentinelEl, (el, old) => {
 onBeforeUnmount(() => {
   observer?.disconnect()
   observer = null
+  petObserver?.disconnect()
+  petObserver = null
+  narrowMq?.removeEventListener('change', onNarrowChange)
+  bodyRef.value?.removeEventListener('scroll', onBodyScroll)
 })
 </script>
 
@@ -238,6 +391,105 @@ onBeforeUnmount(() => {
 .wrapped-btn .material-symbols-outlined { font-size: 18px; }
 
 .groove-live { margin-bottom: 16px; }
+
+/* ── Компактный питомец в шапке (узкие экраны) ─────────────── */
+.pet-strip { display: none; }
+@media (max-width: 1100px) {
+  .pet-strip {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+    margin-top: 10px;
+    border: 1px solid var(--color-outline-dim);
+    background: var(--color-surface);
+    border-radius: var(--radius-full);
+    padding: 6px 14px;
+    cursor: pointer;
+    font: inherit;
+    color: var(--color-text);
+    text-align: left;
+  }
+  .pet-strip:active { background: var(--color-surface-high); }
+  .pet-strip-emoji { font-size: 20px; line-height: 1; }
+  .pet-strip-sick { font-size: 14px; }
+  .pet-strip-name {
+    font-weight: 700;
+    font-size: 13.5px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 96px;
+  }
+  .pet-strip-chip { font-size: 12px; font-weight: 600; white-space: nowrap; }
+  .pet-strip-bar {
+    flex: 1;
+    min-width: 36px;
+    height: 6px;
+    border-radius: var(--radius-full);
+    background: var(--color-surface-high);
+    overflow: hidden;
+  }
+  .pet-strip-fill {
+    display: block;
+    height: 100%;
+    border-radius: inherit;
+    background: var(--color-primary);
+    transition: width 0.4s ease;
+  }
+}
+.petstrip-enter-active, .petstrip-leave-active { transition: opacity 0.2s, transform 0.2s; }
+.petstrip-enter-from, .petstrip-leave-to { opacity: 0; transform: translateY(-6px); }
+
+/* ── Фильтр-чипы ленты ─────────────────────────────────────── */
+.feed-filters { display: flex; gap: 8px; flex-wrap: wrap; }
+.feed-filter-chip {
+  border: 1px solid var(--color-outline-dim);
+  background: var(--color-surface);
+  color: var(--color-text);
+  border-radius: var(--radius-full);
+  padding: 6px 14px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s, color 0.15s;
+}
+.feed-filter-chip:hover { background: var(--color-surface-high); }
+.feed-filter-chip.active {
+  background: var(--color-secondary-container);
+  border-color: transparent;
+  color: var(--color-on-secondary-container);
+}
+
+/* ── Pill «Новые события» ──────────────────────────────────── */
+.feed-newpill-wrap {
+  position: sticky;
+  top: 8px;
+  z-index: 20;
+  height: 0;
+  display: flex;
+  justify-content: center;
+  overflow: visible;
+}
+.feed-newpill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: none;
+  border-radius: var(--radius-full);
+  background: var(--color-primary);
+  color: var(--color-on-primary);
+  font-size: 13px;
+  font-weight: 600;
+  padding: 8px 16px;
+  cursor: pointer;
+  box-shadow: 0 8px 24px color-mix(in oklch, var(--color-primary) 35%, transparent);
+  animation: pill-in 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+.feed-newpill .material-symbols-outlined { font-size: 17px; }
+@keyframes pill-in {
+  from { transform: translateY(-8px); opacity: 0; }
+}
 
 .groove-layout {
   display: grid;
@@ -303,6 +555,17 @@ onBeforeUnmount(() => {
   gap: 12px;
   align-items: start;
 }
+/* Stagger: карточки въезжают каскадом (новые от сокета — тоже). */
+.river-day-body :deep(.feed-card) {
+  animation: card-in 0.4s cubic-bezier(0.34, 1.2, 0.64, 1) backwards;
+  animation-delay: calc(var(--i, 0) * 55ms);
+}
+@keyframes card-in {
+  from { opacity: 0; transform: translateY(10px) scale(0.985); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .river-day-body :deep(.feed-card) { animation: none; }
+}
 .river-zone {
   grid-column: 1 / -1;
   display: inline-flex;
@@ -356,8 +619,88 @@ onBeforeUnmount(() => {
 .desktop-only { display: inline-flex; }
 @media (max-width: 768px) {
   .desktop-only { display: none; }
-  .desktop-only-label { display: none; }
-  .wrapped-btn { padding: 10px 12px; }
   .groove-title { font-size: 22px; }
+}
+
+/* ── Мобильное FAB-меню (M3 Expressive FAB menu) ───────────── */
+.gfab-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 148;
+  background: color-mix(in oklch, var(--color-scrim, var(--color-text)) 24%, transparent);
+}
+.gfab-back-enter-active, .gfab-back-leave-active { transition: opacity 0.2s; }
+.gfab-back-enter-from, .gfab-back-leave-to { opacity: 0; }
+.gfab {
+  position: fixed;
+  right: 16px;
+  bottom: calc(64px + 16px + env(safe-area-inset-bottom, 0px));
+  z-index: 150;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 12px;
+}
+.gfab-items { display: flex; flex-direction: column; align-items: flex-end; gap: 10px; }
+.gfab-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  border: none;
+  background: none;
+  padding: 0;
+  cursor: pointer;
+  font: inherit;
+  opacity: 0;
+  transform: translateY(10px) scale(0.92);
+  pointer-events: none;
+  transition: opacity 0.22s, transform 0.22s cubic-bezier(0.34, 1.36, 0.64, 1);
+}
+.gfab.open .gfab-item { opacity: 1; transform: none; pointer-events: auto; }
+.gfab.open .gfab-item:nth-last-child(2) { transition-delay: 0.05s; }
+.gfab.open .gfab-item:nth-last-child(3) { transition-delay: 0.1s; }
+.gfab-item-label {
+  background: var(--color-surface);
+  border: 1px solid var(--color-outline-dim);
+  color: var(--color-text);
+  border-radius: var(--radius-full);
+  padding: 6px 12px;
+  font-size: 13px;
+  font-weight: 600;
+  box-shadow: var(--shadow-sm, none);
+}
+.gfab-item-btn {
+  width: 44px;
+  height: 44px;
+  border-radius: 16px;
+  background: var(--color-secondary-container);
+  color: var(--color-on-secondary-container);
+  display: grid;
+  place-items: center;
+  box-shadow: 0 4px 12px color-mix(in oklch, var(--color-secondary) 28%, transparent);
+}
+.gfab-item-btn .material-symbols-outlined { font-size: 22px; }
+.gfab-main {
+  width: 56px;
+  height: 56px;
+  border: none;
+  border-radius: 18px;
+  background: var(--color-primary-container);
+  color: var(--color-on-primary-container);
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  box-shadow:
+    0 6px 16px color-mix(in oklch, var(--color-primary) 38%, transparent),
+    0 2px 6px color-mix(in oklch, var(--color-primary) 20%, transparent);
+  transition: border-radius 0.26s cubic-bezier(0.34, 1.36, 0.64, 1),
+              transform 0.12s, background 0.15s;
+}
+.gfab.open .gfab-main { border-radius: 50%; }
+.gfab-main:active { transform: scale(0.94); }
+.gfab-main .material-symbols-outlined { font-size: 24px; }
+.gfab-main-emoji { font-size: 26px; line-height: 1; }
+@media (min-width: 769px) {
+  .gfab, .gfab-backdrop { display: none; }
 }
 </style>

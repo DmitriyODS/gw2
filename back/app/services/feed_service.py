@@ -108,9 +108,9 @@ def on_unit_stopped(unit) -> None:
             "minutes": minutes,
         })
         from app.services import pet_service
-        # 1 грув за факт + по груву за каждые полчаса, не больше 5 за юнит.
+        # 1 грув за каждые 5 минут работы; дневной кап источника «unit» = 15.
         pet_service.award_beans(unit.user_id, unit.company_id, "unit",
-                                min(5, 1 + minutes // 30))
+                                minutes // 5)
         # Работа лечит больного Грувика (совсем короткие юниты не считаются).
         if minutes >= pet_service.RECOVERY_MIN_UNIT_MINUTES:
             pet_service.add_recovery(unit.user_id, unit.company_id, 1)

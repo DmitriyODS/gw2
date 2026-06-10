@@ -1,5 +1,6 @@
 <template>
-  <article class="feed-card" :class="`kind-${event.kind}`">
+  <article class="feed-card" :class="[`kind-${event.kind}`, { hero: !!heroEmoji }]">
+    <span v-if="heroEmoji" class="fcard-hero-emoji" aria-hidden="true">{{ heroEmoji }}</span>
     <div class="fcard-head">
       <span v-if="isSystem" class="fcard-avatar bot" aria-hidden="true">👾</span>
       <img v-else class="fcard-avatar" :src="avatarUrl(event.user)" :alt="event.user?.fio || ''" />
@@ -51,7 +52,7 @@
 <script setup>
 import { computed, ref } from 'vue'
 import { useGrooveStore } from '@/stores/groove.js'
-import { avatarUrl, formatMinutes, PET_STAGES, PET_SPECIES, BOSS_EMOJI, SHOP_ITEMS } from '@/utils/groove.js'
+import { avatarUrl, formatMinutes, PET_STAGES, PET_SPECIES, BOSS_EMOJI, SHOP_ITEMS, FEED_HERO_KINDS } from '@/utils/groove.js'
 import ReactionBar from './ReactionBar.vue'
 import FeedComments from './FeedComments.vue'
 
@@ -79,6 +80,8 @@ const KIND_META = {
 }
 
 const meta = computed(() => KIND_META[props.event.kind] || { icon: 'bolt', tone: 'primary' })
+
+const heroEmoji = computed(() => FEED_HERO_KINDS[props.event.kind] || null)
 
 const isSystem = computed(() => !props.event.user)
 const authorName = computed(() => props.event.user?.fio || 'Грувик')
@@ -152,6 +155,34 @@ function timeOf(iso) {
 }
 .kind-ai_digest { border-color: color-mix(in oklch, var(--color-tertiary) 40%, transparent); }
 .kind-raid_won { border-color: color-mix(in oklch, var(--color-warning) 50%, transparent); }
+
+/* ── Hero-вехи: на всю ширину грида, градиент в тон события ───── */
+.feed-card.hero {
+  grid-column: 1 / -1;
+  position: relative;
+  overflow: hidden;
+  padding: 16px 18px;
+  border-color: color-mix(in oklch, var(--hero-color, var(--color-primary)) 38%, transparent);
+  background: linear-gradient(135deg,
+    color-mix(in oklch, var(--hero-color, var(--color-primary)) 14%, var(--color-surface)),
+    var(--color-surface) 65%);
+}
+.hero.kind-streak { --hero-color: var(--color-warning); }
+.hero.kind-pet_evolved { --hero-color: var(--color-tertiary); }
+.hero.kind-raid_won { --hero-color: var(--color-warning); }
+.hero.kind-wrapped { --hero-color: var(--color-tertiary); }
+.hero .fcard-text { font-size: 15px; font-weight: 600; max-width: calc(100% - 64px); }
+.fcard-hero-emoji {
+  position: absolute;
+  right: 10px;
+  top: 50%;
+  transform: translateY(-50%) rotate(10deg);
+  font-size: 58px;
+  line-height: 1;
+  opacity: 0.18;
+  pointer-events: none;
+  user-select: none;
+}
 
 .fcard-head { display: flex; align-items: center; gap: 10px; }
 .fcard-avatar {

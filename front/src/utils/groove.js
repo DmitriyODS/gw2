@@ -70,6 +70,17 @@ export const PERSONALITIES = {
   steady: { emoji: '🪨', title: 'Уравновешенный трудяга' },
 }
 
+// Вехи ленты: рендерятся полноширинными hero-карточками с декоративным эмодзи.
+export const FEED_HERO_KINDS = {
+  streak: '🔥',
+  pet_evolved: '🌟',
+  raid_won: '🏆',
+  wrapped: '🎉',
+}
+
+// Свои вехи (и победа над рейдом) отмечаются полноэкранным праздником.
+export const CELEBRATED_KINDS = new Set(['streak', 'pet_evolved', 'pet_recovered', 'raid_won'])
+
 export const BOSS_EMOJI = {
   'Дедлайнозавр': '🦖',
   'Багоблин': '👺',

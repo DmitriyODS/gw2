@@ -1,11 +1,17 @@
 <template>
-  <section v-if="raid" class="raid-card" :class="{ defeated: raid.defeated }">
+  <section
+    v-if="raid"
+    class="raid-card"
+    :class="{ defeated: raid.defeated, expanded }"
+    @click="expanded = !expanded"
+  >
     <div class="raid-head">
       <span class="raid-boss-emoji" :class="{ shake: !raid.defeated }">{{ bossEmoji }}</span>
       <div class="raid-title-wrap">
         <h3 class="raid-title">{{ raid.defeated ? 'Босс повержен!' : 'Рейд недели' }}</h3>
         <p class="raid-subtitle">{{ raid.boss }}</p>
       </div>
+      <span class="raid-chevron material-symbols-outlined" aria-hidden="true">expand_more</span>
     </div>
 
     <div class="raid-hp">
@@ -32,12 +38,15 @@
 </template>
 
 <script setup>
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 import { useGrooveStore } from '@/stores/groove.js'
 import { BOSS_EMOJI, SHOP_ITEMS } from '@/utils/groove.js'
 
 const groove = useGrooveStore()
 const raid = computed(() => groove.raid)
+
+// На мобиле карточка свёрнута в тонкую полосу — описание по тапу.
+const expanded = ref(false)
 
 const bossEmoji = computed(() => BOSS_EMOJI[raid.value?.boss] || '👾')
 const rewardTitle = computed(() => SHOP_ITEMS[raid.value?.reward]?.title || 'награда')
@@ -123,4 +132,25 @@ const daysLabel = computed(() => {
   color: var(--color-text-dim);
 }
 .raid-days { white-space: nowrap; }
+.raid-chevron {
+  display: none;
+  margin-left: auto;
+  color: var(--color-text-dim);
+  font-size: 22px;
+  transition: transform 0.25s;
+  flex-shrink: 0;
+}
+
+/* На мобильной вертикали рейд не должен отъедать экран у ленты:
+   компактная полоса, подробности — по тапу. */
+@media (max-width: 1100px) {
+  .raid-card { padding: 10px 14px; gap: 6px; cursor: pointer; }
+  .raid-boss-emoji { width: 36px; height: 36px; font-size: 20px; }
+  .raid-title { font-size: 13.5px; }
+  .raid-subtitle { font-size: 12px; }
+  .raid-hp-bar { height: 7px; }
+  .raid-chevron { display: block; }
+  .raid-card.expanded .raid-chevron { transform: rotate(180deg); }
+  .raid-card:not(.expanded) .raid-note { display: none; }
+}
 </style>

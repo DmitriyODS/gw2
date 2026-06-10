@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia'
 import { computed, ref } from 'vue'
 import * as api from '@/api/groove.js'
+import { CELEBRATED_KINDS } from '@/utils/groove.js'
 import { useAuthStore } from '@/stores/auth.js'
 import { useCompaniesStore } from '@/stores/companies.js'
 
@@ -23,6 +24,10 @@ export const useGrooveStore = defineStore('groove', () => {
   const commentsByEvent = ref({})
   const wrapped = ref(null)
   const wrappedLoading = ref(false)
+  // Полноэкранный праздник вехи: {kind, payload, at}. Рендерит GrooveCelebration.
+  const celebration = ref(null)
+  let lastCelebrationKey = ''
+  let lastCelebrationAt = 0
 
   const myId = computed(() => useAuthStore().user?.id ?? null)
 
@@ -68,6 +73,27 @@ export const useGrooveStore = defineStore('groove', () => {
     if (!isMine(data.company_id)) return
     if (events.value.some(e => e.id === data.id)) return
     events.value.unshift({ my_reactions: [], ...data })
+    // Свои вехи (и общая победа над рейдом) — повод для праздника.
+    if (CELEBRATED_KINDS.has(data.kind)
+      && (data.kind === 'raid_won' || data.user?.id === myId.value)) {
+      celebrate(data.kind, data.payload || {})
+    }
+  }
+
+  // ────────────────────────── праздники ─────────────────────────
+
+  function celebrate(kind, payload) {
+    // Дедуп: прямой триггер (ответ на кормление) и сокет-эхо несут одну веху.
+    const key = `${kind}:${payload.stage ?? payload.days ?? payload.boss ?? ''}`
+    const now = Date.now()
+    if (key === lastCelebrationKey && now - lastCelebrationAt < 15000) return
+    lastCelebrationKey = key
+    lastCelebrationAt = now
+    celebration.value = { kind, payload, at: now }
+  }
+
+  function clearCelebration() {
+    celebration.value = null
   }
 
   // ─────────────────────────── реакции ──────────────────────────
@@ -272,8 +298,8 @@ export const useGrooveStore = defineStore('groove', () => {
   return {
     events, hasMore, loadingFeed, live, liveLoaded, zapsLeft, zapsMax, pet, zoo, raid,
     shopPrices, seasonalItem, seasonTitle, speciesPrices, commentsByEvent,
-    wrapped, wrappedLoading, myId, myCompanyId, isMine,
-    fetchFeed, loadMore, applyNewEvent,
+    wrapped, wrappedLoading, celebration, myId, myCompanyId, isMine,
+    fetchFeed, loadMore, applyNewEvent, celebrate, clearCelebration,
     toggleReaction, applyReaction,
     fetchComments, addComment, applyComment, removeComment, applyCommentDeleted,
     fetchLive, applyZapCount, zap, sendKudos,
