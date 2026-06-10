@@ -93,6 +93,8 @@ const navItems = computed(() => {
     { path: '/messenger', icon: 'chat', label: 'Мессенджер', tutorial: 'nav-messenger',
       active: () => route.path.startsWith('/messenger'),
       badge: () => messenger.totalUnread },
+    { path: '/groove', icon: 'celebration', label: 'Мой Groove', tutorial: 'nav-groove',
+      active: () => route.path === '/groove' },
     { path: '/employees', icon: 'groups', label: 'Сотрудники', tutorial: 'nav-employees',
       active: () => route.path === '/employees' },
   ]

@@ -23,6 +23,7 @@ const routes = [
     meta: { requiresAuth: true },
     props: true,
   },
+  { path: '/groove', component: () => import('@/views/GrooveView.vue'), meta: { requiresAuth: true } },
   { path: '/tv', component: () => import('@/views/TvView.vue'), meta: { requiresAuth: true, fullscreen: true } },
   { path: '/', redirect: '/tasks' },
   { path: '/:pathMatch(.*)*', redirect: '/tasks' }

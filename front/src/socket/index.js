@@ -6,6 +6,7 @@ import { useCallStore } from '@/stores/call.js'
 import { registerTaskSocketHandlers } from '@/socket/tasks.js'
 import { registerMessengerSocketHandlers } from '@/socket/messenger.js'
 import { registerCallSocketHandlers } from '@/socket/calls.js'
+import { registerGrooveSocketHandlers } from '@/socket/groove.js'
 
 let socket = null
 let visibilityHookInstalled = false
@@ -171,6 +172,7 @@ export function connectSocket() {
   registerTaskSocketHandlers(socket)
   registerMessengerSocketHandlers(socket)
   registerCallSocketHandlers(socket)
+  registerGrooveSocketHandlers(socket)
 }
 
 export function disconnectSocket() {

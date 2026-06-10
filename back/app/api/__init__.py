@@ -16,6 +16,7 @@ from .stages import bp as stages_bp
 from .ai_settings import bp as ai_settings_bp
 from .ai_tv import bp as ai_tv_bp
 from .yougile import bp as yougile_bp
+from .groove import bp as groove_bp
 
 
 def register_blueprints(app: Flask) -> None:
@@ -36,3 +37,4 @@ def register_blueprints(app: Flask) -> None:
     app.register_blueprint(ai_settings_bp)
     app.register_blueprint(ai_tv_bp)
     app.register_blueprint(yougile_bp)
+    app.register_blueprint(groove_bp)

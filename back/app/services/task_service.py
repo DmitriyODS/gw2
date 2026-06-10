@@ -138,7 +138,7 @@ def delete_task(task_id: int) -> None:
     logger.info("task.delete", extra={"extra": {"task_id": task_id, "event": "task.delete"}})
 
 
-def archive_task(task_id: int) -> object:
+def archive_task(task_id: int, actor_id: int = None) -> object:
     task = task_repo.get_by_id(task_id)
     if task is None:
         raise TaskServiceError("Задача не найдена", "NOT_FOUND", 404)
@@ -156,6 +156,9 @@ def archive_task(task_id: int) -> object:
     task_repo.update(task, is_archived=True, archived_at=now)
     db.session.commit()
     logger.info("task.archive", extra={"extra": {"task_id": task_id, "event": "task.archive"}})
+
+    from app.services.feed_service import on_task_closed
+    on_task_closed(task, actor_id)
     return task
 
 

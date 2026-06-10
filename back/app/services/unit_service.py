@@ -41,6 +41,9 @@ def create_unit(task_id: int, name: str, unit_type_id: int, user_id: int) -> obj
     db.session.commit()
 
     logger.info("unit.start", extra={"extra": {"unit_id": unit.id, "task_id": task_id, "user_id": user_id, "event": "unit.start"}})
+
+    from app.services.feed_service import on_unit_started
+    on_unit_started(unit)
     return unit
 
 
@@ -77,6 +80,9 @@ def stop_unit(unit_id: int, current_user_id: int, current_user_level: int) -> ob
     db.session.commit()
 
     logger.info("unit.stop", extra={"extra": {"unit_id": unit_id, "user_id": current_user_id, "event": "unit.stop"}})
+
+    from app.services.feed_service import on_unit_stopped
+    on_unit_stopped(unit)
     return unit
 
 

@@ -90,6 +90,8 @@ const mainItems = computed(() => [
 
 const moreItems = computed(() => {
   const arr = [
+    { path: '/groove', icon: 'celebration', label: 'Мой Groove',
+      active: () => route.path === '/groove' },
     { path: '/employees', icon: 'groups', label: 'Сотрудники',
       active: () => route.path === '/employees' },
     { path: '/settings', icon: 'settings', label: 'Настройки',

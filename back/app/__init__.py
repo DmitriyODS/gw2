@@ -22,6 +22,7 @@ def create_app(config_name: str = None) -> Flask:
     _finalize_stuck_calls(app)
     _start_presence_sweeper(app)
     _start_tv_facts_loop(app)
+    _start_groove_ai_loop(app)
     _register_cli(app)
 
     return app
@@ -40,6 +41,13 @@ def _start_tv_facts_loop(app: Flask) -> None:
     """
     from app.services.tv_facts_service import run_tv_facts_loop
     socketio.start_background_task(run_tv_facts_loop, app)
+
+
+def _start_groove_ai_loop(app: Flask) -> None:
+    """Фоновый AI-цикл «Моего Groove»: утренний дайджест в ленту и пул
+    реплик Грувика для кормления (per-company, только при включённом AI)."""
+    from app.services.groove_ai_service import run_groove_ai_loop
+    socketio.start_background_task(run_groove_ai_loop, app)
 
 
 def _start_presence_sweeper(app: Flask) -> None:
@@ -74,6 +82,7 @@ def _init_extensions(app: Flask) -> None:
             Role, User, Department, Task, Favorite, UnitType, Unit, UserTaskColor,
             Conversation, Message, MessageAttachment,
             Call, CallParticipant,
+            FeedEvent, FeedReaction, FeedComment, Pet, PetStroke, GrooveRaid,
         )
 
 
@@ -162,7 +171,7 @@ def _init_swagger(app: Flask) -> None:
         "info": {
             "title": "Groove Work API",
             "description": "REST API платформы учёта задач, времени и общения Groove Work v3.0",
-            "version": "3.2.0",
+            "version": "3.3.0",
         },
         "securityDefinitions": {
             "BearerAuth": {

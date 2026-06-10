@@ -373,7 +373,7 @@ def archive_task(task_id: int):
     """
     current_user_id = int(get_jwt_identity())
     try:
-        task = task_service.archive_task(task_id)
+        task = task_service.archive_task(task_id, actor_id=current_user_id)
     except TaskServiceError as e:
         return jsonify({"error": e.code, "message": e.message}), e.http_status
 

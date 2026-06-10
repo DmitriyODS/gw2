@@ -142,6 +142,11 @@ def _apply_updated(company: Company, task: Task, data: dict[str, Any]) -> dict:
     task_repo.update(task, **fields)
     db.session.commit()
 
+    # Закрытие, пришедшее из YouGile, — тоже опорная точка ленты «Мой Groove».
+    if fields.get("is_archived"):
+        from app.services.feed_service import on_task_closed
+        on_task_closed(task)
+
     payload = _broadcast_task_update(task)
     logger.info("yougile.webhook_applied",
                 extra={"task_id": task.id, "fields": list(fields.keys())})

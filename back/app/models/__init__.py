@@ -13,6 +13,7 @@ from .conversation import Conversation
 from .message import Message, MessageAttachment
 from .call import Call, CallParticipant
 from .user_yougile_account import UserYougileAccount
+from .groove import FeedEvent, FeedReaction, FeedComment, Pet, PetStroke, GrooveRaid
 
 __all__ = [
     "Company",
@@ -20,4 +21,5 @@ __all__ = [
     "Conversation", "Message", "MessageAttachment",
     "Call", "CallParticipant",
     "UserYougileAccount",
+    "FeedEvent", "FeedReaction", "FeedComment", "Pet", "PetStroke", "GrooveRaid",
 ]
