@@ -266,6 +266,10 @@ const nextHint = computed(() => {
 // Календарь кормлений: последние 7 дней, «накормленные» восстанавливаются
 // из стрика — он по определению непрерывен и заканчивается в last_fed_date.
 const dateKey = (d) => `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`
+const formatWeekday = (d) => {
+  const label = d.toLocaleDateString('ru-RU', { weekday: 'short' })
+  return label.charAt(0).toUpperCase() + label.slice(1)
+}
 
 const weekDays = computed(() => {
   const p = pet.value
@@ -285,7 +289,7 @@ const weekDays = computed(() => {
     const dt = new Date(now.getFullYear(), now.getMonth(), now.getDate() - i)
     out.push({
       key: dateKey(dt),
-      label: dt.toLocaleDateString('ru-RU', { weekday: 'narrow' }),
+      label: formatWeekday(dt),
       fed: fed.has(dateKey(dt)),
       today: i === 0,
     })
