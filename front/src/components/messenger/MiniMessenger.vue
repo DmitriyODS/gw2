@@ -95,15 +95,18 @@
               @delete="askDeleteMessage"
               @context-menu="openContextMenu"
               @join-call="onJoinCall"
+              @open-task="openTask"
             />
           </div>
           <MessageInput
             ref="miniInputRef"
             :sending="messenger.sending"
             :reply-to="replyTo"
+            v-model:attached-task="attachedTask"
             placeholder="Сообщение…"
             @send="onSend"
             @cancel-reply="replyTo = null"
+            @attach-task="attachTaskOpen = true"
           />
         </template>
       </div>
@@ -113,6 +116,8 @@
       ref="forwardDialogRef"
       v-model="forwardOpen"
       :message="forwardSource"
+      mask-class="above-mini-mess"
+      dialog-class="above-mini-mess"
       @confirm="onForwardConfirm"
     />
 
@@ -122,7 +127,17 @@
       :text="deleteDialog.text"
       :can-for-all="deleteDialog.canForAll"
       :other-name="deleteDialog.otherName"
+      mask-class="above-mini-mess"
+      dialog-class="above-mini-mess"
       @confirm="onDeleteConfirm"
+    />
+
+    <AttachTaskDialog
+      v-model="attachTaskOpen"
+      :company-id="threadConv?.company_id ?? null"
+      mask-class="above-mini-mess"
+      dialog-class="above-mini-mess"
+      @pick="onPickTask"
     />
 
     <MessageContextMenu
@@ -150,7 +165,7 @@
 
 <script setup>
 import { ref, computed, watch, nextTick } from 'vue'
-import { useRoute } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { useMessengerStore } from '@/stores/messenger.js'
 import { useAuthStore } from '@/stores/auth.js'
 import { useCallStore } from '@/stores/call.js'
@@ -161,10 +176,12 @@ import MessageBubble from './MessageBubble.vue'
 import MessageInput from './MessageInput.vue'
 import ForwardDialog from './ForwardDialog.vue'
 import DeleteScopeDialog from './DeleteScopeDialog.vue'
+import AttachTaskDialog from './AttachTaskDialog.vue'
 import MessageContextMenu from './MessageContextMenu.vue'
 import ProgressSpinner from 'primevue/progressspinner'
 
 const route = useRoute()
+const router = useRouter()
 const messenger = useMessengerStore()
 const authStore = useAuthStore()
 const callStore = useCallStore()
@@ -176,9 +193,18 @@ async function onJoinCall(callInfo) {
   open.value = false
 }
 
+// Клик по плашке прикреплённой задачи: открываем её карточку на /tasks и
+// сворачиваем мини-чат, чтобы он не перекрывал модалку.
+function openTask(taskId) {
+  router.push({ path: '/tasks', query: { open: taskId } })
+  open.value = false
+}
+
 const open = ref(false)
 const threadId = ref(null)
 const replyTo = ref(null)
+const attachedTask = ref(null)
+const attachTaskOpen = ref(false)
 const threadEl = ref(null)
 const miniInputRef = ref(null)
 const dragOver = ref(false)
@@ -238,6 +264,7 @@ function toggle() {
 
 async function openThread(id) {
   threadId.value = id
+  attachedTask.value = null
   await messenger.setActive(id)
   await nextTick()
   scrollBottom()
@@ -246,6 +273,7 @@ async function openThread(id) {
 function closeThread() {
   threadId.value = null
   replyTo.value = null
+  attachedTask.value = null
   // Снимаем «активность», чтобы входящие в этот чат снова считались
   // непрочитанными, пока мы на него не смотрим.
   messenger.activeConversationId = null
@@ -344,8 +372,18 @@ function copyMessageText(m) {
   }
 }
 
+function onPickTask(task) { attachedTask.value = task }
+
 async function onSend(payload) {
-  await messenger.send(threadId.value, payload)
+  try {
+    await messenger.send(threadId.value, payload)
+  } catch (e) {
+    const msg = e?.error === 'TASK_WRONG_COMPANY'
+      ? 'Задача относится к другой компании'
+      : (e?.message || 'Не удалось отправить сообщение')
+    notif.error(msg)
+    return
+  }
   replyTo.value = null
   await nextTick()
   scrollBottom()
@@ -699,5 +737,16 @@ if (typeof window !== 'undefined') {
     width: calc(100vw - 24px);
     height: 70vh;
   }
+}
+</style>
+
+<style>
+/* Мини-чат живёт на z-index 10050 (поверх ActiveUnitModal) — диалоги,
+   открытые из него, надо поднять выше, иначе панель перекрывает маску. */
+.app-dialog-mask.above-mini-mess {
+  z-index: 10060 !important;
+}
+.app-dialog-root.above-mini-mess {
+  z-index: 10061 !important;
 }
 </style>

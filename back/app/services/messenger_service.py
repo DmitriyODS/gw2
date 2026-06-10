@@ -1,4 +1,5 @@
 import os
+import shutil
 import uuid
 from datetime import datetime, timezone
 from typing import Optional
@@ -220,8 +221,8 @@ def _copy_attachment(att, uploader_id: int):
     rel_path = os.path.join(rel_dir, safe_name).replace(os.sep, "/")
     dst_abs = os.path.join(abs_dir, safe_name)
     try:
-        with open(src_abs, "rb") as fsrc, open(dst_abs, "wb") as fdst:
-            fdst.write(fsrc.read())
+        # Потоково, а не read()-ом целиком: вложения бывают до 25 МБ.
+        shutil.copyfile(src_abs, dst_abs)
     except OSError as e:
         raise MessengerServiceError("Не удалось скопировать вложение", "COPY_FAILED", 500) from e
     return message_repo.create_attachment(

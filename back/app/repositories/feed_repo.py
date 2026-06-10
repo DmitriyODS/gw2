@@ -1,5 +1,6 @@
 """Лента «Мой Groove»: события, реакции, комментарии. Только I/O."""
 from sqlalchemy import func
+from sqlalchemy.orm import selectinload
 
 from app.extensions import db
 from app.models.groove import FeedEvent, FeedReaction, FeedComment
@@ -24,6 +25,7 @@ def get_event(event_id: int) -> FeedEvent | None:
 def list_events(company_id: int, before_id: int | None = None,
                 limit: int = 30) -> list[FeedEvent]:
     q = (db.select(FeedEvent)
+         .options(selectinload(FeedEvent.user))
          .where(FeedEvent.company_id == company_id)
          .order_by(FeedEvent.id.desc())
          .limit(limit))
@@ -104,6 +106,7 @@ def comment_counts(event_ids: list[int]) -> dict[int, int]:
 def list_comments(event_id: int) -> list[FeedComment]:
     return db.session.execute(
         db.select(FeedComment)
+        .options(selectinload(FeedComment.author))
         .where(FeedComment.event_id == event_id)
         .order_by(FeedComment.created_at.asc())
     ).scalars().all()
@@ -133,6 +136,7 @@ def list_active_units(company_id: int) -> list[Unit]:
     """Активные юниты компании с видимыми владельцами — «Сейчас в эфире»."""
     return db.session.execute(
         db.select(Unit)
+        .options(selectinload(Unit.user), selectinload(Unit.task))
         .join(User, User.id == Unit.user_id)
         .where(Unit.company_id == company_id,
                Unit.datetime_end.is_(None),

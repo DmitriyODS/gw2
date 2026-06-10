@@ -2,6 +2,7 @@
 from datetime import date, datetime
 
 from sqlalchemy import func
+from sqlalchemy.orm import selectinload
 
 from app.extensions import db
 from app.models.groove import Pet, PetStroke, GrooveRaid
@@ -29,6 +30,7 @@ def list_company_pets(company_id: int) -> list[Pet]:
     """Зоопарк компании: питомцы видимых сотрудников, старшие стадии первыми."""
     return db.session.execute(
         db.select(Pet)
+        .options(selectinload(Pet.user))
         .join(User, User.id == Pet.user_id)
         .where(Pet.company_id == company_id, User.is_hidden.is_(False))
         .order_by(Pet.stage.desc(), Pet.xp.desc())

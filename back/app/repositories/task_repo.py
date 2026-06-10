@@ -122,7 +122,10 @@ def get_list(
     elif sort == "deadline":
         q = q.order_by(asc(Task.deadline).nulls_last())
 
-    total = db.session.execute(db.select(func.count()).select_from(q.subquery())).scalar_one()
+    # Для COUNT сортировка не нужна — а при last_activity она тащит
+    # коррелированный подзапрос max(unit.datetime_start) на каждую строку.
+    count_q = q.order_by(None)
+    total = db.session.execute(db.select(func.count()).select_from(count_q.subquery())).scalar_one()
 
     offset = (page - 1) * per_page
     tasks = db.session.execute(q.offset(offset).limit(per_page)).scalars().all()
@@ -233,10 +236,30 @@ def is_favorite(task_id: int, user_id: int) -> bool:
     ).scalar_one()
 
 
+def get_favorite_task_ids(task_ids: list, user_id: int) -> set:
+    if not task_ids:
+        return set()
+    rows = db.session.execute(
+        db.select(Favorite.task_id).where(
+            Favorite.user_id == user_id, Favorite.task_id.in_(task_ids)
+        )
+    ).scalars().all()
+    return set(rows)
+
+
 def has_any_units(task_id: int) -> bool:
     return db.session.execute(
         db.select(exists().where(Unit.task_id == task_id))
     ).scalar_one()
+
+
+def get_task_ids_with_units(task_ids: list) -> set:
+    if not task_ids:
+        return set()
+    rows = db.session.execute(
+        db.select(Unit.task_id).where(Unit.task_id.in_(task_ids)).distinct()
+    ).scalars().all()
+    return set(rows)
 
 
 def get_active_users(task_id: int) -> list[dict]:

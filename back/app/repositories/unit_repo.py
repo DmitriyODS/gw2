@@ -1,13 +1,18 @@
 from datetime import datetime, timezone
 from typing import Optional
 from sqlalchemy import desc
+from sqlalchemy.orm import selectinload
 from app.extensions import db
 from app.models import Unit
 
 
 def get_by_task(task_id: int) -> list[Unit]:
+    # user/unit_type сериализуются UnitSchema — грузим батчем, не лениво.
     return db.session.execute(
-        db.select(Unit).where(Unit.task_id == task_id).order_by(desc(Unit.datetime_start))
+        db.select(Unit)
+        .options(selectinload(Unit.user), selectinload(Unit.unit_type))
+        .where(Unit.task_id == task_id)
+        .order_by(desc(Unit.datetime_start))
     ).scalars().all()
 
 

@@ -1,6 +1,6 @@
 from typing import Optional
 from sqlalchemy import text
-from sqlalchemy.orm import selectinload
+from sqlalchemy.orm import joinedload, selectinload
 from app.extensions import db
 from app.models import User, Role
 
@@ -42,10 +42,12 @@ def search_directory(query: Optional[str] = None, exclude_id: Optional[int] = No
 
 
 def get_by_id(user_id: int) -> Optional[User]:
+    # joinedload, а не selectinload: лукап одной строки выполняется на каждый
+    # API-запрос (auth-декоратор) — один SQL вместо трёх.
     return db.session.execute(
         db.select(User).options(
-            selectinload(User.role),
-            selectinload(User.company),
+            joinedload(User.role),
+            joinedload(User.company),
         ).where(User.id == user_id)
     ).scalar_one_or_none()
 
@@ -53,8 +55,8 @@ def get_by_id(user_id: int) -> Optional[User]:
 def get_by_login(login: str) -> Optional[User]:
     return db.session.execute(
         db.select(User).options(
-            selectinload(User.role),
-            selectinload(User.company),
+            joinedload(User.role),
+            joinedload(User.company),
         ).where(User.login == login)
     ).scalar_one_or_none()
 

@@ -12,6 +12,22 @@ def _pair(a: int, b: int) -> tuple[int, int]:
     return (a, b) if a < b else (b, a)
 
 
+def _msg_load_options():
+    """Всё, что сериализует MessageSchema, — одним батчем вместо ленивых
+    подгрузок на каждое сообщение (sender, цитата, плашки звонка/задачи…)."""
+    return (
+        selectinload(Message.attachments),
+        selectinload(Message.sender).selectinload(User.role),
+        selectinload(Message.reply_to).selectinload(Message.sender),
+        selectinload(Message.reply_to).selectinload(Message.attachments),
+        selectinload(Message.forwarded_from),
+        selectinload(Message.pinned_by),
+        selectinload(Message.call),
+        selectinload(Message.task),
+        selectinload(Message.conversation),
+    )
+
+
 def get_conversation_between(user_a: int, user_b: int) -> Optional[Conversation]:
     a, b = _pair(user_a, user_b)
     return db.session.execute(
@@ -140,17 +156,7 @@ def list_user_conversations(user_id: int) -> list[dict]:
         )
         rows = db.session.execute(
             db.select(Message)
-            .options(
-                selectinload(Message.attachments),
-                selectinload(Message.sender).selectinload(User.role),
-                selectinload(Message.reply_to).selectinload(Message.sender),
-                selectinload(Message.reply_to).selectinload(Message.attachments),
-                selectinload(Message.forwarded_from),
-                selectinload(Message.pinned_by),
-                selectinload(Message.call),
-                selectinload(Message.task),
-                selectinload(Message.conversation),
-            )
+            .options(*_msg_load_options())
             .join(sub, Message.id == sub.c.last_id)
         ).scalars().all()
         for m in rows:
@@ -202,17 +208,7 @@ def list_user_conversations(user_id: int) -> list[dict]:
             # Последнее сообщение dev_chat (не скрытое нет понятия «стороны»)
             dev_last = db.session.execute(
                 db.select(Message)
-                .options(
-                    selectinload(Message.attachments),
-                    selectinload(Message.sender).selectinload(User.role),
-                    selectinload(Message.reply_to).selectinload(Message.sender),
-                    selectinload(Message.reply_to).selectinload(Message.attachments),
-                    selectinload(Message.forwarded_from),
-                    selectinload(Message.pinned_by),
-                    selectinload(Message.call),
-                    selectinload(Message.task),
-                    selectinload(Message.conversation),
-                )
+                .options(*_msg_load_options())
                 .where(Message.conversation_id == dev.id)
                 .order_by(Message.id.desc())
                 .limit(1)
@@ -249,7 +245,7 @@ def list_messages(conversation_id: int, user_id: int, before_id: Optional[int] =
     if conv is None:
         return []
     hidden_col = Message.hidden_for_a if conv.side(user_id) == 'a' else Message.hidden_for_b
-    q = db.select(Message).where(
+    q = db.select(Message).options(*_msg_load_options()).where(
         Message.conversation_id == conversation_id,
         hidden_col.is_(False),
     )
@@ -483,7 +479,7 @@ def list_pinned_messages(conversation_id: int, user_id: int) -> list[Message]:
         return []
     hidden_col = Message.hidden_for_a if conv.side(user_id) == 'a' else Message.hidden_for_b
     rows = db.session.execute(
-        db.select(Message).where(
+        db.select(Message).options(*_msg_load_options()).where(
             Message.conversation_id == conversation_id,
             Message.pinned_at.isnot(None),
             hidden_col.is_(False),
