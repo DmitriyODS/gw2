@@ -23,6 +23,7 @@ def create_app(config_name: str = None) -> Flask:
     _start_presence_sweeper(app)
     _start_tv_facts_loop(app)
     _start_groove_ai_loop(app)
+    _start_groove_care_loop(app)
     _register_cli(app)
 
     return app
@@ -48,6 +49,13 @@ def _start_groove_ai_loop(app: Flask) -> None:
     реплик Грувика для кормления (per-company, только при включённом AI)."""
     from app.services.groove_ai_service import run_groove_ai_loop
     socketio.start_background_task(run_groove_ai_loop, app)
+
+
+def _start_groove_care_loop(app: Flask) -> None:
+    """Цикл заботы «Моего Groove»: болезни Грувиков (давно не работавшие
+    хозяева) и дневной пересчёт характеров. Работает для всех компаний."""
+    from app.services.pet_service import run_groove_care_loop
+    socketio.start_background_task(run_groove_care_loop, app)
 
 
 def _start_presence_sweeper(app: Flask) -> None:
@@ -171,7 +179,7 @@ def _init_swagger(app: Flask) -> None:
         "info": {
             "title": "Groove Work API",
             "description": "REST API платформы учёта задач, времени и общения Groove Work v3.0",
-            "version": "3.3.0",
+            "version": "3.4.0",
         },
         "securityDefinitions": {
             "BearerAuth": {

@@ -111,6 +111,9 @@ def on_unit_stopped(unit) -> None:
         # 1 грув за факт + по груву за каждые полчаса, не больше 5 за юнит.
         pet_service.award_beans(unit.user_id, unit.company_id, "unit",
                                 min(5, 1 + minutes // 30))
+        # Работа лечит больного Грувика (совсем короткие юниты не считаются).
+        if minutes >= pet_service.RECOVERY_MIN_UNIT_MINUTES:
+            pet_service.add_recovery(unit.user_id, unit.company_id, 1)
     _safe(_job)
 
 
@@ -124,6 +127,7 @@ def on_task_closed(task, actor_id=None) -> None:
         from app.services import pet_service
         if hero_id:
             pet_service.award_beans(hero_id, task.company_id, "task_closed", 5)
+            pet_service.add_recovery(hero_id, task.company_id, 1)
         pet_service.on_task_closed_raid(task.company_id)
     _safe(_job)
 
@@ -230,9 +234,111 @@ def send_kudos(company_id: int, from_user_id: int, to_user_id: int, text: str):
     return event
 
 
+# ───────────────────── wrapped «Моя неделя» ────────────────────────
+
+_WEEKDAYS_RU = ["понедельник", "вторник", "среда", "четверг",
+                "пятница", "суббота", "воскресенье"]
+
+
+def get_wrapped(company_id: int, user_id: int) -> dict:
+    """Личный итог последних 7 дней — карточки-истории «Моя неделя»."""
+    from datetime import datetime, timedelta, timezone as tz
+    from app.repositories import pet_repo
+    from app.services import pet_service
+
+    since = datetime.now(tz.utc) - timedelta(days=7)
+    units = pet_repo.finished_units_for_user(user_id, since, limit=300)
+
+    total_minutes = 0
+    longest = None
+    by_day: dict[int, int] = {}
+    start_hours: list[int] = []
+    for u in units:
+        minutes = max(0, int((u.datetime_end - u.datetime_start).total_seconds() // 60))
+        total_minutes += minutes
+        if longest is None or minutes > longest[1]:
+            longest = (u, minutes)
+        local_start = u.datetime_start.astimezone(pet_service.MSK)
+        by_day[local_start.weekday()] = by_day.get(local_start.weekday(), 0) + minutes
+        start_hours.append(local_start.hour)
+
+    best_day = None
+    if by_day:
+        day_idx, day_minutes = max(by_day.items(), key=lambda kv: kv[1])
+        best_day = {"label": _WEEKDAYS_RU[day_idx], "minutes": day_minutes}
+
+    peak_hour = None
+    if start_hours:
+        start_hours.sort()
+        peak_hour = start_hours[len(start_hours) // 2]
+
+    closed = feed_repo.count_user_events(company_id, user_id, "task_closed", since)
+    reactions = feed_repo.reactions_received(user_id, since)
+    kudos = feed_repo.kudos_received(company_id, user_id, since)
+
+    soulmate = None
+    mate = pet_repo.soulmate_for_user(user_id, since)
+    if mate is not None:
+        mate_user, mate_units = mate
+        soulmate = {
+            "user": {"id": mate_user.id, "fio": mate_user.fio,
+                     "avatar_path": mate_user.avatar_path},
+            "units": mate_units,
+        }
+
+    pet = pet_repo.get_or_create(user_id, company_id)
+    db.session.commit()
+
+    stats = {
+        "units": len(units),
+        "minutes": total_minutes,
+        "closed": closed,
+        "longest": ({"name": longest[0].name, "minutes": longest[1]}
+                    if longest else None),
+        "best_day": best_day,
+        "peak_hour": peak_hour,
+        "reactions": reactions,
+        "kudos": kudos,
+        "soulmate": soulmate,
+        "pet": {"name": pet.name, "stage": pet.stage, "species": pet.species,
+                "feed_streak": pet.feed_streak, "sick": pet.sick_since is not None},
+    }
+    from app.services.groove_ai_service import get_wrapped_phrase
+    stats["ai_phrase"] = get_wrapped_phrase(company_id, user_id, stats)
+    return stats
+
+
+def share_wrapped(company_id: int, user_id: int) -> None:
+    """Опубликовать итог недели в ленту (не чаще раза в день)."""
+    key = f"gw2:groove:wrapped_share:{user_id}"
+    try:
+        r = _redis()
+        if r.exists(key):
+            raise FeedServiceError("Итог недели уже опубликован сегодня",
+                                   "ALREADY_SHARED", 429)
+    except FeedServiceError:
+        raise
+    except Exception:
+        r = None
+    stats = get_wrapped(company_id, user_id)
+    record_event(company_id, user_id, "wrapped", {
+        "units": stats["units"],
+        "minutes": stats["minutes"],
+        "closed": stats["closed"],
+        "best_day": stats["best_day"]["label"] if stats["best_day"] else None,
+        "reactions": stats["reactions"],
+        "kudos": stats["kudos"],
+    }, bot_comment=True)
+    if r is not None:
+        try:
+            r.setex(key, 24 * 3600, "1")
+        except Exception:
+            pass
+
+
 # ─────────────────────── live и заряды энергии ─────────────────────
 
-def get_live(company_id: int) -> list[dict]:
+def get_live(company_id: int, viewer_id: int) -> dict:
     units = feed_repo.list_active_units(company_id)
     zaps = {}
     if units:
@@ -241,16 +347,23 @@ def get_live(company_id: int) -> list[dict]:
             zaps = {u.id: int(v or 0) for u, v in zip(units, values)}
         except Exception:
             zaps = {}
-    return [{
-        "unit_id": u.id,
-        "unit_name": u.name,
-        "task_id": u.task_id,
-        "task_name": u.task.name if u.task else None,
-        "started_at": u.datetime_start.isoformat() if u.datetime_start else None,
-        "user": {"id": u.user.id, "fio": u.user.fio,
-                 "avatar_path": u.user.avatar_path} if u.user else None,
-        "zaps": zaps.get(u.id, 0),
-    } for u in units]
+    from app.services import pet_service
+    zaps_left = pet_service.daily_left(viewer_id, "zap_sent", ZAP_SENT_DAILY_MAX)
+    return {
+        "items": [{
+            "unit_id": u.id,
+            "unit_name": u.name,
+            "task_id": u.task_id,
+            "task_name": u.task.name if u.task else None,
+            "started_at": u.datetime_start.isoformat() if u.datetime_start else None,
+            "user": {"id": u.user.id, "fio": u.user.fio,
+                     "avatar_path": u.user.avatar_path} if u.user else None,
+            "zaps": zaps.get(u.id, 0),
+        } for u in units],
+        # Личный дневной запас зарядов зрителя (обнуляется в полночь МСК).
+        "zaps_left": zaps_left,
+        "zaps_max": ZAP_SENT_DAILY_MAX,
+    }
 
 
 def send_zap(company_id: int, from_user_id: int, to_user_id: int) -> dict:
@@ -289,4 +402,5 @@ def send_zap(company_id: int, from_user_id: int, to_user_id: int) -> dict:
         }, room="all")
     except Exception:
         pass
-    return {"zaps": zaps}
+    zaps_left = pet_service.daily_left(from_user_id, "zap_sent", ZAP_SENT_DAILY_MAX)
+    return {"zaps": zaps, "zaps_left": zaps_left, "zaps_max": ZAP_SENT_DAILY_MAX}

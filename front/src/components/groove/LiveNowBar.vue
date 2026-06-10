@@ -5,6 +5,15 @@
       Сейчас в эфире
     </span>
 
+    <span
+      v-if="groove.zapsLeft != null"
+      class="live-zap-budget"
+      :class="{ empty: groove.zapsLeft === 0 }"
+      :title="`Ваши заряды на сегодня: ${groove.zapsLeft} из ${groove.zapsMax}. Каждый день выдаётся по ${groove.zapsMax} — кидайте их коллегам в эфире (+1 грув получателю)`"
+    >
+      ⚡ {{ groove.zapsLeft }}/{{ groove.zapsMax }}
+    </span>
+
     <div v-if="entries.length" class="live-list">
       <div v-for="entry in entries" :key="entry.unit_id" class="live-item">
         <img class="live-avatar" :src="avatarUrl(entry.user)" :alt="entry.user?.fio || ''" />
@@ -16,7 +25,10 @@
           v-if="entry.user?.id !== groove.myId"
           class="live-zap"
           type="button"
-          title="Кинуть заряд энергии (+1 грув коллеге)"
+          :disabled="groove.zapsLeft === 0"
+          :title="groove.zapsLeft === 0
+            ? 'Заряды на сегодня закончились — новые появятся завтра'
+            : 'Кинуть заряд энергии (+1 грув коллеге)'"
           @click="zap(entry)"
         >
           ⚡<span v-if="entry.zaps" class="live-zap-count">{{ entry.zaps }}</span>
@@ -135,9 +147,26 @@ async function zap(entry) {
   transition: transform 0.12s;
   flex-shrink: 0;
 }
-.live-zap:not(.mine):hover { transform: scale(1.1); }
-.live-zap:not(.mine):active { transform: scale(0.9); }
+.live-zap:not(.mine):not(:disabled):hover { transform: scale(1.1); }
+.live-zap:not(.mine):not(:disabled):active { transform: scale(0.9); }
+.live-zap:disabled { opacity: 0.4; cursor: default; }
 .live-zap.mine { cursor: default; }
+.live-zap-budget {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 3px 10px;
+  border-radius: var(--radius-full);
+  background: color-mix(in oklch, var(--color-warning) 22%, transparent);
+  font-size: 12px;
+  font-weight: 700;
+  cursor: help;
+}
+.live-zap-budget.empty {
+  background: var(--color-surface-high);
+  color: var(--color-text-dim);
+}
 .live-zap-count { font-size: 11.5px; font-weight: 700; }
 .live-empty { font-size: 13px; color: var(--color-text-dim); }
 

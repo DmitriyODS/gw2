@@ -60,6 +60,52 @@ STREAK_MILESTONES = {3, 5, 7, 10, 14, 21, 30, 50, 100}
 BOSSES = ["Дедлайнозавр", "Багоблин", "Прокрастинатор",
           "Совещаниус", "Хаос-гоблин", "Технодолг"]
 
+# ── Болезнь ────────────────────────────────────────────────────────
+# Грувик заболевает, если хозяин SICK_AFTER_DAYS дней не завершал юниты.
+# Лечение — recovery-очки: работа (юнит ≥15 мин, закрытая задача),
+# «куриный бульон» (лечебное кормление) и забота коллег (поглаживания).
+# XP и уровень при болезни не теряются — рост просто замораживается.
+SICK_AFTER_DAYS = 5
+RECOVERY_TARGET = 3
+SICK_FEED_COST = 1
+SICK_FEED_DAILY_MAX = 2
+RECOVERY_MIN_UNIT_MINUTES = 15
+
+# ── Характер ───────────────────────────────────────────────────────
+# Пересчитывается по юнитам за 21 день (см. _detect_personality).
+PERSONALITIES = {
+    "lazy":      {"title": "Ленивец-мечтатель",
+                  "hint": "работает редко, любит подремать и пофилософствовать"},
+    "night":     {"title": "Ночной активист",
+                  "hint": "оживает после заката, ночь — его стихия"},
+    "early":     {"title": "Ранняя пташка",
+                  "hint": "лучшие дела делает до обеда, бодрится с утра"},
+    "energizer": {"title": "Бодрячок-энерджайзер",
+                  "hint": "куча коротких подходов, энергия бьёт ключом"},
+    "zen":       {"title": "Дзен-марафонец",
+                  "hint": "длинные сосредоточенные сессии, спокоен как удав"},
+    "steady":    {"title": "Уравновешенный трудяга",
+                  "hint": "ровный стабильный ритм, надёжен и рассудителен"},
+}
+
+# Русские названия для AI-промптов (стадии ≡ фронтовым PET_STAGES).
+PET_STAGES_TITLES = ["Яйцо", "Малыш", "Непоседа", "Подросток",
+                     "Взрослый", "Герой", "Легенда"]
+PET_SPECIES_TITLES = {
+    "egg": "ещё не вылупившийся", "owl": "сова", "lark": "жаворонок",
+    "sprinter": "спринтер", "marathoner": "марафонец", "fox": "лис-универсал",
+}
+
+# ── Сезонные товары ────────────────────────────────────────────────
+# Аксессуар сезона продаётся только в свой сезон — повод заглянуть в магазин.
+SEASONAL_ITEMS = {"flower": 45, "icecream": 45, "pumpkin": 45, "santa": 45}
+_SEASON_BY_MONTH = {
+    12: ("Зима", "santa"), 1: ("Зима", "santa"), 2: ("Зима", "santa"),
+    3: ("Весна", "flower"), 4: ("Весна", "flower"), 5: ("Весна", "flower"),
+    6: ("Лето", "icecream"), 7: ("Лето", "icecream"), 8: ("Лето", "icecream"),
+    9: ("Осень", "pumpkin"), 10: ("Осень", "pumpkin"), 11: ("Осень", "pumpkin"),
+}
+
 _redis_client: Redis | None = None
 
 
@@ -113,11 +159,21 @@ def _peek_daily(user_id: int, source: str) -> int:
         return 0
 
 
+def daily_left(user_id: int, source: str, cap: int) -> int:
+    """Сколько осталось из дневного лимита источника (сбрасывается в полночь МСК)."""
+    return max(0, cap - _peek_daily(user_id, source))
+
+
 # ─────────────────────────── сериализация ──────────────────────────
 
 def dump_pet(pet) -> dict:
     data = _pet_schema.dump(pet)
     data["next_stage_xp"] = STAGE_XP[pet.stage + 1] if pet.stage < MAX_STAGE else None
+    data["sick"] = pet.sick_since is not None
+    data["recovery"] = pet.recovery
+    data["recovery_target"] = RECOVERY_TARGET
+    data["personality"] = pet.personality
+    data["personality_title"] = PERSONALITIES.get(pet.personality, {}).get("title")
     return data
 
 
@@ -155,9 +211,16 @@ def award_beans(user_id: int, company_id: int, source: str, amount: int) -> int:
 
 def get_my_pet(user_id: int, company_id: int) -> dict:
     pet = pet_repo.get_or_create(user_id, company_id)
+    if pet.personality is None:
+        pet.personality = _detect_personality(user_id)
     db.session.commit()
     data = dump_pet(pet)
-    data["feeds_left"] = max(0, FEED_DAILY_MAX - _peek_daily(user_id, "feeds"))
+    if pet.sick_since is not None:
+        data["feeds_left"] = daily_left(user_id, "sick_feeds", SICK_FEED_DAILY_MAX)
+        data["feeds_max"] = SICK_FEED_DAILY_MAX
+    else:
+        data["feeds_left"] = daily_left(user_id, "feeds", FEED_DAILY_MAX)
+        data["feeds_max"] = FEED_DAILY_MAX
     return data
 
 
@@ -186,8 +249,144 @@ def _detect_species(user_id: int) -> str:
     return "fox"
 
 
+def _detect_personality(user_id: int) -> str:
+    """Характер по юнитам за 21 день: ритм, время суток, длина сессий."""
+    since = datetime.now(timezone.utc) - timedelta(days=21)
+    units = pet_repo.finished_units_for_user(user_id, since, limit=200)
+    if len(units) <= 2:
+        return "lazy"
+    per_week = len(units) / 3.0
+    durations = []
+    start_hours = []
+    for u in units:
+        durations.append((u.datetime_end - u.datetime_start).total_seconds() / 60)
+        start_hours.append(u.datetime_start.astimezone(MSK).hour)
+    avg = sum(durations) / len(durations)
+    start_hours.sort()
+    median_hour = start_hours[len(start_hours) // 2]
+    if per_week <= 3:
+        return "lazy"
+    if median_hour >= 19:
+        return "night"
+    if median_hour < 10:
+        return "early"
+    if per_week >= 12 and avg <= 60:
+        return "energizer"
+    if avg >= 110:
+        return "zen"
+    return "steady"
+
+
+# ───────────────────────────── болезнь ─────────────────────────────
+
+def _apply_recovery(pet, amount: int = 1) -> bool:
+    """Прибавить recovery-очки больному питомцу. True — выздоровел.
+    Без commit'а — коммитит вызывающий."""
+    if pet.sick_since is None:
+        return False
+    pet.recovery = min(RECOVERY_TARGET, pet.recovery + amount)
+    if pet.recovery >= RECOVERY_TARGET:
+        pet.sick_since = None
+        pet.recovery = 0
+        return True
+    return False
+
+
+def add_recovery(user_id: int, company_id: int, amount: int = 1) -> None:
+    """Лечение работой/заботой. Никогда не бросает (зовётся из хуков)."""
+    try:
+        pet = pet_repo.get_pet(user_id)
+        if pet is None or pet.sick_since is None:
+            return
+        recovered = _apply_recovery(pet, amount)
+        db.session.commit()
+        if recovered:
+            from app.services.feed_service import record_event
+            record_event(company_id, user_id, "pet_recovered",
+                         {"pet_name": pet.name}, bot_comment=True)
+        _emit_pet_update(pet)
+    except Exception as e:
+        db.session.rollback()
+        logger.warning("groove.recovery_failed",
+                       extra={"extra": {"user_id": user_id, "err": str(e)}})
+
+
+def check_sickness_for_company(company_id: int) -> int:
+    """Помечает больными питомцев тех, кто давно не работал. Возвращает
+    число новых заболевших. Вызывается фоновым циклом заботы."""
+    pets = pet_repo.list_company_pets(company_id)
+    candidates = [p for p in pets if p.stage >= 1 and p.sick_since is None]
+    if not candidates:
+        return 0
+    last_ends = pet_repo.last_unit_end_by_users([p.user_id for p in candidates])
+    threshold = datetime.now(timezone.utc) - timedelta(days=SICK_AFTER_DAYS)
+    sick_count = 0
+    for pet in candidates:
+        last = last_ends.get(pet.user_id)
+        # Ни одного юнита в принципе — не наказываем (свежий пользователь).
+        if last is None or last >= threshold:
+            continue
+        pet.sick_since = datetime.now(timezone.utc)
+        pet.recovery = 0
+        db.session.commit()
+        sick_count += 1
+        from app.services.feed_service import record_event
+        record_event(company_id, pet.user_id, "pet_sick",
+                     {"pet_name": pet.name}, bot_comment=True)
+        _emit_pet_update(pet)
+    return sick_count
+
+
+def refresh_personalities_for_company(company_id: int) -> None:
+    """Дневной пересчёт характеров всех питомцев компании."""
+    for pet in pet_repo.list_company_pets(company_id):
+        new = _detect_personality(pet.user_id)
+        if new != pet.personality:
+            pet.personality = new
+    db.session.commit()
+
+
+SICK_PHRASES = [
+    "Апчхи… Спасибо за бульон. Кажется, мне уже чуточку лучше.",
+    "Тёплый бульончик… Ещё бы пару закрытых задач — и я на ногах!",
+    "Болею… Поработай немного — твоя энергия меня лечит.",
+    "Кх-кх… Говорят, лучшее лекарство — завершённый юнит хозяина.",
+]
+
+
 def feed_pet(user_id: int, company_id: int) -> dict:
     pet = pet_repo.get_or_create(user_id, company_id)
+
+    # Больного кормим лечебным бульоном: дёшево, без XP, +1 к выздоровлению.
+    if pet.sick_since is not None:
+        if pet.beans < SICK_FEED_COST:
+            raise PetServiceError("Не хватает грувов даже на бульон", "NO_BEANS", 422)
+        if take_daily_budget(user_id, "sick_feeds", 1, SICK_FEED_DAILY_MAX) <= 0:
+            raise PetServiceError("Бульон — не больше двух мисок в день",
+                                  "FED_ENOUGH", 429)
+        pet.beans -= SICK_FEED_COST
+        recovered = _apply_recovery(pet, 1)
+        db.session.commit()
+        if recovered:
+            from app.services.feed_service import record_event
+            record_event(company_id, user_id, "pet_recovered",
+                         {"pet_name": pet.name}, bot_comment=True)
+        _emit_pet_update(pet)
+        import random as _random
+        data = dump_pet(pet)
+        # Выздоровел — счётчики сразу по «здоровой» шкале кормлений.
+        if recovered:
+            data["feeds_left"] = daily_left(user_id, "feeds", FEED_DAILY_MAX)
+            data["feeds_max"] = FEED_DAILY_MAX
+        else:
+            data["feeds_left"] = daily_left(user_id, "sick_feeds", SICK_FEED_DAILY_MAX)
+            data["feeds_max"] = SICK_FEED_DAILY_MAX
+        data["phrase"] = ("Ура, я снова здоров! Спасибо, что выходил меня!"
+                          if recovered else _random.choice(SICK_PHRASES))
+        data["evolved"] = False
+        data["recovered"] = recovered
+        return data
+
     if pet.beans < FEED_COST:
         raise PetServiceError("Не хватает грувов", "NO_BEANS", 422)
     if take_daily_budget(user_id, "feeds", 1, FEED_DAILY_MAX) <= 0:
@@ -213,6 +412,7 @@ def feed_pet(user_id: int, company_id: int) -> dict:
         evolved_to = pet.stage
     if evolved_to is not None:
         pet.species = _detect_species(user_id)
+        pet.personality = _detect_personality(user_id)
 
     db.session.commit()
 
@@ -230,7 +430,8 @@ def feed_pet(user_id: int, company_id: int) -> dict:
     _emit_pet_update(pet)
     from app.services.groove_ai_service import get_feed_phrase
     data = dump_pet(pet)
-    data["feeds_left"] = max(0, FEED_DAILY_MAX - _peek_daily(user_id, "feeds"))
+    data["feeds_left"] = daily_left(user_id, "feeds", FEED_DAILY_MAX)
+    data["feeds_max"] = FEED_DAILY_MAX
     data["phrase"] = get_feed_phrase(company_id)
     data["evolved"] = evolved_to is not None
     return data
@@ -244,8 +445,28 @@ def rename_pet(user_id: int, company_id: int, name: str) -> dict:
     return dump_pet(pet)
 
 
+def current_season() -> tuple[str, str]:
+    """(заголовок сезона, key сезонного аксессуара) по текущему месяцу МСК."""
+    return _SEASON_BY_MONTH[_today_msk().month]
+
+
+def get_shop_state() -> dict:
+    season_title, seasonal_item = current_season()
+    return {
+        "prices": {**SHOP_PRICES, seasonal_item: SEASONAL_ITEMS[seasonal_item]},
+        "seasonal_item": seasonal_item,
+        "season_title": season_title,
+    }
+
+
 def buy_item(user_id: int, company_id: int, item: str) -> dict:
     price = SHOP_PRICES.get(item)
+    if price is None and item in SEASONAL_ITEMS:
+        _, seasonal_item = current_season()
+        if item != seasonal_item:
+            raise PetServiceError("Этот аксессуар вернётся в свой сезон",
+                                  "OUT_OF_SEASON", 422)
+        price = SEASONAL_ITEMS[item]
     if price is None:
         raise PetServiceError("Такого товара нет", "NO_ITEM", 404)
     pet = pet_repo.get_or_create(user_id, company_id)
@@ -301,6 +522,8 @@ def stroke_pet(viewer_id: int, target_user_id: int, company_id: int) -> dict:
     db.session.commit()
     award_beans(target_user_id, company_id, "stroke_in", 1)
     award_beans(viewer_id, company_id, "stroke_out", 1)
+    # Забота лечит: поглаживание больного Грувика даёт ему очко выздоровления.
+    add_recovery(target_user_id, company_id, 1)
     viewer = user_repo.get_by_id(viewer_id)
     try:
         socketio.emit("groove:stroke", {
@@ -365,6 +588,52 @@ def get_raid_state(company_id: int) -> dict:
         "week_start": raid.week_start.isoformat(),
         "days_left": max(0, (week_end - _today_msk()).days),
     }
+
+
+# ──────────────────────── фоновый цикл заботы ──────────────────────
+
+CARE_TICK_INTERVAL_SEC = 60 * 60
+
+
+def run_groove_care_loop(app) -> None:
+    """Раз в час: проверка болезней + дневной пересчёт характеров.
+    Работает для ВСЕХ компаний (в отличие от AI-цикла — болезнь не
+    требует включённого ИИ)."""
+    import time as _time
+    logger.info("groove.care.loop_start",
+                extra={"extra": {"interval_sec": CARE_TICK_INTERVAL_SEC}})
+    while True:
+        try:
+            _care_tick(app)
+        except Exception as e:
+            logger.warning("groove.care.tick_failed", extra={"extra": {"err": str(e)}})
+        try:
+            _time.sleep(CARE_TICK_INTERVAL_SEC)
+        except Exception:
+            return
+
+
+def _care_tick(app) -> None:
+    from app.models.company import Company
+    with app.app_context():
+        company_ids = [c.id for c in Company.query.filter_by(is_active=True).all()]
+    for cid in company_ids:
+        with app.app_context():
+            try:
+                check_sickness_for_company(cid)
+                # Характеры пересчитываем раз в день (метка в Redis).
+                key = f"gw2:groove:personality:{cid}:{_today_msk().isoformat()}"
+                try:
+                    r = _redis()
+                    if not r.exists(key):
+                        refresh_personalities_for_company(cid)
+                        r.setex(key, 48 * 3600, "1")
+                except Exception:
+                    refresh_personalities_for_company(cid)
+            except Exception as e:
+                db.session.rollback()
+                logger.warning("groove.care.company_failed",
+                               extra={"extra": {"company_id": cid, "err": str(e)}})
 
 
 def on_task_closed_raid(company_id: int) -> None:

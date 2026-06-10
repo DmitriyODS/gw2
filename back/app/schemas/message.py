@@ -3,6 +3,17 @@ from marshmallow import Schema, fields, validate
 from .user import UserDirectorySchema
 
 
+def _pet_name_for(conv):
+    """Имя Грувика владельца pet-чата (None для остальных диалогов).
+    Pet-чат у пользователя один, лишних запросов список не даёт."""
+    if not conv.is_pet_chat or conv.user_a_id is None:
+        return None
+    from app.extensions import db
+    from app.models.groove import Pet
+    pet = db.session.get(Pet, conv.user_a_id)
+    return pet.name if pet else None
+
+
 class AttachmentSchema(Schema):
     id = fields.Int(dump_only=True)
     file_name = fields.Str(dump_only=True)
@@ -70,7 +81,9 @@ class CallInfoSchema(Schema):
 class MessageSchema(Schema):
     id = fields.Int(dump_only=True)
     conversation_id = fields.Int(dump_only=True)
-    sender_id = fields.Int(dump_only=True)
+    sender_id = fields.Int(dump_only=True, allow_none=True)
+    # True — сообщение Грувика (pet-чат): sender_id = NULL, пишет ИИ.
+    is_bot = fields.Bool(dump_only=True)
     text = fields.Str(dump_only=True, allow_none=True)
     created_at = fields.DateTime(dump_only=True)
     read_at = fields.DateTime(dump_only=True, allow_none=True)
@@ -113,6 +126,10 @@ class ConversationListItemSchema(Schema):
     is_pinned = fields.Bool(dump_only=True)
     pinned_at = fields.Method("get_pinned_at", dump_only=True)
     is_dev_chat = fields.Method("get_is_dev_chat", dump_only=True)
+    is_pet_chat = fields.Method("get_is_pet_chat", dump_only=True)
+    # Имя Грувика владельца (только для pet-чата) — фронт показывает его
+    # в заголовке/списке, не завися от загрузки groove-store.
+    pet_name = fields.Method("get_pet_name", dump_only=True, allow_none=True)
     company_id = fields.Method("get_company_id", dump_only=True, allow_none=True)
     company_name = fields.Method("get_company_name", dump_only=True, allow_none=True)
     # Владелец dev-чата (заполняется только в support-inbox админа — это
@@ -131,6 +148,12 @@ class ConversationListItemSchema(Schema):
     def get_is_dev_chat(self, obj):
         return bool(obj["conversation"].is_dev_chat)
 
+    def get_is_pet_chat(self, obj):
+        return bool(obj["conversation"].is_pet_chat)
+
+    def get_pet_name(self, obj):
+        return _pet_name_for(obj["conversation"])
+
     def get_company_id(self, obj):
         return obj["conversation"].company_id
 
@@ -146,7 +169,12 @@ class ConversationSchema(Schema):
     created_at = fields.DateTime(dump_only=True)
     last_message_at = fields.DateTime(dump_only=True, allow_none=True)
     is_dev_chat = fields.Bool(dump_only=True)
+    is_pet_chat = fields.Bool(dump_only=True)
+    pet_name = fields.Method("get_pet_name", dump_only=True, allow_none=True)
     company_id = fields.Int(dump_only=True, allow_none=True)
+
+    def get_pet_name(self, obj):
+        return _pet_name_for(obj)
 
 
 class MessageCreateSchema(Schema):

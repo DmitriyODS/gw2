@@ -23,7 +23,10 @@
               :class="{ unread: c.unread_count > 0 }"
               @click="openThread(c.id)"
             >
-              <div v-if="c.is_dev_chat" class="mini-avatar-wrap mini-avatar-wrap--dev">
+              <div v-if="c.is_pet_chat" class="mini-avatar-wrap mini-avatar-wrap--pet">
+                <span class="mini-pet-emoji">👾</span>
+              </div>
+              <div v-else-if="c.is_dev_chat" class="mini-avatar-wrap mini-avatar-wrap--dev">
                 <span class="material-symbols-outlined">support_agent</span>
               </div>
               <div v-else class="mini-avatar-wrap">
@@ -32,7 +35,8 @@
               </div>
               <div class="mini-conv-body">
                 <div class="mini-conv-name">
-                  <template v-if="c.is_dev_chat">Техподдержка</template>
+                  <template v-if="c.is_pet_chat">{{ petName(c) }}</template>
+                  <template v-else-if="c.is_dev_chat">Техподдержка</template>
                   <template v-else>{{ c.other_user?.fio }}</template>
                 </div>
                 <div class="mini-conv-preview">{{ preview(c.last_message) }}</div>
@@ -48,7 +52,10 @@
             <button class="mini-icon" title="Назад" @click="closeThread">
               <span class="material-symbols-outlined">arrow_back</span>
             </button>
-            <div v-if="threadConv?.is_dev_chat" class="mini-head-avatar-wrap mini-head-avatar-wrap--dev">
+            <div v-if="threadConv?.is_pet_chat" class="mini-head-avatar-wrap mini-head-avatar-wrap--pet">
+              <span class="mini-pet-emoji">👾</span>
+            </div>
+            <div v-else-if="threadConv?.is_dev_chat" class="mini-head-avatar-wrap mini-head-avatar-wrap--dev">
               <span class="material-symbols-outlined">support_agent</span>
             </div>
             <div v-else class="mini-head-avatar-wrap">
@@ -57,11 +64,13 @@
             </div>
             <div class="mini-head-title">
               <span class="mini-title--name">
-                <template v-if="threadConv?.is_dev_chat">Техподдержка</template>
+                <template v-if="threadConv?.is_pet_chat">{{ petName(threadConv) }}</template>
+                <template v-else-if="threadConv?.is_dev_chat">Техподдержка</template>
                 <template v-else>{{ threadConv?.other_user?.fio }}</template>
               </span>
               <span class="mini-head-status" :class="{ online: threadOnline }">
-                <template v-if="threadConv?.is_dev_chat">Поддержка Groove Work</template>
+                <template v-if="threadConv?.is_pet_chat">ваш питомец из «Моего Groove»</template>
+                <template v-else-if="threadConv?.is_dev_chat">Поддержка Groove Work</template>
                 <template v-else>{{ threadOnline ? 'в сети' : threadLastSeen }}</template>
               </span>
             </div>
@@ -146,7 +155,7 @@
       :y="ctxMenu.y"
       :is-pinned="!!ctxMenu.message?.pinned_at"
       :show-pin="false"
-      :show-forward="ctxMenu.message?.kind !== 'call' && !threadConv?.is_dev_chat"
+      :show-forward="ctxMenu.message?.kind !== 'call' && !threadConv?.is_dev_chat && !threadConv?.is_pet_chat"
       :show-copy="!!ctxMenu.message?.text"
       :show-delete="ctxMenu.message?.kind !== 'call'"
       @close="ctxMenu.visible = false"
@@ -167,6 +176,7 @@
 import { ref, computed, watch, nextTick } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useMessengerStore } from '@/stores/messenger.js'
+import { useGrooveStore } from '@/stores/groove.js'
 import { useAuthStore } from '@/stores/auth.js'
 import { useCallStore } from '@/stores/call.js'
 import { useNotificationsStore } from '@/stores/notifications.js'
@@ -187,6 +197,10 @@ const authStore = useAuthStore()
 const callStore = useCallStore()
 const notif = useNotificationsStore()
 const { isMobile } = useBreakpoint()
+
+// Имя Грувика: живое из groove-store (если загружен), иначе снапшот из API.
+const grooveStore = useGrooveStore()
+const petName = (conv) => grooveStore.pet?.name || conv?.pet_name || 'Грувик'
 
 async function onJoinCall(callInfo) {
   await callStore.joinExistingCall(callInfo)
@@ -544,6 +558,14 @@ if (typeof window !== 'undefined') {
 }
 
 .mini-head-avatar-wrap--dev,
+.mini-avatar-wrap--pet,
+.mini-head-avatar-wrap--pet {
+  background: var(--color-tertiary-container);
+  display: grid;
+  place-items: center;
+}
+.mini-pet-emoji { font-size: 19px; }
+
 .mini-avatar-wrap--dev {
   display: grid;
   place-items: center;

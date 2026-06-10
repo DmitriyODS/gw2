@@ -142,3 +142,71 @@ def test_create_key_unexpected_payload_raises():
     c = YougileClient(session=sess)
     with pytest.raises(YougileError):
         c.create_key("a@b.c", "pw", "comp")
+
+
+# ── find_task_by_short_id ────────────────────────────────────────────────
+
+def test_find_short_id_top_level():
+    page = {"content": [
+        {"id": "t1", "idTaskProject": "OIP1-1"},
+        {"id": "t2", "idTaskProject": "OIP1-2"},
+    ]}
+    sess = _FakeSession([_FakeResp(200, json_data=page)])
+    c = YougileClient(key="K", session=sess)
+    found = c.find_task_by_short_id(board_id="b", short_id="oip1-2",
+                                    column_ids=["col1"])
+    assert found and found["id"] == "t2"
+
+
+def test_find_short_id_in_subtask():
+    # Колонка отдаёт родителя без совпадения, но с subtasks;
+    # подзадача находится отдельным GET /tasks/{id}.
+    page = {"content": [
+        {"id": "parent", "idTaskProject": "OIP1-1", "subtasks": ["sub1", "sub2"]},
+    ]}
+    sub1 = {"id": "sub1", "idTaskProject": "OIP1-7", "subtasks": ["sub3"]}
+    sess = _FakeSession([_FakeResp(200, json_data=page),
+                         _FakeResp(200, json_data=sub1)])
+    c = YougileClient(key="K", session=sess)
+    found = c.find_task_by_short_id(board_id="b", short_id="OIP1-7",
+                                    column_ids=["col1"])
+    assert found and found["id"] == "sub1"
+    # Второй запрос — именно GET /tasks/sub1.
+    assert sess.calls[1]["url"].endswith("/tasks/sub1")
+
+
+def test_find_short_id_in_nested_subtask():
+    page = {"content": [
+        {"id": "parent", "idTaskProject": "OIP1-1", "subtasks": ["sub1"]},
+    ]}
+    sub1 = {"id": "sub1", "idTaskProject": "OIP1-2", "subtasks": ["sub2"]}
+    sub2 = {"id": "sub2", "idTaskProject": "OIP1-3"}
+    sess = _FakeSession([_FakeResp(200, json_data=page),
+                         _FakeResp(200, json_data=sub1),
+                         _FakeResp(200, json_data=sub2)])
+    c = YougileClient(key="K", session=sess)
+    found = c.find_task_by_short_id(board_id="b", short_id="OIP1-3",
+                                    column_ids=["col1"])
+    assert found and found["id"] == "sub2"
+
+
+def test_find_short_id_subtask_fetch_error_skipped():
+    # Битая подзадача (404) не валит поиск — идём дальше по очереди.
+    page = {"content": [
+        {"id": "parent", "idTaskProject": "OIP1-1", "subtasks": ["bad", "good"]},
+    ]}
+    sess = _FakeSession([_FakeResp(200, json_data=page),
+                         _FakeResp(404, json_data={"message": "nope"}),
+                         _FakeResp(200, json_data={"id": "good", "idTaskProject": "OIP1-9"})])
+    c = YougileClient(key="K", session=sess)
+    found = c.find_task_by_short_id(board_id="b", short_id="OIP1-9",
+                                    column_ids=["col1"])
+    assert found and found["id"] == "good"
+
+
+def test_find_short_id_not_found_returns_none():
+    page = {"content": [{"id": "t1", "idTaskProject": "OIP1-1"}]}
+    sess = _FakeSession([_FakeResp(200, json_data=page)])
+    c = YougileClient(key="K", session=sess)
+    assert c.find_task_by_short_id(board_id="b", short_id="OIP1-99",
+                                   column_ids=["col1"]) is None

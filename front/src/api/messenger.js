@@ -57,5 +57,7 @@ export const listPinnedMessages = (conversationId) =>
 // Личный чат с техподдержкой текущего пользователя.
 export const openDevChat = () => apiRequest('/messenger/dev-chat')
 
+export const openPetChat = () => apiRequest('/messenger/pet-chat')
+
 // Для Администратора системы: список чатов техподдержки всех пользователей.
 export const listSupportInbox = (options = {}) => apiRequest('/messenger/support-inbox', options)

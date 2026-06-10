@@ -72,6 +72,9 @@ const KIND_META = {
   ai_digest: { icon: 'wb_sunny', tone: 'tertiary' },
   raid_started: { icon: 'sports_mma', tone: 'error' },
   raid_won: { icon: 'emoji_events', tone: 'warning' },
+  pet_sick: { icon: 'sick', tone: 'error' },
+  pet_recovered: { icon: 'healing', tone: 'success' },
+  wrapped: { icon: 'auto_awesome', tone: 'tertiary' },
 }
 
 const meta = computed(() => KIND_META[props.event.kind] || { icon: 'bolt', tone: 'primary' })
@@ -99,6 +102,18 @@ const sentence = computed(() => {
       return `Новый рейд недели: ${BOSS_EMOJI[p.boss] || '👾'} «${p.boss}». Цель команды — ${p.target} закрытых задач!`
     case 'raid_won':
       return `${BOSS_EMOJI[p.boss] || '👾'} «${p.boss}» повержен! Всем Грувикам — ${SHOP_ITEMS[p.reward]?.title || 'награда'} и +${p.beans} грувов`
+    case 'pet_sick':
+      return `«${p.pet_name || 'Грувик'}» приболел 🤒 — хозяину пора вернуться в строй. Поглаживания тоже лечат!`
+    case 'pet_recovered':
+      return `«${p.pet_name || 'Грувик'}» выздоровел и снова сияет! 💚`
+    case 'wrapped': {
+      const parts = []
+      if (p.units) parts.push(`${p.units} юнитов`)
+      if (p.minutes) parts.push(formatMinutes(p.minutes))
+      if (p.closed) parts.push(`закрыто задач: ${p.closed}`)
+      const best = p.best_day ? ` Самый мощный день — ${p.best_day}.` : ''
+      return `итоги недели: ${parts.join(' · ') || 'тихая неделя'}.${best}`
+    }
     default:
       return ''
   }

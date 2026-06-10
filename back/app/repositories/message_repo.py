@@ -89,6 +89,46 @@ def get_or_create_dev_chat_for_user(user_id: int, company_id: int) -> Conversati
         return existing
 
 
+def get_pet_chat_for_user(user_id: int) -> Optional[Conversation]:
+    """Чат пользователя со своим Грувиком (один на пользователя)."""
+    return db.session.execute(
+        db.select(Conversation).where(
+            Conversation.is_pet_chat.is_(True),
+            Conversation.user_a_id == user_id,
+        )
+    ).scalar_one_or_none()
+
+
+def get_or_create_pet_chat_for_user(user_id: int, company_id: int) -> Conversation:
+    conv = get_pet_chat_for_user(user_id)
+    if conv:
+        return conv
+    conv = Conversation(user_a_id=user_id, user_b_id=None,
+                        company_id=company_id, is_pet_chat=True)
+    db.session.add(conv)
+    try:
+        db.session.flush()
+        return conv
+    except IntegrityError:
+        db.session.rollback()
+        existing = get_pet_chat_for_user(user_id)
+        if existing is None:
+            raise
+        return existing
+
+
+def last_messages(conversation_id: int, limit: int = 12) -> list[Message]:
+    """Последние сообщения диалога в хронологическом порядке (для контекста
+    AI-ответа Грувика)."""
+    rows = db.session.execute(
+        db.select(Message)
+        .where(Message.conversation_id == conversation_id)
+        .order_by(Message.id.desc())
+        .limit(limit)
+    ).scalars().all()
+    return list(reversed(rows))
+
+
 def list_dev_chats() -> list[Conversation]:
     """Все личные чаты пользователей с техподдержкой (для Администратора системы).
     Сортировка: сначала с непрочитанными/свежим сообщением, потом пустые."""
@@ -120,6 +160,7 @@ def list_user_conversations(user_id: int) -> list[dict]:
     convs = db.session.execute(
         db.select(Conversation).options(selectinload(Conversation.company)).where(
             Conversation.is_dev_chat.is_(False),
+            Conversation.is_pet_chat.is_(False),
             or_(Conversation.user_a_id == user_id, Conversation.user_b_id == user_id),
             not_hidden,
         ).order_by(Conversation.last_message_at.desc().nullslast(), Conversation.created_at.desc())
@@ -171,7 +212,7 @@ def list_user_conversations(user_id: int) -> list[dict]:
             db.select(Message.conversation_id, func.count(Message.id))
             .where(
                 Message.conversation_id.in_(ids),
-                Message.sender_id != user_id,
+                or_(Message.sender_id.is_(None), Message.sender_id != user_id),
                 Message.read_at.is_(None),
                 hidden_col.is_(False),
             )
@@ -226,6 +267,35 @@ def list_user_conversations(user_id: int) -> list[dict]:
                 "other_user": None,
                 "last_message": dev_last,
                 "unread_count": dev_unread,
+                "is_pinned": False,
+                "pinned_at": None,
+            })
+
+        # Чат с Грувиком — самым первым (если уже создан кнопкой в «Моём Groove»).
+        pet_conv = get_pet_chat_for_user(user_id)
+        if pet_conv is not None:
+            pet_last = db.session.execute(
+                db.select(Message)
+                .options(*_msg_load_options())
+                .where(Message.conversation_id == pet_conv.id)
+                .order_by(Message.id.desc())
+                .limit(1)
+            ).scalar_one_or_none()
+            # Ответы Грувика идут с sender_id = NULL — обычное `!=` их молча
+            # отбрасывает (трёхзначная логика SQL), поэтому явный OR IS NULL.
+            pet_unread = db.session.execute(
+                db.select(func.count(Message.id))
+                .where(
+                    Message.conversation_id == pet_conv.id,
+                    or_(Message.sender_id.is_(None), Message.sender_id != user_id),
+                    Message.read_at.is_(None),
+                )
+            ).scalar_one() or 0
+            result.insert(0, {
+                "conversation": pet_conv,
+                "other_user": None,
+                "last_message": pet_last,
+                "unread_count": pet_unread,
                 "is_pinned": False,
                 "pinned_at": None,
             })
@@ -287,10 +357,11 @@ def create_call_message(conversation_id: int, sender_id: int, call_id: int) -> M
     return msg
 
 
-def create_message(conversation_id: int, sender_id: int, text: Optional[str],
+def create_message(conversation_id: int, sender_id: Optional[int], text: Optional[str],
                    attachment_ids: list[int], reply_to_id: Optional[int] = None,
                    forwarded_from_user_id: Optional[int] = None,
-                   kind: str = "text", task_id: Optional[int] = None) -> Message:
+                   kind: str = "text", task_id: Optional[int] = None,
+                   is_bot: bool = False) -> Message:
     msg = Message(
         conversation_id=conversation_id,
         sender_id=sender_id,
@@ -299,6 +370,7 @@ def create_message(conversation_id: int, sender_id: int, text: Optional[str],
         forwarded_from_user_id=forwarded_from_user_id,
         kind=kind,
         task_id=task_id,
+        is_bot=is_bot,
     )
     db.session.add(msg)
     db.session.flush()
@@ -333,7 +405,7 @@ def mark_read(conversation_id: int, reader_id: int) -> int:
         db.update(Message)
         .where(
             Message.conversation_id == conversation_id,
-            Message.sender_id != reader_id,
+            or_(Message.sender_id.is_(None), Message.sender_id != reader_id),
             Message.read_at.is_(None),
         )
         .values(read_at=now)
@@ -374,7 +446,7 @@ def total_unread(user_id: int) -> int:
         .join(Conversation, Conversation.id == Message.conversation_id)
         .where(
             or_(side_a, side_b),
-            Message.sender_id != user_id,
+            or_(Message.sender_id.is_(None), Message.sender_id != user_id),
             Message.read_at.is_(None),
         )
     ).scalar_one() or 0

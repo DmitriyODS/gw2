@@ -186,6 +186,10 @@ def post_message(conversation_id: int):
         # Администраторов системы (личные комнаты `user_{id}`).
         for uid in _dev_chat_user_ids(conv):
             socketio.emit("message:new", payload_event, room=f"user_{uid}")
+    elif conv.is_pet_chat:
+        # Чат с Грувиком видит только владелец: эхо в его вкладки. Ответ
+        # питомца придёт отдельным message:new из groove_ai_service.
+        socketio.emit("message:new", payload_event, room=f"user_{me}")
     else:
         recipient_id = conv.other_user_id(me)
         socketio.emit("message:new", payload_event, room=f"user_{recipient_id}")
@@ -300,7 +304,7 @@ def mark_read(conversation_id: int):
             for uid in _dev_chat_user_ids(conv):
                 if uid != me:
                     socketio.emit("message:read", payload, room=f"user_{uid}")
-        else:
+        elif not conv.is_pet_chat:
             other_id = conv.other_user_id(me)
             socketio.emit("message:read", payload, room=f"user_{other_id}")
 
@@ -556,6 +560,27 @@ def open_dev_chat():
     me = int(get_jwt_identity())
     try:
         conv = messenger_service.open_dev_chat(me)
+    except MessengerServiceError as e:
+        return jsonify({"error": e.code, "message": e.message}), e.http_status
+    return jsonify(_conv.dump(conv)), 200
+
+
+@bp.get("/pet-chat")
+@require_auth
+def open_pet_chat():
+    """
+    Открыть/создать чат пользователя со своим Грувиком («Мой Groove»).
+    Отвечает ИИ от лица питомца с его характером.
+    ---
+    tags: [messenger]
+    security: [BearerAuth: []]
+    responses:
+      200:
+        description: Чат с Грувиком
+    """
+    me = int(get_jwt_identity())
+    try:
+        conv = messenger_service.open_pet_chat(me)
     except MessengerServiceError as e:
         return jsonify({"error": e.code, "message": e.message}), e.http_status
     return jsonify(_conv.dump(conv)), 200

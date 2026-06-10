@@ -37,6 +37,41 @@ def list_company_pets(company_id: int) -> list[Pet]:
     ).scalars().all()
 
 
+def last_unit_end_by_users(user_ids: list[int]) -> dict[int, datetime]:
+    """Время последнего завершённого юнита по каждому пользователю."""
+    if not user_ids:
+        return {}
+    rows = db.session.execute(
+        db.select(Unit.user_id, func.max(Unit.datetime_end))
+        .where(Unit.user_id.in_(user_ids), Unit.datetime_end.isnot(None))
+        .group_by(Unit.user_id)
+    ).all()
+    return {user_id: last_end for user_id, last_end in rows}
+
+
+def soulmate_for_user(user_id: int, since: datetime):
+    """Коллега, чаще всех работавший над теми же задачами, что и user_id,
+    за период. Возвращает (User, units_count) или None."""
+    my_task_ids = db.session.execute(
+        db.select(Unit.task_id).distinct()
+        .where(Unit.user_id == user_id, Unit.datetime_start >= since)
+    ).scalars().all()
+    if not my_task_ids:
+        return None
+    row = db.session.execute(
+        db.select(User, func.count(Unit.id).label("cnt"))
+        .join(Unit, Unit.user_id == User.id)
+        .where(Unit.task_id.in_(my_task_ids),
+               Unit.user_id != user_id,
+               Unit.datetime_start >= since,
+               User.is_hidden.is_(False))
+        .group_by(User.id)
+        .order_by(func.count(Unit.id).desc())
+        .limit(1)
+    ).first()
+    return (row[0], row[1]) if row else None
+
+
 def finished_units_for_user(user_id: int, since: datetime,
                             limit: int = 100) -> list[Unit]:
     """Завершённые юниты пользователя для определения «характера» питомца."""

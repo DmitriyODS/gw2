@@ -15,10 +15,16 @@
             </span>
           </div>
         </div>
-        <button class="kudos-btn desktop-only" @click="showKudos = true">
-          <span class="material-symbols-outlined">volunteer_activism</span>
-          <span>Поблагодарить</span>
-        </button>
+        <div class="head-actions">
+          <button class="wrapped-btn" @click="showWrapped = true">
+            <span class="material-symbols-outlined">auto_awesome</span>
+            <span class="desktop-only-label">Моя неделя</span>
+          </button>
+          <button class="kudos-btn desktop-only" @click="showKudos = true">
+            <span class="material-symbols-outlined">volunteer_activism</span>
+            <span>Поблагодарить</span>
+          </button>
+        </div>
       </div>
     </header>
 
@@ -43,13 +49,15 @@
             <p>Запустите юнит или закройте задачу — здесь появится первая опорная точка</p>
           </div>
 
-          <!-- Река дня: на десктопе — горизонтально, новые дни слева;
-               на мобильном — вертикально сверху вниз. -->
+          <!-- Река дня: дни — полноширинные секции, события внутри
+               раскладываются адаптивным гридом и заполняют всю ширину. -->
           <div v-else ref="riverEl" class="groove-river">
             <section v-for="day in days" :key="day.key" class="river-day">
               <header class="river-day-head">
                 <span class="river-day-dot" aria-hidden="true"></span>
                 <h2 class="river-day-title">{{ day.title }}</h2>
+                <span class="river-day-line" aria-hidden="true"></span>
+                <span class="river-day-count">{{ dayCount(day) }}</span>
               </header>
               <div class="river-day-body">
                 <template v-for="zone in day.zones" :key="day.key + zone.key + zone.events[0].id">
@@ -79,6 +87,7 @@
 
     <PetShopDialog v-model="showShop" />
     <KudosDialog v-model="showKudos" />
+    <WrappedDialog v-model="showWrapped" />
   </div>
 </template>
 
@@ -94,11 +103,13 @@ import ZooStrip from '@/components/groove/ZooStrip.vue'
 import FeedCard from '@/components/groove/FeedCard.vue'
 import PetShopDialog from '@/components/groove/PetShopDialog.vue'
 import KudosDialog from '@/components/groove/KudosDialog.vue'
+import WrappedDialog from '@/components/groove/WrappedDialog.vue'
 
 const groove = useGrooveStore()
 
 const showShop = ref(false)
 const showKudos = ref(false)
+const showWrapped = ref(false)
 const riverEl = ref(null)
 const sentinelEl = ref(null)
 
@@ -118,6 +129,13 @@ const days = computed(() => {
     zones: groupZones(events),
   }))
 })
+
+function dayCount(day) {
+  const n = day.zones.reduce((sum, z) => sum + z.events.length, 0)
+  if (n === 1) return '1 событие'
+  if (n >= 2 && n <= 4) return `${n} события`
+  return `${n} событий`
+}
 
 function groupZones(events) {
   const zones = []
@@ -194,6 +212,23 @@ onBeforeUnmount(() => {
   transition: transform 0.1s;
 }
 .kudos-btn:active { transform: scale(0.97); }
+.head-actions { display: flex; gap: 8px; align-items: center; }
+.wrapped-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  border: none;
+  border-radius: var(--radius-full);
+  background: var(--color-tertiary-container);
+  color: var(--color-on-tertiary-container);
+  font-size: 14px;
+  font-weight: 600;
+  padding: 11px 18px;
+  cursor: pointer;
+  transition: transform 0.1s;
+}
+.wrapped-btn:active { transform: scale(0.97); }
+.wrapped-btn .material-symbols-outlined { font-size: 18px; }
 
 .groove-live { margin-bottom: 16px; }
 
@@ -217,59 +252,52 @@ onBeforeUnmount(() => {
   min-width: 0;
 }
 
-/* ── Река дня ─────────────────────────────────────────────── */
+/* ── Река дня: полноширинные дни, грид карточек ───────────── */
 .groove-river {
   display: flex;
-  gap: 18px;
-  overflow-x: auto;
+  flex-direction: column;
+  gap: 22px;
   padding: 4px 2px 14px;
-  scroll-snap-type: x proximity;
-  scrollbar-width: thin;
-}
-.river-day {
-  width: 318px;
-  flex-shrink: 0;
-  scroll-snap-align: start;
 }
 .river-day-head {
   display: flex;
   align-items: center;
-  gap: 8px;
-  position: relative;
-  padding-bottom: 10px;
+  gap: 10px;
+  padding-bottom: 12px;
 }
-/* Горизонтальная нить времени между днями. */
-.river-day-head::after {
-  content: '';
-  position: absolute;
-  top: 6px;
-  left: 20px;
-  right: -18px;
-  height: 2px;
-  background: var(--color-outline-dim);
-}
-.river-day:last-of-type .river-day-head::after { right: 0; }
 .river-day-dot {
   width: 14px;
   height: 14px;
   border-radius: 50%;
   background: var(--color-surface);
   border: 3px solid var(--color-primary);
-  position: relative;
-  z-index: 1;
   flex-shrink: 0;
 }
 .river-day-title {
   margin: 0;
-  font-size: 14px;
+  font-size: 15px;
   font-weight: 700;
-  position: relative;
-  z-index: 1;
-  background: var(--color-bg);
-  padding-right: 8px;
+  white-space: nowrap;
 }
-.river-day-body { display: flex; flex-direction: column; gap: 10px; }
+.river-day-line {
+  flex: 1;
+  height: 2px;
+  background: var(--color-outline-dim);
+  border-radius: 1px;
+}
+.river-day-count {
+  font-size: 12px;
+  color: var(--color-text-dim);
+  white-space: nowrap;
+}
+.river-day-body {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: 12px;
+  align-items: start;
+}
 .river-zone {
+  grid-column: 1 / -1;
   display: inline-flex;
   align-items: center;
   gap: 6px;
@@ -278,12 +306,12 @@ onBeforeUnmount(() => {
   text-transform: uppercase;
   letter-spacing: 0.06em;
   color: var(--color-text-dim);
-  margin-top: 4px;
+  margin-top: 2px;
 }
 .river-zone .material-symbols-outlined { font-size: 15px; }
 .river-sentinel {
-  flex-shrink: 0;
-  width: 40px;
+  width: 100%;
+  height: 32px;
   display: grid;
   place-items: center;
 }
@@ -315,20 +343,14 @@ onBeforeUnmount(() => {
 @media (max-width: 1100px) {
   .groove-layout { grid-template-columns: 1fr; }
   .groove-aside { position: static; }
-  .groove-river {
-    flex-direction: column;
-    overflow-x: visible;
-    scroll-snap-type: none;
-    gap: 14px;
-  }
-  .river-day { width: 100%; }
-  .river-day-head::after { display: none; }
-  .river-sentinel { width: 100%; height: 32px; }
+  .groove-river { gap: 16px; }
 }
 
 .desktop-only { display: inline-flex; }
 @media (max-width: 768px) {
   .desktop-only { display: none; }
+  .desktop-only-label { display: none; }
+  .wrapped-btn { padding: 10px 12px; }
   .groove-title { font-size: 22px; }
 }
 </style>

@@ -100,6 +100,13 @@ class Pet(db.Model):
     accessories = db.Column(JSONB, nullable=False, default=list)
     feed_streak = db.Column(db.Integer, nullable=False, default=0)
     last_fed_date = db.Column(db.Date, nullable=True)
+    # Болезнь: питомец заболевает, если хозяин долго не работал (нет
+    # завершённых юнитов). Лечится работой и заботой (recovery-очки),
+    # уровень и XP при этом НЕ теряются — болезнь лишь замораживает рост.
+    sick_since = db.Column(db.DateTime(timezone=True), nullable=True)
+    recovery = db.Column(db.Integer, nullable=False, default=0, server_default="0")
+    # Характер: пересчитывается по паттерну работы (см. pet_service).
+    personality = db.Column(db.String(24), nullable=True)
     created_at = db.Column(db.DateTime(timezone=True), nullable=False,
                            default=lambda: datetime.now(timezone.utc))
 

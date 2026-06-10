@@ -391,10 +391,11 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, watch } from 'vue'
+import { ref, computed, onMounted, onBeforeUnmount, watch } from 'vue'
 import Dialog from 'primevue/dialog'
 import AppDialog from '@/components/common/AppDialog.vue'
 import { useBreakpoint } from '@/composables/useBreakpoint.js'
+import { getSocket } from '@/socket/index.js'
 import UnitListItem from '@/components/tasks/UnitListItem.vue'
 import TaskForm from '@/components/tasks/TaskForm.vue'
 import TaskColorPopover from '@/components/tasks/TaskColorPopover.vue'
@@ -599,7 +600,45 @@ function onMobileMenuAction(action) {
 onMounted(() => {
   loadUnits()
   if (usesStages.value) loadStages()
+  subscribeUnitEvents()
 })
+
+onBeforeUnmount(() => unsubscribeUnitEvents())
+
+/* Список юнитов живёт локально и без подписки устаревает: остановив юнит из
+   ActiveUnitModal/карточки, пользователь открывал редактирование со старым
+   объектом (datetime_end=null) — и поле «окончание» не показывалось. */
+const unitHandlers = {
+  'unit:started': (unit) => {
+    if (unit.task_id !== props.task.id) return
+    if (!units.value.some((u) => u.id === unit.id)) units.value.unshift(unit)
+  },
+  'unit:stopped': ({ unit_id, task_id, datetime_end }) => {
+    if (task_id !== props.task.id) return
+    const u = units.value.find((x) => x.id === unit_id)
+    if (u && datetime_end) u.datetime_end = datetime_end
+  },
+  'unit:updated': (data) => {
+    const u = units.value.find((x) => x.id === data.unit_id)
+    if (u) Object.assign(u, data)
+  },
+  'unit:deleted': ({ unit_id }) => {
+    const idx = units.value.findIndex((x) => x.id === unit_id)
+    if (idx !== -1) units.value.splice(idx, 1)
+  },
+}
+
+function subscribeUnitEvents() {
+  const socket = getSocket()
+  if (!socket) return
+  for (const [event, handler] of Object.entries(unitHandlers)) socket.on(event, handler)
+}
+
+function unsubscribeUnitEvents() {
+  const socket = getSocket()
+  if (!socket) return
+  for (const [event, handler] of Object.entries(unitHandlers)) socket.off(event, handler)
+}
 
 async function loadStages() {
   try {

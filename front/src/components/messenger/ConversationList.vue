@@ -70,6 +70,9 @@
         <div v-else-if="c.is_dev_chat" class="conv-avatar-wrap dev">
           <span class="material-symbols-outlined">support_agent</span>
         </div>
+        <div v-else-if="c.is_pet_chat" class="conv-avatar-wrap pet">
+          <span class="conv-pet-emoji">👾</span>
+        </div>
         <div v-else class="conv-avatar-wrap">
           <img class="conv-avatar" :src="avatarOf(c.other_user)" :alt="c.other_user?.fio" />
           <span v-if="messenger.isOnline(c.other_user?.id)" class="online-dot" title="В сети"></span>
@@ -81,6 +84,7 @@
                 {{ c.owner_user.fio }}
               </template>
               <template v-else-if="c.is_dev_chat">Техподдержка</template>
+              <template v-else-if="c.is_pet_chat">{{ petChatName || c.pet_name || 'Грувик' }}</template>
               <template v-else>{{ c.other_user?.fio }}</template>
             </span>
             <span v-if="c.last_message_at" class="conv-time">{{ formatTime(c.last_message_at) }}</span>
@@ -102,7 +106,7 @@
         <!-- Действия pin/delete — только на обычных диалогах. Чат техподдержки
              (и у владельца, и у админа в инбоксе) нельзя ни закрепить, ни
              удалить. -->
-        <div v-if="!c.is_dev_chat" class="conv-actions" @click.stop>
+        <div v-if="!c.is_dev_chat && !c.is_pet_chat" class="conv-actions" @click.stop>
           <button
             class="conv-action"
             :class="{ active: c.is_pinned }"
@@ -128,6 +132,7 @@
 import { ref, computed } from 'vue'
 import ProgressSpinner from 'primevue/progressspinner'
 import SegmentedTabs from '@/components/common/SegmentedTabs.vue'
+import { useGrooveStore } from '@/stores/groove.js'
 import { useMessengerStore } from '@/stores/messenger.js'
 
 const messenger = useMessengerStore()
@@ -193,11 +198,21 @@ const visible = computed(() => {
     if (c.is_dev_chat) {
       return 'техподдержка'.includes(q)
     }
+    if (c.is_pet_chat) {
+      const name = (petChatName.value || c.pet_name || 'Грувик').toLowerCase()
+      return 'грувик'.includes(q) || name.includes(q)
+    }
     return (
       c.other_user?.fio?.toLowerCase().includes(q) ||
       c.other_user?.login?.toLowerCase().includes(q)
     )
   })
+})
+
+// Живое имя своего Грувика (обновляется сокетом pet:update); если groove-store
+// ещё не загружен — null, тогда берём снапшот pet_name из ответа API.
+const petChatName = computed(() => {
+  try { return useGrooveStore().pet?.name || null } catch { return null }
 })
 
 function avatarOf(u) {
@@ -295,6 +310,17 @@ function formatTime(iso) {
   margin: 0 4px;
   color: var(--color-text-dim);
 }
+
+.conv-avatar-wrap.pet {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  background: var(--color-tertiary-container);
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+}
+.conv-pet-emoji { font-size: 24px; }
 
 .conv-avatar-wrap.dev {
   width: 44px;

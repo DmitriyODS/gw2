@@ -91,6 +91,36 @@ Routes (Blueprints) → Services (бизнес-логика) → Repositories (S
 
 Клиент передаёт access token в query param при handshake. Сервер присоединяет к комнатам `all` и `user_{id}`. Все мутации (задачи, юниты) излучают события в комнату `all`.
 
+## v3.4.0 — Groove 2.0: характер и чат Грувика, болезнь, Wrapped, ТВ-слайд
+
+**Болезнь Грувика.** Колонки `pets.sick_since/recovery/personality` (миграция `b0c1d2e3f4a5`). Заболевает при stage≥1 и отсутствии завершённых юнитов `SICK_AFTER_DAYS=5` дней (без юнитов вообще — не болеет). Проверка — фоновый «цикл заботы» `pet_service.run_groove_care_loop` (тик 60 мин, ВСЕ активные компании, не требует ИИ; поднимается в `create_app`), там же дневной пересчёт характеров (метка в Redis). Лечение — `recovery` до `RECOVERY_TARGET=3`: юнит ≥15 мин и закрытая задача (`add_recovery` из хуков feed_service), поглаживание коллеги, «бульон» (кормление больного: 1 грув, без XP, +1 recovery, ≤2/день, источник `sick_feeds`). Болезнь замораживает XP (блок кормления здоровой ветки), уровень НЕ теряется. События `pet_sick`/`pet_recovered` (+бот-комментарии). UI: PetCard — 🤒, прогресс-точки recovery, кнопка «Дать бульон»; ZooStrip — серый питомец с 🤒 (поглаживание лечит).
+
+**Характер (`pets.personality`).** `_detect_personality` по юнитам за 21 день (ритм/время/длительность): lazy/night/early/energizer/zen/steady (`PERSONALITIES` ≡ `utils/groove.js`). Пересчёт: лениво в `get_my_pet` (если NULL), на эволюции, ежедневно в care-цикле. Показан чипом на PetCard.
+
+**Чат с Грувиком в мессенджере.** `conversations.is_pet_chat` (user_a=владелец, user_b NULL; CHECK-констрейнт переписан в миграции), `messages.sender_id` теперь nullable + `messages.is_bot` (ответы питомца: sender NULL + is_bot). Видит только владелец; нельзя удалить/закрепить/переслать/позвонить; только текст (`PET_CHAT_TEXT_ONLY`). `GET /api/messenger/pet-chat` (get-or-create), вставляется первым в список диалогов. **Важно:** во всех unread/mark_read запросах фильтр отправителя — `or_(sender_id.is_(None), sender_id != me)`, иначе трёхзначная логика SQL молча теряет бот-сообщения. Ответ — `groove_ai_service.schedule_pet_reply` (async greenlet из `send_message`): system-prompt = имя+характер+стадия+вид+болезнь+рабочий контекст (минуты сегодня/за неделю), история 12 сообщений, эмит `message:new` владельцу; без ИИ — `PET_OFFLINE_REPLIES`. Фронт: 👾-аватары и заголовок в ConversationList/MessengerView/MiniMessenger, бейдж «Грувик» на пузыре (`pet-reply` в тон tertiary), индикатор «печатает…» (между моим сообщением и ответом бота, таймаут 45с), кнопка `forum` на PetCard → `messenger.openPetChat()` → `/messenger/:id`.
+
+**Wrapped «Моя неделя».** `GET /api/groove/wrapped`: юниты/минуты/закрытия за 7 дней, лучший день (МСК), пик формы (медиана часа старта), самый длинный юнит, реакции+кудосы (`feed_repo.reactions_received/kudos_received` — JSONB `payload['to_user_id'].as_integer()`), соулмейт (`pet_repo.soulmate_for_user` — чужие юниты на моих задачах), снимок питомца + AI-фраза (`get_wrapped_phrase`, Redis-кэш сутки). `POST /wrapped/share` → событие `wrapped` (раз в день, Redis). Фронт: `WrappedDialog.vue` — сторис-карточки (прогресс-сегменты, клик слева/справа листает), кнопка «Моя неделя» в шапке GrooveView.
+
+**Сезонные товары.** `SEASONAL_ITEMS` (flower/icecream/pumpkin/santa, по 45) + `_SEASON_BY_MONTH`; `GET /shop` теперь отдаёт `{prices, seasonal_item, season_title}` (сезонный товар подмешан в prices), покупка вне сезона — `OUT_OF_SEASON`. Фронт: бейдж «сезонный» в PetShopDialog.
+
+**ТВ-слайд Грувиков.** `GET /api/groove/tv` → `{pets: топ-8 по stage/xp (+strokes_today), raid, totals: {pets, sick, beans, strokes_today}}`. В TvView слайд `kind='groove'` (id `groove-pets`, между month-podium и brand): список топ-5 — эмодзи+шапка+🤒, имя питомца/владельца, чип стадии, XP-бар; aside `groove-raid` — прогресс рейда. Данные — `loadGroove()` на mount + в общий 60с-refresh. На portrait XP-бар скрыт.
+
+**Лента-2.0 (редизайн).** «Река» больше не горизонтальная: дни — полноширинные секции (заголовок: точка-нить-счётчик событий), внутри карточки в гриде `auto-fill minmax(320px,1fr)`, зоны «Утро/День/Вечер» — разделители на всю ширину (`grid-column: 1/-1`). Sentinel-подгрузка внизу. Новые kinds в FeedCard: `pet_sick`, `pet_recovered`, `wrapped`.
+
+**Тур.** Шаг `groove` (после `messenger`, target `nav-groove`).
+
+### v3.4.0 — фиксы по отзывам пользователей
+
+**Импорт подзадач YouGile.** `client.find_task_by_short_id` находил карточку только перебором задач в колонках доски, а подзадачи YG к колонке не привязаны (живут в `subtasks` родителя) — импорт по короткой ссылке падал `NOT_FOUND_IN_YG`. Теперь при проходе по колонкам собираются `subtasks`-id всех задач, и если на верхнем уровне совпадения нет — BFS по подзадачам (`GET /tasks/{id}` по одной, любая вложенность, кап `MAX_SUBTASK_LOOKUPS=500`; 404 отдельной подзадачи не валит поиск, `YougileAuthError` пробрасывается). Тесты в `test_yougile_client.py`.
+
+**Редактирование юнита сразу после остановки.** Список юнитов в `TaskModal` грузился один раз на mount: после «Стоп» (из ActiveUnitModal/карточки) объект в списке оставался с `datetime_end=null`, и `UnitEditModal` не показывал поле окончания. Теперь TaskModal подписан на `unit:started/stopped/updated/deleted` (патчит локальный список; `unit:stopped` уже нёс `datetime_end`), а `UnitEditModal` через watch подхватывает появившийся `datetime_end` в открытой форме.
+
+**Имя Грувика в мессенджере (жалоба «кормление сбрасывает имя»).** На бэке имя при кормлении не трогается (проверено); реальный эффект — pet-чат показывал дефолт: groove-store не загружен на маршрутах мессенджера, а в MiniMessenger имя было захардкожено. Добавлено `pet_name` в `ConversationListItemSchema`/`ConversationSchema` (хелпер `_pet_name_for`, только для pet-чатов); фронт показывает `groove.pet?.name || conv.pet_name || 'Грувик'` (ConversationList/MessengerView/MiniMessenger, store.openPetChat кладёт `pet_name` в стаб).
+
+**Счётчик зарядов ⚡.** `GET /groove/live` теперь отдаёт `{items, zaps_left, zaps_max}` (личный остаток зрителя; `pet_service.daily_left` — публичный хелпер поверх `_peek_daily`), `POST /zap` тоже возвращает `zaps_left`. В LiveNowBar — чип `⚡ N/10` с тултипом «обновляются каждый день», кнопки заряда дизейблятся при нуле с объясняющим title.
+
+**UI кормления.** `get_my_pet`/`feed_pet` отдают `feeds_max` рядом с `feeds_left` (при выздоровлении от бульона — сразу здоровая шкала 6, не 2). PetCard: чип кормлений в формате `N/M` с тултипом про дневное обновление + текстовая подсказка под кнопкой, почему кормить нельзя (сыт / не хватает грувов).
+
 ## v3.3.0 — «Мой Groove»: социальная лента, Грувики, рейды (+ИИ)
 
 Геймифицированный соцраздел, роут `/groove` (sidebar «Мой Groove», bottom-nav в «Ещё», tutorial-якорь `nav-groove`). Все таблицы company-scoped, миграция `a9b0c1d2e3f4`.

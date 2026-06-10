@@ -33,6 +33,20 @@ export const SHOP_ITEMS = {
   tophat: { emoji: '🎩', title: 'Цилиндр' },
   crown: { emoji: '👑', title: 'Корона' },
   helmet: { emoji: '⛑️', title: 'Каска дедлайнщика' },
+  flower: { emoji: '🌸', title: 'Весенний цветок' },
+  icecream: { emoji: '🍦', title: 'Летнее мороженое' },
+  pumpkin: { emoji: '🎃', title: 'Осенняя тыква' },
+  santa: { emoji: '🎅', title: 'Новогодний колпак' },
+}
+
+// Характеры (≡ PERSONALITIES в pet_service.py).
+export const PERSONALITIES = {
+  lazy: { emoji: '🦥', title: 'Ленивец-мечтатель' },
+  night: { emoji: '🌙', title: 'Ночной активист' },
+  early: { emoji: '🌅', title: 'Ранняя пташка' },
+  energizer: { emoji: '⚡', title: 'Бодрячок-энерджайзер' },
+  zen: { emoji: '🧘', title: 'Дзен-марафонец' },
+  steady: { emoji: '🪨', title: 'Уравновешенный трудяга' },
 }
 
 export const BOSS_EMOJI = {

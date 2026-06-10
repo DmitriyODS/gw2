@@ -8,7 +8,9 @@ class Message(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     conversation_id = db.Column(db.Integer, db.ForeignKey("conversations.id", ondelete="CASCADE"),
                                 nullable=False)
-    sender_id = db.Column(db.Integer, db.ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    # NULL + is_bot=TRUE — сообщение Грувика в pet-чате (бот, не человек).
+    sender_id = db.Column(db.Integer, db.ForeignKey("users.id", ondelete="CASCADE"), nullable=True)
+    is_bot = db.Column(db.Boolean, nullable=False, default=False, server_default="false")
     text = db.Column(db.Text, nullable=True)
     created_at = db.Column(db.DateTime(timezone=True), nullable=False,
                            default=lambda: datetime.now(timezone.utc))

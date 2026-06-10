@@ -3,9 +3,10 @@
     <div class="pet-stage-bg" aria-hidden="true"></div>
 
     <div class="pet-top">
-      <div class="pet-figure" :class="{ bounce: justFed }">
+      <div class="pet-figure" :class="{ bounce: justFed, sick: pet.sick }">
         <span class="pet-emoji">{{ petEmoji(pet) }}</span>
         <span v-if="hatEmoji" class="pet-hat">{{ hatEmoji }}</span>
+        <span v-if="pet.sick" class="pet-sick-badge" title="Грувик болеет">🤒</span>
       </div>
 
       <transition name="phrase">
@@ -35,8 +36,26 @@
       </template>
     </div>
     <p class="pet-subtitle">{{ stageTitle }}<template v-if="speciesTitle"> · {{ speciesTitle }}</template></p>
+    <p v-if="personality" class="pet-personality">{{ personality.emoji }} {{ personality.title }}</p>
 
-    <div class="pet-xp">
+    <div v-if="pet.sick" class="pet-sick-bar">
+      <div class="pet-sick-head">
+        <span class="material-symbols-outlined">healing</span>
+        Грувик приболел — хозяин давно не работал
+      </div>
+      <div class="pet-sick-progress">
+        <span
+          v-for="i in pet.recovery_target"
+          :key="i"
+          class="pet-sick-dot"
+          :class="{ filled: i <= pet.recovery }"
+        ></span>
+        <span class="pet-sick-count">{{ pet.recovery }}/{{ pet.recovery_target }}</span>
+      </div>
+      <p class="pet-sick-hint">Лечат: юнит от 15 минут, закрытая задача, бульон и поглаживания коллег</p>
+    </div>
+
+    <div v-if="!pet.sick" class="pet-xp">
       <div class="pet-xp-meta">
         <span>{{ pet.stage >= maxStage ? 'Максимальная форма' : 'До эволюции' }}</span>
         <span v-if="pet.next_stage_xp">{{ pet.xp }} / {{ pet.next_stage_xp }} XP</span>
@@ -54,9 +73,13 @@
         <span class="material-symbols-outlined">local_fire_department</span>
         {{ pet.feed_streak }} дн.
       </span>
-      <span v-if="pet.feeds_left != null" class="pet-chip" title="Кормлений осталось сегодня">
+      <span
+        v-if="pet.feeds_left != null"
+        class="pet-chip"
+        :title="`Кормлений осталось сегодня: ${pet.feeds_left} из ${feedsMax}. Счётчик обновляется каждый день`"
+      >
         <span class="material-symbols-outlined">restaurant</span>
-        {{ pet.feeds_left }}
+        {{ pet.feeds_left }}/{{ feedsMax }}
       </span>
     </div>
 
@@ -67,13 +90,18 @@
         :disabled="!canFeed || feeding"
         @click="feed"
       >
-        <span class="pet-chip-emoji">🥕</span>
-        Покормить · 3 грува
+        <span class="pet-chip-emoji">{{ pet.sick ? '🍲' : '🥕' }}</span>
+        {{ pet.sick ? 'Дать бульон · 1 грув' : 'Покормить · 3 грува' }}
+      </button>
+      <button class="pet-icon-btn shop" type="button" @click="openChat" aria-label="Поговорить с Грувиком" title="Поговорить">
+        <span class="material-symbols-outlined">forum</span>
       </button>
       <button class="pet-icon-btn shop" type="button" @click="$emit('open-shop')" aria-label="Магазин аксессуаров" title="Магазин">
         <span class="material-symbols-outlined">storefront</span>
       </button>
     </div>
+
+    <p v-if="feedHint" class="pet-feed-hint">{{ feedHint }}</p>
 
     <div v-if="ownedItems.length" class="pet-closet">
       <button
@@ -91,14 +119,17 @@
 
 <script setup>
 import { computed, nextTick, ref } from 'vue'
+import { useRouter } from 'vue-router'
 import { useGrooveStore } from '@/stores/groove.js'
+import { useMessengerStore } from '@/stores/messenger.js'
 import { useNotificationsStore } from '@/stores/notifications.js'
-import { petEmoji, PET_STAGES, PET_SPECIES, SHOP_ITEMS } from '@/utils/groove.js'
+import { petEmoji, PET_STAGES, PET_SPECIES, PERSONALITIES, SHOP_ITEMS } from '@/utils/groove.js'
 
 defineEmits(['open-shop'])
 
 const groove = useGrooveStore()
 const notify = useNotificationsStore()
+const router = useRouter()
 
 const pet = computed(() => groove.pet)
 const maxStage = PET_STAGES.length - 1
@@ -118,6 +149,18 @@ const speciesTitle = computed(() =>
 const hatEmoji = computed(() =>
   pet.value?.hat ? SHOP_ITEMS[pet.value.hat]?.emoji : null
 )
+const personality = computed(() =>
+  pet.value?.personality ? PERSONALITIES[pet.value.personality] : null
+)
+
+async function openChat() {
+  try {
+    const convId = await useMessengerStore().openPetChat()
+    router.push(`/messenger/${convId}`)
+  } catch (e) {
+    notify.warn(e?.message || 'Чат с Грувиком не открылся')
+  }
+}
 const ownedItems = computed(() => pet.value?.accessories || [])
 
 const xpPercent = computed(() => {
@@ -126,9 +169,29 @@ const xpPercent = computed(() => {
   return Math.min(100, Math.round((pet.value.xp / pet.value.next_stage_xp) * 100))
 })
 
-const canFeed = computed(() =>
-  pet.value && pet.value.beans >= 3 && (pet.value.feeds_left == null || pet.value.feeds_left > 0)
-)
+const canFeed = computed(() => {
+  if (!pet.value) return false
+  const cost = pet.value.sick ? 1 : 3
+  return pet.value.beans >= cost && (pet.value.feeds_left == null || pet.value.feeds_left > 0)
+})
+
+const feedsMax = computed(() => pet.value?.feeds_max ?? (pet.value?.sick ? 2 : 6))
+
+// Кнопка кормления раньше дизейблилась молча — пользователи с грувами в
+// копилке не понимали, почему покормить нельзя. Объясняем причину текстом.
+const feedHint = computed(() => {
+  const p = pet.value
+  if (!p) return ''
+  if (p.feeds_left === 0) {
+    return p.sick
+      ? 'Бульон — не больше двух мисок в день. Завтра счётчик обновится.'
+      : 'Грувик сыт: лимит кормлений на сегодня исчерпан, завтра обновится.'
+  }
+  if (p.beans < (p.sick ? 1 : 3)) {
+    return 'Не хватает грувов — их приносят юниты, закрытые задачи и реакции коллег.'
+  }
+  return ''
+})
 
 async function feed() {
   if (feeding.value) return
@@ -144,6 +207,9 @@ async function feed() {
     }
     if (res.evolved) {
       notify.success(`«${res.name}» эволюционировал! Теперь это ${PET_STAGES[res.stage]} 🎉`)
+    }
+    if (res.recovered) {
+      notify.success(`«${res.name}» выздоровел! Вы отлично его выходили 💚`)
     }
   } catch (e) {
     notify.warn(e?.message || 'Покормить не получилось')
@@ -216,6 +282,13 @@ async function toggleEquip(item) {
   70% { transform: scale(0.96) rotate(2deg); }
   100% { transform: scale(1); }
 }
+.pet-figure.sick .pet-emoji { filter: grayscale(0.55) brightness(0.92); }
+.pet-sick-badge {
+  position: absolute;
+  bottom: -4px;
+  left: -4px;
+  font-size: 22px;
+}
 .pet-emoji { font-size: 46px; line-height: 1; }
 .pet-hat {
   position: absolute;
@@ -278,6 +351,48 @@ async function toggleEquip(item) {
   color: var(--color-text-dim);
 }
 
+.pet-personality {
+  margin: 4px 0 0;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 3px 10px;
+  border-radius: var(--radius-full);
+  background: var(--color-tertiary-container);
+  color: var(--color-on-tertiary-container);
+}
+.pet-sick-bar {
+  width: 100%;
+  margin-top: 12px;
+  border: 1px dashed color-mix(in oklch, var(--color-error) 45%, transparent);
+  border-radius: 14px;
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.pet-sick-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--color-error);
+}
+.pet-sick-head .material-symbols-outlined { font-size: 17px; }
+.pet-sick-progress { display: flex; align-items: center; gap: 6px; }
+.pet-sick-dot {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--color-surface-high);
+  border: 1.5px solid var(--color-outline-dim);
+}
+.pet-sick-dot.filled {
+  background: var(--color-success);
+  border-color: var(--color-success);
+}
+.pet-sick-count { font-size: 12px; font-weight: 700; margin-left: 2px; }
+.pet-sick-hint { margin: 0; font-size: 11.5px; color: var(--color-text-dim); line-height: 1.4; }
 .pet-xp { width: 100%; margin-top: 14px; }
 .pet-xp-meta {
   display: flex;
@@ -334,6 +449,14 @@ async function toggleEquip(item) {
 }
 .pet-feed-btn:active { transform: scale(0.97); }
 .pet-feed-btn:disabled { opacity: 0.45; cursor: default; }
+
+.pet-feed-hint {
+  margin: 8px 0 0;
+  font-size: 11.5px;
+  color: var(--color-text-dim);
+  text-align: center;
+  line-height: 1.4;
+}
 
 .pet-closet { display: flex; gap: 6px; margin-top: 12px; flex-wrap: wrap; justify-content: center; }
 .pet-closet-item {

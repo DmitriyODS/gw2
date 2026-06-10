@@ -10,6 +10,9 @@
   >
     <div class="shop-balance">
       <span class="shop-balance-chip">🫘 {{ pet?.beans ?? 0 }} грувов</span>
+      <span v-if="groove.seasonalItem" class="shop-season-chip">
+        {{ SHOP_ITEMS[groove.seasonalItem]?.emoji }} Сезон: {{ groove.seasonTitle }}
+      </span>
     </div>
 
     <div class="shop-grid">
@@ -17,8 +20,9 @@
         v-for="item in items"
         :key="item.key"
         class="shop-item"
-        :class="{ owned: item.owned }"
+        :class="{ owned: item.owned, seasonal: item.seasonal }"
       >
+        <span v-if="item.seasonal" class="shop-season-tag">сезонный</span>
         <span class="shop-emoji">{{ item.emoji }}</span>
         <span class="shop-title">{{ item.title }}</span>
         <button
@@ -71,6 +75,7 @@ const items = computed(() =>
       emoji: SHOP_ITEMS[key]?.emoji || '🎁',
       title: SHOP_ITEMS[key]?.title || key,
       owned: (pet.value?.accessories || []).includes(key),
+      seasonal: key === groove.seasonalItem,
     }))
     .sort((a, b) => a.price - b.price)
 )
@@ -93,7 +98,7 @@ async function buy(item) {
 </script>
 
 <style scoped>
-.shop-balance { display: flex; justify-content: center; margin-bottom: 14px; }
+.shop-balance { display: flex; justify-content: center; gap: 8px; flex-wrap: wrap; margin-bottom: 14px; }
 .shop-balance-chip {
   background: color-mix(in oklch, var(--color-success) 18%, transparent);
   border-radius: var(--radius-full);
@@ -117,6 +122,29 @@ async function buy(item) {
   text-align: center;
 }
 .shop-item.owned { background: var(--color-surface-high); }
+.shop-item { position: relative; }
+.shop-item.seasonal { border-color: color-mix(in oklch, var(--color-tertiary) 55%, transparent); }
+.shop-season-tag {
+  position: absolute;
+  top: -8px;
+  right: 8px;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  background: var(--color-tertiary-container);
+  color: var(--color-on-tertiary-container);
+  border-radius: var(--radius-full);
+  padding: 2px 8px;
+}
+.shop-season-chip {
+  background: var(--color-tertiary-container);
+  color: var(--color-on-tertiary-container);
+  border-radius: var(--radius-full);
+  padding: 6px 14px;
+  font-size: 13px;
+  font-weight: 600;
+}
 .shop-item.special { border-style: dashed; }
 .shop-emoji { font-size: 30px; line-height: 1; }
 .shop-title { font-size: 12.5px; font-weight: 600; line-height: 1.25; }

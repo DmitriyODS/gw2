@@ -5,7 +5,7 @@
         <span class="material-symbols-outlined">pets</span>
         Зоопарк команды
       </h3>
-      <span class="zoo-hint">Погладьте чужого Грувика — по груву обоим</span>
+      <span class="zoo-hint">Погладьте чужого Грувика — по груву обоим. Больных 🤒 поглаживание лечит</span>
     </header>
 
     <div class="zoo-strip">
@@ -17,8 +17,9 @@
           :title="strokeTitle(p)"
           @click="stroke(p)"
         >
-          <span class="zoo-emoji">{{ petEmoji(p) }}</span>
+          <span class="zoo-emoji" :class="{ sick: p.sick }">{{ petEmoji(p) }}</span>
           <span v-if="hatOf(p)" class="zoo-hat">{{ hatOf(p) }}</span>
+          <span v-if="p.sick" class="zoo-sick" title="Болеет — погладьте, это лечит">🤒</span>
           <span
             v-if="p.user_id !== groove.myId"
             class="zoo-stroke-badge"
@@ -126,6 +127,13 @@ async function stroke(p) {
 .zoo-figure:not(:disabled):hover { transform: scale(1.08); }
 .zoo-figure:disabled { cursor: default; }
 .zoo-emoji { font-size: 28px; line-height: 1; }
+.zoo-emoji.sick { filter: grayscale(0.55) brightness(0.92); }
+.zoo-sick {
+  position: absolute;
+  bottom: -5px;
+  left: -5px;
+  font-size: 15px;
+}
 .zoo-hat {
   position: absolute;
   top: -9px;

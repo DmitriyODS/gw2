@@ -72,9 +72,28 @@ def open_dev_chat(current_user_id: int):
     return conv
 
 
+def open_pet_chat(current_user_id: int):
+    """Открыть/создать чат пользователя со своим Грувиком."""
+    me = user_repo.get_by_id(current_user_id)
+    if me is None:
+        raise MessengerServiceError("Пользователь не найден", "USER_NOT_FOUND", 404)
+    if me.company_id is None:
+        raise MessengerServiceError(
+            "У Администратора системы нет Грувика", "ADMIN_HAS_NO_PET", 400,
+        )
+    conv = message_repo.get_or_create_pet_chat_for_user(me.id, me.company_id)
+    db.session.commit()
+    return conv
+
+
 def _ensure_member(conv, user_id: int):
     """Проверяет доступ к диалогу. Для p2p — только участники. Для dev-чата —
-    владелец (user_a_id) + любой Администратор системы."""
+    владелец (user_a_id) + любой Администратор системы. Для pet-чата —
+    только владелец."""
+    if conv.is_pet_chat:
+        if conv.user_a_id == user_id:
+            return
+        raise MessengerServiceError("Нет доступа к диалогу", "FORBIDDEN", 403)
     if conv.is_dev_chat:
         if conv.user_a_id == user_id:
             return  # владелец
@@ -118,6 +137,12 @@ def send_message(conversation_id: int, sender_id: int,
         if target is None or target.conversation_id != conv.id:
             raise MessengerServiceError("Недопустимый ответ", "BAD_REPLY", 400)
 
+    # Pet-чат: только текст — Грувик не умеет читать файлы и плашки задач.
+    if conv.is_pet_chat and (attachment_ids or task_id is not None):
+        raise MessengerServiceError(
+            "Грувик понимает только текст", "PET_CHAT_TEXT_ONLY", 400,
+        )
+
     # Прикреплённая задача: должна быть из той же компании, что и диалог.
     kind = "text"
     if task_id is not None:
@@ -146,6 +171,11 @@ def send_message(conversation_id: int, sender_id: int,
         "event": "message.send", "conversation_id": conversation_id,
         "sender_id": sender_id, "message_id": msg.id,
     }})
+
+    # Грувик отвечает асинхронно (eventlet-greenlet), не задерживая запрос.
+    if conv.is_pet_chat:
+        from app.services.groove_ai_service import schedule_pet_reply
+        schedule_pet_reply(conv.id)
     return conv, msg
 
 
@@ -168,8 +198,8 @@ def forward_message(source_message_id: int, sender_id: int,
     seen_ids: set[int] = set()
     for cid in conversation_ids or []:
         conv = get_conversation_for_user(cid, sender_id)
-        # Пересылать в dev-чат смысла нет (это поток в техподдержку).
-        if conv.is_dev_chat:
+        # Пересылать в соло-чаты смысла нет (техподдержка / Грувик).
+        if conv.is_solo:
             continue
         if conv.id not in seen_ids:
             target_convs.append(conv)
@@ -312,10 +342,14 @@ def delete_conversation(conversation_id: int, user_id: int, scope: str) -> bool:
     видеть переписку до своего удаления) или 'all' (физически удалить
     у обоих). Возвращает True, если диалог физически удалён."""
     conv = get_conversation_for_user(conversation_id, user_id)
-    # Чат техподдержки удалять нельзя — он живёт сколько живёт владелец.
+    # Соло-чаты удалять нельзя — они живут сколько живёт владелец.
     if conv.is_dev_chat:
         raise MessengerServiceError(
             "Чат техподдержки удалить нельзя", "DEV_CHAT_UNDELETABLE", 400,
+        )
+    if conv.is_pet_chat:
+        raise MessengerServiceError(
+            "Чат с Грувиком удалить нельзя — он обидится", "PET_CHAT_UNDELETABLE", 400,
         )
 
     if scope == 'all':

@@ -41,8 +41,11 @@ BOT_COMMENT_PROB = {
     "pet_evolved": 1.0,
     "streak": 1.0,
     "raid_won": 1.0,
+    "pet_recovered": 1.0,
+    "pet_sick": 0.9,
     "kudos": 0.8,
     "raid_started": 0.8,
+    "wrapped": 0.5,
     "task_closed": 0.25,
 }
 
@@ -149,6 +152,19 @@ def _bot_prompt_for_event(event) -> str | None:
     if event.kind == "task_closed":
         return (f"{first_name} закрыл(а) задачу «{(p.get('task_name') or '')[:120]}». "
                 "Коротко похвали, можно с юмором (до 120 символов).")
+    if event.kind == "pet_sick":
+        return (f"Питомец «{p.get('pet_name', 'Грувик')}» сотрудника {first_name} "
+                "заболел — хозяин давно не работал. Мягко и с юмором позови "
+                "хозяина вернуться к работе и вылечить питомца (до 160 символов). "
+                "Без упрёков и токсичности.")
+    if event.kind == "pet_recovered":
+        return (f"Питомец «{p.get('pet_name', 'Грувик')}» сотрудника {first_name} "
+                "выздоровел — хозяин вылечил его работой и заботой. Порадуйся "
+                "(до 140 символов).")
+    if event.kind == "wrapped":
+        return (f"{first_name} поделился итогами недели: юнитов {p.get('units')}, "
+                f"минут работы {p.get('minutes')}, закрыто задач {p.get('closed')}. "
+                "Прокомментируй тепло и с юмором (до 140 символов).")
     return None
 
 
@@ -205,6 +221,183 @@ def _make_bot_comment(event_id: int) -> None:
         "comment": _comment_schema.dump(comment),
         "company_id": event.company_id,
     })
+
+
+# ─────────────────── wrapped: фраза недели ─────────────────────────
+
+_WRAPPED_KEY = "gw2:groove:wrapped:{uid}:{day}"
+
+
+def get_wrapped_phrase(company_id: int, user_id: int, stats: dict) -> str | None:
+    """Однострочный AI-вердикт для «Моей недели». Кэш — сутки."""
+    day = datetime.now(MSK).date().isoformat()
+    key = _WRAPPED_KEY.format(uid=user_id, day=day)
+    try:
+        cached = _redis().get(key)
+        if cached:
+            return cached
+    except Exception:
+        pass
+    from app.services.ai_client import get_ai_client
+    client = get_ai_client(company_id)
+    if client is None:
+        return None
+    parts = [
+        "Подведи итог рабочей недели сотрудника одной остроумной фразой "
+        "(до 140 символов), тепло и без пафоса.",
+        f"Юнитов: {stats.get('units', 0)}, минут работы: {stats.get('minutes', 0)}, "
+        f"закрыто задач: {stats.get('closed', 0)}.",
+    ]
+    if stats.get("best_day"):
+        parts.append(f"Самый продуктивный день — {stats['best_day']['label']}.")
+    if stats.get("reactions"):
+        parts.append(f"Коллеги поставили {stats['reactions']} реакций.")
+    if not stats.get("units") and not stats.get("closed"):
+        parts.append("Неделя была тихой — обыграй мягко, без укора.")
+    try:
+        text = client.chat(
+            messages=[
+                {"role": "system", "content": _SYSTEM_PROMPT},
+                {"role": "user", "content": " ".join(parts)},
+            ],
+            max_tokens=120, temperature=0.95, timeout=15.0,
+        ).strip().strip('"«»').strip()
+    except Exception as e:
+        logger.warning("groove.ai.wrapped_failed",
+                       extra={"extra": {"user_id": user_id, "err": str(e)}})
+        return None
+    if not text:
+        return None
+    try:
+        _redis().setex(key, 24 * 3600, text)
+    except Exception:
+        pass
+    return text
+
+
+# ───────────────── чат с Грувиком в мессенджере ────────────────────
+
+# Если ИИ выключен у компании — Грувик отвечает дежурными фразами.
+PET_OFFLINE_REPLIES = [
+    "Грув-грув! Я бы поболтал, но мой мозговой модуль (ИИ) сейчас выключен. "
+    "Попроси администратора включить его в настройках компании!",
+    "*смотрит понимающими глазами* Без ИИ я могу только мурлыкать. Мур.",
+    "Я всё слышу, но ответить умно не могу — ИИ компании отключён. Зато могу: грув!",
+]
+
+PET_CHAT_HISTORY_LIMIT = 12
+
+
+def schedule_pet_reply(conversation_id: int) -> None:
+    """Асинхронный ответ Грувика на сообщение хозяина в pet-чате."""
+    app = current_app._get_current_object()
+
+    def _job():
+        with app.app_context():
+            try:
+                _make_pet_reply(conversation_id)
+            except Exception as e:
+                db.session.rollback()
+                logger.warning("groove.ai.pet_reply_failed",
+                               extra={"extra": {"conversation_id": conversation_id,
+                                                "err": str(e)}})
+
+    try:
+        socketio.start_background_task(_job)
+    except Exception as e:
+        logger.warning("groove.ai.pet_reply_spawn_failed",
+                       extra={"extra": {"err": str(e)}})
+
+
+def _pet_system_prompt(pet, owner, work_ctx: dict) -> str:
+    from app.services.pet_service import PERSONALITIES, PET_STAGES_TITLES, PET_SPECIES_TITLES
+    persona = PERSONALITIES.get(pet.personality or "steady", PERSONALITIES["steady"])
+    first_name = owner.fio.split()[1] if owner.fio and len(owner.fio.split()) > 1 else owner.fio
+    lines = [
+        f"Ты — {pet.name}, виртуальный питомец-Грувик сотрудника по имени {first_name} "
+        "на корпоративной платформе Groove Work.",
+        f"Твой характер: {persona['title']} — {persona['hint']}. Отыгрывай его в каждой реплике.",
+        f"Твоя стадия роста: {PET_STAGES_TITLES[pet.stage]}, вид: "
+        f"{PET_SPECIES_TITLES.get(pet.species, 'непонятный зверёк')}.",
+        "Ты растёшь от работы хозяина: юниты и закрытые задачи дают грувы, ими тебя кормят.",
+        "Говори коротко (1-3 предложения), по-русски, тепло и с юмором, можно эмодзи. "
+        "Ты дружелюбный компаньон: поддерживай, подбадривай работать в здоровом ритме, "
+        "интересуйся хозяином. Никогда не стыди и не дави.",
+    ]
+    if pet.sick_since is not None:
+        lines.append("Сейчас ты приболел (хозяин долго не работал) — изредка "
+                     "покашливай и намекай, что выздоровеешь от его юнитов, "
+                     "закрытых задач и заботы.")
+    if work_ctx.get("today_minutes") is not None:
+        lines.append(f"Контекст: сегодня хозяин отработал {work_ctx['today_minutes']} мин "
+                     f"({work_ctx.get('today_units', 0)} юнитов), за неделю — "
+                     f"{work_ctx.get('week_minutes', 0)} мин. Грувов в копилке: {pet.beans}. "
+                     "Используй эти цифры уместно, не в каждой реплике.")
+    return " ".join(lines)
+
+
+def _make_pet_reply(conversation_id: int) -> None:
+    import random as _random
+    from app.repositories import message_repo, user_repo, pet_repo
+    from app.schemas.message import MessageSchema
+
+    conv = message_repo.get_conversation(conversation_id)
+    if conv is None or not conv.is_pet_chat:
+        return
+    owner = user_repo.get_by_id(conv.user_a_id)
+    if owner is None:
+        return
+    pet = pet_repo.get_or_create(owner.id, conv.company_id)
+
+    from app.services.ai_client import get_ai_client
+    client = get_ai_client(conv.company_id)
+    if client is None:
+        text = _random.choice(PET_OFFLINE_REPLIES)
+    else:
+        history = message_repo.last_messages(conv.id, PET_CHAT_HISTORY_LIMIT)
+        chat_msgs = []
+        for m in history:
+            if not m.text:
+                continue
+            role = "assistant" if m.is_bot else "user"
+            chat_msgs.append({"role": role, "content": m.text[:1000]})
+        if not chat_msgs:
+            return
+        from datetime import datetime as _dt, timedelta as _td, timezone as _tz
+        from app.services.pet_service import MSK as _MSK
+        today_start = _dt.now(_MSK).replace(hour=0, minute=0, second=0, microsecond=0)
+        week_units = pet_repo.finished_units_for_user(
+            owner.id, _dt.now(_tz.utc) - _td(days=7), limit=300)
+        today_minutes = 0
+        today_units = 0
+        week_minutes = 0
+        for u in week_units:
+            minutes = max(0, int((u.datetime_end - u.datetime_start).total_seconds() // 60))
+            week_minutes += minutes
+            if u.datetime_start.astimezone(_MSK) >= today_start:
+                today_minutes += minutes
+                today_units += 1
+        work_ctx = {"today_minutes": today_minutes, "today_units": today_units,
+                    "week_minutes": week_minutes}
+        text = client.chat(
+            messages=[{"role": "system",
+                       "content": _pet_system_prompt(pet, owner, work_ctx)},
+                      *chat_msgs],
+            max_tokens=220, temperature=0.95, timeout=25.0,
+        ).strip()
+        if not text:
+            return
+
+    msg = message_repo.create_message(conv.id, None, text, [], is_bot=True)
+    db.session.commit()
+    try:
+        socketio.emit("message:new", {
+            "conversation_id": conv.id,
+            "message": MessageSchema().dump(msg),
+            "from_user_id": None,
+        }, room=f"user_{owner.id}")
+    except Exception:
+        pass
 
 
 # ───────────────────────── утренний дайджест ───────────────────────

@@ -130,6 +130,41 @@ def delete_comment(comment: FeedComment) -> None:
     db.session.delete(comment)
 
 
+# ─────────────────────── wrapped «Моя неделя» ──────────────────────
+
+def count_user_events(company_id: int, user_id: int, kind: str, since) -> int:
+    return db.session.execute(
+        db.select(func.count(FeedEvent.id)).where(
+            FeedEvent.company_id == company_id,
+            FeedEvent.user_id == user_id,
+            FeedEvent.kind == kind,
+            FeedEvent.created_at >= since,
+        )
+    ).scalar_one()
+
+
+def reactions_received(user_id: int, since) -> int:
+    """Реакции коллег на мои события за период (свои не считаем)."""
+    return db.session.execute(
+        db.select(func.count(FeedReaction.id))
+        .join(FeedEvent, FeedEvent.id == FeedReaction.event_id)
+        .where(FeedEvent.user_id == user_id,
+               FeedReaction.user_id != user_id,
+               FeedReaction.created_at >= since)
+    ).scalar_one()
+
+
+def kudos_received(company_id: int, user_id: int, since) -> int:
+    return db.session.execute(
+        db.select(func.count(FeedEvent.id)).where(
+            FeedEvent.company_id == company_id,
+            FeedEvent.kind == "kudos",
+            FeedEvent.created_at >= since,
+            FeedEvent.payload["to_user_id"].as_integer() == user_id,
+        )
+    ).scalar_one()
+
+
 # ─────────────────────────── live-блок ─────────────────────────────
 
 def list_active_units(company_id: int) -> list[Unit]:

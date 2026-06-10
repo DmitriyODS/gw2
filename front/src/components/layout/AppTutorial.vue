@@ -127,6 +127,15 @@ const allSteps = computed(() => [
     navigateTo: '/messenger',
   },
   {
+    id: 'groove',
+    icon: 'celebration', tone: 'primary',
+    title: 'Мой Groove',
+    text: 'Лента жизни команды: кто что делает, реакции и комментарии. Здесь же живёт ваш Грувик — питомец, который растёт от вашей работы. Кормите его, побеждайте недельных боссов всей командой и болтайте с ним в мессенджере.',
+    tip: 'Грувик может заболеть, если долго не работать. Лечится юнитами, задачами и заботой коллег.',
+    target: '[data-tutorial="nav-groove"]',
+    navigateTo: '/groove',
+  },
+  {
     id: 'employees',
     icon: 'group', tone: 'tertiary',
     title: 'Сотрудники',

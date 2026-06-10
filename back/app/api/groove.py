@@ -170,14 +170,15 @@ def send_kudos():
 @require_company_scope
 def get_live():
     """
-    «Сейчас в эфире» — активные юниты компании с зарядами.
+    «Сейчас в эфире» — активные юниты компании с зарядами
+    + личный остаток зарядов на сегодня.
     ---
     tags: [groove]
     security: [BearerAuth: []]
     responses:
-      200: {description: Список активных юнитов}
+      200: {description: Активные юниты (items) + zaps_left/zaps_max}
     """
-    return jsonify(feed_service.get_live(g.company_id)), 200
+    return jsonify(feed_service.get_live(g.company_id, g.current_user.id)), 200
 
 
 @bp.post("/zap")
@@ -288,14 +289,14 @@ def equip_item():
 @require_auth
 def get_shop():
     """
-    Прайс магазина аксессуаров.
+    Магазин аксессуаров: прайс + сезонный товар.
     ---
     tags: [groove]
     security: [BearerAuth: []]
     responses:
-      200: {description: Словарь item → цена}
+      200: {description: Прайс, сезонный товар и название сезона}
     """
-    return jsonify(SHOP_PRICES), 200
+    return jsonify(pet_service.get_shop_state()), 200
 
 
 @bp.post("/shop/buy")
@@ -370,3 +371,73 @@ def get_raid():
       200: {description: Состояние рейда}
     """
     return jsonify(pet_service.get_raid_state(g.company_id)), 200
+
+
+# ──────────────────── wrapped и ТВ-витрина ─────────────────────────
+
+@bp.get("/wrapped")
+@require_auth
+@require_company_scope
+def get_wrapped():
+    """
+    «Моя неделя» — личный итог последних 7 дней (карточки-истории).
+    ---
+    tags: [groove]
+    security: [BearerAuth: []]
+    responses:
+      200: {description: Статистика недели + AI-фраза}
+    """
+    return jsonify(feed_service.get_wrapped(g.company_id, g.current_user.id)), 200
+
+
+@bp.post("/wrapped/share")
+@require_auth
+@require_company_scope
+def share_wrapped():
+    """
+    Опубликовать итог недели в ленту (раз в день).
+    ---
+    tags: [groove]
+    security: [BearerAuth: []]
+    responses:
+      201: {description: Итог опубликован}
+    """
+    try:
+        feed_service.share_wrapped(g.company_id, g.current_user.id)
+    except FeedServiceError as e:
+        return jsonify({"error": e.code, "message": e.message}), e.http_status
+    return jsonify({"message": "Итог недели опубликован"}), 201
+
+
+@bp.get("/tv")
+@require_auth
+@require_company_scope
+def groove_tv():
+    """
+    Данные для ТВ-слайда «Мой Groove»: топ Грувиков, рейд, итоги.
+    ---
+    tags: [groove]
+    security: [BearerAuth: []]
+    responses:
+      200: {description: Топ питомцев + рейд + тоталы}
+    """
+    from app.repositories import pet_repo
+    from app.services.pet_service import _today_msk, dump_pet
+
+    pets = pet_repo.list_company_pets(g.company_id)
+    strokes = pet_repo.strokes_today([p.user_id for p in pets], _today_msk())
+    top = []
+    for p in pets[:8]:
+        data = dump_pet(p)
+        data["strokes_today"] = strokes.get(p.user_id, 0)
+        top.append(data)
+    return jsonify({
+        "pets": top,
+        "raid": pet_service.get_raid_state(g.company_id),
+        "totals": {
+            "pets": len(pets),
+            "sick": sum(1 for p in pets if p.sick_since is not None),
+            "beans": sum(p.beans for p in pets),
+            "strokes_today": sum(strokes.values()),
+        },
+    }), 200

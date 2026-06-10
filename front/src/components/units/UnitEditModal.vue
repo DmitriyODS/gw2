@@ -74,7 +74,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, watch } from 'vue'
 import InputText from 'primevue/inputtext'
 import Select from 'primevue/select'
 import DatePicker from 'primevue/datepicker'
@@ -103,6 +103,12 @@ const form = ref({
 })
 
 const errors = ref({ name: '', unit_type_id: '', datetime_start: '', datetime_end: '' })
+
+// Юнит могли остановить, пока модалка открыта (сокет патчит объект в списке) —
+// подхватываем появившееся время окончания, не затирая правки пользователя.
+watch(() => props.unit.datetime_end, (end) => {
+  if (end && !form.value.datetime_end) form.value.datetime_end = new Date(end)
+})
 
 onMounted(async () => {
   try {

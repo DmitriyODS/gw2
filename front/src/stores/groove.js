@@ -10,11 +10,18 @@ export const useGrooveStore = defineStore('groove', () => {
   const loadingFeed = ref(false)
   const live = ref([])
   const liveLoaded = ref(false)
+  // Личный дневной запас зарядов ⚡ (обновляется каждый день).
+  const zapsLeft = ref(null)
+  const zapsMax = ref(10)
   const pet = ref(null)
   const zoo = ref([])
   const raid = ref(null)
   const shopPrices = ref({})
+  const seasonalItem = ref(null)
+  const seasonTitle = ref('')
   const commentsByEvent = ref({})
+  const wrapped = ref(null)
+  const wrappedLoading = ref(false)
 
   const myId = computed(() => useAuthStore().user?.id ?? null)
 
@@ -143,7 +150,10 @@ export const useGrooveStore = defineStore('groove', () => {
   // ───────────────────── live, заряды, кудосы ────────────────────
 
   async function fetchLive() {
-    live.value = await api.getLive()
+    const res = await api.getLive()
+    live.value = res.items || []
+    zapsLeft.value = res.zaps_left ?? null
+    zapsMax.value = res.zaps_max ?? 10
     liveLoaded.value = true
   }
 
@@ -156,6 +166,7 @@ export const useGrooveStore = defineStore('groove', () => {
     const res = await api.sendZap(toUserId)
     const entry = live.value.find(u => u.user?.id === toUserId)
     if (entry) entry.zaps = res.zaps
+    if (res.zaps_left != null) zapsLeft.value = res.zaps_left
   }
 
   const sendKudos = (toUserId, text) => api.sendKudos(toUserId, text)
@@ -185,8 +196,22 @@ export const useGrooveStore = defineStore('groove', () => {
   }
 
   async function fetchShop() {
-    shopPrices.value = await api.getShop()
+    const state = await api.getShop()
+    shopPrices.value = state.prices || {}
+    seasonalItem.value = state.seasonal_item || null
+    seasonTitle.value = state.season_title || ''
   }
+
+  async function fetchWrapped() {
+    wrappedLoading.value = true
+    try {
+      wrapped.value = await api.getWrapped()
+    } finally {
+      wrappedLoading.value = false
+    }
+  }
+
+  const shareWrapped = () => api.shareWrapped()
 
   function applyPetUpdate(data) {
     // Приходит только в свою user-комнату — синхронизация вкладок владельца.
@@ -231,8 +256,9 @@ export const useGrooveStore = defineStore('groove', () => {
   }
 
   return {
-    events, hasMore, loadingFeed, live, liveLoaded, pet, zoo, raid,
-    shopPrices, commentsByEvent, myId, myCompanyId, isMine,
+    events, hasMore, loadingFeed, live, liveLoaded, zapsLeft, zapsMax, pet, zoo, raid,
+    shopPrices, seasonalItem, seasonTitle, commentsByEvent,
+    wrapped, wrappedLoading, myId, myCompanyId, isMine,
     fetchFeed, loadMore, applyNewEvent,
     toggleReaction, applyReaction,
     fetchComments, addComment, applyComment, removeComment, applyCommentDeleted,
@@ -240,5 +266,6 @@ export const useGrooveStore = defineStore('groove', () => {
     fetchPet, feedPet, renamePet, equipItem, buyItem, fetchShop, applyPetUpdate,
     fetchZoo, strokePet,
     fetchRaid, applyRaidUpdate,
+    fetchWrapped, shareWrapped,
   }
 })

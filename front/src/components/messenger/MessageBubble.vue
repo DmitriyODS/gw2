@@ -58,6 +58,10 @@
         <span class="material-symbols-outlined">support_agent</span>
         Разработчики
       </div>
+      <div v-else-if="message.is_bot" class="msg-pet-badge" title="Сообщение Грувика">
+        <span class="msg-pet-emoji" aria-hidden="true">👾</span>
+        Грувик
+      </div>
       <div v-if="message.forwarded_from" class="msg-forwarded">
         <span class="material-symbols-outlined">forward</span>
         Переслано от {{ message.forwarded_from.fio }}
@@ -138,6 +142,7 @@ const isDevReply = computed(() =>
 const bubbleClass = computed(() => ({
   pinned: isPinned.value,
   'dev-reply': isDevReply.value,
+  'pet-reply': !!props.message.is_bot,
 }))
 
 function attachmentTag() { return AttachmentView }
@@ -365,6 +370,21 @@ const joinLabel = computed(() => props.isMine ? 'Вернуться' : 'Прис
   font-size: 14px;
   font-variation-settings: 'FILL' 1;
 }
+.msg-bubble.pet-reply {
+  background: var(--color-tertiary-container);
+  color: var(--color-on-tertiary-container);
+}
+.msg-pet-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11.5px;
+  font-weight: 700;
+  margin-bottom: 4px;
+  opacity: 0.85;
+}
+.msg-pet-emoji { font-size: 13px; }
+
 .msg-bubble.dev-reply {
   background: var(--color-tertiary-container);
   color: var(--color-on-tertiary-container);

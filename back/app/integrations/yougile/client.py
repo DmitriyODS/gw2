@@ -165,6 +165,9 @@ class YougileClient:
     def update_task(self, task_id: str, body: dict) -> dict:
         return self._request("PUT", f"/tasks/{task_id}", json=body)
 
+    # Предохранитель BFS по подзадачам: каждая — отдельный GET /tasks/{id}.
+    MAX_SUBTASK_LOOKUPS = 500
+
     def find_task_by_short_id(self, *, board_id: str, short_id: str,
                               column_ids: list[str] | None = None) -> dict | None:
         """Резолв человекочитаемого id карточки (`OIP1-2454`) в UUID.
@@ -173,6 +176,10 @@ class YougileClient:
         `/tasks?boardId=...` тоже не работает — только `columnId`. Поэтому
         перебираем колонки доски и страницы внутри.
 
+        Подзадачи к колонке не привязаны — они живут только в поле `subtasks`
+        родителя. Если на верхнем уровне не нашли, обходим собранные subtask-id
+        в ширину (GET /tasks/{id} по одной, вложенность любая).
+
         Возвращает task-объект (dict) или None.
         """
         if column_ids is None:
@@ -180,6 +187,21 @@ class YougileClient:
         target = (short_id or "").strip().upper()
         if not target:
             return None
+
+        def _matches(t: dict) -> bool:
+            return (str(t.get("idTaskProject") or "").upper() == target
+                    or str(t.get("idTaskCommon") or "").upper() == target)
+
+        subtask_ids: list[str] = []
+        seen: set[str] = set()
+
+        def _collect_subtasks(t: dict) -> None:
+            for sid in t.get("subtasks") or []:
+                sid = str(sid)
+                if sid not in seen:
+                    seen.add(sid)
+                    subtask_ids.append(sid)
+
         for col_id in column_ids:
             offset = 0
             page_size = 1000
@@ -191,13 +213,26 @@ class YougileClient:
                 )
                 content = data.get("content", []) if isinstance(data, dict) else (data or [])
                 for t in content:
-                    if str(t.get("idTaskProject") or "").upper() == target:
+                    if _matches(t):
                         return t
-                    if str(t.get("idTaskCommon") or "").upper() == target:
-                        return t
+                    _collect_subtasks(t)
                 if len(content) < page_size:
                     break
                 offset += page_size
+
+        idx = 0
+        while idx < len(subtask_ids) and idx < self.MAX_SUBTASK_LOOKUPS:
+            sid = subtask_ids[idx]
+            idx += 1
+            try:
+                t = self.get_task(sid)
+            except YougileAuthError:
+                raise
+            except YougileError:
+                continue
+            if _matches(t):
+                return t
+            _collect_subtasks(t)
         return None
 
     # ── чат задачи ───────────────────────────────────────────────────────

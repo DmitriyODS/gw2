@@ -47,3 +47,9 @@ export const strokePet = (userId) =>
   apiRequest(`/groove/zoo/${userId}/stroke`, { method: 'POST' })
 
 export const getRaid = () => apiRequest('/groove/raid')
+
+export const getWrapped = () => apiRequest('/groove/wrapped', { timeout: 20000 })
+
+export const shareWrapped = () => apiRequest('/groove/wrapped/share', { method: 'POST', timeout: 20000 })
+
+export const getGrooveTv = () => apiRequest('/groove/tv')
