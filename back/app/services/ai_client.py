@@ -10,9 +10,10 @@ API в worst-case ждать минуту до подхвата — приемл
 """
 from __future__ import annotations
 
+import json
 import time
 from dataclasses import dataclass
-from typing import Iterable
+from typing import Callable, Iterable
 
 from openai import OpenAI, OpenAIError
 
@@ -52,6 +53,85 @@ class AIClient:
         resp = self._raw.chat.completions.create(
             model=model or self.model_chat,
             messages=messages,
+            max_tokens=max_tokens,
+            temperature=temperature,
+            timeout=timeout,
+        )
+        return (resp.choices[0].message.content or "").strip()
+
+    def chat_with_tools(
+        self,
+        messages: list[dict],
+        *,
+        tools: list[dict],
+        on_tool: Callable[[str, dict], object],
+        model: str | None = None,
+        max_tokens: int = 400,
+        temperature: float = 0.7,
+        timeout: float = _REQUEST_TIMEOUT,
+        max_iterations: int = 4,
+    ) -> str:
+        """Чат с поддержкой OpenAI function-calling.
+
+        `on_tool(name, args_dict)` вызывается синхронно для каждого
+        tool_call и должен вернуть JSON-сериализуемый результат. Цикл
+        останавливается, когда модель вернула обычный ответ без tool_calls
+        или достигнут `max_iterations` (страховка от бесконечных циклов).
+
+        Список `messages` мутируется — копируем внутри, чтобы не нагадить
+        вызывающему коду.
+        """
+        convo = list(messages)
+        for _ in range(max_iterations):
+            resp = self._raw.chat.completions.create(
+                model=model or self.model_chat,
+                messages=convo,
+                tools=tools,
+                max_tokens=max_tokens,
+                temperature=temperature,
+                timeout=timeout,
+            )
+            msg = resp.choices[0].message
+            tool_calls = getattr(msg, "tool_calls", None) or []
+            if not tool_calls:
+                return (msg.content or "").strip()
+
+            # Сохраняем assistant-сообщение с tool_calls в истории.
+            convo.append({
+                "role": "assistant",
+                "content": msg.content or "",
+                "tool_calls": [
+                    {
+                        "id": tc.id,
+                        "type": "function",
+                        "function": {
+                            "name": tc.function.name,
+                            "arguments": tc.function.arguments or "{}",
+                        },
+                    }
+                    for tc in tool_calls
+                ],
+            })
+            for tc in tool_calls:
+                try:
+                    args = json.loads(tc.function.arguments or "{}")
+                except json.JSONDecodeError:
+                    args = {}
+                try:
+                    result = on_tool(tc.function.name, args)
+                except Exception as e:
+                    result = {"error": f"tool_handler_failed: {e}"}
+                convo.append({
+                    "role": "tool",
+                    "tool_call_id": tc.id,
+                    "content": json.dumps(result, ensure_ascii=False, default=str),
+                })
+
+        # Достигли лимита итераций — финальный заход без tools, чтобы
+        # модель точно ответила текстом, а не очередным tool_call.
+        resp = self._raw.chat.completions.create(
+            model=model or self.model_chat,
+            messages=convo,
             max_tokens=max_tokens,
             temperature=temperature,
             timeout=timeout,

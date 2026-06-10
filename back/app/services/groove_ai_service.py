@@ -323,6 +323,16 @@ def _pet_system_prompt(pet, owner, work_ctx: dict) -> str:
         "Говори коротко (1-3 предложения), по-русски, тепло и с юмором, можно эмодзи. "
         "Ты дружелюбный компаньон: поддерживай, подбадривай работать в здоровом ритме, "
         "интересуйся хозяином. Никогда не стыди и не дави.",
+        # Инструменты статистики: бот сам решает, когда дёрнуть API.
+        "У тебя есть доступ к рабочей статистике компании через инструменты "
+        "(get_stats_summary, list_departments, get_top_employees, "
+        "get_stats_by_unit_types, get_stats_calendar). Используй их, когда "
+        "хозяин спрашивает о задачах, часах, отделах, сотрудниках или динамике "
+        "(например: «сколько задач поступило на этой неделе», «кто больше всех "
+        "работал», «как дела у отдела X»). На цифровые вопросы отвечай только "
+        "после вызова инструмента — никогда не выдумывай цифры. Если данных "
+        "нет — так и скажи. На обычные разговорные вопросы инструменты не "
+        "трогай. Сегодня — " + datetime.now(MSK).strftime("%d.%m.%Y, %A") + ".",
     ]
     if pet.sick_since is not None:
         lines.append("Сейчас ты приболел (хозяин долго не работал) — изредка "
@@ -379,11 +389,23 @@ def _make_pet_reply(conversation_id: int) -> None:
                 today_units += 1
         work_ctx = {"today_minutes": today_minutes, "today_units": today_units,
                     "week_minutes": week_minutes}
-        text = client.chat(
+        from app.services import groove_ai_tools
+
+        def _on_tool(name: str, args: dict) -> dict:
+            return groove_ai_tools.dispatch(
+                name, args,
+                company_id=conv.company_id,
+                user_id=owner.id,
+            )
+
+        text = client.chat_with_tools(
             messages=[{"role": "system",
                        "content": _pet_system_prompt(pet, owner, work_ctx)},
                       *chat_msgs],
-            max_tokens=220, temperature=0.95, timeout=25.0,
+            tools=groove_ai_tools.TOOL_SCHEMAS,
+            on_tool=_on_tool,
+            max_tokens=350, temperature=0.9, timeout=30.0,
+            max_iterations=4,
         ).strip()
         if not text:
             return
