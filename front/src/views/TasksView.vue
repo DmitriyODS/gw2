@@ -552,18 +552,19 @@ function consumeOpenQuery() {
   router.replace({ path: '/tasks' })
 }
 
-onMounted(async () => {
+onMounted(() => {
   initialFetchDone = true
   // Первичная загрузка задач. Watch на viewMode с immediate:true дёргает
   // setFilter только если per_page реально меняется (для board-режима);
   // при дефолтном grid условие ложно — поэтому fetch нужен здесь явно.
   tasksStore.fetchTasks().catch(() => {})
-  try {
-    await unitsStore.fetchActiveUnit()
-  } catch {}
+  // Карточку из canonical-ссылки /tasks/:id открываем немедленно — не ждём
+  // активный юнит и статус YouGile, иначе по deep-link карточка появляется
+  // с лишней задержкой (на медленной сети — спустя десятки секунд).
+  consumeOpenQuery()
+  unitsStore.fetchActiveUnit().catch(() => {})
   // Статус YouGile подгружаем фоном — нужен только для показа/скрытия кнопок.
   yougileStore.refreshStatus().catch(() => {})
-  consumeOpenQuery()
 })
 
 /* Если пользователь уже на /tasks и кликнул задачу в StaleTasksModal,
