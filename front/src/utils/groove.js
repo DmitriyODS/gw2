@@ -14,13 +14,34 @@ export const PET_SPECIES = {
   sprinter: { emoji: '🐆', title: 'Спринтер' },
   marathoner: { emoji: '🐢', title: 'Марафонец' },
   fox: { emoji: '🦊', title: 'Универсал' },
+  // Покупные виды (магазин обликов).
+  cat: { emoji: '🐱', title: 'Котёнок' },
+  dog: { emoji: '🐶', title: 'Щенок' },
+  rabbit: { emoji: '🐰', title: 'Крольчонок' },
+  frog: { emoji: '🐸', title: 'Лягушонок' },
+  chick: { emoji: '🐥', title: 'Цыплёнок' },
+  monkey: { emoji: '🐵', title: 'Обезьянка' },
+  panda: { emoji: '🐼', title: 'Панда' },
+  tiger: { emoji: '🐯', title: 'Тигрёнок' },
+  bear: { emoji: '🐻', title: 'Медвежонок' },
+  penguin: { emoji: '🐧', title: 'Пингвинёнок' },
+  unicorn: { emoji: '🦄', title: 'Единорог' },
+  dragon: { emoji: '🐲', title: 'Дракон' },
 }
 
+// Природные виды (определяются эволюцией). Покупные не входят сюда —
+// они доступны на любой стадии после разблокировки в магазине.
+export const NATURAL_SPECIES = new Set(['owl', 'lark', 'sprinter', 'marathoner', 'fox'])
+
 // Малыш всех видов выглядит одинаково — вид проявляется со 2-й стадии.
+// Исключение: купленный покупной вид показывается сразу (хозяин же не
+// зря платил), но всё равно после вылупления.
 export function petEmoji(pet) {
   if (!pet || pet.stage === 0) return '🥚'
-  if (pet.stage === 1) return '🐣'
-  return PET_SPECIES[pet.species]?.emoji || '🦊'
+  const species = pet?.species
+  const isBought = species && !NATURAL_SPECIES.has(species) && species !== 'egg'
+  if (pet.stage === 1 && !isBought) return '🐣'
+  return PET_SPECIES[species]?.emoji || '🦊'
 }
 
 export const SHOP_ITEMS = {

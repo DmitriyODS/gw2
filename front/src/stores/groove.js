@@ -19,6 +19,7 @@ export const useGrooveStore = defineStore('groove', () => {
   const shopPrices = ref({})
   const seasonalItem = ref(null)
   const seasonTitle = ref('')
+  const speciesPrices = ref({})
   const commentsByEvent = ref({})
   const wrapped = ref(null)
   const wrappedLoading = ref(false)
@@ -200,6 +201,19 @@ export const useGrooveStore = defineStore('groove', () => {
     shopPrices.value = state.prices || {}
     seasonalItem.value = state.seasonal_item || null
     seasonTitle.value = state.season_title || ''
+    speciesPrices.value = state.species_prices || {}
+  }
+
+  async function buySpecies(species) {
+    pet.value = { ...pet.value, ...(await api.buySpecies(species)) }
+  }
+
+  async function switchSpecies(species) {
+    pet.value = { ...pet.value, ...(await api.switchSpecies(species)) }
+  }
+
+  async function claimQuest() {
+    pet.value = { ...pet.value, ...(await api.claimQuest()) }
   }
 
   async function fetchWrapped() {
@@ -257,13 +271,14 @@ export const useGrooveStore = defineStore('groove', () => {
 
   return {
     events, hasMore, loadingFeed, live, liveLoaded, zapsLeft, zapsMax, pet, zoo, raid,
-    shopPrices, seasonalItem, seasonTitle, commentsByEvent,
+    shopPrices, seasonalItem, seasonTitle, speciesPrices, commentsByEvent,
     wrapped, wrappedLoading, myId, myCompanyId, isMine,
     fetchFeed, loadMore, applyNewEvent,
     toggleReaction, applyReaction,
     fetchComments, addComment, applyComment, removeComment, applyCommentDeleted,
     fetchLive, applyZapCount, zap, sendKudos,
-    fetchPet, feedPet, renamePet, equipItem, buyItem, fetchShop, applyPetUpdate,
+    fetchPet, feedPet, renamePet, equipItem, buyItem, fetchShop,
+    buySpecies, switchSpecies, claimQuest, applyPetUpdate,
     fetchZoo, strokePet,
     fetchRaid, applyRaidUpdate,
     fetchWrapped, shareWrapped,

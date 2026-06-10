@@ -60,6 +60,32 @@ STREAK_MILESTONES = {3, 5, 7, 10, 14, 21, 30, 50, 100}
 BOSSES = ["Дедлайнозавр", "Багоблин", "Прокрастинатор",
           "Совещаниус", "Хаос-гоблин", "Технодолг"]
 
+# ── Ежедневный квест ───────────────────────────────────────────────
+# Грувик каждый день предлагает простую дневную цель — мягкий якорь,
+# чтобы было приятно начать день и закрыть один-два конкретных пункта.
+# Награда за выполнение — бонус-грувы (поверх обычных капов).
+QUEST_REWARD_BEANS = 20
+QUEST_TEMPLATES = [
+    {"kind": "tasks_closed",   "target": 2,
+     "title": "Закрыть 2 задачи", "unit": "задач",
+     "hint": "Грувик ждёт пару записей в архив — наш командный счётчик подскочит."},
+    {"kind": "tasks_closed",   "target": 3,
+     "title": "Закрыть 3 задачи", "unit": "задач",
+     "hint": "Тройка закрытий — Грувик мяукает от восторга. Поехали!"},
+    {"kind": "units_finished", "target": 3,
+     "title": "Завершить 3 юнита", "unit": "юнитов",
+     "hint": "Три полноценных подхода. Можно по 25–50 минут — удобно!"},
+    {"kind": "unit_minutes",   "target": 60,
+     "title": "60 минут в фокусе", "unit": "мин",
+     "hint": "Один час спокойной работы. Грувик обещает вести себя тихо."},
+    {"kind": "unit_minutes",   "target": 90,
+     "title": "Полтора часа фокуса", "unit": "мин",
+     "hint": "1ч30мин чистого времени. Один большой юнит или несколько — как удобнее."},
+    {"kind": "feed_pet",       "target": 1,
+     "title": "Покормить Грувика", "unit": "раз",
+     "hint": "Не забудьте про талисмана — он заскучал."},
+]
+
 # ── Болезнь ────────────────────────────────────────────────────────
 # Грувик заболевает, если хозяин SICK_AFTER_DAYS дней не завершал юниты.
 # Лечение — recovery-очки: работа (юнит ≥15 мин, закрытая задача),
@@ -94,7 +120,24 @@ PET_STAGES_TITLES = ["Яйцо", "Малыш", "Непоседа", "Подрос
 PET_SPECIES_TITLES = {
     "egg": "ещё не вылупившийся", "owl": "сова", "lark": "жаворонок",
     "sprinter": "спринтер", "marathoner": "марафонец", "fox": "лис-универсал",
+    "cat": "котёнок", "dog": "щенок", "tiger": "тигрёнок", "bear": "медвежонок",
+    "rabbit": "крольчонок", "frog": "лягушонок", "panda": "панда",
+    "penguin": "пингвинёнок", "monkey": "обезьянка", "chick": "цыплёнок",
+    "unicorn": "единорог", "dragon": "дракон",
 }
+
+# Магазин «видов» Грувика. Естественный вид (определённый эволюцией)
+# всегда бесплатен и автоматически разблокирован; покупные виды дают
+# возможность переключаться между обликами без потери стадии/XP.
+SPECIES_SHOP = {
+    "cat": 80, "dog": 80, "rabbit": 80, "frog": 80,
+    "chick": 100, "monkey": 100, "panda": 120,
+    "tiger": 140, "bear": 140, "penguin": 140,
+    "unicorn": 250, "dragon": 250,
+}
+# Виды, которые проявляются «естественно» через _detect_species. Их нельзя
+# купить — они приходят с эволюцией. Используются как стартовые в unlocked.
+NATURAL_SPECIES = {"owl", "lark", "sprinter", "marathoner", "fox"}
 
 # ── Сезонные товары ────────────────────────────────────────────────
 # Аксессуар сезона продаётся только в свой сезон — повод заглянуть в магазин.
@@ -174,6 +217,13 @@ def dump_pet(pet) -> dict:
     data["recovery_target"] = RECOVERY_TARGET
     data["personality"] = pet.personality
     data["personality_title"] = PERSONALITIES.get(pet.personality, {}).get("title")
+    # Доступные облики: всё разблокированное + текущий вид (на случай,
+    # если он ещё не был добавлен — старые питомцы до миграции).
+    unlocked = list(pet.unlocked_species or [])
+    if pet.species and pet.species not in unlocked and pet.species != "egg":
+        unlocked.append(pet.species)
+    data["unlocked_species"] = unlocked
+    data["quest"] = _quest_snapshot(pet)
     return data
 
 
@@ -213,6 +263,7 @@ def get_my_pet(user_id: int, company_id: int) -> dict:
     pet = pet_repo.get_or_create(user_id, company_id)
     if pet.personality is None:
         pet.personality = _detect_personality(user_id)
+    _ensure_today_quest(pet)
     db.session.commit()
     data = dump_pet(pet)
     if pet.sick_since is not None:
@@ -413,6 +464,9 @@ def feed_pet(user_id: int, company_id: int) -> dict:
     if evolved_to is not None:
         pet.species = _detect_species(user_id)
         pet.personality = _detect_personality(user_id)
+        unlocked = list(pet.unlocked_species or [])
+        if pet.species not in unlocked:
+            pet.unlocked_species = unlocked + [pet.species]
 
     db.session.commit()
 
@@ -428,6 +482,8 @@ def feed_pet(user_id: int, company_id: int) -> dict:
                      bot_comment=True)
 
     _emit_pet_update(pet)
+    # Кормление двигает дневной квест feed_pet, если такой выпал.
+    bump_quest(user_id, "feed_pet", 1)
     from app.services.groove_ai_service import get_feed_phrase
     data = dump_pet(pet)
     data["feeds_left"] = daily_left(user_id, "feeds", FEED_DAILY_MAX)
@@ -456,6 +512,7 @@ def get_shop_state() -> dict:
         "prices": {**SHOP_PRICES, seasonal_item: SEASONAL_ITEMS[seasonal_item]},
         "seasonal_item": seasonal_item,
         "season_title": season_title,
+        "species_prices": dict(SPECIES_SHOP),
     }
 
 
@@ -491,6 +548,140 @@ def equip_item(user_id: int, company_id: int, item) -> dict:
     db.session.commit()
     _emit_pet_update(pet)
     return dump_pet(pet)
+
+
+def buy_species(user_id: int, company_id: int, species: str) -> dict:
+    """Разблокировать новый облик Грувика и сразу его надеть."""
+    price = SPECIES_SHOP.get(species)
+    if price is None:
+        raise PetServiceError("Такого вида в магазине нет", "NO_ITEM", 404)
+    pet = pet_repo.get_or_create(user_id, company_id)
+    unlocked = list(pet.unlocked_species or [])
+    if species in unlocked:
+        raise PetServiceError("Этот вид уже разблокирован", "ALREADY_OWNED", 422)
+    if pet.beans < price:
+        raise PetServiceError("Не хватает грувов", "NO_BEANS", 422)
+    pet.beans -= price
+    pet.unlocked_species = unlocked + [species]
+    pet.species = species
+    db.session.commit()
+    _emit_pet_update(pet)
+    return dump_pet(pet)
+
+
+def switch_species(user_id: int, company_id: int, species: str) -> dict:
+    """Сменить облик на ранее разблокированный (без оплаты)."""
+    pet = pet_repo.get_or_create(user_id, company_id)
+    unlocked = list(pet.unlocked_species or [])
+    # Природный (определённый эволюцией) вид доступен всегда — он
+    # автоматически считается «своим» даже если не лежит в unlocked.
+    natural_ok = species in NATURAL_SPECIES and pet.stage >= 2
+    if species not in unlocked and not natural_ok:
+        raise PetServiceError("Этот вид ещё не разблокирован", "NOT_OWNED", 422)
+    pet.species = species
+    if species not in unlocked:
+        pet.unlocked_species = unlocked + [species]
+    db.session.commit()
+    _emit_pet_update(pet)
+    return dump_pet(pet)
+
+
+# ─────────────────────────── квест дня ─────────────────────────────
+
+def _pick_quest_template(user_id: int, day: date) -> dict:
+    """Детерминированный выбор шаблона по (user_id, day): один и тот же
+    день — тот же квест (стабильность при перезапросе)."""
+    idx = (user_id * 1009 + day.toordinal()) % len(QUEST_TEMPLATES)
+    return QUEST_TEMPLATES[idx]
+
+
+def _ensure_today_quest(pet) -> None:
+    """Назначает свежий квест, если предыдущий устарел. Без commit'а."""
+    today = _today_msk()
+    if pet.quest_date == today and pet.quest_kind:
+        return
+    tpl = _pick_quest_template(pet.user_id, today)
+    pet.quest_date = today
+    pet.quest_kind = tpl["kind"]
+    pet.quest_target = int(tpl["target"])
+    pet.quest_progress = 0
+    pet.quest_claimed = False
+
+
+def _quest_template_for(kind: str) -> dict | None:
+    for t in QUEST_TEMPLATES:
+        if t["kind"] == kind:
+            return t
+    return None
+
+
+def _quest_snapshot(pet) -> dict | None:
+    if not pet.quest_kind or not pet.quest_target:
+        return None
+    tpl = _quest_template_for(pet.quest_kind) or {}
+    target = int(pet.quest_target)
+    progress = min(int(pet.quest_progress or 0), target)
+    return {
+        "kind": pet.quest_kind,
+        "title": tpl.get("title", "Дневной квест"),
+        "hint": tpl.get("hint", ""),
+        "unit": tpl.get("unit", ""),
+        "target": target,
+        "progress": progress,
+        "done": progress >= target,
+        "claimed": bool(pet.quest_claimed),
+        "reward": QUEST_REWARD_BEANS,
+    }
+
+
+def bump_quest(user_id: int, kind: str, amount: int = 1) -> None:
+    """Прибавить прогресс к дневному квесту, если совпадает по типу.
+    Никогда не бросает (зовётся из хуков юнитов/задач)."""
+    if amount <= 0:
+        return
+    try:
+        pet = pet_repo.get_pet(user_id)
+        if pet is None:
+            return
+        _ensure_today_quest(pet)
+        if pet.quest_kind != kind or pet.quest_claimed:
+            db.session.commit()
+            return
+        target = int(pet.quest_target or 0)
+        was_done = (pet.quest_progress or 0) >= target
+        pet.quest_progress = min(target, int(pet.quest_progress or 0) + amount)
+        db.session.commit()
+        now_done = (pet.quest_progress or 0) >= target
+        if not was_done and now_done:
+            _emit_pet_update(pet)   # сообщить владельцу — можно забрать награду
+        else:
+            _emit_pet_update(pet)
+    except Exception as e:
+        db.session.rollback()
+        logger.warning("groove.quest_bump_failed",
+                       extra={"extra": {"user_id": user_id, "kind": kind,
+                                        "err": str(e)}})
+
+
+def claim_quest(user_id: int, company_id: int) -> dict:
+    pet = pet_repo.get_or_create(user_id, company_id)
+    _ensure_today_quest(pet)
+    target = int(pet.quest_target or 0)
+    if pet.quest_claimed:
+        raise PetServiceError("Награда уже забрана сегодня", "ALREADY_CLAIMED", 422)
+    if (pet.quest_progress or 0) < target:
+        raise PetServiceError("Квест ещё не выполнен", "NOT_DONE", 422)
+    pet.quest_claimed = True
+    pet.beans += QUEST_REWARD_BEANS
+    db.session.commit()
+    from app.services.feed_service import record_event
+    tpl = _quest_template_for(pet.quest_kind) or {}
+    record_event(company_id, user_id, "quest_done",
+                 {"pet_name": pet.name, "title": tpl.get("title", "Квест дня"),
+                  "reward": QUEST_REWARD_BEANS}, bot_comment=True)
+    _emit_pet_update(pet)
+    data = dump_pet(pet)
+    return data
 
 
 # ─────────────────────────── зоопарк ───────────────────────────────

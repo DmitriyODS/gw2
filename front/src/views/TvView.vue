@@ -276,9 +276,9 @@
                 :class="{ 'is-leader': i === 0 }"
                 :style="{ '--row-delay': i * 80 + 'ms' }"
               >
-                <span class="tv-groove-rank">
+                <span class="tv-groove-rank" :class="{ 'is-leader': i === 0 }">
                   <span v-if="i === 0" class="tv-fire material-symbols-outlined">local_fire_department</span>
-                  <span v-else>{{ i + 1 }}</span>
+                  <span class="tv-groove-rank-num">{{ i + 1 }}</span>
                 </span>
                 <span class="tv-groove-pet">
                   <span class="tv-groove-emoji" :class="{ sick: p.sick }">{{ petEmojiOf(p) }}</span>
@@ -2279,7 +2279,13 @@ onBeforeUnmount(() => {
   font-weight: 800;
   text-align: center;
   color: var(--color-text-dim);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
 }
+.tv-groove-rank.is-leader { color: var(--color-warning); }
+.tv-groove-rank.is-leader .tv-groove-rank-num { font-size: 1.1em; }
 .tv-groove-pet {
   position: relative;
   width: clamp(44px, 6vmin, 72px);

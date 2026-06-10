@@ -149,7 +149,12 @@ async function zap(entry) {
 }
 .live-zap:not(.mine):not(:disabled):hover { transform: scale(1.1); }
 .live-zap:not(.mine):not(:disabled):active { transform: scale(0.9); }
-.live-zap:disabled { opacity: 0.4; cursor: default; }
+.live-zap:disabled {
+  cursor: default;
+  background: var(--color-surface-high);
+  color: var(--color-text-dim);
+  filter: grayscale(0.7);
+}
 .live-zap.mine { cursor: default; }
 .live-zap-budget {
   flex-shrink: 0;

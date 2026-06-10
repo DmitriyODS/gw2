@@ -41,6 +41,15 @@ export const getShop = () => apiRequest('/groove/shop')
 export const buyItem = (item) =>
   apiRequest('/groove/shop/buy', { method: 'POST', body: { item } })
 
+export const buySpecies = (species) =>
+  apiRequest('/groove/shop/buy-species', { method: 'POST', body: { species } })
+
+export const switchSpecies = (species) =>
+  apiRequest('/groove/pet/species', { method: 'POST', body: { species } })
+
+export const claimQuest = () =>
+  apiRequest('/groove/pet/quest/claim', { method: 'POST' })
+
 export const getZoo = () => apiRequest('/groove/zoo')
 
 export const strokePet = (userId) =>

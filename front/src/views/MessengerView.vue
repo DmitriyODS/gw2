@@ -80,7 +80,7 @@
             <template v-else>{{ otherOnline ? 'в сети' : lastSeenText }}</template>
           </div>
         </div>
-        <div class="chat-tools" data-tutorial="chat-tools" ref="toolsRef">
+        <div v-if="!active.is_pet_chat" class="chat-tools" data-tutorial="chat-tools" ref="toolsRef">
           <button
             class="chat-tool"
             :class="{ active: chatMenuOpen }"

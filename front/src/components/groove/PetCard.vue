@@ -55,6 +55,33 @@
       <p class="pet-sick-hint">Лечат: юнит от 15 минут, закрытая задача, бульон и поглаживания коллег</p>
     </div>
 
+    <!-- Дневной квест от Грувика: главный мотиватор сделать что-то
+         конкретное сегодня. Награда — бонус-грувы поверх обычных капов. -->
+    <div v-if="quest" class="pet-quest" :class="{ done: quest.done, claimed: quest.claimed }">
+      <div class="pet-quest-head">
+        <span class="material-symbols-outlined pet-quest-ico">
+          {{ quest.claimed ? 'check_circle' : (quest.done ? 'rocket_launch' : 'flag') }}
+        </span>
+        <span class="pet-quest-title">{{ quest.title }}</span>
+        <span class="pet-quest-reward">+{{ quest.reward }} 🫘</span>
+      </div>
+      <div class="pet-quest-bar">
+        <div class="pet-quest-fill" :style="{ width: questPercent + '%' }"></div>
+      </div>
+      <div class="pet-quest-meta">
+        <span>{{ quest.progress }} / {{ quest.target }} {{ quest.unit }}</span>
+        <button
+          v-if="quest.done && !quest.claimed"
+          class="pet-quest-claim"
+          type="button"
+          :disabled="claiming"
+          @click="claim"
+        >Забрать награду</button>
+        <span v-else-if="quest.claimed" class="pet-quest-claimed">Награда забрана 🎉</span>
+        <span v-else class="pet-quest-hint">{{ quest.hint }}</span>
+      </div>
+    </div>
+
     <div v-if="!pet.sick" class="pet-xp">
       <div class="pet-xp-meta">
         <span>{{ pet.stage >= maxStage ? 'Максимальная форма' : 'До эволюции' }}</span>
@@ -137,10 +164,31 @@ const maxStage = PET_STAGES.length - 1
 const phrase = ref('')
 const justFed = ref(false)
 const feeding = ref(false)
+const claiming = ref(false)
 const renaming = ref(false)
 const newName = ref('')
 const nameInput = ref(null)
 let phraseTimer = null
+
+const quest = computed(() => pet.value?.quest || null)
+const questPercent = computed(() => {
+  const q = quest.value
+  if (!q || !q.target) return 0
+  return Math.min(100, Math.round((q.progress / q.target) * 100))
+})
+
+async function claim() {
+  if (claiming.value) return
+  claiming.value = true
+  try {
+    await groove.claimQuest()
+    notify.success(`+${quest.value?.reward || 20} 🫘 за квест от Грувика`)
+  } catch (e) {
+    notify.warn(e?.message || 'Не удалось забрать награду')
+  } finally {
+    claiming.value = false
+  }
+}
 
 const stageTitle = computed(() => PET_STAGES[pet.value?.stage] || '')
 const speciesTitle = computed(() =>
@@ -476,4 +524,78 @@ async function toggleEquip(item) {
   border-color: var(--color-primary);
   background: var(--color-primary-container);
 }
+
+/* ── Квест дня ──────────────────────────────────────────────── */
+.pet-quest {
+  width: 100%;
+  margin-top: 14px;
+  border: 1px solid color-mix(in oklch, var(--color-tertiary) 35%, var(--color-outline-dim));
+  border-radius: 14px;
+  padding: 10px 12px;
+  background: color-mix(in oklch, var(--color-tertiary-container) 35%, transparent);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.pet-quest.done {
+  border-color: var(--color-success);
+  background: color-mix(in oklch, var(--color-success) 14%, transparent);
+}
+.pet-quest.claimed {
+  border-color: var(--color-outline-dim);
+  background: var(--color-surface-high);
+  opacity: 0.85;
+}
+.pet-quest-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 700;
+}
+.pet-quest-ico { font-size: 18px; color: var(--color-tertiary); }
+.pet-quest.done .pet-quest-ico { color: var(--color-success); }
+.pet-quest-title { flex: 1; min-width: 0; }
+.pet-quest-reward {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--color-text-dim);
+  white-space: nowrap;
+}
+.pet-quest-bar {
+  height: 6px;
+  border-radius: var(--radius-full);
+  background: var(--color-surface);
+  overflow: hidden;
+}
+.pet-quest-fill {
+  height: 100%;
+  border-radius: inherit;
+  background: var(--color-tertiary);
+  transition: width 0.5s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+.pet-quest.done .pet-quest-fill { background: var(--color-success); }
+.pet-quest-meta {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  font-size: 11.5px;
+  color: var(--color-text-dim);
+}
+.pet-quest-hint { text-align: right; line-height: 1.35; }
+.pet-quest-claim {
+  border: none;
+  border-radius: var(--radius-full);
+  background: var(--color-success);
+  color: var(--color-on-primary);
+  font-size: 12px;
+  font-weight: 700;
+  padding: 5px 12px;
+  cursor: pointer;
+  transition: transform 0.1s;
+}
+.pet-quest-claim:active { transform: scale(0.95); }
+.pet-quest-claim:disabled { opacity: 0.5; cursor: default; }
+.pet-quest-claimed { font-weight: 700; color: var(--color-success); }
 </style>

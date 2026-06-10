@@ -114,6 +114,10 @@ def on_unit_stopped(unit) -> None:
         # Работа лечит больного Грувика (совсем короткие юниты не считаются).
         if minutes >= pet_service.RECOVERY_MIN_UNIT_MINUTES:
             pet_service.add_recovery(unit.user_id, unit.company_id, 1)
+        # Дневной квест: завершённые юниты и минуты в фокусе.
+        pet_service.bump_quest(unit.user_id, "units_finished", 1)
+        if minutes > 0:
+            pet_service.bump_quest(unit.user_id, "unit_minutes", minutes)
     _safe(_job)
 
 
@@ -128,6 +132,7 @@ def on_task_closed(task, actor_id=None) -> None:
         if hero_id:
             pet_service.award_beans(hero_id, task.company_id, "task_closed", 5)
             pet_service.add_recovery(hero_id, task.company_id, 1)
+            pet_service.bump_quest(hero_id, "tasks_closed", 1)
         pet_service.on_task_closed_raid(task.company_id)
     _safe(_job)
 

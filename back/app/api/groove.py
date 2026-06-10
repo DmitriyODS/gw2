@@ -5,7 +5,8 @@ from marshmallow import ValidationError
 
 from app.schemas.groove import (FeedReactionToggleSchema, FeedCommentCreateSchema,
                                 KudosSchema, ZapSchema, PetRenameSchema,
-                                ShopBuySchema, PetEquipSchema, FEED_REACTIONS)
+                                ShopBuySchema, PetEquipSchema, PetSpeciesSchema,
+                                FEED_REACTIONS)
 from app.services import feed_service, pet_service
 from app.services.feed_service import FeedServiceError
 from app.services.pet_service import PetServiceError, SHOP_PRICES
@@ -20,6 +21,7 @@ _zap_schema = ZapSchema()
 _rename_schema = PetRenameSchema()
 _buy_schema = ShopBuySchema()
 _equip_schema = PetEquipSchema()
+_species_schema = PetSpeciesSchema()
 
 
 def _load(schema):
@@ -317,6 +319,73 @@ def buy_item():
         return jsonify({"error": "VALIDATION_ERROR", "message": e.messages}), 400
     try:
         result = pet_service.buy_item(g.current_user.id, g.company_id, data["item"])
+    except PetServiceError as e:
+        return jsonify({"error": e.code, "message": e.message}), e.http_status
+    return jsonify(result), 200
+
+
+@bp.post("/shop/buy-species")
+@require_auth
+@require_company_scope
+def buy_species():
+    """
+    Купить новый облик Грувика (виды-зверюшки) — сразу надевается.
+    ---
+    tags: [groove]
+    security: [BearerAuth: []]
+    responses:
+      200: {description: Питомец}
+    """
+    try:
+        data = _load(_species_schema)
+    except ValidationError as e:
+        return jsonify({"error": "VALIDATION_ERROR", "message": e.messages}), 400
+    try:
+        result = pet_service.buy_species(g.current_user.id, g.company_id,
+                                          data["species"])
+    except PetServiceError as e:
+        return jsonify({"error": e.code, "message": e.message}), e.http_status
+    return jsonify(result), 200
+
+
+@bp.post("/pet/quest/claim")
+@require_auth
+@require_company_scope
+def claim_quest():
+    """
+    Забрать награду за выполненный квест дня (+бонус-грувы).
+    ---
+    tags: [groove]
+    security: [BearerAuth: []]
+    responses:
+      200: {description: Питомец после получения награды}
+    """
+    try:
+        result = pet_service.claim_quest(g.current_user.id, g.company_id)
+    except PetServiceError as e:
+        return jsonify({"error": e.code, "message": e.message}), e.http_status
+    return jsonify(result), 200
+
+
+@bp.post("/pet/species")
+@require_auth
+@require_company_scope
+def switch_species():
+    """
+    Сменить облик Грувика на уже разблокированный (без оплаты).
+    ---
+    tags: [groove]
+    security: [BearerAuth: []]
+    responses:
+      200: {description: Питомец}
+    """
+    try:
+        data = _load(_species_schema)
+    except ValidationError as e:
+        return jsonify({"error": "VALIDATION_ERROR", "message": e.messages}), 400
+    try:
+        result = pet_service.switch_species(g.current_user.id, g.company_id,
+                                             data["species"])
     except PetServiceError as e:
         return jsonify({"error": e.code, "message": e.message}), e.http_status
     return jsonify(result), 200

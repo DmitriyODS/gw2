@@ -75,6 +75,7 @@ const KIND_META = {
   pet_sick: { icon: 'sick', tone: 'error' },
   pet_recovered: { icon: 'healing', tone: 'success' },
   wrapped: { icon: 'auto_awesome', tone: 'tertiary' },
+  quest_done: { icon: 'rocket_launch', tone: 'tertiary' },
 }
 
 const meta = computed(() => KIND_META[props.event.kind] || { icon: 'bolt', tone: 'primary' })
@@ -106,6 +107,8 @@ const sentence = computed(() => {
       return `«${p.pet_name || 'Грувик'}» приболел 🤒 — хозяину пора вернуться в строй. Поглаживания тоже лечат!`
     case 'pet_recovered':
       return `«${p.pet_name || 'Грувик'}» выздоровел и снова сияет! 💚`
+    case 'quest_done':
+      return `выполнил(а) квест Грувика «${p.title || 'квест дня'}» и забрал(а) +${p.reward || 20} грувов 🚀`
     case 'wrapped': {
       const parts = []
       if (p.units) parts.push(`${p.units} юнитов`)

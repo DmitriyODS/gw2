@@ -28,7 +28,7 @@
       </div>
     </header>
 
-    <div class="admin-body">
+    <div ref="bodyRef" class="admin-body">
       <LiveNowBar class="groove-live" />
 
       <div class="groove-layout">
@@ -82,6 +82,7 @@
       icon="volunteer_activism"
       label="Спасибо"
       aria-label="Поблагодарить коллегу"
+      :collapsed="isCompact"
       @click="showKudos = true"
     />
 
@@ -94,6 +95,7 @@
 <script setup>
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useGrooveStore } from '@/stores/groove.js'
+import { useScrollCollapse } from '@/composables/useScrollCollapse.js'
 import { dayKey, dayTitle, timeZoneOf } from '@/utils/groove.js'
 import AppFab from '@/components/common/AppFab.vue'
 import LiveNowBar from '@/components/groove/LiveNowBar.vue'
@@ -112,6 +114,11 @@ const showKudos = ref(false)
 const showWrapped = ref(false)
 const riverEl = ref(null)
 const sentinelEl = ref(null)
+const bodyRef = ref(null)
+
+// FAB «Спасибо» сворачивается в кружок при скролле вниз — текст не
+// мозолит глаза, но кнопка остаётся под рукой.
+const { isCompact } = useScrollCollapse(bodyRef)
 
 const pet = computed(() => groove.pet)
 

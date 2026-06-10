@@ -2,7 +2,7 @@
   <AppDialog
     :model-value="modelValue"
     title="Гардероб Грувика"
-    subtitle="Аксессуары за грувы — заработанные честным трудом"
+    subtitle="Аксессуары и облики за грувы — заработанные честным трудом"
     icon="storefront"
     tone="primary"
     size="md"
@@ -15,7 +15,22 @@
       </span>
     </div>
 
-    <div class="shop-grid">
+    <div class="shop-tabs">
+      <button
+        class="shop-tab"
+        :class="{ active: tab === 'accessories' }"
+        type="button"
+        @click="tab = 'accessories'"
+      >Аксессуары</button>
+      <button
+        class="shop-tab"
+        :class="{ active: tab === 'species' }"
+        type="button"
+        @click="tab = 'species'"
+      >Облики</button>
+    </div>
+
+    <div v-if="tab === 'accessories'" class="shop-grid">
       <div
         v-for="item in items"
         :key="item.key"
@@ -45,6 +60,40 @@
         </span>
       </div>
     </div>
+
+    <div v-else class="shop-grid">
+      <p class="species-hint">
+        Виды-зверюшки — это альтернативный облик. Стадия и опыт не сбрасываются,
+        переключаться между разблокированными можно когда угодно.
+      </p>
+      <div
+        v-for="sp in speciesItems"
+        :key="sp.key"
+        class="shop-item species"
+        :class="{ owned: sp.unlocked, active: sp.current }"
+      >
+        <span v-if="sp.current" class="shop-season-tag active">сейчас</span>
+        <span class="shop-emoji">{{ sp.emoji }}</span>
+        <span class="shop-title">{{ sp.title }}</span>
+        <button
+          v-if="sp.unlocked && !sp.current"
+          class="shop-buy ghost"
+          type="button"
+          :disabled="switching"
+          @click="pickSpecies(sp)"
+        >Надеть</button>
+        <button
+          v-else-if="!sp.unlocked"
+          class="shop-buy"
+          type="button"
+          :disabled="(pet?.beans ?? 0) < sp.price || switching"
+          @click="buySpecies(sp)"
+        >🫘 {{ sp.price }}</button>
+        <span v-else class="shop-owned-tag">
+          <span class="material-symbols-outlined">check</span> надет
+        </span>
+      </div>
+    </div>
   </AppDialog>
 </template>
 
@@ -53,7 +102,7 @@ import { computed, onMounted, ref } from 'vue'
 import AppDialog from '@/components/common/AppDialog.vue'
 import { useGrooveStore } from '@/stores/groove.js'
 import { useNotificationsStore } from '@/stores/notifications.js'
-import { SHOP_ITEMS } from '@/utils/groove.js'
+import { PET_SPECIES, SHOP_ITEMS } from '@/utils/groove.js'
 
 defineProps({
   modelValue: { type: Boolean, default: false },
@@ -63,6 +112,8 @@ defineEmits(['update:modelValue'])
 const groove = useGrooveStore()
 const notify = useNotificationsStore()
 const buying = ref(false)
+const switching = ref(false)
+const tab = ref('accessories')
 
 const pet = computed(() => groove.pet)
 const hasHelmet = computed(() => (pet.value?.accessories || []).includes('helmet'))
@@ -80,6 +131,21 @@ const items = computed(() =>
     .sort((a, b) => a.price - b.price)
 )
 
+const speciesItems = computed(() => {
+  const unlocked = new Set(pet.value?.unlocked_species || [])
+  if (pet.value?.species) unlocked.add(pet.value.species)
+  return Object.entries(groove.speciesPrices || {})
+    .map(([key, price]) => ({
+      key,
+      price,
+      emoji: PET_SPECIES[key]?.emoji || '🐾',
+      title: PET_SPECIES[key]?.title || key,
+      unlocked: unlocked.has(key),
+      current: pet.value?.species === key,
+    }))
+    .sort((a, b) => a.price - b.price)
+})
+
 onMounted(() => {
   if (!Object.keys(groove.shopPrices).length) groove.fetchShop().catch(() => {})
 })
@@ -95,6 +161,31 @@ async function buy(item) {
     buying.value = false
   }
 }
+
+async function buySpecies(sp) {
+  switching.value = true
+  try {
+    await groove.buySpecies(sp.key)
+    notify.success(`Грувик перевоплотился в облик «${sp.title}» ${sp.emoji}`)
+  } catch (e) {
+    notify.warn(e?.message || 'Не получилось разблокировать вид')
+  } finally {
+    switching.value = false
+  }
+}
+
+async function pickSpecies(sp) {
+  if (sp.current) return
+  switching.value = true
+  try {
+    await groove.switchSpecies(sp.key)
+    notify.success(`Облик сменён: ${sp.emoji} ${sp.title}`)
+  } catch (e) {
+    notify.warn(e?.message || 'Не удалось сменить облик')
+  } finally {
+    switching.value = false
+  }
+}
 </script>
 
 <style scoped>
@@ -106,10 +197,44 @@ async function buy(item) {
   font-size: 14px;
   font-weight: 700;
 }
+
+.shop-tabs {
+  display: inline-flex;
+  background: var(--color-surface-high);
+  border-radius: var(--radius-full);
+  padding: 4px;
+  margin: 0 auto 14px;
+  width: max-content;
+  max-width: 100%;
+}
+.shop-tab {
+  border: none;
+  background: none;
+  font-size: 13px;
+  font-weight: 600;
+  padding: 7px 16px;
+  border-radius: var(--radius-full);
+  cursor: pointer;
+  color: var(--color-text-dim);
+  transition: background 0.15s, color 0.15s;
+}
+.shop-tab.active {
+  background: var(--color-primary);
+  color: var(--color-on-primary);
+}
+
 .shop-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
   gap: 10px;
+}
+.species-hint {
+  grid-column: 1 / -1;
+  margin: 0 0 4px;
+  font-size: 12.5px;
+  color: var(--color-text-dim);
+  line-height: 1.45;
+  text-align: center;
 }
 .shop-item {
   display: flex;
@@ -120,10 +245,14 @@ async function buy(item) {
   border-radius: 14px;
   padding: 12px 8px;
   text-align: center;
+  position: relative;
 }
 .shop-item.owned { background: var(--color-surface-high); }
-.shop-item { position: relative; }
 .shop-item.seasonal { border-color: color-mix(in oklch, var(--color-tertiary) 55%, transparent); }
+.shop-item.species.active {
+  border-color: var(--color-primary);
+  background: var(--color-primary-container);
+}
 .shop-season-tag {
   position: absolute;
   top: -8px;
@@ -136,6 +265,10 @@ async function buy(item) {
   color: var(--color-on-tertiary-container);
   border-radius: var(--radius-full);
   padding: 2px 8px;
+}
+.shop-season-tag.active {
+  background: var(--color-primary);
+  color: var(--color-on-primary);
 }
 .shop-season-chip {
   background: var(--color-tertiary-container);
@@ -157,6 +290,10 @@ async function buy(item) {
   font-weight: 700;
   padding: 6px 14px;
   cursor: pointer;
+}
+.shop-buy.ghost {
+  background: var(--color-secondary-container);
+  color: var(--color-on-secondary-container);
 }
 .shop-buy:disabled { opacity: 0.45; cursor: default; }
 .shop-owned-tag {

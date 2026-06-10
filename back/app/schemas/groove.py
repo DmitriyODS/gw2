@@ -71,3 +71,7 @@ class ShopBuySchema(Schema):
 class PetEquipSchema(Schema):
     item = fields.Str(required=False, load_default=None, allow_none=True,
                       validate=validate.Length(max=32))
+
+
+class PetSpeciesSchema(Schema):
+    species = fields.Str(required=True, validate=validate.Length(min=1, max=24))

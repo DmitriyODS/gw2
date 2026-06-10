@@ -107,6 +107,20 @@ class Pet(db.Model):
     recovery = db.Column(db.Integer, nullable=False, default=0, server_default="0")
     # Характер: пересчитывается по паттерну работы (см. pet_service).
     personality = db.Column(db.String(24), nullable=True)
+    # Виды, которые хозяин уже разблокировал (купил в магазине либо
+    # естественно «развил» через эволюцию). Природный вид добавляется
+    # автоматически, чтобы между ним и купленным можно было переключаться.
+    unlocked_species = db.Column(JSONB, nullable=False, default=list,
+                                 server_default="[]")
+    # Ежедневный квест от Грувика: автообновление в полночь МСК.
+    # kind: tasks_closed | units_finished | unit_minutes | feed_pet
+    quest_date = db.Column(db.Date, nullable=True)
+    quest_kind = db.Column(db.String(32), nullable=True)
+    quest_target = db.Column(db.Integer, nullable=True)
+    quest_progress = db.Column(db.Integer, nullable=False, default=0,
+                               server_default="0")
+    quest_claimed = db.Column(db.Boolean, nullable=False, default=False,
+                              server_default="false")
     created_at = db.Column(db.DateTime(timezone=True), nullable=False,
                            default=lambda: datetime.now(timezone.utc))
 
