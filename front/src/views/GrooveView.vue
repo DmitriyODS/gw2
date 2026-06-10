@@ -54,7 +54,7 @@
           <RaidCard />
         </aside>
 
-        <main class="groove-main">
+        <main ref="grooveMainRef" class="groove-main">
           <ZooStrip />
 
           <div v-if="newCount" class="feed-newpill-wrap">
@@ -189,6 +189,7 @@ const showWrapped = ref(false)
 const riverEl = ref(null)
 const sentinelEl = ref(null)
 const bodyRef = ref(null)
+const grooveMainRef = ref(null)
 const petBoxRef = ref(null)
 const fabOpen = ref(false)
 
@@ -221,15 +222,25 @@ const newCount = ref(0)
 
 watch(() => groove.events[0]?.id, (id, old) => {
   if (id == null || old == null || id === old) return
-  if (bodyRef.value?.scrollTop > 300) newCount.value++
+  const scrollTop = isNarrow.value
+    ? (bodyRef.value?.scrollTop ?? 0)
+    : (grooveMainRef.value?.scrollTop ?? 0)
+  if (scrollTop > 300) newCount.value++
 })
 
 function onBodyScroll() {
-  if (newCount.value && bodyRef.value && bodyRef.value.scrollTop < 200) newCount.value = 0
+  const scrollTop = isNarrow.value
+    ? (bodyRef.value?.scrollTop ?? 0)
+    : (grooveMainRef.value?.scrollTop ?? 0)
+  if (newCount.value && scrollTop < 200) newCount.value = 0
 }
 
 function scrollToTop() {
-  bodyRef.value?.scrollTo({ top: 0, behavior: 'smooth' })
+  if (isNarrow.value) {
+    bodyRef.value?.scrollTo({ top: 0, behavior: 'smooth' })
+  } else {
+    grooveMainRef.value?.scrollTo({ top: 0, behavior: 'smooth' })
+  }
   newCount.value = 0
 }
 
@@ -289,6 +300,7 @@ let observer = null
 
 onMounted(async () => {
   bodyRef.value?.addEventListener('scroll', onBodyScroll, { passive: true })
+  grooveMainRef.value?.addEventListener('scroll', onBodyScroll, { passive: true })
 
   narrowMq = window.matchMedia('(max-width: 1100px)')
   isNarrow.value = narrowMq.matches
@@ -315,17 +327,24 @@ onMounted(async () => {
 
 function onNarrowChange(e) {
   isNarrow.value = e.matches
+  // Пересоздаём обсервер: на десктопе root = grooveMainRef, на мобильном = viewport
+  observer?.disconnect()
+  observer = null
+  if (sentinelEl.value) setupObserver()
 }
 
 // Sentinel в конце реки: виден — догружаем старое (работает и для
 // горизонтального, и для вертикального скролла — clipping учитывается).
 function setupObserver() {
   if (observer || typeof IntersectionObserver === 'undefined') return
+  // На десктопе правая колонка — самостоятельный scroll-контейнер,
+  // поэтому sentinel нужно наблюдать именно внутри него, а не в viewport.
+  const root = isNarrow.value ? null : grooveMainRef.value
   observer = new IntersectionObserver((entries) => {
     if (entries.some(e => e.isIntersecting)) {
       groove.loadMore().catch(() => {})
     }
-  }, { rootMargin: '200px' })
+  }, { root, rootMargin: '200px' })
   if (sentinelEl.value) observer.observe(sentinelEl.value)
 }
 
@@ -342,6 +361,7 @@ onBeforeUnmount(() => {
   petObserver = null
   narrowMq?.removeEventListener('change', onNarrowChange)
   bodyRef.value?.removeEventListener('scroll', onBodyScroll)
+  grooveMainRef.value?.removeEventListener('scroll', onBodyScroll)
 })
 </script>
 
@@ -390,7 +410,14 @@ onBeforeUnmount(() => {
 .wrapped-btn:active { transform: scale(0.97); }
 .wrapped-btn .material-symbols-outlined { font-size: 18px; }
 
-.groove-live { margin-bottom: 16px; }
+/* На десктопе admin-body становится flex-колонкой без собственного скролла:
+   LiveNowBar сверху фиксированной высоты, groove-layout занимает остаток. */
+.admin-body {
+  display: flex;
+  flex-direction: column;
+  overflow-y: hidden;
+}
+.groove-live { flex-shrink: 0; margin-bottom: 16px; }
 
 /* ── Компактный питомец в шапке (узкие экраны) ─────────────── */
 .pet-strip { display: none; }
@@ -492,23 +519,29 @@ onBeforeUnmount(() => {
 }
 
 .groove-layout {
+  flex: 1;
+  min-height: 0;
   display: grid;
   grid-template-columns: 320px minmax(0, 1fr);
   gap: 16px;
-  align-items: start;
+  align-items: stretch;
 }
 .groove-aside {
   display: flex;
   flex-direction: column;
   gap: 16px;
-  position: sticky;
-  top: 0;
+  overflow-y: auto;
+  padding-bottom: 24px;
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-outline-dim) transparent;
 }
 .groove-main {
   display: flex;
   flex-direction: column;
   gap: 16px;
   min-width: 0;
+  overflow-y: auto;
+  padding-bottom: 24px;
 }
 
 /* ── Река дня: полноширинные дни, грид карточек ───────────── */
@@ -611,8 +644,25 @@ onBeforeUnmount(() => {
 
 /* ── Мобильная вертикаль ──────────────────────────────────── */
 @media (max-width: 1100px) {
-  .groove-layout { grid-template-columns: 1fr; }
-  .groove-aside { position: static; }
+  /* Возвращаем admin-body к стандартному поведению: весь контент в потоке */
+  .admin-body {
+    display: block;
+    overflow-y: auto;
+  }
+  .groove-layout {
+    flex: unset;
+    min-height: unset;
+    grid-template-columns: 1fr;
+    align-items: start;
+  }
+  .groove-aside {
+    overflow-y: visible;
+    padding-bottom: 0;
+  }
+  .groove-main {
+    overflow-y: visible;
+    padding-bottom: 0;
+  }
   .groove-river { gap: 16px; }
 }
 

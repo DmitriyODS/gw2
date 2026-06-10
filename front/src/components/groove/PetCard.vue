@@ -391,7 +391,7 @@ async function toggleEquip(item) {
 .pet-stage-bg {
   position: absolute;
   inset: 0 0 auto 0;
-  height: 132px;
+  height: 172px;
   background:
     radial-gradient(100px 60px at 50% 84px,
       color-mix(in oklch, var(--color-tertiary) 16%, transparent), transparent 72%),
@@ -399,6 +399,7 @@ async function toggleEquip(item) {
       color-mix(in oklch, var(--color-primary-container) 75%, transparent),
       color-mix(in oklch, var(--color-tertiary-container) 45%, transparent) 62%,
       transparent);
+  mask-image: linear-gradient(to bottom, black 45%, transparent 100%);
   pointer-events: none;
 }
 .pet-top { position: relative; display: flex; flex-direction: column; align-items: center; }
