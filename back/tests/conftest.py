@@ -1,9 +1,10 @@
 """Общие фикстуры для интеграционных тестов.
 
 Поднимаем настоящее Flask-приложение (фабрика create_app) поверх dev-БД и
-Redis. Если они недоступны — интеграционные тесты, которым нужен `app`,
-автоматически пропускаются (skip), а чистые юнит-тесты call_state работают и
-без них.
+Redis. Если они недоступны — тесты, которым нужен `app`, автоматически
+пропускаются (skip), а чистые юнит-тесты (yougile и т. п.) работают и без них.
+Go-микросервис звонков не нужен: шлюз проверяется против in-process
+fake gRPC-сервера (см. test_call_flow.py).
 """
 import os
 
@@ -15,8 +16,6 @@ os.environ.setdefault("REDIS_URL", "redis://localhost:6379/0")
 os.environ.setdefault("JWT_SECRET_KEY", "dev-jwt-secret-key-min-32-chars-local-xxxx")
 os.environ.setdefault("SECRET_KEY", "dev-flask-secret-key-min-32-chars-local-xxxx")
 os.environ.setdefault("UPLOAD_FOLDER", "./uploads")
-# Без grace-задержки на отдельный поток в тестах ждать не нужно — но оставим
-# дефолт; тест rejoin не зависит от истечения окна.
 
 
 @pytest.fixture(scope="session")
@@ -58,3 +57,22 @@ def make_token(app, user_id: int) -> str:
     from flask_jwt_extended import create_access_token
     with app.app_context():
         return create_access_token(identity=str(user_id))
+
+
+def cleanup_call_artifacts(app, call_id=None, conversation_id=None):
+    """Подчистить созданные тестом звонок/плашки/диалог в общей dev-БД.
+    conversation_id передаём только если диалог создал сам тест."""
+    from app.extensions import db
+    from app.models import Call, CallParticipant, Conversation, Message
+    with app.app_context():
+        try:
+            if call_id is not None:
+                db.session.execute(db.delete(Message).where(Message.call_id == call_id))
+                db.session.execute(db.delete(CallParticipant).where(CallParticipant.call_id == call_id))
+                db.session.execute(db.delete(Call).where(Call.id == call_id))
+            if conversation_id is not None:
+                db.session.execute(db.delete(Message).where(Message.conversation_id == conversation_id))
+                db.session.execute(db.delete(Conversation).where(Conversation.id == conversation_id))
+            db.session.commit()
+        except Exception:  # noqa: BLE001
+            db.session.rollback()

@@ -3,9 +3,9 @@ from app.extensions import db
 
 
 class Call(db.Model):
-    """Запись звонка (история). Сам сигналинг и активное состояние — in-memory
-    (sockets/call_state.py); БД нужна, чтобы пользователь видел, кто и когда
-    ему звонил."""
+    """Запись звонка (история). Ринг-фазой и активным состоянием владеет
+    Go-сервис callsvc (back-go/calls), он же пишет в эту таблицу; БД нужна,
+    чтобы пользователь видел, кто и когда ему звонил."""
     __tablename__ = "calls"
 
     id = db.Column(db.Integer, primary_key=True)
@@ -31,6 +31,12 @@ class Call(db.Model):
     # перейти из истории звонков в чат. Для group-звонков пусто.
     conversation_id = db.Column(db.Integer, db.ForeignKey("conversations.id", ondelete="SET NULL"),
                                 nullable=True)
+    # Имя комнаты LiveKit (call-{id}). NULL у звонков, прошедших до переезда
+    # на LiveKit.
+    room_name = db.Column(db.String(64), nullable=True)
+    # Код ссылки-приглашения: по нему к звонку подключаются внешние гости
+    # (/call/<share_code>). Случайный, непереборный.
+    share_code = db.Column(db.String(48), nullable=True, unique=True)
 
     initiator = db.relationship("User", foreign_keys=[initiator_id])
     participants = db.relationship("CallParticipant", back_populates="call",

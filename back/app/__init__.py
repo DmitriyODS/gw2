@@ -19,7 +19,7 @@ def create_app(config_name: str = None) -> Flask:
     _register_error_handlers(app)
     _register_security_headers(app)
     _init_swagger(app)
-    _finalize_stuck_calls(app)
+    _start_call_bridge(app)
     _start_presence_sweeper(app)
     _start_tv_facts_loop(app)
     _start_groove_ai_loop(app)
@@ -97,6 +97,11 @@ def _init_extensions(app: Flask) -> None:
 def _register_blueprints(app: Flask) -> None:
     from app.api import register_blueprints
     register_blueprints(app)
+
+    # Liveness для docker-compose healthcheck (без БД и авторизации).
+    @app.route("/healthz")
+    def healthz():
+        return jsonify({"ok": True})
 
     @app.route("/uploads/<path:filename>")
     def serve_upload(filename):
@@ -179,7 +184,7 @@ def _init_swagger(app: Flask) -> None:
         "info": {
             "title": "Groove Work API",
             "description": "REST API платформы учёта задач, времени и общения Groove Work v3.0",
-            "version": "3.4.0",
+            "version": "3.5.0",
         },
         "securityDefinitions": {
             "BearerAuth": {
@@ -195,44 +200,10 @@ def _init_swagger(app: Flask) -> None:
     Swagger(app, config=swagger_config, template=template)
 
 
-def _finalize_stuck_calls(app: Flask) -> None:
-    """При старте процесса финализируем все звонки, оставшиеся в БД со
-    статусом 'ringing' или 'active'. Они физически не могут быть «активны»
-    — `call_state` живёт в памяти процесса и теряется при рестарте; без
-    очистки системные плашки в чате (kind='call') вечно показывают
-    «Идёт вызов / Идёт сейчас», и кнопка «Присоединиться» зовёт в
-    несуществующий звонок. 'ringing' → 'missed' (никто не успел поднять),
-    'active' → 'ended' (длительность как была на момент крэша)."""
-    from datetime import datetime, timezone
-    from app.models import Call, CallParticipant
-    from app.utils.logger import get_logger
-    # Если таблицы ещё не созданы (первый деплой, миграции не применены
-    # до вызова create_app) — просто пропускаем, не роняем старт.
-    with app.app_context():
-        try:
-            stuck = db.session.execute(
-                db.select(Call).where(Call.status.in_(["ringing", "active"]))
-            ).scalars().all()
-        except Exception:
-            db.session.rollback()
-            return
-        if not stuck:
-            return
-        now = datetime.now(timezone.utc)
-        for c in stuck:
-            c.status = "missed" if c.status == "ringing" else "ended"
-            c.ended_at = c.started_at if c.status == "missed" else now
-            for p in db.session.execute(
-                db.select(CallParticipant).where(
-                    CallParticipant.call_id == c.id,
-                    CallParticipant.left_at.is_(None),
-                )
-            ).scalars().all():
-                p.left_at = c.ended_at
-        try:
-            db.session.commit()
-            get_logger(__name__).info("calls.startup_cleanup",
-                                      extra={"extra": {"count": len(stuck)}})
-        except Exception:
-            db.session.rollback()
+def _start_call_bridge(app: Flask) -> None:
+    """Слушатель Redis-канала событий Go-микросервиса звонков: транслирует
+    call:ended и обновления плашки звонка в Socket.IO-комнаты пользователей.
+    Реконсиляция зависших звонков при старте теперь — забота самого callsvc."""
+    from app.sockets.call_bridge import start_call_bridge
+    start_call_bridge(app, socketio)
 

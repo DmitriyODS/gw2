@@ -29,8 +29,8 @@ class Message(db.Model):
     forwarded_from_user_id = db.Column(db.Integer, db.ForeignKey("users.id", ondelete="SET NULL"),
                                        nullable=True)
     # 'text' — обычное пользовательское сообщение; 'call' — системная плашка
-    # о завершённом звонке (длительность, статус, тип), создаётся из
-    # call_service после _finalize. text при kind='call' пустой; данные
+    # звонка: создаётся при старте p2p-звонка (sockets/call_events.py),
+    # обновляется при смене статуса. text при kind='call' пустой; данные
     # фронт берёт из nested call (см. MessageSchema).
     kind = db.Column(db.String(16), nullable=False, default="text", server_default="text")
     # Для kind='call' — ссылка на запись звонка. SET NULL: если запись

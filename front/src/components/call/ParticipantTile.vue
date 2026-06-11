@@ -1,99 +1,92 @@
 <template>
-  <div class="tile" :class="{ local: isLocal, no_video: !videoEnabled || !stream, audio_off: !audioEnabled }">
-    <!-- Видео всегда muted: звук удалённого участника воспроизводит отдельный
-         <audio> ниже. Так аудио не пропадает, когда собеседник выключает
-         камеру (тогда <video> прячется через v-show, но звук продолжает идти). -->
+  <div
+    class="tile"
+    :class="{
+      local: isLocal,
+      no_video: !hasVideo,
+      audio_off: !audio,
+      speaking: speaking && !isLocal,
+      screen: source === 'screen',
+    }"
+  >
+    <!-- Видео всегда muted: звук всех удалённых участников воспроизводит
+         CallAudioSink — он не зависит от того, какие плитки отрисованы. -->
     <video
-      v-show="videoEnabled && stream"
+      v-show="hasVideo"
       ref="videoEl"
       class="tile-video"
       autoplay
       playsinline
       muted
     />
-    <!-- Аудио удалённого участника на отдельном элементе (для своего потока не
-         нужно — себя не слушаем). -->
-    <audio v-if="!isLocal" ref="audioEl" autoplay playsinline />
 
-    <div v-show="!videoEnabled || !stream" class="tile-placeholder">
+    <div v-show="!hasVideo" class="tile-placeholder">
       <div class="tile-avatar">
         <img v-if="avatar" :src="avatar" :alt="name" />
         <span v-else class="material-symbols-outlined">person</span>
       </div>
       <div v-if="pending" class="tile-status">
         <span class="material-symbols-outlined spin">progress_activity</span>
-        {{ connLabel }}
+        Ждём ответа…
       </div>
     </div>
 
     <div class="tile-footer">
       <span class="tile-name">{{ isLocal ? `${name} (Вы)` : name }}</span>
-      <span v-if="!audioEnabled" class="material-symbols-outlined tile-icon">mic_off</span>
+      <span v-if="guest" class="tile-guest">гость</span>
+      <span v-if="!audio && !pending" class="material-symbols-outlined tile-icon">mic_off</span>
     </div>
   </div>
 </template>
 
 <script setup>
-import { ref, watch, onMounted, computed } from 'vue'
+import { ref, watch, computed, onMounted, onBeforeUnmount } from 'vue'
+import { callRoom } from '@/services/livekit.js'
 
 const props = defineProps({
+  /** Identity участника в комнате LiveKit (для локального — своя). */
+  identity: { type: String, default: null },
   name: { type: String, required: true },
-  stream: { type: Object, default: null },
-  /* Меняется при каждом ontrack — поднимает watch, даже когда сам объект
-     MediaStream остался прежним (его наполняют новыми треками по мере того,
-     как WebRTC «прорастает»). Без этого watch на stream срабатывает только
-     один раз и второй трек (видео) тихо не подхватится. */
-  streamTick: { type: Number, default: 0 },
-  audioEnabled: { type: Boolean, default: true },
-  videoEnabled: { type: Boolean, default: true },
+  /** 'camera' | 'screen' — какой трек показывает плитка. */
+  source: { type: String, default: 'camera' },
+  audio: { type: Boolean, default: true },
+  video: { type: Boolean, default: true },
   isLocal: { type: Boolean, default: false },
   avatar: { type: String, default: null },
+  /** Приглашён, но ещё не вошёл в комнату. */
   pending: { type: Boolean, default: false },
-  /* Состояние RTCPeerConnection.connectionState — для диагностики прямо на
-     плитке: видно, встало ли соединение или зависло на подключении (тогда,
-     скорее всего, нужен TURN). */
-  connState: { type: String, default: null },
+  speaking: { type: Boolean, default: false },
+  guest: { type: Boolean, default: false },
+  /** Меняется при каждом изменении треков — триггер пере-attach. */
+  tick: { type: Number, default: 0 },
 })
 
 const videoEl = ref(null)
-const audioEl = ref(null)
 
-const connLabel = computed(() => {
-  switch (props.connState) {
-    case 'connected': return 'Соединение есть, ждём видео…'
-    case 'failed': return 'Не удалось соединиться (нужен TURN)'
-    case 'disconnected': return 'Связь прервалась…'
-    default: return 'Подключается…'
-  }
-})
+const hasVideo = computed(() => props.video && !props.pending)
 
-function bindEl(el, stream, force) {
-  if (!el || !stream) return
-  // Принудительное переподключение: когда трек добавляется в уже привязанный
-  // MediaStream (тот же объект), некоторые браузеры не начинают его
-  // воспроизводить без повторного присвоения srcObject. На смену streamTick
-  // (force) обнуляем и заново ставим источник — гарантированный re-render.
-  if (force && el.srcObject) el.srcObject = null
-  if (el.srcObject !== stream) el.srcObject = stream
-  // play() возвращает Promise, безопасно игнорируем отказ (autoplay-политика).
-  el.play?.().catch(() => {})
-}
+let attachedVideo = null
 
-let lastTick = 0
 function attach() {
-  const force = props.streamTick !== lastTick
-  lastTick = props.streamTick
-  // Видео — без звука (см. шаблон).
-  bindEl(videoEl.value, props.stream, force)
-  // Аудио удалённого участника — на отдельном элементе, чтобы звук шёл даже
-  // при выключенной камере. play() уже разрешён жестом accept/«позвонить».
-  if (!props.isLocal) bindEl(audioEl.value, props.stream, force)
+  const identity = props.isLocal ? callRoom.localIdentity : props.identity
+  if (!identity) return
+
+  const videoTrack = callRoom.getTrack(identity, props.source === 'screen' ? 'screen' : 'camera')
+  if (attachedVideo && attachedVideo !== videoTrack && videoEl.value) {
+    attachedVideo.detach(videoEl.value)
+    attachedVideo = null
+  }
+  if (videoTrack && videoEl.value && attachedVideo !== videoTrack) {
+    videoTrack.attach(videoEl.value)
+    attachedVideo = videoTrack
+  }
 }
 
-// streamTick меняется при каждом ontrack — пере-attach подхватывает поздно
-// прибывший трек (видео/аудио приходят независимо).
-watch(() => [props.stream, props.streamTick], attach, { flush: 'post' })
+watch(() => [props.identity, props.tick, props.video], attach, { flush: 'post' })
 onMounted(attach)
+onBeforeUnmount(() => {
+  if (attachedVideo && videoEl.value) attachedVideo.detach(videoEl.value)
+})
 </script>
 
 <style scoped>
@@ -108,6 +101,11 @@ onMounted(attach)
   min-height: 140px;
 }
 
+/* Активный спикер — подсветка рамкой в тон primary. */
+.tile.speaking {
+  box-shadow: inset 0 0 0 3px var(--color-primary);
+}
+
 .tile-video {
   width: 100%;
   height: 100%;
@@ -115,8 +113,14 @@ onMounted(attach)
   background: var(--color-surface-highest);
 }
 
-/* Локальное видео — зеркалим, как Zoom/Meet */
-.tile.local .tile-video {
+/* Демонстрация экрана — без обрезки, текст должен читаться. */
+.tile.screen .tile-video {
+  object-fit: contain;
+  background: var(--color-scrim);
+}
+
+/* Локальное видео — зеркалим, как Zoom/Meet (но не демонстрацию экрана). */
+.tile.local:not(.screen) .tile-video {
   transform: scaleX(-1);
 }
 
@@ -191,6 +195,17 @@ onMounted(attach)
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.tile-guest {
+  flex-shrink: 0;
+  padding: 1px 8px;
+  border-radius: 999px;
+  background: color-mix(in oklch, var(--color-tertiary) 40%, transparent);
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
 }
 
 .tile-icon { font-size: 16px; }

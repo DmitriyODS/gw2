@@ -37,18 +37,9 @@ def register_events(socketio: SocketIO) -> None:
     def on_disconnect():
         from flask import request as flask_request
         from app.sockets import presence
-        from app.sockets.presence import _sid_user
-        user_id = _sid_user.get(flask_request.sid)
         presence.on_disconnect(flask_request.sid)
-        # Если пользователь был в звонке — НЕ завершаем его мгновенно. При
-        # перезагрузке вкладки (F5) или смене сети сокет на пару секунд рвётся
-        # и тут же переустанавливается. Даём grace-окно на возврат: если за это
-        # время пользователь не вернётся (нет ни одного соединения) — только
-        # тогда убираем его из звонка. Так звонок «переживает» reload, и к нему
-        # можно вернуться через call:rejoin.
-        if user_id is not None:
-            from app.sockets.call_events import cleanup_call_on_disconnect
-            cleanup_call_on_disconnect(socketio, user_id)
+        # Звонки обрыв сокета не трогает: присутствие в комнате отслеживает
+        # LiveKit и сообщает вебхуками (participant_left / room_finished).
         logger.info("ws.disconnect", extra={"extra": {"event": "ws.disconnect"}})
 
     @socketio.on("presence:visibility")

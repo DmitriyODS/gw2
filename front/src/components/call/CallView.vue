@@ -19,38 +19,98 @@
             <span v-if="callStore.phase === 'active'" class="status-time">{{ elapsed }}</span>
           </div>
           <div class="header-right">
+            <button
+              v-if="!callStore.isMinimized && callStore.inviteLink"
+              class="header-btn link-btn"
+              :class="{ copied: linkCopied }"
+              :title="linkCopied ? 'Ссылка скопирована' : 'Скопировать ссылку на звонок'"
+              @click="copyInviteLink"
+            >
+              <span class="material-symbols-outlined">{{ linkCopied ? 'check' : 'link' }}</span>
+              <span class="link-label">{{ linkCopied ? 'Скопировано' : 'Ссылка' }}</span>
+            </button>
             <button class="header-btn" :title="callStore.isMinimized ? 'Развернуть' : 'Свернуть'" @click="toggleMin">
               <span class="material-symbols-outlined">{{ callStore.isMinimized ? 'open_in_full' : 'close_fullscreen' }}</span>
             </button>
           </div>
         </header>
 
-        <!-- Сетка участников -->
-        <div class="callview-grid" :class="gridClass">
-          <!-- Локальное превью. В свёрнутом окне его прячем, если есть
-               собеседник — там показываем именно его (а не себя). -->
-          <ParticipantTile
-            v-if="!callStore.isMinimized || !primaryRemoteId"
-            :name="'Вы'"
-            :stream="callStore.localStream"
-            :audio-enabled="callStore.audioEnabled"
-            :video-enabled="callStore.videoEnabled"
-            :is-local="true"
-            :avatar="myAvatar"
-          />
-          <!-- Удалённые участники -->
-          <ParticipantTile
-            v-for="(p, uid) in visibleRemotes"
-            :key="uid"
-            :name="p.fio"
-            :stream="p.stream"
-            :stream-tick="p.streamTick"
-            :audio-enabled="p.audio"
-            :video-enabled="p.video"
-            :avatar="avatarOf(p)"
-            :pending="!p.stream"
-            :conn-state="p.conn"
-          />
+        <div class="callview-body">
+          <!-- Сцена: либо демонстрация экрана + лента камер, либо сетка камер -->
+          <div class="callview-stage">
+            <template v-if="focusShare && !callStore.isMinimized">
+              <div class="stage-focus">
+                <ParticipantTile
+                  :key="`screen-${focusShare.identity}`"
+                  :identity="focusShare.isLocal ? null : focusShare.identity"
+                  :name="focusShare.name"
+                  source="screen"
+                  :is-local="focusShare.isLocal"
+                  :audio="true"
+                  :video="true"
+                  :tick="focusShare.tick"
+                />
+              </div>
+              <div class="stage-strip">
+                <ParticipantTile
+                  :name="myName"
+                  :is-local="true"
+                  :audio="callStore.audioEnabled"
+                  :video="callStore.videoEnabled"
+                  :avatar="myAvatar"
+                  :tick="callStore.localTick"
+                />
+                <ParticipantTile
+                  v-for="p in callStore.participantList"
+                  :key="p.identity"
+                  :identity="p.identity"
+                  :name="p.name"
+                  :audio="p.audio"
+                  :video="p.video"
+                  :avatar="avatarOf(p)"
+                  :pending="p.pending"
+                  :speaking="p.speaking"
+                  :guest="p.guest"
+                  :tick="p.tick"
+                />
+              </div>
+            </template>
+
+            <div v-else class="callview-grid" :class="gridClass">
+              <ParticipantTile
+                v-if="!callStore.isMinimized || !primaryRemote"
+                :name="myName"
+                :is-local="true"
+                :audio="callStore.audioEnabled"
+                :video="callStore.videoEnabled"
+                :avatar="myAvatar"
+                :tick="callStore.localTick"
+              />
+              <ParticipantTile
+                v-for="p in visibleRemotes"
+                :key="p.identity"
+                :identity="p.identity"
+                :name="p.name"
+                :audio="p.audio"
+                :video="p.video"
+                :avatar="avatarOf(p)"
+                :pending="p.pending"
+                :speaking="p.speaking"
+                :guest="p.guest"
+                :tick="p.tick"
+              />
+            </div>
+          </div>
+
+          <!-- Боковая панель: участники / чат -->
+          <aside v-if="callStore.sidePanel && !callStore.isMinimized" class="callview-aside">
+            <CallParticipantsPanel
+              v-if="callStore.sidePanel === 'participants'"
+              @invite="inviteOpen = true"
+              @copy-link="copyInviteLink"
+            />
+            <CallChatPanel v-else-if="callStore.sidePanel === 'chat'" />
+          </aside>
         </div>
 
         <!-- Контролы -->
@@ -64,7 +124,6 @@
             <span class="material-symbols-outlined">{{ callStore.audioEnabled ? 'mic' : 'mic_off' }}</span>
           </button>
           <button
-            v-if="callStore.media === 'video'"
             class="ctrl-btn"
             :class="{ off: !callStore.videoEnabled }"
             :title="callStore.videoEnabled ? 'Выключить камеру' : 'Включить камеру'"
@@ -73,7 +132,36 @@
             <span class="material-symbols-outlined">{{ callStore.videoEnabled ? 'videocam' : 'videocam_off' }}</span>
           </button>
           <button
-            v-if="callStore.phase === 'active'"
+            v-if="canScreenShare && !callStore.isMinimized"
+            class="ctrl-btn"
+            :class="{ on: callStore.screenEnabled }"
+            :title="callStore.screenEnabled ? 'Остановить демонстрацию' : 'Демонстрация экрана'"
+            @click="callStore.toggleScreenShare()"
+          >
+            <span class="material-symbols-outlined">{{ callStore.screenEnabled ? 'stop_screen_share' : 'screen_share' }}</span>
+          </button>
+          <button
+            v-if="!callStore.isMinimized"
+            class="ctrl-btn"
+            :class="{ on: callStore.sidePanel === 'participants' }"
+            title="Участники"
+            @click="callStore.togglePanel('participants')"
+          >
+            <span class="material-symbols-outlined">group</span>
+            <span class="ctrl-badge">{{ callStore.participantCount }}</span>
+          </button>
+          <button
+            v-if="!callStore.isMinimized"
+            class="ctrl-btn"
+            :class="{ on: callStore.sidePanel === 'chat' }"
+            title="Чат звонка"
+            @click="callStore.togglePanel('chat')"
+          >
+            <span class="material-symbols-outlined">forum</span>
+            <span v-if="callStore.chatUnread" class="ctrl-badge unread">{{ callStore.chatUnread }}</span>
+          </button>
+          <button
+            v-if="!callStore.guest && callStore.phase === 'active' && !callStore.isMinimized"
             class="ctrl-btn"
             title="Пригласить участника"
             @click="inviteOpen = true"
@@ -90,6 +178,8 @@
         </div>
 
         <div v-if="callStore.error" class="callview-error">{{ callStore.error }}</div>
+
+        <CallAudioSink />
       </div>
     </Transition>
 
@@ -107,12 +197,16 @@ import { useCallStore } from '@/stores/call.js'
 import { useAuthStore } from '@/stores/auth.js'
 import ParticipantTile from './ParticipantTile.vue'
 import InviteToCallDialog from './InviteToCallDialog.vue'
+import CallParticipantsPanel from './CallParticipantsPanel.vue'
+import CallChatPanel from './CallChatPanel.vue'
+import CallAudioSink from './CallAudioSink.vue'
 
 const callStore = useCallStore()
 const authStore = useAuthStore()
 
 const inviteOpen = ref(false)
-const participantIds = computed(() => Object.keys(callStore.remoteStreams).map(Number))
+const participantIds = computed(() =>
+  callStore.participantList.map(p => p.userId).filter(Boolean))
 
 function onInviteConfirm({ userIds }) {
   callStore.inviteToCall(userIds)
@@ -123,11 +217,18 @@ const isRinging = computed(() => callStore.phase === 'outgoing')
 
 const statusText = computed(() => {
   if (callStore.phase === 'outgoing') return 'Звоним…'
-  if (callStore.phase === 'active') return callStore.call?.kind === 'group' ? 'Групповой звонок' : 'В разговоре'
+  if (callStore.phase === 'active') {
+    return callStore.participantCount > 2 ? 'Групповой звонок' : 'В разговоре'
+  }
   return ''
 })
 
+const myName = computed(() => callStore.guest
+  ? (callStore.guestName || 'Вы')
+  : (authStore.user?.fio || 'Вы'))
+
 const myAvatar = computed(() => {
+  if (callStore.guest) return null
   const u = authStore.user
   if (!u) return null
   if (u.avatar_path) return `/uploads/${u.avatar_path}`
@@ -135,11 +236,25 @@ const myAvatar = computed(() => {
 })
 
 function avatarOf(p) {
-  if (p?.avatar_path) return `/uploads/${p.avatar_path}`
+  if (p?.avatarPath) return `/uploads/${p.avatarPath}`
+  if (p?.userId) return `/api/users/${p.userId}/identicon`
   return null
 }
 
-const numTiles = computed(() => 1 + Object.keys(callStore.remoteStreams).length)
+const canScreenShare = computed(() =>
+  !!navigator.mediaDevices?.getDisplayMedia)
+
+/* Демонстрация экрана: первый, кто шарит (локальный — приоритетно),
+   становится «сценой», камеры уезжают в ленту снизу. */
+const focusShare = computed(() => {
+  if (callStore.screenEnabled) {
+    return { identity: 'local', isLocal: true, name: myName.value, tick: callStore.localTick }
+  }
+  const p = callStore.participantList.find(x => x.screen)
+  return p ? { identity: p.identity, isLocal: false, name: p.name, tick: p.tick } : null
+})
+
+const numTiles = computed(() => 1 + callStore.participantList.length)
 const gridClass = computed(() => {
   if (callStore.isMinimized) return 'g-mini'
   if (numTiles.value <= 1) return 'g-1'
@@ -148,32 +263,48 @@ const gridClass = computed(() => {
   return 'g-many'
 })
 
-/* В свёрнутом окне показываем собеседника, а не себя: берём первого
-   удалённого участника, у которого уже есть поток (видео/аудио), иначе —
-   просто первого в списке. */
-const primaryRemoteId = computed(() => {
-  const entries = Object.entries(callStore.remoteStreams)
-  if (!entries.length) return null
-  const withStream = entries.find(([, p]) => p.stream)
-  return (withStream || entries[0])[0]
+/* В свёрнутом окне показываем собеседника, а не себя: первого активного
+   (не pending), иначе — первого в списке. */
+const primaryRemote = computed(() => {
+  const list = callStore.participantList
+  if (!list.length) return null
+  return list.find(p => !p.pending) || list[0]
 })
 
 const visibleRemotes = computed(() => {
-  if (!callStore.isMinimized) return callStore.remoteStreams
-  const id = primaryRemoteId.value
-  if (!id) return {}
-  return { [id]: callStore.remoteStreams[id] }
+  if (!callStore.isMinimized) return callStore.participantList
+  return primaryRemote.value ? [primaryRemote.value] : []
 })
+
+/* Копирование ссылки-приглашения */
+const linkCopied = ref(false)
+let copiedTimer = null
+
+async function copyInviteLink() {
+  const link = callStore.inviteLink
+  if (!link) return
+  try {
+    await navigator.clipboard.writeText(link)
+  } catch {
+    // Старый браузер/не-HTTPS: textarea-фолбэк.
+    const ta = document.createElement('textarea')
+    ta.value = link
+    document.body.appendChild(ta)
+    ta.select()
+    try { document.execCommand('copy') } catch {}
+    ta.remove()
+  }
+  linkCopied.value = true
+  clearTimeout(copiedTimer)
+  copiedTimer = setTimeout(() => { linkCopied.value = false }, 2000)
+}
 
 function toggleMin() {
   if (callStore.isMinimized) callStore.expand()
   else callStore.minimize()
 }
 
-/* ── Перетаскивание свёрнутого окна ───────────────────────────────
-   По умолчанию мини-окно прижато к правому-нижнему углу (CSS). Как только
-   пользователь потянул его за шапку — переключаемся на абсолютные left/top
-   и держим окно в пределах вьюпорта. */
+/* ── Перетаскивание свёрнутого окна ─────────────────────────────── */
 const miniPos = ref(null) // { left, top } в px, либо null = угол по CSS
 let dragging = false
 let dragOffset = { x: 0, y: 0 }
@@ -190,7 +321,6 @@ const miniStyle = computed(() => {
 
 function onMiniDragStart(e) {
   if (!callStore.isMinimized) return
-  // Клик по кнопке (свернуть/развернуть) не должен начинать перетаскивание.
   if (e.target.closest('button')) return
   const el = e.currentTarget.closest('.callview')
   if (!el) return
@@ -219,7 +349,6 @@ function onMiniDragEnd() {
   window.removeEventListener('pointerup', onMiniDragEnd)
 }
 
-// Новый звонок начинается со штатного угла — сбрасываем позицию при закрытии.
 watch(visible, (v) => { if (!v) miniPos.value = null })
 
 /* Таймер длительности звонка */
@@ -253,14 +382,12 @@ onBeforeUnmount(() => {
   stopTimer()
   stopRingback()
   onMiniDragEnd()
+  clearTimeout(copiedTimer)
 })
 
-/* Ringback tone — гудки «туу...туу...» пока звоним и собеседник не ответил.
-   Стандарт: 425 Гц, 1с звук + 4с тишина (российский тип) либо 440Гц 2с/4с
-   (US). Берём что-то в духе российской АТС: чистый тон 425Гц, длительность
-   1с, период 5с. Останавливаем как только phase != outgoing (accepted или
-   hangup). Защита от suspended AudioContext — как в IncomingCallOverlay:
-   первый жест разогревает звук. */
+/* Ringback tone — гудки «туу...туу...» пока звоним и никто не вошёл.
+   Чистый тон 425 Гц (российская АТС), 1с звук + 4с тишина. Защита от
+   suspended AudioContext — первый жест пользователя «разогревает» звук. */
 let ringCtx = null
 let ringTimer = null
 let pendingGesture = null
@@ -364,14 +491,11 @@ watch(isRinging, (v) => {
   flex-shrink: 0;
 }
 
-.callview.mini .callview-header { padding-top: 8px; }
-
 .callview.mini .callview-header {
   padding: 8px 12px;
   font-size: 12px;
 }
 
-/* Шапка свёрнутого окна — «ручка» для перетаскивания. */
 .callview-header.mini-handle {
   cursor: grab;
   touch-action: none;
@@ -409,35 +533,68 @@ watch(isRinging, (v) => {
   color: var(--color-text-dim);
 }
 
-.header-right { display: flex; gap: 4px; }
+.header-right { display: flex; gap: 4px; align-items: center; }
 
 .header-btn {
-  width: 36px;
   height: 36px;
-  border-radius: 50%;
+  min-width: 36px;
+  border-radius: 999px;
   border: 0;
   background: transparent;
   color: var(--color-text);
-  display: grid;
-  place-items: center;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
   cursor: pointer;
   transition: background 0.15s;
+  font-family: inherit;
 }
 
 .header-btn:hover { background: var(--color-surface-high); }
 .header-btn .material-symbols-outlined { font-size: 20px; }
 
-.callview.mini .header-btn { width: 28px; height: 28px; }
+.link-btn {
+  padding: 0 14px;
+  background: var(--color-secondary-container);
+  color: var(--color-on-secondary-container);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.link-btn.copied {
+  background: var(--color-success-container, var(--color-primary-container));
+  color: var(--color-on-success-container, var(--color-on-primary-container));
+}
+
+.link-label { white-space: nowrap; }
+
+.callview.mini .header-btn { width: 28px; height: 28px; min-width: 28px; }
 .callview.mini .header-btn .material-symbols-outlined { font-size: 16px; }
 
-/* Сетка */
+/* Тело: сцена + боковая панель */
+.callview-body {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+}
+
+.callview-stage {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--color-surface-low);
+}
+
+/* Сетка камер */
 .callview-grid {
   flex: 1;
   min-height: 0;
   display: grid;
   gap: 8px;
   padding: 16px;
-  background: var(--color-surface-low);
 }
 
 .callview.mini .callview-grid { padding: 6px; gap: 4px; }
@@ -447,13 +604,56 @@ watch(isRinging, (v) => {
 .g-4 { grid-template-columns: 1fr 1fr; grid-auto-rows: 1fr; }
 .g-many { grid-template-columns: repeat(3, 1fr); grid-auto-rows: 1fr; }
 
+/* Демонстрация экрана: сцена + лента камер */
+.stage-focus {
+  flex: 1;
+  min-height: 0;
+  padding: 16px 16px 8px;
+  display: flex;
+}
+
+.stage-focus > * { flex: 1; }
+
+.stage-strip {
+  display: flex;
+  gap: 8px;
+  padding: 0 16px 12px;
+  overflow-x: auto;
+  flex-shrink: 0;
+}
+
+.stage-strip > * {
+  width: 168px;
+  min-width: 168px;
+  min-height: 100px;
+  height: 100px;
+}
+
+/* Боковая панель */
+.callview-aside {
+  width: 320px;
+  flex-shrink: 0;
+  border-left: 1px solid var(--color-outline-dim);
+  background: var(--color-surface);
+  min-height: 0;
+}
+
+@media (max-width: 900px) {
+  .callview-aside {
+    position: absolute;
+    inset: 0;
+    width: auto;
+    z-index: 5;
+    border-left: 0;
+  }
+}
+
 @media (max-width: 720px) {
   .g-2, .g-4 { grid-template-columns: 1fr; }
   .g-many { grid-template-columns: 1fr 1fr; }
 }
 
-/* На мобильном свёрнутый режим поднимаем над нижней навигацией и сужаем,
-   чтобы окошко не перекрывало панель навигации и safe-area. */
+/* На мобильном свёрнутый режим поднимаем над нижней навигацией. */
 @media (max-width: 600px) {
   .callview.mini {
     inset: auto 12px calc(76px + env(safe-area-inset-bottom, 0px)) 12px;
@@ -469,8 +669,8 @@ watch(isRinging, (v) => {
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 18px;
-  padding: 20px 16px calc(20px + env(safe-area-inset-bottom, 0px));
+  gap: 14px;
+  padding: 18px 16px calc(18px + env(safe-area-inset-bottom, 0px));
   background: color-mix(in oklch, var(--color-surface) 88%, transparent);
   border-top: 1px solid var(--color-outline-dim);
   flex-shrink: 0;
@@ -482,6 +682,7 @@ watch(isRinging, (v) => {
 }
 
 .ctrl-btn {
+  position: relative;
   width: 56px;
   height: 56px;
   border-radius: 50%;
@@ -502,11 +703,37 @@ watch(isRinging, (v) => {
   color: var(--color-on-error-container);
 }
 
+.ctrl-btn.on {
+  background: var(--color-primary-container);
+  color: var(--color-on-primary-container);
+}
+
 .ctrl-btn.hangup {
   background: var(--color-error);
   color: var(--color-on-error);
   width: 64px;
   height: 64px;
+}
+
+.ctrl-badge {
+  position: absolute;
+  top: -2px;
+  right: -2px;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: 999px;
+  background: var(--color-secondary-container);
+  color: var(--color-on-secondary-container);
+  font-size: 11px;
+  font-weight: 700;
+  display: grid;
+  place-items: center;
+}
+
+.ctrl-badge.unread {
+  background: var(--color-error);
+  color: var(--color-on-error);
 }
 
 .ctrl-btn .material-symbols-outlined { font-size: 24px; }
@@ -527,6 +754,7 @@ watch(isRinging, (v) => {
   border-radius: 999px;
   font-size: 13px;
   font-weight: 600;
+  z-index: 6;
 }
 
 /* Анимация */

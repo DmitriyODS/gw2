@@ -4,6 +4,7 @@
 
 - Docker 24+ и Docker Compose v2
 - Открытый порт 80 (или 443 при HTTPS)
+- Для звонков (LiveKit): открытые порты **7881/TCP** и **7882/UDP** (`ufw allow 7881/tcp && ufw allow 7882/udp`)
 
 ---
 
@@ -15,6 +16,14 @@
 cp deploy/.env.example deploy/.env
 ```
 
+> **Можно пропустить:** `make deploy` сам запускает на сервере
+> `scripts/deploy_server.sh`, который создаёт `deploy/.env` из примера и
+> **генерирует все недостающие секреты автоматически** (существующие значения
+> никогда не перезаписывает, перед правкой делает бэкап `.env.bak.<дата>`).
+> Вручную заполнить остаётся только `YOUGILE_WEBHOOK_PUBLIC_BASE` (публичный
+> URL — его не угадать). Проверить/подготовить .env без выката:
+> `bash scripts/deploy_server.sh --env-only`.
+
 Открыть `deploy/.env` и выставить **реальные** значения:
 
 | Переменная | Что поставить |
@@ -25,6 +34,8 @@ cp deploy/.env.example deploy/.env
 | `AI_KEY_ENCRYPTION_KEY` | Fernet-ключ для шифрования AI-ключей компаний |
 | `YOUGILE_ENC_KEY` | Fernet-ключ для шифрования персональных YouGile-ключей пользователей |
 | `YOUGILE_WEBHOOK_PUBLIC_BASE` | Публичный URL приложения (например `https://gw.example.com`) — нужен для регистрации webhook'а YouGile. Без него двусторонняя синхра не подключится, но импорт/экспорт работают. |
+| `LIVEKIT_API_KEY` | Идентификатор ключа LiveKit — **обязателен**, без него compose не поднимется (deploy-скрипт сгенерирует сам) |
+| `LIVEKIT_API_SECRET` | Случайная строка ≥ 32 символа — подпись токенов звонков и вебхуков LiveKit (deploy-скрипт сгенерирует сам) |
 
 Сгенерировать случайные секреты:
 ```bash
@@ -41,7 +52,7 @@ python3 -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().
 | **Egress** на `https://ru.yougile.com:443` из app-контейнера | Все исходящие вызовы YouGile API (auth, проекты, задачи, чат карточек, регистрация webhook). |
 | **Ingress** на `<YOUGILE_WEBHOOK_PUBLIC_BASE>/api/yougile/webhook/*` снаружи (TLS!) | YouGile стучится сюда событиями `task-*`. Nginx уже проксирует `/api/*` в Flask — отдельного `location`-блока добавлять не нужно. |
 
-Что НЕ нужно: специально открывать порты на `coturn` для YG (это для звонков), отдельный route в nginx, отдельный subdomain.
+Что НЕ нужно: открывать для YG медиа-порты LiveKit (7881/7882 — это для звонков), отдельный route в nginx, отдельный subdomain.
 
 Авторизация ingress'а — через `secret`, который мы сами генерируем при включении интеграции и подставляем в URL webhook'а (`/webhook/<companyId>/<secret>`). Утечка `secret` ≡ возможность писать в чужие задачи; ключи компании это не вскрывает.
 
@@ -49,11 +60,19 @@ python3 -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().
 
 ```bash
 cd deploy
-docker compose up -d --build
+docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
 ```
 
+> **Важно про compose-файлы.** Прод-стек собирается из пары
+> `docker-compose.yml` (база) + `docker-compose.prod.yml` (оверлей: TLS,
+> certbot, обязательные секреты). Голый `docker compose up` запускать на
+> сервере **нельзя** — он автоматически подхватит dev-оверлей
+> `docker-compose.override.yml` и опубликует порты БД/Redis наружу.
+> Проще всего вообще не звать compose руками: `make deploy` с локальной
+> машины делает всё сам через `scripts/deploy_server.sh`.
+
 При первом запуске Docker автоматически:
-- Соберёт бэкенд из `back/`
+- Соберёт бэкенд из `back/` (Flask) и микросервис звонков из `back-go/calls/` (Go)
 - Соберёт фронтенд из `front/` (Node.js → Vite build → nginx)
 - Применит миграции базы данных (`flask db upgrade`)
 - Создаст первого пользователя: **логин** `admin` / **пароль** `admin`
@@ -66,31 +85,33 @@ docker compose up -d --build
 
 ## Управление
 
+С локальной машины (предпочтительно): `make logs` / `make status` /
+`make restart` / `make shell`; для микросервиса звонков — `make logs s=calls`,
+`make restart s=calls`.
+
+На самом сервере (из `deploy/`, всегда парой `-f`):
+
 ```bash
-# Статус контейнеров
-docker compose ps
+PROD="docker compose -f docker-compose.yml -f docker-compose.prod.yml"
 
-# Логи приложения
-docker compose logs -f app
-
-# Перезапуск
-docker compose restart app
-
-# Остановка (данные сохраняются)
-docker compose down
-
-# Пересобрать и перезапустить после изменений кода
-docker compose up -d --build
+$PROD ps                # статус контейнеров
+$PROD logs -f app       # логи Flask (calls / livekit / nginx — аналогично)
+$PROD restart app       # перезапуск
+$PROD down              # остановка (данные сохраняются)
+$PROD up -d --build     # пересобрать после изменений кода
 ```
 
 ---
 
 ## Обновление приложения
 
+`make deploy` с локальной машины (git push → git reset на сервере →
+`scripts/deploy_server.sh`). Вручную:
+
 ```bash
 git pull
 cd deploy
-docker compose up -d --build
+docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
 ```
 
 Миграции применяются автоматически при старте `app`.
@@ -126,15 +147,24 @@ secure=False  →  secure=True
 ## Структура портов и сетей
 
 ```
-Интернет :80
-    ↓
-nginx (фронт + реверс-прокси)
-    ├── /          → front/dist (Vue SPA)
-    ├── /api/*     → app:5000 (Flask REST)
-    ├── /socket.io → app:5000 (WebSocket)
-    └── /uploads   → volume (аватарки)
-         ↓
-    app:5000 (Flask + eventlet)
-         ├── db:5432 (PostgreSQL)
-         └── redis:6379 (Redis)
+Интернет :80/:443                        Интернет :7881/tcp :7882/udp
+    ↓                                        ↓ (медиа WebRTC, мимо nginx)
+nginx (фронт + реверс-прокси)            livekit (SFU звонков)
+    ├── /            → front/dist (Vue SPA)  ↑
+    ├── /api/calls/* → calls:8090 (Go REST)  │ сигнальный WS
+    ├── /api/*       → app:5000 (Flask REST) │
+    ├── /socket.io   → app:5000 (WebSocket)  │
+    ├── /livekit     → livekit:7880 ─────────┘
+    └── /uploads     → volume (аватарки)
+
+app:5000 (Flask + eventlet)          calls:8090/:9090 (Go, callsvc)
+    ├── db:5432 (PostgreSQL)             ├── db:5432 (PostgreSQL)
+    ├── redis:6379 (Redis)               ├── redis:6379 (publish событий)
+    └── calls:9090 (gRPC, ринг-фаза)     └── livekit:7880 (Twirp + вебхуки ←)
 ```
+
+Микросервис звонков (`calls`) наружу не публикуется: REST `/api/calls/*`
+ходит через nginx, gRPC :9090 доступен только app внутри docker-сети.
+События звонков (вебхуки LiveKit → завершение/смена статуса) callsvc
+публикует в Redis-канал `gw2:calls:events`, который слушает app и
+ретранслирует в Socket.IO.

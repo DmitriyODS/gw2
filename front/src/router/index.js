@@ -25,6 +25,9 @@ const routes = [
   },
   { path: '/groove', component: () => import('@/views/GrooveView.vue'), meta: { requiresAuth: true } },
   { path: '/tv', component: () => import('@/views/TvView.vue'), meta: { requiresAuth: true, fullscreen: true } },
+  // Ссылка-приглашение в звонок: доступна и внешним гостям без аккаунта.
+  { path: '/call/:code', component: () => import('@/views/CallJoinView.vue'),
+    meta: { public: true, fullscreen: true } },
   { path: '/', redirect: '/tasks' },
   { path: '/:pathMatch(.*)*', redirect: '/tasks' }
 ]

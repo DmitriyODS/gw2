@@ -1,0 +1,141 @@
+// Контракт микросервиса звонков (gRPC, Flask ↔ callsvc).
+//
+// Flask остаётся транспортом ринг-фазы (Socket.IO) и зовёт эти методы;
+// вся бизнес-логика, состояние и интеграция с LiveKit — в Go-сервисе.
+// Обратные уведомления (вебхуки LiveKit → call:ended и т. п.) сервис
+// публикует в Redis-канал gw2:calls:events — это не часть gRPC-контракта.
+syntax = "proto3";
+
+package calls.v1;
+
+option go_package = "github.com/DmitriyODS/gw2/back-go/calls/gen/callspb;callspb";
+
+service CallService {
+  rpc StartCall(StartCallRequest) returns (StartCallResponse);
+  rpc InviteToCall(InviteToCallRequest) returns (InviteToCallResponse);
+  rpc AcceptCall(AcceptCallRequest) returns (AcceptCallResponse);
+  rpc DeclineCall(DeclineCallRequest) returns (DeclineCallResponse);
+  rpc LeaveCall(LeaveCallRequest) returns (LeaveCallResponse);
+  rpc EndCall(EndCallRequest) returns (EndCallResponse);
+}
+
+// Бизнес-ошибка. Транспортный уровень всегда отвечает OK; отсутствие error
+// означает успех. Коды совпадают с прежними CallServiceError (BUSY,
+// NOT_INVITED, …) — фронт опирается на них в call:error.
+message Error {
+  string code = 1;
+  string message = 2;
+  int32 http_status = 3;
+}
+
+// Снапшот звонка в форме CallSchema (marshmallow) — Flask отдаёт его в
+// сокет-события как есть, без чтения БД. Пустые строки в *_at означают null.
+message Participant {
+  int64 user_id = 1;
+  string fio = 2;
+  string avatar_path = 3;
+  string role = 4; // initiator | invitee
+  string joined_at = 5; // RFC3339, "" = null
+  string left_at = 6;
+  bool declined = 7;
+}
+
+message Call {
+  int64 id = 1;
+  string kind = 2;   // p2p | group
+  string status = 3; // ringing | active | ended | missed
+  string media = 4;  // audio | video
+  string started_at = 5; // RFC3339
+  string ended_at = 6;   // "" = null
+  int64 initiator_id = 7;
+  string initiator_fio = 8;
+  int64 conversation_id = 9; // 0 = null
+  string share_code = 10;
+  optional int64 duration_sec = 11;
+  repeated Participant participants = 12;
+}
+
+message LivekitInfo {
+  string token = 1;
+  string url = 2; // клиентский URL (LIVEKIT_CLIENT_URL)
+}
+
+message StartCallRequest {
+  int64 initiator_id = 1;
+  repeated int64 invitee_ids = 2;
+  string media = 3;
+  // Парный диалог мессенджера (p2p): Flask создаёт/находит его сам и
+  // после ответа кладёт туда системную плашку звонка. 0 — нет диалога.
+  int64 conversation_id = 4;
+}
+
+message StartCallResponse {
+  Error error = 1;
+  Call call = 2;
+  LivekitInfo livekit = 3; // токен инициатора
+}
+
+message InviteToCallRequest {
+  int64 call_id = 1;
+  int64 inviter_id = 2;
+  repeated int64 invitee_ids = 3;
+}
+
+message InviteToCallResponse {
+  Error error = 1;
+  Call call = 2;
+  repeated int64 new_invitee_ids = 3;
+  // Кто сейчас в звонке (joined) — им Flask шлёт call:invited.
+  repeated int64 notify_user_ids = 4;
+}
+
+message AcceptCallRequest {
+  int64 call_id = 1;
+  int64 user_id = 2;
+}
+
+message AcceptCallResponse {
+  Error error = 1;
+  Call call = 2;
+  LivekitInfo livekit = 3;
+}
+
+message DeclineCallRequest {
+  int64 call_id = 1;
+  int64 user_id = 2;
+}
+
+message DeclineCallResponse {
+  Error error = 1;
+  Call call = 2;
+  // Звонок завершился целиком (p2p-отказ или отказался последний ожидаемый).
+  bool ended = 3;
+  // Участники + приглашённые на момент ДО отказа, без самого отказавшегося.
+  repeated int64 notify_user_ids = 4;
+}
+
+message LeaveCallRequest {
+  int64 call_id = 1;
+  int64 user_id = 2;
+}
+
+message LeaveCallResponse {
+  Error error = 1;
+  Call call = 2;
+  bool ended = 3;
+  // Кто был в звонке (joined) на момент до выхода, без самого ушедшего.
+  repeated int64 notify_user_ids = 4;
+}
+
+message EndCallRequest {
+  int64 call_id = 1;
+  int64 user_id = 2; // должен быть инициатором
+}
+
+message EndCallResponse {
+  Error error = 1;
+  Call call = 2;
+  bool ended = 3;
+  // Все участники + приглашённые (включая инициатора).
+  repeated int64 notify_user_ids = 4;
+}

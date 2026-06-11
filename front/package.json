@@ -1,6 +1,6 @@
 {
   "name": "grovework-front",
-  "version": "3.4.0",
+  "version": "3.5.0",
   "private": true,
   "type": "module",
   "scripts": {
@@ -11,6 +11,7 @@
   },
   "dependencies": {
     "@primeuix/themes": "^2.0.3",
+    "livekit-client": "^2.19.2",
     "pinia": "^3.0.4",
     "primevue": "^4.5.5",
     "socket.io-client": "^4.8.3",

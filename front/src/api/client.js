@@ -9,7 +9,7 @@ let refreshQueue = []
 // ?company_id=<выбранный в селекторе>, чтобы бэк понял scope.
 const COMPANY_SCOPED_PREFIXES = [
   '/tasks', '/units', '/departments', '/unit-types', '/stages',
-  '/stats', '/messenger', '/calls', '/users/directory', '/groove',
+  '/stats', '/messenger', '/users/directory', '/groove',
 ]
 
 function _injectCompanyParam(path, companyId) {

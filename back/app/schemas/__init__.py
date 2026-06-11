@@ -23,7 +23,6 @@ from .message import (
     ConversationSchema, MessageCreateSchema, ConversationCreateSchema,
     ForwardSchema,
 )
-from .call import CallSchema, CallStartSchema, CallParticipantBriefSchema
 
 __all__ = [
     "CompanySchema", "CompanyCreateSchema", "CompanyUpdateSchema",
@@ -43,5 +42,4 @@ __all__ = [
     "MessageSchema", "AttachmentSchema", "ConversationListItemSchema",
     "ConversationSchema", "MessageCreateSchema", "ConversationCreateSchema",
     "ForwardSchema",
-    "CallSchema", "CallStartSchema", "CallParticipantBriefSchema",
 ]
