@@ -110,13 +110,9 @@ func (s *Service) applyParticipantLeft(ctx context.Context, callID int64, identi
 	if err := s.ensureRingState(ctx, call); err != nil {
 		return err
 	}
-
-	var notify []int64
-	if ring, ok := s.ring.Snapshot(callID); ok {
-		notify = unionExcept(ring.Invited, []int64{call.InitiatorID}, 0)
-	} else {
-		notify = []int64{call.InitiatorID}
-	}
+	// Снимок ДО удаления ушедшего: он тоже должен получить call_ended
+	// (другие его вкладки/устройства).
+	ring, _ := s.ring.Snapshot(callID)
 
 	if userID := domain.UserIDFromIdentity(identity); userID > 0 {
 		s.ring.RemoveUserFromCall(callID, userID)
@@ -143,7 +139,7 @@ func (s *Service) applyParticipantLeft(ctx context.Context, callID int64, identi
 			return err
 		}
 		s.ring.EndCall(callID)
-		s.pub.CallEnded(ctx, callID, call.Status, notify)
+		s.pub.CallEnded(ctx, callID, call.Status, s.endedNotifyIDs(ctx, call, ring))
 		s.pub.CallStatusChanged(ctx, callID)
 	}
 	return nil
@@ -158,13 +154,6 @@ func (s *Service) applyRoomFinished(ctx context.Context, callID int64) error {
 	ring, _ := s.ring.EndCall(callID)
 	if call == nil {
 		return nil
-	}
-
-	var notify []int64
-	if ring != nil {
-		notify = unionExcept(ring.Invited, []int64{call.InitiatorID}, 0)
-	} else {
-		notify = []int64{call.InitiatorID}
 	}
 
 	if !call.Finished() {
@@ -197,7 +186,7 @@ func (s *Service) applyRoomFinished(ctx context.Context, callID int64) error {
 			}
 		}
 	}
-	s.pub.CallEnded(ctx, callID, call.Status, notify)
+	s.pub.CallEnded(ctx, callID, call.Status, s.endedNotifyIDs(ctx, call, ring))
 	s.pub.CallStatusChanged(ctx, callID)
 	return nil
 }

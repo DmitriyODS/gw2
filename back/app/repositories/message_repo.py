@@ -117,6 +117,21 @@ def get_or_create_pet_chat_for_user(user_id: int, company_id: int) -> Conversati
         return existing
 
 
+def has_human_message_since(conversation_id: int, since: datetime, before_id: int) -> bool:
+    """Было ли в диалоге сообщение от человека (не бота) свежее `since`,
+    не считая сообщения before_id и более новых. Для решения, нужен ли
+    автоответ техподдержки на первое за сутки обращение."""
+    row = db.session.execute(
+        db.select(Message.id).where(
+            Message.conversation_id == conversation_id,
+            Message.id < before_id,
+            Message.is_bot.is_(False),
+            Message.created_at >= since,
+        ).limit(1)
+    ).scalar_one_or_none()
+    return row is not None
+
+
 def last_messages(conversation_id: int, limit: int = 12) -> list[Message]:
     """Последние сообщения диалога в хронологическом порядке (для контекста
     AI-ответа Грувика)."""
@@ -254,11 +269,13 @@ def list_user_conversations(user_id: int) -> list[dict]:
                 .order_by(Message.id.desc())
                 .limit(1)
             ).scalar_one_or_none()
+            # Автоответ техподдержки идёт с sender_id = NULL — обычное `!=`
+            # его молча отбрасывает (трёхзначная логика SQL), как у Грувика.
             dev_unread = db.session.execute(
                 db.select(func.count(Message.id))
                 .where(
                     Message.conversation_id == dev.id,
-                    Message.sender_id != user_id,
+                    or_(Message.sender_id.is_(None), Message.sender_id != user_id),
                     Message.read_at.is_(None),
                 )
             ).scalar_one() or 0
@@ -361,6 +378,7 @@ def create_message(conversation_id: int, sender_id: Optional[int], text: Optiona
                    attachment_ids: list[int], reply_to_id: Optional[int] = None,
                    forwarded_from_user_id: Optional[int] = None,
                    kind: str = "text", task_id: Optional[int] = None,
+                   call_id: Optional[int] = None,
                    is_bot: bool = False) -> Message:
     msg = Message(
         conversation_id=conversation_id,
@@ -370,6 +388,7 @@ def create_message(conversation_id: int, sender_id: Optional[int], text: Optiona
         forwarded_from_user_id=forwarded_from_user_id,
         kind=kind,
         task_id=task_id,
+        call_id=call_id,
         is_bot=is_bot,
     )
     db.session.add(msg)

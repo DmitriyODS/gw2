@@ -1,7 +1,7 @@
 import os
 import shutil
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Optional
 
 from flask import current_app
@@ -23,6 +23,13 @@ class MessengerServiceError(Exception):
 
 # Разрешённые MIME-категории и максимальный размер берём из конфига приложения.
 _ALLOWED_MIME_PREFIXES = ("image/", "audio/", "video/", "application/", "text/")
+
+# Автоответ техподдержки на первое за сутки обращение пользователя.
+SUPPORT_AUTO_REPLY_TEXT = (
+    "Здравствуйте! Спасибо за обращение! "
+    "Ваше сообщение было направлено нашим разработчикам."
+)
+SUPPORT_AUTO_REPLY_AFTER = timedelta(hours=24)
 
 
 def open_conversation(current_user_id: int, other_user_id: int):
@@ -179,6 +186,28 @@ def send_message(conversation_id: int, sender_id: int,
     return conv, msg
 
 
+def maybe_support_auto_reply(conv, message):
+    """Автоответ техподдержки: если владелец dev-чата не общался с поддержкой
+    последние сутки (любые сообщения людей — свои или ответы админов), на его
+    сообщение бот отвечает, что обращение передано разработчикам.
+    Возвращает созданное сообщение или None. Вызывается после send_message."""
+    if not conv.is_dev_chat or message.sender_id != conv.user_a_id:
+        return None
+    since = datetime.now(timezone.utc) - SUPPORT_AUTO_REPLY_AFTER
+    if message_repo.has_human_message_since(conv.id, since=since, before_id=message.id):
+        return None
+    reply = message_repo.create_message(
+        conv.id, None, SUPPORT_AUTO_REPLY_TEXT, [],
+        kind="system_dev_reply", is_bot=True,
+    )
+    db.session.commit()
+    logger.info("message.support_auto_reply", extra={"extra": {
+        "event": "message.support_auto_reply",
+        "conversation_id": conv.id, "message_id": reply.id,
+    }})
+    return reply
+
+
 def forward_message(source_message_id: int, sender_id: int,
                     conversation_ids: list[int], user_ids: list[int]):
     """Пересылает сообщение в один или несколько диалогов. Текст и файлы
@@ -225,9 +254,14 @@ def forward_message(source_message_id: int, sender_id: int,
         for att in src.attachments:
             copied = _copy_attachment(att, sender_id)
             new_att_ids.append(copied.id)
+        # Плашка звонка пересылается как плашка: копируем kind и ссылку на
+        # звонок, получатель увидит ту же карточку со статусом/длительностью.
+        is_call = src.kind == "call"
         msg = message_repo.create_message(
             conv.id, sender_id, src.text, new_att_ids,
             forwarded_from_user_id=origin_user_id,
+            kind="call" if is_call else "text",
+            call_id=src.call_id if is_call else None,
         )
         results.append((conv, msg))
 
@@ -401,8 +435,8 @@ def toggle_message_pin(message_id: int, user_id: int):
     if conv is None:
         raise MessengerServiceError("Диалог не найден", "CONV_NOT_FOUND", 404)
     _ensure_member(conv, user_id)
-    # Системные плашки звонка закреплять незачем.
-    if msg.kind != "text":
+    # Звонки ведут себя как обычные сообщения (их тоже можно закреплять).
+    if msg.kind not in ("text", "call"):
         raise MessengerServiceError("Это сообщение нельзя закрепить", "BAD_PIN", 400)
 
     pinned = msg.pinned_at is None

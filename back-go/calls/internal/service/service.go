@@ -121,11 +121,10 @@ func (s *Service) initiatorFIO(call *domain.Call, parts []*domain.Participant) s
 }
 
 // StartCall — создать звонок: запись в БД, комната LiveKit, ринг-state.
+// Пустой список приглашённых разрешён: это «пустой звонок» — комната с одним
+// инициатором, людей зовут позже (invite из звонка или ссылка-приглашение).
 func (s *Service) StartCall(ctx context.Context, req dto.StartCallRequest) (*dto.StartCallResponse, error) {
 	inviteeIDs := dedupe(req.InviteeIDs, req.InitiatorID)
-	if len(inviteeIDs) == 0 {
-		return nil, domain.NewError("EMPTY_INVITEES", "Не указаны участники звонка", 400)
-	}
 	if len(inviteeIDs) > domain.MaxParticipants-1 {
 		return nil, domain.NewError("TOO_MANY_INVITEES",
 			fmt.Sprintf("Максимум %d участников в одном звонке", domain.MaxParticipants-1), 400)
@@ -160,7 +159,7 @@ func (s *Service) StartCall(ctx context.Context, req dto.StartCallRequest) (*dto
 	// Администратор системы (без компании) — компании первого приглашённого.
 	// Все участники должны быть из одной компании.
 	companyID := initiator.CompanyID
-	if companyID == nil {
+	if companyID == nil && len(invitees) > 0 {
 		companyID = invitees[0].CompanyID
 	}
 	if companyID == nil {
@@ -428,6 +427,10 @@ func (s *Service) DeclineCall(ctx context.Context, req dto.HangupRequest) (*dto.
 		s.ring.EndCall(req.CallID)
 		ended = true
 	}
+	if ended {
+		// Завершение должно дойти до всех, кто когда-либо был в звонке.
+		notify = s.endedNotifyIDs(ctx, call, ring)
+	}
 
 	snap, err := s.snapshot(ctx, call)
 	if err != nil {
@@ -473,6 +476,12 @@ func (s *Service) LeaveCall(ctx context.Context, req dto.HangupRequest) (*dto.Ha
 		s.ring.EndCall(req.CallID)
 		ended = true
 	}
+	if ended {
+		// Завершение должно дойти до всех, кто когда-либо был в звонке, а не
+		// только до оставшихся в ринг-state: у отвалившегося по сети участника
+		// иначе навсегда висит баннер «Вернуться» / live-плашка.
+		notify = s.endedNotifyIDs(ctx, call, ring)
+	}
 
 	snap, err := s.snapshot(ctx, call)
 	if err != nil {
@@ -487,7 +496,6 @@ func (s *Service) EndCall(ctx context.Context, req dto.HangupRequest) (*dto.Hang
 	if !ok || ring.InitiatorID != req.UserID {
 		return &dto.HangupResponse{}, nil
 	}
-	notify := unionExcept(ring.Joined, ring.Invited, 0)
 
 	call, err := s.repo.GetCall(ctx, req.CallID)
 	if err != nil {
@@ -496,6 +504,7 @@ func (s *Service) EndCall(ctx context.Context, req dto.HangupRequest) (*dto.Hang
 	if call == nil {
 		return &dto.HangupResponse{}, nil
 	}
+	notify := s.endedNotifyIDs(ctx, call, ring)
 	ts := now()
 	for _, uid := range ring.Joined {
 		part, err := s.repo.GetParticipant(ctx, req.CallID, uid)
@@ -756,6 +765,28 @@ func (s *Service) joinMemberByLink(ctx context.Context, call *domain.Call, userI
 		Call: snap, Livekit: s.livekitDTO(token),
 		Identity: domain.IdentityForUser(userID), Guest: false,
 	}, nil
+}
+
+// endedNotifyIDs — кому слать call_ended: ВСЕ участники звонка из БД (включая
+// вышедших ранее — у них мог остаться баннер «Вернуться» или live-плашка на
+// другой вкладке), объединённые с ринг-state на случай рассинхрона записи.
+// Списки из ring.Joined для этого не годятся: отвалившийся по сети участник
+// уже удалён из ринг-state и никогда не узнал бы о завершении.
+func (s *Service) endedNotifyIDs(ctx context.Context, call *domain.Call, ring *domain.RingSnapshot) []int64 {
+	ids := []int64{call.InitiatorID}
+	if ring != nil {
+		ids = unionExcept(ids, ring.Invited, 0)
+	}
+	parts, err := s.repo.ListParticipants(ctx, call.ID)
+	if err != nil {
+		s.log.Error("calls.ended_notify_failed", "call_id", call.ID, "error", err)
+		return ids
+	}
+	dbIDs := make([]int64, 0, len(parts))
+	for _, p := range parts {
+		dbIDs = append(dbIDs, p.UserID)
+	}
+	return unionExcept(ids, dbIDs, 0)
 }
 
 // finalize — закрыть звонок в БД и погасить комнату LiveKit (выкидывает

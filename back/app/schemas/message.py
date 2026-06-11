@@ -32,6 +32,8 @@ class ReplyPreviewSchema(Schema):
     sender_fio = fields.Method("get_sender_fio", dump_only=True)
     text = fields.Method("get_text", dump_only=True, allow_none=True)
     has_attachments = fields.Method("get_has_att", dump_only=True)
+    # Для цитат на плашку звонка (kind='call') фронт показывает «Звонок».
+    kind = fields.Str(dump_only=True)
 
     def get_sender_fio(self, obj):
         return obj.sender.fio if obj.sender else None

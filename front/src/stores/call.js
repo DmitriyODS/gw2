@@ -249,6 +249,13 @@ export const useCallStore = defineStore('call', {
     async handleStarted({ call, livekit }) {
       if (this.phase !== 'outgoing') return
       this.call = call
+      // Пустой звонок (без приглашённых) сразу активен — дозваниваться некому,
+      // людей зовут уже из звонка (person_add / ссылка-приглашение).
+      const hasInvitees = (call?.participants || []).some(p => p.role === 'invitee')
+      if (!hasInvitees) {
+        this._clearOutgoingTimeout()
+        this.phase = 'active'
+      }
       this.resyncParticipants() // плейсхолдеры приглашённых
       await this._connectRoom(livekit)
     },
@@ -359,7 +366,13 @@ export const useCallStore = defineStore('call', {
         }
         return
       }
-      if (live && !this.rejoinCall) {
+      if (!live) {
+        // Сервер не видит за мной живого звонка — баннер «Вернуться» устарел
+        // (call:ended мог потеряться, пока не было соединения).
+        this.rejoinCall = null
+        return
+      }
+      if (this.rejoinCall?.id !== live.id) {
         this.rejoinCall = live
       }
     },

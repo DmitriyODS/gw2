@@ -59,9 +59,12 @@ def emit_call_system_message_update(socketio: SocketIO, call_id: int) -> None:
         call = db.session.get(Call, call_id)
         if not call or not call.conversation_id:
             return
+        # Фильтр по диалогу звонка обязателен: пересланные плашки ссылаются
+        # на тот же call_id, но живут в других диалогах.
         msg = db.session.execute(
             db.select(Message).where(
                 Message.call_id == call_id, Message.kind == "call",
+                Message.conversation_id == call.conversation_id,
             ).order_by(Message.id.desc()).limit(1)
         ).scalar_one_or_none()
         if not msg:
@@ -234,7 +237,7 @@ def register_call_events(socketio: SocketIO) -> None:
             socketio.emit("call:participant-declined", payload, room=f"user_{uid}")
         if resp.ended:
             ended_payload = {"call_id": call_id, "status": resp.call.status}
-            for uid in (*targets, me):
+            for uid in {*targets, me}:
                 socketio.emit("call:ended", ended_payload, room=f"user_{uid}")
         emit_call_system_message_update(socketio, call_id)
 
@@ -261,7 +264,7 @@ def register_call_events(socketio: SocketIO) -> None:
 
         if resp.ended:
             ended_payload = {"call_id": call_id, "status": resp.call.status}
-            for uid in (*resp.notify_user_ids, me):
+            for uid in {*resp.notify_user_ids, me}:
                 socketio.emit("call:ended", ended_payload, room=f"user_{uid}")
         emit_call_system_message_update(socketio, call_id)
 

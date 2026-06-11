@@ -80,6 +80,9 @@ const items = computed(() => results.value)
 const preview = computed(() => {
   const m = props.message
   if (!m) return ''
+  if (m.kind === 'call') {
+    return m.call?.media === 'audio' ? '📞 Аудиозвонок' : '📹 Видеозвонок'
+  }
   if (m.text) return m.text.length > 80 ? m.text.slice(0, 80) + '…' : m.text
   if (m.attachments?.length) return 'Вложение'
   return 'Сообщение'

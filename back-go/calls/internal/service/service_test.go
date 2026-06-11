@@ -252,9 +252,6 @@ func TestStartCallValidation(t *testing.T) {
 	svc, _, _, _ := newTestService()
 	ctx := context.Background()
 
-	if _, err := svc.StartCall(ctx, dto.StartCallRequest{InitiatorID: 10}); domainCode(err) != "EMPTY_INVITEES" {
-		t.Errorf("пустой список: %v", err)
-	}
 	if _, err := svc.StartCall(ctx, dto.StartCallRequest{
 		InitiatorID: 10, InviteeIDs: []int64{99},
 	}); domainCode(err) != "CROSS_COMPANY" {
@@ -273,6 +270,57 @@ func TestStartCallValidation(t *testing.T) {
 		InitiatorID: 10, InviteeIDs: []int64{30},
 	}); domainCode(err) != "BUSY" {
 		t.Errorf("занятый инициатор: %v", err)
+	}
+}
+
+func TestStartEmptyCall(t *testing.T) {
+	// «Пустой звонок»: комната с одним инициатором, без приглашённых —
+	// людей зовут уже из звонка (invite / ссылка).
+	svc, repo, media, _ := newTestService()
+	ctx := context.Background()
+
+	resp, err := svc.StartCall(ctx, dto.StartCallRequest{InitiatorID: 10})
+	if err != nil {
+		t.Fatal(err)
+	}
+	c := resp.Call
+	if c.Kind != domain.KindGroup || c.Status != domain.StatusRinging {
+		t.Errorf("ожидался group+ringing, получено %s/%s", c.Kind, c.Status)
+	}
+	if len(c.Participants) != 1 || c.Participants[0].UserID != 10 {
+		t.Errorf("в звонке должен быть только инициатор: %+v", c.Participants)
+	}
+	if resp.Livekit.Token == "" {
+		t.Error("нет LiveKit-токена инициатора")
+	}
+	if !svc.ring.IsUserBusy(10) {
+		t.Error("инициатор должен быть занят")
+	}
+	if len(media.created) != 1 {
+		t.Error("комната не создана")
+	}
+
+	// Пригласить коллегу можно уже из звонка.
+	inv, err := svc.InviteToCall(ctx, dto.InviteRequest{
+		CallID: c.ID, InviterID: 10, InviteeIDs: []int64{20},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(inv.NewInviteeIDs) != 1 || inv.NewInviteeIDs[0] != 20 {
+		t.Errorf("приглашение не прошло: %v", inv.NewInviteeIDs)
+	}
+
+	// Инициатор положил трубку — сам он освобождается сразу (звонок может
+	// ещё ждать приглашённого, его финализируют decline или вебхуки LiveKit).
+	if _, err := svc.LeaveCall(ctx, dto.HangupRequest{CallID: c.ID, UserID: 10}); err != nil {
+		t.Fatal(err)
+	}
+	if svc.ring.IsUserBusy(10) {
+		t.Error("после выхода инициатор должен освободиться")
+	}
+	if stored, _ := repo.GetCall(ctx, c.ID); stored == nil {
+		t.Error("запись звонка должна остаться в истории")
 	}
 }
 
@@ -337,8 +385,10 @@ func TestDeclineP2PBecomesMissed(t *testing.T) {
 	if !resp.Ended || resp.Call.Status != domain.StatusMissed {
 		t.Errorf("ожидался missed+ended, получено %s ended=%v", resp.Call.Status, resp.Ended)
 	}
-	if len(resp.NotifyUserIDs) != 1 || resp.NotifyUserIDs[0] != 10 {
-		t.Errorf("notify = %v, ожидался [10]", resp.NotifyUserIDs)
+	// Завершение уведомляет всех участников звонка, включая отклонившего
+	// (его другие вкладки тоже должны сбросить состояние).
+	if !domain.Has(resp.NotifyUserIDs, 10) || !domain.Has(resp.NotifyUserIDs, 20) {
+		t.Errorf("notify = %v, ожидались оба участника [10 20]", resp.NotifyUserIDs)
 	}
 	if len(media.deleted) != 1 {
 		t.Error("комната должна быть погашена")

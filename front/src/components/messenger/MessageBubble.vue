@@ -1,41 +1,5 @@
 <template>
-  <!-- Системное сообщение о звонке: плашка по центру с иконкой, статусом и длительностью. -->
-  <div v-if="message.kind === 'call'" class="call-row" :data-msg-id="message.id">
-    <div
-      class="call-pill"
-      :class="[callClass, { clickable: isLive }]"
-      :role="isLive ? 'button' : null"
-      :tabindex="isLive ? 0 : null"
-      @click="isLive && $emit('join-call', message.call)"
-      @keydown.enter="isLive && $emit('join-call', message.call)"
-    >
-      <div class="call-icon">
-        <span class="material-symbols-outlined">{{ callIcon }}</span>
-      </div>
-      <div class="call-body">
-        <div class="call-title">{{ callTitle }}</div>
-        <div class="call-sub">
-          <span>{{ formatTime(message.created_at) }}</span>
-          <template v-if="callDurationText">
-            <span class="dot">·</span>
-            <span>{{ callDurationText }}</span>
-          </template>
-        </div>
-      </div>
-      <button
-        v-if="isLive"
-        class="call-join"
-        :title="joinLabel"
-        @click.stop="$emit('join-call', message.call)"
-      >
-        <span class="material-symbols-outlined">{{ joinIcon }}</span>
-        <span class="call-join-label">{{ joinLabel }}</span>
-      </button>
-    </div>
-  </div>
-
   <div
-    v-else
     class="msg-row"
     :class="{ outgoing: isMine, swiping: swipeDx > 0 }"
     :data-msg-id="message.id"
@@ -101,6 +65,34 @@
         <span class="material-symbols-outlined">task_alt</span>
         Задача удалена
       </div>
+      <!-- Звонок — обычное сообщение с карточкой звонка внутри пузыря:
+           переслать/удалить/ответить/закрепить работает как у текста. -->
+      <div
+        v-if="message.kind === 'call'"
+        class="call-msg"
+        :class="[callClass, { clickable: isLive }]"
+        :role="isLive ? 'button' : null"
+        :tabindex="isLive ? 0 : null"
+        @click="isLive && $emit('join-call', message.call)"
+        @keydown.enter="isLive && $emit('join-call', message.call)"
+      >
+        <div class="call-icon">
+          <span class="material-symbols-outlined">{{ callIcon }}</span>
+        </div>
+        <div class="call-body">
+          <div class="call-title">{{ callTitle }}</div>
+          <div v-if="callDurationText" class="call-sub">{{ callDurationText }}</div>
+        </div>
+        <button
+          v-if="isLive"
+          class="call-join"
+          :title="joinLabel"
+          @click.stop="$emit('join-call', message.call)"
+        >
+          <span class="material-symbols-outlined">{{ joinIcon }}</span>
+          <span class="call-join-label">{{ joinLabel }}</span>
+        </button>
+      </div>
       <MarkdownView v-if="message.text" class="msg-text" :source="message.text" />
       <div class="msg-meta">
         <span v-if="senderName" class="msg-sender">{{ senderName }}</span>
@@ -153,6 +145,7 @@ function formatTime(iso) {
 }
 
 function quotePreview(reply) {
+  if (reply.kind === 'call') return '📞 Звонок'
   if (reply.text) return reply.text
   if (reply.has_attachments) return 'Вложение'
   return 'Сообщение'
@@ -569,50 +562,23 @@ const joinLabel = computed(() => props.isMine ? 'Вернуться' : 'Прис
   .msg-bubble { max-width: 85%; }
 }
 
-/* ─── Системная плашка звонка ───────────────────────────────────── */
-.call-row {
+/* ─── Карточка звонка внутри обычного пузыря ───────────────────── */
+.call-msg {
   display: flex;
-  justify-content: center;
-  margin: 6px 0;
-}
-
-.call-pill {
-  display: inline-flex;
   align-items: center;
-  gap: 12px;
-  padding: 10px 14px;
-  background: var(--color-surface-low);
-  border: 1px solid var(--color-outline-dim);
-  border-radius: var(--radius-lg);
-  max-width: min(440px, 92%);
-  width: 100%;
+  gap: 10px;
+  padding: 2px 0;
+  min-width: 190px;
 }
 
-.call-pill.live {
-  background: var(--color-primary-container);
-  border-color: var(--color-primary);
-  color: var(--color-on-primary-container);
-}
-
-.call-pill.clickable {
+.call-msg.clickable {
   cursor: pointer;
-  transition: transform 0.12s, box-shadow 0.15s;
+  border-radius: var(--radius-sm);
 }
 
-.call-pill.clickable:hover {
-  transform: translateY(-1px);
-  box-shadow: var(--shadow-sm);
-}
-
-.call-pill.clickable:focus-visible {
+.call-msg.clickable:focus-visible {
   outline: 2px solid var(--color-primary);
   outline-offset: 2px;
-}
-
-.call-pill.missed {
-  background: var(--color-error-container);
-  border-color: color-mix(in oklch, var(--color-error) 50%, transparent);
-  color: var(--color-on-error-container);
 }
 
 .call-icon {
@@ -626,15 +592,21 @@ const joinLabel = computed(() => props.isMine ? 'Вернуться' : 'Прис
   flex-shrink: 0;
 }
 
-.call-pill.live .call-icon {
+.call-msg.live .call-icon {
   background: var(--color-primary);
   color: var(--color-on-primary);
   animation: callPulse 1.6s ease-in-out infinite;
 }
 
-.call-pill.missed .call-icon {
+.call-msg.missed .call-icon {
   background: var(--color-error);
   color: var(--color-on-error);
+}
+
+.call-msg.missed .call-title { color: var(--color-error); }
+
+.msg-row.outgoing .call-msg.missed .call-title {
+  color: var(--color-on-primary-container);
 }
 
 .call-icon .material-symbols-outlined { font-size: 20px; }
@@ -664,12 +636,7 @@ const joinLabel = computed(() => props.isMine ? 'Вернуться' : 'Прис
 .call-sub {
   font-size: 12px;
   color: color-mix(in oklch, currentColor 70%, transparent);
-  display: flex;
-  align-items: center;
-  gap: 6px;
 }
-
-.call-sub .dot { opacity: 0.6; }
 
 .call-join {
   display: inline-flex;

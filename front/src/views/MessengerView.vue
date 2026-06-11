@@ -10,6 +10,7 @@
       :support-unread="supportTabUnread"
       @select="selectConversation"
       @new-chat="newChatOpen = true"
+      @new-call="startEmptyCall"
       @toggle-pin="onTogglePin"
       @delete="askDeleteConversation"
       @change-tab="onChangeTab"
@@ -174,7 +175,7 @@
           <MessageBubble
             v-for="m in messenger.activeMessages"
             :key="m.id"
-            v-memo="[m.id, m.updated_at, m.read_at, m.pinned_at, authStore.user?.id, active?.is_dev_chat]"
+            v-memo="[m.id, m.read_at, m.pinned_at, m.call?.status, authStore.user?.id, active?.is_dev_chat]"
             :message="m"
             :is-mine="m.sender_id === authStore.user?.id"
             :sender-name="senderNameFor(m)"
@@ -247,9 +248,9 @@
       :y="ctxMenu.y"
       :is-pinned="!!ctxMenu.message?.pinned_at"
       :show-pin="!active?.is_dev_chat && !active?.is_pet_chat"
-      :show-forward="ctxMenu.message?.kind !== 'call' && !active?.is_dev_chat && !active?.is_pet_chat"
+      :show-forward="!active?.is_dev_chat && !active?.is_pet_chat"
       :show-copy="!!ctxMenu.message?.text"
-      :show-delete="ctxMenu.message?.kind !== 'call'"
+      :show-delete="true"
       @close="ctxMenu.visible = false"
       @action="onCtxAction"
     />
@@ -297,6 +298,14 @@ async function startCall(media) {
 
 async function onJoinCall(callInfo) {
   await callStore.joinExistingCall(callInfo)
+}
+
+/* «Пустой звонок»: комната с одним собой — коллег зовут уже из звонка
+   (кнопка person_add или ссылка-приглашение). */
+async function startEmptyCall() {
+  try {
+    await callStore.startCall({ userIds: [], media: 'video' })
+  } catch {/* ошибка отображена в store.error */}
 }
 const authStore = useAuthStore()
 const { isMobile } = useBreakpoint()
@@ -398,6 +407,7 @@ function startReply(message) {
       ? 'Вы'
       : (active.value?.other_user?.fio || ''),
     text: message.text,
+    kind: message.kind,
     has_attachments: !!message.attachments?.length,
   }
 }
@@ -489,6 +499,9 @@ const currentPinned = computed(() => pinnedMessages.value[pinnedIndex.value] || 
 const pinnedPreview = computed(() => {
   const m = currentPinned.value
   if (!m) return ''
+  if (m.kind === 'call') {
+    return m.call?.media === 'audio' ? '📞 Аудиозвонок' : '📹 Видеозвонок'
+  }
   if (m.text) return m.text
   if (m.attachments?.length) return 'Вложение'
   return 'Сообщение'

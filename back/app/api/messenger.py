@@ -184,8 +184,20 @@ def post_message(conversation_id: int):
     if conv.is_dev_chat:
         # Спец-чат компании: уведомляем всех сотрудников компании и всех
         # Администраторов системы (личные комнаты `user_{id}`).
-        for uid in _dev_chat_user_ids(conv):
+        dev_uids = _dev_chat_user_ids(conv)
+        for uid in dev_uids:
             socketio.emit("message:new", payload_event, room=f"user_{uid}")
+        # Первое за сутки обращение пользователя — бот отвечает, что
+        # сообщение передано разработчикам.
+        auto = messenger_service.maybe_support_auto_reply(conv, msg)
+        if auto is not None:
+            auto_event = {
+                "conversation_id": conv.id,
+                "message": _msg.dump(auto),
+                "from_user_id": None,
+            }
+            for uid in dev_uids:
+                socketio.emit("message:new", auto_event, room=f"user_{uid}")
     elif conv.is_pet_chat:
         # Чат с Грувиком видит только владелец: эхо в его вкладки. Ответ
         # питомца придёт отдельным message:new из groove_ai_service.

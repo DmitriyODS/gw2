@@ -3,6 +3,14 @@
     <div class="conv-list-header">
       <h2>{{ headerTitle }}</h2>
       <div class="header-actions">
+        <button
+          v-if="tab !== 'support'"
+          class="new-btn new-btn--call"
+          title="Новый звонок — комната, куда можно позвать коллег"
+          @click="$emit('new-call')"
+        >
+          <span class="material-symbols-outlined">video_call</span>
+        </button>
         <button v-if="tab !== 'support'" class="new-btn" @click="$emit('new-chat')" title="Новый чат">
           <span class="material-symbols-outlined">edit_square</span>
         </button>
@@ -150,7 +158,7 @@ const props = defineProps({
   supportUnread: { type: Number, default: 0 },
 })
 
-const emit = defineEmits(['select', 'new-chat', 'toggle-pin', 'delete', 'change-tab'])
+const emit = defineEmits(['select', 'new-chat', 'new-call', 'toggle-pin', 'delete', 'change-tab'])
 
 const filter = ref('')
 
@@ -291,9 +299,11 @@ function formatTime(iso) {
 
 .header-actions { display: flex; align-items: center; gap: 4px; }
 
-/* На мобиле создание чата делает FAB — дублирующая кнопка в шапке не нужна. */
+/* На мобиле создание чата делает FAB — дублирующая кнопка в шапке не нужна.
+   Кнопка «Новый звонок» остаётся: у неё FAB-дубля нет. */
 @media (max-width: 768px) {
   .new-btn { display: none; }
+  .new-btn--call { display: block; }
 }
 
 /* Обёртка для SegmentedTabs «Чаты / Техподдержка». */

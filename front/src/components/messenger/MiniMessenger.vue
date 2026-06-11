@@ -155,9 +155,9 @@
       :y="ctxMenu.y"
       :is-pinned="!!ctxMenu.message?.pinned_at"
       :show-pin="false"
-      :show-forward="ctxMenu.message?.kind !== 'call' && !threadConv?.is_dev_chat && !threadConv?.is_pet_chat"
+      :show-forward="!threadConv?.is_dev_chat && !threadConv?.is_pet_chat"
       :show-copy="!!ctxMenu.message?.text"
-      :show-delete="ctxMenu.message?.kind !== 'call'"
+      :show-delete="true"
       @close="ctxMenu.visible = false"
       @action="onCtxAction"
     />
@@ -300,6 +300,7 @@ function startReply(message) {
       ? 'Вы'
       : (threadConv.value?.other_user?.fio || ''),
     text: message.text,
+    kind: message.kind,
     has_attachments: !!message.attachments?.length,
   }
 }
