@@ -133,10 +133,12 @@ else
 fi
 
 # ── 5. Health-чеки ───────────────────────────────────────────────
+# curl -kL: прод-nginx отвечает на http 301-редиректом на https с
+# self-issued для localhost сертификатом — идём за редиректом без проверки.
 log "Жду готовности API (миграции на старте могут занять время)"
 api_code=000
 for _ in $(seq 1 30); do
-  api_code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 3 http://localhost/apispec.json || true)
+  api_code=$(curl -skL -o /dev/null -w '%{http_code}' --max-time 5 http://localhost/apispec.json || true)
   [ "$api_code" = "200" ] && break
   sleep 2
 done
@@ -159,7 +161,7 @@ else
   warn "app не достучался до gRPC calls:9090 — ринг-фаза звонков не работает"
 fi
 
-lk_code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 5 http://localhost/livekit/ || true)
+lk_code=$(curl -skL -o /dev/null -w '%{http_code}' --max-time 5 http://localhost/livekit/ || true)
 if [ "$lk_code" = "200" ]; then
   ok "LiveKit отвечает через nginx (/livekit)"
 else
