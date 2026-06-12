@@ -48,6 +48,23 @@ const PRESET_LABELS = {
   forest:  'Лесная',
 }
 
+/* ── Нормализация hex из непроверенных источников ────────────────
+   Темы приходят не только из <input type="color">: импорт JSON и старые
+   записи gw_custom_themes могут содержать #rgb, #rrggbbaa, мусорные строки
+   или undefined. hexToOklch на таком входе возвращает NaN — он попадает в
+   --ref-*-h на корне, ВСЕ oklch-токены становятся невалидными, и поверхности
+   (модалки, выпадашки) отрисовываются прозрачными при работающем скриме.
+   Поэтому каждый цвет проходит через normalizeHex; кривое значение → null. */
+function normalizeHex(value) {
+  if (typeof value !== 'string') return null
+  const v = value.trim().toLowerCase()
+  const short = /^#([0-9a-f]{3})$/.exec(v)
+  if (short) return '#' + [...short[1]].map(ch => ch + ch).join('')
+  const full = /^#([0-9a-f]{6})([0-9a-f]{2})?$/.exec(v)
+  if (full) return '#' + full[1]
+  return null
+}
+
 /* ── oklch conversion ────────────────────────────────────────────
    Converts a CSS hex colour to { L, C, H } in the OKLCH colour space.
    Algorithm from Björn Ottosson — https://bottosson.github.io/posts/oklab/ */
@@ -86,7 +103,9 @@ function hexToOklch(hex) {
 const NEUTRAL_C_THRESHOLD = 0.015
 
 function applyPaletteKey(root, name, hex) {
-  const { L, C, H } = hexToOklch(hex)
+  // Кривой/отсутствующий цвет → акцент классической темы, а не NaN в CSS.
+  const safeHex = normalizeHex(hex) || PRESETS.classic[name]
+  const { L, C, H } = hexToOklch(safeHex)
   const c = C < NEUTRAL_C_THRESHOLD ? C : Math.min(Math.max(C, 0.06), 0.33)
   const l = Math.min(Math.max(L, 0.30), 0.92)
   root.style.setProperty(`--ref-${name}-h`, H.toFixed(1))
@@ -105,7 +124,15 @@ function applyPaletteKey(root, name, hex) {
    множитель 1 (текущий едва заметный тон); чем сочнее выбранный цвет —
    тем заметнее цветная гамма фонов. Кламп до 4, чтобы фон не «кричал». */
 function applyNeutral(root, hex) {
-  const { C, H } = hexToOklch(hex)
+  const safeHex = normalizeHex(hex)
+  // Нет валидного нейтрального — сбрасываем переопределение: фон следует
+  // за основным цветом с дефолтным тоном (поведение тем без neutral).
+  if (!safeHex) {
+    root.style.removeProperty('--ref-neutral-h')
+    root.style.removeProperty('--ref-neutral-c')
+    return
+  }
+  const { C, H } = hexToOklch(safeHex)
   const mult = Math.min(Math.max(C / 0.012, 0), 4)
   root.style.setProperty('--ref-neutral-h', H.toFixed(1))
   root.style.setProperty('--ref-neutral-c', mult.toFixed(3))
@@ -184,6 +211,10 @@ export const useThemeStore = defineStore('theme', () => {
   function applyDark() {
     dark.value = mode.value === 'system' ? !!systemDarkMq?.matches : mode.value === 'dark'
     document.documentElement.setAttribute('data-dark', dark.value)
+    // Сообщаем браузеру фактическую схему: красит родные контролы/скроллбары
+    // и отключает агрессивное «автозатемнение» (Android auto-dark и т.п.),
+    // которое перекрашивает оверлеи в нечитаемые цвета.
+    document.documentElement.style.colorScheme = dark.value ? 'dark' : 'light'
   }
 
   function setMode(m) {
@@ -202,17 +233,10 @@ export const useThemeStore = defineStore('theme', () => {
 
   function applyVars(vars) {
     const root = document.documentElement
-    applyPaletteKey(root, 'primary',   vars.primary)
-    applyPaletteKey(root, 'secondary', vars.secondary)
-    applyPaletteKey(root, 'tertiary',  vars.tertiary)
-    // Нейтральная гамма фона. Без явного цвета — сбрасываем переопределение,
-    // тогда фон следует за основным цветом с дефолтным тоном (как раньше).
-    if (vars.neutral) {
-      applyNeutral(root, vars.neutral)
-    } else {
-      root.style.removeProperty('--ref-neutral-h')
-      root.style.removeProperty('--ref-neutral-c')
-    }
+    applyPaletteKey(root, 'primary',   vars?.primary)
+    applyPaletteKey(root, 'secondary', vars?.secondary)
+    applyPaletteKey(root, 'tertiary',  vars?.tertiary)
+    applyNeutral(root, vars?.neutral)
   }
 
   function applyTheme(name) {
@@ -246,13 +270,16 @@ export const useThemeStore = defineStore('theme', () => {
   function importTheme(json) {
     const parsed = typeof json === 'string' ? JSON.parse(json) : json
     const { name, vars } = parsed
-    /* Accept both old format (has bg/surface/…) and new format (primary/secondary/tertiary[/neutral]) */
+    if (!name || typeof vars !== 'object' || vars === null) throw new Error('bad theme format')
+    /* Accept both old format (has bg/surface/…) and new format (primary/secondary/tertiary[/neutral]).
+       Цвета из файла не доверенные — нормализуем, кривые заменяем дефолтами. */
     const normalised = {
-      primary:   vars.primary   || '#e040fb',
-      secondary: vars.secondary || vars.accent || '#00bfa5',
-      tertiary:  vars.tertiary  || '#3d6ce7',
+      primary:   normalizeHex(vars.primary) || '#e040fb',
+      secondary: normalizeHex(vars.secondary) || normalizeHex(vars.accent) || '#00bfa5',
+      tertiary:  normalizeHex(vars.tertiary) || '#3d6ce7',
     }
-    if (vars.neutral) normalised.neutral = vars.neutral
+    const neutral = normalizeHex(vars.neutral)
+    if (neutral) normalised.neutral = neutral
     saveCustomTheme(name, normalised)
     applyTheme(name)
   }

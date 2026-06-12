@@ -3,6 +3,11 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="color-scheme" content="light dark" />
+    <!-- У приложения есть собственная тёмная тема: просим Dark Reader и
+         подобные расширения не перекрашивать страницу — их эвристики ломают
+         oklch-переменные (прозрачные модалки, белые панели). -->
+    <meta name="darkreader-lock" />
     <link rel="icon" type="image/svg+xml" href="/logo.svg" />
     <title>Groove Work</title>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
