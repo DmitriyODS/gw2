@@ -8,7 +8,7 @@ syntax = "proto3";
 
 package calls.v1;
 
-option go_package = "github.com/DmitriyODS/gw2/back-go/calls/gen/callspb;callspb";
+option go_package = "github.com/DmitriyODS/gw2/back-go/pkg/gen/callspb;callspb";
 
 service CallService {
   rpc StartCall(StartCallRequest) returns (StartCallResponse);

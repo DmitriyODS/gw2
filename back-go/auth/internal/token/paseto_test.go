@@ -4,6 +4,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/DmitriyODS/gw2/back-go/pkg/pasetoauth"
 )
 
 const (
@@ -36,17 +38,17 @@ func TestAccessTokenRoundTrip(t *testing.T) {
 	}
 
 	v := VerifierFromIssuer(iss)
-	userID, forceChange := v.ParseAccess(raw)
-	if userID != 42 || forceChange {
-		t.Fatalf("ParseAccess: got (%d, %v), want (42, false)", userID, forceChange)
+	claims := v.ParseAccess(raw)
+	if claims.UserID != 42 || claims.ForceChange {
+		t.Fatalf("ParseAccess: got (%d, %v), want (42, false)", claims.UserID, claims.ForceChange)
 	}
 }
 
 func TestAccessTokenForceChange(t *testing.T) {
 	iss := newTestIssuer(t, time.Minute)
 	raw, _ := iss.AccessToken(Claims{UserID: 5, ForceChange: true, RoleLevel: 1})
-	if id, fc := VerifierFromIssuer(iss).ParseAccess(raw); id != 5 || !fc {
-		t.Fatalf("ожидался force_change=true, got (%d, %v)", id, fc)
+	if c := VerifierFromIssuer(iss).ParseAccess(raw); c.UserID != 5 || !c.ForceChange {
+		t.Fatalf("ожидался force_change=true, got (%d, %v)", c.UserID, c.ForceChange)
 	}
 }
 
@@ -54,15 +56,15 @@ func TestAccessTokenTampered(t *testing.T) {
 	iss := newTestIssuer(t, time.Minute)
 	raw, _ := iss.AccessToken(Claims{UserID: 1, RoleLevel: 1})
 	bad := raw[:len(raw)-3] + "abc"
-	if id, _ := VerifierFromIssuer(iss).ParseAccess(bad); id != 0 {
-		t.Fatalf("повреждённый токен принят, user_id=%d", id)
+	if c := VerifierFromIssuer(iss).ParseAccess(bad); c.UserID != 0 {
+		t.Fatalf("повреждённый токен принят, user_id=%d", c.UserID)
 	}
 }
 
 func TestAccessTokenExpired(t *testing.T) {
 	iss := newTestIssuer(t, -time.Minute)
 	raw, _ := iss.AccessToken(Claims{UserID: 1, RoleLevel: 1})
-	if id, _ := VerifierFromIssuer(iss).ParseAccess(raw); id != 0 {
+	if c := VerifierFromIssuer(iss).ParseAccess(raw); c.UserID != 0 {
 		t.Fatal("просроченный токен принят")
 	}
 }
@@ -77,7 +79,7 @@ func TestRefreshIsNotAccess(t *testing.T) {
 		t.Fatalf("ожидался v4.local-токен, получено: %s", refresh[:20])
 	}
 	// Refresh не проходит как access…
-	if id, _ := VerifierFromIssuer(iss).ParseAccess(refresh); id != 0 {
+	if c := VerifierFromIssuer(iss).ParseAccess(refresh); c.UserID != 0 {
 		t.Fatal("refresh-токен прошёл проверку access")
 	}
 	// …а access не проходит как refresh.
@@ -94,12 +96,12 @@ func TestRefreshIsNotAccess(t *testing.T) {
 
 func TestVerifierFromHex(t *testing.T) {
 	iss := newTestIssuer(t, time.Minute)
-	v, err := NewVerifier(iss.PublicKeyHex())
+	v, err := pasetoauth.NewVerifier(iss.PublicKeyHex())
 	if err != nil {
 		t.Fatalf("NewVerifier: %v", err)
 	}
 	raw, _ := iss.AccessToken(Claims{UserID: 9, RoleLevel: 2})
-	if id, _ := v.ParseAccess(raw); id != 9 {
-		t.Fatalf("проверка по hex-ключу не прошла, user_id=%d", id)
+	if c := v.ParseAccess(raw); c.UserID != 9 {
+		t.Fatalf("проверка по hex-ключу не прошла, user_id=%d", c.UserID)
 	}
 }

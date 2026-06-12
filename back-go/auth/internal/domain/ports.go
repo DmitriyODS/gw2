@@ -19,6 +19,8 @@ type UserRepository interface {
 	// UpdateFields — точечное обновление колонок пользователя.
 	UpdateFields(ctx context.Context, id int64, fields map[string]any) error
 	GetRole(ctx context.Context, roleID int64) (*Role, error)
+	// ListRoles — фиксированные роли по возрастанию уровня (GET /api/roles).
+	ListRoles(ctx context.Context) ([]*Role, error)
 	// CountVisibleByLevel — видимые пользователи с уровнем роли (защита
 	// «последнего Администратора системы»).
 	CountVisibleByLevel(ctx context.Context, level int) (int, error)
@@ -45,4 +47,34 @@ type AvatarStorage interface {
 	// путь вида avatars/<имя>.<ext>.
 	Save(fileBytes []byte) (string, error)
 	Delete(avatarPath string)
+	// ListFiles / WriteFile — обход и восстановление каталога avatars/
+	// для резервной копии (export/import ZIP).
+	ListFiles() ([]AvatarFile, error)
+	WriteFile(name string, data []byte) error
+}
+
+// CompanyRepository — персистентность компаний (таблица companies; схему
+// по-прежнему ведёт Alembic на стороне Flask).
+type CompanyRepository interface {
+	// ListCompanies — все компании с директором, по created_at DESC.
+	ListCompanies(ctx context.Context) ([]*Company, error)
+	// GetCompany — компания с директором; nil — нет такой.
+	GetCompany(ctx context.Context, id int64) (*Company, error)
+	GetCompanyByName(ctx context.Context, name string) (*Company, error)
+	// CreateCompany — INSERT; заполняет ID, CreatedAt, IsActive.
+	CreateCompany(ctx context.Context, c *Company) error
+	// UpdateCompanyFields — точечное обновление колонок компании.
+	UpdateCompanyFields(ctx context.Context, id int64, fields map[string]any) error
+	// DeleteCompany — удаление; каскады (задачи, юниты, чаты, звонки) — в БД.
+	DeleteCompany(ctx context.Context, id int64) error
+	// CompanyStats — батч-счётчики сотрудников/задач без N+1.
+	CompanyStats(ctx context.Context, ids []int64) (map[int64]CompanyStats, error)
+}
+
+// BackupStore — выгрузка и восстановление основных таблиц для резервной
+// копии. Import — TRUNCATE ... RESTART IDENTITY CASCADE + вставки + setval,
+// всё в одной транзакции (как прежний backup_service во Flask).
+type BackupStore interface {
+	ExportData(ctx context.Context) (*BackupData, error)
+	ImportData(ctx context.Context, data *BackupData) error
 }

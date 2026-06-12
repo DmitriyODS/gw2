@@ -16,13 +16,32 @@ services:
       - "6379:6379"
 
   # Приложения за профилем full: голый `docker compose up` их не стартует —
-  # Flask (:5001), callsvc (:8090/:9090), authsvc (:8091) и Vite (:5173)
-  # бегут на хосте. Dev-ключи PASETO — та же пара, что в dev.sh/Makefile.
+  # Flask (:5001), callsvc (:8090/:9090), authsvc (:8091), msgsvc (:8092/:9092),
+  # aisvc (:8093/:9093) и Vite (:5173) бегут на хосте. Dev-ключи PASETO — та же
+  # пара, что в dev.sh/Makefile.
   app:
     profiles: ["full"]
     environment:
       PASETO_PUBLIC_KEY: ${PASETO_PUBLIC_KEY:-15ef439747fcad6ca627310942ba14b48f164fcbb5f65c10f61ca2aeb4b53fe1}
   calls:
+    profiles: ["full"]
+    environment:
+      PASETO_PUBLIC_KEY: ${PASETO_PUBLIC_KEY:-15ef439747fcad6ca627310942ba14b48f164fcbb5f65c10f61ca2aeb4b53fe1}
+  messenger:
+    profiles: ["full"]
+    environment:
+      PASETO_PUBLIC_KEY: ${PASETO_PUBLIC_KEY:-15ef439747fcad6ca627310942ba14b48f164fcbb5f65c10f61ca2aeb4b53fe1}
+  ai:
+    profiles: ["full"]
+    environment:
+      PASETO_PUBLIC_KEY: ${PASETO_PUBLIC_KEY:-15ef439747fcad6ca627310942ba14b48f164fcbb5f65c10f61ca2aeb4b53fe1}
+      # Dev-ключ Fernet — тот же, что в back/.flaskenv и dev.sh.
+      AI_KEY_ENCRYPTION_KEY: ${AI_KEY_ENCRYPTION_KEY:-X3hFOVZ6XbAzlaygv2PfLbnmBIaH373CK8MqrrAhr8k=}
+  groove:
+    profiles: ["full"]
+    environment:
+      PASETO_PUBLIC_KEY: ${PASETO_PUBLIC_KEY:-15ef439747fcad6ca627310942ba14b48f164fcbb5f65c10f61ca2aeb4b53fe1}
+  tasks:
     profiles: ["full"]
     environment:
       PASETO_PUBLIC_KEY: ${PASETO_PUBLIC_KEY:-15ef439747fcad6ca627310942ba14b48f164fcbb5f65c10f61ca2aeb4b53fe1}

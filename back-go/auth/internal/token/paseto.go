@@ -16,6 +16,8 @@ import (
 	"time"
 
 	"aidanwoods.dev/go-paseto"
+
+	"github.com/DmitriyODS/gw2/back-go/pkg/pasetoauth"
 )
 
 type Claims struct {
@@ -123,44 +125,12 @@ func setAll(t *paseto.Token, claims map[string]any) error {
 	return nil
 }
 
-// Verifier — проверка access-токенов по публичному ключу. Используется
-// HTTP-middleware authsvc; идентичная проверка живёт в callsvc и Flask.
-type Verifier struct {
-	public paseto.V4AsymmetricPublicKey
-}
-
-func NewVerifier(publicHex string) (*Verifier, error) {
-	pub, err := paseto.NewV4AsymmetricPublicKeyFromHex(publicHex)
-	if err != nil {
-		return nil, fmt.Errorf("PASETO_PUBLIC_KEY: %w", err)
+// VerifierFromIssuer — authsvc проверяет access-токены собственным публичным
+// ключом той же pkg-реализацией (pasetoauth), что и остальные сервисы.
+func VerifierFromIssuer(i *Issuer) *pasetoauth.Verifier {
+	v, err := pasetoauth.NewVerifier(i.PublicKeyHex())
+	if err != nil { // невозможно: ExportHex отдаёт валидный ключ
+		panic(err)
 	}
-	return &Verifier{public: pub}, nil
-}
-
-// VerifierFromIssuer — authsvc проверяет токены собственным публичным ключом.
-func VerifierFromIssuer(i *Issuer) *Verifier {
-	return &Verifier{public: i.public}
-}
-
-// ParseAccess — извлечь user_id и force_change; (0, false) при любом дефекте.
-func (v *Verifier) ParseAccess(raw string) (userID int64, forceChange bool) {
-	parser := paseto.NewParser() // ValidAt(now) проверяет exp/iat/nbf по умолчанию
-	t, err := parser.ParseV4Public(v.public, raw, nil)
-	if err != nil {
-		return 0, false
-	}
-	if typ, err := t.GetString("type"); err != nil || typ != "access" {
-		return 0, false
-	}
-	sub, err := t.GetSubject()
-	if err != nil {
-		return 0, false
-	}
-	id, err := strconv.ParseInt(sub, 10, 64)
-	if err != nil || id <= 0 {
-		return 0, false
-	}
-	var fc bool
-	_ = t.Get("force_change", &fc)
-	return id, fc
+	return v
 }

@@ -10,9 +10,10 @@
 #
 # Прод НЕ собирает образы: их пушит локальная машина (`make push` →
 # scripts/build_push.sh) в один репозиторий osipovskijdima/groove_work
-# под тегами app/calls/auth/front. Деплой-скрипт делает `compose pull` +
-# `up --no-build`. Откат: в deploy/.env выставить версионный тег,
-# например APP_TAG=app-3.6.0 (CALLS_TAG / AUTH_TAG / FRONT_TAG — аналогично).
+# под тегами app/calls/auth/messenger/ai/front. Деплой-скрипт делает
+# `compose pull` + `up --no-build`. Откат: в deploy/.env выставить
+# версионный тег, например APP_TAG=app-3.6.0 (CALLS_TAG / AUTH_TAG /
+# MESSENGER_TAG / AI_TAG / FRONT_TAG — аналогично).
 # ================================================================
 services:
   app:
@@ -37,6 +38,18 @@ services:
 
   auth:
     image: osipovskijdima/groove_work:${AUTH_TAG:-auth}
+
+  messenger:
+    image: osipovskijdima/groove_work:${MESSENGER_TAG:-messenger}
+
+  ai:
+    image: osipovskijdima/groove_work:${AI_TAG:-ai}
+
+  groove:
+    image: osipovskijdima/groove_work:${GROOVE_TAG:-groove}
+
+  tasks:
+    image: osipovskijdima/groove_work:${TASKS_TAG:-tasks}
 
   nginx:
     image: osipovskijdima/groove_work:${FRONT_TAG:-front}

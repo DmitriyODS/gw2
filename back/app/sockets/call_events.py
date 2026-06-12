@@ -1,23 +1,27 @@
-"""Ринг-сигналинг звонков через Socket.IO — тонкий шлюз к Go-микросервису.
+"""Ринг-сигналинг звонков через Socket.IO — тонкий шлюз к Go-микросервисам.
 
-Бизнес-логика звонков (валидация, БД, ринг-state, LiveKit) переехала в
-callsvc (back-go/calls); Flask здесь только:
-  - резолвит пользователя по сокету и зовёт gRPC (services/calls_client.py);
-  - эмитит сокет-события по данным из ответа (списки адресатов считает Go);
-  - ведёт системную плашку звонка в чате (домен мессенджера остался тут).
+Бизнес-логика звонков (валидация, БД, ринг-state, LiveKit) живёт в callsvc
+(back-go/calls), домен мессенджера — в msgsvc (back-go/messenger); Flask
+здесь только:
+  - резолвит пользователя по сокету и зовёт gRPC (services/calls_client.py,
+    services/messenger_client.py);
+  - эмитит сокет-события по данным из ответов (списки адресатов считает Go);
+  - связывает домены: парный диалог и системная плашка звонка в чате —
+    через gRPC msgsvc, ошибки мессенджера звонок не роняют.
 
 События, инициированные самим сервисом (вебхуки LiveKit → call:ended),
 прилетают отдельным каналом Redis — см. sockets/call_bridge.py.
 """
+import json
+
 from flask_socketio import SocketIO
 
-from app.schemas import MessageSchema
-from app.services import calls_client
+from app.services import calls_client, messenger_client
 from app.services.calls_client import CallsServiceError
+from app.services.messenger_client import MessengerServiceError
 from app.utils.logger import get_logger
 
 logger = get_logger(__name__)
-_msg_schema = MessageSchema()
 
 
 def _resolve_user_id_from_sid(sid: str) -> int | None:
@@ -47,38 +51,26 @@ def _emit_error(socketio: SocketIO, user_id: int, e: CallsServiceError) -> None:
 
 
 def emit_call_system_message_update(socketio: SocketIO, call_id: int) -> None:
-    """Перечитать системное сообщение о звонке (kind='call') и эмитить
-    message:updated обеим сторонам парного диалога. Вызывается после смены
-    статуса звонка (ringing → active → ended/missed). Для group-звонков
-    плашки нет — тихо выходим."""
-    from flask import current_app
-    from app.extensions import db
-    from app.models import Call, Conversation, Message
-
-    with current_app.app_context():
-        call = db.session.get(Call, call_id)
-        if not call or not call.conversation_id:
-            return
-        # Фильтр по диалогу звонка обязателен: пересланные плашки ссылаются
-        # на тот же call_id, но живут в других диалогах.
-        msg = db.session.execute(
-            db.select(Message).where(
-                Message.call_id == call_id, Message.kind == "call",
-                Message.conversation_id == call.conversation_id,
-            ).order_by(Message.id.desc()).limit(1)
-        ).scalar_one_or_none()
-        if not msg:
-            return
-        conv = db.session.get(Conversation, call.conversation_id)
-        if not conv:
-            return
-        event = {
-            "conversation_id": call.conversation_id,
-            "message": _msg_schema.dump(msg),
-        }
-        for uid in (conv.user_a_id, conv.user_b_id):
-            if uid:
-                socketio.emit("message:updated", event, room=f"user_{uid}")
+    """Перечитать у msgsvc системное сообщение о звонке (kind='call') и
+    эмитить message:updated адресатам. Вызывается после смены статуса звонка
+    (ringing → active → ended/missed). Плашки нет (group-звонок) или msgsvc
+    недоступен — пропускаем: плашка вторична, звонок она не роняет."""
+    try:
+        resp = messenger_client.get_call_message(call_id)
+    except MessengerServiceError as e:
+        if e.code == "MESSENGER_UNAVAILABLE":
+            logger.warning("call.pill_update_skipped", extra={"extra": {
+                "call_id": call_id, "code": e.code,
+            }})
+        return
+    if not resp.message_json:
+        return
+    event = {
+        "conversation_id": resp.conversation_id,
+        "message": json.loads(resp.message_json),
+    }
+    for uid in resp.notify_user_ids:
+        socketio.emit("message:updated", event, room=f"user_{uid}")
 
 
 def register_call_events(socketio: SocketIO) -> None:
@@ -87,9 +79,6 @@ def register_call_events(socketio: SocketIO) -> None:
     def on_start(data):
         """Клиент инициирует звонок. data = {user_ids: [...], media}."""
         from flask import request as flask_request
-        from flask import current_app
-        from app.extensions import db
-        from app.repositories import message_repo
 
         me = _resolve_user_id_from_sid(flask_request.sid)
         if me is None:
@@ -100,16 +89,19 @@ def register_call_events(socketio: SocketIO) -> None:
             "initiator_id": me, "user_ids": user_ids, "media": media,
         }})
 
-        # Парный диалог — домен мессенджера, остаётся на Flask: создаём до
-        # звонка (Go пишет conversation_id в запись звонка) и коммитим,
-        # чтобы FK в БД уже существовал к моменту INSERT на стороне Go.
+        # Парный диалог — домен мессенджера (msgsvc): создаём до звонка,
+        # чтобы FK в БД уже существовал к моменту INSERT звонка в callsvc.
+        # msgsvc недоступен — звонок не блокируем, просто пройдёт без
+        # привязки к чату и без плашки (она вторична).
         conv_id = 0
         others = {uid for uid in user_ids if uid != me}
         if len(others) == 1:
-            with current_app.app_context():
-                conv = message_repo.get_or_create_conversation(me, next(iter(others)))
-                db.session.commit()
-                conv_id = conv.id
+            try:
+                conv_id = messenger_client.ensure_dialog(me, next(iter(others)))
+            except MessengerServiceError as e:
+                logger.warning("call.ensure_dialog_failed", extra={"extra": {
+                    "initiator_id": me, "code": e.code, "message": e.message,
+                }})
 
         try:
             resp = calls_client.start_call(me, user_ids, media, conv_id)
@@ -137,18 +129,23 @@ def register_call_events(socketio: SocketIO) -> None:
             socketio.emit("call:incoming", payload, room=f"user_{uid}")
 
         # Системная плашка звонка в чате (только p2p) — обычное message:new,
-        # фронт рендерит её специально по kind='call'.
+        # фронт рендерит её специально по kind='call'. Создаёт msgsvc; его
+        # ошибка звонок не роняет — плашка вторична.
         if conv_id and payload["kind"] == "p2p":
-            with current_app.app_context():
-                sys_msg = message_repo.create_call_message(conv_id, me, call_id)
-                db.session.commit()
-                sys_payload = _msg_schema.dump(sys_msg)
-            for uid in (*invitee_ids, me):
-                socketio.emit("message:new", {
+            try:
+                pill = messenger_client.create_call_message(conv_id, me, call_id)
+            except MessengerServiceError as e:
+                logger.warning("call.pill_create_failed", extra={"extra": {
+                    "call_id": call_id, "code": e.code, "message": e.message,
+                }})
+            else:
+                event = {
                     "conversation_id": conv_id,
-                    "message": sys_payload,
+                    "message": json.loads(pill.message_json),
                     "from_user_id": me,
-                }, room=f"user_{uid}")
+                }
+                for uid in pill.notify_user_ids:
+                    socketio.emit("message:new", event, room=f"user_{uid}")
 
     @socketio.on("call:invite")
     def on_invite(data):

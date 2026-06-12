@@ -192,6 +192,25 @@ func (r *UserRepository) GetRole(ctx context.Context, roleID int64) (*domain.Rol
 	return &role, nil
 }
 
+func (r *UserRepository) ListRoles(ctx context.Context) ([]*domain.Role, error) {
+	rows, err := r.pool.Query(ctx,
+		`SELECT id, name, level FROM roles ORDER BY level`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var out []*domain.Role
+	for rows.Next() {
+		var role domain.Role
+		if err := rows.Scan(&role.ID, &role.Name, &role.Level); err != nil {
+			return nil, err
+		}
+		out = append(out, &role)
+	}
+	return out, rows.Err()
+}
+
 func (r *UserRepository) CountVisibleByLevel(ctx context.Context, level int) (int, error) {
 	var n int
 	err := r.pool.QueryRow(ctx, `

@@ -31,6 +31,20 @@ type Endpoints struct {
 	HideUser      endpoint.Endpoint
 	AssignRole    endpoint.Endpoint
 	ResetPassword endpoint.Endpoint
+
+	ListRoles endpoint.Endpoint
+
+	ListCompanies         endpoint.Endpoint
+	GetCompany            endpoint.Endpoint
+	CreateCompany         endpoint.Endpoint
+	UpdateCompany         endpoint.Endpoint
+	ToggleCompanyActive   endpoint.Endpoint
+	DeleteCompany         endpoint.Endpoint
+	GetWeekendSettings    endpoint.Endpoint
+	UpdateWeekendSettings endpoint.Endpoint
+
+	ExportBackup endpoint.Endpoint
+	ImportBackup endpoint.Endpoint
 }
 
 // Запросы, которым нужен действующий пользователь (actor) или составной ввод.
@@ -65,6 +79,27 @@ type AssignRoleEpRequest struct {
 	Actor  *domain.User
 	UserID int64
 	RoleID int64
+}
+
+type UpdateCompanyEpRequest struct {
+	CompanyID int64
+	Body      dto.CompanyUpdate
+}
+
+type ToggleCompanyEpRequest struct {
+	CompanyID int64
+	IsActive  bool
+}
+
+type CompanyScopeEpRequest struct {
+	Actor     *domain.User
+	CompanyID int64
+}
+
+type WeekendEpRequest struct {
+	Actor     *domain.User
+	CompanyID int64
+	Days      []int
 }
 
 func New(svc service.AuthService) Endpoints {
@@ -123,6 +158,46 @@ func New(svc service.AuthService) Endpoints {
 		ResetPassword: func(ctx context.Context, request any) (any, error) {
 			req := request.(ActorRequest)
 			return nil, svc.ResetPassword(ctx, req.Actor, req.UserID)
+		},
+
+		ListRoles: func(ctx context.Context, _ any) (any, error) {
+			return svc.ListRoles(ctx)
+		},
+
+		ListCompanies: func(ctx context.Context, _ any) (any, error) {
+			return svc.ListCompanies(ctx)
+		},
+		GetCompany: func(ctx context.Context, request any) (any, error) {
+			return svc.GetCompany(ctx, request.(int64))
+		},
+		CreateCompany: func(ctx context.Context, request any) (any, error) {
+			return svc.CreateCompany(ctx, request.(dto.CompanyCreate))
+		},
+		UpdateCompany: func(ctx context.Context, request any) (any, error) {
+			req := request.(UpdateCompanyEpRequest)
+			return svc.UpdateCompany(ctx, req.CompanyID, req.Body)
+		},
+		ToggleCompanyActive: func(ctx context.Context, request any) (any, error) {
+			req := request.(ToggleCompanyEpRequest)
+			return svc.ToggleCompanyActive(ctx, req.CompanyID, req.IsActive)
+		},
+		DeleteCompany: func(ctx context.Context, request any) (any, error) {
+			return nil, svc.DeleteCompany(ctx, request.(int64))
+		},
+		GetWeekendSettings: func(ctx context.Context, request any) (any, error) {
+			req := request.(CompanyScopeEpRequest)
+			return svc.GetWeekendSettings(ctx, req.Actor, req.CompanyID)
+		},
+		UpdateWeekendSettings: func(ctx context.Context, request any) (any, error) {
+			req := request.(WeekendEpRequest)
+			return svc.UpdateWeekendSettings(ctx, req.Actor, req.CompanyID, req.Days)
+		},
+
+		ExportBackup: func(ctx context.Context, _ any) (any, error) {
+			return svc.ExportBackup(ctx)
+		},
+		ImportBackup: func(ctx context.Context, request any) (any, error) {
+			return nil, svc.ImportBackup(ctx, request.([]byte))
 		},
 	}
 }

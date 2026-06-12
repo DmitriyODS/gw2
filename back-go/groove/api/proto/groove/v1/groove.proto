@@ -1,0 +1,63 @@
+syntax = "proto3";
+
+// Контракт groovesvc: хуки доменных событий других сервисов → groovesvc.
+// Вызовы fire-and-forget (семантика прежних feed_service.on_* во Flask):
+// вызывающий логирует ошибку и НИКОГДА не роняет свой запрос.
+// Транспорт всегда OK; бизнес-ошибка — в поле error.
+package groove.v1;
+
+option go_package = "github.com/DmitriyODS/gw2/back-go/pkg/gen/groovepb;groovepb";
+
+service GrooveService {
+  // Сотрудник начал юнит (Flask, после коммита unit_service).
+  rpc OnUnitStarted(UnitStartedRequest) returns (HookResponse);
+  // Сотрудник завершил юнит: событие ленты + грувы + лечение + квесты.
+  rpc OnUnitStopped(UnitStoppedRequest) returns (HookResponse);
+  // Задача закрыта: событие ленты + грувы героя + прогресс рейда.
+  rpc OnTaskClosed(TaskClosedRequest) returns (HookResponse);
+  // Хозяин написал в pet-чат (msgsvc): Грувик отвечает асинхронно.
+  rpc OnPetMessage(PetMessageRequest) returns (HookResponse);
+}
+
+message Error {
+  string code = 1;
+  string message = 2;
+  int32 http_status = 3;
+}
+
+message HookResponse {
+  Error error = 1;
+}
+
+message UnitStartedRequest {
+  int64 company_id = 1;
+  int64 user_id = 2;
+  int64 unit_id = 3;
+  string unit_name = 4;
+  int64 task_id = 5;
+  string task_name = 6;
+}
+
+message UnitStoppedRequest {
+  int64 company_id = 1;
+  int64 user_id = 2;
+  int64 unit_id = 3;
+  string unit_name = 4;
+  int64 task_id = 5;
+  string task_name = 6;
+  // Длительность юнита в минутах (считает вызывающий по datetime_start/end).
+  int32 minutes = 7;
+}
+
+message TaskClosedRequest {
+  int64 company_id = 1;
+  // «Герой» закрытия: actor → responsible → author (выбирает вызывающий);
+  // 0 — героя нет (событие всё равно пишется).
+  int64 hero_user_id = 2;
+  int64 task_id = 3;
+  string task_name = 4;
+}
+
+message PetMessageRequest {
+  int64 conversation_id = 1;
+}

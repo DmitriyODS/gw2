@@ -31,8 +31,8 @@ class Company(db.Model):
     created_at = db.Column(db.DateTime(timezone=True), nullable=False,
                            default=lambda: datetime.now(timezone.utc))
 
-    # AI / ProxyAPI. Ключ хранится зашифрованным (Fernet, ключ шифрования —
-    # AI_KEY_ENCRYPTION_KEY в env). hint — открытая маска для UI.
+    # AI / ProxyAPI. Полями владеет aisvc (Fernet-ключ AI_KEY_ENCRYPTION_KEY —
+    # в его env); здесь они только ради Alembic-схемы. hint — маска для UI.
     ai_enabled = db.Column(db.Boolean, nullable=False, default=False,
                            server_default='false')
     ai_api_key_enc = db.Column(db.LargeBinary, nullable=True)

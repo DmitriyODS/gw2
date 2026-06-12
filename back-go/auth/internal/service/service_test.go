@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"log/slog"
+	"sort"
 	"strings"
 	"testing"
 	"time"
@@ -131,6 +132,13 @@ func (r *fakeRepo) UpdateFields(_ context.Context, id int64, fields map[string]a
 				p := v.(string)
 				u.AvatarPath = &p
 			}
+		case "company_id":
+			if v == nil {
+				u.CompanyID = nil
+			} else {
+				cid := v.(int64)
+				u.CompanyID = &cid
+			}
 		}
 	}
 	return nil
@@ -143,6 +151,16 @@ func (r *fakeRepo) GetRole(_ context.Context, roleID int64) (*domain.Role, error
 	}
 	cp := *role
 	return &cp, nil
+}
+
+func (r *fakeRepo) ListRoles(_ context.Context) ([]*domain.Role, error) {
+	out := make([]*domain.Role, 0, len(r.roles))
+	for _, role := range r.roles {
+		cp := *role
+		out = append(out, &cp)
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].Level < out[j].Level })
+	return out, nil
 }
 
 func (r *fakeRepo) CountVisibleByLevel(_ context.Context, level int) (int, error) {
@@ -192,6 +210,93 @@ func (a *fakeAvatars) Save(_ []byte) (string, error) {
 }
 func (a *fakeAvatars) Delete(p string) { a.deleted = append(a.deleted, p) }
 
+func (a *fakeAvatars) ListFiles() ([]domain.AvatarFile, error) { return nil, nil }
+func (a *fakeAvatars) WriteFile(string, []byte) error          { return nil }
+
+// fakeCompanies — in-memory компании (порт CompanyRepository).
+type fakeCompanies struct {
+	seq       int64
+	companies map[int64]*domain.Company
+}
+
+func newFakeCompanies() *fakeCompanies {
+	return &fakeCompanies{companies: map[int64]*domain.Company{}}
+}
+
+func (f *fakeCompanies) ListCompanies(_ context.Context) ([]*domain.Company, error) {
+	out := make([]*domain.Company, 0, len(f.companies))
+	for _, c := range f.companies {
+		out = append(out, c)
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].CreatedAt.After(out[j].CreatedAt) })
+	return out, nil
+}
+
+func (f *fakeCompanies) GetCompany(_ context.Context, id int64) (*domain.Company, error) {
+	return f.companies[id], nil
+}
+
+func (f *fakeCompanies) GetCompanyByName(_ context.Context, name string) (*domain.Company, error) {
+	for _, c := range f.companies {
+		if c.Name == name {
+			return c, nil
+		}
+	}
+	return nil, nil
+}
+
+func (f *fakeCompanies) CreateCompany(_ context.Context, c *domain.Company) error {
+	f.seq++
+	c.ID = f.seq
+	c.IsActive = true
+	c.CreatedAt = time.Now().UTC()
+	f.companies[c.ID] = c
+	return nil
+}
+
+func (f *fakeCompanies) UpdateCompanyFields(_ context.Context, id int64, fields map[string]any) error {
+	c, ok := f.companies[id]
+	if !ok {
+		return nil
+	}
+	for k, v := range fields {
+		switch k {
+		case "name":
+			c.Name = v.(string)
+		case "description":
+			c.Description, _ = v.(*string)
+		case "director_id":
+			c.DirectorID, _ = v.(*int64)
+		case "is_active":
+			c.IsActive = v.(bool)
+		case "settings":
+			c.Settings = v.(map[string]any)
+		}
+	}
+	return nil
+}
+
+func (f *fakeCompanies) DeleteCompany(_ context.Context, id int64) error {
+	delete(f.companies, id)
+	return nil
+}
+
+func (f *fakeCompanies) CompanyStats(_ context.Context, ids []int64) (map[int64]domain.CompanyStats, error) {
+	out := map[int64]domain.CompanyStats{}
+	for _, id := range ids {
+		out[id] = domain.CompanyStats{}
+	}
+	return out, nil
+}
+
+// fakeBackup — заглушка BackupStore (export/import в unit-тестах не гоняем).
+type fakeBackup struct{}
+
+func (fakeBackup) ExportData(context.Context) (*domain.BackupData, error) {
+	return &domain.BackupData{}, nil
+}
+func (fakeBackup) ImportData(context.Context, *domain.BackupData) error { return nil }
+
 // ── Хелперы ──────────────────────────────────────────────────────
 
 const testPrivateHex = "b4cbfb43df4ce210727d953e4a713307fa19bb7d9f85041438d9e11b942a37741eb9dbbbbc047c03fd70604e0071f0987e16b28b757225c11f00415d0e20b1a2"
@@ -205,7 +310,7 @@ func newTestService(t *testing.T) (*Service, *fakeRepo, *fakeThrottle) {
 	}
 	repo := newFakeRepo()
 	throttle := newFakeThrottle()
-	svc := New(repo, throttle, iss, &fakeAvatars{}, slog.Default())
+	svc := New(repo, newFakeCompanies(), fakeBackup{}, throttle, iss, &fakeAvatars{}, slog.Default())
 	return svc, repo, throttle
 }
 

@@ -58,6 +58,45 @@ func (s *Storage) Delete(avatarPath string) {
 	_ = os.Remove(filepath.Join(s.root, filepath.FromSlash(avatarPath)))
 }
 
+// ListFiles — все файлы каталога avatars/ для резервной копии (как
+// avatars_dir.iterdir() во Flask: без рекурсии, отсутствующий каталог — пусто).
+func (s *Storage) ListFiles() ([]domain.AvatarFile, error) {
+	dir := filepath.Join(s.root, avatarSubdir)
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	var out []domain.AvatarFile
+	for _, e := range entries {
+		if e.IsDir() {
+			continue
+		}
+		data, err := os.ReadFile(filepath.Join(dir, e.Name()))
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, domain.AvatarFile{Name: e.Name(), Data: data})
+	}
+	return out, nil
+}
+
+// WriteFile — восстановить файл аватарки из архива (имя — только basename,
+// защита от zip-slip).
+func (s *Storage) WriteFile(name string, data []byte) error {
+	name = filepath.Base(filepath.FromSlash(name))
+	if name == "" || name == "." || name == ".." {
+		return nil
+	}
+	dir := filepath.Join(s.root, avatarSubdir)
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return err
+	}
+	return os.WriteFile(filepath.Join(dir, name), data, 0o644)
+}
+
 var _ domain.AvatarStorage = (*Storage)(nil)
 
 // String — для логов старта.

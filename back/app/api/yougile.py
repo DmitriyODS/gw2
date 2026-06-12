@@ -65,7 +65,7 @@ def _dump_task(task, current_user_id: int) -> dict:
     """Полный dump задачи в том же виде, что отдаёт /api/tasks (with favorite,
     has_units, user-color и т.п.). Дёргаем _enrich_task лениво, чтобы не было
     кругового импорта на верхнем уровне модуля."""
-    from app.api.tasks import _enrich_task  # noqa: WPS433
+    from app.integrations.yougile.task_dump import enrich_task as _enrich_task  # noqa: WPS433
     return _enrich_task(task, current_user_id)
 
 

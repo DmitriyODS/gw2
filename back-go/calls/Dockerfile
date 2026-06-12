@@ -1,14 +1,18 @@
 # Микросервис звонков (callsvc): gRPC :9090 + HTTP/Fiber :8090.
-# Стадия сборки бежит на платформе билдера ($BUILDPLATFORM): при сборке
-# amd64-образа на Apple Silicon компилятор Go работает нативно (кросс через
-# GOOS/GOARCH), а не под эмуляцией.
+# Контекст сборки — back-go/ (общий модуль pkg подключается через
+# replace ../pkg в go.mod). Стадия сборки бежит на платформе билдера
+# ($BUILDPLATFORM): при сборке amd64-образа на Apple Silicon компилятор Go
+# работает нативно (кросс через GOOS/GOARCH), а не под эмуляцией.
 FROM --platform=$BUILDPLATFORM golang:1.26-alpine AS build
 ARG TARGETOS
 ARG TARGETARCH
 WORKDIR /src
-COPY go.mod go.sum ./
+COPY pkg/go.mod pkg/go.sum pkg/
+COPY calls/go.mod calls/go.sum calls/
+WORKDIR /src/calls
 RUN go mod download
-COPY . .
+COPY pkg/ /src/pkg/
+COPY calls/ /src/calls/
 RUN CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH go build -ldflags="-s -w" -o /out/callsvc ./cmd/callsvc
 
 FROM alpine:3.21

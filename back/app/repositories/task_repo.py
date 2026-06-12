@@ -1,10 +1,13 @@
 from datetime import datetime
 from typing import Optional
-from sqlalchemy import desc, asc, func, exists, and_, or_
+from sqlalchemy import exists, and_
 from sqlalchemy.orm import selectinload
 from app.extensions import db
 from app.models import Task, Unit, Favorite, UserTaskColor
 
+# Домен задач живёт в tasksvc (back-go/tasks); здесь — только то, что нужно
+# YouGile-интеграции (до фазы 4): создание/обновление при импорте и вебхуках
+# + срез для enrich-дампа сокет-событий.
 
 _TASK_LOAD_OPTIONS = (
     selectinload(Task.author),
@@ -18,170 +21,6 @@ def get_by_id(task_id: int) -> Optional[Task]:
     return db.session.execute(
         db.select(Task).options(*_TASK_LOAD_OPTIONS).where(Task.id == task_id)
     ).scalar_one_or_none()
-
-
-def get_list(
-    current_user_id: int,
-    company_id: Optional[int],
-    tab: str = "active",
-    search: Optional[str] = None,
-    sort: str = "last_activity",
-    dept_id: Optional[int] = None,
-    stage_id: Optional[int] = None,
-    responsible_user_id: Optional[int] = None,
-    received_from: Optional[datetime] = None,
-    received_to: Optional[datetime] = None,
-    has_units: Optional[str] = None,
-    author_id: Optional[int] = None,
-    page: int = 1,
-    per_page: int = 30,
-    ordered_ids: Optional[list] = None,
-) -> dict:
-    # Если задан ordered_ids — это семантическая выдача от AI: id уже
-    # отсортированы по релевантности. Игнорируем `search` (он там был
-    # источником этих id) и `sort` (релевантность важнее даты).
-    if ordered_ids is not None and not ordered_ids:
-        return {"items": [], "total": 0, "page": page, "per_page": per_page}
-    q = db.select(Task).options(*_TASK_LOAD_OPTIONS)
-    # Multi-tenancy: основной фильтр. None означает «во всех компаниях»
-    # (доступно только Администратору системы, без явно выбранной компании
-    # в селекторе) — на практике обработчик должен либо требовать
-    # company_id, либо явно решать.
-    if company_id is not None:
-        q = q.where(Task.company_id == company_id)
-
-    # Вкладка
-    if tab == "active":
-        q = q.where(Task.is_archived.is_(False))
-    elif tab == "favorites":
-        q = q.where(
-            Task.is_archived.is_(False),
-            exists().where(
-                and_(Favorite.task_id == Task.id, Favorite.user_id == current_user_id)
-            )
-        )
-    elif tab == "archive":
-        q = q.where(Task.is_archived.is_(True))
-
-    # Поиск (LIKE) — отключаем, если задан семантический отсортированный набор.
-    if search and not ordered_ids:
-        like = f"%{search.strip().lower()}%"
-        q = q.where(func.lower(Task.name).like(like))
-
-    # Семантическая выдача: фиксированный набор id с заранее заданным порядком.
-    if ordered_ids:
-        q = q.where(Task.id.in_(ordered_ids))
-
-    # Фильтр по отделу
-    if dept_id:
-        q = q.where(Task.department_id == dept_id)
-
-    # Фильтр по этапу
-    if stage_id is not None:
-        q = q.where(Task.stage_id == stage_id)
-
-    # Фильтр по ответственному
-    if responsible_user_id is not None:
-        q = q.where(Task.responsible_user_id == responsible_user_id)
-
-    # Период поступления
-    if received_from:
-        q = q.where(Task.received_at >= received_from)
-    if received_to:
-        q = q.where(Task.received_at <= received_to)
-
-    # Фильтр по автору
-    if author_id is not None:
-        q = q.where(Task.author_id == author_id)
-
-    # Фильтр по юнитам
-    if has_units == "none":
-        q = q.where(~exists().where(Unit.task_id == Task.id))
-    elif has_units == "mine":
-        q = q.where(
-            exists().where(and_(Unit.task_id == Task.id, Unit.user_id == current_user_id))
-        )
-
-    # Сортировка. Семантический режим — по позиции в ordered_ids (релевантность).
-    if ordered_ids:
-        # array_position возвращает 1-based индекс; nulls last не нужен,
-        # потому что мы уже отфильтровали по in_(ordered_ids).
-        q = q.order_by(func.array_position(ordered_ids, Task.id))
-    elif sort == "last_activity":
-        last_unit_subq = (
-            db.select(func.max(Unit.datetime_start))
-            .where(Unit.task_id == Task.id)
-            .correlate(Task)
-            .scalar_subquery()
-        )
-        q = q.order_by(desc(last_unit_subq).nulls_last(), desc(Task.created_at))
-    elif sort == "created_at":
-        q = q.order_by(desc(Task.created_at))
-    elif sort == "received_at":
-        q = q.order_by(desc(Task.received_at))
-    elif sort == "deadline":
-        q = q.order_by(asc(Task.deadline).nulls_last())
-
-    # Для COUNT сортировка не нужна — а при last_activity она тащит
-    # коррелированный подзапрос max(unit.datetime_start) на каждую строку.
-    count_q = q.order_by(None)
-    total = db.session.execute(db.select(func.count()).select_from(count_q.subquery())).scalar_one()
-
-    offset = (page - 1) * per_page
-    tasks = db.session.execute(q.offset(offset).limit(per_page)).scalars().all()
-
-    return {"items": tasks, "total": total, "page": page, "per_page": per_page}
-
-
-def search_ids_by_name(company_id: int, q: str, limit: int = 30,
-                       exclude_ids: Optional[list] = None) -> list[int]:
-    """LIKE-добор для семантического поиска: id задач компании, чьи названия
-    содержат подстроку. Сортировка — по убыванию `created_at` (новые первее).
-    """
-    stmt = (db.select(Task.id)
-            .where(Task.company_id == company_id,
-                   func.lower(Task.name).like(f"%{q.strip().lower()}%"))
-            .order_by(desc(Task.created_at))
-            .limit(limit))
-    if exclude_ids:
-        stmt = stmt.where(~Task.id.in_(exclude_ids))
-    return [int(r) for r in db.session.execute(stmt).scalars().all()]
-
-
-# Задачи, которые сотрудник «тянет на себе»: он ответственный ИЛИ хоть раз
-# по ним работал (есть его юнит). Совпадает с фильтром has_units="mine" в
-# списке задач — единая трактовка «моих задач» для утреннего брифинга.
-def _mine_predicate(user_id: int):
-    return or_(
-        Task.responsible_user_id == user_id,
-        exists().where(and_(Unit.task_id == Task.id, Unit.user_id == user_id)),
-    )
-
-
-def count_user_active(user_id: int, company_id: Optional[int] = None) -> int:
-    """Сколько активных (не в архиве) задач сейчас на сотруднике."""
-    q = db.select(func.count(Task.id)).where(
-        Task.is_archived.is_(False), _mine_predicate(user_id)
-    )
-    if company_id is not None:
-        q = q.where(Task.company_id == company_id)
-    return int(db.session.execute(q).scalar_one())
-
-
-def get_user_stale(user_id: int, threshold: datetime,
-                   company_id: Optional[int] = None, limit: int = 100) -> list[Task]:
-    """Активные задачи сотрудника, поступившие раньше threshold (засиделись).
-    Самые старые — первыми, для утреннего брифинга от Грувика."""
-    q = (
-        db.select(Task).options(*_TASK_LOAD_OPTIONS)
-        .where(Task.is_archived.is_(False), Task.received_at < threshold,
-               _mine_predicate(user_id))
-        .order_by(asc(Task.received_at))
-        .limit(limit)
-    )
-    if company_id is not None:
-        q = q.where(Task.company_id == company_id)
-    return db.session.execute(q).scalars().all()
 
 
 def create(
@@ -212,36 +51,11 @@ def create(
     return task
 
 
-def get_contributors(task_id: int) -> list[dict]:
-    """Сотрудники, у которых хоть когда-либо был юнит по задаче (distinct)."""
-    from app.models import User as UserModel
-    rows = db.session.execute(
-        db.select(UserModel.id, UserModel.fio, UserModel.avatar_path)
-        .join(Unit, Unit.user_id == UserModel.id)
-        .where(Unit.task_id == task_id)
-        .distinct()
-        .order_by(UserModel.fio.asc())
-    ).all()
-    return [{"id": r.id, "fio": r.fio, "avatar_path": r.avatar_path} for r in rows]
-
-
-def count_by_company(company_id: int) -> int:
-    """Кол-во задач (включая архивные) — для статистики таблицы компаний."""
-    return db.session.execute(
-        db.select(db.func.count(Task.id)).where(Task.company_id == company_id)
-    ).scalar_one()
-
-
 def update(task: Task, **kwargs) -> Task:
     for key, value in kwargs.items():
         setattr(task, key, value)
     db.session.flush()
     return task
-
-
-def delete(task: Task) -> None:
-    db.session.delete(task)
-    db.session.flush()
 
 
 def has_active_unit(task_id: int) -> bool:
@@ -256,30 +70,10 @@ def is_favorite(task_id: int, user_id: int) -> bool:
     ).scalar_one()
 
 
-def get_favorite_task_ids(task_ids: list, user_id: int) -> set:
-    if not task_ids:
-        return set()
-    rows = db.session.execute(
-        db.select(Favorite.task_id).where(
-            Favorite.user_id == user_id, Favorite.task_id.in_(task_ids)
-        )
-    ).scalars().all()
-    return set(rows)
-
-
 def has_any_units(task_id: int) -> bool:
     return db.session.execute(
         db.select(exists().where(Unit.task_id == task_id))
     ).scalar_one()
-
-
-def get_task_ids_with_units(task_ids: list) -> set:
-    if not task_ids:
-        return set()
-    rows = db.session.execute(
-        db.select(Unit.task_id).where(Unit.task_id.in_(task_ids)).distinct()
-    ).scalars().all()
-    return set(rows)
 
 
 def get_active_users(task_id: int) -> list[dict]:
@@ -292,71 +86,9 @@ def get_active_users(task_id: int) -> list[dict]:
     return [{"id": r.id, "fio": r.fio, "avatar_path": r.avatar_path} for r in rows]
 
 
-def get_active_users_by_task_ids(task_ids: list) -> dict:
-    if not task_ids:
-        return {}
-    from app.models import User as UserModel
-    rows = db.session.execute(
-        db.select(Unit.task_id, UserModel.id, UserModel.fio, UserModel.avatar_path)
-        .join(UserModel, Unit.user_id == UserModel.id)
-        .where(Unit.task_id.in_(task_ids), Unit.datetime_end.is_(None))
-    ).all()
-    result: dict = {}
-    for r in rows:
-        result.setdefault(r.task_id, []).append({"id": r.id, "fio": r.fio, "avatar_path": r.avatar_path})
-    return result
-
-
-def toggle_favorite(task_id: int, user_id: int) -> bool:
-    """Добавить или убрать из избранного. Возвращает новое состояние (True = добавлено)."""
-    fav = db.session.execute(
-        db.select(Favorite).where(
-            Favorite.task_id == task_id, Favorite.user_id == user_id
-        )
-    ).scalar_one_or_none()
-    if fav:
-        db.session.delete(fav)
-        db.session.flush()
-        return False
-    else:
-        db.session.add(Favorite(task_id=task_id, user_id=user_id))
-        db.session.flush()
-        return True
-
-
 def get_user_color(task_id: int, user_id: int) -> Optional[str]:
     return db.session.execute(
         db.select(UserTaskColor.color).where(
             UserTaskColor.task_id == task_id, UserTaskColor.user_id == user_id
         )
     ).scalar_one_or_none()
-
-
-def get_user_colors_by_task_ids(task_ids: list, user_id: int) -> dict:
-    if not task_ids:
-        return {}
-    rows = db.session.execute(
-        db.select(UserTaskColor.task_id, UserTaskColor.color).where(
-            UserTaskColor.user_id == user_id,
-            UserTaskColor.task_id.in_(task_ids),
-        )
-    ).all()
-    return {r.task_id: r.color for r in rows}
-
-
-def set_user_color(task_id: int, user_id: int, color: Optional[str]) -> None:
-    rec = db.session.execute(
-        db.select(UserTaskColor).where(
-            UserTaskColor.task_id == task_id, UserTaskColor.user_id == user_id
-        )
-    ).scalar_one_or_none()
-    if color is None:
-        if rec is not None:
-            db.session.delete(rec)
-            db.session.flush()
-        return
-    if rec is None:
-        db.session.add(UserTaskColor(task_id=task_id, user_id=user_id, color=color))
-    else:
-        rec.color = color
-    db.session.flush()

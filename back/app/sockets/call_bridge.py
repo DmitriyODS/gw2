@@ -64,5 +64,5 @@ def _handle_event(app: Flask, socketio: SocketIO, event: dict) -> None:
             socketio.emit("call:ended", payload, room=f"user_{uid}")
 
     if kind in ("call_ended", "call_status_changed"):
-        with app.app_context():
-            emit_call_system_message_update(socketio, call_id)
+        # Плашка читается у msgsvc по gRPC — app-контекст не нужен.
+        emit_call_system_message_update(socketio, call_id)

@@ -1,0 +1,80 @@
+// Package http — HTTP-транспорт (Fiber): REST /api/messenger/*.
+//
+// Пути и формы JSON байт-в-байт совместимы с прежним Flask-блюпринтом
+// api/messenger.py — фронт не меняется, nginx маршрутизирует префикс
+// /api/messenger на этот сервис (кроме exact /api/messenger/presence,
+// который остаётся во Flask: presence живёт в памяти процесса Socket.IO).
+package http
+
+import (
+	"context"
+	"log/slog"
+
+	"github.com/gofiber/fiber/v2"
+
+	"github.com/DmitriyODS/gw2/back-go/messenger/internal/domain"
+	"github.com/DmitriyODS/gw2/back-go/messenger/internal/endpoint"
+	"github.com/DmitriyODS/gw2/back-go/pkg/pasetoauth"
+)
+
+type Server struct {
+	app *fiber.App
+}
+
+// authSource — сверка пользователя для pkg-мидлвари (is_hidden, активность
+// компании) поверх доменного UserReader.
+func authSource(users domain.UserReader) pasetoauth.AuthSource {
+	return func(ctx context.Context, userID int64) (*pasetoauth.AuthInfo, error) {
+		u, err := users.GetUser(ctx, userID)
+		if err != nil || u == nil {
+			return nil, err
+		}
+		return &pasetoauth.AuthInfo{
+			RoleLevel:     u.RoleLevel,
+			IsHidden:      u.IsHidden,
+			CompanyActive: u.CompanyActive,
+			User:          u,
+		}, nil
+	}
+}
+
+func NewServer(eps endpoint.Endpoints, users domain.UserReader,
+	verifier *pasetoauth.Verifier, log *slog.Logger) *Server {
+
+	app := fiber.New(fiber.Config{
+		AppName:               "gw2-msgsvc",
+		DisableStartupMessage: true,
+		// Вложения ≤25МБ проверяются в сервисе; лимит тела — с запасом
+		// (как MAX_CONTENT_LENGTH=50МБ во Flask).
+		BodyLimit: 50 * 1024 * 1024,
+	})
+	auth := pasetoauth.NewMiddleware(verifier, authSource(users))
+	h := &handlers{eps: eps, log: log}
+
+	app.Get("/healthz", func(c *fiber.Ctx) error {
+		return c.JSON(fiber.Map{"ok": true})
+	})
+
+	api := app.Group("/api/messenger", auth.RequireAuth)
+	api.Get("/conversations", h.listConversations)
+	api.Post("/conversations", h.openConversation)
+	api.Get("/conversations/:id<int>/messages", h.listMessages)
+	api.Post("/conversations/:id<int>/messages", h.postMessage)
+	api.Post("/forward", h.forward)
+	api.Post("/conversations/:id<int>/read", h.markRead)
+	api.Post("/uploads", h.upload)
+	api.Delete("/messages/:id<int>", h.deleteMessage)
+	api.Delete("/conversations/:id<int>", h.deleteConversation)
+	api.Post("/conversations/:id<int>/pin", h.toggleConversationPin)
+	api.Post("/messages/:id<int>/pin", h.toggleMessagePin)
+	api.Get("/conversations/:id<int>/pinned", h.listPinned)
+	api.Get("/dev-chat", h.openDevChat)
+	api.Get("/pet-chat", h.openPetChat)
+	api.Get("/support-inbox", h.supportInbox)
+	api.Get("/unread", h.unread)
+
+	return &Server{app: app}
+}
+
+func (s *Server) Listen(addr string) error { return s.app.Listen(addr) }
+func (s *Server) Shutdown() error          { return s.app.Shutdown() }

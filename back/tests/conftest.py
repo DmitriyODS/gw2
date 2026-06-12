@@ -3,11 +3,15 @@
 Поднимаем настоящее Flask-приложение (фабрика create_app) поверх dev-БД и
 Redis. Если они недоступны — тесты, которым нужен `app`, автоматически
 пропускаются (skip), а чистые юнит-тесты (yougile и т. п.) работают и без них.
-Go-микросервис звонков не нужен: шлюз проверяется против in-process
-fake gRPC-сервера (см. test_call_flow.py).
+Go-микросервисы (callsvc, msgsvc) не нужны: шлюзы проверяются против
+in-process fake gRPC-серверов (fake_messenger здесь, fake_calls —
+в test_call_flow.py).
 """
 import os
+import socket
+from concurrent import futures
 
+import grpc
 import pytest
 
 # Переменные окружения dev-стенда (pytest не читает .flaskenv сам).
@@ -79,20 +83,102 @@ def make_token(app, user_id: int, claims: dict | None = None) -> str:
     return pyseto.encode(key, json.dumps(payload).encode()).decode()
 
 
-def cleanup_call_artifacts(app, call_id=None, conversation_id=None):
-    """Подчистить созданные тестом звонок/плашки/диалог в общей dev-БД.
-    conversation_id передаём только если диалог создал сам тест."""
-    from app.extensions import db
-    from app.models import Call, CallParticipant, Conversation, Message
-    with app.app_context():
-        try:
-            if call_id is not None:
-                db.session.execute(db.delete(Message).where(Message.call_id == call_id))
-                db.session.execute(db.delete(CallParticipant).where(CallParticipant.call_id == call_id))
-                db.session.execute(db.delete(Call).where(Call.id == call_id))
-            if conversation_id is not None:
-                db.session.execute(db.delete(Message).where(Message.conversation_id == conversation_id))
-                db.session.execute(db.delete(Conversation).where(Conversation.id == conversation_id))
-            db.session.commit()
-        except Exception:  # noqa: BLE001
-            db.session.rollback()
+# ─────────────── gRPC-хелперы для фейковых микросервисов ───────────────
+
+def grpc_direct_execute(method, request):
+    """В pytest eventlet не monkey-patch'ится: tpool-путь gRPC-клиентов отдал
+    бы управление hub'у, и фоновые гринлеты create_app повисли бы на не-зелёном
+    time.sleep. Транспорт для шлюза прозрачен — зовём gRPC напрямую."""
+    return method(request, timeout=5)
+
+
+def free_port() -> int:
+    """Порт, на котором заведомо никто не слушает (для *_down фикстур)."""
+    s = socket.socket()
+    s.bind(("127.0.0.1", 0))
+    port = s.getsockname()[1]
+    s.close()
+    return port
+
+
+def reset_messenger_stub():
+    # messenger_client кэширует channel/stub в module-globals — сбрасываем,
+    # чтобы клиент пересоздал их на подменённый MESSENGER_GRPC_ADDR.
+    from app.services import messenger_client
+    if messenger_client._channel is not None:
+        messenger_client._channel.close()
+    messenger_client._channel = None
+    messenger_client._stub = None
+
+
+class FakeMessengerService:
+    """Canned-ответы MessengerService + запись входящих запросов для ассертов.
+    Дефолтные ответы пустые: EnsureDialog → conversation_id=0,
+    GetCallMessage → пустой message_json (плашки нет)."""
+
+    def __init__(self):
+        self.requests = []
+        self.responses = {}  # имя RPC -> ответ или callable(request)
+
+    def _respond(self, name, request, default):
+        self.requests.append((name, request))
+        resp = self.responses.get(name, default)
+        return resp(request) if callable(resp) else resp
+
+    def EnsureDialog(self, request, context):
+        from app.grpc import messenger_pb2
+        return self._respond("EnsureDialog", request,
+                             messenger_pb2.EnsureDialogResponse())
+
+    def CreateCallMessage(self, request, context):
+        from app.grpc import messenger_pb2
+        return self._respond("CreateCallMessage", request,
+                             messenger_pb2.CreateCallMessageResponse())
+
+    def GetCallMessage(self, request, context):
+        from app.grpc import messenger_pb2
+        return self._respond("GetCallMessage", request,
+                             messenger_pb2.GetCallMessageResponse())
+
+    def PostBotMessage(self, request, context):
+        from app.grpc import messenger_pb2
+        return self._respond("PostBotMessage", request,
+                             messenger_pb2.PostBotMessageResponse())
+
+    def ListRecentMessages(self, request, context):
+        from app.grpc import messenger_pb2
+        return self._respond("ListRecentMessages", request,
+                             messenger_pb2.ListRecentMessagesResponse())
+
+
+@pytest.fixture
+def fake_messenger(monkeypatch):
+    """In-process fake msgsvc: gRPC-сервер с canned-ответами вместо
+    настоящего back-go/messenger."""
+    from app.grpc import messenger_pb2_grpc
+    from app.services import messenger_client
+
+    servicer = FakeMessengerService()
+    server = grpc.server(futures.ThreadPoolExecutor(max_workers=2))
+    messenger_pb2_grpc.add_MessengerServiceServicer_to_server(servicer, server)
+    port = server.add_insecure_port("127.0.0.1:0")
+    server.start()
+
+    monkeypatch.setenv("MESSENGER_GRPC_ADDR", f"127.0.0.1:{port}")
+    monkeypatch.setattr(messenger_client, "_execute", grpc_direct_execute)
+    reset_messenger_stub()
+    yield servicer
+    server.stop(None)
+    reset_messenger_stub()
+
+
+@pytest.fixture
+def messenger_down(monkeypatch):
+    """MESSENGER_GRPC_ADDR указывает на порт, где никто не слушает."""
+    from app.services import messenger_client
+
+    monkeypatch.setenv("MESSENGER_GRPC_ADDR", f"127.0.0.1:{free_port()}")
+    monkeypatch.setattr(messenger_client, "_execute", grpc_direct_execute)
+    reset_messenger_stub()
+    yield
+    reset_messenger_stub()

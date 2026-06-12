@@ -1,5 +1,5 @@
-// Сгенерировано из /apispec.json — не редактировать вручную
-// Перегенерировать: npm run gen:api
+// Ведётся вручную: REST юнитов живёт в tasksvc (back-go/tasks), в Flask-spec
+// его больше нет (MANUAL_TAGS в scripts/gen-api.mjs).
 import { apiRequest } from './client.js'
 
 export const getUnits = (taskId) => apiRequest(`/tasks/${taskId}/units`)

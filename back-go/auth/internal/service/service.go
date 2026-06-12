@@ -1,6 +1,7 @@
-// Package service — бизнес-логика авторизации и управления пользователями.
-// Портировано из back/app/services/{auth_service,user_service}.py без
-// изменения правил.
+// Package service — бизнес-логика авторизации, пользователей, компаний,
+// ролей и резервных копий. Портировано из back/app/services/
+// {auth_service,user_service,company_service,backup_service}.py и
+// api/{companies,roles,backup}.py без изменения правил.
 package service
 
 import (
@@ -31,19 +32,37 @@ type AuthService interface {
 	HideUser(ctx context.Context, actor *domain.User, userID int64) error
 	AssignRole(ctx context.Context, actor *domain.User, userID, roleID int64) (*dto.User, error)
 	ResetPassword(ctx context.Context, actor *domain.User, userID int64) error
+
+	ListRoles(ctx context.Context) ([]dto.Role, error)
+
+	ListCompanies(ctx context.Context) (*dto.CompanyList, error)
+	GetCompany(ctx context.Context, companyID int64) (*dto.Company, error)
+	CreateCompany(ctx context.Context, req dto.CompanyCreate) (*dto.Company, error)
+	UpdateCompany(ctx context.Context, companyID int64, req dto.CompanyUpdate) (*dto.Company, error)
+	ToggleCompanyActive(ctx context.Context, companyID int64, isActive bool) (*dto.Company, error)
+	DeleteCompany(ctx context.Context, companyID int64) error
+	GetWeekendSettings(ctx context.Context, actor *domain.User, companyID int64) (*dto.WeekendSettings, error)
+	UpdateWeekendSettings(ctx context.Context, actor *domain.User, companyID int64, days []int) (*dto.WeekendSettings, error)
+
+	ExportBackup(ctx context.Context) ([]byte, error)
+	ImportBackup(ctx context.Context, zipBytes []byte) error
 }
 
 type Service struct {
-	repo     domain.UserRepository
-	throttle domain.LoginThrottle
-	tokens   *token.Issuer
-	avatars  domain.AvatarStorage
-	log      *slog.Logger
+	repo      domain.UserRepository
+	companies domain.CompanyRepository
+	backup    domain.BackupStore
+	throttle  domain.LoginThrottle
+	tokens    *token.Issuer
+	avatars   domain.AvatarStorage
+	log       *slog.Logger
 }
 
-func New(repo domain.UserRepository, throttle domain.LoginThrottle, tokens *token.Issuer,
+func New(repo domain.UserRepository, companies domain.CompanyRepository,
+	backup domain.BackupStore, throttle domain.LoginThrottle, tokens *token.Issuer,
 	avatars domain.AvatarStorage, log *slog.Logger) *Service {
-	return &Service{repo: repo, throttle: throttle, tokens: tokens, avatars: avatars, log: log}
+	return &Service{repo: repo, companies: companies, backup: backup,
+		throttle: throttle, tokens: tokens, avatars: avatars, log: log}
 }
 
 var _ AuthService = (*Service)(nil)

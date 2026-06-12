@@ -21,6 +21,10 @@ help:
 	@printf "  make dev-infra    Инфра в Docker: DB + Redis + LiveKit\n"
 	@printf "  make dev-calls    Go-микросервис звонков (gRPC :9090, HTTP :8090)\n"
 	@printf "  make dev-auth     Go-микросервис авторизации (HTTP :8091)\n"
+	@printf "  make dev-messenger  Go-микросервис мессенджера (gRPC :9092, HTTP :8092)\n"
+	@printf "  make dev-ai       Go-микросервис ИИ (gRPC :9093, HTTP :8093)\n"
+	@printf "  make dev-groove   Go-микросервис «Мой Groove» (gRPC :9094, HTTP :8094)\n"
+	@printf "  make dev-tasks    Go-микросервис задач (HTTP :8095)\n"
 	@printf "  make dev-back     Flask dev-сервер :5001\n"
 	@printf "  make dev-front    Vite dev-сервер  :5173\n"
 	@printf "  make dev-stop     Остановить dev-контейнеры\n"
@@ -39,7 +43,7 @@ help:
 	@printf "\n\033[33mКонфигурация сервера:\033[0m cp .env.deploy.example .env.deploy\n\n"
 
 # ── Разработка ────────────────────────────────────────────────────
-.PHONY: dev-infra dev-migrate dev-back dev-front dev-calls dev-auth dev-stop dev-stack dev-stack-stop gen-proto
+.PHONY: dev-infra dev-migrate dev-back dev-front dev-calls dev-auth dev-messenger dev-ai dev-groove dev-tasks dev-stop dev-stack dev-stack-stop gen-proto
 
 # Dev-ключи PASETO (синхронизированы с dev.sh, back/.flaskenv и
 # back/tests/conftest.py): приватный — только у authsvc, публичный — у
@@ -48,8 +52,8 @@ PASETO_PRIVATE_KEY_DEV := 68eb779b2f672beb8fcd58d72a81ce1565a1417aed3788d1362bf4
 PASETO_PUBLIC_KEY_DEV  := 15ef439747fcad6ca627310942ba14b48f164fcbb5f65c10f61ca2aeb4b53fe1
 PASETO_REFRESH_KEY_DEV := d525374c4ec7b5e1c5b140fb9c1f4cffd9c3dbf052bb18f2f32bf9f92d9fa05c
 
-# Приложения (app/calls/nginx) в dev-оверлее за профилем "full" —
-# bare `up` поднимает только инфраструктуру.
+# Приложения (app/calls/auth/messenger/nginx) в dev-оверлее за профилем
+# "full" — bare `up` поднимает только инфраструктуру.
 dev-infra:
 	@printf "\033[1m▶ Запускаю DB + Redis + LiveKit...\033[0m\n"
 	cd deploy && docker compose up -d
@@ -97,6 +101,62 @@ dev-auth: dev-infra
 	UPLOAD_FOLDER="$(CURDIR)/back/uploads" \
 	go run ./cmd/authsvc
 
+# Go-микросервис мессенджера: REST /api/messenger/* (кроме exact presence —
+# он во Flask) и gRPC для Flask-шлюза. env синхронизированы с dev.sh.
+dev-messenger: dev-infra
+	@printf "\033[1m▶ msgsvc (Go)  gRPC :9092  HTTP :8092\033[0m\n"
+	cd back-go/messenger && \
+	DATABASE_URL="postgresql://grovework:grovework_local@localhost:5432/grovework" \
+	REDIS_URL="redis://localhost:6379/0" \
+	PASETO_PUBLIC_KEY="$(PASETO_PUBLIC_KEY_DEV)" \
+	UPLOAD_FOLDER="$(CURDIR)/back/uploads" \
+	HTTP_ADDR=":8092" \
+	GRPC_ADDR=":9092" \
+	go run ./cmd/msgsvc
+
+# Go-микросервис ИИ: REST /api/companies/<id>/ai-settings (regex-роут в
+# nginx/vite) + /api/ai/tv-fact и gRPC для Flask-шлюза. Redis — кэш
+# ТВ-фактов. env синхронизированы с dev.sh.
+dev-ai: dev-infra
+	@printf "\033[1m▶ aisvc (Go)  gRPC :9093  HTTP :8093\033[0m\n"
+	cd back-go/ai && \
+	DATABASE_URL="postgresql://grovework:grovework_local@localhost:5432/grovework" \
+	REDIS_URL="redis://localhost:6379/0" \
+	PASETO_PUBLIC_KEY="$(PASETO_PUBLIC_KEY_DEV)" \
+	AI_KEY_ENCRYPTION_KEY="X3hFOVZ6XbAzlaygv2PfLbnmBIaH373CK8MqrrAhr8k=" \
+	HTTP_ADDR=":8093" \
+	GRPC_ADDR=":9093" \
+	go run ./cmd/aisvc
+
+# Go-микросервис «Мой Groove»: REST /api/groove/* и gRPC-хуки доменных
+# событий (Flask — юниты/задачи, msgsvc — pet-чат). env синхронизированы
+# с dev.sh.
+dev-groove: dev-infra
+	@printf "\033[1m▶ groovesvc (Go)  gRPC :9094  HTTP :8094\033[0m\n"
+	cd back-go/groove && \
+	DATABASE_URL="postgresql://grovework:grovework_local@localhost:5432/grovework" \
+	REDIS_URL="redis://localhost:6379/0" \
+	PASETO_PUBLIC_KEY="$(PASETO_PUBLIC_KEY_DEV)" \
+	AI_GRPC_ADDR="localhost:9093" \
+	MESSENGER_GRPC_ADDR="localhost:9092" \
+	HTTP_ADDR=":8094" \
+	GRPC_ADDR=":9094" \
+	go run ./cmd/groovesvc
+
+# Go-микросервис задач: ядро платформы — REST /api/tasks|units|unit-types|
+# departments|stages|stats. Хуки геймификации — gRPC groovesvc, поиск/
+# реиндекс — gRPC aisvc. env синхронизированы с dev.sh.
+dev-tasks: dev-infra
+	@printf "\033[1m▶ tasksvc (Go)  HTTP :8095\033[0m\n"
+	cd back-go/tasks && \
+	DATABASE_URL="postgresql://grovework:grovework_local@localhost:5432/grovework" \
+	REDIS_URL="redis://localhost:6379/0" \
+	PASETO_PUBLIC_KEY="$(PASETO_PUBLIC_KEY_DEV)" \
+	GROOVE_GRPC_ADDR="localhost:9094" \
+	AI_GRPC_ADDR="localhost:9093" \
+	HTTP_ADDR=":8095" \
+	go run ./cmd/tasksvc
+
 gen-proto:
 	bash scripts/gen_proto.sh
 
@@ -124,7 +184,7 @@ COMPOSE_PROD := docker compose -f docker-compose.yml -f docker-compose.prod.yml
 s ?= app
 
 # Сборка прод-образов (linux/amd64) и push в Docker Hub
-# osipovskijdima/groove_work (теги app/calls/auth/front + версионные).
+# osipovskijdima/groove_work (теги app/calls/auth/messenger/ai/front + версионные).
 # Выборочно: make push only="app front". Нужен одноразовый docker login.
 push:
 	bash scripts/build_push.sh $(only)

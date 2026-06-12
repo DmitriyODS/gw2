@@ -1,26 +1,15 @@
 package domain
 
-import "errors"
+import "github.com/DmitriyODS/gw2/back-go/pkg/apierror"
 
-// Error — бизнес-ошибка домена. Коды стабильны: фронт показывает их в
-// call:error, REST-клиенты получают {code, message} с http_status.
-type Error struct {
-	Code       string
-	Message    string
-	HTTPStatus int
-}
-
-func (e *Error) Error() string { return e.Code + ": " + e.Message }
+// Error — общая бизнес-ошибка платформы (pkg/apierror). Коды стабильны:
+// фронт показывает их в call:error, REST-клиенты получают {code, message}
+// с http_status (исторический формат REST звонков — ключ "code").
+type Error = apierror.Error
 
 func NewError(code, message string, httpStatus int) *Error {
-	return &Error{Code: code, Message: message, HTTPStatus: httpStatus}
+	return apierror.New(code, message, httpStatus)
 }
 
 // AsDomainError — достать *Error из цепочки; nil, если это не бизнес-ошибка.
-func AsDomainError(err error) *Error {
-	var de *Error
-	if errors.As(err, &de) {
-		return de
-	}
-	return nil
-}
+func AsDomainError(err error) *Error { return apierror.As(err) }

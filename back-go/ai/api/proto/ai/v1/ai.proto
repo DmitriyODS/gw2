@@ -1,0 +1,94 @@
+syntax = "proto3";
+
+// Контракт LLM-шлюза: вызовы Flask (и в будущем groovesvc) → aisvc.
+// aisvc хранит ключи компаний (Fernet) и ходит в ProxyAPI/OpenAI;
+// промпты и циклы tool-calling остаются на стороне вызывающего —
+// Chat выполняет РОВНО ОДИН ход (messages → content | tool_calls).
+// Транспорт всегда OK; бизнес-ошибка — в поле error.
+package ai.v1;
+
+option go_package = "github.com/DmitriyODS/gw2/back-go/pkg/gen/aipb;aipb";
+
+service AiService {
+  // Включён ли ИИ у компании и какие модели настроены.
+  rpc Status(StatusRequest) returns (StatusResponse);
+  // Один ход chat completion. messages_json/tools_json — сырые JSON
+  // в формате OpenAI API (массивы), tool_calls_json — сырой ответ модели.
+  rpc Chat(ChatRequest) returns (ChatResponse);
+  // Эмбеддинг произвольного текста моделью компании.
+  rpc Embed(EmbedRequest) returns (EmbedResponse);
+  // Семантический поиск задач компании по task_embeddings (pgvector).
+  rpc SemanticSearch(SemanticSearchRequest) returns (SemanticSearchResponse);
+  // Переиндексировать задачу (фоном внутри aisvc); зовётся после изменений задачи.
+  rpc ReindexTask(ReindexTaskRequest) returns (ReindexTaskResponse);
+}
+
+message Error {
+  string code = 1;
+  string message = 2;
+  int32 http_status = 3;
+}
+
+message StatusRequest {
+  int64 company_id = 1;
+}
+
+message StatusResponse {
+  Error error = 1;
+  bool enabled = 2;
+  string model_chat = 3;
+  string model_embedding = 4;
+}
+
+message ChatRequest {
+  int64 company_id = 1;
+  // JSON-массив сообщений OpenAI ([{role, content, ...}]).
+  string messages_json = 2;
+  // JSON-массив tool-схем OpenAI; пусто — без инструментов.
+  string tools_json = 3;
+  int32 max_tokens = 4;
+  double temperature = 5;
+  double timeout_sec = 6;
+}
+
+message ChatResponse {
+  Error error = 1;
+  // Текст ответа (пусто, если модель вернула tool_calls).
+  string content = 2;
+  // JSON-массив tool_calls из ответа модели; пусто — обычный ответ.
+  string tool_calls_json = 3;
+}
+
+message EmbedRequest {
+  int64 company_id = 1;
+  string text = 2;
+}
+
+message EmbedResponse {
+  Error error = 1;
+  repeated float vector = 2;
+  string model = 3;
+}
+
+message SemanticSearchRequest {
+  int64 company_id = 1;
+  string query = 2;
+}
+
+message SearchHit {
+  int64 task_id = 1;
+  double score = 2;
+}
+
+message SemanticSearchResponse {
+  Error error = 1;
+  repeated SearchHit hits = 2;
+}
+
+message ReindexTaskRequest {
+  int64 task_id = 1;
+}
+
+message ReindexTaskResponse {
+  Error error = 1;
+}

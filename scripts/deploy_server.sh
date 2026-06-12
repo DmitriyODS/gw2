@@ -14,12 +14,14 @@
 #   3. docker compose pull + up -d --no-build --remove-orphans.
 #      Образы НА СЕРВЕРЕ НЕ СОБИРАЮТСЯ — их пушит локальная машина
 #      (`make push` → scripts/build_push.sh) в Docker Hub
-#      osipovskijdima/groove_work (теги app/calls/auth/front).
+#      osipovskijdima/groove_work (теги app/calls/auth/messenger/ai/groove/front).
 #   4. Перечитывает конфиг nginx (он bind-mounted: git обновляет
 #      файл, но без reload контейнер живёт со старым конфигом).
 #   5. Health-чеки: API через nginx, микросервис звонков (healthz +
 #      gRPC из app), микросервис авторизации (healthz + логин через
-#      nginx), LiveKit через nginx (/livekit), TCP-порт медиа 7881.
+#      nginx), микросервис мессенджера (healthz + gRPC из app),
+#      микросервис ИИ (healthz + gRPC из app), LiveKit через nginx
+#      (/livekit), TCP-порт медиа 7881.
 # ================================================================
 set -euo pipefail
 cd "$(cd "$(dirname "$0")/.." && pwd)"
@@ -220,6 +222,78 @@ if [ "$auth_code" = "400" ]; then
   ok "маршрут /api/auth/ через nginx ведёт в authsvc"
 else
   warn "маршрут /api/auth/ вернул $auth_code (ожидался 400) — проверьте nginx"
+fi
+# Компании уехали в authsvc: без токена ожидаем 401 от него (не 404/502).
+companies_code=$(curl -skL -o /dev/null -w '%{http_code}' --max-time 5 http://localhost/api/companies || true)
+if [ "$companies_code" = "401" ]; then
+  ok "маршрут /api/companies через nginx ведёт в authsvc"
+else
+  warn "маршрут /api/companies вернул $companies_code (ожидался 401) — проверьте nginx"
+fi
+# Лог изменений — статика nginx (bind-mount changelog.json).
+changelog_code=$(curl -skL -o /dev/null -w '%{http_code}' --max-time 5 http://localhost/api/changelog || true)
+if [ "$changelog_code" = "200" ]; then
+  ok "/api/changelog отдаётся статикой"
+else
+  warn "/api/changelog вернул $changelog_code (ожидался 200) — проверьте bind-mount changelog.json"
+fi
+
+# Микросервис мессенджера: HTTP-healthz изнутри контейнера (наружу порт не
+# торчит, через nginx ходит только /api/messenger) + досягаемость gRPC из app.
+if $COMPOSE exec -T messenger wget -qO- --timeout=3 http://127.0.0.1:8092/healthz >/dev/null 2>&1; then
+  ok "msgsvc отвечает (healthz)"
+else
+  warn "msgsvc не отвечает — мессенджер не работает: make logs s=messenger"
+fi
+if $COMPOSE exec -T app python -c "import socket; socket.create_connection(('messenger', 9092), timeout=3)" >/dev/null 2>&1; then
+  ok "gRPC msgsvc досягаем из app (messenger:9092)"
+else
+  warn "app не достучался до gRPC messenger:9092 — диалоги и плашки звонков не работают"
+fi
+
+# Микросервис ИИ: HTTP-healthz изнутри контейнера (наружу порт не торчит,
+# через nginx ходит только regex /api/companies/<id>/ai-settings) +
+# досягаемость gRPC из app.
+if $COMPOSE exec -T ai wget -qO- --timeout=3 http://127.0.0.1:8093/healthz >/dev/null 2>&1; then
+  ok "aisvc отвечает (healthz)"
+else
+  warn "aisvc не отвечает — ИИ-фичи не работают: make logs s=ai"
+fi
+if $COMPOSE exec -T app python -c "import socket; socket.create_connection(('ai', 9093), timeout=3)" >/dev/null 2>&1; then
+  ok "gRPC aisvc досягаем из app (ai:9093)"
+else
+  warn "app не достучался до gRPC ai:9093 — ИИ-фичи не работают"
+fi
+# ТВ-факт уехал в aisvc: без токена ожидаем 401 от него (не 404/502).
+tvfact_code=$(curl -skL -o /dev/null -w '%{http_code}' --max-time 5 http://localhost/api/ai/tv-fact || true)
+if [ "$tvfact_code" = "401" ]; then
+  ok "маршрут /api/ai через nginx ведёт в aisvc"
+else
+  warn "маршрут /api/ai/tv-fact вернул $tvfact_code (ожидался 401) — проверьте nginx"
+fi
+if $COMPOSE exec -T groove wget -qO- --timeout=3 http://127.0.0.1:8094/healthz >/dev/null 2>&1; then
+  ok "groovesvc отвечает (healthz)"
+else
+  warn "groovesvc не отвечает — «Мой Groove» не работает: make logs s=groove"
+fi
+
+# Микросервис задач: healthz изнутри контейнера + маршрутизация /api/tasks
+# через nginx (без токена ожидаем 401 от tasksvc, не 404/502).
+if $COMPOSE exec -T tasks wget -qO- --timeout=3 http://127.0.0.1:8095/healthz >/dev/null 2>&1; then
+  ok "tasksvc отвечает (healthz)"
+else
+  warn "tasksvc не отвечает — задачи и статистика не работают: make logs s=tasks"
+fi
+tasks_code=$(curl -skL -o /dev/null -w '%{http_code}' --max-time 5 http://localhost/api/tasks || true)
+if [ "$tasks_code" = "401" ]; then
+  ok "маршрут /api/tasks через nginx ведёт в tasksvc"
+else
+  warn "маршрут /api/tasks вернул $tasks_code (ожидался 401) — проверьте nginx"
+fi
+if $COMPOSE exec -T app python -c "import socket; socket.create_connection(('groove', 9094), timeout=3)" >/dev/null 2>&1; then
+  ok "gRPC groovesvc досягаем из app (groove:9094)"
+else
+  warn "app не достучался до gRPC groove:9094 — хуки геймификации не работают"
 fi
 
 lk_code=$(curl -skL -o /dev/null -w '%{http_code}' --max-time 5 http://localhost/livekit/ || true)

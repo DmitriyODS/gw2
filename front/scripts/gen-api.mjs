@@ -82,6 +82,17 @@ const SKIP_OPS = new Set([
   'get /api/users/{user_id}/identicon',
 ])
 
+// Теги, чьи клиенты ведутся ВРУЧНУЮ (REST уехал в Go-микросервисы, в
+// Flask-spec остаётся лишь огрызок или ничего) — их файлы не перезаписываем:
+// messenger.js — msgsvc (во Flask остался только exact /api/messenger/presence);
+// groove.js — groovesvc; companies.js, roles.js, backup.js — authsvc;
+// changelog.js — статика nginx; ai.js — aisvc; tasks.js, units.js,
+// unitTypes.js, departments.js, stages.js, stats.js — tasksvc.
+const MANUAL_TAGS = new Set([
+  'messenger', 'groove', 'companies', 'roles', 'backup', 'changelog', 'ai',
+  'tasks', 'units', 'unit-types', 'departments', 'stages', 'stats',
+])
+
 // ─── Утилиты ──────────────────────────────────────────────────────────────────
 
 function toCamel(s) {
@@ -226,6 +237,10 @@ async function main() {
   }
 
   for (const [tag, ops] of Object.entries(byTag)) {
+    if (MANUAL_TAGS.has(tag)) {
+      console.log(`  ↷ ${tagToFilename(tag)} ведётся вручную — пропускаем`)
+      continue
+    }
     const filename = tagToFilename(tag)
     const content  = generateFile(ops)
     const outPath  = resolve(OUT_DIR, filename)

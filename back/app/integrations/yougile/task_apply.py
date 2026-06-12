@@ -144,7 +144,7 @@ def _apply_updated(company: Company, task: Task, data: dict[str, Any]) -> dict:
 
     # Закрытие, пришедшее из YouGile, — тоже опорная точка ленты «Мой Groove».
     if fields.get("is_archived"):
-        from app.services.feed_service import on_task_closed
+        from app.services.groove_client import on_task_closed
         on_task_closed(task)
 
     payload = _broadcast_task_update(task)
@@ -205,7 +205,7 @@ def _broadcast_task_update(task: Task) -> dict:
     (для is_favorite/color); webhook'и идут без пользователя, поэтому
     передаём 0 — фронт получит is_favorite=false/color=null и подмёрджит
     локально, если у него были индивидуальные данные."""
-    from app.api.tasks import _enrich_task  # noqa: WPS433
+    from app.integrations.yougile.task_dump import enrich_task as _enrich_task  # noqa: WPS433
     payload = _enrich_task(task, current_user_id=0)
     socketio.emit("task:updated", payload, room="all")
     return payload

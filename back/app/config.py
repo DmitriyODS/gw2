@@ -18,10 +18,8 @@ class Config:
     REDIS_URL = os.environ.get("REDIS_URL", "redis://localhost:6379/0")
 
     UPLOAD_FOLDER = os.environ.get("UPLOAD_FOLDER", "/app/uploads")
-    # 50 MB — общий лимит на запрос; аватарка отдельно проверяет 2 MB в коде,
-    # вложения мессенджера лимитируются в messenger_service.
+    # 50 MB — общий лимит на запрос (вложения мессенджера лимитирует msgsvc).
     MAX_CONTENT_LENGTH = 50 * 1024 * 1024
-    MESSENGER_ATTACHMENT_MAX = 25 * 1024 * 1024  # 25 MB на одно вложение
 
     RATELIMIT_DEFAULT = "200 per minute"
     RATELIMIT_STORAGE_URI = os.environ.get("REDIS_URL", "redis://localhost:6379/1")

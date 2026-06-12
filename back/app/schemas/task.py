@@ -1,8 +1,8 @@
-from marshmallow import Schema, fields, validate
+from marshmallow import Schema, fields
 
-# Фиксированный набор цветов-тегов задач (синхронизирован с
-# front/src/utils/taskColors.js и токенами --tag-* в tokens.css).
-TASK_COLORS = ["red", "orange", "amber", "green", "teal", "blue", "violet", "pink"]
+# Домен задач живёт в tasksvc (back-go/tasks); схема осталась ради
+# YouGile-интеграции (дампы задач в ответах /api/yougile и сокет-событиях,
+# см. integrations/yougile/task_dump.py). Уйдёт вместе с ней в фазе 4.
 
 
 class DeptRefSchema(Schema):
@@ -51,35 +51,3 @@ class TaskSchema(Schema):
     yougile_project_id = fields.Str(dump_only=True, allow_none=True)
     yougile_board_id = fields.Str(dump_only=True, allow_none=True)
     yougile_column_id = fields.Str(dump_only=True, allow_none=True)
-
-
-class TaskCreateSchema(Schema):
-    name = fields.Str(required=True, validate=validate.Length(min=1, max=500))
-    link_yougile = fields.Str(validate=validate.Length(max=2000), load_default=None, allow_none=True)
-    department_id = fields.Int(required=True)
-    received_at = fields.Date(load_default=None, allow_none=True)
-    deadline = fields.Date(load_default=None, allow_none=True)
-    responsible_user_id = fields.Int(load_default=None, allow_none=True)
-    stage_id = fields.Int(load_default=None, allow_none=True)
-
-
-class TaskUpdateSchema(Schema):
-    name = fields.Str(validate=validate.Length(min=1, max=500))
-    link_yougile = fields.Str(validate=validate.Length(max=2000), allow_none=True)
-    department_id = fields.Int()
-    received_at = fields.Date(allow_none=True)
-    deadline = fields.Date(allow_none=True)
-    responsible_user_id = fields.Int(allow_none=True)
-    stage_id = fields.Int(allow_none=True)
-
-
-class TaskColorSchema(Schema):
-    color = fields.Str(allow_none=True, load_default=None, validate=validate.OneOf(TASK_COLORS))
-
-
-class TaskResponsibleSchema(Schema):
-    responsible_user_id = fields.Int(required=True, allow_none=True)
-
-
-class TaskStageSchema(Schema):
-    stage_id = fields.Int(required=True, allow_none=True)

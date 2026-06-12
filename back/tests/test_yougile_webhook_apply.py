@@ -98,7 +98,7 @@ def test_title_change_applies():
          patch.object(apply_mod, "task_repo") as repo_mod, \
          patch.object(apply_mod, "socketio"), \
          patch.object(apply_mod, "db"), \
-         patch("app.api.tasks._enrich_task", return_value={"id": 10, "name": "New"}):
+         patch("app.integrations.yougile.task_dump.enrich_task", return_value={"id": 10, "name": "New"}):
         Task_mod.query = fake_q
         out = apply_mod.apply_event(task.company, {
             "event": "task-updated",
@@ -120,7 +120,7 @@ def test_deadline_applies_from_ms():
          patch.object(apply_mod, "task_repo") as repo_mod, \
          patch.object(apply_mod, "socketio"), \
          patch.object(apply_mod, "db"), \
-         patch("app.api.tasks._enrich_task", return_value={}):
+         patch("app.integrations.yougile.task_dump.enrich_task", return_value={}):
         Task_mod.query = fake_q
         out = apply_mod.apply_event(task.company, {
             "event": "task-updated",
@@ -140,7 +140,7 @@ def test_completed_triggers_archive():
          patch.object(apply_mod, "task_repo") as repo_mod, \
          patch.object(apply_mod, "socketio"), \
          patch.object(apply_mod, "db"), \
-         patch("app.api.tasks._enrich_task", return_value={}):
+         patch("app.integrations.yougile.task_dump.enrich_task", return_value={}):
         Task_mod.query = fake_q
         repo_mod.has_active_unit.return_value = False
         out = apply_mod.apply_event(task.company, {
@@ -162,7 +162,7 @@ def test_completed_with_active_unit_does_not_archive():
          patch.object(apply_mod, "task_repo") as repo_mod, \
          patch.object(apply_mod, "socketio"), \
          patch.object(apply_mod, "db"), \
-         patch("app.api.tasks._enrich_task", return_value={}):
+         patch("app.integrations.yougile.task_dump.enrich_task", return_value={}):
         Task_mod.query = fake_q
         repo_mod.has_active_unit.return_value = True
         out = apply_mod.apply_event(task.company, {
@@ -183,7 +183,7 @@ def test_move_to_completed_column_archives():
          patch.object(apply_mod, "task_repo") as repo_mod, \
          patch.object(apply_mod, "socketio"), \
          patch.object(apply_mod, "db"), \
-         patch("app.api.tasks._enrich_task", return_value={}):
+         patch("app.integrations.yougile.task_dump.enrich_task", return_value={}):
         Task_mod.query = fake_q
         repo_mod.has_active_unit.return_value = False
         out = apply_mod.apply_event(company, {
@@ -208,7 +208,7 @@ def test_task_deleted_unlinks_and_comments():
          patch.object(apply_mod, "_post_system_comment") as post_comment_fn, \
          patch.object(apply_mod, "socketio"), \
          patch.object(apply_mod, "db"), \
-         patch("app.api.tasks._enrich_task", return_value={}):
+         patch("app.integrations.yougile.task_dump.enrich_task", return_value={}):
         Task_mod.query = fake_q
         ur_mod.get_by_id.return_value = SimpleNamespace(id=99)
         out = apply_mod.apply_event(task.company, {
@@ -230,7 +230,7 @@ def test_task_restored_unarchives():
          patch.object(apply_mod, "task_repo") as repo_mod, \
          patch.object(apply_mod, "socketio"), \
          patch.object(apply_mod, "db"), \
-         patch("app.api.tasks._enrich_task", return_value={}):
+         patch("app.integrations.yougile.task_dump.enrich_task", return_value={}):
         Task_mod.query = fake_q
         out = apply_mod.apply_event(task.company, {
             "event": "task-restored",

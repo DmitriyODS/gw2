@@ -9,7 +9,7 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
-	"github.com/DmitriyODS/gw2/back-go/calls/gen/callspb"
+	"github.com/DmitriyODS/gw2/back-go/pkg/gen/callspb"
 	"github.com/DmitriyODS/gw2/back-go/calls/internal/domain"
 	"github.com/DmitriyODS/gw2/back-go/calls/internal/dto"
 	"github.com/DmitriyODS/gw2/back-go/calls/internal/endpoint"

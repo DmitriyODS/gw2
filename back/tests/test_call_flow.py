@@ -1,24 +1,27 @@
 """Тесты Socket.IO-шлюза звонков (sockets/call_events.py).
 
-Бизнес-логика звонков живёт в Go-микросервисе и покрыта его тестами
-(back-go/calls/internal/...). Здесь проверяем именно шлюз: хендлеры зовут
-gRPC и раскладывают ответ по сокет-событиям и плашке звонка в чате. Вместо
-callsvc — in-process fake gRPC-сервер с canned-ответами; LiveKit не нужен.
+Бизнес-логика звонков живёт в Go-микросервисе callsvc, домен мессенджера
+(парный диалог, плашка звонка) — в msgsvc; оба покрыты своими Go-тестами.
+Здесь проверяем именно шлюз: хендлеры зовут gRPC обоих сервисов и
+раскладывают ответы по сокет-событиям. Вместо callsvc — in-process fake
+gRPC-сервер с canned-ответами (ниже), вместо msgsvc — фикстура
+fake_messenger из conftest; БД-записи не создаются, LiveKit не нужен.
 Нужны dev-БД и Redis (фикстура app пропустит тесты, если их нет).
 """
-import socket
+import json
 from concurrent import futures
 
 import grpc
 import pytest
 
 from app.extensions import socketio as sio
-from app.grpc import calls_pb2, calls_pb2_grpc
-from tests.conftest import cleanup_call_artifacts, make_token
+from app.grpc import calls_pb2, calls_pb2_grpc, messenger_pb2
+from tests.conftest import free_port, grpc_direct_execute, make_token
 
-# Заведомо отсутствующий в dev-БД id звонка: emit_call_system_message_update
-# не найдёт плашку и должен тихо выйти.
-MISSING_CALL_ID = 2_000_000_000
+# id, которых нет в dev-БД: шлюз ходит только в фейковые gRPC-сервисы,
+# реальные строки звонка/диалога не нужны.
+TEST_CALL_ID = 2_000_000_000
+TEST_CONV_ID = 2_000_000_001
 
 
 class FakeCallService(calls_pb2_grpc.CallServiceServicer):
@@ -52,13 +55,6 @@ class FakeCallService(calls_pb2_grpc.CallServiceServicer):
         return self._respond("EndCall", request, calls_pb2.EndCallResponse())
 
 
-def _direct_execute(method, request):
-    # В pytest eventlet не monkey-patch'ится: tpool-путь calls_client отдал бы
-    # управление hub'у, и фоновые гринлеты create_app повисли бы на не-зелёном
-    # time.sleep. Транспорт для шлюза прозрачен — зовём gRPC напрямую.
-    return method(request, timeout=5)
-
-
 def _reset_grpc_stub():
     # calls_client кэширует channel/stub в module-globals — сбрасываем, чтобы
     # клиент пересоздал их на подменённый CALLS_GRPC_ADDR.
@@ -80,7 +76,7 @@ def fake_calls(monkeypatch):
     server.start()
 
     monkeypatch.setenv("CALLS_GRPC_ADDR", f"127.0.0.1:{port}")
-    monkeypatch.setattr(calls_client, "_execute", _direct_execute)
+    monkeypatch.setattr(calls_client, "_execute", grpc_direct_execute)
     _reset_grpc_stub()
     yield servicer
     server.stop(None)
@@ -88,17 +84,13 @@ def fake_calls(monkeypatch):
 
 
 @pytest.fixture
-def grpc_down(monkeypatch):
-    """CALLS_GRPC_ADDR указывает на порт, где никто не слушает."""
+def grpc_down(monkeypatch, messenger_down):
+    """CALLS_GRPC_ADDR (и msgsvc — через messenger_down) указывают на порты,
+    где никто не слушает."""
     from app.services import calls_client
 
-    s = socket.socket()
-    s.bind(("127.0.0.1", 0))
-    port = s.getsockname()[1]
-    s.close()
-
-    monkeypatch.setenv("CALLS_GRPC_ADDR", f"127.0.0.1:{port}")
-    monkeypatch.setattr(calls_client, "_execute", _direct_execute)
+    monkeypatch.setenv("CALLS_GRPC_ADDR", f"127.0.0.1:{free_port()}")
+    monkeypatch.setattr(calls_client, "_execute", grpc_direct_execute)
     _reset_grpc_stub()
     yield
     _reset_grpc_stub()
@@ -137,33 +129,29 @@ def _pb_call(call_id, caller, callee, conversation_id=0, status="ringing",
     )
 
 
-def _create_call_row(app, initiator_id):
-    """Запись звонка в БД — в проде её создаёт Go-сервис; здесь нужна, чтобы
-    плашке в чате (messages.call_id FK) было на что ссылаться."""
-    from app.extensions import db
-    from app.models import Call, User
-    with app.app_context():
-        company_id = db.session.get(User, initiator_id).company_id
-        call = Call(initiator_id=initiator_id, company_id=company_id,
-                    kind="p2p", status="ringing", media="video")
-        db.session.add(call)
-        db.session.commit()
-        return call.id
+def _pill_json(req):
+    """Снапшот плашки звонка, как его отдаёт msgsvc в message_json."""
+    return json.dumps({
+        "id": 9001,
+        "conversation_id": req.conversation_id,
+        "kind": "call",
+        "call": {"id": req.call_id, "status": "ringing"},
+    })
 
 
-def _conv_id_between(app, a, b):
-    from app.repositories import message_repo
-    with app.app_context():
-        conv = message_repo.get_conversation_between(a, b)
-        return conv.id if conv else None
-
-
-def test_start_call_emits_started_incoming_and_chat_pill(app, two_users, fake_calls):
+def test_start_call_emits_started_incoming_and_chat_pill(
+        app, two_users, fake_calls, fake_messenger):
     caller, callee = two_users
-    conv_before = _conv_id_between(app, caller, callee)
-    call_id = _create_call_row(app, caller)
+    fake_messenger.responses["EnsureDialog"] = messenger_pb2.EnsureDialogResponse(
+        conversation_id=TEST_CONV_ID)
+    fake_messenger.responses["CreateCallMessage"] = (
+        lambda req: messenger_pb2.CreateCallMessageResponse(
+            message_json=_pill_json(req),
+            notify_user_ids=[callee, caller],
+        ))
     fake_calls.responses["StartCall"] = lambda req: calls_pb2.StartCallResponse(
-        call=_pb_call(call_id, caller, callee, conversation_id=req.conversation_id),
+        call=_pb_call(TEST_CALL_ID, caller, callee,
+                      conversation_id=req.conversation_id),
         livekit=calls_pb2.LivekitInfo(token="tok-caller", url="ws://livekit.test"),
     )
 
@@ -172,74 +160,87 @@ def test_start_call_emits_started_incoming_and_chat_pill(app, two_users, fake_ca
     try:
         c_caller.emit("call:start", {"user_ids": [callee], "media": "video"})
 
-        # Парный диалог Flask создал сам и передал его id в gRPC-запрос.
-        conv_id = _conv_id_between(app, caller, callee)
-        assert conv_id, "Flask не создал парный диалог"
+        # Парный диалог Flask запросил у msgsvc и передал его id в StartCall.
+        ens_name, ens_req = fake_messenger.requests[0]
+        assert ens_name == "EnsureDialog"
+        assert {ens_req.user_a_id, ens_req.user_b_id} == {caller, callee}
         name, req = fake_calls.requests[0]
         assert name == "StartCall"
         assert req.initiator_id == caller
         assert list(req.invitee_ids) == [callee]
         assert req.media == "video"
-        assert req.conversation_id == conv_id
+        assert req.conversation_id == TEST_CONV_ID
 
         got_caller = _events(c_caller.get_received())
         started = got_caller["call:started"]
-        assert started["call"]["id"] == call_id
-        assert started["call"]["conversation_id"] == conv_id
+        assert started["call"]["id"] == TEST_CALL_ID
+        assert started["call"]["conversation_id"] == TEST_CONV_ID
         assert started["call"]["share_code"] == "sh-test"
         assert started["livekit"] == {"token": "tok-caller", "url": "ws://livekit.test"}
 
+        # Плашку создал msgsvc — Flask разослал готовый message_json
+        # адресатам из notify_user_ids.
+        pill_name, pill_req = fake_messenger.requests[1]
+        assert pill_name == "CreateCallMessage"
+        assert (pill_req.conversation_id, pill_req.sender_id, pill_req.call_id) == \
+            (TEST_CONV_ID, caller, TEST_CALL_ID)
+
         pill = got_caller["message:new"]
-        assert pill["conversation_id"] == conv_id
+        assert pill["conversation_id"] == TEST_CONV_ID
+        assert pill["from_user_id"] == caller
         assert pill["message"]["kind"] == "call"
-        assert pill["message"]["call"]["id"] == call_id
+        assert pill["message"]["call"]["id"] == TEST_CALL_ID
 
         got_callee = _events(c_callee.get_received())
-        assert got_callee["call:incoming"]["id"] == call_id
+        assert got_callee["call:incoming"]["id"] == TEST_CALL_ID
         assert got_callee["message:new"]["message"]["kind"] == "call"
     finally:
         for c in (c_caller, c_callee):
             if c.is_connected():
                 c.disconnect()
-        cleanup_call_artifacts(
-            app, call_id=call_id,
-            conversation_id=None if conv_before else _conv_id_between(app, caller, callee),
-        )
 
 
-def test_accept_returns_livekit_token_only_to_acceptor(app, two_users, fake_calls):
+def test_accept_returns_livekit_token_only_to_acceptor(
+        app, two_users, fake_calls, fake_messenger):
     caller, callee = two_users
     fake_calls.responses["AcceptCall"] = calls_pb2.AcceptCallResponse(
-        call=_pb_call(MISSING_CALL_ID, caller, callee, status="active"),
+        call=_pb_call(TEST_CALL_ID, caller, callee, status="active"),
         livekit=calls_pb2.LivekitInfo(token="tok-callee", url="ws://livekit.test"),
     )
 
     c_caller = _connect(app, caller)
     c_callee = _connect(app, callee)
     try:
-        c_callee.emit("call:accept", {"call_id": MISSING_CALL_ID})
+        c_callee.emit("call:accept", {"call_id": TEST_CALL_ID})
 
         name, req = fake_calls.requests[0]
-        assert (name, req.call_id, req.user_id) == ("AcceptCall", MISSING_CALL_ID, callee)
+        assert (name, req.call_id, req.user_id) == ("AcceptCall", TEST_CALL_ID, callee)
 
         got_callee = _events(c_callee.get_received())
         accepted = got_callee["call:accepted"]
-        assert accepted["call_id"] == MISSING_CALL_ID
+        assert accepted["call_id"] == TEST_CALL_ID
         assert accepted["call"]["status"] == "active"
         assert accepted["livekit"]["token"] == "tok-callee"
         # Остальные узнают о принявшем от LiveKit (ParticipantConnected),
         # сокет-событие — только ему самому.
         assert "call:accepted" not in _events(c_caller.get_received())
+
+        # Плашка перечитана у msgsvc; пустой message_json (дефолт фейка) —
+        # message:updated никому не уходит.
+        assert ("GetCallMessage", TEST_CALL_ID) in [
+            (n, r.call_id) for n, r in fake_messenger.requests]
+        assert "message:updated" not in got_callee
     finally:
         for c in (c_caller, c_callee):
             if c.is_connected():
                 c.disconnect()
 
 
-def test_decline_notifies_initiator_and_ends_p2p(app, two_users, fake_calls):
+def test_decline_notifies_initiator_and_ends_p2p(
+        app, two_users, fake_calls, fake_messenger):
     caller, callee = two_users
     fake_calls.responses["DeclineCall"] = calls_pb2.DeclineCallResponse(
-        call=_pb_call(MISSING_CALL_ID, caller, callee, status="missed"),
+        call=_pb_call(TEST_CALL_ID, caller, callee, status="missed"),
         ended=True,
         notify_user_ids=[caller],
     )
@@ -247,14 +248,14 @@ def test_decline_notifies_initiator_and_ends_p2p(app, two_users, fake_calls):
     c_caller = _connect(app, caller)
     c_callee = _connect(app, callee)
     try:
-        c_callee.emit("call:decline", {"call_id": MISSING_CALL_ID})
+        c_callee.emit("call:decline", {"call_id": TEST_CALL_ID})
 
         got_caller = _events(c_caller.get_received())
         assert got_caller["call:participant-declined"] == {
-            "call_id": MISSING_CALL_ID, "user_id": callee,
+            "call_id": TEST_CALL_ID, "user_id": callee,
         }
         assert got_caller["call:ended"] == {
-            "call_id": MISSING_CALL_ID, "status": "missed",
+            "call_id": TEST_CALL_ID, "status": "missed",
         }
         # Отказавшийся тоже получает call:ended (закрыть свои вкладки).
         assert _events(c_callee.get_received())["call:ended"]["status"] == "missed"
@@ -264,9 +265,9 @@ def test_decline_notifies_initiator_and_ends_p2p(app, two_users, fake_calls):
                 c.disconnect()
 
 
-def test_business_error_reaches_initiator_as_call_error(app, two_users, fake_calls):
+def test_business_error_reaches_initiator_as_call_error(
+        app, two_users, fake_calls, fake_messenger):
     caller, callee = two_users
-    conv_before = _conv_id_between(app, caller, callee)
     fake_calls.responses["StartCall"] = calls_pb2.StartCallResponse(
         error=calls_pb2.Error(code="BUSY", message="Пользователь уже в звонке",
                               http_status=409),
@@ -283,14 +284,37 @@ def test_business_error_reaches_initiator_as_call_error(app, two_users, fake_cal
     finally:
         if c_caller.is_connected():
             c_caller.disconnect()
-        if conv_before is None:
-            cleanup_call_artifacts(
-                app, conversation_id=_conv_id_between(app, caller, callee))
+
+
+def test_messenger_down_does_not_break_call(
+        app, two_users, fake_calls, messenger_down):
+    """msgsvc недоступен: звонок проходит без привязки к чату и без плашки."""
+    caller, callee = two_users
+    fake_calls.responses["StartCall"] = lambda req: calls_pb2.StartCallResponse(
+        call=_pb_call(TEST_CALL_ID, caller, callee,
+                      conversation_id=req.conversation_id),
+        livekit=calls_pb2.LivekitInfo(token="tok-caller", url="ws://livekit.test"),
+    )
+
+    c_caller = _connect(app, caller)
+    try:
+        c_caller.emit("call:start", {"user_ids": [callee], "media": "video"})
+
+        name, req = fake_calls.requests[0]
+        assert name == "StartCall"
+        assert req.conversation_id == 0  # диалог не создан — msgsvc лежит
+
+        got = _events(c_caller.get_received())
+        assert got["call:started"]["call"]["id"] == TEST_CALL_ID
+        assert "call:error" not in got
+        assert "message:new" not in got
+    finally:
+        if c_caller.is_connected():
+            c_caller.disconnect()
 
 
 def test_grpc_unavailable_emits_calls_unavailable(app, two_users, grpc_down):
     caller, callee = two_users
-    conv_before = _conv_id_between(app, caller, callee)
 
     c_caller = _connect(app, caller)
     try:
@@ -302,6 +326,3 @@ def test_grpc_unavailable_emits_calls_unavailable(app, two_users, grpc_down):
     finally:
         if c_caller.is_connected():
             c_caller.disconnect()
-        if conv_before is None:
-            cleanup_call_artifacts(
-                app, conversation_id=_conv_id_between(app, caller, callee))

@@ -17,7 +17,7 @@ class Message(db.Model):
     read_at = db.Column(db.DateTime(timezone=True), nullable=True)
     # Скрыто стороной (для «удалить только у себя»). Стороны определяются
     # по conversation.user_a_id / user_b_id. Когда оба true — сообщение
-    # физически удаляется фоновой проверкой (см. messenger_service).
+    # физически удаляет msgsvc (back-go/messenger).
     hidden_for_a = db.Column(db.Boolean, nullable=False, default=False, server_default="false")
     hidden_for_b = db.Column(db.Boolean, nullable=False, default=False, server_default="false")
     # Ответ на сообщение того же диалога. SET NULL при удалении исходного —
@@ -29,9 +29,9 @@ class Message(db.Model):
     forwarded_from_user_id = db.Column(db.Integer, db.ForeignKey("users.id", ondelete="SET NULL"),
                                        nullable=True)
     # 'text' — обычное пользовательское сообщение; 'call' — системная плашка
-    # звонка: создаётся при старте p2p-звонка (sockets/call_events.py),
-    # обновляется при смене статуса. text при kind='call' пустой; данные
-    # фронт берёт из nested call (см. MessageSchema).
+    # звонка: создаётся msgsvc при старте p2p-звонка (gRPC CreateCallMessage
+    # из sockets/call_events.py), обновляется при смене статуса. text при
+    # kind='call' пустой; данные фронт берёт из nested call.
     kind = db.Column(db.String(16), nullable=False, default="text", server_default="text")
     # Для kind='call' — ссылка на запись звонка. SET NULL: если запись
     # звонка когда-то удалят, плашка останется в чате, но без деталей.

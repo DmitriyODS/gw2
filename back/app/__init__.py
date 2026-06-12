@@ -20,42 +20,10 @@ def create_app(config_name: str = None) -> Flask:
     _register_security_headers(app)
     _init_swagger(app)
     _start_call_bridge(app)
+    _start_service_bridge(app)
     _start_presence_sweeper(app)
-    _start_tv_facts_loop(app)
-    _start_groove_ai_loop(app)
-    _start_groove_care_loop(app)
-    _register_cli(app)
 
     return app
-
-
-def _register_cli(app: Flask) -> None:
-    from app.cli import register_cli
-    register_cli(app)
-
-
-def _start_tv_facts_loop(app: Flask) -> None:
-    """Фоновая генерация TV-факта дня для компаний с включённым AI.
-
-    Поднимаем через socketio.start_background_task (eventlet-greenlet под
-    капотом). Цикл сам считает, когда ближайший слот, и спит до него.
-    """
-    from app.services.tv_facts_service import run_tv_facts_loop
-    socketio.start_background_task(run_tv_facts_loop, app)
-
-
-def _start_groove_ai_loop(app: Flask) -> None:
-    """Фоновый AI-цикл «Моего Groove»: утренний дайджест в ленту и пул
-    реплик Грувика для кормления (per-company, только при включённом AI)."""
-    from app.services.groove_ai_service import run_groove_ai_loop
-    socketio.start_background_task(run_groove_ai_loop, app)
-
-
-def _start_groove_care_loop(app: Flask) -> None:
-    """Цикл заботы «Моего Groove»: болезни Грувиков (давно не работавшие
-    хозяева) и дневной пересчёт характеров. Работает для всех компаний."""
-    from app.services.pet_service import run_groove_care_loop
-    socketio.start_background_task(run_groove_care_loop, app)
 
 
 def _start_presence_sweeper(app: Flask) -> None:
@@ -205,4 +173,12 @@ def _start_call_bridge(app: Flask) -> None:
     Реконсиляция зависших звонков при старте теперь — забота самого callsvc."""
     from app.sockets.call_bridge import start_call_bridge
     start_call_bridge(app, socketio)
+
+
+def _start_service_bridge(app: Flask) -> None:
+    """Обобщённый слушатель Redis-каналов gw2:<svc>:events Go-микросервисов
+    (пока — мессенджер): обычные события ретранслируются в Socket.IO-комнаты,
+    служебные (на «_») диспатчатся в python-обработчики."""
+    from app.sockets.service_bridge import start_service_bridge
+    start_service_bridge(app, socketio)
 

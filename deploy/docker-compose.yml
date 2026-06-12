@@ -61,8 +61,12 @@ services:
       UPLOAD_FOLDER: /app/uploads
       # Микросервис звонков (Go): ринг-фаза ходит из сокет-хендлеров по gRPC.
       CALLS_GRPC_ADDR: calls:9090
-      # AI / ProxyAPI — ключ шифрования API-ключей компаний.
-      AI_KEY_ENCRYPTION_KEY: ${AI_KEY_ENCRYPTION_KEY:-}
+      # Микросервис мессенджера (Go): плашки звонков и диалоги — по gRPC.
+      MESSENGER_GRPC_ADDR: messenger:9092
+      # Микросервис ИИ (Go): chat/embeddings/семантический поиск — по gRPC.
+      AI_GRPC_ADDR: ai:9093
+      # Микросервис Groove (Go): хуки геймификации задач/юнитов — по gRPC.
+      GROOVE_GRPC_ADDR: groove:9094
     volumes:
       - uploads:/app/uploads
     expose:
@@ -81,7 +85,9 @@ services:
   # мимо Flask) и gRPC для Flask-шлюза. События для Socket.IO публикует в
   # Redis-канал gw2:calls:events, который слушает app.
   calls:
-    build: ../back-go/calls
+    build:
+      context: ../back-go
+      dockerfile: calls/Dockerfile
     restart: unless-stopped
     depends_on:
       db:
@@ -120,7 +126,9 @@ services:
   # ключ только здесь, Flask и calls проверяют по PASETO_PUBLIC_KEY. Пишет
   # аватарки в общий uploads-volume (отдаёт их nginx), брутфорс-щит — в Redis.
   auth:
-    build: ../back-go/auth
+    build:
+      context: ../back-go
+      dockerfile: auth/Dockerfile
     restart: unless-stopped
     depends_on:
       db:
@@ -149,6 +157,164 @@ services:
       retries: 5
       start_period: 10s
 
+  # Микросервис мессенджера (Go, back-go/messenger): REST /api/messenger/*
+  # (nginx маршрутизирует сюда мимо Flask; исключение — exact-роут
+  # /api/messenger/presence, он остаётся во Flask) и gRPC для Flask-шлюза.
+  # Вложения сообщений пишет в общий uploads-volume (отдаёт их nginx).
+  # События для Socket.IO публикует в Redis-канал gw2:messenger:events.
+  messenger:
+    build:
+      context: ../back-go
+      dockerfile: messenger/Dockerfile
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      # Схему conversations/messages ведёт Alembic на стороне app
+      # (entrypoint.sh → flask db upgrade); healthy app = миграции применены.
+      app:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql://${DB_USER}:${DB_PASSWORD}@db:5432/${DB_NAME}
+      REDIS_URL: redis://redis:6379/0
+      PASETO_PUBLIC_KEY: ${PASETO_PUBLIC_KEY}
+      UPLOAD_FOLDER: /app/uploads
+      # Pet-чат: хук «хозяин написал» уходит в groovesvc по gRPC.
+      GROOVE_GRPC_ADDR: groove:9094
+      HTTP_ADDR: ":8092"
+      GRPC_ADDR: ":9092"
+    volumes:
+      - uploads:/app/uploads
+    expose:
+      - "8092"
+      - "9092"
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8092/healthz"]
+      interval: 15s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
+
+  # Микросервис ИИ (Go, back-go/ai): ключи компаний (Fernet), вызовы
+  # ProxyAPI/OpenAI (chat + embeddings), task_embeddings (pgvector), ТВ-факт
+  # дня (фоновый цикл + кэш в Redis gw2:ai:tv_fact:*), REST
+  # /api/companies/<id>/ai-settings и /api/ai/tv-fact (nginx ведёт сюда мимо
+  # Flask) и gRPC для Flask-шлюза. Uploads не нужны.
+  ai:
+    build:
+      context: ../back-go
+      dockerfile: ai/Dockerfile
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      # Схему companies.ai_* / task_embeddings ведёт Alembic на стороне app
+      # (entrypoint.sh → flask db upgrade); healthy app = миграции применены.
+      app:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql://${DB_USER}:${DB_PASSWORD}@db:5432/${DB_NAME}
+      REDIS_URL: redis://redis:6379/0
+      PASETO_PUBLIC_KEY: ${PASETO_PUBLIC_KEY}
+      # Fernet-ключ шифрования API-ключей компаний — теперь только у aisvc.
+      AI_KEY_ENCRYPTION_KEY: ${AI_KEY_ENCRYPTION_KEY:-}
+      HTTP_ADDR: ":8093"
+      GRPC_ADDR: ":9093"
+    expose:
+      - "8093"
+      - "9093"
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8093/healthz"]
+      interval: 15s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
+
+  # Микросервис «Мой Groove» (Go, back-go/groove): лента, питомцы, рейды,
+  # магазин и AI-механики Грувика. REST /api/groove/* (nginx ведёт сюда мимо
+  # Flask), gRPC-хуки доменных событий (app — юниты/задачи, messenger —
+  # pet-чат). События Socket.IO публикует в Redis-канал gw2:groove:events.
+  groove:
+    build:
+      context: ../back-go
+      dockerfile: groove/Dockerfile
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      # Схему feed_events/pets/groove_raids ведёт Alembic на стороне app
+      # (entrypoint.sh → flask db upgrade); healthy app = миграции применены.
+      app:
+        condition: service_healthy
+      messenger:
+        condition: service_healthy
+      ai:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql://${DB_USER}:${DB_PASSWORD}@db:5432/${DB_NAME}
+      REDIS_URL: redis://redis:6379/0
+      PASETO_PUBLIC_KEY: ${PASETO_PUBLIC_KEY}
+      AI_GRPC_ADDR: ai:9093
+      MESSENGER_GRPC_ADDR: messenger:9092
+      HTTP_ADDR: ":8094"
+      GRPC_ADDR: ":9094"
+    expose:
+      - "8094"
+      - "9094"
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8094/healthz"]
+      interval: 15s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
+
+  # Микросервис задач (Go, back-go/tasks): ядро платформы — задачи, юниты,
+  # типы юнитов, этапы, отделы, комментарии, избранное, цвета и статистика
+  # с xlsx-экспортом. REST /api/tasks|units|unit-types|departments|stages|
+  # stats (nginx ведёт сюда мимо Flask). Хуки геймификации — gRPC groovesvc,
+  # семантический поиск/реиндекс — gRPC aisvc. Сокет-события публикует в
+  # Redis-канал gw2:tasks:events (мост Flask; служебные «_»-события дёргают
+  # YouGile-пуш, пока интеграция живёт во Flask).
+  tasks:
+    build:
+      context: ../back-go
+      dockerfile: tasks/Dockerfile
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      # Схему tasks/units/... ведёт Alembic на стороне app
+      # (entrypoint.sh → flask db upgrade); healthy app = миграции применены.
+      app:
+        condition: service_healthy
+      groove:
+        condition: service_healthy
+      ai:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql://${DB_USER}:${DB_PASSWORD}@db:5432/${DB_NAME}
+      REDIS_URL: redis://redis:6379/0
+      PASETO_PUBLIC_KEY: ${PASETO_PUBLIC_KEY}
+      GROOVE_GRPC_ADDR: groove:9094
+      AI_GRPC_ADDR: ai:9093
+      HTTP_ADDR: ":8095"
+    expose:
+      - "8095"
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8095/healthz"]
+      interval: 15s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
+
   # Конфиг nginx и хост-порты задают оверлеи: dev — nginx.conf и :8080,
   # prod — nginx.prod.conf, :80/:443 и certbot-volumes.
   nginx:
@@ -157,8 +323,10 @@ services:
       dockerfile: Dockerfile
     restart: unless-stopped
     # service_healthy, а не started: конфиг nginx резолвит upstream'ы app:5000,
-    # calls:8090 и auth:8091 на старте — без живых контейнеров он падает целиком
-    # («host not found in upstream»), включая отдачу SPA.
+    # calls:8090, auth:8091, messenger:8092, ai:8093 и groove:8094 на
+    # старте — без живых
+    # контейнеров он падает целиком («host not found in upstream»), включая
+    # отдачу SPA.
     depends_on:
       app:
         condition: service_healthy
@@ -166,8 +334,19 @@ services:
         condition: service_healthy
       auth:
         condition: service_healthy
+      messenger:
+        condition: service_healthy
+      ai:
+        condition: service_healthy
+      groove:
+        condition: service_healthy
+      tasks:
+        condition: service_healthy
     volumes:
       - uploads:/app/uploads:ro
+      # Лог изменений отдаётся статикой (location = /api/changelog);
+      # файл приезжает из git-репозитория, отдельного API больше нет.
+      - ../back/data/changelog.json:/srv/changelog.json:ro
 
   # Медиа-сервер звонков LiveKit (SFU). Сигнальный WebSocket :7880 ходит через
   # nginx (/livekit); медиа — UDP-мультиплекс на одном порту 7882 (+ TCP 7881

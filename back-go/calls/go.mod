@@ -3,14 +3,14 @@ module github.com/DmitriyODS/gw2/back-go/calls
 go 1.26
 
 require (
-	aidanwoods.dev/go-paseto v1.5.4
+	aidanwoods.dev/go-paseto v1.5.4 // indirect
 	github.com/go-kit/kit v0.13.0
 	github.com/gofiber/fiber/v2 v2.52.13
 	github.com/golang-jwt/jwt/v5 v5.3.1
 	github.com/jackc/pgx/v5 v5.10.0
 	github.com/redis/go-redis/v9 v9.20.1
 	google.golang.org/grpc v1.81.1
-	google.golang.org/protobuf v1.36.11
+	google.golang.org/protobuf v1.36.11 // indirect
 )
 
 require (
@@ -37,3 +37,7 @@ require (
 	golang.org/x/text v0.34.0 // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20260610212136-7ab31c22f7ad // indirect
 )
+
+require github.com/DmitriyODS/gw2/back-go/pkg v0.0.0
+
+replace github.com/DmitriyODS/gw2/back-go/pkg => ../pkg

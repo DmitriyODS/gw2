@@ -1,12 +1,7 @@
 from . import (
-    task_service, unit_service, stats_service,
-    backup_service, messenger_service, calls_client, company_service,
-    stage_service, comment_service, feed_service, pet_service,
+    task_service, calls_client, messenger_client, groove_client,
 )
 
 __all__ = [
-    "task_service", "unit_service",
-    "stats_service", "backup_service", "messenger_service", "calls_client",
-    "company_service", "stage_service", "comment_service",
-    "feed_service", "pet_service",
+    "task_service", "calls_client", "messenger_client", "groove_client",
 ]

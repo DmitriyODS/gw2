@@ -1,0 +1,356 @@
+// Package endpoint — go-kit обёртки use-case'ов: единая сигнатура
+// (ctx, request) → (response, error). Та же схема, что в остальных сервисах.
+package endpoint
+
+import (
+	"context"
+	"time"
+
+	"github.com/go-kit/kit/endpoint"
+
+	"github.com/DmitriyODS/gw2/back-go/tasks/internal/domain"
+	"github.com/DmitriyODS/gw2/back-go/tasks/internal/dto"
+	"github.com/DmitriyODS/gw2/back-go/tasks/internal/service"
+)
+
+type Endpoints struct {
+	ListTasks      endpoint.Endpoint
+	CreateTask     endpoint.Endpoint
+	GetTask        endpoint.Endpoint
+	UpdateTask     endpoint.Endpoint
+	DeleteTask     endpoint.Endpoint
+	ArchiveTask    endpoint.Endpoint
+	RestoreTask    endpoint.Endpoint
+	SetTaskColor   endpoint.Endpoint
+	ToggleFavorite endpoint.Endpoint
+	SetResponsible endpoint.Endpoint
+	SetStage       endpoint.Endpoint
+	Contributors   endpoint.Endpoint
+
+	TaskUnits  endpoint.Endpoint
+	CreateUnit endpoint.Endpoint
+	ActiveUnit endpoint.Endpoint
+	UpdateUnit endpoint.Endpoint
+	StopUnit   endpoint.Endpoint
+	DeleteUnit endpoint.Endpoint
+
+	ListComments  endpoint.Endpoint
+	CreateComment endpoint.Endpoint
+	UpdateComment endpoint.Endpoint
+	DeleteComment endpoint.Endpoint
+
+	ListUnitTypes  endpoint.Endpoint
+	CreateUnitType endpoint.Endpoint
+	UpdateUnitType endpoint.Endpoint
+	DeleteUnitType endpoint.Endpoint
+
+	ListDepartments  endpoint.Endpoint
+	CreateDepartment endpoint.Endpoint
+	UpdateDepartment endpoint.Endpoint
+	DeleteDepartment endpoint.Endpoint
+
+	ListStages    endpoint.Endpoint
+	CreateStage   endpoint.Endpoint
+	UpdateStage   endpoint.Endpoint
+	DeleteStage   endpoint.Endpoint
+	ReorderStages endpoint.Endpoint
+
+	StatsCommon         endpoint.Endpoint
+	StatsExtended       endpoint.Endpoint
+	ExportCommonXLSX    endpoint.Endpoint
+	ExportExtendedXLSX  endpoint.Endpoint
+	StatsUserTasks      endpoint.Endpoint
+	StatsProfile        endpoint.Endpoint
+	StatsEmployees      endpoint.Endpoint
+	StatsResponsibles   endpoint.Endpoint
+}
+
+// ── Транспорт-независимые запросы ────────────────────────────────
+
+type CreateTaskRequest struct {
+	ActorID   int64
+	CompanyID int64
+	Body      dto.TaskCreate
+}
+
+type UpdateTaskRequest struct {
+	TaskID  int64
+	ActorID int64
+	Body    dto.TaskUpdate
+}
+
+type TaskActorRequest struct {
+	TaskID  int64
+	ActorID int64
+}
+
+type TaskColorRequest struct {
+	TaskID int64
+	UserID int64
+	Color  *string
+}
+
+type SetResponsibleRequest struct {
+	TaskID            int64
+	ActorID           int64
+	ResponsibleUserID *int64
+}
+
+type SetStageRequest struct {
+	TaskID  int64
+	ActorID int64
+	StageID *int64
+}
+
+type CreateUnitRequest struct {
+	TaskID     int64
+	UserID     int64
+	Name       string
+	UnitTypeID int64
+}
+
+type UnitActorRequest struct {
+	UnitID     int64
+	ActorID    int64
+	ActorLevel int
+}
+
+type UpdateUnitRequest struct {
+	UnitID     int64
+	ActorID    int64
+	ActorLevel int
+	Body       dto.UnitUpdate
+}
+
+type CommentCreateRequest struct {
+	TaskID   int64
+	AuthorID int64
+	Text     string
+}
+
+type CommentEditRequest struct {
+	TaskID    int64
+	CommentID int64
+	UserID    int64
+	Text      string
+}
+
+type CompanyNameRequest struct {
+	CompanyID int64
+	ItemID    int64
+	Name      string
+}
+
+type StageCreateRequest struct {
+	CompanyID int64
+	Name      string
+	Color     string
+}
+
+type StageUpdateRequest struct {
+	CompanyID int64
+	StageID   int64
+	Name      *string
+	Color     *string
+}
+
+type CompanyItemRequest struct {
+	CompanyID int64
+	ItemID    int64
+}
+
+type ReorderRequest struct {
+	CompanyID int64
+	IDs       []int64
+}
+
+type PeriodRequest struct {
+	Start     time.Time
+	End       time.Time
+	CompanyID *int64
+}
+
+type UserTasksRequest struct {
+	Actor        *domain.User
+	TargetUserID int64
+	Start        time.Time
+	End          time.Time
+}
+
+type ProfileRequest struct {
+	UserID int64
+	Start  time.Time
+	End    time.Time
+}
+
+func New(svc *service.Service) Endpoints {
+	return Endpoints{
+		ListTasks: func(ctx context.Context, request any) (any, error) {
+			return svc.ListTasks(ctx, request.(domain.TaskListFilter))
+		},
+		CreateTask: func(ctx context.Context, request any) (any, error) {
+			req := request.(CreateTaskRequest)
+			return svc.CreateTask(ctx, req.ActorID, req.CompanyID, req.Body)
+		},
+		GetTask: func(ctx context.Context, request any) (any, error) {
+			req := request.(TaskActorRequest)
+			return svc.GetTask(ctx, req.TaskID, req.ActorID)
+		},
+		UpdateTask: func(ctx context.Context, request any) (any, error) {
+			req := request.(UpdateTaskRequest)
+			return svc.UpdateTask(ctx, req.TaskID, req.ActorID, req.Body)
+		},
+		DeleteTask: func(ctx context.Context, request any) (any, error) {
+			return nil, svc.DeleteTask(ctx, request.(int64))
+		},
+		ArchiveTask: func(ctx context.Context, request any) (any, error) {
+			req := request.(TaskActorRequest)
+			return svc.ArchiveTask(ctx, req.TaskID, req.ActorID)
+		},
+		RestoreTask: func(ctx context.Context, request any) (any, error) {
+			req := request.(TaskActorRequest)
+			return svc.RestoreTask(ctx, req.TaskID, req.ActorID)
+		},
+		SetTaskColor: func(ctx context.Context, request any) (any, error) {
+			req := request.(TaskColorRequest)
+			return nil, svc.SetTaskColor(ctx, req.TaskID, req.UserID, req.Color)
+		},
+		ToggleFavorite: func(ctx context.Context, request any) (any, error) {
+			req := request.(TaskActorRequest)
+			return svc.ToggleFavorite(ctx, req.TaskID, req.ActorID)
+		},
+		SetResponsible: func(ctx context.Context, request any) (any, error) {
+			req := request.(SetResponsibleRequest)
+			return svc.SetResponsible(ctx, req.TaskID, req.ActorID, req.ResponsibleUserID)
+		},
+		SetStage: func(ctx context.Context, request any) (any, error) {
+			req := request.(SetStageRequest)
+			return svc.SetStage(ctx, req.TaskID, req.ActorID, req.StageID)
+		},
+		Contributors: func(ctx context.Context, request any) (any, error) {
+			return svc.Contributors(ctx, request.(int64))
+		},
+
+		TaskUnits: func(ctx context.Context, request any) (any, error) {
+			return svc.TaskUnits(ctx, request.(int64))
+		},
+		CreateUnit: func(ctx context.Context, request any) (any, error) {
+			req := request.(CreateUnitRequest)
+			return svc.CreateUnit(ctx, req.TaskID, req.UserID, req.Name, req.UnitTypeID)
+		},
+		ActiveUnit: func(ctx context.Context, request any) (any, error) {
+			return svc.ActiveUnit(ctx, request.(int64))
+		},
+		UpdateUnit: func(ctx context.Context, request any) (any, error) {
+			req := request.(UpdateUnitRequest)
+			return svc.UpdateUnit(ctx, req.UnitID, req.ActorID, req.ActorLevel, req.Body)
+		},
+		StopUnit: func(ctx context.Context, request any) (any, error) {
+			req := request.(UnitActorRequest)
+			return svc.StopUnit(ctx, req.UnitID, req.ActorID, req.ActorLevel)
+		},
+		DeleteUnit: func(ctx context.Context, request any) (any, error) {
+			req := request.(UnitActorRequest)
+			return nil, svc.DeleteUnit(ctx, req.UnitID, req.ActorID, req.ActorLevel)
+		},
+
+		ListComments: func(ctx context.Context, request any) (any, error) {
+			return svc.ListComments(ctx, request.(int64))
+		},
+		CreateComment: func(ctx context.Context, request any) (any, error) {
+			req := request.(CommentCreateRequest)
+			return svc.CreateComment(ctx, req.TaskID, req.AuthorID, req.Text)
+		},
+		UpdateComment: func(ctx context.Context, request any) (any, error) {
+			req := request.(CommentEditRequest)
+			return svc.UpdateComment(ctx, req.CommentID, req.UserID, req.Text)
+		},
+		DeleteComment: func(ctx context.Context, request any) (any, error) {
+			req := request.(CommentEditRequest)
+			return nil, svc.DeleteComment(ctx, req.TaskID, req.CommentID, req.UserID)
+		},
+
+		ListUnitTypes: func(ctx context.Context, request any) (any, error) {
+			return svc.ListUnitTypes(ctx, request.(int64))
+		},
+		CreateUnitType: func(ctx context.Context, request any) (any, error) {
+			req := request.(CompanyNameRequest)
+			return svc.CreateUnitType(ctx, req.CompanyID, req.Name)
+		},
+		UpdateUnitType: func(ctx context.Context, request any) (any, error) {
+			req := request.(CompanyNameRequest)
+			return svc.UpdateUnitType(ctx, req.CompanyID, req.ItemID, req.Name)
+		},
+		DeleteUnitType: func(ctx context.Context, request any) (any, error) {
+			req := request.(CompanyItemRequest)
+			return nil, svc.DeleteUnitType(ctx, req.CompanyID, req.ItemID)
+		},
+
+		ListDepartments: func(ctx context.Context, request any) (any, error) {
+			return svc.ListDepartments(ctx, request.(int64))
+		},
+		CreateDepartment: func(ctx context.Context, request any) (any, error) {
+			req := request.(CompanyNameRequest)
+			return svc.CreateDepartment(ctx, req.CompanyID, req.Name)
+		},
+		UpdateDepartment: func(ctx context.Context, request any) (any, error) {
+			req := request.(CompanyNameRequest)
+			return svc.UpdateDepartment(ctx, req.CompanyID, req.ItemID, req.Name)
+		},
+		DeleteDepartment: func(ctx context.Context, request any) (any, error) {
+			req := request.(CompanyItemRequest)
+			return nil, svc.DeleteDepartment(ctx, req.CompanyID, req.ItemID)
+		},
+
+		ListStages: func(ctx context.Context, request any) (any, error) {
+			return svc.ListStages(ctx, request.(int64))
+		},
+		CreateStage: func(ctx context.Context, request any) (any, error) {
+			req := request.(StageCreateRequest)
+			return svc.CreateStage(ctx, req.CompanyID, req.Name, req.Color)
+		},
+		UpdateStage: func(ctx context.Context, request any) (any, error) {
+			req := request.(StageUpdateRequest)
+			return svc.UpdateStage(ctx, req.CompanyID, req.StageID, req.Name, req.Color)
+		},
+		DeleteStage: func(ctx context.Context, request any) (any, error) {
+			req := request.(CompanyItemRequest)
+			return nil, svc.DeleteStage(ctx, req.CompanyID, req.ItemID)
+		},
+		ReorderStages: func(ctx context.Context, request any) (any, error) {
+			req := request.(ReorderRequest)
+			return svc.ReorderStages(ctx, req.CompanyID, req.IDs)
+		},
+
+		StatsCommon: func(ctx context.Context, request any) (any, error) {
+			req := request.(PeriodRequest)
+			return svc.StatsCommon(ctx, req.Start, req.End, req.CompanyID)
+		},
+		StatsExtended: func(ctx context.Context, request any) (any, error) {
+			req := request.(PeriodRequest)
+			return svc.StatsExtended(ctx, req.Start, req.End, req.CompanyID)
+		},
+		ExportCommonXLSX: func(ctx context.Context, request any) (any, error) {
+			req := request.(PeriodRequest)
+			return svc.ExportCommonXLSX(ctx, req.Start, req.End, req.CompanyID)
+		},
+		ExportExtendedXLSX: func(ctx context.Context, request any) (any, error) {
+			req := request.(PeriodRequest)
+			return svc.ExportExtendedXLSX(ctx, req.Start, req.End, req.CompanyID)
+		},
+		StatsUserTasks: func(ctx context.Context, request any) (any, error) {
+			req := request.(UserTasksRequest)
+			return svc.StatsUserTasks(ctx, req.Actor, req.TargetUserID, req.Start, req.End)
+		},
+		StatsProfile: func(ctx context.Context, request any) (any, error) {
+			req := request.(ProfileRequest)
+			return svc.StatsProfile(ctx, req.UserID, req.Start, req.End)
+		},
+		StatsEmployees: func(ctx context.Context, request any) (any, error) {
+			return svc.StatsEmployees(ctx, request.(*int64))
+		},
+		StatsResponsibles: func(ctx context.Context, request any) (any, error) {
+			return svc.StatsResponsibles(ctx, request.(*int64))
+		},
+	}
+}
