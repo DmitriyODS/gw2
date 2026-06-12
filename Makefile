@@ -28,7 +28,8 @@ help:
 	@printf "  make dev-stack-stop  Остановить полный стек\n"
 	@printf "  make gen-proto    Перегенерировать gRPC-стабы (Go + Python)\n"
 	@printf "\n\033[1mДеплой (сервер):\033[0m\n"
-	@printf "  make deploy       git push → fetch+reset на сервере → docker compose up --build\n"
+	@printf "  make push [only=\"app front\"]  Собрать (linux/amd64) и запушить образы в Docker Hub\n"
+	@printf "  make deploy       make push → git push → на сервере: compose pull + up --no-build\n"
 	@printf "  make logs [s=calls]     Логи контейнера (по умолчанию app)\n"
 	@printf "  make status       docker compose ps на сервере\n"
 	@printf "  make restart [s=calls]  Перезапустить контейнер без пересборки\n"
@@ -114,20 +115,27 @@ dev-stack-stop:
 	@printf "\033[32m✓ Полный стек остановлен\033[0m\n"
 
 # ── Деплой ───────────────────────────────────────────────────────
-.PHONY: deploy logs status restart shell
+.PHONY: push deploy logs status restart shell
 
 # Прод-стек = база + оверлей (см. шапку deploy/docker-compose.prod.yml).
 COMPOSE_PROD := docker compose -f docker-compose.yml -f docker-compose.prod.yml
 # Сервис для logs/restart/shell: make logs s=calls (по умолчанию app).
 s ?= app
 
-deploy:
+# Сборка прод-образов (linux/amd64) и push в Docker Hub
+# osipovskijdima/groove_work (теги app/calls/auth/front + версионные).
+# Выборочно: make push only="app front". Нужен одноразовый docker login.
+push:
+	bash scripts/build_push.sh $(only)
+
+deploy: push
 	@printf "\033[1m▶ Пушу в GitHub...\033[0m\n"
 	git push
 	@printf "\033[1m▶ Деплою на $(SERVER_HOST)...\033[0m\n"
-	@# Вся серверная логика — в scripts/deploy_server.sh (приезжает тем же
-	@# git reset): синк .env с автогенерацией недостающих секретов, firewall,
-	@# up --build --remove-orphans, reload nginx, health-чеки.
+	@# Сервер НЕ собирает образы. Вся серверная логика — в
+	@# scripts/deploy_server.sh (приезжает тем же git reset): синк .env с
+	@# автогенерацией недостающих секретов, firewall, compose pull +
+	@# up --no-build --remove-orphans, reload nginx, health-чеки.
 	$(SSH) "cd $(SERVER_DIR) && git fetch origin && git reset --hard origin/main && bash scripts/deploy_server.sh"
 	@printf "\033[32m✓ Задеплоено на $(SERVER_HOST)\033[0m\n"
 

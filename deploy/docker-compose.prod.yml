@@ -4,11 +4,19 @@
 # (так зовут scripts/deploy_server.sh и Makefile; голый `docker compose`
 # на сервере не использовать — он подхватит dev-оверлей с портами наружу).
 #
-# Здесь только отличия от базы: обязательные секреты, TLS/certbot,
-# прод-конфиг nginx, YouGile-окружение app.
+# Здесь только отличия от базы: образы из Docker Hub вместо локальной
+# сборки, обязательные секреты, TLS/certbot, прод-конфиг nginx,
+# YouGile-окружение app.
+#
+# Прод НЕ собирает образы: их пушит локальная машина (`make push` →
+# scripts/build_push.sh) в один репозиторий osipovskijdima/groove_work
+# под тегами app/calls/auth/front. Деплой-скрипт делает `compose pull` +
+# `up --no-build`. Откат: в deploy/.env выставить версионный тег,
+# например APP_TAG=app-3.6.0 (CALLS_TAG / AUTH_TAG / FRONT_TAG — аналогично).
 # ================================================================
 services:
   app:
+    image: osipovskijdima/groove_work:${APP_TAG:-app}
     environment:
       # YouGile-интеграция:
       #   YOUGILE_ENC_KEY — Fernet для шифрования персональных ключей юзеров.
@@ -22,11 +30,16 @@ services:
       - /opt/gw2/backup.json:/app/backup.json:ro
 
   calls:
+    image: osipovskijdima/groove_work:${CALLS_TAG:-calls}
     environment:
       LIVEKIT_API_KEY: ${LIVEKIT_API_KEY:?LIVEKIT_API_KEY обязателен}
       LIVEKIT_API_SECRET: ${LIVEKIT_API_SECRET:?LIVEKIT_API_SECRET обязателен}
 
+  auth:
+    image: osipovskijdima/groove_work:${AUTH_TAG:-auth}
+
   nginx:
+    image: osipovskijdima/groove_work:${FRONT_TAG:-front}
     ports:
       - "80:80"
       - "443:443"

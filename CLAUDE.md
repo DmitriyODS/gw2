@@ -173,12 +173,15 @@ make gen-proto       # перегенерировать gRPC-стабы посл
 
 ```bash
 cp .env.deploy.example .env.deploy   # один раз: SERVER_HOST, SSH_KEY
-make deploy    # git push → SSH → git reset --hard → scripts/deploy_server.sh
+make push      # собрать (linux/amd64) и запушить образы в Docker Hub; only="app front" — выборочно
+make deploy    # make push → git push → SSH → git reset --hard → scripts/deploy_server.sh
 make logs s=auth|calls   make status   make restart s=...   make shell s=...
 make reset NEWPASS='...'  # сброс пароля суперадмина (pgcrypto, без утечки в ps)
 ```
 
-`scripts/deploy_server.sh` (идемпотентен): 1) синк `deploy/.env` — недостающие секреты генерирует сам (DB_PASSWORD, SECRET_KEY, Fernet-ключи, LIVEKIT_*, пара PASETO Ed25519 целиком + PASETO_REFRESH_KEY), существующие НЕ перезаписывает, устаревшие (TURN_*, JWT_SECRET_KEY) вычищает, бэкапит .env; 2) ufw: 7881/tcp, 7882/udp; 3) `compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build --remove-orphans`; 4) `nginx -t` + reload (конфиг bind-mounted); 5) health-чеки: apispec через nginx, callsvc (healthz + gRPC из app), authsvc (healthz + POST /api/auth/login через nginx → ожидается 400), `/livekit/`, TCP 7881. `--env-only` — только синк .env. `entrypoint.sh` app-контейнера сам гонит `flask db upgrade`. Подробности — `DEPLOY.md`. GitHub: https://github.com/DmitriyODS/gw2.git
+**Сервер образы НЕ собирает.** `scripts/build_push.sh` собирает их локально под `linux/amd64` (Go-стадии — нативный кросс через `$BUILDPLATFORM`, python/node — Rosetta) и пушит в ОДИН репозиторий Docker Hub `osipovskijdima/groove_work` с тегами `app` / `calls` / `auth` / `front` + версионными `<svc>-X.Y.Z` (версия из `front/package.json`). Откат: в `deploy/.env` на сервере `APP_TAG=app-3.6.0` (аналогично `CALLS_TAG`/`AUTH_TAG`/`FRONT_TAG`), затем pull+up. Приватный репозиторий → одноразовый `docker login` локально и на сервере.
+
+`scripts/deploy_server.sh` (идемпотентен): 1) синк `deploy/.env` — недостающие секреты генерирует сам (DB_PASSWORD, SECRET_KEY, Fernet-ключи, LIVEKIT_*, пара PASETO Ed25519 целиком + PASETO_REFRESH_KEY), существующие НЕ перезаписывает, устаревшие (TURN_*, JWT_SECRET_KEY) вычищает, бэкапит .env; 2) ufw: 7881/tcp, 7882/udp; 3) `compose -f docker-compose.yml -f docker-compose.prod.yml pull` + `up -d --no-build --remove-orphans` + prune старых слоёв и build-кэша; 4) `nginx -t` + reload (конфиг bind-mounted); 5) health-чеки: apispec через nginx, callsvc (healthz + gRPC из app), authsvc (healthz + POST /api/auth/login через nginx → ожидается 400), `/livekit/`, TCP 7881. `--env-only` — только синк .env. `entrypoint.sh` app-контейнера сам гонит `flask db upgrade`. Подробности — `DEPLOY.md`. GitHub: https://github.com/DmitriyODS/gw2.git
 
 ## Версионирование
 

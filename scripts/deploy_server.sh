@@ -11,8 +11,10 @@
 #      Перед любой правкой делает бэкап .env рядом.
 #   2. Если включён ufw — открывает медиа-порты LiveKit (7881/tcp,
 #      7882/udp); 80/443 считаются уже открытыми.
-#   3. docker compose up -d --build --remove-orphans (сносит
-#      осиротевшие контейнеры вроде старого coturn).
+#   3. docker compose pull + up -d --no-build --remove-orphans.
+#      Образы НА СЕРВЕРЕ НЕ СОБИРАЮТСЯ — их пушит локальная машина
+#      (`make push` → scripts/build_push.sh) в Docker Hub
+#      osipovskijdima/groove_work (теги app/calls/auth/front).
 #   4. Перечитывает конфиг nginx (он bind-mounted: git обновляет
 #      файл, но без reload контейнер живёт со старым конфигом).
 #   5. Health-чеки: API через nginx, микросервис звонков (healthz +
@@ -149,10 +151,21 @@ else
   warn "ufw недоступен (нет команды или sudo) — проверьте медиа-порты 7881/tcp, 7882/udp вручную"
 fi
 
-# ── 3. Сборка и запуск ───────────────────────────────────────────
-log "Собираю и поднимаю контейнеры"
+# ── 3. Образы и запуск ───────────────────────────────────────────
+# Сборки на сервере нет: тянем готовые образы из Docker Hub. Если
+# репозиторий приватный — на сервере нужен одноразовый `docker login`.
+log "Тяну образы из Docker Hub"
 cd deploy
-$COMPOSE up -d --build --remove-orphans
+if ! $COMPOSE pull --quiet; then
+  warn "docker compose pull не прошёл — образы не запушены (make push) или нужен docker login на сервере"
+  exit 1
+fi
+log "Поднимаю контейнеры"
+$COMPOSE up -d --no-build --remove-orphans
+# Подчищаем: слои, осиротевшие после переезда тегов, и build-кэш
+# (он остался от прежней схемы со сборкой на сервере и больше не нужен).
+docker image prune -f >/dev/null 2>&1 || true
+docker builder prune -af >/dev/null 2>&1 || true
 
 # ── 4. Перечитать конфиг nginx ───────────────────────────────────
 # Конфиг примонтирован файлом: git reset уже обновил его на диске, но

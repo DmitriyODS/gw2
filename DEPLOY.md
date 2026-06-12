@@ -5,6 +5,12 @@
 - Docker 24+ и Docker Compose v2
 - Открытый порт 80 (или 443 при HTTPS)
 - Для звонков (LiveKit): открытые порты **7881/TCP** и **7882/UDP** (`ufw allow 7881/tcp && ufw allow 7882/udp`)
+- Доступ к Docker Hub: сервер **не собирает** образы приложений, а тянет
+  готовые из репозитория `osipovskijdima/groove_work` (теги
+  `app` / `calls` / `auth` / `front`). Пушит их локальная машина:
+  `make push` (= `scripts/build_push.sh`, сборка под `linux/amd64`).
+  Если репозиторий приватный — один раз выполнить `docker login` и на
+  локальной машине (push), и на сервере (pull).
 
 ---
 
@@ -61,23 +67,33 @@ python3 -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().
 
 ### 2. Запустить
 
+С локальной машины (предпочтительно):
+
+```bash
+make deploy   # = make push (сборка+публикация образов) → git push →
+              #   на сервере: git reset + scripts/deploy_server.sh
+```
+
+Вручную на сервере (образы уже должны быть запушены через `make push`):
+
 ```bash
 cd deploy
-docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
+docker compose -f docker-compose.yml -f docker-compose.prod.yml pull
+docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --no-build
 ```
 
 > **Важно про compose-файлы.** Прод-стек собирается из пары
-> `docker-compose.yml` (база) + `docker-compose.prod.yml` (оверлей: TLS,
-> certbot, обязательные секреты). Голый `docker compose up` запускать на
-> сервере **нельзя** — он автоматически подхватит dev-оверлей
-> `docker-compose.override.yml` и опубликует порты БД/Redis наружу.
-> Проще всего вообще не звать compose руками: `make deploy` с локальной
-> машины делает всё сам через `scripts/deploy_server.sh`.
+> `docker-compose.yml` (база) + `docker-compose.prod.yml` (оверлей: образы
+> из Docker Hub, TLS, certbot, обязательные секреты). Голый `docker compose
+> up` запускать на сервере **нельзя** — он автоматически подхватит
+> dev-оверлей `docker-compose.override.yml` и опубликует порты БД/Redis
+> наружу. Проще всего вообще не звать compose руками: `make deploy` с
+> локальной машины делает всё сам через `scripts/deploy_server.sh`.
 
-При первом запуске Docker автоматически:
-- Соберёт бэкенд из `back/` (Flask) и микросервис звонков из `back-go/calls/` (Go)
-- Соберёт фронтенд из `front/` (Node.js → Vite build → nginx)
-- Применит миграции базы данных (`flask db upgrade`)
+При первом запуске:
+- Сервер стянет готовые образы из Docker Hub (`app` — Flask, `calls` и
+  `auth` — Go-микросервисы, `front` — nginx со собранной SPA)
+- Применит миграции базы данных (`flask db upgrade` в entrypoint app)
 - Создаст первого пользователя: **логин** `admin` / **пароль** `admin`
 
 Приложение будет доступно по адресу: `http://<IP сервера>`
@@ -97,27 +113,38 @@ docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
 ```bash
 PROD="docker compose -f docker-compose.yml -f docker-compose.prod.yml"
 
-$PROD ps                # статус контейнеров
-$PROD logs -f app       # логи Flask (calls / livekit / nginx — аналогично)
-$PROD restart app       # перезапуск
-$PROD down              # остановка (данные сохраняются)
-$PROD up -d --build     # пересобрать после изменений кода
+$PROD ps                    # статус контейнеров
+$PROD logs -f app           # логи Flask (calls / auth / livekit / nginx — аналогично)
+$PROD restart app           # перезапуск
+$PROD down                  # остановка (данные сохраняются)
+$PROD pull && $PROD up -d --no-build   # обновить после нового `make push`
 ```
 
 ---
 
 ## Обновление приложения
 
-`make deploy` с локальной машины (git push → git reset на сервере →
-`scripts/deploy_server.sh`). Вручную:
+`make deploy` с локальной машины (`make push` образов → git push →
+git reset на сервере → `scripts/deploy_server.sh`). Вручную:
 
 ```bash
+# Локально: собрать и запушить образы (все или выборочно)
+make push                  # или: make push only="app front"
+
+# На сервере: обновить конфиги и перекатить контейнеры
 git pull
 cd deploy
-docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
+docker compose -f docker-compose.yml -f docker-compose.prod.yml pull
+docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --no-build
 ```
 
 Миграции применяются автоматически при старте `app`.
+
+**Откат на предыдущую версию:** каждый push дополнительно помечает образы
+версионным тегом (`app-3.6.0` и т.п. — версия из `front/package.json`).
+В `deploy/.env` на сервере выставить `APP_TAG=app-3.6.0` (аналогично
+`CALLS_TAG` / `AUTH_TAG` / `FRONT_TAG`) и повторить `pull` + `up -d
+--no-build`. Убрать переменную — вернуться на текущие теги.
 
 ---
 
@@ -137,13 +164,11 @@ docker run --rm \
 
 ## HTTPS (Let's Encrypt)
 
-Если нужен HTTPS — добавьте certbot или поставьте nginx-proxy перед контейнером.
-
-После настройки HTTPS не забудьте в `back/app/api/auth.py` изменить:
-```python
-secure=False  →  secure=True
-```
-и пересобрать: `docker compose up -d --build app`.
+TLS уже встроен в прод-оверлей: nginx слушает 80/443 с конфигом
+`deploy/nginx/nginx.prod.conf`, сертификаты живут во внешних volume'ах
+`gw1_certbot-conf` / `gw1_certbot-www`, продление крутит контейнер
+`certbot` (renew каждые 12 часов). Refresh-cookie authsvc выставляется
+с `Secure` всегда — дополнительных правок кода не требуется.
 
 ---
 
