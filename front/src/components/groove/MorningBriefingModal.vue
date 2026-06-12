@@ -38,8 +38,8 @@
         <span class="mb-bubble-author">— {{ pet.name }}</span>
       </div>
 
-      <!-- Сводка цифрами. -->
-      <div class="mb-stats">
+      <!-- Сводка цифрами. В выходной рабочие цифры не показываем. -->
+      <div v-if="b.mood !== 'weekend'" class="mb-stats">
         <div class="mb-stat">
           <span class="mb-stat-num">{{ b.open_count }}</span>
           <span class="mb-stat-label">{{ plural(b.open_count, 'задача', 'задачи', 'задач') }} в работе</span>
@@ -88,21 +88,26 @@ const TONE_BY_MOOD = {
   buried: 'warning',
   reminder: 'primary',
   fresh: 'success',
+  weekend: 'success',
 }
 const tone = computed(() => TONE_BY_MOOD[b.value.mood] || 'primary')
 
-const actions = computed(() => [
-  { kind: 'cancel', label: 'Позже' },
-  b.value.stale_count
-    ? { kind: 'confirm', label: 'Разобрать задачи', icon: 'cleaning_services' }
-    : { kind: 'confirm', label: 'К задачам', icon: 'bolt' },
-])
+// В выходной к задачам не зовём — единственная кнопка закрывает модалку.
+const actions = computed(() => b.value.mood === 'weekend'
+  ? [{ kind: 'confirm', label: 'Отдыхаем!', icon: 'beach_access' }]
+  : [
+      { kind: 'cancel', label: 'Позже' },
+      b.value.stale_count
+        ? { kind: 'confirm', label: 'Разобрать задачи', icon: 'cleaning_services' }
+        : { kind: 'confirm', label: 'К задачам', icon: 'bolt' },
+    ])
 
 // Парящий декор вокруг питомца под настроение.
 const DECOR_BY_MOOD = {
   buried: { emoji: '📄', count: 5 },
   sick: { emoji: '💤', count: 3 },
   fresh: { emoji: '✨', count: 5 },
+  weekend: { emoji: '🌴', count: 4 },
 }
 const decor = computed(() => DECOR_BY_MOOD[b.value.mood] || null)
 
@@ -140,6 +145,7 @@ function open(task) {
 
 function goToTasks() {
   emit('close')
+  if (b.value.mood === 'weekend') return // в выходной никуда не гоним
   router.push('/tasks')
 }
 </script>
@@ -176,7 +182,8 @@ function goToTasks() {
   filter: blur(2px);
 }
 
-.mood-fresh { --glow-color: var(--color-success); }
+.mood-fresh,
+.mood-weekend { --glow-color: var(--color-success); }
 .mood-reminder { --glow-color: var(--color-primary); }
 .mood-buried,
 .mood-sick { --glow-color: var(--color-warning, var(--color-tertiary)); }

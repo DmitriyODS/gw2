@@ -12,6 +12,15 @@ class CompanySettingsSchema(Schema):
     uses_yougile = fields.Bool(load_default=False)
     uses_stages = fields.Bool(load_default=False)
     uses_calls = fields.Bool(load_default=True)
+    # 0=Пн … 6=Вс (Python date.weekday()).
+    weekend_days = fields.List(fields.Int(validate=validate.Range(min=0, max=6)),
+                               load_default=lambda: [5, 6],
+                               validate=validate.Length(max=7))
+
+
+class WeekendSettingsSchema(Schema):
+    weekend_days = fields.List(fields.Int(validate=validate.Range(min=0, max=6)),
+                               required=True, validate=validate.Length(max=7))
 
 
 class CompanySchema(Schema):

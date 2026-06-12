@@ -7,6 +7,7 @@
 """
 from __future__ import annotations
 
+import random
 from datetime import datetime, timedelta, timezone
 
 from flask import current_app
@@ -376,8 +377,20 @@ def _slim_task(t, now: datetime) -> dict:
     }
 
 
+# Идеи для выходного, когда AI выключен — Грувик зовёт отдыхать, не работать.
+_WEEKEND_FALLBACKS = [
+    "Сегодня выходной — никаких задач! Может, прогуляемся? Говорят, на улице целый мир. 🌞",
+    "Выходной! План такой: вкусный завтрак, любимое хобби и ноль рабочих мыслей. 🧘",
+    "Объявляю день отдыха! Фильм, плед и что-нибудь вкусное — я уже занял место рядом. 🍿",
+    "Задачи подождут до будней. А нам — гулять, отдыхать и набираться сил! 🌿",
+    "Сегодня по плану: отдых, отдых и ещё раз отдых. Ты заслужил — я проверял. 🎈",
+]
+
+
 def _morning_fallback(ctx: dict) -> str:
     """Статичная реплика Грувика, когда AI у компании выключен/недоступен."""
+    if ctx["mood"] == "weekend":
+        return random.choice(_WEEKEND_FALLBACKS)
     open_n, stale_n = ctx["open_count"], ctx["stale_count"]
     oldest = ctx["oldest"][0] if ctx["oldest"] else None
     open_word = _plural(open_n, "задача", "задачи", "задач")
@@ -404,7 +417,8 @@ def get_morning_briefing(company_id: int | None, user_id: int,
     первом входе вместо скучного списка просроченных задач."""
     from app.repositories import task_repo, pet_repo
     from app.services import groove_ai_service
-    from app.services.pet_service import PERSONALITIES
+    from app.services.pet_service import MSK, PERSONALITIES
+    from app.utils.workweek import is_weekend, weekend_days
 
     if company_id is None:
         return {"show": False}
@@ -415,26 +429,35 @@ def get_morning_briefing(company_id: int | None, user_id: int,
     sick = pet.sick_since is not None
     personality_title = PERSONALITIES.get(pet.personality or "", {}).get("title")
 
+    day_off = is_weekend(datetime.now(MSK).date(), weekend_days(company_id))
+
     now = datetime.now(timezone.utc)
     threshold = now - timedelta(days=MORNING_STALE_DAYS)
     open_count = task_repo.count_user_active(user_id, company_id)
 
-    # Показываем только когда есть о чём сказать: есть задачи или питомец грустит.
-    if open_count == 0 and not sick:
+    # Показываем когда есть о чём сказать: задачи, грустный питомец — или
+    # выходной, в который Грувик зовёт отдыхать, а не работать.
+    if open_count == 0 and not sick and not day_off:
         return {"show": False}
 
-    stale = [_slim_task(t, now)
-             for t in task_repo.get_user_stale(user_id, threshold, company_id, limit=20)]
-    stale_count = len(stale)
-
-    if sick:
-        mood = "sick"
-    elif stale_count >= 3:
-        mood = "buried"
-    elif stale_count >= 1:
-        mood = "reminder"
+    if day_off:
+        # В выходной за задачи не пилим: ни списка засидевшихся, ни упрёков.
+        stale = []
+        stale_count = 0
+        mood = "weekend"
     else:
-        mood = "fresh"
+        stale = [_slim_task(t, now)
+                 for t in task_repo.get_user_stale(user_id, threshold, company_id, limit=20)]
+        stale_count = len(stale)
+
+        if sick:
+            mood = "sick"
+        elif stale_count >= 3:
+            mood = "buried"
+        elif stale_count >= 1:
+            mood = "reminder"
+        else:
+            mood = "fresh"
 
     user = user_repo.get_by_id(user_id)
     fio = user.fio if user else None

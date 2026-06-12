@@ -7,6 +7,9 @@ DEFAULT_SETTINGS = {
     "uses_yougile": False,
     "uses_stages": False,
     "uses_calls": True,
+    # Выходные дни компании: 0=Пн … 6=Вс (Python date.weekday()).
+    # В эти дни Грувик не заболевает от простоя и не зовёт работать.
+    "weekend_days": [5, 6],
 }
 
 

@@ -203,12 +203,14 @@ export const useCallStore = defineStore('call', {
       this.resyncParticipants()
     },
 
-    /** Я звоню кому-то — отправляем call:start, ждём call:started с токеном. */
-    async startCall({ userIds, media = 'video' }) {
+    /** Я звоню кому-то — отправляем call:start, ждём call:started с токеном.
+     *  videoOff — звонок остаётся видео-звонком, но своя камера при старте
+     *  выключена (конференция «для одного»: видео включают по желанию). */
+    async startCall({ userIds, media = 'video', videoOff = false }) {
       if (this.phase !== 'idle') return
       this.media = media
       this.audioEnabled = true
-      this.videoEnabled = media === 'video'
+      this.videoEnabled = media === 'video' && !videoOff
       this.phase = 'outgoing'
       this.error = null
 

@@ -301,10 +301,11 @@ async function onJoinCall(callInfo) {
 }
 
 /* «Пустой звонок»: комната с одним собой — коллег зовут уже из звонка
-   (кнопка person_add или ссылка-приглашение). */
+   (кнопка person_add или ссылка-приглашение). Стартуем без камеры:
+   видео каждый включает сам по желанию. */
 async function startEmptyCall() {
   try {
-    await callStore.startCall({ userIds: [], media: 'video' })
+    await callStore.startCall({ userIds: [], media: 'video', videoOff: true })
   } catch {/* ошибка отображена в store.error */}
 }
 const authStore = useAuthStore()

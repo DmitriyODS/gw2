@@ -286,6 +286,9 @@ _MORNING_MOOD_HINT = {
               "Бодро предложи разгрести завал вместе.",
     "reminder": "Пара задач засиделись — по-доброму подтолкни к ним.",
     "fresh": "Хвостов нет, всё свежее — порадуйся и поддержи темп.",
+    "weekend": "Сегодня у компании выходной — ни слова про задачи и работу! "
+               "Предложи хозяину конкретную идею отдыха: прогулку, хобби, "
+               "фильм, спорт или время с близкими.",
 }
 
 
@@ -311,22 +314,27 @@ def get_morning_phrase(company_id: int, user_id: int, ctx: dict) -> str | None:
         return None
 
     name = ctx.get("first_name") or "коллега"
+    weekend = ctx.get("mood") == "weekend"
     parts = [
         f"Ты — питомец {ctx.get('pet_name', 'Грувик')} сотрудника {name}. "
         "Поприветствие уже показано отдельно — не здоровайся повторно, сразу к делу.",
-        "Скажи одну живую утреннюю реплику от первого лица про наши с хозяином "
-        "задачи: тепло, по-дружески, в духе «у нас с тобой». 1-2 коротких "
+        ("Скажи одну живую реплику от первого лица про наш с хозяином выходной: "
+         if weekend else
+         "Скажи одну живую утреннюю реплику от первого лица про наши с хозяином "
+         "задачи: ") +
+        "тепло, по-дружески, в духе «у нас с тобой». 1-2 коротких "
         "предложения, до 160 символов. Без упрёков и канцелярита, можно лёгкий "
         "юмор и изредка эмодзи.",
         _MORNING_MOOD_HINT.get(ctx.get("mood"), ""),
-        f"Сейчас на хозяине {ctx.get('open_count', 0)} активных задач, "
-        f"из них засиделись дольше недели: {ctx.get('stale_count', 0)}.",
     ]
-    oldest = ctx.get("oldest") or []
-    if oldest:
-        top = oldest[0]
-        parts.append(f"Самая давняя — «{(top.get('name') or '')[:80]}», "
-                     f"висит {top.get('days_pending', 0)} дн.")
+    if not weekend:
+        parts.append(f"Сейчас на хозяине {ctx.get('open_count', 0)} активных задач, "
+                     f"из них засиделись дольше недели: {ctx.get('stale_count', 0)}.")
+        oldest = ctx.get("oldest") or []
+        if oldest:
+            top = oldest[0]
+            parts.append(f"Самая давняя — «{(top.get('name') or '')[:80]}», "
+                         f"висит {top.get('days_pending', 0)} дн.")
     if ctx.get("personality_title"):
         parts.append(f"Твой характер: {ctx['personality_title']} — отыграй его.")
     try:
@@ -413,6 +421,11 @@ def _pet_system_prompt(pet, owner, work_ctx: dict) -> str:
         lines.append("Сейчас ты приболел (хозяин долго не работал) — изредка "
                      "покашливай и намекай, что выздоровеешь от его юнитов, "
                      "закрытых задач и заботы.")
+    from app.utils.workweek import is_weekend, weekend_days
+    if is_weekend(datetime.now(MSK).date(), weekend_days(pet.company_id)):
+        lines.append("Сегодня у компании выходной: не зови работать и не "
+                     "предлагай задачи — поддержи отдых, предлагай активности "
+                     "(прогулка, хобби, фильм, время с близкими).")
     if work_ctx.get("today_minutes") is not None:
         lines.append(f"Контекст: сегодня хозяин отработал {work_ctx['today_minutes']} мин "
                      f"({work_ctx.get('today_units', 0)} юнитов), за неделю — "
@@ -521,23 +534,31 @@ def _digest_context(company_id: int) -> dict:
 
 def generate_digest(company_id: int) -> bool:
     from app.services.ai_client import get_ai_client
+    from app.utils.workweek import is_weekend, weekend_days
     client = get_ai_client(company_id)
     if client is None:
         return False
-    ctx = _digest_context(company_id)
-    lines = ["Напиши утренний пост-дайджест для ленты команды: поприветствуй, "
-             "подведи итог вчерашнего дня, пожелай хорошего дня. 2-3 предложения, "
-             "до 350 символов, живо и с юмором."]
-    if ctx.get("closed"):
-        lines.append(f"Вчера закрыто задач: {ctx['closed']}.")
-    if ctx.get("received"):
-        lines.append(f"Поступило новых: {ctx['received']}.")
-    if ctx.get("hours"):
-        lines.append(f"Команда отработала часов: {ctx['hours']}.")
-    if ctx.get("leader_fio"):
-        lines.append(f"Герой вчерашнего дня — {ctx['leader_fio']}.")
-    if not any((ctx.get("closed"), ctx.get("received"), ctx.get("hours"))):
-        lines.append("Вчера было тихо — обыграй это мягко, без упрёков.")
+    if is_weekend(datetime.now(MSK).date(), weekend_days(company_id)):
+        # Выходной: вместо рабочей сводки — тёплый пост про отдых.
+        lines = ["Сегодня у команды выходной. Напиши пост для ленты: поздравь "
+                 "с заслуженным отдыхом и предложи пару идей активностей — "
+                 "прогулка, хобби, спорт, время с близкими. Ни слова про задачи "
+                 "и работу. 2-3 предложения, до 350 символов, живо и с юмором."]
+    else:
+        ctx = _digest_context(company_id)
+        lines = ["Напиши утренний пост-дайджест для ленты команды: поприветствуй, "
+                 "подведи итог вчерашнего дня, пожелай хорошего дня. 2-3 предложения, "
+                 "до 350 символов, живо и с юмором."]
+        if ctx.get("closed"):
+            lines.append(f"Вчера закрыто задач: {ctx['closed']}.")
+        if ctx.get("received"):
+            lines.append(f"Поступило новых: {ctx['received']}.")
+        if ctx.get("hours"):
+            lines.append(f"Команда отработала часов: {ctx['hours']}.")
+        if ctx.get("leader_fio"):
+            lines.append(f"Герой вчерашнего дня — {ctx['leader_fio']}.")
+        if not any((ctx.get("closed"), ctx.get("received"), ctx.get("hours"))):
+            lines.append("Вчера было тихо — обыграй это мягко, без упрёков.")
     try:
         text = client.chat(
             messages=[

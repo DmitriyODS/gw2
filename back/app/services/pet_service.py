@@ -364,18 +364,30 @@ def add_recovery(user_id: int, company_id: int, amount: int = 1) -> None:
 
 def check_sickness_for_company(company_id: int) -> int:
     """Помечает больными питомцев тех, кто давно не работал. Возвращает
-    число новых заболевших. Вызывается фоновым циклом заботы."""
+    число новых заболевших. Вызывается фоновым циклом заботы.
+
+    Простой считается в РАБОЧИХ днях компании: выходные (settings.weekend_days)
+    не приближают болезнь, а в сам выходной Грувик не заболевает вовсе."""
+    from app.utils.workweek import weekend_days, working_days_between
+    weekend = weekend_days(company_id)
+    today = _today_msk()
+    if today.weekday() in weekend:
+        return 0
     pets = pet_repo.list_company_pets(company_id)
     candidates = [p for p in pets if p.stage >= 1 and p.sick_since is None]
     if not candidates:
         return 0
     last_ends = pet_repo.last_unit_end_by_users([p.user_id for p in candidates])
-    threshold = datetime.now(timezone.utc) - timedelta(days=SICK_AFTER_DAYS)
     sick_count = 0
     for pet in candidates:
         last = last_ends.get(pet.user_id)
         # Ни одного юнита в принципе — не наказываем (свежий пользователь).
-        if last is None or last >= threshold:
+        if last is None:
+            continue
+        if last.tzinfo is None:
+            last = last.replace(tzinfo=timezone.utc)
+        idle_workdays = working_days_between(last.astimezone(MSK).date(), today, weekend)
+        if idle_workdays < SICK_AFTER_DAYS:
             continue
         pet.sick_since = datetime.now(timezone.utc)
         pet.recovery = 0

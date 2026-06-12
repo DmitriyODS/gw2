@@ -154,6 +154,11 @@
           <YougileCompanySettings v-if="isAtLeast(ROLES.DIRECTOR) && hasCompany && activeSection === 'yougile-company'" />
         </div>
 
+        <!-- Выходные дни компании (Руководитель+ / Администратор системы). -->
+        <div v-show="activeSection === 'weekends'" class="pane-block">
+          <WeekendSettings v-if="isAtLeast(ROLES.DIRECTOR) && activeSection === 'weekends'" />
+        </div>
+
         <!-- Справка -->
         <div v-show="activeSection === 'help'" class="pane-block">
           <HelpCenter />
@@ -205,6 +210,7 @@ import AboutApp from '@/components/settings/AboutApp.vue'
 import AiSettings from '@/components/settings/AiSettings.vue'
 import YougileUserSettings from '@/components/settings/YougileUserSettings.vue'
 import YougileCompanySettings from '@/components/settings/YougileCompanySettings.vue'
+import WeekendSettings from '@/components/settings/WeekendSettings.vue'
 import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
 
 const { isAtLeast } = usePermission()
@@ -246,6 +252,7 @@ const allGroups = computed(() => [
     label: 'Администрирование',
     sections: [
       { key: 'ai', title: 'Нейро-функции', desc: 'Подключение ProxyAPI: факт дня и семантический поиск', icon: 'smart_toy', tone: 'tertiary' },
+      { key: 'weekends', title: 'Выходные дни', desc: 'Дни отдыха компании: Грувик не зовёт работать и предлагает активности', icon: 'weekend', tone: 'secondary' },
       // Интеграция с YouGile завязана на конкретную компанию. Root-админ
       // системы (без company_id) не настраивает её — это делает директор
       // конкретной компании. Поэтому пункт показываем только если

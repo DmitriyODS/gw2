@@ -1,13 +1,15 @@
-from flask import Blueprint, request, jsonify
+from flask import Blueprint, g, request, jsonify
 from marshmallow import ValidationError
 
+from app.extensions import db
 from app.schemas.company import (
     CompanySchema, CompanyCreateSchema, CompanyUpdateSchema, CompanyToggleActiveSchema,
+    WeekendSettingsSchema,
 )
 from app.repositories import company_repo
 from app.services import company_service
 from app.services.company_service import CompanyServiceError
-from app.utils.permissions import require_role, ADMIN
+from app.utils.permissions import require_role, ADMIN, DIRECTOR
 
 bp = Blueprint("companies", __name__, url_prefix="/api/companies")
 
@@ -16,6 +18,7 @@ _many_schema = CompanySchema(many=True)
 _create_schema = CompanyCreateSchema()
 _update_schema = CompanyUpdateSchema()
 _toggle_schema = CompanyToggleActiveSchema()
+_weekend_schema = WeekendSettingsSchema()
 
 
 def _enrich(company) -> dict:
@@ -117,6 +120,64 @@ def toggle_active(company_id: int):
     except CompanyServiceError as e:
         return jsonify({"error": e.code, "message": e.message}), e.http_status
     return jsonify(_enrich(company)), 200
+
+
+# ── Выходные дни (Руководитель своей компании / Администратор системы) ──
+
+def _check_company_access(company) -> tuple[dict, int] | None:
+    user = g.current_user
+    if getattr(user, "is_root_admin", False):
+        return None
+    if user.company_id == company.id:
+        return None
+    return {"error": "FORBIDDEN", "message": "Нет доступа к настройкам этой компании"}, 403
+
+
+@bp.get("/<int:company_id>/weekend-settings")
+@require_role(DIRECTOR)
+def get_weekend_settings(company_id: int):
+    """
+    Выходные дни компании (0=Пн … 6=Вс).
+    ---
+    tags: [companies]
+    security: [BearerAuth: []]
+    responses:
+      200: {description: "{weekend_days: [5, 6]}"}
+    """
+    from app.utils.workweek import weekend_days
+    company = company_repo.get_by_id(company_id)
+    if company is None:
+        return jsonify({"error": "NOT_FOUND", "message": "Компания не найдена"}), 404
+    err = _check_company_access(company)
+    if err:
+        return jsonify(err[0]), err[1]
+    return jsonify({"weekend_days": sorted(weekend_days(company_id))}), 200
+
+
+@bp.put("/<int:company_id>/weekend-settings")
+@require_role(DIRECTOR)
+def update_weekend_settings(company_id: int):
+    """
+    Задать выходные дни компании (0=Пн … 6=Вс).
+    ---
+    tags: [companies]
+    security: [BearerAuth: []]
+    """
+    company = company_repo.get_by_id(company_id)
+    if company is None:
+        return jsonify({"error": "NOT_FOUND", "message": "Компания не найдена"}), 404
+    err = _check_company_access(company)
+    if err:
+        return jsonify(err[0]), err[1]
+    try:
+        data = _weekend_schema.load(request.get_json(silent=True) or {})
+    except ValidationError as e:
+        return jsonify({"error": "VALIDATION_ERROR", "message": e.messages}), 400
+    days = sorted(set(data["weekend_days"]))
+    # JSONB: присваиваем новый dict — мутация in-place не видна SQLAlchemy.
+    company.settings = {**(company.settings or {}), "weekend_days": days}
+    db.session.commit()
+    return jsonify({"weekend_days": days}), 200
 
 
 @bp.delete("/<int:company_id>")

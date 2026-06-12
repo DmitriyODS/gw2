@@ -1,35 +1,21 @@
 <template>
   <div class="profile-view">
     <div class="profile-container">
-      <!-- Hero-шапка профиля -->
-      <section class="profile-hero">
-        <div class="hero-avatar-block">
-          <button
-            type="button"
-            class="avatar-wrapper"
-            title="Открыть фото"
-            @click="lightboxOpen = true"
-          >
-            <img :src="avatarSrc" class="profile-avatar" :alt="authStore.user?.fio" />
-            <span class="avatar-zoom-overlay" aria-hidden="true">
-              <span class="material-symbols-outlined">zoom_in</span>
-            </span>
-          </button>
-          <div class="avatar-actions">
-            <button class="btn-sm" @click="showCropper = true">
-              <span class="material-symbols-outlined">photo_camera</span>
-              Загрузить
-            </button>
-            <button
-              v-if="authStore.user?.avatar_path"
-              class="btn-sm danger"
-              @click="handleDeleteAvatar"
-            >
-              <span class="material-symbols-outlined">delete</span>
-              Удалить
-            </button>
-          </div>
-        </div>
+      <!-- Левая колонка: карточка-идентичность (sticky на десктопе) -->
+      <aside class="identity-card">
+        <div class="identity-cover" aria-hidden="true"></div>
+
+        <button
+          type="button"
+          class="avatar-wrapper"
+          title="Открыть фото"
+          @click="lightboxOpen = true"
+        >
+          <img :src="avatarSrc" class="profile-avatar" :alt="authStore.user?.fio" />
+          <span class="avatar-zoom-overlay" aria-hidden="true">
+            <span class="material-symbols-outlined">zoom_in</span>
+          </span>
+        </button>
 
         <div class="hero-info">
           <h1 class="hero-name">{{ authStore.user?.fio }}</h1>
@@ -42,131 +28,242 @@
           </div>
         </div>
 
+        <div class="avatar-actions">
+          <button class="btn-sm" @click="showCropper = true">
+            <span class="material-symbols-outlined">photo_camera</span>
+            Загрузить
+          </button>
+          <button
+            v-if="authStore.user?.avatar_path"
+            class="btn-sm danger"
+            @click="handleDeleteAvatar"
+          >
+            <span class="material-symbols-outlined">delete</span>
+            Удалить
+          </button>
+        </div>
+
+        <!-- Контакты — только на десктопе, мобильная шапка остаётся прежней -->
+        <ul class="identity-contacts">
+          <li class="contact-row">
+            <span class="contact-ico" data-tone="primary">
+              <span class="material-symbols-outlined">mail</span>
+            </span>
+            <span class="contact-text">
+              <small>Email</small>
+              <span :class="{ 'contact-empty': !authStore.user?.email }">
+                {{ authStore.user?.email || 'Не указан' }}
+              </span>
+            </span>
+          </li>
+          <li class="contact-row">
+            <span class="contact-ico" data-tone="secondary">
+              <span class="material-symbols-outlined">call</span>
+            </span>
+            <span class="contact-text">
+              <small>Телефон</small>
+              <span :class="{ 'contact-empty': !authStore.user?.phone }">
+                {{ authStore.user?.phone || 'Не указан' }}
+              </span>
+            </span>
+          </li>
+          <li v-if="authStore.companyName" class="contact-row">
+            <span class="contact-ico" data-tone="tertiary">
+              <span class="material-symbols-outlined">domain</span>
+            </span>
+            <span class="contact-text">
+              <small>Компания</small>
+              <span>{{ authStore.companyName }}</span>
+            </span>
+          </li>
+        </ul>
+
         <button class="btn-logout" @click="authStore.logout()">
           <span class="material-symbols-outlined">logout</span>
           <span class="btn-logout-label">Выйти</span>
         </button>
-      </section>
+      </aside>
 
-      <!-- Адаптивная сетка карточек -->
-      <div class="profile-grid">
-        <!-- Редактирование профиля -->
-        <section class="profile-card">
-          <h3>Редактирование профиля</h3>
-          <form @submit.prevent="saveProfile" class="profile-form">
-            <div class="form-group">
-              <label>ФИО</label>
-              <InputText v-model="profileForm.fio" class="w-full" placeholder="Иванов Иван Иванович" />
-            </div>
-            <div class="form-group">
-              <label>Логин</label>
-              <InputText v-model="profileForm.login" class="w-full" placeholder="ivanov" />
-            </div>
-            <div class="form-group">
-              <label>Должность</label>
-              <InputText v-model="profileForm.post" class="w-full" placeholder="Менеджер" />
-            </div>
-            <div class="form-group">
-              <label>Телефон</label>
-              <PhoneInput v-model="profileForm.phone" />
-            </div>
-            <div class="form-group">
-              <label>Email</label>
-              <InputText
-                v-model="profileForm.email"
-                class="w-full"
-                type="email"
-                inputmode="email"
-                placeholder="you@example.com"
-              />
-            </div>
-            <p v-if="profileError" class="error-msg">{{ profileError }}</p>
-            <button type="submit" class="btn-primary" :disabled="profileLoading">
-              {{ profileLoading ? 'Сохраняем...' : 'Сохранить' }}
-            </button>
-          </form>
-        </section>
-
-        <!-- Смена пароля -->
-        <section class="profile-card">
-          <h3>Смена пароля</h3>
-          <form @submit.prevent="changePassword" class="profile-form">
-            <div class="form-group">
-              <label>Текущий пароль</label>
-              <InputText
-                v-model="passwordForm.current"
-                type="password"
-                class="w-full"
-                placeholder="Введите текущий пароль"
-                autocomplete="current-password"
-              />
-            </div>
-            <div class="form-group">
-              <label>Новый пароль</label>
-              <InputText
-                v-model="passwordForm.password"
-                type="password"
-                class="w-full"
-                placeholder="Минимум 8 символов"
-                autocomplete="new-password"
-              />
-            </div>
-            <div class="form-group">
-              <label>Подтвердите пароль</label>
-              <InputText
-                v-model="passwordForm.confirm"
-                type="password"
-                class="w-full"
-                placeholder="Повторите пароль"
-                autocomplete="new-password"
-              />
-            </div>
-            <p v-if="passwordError" class="error-msg">{{ passwordError }}</p>
-            <button type="submit" class="btn-primary" :disabled="passwordLoading">
-              {{ passwordLoading ? 'Изменяем...' : 'Изменить пароль' }}
-            </button>
-          </form>
-        </section>
-
+      <!-- Правая колонка: статистика + формы -->
+      <div class="profile-main">
         <!-- Личная статистика -->
-        <section class="profile-card profile-card--wide">
-          <h3>Личная статистика</h3>
-          <DateRangePicker v-model="statsPeriod" @update:model-value="loadStats" />
+        <section class="profile-card stats-card">
+          <header class="card-head stats-head">
+            <div class="head-icon" data-tone="primary">
+              <span class="material-symbols-outlined">insights</span>
+            </div>
+            <div class="head-text">
+              <h3>Личная статистика</h3>
+              <p class="head-desc">Часы и задачи за выбранный период</p>
+            </div>
+            <DateRangePicker
+              v-model="statsPeriod"
+              class="head-period"
+              @update:model-value="loadStats"
+            />
+          </header>
 
           <div v-if="statsLoading" class="loading-inline">
             <ProgressSpinner style="width:32px;height:32px" />
           </div>
 
           <template v-else-if="profileStats">
-            <div class="profile-stats-cards">
-              <div class="stat-card">
-                <span class="stat-value">{{ roundHours(profileStats.total_hours) }}</span>
-                <span class="stat-label">Время</span>
+            <div class="stat-tiles">
+              <div class="stat-tile" data-tone="primary">
+                <span class="tile-ico"><span class="material-symbols-outlined">schedule</span></span>
+                <span class="tile-text">
+                  <span class="tile-num">{{ roundHours(profileStats.total_hours) }}</span>
+                  <span class="tile-label">Время</span>
+                </span>
               </div>
-              <div class="stat-card">
-                <span class="stat-value">{{ profileStats.tasks_count ?? 0 }}</span>
-                <span class="stat-label">Задач</span>
+              <div class="stat-tile" data-tone="secondary">
+                <span class="tile-ico"><span class="material-symbols-outlined">task_alt</span></span>
+                <span class="tile-text">
+                  <span class="tile-num">{{ profileStats.tasks_count ?? 0 }}</span>
+                  <span class="tile-label">Задач</span>
+                </span>
+              </div>
+              <div class="stat-tile stat-tile--avg" data-tone="tertiary">
+                <span class="tile-ico"><span class="material-symbols-outlined">avg_pace</span></span>
+                <span class="tile-text">
+                  <span class="tile-num">{{ roundHours(avgHoursPerDay) }}</span>
+                  <span class="tile-label">В среднем за день</span>
+                </span>
               </div>
             </div>
 
-            <DataTable
-              v-if="profileStats.by_unit_types?.length"
-              :value="profileStats.by_unit_types"
-              size="small"
-              class="stats-table"
-            >
-              <Column field="name" header="Тип юнита" />
-              <Column header="Время" style="width:120px">
-                <template #body="{ data }">{{ roundHours(data.hours) }}</template>
-              </Column>
-              <Column field="tasks_count" header="Задачи" style="width:100px" />
-            </DataTable>
+            <template v-if="profileStats.by_unit_types?.length">
+              <!-- Десктоп: наглядные бары по типам; мобилка — прежняя таблица -->
+              <div v-if="!isMobile" class="type-list">
+                <div v-for="t in profileStats.by_unit_types" :key="t.name" class="type-row">
+                  <div class="type-top">
+                    <span class="type-name">{{ t.name }}</span>
+                    <span class="type-meta">
+                      {{ roundHours(t.hours) }} · {{ t.tasks_count }}
+                      {{ plural(t.tasks_count, 'задача', 'задачи', 'задач') }}
+                    </span>
+                  </div>
+                  <div class="type-bar">
+                    <span :style="{ width: typeBarWidth(t) }"></span>
+                  </div>
+                </div>
+              </div>
+
+              <DataTable
+                v-else
+                :value="profileStats.by_unit_types"
+                size="small"
+                class="stats-table"
+              >
+                <Column field="name" header="Тип юнита" />
+                <Column header="Время" style="width:120px">
+                  <template #body="{ data }">{{ roundHours(data.hours) }}</template>
+                </Column>
+                <Column field="tasks_count" header="Задачи" style="width:100px" />
+              </DataTable>
+            </template>
           </template>
 
           <div v-else class="empty-stats">
             Нет данных за выбранный период
           </div>
         </section>
+
+        <div class="forms-row">
+          <!-- Редактирование профиля -->
+          <section class="profile-card">
+            <header class="card-head">
+              <div class="head-icon" data-tone="secondary">
+                <span class="material-symbols-outlined">badge</span>
+              </div>
+              <div class="head-text">
+                <h3>Редактирование профиля</h3>
+                <p class="head-desc">Данные и контакты, видимые коллегам</p>
+              </div>
+            </header>
+            <form @submit.prevent="saveProfile" class="profile-form">
+              <div class="form-group">
+                <label>ФИО</label>
+                <InputText v-model="profileForm.fio" class="w-full" placeholder="Иванов Иван Иванович" />
+              </div>
+              <div class="form-group">
+                <label>Логин</label>
+                <InputText v-model="profileForm.login" class="w-full" placeholder="ivanov" />
+              </div>
+              <div class="form-group">
+                <label>Должность</label>
+                <InputText v-model="profileForm.post" class="w-full" placeholder="Менеджер" />
+              </div>
+              <div class="form-group">
+                <label>Телефон</label>
+                <PhoneInput v-model="profileForm.phone" />
+              </div>
+              <div class="form-group">
+                <label>Email</label>
+                <InputText
+                  v-model="profileForm.email"
+                  class="w-full"
+                  type="email"
+                  inputmode="email"
+                  placeholder="you@example.com"
+                />
+              </div>
+              <p v-if="profileError" class="error-msg">{{ profileError }}</p>
+              <button type="submit" class="btn-primary" :disabled="profileLoading">
+                {{ profileLoading ? 'Сохраняем...' : 'Сохранить' }}
+              </button>
+            </form>
+          </section>
+
+          <!-- Смена пароля -->
+          <section class="profile-card">
+            <header class="card-head">
+              <div class="head-icon" data-tone="tertiary">
+                <span class="material-symbols-outlined">lock_reset</span>
+              </div>
+              <div class="head-text">
+                <h3>Смена пароля</h3>
+                <p class="head-desc">Не короче 8 символов</p>
+              </div>
+            </header>
+            <form @submit.prevent="changePassword" class="profile-form">
+              <div class="form-group">
+                <label>Текущий пароль</label>
+                <InputText
+                  v-model="passwordForm.current"
+                  type="password"
+                  class="w-full"
+                  placeholder="Введите текущий пароль"
+                  autocomplete="current-password"
+                />
+              </div>
+              <div class="form-group">
+                <label>Новый пароль</label>
+                <InputText
+                  v-model="passwordForm.password"
+                  type="password"
+                  class="w-full"
+                  placeholder="Минимум 8 символов"
+                  autocomplete="new-password"
+                />
+              </div>
+              <div class="form-group">
+                <label>Подтвердите пароль</label>
+                <InputText
+                  v-model="passwordForm.confirm"
+                  type="password"
+                  class="w-full"
+                  placeholder="Повторите пароль"
+                  autocomplete="new-password"
+                />
+              </div>
+              <p v-if="passwordError" class="error-msg">{{ passwordError }}</p>
+              <button type="submit" class="btn-primary" :disabled="passwordLoading">
+                {{ passwordLoading ? 'Изменяем...' : 'Изменить пароль' }}
+              </button>
+            </form>
+          </section>
+        </div>
       </div>
     </div>
 
@@ -196,6 +293,7 @@
 import { ref, reactive, computed, onMounted } from 'vue'
 import { useAuthStore } from '@/stores/auth.js'
 import { useNotificationsStore } from '@/stores/notifications.js'
+import { useBreakpoint } from '@/composables/useBreakpoint.js'
 import { updateMe, uploadAvatar, deleteAvatar } from '@/api/users.js'
 import { getStatsProfile } from '@/api/stats.js'
 import { formatHours } from '@/utils/time.js'
@@ -211,6 +309,7 @@ import ProgressSpinner from 'primevue/progressspinner'
 
 const authStore = useAuthStore()
 const notif = useNotificationsStore()
+const { isMobile } = useBreakpoint()
 
 // ---- Avatar ----
 const showCropper = ref(false)
@@ -222,8 +321,6 @@ const avatarSrc = computed(() => {
   if (user.avatar_path) return `/uploads/${user.avatar_path}`
   return `/api/users/${user.id}/identicon`
 })
-
-const hasAvatar = computed(() => !!authStore.user?.avatar_path)
 
 async function onCropped(blob) {
   showCropper.value = false
@@ -346,6 +443,33 @@ function roundHours(val) {
   return formatHours(val)
 }
 
+function plural(n, one, few, many) {
+  const mod10 = n % 10, mod100 = n % 100
+  if (mod10 === 1 && mod100 !== 11) return one
+  if (mod10 >= 2 && mod10 <= 4 && (mod100 < 10 || mod100 >= 20)) return few
+  return many
+}
+
+const periodDays = computed(() => {
+  const r = statsPeriod.value
+  if (!r || !r[0] || !r[1]) return 0
+  return Math.max(1, Math.round((r[1] - r[0]) / 86400000) + 1)
+})
+
+const avgHoursPerDay = computed(() => {
+  const total = profileStats.value?.total_hours || 0
+  return periodDays.value ? total / periodDays.value : 0
+})
+
+const maxTypeHours = computed(() => {
+  const types = profileStats.value?.by_unit_types || []
+  return Math.max(...types.map(t => t.hours || 0), 0.001)
+})
+
+function typeBarWidth(t) {
+  return `${Math.max(4, ((t.hours || 0) / maxTypeHours.value) * 100)}%`
+}
+
 async function loadStats(range) {
   const r = range || statsPeriod.value
   if (!r || !r[0] || !r[1]) return
@@ -373,45 +497,65 @@ onMounted(() => {
   overflow-y: auto;
 }
 
+/* Десктоп: identity-рейл слева + контент справа — экран используется
+   целиком, а не узкой колонкой. */
 .profile-container {
-  max-width: 1100px;
+  max-width: 1280px;
   margin: 0 auto;
-  display: flex;
-  flex-direction: column;
+  display: grid;
+  grid-template-columns: 340px minmax(0, 1fr);
   gap: 24px;
+  align-items: start;
 }
 
-/* ── Hero-шапка ──────────────────────────────────────────────── */
-.profile-hero {
+/* ── Identity-карточка ───────────────────────────────────────── */
+.identity-card {
+  position: sticky;
+  top: 24px;
   display: flex;
+  flex-direction: column;
   align-items: center;
-  gap: 28px;
+  gap: 14px;
   background: var(--color-surface);
   border: 1px solid var(--color-outline-dim);
   border-radius: var(--radius-xl);
-  padding: 28px;
+  padding: 0 20px 20px;
   box-shadow: var(--shadow-sm);
+  overflow: hidden;
+  text-align: center;
 }
 
-.hero-avatar-block {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 12px;
+/* Экспрессивная обложка — hero-момент идентичности (M3 Expressive).
+   Пастельные тона (контейнеры, приглушённые поверхностью) + плавное
+   растворение к низу через маску — без резкой кромки. */
+.identity-cover {
+  width: calc(100% + 40px);
+  margin: 0 -20px -20px;
+  height: 128px;
   flex-shrink: 0;
+  background:
+    radial-gradient(120% 140% at 85% 0%,
+      color-mix(in oklch, var(--color-tertiary-container) 40%, transparent) 0%,
+      transparent 60%),
+    linear-gradient(120deg,
+      color-mix(in oklch, var(--color-primary-container) 55%, var(--color-surface)),
+      color-mix(in oklch, var(--color-secondary-container) 55%, var(--color-surface)));
+  -webkit-mask-image: linear-gradient(to bottom, black 30%, transparent 100%);
+  mask-image: linear-gradient(to bottom, black 30%, transparent 100%);
 }
 
 .avatar-wrapper {
   position: relative;
   width: 120px;
   height: 120px;
+  margin-top: -56px;
   border-radius: 50%;
   overflow: hidden;
   border: 3px solid var(--color-primary);
   box-shadow: 0 0 0 4px var(--color-surface);
   flex-shrink: 0;
   padding: 0;
-  background: transparent;
+  background: var(--color-surface);
   cursor: zoom-in;
   transition: transform .18s, box-shadow .18s;
 }
@@ -441,6 +585,53 @@ onMounted(() => {
   display: block;
 }
 
+.hero-info {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+}
+
+.hero-name {
+  margin: 0;
+  font-size: 24px;
+  font-weight: 800;
+  letter-spacing: -0.3px;
+  color: var(--color-text);
+  line-height: 1.2;
+}
+
+.hero-post {
+  margin: 0;
+  font-size: 15px;
+  color: var(--color-text-dim);
+}
+
+.hero-meta {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-top: 4px;
+}
+
+.hero-login {
+  font-size: 13px;
+  color: var(--color-text-dim);
+}
+
+.role-tag {
+  display: inline-block;
+  background: var(--color-tertiary-container);
+  color: var(--color-on-tertiary-container);
+  border-radius: var(--radius-full);
+  padding: 4px 14px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
 .avatar-actions {
   display: flex;
   gap: 8px;
@@ -453,7 +644,7 @@ onMounted(() => {
   align-items: center;
   gap: 4px;
   padding: 5px 12px;
-  border-radius: 8px;
+  border-radius: var(--radius-full);
   font-size: 12px;
   font-weight: 500;
   cursor: pointer;
@@ -480,57 +671,73 @@ onMounted(() => {
   font-size: 14px;
 }
 
-.hero-info {
-  flex: 1;
+/* Контакты в рейле — тональные иконки в духе разделов настроек. */
+.identity-contacts {
+  list-style: none;
+  width: 100%;
+  margin: 4px 0 0;
+  padding: 14px 0 0;
+  border-top: 1px solid var(--color-outline-dim);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.contact-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+  text-align: left;
+}
+
+.contact-ico {
+  flex-shrink: 0;
+  width: 36px;
+  height: 36px;
+  border-radius: 12px;
+  display: grid;
+  place-items: center;
+  background: var(--tone-bg, var(--color-primary-container));
+  color: var(--tone-fg, var(--color-on-primary-container));
+}
+.contact-ico[data-tone="primary"]   { --tone-bg: var(--color-primary-container);   --tone-fg: var(--color-on-primary-container); }
+.contact-ico[data-tone="secondary"] { --tone-bg: var(--color-secondary-container); --tone-fg: var(--color-on-secondary-container); }
+.contact-ico[data-tone="tertiary"]  { --tone-bg: var(--color-tertiary-container);  --tone-fg: var(--color-on-tertiary-container); }
+.contact-ico .material-symbols-outlined { font-size: 18px; }
+
+.contact-text {
   min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 1px;
 }
 
-.hero-name {
-  margin: 0;
-  font-size: 26px;
-  font-weight: 800;
-  letter-spacing: -0.3px;
-  color: var(--color-text);
-  line-height: 1.2;
-}
-
-.hero-post {
-  margin: 0;
-  font-size: 15px;
-  color: var(--color-text-dim);
-}
-
-.hero-meta {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  flex-wrap: wrap;
-  margin-top: 4px;
-}
-
-.hero-login {
-  font-size: 13px;
-  color: var(--color-text-dim);
-}
-
-.role-tag {
-  display: inline-block;
-  background: var(--color-tertiary-container);
-  color: var(--color-on-tertiary-container);
-  border-radius: var(--radius-full);
-  padding: 4px 14px;
-  font-size: 12px;
+.contact-text small {
+  font-size: 11px;
   font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--color-text-dim);
 }
+
+.contact-text > span {
+  font-size: 13px;
+  color: var(--color-text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.contact-text > span.contact-empty { color: var(--color-text-dim); }
 
 .btn-logout {
   display: inline-flex;
   align-items: center;
   justify-content: center;
   gap: 8px;
+  width: 100%;
+  margin-top: 4px;
   padding: 10px 18px;
   border: 1px solid color-mix(in oklch, var(--color-error) 30%, var(--color-outline-dim));
   border-radius: var(--radius-full);
@@ -540,8 +747,6 @@ onMounted(() => {
   font-weight: 600;
   cursor: pointer;
   transition: background 0.15s;
-  flex-shrink: 0;
-  align-self: flex-start;
 }
 
 .btn-logout:hover {
@@ -552,10 +757,17 @@ onMounted(() => {
   font-size: 18px;
 }
 
-/* ── Адаптивная сетка карточек ───────────────────────────────── */
-.profile-grid {
+/* ── Правая колонка ──────────────────────────────────────────── */
+.profile-main {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  min-width: 0;
+}
+
+.forms-row {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  grid-template-columns: 1fr 1fr;
   gap: 24px;
   align-items: start;
 }
@@ -568,22 +780,56 @@ onMounted(() => {
   display: flex;
   flex-direction: column;
   gap: 16px;
+  transition: border-color 0.15s;
 }
 
-/* Карточка во всю ширину сетки (статистика) */
-.profile-card--wide {
-  grid-column: 1 / -1;
+.profile-card:hover {
+  border-color: color-mix(in oklch, var(--color-primary) 30%, var(--color-outline-dim));
 }
 
-.profile-card h3 {
-  margin: 0;
-  font-size: 16px;
-  font-weight: 700;
-  color: var(--color-text);
+/* Шапка карточки: тональная иконка + заголовок + описание. */
+.card-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
   padding-bottom: 12px;
   border-bottom: 1px solid var(--color-outline-dim);
 }
 
+.card-head h3 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--color-text);
+}
+
+.head-text { min-width: 0; }
+
+.head-desc {
+  margin: 2px 0 0;
+  font-size: 12.5px;
+  color: var(--color-text-dim);
+}
+
+.head-icon {
+  flex-shrink: 0;
+  width: 40px;
+  height: 40px;
+  border-radius: 12px;
+  display: grid;
+  place-items: center;
+  background: var(--tone-bg, var(--color-primary-container));
+  color: var(--tone-fg, var(--color-on-primary-container));
+}
+.head-icon[data-tone="primary"]   { --tone-bg: var(--color-primary-container);   --tone-fg: var(--color-on-primary-container); }
+.head-icon[data-tone="secondary"] { --tone-bg: var(--color-secondary-container); --tone-fg: var(--color-on-secondary-container); }
+.head-icon[data-tone="tertiary"]  { --tone-bg: var(--color-tertiary-container);  --tone-fg: var(--color-on-tertiary-container); }
+.head-icon .material-symbols-outlined { font-size: 22px; }
+
+.stats-head { flex-wrap: wrap; }
+.head-period { margin-left: auto; }
+
+/* ── Формы ───────────────────────────────────────────────────── */
 .profile-form {
   display: flex;
   flex-direction: column;
@@ -621,8 +867,8 @@ onMounted(() => {
   background: var(--color-primary);
   color: var(--color-on-primary);
   border: none;
-  border-radius: 10px;
-  padding: 9px 20px;
+  border-radius: var(--radius-full);
+  padding: 10px 22px;
   font-size: 14px;
   font-weight: 600;
   cursor: pointer;
@@ -638,36 +884,102 @@ onMounted(() => {
   cursor: not-allowed;
 }
 
-/* Stats */
-.profile-stats-cards {
-  display: flex;
-  gap: 16px;
-  flex-wrap: wrap;
+/* ── Статистика ──────────────────────────────────────────────── */
+.stat-tiles {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 14px;
 }
 
-.stat-card {
-  flex: 1;
-  min-width: 100px;
+.stat-tile {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 16px 18px;
+  border-radius: 18px;
+  background: var(--tone-bg, var(--color-primary-container));
+  color: var(--tone-fg, var(--color-on-primary-container));
+}
+.stat-tile[data-tone="primary"]   { --tone-bg: var(--color-primary-container);   --tone-fg: var(--color-on-primary-container); }
+.stat-tile[data-tone="secondary"] { --tone-bg: var(--color-secondary-container); --tone-fg: var(--color-on-secondary-container); }
+.stat-tile[data-tone="tertiary"]  { --tone-bg: var(--color-tertiary-container);  --tone-fg: var(--color-on-tertiary-container); }
+
+.tile-ico {
+  flex-shrink: 0;
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background: color-mix(in oklch, currentColor 14%, transparent);
+}
+.tile-ico .material-symbols-outlined { font-size: 20px; }
+
+.tile-text {
   display: flex;
   flex-direction: column;
-  align-items: center;
-  gap: 4px;
-  padding: 16px;
-  background: var(--color-surface-low);
-  border: 1px solid var(--color-outline-dim);
-  border-radius: 10px;
+  gap: 2px;
+  min-width: 0;
 }
 
-.stat-value {
-  font-size: 28px;
+.tile-num {
+  font-size: 26px;
   font-weight: 800;
-  color: var(--color-primary);
-  line-height: 1;
+  line-height: 1.1;
 }
 
-.stat-label {
+.tile-label {
   font-size: 12px;
+  opacity: 0.8;
+}
+
+/* Бары по типам юнитов (десктоп). */
+.type-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.type-row {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.type-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 12px;
+  font-size: 13px;
+}
+
+.type-name {
+  font-weight: 600;
+  color: var(--color-text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.type-meta {
   color: var(--color-text-dim);
+  white-space: nowrap;
+}
+
+.type-bar {
+  height: 8px;
+  border-radius: var(--radius-full);
+  background: var(--color-surface-low);
+  overflow: hidden;
+}
+
+.type-bar > span {
+  display: block;
+  height: 100%;
+  border-radius: var(--radius-full);
+  background: linear-gradient(90deg, var(--color-primary), var(--color-tertiary));
+  transition: width 0.4s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .stats-table {
@@ -687,37 +999,97 @@ onMounted(() => {
   font-size: 14px;
 }
 
-/* ── Адаптив ─────────────────────────────────────────────────── */
+/* ── Узкий десктоп: формы в одну колонку ─────────────────────── */
+@media (max-width: 1100px) and (min-width: 769px) {
+  .profile-container { grid-template-columns: 300px minmax(0, 1fr); }
+  .forms-row { grid-template-columns: 1fr; }
+  .stat-tiles { grid-template-columns: repeat(2, 1fr); }
+  .stat-tile--avg { display: none; }
+}
+
+/* ── Мобилка: воспроизводим прежний вид без изменений ────────── */
 @media (max-width: 768px) {
   .profile-view {
     padding: 12px;
     padding-bottom: calc(60px + 12px + env(safe-area-inset-bottom, 0px));
   }
 
-  .profile-hero {
+  .profile-container {
+    display: flex;
     flex-direction: column;
-    text-align: center;
+    gap: 16px;
+    max-width: none;
+  }
+
+  .identity-card {
+    position: static;
     padding: 24px 16px;
     gap: 16px;
+    overflow: visible;
   }
 
-  .hero-info {
-    align-items: center;
-  }
+  /* Обложка и контакты — только десктопная фишка. */
+  .identity-cover,
+  .identity-contacts { display: none; }
 
-  .hero-meta {
-    justify-content: center;
-  }
+  .avatar-wrapper { margin-top: 0; }
 
-  .btn-logout {
-    align-self: stretch;
-  }
+  .hero-name { font-size: 26px; }
 
-  /* На узком экране карточки всегда в одну колонку на всю ширину */
-  .profile-grid {
-    grid-template-columns: 1fr;
+  .btn-logout { margin-top: 0; }
+
+  .profile-main { gap: 16px; }
+
+  /* Прежний порядок карточек: профиль → пароль → статистика. */
+  .forms-row { display: contents; }
+  .stats-card { order: 1; }
+
+  /* Шапки карточек — как раньше: просто заголовок с разделителем. */
+  .head-icon,
+  .head-desc { display: none; }
+
+  .stats-head { flex-wrap: wrap; }
+  .head-period { margin-left: 0; flex-basis: 100%; }
+
+  /* Плитки статистики — прежние нейтральные карточки, без третьей. */
+  .stat-tiles {
+    display: flex;
     gap: 16px;
+    flex-wrap: wrap;
   }
+
+  .stat-tile {
+    flex: 1;
+    min-width: 100px;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+    padding: 16px;
+    border-radius: 10px;
+    background: var(--color-surface-low);
+    border: 1px solid var(--color-outline-dim);
+    color: var(--color-text);
+  }
+
+  .stat-tile--avg { display: none; }
+
+  .tile-ico { display: none; }
+
+  .tile-text { align-items: center; gap: 4px; }
+
+  .tile-num {
+    font-size: 28px;
+    color: var(--color-primary);
+    line-height: 1;
+  }
+
+  .tile-label {
+    font-size: 12px;
+    color: var(--color-text-dim);
+    opacity: 1;
+  }
+
+  .btn-primary { border-radius: 10px; padding: 9px 20px; }
 
   /* Горизонтальный скролл для таблицы статистики */
   .stats-table {
