@@ -114,7 +114,9 @@ func (s *Service) GetTask(ctx context.Context, taskID, userID int64) (*dto.Task,
 	return &out, nil
 }
 
-func (s *Service) CreateTask(ctx context.Context, actorID, companyID int64, req dto.TaskCreate) (*dto.Task, error) {
+// createTaskCore — создание задачи с бизнес-проверками, без дампа и
+// сокет-события (общая часть CreateTask и YouGile-импорта).
+func (s *Service) createTaskCore(ctx context.Context, actorID, companyID int64, req dto.TaskCreate) (*domain.Task, error) {
 	dept, err := s.depts.GetDepartment(ctx, req.DepartmentID)
 	if err != nil {
 		return nil, err
@@ -156,7 +158,14 @@ func (s *Service) CreateTask(ctx context.Context, actorID, companyID int64, req 
 	}
 	s.log.Info("task.create", "task_id", task.ID, "author_id", actorID)
 	s.ai.ScheduleReindex(task.ID)
+	return task, nil
+}
 
+func (s *Service) CreateTask(ctx context.Context, actorID, companyID int64, req dto.TaskCreate) (*dto.Task, error) {
+	task, err := s.createTaskCore(ctx, actorID, companyID, req)
+	if err != nil {
+		return nil, err
+	}
 	out, err := s.GetTask(ctx, task.ID, actorID)
 	if err != nil {
 		return nil, err
@@ -228,11 +237,10 @@ func (s *Service) UpdateTask(ctx context.Context, taskID, actorID int64, req dto
 	if err != nil {
 		return nil, err
 	}
-	// Двусторонняя синхра с YouGile живёт во Flask до фазы 4: служебное
-	// событие «_» диспатчится мостом в python-обработчик (push best-effort).
-	s.bus.Publish(ctx, "_yg_task_updated", nil, map[string]any{
-		"task_id": taskID, "actor_user_id": actorID, "changed": changed,
-	})
+	// Исходящий пуш в YouGile — best-effort в фоне, антицикл через sync_hash.
+	if s.yg != nil {
+		s.yg.PushAfterUpdate(taskID, actorID, changed)
+	}
 	s.broadcastTask(ctx, "task:updated", *out)
 	return out, nil
 }
@@ -287,9 +295,9 @@ func (s *Service) ArchiveTask(ctx context.Context, taskID, actorID int64) (*dto.
 	if err != nil {
 		return nil, err
 	}
-	s.bus.Publish(ctx, "_yg_task_archived", nil, map[string]any{
-		"task_id": taskID, "actor_user_id": actorID, "archived": true,
-	})
+	if s.yg != nil {
+		s.yg.PushAfterArchive(taskID, actorID, true)
+	}
 	s.bus.Publish(ctx, "task:archived", []string{roomAll}, map[string]any{
 		"task_id": taskID, "archived_at": dto.ISO(now),
 	})
@@ -318,9 +326,9 @@ func (s *Service) RestoreTask(ctx context.Context, taskID, actorID int64) (*dto.
 	if err != nil {
 		return nil, err
 	}
-	s.bus.Publish(ctx, "_yg_task_archived", nil, map[string]any{
-		"task_id": taskID, "actor_user_id": actorID, "archived": false,
-	})
+	if s.yg != nil {
+		s.yg.PushAfterArchive(taskID, actorID, false)
+	}
 	s.bus.Publish(ctx, "task:restored", []string{roomAll}, map[string]any{"task_id": taskID})
 	return out, nil
 }

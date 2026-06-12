@@ -166,9 +166,10 @@ printf "\033[1m▶ groovesvc (Go)  gRPC :9094  HTTP :8094...\033[0m\n"
 GROOVE_PID=$!
 
 # 8. Go-микросервис задач (HTTP :8095 — /api/tasks|units|unit-types|
-#    departments|stages|stats). Зовёт groovesvc и aisvc по gRPC, события —
-#    в Redis gw2:tasks:events. env синхронизированы с
-#    deploy/docker-compose.override.yml.
+#    departments|stages|stats|yougile). Зовёт groovesvc и aisvc по gRPC,
+#    события — в Redis gw2:tasks:events. env синхронизированы с
+#    deploy/docker-compose.override.yml. Dev-ключ Fernet YouGile — тот же,
+#    что был в back/.flaskenv.
 printf "\033[1m▶ tasksvc (Go)  HTTP :8095...\033[0m\n"
 (
   cd "$ROOT/back-go/tasks" && \
@@ -177,6 +178,7 @@ printf "\033[1m▶ tasksvc (Go)  HTTP :8095...\033[0m\n"
   PASETO_PUBLIC_KEY="$PASETO_PUBLIC_KEY_DEV" \
   GROOVE_GRPC_ADDR="localhost:9094" \
   AI_GRPC_ADDR="localhost:9093" \
+  YOUGILE_ENC_KEY="CT5VF1jg6uFFbj4W_6RW3z3416bPlfbxdMYelrEOIXc=" \
   HTTP_ADDR=":8095" \
   exec go run ./cmd/tasksvc
 ) &

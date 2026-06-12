@@ -58,8 +58,8 @@ python3 -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().
 
 | Что нужно открыть | Зачем |
 |---|---|
-| **Egress** на `https://ru.yougile.com:443` из app-контейнера | Все исходящие вызовы YouGile API (auth, проекты, задачи, чат карточек, регистрация webhook). |
-| **Ingress** на `<YOUGILE_WEBHOOK_PUBLIC_BASE>/api/yougile/webhook/*` снаружи (TLS!) | YouGile стучится сюда событиями `task-*`. Nginx уже проксирует `/api/*` в Flask — отдельного `location`-блока добавлять не нужно. |
+| **Egress** на `https://ru.yougile.com:443` из tasks-контейнера | Все исходящие вызовы YouGile API (auth, проекты, задачи, чат карточек, регистрация webhook). |
+| **Ingress** на `<YOUGILE_WEBHOOK_PUBLIC_BASE>/api/yougile/webhook/*` снаружи (TLS!) | YouGile стучится сюда событиями `task-*`. Nginx проксирует `/api/yougile` на tasks:8095 (вебхук в tasksvc публичный, без токена). |
 
 Что НЕ нужно: открывать для YG медиа-порты LiveKit (7881/7882 — это для звонков), отдельный route в nginx, отдельный subdomain.
 

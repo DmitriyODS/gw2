@@ -29,6 +29,9 @@ type Service struct {
 	ai        domain.AIClient
 	bus       domain.EventBus
 	log       *slog.Logger
+	// yg — YouGile-модуль (NewYougile привязывает себя сам); nil в тестах
+	// ядра — пуш тогда не дёргается.
+	yg *Yougile
 }
 
 type Deps struct {

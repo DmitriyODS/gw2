@@ -1,14 +1,14 @@
 """Обобщённый Redis-мост: события Go-микросервисов → Socket.IO (клиенты).
 
 Socket.IO остаётся во Flask, поэтому каждый вынесенный сервис (мессенджер,
-groove) публикует свои сокет-события в Redis-канал `gw2:<svc>:events`
+groove, tasks) публикует свои сокет-события в Redis-канал `gw2:<svc>:events`
 в едином формате:
 
   {"event": "message:new", "rooms": ["user_12", "all"], "payload": {...}}
 
-Обычные события транслируются вербатим в каждую комнату из `rooms`.
-События с именем на "_" — служебные хуки моста: наружу не эмитятся,
-а диспатчатся в зарегистрированные python-обработчики.
+События транслируются вербатим в каждую комнату из `rooms`. Имена на "_"
+зарезервированы под служебные хуки моста — сейчас таких нет (YouGile-пуш
+уехал внутрь tasksvc), наружу они не эмитятся.
 
 Канал звонков (gw2:calls:events, исторический формат) живёт отдельно —
 см. sockets/call_bridge.py. Соединение с Redis самовосстанавливается:
@@ -29,18 +29,6 @@ CHANNELS = [
     "gw2:tasks:events",
 ]
 _RECONNECT_DELAY_SEC = 3
-
-
-from app.integrations.yougile.bridge_hooks import (  # noqa: E402
-    handle_task_archived, handle_task_updated,
-)
-
-# Служебные события (имя на "_") → обработчик(app, socketio, payload).
-# tasksvc дёргает ими исходящий YouGile-пуш, пока интеграция живёт во Flask.
-_INTERNAL_HANDLERS = {
-    "_yg_task_updated": handle_task_updated,
-    "_yg_task_archived": handle_task_archived,
-}
 
 
 def start_service_bridge(app: Flask, socketio: SocketIO) -> None:
@@ -78,12 +66,8 @@ def _handle_event(app: Flask, socketio: SocketIO, event: dict) -> None:
     payload = event.get("payload") or {}
 
     if name.startswith("_"):
-        handler = _INTERNAL_HANDLERS.get(name)
-        if handler is None:
-            logger.warning("service_bridge.unknown_internal",
-                           extra={"extra": {"event": name}})
-            return
-        handler(app, socketio, payload)
+        logger.warning("service_bridge.unknown_internal",
+                       extra={"extra": {"event": name}})
         return
 
     for room in event.get("rooms") or []:

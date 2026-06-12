@@ -37,7 +37,7 @@ const taskColumns = `
 	t.received_at, t.department_id, t.stage_id, t.deadline, t.is_archived,
 	t.archived_at, t.company_id,
 	t.yougile_task_id, t.yougile_id_short, t.yougile_project_id,
-	t.yougile_board_id, t.yougile_column_id,
+	t.yougile_board_id, t.yougile_column_id, t.yougile_sync_hash,
 	a.id, a.fio, a.avatar_path,
 	r.id, r.fio, r.avatar_path,
 	d.id, d.name,
@@ -69,7 +69,7 @@ func scanTask(row pgx.Row) (*domain.Task, error) {
 		&t.ReceivedAt, &t.DepartmentID, &t.StageID, &t.Deadline, &t.IsArchived,
 		&t.ArchivedAt, &t.CompanyID,
 		&t.YougileTaskID, &t.YougileIDShort, &t.YougileProjectID,
-		&t.YougileBoardID, &t.YougileColumnID,
+		&t.YougileBoardID, &t.YougileColumnID, &t.YougileSyncHash,
 		&aID, &aFIO, &aAvatar,
 		&rID, &rFIO, &rAvatar,
 		&dID, &dName,
@@ -235,6 +235,9 @@ var allowedTaskFields = map[string]bool{
 	"name": true, "link_yougile": true, "department_id": true,
 	"received_at": true, "deadline": true, "responsible_user_id": true,
 	"stage_id": true, "is_archived": true, "archived_at": true,
+	"yougile_task_id": true, "yougile_id_short": true, "yougile_project_id": true,
+	"yougile_board_id": true, "yougile_column_id": true,
+	"yougile_synced_at": true, "yougile_sync_hash": true,
 }
 
 func (r *Repo) UpdateTaskFields(ctx context.Context, id int64, fields map[string]any) error {

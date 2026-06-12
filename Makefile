@@ -144,8 +144,8 @@ dev-groove: dev-infra
 	go run ./cmd/groovesvc
 
 # Go-микросервис задач: ядро платформы — REST /api/tasks|units|unit-types|
-# departments|stages|stats. Хуки геймификации — gRPC groovesvc, поиск/
-# реиндекс — gRPC aisvc. env синхронизированы с dev.sh.
+# departments|stages|stats|yougile. Хуки геймификации — gRPC groovesvc,
+# поиск/реиндекс — gRPC aisvc. env синхронизированы с dev.sh.
 dev-tasks: dev-infra
 	@printf "\033[1m▶ tasksvc (Go)  HTTP :8095\033[0m\n"
 	cd back-go/tasks && \
@@ -154,6 +154,7 @@ dev-tasks: dev-infra
 	PASETO_PUBLIC_KEY="$(PASETO_PUBLIC_KEY_DEV)" \
 	GROOVE_GRPC_ADDR="localhost:9094" \
 	AI_GRPC_ADDR="localhost:9093" \
+	YOUGILE_ENC_KEY="CT5VF1jg6uFFbj4W_6RW3z3416bPlfbxdMYelrEOIXc=" \
 	HTTP_ADDR=":8095" \
 	go run ./cmd/tasksvc
 

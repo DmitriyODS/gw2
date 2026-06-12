@@ -21,6 +21,11 @@ ALL_SERVICES=(
   "groove:groove"
 )
 
+# Python-стабы нужны только контрактам, которые зовёт Flask-шлюз:
+# calls (ринг-фаза) и messenger (плашки звонков). ai/groove Flask
+# больше не вызывает — их клиенты Go-сервисы, стабы у них в pkg/gen.
+PY_SERVICES="calls messenger"
+
 if [ "$#" -gt 0 ]; then
   SERVICES=()
   for want in "$@"; do
@@ -44,6 +49,11 @@ for entry in "${SERVICES[@]}"; do
 
   echo "▶ [$svc] Go-стабы (buf generate)…"
   (cd "$svc_dir" && buf lint && buf generate)
+
+  case " $PY_SERVICES " in
+    *" $svc "*) ;;
+    *) continue ;;
+  esac
 
   echo "▶ [$svc] Python-стабы (grpcio-tools)…"
   # Генерируем из плоской копии: иначе grpcio-tools раскладывает стабы по

@@ -75,6 +75,8 @@ type Task struct {
 	YougileProjectID *string
 	YougileBoardID   *string
 	YougileColumnID  *string
+	// YougileSyncHash — антицикл двусторонней синхры (в дампы не попадает).
+	YougileSyncHash *string
 }
 
 // Unit — юнит с user/unit_type (грузятся батчем для сериализации).

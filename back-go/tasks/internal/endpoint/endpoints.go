@@ -63,6 +63,23 @@ type Endpoints struct {
 	StatsProfile        endpoint.Endpoint
 	StatsEmployees      endpoint.Endpoint
 	StatsResponsibles   endpoint.Endpoint
+
+	YougileStatus          endpoint.Endpoint
+	YougileConnect         endpoint.Endpoint
+	YougileDisconnect      endpoint.Endpoint
+	YougileRotate          endpoint.Endpoint
+	YougileLookupCompanies endpoint.Endpoint
+	YougileProjects        endpoint.Endpoint
+	YougileBoards          endpoint.Endpoint
+	YougileColumns         endpoint.Endpoint
+	YougileGetSettings     endpoint.Endpoint
+	YougileUpdateSettings  endpoint.Endpoint
+	YougileReset           endpoint.Endpoint
+	YougileImport          endpoint.Endpoint
+	YougileExport          endpoint.Endpoint
+	YougileUnlink          endpoint.Endpoint
+	YougileWebhook         endpoint.Endpoint
+	YougileRegisterWebhook endpoint.Endpoint
 }
 
 // ── Транспорт-независимые запросы ────────────────────────────────
@@ -183,7 +200,65 @@ type ProfileRequest struct {
 	End    time.Time
 }
 
-func New(svc *service.Service) Endpoints {
+// ── YouGile ──────────────────────────────────────────────────────
+
+type YougileConnectRequest struct {
+	User     *domain.User
+	Login    string
+	Password string
+	Explicit *string // yg_company_id из payload (учитывается для DIRECTOR+)
+}
+
+type YougileRotateRequest struct {
+	User     *domain.User
+	Password string
+}
+
+type YougileCredsRequest struct {
+	Login    string
+	Password string
+}
+
+type YougileCatalogRequest struct {
+	ActorID int64
+	Param   string // projectId / boardId
+}
+
+type YougileSettingsUpdateRequest struct {
+	Actor     *domain.User
+	CompanyID int64
+	Body      dto.YougileSettingsUpdate
+}
+
+type YougileCompanyActorRequest struct {
+	Actor     *domain.User
+	CompanyID int64
+}
+
+type YougileImportRequest struct {
+	User   *domain.User
+	Body   dto.YougileImport
+	Origin string
+}
+
+type YougileTaskActionRequest struct {
+	User   *domain.User
+	TaskID int64
+	Origin string
+}
+
+type YougileWebhookRequest struct {
+	CompanyID int64
+	Secret    string
+	Body      []byte
+}
+
+type YougileWebhookResponse struct {
+	Results []map[string]any
+	Found   bool
+}
+
+func New(svc *service.Service, yg *service.Yougile) Endpoints {
 	return Endpoints{
 		ListTasks: func(ctx context.Context, request any) (any, error) {
 			return svc.ListTasks(ctx, request.(domain.TaskListFilter))
@@ -351,6 +426,71 @@ func New(svc *service.Service) Endpoints {
 		},
 		StatsResponsibles: func(ctx context.Context, request any) (any, error) {
 			return svc.StatsResponsibles(ctx, request.(*int64))
+		},
+
+		YougileStatus: func(ctx context.Context, request any) (any, error) {
+			return yg.Status(ctx, request.(*domain.User))
+		},
+		YougileConnect: func(ctx context.Context, request any) (any, error) {
+			req := request.(YougileConnectRequest)
+			return yg.Connect(ctx, req.User, req.Login, req.Password, req.Explicit)
+		},
+		YougileDisconnect: func(ctx context.Context, request any) (any, error) {
+			return nil, yg.Disconnect(ctx, request.(int64))
+		},
+		YougileRotate: func(ctx context.Context, request any) (any, error) {
+			req := request.(YougileRotateRequest)
+			return yg.Rotate(ctx, req.User, req.Password)
+		},
+		YougileLookupCompanies: func(ctx context.Context, request any) (any, error) {
+			req := request.(YougileCredsRequest)
+			return yg.LookupCompanies(ctx, req.Login, req.Password)
+		},
+		YougileProjects: func(ctx context.Context, request any) (any, error) {
+			return yg.Projects(ctx, request.(int64))
+		},
+		YougileBoards: func(ctx context.Context, request any) (any, error) {
+			req := request.(YougileCatalogRequest)
+			return yg.Boards(ctx, req.ActorID, req.Param)
+		},
+		YougileColumns: func(ctx context.Context, request any) (any, error) {
+			req := request.(YougileCatalogRequest)
+			return yg.Columns(ctx, req.ActorID, req.Param)
+		},
+		YougileGetSettings: func(ctx context.Context, request any) (any, error) {
+			return yg.CompanySettings(ctx, request.(*int64))
+		},
+		YougileUpdateSettings: func(ctx context.Context, request any) (any, error) {
+			req := request.(YougileSettingsUpdateRequest)
+			return yg.UpdateCompanySettings(ctx, req.Actor, req.CompanyID, req.Body)
+		},
+		YougileReset: func(ctx context.Context, request any) (any, error) {
+			req := request.(YougileCompanyActorRequest)
+			return yg.ResetIntegration(ctx, req.Actor, req.CompanyID)
+		},
+		YougileImport: func(ctx context.Context, request any) (any, error) {
+			req := request.(YougileImportRequest)
+			return yg.ImportTask(ctx, req.User, req.Body, req.Origin)
+		},
+		YougileExport: func(ctx context.Context, request any) (any, error) {
+			req := request.(YougileTaskActionRequest)
+			return yg.ExportTask(ctx, req.User, req.TaskID, req.Origin)
+		},
+		YougileUnlink: func(ctx context.Context, request any) (any, error) {
+			req := request.(YougileTaskActionRequest)
+			return yg.UnlinkTask(ctx, req.User, req.TaskID)
+		},
+		YougileWebhook: func(ctx context.Context, request any) (any, error) {
+			req := request.(YougileWebhookRequest)
+			results, found, err := yg.HandleWebhook(ctx, req.CompanyID, req.Secret, req.Body)
+			if err != nil {
+				return nil, err
+			}
+			return YougileWebhookResponse{Results: results, Found: found}, nil
+		},
+		YougileRegisterWebhook: func(ctx context.Context, request any) (any, error) {
+			req := request.(YougileCompanyActorRequest)
+			return yg.RegisterWebhook(ctx, req.Actor, req.CompanyID)
 		},
 	}
 }

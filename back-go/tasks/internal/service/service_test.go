@@ -70,6 +70,17 @@ func (f *fakeStore) CreateTask(_ context.Context, t *domain.Task) error {
 	return nil
 }
 
+// updOptStr — значение текстовой колонки из fields (string / *string / nil).
+func updOptStr(v any) *string {
+	switch s := v.(type) {
+	case string:
+		return &s
+	case *string:
+		return s
+	}
+	return nil
+}
+
 func (f *fakeStore) UpdateTaskFields(_ context.Context, id int64, fields map[string]any) error {
 	t := f.tasks[id]
 	for k, v := range fields {
@@ -89,6 +100,27 @@ func (f *fakeStore) UpdateTaskFields(_ context.Context, id int64, fields map[str
 			t.ResponsibleUserID, _ = v.(*int64)
 		case "stage_id":
 			t.StageID, _ = v.(*int64)
+		case "deadline":
+			if v == nil {
+				t.Deadline = nil
+			} else {
+				dl := v.(time.Time)
+				t.Deadline = &dl
+			}
+		case "link_yougile":
+			t.LinkYougile = updOptStr(v)
+		case "yougile_task_id":
+			t.YougileTaskID = updOptStr(v)
+		case "yougile_id_short":
+			t.YougileIDShort = updOptStr(v)
+		case "yougile_project_id":
+			t.YougileProjectID = updOptStr(v)
+		case "yougile_board_id":
+			t.YougileBoardID = updOptStr(v)
+		case "yougile_column_id":
+			t.YougileColumnID = updOptStr(v)
+		case "yougile_sync_hash":
+			t.YougileSyncHash = updOptStr(v)
 		}
 	}
 	return nil
@@ -467,8 +499,8 @@ func TestArchiveTaskWithActiveUnitForbidden(t *testing.T) {
 	for _, n := range names {
 		found[n] = true
 	}
-	if !found["task:archived"] || !found["_yg_task_archived"] {
-		t.Fatalf("события архивирования не опубликованы: %v", names)
+	if !found["task:archived"] {
+		t.Fatalf("событие архивирования не опубликовано: %v", names)
 	}
 
 	_, err = svc.ArchiveTask(context.Background(), task.ID, 5)
@@ -506,7 +538,7 @@ func TestStopForeignUnitNeedsManager(t *testing.T) {
 	}
 }
 
-func TestUpdateTaskReindexAndYGEvent(t *testing.T) {
+func TestUpdateTaskReindexAndBroadcast(t *testing.T) {
 	svc, store, _, ai, bus, _ := newTestService()
 	task := seedTask(store, 1)
 
@@ -518,14 +550,14 @@ func TestUpdateTaskReindexAndYGEvent(t *testing.T) {
 	if len(ai.reindexed) == 0 || ai.reindexed[len(ai.reindexed)-1] != task.ID {
 		t.Fatal("изменение name должно перегенерить эмбеддинг")
 	}
-	var yg *busEvent
+	var updated *busEvent
 	for i := range bus.events {
-		if bus.events[i].Event == "_yg_task_updated" {
-			yg = &bus.events[i]
+		if bus.events[i].Event == "task:updated" {
+			updated = &bus.events[i]
 		}
 	}
-	if yg == nil {
-		t.Fatal("служебное событие _yg_task_updated не опубликовано")
+	if updated == nil {
+		t.Fatal("событие task:updated не опубликовано")
 	}
 }
 

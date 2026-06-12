@@ -6,7 +6,7 @@
 #
 # Здесь только отличия от базы: образы из Docker Hub вместо локальной
 # сборки, обязательные секреты, TLS/certbot, прод-конфиг nginx,
-# YouGile-окружение app.
+# YouGile-окружение tasks.
 #
 # Прод НЕ собирает образы: их пушит локальная машина (`make push` →
 # scripts/build_push.sh) в один репозиторий osipovskijdima/groove_work
@@ -18,15 +18,6 @@
 services:
   app:
     image: osipovskijdima/groove_work:${APP_TAG:-app}
-    environment:
-      # YouGile-интеграция:
-      #   YOUGILE_ENC_KEY — Fernet для шифрования персональных ключей юзеров.
-      #     Без него вся /api/yougile/* отдаст 500 ENC_KEY_MISCONFIGURED.
-      #   YOUGILE_WEBHOOK_PUBLIC_BASE — публичный URL приложения
-      #     (https://gw.example.com). Без него регистрация webhook'а упадёт,
-      #     импорт/экспорт продолжают работать.
-      YOUGILE_ENC_KEY: ${YOUGILE_ENC_KEY:-}
-      YOUGILE_WEBHOOK_PUBLIC_BASE: ${YOUGILE_WEBHOOK_PUBLIC_BASE:-}
     volumes:
       - /opt/gw2/backup.json:/app/backup.json:ro
 
@@ -50,6 +41,15 @@ services:
 
   tasks:
     image: osipovskijdima/groove_work:${TASKS_TAG:-tasks}
+    environment:
+      # YouGile-интеграция:
+      #   YOUGILE_ENC_KEY — Fernet для шифрования персональных ключей юзеров.
+      #     Без него вся /api/yougile/* отдаст 500 ENC_KEY_MISCONFIGURED.
+      #   YOUGILE_WEBHOOK_PUBLIC_BASE — публичный URL приложения
+      #     (https://gw.example.com). Без него регистрация webhook'а упадёт,
+      #     импорт/экспорт продолжают работать.
+      YOUGILE_ENC_KEY: ${YOUGILE_ENC_KEY:-}
+      YOUGILE_WEBHOOK_PUBLIC_BASE: ${YOUGILE_WEBHOOK_PUBLIC_BASE:-}
 
   nginx:
     image: osipovskijdima/groove_work:${FRONT_TAG:-front}

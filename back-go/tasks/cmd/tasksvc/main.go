@@ -1,16 +1,17 @@
 // tasksvc — микросервис задач Groove Work (ядро платформы).
 //
 // Владеет задачами, юнитами, типами юнитов, этапами, отделами,
-// комментариями, избранным, личными цветами и статистикой (включая
-// xlsx-экспорт). Схему таблиц по-прежнему ведёт Alembic на стороне Flask.
+// комментариями, избранным, личными цветами, статистикой (включая
+// xlsx-экспорт) и YouGile-интеграцией (личные ключи пользователей,
+// настройки компаний, импорт/экспорт задач, двусторонняя синхра через
+// вебхук). Схему таблиц по-прежнему ведёт Alembic на стороне Flask.
 //
 // Транспорт: HTTP/Fiber (HTTP_ADDR) — REST /api/tasks|units|unit-types|
-// departments|stages|stats (за nginx, мимо Flask).
+// departments|stages|stats|yougile (за nginx, мимо Flask).
 //
 // Межсервисное: groovesvc (gRPC, хуки геймификации), aisvc (gRPC,
 // семантический поиск + реиндекс эмбеддингов). Сокет-события клиентам —
-// Redis-канал gw2:tasks:events (generic-мост Flask); события с префиксом
-// «_» дёргают python-обработчики (YouGile-пуш до фазы 4).
+// Redis-канал gw2:tasks:events (generic-мост Flask).
 package main
 
 import (
@@ -20,10 +21,12 @@ import (
 	"github.com/DmitriyODS/gw2/back-go/pkg/events"
 	"github.com/DmitriyODS/gw2/back-go/pkg/pasetoauth"
 	"github.com/DmitriyODS/gw2/back-go/tasks/internal/clients"
+	"github.com/DmitriyODS/gw2/back-go/tasks/internal/domain"
 	"github.com/DmitriyODS/gw2/back-go/tasks/internal/endpoint"
 	"github.com/DmitriyODS/gw2/back-go/tasks/internal/repository/postgres"
 	"github.com/DmitriyODS/gw2/back-go/tasks/internal/service"
 	httptransport "github.com/DmitriyODS/gw2/back-go/tasks/internal/transport/http"
+	"github.com/DmitriyODS/gw2/back-go/tasks/internal/yougile"
 )
 
 func main() {
@@ -73,7 +76,17 @@ func main() {
 		Bus: events.NewPublisher(rdb, log, "gw2:tasks:events"),
 		Log: log,
 	})
-	eps := endpoint.New(svc)
+	yg := service.NewYougile(service.YougileDeps{
+		Service: svc,
+		Repo:    repo,
+		Cipher:  yougile.NewCipher(bootstrap.Env("YOUGILE_ENC_KEY", "")),
+		NewClient: func(key string) domain.YougileAPI {
+			return yougile.NewClient(key)
+		},
+		PublicBase: bootstrap.Env("YOUGILE_WEBHOOK_PUBLIC_BASE", ""),
+		Log:        log,
+	})
+	eps := endpoint.New(svc, yg)
 
 	httpServer := httptransport.NewServer(eps, users, verifier, log)
 

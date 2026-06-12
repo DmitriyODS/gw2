@@ -87,6 +87,11 @@ export default defineConfig({
         target: 'http://localhost:8095',
         changeOrigin: true
       },
+      // YouGile-интеграция — тоже tasksvc.
+      '/api/yougile': {
+        target: 'http://localhost:8095',
+        changeOrigin: true
+      },
       // ТВ-факт дня — aisvc.
       '/api/ai': {
         target: 'http://localhost:8093',

@@ -63,10 +63,6 @@ services:
       CALLS_GRPC_ADDR: calls:9090
       # Микросервис мессенджера (Go): плашки звонков и диалоги — по gRPC.
       MESSENGER_GRPC_ADDR: messenger:9092
-      # Микросервис ИИ (Go): chat/embeddings/семантический поиск — по gRPC.
-      AI_GRPC_ADDR: ai:9093
-      # Микросервис Groove (Go): хуки геймификации задач/юнитов — по gRPC.
-      GROOVE_GRPC_ADDR: groove:9094
     volumes:
       - uploads:/app/uploads
     expose:
@@ -275,12 +271,12 @@ services:
       start_period: 10s
 
   # Микросервис задач (Go, back-go/tasks): ядро платформы — задачи, юниты,
-  # типы юнитов, этапы, отделы, комментарии, избранное, цвета и статистика
-  # с xlsx-экспортом. REST /api/tasks|units|unit-types|departments|stages|
-  # stats (nginx ведёт сюда мимо Flask). Хуки геймификации — gRPC groovesvc,
-  # семантический поиск/реиндекс — gRPC aisvc. Сокет-события публикует в
-  # Redis-канал gw2:tasks:events (мост Flask; служебные «_»-события дёргают
-  # YouGile-пуш, пока интеграция живёт во Flask).
+  # типы юнитов, этапы, отделы, комментарии, избранное, цвета, статистика
+  # с xlsx-экспортом и YouGile-интеграция (личные ключи, импорт/экспорт,
+  # вебхук). REST /api/tasks|units|unit-types|departments|stages|stats|
+  # yougile (nginx ведёт сюда мимо Flask). Хуки геймификации — gRPC
+  # groovesvc, семантический поиск/реиндекс — gRPC aisvc. Сокет-события
+  # публикует в Redis-канал gw2:tasks:events (мост Flask).
   tasks:
     build:
       context: ../back-go

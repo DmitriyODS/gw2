@@ -90,7 +90,7 @@ const SKIP_OPS = new Set([
 // unitTypes.js, departments.js, stages.js, stats.js — tasksvc.
 const MANUAL_TAGS = new Set([
   'messenger', 'groove', 'companies', 'roles', 'backup', 'changelog', 'ai',
-  'tasks', 'units', 'unit-types', 'departments', 'stages', 'stats',
+  'tasks', 'units', 'unit-types', 'departments', 'stages', 'stats', 'yougile',
 ])
 
 // ─── Утилиты ──────────────────────────────────────────────────────────────────

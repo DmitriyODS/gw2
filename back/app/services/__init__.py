@@ -1,7 +1,3 @@
-from . import (
-    task_service, calls_client, messenger_client, groove_client,
-)
+from . import calls_client, messenger_client
 
-__all__ = [
-    "task_service", "calls_client", "messenger_client", "groove_client",
-]
+__all__ = ["calls_client", "messenger_client"]

@@ -56,6 +56,28 @@ func NewServer(eps endpoint.Endpoints, users domain.UserReader,
 
 	employee := auth.RequireRole(domain.LevelEmployee)
 	manager := auth.RequireRole(domain.LevelManager)
+	director := auth.RequireRole(domain.LevelDirector)
+
+	// Вебхук YouGile — публичный (без токена): авторизация через secret
+	// в URL. Регистрируется вне auth-группы.
+	app.Post("/api/yougile/webhook/:companyId<int>/:secret", h.yougileWebhook)
+
+	ygAPI := app.Group("/api/yougile", auth.RequireAuth)
+	ygAPI.Get("/status", h.yougileStatus)
+	ygAPI.Post("/account", h.yougileConnect)
+	ygAPI.Delete("/account", h.yougileDisconnect)
+	ygAPI.Post("/account/rotate", h.yougileRotate)
+	ygAPI.Post("/companies/lookup", director, h.yougileLookupCompanies)
+	ygAPI.Get("/projects", director, h.yougileProjects)
+	ygAPI.Get("/boards", director, h.yougileBoards)
+	ygAPI.Get("/columns", director, h.yougileColumns)
+	ygAPI.Get("/company-settings", director, h.yougileGetSettings)
+	ygAPI.Put("/company-settings", director, h.yougilePutSettings)
+	ygAPI.Post("/reset", director, h.yougileReset)
+	ygAPI.Post("/import-task", employee, h.yougileImportTask)
+	ygAPI.Post("/export-task", employee, h.yougileExportTask)
+	ygAPI.Delete("/tasks/:id<int>/link", employee, h.yougileUnlinkTask)
+	ygAPI.Post("/webhook/register", director, h.yougileRegisterWebhook)
 
 	tasksAPI := app.Group("/api/tasks", auth.RequireAuth)
 	tasksAPI.Get("", employee, h.listTasks)

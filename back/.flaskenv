@@ -6,11 +6,8 @@ REDIS_URL=redis://localhost:6379/0
 # Токены выпускает authsvc, Flask только проверяет подпись.
 PASETO_PUBLIC_KEY=15ef439747fcad6ca627310942ba14b48f164fcbb5f65c10f61ca2aeb4b53fe1
 SECRET_KEY=dev-flask-secret-key-min-32-chars-local-xxxx
-YOUGILE_ENC_KEY=CT5VF1jg6uFFbj4W_6RW3z3416bPlfbxdMYelrEOIXc=
 # gRPC-адреса Go-микросервисов (на хосте, см. dev.sh / make dev-calls /
-# make dev-messenger). LiveKit-ключи Flask больше не нужны — ими владеет callsvc;
-# AI_KEY_ENCRYPTION_KEY переехал в env aisvc.
+# make dev-messenger): Flask-шлюз зовёт только callsvc (ринг-фаза) и
+# msgsvc (плашки звонков).
 CALLS_GRPC_ADDR=localhost:9090
 MESSENGER_GRPC_ADDR=localhost:9092
-AI_GRPC_ADDR=localhost:9093
-GROOVE_GRPC_ADDR=localhost:9094
