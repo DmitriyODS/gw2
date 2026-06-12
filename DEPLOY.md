@@ -150,6 +150,15 @@ docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --no-build
 
 ## Резервное копирование
 
+С локальной машины — `make backup`: pg_dump прод-БД внутри контейнера `db`,
+gzip на сервере, стрим по SSH в `backups/gw2_<дата>.sql.gz` (каталог в
+.gitignore). Дамп сделан с `--clean --if-exists --no-owner`, поэтому
+накатывается на локальную dev-БД одной командой:
+
+```bash
+gunzip -c backups/gw2_<дата>.sql.gz | docker exec -i deploy-db-1 psql -U grovework -d grovework
+```
+
 Через UI: **Настройки → Копирование и восстановление → Создать резервную копию**.
 
 Или вручную — данные лежат в Docker volume:

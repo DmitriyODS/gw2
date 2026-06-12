@@ -34,6 +34,7 @@ help:
 	@printf "  make status       docker compose ps на сервере\n"
 	@printf "  make restart [s=calls]  Перезапустить контейнер без пересборки\n"
 	@printf "  make shell [s=calls]    Шелл внутри контейнера на сервере\n"
+	@printf "  make backup       Дамп прод-БД → backups/gw2_<дата>.sql.gz (локально)\n"
 	@printf "  make reset NEWPASS='...'  Сбросить пароль суперадмина на сервере\n"
 	@printf "\n\033[33mКонфигурация сервера:\033[0m cp .env.deploy.example .env.deploy\n\n"
 
@@ -151,6 +152,23 @@ restart:
 
 shell:
 	$(SSH) "cd $(SERVER_DIR)/deploy && $(COMPOSE_PROD) exec $(s) sh -c 'command -v bash >/dev/null && exec bash || exec sh'"
+
+# ── Бэкап БД ─────────────────────────────────────────────────────
+# make backup — pg_dump прод-БД (внутри контейнера db, креды берутся из
+# его же POSTGRES_*) → gzip на сервере → стрим по SSH в backups/ (в
+# .gitignore: дамп содержит реальные данные). Флаги --clean --if-exists
+# --no-owner — чтобы дамп накатывался на локальную dev-БД одной командой:
+#   gunzip -c backups/gw2_<дата>.sql.gz | docker exec -i deploy-db-1 psql -U grovework -d grovework
+.PHONY: backup
+BACKUP_TS := $(shell date +%Y%m%d-%H%M%S)
+BACKUP_FILE := backups/gw2_$(BACKUP_TS).sql.gz
+backup:
+	@mkdir -p backups
+	@printf "\033[1m▶ Дамп прод-БД с $(SERVER_HOST)...\033[0m\n"
+	@$(SSH) "set -o pipefail; cd $(SERVER_DIR)/deploy && $(COMPOSE_PROD) exec -T db sh -c 'pg_dump --clean --if-exists --no-owner -U \$$POSTGRES_USER -d \$$POSTGRES_DB' | gzip -c" > $(BACKUP_FILE).part \
+		|| { rm -f $(BACKUP_FILE).part; printf "\033[31m✗ Дамп не удался\033[0m\n"; exit 1; }
+	@gunzip -t $(BACKUP_FILE).part && mv $(BACKUP_FILE).part $(BACKUP_FILE)
+	@printf "\033[32m✓ Дамп: $(BACKUP_FILE) ($$(du -h $(BACKUP_FILE) | cut -f1))\033[0m\n"
 
 # ── Сброс пароля суперадмина ─────────────────────────────────────
 # Использование: make reset NEWPASS='новый-пароль'

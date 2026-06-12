@@ -176,6 +176,7 @@ cp .env.deploy.example .env.deploy   # один раз: SERVER_HOST, SSH_KEY
 make push      # собрать (linux/amd64) и запушить образы в Docker Hub; only="app front" — выборочно
 make deploy    # make push → git push → SSH → git reset --hard → scripts/deploy_server.sh
 make logs s=auth|calls   make status   make restart s=...   make shell s=...
+make backup    # pg_dump прод-БД → локально backups/gw2_<дата>.sql.gz (накат на dev-БД: gunzip -c ... | docker exec -i deploy-db-1 psql -U grovework -d grovework)
 make reset NEWPASS='...'  # сброс пароля суперадмина (pgcrypto, без утечки в ps)
 ```
 

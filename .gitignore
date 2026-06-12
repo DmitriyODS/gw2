@@ -45,6 +45,7 @@ Thumbs.db
 
 # Backup data (содержит реальные данные пользователей, не коммитим)
 backup.json
+backups/
 
 # Logs
 *.log
