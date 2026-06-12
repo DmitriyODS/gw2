@@ -54,7 +54,7 @@ type AvatarStorage interface {
 }
 
 // CompanyRepository — персистентность компаний (таблица companies; схему
-// по-прежнему ведёт Alembic на стороне Flask).
+// ведёт migrate-контейнер goose).
 type CompanyRepository interface {
 	// ListCompanies — все компании с директором, по created_at DESC.
 	ListCompanies(ctx context.Context) ([]*Company, error)

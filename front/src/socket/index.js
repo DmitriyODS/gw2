@@ -1,4 +1,4 @@
-import { io } from 'socket.io-client'
+import { GatewaySocket } from '@/socket/gateway.js'
 import { useAuthStore } from '@/stores/auth.js'
 import { useUnitsStore } from '@/stores/units.js'
 import { useMessengerStore } from '@/stores/messenger.js'
@@ -120,20 +120,13 @@ export function connectSocket() {
   const auth = useAuthStore()
   if (!auth.token || socket) return socket
 
-  // В dev подключаемся напрямую к Flask (5001), минуя Vite proxy.
-  // Порядок transports важен: ['polling', 'websocket'] = стандартный socket.io
-  // flow — сначала HTTP polling устанавливает sid, затем upgrade на WS.
-  // Прямой WS без polling часто фейлится handshake'ом.
-  const target = import.meta.env.DEV ? 'http://localhost:5001' : '/'
-  socket = io(target, {
-    auth: { token: auth.token },
-    transports: ['polling', 'websocket'],
-    upgrade: true,
-    reconnection: true,
-    reconnectionAttempts: Infinity,
-    reconnectionDelay: 1000,
-    reconnectionDelayMax: 5000,
-  })
+  // В dev подключаемся напрямую к gatewaysvc (:8096), минуя Vite proxy;
+  // в проде — /ws через nginx (схема по текущему протоколу страницы).
+  const target = import.meta.env.DEV
+    ? 'ws://localhost:8096/ws'
+    : (window.location.protocol === 'https:' ? 'wss://' : 'ws://')
+      + window.location.host + '/ws'
+  socket = new GatewaySocket(target, { auth: { token: auth.token } })
 
   installVisibilityResync()
 

@@ -7,7 +7,7 @@
 //   - gRPC (GRPC_ADDR) — хуки доменных событий (Flask — юниты/задачи,
 //     msgsvc — pet-чат).
 //
-// Зависимости: общая PostgreSQL платформы (схему ведёт Alembic), Redis
+// Зависимости: общая PostgreSQL платформы (схему ведёт goose-migrate), Redis
 // (дневные капы, кэши, события Socket.IO через канал gw2:groove:events),
 // gRPC-клиенты aisvc (LLM) и msgsvc (pet-чат).
 package main

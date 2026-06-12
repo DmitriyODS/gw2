@@ -11,7 +11,7 @@
 //   - gRPC (GRPC_ADDR) — Status/Chat/Embed/SemanticSearch/ReindexTask
 //     (зовут Flask и groovesvc; промпты и циклы tool-calling — у вызывающих).
 //
-// Зависимости: общая PostgreSQL платформы (схему ведёт Alembic) + Redis
+// Зависимости: общая PostgreSQL платформы (схему ведёт goose-migrate) + Redis
 // (кэш ТВ-фактов).
 package main
 

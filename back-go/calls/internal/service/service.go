@@ -7,8 +7,8 @@
 //   - применение вебхуков LiveKit — источника истины «кто реально в комнате»;
 //   - реконсиляция зависших звонков при старте сервиса.
 //
-// Ринг-фаза по-прежнему инициируется из Socket.IO (Flask), но Flask теперь
-// лишь транспорт: сюда он ходит по gRPC.
+// Ринг-фаза инициируется WS-командами call:* через gatewaysvc — он лишь
+// транспорт и ходит сюда по gRPC.
 package service
 
 import (
@@ -26,7 +26,7 @@ import (
 )
 
 // CallService — публичный контракт сервисного слоя (его оборачивают
-// go-kit endpoints; транспорты — gRPC для Flask и Fiber для REST/вебхуков).
+// go-kit endpoints; транспорты — gRPC для gateway и Fiber для REST/вебхуков).
 type CallService interface {
 	StartCall(ctx context.Context, req dto.StartCallRequest) (*dto.StartCallResponse, error)
 	InviteToCall(ctx context.Context, req dto.InviteRequest) (*dto.InviteResponse, error)
@@ -51,14 +51,17 @@ type Service struct {
 	ring  domain.RingState
 	media domain.MediaServer
 	pub   domain.EventPublisher
+	msgr  domain.MessengerClient
 	log   *slog.Logger
 }
 
 var _ CallService = (*Service)(nil)
 
 func New(repo domain.CallRepository, users domain.UserReader, ring domain.RingState,
-	media domain.MediaServer, pub domain.EventPublisher, log *slog.Logger) *Service {
-	return &Service{repo: repo, users: users, ring: ring, media: media, pub: pub, log: log}
+	media domain.MediaServer, pub domain.EventPublisher, msgr domain.MessengerClient,
+	log *slog.Logger) *Service {
+	return &Service{repo: repo, users: users, ring: ring, media: media, pub: pub,
+		msgr: msgr, log: log}
 }
 
 func now() time.Time { return time.Now().UTC() }
@@ -176,6 +179,19 @@ func (s *Service) StartCall(ctx context.Context, req dto.StartCallRequest) (*dto
 		kind = domain.KindP2P
 	}
 
+	// Парный диалог — домен мессенджера: создаём ДО записи звонка, чтобы FK
+	// conversation_id уже существовал. msgsvc недоступен — звонок не
+	// блокируем: пройдёт без привязки к чату и без плашки (она вторична).
+	if kind == domain.KindP2P && req.ConversationID == 0 {
+		convID, err := s.msgr.EnsureDialog(ctx, req.InitiatorID, inviteeIDs[0])
+		if err != nil {
+			s.log.Warn("call.ensure_dialog_failed",
+				"initiator_id", req.InitiatorID, "error", err)
+		} else {
+			req.ConversationID = convID
+		}
+	}
+
 	ts := now()
 	call := &domain.Call{
 		InitiatorID: req.InitiatorID,
@@ -186,8 +202,7 @@ func (s *Service) StartCall(ctx context.Context, req dto.StartCallRequest) (*dto
 		StartedAt:   ts,
 		ShareCode:   shareCode(),
 	}
-	// Парная привязка к диалогу — только для p2p (Flask создаёт диалог и
-	// системную плашку звонка на своей стороне, тут храним связь).
+	// Парная привязка к диалогу — только для p2p.
 	if kind == domain.KindP2P && req.ConversationID > 0 {
 		call.ConversationID = &req.ConversationID
 	}
@@ -222,6 +237,12 @@ func (s *Service) StartCall(ctx context.Context, req dto.StartCallRequest) (*dto
 	if err != nil {
 		s.abortStart(ctx, call)
 		return nil, err
+	}
+
+	// Системная плашка звонка в чате — только p2p; рассылку message:new
+	// делает паблишер (fire-and-forget).
+	if call.Kind == domain.KindP2P && call.ConversationID != nil {
+		s.pub.PillCreated(ctx, *call.ConversationID, req.InitiatorID, call.ID)
 	}
 	return &dto.StartCallResponse{Call: snap, Livekit: s.livekitDTO(token)}, nil
 }
@@ -376,6 +397,8 @@ func (s *Service) AcceptCall(ctx context.Context, req dto.AcceptRequest) (*dto.A
 	if err != nil {
 		return nil, err
 	}
+	// Плашка в чате: status ringing → active.
+	s.pub.PillUpdated(ctx, req.CallID)
 	return &dto.AcceptResponse{Call: snap, Livekit: s.livekitDTO(token)}, nil
 }
 
@@ -436,6 +459,7 @@ func (s *Service) DeclineCall(ctx context.Context, req dto.HangupRequest) (*dto.
 	if err != nil {
 		return nil, err
 	}
+	s.pub.PillUpdated(ctx, req.CallID)
 	return &dto.HangupResponse{Call: snap, Ended: ended, NotifyUserIDs: notify}, nil
 }
 
@@ -487,6 +511,7 @@ func (s *Service) LeaveCall(ctx context.Context, req dto.HangupRequest) (*dto.Ha
 	if err != nil {
 		return nil, err
 	}
+	s.pub.PillUpdated(ctx, req.CallID)
 	return &dto.HangupResponse{Call: snap, Ended: ended, NotifyUserIDs: notify}, nil
 }
 
@@ -527,6 +552,7 @@ func (s *Service) EndCall(ctx context.Context, req dto.HangupRequest) (*dto.Hang
 	if err != nil {
 		return nil, err
 	}
+	s.pub.PillUpdated(ctx, req.CallID)
 	return &dto.HangupResponse{Call: snap, Ended: true, NotifyUserIDs: notify}, nil
 }
 

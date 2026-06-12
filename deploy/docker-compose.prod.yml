@@ -10,16 +10,18 @@
 #
 # Прод НЕ собирает образы: их пушит локальная машина (`make push` →
 # scripts/build_push.sh) в один репозиторий osipovskijdima/groove_work
-# под тегами app/calls/auth/messenger/ai/front. Деплой-скрипт делает
-# `compose pull` + `up --no-build`. Откат: в deploy/.env выставить
-# версионный тег, например APP_TAG=app-3.6.0 (CALLS_TAG / AUTH_TAG /
-# MESSENGER_TAG / AI_TAG / FRONT_TAG — аналогично).
+# под тегами migrate/gateway/calls/auth/messenger/ai/groove/tasks/front.
+# Деплой-скрипт делает `compose pull` + `up --no-build`. Откат: в deploy/.env
+# выставить версионный тег, например GATEWAY_TAG=gateway-3.7.0 (MIGRATE_TAG /
+# CALLS_TAG / AUTH_TAG / MESSENGER_TAG / AI_TAG / GROOVE_TAG / TASKS_TAG /
+# FRONT_TAG — аналогично).
 # ================================================================
 services:
-  app:
-    image: osipovskijdima/groove_work:${APP_TAG:-app}
-    volumes:
-      - /opt/gw2/backup.json:/app/backup.json:ro
+  migrate:
+    image: osipovskijdima/groove_work:${MIGRATE_TAG:-migrate}
+
+  gateway:
+    image: osipovskijdima/groove_work:${GATEWAY_TAG:-gateway}
 
   calls:
     image: osipovskijdima/groove_work:${CALLS_TAG:-calls}

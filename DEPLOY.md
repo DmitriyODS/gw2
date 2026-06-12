@@ -91,9 +91,10 @@ docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --no-build
 > локальной машины делает всё сам через `scripts/deploy_server.sh`.
 
 При первом запуске:
-- Сервер стянет готовые образы из Docker Hub (`app` — Flask, `calls` и
-  `auth` — Go-микросервисы, `front` — nginx со собранной SPA)
-- Применит миграции базы данных (`flask db upgrade` в entrypoint app)
+- Сервер стянет готовые образы из Docker Hub (Go-микросервисы `migrate`,
+  `gateway`, `calls`, `auth`, `messenger`, `ai`, `groove`, `tasks` и
+  `front` — nginx со собранной SPA)
+- Применит миграции базы данных (run-once контейнер `migrate`, goose)
 - Создаст первого пользователя: **логин** `admin` / **пароль** `admin`
 
 Приложение будет доступно по адресу: `http://<IP сервера>`
@@ -114,8 +115,8 @@ docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --no-build
 PROD="docker compose -f docker-compose.yml -f docker-compose.prod.yml"
 
 $PROD ps                    # статус контейнеров
-$PROD logs -f app           # логи Flask (calls / auth / livekit / nginx — аналогично)
-$PROD restart app           # перезапуск
+$PROD logs -f gateway       # логи шлюза (calls / auth / livekit / nginx — аналогично)
+$PROD restart gateway       # перезапуск
 $PROD down                  # остановка (данные сохраняются)
 $PROD pull && $PROD up -d --no-build   # обновить после нового `make push`
 ```
@@ -189,19 +190,18 @@ TLS уже встроен в прод-оверлей: nginx слушает 80/44
 nginx (фронт + реверс-прокси)            livekit (SFU звонков)
     ├── /            → front/dist (Vue SPA)  ↑
     ├── /api/calls/* → calls:8090 (Go REST)  │ сигнальный WS
-    ├── /api/*       → app:5000 (Flask REST) │
-    ├── /socket.io   → app:5000 (WebSocket)  │
+    ├── /api/...     → auth/messenger/ai/    │
+    │                  groove/tasks (Go REST)│
+    ├── /ws          → gateway:8096 (WS)     │
     ├── /livekit     → livekit:7880 ─────────┘
-    └── /uploads     → volume (аватарки)
+    └── /uploads     → volume (аватарки, вложения)
 
-app:5000 (Flask + eventlet)          calls:8090/:9090 (Go, callsvc)
-    ├── db:5432 (PostgreSQL)             ├── db:5432 (PostgreSQL)
-    ├── redis:6379 (Redis)               ├── redis:6379 (publish событий)
+gateway:8096 (Go, realtime-шлюз)     calls:8090/:9090 (Go, callsvc)
+    ├── db:5432 (last_seen_at)           ├── db:5432 (PostgreSQL)
+    ├── redis:6379 (presence + события)  ├── redis:6379 (publish событий)
     └── calls:9090 (gRPC, ринг-фаза)     └── livekit:7880 (Twirp + вебхуки ←)
 ```
 
-Микросервис звонков (`calls`) наружу не публикуется: REST `/api/calls/*`
-ходит через nginx, gRPC :9090 доступен только app внутри docker-сети.
-События звонков (вебхуки LiveKit → завершение/смена статуса) callsvc
-публикует в Redis-канал `gw2:calls:events`, который слушает app и
-ретранслирует в Socket.IO.
+Микросервисы наружу не публикуются: REST ходит через nginx, gRPC доступен
+только внутри docker-сети. Сокет-события сервисы публикуют в Redis-каналы
+`gw2:<svc>:events`, которые слушает gateway и доставляет клиентам по WS.

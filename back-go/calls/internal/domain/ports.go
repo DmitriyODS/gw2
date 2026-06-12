@@ -90,10 +90,22 @@ type MediaServer interface {
 	ClientURL() string
 }
 
-// EventPublisher — уведомления Flask-шлюзу (он эмитит Socket.IO-события).
-// Нужен только для изменений, которые инициирует сам сервис (вебхуки
-// LiveKit): сокет-мутации Flask обрабатывает по ответу gRPC сам.
+// EventPublisher — сокет-события клиентам через Redis gw2:calls:events
+// (общий envelope {event, rooms, payload}; доставляет gatewaysvc).
+// CallEnded нужен для изменений, которые инициирует сам сервис (вебхуки
+// LiveKit): результат ринг-команд gateway эмитит по ответу gRPC сам.
+// Плашка звонка в чате (kind='call') — оркестрация callsvc: PillCreated
+// создаёт её через msgsvc и рассылает message:new, PillUpdated перечитывает
+// снапшот и рассылает message:updated. Оба — fire-and-forget: плашка
+// вторична и звонок не роняет.
 type EventPublisher interface {
 	CallEnded(ctx context.Context, callID int64, status string, notifyUserIDs []int64)
-	CallStatusChanged(ctx context.Context, callID int64)
+	PillCreated(ctx context.Context, conversationID, senderID, callID int64)
+	PillUpdated(ctx context.Context, callID int64)
+}
+
+// MessengerClient — gRPC msgsvc: парный диалог для p2p-звонка (создаётся ДО
+// записи звонка, чтобы FK conversation_id уже существовал).
+type MessengerClient interface {
+	EnsureDialog(ctx context.Context, userAID, userBID int64) (int64, error)
 }

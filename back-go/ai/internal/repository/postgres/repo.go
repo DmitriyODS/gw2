@@ -1,5 +1,5 @@
 // Package postgres — персистентность aisvc (pgx, raw SQL по таблицам, схему
-// которых ведёт Alembic во Flask): AI-поля companies, task_embeddings
+// которых ведёт migrate-контейнер goose): AI-поля companies, task_embeddings
 // (pgvector) + read-only лукапы tasks/departments/users.
 package postgres
 

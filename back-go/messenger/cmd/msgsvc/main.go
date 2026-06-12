@@ -5,7 +5,7 @@
 //     exact /api/messenger/presence — он остаётся во Flask);
 //   - gRPC (GRPC_ADDR) — плашки звонков (Flask) и бот Грувика (groove).
 //
-// Зависимости: общая PostgreSQL платформы (схему ведёт Alembic), Redis
+// Зависимости: общая PostgreSQL платформы (схему ведёт goose-migrate), Redis
 // (публикация событий Socket.IO для Flask-моста, канал gw2:messenger:events),
 // общий uploads-volume (файлы вложений).
 package main

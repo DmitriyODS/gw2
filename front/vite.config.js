@@ -1,11 +1,12 @@
 import { defineConfig } from 'vite'
 import vue from '@vitejs/plugin-vue'
-import { readFileSync } from 'node:fs'
+import { createReadStream, existsSync, readFileSync } from 'node:fs'
+import { join, normalize } from 'node:path'
 import { fileURLToPath, URL } from 'node:url'
 
-// В проде /api/changelog отдаёт nginx статикой из back/data/changelog.json;
+// В проде /api/changelog отдаёт nginx статикой из data/changelog.json;
 // в dev тот же файл отдаёт этот мини-плагин (мидлварь встаёт раньше прокси).
-const changelogPath = fileURLToPath(new URL('../back/data/changelog.json', import.meta.url))
+const changelogPath = fileURLToPath(new URL('../data/changelog.json', import.meta.url))
 const serveChangelog = () => ({
   name: 'serve-changelog',
   configureServer(server) {
@@ -16,8 +17,23 @@ const serveChangelog = () => ({
   }
 })
 
+// В проде /uploads/ отдаёт nginx из общего volume; в dev файлы (аватарки,
+// вложения) пишут Go-сервисы в каталог uploads/ корня репо — отдаём оттуда.
+const uploadsDir = fileURLToPath(new URL('../uploads', import.meta.url))
+const serveUploads = () => ({
+  name: 'serve-uploads',
+  configureServer(server) {
+    server.middlewares.use('/uploads', (req, res, next) => {
+      const rel = normalize(decodeURIComponent((req.url || '').split('?')[0]))
+      const file = join(uploadsDir, rel)
+      if (!file.startsWith(uploadsDir) || !existsSync(file)) return next()
+      createReadStream(file).pipe(res)
+    })
+  }
+})
+
 export default defineConfig({
-  plugins: [vue(), serveChangelog()],
+  plugins: [vue(), serveChangelog(), serveUploads()],
   resolve: {
     alias: {
       '@': fileURLToPath(new URL('./src', import.meta.url))
@@ -25,8 +41,7 @@ export default defineConfig({
   },
   server: {
     proxy: {
-      // Go-микросервисы; более специфичные префиксы ДОЛЖНЫ стоять раньше
-      // '/api', иначе запросы уйдут во Flask.
+      // Go-микросервисы; более специфичные префиксы стоят раньше общих.
       '/api/calls': {
         target: 'http://localhost:8090',
         changeOrigin: true
@@ -48,9 +63,9 @@ export default defineConfig({
         target: 'http://localhost:8091',
         changeOrigin: true
       },
-      // Presence остаётся во Flask (in-memory), остальной мессенджер — msgsvc.
+      // Presence — домен realtime-шлюза gatewaysvc, остальной мессенджер — msgsvc.
       '/api/messenger/presence': {
-        target: 'http://localhost:5001',
+        target: 'http://localhost:8096',
         changeOrigin: true
       },
       '/api/messenger': {
@@ -107,20 +122,9 @@ export default defineConfig({
       '/api/companies': {
         target: 'http://localhost:8091',
         changeOrigin: true
-      },
-      '/api': {
-        target: 'http://localhost:5001',
-        changeOrigin: true
-      },
-      '/uploads': {
-        target: 'http://localhost:5001',
-        changeOrigin: true
-      },
-      '/socket.io': {
-        target: 'http://localhost:5001',
-        changeOrigin: true,
-        ws: true
       }
+      // WS realtime-шлюза в dev фронт открывает напрямую (ws://localhost:8096/ws,
+      // см. src/socket/index.js) — прокси не нужен.
     }
   }
 })

@@ -1,11 +1,13 @@
 // callsvc — микросервис звонков Groove Work.
 //
 // Транспорты:
-//   - gRPC (GRPC_ADDR) — ринг-фаза, дёргается Flask-шлюзом из Socket.IO;
+//   - gRPC (GRPC_ADDR) — ринг-фаза, дёргается gatewaysvc из WS-команд call:*;
 //   - HTTP/Fiber (HTTP_ADDR) — REST /api/calls/* (за nginx) и вебхуки LiveKit.
 //
-// Зависимости: общая PostgreSQL платформы (схему ведёт Alembic), Redis
-// (публикация событий для Flask), LiveKit (медиа).
+// Межсервисное: msgsvc (gRPC — парный диалог и плашка звонка в чате).
+// Сокет-события клиентам — Redis-канал gw2:calls:events (общий envelope,
+// доставляет gatewaysvc). Зависимости: общая PostgreSQL платформы, Redis,
+// LiveKit (медиа).
 package main
 
 import (
@@ -16,7 +18,7 @@ import (
 
 	googrpc "google.golang.org/grpc"
 
-	"github.com/DmitriyODS/gw2/back-go/pkg/gen/callspb"
+	"github.com/DmitriyODS/gw2/back-go/calls/internal/clients"
 	"github.com/DmitriyODS/gw2/back-go/calls/internal/endpoint"
 	"github.com/DmitriyODS/gw2/back-go/calls/internal/events"
 	"github.com/DmitriyODS/gw2/back-go/calls/internal/livekit"
@@ -26,6 +28,8 @@ import (
 	grpctransport "github.com/DmitriyODS/gw2/back-go/calls/internal/transport/grpc"
 	httptransport "github.com/DmitriyODS/gw2/back-go/calls/internal/transport/http"
 	"github.com/DmitriyODS/gw2/back-go/pkg/bootstrap"
+	pkgevents "github.com/DmitriyODS/gw2/back-go/pkg/events"
+	"github.com/DmitriyODS/gw2/back-go/pkg/gen/callspb"
 	"github.com/DmitriyODS/gw2/back-go/pkg/pasetoauth"
 )
 
@@ -64,11 +68,18 @@ func main() {
 		TokenTTL:  tokenTTL,
 	}, log)
 
+	msgr, err := clients.NewMessenger(bootstrap.Env("MESSENGER_GRPC_ADDR", "localhost:9092"), log)
+	if err != nil {
+		log.Error("messenger.client_failed", "error", err)
+		os.Exit(1)
+	}
+	defer msgr.Close()
+
 	repo := postgres.NewCallRepository(pool)
 	users := postgres.NewUserReader(pool)
 	ring := ringstate.New()
-	pub := events.NewPublisher(rdb, log)
-	svc := service.New(repo, users, ring, lk, pub, log)
+	pub := events.NewPublisher(pkgevents.NewPublisher(rdb, log, events.Channel), msgr, log)
+	svc := service.New(repo, users, ring, lk, pub, msgr, log)
 	eps := endpoint.New(svc)
 
 	// Зависшие с прошлого запуска звонки: живые комнаты восстанавливаем,

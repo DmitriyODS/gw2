@@ -190,8 +190,29 @@ type fakePub struct{ events []pubEvent }
 func (p *fakePub) CallEnded(_ context.Context, callID int64, status string, notify []int64) {
 	p.events = append(p.events, pubEvent{"call_ended", callID, status, notify})
 }
-func (p *fakePub) CallStatusChanged(_ context.Context, callID int64) {
-	p.events = append(p.events, pubEvent{"call_status_changed", callID, "", nil})
+func (p *fakePub) PillCreated(_ context.Context, conversationID, senderID, callID int64) {
+	p.events = append(p.events, pubEvent{"pill_created", callID, "", []int64{conversationID, senderID}})
+}
+func (p *fakePub) PillUpdated(_ context.Context, callID int64) {
+	p.events = append(p.events, pubEvent{"pill_updated", callID, "", nil})
+}
+
+// fakeMessenger — msgsvc: парный диалог для p2p-звонков.
+type fakeMessenger struct {
+	nextConvID int64
+	calls      [][2]int64
+	err        error
+}
+
+func (m *fakeMessenger) EnsureDialog(_ context.Context, a, b int64) (int64, error) {
+	m.calls = append(m.calls, [2]int64{a, b})
+	if m.err != nil {
+		return 0, m.err
+	}
+	if m.nextConvID == 0 {
+		m.nextConvID = 700
+	}
+	return m.nextConvID, nil
 }
 
 func company(id int64) *int64 { return &id }
@@ -206,7 +227,7 @@ func newTestService() (*Service, *fakeRepo, *fakeMedia, *fakePub) {
 		30: {ID: 30, FIO: "Третий", CompanyID: company(1), CompanyActive: true},
 		99: {ID: 99, FIO: "Чужой", CompanyID: company(2), CompanyActive: true},
 	}
-	svc := New(repo, users, ringstate.New(), media, pub, slog.Default())
+	svc := New(repo, users, ringstate.New(), media, pub, &fakeMessenger{}, slog.Default())
 	return svc, repo, media, pub
 }
 
@@ -245,6 +266,61 @@ func TestStartCallP2P(t *testing.T) {
 	stored, _ := repo.GetCall(context.Background(), c.ID)
 	if stored.RoomName != domain.RoomNameFor(c.ID) {
 		t.Error("room_name не записан")
+	}
+}
+
+// p2p без переданного conversation_id: callsvc сам создаёт парный диалог
+// через msgsvc и заводит плашку (PillCreated). Недоступный msgsvc звонок
+// не блокирует — он пройдёт без привязки к чату.
+func TestStartCallEnsuresDialogAndPill(t *testing.T) {
+	repo := newFakeRepo()
+	media := &fakeMedia{occupants: map[string][]string{}}
+	pub := &fakePub{}
+	msgr := &fakeMessenger{nextConvID: 700}
+	users := fakeUsers{
+		10: {ID: 10, FIO: "Инициатор", CompanyID: company(1), CompanyActive: true},
+		20: {ID: 20, FIO: "Собеседник", CompanyID: company(1), CompanyActive: true},
+	}
+	svc := New(repo, users, ringstate.New(), media, pub, msgr, slog.Default())
+
+	resp, err := svc.StartCall(context.Background(), dto.StartCallRequest{
+		InitiatorID: 10, InviteeIDs: []int64{20}, Media: "audio",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(msgr.calls) != 1 || msgr.calls[0] != [2]int64{10, 20} {
+		t.Fatalf("EnsureDialog не вызван: %v", msgr.calls)
+	}
+	if resp.Call.ConversationID == nil || *resp.Call.ConversationID != 700 {
+		t.Fatalf("conversation_id = %v", resp.Call.ConversationID)
+	}
+	var pill *pubEvent
+	for i := range pub.events {
+		if pub.events[i].kind == "pill_created" {
+			pill = &pub.events[i]
+		}
+	}
+	if pill == nil || pill.notify[0] != 700 || pill.notify[1] != 10 {
+		t.Fatalf("PillCreated не опубликован: %+v", pub.events)
+	}
+
+	// msgsvc лежит — звонок всё равно создаётся, без привязки.
+	svc2, _, _, pub2 := newTestService()
+	svc2.msgr = &fakeMessenger{err: context.DeadlineExceeded}
+	resp2, err := svc2.StartCall(context.Background(), dto.StartCallRequest{
+		InitiatorID: 10, InviteeIDs: []int64{20}, Media: "audio",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if resp2.Call.ConversationID != nil {
+		t.Fatal("привязка к диалогу при недоступном msgsvc")
+	}
+	for _, e := range pub2.events {
+		if e.kind == "pill_created" {
+			t.Fatal("плашка без диалога")
+		}
 	}
 }
 

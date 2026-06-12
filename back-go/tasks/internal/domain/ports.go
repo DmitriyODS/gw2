@@ -123,9 +123,7 @@ type AIClient interface {
 }
 
 // EventBus — сокет-события клиентам через Redis gw2:tasks:events
-// (generic-мост Flask эмитит их в Socket.IO-комнаты вербатим; события
-// с префиксом «_» диспатчатся в python-обработчики — ими пользуется
-// YouGile-пуш, пока интеграция живёт во Flask).
+// (realtime-шлюз gatewaysvc доставляет их в WS-комнаты вербатим).
 type EventBus interface {
 	Publish(ctx Ctx, event string, rooms []string, payload any)
 }

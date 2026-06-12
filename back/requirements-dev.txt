@@ -1,5 +1,0 @@
-# Зависимости только для разработки/тестов (в прод-образ не идут).
-# Установка:  ./venv/bin/pip install -r requirements-dev.txt
-# Запуск тестов:  ./venv/bin/pytest -q   (нужны проброшенные порты БД/Redis: make dev-infra)
--r requirements.txt
-pytest==9.0.3

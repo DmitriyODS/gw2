@@ -25,16 +25,17 @@ help:
 	@printf "  make dev-ai       Go-микросервис ИИ (gRPC :9093, HTTP :8093)\n"
 	@printf "  make dev-groove   Go-микросервис «Мой Groove» (gRPC :9094, HTTP :8094)\n"
 	@printf "  make dev-tasks    Go-микросервис задач (HTTP :8095)\n"
-	@printf "  make dev-back     Flask dev-сервер :5001\n"
+	@printf "  make dev-gateway  Realtime-шлюз (WS /ws, HTTP :8096)\n"
+	@printf "  make dev-migrate  Применить миграции (goose)\n"
 	@printf "  make dev-front    Vite dev-сервер  :5173\n"
 	@printf "  make dev-stop     Остановить dev-контейнеры\n"
 	@printf "  make dev-stack    ВЕСЬ стек в Docker (прод-подобно, фронт :8080)\n"
 	@printf "  make dev-stack-stop  Остановить полный стек\n"
 	@printf "  make gen-proto    Перегенерировать gRPC-стабы (Go + Python)\n"
 	@printf "\n\033[1mДеплой (сервер):\033[0m\n"
-	@printf "  make push [only=\"app front\"]  Собрать (linux/amd64) и запушить образы в Docker Hub\n"
+	@printf "  make push [only=\"gateway front\"]  Собрать (linux/amd64) и запушить образы в Docker Hub\n"
 	@printf "  make deploy       make push → git push → на сервере: compose pull + up --no-build\n"
-	@printf "  make logs [s=calls]     Логи контейнера (по умолчанию app)\n"
+	@printf "  make logs [s=calls]     Логи контейнера (по умолчанию gateway)\n"
 	@printf "  make status       docker compose ps на сервере\n"
 	@printf "  make restart [s=calls]  Перезапустить контейнер без пересборки\n"
 	@printf "  make shell [s=calls]    Шелл внутри контейнера на сервере\n"
@@ -43,40 +44,36 @@ help:
 	@printf "\n\033[33mКонфигурация сервера:\033[0m cp .env.deploy.example .env.deploy\n\n"
 
 # ── Разработка ────────────────────────────────────────────────────
-.PHONY: dev-infra dev-migrate dev-back dev-front dev-calls dev-auth dev-messenger dev-ai dev-groove dev-tasks dev-stop dev-stack dev-stack-stop gen-proto
+.PHONY: dev-infra dev-migrate dev-front dev-calls dev-auth dev-messenger dev-ai dev-groove dev-tasks dev-gateway dev-stop dev-stack dev-stack-stop gen-proto
 
-# Dev-ключи PASETO (синхронизированы с dev.sh, back/.flaskenv и
-# back/tests/conftest.py): приватный — только у authsvc, публичный — у
-# Flask и callsvc.
+# Dev-ключи PASETO (синхронизированы с dev.sh и
+# deploy/docker-compose.override.yml): приватный — только у authsvc,
+# публичный — у остальных сервисов.
 PASETO_PRIVATE_KEY_DEV := 68eb779b2f672beb8fcd58d72a81ce1565a1417aed3788d1362bf4faaa3f62ac15ef439747fcad6ca627310942ba14b48f164fcbb5f65c10f61ca2aeb4b53fe1
 PASETO_PUBLIC_KEY_DEV  := 15ef439747fcad6ca627310942ba14b48f164fcbb5f65c10f61ca2aeb4b53fe1
 PASETO_REFRESH_KEY_DEV := d525374c4ec7b5e1c5b140fb9c1f4cffd9c3dbf052bb18f2f32bf9f92d9fa05c
 
-# Приложения (app/calls/auth/messenger/nginx) в dev-оверлее за профилем
-# "full" — bare `up` поднимает только инфраструктуру.
+# Приложения в dev-оверлее за профилем "full" — bare `up` поднимает
+# только инфраструктуру.
 dev-infra:
 	@printf "\033[1m▶ Запускаю DB + Redis + LiveKit...\033[0m\n"
 	cd deploy && docker compose up -d
 	@printf "\033[32m✓ PostgreSQL :5432  Redis :6379  LiveKit :7880\033[0m\n"
 
 dev-migrate: dev-infra
-	@printf "\033[1m▶ Применяю миграции...\033[0m\n"
-	cd back && . venv/bin/activate && flask db upgrade
+	@printf "\033[1m▶ Применяю миграции (goose)...\033[0m\n"
+	cd back-go/migrate && \
+	DATABASE_URL="postgresql://grovework:grovework_local@localhost:5432/grovework" \
+	go run ./cmd/migrate
 	@printf "\033[32m✓ Миграции применены\033[0m\n"
-
-dev-back: dev-migrate
-	@printf "\033[1m▶ Flask + eventlet :5001\033[0m\n"
-	@# Запускаем через wsgi.py (eventlet). Werkzeug-сервер из flask run
-	@# не поддерживает WebSocket — поэтому socket.io WS-upgrade на нём фейлится.
-	@# Auto-reload в dev отсутствует: перезапускайте процесс после изменений.
-	cd back && . venv/bin/activate && PORT=5001 python wsgi.py
 
 dev-front:
 	@printf "\033[1m▶ Vite :5173\033[0m\n"
 	cd front && npm run dev
 
 # Go-микросервис звонков: бизнес-логика, LiveKit, REST /api/calls/* и gRPC
-# для Flask-шлюза. env синхронизированы с back/.flaskenv и dev.sh.
+# ринг-фазы (зовёт gateway); плашки звонков — gRPC msgsvc.
+# env синхронизированы с dev.sh.
 dev-calls: dev-infra
 	@printf "\033[1m▶ callsvc (Go)  gRPC :9090  HTTP :8090\033[0m\n"
 	cd back-go/calls && \
@@ -87,6 +84,7 @@ dev-calls: dev-infra
 	LIVEKIT_API_SECRET="dev_livekit_secret_min_32_chars_ok" \
 	LIVEKIT_URL="http://localhost:7880" \
 	LIVEKIT_CLIENT_URL="ws://localhost:7880" \
+	MESSENGER_GRPC_ADDR="localhost:9092" \
 	go run ./cmd/callsvc
 
 # Go-микросервис авторизации: /api/auth/* и /api/users/*, выпуск PASETO-токенов
@@ -98,24 +96,24 @@ dev-auth: dev-infra
 	REDIS_URL="redis://localhost:6379/0" \
 	PASETO_PRIVATE_KEY="$(PASETO_PRIVATE_KEY_DEV)" \
 	PASETO_REFRESH_KEY="$(PASETO_REFRESH_KEY_DEV)" \
-	UPLOAD_FOLDER="$(CURDIR)/back/uploads" \
+	UPLOAD_FOLDER="$(CURDIR)/uploads" \
 	go run ./cmd/authsvc
 
 # Go-микросервис мессенджера: REST /api/messenger/* (кроме exact presence —
-# он во Flask) и gRPC для Flask-шлюза. env синхронизированы с dev.sh.
+# он в gateway) и gRPC (плашки звонков, pet-чат). env синхронизированы с dev.sh.
 dev-messenger: dev-infra
 	@printf "\033[1m▶ msgsvc (Go)  gRPC :9092  HTTP :8092\033[0m\n"
 	cd back-go/messenger && \
 	DATABASE_URL="postgresql://grovework:grovework_local@localhost:5432/grovework" \
 	REDIS_URL="redis://localhost:6379/0" \
 	PASETO_PUBLIC_KEY="$(PASETO_PUBLIC_KEY_DEV)" \
-	UPLOAD_FOLDER="$(CURDIR)/back/uploads" \
+	UPLOAD_FOLDER="$(CURDIR)/uploads" \
 	HTTP_ADDR=":8092" \
 	GRPC_ADDR=":9092" \
 	go run ./cmd/msgsvc
 
 # Go-микросервис ИИ: REST /api/companies/<id>/ai-settings (regex-роут в
-# nginx/vite) + /api/ai/tv-fact и gRPC для Flask-шлюза. Redis — кэш
+# nginx/vite) + /api/ai/tv-fact и gRPC для tasksvc/groovesvc. Redis — кэш
 # ТВ-фактов. env синхронизированы с dev.sh.
 dev-ai: dev-infra
 	@printf "\033[1m▶ aisvc (Go)  gRPC :9093  HTTP :8093\033[0m\n"
@@ -129,7 +127,7 @@ dev-ai: dev-infra
 	go run ./cmd/aisvc
 
 # Go-микросервис «Мой Groove»: REST /api/groove/* и gRPC-хуки доменных
-# событий (Flask — юниты/задачи, msgsvc — pet-чат). env синхронизированы
+# событий (tasksvc — юниты/задачи, msgsvc — pet-чат). env синхронизированы
 # с dev.sh.
 dev-groove: dev-infra
 	@printf "\033[1m▶ groovesvc (Go)  gRPC :9094  HTTP :8094\033[0m\n"
@@ -158,6 +156,18 @@ dev-tasks: dev-infra
 	HTTP_ADDR=":8095" \
 	go run ./cmd/tasksvc
 
+# Realtime-шлюз: WebSocket /ws (комнаты all/user_{id}), presence в Redis,
+# ринг-фаза → gRPC callsvc, доставка событий gw2:*:events клиентам.
+dev-gateway: dev-infra
+	@printf "\033[1m▶ gatewaysvc (Go)  HTTP :8096\033[0m\n"
+	cd back-go/gateway && \
+	DATABASE_URL="postgresql://grovework:grovework_local@localhost:5432/grovework" \
+	REDIS_URL="redis://localhost:6379/0" \
+	PASETO_PUBLIC_KEY="$(PASETO_PUBLIC_KEY_DEV)" \
+	CALLS_GRPC_ADDR="localhost:9090" \
+	HTTP_ADDR=":8096" \
+	go run ./cmd/gatewaysvc
+
 gen-proto:
 	bash scripts/gen_proto.sh
 
@@ -166,7 +176,7 @@ dev-stop:
 	@printf "\033[32m✓ Dev-контейнеры остановлены\033[0m\n"
 
 # Полный стек в контейнерах — прод-подобная проверка сборки/композиции
-# (Flask, callsvc и nginx из образов; фронт на http://localhost:8080).
+# (все Go-сервисы и nginx из образов; фронт на http://localhost:8080).
 dev-stack:
 	@printf "\033[1m▶ Полный стек в Docker...\033[0m\n"
 	cd deploy && docker compose --profile full up -d --build
@@ -181,12 +191,13 @@ dev-stack-stop:
 
 # Прод-стек = база + оверлей (см. шапку deploy/docker-compose.prod.yml).
 COMPOSE_PROD := docker compose -f docker-compose.yml -f docker-compose.prod.yml
-# Сервис для logs/restart/shell: make logs s=calls (по умолчанию app).
-s ?= app
+# Сервис для logs/restart/shell: make logs s=calls (по умолчанию gateway).
+s ?= gateway
 
 # Сборка прод-образов (linux/amd64) и push в Docker Hub
-# osipovskijdima/groove_work (теги app/calls/auth/messenger/ai/front + версионные).
-# Выборочно: make push only="app front". Нужен одноразовый docker login.
+# osipovskijdima/groove_work (теги migrate/gateway/calls/auth/messenger/ai/
+# groove/tasks/front + версионные). Выборочно: make push only="gateway front".
+# Нужен одноразовый docker login.
 push:
 	bash scripts/build_push.sh $(only)
 

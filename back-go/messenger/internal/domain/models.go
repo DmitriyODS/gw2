@@ -1,7 +1,7 @@
 // Package domain — модели и порты микросервиса мессенджера.
 //
 // Таблицами conversations/messages/message_attachments в рантайме владеет
-// этот сервис; схему по-прежнему ведёт Alembic на стороне Flask. Чужие
+// этот сервис; схему ведёт migrate-контейнер (goose). Чужие
 // таблицы (users, companies, pets, tasks, calls) читаются read-only.
 package domain
 

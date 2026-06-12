@@ -18,12 +18,8 @@ env/
 *.env.local
 .env.deploy
 
-# Flask
-instance/
-.flask_session/
-
-# Uploads
-back/uploads/
+# Uploads (dev-файлы пользователей: аватарки, вложения)
+uploads/
 
 # Node
 front/node_modules/
@@ -39,9 +35,6 @@ front/dist/
 # OS
 .DS_Store
 Thumbs.db
-
-# Migrations generated files (keep versions/)
-# back/migrations/
 
 # Backup data (содержит реальные данные пользователей, не коммитим)
 backup.json

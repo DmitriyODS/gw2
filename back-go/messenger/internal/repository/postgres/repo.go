@@ -1,5 +1,5 @@
 // Package postgres — персистентность мессенджера (pgx, raw SQL по таблицам,
-// схему которых ведёт Alembic во Flask) + read-only лукапы pets/tasks/calls.
+// схему которых ведёт migrate-контейнер goose) + read-only лукапы pets/tasks/calls.
 package postgres
 
 import (

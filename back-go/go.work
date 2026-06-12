@@ -4,8 +4,10 @@ use (
 	./ai
 	./auth
 	./calls
+	./gateway
 	./groove
 	./messenger
+	./migrate
 	./pkg
 	./tasks
 )

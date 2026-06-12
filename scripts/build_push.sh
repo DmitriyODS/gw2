@@ -5,25 +5,27 @@
 # `docker compose pull`.
 #
 # Все сервисы живут в ОДНОМ репозитории Docker Hub под разными тегами:
-#   osipovskijdima/groove_work:app        — Flask-монолит  (back/)
-#   osipovskijdima/groove_work:calls      — callsvc, Go    (back-go/calls/)
-#   osipovskijdima/groove_work:auth       — authsvc, Go    (back-go/auth/)
-#   osipovskijdima/groove_work:messenger  — msgsvc, Go     (back-go/messenger/)
-#   osipovskijdima/groove_work:ai         — aisvc, Go      (back-go/ai/)
-#   osipovskijdima/groove_work:groove     — groovesvc, Go  (back-go/groove/)
-#   osipovskijdima/groove_work:tasks      — tasksvc, Go    (back-go/tasks/)
-#   osipovskijdima/groove_work:front      — nginx + SPA    (front/)
+#   osipovskijdima/groove_work:migrate    — миграции, Go    (back-go/migrate/)
+#   osipovskijdima/groove_work:gateway    — gatewaysvc, Go  (back-go/gateway/)
+#   osipovskijdima/groove_work:calls      — callsvc, Go     (back-go/calls/)
+#   osipovskijdima/groove_work:auth       — authsvc, Go     (back-go/auth/)
+#   osipovskijdima/groove_work:messenger  — msgsvc, Go      (back-go/messenger/)
+#   osipovskijdima/groove_work:ai         — aisvc, Go       (back-go/ai/)
+#   osipovskijdima/groove_work:groove     — groovesvc, Go   (back-go/groove/)
+#   osipovskijdima/groove_work:tasks      — tasksvc, Go     (back-go/tasks/)
+#   osipovskijdima/groove_work:front      — nginx + SPA     (front/)
 #
 # Дополнительно каждый образ получает версионный тег `<svc>-X.Y.Z`
 # (версия из front/package.json) — для отката: на сервере в deploy/.env
-# выставить APP_TAG=app-X.Y.Z (CALLS_TAG / AUTH_TAG / MESSENGER_TAG / GROOVE_TAG /
-# AI_TAG / TASKS_TAG / FRONT_TAG — аналогично) и перезапустить деплой.
+# выставить GATEWAY_TAG=gateway-X.Y.Z (MIGRATE_TAG / CALLS_TAG / AUTH_TAG /
+# MESSENGER_TAG / GROOVE_TAG / AI_TAG / TASKS_TAG / FRONT_TAG — аналогично)
+# и перезапустить деплой.
 #
 # Требуется один раз: `docker login` под аккаунтом с правом push.
 #
 # Использование:
-#   scripts/build_push.sh              # все образы
-#   scripts/build_push.sh app front    # выборочно
+#   scripts/build_push.sh                # все образы
+#   scripts/build_push.sh gateway front  # выборочно
 # ================================================================
 set -euo pipefail
 cd "$(cd "$(dirname "$0")/.." && pwd)"
@@ -39,18 +41,17 @@ ok()  { printf '\033[32m✓ %s\033[0m\n' "$*"; }
 
 context_of() {
   case "$1" in
-    app)   echo back ;;
     front) echo front ;;
     # Go-сервисы собираются из общего контекста back-go/ (модуль pkg
     # подключён через replace ../pkg), Dockerfile — внутри сервиса.
-    calls|auth|messenger|ai|groove|tasks) echo back-go ;;
-    *) printf 'Неизвестный сервис: %s (ожидается app|calls|auth|messenger|ai|groove|tasks|front)\n' "$1" >&2; return 2 ;;
+    migrate|gateway|calls|auth|messenger|ai|groove|tasks) echo back-go ;;
+    *) printf 'Неизвестный сервис: %s (ожидается migrate|gateway|calls|auth|messenger|ai|groove|tasks|front)\n' "$1" >&2; return 2 ;;
   esac
 }
 
 dockerfile_of() {
   case "$1" in
-    calls|auth|messenger|ai|groove|tasks) echo "back-go/$1/Dockerfile" ;;
+    migrate|gateway|calls|auth|messenger|ai|groove|tasks) echo "back-go/$1/Dockerfile" ;;
     *) echo "" ;;
   esac
 }
@@ -66,7 +67,7 @@ build_push() {
 }
 
 SERVICES=("$@")
-[ ${#SERVICES[@]} -eq 0 ] && SERVICES=(app calls auth messenger ai groove tasks front)
+[ ${#SERVICES[@]} -eq 0 ] && SERVICES=(migrate gateway calls auth messenger ai groove tasks front)
 
 for svc in "${SERVICES[@]}"; do
   build_push "$svc" "$(context_of "$svc")" "$(dockerfile_of "$svc")"

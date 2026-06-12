@@ -1,5 +1,5 @@
 // Package postgres — персистентность tasksvc (pgx, raw SQL по таблицам,
-// схему которых ведёт Alembic во Flask): tasks, units, unit_types, stages,
+// схему которых ведёт migrate-контейнер goose): tasks, units, unit_types, stages,
 // departments, comments, favorites, user_task_colors + read-only users.
 package postgres
 

@@ -6,22 +6,21 @@
 # Что делает:
 #   1. Сверяет deploy/.env с требуемыми переменными: недостающие
 #      секреты генерирует сам (существующие НЕ трогает), устаревшие
-#      (TURN_* от coturn, JWT_SECRET_KEY от flask-jwt) вычищает.
-#      PASETO-ключи генерируются ПАРОЙ (приватный Ed25519 + публичный).
-#      Перед любой правкой делает бэкап .env рядом.
+#      (TURN_* от coturn, JWT_SECRET_KEY от flask-jwt, SECRET_KEY от
+#      Flask) вычищает. PASETO-ключи генерируются ПАРОЙ (приватный
+#      Ed25519 + публичный). Перед любой правкой делает бэкап .env рядом.
 #   2. Если включён ufw — открывает медиа-порты LiveKit (7881/tcp,
 #      7882/udp); 80/443 считаются уже открытыми.
 #   3. docker compose pull + up -d --no-build --remove-orphans.
 #      Образы НА СЕРВЕРЕ НЕ СОБИРАЮТСЯ — их пушит локальная машина
 #      (`make push` → scripts/build_push.sh) в Docker Hub
-#      osipovskijdima/groove_work (теги app/calls/auth/messenger/ai/groove/front).
+#      osipovskijdima/groove_work (теги migrate/gateway/calls/auth/
+#      messenger/ai/groove/tasks/front).
 #   4. Перечитывает конфиг nginx (он bind-mounted: git обновляет
 #      файл, но без reload контейнер живёт со старым конфигом).
-#   5. Health-чеки: API через nginx, микросервис звонков (healthz +
-#      gRPC из app), микросервис авторизации (healthz + логин через
-#      nginx), микросервис мессенджера (healthz + gRPC из app),
-#      микросервис ИИ (healthz + gRPC из app), LiveKit через nginx
-#      (/livekit), TCP-порт медиа 7881.
+#   5. Health-чеки: фронт и маршруты через nginx, healthz всех
+#      микросервисов изнутри контейнеров, досягаемость gRPC между
+#      сервисами, LiveKit через nginx (/livekit), TCP-порт медиа 7881.
 # ================================================================
 set -euo pipefail
 cd "$(cd "$(dirname "$0")/.." && pwd)"
@@ -78,7 +77,6 @@ ensure() {
 ensure DB_NAME "grovework"
 ensure DB_USER "grovework"
 ensure DB_PASSWORD "$(gen_hex)"
-ensure SECRET_KEY "$(gen_hex)"
 ensure AI_KEY_ENCRYPTION_KEY "$(gen_fernet)"
 ensure YOUGILE_ENC_KEY "$(gen_fernet)"
 ensure LIVEKIT_API_KEY "gw2_$(openssl rand -hex 6)"
@@ -110,8 +108,9 @@ ensure_paseto_pair() {
 ensure_paseto_pair
 ensure PASETO_REFRESH_KEY "$(gen_hex)"
 
-# Устаревшие переменные: coturn (заменён LiveKit в v3.5.0) и JWT-секрет
-# flask-jwt-extended (заменён PASETO-ключами в v3.6.0).
+# Устаревшие переменные: coturn (заменён LiveKit в v3.5.0), JWT-секрет
+# flask-jwt-extended (заменён PASETO-ключами в v3.6.0) и SECRET_KEY
+# Flask-сессий (Flask ликвидирован в фазе 5).
 if grep -qE '^TURN_' "$ENV_FILE"; then
   backup_once
   sed -i '/^TURN_/d' "$ENV_FILE"
@@ -121,6 +120,16 @@ if grep -qE '^JWT_SECRET_KEY=' "$ENV_FILE"; then
   backup_once
   sed -i '/^JWT_SECRET_KEY=/d' "$ENV_FILE"
   ok "удалён устаревший JWT_SECRET_KEY (JWT заменён PASETO)"
+fi
+if grep -qE '^SECRET_KEY=' "$ENV_FILE"; then
+  backup_once
+  sed -i '/^SECRET_KEY=/d' "$ENV_FILE"
+  ok "удалён устаревший SECRET_KEY (Flask ликвидирован)"
+fi
+if grep -qE '^APP_TAG=' "$ENV_FILE"; then
+  backup_once
+  sed -i '/^APP_TAG=/d' "$ENV_FILE"
+  ok "удалён устаревший APP_TAG (app-контейнер ликвидирован)"
 fi
 
 # Не генерируемое автоматически — только предупреждаем.
@@ -183,30 +192,45 @@ fi
 # ── 5. Health-чеки ───────────────────────────────────────────────
 # curl -kL: прод-nginx отвечает на http 301-редиректом на https с
 # self-issued для localhost сертификатом — идём за редиректом без проверки.
-log "Жду готовности API (миграции на старте могут занять время)"
-api_code=000
+log "Жду готовности фронта (миграции на старте могут занять время)"
+front_code=000
 for _ in $(seq 1 30); do
-  api_code=$(curl -skL -o /dev/null -w '%{http_code}' --max-time 5 http://localhost/apispec.json || true)
-  [ "$api_code" = "200" ] && break
+  front_code=$(curl -skL -o /dev/null -w '%{http_code}' --max-time 5 http://localhost/ || true)
+  [ "$front_code" = "200" ] && break
   sleep 2
 done
-if [ "$api_code" = "200" ]; then
-  ok "API отвечает (apispec 200)"
+if [ "$front_code" = "200" ]; then
+  ok "фронт отвечает через nginx"
 else
-  warn "API не ответил за 60с (код $api_code) — смотрите: make logs"
+  warn "фронт не ответил за 60с (код $front_code) — смотрите: make logs"
+fi
+
+# Realtime-шлюз: healthz изнутри контейнера + exact-роут presence через
+# nginx (без токена ожидаем 401 от gateway, не 404/502).
+if $COMPOSE exec -T gateway wget -qO- --timeout=3 http://127.0.0.1:8096/healthz >/dev/null 2>&1; then
+  ok "gatewaysvc отвечает (healthz)"
+else
+  warn "gatewaysvc не отвечает — realtime и звонки не работают: make logs s=gateway"
+fi
+presence_code=$(curl -skL -o /dev/null -w '%{http_code}' --max-time 5 http://localhost/api/messenger/presence || true)
+if [ "$presence_code" = "401" ]; then
+  ok "маршрут /api/messenger/presence через nginx ведёт в gateway"
+else
+  warn "маршрут /api/messenger/presence вернул $presence_code (ожидался 401) — проверьте nginx"
 fi
 
 # Микросервис звонков: HTTP-healthz изнутри контейнера (наружу порт не
-# торчит, через nginx ходит только /api/calls/*) + досягаемость gRPC из app.
+# торчит, через nginx ходит только /api/calls/*) + досягаемость gRPC
+# из gateway (ринг-фаза).
 if $COMPOSE exec -T calls wget -qO- --timeout=3 http://127.0.0.1:8090/healthz >/dev/null 2>&1; then
   ok "callsvc отвечает (healthz)"
 else
   warn "callsvc не отвечает — звонки не работают: make logs s=calls"
 fi
-if $COMPOSE exec -T app python -c "import socket; socket.create_connection(('calls', 9090), timeout=3)" >/dev/null 2>&1; then
-  ok "gRPC callsvc досягаем из app (calls:9090)"
+if $COMPOSE exec -T gateway sh -c "wget -q --timeout=3 -O /dev/null http://calls:8090/healthz" >/dev/null 2>&1; then
+  ok "callsvc досягаем из gateway (calls:8090)"
 else
-  warn "app не достучался до gRPC calls:9090 — ринг-фаза звонков не работает"
+  warn "gateway не достучался до callsvc — ринг-фаза звонков не работает"
 fi
 
 # Микросервис авторизации: healthz изнутри контейнера + маршрутизация
@@ -239,30 +263,19 @@ else
 fi
 
 # Микросервис мессенджера: HTTP-healthz изнутри контейнера (наружу порт не
-# торчит, через nginx ходит только /api/messenger) + досягаемость gRPC из app.
+# торчит, через nginx ходит только /api/messenger).
 if $COMPOSE exec -T messenger wget -qO- --timeout=3 http://127.0.0.1:8092/healthz >/dev/null 2>&1; then
   ok "msgsvc отвечает (healthz)"
 else
   warn "msgsvc не отвечает — мессенджер не работает: make logs s=messenger"
 fi
-if $COMPOSE exec -T app python -c "import socket; socket.create_connection(('messenger', 9092), timeout=3)" >/dev/null 2>&1; then
-  ok "gRPC msgsvc досягаем из app (messenger:9092)"
-else
-  warn "app не достучался до gRPC messenger:9092 — диалоги и плашки звонков не работают"
-fi
 
 # Микросервис ИИ: HTTP-healthz изнутри контейнера (наружу порт не торчит,
-# через nginx ходит только regex /api/companies/<id>/ai-settings) +
-# досягаемость gRPC из app.
+# через nginx ходит только regex /api/companies/<id>/ai-settings).
 if $COMPOSE exec -T ai wget -qO- --timeout=3 http://127.0.0.1:8093/healthz >/dev/null 2>&1; then
   ok "aisvc отвечает (healthz)"
 else
   warn "aisvc не отвечает — ИИ-фичи не работают: make logs s=ai"
-fi
-if $COMPOSE exec -T app python -c "import socket; socket.create_connection(('ai', 9093), timeout=3)" >/dev/null 2>&1; then
-  ok "gRPC aisvc досягаем из app (ai:9093)"
-else
-  warn "app не достучался до gRPC ai:9093 — ИИ-фичи не работают"
 fi
 # ТВ-факт уехал в aisvc: без токена ожидаем 401 от него (не 404/502).
 tvfact_code=$(curl -skL -o /dev/null -w '%{http_code}' --max-time 5 http://localhost/api/ai/tv-fact || true)
@@ -289,11 +302,6 @@ if [ "$tasks_code" = "401" ]; then
   ok "маршрут /api/tasks через nginx ведёт в tasksvc"
 else
   warn "маршрут /api/tasks вернул $tasks_code (ожидался 401) — проверьте nginx"
-fi
-if $COMPOSE exec -T app python -c "import socket; socket.create_connection(('groove', 9094), timeout=3)" >/dev/null 2>&1; then
-  ok "gRPC groovesvc досягаем из app (groove:9094)"
-else
-  warn "app не достучался до gRPC groove:9094 — хуки геймификации не работают"
 fi
 
 lk_code=$(curl -skL -o /dev/null -w '%{http_code}' --max-time 5 http://localhost/livekit/ || true)

@@ -1,12 +1,8 @@
-// Package events — публикация Socket.IO-событий микросервисов для Flask-моста.
+// Package events — публикация сокет-событий микросервисов для realtime-шлюза.
 //
-// Socket.IO остаётся во Flask: generic-мост (sockets/service_bridge.py)
-// слушает Redis-каналы gw2:<svc>:events и эмитит обычные события вербатим
-// в каждую комнату из rooms; события с префиксом "_" (служебные хуки)
-// наружу не эмитятся, а диспатчатся в python-обработчики.
-//
-// Канал звонков (gw2:calls:events) живёт в историческом формате —
-// см. back-go/calls/internal/events.
+// gatewaysvc (back-go/gateway) подписан на Redis-каналы gw2:<svc>:events и
+// доставляет события вербатим в каждую WS-комнату из rooms; события с
+// префиксом "_" (служебные хуки) наружу не эмитятся.
 package events
 
 import (

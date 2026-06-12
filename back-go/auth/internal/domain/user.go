@@ -1,7 +1,7 @@
 // Package domain — модели и порты микросервиса авторизации.
 //
 // Таблицами users/roles/companies в рантайме (в части auth/users) владеет
-// этот сервис, схему по-прежнему ведёт Alembic на стороне Flask.
+// этот сервис, схему ведёт migrate-контейнер (goose).
 package domain
 
 import "time"

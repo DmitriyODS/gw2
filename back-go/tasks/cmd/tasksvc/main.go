@@ -4,14 +4,14 @@
 // комментариями, избранным, личными цветами, статистикой (включая
 // xlsx-экспорт) и YouGile-интеграцией (личные ключи пользователей,
 // настройки компаний, импорт/экспорт задач, двусторонняя синхра через
-// вебхук). Схему таблиц по-прежнему ведёт Alembic на стороне Flask.
+// вебхук). Схему таблиц ведёт migrate-контейнер (goose, back-go/migrate).
 //
 // Транспорт: HTTP/Fiber (HTTP_ADDR) — REST /api/tasks|units|unit-types|
-// departments|stages|stats|yougile (за nginx, мимо Flask).
+// departments|stages|stats|yougile (за nginx).
 //
 // Межсервисное: groovesvc (gRPC, хуки геймификации), aisvc (gRPC,
 // семантический поиск + реиндекс эмбеддингов). Сокет-события клиентам —
-// Redis-канал gw2:tasks:events (generic-мост Flask).
+// Redis-канал gw2:tasks:events (доставляет gatewaysvc).
 package main
 
 import (

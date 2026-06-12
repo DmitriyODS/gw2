@@ -7,7 +7,7 @@
 // по публичному ключу; refresh — v4.local (PASETO_REFRESH_KEY) в
 // HttpOnly-cookie.
 //
-// Зависимости: общая PostgreSQL платформы (схему ведёт Alembic; пароли —
+// Зависимости: общая PostgreSQL платформы (схему ведёт goose-migrate; пароли —
 // pgcrypto), Redis (анти-brute-force), общий uploads-volume (аватарки).
 package main
 

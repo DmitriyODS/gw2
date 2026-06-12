@@ -8,8 +8,8 @@ import (
 )
 
 // HandleWebhook — применить событие LiveKit. Источник истины о том, кто
-// реально в комнате; финализирует историю и публикует уведомления для
-// Flask-шлюза (тот эмитит сокет-события). Работает и после рестарта сервиса:
+// реально в комнате; финализирует историю и публикует сокет-события
+// клиентам (через gatewaysvc). Работает и после рестарта сервиса:
 // call_id восстанавливается из имени комнаты, запись — из БД.
 func (s *Service) HandleWebhook(ctx context.Context, event dto.WebhookEvent) error {
 	callID := domain.CallIDFromRoom(event.Room)
@@ -93,7 +93,7 @@ func (s *Service) applyParticipantJoined(ctx context.Context, callID int64, iden
 		if err := s.repo.UpdateCall(ctx, call); err != nil {
 			return err
 		}
-		s.pub.CallStatusChanged(ctx, callID)
+		s.pub.PillUpdated(ctx, callID)
 	}
 	return nil
 }
@@ -140,7 +140,7 @@ func (s *Service) applyParticipantLeft(ctx context.Context, callID int64, identi
 		}
 		s.ring.EndCall(callID)
 		s.pub.CallEnded(ctx, callID, call.Status, s.endedNotifyIDs(ctx, call, ring))
-		s.pub.CallStatusChanged(ctx, callID)
+		s.pub.PillUpdated(ctx, callID)
 	}
 	return nil
 }
@@ -187,7 +187,7 @@ func (s *Service) applyRoomFinished(ctx context.Context, callID int64) error {
 		}
 	}
 	s.pub.CallEnded(ctx, callID, call.Status, s.endedNotifyIDs(ctx, call, ring))
-	s.pub.CallStatusChanged(ctx, callID)
+	s.pub.PillUpdated(ctx, callID)
 	return nil
 }
 

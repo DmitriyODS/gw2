@@ -1,13 +1,13 @@
 // Package domain — модели и порты микросервиса задач.
 //
 // tasksvc владеет таблицами tasks, units, unit_types, stages, departments,
-// comments, favorites, user_task_colors (в рантайме); схему по-прежнему
-// ведёт Alembic на стороне Flask. users/roles/companies читаются read-only.
+// comments, favorites, user_task_colors (в рантайме); схему ведёт
+// migrate-контейнер (goose). users/roles/companies читаются read-only.
 package domain
 
 import "time"
 
-// Уровни ролей — общие с back/app/utils/permissions.py.
+// Уровни ролей платформы (общие с authsvc domain.Level*).
 const (
 	LevelEmployee = 1
 	LevelManager  = 2
