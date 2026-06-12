@@ -172,6 +172,10 @@
           <ProgressSpinner style="width:32px;height:32px" />
         </div>
         <template v-else>
+          <div v-if="loadingOlder" class="msg-loading-older">
+            <ProgressSpinner style="width:22px;height:22px" />
+            <span>Загружаем историю…</span>
+          </div>
           <MessageBubble
             v-for="m in messenger.activeMessages"
             :key="m.id"
@@ -715,10 +719,10 @@ function scrollToBottomSmooth() {
   messagesEl.value?.scrollTo({ top: messagesEl.value.scrollHeight, behavior: 'smooth' })
 }
 
-// Локальный гард, чтобы scroll-событие не запускало вторую подгрузку,
-// пока первая ещё в полёте, и не падало в бесконечный «магнит» к верху,
-// если страница вернулась пустой.
-let loadingOlder = false
+// Гард, чтобы scroll-событие не запускало вторую подгрузку, пока первая ещё
+// в полёте, и не падало в бесконечный «магнит» к верху, если страница
+// вернулась пустой. Реактивный — на нём же висит индикатор подгрузки истории.
+const loadingOlder = ref(false)
 
 // Плавающая кнопка «к последним сообщениям» — видна, когда пользователь
 // ушёл вверх по истории (паттерн Telegram/WhatsApp).
@@ -728,18 +732,20 @@ async function onScroll() {
   const el = messagesEl.value
   if (!el) return
   showJumpDown.value = el.scrollHeight - el.scrollTop - el.clientHeight > 320
-  if (loadingOlder || jumping.value) return
+  if (loadingOlder.value || jumping.value) return
   if (el.scrollTop > 80) return
   if (!messenger.hasMoreHistory(activeId.value)) return
   const arr = messenger.activeMessages
   if (!arr.length) return
 
-  loadingOlder = true
+  loadingOlder.value = true
   try {
     const firstId = arr[0].id
     const prevHeight = el.scrollHeight
     const prevTop = el.scrollTop
     const added = await messenger.fetchMessages(activeId.value, firstId)
+    // Индикатор убираем до замера высоты, чтобы он не искажал расчёт позиции.
+    loadingOlder.value = false
     if (!added || !added.length) return
     await nextTick()
     // Сохраняем визуальную позицию: пиксель, на который смотрел пользователь,
@@ -749,7 +755,7 @@ async function onScroll() {
       el.scrollTop = prevTop + delta
     }
   } finally {
-    loadingOlder = false
+    loadingOlder.value = false
   }
 }
 
@@ -784,6 +790,9 @@ onBeforeUnmount(() => {
   window.removeEventListener('messenger:open-conversation', handleExternalOpen)
   document.removeEventListener('mousedown', handleOutsideMenu)
   document.removeEventListener('touchstart', handleOutsideMenu)
+  // Уходим со страницы — диалог больше не «открыт», иначе входящие в него
+  // продолжали бы тихо помечаться прочитанными.
+  messenger.activeConversationId = null
 })
 
 /* Скроллим вниз только когда появилось НОВОЕ сообщение снизу (lastId вырос),
@@ -1204,6 +1213,17 @@ watch(() => route.params.conversationId, async (id) => {
   display: flex;
   justify-content: center;
   padding: 16px;
+}
+
+/* Индикатор подгрузки старых сообщений при скролле вверх. */
+.msg-loading-older {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 10px;
+  font-size: 12px;
+  color: var(--color-text-dim);
 }
 
 .is-mobile-hidden { display: none; }

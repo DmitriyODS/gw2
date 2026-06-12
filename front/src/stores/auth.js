@@ -68,6 +68,13 @@ export const useAuthStore = defineStore('auth', () => {
   }
 
   async function logout() {
+    // Сначала выходим из звонка (если он идёт): иначе после разлогина медиа
+    // LiveKit продолжает жить — собеседника видно и слышно. Импорт ленивый,
+    // чтобы не закольцевать стора (call.js импортирует auth.js).
+    try {
+      const { useCallStore } = await import('./call.js')
+      useCallStore().hangup()
+    } catch {}
     try { await apiLogout() } catch {}
     clearAuth()
     router.push('/login')
@@ -84,6 +91,10 @@ export const useAuthStore = defineStore('auth', () => {
   }
 
   function clearAuth() {
+    // Сессия закончилась (logout или умерший refresh) — медиа звонка тоже.
+    import('./call.js')
+      .then(({ useCallStore }) => { try { useCallStore().reset() } catch {} })
+      .catch(() => {})
     disconnectSocket()
     user.value = null
     token.value = null

@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"time"
 
 	"github.com/DmitriyODS/gw2/back-go/calls/internal/domain"
 	"github.com/DmitriyODS/gw2/back-go/calls/internal/dto"
@@ -98,50 +99,125 @@ func (s *Service) applyParticipantJoined(ctx context.Context, callID int64, iden
 	return nil
 }
 
-// applyParticipantLeft — кто-то отключился от комнаты.
-func (s *Service) applyParticipantLeft(ctx context.Context, callID int64, identity string) error {
+// applyParticipantLeft — кто-то отключился от комнаты. Сразу ничего не
+// вычищаем и не финализируем: перезагрузка страницы, переход по
+// ссылке-приглашению и перехват identity второй вкладкой выглядят точно так
+// же, как настоящий выход. Даём грейс-период вернуться, после — сверяем
+// состав с фактическим списком LiveKit и закрываем звонок, только если он
+// действительно опустел. Явный выход кнопкой (LeaveCall/EndCall) финализирует
+// мгновенно, как и раньше.
+func (s *Service) applyParticipantLeft(ctx context.Context, callID int64, _ string) error {
 	call, err := s.repo.GetCall(ctx, callID)
 	if err != nil {
 		return err
 	}
-	if call == nil {
+	if call == nil || call.Finished() {
 		return nil
 	}
 	if err := s.ensureRingState(ctx, call); err != nil {
 		return err
 	}
-	// Снимок ДО удаления ушедшего: он тоже должен получить call_ended
-	// (другие его вкладки/устройства).
-	ring, _ := s.ring.Snapshot(callID)
+	s.scheduleLeftSweep(callID)
+	return nil
+}
 
-	if userID := domain.UserIDFromIdentity(identity); userID > 0 {
-		s.ring.RemoveUserFromCall(callID, userID)
-		part, err := s.repo.GetParticipant(ctx, callID, userID)
-		if err != nil {
-			return err
+// scheduleLeftSweep — отложенная сверка состава звонка; не более одной
+// запланированной на звонок. При leftGrace <= 0 — синхронно (тесты).
+func (s *Service) scheduleLeftSweep(callID int64) {
+	if s.leftGrace <= 0 {
+		if err := s.sweepDeparted(context.Background(), callID); err != nil {
+			s.log.Error("calls.left_sweep_failed", "call_id", callID, "error", err)
 		}
-		if part != nil && part.LeftAt == nil {
-			ts := now()
-			part.LeftAt = &ts
-			if err := s.repo.UpdateParticipant(ctx, part); err != nil {
-				return err
-			}
-		}
-	} else {
-		s.ring.RemoveGuest(callID, identity)
+		return
 	}
+	s.sweepMu.Lock()
+	if _, scheduled := s.sweepSet[callID]; scheduled {
+		s.sweepMu.Unlock()
+		return
+	}
+	s.sweepSet[callID] = struct{}{}
+	s.sweepMu.Unlock()
 
-	if call.Finished() {
+	time.AfterFunc(s.leftGrace, func() {
+		s.sweepMu.Lock()
+		delete(s.sweepSet, callID)
+		s.sweepMu.Unlock()
+		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+		defer cancel()
+		if err := s.sweepDeparted(ctx, callID); err != nil {
+			s.log.Error("calls.left_sweep_failed", "call_id", callID, "error", err)
+		}
+	})
+}
+
+// sweepDeparted — сверка после грейс-периода: участники, бывавшие в комнате
+// (joined_at есть) и не вернувшиеся, помечаются ушедшими; пропавшие гости
+// вычищаются; опустевший звонок финализируется с событиями клиентам.
+func (s *Service) sweepDeparted(ctx context.Context, callID int64) error {
+	call, err := s.repo.GetCall(ctx, callID)
+	if err != nil {
+		return err
+	}
+	if call == nil || call.Finished() {
 		return nil
 	}
-	if s.ring.ShouldEnd(callID) {
-		if err := s.finalize(ctx, call); err != nil {
+	if err := s.ensureRingState(ctx, call); err != nil {
+		return err
+	}
+	identities, ok := s.media.ListParticipantIdentities(ctx, call.RoomName)
+	if !ok {
+		return nil // LiveKit недоступен — опустевшую комнату добьёт room_finished
+	}
+
+	presentUsers := make(map[int64]struct{})
+	presentGuests := make(map[string]struct{})
+	for _, identity := range identities {
+		if uid := domain.UserIDFromIdentity(identity); uid > 0 {
+			presentUsers[uid] = struct{}{}
+		} else {
+			presentGuests[identity] = struct{}{}
+		}
+	}
+
+	// Снимок ДО вычистки: ушедший тоже должен получить call_ended
+	// (его другие вкладки/устройства).
+	ring, _ := s.ring.Snapshot(callID)
+
+	parts, err := s.repo.ListParticipants(ctx, callID)
+	if err != nil {
+		return err
+	}
+	ts := now()
+	for _, part := range parts {
+		if part.JoinedAt == nil || part.LeftAt != nil {
+			continue // ещё дозванивается / уже ушёл
+		}
+		if _, here := presentUsers[part.UserID]; here {
+			continue
+		}
+		s.ring.RemoveUserFromCall(callID, part.UserID)
+		part.LeftAt = &ts
+		if err := s.repo.UpdateParticipant(ctx, part); err != nil {
 			return err
 		}
-		s.ring.EndCall(callID)
-		s.pub.CallEnded(ctx, callID, call.Status, s.endedNotifyIDs(ctx, call, ring))
-		s.pub.PillUpdated(ctx, callID)
 	}
+	if ring != nil {
+		for _, g := range ring.Guests {
+			if _, here := presentGuests[g]; !here {
+				s.ring.RemoveGuest(callID, g)
+			}
+		}
+	}
+
+	if !s.ring.ShouldEnd(callID) {
+		return nil
+	}
+	if err := s.finalize(ctx, call); err != nil {
+		return err
+	}
+	s.ring.EndCall(callID)
+	s.pub.CallEnded(ctx, callID, call.Status, s.endedNotifyIDs(ctx, call, ring))
+	s.pub.PillUpdated(ctx, callID)
 	return nil
 }
 

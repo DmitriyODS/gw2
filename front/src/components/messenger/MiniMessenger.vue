@@ -275,6 +275,12 @@ function toggle() {
     if (!messenger.conversations.length) messenger.fetchConversations()
     // Свежий снимок онлайн-статусов при открытии.
     messenger.fetchPresence()
+    // Вернулись к открытому ранее треду — он снова «активен».
+    if (threadId.value) messenger.setActive(threadId.value)
+  } else if (threadId.value) {
+    // Панель закрыта — тред больше не виден, входящие в него не должны
+    // тихо помечаться прочитанными.
+    messenger.activeConversationId = null
   }
 }
 

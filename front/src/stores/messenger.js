@@ -2,6 +2,9 @@ import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import * as api from '@/api/messenger.js'
 import { useAuthStore } from './auth.js'
+// Циклический импорт (call.js ↔ messenger.js) безопасен: оба стора зовут
+// друг друга только внутри функций, к этому моменту биндинги уже живые.
+import { useCallStore } from './call.js'
 
 /* Сортировка: закреплённые сверху (по pinned_at desc), затем по
    last_message_at desc. Чистая функция, чтобы переиспользовать после каждого
@@ -329,6 +332,14 @@ export const useMessengerStore = defineStore('messenger', () => {
   /* «Активно смотрю на чат» — открыт И вкладка в фокусе. Только в этом случае
      входящее считается сразу прочитанным; иначе растёт счётчик непрочитанных. */
   function isViewingActively(conversationId) {
+    // Полноэкранный звонок перекрывает мессенджер целиком — даже «открытый»
+    // диалог в этот момент не виден, читать его нельзя.
+    try {
+      const call = useCallStore()
+      if ((call.phase === 'active' || call.phase === 'outgoing') && !call.isMinimized) {
+        return false
+      }
+    } catch { /* стор звонка ещё не инициализирован */ }
     return conversationId === activeConversationId.value
       && typeof document !== 'undefined'
       && document.visibilityState === 'visible'

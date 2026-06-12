@@ -228,6 +228,7 @@ func newTestService() (*Service, *fakeRepo, *fakeMedia, *fakePub) {
 		99: {ID: 99, FIO: "Чужой", CompanyID: company(2), CompanyActive: true},
 	}
 	svc := New(repo, users, ringstate.New(), media, pub, &fakeMessenger{}, slog.Default())
+	svc.leftGrace = 0 // сверка после participant_left — синхронно
 	return svc, repo, media, pub
 }
 
@@ -479,7 +480,7 @@ func TestDeclineP2PBecomesMissed(t *testing.T) {
 }
 
 func TestWebhookJoinActivatesAndLeftFinalizes(t *testing.T) {
-	svc, repo, _, pub := newTestService()
+	svc, repo, media, pub := newTestService()
 	ctx := context.Background()
 	started, _ := svc.StartCall(ctx, dto.StartCallRequest{InitiatorID: 10, InviteeIDs: []int64{20}})
 	callID := started.Call.ID
@@ -496,7 +497,9 @@ func TestWebhookJoinActivatesAndLeftFinalizes(t *testing.T) {
 		t.Errorf("после двоих в комнате статус %s, ожидался active", stored.Status)
 	}
 
-	// Собеседник вышел → инициатор один → звонок завершается, событие — Flask'у.
+	// Собеседник вышел (в комнате остался один инициатор) → после сверки с
+	// фактическим составом LiveKit звонок завершается, событие — клиентам.
+	media.occupants[room] = []string{"u10"}
 	must(t, svc.HandleWebhook(ctx, dto.WebhookEvent{Event: "participant_left", Room: room, Identity: "u20"}))
 	stored, _ = repo.GetCall(ctx, callID)
 	if stored.Status != domain.StatusEnded {
@@ -516,6 +519,40 @@ func TestWebhookJoinActivatesAndLeftFinalizes(t *testing.T) {
 	}
 }
 
+// Перезагрузка страницы / перехват identity второй вкладкой: participant_left
+// приходит, но к моменту сверки участник уже снова в комнате — звонок живёт,
+// membership сохраняется (нужен для авто-возврата).
+func TestWebhookLeftThenReturnedKeepsCall(t *testing.T) {
+	svc, repo, media, pub := newTestService()
+	ctx := context.Background()
+	started, _ := svc.StartCall(ctx, dto.StartCallRequest{InitiatorID: 10, InviteeIDs: []int64{20}})
+	callID := started.Call.ID
+	room := domain.RoomNameFor(callID)
+
+	if _, err := svc.AcceptCall(ctx, dto.AcceptRequest{CallID: callID, UserID: 20}); err != nil {
+		t.Fatal(err)
+	}
+	must(t, svc.HandleWebhook(ctx, dto.WebhookEvent{Event: "participant_joined", Room: room, Identity: "u10"}))
+	must(t, svc.HandleWebhook(ctx, dto.WebhookEvent{Event: "participant_joined", Room: room, Identity: "u20"}))
+
+	// На момент сверки собеседник уже вернулся в комнату.
+	media.occupants[room] = []string{"u10", "u20"}
+	must(t, svc.HandleWebhook(ctx, dto.WebhookEvent{Event: "participant_left", Room: room, Identity: "u20"}))
+
+	stored, _ := repo.GetCall(ctx, callID)
+	if stored.Status != domain.StatusActive || stored.EndedAt != nil {
+		t.Errorf("живой звонок финализирован: %s", stored.Status)
+	}
+	if id, ok := svc.ring.UserActiveCall(20); !ok || id != callID {
+		t.Error("участник должен остаться в звонке (для авто-возврата)")
+	}
+	for _, e := range pub.events {
+		if e.kind == "call_ended" {
+			t.Fatal("call_ended не должен публиковаться")
+		}
+	}
+}
+
 // Ринг-state потерян (рестарт при упавшем ReconcileStartup) — вебхуки должны
 // восстановить его по БД и LiveKit, а не финализировать живой звонок.
 func TestWebhookLeftWithoutRingStateKeepsLiveCall(t *testing.T) {
@@ -530,7 +567,8 @@ func TestWebhookLeftWithoutRingStateKeepsLiveCall(t *testing.T) {
 		{UserID: 20, Role: domain.RoleInvitee, InvitedAt: ts, JoinedAt: &ts},
 		{UserID: 30, Role: domain.RoleInvitee, InvitedAt: ts, JoinedAt: &ts},
 	}))
-	media.occupants[call.RoomName] = []string{"u10", "u20", "u30"}
+	// Фактический состав комнаты после ухода u30.
+	media.occupants[call.RoomName] = []string{"u10", "u20"}
 
 	// Один из троих вышел — звонок продолжается.
 	must(t, svc.HandleWebhook(ctx, dto.WebhookEvent{

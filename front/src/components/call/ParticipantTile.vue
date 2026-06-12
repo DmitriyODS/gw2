@@ -5,7 +5,7 @@
       local: isLocal,
       no_video: !hasVideo,
       audio_off: !audio,
-      speaking: speaking && !isLocal,
+      speaking: speaking && source !== 'screen',
       screen: source === 'screen',
     }"
   >
@@ -101,9 +101,16 @@ onBeforeUnmount(() => {
   min-height: 140px;
 }
 
-/* Активный спикер — подсветка рамкой в тон primary. */
-.tile.speaking {
-  box-shadow: inset 0 0 0 3px var(--color-primary);
+/* Активный спикер — рамка в тон primary. Рисуем оверлеем поверх содержимого:
+   inset box-shadow на контейнере перекрывается <video> и не виден. */
+.tile.speaking::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border: 3px solid var(--color-primary);
+  border-radius: inherit;
+  pointer-events: none;
+  z-index: 2;
 }
 
 .tile-video {

@@ -43,6 +43,10 @@ export const useCallStore = defineStore('call', {
     audioEnabled: true,
     videoEnabled: true,
     screenEnabled: false,
+    /** Говорю ли я сейчас (подсветка собственной плитки). */
+    localSpeaking: false,
+    /** Есть ли у устройства камера (нет — кнопка камеры заблокирована). */
+    hasCamera: true,
     /** Стартовый медиа-режим звонка ('audio' | 'video'). */
     media: 'video',
     /** UI-флаги. */
@@ -103,6 +107,7 @@ export const useCallStore = defineStore('call', {
       })
       callRoom.addEventListener('speakers', (e) => {
         const speaking = new Set(e.detail.identities)
+        this.localSpeaking = speaking.has(callRoom.localIdentity)
         const next = { ...this.participants }
         for (const id of Object.keys(next)) {
           next[id] = { ...next[id], speaking: speaking.has(id) }
@@ -119,14 +124,23 @@ export const useCallStore = defineStore('call', {
         if (this.sidePanel !== 'chat') this.chatUnread++
       })
       callRoom.addEventListener('media-error', (e) => {
-        const msg = e.detail.kind === 'video'
-          ? 'Не удалось включить камеру. Проверьте разрешение в браузере.'
-          : 'Не удалось включить микрофон. Проверьте разрешение в браузере.'
+        const name = e.detail.error?.name
+        const noDevice = name === 'NotFoundError' || name === 'DevicesNotFoundError'
+        let msg
+        if (e.detail.kind === 'video') {
+          msg = noDevice ? 'Камера не найдена' : 'Не удалось включить камеру. Проверьте разрешение в браузере.'
+          if (noDevice) this.hasCamera = false
+          this.videoEnabled = false
+        } else {
+          msg = 'Не удалось включить микрофон. Проверьте разрешение в браузере.'
+          this.audioEnabled = false
+        }
         this.error = msg
         try { useNotificationsStore().warn(msg) } catch {}
-        if (e.detail.kind === 'audio') this.audioEnabled = false
-        else this.videoEnabled = false
       })
+
+      this.refreshDevices()
+      navigator.mediaDevices?.addEventListener?.('devicechange', () => this.refreshDevices())
       callRoom.addEventListener('disconnected', (e) => {
         // Комнату закрыл сервер (звонок завершён/нас удалили) — выходим.
         // Свой собственный disconnect() сюда не попадает (слушатели сняты).
@@ -181,6 +195,22 @@ export const useCallStore = defineStore('call', {
       }
 
       this.participants = next
+
+      // Дозвон состоялся, даже если participant-joined не пришёл (собеседник
+      // успел войти в комнату раньше нас) — снимаем гудки и таймаут дозвона.
+      if (this.phase === 'outgoing' && Object.values(next).some(p => !p.pending)) {
+        this.phase = 'active'
+        this._clearOutgoingTimeout()
+      }
+    },
+
+    /** Узнать, есть ли у устройства камера (для блокировки кнопки). */
+    async refreshDevices() {
+      if (!navigator.mediaDevices?.enumerateDevices) return
+      try {
+        const devices = await navigator.mediaDevices.enumerateDevices()
+        this.hasCamera = devices.some(d => d.kind === 'videoinput')
+      } catch { /* список устройств недоступен — кнопку не блокируем */ }
     },
 
     /** Подключение к комнате LiveKit по выданному бэком токену. */
@@ -287,17 +317,26 @@ export const useCallStore = defineStore('call', {
       }
       this.audioEnabled = true
       this.videoEnabled = this.media === 'video'
+      this._acceptedHere = true
       socket.emit('call:accept', { call_id: this.call.id })
     },
 
-    /** Сервер подтвердил accept и выдал токен — подключаемся к комнате. */
+    /** Сервер подтвердил accept и выдал токен — подключаемся к комнате.
+     *  call:accepted приходит во ВСЕ вкладки принявшего; токеном пользуется
+     *  только вкладка, где нажали «Принять»: повторное подключение с тем же
+     *  identity выбивает первое соединение из LiveKit и роняет звонок у всех. */
     async handleAccepted({ call_id, call, livekit }) {
-      if (!this.call || this.call.id !== call_id) {
-        // accept мог уйти с другой вкладки — просто синхронизируемся.
+      if (!this._acceptedHere) {
+        if (this.phase === 'incoming' && this.call?.id === call_id) {
+          // Приняли в другой вкладке — здесь просто закрываем экран входящего.
+          this.reset()
+        }
+        return
+      }
+      this._acceptedHere = false
+      if (call) {
         this.call = call
-        this.media = call?.media || this.media
-      } else if (call) {
-        this.call = call
+        this.media = call.media || this.media
       }
       this._clearOutgoingTimeout()
       this.rejoinCall = null
@@ -338,7 +377,17 @@ export const useCallStore = defineStore('call', {
 
     /** Гость (или сотрудник) входит по ссылке-приглашению /call/<code>. */
     async joinAsGuest({ code, name = null }) {
-      if (this.phase !== 'idle') return
+      if (this.phase !== 'idle') {
+        // Уже в звонке. Ссылка на этот же звонок — просто разворачиваем окно;
+        // на другой — честная ошибка вместо тихого бездействия.
+        if (this.call?.share_code === code) {
+          this.expand()
+          return
+        }
+        const err = new Error('Вы уже в другом звонке. Завершите его, чтобы перейти по ссылке.')
+        err.code = 'ALREADY_IN_CALL'
+        throw err
+      }
       const data = await joinCallByCode(code, { name }) // ошибки ловит вьюха
       this.guest = data.guest
       this.guestName = data.guest ? name : null
@@ -373,6 +422,14 @@ export const useCallStore = defineStore('call', {
         // (call:ended мог потеряться, пока не было соединения).
         this.rejoinCall = null
         return
+      }
+      // Живой звонок, в котором мы числимся, — после перезагрузки страницы
+      // возвращаемся автоматически (один раз на звонок); не вышло — баннер.
+      this._rejoinTried ??= new Set()
+      if (!this._rejoinTried.has(live.id)) {
+        this._rejoinTried.add(live.id)
+        try { await this.joinExistingCall(live) } catch { /* ниже — баннер */ }
+        if (this.phase !== 'idle') return
       }
       if (this.rejoinCall?.id !== live.id) {
         this.rejoinCall = live
@@ -471,6 +528,7 @@ export const useCallStore = defineStore('call', {
     },
 
     async toggleCam() {
+      if (!this.hasCamera) return
       this.videoEnabled = !this.videoEnabled
       try {
         await callRoom.setCamEnabled(this.videoEnabled)
@@ -524,9 +582,11 @@ export const useCallStore = defineStore('call', {
 
     reset() {
       this._clearOutgoingTimeout()
+      this._acceptedHere = false
       callRoom.disconnect().catch(() => {})
       this.participants = {}
       this.localTick = 0
+      this.localSpeaking = false
       this.phase = 'idle'
       this.call = null
       this.guest = false

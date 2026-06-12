@@ -19,6 +19,7 @@ import (
 	"fmt"
 	"log/slog"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/DmitriyODS/gw2/back-go/calls/internal/domain"
@@ -53,6 +54,14 @@ type Service struct {
 	pub   domain.EventPublisher
 	msgr  domain.MessengerClient
 	log   *slog.Logger
+
+	// Грейс перед закрытием опустевшего звонка: перезагрузка страницы,
+	// переход по ссылке-приглашению и перехват identity второй вкладкой
+	// выглядят как participant_left + скорый возврат. 0 — сверка синхронно
+	// (используется в тестах).
+	leftGrace time.Duration
+	sweepMu   sync.Mutex
+	sweepSet  map[int64]struct{}
 }
 
 var _ CallService = (*Service)(nil)
@@ -61,7 +70,8 @@ func New(repo domain.CallRepository, users domain.UserReader, ring domain.RingSt
 	media domain.MediaServer, pub domain.EventPublisher, msgr domain.MessengerClient,
 	log *slog.Logger) *Service {
 	return &Service{repo: repo, users: users, ring: ring, media: media, pub: pub,
-		msgr: msgr, log: log}
+		msgr: msgr, log: log,
+		leftGrace: 20 * time.Second, sweepSet: make(map[int64]struct{})}
 }
 
 func now() time.Time { return time.Now().UTC() }

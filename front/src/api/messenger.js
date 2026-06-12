@@ -30,7 +30,9 @@ export const markRead = (conversationId) =>
 export const uploadAttachment = (file) => {
   const form = new FormData()
   form.append('file', file)
-  return apiRequest('/messenger/uploads', { method: 'POST', body: form })
+  // Стандартный таймаут apiRequest (8с) обрывает загрузку больших файлов
+  // на середине — даём вложениям до 3 минут.
+  return apiRequest('/messenger/uploads', { method: 'POST', body: form, timeout: 180000 })
 }
 
 export const getUnreadCount = () =>

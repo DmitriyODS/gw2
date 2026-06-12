@@ -18,7 +18,11 @@ self.addEventListener('notificationclick', (event) => {
   event.notification.close()
   event.waitUntil((async () => {
     const all = await self.clients.matchAll({ type: 'window', includeUncontrolled: true })
-    const target = all.find((c) => 'focus' in c)
+    // Предпочитаем уже видимую/сфокусированную вкладку: клик по уведомлению
+    // не должен уводить в случайное фоновое окно.
+    const target = all.find((c) => c.focused)
+      || all.find((c) => c.visibilityState === 'visible')
+      || all.find((c) => 'focus' in c)
     // Уведомление о звонке: focus + сообщение основному потоку, чтобы тот
     // показал/развернул overlay с принятым/входящим вызовом.
     if (data.kind === 'call') {

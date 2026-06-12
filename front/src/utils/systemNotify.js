@@ -125,11 +125,42 @@ export async function requestNotificationPermission() {
   }
 }
 
-/* Показывает OS-уведомление. data — произвольные данные (передаём
-   conversation_id, чтобы клик открыл нужный чат).
-   На десктопе используем конструктор Notification (самый надёжный путь, он же
-   даёт onclick). Если конструктор недоступен (Android Chrome запрещает
-   `new Notification` — бросает исключение), уходим в service worker. */
+/* Конструкторный путь показа (фолбэк): non-persistent уведомление.
+   Возвращает Notification либо null. */
+function constructNotification(title, options, onClick) {
+  try {
+    const n = new Notification(title, options)
+    if (onClick) {
+      n.onclick = () => {
+        try { window.focus?.(); onClick() } finally { n.close() }
+      }
+    }
+    return n
+  } catch (e) {
+    if (!warned) {
+      console.warn('Notification: нет ни активного service worker, ни конструктора', e)
+      warned = true
+    }
+    return null
+  }
+}
+
+/* Единый показ OS-уведомления: сперва через service worker (персистентные
+   уведомления — надёжнее, Chrome может молча ронять non-persistent у фоновых
+   вкладок; на Android конструктор вообще запрещён), фолбэк — конструктор.
+   Клики SW-уведомлений обрабатывает sw.js (postMessage по data.kind).
+   Возвращает Promise<Notification|null> (для SW-пути — null). */
+function deliverNotification(title, options, onClick) {
+  if (swRegistration && typeof swRegistration.showNotification === 'function') {
+    return swRegistration.showNotification(title, options)
+      .then(() => null)
+      .catch(() => constructNotification(title, options, onClick))
+  }
+  return Promise.resolve(constructNotification(title, options, onClick))
+}
+
+/* Показывает OS-уведомление о сообщении. data — произвольные данные
+   (передаём conversation_id, чтобы клик открыл нужный чат). */
 export function showSystemNotification(title, body, { onClick, data } = {}) {
   if (!notificationsAllowed()) return
 
@@ -139,36 +170,16 @@ export function showSystemNotification(title, body, { onClick, data } = {}) {
     badge: '/logo.svg',
     tag: 'gw2-message',
     renotify: true,
+    silent: true,
     data: data || {},
   }
-
-  try {
-    const n = new Notification(title, { ...options, silent: true })
-    if (onClick) {
-      n.onclick = () => {
-        try { window.focus?.(); onClick() } finally { n.close() }
-      }
-    }
-    return
-  } catch (e) {
-    // Конструктор недоступен (мобильный Chrome) — пробуем через SW.
-  }
-
-  if (swRegistration && typeof swRegistration.showNotification === 'function') {
-    swRegistration.showNotification(title, options).catch((e) => {
-      if (!warned) { console.warn('SW notification failed', e); warned = true }
-    })
-  } else if (!warned) {
-    console.warn('Notification: нет ни конструктора, ни активного service worker')
-    warned = true
-  }
+  deliverNotification(title, options, onClick)
 }
 
 /* Уведомление о входящем звонке. Отличается от сообщений отдельным `tag`
    (чтобы не перезаписывало последнее сообщение и наоборот), `requireInteraction:
    true` (на десктопе ОС не скроет его автоматически через 5 секунд) и тем,
-   что мы сохраняем reference и умеем явно закрыть его, когда звонок принят
-   или завершён. */
+   что мы умеем явно закрыть его, когда звонок принят или завершён. */
 export function showCallNotification(title, body, { callId, onClick } = {}) {
   if (!notificationsAllowed()) return
   closeCallNotification()
@@ -184,26 +195,11 @@ export function showCallNotification(title, body, { callId, onClick } = {}) {
     data: { call_id: callId, kind: 'call' },
   }
 
-  try {
-    const n = new Notification(title, options)
+  deliverNotification(title, options, onClick).then((n) => {
+    if (!n) return // SW-вариант закрывается по тегу в closeCallNotification
     activeCallNotification = n
-    n.onclick = () => {
-      try { window.focus?.(); onClick?.() } finally { n.close(); activeCallNotification = null }
-    }
     n.onclose = () => { activeCallNotification = null }
-    return
-  } catch (e) {
-    // Конструктор недоступен — Android Chrome и т. п.
-  }
-
-  if (swRegistration && typeof swRegistration.showNotification === 'function') {
-    swRegistration.showNotification(title, options).catch((e) => {
-      if (!warned) { console.warn('SW notification failed', e); warned = true }
-    })
-  } else if (!warned) {
-    console.warn('Notification: нет ни конструктора, ни активного service worker')
-    warned = true
-  }
+  })
 }
 
 export function closeCallNotification() {

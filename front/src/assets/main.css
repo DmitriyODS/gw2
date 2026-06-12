@@ -219,6 +219,39 @@ textarea.ctl.invalid:focus {
   border-radius: 0 0 var(--radius-xl) var(--radius-xl);
 }
 
+/* ── Защита модалок от «невидимой карточки» ─────────────────────────
+   Вендорная enter-анимация PrimeVue Dialog описывает только from-состояние
+   (opacity: 0, scale(0.93)): в окружениях, где CSS-анимации отключены или
+   прерываются (системное «отключить анимацию» / prefers-reduced-motion,
+   оптимизаторы браузера), карточка остаётся прозрачной и сжатой при живом
+   DOM. Дописываем явное to-состояние и полностью отключаем анимацию в
+   reduced-motion, форсируя конечные значения. */
+@keyframes p-animate-dialog-enter {
+  from { opacity: 0; transform: scale(0.93); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+@keyframes p-animate-dialog-leave {
+  from { opacity: 1; transform: scale(1); }
+  to { opacity: 0; transform: scale(0.93); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .p-dialog-enter-active,
+  .p-dialog-leave-active {
+    animation: none !important;
+  }
+
+  .p-dialog {
+    opacity: 1 !important;
+    transform: scale(1) !important;
+  }
+
+  .p-overlay-mask {
+    transition: none !important;
+  }
+}
+
 /* Модалка профиля сотрудника — без шапки PrimeVue, контент заполняет
    весь dialog. Overflow hidden клипует градиентный hero к скруглениям. */
 .emp-dialog.p-dialog {

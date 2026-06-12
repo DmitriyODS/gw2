@@ -39,7 +39,7 @@
           <!-- Сцена: либо демонстрация экрана + лента камер, либо сетка камер -->
           <div class="callview-stage">
             <template v-if="focusShare && !callStore.isMinimized">
-              <div class="stage-focus">
+              <div ref="stageFocusEl" class="stage-focus">
                 <ParticipantTile
                   :key="`screen-${focusShare.identity}`"
                   :identity="focusShare.isLocal ? null : focusShare.identity"
@@ -50,6 +50,13 @@
                   :video="true"
                   :tick="focusShare.tick"
                 />
+                <button
+                  class="stage-fs-btn"
+                  :title="isStageFullscreen ? 'Выйти из полноэкранного режима' : 'На весь экран'"
+                  @click="toggleStageFullscreen"
+                >
+                  <span class="material-symbols-outlined">{{ isStageFullscreen ? 'fullscreen_exit' : 'fullscreen' }}</span>
+                </button>
               </div>
               <div class="stage-strip">
                 <ParticipantTile
@@ -58,6 +65,7 @@
                   :audio="callStore.audioEnabled"
                   :video="callStore.videoEnabled"
                   :avatar="myAvatar"
+                  :speaking="callStore.localSpeaking"
                   :tick="callStore.localTick"
                 />
                 <ParticipantTile
@@ -84,6 +92,7 @@
                 :audio="callStore.audioEnabled"
                 :video="callStore.videoEnabled"
                 :avatar="myAvatar"
+                :speaking="callStore.localSpeaking"
                 :tick="callStore.localTick"
               />
               <ParticipantTile
@@ -126,10 +135,11 @@
           <button
             class="ctrl-btn"
             :class="{ off: !callStore.videoEnabled }"
-            :title="callStore.videoEnabled ? 'Выключить камеру' : 'Включить камеру'"
+            :disabled="!callStore.hasCamera"
+            :title="!callStore.hasCamera ? 'Камера не найдена' : (callStore.videoEnabled ? 'Выключить камеру' : 'Включить камеру')"
             @click="callStore.toggleCam()"
           >
-            <span class="material-symbols-outlined">{{ callStore.videoEnabled ? 'videocam' : 'videocam_off' }}</span>
+            <span class="material-symbols-outlined">{{ callStore.videoEnabled && callStore.hasCamera ? 'videocam' : 'videocam_off' }}</span>
           </button>
           <button
             v-if="canScreenShare && !callStore.isMinimized"
@@ -177,7 +187,12 @@
           </button>
         </div>
 
-        <div v-if="callStore.error" class="callview-error">{{ callStore.error }}</div>
+        <div v-if="callStore.error" class="callview-error">
+          <span>{{ callStore.error }}</span>
+          <button class="error-close" title="Закрыть" @click="callStore.error = null">
+            <span class="material-symbols-outlined">close</span>
+          </button>
+        </div>
 
         <CallAudioSink />
       </div>
@@ -351,13 +366,15 @@ function onMiniDragEnd() {
 
 watch(visible, (v) => { if (!v) miniPos.value = null })
 
-/* Таймер длительности звонка */
+/* Таймер «в разговоре»: отсчёт только с момента, когда звонок реально стал
+   активным (собеседник вошёл), а не с открытия приложения или дозвона. */
 const elapsedSec = ref(0)
 let timer = null
 
 function startTimer() {
   if (timer) return
-  const startedAt = callStore.call?.started_at ? new Date(callStore.call.started_at).getTime() : Date.now()
+  const startedAt = Date.now()
+  elapsedSec.value = 0
   timer = setInterval(() => {
     elapsedSec.value = Math.max(0, Math.floor((Date.now() - startedAt) / 1000))
   }, 1000)
@@ -377,8 +394,36 @@ const elapsed = computed(() => {
     : `${m}:${sec}`
 })
 
-onMounted(startTimer)
+watch(() => callStore.phase === 'active', (active) => {
+  if (active) startTimer()
+  else stopTimer()
+}, { immediate: true })
+
+/* Полноэкранный режим демонстрации экрана */
+const stageFocusEl = ref(null)
+const isStageFullscreen = ref(false)
+
+function onFullscreenChange() {
+  isStageFullscreen.value = !!document.fullscreenElement
+}
+
+async function toggleStageFullscreen() {
+  try {
+    if (document.fullscreenElement) {
+      await document.exitFullscreen()
+    } else {
+      const el = stageFocusEl.value
+      if (!el) return
+      await (el.requestFullscreen?.() ?? el.webkitRequestFullscreen?.())
+    }
+  } catch { /* браузер отказал — не ошибка */ }
+}
+
+onMounted(() => {
+  document.addEventListener('fullscreenchange', onFullscreenChange)
+})
 onBeforeUnmount(() => {
+  document.removeEventListener('fullscreenchange', onFullscreenChange)
   stopTimer()
   stopRingback()
   onMiniDragEnd()
@@ -606,6 +651,7 @@ watch(isRinging, (v) => {
 
 /* Демонстрация экрана: сцена + лента камер */
 .stage-focus {
+  position: relative;
   flex: 1;
   min-height: 0;
   padding: 16px 16px 8px;
@@ -613,6 +659,38 @@ watch(isRinging, (v) => {
 }
 
 .stage-focus > * { flex: 1; }
+
+.stage-focus:fullscreen {
+  background: var(--color-bg);
+  padding: 0;
+}
+
+.stage-fs-btn {
+  position: absolute;
+  top: 26px;
+  right: 26px;
+  flex: 0 0 auto;
+  width: 40px;
+  height: 40px;
+  border: 0;
+  border-radius: 999px;
+  background: color-mix(in oklch, var(--color-scrim) 56%, transparent);
+  color: oklch(1 0 0);
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  z-index: 3;
+  transition: background 0.15s;
+}
+
+.stage-fs-btn:hover {
+  background: color-mix(in oklch, var(--color-scrim) 75%, transparent);
+}
+
+.stage-focus:fullscreen .stage-fs-btn {
+  top: 16px;
+  right: 16px;
+}
 
 .stage-strip {
   display: flex;
@@ -698,6 +776,12 @@ watch(isRinging, (v) => {
 .ctrl-btn:hover { transform: translateY(-2px); }
 .ctrl-btn:active { transform: translateY(0); }
 
+.ctrl-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+  transform: none;
+}
+
 .ctrl-btn.off {
   background: var(--color-error-container);
   color: var(--color-on-error-container);
@@ -748,14 +832,37 @@ watch(isRinging, (v) => {
   top: 60px;
   left: 50%;
   transform: translateX(-50%);
-  padding: 8px 14px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 8px 8px 14px;
   background: var(--color-error-container);
   color: var(--color-on-error-container);
   border-radius: 999px;
   font-size: 13px;
   font-weight: 600;
   z-index: 6;
+  max-width: min(92vw, 480px);
 }
+
+.error-close {
+  flex-shrink: 0;
+  width: 22px;
+  height: 22px;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: inherit;
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+}
+
+.error-close:hover {
+  background: color-mix(in oklch, var(--color-on-error-container) 12%, transparent);
+}
+
+.error-close .material-symbols-outlined { font-size: 16px; }
 
 /* Анимация */
 .callview-enter-active, .callview-leave-active { transition: opacity 0.22s; }

@@ -318,7 +318,10 @@ async function uploadFiles(files) {
     } catch (err) {
       pending.value = pending.value.filter(p => p._key !== key)
       console.error('upload failed', err)
-      window.alert(err?.message || 'Не удалось загрузить файл')
+      const msg = err?.status === 413
+        ? 'Файл слишком большой (максимум 25 МБ)'
+        : (err?.message || 'Не удалось загрузить файл')
+      window.alert(msg)
     }
   }
 }
