@@ -1,6 +1,7 @@
 from functools import wraps
 from flask import abort, g, request
-from flask_jwt_extended import verify_jwt_in_request, get_jwt_identity, get_jwt
+
+from app.utils.paseto import verify_request_token
 
 
 EMPLOYEE = 1
@@ -13,16 +14,16 @@ def get_user_level(user) -> int:
     return user.role.level if user and user.role else 0
 
 
-def _resolve_current_user_and_check_force_change(fn_name: str):
-    """Общая преамбула декораторов: верифицировать JWT, проверить
-    force_change, загрузить пользователя из БД, сложить в `g.current_user`."""
-    verify_jwt_in_request()
-    claims = get_jwt()
-    if claims.get("force_change") and fn_name != "change_default":
+def _resolve_current_user_and_check_force_change():
+    """Общая преамбула декораторов: верифицировать PASETO-токен, проверить
+    force_change, загрузить пользователя из БД, сложить в `g.current_user`.
+    Смена дефолтного пароля живёт в authsvc — во Flask исключений нет."""
+    claims = verify_request_token()
+    if claims.get("force_change"):
         abort(403, description="FORCE_PASSWORD_CHANGE")
 
     from app.repositories.user_repo import get_user_by_id
-    user_id = int(get_jwt_identity())
+    user_id = int(claims["sub"])
     user = get_user_by_id(user_id)
     if user is None or user.is_hidden:
         abort(401, description="Пользователь не найден")
@@ -40,11 +41,11 @@ def _resolve_current_user_and_check_force_change(fn_name: str):
 
 
 def require_role(min_level: int):
-    """Декоратор для Flask route — проверяет JWT и уровень роли."""
+    """Декоратор для Flask route — проверяет токен и уровень роли."""
     def decorator(fn):
         @wraps(fn)
         def wrapper(*args, **kwargs):
-            user = _resolve_current_user_and_check_force_change(fn.__name__)
+            user = _resolve_current_user_and_check_force_change()
             if get_user_level(user) < min_level:
                 abort(403, description="Недостаточно прав")
             return fn(*args, **kwargs)
@@ -53,10 +54,10 @@ def require_role(min_level: int):
 
 
 def require_auth(fn):
-    """Декоратор — только проверка JWT и force_change. Без проверки уровня роли."""
+    """Декоратор — только проверка токена и force_change. Без проверки уровня роли."""
     @wraps(fn)
     def wrapper(*args, **kwargs):
-        _resolve_current_user_and_check_force_change(fn.__name__)
+        _resolve_current_user_and_check_force_change()
         return fn(*args, **kwargs)
     return wrapper
 
@@ -88,7 +89,7 @@ def require_company_scope(fn):
     def wrapper(*args, **kwargs):
         user = getattr(g, "current_user", None)
         if user is None:
-            user = _resolve_current_user_and_check_force_change(fn.__name__)
+            user = _resolve_current_user_and_check_force_change()
         cid = resolve_company_scope(user)
         if cid is None:
             abort(400, description="Требуется указать company_id")

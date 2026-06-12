@@ -18,7 +18,7 @@
       <ActiveUnitModal v-if="unitsStore.activeUnit" />
       <AppTutorial v-if="isTutorialOpen" />
       <ChangelogModal v-if="isChangelogOpen" @close="closeChangelog" />
-      <StaleTasksModal v-if="isStaleOpen" :tasks="staleTasks" @close="closeStale" />
+      <MorningBriefingModal v-if="isBriefingOpen" :briefing="briefing" @close="closeBriefing" />
       <MiniMessenger />
       <IncomingCallOverlay @accept="callStore.accept()" @decline="callStore.decline()" />
       <CallView />
@@ -46,7 +46,7 @@ import { useNotificationsStore } from '@/stores/notifications.js'
 import { useBreakpoint } from '@/composables/useBreakpoint.js'
 import { useTutorial } from '@/composables/useTutorial.js'
 import { useChangelog } from '@/composables/useChangelog.js'
-import { useStaleReminder } from '@/composables/useStaleReminder.js'
+import { useMorningBriefing } from '@/composables/useMorningBriefing.js'
 import { connectSocket } from '@/socket/index.js'
 import {
   registerNotifyServiceWorker, installNotifyUnlock, requestNotificationPermission,
@@ -57,7 +57,7 @@ import CompanyDisabledScreen from '@/components/layout/CompanyDisabledScreen.vue
 import ActiveUnitModal from '@/components/layout/ActiveUnitModal.vue'
 import AppTutorial from '@/components/layout/AppTutorial.vue'
 import ChangelogModal from '@/components/layout/ChangelogModal.vue'
-import StaleTasksModal from '@/components/tasks/StaleTasksModal.vue'
+import MorningBriefingModal from '@/components/groove/MorningBriefingModal.vue'
 import MiniMessenger from '@/components/messenger/MiniMessenger.vue'
 import IncomingCallOverlay from '@/components/call/IncomingCallOverlay.vue'
 import CallView from '@/components/call/CallView.vue'
@@ -78,9 +78,9 @@ const isFullscreenRoute = computed(() => !!route.meta?.fullscreen && !!authStore
 // isOpen деструктурирован как топ-левел ref — Vue auto-unwraps в шаблоне
 const { isOpen: isTutorialOpen, open: openTutorial, shouldAutoShow } = useTutorial()
 const { isOpen: isChangelogOpen, close: closeChangelog, checkForNewVersion } = useChangelog()
-const { isOpen: isStaleOpen, tasks: staleTasks, close: closeStale, check: checkStaleTasks } = useStaleReminder()
+const { isOpen: isBriefingOpen, briefing, close: closeBriefing, check: checkMorningBriefing } = useMorningBriefing()
 let tutorialTimer = null
-let staleTimer = null
+let briefingTimer = null
 
 watch(() => authStore.user, (user, prev) => {
   if (user && !prev && shouldAutoShow()) {
@@ -127,12 +127,12 @@ onMounted(async () => {
     if (!shouldAutoShow()) {
       checkForNewVersion()
     }
-    // Напоминание о давних задачах — раз в день, и только если не показываем
+    // Утренний брифинг от Грувика — раз в день, и только если не показываем
     // тур/лог версий (чтобы не громоздить модалки друг на друга).
-    clearTimeout(staleTimer)
-    staleTimer = setTimeout(() => {
+    clearTimeout(briefingTimer)
+    briefingTimer = setTimeout(() => {
       if (!isTutorialOpen.value && !isChangelogOpen.value) {
-        checkStaleTasks()
+        checkMorningBriefing()
       }
     }, 1200)
   }
@@ -158,7 +158,7 @@ onMounted(() => {
 onBeforeUnmount(() => {
   window.removeEventListener('call:focus-overlay', onCallFocusOverlay)
   clearTimeout(tutorialTimer)
-  clearTimeout(staleTimer)
+  clearTimeout(briefingTimer)
 })
 </script>
 

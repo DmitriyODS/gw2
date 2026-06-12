@@ -86,7 +86,8 @@
         :placeholder="placeholder"
         rows="1"
         class="text-area"
-        @keydown.enter.exact.prevent="submit"
+        enterkeyhint="enter"
+        @keydown.enter.exact="onEnterKey"
         @input="autoresize"
         @paste="onPaste"
         @contextmenu="onTextContextMenu"
@@ -95,7 +96,7 @@
         class="send-btn"
         :disabled="!canSend"
         @click="submit"
-        title="Отправить (Enter)"
+        :title="isTouchDevice ? 'Отправить' : 'Отправить (Enter)'"
       >
         <span class="material-symbols-outlined">send</span>
       </button>
@@ -138,6 +139,17 @@ const emit = defineEmits(['send', 'cancel-reply', 'attach-task', 'update:attache
 const text = ref('')
 const pending = ref([])
 const textarea = ref(null)
+
+/* На смартфоне Enter экранной клавиатуры набирает новую строку, отправка —
+   только кнопкой: случайные отправки с тач-клавиатуры раздражают сильнее,
+   чем лишний тап. На десктопе Enter отправляет, Shift+Enter — новая строка. */
+const isTouchDevice = window.matchMedia?.('(hover: none) and (pointer: coarse)').matches ?? false
+
+function onEnterKey(e) {
+  if (isTouchDevice) return // default-поведение textarea — перенос строки
+  e.preventDefault()
+  submit()
+}
 
 /* ── Меню «что прикрепить» (файл / задача / запись экрана) ── */
 const attachMenuOpen = ref(false)

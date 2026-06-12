@@ -77,7 +77,7 @@
           <button
             v-if="isMobile"
             class="settings-back"
-            @click="activeSection = null"
+            @click="closeSection"
             title="Назад к списку"
             aria-label="Назад"
           >
@@ -95,7 +95,7 @@
         <div class="settings-pane-body">
         <!-- Внешний вид -->
         <div v-show="activeSection === 'theme'" class="pane-block">
-          <ThemeBuilder />
+          <ThemeBuilder ref="themeBuilder" />
         </div>
 
         <!-- Резервная копия -->
@@ -283,9 +283,27 @@ const sectionByKey = computed(() => {
 
 const activeSectionMeta = computed(() => activeSection.value ? sectionByKey.value[activeSection.value] : null)
 
-function openSection(key) {
+const themeBuilder = ref(null)
+
+/* Уход из «Внешнего вида» с несохранёнными цветами — ThemeBuilder сам
+   показывает предупреждение и откатывает превью; false = пользователь
+   решил остаться. Спросить нужно ДО смены секции: pane пересоздаётся
+   по :key, и компонент размонтируется. */
+async function canLeaveTheme() {
+  if (activeSection.value !== 'theme') return true
+  return await (themeBuilder.value?.confirmLeave?.() ?? true)
+}
+
+async function openSection(key) {
+  if (key === activeSection.value) return
+  if (!(await canLeaveTheme())) return
   activeSection.value = key
   router.replace({ query: { ...route.query, section: key } }).catch(() => {})
+}
+
+async function closeSection() {
+  if (!(await canLeaveTheme())) return
+  activeSection.value = null
 }
 
 /* ── Backup ────────────────────────────────────────────────────── */

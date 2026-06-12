@@ -1,6 +1,6 @@
-from datetime import datetime, timedelta, timezone
+from datetime import datetime
 from flask import Blueprint, request, jsonify, g
-from flask_jwt_extended import get_jwt_identity
+from app.utils.paseto import request_user_id
 from marshmallow import ValidationError
 
 from app.schemas import (
@@ -80,7 +80,7 @@ def list_tasks():
         description: Список задач
     """
     args = request.args
-    current_user_id = int(get_jwt_identity())
+    current_user_id = int(request_user_id())
 
     received_from = None
     received_to = None
@@ -155,44 +155,6 @@ def list_tasks():
     }), 200
 
 
-@bp.get("/stale")
-@require_role(EMPLOYEE)
-@require_company_scope
-def stale_tasks():
-    """
-    Активные задачи, «висящие» дольше недели (по дате поступления).
-    Используется для ежедневного напоминания «пора закрыть».
-    ---
-    tags: [tasks]
-    security: [BearerAuth: []]
-    parameters:
-      - {in: query, name: days, schema: {type: integer, default: 7}, description: Порог «давности» в днях}
-    responses:
-      200:
-        description: Список давних задач
-    """
-    try:
-        days = max(1, int(request.args.get("days", 7)))
-    except (TypeError, ValueError):
-        days = 7
-
-    now = datetime.now(timezone.utc)
-    threshold = now - timedelta(days=days)
-    tasks = task_repo.get_stale(threshold, company_id=g.company_id)
-
-    items = []
-    for t in tasks:
-        data = _task_schema.dump(t)
-        received = t.received_at
-        # received_at хранится timezone-aware; на всякий случай нормализуем.
-        if received.tzinfo is None:
-            received = received.replace(tzinfo=timezone.utc)
-        data["days_pending"] = (now - received).days
-        items.append(data)
-
-    return jsonify({"items": items, "days": days, "total": len(items)}), 200
-
-
 @bp.post("")
 @require_role(EMPLOYEE)
 @require_company_scope
@@ -224,7 +186,7 @@ def create_task():
     except ValidationError as e:
         return jsonify({"error": "VALIDATION_ERROR", "message": e.messages}), 400
 
-    current_user_id = int(get_jwt_identity())
+    current_user_id = int(request_user_id())
     try:
         task = task_service.create_task(
             author_id=current_user_id,
@@ -266,7 +228,7 @@ def get_task(task_id: int):
     if task is None:
         return jsonify({"error": "NOT_FOUND", "message": "Задача не найдена"}), 404
 
-    current_user_id = int(get_jwt_identity())
+    current_user_id = int(request_user_id())
     return jsonify(_enrich_task(task, current_user_id)), 200
 
 
@@ -304,7 +266,7 @@ def update_task(task_id: int):
     except ValidationError as e:
         return jsonify({"error": "VALIDATION_ERROR", "message": e.messages}), 400
 
-    current_user_id = int(get_jwt_identity())
+    current_user_id = int(request_user_id())
     try:
         task = task_service.update_task(task_id, **data)
     except TaskServiceError as e:
@@ -345,7 +307,7 @@ def delete_task(task_id: int):
       200:
         description: Задача удалена
     """
-    current_user_id = int(get_jwt_identity())
+    current_user_id = int(request_user_id())
     try:
         task_service.delete_task(task_id)
     except TaskServiceError as e:
@@ -376,7 +338,7 @@ def archive_task(task_id: int):
       422:
         description: У задачи есть активный юнит
     """
-    current_user_id = int(get_jwt_identity())
+    current_user_id = int(request_user_id())
     try:
         task = task_service.archive_task(task_id, actor_id=current_user_id)
     except TaskServiceError as e:
@@ -411,7 +373,7 @@ def restore_task(task_id: int):
       200:
         description: Задача восстановлена
     """
-    current_user_id = int(get_jwt_identity())
+    current_user_id = int(request_user_id())
     try:
         task = task_service.restore_task(task_id)
     except TaskServiceError as e:
@@ -470,7 +432,7 @@ def set_task_color(task_id: int):
     if task is None:
         return jsonify({"error": "NOT_FOUND", "message": "Задача не найдена"}), 404
 
-    current_user_id = int(get_jwt_identity())
+    current_user_id = int(request_user_id())
     try:
         task_service.set_user_color(task_id, current_user_id, data.get("color"))
     except TaskServiceError as e:
@@ -496,7 +458,7 @@ def toggle_favorite(task_id: int):
       200:
         description: Статус избранного изменён
     """
-    current_user_id = int(get_jwt_identity())
+    current_user_id = int(request_user_id())
     try:
         is_fav = task_service.toggle_favorite(task_id, current_user_id)
     except TaskServiceError as e:
@@ -568,7 +530,7 @@ def create_unit(task_id: int):
     except ValidationError as e:
         return jsonify({"error": "VALIDATION_ERROR", "message": e.messages}), 400
 
-    current_user_id = int(get_jwt_identity())
+    current_user_id = int(request_user_id())
     try:
         unit = unit_service.create_unit(
             task_id=task_id,
@@ -615,7 +577,7 @@ def set_task_responsible(task_id: int):
     except ValidationError as e:
         return jsonify({"error": "VALIDATION_ERROR", "message": e.messages}), 400
 
-    current_user_id = int(get_jwt_identity())
+    current_user_id = int(request_user_id())
     try:
         task = task_service.set_responsible(task_id, data["responsible_user_id"])
     except TaskServiceError as e:
@@ -654,7 +616,7 @@ def set_task_stage(task_id: int):
     except ValidationError as e:
         return jsonify({"error": "VALIDATION_ERROR", "message": e.messages}), 400
 
-    current_user_id = int(get_jwt_identity())
+    current_user_id = int(request_user_id())
     try:
         task = task_service.set_stage(task_id, data["stage_id"])
     except TaskServiceError as e:
@@ -733,7 +695,7 @@ def create_task_comment(task_id: int):
     except ValidationError as e:
         return jsonify({"error": "VALIDATION_ERROR", "message": e.messages}), 400
 
-    current_user_id = int(get_jwt_identity())
+    current_user_id = int(request_user_id())
     try:
         comment = comment_service.create_comment(task_id, current_user_id, data["text"])
     except CommentServiceError as e:
@@ -769,7 +731,7 @@ def update_task_comment(task_id: int, comment_id: int):
     except ValidationError as e:
         return jsonify({"error": "VALIDATION_ERROR", "message": e.messages}), 400
 
-    current_user_id = int(get_jwt_identity())
+    current_user_id = int(request_user_id())
     try:
         comment = comment_service.update_comment(comment_id, current_user_id, data["text"])
     except CommentServiceError as e:
@@ -795,7 +757,7 @@ def delete_task_comment(task_id: int, comment_id: int):
     responses:
       200: {description: Удалён}
     """
-    current_user_id = int(get_jwt_identity())
+    current_user_id = int(request_user_id())
     try:
         comment_service.delete_comment(comment_id, current_user_id)
     except CommentServiceError as e:

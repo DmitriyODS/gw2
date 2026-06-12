@@ -10,6 +10,7 @@ import (
 	"log/slog"
 	"strconv"
 
+	"aidanwoods.dev/go-paseto"
 	"github.com/gofiber/fiber/v2"
 
 	"github.com/DmitriyODS/gw2/back-go/calls/internal/domain"
@@ -26,14 +27,14 @@ type Server struct {
 }
 
 func NewServer(eps endpoint.Endpoints, svc service.CallService, lk *livekit.Client,
-	users domain.UserReader, jwtSecret string, log *slog.Logger) *Server {
+	users domain.UserReader, pasetoPublic paseto.V4AsymmetricPublicKey, log *slog.Logger) *Server {
 
 	app := fiber.New(fiber.Config{
 		AppName:               "gw2-callsvc",
 		DisableStartupMessage: true,
 		// Тело вебхука читаем как есть; JSON-парсинг — вручную в хендлерах.
 	})
-	auth := &authParser{secret: []byte(jwtSecret), users: users}
+	auth := &authParser{public: pasetoPublic, users: users}
 	h := &handlers{eps: eps, svc: svc, lk: lk, auth: auth, log: log}
 
 	app.Get("/healthz", func(c *fiber.Ctx) error {

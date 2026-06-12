@@ -20,6 +20,7 @@ help:
 	@printf "\n\033[1mРазработка (локально):\033[0m\n"
 	@printf "  make dev-infra    Инфра в Docker: DB + Redis + LiveKit\n"
 	@printf "  make dev-calls    Go-микросервис звонков (gRPC :9090, HTTP :8090)\n"
+	@printf "  make dev-auth     Go-микросервис авторизации (HTTP :8091)\n"
 	@printf "  make dev-back     Flask dev-сервер :5001\n"
 	@printf "  make dev-front    Vite dev-сервер  :5173\n"
 	@printf "  make dev-stop     Остановить dev-контейнеры\n"
@@ -36,7 +37,14 @@ help:
 	@printf "\n\033[33mКонфигурация сервера:\033[0m cp .env.deploy.example .env.deploy\n\n"
 
 # ── Разработка ────────────────────────────────────────────────────
-.PHONY: dev-infra dev-migrate dev-back dev-front dev-calls dev-stop dev-stack dev-stack-stop gen-proto
+.PHONY: dev-infra dev-migrate dev-back dev-front dev-calls dev-auth dev-stop dev-stack dev-stack-stop gen-proto
+
+# Dev-ключи PASETO (синхронизированы с dev.sh, back/.flaskenv и
+# back/tests/conftest.py): приватный — только у authsvc, публичный — у
+# Flask и callsvc.
+PASETO_PRIVATE_KEY_DEV := 68eb779b2f672beb8fcd58d72a81ce1565a1417aed3788d1362bf4faaa3f62ac15ef439747fcad6ca627310942ba14b48f164fcbb5f65c10f61ca2aeb4b53fe1
+PASETO_PUBLIC_KEY_DEV  := 15ef439747fcad6ca627310942ba14b48f164fcbb5f65c10f61ca2aeb4b53fe1
+PASETO_REFRESH_KEY_DEV := d525374c4ec7b5e1c5b140fb9c1f4cffd9c3dbf052bb18f2f32bf9f92d9fa05c
 
 # Приложения (app/calls/nginx) в dev-оверлее за профилем "full" —
 # bare `up` поднимает только инфраструктуру.
@@ -68,12 +76,24 @@ dev-calls: dev-infra
 	cd back-go/calls && \
 	DATABASE_URL="postgresql://grovework:grovework_local@localhost:5432/grovework" \
 	REDIS_URL="redis://localhost:6379/0" \
-	JWT_SECRET_KEY="dev-jwt-secret-key-min-32-chars-local-xxxx" \
+	PASETO_PUBLIC_KEY="$(PASETO_PUBLIC_KEY_DEV)" \
 	LIVEKIT_API_KEY="devkey" \
 	LIVEKIT_API_SECRET="dev_livekit_secret_min_32_chars_ok" \
 	LIVEKIT_URL="http://localhost:7880" \
 	LIVEKIT_CLIENT_URL="ws://localhost:7880" \
 	go run ./cmd/callsvc
+
+# Go-микросервис авторизации: /api/auth/* и /api/users/*, выпуск PASETO-токенов
+# (access v4.public + refresh v4.local). env синхронизированы с dev.sh.
+dev-auth: dev-infra
+	@printf "\033[1m▶ authsvc (Go)  HTTP :8091\033[0m\n"
+	cd back-go/auth && \
+	DATABASE_URL="postgresql://grovework:grovework_local@localhost:5432/grovework" \
+	REDIS_URL="redis://localhost:6379/0" \
+	PASETO_PRIVATE_KEY="$(PASETO_PRIVATE_KEY_DEV)" \
+	PASETO_REFRESH_KEY="$(PASETO_REFRESH_KEY_DEV)" \
+	UPLOAD_FOLDER="$(CURDIR)/back/uploads" \
+	go run ./cmd/authsvc
 
 gen-proto:
 	bash scripts/gen_proto.sh

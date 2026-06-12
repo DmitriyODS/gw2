@@ -3,7 +3,7 @@ import { useAuthStore } from '@/stores/auth.js'
 import { useCompaniesStore } from '@/stores/companies.js'
 
 // Возвращает реактивные настройки активной компании. У обычных ролей берётся
-// из JWT (auth.companySettings). У Администратора системы — из selected
+// из клеймов сессии (auth.companySettings). У Администратора системы — из selected
 // company в companies-store; если ничего не выбрано, отдаём все фичи включёнными
 // (что эквивалентно «глобальный системный режим»).
 export function useCompanySettings() {

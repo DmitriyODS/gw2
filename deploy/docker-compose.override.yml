@@ -16,11 +16,21 @@ services:
       - "6379:6379"
 
   # Приложения за профилем full: голый `docker compose up` их не стартует —
-  # Flask (:5001), callsvc (:8090/:9090) и Vite (:5173) бегут на хосте.
+  # Flask (:5001), callsvc (:8090/:9090), authsvc (:8091) и Vite (:5173)
+  # бегут на хосте. Dev-ключи PASETO — та же пара, что в dev.sh/Makefile.
   app:
     profiles: ["full"]
+    environment:
+      PASETO_PUBLIC_KEY: ${PASETO_PUBLIC_KEY:-15ef439747fcad6ca627310942ba14b48f164fcbb5f65c10f61ca2aeb4b53fe1}
   calls:
     profiles: ["full"]
+    environment:
+      PASETO_PUBLIC_KEY: ${PASETO_PUBLIC_KEY:-15ef439747fcad6ca627310942ba14b48f164fcbb5f65c10f61ca2aeb4b53fe1}
+  auth:
+    profiles: ["full"]
+    environment:
+      PASETO_PRIVATE_KEY: ${PASETO_PRIVATE_KEY:-68eb779b2f672beb8fcd58d72a81ce1565a1417aed3788d1362bf4faaa3f62ac15ef439747fcad6ca627310942ba14b48f164fcbb5f65c10f61ca2aeb4b53fe1}
+      PASETO_REFRESH_KEY: ${PASETO_REFRESH_KEY:-d525374c4ec7b5e1c5b140fb9c1f4cffd9c3dbf052bb18f2f32bf9f92d9fa05c}
   nginx:
     profiles: ["full"]
     ports:

@@ -66,31 +66,23 @@
         </div>
         <div>
           <h4 class="tb-card-title">Режим оформления</h4>
-          <p class="tb-card-sub">Подстройте платформу под освещение в комнате.</p>
+          <p class="tb-card-sub">Светлая, тёмная — или как в системе: приложение само переключится вслед за устройством.</p>
         </div>
       </div>
       <div class="seg-group" role="tablist">
         <button
+          v-for="m in THEME_MODES"
+          :key="m.value"
           class="seg-btn"
-          :class="{ active: !themeStore.dark }"
+          :class="{ active: themeStore.mode === m.value }"
           role="tab"
-          :aria-selected="!themeStore.dark"
-          @click="themeStore.dark && themeStore.toggleDark()"
+          :aria-selected="themeStore.mode === m.value"
+          @click="themeStore.setMode(m.value)"
         >
-          <span class="material-symbols-outlined">light_mode</span>
-          Светлая
+          <span class="material-symbols-outlined">{{ m.icon }}</span>
+          {{ m.label }}
         </button>
-        <button
-          class="seg-btn"
-          :class="{ active: themeStore.dark }"
-          role="tab"
-          :aria-selected="themeStore.dark"
-          @click="!themeStore.dark && themeStore.toggleDark()"
-        >
-          <span class="material-symbols-outlined">dark_mode</span>
-          Тёмная
-        </button>
-        <span class="seg-indicator" :data-pos="themeStore.dark ? 'right' : 'left'" />
+        <span class="seg-indicator" :data-pos="modeIndicatorPos" />
       </div>
     </div>
 
@@ -139,7 +131,7 @@
         </div>
         <div>
           <h4 class="tb-card-title">Свои цвета</h4>
-          <p class="tb-card-sub">Покрутите ручки — палитра обновится мгновенно. Сохраните, если понравится.</p>
+          <p class="tb-card-sub">Покрутите ручки — палитра обновится мгновенно. Как только что-то измените, внизу появится кнопка «Сохранить изменения».</p>
         </div>
       </div>
 
@@ -170,17 +162,6 @@
         </label>
       </div>
 
-      <div class="save-row">
-        <InputText
-          v-model="customThemeName"
-          placeholder="Дайте теме название — например, «Утро в офисе»"
-          class="save-input"
-        />
-        <button class="btn-filled" @click="saveCustom" :disabled="!customThemeName.trim()">
-          <span class="material-symbols-outlined">bookmark_add</span>
-          Сохранить
-        </button>
-      </div>
     </div>
 
     <!-- Мои темы -->
@@ -245,17 +226,87 @@
         </label>
       </div>
     </div>
+
+    <!-- Плавающая панель несохранённых изменений: цвета уже применены как
+         превью, но без сохранения откатятся при выходе из раздела. -->
+    <Transition name="tb-bar">
+      <div v-if="isDirty" class="unsaved-bar" role="status">
+        <span class="material-symbols-outlined unsaved-ico">palette</span>
+        <span class="unsaved-text">Тема изменена, но не сохранена</span>
+        <div class="unsaved-actions">
+          <button class="btn-ghost-dim" @click="resetToCurrent">Откатить</button>
+          <button class="btn-filled" @click="openSaveDialog">
+            <span class="material-symbols-outlined">bookmark_add</span>
+            Сохранить изменения
+          </button>
+        </div>
+      </div>
+    </Transition>
+
+    <!-- Сохранение темы: имя предзаполнено («Моя тема N»), можно сменить. -->
+    <AppDialog
+      v-model="saveDialogOpen"
+      size="sm"
+      icon="bookmark_add"
+      title="Сохранить тему"
+      subtitle="Палитра появится в списке «Мои темы» и сразу применится."
+      :actions="[
+        { kind: 'cancel', label: 'Отмена' },
+        { kind: 'confirm', label: 'Сохранить', icon: 'bookmark_add', disabled: !saveName.trim() },
+      ]"
+      @confirm="confirmSave"
+    >
+      <InputText
+        v-model="saveName"
+        class="save-name-input"
+        placeholder="Название темы"
+        autofocus
+        @keydown.enter="saveName.trim() && confirmSave()"
+      />
+      <p v-if="saveNameTaken" class="save-name-hint">
+        Тема с таким именем уже есть — она будет перезаписана.
+      </p>
+    </AppDialog>
+
+    <!-- Предупреждение при выходе из раздела с несохранёнными цветами. -->
+    <AppDialog
+      v-model="leaveDialogOpen"
+      size="sm"
+      tone="warning"
+      icon="palette"
+      title="Тема не сохранена"
+      subtitle="Если выйти сейчас, изменения откатятся к текущей теме. Хотите оставить эти цвета — останьтесь и нажмите «Сохранить изменения»."
+      :actions="[
+        { kind: 'cancel', label: 'Остаться' },
+        { kind: 'confirm', label: 'Выйти без сохранения', icon: 'logout' },
+      ]"
+      @confirm="onLeaveConfirm"
+      @cancel="onLeaveCancel"
+    />
   </div>
 </template>
 
 <script setup>
-import { ref, reactive, watch } from 'vue'
+import { ref, reactive, computed, watch, onMounted, onBeforeUnmount } from 'vue'
+import { onBeforeRouteLeave } from 'vue-router'
 import InputText from 'primevue/inputtext'
+import AppDialog from '@/components/common/AppDialog.vue'
 import { useThemeStore } from '@/stores/theme.js'
 import { useNotificationsStore } from '@/stores/notifications.js'
 
 const themeStore = useThemeStore()
 const notif = useNotificationsStore()
+
+/* Режим оформления: светлая / системная / тёмная. «Системная» следует за
+   настройкой устройства и переключается на лету. */
+const THEME_MODES = [
+  { value: 'light',  label: 'Светлая',   icon: 'light_mode' },
+  { value: 'system', label: 'Системная', icon: 'brightness_auto' },
+  { value: 'dark',   label: 'Тёмная',    icon: 'dark_mode' },
+]
+
+const modeIndicatorPos = computed(() =>
+  ({ light: 'left', system: 'center', dark: 'right' }[themeStore.mode] || 'left'))
 
 const colorLabels = {
   primary:   { title: 'Основной',   hint: 'Главный акцент: кнопки и активные элементы' },
@@ -273,8 +324,6 @@ const customVars = reactive({
   neutral:   DEFAULT_NEUTRAL,
 })
 
-const customThemeName = ref('')
-
 watch(
   () => themeStore.currentPreset,
   (preset) => {
@@ -284,6 +333,88 @@ watch(
   },
   { immediate: true },
 )
+
+/* ── Несохранённые изменения ───────────────────────────────────
+   Свои цвета и «Мне повезёт» применяются сразу как живое превью, но без
+   сохранения откатятся при выходе из раздела — отсюда плавающая кнопка
+   «Сохранить изменения» и предупреждение при уходе. */
+const isDirty = computed(() => {
+  const saved = themeStore.getVars(themeStore.currentPreset)
+  const eq = (a, b) => (a || '').toLowerCase() === (b || '').toLowerCase()
+  return !eq(customVars.primary, saved.primary) ||
+    !eq(customVars.secondary, saved.secondary) ||
+    !eq(customVars.tertiary, saved.tertiary) ||
+    !eq(customVars.neutral, saved.neutral || DEFAULT_NEUTRAL)
+})
+
+/* ── Сохранение: имя по умолчанию «Моя тема N» ── */
+const saveDialogOpen = ref(false)
+const saveName = ref('')
+
+const saveNameTaken = computed(() =>
+  themeStore.customThemes.some(t => t.name === saveName.value.trim()))
+
+function nextThemeName() {
+  const names = new Set(themeStore.customThemes.map(t => t.name))
+  let n = 1
+  while (names.has(`Моя тема ${n}`)) n++
+  return `Моя тема ${n}`
+}
+
+function openSaveDialog() {
+  saveName.value = nextThemeName()
+  saveDialogOpen.value = true
+}
+
+function confirmSave() {
+  const name = saveName.value.trim()
+  if (!name) return
+  themeStore.saveCustomTheme(name, { ...customVars })
+  themeStore.applyTheme(name) // currentPreset = name → customVars пересинхронятся, isDirty погаснет
+  notif.success(`Тема «${name}» сохранена`)
+  saveDialogOpen.value = false
+}
+
+/* ── Предупреждение при выходе с несохранёнными цветами ──
+   confirmLeave() дёргают SettingsView (смена секции) и route-guard ниже:
+   true — уходить можно (изменения откачены), false — пользователь остался. */
+const leaveDialogOpen = ref(false)
+let leaveResolve = null
+
+function confirmLeave() {
+  if (!isDirty.value) return Promise.resolve(true)
+  leaveDialogOpen.value = true
+  return new Promise((resolve) => { leaveResolve = resolve })
+}
+
+function resolveLeave(allowed) {
+  leaveDialogOpen.value = false
+  leaveResolve?.(allowed)
+  leaveResolve = null
+}
+
+function onLeaveConfirm() {
+  resetToCurrent()
+  resolveLeave(true)
+}
+
+function onLeaveCancel() {
+  resolveLeave(false)
+}
+
+onBeforeRouteLeave(() => confirmLeave())
+
+defineExpose({ isDirty, confirmLeave })
+
+/* Закрытие/перезагрузка вкладки — нативный браузерный confirm. */
+function onBeforeUnload(e) {
+  if (!isDirty.value) return
+  e.preventDefault()
+  e.returnValue = ''
+}
+
+onMounted(() => window.addEventListener('beforeunload', onBeforeUnload))
+onBeforeUnmount(() => window.removeEventListener('beforeunload', onBeforeUnload))
 
 function previewStyle(preset) {
   const v = themeStore.getVars(preset)
@@ -314,15 +445,6 @@ function surpriseMe() {
   const t = themeStore.randomTheme()
   Object.assign(customVars, t)
   themeStore.applyVars({ ...customVars })
-}
-
-function saveCustom() {
-  const name = customThemeName.value.trim()
-  if (!name) return
-  themeStore.saveCustomTheme(name, { ...customVars })
-  themeStore.applyTheme(name)
-  notif.success(`Тема «${name}» сохранена`)
-  customThemeName.value = ''
 }
 
 function importTheme(event) {
@@ -654,12 +776,12 @@ function importTheme(event) {
 .seg-group {
   position: relative;
   display: inline-grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: repeat(3, 1fr);
   padding: 4px;
   background: var(--color-surface-high);
   border-radius: 999px;
   width: 100%;
-  max-width: 320px;
+  max-width: 440px;
 }
 
 .seg-btn {
@@ -669,7 +791,7 @@ function importTheme(event) {
   align-items: center;
   justify-content: center;
   gap: 6px;
-  padding: 10px 18px;
+  padding: 10px 8px;
   background: transparent;
   border: 0;
   border-radius: 999px;
@@ -689,14 +811,15 @@ function importTheme(event) {
   top: 4px;
   bottom: 4px;
   left: 4px;
-  width: calc(50% - 4px);
+  width: calc((100% - 8px) / 3);
   background: var(--color-primary);
   border-radius: 999px;
   transition: transform 0.3s cubic-bezier(0.22, 1, 0.36, 1);
   box-shadow: 0 4px 14px color-mix(in oklch, var(--color-primary) 35%, transparent);
 }
 
-.seg-indicator[data-pos="right"] { transform: translateX(100%); }
+.seg-indicator[data-pos="center"] { transform: translateX(100%); }
+.seg-indicator[data-pos="right"]  { transform: translateX(200%); }
 
 /* ── Галерея пресетов ───────────────────────────────────────── */
 .preset-gallery {
@@ -870,19 +993,80 @@ function importTheme(event) {
 }
 
 /* ── Save row ────────────────────────────────────────────────── */
-.save-row {
+/* ── Панель несохранённых изменений ─────────────────────────────
+   Sticky к низу скролл-зоны настроек: всегда на виду, пока пользователь
+   крутит цвета. На мобильном приподнята над нижней навигацией. */
+.unsaved-bar {
+  position: sticky;
+  bottom: 12px;
+  z-index: 5;
   display: flex;
-  gap: 10px;
   align-items: center;
-}
-
-.save-input {
-  flex: 1;
-}
-
-.save-row :deep(.save-input) {
+  gap: 10px;
+  padding: 10px 14px;
+  background: var(--color-surface);
+  color: var(--color-text);
+  border: 1px solid var(--color-outline-dim);
   border-radius: 999px;
-  padding-left: 18px;
+  box-shadow: var(--shadow-lg);
+}
+
+.unsaved-ico {
+  font-size: 20px;
+  color: var(--color-primary);
+  flex-shrink: 0;
+}
+
+.unsaved-text {
+  font-size: 14px;
+  font-weight: 600;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.unsaved-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
+  flex-shrink: 0;
+}
+
+.btn-ghost-dim {
+  appearance: none;
+  border: none;
+  background: transparent;
+  color: inherit;
+  opacity: 0.8;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  padding: 8px 12px;
+  border-radius: 999px;
+  cursor: pointer;
+}
+.btn-ghost-dim:hover { opacity: 1; background: color-mix(in oklch, currentColor 12%, transparent); }
+
+.tb-bar-enter-active, .tb-bar-leave-active { transition: opacity 0.2s, transform 0.2s; }
+.tb-bar-enter-from, .tb-bar-leave-to { opacity: 0; transform: translateY(12px); }
+
+/* Поле имени в диалоге сохранения */
+.save-name-input { width: 100%; }
+
+.save-name-hint {
+  margin: 8px 0 0;
+  font-size: 12.5px;
+  color: var(--color-warning);
+}
+
+@media (max-width: 768px) {
+  .unsaved-bar {
+    bottom: calc(76px + env(safe-area-inset-bottom, 0px));
+    flex-wrap: wrap;
+  }
+  .unsaved-actions { margin-left: 0; width: 100%; justify-content: flex-end; }
 }
 
 /* ── Кнопки M3 ───────────────────────────────────────────────── */
@@ -1030,8 +1214,6 @@ function importTheme(event) {
   .tb-card-head { gap: 10px; }
   .preset-gallery { grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: 10px; }
   .color-grid { grid-template-columns: 1fr; }
-  .save-row { flex-direction: column; align-items: stretch; }
-  .save-row .btn-filled { justify-content: center; }
   .custom-list { grid-template-columns: 1fr; }
 }
 </style>

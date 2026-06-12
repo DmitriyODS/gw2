@@ -1,6 +1,4 @@
 from flask import Flask
-from .auth import bp as auth_bp
-from .users import bp as users_bp
 from .roles import bp as roles_bp
 from .tasks import bp as tasks_bp
 from .units import bp as units_bp
@@ -19,8 +17,6 @@ from .groove import bp as groove_bp
 
 
 def register_blueprints(app: Flask) -> None:
-    app.register_blueprint(auth_bp)
-    app.register_blueprint(users_bp)
     app.register_blueprint(roles_bp)
     app.register_blueprint(tasks_bp)
     app.register_blueprint(units_bp)

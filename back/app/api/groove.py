@@ -459,6 +459,30 @@ def get_wrapped():
     return jsonify(feed_service.get_wrapped(g.company_id, g.current_user.id)), 200
 
 
+@bp.get("/morning")
+@require_auth
+@require_company_scope
+def morning_briefing():
+    """
+    Утренний брифинг от Грувика — персональная сводка задач + настроение
+    питомца + живая реплика. Показывается раз в сутки при первом входе.
+    ---
+    tags: [groove]
+    security: [BearerAuth: []]
+    parameters:
+      - in: query
+        name: part
+        schema: {type: string, enum: [morning, day, evening, night]}
+        description: Время суток (по локальным часам клиента) — для приветствия
+    responses:
+      200: {description: Брифинг (show=false — показывать нечего)}
+    """
+    part = (request.args.get("part") or "morning").strip()
+    return jsonify(
+        feed_service.get_morning_briefing(g.company_id, g.current_user.id, part)
+    ), 200
+
+
 @bp.post("/wrapped/share")
 @require_auth
 @require_company_scope

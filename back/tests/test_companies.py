@@ -3,7 +3,7 @@ import pytest
 
 
 def _auth_headers(app, user_id):
-    from flask_jwt_extended import create_access_token
+    from conftest import make_token
     with app.app_context():
         from app.repositories.user_repo import get_by_id
         u = get_by_id(user_id)
@@ -13,7 +13,7 @@ def _auth_headers(app, user_id):
             "role_level": u.role.level if u.role else 0,
             "is_root_admin": bool(u.is_root_admin),
         }
-        token = create_access_token(identity=str(user_id), additional_claims=claims)
+    token = make_token(app, user_id, claims)
     return {"Authorization": f"Bearer {token}"}
 
 

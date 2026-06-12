@@ -51,8 +51,8 @@ function fetchWithTimeout(url, options = {}, ms = 8000) {
 async function refreshToken() {
   const resp = await fetchWithTimeout('/api/auth/refresh', { method: 'POST', credentials: 'include' }, 5000)
   if (!resp.ok) throw new Error('refresh_failed')
-  const data = await resp.json()
-  return data.access_token
+  // Тело несёт и токен, и клеймы сессии (PASETO на клиенте не декодируется).
+  return resp.json()
 }
 
 export async function apiRequest(path, options = {}) {
@@ -99,8 +99,8 @@ export async function apiRequest(path, options = {}) {
     }
     isRefreshing = true
     try {
-      const newToken = await refreshToken()
-      auth.token = newToken
+      const data = await refreshToken()
+      auth.applySession(data)
       isRefreshing = false
       refreshQueue.forEach(({ resolve, reject, path, options }) => {
         apiRequest(path, { ...options, _retry: true }).then(resolve).catch(reject)

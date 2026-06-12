@@ -1,5 +1,4 @@
 import os
-from datetime import timedelta
 
 
 class Config:
@@ -12,11 +11,9 @@ class Config:
         "max_overflow": 20,
     }
 
-    JWT_SECRET_KEY = os.environ.get("JWT_SECRET_KEY", "change-jwt-secret-in-production")
-    JWT_ACCESS_TOKEN_EXPIRES = timedelta(minutes=15)
-    JWT_REFRESH_TOKEN_EXPIRES = timedelta(days=30)
-    JWT_TOKEN_LOCATION = ["headers"]
-    JWT_REFRESH_COOKIE_NAME = "refresh_token"
+    # Публичный ключ PASETO v4.public (hex, 32 байта): access-токены выпускает
+    # микросервис авторизации (back-go/auth), Flask только проверяет подпись.
+    PASETO_PUBLIC_KEY = os.environ.get("PASETO_PUBLIC_KEY", "")
 
     REDIS_URL = os.environ.get("REDIS_URL", "redis://localhost:6379/0")
 

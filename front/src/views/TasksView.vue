@@ -543,7 +543,7 @@ function onYgImported(task) {
 
 function consumeOpenQuery() {
   // Источника два: canonical `/tasks/:id` (params.id) и legacy `/tasks?open=…`.
-  // Второй вариант оставлен для StaleTasksModal/уведомлений/совместимости.
+  // Второй вариант — для утреннего брифинга Грувика/уведомлений/совместимости.
   const openId = route.params.id || route.query.open
   if (!openId) return
   openTask({ id: Number(openId) })
@@ -567,7 +567,7 @@ onMounted(() => {
   yougileStore.refreshStatus().catch(() => {})
 })
 
-/* Если пользователь уже на /tasks и кликнул задачу в StaleTasksModal,
+/* Если пользователь уже на /tasks и кликнул задачу в утреннем брифинге,
    роутер делает push с тем же path и другим query — компонент НЕ пересоздаётся,
    onMounted не повторяется. Поэтому слушаем сам query.open и реагируем здесь. */
 watch(() => route.query.open, (v) => {

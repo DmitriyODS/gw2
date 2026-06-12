@@ -11,10 +11,19 @@ export default defineConfig({
   },
   server: {
     proxy: {
-      // Звонки — Go-микросервис callsvc; более специфичный префикс ДОЛЖЕН
-      // стоять раньше '/api', иначе запросы уйдут во Flask.
+      // Go-микросервисы; более специфичные префиксы ДОЛЖНЫ стоять раньше
+      // '/api', иначе запросы уйдут во Flask.
       '/api/calls': {
         target: 'http://localhost:8090',
+        changeOrigin: true
+      },
+      // Авторизация и пользователи — authsvc.
+      '/api/auth': {
+        target: 'http://localhost:8091',
+        changeOrigin: true
+      },
+      '/api/users': {
+        target: 'http://localhost:8091',
         changeOrigin: true
       },
       '/api': {

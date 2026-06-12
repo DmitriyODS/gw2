@@ -57,6 +57,9 @@ export const strokePet = (userId) =>
 
 export const getRaid = () => apiRequest('/groove/raid')
 
+export const getMorningBriefing = (part) =>
+  apiRequest(`/groove/morning?part=${encodeURIComponent(part)}`, { timeout: 20000 })
+
 export const getWrapped = () => apiRequest('/groove/wrapped', { timeout: 20000 })
 
 export const shareWrapped = () => apiRequest('/groove/wrapped/share', { method: 'POST', timeout: 20000 })

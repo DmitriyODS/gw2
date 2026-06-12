@@ -1,5 +1,5 @@
 from flask import Blueprint, request, jsonify
-from flask_jwt_extended import get_jwt_identity
+from app.utils.paseto import request_user_id
 from marshmallow import ValidationError
 
 from app.schemas.unit import UnitSchema, UnitUpdateSchema
@@ -26,7 +26,7 @@ def get_active_unit():
       200:
         description: Активный юнит или null
     """
-    current_user_id = int(get_jwt_identity())
+    current_user_id = int(request_user_id())
     unit = unit_repo.get_active_for_user(current_user_id)
     if unit is None:
         return jsonify(None), 200
@@ -66,7 +66,7 @@ def update_unit(unit_id: int):
     except ValidationError as e:
         return jsonify({"error": "VALIDATION_ERROR", "message": e.messages}), 400
 
-    current_user_id = int(get_jwt_identity())
+    current_user_id = int(request_user_id())
     current_user = user_repo.get_by_id(current_user_id)
 
     try:
@@ -98,7 +98,7 @@ def delete_unit(unit_id: int):
       200:
         description: Юнит удалён
     """
-    current_user_id = int(get_jwt_identity())
+    current_user_id = int(request_user_id())
     current_user = user_repo.get_by_id(current_user_id)
 
     unit = unit_repo.get_by_id(unit_id)
@@ -133,7 +133,7 @@ def stop_unit(unit_id: int):
       200:
         description: Юнит завершён
     """
-    current_user_id = int(get_jwt_identity())
+    current_user_id = int(request_user_id())
     current_user = user_repo.get_by_id(current_user_id)
 
     unit_before = unit_repo.get_by_id(unit_id)

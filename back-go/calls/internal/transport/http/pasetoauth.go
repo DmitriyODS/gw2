@@ -3,22 +3,21 @@ package http
 import (
 	"strconv"
 	"strings"
-	"time"
 
+	"aidanwoods.dev/go-paseto"
 	"github.com/gofiber/fiber/v2"
-	"github.com/golang-jwt/jwt/v5"
 
 	"github.com/DmitriyODS/gw2/back-go/calls/internal/domain"
 )
 
 const localUserID = "userID"
 
-// authParser — валидация access-токенов flask-jwt-extended (HS256, общий
-// JWT_SECRET_KEY с Flask): claims sub (id строкой), type=="access",
-// force_change. Пользователь дополнительно сверяется с БД (is_hidden,
-// активность компании) — как в декораторе @require_auth.
+// authParser — валидация PASETO v4.public access-токенов, которые выпускает
+// authsvc (общий публичный ключ PASETO_PUBLIC_KEY): claims sub (id строкой),
+// type=="access", force_change. Пользователь дополнительно сверяется с БД
+// (is_hidden, активность компании) — как в декораторе @require_auth.
 type authParser struct {
-	secret []byte
+	public paseto.V4AsymmetricPublicKey
 	users  domain.UserReader
 }
 
@@ -29,30 +28,24 @@ func (a *authParser) parseUserID(c *fiber.Ctx) (userID int64, forceChange bool) 
 	if !strings.HasPrefix(header, "Bearer ") {
 		return 0, false
 	}
-	claims := jwt.MapClaims{}
-	_, err := jwt.ParseWithClaims(strings.TrimPrefix(header, "Bearer "), claims,
-		func(t *jwt.Token) (any, error) {
-			if _, ok := t.Method.(*jwt.SigningMethodHMAC); !ok {
-				return nil, jwt.ErrSignatureInvalid
-			}
-			return a.secret, nil
-		},
-		jwt.WithValidMethods([]string{"HS256"}),
-		jwt.WithExpirationRequired(),
-		jwt.WithLeeway(10*time.Second),
-	)
+	parser := paseto.NewParser() // проверяет exp/iat/nbf
+	t, err := parser.ParseV4Public(a.public, strings.TrimPrefix(header, "Bearer "), nil)
 	if err != nil {
 		return 0, false
 	}
-	if typ, _ := claims["type"].(string); typ != "access" {
+	if typ, err := t.GetString("type"); err != nil || typ != "access" {
 		return 0, false
 	}
-	sub, _ := claims["sub"].(string)
+	sub, err := t.GetSubject()
+	if err != nil {
+		return 0, false
+	}
 	id, err := strconv.ParseInt(sub, 10, 64)
 	if err != nil || id <= 0 {
 		return 0, false
 	}
-	fc, _ := claims["force_change"].(bool)
+	var fc bool
+	_ = t.Get("force_change", &fc)
 	return id, fc
 }
 

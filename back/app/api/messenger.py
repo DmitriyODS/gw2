@@ -1,5 +1,5 @@
 from flask import Blueprint, request, jsonify
-from flask_jwt_extended import get_jwt_identity
+from app.utils.paseto import request_user_id
 from marshmallow import ValidationError
 
 from app.schemas import (
@@ -37,7 +37,7 @@ def list_conversations():
       200:
         description: Список диалогов с последним сообщением и счётчиком непрочитанных
     """
-    user_id = int(get_jwt_identity())
+    user_id = int(request_user_id())
     # Гарантируем, что личный чат техподдержки существует у сотрудника
     # компании — он должен быть всегда первым в списке, даже без переписки.
     # У Администратора системы своего dev-чата нет (он отвечает в чужие
@@ -78,7 +78,7 @@ def open_or_create_conversation():
     except ValidationError as e:
         return jsonify({"error": "VALIDATION_ERROR", "message": e.messages}), 400
 
-    me = int(get_jwt_identity())
+    me = int(request_user_id())
     try:
         conv = messenger_service.open_conversation(me, data["user_id"])
     except MessengerServiceError as e:
@@ -113,7 +113,7 @@ def list_messages(conversation_id: int):
       200:
         description: Сообщения
     """
-    me = int(get_jwt_identity())
+    me = int(request_user_id())
     try:
         conv = messenger_service.get_conversation_for_user(conversation_id, me)
     except MessengerServiceError as e:
@@ -161,7 +161,7 @@ def post_message(conversation_id: int):
     except ValidationError as e:
         return jsonify({"error": "VALIDATION_ERROR", "message": e.messages}), 400
 
-    me = int(get_jwt_identity())
+    me = int(request_user_id())
     try:
         conv, msg = messenger_service.send_message(
             conversation_id, me,
@@ -257,7 +257,7 @@ def forward_message_endpoint():
     except ValidationError as e:
         return jsonify({"error": "VALIDATION_ERROR", "message": e.messages}), 400
 
-    me = int(get_jwt_identity())
+    me = int(request_user_id())
     try:
         results = messenger_service.forward_message(
             data["message_id"], me,
@@ -300,7 +300,7 @@ def mark_read(conversation_id: int):
       200:
         description: Помечено как прочитанное
     """
-    me = int(get_jwt_identity())
+    me = int(request_user_id())
     try:
         n = messenger_service.mark_conversation_read(conversation_id, me)
     except MessengerServiceError as e:
@@ -348,7 +348,7 @@ def upload_attachment():
     if "file" not in request.files:
         return jsonify({"error": "NO_FILE", "message": "Файл не передан"}), 400
 
-    me = int(get_jwt_identity())
+    me = int(request_user_id())
     try:
         att = messenger_service.upload_attachment(me, request.files["file"])
     except MessengerServiceError as e:
@@ -379,7 +379,7 @@ def delete_message_endpoint(message_id: int):
         description: Сообщение удалено
     """
     scope = (request.args.get("scope") or "me").lower()
-    me = int(get_jwt_identity())
+    me = int(request_user_id())
     try:
         conv_id, for_all = messenger_service.delete_message(message_id, me, scope)
     except MessengerServiceError as e:
@@ -419,7 +419,7 @@ def delete_conversation_endpoint(conversation_id: int):
         description: Диалог удалён
     """
     scope = (request.args.get("scope") or "me").lower()
-    me = int(get_jwt_identity())
+    me = int(request_user_id())
 
     # Запомним собеседника ДО удаления, чтобы было кому слать broadcast.
     conv = message_repo.get_conversation(conversation_id)
@@ -463,7 +463,7 @@ def toggle_pin(conversation_id: int):
       200:
         description: Закрепление переключено
     """
-    me = int(get_jwt_identity())
+    me = int(request_user_id())
     try:
         pinned = messenger_service.toggle_pin(conversation_id, me)
     except MessengerServiceError as e:
@@ -495,7 +495,7 @@ def toggle_message_pin_endpoint(message_id: int):
       200:
         description: Закрепление переключено
     """
-    me = int(get_jwt_identity())
+    me = int(request_user_id())
     try:
         conv, msg, pinned = messenger_service.toggle_message_pin(message_id, me)
     except MessengerServiceError as e:
@@ -531,7 +531,7 @@ def list_pinned_endpoint(conversation_id: int):
       200:
         description: Список закреплённых сообщений
     """
-    me = int(get_jwt_identity())
+    me = int(request_user_id())
     try:
         msgs = messenger_service.list_pinned_messages(conversation_id, me)
     except MessengerServiceError as e:
@@ -569,7 +569,7 @@ def open_dev_chat():
       200:
         description: Чат с техподдержкой
     """
-    me = int(get_jwt_identity())
+    me = int(request_user_id())
     try:
         conv = messenger_service.open_dev_chat(me)
     except MessengerServiceError as e:
@@ -590,7 +590,7 @@ def open_pet_chat():
       200:
         description: Чат с Грувиком
     """
-    me = int(get_jwt_identity())
+    me = int(request_user_id())
     try:
         conv = messenger_service.open_pet_chat(me)
     except MessengerServiceError as e:
@@ -611,7 +611,7 @@ def support_inbox():
       200:
         description: Список dev-чатов всех пользователей
     """
-    me = int(get_jwt_identity())
+    me = int(request_user_id())
     me_user = user_repo.get_by_id(me)
     if me_user is None or me_user.company_id is not None:
         return jsonify({"error": "FORBIDDEN", "message": "Только Администратор системы"}), 403
@@ -693,5 +693,5 @@ def unread_count():
       200:
         description: Счётчик непрочитанных
     """
-    me = int(get_jwt_identity())
+    me = int(request_user_id())
     return jsonify({"total": message_repo.total_unread(me)}), 200

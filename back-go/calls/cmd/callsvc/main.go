@@ -18,6 +18,7 @@ import (
 	"syscall"
 	"time"
 
+	"aidanwoods.dev/go-paseto"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
 	googrpc "google.golang.org/grpc"
@@ -46,9 +47,16 @@ func main() {
 
 	dbURL := env("DATABASE_URL", "postgresql://grovework:grovework_local@localhost:5432/grovework")
 	redisURL := env("REDIS_URL", "redis://localhost:6379/0")
-	jwtSecret := os.Getenv("JWT_SECRET_KEY")
-	if jwtSecret == "" {
-		log.Error("JWT_SECRET_KEY не задан")
+	// Публичный ключ access-токенов PASETO (v4.public): токены выпускает
+	// authsvc, мы только проверяем подпись.
+	pasetoPublicHex := os.Getenv("PASETO_PUBLIC_KEY")
+	if pasetoPublicHex == "" {
+		log.Error("PASETO_PUBLIC_KEY не задан")
+		os.Exit(1)
+	}
+	pasetoPublic, err := paseto.NewV4AsymmetricPublicKeyFromHex(pasetoPublicHex)
+	if err != nil {
+		log.Error("paseto.bad_public_key", "error", err)
 		os.Exit(1)
 	}
 	tokenTTL := 6 * time.Hour
@@ -109,7 +117,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	httpServer := httptransport.NewServer(eps, svc, lk, users, jwtSecret, log)
+	httpServer := httptransport.NewServer(eps, svc, lk, users, pasetoPublic, log)
 
 	errCh := make(chan error, 2)
 	go func() {

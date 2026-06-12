@@ -1,7 +1,7 @@
 import json
 import os
 from flask import Blueprint, jsonify
-from flask_jwt_extended import jwt_required
+from app.utils.permissions import require_auth
 
 bp = Blueprint("changelog", __name__, url_prefix="/api/changelog")
 
@@ -13,7 +13,7 @@ def _load():
 
 
 @bp.get("")
-@jwt_required()
+@require_auth
 def get_changelog():
     """
     Получить лог изменений приложения.

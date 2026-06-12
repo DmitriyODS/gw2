@@ -10,9 +10,6 @@ export const getTasks = (params = {}, options = {}) => {
 
 export const createTask = (data) => apiRequest('/tasks', { method: 'POST', body: data })
 
-// Активные задачи, висящие дольше недели — для ежедневного напоминания.
-export const getStaleTasks = () => apiRequest('/tasks/stale')
-
 export const deleteTask = (taskId) => apiRequest(`/tasks/${taskId}`, { method: 'DELETE' })
 
 export const getTask = (taskId) => apiRequest(`/tasks/${taskId}`)

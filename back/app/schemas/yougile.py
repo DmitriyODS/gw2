@@ -36,7 +36,7 @@ class YougileConnectFinishSchema(Schema):
 
 class YougileRotateSchema(Schema):
     """Сброс ключа. Требуем повторно ввести пароль — это чувствительная
-    операция, JWT-сессии недостаточно."""
+    операция, одной токен-сессии недостаточно."""
     password = fields.String(required=True, load_only=True,
                              validate=validate.Length(min=1, max=512))
 

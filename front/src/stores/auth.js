@@ -8,6 +8,10 @@ import { disconnectSocket, updateSocketAuth } from '@/socket/index.js'
 export const useAuthStore = defineStore('auth', () => {
   const user = ref(null)
   const token = ref(null)
+  // Клеймы сессии (company_id/company_name/company_settings/role_level/
+  // is_root_admin/force_change). PASETO-токен на клиенте не декодируется —
+  // authsvc дублирует клеймы в теле ответов login/refresh/change-default.
+  const claims = ref({})
   const forceChange = ref(false)
   const ready = ref(false)
   // Сообщение от backend о блокировке компании. Если не null — глобальный
@@ -21,26 +25,28 @@ export const useAuthStore = defineStore('auth', () => {
 
   const isAuth = computed(() => !!token.value)
 
-  function decodeToken(t) {
-    try {
-      const payload = t.split('.')[1]
-      return JSON.parse(atob(payload.replace(/-/g, '+').replace(/_/g, '/')))
-    } catch { return {} }
-  }
+  const companyId = computed(() => claims.value.company_id ?? null)
+  const companyName = computed(() => claims.value.company_name ?? null)
+  const companySettings = computed(() => claims.value.company_settings ?? null)
+  const isRootAdmin = computed(() => !!claims.value.is_root_admin)
 
-  // Доп. клеймы из JWT — companyId/companyName/isRootAdmin/roleLevel.
-  const tokenClaims = computed(() => token.value ? decodeToken(token.value) : {})
-  const companyId = computed(() => tokenClaims.value.company_id ?? null)
-  const companyName = computed(() => tokenClaims.value.company_name ?? null)
-  const companySettings = computed(() => tokenClaims.value.company_settings ?? null)
-  const isRootAdmin = computed(() => !!tokenClaims.value.is_root_admin)
+  // Применить ответ login/refresh/change-default: токен + клеймы сессии.
+  function applySession(data) {
+    token.value = data.access_token
+    claims.value = {
+      company_id: data.company_id ?? null,
+      company_name: data.company_name ?? null,
+      company_settings: data.company_settings ?? null,
+      role_level: data.role_level ?? 0,
+      is_root_admin: !!data.is_root_admin,
+    }
+    forceChange.value = !!data.force_change
+  }
 
   async function login(loginVal, password) {
     try {
       const data = await apiLogin({ login: loginVal, password })
-      token.value = data.access_token
-      const payload = decodeToken(data.access_token)
-      forceChange.value = !!payload.force_change
+      applySession(data)
       if (!forceChange.value) {
         await loadMe()
       }
@@ -73,8 +79,7 @@ export const useAuthStore = defineStore('auth', () => {
       new_password: password,
       confirm_password: confirmPassword,
     })
-    token.value = result.access_token
-    forceChange.value = false
+    applySession(result)
     await loadMe()
   }
 
@@ -82,23 +87,17 @@ export const useAuthStore = defineStore('auth', () => {
     disconnectSocket()
     user.value = null
     token.value = null
+    claims.value = {}
     forceChange.value = false
     companyDisabled.value = null
-  }
-
-  function setToken(t) {
-    token.value = t
-    const payload = decodeToken(t)
-    forceChange.value = !!payload.force_change
   }
 
   async function _restore() {
     if (token.value) { ready.value = true; return }
     try {
       const data = await refreshToken()
-      const payload = decodeToken(data.access_token)
-      if (!payload.force_change) {
-        setToken(data.access_token)
+      if (!data.force_change) {
+        applySession(data)
         await loadMe()
       }
     } catch {
@@ -116,7 +115,7 @@ export const useAuthStore = defineStore('auth', () => {
   return {
     user, token, forceChange, isAuth, ready,
     companyId, companyName, companySettings, isRootAdmin, companyDisabled,
-    ensureReady, login, logout, loadMe, clearAuth, setToken,
+    ensureReady, login, logout, loadMe, clearAuth, applySession,
     changeDefaultCredentials,
   }
 })

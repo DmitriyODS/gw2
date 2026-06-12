@@ -1,5 +1,5 @@
 from flask_socketio import SocketIO, join_room, disconnect
-from flask_jwt_extended import decode_token
+from app.utils.paseto import verify_access_token
 from app.utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -11,7 +11,7 @@ def register_events(socketio: SocketIO) -> None:
 
     @socketio.on("connect")
     def on_connect(auth):
-        """Верифицировать JWT из auth-payload (Socket.IO v4) и присоединить к комнатам."""
+        """Верифицировать PASETO-токен из auth-payload (Socket.IO v4) и присоединить к комнатам."""
         from flask import request as flask_request
         token = (auth or {}).get("token") or flask_request.args.get("token")
         if not token:
@@ -20,7 +20,7 @@ def register_events(socketio: SocketIO) -> None:
             return False
 
         try:
-            decoded = decode_token(token)
+            decoded = verify_access_token(token)
             user_id = decoded["sub"]
         except Exception as e:
             logger.warning("ws.connect_rejected: invalid token", extra={"extra": {"error": str(e)}})

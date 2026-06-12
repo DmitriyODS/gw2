@@ -1,6 +1,6 @@
 from datetime import datetime
 from typing import Optional
-from sqlalchemy import desc, asc, func, exists, and_
+from sqlalchemy import desc, asc, func, exists, and_, or_
 from sqlalchemy.orm import selectinload
 from app.extensions import db
 from app.models import Task, Unit, Favorite, UserTaskColor
@@ -148,14 +148,34 @@ def search_ids_by_name(company_id: int, q: str, limit: int = 30,
     return [int(r) for r in db.session.execute(stmt).scalars().all()]
 
 
-def get_stale(threshold: datetime, company_id: Optional[int] = None,
-              limit: int = 100) -> list[Task]:
-    """Активные (не в архиве) задачи, поступившие раньше threshold — те, что
-    «висят» дольше порога. Сначала самые старые, чтобы напоминание подсвечивало
-    залежавшиеся в первую очередь."""
+# Задачи, которые сотрудник «тянет на себе»: он ответственный ИЛИ хоть раз
+# по ним работал (есть его юнит). Совпадает с фильтром has_units="mine" в
+# списке задач — единая трактовка «моих задач» для утреннего брифинга.
+def _mine_predicate(user_id: int):
+    return or_(
+        Task.responsible_user_id == user_id,
+        exists().where(and_(Unit.task_id == Task.id, Unit.user_id == user_id)),
+    )
+
+
+def count_user_active(user_id: int, company_id: Optional[int] = None) -> int:
+    """Сколько активных (не в архиве) задач сейчас на сотруднике."""
+    q = db.select(func.count(Task.id)).where(
+        Task.is_archived.is_(False), _mine_predicate(user_id)
+    )
+    if company_id is not None:
+        q = q.where(Task.company_id == company_id)
+    return int(db.session.execute(q).scalar_one())
+
+
+def get_user_stale(user_id: int, threshold: datetime,
+                   company_id: Optional[int] = None, limit: int = 100) -> list[Task]:
+    """Активные задачи сотрудника, поступившие раньше threshold (засиделись).
+    Самые старые — первыми, для утреннего брифинга от Грувика."""
     q = (
         db.select(Task).options(*_TASK_LOAD_OPTIONS)
-        .where(Task.is_archived.is_(False), Task.received_at < threshold)
+        .where(Task.is_archived.is_(False), Task.received_at < threshold,
+               _mine_predicate(user_id))
         .order_by(asc(Task.received_at))
         .limit(limit)
     )

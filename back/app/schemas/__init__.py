@@ -3,11 +3,7 @@ from .company import (
     CompanyToggleActiveSchema, CompanySettingsSchema, CompanyDirectorRefSchema,
 )
 from .role import RoleSchema
-from .user import (
-    UserSchema, UserCreateSchema, UserUpdateSchema,
-    UserMeUpdateSchema, ChangeDefaultSchema, LoginSchema,
-    UserDirectorySchema,
-)
+from .user import UserDirectorySchema, RoleRefSchema
 from .task import (
     TaskSchema, TaskCreateSchema, TaskUpdateSchema, TaskColorSchema,
     TaskResponsibleSchema, TaskStageSchema,
@@ -28,9 +24,7 @@ __all__ = [
     "CompanySchema", "CompanyCreateSchema", "CompanyUpdateSchema",
     "CompanyToggleActiveSchema", "CompanySettingsSchema", "CompanyDirectorRefSchema",
     "RoleSchema",
-    "UserSchema", "UserCreateSchema", "UserUpdateSchema",
-    "UserMeUpdateSchema", "ChangeDefaultSchema", "LoginSchema",
-    "UserDirectorySchema",
+    "UserDirectorySchema", "RoleRefSchema",
     "TaskSchema", "TaskCreateSchema", "TaskUpdateSchema", "TaskColorSchema",
     "TaskResponsibleSchema", "TaskStageSchema",
     "UnitSchema", "UnitCreateSchema", "UnitUpdateSchema",

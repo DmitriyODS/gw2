@@ -6,8 +6,9 @@
 # Что делает:
 #   1. Сверяет deploy/.env с требуемыми переменными: недостающие
 #      секреты генерирует сам (существующие НЕ трогает), устаревшие
-#      (TURN_* от выпиленного coturn) вычищает. Перед любой правкой
-#      делает бэкап .env рядом.
+#      (TURN_* от coturn, JWT_SECRET_KEY от flask-jwt) вычищает.
+#      PASETO-ключи генерируются ПАРОЙ (приватный Ed25519 + публичный).
+#      Перед любой правкой делает бэкап .env рядом.
 #   2. Если включён ufw — открывает медиа-порты LiveKit (7881/tcp,
 #      7882/udp); 80/443 считаются уже открытыми.
 #   3. docker compose up -d --build --remove-orphans (сносит
@@ -15,7 +16,8 @@
 #   4. Перечитывает конфиг nginx (он bind-mounted: git обновляет
 #      файл, но без reload контейнер живёт со старым конфигом).
 #   5. Health-чеки: API через nginx, микросервис звонков (healthz +
-#      gRPC из app), LiveKit через nginx (/livekit), TCP-порт медиа 7881.
+#      gRPC из app), микросервис авторизации (healthz + логин через
+#      nginx), LiveKit через nginx (/livekit), TCP-порт медиа 7881.
 # ================================================================
 set -euo pipefail
 cd "$(cd "$(dirname "$0")/.." && pwd)"
@@ -72,18 +74,49 @@ ensure() {
 ensure DB_NAME "grovework"
 ensure DB_USER "grovework"
 ensure DB_PASSWORD "$(gen_hex)"
-ensure JWT_SECRET_KEY "$(gen_hex)"
 ensure SECRET_KEY "$(gen_hex)"
 ensure AI_KEY_ENCRYPTION_KEY "$(gen_fernet)"
 ensure YOUGILE_ENC_KEY "$(gen_fernet)"
 ensure LIVEKIT_API_KEY "gw2_$(openssl rand -hex 6)"
 ensure LIVEKIT_API_SECRET "$(gen_hex)"
 
-# Устаревшие переменные coturn (заменён LiveKit в v3.5.0).
+# PASETO-ключи (v3.6.0): пара Ed25519 для access-токенов генерируется
+# ВМЕСТЕ — публичный обязан соответствовать приватному, поэтому если хотя бы
+# одной половины нет, перегенерируем обе. Безопасно: access-токены живут
+# 15 минут, сессии восстановятся по refresh-токену (его ключ отдельный
+# и без нужды не трогается).
+ensure_paseto_pair() {
+  if grep -qE '^PASETO_PRIVATE_KEY=..*' "$ENV_FILE" && grep -qE '^PASETO_PUBLIC_KEY=..*' "$ENV_FILE"; then
+    return 0
+  fi
+  backup_once
+  local pem seed pub
+  pem="$(mktemp)"
+  openssl genpkey -algorithm ed25519 -out "$pem"
+  # PKCS8 DER: последние 32 байта приватного — seed, публичного — ключ.
+  seed=$(openssl pkey -in "$pem" -outform DER | tail -c 32 | od -An -v -tx1 | tr -d ' \n')
+  pub=$(openssl pkey -in "$pem" -pubout -outform DER | tail -c 32 | od -An -v -tx1 | tr -d ' \n')
+  rm -f "$pem"
+  # go-paseto ждёт приватный как seed||public (64 байта hex).
+  sed -i '/^PASETO_PRIVATE_KEY=/d;/^PASETO_PUBLIC_KEY=/d' "$ENV_FILE"
+  printf 'PASETO_PRIVATE_KEY=%s%s\n' "$seed" "$pub" >> "$ENV_FILE"
+  printf 'PASETO_PUBLIC_KEY=%s\n' "$pub" >> "$ENV_FILE"
+  ok "сгенерирована пара PASETO_PRIVATE_KEY/PASETO_PUBLIC_KEY"
+}
+ensure_paseto_pair
+ensure PASETO_REFRESH_KEY "$(gen_hex)"
+
+# Устаревшие переменные: coturn (заменён LiveKit в v3.5.0) и JWT-секрет
+# flask-jwt-extended (заменён PASETO-ключами в v3.6.0).
 if grep -qE '^TURN_' "$ENV_FILE"; then
   backup_once
   sed -i '/^TURN_/d' "$ENV_FILE"
   ok "удалены устаревшие TURN_* (coturn заменён LiveKit)"
+fi
+if grep -qE '^JWT_SECRET_KEY=' "$ENV_FILE"; then
+  backup_once
+  sed -i '/^JWT_SECRET_KEY=/d' "$ENV_FILE"
+  ok "удалён устаревший JWT_SECRET_KEY (JWT заменён PASETO)"
 fi
 
 # Не генерируемое автоматически — только предупреждаем.
@@ -159,6 +192,21 @@ if $COMPOSE exec -T app python -c "import socket; socket.create_connection(('cal
   ok "gRPC callsvc досягаем из app (calls:9090)"
 else
   warn "app не достучался до gRPC calls:9090 — ринг-фаза звонков не работает"
+fi
+
+# Микросервис авторизации: healthz изнутри контейнера + маршрутизация
+# /api/auth/* через nginx (login без тела должен вернуть 400 от authsvc,
+# а не 404/502 — значит, префикс уехал в нужный сервис).
+if $COMPOSE exec -T auth wget -qO- --timeout=3 http://127.0.0.1:8091/healthz >/dev/null 2>&1; then
+  ok "authsvc отвечает (healthz)"
+else
+  warn "authsvc не отвечает — вход в систему не работает: make logs s=auth"
+fi
+auth_code=$(curl -skL -o /dev/null -w '%{http_code}' --max-time 5 -X POST http://localhost/api/auth/login || true)
+if [ "$auth_code" = "400" ]; then
+  ok "маршрут /api/auth/ через nginx ведёт в authsvc"
+else
+  warn "маршрут /api/auth/ вернул $auth_code (ожидался 400) — проверьте nginx"
 fi
 
 lk_code=$(curl -skL -o /dev/null -w '%{http_code}' --max-time 5 http://localhost/livekit/ || true)

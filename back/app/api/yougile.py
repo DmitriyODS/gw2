@@ -395,7 +395,7 @@ def unlink_yougile_task(gw_task_id: int):
     return jsonify(payload), 200
 
 
-# ── webhook ingress (публичный, без JWT) ──────────────────────────────────
+# ── webhook ingress (публичный, без токена) ──────────────────────────────────
 
 @bp.post("/webhook/<int:company_id>/<string:secret>")
 def webhook_ingress(company_id: int, secret: str):

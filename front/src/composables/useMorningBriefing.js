@@ -1,36 +1,45 @@
 import { ref } from 'vue'
-import { getStaleTasks } from '@/api/tasks.js'
+import { getMorningBriefing } from '@/api/groove.js'
 import { storageGet, storageSet } from '@/utils/storage.js'
 
-const STORAGE_KEY = 'gw2_stale_reminder_shown_date'
+const STORAGE_KEY = 'gw2_morning_briefing_shown_date'
 
 // Module-level singleton: модалка одна на приложение, автопоказ управляется
 // из App.vue после входа. Показываем не чаще раза в календарный день.
 const isOpen = ref(false)
-const tasks = ref([])
+const briefing = ref(null)
 
 function todayKey() {
   const d = new Date()
   return `${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}`
 }
 
+// Время суток по локальным часам клиента — для приветствия Грувика.
+function partOfDay() {
+  const h = new Date().getHours()
+  if (h >= 5 && h < 12) return 'morning'
+  if (h >= 12 && h < 17) return 'day'
+  if (h >= 17 && h < 23) return 'evening'
+  return 'night'
+}
+
 function close() {
   isOpen.value = false
 }
 
-// Раз в день проверяет давние задачи и показывает напоминание, если они есть.
+// Раз в день запрашивает утренний брифинг и показывает модалку, если Грувику
+// есть что сказать (data.show). Иначе тихо помечает день показанным.
 async function check() {
   const shown = storageGet(STORAGE_KEY, null)
   if (shown === todayKey()) return
 
   try {
-    const data = await getStaleTasks()
-    const items = data?.items || []
+    const data = await getMorningBriefing(partOfDay())
     // Отмечаем сегодняшний показ независимо от результата — чтобы не дёргать
     // эндпоинт повторно при каждом возврате на вкладку в течение дня.
     storageSet(STORAGE_KEY, todayKey())
-    if (items.length) {
-      tasks.value = items
+    if (data?.show) {
+      briefing.value = data
       isOpen.value = true
     }
   } catch {
@@ -38,6 +47,6 @@ async function check() {
   }
 }
 
-export function useStaleReminder() {
-  return { isOpen, tasks, check, close }
+export function useMorningBriefing() {
+  return { isOpen, briefing, check, close }
 }

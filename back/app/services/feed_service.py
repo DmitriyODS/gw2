@@ -7,6 +7,8 @@
 """
 from __future__ import annotations
 
+from datetime import datetime, timedelta, timezone
+
 from flask import current_app
 from redis import Redis
 
@@ -339,6 +341,139 @@ def share_wrapped(company_id: int, user_id: int) -> None:
             r.setex(key, 24 * 3600, "1")
         except Exception:
             pass
+
+
+# ──────────────── утренний брифинг от Грувика ──────────────────────
+
+MORNING_STALE_DAYS = 7
+
+_GREETINGS = {
+    "morning": "Доброе утро",
+    "day": "Добрый день",
+    "evening": "Добрый вечер",
+    "night": "Привет",
+}
+
+
+def _plural(n: int, one: str, few: str, many: str) -> str:
+    n = abs(int(n))
+    if n % 10 == 1 and n % 100 != 11:
+        return one
+    if 2 <= n % 10 <= 4 and not 12 <= n % 100 <= 14:
+        return few
+    return many
+
+
+def _slim_task(t, now: datetime) -> dict:
+    received = t.received_at
+    if received.tzinfo is None:
+        received = received.replace(tzinfo=timezone.utc)
+    return {
+        "id": t.id,
+        "name": t.name,
+        "department": {"name": t.department.name} if t.department else None,
+        "days_pending": (now - received).days,
+    }
+
+
+def _morning_fallback(ctx: dict) -> str:
+    """Статичная реплика Грувика, когда AI у компании выключен/недоступен."""
+    open_n, stale_n = ctx["open_count"], ctx["stale_count"]
+    oldest = ctx["oldest"][0] if ctx["oldest"] else None
+    open_word = _plural(open_n, "задача", "задачи", "задач")
+    if ctx["mood"] == "sick":
+        return (f"Я что-то расклеился, пока мы отдыхали… На нас {open_n} {open_word}. "
+                "Закроем парочку — и мне сразу полегчает. 🤒")
+    if ctx["mood"] == "buried":
+        return (f"Кажется, я закопался в бумагах: у нас с тобой {open_n} {open_word}, "
+                f"и {stale_n} засиделись дольше недели. Разгребём вместе? 💪")
+    if ctx["mood"] == "reminder" and oldest:
+        d = oldest["days_pending"]
+        return (f"У нас с тобой {open_n} {open_word}. Вот эта засиделась "
+                f"({d} {_plural(d, 'день', 'дня', 'дней')}) — «{oldest['name'][:60]}». Глянем?")
+    if ctx["mood"] == "fresh":
+        return (f"{open_n} {open_word} в работе — и все свежие, ни одна не залежалась. "
+                "Красота, держим темп! ✨")
+    return f"У нас с тобой сегодня {open_n} {open_word}. За дело!"
+
+
+def get_morning_briefing(company_id: int | None, user_id: int,
+                         part: str = "morning") -> dict:
+    """Утренний брифинг от Грувика: персональная сводка задач + настроение
+    питомца + живая реплика (AI или статика). Показывается раз в сутки при
+    первом входе вместо скучного списка просроченных задач."""
+    from app.repositories import task_repo, pet_repo
+    from app.services import groove_ai_service
+    from app.services.pet_service import PERSONALITIES
+
+    if company_id is None:
+        return {"show": False}
+    part = part if part in _GREETINGS else "morning"
+
+    pet = pet_repo.get_or_create(user_id, company_id)
+    db.session.commit()
+    sick = pet.sick_since is not None
+    personality_title = PERSONALITIES.get(pet.personality or "", {}).get("title")
+
+    now = datetime.now(timezone.utc)
+    threshold = now - timedelta(days=MORNING_STALE_DAYS)
+    open_count = task_repo.count_user_active(user_id, company_id)
+
+    # Показываем только когда есть о чём сказать: есть задачи или питомец грустит.
+    if open_count == 0 and not sick:
+        return {"show": False}
+
+    stale = [_slim_task(t, now)
+             for t in task_repo.get_user_stale(user_id, threshold, company_id, limit=20)]
+    stale_count = len(stale)
+
+    if sick:
+        mood = "sick"
+    elif stale_count >= 3:
+        mood = "buried"
+    elif stale_count >= 1:
+        mood = "reminder"
+    else:
+        mood = "fresh"
+
+    user = user_repo.get_by_id(user_id)
+    fio = user.fio if user else None
+    first_name = (fio.split()[1] if fio and len(fio.split()) > 1 else fio) or "коллега"
+
+    ctx = {
+        "first_name": first_name,
+        "open_count": open_count,
+        "stale_count": stale_count,
+        "oldest": stale[:3],
+        "mood": mood,
+        "pet_name": pet.name,
+        "personality_title": personality_title,
+        "sick": sick,
+    }
+    message = groove_ai_service.get_morning_phrase(company_id, user_id, ctx)
+    ai = message is not None
+    if not message:
+        message = _morning_fallback(ctx)
+
+    return {
+        "show": True,
+        "part": part,
+        "greeting": _GREETINGS[part],
+        "first_name": first_name,
+        "open_count": open_count,
+        "stale_count": stale_count,
+        "stale": stale[:6],
+        "mood": mood,
+        "message": message,
+        "ai": ai,
+        "pet": {
+            "name": pet.name,
+            "species": pet.species,
+            "stage": pet.stage,
+            "sick": sick,
+            "hat": pet.hat,
+        },
+    }
 
 
 # ─────────────────────── live и заряды энергии ─────────────────────

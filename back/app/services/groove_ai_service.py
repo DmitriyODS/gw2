@@ -275,6 +275,81 @@ def get_wrapped_phrase(company_id: int, user_id: int, stats: dict) -> str | None
     return text
 
 
+# ──────────────── утренний брифинг от Грувика ──────────────────────
+
+_MORNING_KEY = "gw2:groove:morning:{uid}:{day}"
+
+_MORNING_MOOD_HINT = {
+    "sick": "Ты приболел, пока хозяин не работал, и немного тоскуешь — "
+            "мягко намекни, что закрытые задачи тебя вылечат.",
+    "buried": "Ты в шутку «закопался в бумагах» — задач накопилось много. "
+              "Бодро предложи разгрести завал вместе.",
+    "reminder": "Пара задач засиделись — по-доброму подтолкни к ним.",
+    "fresh": "Хвостов нет, всё свежее — порадуйся и поддержи темп.",
+}
+
+
+def get_morning_phrase(company_id: int, user_id: int, ctx: dict) -> str | None:
+    """Одна короткая утренняя реплика Грувика для брифинга. Кэш — сутки.
+
+    ctx: {part, first_name, open_count, stale_count, oldest:[{name,days}],
+          mood, pet_name, personality_title, sick}.
+    Возвращает None, если AI у компании выключен или упал — вызывающий код
+    подставит статичный фолбэк.
+    """
+    day = datetime.now(MSK).date().isoformat()
+    key = _MORNING_KEY.format(uid=user_id, day=day)
+    try:
+        cached = _redis().get(key)
+        if cached:
+            return cached
+    except Exception:
+        pass
+    from app.services.ai_client import get_ai_client
+    client = get_ai_client(company_id)
+    if client is None:
+        return None
+
+    name = ctx.get("first_name") or "коллега"
+    parts = [
+        f"Ты — питомец {ctx.get('pet_name', 'Грувик')} сотрудника {name}. "
+        "Поприветствие уже показано отдельно — не здоровайся повторно, сразу к делу.",
+        "Скажи одну живую утреннюю реплику от первого лица про наши с хозяином "
+        "задачи: тепло, по-дружески, в духе «у нас с тобой». 1-2 коротких "
+        "предложения, до 160 символов. Без упрёков и канцелярита, можно лёгкий "
+        "юмор и изредка эмодзи.",
+        _MORNING_MOOD_HINT.get(ctx.get("mood"), ""),
+        f"Сейчас на хозяине {ctx.get('open_count', 0)} активных задач, "
+        f"из них засиделись дольше недели: {ctx.get('stale_count', 0)}.",
+    ]
+    oldest = ctx.get("oldest") or []
+    if oldest:
+        top = oldest[0]
+        parts.append(f"Самая давняя — «{(top.get('name') or '')[:80]}», "
+                     f"висит {top.get('days_pending', 0)} дн.")
+    if ctx.get("personality_title"):
+        parts.append(f"Твой характер: {ctx['personality_title']} — отыграй его.")
+    try:
+        text = client.chat(
+            messages=[
+                {"role": "system", "content": _SYSTEM_PROMPT},
+                {"role": "user", "content": " ".join(p for p in parts if p)},
+            ],
+            max_tokens=120, temperature=0.92, timeout=15.0,
+        ).strip().strip('"«»').strip()
+    except Exception as e:
+        logger.warning("groove.ai.morning_failed",
+                       extra={"extra": {"user_id": user_id, "err": str(e)}})
+        return None
+    if not text:
+        return None
+    try:
+        _redis().setex(key, 24 * 3600, text)
+    except Exception:
+        pass
+    return text
+
+
 # ───────────────── чат с Грувиком в мессенджере ────────────────────
 
 # Если ИИ выключен у компании — Грувик отвечает дежурными фразами.

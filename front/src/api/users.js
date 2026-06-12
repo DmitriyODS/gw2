@@ -1,5 +1,5 @@
-// Сгенерировано из /apispec.json — не редактировать вручную
-// Перегенерировать: npm run gen:api
+// Контракт Go-микросервиса авторизации (back-go/auth) — ведётся вручную:
+// authsvc не публикует Swagger, npm run gen:api этот файл не трогает.
 import { apiRequest } from './client.js'
 
 export const getUsers = () => apiRequest('/users')

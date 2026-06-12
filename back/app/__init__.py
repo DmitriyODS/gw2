@@ -3,7 +3,7 @@ from flask import Flask, jsonify
 from flasgger import Swagger
 
 from app.config import config
-from app.extensions import db, jwt, socketio, limiter, migrate
+from app.extensions import db, socketio, limiter, migrate
 
 
 def create_app(config_name: str = None) -> Flask:
@@ -68,7 +68,6 @@ def _start_presence_sweeper(app: Flask) -> None:
 def _init_extensions(app: Flask) -> None:
     db.init_app(app)
     migrate.init_app(app, db)
-    jwt.init_app(app)
     limiter.init_app(app)
     # message_queue нужен ТОЛЬКО при нескольких процессах socketio (горизонтальное
     # масштабирование через Redis pubsub). У нас один процесс и в dev, и в prod —
@@ -184,7 +183,7 @@ def _init_swagger(app: Flask) -> None:
         "info": {
             "title": "Groove Work API",
             "description": "REST API платформы учёта задач, времени и общения Groove Work v3.0",
-            "version": "3.5.0",
+            "version": "3.6.0",
         },
         "securityDefinitions": {
             "BearerAuth": {

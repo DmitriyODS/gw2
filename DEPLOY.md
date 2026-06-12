@@ -29,7 +29,8 @@ cp deploy/.env.example deploy/.env
 | Переменная | Что поставить |
 |---|---|
 | `DB_PASSWORD` | Сильный пароль (минимум 20 символов) |
-| `JWT_SECRET_KEY` | Случайная строка ≥ 32 символа |
+| `PASETO_PRIVATE_KEY` / `PASETO_PUBLIC_KEY` | Пара Ed25519 (hex) для access-токенов PASETO — генерируются ВМЕСТЕ, deploy-скрипт сделает сам |
+| `PASETO_REFRESH_KEY` | Случайные 32 байта hex — ключ refresh-токенов (v4.local) |
 | `SECRET_KEY` | Случайная строка ≥ 32 символа |
 | `AI_KEY_ENCRYPTION_KEY` | Fernet-ключ для шифрования AI-ключей компаний |
 | `YOUGILE_ENC_KEY` | Fernet-ключ для шифрования персональных YouGile-ключей пользователей |
@@ -39,8 +40,10 @@ cp deploy/.env.example deploy/.env
 
 Сгенерировать случайные секреты:
 ```bash
-# JWT_SECRET_KEY / SECRET_KEY:
+# SECRET_KEY / PASETO_REFRESH_KEY:
 python3 -c "import secrets; print(secrets.token_hex(32))"
+# PASETO_PRIVATE_KEY/PASETO_PUBLIC_KEY — пара Ed25519, рецепт в deploy/.env.example
+# (или просто доверьте deploy_server.sh — он генерирует пару сам)
 # AI_KEY_ENCRYPTION_KEY / YOUGILE_ENC_KEY:
 python3 -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
 ```

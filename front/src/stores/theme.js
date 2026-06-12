@@ -162,15 +162,34 @@ export const useThemeStore = defineStore('theme', () => {
   const resolvedPreset = isKnownPreset ? storedPreset : 'classic'
 
   const currentPreset = ref(resolvedPreset)
-  const dark = ref(storageGet('gw_dark', 'false') === 'true')
 
-  /* If the old 'dark' preset was active, enable dark mode automatically.
-     localStorage.setItem может бросить в приватном режиме старого iOS Safari —
-     это код инициализации store, исключение здесь рушит монтирование приложения
-     (белый экран). Оборачиваем в try/catch. */
-  if (storedPreset === 'dark' && !dark.value) {
-    dark.value = true
-    storageSet('gw_dark', 'true')
+  /* Режим оформления: light | dark | system. Миграция со старого булевого
+     gw_dark; legacy-пресет 'dark' тоже когда-то означал тёмный режим. */
+  const storedMode = storageGet('gw_theme_mode', '')
+  const legacyDark = storageGet('gw_dark', 'false') === 'true' || storedPreset === 'dark'
+  const mode = ref(['light', 'dark', 'system'].includes(storedMode)
+    ? storedMode
+    : (legacyDark ? 'dark' : 'light'))
+
+  /* matchMedia может отсутствовать в очень старых браузерах — тогда
+     «системная» ведёт себя как светлая. */
+  const systemDarkMq = typeof window.matchMedia === 'function'
+    ? window.matchMedia('(prefers-color-scheme: dark)')
+    : null
+
+  /* Эффективная темнота (учитывает системную настройку) — её читают
+     компоненты, data-dark на <html> ставится из неё же. */
+  const dark = ref(false)
+
+  function applyDark() {
+    dark.value = mode.value === 'system' ? !!systemDarkMq?.matches : mode.value === 'dark'
+    document.documentElement.setAttribute('data-dark', dark.value)
+  }
+
+  function setMode(m) {
+    mode.value = m
+    storageSet('gw_theme_mode', m)
+    applyDark()
   }
 
   const customThemes = ref(storedCustomThemes)
@@ -200,12 +219,6 @@ export const useThemeStore = defineStore('theme', () => {
     currentPreset.value = name
     storageSet('gw_theme', name)
     applyVars(getVars(name))
-  }
-
-  function toggleDark() {
-    dark.value = !dark.value
-    storageSet('gw_dark', dark.value)
-    document.documentElement.setAttribute('data-dark', dark.value)
   }
 
   function saveCustomTheme(name, vars) {
@@ -246,14 +259,18 @@ export const useThemeStore = defineStore('theme', () => {
 
   function init() {
     applyVars(getVars(currentPreset.value))
-    document.documentElement.setAttribute('data-dark', dark.value)
+    applyDark()
+    // Живое переключение вслед за системой (addListener — старый Safari).
+    const onSystemChange = () => { if (mode.value === 'system') applyDark() }
+    if (systemDarkMq?.addEventListener) systemDarkMq.addEventListener('change', onSystemChange)
+    else systemDarkMq?.addListener?.(onSystemChange)
   }
 
   return {
-    currentPreset, dark, customThemes,
+    currentPreset, mode, dark, customThemes,
     presetNames: Object.keys(PRESETS),
     presetLabels: PRESET_LABELS,
-    applyTheme, applyVars, toggleDark, saveCustomTheme, deleteCustomTheme,
+    applyTheme, applyVars, setMode, saveCustomTheme, deleteCustomTheme,
     exportTheme, importTheme, init, getVars, randomTheme,
   }
 })

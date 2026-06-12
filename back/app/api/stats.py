@@ -1,6 +1,6 @@
 from datetime import datetime, date, timezone
 from flask import Blueprint, request, jsonify, send_file
-from flask_jwt_extended import get_jwt_identity
+from app.utils.paseto import request_user_id
 
 from app.services import stats_service
 from app.repositories import user_repo
@@ -169,7 +169,7 @@ def get_user_tasks():
     except ValueError as e:
         return jsonify({"error": "VALIDATION_ERROR", "message": str(e)}), 400
 
-    current_user_id = int(get_jwt_identity())
+    current_user_id = int(request_user_id())
 
     user_id_str = request.args.get("user_id")
     if user_id_str:
@@ -249,6 +249,6 @@ def get_profile():
     except ValueError as e:
         return jsonify({"error": "VALIDATION_ERROR", "message": str(e)}), 400
 
-    user_id = int(get_jwt_identity())
+    user_id = int(request_user_id())
     data = stats_service.get_profile(user_id, period_start, period_end)
     return jsonify(data), 200

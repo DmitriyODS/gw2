@@ -54,7 +54,9 @@ services:
       PORT: "5000"
       DATABASE_URL: postgresql://${DB_USER}:${DB_PASSWORD}@db:5432/${DB_NAME}
       REDIS_URL: redis://redis:6379/0
-      JWT_SECRET_KEY: ${JWT_SECRET_KEY}
+      # Публичный ключ PASETO: access-токены выпускает authsvc, Flask только
+      # проверяет подпись.
+      PASETO_PUBLIC_KEY: ${PASETO_PUBLIC_KEY}
       SECRET_KEY: ${SECRET_KEY}
       UPLOAD_FOLDER: /app/uploads
       # Микросервис звонков (Go): ринг-фаза ходит из сокет-хендлеров по gRPC.
@@ -94,7 +96,7 @@ services:
     environment:
       DATABASE_URL: postgresql://${DB_USER}:${DB_PASSWORD}@db:5432/${DB_NAME}
       REDIS_URL: redis://redis:6379/0
-      JWT_SECRET_KEY: ${JWT_SECRET_KEY}
+      PASETO_PUBLIC_KEY: ${PASETO_PUBLIC_KEY}
       LIVEKIT_API_KEY: ${LIVEKIT_API_KEY:-devkey}
       LIVEKIT_API_SECRET: ${LIVEKIT_API_SECRET:-dev_livekit_secret_min_32_chars_ok}
       LIVEKIT_URL: http://livekit:7880
@@ -113,6 +115,40 @@ services:
       retries: 5
       start_period: 10s
 
+  # Микросервис авторизации (Go, back-go/auth): /api/auth/* и /api/users/*
+  # (nginx маршрутизирует сюда мимо Flask). Выпускает PASETO-токены: приватный
+  # ключ только здесь, Flask и calls проверяют по PASETO_PUBLIC_KEY. Пишет
+  # аватарки в общий uploads-volume (отдаёт их nginx), брутфорс-щит — в Redis.
+  auth:
+    build: ../back-go/auth
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      # Схему users/roles/companies ведёт Alembic на стороне app
+      # (entrypoint.sh → flask db upgrade); healthy app = миграции применены.
+      app:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql://${DB_USER}:${DB_PASSWORD}@db:5432/${DB_NAME}
+      REDIS_URL: redis://redis:6379/0
+      PASETO_PRIVATE_KEY: ${PASETO_PRIVATE_KEY}
+      PASETO_REFRESH_KEY: ${PASETO_REFRESH_KEY}
+      UPLOAD_FOLDER: /app/uploads
+      HTTP_ADDR: ":8091"
+    volumes:
+      - uploads:/app/uploads
+    expose:
+      - "8091"
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8091/healthz"]
+      interval: 15s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
+
   # Конфиг nginx и хост-порты задают оверлеи: dev — nginx.conf и :8080,
   # prod — nginx.prod.conf, :80/:443 и certbot-volumes.
   nginx:
@@ -120,13 +156,15 @@ services:
       context: ../front
       dockerfile: Dockerfile
     restart: unless-stopped
-    # service_healthy, а не started: конфиг nginx резолвит upstream'ы app:5000
-    # и calls:8090 на старте — без живых контейнеров он падает целиком
+    # service_healthy, а не started: конфиг nginx резолвит upstream'ы app:5000,
+    # calls:8090 и auth:8091 на старте — без живых контейнеров он падает целиком
     # («host not found in upstream»), включая отдачу SPA.
     depends_on:
       app:
         condition: service_healthy
       calls:
+        condition: service_healthy
+      auth:
         condition: service_healthy
     volumes:
       - uploads:/app/uploads:ro
