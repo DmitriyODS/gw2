@@ -58,7 +58,7 @@
     </div>
 
     <div class="cpm-stats">
-      <span class="cpm-chip" title="Накоплено грувов">🫘 {{ pet?.beans ?? 0 }}</span>
+      <span class="cpm-chip" title="Накоплено грувов"><GrooveCoin /> {{ pet?.beans ?? 0 }}</span>
       <span class="cpm-chip" title="Стрик кормлений">
         <span class="material-symbols-outlined">local_fire_department</span>
         {{ pet?.feed_streak ?? 0 }} дн.
@@ -95,6 +95,7 @@
 <script setup>
 import { computed, ref } from 'vue'
 import AppDialog from '@/components/common/AppDialog.vue'
+import GrooveCoin from '@/components/groove/GrooveCoin.vue'
 import { useGrooveStore } from '@/stores/groove.js'
 import { useNotificationsStore } from '@/stores/notifications.js'
 import { petEmoji, PET_STAGES, PET_SPECIES, PERSONALITIES, SHOP_ITEMS } from '@/utils/groove.js'

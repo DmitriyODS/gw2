@@ -35,6 +35,7 @@ help:
 	@printf "\n\033[1mДеплой (сервер):\033[0m\n"
 	@printf "  make push [only=\"gateway front\"]  Собрать (linux/amd64) и запушить образы в Docker Hub\n"
 	@printf "  make deploy       make push → git push → на сервере: compose pull + up --no-build\n"
+	@printf "  make deploy-only  То же без сборки/пуша образов (push уже сделан)\n"
 	@printf "  make logs [s=calls]     Логи контейнера (по умолчанию gateway)\n"
 	@printf "  make status       docker compose ps на сервере\n"
 	@printf "  make restart [s=calls]  Перезапустить контейнер без пересборки\n"
@@ -187,7 +188,7 @@ dev-stack-stop:
 	@printf "\033[32m✓ Полный стек остановлен\033[0m\n"
 
 # ── Деплой ───────────────────────────────────────────────────────
-.PHONY: push deploy logs status restart shell
+.PHONY: push deploy deploy-only logs status restart shell
 
 # Прод-стек = база + оверлей (см. шапку deploy/docker-compose.prod.yml).
 COMPOSE_PROD := docker compose -f docker-compose.yml -f docker-compose.prod.yml
@@ -201,7 +202,11 @@ s ?= gateway
 push:
 	bash scripts/build_push.sh $(only)
 
-deploy: push
+deploy: push deploy-only
+
+# Деплой БЕЗ сборки/пуша образов: когда make push уже сделан и осталось
+# только довезти код и перезапустить стек на сервере.
+deploy-only:
 	@printf "\033[1m▶ Пушу в GitHub...\033[0m\n"
 	git push
 	@printf "\033[1m▶ Деплою на $(SERVER_HOST)...\033[0m\n"

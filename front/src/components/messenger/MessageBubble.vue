@@ -30,7 +30,15 @@
         <span class="material-symbols-outlined">forward</span>
         Переслано от {{ message.forwarded_from.fio }}
       </div>
-      <div v-if="message.reply_to" class="msg-quote">
+      <div
+        v-if="message.reply_to"
+        class="msg-quote"
+        role="button"
+        tabindex="0"
+        title="Перейти к сообщению"
+        @click.stop="$emit('quote-click', message.reply_to.id)"
+        @keydown.enter.stop="$emit('quote-click', message.reply_to.id)"
+      >
         <span class="msg-quote-author">{{ message.reply_to.sender_fio || 'Сообщение' }}</span>
         <span class="msg-quote-text">{{ quotePreview(message.reply_to) }}</span>
       </div>
@@ -122,7 +130,7 @@ const props = defineProps({
   showPin: { type: Boolean, default: true },
 })
 
-const emit = defineEmits(['delete', 'reply', 'forward', 'join-call', 'pin', 'open-task', 'context-menu'])
+const emit = defineEmits(['delete', 'reply', 'forward', 'join-call', 'pin', 'open-task', 'context-menu', 'quote-click'])
 
 const isPinned = computed(() => !!props.message.pinned_at)
 // Сообщение от техподдержки: новое серверное поле is_from_support либо старый
@@ -396,7 +404,7 @@ const joinLabel = computed(() => props.isMine ? 'Вернуться' : 'Прис
 
 .msg-forwarded .material-symbols-outlined { font-size: 14px; }
 
-/* Цитата (ответ на сообщение) */
+/* Цитата (ответ на сообщение) — кликабельна: переход к оригиналу. */
 .msg-quote {
   display: flex;
   flex-direction: column;
@@ -406,11 +414,32 @@ const joinLabel = computed(() => props.isMine ? 'Вернуться' : 'Прис
   border-left: 3px solid var(--color-primary);
   background: color-mix(in oklch, var(--color-primary) 10%, transparent);
   border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.msg-quote:hover {
+  background: color-mix(in oklch, var(--color-primary) 18%, transparent);
 }
 
 .msg-row.outgoing .msg-quote {
   border-left-color: var(--color-on-primary-container);
   background: color-mix(in oklch, var(--color-on-primary-container) 10%, transparent);
+}
+
+.msg-row.outgoing .msg-quote:hover {
+  background: color-mix(in oklch, var(--color-on-primary-container) 18%, transparent);
+}
+
+/* Подсветка сообщения после перехода к нему (класс вешает useJumpToMessage). */
+.msg-row.msg-flash {
+  border-radius: var(--radius-md);
+  animation: msgRowFlash 1.5s ease-out;
+}
+
+@keyframes msgRowFlash {
+  0%, 35% { background-color: color-mix(in oklch, var(--color-primary) 14%, transparent); }
+  100%    { background-color: transparent; }
 }
 
 .msg-quote-author {

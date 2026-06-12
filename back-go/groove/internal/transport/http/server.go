@@ -79,6 +79,10 @@ func NewServer(eps endpoint.Endpoints, users domain.UserReader,
 	scoped.Post("/wrapped/share", h.shareWrapped)
 	scoped.Get("/morning", h.morning)
 	scoped.Get("/tv", h.grooveTV)
+	scoped.Get("/location", h.getLocation)
+	scoped.Put("/location", h.setLocation)
+	scoped.Delete("/location", h.deleteLocation)
+	scoped.Get("/geo", h.geoSearch)
 
 	return &Server{app: app}
 }

@@ -9,7 +9,7 @@
         <span v-if="pet.sick" class="pet-sick-badge" title="Грувик болеет">🤒</span>
       </div>
       <span v-if="xpGain" :key="xpGainTick" class="pet-xp-float">+{{ xpGain }} XP</span>
-      <span v-if="beansGain" :key="'b' + beansGainTick" class="pet-beans-float">+{{ beansGain }} 🫘</span>
+      <span v-if="beansGain" :key="'b' + beansGainTick" class="pet-beans-float">+{{ beansGain }} <GrooveCoin /></span>
 
       <transition name="phrase">
         <div v-if="phrase" class="pet-phrase">{{ phrase }}</div>
@@ -65,7 +65,7 @@
           {{ quest.claimed ? 'check_circle' : (quest.done ? 'rocket_launch' : 'flag') }}
         </span>
         <span class="pet-quest-title">{{ quest.title }}</span>
-        <span class="pet-quest-reward">+{{ quest.reward }} 🫘</span>
+        <span class="pet-quest-reward">+{{ quest.reward }} <GrooveCoin /></span>
       </div>
       <div class="pet-quest-bar">
         <div class="pet-quest-fill" :style="{ width: questPercent + '%' }"></div>
@@ -104,7 +104,7 @@
 
     <div class="pet-stats">
       <span class="pet-chip beans" title="Грувы — внутренняя валюта за работу">
-        <span class="pet-chip-emoji">🫘</span> {{ pet.beans }}
+        <GrooveCoin class="pet-chip-emoji" /> {{ pet.beans }}
       </span>
       <span class="pet-chip streak" title="Стрик кормления">
         <span class="material-symbols-outlined">local_fire_department</span>
@@ -118,7 +118,27 @@
         <span class="material-symbols-outlined">restaurant</span>
         {{ pet.feeds_left }}/{{ feedsMax }}
       </span>
+      <button
+        class="pet-chip weather"
+        type="button"
+        :title="groove.location ? 'Погода за окном — нажми, чтобы изменить локацию' : 'Подскажи Грувику, где ты — он будет следить за погодой'"
+        @click="locationOpen = true"
+      >
+        <template v-if="groove.location && groove.weather">
+          {{ groove.weather.emoji }} {{ formatTemp(groove.weather.temp_c) }}
+        </template>
+        <template v-else-if="groove.location">
+          <span class="material-symbols-outlined">location_on</span>
+          {{ groove.location.city || 'Локация' }}
+        </template>
+        <template v-else>
+          <span class="material-symbols-outlined">add_location_alt</span>
+          Где ты?
+        </template>
+      </button>
     </div>
+
+    <LocationDialog v-model="locationOpen" />
 
     <div v-if="weekDays.length" class="pet-week" title="Кормления за последние 7 дней">
       <div
@@ -167,8 +187,10 @@
 </template>
 
 <script setup>
-import { computed, nextTick, ref, watch } from 'vue'
+import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
+import GrooveCoin from '@/components/groove/GrooveCoin.vue'
+import LocationDialog from '@/components/groove/LocationDialog.vue'
 import { useGrooveStore } from '@/stores/groove.js'
 import { useMessengerStore } from '@/stores/messenger.js'
 import { useNotificationsStore } from '@/stores/notifications.js'
@@ -182,6 +204,18 @@ const router = useRouter()
 
 const pet = computed(() => groove.pet)
 const maxStage = PET_STAGES.length - 1
+
+// Локация для погодных реплик Грувика.
+const locationOpen = ref(false)
+
+onMounted(() => {
+  if (!groove.locationLoaded) groove.fetchLocation().catch(() => {})
+})
+
+function formatTemp(t) {
+  const n = Math.round(t)
+  return (n > 0 ? `+${n}` : `${n}`) + '°C'
+}
 
 const phrase = ref('')
 const justFed = ref(false)
@@ -219,7 +253,7 @@ async function claim() {
   claiming.value = true
   try {
     await groove.claimQuest()
-    notify.success(`+${quest.value?.reward || 20} 🫘 за квест от Грувика`)
+    notify.success(`+${quest.value?.reward || 20} грувов за квест от Грувика`)
   } catch (e) {
     notify.warn(e?.message || 'Не удалось забрать награду')
   } finally {
@@ -625,6 +659,17 @@ async function toggleEquip(item) {
 .pet-chip .material-symbols-outlined { font-size: 16px; }
 .pet-chip.beans { background: color-mix(in oklch, var(--color-success) 18%, transparent); }
 .pet-chip.streak { background: color-mix(in oklch, var(--color-warning) 22%, transparent); }
+.pet-chip.weather {
+  border: none;
+  background: color-mix(in oklch, var(--color-tertiary) 14%, transparent);
+  color: inherit;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.pet-chip.weather:hover { background: color-mix(in oklch, var(--color-tertiary) 24%, transparent); }
 .pet-chip-emoji { font-size: 14px; }
 
 /* ── Календарь кормлений за неделю ─────────────────────────── */

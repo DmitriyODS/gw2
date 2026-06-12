@@ -9,7 +9,7 @@
     @update:model-value="$emit('update:modelValue', $event)"
   >
     <div class="shop-balance">
-      <span class="shop-balance-chip">🫘 {{ pet?.beans ?? 0 }} грувов</span>
+      <span class="shop-balance-chip"><GrooveCoin /> {{ pet?.beans ?? 0 }} грувов</span>
       <span v-if="groove.seasonalItem" class="shop-season-chip">
         {{ SHOP_ITEMS[groove.seasonalItem]?.emoji }} Сезон: {{ groove.seasonTitle }}
       </span>
@@ -46,7 +46,7 @@
           type="button"
           :disabled="(pet?.beans ?? 0) < item.price || buying"
           @click="buy(item)"
-        >🫘 {{ item.price }}</button>
+        ><GrooveCoin /> {{ item.price }}</button>
         <span v-else class="shop-owned-tag">
           <span class="material-symbols-outlined">check</span> куплено
         </span>
@@ -88,7 +88,7 @@
           type="button"
           :disabled="(pet?.beans ?? 0) < sp.price || switching"
           @click="buySpecies(sp)"
-        >🫘 {{ sp.price }}</button>
+        ><GrooveCoin /> {{ sp.price }}</button>
         <span v-else class="shop-owned-tag">
           <span class="material-symbols-outlined">check</span> надет
         </span>
@@ -100,6 +100,7 @@
 <script setup>
 import { computed, onMounted, ref } from 'vue'
 import AppDialog from '@/components/common/AppDialog.vue'
+import GrooveCoin from '@/components/groove/GrooveCoin.vue'
 import { useGrooveStore } from '@/stores/groove.js'
 import { useNotificationsStore } from '@/stores/notifications.js'
 import { PET_SPECIES, SHOP_ITEMS } from '@/utils/groove.js'

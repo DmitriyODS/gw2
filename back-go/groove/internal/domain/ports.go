@@ -88,6 +88,25 @@ type WorkReader interface {
 // читаются/пишутся ТОЛЬКО через gRPC msgsvc).
 type ConversationReader interface {
 	GetConversation(ctx context.Context, id int64) (*PetConversation, error)
+	// GetPetConversationByOwner: nil — у пользователя ещё нет pet-чата.
+	GetPetConversationByOwner(ctx context.Context, ownerID int64) (*PetConversation, error)
+}
+
+// LocationRepo — локации пользователей (таблица user_locations, домен groove).
+type LocationRepo interface {
+	GetLocation(ctx context.Context, userID int64) (*UserLocation, error)
+	SaveLocation(ctx context.Context, loc *UserLocation) error
+	DeleteLocation(ctx context.Context, userID int64) error
+	// ListLocations — локации видимых пользователей активных компаний
+	// (обход погодного цикла).
+	ListLocations(ctx context.Context) ([]*UserLocation, error)
+}
+
+// WeatherProvider — текущая погода и геокодинг (Open-Meteo). Fail-open:
+// провайдер недоступен — Грувик просто молчит о погоде.
+type WeatherProvider interface {
+	Current(ctx context.Context, lat, lon float64) (*Weather, error)
+	SearchCities(ctx context.Context, query string, count int) ([]GeoPlace, error)
 }
 
 // Daily — дневные счётчики и кэши в Redis. ВСЁ fail-open: Redis лёг —

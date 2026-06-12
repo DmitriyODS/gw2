@@ -257,6 +257,12 @@
   --radius-lg:   16px;
   --radius-xl:   24px;
   --radius-full: 999px;
+
+  /* Монетка грувов (GrooveCoin) — фиксированное золото, не зависит от темы */
+  --groove-coin-rim:   oklch(0.72 0.135 80);
+  --groove-coin-face:  oklch(0.86 0.140 88);
+  --groove-coin-mark:  oklch(0.46 0.100 70);
+  --groove-coin-shine: oklch(0.96 0.050 95);
 }
 
 [data-dark="true"] {
@@ -266,6 +272,12 @@
   --color-tertiary-hover:  color-mix(in oklch, var(--color-tertiary)  85%, white);
   --color-error-hover:     color-mix(in oklch, var(--color-error)     85%, white);
   --color-success-hover:   color-mix(in oklch, var(--color-success)   85%, white);
+
+  /* Золото монетки чуть приглушаем, чтобы не «горело» на тёмных поверхностях */
+  --groove-coin-rim:   oklch(0.62 0.120 78);
+  --groove-coin-face:  oklch(0.78 0.125 86);
+  --groove-coin-mark:  oklch(0.36 0.085 70);
+  --groove-coin-shine: oklch(0.90 0.050 95);
 }
 
 
@@ -415,6 +427,11 @@
 
     --color-outline:                #79747e;
     --color-outline-dim:            #cac4d0;
+
+    --groove-coin-rim:              #d9a514;
+    --groove-coin-face:             #f3c83b;
+    --groove-coin-mark:             #7a5410;
+    --groove-coin-shine:            #fdeeb5;
 
     --color-scrim:                  rgba(0, 0, 0, 0.32);
     --shadow-color:                 rgba(60, 0, 70, 0.12);

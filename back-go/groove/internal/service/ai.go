@@ -347,6 +347,9 @@ func (s *Service) morningPhrase(ctx context.Context, companyID, userID int64,
 	if bctx.PersonalityTitle != "" {
 		parts = append(parts, "Твой характер: "+bctx.PersonalityTitle+" — отыграй его.")
 	}
+	if wl := s.weatherPromptLine(ctx, userID); wl != "" {
+		parts = append(parts, wl)
+	}
 	nonEmpty := parts[:0]
 	for _, p := range parts {
 		if p != "" {
@@ -424,6 +427,9 @@ func (s *Service) petSystemPrompt(ctx context.Context, pet *domain.Pet,
 			strconvInt(workCtx["today_units"])+" юнитов), за неделю — "+
 			strconvInt(workCtx["week_minutes"])+" мин. Грувов в копилке: "+
 			strconvInt(pet.Beans)+". Используй эти цифры уместно, не в каждой реплике.")
+	}
+	if wl := s.weatherPromptLine(ctx, pet.UserID); wl != "" {
+		lines = append(lines, wl)
 	}
 	return strings.Join(lines, " ")
 }

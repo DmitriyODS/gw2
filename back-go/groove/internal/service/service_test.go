@@ -39,7 +39,7 @@ func TestPickQuestTemplateMatchesPython(t *testing.T) {
 }
 
 func TestWorkingDaysBetween(t *testing.T) {
-	weekend := []int{5, 6} // Сб+Вс
+	weekend := []int{5, 6}                              // Сб+Вс
 	mon := time.Date(2026, 6, 8, 0, 0, 0, 0, time.UTC)  // понедельник
 	fri := time.Date(2026, 6, 12, 0, 0, 0, 0, time.UTC) // пятница
 	nextMon := time.Date(2026, 6, 15, 0, 0, 0, 0, time.UTC)
@@ -194,7 +194,7 @@ type fakeAI struct{ domain.AIClient }
 func (fakeAI) Enabled(context.Context, int64) bool { return false }
 
 func newTestService(pets *fakePets, daily *fakeDaily, pub *fakePub, feed *fakeFeed) *Service {
-	return New(feed, pets, nil, nil, nil, nil, daily, pub, fakeAI{}, nil,
+	return New(feed, pets, nil, nil, nil, nil, nil, daily, pub, fakeAI{}, nil, nil,
 		slog.New(slog.DiscardHandler))
 }
 

@@ -380,3 +380,63 @@ func (h *handlers) grooveTV(c *fiber.Ctx) error {
 	}
 	return c.JSON(resp)
 }
+
+// ──────────────────── локация и погода Грувика ─────────────────────
+
+func (h *handlers) getLocation(c *fiber.Ctx) error {
+	resp, err := h.eps.GetLocation(c.Context(), scope(c))
+	if err != nil {
+		return h.respondError(c, err)
+	}
+	return c.JSON(resp)
+}
+
+func (h *handlers) setLocation(c *fiber.Ctx) error {
+	var body struct {
+		Latitude  *float64 `json:"latitude"`
+		Longitude *float64 `json:"longitude"`
+		City      *string  `json:"city"`
+	}
+	parseBody(c, &body)
+	if body.Latitude == nil || *body.Latitude < -90 || *body.Latitude > 90 {
+		return validationError(c, "latitude", "Широта должна быть в диапазоне от -90 до 90")
+	}
+	if body.Longitude == nil || *body.Longitude < -180 || *body.Longitude > 180 {
+		return validationError(c, "longitude", "Долгота должна быть в диапазоне от -180 до 180")
+	}
+	if body.City != nil && runeLen(*body.City) > 120 {
+		return validationError(c, "city", "Длина не должна превышать 120 символов")
+	}
+	resp, err := h.eps.SetLocation(c.Context(), endpoint.LocationRequest{
+		Scope: scope(c), Lat: *body.Latitude, Lon: *body.Longitude, City: body.City,
+	})
+	if err != nil {
+		return h.respondError(c, err)
+	}
+	return c.JSON(resp)
+}
+
+func (h *handlers) deleteLocation(c *fiber.Ctx) error {
+	_, err := h.eps.DeleteLocation(c.Context(), scope(c))
+	if err != nil {
+		return h.respondError(c, err)
+	}
+	return c.JSON(fiber.Map{"message": "Локация удалена"})
+}
+
+func (h *handlers) geoSearch(c *fiber.Ctx) error {
+	q := strings.TrimSpace(c.Query("q"))
+	if runeLen(q) < 2 {
+		return validationError(c, "q", "Минимум 2 символа")
+	}
+	if runeLen(q) > 80 {
+		return validationError(c, "q", "Длина не должна превышать 80 символов")
+	}
+	resp, err := h.eps.GeoSearch(c.Context(), endpoint.GeoSearchRequest{
+		Scope: scope(c), Query: q,
+	})
+	if err != nil {
+		return h.respondError(c, err)
+	}
+	return c.JSON(fiber.Map{"items": resp})
+}

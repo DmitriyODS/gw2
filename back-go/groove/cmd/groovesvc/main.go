@@ -25,6 +25,7 @@ import (
 	"github.com/DmitriyODS/gw2/back-go/groove/internal/service"
 	grpctransport "github.com/DmitriyODS/gw2/back-go/groove/internal/transport/grpc"
 	httptransport "github.com/DmitriyODS/gw2/back-go/groove/internal/transport/http"
+	"github.com/DmitriyODS/gw2/back-go/groove/internal/weather"
 	"github.com/DmitriyODS/gw2/back-go/pkg/bootstrap"
 	"github.com/DmitriyODS/gw2/back-go/pkg/events"
 	"github.com/DmitriyODS/gw2/back-go/pkg/gen/groovepb"
@@ -70,16 +71,20 @@ func main() {
 	feedRepo := postgres.NewFeedRepo(pool)
 	petRepo := postgres.NewPetRepo(pool)
 	platform := postgres.NewPlatformRepo(pool)
+	locRepo := postgres.NewLocationRepo(pool)
 	daily := redisx.New(rdb, log)
 	pub := events.NewPublisher(rdb, log, "gw2:groove:events")
+	weatherCli := weather.New(log)
 
 	svc := service.New(feedRepo, petRepo, platform, platform, platform,
-		platform, daily, pub, aiClient, msgrClient, log)
+		platform, locRepo, daily, pub, aiClient, msgrClient, weatherCli, log)
 	eps := endpoint.New(svc)
 
-	// Фоновые циклы: забота (болезни, характеры) и AI (фразы, дайджест).
+	// Фоновые циклы: забота (болезни, характеры), AI (фразы, дайджест)
+	// и погода (Open-Meteo → реплики Грувика).
 	go svc.RunCareLoop(ctx)
 	go svc.RunAILoop(ctx)
+	go svc.RunWeatherLoop(ctx)
 
 	grpcAddr := bootstrap.Env("GRPC_ADDR", ":9094")
 	httpAddr := bootstrap.Env("HTTP_ADDR", ":8094")

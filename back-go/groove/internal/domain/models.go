@@ -121,6 +121,33 @@ type PetConversation struct {
 	IsPetChat bool
 }
 
+// UserLocation — локация пользователя для погодных механик Грувика.
+type UserLocation struct {
+	UserID    int64
+	CompanyID int64 // подтягивается из users при чтении
+	Lat       float64
+	Lon       float64
+	City      *string
+	UpdatedAt time.Time
+}
+
+// Weather — текущая погода (Open-Meteo, код WMO).
+type Weather struct {
+	Code    int
+	TempC   float64
+	WindKmh float64
+	IsDay   bool
+}
+
+// GeoPlace — результат поиска города (Open-Meteo geocoding).
+type GeoPlace struct {
+	Name    string  `json:"name"`
+	Region  *string `json:"region"`
+	Country *string `json:"country"`
+	Lat     float64 `json:"latitude"`
+	Lon     float64 `json:"longitude"`
+}
+
 // ChatMessage — сообщение pet-чата из msgsvc (контекст AI-ответа).
 type ChatMessage struct {
 	IsBot bool

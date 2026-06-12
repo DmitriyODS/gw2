@@ -43,6 +43,11 @@ type Endpoints struct {
 	ShareWrapped endpoint.Endpoint
 	Morning      endpoint.Endpoint
 	GrooveTV     endpoint.Endpoint
+
+	GetLocation    endpoint.Endpoint
+	SetLocation    endpoint.Endpoint
+	DeleteLocation endpoint.Endpoint
+	GeoSearch      endpoint.Endpoint
 }
 
 // ── Транспорт-независимые запросы ─────────────────────────────────
@@ -115,6 +120,18 @@ type StrokeRequest struct {
 type MorningRequest struct {
 	Scope
 	Part string
+}
+
+type LocationRequest struct {
+	Scope
+	Lat  float64
+	Lon  float64
+	City *string
+}
+
+type GeoSearchRequest struct {
+	Scope
+	Query string
 }
 
 func New(svc *service.Service) Endpoints {
@@ -216,6 +233,23 @@ func New(svc *service.Service) Endpoints {
 		GrooveTV: func(ctx context.Context, request any) (any, error) {
 			r := request.(Scope)
 			return svc.GetGrooveTV(ctx, r.CompanyID)
+		},
+
+		GetLocation: func(ctx context.Context, request any) (any, error) {
+			r := request.(Scope)
+			return svc.GetUserLocation(ctx, r.UserID)
+		},
+		SetLocation: func(ctx context.Context, request any) (any, error) {
+			r := request.(LocationRequest)
+			return svc.SetUserLocation(ctx, r.UserID, r.Lat, r.Lon, r.City)
+		},
+		DeleteLocation: func(ctx context.Context, request any) (any, error) {
+			r := request.(Scope)
+			return nil, svc.DeleteUserLocation(ctx, r.UserID)
+		},
+		GeoSearch: func(ctx context.Context, request any) (any, error) {
+			r := request.(GeoSearchRequest)
+			return svc.SearchCities(ctx, r.Query)
 		},
 	}
 }

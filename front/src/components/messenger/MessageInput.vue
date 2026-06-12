@@ -331,8 +331,11 @@ async function onFiles(e) {
 
 /* Drag-and-drop обрабатывает родитель (вся область чата), а не только это
    поле — чтобы файл можно было бросить куда угодно в переписку. Сюда файлы
-   приходят через exposed addFiles(). */
-defineExpose({ addFiles: uploadFiles })
+   приходят через exposed addFiles(); focus() дёргает родитель при ответе. */
+defineExpose({
+  addFiles: uploadFiles,
+  focus: () => textarea.value?.focus(),
+})
 
 /* Вставка из буфера: картинки/файлы скриншотов приходят как items типа file. */
 async function onPaste(e) {

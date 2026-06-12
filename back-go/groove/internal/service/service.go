@@ -20,22 +20,25 @@ type Service struct {
 	companies domain.CompanyReader
 	work      domain.WorkReader
 	convs     domain.ConversationReader
+	locs      domain.LocationRepo
 	daily     domain.Daily
 	pub       domain.EventPublisher
 	ai        domain.AIClient
 	msgr      domain.MessengerClient
+	weather   domain.WeatherProvider
 	log       *slog.Logger
 }
 
 func New(feed domain.FeedRepo, pets domain.PetRepo, users domain.UserReader,
 	companies domain.CompanyReader, work domain.WorkReader,
-	convs domain.ConversationReader, daily domain.Daily,
+	convs domain.ConversationReader, locs domain.LocationRepo, daily domain.Daily,
 	pub domain.EventPublisher, ai domain.AIClient, msgr domain.MessengerClient,
-	log *slog.Logger) *Service {
+	weather domain.WeatherProvider, log *slog.Logger) *Service {
 
 	return &Service{
 		feed: feed, pets: pets, users: users, companies: companies, work: work,
-		convs: convs, daily: daily, pub: pub, ai: ai, msgr: msgr, log: log,
+		convs: convs, locs: locs, daily: daily, pub: pub, ai: ai, msgr: msgr,
+		weather: weather, log: log,
 	}
 }
 

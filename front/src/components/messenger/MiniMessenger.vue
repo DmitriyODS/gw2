@@ -105,6 +105,7 @@
               @context-menu="openContextMenu"
               @join-call="onJoinCall"
               @open-task="openTask"
+              @quote-click="onQuoteClick"
             />
           </div>
           <MessageInput
@@ -181,6 +182,7 @@ import { useAuthStore } from '@/stores/auth.js'
 import { useCallStore } from '@/stores/call.js'
 import { useNotificationsStore } from '@/stores/notifications.js'
 import { useBreakpoint } from '@/composables/useBreakpoint.js'
+import { useJumpToMessage } from '@/composables/useJumpToMessage.js'
 import { formatLastSeen } from '@/utils/presence.js'
 import MessageBubble from './MessageBubble.vue'
 import MessageInput from './MessageInput.vue'
@@ -293,6 +295,20 @@ function closeThread() {
   messenger.activeConversationId = null
 }
 
+// Переход к процитированному сообщению — та же логика, что в MessengerView.
+const { jumpToMessage } = useJumpToMessage({
+  container: threadEl,
+  getMessages: () => messenger.activeMessages,
+  hasMore: () => messenger.hasMoreHistory(threadId.value),
+  loadOlder: (beforeId) => messenger.fetchMessages(threadId.value, beforeId),
+})
+
+async function onQuoteClick(id) {
+  if (!await jumpToMessage(id)) {
+    notif.warn('Сообщение не найдено')
+  }
+}
+
 function startReply(message) {
   replyTo.value = {
     id: message.id,
@@ -303,6 +319,8 @@ function startReply(message) {
     kind: message.kind,
     has_attachments: !!message.attachments?.length,
   }
+  // Сразу в поле ввода — можно писать ответ без лишнего клика.
+  nextTick(() => miniInputRef.value?.focus())
 }
 
 /* ── Пересылка ─────────────────────────────────────────────── */

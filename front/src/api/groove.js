@@ -65,3 +65,12 @@ export const getWrapped = () => apiRequest('/groove/wrapped', { timeout: 20000 }
 export const shareWrapped = () => apiRequest('/groove/wrapped/share', { method: 'POST', timeout: 20000 })
 
 export const getGrooveTv = () => apiRequest('/groove/tv')
+
+export const getLocation = () => apiRequest('/groove/location')
+
+export const setLocation = ({ latitude, longitude, city = null }) =>
+  apiRequest('/groove/location', { method: 'PUT', body: { latitude, longitude, city } })
+
+export const deleteLocation = () => apiRequest('/groove/location', { method: 'DELETE' })
+
+export const searchCities = (q) => apiRequest(`/groove/geo?q=${encodeURIComponent(q)}`)

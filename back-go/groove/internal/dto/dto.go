@@ -224,6 +224,36 @@ func NewLiveItem(u *domain.ActiveUnit, zaps int) *LiveItemDTO {
 	}
 }
 
+// ── Локация и погода (Грувик-метеоролог) ──────────────────────────
+
+type LocationDTO struct {
+	Latitude  float64 `json:"latitude"`
+	Longitude float64 `json:"longitude"`
+	City      *string `json:"city"`
+	UpdatedAt string  `json:"updated_at"`
+}
+
+func NewLocation(l *domain.UserLocation) *LocationDTO {
+	return &LocationDTO{
+		Latitude:  l.Lat,
+		Longitude: l.Lon,
+		City:      l.City,
+		UpdatedAt: isoTime(l.UpdatedAt),
+	}
+}
+
+type WeatherDTO struct {
+	TempC       float64 `json:"temp_c"`
+	Description string  `json:"description"`
+	Category    string  `json:"category"`
+	Emoji       string  `json:"emoji"`
+}
+
+type LocationStateDTO struct {
+	Location *LocationDTO `json:"location"`
+	Weather  *WeatherDTO  `json:"weather"`
+}
+
 func orEmpty(s []string) []string {
 	if s == nil {
 		return []string{}

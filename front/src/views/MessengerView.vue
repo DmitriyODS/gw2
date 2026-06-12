@@ -186,9 +186,21 @@
             @join-call="onJoinCall"
             @open-task="openTask"
             @context-menu="openContextMenu"
+            @quote-click="onQuoteClick"
           />
         </template>
       </div>
+
+      <Transition name="jump-down">
+        <button
+          v-if="active && showJumpDown"
+          class="jump-down-btn"
+          aria-label="К последним сообщениям"
+          @click="scrollToBottomSmooth"
+        >
+          <span class="material-symbols-outlined">keyboard_arrow_down</span>
+        </button>
+      </Transition>
 
       <MessageInput
         v-if="active"
@@ -267,6 +279,7 @@ import { useNotificationsStore } from '@/stores/notifications.js'
 import { useCallStore } from '@/stores/call.js'
 import { useBreakpoint } from '@/composables/useBreakpoint.js'
 import { useFileDrop } from '@/composables/useFileDrop.js'
+import { useJumpToMessage } from '@/composables/useJumpToMessage.js'
 import {
   requestNotificationPermission, notificationsAllowed,
 } from '@/utils/systemNotify.js'
@@ -411,6 +424,8 @@ function startReply(message) {
     kind: message.kind,
     has_attachments: !!message.attachments?.length,
   }
+  // Сразу в поле ввода — можно писать ответ без лишнего клика.
+  nextTick(() => messageInputRef.value?.focus())
 }
 
 function startForward(message) {
@@ -521,16 +536,25 @@ async function onTogglePinMessage(message) {
   }
 }
 
-function scrollToMessage(id) {
-  const el = messagesEl.value?.querySelector(`[data-msg-id="${id}"]`)
-  if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' })
+// Переход к сообщению с подсветкой и догрузкой истории — общий с MiniMessenger.
+const { jumping, jumpToMessage } = useJumpToMessage({
+  container: messagesEl,
+  getMessages: () => messenger.activeMessages,
+  hasMore: () => messenger.hasMoreHistory(activeId.value),
+  loadOlder: (beforeId) => messenger.fetchMessages(activeId.value, beforeId),
+})
+
+async function onQuoteClick(id) {
+  if (!await jumpToMessage(id)) {
+    useNotificationsStore().warn('Сообщение не найдено')
+  }
 }
 
 function cyclePinned() {
   const list = pinnedMessages.value
   if (!list.length) return
   const m = list[pinnedIndex.value]
-  if (m) scrollToMessage(m.id)
+  if (m) jumpToMessage(m.id)
   // Следующий клик — к следующему закреплённому.
   pinnedIndex.value = (pinnedIndex.value + 1) % list.length
 }
@@ -687,14 +711,24 @@ function scrollToBottom() {
   el.scrollTop = el.scrollHeight
 }
 
+function scrollToBottomSmooth() {
+  messagesEl.value?.scrollTo({ top: messagesEl.value.scrollHeight, behavior: 'smooth' })
+}
+
 // Локальный гард, чтобы scroll-событие не запускало вторую подгрузку,
 // пока первая ещё в полёте, и не падало в бесконечный «магнит» к верху,
 // если страница вернулась пустой.
 let loadingOlder = false
 
+// Плавающая кнопка «к последним сообщениям» — видна, когда пользователь
+// ушёл вверх по истории (паттерн Telegram/WhatsApp).
+const showJumpDown = ref(false)
+
 async function onScroll() {
   const el = messagesEl.value
-  if (!el || loadingOlder) return
+  if (!el) return
+  showJumpDown.value = el.scrollHeight - el.scrollTop - el.clientHeight > 320
+  if (loadingOlder || jumping.value) return
   if (el.scrollTop > 80) return
   if (!messenger.hasMoreHistory(activeId.value)) return
   const arr = messenger.activeMessages
@@ -1066,6 +1100,36 @@ watch(() => route.params.conversationId, async (id) => {
   background: var(--color-bg);
   min-height: 0;
 }
+
+/* Плавающая кнопка «к последним сообщениям». */
+.jump-down-btn {
+  position: absolute;
+  right: 16px;
+  bottom: 96px;
+  width: 40px;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--color-outline-dim);
+  border-radius: 50%;
+  background: var(--color-surface-high);
+  color: var(--color-text);
+  box-shadow: var(--shadow-md);
+  cursor: pointer;
+  z-index: 5;
+  transition: background 0.15s;
+}
+
+.jump-down-btn:hover {
+  background: color-mix(in oklch, var(--color-primary) 10%, var(--color-surface-high));
+}
+
+.jump-down-enter-active,
+.jump-down-leave-active { transition: opacity 0.15s, transform 0.15s; }
+
+.jump-down-enter-from,
+.jump-down-leave-to { opacity: 0; transform: translateY(8px); }
 
 /* Баннер закреплённых сообщений — между шапкой и лентой. */
 .pinned-bar {

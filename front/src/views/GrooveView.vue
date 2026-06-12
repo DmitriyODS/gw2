@@ -6,7 +6,7 @@
           <h1 class="groove-title">Мой Groove</h1>
           <div class="groove-meta">
             <span v-if="pet" class="meta-stat">
-              <span class="meta-emoji">🫘</span>
+              <GrooveCoin class="meta-emoji" />
               <strong>{{ pet.beans }}</strong> грувов
             </span>
             <span v-if="pet?.feed_streak" class="meta-stat warning">
@@ -34,7 +34,7 @@
           <span class="pet-strip-emoji">{{ petEmoji(pet) }}</span>
           <span class="pet-strip-name">{{ pet.name }}</span>
           <span v-if="pet.sick" class="pet-strip-sick" title="Грувик болеет">🤒</span>
-          <span class="pet-strip-chip">🫘 {{ pet.beans }}</span>
+          <span class="pet-strip-chip"><GrooveCoin /> {{ pet.beans }}</span>
           <span v-if="pet.feed_streak" class="pet-strip-chip">🔥 {{ pet.feed_streak }}</span>
           <span class="pet-strip-bar" aria-hidden="true">
             <span class="pet-strip-fill" :style="{ width: stripXpPercent + '%' }"></span>
@@ -171,6 +171,7 @@
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useGrooveStore } from '@/stores/groove.js'
 import { dayKey, dayTitle, petEmoji, timeZoneOf } from '@/utils/groove.js'
+import GrooveCoin from '@/components/groove/GrooveCoin.vue'
 import LiveNowBar from '@/components/groove/LiveNowBar.vue'
 import PetCard from '@/components/groove/PetCard.vue'
 import RaidCard from '@/components/groove/RaidCard.vue'

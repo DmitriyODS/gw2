@@ -248,6 +248,7 @@
       }"
     >
       <div v-if="selected" class="emp-profile">
+        <div class="profile-cover" aria-hidden="true"></div>
         <button class="profile-close" @click="profileOpen = false" aria-label="Закрыть">
           <span class="material-symbols-outlined">close</span>
         </button>
@@ -1212,7 +1213,7 @@ const RolePill = {
   border-radius: 50%;
   border: none;
   background: color-mix(in oklch, var(--color-surface) 60%, transparent);
-  color: var(--color-on-primary-container);
+  color: var(--color-text-dim);
   display: grid;
   place-items: center;
   cursor: pointer;
@@ -1225,25 +1226,32 @@ const RolePill = {
 }
 .profile-close .material-symbols-outlined { font-size: 20px; }
 
+/* Пастельная обложка, затухающая книзу — в стиле карточки в разделе аккаунта. */
+.profile-cover {
+  position: absolute;
+  inset: 0 0 auto;
+  height: 150px;
+  background:
+    radial-gradient(120% 140% at 85% 0%,
+      color-mix(in oklch, var(--color-tertiary-container) 40%, transparent) 0%,
+      transparent 60%),
+    linear-gradient(120deg,
+      color-mix(in oklch, var(--color-primary-container) 55%, var(--color-surface)),
+      color-mix(in oklch, var(--color-secondary-container) 55%, var(--color-surface)));
+  -webkit-mask-image: linear-gradient(to bottom, black 30%, transparent 100%);
+  mask-image: linear-gradient(to bottom, black 30%, transparent 100%);
+  pointer-events: none;
+}
+
 .profile-hero {
+  position: relative;
   display: flex;
   flex-direction: column;
   align-items: center;
   text-align: center;
   padding: 36px 22px 22px;
   gap: 10px;
-  background:
-    radial-gradient(
-      130% 80% at 50% 0%,
-      color-mix(in oklch, var(--color-tertiary-container) 65%, transparent) 0%,
-      transparent 70%
-    ),
-    linear-gradient(
-      170deg,
-      var(--color-primary-container) 0%,
-      color-mix(in oklch, var(--color-primary-container) 50%, var(--color-surface)) 100%
-    );
-  color: var(--color-on-primary-container);
+  color: var(--color-text);
 }
 .profile-avatar-btn {
   appearance: none;
@@ -1259,7 +1267,7 @@ const RolePill = {
   font-weight: 800;
   line-height: 1.2;
   letter-spacing: -0.01em;
-  color: var(--color-on-primary-container);
+  color: var(--color-text);
   word-break: break-word;
   overflow-wrap: anywhere;
   display: inline-flex;
@@ -1283,8 +1291,8 @@ const RolePill = {
   border-radius: var(--radius-full);
   font-size: 12px;
   font-weight: 600;
-  background: color-mix(in oklch, var(--color-on-primary-container) 10%, transparent);
-  color: var(--color-on-primary-container);
+  background: color-mix(in oklch, var(--color-text) 8%, transparent);
+  color: var(--color-text-dim);
 }
 .profile-status .status-dot {
   width: 8px;

@@ -261,6 +261,34 @@ export const useGrooveStore = defineStore('groove', () => {
     if (entry) Object.assign(entry, data)
   }
 
+  // ─────────────────── локация и погода Грувика ─────────────────
+
+  const location = ref(null)
+  const weather = ref(null)
+  const locationLoaded = ref(false)
+
+  async function fetchLocation() {
+    try {
+      const res = await api.getLocation()
+      location.value = res.location
+      weather.value = res.weather
+    } finally {
+      locationLoaded.value = true
+    }
+  }
+
+  async function saveLocation(payload) {
+    const res = await api.setLocation(payload)
+    location.value = res.location
+    weather.value = res.weather
+  }
+
+  async function removeLocation() {
+    await api.deleteLocation()
+    location.value = null
+    weather.value = null
+  }
+
   // ─────────────────────────── зоопарк ──────────────────────────
 
   async function fetchZoo() {
@@ -305,6 +333,7 @@ export const useGrooveStore = defineStore('groove', () => {
     fetchLive, applyZapCount, zap, sendKudos,
     fetchPet, feedPet, renamePet, equipItem, buyItem, fetchShop,
     buySpecies, switchSpecies, claimQuest, applyPetUpdate,
+    location, weather, locationLoaded, fetchLocation, saveLocation, removeLocation,
     fetchZoo, strokePet,
     fetchRaid, applyRaidUpdate,
     fetchWrapped, shareWrapped,

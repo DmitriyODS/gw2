@@ -132,6 +132,25 @@ func (r *PlatformRepo) GetConversation(ctx context.Context, id int64) (*domain.P
 	return &conv, nil
 }
 
+func (r *PlatformRepo) GetPetConversationByOwner(ctx context.Context, ownerID int64) (*domain.PetConversation, error) {
+	var conv domain.PetConversation
+	var companyID *int64
+	err := r.pool.QueryRow(ctx, `
+		SELECT id, user_a_id, company_id, is_pet_chat
+		FROM conversations WHERE user_a_id = $1 AND is_pet_chat = TRUE`, ownerID,
+	).Scan(&conv.ID, &conv.OwnerID, &companyID, &conv.IsPetChat)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	if companyID != nil {
+		conv.CompanyID = *companyID
+	}
+	return &conv, nil
+}
+
 // ──────────────────────── задачи и юниты ───────────────────────────
 
 // «Мои» задачи: сотрудник ответственный ИЛИ хоть раз работал по задаче —
