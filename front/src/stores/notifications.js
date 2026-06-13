@@ -1,4 +1,5 @@
 import { defineStore } from 'pinia'
+import { useAuthStore } from './auth.js'
 
 export const useNotificationsStore = defineStore('notifications', () => {
   let _toast = null
@@ -8,6 +9,16 @@ export const useNotificationsStore = defineStore('notifications', () => {
   }
 
   function notify({ severity = 'info', summary = '', detail = '', life = 4000 }) {
+    // При выходе/без активной сессии хвостовые запросы авторизованных экранов
+    // отваливаются по 401 — это ожидаемо, поэтому не сыпем тостами ошибок
+    // («Ошибка загрузки статистики» и т.п.). Сигнал надёжен: после clearAuth
+    // токен null до следующего входа, так что под глушилку попадают и запросы,
+    // отвалившиеся уже после редиректа на /login. Неавторизованные флоу (логин,
+    // гостевой вход в звонок) тосты не используют — их это не затрагивает.
+    if (severity === 'error') {
+      const auth = useAuthStore()
+      if (auth.loggingOut || !auth.token) return
+    }
     _toast?.add({ severity, summary, detail, life })
   }
 

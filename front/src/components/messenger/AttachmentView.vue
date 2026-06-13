@@ -4,7 +4,7 @@
   </a>
   <video v-else-if="isVideo" :src="att.url" controls class="att-video" preload="metadata" />
   <audio v-else-if="isAudio" :src="att.url" controls class="att-audio" preload="metadata" />
-  <a v-else :href="att.url" target="_blank" rel="noopener" class="att-file">
+  <a v-else :href="att.url" :download="att.file_name" target="_blank" rel="noopener" class="att-file">
     <span class="material-symbols-outlined">attach_file</span>
     <span class="att-file-info">
       <span class="att-file-name">{{ att.file_name }}</span>
