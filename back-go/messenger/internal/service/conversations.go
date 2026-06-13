@@ -297,12 +297,22 @@ func (s *Service) DeleteConversation(ctx context.Context, convID, userID int64, 
 	if err != nil {
 		return false, err
 	}
-	// Соло-чаты удалять нельзя — они живут сколько живёт владелец.
+	// Чат техподдержки живёт сколько живёт владелец — удалять нельзя.
 	if conv.IsDevChat {
 		return false, domain.NewError("DEV_CHAT_UNDELETABLE", "Чат техподдержки удалить нельзя", 400)
 	}
+	// Чат с Грувиком — соло-диалог без второй стороны: scope неприменим,
+	// удаляем физически (история и вложения стираются). Грувик никуда не
+	// девается — при следующем открытии pet-чат создаётся заново пустым.
 	if conv.IsPetChat {
-		return false, domain.NewError("PET_CHAT_UNDELETABLE", "Чат с Грувиком удалить нельзя — он обидится", 400)
+		if err := s.destroyConversation(ctx, convID); err != nil {
+			return false, err
+		}
+		s.log.Info("conversation.delete", "conversation_id", convID,
+			"user_id", userID, "scope", "all", "physical", true)
+		s.pub.Publish(ctx, "conversation:deleted", rooms(userID),
+			dto.ConversationDeletedEvent{ConversationID: convID})
+		return true, nil
 	}
 	otherID := conv.OtherUserID(userID)
 

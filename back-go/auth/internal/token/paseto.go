@@ -82,7 +82,14 @@ func (i *Issuer) AccessToken(c Claims) (string, error) {
 	return t.V4Sign(i.secret, nil), nil
 }
 
-func (i *Issuer) RefreshToken(userID int64) (string, error) {
+// selectTTL — срок жизни короткого select-токена login-gate (выбор компании
+// после ввода пароля, до выдачи полноценной сессии).
+const selectTTL = 5 * time.Minute
+
+// RefreshToken — refresh-токен несёт user_id и АКТИВНУЮ компанию сессии
+// (companyID, nil у Администратора системы): на refresh выбранная компания
+// восстанавливается без обращения к localStorage.
+func (i *Issuer) RefreshToken(userID int64, companyID *int64) (string, error) {
 	t := paseto.NewToken()
 	now := time.Now()
 	t.SetIssuedAt(now)
@@ -90,30 +97,63 @@ func (i *Issuer) RefreshToken(userID int64) (string, error) {
 	t.SetExpiration(now.Add(i.refreshTTL))
 	t.SetSubject(strconv.FormatInt(userID, 10))
 	t.SetString("type", "refresh")
+	if err := t.Set("company_id", companyID); err != nil {
+		return "", err
+	}
 	return t.V4Encrypt(i.refreshKey, nil), nil
 }
 
-// ParseRefresh — проверить refresh-токен и вернуть user_id; ошибка на любом
-// дефекте (подпись, срок, не тот тип).
-func (i *Issuer) ParseRefresh(raw string) (int64, error) {
+// ParseRefresh — проверить refresh-токен и вернуть user_id и активную компанию
+// (nil — без компании); ошибка на любом дефекте (подпись, срок, не тот тип).
+func (i *Issuer) ParseRefresh(raw string) (int64, *int64, error) {
+	id, t, err := i.parseLocal(raw, "refresh")
+	if err != nil {
+		return 0, nil, err
+	}
+	var cid *int64
+	_ = t.Get("company_id", &cid)
+	return id, cid, nil
+}
+
+// SelectToken — короткий токен этапа выбора компании при логине (>1 компании).
+// Шифруется тем же refresh-ключом, отличается типом; в cookie не кладётся.
+func (i *Issuer) SelectToken(userID int64) (string, error) {
+	t := paseto.NewToken()
+	now := time.Now()
+	t.SetIssuedAt(now)
+	t.SetNotBefore(now)
+	t.SetExpiration(now.Add(selectTTL))
+	t.SetSubject(strconv.FormatInt(userID, 10))
+	t.SetString("type", "select")
+	return t.V4Encrypt(i.refreshKey, nil), nil
+}
+
+// ParseSelect — проверить select-токен и вернуть user_id.
+func (i *Issuer) ParseSelect(raw string) (int64, error) {
+	id, _, err := i.parseLocal(raw, "select")
+	return id, err
+}
+
+// parseLocal — разбор v4.local-токена нужного типа → user_id из subject.
+func (i *Issuer) parseLocal(raw, wantType string) (int64, *paseto.Token, error) {
 	parser := paseto.NewParser()
 	t, err := parser.ParseV4Local(i.refreshKey, raw, nil)
 	if err != nil {
-		return 0, err
+		return 0, nil, err
 	}
 	typ, err := t.GetString("type")
-	if err != nil || typ != "refresh" {
-		return 0, fmt.Errorf("not a refresh token")
+	if err != nil || typ != wantType {
+		return 0, nil, fmt.Errorf("not a %s token", wantType)
 	}
 	sub, err := t.GetSubject()
 	if err != nil {
-		return 0, err
+		return 0, nil, err
 	}
 	id, err := strconv.ParseInt(sub, 10, 64)
 	if err != nil || id <= 0 {
-		return 0, fmt.Errorf("bad subject")
+		return 0, nil, fmt.Errorf("bad subject")
 	}
-	return id, nil
+	return id, t, nil
 }
 
 func setAll(t *paseto.Token, claims map[string]any) error {

@@ -38,19 +38,6 @@
       </div>
 
       <div class="field">
-        <label class="lbl">Руководитель</label>
-        <select v-model="form.director_id" class="ctl">
-          <option :value="null">— не выбран —</option>
-          <option v-for="u in directors" :key="u.id" :value="u.id">
-            {{ u.fio }} <template v-if="u.login">({{ u.login }})</template>
-          </option>
-        </select>
-        <div class="hint">
-          Корневой Руководитель компании. Его не могут разжаловать другие Руководители — только Администратор.
-        </div>
-      </div>
-
-      <div class="field">
         <label class="lbl">Настройки</label>
         <div class="switch-list">
           <label class="switch-row">
@@ -83,6 +70,84 @@
             </span>
             <input type="checkbox" v-model="form.settings.uses_calls" class="switch" />
           </label>
+          <label class="switch-row">
+            <span class="switch-text">
+              <span class="material-symbols-outlined">celebration</span>
+              <span>
+                <strong>Мой Groove</strong>
+                <small>Геймификация: питомцы-Грувики, лента активности, кудосы и рейды</small>
+              </span>
+            </span>
+            <input type="checkbox" v-model="form.settings.uses_groove" class="switch" />
+          </label>
+        </div>
+      </div>
+
+      <div v-if="isEdit" class="field">
+        <label class="lbl">Участники</label>
+        <div class="members">
+          <div v-if="!members.length" class="members-empty">В компании пока только руководитель и добавленные сотрудники.</div>
+          <div v-for="m in members" :key="m.id" class="member-row">
+            <span class="member-ava">{{ initials(m.fio) }}</span>
+            <span class="member-main">
+              <span class="member-name">{{ m.fio }}</span>
+              <span class="member-login">@{{ m.login }}</span>
+            </span>
+            <select
+              class="ctl member-role"
+              :value="m.role?.id"
+              @change="changeRole(m, Number($event.target.value))"
+            >
+              <option v-for="r in roleOptions" :key="r.id" :value="r.id">{{ r.name }}</option>
+            </select>
+            <button type="button" class="member-del" title="Убрать из компании" @click="removeMember(m)">
+              <span class="material-symbols-outlined">close</span>
+            </button>
+          </div>
+        </div>
+
+        <div class="member-add">
+          <div class="member-add-search">
+            <span class="material-symbols-outlined">person_search</span>
+            <input
+              v-model="candQuery"
+              class="ctl"
+              type="text"
+              placeholder="Добавить существующего: имя или логин…"
+              @input="onCandQuery"
+            />
+          </div>
+          <div v-if="candidates.length" class="cand-list">
+            <button
+              v-for="c in candidates"
+              :key="c.id"
+              type="button"
+              class="cand-item"
+              @click="addMember(c)"
+            >
+              <span class="member-name">{{ c.fio }}</span>
+              <span class="member-login">@{{ c.login }}</span>
+              <span class="material-symbols-outlined">add</span>
+            </button>
+          </div>
+        </div>
+        <div v-if="membersError" class="err">{{ membersError }}</div>
+      </div>
+
+      <div v-if="isEdit" class="field">
+        <label class="lbl">Ссылка-приглашение</label>
+        <div class="invite">
+          <input class="ctl invite-input" :value="inviteUrl" readonly placeholder="Ссылка ещё не создана" />
+          <button type="button" class="invite-btn" :disabled="!inviteCode" title="Скопировать" @click="copyInvite">
+            <span class="material-symbols-outlined">content_copy</span>
+          </button>
+          <button type="button" class="invite-btn" :disabled="inviteBusy" :title="inviteCode ? 'Перевыпустить' : 'Создать'" @click="regenInvite">
+            <span class="material-symbols-outlined">{{ inviteCode ? 'autorenew' : 'add_link' }}</span>
+          </button>
+        </div>
+        <div class="hint">
+          Любой авторизованный пользователь, перешедший по ссылке, вступит в компанию как Сотрудник.
+          Перевыпуск ссылки делает старую недействительной.
         </div>
       </div>
 
@@ -94,7 +159,11 @@
 <script setup>
 import { ref, computed, watch } from 'vue'
 import AppDialog from '@/components/common/AppDialog.vue'
-import { getCompanyDirectory } from '@/api/companies.js'
+import {
+  listCompanyMembers, getCompanyCandidates, addCompanyMember,
+  setMemberRole, removeCompanyMember, getCompanyInvite, regenerateCompanyInvite,
+} from '@/api/companies.js'
+import { getRoles } from '@/api/roles.js'
 
 const props = defineProps({
   modelValue: { type: Boolean, required: true },
@@ -108,14 +177,29 @@ const form = ref(_blank())
 const errors = ref({})
 const serverError = ref('')
 const saving = ref(false)
-const directors = ref([])
+
+// Участники + ссылка-приглашение (только в режиме редактирования).
+const members = ref([])
+const roleOptions = ref([])
+const membersError = ref('')
+const candQuery = ref('')
+const candidates = ref([])
+let candTimer = null
+const inviteCode = ref('')
+const inviteBusy = ref(false)
+
+const inviteUrl = computed(() =>
+  inviteCode.value ? `${window.location.origin}/join/${inviteCode.value}` : '')
+
+function initials(fio) {
+  return (fio || '').trim().split(/\s+/).slice(0, 2).map((p) => p[0]?.toUpperCase() || '').join('')
+}
 
 function _blank() {
   return {
     name: '',
     description: '',
-    director_id: null,
-    settings: { uses_stages: false, uses_yougile: false, uses_calls: true },
+    settings: { uses_stages: false, uses_yougile: false, uses_calls: true, uses_groove: true },
   }
 }
 
@@ -127,29 +211,119 @@ watch(() => props.modelValue, (v) => {
     form.value = {
       name: props.company.name || '',
       description: props.company.description || '',
-      director_id: props.company.director?.id ?? props.company.director_id ?? null,
       settings: {
         uses_stages: !!props.company.settings?.uses_stages,
         uses_yougile: !!props.company.settings?.uses_yougile,
         uses_calls: props.company.settings?.uses_calls !== false,
+        uses_groove: props.company.settings?.uses_groove !== false,
       },
     }
   } else {
     form.value = _blank()
   }
-  loadDirectors()
+  members.value = []
+  candidates.value = []
+  candQuery.value = ''
+  membersError.value = ''
+  inviteCode.value = ''
+  if (props.company?.id) {
+    loadMembers()
+    loadRoleOptions()
+    loadInvite()
+  }
 }, { immediate: false })
 
-async function loadDirectors() {
-  // Для редактирования — сотрудники этой компании;
-  // для создания — все видимые без фильтра по компании.
+async function loadMembers() {
   try {
-    const cid = props.company?.id ?? null
-    const users = await getCompanyDirectory(cid)
-    directors.value = users || []
-  } catch {
-    directors.value = []
+    members.value = await listCompanyMembers(props.company.id)
+  } catch (e) {
+    membersError.value = e?.message || 'Не удалось загрузить участников'
   }
+}
+
+async function loadRoleOptions() {
+  try {
+    const roles = await getRoles()
+    // В компании роли только Сотрудник/Менеджер/Руководитель (без Администратора).
+    roleOptions.value = (roles || []).filter((r) => r.level < 4)
+  } catch {
+    roleOptions.value = []
+  }
+}
+
+async function loadInvite() {
+  try {
+    const { code } = await getCompanyInvite(props.company.id)
+    inviteCode.value = code || ''
+  } catch {
+    inviteCode.value = ''
+  }
+}
+
+function onCandQuery() {
+  if (candTimer) clearTimeout(candTimer)
+  candTimer = setTimeout(searchCandidates, 250)
+}
+
+async function searchCandidates() {
+  const q = candQuery.value.trim()
+  if (!q) { candidates.value = []; return }
+  try {
+    candidates.value = await getCompanyCandidates(props.company.id, q)
+  } catch {
+    candidates.value = []
+  }
+}
+
+async function addMember(c) {
+  membersError.value = ''
+  const employeeRole = roleOptions.value.find((r) => r.level === 1) || roleOptions.value[0]
+  try {
+    await addCompanyMember(props.company.id, c.id, employeeRole.id)
+    candQuery.value = ''
+    candidates.value = []
+    await loadMembers()
+  } catch (e) {
+    membersError.value = e?.message || 'Не удалось добавить'
+  }
+}
+
+async function changeRole(m, roleId) {
+  membersError.value = ''
+  try {
+    await setMemberRole(props.company.id, m.id, roleId)
+    await loadMembers()
+  } catch (e) {
+    membersError.value = e?.message || 'Не удалось сменить роль'
+    await loadMembers()
+  }
+}
+
+async function removeMember(m) {
+  membersError.value = ''
+  try {
+    await removeCompanyMember(props.company.id, m.id)
+    await loadMembers()
+  } catch (e) {
+    membersError.value = e?.message || 'Не удалось убрать'
+  }
+}
+
+async function regenInvite() {
+  inviteBusy.value = true
+  try {
+    const { code } = await regenerateCompanyInvite(props.company.id)
+    inviteCode.value = code || ''
+  } catch (e) {
+    membersError.value = e?.message || 'Не удалось создать ссылку'
+  } finally {
+    inviteBusy.value = false
+  }
+}
+
+async function copyInvite() {
+  if (!inviteUrl.value) return
+  try { await navigator.clipboard.writeText(inviteUrl.value) } catch { /* ignore */ }
 }
 
 const canSave = computed(() => form.value.name.trim().length >= 1)
@@ -168,7 +342,6 @@ async function save() {
     const payload = {
       name: form.value.name.trim(),
       description: form.value.description.trim() || null,
-      director_id: form.value.director_id || null,
       settings: { ...form.value.settings },
     }
     emit('save', { payload, isEdit: isEdit.value, id: props.company?.id ?? null })
@@ -300,5 +473,58 @@ select.ctl {
   left: 24px;
   background: var(--color-on-primary);
 }
+
+/* Участники */
+.members { display: flex; flex-direction: column; gap: 6px; }
+.members-empty { font-size: 12px; color: var(--color-on-surface-variant); padding: 4px 2px; }
+.member-row {
+  display: flex; align-items: center; gap: 10px;
+  padding: 6px 8px; border-radius: var(--radius-md, 12px);
+  background: var(--color-surface-container);
+}
+.member-ava {
+  width: 32px; height: 32px; flex: none; border-radius: 50%;
+  display: grid; place-items: center; font-size: 12px; font-weight: 700;
+  background: var(--color-primary-container); color: var(--color-on-primary-container);
+}
+.member-main { display: flex; flex-direction: column; min-width: 0; flex: 1; }
+.member-name { font-size: 14px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.member-login { font-size: 12px; color: var(--color-on-surface-variant); }
+.member-role { width: auto; min-width: 130px; padding: 6px 28px 6px 10px; }
+.member-del {
+  flex: none; display: grid; place-items: center; width: 30px; height: 30px;
+  border: none; background: transparent; color: var(--color-on-surface-variant);
+  border-radius: 50%; cursor: pointer;
+}
+.member-del:hover { background: var(--color-error-container); color: var(--color-on-error-container); }
+.member-del .material-symbols-outlined { font-size: 18px; }
+
+.member-add { margin-top: 8px; display: flex; flex-direction: column; gap: 6px; }
+.member-add-search { position: relative; display: flex; align-items: center; }
+.member-add-search > .material-symbols-outlined {
+  position: absolute; left: 10px; font-size: 18px; color: var(--color-on-surface-variant); pointer-events: none;
+}
+.member-add-search .ctl { padding-left: 36px; }
+.cand-list { display: flex; flex-direction: column; gap: 4px; max-height: 180px; overflow-y: auto; }
+.cand-item {
+  display: flex; align-items: center; gap: 8px; padding: 8px 10px; text-align: left;
+  border: 1px solid var(--color-outline-variant); border-radius: var(--radius-md, 12px);
+  background: var(--color-surface); color: var(--color-on-surface); cursor: pointer;
+}
+.cand-item:hover { border-color: var(--color-primary); }
+.cand-item .member-login { flex: 1; }
+.cand-item .material-symbols-outlined { font-size: 18px; color: var(--color-primary); }
+
+/* Ссылка-приглашение */
+.invite { display: flex; gap: 8px; align-items: center; }
+.invite-input { flex: 1; font-size: 13px; }
+.invite-btn {
+  flex: none; display: grid; place-items: center; width: 40px; height: 40px;
+  border: 1px solid var(--color-outline-variant); border-radius: var(--radius-md, 12px);
+  background: var(--color-surface); color: var(--color-on-surface); cursor: pointer;
+}
+.invite-btn:hover:not(:disabled) { border-color: var(--color-primary); color: var(--color-primary); }
+.invite-btn:disabled { opacity: .5; cursor: not-allowed; }
+.invite-btn .material-symbols-outlined { font-size: 20px; }
 
 </style>

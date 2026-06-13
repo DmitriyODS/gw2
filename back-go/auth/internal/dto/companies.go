@@ -77,6 +77,12 @@ type WeekendSettings struct {
 	WeekendDays []int `json:"weekend_days"`
 }
 
+// GrooveSettings — ответ GET/PUT /api/companies/<id>/groove-settings:
+// включён ли режим «Мой Groove» (settings.uses_groove).
+type GrooveSettings struct {
+	Enabled bool `json:"enabled"`
+}
+
 // ── Запросы (после schema-валидации в транспорте) ────────────────
 
 // CompanyCreate — распарсенный POST-боди: settings уже прошли schema-load

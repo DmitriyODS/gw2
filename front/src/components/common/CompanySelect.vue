@@ -58,7 +58,7 @@
             </button>
           </header>
 
-          <div v-if="companies.items.length > 6" class="company-popover-search">
+          <div v-if="rowList.length > 6" class="company-popover-search">
             <span class="material-symbols-outlined">search</span>
             <input
               ref="searchEl"
@@ -81,6 +81,7 @@
 
           <div class="company-popover-body">
             <button
+              v-if="showAllOption"
               type="button"
               class="company-popover-item all"
               :class="{ active: effectiveValue == null }"
@@ -99,7 +100,7 @@
               >check</span>
             </button>
 
-            <div class="company-popover-sep" />
+            <div v-if="showAllOption" class="company-popover-sep" />
 
             <div v-if="!filteredCompanies.length" class="company-popover-empty">
               <span class="material-symbols-outlined">search_off</span>
@@ -287,17 +288,37 @@ const emit = defineEmits(['show', 'hide', 'update:modelValue'])
 const auth = useAuthStore()
 const companies = useCompaniesStore()
 
-const fixed = computed(() => auth.companyId != null)
+// Многокомпанийный обычный пользователь — переключает активную компанию из
+// своих членств (auth.companies) через switchCompany (перевыпуск токена).
+const isMulti = computed(() => auth.isMultiCompany)
+// Неизменяемый чип — только у обычного пользователя ровно с одной компанией.
+const fixed = computed(() => auth.companyId != null && !isMulti.value)
 const companyLabel = computed(() => auth.companyName || 'Без компании')
 const options = computed(() => companies.items)
 
-// controlled mode: если props.modelValue передан — используем его, иначе — activeCompanyId
+// Список для row-поповера: у многокомпанийного — его членства, у Админа
+// системы — все компании (с опцией «Все компании»).
+const rowList = computed(() => {
+  if (isMulti.value) {
+    return auth.companies.map((c) => ({ id: c.company_id, name: c.company_name, is_active: c.is_active }))
+  }
+  return companies.items
+})
+// «Все компании» (null) — только Администратору системы, не многокомпанийному.
+const showAllOption = computed(() => !isMulti.value)
+
+// controlled mode: если props.modelValue передан — используем его, иначе —
+// активная компания (для многокомпанийного — из токена auth.companyId).
 const isControlled = computed(() => props.modelValue !== undefined)
-const effectiveValue = computed(() => isControlled.value ? props.modelValue : companies.activeCompanyId)
+const effectiveValue = computed(() => {
+  if (isControlled.value) return props.modelValue
+  if (isMulti.value) return auth.companyId
+  return companies.activeCompanyId
+})
 
 const activeLabel = computed(() => {
-  const c = companies.activeCompany
-  return c?.name ?? null
+  if (isMulti.value) return auth.companyName
+  return companies.activeCompany?.name ?? null
 })
 
 const activeInitial = computed(() => initialOf(activeLabel.value))
@@ -333,8 +354,8 @@ const popoverStyle = ref({})
 
 const filteredCompanies = computed(() => {
   const q = query.value.trim().toLowerCase()
-  if (!q) return companies.items
-  return companies.items.filter((c) => (c.name || '').toLowerCase().includes(q))
+  if (!q) return rowList.value
+  return rowList.value.filter((c) => (c.name || '').toLowerCase().includes(q))
 })
 
 function computePosition() {
@@ -397,15 +418,24 @@ function onDocKeydown(e) {
 function onPick(id) {
   if (isControlled.value) {
     emit('update:modelValue', id ?? null)
-  } else {
-    companies.setActive(id)
+    close()
+    return
   }
+  if (isMulti.value) {
+    // Перевыпуск токена под выбранную компанию; данные перезагрузятся по watch.
+    if (id != null && id !== auth.companyId) auth.switchCompany(id).catch(() => {})
+    close()
+    return
+  }
+  companies.setActive(id)
   close()
 }
 
 /* ---------- common ---------- */
 onMounted(() => {
-  if (!fixed.value) companies.load()
+  // Список компаний из API нужен только Администратору системы; многокомпанийный
+  // обычный пользователь берёт свои компании из auth.companies.
+  if (!fixed.value && !isMulti.value) companies.load()
 })
 
 onBeforeUnmount(() => {

@@ -34,6 +34,9 @@ type UserReader interface {
 	GetUser(ctx context.Context, id int64) (*User, error)
 	// ListVisibleUsers — только существующие и не скрытые.
 	ListVisibleUsers(ctx context.Context, ids []int64) ([]*User, error)
+	// CompanyActive — активна ли выбранная (активная) компания сессии из
+	// токена. nil (Администратор системы) → true.
+	CompanyActive(ctx context.Context, companyID *int64) (bool, error)
 }
 
 // RingSnapshot — копия состояния ринг-фазы звонка на момент запроса.

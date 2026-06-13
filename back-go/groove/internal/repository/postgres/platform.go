@@ -55,6 +55,23 @@ func (r *PlatformRepo) GetUser(ctx context.Context, id int64) (*domain.User, err
 	return &u, nil
 }
 
+// CompanyActive — активность ИМЕННО выбранной (активной) компании сессии.
+func (r *PlatformRepo) CompanyActive(ctx context.Context, companyID *int64) (bool, error) {
+	if companyID == nil {
+		return true, nil
+	}
+	var active bool
+	err := r.pool.QueryRow(ctx,
+		`SELECT is_active FROM companies WHERE id = $1`, *companyID).Scan(&active)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return false, nil
+		}
+		return false, err
+	}
+	return active, nil
+}
+
 // ───────────────────────────── компании ────────────────────────────
 
 func (r *PlatformRepo) companyIDs(ctx context.Context, where string) ([]int64, error) {
@@ -109,6 +126,28 @@ func (r *PlatformRepo) WeekendDays(ctx context.Context, companyID int64) ([]int,
 		days = append(days, int(f))
 	}
 	return days, nil
+}
+
+// GrooveEnabled — включён ли режим «Мой Groove» у компании
+// (settings.uses_groove). Отсутствие ключа, мусор или несуществующая
+// компания → включён (как и на фронте: uses_groove !== false).
+func (r *PlatformRepo) GrooveEnabled(ctx context.Context, companyID int64) (bool, error) {
+	var raw []byte
+	err := r.pool.QueryRow(ctx,
+		`SELECT settings FROM companies WHERE id = $1`, companyID).Scan(&raw)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return true, nil
+		}
+		return false, err
+	}
+	var settings struct {
+		UsesGroove *bool `json:"uses_groove"`
+	}
+	if len(raw) == 0 || json.Unmarshal(raw, &settings) != nil || settings.UsesGroove == nil {
+		return true, nil
+	}
+	return *settings.UsesGroove, nil
 }
 
 // ───────────────────────────── pet-чаты ────────────────────────────

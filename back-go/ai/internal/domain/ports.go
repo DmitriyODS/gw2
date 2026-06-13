@@ -53,6 +53,9 @@ type FactCache interface {
 // и проверка доступа к настройкам компании).
 type UserReader interface {
 	GetUser(ctx context.Context, id int64) (*User, error)
+	// CompanyActive — активна ли выбранная (активная) компания сессии из
+	// токена. nil (Администратор системы) → true.
+	CompanyActive(ctx context.Context, companyID *int64) (bool, error)
 }
 
 // ChatParams — параметры одного хода chat completion. MessagesJSON/ToolsJSON —

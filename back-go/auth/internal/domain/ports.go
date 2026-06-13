@@ -29,6 +29,34 @@ type UserRepository interface {
 	IsCompanyDirector(ctx context.Context, userID int64) (bool, error)
 	HashPassword(ctx context.Context, password string) (string, error)
 	VerifyPassword(ctx context.Context, password, hash string) (bool, error)
+
+	// ── Членство в компаниях (user_companies) ──
+	// ListMemberships — все компании пользователя с ролью в каждой и активностью
+	// компании, по created_at ASC (первая — «первичная»).
+	ListMemberships(ctx context.Context, userID int64) ([]Membership, error)
+	// GetMembership — связка для конкретной компании; nil — не состоит.
+	GetMembership(ctx context.Context, userID, companyID int64) (*Membership, error)
+	// AddMembership — INSERT ... ON CONFLICT DO NOTHING.
+	AddMembership(ctx context.Context, userID, companyID, roleID int64) error
+	// RemoveMembership — удалить связку.
+	RemoveMembership(ctx context.Context, userID, companyID int64) error
+	// UpdateMembershipRole — сменить роль в конкретной компании.
+	UpdateMembershipRole(ctx context.Context, userID, companyID, roleID int64) error
+	// CountCompanyMembersByLevel — видимые члены компании с уровнем роли
+	// (защита «последнего Руководителя компании»).
+	CountCompanyMembersByLevel(ctx context.Context, companyID int64, level int) (int, error)
+	// SearchDirectoryMembers — каталог членов КОМПАНИИ (по user_companies) с
+	// ролью в этой компании; только видимые, ILIKE по fio/login.
+	SearchDirectoryMembers(ctx context.Context, query string, excludeID, companyID int64) ([]*User, error)
+	// SearchNonMembers — видимые пользователи, ЕЩЁ НЕ состоящие в компании
+	// (кандидаты на добавление), ILIKE по fio/login; их первичная роль/компания.
+	SearchNonMembers(ctx context.Context, query string, companyID int64) ([]*User, error)
+	// SyncPrimaryCompany — пересчитать users.company_id/role_id из старейшей
+	// связки (NULL, если членств не осталось). Держит инвариант NULL ⇔ админ.
+	SyncPrimaryCompany(ctx context.Context, userID int64) error
+	// CompanyActive — активна ли компания (auth-гейт по активной компании
+	// сессии из токена). nil → true (Администратор системы).
+	CompanyActive(ctx context.Context, companyID *int64) (bool, error)
 }
 
 // LoginThrottle — защита от подбора пароля (Redis, ключи gw2:bf:*).
@@ -61,6 +89,8 @@ type CompanyRepository interface {
 	// GetCompany — компания с директором; nil — нет такой.
 	GetCompany(ctx context.Context, id int64) (*Company, error)
 	GetCompanyByName(ctx context.Context, name string) (*Company, error)
+	// GetCompanyByInviteCode — компания по коду-приглашению; nil — нет такой.
+	GetCompanyByInviteCode(ctx context.Context, code string) (*Company, error)
 	// CreateCompany — INSERT; заполняет ID, CreatedAt, IsActive.
 	CreateCompany(ctx context.Context, c *Company) error
 	// UpdateCompanyFields — точечное обновление колонок компании.

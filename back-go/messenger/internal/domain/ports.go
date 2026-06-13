@@ -91,6 +91,9 @@ type Repository interface {
 // UserReader — read-only доступ к пользователям платформы.
 type UserReader interface {
 	GetUser(ctx context.Context, id int64) (*User, error)
+	// CompanyActive — активна ли выбранная (активная) компания сессии из
+	// токена. nil (Администратор системы) → true.
+	CompanyActive(ctx context.Context, companyID *int64) (bool, error)
 	// ListUsers — профили по id (включая скрытых — как «собеседники»
 	// в листинге Flask).
 	ListUsers(ctx context.Context, ids []int64) ([]*User, error)

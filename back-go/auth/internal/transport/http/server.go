@@ -23,18 +23,27 @@ type Server struct {
 	app *fiber.App
 }
 
-// authSource — сверка пользователя для pkg-мидлвари (is_hidden, активность
-// компании, уровень роли) поверх доменного репозитория.
+// authSource — сверка пользователя для pkg-мидлвари. Активная компания и роль
+// в ней — ИЗ ТОКЕНА (active): actor.CompanyID/Role.Level отражают выбранную
+// компанию сессии (для многокомпанийных), из БД — is_hidden, профиль и
+// активность выбранной компании.
 func authSource(users domain.UserRepository) pasetoauth.AuthSource {
-	return func(ctx context.Context, userID int64) (*pasetoauth.AuthInfo, error) {
+	return func(ctx context.Context, userID int64, active pasetoauth.Claims) (*pasetoauth.AuthInfo, error) {
 		u, err := users.GetByID(ctx, userID)
 		if err != nil || u == nil {
 			return nil, err
 		}
+		u.CompanyID = active.CompanyID
+		u.Role.Level = active.RoleLevel
+		u.IsRootAdmin = active.IsRootAdmin
+		companyActive, err := users.CompanyActive(ctx, active.CompanyID)
+		if err != nil {
+			return nil, err
+		}
 		return &pasetoauth.AuthInfo{
-			RoleLevel:     u.Level(),
+			RoleLevel:     active.RoleLevel,
 			IsHidden:      u.IsHidden,
-			CompanyActive: u.CompanyActive(),
+			CompanyActive: companyActive,
 			User:          u,
 		}, nil
 	}
@@ -59,6 +68,8 @@ func NewServer(eps endpoint.Endpoints, verifier *pasetoauth.Verifier,
 
 	authAPI := app.Group("/api/auth")
 	authAPI.Post("/login", h.login)
+	authAPI.Post("/select-company", h.selectCompany) // завершение login-gate (select-токен в теле)
+	authAPI.Post("/switch-company", auth.RequireToken, h.switchCompany)
 	authAPI.Post("/refresh", h.refresh)
 	authAPI.Post("/logout", auth.RequireToken, h.logout)
 	authAPI.Post("/change-default", auth.RequireToken, h.changeDefault)
@@ -92,6 +103,21 @@ func NewServer(eps endpoint.Endpoints, verifier *pasetoauth.Verifier,
 	companiesAPI.Patch("/:id<int>/toggle-active", auth.RequireRole(domain.LevelAdmin), h.toggleCompanyActive)
 	companiesAPI.Get("/:id<int>/weekend-settings", auth.RequireRole(domain.LevelDirector), h.getWeekendSettings)
 	companiesAPI.Put("/:id<int>/weekend-settings", auth.RequireRole(domain.LevelDirector), h.updateWeekendSettings)
+	// Режим «Мой Groove» — DIRECTOR+ (Руководитель своей компании, проверка в сервисе).
+	companiesAPI.Get("/:id<int>/groove-settings", auth.RequireRole(domain.LevelDirector), h.getGrooveSettings)
+	companiesAPI.Put("/:id<int>/groove-settings", auth.RequireRole(domain.LevelDirector), h.updateGrooveSettings)
+	// Участники компании — управляет ТОЛЬКО Администратор системы (в карточке
+	// компании). Самостоятельное вступление — по ссылке-приглашению.
+	companiesAPI.Get("/:id<int>/members", auth.RequireRole(domain.LevelAdmin), h.listMembers)
+	companiesAPI.Get("/:id<int>/members/candidates", auth.RequireRole(domain.LevelAdmin), h.companyCandidates)
+	companiesAPI.Post("/:id<int>/members", auth.RequireRole(domain.LevelAdmin), h.addMember)
+	companiesAPI.Patch("/:id<int>/members/:userId<int>", auth.RequireRole(domain.LevelAdmin), h.setMemberRole)
+	companiesAPI.Delete("/:id<int>/members/:userId<int>", auth.RequireRole(domain.LevelAdmin), h.removeMember)
+	// Ссылка-приглашение — Админ системы или Руководитель компании (проверка в сервисе).
+	companiesAPI.Get("/:id<int>/invite", auth.RequireRole(domain.LevelDirector), h.companyInvite)
+	companiesAPI.Post("/:id<int>/invite", auth.RequireRole(domain.LevelDirector), h.regenerateInvite)
+	// Вступление по коду — любой авторизованный пользователь.
+	companiesAPI.Post("/join/:code", h.joinByInvite)
 
 	backupAPI := app.Group("/api/backup", auth.RequireAuth, auth.RequireRole(domain.LevelAdmin))
 	backupAPI.Get("/export", h.exportBackup)

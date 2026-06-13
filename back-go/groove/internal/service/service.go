@@ -111,6 +111,16 @@ func (s *Service) weekendDays(ctx context.Context, companyID int64) []int {
 	return days
 }
 
+// grooveEnabled — включён ли режим «Мой Groove» у компании. Любая ошибка
+// чтения → true (fail-open: режим по умолчанию включён).
+func (s *Service) grooveEnabled(ctx context.Context, companyID int64) bool {
+	ok, err := s.companies.GrooveEnabled(ctx, companyID)
+	if err != nil {
+		return true
+	}
+	return ok
+}
+
 // firstName — имя из ФИО («Фамилия Имя Отчество» → «Имя»).
 func firstName(fio string) string {
 	parts := splitWords(fio)

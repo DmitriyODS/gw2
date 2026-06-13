@@ -117,18 +117,51 @@ func NewDirectoryUsers(users []*domain.User) []DirectoryUser {
 	return out
 }
 
-// Session — ответ login/refresh/change-default. Клеймы продублированы в
-// теле, потому что PASETO-payload фронт больше не декодирует (в отличие от
-// JWT); refresh-токен уезжает только в HttpOnly-cookie.
+// MembershipDTO — компания пользователя и его роль в ней (для списка компаний
+// в теле login/refresh/me: фронт показывает переключатель и пикер при логине).
+type MembershipDTO struct {
+	CompanyID   int64  `json:"company_id"`
+	CompanyName string `json:"company_name"`
+	IsActive    bool   `json:"is_active"`
+	RoleLevel   int    `json:"role_level"`
+	RoleName    string `json:"role_name"`
+}
+
+func NewMemberships(ms []domain.Membership) []MembershipDTO {
+	out := make([]MembershipDTO, 0, len(ms))
+	for _, m := range ms {
+		d := MembershipDTO{
+			CompanyID: m.CompanyID,
+			RoleLevel: m.Role.Level,
+			RoleName:  m.Role.Name,
+		}
+		if m.Company != nil {
+			d.CompanyName = m.Company.Name
+			d.IsActive = m.Company.IsActive
+		}
+		out = append(out, d)
+	}
+	return out
+}
+
+// Session — ответ login/select/switch/refresh/change-default. Клеймы продублированы
+// в теле, потому что PASETO-payload фронт больше не декодирует (в отличие от
+// JWT); refresh-токен уезжает только в HttpOnly-cookie. NeedsCompanySelection —
+// этап выбора компании при логине (>1 компании): access/refresh не выдаются,
+// фронт показывает пикер и шлёт выбор с SelectToken на /auth/select-company.
 type Session struct {
-	AccessToken     string         `json:"access_token"`
-	UserID          int64          `json:"user_id"`
-	ForceChange     bool           `json:"force_change"`
-	CompanyID       *int64         `json:"company_id"`
-	CompanyName     *string        `json:"company_name"`
-	CompanySettings map[string]any `json:"company_settings"`
-	RoleLevel       int            `json:"role_level"`
-	IsRootAdmin     bool           `json:"is_root_admin"`
+	AccessToken     string          `json:"access_token"`
+	UserID          int64           `json:"user_id"`
+	ForceChange     bool            `json:"force_change"`
+	CompanyID       *int64          `json:"company_id"`
+	CompanyName     *string         `json:"company_name"`
+	CompanySettings map[string]any  `json:"company_settings"`
+	RoleLevel       int             `json:"role_level"`
+	IsRootAdmin     bool            `json:"is_root_admin"`
+	Companies       []MembershipDTO `json:"companies"`
+
+	NeedsCompanySelection bool   `json:"needs_company_selection,omitempty"`
+	SelectToken           string `json:"select_token,omitempty"`
 
 	RefreshToken string `json:"-"`
 }
@@ -178,6 +211,13 @@ type UpdateMeRequest struct {
 	CurrentPassword *string `json:"current_password"`
 	NewPassword     *string `json:"new_password"`
 	ConfirmPassword *string `json:"confirm_password"`
+}
+
+// AddMemberRequest — POST /companies/<id>/members: добавить существующего
+// пользователя в компанию с ролью.
+type AddMemberRequest struct {
+	UserID int64 `json:"user_id"`
+	RoleID int64 `json:"role_id"`
 }
 
 // DirectoryRequest — GET /users/directory.

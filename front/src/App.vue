@@ -21,7 +21,7 @@
       <ActiveUnitModal v-if="unitsStore.activeUnit" />
       <AppTutorial v-if="isTutorialOpen" />
       <ChangelogModal v-if="isChangelogOpen" @close="closeChangelog" />
-      <MorningBriefingModal v-if="isBriefingOpen" :briefing="briefing" @close="closeBriefing" />
+      <MorningBriefingModal v-if="usesGroove && isBriefingOpen" :briefing="briefing" @close="closeBriefing" />
       <MiniMessenger />
       <IncomingCallOverlay @accept="callStore.accept()" @decline="callStore.decline()" />
       <CallView />
@@ -47,6 +47,7 @@ import { useMessengerStore } from '@/stores/messenger.js'
 import { useCallStore } from '@/stores/call.js'
 import { useNotificationsStore } from '@/stores/notifications.js'
 import { useBreakpoint } from '@/composables/useBreakpoint.js'
+import { useCompanySettings } from '@/composables/useCompanySettings.js'
 import { useTutorial } from '@/composables/useTutorial.js'
 import { useChangelog } from '@/composables/useChangelog.js'
 import { useMorningBriefing } from '@/composables/useMorningBriefing.js'
@@ -77,6 +78,7 @@ const callStore = useCallStore()
 const notif = useNotificationsStore()
 const route = useRoute()
 const { isMobile } = useBreakpoint()
+const { usesGroove } = useCompanySettings()
 
 const isFullscreenRoute = computed(() => !!route.meta?.fullscreen && !!authStore.user)
 // isOpen деструктурирован как топ-левел ref — Vue auto-unwraps в шаблоне
@@ -135,7 +137,7 @@ onMounted(async () => {
     // тур/лог версий (чтобы не громоздить модалки друг на друга).
     clearTimeout(briefingTimer)
     briefingTimer = setTimeout(() => {
-      if (!isTutorialOpen.value && !isChangelogOpen.value) {
+      if (usesGroove.value && !isTutorialOpen.value && !isChangelogOpen.value) {
         checkMorningBriefing()
       }
     }, 1200)

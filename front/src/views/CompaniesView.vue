@@ -108,15 +108,6 @@
               </span>
             </div>
 
-            <div v-if="c.director" class="cmp-card-director">
-              <span class="director-avatar">{{ initials(c.director.fio) }}</span>
-              <span class="director-name">{{ c.director.fio }}</span>
-            </div>
-            <div v-else class="cmp-card-director muted">
-              <span class="material-symbols-outlined">person_off</span>
-              Руководитель не назначен
-            </div>
-
             <div class="cmp-card-actions" @click.stop>
               <button class="card-act" title="Редактировать" @click="openEdit(c)">
                 <span class="material-symbols-outlined">edit</span>
@@ -202,16 +193,6 @@
               </span>
               <span class="num-val">{{ data.tasks_count }}</span>
             </div>
-          </template>
-        </Column>
-
-        <Column header="Руководитель" style="min-width: 200px">
-          <template #body="{ data }">
-            <div v-if="data.director" class="director-cell">
-              <span class="director-avatar">{{ initials(data.director.fio) }}</span>
-              <span class="director-name">{{ data.director.fio }}</span>
-            </div>
-            <span v-else class="muted">не назначен</span>
           </template>
         </Column>
 
@@ -339,10 +320,7 @@ const disabledCount = computed(() => companies.items.filter(c => !c.is_active).l
 const visible = computed(() => {
   const q = search.value.toLowerCase()
   return q
-    ? companies.items.filter(c =>
-        c.name.toLowerCase().includes(q) ||
-        (c.director?.fio || '').toLowerCase().includes(q),
-      )
+    ? companies.items.filter(c => c.name.toLowerCase().includes(q))
     : companies.items
 })
 
@@ -614,32 +592,6 @@ async function doDelete() {
   text-align: right;
 }
 
-.director-cell {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  min-width: 0;
-}
-.director-avatar {
-  display: grid;
-  place-items: center;
-  width: 28px;
-  height: 28px;
-  border-radius: 50%;
-  background: var(--color-tertiary-container);
-  color: var(--color-on-tertiary-container);
-  font-size: 11px;
-  font-weight: 800;
-  flex-shrink: 0;
-}
-.director-name {
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--color-text);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
 .muted {
   color: var(--color-text-dim);
   font-style: italic;
@@ -821,21 +773,6 @@ async function doDelete() {
 .cmp-card-stats .stat.date { color: var(--color-text-dim); }
 .cmp-card-stats .stat strong { font-weight: 700; font-variant-numeric: tabular-nums; }
 
-.cmp-card-director {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  padding: 8px 10px;
-  background: var(--color-surface-low);
-  border-radius: var(--radius-md);
-  font-size: 13px;
-  color: var(--color-text);
-}
-.cmp-card-director.muted {
-  color: var(--color-text-dim);
-  font-style: italic;
-}
-.cmp-card-director.muted .material-symbols-outlined { font-size: 16px; }
 
 .cmp-card-actions {
   display: flex;

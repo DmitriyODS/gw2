@@ -451,6 +451,9 @@ func (s *Service) makePetReply(ctx context.Context, conversationID int64) error 
 	if err != nil || conv == nil || !conv.IsPetChat {
 		return err
 	}
+	if !s.grooveEnabled(ctx, conv.CompanyID) {
+		return nil // режим «Мой Groove» выключен — питомец не отвечает
+	}
 	owner, err := s.users.GetUser(ctx, conv.OwnerID)
 	if err != nil || owner == nil {
 		return err

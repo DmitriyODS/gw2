@@ -18,26 +18,12 @@ func errLocked(seconds int) error {
 }
 
 var errInvalidCredentials = domain.NewError("INVALID_CREDENTIALS", "Неверный логин или пароль", 401)
+var errNoCompanyAccess = domain.NewError("NO_COMPANY_ACCESS", "Нет доступа ни к одной компании. Обратитесь к администратору.", 403)
 
-// ensureCompanyActive — пользователь с привязкой к компании входит только
-// в активную; Администраторы системы (без company_id) не блокируются.
-func ensureCompanyActive(u *domain.User) error {
-	if u.CompanyID == nil {
-		return nil
-	}
-	if u.Company == nil || !u.Company.IsActive {
-		var name *string
-		if u.Company != nil {
-			name = &u.Company.Name
-		}
-		return domain.NewErrorExtra(
-			"COMPANY_DISABLED",
-			"Ваша компания отключена. Обратитесь к администратору.",
-			403,
-			map[string]any{"company_name": name},
-		)
-	}
-	return nil
+// isSystemAdmin — Администратор системы: кросс-компанийный, без членств,
+// ходит по компаниям через ?company_id=. Только у него роль уровня ADMIN.
+func isSystemAdmin(u *domain.User) bool {
+	return u.IsRootAdmin || u.Role.Level >= domain.LevelAdmin
 }
 
 func (s *Service) Login(ctx context.Context, req dto.LoginRequest) (*dto.Session, error) {
@@ -70,18 +56,72 @@ func (s *Service) Login(ctx context.Context, req dto.LoginRequest) (*dto.Session
 	}
 
 	s.throttle.RegisterSuccess(ctx, req.Login)
-	// Пароль верный — проверяем доступ компании. ПОСЛЕ верификации пароля,
-	// чтобы по ответу нельзя было узнать компанию чужого логина.
-	if err := ensureCompanyActive(user); err != nil {
-		return nil, err
+	s.log.Info("auth.login", "user_id", user.ID)
+
+	// Администратор системы — сессия без компании (контекст через ?company_id=).
+	if isSystemAdmin(user) {
+		return s.session(ctx, user, nil, true)
 	}
 
-	s.log.Info("auth.login", "user_id", user.ID)
-	return s.session(user, true)
+	memberships, err := s.repo.ListMemberships(ctx, user.ID)
+	if err != nil {
+		return nil, err
+	}
+	switch len(memberships) {
+	case 0:
+		// Доступа ни к одной компании нет (после верификации пароля, чтобы по
+		// ответу нельзя было узнать компанию чужого логина).
+		return nil, errNoCompanyAccess
+	case 1:
+		return s.session(ctx, user, &memberships[0].CompanyID, true)
+	default:
+		// >1 компании — сначала выбор: возвращаем список и короткий select-токен,
+		// полноценную сессию не выдаём (см. SelectCompany).
+		selectTok, err := s.tokens.SelectToken(user.ID)
+		if err != nil {
+			return nil, err
+		}
+		return &dto.Session{
+			UserID:                user.ID,
+			NeedsCompanySelection: true,
+			SelectToken:           selectTok,
+			Companies:             dto.NewMemberships(memberships),
+		}, nil
+	}
+}
+
+// SelectCompany — завершить логин выбором компании (этап после login-gate):
+// проверить select-токен и членство, выдать полноценную сессию.
+func (s *Service) SelectCompany(ctx context.Context, selectToken string, companyID int64) (*dto.Session, error) {
+	userID, err := s.tokens.ParseSelect(selectToken)
+	if err != nil {
+		return nil, domain.NewError("INVALID_TOKEN", "Сессия выбора компании истекла, войдите заново", 401)
+	}
+	user, err := s.repo.GetByID(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	if user == nil || user.IsHidden {
+		return nil, domain.NewError("NOT_FOUND", "Пользователь не найден", 401)
+	}
+	return s.session(ctx, user, &companyID, true)
+}
+
+// SwitchCompany — сменить активную компанию в существующей сессии: перевыпуск
+// access+refresh с клеймами выбранной компании (роль в ней).
+func (s *Service) SwitchCompany(ctx context.Context, userID, companyID int64) (*dto.Session, error) {
+	user, err := s.repo.GetByID(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	if user == nil || user.IsHidden {
+		return nil, domain.NewError("NOT_FOUND", "Пользователь не найден", 401)
+	}
+	return s.session(ctx, user, &companyID, true)
 }
 
 func (s *Service) Refresh(ctx context.Context, refreshToken string) (*dto.Session, error) {
-	userID, err := s.tokens.ParseRefresh(refreshToken)
+	userID, companyID, err := s.tokens.ParseRefresh(refreshToken)
 	if err != nil {
 		return nil, domain.NewError("INVALID_TOKEN", "Refresh token недействителен", 401)
 	}
@@ -92,10 +132,17 @@ func (s *Service) Refresh(ctx context.Context, refreshToken string) (*dto.Sessio
 	if user == nil || user.IsHidden {
 		return nil, domain.NewError("NOT_FOUND", "Пользователь не найден", 401)
 	}
-	if err := ensureCompanyActive(user); err != nil {
-		return nil, err
+	if isSystemAdmin(user) {
+		return s.session(ctx, user, nil, false)
 	}
-	return s.session(user, false)
+	// Совместимость со старыми refresh-токенами без company_id — берём первичную.
+	if companyID == nil {
+		companyID = user.CompanyID
+	}
+	if companyID == nil {
+		return nil, errNoCompanyAccess
+	}
+	return s.session(ctx, user, companyID, false)
 }
 
 func (s *Service) ChangeDefault(ctx context.Context, req dto.ChangeDefaultRequest) (*dto.Session, error) {
@@ -138,5 +185,8 @@ func (s *Service) ChangeDefault(ctx context.Context, req dto.ChangeDefaultReques
 		return nil, err
 	}
 	s.log.Info("auth.change_default", "user_id", user.ID)
-	return s.session(user, true)
+	if isSystemAdmin(user) {
+		return s.session(ctx, user, nil, true)
+	}
+	return s.session(ctx, user, user.CompanyID, true)
 }

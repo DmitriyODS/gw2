@@ -6,6 +6,7 @@ import (
 	"github.com/gofiber/fiber/v2"
 
 	"github.com/DmitriyODS/gw2/back-go/auth/internal/dto"
+	"github.com/DmitriyODS/gw2/back-go/auth/internal/endpoint"
 )
 
 const (
@@ -44,6 +45,43 @@ func (h *handlers) login(c *fiber.Ctx) error {
 	}
 
 	resp, err := h.eps.Login(c.Context(), req)
+	if err != nil {
+		return h.respondError(c, err)
+	}
+	sess := resp.(*dto.Session)
+	setRefreshCookie(c, sess.RefreshToken)
+	return c.JSON(sess)
+}
+
+func (h *handlers) selectCompany(c *fiber.Ctx) error {
+	var req struct {
+		SelectToken string `json:"select_token"`
+		CompanyID   int64  `json:"company_id"`
+	}
+	if err := c.BodyParser(&req); err != nil || req.SelectToken == "" || req.CompanyID == 0 {
+		return badRequest(c, "select_token и company_id обязательны")
+	}
+	resp, err := h.eps.SelectCompany(c.Context(), endpoint.SelectCompanyEpRequest{
+		SelectToken: req.SelectToken, CompanyID: req.CompanyID,
+	})
+	if err != nil {
+		return h.respondError(c, err)
+	}
+	sess := resp.(*dto.Session)
+	setRefreshCookie(c, sess.RefreshToken)
+	return c.JSON(sess)
+}
+
+func (h *handlers) switchCompany(c *fiber.Ctx) error {
+	var req struct {
+		CompanyID int64 `json:"company_id"`
+	}
+	if err := c.BodyParser(&req); err != nil || req.CompanyID == 0 {
+		return badRequest(c, "company_id обязателен")
+	}
+	resp, err := h.eps.SwitchCompany(c.Context(), endpoint.SwitchCompanyEpRequest{
+		UserID: tokenUserID(c), CompanyID: req.CompanyID,
+	})
 	if err != nil {
 		return h.respondError(c, err)
 	}

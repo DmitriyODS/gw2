@@ -62,6 +62,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth.js'
 import { useMessengerStore } from '@/stores/messenger.js'
 import { usePermission, ROLES } from '@/composables/usePermission.js'
+import { useCompanySettings } from '@/composables/useCompanySettings.js'
 import { useChangelog } from '@/composables/useChangelog.js'
 import CompanySelect from '@/components/common/CompanySelect.vue'
 import Logo from '@/components/common/Logo.vue'
@@ -71,6 +72,7 @@ const router = useRouter()
 const authStore = useAuthStore()
 const messenger = useMessengerStore()
 const { isAtLeast } = usePermission()
+const { usesGroove } = useCompanySettings()
 const { open: openChangelog } = useChangelog()
 
 const hovered = ref(false)
@@ -95,8 +97,9 @@ const navItems = computed(() => {
     { path: '/messenger', icon: 'chat', label: 'Мессенджер', tutorial: 'nav-messenger',
       active: () => route.path.startsWith('/messenger'),
       badge: () => messenger.totalUnread },
-    { path: '/groove', icon: 'celebration', label: 'Мой Groove', tutorial: 'nav-groove',
-      active: () => route.path === '/groove' },
+    // «Мой Groove» — только если компания не выключила режим грувиков.
+    ...(usesGroove.value ? [{ path: '/groove', icon: 'celebration', label: 'Мой Groove', tutorial: 'nav-groove',
+      active: () => route.path === '/groove' }] : []),
     { path: '/employees', icon: 'groups', label: 'Сотрудники', tutorial: 'nav-employees',
       active: () => route.path === '/employees' },
   ]

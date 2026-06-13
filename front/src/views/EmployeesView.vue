@@ -391,6 +391,7 @@
       @save="onSave"
     />
 
+
     <ConfirmDialog
       :visible="deleteDlg.open"
       header="Скрыть сотрудника"
@@ -529,6 +530,12 @@ onMounted(() => {
 
 watch(() => companies.activeCompanyId, () => {
   if (auth.isRootAdmin) load()
+})
+
+// Многокомпанийный обычный пользователь сменил активную компанию (switchCompany
+// меняет auth.companyId, не companies.activeCompanyId) — перезагружаем каталог.
+watch(() => auth.companyId, () => {
+  if (!auth.isRootAdmin) load()
 })
 
 function statusOf(u) {
@@ -1486,4 +1493,5 @@ const RolePill = {
   /* Очень узкие — 1 колонка, чтобы ФИО не обрезалось. */
   .emp-grid { grid-template-columns: 1fr; }
 }
+
 </style>

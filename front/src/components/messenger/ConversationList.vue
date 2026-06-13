@@ -111,11 +111,12 @@
             </span>
           </div>
         </div>
-        <!-- Действия pin/delete — только на обычных диалогах. Чат техподдержки
-             (и у владельца, и у админа в инбоксе) нельзя ни закрепить, ни
-             удалить. -->
-        <div v-if="!c.is_dev_chat && !c.is_pet_chat" class="conv-actions" @click.stop>
+        <!-- Действия pin/delete. Чат техподдержки нельзя ни закрепить, ни
+             удалить. Чат с Грувиком закреплять нельзя, но удалить можно
+             (переписка сотрётся, питомец вернётся пустым чатом). -->
+        <div v-if="!c.is_dev_chat" class="conv-actions" @click.stop>
           <button
+            v-if="!c.is_pet_chat"
             class="conv-action"
             :class="{ active: c.is_pinned }"
             :title="c.is_pinned ? 'Открепить' : 'Закрепить'"

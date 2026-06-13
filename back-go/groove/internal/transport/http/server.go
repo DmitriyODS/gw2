@@ -20,25 +20,33 @@ type Server struct {
 	app *fiber.App
 }
 
-// authSource — сверка пользователя для pkg-мидлвари (is_hidden, активность
-// компании, уровень роли) поверх доменного UserReader.
+// authSource — сверка пользователя для pkg-мидлвари. Активная компания и роль
+// в ней — ИЗ ТОКЕНА (active); из БД — is_hidden, профиль и активность выбранной
+// компании.
 func authSource(users domain.UserReader) pasetoauth.AuthSource {
-	return func(ctx context.Context, userID int64) (*pasetoauth.AuthInfo, error) {
+	return func(ctx context.Context, userID int64, active pasetoauth.Claims) (*pasetoauth.AuthInfo, error) {
 		u, err := users.GetUser(ctx, userID)
 		if err != nil || u == nil {
 			return nil, err
 		}
+		u.CompanyID = active.CompanyID
+		u.RoleLevel = active.RoleLevel
+		companyActive, err := users.CompanyActive(ctx, active.CompanyID)
+		if err != nil {
+			return nil, err
+		}
+		u.CompanyActive = companyActive
 		return &pasetoauth.AuthInfo{
-			RoleLevel:     u.RoleLevel,
+			RoleLevel:     active.RoleLevel,
 			IsHidden:      u.IsHidden,
-			CompanyActive: u.CompanyActive,
+			CompanyActive: companyActive,
 			User:          u,
 		}, nil
 	}
 }
 
 func NewServer(eps endpoint.Endpoints, users domain.UserReader,
-	verifier *pasetoauth.Verifier, log *slog.Logger) *Server {
+	companies domain.CompanyReader, verifier *pasetoauth.Verifier, log *slog.Logger) *Server {
 
 	app := fiber.New(fiber.Config{
 		AppName:               "gw2-groovesvc",
@@ -55,7 +63,7 @@ func NewServer(eps endpoint.Endpoints, users domain.UserReader,
 	// Магазин — без company-scope (глобальный прайс), как во Flask.
 	api.Get("/shop", h.getShop)
 
-	scoped := api.Group("", companyScope)
+	scoped := api.Group("", companyScope, grooveGate(companies))
 	scoped.Get("/feed", h.getFeed)
 	scoped.Post("/feed/:id<int>/reactions", h.toggleReaction)
 	scoped.Get("/feed/:id<int>/comments", h.listComments)
@@ -116,4 +124,22 @@ func companyScope(c *fiber.Ctx) error {
 	}
 	c.Locals(localCompanyID, id)
 	return c.Next()
+}
+
+// grooveGate — 403, если компания выключила режим «Мой Groove». Вешается
+// после companyScope (читает companyID из Locals). Ошибка чтения настройки →
+// пропускаем (fail-open: режим по умолчанию включён).
+func grooveGate(companies domain.CompanyReader) fiber.Handler {
+	return func(c *fiber.Ctx) error {
+		cid, _ := c.Locals(localCompanyID).(int64)
+		if cid != 0 {
+			if enabled, err := companies.GrooveEnabled(c.Context(), cid); err == nil && !enabled {
+				return c.Status(fiber.StatusForbidden).JSON(fiber.Map{
+					"error":   "GROOVE_DISABLED",
+					"message": "Режим «Мой Groove» отключён для компании",
+				})
+			}
+		}
+		return c.Next()
+	}
 }

@@ -576,6 +576,8 @@ func (f *fakeUsers) GetUser(_ context.Context, id int64) (*domain.User, error) {
 	return &cp, nil
 }
 
+func (f *fakeUsers) CompanyActive(_ context.Context, _ *int64) (bool, error) { return true, nil }
+
 func (f *fakeUsers) ListUsers(_ context.Context, ids []int64) ([]*domain.User, error) {
 	var out []*domain.User
 	for _, id := range ids {
@@ -897,21 +899,39 @@ func TestConversationHiddenByBothSidesIsPhysicallyDeleted(t *testing.T) {
 	}
 }
 
-// Соло-чаты удалять нельзя.
-func TestSoloChatsUndeletable(t *testing.T) {
+// Чат техподдержки удалять нельзя.
+func TestDevChatUndeletable(t *testing.T) {
 	svc, _, _, _ := newTestEnv()
 	ctx := context.Background()
 
 	dev, _ := svc.OpenDevChat(ctx, 2)
-	pet, _ := svc.OpenPetChat(ctx, 2)
-
 	_, err := svc.DeleteConversation(ctx, dev.ID, 2, "all")
 	if de := domain.AsDomainError(err); de == nil || de.Code != "DEV_CHAT_UNDELETABLE" {
 		t.Fatalf("dev-чат: %v", err)
 	}
-	_, err = svc.DeleteConversation(ctx, pet.ID, 2, "all")
-	if de := domain.AsDomainError(err); de == nil || de.Code != "PET_CHAT_UNDELETABLE" {
-		t.Fatalf("pet-чат: %v", err)
+}
+
+// Чат с Грувиком — соло-диалог: удаляется физически при любом scope,
+// владелец получает conversation:deleted в свои вкладки.
+func TestPetChatDeletesPhysically(t *testing.T) {
+	svc, repo, _, pub := newTestEnv()
+	ctx := context.Background()
+
+	pet, _ := svc.OpenPetChat(ctx, 2)
+	if _, err := svc.SendMessage(ctx, pet.ID, 2, dto.MessageCreate{Text: str("привет")}); err != nil {
+		t.Fatalf("send: %v", err)
+	}
+
+	physical, err := svc.DeleteConversation(ctx, pet.ID, 2, "me")
+	if err != nil || !physical {
+		t.Fatalf("pet-чат: physical=%v err=%v", physical, err)
+	}
+	if _, ok := repo.convs[pet.ID]; ok {
+		t.Fatal("pet-чат не удалён физически")
+	}
+	evs := pub.byName("conversation:deleted")
+	if len(evs) != 1 || len(evs[0].Rooms) != 1 || evs[0].Rooms[0] != "user_2" {
+		t.Fatalf("conversation:deleted: %+v", evs)
 	}
 }
 

@@ -229,6 +229,184 @@ func (r *UserRepository) IsCompanyDirector(ctx context.Context, userID int64) (b
 	return exists, err
 }
 
+// ── Членство в компаниях (user_companies) ──
+
+// memberColumns/memberFrom — те же колонки и порядок, что userColumns, но роль
+// и компания берутся из связки user_companies (роль В ЭТОЙ компании), поэтому
+// результат сканируется тем же scanUser.
+const memberColumns = `
+	u.id, u.fio, u.login, u.hash_password, u.post,
+	r.id, r.name, r.level,
+	uc.company_id, c.id, c.name, c.is_active, c.settings,
+	u.avatar_path, u.phone, u.email,
+	u.is_default_pass, u.is_hidden, u.is_root_admin,
+	u.created_at, u.last_seen_at`
+
+const memberFrom = `
+	FROM user_companies uc
+	JOIN users u ON u.id = uc.user_id
+	JOIN roles r ON r.id = uc.role_id
+	JOIN companies c ON c.id = uc.company_id`
+
+func scanMembership(row pgx.Row) (*domain.Membership, error) {
+	var (
+		m       domain.Membership
+		cActive *bool
+		cName   *string
+	)
+	c := domain.CompanyRef{}
+	err := row.Scan(&m.CompanyID, &cName, &cActive, &c.Settings,
+		&m.Role.ID, &m.Role.Name, &m.Role.Level, &m.CreatedAt)
+	if err != nil {
+		return nil, err
+	}
+	c.ID = m.CompanyID
+	if cName != nil {
+		c.Name = *cName
+	}
+	c.IsActive = cActive != nil && *cActive
+	m.Company = &c
+	return &m, nil
+}
+
+const membershipSelect = `
+	SELECT uc.company_id, c.name, c.is_active, c.settings,
+	       r.id, r.name, r.level, uc.created_at
+	  FROM user_companies uc
+	  JOIN companies c ON c.id = uc.company_id
+	  JOIN roles r ON r.id = uc.role_id`
+
+func (r *UserRepository) ListMemberships(ctx context.Context, userID int64) ([]domain.Membership, error) {
+	rows, err := r.pool.Query(ctx, membershipSelect+
+		` WHERE uc.user_id = $1 ORDER BY uc.created_at ASC, uc.company_id ASC`, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []domain.Membership
+	for rows.Next() {
+		m, err := scanMembership(rows)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, *m)
+	}
+	return out, rows.Err()
+}
+
+func (r *UserRepository) GetMembership(ctx context.Context, userID, companyID int64) (*domain.Membership, error) {
+	m, err := scanMembership(r.pool.QueryRow(ctx, membershipSelect+
+		` WHERE uc.user_id = $1 AND uc.company_id = $2`, userID, companyID))
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, nil
+	}
+	return m, err
+}
+
+func (r *UserRepository) AddMembership(ctx context.Context, userID, companyID, roleID int64) error {
+	_, err := r.pool.Exec(ctx, `
+		INSERT INTO user_companies (user_id, company_id, role_id)
+		VALUES ($1, $2, $3) ON CONFLICT (user_id, company_id) DO NOTHING`,
+		userID, companyID, roleID)
+	return err
+}
+
+func (r *UserRepository) RemoveMembership(ctx context.Context, userID, companyID int64) error {
+	_, err := r.pool.Exec(ctx,
+		`DELETE FROM user_companies WHERE user_id = $1 AND company_id = $2`, userID, companyID)
+	return err
+}
+
+func (r *UserRepository) UpdateMembershipRole(ctx context.Context, userID, companyID, roleID int64) error {
+	_, err := r.pool.Exec(ctx,
+		`UPDATE user_companies SET role_id = $3 WHERE user_id = $1 AND company_id = $2`,
+		userID, companyID, roleID)
+	return err
+}
+
+func (r *UserRepository) CountCompanyMembersByLevel(ctx context.Context, companyID int64, level int) (int, error) {
+	var n int
+	err := r.pool.QueryRow(ctx, `
+		SELECT count(*) FROM user_companies uc
+		JOIN users u ON u.id = uc.user_id
+		JOIN roles r ON r.id = uc.role_id
+		WHERE uc.company_id = $1 AND r.level = $2 AND u.is_hidden = FALSE`, companyID, level,
+	).Scan(&n)
+	return n, err
+}
+
+func (r *UserRepository) SearchDirectoryMembers(ctx context.Context, query string, excludeID, companyID int64) ([]*domain.User, error) {
+	args := []any{companyID}
+	where := []string{"uc.company_id = $1", "u.is_hidden = FALSE"}
+	if excludeID > 0 {
+		args = append(args, excludeID)
+		where = append(where, fmt.Sprintf("u.id <> $%d", len(args)))
+	}
+	if q := strings.TrimSpace(query); q != "" {
+		args = append(args, "%"+strings.ToLower(q)+"%")
+		where = append(where, fmt.Sprintf("(lower(u.fio) LIKE $%d OR lower(u.login) LIKE $%d)", len(args), len(args)))
+	}
+	rows, err := r.pool.Query(ctx,
+		"SELECT"+memberColumns+memberFrom+" WHERE "+strings.Join(where, " AND ")+" ORDER BY u.fio ASC", args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []*domain.User
+	for rows.Next() {
+		u, err := scanUser(rows)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, u)
+	}
+	return out, rows.Err()
+}
+
+func (r *UserRepository) SearchNonMembers(ctx context.Context, query string, companyID int64) ([]*domain.User, error) {
+	args := []any{companyID}
+	where := []string{
+		"u.is_hidden = FALSE",
+		"NOT EXISTS (SELECT 1 FROM user_companies uc WHERE uc.user_id = u.id AND uc.company_id = $1)",
+	}
+	if q := strings.TrimSpace(query); q != "" {
+		args = append(args, "%"+strings.ToLower(q)+"%")
+		where = append(where, fmt.Sprintf("(lower(u.fio) LIKE $%d OR lower(u.login) LIKE $%d)", len(args), len(args)))
+	}
+	return r.list(ctx, "WHERE "+strings.Join(where, " AND ")+" ORDER BY u.fio ASC LIMIT 20", args...)
+}
+
+func (r *UserRepository) SyncPrimaryCompany(ctx context.Context, userID int64) error {
+	// Первичная компания = старейшая связка; role_id сохраняем при отсутствии
+	// связок (колонка NOT NULL), company_id → NULL (инвариант NULL ⇔ админ).
+	_, err := r.pool.Exec(ctx, `
+		WITH primary_m AS (
+			SELECT company_id, role_id FROM user_companies
+			WHERE user_id = $1 ORDER BY created_at ASC, company_id ASC LIMIT 1
+		)
+		UPDATE users SET
+			company_id = (SELECT company_id FROM primary_m),
+			role_id    = COALESCE((SELECT role_id FROM primary_m), role_id)
+		WHERE id = $1`, userID)
+	return err
+}
+
+func (r *UserRepository) CompanyActive(ctx context.Context, companyID *int64) (bool, error) {
+	if companyID == nil {
+		return true, nil
+	}
+	var active bool
+	err := r.pool.QueryRow(ctx,
+		`SELECT is_active FROM companies WHERE id = $1`, *companyID).Scan(&active)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return false, nil
+		}
+		return false, err
+	}
+	return active, nil
+}
+
 func (r *UserRepository) HashPassword(ctx context.Context, password string) (string, error) {
 	var hash string
 	err := r.pool.QueryRow(ctx,

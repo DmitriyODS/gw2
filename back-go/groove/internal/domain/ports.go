@@ -60,14 +60,21 @@ type PetRepo interface {
 // UserReader — read-only пользователи платформы (владелец — authsvc).
 type UserReader interface {
 	GetUser(ctx context.Context, id int64) (*User, error)
+	// CompanyActive — активна ли выбранная (активная) компания сессии из
+	// токена. nil (Администратор системы) → true.
+	CompanyActive(ctx context.Context, companyID *int64) (bool, error)
 }
 
-// CompanyReader — read-only компании (активность, ai_enabled, выходные).
+// CompanyReader — read-only компании (активность, ai_enabled, выходные,
+// режим «Мой Groove»).
 type CompanyReader interface {
 	ActiveCompanyIDs(ctx context.Context) ([]int64, error)
 	AICompanyIDs(ctx context.Context) ([]int64, error)
 	// WeekendDays: дни недели 0=Пн … 6=Вс; мусор/отсутствие → дефолт Сб+Вс.
 	WeekendDays(ctx context.Context, companyID int64) ([]int, error)
+	// GrooveEnabled: включён ли режим «Мой Groove» (settings.uses_groove);
+	// отсутствие/мусор → включён.
+	GrooveEnabled(ctx context.Context, companyID int64) (bool, error)
 }
 
 // WorkReader — read-only задачи/юниты (брифинг, заряды, статистика Грувика).

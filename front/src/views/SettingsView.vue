@@ -159,6 +159,16 @@
           <WeekendSettings v-if="isAtLeast(ROLES.DIRECTOR) && activeSection === 'weekends'" />
         </div>
 
+        <!-- Режим «Мой Groove» компании (Руководитель+ / Администратор системы). -->
+        <div v-show="activeSection === 'groove'" class="pane-block">
+          <GrooveSettings v-if="isAtLeast(ROLES.DIRECTOR) && activeSection === 'groove'" />
+        </div>
+
+        <!-- Ссылка-приглашение в компанию (Руководитель своей компании). -->
+        <div v-show="activeSection === 'invite'" class="pane-block">
+          <CompanyInviteSettings v-if="isAtLeast(ROLES.DIRECTOR) && hasCompany && activeSection === 'invite'" />
+        </div>
+
         <!-- Справка -->
         <div v-show="activeSection === 'help'" class="pane-block">
           <HelpCenter />
@@ -211,6 +221,8 @@ import AiSettings from '@/components/settings/AiSettings.vue'
 import YougileUserSettings from '@/components/settings/YougileUserSettings.vue'
 import YougileCompanySettings from '@/components/settings/YougileCompanySettings.vue'
 import WeekendSettings from '@/components/settings/WeekendSettings.vue'
+import GrooveSettings from '@/components/settings/GrooveSettings.vue'
+import CompanyInviteSettings from '@/components/settings/CompanyInviteSettings.vue'
 import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
 
 const { isAtLeast } = usePermission()
@@ -253,11 +265,13 @@ const allGroups = computed(() => [
     sections: [
       { key: 'ai', title: 'Нейро-функции', desc: 'Подключение ProxyAPI: факт дня и семантический поиск', icon: 'smart_toy', tone: 'tertiary' },
       { key: 'weekends', title: 'Выходные дни', desc: 'Дни отдыха компании: Грувик не зовёт работать и предлагает активности', icon: 'weekend', tone: 'secondary' },
+      { key: 'groove', title: 'Мой Groove', desc: 'Геймификация: питомцы-Грувики, лента, реакции, кудосы и рейды', icon: 'celebration', tone: 'tertiary' },
       // Интеграция с YouGile завязана на конкретную компанию. Root-админ
       // системы (без company_id) не настраивает её — это делает директор
       // конкретной компании. Поэтому пункт показываем только если
       // hasCompany.
       ...(hasCompany.value ? [
+        { key: 'invite', title: 'Ссылка-приглашение', desc: 'Пригласить сотрудников в компанию по ссылке', icon: 'link', tone: 'secondary' },
         { key: 'yougile-company', title: 'Интеграция с YouGile', desc: 'Личный коннект директора + выбор компании, проекта и доски', icon: 'integration_instructions', tone: 'primary' },
       ] : []),
     ],

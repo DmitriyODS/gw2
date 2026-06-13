@@ -111,12 +111,45 @@
         </button>
       </form>
     </AppDialog>
+
+    <!-- Выбор компании при логине (несколько компаний у пользователя) -->
+    <AppDialog
+      v-if="showCompanyPicker"
+      model-value
+      icon="apartment"
+      size="sm"
+      title="Выберите компанию"
+      subtitle="Вы состоите в нескольких компаниях. В какую войти?"
+      :closable="false"
+    >
+      <div class="company-picker">
+        <button
+          v-for="c in pickerCompanies"
+          :key="c.company_id"
+          type="button"
+          class="company-option"
+          :class="{ active: pickerSelected === c.company_id, disabled: !c.is_active }"
+          :disabled="!c.is_active"
+          @click="pickerSelected = c.company_id"
+        >
+          <span class="company-option-main">
+            <span class="company-option-name">{{ c.company_name }}</span>
+            <span class="company-option-role">{{ c.role_name }}<template v-if="!c.is_active"> · отключена</template></span>
+          </span>
+          <span v-if="pickerSelected === c.company_id" class="material-symbols-outlined">check_circle</span>
+        </button>
+      </div>
+      <p v-if="loginError" class="error-msg">{{ loginError }}</p>
+      <button type="button" class="btn-login" :disabled="loading || !pickerSelected" @click="confirmCompany">
+        {{ loading ? 'Входим...' : 'Войти' }}
+      </button>
+    </AppDialog>
   </div>
 </template>
 
 <script setup>
 import { ref, reactive, computed, onMounted, onBeforeUnmount } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRouter, useRoute } from 'vue-router'
 import { useAuthStore } from '@/stores/auth.js'
 import { useThemeStore } from '@/stores/theme.js'
 import { connectSocket } from '@/socket/index.js'
@@ -124,6 +157,7 @@ import AppDialog from '@/components/common/AppDialog.vue'
 import Logo from '@/components/common/Logo.vue'
 
 const router = useRouter()
+const route = useRoute()
 const authStore = useAuthStore()
 const themeStore = useThemeStore()
 
@@ -137,6 +171,12 @@ const showLoginPassword = ref(false)
 // тикаем секунды и блокируем форму до конца таймера.
 const cooldownSec = ref(0)
 let cooldownTimer = null
+
+// Выбор компании при логине (если их несколько).
+const showCompanyPicker = ref(false)
+const pickerCompanies = ref([])
+const pickerSelectToken = ref('')
+const pickerSelected = ref(null)
 
 const changeForm = reactive({ login: '', password: '', confirmPassword: '' })
 const changeError = ref('')
@@ -189,19 +229,55 @@ async function handleLogin() {
   }
   loading.value = true
   try {
-    const needsChange = await authStore.login(loginForm.login, loginForm.password)
-    if (needsChange) {
-      showChangeModal.value = true
-    } else {
-      connectSocket()
-      router.push('/tasks')
+    const result = await authStore.login(loginForm.login, loginForm.password)
+    if (result.needsSelection) {
+      openCompanyPicker(result.companies, result.selectToken)
+      return
     }
+    finishLogin(result.forceChange)
   } catch (e) {
     if (e?.status === 429 && e?.retry_after_sec) {
       startCooldown(e.retry_after_sec)
     } else {
       loginError.value = e?.message || 'Неверный логин или пароль'
     }
+  } finally {
+    loading.value = false
+  }
+}
+
+function finishLogin(forceChange) {
+  if (forceChange) {
+    showChangeModal.value = true
+  } else {
+    connectSocket()
+    const redirect = typeof route.query.redirect === 'string' ? route.query.redirect : '/tasks'
+    router.push(redirect)
+  }
+}
+
+function openCompanyPicker(list, selectToken) {
+  pickerCompanies.value = list || []
+  pickerSelectToken.value = selectToken
+  // Пред-выбор: последняя выбранная компания (localStorage), иначе первая.
+  const last = Number(localStorage.getItem('gw_active_company_id'))
+  const remembered = pickerCompanies.value.find((c) => c.company_id === last && c.is_active)
+  const firstActive = pickerCompanies.value.find((c) => c.is_active)
+  pickerSelected.value = (remembered || firstActive || pickerCompanies.value[0])?.company_id ?? null
+  showCompanyPicker.value = true
+}
+
+async function confirmCompany() {
+  if (!pickerSelected.value) return
+  loading.value = true
+  loginError.value = ''
+  try {
+    const result = await authStore.selectCompany(pickerSelectToken.value, pickerSelected.value)
+    showCompanyPicker.value = false
+    finishLogin(result.forceChange)
+  } catch (e) {
+    showCompanyPicker.value = false
+    loginError.value = e?.message || 'Не удалось войти в выбранную компанию'
   } finally {
     loading.value = false
   }
@@ -433,6 +509,65 @@ async function handleChangeDefault() {
   opacity: 0.6;
   cursor: not-allowed;
   transform: none;
+}
+
+/* Company picker dialog */
+.company-picker {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-bottom: 16px;
+}
+
+.company-option {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px 16px;
+  border-radius: var(--radius-lg);
+  border: 1.5px solid var(--color-outline-dim);
+  background: var(--color-surface);
+  color: var(--color-text);
+  cursor: pointer;
+  text-align: left;
+  transition: border-color 0.15s, background 0.15s;
+}
+
+.company-option:hover:not(.disabled) {
+  border-color: var(--color-primary);
+}
+
+.company-option.active {
+  border-color: var(--color-primary);
+  background: var(--color-primary-container);
+  color: var(--color-on-primary-container);
+}
+
+.company-option.disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.company-option-main {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.company-option-name {
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.company-option-role {
+  font-size: 12px;
+  color: var(--color-text-dim);
+}
+
+.company-option .material-symbols-outlined {
+  color: var(--color-primary);
 }
 
 /* Change credentials dialog */

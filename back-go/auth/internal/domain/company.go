@@ -10,6 +10,8 @@ func DefaultCompanySettings() map[string]any {
 		"uses_yougile": false,
 		"uses_stages":  false,
 		"uses_calls":   true,
+		// Режим «Мой Groove» (геймификация-питомцы) включён по умолчанию.
+		"uses_groove": true,
 		// Выходные дни компании: 0=Пн … 6=Вс (Python date.weekday()).
 		"weekend_days": []any{5, 6},
 	}
@@ -37,6 +39,7 @@ type Company struct {
 	IsActive    bool
 	Settings    map[string]any
 	CreatedAt   time.Time
+	InviteCode  *string
 }
 
 // CompanyStats — счётчики для строки таблицы Компаний.

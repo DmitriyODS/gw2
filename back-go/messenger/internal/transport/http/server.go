@@ -21,18 +21,26 @@ type Server struct {
 	app *fiber.App
 }
 
-// authSource — сверка пользователя для pkg-мидлвари (is_hidden, активность
-// компании) поверх доменного UserReader.
+// authSource — сверка пользователя для pkg-мидлвари. Активная компания и роль
+// в ней — ИЗ ТОКЕНА (active); из БД — is_hidden, профиль и активность выбранной
+// компании. Многокомпанийный юзер скоупится по выбранной компании.
 func authSource(users domain.UserReader) pasetoauth.AuthSource {
-	return func(ctx context.Context, userID int64) (*pasetoauth.AuthInfo, error) {
+	return func(ctx context.Context, userID int64, active pasetoauth.Claims) (*pasetoauth.AuthInfo, error) {
 		u, err := users.GetUser(ctx, userID)
 		if err != nil || u == nil {
 			return nil, err
 		}
+		u.CompanyID = active.CompanyID
+		u.RoleLevel = active.RoleLevel
+		companyActive, err := users.CompanyActive(ctx, active.CompanyID)
+		if err != nil {
+			return nil, err
+		}
+		u.CompanyActive = companyActive
 		return &pasetoauth.AuthInfo{
-			RoleLevel:     u.RoleLevel,
+			RoleLevel:     active.RoleLevel,
 			IsHidden:      u.IsHidden,
-			CompanyActive: u.CompanyActive,
+			CompanyActive: companyActive,
 			User:          u,
 		}, nil
 	}

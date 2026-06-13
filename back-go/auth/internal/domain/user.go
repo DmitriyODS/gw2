@@ -48,6 +48,18 @@ type User struct {
 	LastSeenAt    *time.Time
 }
 
+// Membership — связка «пользователь ↔ компания» с ролью в этой компании
+// (таблица user_companies). Один человек (один аккаунт) может состоять в
+// нескольких компаниях с разными ролями. Источник истины для «активной»
+// компании сессии (выбирается при login/switch и кладётся в токен);
+// users.company_id/role_id — лишь «первичная» компания и роль в ней.
+type Membership struct {
+	CompanyID int64
+	Company   *CompanyRef
+	Role      Role
+	CreatedAt time.Time
+}
+
 func (u *User) Level() int {
 	if u == nil {
 		return 0

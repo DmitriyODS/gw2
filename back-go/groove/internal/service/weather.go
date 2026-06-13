@@ -236,6 +236,9 @@ func (s *Service) maybeWeatherRemark(ctx context.Context, loc *domain.UserLocati
 	if err != nil || conv == nil {
 		return // pet-чата ещё нет — некуда писать
 	}
+	if !s.grooveEnabled(ctx, conv.CompanyID) {
+		return // режим «Мой Groove» выключен — Грувик молчит о погоде
+	}
 	pet, err := s.pets.GetOrCreate(ctx, loc.UserID, conv.CompanyID)
 	if err != nil {
 		return

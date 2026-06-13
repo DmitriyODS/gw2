@@ -6,13 +6,23 @@ package domain
 // парсит сам PostgreSQL.
 
 type BackupData struct {
-	Roles       []BackupRole       `json:"roles"`
-	Users       []BackupUser       `json:"users"`
-	Departments []BackupDepartment `json:"departments"`
-	Tasks       []BackupTask       `json:"tasks"`
-	Favorites   []BackupFavorite   `json:"favorites"`
-	UnitTypes   []BackupUnitType   `json:"unit_types"`
-	Units       []BackupUnit       `json:"units"`
+	Roles         []BackupRole       `json:"roles"`
+	Users         []BackupUser       `json:"users"`
+	UserCompanies []BackupMembership `json:"user_companies"`
+	Departments   []BackupDepartment `json:"departments"`
+	Tasks         []BackupTask       `json:"tasks"`
+	Favorites     []BackupFavorite   `json:"favorites"`
+	UnitTypes     []BackupUnitType   `json:"unit_types"`
+	Units         []BackupUnit       `json:"units"`
+}
+
+// BackupMembership — связка user↔company с ролью. Ключа не было в legacy-
+// формате; старые бэкапы без него восстанавливаются без членств (best-effort).
+type BackupMembership struct {
+	UserID    int64   `json:"user_id"`
+	CompanyID int64   `json:"company_id"`
+	RoleID    int64   `json:"role_id"`
+	CreatedAt *string `json:"created_at"`
 }
 
 type BackupRole struct {

@@ -1,7 +1,9 @@
 import { defineStore } from 'pinia'
 import { ref, computed, watch } from 'vue'
 import { getMe } from '@/api/users.js'
-import { login as apiLogin, logout as apiLogout, changeDefault as apiChangeDefault, refreshToken } from '@/api/auth.js'
+import { login as apiLogin, logout as apiLogout, changeDefault as apiChangeDefault, refreshToken,
+  selectCompany as apiSelectCompany, switchCompany as apiSwitchCompany } from '@/api/auth.js'
+import { joinCompanyByCode as apiJoinCompany } from '@/api/companies.js'
 import router from '@/router/index.js'
 import { disconnectSocket, updateSocketAuth } from '@/socket/index.js'
 
@@ -12,6 +14,9 @@ export const useAuthStore = defineStore('auth', () => {
   // is_root_admin/force_change). PASETO-токен на клиенте не декодируется —
   // authsvc дублирует клеймы в теле ответов login/refresh/change-default.
   const claims = ref({})
+  // Компании, в которых состоит пользователь, с ролью в каждой (из тела
+  // login/select/switch/refresh). Для многокомпанийных — переключатель и пикер.
+  const companies = ref([])
   const forceChange = ref(false)
   const ready = ref(false)
   // Идёт намеренный выход: client.js на это время глушит «Сессия истекла»
@@ -32,8 +37,12 @@ export const useAuthStore = defineStore('auth', () => {
   const companyName = computed(() => claims.value.company_name ?? null)
   const companySettings = computed(() => claims.value.company_settings ?? null)
   const isRootAdmin = computed(() => !!claims.value.is_root_admin)
+  const roleLevel = computed(() => claims.value.role_level ?? 0)
+  // Многокомпанийный обычный пользователь — может переключать активную компанию.
+  const isMultiCompany = computed(() => !isRootAdmin.value && companies.value.length > 1)
 
-  // Применить ответ login/refresh/change-default: токен + клеймы сессии.
+  // Применить ответ login/select/switch/refresh/change-default: токен + клеймы
+  // сессии + список компаний пользователя.
   function applySession(data) {
     loggingOut.value = false
     token.value = data.access_token
@@ -44,12 +53,35 @@ export const useAuthStore = defineStore('auth', () => {
       role_level: data.role_level ?? 0,
       is_root_admin: !!data.is_root_admin,
     }
+    companies.value = data.companies ?? []
     forceChange.value = !!data.force_change
+  }
+
+  // Локально подмешать изменённые настройки активной компании в клеймы сессии,
+  // не дожидаясь рефреша токена (15 мин). Нужно, когда Руководитель сам меняет
+  // настройку своей компании (например выключает «Мой Groove») — иначе меню и
+  // гард раздела отстают от факта до следующего refresh.
+  function patchCompanySettings(patch) {
+    claims.value = {
+      ...claims.value,
+      company_settings: { ...(claims.value.company_settings || {}), ...patch },
+    }
+  }
+
+  // Активная компания запоминается в браузере — на следующем логине пикер
+  // пред-выбирает её (внутри сессии активную компанию несёт refresh-cookie).
+  function rememberCompany(companyId) {
+    try { localStorage.setItem('gw_active_company_id', String(companyId)) } catch { /* ignore */ }
   }
 
   async function login(loginVal, password) {
     try {
       const data = await apiLogin({ login: loginVal, password })
+      // Несколько компаний — сначала выбор: сессию не применяем, отдаём список
+      // и select-токен наверх (LoginView показывает пикер → selectCompany).
+      if (data.needs_company_selection) {
+        return { needsSelection: true, companies: data.companies ?? [], selectToken: data.select_token }
+      }
       applySession(data)
       companyDisabled.value = null
       // Профиль грузим в фоне — вход и редирект не ждут /users/me: иначе на
@@ -58,7 +90,7 @@ export const useAuthStore = defineStore('auth', () => {
       if (!forceChange.value) {
         loadMe().catch(() => {})
       }
-      return forceChange.value
+      return { forceChange: forceChange.value }
     } catch (e) {
       // 403 COMPANY_DISABLED — бэк сообщил, что компания отключена.
       // client.js уже выставил флаг — добиваем здесь на случай прямого fetch.
@@ -67,6 +99,39 @@ export const useAuthStore = defineStore('auth', () => {
       }
       throw e
     }
+  }
+
+  // Завершить логин выбором компании (после login с needs_company_selection).
+  async function selectCompany(selectToken, companyId) {
+    const data = await apiSelectCompany({ select_token: selectToken, company_id: companyId })
+    applySession(data)
+    companyDisabled.value = null
+    rememberCompany(companyId)
+    if (!forceChange.value) {
+      loadMe().catch(() => {})
+    }
+    return { forceChange: forceChange.value }
+  }
+
+  // Сменить активную компанию в текущей сессии (перевыпуск токенов + перечит.
+  // профиля). Сторы данных перезагрузятся по watch на claims.company_id.
+  async function switchCompany(targetCompanyId) {
+    if (targetCompanyId === claims.value.company_id) return
+    const data = await apiSwitchCompany(targetCompanyId)
+    applySession(data)
+    rememberCompany(targetCompanyId)
+    await loadMe().catch(() => {})
+  }
+
+  // Вступить в компанию по ссылке-приглашению (авторизованный пользователь):
+  // бэкенд добавляет членство и возвращает сессию, переключённую на компанию.
+  async function joinCompany(code) {
+    const data = await apiJoinCompany(code)
+    applySession(data)
+    companyDisabled.value = null
+    if (data.company_id != null) rememberCompany(data.company_id)
+    await loadMe().catch(() => {})
+    return data
   }
 
   async function loadMe() {
@@ -115,6 +180,7 @@ export const useAuthStore = defineStore('auth', () => {
     user.value = null
     token.value = null
     claims.value = {}
+    companies.value = []
     forceChange.value = false
     companyDisabled.value = null
   }
@@ -142,7 +208,9 @@ export const useAuthStore = defineStore('auth', () => {
   return {
     user, token, forceChange, isAuth, ready, loggingOut,
     companyId, companyName, companySettings, isRootAdmin, companyDisabled,
-    ensureReady, login, logout, loadMe, clearAuth, applySession,
+    companies, isMultiCompany, roleLevel,
+    ensureReady, login, logout, loadMe, clearAuth, applySession, patchCompanySettings,
+    selectCompany, switchCompany, joinCompany,
     changeDefaultCredentials,
   }
 })

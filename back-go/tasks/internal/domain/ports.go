@@ -94,6 +94,9 @@ type CommentRepository interface {
 // валидация ответственного, ФИО для force-stop уведомления).
 type UserReader interface {
 	GetUser(ctx Ctx, id int64) (*User, error)
+	// CompanyActive — активна ли компания (для auth-гейта по АКТИВНОЙ компании
+	// сессии из токена). nil (Администратор системы) → true.
+	CompanyActive(ctx Ctx, companyID *int64) (bool, error)
 }
 
 // CompanyReader — read-only настройки компании (флаг uses_yougile для

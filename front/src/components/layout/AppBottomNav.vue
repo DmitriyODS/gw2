@@ -63,6 +63,7 @@ import { useAuthStore } from '@/stores/auth.js'
 import { useUnitsStore } from '@/stores/units.js'
 import { useMessengerStore } from '@/stores/messenger.js'
 import { usePermission, ROLES } from '@/composables/usePermission.js'
+import { useCompanySettings } from '@/composables/useCompanySettings.js'
 
 const route = useRoute()
 const router = useRouter()
@@ -70,6 +71,7 @@ const authStore = useAuthStore()
 const unitsStore = useUnitsStore()
 const messenger = useMessengerStore()
 const { isAtLeast } = usePermission()
+const { usesGroove } = useCompanySettings()
 
 const moreOpen = ref(false)
 watch(() => route.path, () => { moreOpen.value = false })
@@ -90,8 +92,9 @@ const mainItems = computed(() => [
 
 const moreItems = computed(() => {
   const arr = [
-    { path: '/groove', icon: 'celebration', label: 'Мой Groove',
-      active: () => route.path === '/groove' },
+    // «Мой Groove» — только если компания не выключила режим грувиков.
+    ...(usesGroove.value ? [{ path: '/groove', icon: 'celebration', label: 'Мой Groove',
+      active: () => route.path === '/groove' }] : []),
     { path: '/employees', icon: 'groups', label: 'Сотрудники',
       active: () => route.path === '/employees' },
     { path: '/settings', icon: 'settings', label: 'Настройки',

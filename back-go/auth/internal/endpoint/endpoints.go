@@ -15,22 +15,32 @@ import (
 
 type Endpoints struct {
 	Login         endpoint.Endpoint
+	SelectCompany endpoint.Endpoint
+	SwitchCompany endpoint.Endpoint
 	Refresh       endpoint.Endpoint
 	ChangeDefault endpoint.Endpoint
 
-	ListUsers     endpoint.Endpoint
-	CreateUser    endpoint.Endpoint
-	Directory     endpoint.Endpoint
-	DirectoryUser endpoint.Endpoint
-	Me            endpoint.Endpoint
-	UpdateMe      endpoint.Endpoint
-	UploadAvatar  endpoint.Endpoint
-	DeleteAvatar  endpoint.Endpoint
-	GetUser       endpoint.Endpoint
-	UpdateUser    endpoint.Endpoint
-	HideUser      endpoint.Endpoint
-	AssignRole    endpoint.Endpoint
-	ResetPassword endpoint.Endpoint
+	ListUsers          endpoint.Endpoint
+	CreateUser         endpoint.Endpoint
+	Directory          endpoint.Endpoint
+	DirectoryUser      endpoint.Endpoint
+	Me                 endpoint.Endpoint
+	UpdateMe           endpoint.Endpoint
+	UploadAvatar       endpoint.Endpoint
+	DeleteAvatar       endpoint.Endpoint
+	GetUser            endpoint.Endpoint
+	UpdateUser         endpoint.Endpoint
+	HideUser           endpoint.Endpoint
+	AssignRole         endpoint.Endpoint
+	ResetPassword      endpoint.Endpoint
+	ListCompanyMembers endpoint.Endpoint
+	AddCompanyMember   endpoint.Endpoint
+	SetMemberRole      endpoint.Endpoint
+	RemoveMember       endpoint.Endpoint
+	SearchCandidates   endpoint.Endpoint
+	CompanyInvite      endpoint.Endpoint
+	RegenerateInvite   endpoint.Endpoint
+	JoinByCode         endpoint.Endpoint
 
 	ListRoles endpoint.Endpoint
 
@@ -42,6 +52,8 @@ type Endpoints struct {
 	DeleteCompany         endpoint.Endpoint
 	GetWeekendSettings    endpoint.Endpoint
 	UpdateWeekendSettings endpoint.Endpoint
+	GetGrooveSettings     endpoint.Endpoint
+	UpdateGrooveSettings  endpoint.Endpoint
 
 	ExportBackup endpoint.Endpoint
 	ImportBackup endpoint.Endpoint
@@ -81,6 +93,39 @@ type AssignRoleEpRequest struct {
 	RoleID int64
 }
 
+type SelectCompanyEpRequest struct {
+	SelectToken string
+	CompanyID   int64
+}
+
+type SwitchCompanyEpRequest struct {
+	UserID    int64
+	CompanyID int64
+}
+
+type MemberEpRequest struct {
+	Actor     *domain.User
+	CompanyID int64
+	UserID    int64
+	RoleID    int64
+}
+
+type CandidatesEpRequest struct {
+	Actor     *domain.User
+	CompanyID int64
+	Query     string
+}
+
+type CompanyActorEpRequest struct {
+	Actor     *domain.User
+	CompanyID int64
+}
+
+type JoinEpRequest struct {
+	UserID int64
+	Code   string
+}
+
 type UpdateCompanyEpRequest struct {
 	CompanyID int64
 	Body      dto.CompanyUpdate
@@ -102,10 +147,24 @@ type WeekendEpRequest struct {
 	Days      []int
 }
 
+type GrooveEpRequest struct {
+	Actor     *domain.User
+	CompanyID int64
+	Enabled   bool
+}
+
 func New(svc service.AuthService) Endpoints {
 	return Endpoints{
 		Login: func(ctx context.Context, request any) (any, error) {
 			return svc.Login(ctx, request.(dto.LoginRequest))
+		},
+		SelectCompany: func(ctx context.Context, request any) (any, error) {
+			req := request.(SelectCompanyEpRequest)
+			return svc.SelectCompany(ctx, req.SelectToken, req.CompanyID)
+		},
+		SwitchCompany: func(ctx context.Context, request any) (any, error) {
+			req := request.(SwitchCompanyEpRequest)
+			return svc.SwitchCompany(ctx, req.UserID, req.CompanyID)
 		},
 		Refresh: func(ctx context.Context, request any) (any, error) {
 			return svc.Refresh(ctx, request.(string))
@@ -159,6 +218,38 @@ func New(svc service.AuthService) Endpoints {
 			req := request.(ActorRequest)
 			return nil, svc.ResetPassword(ctx, req.Actor, req.UserID)
 		},
+		ListCompanyMembers: func(ctx context.Context, request any) (any, error) {
+			req := request.(CompanyActorEpRequest)
+			return svc.ListCompanyMembers(ctx, req.Actor, req.CompanyID)
+		},
+		AddCompanyMember: func(ctx context.Context, request any) (any, error) {
+			req := request.(MemberEpRequest)
+			return nil, svc.AddCompanyMember(ctx, req.Actor, req.CompanyID, req.UserID, req.RoleID)
+		},
+		SetMemberRole: func(ctx context.Context, request any) (any, error) {
+			req := request.(MemberEpRequest)
+			return nil, svc.SetMemberRole(ctx, req.Actor, req.CompanyID, req.UserID, req.RoleID)
+		},
+		RemoveMember: func(ctx context.Context, request any) (any, error) {
+			req := request.(MemberEpRequest)
+			return nil, svc.RemoveCompanyMember(ctx, req.Actor, req.CompanyID, req.UserID)
+		},
+		SearchCandidates: func(ctx context.Context, request any) (any, error) {
+			req := request.(CandidatesEpRequest)
+			return svc.SearchCandidates(ctx, req.Actor, req.CompanyID, req.Query)
+		},
+		CompanyInvite: func(ctx context.Context, request any) (any, error) {
+			req := request.(CompanyActorEpRequest)
+			return svc.CompanyInvite(ctx, req.Actor, req.CompanyID)
+		},
+		RegenerateInvite: func(ctx context.Context, request any) (any, error) {
+			req := request.(CompanyActorEpRequest)
+			return svc.RegenerateInvite(ctx, req.Actor, req.CompanyID)
+		},
+		JoinByCode: func(ctx context.Context, request any) (any, error) {
+			req := request.(JoinEpRequest)
+			return svc.JoinByCode(ctx, req.UserID, req.Code)
+		},
 
 		ListRoles: func(ctx context.Context, _ any) (any, error) {
 			return svc.ListRoles(ctx)
@@ -191,6 +282,14 @@ func New(svc service.AuthService) Endpoints {
 		UpdateWeekendSettings: func(ctx context.Context, request any) (any, error) {
 			req := request.(WeekendEpRequest)
 			return svc.UpdateWeekendSettings(ctx, req.Actor, req.CompanyID, req.Days)
+		},
+		GetGrooveSettings: func(ctx context.Context, request any) (any, error) {
+			req := request.(CompanyScopeEpRequest)
+			return svc.GetGrooveSettings(ctx, req.Actor, req.CompanyID)
+		},
+		UpdateGrooveSettings: func(ctx context.Context, request any) (any, error) {
+			req := request.(GrooveEpRequest)
+			return svc.UpdateGrooveSettings(ctx, req.Actor, req.CompanyID, req.Enabled)
 		},
 
 		ExportBackup: func(ctx context.Context, _ any) (any, error) {

@@ -65,6 +65,19 @@ export const useCompaniesStore = defineStore('companies', () => {
     else items.value.unshift(updated)
   }
 
+  // Локально подмешать изменённые настройки компании в загруженный список —
+  // чтобы UI (меню/гард раздела через useCompanySettings) у Администратора
+  // системы отреагировал сразу, без перезагрузки списка. No-op, если компании
+  // нет в items (обычная роль список компаний не грузит).
+  function patchSettings(companyId, patch) {
+    const idx = items.value.findIndex(c => c.id === companyId)
+    if (idx < 0) return
+    items.value[idx] = {
+      ...items.value[idx],
+      settings: { ...(items.value[idx].settings || {}), ...patch },
+    }
+  }
+
   async function create(payload) {
     const c = await apiCreate(payload)
     _replace(c)
@@ -110,7 +123,7 @@ export const useCompaniesStore = defineStore('companies', () => {
 
   return {
     items, loading, loaded, activeCompanyId, activeCompany,
-    effectiveCompanyId, setActive, load, clear,
+    effectiveCompanyId, setActive, load, clear, patchSettings,
     create, update, toggleActive, remove,
   }
 })

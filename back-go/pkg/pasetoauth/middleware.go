@@ -22,9 +22,11 @@ type AuthInfo struct {
 }
 
 // AuthSource — порт сверки с БД: вернуть пользователя для проверки
-// (nil — не найден). Пользователь без компании (Администратор системы)
-// должен возвращаться с CompanyActive=true.
-type AuthSource func(ctx context.Context, userID int64) (*AuthInfo, error)
+// (nil — не найден). active — клеймы access-токена: активная компания и роль
+// в ней берутся ИЗ ТОКЕНА (источник истины), реализация сверяет с БД только
+// is_hidden и активность ИМЕННО выбранной компании (active.CompanyID).
+// Пользователь без компании (Администратор системы) — CompanyActive=true.
+type AuthSource func(ctx context.Context, userID int64, active Claims) (*AuthInfo, error)
 
 // Middleware — Fiber-мидлвари авторизации; поведение байт-в-байт повторяет
 // прежние Flask-декораторы @require_auth / @require_role.
@@ -71,7 +73,7 @@ func (m *Middleware) RequireAuth(c *fiber.Ctx) error {
 	if claims.ForceChange {
 		return forbidden(c, "FORCE_PASSWORD_CHANGE")
 	}
-	info, err := m.source(c.Context(), claims.UserID)
+	info, err := m.source(c.Context(), claims.UserID, claims)
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error": "INTERNAL_ERROR", "message": "Внутренняя ошибка сервера",
@@ -106,7 +108,7 @@ func (m *Middleware) OptionalUserID(c *fiber.Ctx) int64 {
 	if claims.UserID == 0 || claims.ForceChange {
 		return 0
 	}
-	info, err := m.source(c.Context(), claims.UserID)
+	info, err := m.source(c.Context(), claims.UserID, claims)
 	if err != nil || info == nil || info.IsHidden || !info.CompanyActive {
 		return 0
 	}

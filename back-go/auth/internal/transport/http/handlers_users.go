@@ -7,11 +7,27 @@ import (
 	"github.com/gofiber/fiber/v2"
 
 	"github.com/DmitriyODS/gw2/back-go/auth/internal/avatar"
+	"github.com/DmitriyODS/gw2/back-go/auth/internal/domain"
 	"github.com/DmitriyODS/gw2/back-go/auth/internal/dto"
 	"github.com/DmitriyODS/gw2/back-go/auth/internal/endpoint"
 )
 
 const avatarMaxBytes = 2 * 1024 * 1024
+
+// applyAdminScope — у Администратора системы (actor.CompanyID == nil) активная
+// компания приходит в ?company_id=; проставляем её в actor на время запроса,
+// чтобы company-scoped операции (роль/скрытие/сброс) работали единообразно.
+// У обычного актора компания уже в токене — не трогаем.
+func applyAdminScope(c *fiber.Ctx, actor *domain.User) {
+	if actor == nil || actor.CompanyID != nil {
+		return
+	}
+	if raw := c.Query("company_id"); raw != "" {
+		if cid, err := strconv.ParseInt(raw, 10, 64); err == nil {
+			actor.CompanyID = &cid
+		}
+	}
+}
 
 func (h *handlers) listUsers(c *fiber.Ctx) error {
 	resp, err := h.eps.ListUsers(c.Context(), nil)
@@ -162,8 +178,10 @@ func (h *handlers) updateUser(c *fiber.Ctx) error {
 }
 
 func (h *handlers) hideUser(c *fiber.Ctx) error {
+	actor := currentUser(c)
+	applyAdminScope(c, actor)
 	_, err := h.eps.HideUser(c.Context(), endpoint.ActorRequest{
-		Actor: currentUser(c), UserID: pathID(c),
+		Actor: actor, UserID: pathID(c),
 	})
 	if err != nil {
 		return h.respondError(c, err)
@@ -178,8 +196,10 @@ func (h *handlers) assignRole(c *fiber.Ctx) error {
 	if err := c.BodyParser(&body); err != nil || body.RoleID == 0 {
 		return badRequest(c, "role_id обязателен")
 	}
+	actor := currentUser(c)
+	applyAdminScope(c, actor)
 	resp, err := h.eps.AssignRole(c.Context(), endpoint.AssignRoleEpRequest{
-		Actor: currentUser(c), UserID: pathID(c), RoleID: body.RoleID,
+		Actor: actor, UserID: pathID(c), RoleID: body.RoleID,
 	})
 	if err != nil {
 		return h.respondError(c, err)
@@ -188,8 +208,10 @@ func (h *handlers) assignRole(c *fiber.Ctx) error {
 }
 
 func (h *handlers) resetPassword(c *fiber.Ctx) error {
+	actor := currentUser(c)
+	applyAdminScope(c, actor)
 	_, err := h.eps.ResetPassword(c.Context(), endpoint.ActorRequest{
-		Actor: currentUser(c), UserID: pathID(c),
+		Actor: actor, UserID: pathID(c),
 	})
 	if err != nil {
 		return h.respondError(c, err)
@@ -200,4 +222,100 @@ func (h *handlers) resetPassword(c *fiber.Ctx) error {
 func (h *handlers) identicon(c *fiber.Ctx) error {
 	c.Set(fiber.HeaderContentType, "image/png")
 	return c.Send(avatar.Identicon(pathID(c)))
+}
+
+// ── Участники компании (multi-company; Администратор системы) ──
+
+func (h *handlers) listMembers(c *fiber.Ctx) error {
+	resp, err := h.eps.ListCompanyMembers(c.Context(), endpoint.CompanyActorEpRequest{
+		Actor: currentUser(c), CompanyID: pathID(c),
+	})
+	if err != nil {
+		return h.respondError(c, err)
+	}
+	return c.JSON(resp)
+}
+
+func (h *handlers) companyCandidates(c *fiber.Ctx) error {
+	resp, err := h.eps.SearchCandidates(c.Context(), endpoint.CandidatesEpRequest{
+		Actor: currentUser(c), CompanyID: pathID(c), Query: c.Query("q"),
+	})
+	if err != nil {
+		return h.respondError(c, err)
+	}
+	return c.JSON(resp)
+}
+
+func (h *handlers) addMember(c *fiber.Ctx) error {
+	var body dto.AddMemberRequest
+	if err := c.BodyParser(&body); err != nil || body.UserID == 0 || body.RoleID == 0 {
+		return badRequest(c, "user_id и role_id обязательны")
+	}
+	_, err := h.eps.AddCompanyMember(c.Context(), endpoint.MemberEpRequest{
+		Actor: currentUser(c), CompanyID: pathID(c), UserID: body.UserID, RoleID: body.RoleID,
+	})
+	if err != nil {
+		return h.respondError(c, err)
+	}
+	return c.Status(fiber.StatusCreated).JSON(fiber.Map{"message": "Сотрудник добавлен в компанию"})
+}
+
+func (h *handlers) setMemberRole(c *fiber.Ctx) error {
+	userID, _ := c.ParamsInt("userId")
+	var body struct {
+		RoleID int64 `json:"role_id"`
+	}
+	if err := c.BodyParser(&body); err != nil || body.RoleID == 0 {
+		return badRequest(c, "role_id обязателен")
+	}
+	_, err := h.eps.SetMemberRole(c.Context(), endpoint.MemberEpRequest{
+		Actor: currentUser(c), CompanyID: pathID(c), UserID: int64(userID), RoleID: body.RoleID,
+	})
+	if err != nil {
+		return h.respondError(c, err)
+	}
+	return c.JSON(fiber.Map{"message": "Роль обновлена"})
+}
+
+func (h *handlers) removeMember(c *fiber.Ctx) error {
+	userID, _ := c.ParamsInt("userId")
+	_, err := h.eps.RemoveMember(c.Context(), endpoint.MemberEpRequest{
+		Actor: currentUser(c), CompanyID: pathID(c), UserID: int64(userID),
+	})
+	if err != nil {
+		return h.respondError(c, err)
+	}
+	return c.JSON(fiber.Map{"message": "Сотрудник убран из компании"})
+}
+
+func (h *handlers) companyInvite(c *fiber.Ctx) error {
+	resp, err := h.eps.CompanyInvite(c.Context(), endpoint.CompanyActorEpRequest{
+		Actor: currentUser(c), CompanyID: pathID(c),
+	})
+	if err != nil {
+		return h.respondError(c, err)
+	}
+	return c.JSON(fiber.Map{"code": resp})
+}
+
+func (h *handlers) regenerateInvite(c *fiber.Ctx) error {
+	resp, err := h.eps.RegenerateInvite(c.Context(), endpoint.CompanyActorEpRequest{
+		Actor: currentUser(c), CompanyID: pathID(c),
+	})
+	if err != nil {
+		return h.respondError(c, err)
+	}
+	return c.JSON(fiber.Map{"code": resp})
+}
+
+func (h *handlers) joinByInvite(c *fiber.Ctx) error {
+	resp, err := h.eps.JoinByCode(c.Context(), endpoint.JoinEpRequest{
+		UserID: tokenUserID(c), Code: c.Params("code"),
+	})
+	if err != nil {
+		return h.respondError(c, err)
+	}
+	sess := resp.(*dto.Session)
+	setRefreshCookie(c, sess.RefreshToken)
+	return c.JSON(sess)
 }

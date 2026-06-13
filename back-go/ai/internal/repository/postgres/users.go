@@ -43,3 +43,20 @@ func (r *UserReader) GetUser(ctx context.Context, id int64) (*domain.User, error
 	u.CompanyActive = companyActive == nil || *companyActive
 	return &u, nil
 }
+
+// CompanyActive — активность ИМЕННО выбранной (активной) компании сессии.
+func (r *UserReader) CompanyActive(ctx context.Context, companyID *int64) (bool, error) {
+	if companyID == nil {
+		return true, nil
+	}
+	var active bool
+	err := r.pool.QueryRow(ctx,
+		`SELECT is_active FROM companies WHERE id = $1`, *companyID).Scan(&active)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return false, nil
+		}
+		return false, err
+	}
+	return active, nil
+}

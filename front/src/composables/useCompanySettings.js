@@ -18,6 +18,7 @@ export function useCompanySettings() {
   const usesYougile = computed(() => settings.value.uses_yougile !== false)
   const usesStages = computed(() => settings.value.uses_stages !== false)
   const usesCalls = computed(() => settings.value.uses_calls !== false)
+  const usesGroove = computed(() => settings.value.uses_groove !== false)
 
-  return { settings, usesYougile, usesStages, usesCalls }
+  return { settings, usesYougile, usesStages, usesCalls, usesGroove }
 }

@@ -15,10 +15,15 @@ import (
 )
 
 // Claims — авторизационные клеймы access-токена. Нулевой UserID —
-// токен невалиден/отсутствует.
+// токен невалиден/отсутствует. CompanyID/RoleLevel/IsRootAdmin описывают
+// АКТИВНУЮ компанию сессии (для многокомпанийных юзеров — выбранную при
+// login/switch); CompanyID == nil ⇔ Администратор системы.
 type Claims struct {
 	UserID      int64
 	ForceChange bool
+	CompanyID   *int64
+	RoleLevel   int
+	IsRootAdmin bool
 }
 
 // Verifier — проверка подписи и клеймов access-токена.
@@ -53,9 +58,14 @@ func (v *Verifier) ParseAccess(raw string) Claims {
 	if err != nil || id <= 0 {
 		return Claims{}
 	}
-	var fc bool
+	var fc, ra bool
+	var cid *int64
+	var rl int
 	_ = t.Get("force_change", &fc)
-	return Claims{UserID: id, ForceChange: fc}
+	_ = t.Get("company_id", &cid)
+	_ = t.Get("role_level", &rl)
+	_ = t.Get("is_root_admin", &ra)
+	return Claims{UserID: id, ForceChange: fc, CompanyID: cid, RoleLevel: rl, IsRootAdmin: ra}
 }
 
 // FromRequest — клеймы из Bearer-заголовка Fiber-запроса.

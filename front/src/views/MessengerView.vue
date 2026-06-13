@@ -81,7 +81,7 @@
             <template v-else>{{ otherOnline ? 'в сети' : lastSeenText }}</template>
           </div>
         </div>
-        <div v-if="!active.is_pet_chat" class="chat-tools" data-tutorial="chat-tools" ref="toolsRef">
+        <div class="chat-tools" data-tutorial="chat-tools" ref="toolsRef">
           <button
             class="chat-tool"
             :class="{ active: chatMenuOpen }"
@@ -122,8 +122,8 @@
                 </span>
                 <span>{{ active.is_pinned ? 'Открепить чат' : 'Закрепить чат' }}</span>
               </button>
-              <template v-if="!active.is_dev_chat && !active.is_pet_chat">
-                <div class="chat-menu-divider" />
+              <template v-if="!active.is_dev_chat">
+                <div v-if="!active.is_pet_chat" class="chat-menu-divider" />
                 <button
                   class="chat-menu-item danger"
                   @click="onMenuAction(() => askDeleteConversation(active))"
@@ -476,6 +476,19 @@ function askDeleteMessage(message) {
 }
 
 function askDeleteConversation(conv) {
+  if (conv?.is_pet_chat) {
+    // У чата с Грувиком нет второй стороны — выбора «у себя/у всех» нет:
+    // переписка стирается полностью, питомец вернётся пустым чатом.
+    deleteDialog.value = {
+      title: 'Удалить чат с Грувиком?',
+      text: 'Вся переписка с Грувиком сотрётся безвозвратно. Сам он никуда не денется — чат начнётся заново, как только вы ему напишете.',
+      canForAll: false,
+      otherName: '',
+      payload: { kind: 'conversation', id: conv.id },
+    }
+    deleteDialogOpen.value = true
+    return
+  }
   const other = conv?.other_user?.fio || ''
   deleteDialog.value = {
     title: 'Удалить чат?',

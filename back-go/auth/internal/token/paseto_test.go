@@ -71,7 +71,8 @@ func TestAccessTokenExpired(t *testing.T) {
 
 func TestRefreshIsNotAccess(t *testing.T) {
 	iss := newTestIssuer(t, time.Minute)
-	refresh, err := iss.RefreshToken(42)
+	cid := int64(7)
+	refresh, err := iss.RefreshToken(42, &cid)
 	if err != nil {
 		t.Fatalf("RefreshToken: %v", err)
 	}
@@ -84,13 +85,49 @@ func TestRefreshIsNotAccess(t *testing.T) {
 	}
 	// …а access не проходит как refresh.
 	access, _ := iss.AccessToken(Claims{UserID: 42, RoleLevel: 1})
-	if _, err := iss.ParseRefresh(access); err == nil {
+	if _, _, err := iss.ParseRefresh(access); err == nil {
 		t.Fatal("access-токен прошёл проверку refresh")
 	}
-	// Сам refresh валиден.
-	id, err := iss.ParseRefresh(refresh)
+	// Сам refresh валиден и несёт активную компанию.
+	id, company, err := iss.ParseRefresh(refresh)
 	if err != nil || id != 42 {
 		t.Fatalf("ParseRefresh: got (%d, %v), want (42, nil)", id, err)
+	}
+	if company == nil || *company != cid {
+		t.Fatalf("ParseRefresh company: got %v, want %d", company, cid)
+	}
+}
+
+func TestRefreshNoCompany(t *testing.T) {
+	iss := newTestIssuer(t, time.Minute)
+	refresh, _ := iss.RefreshToken(5, nil)
+	id, company, err := iss.ParseRefresh(refresh)
+	if err != nil || id != 5 || company != nil {
+		t.Fatalf("ParseRefresh: got (%d, %v, %v), want (5, nil, nil)", id, company, err)
+	}
+}
+
+func TestSelectToken(t *testing.T) {
+	iss := newTestIssuer(t, time.Minute)
+	sel, err := iss.SelectToken(99)
+	if err != nil {
+		t.Fatalf("SelectToken: %v", err)
+	}
+	id, err := iss.ParseSelect(sel)
+	if err != nil || id != 99 {
+		t.Fatalf("ParseSelect: got (%d, %v), want (99, nil)", id, err)
+	}
+	// Select-токен не проходит ни как access, ни как refresh.
+	if c := VerifierFromIssuer(iss).ParseAccess(sel); c.UserID != 0 {
+		t.Fatal("select-токен прошёл проверку access")
+	}
+	if _, _, err := iss.ParseRefresh(sel); err == nil {
+		t.Fatal("select-токен прошёл проверку refresh")
+	}
+	// А refresh не проходит как select.
+	refresh, _ := iss.RefreshToken(99, nil)
+	if _, err := iss.ParseSelect(refresh); err == nil {
+		t.Fatal("refresh-токен прошёл проверку select")
 	}
 }
 

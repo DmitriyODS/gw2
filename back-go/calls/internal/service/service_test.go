@@ -144,6 +144,8 @@ func (f fakeUsers) GetUser(_ context.Context, id int64) (*domain.User, error) {
 	return u, nil
 }
 
+func (f fakeUsers) CompanyActive(_ context.Context, _ *int64) (bool, error) { return true, nil }
+
 func (f fakeUsers) ListVisibleUsers(_ context.Context, ids []int64) ([]*domain.User, error) {
 	var out []*domain.User
 	for _, id := range ids {

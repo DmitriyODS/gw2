@@ -38,6 +38,11 @@ func (s *Service) careTick(ctx context.Context) {
 		return
 	}
 	for _, cid := range companyIDs {
+		// Компания выключила режим «Мой Groove» — питомцы не болеют, характеры
+		// не пересчитываем.
+		if !s.grooveEnabled(ctx, cid) {
+			continue
+		}
 		if _, err := s.CheckSicknessForCompany(ctx, cid); err != nil {
 			s.log.Warn("groove.care.company_failed", "company_id", cid, "error", err)
 		}
@@ -77,6 +82,10 @@ func (s *Service) aiTick(ctx context.Context) {
 		return
 	}
 	for _, cid := range companyIDs {
+		// Режим «Мой Groove» выключен — ни фраз кормления, ни дайджеста.
+		if !s.grooveEnabled(ctx, cid) {
+			continue
+		}
 		// Пул фраз кормления: держим свежим всегда.
 		if !s.daily.Exists(ctx, phrasesKeyPrefix+strconvI64(cid)) {
 			s.refreshPhrases(ctx, cid)

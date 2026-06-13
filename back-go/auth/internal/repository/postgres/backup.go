@@ -41,13 +41,14 @@ func pyISO(t *time.Time) *string {
 
 func (b *BackupStore) ExportData(ctx context.Context) (*domain.BackupData, error) {
 	data := &domain.BackupData{
-		Roles:       []domain.BackupRole{},
-		Users:       []domain.BackupUser{},
-		Departments: []domain.BackupDepartment{},
-		Tasks:       []domain.BackupTask{},
-		Favorites:   []domain.BackupFavorite{},
-		UnitTypes:   []domain.BackupUnitType{},
-		Units:       []domain.BackupUnit{},
+		Roles:         []domain.BackupRole{},
+		Users:         []domain.BackupUser{},
+		UserCompanies: []domain.BackupMembership{},
+		Departments:   []domain.BackupDepartment{},
+		Tasks:         []domain.BackupTask{},
+		Favorites:     []domain.BackupFavorite{},
+		UnitTypes:     []domain.BackupUnitType{},
+		Units:         []domain.BackupUnit{},
 	}
 
 	if err := queryEach(ctx, b.pool, `SELECT id, name, level FROM roles`,
@@ -75,6 +76,21 @@ func (b *BackupStore) ExportData(ctx context.Context) (*domain.BackupData, error
 			}
 			u.CreatedAt = pyISO(createdAt)
 			data.Users = append(data.Users, u)
+			return nil
+		}); err != nil {
+		return nil, err
+	}
+
+	if err := queryEach(ctx, b.pool, `
+		SELECT user_id, company_id, role_id, created_at FROM user_companies`,
+		func(rows pgx.Rows) error {
+			var m domain.BackupMembership
+			var createdAt *time.Time
+			if err := rows.Scan(&m.UserID, &m.CompanyID, &m.RoleID, &createdAt); err != nil {
+				return err
+			}
+			m.CreatedAt = pyISO(createdAt)
+			data.UserCompanies = append(data.UserCompanies, m)
 			return nil
 		}); err != nil {
 		return nil, err
@@ -182,7 +198,7 @@ func (b *BackupStore) ImportData(ctx context.Context, data *domain.BackupData) e
 	defer tx.Rollback(ctx) //nolint:errcheck
 
 	if _, err := tx.Exec(ctx,
-		`TRUNCATE units, favorites, tasks, unit_types, departments, users, roles RESTART IDENTITY CASCADE`); err != nil {
+		`TRUNCATE user_companies, units, favorites, tasks, unit_types, departments, users, roles RESTART IDENTITY CASCADE`); err != nil {
 		return err
 	}
 
@@ -203,6 +219,27 @@ func (b *BackupStore) ImportData(ctx context.Context, data *domain.BackupData) e
 			return err
 		}
 	}
+	// Членства восстанавливаем после users (FK на users; companies/roles живут).
+	// Старые бэкапы без секции user_companies — пустой слайс, членств не будет.
+	for _, m := range data.UserCompanies {
+		if _, err := tx.Exec(ctx, `
+			INSERT INTO user_companies (user_id, company_id, role_id, created_at)
+			VALUES ($1, $2, $3, COALESCE($4::timestamptz, now()))`,
+			m.UserID, m.CompanyID, m.RoleID, m.CreatedAt); err != nil {
+			return err
+		}
+	}
+	// Импорт users не проставляет company_id; синхронизируем легаси-колонки
+	// (первичная компания = старейшая связка), сохраняя инвариант NULL ⇔ админ.
+	if _, err := tx.Exec(ctx, `
+		UPDATE users u SET company_id = m.company_id, role_id = m.role_id
+		FROM (
+			SELECT DISTINCT ON (user_id) user_id, company_id, role_id
+			FROM user_companies ORDER BY user_id, created_at, company_id
+		) m WHERE u.id = m.user_id`); err != nil {
+		return err
+	}
+
 	for _, d := range data.Departments {
 		if _, err := tx.Exec(ctx,
 			`INSERT INTO departments (id, name) VALUES ($1, $2)`,

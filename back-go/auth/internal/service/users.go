@@ -122,23 +122,43 @@ func (s *Service) CreateUser(ctx context.Context, actor *domain.User, req dto.Cr
 	if err := s.repo.Create(ctx, user); err != nil {
 		return nil, err
 	}
+	// Первичная связка членства (роль в этой компании). users.company_id/role_id
+	// уже проставлены Create — это и есть «первичная» компания нового юзера.
+	if companyID != nil {
+		if err := s.repo.AddMembership(ctx, user.ID, *companyID, role.ID); err != nil {
+			return nil, err
+		}
+	}
 
 	s.log.Info("user.create", "user_id", user.ID, "actor_id", actor.ID)
 	return s.freshUser(ctx, user.ID)
 }
 
+// errCompanyScopeRequired — операция требует контекста компании (актив. компания
+// из токена для обычного актора; ?company_id= для Администратора системы).
+var errCompanyScopeRequired = domain.NewError("COMPANY_SCOPE_REQUIRED", "Требуется указать компанию (company_id)", 400)
+
+// actorScope — активная компания актора: у обычного — из токена (actor.CompanyID),
+// у Администратора системы хендлер проставляет её из ?company_id=.
+func actorScope(actor *domain.User) (int64, error) {
+	if actor == nil || actor.CompanyID == nil {
+		return 0, errCompanyScopeRequired
+	}
+	return *actor.CompanyID, nil
+}
+
 func (s *Service) Directory(ctx context.Context, req dto.DirectoryRequest) ([]dto.DirectoryUser, error) {
-	me, err := s.repo.GetByID(ctx, req.ActorID)
-	if err != nil {
-		return nil, err
+	// req.CompanyID уже разрешён хендлером: активная компания актора (из токена)
+	// либо ?company_id= Администратора системы. Список — члены этой компании с
+	// ролью в ней (user_companies). nil (админ без выбора) — все видимые.
+	if req.CompanyID == nil {
+		users, err := s.repo.SearchDirectory(ctx, req.Query, req.ExcludeID, nil)
+		if err != nil {
+			return nil, err
+		}
+		return dto.NewDirectoryUsers(users), nil
 	}
-	// company_id: обычным сотрудникам навязываем их компанию; Администратор
-	// системы (без компании) выбирает через query или получает всех.
-	companyID := req.CompanyID
-	if me != nil && me.CompanyID != nil {
-		companyID = me.CompanyID
-	}
-	users, err := s.repo.SearchDirectory(ctx, req.Query, req.ExcludeID, companyID)
+	users, err := s.repo.SearchDirectoryMembers(ctx, req.Query, req.ExcludeID, *req.CompanyID)
 	if err != nil {
 		return nil, err
 	}
@@ -384,6 +404,16 @@ func (s *Service) HideUser(ctx context.Context, actor *domain.User, userID int64
 	if user == nil || user.IsHidden {
 		return errUserNotFound
 	}
+	// Обычный актор управляет только членами своей активной компании.
+	if actor.CompanyID != nil {
+		m, err := s.repo.GetMembership(ctx, userID, *actor.CompanyID)
+		if err != nil {
+			return err
+		}
+		if m == nil {
+			return errUserNotFound
+		}
+	}
 
 	// Нельзя скрыть пользователя с более высоким уровнем; равный допускаем
 	// (Админ системы может удалить другого Админа системы).
@@ -427,12 +457,24 @@ func (s *Service) AssignRole(ctx context.Context, actor *domain.User, userID, ro
 	if userID == actor.ID {
 		return nil, domain.NewError("SELF_ROLE_CHANGE", "Нельзя изменить свою роль", 422)
 	}
+	companyID, err := actorScope(actor)
+	if err != nil {
+		return nil, err
+	}
 
 	user, err := s.repo.GetByID(ctx, userID)
 	if err != nil {
 		return nil, err
 	}
 	if user == nil || user.IsHidden {
+		return nil, errUserNotFound
+	}
+	// Роль меняется В АКТИВНОЙ КОМПАНИИ актора — целевой должен быть её членом.
+	membership, err := s.repo.GetMembership(ctx, userID, companyID)
+	if err != nil {
+		return nil, err
+	}
+	if membership == nil {
 		return nil, errUserNotFound
 	}
 
@@ -450,18 +492,10 @@ func (s *Service) AssignRole(ctx context.Context, actor *domain.User, userID, ro
 	if user.IsRootAdmin {
 		return nil, domain.NewError("ROOT_ADMIN", "Корневому Администратору системы нельзя сменить роль", 422)
 	}
-	if user.Role.Level >= domain.LevelAdmin {
-		n, err := s.repo.CountVisibleByLevel(ctx, domain.LevelAdmin)
-		if err != nil {
-			return nil, err
-		}
-		if n <= 1 {
-			return nil, domain.NewError("LAST_ADMIN", "Нельзя изменить роль единственного Администратора системы", 422)
-		}
-	}
-	// Корневой Руководитель компании (companies.director_id) — разжаловать
-	// может только Администратор системы: страховка от «дворцового переворота».
-	if user.Role.Level >= domain.LevelDirector && newRole.Level < domain.LevelDirector {
+	// Понижение Руководителя в этой компании: корневого Руководителя
+	// (companies.director_id) разжалует только Админ системы; единственного
+	// Руководителя компании разжаловать нельзя.
+	if membership.Role.Level >= domain.LevelDirector && newRole.Level < domain.LevelDirector {
 		isRootDirector, err := s.repo.IsCompanyDirector(ctx, user.ID)
 		if err != nil {
 			return nil, err
@@ -470,9 +504,19 @@ func (s *Service) AssignRole(ctx context.Context, actor *domain.User, userID, ro
 			return nil, domain.NewError("ROOT_DIRECTOR",
 				"Корневого Руководителя компании может разжаловать только Администратор системы", 422)
 		}
+		n, err := s.repo.CountCompanyMembersByLevel(ctx, companyID, domain.LevelDirector)
+		if err != nil {
+			return nil, err
+		}
+		if n <= 1 {
+			return nil, domain.NewError("LAST_DIRECTOR", "Нельзя разжаловать единственного Руководителя компании", 422)
+		}
 	}
 
-	if err := s.repo.UpdateFields(ctx, userID, map[string]any{"role_id": roleID}); err != nil {
+	if err := s.repo.UpdateMembershipRole(ctx, userID, companyID, roleID); err != nil {
+		return nil, err
+	}
+	if err := s.repo.SyncPrimaryCompany(ctx, userID); err != nil {
 		return nil, err
 	}
 	return s.freshUser(ctx, userID)
@@ -490,6 +534,16 @@ func (s *Service) ResetPassword(ctx context.Context, actor *domain.User, userID 
 	if user == nil || user.IsHidden {
 		return errUserNotFound
 	}
+	// Обычный актор управляет только членами своей активной компании.
+	if actor.CompanyID != nil {
+		m, err := s.repo.GetMembership(ctx, userID, *actor.CompanyID)
+		if err != nil {
+			return err
+		}
+		if m == nil {
+			return errUserNotFound
+		}
+	}
 	if user.Role.Level > actor.Level() {
 		return domain.NewError("ROLE_LEVEL_FORBIDDEN", "Нельзя сбросить пароль пользователю с более высокой ролью", 403)
 	}
@@ -504,5 +558,160 @@ func (s *Service) ResetPassword(ctx context.Context, actor *domain.User, userID 
 		return err
 	}
 	s.log.Info("user.reset_password", "user_id", userID, "actor_id", actor.ID)
+	return nil
+}
+
+// ── Членство пользователя в компаниях (multi-company) ──
+
+// companyAuthority — уровень полномочий актора в КОНКРЕТНОЙ компании: Админ
+// системы — LevelAdmin; иначе нужно членство уровня ≥ Руководитель.
+func (s *Service) companyAuthority(ctx context.Context, actor *domain.User, companyID int64) (int, error) {
+	if isSystemAdmin(actor) {
+		return domain.LevelAdmin, nil
+	}
+	am, err := s.repo.GetMembership(ctx, actor.ID, companyID)
+	if err != nil {
+		return 0, err
+	}
+	if am == nil || am.Role.Level < domain.LevelDirector {
+		return 0, domain.NewError("FORBIDDEN", "Недостаточно прав в этой компании", 403)
+	}
+	return am.Role.Level, nil
+}
+
+var errMembersAdminOnly = domain.NewError("FORBIDDEN", "Управлять участниками компании может только Администратор системы", 403)
+
+// clearDirectorIfMatches — если пользователь был корневым Руководителем компании
+// (companies.director_id), снять привязку (членство меняется/убирается).
+func (s *Service) clearDirectorIfMatches(ctx context.Context, companyID, userID int64) error {
+	company, err := s.companies.GetCompany(ctx, companyID)
+	if err != nil {
+		return err
+	}
+	if company != nil && company.DirectorID != nil && *company.DirectorID == userID {
+		return s.companies.UpdateCompanyFields(ctx, companyID, map[string]any{"director_id": nil})
+	}
+	return nil
+}
+
+// validMemberRole — роль участника компании: только Сотрудник/Менеджер/
+// Руководитель (Администратор системы — глобальная роль вне компаний).
+func (s *Service) validMemberRole(ctx context.Context, roleID int64) (*domain.Role, error) {
+	role, err := s.repo.GetRole(ctx, roleID)
+	if err != nil {
+		return nil, err
+	}
+	if role == nil {
+		return nil, domain.NewError("ROLE_NOT_FOUND", "Роль не найдена", 404)
+	}
+	if role.Level >= domain.LevelAdmin {
+		return nil, domain.NewError("ROLE_LEVEL_FORBIDDEN", "Роль в компании не может быть Администратором системы", 422)
+	}
+	return role, nil
+}
+
+func (s *Service) ListCompanyMembers(ctx context.Context, actor *domain.User, companyID int64) ([]dto.DirectoryUser, error) {
+	if !isSystemAdmin(actor) {
+		return nil, errMembersAdminOnly
+	}
+	users, err := s.repo.SearchDirectoryMembers(ctx, "", 0, companyID)
+	if err != nil {
+		return nil, err
+	}
+	return dto.NewDirectoryUsers(users), nil
+}
+
+func (s *Service) SearchCandidates(ctx context.Context, actor *domain.User, companyID int64, query string) ([]dto.DirectoryUser, error) {
+	if !isSystemAdmin(actor) {
+		return nil, errMembersAdminOnly
+	}
+	users, err := s.repo.SearchNonMembers(ctx, query, companyID)
+	if err != nil {
+		return nil, err
+	}
+	return dto.NewDirectoryUsers(users), nil
+}
+
+func (s *Service) AddCompanyMember(ctx context.Context, actor *domain.User, companyID, userID, roleID int64) error {
+	// Добавлять в компанию может ТОЛЬКО Администратор системы (в карточке
+	// компании). Самостоятельное вступление — по ссылке-приглашению (JoinByCode).
+	if !isSystemAdmin(actor) {
+		return errMembersAdminOnly
+	}
+	if _, err := s.validMemberRole(ctx, roleID); err != nil {
+		return err
+	}
+	target, err := s.repo.GetByID(ctx, userID)
+	if err != nil {
+		return err
+	}
+	if target == nil || target.IsHidden {
+		return errUserNotFound
+	}
+	if target.IsRootAdmin {
+		return domain.NewError("ROOT_ADMIN", "Администратора системы нельзя добавить в компанию", 422)
+	}
+	if err := s.repo.AddMembership(ctx, userID, companyID, roleID); err != nil {
+		return err
+	}
+	// Уже состоял — выставить указанную роль.
+	if err := s.repo.UpdateMembershipRole(ctx, userID, companyID, roleID); err != nil {
+		return err
+	}
+	if err := s.repo.SyncPrimaryCompany(ctx, userID); err != nil {
+		return err
+	}
+	s.log.Info("member.add", "user_id", userID, "company_id", companyID, "actor_id", actor.ID)
+	return nil
+}
+
+func (s *Service) SetMemberRole(ctx context.Context, actor *domain.User, companyID, userID, roleID int64) error {
+	if !isSystemAdmin(actor) {
+		return errMembersAdminOnly
+	}
+	role, err := s.validMemberRole(ctx, roleID)
+	if err != nil {
+		return err
+	}
+	m, err := s.repo.GetMembership(ctx, userID, companyID)
+	if err != nil {
+		return err
+	}
+	if m == nil {
+		return errUserNotFound
+	}
+	if err := s.repo.UpdateMembershipRole(ctx, userID, companyID, roleID); err != nil {
+		return err
+	}
+	if role.Level < domain.LevelDirector {
+		if err := s.clearDirectorIfMatches(ctx, companyID, userID); err != nil {
+			return err
+		}
+	}
+	return s.repo.SyncPrimaryCompany(ctx, userID)
+}
+
+func (s *Service) RemoveCompanyMember(ctx context.Context, actor *domain.User, companyID, userID int64) error {
+	if !isSystemAdmin(actor) {
+		return errMembersAdminOnly
+	}
+	m, err := s.repo.GetMembership(ctx, userID, companyID)
+	if err != nil {
+		return err
+	}
+	if m == nil {
+		return errUserNotFound
+	}
+	// Если это был корневой Руководитель — снять director_id, иначе ссылка повиснет.
+	if err := s.clearDirectorIfMatches(ctx, companyID, userID); err != nil {
+		return err
+	}
+	if err := s.repo.RemoveMembership(ctx, userID, companyID); err != nil {
+		return err
+	}
+	if err := s.repo.SyncPrimaryCompany(ctx, userID); err != nil {
+		return err
+	}
+	s.log.Info("member.remove", "user_id", userID, "company_id", companyID, "actor_id", actor.ID)
 	return nil
 }

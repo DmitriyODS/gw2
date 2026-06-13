@@ -2,6 +2,8 @@ package service
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"sort"
 	"strconv"
 
@@ -48,6 +50,38 @@ func (s *Service) validateDirector(ctx context.Context, directorID *int64) error
 		return domain.NewError("DIRECTOR_NOT_FOUND", "Руководитель не найден", 404)
 	}
 	return nil
+}
+
+// roleIDByLevel — id фиксированной роли по уровню (роли создавать нельзя).
+func (s *Service) roleIDByLevel(ctx context.Context, level int) (int64, error) {
+	roles, err := s.repo.ListRoles(ctx)
+	if err != nil {
+		return 0, err
+	}
+	for _, r := range roles {
+		if r.Level == level {
+			return r.ID, nil
+		}
+	}
+	return 0, domain.NewError("ROLE_NOT_FOUND", "Роль не найдена", 500)
+}
+
+// ensureDirectorMembership — назначение корневого Руководителя компании заводит
+// (или поднимает до Руководителя) его членство в этой компании: иначе человек,
+// уже состоящий в другой компании, не получал доступа ко второй (не видел ни
+// пикера при логине, ни переключателя). Первичная компания пересчитывается.
+func (s *Service) ensureDirectorMembership(ctx context.Context, userID, companyID int64) error {
+	roleID, err := s.roleIDByLevel(ctx, domain.LevelDirector)
+	if err != nil {
+		return err
+	}
+	if err := s.repo.AddMembership(ctx, userID, companyID, roleID); err != nil {
+		return err
+	}
+	if err := s.repo.UpdateMembershipRole(ctx, userID, companyID, roleID); err != nil {
+		return err
+	}
+	return s.repo.SyncPrimaryCompany(ctx, userID)
 }
 
 func (s *Service) ensureCompanyNameFree(ctx context.Context, name string, selfID int64) error {
@@ -126,18 +160,11 @@ func (s *Service) CreateCompany(ctx context.Context, req dto.CompanyCreate) (*dt
 		}
 	}
 
-	// Если у выбранного директора ещё нет компании — автоматически привязываем
-	// его к создаваемой: создание компании сразу логично «доукомплектовано».
+	// Заводим членство Руководителя в созданной компании (в т.ч. для того, кто
+	// уже состоит в других компаниях — так появляется многокомпанийность).
 	if req.DirectorID != nil {
-		director, err := s.repo.GetByID(ctx, *req.DirectorID)
-		if err != nil {
+		if err := s.ensureDirectorMembership(ctx, *req.DirectorID, company.ID); err != nil {
 			return nil, err
-		}
-		if director != nil && director.CompanyID == nil {
-			if err := s.repo.UpdateFields(ctx, director.ID,
-				map[string]any{"company_id": company.ID}); err != nil {
-				return nil, err
-			}
 		}
 	}
 
@@ -186,6 +213,12 @@ func (s *Service) UpdateCompany(ctx context.Context, companyID int64, req dto.Co
 			return nil, err
 		}
 	}
+	// Назначение нового Руководителя — завести/поднять его членство в компании.
+	if req.DirectorSet && req.DirectorID != nil {
+		if err := s.ensureDirectorMembership(ctx, *req.DirectorID, companyID); err != nil {
+			return nil, err
+		}
+	}
 	return s.enrichedCompany(ctx, companyID)
 }
 
@@ -217,6 +250,95 @@ func (s *Service) DeleteCompany(ctx context.Context, companyID int64) error {
 	}
 	s.log.Info("company.delete", "company_id", companyID)
 	return nil
+}
+
+// ── Ссылка-приглашение и вступление по ней ──
+
+func randomInviteCode() (string, error) {
+	b := make([]byte, 12)
+	if _, err := rand.Read(b); err != nil {
+		return "", err
+	}
+	return hex.EncodeToString(b), nil
+}
+
+// CompanyInvite — текущий код-приглашение (Админ системы или Руководитель этой
+// компании); пустая строка — приглашение ещё не выдано.
+func (s *Service) CompanyInvite(ctx context.Context, actor *domain.User, companyID int64) (string, error) {
+	if _, err := s.companyAuthority(ctx, actor, companyID); err != nil {
+		return "", err
+	}
+	company, err := s.companies.GetCompany(ctx, companyID)
+	if err != nil {
+		return "", err
+	}
+	if company == nil {
+		return "", errCompanyNotFound
+	}
+	if company.InviteCode == nil {
+		return "", nil
+	}
+	return *company.InviteCode, nil
+}
+
+// RegenerateInvite — выдать/перевыпустить код (старая ссылка перестаёт работать).
+func (s *Service) RegenerateInvite(ctx context.Context, actor *domain.User, companyID int64) (string, error) {
+	if _, err := s.companyAuthority(ctx, actor, companyID); err != nil {
+		return "", err
+	}
+	company, err := s.companies.GetCompany(ctx, companyID)
+	if err != nil {
+		return "", err
+	}
+	if company == nil {
+		return "", errCompanyNotFound
+	}
+	code, err := randomInviteCode()
+	if err != nil {
+		return "", err
+	}
+	if err := s.companies.UpdateCompanyFields(ctx, companyID, map[string]any{"invite_code": code}); err != nil {
+		return "", err
+	}
+	return code, nil
+}
+
+// JoinByCode — авторизованный пользователь вступает в компанию по ссылке (роль
+// Сотрудник). Возвращает сессию, переключённую на эту компанию. Администратору
+// системы вступать не нужно — у него доступ ко всем компаниям.
+func (s *Service) JoinByCode(ctx context.Context, userID int64, code string) (*dto.Session, error) {
+	company, err := s.companies.GetCompanyByInviteCode(ctx, code)
+	if err != nil {
+		return nil, err
+	}
+	if company == nil {
+		return nil, domain.NewError("INVALID_INVITE", "Ссылка-приглашение недействительна", 404)
+	}
+	if !company.IsActive {
+		return nil, companyDisabledErr(&company.Name)
+	}
+	user, err := s.repo.GetByID(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	if user == nil || user.IsHidden {
+		return nil, errUserNotFound
+	}
+	if isSystemAdmin(user) {
+		return s.session(ctx, user, nil, true)
+	}
+	roleID, err := s.roleIDByLevel(ctx, domain.LevelEmployee)
+	if err != nil {
+		return nil, err
+	}
+	if err := s.repo.AddMembership(ctx, userID, company.ID, roleID); err != nil {
+		return nil, err
+	}
+	if err := s.repo.SyncPrimaryCompany(ctx, userID); err != nil {
+		return nil, err
+	}
+	s.log.Info("company.join", "user_id", userID, "company_id", company.ID)
+	return s.session(ctx, user, &company.ID, true)
 }
 
 // ── Выходные дни (Руководитель своей компании / Администратор системы) ──
@@ -309,6 +431,60 @@ func (s *Service) GetWeekendSettings(ctx context.Context, actor *domain.User, co
 		return nil, err
 	}
 	return &dto.WeekendSettings{WeekendDays: weekendDays(company.Settings)}, nil
+}
+
+// ── Режим «Мой Groove» (Руководитель своей компании / Администратор системы) ──
+
+// grooveEnabled — режим «Мой Groove» из settings.uses_groove: отсутствие или
+// мусор → включён (как и на фронте, uses_groove !== false).
+func grooveEnabled(settings map[string]any) bool {
+	v, ok := settings["uses_groove"]
+	if !ok {
+		return true
+	}
+	b, ok := v.(bool)
+	if !ok {
+		return true
+	}
+	return b
+}
+
+func (s *Service) GetGrooveSettings(ctx context.Context, actor *domain.User, companyID int64) (*dto.GrooveSettings, error) {
+	company, err := s.companies.GetCompany(ctx, companyID)
+	if err != nil {
+		return nil, err
+	}
+	if company == nil {
+		return nil, errCompanyNotFound
+	}
+	if err := checkCompanyAccess(actor, company.ID); err != nil {
+		return nil, err
+	}
+	return &dto.GrooveSettings{Enabled: grooveEnabled(company.Settings)}, nil
+}
+
+func (s *Service) UpdateGrooveSettings(ctx context.Context, actor *domain.User, companyID int64, enabled bool) (*dto.GrooveSettings, error) {
+	company, err := s.companies.GetCompany(ctx, companyID)
+	if err != nil {
+		return nil, err
+	}
+	if company == nil {
+		return nil, errCompanyNotFound
+	}
+	if err := checkCompanyAccess(actor, company.ID); err != nil {
+		return nil, err
+	}
+
+	settings := map[string]any{}
+	for k, v := range company.Settings {
+		settings[k] = v
+	}
+	settings["uses_groove"] = enabled
+	if err := s.companies.UpdateCompanyFields(ctx, companyID,
+		map[string]any{"settings": settings}); err != nil {
+		return nil, err
+	}
+	return &dto.GrooveSettings{Enabled: enabled}, nil
 }
 
 func (s *Service) UpdateWeekendSettings(ctx context.Context, actor *domain.User, companyID int64, days []int) (*dto.WeekendSettings, error) {

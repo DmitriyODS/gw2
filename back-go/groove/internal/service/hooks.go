@@ -28,6 +28,9 @@ func taskNamePayload(name string) any {
 }
 
 func (s *Service) OnUnitStarted(ctx context.Context, h UnitHook) {
+	if !s.grooveEnabled(ctx, h.CompanyID) {
+		return
+	}
 	_, err := s.recordEvent(ctx, h.CompanyID, &h.UserID, "unit_started", map[string]any{
 		"unit_id":   h.UnitID,
 		"unit_name": h.UnitName,
@@ -40,6 +43,9 @@ func (s *Service) OnUnitStarted(ctx context.Context, h UnitHook) {
 }
 
 func (s *Service) OnUnitStopped(ctx context.Context, h UnitHook) {
+	if !s.grooveEnabled(ctx, h.CompanyID) {
+		return
+	}
 	_, err := s.recordEvent(ctx, h.CompanyID, &h.UserID, "unit_stopped", map[string]any{
 		"unit_id":   h.UnitID,
 		"unit_name": h.UnitName,
@@ -67,6 +73,9 @@ func (s *Service) OnUnitStopped(ctx context.Context, h UnitHook) {
 func (s *Service) OnTaskClosed(ctx context.Context, companyID, heroUserID,
 	taskID int64, taskName string) {
 
+	if !s.grooveEnabled(ctx, companyID) {
+		return
+	}
 	var hero *int64
 	if heroUserID > 0 {
 		hero = &heroUserID

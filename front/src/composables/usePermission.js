@@ -17,8 +17,11 @@ export const ROLE_NAMES = {
 export function usePermission() {
   const auth = useAuthStore()
 
+  // Уровень роли в АКТИВНОЙ компании — из клеймов сессии (claims.role_level),
+  // а не из /users/me (там «первичная» роль): для многокомпанийного юзера роль
+  // зависит от выбранной компании. Фолбэк на профиль — на время до загрузки me.
   function myLevel() {
-    return auth.user?.role?.level ?? 0
+    return auth.roleLevel || auth.user?.role?.level || 0
   }
 
   function isAtLeast(level) {
@@ -26,7 +29,7 @@ export function usePermission() {
   }
 
   function isRootAdmin() {
-    return !!auth.user?.is_root_admin
+    return auth.isRootAdmin
   }
 
   return { isAtLeast, myLevel, isRootAdmin, ROLES }
