@@ -8,10 +8,12 @@
         <span class="sidebar-logo-text">Groove Work</span>
       </div>
 
-      <!-- v-show, не v-if: overlay компании теплепортится в body; размонтирование
-           компонента уничтожает overlay и закрывает выпадашку до того, как
-           пользователь дойдёт до пункта. -->
-      <div v-show="expanded" class="sidebar-company">
+      <!-- Рендерится ВСЕГДА (а не только в развёрнутом виде): иначе при
+           разворачивании плашка компании возникает над кнопками и сдвигает
+           их вниз — пользователь промахивается мимо раздела. В свёрнутом виде
+           показывается одним бейджем по центру колонки, место под неё всегда
+           зарезервировано, поэтому кнопки не «прыгают». -->
+      <div class="sidebar-company">
         <CompanySelect
           variant="row"
           @show="companyDropdownOpen = true"
@@ -179,6 +181,35 @@ const avatarSrc = computed(() => {
 }
 
 .sidebar-company > * { flex: 1; min-width: 0; }
+
+/* Свёрнутая панель: компанию показываем одним бейджем/иконкой по центру
+   колонки (как иконки разделов), текст скрыт. Высота секции постоянна в обоих
+   состояниях, поэтому кнопки разделов не сдвигаются при разворачивании. */
+.sidebar-inner:not(.expanded) :deep(.company-row),
+.sidebar-inner:not(.expanded) :deep(.company-chip) {
+  background: transparent;
+  justify-content: center;
+  padding-left: 4px;
+  padding-right: 4px;
+  gap: 0;
+}
+
+.sidebar-inner:not(.expanded) :deep(.company-row-text),
+.sidebar-inner:not(.expanded) :deep(.company-chip-label) {
+  width: 0;
+  min-width: 0;
+  opacity: 0;
+  overflow: hidden;
+}
+
+.sidebar-inner:not(.expanded) :deep(.company-row-chev) {
+  display: none;
+}
+
+.sidebar-inner :deep(.company-row-text),
+.sidebar-inner :deep(.company-chip-label) {
+  transition: opacity 0.18s ease;
+}
 
 .sidebar-nav { display: flex; flex-direction: column; gap: 6px; flex: 1; }
 

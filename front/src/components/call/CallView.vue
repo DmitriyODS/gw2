@@ -36,78 +36,101 @@
         </header>
 
         <div class="callview-body">
-          <!-- Сцена: либо демонстрация экрана + лента камер, либо сетка камер -->
+          <!-- Сцена: мини (3:4) | прожектор (крупно + лента) | сетка камер (3:4) -->
           <div class="callview-stage">
-            <template v-if="focusShare && !callStore.isMinimized">
+            <!-- Свёрнутое окно: один 3:4-тайл — трансляция или текущий спикер -->
+            <div v-if="callStore.isMinimized" class="stage-mini">
+              <ParticipantTile
+                v-if="miniSource"
+                :key="miniSource.key"
+                :identity="miniSource.identity"
+                :name="miniSource.name"
+                :source="miniSource.source"
+                :is-local="miniSource.isLocal"
+                :audio="miniSource.audio"
+                :video="miniSource.video"
+                :avatar="miniSource.avatar"
+                :speaking="miniSource.speaking"
+                :tick="miniSource.tick"
+              />
+            </div>
+
+            <!-- Прожектор: крупно выбранный источник + лента остальных -->
+            <template v-else-if="spotlight">
               <div ref="stageFocusEl" class="stage-focus">
                 <ParticipantTile
-                  :key="`screen-${focusShare.identity}`"
-                  :identity="focusShare.isLocal ? null : focusShare.identity"
-                  :name="focusShare.name"
-                  source="screen"
-                  :is-local="focusShare.isLocal"
-                  :audio="true"
-                  :video="true"
-                  :tick="focusShare.tick"
+                  :key="spotlight.key"
+                  :identity="spotlight.identity"
+                  :name="spotlight.name"
+                  :source="spotlight.source"
+                  :is-local="spotlight.isLocal"
+                  :audio="spotlight.audio"
+                  :video="spotlight.video"
+                  :avatar="spotlight.avatar"
+                  :speaking="spotlight.speaking"
+                  :tick="spotlight.tick"
                 />
-                <button
-                  class="stage-fs-btn"
-                  :title="isStageFullscreen ? 'Выйти из полноэкранного режима' : 'На весь экран'"
-                  @click="toggleStageFullscreen"
-                >
-                  <span class="material-symbols-outlined">{{ isStageFullscreen ? 'fullscreen_exit' : 'fullscreen' }}</span>
-                </button>
+                <div class="stage-actions">
+                  <button class="stage-act-btn" title="Показать сетку" @click="callStore.setSpotlight(null)">
+                    <span class="material-symbols-outlined">grid_view</span>
+                  </button>
+                  <button
+                    class="stage-act-btn"
+                    :title="isStageFullscreen ? 'Выйти из полноэкранного режима' : 'На весь экран'"
+                    @click="toggleStageFullscreen"
+                  >
+                    <span class="material-symbols-outlined">{{ isStageFullscreen ? 'fullscreen_exit' : 'fullscreen' }}</span>
+                  </button>
+                </div>
               </div>
               <div class="stage-strip">
-                <ParticipantTile
-                  :name="myName"
-                  :is-local="true"
-                  :audio="callStore.audioEnabled"
-                  :video="callStore.videoEnabled"
-                  :avatar="myAvatar"
-                  :speaking="callStore.localSpeaking"
-                  :tick="callStore.localTick"
-                />
-                <ParticipantTile
-                  v-for="p in callStore.participantList"
-                  :key="p.identity"
-                  :identity="p.identity"
-                  :name="p.name"
-                  :audio="p.audio"
-                  :video="p.video"
-                  :avatar="avatarOf(p)"
-                  :pending="p.pending"
-                  :speaking="p.speaking"
-                  :guest="p.guest"
-                  :tick="p.tick"
-                />
+                <button
+                  v-for="s in stripSources"
+                  :key="s.key"
+                  class="tile-pick strip-tile"
+                  :title="`Показать крупно: ${s.name}`"
+                  @click="callStore.setSpotlight(s.key)"
+                >
+                  <ParticipantTile
+                    :identity="s.identity"
+                    :name="s.name"
+                    :source="s.source"
+                    :is-local="s.isLocal"
+                    :audio="s.audio"
+                    :video="s.video"
+                    :avatar="s.avatar"
+                    :pending="s.pending"
+                    :speaking="s.speaking"
+                    :guest="s.guest"
+                    :tick="s.tick"
+                  />
+                </button>
               </div>
             </template>
 
-            <div v-else class="callview-grid" :class="gridClass">
-              <ParticipantTile
-                v-if="!callStore.isMinimized || !primaryRemote"
-                :name="myName"
-                :is-local="true"
-                :audio="callStore.audioEnabled"
-                :video="callStore.videoEnabled"
-                :avatar="myAvatar"
-                :speaking="callStore.localSpeaking"
-                :tick="callStore.localTick"
-              />
-              <ParticipantTile
-                v-for="p in visibleRemotes"
-                :key="p.identity"
-                :identity="p.identity"
-                :name="p.name"
-                :audio="p.audio"
-                :video="p.video"
-                :avatar="avatarOf(p)"
-                :pending="p.pending"
-                :speaking="p.speaking"
-                :guest="p.guest"
-                :tick="p.tick"
-              />
+            <!-- Сетка камер (всегда 3:4); клик по плитке — показать крупно -->
+            <div v-else ref="gridEl" class="callview-grid" :style="gridStyle">
+              <button
+                v-for="s in cameraSources"
+                :key="s.key"
+                class="tile-pick grid-tile"
+                :title="`Показать крупно: ${s.name}`"
+                @click="callStore.setSpotlight(s.key)"
+              >
+                <ParticipantTile
+                  :identity="s.identity"
+                  :name="s.name"
+                  :source="s.source"
+                  :is-local="s.isLocal"
+                  :audio="s.audio"
+                  :video="s.video"
+                  :avatar="s.avatar"
+                  :pending="s.pending"
+                  :speaking="s.speaking"
+                  :guest="s.guest"
+                  :tick="s.tick"
+                />
+              </button>
             </div>
           </div>
 
@@ -145,7 +168,10 @@
             v-if="canScreenShare && !callStore.isMinimized"
             class="ctrl-btn"
             :class="{ on: callStore.screenEnabled }"
-            :title="callStore.screenEnabled ? 'Остановить демонстрацию' : 'Демонстрация экрана'"
+            :disabled="remoteSharing && !callStore.screenEnabled"
+            :title="remoteSharing && !callStore.screenEnabled
+              ? 'Идёт демонстрация другого участника'
+              : (callStore.screenEnabled ? 'Остановить демонстрацию' : 'Демонстрация экрана')"
             @click="callStore.toggleScreenShare()"
           >
             <span class="material-symbols-outlined">{{ callStore.screenEnabled ? 'stop_screen_share' : 'screen_share' }}</span>
@@ -210,6 +236,8 @@
 import { computed, onMounted, onBeforeUnmount, ref, watch } from 'vue'
 import { useCallStore } from '@/stores/call.js'
 import { useAuthStore } from '@/stores/auth.js'
+import { callRoom } from '@/services/livekit.js'
+import { useTileGrid } from '@/composables/useTileGrid.js'
 import ParticipantTile from './ParticipantTile.vue'
 import InviteToCallDialog from './InviteToCallDialog.vue'
 import CallParticipantsPanel from './CallParticipantsPanel.vue'
@@ -259,36 +287,94 @@ function avatarOf(p) {
 const canScreenShare = computed(() =>
   !!navigator.mediaDevices?.getDisplayMedia)
 
-/* Демонстрация экрана: первый, кто шарит (локальный — приоритетно),
-   становится «сценой», камеры уезжают в ленту снизу. */
-const focusShare = computed(() => {
+/* ── Источники картинки: я + удалённые камеры + (опц.) трансляция экрана ──
+   Единый дескриптор плитки, из которого собираются сетка, лента и «прожектор». */
+const screenSharer = computed(() => {
   if (callStore.screenEnabled) {
-    return { identity: 'local', isLocal: true, name: myName.value, tick: callStore.localTick }
+    return { identity: callRoom.localIdentity, isLocal: true, name: myName.value, tick: callStore.localTick }
   }
   const p = callStore.participantList.find(x => x.screen)
   return p ? { identity: p.identity, isLocal: false, name: p.name, tick: p.tick } : null
 })
 
-const numTiles = computed(() => 1 + callStore.participantList.length)
-const gridClass = computed(() => {
-  if (callStore.isMinimized) return 'g-mini'
-  if (numTiles.value <= 1) return 'g-1'
-  if (numTiles.value === 2) return 'g-2'
-  if (numTiles.value <= 4) return 'g-4'
-  return 'g-many'
+const remoteSharing = computed(() => callStore.participantList.some(p => p.screen))
+
+const cameraSources = computed(() => {
+  const list = [{
+    key: 'self', identity: null, isLocal: true, name: myName.value, avatar: myAvatar.value,
+    source: 'camera', audio: callStore.audioEnabled, video: callStore.videoEnabled,
+    speaking: callStore.localSpeaking, pending: false, guest: false, tick: callStore.localTick,
+  }]
+  for (const p of callStore.participantList) {
+    list.push({
+      key: p.identity, identity: p.identity, isLocal: false, name: p.name, avatar: avatarOf(p),
+      source: 'camera', audio: p.audio, video: p.video, speaking: p.speaking,
+      pending: p.pending, guest: p.guest, tick: p.tick,
+    })
+  }
+  return list
 })
 
-/* В свёрнутом окне показываем собеседника, а не себя: первого активного
-   (не pending), иначе — первого в списке. */
-const primaryRemote = computed(() => {
-  const list = callStore.participantList
-  if (!list.length) return null
-  return list.find(p => !p.pending) || list[0]
+const screenSource = computed(() => {
+  const s = screenSharer.value
+  if (!s) return null
+  return {
+    key: `screen:${s.identity}`, identity: s.isLocal ? null : s.identity, isLocal: s.isLocal,
+    name: `${s.name} — экран`, source: 'screen', avatar: null,
+    audio: true, video: true, speaking: false, pending: false, guest: false, tick: s.tick,
+  }
 })
 
-const visibleRemotes = computed(() => {
-  if (!callStore.isMinimized) return callStore.participantList
-  return primaryRemote.value ? [primaryRemote.value] : []
+/* Крупно (большое окно): выбранный пользователем источник; null — сетка. */
+const spotlight = computed(() => {
+  const key = callStore.spotlightKey
+  if (!key) return null
+  if (screenSource.value && screenSource.value.key === key) return screenSource.value
+  return cameraSources.value.find(s => s.key === key) || null
+})
+
+/* Лента под «прожектором» — все источники, кроме показанного крупно
+   (трансляция первой, если она не в фокусе). */
+const stripSources = computed(() => {
+  const key = callStore.spotlightKey
+  const out = []
+  if (screenSource.value && screenSource.value.key !== key) out.push(screenSource.value)
+  for (const s of cameraSources.value) {
+    if (s.key !== key) out.push(s)
+  }
+  return out
+})
+
+/* Мини-окно: трансляция важнее всего; иначе — текущий громкий спикер,
+   иначе первый вошедший собеседник, иначе я. */
+const miniSource = computed(() => {
+  if (screenSource.value) return screenSource.value
+  const sp = callStore.activeSpeakerId
+  if (sp) {
+    const found = cameraSources.value.find(s => s.identity === sp && !s.isLocal)
+    if (found) return found
+  }
+  const remote = cameraSources.value.find(s => !s.isLocal && !s.pending)
+  return remote || cameraSources.value[0]
+})
+
+/* Сетка камер: подбор колонок под плитки 3:4. */
+const gridEl = ref(null)
+const { cols, tilePx } = useTileGrid(
+  gridEl, computed(() => cameraSources.value.length), { aspect: 3 / 4, gap: 8 },
+)
+const gridStyle = computed(() => tilePx.value > 0
+  ? { gridTemplateColumns: `repeat(${cols.value}, ${tilePx.value}px)` }
+  : { gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))' })
+
+/* Началась демонстрация — авто-фокус на неё; закончилась (и фокус был на ней) —
+   назад к сетке. Ручной выбор пользователя при этом не перетираем. */
+watch(() => screenSource.value?.key, (key, prev) => {
+  if (key && key !== prev) {
+    callStore.setSpotlight(key)
+  } else if (!key && prev && callStore.spotlightKey === prev) {
+    callStore.setSpotlight(null)
+  }
 })
 
 /* Копирование ссылки-приглашения */
@@ -515,8 +601,8 @@ watch(isRinging, (v) => {
 /* Свёрнутый режим — плавающая мини-панель в углу */
 .callview.mini {
   inset: auto 16px 90px auto;
-  width: 320px;
-  height: 240px;
+  width: 208px;
+  height: 364px;
   border-radius: 24px;
   overflow: hidden;
   background: var(--color-surface);
@@ -633,21 +719,35 @@ watch(isRinging, (v) => {
   background: var(--color-surface-low);
 }
 
-/* Сетка камер */
+/* Сетка камер: плитки 3:4, число колонок и размер подбирает useTileGrid
+   (inline grid-template-columns), центрируем по обеим осям. */
 .callview-grid {
   flex: 1;
   min-height: 0;
   display: grid;
   gap: 8px;
   padding: 16px;
+  justify-content: center;
+  align-content: center;
+  overflow: hidden;
 }
 
-.callview.mini .callview-grid { padding: 6px; gap: 4px; }
+/* Кликабельная обёртка-плитка («показать крупно»). Держит пропорцию 3:4. */
+.tile-pick {
+  appearance: none;
+  border: 0;
+  padding: 0;
+  background: transparent;
+  cursor: pointer;
+  border-radius: 20px;
+  min-width: 0;
+}
+.tile-pick > * { width: 100%; height: 100%; }
 
-.g-1 { grid-template-columns: 1fr; }
-.g-2 { grid-template-columns: 1fr 1fr; }
-.g-4 { grid-template-columns: 1fr 1fr; grid-auto-rows: 1fr; }
-.g-many { grid-template-columns: repeat(3, 1fr); grid-auto-rows: 1fr; }
+.grid-tile {
+  aspect-ratio: 3 / 4;
+  width: 100%;
+}
 
 /* Демонстрация экрана: сцена + лента камер */
 .stage-focus {
@@ -658,18 +758,25 @@ watch(isRinging, (v) => {
   display: flex;
 }
 
-.stage-focus > * { flex: 1; }
+.stage-focus > .tile { flex: 1; min-width: 0; }
 
 .stage-focus:fullscreen {
   background: var(--color-bg);
   padding: 0;
 }
 
-.stage-fs-btn {
+.stage-actions {
   position: absolute;
   top: 26px;
   right: 26px;
-  flex: 0 0 auto;
+  display: flex;
+  gap: 8px;
+  z-index: 3;
+}
+
+.stage-focus:fullscreen .stage-actions { top: 16px; right: 16px; }
+
+.stage-act-btn {
   width: 40px;
   height: 40px;
   border: 0;
@@ -679,19 +786,16 @@ watch(isRinging, (v) => {
   display: grid;
   place-items: center;
   cursor: pointer;
-  z-index: 3;
   transition: background 0.15s;
 }
 
-.stage-fs-btn:hover {
+.stage-act-btn:hover {
   background: color-mix(in oklch, var(--color-scrim) 75%, transparent);
 }
 
-.stage-focus:fullscreen .stage-fs-btn {
-  top: 16px;
-  right: 16px;
-}
+.stage-act-btn .material-symbols-outlined { font-size: 20px; }
 
+/* Лента под «прожектором»: миниатюры 3:4, горизонтальный скролл. */
 .stage-strip {
   display: flex;
   gap: 8px;
@@ -700,12 +804,21 @@ watch(isRinging, (v) => {
   flex-shrink: 0;
 }
 
-.stage-strip > * {
-  width: 168px;
-  min-width: 168px;
-  min-height: 100px;
-  height: 100px;
+.strip-tile {
+  height: 112px;
+  aspect-ratio: 3 / 4;
+  flex: 0 0 auto;
 }
+
+/* Свёрнутое окно: тайл заполняет сцену. Размеры окна заданы портретными
+   (≈3:4), так что картинка собеседника/трансляции получается 3:4. */
+.stage-mini {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  padding: 6px;
+}
+.stage-mini > .tile { flex: 1; min-width: 0; }
 
 /* Боковая панель */
 .callview-aside {
@@ -726,21 +839,14 @@ watch(isRinging, (v) => {
   }
 }
 
-@media (max-width: 720px) {
-  .g-2, .g-4 { grid-template-columns: 1fr; }
-  .g-many { grid-template-columns: 1fr 1fr; }
-}
-
 /* На мобильном свёрнутый режим поднимаем над нижней навигацией. */
 @media (max-width: 600px) {
   .callview.mini {
-    inset: auto 12px calc(76px + env(safe-area-inset-bottom, 0px)) 12px;
-    width: auto;
-    height: 200px;
+    inset: auto 12px calc(76px + env(safe-area-inset-bottom, 0px)) auto;
+    width: 168px;
+    height: 300px;
   }
 }
-
-.g-mini { grid-template-columns: 1fr; }
 
 /* Контролы */
 .callview-controls {

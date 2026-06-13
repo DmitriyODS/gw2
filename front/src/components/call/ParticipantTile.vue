@@ -92,13 +92,15 @@ onBeforeUnmount(() => {
 <style scoped>
 .tile {
   position: relative;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
   border-radius: 20px;
   overflow: hidden;
   background: var(--color-surface-highest);
   display: flex;
   align-items: center;
   justify-content: center;
-  min-height: 140px;
 }
 
 /* Активный спикер — рамка в тон primary. Рисуем оверлеем поверх содержимого:

@@ -14,6 +14,21 @@ DEPLOY="$ROOT/deploy"
 UPLOADS="$ROOT/uploads"
 mkdir -p "$UPLOADS"
 
+# Адреса для доступа с других устройств той же сети (телефон/планшет на том же
+# Wi-Fi заходят на http://<IP>:5173). PRIMARY_IP — адрес интерфейса маршрута по
+# умолчанию (его же отдаём LiveKit-клиенту), LAN_IPS — все не-петлевые адреса
+# для подсказки. Нет сети — откатываемся на localhost (как было).
+if [ "$(uname)" = "Darwin" ]; then
+    def_if="$(route -n get default 2>/dev/null | awk '/interface:/{print $2}')"
+    PRIMARY_IP="$([ -n "$def_if" ] && ipconfig getifaddr "$def_if" 2>/dev/null || true)"
+    LAN_IPS="$(ifconfig 2>/dev/null | awk '/inet /{print $2}' | grep -Ev '^(127\.|169\.254\.)' || true)"
+else
+    PRIMARY_IP="$(ip route get 1 2>/dev/null | awk '{for(i=1;i<=NF;i++) if($i=="src"){print $(i+1); exit}}')"
+    LAN_IPS="$(hostname -I 2>/dev/null | tr ' ' '\n' | grep -Ev '^(127\.|169\.254\.)' || true)"
+fi
+[ -z "${PRIMARY_IP:-}" ] && PRIMARY_IP="$(printf '%s\n' "$LAN_IPS" | head -n1)"
+[ -z "${PRIMARY_IP:-}" ] && PRIMARY_IP="localhost"
+
 FRONT_PID=""
 CALLS_PID=""
 AUTH_PID=""
@@ -101,7 +116,7 @@ printf "\033[1m▶ callsvc (Go)  gRPC :9090  HTTP :8090...\033[0m\n"
   LIVEKIT_API_KEY="devkey" \
   LIVEKIT_API_SECRET="dev_livekit_secret_min_32_chars_ok" \
   LIVEKIT_URL="http://localhost:7880" \
-  LIVEKIT_CLIENT_URL="ws://localhost:7880" \
+  LIVEKIT_CLIENT_URL="ws://${PRIMARY_IP}:7880" \
   MESSENGER_GRPC_ADDR="localhost:9092" \
   exec go run ./cmd/callsvc
 ) &
@@ -202,14 +217,23 @@ printf "\033[1m▶ gatewaysvc (Go)  HTTP :8096...\033[0m\n"
 ) &
 GATEWAY_PID=$!
 
-# 10. Vite
+# 10. Vite (--host 0.0.0.0 — слушаем все интерфейсы, чтобы фронт открывался
+#     с других устройств сети по http://<IP>:5173).
 printf "\033[1m▶ Vite  :5173...\033[0m\n"
-( cd "$FRONT" && exec npm run dev ) &
+( cd "$FRONT" && exec npm run dev -- --host 0.0.0.0 ) &
 FRONT_PID=$!
 
 printf "\n\033[1mСерверы запущены\033[0m  (Ctrl+C — остановить всё)\n"
 printf "  Фронт:   \033[4mhttp://localhost:5173\033[0m\n"
-printf "  Шлюз:    \033[4mws://localhost:8096/ws\033[0m\n"
+if [ "$PRIMARY_IP" != "localhost" ] && [ -n "$LAN_IPS" ]; then
+    printf "\n\033[1m  С других устройств в этой сети:\033[0m\n"
+    printf '%s\n' "$LAN_IPS" | while IFS= read -r ip; do
+        [ -n "$ip" ] && printf "    \033[4mhttp://%s:5173\033[0m\n" "$ip"
+    done
+    printf "    \033[2m(устройство должно быть в той же сети; firewall macOS может\n"
+    printf "     спросить разрешение для node/go при первом подключении)\033[0m\n"
+fi
+printf "\n  Шлюз:    \033[4mws://localhost:8096/ws\033[0m\n"
 printf "  Звонки:  \033[4mhttp://localhost:8090/api/calls\033[0m (gRPC :9090)\n"
 printf "  Auth:    \033[4mhttp://localhost:8091/api/auth\033[0m\n"
 printf "  Чаты:    \033[4mhttp://localhost:8092/api/messenger\033[0m (gRPC :9092)\n"

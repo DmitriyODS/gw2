@@ -27,13 +27,15 @@
     </div>
 
     <footer class="cpanel-foot">
-      <input
+      <textarea
+        ref="inputEl"
         v-model="draft"
         class="chat-input"
-        type="text"
+        rows="1"
         placeholder="Сообщение…"
         maxlength="2000"
-        @keydown.enter.prevent="send"
+        @input="autoGrow"
+        @keydown.enter.exact="onEnter"
       />
       <button class="chat-send" :disabled="!draft.trim()" title="Отправить" @click="send">
         <span class="material-symbols-outlined">send</span>
@@ -49,12 +51,34 @@ import { useCallStore } from '@/stores/call.js'
 const callStore = useCallStore()
 const draft = ref('')
 const listEl = ref(null)
+const inputEl = ref(null)
+
+const MAX_INPUT_PX = 120
+
+// На тач-устройствах Enter — перенос строки (отправка только кнопкой):
+// случайные отправки с экранной клавиатуры раздражают сильнее лишнего тапа.
+// На десктопе Enter отправляет, Shift+Enter — новая строка (см. MessageInput).
+const isTouchDevice = window.matchMedia?.('(hover: none) and (pointer: coarse)').matches ?? false
+
+function autoGrow() {
+  const el = inputEl.value
+  if (!el) return
+  el.style.height = 'auto'
+  el.style.height = `${Math.min(el.scrollHeight, MAX_INPUT_PX)}px`
+}
+
+function onEnter(e) {
+  if (isTouchDevice) return // default-поведение textarea — перенос строки
+  e.preventDefault()
+  send()
+}
 
 function send() {
   const text = draft.value.trim()
   if (!text) return
   callStore.sendChat(text)
   draft.value = ''
+  nextTick(autoGrow)
 }
 
 function fmtTime(ts) {
@@ -165,6 +189,7 @@ onMounted(scrollDown)
 
 .cpanel-foot {
   display: flex;
+  align-items: flex-end;
   gap: 8px;
   padding: 12px 16px calc(12px + env(safe-area-inset-bottom, 0px));
   border-top: 1px solid var(--color-outline-dim);
@@ -174,14 +199,18 @@ onMounted(scrollDown)
 .chat-input {
   flex: 1;
   min-width: 0;
-  padding: 10px 14px;
+  padding: 9px 14px;
   border: 1px solid var(--color-outline-dim);
-  border-radius: 999px;
+  border-radius: 18px;
   background: var(--color-surface-high);
   color: var(--color-text);
+  font: inherit;
   font-size: 14px;
-  font-family: inherit;
+  line-height: 1.35;
   outline: none;
+  resize: none;
+  max-height: 120px;
+  overflow-y: auto;
 }
 
 .chat-input:focus { border-color: var(--color-primary); }

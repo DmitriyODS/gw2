@@ -53,6 +53,11 @@ export const useCallStore = defineStore('call', {
     isMinimized: false,
     /** Боковая панель: null | 'participants' | 'chat'. */
     sidePanel: null,
+    /** Identity текущего/последнего громкого удалённого спикера (для мини-окна). */
+    activeSpeakerId: null,
+    /** Что показывать крупно в большом окне: null = сетка, иначе ключ источника
+     *  ('self' | identity | 'screen:<identity>'). Демонстрация авто-фокусится. */
+    spotlightKey: null,
     error: null,
     /** Чат звонка (data-канал LiveKit, живёт только пока идёт звонок). */
     chatMessages: [],
@@ -106,8 +111,13 @@ export const useCallStore = defineStore('call', {
         this.resyncParticipants()
       })
       callRoom.addEventListener('speakers', (e) => {
-        const speaking = new Set(e.detail.identities)
+        const ids = e.detail.identities // LiveKit: по убыванию громкости
+        const speaking = new Set(ids)
         this.localSpeaking = speaking.has(callRoom.localIdentity)
+        // Самый громкий удалённый — для авто-фокуса мини-окна. Когда все молчат,
+        // оставляем последнего, чтобы окошко не дёргалось.
+        const remote = ids.find(id => id !== callRoom.localIdentity)
+        if (remote) this.activeSpeakerId = remote
         const next = { ...this.participants }
         for (const id of Object.keys(next)) {
           next[id] = { ...next[id], speaking: speaking.has(id) }
@@ -210,6 +220,28 @@ export const useCallStore = defineStore('call', {
       if (this.phase === 'outgoing' && Object.values(next).some(p => !p.pending)) {
         this.phase = 'active'
         this._clearOutgoingTimeout()
+      }
+
+      this._resolveScreenConflict()
+    },
+
+    /** Выбрать, что показывать крупно: null — сетка, иначе ключ источника. */
+    setSpotlight(key) {
+      this.spotlightKey = key || null
+    },
+
+    /** Двое начали демонстрацию почти одновременно (UI-блокировка не успела) —
+     *  детерминированно уступает тот, чей identity «больше»: обе стороны
+     *  приходят к одному решению, и одна трансляция останавливается. */
+    _resolveScreenConflict() {
+      if (!this.screenEnabled) return
+      const mine = callRoom.localIdentity
+      if (!mine) return
+      const other = Object.values(this.participants).find(p => p.screen && p.identity !== mine)
+      if (other && other.identity < mine) {
+        this.screenEnabled = false
+        callRoom.setScreenShareEnabled(false).catch(() => {})
+        try { useNotificationsStore().info('Демонстрацию уже ведёт другой участник') } catch {}
       }
     },
 
@@ -577,6 +609,14 @@ export const useCallStore = defineStore('call', {
 
     async toggleScreenShare() {
       const target = !this.screenEnabled
+      if (target) {
+        // Пока кто-то демонстрирует — другие запустить не могут (одна трансляция).
+        const other = Object.values(this.participants).find(p => p.screen)
+        if (other) {
+          try { useNotificationsStore().warn(`Сейчас демонстрирует ${other.name || 'другой участник'}`) } catch {}
+          return
+        }
+      }
       try {
         await callRoom.setScreenShareEnabled(target)
         this.screenEnabled = target
@@ -633,6 +673,8 @@ export const useCallStore = defineStore('call', {
       this.media = 'video'
       this.isMinimized = false
       this.sidePanel = null
+      this.activeSpeakerId = null
+      this.spotlightKey = null
       this.chatMessages = []
       this.chatUnread = 0
       this.error = null

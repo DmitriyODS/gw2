@@ -121,9 +121,11 @@ export function connectSocket() {
   if (!auth.token || socket) return socket
 
   // В dev подключаемся напрямую к gatewaysvc (:8096), минуя Vite proxy;
-  // в проде — /ws через nginx (схема по текущему протоколу страницы).
+  // хост берём из адреса страницы (не хардкодим localhost) — тогда заход с
+  // другого устройства по http://<IP-машины>:5173 даёт ws://<IP-машины>:8096.
+  // В проде — /ws через nginx (схема по текущему протоколу страницы).
   const target = import.meta.env.DEV
-    ? 'ws://localhost:8096/ws'
+    ? `ws://${window.location.hostname}:8096/ws`
     : (window.location.protocol === 'https:' ? 'wss://' : 'ws://')
       + window.location.host + '/ws'
   socket = new GatewaySocket(target, { auth: { token: auth.token } })
