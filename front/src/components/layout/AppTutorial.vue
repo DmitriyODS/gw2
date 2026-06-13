@@ -375,7 +375,7 @@ function clamp(v, lo, hi) { return Math.min(Math.max(v, lo), hi) }
   display: flex;
   flex-direction: column;
   gap: 10px;
-  max-height: calc(100vh - 32px);
+  max-height: calc(100dvh - 32px);
   overflow: auto;
 }
 

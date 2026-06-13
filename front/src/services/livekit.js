@@ -99,6 +99,9 @@ export class CallRoomManager extends EventTarget {
           byServer: reason === DisconnectReason.ROOM_DELETED
             || reason === DisconnectReason.PARTICIPANT_REMOVED
             || reason === DisconnectReason.SERVER_SHUTDOWN,
+          // Этим же identity вошли в другом месте (вторая вкладка/устройство,
+          // ссылка-приглашение): LiveKit вышиб это соединение.
+          duplicate: reason === DisconnectReason.DUPLICATE_IDENTITY,
         })
       })
 

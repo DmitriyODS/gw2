@@ -99,12 +99,21 @@ func (s *Service) CreateUser(ctx context.Context, actor *domain.User, req dto.Cr
 		return nil, err
 	}
 
+	// Компанию из тела принимаем только у Администратора системы (company_id
+	// NULL — он один создаёт пользователей вне своей компании). У остальных
+	// (Руководитель/Менеджер) сотрудник принудительно создаётся в компании
+	// создателя — иначе он создавался «без компании» и не появлялся в списке.
+	companyID := req.CompanyID
+	if actor.CompanyID != nil {
+		companyID = actor.CompanyID
+	}
+
 	user := &domain.User{
 		FIO:           req.FIO,
 		Login:         req.Login,
 		HashPassword:  hashed,
 		Role:          *role,
-		CompanyID:     req.CompanyID,
+		CompanyID:     companyID,
 		Post:          req.Post,
 		Phone:         phone,
 		Email:         email,

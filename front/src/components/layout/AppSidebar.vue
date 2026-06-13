@@ -135,6 +135,7 @@ const avatarSrc = computed(() => {
   position: sticky;
   top: 0;
   height: 100vh;
+  height: 100dvh;
   width: 72px;
   background: var(--gw-sidebar-bg);
   border-right: 1px solid var(--gw-border);

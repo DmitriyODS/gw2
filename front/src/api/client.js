@@ -92,6 +92,14 @@ export async function apiRequest(path, options = {}) {
   }
 
   if (resp.status === 401 && !options._retry && path !== '/auth/refresh') {
+    // Намеренный выход или уже нет активной сессии — не дёргаем refresh и не
+    // шумим «Сессия истекла»: 401 от запросов, стартовавших до/во время
+    // logout, ожидаем. Сам запрос logout (_isLogout) — исключение: ему нужно
+    // дойти до сервера (через refresh, если access протух), чтобы погасить
+    // refresh-cookie.
+    if (!options._isLogout && (auth.loggingOut || !auth.token)) {
+      throw { status: 401, error: 'unauthorized', message: '', silent: true }
+    }
     if (isRefreshing) {
       return new Promise((resolve, reject) => {
         refreshQueue.push({ resolve, reject, path, options })

@@ -6,6 +6,9 @@ export const changeDefault = (data) => apiRequest('/auth/change-default', { meth
 
 export const login = (data) => apiRequest('/auth/login', { method: 'POST', body: data })
 
-export const logout = () => apiRequest('/auth/logout', { method: 'POST' })
+// _isLogout — пометка для client.js: даже во время выхода этот запрос должен
+// дойти до сервера (через refresh, если access протух), чтобы погасить
+// refresh-cookie. Остальные 401 при выходе подавляются без шума.
+export const logout = () => apiRequest('/auth/logout', { method: 'POST', _isLogout: true })
 
 export const refreshToken = () => apiRequest('/auth/refresh', { method: 'POST' })

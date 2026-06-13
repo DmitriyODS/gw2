@@ -142,9 +142,18 @@ export const useCallStore = defineStore('call', {
       this.refreshDevices()
       navigator.mediaDevices?.addEventListener?.('devicechange', () => this.refreshDevices())
       callRoom.addEventListener('disconnected', (e) => {
-        // Комнату закрыл сервер (звонок завершён/нас удалили) — выходим.
         // Свой собственный disconnect() сюда не попадает (слушатели сняты).
-        if (this.phase !== 'idle' && e.detail?.byServer) {
+        if (this.phase === 'idle') return
+        // Этим же identity вошли в другом месте (вторая вкладка/ссылка-
+        // приглашение) — LiveKit вышиб ЭТО соединение. Тихо выходим: reset()
+        // НЕ шлёт call:leave, иначе завершили бы p2p-звонок собеседнику.
+        if (e.detail?.duplicate) {
+          this.reset()
+          try { useNotificationsStore().info('Звонок продолжен в другой вкладке') } catch {}
+          return
+        }
+        // Комнату закрыл сервер (звонок завершён/нас удалили) — выходим.
+        if (e.detail?.byServer) {
           this.reset()
         }
       })
@@ -351,28 +360,38 @@ export const useCallStore = defineStore('call', {
     async joinExistingCall(callPayload) {
       const callId = callPayload?.id || callPayload?.call_id || callPayload
       if (!callId) return
-      this.rejoinCall = null
-      // Уже в этом звонке — просто разворачиваем окно.
+      // Уже в этом звонке — только разворачиваем окно. Второе подключение с тем
+      // же identity LiveKit считает дублем и выбивает первое соединение —
+      // звонок рвётся у всех; поэтому повторно НЕ коннектимся.
       if (this.call?.id === callId && this.phase !== 'idle') {
+        this.rejoinCall = null
         this.expand()
         return
       }
-      if (this.phase !== 'idle') return
-
-      let data
+      // Параллельный вход (авто-rejoin после F5 + клик по баннеру «Вернуться»)
+      // давал две конкурентные connect-попытки на один singleton-Room — это и
+      // роняло звонок (DUPLICATE_IDENTITY). Пускаем строго по одной.
+      if (this.phase !== 'idle' || this._joining) return
+      this._joining = true
+      this.rejoinCall = null
       try {
-        data = await getCallToken(callId)
-      } catch (e) {
-        this.handleError({ code: e?.code || 'NOT_IN_CALL', message: e?.message })
-        return
+        let data
+        try {
+          data = await getCallToken(callId)
+        } catch (e) {
+          this.handleError({ code: e?.code || 'NOT_IN_CALL', message: e?.message })
+          return
+        }
+        this.call = data.call
+        this.media = data.call?.media || 'video'
+        this.audioEnabled = true
+        this.videoEnabled = this.media === 'video'
+        this.phase = 'active'
+        this.error = null
+        await this._connectRoom(data.livekit)
+      } finally {
+        this._joining = false
       }
-      this.call = data.call
-      this.media = data.call?.media || 'video'
-      this.audioEnabled = true
-      this.videoEnabled = this.media === 'video'
-      this.phase = 'active'
-      this.error = null
-      await this._connectRoom(data.livekit)
     },
 
     /** Гость (или сотрудник) входит по ссылке-приглашению /call/<code>. */
@@ -388,51 +407,68 @@ export const useCallStore = defineStore('call', {
         err.code = 'ALREADY_IN_CALL'
         throw err
       }
-      const data = await joinCallByCode(code, { name }) // ошибки ловит вьюха
-      this.guest = data.guest
-      this.guestName = data.guest ? name : null
-      this.call = data.call
-      this.media = data.call?.media || 'video'
-      this.audioEnabled = true
-      this.videoEnabled = this.media === 'video'
-      this.phase = 'active'
-      this.error = null
-      await this._connectRoom(data.livekit)
+      if (this._joining) return
+      this._joining = true
+      try {
+        const data = await joinCallByCode(code, { name }) // ошибки ловит вьюха
+        this.guest = data.guest
+        this.guestName = data.guest ? name : null
+        this.call = data.call
+        this.media = data.call?.media || 'video'
+        this.audioEnabled = true
+        this.videoEnabled = this.media === 'video'
+        this.phase = 'active'
+        this.error = null
+        await this._connectRoom(data.livekit)
+      } finally {
+        this._joining = false
+      }
     },
 
     /** Синхронизировать состояние звонка с сервером (загрузка страницы и
      *  каждый reconnect сокета). Лечит зависший phase и предлагает вернуться
      *  в живой звонок после перезагрузки. */
     async checkRejoin() {
-      let call
+      // Зовётся и из App.vue onMounted, и из socket-connect. Без single-flight
+      // две параллельные сверки гонятся: одна авто-возвращается в звонок, пока
+      // у второй phase ещё 'idle' — и та выставляет баннер «Вернуться» поверх
+      // уже идущего возврата (а клик по нему даёт второе подключение с тем же
+      // identity и роняет звонок).
+      if (this._checkingRejoin) return
+      this._checkingRejoin = true
       try {
-        ({ call } = await getActiveCall())
-      } catch { return } // сервер недоступен — не трогаем состояние
-      const live = (call && call.status !== 'ended' && call.status !== 'missed') ? call : null
+        let call
+        try {
+          ({ call } = await getActiveCall())
+        } catch { return } // сервер недоступен — не трогаем состояние
+        const live = (call && call.status !== 'ended' && call.status !== 'missed') ? call : null
 
-      if (this.phase !== 'idle') {
-        if (!live || live.id !== this.call?.id) {
-          this.reset()
-          if (live) this.rejoinCall = live
+        if (this.phase !== 'idle') {
+          if (!live || live.id !== this.call?.id) {
+            this.reset()
+            if (live) this.rejoinCall = live
+          }
+          return
         }
-        return
-      }
-      if (!live) {
-        // Сервер не видит за мной живого звонка — баннер «Вернуться» устарел
-        // (call:ended мог потеряться, пока не было соединения).
-        this.rejoinCall = null
-        return
-      }
-      // Живой звонок, в котором мы числимся, — после перезагрузки страницы
-      // возвращаемся автоматически (один раз на звонок); не вышло — баннер.
-      this._rejoinTried ??= new Set()
-      if (!this._rejoinTried.has(live.id)) {
-        this._rejoinTried.add(live.id)
-        try { await this.joinExistingCall(live) } catch { /* ниже — баннер */ }
-        if (this.phase !== 'idle') return
-      }
-      if (this.rejoinCall?.id !== live.id) {
-        this.rejoinCall = live
+        if (!live) {
+          // Сервер не видит за мной живого звонка — баннер «Вернуться» устарел
+          // (call:ended мог потеряться, пока не было соединения).
+          this.rejoinCall = null
+          return
+        }
+        // Живой звонок, в котором мы числимся, — после перезагрузки страницы
+        // возвращаемся автоматически (один раз на звонок); не вышло — баннер.
+        this._rejoinTried ??= new Set()
+        if (!this._rejoinTried.has(live.id)) {
+          this._rejoinTried.add(live.id)
+          try { await this.joinExistingCall(live) } catch { /* ниже — баннер */ }
+          if (this.phase !== 'idle') return
+        }
+        if (this.rejoinCall?.id !== live.id) {
+          this.rejoinCall = live
+        }
+      } finally {
+        this._checkingRejoin = false
       }
     },
 

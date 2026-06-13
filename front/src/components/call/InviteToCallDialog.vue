@@ -162,7 +162,7 @@ function confirm() {
   list-style: none;
   padding: 0;
   margin: 0 0 4px;
-  max-height: 42vh;
+  max-height: 42dvh;
   overflow-y: auto;
 }
 

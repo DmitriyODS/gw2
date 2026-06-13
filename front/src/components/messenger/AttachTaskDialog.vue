@@ -130,7 +130,7 @@ function pick(t) {
 .attach-task {
   display: flex;
   flex-direction: column;
-  max-height: 70vh;
+  max-height: 70dvh;
   min-height: 320px;
 }
 

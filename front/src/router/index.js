@@ -1,6 +1,7 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { ROLES } from '@/composables/usePermission.js'
+import { navProgress } from '@/composables/useNavProgress.js'
 
 const routes = [
   { path: '/login', component: () => import('@/views/LoginView.vue'), meta: { public: true } },
@@ -38,6 +39,7 @@ const router = createRouter({
 })
 
 router.beforeEach(async (to) => {
+  navProgress.value = true
   const auth = useAuthStore()
   await auth.ensureReady()
   if (!to.meta.public && !auth.token) {
@@ -52,5 +54,8 @@ router.beforeEach(async (to) => {
     if (level < to.meta.minRole) return '/tasks'
   }
 })
+
+router.afterEach(() => { navProgress.value = false })
+router.onError(() => { navProgress.value = false })
 
 export default router

@@ -14,6 +14,9 @@ export const useAuthStore = defineStore('auth', () => {
   const claims = ref({})
   const forceChange = ref(false)
   const ready = ref(false)
+  // Идёт намеренный выход: client.js на это время глушит «Сессия истекла»
+  // от хвостовых запросов, чтобы logout был тихим.
+  const loggingOut = ref(false)
   // Сообщение от backend о блокировке компании. Если не null — глобальный
   // обработчик показывает экран блокировки вместо обычного приложения.
   const companyDisabled = ref(null)
@@ -32,6 +35,7 @@ export const useAuthStore = defineStore('auth', () => {
 
   // Применить ответ login/refresh/change-default: токен + клеймы сессии.
   function applySession(data) {
+    loggingOut.value = false
     token.value = data.access_token
     claims.value = {
       company_id: data.company_id ?? null,
@@ -47,10 +51,13 @@ export const useAuthStore = defineStore('auth', () => {
     try {
       const data = await apiLogin({ login: loginVal, password })
       applySession(data)
-      if (!forceChange.value) {
-        await loadMe()
-      }
       companyDisabled.value = null
+      // Профиль грузим в фоне — вход и редирект не ждут /users/me: иначе на
+      // медленном канале форма логина висит секунды поверх готового приложения
+      // (шелл рендерится по token, а user подтягивается следом).
+      if (!forceChange.value) {
+        loadMe().catch(() => {})
+      }
       return forceChange.value
     } catch (e) {
       // 403 COMPANY_DISABLED — бэк сообщил, что компания отключена.
@@ -68,16 +75,25 @@ export const useAuthStore = defineStore('auth', () => {
   }
 
   async function logout() {
-    // Сначала выходим из звонка (если он идёт): иначе после разлогина медиа
-    // LiveKit продолжает жить — собеседника видно и слышно. Импорт ленивый,
-    // чтобы не закольцевать стора (call.js импортирует auth.js).
+    // Глушим «Сессия истекла» от запросов, стартовавших до выхода: до сброса
+    // флага хвостовые 401 уходят тихо (см. client.js).
+    loggingOut.value = true
     try {
-      const { useCallStore } = await import('./call.js')
-      useCallStore().hangup()
-    } catch {}
-    try { await apiLogout() } catch {}
-    clearAuth()
-    router.push('/login')
+      // Сначала выходим из звонка (если он идёт): иначе после разлогина медиа
+      // LiveKit продолжает жить — собеседника видно и слышно. Импорт ленивый,
+      // чтобы не закольцевать стора (call.js импортирует auth.js).
+      try {
+        const { useCallStore } = await import('./call.js')
+        useCallStore().hangup()
+      } catch {}
+      try { await apiLogout() } catch {}
+      clearAuth()
+      router.push('/login')
+    } finally {
+      // Хвостовые запросы, стартовавшие с токеном до clearAuth, и так глушатся
+      // веткой !auth.token в client.js — флаг можно снимать сразу.
+      loggingOut.value = false
+    }
   }
 
   async function changeDefaultCredentials({ login, password, confirmPassword }) {
@@ -124,7 +140,7 @@ export const useAuthStore = defineStore('auth', () => {
   }
 
   return {
-    user, token, forceChange, isAuth, ready,
+    user, token, forceChange, isAuth, ready, loggingOut,
     companyId, companyName, companySettings, isRootAdmin, companyDisabled,
     ensureReady, login, logout, loadMe, clearAuth, applySession,
     changeDefaultCredentials,

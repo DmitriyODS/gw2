@@ -532,7 +532,7 @@ if (typeof window !== 'undefined') {
 .mini-panel {
   width: 360px;
   max-width: calc(100vw - 32px);
-  height: 70vh;
+  height: 70dvh;
   max-height: 560px;
   background: var(--color-surface);
   border: 1px solid var(--color-outline-dim);
@@ -782,7 +782,7 @@ if (typeof window !== 'undefined') {
   }
   .mini-panel {
     width: calc(100vw - 24px);
-    height: 70vh;
+    height: 70dvh;
   }
 }
 </style>

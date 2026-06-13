@@ -186,7 +186,7 @@ function onCaptionKey(e) {
   list-style: none;
   padding: 0;
   margin: 0;
-  max-height: 44vh;
+  max-height: 44dvh;
   overflow-y: auto;
 }
 

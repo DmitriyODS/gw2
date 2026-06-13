@@ -832,7 +832,7 @@ async function handleSetColor(color) {
   display: flex;
   flex: 1;
   min-height: 520px;
-  max-height: 85vh;
+  max-height: 85dvh;
   overflow: hidden;
 }
 

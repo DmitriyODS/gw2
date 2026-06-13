@@ -89,7 +89,7 @@ onBeforeUnmount(() => {
 }
 .lb-img {
   max-width: min(92vw, 1200px);
-  max-height: 80vh;
+  max-height: 80dvh;
   object-fit: contain;
   border-radius: var(--radius-lg, 16px);
   box-shadow: var(--shadow-lg);

@@ -197,10 +197,13 @@ s ?= gateway
 
 # Сборка прод-образов (linux/amd64) и push в Docker Hub
 # osipovskijdima/groove_work (теги migrate/gateway/calls/auth/messenger/ai/
-# groove/tasks/front + версионные). Выборочно: make push only="gateway front".
-# Нужен одноразовый docker login.
+# groove/tasks/front + версионные). Нужен одноразовый docker login.
+# По умолчанию (и в `make deploy`) пушит ТОЛЬКО изменившиеся образы
+# (git diff origin/main..рабочее дерево; back-go/pkg/* → все Go-сервисы).
+# Выборочно:    make push only="gateway front"
+# Принудительно всё: make push only="migrate gateway calls auth messenger ai groove tasks front"
 push:
-	bash scripts/build_push.sh $(only)
+	bash scripts/build_push.sh $(if $(strip $(only)),$(only),--changed)
 
 deploy: push deploy-only
 

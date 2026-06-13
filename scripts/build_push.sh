@@ -26,11 +26,16 @@
 # Использование:
 #   scripts/build_push.sh                # все образы
 #   scripts/build_push.sh gateway front  # выборочно
+#   scripts/build_push.sh --changed      # только реально изменившиеся
+#                                         (git diff origin/main..рабочее дерево;
+#                                          back-go/pkg/* → все Go-сервисы;
+#                                          base переопределяется CHANGED_BASE)
 # ================================================================
 set -euo pipefail
 cd "$(cd "$(dirname "$0")/.." && pwd)"
 
 REPO="${DOCKER_REPO:-osipovskijdima/groove_work}"
+ALL_SERVICES=(migrate gateway calls auth messenger ai groove tasks front)
 # Прод — linux/amd64. На Apple Silicon: Go-стадии кросс-компилируют нативно
 # (см. $BUILDPLATFORM в Dockerfile), python/node-стадии бегут под Rosetta.
 PLATFORM="${DOCKER_PLATFORM:-linux/amd64}"
@@ -66,8 +71,64 @@ build_push() {
   ok "$REPO:$tag${VERSION:+  (+ $tag-$VERSION)}"
 }
 
-SERVICES=("$@")
-[ ${#SERVICES[@]} -eq 0 ] && SERVICES=(migrate gateway calls auth messenger ai groove tasks front)
+# changed_services — какие образы пересобирать по git-диффу рабочего дерева
+# против задеплоенного состояния (origin/main). Покрывает и коммиты, и ещё не
+# закоммиченные правки. Карта путь→сервис; back-go/pkg/* (общий модуль) тянет
+# пересборку всех Go-сервисов. Без bash-4 (на macOS системный bash 3.2).
+changed_services() {
+  local base="${CHANGED_BASE:-origin/main}"
+  if ! git rev-parse --verify -q "$base" >/dev/null 2>&1; then
+    printf 'changed: нет %s для сравнения — собираю все образы\n' "$base" >&2
+    printf '%s\n' "${ALL_SERVICES[@]}"
+    return
+  fi
+  # git diff не видит НОВЫЕ (untracked) файлы, а docker собирает из рабочего
+  # дерева — поэтому добавляем и их (git ls-files --others), иначе свежесозданный
+  # файл сервиса не вызвал бы его пересборку.
+  local files; files="$( { git diff --name-only "$base" --; git ls-files --others --exclude-standard; } 2>/dev/null || true )"
+  local hits="" go=0 front=0 unknown="" f
+  while IFS= read -r f; do
+    [ -z "$f" ] && continue
+    case "$f" in
+      front/*) front=1 ;;
+      back-go/pkg/*) go=1 ;;
+      back-go/migrate/*) hits="$hits migrate" ;;
+      back-go/gateway/*) hits="$hits gateway" ;;
+      back-go/calls/*) hits="$hits calls" ;;
+      back-go/auth/*) hits="$hits auth" ;;
+      back-go/messenger/*) hits="$hits messenger" ;;
+      back-go/ai/*) hits="$hits ai" ;;
+      back-go/groove/*) hits="$hits groove" ;;
+      back-go/tasks/*) hits="$hits tasks" ;;
+      deploy/*|data/*|scripts/*|*.md|.gitignore|.env*) : ;; # bind-mount/серверное — образ не трогаем
+      *) unknown="$unknown $f" ;;
+    esac
+  done <<EOF
+$files
+EOF
+  [ "$go" = 1 ] && hits="$hits migrate gateway calls auth messenger ai groove tasks"
+  [ "$front" = 1 ] && hits="$hits front"
+  [ -n "$unknown" ] && printf 'changed: не отнёс к сервисам (образы не трогаю):%s\n' "$unknown" >&2
+  local s
+  for s in "${ALL_SERVICES[@]}"; do
+    case " $hits " in *" $s "*) echo "$s" ;; esac
+  done
+}
+
+if [ "${1:-}" = "--changed" ]; then
+  SERVICES=()
+  while IFS= read -r line; do
+    [ -n "$line" ] && SERVICES+=("$line")
+  done < <(changed_services)
+  if [ ${#SERVICES[@]} -eq 0 ]; then
+    ok "Изменившихся сервисов нет — пересобирать нечего"
+    exit 0
+  fi
+  log "Изменились: ${SERVICES[*]}"
+else
+  SERVICES=("$@")
+  [ ${#SERVICES[@]} -eq 0 ] && SERVICES=("${ALL_SERVICES[@]}")
+fi
 
 for svc in "${SERVICES[@]}"; do
   build_push "$svc" "$(context_of "$svc")" "$(dockerfile_of "$svc")"

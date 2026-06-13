@@ -14,9 +14,10 @@
 // StaleAfter. last_seen_at пишется в users на переходе в офлайн.
 //
 // Ключи Redis:
-//   gw2:presence:beats  — ZSET, member "uid:connID", score — unix-время
-//                         последнего сигнала живой видимой вкладки;
-//   gw2:presence:online — SET онлайн-пользователей (для переходов и REST).
+//
+//	gw2:presence:beats  — ZSET, member "uid:connID", score — unix-время
+//	                      последнего сигнала живой видимой вкладки;
+//	gw2:presence:online — SET онлайн-пользователей (для переходов и REST).
 package presence
 
 import (
@@ -157,8 +158,8 @@ func (p *Presence) setOnline(ctx context.Context, userID int64) {
 	})
 }
 
-// maybeOffline — если живых видимых соединений не осталось, выставить офлайн
-// с актуальным last_seen.
+// maybeOffline — если живых видимых соединений не осталось, выставить офлайн.
+// Уход чистый (дисконнект/скрытие вкладки) — last_seen = сейчас.
 func (p *Presence) maybeOffline(ctx context.Context, userID int64) {
 	alive, err := p.aliveUsers(ctx)
 	if err != nil {
@@ -168,10 +169,14 @@ func (p *Presence) maybeOffline(ctx context.Context, userID int64) {
 	if alive[userID] {
 		return
 	}
-	p.setOffline(ctx, userID)
+	p.setOffline(ctx, userID, p.now())
 }
 
-func (p *Presence) setOffline(ctx context.Context, userID int64) {
+// setOffline — перевод в офлайн с явным временем last_seen. Время передаёт
+// вызывающий: чистый уход — момент ухода, sweep «зависшего» соединения —
+// время последнего heartbeat'а (а НЕ момента sweep'а, иначе «был в сети»
+// показывает время на StaleAfter+SweepInterval позже реального).
+func (p *Presence) setOffline(ctx context.Context, userID int64, at time.Time) {
 	removed, err := p.rdb.SRem(ctx, onlineKey, userID).Result()
 	if err != nil {
 		p.log.Warn("presence.offline_failed", "user_id", userID, "error", err)
@@ -180,12 +185,12 @@ func (p *Presence) setOffline(ctx context.Context, userID int64) {
 	if removed == 0 {
 		return
 	}
-	now := p.now().UTC()
-	if err := p.lastSeen.SetLastSeen(ctx, userID, now); err != nil {
+	at = at.UTC()
+	if err := p.lastSeen.SetLastSeen(ctx, userID, at); err != nil {
 		p.log.Warn("presence.last_seen_failed", "user_id", userID, "error", err)
 	}
 	p.bus.Publish(ctx, "presence:update", []string{roomAll}, map[string]any{
-		"user_id": userID, "online": false, "last_seen_at": isoUTC(now),
+		"user_id": userID, "online": false, "last_seen_at": isoUTC(at),
 	})
 }
 
@@ -227,25 +232,48 @@ func (p *Presence) OnlineUserIDs(ctx context.Context) ([]int64, error) {
 // офлайн пользователей, у которых не осталось живых видимых вкладок
 // (включая «осиротевших» после рестарта шлюза).
 func (p *Presence) SweepOnce(ctx context.Context) {
-	maxScore := strconv.FormatInt(p.now().Add(-StaleAfter).Unix(), 10)
-	if err := p.rdb.ZRemRangeByScore(ctx, beatsKey, "-inf", maxScore).Err(); err != nil {
-		p.log.Warn("presence.sweep_trim_failed", "error", err)
-		return
-	}
-	alive, err := p.aliveUsers(ctx)
+	now := p.now()
+	staleBefore := now.Add(-StaleAfter).Unix()
+
+	// Снимок «последний сигнал по пользователю» снимаем ДО вычистки: после
+	// ZRemRangeByScore просроченные члены пропадут, а их score — это и есть
+	// время, которое нужно записать в last_seen уходящему в офлайн.
+	withScores, err := p.rdb.ZRangeWithScores(ctx, beatsKey, 0, -1).Result()
 	if err != nil {
 		p.log.Warn("presence.sweep_failed", "error", err)
 		return
 	}
+	lastBeat := make(map[int64]int64)
+	for _, z := range withScores {
+		m, _ := z.Member.(string)
+		id := memberUserID(m)
+		if id <= 0 {
+			continue
+		}
+		if s := int64(z.Score); s > lastBeat[id] {
+			lastBeat[id] = s
+		}
+	}
+
+	if err := p.rdb.ZRemRangeByScore(ctx, beatsKey, "-inf", strconv.FormatInt(staleBefore, 10)).Err(); err != nil {
+		p.log.Warn("presence.sweep_trim_failed", "error", err)
+		return
+	}
+
 	online, err := p.OnlineUserIDs(ctx)
 	if err != nil {
 		p.log.Warn("presence.sweep_failed", "error", err)
 		return
 	}
 	for _, uid := range online {
-		if !alive[uid] {
-			p.setOffline(ctx, uid)
+		if lastBeat[uid] > staleBefore {
+			continue // есть свежий видимый сигнал — пользователь жив
 		}
+		at := now
+		if s, ok := lastBeat[uid]; ok {
+			at = time.Unix(s, 0)
+		}
+		p.setOffline(ctx, uid, at)
 	}
 }
 

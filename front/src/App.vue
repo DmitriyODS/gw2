@@ -1,5 +1,8 @@
 <template>
   <div class="app-layout" :data-dark="themeStore.dark">
+    <div v-if="navProgress" class="nav-progress" aria-hidden="true">
+      <div class="nav-progress-bar" />
+    </div>
     <div v-if="initializing" class="app-loading">
       <ProgressSpinner />
     </div>
@@ -9,7 +12,7 @@
         <router-view />
       </main>
     </template>
-    <template v-else-if="authStore.user">
+    <template v-else-if="authStore.token">
       <AppSidebar />
       <main class="main-content">
         <router-view />
@@ -48,6 +51,7 @@ import { useTutorial } from '@/composables/useTutorial.js'
 import { useChangelog } from '@/composables/useChangelog.js'
 import { useMorningBriefing } from '@/composables/useMorningBriefing.js'
 import { connectSocket } from '@/socket/index.js'
+import { navProgress } from '@/composables/useNavProgress.js'
 import {
   registerNotifyServiceWorker, installNotifyUnlock, requestNotificationPermission,
 } from '@/utils/systemNotify.js'
@@ -169,12 +173,38 @@ onBeforeUnmount(() => {
   align-items: center;
   justify-content: center;
   width: 100%;
-  min-height: 100vh;
+  min-height: 100dvh;
   background: var(--gw-bg);
 }
 
 .fullscreen-content {
   width: 100vw;
-  min-height: 100vh;
+  min-height: 100dvh;
+}
+
+/* Тонкий индикатор перехода между разделами (поверх всего, под тостами). */
+.nav-progress {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  overflow: hidden;
+  z-index: 12000;
+  background: color-mix(in oklab, var(--color-primary) 16%, transparent);
+  pointer-events: none;
+}
+.nav-progress-bar {
+  position: absolute;
+  top: 0;
+  height: 100%;
+  width: 40%;
+  border-radius: 0 2px 2px 0;
+  background: var(--color-primary);
+  animation: navProgressSlide 1.1s ease-in-out infinite;
+}
+@keyframes navProgressSlide {
+  0% { left: -40%; }
+  100% { left: 100%; }
 }
 </style>

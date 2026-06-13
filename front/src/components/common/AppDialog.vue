@@ -144,11 +144,14 @@ const hasHeader = computed(() =>
 )
 
 const SIZE_WIDTH = { sm: '380px', md: '520px', lg: '720px', xl: '920px' }
+// dvh, не vh: на мобильных vh = высота при СКРЫТОЙ панели браузера, поэтому
+// модалка получалась выше видимой области и обрезалась сверху/снизу (а
+// нижний sheet «уезжал» под адресную строку — выглядело узкой полоской).
 const SIZE_MAX_H = {
-  sm: 'calc(100vh - 48px)',
-  md: 'calc(100vh - 48px)',
-  lg: 'calc(100vh - 48px)',
-  xl: 'calc(100vh - 32px)',
+  sm: 'calc(100dvh - 48px)',
+  md: 'calc(100dvh - 48px)',
+  lg: 'calc(100dvh - 48px)',
+  xl: 'calc(100dvh - 32px)',
 }
 
 const rootStyle = computed(() => ({
@@ -430,7 +433,8 @@ function actionClass(a) {
 @media (max-width: 600px) {
   .app-dialog {
     border-radius: var(--radius-xl, 28px) var(--radius-xl, 28px) 0 0;
-    max-height: 90vh;
+    /* dvh — учитывает динамическую панель браузера; иначе sheet выше экрана. */
+    max-height: 90dvh;
   }
   .ad-header { padding: 20px 20px 4px; }
   .ad-body { padding-left: 20px; padding-right: 20px; }
@@ -485,9 +489,9 @@ function actionClass(a) {
     position: fixed !important;
     inset: 0 !important;
     width: 100vw !important;
-    height: 100vh !important;
+    height: 100dvh !important;
     max-width: 100vw !important;
-    max-height: 100vh !important;
+    max-height: 100dvh !important;
     margin: 0 !important;
     border-radius: 0 !important;
   }

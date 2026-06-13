@@ -199,7 +199,7 @@ defineExpose({ stopSending: () => { sending.value = false } })
   list-style: none;
   padding: 0;
   margin: 0 0 14px;
-  max-height: 42vh;
+  max-height: 42dvh;
   overflow-y: auto;
 }
 

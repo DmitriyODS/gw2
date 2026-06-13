@@ -123,7 +123,7 @@ function pick(u) {
   list-style: none;
   padding: 0;
   margin: 0;
-  max-height: 50vh;
+  max-height: 50dvh;
   overflow-y: auto;
 }
 

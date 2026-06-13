@@ -48,6 +48,7 @@ function onContactSupport() {
 <style scoped>
 .cd-screen {
   min-height: 100vh;
+  min-height: 100dvh;
   width: 100%;
   display: grid;
   place-items: center;

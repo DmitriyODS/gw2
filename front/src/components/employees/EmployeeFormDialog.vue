@@ -26,6 +26,7 @@
           <label class="lbl">Логин <span class="req">*</span></label>
           <input v-model.trim="form.login" class="ctl" maxlength="100"
                  :disabled="isEdit"
+                 @input="loginEdited = true"
                  :class="{ invalid: errors.login }" placeholder="ivan.ivanov" />
           <div v-if="errors.login" class="err">{{ errors.login }}</div>
           <div v-else-if="isEdit" class="hint">Логин нельзя изменить после создания.</div>
@@ -126,6 +127,7 @@ import { useCompaniesStore } from '@/stores/companies.js'
 import { usePermission } from '@/composables/usePermission.js'
 import { useNotificationsStore } from '@/stores/notifications.js'
 import { resetUserPassword } from '@/api/users.js'
+import { loginFromFio } from '@/utils/translit.js'
 
 const props = defineProps({
   modelValue: { type: Boolean, required: true },
@@ -148,6 +150,8 @@ const errors = ref({})
 const serverError = ref('')
 const saving = ref(false)
 const resetting = ref(false)
+// Логин автогенерится из ФИО, пока пользователь не правил его руками.
+const loginEdited = ref(false)
 
 function _blank() {
   return {
@@ -157,10 +161,18 @@ function _blank() {
   }
 }
 
+// Живая генерация логина из ФИО при создании (пока его не правили вручную).
+watch(() => form.value.fio, (fio) => {
+  if (!isEdit.value && !loginEdited.value) {
+    form.value.login = loginFromFio(fio)
+  }
+})
+
 watch(() => props.modelValue, (v) => {
   if (!v) return
   errors.value = {}
   serverError.value = ''
+  loginEdited.value = false
   if (props.user) {
     form.value = {
       fio: props.user.fio || '',
