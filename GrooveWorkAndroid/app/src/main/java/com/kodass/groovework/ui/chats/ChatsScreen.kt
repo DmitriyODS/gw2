@@ -5,8 +5,10 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
 import androidx.compose.animation.scaleOut
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -24,6 +26,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.PushPin
 import androidx.compose.material3.Badge
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
@@ -45,15 +49,19 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import android.widget.Toast
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.kodass.groovework.AppContainer
 import com.kodass.groovework.data.dto.ConversationItemDto
 import com.kodass.groovework.data.dto.MessageDto
 import com.kodass.groovework.ui.common.CenteredLoading
+import com.kodass.groovework.ui.common.ConfirmDialog
+import com.kodass.groovework.ui.common.ConfirmSpec
 import com.kodass.groovework.ui.common.EmptyState
 import com.kodass.groovework.ui.common.ErrorState
 import com.kodass.groovework.ui.common.UserAvatar
@@ -68,11 +76,20 @@ fun ChatsScreen(container: AppContainer, onOpenChat: (Long) -> Unit) {
     }
     val conversations by container.messengerRepo.conversations.collectAsStateWithLifecycle()
     val online by container.messengerRepo.onlineUsers.collectAsStateWithLifecycle()
+    val typing by container.messengerRepo.typingConversations.collectAsStateWithLifecycle()
     var showNewChat by remember { mutableStateOf(false) }
 
     val scrollBehavior = TopAppBarDefaults.pinnedScrollBehavior()
     val listState = rememberLazyListState()
     val fabVisible = listState.rememberIsScrollingUp()
+
+    val context = LocalContext.current
+    LaunchedEffect(viewModel.actionError) {
+        viewModel.actionError?.let {
+            Toast.makeText(context, it, Toast.LENGTH_SHORT).show()
+            viewModel.actionError = null
+        }
+    }
 
     Scaffold(
         modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
@@ -127,7 +144,10 @@ fun ChatsScreen(container: AppContainer, onOpenChat: (Long) -> Unit) {
                         ConversationRow(
                             conversation = conversation,
                             isOnline = conversation.otherUser?.id in online,
+                            isTyping = conversation.id in typing,
                             onClick = { onOpenChat(conversation.id) },
+                            onTogglePin = { viewModel.togglePin(conversation.id) },
+                            onDelete = { scope -> viewModel.deleteConversation(conversation.id, scope) },
                         )
                     }
                 }
@@ -147,20 +167,79 @@ fun ChatsScreen(container: AppContainer, onOpenChat: (Long) -> Unit) {
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun ConversationRow(
     conversation: ConversationItemDto,
     isOnline: Boolean,
+    isTyping: Boolean,
     onClick: () -> Unit,
+    onTogglePin: () -> Unit,
+    onDelete: (scope: String) -> Unit,
 ) {
+    var menuOpen by remember { mutableStateOf(false) }
+    var confirm by remember { mutableStateOf<ConfirmSpec?>(null) }
+    // Системные чаты (питомец/техподдержка) нельзя удалить «у обоих»; dev-чат не
+    // удаляется вовсе — для него прячем удаление целиком.
+    val isSystem = conversation.isPetChat || conversation.isDevChat
+    val title = conversationTitle(conversation)
+
+    confirm?.let { spec -> ConfirmDialog(spec, onDismiss = { confirm = null }) }
+
     Row(
         verticalAlignment = Alignment.CenterVertically,
         modifier = Modifier
             .fillMaxWidth()
-            .clickable(onClick = onClick)
+            .combinedClickable(onClick = onClick, onLongClick = { menuOpen = true })
             .padding(horizontal = 16.dp, vertical = 10.dp),
     ) {
         Box {
+            DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
+                DropdownMenuItem(
+                    text = { Text(if (conversation.isPinned) "Открепить" else "Закрепить") },
+                    onClick = {
+                        menuOpen = false
+                        // Закрепление не деструктивно; открепление подтверждаем (#5).
+                        if (conversation.isPinned) {
+                            confirm = ConfirmSpec(
+                                title = "Открепить чат",
+                                text = "Убрать «$title» из закреплённых?",
+                                confirmLabel = "Открепить",
+                                destructive = false,
+                                action = onTogglePin,
+                            )
+                        } else {
+                            onTogglePin()
+                        }
+                    },
+                )
+                if (!conversation.isDevChat) {
+                    DropdownMenuItem(
+                        text = { Text("Удалить у себя") },
+                        onClick = {
+                            menuOpen = false
+                            confirm = ConfirmSpec(
+                                title = "Удалить чат",
+                                text = "Удалить «$title» у себя? Историю можно будет восстановить, написав снова.",
+                                action = { onDelete("me") },
+                            )
+                        },
+                    )
+                    if (!isSystem) {
+                        DropdownMenuItem(
+                            text = { Text("Удалить у обоих") },
+                            onClick = {
+                                menuOpen = false
+                                confirm = ConfirmSpec(
+                                    title = "Удалить у обоих",
+                                    text = "Удалить «$title» у обоих собеседников без возможности восстановления?",
+                                    action = { onDelete("all") },
+                                )
+                            },
+                        )
+                    }
+                }
+            }
             UserAvatar(
                 userId = conversation.otherUser?.id,
                 name = conversationTitle(conversation),
@@ -203,9 +282,10 @@ private fun ConversationRow(
                 }
             }
             Text(
-                text = previewText(conversation.lastMessage),
+                text = if (isTyping) "печатает…" else previewText(conversation.lastMessage),
                 style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                color = if (isTyping) MaterialTheme.colorScheme.primary
+                else MaterialTheme.colorScheme.onSurfaceVariant,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.padding(top = 2.dp),

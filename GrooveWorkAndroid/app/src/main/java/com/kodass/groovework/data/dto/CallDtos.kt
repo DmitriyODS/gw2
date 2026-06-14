@@ -33,3 +33,16 @@ data class LivekitInfoDto(
     val token: String,
     val url: String,
 )
+
+// Ответ POST /api/calls/{id}/token — токен входа в живой звонок.
+@Serializable
+data class CallTokenDto(
+    val call: CallDto? = null,
+    val livekit: LivekitInfoDto,
+)
+
+// Ответ GET /api/calls/active — текущий живой звонок пользователя (или пусто).
+@Serializable
+data class ActiveCallDto(
+    val call: CallDto? = null,
+)

@@ -74,6 +74,7 @@ data class ConversationItemDto(
     @SerialName("unread_count") val unreadCount: Int = 0,
     @SerialName("last_message_at") val lastMessageAt: String? = null,
     @SerialName("is_pinned") val isPinned: Boolean = false,
+    @SerialName("pinned_at") val pinnedAt: String? = null,
     @SerialName("is_dev_chat") val isDevChat: Boolean = false,
     @SerialName("is_pet_chat") val isPetChat: Boolean = false,
     @SerialName("pet_name") val petName: String? = null,
@@ -101,6 +102,7 @@ data class SendMessageRequest(
     val text: String? = null,
     @SerialName("attachment_ids") val attachmentIds: List<Long>? = null,
     @SerialName("reply_to_id") val replyToId: Long? = null,
+    @SerialName("task_id") val taskId: Long? = null,
 )
 
 @Serializable
@@ -108,6 +110,19 @@ data class ForwardRequest(
     @SerialName("message_id") val messageId: Long,
     @SerialName("conversation_ids") val conversationIds: List<Long> = emptyList(),
     @SerialName("user_ids") val userIds: List<Long> = emptyList(),
+)
+
+// Ответ POST /messages/{id}/pin.
+@Serializable
+data class MessagePinDto(
+    val pinned: Boolean = false,
+    val message: MessageDto? = null,
+)
+
+// Ответ POST /conversations/{id}/pin.
+@Serializable
+data class ConversationPinDto(
+    @SerialName("is_pinned") val isPinned: Boolean = false,
 )
 
 @Serializable

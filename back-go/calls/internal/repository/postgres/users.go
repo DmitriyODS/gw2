@@ -82,6 +82,42 @@ func (r *UserReader) ListVisibleUsers(ctx context.Context, ids []int64) ([]*doma
 	return out, rows.Err()
 }
 
+// Memberships — компании каждого пользователя: первичная users.company_id ∪
+// членства user_companies. Многокомпанийность: звонок возможен между людьми,
+// у которых есть общая компания (а не только совпадающая «первичная»).
+func (r *UserReader) Memberships(ctx context.Context, ids []int64) (map[int64]map[int64]bool, error) {
+	out := make(map[int64]map[int64]bool, len(ids))
+	if len(ids) == 0 {
+		return out, nil
+	}
+	rows, err := r.pool.Query(ctx, `
+		SELECT user_id, company_id FROM (
+			SELECT id AS user_id, company_id FROM users
+			 WHERE id = ANY($1) AND company_id IS NOT NULL
+			UNION
+			SELECT user_id, company_id FROM user_companies
+			 WHERE user_id = ANY($1)
+		) t`, ids)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var userID, companyID int64
+		if err := rows.Scan(&userID, &companyID); err != nil {
+			return nil, err
+		}
+		set := out[userID]
+		if set == nil {
+			set = make(map[int64]bool)
+			out[userID] = set
+		}
+		set[companyID] = true
+	}
+	return out, rows.Err()
+}
+
 // prefixed — "id, kind" → "c.id, c.kind" (для запросов с JOIN).
 func prefixed(alias, cols string) string {
 	parts := strings.Split(cols, ",")

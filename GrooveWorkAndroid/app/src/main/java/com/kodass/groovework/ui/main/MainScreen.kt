@@ -142,6 +142,7 @@ fun MainScreen(container: AppContainer) {
                     container = container,
                     conversationId = entry.arguments?.getLong("id") ?: 0L,
                     onBack = { navController.popBackStack() },
+                    onOpenTask = { id -> navController.navigate("task/$id") },
                 )
             }
             composable("tasks") {

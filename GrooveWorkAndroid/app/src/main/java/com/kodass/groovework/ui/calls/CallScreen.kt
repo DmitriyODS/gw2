@@ -1,6 +1,7 @@
 package com.kodass.groovework.ui.calls
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -36,6 +37,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableLongStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -76,12 +78,26 @@ fun CallScreen(container: AppContainer) {
         }
     }
 
+    // Какое видео на весь экран: true — собеседника, false — своё (тап по PiP меняет).
+    var primaryIsRemote by remember { mutableStateOf(true) }
+    val remoteTrack = remoteTracks.values.firstOrNull()
+    val localVideo = if (cameraEnabled) localTrack else null
+    val hasBoth = remoteTrack != null && localVideo != null
+    // Если своего видео нет — основным всегда идёт собеседник.
+    val primaryRemote = primaryIsRemote || localVideo == null
+    val primaryTrack = if (primaryRemote) remoteTrack else localVideo
+    val pipTrack = if (hasBoth) (if (primaryRemote) localVideo else remoteTrack) else null
+
     Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.surfaceContainerLowest) {
         Box(modifier = Modifier.fillMaxSize()) {
-            // Видео собеседника на весь экран, иначе — аватар и имя.
-            val remoteTrack = remoteTracks.values.firstOrNull()
-            if (remoteTrack != null && room != null) {
-                VideoTrackView(room = room, track = remoteTrack, modifier = Modifier.fillMaxSize())
+            // Основное видео на весь экран, иначе — аватар и имя.
+            if (primaryTrack != null && room != null) {
+                CallVideo(
+                    room = room,
+                    track = primaryTrack,
+                    mirror = !primaryRemote,
+                    modifier = Modifier.fillMaxSize(),
+                )
             } else {
                 Column(
                     horizontalAlignment = Alignment.CenterHorizontally,
@@ -100,7 +116,11 @@ fun CallScreen(container: AppContainer) {
                         modifier = Modifier.padding(top = 16.dp),
                     )
                     Text(
-                        text = if (isOutgoing) "Звоним…" else formatDuration(duration),
+                        text = when {
+                            isOutgoing -> "Звоним…"
+                            room == null -> "Соединение…"
+                            else -> formatDuration(duration)
+                        },
                         style = MaterialTheme.typography.bodyLarge,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.padding(top = 6.dp),
@@ -122,7 +142,7 @@ fun CallScreen(container: AppContainer) {
                         tint = MaterialTheme.colorScheme.onSurface,
                     )
                 }
-                if (remoteTrack != null) {
+                if (primaryTrack != null) {
                     Column(modifier = Modifier.padding(start = 4.dp)) {
                         Text(text = peer?.fio ?: "", style = MaterialTheme.typography.titleMedium)
                         Text(
@@ -134,8 +154,8 @@ fun CallScreen(container: AppContainer) {
                 }
             }
 
-            // Локальное превью.
-            if (cameraEnabled && localTrack != null && room != null) {
+            // Превью второго видео в углу: тап меняет, какое видео на весь экран.
+            if (pipTrack != null && room != null) {
                 Box(
                     modifier = Modifier
                         .align(Alignment.TopEnd)
@@ -144,9 +164,15 @@ fun CallScreen(container: AppContainer) {
                         .width(110.dp)
                         .height(150.dp)
                         .clip(RoundedCornerShape(12.dp))
-                        .background(MaterialTheme.colorScheme.surfaceContainerHigh),
+                        .background(MaterialTheme.colorScheme.surfaceContainerHigh)
+                        .clickable { primaryIsRemote = !primaryIsRemote },
                 ) {
-                    VideoTrackView(room = room, track = localTrack, modifier = Modifier.fillMaxSize())
+                    CallVideo(
+                        room = room,
+                        track = pipTrack,
+                        mirror = primaryRemote,
+                        modifier = Modifier.fillMaxSize(),
+                    )
                 }
             }
 

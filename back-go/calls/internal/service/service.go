@@ -133,6 +133,53 @@ func (s *Service) initiatorFIO(call *domain.Call, parts []*domain.Participant) s
 	return ""
 }
 
+// resolveCompany — компания звонка: общая для инициатора и всех приглашённых
+// по членствам user_companies (многокомпанийность). 0 — общей компании нет.
+// Предпочитает первичную компанию инициатора; иначе детерминированно
+// минимальный id из общих. Инициатор-админ (без членств) → общая компания
+// приглашённых.
+func (s *Service) resolveCompany(ctx context.Context, initiator *domain.User, inviteeIDs []int64) (int64, error) {
+	ids := append([]int64{initiator.ID}, inviteeIDs...)
+	memberships, err := s.users.Memberships(ctx, ids)
+	if err != nil {
+		return 0, err
+	}
+	candidates := memberships[initiator.ID]
+	if len(candidates) == 0 && len(inviteeIDs) > 0 {
+		candidates = memberships[inviteeIDs[0]]
+	}
+	shared := make([]int64, 0, len(candidates))
+	for cid := range candidates {
+		inAll := true
+		for _, uid := range inviteeIDs {
+			if !memberships[uid][cid] {
+				inAll = false
+				break
+			}
+		}
+		if inAll {
+			shared = append(shared, cid)
+		}
+	}
+	if len(shared) == 0 {
+		return 0, nil
+	}
+	if initiator.CompanyID != nil {
+		for _, cid := range shared {
+			if cid == *initiator.CompanyID {
+				return cid, nil
+			}
+		}
+	}
+	best := shared[0]
+	for _, cid := range shared {
+		if cid < best {
+			best = cid
+		}
+	}
+	return best, nil
+}
+
 // StartCall — создать звонок: запись в БД, комната LiveKit, ринг-state.
 // Пустой список приглашённых разрешён: это «пустой звонок» — комната с одним
 // инициатором, людей зовут позже (invite из звонка или ссылка-приглашение).
@@ -168,20 +215,20 @@ func (s *Service) StartCall(ctx context.Context, req dto.StartCallRequest) (*dto
 		return nil, domain.NewError("USER_NOT_FOUND", "Пользователь не найден", 404)
 	}
 
-	// Multi-tenancy: звонок принадлежит компании инициатора; если инициатор —
-	// Администратор системы (без компании) — компании первого приглашённого.
-	// Все участники должны быть из одной компании.
-	companyID := initiator.CompanyID
-	if companyID == nil && len(invitees) > 0 {
-		companyID = invitees[0].CompanyID
+	// Multi-tenancy с учётом многокомпанийности: звонок идёт в ОБЩЕЙ компании
+	// инициатора и всех приглашённых (членство в user_companies, а не только
+	// совпадающая «первичная» company_id) — иначе мультикомпанийному коллеге
+	// нельзя было бы позвонить. Админ системы (без компании) — общая компания
+	// приглашённых.
+	companyID, err := s.resolveCompany(ctx, initiator, inviteeIDs)
+	if err != nil {
+		return nil, err
 	}
-	if companyID == nil {
-		return nil, domain.NewError("NO_COMPANY", "Звонок возможен только в рамках компании", 400)
-	}
-	for _, u := range invitees {
-		if u.CompanyID == nil || *u.CompanyID != *companyID {
-			return nil, domain.NewError("CROSS_COMPANY", "Все участники должны быть из одной компании", 422)
+	if companyID == 0 {
+		if len(inviteeIDs) == 0 {
+			return nil, domain.NewError("NO_COMPANY", "Звонок возможен только в рамках компании", 400)
 		}
+		return nil, domain.NewError("CROSS_COMPANY", "Нет общей компании с участниками звонка", 422)
 	}
 
 	kind := domain.KindGroup
@@ -205,7 +252,7 @@ func (s *Service) StartCall(ctx context.Context, req dto.StartCallRequest) (*dto
 	ts := now()
 	call := &domain.Call{
 		InitiatorID: req.InitiatorID,
-		CompanyID:   *companyID,
+		CompanyID:   companyID,
 		Kind:        kind,
 		Status:      domain.StatusRinging,
 		Media:       normalizeMedia(req.Media),
@@ -312,9 +359,15 @@ func (s *Service) InviteToCall(ctx context.Context, req dto.InviteRequest) (*dto
 	if len(users) != len(newIDs) {
 		return nil, domain.NewError("USER_NOT_FOUND", "Один из участников не найден", 404)
 	}
-	for _, u := range users {
-		if u.CompanyID == nil || *u.CompanyID != call.CompanyID {
-			return nil, domain.NewError("CROSS_COMPANY", "Все участники должны быть из одной компании", 422)
+	// Приглашаемый должен состоять в компании звонка (членство, не только
+	// первичная company_id) — иначе мультикомпанийного коллегу не позвать.
+	memberships, err := s.users.Memberships(ctx, newIDs)
+	if err != nil {
+		return nil, err
+	}
+	for _, uid := range newIDs {
+		if !memberships[uid][call.CompanyID] {
+			return nil, domain.NewError("CROSS_COMPANY", "Участник не состоит в компании звонка", 422)
 		}
 	}
 

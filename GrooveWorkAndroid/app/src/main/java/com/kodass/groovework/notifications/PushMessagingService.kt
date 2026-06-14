@@ -22,8 +22,11 @@ class PushMessagingService : FirebaseMessagingService() {
 
         when (data["type"]) {
             "call" -> {
+                // Пуш звонка приходит data-only high-priority (приложение в
+                // фоне/убито). Поднимаем «звонилку» немедленно — в окне после
+                // high-FCM разрешён старт foreground-сервиса звонка из фона.
                 val callId = data["call_id"]?.toLongOrNull() ?: return
-                notifier.showIncomingCall(
+                (application as GrooveApp).container.callManager.onIncomingFromPush(
                     CallDto(
                         id = callId,
                         media = data["media"] ?: "audio",

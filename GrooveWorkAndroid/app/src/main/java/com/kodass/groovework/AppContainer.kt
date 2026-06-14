@@ -2,6 +2,7 @@ package com.kodass.groovework
 
 import android.app.Application
 import com.kodass.groovework.data.api.AuthApi
+import com.kodass.groovework.data.api.CallsApi
 import com.kodass.groovework.data.calls.CallManager
 import com.kodass.groovework.data.api.MessengerApi
 import com.kodass.groovework.data.api.MetaApi
@@ -68,6 +69,7 @@ class AppContainer(app: Application) {
     val tasksApi: TasksApi = retrofit.create(TasksApi::class.java)
     val metaApi: MetaApi = retrofit.create(MetaApi::class.java)
     val pushApi: PushApi = retrofit.create(PushApi::class.java)
+    val callsApi: CallsApi = retrofit.create(CallsApi::class.java)
 
     val gateway = GatewayClient(okHttp, sessionManager, json)
     val messengerRepo = MessengerRepository(messengerApi, gateway, sessionManager, json, appScope)
@@ -75,7 +77,7 @@ class AppContainer(app: Application) {
 
     val notifier = Notifier(app)
     val notificationCenter = NotificationCenter(notifier, gateway, messengerRepo, sessionManager, json, appScope)
-    val callManager = CallManager(app, gateway, sessionManager, json, notifier, appScope)
+    val callManager = CallManager(app, gateway, sessionManager, json, notifier, callsApi, appScope)
     val pushTokens = PushTokenManager(pushApi, appScope)
 
     // Маршрут из тапа по уведомлению — MainScreen подхватывает и навигирует.

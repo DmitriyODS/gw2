@@ -36,6 +36,7 @@ class ChatsViewModel(
         private set
     var openingChat by mutableStateOf(false)
         private set
+    var actionError by mutableStateOf<String?>(null)
 
     private var searchJob: Job? = null
 
@@ -93,6 +94,26 @@ class ChatsViewModel(
                 directory = emptyList()
             } finally {
                 directoryLoading = false
+            }
+        }
+    }
+
+    fun togglePin(conversationId: Long) {
+        viewModelScope.launch {
+            try {
+                repo.toggleConversationPin(conversationId)
+            } catch (e: ApiException) {
+                actionError = e.message
+            }
+        }
+    }
+
+    fun deleteConversation(conversationId: Long, scope: String) {
+        viewModelScope.launch {
+            try {
+                repo.deleteConversation(conversationId, scope)
+            } catch (e: ApiException) {
+                actionError = e.message
             }
         }
     }

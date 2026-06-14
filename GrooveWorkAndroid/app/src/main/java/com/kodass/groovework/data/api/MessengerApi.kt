@@ -2,8 +2,10 @@ package com.kodass.groovework.data.api
 
 import com.kodass.groovework.data.dto.AttachmentDto
 import com.kodass.groovework.data.dto.ConversationItemDto
+import com.kodass.groovework.data.dto.ConversationPinDto
 import com.kodass.groovework.data.dto.ForwardRequest
 import com.kodass.groovework.data.dto.MessageDto
+import com.kodass.groovework.data.dto.MessagePinDto
 import com.kodass.groovework.data.dto.OpenConversationRequest
 import com.kodass.groovework.data.dto.OpenedConversationDto
 import com.kodass.groovework.data.dto.PresenceDto
@@ -55,4 +57,19 @@ interface MessengerApi {
 
     @POST("api/messenger/forward")
     suspend fun forward(@Body body: ForwardRequest)
+
+    @POST("api/messenger/messages/{id}/pin")
+    suspend fun toggleMessagePin(@Path("id") messageId: Long): MessagePinDto
+
+    @GET("api/messenger/conversations/{id}/pinned")
+    suspend fun pinnedMessages(@Path("id") conversationId: Long): List<MessageDto>
+
+    @POST("api/messenger/conversations/{id}/pin")
+    suspend fun toggleConversationPin(@Path("id") conversationId: Long): ConversationPinDto
+
+    @DELETE("api/messenger/conversations/{id}")
+    suspend fun deleteConversation(
+        @Path("id") conversationId: Long,
+        @Query("scope") scope: String = "me",
+    )
 }

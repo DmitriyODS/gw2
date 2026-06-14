@@ -2,11 +2,10 @@ package com.kodass.groovework.data.calls
 
 import android.content.Context
 import android.content.Intent
-import android.media.AudioAttributes
 import android.media.AudioManager
 import android.media.MediaPlayer
-import android.media.RingtoneManager
 import android.media.ToneGenerator
+import com.kodass.groovework.data.api.CallsApi
 import com.kodass.groovework.data.dto.CallDto
 import com.kodass.groovework.data.dto.LivekitInfoDto
 import com.kodass.groovework.data.session.AuthState
@@ -15,8 +14,10 @@ import com.kodass.groovework.data.ws.GatewayClient
 import com.kodass.groovework.data.ws.GatewayEvent
 import com.kodass.groovework.data.ws.longField
 import com.kodass.groovework.data.ws.objField
+import com.kodass.groovework.CallActivity
 import com.kodass.groovework.notifications.Notifier
 import com.kodass.groovework.service.CallService
+import com.kodass.groovework.service.Ringer
 import com.twilio.audioswitch.AudioDevice
 import io.livekit.android.LiveKit
 import io.livekit.android.audio.AudioSwitchHandler
@@ -47,7 +48,14 @@ sealed interface CallPhase {
     data class Active(val call: CallDto) : CallPhase
 }
 
+// Запрос на ответ (из шторки или с экрана входящего): шлюз разрешений в UI
+// подхватывает его, спрашивает доступ к микрофону/камере и зовёт answerCall.
+data class PendingAnswer(val callId: Long, val video: Boolean, val fio: String?)
+
 private const val OUTGOING_TIMEOUT_MS = 45_000L
+// Страховка для входящего, поднятого пушем офлайн: если событие отмены не
+// дойдёт (были офлайн), звонилка не должна звенеть вечно.
+private const val INCOMING_TIMEOUT_MS = 60_000L
 
 // Ринг-фаза через WS-команды call:* (gatewaysvc → gRPC callsvc), медиа — LiveKit.
 class CallManager(
@@ -56,6 +64,7 @@ class CallManager(
     private val session: SessionManager,
     private val json: Json,
     private val notifier: Notifier,
+    private val callsApi: CallsApi,
     private val scope: CoroutineScope,
 ) {
     private val _phase = MutableStateFlow<CallPhase>(CallPhase.Idle)
@@ -63,8 +72,8 @@ class CallManager(
 
     // Полноэкранный UI звонка показан (false при активном звонке = баннер «вернуться»).
     val callUiVisible = MutableStateFlow(false)
-    // Просьба авто-принять звонок (кнопка «Ответить» из шторки).
-    val autoAcceptRequested = MutableStateFlow(false)
+    // Запрос ответа на звонок — обрабатывает шлюз разрешений в AppRoot.
+    val pendingAnswer = MutableStateFlow<PendingAnswer?>(null)
 
     val micEnabled = MutableStateFlow(true)
     val cameraEnabled = MutableStateFlow(false)
@@ -86,7 +95,8 @@ class CallManager(
 
     private var roomEventsJob: Job? = null
     private var outgoingTimeoutJob: Job? = null
-    private var ringtone: MediaPlayer? = null
+    private var incomingTimeoutJob: Job? = null
+    private val ringer = Ringer(appContext)
     private var ringbackPlayer: MediaPlayer? = null
     private var ringbackTone: ToneGenerator? = null
     private var wasIncoming = false
@@ -111,6 +121,59 @@ class CallManager(
     val peer
         get() = currentCall?.participants?.firstOrNull { it.userId != myUserId }
 
+    // Входящий из FCM-пуша (приложение в фоне/убито, WS не подключён): полная
+    // «звонилка» — рингтон+вибрация (Ringer) и full-screen-уведомление через
+    // foreground-сервис. Экран звонка поднимет full-screen intent.
+    fun onIncomingFromPush(call: CallDto) {
+        onIncoming(call, launchUi = false)
+    }
+
+    // Общий вход входящего (из пуша и из WS). launchUi — поднять CallActivity
+    // самим (true только из foreground/WS; из фона активити не стартуем —
+    // развернёт full-screen intent уведомления).
+    private fun onIncoming(call: CallDto, launchUi: Boolean) {
+        if (_phase.value != CallPhase.Idle) return
+        wasIncoming = true
+        accepted = false
+        cameraEnabled.value = false
+        _phase.value = CallPhase.Incoming(call)
+        callUiVisible.value = true
+        ringer.start()
+        startCallService(CallService.MODE_INCOMING)
+        if (launchUi) launchCallUi()
+        armIncomingTimeout(call.id)
+    }
+
+    private fun armIncomingTimeout(callId: Long) {
+        incomingTimeoutJob?.cancel()
+        incomingTimeoutJob = scope.launch {
+            delay(INCOMING_TIMEOUT_MS)
+            val current = (_phase.value as? CallPhase.Incoming)?.call
+            if (current != null && current.id == callId) {
+                val fio = current.initiatorFio
+                cleanup()
+                if (fio != null) notifier.showMissedCall(fio)
+            }
+        }
+    }
+
+    // Открыть полноэкранный экран звонка (CallActivity). Из фона стартовать
+    // активити нельзя — там полагаемся на full-screen intent уведомления.
+    private fun launchCallUi() {
+        runCatching {
+            appContext.startActivity(
+                Intent(appContext, CallActivity::class.java)
+                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            )
+        }
+    }
+
+    // Вернуться к звёрнутому звонку (баннер в приложении).
+    fun showCallUi() {
+        callUiVisible.value = true
+        launchCallUi()
+    }
+
     fun startCall(userId: Long, video: Boolean) {
         if (_phase.value != CallPhase.Idle) {
             _errors.tryEmit("Вы уже в звонке")
@@ -123,17 +186,64 @@ class CallManager(
         })
     }
 
-    fun accept() {
-        val call = (_phase.value as? CallPhase.Incoming)?.call ?: return
-        accepted = true
-        stopRingtone()
-        gateway.send("call:accept", buildJsonObject { put("call_id", call.id) })
+    // Просьба ответить на звонок — выставляет pendingAnswer, который шлюз
+    // разрешений в UI подхватит и вызовет answerCall (работает и когда экран
+    // входящего ещё не показан — звонок поднят пушем из фона).
+    fun requestAnswer(callId: Long, video: Boolean, fio: String? = null) {
+        if (_phase.value is CallPhase.Active && currentCall?.id == callId) {
+            callUiVisible.value = true
+            return
+        }
+        pendingAnswer.value = PendingAnswer(callId, video, fio ?: currentCall?.initiatorFio)
+        callUiVisible.value = true
     }
 
-    fun decline() {
-        val call = (_phase.value as? CallPhase.Incoming)?.call ?: return
-        gateway.send("call:decline", buildJsonObject { put("call_id", call.id) })
-        cleanup()
+    // Ответ на входящий: токен входа берём REST-ом (POST /api/calls/{id}/token),
+    // не полагаясь на WS-цикл call:accept→call:accepted. Сразу подключаемся к
+    // LiveKit — инициатор узнаёт о нас по ParticipantConnected.
+    fun answerCall(callId: Long, video: Boolean, fio: String? = null) {
+        if (_phase.value is CallPhase.Active && currentCall?.id == callId) {
+            callUiVisible.value = true
+            return
+        }
+        accepted = true
+        wasIncoming = true
+        ringer.stop()
+        incomingTimeoutJob?.cancel()
+        cameraEnabled.value = video
+        callUiVisible.value = true
+        // Оптимистично показываем экран звонка («Соединение…»), пока тянем токен.
+        val known = currentCall?.takeIf { it.id == callId }
+        _phase.value = CallPhase.Active(
+            known ?: CallDto(id = callId, media = if (video) "video" else "audio", initiatorFio = fio)
+        )
+        // Сразу переводим сервис в активный режим (мы на переднем плане —
+        // mic/camera-FGS разрешён): убирает входящее full-screen-уведомление с
+        // кнопками на время «Соединение…».
+        startCallService(CallService.MODE_ONGOING)
+        scope.launch {
+            val token = runCatching { callsApi.token(callId) }.getOrNull()
+            if (token == null) {
+                _errors.tryEmit("Звонок уже завершён")
+                cleanup()
+                return@launch
+            }
+            val call = token.call ?: known ?: return@launch
+            _phase.value = CallPhase.Active(call)
+            activeSince.value = System.currentTimeMillis()
+            connect(token.livekit, video = call.media == "video" && cameraEnabled.value)
+        }
+    }
+
+    // Отклонение из шторки/экрана входящего: уведомление гасим всегда (иначе оно
+    // зависало), call:decline шлём best-effort — если WS поднят.
+    fun declineFromNotification(callId: Long) {
+        ringer.stop()
+        notifier.cancelCall()
+        gateway.send("call:decline", buildJsonObject { put("call_id", callId) })
+        val incoming = (_phase.value as? CallPhase.Incoming)?.call
+        if (incoming != null && incoming.id == callId) cleanup()
+        else pendingAnswer.value = null
     }
 
     fun hangup() {
@@ -191,15 +301,9 @@ class CallManager(
     private fun handle(event: GatewayEvent) {
         when (event.event) {
             "call:incoming" -> {
+                // WS работает только когда приложение на экране → можно поднять UI сами.
                 val call = decodeCall(event.data) ?: return
-                if (_phase.value != CallPhase.Idle) return
-                wasIncoming = true
-                accepted = false
-                cameraEnabled.value = false
-                _phase.value = CallPhase.Incoming(call)
-                callUiVisible.value = true
-                startRingtone()
-                notifier.showIncomingCall(call)
+                onIncoming(call, launchUi = true)
             }
             "call:started" -> {
                 val call = decodeCall(event.data.objField("call")) ?: return
@@ -207,19 +311,10 @@ class CallManager(
                 wasIncoming = false
                 _phase.value = CallPhase.Outgoing(call)
                 callUiVisible.value = true
+                launchCallUi()
                 startRingback()
                 connect(livekit, video = call.media == "video")
                 armOutgoingTimeout()
-            }
-            "call:accepted" -> {
-                val call = decodeCall(event.data.objField("call")) ?: return
-                val livekit = decodeLivekit(event.data.objField("livekit")) ?: return
-                if ((_phase.value as? CallPhase.Incoming)?.call?.id != call.id) return
-                notifier.cancelCall()
-                _phase.value = CallPhase.Active(call)
-                activeSince.value = System.currentTimeMillis()
-                callUiVisible.value = true
-                connect(livekit, video = call.media == "video" && cameraEnabled.value)
             }
             "call:invited" -> {
                 val call = decodeCall(event.data.objField("call")) ?: return
@@ -278,7 +373,7 @@ class CallManager(
                 }
                 // Видеозвонок — сразу громкая связь, голосовой — динамик у уха.
                 setSpeaker(video)
-                startCallService()
+                startCallService(CallService.MODE_ONGOING)
             } catch (e: Exception) {
                 _errors.tryEmit("Не удалось подключиться к звонку")
                 hangup()
@@ -346,33 +441,6 @@ class CallManager(
         return if (raw.startsWith("/")) wsBase + raw else "$wsBase/$raw"
     }
 
-    private fun startRingtone() {
-        stopRingtone()
-        runCatching {
-            val uri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_RINGTONE) ?: return
-            ringtone = MediaPlayer().apply {
-                setDataSource(appContext, uri)
-                setAudioAttributes(
-                    AudioAttributes.Builder()
-                        .setUsage(AudioAttributes.USAGE_NOTIFICATION_RINGTONE)
-                        .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
-                        .build()
-                )
-                isLooping = true
-                prepare()
-                start()
-            }
-        }
-    }
-
-    private fun stopRingtone() {
-        runCatching {
-            ringtone?.stop()
-            ringtone?.release()
-        }
-        ringtone = null
-    }
-
     // Гудок исходящего: res/raw/ringback.* если положили свой звук,
     // иначе системный гудок ToneGenerator (TONE_SUP_RINGTONE, сам зациклен).
     private fun startRingback() {
@@ -407,17 +475,21 @@ class CallManager(
         ringbackTone = null
     }
 
-    private fun startCallService() {
+    private fun startCallService(mode: String) {
         runCatching {
-            appContext.startForegroundService(Intent(appContext, CallService::class.java))
+            appContext.startForegroundService(
+                Intent(appContext, CallService::class.java).putExtra(CallService.EXTRA_MODE, mode)
+            )
         }
     }
 
     private fun cleanup() {
-        stopRingtone()
+        ringer.stop()
         stopRingback()
         outgoingTimeoutJob?.cancel()
         outgoingTimeoutJob = null
+        incomingTimeoutJob?.cancel()
+        incomingTimeoutJob = null
         roomEventsJob?.cancel()
         roomEventsJob = null
         // UI сбрасываем мгновенно; отключение LiveKit может быть долгим — в фон.
@@ -433,7 +505,7 @@ class CallManager(
         speakerOn.value = false
         accepted = false
         wasIncoming = false
-        autoAcceptRequested.value = false
+        pendingAnswer.value = null
         callUiVisible.value = false
         _phase.value = CallPhase.Idle
         notifier.cancelCall()

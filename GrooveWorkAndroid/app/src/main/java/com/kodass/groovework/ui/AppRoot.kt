@@ -16,9 +16,12 @@ import androidx.compose.material3.LoadingIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import android.widget.Toast
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
@@ -30,8 +33,6 @@ import com.kodass.groovework.AppContainer
 import com.kodass.groovework.R
 import com.kodass.groovework.data.calls.CallPhase
 import com.kodass.groovework.data.session.AuthState
-import com.kodass.groovework.ui.calls.CallScreen
-import com.kodass.groovework.ui.calls.IncomingCallScreen
 import com.kodass.groovework.ui.login.ChangeDefaultScreen
 import com.kodass.groovework.ui.login.LoginScreen
 import com.kodass.groovework.ui.main.MainScreen
@@ -42,6 +43,14 @@ fun AppRoot(container: AppContainer) {
 
     // Жизненный цикл WebSocket ведёт AppContainer (foreground/звонок); в фоне
     // уведомления доставляет FCM — постоянный foreground-сервис больше не нужен.
+
+    // Ошибки звонка — пользователю (иначе сбой соединения был незаметен).
+    val context = LocalContext.current
+    LaunchedEffect(Unit) {
+        container.callManager.errors.collect { message ->
+            Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
+        }
+    }
 
     Box(modifier = Modifier.fillMaxSize()) {
         Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
@@ -57,22 +66,16 @@ fun AppRoot(container: AppContainer) {
             }
         }
 
-        // Поверх всего — звонок: входящий, полноэкранный или баннер возврата.
+        // Сам экран звонка живёт в отдельной CallActivity (поверх локскрина).
+        // Здесь — только баннер возврата, когда звонок свёрнут.
         val callPhase by container.callManager.phase.collectAsStateWithLifecycle()
         val callUiVisible by container.callManager.callUiVisible.collectAsStateWithLifecycle()
-        when (callPhase) {
-            is CallPhase.Incoming -> IncomingCallScreen(container)
-            is CallPhase.Outgoing, is CallPhase.Active -> {
-                if (callUiVisible) {
-                    CallScreen(container)
-                } else {
-                    ReturnToCallBanner(
-                        onClick = { container.callManager.callUiVisible.value = true },
-                        modifier = Modifier.align(Alignment.TopCenter),
-                    )
-                }
-            }
-            CallPhase.Idle -> {}
+        val callActive = callPhase is CallPhase.Outgoing || callPhase is CallPhase.Active
+        if (callActive && !callUiVisible) {
+            ReturnToCallBanner(
+                onClick = { container.callManager.showCallUi() },
+                modifier = Modifier.align(Alignment.TopCenter),
+            )
         }
     }
 }

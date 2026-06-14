@@ -7,6 +7,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.kodass.groovework.data.dto.AttachmentDto
 import com.kodass.groovework.data.dto.MessageDto
+import com.kodass.groovework.data.dto.TaskDto
 import com.kodass.groovework.data.network.ApiException
 import com.kodass.groovework.data.repo.MessengerRepository
 import com.kodass.groovework.data.session.AuthState
@@ -14,6 +15,8 @@ import com.kodass.groovework.data.session.SessionManager
 import com.kodass.groovework.data.ws.GatewayEvent
 import com.kodass.groovework.data.ws.longField
 import com.kodass.groovework.data.ws.objField
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.decodeFromJsonElement
@@ -43,6 +46,7 @@ class ChatViewModel(
 
     var input by mutableStateOf("")
     var replyTo by mutableStateOf<MessageDto?>(null)
+    var attachedTask by mutableStateOf<TaskDto?>(null)
     var pendingAttachment by mutableStateOf<AttachmentDto?>(null)
         private set
     var uploading by mutableStateOf(false)
@@ -51,8 +55,13 @@ class ChatViewModel(
         private set
     var actionError by mutableStateOf<String?>(null)
 
+    // Закреплённые сообщения диалога (баннер сверху).
+    var pinnedMessages by mutableStateOf<List<MessageDto>>(emptyList())
+        private set
+
     init {
         loadInitial()
+        loadPinned()
         viewModelScope.launch {
             repo.events.collect { handleEvent(it) }
         }
@@ -76,39 +85,77 @@ class ChatViewModel(
     }
 
     fun loadMore() {
-        if (loadingMore || !hasMore || messages.isEmpty()) return
+        viewModelScope.launch { fetchOlder() }
+    }
+
+    private suspend fun fetchOlder(): Boolean {
+        if (loadingMore || !hasMore || messages.isEmpty()) return false
+        loadingMore = true
+        return try {
+            val beforeId = messages.last().id
+            val batch = repo.messages(conversationId, beforeId = beforeId, limit = PAGE_SIZE)
+            val known = messages.map { it.id }.toHashSet()
+            messages = messages + batch.sortedByDescending { it.id }.filter { it.id !in known }
+            hasMore = batch.size >= PAGE_SIZE
+            true
+        } catch (_: Exception) {
+            false
+        } finally {
+            loadingMore = false
+        }
+    }
+
+    // Индекс сообщения в списке, при необходимости догружая историю (для перехода
+    // к отвеченному сообщению). null — если не найдено даже после полной загрузки.
+    suspend fun ensureLoaded(messageId: Long): Int? {
+        var index = messages.indexOfFirst { it.id == messageId }
+        var guard = 0
+        while (index < 0 && hasMore && guard < 20) {
+            if (!fetchOlder()) break
+            index = messages.indexOfFirst { it.id == messageId }
+            guard++
+        }
+        return index.takeIf { it >= 0 }
+    }
+
+    private fun loadPinned() {
         viewModelScope.launch {
-            loadingMore = true
+            runCatching { pinnedMessages = repo.pinnedMessages(conversationId) }
+        }
+    }
+
+    fun togglePin(message: MessageDto) {
+        viewModelScope.launch {
             try {
-                val beforeId = messages.last().id
-                val batch = repo.messages(conversationId, beforeId = beforeId, limit = PAGE_SIZE)
-                val known = messages.map { it.id }.toHashSet()
-                messages = messages + batch.sortedByDescending { it.id }.filter { it.id !in known }
-                hasMore = batch.size >= PAGE_SIZE
-            } catch (_: Exception) {
-            } finally {
-                loadingMore = false
+                repo.toggleMessagePin(message.id)
+                loadPinned()
+            } catch (e: ApiException) {
+                actionError = e.message
             }
         }
     }
 
     val canSend: Boolean
-        get() = !sending && !uploading && (input.isNotBlank() || pendingAttachment != null)
+        get() = !sending && !uploading &&
+            (input.isNotBlank() || pendingAttachment != null || attachedTask != null)
 
     fun send() {
         if (!canSend) return
+        stopTyping()
         val text = input.trim().takeIf { it.isNotEmpty() }
         val attachmentIds = pendingAttachment?.let { listOf(it.id) }
         val replyId = replyTo?.id
+        val taskId = attachedTask?.id
         viewModelScope.launch {
             sending = true
             actionError = null
             try {
-                val message = repo.send(conversationId, text, attachmentIds, replyId)
+                val message = repo.send(conversationId, text, attachmentIds, replyId, taskId)
                 prepend(message)
                 input = ""
                 replyTo = null
                 pendingAttachment = null
+                attachedTask = null
             } catch (e: ApiException) {
                 actionError = e.message
             } finally {
@@ -137,6 +184,44 @@ class ChatViewModel(
 
     fun clearAttachment() {
         pendingAttachment = null
+    }
+
+    // «Печатает…»: шлём собеседнику не чаще раза в 3с, авто-«перестал» через 4с
+    // тишины (и сразу при отправке/выходе).
+    private var typingActive = false
+    private var lastTypingEmit = 0L
+    private var typingStopJob: Job? = null
+
+    fun onInputChange(value: String) {
+        input = value
+        if (value.isNotBlank()) notifyTyping()
+    }
+
+    private fun notifyTyping() {
+        val now = System.currentTimeMillis()
+        if (!typingActive || now - lastTypingEmit > 3000) {
+            typingActive = true
+            lastTypingEmit = now
+            repo.sendTyping(conversationId, true)
+        }
+        typingStopJob?.cancel()
+        typingStopJob = viewModelScope.launch {
+            delay(4000)
+            stopTyping()
+        }
+    }
+
+    private fun stopTyping() {
+        typingStopJob?.cancel()
+        if (typingActive) {
+            typingActive = false
+            repo.sendTyping(conversationId, false)
+        }
+    }
+
+    override fun onCleared() {
+        stopTyping()
+        super.onCleared()
     }
 
     // Сообщение, выбранное свайпом для пересылки (открывает шит выбора чата).
@@ -190,6 +275,7 @@ class ChatViewModel(
                 if (event.data.longField("conversation_id") != conversationId) return
                 val message = decodeMessage(event.data.objField("message")) ?: return
                 messages = messages.map { if (it.id == message.id) message else it }
+                if (event.event == "message:pin") loadPinned()
             }
             "message:deleted" -> {
                 if (event.data.longField("conversation_id") != conversationId) return

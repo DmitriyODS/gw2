@@ -66,6 +66,7 @@ func main() {
 		Hub:      h,
 		Presence: pres,
 		Ring:     rng,
+		Bus:      bus,
 		Verifier: verifier,
 		Auth:     users.AuthInfo,
 		Log:      log,

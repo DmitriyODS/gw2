@@ -35,17 +35,21 @@ class MainActivity : ComponentActivity() {
         handleIntent(intent)
     }
 
-    // Extras уведомлений: маршрут (чат/задача) или действие со звонком.
+    // Extras уведомлений: маршрут (чат/задача). Действия со звонком обрабатывает
+    // отдельная CallActivity.
     private fun handleIntent(intent: Intent?) {
         intent ?: return
         intent.getStringExtra("route")?.let { container.pendingRoute.value = it }
-        if (intent.hasExtra("answer_call_id")) {
-            container.callManager.autoAcceptRequested.value = true
-            container.callManager.callUiVisible.value = true
-            intent.removeExtra("answer_call_id")
-        }
-        if (intent.getBooleanExtra("open_call", false)) {
-            container.callManager.callUiVisible.value = true
+        // Тап по системному уведомлению FCM (приложение было в фоне/убито):
+        // onMessageReceived не вызывается, data-поля приходят как extras
+        // запускающего интента — навигируем к нужному чату/задаче по ним.
+        when (intent.getStringExtra("type")) {
+            "message" -> intent.getStringExtra("conversation_id")?.toLongOrNull()?.let {
+                container.pendingRoute.value = "chat/$it"
+            }
+            "task" -> intent.getStringExtra("task_id")?.toLongOrNull()?.let {
+                container.pendingRoute.value = "task/$it"
+            }
         }
     }
 

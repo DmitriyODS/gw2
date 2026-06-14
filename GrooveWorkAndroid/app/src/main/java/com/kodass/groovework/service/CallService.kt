@@ -15,9 +15,19 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 
-// Foreground-сервис активного звонка: микрофон/камера живут при свёрнутом
-// приложении, в шторке — CallStyle-уведомление с кнопкой завершения.
+// Foreground-сервис звонка. Два режима:
+//  INCOMING — поднимается из пуша (тип phoneCall, mic/cam из фона нельзя):
+//    держит процесс живым во время звона и постит full-screen-уведомление.
+//  ONGOING  — после ответа/при исходящем (тип phoneCall|microphone|camera,
+//    стартует с переднего плана): микрофон/камера живут при свёрнутом
+//    приложении, в шторке — тихое CallStyle-уведомление.
 class CallService : Service() {
+    companion object {
+        const val EXTRA_MODE = "mode"
+        const val MODE_INCOMING = "incoming"
+        const val MODE_ONGOING = "ongoing"
+    }
+
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
     private var watchJob: Job? = null
 
@@ -29,21 +39,33 @@ class CallService : Service() {
             stopSelf()
             return START_NOT_STICKY
         }
-        val peerName = manager.peer?.fio ?: call.initiatorFio ?: "Звонок"
-        val video = call.media == "video"
+        val mode = intent?.getStringExtra(EXTRA_MODE) ?: MODE_ONGOING
 
-        var types = ServiceInfo.FOREGROUND_SERVICE_TYPE_PHONE_CALL
-        if (granted(android.Manifest.permission.RECORD_AUDIO)) {
-            types = types or ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE
+        if (mode == MODE_INCOMING) {
+            // Из фона разрешён только тип phoneCall — микрофон/камеру поднимем
+            // после ответа, уже с переднего плана.
+            startForeground(
+                Notifier.NOTIF_ID_INCOMING,
+                container.notifier.buildIncomingCallNotification(call),
+                ServiceInfo.FOREGROUND_SERVICE_TYPE_PHONE_CALL,
+            )
+        } else {
+            container.notifier.cancelIncoming()
+            val peerName = manager.peer?.fio ?: call.initiatorFio ?: "Звонок"
+            val video = call.media == "video"
+            var types = ServiceInfo.FOREGROUND_SERVICE_TYPE_PHONE_CALL
+            if (granted(android.Manifest.permission.RECORD_AUDIO)) {
+                types = types or ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE
+            }
+            if (video && granted(android.Manifest.permission.CAMERA)) {
+                types = types or ServiceInfo.FOREGROUND_SERVICE_TYPE_CAMERA
+            }
+            startForeground(
+                Notifier.NOTIF_ID_ONGOING,
+                container.notifier.buildOngoingCallNotification(peerName, video),
+                types,
+            )
         }
-        if (video && granted(android.Manifest.permission.CAMERA)) {
-            types = types or ServiceInfo.FOREGROUND_SERVICE_TYPE_CAMERA
-        }
-        startForeground(
-            Notifier.NOTIF_ID_CALL,
-            container.notifier.buildOngoingCallNotification(peerName, video),
-            types,
-        )
 
         watchJob?.cancel()
         watchJob = scope.launch {

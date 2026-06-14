@@ -5,11 +5,14 @@ import android.content.Intent
 import android.provider.OpenableColumns
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.layout.Arrangement
@@ -34,15 +37,18 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Reply
 import androidx.compose.material.icons.automirrored.filled.Send
+import androidx.compose.material.icons.filled.ArrowDownward
 import androidx.compose.material.icons.filled.AttachFile
 import androidx.compose.material.icons.filled.Call
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Done
 import androidx.compose.material.icons.filled.DoneAll
 import androidx.compose.material.icons.automirrored.filled.InsertDriveFile
+import androidx.compose.material.icons.filled.PushPin
 import androidx.compose.material.icons.filled.TaskAlt
 import androidx.compose.material.icons.filled.Videocam
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -60,6 +66,7 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -69,6 +76,8 @@ import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.pointerInput
@@ -77,6 +86,9 @@ import androidx.core.net.toUri
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
@@ -87,6 +99,8 @@ import com.kodass.groovework.AppContainer
 import com.kodass.groovework.data.dto.AttachmentDto
 import com.kodass.groovework.data.dto.MessageDto
 import com.kodass.groovework.ui.common.CenteredLoading
+import com.kodass.groovework.ui.common.ConfirmDialog
+import com.kodass.groovework.ui.common.ConfirmSpec
 import com.kodass.groovework.ui.common.ErrorState
 import com.kodass.groovework.ui.common.LocalServerUrl
 import com.kodass.groovework.ui.common.UserAvatar
@@ -101,14 +115,21 @@ import kotlin.math.roundToInt
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun ChatScreen(container: AppContainer, conversationId: Long, onBack: () -> Unit) {
+fun ChatScreen(
+    container: AppContainer,
+    conversationId: Long,
+    onBack: () -> Unit,
+    onOpenTask: (Long) -> Unit,
+) {
     val viewModel: ChatViewModel = viewModel(key = "chat-$conversationId") {
         ChatViewModel(container.messengerRepo, container.sessionManager, container.json, conversationId)
     }
     val conversations by container.messengerRepo.conversations.collectAsStateWithLifecycle()
     val online by container.messengerRepo.onlineUsers.collectAsStateWithLifecycle()
+    val typingConversations by container.messengerRepo.typingConversations.collectAsStateWithLifecycle()
     val conversation = conversations.firstOrNull { it.id == conversationId }
     val peer = conversation?.otherUser
+    val isPeerTyping = conversationId in typingConversations
 
     // Открытый чат не шлёт уведомления и гасит существующее.
     DisposableEffect(conversationId) {
@@ -144,6 +165,50 @@ fun ChatScreen(container: AppContainer, conversationId: Long, onBack: () -> Unit
     val canCall = peer != null && conversation.isPetChat.not() && conversation.isDevChat.not()
 
     val listState = rememberLazyListState()
+    val scope = rememberCoroutineScope()
+    val inputFocus = remember { FocusRequester() }
+    val keyboard = LocalSoftwareKeyboardController.current
+
+    // Подтверждение деструктива (#5) и пикер задачи (#8) — на уровне экрана.
+    var confirm by remember { mutableStateOf<ConfirmSpec?>(null) }
+    var showTaskPicker by remember { mutableStateOf(false) }
+    confirm?.let { spec -> ConfirmDialog(spec, onDismiss = { confirm = null }) }
+    if (showTaskPicker) {
+        TaskPickerSheet(
+            container = container,
+            onDismiss = { showTaskPicker = false },
+            onPick = { viewModel.attachedTask = it },
+        )
+    }
+
+    // Подсветка сообщения, к которому перешли по ответу/закреплению.
+    var highlightedId by remember { mutableStateOf<Long?>(null) }
+    LaunchedEffect(highlightedId) {
+        if (highlightedId != null) {
+            kotlinx.coroutines.delay(1600)
+            highlightedId = null
+        }
+    }
+
+    // Переход к сообщению (тап по ответу или по баннеру закрепления): догружаем
+    // историю, скроллим, подсвечиваем.
+    val scrollToMessage: (Long) -> Unit = { messageId ->
+        scope.launch {
+            val index = viewModel.ensureLoaded(messageId)
+            if (index != null) {
+                listState.animateScrollToItem(index)
+                highlightedId = messageId
+            }
+        }
+    }
+
+    // Фокус на поле ввода при выборе ответа (свайп/меню) — сразу можно печатать.
+    LaunchedEffect(viewModel.replyTo?.id) {
+        if (viewModel.replyTo != null) {
+            inputFocus.requestFocus()
+            keyboard?.show()
+        }
+    }
 
     // Подгрузка истории при прокрутке к старым сообщениям.
     LaunchedEffect(listState) {
@@ -187,11 +252,15 @@ fun ChatScreen(container: AppContainer, conversationId: Long, onBack: () -> Unit
                                 overflow = TextOverflow.Ellipsis,
                             )
                             if (peer != null) {
-                                val subtitle = if (peer.id in online) "в сети" else formatLastSeen(peer.lastSeenAt)
+                                val peerOnline = peer.id in online
                                 Text(
-                                    text = subtitle,
+                                    text = when {
+                                        isPeerTyping -> "печатает…"
+                                        peerOnline -> "в сети"
+                                        else -> formatLastSeen(peer.lastSeenAt)
+                                    },
                                     style = MaterialTheme.typography.bodySmall,
-                                    color = if (peer.id in online) MaterialTheme.colorScheme.primary
+                                    color = if (isPeerTyping || peerOnline) MaterialTheme.colorScheme.primary
                                     else MaterialTheme.colorScheme.onSurfaceVariant,
                                 )
                             }
@@ -211,48 +280,97 @@ fun ChatScreen(container: AppContainer, conversationId: Long, onBack: () -> Unit
             )
         },
         bottomBar = {
-            MessageInputBar(viewModel)
+            MessageInputBar(viewModel, inputFocus, onAttachTask = { showTaskPicker = true })
         },
     ) { padding ->
-        Box(modifier = Modifier.fillMaxSize().padding(padding)) {
-            when {
-                viewModel.loading -> CenteredLoading()
-                viewModel.error != null ->
-                    ErrorState(viewModel.error ?: "", onRetry = { viewModel.loadInitial() })
-                else -> LazyColumn(
-                    state = listState,
-                    reverseLayout = true,
-                    modifier = Modifier.fillMaxSize(),
-                    contentPadding = androidx.compose.foundation.layout.PaddingValues(vertical = 8.dp),
-                ) {
-                    itemsIndexed(viewModel.messages, key = { _, m -> m.id }) { index, message ->
-                        val older = viewModel.messages.getOrNull(index + 1)
-                        val messageDate = parseIso(message.createdAt)?.toLocalDate()
-                        val olderDate = older?.let { parseIso(it.createdAt)?.toLocalDate() }
-                        Column {
-                            if (messageDate != null && messageDate != olderDate) {
-                                DayHeader(formatDayHeader(messageDate))
+        Column(modifier = Modifier.fillMaxSize().padding(padding)) {
+            if (viewModel.pinnedMessages.isNotEmpty()) {
+                PinnedBanner(
+                    pinned = viewModel.pinnedMessages,
+                    onOpen = { scrollToMessage(it.id) },
+                    onUnpin = { message ->
+                        confirm = ConfirmSpec(
+                            title = "Открепить сообщение",
+                            text = "Открепить это сообщение для всех?",
+                            confirmLabel = "Открепить",
+                            destructive = false,
+                            action = { viewModel.togglePin(message) },
+                        )
+                    },
+                )
+            }
+            Box(modifier = Modifier.fillMaxSize().weight(1f)) {
+                when {
+                    viewModel.loading -> CenteredLoading()
+                    viewModel.error != null ->
+                        ErrorState(viewModel.error ?: "", onRetry = { viewModel.loadInitial() })
+                    else -> LazyColumn(
+                        state = listState,
+                        reverseLayout = true,
+                        modifier = Modifier.fillMaxSize(),
+                        contentPadding = androidx.compose.foundation.layout.PaddingValues(vertical = 8.dp),
+                    ) {
+                        itemsIndexed(viewModel.messages, key = { _, m -> m.id }) { index, message ->
+                            val older = viewModel.messages.getOrNull(index + 1)
+                            val messageDate = parseIso(message.createdAt)?.toLocalDate()
+                            val olderDate = older?.let { parseIso(it.createdAt)?.toLocalDate() }
+                            Column {
+                                if (messageDate != null && messageDate != olderDate) {
+                                    DayHeader(formatDayHeader(messageDate))
+                                }
+                                SwipeToReply(onReply = { viewModel.replyTo = message }) {
+                                    MessageBubble(
+                                        message = message,
+                                        mine = message.senderId != null && message.senderId == viewModel.myUserId,
+                                        highlighted = highlightedId == message.id,
+                                        onReply = { viewModel.replyTo = message },
+                                        onReplyClick = { replyId -> scrollToMessage(replyId) },
+                                        onForward = { viewModel.forwardTarget = message },
+                                        onTogglePin = { viewModel.togglePin(message) },
+                                        onDelete = { forAll -> viewModel.deleteMessage(message, forAll) },
+                                        onOpenTask = { message.task?.let { onOpenTask(it.id) } },
+                                        onConfirm = { spec -> confirm = spec },
+                                    )
+                                }
                             }
-                            SwipeToReply(onReply = { viewModel.replyTo = message }) {
-                                MessageBubble(
-                                    message = message,
-                                    mine = message.senderId != null && message.senderId == viewModel.myUserId,
-                                    onReply = { viewModel.replyTo = message },
-                                    onForward = { viewModel.forwardTarget = message },
-                                    onDelete = { forAll -> viewModel.deleteMessage(message, forAll) },
-                                )
+                        }
+                        if (viewModel.loadingMore) {
+                            item {
+                                Box(
+                                    modifier = Modifier.fillMaxWidth().padding(12.dp),
+                                    contentAlignment = Alignment.Center,
+                                ) {
+                                    CircularProgressIndicator(modifier = Modifier.size(24.dp), strokeWidth = 2.dp)
+                                }
                             }
                         }
                     }
-                    if (viewModel.loadingMore) {
-                        item {
-                            Box(
-                                modifier = Modifier.fillMaxWidth().padding(12.dp),
-                                contentAlignment = Alignment.Center,
-                            ) {
-                                CircularProgressIndicator(modifier = Modifier.size(24.dp), strokeWidth = 2.dp)
-                            }
-                        }
+                }
+
+                // Кнопка «к новым сообщениям» — видна, когда пролистали вверх.
+                val showScrollDown by remember {
+                    derivedStateOf { listState.firstVisibleItemIndex > 1 }
+                }
+                val fabScale by animateFloatAsState(
+                    targetValue = if (showScrollDown) 1f else 0f,
+                    label = "scrollDownFab",
+                )
+                if (fabScale > 0.01f) {
+                    FloatingActionButton(
+                        onClick = { scope.launch { listState.animateScrollToItem(0) } },
+                        containerColor = MaterialTheme.colorScheme.secondaryContainer,
+                        contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
+                        modifier = Modifier
+                            .align(Alignment.BottomEnd)
+                            .padding(16.dp)
+                            .size(44.dp)
+                            .graphicsLayer {
+                                scaleX = fabScale
+                                scaleY = fabScale
+                                alpha = fabScale
+                            },
+                    ) {
+                        Icon(Icons.Filled.ArrowDownward, contentDescription = "К новым сообщениям")
                     }
                 }
             }
@@ -393,6 +511,68 @@ private fun SwipeToReply(onReply: () -> Unit, content: @Composable () -> Unit) {
     }
 }
 
+// Баннер закреплённых сообщений: тап открывает текущее и листает к следующему,
+// крестик — открепляет.
+@Composable
+private fun PinnedBanner(
+    pinned: List<MessageDto>,
+    onOpen: (MessageDto) -> Unit,
+    onUnpin: (MessageDto) -> Unit,
+) {
+    var index by remember(pinned.size) { mutableStateOf(0) }
+    val current = pinned.getOrNull(index.coerceIn(0, pinned.size - 1)) ?: return
+    Surface(color = MaterialTheme.colorScheme.surfaceContainer, tonalElevation = 2.dp) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable {
+                    onOpen(current)
+                    if (pinned.size > 1) index = (index + 1) % pinned.size
+                }
+                .padding(start = 12.dp, end = 4.dp, top = 6.dp, bottom = 6.dp),
+        ) {
+            Icon(
+                Icons.Filled.PushPin,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.size(18.dp),
+            )
+            Column(modifier = Modifier.weight(1f).padding(start = 10.dp)) {
+                Text(
+                    text = if (pinned.size > 1) "Закреплённые · ${index + 1}/${pinned.size}"
+                    else "Закреплённое сообщение",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.primary,
+                )
+                Text(
+                    text = messageSummary(current),
+                    style = MaterialTheme.typography.bodySmall,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+            IconButton(onClick = { onUnpin(current) }) {
+                Icon(
+                    Icons.Filled.Close,
+                    contentDescription = "Открепить",
+                    modifier = Modifier.size(18.dp),
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
+    }
+}
+
+private fun messageSummary(message: MessageDto): String =
+    message.text?.takeIf { it.isNotBlank() }
+        ?: when {
+            message.kind == "call" -> "Звонок"
+            message.task != null -> "Задача: ${message.task.name}"
+            message.attachments.isNotEmpty() -> message.attachments.first().fileName
+            else -> "Сообщение"
+        }
+
 @Composable
 private fun DayHeader(text: String) {
     Box(modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp), contentAlignment = Alignment.Center) {
@@ -415,11 +595,17 @@ private fun DayHeader(text: String) {
 private fun MessageBubble(
     message: MessageDto,
     mine: Boolean,
+    highlighted: Boolean,
     onReply: () -> Unit,
+    onReplyClick: (Long) -> Unit,
     onForward: () -> Unit,
+    onTogglePin: () -> Unit,
     onDelete: (forAll: Boolean) -> Unit,
+    onOpenTask: () -> Unit,
+    onConfirm: (ConfirmSpec) -> Unit,
 ) {
     var menuOpen by remember { mutableStateOf(false) }
+    val pinned = message.pinnedAt != null
     val bubbleColor = if (mine) MaterialTheme.colorScheme.primaryContainer
     else MaterialTheme.colorScheme.surfaceContainerHigh
     val shape = RoundedCornerShape(
@@ -428,10 +614,16 @@ private fun MessageBubble(
         bottomStart = if (mine) 18.dp else 6.dp,
         bottomEnd = if (mine) 6.dp else 18.dp,
     )
+    val highlightColor by animateColorAsState(
+        targetValue = if (highlighted) MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)
+        else androidx.compose.ui.graphics.Color.Transparent,
+        label = "highlight",
+    )
 
     Row(
         modifier = Modifier
             .fillMaxWidth()
+            .background(highlightColor)
             .padding(horizontal = 12.dp, vertical = 3.dp),
         horizontalArrangement = if (mine) Arrangement.End else Arrangement.Start,
     ) {
@@ -458,7 +650,9 @@ private fun MessageBubble(
                         Surface(
                             color = MaterialTheme.colorScheme.surface.copy(alpha = 0.5f),
                             shape = RoundedCornerShape(8.dp),
-                            modifier = Modifier.padding(bottom = 6.dp),
+                            modifier = Modifier
+                                .padding(bottom = 6.dp)
+                                .clickable { onReplyClick(reply.id) },
                         ) {
                             Column(modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)) {
                                 Text(
@@ -479,7 +673,7 @@ private fun MessageBubble(
                     if (message.kind == "call") {
                         CallCard(message)
                     }
-                    message.task?.let { TaskCard(name = it.name) }
+                    message.task?.let { TaskCard(task = it, onClick = onOpenTask) }
                     message.attachments.forEach { attachment ->
                         AttachmentView(attachment)
                     }
@@ -490,6 +684,14 @@ private fun MessageBubble(
                         verticalAlignment = Alignment.CenterVertically,
                         modifier = Modifier.align(Alignment.End).padding(top = 2.dp),
                     ) {
+                        if (pinned) {
+                            Icon(
+                                Icons.Filled.PushPin,
+                                contentDescription = "Закреплено",
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.padding(end = 4.dp).size(13.dp),
+                            )
+                        }
                         Text(
                             text = formatTime(message.createdAt),
                             style = MaterialTheme.typography.labelSmall,
@@ -523,10 +725,36 @@ private fun MessageBubble(
                     },
                 )
                 DropdownMenuItem(
+                    text = { Text(if (pinned) "Открепить" else "Закрепить") },
+                    onClick = {
+                        menuOpen = false
+                        // Закрепление не деструктивно; открепление подтверждаем (#5).
+                        if (pinned) {
+                            onConfirm(
+                                ConfirmSpec(
+                                    title = "Открепить сообщение",
+                                    text = "Открепить это сообщение для всех?",
+                                    confirmLabel = "Открепить",
+                                    destructive = false,
+                                    action = onTogglePin,
+                                )
+                            )
+                        } else {
+                            onTogglePin()
+                        }
+                    },
+                )
+                DropdownMenuItem(
                     text = { Text("Удалить у себя") },
                     onClick = {
                         menuOpen = false
-                        onDelete(false)
+                        onConfirm(
+                            ConfirmSpec(
+                                title = "Удалить сообщение",
+                                text = "Удалить это сообщение у себя?",
+                                action = { onDelete(false) },
+                            )
+                        )
                     },
                 )
                 if (mine) {
@@ -534,7 +762,13 @@ private fun MessageBubble(
                         text = { Text("Удалить у всех") },
                         onClick = {
                             menuOpen = false
-                            onDelete(true)
+                            onConfirm(
+                                ConfirmSpec(
+                                    title = "Удалить у всех",
+                                    text = "Удалить это сообщение у обоих собеседников?",
+                                    action = { onDelete(true) },
+                                )
+                            )
                         },
                     )
                 }
@@ -560,15 +794,37 @@ private fun CallCard(message: MessageDto) {
     }
 }
 
+// Карточка прикреплённой задачи в пузыре: тап открывает карточку задачи (#8).
 @Composable
-private fun TaskCard(name: String) {
-    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(vertical = 4.dp)) {
-        Icon(Icons.Filled.TaskAlt, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
-        Text(
-            text = name.ifBlank { "Задача" },
-            style = MaterialTheme.typography.bodyMedium,
-            modifier = Modifier.padding(start = 8.dp),
-        )
+private fun TaskCard(task: com.kodass.groovework.data.dto.TaskCardDto, onClick: () -> Unit) {
+    val accent = com.kodass.groovework.ui.tasks.taskAccentColor(task.color)
+        ?: MaterialTheme.colorScheme.primary
+    Surface(
+        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.5f),
+        shape = RoundedCornerShape(10.dp),
+        modifier = Modifier
+            .padding(vertical = 4.dp)
+            .clickable(onClick = onClick),
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
+        ) {
+            Icon(Icons.Filled.TaskAlt, contentDescription = null, tint = accent)
+            Column(modifier = Modifier.padding(start = 8.dp)) {
+                Text(
+                    text = task.name.ifBlank { "Задача" },
+                    style = MaterialTheme.typography.bodyMedium,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                Text(
+                    text = "Открыть задачу",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.primary,
+                )
+            }
+        }
     }
 }
 
@@ -622,8 +878,13 @@ private fun AttachmentView(attachment: AttachmentDto) {
 }
 
 @Composable
-private fun MessageInputBar(viewModel: ChatViewModel) {
+private fun MessageInputBar(
+    viewModel: ChatViewModel,
+    focusRequester: FocusRequester,
+    onAttachTask: () -> Unit,
+) {
     val context = LocalContext.current
+    var attachMenuOpen by remember { mutableStateOf(false) }
     val filePicker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
         if (uri == null) return@rememberLauncherForActivityResult
         val resolver = context.contentResolver
@@ -688,22 +949,67 @@ private fun MessageInputBar(viewModel: ChatViewModel) {
                     }
                 }
             }
+            viewModel.attachedTask?.let { task ->
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.fillMaxWidth().padding(start = 16.dp, end = 4.dp, top = 4.dp),
+                ) {
+                    Icon(
+                        Icons.Filled.TaskAlt,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(18.dp),
+                    )
+                    Text(
+                        text = "Задача: ${task.name.ifBlank { "#${task.id}" }}",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.primary,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f).padding(start = 6.dp),
+                    )
+                    IconButton(onClick = { viewModel.attachedTask = null }) {
+                        Icon(Icons.Filled.Close, contentDescription = "Убрать задачу")
+                    }
+                }
+            }
             Row(
                 verticalAlignment = Alignment.Bottom,
                 modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp, vertical = 6.dp),
             ) {
-                IconButton(onClick = { filePicker.launch("*/*") }, enabled = !viewModel.uploading) {
-                    if (viewModel.uploading) {
-                        CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
-                    } else {
-                        Icon(Icons.Filled.AttachFile, contentDescription = "Прикрепить файл")
+                Box {
+                    IconButton(onClick = { attachMenuOpen = true }, enabled = !viewModel.uploading) {
+                        if (viewModel.uploading) {
+                            CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
+                        } else {
+                            Icon(Icons.Filled.AttachFile, contentDescription = "Прикрепить")
+                        }
+                    }
+                    DropdownMenu(expanded = attachMenuOpen, onDismissRequest = { attachMenuOpen = false }) {
+                        DropdownMenuItem(
+                            text = { Text("Файл") },
+                            leadingIcon = { Icon(Icons.Filled.AttachFile, contentDescription = null) },
+                            onClick = {
+                                attachMenuOpen = false
+                                filePicker.launch("*/*")
+                            },
+                        )
+                        DropdownMenuItem(
+                            text = { Text("Задачу") },
+                            leadingIcon = { Icon(Icons.Filled.TaskAlt, contentDescription = null) },
+                            onClick = {
+                                attachMenuOpen = false
+                                onAttachTask()
+                            },
+                        )
                     }
                 }
                 TextField(
                     value = viewModel.input,
-                    onValueChange = { viewModel.input = it },
+                    onValueChange = { viewModel.onInputChange(it) },
                     placeholder = { Text("Сообщение…") },
                     maxLines = 5,
+                    keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences),
                     colors = TextFieldDefaults.colors(
                         focusedContainerColor = MaterialTheme.colorScheme.surfaceContainerHighest,
                         unfocusedContainerColor = MaterialTheme.colorScheme.surfaceContainerHighest,
@@ -711,7 +1017,7 @@ private fun MessageInputBar(viewModel: ChatViewModel) {
                         unfocusedIndicatorColor = androidx.compose.ui.graphics.Color.Transparent,
                     ),
                     shape = RoundedCornerShape(24.dp),
-                    modifier = Modifier.weight(1f),
+                    modifier = Modifier.weight(1f).focusRequester(focusRequester),
                 )
                 FilledIconButton(
                     onClick = { viewModel.send() },

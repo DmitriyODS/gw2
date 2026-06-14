@@ -40,6 +40,7 @@ type Deps struct {
 	Hub      *hub.Hub
 	Presence *presence.Presence
 	Ring     *ring.Ring
+	Bus      ring.Bus
 	Verifier *pasetoauth.Verifier
 	Auth     pasetoauth.AuthSource
 	Log      *slog.Logger
@@ -211,7 +212,31 @@ func (h *wsHandler) dispatch(client *hub.Client, frame hub.Frame) {
 	case "call:start", "call:invite", "call:accept", "call:decline", "call:leave", "call:end":
 		// gRPC до 10с — в горутине, чтобы не блокировать чтение (пинг-понг).
 		go h.deps.Ring.Dispatch(client.UserID, frame.Event, frame.Data)
+	case "typing":
+		// Эфемерный индикатор «печатает…»: релеим собеседнику без БД. Клиент
+		// сам сообщает to_user_id (знает other_user диалога).
+		h.relayTyping(ctx, client.UserID, frame.Data)
 	}
+}
+
+func (h *wsHandler) relayTyping(ctx context.Context, fromUserID int64, raw json.RawMessage) {
+	if h.deps.Bus == nil {
+		return
+	}
+	var data struct {
+		ConversationID int64 `json:"conversation_id"`
+		ToUserID       int64 `json:"to_user_id"`
+		Typing         *bool `json:"typing"`
+	}
+	if json.Unmarshal(raw, &data) != nil || data.ToUserID == 0 || data.ConversationID == 0 {
+		return
+	}
+	typing := data.Typing == nil || *data.Typing
+	h.deps.Bus.Publish(ctx, "typing", []string{"user_" + itoa(data.ToUserID)}, map[string]any{
+		"conversation_id": data.ConversationID,
+		"user_id":         fromUserID,
+		"typing":          typing,
+	})
 }
 
 func itoa(v int64) string {

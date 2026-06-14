@@ -15,7 +15,7 @@ class CallActionReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
         val manager = (context.applicationContext as GrooveApp).container.callManager
         when (intent.action) {
-            ACTION_DECLINE -> manager.decline()
+            ACTION_DECLINE -> manager.declineFromNotification(intent.getLongExtra("call_id", 0))
             ACTION_HANGUP -> manager.hangup()
         }
     }

@@ -61,6 +61,12 @@ dependencies {
     implementation(libs.coil.compose)
     implementation(libs.coil.network.okhttp)
     implementation(libs.livekit.android)
+    // Только VideoTrackView; аудио-визуализатор не нужен, а его транзитивный
+    // noise-2.0.0 тащит libnoise.so без 16 KB-выравнивания (требование Play
+    // для Android 15+).
+    implementation(libs.livekit.android.compose.components) {
+        exclude(group = "com.github.paramsen", module = "noise")
+    }
     implementation(platform(libs.firebase.bom))
     implementation(libs.firebase.messaging)
     testImplementation(libs.junit)

@@ -156,6 +156,39 @@ func (f fakeUsers) ListVisibleUsers(_ context.Context, ids []int64) ([]*domain.U
 	return out, nil
 }
 
+// Memberships по умолчанию — первичная компания каждого пользователя.
+func (f fakeUsers) Memberships(_ context.Context, ids []int64) (map[int64]map[int64]bool, error) {
+	out := make(map[int64]map[int64]bool, len(ids))
+	for _, id := range ids {
+		set := map[int64]bool{}
+		if u, ok := f[id]; ok && u.CompanyID != nil {
+			set[*u.CompanyID] = true
+		}
+		out[id] = set
+	}
+	return out, nil
+}
+
+// membershipUsers — фейк с дополнительными членствами user_companies сверх
+// первичной компании (для тестов многокомпанийности).
+type membershipUsers struct {
+	fakeUsers
+	extra map[int64][]int64
+}
+
+func (m membershipUsers) Memberships(ctx context.Context, ids []int64) (map[int64]map[int64]bool, error) {
+	out, _ := m.fakeUsers.Memberships(ctx, ids)
+	for _, id := range ids {
+		for _, cid := range m.extra[id] {
+			if out[id] == nil {
+				out[id] = map[int64]bool{}
+			}
+			out[id][cid] = true
+		}
+	}
+	return out, nil
+}
+
 type fakeMedia struct {
 	created, deleted []string
 	occupants        map[string][]string // room → identities (nil = недоступен)
@@ -349,6 +382,34 @@ func TestStartCallValidation(t *testing.T) {
 		InitiatorID: 10, InviteeIDs: []int64{30},
 	}); domainCode(err) != "BUSY" {
 		t.Errorf("занятый инициатор: %v", err)
+	}
+}
+
+// Многокомпанийность: у инициатора первичная компания 1, но он также состоит
+// в компании 2 (user_companies); собеседник — только в компании 2. Общая
+// компания есть → звонок проходит и принадлежит ей.
+func TestStartCallSharedCompany(t *testing.T) {
+	repo := newFakeRepo()
+	media := &fakeMedia{occupants: map[string][]string{}}
+	pub := &fakePub{}
+	users := membershipUsers{
+		fakeUsers: fakeUsers{
+			10: {ID: 10, FIO: "Инициатор", CompanyID: company(1), CompanyActive: true},
+			99: {ID: 99, FIO: "Коллега", CompanyID: company(2), CompanyActive: true},
+		},
+		extra: map[int64][]int64{10: {2}}, // инициатор также член компании 2
+	}
+	svc := New(repo, users, ringstate.New(), media, pub, &fakeMessenger{}, slog.Default())
+
+	resp, err := svc.StartCall(context.Background(), dto.StartCallRequest{
+		InitiatorID: 10, InviteeIDs: []int64{99}, Media: "audio",
+	})
+	if err != nil {
+		t.Fatalf("звонок мультикомпанийному коллеге должен проходить: %v", err)
+	}
+	stored, _ := repo.GetCall(context.Background(), resp.Call.ID)
+	if stored.CompanyID != 2 {
+		t.Errorf("компания звонка = %d, ожидалась общая 2", stored.CompanyID)
 	}
 }
 

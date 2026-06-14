@@ -1017,6 +1017,9 @@ onMounted(() => {
   .profile-container {
     display: flex;
     flex-direction: column;
+    /* Десктопный align-items: start здесь дал бы flex-колонке сжатие по
+       содержимому и прижатие влево — на мобилке карточки во всю ширину. */
+    align-items: stretch;
     gap: 16px;
     max-width: none;
   }
