@@ -56,22 +56,17 @@ func (h *handlers) createUser(c *fiber.Ctx) error {
 
 func (h *handlers) directory(c *fiber.Ctx) error {
 	me := currentUser(c)
+	// Скоуп — активная компания актора из токена; у Администратора системы её нет,
+	// она приходит в ?company_id= (nil → все видимые пользователи всех компаний).
+	applyAdminScope(c, me)
 	req := dto.DirectoryRequest{
-		ActorID: me.ID,
-		Query:   c.Query("q"),
+		ActorID:   me.ID,
+		Query:     c.Query("q"),
+		CompanyID: me.CompanyID,
 	}
 	switch c.Query("exclude_self") {
 	case "1", "true", "yes":
 		req.ExcludeID = me.ID
-	}
-	// company_id из query учитывается сервисом только для Администратора
-	// системы (без своей компании).
-	if raw := c.Query("company_id"); raw != "" {
-		cid, err := strconv.ParseInt(raw, 10, 64)
-		if err != nil {
-			return badRequest(c, "Неверный company_id")
-		}
-		req.CompanyID = &cid
 	}
 
 	resp, err := h.eps.Directory(c.Context(), req)

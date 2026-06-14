@@ -26,7 +26,17 @@ func (s *Service) validateResponsible(ctx context.Context, userID *int64, compan
 	if user == nil || user.IsHidden {
 		return domain.NewError("USER_NOT_FOUND", "Сотрудник не найден", 404)
 	}
-	if user.CompanyID != nil && *user.CompanyID != companyID {
+	// Администратор системы (без первичной компании) может быть ответственным везде.
+	if user.CompanyID == nil {
+		return nil
+	}
+	// Многокомпанийность: принадлежность — по членству в АКТИВНОЙ компании
+	// (user_companies), а не по первичной users.company_id.
+	member, err := s.users.IsCompanyMember(ctx, *userID, companyID)
+	if err != nil {
+		return err
+	}
+	if !member {
 		return domain.NewError("USER_FOREIGN", "Сотрудник из другой компании", 422)
 	}
 	return nil

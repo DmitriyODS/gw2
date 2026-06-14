@@ -304,6 +304,20 @@ else
   warn "маршрут /api/tasks вернул $tasks_code (ожидался 401) — проверьте nginx"
 fi
 
+# Микросервис пуш-уведомлений: healthz изнутри контейнера + маршрут
+# /api/push/register через nginx (без токена ожидаем 401, не 404/502).
+if $COMPOSE exec -T push wget -qO- --timeout=3 http://127.0.0.1:8097/healthz >/dev/null 2>&1; then
+  ok "pushsvc отвечает (healthz)"
+else
+  warn "pushsvc не отвечает — пуш-уведомления не работают: make logs s=push"
+fi
+push_code=$(curl -skL -o /dev/null -w '%{http_code}' --max-time 5 -X POST http://localhost/api/push/register || true)
+if [ "$push_code" = "401" ]; then
+  ok "маршрут /api/push через nginx ведёт в pushsvc"
+else
+  warn "маршрут /api/push вернул $push_code (ожидался 401) — проверьте nginx"
+fi
+
 lk_code=$(curl -skL -o /dev/null -w '%{http_code}' --max-time 5 http://localhost/livekit/ || true)
 if [ "$lk_code" = "200" ]; then
   ok "LiveKit отвечает через nginx (/livekit)"

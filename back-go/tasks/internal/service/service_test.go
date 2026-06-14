@@ -364,6 +364,11 @@ func (f *fakeUsers) GetUser(_ context.Context, id int64) (*domain.User, error) {
 
 func (f *fakeUsers) CompanyActive(_ context.Context, _ *int64) (bool, error) { return true, nil }
 
+func (f *fakeUsers) IsCompanyMember(_ context.Context, userID, companyID int64) (bool, error) {
+	u := f.users[userID]
+	return u != nil && u.CompanyID != nil && *u.CompanyID == companyID, nil
+}
+
 func (f *fakeUsers) YougileEnabled(_ context.Context, _ int64) (bool, error) { return true, nil }
 
 type fakeGroove struct {

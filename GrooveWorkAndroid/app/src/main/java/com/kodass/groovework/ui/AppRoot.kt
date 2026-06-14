@@ -1,6 +1,5 @@
 package com.kodass.groovework.ui
 
-import android.content.Intent
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -18,11 +17,9 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.foundation.layout.Row
@@ -33,7 +30,6 @@ import com.kodass.groovework.AppContainer
 import com.kodass.groovework.R
 import com.kodass.groovework.data.calls.CallPhase
 import com.kodass.groovework.data.session.AuthState
-import com.kodass.groovework.service.GatewayOnlineService
 import com.kodass.groovework.ui.calls.CallScreen
 import com.kodass.groovework.ui.calls.IncomingCallScreen
 import com.kodass.groovework.ui.login.ChangeDefaultScreen
@@ -43,19 +39,9 @@ import com.kodass.groovework.ui.main.MainScreen
 @Composable
 fun AppRoot(container: AppContainer) {
     val authState by container.sessionManager.authState.collectAsStateWithLifecycle()
-    val context = LocalContext.current
 
-    // WS живёт в foreground-сервисе: события и уведомления доходят и в фоне.
-    val loggedIn = authState is AuthState.LoggedIn
-    LaunchedEffect(loggedIn) {
-        val intent = Intent(context, GatewayOnlineService::class.java)
-        if (loggedIn) {
-            context.startForegroundService(intent)
-        } else {
-            context.stopService(intent)
-            container.gateway.stop()
-        }
-    }
+    // Жизненный цикл WebSocket ведёт AppContainer (foreground/звонок); в фоне
+    // уведомления доставляет FCM — постоянный foreground-сервис больше не нужен.
 
     Box(modifier = Modifier.fillMaxSize()) {
         Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {

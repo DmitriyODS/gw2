@@ -3,7 +3,10 @@ package com.kodass.groovework.data.session
 import com.kodass.groovework.data.api.AuthApi
 import com.kodass.groovework.data.dto.ChangeDefaultRequest
 import com.kodass.groovework.data.dto.LoginRequest
+import com.kodass.groovework.data.dto.MembershipDto
+import com.kodass.groovework.data.dto.SelectCompanyRequest
 import com.kodass.groovework.data.dto.SessionResponse
+import com.kodass.groovework.data.dto.SwitchCompanyRequest
 import com.kodass.groovework.data.dto.UserDto
 import com.kodass.groovework.data.network.ApiException
 import com.kodass.groovework.data.network.HostSelectionInterceptor
@@ -31,6 +34,12 @@ sealed interface AuthState {
     data class LoggedIn(val claims: SessionClaims) : AuthState
 }
 
+// Результат login: либо сразу сессия, либо (для многокомпанийных) нужен выбор компании.
+sealed interface LoginResult {
+    data object Success : LoginResult
+    data class NeedsCompany(val selectToken: String, val companies: List<MembershipDto>) : LoginResult
+}
+
 // Жизненный цикл сессии: access-токен в памяти (TTL 15 мин), refresh — в DataStore.
 class SessionManager(
     private val store: SessionStore,
@@ -54,6 +63,13 @@ class SessionManager(
     private val _me = kotlinx.coroutines.flow.MutableStateFlow<UserDto?>(null)
     val me: kotlinx.coroutines.flow.StateFlow<UserDto?> = _me
 
+    // Хук перед logout (пока есть авторизация) — снятие FCM-токена с сервера.
+    var onLogout: (suspend () -> Unit)? = null
+
+    // Компании пользователя (для переключателя активной компании); пусто у Администратора системы.
+    private val _companies = kotlinx.coroutines.flow.MutableStateFlow<List<MembershipDto>>(emptyList())
+    val companies: kotlinx.coroutines.flow.StateFlow<List<MembershipDto>> = _companies
+
     suspend fun bootstrap(defaultServerUrl: String) {
         val server = store.serverUrl() ?: defaultServerUrl
         applyServer(server)
@@ -76,10 +92,26 @@ class SessionManager(
         }
     }
 
-    suspend fun login(serverUrl: String, login: String, password: String) {
+    suspend fun login(serverUrl: String, login: String, password: String): LoginResult {
         applyServer(serverUrl)
         store.setServerUrl(_serverUrl.value)
         val resp = apiCall(json) { authApi.login(LoginRequest(login, password)) }
+        val body = unwrap(resp)
+        // Многокомпанийный аккаунт: access-токена ещё нет — сначала выбор компании.
+        if (body.needsCompanySelection) {
+            return LoginResult.NeedsCompany(body.selectToken.orEmpty(), body.companies)
+        }
+        applySession(body)
+        return LoginResult.Success
+    }
+
+    suspend fun selectCompany(selectToken: String, companyId: Long) {
+        val resp = apiCall(json) { authApi.selectCompany(SelectCompanyRequest(selectToken, companyId)) }
+        applySession(unwrap(resp))
+    }
+
+    suspend fun switchCompany(companyId: Long) {
+        val resp = apiCall(json) { authApi.switchCompany(SwitchCompanyRequest(companyId)) }
         applySession(unwrap(resp))
     }
 
@@ -91,6 +123,8 @@ class SessionManager(
     }
 
     suspend fun logout() {
+        // Снимаем FCM-токен, пока ещё авторизованы (нужен access-токен).
+        runCatching { onLogout?.invoke() }
         try {
             authApi.logout()
         } catch (_: Exception) {
@@ -152,6 +186,7 @@ class SessionManager(
 
     private fun applySessionInternal(session: SessionResponse) {
         accessToken = session.accessToken
+        _companies.value = session.companies
         _authState.value = AuthState.LoggedIn(
             SessionClaims(
                 userId = session.userId,
@@ -178,6 +213,7 @@ class SessionManager(
     private fun clearState() {
         accessToken = null
         _me.value = null
+        _companies.value = emptyList()
         _authState.value = AuthState.LoggedOut
     }
 }

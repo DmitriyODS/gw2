@@ -27,6 +27,17 @@ func companyCond(args *[]any, companyID *int64, col string) string {
 	return " AND " + col + " = $" + strconv.Itoa(len(*args))
 }
 
+// memberCond — фильтр принадлежности пользователя активной компании через
+// user_companies (многокомпанийность: users.company_id — лишь первичная, поэтому
+// скоуп людей нельзя вести по ней). userIDCol — колонка id пользователя.
+func memberCond(args *[]any, companyID *int64, userIDCol string) string {
+	if companyID == nil {
+		return ""
+	}
+	*args = append(*args, *companyID)
+	return " AND " + userIDCol + " IN (SELECT user_id FROM user_companies WHERE company_id = $" + strconv.Itoa(len(*args)) + ")"
+}
+
 func (r *Repo) CommonMetrics(ctx context.Context, start, end time.Time, companyID *int64) (*domain.CommonMetrics, error) {
 	args := []any{start, end}
 	cond := companyCond(&args, companyID, "company_id")
@@ -71,7 +82,7 @@ func (r *Repo) TasksByHours(ctx context.Context, start, end time.Time, companyID
 
 func (r *Repo) TasksByEmployees(ctx context.Context, start, end time.Time, companyID *int64) ([]domain.EmployeeHours, error) {
 	args := []any{start, end}
-	cond := companyCond(&args, companyID, "us.company_id")
+	cond := memberCond(&args, companyID, "us.id")
 	rows, err := r.pool.Query(ctx, `
 		SELECT us.id, us.fio, COUNT(DISTINCT u.task_id), COALESCE(SUM(`+hoursExpr+`), 0)
 		  FROM users us
@@ -148,7 +159,7 @@ func (r *Repo) ByDepartments(ctx context.Context, start, end time.Time, companyI
 
 func (r *Repo) ByUnitTypesPerUser(ctx context.Context, start, end time.Time, companyID *int64) ([]domain.UserUnitTypeStats, error) {
 	args := []any{start, end}
-	cond := companyCond(&args, companyID, "us.company_id")
+	cond := memberCond(&args, companyID, "us.id")
 	rows, err := r.pool.Query(ctx, `
 		SELECT us.id, us.fio, ut.id, ut.name,
 		       COALESCE(SUM(`+hoursExpr+`), 0), COUNT(DISTINCT u.task_id)
@@ -388,7 +399,7 @@ func (r *Repo) Responsibles(ctx context.Context, companyID *int64) ([]domain.Res
 
 func (r *Repo) VisibleEmployees(ctx context.Context, companyID *int64) ([]domain.EmployeeRef, error) {
 	args := []any{}
-	cond := companyCond(&args, companyID, "company_id")
+	cond := memberCond(&args, companyID, "id")
 	rows, err := r.pool.Query(ctx,
 		`SELECT id, fio FROM users WHERE is_hidden = FALSE`+cond+` ORDER BY id`, args...)
 	if err != nil {

@@ -13,6 +13,7 @@
 #   osipovskijdima/groove_work:ai         — aisvc, Go       (back-go/ai/)
 #   osipovskijdima/groove_work:groove     — groovesvc, Go   (back-go/groove/)
 #   osipovskijdima/groove_work:tasks      — tasksvc, Go     (back-go/tasks/)
+#   osipovskijdima/groove_work:push       — pushsvc, Go     (back-go/push/)
 #   osipovskijdima/groove_work:front      — nginx + SPA     (front/)
 #
 # Дополнительно каждый образ получает версионный тег `<svc>-X.Y.Z`
@@ -35,7 +36,7 @@ set -euo pipefail
 cd "$(cd "$(dirname "$0")/.." && pwd)"
 
 REPO="${DOCKER_REPO:-osipovskijdima/groove_work}"
-ALL_SERVICES=(migrate gateway calls auth messenger ai groove tasks front)
+ALL_SERVICES=(migrate gateway calls auth messenger ai groove tasks push front)
 # Прод — linux/amd64. На Apple Silicon: Go-стадии кросс-компилируют нативно
 # (см. $BUILDPLATFORM в Dockerfile), python/node-стадии бегут под Rosetta.
 PLATFORM="${DOCKER_PLATFORM:-linux/amd64}"
@@ -49,14 +50,14 @@ context_of() {
     front) echo front ;;
     # Go-сервисы собираются из общего контекста back-go/ (модуль pkg
     # подключён через replace ../pkg), Dockerfile — внутри сервиса.
-    migrate|gateway|calls|auth|messenger|ai|groove|tasks) echo back-go ;;
-    *) printf 'Неизвестный сервис: %s (ожидается migrate|gateway|calls|auth|messenger|ai|groove|tasks|front)\n' "$1" >&2; return 2 ;;
+    migrate|gateway|calls|auth|messenger|ai|groove|tasks|push) echo back-go ;;
+    *) printf 'Неизвестный сервис: %s (ожидается migrate|gateway|calls|auth|messenger|ai|groove|tasks|push|front)\n' "$1" >&2; return 2 ;;
   esac
 }
 
 dockerfile_of() {
   case "$1" in
-    migrate|gateway|calls|auth|messenger|ai|groove|tasks) echo "back-go/$1/Dockerfile" ;;
+    migrate|gateway|calls|auth|messenger|ai|groove|tasks|push) echo "back-go/$1/Dockerfile" ;;
     *) echo "" ;;
   esac
 }
@@ -100,13 +101,14 @@ changed_services() {
       back-go/ai/*) hits="$hits ai" ;;
       back-go/groove/*) hits="$hits groove" ;;
       back-go/tasks/*) hits="$hits tasks" ;;
+      back-go/push/*) hits="$hits push" ;;
       deploy/*|data/*|scripts/*|*.md|.gitignore|.env*) : ;; # bind-mount/серверное — образ не трогаем
       *) unknown="$unknown $f" ;;
     esac
   done <<EOF
 $files
 EOF
-  [ "$go" = 1 ] && hits="$hits migrate gateway calls auth messenger ai groove tasks"
+  [ "$go" = 1 ] && hits="$hits migrate gateway calls auth messenger ai groove tasks push"
   [ "$front" = 1 ] && hits="$hits front"
   [ -n "$unknown" ] && printf 'changed: не отнёс к сервисам (образы не трогаю):%s\n' "$unknown" >&2
   local s

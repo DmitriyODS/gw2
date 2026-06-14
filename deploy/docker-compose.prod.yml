@@ -14,7 +14,7 @@
 # Деплой-скрипт делает `compose pull` + `up --no-build`. Откат: в deploy/.env
 # выставить версионный тег, например GATEWAY_TAG=gateway-3.7.0 (MIGRATE_TAG /
 # CALLS_TAG / AUTH_TAG / MESSENGER_TAG / AI_TAG / GROOVE_TAG / TASKS_TAG /
-# FRONT_TAG — аналогично).
+# PUSH_TAG / FRONT_TAG — аналогично).
 # ================================================================
 services:
   migrate:
@@ -52,6 +52,13 @@ services:
       #     импорт/экспорт продолжают работать.
       YOUGILE_ENC_KEY: ${YOUGILE_ENC_KEY:-}
       YOUGILE_WEBHOOK_PUBLIC_BASE: ${YOUGILE_WEBHOOK_PUBLIC_BASE:-}
+
+  push:
+    image: osipovskijdima/groove_work:${PUSH_TAG:-push}
+    environment:
+      # FCM service-account JSON (содержимое ключа Firebase). Без него pushsvc
+      # работает, но пуши не отправляются.
+      FIREBASE_CREDENTIALS_JSON: ${FIREBASE_CREDENTIALS_JSON:-}
 
   nginx:
     image: osipovskijdima/groove_work:${FRONT_TAG:-front}

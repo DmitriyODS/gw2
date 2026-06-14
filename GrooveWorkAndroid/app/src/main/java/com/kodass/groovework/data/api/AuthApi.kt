@@ -2,7 +2,9 @@ package com.kodass.groovework.data.api
 
 import com.kodass.groovework.data.dto.ChangeDefaultRequest
 import com.kodass.groovework.data.dto.LoginRequest
+import com.kodass.groovework.data.dto.SelectCompanyRequest
 import com.kodass.groovework.data.dto.SessionResponse
+import com.kodass.groovework.data.dto.SwitchCompanyRequest
 import com.kodass.groovework.data.dto.UserDto
 import retrofit2.Response
 import retrofit2.http.Body
@@ -15,6 +17,14 @@ interface AuthApi {
     // Response<…> — чтобы прочитать Set-Cookie с refresh-токеном.
     @POST("api/auth/login")
     suspend fun login(@Body body: LoginRequest): Response<SessionResponse>
+
+    // Завершение многокомпанийного login-gate: select_token из login + выбранная компания.
+    @POST("api/auth/select-company")
+    suspend fun selectCompany(@Body body: SelectCompanyRequest): Response<SessionResponse>
+
+    // Смена активной компании в существующей сессии (перевыпуск токенов).
+    @POST("api/auth/switch-company")
+    suspend fun switchCompany(@Body body: SwitchCompanyRequest): Response<SessionResponse>
 
     @POST("api/auth/refresh")
     suspend fun refresh(@Header("Cookie") cookie: String): Response<SessionResponse>

@@ -9,6 +9,7 @@ use (
 	./messenger
 	./migrate
 	./pkg
+	./push
 	./tasks
 )
 

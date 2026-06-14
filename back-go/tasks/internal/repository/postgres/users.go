@@ -76,6 +76,17 @@ func (r *UserReader) GetUser(ctx context.Context, id int64) (*domain.User, error
 	return &u, nil
 }
 
+// IsCompanyMember — состоит ли пользователь в компании по user_companies
+// (многокомпанийность: один аккаунт может быть в нескольких компаниях; первичная
+// users.company_id — лишь одна из них).
+func (r *UserReader) IsCompanyMember(ctx context.Context, userID, companyID int64) (bool, error) {
+	var exists bool
+	err := r.pool.QueryRow(ctx,
+		`SELECT EXISTS(SELECT 1 FROM user_companies WHERE user_id = $1 AND company_id = $2)`,
+		userID, companyID).Scan(&exists)
+	return exists, err
+}
+
 // CompanyActive — активность ИМЕННО выбранной (активной) компании сессии.
 func (r *UserReader) CompanyActive(ctx context.Context, companyID *int64) (bool, error) {
 	if companyID == nil {

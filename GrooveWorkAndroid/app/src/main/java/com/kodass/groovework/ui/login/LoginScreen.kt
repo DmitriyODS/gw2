@@ -21,6 +21,7 @@ import androidx.compose.material.icons.outlined.Lock
 import androidx.compose.material.icons.outlined.Person
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -44,12 +45,19 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.kodass.groovework.AppContainer
 import com.kodass.groovework.R
+import com.kodass.groovework.data.dto.MembershipDto
 
 @Composable
 fun LoginScreen(container: AppContainer) {
     val viewModel: LoginViewModel = viewModel { LoginViewModel(container.sessionManager) }
     var passwordVisible by remember { mutableStateOf(false) }
     var serverVisible by remember { mutableStateOf(false) }
+
+    val choices = viewModel.companyChoices
+    if (choices != null) {
+        CompanyPicker(viewModel, choices)
+        return
+    }
 
     Column(
         modifier = Modifier
@@ -165,6 +173,81 @@ fun LoginScreen(container: AppContainer) {
             modifier = Modifier.padding(top = 8.dp),
         ) {
             Text(if (serverVisible) "Скрыть настройки сервера" else "Настройки сервера")
+        }
+    }
+}
+
+@Composable
+private fun CompanyPicker(viewModel: LoginViewModel, choices: List<MembershipDto>) {
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .verticalScroll(rememberScrollState())
+            .imePadding()
+            .padding(horizontal = 32.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center,
+    ) {
+        Image(
+            painter = painterResource(R.drawable.logo_groove),
+            contentDescription = null,
+            modifier = Modifier.size(72.dp),
+        )
+        Text(
+            text = "Выберите компанию",
+            style = MaterialTheme.typography.headlineSmall,
+            modifier = Modifier.padding(top = 16.dp),
+        )
+        Text(
+            text = "У вас несколько компаний — выберите, в какую войти",
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            textAlign = TextAlign.Center,
+            modifier = Modifier.padding(top = 4.dp, bottom = 24.dp),
+        )
+
+        choices.forEach { company ->
+            ElevatedCard(
+                onClick = { viewModel.selectCompany(company.companyId) },
+                enabled = company.isActive && !viewModel.loading,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(bottom = 12.dp),
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Text(
+                        text = company.companyName,
+                        style = MaterialTheme.typography.titleMedium,
+                    )
+                    Text(
+                        text = if (company.isActive) company.roleName else "Компания отключена",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(top = 2.dp),
+                    )
+                }
+            }
+        }
+
+        viewModel.error?.let { error ->
+            Text(
+                text = error,
+                color = MaterialTheme.colorScheme.error,
+                style = MaterialTheme.typography.bodyMedium,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.padding(top = 8.dp),
+            )
+        }
+
+        if (viewModel.loading) {
+            CircularProgressIndicator(modifier = Modifier.padding(top = 16.dp))
+        }
+
+        TextButton(
+            onClick = { viewModel.cancelCompanySelection() },
+            modifier = Modifier.padding(top = 8.dp),
+        ) {
+            Text("Назад ко входу")
         }
     }
 }

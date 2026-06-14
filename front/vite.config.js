@@ -77,6 +77,11 @@ export default defineConfig({
         target: 'http://localhost:8094',
         changeOrigin: true
       },
+      // Пуш-уведомления — pushsvc (регистрация токенов устройств).
+      '/api/push': {
+        target: 'http://localhost:8097',
+        changeOrigin: true
+      },
       // Ядро задач — tasksvc (задачи, юниты, типы, этапы, отделы, статистика).
       '/api/tasks': {
         target: 'http://localhost:8095',

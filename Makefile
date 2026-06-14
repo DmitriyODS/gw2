@@ -26,6 +26,7 @@ help:
 	@printf "  make dev-groove   Go-микросервис «Мой Groove» (gRPC :9094, HTTP :8094)\n"
 	@printf "  make dev-tasks    Go-микросервис задач (HTTP :8095)\n"
 	@printf "  make dev-gateway  Realtime-шлюз (WS /ws, HTTP :8096)\n"
+	@printf "  make dev-push     Go-микросервис пуш-уведомлений (HTTP :8097)\n"
 	@printf "  make dev-migrate  Применить миграции (goose)\n"
 	@printf "  make dev-front    Vite dev-сервер  :5173\n"
 	@printf "  make dev-stop     Остановить dev-контейнеры\n"
@@ -45,7 +46,7 @@ help:
 	@printf "\n\033[33mКонфигурация сервера:\033[0m cp .env.deploy.example .env.deploy\n\n"
 
 # ── Разработка ────────────────────────────────────────────────────
-.PHONY: dev-infra dev-migrate dev-front dev-calls dev-auth dev-messenger dev-ai dev-groove dev-tasks dev-gateway dev-stop dev-stack dev-stack-stop gen-proto
+.PHONY: dev-infra dev-migrate dev-front dev-calls dev-auth dev-messenger dev-ai dev-groove dev-tasks dev-gateway dev-push dev-stop dev-stack dev-stack-stop gen-proto
 
 # Dev-ключи PASETO (синхронизированы с dev.sh и
 # deploy/docker-compose.override.yml): приватный — только у authsvc,
@@ -168,6 +169,19 @@ dev-gateway: dev-infra
 	CALLS_GRPC_ADDR="localhost:9090" \
 	HTTP_ADDR=":8096" \
 	go run ./cmd/gatewaysvc
+
+# Go-микросервис пуш-уведомлений: подписан на gw2:*:events, шлёт FCM
+# офлайн-получателям; REST /api/push/register|unregister. Без
+# FIREBASE_CREDENTIALS_JSON отправка отключена (для dev это норма).
+dev-push: dev-infra
+	@printf "\033[1m▶ pushsvc (Go)  HTTP :8097\033[0m\n"
+	cd back-go/push && \
+	DATABASE_URL="postgresql://grovework:grovework_local@localhost:5432/grovework" \
+	REDIS_URL="redis://localhost:6379/0" \
+	PASETO_PUBLIC_KEY="$(PASETO_PUBLIC_KEY_DEV)" \
+	FIREBASE_CREDENTIALS_JSON="$${FIREBASE_CREDENTIALS_JSON:-}" \
+	HTTP_ADDR=":8097" \
+	go run ./cmd/pushsvc
 
 gen-proto:
 	bash scripts/gen_proto.sh

@@ -80,10 +80,16 @@ func (s *Service) StatsUserTasks(ctx context.Context, actor *domain.User, target
 		if target == nil {
 			return nil, domain.NewError("NOT_FOUND", "Сотрудник не найден", 404)
 		}
-		// Менеджер/Руководитель — только своя компания.
-		if actor.CompanyID != nil &&
-			(target.CompanyID == nil || *target.CompanyID != *actor.CompanyID) {
-			return nil, domain.NewError("FORBIDDEN", "Доступ запрещён", 403)
+		// Менеджер/Руководитель — только своя компания (членство в активной,
+		// а не первичная users.company_id: цель может быть многокомпанийной).
+		if actor.CompanyID != nil {
+			member, err := s.users.IsCompanyMember(ctx, targetUserID, *actor.CompanyID)
+			if err != nil {
+				return nil, err
+			}
+			if !member {
+				return nil, domain.NewError("FORBIDDEN", "Доступ запрещён", 403)
+			}
 		}
 	}
 

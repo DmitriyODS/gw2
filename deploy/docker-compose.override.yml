@@ -55,6 +55,12 @@ services:
     environment:
       PASETO_PRIVATE_KEY: ${PASETO_PRIVATE_KEY:-68eb779b2f672beb8fcd58d72a81ce1565a1417aed3788d1362bf4faaa3f62ac15ef439747fcad6ca627310942ba14b48f164fcbb5f65c10f61ca2aeb4b53fe1}
       PASETO_REFRESH_KEY: ${PASETO_REFRESH_KEY:-d525374c4ec7b5e1c5b140fb9c1f4cffd9c3dbf052bb18f2f32bf9f92d9fa05c}
+  push:
+    profiles: ["full"]
+    environment:
+      PASETO_PUBLIC_KEY: ${PASETO_PUBLIC_KEY:-15ef439747fcad6ca627310942ba14b48f164fcbb5f65c10f61ca2aeb4b53fe1}
+      # Dev без Firebase: пуши отключены (no-op). Подложите ключ — заработают.
+      FIREBASE_CREDENTIALS_JSON: ${FIREBASE_CREDENTIALS_JSON:-}
   nginx:
     profiles: ["full"]
     ports:

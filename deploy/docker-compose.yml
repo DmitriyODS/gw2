@@ -315,6 +315,35 @@ services:
       retries: 5
       start_period: 10s
 
+  push:
+    build:
+      context: ../back-go
+      dockerfile: push/Dockerfile
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    environment:
+      DATABASE_URL: postgresql://${DB_USER}:${DB_PASSWORD}@db:5432/${DB_NAME}
+      REDIS_URL: redis://redis:6379/0
+      PASETO_PUBLIC_KEY: ${PASETO_PUBLIC_KEY}
+      # FCM service-account JSON (содержимое ключа). Пусто — сервис работает,
+      # но пуши не отправляются (см. back-go/push/internal/fcm).
+      FIREBASE_CREDENTIALS_JSON: ${FIREBASE_CREDENTIALS_JSON:-}
+      HTTP_ADDR: ":8097"
+    expose:
+      - "8097"
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8097/healthz"]
+      interval: 15s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
+
   # Конфиг nginx и хост-порты задают оверлеи: dev — nginx.conf и :8080,
   # prod — nginx.prod.conf, :80/:443 и certbot-volumes.
   nginx:
@@ -324,7 +353,7 @@ services:
     restart: unless-stopped
     # service_healthy, а не started: конфиг nginx резолвит upstream'ы
     # gateway:8096, calls:8090, auth:8091, messenger:8092, ai:8093,
-    # groove:8094 и tasks:8095 на старте — без живых контейнеров он падает
+    # groove:8094, tasks:8095 и push:8097 на старте — без живых контейнеров он падает
     # целиком («host not found in upstream»), включая отдачу SPA.
     depends_on:
       gateway:
@@ -340,6 +369,8 @@ services:
       groove:
         condition: service_healthy
       tasks:
+        condition: service_healthy
+      push:
         condition: service_healthy
     volumes:
       - uploads:/app/uploads:ro

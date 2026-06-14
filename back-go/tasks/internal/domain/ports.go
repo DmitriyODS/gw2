@@ -97,6 +97,9 @@ type UserReader interface {
 	// CompanyActive — активна ли компания (для auth-гейта по АКТИВНОЙ компании
 	// сессии из токена). nil (Администратор системы) → true.
 	CompanyActive(ctx Ctx, companyID *int64) (bool, error)
+	// IsCompanyMember — состоит ли пользователь в компании (многокомпанийность:
+	// членство в user_companies, а не первичная users.company_id).
+	IsCompanyMember(ctx Ctx, userID, companyID int64) (bool, error)
 }
 
 // CompanyReader — read-only настройки компании (флаг uses_yougile для

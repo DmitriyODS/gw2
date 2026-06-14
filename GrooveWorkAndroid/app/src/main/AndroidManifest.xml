@@ -19,7 +19,6 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_PHONE_CALL" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CAMERA" />
-    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_REMOTE_MESSAGING" />
 
     <uses-feature android:name="android.hardware.camera" android:required="false" />
     <uses-feature android:name="android.hardware.microphone" android:required="false" />
@@ -51,11 +50,23 @@
             </intent-filter>
         </activity>
 
-        <!-- WS-подключение к gatewaysvc в фоне: live-события и уведомления. -->
+        <!-- FCM: получение пуш-уведомлений (фоновые сообщения/задачи/звонки). -->
         <service
-            android:name=".service.GatewayOnlineService"
-            android:exported="false"
-            android:foregroundServiceType="remoteMessaging" />
+            android:name=".notifications.PushMessagingService"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="com.google.firebase.MESSAGING_EVENT" />
+            </intent-filter>
+        </service>
+
+        <!-- Канал и иконка по умолчанию для уведомлений, которые показывает
+             система (notification-сообщения FCM при свёрнутом приложении). -->
+        <meta-data
+            android:name="com.google.firebase.messaging.default_notification_channel_id"
+            android:value="messages" />
+        <meta-data
+            android:name="com.google.firebase.messaging.default_notification_icon"
+            android:resource="@drawable/ic_launcher_monochrome" />
 
         <!-- Активный звонок: микрофон/камера при свёрнутом приложении. -->
         <service

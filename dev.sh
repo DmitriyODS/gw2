@@ -84,6 +84,7 @@ cleanup() {
     pkill -f "exe/groovesvc"     2>/dev/null || true
     pkill -f "exe/tasksvc"       2>/dev/null || true
     pkill -f "exe/gatewaysvc"    2>/dev/null || true
+    pkill -f "exe/pushsvc"       2>/dev/null || true
 
     (cd "$DEPLOY" && docker compose stop 2>/dev/null) || true
     printf "\033[32mВсё остановлено.\033[0m\n"
@@ -217,7 +218,22 @@ printf "\033[1m▶ gatewaysvc (Go)  HTTP :8096...\033[0m\n"
 ) &
 GATEWAY_PID=$!
 
-# 10. Vite (--host 0.0.0.0 — слушаем все интерфейсы, чтобы фронт открывался
+# 10. Go-микросервис пуш-уведомлений pushsvc (HTTP :8097 — регистрация
+#     токенов устройств; подписан на gw2:*:events, шлёт FCM офлайн-получателям).
+#     Без FIREBASE_CREDENTIALS_JSON отправка отключена — для dev это норма.
+printf "\033[1m▶ pushsvc (Go)  HTTP :8097...\033[0m\n"
+(
+  cd "$ROOT/back-go/push" && \
+  DATABASE_URL="postgresql://grovework:grovework_local@localhost:5432/grovework" \
+  REDIS_URL="redis://localhost:6379/0" \
+  PASETO_PUBLIC_KEY="$PASETO_PUBLIC_KEY_DEV" \
+  FIREBASE_CREDENTIALS_JSON="${FIREBASE_CREDENTIALS_JSON:-}" \
+  HTTP_ADDR=":8097" \
+  exec go run ./cmd/pushsvc
+) &
+PUSH_PID=$!
+
+# 11. Vite (--host 0.0.0.0 — слушаем все интерфейсы, чтобы фронт открывался
 #     с других устройств сети по http://<IP>:5173).
 printf "\033[1m▶ Vite  :5173...\033[0m\n"
 ( cd "$FRONT" && exec npm run dev -- --host 0.0.0.0 ) &
@@ -239,6 +255,7 @@ printf "  Auth:    \033[4mhttp://localhost:8091/api/auth\033[0m\n"
 printf "  Чаты:    \033[4mhttp://localhost:8092/api/messenger\033[0m (gRPC :9092)\n"
 printf "  Groove:  \033[4mhttp://localhost:8094/api/groove\033[0m (gRPC :9094)\n"
 printf "  Задачи:  \033[4mhttp://localhost:8095/api/tasks\033[0m\n"
-printf "  ИИ:      \033[4mhttp://localhost:8093\033[0m (gRPC :9093)\n\n"
+printf "  ИИ:      \033[4mhttp://localhost:8093\033[0m (gRPC :9093)\n"
+printf "  Пуши:    \033[4mhttp://localhost:8097/api/push\033[0m\n\n"
 
 wait
