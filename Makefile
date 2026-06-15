@@ -34,7 +34,8 @@ help:
 	@printf "  make dev-stack-stop  Остановить полный стек\n"
 	@printf "  make gen-proto    Перегенерировать gRPC-стабы (Go + Python)\n"
 	@printf "\n\033[1mДеплой (сервер):\033[0m\n"
-	@printf "  make push [only=\"gateway front\"]  Собрать (linux/amd64) и запушить образы в Docker Hub\n"
+	@printf "  make push [only=\"gateway front\"]  Собрать (linux/amd64) и запушить изменившиеся образы\n"
+	@printf "  make push-all     Принудительно пересобрать и запушить ВСЕ образы\n"
 	@printf "  make deploy       make push → git push → на сервере: compose pull + up --no-build\n"
 	@printf "  make deploy-only  То же без сборки/пуша образов (push уже сделан)\n"
 	@printf "  make deploy-apk   Залить apps/groovework.apk и apps/version.json на сервер\n"
@@ -203,7 +204,7 @@ dev-stack-stop:
 	@printf "\033[32m✓ Полный стек остановлен\033[0m\n"
 
 # ── Деплой ───────────────────────────────────────────────────────
-.PHONY: push deploy deploy-only deploy-apk logs status restart shell
+.PHONY: push push-all deploy deploy-only deploy-apk logs status restart shell
 
 # Прод-стек = база + оверлей (см. шапку deploy/docker-compose.prod.yml).
 COMPOSE_PROD := docker compose -f docker-compose.yml -f docker-compose.prod.yml
@@ -216,9 +217,14 @@ s ?= gateway
 # По умолчанию (и в `make deploy`) пушит ТОЛЬКО изменившиеся образы
 # (git diff origin/main..рабочее дерево; back-go/pkg/* → все Go-сервисы).
 # Выборочно:    make push only="gateway front"
-# Принудительно всё: make push only="migrate gateway calls auth messenger ai groove tasks front"
+# Принудительно всё (игнорируя git-дифф): make push-all
 push:
 	bash scripts/build_push.sh $(if $(strip $(only)),$(only),--changed)
+
+# Принудительная пересборка и push ВСЕХ образов, без оглядки на git-дифф.
+# Без аргументов build_push.sh берёт весь ALL_SERVICES (единый список в скрипте).
+push-all:
+	bash scripts/build_push.sh
 
 deploy: push deploy-only
 

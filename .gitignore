@@ -46,3 +46,4 @@ backups/
 
 # Logs
 *.log
+./apps/groovework.apk
