@@ -13,3 +13,8 @@
 .externalNativeBuild
 .cxx
 local.properties
+
+# Релизная подпись (секреты — не коммитим; шаблон keystore.properties.example)
+keystore.properties
+*.jks
+*.keystore

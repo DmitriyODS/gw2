@@ -38,6 +38,7 @@ help:
 	@printf "  make push-all     Принудительно пересобрать и запушить ВСЕ образы\n"
 	@printf "  make deploy       make push → git push → на сервере: compose pull + up --no-build\n"
 	@printf "  make deploy-only  То же без сборки/пуша образов (push уже сделан)\n"
+	@printf "  make apk          Собрать подписанный release-APK → apps/groovework.apk\n"
 	@printf "  make deploy-apk   Залить apps/groovework.apk и apps/version.json на сервер\n"
 	@printf "  make logs [s=calls]     Логи контейнера (по умолчанию gateway)\n"
 	@printf "  make status       docker compose ps на сервере\n"
@@ -204,7 +205,7 @@ dev-stack-stop:
 	@printf "\033[32m✓ Полный стек остановлен\033[0m\n"
 
 # ── Деплой ───────────────────────────────────────────────────────
-.PHONY: push push-all deploy deploy-only deploy-apk logs status restart shell
+.PHONY: push push-all deploy deploy-only apk deploy-apk logs status restart shell
 
 # Прод-стек = база + оверлей (см. шапку deploy/docker-compose.prod.yml).
 COMPOSE_PROD := docker compose -f docker-compose.yml -f docker-compose.prod.yml
@@ -240,6 +241,21 @@ deploy-only:
 	@# up --no-build --remove-orphans, reload nginx, health-чеки.
 	$(SSH) "cd $(SERVER_DIR) && git fetch origin && git reset --hard origin/main && bash scripts/deploy_server.sh"
 	@printf "\033[32m✓ Задеплоено на $(SERVER_HOST)\033[0m\n"
+
+# Сборка подписанного release-APK и копирование в apps/groovework.apk (готов к
+# make deploy-apk). Подпись берётся из GrooveWorkAndroid/keystore.properties
+# (см. keystore.properties.example) — без него APK будет без подписи и не встанет
+# поверх установленного. Номер сборки (versionCode) Gradle читает из
+# apps/version.json — обнови current_build перед релизом.
+ANDROID_DIR := GrooveWorkAndroid
+apk:
+	@if [ ! -f $(ANDROID_DIR)/keystore.properties ]; then \
+		printf "\033[31m✗ Нет $(ANDROID_DIR)/keystore.properties — создай ключ и заполни (см. keystore.properties.example)\033[0m\n"; exit 2; fi
+	@printf "\033[1m▶ Собираю подписанный release-APK...\033[0m\n"
+	cd $(ANDROID_DIR) && ./gradlew assembleRelease
+	@mkdir -p apps
+	cp $(ANDROID_DIR)/app/build/outputs/apk/release/app-release.apk apps/groovework.apk
+	@printf "\033[32m✓ Готово: apps/groovework.apk — выложить: make deploy-apk\033[0m\n"
 
 # Публикация мобильного приложения: заливаем APK и version.json из локального
 # каталога apps/ в apps/ репозитория на сервере (его монтирует nginx в /apps/,

@@ -1,4 +1,6 @@
 import java.io.File
+import java.io.FileInputStream
+import java.util.Properties
 
 plugins {
     alias(libs.plugins.android.application)
@@ -15,6 +17,15 @@ plugins {
 val appBuildNumber: Int = run {
     val raw = runCatching { File(rootProject.projectDir, "../apps/version.json").readText() }.getOrNull()
     raw?.let { Regex("\"current_build\"\\s*:\\s*(\\d+)").find(it)?.groupValues?.get(1)?.toIntOrNull() } ?: 1
+}
+
+// Подпись релиза: секреты лежат в keystore.properties (в .gitignore, шаблон —
+// keystore.properties.example). Без файла release собирается без подписи, а
+// debug-сборка ключа не требует. ВАЖНО: ключ один на все релизы — Android
+// обновит установленное приложение только APK с той же подписью.
+val keystorePropsFile = rootProject.file("keystore.properties")
+val keystoreProps = Properties().apply {
+    if (keystorePropsFile.exists()) FileInputStream(keystorePropsFile).use { load(it) }
 }
 
 android {
@@ -35,10 +46,24 @@ android {
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
+    signingConfigs {
+        if (keystorePropsFile.exists()) {
+            create("release") {
+                storeFile = rootProject.file(keystoreProps.getProperty("storeFile"))
+                storePassword = keystoreProps.getProperty("storePassword")
+                keyAlias = keystoreProps.getProperty("keyAlias")
+                keyPassword = keystoreProps.getProperty("keyPassword")
+            }
+        }
+    }
+
     buildTypes {
         release {
             optimization {
                 enable = false
+            }
+            if (keystorePropsFile.exists()) {
+                signingConfig = signingConfigs.getByName("release")
             }
         }
     }
