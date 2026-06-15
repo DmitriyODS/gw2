@@ -3,12 +3,12 @@ package com.kodass.groovework
 import android.app.Application
 import com.kodass.groovework.data.api.AuthApi
 import com.kodass.groovework.data.api.CallsApi
-import com.kodass.groovework.data.calls.CallManager
+import com.kodass.groovework.calls.CallController
 import com.kodass.groovework.data.api.MessengerApi
 import com.kodass.groovework.data.api.MetaApi
 import com.kodass.groovework.data.api.PushApi
 import com.kodass.groovework.data.api.TasksApi
-import com.kodass.groovework.data.calls.CallPhase
+import com.kodass.groovework.calls.CallState
 import com.kodass.groovework.data.session.AuthState
 import com.kodass.groovework.notifications.PushTokenManager
 import com.kodass.groovework.data.network.AuthHeaderInterceptor
@@ -109,7 +109,7 @@ class AppContainer(app: Application) {
 
     val notifier = Notifier(app)
     val notificationCenter = NotificationCenter(notifier, gateway, messengerRepo, sessionManager, json, appScope)
-    val callManager = CallManager(app, gateway, sessionManager, json, notifier, callsApi, appScope)
+    val callController = CallController(app, gateway, sessionManager, json, callsApi, appScope)
     val unitManager = com.kodass.groovework.data.units.UnitManager(
         unitsRepo, sessionManager, gateway, json, notifier, appScope,
     )
@@ -137,10 +137,10 @@ class AppContainer(app: Application) {
         appScope.launch {
             combine(
                 notificationCenter.appForeground,
-                callManager.phase,
+                callController.ui,
                 sessionManager.authState,
-            ) { foreground, phase, auth ->
-                auth is AuthState.LoggedIn && (foreground || phase != CallPhase.Idle)
+            ) { foreground, ui, auth ->
+                auth is AuthState.LoggedIn && (foreground || ui.state != CallState.Idle)
             }.distinctUntilChanged().collect { shouldRun ->
                 if (shouldRun) gateway.start() else gateway.stop()
             }

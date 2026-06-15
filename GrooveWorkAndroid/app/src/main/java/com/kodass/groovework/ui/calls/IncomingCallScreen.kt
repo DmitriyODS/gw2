@@ -1,8 +1,5 @@
 package com.kodass.groovework.ui.calls
 
-import android.Manifest
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -14,31 +11,30 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Call
 import androidx.compose.material.icons.filled.CallEnd
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.kodass.groovework.AppContainer
-import com.kodass.groovework.data.calls.CallPhase
-import com.kodass.groovework.data.calls.PendingAnswer
-import com.kodass.groovework.ui.common.UserAvatar
+import com.kodass.groovework.calls.CallDirection
+import com.kodass.groovework.calls.CallState
 
+// Экран входящего звонка (поверх локскрина). Аватар+имя звонящего, приём/отклон.
 @Composable
 fun IncomingCallScreen(container: AppContainer) {
-    val manager = container.callManager
-    val phase by manager.phase.collectAsStateWithLifecycle()
-    val call = (phase as? CallPhase.Incoming)?.call ?: return
-    val video = call.media == "video"
-    val initiator = call.participants.firstOrNull { it.userId == call.initiatorId }
+    val controller = container.callController
+    val ui by controller.ui.collectAsStateWithLifecycle()
+    val state = ui.state as? CallState.Ringing ?: return
+    if (state.direction != CallDirection.Incoming) return
+    val call = state.call
+    val party = controller.peer
 
     Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.surfaceContainerLowest) {
         Column(
@@ -50,19 +46,19 @@ fun IncomingCallScreen(container: AppContainer) {
                 verticalArrangement = Arrangement.Center,
                 modifier = Modifier.weight(1f),
             ) {
-                UserAvatar(
-                    userId = initiator?.userId,
-                    name = call.initiatorFio,
-                    avatarPath = initiator?.avatarPath,
+                com.kodass.groovework.ui.common.UserAvatar(
+                    userId = party?.userId,
+                    name = party?.fio ?: call.initiatorFio,
+                    avatarPath = party?.avatarPath,
                     size = 120.dp,
                 )
                 Text(
-                    text = call.initiatorFio ?: "Входящий звонок",
+                    text = party?.fio ?: call.initiatorFio ?: "Входящий звонок",
                     style = MaterialTheme.typography.headlineSmall,
                     modifier = Modifier.padding(top = 20.dp),
                 )
                 Text(
-                    text = if (video) "Входящий видеозвонок" else "Входящий звонок",
+                    text = if (state.video) "Входящий видеозвонок" else "Входящий звонок",
                     style = MaterialTheme.typography.bodyLarge,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(top = 6.dp),
@@ -70,13 +66,10 @@ fun IncomingCallScreen(container: AppContainer) {
             }
             Row(
                 horizontalArrangement = Arrangement.SpaceEvenly,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .navigationBarsPadding()
-                    .padding(bottom = 32.dp),
+                modifier = Modifier.fillMaxWidth().navigationBarsPadding().padding(bottom = 32.dp),
             ) {
                 FloatingActionButton(
-                    onClick = { manager.declineFromNotification(call.id) },
+                    onClick = { controller.declineFromNotification(call.id) },
                     containerColor = MaterialTheme.colorScheme.error,
                     contentColor = MaterialTheme.colorScheme.onError,
                     modifier = Modifier.size(72.dp),
@@ -84,7 +77,7 @@ fun IncomingCallScreen(container: AppContainer) {
                     Icon(Icons.Filled.CallEnd, contentDescription = "Отклонить", modifier = Modifier.size(32.dp))
                 }
                 FloatingActionButton(
-                    onClick = { manager.requestAnswer(call.id, video, call.initiatorFio) },
+                    onClick = { controller.requestAnswer(call.id, state.video, call.initiatorFio) },
                     containerColor = MaterialTheme.colorScheme.primary,
                     contentColor = MaterialTheme.colorScheme.onPrimary,
                     modifier = Modifier.size(72.dp),
@@ -92,57 +85,6 @@ fun IncomingCallScreen(container: AppContainer) {
                     Icon(Icons.Filled.Call, contentDescription = "Принять", modifier = Modifier.size(32.dp))
                 }
             }
-        }
-    }
-}
-
-// Шлюз ответа на звонок: спрашивает доступ к микрофону/камере и вызывает
-// answerCall. Работает в любой фазе — в том числе когда звонок поднят пушем из
-// убитого приложения и экрана входящего ещё нет.
-@Composable
-fun AnswerCallGate(container: AppContainer, pending: PendingAnswer) {
-    val manager = container.callManager
-    val permissions = if (pending.video) {
-        arrayOf(Manifest.permission.RECORD_AUDIO, Manifest.permission.CAMERA)
-    } else {
-        arrayOf(Manifest.permission.RECORD_AUDIO)
-    }
-    val launcher = rememberLauncherForActivityResult(
-        ActivityResultContracts.RequestMultiplePermissions()
-    ) { result ->
-        if (result[Manifest.permission.RECORD_AUDIO] == true) {
-            manager.answerCall(
-                callId = pending.callId,
-                video = pending.video && result[Manifest.permission.CAMERA] == true,
-                fio = pending.fio,
-            )
-        } else {
-            // Без микрофона отвечать нельзя — отклоняем и гасим уведомление.
-            manager.declineFromNotification(pending.callId)
-        }
-        manager.pendingAnswer.value = null
-    }
-    LaunchedEffect(pending.callId) { launcher.launch(permissions) }
-
-    Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.surfaceContainerLowest) {
-        Column(
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.Center,
-            modifier = Modifier.fillMaxSize().padding(24.dp),
-        ) {
-            UserAvatar(userId = null, name = pending.fio, avatarPath = null, size = 120.dp)
-            Text(
-                text = pending.fio ?: "Звонок",
-                style = MaterialTheme.typography.headlineSmall,
-                modifier = Modifier.padding(top = 20.dp),
-            )
-            CircularProgressIndicator(modifier = Modifier.padding(top = 24.dp))
-            Text(
-                text = "Соединение…",
-                style = MaterialTheme.typography.bodyLarge,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(top = 16.dp),
-            )
         }
     }
 }

@@ -23,8 +23,10 @@ class PushMessagingService : FirebaseMessagingService() {
         when (data["type"]) {
             "call" -> {
                 // Пуш звонка приходит data-only high-priority (приложение в
-                // фоне/убито). Поднимаем «звонилку» немедленно — в окне после
-                // high-FCM разрешён старт foreground-сервиса звонка из фона.
+                // фоне/убито). Поднимаем «звонилку» немедленно: контроллер сам
+                // пробует foreground-сервис и при отказе (Doze/понижен приоритет)
+                // показывает full-screen уведомление напрямую — решение по
+                // фактическому результату старта, не по объявленному приоритету.
                 val callId = data["call_id"]?.toLongOrNull() ?: return
                 val call = CallDto(
                     id = callId,
@@ -32,15 +34,7 @@ class PushMessagingService : FirebaseMessagingService() {
                     initiatorId = data["caller_id"]?.toLongOrNull() ?: 0,
                     initiatorFio = data["caller"] ?: body.ifBlank { null },
                 )
-                val callManager = (application as GrooveApp).container.callManager
-                // FCM мог понизить приоритет (Doze/квоты) — тогда старт FGS из фона
-                // кинул бы ForegroundServiceStartNotAllowedException; показываем
-                // full-screen уведомление напрямую, без сервиса.
-                if (message.priority == RemoteMessage.PRIORITY_HIGH) {
-                    callManager.onIncomingFromPush(call)
-                } else {
-                    callManager.onIncomingFromPushNoFgs(call)
-                }
+                (application as GrooveApp).container.callController.onIncomingFromPush(call)
             }
             "message" -> {
                 val conversationId = data["conversation_id"]?.toLongOrNull() ?: return

@@ -13,11 +13,8 @@ import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.app.Person
 import androidx.core.content.ContextCompat
-import com.kodass.groovework.CallActivity
 import com.kodass.groovework.MainActivity
 import com.kodass.groovework.R
-import com.kodass.groovework.data.dto.CallDto
-import com.kodass.groovework.service.CallActionReceiver
 
 // Каналы и построение всех уведомлений приложения.
 class Notifier(private val context: Context) {
@@ -57,7 +54,7 @@ class Notifier(private val context: Context) {
             }
         )
         nm.createNotificationChannel(
-            // Без звука/вибрации канала: рингтон и вибрацию ведёт CallManager.Ringer,
+            // Без звука/вибрации канала: рингтон и вибрацию ведёт IncomingRinger,
             // пока идёт ринг-фаза. Канал HIGH — для full-screen intent.
             NotificationChannel(CHANNEL_CALLS_INCOMING, "Входящие звонки", NotificationManager.IMPORTANCE_HIGH).apply {
                 description = "Входящие звонки"
@@ -95,8 +92,9 @@ class Notifier(private val context: Context) {
             PackageManager.PERMISSION_GRANTED
 
     // Android 14+: full-screen intent звонка может быть не разрешён. Без него
-    // «звонилка» всё равно звучит и вибрирует (CallManager), но экран звонка
-    // поверх локскрина не развернётся автоматически.
+    // «звонилка» всё равно звучит и вибрирует (IncomingRinger), но экран звонка
+    // поверх локскрина не развернётся автоматически. Используется MainScreen для
+    // разового онбординга разрешения.
     fun canUseFullScreenIntent(): Boolean {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.UPSIDE_DOWN_CAKE) return true
         return context.getSystemService(NotificationManager::class.java).canUseFullScreenIntent()
@@ -150,121 +148,8 @@ class Notifier(private val context: Context) {
         manager.notify(TASK_BASE + (taskId % 100_000).toInt(), notification)
     }
 
-    fun showMissedCall(fio: String) {
-        if (!canPost()) return
-        val notification = NotificationCompat.Builder(context, CHANNEL_CALLS_INCOMING)
-            .setSmallIcon(R.drawable.ic_launcher_monochrome)
-            .setContentTitle("Пропущенный звонок")
-            .setContentText(fio)
-            .setCategory(NotificationCompat.CATEGORY_MISSED_CALL)
-            .setAutoCancel(true)
-            .setContentIntent(routeIntent("chats"))
-            .build()
-        manager.notify((System.currentTimeMillis() % 100_000).toInt() + 10_000, notification)
-    }
-
-    // Уведомление входящего звонка (его постит CallService через startForeground):
-    // CallStyle + full-screen intent на CallActivity (поверх локскрина).
-    fun buildIncomingCallNotification(call: CallDto): Notification {
-        val fio = call.initiatorFio ?: "Входящий звонок"
-        val video = call.media == "video"
-        val person = Person.Builder().setName(fio).setImportant(true).build()
-        val declineIntent = PendingIntent.getBroadcast(
-            context,
-            1,
-            Intent(context, CallActionReceiver::class.java)
-                .setAction(CallActionReceiver.ACTION_DECLINE)
-                .putExtra("call_id", call.id),
-            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
-        )
-        val answerIntent = PendingIntent.getActivity(
-            context,
-            2,
-            Intent(context, CallActivity::class.java).apply {
-                putExtra("answer_call_id", call.id)
-                putExtra("answer_call_video", video)
-                putExtra("answer_call_fio", fio)
-                flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP
-            },
-            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
-        )
-        val fullScreenIntent = PendingIntent.getActivity(
-            context,
-            3,
-            Intent(context, CallActivity::class.java).apply {
-                putExtra("open_call", true)
-                flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP
-            },
-            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
-        )
-        return NotificationCompat.Builder(context, CHANNEL_CALLS_INCOMING)
-            .setSmallIcon(R.drawable.ic_launcher_monochrome)
-            .setStyle(NotificationCompat.CallStyle.forIncomingCall(person, declineIntent, answerIntent))
-            .setContentText(if (video) "Входящий видеозвонок" else "Входящий звонок")
-            .setCategory(NotificationCompat.CATEGORY_CALL)
-            .setOngoing(true)
-            .setFullScreenIntent(fullScreenIntent, true)
-            .build()
-    }
-
-    // «Виджет звонка» в шторке, пока приложение свёрнуто (тихий канал, без heads-up).
-    fun buildOngoingCallNotification(peerName: String, video: Boolean): Notification {
-        val person = Person.Builder().setName(peerName).setImportant(true).build()
-        val hangupIntent = PendingIntent.getBroadcast(
-            context,
-            4,
-            Intent(context, CallActionReceiver::class.java).setAction(CallActionReceiver.ACTION_HANGUP),
-            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
-        )
-        return NotificationCompat.Builder(context, CHANNEL_CALLS_ONGOING)
-            .setSmallIcon(R.drawable.ic_launcher_monochrome)
-            .setStyle(NotificationCompat.CallStyle.forOngoingCall(person, hangupIntent))
-            .setContentText(if (video) "Видеозвонок" else "Звонок")
-            .setCategory(NotificationCompat.CATEGORY_CALL)
-            .setOngoing(true)
-            .setOnlyAlertOnce(true)
-            .setUsesChronometer(true)
-            .setWhen(System.currentTimeMillis())
-            .setContentIntent(
-                PendingIntent.getActivity(
-                    context,
-                    5,
-                    Intent(context, CallActivity::class.java).apply {
-                        putExtra("open_call", true)
-                        flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP
-                    },
-                    PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
-                )
-            )
-            .build()
-    }
-
-    // Показать входящий напрямую (без foreground-сервиса) — запасной путь, когда
-    // FCM понизил приоритет пуша и старт FGS из фона запрещён. Full-screen intent
-    // на CallActivity внутри уведомления остаётся (поверх локскрина).
-    fun showIncomingCallStandalone(call: CallDto) {
-        if (!canPost()) return
-        manager.notify(NOTIF_ID_INCOMING, buildIncomingCallNotification(call))
-    }
-
-    // Заглушка-уведомление: нужна только чтобы удовлетворить контракт FGS
-    // (startForeground обязателен после startForegroundService) в гонке, когда
-    // звонок уже завершился до старта сервиса. Сразу снимается.
-    fun buildPlaceholderCallNotification(): Notification =
-        NotificationCompat.Builder(context, CHANNEL_CALLS_ONGOING)
-            .setSmallIcon(R.drawable.ic_launcher_monochrome)
-            .setContentTitle("Звонок")
-            .setOngoing(false)
-            .build()
-
-    fun cancelIncoming() {
-        manager.cancel(NOTIF_ID_INCOMING)
-    }
-
-    fun cancelCall() {
-        manager.cancel(NOTIF_ID_INCOMING)
-        manager.cancel(NOTIF_ID_ONGOING)
-    }
+    // Уведомления звонка (входящий/активный/пропущенный) строит CallNotifications
+    // в пакете calls; здесь — только каналы (createChannels) и проверка FSI.
 
     // Ongoing-уведомление текущего юнита: отсчёт времени (хронометр от старта) +
     // кнопка «Завершить» и переход в модалку юнита по тапу.

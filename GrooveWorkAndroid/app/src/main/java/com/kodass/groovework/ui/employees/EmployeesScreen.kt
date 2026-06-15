@@ -145,7 +145,7 @@ fun EmployeesScreen(container: AppContainer, onOpenChat: (Long) -> Unit) {
         pendingCall = null
         val micOk = result[Manifest.permission.RECORD_AUDIO] == true
         val camOk = !video || result[Manifest.permission.CAMERA] == true
-        if (micOk && camOk) container.callManager.startCall(uid, video)
+        if (micOk && camOk) container.callController.startCall(uid, video)
     }
     val requestCall: (Long, Boolean) -> Unit = { uid, video ->
         pendingCall = uid to video

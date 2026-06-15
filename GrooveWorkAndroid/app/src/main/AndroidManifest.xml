@@ -82,13 +82,13 @@
 
         <!-- Активный звонок: микрофон/камера при свёрнутом приложении. -->
         <service
-            android:name=".service.CallService"
+            android:name=".calls.CallForegroundService"
             android:exported="false"
             android:foregroundServiceType="phoneCall|microphone|camera" />
 
         <!-- Кнопки уведомления звонка (отклонить/завершить). -->
         <receiver
-            android:name=".service.CallActionReceiver"
+            android:name=".calls.CallActionReceiver"
             android:exported="false" />
 
         <!-- Кнопка «Завершить» уведомления текущего юнита. -->

@@ -7,7 +7,6 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
@@ -16,6 +15,8 @@ import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.VolumeOff
+import androidx.compose.material.icons.automirrored.filled.VolumeUp
 import androidx.compose.material.icons.filled.CallEnd
 import androidx.compose.material.icons.filled.Cameraswitch
 import androidx.compose.material.icons.filled.KeyboardArrowDown
@@ -23,8 +24,6 @@ import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.MicOff
 import androidx.compose.material.icons.filled.Videocam
 import androidx.compose.material.icons.filled.VideocamOff
-import androidx.compose.material.icons.automirrored.filled.VolumeUp
-import androidx.compose.material.icons.automirrored.filled.VolumeOff
 import androidx.compose.material3.FilledIconButton
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
@@ -43,35 +42,31 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.kodass.groovework.AppContainer
-import com.kodass.groovework.data.calls.CallPhase
+import com.kodass.groovework.calls.CallConnection
+import com.kodass.groovework.calls.CallState
 import com.kodass.groovework.ui.common.UserAvatar
 import kotlinx.coroutines.delay
 
+// Экран исходящего/активного звонка (поверх локскрина). Фазы:
+//  Звонок… (Dialing/Ringing-Outgoing) → Соединение… (Connecting) → таймер (Active).
 @Composable
-fun CallScreen(container: AppContainer) {
-    val manager = container.callManager
-    val phase by manager.phase.collectAsStateWithLifecycle()
-    val call = when (val p = phase) {
-        is CallPhase.Outgoing -> p.call
-        is CallPhase.Active -> p.call
-        else -> return
-    }
-    val isOutgoing = phase is CallPhase.Outgoing
-    val peer = manager.peer
-    val micEnabled by manager.micEnabled.collectAsStateWithLifecycle()
-    val cameraEnabled by manager.cameraEnabled.collectAsStateWithLifecycle()
-    val speakerOn by manager.speakerOn.collectAsStateWithLifecycle()
-    val localTrack by manager.localVideoTrack.collectAsStateWithLifecycle()
-    val remoteTracks by manager.remoteVideoTracks.collectAsStateWithLifecycle()
-    val activeSince by manager.activeSince.collectAsStateWithLifecycle()
-    val roomState by manager.room.collectAsStateWithLifecycle()
-    val room = roomState // плоский val — иначе нет smart-cast у делегата при room != null
+fun OngoingCallScreen(container: AppContainer) {
+    val controller = container.callController
+    val ui by controller.ui.collectAsStateWithLifecycle()
+    val room by controller.room.collectAsStateWithLifecycle()
+    val state = ui.state
+    val media = ui.media
+    val call = state.call
+    if (state is CallState.Idle) return
+    val party = controller.peer
 
-    // Таймер длительности: бежит только когда activeSince выставлен — а он
-    // выставляется на первом аудио собеседника, не раньше (иначе секунды шли в тишине).
+    // Таймер длительности: бежит только в Active (activeSinceMs выставлен на первом
+    // аудио собеседника, не раньше — иначе секунды шли бы в тишине «Соединения»).
+    val activeSince = (state as? CallState.Active)?.activeSinceMs
     var duration by remember { mutableLongStateOf(0L) }
     LaunchedEffect(activeSince) {
         while (true) {
@@ -80,26 +75,28 @@ fun CallScreen(container: AppContainer) {
         }
     }
 
-    // Какое видео на весь экран: true — собеседника, false — своё (тап по PiP меняет).
+    val statusText = when {
+        state is CallState.Dialing || state is CallState.Ringing -> "Звонок…"
+        state is CallState.Connecting -> "Соединение…"
+        media.paused -> "На паузе"
+        media.connection == CallConnection.Reconnecting -> "Соединение…"
+        state is CallState.Active -> formatDuration(duration)
+        else -> ""
+    }
+
+    // Видео: основное на весь экран, второе — в углу (PiP); тап меняет местами.
     var primaryIsRemote by remember { mutableStateOf(true) }
-    val remoteTrack = remoteTracks.values.firstOrNull()
-    val localVideo = if (cameraEnabled) localTrack else null
+    val remoteTrack = media.remoteVideo
+    val localVideo = if (media.cameraEnabled) media.localVideo else null
     val hasBoth = remoteTrack != null && localVideo != null
-    // Если своего видео нет — основным всегда идёт собеседник.
     val primaryRemote = primaryIsRemote || localVideo == null
     val primaryTrack = if (primaryRemote) remoteTrack else localVideo
     val pipTrack = if (hasBoth) (if (primaryRemote) localVideo else remoteTrack) else null
 
     Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.surfaceContainerLowest) {
         Box(modifier = Modifier.fillMaxSize()) {
-            // Основное видео на весь экран, иначе — аватар и имя.
             if (primaryTrack != null && room != null) {
-                CallVideo(
-                    room = room,
-                    track = primaryTrack,
-                    mirror = !primaryRemote,
-                    modifier = Modifier.fillMaxSize(),
-                )
+                CallVideo(room = room!!, track = primaryTrack, mirror = !primaryRemote, modifier = Modifier.fillMaxSize())
             } else {
                 Column(
                     horizontalAlignment = Alignment.CenterHorizontally,
@@ -107,22 +104,18 @@ fun CallScreen(container: AppContainer) {
                     modifier = Modifier.fillMaxSize(),
                 ) {
                     UserAvatar(
-                        userId = peer?.userId,
-                        name = peer?.fio,
-                        avatarPath = peer?.avatarPath,
+                        userId = party?.userId,
+                        name = party?.fio ?: call?.initiatorFio,
+                        avatarPath = party?.avatarPath,
                         size = 110.dp,
                     )
                     Text(
-                        text = peer?.fio ?: "Звонок",
+                        text = party?.fio ?: call?.initiatorFio ?: "Звонок",
                         style = MaterialTheme.typography.headlineSmall,
                         modifier = Modifier.padding(top = 16.dp),
                     )
                     Text(
-                        text = when {
-                            isOutgoing -> "Звоним…"
-                            activeSince == null -> "Соединение…"
-                            else -> formatDuration(duration)
-                        },
+                        text = statusText,
                         style = MaterialTheme.typography.bodyLarge,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.padding(top = 6.dp),
@@ -130,14 +123,12 @@ fun CallScreen(container: AppContainer) {
                 }
             }
 
-            // Шапка: свернуть + имя/таймер поверх видео.
+            // Шапка: свернуть + имя/статус поверх видео.
             Row(
                 verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier
-                    .statusBarsPadding()
-                    .padding(8.dp),
+                modifier = Modifier.statusBarsPadding().padding(8.dp),
             ) {
-                IconButton(onClick = { manager.callUiVisible.value = false }) {
+                IconButton(onClick = { controller.callUiVisible.value = false }) {
                     Icon(
                         Icons.Filled.KeyboardArrowDown,
                         contentDescription = "Свернуть",
@@ -146,13 +137,9 @@ fun CallScreen(container: AppContainer) {
                 }
                 if (primaryTrack != null) {
                     Column(modifier = Modifier.padding(start = 4.dp)) {
-                        Text(text = peer?.fio ?: "", style = MaterialTheme.typography.titleMedium)
+                        Text(text = party?.fio ?: "", style = MaterialTheme.typography.titleMedium)
                         Text(
-                            text = when {
-                                isOutgoing -> "Звоним…"
-                                activeSince == null -> "Соединение…"
-                                else -> formatDuration(duration)
-                            },
+                            text = statusText,
                             style = MaterialTheme.typography.labelMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
@@ -160,7 +147,6 @@ fun CallScreen(container: AppContainer) {
                 }
             }
 
-            // Превью второго видео в углу: тап меняет, какое видео на весь экран.
             if (pipTrack != null && room != null) {
                 Box(
                     modifier = Modifier
@@ -173,12 +159,7 @@ fun CallScreen(container: AppContainer) {
                         .background(MaterialTheme.colorScheme.surfaceContainerHigh)
                         .clickable { primaryIsRemote = !primaryIsRemote },
                 ) {
-                    CallVideo(
-                        room = room,
-                        track = pipTrack,
-                        mirror = primaryRemote,
-                        modifier = Modifier.fillMaxSize(),
-                    )
+                    CallVideo(room = room!!, track = pipTrack, mirror = primaryRemote, modifier = Modifier.fillMaxSize())
                 }
             }
 
@@ -186,10 +167,7 @@ fun CallScreen(container: AppContainer) {
             Surface(
                 color = MaterialTheme.colorScheme.surfaceContainer.copy(alpha = 0.92f),
                 shape = RoundedCornerShape(28.dp),
-                modifier = Modifier
-                    .align(Alignment.BottomCenter)
-                    .navigationBarsPadding()
-                    .padding(bottom = 24.dp),
+                modifier = Modifier.align(Alignment.BottomCenter).navigationBarsPadding().padding(bottom = 24.dp),
             ) {
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
@@ -197,33 +175,33 @@ fun CallScreen(container: AppContainer) {
                     modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp),
                 ) {
                     ControlButton(
-                        icon = if (micEnabled) Icons.Filled.Mic else Icons.Filled.MicOff,
-                        active = micEnabled,
+                        icon = if (media.micEnabled) Icons.Filled.Mic else Icons.Filled.MicOff,
+                        active = media.micEnabled,
                         contentDescription = "Микрофон",
-                        onClick = { manager.toggleMic() },
+                        onClick = { controller.toggleMic() },
                     )
                     ControlButton(
-                        icon = if (cameraEnabled) Icons.Filled.Videocam else Icons.Filled.VideocamOff,
-                        active = cameraEnabled,
+                        icon = if (media.cameraEnabled) Icons.Filled.Videocam else Icons.Filled.VideocamOff,
+                        active = media.cameraEnabled,
                         contentDescription = "Камера",
-                        onClick = { manager.toggleCamera() },
+                        onClick = { controller.toggleCamera() },
                     )
-                    if (cameraEnabled) {
+                    if (media.cameraEnabled) {
                         ControlButton(
                             icon = Icons.Filled.Cameraswitch,
                             active = true,
                             contentDescription = "Сменить камеру",
-                            onClick = { manager.flipCamera() },
+                            onClick = { controller.flipCamera() },
                         )
                     }
                     ControlButton(
-                        icon = if (speakerOn) Icons.AutoMirrored.Filled.VolumeUp else Icons.AutoMirrored.Filled.VolumeOff,
-                        active = speakerOn,
+                        icon = if (media.speakerOn) Icons.AutoMirrored.Filled.VolumeUp else Icons.AutoMirrored.Filled.VolumeOff,
+                        active = media.speakerOn,
                         contentDescription = "Динамик",
-                        onClick = { manager.setSpeaker(!speakerOn) },
+                        onClick = { controller.setSpeaker(!media.speakerOn) },
                     )
                     FloatingActionButton(
-                        onClick = { manager.hangup() },
+                        onClick = { controller.hangup() },
                         containerColor = MaterialTheme.colorScheme.error,
                         contentColor = MaterialTheme.colorScheme.onError,
                         modifier = Modifier.size(56.dp),
@@ -238,7 +216,7 @@ fun CallScreen(container: AppContainer) {
 
 @Composable
 private fun ControlButton(
-    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    icon: ImageVector,
     active: Boolean,
     contentDescription: String,
     onClick: () -> Unit,

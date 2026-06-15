@@ -35,7 +35,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.kodass.groovework.AppContainer
 import com.kodass.groovework.R
-import com.kodass.groovework.data.calls.CallPhase
+import com.kodass.groovework.calls.CallDirection
+import com.kodass.groovework.calls.CallState
 import com.kodass.groovework.data.session.AuthState
 import com.kodass.groovework.ui.login.ChangeDefaultScreen
 import com.kodass.groovework.ui.login.LoginScreen
@@ -52,7 +53,7 @@ fun AppRoot(container: AppContainer) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     LaunchedEffect(Unit) {
-        container.callManager.errors.collect { message ->
+        container.callController.errors.collect { message ->
             Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
         }
     }
@@ -77,16 +78,19 @@ fun AppRoot(container: AppContainer) {
         // Сам экран звонка живёт в отдельной CallActivity (поверх локскрина).
         // Здесь — только баннеры поверх приложения: возврат к свёрнутому звонку
         // и плашка текущего юнита (с отсчётом времени).
-        val callPhase by container.callManager.phase.collectAsStateWithLifecycle()
-        val callUiVisible by container.callManager.callUiVisible.collectAsStateWithLifecycle()
-        val callActive = callPhase is CallPhase.Outgoing || callPhase is CallPhase.Active
+        val callUi by container.callController.ui.collectAsStateWithLifecycle()
+        val callUiVisible by container.callController.callUiVisible.collectAsStateWithLifecycle()
+        val callState = callUi.state
+        val callActive = callState is CallState.Dialing || callState is CallState.Connecting ||
+            callState is CallState.Active ||
+            (callState is CallState.Ringing && callState.direction == CallDirection.Outgoing)
         val authed = authState is AuthState.LoggedIn
         Column(
             modifier = Modifier.align(Alignment.TopCenter).statusBarsPadding(),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
             if (callActive && !callUiVisible) {
-                ReturnToCallBanner(onClick = { container.callManager.showCallUi() })
+                ReturnToCallBanner(onClick = { container.callController.showCallUi() })
             }
             if (authed) {
                 com.kodass.groovework.ui.units.UnitBanner(container = container)

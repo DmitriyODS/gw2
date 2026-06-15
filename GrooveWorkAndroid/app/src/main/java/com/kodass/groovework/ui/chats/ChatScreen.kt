@@ -156,7 +156,7 @@ fun ChatScreen(
         val micOk = result[Manifest.permission.RECORD_AUDIO] == true
         val camOk = !video || result[Manifest.permission.CAMERA] == true
         if (micOk && camOk) {
-            peer?.let { container.callManager.startCall(it.id, video) }
+            peer?.let { container.callController.startCall(it.id, video) }
         }
     }
     val requestCall: (Boolean) -> Unit = { video ->
@@ -169,13 +169,8 @@ fun ChatScreen(
     val canCall = peer != null && conversation.isPetChat.not() && conversation.isDevChat.not()
 
     // Возврат/вход в живой звонок по тапу на плашке в чате.
-    val callPhase by container.callManager.phase.collectAsStateWithLifecycle()
-    val currentCallId = when (val p = callPhase) {
-        is com.kodass.groovework.data.calls.CallPhase.Active -> p.call.id
-        is com.kodass.groovework.data.calls.CallPhase.Outgoing -> p.call.id
-        is com.kodass.groovework.data.calls.CallPhase.Incoming -> p.call.id
-        else -> null
-    }
+    val callUi by container.callController.ui.collectAsStateWithLifecycle()
+    val currentCallId = callUi.state.call?.id
     var pendingJoinCall by remember { mutableStateOf<com.kodass.groovework.data.dto.CallInfoDto?>(null) }
     val joinCallPermLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
@@ -184,11 +179,11 @@ fun ChatScreen(
         pendingJoinCall = null
         val micOk = result[Manifest.permission.RECORD_AUDIO] == true
         val camOk = !call.isVideo || result[Manifest.permission.CAMERA] == true
-        if (micOk && camOk) container.callManager.returnOrJoinCall(call.id, call.isVideo)
+        if (micOk && camOk) container.callController.returnOrJoinCall(call.id, call.isVideo)
     }
     val returnToCall: (com.kodass.groovework.data.dto.CallInfoDto) -> Unit = { call ->
-        if (container.callManager.currentCall?.id == call.id) {
-            container.callManager.showCallUi()
+        if (container.callController.currentCall?.id == call.id) {
+            container.callController.showCallUi()
         } else {
             pendingJoinCall = call
             joinCallPermLauncher.launch(

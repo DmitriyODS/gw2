@@ -1,4 +1,4 @@
-package com.kodass.groovework.service
+package com.kodass.groovework.calls
 
 import android.content.Context
 import android.media.AudioAttributes
@@ -8,10 +8,10 @@ import android.os.VibrationEffect
 import android.os.Vibrator
 import android.os.VibratorManager
 
-// Звонилка входящего: зацикленный рингтон + зацикленная вибрация (как настоящий
-// звонок, а не одиночное уведомление). Живёт в процессе, удерживаемом
-// foreground-сервисом звонка. Останавливается на ответ/отклон/завершение.
-class Ringer(private val context: Context) {
+// Звонилка входящего: зацикленный системный рингтон + зацикленная вибрация (как
+// настоящий звонок). Живёт в процессе, удерживаемом foreground-сервисом звонка.
+// Останавливается на ответ/отклон/завершение.
+class IncomingRinger(private val context: Context) {
     private var player: MediaPlayer? = null
     private var vibrator: Vibrator? = null
 
@@ -57,8 +57,6 @@ class Ringer(private val context: Context) {
             // Пауза-вибро-пауза, зациклено (repeat = 0 — с начала массива).
             val pattern = longArrayOf(0, 800, 600)
             val effect = VibrationEffect.createWaveform(pattern, 0)
-            // Перегрузка vibrate с AudioAttributes доступна с API 26 (вариант с
-            // VibrationAttributes — только с API 33), поэтому работает и на Android 12.
             val attrs = AudioAttributes.Builder()
                 .setUsage(AudioAttributes.USAGE_NOTIFICATION_RINGTONE)
                 .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)

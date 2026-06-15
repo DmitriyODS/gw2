@@ -1,4 +1,4 @@
-package com.kodass.groovework.service
+package com.kodass.groovework.calls
 
 import android.content.BroadcastReceiver
 import android.content.Context
@@ -13,10 +13,10 @@ class CallActionReceiver : BroadcastReceiver() {
     }
 
     override fun onReceive(context: Context, intent: Intent) {
-        val manager = (context.applicationContext as GrooveApp).container.callManager
+        val controller = (context.applicationContext as GrooveApp).container.callController
         when (intent.action) {
-            ACTION_DECLINE -> manager.declineFromNotification(intent.getLongExtra("call_id", 0))
-            ACTION_HANGUP -> manager.hangup()
+            ACTION_DECLINE -> controller.declineFromNotification(intent.getLongExtra("call_id", 0))
+            ACTION_HANGUP -> controller.hangup()
         }
     }
 }
