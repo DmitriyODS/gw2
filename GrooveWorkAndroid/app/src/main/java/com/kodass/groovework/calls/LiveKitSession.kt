@@ -242,14 +242,18 @@ class LiveKitSession(
         runCatching { track.switchCamera() }
     }
 
-    // Явный пользовательский тоггл громкой связи.
+    // Выбор аудио-маршрута. Проводная/BT-гарнитура ВСЕГДА выигрывает (не прыгаем
+    // на динамик); иначе on → громкая связь, off → ухо.
     fun setSpeaker(on: Boolean) {
         val handler = _room.value?.audioHandler as? AudioSwitchHandler ?: return
         val devices = handler.availableAudioDevices
-        val target = if (on) {
-            devices.firstOrNull { it is AudioDevice.Speakerphone }
-        } else {
-            devices.firstOrNull { it is AudioDevice.Earpiece }
+        val headset = devices.firstOrNull {
+            it is AudioDevice.BluetoothHeadset || it is AudioDevice.WiredHeadset
+        }
+        val target = when {
+            headset != null -> headset
+            on -> devices.firstOrNull { it is AudioDevice.Speakerphone }
+            else -> devices.firstOrNull { it is AudioDevice.Earpiece }
                 ?: devices.firstOrNull { it !is AudioDevice.Speakerphone }
         }
         if (target != null) runCatching { handler.selectDevice(target) }
@@ -275,20 +279,6 @@ class LiveKitSession(
             _localVideo.value = room.localParticipant.getTrackPublication(Track.Source.CAMERA)?.track as? VideoTrack
         }.isSuccess
         if (!ok) _events.tryEmit(SessionEvent.CameraUnavailable)
-    }
-
-    // Маршрут по умолчанию: проводная/BT-гарнитура всегда выигрывает (не прыгаем
-    // на динамик); иначе видео — громкая связь, голос — ухо.
-    private fun applyDefaultRoute(room: Room, video: Boolean) {
-        val handler = room.audioHandler as? AudioSwitchHandler ?: return
-        val external = handler.availableAudioDevices.firstOrNull {
-            it is AudioDevice.BluetoothHeadset || it is AudioDevice.WiredHeadset
-        }
-        if (external != null) {
-            runCatching { handler.selectDevice(external) }
-        } else {
-            setSpeaker(video)
-        }
     }
 
     fun dispose() {

@@ -125,7 +125,7 @@ class CallController(
     fun startCall(userId: Long, video: Boolean) {
         if (_ui.value.state != CallState.Idle) { _errors.tryEmit("Вы уже в звонке"); return }
         wasIncoming = false; accepted = false
-        resetUi(CallState.Dialing(userId, video), MediaState(micEnabled = true, cameraEnabled = video))
+        resetUi(CallState.Dialing(userId, video), MediaState(micEnabled = true, cameraEnabled = video, speakerOn = video))
         callUiVisible.value = true
         launchCallUi()
         signaling.startCall(listOf(userId), video)
@@ -165,7 +165,7 @@ class CallController(
         callUiVisible.value = true
         val known = currentCall?.takeIf { it.id == callId }
         val call = known ?: CallDto(id = callId, media = if (video) "video" else "audio", initiatorFio = fio)
-        resetUi(CallState.Connecting(call, video), _ui.value.media.copy(cameraEnabled = video))
+        resetUi(CallState.Connecting(call, video), _ui.value.media.copy(cameraEnabled = video, speakerOn = video))
         // FGS в активный режим (без media-типов — повысим на Active, уже из foreground).
         startService(CallForegroundService.MODE_ONGOING)
         val epoch = callEpoch
