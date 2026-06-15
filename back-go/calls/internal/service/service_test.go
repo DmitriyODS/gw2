@@ -364,12 +364,6 @@ func TestStartCallValidation(t *testing.T) {
 	svc, _, _, _ := newTestService()
 	ctx := context.Background()
 
-	if _, err := svc.StartCall(ctx, dto.StartCallRequest{
-		InitiatorID: 10, InviteeIDs: []int64{99},
-	}); domainCode(err) != "CROSS_COMPANY" {
-		t.Errorf("чужая компания: %v", err)
-	}
-
 	if _, err := svc.StartCall(ctx, dto.StartCallRequest{InitiatorID: 10, InviteeIDs: []int64{20}}); err != nil {
 		t.Fatal(err)
 	}
@@ -484,7 +478,9 @@ func TestStartCallRollbackOnTokenError(t *testing.T) {
 	}
 }
 
-func TestInviteCrossCompany(t *testing.T) {
+// Кросс-компанийный барьер для звонков снят: позвать в звонок можно сотрудника
+// любой компании (99 — из компании 2, звонок заведён в компании 1).
+func TestInviteCrossCompanyAllowed(t *testing.T) {
 	svc, _, _, _ := newTestService()
 	ctx := context.Background()
 	started, err := svc.StartCall(ctx, dto.StartCallRequest{InitiatorID: 10, InviteeIDs: []int64{20}})
@@ -492,13 +488,17 @@ func TestInviteCrossCompany(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if _, err := svc.InviteToCall(ctx, dto.InviteRequest{
+	resp, err := svc.InviteToCall(ctx, dto.InviteRequest{
 		CallID: started.Call.ID, InviterID: 10, InviteeIDs: []int64{99},
-	}); domainCode(err) != "CROSS_COMPANY" {
-		t.Errorf("приглашение из чужой компании: %v", err)
+	})
+	if err != nil {
+		t.Fatalf("кросс-компанийное приглашение должно проходить: %v", err)
+	}
+	if len(resp.NewInviteeIDs) != 1 || resp.NewInviteeIDs[0] != 99 {
+		t.Errorf("приглашён должен быть 99: %v", resp.NewInviteeIDs)
 	}
 
-	resp, err := svc.InviteToCall(ctx, dto.InviteRequest{
+	resp, err = svc.InviteToCall(ctx, dto.InviteRequest{
 		CallID: started.Call.ID, InviterID: 10, InviteeIDs: []int64{30},
 	})
 	if err != nil {

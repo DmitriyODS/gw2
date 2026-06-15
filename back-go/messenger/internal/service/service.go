@@ -155,12 +155,9 @@ func (s *Service) ensureConversation(ctx context.Context, currentUserID, otherUs
 	if other == nil || other.IsHidden {
 		return nil, domain.NewError("USER_NOT_FOUND", "Собеседник не найден", 404)
 	}
-	// Multi-tenancy: вне компании писать нельзя. Администратор системы
-	// (company_id IS NULL) может писать любому; сотрудник — только своим
-	// или Администратору системы.
-	if me != nil && me.CompanyID != nil && other.CompanyID != nil && *me.CompanyID != *other.CompanyID {
-		return nil, domain.NewError("CROSS_COMPANY", "Нельзя писать сотруднику другой компании", 403)
-	}
+	// Переписка между сотрудниками разных компаний разрешена: company-барьер
+	// для чата снят. company_id диалога ниже берётся от любого из участников
+	// (для NOT NULL и привязки прикрепляемых задач к компании-владельцу).
 
 	a, b := currentUserID, otherUserID
 	lower, higher := me, other

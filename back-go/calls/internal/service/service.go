@@ -215,20 +215,32 @@ func (s *Service) StartCall(ctx context.Context, req dto.StartCallRequest) (*dto
 		return nil, domain.NewError("USER_NOT_FOUND", "Пользователь не найден", 404)
 	}
 
-	// Multi-tenancy с учётом многокомпанийности: звонок идёт в ОБЩЕЙ компании
-	// инициатора и всех приглашённых (членство в user_companies, а не только
-	// совпадающая «первичная» company_id) — иначе мультикомпанийному коллеге
-	// нельзя было бы позвонить. Админ системы (без компании) — общая компания
-	// приглашённых.
+	// Кросс-компанийные звонки разрешены. company_id у звонка всё равно один
+	// (колонка NOT NULL, привязка плашки и истории): предпочитаем ОБЩУЮ компанию
+	// инициатора и приглашённых (resolveCompany, многокомпанийность), а если
+	// общей нет — штампуем компанией инициатора, иначе первого приглашённого
+	// с компанией. Участники при этом могут быть из разных компаний.
 	companyID, err := s.resolveCompany(ctx, initiator, inviteeIDs)
 	if err != nil {
 		return nil, err
 	}
 	if companyID == 0 {
-		if len(inviteeIDs) == 0 {
-			return nil, domain.NewError("NO_COMPANY", "Звонок возможен только в рамках компании", 400)
+		switch {
+		case initiator.CompanyID != nil:
+			companyID = *initiator.CompanyID
+		default:
+			for _, u := range invitees {
+				if u.CompanyID != nil {
+					companyID = *u.CompanyID
+					break
+				}
+			}
 		}
-		return nil, domain.NewError("CROSS_COMPANY", "Нет общей компании с участниками звонка", 422)
+	}
+	if companyID == 0 {
+		// Ни у инициатора, ни у приглашённых нет компании (напр. пустой звонок
+		// Администратора системы) — контекст компании отсутствует.
+		return nil, domain.NewError("NO_COMPANY", "Звонок возможен только в рамках компании", 400)
 	}
 
 	kind := domain.KindGroup
@@ -359,17 +371,8 @@ func (s *Service) InviteToCall(ctx context.Context, req dto.InviteRequest) (*dto
 	if len(users) != len(newIDs) {
 		return nil, domain.NewError("USER_NOT_FOUND", "Один из участников не найден", 404)
 	}
-	// Приглашаемый должен состоять в компании звонка (членство, не только
-	// первичная company_id) — иначе мультикомпанийного коллегу не позвать.
-	memberships, err := s.users.Memberships(ctx, newIDs)
-	if err != nil {
-		return nil, err
-	}
-	for _, uid := range newIDs {
-		if !memberships[uid][call.CompanyID] {
-			return nil, domain.NewError("CROSS_COMPANY", "Участник не состоит в компании звонка", 422)
-		}
-	}
+	// Пригласить в звонок можно любого видимого сотрудника, в т.ч. из другой
+	// компании — company-барьер для звонков снят.
 
 	ts := now()
 	for _, uid := range newIDs {

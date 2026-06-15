@@ -61,7 +61,7 @@ let debounceTimer = null
 async function search() {
   loading.value = true
   try {
-    results.value = await getDirectory(q.value.trim(), /* excludeSelf */ true)
+    results.value = await getDirectory(q.value.trim(), /* excludeSelf */ true, { global: true })
   } finally {
     loading.value = false
   }

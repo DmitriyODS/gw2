@@ -95,7 +95,7 @@ class ChatsViewModel(
             directoryLoading = true
             try {
                 directory = apiCall(json) {
-                    authApi.directory(query = directoryQuery.takeIf { it.isNotBlank() }, excludeSelf = "1")
+                    authApi.directory(query = directoryQuery.takeIf { it.isNotBlank() }, excludeSelf = "1", all = "1")
                 }
             } catch (_: Exception) {
                 directory = emptyList()

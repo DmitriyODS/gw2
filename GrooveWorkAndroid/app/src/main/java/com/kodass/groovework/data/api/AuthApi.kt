@@ -55,10 +55,13 @@ interface AuthApi {
     @DELETE("api/users/me/avatar")
     suspend fun deleteAvatar(): UserDto
 
+    // all="1" — глобальный справочник (видимые сотрудники всех компаний),
+    // нужен для старта чата/звонка с сотрудником другой компании.
     @GET("api/users/directory")
     suspend fun directory(
         @Query("q") query: String? = null,
         @Query("exclude_self") excludeSelf: String? = null,
+        @Query("all") all: String? = null,
     ): List<UserDto>
 
     @GET("api/users/directory/{id}")

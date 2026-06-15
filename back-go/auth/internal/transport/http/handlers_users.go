@@ -68,6 +68,13 @@ func (h *handlers) directory(c *fiber.Ctx) error {
 	case "1", "true", "yes":
 		req.ExcludeID = me.ID
 	}
+	// all=1 — глобальный справочник (все видимые сотрудники всех компаний).
+	// Нужен, чтобы начать чат/звонок с сотрудником другой компании; перебивает
+	// company-scope актора (включая ?company_id= Администратора системы).
+	switch c.Query("all") {
+	case "1", "true", "yes":
+		req.CompanyID = nil
+	}
 
 	resp, err := h.eps.Directory(c.Context(), req)
 	if err != nil {

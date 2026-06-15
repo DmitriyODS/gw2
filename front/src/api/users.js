@@ -27,10 +27,13 @@ export const updateUser = (userId, data) => apiRequest(`/users/${userId}`, { met
 export const assignRole = (userId, data) => apiRequest(`/users/${userId}/role`, { method: 'PATCH', body: data })
 
 // Каталог сотрудников — доступно любому авторизованному.
-export const getDirectory = (q = '', excludeSelf = false) => {
+// global: true — все видимые сотрудники всех компаний (для старта чата/звонка
+// с сотрудником другой компании); по умолчанию — в рамках своей компании.
+export const getDirectory = (q = '', excludeSelf = false, { global = false } = {}) => {
   const params = new URLSearchParams()
   if (q) params.set('q', q)
   if (excludeSelf) params.set('exclude_self', 'true')
+  if (global) params.set('all', '1')
   const qs = params.toString()
   return apiRequest(`/users/directory${qs ? '?' + qs : ''}`)
 }

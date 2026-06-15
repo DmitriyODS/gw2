@@ -723,7 +723,6 @@ func TestOpenConversationGuards(t *testing.T) {
 		{2, 2, "SELF_CONVERSATION"},
 		{2, 5, "USER_NOT_FOUND"}, // скрытый
 		{2, 99, "USER_NOT_FOUND"},
-		{2, 4, "CROSS_COMPANY"},
 	}
 	for _, tc := range cases {
 		_, err := svc.OpenConversation(ctx, tc.me, tc.other)
@@ -732,7 +731,16 @@ func TestOpenConversationGuards(t *testing.T) {
 			t.Fatalf("open %d→%d: ожидался %s, получено %v", tc.me, tc.other, tc.code, err)
 		}
 	}
-	// Администратор системы может писать сотруднику любой компании.
+	// Барьер компаний для чата снят: сотрудник может писать в другую компанию
+	// (2 — компания 10, 4 — компания 20).
+	cross, err := svc.OpenConversation(ctx, 2, 4)
+	if err != nil {
+		t.Fatalf("кросс-компанийный чат должен проходить: %v", err)
+	}
+	if cross.CompanyID == 0 {
+		t.Fatalf("у кросс-компанийного диалога должен быть company_id: %+v", cross)
+	}
+	// Администратор системы тоже может писать сотруднику любой компании.
 	if _, err := svc.OpenConversation(ctx, 1, 4); err != nil {
 		t.Fatalf("админ → сотрудник: %v", err)
 	}
