@@ -78,7 +78,23 @@ services:
     entrypoint: "/bin/sh -c 'trap exit TERM; while :; do certbot renew --webroot -w /var/www/certbot --quiet; sleep 12h & wait $${!}; done;'"
     restart: always
 
+  # Встроенный в LiveKit TURN-relay — для звонков с «тяжёлых» сетей
+  # (мобильный CGNAT/симметричный NAT, VPN, корпоративные фаерволы), где
+  # прямой UDP 7882 / TCP 7881 наружу закрыт. TLS на 5349 (cert тот же
+  # Let's Encrypt, что у nginx, read-only) + UDP 3478. LiveKit сам анонсирует
+  # TURN клиентам с эфемерными кредами — правок в callsvc/фронте/Android не
+  # нужно. Relay внутренний (терминируется в SFU), отдельный диапазон
+  # relay-портов не требуется — достаточно слушающих 5349/tcp и 3478/udp
+  # (deploy_server.sh открывает их в ufw). cert обновляет certbot; LiveKit
+  # читает его при старте, поэтому после `certbot renew` нужен рестарт
+  # контейнера (происходит на каждом деплое; окно продления Let's Encrypt
+  # 30 дней покрывает обычную частоту выкатов).
   livekit:
+    ports:
+      - "5349:5349"
+      - "3478:3478/udp"
+    volumes:
+      - certbot-conf:/etc/letsencrypt:ro
     environment:
       LIVEKIT_CONFIG: |
         port: 7880
@@ -86,6 +102,13 @@ services:
           tcp_port: 7881
           udp_port: 7882
           use_external_ip: true
+        turn:
+          enabled: true
+          domain: ${LIVEKIT_TURN_DOMAIN:-gw.kodass.ru}
+          tls_port: 5349
+          udp_port: 3478
+          cert_file: /etc/letsencrypt/live/${LIVEKIT_TURN_DOMAIN:-gw.kodass.ru}/fullchain.pem
+          key_file: /etc/letsencrypt/live/${LIVEKIT_TURN_DOMAIN:-gw.kodass.ru}/privkey.pem
         keys:
           ${LIVEKIT_API_KEY:?}: ${LIVEKIT_API_SECRET:?}
         webhook:

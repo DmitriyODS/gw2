@@ -4,7 +4,7 @@
 
 - Docker 24+ и Docker Compose v2
 - Открытый порт 80 (или 443 при HTTPS)
-- Для звонков (LiveKit): открытые порты **7881/TCP** и **7882/UDP** (`ufw allow 7881/tcp && ufw allow 7882/udp`)
+- Для звонков (LiveKit): открытые порты **7881/TCP** и **7882/UDP** (медиа) + **5349/TCP** и **3478/UDP** (встроенный TURN-relay для NAT/VPN/мобильных сетей). `deploy_server.sh` открывает их сам при активном ufw; вручную: `ufw allow 7881/tcp && ufw allow 7882/udp && ufw allow 5349/tcp && ufw allow 3478/udp`. TURN/TLS использует тот же сертификат Let's Encrypt, что и nginx (`LIVEKIT_TURN_DOMAIN`, по умолчанию `gw.kodass.ru`).
 - Доступ к Docker Hub: сервер **не собирает** образы приложений, а тянет
   готовые из репозитория `osipovskijdima/groove_work` (теги
   `app` / `calls` / `auth` / `front`). Пушит их локальная машина:
@@ -185,12 +185,12 @@ TLS уже встроен в прод-оверлей: nginx слушает 80/44
 ## Структура портов и сетей
 
 ```
-Интернет :80/:443                        Интернет :7881/tcp :7882/udp
-    ↓                                        ↓ (медиа WebRTC, мимо nginx)
-nginx (фронт + реверс-прокси)            livekit (SFU звонков)
-    ├── /            → front/dist (Vue SPA)  ↑
-    ├── /api/calls/* → calls:8090 (Go REST)  │ сигнальный WS
-    ├── /api/...     → auth/messenger/ai/    │
+Интернет :80/:443             Интернет :7881/tcp :7882/udp (медиа)
+    ↓                                  :5349/tcp :3478/udp (TURN-relay)
+nginx (фронт + реверс-прокси)            ↓ (медиа/TURN WebRTC, мимо nginx)
+    ├── /            → front/dist (Vue SPA)  livekit (SFU звонков + TURN)
+    ├── /api/calls/* → calls:8090 (Go REST)  ↑
+    ├── /api/...     → auth/messenger/ai/    │ сигнальный WS
     │                  groove/tasks (Go REST)│
     ├── /ws          → gateway:8096 (WS)     │
     ├── /livekit     → livekit:7880 ─────────┘

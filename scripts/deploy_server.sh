@@ -9,8 +9,9 @@
 #      (TURN_* от coturn, JWT_SECRET_KEY от flask-jwt, SECRET_KEY от
 #      Flask) вычищает. PASETO-ключи генерируются ПАРОЙ (приватный
 #      Ed25519 + публичный). Перед любой правкой делает бэкап .env рядом.
-#   2. Если включён ufw — открывает медиа-порты LiveKit (7881/tcp,
-#      7882/udp); 80/443 считаются уже открытыми.
+#   2. Если включён ufw — открывает порты LiveKit: медиа 7881/tcp,
+#      7882/udp и TURN-relay 5349/tcp, 3478/udp; 80/443 считаются
+#      уже открытыми.
 #   3. docker compose pull + up -d --no-build --remove-orphans.
 #      Образы НА СЕРВЕРЕ НЕ СОБИРАЮТСЯ — их пушит локальная машина
 #      (`make push` → scripts/build_push.sh) в Docker Hub
@@ -20,7 +21,8 @@
 #      файл, но без reload контейнер живёт со старым конфигом).
 #   5. Health-чеки: фронт и маршруты через nginx, healthz всех
 #      микросервисов изнутри контейнеров, досягаемость gRPC между
-#      сервисами, LiveKit через nginx (/livekit), TCP-порт медиа 7881.
+#      сервисами, LiveKit через nginx (/livekit), TCP-порты медиа 7881
+#      и TURN/TLS 5349.
 # ================================================================
 set -euo pipefail
 cd "$(cd "$(dirname "$0")/.." && pwd)"
@@ -151,15 +153,17 @@ fi
 # ── 2. Firewall (только если ufw реально фильтрует) ──────────────
 if command -v ufw >/dev/null 2>&1 && sudo -n true 2>/dev/null; then
   if sudo -n ufw status 2>/dev/null | grep -q 'Status: active'; then
-    log "ufw активен — открываю медиа-порты LiveKit"
+    log "ufw активен — открываю медиа- и TURN-порты LiveKit"
     sudo -n ufw allow 7881/tcp >/dev/null
     sudo -n ufw allow 7882/udp >/dev/null
-    ok "открыты 7881/tcp и 7882/udp"
+    sudo -n ufw allow 5349/tcp >/dev/null
+    sudo -n ufw allow 3478/udp >/dev/null
+    ok "открыты 7881/tcp, 7882/udp (медиа) и 5349/tcp, 3478/udp (TURN)"
   else
     ok "ufw неактивен — фильтрации нет, порты доступны"
   fi
 else
-  warn "ufw недоступен (нет команды или sudo) — проверьте медиа-порты 7881/tcp, 7882/udp вручную"
+  warn "ufw недоступен (нет команды или sudo) — проверьте порты 7881/tcp, 7882/udp, 5349/tcp, 3478/udp вручную"
 fi
 
 # ── 3. Образы и запуск ───────────────────────────────────────────
@@ -330,6 +334,13 @@ if (exec 3<>/dev/tcp/127.0.0.1/7881) 2>/dev/null; then
   ok "медиа-порт 7881/tcp слушает (7882/udp проверить извне нельзя — webrtc проверит сам)"
 else
   warn "медиа-порт 7881/tcp не слушает — проверьте сервис livekit"
+fi
+
+if (exec 3<>/dev/tcp/127.0.0.1/5349) 2>/dev/null; then
+  exec 3>&- 3<&-
+  ok "TURN/TLS-порт 5349/tcp слушает (3478/udp проверит сам webrtc через relay)"
+else
+  warn "TURN/TLS-порт 5349/tcp не слушает — LiveKit не нашёл cert или turn выключен; звонки с мобильных/VPN-сетей не пробьются"
 fi
 
 $COMPOSE ps --format 'table {{.Name}}\t{{.Status}}'
