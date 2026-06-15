@@ -239,6 +239,24 @@ class Notifier(private val context: Context) {
             .build()
     }
 
+    // Показать входящий напрямую (без foreground-сервиса) — запасной путь, когда
+    // FCM понизил приоритет пуша и старт FGS из фона запрещён. Full-screen intent
+    // на CallActivity внутри уведомления остаётся (поверх локскрина).
+    fun showIncomingCallStandalone(call: CallDto) {
+        if (!canPost()) return
+        manager.notify(NOTIF_ID_INCOMING, buildIncomingCallNotification(call))
+    }
+
+    // Заглушка-уведомление: нужна только чтобы удовлетворить контракт FGS
+    // (startForeground обязателен после startForegroundService) в гонке, когда
+    // звонок уже завершился до старта сервиса. Сразу снимается.
+    fun buildPlaceholderCallNotification(): Notification =
+        NotificationCompat.Builder(context, CHANNEL_CALLS_ONGOING)
+            .setSmallIcon(R.drawable.ic_launcher_monochrome)
+            .setContentTitle("Звонок")
+            .setOngoing(false)
+            .build()
+
     fun cancelIncoming() {
         manager.cancel(NOTIF_ID_INCOMING)
     }

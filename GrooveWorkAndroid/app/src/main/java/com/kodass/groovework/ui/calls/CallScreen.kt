@@ -69,9 +69,9 @@ fun CallScreen(container: AppContainer) {
     val activeSince by manager.activeSince.collectAsStateWithLifecycle()
     val roomState by manager.room.collectAsStateWithLifecycle()
     val room = roomState // плоский val — иначе нет smart-cast у делегата при room != null
-    val connecting by manager.connecting.collectAsStateWithLifecycle()
 
-    // Таймер длительности.
+    // Таймер длительности: бежит только когда activeSince выставлен — а он
+    // выставляется на первом аудио собеседника, не раньше (иначе секунды шли в тишине).
     var duration by remember { mutableLongStateOf(0L) }
     LaunchedEffect(activeSince) {
         while (true) {
@@ -120,7 +120,7 @@ fun CallScreen(container: AppContainer) {
                     Text(
                         text = when {
                             isOutgoing -> "Звоним…"
-                            connecting || room == null -> "Соединение…"
+                            activeSince == null -> "Соединение…"
                             else -> formatDuration(duration)
                         },
                         style = MaterialTheme.typography.bodyLarge,
@@ -148,7 +148,11 @@ fun CallScreen(container: AppContainer) {
                     Column(modifier = Modifier.padding(start = 4.dp)) {
                         Text(text = peer?.fio ?: "", style = MaterialTheme.typography.titleMedium)
                         Text(
-                            text = if (isOutgoing) "Звоним…" else formatDuration(duration),
+                            text = when {
+                                isOutgoing -> "Звоним…"
+                                activeSince == null -> "Соединение…"
+                                else -> formatDuration(duration)
+                            },
                             style = MaterialTheme.typography.labelMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )

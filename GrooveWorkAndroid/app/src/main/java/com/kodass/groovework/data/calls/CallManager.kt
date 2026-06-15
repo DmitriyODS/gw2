@@ -19,11 +19,16 @@ import com.kodass.groovework.notifications.Notifier
 import com.kodass.groovework.service.CallService
 import com.kodass.groovework.service.Ringer
 import com.twilio.audioswitch.AudioDevice
+import io.livekit.android.AudioOptions
 import io.livekit.android.LiveKit
+import io.livekit.android.LiveKitOverrides
+import io.livekit.android.RoomOptions
 import io.livekit.android.audio.AudioSwitchHandler
+import io.livekit.android.events.DisconnectReason
 import io.livekit.android.events.RoomEvent
 import io.livekit.android.events.collect
 import io.livekit.android.room.Room
+import io.livekit.android.room.track.AudioTrack
 import io.livekit.android.room.track.LocalVideoTrack
 import io.livekit.android.room.track.Track
 import io.livekit.android.room.track.VideoTrack
@@ -107,11 +112,26 @@ class CallManager(
     private var wasIncoming = false
     private var accepted = false
 
+    // Монотонная «эпоха» звонка: cleanup() её увеличивает, поэтому любая
+    // отложенная корутина (тянем токен / connect к LiveKit), возобновившись
+    // после завершения/смены звонка, увидит расхождение и не воскресит звонок
+    // (не откроет микрофон в осиротевшую комнату — иначе нас слышно после отбоя).
+    @Volatile
+    private var callEpoch = 0L
+
+    // Single-flight для resync состояния звонка после реконнекта WS.
+    @Volatile
+    private var resyncing = false
+
     private val myUserId: Long?
         get() = (session.authState.value as? AuthState.LoggedIn)?.claims?.userId
 
     init {
         scope.launch { gateway.events.collect { handle(it) } }
+        // После (ре)коннекта WS сверяем состояние звонка с сервером: пока сокет
+        // лежал, мы могли пропустить call:ended (отмена/отклон) — без этого
+        // входящий/исходящий «висел» бы до локального таймаута.
+        scope.launch { gateway.connected.collect { up -> if (up) resyncFromServer() } }
     }
 
     val currentCall: CallDto?
@@ -133,10 +153,19 @@ class CallManager(
         onIncoming(call, launchUi = false)
     }
 
+    // Входящий из пуша, доставленного НЕ high-priority (FCM понизил приоритет):
+    // старт foreground-сервиса из фона тогда кинул бы исключение, поэтому показываем
+    // полноэкранное уведомление напрямую, без FGS.
+    fun onIncomingFromPushNoFgs(call: CallDto) {
+        onIncoming(call, launchUi = false, useFgs = false)
+    }
+
     // Общий вход входящего (из пуша и из WS). launchUi — поднять CallActivity
     // самим (true только из foreground/WS; из фона активити не стартуем —
-    // развернёт full-screen intent уведомления).
-    private fun onIncoming(call: CallDto, launchUi: Boolean) {
+    // развернёт full-screen intent уведомления). useFgs — поднимать ли
+    // foreground-сервис (false при пониженном приоритете пуша; тогда уведомление
+    // постим напрямую).
+    private fun onIncoming(call: CallDto, launchUi: Boolean, useFgs: Boolean = true) {
         if (_phase.value != CallPhase.Idle) return
         wasIncoming = true
         accepted = false
@@ -144,7 +173,10 @@ class CallManager(
         _phase.value = CallPhase.Incoming(call)
         callUiVisible.value = true
         ringer.start()
-        startCallService(CallService.MODE_INCOMING)
+        // Если FGS не стартовал (понижен приоритет/окно фона закрылось) — full-screen
+        // уведомление всё равно показываем сами, иначе входящий потеряется.
+        val started = if (useFgs) startCallService(CallService.MODE_INCOMING) else false
+        if (!started) notifier.showIncomingCallStandalone(call)
         if (launchUi) launchCallUi()
         armIncomingTimeout(call.id)
     }
@@ -241,8 +273,14 @@ class CallManager(
         // mic/camera-FGS разрешён): убирает входящее full-screen-уведомление с
         // кнопками на время «Соединение…».
         startCallService(CallService.MODE_ONGOING)
+        val epoch = callEpoch
         scope.launch {
             val token = runCatching { callsApi.token(callId) }.getOrNull()
+            // Пока тянули токен, звонок мог завершиться/смениться (call:ended,
+            // Disconnected, hangup из шторки) — не воскрешаем разорванный звонок.
+            if (epoch != callEpoch || _phase.value !is CallPhase.Active || currentCall?.id != callId) {
+                return@launch
+            }
             if (token == null) {
                 _errors.tryEmit("Звонок уже завершён")
                 cleanup()
@@ -250,7 +288,9 @@ class CallManager(
             }
             val call = token.call ?: known ?: return@launch
             _phase.value = CallPhase.Active(call)
-            activeSince.value = System.currentTimeMillis()
+            // activeSince НЕ выставляем здесь — таймер разговора пускаем только когда
+            // реально пошло аудио собеседника (первый remote audio в onRoomEvent),
+            // иначе секунды бегут все 15-20с установки медиа, пока тишина.
             connect(token.livekit, video = call.media == "video" && cameraEnabled.value)
         }
     }
@@ -280,7 +320,11 @@ class CallManager(
         val enabled = !micEnabled.value
         micEnabled.value = enabled
         scope.launch {
-            runCatching { _room.value?.localParticipant?.setMicrophoneEnabled(enabled) }
+            val ok = runCatching { _room.value?.localParticipant?.setMicrophoneEnabled(enabled) }.isSuccess
+            if (!ok) {
+                micEnabled.value = !enabled
+                _errors.tryEmit("Не удалось переключить микрофон")
+            }
         }
     }
 
@@ -288,13 +332,17 @@ class CallManager(
         val enabled = !cameraEnabled.value
         cameraEnabled.value = enabled
         scope.launch {
-            runCatching {
+            val ok = runCatching {
                 _room.value?.localParticipant?.setCameraEnabled(enabled)
                 localVideoTrack.value = if (enabled) {
                     _room.value?.localParticipant?.getTrackPublication(Track.Source.CAMERA)?.track as? VideoTrack
                 } else {
                     null
                 }
+            }.isSuccess
+            if (!ok) {
+                cameraEnabled.value = !enabled
+                _errors.tryEmit("Не удалось переключить камеру")
             }
         }
     }
@@ -372,35 +420,99 @@ class CallManager(
 
     private fun connect(info: LivekitInfoDto, video: Boolean) {
         val url = resolveLivekitUrl(info.url)
+        val epoch = callEpoch
         _connecting.value = true
         scope.launch {
-            try {
-                val newRoom = LiveKit.create(appContext)
-                _room.value = newRoom
-                roomEventsJob?.cancel()
-                roomEventsJob = scope.launch {
-                    newRoom.events.collect { onRoomEvent(it) }
+            // Свой AudioSwitchHandler с порядком устройств под тип звонка: у дефолтного
+            // динамик стоит ВЫШЕ уха, из-за чего голосовой звонок уходил на громкую связь.
+            val audioHandler = AudioSwitchHandler(appContext).apply {
+                preferredDeviceList = if (video) {
+                    listOf(
+                        AudioDevice.BluetoothHeadset::class.java,
+                        AudioDevice.WiredHeadset::class.java,
+                        AudioDevice.Speakerphone::class.java,
+                        AudioDevice.Earpiece::class.java,
+                    )
+                } else {
+                    listOf(
+                        AudioDevice.BluetoothHeadset::class.java,
+                        AudioDevice.WiredHeadset::class.java,
+                        AudioDevice.Earpiece::class.java,
+                        AudioDevice.Speakerphone::class.java,
+                    )
                 }
+            }
+            val newRoom = LiveKit.create(
+                appContext,
+                options = RoomOptions(adaptiveStream = true, dynacast = true),
+                overrides = LiveKitOverrides(audioOptions = AudioOptions(audioHandler = audioHandler)),
+            )
+            // Звонок мог быть свёрнут/завершён, пока создавали комнату.
+            if (epoch != callEpoch) {
+                runCatching { newRoom.release() }
+                return@launch
+            }
+            // Присваиваем _room ДО connect — тогда cleanup() гарантированно найдёт
+            // эту комнату и отключит её, а не оставит «фантом» с открытым микрофоном.
+            _room.value = newRoom
+            val eventsJob = scope.launch { newRoom.events.collect { onRoomEvent(it) } }
+            roomEventsJob?.cancel()
+            roomEventsJob = eventsJob
+            try {
                 kotlinx.coroutines.withTimeout(15_000) {
                     newRoom.connect(url, info.token)
                 }
-                // Реально подключились к комнате — «Соединение…» можно убирать.
-                _connecting.value = false
-                micEnabled.value = true
-                newRoom.localParticipant.setMicrophoneEnabled(true)
-                if (video) {
-                    cameraEnabled.value = true
+            } catch (e: Exception) {
+                if (epoch == callEpoch) {
+                    _errors.tryEmit("Не удалось подключиться к звонку")
+                    hangup()
+                } else {
+                    eventsJob.cancel()
+                    runCatching { newRoom.disconnect() }
+                    runCatching { newRoom.release() }
+                }
+                return@launch
+            }
+            // Пока шёл connect, звонок мог завершиться (hangup из шторки, call:ended) —
+            // НЕ публикуем микрофон в осиротевшую комнату.
+            if (epoch != callEpoch || _phase.value !is CallPhase.Active) {
+                eventsJob.cancel()
+                runCatching { newRoom.disconnect() }
+                runCatching { newRoom.release() }
+                return@launch
+            }
+            // Подключились к комнате. «Соединение…» снимется на первом аудио собеседника.
+            _connecting.value = false
+            // Микрофон/камеру публикуем ПОСЛЕ connect и ВНЕ роняющего try: сбой
+            // устройства не рвёт звонок (паритет с вебом) — можно остаться «слушателем».
+            // Уважаем текущее намерение (юзер мог замьютить на «Соединение…»).
+            val micWanted = micEnabled.value
+            val micOk = runCatching { newRoom.localParticipant.setMicrophoneEnabled(micWanted) }.isSuccess
+            if (micWanted) {
+                val micLive = newRoom.localParticipant.getTrackPublication(Track.Source.MICROPHONE)?.track != null
+                if (!micOk || !micLive) {
+                    // Одна повторная попытка только если трека реально нет (двойной
+                    // вызов setMicrophoneEnabled может опубликовать дубль-трек).
+                    val retried = runCatching { newRoom.localParticipant.setMicrophoneEnabled(true) }.isSuccess &&
+                        newRoom.localParticipant.getTrackPublication(Track.Source.MICROPHONE)?.track != null
+                    if (!retried) {
+                        micEnabled.value = false
+                        _errors.tryEmit("Микрофон недоступен — вас не слышно")
+                    }
+                }
+            }
+            if (video) {
+                val camOk = runCatching {
                     newRoom.localParticipant.setCameraEnabled(true)
                     localVideoTrack.value =
                         newRoom.localParticipant.getTrackPublication(Track.Source.CAMERA)?.track as? VideoTrack
-                }
-                // Видеозвонок — сразу громкая связь, голосовой — динамик у уха.
-                setSpeaker(video)
-                startCallService(CallService.MODE_ONGOING)
-            } catch (e: Exception) {
-                _errors.tryEmit("Не удалось подключиться к звонку")
-                hangup()
+                }.isSuccess
+                cameraEnabled.value = camOk
+                if (!camOk) _errors.tryEmit("Камера недоступна — звонок без видео")
             }
+            // Видеозвонок — сразу громкая связь, голосовой — динамик у уха.
+            setSpeaker(video)
+            startCallService(CallService.MODE_ONGOING)
         }
     }
 
@@ -410,11 +522,12 @@ class CallManager(
                 connectedIdentities.value =
                     connectedIdentities.value + (event.participant.identity?.value ?: return)
                 // Собеседник вошёл в комнату — исходящий стал активным (как на вебе).
+                // Таймер разговора НЕ пускаем здесь: signaling-join ещё не значит,
+                // что слышно — отсчёт начнём на первом аудио (TrackSubscribed ниже).
                 (_phase.value as? CallPhase.Outgoing)?.let { outgoing ->
                     outgoingTimeoutJob?.cancel()
                     stopRingback()
                     _phase.value = CallPhase.Active(outgoing.call)
-                    activeSince.value = System.currentTimeMillis()
                 }
             }
             is RoomEvent.ParticipantDisconnected -> {
@@ -424,9 +537,20 @@ class CallManager(
             }
             is RoomEvent.TrackSubscribed -> {
                 val identity = event.participant.identity?.value ?: return
-                val track = event.track
-                if (track is VideoTrack) {
-                    remoteVideoTracks.value = remoteVideoTracks.value + (identity to track)
+                when (val track = event.track) {
+                    is VideoTrack ->
+                        remoteVideoTracks.value = remoteVideoTracks.value + (identity to track)
+                    is AudioTrack -> {
+                        // Первый удалённый аудиотрек = собеседника реально слышно →
+                        // только теперь пускаем таймер и снимаем «Соединение…».
+                        if (_phase.value is CallPhase.Active) {
+                            if (activeSince.value == null) activeSince.value = System.currentTimeMillis()
+                            _connecting.value = false
+                            // Устройства аудио уже перечислены — навязываем выбранный маршрут.
+                            setSpeaker(speakerOn.value)
+                        }
+                    }
+                    else -> {}
                 }
             }
             is RoomEvent.TrackUnsubscribed -> {
@@ -439,7 +563,13 @@ class CallManager(
                 activeSpeakers.value = event.speakers.mapNotNull { it.identity?.value }.toSet()
             }
             is RoomEvent.Disconnected -> {
-                if (_phase.value != CallPhase.Idle) cleanup()
+                if (_phase.value == CallPhase.Idle) return
+                // Этим identity вошли с другого устройства — LiveKit вышиб ЭТО
+                // соединение; собеседнику звонок не рвём (cleanup не шлёт call:leave).
+                if (event.reason == DisconnectReason.DUPLICATE_IDENTITY) {
+                    _errors.tryEmit("Звонок продолжен на другом устройстве")
+                }
+                cleanup()
             }
             else -> {}
         }
@@ -498,15 +628,43 @@ class CallManager(
         ringbackTone = null
     }
 
-    private fun startCallService(mode: String) {
-        runCatching {
-            appContext.startForegroundService(
-                Intent(appContext, CallService::class.java).putExtra(CallService.EXTRA_MODE, mode)
-            )
+    // Возвращает true, если старт сервиса прошёл без исключения. false — повод
+    // показать full-screen уведомление напрямую (старт FGS из фона запрещён).
+    private fun startCallService(mode: String): Boolean = runCatching {
+        appContext.startForegroundService(
+            Intent(appContext, CallService::class.java).putExtra(CallService.EXTRA_MODE, mode)
+        )
+    }.isSuccess
+
+    // Сверка состояния с сервером после реконнекта WS: чистит зависшую ринг-фазу
+    // (входящий/исходящий без живой комнаты), если сервер уже не видит звонок
+    // живым. Активный звонок с комнатой не трогаем — им заведует RoomEvent.Disconnected.
+    private fun resyncFromServer() {
+        if (resyncing) return
+        val phase = _phase.value
+        if (_room.value != null) return
+        if (phase !is CallPhase.Incoming && phase !is CallPhase.Outgoing) return
+        val callId = currentCall?.id ?: return
+        resyncing = true
+        scope.launch {
+            try {
+                val live = runCatching { callsApi.active() }.getOrNull()?.call
+                val stillLive = live != null && live.id == callId &&
+                    live.status != "ended" && live.status != "missed"
+                // Сверяем ещё раз: пока ходили на сервер, состояние могло измениться.
+                if (!stillLive && _room.value == null &&
+                    _phase.value !is CallPhase.Active && currentCall?.id == callId) {
+                    cleanup()
+                }
+            } finally {
+                resyncing = false
+            }
         }
     }
 
     private fun cleanup() {
+        // Инвалидируем любые отложенные connect/answer-корутины этого звонка.
+        callEpoch++
         ringer.stop()
         stopRingback()
         outgoingTimeoutJob?.cancel()

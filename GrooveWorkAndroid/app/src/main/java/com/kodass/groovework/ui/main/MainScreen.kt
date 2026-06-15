@@ -1,7 +1,12 @@
 package com.kodass.groovework.ui.main
 
 import android.Manifest
+import android.content.Context
+import android.content.Intent
 import android.content.pm.PackageManager
+import android.net.Uri
+import android.os.Build
+import android.provider.Settings
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Box
@@ -32,6 +37,7 @@ import androidx.compose.material.icons.outlined.Groups
 import androidx.compose.material.icons.outlined.Person
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material.icons.outlined.TaskAlt
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Badge
 import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.Icon
@@ -39,9 +45,13 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -115,6 +125,57 @@ fun MainScreen(container: AppContainer) {
             context, Manifest.permission.POST_NOTIFICATIONS
         ) == PackageManager.PERMISSION_GRANTED
         if (!granted) notifPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+    }
+
+    // Полноэкранные уведомления (Android 14+): без них входящий звонок не
+    // развернётся поверх заблокированного экрана. Системного runtime-диалога нет —
+    // ведём пользователя в настройки. Спрашиваем один раз.
+    var showFsiDialog by remember { mutableStateOf(false) }
+    LaunchedEffect(Unit) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE &&
+            !container.notifier.canUseFullScreenIntent()
+        ) {
+            val prefs = context.getSharedPreferences("calls_prefs", Context.MODE_PRIVATE)
+            if (!prefs.getBoolean("fsi_asked", false)) showFsiDialog = true
+        }
+    }
+    if (showFsiDialog) {
+        AlertDialog(
+            onDismissRequest = {
+                context.getSharedPreferences("calls_prefs", Context.MODE_PRIVATE)
+                    .edit().putBoolean("fsi_asked", true).apply()
+                showFsiDialog = false
+            },
+            title = { Text("Звонки на заблокированном экране") },
+            text = {
+                Text(
+                    "Чтобы видеть входящий вызов поверх заблокированного экрана, " +
+                        "разрешите Groove Work показывать полноэкранные уведомления."
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    context.getSharedPreferences("calls_prefs", Context.MODE_PRIVATE)
+                        .edit().putBoolean("fsi_asked", true).apply()
+                    showFsiDialog = false
+                    runCatching {
+                        context.startActivity(
+                            Intent(
+                                Settings.ACTION_MANAGE_APP_USE_FULL_SCREEN_INTENT,
+                                Uri.parse("package:${context.packageName}"),
+                            )
+                        )
+                    }
+                }) { Text("Разрешить") }
+            },
+            dismissButton = {
+                TextButton(onClick = {
+                    context.getSharedPreferences("calls_prefs", Context.MODE_PRIVATE)
+                        .edit().putBoolean("fsi_asked", true).apply()
+                    showFsiDialog = false
+                }) { Text("Позже") }
+            },
+        )
     }
 
     // Тап по уведомлению → маршрут из MainActivity.handleIntent.

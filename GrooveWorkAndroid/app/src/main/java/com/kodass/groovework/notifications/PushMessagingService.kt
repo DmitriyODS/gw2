@@ -26,14 +26,21 @@ class PushMessagingService : FirebaseMessagingService() {
                 // фоне/убито). Поднимаем «звонилку» немедленно — в окне после
                 // high-FCM разрешён старт foreground-сервиса звонка из фона.
                 val callId = data["call_id"]?.toLongOrNull() ?: return
-                (application as GrooveApp).container.callManager.onIncomingFromPush(
-                    CallDto(
-                        id = callId,
-                        media = data["media"] ?: "audio",
-                        initiatorId = data["caller_id"]?.toLongOrNull() ?: 0,
-                        initiatorFio = data["caller"] ?: body.ifBlank { null },
-                    )
+                val call = CallDto(
+                    id = callId,
+                    media = data["media"] ?: "audio",
+                    initiatorId = data["caller_id"]?.toLongOrNull() ?: 0,
+                    initiatorFio = data["caller"] ?: body.ifBlank { null },
                 )
+                val callManager = (application as GrooveApp).container.callManager
+                // FCM мог понизить приоритет (Doze/квоты) — тогда старт FGS из фона
+                // кинул бы ForegroundServiceStartNotAllowedException; показываем
+                // full-screen уведомление напрямую, без сервиса.
+                if (message.priority == RemoteMessage.PRIORITY_HIGH) {
+                    callManager.onIncomingFromPush(call)
+                } else {
+                    callManager.onIncomingFromPushNoFgs(call)
+                }
             }
             "message" -> {
                 val conversationId = data["conversation_id"]?.toLongOrNull() ?: return

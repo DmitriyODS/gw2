@@ -12,21 +12,21 @@
   >
     <div class="app-dialog" :class="[`tone-${tone}`, `size-${size}`, { 'has-icon': showIcon }]">
       <!-- Шапка: иконка-тон + заголовок/подзаголовок + крестик. -->
-      <header v-if="hasHeader" class="ad-header">
-        <div v-if="showIcon" class="ad-icon" :class="`tone-${tone}`">
+      <header v-if="hasHeader" class="dlg-header">
+        <div v-if="showIcon" class="dlg-icon" :class="`tone-${tone}`">
           <span class="material-symbols-outlined">{{ resolvedIcon }}</span>
         </div>
-        <div class="ad-title-wrap">
+        <div class="dlg-title-wrap">
           <slot name="title">
-            <h3 v-if="title" class="ad-title">{{ title }}</h3>
+            <h3 v-if="title" class="dlg-title">{{ title }}</h3>
           </slot>
           <slot name="subtitle">
-            <p v-if="subtitle" class="ad-subtitle">{{ subtitle }}</p>
+            <p v-if="subtitle" class="dlg-subtitle">{{ subtitle }}</p>
           </slot>
         </div>
         <button
           v-if="closable && showClose"
-          class="ad-close"
+          class="dlg-close"
           type="button"
           aria-label="Закрыть"
           @click="cancel"
@@ -36,18 +36,18 @@
       </header>
 
       <!-- Тело: дефолтный слот. Скроллится при переполнении. -->
-      <div class="ad-body" :class="{ 'no-padding': bodyNoPadding }">
+      <div class="dlg-body" :class="{ 'no-padding': bodyNoPadding }">
         <slot />
       </div>
 
       <!-- Подвал: либо кастомный (slot=footer), либо встроенный набор кнопок. -->
-      <footer v-if="$slots.footer || actions.length" class="ad-footer">
+      <footer v-if="$slots.footer || actions.length" class="dlg-footer">
         <slot name="footer">
           <!-- Левые кнопки (например, «Удалить» на форме редактирования). -->
-          <div v-if="$slots['footer-start']" class="ad-footer-start">
+          <div v-if="$slots['footer-start']" class="dlg-footer-start">
             <slot name="footer-start" />
           </div>
-          <div class="ad-footer-end">
+          <div class="dlg-footer-end">
             <template v-for="(a, i) in actions" :key="i">
               <button
                 :class="actionClass(a)"
@@ -55,7 +55,7 @@
                 type="button"
                 @click="onAction(a)"
               >
-                <span v-if="a.kind === 'confirm' && busy" class="ad-spinner" aria-hidden="true" />
+                <span v-if="a.kind === 'confirm' && busy" class="dlg-spinner" aria-hidden="true" />
                 <span v-else-if="a.icon" class="material-symbols-outlined">{{ a.icon }}</span>
                 {{ a.label }}
               </button>
@@ -191,17 +191,17 @@ function onAction(a) {
 }
 
 function actionClass(a) {
-  if (a.kind === 'cancel') return 'ad-btn ad-btn-text'
+  if (a.kind === 'cancel') return 'dlg-btn dlg-btn-text'
   if (a.kind === 'confirm') {
     // Тон confirm-кнопки наследуется от диалога, если не задан явно.
     const t = a.tone || props.tone
-    if (t === 'danger') return 'ad-btn ad-btn-filled tone-danger'
-    if (t === 'warning') return 'ad-btn ad-btn-filled tone-warning'
-    if (t === 'success') return 'ad-btn ad-btn-filled tone-success'
-    if (t === 'tertiary') return 'ad-btn ad-btn-filled tone-tertiary'
-    return 'ad-btn ad-btn-filled tone-primary'
+    if (t === 'danger') return 'dlg-btn dlg-btn-filled tone-danger'
+    if (t === 'warning') return 'dlg-btn dlg-btn-filled tone-warning'
+    if (t === 'success') return 'dlg-btn dlg-btn-filled tone-success'
+    if (t === 'tertiary') return 'dlg-btn dlg-btn-filled tone-tertiary'
+    return 'dlg-btn dlg-btn-filled tone-primary'
   }
-  return 'ad-btn ad-btn-tonal'
+  return 'dlg-btn dlg-btn-tonal'
 }
 </script>
 
@@ -217,14 +217,14 @@ function actionClass(a) {
 }
 
 /* Шапка — иконка-тон + текст + крестик. */
-.ad-header {
+.dlg-header {
   display: flex;
   align-items: flex-start;
   gap: 16px;
   padding: 24px 24px 8px;
 }
 
-.ad-icon {
+.dlg-icon {
   width: 56px;
   height: 56px;
   flex-shrink: 0;
@@ -235,39 +235,39 @@ function actionClass(a) {
   color: var(--color-on-primary-container);
 }
 
-.ad-icon.tone-tertiary {
+.dlg-icon.tone-tertiary {
   background: var(--color-tertiary-container);
   color: var(--color-on-tertiary-container);
 }
-.ad-icon.tone-success {
+.dlg-icon.tone-success {
   background: var(--color-success-container, var(--color-tertiary-container));
   color: var(--color-on-success-container, var(--color-on-tertiary-container));
 }
-.ad-icon.tone-warning {
+.dlg-icon.tone-warning {
   background: var(--color-warning-container, var(--color-tertiary-container));
   color: var(--color-on-warning-container, var(--color-on-tertiary-container));
 }
-.ad-icon.tone-danger {
+.dlg-icon.tone-danger {
   background: var(--color-error-container);
   color: var(--color-on-error-container);
 }
-.ad-icon.tone-neutral {
+.dlg-icon.tone-neutral {
   background: var(--color-surface-high);
   color: var(--color-text);
 }
 
-.ad-icon .material-symbols-outlined {
+.dlg-icon .material-symbols-outlined {
   font-size: 28px;
   font-variation-settings: 'FILL' 1, 'wght' 500, 'GRAD' 0, 'opsz' 32;
 }
 
-.ad-title-wrap {
+.dlg-title-wrap {
   flex: 1;
   min-width: 0;
   padding-top: 8px;
 }
 
-.ad-title {
+.dlg-title {
   margin: 0;
   font-size: 20px;
   font-weight: 700;
@@ -276,14 +276,14 @@ function actionClass(a) {
   line-height: 1.25;
 }
 
-.ad-subtitle {
+.dlg-subtitle {
   margin: 4px 0 0;
   font-size: 14px;
   color: var(--color-text-dim);
   line-height: 1.45;
 }
 
-.ad-close {
+.dlg-close {
   flex-shrink: 0;
   width: 36px;
   height: 36px;
@@ -298,15 +298,15 @@ function actionClass(a) {
   transition: background 0.15s, color 0.15s;
 }
 
-.ad-close:hover {
+.dlg-close:hover {
   background: var(--color-surface-low);
   color: var(--color-text);
 }
 
-.ad-close .material-symbols-outlined { font-size: 20px; }
+.dlg-close .material-symbols-outlined { font-size: 20px; }
 
 /* Тело. */
-.ad-body {
+.dlg-body {
   padding: 12px 24px 4px;
   overflow-y: auto;
   flex: 1;
@@ -316,18 +316,18 @@ function actionClass(a) {
   line-height: 1.5;
 }
 
-.ad-body.no-padding { padding: 0; }
+.dlg-body.no-padding { padding: 0; }
 
-.app-dialog.has-icon .ad-body {
+.app-dialog.has-icon .dlg-body {
   padding-left: 24px;
   padding-right: 24px;
 }
 
 /* Когда шапки нет — тело не должно «лепиться» к верху. */
-.app-dialog:not(:has(.ad-header)) .ad-body { padding-top: 24px; }
+.app-dialog:not(:has(.dlg-header)) .dlg-body { padding-top: 24px; }
 
 /* Подвал. */
-.ad-footer {
+.dlg-footer {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -335,15 +335,15 @@ function actionClass(a) {
   padding: 16px 24px 20px;
 }
 
-.ad-footer-start { display: flex; gap: 8px; }
-.ad-footer-end {
+.dlg-footer-start { display: flex; gap: 8px; }
+.dlg-footer-end {
   display: flex;
   gap: 8px;
   margin-left: auto;
 }
 
 /* Кнопки. */
-.ad-btn {
+.dlg-btn {
   display: inline-flex;
   align-items: center;
   gap: 6px;
@@ -361,7 +361,7 @@ function actionClass(a) {
   transition: box-shadow 0.18s ease, transform 0.12s ease;
 }
 
-.ad-btn::before {
+.dlg-btn::before {
   content: '';
   position: absolute;
   inset: 0;
@@ -371,60 +371,60 @@ function actionClass(a) {
   z-index: -1;
 }
 
-.ad-btn:hover::before { opacity: 0.08; }
-.ad-btn:focus-visible::before { opacity: 0.12; }
-.ad-btn:active::before { opacity: 0.16; }
-.ad-btn:active { transform: scale(0.98); }
-.ad-btn:disabled { opacity: 0.55; cursor: not-allowed; transform: none; }
-.ad-btn:disabled::before { opacity: 0; }
+.dlg-btn:hover::before { opacity: 0.08; }
+.dlg-btn:focus-visible::before { opacity: 0.12; }
+.dlg-btn:active::before { opacity: 0.16; }
+.dlg-btn:active { transform: scale(0.98); }
+.dlg-btn:disabled { opacity: 0.55; cursor: not-allowed; transform: none; }
+.dlg-btn:disabled::before { opacity: 0; }
 
-.ad-btn .material-symbols-outlined { font-size: 18px; }
+.dlg-btn .material-symbols-outlined { font-size: 18px; }
 
-.ad-btn-text {
+.dlg-btn-text {
   background: transparent;
   color: var(--color-primary);
   padding: 0 14px;
 }
 
-.ad-btn-tonal {
+.dlg-btn-tonal {
   background: var(--color-secondary-container);
   color: var(--color-on-secondary-container);
 }
 
-.ad-btn-filled.tone-primary {
+.dlg-btn-filled.tone-primary {
   background: var(--color-primary);
   color: var(--color-on-primary);
 }
-.ad-btn-filled.tone-danger {
+.dlg-btn-filled.tone-danger {
   background: var(--color-error);
   color: var(--color-on-error);
 }
-.ad-btn-filled.tone-warning {
+.dlg-btn-filled.tone-warning {
   background: var(--color-warning, var(--color-tertiary));
   color: var(--color-on-warning, var(--color-on-tertiary));
 }
-.ad-btn-filled.tone-success {
+.dlg-btn-filled.tone-success {
   background: var(--color-success);
   color: var(--color-on-success);
 }
-.ad-btn-filled.tone-tertiary {
+.dlg-btn-filled.tone-tertiary {
   background: var(--color-tertiary);
   color: var(--color-on-tertiary);
 }
 
-.ad-btn-filled:hover { box-shadow: var(--shadow-sm); }
+.dlg-btn-filled:hover { box-shadow: var(--shadow-sm); }
 
 /* Спиннер для busy-кнопки. */
-.ad-spinner {
+.dlg-spinner {
   width: 16px;
   height: 16px;
   border-radius: 50%;
   border: 2px solid currentColor;
   border-right-color: transparent;
-  animation: ad-spin 0.6s linear infinite;
+  animation: dlg-spin 0.6s linear infinite;
 }
 
-@keyframes ad-spin {
+@keyframes dlg-spin {
   to { transform: rotate(360deg); }
 }
 
@@ -436,10 +436,10 @@ function actionClass(a) {
     /* dvh — учитывает динамическую панель браузера; иначе sheet выше экрана. */
     max-height: 90dvh;
   }
-  .ad-header { padding: 20px 20px 4px; }
-  .ad-body { padding-left: 20px; padding-right: 20px; }
-  .ad-footer { padding: 16px 20px calc(20px + env(safe-area-inset-bottom, 0px)); }
-  .ad-footer-end { flex-wrap: wrap; justify-content: flex-end; }
+  .dlg-header { padding: 20px 20px 4px; }
+  .dlg-body { padding-left: 20px; padding-right: 20px; }
+  .dlg-footer { padding: 16px 20px calc(20px + env(safe-area-inset-bottom, 0px)); }
+  .dlg-footer-end { flex-wrap: wrap; justify-content: flex-end; }
 }
 </style>
 

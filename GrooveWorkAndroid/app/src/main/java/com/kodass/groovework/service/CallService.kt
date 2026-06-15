@@ -36,6 +36,17 @@ class CallService : Service() {
         val manager = container.callManager
         val call = manager.currentCall
         if (call == null) {
+            // Контракт FGS: после startForegroundService обязаны вызвать
+            // startForeground в течение ~5с, даже если тут же останавливаемся —
+            // иначе ForegroundServiceDidNotStartInTimeException (краш).
+            runCatching {
+                startForeground(
+                    Notifier.NOTIF_ID_ONGOING,
+                    container.notifier.buildPlaceholderCallNotification(),
+                    ServiceInfo.FOREGROUND_SERVICE_TYPE_PHONE_CALL,
+                )
+            }
+            stopForeground(STOP_FOREGROUND_REMOVE)
             stopSelf()
             return START_NOT_STICKY
         }
@@ -67,12 +78,15 @@ class CallService : Service() {
             )
         }
 
-        watchJob?.cancel()
-        watchJob = scope.launch {
-            manager.phase.collect { phase ->
-                if (phase is CallPhase.Idle) {
-                    stopForeground(STOP_FOREGROUND_REMOVE)
-                    stopSelf()
+        // Один наблюдатель на инстанс: повторные onStartCommand (смена режима
+        // INCOMING→ONGOING) не плодят корутины.
+        if (watchJob?.isActive != true) {
+            watchJob = scope.launch {
+                manager.phase.collect { phase ->
+                    if (phase is CallPhase.Idle) {
+                        stopForeground(STOP_FOREGROUND_REMOVE)
+                        stopSelf()
+                    }
                 }
             }
         }
