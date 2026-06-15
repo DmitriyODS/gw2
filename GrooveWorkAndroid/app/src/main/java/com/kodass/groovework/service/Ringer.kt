@@ -4,7 +4,6 @@ import android.content.Context
 import android.media.AudioAttributes
 import android.media.MediaPlayer
 import android.media.RingtoneManager
-import android.os.VibrationAttributes
 import android.os.VibrationEffect
 import android.os.Vibrator
 import android.os.VibratorManager
@@ -58,8 +57,11 @@ class Ringer(private val context: Context) {
             // Пауза-вибро-пауза, зациклено (repeat = 0 — с начала массива).
             val pattern = longArrayOf(0, 800, 600)
             val effect = VibrationEffect.createWaveform(pattern, 0)
-            val attrs = VibrationAttributes.Builder()
-                .setUsage(VibrationAttributes.USAGE_RINGTONE)
+            // Перегрузка vibrate с AudioAttributes доступна с API 26 (вариант с
+            // VibrationAttributes — только с API 33), поэтому работает и на Android 12.
+            val attrs = AudioAttributes.Builder()
+                .setUsage(AudioAttributes.USAGE_NOTIFICATION_RINGTONE)
+                .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
                 .build()
             vib.vibrate(effect, attrs)
         }

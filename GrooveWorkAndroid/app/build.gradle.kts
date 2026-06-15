@@ -39,7 +39,7 @@ android {
 
     defaultConfig {
         applicationId = "com.kodass.groovework"
-        minSdk = 34
+        minSdk = 31
         targetSdk = 36
         versionCode = appBuildNumber
         versionName = "1.0"

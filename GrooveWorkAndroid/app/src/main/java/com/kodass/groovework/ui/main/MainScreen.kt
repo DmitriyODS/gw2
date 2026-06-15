@@ -121,10 +121,14 @@ fun MainScreen(container: AppContainer) {
         ActivityResultContracts.RequestPermission()
     ) {}
     LaunchedEffect(Unit) {
-        val granted = ContextCompat.checkSelfPermission(
-            context, Manifest.permission.POST_NOTIFICATIONS
-        ) == PackageManager.PERMISSION_GRANTED
-        if (!granted) notifPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+        // Рантайм-разрешение POST_NOTIFICATIONS появилось в Android 13; на 12/12L
+        // уведомления включены по умолчанию — спрашивать нечего.
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            val granted = ContextCompat.checkSelfPermission(
+                context, Manifest.permission.POST_NOTIFICATIONS
+            ) == PackageManager.PERMISSION_GRANTED
+            if (!granted) notifPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+        }
     }
 
     // Полноэкранные уведомления (Android 14+): без них входящий звонок не

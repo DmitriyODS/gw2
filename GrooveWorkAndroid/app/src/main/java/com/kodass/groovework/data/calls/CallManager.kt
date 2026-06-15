@@ -5,6 +5,7 @@ import android.content.Intent
 import android.media.AudioManager
 import android.media.MediaPlayer
 import android.media.ToneGenerator
+import android.os.PowerManager
 import com.kodass.groovework.data.api.CallsApi
 import com.kodass.groovework.data.dto.CallDto
 import com.kodass.groovework.data.dto.LivekitInfoDto
@@ -37,6 +38,8 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
@@ -112,6 +115,18 @@ class CallManager(
     private var wasIncoming = false
     private var accepted = false
 
+    private val powerManager by lazy { appContext.getSystemService(Context.POWER_SERVICE) as PowerManager }
+    // Гасит экран по датчику приближения, пока телефон у уха (как в обычной
+    // звонилке). Держим только при разговоре через ухо: динамик/видео — экран нужен.
+    private val proximityLock: PowerManager.WakeLock? by lazy {
+        if (powerManager.isWakeLockLevelSupported(PowerManager.PROXIMITY_SCREEN_OFF_WAKE_LOCK)) {
+            powerManager.newWakeLock(PowerManager.PROXIMITY_SCREEN_OFF_WAKE_LOCK, "groovework:call_proximity")
+                .apply { setReferenceCounted(false) }
+        } else {
+            null
+        }
+    }
+
     // Монотонная «эпоха» звонка: cleanup() её увеличивает, поэтому любая
     // отложенная корутина (тянем токен / connect к LiveKit), возобновившись
     // после завершения/смены звонка, увидит расхождение и не воскресит звонок
@@ -132,6 +147,15 @@ class CallManager(
         // лежал, мы могли пропустить call:ended (отмена/отклон) — без этого
         // входящий/исходящий «висел» бы до локального таймаута.
         scope.launch { gateway.connected.collect { up -> if (up) resyncFromServer() } }
+        // Датчик приближения гасит экран, когда телефон у уха: только в активном/
+        // исходящем звонке через ухо (не громкая связь и не видео).
+        scope.launch {
+            combine(phase, speakerOn, cameraEnabled) { p, speaker, camera ->
+                (p is CallPhase.Outgoing || p is CallPhase.Active) && !speaker && !camera
+            }.distinctUntilChanged().collect { nearEar ->
+                if (nearEar) acquireProximityLock() else releaseProximityLock()
+            }
+        }
     }
 
     val currentCall: CallDto?
@@ -666,9 +690,21 @@ class CallManager(
         }
     }
 
+    private fun acquireProximityLock() {
+        val lock = proximityLock ?: return
+        runCatching { if (!lock.isHeld) lock.acquire() }
+    }
+
+    private fun releaseProximityLock() {
+        val lock = proximityLock ?: return
+        // WAIT_FOR_NO_PROXIMITY — не «мигать» включением экрана, пока телефон ещё у уха.
+        runCatching { if (lock.isHeld) lock.release(PowerManager.RELEASE_FLAG_WAIT_FOR_NO_PROXIMITY) }
+    }
+
     private fun cleanup() {
         // Инвалидируем любые отложенные connect/answer-корутины этого звонка.
         callEpoch++
+        releaseProximityLock()
         ringer.stop()
         stopRingback()
         outgoingTimeoutJob?.cancel()
