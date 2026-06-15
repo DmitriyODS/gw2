@@ -1,4 +1,3 @@
-import java.io.File
 import java.io.FileInputStream
 import java.util.Properties
 
@@ -14,8 +13,12 @@ plugins {
 // Подставляем как versionCode: приложение узнаёт свою сборку через
 // packageInfo.longVersionCode, а монотонный рост по дате удовлетворяет
 // требованию Android к возрастающему versionCode при обновлении.
+// Читаем через providers.fileContents (а не File.readText): при включённом
+// configuration-cache только Provider API регистрирует файл как вход кэша —
+// иначе изменение version.json не инвалидирует кэш и в APK уходит старый код.
 val appBuildNumber: Int = run {
-    val raw = runCatching { File(rootProject.projectDir, "../apps/version.json").readText() }.getOrNull()
+    val versionFile = rootProject.layout.projectDirectory.file("../apps/version.json")
+    val raw = providers.fileContents(versionFile).asText.orNull
     raw?.let { Regex("\"current_build\"\\s*:\\s*(\\d+)").find(it)?.groupValues?.get(1)?.toIntOrNull() } ?: 1
 }
 
