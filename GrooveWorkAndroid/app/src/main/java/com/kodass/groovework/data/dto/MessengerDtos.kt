@@ -32,10 +32,15 @@ data class ForwardedFromDto(
 data class CallInfoDto(
     val id: Long,
     val status: String? = null,
+    val media: String? = null,
     @SerialName("started_at") val startedAt: String? = null,
     @SerialName("ended_at") val endedAt: String? = null,
     @SerialName("duration_sec") val durationSec: Long? = null,
-)
+) {
+    // Живой звонок, к которому можно присоединиться/вернуться.
+    val isLive: Boolean get() = status == "ringing" || status == "active"
+    val isVideo: Boolean get() = media == "video"
+}
 
 @Serializable
 data class TaskCardDto(

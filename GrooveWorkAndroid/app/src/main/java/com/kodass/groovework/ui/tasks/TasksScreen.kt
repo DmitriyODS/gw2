@@ -17,8 +17,11 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -49,6 +52,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
@@ -63,14 +67,14 @@ import com.kodass.groovework.data.dto.TaskDto
 import com.kodass.groovework.ui.common.CenteredLoading
 import com.kodass.groovework.ui.common.EmptyState
 import com.kodass.groovework.ui.common.ErrorState
+import com.kodass.groovework.ui.common.RefreshOnResume
 import com.kodass.groovework.ui.common.UserAvatar
 import com.kodass.groovework.ui.common.formatChatStamp
 import com.kodass.groovework.ui.common.parseIso
 import com.kodass.groovework.ui.common.rememberIsScrollingUp
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.launch
 import java.time.LocalDate
-
-private val tabs = listOf("active" to "Активные", "favorites" to "Избранные", "archive" to "Архив")
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -79,17 +83,23 @@ fun TasksScreen(container: AppContainer, onOpenTask: (Long) -> Unit) {
         TasksViewModel(container.tasksRepo, container.gateway, container.json)
     }
     var showCreate by remember { mutableStateOf(false) }
-    val listState = rememberLazyListState()
-    val fabVisible = listState.rememberIsScrollingUp()
+    val scope = rememberCoroutineScope()
+    val initialPage = remember { taskTabs.indexOfFirst { it.first == viewModel.tab }.coerceAtLeast(0) }
+    val pagerState = rememberPagerState(initialPage = initialPage) { taskTabs.size }
+    // Свой LazyListState на вкладку: сохраняет позицию при свайпе и питает скрытие FAB.
+    val listStates = listOf(rememberLazyListState(), rememberLazyListState(), rememberLazyListState())
+    val fabVisible = listStates[pagerState.currentPage].rememberIsScrollingUp()
 
-    LaunchedEffect(listState) {
-        snapshotFlow {
-            val last = listState.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: 0
-            last >= listState.layoutInfo.totalItemsCount - 5
-        }
+    // Свайп пейджера → выбор вкладки (её данные подгружаются при оседании).
+    LaunchedEffect(pagerState) {
+        snapshotFlow { pagerState.currentPage }
             .distinctUntilChanged()
-            .collect { nearEnd -> if (nearEnd) viewModel.loadMore() }
+            .collect { page -> viewModel.selectTab(taskTabs[page].first) }
     }
+
+    // Живые обновления приходят по WebSocket; при входе/возврате и смене компании —
+    // разовое обновление загруженных вкладок.
+    RefreshOnResume { viewModel.backgroundRefresh() }
 
     Scaffold(
         topBar = { TopAppBar(title = { Text("Задачи") }) },
@@ -127,67 +137,28 @@ fun TasksScreen(container: AppContainer, onOpenTask: (Long) -> Unit) {
                     .fillMaxWidth()
                     .padding(horizontal = 16.dp, vertical = 4.dp),
             )
-            val selectedIndex = tabs.indexOfFirst { it.first == viewModel.tab }.coerceAtLeast(0)
-            PrimaryTabRow(selectedTabIndex = selectedIndex) {
-                tabs.forEachIndexed { index, (key, label) ->
+            PrimaryTabRow(selectedTabIndex = pagerState.currentPage) {
+                taskTabs.forEachIndexed { index, (_, label) ->
                     Tab(
-                        selected = index == selectedIndex,
-                        onClick = { viewModel.setTabValue(key) },
+                        selected = pagerState.currentPage == index,
+                        onClick = { scope.launch { pagerState.animateScrollToPage(index) } },
                         text = { Text(label) },
                     )
                 }
             }
-            PullToRefreshBox(
-                isRefreshing = viewModel.refreshing,
-                onRefresh = { viewModel.pullRefresh() },
-                modifier = Modifier.fillMaxSize(),
-            ) {
-                when {
-                    viewModel.loading -> CenteredLoading()
-                    viewModel.error != null -> LazyColumn(modifier = Modifier.fillMaxSize()) {
-                        item {
-                            ErrorState(
-                                viewModel.error ?: "",
-                                onRetry = { viewModel.reload() },
-                                modifier = Modifier.fillParentMaxSize(),
-                            )
-                        }
-                    }
-                    viewModel.items.isEmpty() -> LazyColumn(modifier = Modifier.fillMaxSize()) {
-                        item {
-                            EmptyState(
-                                title = when (viewModel.tab) {
-                                    "favorites" -> "Нет избранных задач"
-                                    "archive" -> "Архив пуст"
-                                    else -> "Задач пока нет"
-                                },
-                                subtitle = if (viewModel.search.isNotBlank()) "Попробуйте изменить запрос" else null,
-                                modifier = Modifier.fillParentMaxSize(),
-                            )
-                        }
-                    }
-                    else -> LazyColumn(
-                        state = listState,
-                        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
-                        verticalArrangement = Arrangement.spacedBy(8.dp),
-                        modifier = Modifier.fillMaxSize(),
-                    ) {
-                        items(viewModel.items, key = { it.id }) { task ->
-                            TaskCard(
-                                task = task,
-                                onClick = { onOpenTask(task.id) },
-                                onToggleFavorite = { viewModel.toggleFavorite(task) },
-                            )
-                        }
-                        if (viewModel.loadingMore) {
-                            item {
-                                Box(modifier = Modifier.fillMaxWidth().padding(12.dp), contentAlignment = Alignment.Center) {
-                                    CircularProgressIndicator(modifier = Modifier.size(24.dp), strokeWidth = 2.dp)
-                                }
-                            }
-                        }
-                    }
-                }
+            HorizontalPager(
+                state = pagerState,
+                key = { taskTabs[it].first },
+                modifier = Modifier.weight(1f).fillMaxWidth(),
+            ) { page ->
+                val key = taskTabs[page].first
+                LaunchedEffect(key) { viewModel.ensureLoaded(key) }
+                TaskTabContent(
+                    viewModel = viewModel,
+                    tabKey = key,
+                    listState = listStates[page],
+                    onOpenTask = onOpenTask,
+                )
             }
         }
     }
@@ -201,6 +172,77 @@ fun TasksScreen(container: AppContainer, onOpenTask: (Long) -> Unit) {
                 onOpenTask(task.id)
             },
         )
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun TaskTabContent(
+    viewModel: TasksViewModel,
+    tabKey: String,
+    listState: LazyListState,
+    onOpenTask: (Long) -> Unit,
+) {
+    LaunchedEffect(listState, tabKey) {
+        snapshotFlow {
+            val last = listState.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: 0
+            last >= listState.layoutInfo.totalItemsCount - 5
+        }
+            .distinctUntilChanged()
+            .collect { nearEnd -> if (nearEnd) viewModel.loadMore(tabKey) }
+    }
+    PullToRefreshBox(
+        isRefreshing = viewModel.isRefreshing(tabKey),
+        onRefresh = { viewModel.pullRefresh(tabKey) },
+        modifier = Modifier.fillMaxSize(),
+    ) {
+        val taskItems = viewModel.items(tabKey)
+        when {
+            viewModel.isLoading(tabKey) && taskItems.isEmpty() -> CenteredLoading()
+            viewModel.errorOf(tabKey) != null && taskItems.isEmpty() -> LazyColumn(modifier = Modifier.fillMaxSize()) {
+                item {
+                    ErrorState(
+                        viewModel.errorOf(tabKey) ?: "",
+                        onRetry = { viewModel.reload(tabKey) },
+                        modifier = Modifier.fillParentMaxSize(),
+                    )
+                }
+            }
+            taskItems.isEmpty() -> LazyColumn(modifier = Modifier.fillMaxSize()) {
+                item {
+                    EmptyState(
+                        title = when (tabKey) {
+                            "favorites" -> "Нет избранных задач"
+                            "archive" -> "Архив пуст"
+                            else -> "Задач пока нет"
+                        },
+                        subtitle = if (viewModel.search.isNotBlank()) "Попробуйте изменить запрос" else null,
+                        modifier = Modifier.fillParentMaxSize(),
+                    )
+                }
+            }
+            else -> LazyColumn(
+                state = listState,
+                contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+                modifier = Modifier.fillMaxSize(),
+            ) {
+                items(taskItems, key = { it.id }) { task ->
+                    TaskCard(
+                        task = task,
+                        onClick = { onOpenTask(task.id) },
+                        onToggleFavorite = { viewModel.toggleFavorite(task) },
+                    )
+                }
+                if (viewModel.isLoadingMore(tabKey)) {
+                    item {
+                        Box(modifier = Modifier.fillMaxWidth().padding(12.dp), contentAlignment = Alignment.Center) {
+                            CircularProgressIndicator(modifier = Modifier.size(24.dp), strokeWidth = 2.dp)
+                        }
+                    }
+                }
+            }
+        }
     }
 }
 

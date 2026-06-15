@@ -17,6 +17,20 @@
       </div>
     </div>
 
+    <a class="about-mobile" href="/apps/groovework.apk" download>
+      <div class="about-mobile-icon">
+        <span class="material-symbols-outlined">android</span>
+      </div>
+      <div class="about-mobile-text">
+        <h4>Мобильное приложение для Android</h4>
+        <p>Установите Groove Work на смартфон — задачи, юниты, чаты и звонки всегда под рукой.</p>
+      </div>
+      <span class="about-mobile-btn">
+        <span class="material-symbols-outlined">download</span>
+        Скачать APK
+      </span>
+    </a>
+
     <div class="about-grid">
       <button class="about-card" @click="openSupport" :disabled="opening">
         <div class="about-card-icon" data-tone="primary">
@@ -169,6 +183,70 @@ async function openSupport() {
   font-size: 16px;
 }
 
+.about-mobile {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 18px 20px;
+  border-radius: var(--radius-lg);
+  background: linear-gradient(135deg,
+    var(--color-tertiary-container) 0%,
+    var(--color-secondary-container) 100%);
+  text-decoration: none;
+  transition: transform 0.12s, box-shadow 0.15s;
+}
+
+.about-mobile:hover {
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-sm);
+}
+
+.about-mobile-icon {
+  width: 48px;
+  height: 48px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  color: var(--color-tertiary);
+  flex-shrink: 0;
+}
+
+.about-mobile-icon .material-symbols-outlined { font-size: 28px; }
+
+.about-mobile-text { flex: 1; min-width: 0; }
+
+.about-mobile-text h4 {
+  margin: 0 0 2px;
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--color-on-tertiary-container);
+}
+
+.about-mobile-text p {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.35;
+  color: var(--color-on-tertiary-container);
+  opacity: 0.85;
+}
+
+.about-mobile-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 20px;
+  border-radius: var(--radius-full);
+  background: var(--color-primary);
+  color: var(--color-on-primary);
+  font-size: 14px;
+  font-weight: 600;
+  flex-shrink: 0;
+}
+
+.about-mobile-btn .material-symbols-outlined { font-size: 18px; }
+
 .about-grid {
   display: grid;
   grid-template-columns: 1fr;
@@ -248,5 +326,7 @@ async function openSupport() {
   }
   .about-version { justify-content: center; }
   .about-card { padding: 14px; }
+  .about-mobile { flex-direction: column; text-align: center; }
+  .about-mobile-btn { width: 100%; justify-content: center; }
 }
 </style>

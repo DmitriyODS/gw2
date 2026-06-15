@@ -32,8 +32,25 @@ const serveUploads = () => ({
   }
 })
 
+// В проде /apps/ (APK мобильного приложения + version.json с номером сборки)
+// отдаёт nginx из каталога apps/ репозитория; в dev — этот мини-плагин.
+const appsDir = fileURLToPath(new URL('../apps', import.meta.url))
+const serveApps = () => ({
+  name: 'serve-apps',
+  configureServer(server) {
+    server.middlewares.use('/apps', (req, res, next) => {
+      const rel = normalize(decodeURIComponent((req.url || '').split('?')[0]))
+      const file = join(appsDir, rel)
+      if (!file.startsWith(appsDir) || !existsSync(file)) return next()
+      if (file.endsWith('.json')) res.setHeader('Content-Type', 'application/json')
+      else if (file.endsWith('.apk')) res.setHeader('Content-Type', 'application/vnd.android.package-archive')
+      createReadStream(file).pipe(res)
+    })
+  }
+})
+
 export default defineConfig({
-  plugins: [vue(), serveChangelog(), serveUploads()],
+  plugins: [vue(), serveChangelog(), serveUploads(), serveApps()],
   resolve: {
     alias: {
       '@': fileURLToPath(new URL('./src', import.meta.url))

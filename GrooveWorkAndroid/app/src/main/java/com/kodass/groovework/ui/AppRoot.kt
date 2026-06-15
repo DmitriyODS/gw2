@@ -10,6 +10,8 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Call
+import androidx.compose.material.icons.filled.CloudOff
+import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LoadingIndicator
@@ -20,6 +22,8 @@ import android.widget.Toast
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.rememberCoroutineScope
+import kotlinx.coroutines.launch
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.Modifier
@@ -46,6 +50,7 @@ fun AppRoot(container: AppContainer) {
 
     // Ошибки звонка — пользователю (иначе сбой соединения был незаметен).
     val context = LocalContext.current
+    val scope = rememberCoroutineScope()
     LaunchedEffect(Unit) {
         container.callManager.errors.collect { message ->
             Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
@@ -57,6 +62,9 @@ fun AppRoot(container: AppContainer) {
             when (val state = authState) {
                 AuthState.Loading -> SplashScreen()
                 AuthState.LoggedOut -> LoginScreen(container)
+                AuthState.Offline -> OfflineScreen(
+                    onRetry = { scope.launch { container.sessionManager.retryBootstrap() } },
+                )
                 is AuthState.LoggedIn ->
                     if (state.claims.forceChange) {
                         ChangeDefaultScreen(container)
@@ -67,15 +75,22 @@ fun AppRoot(container: AppContainer) {
         }
 
         // Сам экран звонка живёт в отдельной CallActivity (поверх локскрина).
-        // Здесь — только баннер возврата, когда звонок свёрнут.
+        // Здесь — только баннеры поверх приложения: возврат к свёрнутому звонку
+        // и плашка текущего юнита (с отсчётом времени).
         val callPhase by container.callManager.phase.collectAsStateWithLifecycle()
         val callUiVisible by container.callManager.callUiVisible.collectAsStateWithLifecycle()
         val callActive = callPhase is CallPhase.Outgoing || callPhase is CallPhase.Active
-        if (callActive && !callUiVisible) {
-            ReturnToCallBanner(
-                onClick = { container.callManager.showCallUi() },
-                modifier = Modifier.align(Alignment.TopCenter),
-            )
+        val authed = authState is AuthState.LoggedIn
+        Column(
+            modifier = Modifier.align(Alignment.TopCenter).statusBarsPadding(),
+            horizontalAlignment = Alignment.CenterHorizontally,
+        ) {
+            if (callActive && !callUiVisible) {
+                ReturnToCallBanner(onClick = { container.callManager.showCallUi() })
+            }
+            if (authed) {
+                com.kodass.groovework.ui.units.UnitBanner(container = container)
+            }
         }
     }
 }
@@ -86,7 +101,6 @@ private fun ReturnToCallBanner(onClick: () -> Unit, modifier: Modifier = Modifie
         color = MaterialTheme.colorScheme.primary,
         shape = RoundedCornerShape(24.dp),
         modifier = modifier
-            .statusBarsPadding()
             .padding(top = 8.dp)
             .clickable(onClick = onClick),
     ) {
@@ -106,6 +120,37 @@ private fun ReturnToCallBanner(onClick: () -> Unit, modifier: Modifier = Modifie
                 style = MaterialTheme.typography.labelLarge,
                 modifier = Modifier.padding(start = 8.dp),
             )
+        }
+    }
+}
+
+@Composable
+private fun OfflineScreen(onRetry: () -> Unit) {
+    Column(
+        modifier = Modifier.fillMaxSize().padding(32.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center,
+    ) {
+        Icon(
+            imageVector = Icons.Filled.CloudOff,
+            contentDescription = null,
+            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.size(56.dp),
+        )
+        Text(
+            text = "Нет подключения к интернету",
+            style = MaterialTheme.typography.titleMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(top = 16.dp),
+        )
+        Text(
+            text = "Проверьте соединение и попробуйте снова.",
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.outline,
+            modifier = Modifier.padding(top = 4.dp),
+        )
+        Button(onClick = onRetry, modifier = Modifier.padding(top = 20.dp)) {
+            Text("Повторить")
         }
     }
 }

@@ -28,6 +28,9 @@ interface MessengerApi {
     @POST("api/messenger/conversations")
     suspend fun openConversation(@Body body: OpenConversationRequest): OpenedConversationDto
 
+    @GET("api/messenger/dev-chat")
+    suspend fun devChat(): OpenedConversationDto
+
     @GET("api/messenger/conversations/{id}/messages")
     suspend fun messages(
         @Path("id") conversationId: Long,

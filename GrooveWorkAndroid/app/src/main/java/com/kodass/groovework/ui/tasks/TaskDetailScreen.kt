@@ -1,5 +1,10 @@
 package com.kodass.groovework.ui.tasks
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -18,43 +23,52 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Send
-import androidx.compose.material.icons.filled.Archive
 import androidx.compose.material.icons.filled.Block
+import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.Unarchive
 import androidx.compose.material.icons.outlined.StarBorder
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DatePicker
 import androidx.compose.material3.DatePickerDialog
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledIconButton
+import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.PrimaryTabRow
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Tab
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TextField
 import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.material3.TopAppBar
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.rememberDatePickerState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -62,16 +76,24 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.kodass.groovework.AppContainer
 import com.kodass.groovework.data.dto.CommentDto
 import com.kodass.groovework.ui.common.CenteredLoading
+import com.kodass.groovework.ui.common.ConfirmDialog
+import com.kodass.groovework.ui.common.ConfirmSpec
 import com.kodass.groovework.ui.common.ErrorState
 import com.kodass.groovework.ui.common.UserAvatar
 import com.kodass.groovework.ui.common.formatDate
 import com.kodass.groovework.ui.common.formatDateTime
+import com.kodass.groovework.ui.units.StartUnitSheet
+import com.kodass.groovework.ui.units.UnitRow
+import kotlinx.coroutines.launch
 import java.time.Instant
 import java.time.ZoneOffset
+
+private val detailTabs = listOf("Задача", "Юниты", "Комментарии")
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -79,6 +101,7 @@ fun TaskDetailScreen(container: AppContainer, taskId: Long, onBack: () -> Unit) 
     val viewModel: TaskDetailViewModel = viewModel(key = "task-$taskId") {
         TaskDetailViewModel(
             container.tasksRepo,
+            container.unitsRepo,
             container.authApi,
             container.sessionManager,
             container.gateway,
@@ -87,11 +110,21 @@ fun TaskDetailScreen(container: AppContainer, taskId: Long, onBack: () -> Unit) 
         )
     }
     val task = viewModel.task
+    val activeUnit by container.unitManager.activeUnit.collectAsStateWithLifecycle()
+    val scope = rememberCoroutineScope()
+    val pagerState = rememberPagerState { detailTabs.size }
+
     var menuOpen by remember { mutableStateOf(false) }
     var showRename by remember { mutableStateOf(false) }
     var showStagePicker by remember { mutableStateOf(false) }
     var showResponsiblePicker by remember { mutableStateOf(false) }
     var showDeadlinePicker by remember { mutableStateOf(false) }
+    var showStartUnit by remember { mutableStateOf(false) }
+    var showComplete by remember { mutableStateOf(false) }
+
+    // FAB «Начать юнит»: задача открыта, не в архиве, активного юнита нет,
+    // и мы не на вкладке комментариев (там своё поле ввода).
+    val showStartFab = task != null && !task.isArchived && activeUnit == null && pagerState.currentPage != 2
 
     Scaffold(
         topBar = {
@@ -112,11 +145,13 @@ fun TaskDetailScreen(container: AppContainer, taskId: Long, onBack: () -> Unit) 
                                 else MaterialTheme.colorScheme.onSurfaceVariant,
                             )
                         }
-                        IconButton(onClick = { menuOpen = true }) {
-                            Icon(Icons.Filled.MoreVert, contentDescription = "Меню")
-                        }
-                        DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
-                            if (task.isArchived) {
+                        // Завершение неархивной задачи — кнопкой во вкладке «Задача»
+                        // (раздел ниже). В меню остаётся только восстановление из архива.
+                        if (task.isArchived) {
+                            IconButton(onClick = { menuOpen = true }) {
+                                Icon(Icons.Filled.MoreVert, contentDescription = "Меню")
+                            }
+                            DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
                                 DropdownMenuItem(
                                     text = { Text("Восстановить") },
                                     leadingIcon = { Icon(Icons.Filled.Unarchive, contentDescription = null) },
@@ -125,24 +160,23 @@ fun TaskDetailScreen(container: AppContainer, taskId: Long, onBack: () -> Unit) 
                                         viewModel.restore()
                                     },
                                 )
-                            } else {
-                                DropdownMenuItem(
-                                    text = { Text("В архив") },
-                                    leadingIcon = { Icon(Icons.Filled.Archive, contentDescription = null) },
-                                    onClick = {
-                                        menuOpen = false
-                                        viewModel.archive()
-                                    },
-                                )
                             }
                         }
                     }
                 },
             )
         },
-        bottomBar = {
-            if (task != null) {
-                CommentInputBar(viewModel)
+        floatingActionButton = {
+            AnimatedVisibility(
+                visible = showStartFab,
+                enter = scaleIn() + fadeIn(),
+                exit = scaleOut() + fadeOut(),
+            ) {
+                ExtendedFloatingActionButton(
+                    onClick = { showStartUnit = true },
+                    icon = { Icon(Icons.Filled.PlayArrow, contentDescription = null) },
+                    text = { Text("Начать юнит") },
+                )
             }
         },
     ) { padding ->
@@ -151,76 +185,65 @@ fun TaskDetailScreen(container: AppContainer, taskId: Long, onBack: () -> Unit) 
                 viewModel.loading -> CenteredLoading()
                 viewModel.error != null || task == null ->
                     ErrorState(viewModel.error ?: "Задача не найдена", onRetry = { viewModel.load() })
-                else -> LazyColumn(
-                    modifier = Modifier.fillMaxSize(),
-                    contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
-                ) {
-                    item {
-                        Row(verticalAlignment = Alignment.Top) {
-                            Text(
-                                text = task.name,
-                                style = MaterialTheme.typography.headlineSmall,
-                                fontWeight = FontWeight.SemiBold,
-                                modifier = Modifier.weight(1f),
-                            )
-                            IconButton(onClick = { showRename = true }) {
-                                Icon(Icons.Filled.Edit, contentDescription = "Переименовать")
-                            }
-                        }
-                    }
-                    item {
-                        ColorRow(selected = task.color, onSelect = { viewModel.setColor(it) })
-                    }
-                    item {
-                        viewModel.actionError?.let { error ->
-                            Text(
-                                text = error,
-                                color = MaterialTheme.colorScheme.error,
-                                style = MaterialTheme.typography.bodyMedium,
-                                modifier = Modifier.padding(vertical = 4.dp),
+                else -> Column(modifier = Modifier.fillMaxSize()) {
+                    PrimaryTabRow(selectedTabIndex = pagerState.currentPage) {
+                        detailTabs.forEachIndexed { index, label ->
+                            Tab(
+                                selected = pagerState.currentPage == index,
+                                onClick = { scope.launch { pagerState.animateScrollToPage(index) } },
+                                text = { Text(label) },
                             )
                         }
                     }
-                    item {
-                        MetaRow("Этап", task.stage?.name ?: "Не задан") { showStagePicker = true }
-                        MetaRow("Ответственный", task.responsible?.fio ?: "Не назначен") {
-                            viewModel.loadDirectory()
-                            showResponsiblePicker = true
-                        }
-                        MetaRow("Дедлайн", task.deadline?.let { formatDate(it) } ?: "Не задан") {
-                            showDeadlinePicker = true
-                        }
-                        MetaRow("Отдел", task.department?.name ?: "—", onClick = null)
-                        MetaRow("Автор", task.author?.fio ?: "—", onClick = null)
-                        MetaRow("Получена", task.receivedAt?.let { formatDate(it) } ?: "—", onClick = null)
-                    }
-                    item {
-                        HorizontalDivider(modifier = Modifier.padding(vertical = 12.dp))
-                        Text(
-                            text = "Комментарии (${viewModel.comments.size})",
-                            style = MaterialTheme.typography.titleMedium,
-                            modifier = Modifier.padding(bottom = 8.dp),
-                        )
-                    }
-                    items(viewModel.comments, key = { it.id }) { comment ->
-                        CommentRow(
-                            comment = comment,
-                            mine = comment.authorId == viewModel.myUserId,
-                            onDelete = { viewModel.deleteComment(comment) },
-                        )
-                    }
-                    if (viewModel.comments.isEmpty()) {
-                        item {
-                            Text(
-                                text = "Пока нет комментариев",
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    HorizontalPager(
+                        state = pagerState,
+                        modifier = Modifier.weight(1f).fillMaxWidth(),
+                    ) { page ->
+                        when (page) {
+                            0 -> TaskInfoTab(
+                                viewModel = viewModel,
+                                onRename = { showRename = true },
+                                onStage = { showStagePicker = true },
+                                onResponsible = {
+                                    viewModel.loadDirectory()
+                                    showResponsiblePicker = true
+                                },
+                                onDeadline = { showDeadlinePicker = true },
+                                onComplete = { showComplete = true },
                             )
+                            1 -> UnitsTab(viewModel = viewModel)
+                            else -> CommentsTab(viewModel = viewModel)
                         }
                     }
                 }
             }
         }
+    }
+
+    if (showStartUnit && task != null) {
+        StartUnitSheet(
+            container = container,
+            taskId = taskId,
+            onDismiss = { showStartUnit = false },
+            onStarted = {
+                showStartUnit = false
+                viewModel.loadUnits()
+                scope.launch { pagerState.animateScrollToPage(1) }
+            },
+        )
+    }
+
+    if (showComplete && task != null) {
+        ConfirmDialog(
+            ConfirmSpec(
+                title = "Завершить задачу",
+                text = "Задача отправится в архив и будет закрыта. Продолжить?",
+                confirmLabel = "Завершить",
+                destructive = true,
+                action = { viewModel.complete(onBack) },
+            ),
+            onDismiss = { showComplete = false },
+        )
     }
 
     if (showRename && task != null) {
@@ -236,7 +259,7 @@ fun TaskDetailScreen(container: AppContainer, taskId: Long, onBack: () -> Unit) 
 
     if (showStagePicker) {
         ModalBottomSheet(onDismissRequest = { showStagePicker = false }) {
-            Column(modifier = Modifier.padding(horizontal = 16.dp)) {
+            Column(modifier = Modifier.padding(horizontal = 16.dp).navigationBarsPadding()) {
                 Text("Этап", style = MaterialTheme.typography.titleLarge, modifier = Modifier.padding(bottom = 8.dp))
                 Text(
                     text = "Без этапа",
@@ -330,6 +353,132 @@ fun TaskDetailScreen(container: AppContainer, taskId: Long, onBack: () -> Unit) 
         ) {
             DatePicker(state = datePickerState)
         }
+    }
+}
+
+@Composable
+private fun TaskInfoTab(
+    viewModel: TaskDetailViewModel,
+    onRename: () -> Unit,
+    onStage: () -> Unit,
+    onResponsible: () -> Unit,
+    onDeadline: () -> Unit,
+    onComplete: () -> Unit,
+) {
+    val task = viewModel.task ?: return
+    LazyColumn(
+        modifier = Modifier.fillMaxSize(),
+        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
+    ) {
+        item {
+            Row(verticalAlignment = Alignment.Top) {
+                Text(
+                    text = task.name,
+                    style = MaterialTheme.typography.headlineSmall,
+                    fontWeight = FontWeight.SemiBold,
+                    modifier = Modifier.weight(1f),
+                )
+                IconButton(onClick = onRename) {
+                    Icon(Icons.Filled.Edit, contentDescription = "Переименовать")
+                }
+            }
+        }
+        item { ColorRow(selected = task.color, onSelect = { viewModel.setColor(it) }) }
+        item {
+            viewModel.actionError?.let { error ->
+                Text(
+                    text = error,
+                    color = MaterialTheme.colorScheme.error,
+                    style = MaterialTheme.typography.bodyMedium,
+                    modifier = Modifier.padding(vertical = 4.dp),
+                )
+            }
+        }
+        item {
+            MetaRow("Этап", task.stage?.name ?: "Не задан", onStage)
+            MetaRow("Ответственный", task.responsible?.fio ?: "Не назначен", onResponsible)
+            MetaRow("Дедлайн", task.deadline?.let { formatDate(it) } ?: "Не задан", onDeadline)
+            MetaRow("Отдел", task.department?.name ?: "—", onClick = null)
+            MetaRow("Автор", task.author?.fio ?: "—", onClick = null)
+            MetaRow("Получена", task.receivedAt?.let { formatDate(it) } ?: "—", onClick = null)
+        }
+        if (!task.isArchived) {
+            item {
+                FilledTonalButton(
+                    onClick = onComplete,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 24.dp, bottom = 80.dp),
+                ) {
+                    Icon(Icons.Filled.CheckCircle, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Text("Завершить задачу", modifier = Modifier.padding(start = 8.dp))
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun UnitsTab(viewModel: TaskDetailViewModel) {
+    LaunchedEffect(Unit) { viewModel.loadUnits() }
+    Box(modifier = Modifier.fillMaxSize()) {
+        when {
+            viewModel.unitsLoading && viewModel.units.isEmpty() -> CenteredLoading()
+            viewModel.units.isEmpty() -> Text(
+                text = "Юнитов пока нет",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.align(Alignment.Center),
+            )
+            else -> LazyColumn(
+                contentPadding = PaddingValues(16.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+                modifier = Modifier.fillMaxSize(),
+            ) {
+                items(viewModel.units, key = { it.id }) { unit ->
+                    UnitRow(
+                        unit = unit,
+                        canDelete = viewModel.canManageUnit(unit),
+                        onDelete = { viewModel.deleteUnit(unit) },
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun CommentsTab(viewModel: TaskDetailViewModel) {
+    Column(modifier = Modifier.fillMaxSize()) {
+        LazyColumn(
+            modifier = Modifier.weight(1f).fillMaxWidth(),
+            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
+        ) {
+            item {
+                Text(
+                    text = "Комментарии (${viewModel.comments.size})",
+                    style = MaterialTheme.typography.titleMedium,
+                    modifier = Modifier.padding(bottom = 8.dp),
+                )
+            }
+            items(viewModel.comments, key = { it.id }) { comment ->
+                CommentRow(
+                    comment = comment,
+                    mine = comment.authorId == viewModel.myUserId,
+                    onDelete = { viewModel.deleteComment(comment) },
+                )
+            }
+            if (viewModel.comments.isEmpty()) {
+                item {
+                    Text(
+                        text = "Пока нет комментариев",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
+        }
+        CommentInputBar(viewModel)
     }
 }
 

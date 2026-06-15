@@ -96,6 +96,9 @@ class MessengerRepository(
     suspend fun openConversation(userId: Long): OpenedConversationDto =
         apiCall(json) { api.openConversation(OpenConversationRequest(userId)) }
 
+    suspend fun openDevChat(): OpenedConversationDto =
+        apiCall(json) { api.devChat() }
+
     suspend fun upload(fileName: String, mimeType: String, bytes: ByteArray): AttachmentDto {
         val body = bytes.toRequestBody(mimeType.toMediaTypeOrNull())
         val part = MultipartBody.Part.createFormData("file", fileName, body)

@@ -381,6 +381,9 @@ services:
       # nginx отдавал бы прежний changelog до пересоздания контейнера. С
       # каталогом файл резолвится по имени на каждый запрос — правки видны сразу.
       - ../data:/srv/data:ro
+      # Мобильное приложение: APK + version.json (location /apps/). APK кладёт
+      # `make deploy-apk` (scp), version.json приезжает с git-репозиторием.
+      - ../apps:/srv/apps:ro
 
   # Медиа-сервер звонков LiveKit (SFU). Сигнальный WebSocket :7880 ходит через
   # nginx (/livekit); медиа — UDP-мультиплекс на одном порту 7882 (+ TCP 7881

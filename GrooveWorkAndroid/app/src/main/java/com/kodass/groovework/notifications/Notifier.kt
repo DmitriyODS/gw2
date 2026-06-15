@@ -29,12 +29,14 @@ class Notifier(private val context: Context) {
         const val CHANNEL_CALLS_INCOMING = "calls_incoming"
         const val CHANNEL_CALLS_ONGOING = "calls_ongoing"
         const val CHANNEL_SERVICE = "service"
+        const val CHANNEL_UNIT = "unit"
 
         const val NOTIF_ID_ONLINE = 1
         // Разные id для входящего и активного — иначе активное «наследует»
         // heads-up входящего и зависает поверх.
         const val NOTIF_ID_INCOMING = 2
         const val NOTIF_ID_ONGOING = 3
+        const val NOTIF_ID_UNIT = 4
         // Сообщения: id = 1000 + conversationId, задачи: 5000 + taskId.
         private const val MESSAGE_BASE = 1000
         private const val TASK_BASE = 5000
@@ -69,6 +71,15 @@ class Notifier(private val context: Context) {
                 description = "Текущий звонок"
                 setSound(null, null)
                 enableVibration(false)
+            }
+        )
+        nm.createNotificationChannel(
+            // Текущий юнит — тихо в шторке (без heads-up), с отсчётом времени.
+            NotificationChannel(CHANNEL_UNIT, "Текущий юнит", NotificationManager.IMPORTANCE_LOW).apply {
+                description = "Отсчёт времени активного юнита"
+                setSound(null, null)
+                enableVibration(false)
+                setShowBadge(false)
             }
         )
         nm.createNotificationChannel(
@@ -235,6 +246,40 @@ class Notifier(private val context: Context) {
     fun cancelCall() {
         manager.cancel(NOTIF_ID_INCOMING)
         manager.cancel(NOTIF_ID_ONGOING)
+    }
+
+    // Ongoing-уведомление текущего юнита: отсчёт времени (хронометр от старта) +
+    // кнопка «Завершить» и переход в модалку юнита по тапу.
+    fun showUnit(unit: com.kodass.groovework.data.dto.UnitDto) {
+        if (!canPost()) return
+        val startMillis = com.kodass.groovework.ui.common.parseIso(unit.datetimeStart)
+            ?.toInstant()?.toEpochMilli() ?: System.currentTimeMillis()
+        val stopIntent = PendingIntent.getBroadcast(
+            context,
+            6,
+            Intent(context, com.kodass.groovework.service.UnitActionReceiver::class.java)
+                .setAction(com.kodass.groovework.service.UnitActionReceiver.ACTION_STOP)
+                .putExtra("unit_id", unit.id),
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+        )
+        val notification = NotificationCompat.Builder(context, CHANNEL_UNIT)
+            .setSmallIcon(R.drawable.ic_launcher_monochrome)
+            .setContentTitle("Текущий юнит")
+            .setContentText(unit.name)
+            .setOngoing(true)
+            .setOnlyAlertOnce(true)
+            .setUsesChronometer(true)
+            .setWhen(startMillis)
+            .setShowWhen(true)
+            .setCategory(NotificationCompat.CATEGORY_STOPWATCH)
+            .setContentIntent(routeIntent("unit"))
+            .addAction(0, "Завершить", stopIntent)
+            .build()
+        manager.notify(NOTIF_ID_UNIT, notification)
+    }
+
+    fun cancelUnit() {
+        manager.cancel(NOTIF_ID_UNIT)
     }
 
     // Тихое уведомление фонового подключения (если когда-то понадобится FGS связи).

@@ -1,8 +1,8 @@
 package com.kodass.groovework.ui.chats
 
 import android.Manifest
-import android.content.Intent
 import android.provider.OpenableColumns
+import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.animateColorAsState
@@ -43,6 +43,7 @@ import androidx.compose.material.icons.filled.Call
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Done
 import androidx.compose.material.icons.filled.DoneAll
+import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.automirrored.filled.InsertDriveFile
 import androidx.compose.material.icons.filled.PushPin
 import androidx.compose.material.icons.filled.TaskAlt
@@ -82,7 +83,6 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
-import androidx.core.net.toUri
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
@@ -98,12 +98,16 @@ import coil3.compose.AsyncImage
 import com.kodass.groovework.AppContainer
 import com.kodass.groovework.data.dto.AttachmentDto
 import com.kodass.groovework.data.dto.MessageDto
+import com.kodass.groovework.data.files.DownloadState
+import com.kodass.groovework.data.files.openDownloadedFile
 import com.kodass.groovework.ui.common.CenteredLoading
 import com.kodass.groovework.ui.common.ConfirmDialog
 import com.kodass.groovework.ui.common.ConfirmSpec
 import com.kodass.groovework.ui.common.ErrorState
+import com.kodass.groovework.ui.common.ImageViewer
 import com.kodass.groovework.ui.common.LocalServerUrl
 import com.kodass.groovework.ui.common.UserAvatar
+import com.kodass.groovework.ui.common.UserInfoSheet
 import com.kodass.groovework.ui.common.formatDayHeader
 import com.kodass.groovework.ui.common.formatFileSize
 import com.kodass.groovework.ui.common.formatLastSeen
@@ -164,6 +168,36 @@ fun ChatScreen(
     }
     val canCall = peer != null && conversation.isPetChat.not() && conversation.isDevChat.not()
 
+    // Возврат/вход в живой звонок по тапу на плашке в чате.
+    val callPhase by container.callManager.phase.collectAsStateWithLifecycle()
+    val currentCallId = when (val p = callPhase) {
+        is com.kodass.groovework.data.calls.CallPhase.Active -> p.call.id
+        is com.kodass.groovework.data.calls.CallPhase.Outgoing -> p.call.id
+        is com.kodass.groovework.data.calls.CallPhase.Incoming -> p.call.id
+        else -> null
+    }
+    var pendingJoinCall by remember { mutableStateOf<com.kodass.groovework.data.dto.CallInfoDto?>(null) }
+    val joinCallPermLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestMultiplePermissions()
+    ) { result ->
+        val call = pendingJoinCall ?: return@rememberLauncherForActivityResult
+        pendingJoinCall = null
+        val micOk = result[Manifest.permission.RECORD_AUDIO] == true
+        val camOk = !call.isVideo || result[Manifest.permission.CAMERA] == true
+        if (micOk && camOk) container.callManager.returnOrJoinCall(call.id, call.isVideo)
+    }
+    val returnToCall: (com.kodass.groovework.data.dto.CallInfoDto) -> Unit = { call ->
+        if (container.callManager.currentCall?.id == call.id) {
+            container.callManager.showCallUi()
+        } else {
+            pendingJoinCall = call
+            joinCallPermLauncher.launch(
+                if (call.isVideo) arrayOf(Manifest.permission.RECORD_AUDIO, Manifest.permission.CAMERA)
+                else arrayOf(Manifest.permission.RECORD_AUDIO)
+            )
+        }
+    }
+
     val listState = rememberLazyListState()
     val scope = rememberCoroutineScope()
     val inputFocus = remember { FocusRequester() }
@@ -172,7 +206,14 @@ fun ChatScreen(
     // Подтверждение деструктива (#5) и пикер задачи (#8) — на уровне экрана.
     var confirm by remember { mutableStateOf<ConfirmSpec?>(null) }
     var showTaskPicker by remember { mutableStateOf(false) }
+    // Просмотр картинки из чата внутри приложения (зум + скачивание).
+    var imageViewer by remember { mutableStateOf<AttachmentDto?>(null) }
+    // Карточка собеседника (тап по шапке чата).
+    var showPeerInfo by remember { mutableStateOf(false) }
     confirm?.let { spec -> ConfirmDialog(spec, onDismiss = { confirm = null }) }
+    imageViewer?.let { attachment ->
+        ImageViewer(container = container, attachment = attachment, onDismiss = { imageViewer = null })
+    }
     if (showTaskPicker) {
         TaskPickerSheet(
             container = container,
@@ -237,7 +278,10 @@ fun ChatScreen(
                     }
                 },
                 title = {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.clickable(enabled = peer != null) { showPeerInfo = true },
+                    ) {
                         UserAvatar(
                             userId = peer?.id,
                             name = conversation?.let { conversationTitle(it) },
@@ -320,6 +364,7 @@ fun ChatScreen(
                                 }
                                 SwipeToReply(onReply = { viewModel.replyTo = message }) {
                                     MessageBubble(
+                                        container = container,
                                         message = message,
                                         mine = message.senderId != null && message.senderId == viewModel.myUserId,
                                         highlighted = highlightedId == message.id,
@@ -329,7 +374,10 @@ fun ChatScreen(
                                         onTogglePin = { viewModel.togglePin(message) },
                                         onDelete = { forAll -> viewModel.deleteMessage(message, forAll) },
                                         onOpenTask = { message.task?.let { onOpenTask(it.id) } },
+                                        onOpenImage = { imageViewer = it },
                                         onConfirm = { spec -> confirm = spec },
+                                        currentCallId = currentCallId,
+                                        onReturnToCall = returnToCall,
                                     )
                                 }
                             }
@@ -375,6 +423,19 @@ fun ChatScreen(
                 }
             }
         }
+    }
+
+    if (showPeerInfo && peer != null) {
+        UserInfoSheet(
+            container = container,
+            userId = peer.id,
+            fallback = peer,
+            online = peer.id in online,
+            canCall = canCall,
+            onAudioCall = { showPeerInfo = false; requestCall(false) },
+            onVideoCall = { showPeerInfo = false; requestCall(true) },
+            onDismiss = { showPeerInfo = false },
+        )
     }
 
     viewModel.forwardTarget?.let { target ->
@@ -593,6 +654,7 @@ private fun DayHeader(text: String) {
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun MessageBubble(
+    container: AppContainer,
     message: MessageDto,
     mine: Boolean,
     highlighted: Boolean,
@@ -602,7 +664,10 @@ private fun MessageBubble(
     onTogglePin: () -> Unit,
     onDelete: (forAll: Boolean) -> Unit,
     onOpenTask: () -> Unit,
+    onOpenImage: (AttachmentDto) -> Unit,
     onConfirm: (ConfirmSpec) -> Unit,
+    currentCallId: Long?,
+    onReturnToCall: (com.kodass.groovework.data.dto.CallInfoDto) -> Unit,
 ) {
     var menuOpen by remember { mutableStateOf(false) }
     val pinned = message.pinnedAt != null
@@ -671,11 +736,15 @@ private fun MessageBubble(
                         }
                     }
                     if (message.kind == "call") {
-                        CallCard(message)
+                        CallCard(
+                            message = message,
+                            isCurrent = currentCallId != null && message.call?.id == currentCallId,
+                            onReturnToCall = onReturnToCall,
+                        )
                     }
                     message.task?.let { TaskCard(task = it, onClick = onOpenTask) }
                     message.attachments.forEach { attachment ->
-                        AttachmentView(attachment)
+                        AttachmentView(container = container, attachment = attachment, onOpenImage = onOpenImage)
                     }
                     message.text?.takeIf { it.isNotBlank() }?.let { text ->
                         Text(text = text, style = MaterialTheme.typography.bodyLarge)
@@ -778,14 +847,43 @@ private fun MessageBubble(
 }
 
 @Composable
-private fun CallCard(message: MessageDto) {
-    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(vertical = 4.dp)) {
-        Icon(Icons.Filled.Call, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
-        Column(modifier = Modifier.padding(start = 8.dp)) {
-            Text("Звонок", style = MaterialTheme.typography.bodyMedium)
-            message.call?.durationSec?.let { seconds ->
-                Text(
-                    text = "${seconds / 60} мин ${seconds % 60} с",
+private fun CallCard(
+    message: MessageDto,
+    isCurrent: Boolean,
+    onReturnToCall: (com.kodass.groovework.data.dto.CallInfoDto) -> Unit,
+) {
+    val call = message.call
+    val live = call?.isLive == true
+    val video = call?.isVideo == true
+    val title = when {
+        live -> if (video) "Видеозвонок · идёт сейчас" else "Звонок · идёт сейчас"
+        else -> if (video) "Видеозвонок" else "Звонок"
+    }
+    val rowModifier = if (live && call != null) {
+        Modifier
+            .clip(RoundedCornerShape(12.dp))
+            .clickable { onReturnToCall(call) }
+            .background(MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f))
+            .padding(horizontal = 10.dp, vertical = 8.dp)
+    } else {
+        Modifier.padding(vertical = 4.dp)
+    }
+    Row(verticalAlignment = Alignment.CenterVertically, modifier = rowModifier) {
+        Icon(
+            if (video) Icons.Filled.Videocam else Icons.Filled.Call,
+            contentDescription = null,
+            tint = MaterialTheme.colorScheme.primary,
+        )
+        Column(modifier = Modifier.padding(start = 8.dp).weight(1f, fill = false)) {
+            Text(title, style = MaterialTheme.typography.bodyMedium)
+            when {
+                live -> Text(
+                    text = if (isCurrent) "Нажмите, чтобы вернуться" else "Нажмите, чтобы присоединиться",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.primary,
+                )
+                call?.durationSec != null -> Text(
+                    text = "${call.durationSec / 60} мин ${call.durationSec % 60} с",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -829,10 +927,16 @@ private fun TaskCard(task: com.kodass.groovework.data.dto.TaskCardDto, onClick: 
 }
 
 @Composable
-private fun AttachmentView(attachment: AttachmentDto) {
+private fun AttachmentView(
+    container: AppContainer,
+    attachment: AttachmentDto,
+    onOpenImage: (AttachmentDto) -> Unit,
+) {
     val serverUrl = LocalServerUrl.current
     val context = LocalContext.current
+    val scope = rememberCoroutineScope()
     val fullUrl = serverUrl.trimEnd('/') + "/" + attachment.url.trimStart('/')
+
     if (attachment.mimeType.startsWith("image/")) {
         AsyncImage(
             model = fullUrl,
@@ -843,36 +947,88 @@ private fun AttachmentView(attachment: AttachmentDto) {
                 .widthIn(max = 260.dp)
                 .heightIn(max = 280.dp)
                 .clip(RoundedCornerShape(12.dp))
-                .combinedClickable(onClick = {
-                    context.startActivity(Intent(Intent.ACTION_VIEW, fullUrl.toUri()))
-                }),
+                .combinedClickable(onClick = { onOpenImage(attachment) }),
         )
-    } else {
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier
-                .padding(vertical = 4.dp)
-                .clip(RoundedCornerShape(10.dp))
-                .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.5f))
-                .combinedClickable(onClick = {
-                    context.startActivity(Intent(Intent.ACTION_VIEW, fullUrl.toUri()))
-                })
-                .padding(8.dp),
-        ) {
-            Icon(Icons.AutoMirrored.Filled.InsertDriveFile, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
-            Column(modifier = Modifier.padding(start = 8.dp)) {
-                Text(
-                    text = attachment.fileName,
-                    style = MaterialTheme.typography.bodyMedium,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-                Text(
-                    text = formatFileSize(attachment.sizeBytes),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
+        return
+    }
+
+    // Файл: тап скачивает внутрь приложения (с прогрессом), повторный тап после
+    // загрузки — открывает сохранённый файл.
+    var dl by remember(attachment.id) { mutableStateOf<DownloadState>(DownloadState.Idle) }
+    fun startDownload() {
+        if (dl is DownloadState.Running) return
+        dl = DownloadState.Running(-1f)
+        scope.launch {
+            try {
+                val uri = container.downloader.download(
+                    url = fullUrl,
+                    fileName = attachment.fileName,
+                    mime = attachment.mimeType,
+                    toImages = false,
+                ) { p -> dl = DownloadState.Running(p) }
+                dl = DownloadState.Done(uri, attachment.mimeType)
+                Toast.makeText(context, "Файл сохранён", Toast.LENGTH_SHORT).show()
+            } catch (_: Exception) {
+                dl = DownloadState.Failed("Ошибка загрузки")
+                Toast.makeText(context, "Не удалось скачать", Toast.LENGTH_SHORT).show()
             }
+        }
+    }
+
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier
+            .padding(vertical = 4.dp)
+            .clip(RoundedCornerShape(10.dp))
+            .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.5f))
+            .combinedClickable(onClick = {
+                when (val s = dl) {
+                    is DownloadState.Done -> openDownloadedFile(context, s.uri, s.mime)
+                    is DownloadState.Running -> {}
+                    else -> startDownload()
+                }
+            })
+            .padding(8.dp),
+    ) {
+        val state = dl
+        if (state is DownloadState.Running) {
+            Box(modifier = Modifier.size(24.dp), contentAlignment = Alignment.Center) {
+                if (state.progress >= 0f) {
+                    CircularProgressIndicator(
+                        progress = { state.progress },
+                        modifier = Modifier.size(24.dp),
+                        strokeWidth = 2.dp,
+                    )
+                } else {
+                    CircularProgressIndicator(modifier = Modifier.size(24.dp), strokeWidth = 2.dp)
+                }
+            }
+        } else {
+            Icon(
+                if (state is DownloadState.Done) Icons.Filled.Download
+                else Icons.AutoMirrored.Filled.InsertDriveFile,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.primary,
+            )
+        }
+        Column(modifier = Modifier.padding(start = 8.dp)) {
+            Text(
+                text = attachment.fileName,
+                style = MaterialTheme.typography.bodyMedium,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            Text(
+                text = when (val s = dl) {
+                    is DownloadState.Running ->
+                        if (s.progress >= 0f) "Загрузка… ${(s.progress * 100).toInt()}%" else "Загрузка…"
+                    is DownloadState.Done -> "Открыть файл"
+                    is DownloadState.Failed -> "Ошибка — нажмите ещё раз"
+                    DownloadState.Idle -> formatFileSize(attachment.sizeBytes)
+                },
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
         }
     }
 }

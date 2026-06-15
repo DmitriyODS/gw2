@@ -21,6 +21,10 @@ env/
 # Uploads (dev-файлы пользователей: аватарки, вложения)
 uploads/
 
+# APK мобильного приложения (бинарь, заливается на сервер через make deploy-apk;
+# apps/version.json с номером сборки остаётся в git — его читает Gradle)
+apps/*.apk
+
 # Node
 front/node_modules/
 front/dist/

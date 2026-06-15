@@ -37,6 +37,7 @@ help:
 	@printf "  make push [only=\"gateway front\"]  Собрать (linux/amd64) и запушить образы в Docker Hub\n"
 	@printf "  make deploy       make push → git push → на сервере: compose pull + up --no-build\n"
 	@printf "  make deploy-only  То же без сборки/пуша образов (push уже сделан)\n"
+	@printf "  make deploy-apk   Залить apps/groovework.apk и apps/version.json на сервер\n"
 	@printf "  make logs [s=calls]     Логи контейнера (по умолчанию gateway)\n"
 	@printf "  make status       docker compose ps на сервере\n"
 	@printf "  make restart [s=calls]  Перезапустить контейнер без пересборки\n"
@@ -202,7 +203,7 @@ dev-stack-stop:
 	@printf "\033[32m✓ Полный стек остановлен\033[0m\n"
 
 # ── Деплой ───────────────────────────────────────────────────────
-.PHONY: push deploy deploy-only logs status restart shell
+.PHONY: push deploy deploy-only deploy-apk logs status restart shell
 
 # Прод-стек = база + оверлей (см. шапку deploy/docker-compose.prod.yml).
 COMPOSE_PROD := docker compose -f docker-compose.yml -f docker-compose.prod.yml
@@ -233,6 +234,21 @@ deploy-only:
 	@# up --no-build --remove-orphans, reload nginx, health-чеки.
 	$(SSH) "cd $(SERVER_DIR) && git fetch origin && git reset --hard origin/main && bash scripts/deploy_server.sh"
 	@printf "\033[32m✓ Задеплоено на $(SERVER_HOST)\033[0m\n"
+
+# Публикация мобильного приложения: заливаем APK и version.json из локального
+# каталога apps/ в apps/ репозитория на сервере (его монтирует nginx в /apps/,
+# оттуда приложение проверяет обновления и качает новую сборку). version.json
+# также хранится в git (его читает Gradle как versionCode), но scp обновляет
+# сборку на сервере сразу — без полного деплоя кода.
+deploy-apk:
+	@if [ ! -f apps/groovework.apk ]; then \
+		printf "\033[31m✗ Нет apps/groovework.apk — положите собранный APK в каталог apps/\033[0m\n"; exit 2; fi
+	@if [ ! -f apps/version.json ]; then \
+		printf "\033[31m✗ Нет apps/version.json с номером сборки\033[0m\n"; exit 2; fi
+	@printf "\033[1m▶ Заливаю мобильное приложение на $(SERVER_HOST)...\033[0m\n"
+	$(SSH) "mkdir -p $(SERVER_DIR)/apps"
+	scp -i $(SSH_KEY) apps/groovework.apk apps/version.json $(SERVER_USER)@$(SERVER_HOST):$(SERVER_DIR)/apps/
+	@printf "\033[32m✓ APK и version.json выложены — проверка обновлений увидит новую сборку\033[0m\n"
 
 logs:
 	$(SSH) "cd $(SERVER_DIR)/deploy && $(COMPOSE_PROD) logs -f --tail=200 $(s)"

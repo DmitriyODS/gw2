@@ -40,8 +40,15 @@ class ChatsViewModel(
 
     private var searchJob: Job? = null
 
-    init {
-        refresh()
+    // Фоновое обновление списка чатов и presence (без спиннера) — вызывается
+    // периодически, пока пользователь в разделе, и при входе/смене компании.
+    fun backgroundRefresh() {
+        viewModelScope.launch {
+            runCatching { repo.refreshConversations() }
+            runCatching { repo.refreshPresence() }
+            loading = false
+            if (repo.conversations.value.isNotEmpty()) error = null
+        }
     }
 
     fun refresh() {

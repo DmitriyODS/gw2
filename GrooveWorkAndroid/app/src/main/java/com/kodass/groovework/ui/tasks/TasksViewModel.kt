@@ -1,7 +1,7 @@
 package com.kodass.groovework.ui.tasks
 
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
@@ -21,6 +21,11 @@ import kotlinx.serialization.json.decodeFromJsonElement
 
 private const val PER_PAGE = 30
 
+// Вкладки задач — общий список для экрана (свайп-пейджер) и VM.
+val taskTabs = listOf("active" to "Активные", "favorites" to "Избранные", "archive" to "Архив")
+
+// Состояние на каждую вкладку (свайп между Активные/Избранные/Архив — у каждой
+// свой список, пагинация и индикаторы, чтобы вкладки не «прыгали» при свайпе).
 class TasksViewModel(
     private val repo: TasksRepository,
     gateway: GatewayClient,
@@ -30,18 +35,22 @@ class TasksViewModel(
         private set
     var search by mutableStateOf("")
         private set
-    var items by mutableStateOf<List<TaskDto>>(emptyList())
-        private set
-    var loading by mutableStateOf(true)
-        private set
-    var refreshing by mutableStateOf(false)
-        private set
-    var loadingMore by mutableStateOf(false)
-        private set
-    var error by mutableStateOf<String?>(null)
-        private set
-    var total by mutableIntStateOf(0)
-        private set
+
+    private val itemsState = mutableStateMapOf<String, List<TaskDto>>()
+    private val totalState = mutableStateMapOf<String, Int>()
+    private val loadingState = mutableStateMapOf<String, Boolean>()
+    private val refreshingState = mutableStateMapOf<String, Boolean>()
+    private val loadingMoreState = mutableStateMapOf<String, Boolean>()
+    private val errorState = mutableStateMapOf<String, String?>()
+    private val pageState = mutableMapOf<String, Int>()
+    private val loaded = mutableSetOf<String>()
+
+    fun items(tabKey: String): List<TaskDto> = itemsState[tabKey] ?: emptyList()
+    fun isLoading(tabKey: String): Boolean = loadingState[tabKey] ?: true
+    fun isRefreshing(tabKey: String): Boolean = refreshingState[tabKey] ?: false
+    fun isLoadingMore(tabKey: String): Boolean = loadingMoreState[tabKey] ?: false
+    fun errorOf(tabKey: String): String? = errorState[tabKey]
+    fun hasMore(tabKey: String): Boolean = items(tabKey).size < (totalState[tabKey] ?: 0)
 
     var departments by mutableStateOf<List<DeptRef>>(emptyList())
         private set
@@ -49,30 +58,20 @@ class TasksViewModel(
         private set
     var createError by mutableStateOf<String?>(null)
 
-    private var page = 1
     private var searchJob: Job? = null
 
-    val hasMore: Boolean
-        get() = items.size < total
-
     init {
-        reload()
-        // Изменения из карточки задачи (цвет, избранное, архив и т.д.) — мгновенно в список.
+        ensureLoaded("active")
+        // Локальные мутации из карточки задачи — мгновенно в загруженные вкладки;
+        // членство (избранное/архив) могло измениться → тихо перезагружаем.
         viewModelScope.launch {
             repo.taskChanges.collect { updated ->
-                if (items.none { it.id == updated.id }) {
-                    silentRefresh()
-                    return@collect
-                }
-                items = items
-                    .map { if (it.id == updated.id) updated else it }
-                    .filter { task ->
-                        when (tab) {
-                            "favorites" -> task.isFavorite
-                            "archive" -> task.isArchived
-                            else -> !task.isArchived
-                        }
+                loaded.forEach { key ->
+                    if (items(key).any { it.id == updated.id }) {
+                        itemsState[key] = items(key).map { if (it.id == updated.id) updated else it }
                     }
+                }
+                refreshLoaded()
             }
         }
         viewModelScope.launch {
@@ -83,110 +82,135 @@ class TasksViewModel(
                             json.decodeFromJsonElement<TaskDto>(event.data ?: return@collect)
                         }.getOrNull() ?: return@collect
                         // В броадкастах вырезан личный цвет — сохраняем свой.
-                        items = items.map {
-                            if (it.id == updated.id) updated.copy(color = it.color) else it
+                        loaded.forEach { key ->
+                            itemsState[key] = items(key).map {
+                                if (it.id == updated.id) updated.copy(color = it.color) else it
+                            }
                         }
                     }
                     "task:deleted" -> {
                         val id = event.data.longField("task_id") ?: return@collect
-                        items = items.filter { it.id != id }
+                        loaded.forEach { key -> itemsState[key] = items(key).filter { it.id != id } }
                     }
-                    "task:created", "task:archived", "task:restored" -> silentRefresh()
+                    "task:created", "task:archived", "task:restored" -> refreshLoaded()
                 }
             }
         }
     }
 
-    fun setTabValue(value: String) {
-        if (tab == value) return
-        tab = value
-        reload()
+    fun selectTab(key: String) {
+        if (tab != key) tab = key
+        ensureLoaded(key)
+    }
+
+    fun ensureLoaded(key: String) {
+        if (key in loaded) return
+        loadFirst(key)
+    }
+
+    fun reload(key: String) = loadFirst(key)
+
+    private fun loadFirst(key: String) {
+        viewModelScope.launch {
+            if (items(key).isEmpty()) loadingState[key] = true
+            errorState[key] = null
+            try {
+                pageState[key] = 1
+                val r = repo.tasks(key, search, 1, PER_PAGE)
+                itemsState[key] = r.items
+                totalState[key] = r.total
+                loaded.add(key)
+            } catch (e: ApiException) {
+                if (items(key).isEmpty()) errorState[key] = e.message
+            } finally {
+                loadingState[key] = false
+            }
+        }
+    }
+
+    fun pullRefresh(key: String) {
+        if (isRefreshing(key)) return
+        viewModelScope.launch {
+            refreshingState[key] = true
+            try {
+                pageState[key] = 1
+                val r = repo.tasks(key, search, 1, PER_PAGE)
+                itemsState[key] = r.items
+                totalState[key] = r.total
+                loaded.add(key)
+                errorState[key] = null
+            } catch (e: ApiException) {
+                if (items(key).isEmpty()) errorState[key] = e.message
+            } finally {
+                refreshingState[key] = false
+            }
+        }
+    }
+
+    // Тихое фоновое обновление всех загруженных вкладок (без спиннеров) — вызывается
+    // периодически и при входе/смене компании, чтобы данные были актуальны.
+    fun backgroundRefresh() = refreshLoaded()
+
+    private fun refreshLoaded() = loaded.toList().forEach { silentRefresh(it) }
+
+    private fun silentRefresh(key: String) {
+        viewModelScope.launch {
+            try {
+                val size = items(key).size.coerceAtLeast(PER_PAGE)
+                val r = repo.tasks(key, search, 1, size)
+                itemsState[key] = r.items
+                totalState[key] = r.total
+                loaded.add(key)
+            } catch (_: Exception) {
+            }
+        }
     }
 
     fun setSearchValue(value: String) {
         search = value
+        loaded.clear() // под новый запрос перезагрузятся все вкладки (текущая — сразу)
         searchJob?.cancel()
         searchJob = viewModelScope.launch {
             delay(350)
-            reload()
+            loadFirst(tab)
         }
     }
 
-    fun reload() {
+    fun loadMore(key: String) {
+        if (isLoadingMore(key) || isLoading(key) || !hasMore(key)) return
         viewModelScope.launch {
-            loading = true
-            error = null
+            loadingMoreState[key] = true
             try {
-                page = 1
-                val result = repo.tasks(tab, search, page, PER_PAGE)
-                items = result.items
-                total = result.total
-            } catch (e: ApiException) {
-                error = e.message
-            } finally {
-                loading = false
-            }
-        }
-    }
-
-    // Pull-to-refresh: список остаётся на экране, крутится только индикатор сверху.
-    fun pullRefresh() {
-        if (refreshing) return
-        viewModelScope.launch {
-            refreshing = true
-            try {
-                page = 1
-                val result = repo.tasks(tab, search, page, PER_PAGE)
-                items = result.items
-                total = result.total
-                error = null
-            } catch (e: ApiException) {
-                if (items.isEmpty()) error = e.message
-            } finally {
-                refreshing = false
-            }
-        }
-    }
-
-    private fun silentRefresh() {
-        viewModelScope.launch {
-            try {
-                val result = repo.tasks(tab, search, 1, PER_PAGE.coerceAtLeast(items.size))
-                items = result.items
-                total = result.total
-            } catch (_: Exception) {
-            }
-        }
-    }
-
-    fun loadMore() {
-        if (loadingMore || loading || !hasMore) return
-        viewModelScope.launch {
-            loadingMore = true
-            try {
-                val result = repo.tasks(tab, search, page + 1, PER_PAGE)
-                page += 1
-                val known = items.map { it.id }.toHashSet()
-                items = items + result.items.filter { it.id !in known }
-                total = result.total
+                val next = (pageState[key] ?: 1) + 1
+                val r = repo.tasks(key, search, next, PER_PAGE)
+                pageState[key] = next
+                val known = items(key).map { it.id }.toHashSet()
+                itemsState[key] = items(key) + r.items.filter { it.id !in known }
+                totalState[key] = r.total
             } catch (_: Exception) {
             } finally {
-                loadingMore = false
+                loadingMoreState[key] = false
             }
         }
     }
 
     fun toggleFavorite(task: TaskDto) {
-        val before = items
-        items = items.map { if (it.id == task.id) it.copy(isFavorite = !task.isFavorite) else it }
+        val newFav = !task.isFavorite
+        loaded.forEach { key ->
+            itemsState[key] = items(key).map { if (it.id == task.id) it.copy(isFavorite = newFav) else it }
+        }
         viewModelScope.launch {
             try {
                 val isFavorite = repo.toggleFavorite(task.id)
-                if (tab == "favorites" && !isFavorite) {
-                    items = items.filter { it.id != task.id }
+                if (!isFavorite) {
+                    itemsState["favorites"] = items("favorites").filter { it.id != task.id }
+                } else if ("favorites" in loaded) {
+                    silentRefresh("favorites")
                 }
             } catch (_: Exception) {
-                items = before
+                loaded.forEach { key ->
+                    itemsState[key] = items(key).map { if (it.id == task.id) it.copy(isFavorite = task.isFavorite) else it }
+                }
             }
         }
     }
@@ -205,7 +229,7 @@ class TasksViewModel(
             createError = null
             try {
                 val task = repo.create(CreateTaskRequest(name = name, departmentId = departmentId, deadline = deadline))
-                reload()
+                reload("active")
                 onDone(task)
             } catch (e: ApiException) {
                 createError = e.message

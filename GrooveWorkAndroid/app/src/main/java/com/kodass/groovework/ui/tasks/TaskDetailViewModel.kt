@@ -9,11 +9,13 @@ import com.kodass.groovework.data.api.AuthApi
 import com.kodass.groovework.data.dto.CommentDto
 import com.kodass.groovework.data.dto.StageDto
 import com.kodass.groovework.data.dto.TaskDto
+import com.kodass.groovework.data.dto.UnitDto
 import com.kodass.groovework.data.dto.UpdateTaskRequest
 import com.kodass.groovework.data.dto.UserDto
 import com.kodass.groovework.data.network.ApiException
 import com.kodass.groovework.data.network.apiCall
 import com.kodass.groovework.data.repo.TasksRepository
+import com.kodass.groovework.data.repo.UnitsRepository
 import com.kodass.groovework.data.session.AuthState
 import com.kodass.groovework.data.session.SessionManager
 import com.kodass.groovework.data.ws.GatewayClient
@@ -24,6 +26,7 @@ import kotlinx.serialization.json.decodeFromJsonElement
 
 class TaskDetailViewModel(
     private val repo: TasksRepository,
+    private val unitsRepo: UnitsRepository,
     private val authApi: AuthApi,
     session: SessionManager,
     gateway: GatewayClient,
@@ -31,6 +34,7 @@ class TaskDetailViewModel(
     val taskId: Long,
 ) : ViewModel() {
     val myUserId: Long? = (session.authState.value as? AuthState.LoggedIn)?.claims?.userId
+    private val myRoleLevel: Int = (session.authState.value as? AuthState.LoggedIn)?.claims?.roleLevel ?: 1
 
     var task by mutableStateOf<TaskDto?>(null)
         private set
@@ -46,6 +50,13 @@ class TaskDetailViewModel(
         private set
     var directory by mutableStateOf<List<UserDto>>(emptyList())
         private set
+
+    var units by mutableStateOf<List<UnitDto>>(emptyList())
+        private set
+    var unitsLoading by mutableStateOf(false)
+        private set
+
+    fun canManageUnit(unit: UnitDto): Boolean = unit.userId == myUserId || myRoleLevel >= 2
 
     var commentInput by mutableStateOf("")
     var sendingComment by mutableStateOf(false)
@@ -83,7 +94,48 @@ class TaskDetailViewModel(
                     "task:archived", "task:restored" -> {
                         if (event.data.longField("task_id") == taskId) refreshTask()
                     }
+                    "unit:started" -> {
+                        val unit = runCatching {
+                            json.decodeFromJsonElement<UnitDto>(event.data ?: return@collect)
+                        }.getOrNull() ?: return@collect
+                        if (unit.taskId == taskId && units.none { it.id == unit.id }) {
+                            units = listOf(unit) + units
+                        }
+                    }
+                    "unit:stopped" -> {
+                        if (event.data.longField("task_id") != taskId) return@collect
+                        // datetime_end приходит в событии — перезагружаем список,
+                        // чтобы строка перестала тикать и показала длительность.
+                        loadUnits()
+                    }
+                    "unit:deleted" -> {
+                        val unitId = event.data.longField("unit_id") ?: return@collect
+                        units = units.filter { it.id != unitId }
+                    }
                 }
+            }
+        }
+    }
+
+    fun loadUnits() {
+        viewModelScope.launch {
+            unitsLoading = true
+            try {
+                units = unitsRepo.taskUnits(taskId)
+            } catch (_: Exception) {
+            } finally {
+                unitsLoading = false
+            }
+        }
+    }
+
+    fun deleteUnit(unit: UnitDto) {
+        viewModelScope.launch {
+            try {
+                unitsRepo.deleteUnit(unit.id)
+                units = units.filter { it.id != unit.id }
+            } catch (e: ApiException) {
+                actionError = e.message
             }
         }
     }
@@ -135,7 +187,21 @@ class TaskDetailViewModel(
 
     fun setResponsible(userId: Long?) = mutate { repo.setResponsible(taskId, userId) }
 
-    fun archive() = mutate { repo.archive(taskId) }
+    // Завершение задачи: отправляем в архив и закрываем экран. onDone зовём
+    // только при успехе — при отказе (например, активный юнит) остаёмся на
+    // экране и показываем actionError.
+    fun complete(onDone: () -> Unit) {
+        viewModelScope.launch {
+            actionError = null
+            try {
+                task = repo.archive(taskId)
+                task?.let { repo.notifyTaskChanged(it) }
+                onDone()
+            } catch (e: ApiException) {
+                actionError = e.message
+            }
+        }
+    }
 
     fun restore() = mutate { repo.restore(taskId) }
 

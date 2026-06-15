@@ -39,7 +39,11 @@ class MainActivity : ComponentActivity() {
     // отдельная CallActivity.
     private fun handleIntent(intent: Intent?) {
         intent ?: return
-        intent.getStringExtra("route")?.let { container.pendingRoute.value = it }
+        intent.getStringExtra("route")?.let { route ->
+            // «unit» — не маршрут навигации, а запрос открыть модалку текущего юнита.
+            if (route == "unit") container.unitManager.requestShowSheet()
+            else container.pendingRoute.value = route
+        }
         // Тап по системному уведомлению FCM (приложение было в фоне/убито):
         // onMessageReceived не вызывается, data-поля приходят как extras
         // запускающего интента — навигируем к нужному чату/задаче по ним.

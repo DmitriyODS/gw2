@@ -31,6 +31,9 @@ data class SessionClaims(
 sealed interface AuthState {
     data object Loading : AuthState
     data object LoggedOut : AuthState
+    // Есть сохранённая сессия, но возобновить не удалось из-за отсутствия сети —
+    // НЕ разлогиниваем, показываем экран «нет подключения» с кнопкой «Повторить».
+    data object Offline : AuthState
     data class LoggedIn(val claims: SessionClaims) : AuthState
 }
 
@@ -73,6 +76,16 @@ class SessionManager(
     suspend fun bootstrap(defaultServerUrl: String) {
         val server = store.serverUrl() ?: defaultServerUrl
         applyServer(server)
+        attemptResume()
+    }
+
+    // Повторная попытка возобновить сессию (кнопка «Повторить» на offline-экране).
+    suspend fun retryBootstrap() {
+        _authState.value = AuthState.Loading
+        attemptResume()
+    }
+
+    private suspend fun attemptResume() {
         val refresh = store.refreshToken()
         if (refresh == null) {
             _authState.value = AuthState.LoggedOut
@@ -83,11 +96,12 @@ class SessionManager(
             applySession(unwrap(resp))
         } catch (e: ApiException) {
             if (e.status == 401 || e.status == 403) {
+                // Сессия недействительна — выходим на экран входа.
                 store.setRefreshToken(null)
                 _authState.value = AuthState.LoggedOut
             } else {
-                // Сервер недоступен — не разлогиниваем, экран входа покажет ошибку при попытке.
-                _authState.value = AuthState.LoggedOut
+                // Нет сети / сервер недоступен — сессию сохраняем, показываем offline-экран.
+                _authState.value = AuthState.Offline
             }
         }
     }
@@ -138,6 +152,17 @@ class SessionManager(
             _me.value = apiCall(json) { authApi.me() }
         } catch (_: Exception) {
         }
+    }
+
+    // Смена адреса сервера: токены принадлежат старому серверу, поэтому это выход —
+    // снимаем FCM и завершаем сессию на СТАРОМ сервере, затем переключаем хост и
+    // чистим сессию (экран входа откроется с новым адресом).
+    suspend fun changeServer(url: String) {
+        runCatching { onLogout?.invoke() }
+        runCatching { authApi.logout() }
+        applyServer(url)
+        store.setServerUrl(_serverUrl.value)
+        clear()
     }
 
     // Вызывается из OkHttp Authenticator (поток OkHttp) — runBlocking namеренно.

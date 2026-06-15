@@ -75,6 +75,20 @@ data class UserDto(
     @SerialName("last_seen_at") val lastSeenAt: String? = null,
 )
 
+// PATCH /api/users/me — частичное обновление профиля и/или смена пароля.
+// explicitNulls=false: непереданные поля не сериализуются.
+@Serializable
+data class UpdateMeRequest(
+    val fio: String? = null,
+    val login: String? = null,
+    val post: String? = null,
+    val phone: String? = null,
+    val email: String? = null,
+    @SerialName("current_password") val currentPassword: String? = null,
+    @SerialName("new_password") val newPassword: String? = null,
+    @SerialName("confirm_password") val confirmPassword: String? = null,
+)
+
 // Короткая ссылка на пользователя в задачах/комментариях.
 @Serializable
 data class UserRef(

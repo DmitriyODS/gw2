@@ -64,6 +64,7 @@ import com.kodass.groovework.ui.common.ConfirmDialog
 import com.kodass.groovework.ui.common.ConfirmSpec
 import com.kodass.groovework.ui.common.EmptyState
 import com.kodass.groovework.ui.common.ErrorState
+import com.kodass.groovework.ui.common.RefreshOnResume
 import com.kodass.groovework.ui.common.UserAvatar
 import com.kodass.groovework.ui.common.formatChatStamp
 import com.kodass.groovework.ui.common.rememberIsScrollingUp
@@ -90,6 +91,10 @@ fun ChatsScreen(container: AppContainer, onOpenChat: (Long) -> Unit) {
             viewModel.actionError = null
         }
     }
+
+    // Живые обновления списка и presence приходят по WebSocket; при входе/возврате
+    // и смене компании догружаем актуальный снимок один раз.
+    RefreshOnResume { viewModel.backgroundRefresh() }
 
     Scaffold(
         modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),

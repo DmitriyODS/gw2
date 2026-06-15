@@ -67,7 +67,9 @@ fun CallScreen(container: AppContainer) {
     val localTrack by manager.localVideoTrack.collectAsStateWithLifecycle()
     val remoteTracks by manager.remoteVideoTracks.collectAsStateWithLifecycle()
     val activeSince by manager.activeSince.collectAsStateWithLifecycle()
-    val room = manager.roomOrNull
+    val roomState by manager.room.collectAsStateWithLifecycle()
+    val room = roomState // плоский val — иначе нет smart-cast у делегата при room != null
+    val connecting by manager.connecting.collectAsStateWithLifecycle()
 
     // Таймер длительности.
     var duration by remember { mutableLongStateOf(0L) }
@@ -118,7 +120,7 @@ fun CallScreen(container: AppContainer) {
                     Text(
                         text = when {
                             isOutgoing -> "Звоним…"
-                            room == null -> "Соединение…"
+                            connecting || room == null -> "Соединение…"
                             else -> formatDuration(duration)
                         },
                         style = MaterialTheme.typography.bodyLarge,

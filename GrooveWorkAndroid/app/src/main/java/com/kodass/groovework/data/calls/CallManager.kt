@@ -87,11 +87,16 @@ class CallManager(
     private val _errors = MutableSharedFlow<String>(extraBufferCapacity = 8)
     val errors: SharedFlow<String> = _errors
 
-    private var room: Room? = null
+    // Комната LiveKit — наблюдаемая (StateFlow), чтобы экран звонка перерисовался
+    // ровно тогда, когда комната появилась/исчезла, а не по случайному ререндеру.
+    private val _room = MutableStateFlow<Room?>(null)
+    val room: StateFlow<Room?> = _room
 
-    // Для видео-рендеров на экране звонка.
-    val roomOrNull: Room?
-        get() = room
+    // Идёт установка соединения с медиа-комнатой (ответ на звонок до connect()).
+    // Снимается, как только LiveKit реально подключился, — иначе «Соединение…»
+    // висело, пока разговор уже шёл (room выставлялся, но UI не реагировал).
+    private val _connecting = MutableStateFlow(false)
+    val connecting: StateFlow<Boolean> = _connecting
 
     private var roomEventsJob: Job? = null
     private var outgoingTimeoutJob: Job? = null
@@ -174,6 +179,20 @@ class CallManager(
         launchCallUi()
     }
 
+    // Тап по плашке живого звонка в чате: если это наш текущий звонок — просто
+    // разворачиваем экран; иначе (мы не в звонке) — присоединяемся по REST-токену.
+    fun returnOrJoinCall(callId: Long, video: Boolean) {
+        if (currentCall?.id == callId && _phase.value !is CallPhase.Idle) {
+            showCallUi()
+            return
+        }
+        if (_phase.value !is CallPhase.Idle) {
+            _errors.tryEmit("Вы уже в звонке")
+            return
+        }
+        answerCall(callId, video)
+    }
+
     fun startCall(userId: Long, video: Boolean) {
         if (_phase.value != CallPhase.Idle) {
             _errors.tryEmit("Вы уже в звонке")
@@ -212,6 +231,7 @@ class CallManager(
         incomingTimeoutJob?.cancel()
         cameraEnabled.value = video
         callUiVisible.value = true
+        _connecting.value = true
         // Оптимистично показываем экран звонка («Соединение…»), пока тянем токен.
         val known = currentCall?.takeIf { it.id == callId }
         _phase.value = CallPhase.Active(
@@ -260,7 +280,7 @@ class CallManager(
         val enabled = !micEnabled.value
         micEnabled.value = enabled
         scope.launch {
-            runCatching { room?.localParticipant?.setMicrophoneEnabled(enabled) }
+            runCatching { _room.value?.localParticipant?.setMicrophoneEnabled(enabled) }
         }
     }
 
@@ -269,9 +289,9 @@ class CallManager(
         cameraEnabled.value = enabled
         scope.launch {
             runCatching {
-                room?.localParticipant?.setCameraEnabled(enabled)
+                _room.value?.localParticipant?.setCameraEnabled(enabled)
                 localVideoTrack.value = if (enabled) {
-                    room?.localParticipant?.getTrackPublication(Track.Source.CAMERA)?.track as? VideoTrack
+                    _room.value?.localParticipant?.getTrackPublication(Track.Source.CAMERA)?.track as? VideoTrack
                 } else {
                     null
                 }
@@ -280,14 +300,14 @@ class CallManager(
     }
 
     fun flipCamera() {
-        val track = room?.localParticipant
+        val track = _room.value?.localParticipant
             ?.getTrackPublication(Track.Source.CAMERA)?.track as? LocalVideoTrack ?: return
         runCatching { track.switchCamera() }
     }
 
     fun setSpeaker(on: Boolean) {
         speakerOn.value = on
-        val handler = room?.audioHandler as? AudioSwitchHandler ?: return
+        val handler = _room.value?.audioHandler as? AudioSwitchHandler ?: return
         val devices = handler.availableAudioDevices
         val target = if (on) {
             devices.firstOrNull { it is AudioDevice.Speakerphone }
@@ -352,10 +372,11 @@ class CallManager(
 
     private fun connect(info: LivekitInfoDto, video: Boolean) {
         val url = resolveLivekitUrl(info.url)
+        _connecting.value = true
         scope.launch {
             try {
                 val newRoom = LiveKit.create(appContext)
-                room = newRoom
+                _room.value = newRoom
                 roomEventsJob?.cancel()
                 roomEventsJob = scope.launch {
                     newRoom.events.collect { onRoomEvent(it) }
@@ -363,6 +384,8 @@ class CallManager(
                 kotlinx.coroutines.withTimeout(15_000) {
                     newRoom.connect(url, info.token)
                 }
+                // Реально подключились к комнате — «Соединение…» можно убирать.
+                _connecting.value = false
                 micEnabled.value = true
                 newRoom.localParticipant.setMicrophoneEnabled(true)
                 if (video) {
@@ -492,9 +515,10 @@ class CallManager(
         incomingTimeoutJob = null
         roomEventsJob?.cancel()
         roomEventsJob = null
+        _connecting.value = false
         // UI сбрасываем мгновенно; отключение LiveKit может быть долгим — в фон.
-        val oldRoom = room
-        room = null
+        val oldRoom = _room.value
+        _room.value = null
         localVideoTrack.value = null
         remoteVideoTracks.value = emptyMap()
         activeSpeakers.value = emptySet()

@@ -13,15 +13,21 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Logout
+import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Dns
+import androidx.compose.material.icons.filled.SupportAgent
+import androidx.compose.material.icons.filled.SystemUpdate
+import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.Scaffold
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -34,8 +40,8 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.lifecycle.ViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.kodass.groovework.AppContainer
@@ -43,13 +49,20 @@ import com.kodass.groovework.R
 import com.kodass.groovework.data.api.MetaApi
 import com.kodass.groovework.data.dto.ChangelogVersionDto
 import com.kodass.groovework.data.network.apiCall
+import com.kodass.groovework.data.network.normalizeServerUrl
+import com.kodass.groovework.data.repo.MessengerRepository
 import com.kodass.groovework.data.session.SessionManager
-import com.kodass.groovework.ui.common.UserAvatar
+import com.kodass.groovework.data.update.AppUpdater
+import com.kodass.groovework.data.update.UpdateState
+import com.kodass.groovework.ui.common.ConfirmDialog
+import com.kodass.groovework.ui.common.ConfirmSpec
+import com.kodass.groovework.ui.settings.SettingsSubScaffold
 import kotlinx.coroutines.launch
 import kotlinx.serialization.json.Json
 
 class AboutViewModel(
     private val session: SessionManager,
+    private val messengerRepo: MessengerRepository,
     private val metaApi: MetaApi,
     private val json: Json,
 ) : ViewModel() {
@@ -61,9 +74,12 @@ class AboutViewModel(
         private set
     var loggingOut by mutableStateOf(false)
         private set
+    var openingSupport by mutableStateOf(false)
+        private set
+    var changingServer by mutableStateOf(false)
+        private set
 
     init {
-        viewModelScope.launch { session.loadMe() }
         viewModelScope.launch { loadChangelog() }
     }
 
@@ -81,10 +97,24 @@ class AboutViewModel(
         viewModelScope.launch {
             refreshing = true
             try {
-                session.loadMe()
                 loadChangelog()
             } finally {
                 refreshing = false
+            }
+        }
+    }
+
+    fun openSupport(onOpened: (Long) -> Unit) {
+        if (openingSupport) return
+        viewModelScope.launch {
+            openingSupport = true
+            try {
+                val chat = messengerRepo.openDevChat()
+                runCatching { messengerRepo.refreshConversations() }
+                onOpened(chat.id)
+            } catch (_: Exception) {
+            } finally {
+                openingSupport = false
             }
         }
     }
@@ -100,13 +130,25 @@ class AboutViewModel(
             }
         }
     }
+
+    fun changeServer(url: String) {
+        if (changingServer) return
+        viewModelScope.launch {
+            changingServer = true
+            try {
+                session.changeServer(url)
+            } finally {
+                changingServer = false
+            }
+        }
+    }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun AboutScreen(container: AppContainer) {
+fun AboutScreen(container: AppContainer, onBack: () -> Unit, onOpenChat: (Long) -> Unit) {
     val viewModel: AboutViewModel = viewModel {
-        AboutViewModel(container.sessionManager, container.metaApi, container.json)
+        AboutViewModel(container.sessionManager, container.messengerRepo, container.metaApi, container.json)
     }
     val context = LocalContext.current
     val appVersion = remember(context) {
@@ -114,137 +156,245 @@ fun AboutScreen(container: AppContainer) {
             context.packageManager.getPackageInfo(context.packageName, 0).versionName
         }.getOrNull() ?: "1.0"
     }
+    val serverUrl by container.sessionManager.serverUrl.collectAsStateWithLifecycle()
+    var serverInput by remember(serverUrl) { mutableStateOf(serverUrl) }
+    var confirmServer by remember { mutableStateOf(false) }
 
-    Scaffold(
-        topBar = { TopAppBar(title = { Text("О приложении") }) },
-    ) { padding ->
+    if (confirmServer) {
+        ConfirmDialog(
+            ConfirmSpec(
+                title = "Сменить сервер",
+                text = "Приложение выйдет из аккаунта и переключится на «${normalizeServerUrl(serverInput)}». Продолжить?",
+                confirmLabel = "Сменить и выйти",
+                destructive = true,
+                action = { viewModel.changeServer(serverInput) },
+            ),
+            onDismiss = { confirmServer = false },
+        )
+    }
+
+    SettingsSubScaffold(title = "О приложении", onBack = onBack) { padding ->
         PullToRefreshBox(
             isRefreshing = viewModel.refreshing,
             onRefresh = { viewModel.pullRefresh() },
             modifier = Modifier.fillMaxSize().padding(padding),
         ) {
-            AboutContent(viewModel = viewModel, container = container, appVersion = appVersion)
+            LazyColumn(
+                modifier = Modifier.fillMaxSize(),
+                contentPadding = PaddingValues(16.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                item {
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        modifier = Modifier.fillMaxWidth().padding(vertical = 12.dp),
+                    ) {
+                        Image(
+                            painter = painterResource(R.drawable.logo_groove),
+                            contentDescription = null,
+                            modifier = Modifier.size(80.dp),
+                        )
+                        Text(
+                            text = "Groove Work",
+                            style = MaterialTheme.typography.headlineSmall,
+                            fontWeight = FontWeight.SemiBold,
+                            modifier = Modifier.padding(top = 12.dp),
+                        )
+                        Text(
+                            text = "Версия приложения $appVersion",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                        Text(
+                            text = "Сборка ${container.appUpdater.currentBuild}",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                        Text(
+                            text = "Платформа учёта времени, задач и общения команды",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(top = 4.dp),
+                        )
+                    }
+                }
+                item { UpdateCard(container.appUpdater) }
+                item {
+                    Card(
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Column(modifier = Modifier.padding(16.dp)) {
+                            Button(
+                                onClick = { viewModel.openSupport(onOpenChat) },
+                                enabled = !viewModel.openingSupport,
+                                modifier = Modifier.fillMaxWidth(),
+                            ) {
+                                Icon(Icons.Filled.SupportAgent, contentDescription = null, modifier = Modifier.size(18.dp))
+                                Text("Чат с техподдержкой", modifier = Modifier.padding(start = 8.dp))
+                            }
+                            OutlinedButton(
+                                onClick = { viewModel.logout() },
+                                enabled = !viewModel.loggingOut,
+                                modifier = Modifier.fillMaxWidth().padding(top = 12.dp),
+                            ) {
+                                Icon(
+                                    Icons.AutoMirrored.Filled.Logout,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(18.dp),
+                                )
+                                Text("Выйти из аккаунта", modifier = Modifier.padding(start = 8.dp))
+                            }
+                        }
+                    }
+                }
+                item {
+                    Card(
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Column(modifier = Modifier.padding(16.dp)) {
+                            Text("Сервер", style = MaterialTheme.typography.titleMedium)
+                            Text(
+                                text = "Смена адреса выполнит выход из аккаунта.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.padding(top = 2.dp, bottom = 8.dp),
+                            )
+                            OutlinedTextField(
+                                value = serverInput,
+                                onValueChange = { serverInput = it },
+                                label = { Text("Адрес сервера") },
+                                singleLine = true,
+                                enabled = !viewModel.changingServer,
+                                modifier = Modifier.fillMaxWidth(),
+                            )
+                            Button(
+                                onClick = { confirmServer = true },
+                                enabled = !viewModel.changingServer &&
+                                    serverInput.isNotBlank() &&
+                                    normalizeServerUrl(serverInput) != serverUrl,
+                                modifier = Modifier.fillMaxWidth().padding(top = 12.dp),
+                            ) {
+                                Icon(Icons.Filled.Dns, contentDescription = null, modifier = Modifier.size(18.dp))
+                                Text(
+                                    if (viewModel.changingServer) "Меняю…" else "Сменить сервер",
+                                    modifier = Modifier.padding(start = 8.dp),
+                                )
+                            }
+                        }
+                    }
+                }
+                item {
+                    Text(
+                        text = "Что нового",
+                        style = MaterialTheme.typography.titleMedium,
+                        modifier = Modifier.padding(top = 8.dp),
+                    )
+                    if (viewModel.changelogError) {
+                        Text(
+                            text = "Не удалось загрузить список изменений",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(top = 8.dp),
+                        )
+                    }
+                }
+                items(viewModel.versions, key = { it.version }) { version ->
+                    ChangelogCard(version)
+                }
+            }
         }
     }
 }
 
 @Composable
-private fun AboutContent(viewModel: AboutViewModel, container: AppContainer, appVersion: String) {
-    val me by container.sessionManager.me.collectAsStateWithLifecycle()
-    val serverUrl by container.sessionManager.serverUrl.collectAsStateWithLifecycle()
-    LazyColumn(
-            modifier = Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
-        ) {
-            item {
-                Column(
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    modifier = Modifier.fillMaxWidth().padding(vertical = 12.dp),
-                ) {
-                    Image(
-                        painter = painterResource(R.drawable.logo_groove),
-                        contentDescription = null,
-                        modifier = Modifier.size(80.dp),
-                    )
-                    Text(
-                        text = "Groove Work",
-                        style = MaterialTheme.typography.headlineSmall,
-                        fontWeight = FontWeight.SemiBold,
-                        modifier = Modifier.padding(top = 12.dp),
-                    )
-                    Text(
-                        text = "Версия приложения $appVersion",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                    Text(
-                        text = "Платформа учёта времени, задач и общения команды",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.padding(top = 4.dp),
-                    )
-                }
+private fun UpdateCard(updater: AppUpdater) {
+    val state by updater.state.collectAsStateWithLifecycle()
+    Card(
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Text("Обновления", style = MaterialTheme.typography.titleMedium)
+
+            val status: String? = when (val s = state) {
+                is UpdateState.UpToDate -> "Установлена последняя версия"
+                is UpdateState.Available -> "Доступна новая сборка ${s.build}"
+                is UpdateState.ReadyToInstall -> "Обновление загружено — нажмите, чтобы установить"
+                is UpdateState.Failed -> s.message
+                else -> null
             }
-            item {
-                Card(
-                    colors = CardDefaults.cardColors(
-                        containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
-                    ),
-                    modifier = Modifier.fillMaxWidth(),
-                ) {
-                    Column(modifier = Modifier.padding(16.dp)) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            UserAvatar(
-                                userId = me?.id,
-                                name = me?.fio,
-                                avatarPath = me?.avatarPath,
-                                size = 52.dp,
-                            )
-                            Column(modifier = Modifier.padding(start = 12.dp)) {
-                                Text(
-                                    text = me?.fio ?: "…",
-                                    style = MaterialTheme.typography.titleMedium,
-                                )
-                                val subtitle = listOfNotNull(me?.role?.name, me?.post?.takeIf { it.isNotBlank() })
-                                    .joinToString(" · ")
-                                if (subtitle.isNotEmpty()) {
-                                    Text(
-                                        text = subtitle,
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    )
-                                }
-                            }
+            status?.let {
+                Text(
+                    text = it,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = if (state is UpdateState.Failed) MaterialTheme.colorScheme.error
+                    else MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(top = 2.dp, bottom = 8.dp),
+                )
+            }
+
+            val downloading = state as? UpdateState.Downloading
+            if (downloading != null) {
+                val progress = downloading.progress
+                Text(
+                    text = if (progress >= 0f) "Скачивание… ${(progress * 100).toInt()}%" else "Скачивание…",
+                    style = MaterialTheme.typography.bodyMedium,
+                    modifier = Modifier.padding(top = 8.dp),
+                )
+                if (progress >= 0f) {
+                    LinearProgressIndicator(
+                        progress = { progress },
+                        modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+                    )
+                } else {
+                    LinearProgressIndicator(modifier = Modifier.fillMaxWidth().padding(top = 8.dp))
+                }
+            } else {
+                Button(
+                    onClick = {
+                        when (state) {
+                            is UpdateState.Available -> updater.download()
+                            is UpdateState.ReadyToInstall -> updater.install()
+                            else -> updater.check()
                         }
-                        Text(
-                            text = "Сервер: $serverUrl",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.outline,
-                            modifier = Modifier.padding(top = 12.dp),
-                        )
-                        OutlinedButton(
-                            onClick = { viewModel.logout() },
-                            enabled = !viewModel.loggingOut,
-                            modifier = Modifier.fillMaxWidth().padding(top = 12.dp),
-                        ) {
-                            Icon(
-                                Icons.AutoMirrored.Filled.Logout,
-                                contentDescription = null,
+                    },
+                    enabled = state !is UpdateState.Checking,
+                    modifier = Modifier.fillMaxWidth().padding(top = if (status != null) 0.dp else 8.dp),
+                ) {
+                    when (state) {
+                        is UpdateState.Checking -> {
+                            CircularProgressIndicator(
+                                strokeWidth = 2.dp,
+                                color = MaterialTheme.colorScheme.onPrimary,
                                 modifier = Modifier.size(18.dp),
                             )
-                            Text("Выйти из аккаунта", modifier = Modifier.padding(start = 8.dp))
+                            Text("Проверяю…", modifier = Modifier.padding(start = 8.dp))
+                        }
+                        is UpdateState.Available -> {
+                            Icon(Icons.Filled.SystemUpdate, contentDescription = null, modifier = Modifier.size(18.dp))
+                            Text("Скачать обновление", modifier = Modifier.padding(start = 8.dp))
+                        }
+                        is UpdateState.ReadyToInstall -> {
+                            Icon(Icons.Filled.CheckCircle, contentDescription = null, modifier = Modifier.size(18.dp))
+                            Text("Установить обновление", modifier = Modifier.padding(start = 8.dp))
+                        }
+                        else -> {
+                            Icon(Icons.Filled.SystemUpdate, contentDescription = null, modifier = Modifier.size(18.dp))
+                            Text("Проверка обновлений", modifier = Modifier.padding(start = 8.dp))
                         }
                     }
                 }
             }
-            item {
-                Text(
-                    text = "Что нового",
-                    style = MaterialTheme.typography.titleMedium,
-                    modifier = Modifier.padding(top = 8.dp),
-                )
-                if (viewModel.changelogError) {
-                    Text(
-                        text = "Не удалось загрузить список изменений",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.padding(top = 8.dp),
-                    )
-                }
-            }
-            items(viewModel.versions, key = { it.version }) { version ->
-                ChangelogCard(version)
-            }
+        }
     }
 }
 
 @Composable
 private fun ChangelogCard(version: ChangelogVersionDto) {
     Card(
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
-        ),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
         modifier = Modifier.fillMaxWidth(),
     ) {
         Column(modifier = Modifier.padding(16.dp)) {

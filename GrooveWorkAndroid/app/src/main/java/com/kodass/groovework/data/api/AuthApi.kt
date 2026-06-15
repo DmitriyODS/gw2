@@ -5,12 +5,19 @@ import com.kodass.groovework.data.dto.LoginRequest
 import com.kodass.groovework.data.dto.SelectCompanyRequest
 import com.kodass.groovework.data.dto.SessionResponse
 import com.kodass.groovework.data.dto.SwitchCompanyRequest
+import com.kodass.groovework.data.dto.UpdateMeRequest
 import com.kodass.groovework.data.dto.UserDto
+import okhttp3.MultipartBody
 import retrofit2.Response
 import retrofit2.http.Body
+import retrofit2.http.DELETE
 import retrofit2.http.GET
 import retrofit2.http.Header
+import retrofit2.http.Multipart
+import retrofit2.http.PATCH
 import retrofit2.http.POST
+import retrofit2.http.Part
+import retrofit2.http.Path
 import retrofit2.http.Query
 
 interface AuthApi {
@@ -38,9 +45,22 @@ interface AuthApi {
     @GET("api/users/me")
     suspend fun me(): UserDto
 
+    @PATCH("api/users/me")
+    suspend fun updateMe(@Body body: UpdateMeRequest): UserDto
+
+    @Multipart
+    @POST("api/users/me/avatar")
+    suspend fun uploadAvatar(@Part file: MultipartBody.Part): UserDto
+
+    @DELETE("api/users/me/avatar")
+    suspend fun deleteAvatar(): UserDto
+
     @GET("api/users/directory")
     suspend fun directory(
         @Query("q") query: String? = null,
         @Query("exclude_self") excludeSelf: String? = null,
     ): List<UserDto>
+
+    @GET("api/users/directory/{id}")
+    suspend fun directoryUser(@Path("id") id: Long): UserDto
 }

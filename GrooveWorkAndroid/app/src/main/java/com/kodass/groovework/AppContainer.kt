@@ -70,14 +70,49 @@ class AppContainer(app: Application) {
     val metaApi: MetaApi = retrofit.create(MetaApi::class.java)
     val pushApi: PushApi = retrofit.create(PushApi::class.java)
     val callsApi: CallsApi = retrofit.create(CallsApi::class.java)
+    val statsApi: com.kodass.groovework.data.api.StatsApi =
+        retrofit.create(com.kodass.groovework.data.api.StatsApi::class.java)
+    val companiesApi: com.kodass.groovework.data.api.CompaniesApi =
+        retrofit.create(com.kodass.groovework.data.api.CompaniesApi::class.java)
+    val aiApi: com.kodass.groovework.data.api.AiApi =
+        retrofit.create(com.kodass.groovework.data.api.AiApi::class.java)
+    // YouGile-ручки под капотом ходят в ru.yougile.com (несколько запросов с
+    // ретраями) — 30с клиента не хватает, поднимаем планку как на фронте (60с).
+    private val yougileRetrofit = retrofit.newBuilder()
+        .client(okHttp.newBuilder().readTimeout(60, TimeUnit.SECONDS).callTimeout(70, TimeUnit.SECONDS).build())
+        .build()
+    val yougileApi: com.kodass.groovework.data.api.YougileApi =
+        yougileRetrofit.create(com.kodass.groovework.data.api.YougileApi::class.java)
+    val backupApi: com.kodass.groovework.data.api.BackupApi =
+        retrofit.create(com.kodass.groovework.data.api.BackupApi::class.java)
+
+    // Отдельный клиент для скачивания файлов: без read-таймаута (большие файлы),
+    // те же интерсепторы (хост/токен) — путь /uploads на том же сервере.
+    val downloadHttp: OkHttpClient = okHttp.newBuilder()
+        .readTimeout(0, TimeUnit.SECONDS)
+        .build()
+    val downloader = com.kodass.groovework.data.files.Downloader(app, downloadHttp)
+
+    // Обновление приложения «по воздуху» (проверка версии + скачивание APK).
+    // Один на процесс: фаза «готово к установке» переживает уход с экрана.
+    val appUpdater = com.kodass.groovework.data.update.AppUpdater(
+        app, metaApi, downloadHttp, sessionManager, json, appScope,
+    )
+
+    val unitsApi: com.kodass.groovework.data.api.UnitsApi =
+        retrofit.create(com.kodass.groovework.data.api.UnitsApi::class.java)
 
     val gateway = GatewayClient(okHttp, sessionManager, json)
     val messengerRepo = MessengerRepository(messengerApi, gateway, sessionManager, json, appScope)
     val tasksRepo = TasksRepository(tasksApi, json)
+    val unitsRepo = com.kodass.groovework.data.repo.UnitsRepository(unitsApi, json)
 
     val notifier = Notifier(app)
     val notificationCenter = NotificationCenter(notifier, gateway, messengerRepo, sessionManager, json, appScope)
     val callManager = CallManager(app, gateway, sessionManager, json, notifier, callsApi, appScope)
+    val unitManager = com.kodass.groovework.data.units.UnitManager(
+        unitsRepo, sessionManager, gateway, json, notifier, appScope,
+    )
     val pushTokens = PushTokenManager(pushApi, appScope)
 
     // Маршрут из тапа по уведомлению — MainScreen подхватывает и навигирует.
