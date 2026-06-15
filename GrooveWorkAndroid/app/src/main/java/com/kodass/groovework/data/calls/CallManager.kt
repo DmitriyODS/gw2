@@ -474,8 +474,12 @@ class CallManager(
                 return@launch
             }
             // Пока шёл connect, звонок мог завершиться (hangup из шторки, call:ended) —
-            // НЕ публикуем микрофон в осиротевшую комнату.
-            if (epoch != callEpoch || _phase.value !is CallPhase.Active) {
+            // тогда cleanup() увеличивает callEpoch, и этого достаточно, чтобы понять,
+            // что комнату надо бросить. Фазу здесь НЕ проверяем на Active: у инициатора
+            // она ещё Outgoing (собеседник войдёт позже и переведёт в Active через
+            // ParticipantConnected) — рвать Outgoing нельзя, иначе звонящий отваливается
+            // от собственной комнаты сразу после connect, и звонок не соединяется.
+            if (epoch != callEpoch) {
                 eventsJob.cancel()
                 runCatching { newRoom.disconnect() }
                 runCatching { newRoom.release() }
