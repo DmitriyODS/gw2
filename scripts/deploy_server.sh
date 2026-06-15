@@ -11,7 +11,8 @@
 #      Ed25519 + публичный). Перед любой правкой делает бэкап .env рядом.
 #   2. Если включён ufw — открывает порты LiveKit: медиа 7881/tcp,
 #      7882/udp и TURN-relay 5349/tcp, 3478/udp; 80/443 считаются
-#      уже открытыми.
+#      уже открытыми. (2b) Поднимает UDP-буферы ядра (net.core.rmem_max/
+#      wmem_max=16 МБ) для качества WebRTC под нагрузкой — персистентно.
 #   3. docker compose pull + up -d --no-build --remove-orphans.
 #      Образы НА СЕРВЕРЕ НЕ СОБИРАЮТСЯ — их пушит локальная машина
 #      (`make push` → scripts/build_push.sh) в Docker Hub
@@ -166,6 +167,29 @@ else
   warn "ufw недоступен (нет команды или sudo) — проверьте порты 7881/tcp, 7882/udp, 5349/tcp, 3478/udp вручную"
 fi
 
+# ── 2b. UDP-буферы ядра для LiveKit (качество WebRTC под нагрузкой) ──
+# pion/LiveKit при старте требует net.core.rmem_max ~5 МБ, иначе под нагрузкой
+# растут потери аудио/видео-пакетов. Ставим с запасом (16 МБ), персистентно
+# (/etc/sysctl.d, применится и после ребута до старта docker) и идемпотентно.
+# sysctl глобальный, НЕ namespaced — Docker `sysctls:` его не примет, но
+# контейнер и так видит хостовое значение. Буфер берётся при старте процесса,
+# поэтому при первом подъёме livekit надо перезапустить (флаг ниже).
+LK_BUF_TARGET=16777216
+if command -v sysctl >/dev/null 2>&1 && sudo -n true 2>/dev/null; then
+  cur_rmem=$(sysctl -n net.core.rmem_max 2>/dev/null || echo 0)
+  if [ "${cur_rmem:-0}" -lt "$LK_BUF_TARGET" ]; then
+    printf 'net.core.rmem_max=%s\nnet.core.wmem_max=%s\n' "$LK_BUF_TARGET" "$LK_BUF_TARGET" \
+      | sudo -n tee /etc/sysctl.d/99-grovework-livekit.conf >/dev/null
+    sudo -n sysctl -q -w net.core.rmem_max="$LK_BUF_TARGET" net.core.wmem_max="$LK_BUF_TARGET"
+    NEED_LK_RESTART=1
+    ok "UDP-буферы подняты до $LK_BUF_TARGET (rmem/wmem)"
+  else
+    ok "UDP-буферы уже >= $LK_BUF_TARGET"
+  fi
+else
+  warn "нет sudo/sysctl — подними net.core.rmem_max и net.core.wmem_max до $LK_BUF_TARGET вручную"
+fi
+
 # ── 3. Образы и запуск ───────────────────────────────────────────
 # Сборки на сервере нет: тянем готовые образы из Docker Hub. Если
 # репозиторий приватный — на сервере нужен одноразовый `docker login`.
@@ -177,6 +201,12 @@ if ! $COMPOSE pull --quiet; then
 fi
 log "Поднимаю контейнеры"
 $COMPOSE up -d --no-build --remove-orphans
+# UDP-буферы только что подняли (2b) — livekit читает их лишь при старте,
+# поэтому перезапускаем его, чтобы предупреждение pion ушло сразу.
+if [ "${NEED_LK_RESTART:-0}" = 1 ]; then
+  log "Перезапускаю livekit под новые UDP-буферы"
+  $COMPOSE restart livekit >/dev/null 2>&1 || true
+fi
 # Подчищаем: слои, осиротевшие после переезда тегов, и build-кэш
 # (он остался от прежней схемы со сборкой на сервере и больше не нужен).
 docker image prune -f >/dev/null 2>&1 || true
