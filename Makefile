@@ -273,6 +273,7 @@ apk:
 	cd $(ANDROID_DIR) && ./gradlew assembleRelease
 	@mkdir -p apps
 	cp $(ANDROID_DIR)/app/build/outputs/apk/release/app-release.apk apps/groovework.apk
+	@bash scripts/check_apk_version.sh
 	@printf "\033[32m✓ Готово: apps/groovework.apk — выложить: make deploy-apk\033[0m\n"
 
 # Публикация мобильного приложения: заливаем APK и version.json из локального
@@ -285,6 +286,7 @@ deploy-apk:
 		printf "\033[31m✗ Нет apps/groovework.apk — положите собранный APK в каталог apps/\033[0m\n"; exit 2; fi
 	@if [ ! -f apps/version.json ]; then \
 		printf "\033[31m✗ Нет apps/version.json с номером сборки\033[0m\n"; exit 2; fi
+	@bash scripts/check_apk_version.sh
 	@printf "\033[1m▶ Заливаю мобильное приложение на $(SERVER_HOST)...\033[0m\n"
 	$(SSH) "mkdir -p $(SERVER_DIR)/apps"
 	scp -i $(SSH_KEY) apps/groovework.apk apps/version.json $(SERVER_USER)@$(SERVER_HOST):$(SERVER_DIR)/apps/
