@@ -17,10 +17,6 @@
             </span>
           </div>
         </div>
-        <button v-if="canCreate" class="btn-filled desktop-only" @click="openCreate">
-          <span class="material-symbols-outlined">person_add</span>
-          <span>Добавить</span>
-        </button>
       </div>
 
       <div class="admin-toolbar">
@@ -46,31 +42,12 @@
             <span class="chip-count">{{ f.count }}</span>
           </button>
         </div>
-
-        <div class="view-toggle" role="group" aria-label="Вид">
-          <button
-            :class="['vt-btn', { active: view === 'cards' }]"
-            @click="setView('cards')"
-            title="Карточки"
-            aria-label="Карточки"
-          >
-            <span class="material-symbols-outlined">grid_view</span>
-          </button>
-          <button
-            :class="['vt-btn', { active: view === 'table' }]"
-            @click="setView('table')"
-            title="Таблица"
-            aria-label="Таблица"
-          >
-            <span class="material-symbols-outlined">view_list</span>
-          </button>
-        </div>
       </div>
     </header>
 
-    <div ref="bodyRef" class="admin-body">
+    <div class="admin-body">
       <!-- Карточки -->
-      <div v-if="effectiveView === 'cards'" class="emp-grid">
+      <div class="emp-grid">
         <article
           v-for="u in filtered"
           :key="u.id"
@@ -153,84 +130,6 @@
           <p v-if="search">Попробуйте уточнить запрос или сбросить фильтры.</p>
         </div>
       </div>
-
-      <!-- Таблица -->
-      <AppDataTable
-        v-else
-        :value="filtered"
-        :loading="loading"
-        v-model:sort-field="sortField"
-        v-model:sort-order="sortOrder"
-        :row-class="() => 'row-clickable'"
-        empty-message="Сотрудников не найдено"
-        @row-click="onRowClick"
-      >
-        <Column field="fio" header="ФИО" sortable :sort-field="(d) => (d.fio || '').toLowerCase()" style="min-width: 240px">
-          <template #body="{ data }">
-            <div class="cell-user">
-              <span class="avatar avatar-sm" :class="presenceClass(data)">
-                <img :src="avatarOf(data)" :alt="data.fio" />
-              </span>
-              <span class="user-fio">{{ data.fio }}</span>
-              <span
-                v-if="data.is_super_admin"
-                class="root-badge"
-                title="Супер-администратор платформы"
-              >
-                <span class="material-symbols-outlined">verified</span>
-              </span>
-              <span v-if="data.id === auth.user?.id" class="me-tag">это вы</span>
-            </div>
-          </template>
-        </Column>
-
-        <Column field="login" header="Логин" sortable style="width: 160px">
-          <template #body="{ data }">
-            <span class="td-mono">@{{ data.login }}</span>
-          </template>
-        </Column>
-
-        <Column field="post" header="Должность" style="min-width: 180px">
-          <template #body="{ data }">
-            <span>{{ data.post || '—' }}</span>
-          </template>
-        </Column>
-
-        <Column header="Роль" style="width: 170px">
-          <template #body="{ data }">
-            <RolePill :level="data.role?.level" :name="data.role?.name" />
-          </template>
-        </Column>
-
-        <Column v-if="auth.isSuperAdmin" header="Компания" style="min-width: 160px">
-          <template #body="{ data }">
-            <span v-if="companyOf(data)" class="company-chip">{{ companyOf(data) }}</span>
-            <span v-else class="muted">—</span>
-          </template>
-        </Column>
-
-        <Column header="Статус" style="width: 170px">
-          <template #body="{ data }">
-            <span :class="['status', messenger.isOnline(data.id) ? 'on' : 'off']">
-              <span class="status-dot" />
-              {{ statusOf(data) }}
-            </span>
-          </template>
-        </Column>
-
-        <Column header="" style="width: 88px" body-style="text-align: right">
-          <template #body="{ data }">
-            <div class="row-actions" @click.stop>
-              <button v-if="canEdit(data)" class="icon-btn" title="Редактировать" @click="openEdit(data)">
-                <span class="material-symbols-outlined">edit</span>
-              </button>
-              <button v-if="canDelete(data)" class="icon-btn danger" title="Исключить из компании" @click="askDelete(data)">
-                <span class="material-symbols-outlined">person_remove</span>
-              </button>
-            </div>
-          </template>
-        </Column>
-      </AppDataTable>
     </div>
 
     <!-- Профиль сотрудника. -->
@@ -358,20 +257,6 @@
             <span class="hide-narrow">Аудио</span>
           </button>
         </div>
-
-        <div
-          v-if="canEdit(selected) || canDelete(selected)"
-          class="profile-admin"
-        >
-          <button v-if="canEdit(selected)" class="btn-outlined" @click="openEdit(selected)">
-            <span class="material-symbols-outlined">edit</span>
-            Редактировать
-          </button>
-          <button v-if="canDelete(selected)" class="btn-outlined danger" @click="askDelete(selected)">
-            <span class="material-symbols-outlined">person_remove</span>
-            Исключить
-          </button>
-        </div>
       </div>
     </Dialog>
 
@@ -382,34 +267,6 @@
       :alt="selected.fio"
       :caption="selected.fio"
     />
-
-    <EmployeeFormDialog
-      ref="formDlgRef"
-      v-model="formOpen"
-      :user="editTarget"
-      :roles="roles"
-      @save="onSave"
-    />
-
-
-    <ConfirmDialog
-      :visible="deleteDlg.open"
-      header="Исключить из компании"
-      :message="`Исключить сотрудника «${deleteDlg.user?.fio}» из компании? Он потеряет доступ к её данным, история работы сохранится.`"
-      confirm-label="Исключить"
-      danger-confirm
-      @confirm="doDelete"
-      @cancel="deleteDlg.open = false"
-    />
-
-    <AppFab
-      :visible="canCreate"
-      icon="person_add"
-      label="Добавить"
-      :collapsed="isCompact"
-      aria-label="Добавить сотрудника"
-      @click="openCreate"
-    />
   </div>
 </template>
 
@@ -417,32 +274,19 @@
 import { ref, computed, onMounted, watch, h } from 'vue'
 import { useRouter } from 'vue-router'
 import Dialog from 'primevue/dialog'
-import Column from 'primevue/column'
-import {
-  getDirectory, getUsers, createUser, updateUser, deleteUser, assignRole,
-} from '@/api/users.js'
-import { getRoles } from '@/api/roles.js'
+import { getDirectory, getUsers } from '@/api/users.js'
 import { useAuthStore } from '@/stores/auth.js'
 import { useCompaniesStore } from '@/stores/companies.js'
 import { useMessengerStore } from '@/stores/messenger.js'
 import { useCallStore } from '@/stores/call.js'
 import { useNotificationsStore } from '@/stores/notifications.js'
-import { usePermission, ROLE_NAMES } from '@/composables/usePermission.js'
+import { ROLE_NAMES } from '@/composables/usePermission.js'
 import { formatLastSeen } from '@/utils/presence.js'
 import AvatarLightbox from '@/components/common/AvatarLightbox.vue'
-import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
-import AppDataTable from '@/components/common/AppDataTable.vue'
-import AppFab from '@/components/common/AppFab.vue'
-import EmployeeFormDialog from '@/components/employees/EmployeeFormDialog.vue'
 import { useBreakpoint } from '@/composables/useBreakpoint.js'
-import { useScrollCollapse } from '@/composables/useScrollCollapse.js'
-import { storageGet, storageSet } from '@/utils/storage.js'
 
 const { isMobile } = useBreakpoint()
 const pageTitle = computed(() => (isMobile.value ? 'Люди' : 'Сотрудники'))
-
-const bodyRef = ref(null)
-const { isCompact } = useScrollCollapse(bodyRef)
 
 const router = useRouter()
 const auth = useAuthStore()
@@ -450,58 +294,20 @@ const companies = useCompaniesStore()
 const messenger = useMessengerStore()
 const callStore = useCallStore()
 const notif = useNotificationsStore()
-const { isAtLeast, ROLES, myLevel } = usePermission()
 
 const users = ref([])
-const roles = ref([])
-const loading = ref(false)
 const search = ref('')
 const roleFilter = ref('all')
-const sortField = ref('fio')
-const sortOrder = ref(1)
-
-const VIEW_KEY = 'gw2_employees_view'
-const view = ref(storageGet(VIEW_KEY, 'cards'))
-function setView(v) {
-  view.value = v
-  storageSet(VIEW_KEY, v)
-}
-
-/* На мобильном table-вид непригоден (горизонтальный скролл, мелкий шрифт),
-   принудительно показываем карточки независимо от сохранённого выбора. */
-const effectiveView = computed(() => (isMobile.value ? 'cards' : view.value))
 
 const profileOpen = ref(false)
 const selected = ref(null)
 const lightboxOpen = ref(false)
 
-const formOpen = ref(false)
-const editTarget = ref(null)
-const formDlgRef = ref(null)
-
-const deleteDlg = ref({ open: false, user: null })
-
-// Создание/управление членами — у администратора компании (роль ≥ 3).
-// Супер-админ управляет членами через раздел компаний, здесь только смотрит список.
-const canCreate = computed(() => !auth.isSuperAdmin && isAtLeast(ROLES.ADMIN))
+// Раздел только для просмотра: открыть карточку, написать, позвонить. Управление
+// сотрудниками (создание/роли/удаление) — в разделе «Компании».
 const callsOn = computed(() => true)
 
-function canEdit(u) {
-  if (auth.isSuperAdmin) return false
-  if (!isAtLeast(ROLES.ADMIN)) return false
-  if (u.is_super_admin) return false
-  if ((u.role?.level ?? 0) > myLevel()) return false
-  return true
-}
-
-function canDelete(u) {
-  if (!canEdit(u)) return false
-  if (u.id === auth.user?.id) return false
-  return true
-}
-
 async function load() {
-  loading.value = true
   try {
     // Супер-админ — все пользователи платформы; член компании — каталог
     // своей активной компании (компания берётся из токена на бэке).
@@ -512,19 +318,11 @@ async function load() {
     }
   } catch (e) {
     notif.error(e?.message || 'Не удалось загрузить сотрудников')
-  } finally {
-    loading.value = false
   }
-}
-
-async function loadRoles() {
-  try { roles.value = await getRoles() }
-  catch { /* без ролей: просмотр работает, редактирование — нет */ }
 }
 
 onMounted(() => {
   load()
-  loadRoles()
   messenger.fetchPresence()
   if (auth.isSuperAdmin) companies.load()
 })
@@ -614,10 +412,6 @@ const filtered = computed(() => {
   return arr
 })
 
-function onRowClick(e) {
-  openProfile(e.data)
-}
-
 function openProfile(u) { selected.value = u; profileOpen.value = true }
 
 async function writeTo(u) {
@@ -630,64 +424,6 @@ async function callTo(u, media) {
   profileOpen.value = false
   try { await callStore.startCall({ userIds: [u.id], media }) }
   catch { /* ошибка в store */ }
-}
-
-function openCreate() {
-  editTarget.value = null
-  formOpen.value = true
-}
-
-function openEdit(u) {
-  editTarget.value = u
-  profileOpen.value = false
-  formOpen.value = true
-}
-
-async function onSave({ payload, isEdit, userId, newRoleId }) {
-  try {
-    let saved
-    if (isEdit) {
-      saved = await updateUser(userId, payload)
-      if (newRoleId) {
-        saved = await assignRole(userId, { role_id: newRoleId })
-      }
-      _replace(saved)
-      notif.success('Сотрудник обновлён')
-    } else {
-      saved = await createUser(payload)
-      users.value.push(saved)
-      notif.success('Сотрудник создан')
-    }
-    formOpen.value = false
-  } catch (e) {
-    const msg = typeof e?.message === 'string' ? e.message : 'Не удалось сохранить'
-    formDlgRef.value?.showError(msg)
-  } finally {
-    formDlgRef.value?.finish()
-  }
-}
-
-function _replace(u) {
-  const idx = users.value.findIndex(x => x.id === u.id)
-  if (idx >= 0) users.value.splice(idx, 1, u)
-  if (selected.value?.id === u.id) selected.value = u
-}
-
-function askDelete(u) { deleteDlg.value = { open: true, user: u } }
-
-async function doDelete() {
-  if (!deleteDlg.value.user) return
-  try {
-    await deleteUser(deleteDlg.value.user.id)
-    users.value = users.value.filter(x => x.id !== deleteDlg.value.user.id)
-    notif.success('Сотрудник исключён из компании')
-    deleteDlg.value.open = false
-    if (profileOpen.value && selected.value?.id === deleteDlg.value.user.id) {
-      profileOpen.value = false
-    }
-  } catch (e) {
-    notif.error(e?.message || 'Не удалось исключить')
-  }
 }
 
 watch(profileOpen, (open) => {
@@ -849,36 +585,6 @@ const RolePill = {
   background: color-mix(in oklch, var(--color-on-secondary-container) 18%, transparent);
   color: var(--color-on-secondary-container);
 }
-
-/* ============ Переключатель вида ============ */
-.view-toggle {
-  display: inline-flex;
-  padding: 3px;
-  background: var(--color-surface-high);
-  border-radius: var(--radius-full);
-  gap: 2px;
-  margin-left: auto;
-}
-.vt-btn {
-  appearance: none;
-  border: none;
-  background: transparent;
-  width: 38px;
-  height: 38px;
-  display: grid;
-  place-items: center;
-  border-radius: var(--radius-full);
-  cursor: pointer;
-  color: var(--color-text-dim);
-  transition: background .12s, color .12s;
-}
-.vt-btn:hover { color: var(--color-text); }
-.vt-btn.active {
-  background: var(--color-primary);
-  color: var(--color-on-primary);
-  box-shadow: var(--shadow-sm);
-}
-.vt-btn .material-symbols-outlined { font-size: 20px; }
 
 /* ============ Сетка карточек ============ */
 .emp-grid {
@@ -1070,7 +776,6 @@ const RolePill = {
   object-fit: cover;
   display: block;
 }
-.avatar-sm { width: 32px; height: 32px; }
 .avatar-xl { width: 116px; height: 116px; }
 
 .avatar::before {
@@ -1088,20 +793,6 @@ const RolePill = {
   box-shadow: 0 0 0 2px color-mix(in oklch, var(--color-success) 22%, transparent);
 }
 
-/* ============ Ячейки таблицы ============ */
-.cell-user {
-  display: inline-flex;
-  align-items: center;
-  gap: 10px;
-  min-width: 0;
-}
-.user-fio {
-  font-weight: 600;
-  color: var(--color-text);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
 .me-tag {
   font-size: 10px;
   font-weight: 700;
@@ -1113,56 +804,6 @@ const RolePill = {
   color: var(--color-on-primary-container);
   flex-shrink: 0;
 }
-.td-mono { color: var(--color-text-dim); font-variant-numeric: tabular-nums; }
-.company-chip {
-  display: inline-block;
-  padding: 3px 10px;
-  background: var(--color-surface-high);
-  border-radius: var(--radius-full);
-  font-size: 12px;
-}
-.muted { color: var(--color-text-dim); font-style: italic; }
-
-.status {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  font-weight: 600;
-  font-size: 13px;
-}
-.status .status-dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: var(--color-outline-dim);
-}
-.status.on { color: var(--color-success); }
-.status.on .status-dot { background: var(--color-success); }
-.status.off { color: var(--color-text-dim); }
-
-.row-actions {
-  display: inline-flex;
-  align-items: center;
-  justify-content: flex-end;
-  gap: 4px;
-}
-.icon-btn {
-  appearance: none;
-  border: none;
-  background: transparent;
-  width: 34px;
-  height: 34px;
-  display: grid;
-  place-items: center;
-  border-radius: 50%;
-  color: var(--color-text-dim);
-  cursor: pointer;
-  transition: background .12s, color .12s;
-}
-.icon-btn:hover { background: var(--color-surface-high); color: var(--color-text); }
-.icon-btn.danger:hover { background: var(--color-error-container); color: var(--color-on-error-container); }
-.icon-btn .material-symbols-outlined { font-size: 18px; }
-
 .root-badge {
   display: inline-grid;
   place-items: center;
@@ -1379,25 +1020,19 @@ const RolePill = {
   flex-shrink: 0;
 }
 
-.profile-actions, .profile-admin {
+.profile-actions {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
   padding: 0 16px 16px;
 }
-.profile-admin {
-  padding-top: 14px;
-  margin-top: 4px;
-  border-top: 1px solid var(--color-outline-dim);
-  padding-bottom: 18px;
-}
-.profile-actions > *, .profile-admin > * {
+.profile-actions > * {
   flex: 1 1 120px;
   justify-content: center;
 }
 
 /* ============ Кнопки ============ */
-.btn-filled, .btn-tonal, .btn-outlined {
+.btn-filled, .btn-tonal {
   appearance: none;
   border: none;
   cursor: pointer;
@@ -1426,31 +1061,16 @@ const RolePill = {
   color: var(--color-on-tertiary-container);
 }
 .btn-tonal:hover { filter: brightness(.96); }
-.btn-outlined {
-  background: transparent;
-  border: 1px solid var(--color-outline-dim);
-  color: var(--color-text);
-}
-.btn-outlined:hover { background: var(--color-surface-high); }
-.btn-outlined.danger { color: var(--color-error); border-color: var(--color-error); }
-.btn-outlined.danger:hover {
-  background: var(--color-error-container);
-  color: var(--color-on-error-container);
-}
-.btn-tonal .material-symbols-outlined,
-.btn-outlined .material-symbols-outlined { font-size: 18px; }
+.btn-tonal .material-symbols-outlined { font-size: 18px; }
 
 @media (max-width: 768px) {
   .hide-narrow { display: none; }
-  .desktop-only { display: none; }
 
   .page-head-title { font-size: 20px; }
   .page-head-meta { font-size: 12px; }
   .meta-dot { display: none; }
 
-  /* Поиск во всю ширину — view-toggle уходит на отдельную строку. */
   .emp-search { flex: 1 1 100%; max-width: 100%; }
-  .view-toggle { display: none; }
 
   /* Сетка карточек 2 колонки. */
   .emp-grid {
@@ -1483,7 +1103,7 @@ const RolePill = {
 
   /* Профиль-модалка адаптивная. */
   .profile-list { padding: 12px; }
-  .profile-actions, .profile-admin { padding-left: 12px; padding-right: 12px; }
+  .profile-actions { padding-left: 12px; padding-right: 12px; }
 }
 
 @media (max-width: 420px) {

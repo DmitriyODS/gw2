@@ -1,33 +1,24 @@
 package domain
 
-import "errors"
+import "github.com/DmitriyODS/gw2/back-go/pkg/apierror"
 
-// Error — бизнес-ошибка с HTTP-статусом и кодом для фронта. Формат ответа
-// совпадает с прежними Flask-обработчиками: {"error": code, "message": ...}
-// плюс дополнительные поля из Extra (retry_after_sec, company_name).
-type Error struct {
-	Code       string
-	Message    string
-	HTTPStatus int
-	Extra      map[string]any
-}
-
-func (e *Error) Error() string { return e.Code + ": " + e.Message }
+// Error — бизнес-ошибка с HTTP-статусом и кодом для фронта. АЛИАС на общий
+// pkg/apierror.Error: единый формат ответов {"error": code, "message": ...}
+// (+Extra: retry_after_sec, company_name) и, главное, распознаётся
+// apierror.Respond/As в транспорте. Без алиаса (отдельным типом) любая
+// бизнес-ошибка не распозналась бы и улетала бы 500 INTERNAL_ERROR.
+type Error = apierror.Error
 
 func NewError(code, message string, httpStatus int) *Error {
-	return &Error{Code: code, Message: message, HTTPStatus: httpStatus}
+	return apierror.New(code, message, httpStatus)
 }
 
 func NewErrorExtra(code, message string, httpStatus int, extra map[string]any) *Error {
-	return &Error{Code: code, Message: message, HTTPStatus: httpStatus, Extra: extra}
+	return apierror.NewExtra(code, message, httpStatus, extra)
 }
 
 // AsDomainError — распаковать *Error из цепочки ошибок (nil, если это
 // внутренняя ошибка, а не бизнес-ответ).
 func AsDomainError(err error) *Error {
-	var de *Error
-	if errors.As(err, &de) {
-		return de
-	}
-	return nil
+	return apierror.As(err)
 }

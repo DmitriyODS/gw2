@@ -92,11 +92,8 @@
               </span>
             </div>
 
-            <div class="cmp-card-actions" @click.stop>
-              <button class="card-act" title="Управление" @click="openManage(c)">
-                <span class="material-symbols-outlined">settings</span>
-              </button>
-              <button v-if="isSuper" class="card-act danger" title="Удалить" @click="askDelete(c)">
+            <div v-if="isSuper" class="cmp-card-actions" @click.stop>
+              <button class="card-act danger" title="Удалить" @click="askDelete(c)">
                 <span class="material-symbols-outlined">delete</span>
               </button>
             </div>
@@ -183,13 +180,10 @@
           </template>
         </Column>
 
-        <Column header="" style="width: 96px" body-style="text-align: right">
+        <Column v-if="isSuper" header="" style="width: 64px" body-style="text-align: right">
           <template #body="{ data }">
             <div class="row-actions" @click.stop>
-              <button class="icon-btn" title="Управление" @click="openManage(data)">
-                <span class="material-symbols-outlined">settings</span>
-              </button>
-              <button v-if="isSuper" class="icon-btn danger" title="Удалить" @click="askDelete(data)">
+              <button class="icon-btn danger" title="Удалить" @click="askDelete(data)">
                 <span class="material-symbols-outlined">delete</span>
               </button>
             </div>

@@ -11,9 +11,10 @@ import (
 )
 
 // resolveCompany — компания (404) + проверка доступа: AI-настройками управляет
-// администратор ИМЕННО этой компании, т.е. компания из пути должна совпасть с
-// активной компанией сессии. Супер-админ компанийные AI-настройки не управляет.
-// Уровень роли (Администратор, ≥ 3) проверяет транспорт.
+// администратор ИМЕННО этой компании (членство user_companies с ролью ≥ 3) или
+// супер-админ платформы. Доступ скоупится компанией из пути, а НЕ активной
+// компанией сессии — раздел «Компании» правит любую свою компанию независимо от
+// того, какая активна.
 func (s *Service) resolveCompany(ctx context.Context, actor *domain.User, companyID int64) (*domain.CompanyAI, error) {
 	company, err := s.repo.GetCompanyAI(ctx, companyID)
 	if err != nil {
@@ -22,8 +23,17 @@ func (s *Service) resolveCompany(ctx context.Context, actor *domain.User, compan
 	if company == nil {
 		return nil, errNotFound()
 	}
-	if actor.CompanyID != nil && *actor.CompanyID == company.ID {
+	if actor != nil && actor.IsSuperAdmin {
 		return company, nil
+	}
+	if actor != nil {
+		level, err := s.repo.MembershipLevel(ctx, actor.ID, company.ID)
+		if err != nil {
+			return nil, err
+		}
+		if level >= domain.LevelAdmin {
+			return company, nil
+		}
 	}
 	return nil, errNoAccess()
 }

@@ -56,6 +56,15 @@ func (r *fakeRepo) UpdateCompanyAI(_ context.Context, c *domain.CompanyAI) error
 	return nil
 }
 
+// MembershipLevel — в тестах администратор управляет одноимённой компанией
+// (см. companyAdmin: id == companyID).
+func (r *fakeRepo) MembershipLevel(_ context.Context, userID, companyID int64) (int, error) {
+	if userID == companyID {
+		return domain.LevelAdmin, nil
+	}
+	return 0, nil
+}
+
 func (r *fakeRepo) CountTasks(_ context.Context, companyID int64) (int, error) {
 	n := 0
 	for _, t := range r.tasks {
@@ -243,10 +252,11 @@ func enabledCompany(id int64) *domain.CompanyAI {
 	}
 }
 
-// companyAdmin — администратор (level 3) компании companyID в активной сессии:
-// AI-настройками управляет администратор ИМЕННО этой компании.
+// companyAdmin — администратор (level 3) компании companyID. id == companyID,
+// чтобы membership-проверка (fakeRepo.MembershipLevel) различала персоны: доступ
+// к AI-настройкам скоупится компанией из пути, а не активной компанией сессии.
 func companyAdmin(companyID int64) *domain.User {
-	return &domain.User{ID: 10, RoleLevel: domain.LevelAdmin, CompanyID: &companyID, CompanyActive: true}
+	return &domain.User{ID: companyID, RoleLevel: domain.LevelAdmin, CompanyID: &companyID, CompanyActive: true}
 }
 
 func wantDomainError(t *testing.T, err error, code string, status int) {
@@ -392,8 +402,8 @@ func TestSettingsAccess(t *testing.T) {
 	if _, err := svc.GetSettings(context.Background(), companyAdmin(1), 1); err != nil {
 		t.Fatalf("своя компания: %v", err)
 	}
-	// Администратор чужой компании — 403 (кросс-компанийного доступа нет даже у
-	// супер-админа: AI-настройками управляет администратор именно этой компании).
+	// Администратор чужой компании — 403: AI-настройками управляет администратор
+	// именно этой компании (членство), независимо от активной компании сессии.
 	_, err := svc.GetSettings(context.Background(), companyAdmin(2), 1)
 	wantDomainError(t, err, "FORBIDDEN", 403)
 	// Компании нет — 404 без message (проверяется до доступа).

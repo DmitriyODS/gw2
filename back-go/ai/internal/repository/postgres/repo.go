@@ -44,6 +44,23 @@ func (r *Repo) GetCompanyAI(ctx context.Context, companyID int64) (*domain.Compa
 	return &c, nil
 }
 
+// MembershipLevel — уровень роли пользователя в компании; 0 — не член.
+func (r *Repo) MembershipLevel(ctx context.Context, userID, companyID int64) (int, error) {
+	var level int
+	err := r.pool.QueryRow(ctx, `
+		SELECT r.level
+		  FROM user_companies uc
+		  JOIN roles r ON r.id = uc.role_id
+		 WHERE uc.user_id = $1 AND uc.company_id = $2`, userID, companyID).Scan(&level)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return 0, nil
+		}
+		return 0, err
+	}
+	return level, nil
+}
+
 func (r *Repo) UpdateCompanyAI(ctx context.Context, c *domain.CompanyAI) error {
 	_, err := r.pool.Exec(ctx, `
 		UPDATE companies

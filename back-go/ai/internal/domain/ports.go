@@ -14,6 +14,11 @@ type Repository interface {
 	// UpdateCompanyAI — сохранить ai_*-поля компании.
 	UpdateCompanyAI(ctx context.Context, c *CompanyAI) error
 
+	// MembershipLevel — уровень роли пользователя в КОНКРЕТНОЙ компании
+	// (user_companies); 0 — не член. Доступ к AI-настройкам скоупится этой
+	// компанией, а не активной компанией сессии.
+	MembershipLevel(ctx context.Context, userID, companyID int64) (int, error)
+
 	// CountTasks — все задачи компании (total_tasks в indexing-статусе).
 	CountTasks(ctx context.Context, companyID int64) (int, error)
 	// CountEmbeddings — проиндексированные; model "" — без фильтра по модели

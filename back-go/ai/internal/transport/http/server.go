@@ -5,9 +5,10 @@
 // api/ai_settings.py и api/ai_tv.py — фронт не меняется, nginx маршрутизирует
 // regex ^/api/companies/\d+/ai-settings и префикс /api/ai на этот сервис.
 //
-// Доступ к настройкам: администратор ИМЕННО этой компании (роль ≥ 3 в активной
-// компании, мидлварь RequireRole). AI-настройки скоупятся компанией из пути;
-// супер-админ ими не управляет. ТВ-факт — любой авторизованный в company-scope.
+// Доступ к настройкам: администратор ИМЕННО этой компании (членство с ролью ≥ 3)
+// или супер-админ — проверяет сервис (resolveCompany) по компании из пути, а не
+// по активной компании сессии. Транспорт лишь требует авторизацию. ТВ-факт —
+// любой авторизованный в company-scope.
 package http
 
 import (
@@ -65,8 +66,7 @@ func NewServer(eps endpoint.Endpoints, users domain.UserReader,
 		return c.JSON(fiber.Map{"ok": true})
 	})
 
-	api := app.Group("/api/companies/:companyId<int>/ai-settings",
-		auth.RequireAuth, auth.RequireRole(domain.LevelAdmin))
+	api := app.Group("/api/companies/:companyId<int>/ai-settings", auth.RequireAuth)
 	api.Get("", h.getSettings)
 	api.Put("", h.updateSettings)
 	api.Post("/test", h.testSettings)

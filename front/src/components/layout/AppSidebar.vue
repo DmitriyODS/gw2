@@ -42,20 +42,6 @@
       </div>
 
       <div class="sidebar-bottom">
-        <!-- «Создать компанию» — доступно любому авторизованному пользователю
-             (кроме платформенного супер-админа, у которого есть раздел Компании). -->
-        <button
-          v-if="!isSuperAdmin()"
-          class="nav-btn create-company-btn"
-          @click="showCreateCompany = true"
-          title="Создать компанию"
-        >
-          <span class="nav-btn-icon">
-            <span class="material-symbols-outlined">add_business</span>
-          </span>
-          <span class="nav-label">Создать компанию</span>
-        </button>
-
         <button class="user-row" @click="router.push('/profile')" title="Профиль">
           <img
             data-tutorial="profile-avatar"
@@ -67,8 +53,6 @@
         </button>
       </div>
     </div>
-
-    <CreateCompanyDialog v-model="showCreateCompany" />
   </nav>
 </template>
 
@@ -77,24 +61,22 @@ import { computed, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth.js'
 import { useMessengerStore } from '@/stores/messenger.js'
-import { usePermission, ROLES } from '@/composables/usePermission.js'
+import { usePermission } from '@/composables/usePermission.js'
 import { useCompanySettings } from '@/composables/useCompanySettings.js'
 import { useChangelog } from '@/composables/useChangelog.js'
 import CompanySelect from '@/components/common/CompanySelect.vue'
-import CreateCompanyDialog from '@/components/common/CreateCompanyDialog.vue'
 import Logo from '@/components/common/Logo.vue'
 
 const route = useRoute()
 const router = useRouter()
 const authStore = useAuthStore()
 const messenger = useMessengerStore()
-const { isAtLeast, isSuperAdmin, canManageCompanies } = usePermission()
+const { isSuperAdmin, canManageCompanies } = usePermission()
 const { usesGroove } = useCompanySettings()
 const { open: openChangelog } = useChangelog()
 
 const hovered = ref(false)
 const companyDropdownOpen = ref(false)
-const showCreateCompany = ref(false)
 
 // Активная компания есть только у обычного пользователя-члена (roleLevel>0).
 // У супер-админа активной компании нет — компанийный контент он не видит.
@@ -138,12 +120,6 @@ const navItems = computed(() => {
     }
     items.push({ path: '/employees', icon: 'groups', label: 'Сотрудники', tutorial: 'nav-employees',
       active: () => route.path === '/employees' })
-
-    // Раздел "Списки" — от Администратора компании.
-    if (isAtLeast(ROLES.ADMIN)) {
-      items.push({ path: '/lists', icon: 'list_alt', label: 'Списки', tutorial: 'nav-lists',
-        active: () => route.path.startsWith('/lists') })
-    }
   }
 
   // Раздел "Компании" — платформенный супер-админ (все компании) ИЛИ
@@ -304,9 +280,6 @@ const avatarSrc = computed(() => {
 }
 
 .sidebar-bottom { margin-top: auto; padding-top: 16px; display: flex; flex-direction: column; gap: 6px; }
-
-.create-company-btn { color: var(--gw-primary); }
-.create-company-btn:hover { background: var(--gw-primary-light); color: var(--gw-primary); }
 
 .user-row {
   display: flex;

@@ -103,8 +103,6 @@ const moreItems = computed(() => {
   if (isAtLeast(ROLES.ADMIN)) {
     arr.splice(1, 0, { path: '/companies', icon: 'domain', label: 'Компании',
       active: () => route.path.startsWith('/companies') })
-    arr.push({ path: '/lists', icon: 'view_list', label: 'Списки',
-      active: () => route.path.startsWith('/lists') })
   }
   return arr
 })

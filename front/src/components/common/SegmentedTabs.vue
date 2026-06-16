@@ -52,7 +52,13 @@ function select(t) {
   padding: 4px;
   align-self: flex-start;
   max-width: 100%;
+  /* На узких экранах вкладок может быть больше, чем влезает в ряд — даём
+     горизонтальный скролл (без видимой полосы), вместо обрезки/переноса. */
+  overflow-x: auto;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
 }
+.seg-tabs::-webkit-scrollbar { display: none; }
 
 .seg-tabs--full-width {
   align-self: stretch;

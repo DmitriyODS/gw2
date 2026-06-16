@@ -35,8 +35,6 @@ const routes = [
     meta: { requiresAuth: true } },
   { path: '/companies/:id(\\d+)', component: () => import('@/views/CompanyManageView.vue'),
     meta: { requiresAuth: true }, props: true },
-  { path: '/lists', component: () => import('@/views/ListsView.vue'),
-    meta: { requiresAuth: true, requiresCompany: true, minRole: ROLES.ADMIN } },
   {
     path: '/messenger/:conversationId(\\d+)?',
     component: () => import('@/views/MessengerView.vue'),

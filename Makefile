@@ -47,6 +47,7 @@ help:
 	@printf "  make shell [s=calls]    Шелл внутри контейнера на сервере\n"
 	@printf "  make backup       Дамп прод-БД → backups/gw2_<дата>.sql.gz (локально)\n"
 	@printf "  make reset NEWPASS='...'  Сбросить пароль суперадмина на сервере\n"
+	@printf "  make dev-reset NEWPASS='...'  Сбросить пароль суперадмина в dev-БД\n"
 	@printf "\n\033[33mКонфигурация сервера:\033[0m cp .env.deploy.example .env.deploy\n\n"
 
 # ── Разработка ────────────────────────────────────────────────────
@@ -331,3 +332,15 @@ reset:
 	fi
 	@printf "\033[1m▶ Сбрасываю пароль суперадмина на $(SERVER_HOST)...\033[0m\n"
 	@scripts/reset_superadmin_password.sh "$(SERVER_USER)@$(SERVER_HOST)" "$(SSH_KEY)" "$(SERVER_DIR)" "$(NEWPASS)"
+
+# ── Сброс пароля суперадмина в локальной dev-БД ──────────────────
+# Использование: make dev-reset NEWPASS='новый-пароль'
+# То же, что make reset, но без SSH — работает с контейнером db dev-инфры.
+.PHONY: dev-reset
+dev-reset:
+	@if [ -z "$(NEWPASS)" ]; then \
+		printf "\033[31m✗ Передайте новый пароль:\033[0m  make dev-reset NEWPASS='новый-пароль'\n"; \
+		exit 2; \
+	fi
+	@printf "\033[1m▶ Сбрасываю пароль суперадмина в dev-БД...\033[0m\n"
+	@scripts/reset_superadmin_password_dev.sh "$(NEWPASS)"
