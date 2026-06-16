@@ -28,11 +28,21 @@ require (
 	github.com/valyala/tcplisten v1.0.0 // indirect
 	go.uber.org/atomic v1.11.0 // indirect
 	golang.org/x/crypto v0.48.0 // indirect
+	golang.org/x/net v0.51.0 // indirect
 	golang.org/x/sync v0.20.0 // indirect
 	golang.org/x/sys v0.42.0 // indirect
 	golang.org/x/text v0.34.0 // indirect
+	google.golang.org/genproto/googleapis/rpc v0.0.0-20260226221140-a57be14db171 // indirect
+	google.golang.org/protobuf v1.36.11 // indirect
 )
 
-require github.com/DmitriyODS/gw2/back-go/pkg v0.0.0
+require (
+	github.com/DmitriyODS/gw2/back-go/pkg v0.0.0
+	google.golang.org/grpc v1.81.1
+)
 
 replace github.com/DmitriyODS/gw2/back-go/pkg => ../pkg
+
+// go-kit тянет монолитный genproto 2021 года (конфликт с новым
+// сплит-модулем genproto/googleapis/rpc) — пиним пост-сплит версию.
+replace google.golang.org/genproto => google.golang.org/genproto v0.0.0-20260610212136-7ab31c22f7ad
