@@ -20,16 +20,10 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Clear
-import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.FilterChip
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -59,6 +53,7 @@ import com.kodass.groovework.ui.common.CenteredLoading
 import com.kodass.groovework.ui.common.EmptyState
 import com.kodass.groovework.ui.common.ErrorState
 import com.kodass.groovework.ui.common.RefreshOnResume
+import com.kodass.groovework.ui.common.SearchField
 import com.kodass.groovework.ui.common.UserAvatar
 import com.kodass.groovework.ui.common.UserInfoSheet
 import com.kodass.groovework.ui.common.formatLastSeen
@@ -157,21 +152,10 @@ fun EmployeesScreen(container: AppContainer, onOpenChat: (Long) -> Unit) {
 
     Scaffold(topBar = { TopAppBar(title = { Text("Сотрудники") }) }) { padding ->
         Column(modifier = Modifier.fillMaxSize().padding(padding)) {
-            OutlinedTextField(
+            SearchField(
                 value = viewModel.search,
                 onValueChange = { viewModel.search = it },
-                placeholder = { Text("Поиск по ФИО, логину, должности") },
-                leadingIcon = { Icon(Icons.Filled.Search, contentDescription = null) },
-                trailingIcon = {
-                    if (viewModel.search.isNotEmpty()) {
-                        IconButton(onClick = { viewModel.search = "" }) {
-                            Icon(Icons.Filled.Clear, contentDescription = "Очистить")
-                        }
-                    }
-                },
-                singleLine = true,
-                shape = RoundedCornerShape(28.dp),
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp),
+                placeholder = "Поиск по ФИО, логину, должности",
             )
 
             val counts = viewModel.roleCounts()

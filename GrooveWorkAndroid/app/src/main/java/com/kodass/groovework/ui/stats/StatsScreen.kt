@@ -14,6 +14,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AssistChip
@@ -133,7 +135,8 @@ private val statsTabs = listOf("Общая", "Расширенная")
 fun StatsScreen(container: AppContainer) {
     val viewModel: StatsViewModel = viewModel { StatsViewModel(container.statsApi, container.json) }
     RefreshOnResume { viewModel.load() }
-    var tab by remember { mutableStateOf(0) }
+    val pagerState = rememberPagerState { statsTabs.size }
+    val scope = rememberCoroutineScope()
     var showRange by remember { mutableStateOf(false) }
 
     Scaffold(topBar = { TopAppBar(title = { Text("Статистика") }) }) { padding ->
@@ -145,9 +148,13 @@ fun StatsScreen(container: AppContainer) {
                 onPreset = { viewModel.applyPreset(it) },
                 onCustom = { showRange = true },
             )
-            PrimaryTabRow(selectedTabIndex = tab) {
+            PrimaryTabRow(selectedTabIndex = pagerState.currentPage) {
                 statsTabs.forEachIndexed { index, label ->
-                    Tab(selected = tab == index, onClick = { tab = index }, text = { Text(label) })
+                    Tab(
+                        selected = pagerState.currentPage == index,
+                        onClick = { scope.launch { pagerState.animateScrollToPage(index) } },
+                        text = { Text(label) },
+                    )
                 }
             }
             Box(modifier = Modifier.fillMaxSize()) {
@@ -155,8 +162,12 @@ fun StatsScreen(container: AppContainer) {
                     viewModel.loading && viewModel.common == null -> CenteredLoading()
                     viewModel.error != null && viewModel.common == null ->
                         ErrorState(viewModel.error ?: "", onRetry = { viewModel.load() })
-                    tab == 0 -> CommonTab(viewModel.common)
-                    else -> ExtendedTab(viewModel.extended)
+                    else -> HorizontalPager(
+                        state = pagerState,
+                        modifier = Modifier.fillMaxSize(),
+                    ) { page ->
+                        if (page == 0) CommonTab(viewModel.common) else ExtendedTab(viewModel.extended)
+                    }
                 }
             }
         }

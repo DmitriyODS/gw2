@@ -12,7 +12,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.Logout
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Dns
 import androidx.compose.material.icons.filled.SupportAgent
@@ -25,9 +24,10 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -56,7 +56,6 @@ import com.kodass.groovework.data.update.AppUpdater
 import com.kodass.groovework.data.update.UpdateState
 import com.kodass.groovework.ui.common.ConfirmDialog
 import com.kodass.groovework.ui.common.ConfirmSpec
-import com.kodass.groovework.ui.settings.SettingsSubScaffold
 import kotlinx.coroutines.launch
 import kotlinx.serialization.json.Json
 
@@ -71,8 +70,6 @@ class AboutViewModel(
     var changelogError by mutableStateOf(false)
         private set
     var refreshing by mutableStateOf(false)
-        private set
-    var loggingOut by mutableStateOf(false)
         private set
     var openingSupport by mutableStateOf(false)
         private set
@@ -119,18 +116,6 @@ class AboutViewModel(
         }
     }
 
-    fun logout() {
-        if (loggingOut) return
-        viewModelScope.launch {
-            loggingOut = true
-            try {
-                session.logout()
-            } finally {
-                loggingOut = false
-            }
-        }
-    }
-
     fun changeServer(url: String) {
         if (changingServer) return
         viewModelScope.launch {
@@ -146,7 +131,7 @@ class AboutViewModel(
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun AboutScreen(container: AppContainer, onBack: () -> Unit, onOpenChat: (Long) -> Unit) {
+fun AboutScreen(container: AppContainer, onOpenChat: (Long) -> Unit) {
     val viewModel: AboutViewModel = viewModel {
         AboutViewModel(container.sessionManager, container.messengerRepo, container.metaApi, container.json)
     }
@@ -173,7 +158,7 @@ fun AboutScreen(container: AppContainer, onBack: () -> Unit, onOpenChat: (Long) 
         )
     }
 
-    SettingsSubScaffold(title = "О приложении", onBack = onBack) { padding ->
+    Scaffold(topBar = { TopAppBar(title = { Text("О приложении") }) }) { padding ->
         PullToRefreshBox(
             isRefreshing = viewModel.refreshing,
             onRefresh = { viewModel.pullRefresh() },
@@ -232,18 +217,6 @@ fun AboutScreen(container: AppContainer, onBack: () -> Unit, onOpenChat: (Long) 
                             ) {
                                 Icon(Icons.Filled.SupportAgent, contentDescription = null, modifier = Modifier.size(18.dp))
                                 Text("Чат с техподдержкой", modifier = Modifier.padding(start = 8.dp))
-                            }
-                            OutlinedButton(
-                                onClick = { viewModel.logout() },
-                                enabled = !viewModel.loggingOut,
-                                modifier = Modifier.fillMaxWidth().padding(top = 12.dp),
-                            ) {
-                                Icon(
-                                    Icons.AutoMirrored.Filled.Logout,
-                                    contentDescription = null,
-                                    modifier = Modifier.size(18.dp),
-                                )
-                                Text("Выйти из аккаунта", modifier = Modifier.padding(start = 8.dp))
                             }
                         }
                     }

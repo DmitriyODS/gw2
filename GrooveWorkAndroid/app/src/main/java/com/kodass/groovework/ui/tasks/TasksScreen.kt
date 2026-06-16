@@ -26,9 +26,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.Schedule
-import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.outlined.StarBorder
 import androidx.compose.material3.Card
@@ -39,7 +37,6 @@ import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.PrimaryTabRow
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
@@ -68,6 +65,7 @@ import com.kodass.groovework.ui.common.CenteredLoading
 import com.kodass.groovework.ui.common.EmptyState
 import com.kodass.groovework.ui.common.ErrorState
 import com.kodass.groovework.ui.common.RefreshOnResume
+import com.kodass.groovework.ui.common.SearchField
 import com.kodass.groovework.ui.common.UserAvatar
 import com.kodass.groovework.ui.common.formatChatStamp
 import com.kodass.groovework.ui.common.parseIso
@@ -119,23 +117,10 @@ fun TasksScreen(container: AppContainer, onOpenTask: (Long) -> Unit) {
         },
     ) { padding ->
         Column(modifier = Modifier.fillMaxSize().padding(padding)) {
-            OutlinedTextField(
+            SearchField(
                 value = viewModel.search,
                 onValueChange = { viewModel.setSearchValue(it) },
-                placeholder = { Text("Поиск задач") },
-                leadingIcon = { Icon(Icons.Filled.Search, contentDescription = null) },
-                trailingIcon = {
-                    if (viewModel.search.isNotEmpty()) {
-                        IconButton(onClick = { viewModel.setSearchValue("") }) {
-                            Icon(Icons.Filled.Clear, contentDescription = "Очистить")
-                        }
-                    }
-                },
-                singleLine = true,
-                shape = RoundedCornerShape(28.dp),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 4.dp),
+                placeholder = "Поиск задач",
             )
             PrimaryTabRow(selectedTabIndex = pagerState.currentPage) {
                 taskTabs.forEachIndexed { index, (_, label) ->

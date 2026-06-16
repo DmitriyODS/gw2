@@ -18,10 +18,12 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.Logout
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.PhotoCamera
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -102,6 +104,8 @@ class ProfileViewModel(
     var stats by mutableStateOf<ProfileStatsDto?>(null)
         private set
     var switching by mutableStateOf(false)
+        private set
+    var loggingOut by mutableStateOf(false)
         private set
 
     private var formInit = false
@@ -263,6 +267,18 @@ class ProfileViewModel(
                 message = e.message
             } finally {
                 switching = false
+            }
+        }
+    }
+
+    fun logout() {
+        if (loggingOut) return
+        viewModelScope.launch {
+            loggingOut = true
+            try {
+                session.logout()
+            } finally {
+                loggingOut = false
             }
         }
     }
@@ -464,6 +480,24 @@ fun ProfileScreen(container: AppContainer) {
                             }
                         }
                     }
+                }
+            }
+
+            item {
+                OutlinedButton(
+                    onClick = { viewModel.logout() },
+                    enabled = !viewModel.loggingOut,
+                    colors = ButtonDefaults.outlinedButtonColors(
+                        contentColor = MaterialTheme.colorScheme.error,
+                    ),
+                    modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
+                ) {
+                    Icon(
+                        Icons.AutoMirrored.Filled.Logout,
+                        contentDescription = null,
+                        modifier = Modifier.size(18.dp),
+                    )
+                    Text("Выйти из аккаунта", modifier = Modifier.padding(start = 8.dp))
                 }
             }
         }

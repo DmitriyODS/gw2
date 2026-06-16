@@ -9,59 +9,53 @@ import android.os.Build
 import android.provider.Settings
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.WindowInsets
-import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.background
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.horizontalScroll
-import androidx.compose.foundation.selection.selectable
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.Chat
 import androidx.compose.material.icons.automirrored.filled.Chat
 import androidx.compose.material.icons.filled.BarChart
 import androidx.compose.material.icons.filled.Groups
+import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.MoreHoriz
 import androidx.compose.material.icons.filled.Person
-import androidx.compose.material.icons.filled.Settings
-import androidx.compose.material.icons.filled.TaskAlt
 import androidx.compose.material.icons.outlined.BarChart
 import androidx.compose.material.icons.outlined.Groups
+import androidx.compose.material.icons.outlined.Info
+import androidx.compose.material.icons.outlined.MoreHoriz
 import androidx.compose.material.icons.outlined.Person
-import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material.icons.outlined.TaskAlt
+import androidx.compose.material.icons.filled.TaskAlt
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Badge
 import androidx.compose.material3.BadgedBox
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
-import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ListItem
+import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.NavigationBar
+import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.semantics.Role
-import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.navigation.NavController
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
@@ -75,22 +69,13 @@ import com.kodass.groovework.ui.about.AboutScreen
 import com.kodass.groovework.ui.chats.ChatScreen
 import com.kodass.groovework.ui.chats.ChatsScreen
 import com.kodass.groovework.ui.companies.AcceptInviteScreen
-import com.kodass.groovework.ui.companies.CompaniesScreen
-import com.kodass.groovework.ui.companies.CompanyManageScreen
 import com.kodass.groovework.ui.employees.EmployeesScreen
 import com.kodass.groovework.ui.profile.ProfileScreen
-import com.kodass.groovework.ui.settings.AiSettingsScreen
-import com.kodass.groovework.ui.settings.BackupSettingsScreen
-import com.kodass.groovework.ui.settings.GrooveSettingsScreen
-import com.kodass.groovework.ui.settings.InviteSettingsScreen
-import com.kodass.groovework.ui.settings.SettingsScreen
-import com.kodass.groovework.ui.settings.WeekendSettingsScreen
-import com.kodass.groovework.ui.settings.YougileCompanySettingsScreen
-import com.kodass.groovework.ui.settings.YougileUserSettingsScreen
 import com.kodass.groovework.ui.stats.StatsScreen
 import com.kodass.groovework.ui.tasks.TaskDetailScreen
 import com.kodass.groovework.ui.tasks.TasksScreen
 import com.kodass.groovework.ui.units.UnitSheet
+import kotlinx.coroutines.launch
 
 private data class TopLevelDestination(
     val route: String,
@@ -99,25 +84,38 @@ private data class TopLevelDestination(
     val selectedIcon: ImageVector,
 )
 
-// Порядок и состав пунктов нижней панели (она прокручивается — все сразу не влезают).
-private val topLevelDestinations = listOf(
+// Постоянно видимые пункты нижней панели.
+private val primaryDestinations = listOf(
     TopLevelDestination("tasks", "Задачи", Icons.Outlined.TaskAlt, Icons.Filled.TaskAlt),
     TopLevelDestination("chats", "Чат", Icons.AutoMirrored.Outlined.Chat, Icons.AutoMirrored.Filled.Chat),
-    TopLevelDestination("employees", "Сотрудники", Icons.Outlined.Groups, Icons.Filled.Groups),
-    TopLevelDestination("stats", "Статистика", Icons.Outlined.BarChart, Icons.Filled.BarChart),
     TopLevelDestination("profile", "Профиль", Icons.Outlined.Person, Icons.Filled.Person),
-    TopLevelDestination("settings", "Настройки", Icons.Outlined.Settings, Icons.Filled.Settings),
 )
 
+// Вторичные пункты — прячутся под «Ещё» (M3: nav bar держит 3–5 пунктов, остальное
+// в overflow-меню), доступны через нижний лист.
+private val overflowDestinations = listOf(
+    TopLevelDestination("employees", "Сотрудники", Icons.Outlined.Groups, Icons.Filled.Groups),
+    TopLevelDestination("stats", "Статистика", Icons.Outlined.BarChart, Icons.Filled.BarChart),
+    TopLevelDestination("about", "О приложении", Icons.Outlined.Info, Icons.Filled.Info),
+)
+
+private val bottomBarRoutes =
+    (primaryDestinations + overflowDestinations).map { it.route }.toSet()
+
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun MainScreen(container: AppContainer) {
     val navController = rememberNavController()
     val backStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = backStackEntry?.destination?.route
-    val showBottomBar = topLevelDestinations.any { it.route == currentRoute }
+    val showBottomBar = currentRoute in bottomBarRoutes
 
     val conversations by container.messengerRepo.conversations.collectAsStateWithLifecycle()
     val totalUnread = conversations.sumOf { it.unreadCount }
+
+    var showMoreSheet by remember { mutableStateOf(false) }
+    val moreSheetState = rememberModalBottomSheetState()
+    val scope = rememberCoroutineScope()
 
     // Разрешение на уведомления — один раз при входе.
     val context = LocalContext.current
@@ -219,18 +217,34 @@ fun MainScreen(container: AppContainer) {
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
         bottomBar = {
             if (showBottomBar) {
-                ScrollableBottomBar(
-                    destinations = topLevelDestinations,
-                    currentRoute = currentRoute,
-                    chatUnread = totalUnread,
-                    onSelect = { route ->
-                        navController.navigate(route) {
-                            popUpTo(navController.graph.findStartDestination().id) { saveState = true }
-                            launchSingleTop = true
-                            restoreState = true
-                        }
-                    },
-                )
+                NavigationBar {
+                    primaryDestinations.forEach { destination ->
+                        NavigationBarItem(
+                            selected = currentRoute == destination.route,
+                            onClick = { navController.navigateTop(destination.route) },
+                            icon = {
+                                BottomBarIcon(
+                                    destination = destination,
+                                    selected = currentRoute == destination.route,
+                                    badge = if (destination.route == "chats") totalUnread else 0,
+                                )
+                            },
+                            label = { Text(destination.label) },
+                        )
+                    }
+                    val moreSelected = currentRoute in overflowDestinations.map { it.route }
+                    NavigationBarItem(
+                        selected = moreSelected,
+                        onClick = { showMoreSheet = true },
+                        icon = {
+                            Icon(
+                                if (moreSelected) Icons.Filled.MoreHoriz else Icons.Outlined.MoreHoriz,
+                                contentDescription = "Ещё",
+                            )
+                        },
+                        label = { Text("Ещё") },
+                    )
+                }
             }
         },
     ) { innerPadding ->
@@ -284,29 +298,10 @@ fun MainScreen(container: AppContainer) {
             composable("profile") {
                 ProfileScreen(container = container)
             }
-            composable("settings") {
-                SettingsScreen(
+            composable("about") {
+                AboutScreen(
                     container = container,
-                    onOpen = { section -> navController.navigate("settings/$section") { launchSingleTop = true } },
-                    onOpenCompanies = { navController.navigate("companies") },
-                )
-            }
-            composable("companies") {
-                CompaniesScreen(
-                    container = container,
-                    onBack = { navController.popBackStack() },
-                    onOpenCompany = { id -> navController.navigate("company/$id") },
-                )
-            }
-            composable(
-                route = "company/{id}",
-                arguments = listOf(navArgument("id") { type = NavType.LongType }),
-            ) { entry ->
-                CompanyManageScreen(
-                    container = container,
-                    companyId = entry.arguments?.getLong("id") ?: 0L,
-                    onBack = { navController.popBackStack() },
-                    onOpenSettings = { route -> navController.navigate(route) { launchSingleTop = true } },
+                    onOpenChat = { id -> navController.navigate("chat/$id") },
                 )
             }
             composable(
@@ -325,49 +320,35 @@ fun MainScreen(container: AppContainer) {
                     onBack = { navController.popBackStack() },
                 )
             }
-            composable("settings/about") {
-                AboutScreen(
-                    container = container,
-                    onBack = { navController.popBackStack() },
-                    onOpenChat = { id -> navController.navigate("chat/$id") },
-                )
-            }
-            composable(
-                route = "settings/weekends?companyId={companyId}",
-                arguments = listOf(navArgument("companyId") { type = NavType.LongType; defaultValue = -1L }),
-            ) { entry ->
-                val cid = entry.arguments?.getLong("companyId") ?: -1L
-                WeekendSettingsScreen(
-                    container = container,
-                    onBack = { navController.popBackStack() },
-                    companyIdOverride = cid.takeIf { it > 0 },
-                )
-            }
-            composable(
-                route = "settings/groove?companyId={companyId}",
-                arguments = listOf(navArgument("companyId") { type = NavType.LongType; defaultValue = -1L }),
-            ) { entry ->
-                val cid = entry.arguments?.getLong("companyId") ?: -1L
-                GrooveSettingsScreen(
-                    container = container,
-                    onBack = { navController.popBackStack() },
-                    companyIdOverride = cid.takeIf { it > 0 },
-                )
-            }
-            composable("settings/invite") {
-                InviteSettingsScreen(container = container, onBack = { navController.popBackStack() })
-            }
-            composable("settings/ai") {
-                AiSettingsScreen(container = container, onBack = { navController.popBackStack() })
-            }
-            composable("settings/yougile") {
-                YougileUserSettingsScreen(container = container, onBack = { navController.popBackStack() })
-            }
-            composable("settings/yougile-company") {
-                YougileCompanySettingsScreen(container = container, onBack = { navController.popBackStack() })
-            }
-            composable("settings/backup") {
-                BackupSettingsScreen(container = container, onBack = { navController.popBackStack() })
+        }
+    }
+
+    if (showMoreSheet) {
+        ModalBottomSheet(
+            onDismissRequest = { showMoreSheet = false },
+            sheetState = moreSheetState,
+        ) {
+            Column(modifier = Modifier.fillMaxWidth().navigationBarsPadding()) {
+                overflowDestinations.forEach { destination ->
+                    val selected = currentRoute == destination.route
+                    ListItem(
+                        headlineContent = { Text(destination.label) },
+                        leadingContent = {
+                            Icon(
+                                if (selected) destination.selectedIcon else destination.icon,
+                                contentDescription = null,
+                            )
+                        },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable {
+                                navController.navigateTop(destination.route)
+                                scope.launch { moreSheetState.hide() }.invokeOnCompletion {
+                                    if (!moreSheetState.isVisible) showMoreSheet = false
+                                }
+                            },
+                    )
+                }
             }
         }
     }
@@ -381,83 +362,23 @@ fun MainScreen(container: AppContainer) {
     }
 }
 
-// Прокручиваемая нижняя панель (пунктов больше, чем влезает по ширине).
-@Composable
-private fun ScrollableBottomBar(
-    destinations: List<TopLevelDestination>,
-    currentRoute: String?,
-    chatUnread: Int,
-    onSelect: (String) -> Unit,
-) {
-    Surface(
-        color = MaterialTheme.colorScheme.surfaceContainer,
-        tonalElevation = 3.dp,
-    ) {
-        androidx.compose.foundation.layout.Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .horizontalScroll(rememberScrollState())
-                .navigationBarsPadding()
-                .height(72.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            destinations.forEach { destination ->
-                BottomBarItem(
-                    destination = destination,
-                    selected = currentRoute == destination.route,
-                    badge = if (destination.route == "chats") chatUnread else 0,
-                    onClick = { onSelect(destination.route) },
-                )
-            }
-        }
+// Переход к верхнеуровневому разделу с сохранением/восстановлением состояния вкладок.
+private fun NavController.navigateTop(route: String) {
+    navigate(route) {
+        popUpTo(graph.findStartDestination().id) { saveState = true }
+        launchSingleTop = true
+        restoreState = true
     }
 }
 
 @Composable
-private fun BottomBarItem(
-    destination: TopLevelDestination,
-    selected: Boolean,
-    badge: Int,
-    onClick: () -> Unit,
-) {
-    Column(
-        modifier = Modifier
-            .width(84.dp)
-            .fillMaxHeight()
-            .selectable(selected = selected, role = Role.Tab, onClick = onClick),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = androidx.compose.foundation.layout.Arrangement.Center,
-    ) {
-        val icon = if (selected) destination.selectedIcon else destination.icon
-        Box(
-            modifier = Modifier
-                .height(32.dp)
-                .width(56.dp)
-                .clip(RoundedCornerShape(16.dp))
-                .then(
-                    if (selected) Modifier.background(MaterialTheme.colorScheme.secondaryContainer)
-                    else Modifier
-                ),
-            contentAlignment = Alignment.Center,
-        ) {
-            val tint = if (selected) MaterialTheme.colorScheme.onSecondaryContainer
-            else MaterialTheme.colorScheme.onSurfaceVariant
-            if (badge > 0) {
-                BadgedBox(badge = { Badge { Text(badge.toString()) } }) {
-                    Icon(icon, contentDescription = destination.label, tint = tint)
-                }
-            } else {
-                Icon(icon, contentDescription = destination.label, tint = tint)
-            }
+private fun BottomBarIcon(destination: TopLevelDestination, selected: Boolean, badge: Int) {
+    val icon = if (selected) destination.selectedIcon else destination.icon
+    if (badge > 0) {
+        BadgedBox(badge = { Badge { Text(badge.toString()) } }) {
+            Icon(icon, contentDescription = destination.label)
         }
-        Text(
-            text = destination.label,
-            style = MaterialTheme.typography.labelMedium,
-            color = if (selected) MaterialTheme.colorScheme.onSurface
-            else MaterialTheme.colorScheme.onSurfaceVariant,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.padding(top = 4.dp),
-        )
+    } else {
+        Icon(icon, contentDescription = destination.label)
     }
 }
