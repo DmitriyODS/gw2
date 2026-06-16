@@ -3,22 +3,24 @@
     <header class="admin-sticky">
       <div class="page-head">
         <div class="page-head-text">
-          <h1 class="page-head-title">Компании</h1>
+          <h1 class="page-head-title">{{ isSuper ? 'Компании' : 'Мои компании' }}</h1>
           <div class="page-head-meta">
             <span class="meta-stat">
               <span class="material-symbols-outlined">domain</span>
-              <strong>{{ companies.items.length }}</strong> всего
+              <strong>{{ rows.length }}</strong> {{ isSuper ? 'всего' : 'под управлением' }}
             </span>
-            <span class="meta-dot" aria-hidden="true">·</span>
-            <span class="meta-stat online">
-              <span class="presence-pulse" />
-              <strong>{{ activeCount }}</strong> активных
-            </span>
-            <template v-if="disabledCount">
+            <template v-if="isSuper">
               <span class="meta-dot" aria-hidden="true">·</span>
-              <span class="meta-stat error">
-                <strong>{{ disabledCount }}</strong> отключённых
+              <span class="meta-stat online">
+                <span class="presence-pulse" />
+                <strong>{{ activeCount }}</strong> активных
               </span>
+              <template v-if="disabledCount">
+                <span class="meta-dot" aria-hidden="true">·</span>
+                <span class="meta-stat error">
+                  <strong>{{ disabledCount }}</strong> отключённых
+                </span>
+              </template>
             </template>
           </div>
         </div>
@@ -31,16 +33,8 @@
       <div class="admin-toolbar">
         <div class="cmp-search">
           <span class="material-symbols-outlined">search</span>
-          <input
-            v-model.trim="search"
-            placeholder="Поиск по названию или руководителю"
-          />
-          <button
-            v-if="search"
-            class="cmp-search-clear"
-            @click="search = ''"
-            aria-label="Очистить"
-          >
+          <input v-model.trim="search" placeholder="Поиск по названию" />
+          <button v-if="search" class="cmp-search-clear" @click="search = ''" aria-label="Очистить">
             <span class="material-symbols-outlined">close</span>
           </button>
         </div>
@@ -48,10 +42,6 @@
     </header>
 
     <div ref="bodyRef" class="admin-body">
-      <!-- Мобильное представление: карточки вместо таблицы.
-           AppDataTable горизонтально скроллится на узких экранах — UX плохой,
-           и поэтому на ≤768px рендерим компактные карточки с теми же данными
-           и действиями. -->
       <div v-if="isMobile" class="cmp-cards">
         <div v-if="loading" class="state-block">
           <ProgressSpinner />
@@ -62,6 +52,7 @@
           </div>
           <h3>{{ search ? 'Ничего не нашли' : 'Компаний пока нет' }}</h3>
           <p v-if="search">Попробуйте уточнить запрос.</p>
+          <p v-else>Создайте компанию — вы станете её администратором.</p>
         </div>
         <template v-else>
           <article
@@ -70,27 +61,20 @@
             class="cmp-card"
             :class="{ off: !c.is_active }"
             tabindex="0"
-            @click="openEdit(c)"
-            @keydown.enter.prevent="openEdit(c)"
+            @click="openManage(c)"
+            @keydown.enter.prevent="openManage(c)"
           >
             <div class="cmp-card-top">
-              <span
-                class="cmp-avatar"
-                :class="['tone-' + toneOf(c)]"
-              >{{ initials(c.name) }}</span>
+              <span class="cmp-avatar" :class="['tone-' + toneOf(c)]">{{ initials(c.name) }}</span>
               <div class="cmp-card-text">
                 <div class="cmp-card-name">{{ c.name }}</div>
                 <div v-if="c.description" class="cmp-card-desc">{{ c.description }}</div>
               </div>
-              <label class="toggle" @click.stop>
-                <input
-                  type="checkbox"
-                  :checked="c.is_active"
-                  :disabled="togglingId === c.id"
-                  @change="onToggle(c)"
-                />
+              <label v-if="isSuper" class="toggle" @click.stop>
+                <input type="checkbox" :checked="c.is_active" :disabled="togglingId === c.id" @change="onToggle(c)" />
                 <span class="toggle-track" />
               </label>
+              <span v-else class="role-badge" :class="{ creator: isCreator(c) }">{{ roleBadge(c) }}</span>
             </div>
 
             <div class="cmp-card-stats">
@@ -109,10 +93,10 @@
             </div>
 
             <div class="cmp-card-actions" @click.stop>
-              <button class="card-act" title="Редактировать" @click="openEdit(c)">
-                <span class="material-symbols-outlined">edit</span>
+              <button class="card-act" title="Управление" @click="openManage(c)">
+                <span class="material-symbols-outlined">settings</span>
               </button>
-              <button class="card-act danger" title="Удалить" @click="askDelete(c)">
+              <button v-if="isSuper" class="card-act danger" title="Удалить" @click="askDelete(c)">
                 <span class="material-symbols-outlined">delete</span>
               </button>
             </div>
@@ -133,20 +117,12 @@
         <Column field="name" header="Компания" sortable :sort-field="(d) => d.name?.toLowerCase()">
           <template #body="{ data }">
             <div class="cell-company">
-              <span
-                class="cmp-avatar"
-                :class="['tone-' + toneOf(data)]"
-                :title="data.name"
-              >
+              <span class="cmp-avatar" :class="['tone-' + toneOf(data)]" :title="data.name">
                 {{ initials(data.name) }}
               </span>
               <div class="cmp-name-text">
-                <div class="cmp-name-main" :class="{ off: !data.is_active }">
-                  {{ data.name }}
-                </div>
-                <div v-if="data.description" class="cmp-name-sub">
-                  {{ data.description }}
-                </div>
+                <div class="cmp-name-main" :class="{ off: !data.is_active }">{{ data.name }}</div>
+                <div v-if="data.description" class="cmp-name-sub">{{ data.description }}</div>
               </div>
             </div>
           </template>
@@ -158,53 +134,47 @@
           </template>
         </Column>
 
-        <Column
-          field="employees_count"
-          header="Сотрудников"
-          sortable
-          style="width: 200px"
-        >
+        <Column v-if="isSuper" header="Создатель" style="min-width: 160px">
+          <template #body="{ data }">
+            <span v-if="creatorName(data)" class="creator-chip">
+              <span class="material-symbols-outlined">person</span>
+              {{ creatorName(data) }}
+            </span>
+            <span v-else class="muted">—</span>
+          </template>
+        </Column>
+        <Column v-else header="Роль" style="width: 150px">
+          <template #body="{ data }">
+            <span class="role-badge" :class="{ creator: isCreator(data) }">{{ roleBadge(data) }}</span>
+          </template>
+        </Column>
+
+        <Column field="employees_count" header="Сотрудников" sortable style="width: 200px">
           <template #body="{ data }">
             <div class="num-cell">
               <span class="num-bar">
-                <span
-                  class="num-bar-fill"
-                  :style="{ width: barWidth(data.employees_count, maxEmployees) + '%' }"
-                />
+                <span class="num-bar-fill" :style="{ width: barWidth(data.employees_count, maxEmployees) + '%' }" />
               </span>
               <span class="num-val">{{ data.employees_count }}</span>
             </div>
           </template>
         </Column>
 
-        <Column
-          field="tasks_count"
-          header="Задач"
-          sortable
-          style="width: 200px"
-        >
+        <Column field="tasks_count" header="Задач" sortable style="width: 200px">
           <template #body="{ data }">
             <div class="num-cell">
               <span class="num-bar tasks">
-                <span
-                  class="num-bar-fill"
-                  :style="{ width: barWidth(data.tasks_count, maxTasks) + '%' }"
-                />
+                <span class="num-bar-fill" :style="{ width: barWidth(data.tasks_count, maxTasks) + '%' }" />
               </span>
               <span class="num-val">{{ data.tasks_count }}</span>
             </div>
           </template>
         </Column>
 
-        <Column header="Статус" style="width: 170px">
+        <Column v-if="isSuper" header="Статус" style="width: 170px">
           <template #body="{ data }">
             <label class="toggle" :title="data.is_active ? 'Активна' : 'Отключена'" @click.stop>
-              <input
-                type="checkbox"
-                :checked="data.is_active"
-                :disabled="togglingId === data.id"
-                @change="onToggle(data)"
-              />
+              <input type="checkbox" :checked="data.is_active" :disabled="togglingId === data.id" @change="onToggle(data)" />
               <span class="toggle-track" />
               <span :class="['toggle-label', { on: data.is_active }]">
                 {{ data.is_active ? 'Активна' : 'Отключена' }}
@@ -216,18 +186,10 @@
         <Column header="" style="width: 96px" body-style="text-align: right">
           <template #body="{ data }">
             <div class="row-actions" @click.stop>
-              <button
-                class="icon-btn"
-                title="Редактировать"
-                @click="openEdit(data)"
-              >
-                <span class="material-symbols-outlined">edit</span>
+              <button class="icon-btn" title="Управление" @click="openManage(data)">
+                <span class="material-symbols-outlined">settings</span>
               </button>
-              <button
-                class="icon-btn danger"
-                title="Удалить"
-                @click="askDelete(data)"
-              >
+              <button v-if="isSuper" class="icon-btn danger" title="Удалить" @click="askDelete(data)">
                 <span class="material-symbols-outlined">delete</span>
               </button>
             </div>
@@ -236,12 +198,7 @@
       </AppDataTable>
     </div>
 
-    <CompanyFormDialog
-      ref="formDlgRef"
-      v-model="formOpen"
-      :company="editTarget"
-      @save="onSave"
-    />
+    <CreateCompanyDialog v-model="createOpen" />
 
     <AppDialog
       v-model="confirmOpen"
@@ -268,68 +225,84 @@
       <p v-else>Компания пустая — данных не пострадает.</p>
     </AppDialog>
 
-    <AppFab
-      icon="add"
-      label="Создать"
-      :collapsed="isCompact"
-      aria-label="Новая компания"
-      @click="openCreate"
-    />
+    <AppFab icon="add" label="Создать" :collapsed="isCompact" aria-label="Новая компания" @click="openCreate" />
   </div>
 </template>
 
 <script setup>
 import { ref, computed, onMounted } from 'vue'
+import { useRouter } from 'vue-router'
 import Column from 'primevue/column'
 import ProgressSpinner from 'primevue/progressspinner'
 import AppDialog from '@/components/common/AppDialog.vue'
 import AppDataTable from '@/components/common/AppDataTable.vue'
 import AppFab from '@/components/common/AppFab.vue'
+import CreateCompanyDialog from '@/components/common/CreateCompanyDialog.vue'
 import { useCompaniesStore } from '@/stores/companies.js'
 import { useNotificationsStore } from '@/stores/notifications.js'
+import { useAuthStore } from '@/stores/auth.js'
+import { usePermission } from '@/composables/usePermission.js'
 import { useBreakpoint } from '@/composables/useBreakpoint.js'
 import { useScrollCollapse } from '@/composables/useScrollCollapse.js'
-import CompanyFormDialog from '@/components/companies/CompanyFormDialog.vue'
+import { listMyCompanies } from '@/api/companies.js'
 
 const { isMobile } = useBreakpoint()
 const bodyRef = ref(null)
 const { isCompact } = useScrollCollapse(bodyRef)
 
+const router = useRouter()
 const companies = useCompaniesStore()
 const notif = useNotificationsStore()
+const auth = useAuthStore()
+const { isSuperAdmin } = usePermission()
+const isSuper = computed(() => isSuperAdmin())
 
-const loading = computed(() => companies.loading && !companies.loaded)
+// Источник данных: супер-админ видит ВСЕ компании (платформа, стор), обычный
+// пользователь — те, где он администратор/создатель (эндпоинт /companies/mine).
+const myItems = ref([])
+const myLoading = ref(false)
+const rows = computed(() => (isSuper.value ? companies.items : myItems.value))
+const loading = computed(() =>
+  isSuper.value ? companies.loading && !companies.loaded : myLoading.value)
+
 const search = ref('')
 const sortField = ref('created_at')
 const sortOrder = ref(-1)
 
-const formOpen = ref(false)
-const editTarget = ref(null)
-const formDlgRef = ref(null)
-
+const createOpen = ref(false)
 const confirmOpen = ref(false)
 const deleteTarget = ref(null)
 const deleting = ref(false)
 const togglingId = ref(null)
 
-onMounted(() => companies.load(true))
+onMounted(loadData)
 
-const activeCount = computed(() => companies.items.filter(c => c.is_active).length)
-const disabledCount = computed(() => companies.items.filter(c => !c.is_active).length)
+async function loadData() {
+  if (isSuper.value) {
+    companies.load(true)
+    return
+  }
+  myLoading.value = true
+  try {
+    const res = await listMyCompanies()
+    myItems.value = res.items || []
+  } catch (e) {
+    notif.error(e?.message || 'Не удалось загрузить компании')
+  } finally {
+    myLoading.value = false
+  }
+}
+
+const activeCount = computed(() => rows.value.filter((c) => c.is_active).length)
+const disabledCount = computed(() => rows.value.filter((c) => !c.is_active).length)
 
 const visible = computed(() => {
   const q = search.value.toLowerCase()
-  return q
-    ? companies.items.filter(c => c.name.toLowerCase().includes(q))
-    : companies.items
+  return q ? rows.value.filter((c) => c.name.toLowerCase().includes(q)) : rows.value
 })
 
-const maxEmployees = computed(() =>
-  Math.max(1, ...companies.items.map(c => c.employees_count || 0))
-)
-const maxTasks = computed(() =>
-  Math.max(1, ...companies.items.map(c => c.tasks_count || 0))
-)
+const maxEmployees = computed(() => Math.max(1, ...rows.value.map((c) => c.employees_count || 0)))
+const maxTasks = computed(() => Math.max(1, ...rows.value.map((c) => c.tasks_count || 0)))
 
 function barWidth(value, max) {
   if (!max) return 0
@@ -338,53 +311,40 @@ function barWidth(value, max) {
 
 function fmtDate(s) {
   if (!s) return '—'
-  return new Date(s).toLocaleDateString('ru-RU', {
-    day: '2-digit', month: '2-digit', year: 'numeric',
-  })
+  return new Date(s).toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric' })
 }
 
 function initials(name) {
   if (!name) return '?'
   const parts = name.trim().split(/\s+/).slice(0, 2)
-  return parts.map(p => p[0]).join('').toUpperCase()
+  return parts.map((p) => p[0]).join('').toUpperCase()
 }
 
-/* Тон аватара компании — детерминированно из её id. */
+function creatorName(c) {
+  return c.creator?.fio || c.creator?.name || null
+}
+
 const TONES = ['primary', 'secondary', 'tertiary']
 function toneOf(c) {
   return TONES[(c.id || 0) % TONES.length]
 }
 
+// Создатель ли текущий пользователь этой компании (полные права на участников).
+function isCreator(c) {
+  return c.created_by != null && c.created_by === auth.userId
+}
+function roleBadge(c) {
+  return isCreator(c) ? 'Создатель' : 'Администратор'
+}
+
+function openManage(c) {
+  router.push(`/companies/${c.id}`)
+}
 function onRowClick(e) {
-  openEdit(e.data)
+  openManage(e.data)
 }
-
 function openCreate() {
-  editTarget.value = null
-  formOpen.value = true
-}
-
-function openEdit(c) {
-  editTarget.value = c
-  formOpen.value = true
-}
-
-async function onSave({ payload, isEdit, id }) {
-  try {
-    if (isEdit) {
-      await companies.update(id, payload)
-      notif.success('Компания обновлена')
-    } else {
-      await companies.create(payload)
-      notif.success('Компания создана')
-    }
-    formOpen.value = false
-  } catch (e) {
-    const msg = e?.message?.name?.[0] || e?.message || 'Не удалось сохранить компанию'
-    formDlgRef.value?.showError(typeof msg === 'string' ? msg : 'Ошибка сохранения')
-  } finally {
-    formDlgRef.value?.finish()
-  }
+  createOpen.value = true
 }
 
 async function onToggle(c) {
@@ -503,7 +463,6 @@ async function doDelete() {
 }
 .cmp-search-clear .material-symbols-outlined { font-size: 14px; }
 
-/* ============ Ячейки таблицы ============ */
 .cell-company {
   display: flex;
   align-items: center;
@@ -553,6 +512,22 @@ async function doDelete() {
   margin-top: 1px;
 }
 
+.role-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 10px;
+  border-radius: var(--radius-full);
+  font-size: 12px;
+  font-weight: 600;
+  background: var(--color-surface-high);
+  color: var(--color-text-dim);
+  white-space: nowrap;
+}
+.role-badge.creator {
+  background: var(--color-primary-container);
+  color: var(--color-on-primary-container);
+}
+
 .mono {
   font-variant-numeric: tabular-nums;
   color: var(--color-text-dim);
@@ -598,7 +573,19 @@ async function doDelete() {
   font-size: 13px;
 }
 
-/* M3 Expressive toggle. */
+.creator-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 10px 3px 8px;
+  background: var(--color-surface-high);
+  border-radius: var(--radius-full);
+  font-size: 12.5px;
+  color: var(--color-text);
+  max-width: 100%;
+}
+.creator-chip .material-symbols-outlined { font-size: 15px; color: var(--color-text-dim); }
+
 .toggle {
   display: inline-flex;
   align-items: center;
@@ -677,7 +664,6 @@ async function doDelete() {
 }
 .icon-btn .material-symbols-outlined { font-size: 18px; }
 
-/* Кнопки */
 .btn-filled {
   appearance: none;
   border: none;
@@ -700,7 +686,6 @@ async function doDelete() {
 .confirm-warn { color: var(--color-text); }
 .confirm-warn strong { color: var(--color-error); }
 
-/* ===== Мобильные карточки компаний ===== */
 .cmp-cards {
   display: flex;
   flex-direction: column;
@@ -772,7 +757,6 @@ async function doDelete() {
 .cmp-card-stats .stat .material-symbols-outlined { font-size: 15px; color: var(--color-text-dim); }
 .cmp-card-stats .stat.date { color: var(--color-text-dim); }
 .cmp-card-stats .stat strong { font-weight: 700; font-variant-numeric: tabular-nums; }
-
 
 .cmp-card-actions {
   display: flex;

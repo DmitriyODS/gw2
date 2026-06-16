@@ -41,7 +41,7 @@ func (r *Repo) GetPair(ctx context.Context, a, b int64) (*domain.Conversation, e
 		`SELECT `+convCols+convFrom+`WHERE c.user_a_id = $1 AND c.user_b_id = $2`, a, b))
 }
 
-func (r *Repo) CreatePair(ctx context.Context, a, b, companyID int64) (*domain.Conversation, error) {
+func (r *Repo) CreatePair(ctx context.Context, a, b int64, companyID *int64) (*domain.Conversation, error) {
 	row := r.q(ctx).QueryRow(ctx, `
 		INSERT INTO conversations (user_a_id, user_b_id, company_id, is_dev_chat, is_pet_chat,
 			created_at, hidden_for_a, hidden_for_b)

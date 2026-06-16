@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -29,6 +30,7 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -48,10 +50,23 @@ import com.kodass.groovework.R
 import com.kodass.groovework.data.dto.MembershipDto
 
 @Composable
-fun LoginScreen(container: AppContainer) {
+fun LoginScreen(
+    container: AppContainer,
+    onRegister: () -> Unit = {},
+    onForgot: () -> Unit = {},
+    onNeedVerify: (String) -> Unit = {},
+) {
     val viewModel: LoginViewModel = viewModel { LoginViewModel(container.sessionManager) }
     var passwordVisible by remember { mutableStateOf(false) }
     var serverVisible by remember { mutableStateOf(false) }
+
+    // Логин неподтверждённого аккаунта → экран ввода кода (с этим email).
+    LaunchedEffect(viewModel.pendingVerifyEmail) {
+        viewModel.pendingVerifyEmail?.let { email ->
+            viewModel.consumeVerifyEmail()
+            onNeedVerify(email)
+        }
+    }
 
     val choices = viewModel.companyChoices
     if (choices != null) {
@@ -168,9 +183,22 @@ fun LoginScreen(container: AppContainer) {
             }
         }
 
+        TextButton(onClick = onForgot, modifier = Modifier.padding(top = 12.dp)) {
+            Text("Забыли пароль?")
+        }
+
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                text = "Нет аккаунта?",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            TextButton(onClick = onRegister) { Text("Зарегистрироваться") }
+        }
+
         TextButton(
             onClick = { serverVisible = !serverVisible },
-            modifier = Modifier.padding(top = 8.dp),
+            modifier = Modifier.padding(top = 4.dp),
         ) {
             Text(if (serverVisible) "Скрыть настройки сервера" else "Настройки сервера")
         }

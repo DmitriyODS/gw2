@@ -2,8 +2,10 @@ import { defineStore } from 'pinia'
 import { ref, computed, watch } from 'vue'
 import { getMe } from '@/api/users.js'
 import { login as apiLogin, logout as apiLogout, changeDefault as apiChangeDefault, refreshToken,
-  selectCompany as apiSelectCompany, switchCompany as apiSwitchCompany } from '@/api/auth.js'
-import { joinCompanyByCode as apiJoinCompany } from '@/api/companies.js'
+  register as apiRegister, selectCompany as apiSelectCompany, switchCompany as apiSwitchCompany,
+  verifyEmail as apiVerifyEmail, resendVerification as apiResendVerification,
+  forgotPassword as apiForgotPassword, resetPassword as apiResetPassword } from '@/api/auth.js'
+import { joinCompanyByCode as apiJoinCompany, acceptCompanyInvite as apiAcceptInvite } from '@/api/companies.js'
 import router from '@/router/index.js'
 import { disconnectSocket, updateSocketAuth } from '@/socket/index.js'
 
@@ -11,8 +13,10 @@ export const useAuthStore = defineStore('auth', () => {
   const user = ref(null)
   const token = ref(null)
   // Клеймы сессии (company_id/company_name/company_settings/role_level/
-  // is_root_admin/force_change). PASETO-токен на клиенте не декодируется —
+  // is_super_admin/force_change). PASETO-токен на клиенте не декодируется —
   // authsvc дублирует клеймы в теле ответов login/refresh/change-default.
+  // role_level может быть 0, а company_id — null: пользователь развязан с
+  // компаниями и может не иметь активной (это нормальное состояние).
   const claims = ref({})
   // Компании, в которых состоит пользователь, с ролью в каждой (из тела
   // login/select/switch/refresh). Для многокомпанийных — переключатель и пикер.
@@ -33,13 +37,17 @@ export const useAuthStore = defineStore('auth', () => {
 
   const isAuth = computed(() => !!token.value)
 
+  // Id текущего пользователя (из тела сессии); до /me доступен из claims.
+  const userId = computed(() => claims.value.user_id ?? user.value?.id ?? null)
   const companyId = computed(() => claims.value.company_id ?? null)
   const companyName = computed(() => claims.value.company_name ?? null)
   const companySettings = computed(() => claims.value.company_settings ?? null)
-  const isRootAdmin = computed(() => !!claims.value.is_root_admin)
+  // Платформенный супер-админ — отдельный флаг (НЕ роль компании).
+  const isSuperAdmin = computed(() => !!claims.value.is_super_admin)
+  // Роль в активной компании; 0 — нет активной компании (норма).
   const roleLevel = computed(() => claims.value.role_level ?? 0)
   // Многокомпанийный обычный пользователь — может переключать активную компанию.
-  const isMultiCompany = computed(() => !isRootAdmin.value && companies.value.length > 1)
+  const isMultiCompany = computed(() => !isSuperAdmin.value && companies.value.length > 1)
 
   // Применить ответ login/select/switch/refresh/change-default: токен + клеймы
   // сессии + список компаний пользователя.
@@ -47,11 +55,12 @@ export const useAuthStore = defineStore('auth', () => {
     loggingOut.value = false
     token.value = data.access_token
     claims.value = {
+      user_id: data.user_id ?? null,
       company_id: data.company_id ?? null,
       company_name: data.company_name ?? null,
       company_settings: data.company_settings ?? null,
       role_level: data.role_level ?? 0,
-      is_root_admin: !!data.is_root_admin,
+      is_super_admin: !!data.is_super_admin,
     }
     companies.value = data.companies ?? []
     forceChange.value = !!data.force_change
@@ -99,6 +108,54 @@ export const useAuthStore = defineStore('auth', () => {
       }
       throw e
     }
+  }
+
+  // Регистрация нового пользователя (без компании). Сессию НЕ выдаёт — сначала
+  // подтверждение email: возвращает {verificationRequired, email}, фронт ведёт
+  // на экран ввода кода.
+  async function register(payload) {
+    const data = await apiRegister(payload)
+    return { verificationRequired: true, email: data.email }
+  }
+
+  // Подтверждение email (по коду {email, code} или ссылке {token}). При успехе
+  // выдаётся сессия (как login) — пользователь входит в систему. У новичка нет
+  // активной компании (company_id=null): он создаёт компанию или вступает по
+  // приглашению.
+  async function verifyEmail(payload) {
+    const data = await apiVerifyEmail(payload)
+    applySession(data)
+    companyDisabled.value = null
+    if (!forceChange.value) {
+      loadMe().catch(() => {})
+    }
+    return { forceChange: forceChange.value }
+  }
+
+  async function resendVerification(email) {
+    await apiResendVerification(email)
+  }
+
+  // Запрос письма со сбросом пароля (ответ всегда ok — не раскрываем аккаунт).
+  async function forgotPassword(email) {
+    await apiForgotPassword(email)
+  }
+
+  // Установка нового пароля по токену. Сессию НЕ выдаёт — фронт ведёт на вход
+  // (с префиллом логина). Возвращает {login}.
+  async function resetPassword(token, newPassword) {
+    return await apiResetPassword(token, newPassword)
+  }
+
+  // Принять email-приглашение в компанию: бэкенд добавляет членство с ролью и
+  // возвращает сессию, переключённую на компанию.
+  async function acceptInvite(token) {
+    const data = await apiAcceptInvite(token)
+    applySession(data)
+    companyDisabled.value = null
+    if (data.company_id != null) rememberCompany(data.company_id)
+    await loadMe().catch(() => {})
+    return data
   }
 
   // Завершить логин выбором компании (после login с needs_company_selection).
@@ -207,9 +264,11 @@ export const useAuthStore = defineStore('auth', () => {
 
   return {
     user, token, forceChange, isAuth, ready, loggingOut,
-    companyId, companyName, companySettings, isRootAdmin, companyDisabled,
+    userId, companyId, companyName, companySettings, isSuperAdmin, companyDisabled,
     companies, isMultiCompany, roleLevel,
-    ensureReady, login, logout, loadMe, clearAuth, applySession, patchCompanySettings,
+    ensureReady, login, register, verifyEmail, resendVerification,
+    forgotPassword, resetPassword, acceptInvite,
+    logout, loadMe, clearAuth, applySession, patchCompanySettings,
     selectCompany, switchCompany, joinCompany,
     changeDefaultCredentials,
   }

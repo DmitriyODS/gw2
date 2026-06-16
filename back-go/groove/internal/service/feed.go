@@ -211,7 +211,7 @@ func (s *Service) SendKudos(ctx context.Context, companyID, fromUserID,
 	if err != nil {
 		return err
 	}
-	if target == nil || target.IsHidden || target.CompanyID == nil || *target.CompanyID != companyID {
+	if target == nil || !target.IsActive {
 		return domain.NewError("USER_NOT_FOUND", "Сотрудник не найден", 404)
 	}
 	_, err = s.recordEvent(ctx, companyID, &fromUserID, "kudos", map[string]any{

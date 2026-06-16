@@ -35,6 +35,29 @@ import retrofit2.Retrofit
 import retrofit2.converter.kotlinx.serialization.asConverterFactory
 import java.util.concurrent.TimeUnit
 
+// Deep link из писем (verify-email / reset-password / invite). Парсится из
+// Intent.ACTION_VIEW в MainActivity; потребляется в зависимости от состояния входа.
+sealed interface DeepLink {
+    data class VerifyEmail(val token: String) : DeepLink
+    data class ResetPassword(val token: String) : DeepLink
+    data class Invite(val token: String) : DeepLink
+
+    companion object {
+        // Разбор пути ссылки приложения: /verify-email?token=, /reset-password?token=,
+        // /invite/<token>. Возвращает null, если ссылка не наша.
+        fun parse(path: String?, token: String?): DeepLink? {
+            if (path == null) return null
+            return when {
+                path.startsWith("/verify-email") && !token.isNullOrBlank() -> VerifyEmail(token)
+                path.startsWith("/reset-password") && !token.isNullOrBlank() -> ResetPassword(token)
+                path.startsWith("/invite/") -> path.removePrefix("/invite/").trim('/')
+                    .takeIf { it.isNotBlank() }?.let { Invite(it) }
+                else -> null
+            }
+        }
+    }
+}
+
 // Ручной DI: один контейнер на процесс, без фреймворков.
 class AppContainer(app: Application) {
     val json = Json {
@@ -118,8 +141,13 @@ class AppContainer(app: Application) {
     // Маршрут из тапа по уведомлению — MainScreen подхватывает и навигирует.
     val pendingRoute = MutableStateFlow<String?>(null)
 
+    // Deep link из письма (App Links на gw.kodass.ru) — потребляют AuthFlow
+    // (verify/reset до входа) и MainScreen (invite после входа).
+    val pendingDeepLink = MutableStateFlow<DeepLink?>(null)
+
     init {
         sessionManager.authApi = authApi
+        sessionManager.companiesApi = companiesApi
         sessionManager.onLogout = { pushTokens.unregisterCurrentToken() }
         appScope.launch { sessionManager.bootstrap(BuildConfig.DEFAULT_SERVER_URL) }
 

@@ -14,9 +14,15 @@ const (
 // AuthInfo — срез пользователя для авторизационных проверок мидлвари.
 // User — полный доменный пользователь сервиса (any, чтобы pkg не зависел
 // от доменов): хендлеры достают его через CurrentUser без второго похода в БД.
+//
+// RoleLevel — роль в АКТИВНОЙ компании (0, если активной компании нет).
+// IsActive — глобально активный аккаунт (отключённый супер-админом — false).
+// IsSuperAdmin — платформенный супер-админ.
+// CompanyActive — активна ли ВЫБРАННАЯ компания (true, если компании нет).
 type AuthInfo struct {
 	RoleLevel     int
-	IsHidden      bool
+	IsActive      bool
+	IsSuperAdmin  bool
 	CompanyActive bool
 	User          any
 }
@@ -24,12 +30,11 @@ type AuthInfo struct {
 // AuthSource — порт сверки с БД: вернуть пользователя для проверки
 // (nil — не найден). active — клеймы access-токена: активная компания и роль
 // в ней берутся ИЗ ТОКЕНА (источник истины), реализация сверяет с БД только
-// is_hidden и активность ИМЕННО выбранной компании (active.CompanyID).
-// Пользователь без компании (Администратор системы) — CompanyActive=true.
+// глобальную активность аккаунта и активность ИМЕННО выбранной компании
+// (active.CompanyID). Если активной компании нет — CompanyActive=true.
 type AuthSource func(ctx context.Context, userID int64, active Claims) (*AuthInfo, error)
 
-// Middleware — Fiber-мидлвари авторизации; поведение байт-в-байт повторяет
-// прежние Flask-декораторы @require_auth / @require_role.
+// Middleware — Fiber-мидлвари авторизации.
 type Middleware struct {
 	verifier *Verifier
 	source   AuthSource
@@ -64,7 +69,8 @@ func (m *Middleware) RequireToken(c *fiber.Ctx) error {
 }
 
 // RequireAuth — полная авторизация: токен + force_change-гейт + сверка с БД
-// (is_hidden, активность компании). Кладёт UserID и AuthInfo в Locals.
+// (активность аккаунта, активность выбранной компании). Кладёт UserID и
+// AuthInfo в Locals.
 func (m *Middleware) RequireAuth(c *fiber.Ctx) error {
 	claims := m.verifier.FromRequest(c)
 	if claims.UserID == 0 {
@@ -79,7 +85,7 @@ func (m *Middleware) RequireAuth(c *fiber.Ctx) error {
 			"error": "INTERNAL_ERROR", "message": "Внутренняя ошибка сервера",
 		})
 	}
-	if info == nil || info.IsHidden {
+	if info == nil || !info.IsActive {
 		return unauthorized(c, "Пользователь не найден")
 	}
 	if !info.CompanyActive {
@@ -90,7 +96,10 @@ func (m *Middleware) RequireAuth(c *fiber.Ctx) error {
 	return c.Next()
 }
 
-// RequireRole — уровень роли не ниже min (вешается после RequireAuth).
+// RequireRole — уровень роли в АКТИВНОЙ компании не ниже min (вешается после
+// RequireAuth). Требует выбранной компании: супер-админ и пользователь без
+// активной компании сюда не проходят (RoleLevel == 0) — компанийная
+// функциональность доступна только участникам компании.
 func (m *Middleware) RequireRole(min int) fiber.Handler {
 	return func(c *fiber.Ctx) error {
 		info := Current(c)
@@ -101,6 +110,16 @@ func (m *Middleware) RequireRole(min int) fiber.Handler {
 	}
 }
 
+// RequireSuperAdmin — только платформенный супер-админ (вешается после
+// RequireAuth). Для управления компаниями и просмотра пользователей платформы.
+func (m *Middleware) RequireSuperAdmin(c *fiber.Ctx) error {
+	info := Current(c)
+	if info == nil || !info.IsSuperAdmin {
+		return forbidden(c, "Требуется супер-администратор")
+	}
+	return c.Next()
+}
+
 // OptionalUserID — для публичных роутов с необязательной авторизацией
 // (вход по ссылке): невалидный/чужой токен не ошибка, просто гость (0).
 func (m *Middleware) OptionalUserID(c *fiber.Ctx) int64 {
@@ -109,7 +128,7 @@ func (m *Middleware) OptionalUserID(c *fiber.Ctx) int64 {
 		return 0
 	}
 	info, err := m.source(c.Context(), claims.UserID, claims)
-	if err != nil || info == nil || info.IsHidden || !info.CompanyActive {
+	if err != nil || info == nil || !info.IsActive || !info.CompanyActive {
 		return 0
 	}
 	return claims.UserID

@@ -23,21 +23,17 @@ func NewUserReader(pool *pgxpool.Pool) *UserReader {
 
 func (r *UserReader) GetUser(ctx context.Context, id int64) (*domain.User, error) {
 	var u domain.User
-	var companyActive *bool
 	err := r.pool.QueryRow(ctx, `
-		SELECT u.id, u.fio, u.avatar_path, u.company_id, u.is_hidden, c.is_active
-		FROM users u
-		LEFT JOIN companies c ON c.id = u.company_id
-		WHERE u.id = $1`, id,
-	).Scan(&u.ID, &u.FIO, &u.AvatarPath, &u.CompanyID, &u.IsHidden, &companyActive)
+		SELECT id, fio, avatar_path, is_active, is_super_admin
+		FROM users
+		WHERE id = $1`, id,
+	).Scan(&u.ID, &u.FIO, &u.AvatarPath, &u.IsActive, &u.IsSuperAdmin)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, nil
 		}
 		return nil, err
 	}
-	// Пользователь без компании (Администратор системы) считается активным.
-	u.CompanyActive = companyActive == nil || *companyActive
 	return &u, nil
 }
 
@@ -63,9 +59,9 @@ func (r *UserReader) ListVisibleUsers(ctx context.Context, ids []int64) ([]*doma
 		return nil, nil
 	}
 	rows, err := r.pool.Query(ctx, `
-		SELECT id, fio, avatar_path, company_id, is_hidden
+		SELECT id, fio, avatar_path, is_active, is_super_admin
 		FROM users
-		WHERE id = ANY($1) AND is_hidden = FALSE`, ids)
+		WHERE id = ANY($1) AND is_active = TRUE`, ids)
 	if err != nil {
 		return nil, err
 	}
@@ -74,7 +70,7 @@ func (r *UserReader) ListVisibleUsers(ctx context.Context, ids []int64) ([]*doma
 	var out []*domain.User
 	for rows.Next() {
 		var u domain.User
-		if err := rows.Scan(&u.ID, &u.FIO, &u.AvatarPath, &u.CompanyID, &u.IsHidden); err != nil {
+		if err := rows.Scan(&u.ID, &u.FIO, &u.AvatarPath, &u.IsActive, &u.IsSuperAdmin); err != nil {
 			return nil, err
 		}
 		out = append(out, &u)
@@ -82,22 +78,16 @@ func (r *UserReader) ListVisibleUsers(ctx context.Context, ids []int64) ([]*doma
 	return out, rows.Err()
 }
 
-// Memberships — компании каждого пользователя: первичная users.company_id ∪
-// членства user_companies. Многокомпанийность: звонок возможен между людьми,
-// у которых есть общая компания (а не только совпадающая «первичная»).
+// Memberships — компании каждого пользователя из членств user_companies.
+// Многокомпанийность: звонок может проставить общую компанию, если она есть.
 func (r *UserReader) Memberships(ctx context.Context, ids []int64) (map[int64]map[int64]bool, error) {
 	out := make(map[int64]map[int64]bool, len(ids))
 	if len(ids) == 0 {
 		return out, nil
 	}
 	rows, err := r.pool.Query(ctx, `
-		SELECT user_id, company_id FROM (
-			SELECT id AS user_id, company_id FROM users
-			 WHERE id = ANY($1) AND company_id IS NOT NULL
-			UNION
-			SELECT user_id, company_id FROM user_companies
-			 WHERE user_id = ANY($1)
-		) t`, ids)
+		SELECT user_id, company_id FROM user_companies
+		WHERE user_id = ANY($1)`, ids)
 	if err != nil {
 		return nil, err
 	}

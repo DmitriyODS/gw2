@@ -64,14 +64,14 @@ func (b *BackupStore) ExportData(ctx context.Context) (*domain.BackupData, error
 	}
 
 	if err := queryEach(ctx, b.pool, `
-		SELECT id, fio, login, hash_password, post, role_id, avatar_path,
-		       is_default_pass, is_hidden, created_at
+		SELECT id, fio, login, hash_password, avatar_path,
+		       is_default_pass, is_active, is_super_admin, created_at
 		  FROM users`,
 		func(rows pgx.Rows) error {
 			var u domain.BackupUser
 			var createdAt *time.Time
-			if err := rows.Scan(&u.ID, &u.FIO, &u.Login, &u.HashPassword, &u.Post,
-				&u.RoleID, &u.AvatarPath, &u.IsDefaultPass, &u.IsHidden, &createdAt); err != nil {
+			if err := rows.Scan(&u.ID, &u.FIO, &u.Login, &u.HashPassword, &u.AvatarPath,
+				&u.IsDefaultPass, &u.IsActive, &u.IsSuperAdmin, &createdAt); err != nil {
 				return err
 			}
 			u.CreatedAt = pyISO(createdAt)
@@ -82,11 +82,11 @@ func (b *BackupStore) ExportData(ctx context.Context) (*domain.BackupData, error
 	}
 
 	if err := queryEach(ctx, b.pool, `
-		SELECT user_id, company_id, role_id, created_at FROM user_companies`,
+		SELECT user_id, company_id, role_id, post, created_at FROM user_companies`,
 		func(rows pgx.Rows) error {
 			var m domain.BackupMembership
 			var createdAt *time.Time
-			if err := rows.Scan(&m.UserID, &m.CompanyID, &m.RoleID, &createdAt); err != nil {
+			if err := rows.Scan(&m.UserID, &m.CompanyID, &m.RoleID, &m.Post, &createdAt); err != nil {
 				return err
 			}
 			m.CreatedAt = pyISO(createdAt)
@@ -211,33 +211,22 @@ func (b *BackupStore) ImportData(ctx context.Context, data *domain.BackupData) e
 	}
 	for _, u := range data.Users {
 		if _, err := tx.Exec(ctx, `
-			INSERT INTO users (id, fio, login, hash_password, post, role_id, avatar_path,
-			    is_default_pass, is_hidden, created_at)
-			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
-			u.ID, u.FIO, u.Login, u.HashPassword, u.Post, u.RoleID, u.AvatarPath,
-			u.IsDefaultPass, u.IsHidden, u.CreatedAt); err != nil {
+			INSERT INTO users (id, fio, login, hash_password, avatar_path,
+			    is_default_pass, is_active, is_super_admin, created_at)
+			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+			u.ID, u.FIO, u.Login, u.HashPassword, u.AvatarPath,
+			u.IsDefaultPass, u.IsActive, u.IsSuperAdmin, u.CreatedAt); err != nil {
 			return err
 		}
 	}
 	// Членства восстанавливаем после users (FK на users; companies/roles живут).
-	// Старые бэкапы без секции user_companies — пустой слайс, членств не будет.
 	for _, m := range data.UserCompanies {
 		if _, err := tx.Exec(ctx, `
-			INSERT INTO user_companies (user_id, company_id, role_id, created_at)
-			VALUES ($1, $2, $3, COALESCE($4::timestamptz, now()))`,
-			m.UserID, m.CompanyID, m.RoleID, m.CreatedAt); err != nil {
+			INSERT INTO user_companies (user_id, company_id, role_id, post, created_at)
+			VALUES ($1, $2, $3, $4, COALESCE($5::timestamptz, now()))`,
+			m.UserID, m.CompanyID, m.RoleID, m.Post, m.CreatedAt); err != nil {
 			return err
 		}
-	}
-	// Импорт users не проставляет company_id; синхронизируем легаси-колонки
-	// (первичная компания = старейшая связка), сохраняя инвариант NULL ⇔ админ.
-	if _, err := tx.Exec(ctx, `
-		UPDATE users u SET company_id = m.company_id, role_id = m.role_id
-		FROM (
-			SELECT DISTINCT ON (user_id) user_id, company_id, role_id
-			FROM user_companies ORDER BY user_id, created_at, company_id
-		) m WHERE u.id = m.user_id`); err != nil {
-		return err
 	}
 
 	for _, d := range data.Departments {

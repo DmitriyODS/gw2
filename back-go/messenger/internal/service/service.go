@@ -93,7 +93,7 @@ func rooms(ids ...int64) []string {
 }
 
 // ensureMember — доступ к диалогу: p2p — только участники; dev-чат —
-// владелец (user_a) + любой Администратор системы; pet-чат — только владелец.
+// владелец (user_a) + любой супер-админ; pet-чат — только владелец.
 func (s *Service) ensureMember(ctx context.Context, conv *domain.Conversation, userID int64) error {
 	if conv.IsPetChat {
 		if conv.UserAID == userID {
@@ -112,8 +112,8 @@ func (s *Service) ensureMember(ctx context.Context, conv *domain.Conversation, u
 		if user == nil {
 			return errNoAccess()
 		}
-		if user.CompanyID == nil {
-			return nil // Администратор системы (техподдержка)
+		if user.IsSuperAdmin {
+			return nil // супер-админ (техподдержка)
 		}
 		return errNoAccess()
 	}
@@ -152,12 +152,11 @@ func (s *Service) ensureConversation(ctx context.Context, currentUserID, otherUs
 	if err != nil {
 		return nil, err
 	}
-	if other == nil || other.IsHidden {
+	if other == nil || !other.IsActive {
 		return nil, domain.NewError("USER_NOT_FOUND", "Собеседник не найден", 404)
 	}
-	// Переписка между сотрудниками разных компаний разрешена: company-барьер
-	// для чата снят. company_id диалога ниже берётся от любого из участников
-	// (для NOT NULL и привязки прикрепляемых задач к компании-владельцу).
+	// Переписка между сотрудниками разных компаний (и людьми без общей
+	// компании) разрешена: company-барьер для чата снят.
 
 	a, b := currentUserID, otherUserID
 	lower, higher := me, other
@@ -169,17 +168,14 @@ func (s *Service) ensureConversation(ctx context.Context, currentUserID, otherUs
 	if err != nil || conv != nil {
 		return conv, err
 	}
-	// Компания диалога — company_id любого из участников (как во Flask:
-	// сначала меньший id). Оба без компании (админ↔админ) — на практике
-	// не происходит, NOT NULL в БД отдаст 500.
-	var companyID int64
+	// company_id диалога теперь опционален: берём активную компанию любого из
+	// участников (сначала меньший id), nil — если общей/любой компании нет.
+	var companyID *int64
 	switch {
 	case lower != nil && lower.CompanyID != nil:
-		companyID = *lower.CompanyID
+		companyID = lower.CompanyID
 	case higher != nil && higher.CompanyID != nil:
-		companyID = *higher.CompanyID
-	default:
-		return nil, fmt.Errorf("conversation between users without company: %d, %d", a, b)
+		companyID = higher.CompanyID
 	}
 	return s.repo.CreatePair(ctx, a, b, companyID)
 }

@@ -9,8 +9,8 @@ import (
 )
 
 // ListConversations — список диалогов пользователя: закреплённые → остальные
-// (по last_message_at), сверху pet-чат и личный dev-чат (для сотрудников
-// компаний; у Администратора системы своих соло-чатов нет).
+// (по last_message_at), сверху pet-чат и личный dev-чат (для пользователей
+// с активной компанией; без активной компании своих соло-чатов нет).
 func (s *Service) ListConversations(ctx context.Context, userID int64) ([]*dto.ConversationListItem, error) {
 	me, err := s.users.GetUser(ctx, userID)
 	if err != nil {
@@ -188,7 +188,7 @@ func (s *Service) getOrCreateSolo(ctx context.Context, userID, companyID int64, 
 	return s.repo.CreateSolo(ctx, userID, companyID, pet)
 }
 
-// OpenDevChat — личный чат с техподдержкой (у Администратора системы его нет).
+// OpenDevChat — личный чат с техподдержкой (нужна активная компания).
 func (s *Service) OpenDevChat(ctx context.Context, userID int64) (*dto.Conversation, error) {
 	me, err := s.users.GetUser(ctx, userID)
 	if err != nil {
@@ -198,8 +198,8 @@ func (s *Service) OpenDevChat(ctx context.Context, userID int64) (*dto.Conversat
 		return nil, domain.NewError("USER_NOT_FOUND", "Пользователь не найден", 404)
 	}
 	if me.CompanyID == nil {
-		return nil, domain.NewError("ADMIN_HAS_NO_DEVCHAT",
-			"У Администратора системы нет своего чата с техподдержкой", 400)
+		return nil, domain.NewError("NO_ACTIVE_COMPANY",
+			"Нет активной компании для чата с техподдержкой", 400)
 	}
 	conv, err := s.getOrCreateSolo(ctx, userID, *me.CompanyID, false)
 	if err != nil {
@@ -218,7 +218,7 @@ func (s *Service) OpenPetChat(ctx context.Context, userID int64) (*dto.Conversat
 		return nil, domain.NewError("USER_NOT_FOUND", "Пользователь не найден", 404)
 	}
 	if me.CompanyID == nil {
-		return nil, domain.NewError("ADMIN_HAS_NO_PET", "У Администратора системы нет Грувика", 400)
+		return nil, domain.NewError("NO_ACTIVE_COMPANY", "Нет активной компании — Грувика нет", 400)
 	}
 	conv, err := s.getOrCreateSolo(ctx, userID, *me.CompanyID, true)
 	if err != nil {
@@ -232,14 +232,14 @@ func (s *Service) OpenPetChat(ctx context.Context, userID int64) (*dto.Conversat
 }
 
 // SupportInbox — все личные dev-чаты пользователей (вкладка «Техподдержка»
-// Администратора системы).
+// супер-админа).
 func (s *Service) SupportInbox(ctx context.Context, userID int64) ([]*dto.ConversationListItem, error) {
 	me, err := s.users.GetUser(ctx, userID)
 	if err != nil {
 		return nil, err
 	}
-	if me == nil || me.CompanyID != nil {
-		return nil, domain.NewError("FORBIDDEN", "Только Администратор системы", 403)
+	if me == nil || !me.IsSuperAdmin {
+		return nil, domain.NewError("FORBIDDEN", "Только супер-админ", 403)
 	}
 
 	convs, err := s.repo.ListDevChats(ctx)

@@ -14,11 +14,17 @@ import (
 )
 
 type Endpoints struct {
-	Login         endpoint.Endpoint
-	SelectCompany endpoint.Endpoint
-	SwitchCompany endpoint.Endpoint
-	Refresh       endpoint.Endpoint
-	ChangeDefault endpoint.Endpoint
+	Login                endpoint.Endpoint
+	Register             endpoint.Endpoint
+	SuggestLogin         endpoint.Endpoint
+	VerifyEmail          endpoint.Endpoint
+	ResendVerification   endpoint.Endpoint
+	RequestPasswordReset endpoint.Endpoint
+	ResetPasswordByToken endpoint.Endpoint
+	SelectCompany        endpoint.Endpoint
+	SwitchCompany        endpoint.Endpoint
+	Refresh              endpoint.Endpoint
+	ChangeDefault        endpoint.Endpoint
 
 	ListUsers          endpoint.Endpoint
 	CreateUser         endpoint.Endpoint
@@ -45,6 +51,13 @@ type Endpoints struct {
 	ListRoles endpoint.Endpoint
 
 	ListCompanies         endpoint.Endpoint
+	ListMyCompanies       endpoint.Endpoint
+	CreateCompanyUser     endpoint.Endpoint
+	UpdateCompanyMember   endpoint.Endpoint
+	ResetCompanyMember    endpoint.Endpoint
+	CreateCompanyInvite   endpoint.Endpoint
+	GetInvitePreview      endpoint.Endpoint
+	AcceptCompanyInvite   endpoint.Endpoint
 	GetCompany            endpoint.Endpoint
 	CreateCompany         endpoint.Endpoint
 	UpdateCompany         endpoint.Endpoint
@@ -126,7 +139,44 @@ type JoinEpRequest struct {
 	Code   string
 }
 
+type CreateCompanyEpRequest struct {
+	Actor *domain.User
+	Body  dto.CompanyCreate
+}
+
+type CompanyUserCreateEpRequest struct {
+	Actor     *domain.User
+	CompanyID int64
+	Body      dto.CreateUserRequest
+}
+
+type CompanyUserUpdateEpRequest struct {
+	Actor     *domain.User
+	CompanyID int64
+	UserID    int64
+	Body      dto.UpdateUserRequest
+}
+
+type CompanyMemberResetEpRequest struct {
+	Actor     *domain.User
+	CompanyID int64
+	UserID    int64
+}
+
+type CreateInviteEpRequest struct {
+	Actor     *domain.User
+	CompanyID int64
+	Email     string
+	RoleID    int64
+}
+
+type AcceptInviteEpRequest struct {
+	UserID int64
+	Token  string
+}
+
 type UpdateCompanyEpRequest struct {
+	Actor     *domain.User
 	CompanyID int64
 	Body      dto.CompanyUpdate
 }
@@ -157,6 +207,24 @@ func New(svc service.AuthService) Endpoints {
 	return Endpoints{
 		Login: func(ctx context.Context, request any) (any, error) {
 			return svc.Login(ctx, request.(dto.LoginRequest))
+		},
+		Register: func(ctx context.Context, request any) (any, error) {
+			return svc.Register(ctx, request.(dto.RegisterRequest))
+		},
+		SuggestLogin: func(ctx context.Context, request any) (any, error) {
+			return svc.SuggestLogin(ctx, request.(string))
+		},
+		VerifyEmail: func(ctx context.Context, request any) (any, error) {
+			return svc.VerifyEmail(ctx, request.(dto.VerifyEmailRequest))
+		},
+		ResendVerification: func(ctx context.Context, request any) (any, error) {
+			return nil, svc.ResendVerification(ctx, request.(string))
+		},
+		RequestPasswordReset: func(ctx context.Context, request any) (any, error) {
+			return nil, svc.RequestPasswordReset(ctx, request.(string))
+		},
+		ResetPasswordByToken: func(ctx context.Context, request any) (any, error) {
+			return svc.ResetPasswordByToken(ctx, request.(dto.ResetPasswordRequest))
 		},
 		SelectCompany: func(ctx context.Context, request any) (any, error) {
 			req := request.(SelectCompanyEpRequest)
@@ -258,22 +326,51 @@ func New(svc service.AuthService) Endpoints {
 		ListCompanies: func(ctx context.Context, _ any) (any, error) {
 			return svc.ListCompanies(ctx)
 		},
+		ListMyCompanies: func(ctx context.Context, request any) (any, error) {
+			return svc.ListMyCompanies(ctx, request.(*domain.User))
+		},
+		CreateCompanyUser: func(ctx context.Context, request any) (any, error) {
+			req := request.(CompanyUserCreateEpRequest)
+			return svc.CreateCompanyUser(ctx, req.Actor, req.CompanyID, req.Body)
+		},
+		UpdateCompanyMember: func(ctx context.Context, request any) (any, error) {
+			req := request.(CompanyUserUpdateEpRequest)
+			return svc.UpdateCompanyMember(ctx, req.Actor, req.CompanyID, req.UserID, req.Body)
+		},
+		ResetCompanyMember: func(ctx context.Context, request any) (any, error) {
+			req := request.(CompanyMemberResetEpRequest)
+			return nil, svc.ResetCompanyMemberPassword(ctx, req.Actor, req.CompanyID, req.UserID)
+		},
+		CreateCompanyInvite: func(ctx context.Context, request any) (any, error) {
+			req := request.(CreateInviteEpRequest)
+			return nil, svc.CreateCompanyInvite(ctx, req.Actor, req.CompanyID, req.Email, req.RoleID)
+		},
+		GetInvitePreview: func(ctx context.Context, request any) (any, error) {
+			return svc.GetCompanyInvitePreview(ctx, request.(string))
+		},
+		AcceptCompanyInvite: func(ctx context.Context, request any) (any, error) {
+			req := request.(AcceptInviteEpRequest)
+			return svc.AcceptCompanyInvite(ctx, req.UserID, req.Token)
+		},
 		GetCompany: func(ctx context.Context, request any) (any, error) {
-			return svc.GetCompany(ctx, request.(int64))
+			req := request.(CompanyActorEpRequest)
+			return svc.GetCompany(ctx, req.Actor, req.CompanyID)
 		},
 		CreateCompany: func(ctx context.Context, request any) (any, error) {
-			return svc.CreateCompany(ctx, request.(dto.CompanyCreate))
+			req := request.(CreateCompanyEpRequest)
+			return svc.CreateCompany(ctx, req.Actor, req.Body)
 		},
 		UpdateCompany: func(ctx context.Context, request any) (any, error) {
 			req := request.(UpdateCompanyEpRequest)
-			return svc.UpdateCompany(ctx, req.CompanyID, req.Body)
+			return svc.UpdateCompany(ctx, req.Actor, req.CompanyID, req.Body)
 		},
 		ToggleCompanyActive: func(ctx context.Context, request any) (any, error) {
 			req := request.(ToggleCompanyEpRequest)
 			return svc.ToggleCompanyActive(ctx, req.CompanyID, req.IsActive)
 		},
 		DeleteCompany: func(ctx context.Context, request any) (any, error) {
-			return nil, svc.DeleteCompany(ctx, request.(int64))
+			req := request.(CompanyActorEpRequest)
+			return nil, svc.DeleteCompany(ctx, req.Actor, req.CompanyID)
 		},
 		GetWeekendSettings: func(ctx context.Context, request any) (any, error) {
 			req := request.(CompanyScopeEpRequest)

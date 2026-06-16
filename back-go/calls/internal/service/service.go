@@ -133,22 +133,21 @@ func (s *Service) initiatorFIO(call *domain.Call, parts []*domain.Participant) s
 	return ""
 }
 
-// resolveCompany — компания звонка: общая для инициатора и всех приглашённых
-// по членствам user_companies (многокомпанийность). 0 — общей компании нет.
-// Предпочитает первичную компанию инициатора; иначе детерминированно
-// минимальный id из общих. Инициатор-админ (без членств) → общая компания
-// приглашённых.
-func (s *Service) resolveCompany(ctx context.Context, initiator *domain.User, inviteeIDs []int64) (int64, error) {
+// resolveCompany — общая компания инициатора и всех приглашённых по членствам
+// user_companies (многокомпанийность). nil — общей компании нет (это нормально:
+// звонок возможен между людьми без общей компании, company_id остаётся пустым).
+// Среди общих выбирается детерминированно минимальный id.
+func (s *Service) resolveCompany(ctx context.Context, initiator *domain.User, inviteeIDs []int64) (*int64, error) {
 	ids := append([]int64{initiator.ID}, inviteeIDs...)
 	memberships, err := s.users.Memberships(ctx, ids)
 	if err != nil {
-		return 0, err
+		return nil, err
 	}
 	candidates := memberships[initiator.ID]
 	if len(candidates) == 0 && len(inviteeIDs) > 0 {
 		candidates = memberships[inviteeIDs[0]]
 	}
-	shared := make([]int64, 0, len(candidates))
+	var best *int64
 	for cid := range candidates {
 		inAll := true
 		for _, uid := range inviteeIDs {
@@ -157,24 +156,9 @@ func (s *Service) resolveCompany(ctx context.Context, initiator *domain.User, in
 				break
 			}
 		}
-		if inAll {
-			shared = append(shared, cid)
-		}
-	}
-	if len(shared) == 0 {
-		return 0, nil
-	}
-	if initiator.CompanyID != nil {
-		for _, cid := range shared {
-			if cid == *initiator.CompanyID {
-				return cid, nil
-			}
-		}
-	}
-	best := shared[0]
-	for _, cid := range shared {
-		if cid < best {
-			best = cid
+		if inAll && (best == nil || cid < *best) {
+			c := cid
+			best = &c
 		}
 	}
 	return best, nil
@@ -215,32 +199,13 @@ func (s *Service) StartCall(ctx context.Context, req dto.StartCallRequest) (*dto
 		return nil, domain.NewError("USER_NOT_FOUND", "Пользователь не найден", 404)
 	}
 
-	// Кросс-компанийные звонки разрешены. company_id у звонка всё равно один
-	// (колонка NOT NULL, привязка плашки и истории): предпочитаем ОБЩУЮ компанию
-	// инициатора и приглашённых (resolveCompany, многокомпанийность), а если
-	// общей нет — штампуем компанией инициатора, иначе первого приглашённого
-	// с компанией. Участники при этом могут быть из разных компаний.
+	// Кросс-компанийные звонки разрешены, общая компания не обязательна.
+	// company_id звонка опционален: если у инициатора и приглашённых есть общая
+	// компания — проставляем её (привязка плашки и истории), иначе оставляем
+	// пустым. Участники при этом могут быть из разных компаний или вовсе без неё.
 	companyID, err := s.resolveCompany(ctx, initiator, inviteeIDs)
 	if err != nil {
 		return nil, err
-	}
-	if companyID == 0 {
-		switch {
-		case initiator.CompanyID != nil:
-			companyID = *initiator.CompanyID
-		default:
-			for _, u := range invitees {
-				if u.CompanyID != nil {
-					companyID = *u.CompanyID
-					break
-				}
-			}
-		}
-	}
-	if companyID == 0 {
-		// Ни у инициатора, ни у приглашённых нет компании (напр. пустой звонок
-		// Администратора системы) — контекст компании отсутствует.
-		return nil, domain.NewError("NO_COMPANY", "Звонок возможен только в рамках компании", 400)
 	}
 
 	kind := domain.KindGroup
@@ -805,7 +770,7 @@ func (s *Service) joinMemberByLink(ctx context.Context, call *domain.Call, userI
 	if err != nil {
 		return nil, err
 	}
-	if user == nil || user.IsHidden {
+	if user == nil || !user.IsActive {
 		return nil, domain.NewError("USER_NOT_FOUND", "Пользователь не найден", 404)
 	}
 

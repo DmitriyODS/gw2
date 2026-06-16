@@ -15,7 +15,7 @@ import (
 // Status — GET /api/yougile/status.
 //
 // company_enabled означает «интеграция реально работоспособна»: включён флаг
-// + директор выбрал компанию + есть доска + резолвлена первая колонка. Если
+// + администратор выбрал компанию + есть доска + резолвлена первая колонка. Если
 // что-то не задано, фронт показывает старое простое поле «ссылка на задачу
 // YouGile» и не пытается дёргать импорт/экспорт.
 func (y *Yougile) Status(ctx context.Context, user *domain.User) (*dto.YougileStatus, error) {
@@ -103,8 +103,8 @@ func (y *Yougile) Connect(ctx context.Context, user *domain.User, login, passwor
 
 	if user.CompanyID == nil {
 		return nil, domain.NewError("NO_COMPANY",
-			"Эта функция доступна только пользователям компании. "+
-				"Администратору системы нужно войти как директор конкретной компании.", 400)
+			"Эта функция доступна только в контексте компании. "+
+				"Выберите активную компанию.", 400)
 	}
 	company, err := y.repo.GetYougileCompany(ctx, *user.CompanyID)
 	if err != nil {
@@ -112,8 +112,8 @@ func (y *Yougile) Connect(ctx context.Context, user *domain.User, login, passwor
 	}
 	if company == nil {
 		return nil, domain.NewError("NO_COMPANY",
-			"Эта функция доступна только пользователям компании. "+
-				"Администратору системы нужно войти как директор конкретной компании.", 400)
+			"Эта функция доступна только в контексте компании. "+
+				"Выберите активную компанию.", 400)
 	}
 
 	targetYgID := strOrEmpty(explicitYgCompanyID)

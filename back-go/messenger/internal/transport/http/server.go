@@ -22,8 +22,9 @@ type Server struct {
 }
 
 // authSource — сверка пользователя для pkg-мидлвари. Активная компания и роль
-// в ней — ИЗ ТОКЕНА (active); из БД — is_hidden, профиль и активность выбранной
-// компании. Многокомпанийный юзер скоупится по выбранной компании.
+// в ней — ИЗ ТОКЕНА (active); из БД — глобальная активность аккаунта, признак
+// супер-админа, профиль и активность выбранной компании. Многокомпанийный юзер
+// скоупится по выбранной компании.
 func authSource(users domain.UserReader) pasetoauth.AuthSource {
 	return func(ctx context.Context, userID int64, active pasetoauth.Claims) (*pasetoauth.AuthInfo, error) {
 		u, err := users.GetUser(ctx, userID)
@@ -39,7 +40,8 @@ func authSource(users domain.UserReader) pasetoauth.AuthSource {
 		u.CompanyActive = companyActive
 		return &pasetoauth.AuthInfo{
 			RoleLevel:     active.RoleLevel,
-			IsHidden:      u.IsHidden,
+			IsActive:      u.IsActive,
+			IsSuperAdmin:  u.IsSuperAdmin,
 			CompanyActive: companyActive,
 			User:          u,
 		}, nil

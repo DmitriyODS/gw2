@@ -61,11 +61,13 @@ import { useCompaniesStore } from '@/stores/companies.js'
 import { useNotificationsStore } from '@/stores/notifications.js'
 import { getGrooveSettings, updateGrooveSettings } from '@/api/companies.js'
 
+const props = defineProps({ companyId: { type: Number, default: null } })
 const auth = useAuthStore()
 const companies = useCompaniesStore()
 const notif = useNotificationsStore()
 const { effectiveCompanyId } = storeToRefs(companies)
-const companyId = computed(() => effectiveCompanyId.value)
+// Явный companyId (страница управления компанией) приоритетнее активной компании.
+const companyId = computed(() => props.companyId ?? effectiveCompanyId.value)
 
 const enabled = ref(true)
 const initial = ref(true)

@@ -7,12 +7,12 @@ package domain
 
 import "time"
 
-// Уровни ролей платформы (общие с authsvc domain.Level*).
+// Уровни ролей в компании (общие с authsvc domain.Level*). Системной роли 4
+// больше нет — платформенного администратора заменяет users.is_super_admin.
 const (
 	LevelEmployee = 1
 	LevelManager  = 2
-	LevelDirector = 3
-	LevelAdmin    = 4
+	LevelAdmin    = 3
 )
 
 // TaskColors — фиксированный набор цветов-тегов задач (синхронизирован с
@@ -132,15 +132,17 @@ type Comment struct {
 }
 
 // User — пользователь в объёме auth-мидлвари и проверок task-домена.
+// Идентичность (id, fio, avatar, is_active, is_super_admin) грузится из users;
+// активная компания и роль в ней (CompanyID/RoleLevel) заполняются из токена в
+// authSource, CompanyActive — активность выбранной компании.
 type User struct {
 	ID            int64
 	FIO           string
-	Post          *string
 	AvatarPath    *string
+	IsActive      bool
+	IsSuperAdmin  bool
 	RoleLevel     int
 	CompanyID     *int64
-	IsHidden      bool
-	IsRootAdmin   bool
 	CompanyActive bool
 }
 

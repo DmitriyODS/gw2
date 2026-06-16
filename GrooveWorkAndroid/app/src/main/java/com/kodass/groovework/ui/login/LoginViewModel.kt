@@ -30,6 +30,10 @@ class LoginViewModel(private val session: SessionManager) : ViewModel() {
         private set
     private var selectToken: String = ""
 
+    // Логин неподтверждённого аккаунта (403 EMAIL_NOT_VERIFIED) — ведём на экран кода.
+    var pendingVerifyEmail by mutableStateOf<String?>(null)
+        private set
+
     private var timerJob: Job? = null
 
     val canSubmit: Boolean
@@ -86,10 +90,16 @@ class LoginViewModel(private val session: SessionManager) : ViewModel() {
         error = null
     }
 
+    fun consumeVerifyEmail() {
+        pendingVerifyEmail = null
+    }
+
     private fun handleApiError(e: ApiException) {
         when (e.code) {
             // Брутфорс-щит authsvc: 429 + retry_after_sec.
             "TOO_MANY_ATTEMPTS" -> startRetryTimer(e.retryAfterSec ?: 30)
+            // Неподтверждённый email — на экран ввода кода (email из тела ошибки).
+            "EMAIL_NOT_VERIFIED" -> pendingVerifyEmail = e.email ?: login.trim()
             "NO_COMPANY_ACCESS" -> error = "Нет доступа ни к одной компании. Обратитесь к администратору."
             "COMPANY_DISABLED" -> error = "Компания отключена. Обратитесь к администратору."
             "NETWORK_ERROR" -> error = "Сервер недоступен. Проверьте адрес и подключение."

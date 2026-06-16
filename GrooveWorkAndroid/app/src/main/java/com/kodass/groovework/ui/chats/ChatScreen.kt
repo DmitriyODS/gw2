@@ -854,7 +854,7 @@ private fun CallCard(
         live -> if (video) "Видеозвонок · идёт сейчас" else "Звонок · идёт сейчас"
         else -> if (video) "Видеозвонок" else "Звонок"
     }
-    val rowModifier = if (live && call != null) {
+    val rowModifier = if (call != null && call.isLive) {
         Modifier
             .clip(RoundedCornerShape(12.dp))
             .clickable { onReturnToCall(call) }

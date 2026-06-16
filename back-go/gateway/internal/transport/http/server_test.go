@@ -75,7 +75,7 @@ func startServer(t *testing.T) (addr string, rdb *redis.Client, secret paseto.V4
 		Ring:     nil, // ринг-фаза в этом тесте не дёргается
 		Verifier: verifier,
 		Auth: func(context.Context, int64, pasetoauth.Claims) (*pasetoauth.AuthInfo, error) {
-			return &pasetoauth.AuthInfo{RoleLevel: 1, CompanyActive: true}, nil
+			return &pasetoauth.AuthInfo{RoleLevel: 1, IsActive: true, CompanyActive: true}, nil
 		},
 		Log: log,
 	})

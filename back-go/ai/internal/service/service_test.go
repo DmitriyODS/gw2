@@ -243,12 +243,10 @@ func enabledCompany(id int64) *domain.CompanyAI {
 	}
 }
 
-func director(companyID int64) *domain.User {
-	return &domain.User{ID: 10, RoleLevel: domain.LevelDirector, CompanyID: &companyID, CompanyActive: true}
-}
-
-func rootAdmin() *domain.User {
-	return &domain.User{ID: 1, RoleLevel: domain.LevelAdmin, IsRootAdmin: true, CompanyActive: true}
+// companyAdmin — администратор (level 3) компании companyID в активной сессии:
+// AI-настройками управляет администратор ИМЕННО этой компании.
+func companyAdmin(companyID int64) *domain.User {
+	return &domain.User{ID: 10, RoleLevel: domain.LevelAdmin, CompanyID: &companyID, CompanyActive: true}
 }
 
 func wantDomainError(t *testing.T, err error, code string, status int) {
@@ -390,19 +388,16 @@ func TestSettingsAccess(t *testing.T) {
 	repo.companies[1] = enabledCompany(1)
 	repo.companies[2] = enabledCompany(2)
 
-	// Руководитель своей компании — ок.
-	if _, err := svc.GetSettings(context.Background(), director(1), 1); err != nil {
+	// Администратор своей компании — ок.
+	if _, err := svc.GetSettings(context.Background(), companyAdmin(1), 1); err != nil {
 		t.Fatalf("своя компания: %v", err)
 	}
-	// Руководитель чужой компании — 403.
-	_, err := svc.GetSettings(context.Background(), director(2), 1)
+	// Администратор чужой компании — 403 (кросс-компанийного доступа нет даже у
+	// супер-админа: AI-настройками управляет администратор именно этой компании).
+	_, err := svc.GetSettings(context.Background(), companyAdmin(2), 1)
 	wantDomainError(t, err, "FORBIDDEN", 403)
-	// Администратор системы — любая компания.
-	if _, err := svc.GetSettings(context.Background(), rootAdmin(), 1); err != nil {
-		t.Fatalf("root admin: %v", err)
-	}
-	// Компании нет — 404 без message.
-	_, err = svc.GetSettings(context.Background(), rootAdmin(), 99)
+	// Компании нет — 404 без message (проверяется до доступа).
+	_, err = svc.GetSettings(context.Background(), companyAdmin(99), 99)
 	wantDomainError(t, err, "NOT_FOUND", 404)
 	if de := domain.AsDomainError(err); de.Message != "" {
 		t.Fatalf("NOT_FOUND без message, получено %q", de.Message)
@@ -421,7 +416,7 @@ func TestUpdateSettingsEncryptsKey(t *testing.T) {
 
 	enabled := true
 	key := "sk-proj-abcdef123456"
-	out, err := svc.UpdateSettings(context.Background(), director(1), 1, dto.AiSettingsUpdate{
+	out, err := svc.UpdateSettings(context.Background(), companyAdmin(1), 1, dto.AiSettingsUpdate{
 		Enabled: &enabled,
 		APIKey:  &key,
 	})
@@ -452,7 +447,7 @@ func TestUpdateSettingsClearKeyAndCacheInvalidation(t *testing.T) {
 	if st, _ := svc.Status(context.Background(), 1); !st.Enabled {
 		t.Fatal("прекондиция: AI включён")
 	}
-	out, err := svc.UpdateSettings(context.Background(), director(1), 1, dto.AiSettingsUpdate{ClearKey: true})
+	out, err := svc.UpdateSettings(context.Background(), companyAdmin(1), 1, dto.AiSettingsUpdate{ClearKey: true})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -470,7 +465,7 @@ func TestUpdateSettingsEmptyKeyKeepsExisting(t *testing.T) {
 	repo.companies[1] = enabledCompany(1)
 
 	empty := "  "
-	out, err := svc.UpdateSettings(context.Background(), director(1), 1, dto.AiSettingsUpdate{APIKey: &empty})
+	out, err := svc.UpdateSettings(context.Background(), companyAdmin(1), 1, dto.AiSettingsUpdate{APIKey: &empty})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -485,7 +480,7 @@ func TestUpdateSettingsMisconfiguredCipher(t *testing.T) {
 	svc := New(repo, &fakeLLM{}, &fakeCipher{misconfigured: true}, newFakeFacts(), slog.New(slog.DiscardHandler))
 
 	key := "sk-new"
-	_, err := svc.UpdateSettings(context.Background(), director(1), 1, dto.AiSettingsUpdate{APIKey: &key})
+	_, err := svc.UpdateSettings(context.Background(), companyAdmin(1), 1, dto.AiSettingsUpdate{APIKey: &key})
 	wantDomainError(t, err, "AI_KEY_NOT_CONFIGURED", 500)
 }
 
@@ -497,7 +492,7 @@ func TestTestSettingsDisabled(t *testing.T) {
 	c.APIKeyEnc = nil
 	repo.companies[1] = c
 
-	_, err := svc.TestSettings(context.Background(), director(1), 1)
+	_, err := svc.TestSettings(context.Background(), companyAdmin(1), 1)
 	wantDomainError(t, err, "AI_DISABLED", 409)
 }
 
@@ -506,7 +501,7 @@ func TestTestSettingsCollectsErrors(t *testing.T) {
 	repo.companies[1] = enabledCompany(1)
 	llm.embedErr = fmt.Errorf("bad model")
 
-	res, err := svc.TestSettings(context.Background(), director(1), 1)
+	res, err := svc.TestSettings(context.Background(), companyAdmin(1), 1)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -624,7 +619,7 @@ func TestBackfillAndIndexingStatus(t *testing.T) {
 	// Один эмбеддинг устаревшей моделью — должен пересчитаться.
 	repo.embedded[1] = storedEmbedding{companyID: 1, model: "old-model"}
 
-	before, err := svc.IndexingStatus(context.Background(), director(1), 1)
+	before, err := svc.IndexingStatus(context.Background(), companyAdmin(1), 1)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -634,7 +629,7 @@ func TestBackfillAndIndexingStatus(t *testing.T) {
 
 	svc.runBackfill(context.Background(), 1)
 
-	after, err := svc.IndexingStatus(context.Background(), director(1), 1)
+	after, err := svc.IndexingStatus(context.Background(), companyAdmin(1), 1)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -654,7 +649,7 @@ func TestIndexingStatusDisabledCompany(t *testing.T) {
 	cid := int64(1)
 	repo.tasks[1] = &domain.TaskText{ID: 1, CompanyID: &cid, Name: "Задача"}
 
-	st, err := svc.IndexingStatus(context.Background(), director(1), 1)
+	st, err := svc.IndexingStatus(context.Background(), companyAdmin(1), 1)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -670,7 +665,7 @@ func TestStartReindex(t *testing.T) {
 	cid := int64(1)
 	repo.tasks[1] = &domain.TaskText{ID: 1, CompanyID: &cid, Name: "Задача"}
 
-	out, err := svc.StartReindex(context.Background(), director(1), 1)
+	out, err := svc.StartReindex(context.Background(), companyAdmin(1), 1)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -694,7 +689,7 @@ func TestStartReindexDisabled(t *testing.T) {
 	c.Enabled = false
 	repo.companies[1] = c
 
-	_, err := svc.StartReindex(context.Background(), director(1), 1)
+	_, err := svc.StartReindex(context.Background(), companyAdmin(1), 1)
 	wantDomainError(t, err, "AI_DISABLED", 409)
 }
 

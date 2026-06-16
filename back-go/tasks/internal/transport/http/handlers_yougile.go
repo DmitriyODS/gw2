@@ -27,8 +27,8 @@ func (h *handlers) yougileStatus(c *fiber.Ctx) error {
 
 // yougileConnect — подключение аккаунта. Обычный юзер не может выбрать
 // произвольную yg_company (она зафиксирована настройками компании) — поле
-// yg_company_id учитывается только для DIRECTOR+ (админ в визарде выбирает
-// будущую компанию до сохранения настроек), иначе молча игнорируется.
+// yg_company_id учитывается только для Администратора компании (в визарде он
+// выбирает будущую компанию до сохранения настроек), иначе молча игнорируется.
 func (h *handlers) yougileConnect(c *fiber.Ctx) error {
 	req, details := parseYougileConnect(c.Body())
 	if details != nil {
@@ -36,7 +36,7 @@ func (h *handlers) yougileConnect(c *fiber.Ctx) error {
 	}
 	user := currentUser(c)
 	var explicit *string
-	if user.RoleLevel >= domain.LevelDirector {
+	if user.RoleLevel >= domain.LevelAdmin {
 		explicit = req.YgCompanyID
 	}
 	resp, err := h.eps.YougileConnect(c.Context(), endpoint.YougileConnectRequest{
@@ -125,8 +125,8 @@ func (h *handlers) yougileColumns(c *fiber.Ctx) error {
 	return c.JSON(resp)
 }
 
-// yougileGetSettings — без компании (root admin до выбора) отдаём пустые
-// настройки, чтобы фронт мог отрендерить визард, а не ловить 400.
+// yougileGetSettings — без активной компании отдаём пустые настройки, чтобы
+// фронт мог отрендерить визард, а не ловить 400.
 func (h *handlers) yougileGetSettings(c *fiber.Ctx) error {
 	resp, err := h.eps.YougileGetSettings(c.Context(), currentUser(c).CompanyID)
 	if err != nil {
@@ -135,8 +135,8 @@ func (h *handlers) yougileGetSettings(c *fiber.Ctx) error {
 	return c.JSON(resp)
 }
 
-// requireOwnCompany — компания пользователя обязательна (как
-// _own_company_or_403 во Flask); nil — ответ уже записан.
+// requireOwnCompany — нужна активная компания (скоуп из токена); nil — ответ
+// уже записан.
 func requireOwnCompany(c *fiber.Ctx, user *domain.User) (*int64, error) {
 	if user.CompanyID == nil {
 		return nil, c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "NO_COMPANY"})

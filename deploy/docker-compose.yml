@@ -149,6 +149,10 @@ services:
       PASETO_PRIVATE_KEY: ${PASETO_PRIVATE_KEY}
       PASETO_REFRESH_KEY: ${PASETO_REFRESH_KEY}
       UPLOAD_FOLDER: /app/uploads
+      # Письма подтверждения email — через mailsvc (gRPC). Ссылка в письме
+      # строится от публичного базового URL приложения.
+      MAIL_GRPC_ADDR: mail:9098
+      APP_PUBLIC_BASE_URL: ${APP_PUBLIC_BASE_URL:-http://localhost:8080}
       HTTP_ADDR: ":8091"
     volumes:
       - uploads:/app/uploads
@@ -339,6 +343,35 @@ services:
       - "8097"
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8097/healthz"]
+      interval: 15s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
+
+  # Микросервис рассылки писем (Go, back-go/mail): gRPC :9098 — Send(шаблон),
+  # HTTP :8098 — /healthz. Stateless (без БД/Redis), доставка по SMTP. Зовёт его
+  # authsvc (письма подтверждения email). SMTP_* и отправитель задаёт .env /
+  # прод-оверлей; без рабочего SMTP сервис стартует, но письма не уходят.
+  mail:
+    build:
+      context: ../back-go
+      dockerfile: mail/Dockerfile
+    restart: unless-stopped
+    environment:
+      SMTP_HOST: ${SMTP_HOST:-localhost}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+      SMTP_FROM: ${SMTP_FROM:-noreply@grovework.local}
+      SMTP_FROM_NAME: ${SMTP_FROM_NAME:-Groove Work}
+      SMTP_TLS: ${SMTP_TLS:-starttls}
+      HTTP_ADDR: ":8098"
+      GRPC_ADDR: ":9098"
+    expose:
+      - "8098"
+      - "9098"
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8098/healthz"]
       interval: 15s
       timeout: 3s
       retries: 5

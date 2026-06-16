@@ -14,6 +14,8 @@ class ApiException(
     override val message: String,
     val status: Int,
     val retryAfterSec: Int? = null,
+    // Extra-поле email: приходит при EMAIL_NOT_VERIFIED — ведём на экран кода.
+    val email: String? = null,
 ) : Exception(message)
 
 fun parseApiError(json: Json, status: Int, body: String?): ApiException {
@@ -33,7 +35,8 @@ fun parseApiError(json: Json, status: Int, body: String?): ApiException {
             else -> "Ошибка сервера ($status)"
         }
         val retryAfter = (obj["retry_after_sec"] as? JsonPrimitive)?.content?.toIntOrNull()
-        ApiException(code, message, status, retryAfter)
+        val email = (obj["email"] as? JsonPrimitive)?.content
+        ApiException(code, message, status, retryAfter, email)
     } catch (_: Exception) {
         ApiException("HTTP_$status", "Ошибка сервера ($status)", status)
     }

@@ -21,33 +21,33 @@ func NewRoles(roles []*domain.Role) []Role {
 	return out
 }
 
-// CompanyDirectorRef — форма CompanyDirectorRefSchema.
-type CompanyDirectorRef struct {
+// CompanyCreatorRef — создатель компании (информативно).
+type CompanyCreatorRef struct {
 	AvatarPath *string `json:"avatar_path"`
 	FIO        string  `json:"fio"`
 	ID         int64   `json:"id"`
 	Login      string  `json:"login"`
 }
 
-// Company — форма CompanySchema + виртуальные счётчики (_enrich во Flask).
+// Company — компания + виртуальные счётчики.
 type Company struct {
-	CreatedAt      JSONTime            `json:"created_at"`
-	Description    *string             `json:"description"`
-	Director       *CompanyDirectorRef `json:"director"`
-	DirectorID     *int64              `json:"director_id"`
-	EmployeesCount int                 `json:"employees_count"`
-	ID             int64               `json:"id"`
-	IsActive       bool                `json:"is_active"`
-	Name           string              `json:"name"`
-	Settings       map[string]any      `json:"settings"`
-	TasksCount     int                 `json:"tasks_count"`
+	CreatedAt      JSONTime           `json:"created_at"`
+	CreatedBy      *int64             `json:"created_by"`
+	Creator        *CompanyCreatorRef `json:"creator"`
+	Description    *string            `json:"description"`
+	EmployeesCount int                `json:"employees_count"`
+	ID             int64              `json:"id"`
+	IsActive       bool               `json:"is_active"`
+	Name           string             `json:"name"`
+	Settings       map[string]any     `json:"settings"`
+	TasksCount     int                `json:"tasks_count"`
 }
 
 func NewCompany(c *domain.Company, stats domain.CompanyStats) Company {
 	out := Company{
 		CreatedAt:      JSONTime(c.CreatedAt),
+		CreatedBy:      c.CreatedBy,
 		Description:    c.Description,
-		DirectorID:     c.DirectorID,
 		EmployeesCount: stats.Employees,
 		ID:             c.ID,
 		IsActive:       c.IsActive,
@@ -55,12 +55,12 @@ func NewCompany(c *domain.Company, stats domain.CompanyStats) Company {
 		Settings:       c.Settings,
 		TasksCount:     stats.Tasks,
 	}
-	if c.Director != nil {
-		out.Director = &CompanyDirectorRef{
-			AvatarPath: c.Director.AvatarPath,
-			FIO:        c.Director.FIO,
-			ID:         c.Director.ID,
-			Login:      c.Director.Login,
+	if c.Creator != nil {
+		out.Creator = &CompanyCreatorRef{
+			AvatarPath: c.Creator.AvatarPath,
+			FIO:        c.Creator.FIO,
+			ID:         c.Creator.ID,
+			Login:      c.Creator.Login,
 		}
 	}
 	return out
@@ -90,8 +90,6 @@ type GrooveSettings struct {
 type CompanyCreate struct {
 	Name        string
 	Description *string
-	DirectorID  *int64
-	IsActive    bool
 	Settings    map[string]any
 }
 
@@ -101,9 +99,6 @@ type CompanyUpdate struct {
 	Name           *string
 	Description    *string
 	DescriptionSet bool
-	DirectorID     *int64
-	DirectorSet    bool
-	IsActive       *bool
 	Settings       map[string]any // переданные ключи (partial); nil — не передано
 	SettingsSet    bool
 }

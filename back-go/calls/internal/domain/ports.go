@@ -37,9 +37,9 @@ type UserReader interface {
 	// CompanyActive — активна ли выбранная (активная) компания сессии из
 	// токена. nil (Администратор системы) → true.
 	CompanyActive(ctx context.Context, companyID *int64) (bool, error)
-	// Memberships — множество компаний для каждого пользователя: первичная
-	// users.company_id ∪ членства user_companies (многокомпанийность). Звонок
-	// разрешён, если у инициатора и приглашённых есть общая компания.
+	// Memberships — множество компаний для каждого пользователя из членств
+	// user_companies (многокомпанийность). Нужно лишь чтобы проставить звонку
+	// общую компанию, если она есть; общей компании может и не быть.
 	Memberships(ctx context.Context, ids []int64) (map[int64]map[int64]bool, error)
 }
 

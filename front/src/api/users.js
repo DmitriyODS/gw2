@@ -2,6 +2,7 @@
 // authsvc не публикует Swagger, npm run gen:api этот файл не трогает.
 import { apiRequest } from './client.js'
 
+// Список ВСЕХ пользователей платформы — только для супер-админа.
 export const getUsers = () => apiRequest('/users')
 
 export const createUser = (data) => apiRequest('/users', { method: 'POST', body: data })
@@ -26,9 +27,10 @@ export const updateUser = (userId, data) => apiRequest(`/users/${userId}`, { met
 
 export const assignRole = (userId, data) => apiRequest(`/users/${userId}/role`, { method: 'PATCH', body: data })
 
-// Каталог сотрудников — доступно любому авторизованному.
-// global: true — все видимые сотрудники всех компаний (для старта чата/звонка
-// с сотрудником другой компании); по умолчанию — в рамках своей компании.
+// Каталог сотрудников — доступно любому авторизованному. По умолчанию —
+// члены АКТИВНОЙ компании (роль/должность из связки, компания берётся из токена).
+// global: true (?all=1) — все видимые пользователи платформы (для старта чата/
+// звонка с сотрудником другой компании, контакты).
 export const getDirectory = (q = '', excludeSelf = false, { global = false } = {}) => {
   const params = new URLSearchParams()
   if (q) params.set('q', q)

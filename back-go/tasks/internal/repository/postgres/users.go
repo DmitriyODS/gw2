@@ -11,8 +11,8 @@ import (
 )
 
 // UserReader — read-only доступ к пользователям платформы (владелец таблицы
-// в рантайме — authsvc); объём — auth-мидлварь (is_hidden, активность
-// компании), валидация ответственного, ФИО для уведомления force-stop.
+// в рантайме — authsvc); объём — auth-мидлварь (is_active, активность
+// выбранной компании), валидация ответственного, ФИО для уведомления force-stop.
 type UserReader struct {
 	pool *pgxpool.Pool
 }
@@ -53,26 +53,21 @@ func (r *UserReader) YougileEnabled(ctx context.Context, companyID int64) (bool,
 	return b, nil
 }
 
+// GetUser — только идентичность из users (компания/роль развязаны: активная
+// компания и роль в ней приходят из токена, заполняются в authSource).
 func (r *UserReader) GetUser(ctx context.Context, id int64) (*domain.User, error) {
 	var u domain.User
-	var companyActive *bool
 	err := r.pool.QueryRow(ctx, `
-		SELECT u.id, u.fio, u.post, u.avatar_path, r.level, u.company_id,
-		       u.is_hidden, u.is_root_admin, c.is_active
-		  FROM users u
-		  JOIN roles r ON r.id = u.role_id
-		  LEFT JOIN companies c ON c.id = u.company_id
-		 WHERE u.id = $1`, id).
-		Scan(&u.ID, &u.FIO, &u.Post, &u.AvatarPath, &u.RoleLevel, &u.CompanyID,
-			&u.IsHidden, &u.IsRootAdmin, &companyActive)
+		SELECT id, fio, avatar_path, is_active, is_super_admin
+		  FROM users
+		 WHERE id = $1`, id).
+		Scan(&u.ID, &u.FIO, &u.AvatarPath, &u.IsActive, &u.IsSuperAdmin)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, nil
 		}
 		return nil, err
 	}
-	// Пользователь без компании (Администратор системы) считается активным.
-	u.CompanyActive = companyActive == nil || *companyActive
 	return &u, nil
 }
 

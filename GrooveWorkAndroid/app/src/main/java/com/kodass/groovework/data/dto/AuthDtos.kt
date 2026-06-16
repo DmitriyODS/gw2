@@ -9,6 +9,52 @@ data class LoginRequest(
     val password: String,
 )
 
+// Публичная регистрация: сессию НЕ выдаёт (см. RegisterResultDto). Логин может
+// прийти пустым — сервер сгенерит из ФИО; пароль генерируется на клиенте.
+@Serializable
+data class RegisterRequest(
+    val fio: String,
+    val email: String,
+    val login: String,
+    val password: String,
+)
+
+// Ответ register: верификация email обязательна перед входом.
+@Serializable
+data class RegisterResultDto(
+    val status: String = "",
+    val email: String = "",
+)
+
+@Serializable
+data class SuggestLoginDto(val login: String = "")
+
+// Подтверждение email: по ссылке ({token}) или вводом кода ({email, code}).
+// explicitNulls=false (общий Json) вырежет непереданные поля.
+@Serializable
+data class VerifyEmailRequest(
+    val token: String? = null,
+    val email: String? = null,
+    val code: String? = null,
+)
+
+// Универсальный ответ {status:"ok"} (resend-verification, forgot-password).
+@Serializable
+data class StatusDto(val status: String = "")
+
+@Serializable
+data class ForgotPasswordRequest(val email: String)
+
+@Serializable
+data class ResetPasswordRequest(
+    val token: String,
+    @SerialName("new_password") val newPassword: String,
+)
+
+// Ответ reset-password: логин для префилла на экране входа.
+@Serializable
+data class ResetPasswordResultDto(val login: String = "")
+
 @Serializable
 data class ChangeDefaultRequest(
     @SerialName("new_login") val newLogin: String,
@@ -27,7 +73,7 @@ data class SessionResponse(
     @SerialName("company_id") val companyId: Long? = null,
     @SerialName("company_name") val companyName: String? = null,
     @SerialName("role_level") val roleLevel: Int? = null,
-    @SerialName("is_root_admin") val isRootAdmin: Boolean = false,
+    @SerialName("is_super_admin") val isRootAdmin: Boolean = false,
     @SerialName("needs_company_selection") val needsCompanySelection: Boolean = false,
     @SerialName("select_token") val selectToken: String? = null,
     val companies: List<MembershipDto> = emptyList(),

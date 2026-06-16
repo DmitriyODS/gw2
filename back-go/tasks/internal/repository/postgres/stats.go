@@ -371,14 +371,18 @@ func (r *Repo) ProfileStats(ctx context.Context, userID int64, start, end time.T
 func (r *Repo) Responsibles(ctx context.Context, companyID *int64) ([]domain.Responsible, error) {
 	args := []any{}
 	cond := companyCond(&args, companyID, "t.company_id")
+	// Должность переехала в user_companies (привязана к компании); тянем её
+	// для компании задачи. is_active — глобальная активность аккаунта.
 	rows, err := r.pool.Query(ctx, `
-		SELECT us.id, us.fio, us.avatar_path, us.post,
+		SELECT us.id, us.fio, us.avatar_path,
+		       (SELECT uc.post FROM user_companies uc
+		          WHERE uc.user_id = us.id AND uc.company_id = t.company_id LIMIT 1),
 		       SUM(CASE WHEN t.is_archived = FALSE THEN 1 ELSE 0 END),
 		       SUM(CASE WHEN t.is_archived = TRUE THEN 1 ELSE 0 END)
 		  FROM users us
 		  JOIN tasks t ON t.responsible_user_id = us.id
-		 WHERE us.is_hidden = FALSE`+cond+`
-		 GROUP BY us.id, us.fio, us.avatar_path, us.post
+		 WHERE us.is_active = TRUE`+cond+`
+		 GROUP BY us.id, us.fio, us.avatar_path, t.company_id
 		 ORDER BY SUM(CASE WHEN t.is_archived = FALSE THEN 1 ELSE 0 END) DESC,
 		          SUM(CASE WHEN t.is_archived = TRUE THEN 1 ELSE 0 END) DESC`, args...)
 	if err != nil {
@@ -401,7 +405,7 @@ func (r *Repo) VisibleEmployees(ctx context.Context, companyID *int64) ([]domain
 	args := []any{}
 	cond := memberCond(&args, companyID, "id")
 	rows, err := r.pool.Query(ctx,
-		`SELECT id, fio FROM users WHERE is_hidden = FALSE`+cond+` ORDER BY id`, args...)
+		`SELECT id, fio FROM users WHERE is_active = TRUE`+cond+` ORDER BY id`, args...)
 	if err != nil {
 		return nil, err
 	}

@@ -15,6 +15,17 @@ services:
     ports:
       - "6379:6379"
 
+  # Dev-перехватчик почты: SMTP :1025, веб-интерфейс http://localhost:8025.
+  # mailsvc (на хосте через ./dev.sh или в стеке --profile full) шлёт письма
+  # сюда — реальный SMTP в разработке не нужен. Часть инфры (без профиля full),
+  # чтобы письма ловились и при запуске сервисов на хосте.
+  mailpit:
+    image: axllent/mailpit:latest
+    restart: unless-stopped
+    ports:
+      - "1025:1025"
+      - "8025:8025"
+
   # Приложения за профилем full: голый `docker compose up` их не стартует —
   # gatewaysvc (:8096), callsvc (:8090/:9090), authsvc (:8091),
   # msgsvc (:8092/:9092), aisvc (:8093/:9093), groovesvc (:8094/:9094),
@@ -61,6 +72,14 @@ services:
       PASETO_PUBLIC_KEY: ${PASETO_PUBLIC_KEY:-15ef439747fcad6ca627310942ba14b48f164fcbb5f65c10f61ca2aeb4b53fe1}
       # Dev без Firebase: пуши отключены (no-op). Подложите ключ — заработают.
       FIREBASE_CREDENTIALS_JSON: ${FIREBASE_CREDENTIALS_JSON:-}
+  mail:
+    profiles: ["full"]
+    environment:
+      # Dev-почта уходит в mailpit (без TLS/авторизации) — см. http://localhost:8025.
+      SMTP_HOST: mailpit
+      SMTP_PORT: "1025"
+      SMTP_TLS: none
+      SMTP_FROM: noreply@grovework.local
   nginx:
     profiles: ["full"]
     ports:

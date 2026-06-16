@@ -77,10 +77,12 @@ const DAYS = [
 ]
 const DAY_TITLES = ['понедельник', 'вторник', 'среда', 'четверг', 'пятница', 'суббота', 'воскресенье']
 
+const props = defineProps({ companyId: { type: Number, default: null } })
 const companies = useCompaniesStore()
 const notif = useNotificationsStore()
 const { effectiveCompanyId } = storeToRefs(companies)
-const companyId = computed(() => effectiveCompanyId.value)
+// Явный companyId (страница управления компанией) приоритетнее активной компании.
+const companyId = computed(() => props.companyId ?? effectiveCompanyId.value)
 
 const selected = ref(new Set([5, 6]))
 const initial = ref([5, 6])

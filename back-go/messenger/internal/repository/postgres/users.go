@@ -11,8 +11,8 @@ import (
 )
 
 // UserReader — read-only доступ к пользователям платформы (владелец таблицы
-// в рантайме — authsvc); профиль в объёме UserDirectorySchema + проверки
-// auth-мидлвари (is_hidden, активность компании).
+// в рантайме — authsvc). Грузит ТОЛЬКО идентичность из users; роль и компания
+// развязаны с users (живут в user_companies) и приходят из токена в authSource.
 type UserReader struct {
 	pool *pgxpool.Pool
 }
@@ -23,27 +23,21 @@ func NewUserReader(pool *pgxpool.Pool) *UserReader {
 	return &UserReader{pool: pool}
 }
 
-const userCols = `u.id, u.fio, u.login, u.post, u.role_id, r.name, r.level,
-	u.company_id, u.phone, u.email, u.avatar_path, u.is_hidden, u.last_seen_at, c.is_active`
+const userCols = `u.id, u.fio, u.login, u.avatar_path, u.phone, u.email,
+	u.is_active, u.is_super_admin, u.last_seen_at`
 
-const userFrom = `
-	FROM users u
-	JOIN roles r ON r.id = u.role_id
-	LEFT JOIN companies c ON c.id = u.company_id `
+const userFrom = ` FROM users u `
 
 func scanUser(row pgx.Row) (*domain.User, error) {
 	var u domain.User
-	var companyActive *bool
-	err := row.Scan(&u.ID, &u.FIO, &u.Login, &u.Post, &u.RoleID, &u.RoleName, &u.RoleLevel,
-		&u.CompanyID, &u.Phone, &u.Email, &u.AvatarPath, &u.IsHidden, &u.LastSeenAt, &companyActive)
+	err := row.Scan(&u.ID, &u.FIO, &u.Login, &u.AvatarPath, &u.Phone, &u.Email,
+		&u.IsActive, &u.IsSuperAdmin, &u.LastSeenAt)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, nil
 		}
 		return nil, err
 	}
-	// Пользователь без компании (Администратор системы) считается активным.
-	u.CompanyActive = companyActive == nil || *companyActive
 	return &u, nil
 }
 
@@ -89,12 +83,12 @@ func (r *UserReader) ListUsers(ctx context.Context, ids []int64) ([]*domain.User
 	return out, rows.Err()
 }
 
-// DevChatUserIDs — адресаты событий dev-чата: владелец + все видимые
-// Администраторы системы (company_id IS NULL).
+// DevChatUserIDs — адресаты событий dev-чата: владелец + все активные
+// супер-админы (техподдержка).
 func (r *UserReader) DevChatUserIDs(ctx context.Context, ownerID int64) ([]int64, error) {
 	rows, err := r.pool.Query(ctx, `
 		SELECT id FROM users
-		WHERE is_hidden = FALSE AND (id = $1 OR company_id IS NULL)`, ownerID)
+		WHERE is_active = TRUE AND (id = $1 OR is_super_admin = TRUE)`, ownerID)
 	if err != nil {
 		return nil, err
 	}

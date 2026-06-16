@@ -626,7 +626,7 @@ func (s *Service) StrokePet(ctx context.Context, viewerID, targetUserID,
 	if err != nil {
 		return nil, err
 	}
-	if target == nil || target.IsHidden || target.CompanyID == nil || *target.CompanyID != companyID {
+	if target == nil || !target.IsActive {
 		return nil, domain.NewError("USER_NOT_FOUND", "Сотрудник не найден", 404)
 	}
 	pet, err := s.pets.GetOrCreate(ctx, targetUserID, companyID)

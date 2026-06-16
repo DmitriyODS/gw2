@@ -1,27 +1,7 @@
 import { useAuthStore } from '@/stores/auth'
-import { useCompaniesStore } from '@/stores/companies'
 
 let isRefreshing = false
 let refreshQueue = []
-
-// Эндпоинты, работающие в рамках конкретной компании. Для Администратора
-// системы (без своей company_id) — автоматически добавляем
-// ?company_id=<выбранный в селекторе>, чтобы бэк понял scope.
-const COMPANY_SCOPED_PREFIXES = [
-  '/tasks', '/units', '/departments', '/unit-types', '/stages',
-  '/stats', '/messenger', '/users/directory', '/groove',
-]
-
-function _injectCompanyParam(path, companyId) {
-  if (companyId == null) return path
-  if (!COMPANY_SCOPED_PREFIXES.some(p => path === p || path.startsWith(p + '/') || path.startsWith(p + '?'))) {
-    return path
-  }
-  // Уже передан явно — не перезаписываем.
-  if (/[?&]company_id=/.test(path)) return path
-  const sep = path.includes('?') ? '&' : '?'
-  return `${path}${sep}company_id=${companyId}`
-}
 
 function anySignal(signals) {
   const list = signals.filter(Boolean)
@@ -66,14 +46,9 @@ export async function apiRequest(path, options = {}) {
     headers['Authorization'] = `Bearer ${auth.token}`
   }
 
-  // Если пользователь — Администратор системы (нет своей company_id),
-  // подмешиваем выбранную в селекторе компанию для всех scope-эндпоинтов.
-  if (auth.token && auth.companyId == null) {
-    try {
-      const companies = useCompaniesStore()
-      path = _injectCompanyParam(path, companies.activeCompanyId)
-    } catch { /* пиния ещё не готова — пропускаем */ }
-  }
+  // Активная компания берётся из access-токена (claims.company_id) — на клиенте
+  // её больше не подмешиваем через ?company_id=. Переключение между компаниями —
+  // через switch-company (перевыпуск токена).
 
   let resp
   try {

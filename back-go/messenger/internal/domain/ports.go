@@ -17,8 +17,8 @@ type Repository interface {
 	// GetPair — пара уже нормализована вызывающим (a < b).
 	GetPair(ctx context.Context, a, b int64) (*Conversation, error)
 	// CreatePair — INSERT пары; при гонке по уникальному индексу возвращает
-	// существующий диалог (как get_or_create_conversation во Flask).
-	CreatePair(ctx context.Context, a, b, companyID int64) (*Conversation, error)
+	// существующий диалог. companyID может быть nil (нет общей компании).
+	CreatePair(ctx context.Context, a, b int64, companyID *int64) (*Conversation, error)
 	// GetSolo / CreateSolo — личный dev-чат или pet-чат владельца.
 	GetSolo(ctx context.Context, userID int64, pet bool) (*Conversation, error)
 	CreateSolo(ctx context.Context, userID, companyID int64, pet bool) (*Conversation, error)
@@ -92,13 +92,13 @@ type Repository interface {
 type UserReader interface {
 	GetUser(ctx context.Context, id int64) (*User, error)
 	// CompanyActive — активна ли выбранная (активная) компания сессии из
-	// токена. nil (Администратор системы) → true.
+	// токена. nil (активной компании нет) → true.
 	CompanyActive(ctx context.Context, companyID *int64) (bool, error)
-	// ListUsers — профили по id (включая скрытых — как «собеседники»
-	// в листинге Flask).
+	// ListUsers — профили по id (включая неактивных — как «собеседники»
+	// в листинге).
 	ListUsers(ctx context.Context, ids []int64) ([]*User, error)
-	// DevChatUserIDs — адресаты событий dev-чата: владелец + все видимые
-	// Администраторы системы (company_id IS NULL).
+	// DevChatUserIDs — адресаты событий dev-чата: владелец + все активные
+	// супер-админы (техподдержка).
 	DevChatUserIDs(ctx context.Context, ownerID int64) ([]int64, error)
 }
 

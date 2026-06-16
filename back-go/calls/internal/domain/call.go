@@ -31,10 +31,11 @@ const (
 )
 
 // Call — запись звонка (история в БД + текущий статус).
+// CompanyID опционален: звонок возможен между людьми без общей компании.
 type Call struct {
 	ID             int64
 	InitiatorID    int64
-	CompanyID      int64
+	CompanyID      *int64
 	Kind           string
 	Status         string
 	Media          string
@@ -89,12 +90,13 @@ type Participant struct {
 	AvatarPath *string
 }
 
-// User — проекция пользователя платформы (только нужное звонкам).
+// User — проекция идентичности пользователя платформы (только нужное звонкам).
+// Принадлежность к компаниям и роли — не здесь (user_companies, токен).
 type User struct {
 	ID            int64
 	FIO           string
 	AvatarPath    *string
-	CompanyID     *int64
-	IsHidden      bool
+	IsActive      bool
+	IsSuperAdmin  bool
 	CompanyActive bool
 }

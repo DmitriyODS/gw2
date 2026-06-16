@@ -42,6 +42,20 @@
       </div>
 
       <div class="sidebar-bottom">
+        <!-- «Создать компанию» — доступно любому авторизованному пользователю
+             (кроме платформенного супер-админа, у которого есть раздел Компании). -->
+        <button
+          v-if="!isSuperAdmin()"
+          class="nav-btn create-company-btn"
+          @click="showCreateCompany = true"
+          title="Создать компанию"
+        >
+          <span class="nav-btn-icon">
+            <span class="material-symbols-outlined">add_business</span>
+          </span>
+          <span class="nav-label">Создать компанию</span>
+        </button>
+
         <button class="user-row" @click="router.push('/profile')" title="Профиль">
           <img
             data-tutorial="profile-avatar"
@@ -53,6 +67,8 @@
         </button>
       </div>
     </div>
+
+    <CreateCompanyDialog v-model="showCreateCompany" />
   </nav>
 </template>
 
@@ -65,18 +81,24 @@ import { usePermission, ROLES } from '@/composables/usePermission.js'
 import { useCompanySettings } from '@/composables/useCompanySettings.js'
 import { useChangelog } from '@/composables/useChangelog.js'
 import CompanySelect from '@/components/common/CompanySelect.vue'
+import CreateCompanyDialog from '@/components/common/CreateCompanyDialog.vue'
 import Logo from '@/components/common/Logo.vue'
 
 const route = useRoute()
 const router = useRouter()
 const authStore = useAuthStore()
 const messenger = useMessengerStore()
-const { isAtLeast } = usePermission()
+const { isAtLeast, isSuperAdmin, canManageCompanies } = usePermission()
 const { usesGroove } = useCompanySettings()
 const { open: openChangelog } = useChangelog()
 
 const hovered = ref(false)
 const companyDropdownOpen = ref(false)
+const showCreateCompany = ref(false)
+
+// Активная компания есть только у обычного пользователя-члена (roleLevel>0).
+// У супер-админа активной компании нет — компанийный контент он не видит.
+const hasActiveCompany = computed(() => !isSuperAdmin() && authStore.roleLevel > 0)
 
 // Сайдбар развёрнут, пока курсор на нём — ИЛИ пока открыта overlay-выпадашка
 // CompanySelect: пользователь уже навёл курсор на пункт в overlay-панели,
@@ -84,37 +106,51 @@ const companyDropdownOpen = ref(false)
 // сайдбар бы свернулся, выпадашка пропала бы. Держим его развёрнутым по флагу.
 const expanded = computed(() => hovered.value || companyDropdownOpen.value)
 
-// Состав боковой панели по ролям (см. PLAN_V3.md):
-//   Сотрудник/Менеджер/Руководитель: Задачи, Статистика, Мессенджер,
-//     Сотрудники [+ Списки от Руководителя], Настройки, Аккаунт.
-//   Администратор системы: всё то же + Компании + Списки.
+// Состав боковой панели по новой модели прав:
+//   Член компании (Сотрудник/Менеджер/Администратор): Задачи, Статистика,
+//     Мессенджер, [Мой Groove], Сотрудники [+ Списки от Администратора].
+//   Супер-админ (нет активной компании): Мессенджер + Компании — компанийный
+//     контент ему недоступен.
+//   Любой авторизованный: Мессенджер, Создать компанию, Настройки, Аккаунт.
 const navItems = computed(() => {
-  const items = [
-    { path: '/tasks', icon: 'grid_view', label: 'Задачи', tutorial: 'nav-tasks',
-      active: () => route.path === '/tasks' },
-    { path: '/stats', icon: 'query_stats', label: 'Статистика', tutorial: 'nav-stats',
-      active: () => route.path === '/stats' },
-    { path: '/messenger', icon: 'chat', label: 'Мессенджер', tutorial: 'nav-messenger',
-      active: () => route.path.startsWith('/messenger'),
-      badge: () => messenger.totalUnread },
-    // «Мой Groove» — только если компания не выключила режим грувиков.
-    ...(usesGroove.value ? [{ path: '/groove', icon: 'celebration', label: 'Мой Groove', tutorial: 'nav-groove',
-      active: () => route.path === '/groove' }] : []),
-    { path: '/employees', icon: 'groups', label: 'Сотрудники', tutorial: 'nav-employees',
-      active: () => route.path === '/employees' },
-  ]
+  const items = []
 
-  // Раздел "Компании" — только Администратор системы.
-  if (isAtLeast(ROLES.ADMIN)) {
-    items.push({ path: '/companies', icon: 'domain', label: 'Компании', tutorial: 'nav-companies',
-      active: () => route.path.startsWith('/companies') })
+  // Компанийный контент — только при наличии активной компании.
+  if (hasActiveCompany.value) {
+    items.push(
+      { path: '/tasks', icon: 'grid_view', label: 'Задачи', tutorial: 'nav-tasks',
+        active: () => route.path === '/tasks' },
+      { path: '/stats', icon: 'query_stats', label: 'Статистика', tutorial: 'nav-stats',
+        active: () => route.path === '/stats' },
+    )
   }
 
-  // Раздел "Списки" — от Руководителя (новый, ex-настройки). Сотрудникам
-  // и Менеджерам — только просмотр через будущий API, ссылка скрыта.
-  if (isAtLeast(ROLES.DIRECTOR)) {
-    items.push({ path: '/lists', icon: 'list_alt', label: 'Списки', tutorial: 'nav-lists',
-      active: () => route.path.startsWith('/lists') })
+  // Мессенджер доступен всегда (в т.ч. без активной компании).
+  items.push({ path: '/messenger', icon: 'chat', label: 'Мессенджер', tutorial: 'nav-messenger',
+    active: () => route.path.startsWith('/messenger'),
+    badge: () => messenger.totalUnread })
+
+  if (hasActiveCompany.value) {
+    // «Мой Groove» — только если компания не выключила режим грувиков.
+    if (usesGroove.value) {
+      items.push({ path: '/groove', icon: 'celebration', label: 'Мой Groove', tutorial: 'nav-groove',
+        active: () => route.path === '/groove' })
+    }
+    items.push({ path: '/employees', icon: 'groups', label: 'Сотрудники', tutorial: 'nav-employees',
+      active: () => route.path === '/employees' })
+
+    // Раздел "Списки" — от Администратора компании.
+    if (isAtLeast(ROLES.ADMIN)) {
+      items.push({ path: '/lists', icon: 'list_alt', label: 'Списки', tutorial: 'nav-lists',
+        active: () => route.path.startsWith('/lists') })
+    }
+  }
+
+  // Раздел "Компании" — платформенный супер-админ (все компании) ИЛИ
+  // администратор/создатель хотя бы одной компании (свои компании).
+  if (canManageCompanies()) {
+    items.push({ path: '/companies', icon: 'domain', label: isSuperAdmin() ? 'Компании' : 'Мои компании',
+      tutorial: 'nav-companies', active: () => route.path.startsWith('/companies') })
   }
 
   items.push({ path: '/settings', icon: 'settings', label: 'Настройки', tutorial: 'nav-settings',
@@ -267,7 +303,10 @@ const avatarSrc = computed(() => {
   border: 2px solid var(--gw-sidebar-bg, var(--color-surface));
 }
 
-.sidebar-bottom { margin-top: auto; padding-top: 16px; }
+.sidebar-bottom { margin-top: auto; padding-top: 16px; display: flex; flex-direction: column; gap: 6px; }
+
+.create-company-btn { color: var(--gw-primary); }
+.create-company-btn:hover { background: var(--gw-primary-light); color: var(--gw-primary); }
 
 .user-row {
   display: flex;

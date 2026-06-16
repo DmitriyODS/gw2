@@ -85,8 +85,8 @@ type EmployeeRef struct {
 	FIO string
 }
 
-// StatsRepository — выборки статистики (порт stats_repo).
-// company_id nil — все компании (Администратор системы без контекста).
+// StatsRepository — выборки статистики (порт stats_repo). Статистика всегда в
+// пределах активной компании; companyID приходит из токена и непустой.
 type StatsRepository interface {
 	CommonMetrics(ctx Ctx, start, end time.Time, companyID *int64) (*CommonMetrics, error)
 	TasksByHours(ctx Ctx, start, end time.Time, companyID *int64) ([]TaskHours, error)

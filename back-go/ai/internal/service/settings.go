@@ -10,9 +10,10 @@ import (
 	"github.com/DmitriyODS/gw2/back-go/ai/internal/secret"
 )
 
-// resolveCompany — компания (404) + проверка доступа (_check_access во Flask):
-// Администратор системы (is_root_admin) — любая компания, остальные —
-// только своя. Уровень роли (DIRECTOR+) проверяет транспорт.
+// resolveCompany — компания (404) + проверка доступа: AI-настройками управляет
+// администратор ИМЕННО этой компании, т.е. компания из пути должна совпасть с
+// активной компанией сессии. Супер-админ компанийные AI-настройки не управляет.
+// Уровень роли (Администратор, ≥ 3) проверяет транспорт.
 func (s *Service) resolveCompany(ctx context.Context, actor *domain.User, companyID int64) (*domain.CompanyAI, error) {
 	company, err := s.repo.GetCompanyAI(ctx, companyID)
 	if err != nil {
@@ -20,9 +21,6 @@ func (s *Service) resolveCompany(ctx context.Context, actor *domain.User, compan
 	}
 	if company == nil {
 		return nil, errNotFound()
-	}
-	if actor.IsRootAdmin {
-		return company, nil
 	}
 	if actor.CompanyID != nil && *actor.CompanyID == company.ID {
 		return company, nil

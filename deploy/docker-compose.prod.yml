@@ -31,6 +31,10 @@ services:
 
   auth:
     image: osipovskijdima/groove_work:${AUTH_TAG:-auth}
+    environment:
+      # Публичный базовый URL приложения — ссылки подтверждения email в письмах
+      # (https://gw.example.com → .../verify-email?token=...).
+      APP_PUBLIC_BASE_URL: ${APP_PUBLIC_BASE_URL:-https://gw.kodass.ru}
 
   messenger:
     image: osipovskijdima/groove_work:${MESSENGER_TAG:-messenger}
@@ -59,6 +63,20 @@ services:
       # FCM service-account JSON (содержимое ключа Firebase). Без него pushsvc
       # работает, но пуши не отправляются.
       FIREBASE_CREDENTIALS_JSON: ${FIREBASE_CREDENTIALS_JSON:-}
+
+  mail:
+    image: osipovskijdima/groove_work:${MAIL_TAG:-mail}
+    environment:
+      # SMTP-параметры отправителя писем (см. deploy/.env). HOST/PORT/FROM
+      # обязательны; USER/PASSWORD опциональны (для серверов без авторизации),
+      # TLS: starttls (587) | tls (465) | none.
+      SMTP_HOST: ${SMTP_HOST:?SMTP_HOST обязателен}
+      SMTP_PORT: ${SMTP_PORT:?SMTP_PORT обязателен}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+      SMTP_FROM: ${SMTP_FROM:?SMTP_FROM обязателен}
+      SMTP_FROM_NAME: ${SMTP_FROM_NAME:-Groove Work}
+      SMTP_TLS: ${SMTP_TLS:-starttls}
 
   nginx:
     image: osipovskijdima/groove_work:${FRONT_TAG:-front}

@@ -86,20 +86,20 @@ func (s *Service) SendMessage(ctx context.Context, convID, senderID int64,
 		if task == nil {
 			return nil, domain.NewError("TASK_NOT_FOUND", "Задача не найдена", 404)
 		}
-		if conv.CompanyID != 0 && task.CompanyID != conv.CompanyID {
+		if conv.CompanyID != nil && task.CompanyID != *conv.CompanyID {
 			return nil, domain.NewError("TASK_WRONG_COMPANY", "Задача из другой компании", 400)
 		}
 		kind = domain.KindTask
 	}
 
-	// Ответ Администратора системы в dev-чате — спец-kind: фронт рисует
-	// badge «Разработчики». Для kind='task' плашка задачи приоритетнее.
+	// Ответ супер-админа в dev-чате — спец-kind: фронт рисует badge
+	// «Разработчики». Для kind='task' плашка задачи приоритетнее.
 	if conv.IsDevChat && kind == domain.KindText {
 		sender, err := s.users.GetUser(ctx, senderID)
 		if err != nil {
 			return nil, err
 		}
-		if sender != nil && sender.CompanyID == nil {
+		if sender != nil && sender.IsSuperAdmin {
 			kind = domain.KindDevReply
 		}
 	}

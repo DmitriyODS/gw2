@@ -41,7 +41,7 @@
     <div ref="bodyRef" class="admin-body">
       <!-- Системный администратор без выбранной компании — placeholder. -->
       <div
-        v-if="!effectiveCompanyId && auth.isRootAdmin"
+        v-if="!effectiveCompanyId && auth.isSuperAdmin"
         class="placeholder"
       >
         <div class="placeholder-icon">

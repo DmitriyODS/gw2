@@ -14,16 +14,24 @@ import (
 	"github.com/gofiber/fiber/v2"
 )
 
-// Claims — авторизационные клеймы access-токена. Нулевой UserID —
-// токен невалиден/отсутствует. CompanyID/RoleLevel/IsRootAdmin описывают
-// АКТИВНУЮ компанию сессии (для многокомпанийных юзеров — выбранную при
-// login/switch); CompanyID == nil ⇔ Администратор системы.
+// Claims — авторизационные клеймы access-токена. Нулевой UserID — токен
+// невалиден/отсутствует.
+//
+// Идентичность пользователя (UserID) развязана с компаниями. CompanyID/RoleLevel
+// описывают АКТИВНУЮ компанию сессии (выбранную при login/switch) и опциональны:
+// CompanyID == nil означает, что активной компании нет — это НОРМАЛЬНОЕ состояние
+// (мессенджер, профиль, контакты), а не признак админа. RoleLevel значим только
+// при CompanyID != nil — это роль пользователя именно в этой компании.
+//
+// IsSuperAdmin — платформенный супер-админ: отдельный класс, видит все компании и
+// пользователей, но к компанийной функциональности (задачи, грувики, YouGile)
+// доступа не имеет.
 type Claims struct {
-	UserID      int64
-	ForceChange bool
-	CompanyID   *int64
-	RoleLevel   int
-	IsRootAdmin bool
+	UserID       int64
+	ForceChange  bool
+	IsSuperAdmin bool
+	CompanyID    *int64
+	RoleLevel    int
 }
 
 // Verifier — проверка подписи и клеймов access-токена.
@@ -58,14 +66,14 @@ func (v *Verifier) ParseAccess(raw string) Claims {
 	if err != nil || id <= 0 {
 		return Claims{}
 	}
-	var fc, ra bool
+	var fc, sa bool
 	var cid *int64
 	var rl int
 	_ = t.Get("force_change", &fc)
 	_ = t.Get("company_id", &cid)
 	_ = t.Get("role_level", &rl)
-	_ = t.Get("is_root_admin", &ra)
-	return Claims{UserID: id, ForceChange: fc, CompanyID: cid, RoleLevel: rl, IsRootAdmin: ra}
+	_ = t.Get("is_super_admin", &sa)
+	return Claims{UserID: id, ForceChange: fc, IsSuperAdmin: sa, CompanyID: cid, RoleLevel: rl}
 }
 
 // FromRequest — клеймы из Bearer-заголовка Fiber-запроса.

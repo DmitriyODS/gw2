@@ -13,12 +13,12 @@ const (
 	DefaultModelEmbedding = "text-embedding-3-small"
 )
 
-// Уровни ролей — общие с back/app/utils/permissions.py.
+// Уровни ролей в компании (user_companies.role): 1/2/3. Системной роли 4 нет —
+// платформенный супер-админ это отдельный класс (users.is_super_admin).
 const (
 	LevelEmployee = 1
 	LevelManager  = 2
-	LevelDirector = 3
-	LevelAdmin    = 4
+	LevelAdmin    = 3
 )
 
 // CompanyAI — AI-срез строки companies.
@@ -91,11 +91,13 @@ func (c *TVWeekContext) Meaningful() bool {
 }
 
 // User — пользователь в объёме auth-мидлвари и проверки доступа к настройкам.
+// Идентичность развязана с компаниями: RoleLevel/CompanyID берутся из токена
+// (активная компания сессии), а не из таблицы users.
 type User struct {
 	ID            int64
 	RoleLevel     int
 	CompanyID     *int64
-	IsHidden      bool
-	IsRootAdmin   bool
+	IsActive      bool
+	IsSuperAdmin  bool
 	CompanyActive bool
 }

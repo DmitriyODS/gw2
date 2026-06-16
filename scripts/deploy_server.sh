@@ -139,6 +139,14 @@ fi
 if ! grep -qE '^YOUGILE_WEBHOOK_PUBLIC_BASE=..*' "$ENV_FILE"; then
   warn "YOUGILE_WEBHOOK_PUBLIC_BASE пуст — вебхуки YouGile не зарегистрируются"
 fi
+# SMTP — секреты оператора (не генерируем). Без них прод-оверлей не поднимет
+# mailsvc (HOST/FROM обязательны), а регистрация с подтверждением email не пройдёт.
+if ! grep -qE '^SMTP_HOST=..*' "$ENV_FILE" || ! grep -qE '^SMTP_FROM=..*' "$ENV_FILE"; then
+  warn "SMTP_HOST/SMTP_FROM пусты — заполните в $ENV_FILE, иначе письма подтверждения email не уйдут (mailsvc)"
+fi
+if ! grep -qE '^APP_PUBLIC_BASE_URL=..*' "$ENV_FILE"; then
+  warn "APP_PUBLIC_BASE_URL пуст — ссылки подтверждения email используют домен по умолчанию"
+fi
 
 if [ "$ENV_CHANGED" -eq 1 ]; then
   ok "$ENV_FILE обновлён (бэкап лежит рядом)"
@@ -350,6 +358,14 @@ if [ "$push_code" = "401" ]; then
   ok "маршрут /api/push через nginx ведёт в pushsvc"
 else
   warn "маршрут /api/push вернул $push_code (ожидался 401) — проверьте nginx"
+fi
+
+# Микросервис почты: healthz изнутри контейнера (наружу не торчит — gRPC-only,
+# через nginx не проксируется).
+if $COMPOSE exec -T mail wget -qO- --timeout=3 http://127.0.0.1:8098/healthz >/dev/null 2>&1; then
+  ok "mailsvc отвечает (healthz)"
+else
+  warn "mailsvc не отвечает — письма подтверждения email не уйдут: make logs s=mail"
 fi
 
 lk_code=$(curl -skL -o /dev/null -w '%{http_code}' --max-time 5 http://localhost/livekit/ || true)

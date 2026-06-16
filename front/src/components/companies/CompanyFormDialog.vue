@@ -86,7 +86,7 @@
       <div v-if="isEdit" class="field">
         <label class="lbl">Участники</label>
         <div class="members">
-          <div v-if="!members.length" class="members-empty">В компании пока только руководитель и добавленные сотрудники.</div>
+          <div v-if="!members.length" class="members-empty">В компании пока только создатель и добавленные сотрудники.</div>
           <div v-for="m in members" :key="m.id" class="member-row">
             <span class="member-ava">{{ initials(m.fio) }}</span>
             <span class="member-main">
@@ -243,9 +243,9 @@ async function loadMembers() {
 
 async function loadRoleOptions() {
   try {
-    const roles = await getRoles()
-    // В компании роли только Сотрудник/Менеджер/Руководитель (без Администратора).
-    roleOptions.value = (roles || []).filter((r) => r.level < 4)
+    // Все роли — компанийные (Сотрудник/Менеджер/Администратор); платформенный
+    // супер-админ задаётся флагом, а не ролью, и в списке ролей не присутствует.
+    roleOptions.value = (await getRoles()) || []
   } catch {
     roleOptions.value = []
   }

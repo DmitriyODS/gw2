@@ -92,8 +92,8 @@ function quoted(c) {
 }
 
 function canDelete(c) {
-  if (c.is_bot) return myLevel.value >= ROLES.DIRECTOR
-  return c.author?.id === groove.myId || myLevel.value >= ROLES.DIRECTOR
+  if (c.is_bot) return myLevel.value >= ROLES.ADMIN
+  return c.author?.id === groove.myId || myLevel.value >= ROLES.ADMIN
 }
 
 async function send() {

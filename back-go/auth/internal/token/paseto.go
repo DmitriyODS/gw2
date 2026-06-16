@@ -5,9 +5,10 @@
 // они не могут. Refresh-токен — v4.local (XChaCha20-Poly1305) с отдельным
 // симметричным ключом: его читает только сам authsvc.
 //
-// Клеймы access-токена повторяют прежние JWT additional_claims Flask:
-// sub (id строкой), type=access, force_change, company_id, company_name,
-// company_settings, role_level, is_root_admin.
+// Клеймы access-токена: sub (id строкой), type=access, force_change,
+// is_super_admin и опциональный контекст активной компании (company_id,
+// company_name, company_settings, role_level). «Нет активной компании» —
+// нормальное состояние (мессенджер/профиль), а не признак админа.
 package token
 
 import (
@@ -23,11 +24,11 @@ import (
 type Claims struct {
 	UserID          int64
 	ForceChange     bool
+	IsSuperAdmin    bool
 	CompanyID       *int64
 	CompanyName     *string
 	CompanySettings map[string]any
 	RoleLevel       int
-	IsRootAdmin     bool
 }
 
 type Issuer struct {
@@ -71,11 +72,11 @@ func (i *Issuer) AccessToken(c Claims) (string, error) {
 	t.SetString("type", "access")
 	if err := setAll(&t, map[string]any{
 		"force_change":     c.ForceChange,
+		"is_super_admin":   c.IsSuperAdmin,
 		"company_id":       c.CompanyID,
 		"company_name":     c.CompanyName,
 		"company_settings": c.CompanySettings,
 		"role_level":       c.RoleLevel,
-		"is_root_admin":    c.IsRootAdmin,
 	}); err != nil {
 		return "", err
 	}
@@ -87,7 +88,7 @@ func (i *Issuer) AccessToken(c Claims) (string, error) {
 const selectTTL = 5 * time.Minute
 
 // RefreshToken — refresh-токен несёт user_id и АКТИВНУЮ компанию сессии
-// (companyID, nil у Администратора системы): на refresh выбранная компания
+// (companyID, nil — активной компании нет): на refresh выбранная компания
 // восстанавливается без обращения к localStorage.
 func (i *Issuer) RefreshToken(userID int64, companyID *int64) (string, error) {
 	t := paseto.NewToken()

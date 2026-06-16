@@ -134,39 +134,11 @@
           </div>
         </div>
 
-        <!-- ИИ-настройки (Руководитель своей компании / Администратор системы).
-             Монтируем только если у пользователя есть права И раздел открыт —
-             иначе onMounted дёргает /api/ai/settings, бэк отдаёт 403, а
-             notif.error превращается в спам при заходе в Настройки. -->
-        <div v-show="activeSection === 'ai'" class="pane-block">
-          <AiSettings v-if="isAtLeast(ROLES.DIRECTOR) && activeSection === 'ai'" />
-        </div>
-
-        <!-- YouGile — личный коннект (любой авторизованный с компанией). -->
+        <!-- YouGile — личный коннект (любой авторизованный с компанией).
+             Настройки компании (ИИ, выходные, «Мой Groove», ссылка-приглашение,
+             YouGile-компания) переехали в раздел «Компании» → карточка компании. -->
         <div v-show="activeSection === 'yougile'" class="pane-block">
           <YougileUserSettings v-if="hasCompany && activeSection === 'yougile'" />
-        </div>
-
-        <!-- YouGile — настройки компании (Руководитель+). Тот же приём:
-             без v-if не-директор всё равно получал бы 403 от
-             /yougile/company-settings при заходе в любой другой раздел. -->
-        <div v-show="activeSection === 'yougile-company'" class="pane-block">
-          <YougileCompanySettings v-if="isAtLeast(ROLES.DIRECTOR) && hasCompany && activeSection === 'yougile-company'" />
-        </div>
-
-        <!-- Выходные дни компании (Руководитель+ / Администратор системы). -->
-        <div v-show="activeSection === 'weekends'" class="pane-block">
-          <WeekendSettings v-if="isAtLeast(ROLES.DIRECTOR) && activeSection === 'weekends'" />
-        </div>
-
-        <!-- Режим «Мой Groove» компании (Руководитель+ / Администратор системы). -->
-        <div v-show="activeSection === 'groove'" class="pane-block">
-          <GrooveSettings v-if="isAtLeast(ROLES.DIRECTOR) && activeSection === 'groove'" />
-        </div>
-
-        <!-- Ссылка-приглашение в компанию (Руководитель своей компании). -->
-        <div v-show="activeSection === 'invite'" class="pane-block">
-          <CompanyInviteSettings v-if="isAtLeast(ROLES.DIRECTOR) && hasCompany && activeSection === 'invite'" />
         </div>
 
         <!-- Справка -->
@@ -217,12 +189,7 @@ import { exportBackup, importBackup } from '@/api/backup.js'
 import ThemeBuilder from '@/components/settings/ThemeBuilder.vue'
 import HelpCenter from '@/components/settings/HelpCenter.vue'
 import AboutApp from '@/components/settings/AboutApp.vue'
-import AiSettings from '@/components/settings/AiSettings.vue'
 import YougileUserSettings from '@/components/settings/YougileUserSettings.vue'
-import YougileCompanySettings from '@/components/settings/YougileCompanySettings.vue'
-import WeekendSettings from '@/components/settings/WeekendSettings.vue'
-import GrooveSettings from '@/components/settings/GrooveSettings.vue'
-import CompanyInviteSettings from '@/components/settings/CompanyInviteSettings.vue'
 import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
 
 const { isAtLeast } = usePermission()
@@ -252,31 +219,18 @@ const allGroups = computed(() => [
       // YouGile (личный) — только для НЕ-директоров и только для тех, кто
       // привязан к компании. Root-администратор системы (без company_id)
       // эту настройку видеть не должен: она бессмысленна без компании.
-      ...((!isAtLeast(ROLES.DIRECTOR) && hasCompany.value) ? [
+      ...((!isAtLeast(ROLES.ADMIN) && hasCompany.value) ? [
         { key: 'yougile', title: 'YouGile', desc: 'Подключение личного аккаунта для импорта и создания карточек', icon: 'sync_alt', tone: 'secondary' },
       ] : []),
       { key: 'help', title: 'Справка', desc: 'Как пользоваться разделами платформы', icon: 'help_center', tone: 'secondary' },
       { key: 'about', title: 'О приложении', desc: 'Версия, тур, написать в техподдержку', icon: 'info', tone: 'tertiary' },
     ],
   },
-  ...(isAtLeast(ROLES.DIRECTOR) ? [{
-    key: 'admin',
-    label: 'Администрирование',
-    sections: [
-      { key: 'ai', title: 'Нейро-функции', desc: 'Подключение ProxyAPI: факт дня и семантический поиск', icon: 'smart_toy', tone: 'tertiary' },
-      { key: 'weekends', title: 'Выходные дни', desc: 'Дни отдыха компании: Грувик не зовёт работать и предлагает активности', icon: 'weekend', tone: 'secondary' },
-      { key: 'groove', title: 'Мой Groove', desc: 'Геймификация: питомцы-Грувики, лента, реакции, кудосы и рейды', icon: 'celebration', tone: 'tertiary' },
-      // Интеграция с YouGile завязана на конкретную компанию. Root-админ
-      // системы (без company_id) не настраивает её — это делает директор
-      // конкретной компании. Поэтому пункт показываем только если
-      // hasCompany.
-      ...(hasCompany.value ? [
-        { key: 'invite', title: 'Ссылка-приглашение', desc: 'Пригласить сотрудников в компанию по ссылке', icon: 'link', tone: 'secondary' },
-        { key: 'yougile-company', title: 'Интеграция с YouGile', desc: 'Личный коннект директора + выбор компании, проекта и доски', icon: 'integration_instructions', tone: 'primary' },
-      ] : []),
-    ],
-  }] : []),
-  ...(isAtLeast(ROLES.ADMIN) ? [{
+  // Настройки компании (ИИ, выходные, «Мой Groove», ссылка-приглашение,
+  // интеграция YouGile) переехали в раздел «Компании» → карточка компании:
+  // один пользователь может администрировать несколько компаний, и настройки
+  // привязаны к конкретной компании, а не к активной сессии.
+  ...(authStore.isSuperAdmin ? [{
     key: 'system',
     label: 'Система',
     sections: [

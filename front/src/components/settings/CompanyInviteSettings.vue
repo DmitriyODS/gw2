@@ -25,20 +25,23 @@ import { ref, computed, onMounted } from 'vue'
 import { useAuthStore } from '@/stores/auth.js'
 import { getCompanyInvite, regenerateCompanyInvite } from '@/api/companies.js'
 
+const props = defineProps({ companyId: { type: Number, default: null } })
 const auth = useAuthStore()
 const code = ref('')
 const busy = ref(false)
 const copied = ref(false)
 const error = ref('')
 
+// Явный companyId (страница управления компанией) приоритетнее активной.
+const companyId = computed(() => props.companyId ?? auth.companyId)
 const inviteUrl = computed(() => (code.value ? `${window.location.origin}/join/${code.value}` : ''))
 
 onMounted(load)
 
 async function load() {
-  if (auth.companyId == null) return
+  if (companyId.value == null) return
   try {
-    const res = await getCompanyInvite(auth.companyId)
+    const res = await getCompanyInvite(companyId.value)
     code.value = res.code || ''
   } catch (e) {
     error.value = e?.message || 'Не удалось загрузить ссылку'
@@ -46,11 +49,11 @@ async function load() {
 }
 
 async function regen() {
-  if (auth.companyId == null) return
+  if (companyId.value == null) return
   busy.value = true
   error.value = ''
   try {
-    const res = await regenerateCompanyInvite(auth.companyId)
+    const res = await regenerateCompanyInvite(companyId.value)
     code.value = res.code || ''
   } catch (e) {
     error.value = e?.message || 'Не удалось создать ссылку'

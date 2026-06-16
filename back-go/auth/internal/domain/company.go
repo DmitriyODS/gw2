@@ -20,8 +20,9 @@ func DefaultCompanySettings() map[string]any {
 // DefaultWeekend — суббота и воскресенье (DEFAULT_WEEKEND из utils/workweek.py).
 var DefaultWeekend = []int{5, 6}
 
-// CompanyDirector — корневой Руководитель в объёме CompanyDirectorRefSchema.
-type CompanyDirector struct {
+// CompanyCreator — создатель компании (информативно, без особых прав:
+// администраторы равны).
+type CompanyCreator struct {
 	ID         int64
 	FIO        string
 	Login      string
@@ -34,8 +35,8 @@ type Company struct {
 	ID          int64
 	Name        string
 	Description *string
-	DirectorID  *int64
-	Director    *CompanyDirector
+	CreatedBy   *int64
+	Creator     *CompanyCreator
 	IsActive    bool
 	Settings    map[string]any
 	CreatedAt   time.Time

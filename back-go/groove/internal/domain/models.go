@@ -16,13 +16,16 @@ type UserRef struct {
 }
 
 // User — пользователь в объёме проверок groove (кудосы, поглаживания).
+// Идентичность пользователя — из users; активная компания и роль приходят
+// из access-токена и проставляются транспортом, не читаются из users.
 type User struct {
 	ID            int64
 	FIO           string
 	AvatarPath    *string
-	CompanyID     *int64
-	IsHidden      bool
-	RoleLevel     int
+	IsActive      bool
+	IsSuperAdmin  bool
+	CompanyID     *int64 // активная компания из токена (не из users)
+	RoleLevel     int    // уровень роли в активной компании из токена
 	CompanyActive bool
 }
 
@@ -124,7 +127,6 @@ type PetConversation struct {
 // UserLocation — локация пользователя для погодных механик Грувика.
 type UserLocation struct {
 	UserID    int64
-	CompanyID int64 // подтягивается из users при чтении
 	Lat       float64
 	Lon       float64
 	City      *string

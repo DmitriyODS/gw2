@@ -134,10 +134,22 @@ func (r *fakeRepo) ListHistoryForUser(context.Context, int64, int) ([]*domain.Ca
 	return nil, nil
 }
 
-type fakeUsers map[int64]*domain.User
+// fakeUsers — идентичности пользователей; принадлежность к компаниям задаётся
+// отдельно (primary), как в реальной развязанной модели (users без company_id).
+type fakeUsers struct {
+	byID    map[int64]*domain.User
+	primary map[int64]int64 // user_id → primary company (0 = без компании)
+}
+
+func newFakeUsers(byID map[int64]*domain.User, primary map[int64]int64) fakeUsers {
+	if primary == nil {
+		primary = map[int64]int64{}
+	}
+	return fakeUsers{byID: byID, primary: primary}
+}
 
 func (f fakeUsers) GetUser(_ context.Context, id int64) (*domain.User, error) {
-	u, ok := f[id]
+	u, ok := f.byID[id]
 	if !ok {
 		return nil, nil
 	}
@@ -149,7 +161,7 @@ func (f fakeUsers) CompanyActive(_ context.Context, _ *int64) (bool, error) { re
 func (f fakeUsers) ListVisibleUsers(_ context.Context, ids []int64) ([]*domain.User, error) {
 	var out []*domain.User
 	for _, id := range ids {
-		if u, ok := f[id]; ok && !u.IsHidden {
+		if u, ok := f.byID[id]; ok && u.IsActive {
 			out = append(out, u)
 		}
 	}
@@ -161,8 +173,8 @@ func (f fakeUsers) Memberships(_ context.Context, ids []int64) (map[int64]map[in
 	out := make(map[int64]map[int64]bool, len(ids))
 	for _, id := range ids {
 		set := map[int64]bool{}
-		if u, ok := f[id]; ok && u.CompanyID != nil {
-			set[*u.CompanyID] = true
+		if cid := f.primary[id]; cid != 0 {
+			set[cid] = true
 		}
 		out[id] = set
 	}
@@ -256,12 +268,12 @@ func newTestService() (*Service, *fakeRepo, *fakeMedia, *fakePub) {
 	repo := newFakeRepo()
 	media := &fakeMedia{occupants: map[string][]string{}}
 	pub := &fakePub{}
-	users := fakeUsers{
-		10: {ID: 10, FIO: "Инициатор", CompanyID: company(1), CompanyActive: true},
-		20: {ID: 20, FIO: "Собеседник", CompanyID: company(1), CompanyActive: true},
-		30: {ID: 30, FIO: "Третий", CompanyID: company(1), CompanyActive: true},
-		99: {ID: 99, FIO: "Чужой", CompanyID: company(2), CompanyActive: true},
-	}
+	users := newFakeUsers(map[int64]*domain.User{
+		10: {ID: 10, FIO: "Инициатор", IsActive: true, CompanyActive: true},
+		20: {ID: 20, FIO: "Собеседник", IsActive: true, CompanyActive: true},
+		30: {ID: 30, FIO: "Третий", IsActive: true, CompanyActive: true},
+		99: {ID: 99, FIO: "Чужой", IsActive: true, CompanyActive: true},
+	}, map[int64]int64{10: 1, 20: 1, 30: 1, 99: 2})
 	svc := New(repo, users, ringstate.New(), media, pub, &fakeMessenger{}, slog.Default())
 	svc.leftGrace = 0 // сверка после participant_left — синхронно
 	return svc, repo, media, pub
@@ -313,10 +325,10 @@ func TestStartCallEnsuresDialogAndPill(t *testing.T) {
 	media := &fakeMedia{occupants: map[string][]string{}}
 	pub := &fakePub{}
 	msgr := &fakeMessenger{nextConvID: 700}
-	users := fakeUsers{
-		10: {ID: 10, FIO: "Инициатор", CompanyID: company(1), CompanyActive: true},
-		20: {ID: 20, FIO: "Собеседник", CompanyID: company(1), CompanyActive: true},
-	}
+	users := newFakeUsers(map[int64]*domain.User{
+		10: {ID: 10, FIO: "Инициатор", IsActive: true, CompanyActive: true},
+		20: {ID: 20, FIO: "Собеседник", IsActive: true, CompanyActive: true},
+	}, map[int64]int64{10: 1, 20: 1})
 	svc := New(repo, users, ringstate.New(), media, pub, msgr, slog.Default())
 
 	resp, err := svc.StartCall(context.Background(), dto.StartCallRequest{
@@ -387,10 +399,10 @@ func TestStartCallSharedCompany(t *testing.T) {
 	media := &fakeMedia{occupants: map[string][]string{}}
 	pub := &fakePub{}
 	users := membershipUsers{
-		fakeUsers: fakeUsers{
-			10: {ID: 10, FIO: "Инициатор", CompanyID: company(1), CompanyActive: true},
-			99: {ID: 99, FIO: "Коллега", CompanyID: company(2), CompanyActive: true},
-		},
+		fakeUsers: newFakeUsers(map[int64]*domain.User{
+			10: {ID: 10, FIO: "Инициатор", IsActive: true, CompanyActive: true},
+			99: {ID: 99, FIO: "Коллега", IsActive: true, CompanyActive: true},
+		}, map[int64]int64{10: 1, 99: 2}),
 		extra: map[int64][]int64{10: {2}}, // инициатор также член компании 2
 	}
 	svc := New(repo, users, ringstate.New(), media, pub, &fakeMessenger{}, slog.Default())
@@ -402,8 +414,8 @@ func TestStartCallSharedCompany(t *testing.T) {
 		t.Fatalf("звонок мультикомпанийному коллеге должен проходить: %v", err)
 	}
 	stored, _ := repo.GetCall(context.Background(), resp.Call.ID)
-	if stored.CompanyID != 2 {
-		t.Errorf("компания звонка = %d, ожидалась общая 2", stored.CompanyID)
+	if stored.CompanyID == nil || *stored.CompanyID != 2 {
+		t.Errorf("компания звонка = %v, ожидалась общая 2", stored.CompanyID)
 	}
 }
 
@@ -623,7 +635,7 @@ func TestWebhookLeftWithoutRingStateKeepsLiveCall(t *testing.T) {
 	ctx := context.Background()
 	ts := time.Now().UTC()
 
-	call := &domain.Call{InitiatorID: 10, CompanyID: 1, Kind: domain.KindGroup,
+	call := &domain.Call{InitiatorID: 10, CompanyID: company(1), Kind: domain.KindGroup,
 		Status: domain.StatusActive, Media: domain.MediaVideo, StartedAt: ts}
 	must(t, repo.CreateCall(ctx, call, []*domain.Participant{
 		{UserID: 10, Role: domain.RoleInitiator, InvitedAt: ts, JoinedAt: &ts},
@@ -651,7 +663,7 @@ func TestWebhookJoinWithoutRingStateActivates(t *testing.T) {
 	ctx := context.Background()
 	ts := time.Now().UTC()
 
-	call := &domain.Call{InitiatorID: 10, CompanyID: 1, Kind: domain.KindP2P,
+	call := &domain.Call{InitiatorID: 10, CompanyID: company(1), Kind: domain.KindP2P,
 		Status: domain.StatusRinging, Media: domain.MediaAudio, StartedAt: ts}
 	must(t, repo.CreateCall(ctx, call, []*domain.Participant{
 		{UserID: 10, Role: domain.RoleInitiator, InvitedAt: ts, JoinedAt: &ts},
@@ -698,14 +710,14 @@ func TestReconcileStartup(t *testing.T) {
 	ctx := context.Background()
 
 	// Звонок «завис» в ringing, комнаты в LiveKit нет → missed.
-	dead := &domain.Call{InitiatorID: 10, CompanyID: 1, Kind: domain.KindP2P,
+	dead := &domain.Call{InitiatorID: 10, CompanyID: company(1), Kind: domain.KindP2P,
 		Status: domain.StatusRinging, Media: domain.MediaVideo, StartedAt: time.Now().UTC()}
 	must(t, repo.CreateCall(ctx, dead, []*domain.Participant{
 		{UserID: 10, Role: domain.RoleInitiator, InvitedAt: time.Now().UTC()},
 	}))
 
 	// Живой active-звонок: комната существует, в ней двое → restore.
-	alive := &domain.Call{InitiatorID: 20, CompanyID: 1, Kind: domain.KindP2P,
+	alive := &domain.Call{InitiatorID: 20, CompanyID: company(1), Kind: domain.KindP2P,
 		Status: domain.StatusActive, Media: domain.MediaVideo, StartedAt: time.Now().UTC()}
 	must(t, repo.CreateCall(ctx, alive, []*domain.Participant{
 		{UserID: 20, Role: domain.RoleInitiator, InvitedAt: time.Now().UTC()},

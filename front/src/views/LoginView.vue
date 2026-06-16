@@ -36,6 +36,9 @@
               </button>
             </div>
           </div>
+          <div class="forgot-row">
+            <RouterLink to="/forgot-password" class="forgot-link">Забыли пароль?</RouterLink>
+          </div>
           <div v-if="cooldownSec > 0" class="cooldown-box" role="status" aria-live="polite">
             <span class="material-symbols-outlined">lock_clock</span>
             <div class="cooldown-text">
@@ -48,6 +51,11 @@
             {{ loginButtonLabel }}
           </button>
         </form>
+
+        <p class="switch-line">
+          Нет аккаунта?
+          <RouterLink to="/register" class="switch-link">Зарегистрироваться</RouterLink>
+        </p>
       </div>
     </div>
 
@@ -236,7 +244,10 @@ async function handleLogin() {
     }
     finishLogin(result.forceChange)
   } catch (e) {
-    if (e?.status === 429 && e?.retry_after_sec) {
+    if (e?.error === 'EMAIL_NOT_VERIFIED') {
+      // Email не подтверждён — ведём на экран ввода кода (с возможностью переотправки).
+      router.push({ path: '/verify-email', query: { email: e?.email || loginForm.login } })
+    } else if (e?.status === 429 && e?.retry_after_sec) {
       startCooldown(e.retry_after_sec)
     } else {
       loginError.value = e?.message || 'Неверный логин или пароль'
@@ -510,6 +521,37 @@ async function handleChangeDefault() {
   cursor: not-allowed;
   transform: none;
 }
+
+.switch-line {
+  margin: 20px 0 0;
+  text-align: center;
+  font-size: 14px;
+  color: var(--color-text-dim);
+}
+
+.switch-link {
+  color: var(--color-primary);
+  font-weight: 700;
+  text-decoration: none;
+  margin-left: 4px;
+}
+
+.switch-link:hover {
+  text-decoration: underline;
+}
+
+.forgot-row {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: -8px;
+}
+.forgot-link {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--color-text-dim);
+  text-decoration: none;
+}
+.forgot-link:hover { color: var(--color-primary); text-decoration: underline; }
 
 /* Company picker dialog */
 .company-picker {

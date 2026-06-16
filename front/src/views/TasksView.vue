@@ -93,7 +93,7 @@
 
     <div class="tasks-body">
       <!-- Рут-админ без выбранной компании -->
-      <div v-if="auth.isRootAdmin && !companiesStore.effectiveCompanyId" class="state-block empty-state">
+      <div v-if="auth.isSuperAdmin && !companiesStore.effectiveCompanyId" class="state-block empty-state">
         <span class="material-symbols-outlined empty-icon">domain</span>
         <p class="empty-title">Выберите компанию</p>
         <p class="empty-sub">Задачи ведутся в рамках компании. Выберите её в боковом меню.</p>

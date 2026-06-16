@@ -395,7 +395,7 @@ export const useMessengerStore = defineStore('messenger', () => {
       // Диалог появился впервые (или вернулся из «скрытых») — перезапрос
       // правильного списка. Для рут-админа dev-чаты живут в support-inbox,
       // для всех остальных — в обычном списке.
-      if (auth.isRootAdmin) fetchSupportInbox()
+      if (auth.isSuperAdmin) fetchSupportInbox()
       else fetchConversations()
     }
     recomputeUnread()

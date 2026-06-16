@@ -39,6 +39,14 @@ class MainActivity : ComponentActivity() {
     // отдельная CallActivity.
     private fun handleIntent(intent: Intent?) {
         intent ?: return
+        // Deep link из письма (App Links): verify-email / reset-password / invite.
+        if (intent.action == Intent.ACTION_VIEW) {
+            intent.data?.let { uri ->
+                DeepLink.parse(uri.path, uri.getQueryParameter("token"))?.let {
+                    container.pendingDeepLink.value = it
+                }
+            }
+        }
         intent.getStringExtra("route")?.let { route ->
             // «unit» — не маршрут навигации, а запрос открыть модалку текущего юнита.
             if (route == "unit") container.unitManager.requestShowSheet()

@@ -5,7 +5,7 @@
       :active-id="activeId"
       :loading="listLoading"
       :hide-on-mobile="isMobile && !!activeId"
-      :show-support-tab="authStore.isRootAdmin"
+      :show-support-tab="authStore.isSuperAdmin"
       :tab="listTab"
       :support-unread="supportTabUnread"
       @select="selectConversation"
@@ -592,25 +592,25 @@ const listTab = ref('chats')
    отображается на собственной вкладке. У обычных пользователей dev-чат с
    техподдержкой — это обычный диалог в общем списке, без отдельной вкладки. */
 const visibleConversations = computed(() => {
-  if (authStore.isRootAdmin && listTab.value === 'support') {
+  if (authStore.isSuperAdmin && listTab.value === 'support') {
     return messenger.supportInbox
   }
   return messenger.conversations
 })
 
 const listLoading = computed(() =>
-  listTab.value === 'support' && authStore.isRootAdmin
+  listTab.value === 'support' && authStore.isSuperAdmin
     ? messenger.loadingSupportInbox
     : messenger.loadingList
 )
 
 const supportTabUnread = computed(() =>
-  authStore.isRootAdmin ? messenger.supportUnread : 0
+  authStore.isSuperAdmin ? messenger.supportUnread : 0
 )
 
 async function onChangeTab(t) {
   listTab.value = t
-  if (t === 'support' && authStore.isRootAdmin && !messenger.supportInbox.length) {
+  if (t === 'support' && authStore.isSuperAdmin && !messenger.supportInbox.length) {
     await messenger.fetchSupportInbox()
   }
 }
@@ -784,7 +784,7 @@ onMounted(async () => {
   // (бейдж непрочитанных, активация глубокой ссылки на support-чат), но
   // не должен задерживать первичный рендер обычных диалогов.
   const tasks = [messenger.fetchConversations().catch(() => {})]
-  if (authStore.isRootAdmin) {
+  if (authStore.isSuperAdmin) {
     tasks.push(messenger.fetchSupportInbox().catch(() => {}))
   }
   await Promise.all(tasks)

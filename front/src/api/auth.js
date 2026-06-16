@@ -6,6 +6,31 @@ export const changeDefault = (data) => apiRequest('/auth/change-default', { meth
 
 export const login = (data) => apiRequest('/auth/login', { method: 'POST', body: data })
 
+// Регистрация нового пользователя ({fio, email, login, password}). Сессию НЕ
+// выдаёт — отвечает {status:'verification_required', email}; дальше нужно
+// подтвердить email кодом/ссылкой.
+export const register = (data) => apiRequest('/auth/register', { method: 'POST', body: data })
+
+// Подсказка свободного логина по ФИО (для live-заполнения поля на регистрации).
+export const suggestLogin = (fio) =>
+  apiRequest(`/auth/suggest-login?fio=${encodeURIComponent(fio)}`, { method: 'GET' })
+
+// Подтверждение email: по ссылке ({token}) или вводом кода ({email, code}).
+// Возвращает полноценную сессию (как login).
+export const verifyEmail = (data) => apiRequest('/auth/verify-email', { method: 'POST', body: data })
+
+// Повторная отправка письма с кодом подтверждения.
+export const resendVerification = (email) =>
+  apiRequest('/auth/resend-verification', { method: 'POST', body: { email } })
+
+// Запрос письма со ссылкой сброса пароля (ответ всегда ok — не раскрываем аккаунт).
+export const forgotPassword = (email) =>
+  apiRequest('/auth/forgot-password', { method: 'POST', body: { email } })
+
+// Установка нового пароля по токену из письма. Возвращает {login} для префилла входа.
+export const resetPassword = (token, newPassword) =>
+  apiRequest('/auth/reset-password', { method: 'POST', body: { token, new_password: newPassword } })
+
 // Завершение логина выбором компании (когда у пользователя их несколько):
 // select_token получен в ответе login с needs_company_selection.
 export const selectCompany = (data) => apiRequest('/auth/select-company', { method: 'POST', body: data })

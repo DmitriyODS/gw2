@@ -32,8 +32,20 @@ func (h *handlers) listCompanies(c *fiber.Ctx) error {
 	return c.JSON(resp)
 }
 
+// listMyCompanies — компании, где текущий пользователь администратор (раздел
+// «Компании»). Создателя видно по полю created_by.
+func (h *handlers) listMyCompanies(c *fiber.Ctx) error {
+	resp, err := h.eps.ListMyCompanies(c.Context(), currentUser(c))
+	if err != nil {
+		return h.respondError(c, err)
+	}
+	return c.JSON(resp)
+}
+
 func (h *handlers) getCompany(c *fiber.Ctx) error {
-	resp, err := h.eps.GetCompany(c.Context(), pathID(c))
+	resp, err := h.eps.GetCompany(c.Context(), endpoint.CompanyActorEpRequest{
+		Actor: currentUser(c), CompanyID: pathID(c),
+	})
 	if err != nil {
 		return h.respondError(c, err)
 	}
@@ -45,7 +57,9 @@ func (h *handlers) createCompany(c *fiber.Ctx) error {
 	if details != nil {
 		return validationError(c, details)
 	}
-	resp, err := h.eps.CreateCompany(c.Context(), req)
+	resp, err := h.eps.CreateCompany(c.Context(), endpoint.CreateCompanyEpRequest{
+		Actor: currentUser(c), Body: req,
+	})
 	if err != nil {
 		return h.respondError(c, err)
 	}
@@ -58,7 +72,7 @@ func (h *handlers) updateCompany(c *fiber.Ctx) error {
 		return validationError(c, details)
 	}
 	resp, err := h.eps.UpdateCompany(c.Context(), endpoint.UpdateCompanyEpRequest{
-		CompanyID: pathID(c), Body: req,
+		Actor: currentUser(c), CompanyID: pathID(c), Body: req,
 	})
 	if err != nil {
 		return h.respondError(c, err)
@@ -81,7 +95,9 @@ func (h *handlers) toggleCompanyActive(c *fiber.Ctx) error {
 }
 
 func (h *handlers) deleteCompany(c *fiber.Ctx) error {
-	if _, err := h.eps.DeleteCompany(c.Context(), pathID(c)); err != nil {
+	if _, err := h.eps.DeleteCompany(c.Context(), endpoint.CompanyActorEpRequest{
+		Actor: currentUser(c), CompanyID: pathID(c),
+	}); err != nil {
 		return h.respondError(c, err)
 	}
 	return c.JSON(fiber.Map{"message": "Компания удалена"})
@@ -390,7 +406,7 @@ func parseCompanyCreate(body []byte) (dto.CompanyCreate, map[string]any) {
 	_ = json.Unmarshal(body, &raw)
 
 	details := map[string]any{}
-	req := dto.CompanyCreate{IsActive: true}
+	req := dto.CompanyCreate{}
 
 	if value, ok := raw["name"]; ok {
 		s, ok := asJSONString(value)
@@ -419,20 +435,6 @@ func parseCompanyCreate(body []byte) (dto.CompanyCreate, map[string]any) {
 				req.Description = &s
 			} else {
 				details[field] = []string{"Not a valid string."}
-			}
-		case "director_id":
-			if string(value) == "null" {
-				req.DirectorID = nil
-			} else if v, ok := asJSONInt(value); ok {
-				req.DirectorID = &v
-			} else {
-				details[field] = []string{"Not a valid integer."}
-			}
-		case "is_active":
-			if b, ok := asJSONBool(value); ok {
-				req.IsActive = b
-			} else {
-				details[field] = []string{"Not a valid boolean."}
 			}
 		case "settings":
 			settings, errs := parseCompanySettings(value, false)
@@ -489,22 +491,6 @@ func parseCompanyUpdate(body []byte) (dto.CompanyUpdate, map[string]any) {
 			} else {
 				req.DescriptionSet = false
 				details[field] = []string{"Not a valid string."}
-			}
-		case "director_id":
-			req.DirectorSet = true
-			if string(value) == "null" {
-				req.DirectorID = nil
-			} else if v, ok := asJSONInt(value); ok {
-				req.DirectorID = &v
-			} else {
-				req.DirectorSet = false
-				details[field] = []string{"Not a valid integer."}
-			}
-		case "is_active":
-			if b, ok := asJSONBool(value); ok {
-				req.IsActive = &b
-			} else {
-				details[field] = []string{"Not a valid boolean."}
 			}
 		case "settings":
 			settings, errs := parseCompanySettings(value, true)

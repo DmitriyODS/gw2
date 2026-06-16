@@ -1,7 +1,7 @@
 // Package postgres — pgx-реализация портов персистентности.
 //
-// Сервис работает с общей PostgreSQL платформы. Владелец схемы — Alembic
-// (back/migrations): здесь только запросы, никакого DDL.
+// Сервис работает с общей PostgreSQL платформы. Владелец схемы — goose
+// (back-go/migrate): здесь только запросы, никакого DDL.
 package postgres
 
 import (

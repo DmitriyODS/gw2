@@ -291,24 +291,28 @@ const companies = useCompaniesStore()
 // Многокомпанийный обычный пользователь — переключает активную компанию из
 // своих членств (auth.companies) через switchCompany (перевыпуск токена).
 const isMulti = computed(() => auth.isMultiCompany)
-// Неизменяемый чип — только у обычного пользователя ровно с одной компанией.
-const fixed = computed(() => auth.companyId != null && !isMulti.value)
+// Платформенный супер-админ — локально выбирает компанию для платформенных
+// экранов (через companies.setActive, без перевыпуска токена).
+const isSuper = computed(() => auth.isSuperAdmin)
+// Неизменяемый чип — у обычного пользователя ровно с одной активной компанией.
+const fixed = computed(() => !isSuper.value && auth.companyId != null && !isMulti.value)
 const companyLabel = computed(() => auth.companyName || 'Без компании')
 const options = computed(() => companies.items)
 
-// Список для row-поповера: у многокомпанийного — его членства, у Админа
-// системы — все компании (с опцией «Все компании»).
+// Список для row-поповера: у многокомпанийного — его членства, у супер-админа —
+// все компании (с опцией «Все компании»).
 const rowList = computed(() => {
   if (isMulti.value) {
     return auth.companies.map((c) => ({ id: c.company_id, name: c.company_name, is_active: c.is_active }))
   }
   return companies.items
 })
-// «Все компании» (null) — только Администратору системы, не многокомпанийному.
-const showAllOption = computed(() => !isMulti.value)
+// «Все компании» (null) — только супер-админу, не многокомпанийному пользователю.
+const showAllOption = computed(() => isSuper.value)
 
 // controlled mode: если props.modelValue передан — используем его, иначе —
-// активная компания (для многокомпанийного — из токена auth.companyId).
+// активная компания (для многокомпанийного — из токена auth.companyId,
+// для супер-админа — выбранная локально companies.activeCompanyId).
 const isControlled = computed(() => props.modelValue !== undefined)
 const effectiveValue = computed(() => {
   if (isControlled.value) return props.modelValue
@@ -433,9 +437,9 @@ function onPick(id) {
 
 /* ---------- common ---------- */
 onMounted(() => {
-  // Список компаний из API нужен только Администратору системы; многокомпанийный
-  // обычный пользователь берёт свои компании из auth.companies.
-  if (!fixed.value && !isMulti.value) companies.load()
+  // Список компаний из API (платформенный эндпоинт) нужен только супер-админу;
+  // многокомпанийный пользователь берёт свои компании из auth.companies.
+  if (isSuper.value) companies.load()
 })
 
 onBeforeUnmount(() => {

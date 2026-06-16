@@ -37,9 +37,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.kodass.groovework.AppContainer
@@ -53,6 +51,7 @@ import com.kodass.groovework.data.session.AuthState
 import com.kodass.groovework.ui.common.CenteredLoading
 import com.kodass.groovework.ui.common.ConfirmDialog
 import com.kodass.groovework.ui.common.ConfirmSpec
+import com.kodass.groovework.ui.common.rememberClipboardCopy
 import kotlinx.coroutines.launch
 import okhttp3.MediaType.Companion.toMediaTypeOrNull
 import okhttp3.MultipartBody
@@ -80,8 +79,8 @@ internal fun NoCompanyHint() {
 // ── Выходные дни ────────────────────────────────────────────────────────────
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-fun WeekendSettingsScreen(container: AppContainer, onBack: () -> Unit) {
-    val cid = companyId(container)
+fun WeekendSettingsScreen(container: AppContainer, onBack: () -> Unit, companyIdOverride: Long? = null) {
+    val cid = companyIdOverride ?: companyId(container)
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     var days by remember { mutableStateOf<Set<Int>>(emptySet()) }
@@ -142,8 +141,8 @@ fun WeekendSettingsScreen(container: AppContainer, onBack: () -> Unit) {
 
 // ── Мой Groove ──────────────────────────────────────────────────────────────
 @Composable
-fun GrooveSettingsScreen(container: AppContainer, onBack: () -> Unit) {
-    val cid = companyId(container)
+fun GrooveSettingsScreen(container: AppContainer, onBack: () -> Unit, companyIdOverride: Long? = null) {
+    val cid = companyIdOverride ?: companyId(container)
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     var enabled by remember { mutableStateOf(false) }
@@ -197,11 +196,11 @@ fun GrooveSettingsScreen(container: AppContainer, onBack: () -> Unit) {
 
 // ── Ссылка-приглашение ──────────────────────────────────────────────────────
 @Composable
-fun InviteSettingsScreen(container: AppContainer, onBack: () -> Unit) {
-    val cid = companyId(container)
+fun InviteSettingsScreen(container: AppContainer, onBack: () -> Unit, companyIdOverride: Long? = null) {
+    val cid = companyIdOverride ?: companyId(container)
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
-    val clipboard = LocalClipboardManager.current
+    val copyToClipboard = rememberClipboardCopy()
     val serverUrl by container.sessionManager.serverUrl.collectAsStateWithLifecycle()
     var code by remember { mutableStateOf<String?>(null) }
     var loading by remember { mutableStateOf(true) }
@@ -239,7 +238,7 @@ fun InviteSettingsScreen(container: AppContainer, onBack: () -> Unit) {
                 if (link != null) {
                     OutlinedButton(
                         onClick = {
-                            clipboard.setText(AnnotatedString(link))
+                            copyToClipboard(link)
                             Toast.makeText(context, "Ссылка скопирована", Toast.LENGTH_SHORT).show()
                         },
                         modifier = Modifier.fillMaxWidth().padding(top = 12.dp),

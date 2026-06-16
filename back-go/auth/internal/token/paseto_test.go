@@ -28,7 +28,7 @@ func TestAccessTokenRoundTrip(t *testing.T) {
 	name := "ООО Ромашка"
 	raw, err := iss.AccessToken(Claims{
 		UserID: 42, ForceChange: false, CompanyID: &cid, CompanyName: &name,
-		CompanySettings: map[string]any{"uses_calls": true}, RoleLevel: 3, IsRootAdmin: false,
+		CompanySettings: map[string]any{"uses_calls": true}, RoleLevel: 3, IsSuperAdmin: true,
 	})
 	if err != nil {
 		t.Fatalf("AccessToken: %v", err)
@@ -41,6 +41,10 @@ func TestAccessTokenRoundTrip(t *testing.T) {
 	claims := v.ParseAccess(raw)
 	if claims.UserID != 42 || claims.ForceChange {
 		t.Fatalf("ParseAccess: got (%d, %v), want (42, false)", claims.UserID, claims.ForceChange)
+	}
+	// Клейм супер-админа называется is_super_admin — verifier поднимает его в IsSuperAdmin.
+	if !claims.IsSuperAdmin {
+		t.Fatal("IsSuperAdmin не проброшен через клейм is_super_admin")
 	}
 }
 

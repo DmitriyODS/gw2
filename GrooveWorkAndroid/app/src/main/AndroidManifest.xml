@@ -48,6 +48,19 @@
 
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
+
+            <!-- App Links: ссылки из писем (подтверждение email, сброс пароля,
+                 приглашение в компанию) открываются прямо в приложении.
+                 autoVerify сверяет подпись через /.well-known/assetlinks.json. -->
+            <intent-filter android:autoVerify="true">
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="https" android:host="gw.kodass.ru" />
+                <data android:pathPrefix="/verify-email" />
+                <data android:pathPrefix="/reset-password" />
+                <data android:pathPrefix="/invite/" />
+            </intent-filter>
         </activity>
 
         <!-- Экран звонка: показывается поверх локскрина (входящий из пуша),

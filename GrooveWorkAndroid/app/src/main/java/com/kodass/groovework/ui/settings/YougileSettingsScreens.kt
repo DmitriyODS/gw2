@@ -360,7 +360,7 @@ fun YougileCompanySettingsScreen(container: AppContainer, onBack: () -> Unit) {
                     }
                 }
 
-                val canEnable = cfg.ygCompanyId != null && cfg.ygProjectId != null && cfg.ygBoardId != null
+                val canEnable = cfg.ygProjectId != null && cfg.ygBoardId != null
                 Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow)) {
                     Column(modifier = Modifier.padding(16.dp)) {
                         SwitchRow(

@@ -16,12 +16,12 @@ type BackupData struct {
 	Units         []BackupUnit       `json:"units"`
 }
 
-// BackupMembership — связка user↔company с ролью. Ключа не было в legacy-
-// формате; старые бэкапы без него восстанавливаются без членств (best-effort).
+// BackupMembership — связка user↔company с ролью и должностью в этой компании.
 type BackupMembership struct {
 	UserID    int64   `json:"user_id"`
 	CompanyID int64   `json:"company_id"`
 	RoleID    int64   `json:"role_id"`
+	Post      *string `json:"post"`
 	CreatedAt *string `json:"created_at"`
 }
 
@@ -36,11 +36,10 @@ type BackupUser struct {
 	FIO           string  `json:"fio"`
 	Login         string  `json:"login"`
 	HashPassword  string  `json:"hash_password"`
-	Post          *string `json:"post"`
-	RoleID        int64   `json:"role_id"`
 	AvatarPath    *string `json:"avatar_path"`
 	IsDefaultPass bool    `json:"is_default_pass"`
-	IsHidden      bool    `json:"is_hidden"`
+	IsActive      bool    `json:"is_active"`
+	IsSuperAdmin  bool    `json:"is_super_admin"`
 	CreatedAt     *string `json:"created_at"`
 }
 

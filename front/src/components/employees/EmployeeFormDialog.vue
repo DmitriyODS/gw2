@@ -52,24 +52,14 @@
         </div>
       </div>
 
-      <div class="grid-2">
-        <div v-if="canPickCompany" class="field">
-          <label class="lbl">Компания</label>
-          <CompanySelect
-            v-model="form.company_id"
-            variant="form"
-            placeholder="Без компании"
-          />
+      <div v-if="!isEdit" class="field">
+        <label class="lbl">Пароль</label>
+        <input v-model="form.password" type="password" class="ctl"
+               :class="{ invalid: errors.password }" placeholder="Минимум 8 символов" />
+        <div class="hint">
+          Пусто — пароль будет <strong>логин&nbsp;+&nbsp;123</strong> (например <code>{{ form.login || 'ivan.ivanov' }}123</code>). При первом входе потребуется сменить.
         </div>
-        <div v-if="!isEdit" class="field">
-          <label class="lbl">Пароль</label>
-          <input v-model="form.password" type="password" class="ctl"
-                 :class="{ invalid: errors.password }" placeholder="Минимум 8 символов" />
-          <div class="hint">
-            Пусто — пароль будет <strong>логин&nbsp;+&nbsp;123</strong> (например <code>{{ form.login || 'ivan.ivanov' }}123</code>). При первом входе потребуется сменить.
-          </div>
-          <div v-if="errors.password" class="err">{{ errors.password }}</div>
-        </div>
+        <div v-if="errors.password" class="err">{{ errors.password }}</div>
       </div>
 
       <div class="field">
@@ -121,9 +111,7 @@
 import { ref, computed, watch } from 'vue'
 import AppDialog from '@/components/common/AppDialog.vue'
 import PhoneInput from '@/components/common/PhoneInput.vue'
-import CompanySelect from '@/components/common/CompanySelect.vue'
 import { useAuthStore } from '@/stores/auth.js'
-import { useCompaniesStore } from '@/stores/companies.js'
 import { usePermission } from '@/composables/usePermission.js'
 import { useNotificationsStore } from '@/stores/notifications.js'
 import { resetUserPassword } from '@/api/users.js'
@@ -137,13 +125,11 @@ const props = defineProps({
 const emit = defineEmits(['update:modelValue', 'save'])
 
 const auth = useAuthStore()
-const companies = useCompaniesStore()
 const notif = useNotificationsStore()
 const { myLevel } = usePermission()
 
 const isEdit = computed(() => !!props.user?.id)
 const isSelf = computed(() => isEdit.value && props.user?.id === auth.user?.id)
-const canPickCompany = computed(() => auth.isRootAdmin)
 
 const form = ref(_blank())
 const errors = ref({})
@@ -157,7 +143,6 @@ function _blank() {
   return {
     fio: '', login: '', post: '', password: '',
     phone: '', email: '', role_id: null,
-    company_id: auth.isRootAdmin ? null : auth.companyId,
   }
 }
 
@@ -182,12 +167,10 @@ watch(() => props.modelValue, (v) => {
       phone: props.user.phone || '',
       email: props.user.email || '',
       role_id: props.user.role?.id ?? null,
-      company_id: props.user.company_id ?? null,
     }
   } else {
     form.value = _blank()
   }
-  if (auth.isRootAdmin) companies.load()
 })
 
 const assignableRoles = computed(() => {
@@ -199,7 +182,6 @@ const assignableRoles = computed(() => {
 })
 
 function roleIcon(level) {
-  if (level >= 4) return 'workspace_premium'
   if (level >= 3) return 'shield_person'
   if (level >= 2) return 'badge'
   return 'person'
@@ -247,7 +229,6 @@ function save() {
     payload.role_id = form.value.role_id
     if (form.value.password) payload.password = form.value.password
   }
-  if (auth.isRootAdmin) payload.company_id = form.value.company_id ?? null
   emit('save', {
     payload,
     isEdit: isEdit.value,

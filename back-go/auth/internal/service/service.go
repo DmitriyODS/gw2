@@ -16,6 +16,12 @@ import (
 // AuthService — все use-case'ы сервиса (auth + users).
 type AuthService interface {
 	Login(ctx context.Context, req dto.LoginRequest) (*dto.Session, error)
+	Register(ctx context.Context, req dto.RegisterRequest) (*dto.RegisterResult, error)
+	SuggestLogin(ctx context.Context, fio string) (string, error)
+	VerifyEmail(ctx context.Context, req dto.VerifyEmailRequest) (*dto.Session, error)
+	ResendVerification(ctx context.Context, email string) error
+	RequestPasswordReset(ctx context.Context, email string) error
+	ResetPasswordByToken(ctx context.Context, req dto.ResetPasswordRequest) (*dto.PasswordResetResult, error)
 	SelectCompany(ctx context.Context, selectToken string, companyID int64) (*dto.Session, error)
 	SwitchCompany(ctx context.Context, userID, companyID int64) (*dto.Session, error)
 	Refresh(ctx context.Context, refreshToken string) (*dto.Session, error)
@@ -45,15 +51,22 @@ type AuthService interface {
 	CompanyInvite(ctx context.Context, actor *domain.User, companyID int64) (string, error)
 	RegenerateInvite(ctx context.Context, actor *domain.User, companyID int64) (string, error)
 	JoinByCode(ctx context.Context, userID int64, code string) (*dto.Session, error)
+	CreateCompanyInvite(ctx context.Context, actor *domain.User, companyID int64, email string, roleID int64) error
+	GetCompanyInvitePreview(ctx context.Context, token string) (*dto.InvitePreview, error)
+	AcceptCompanyInvite(ctx context.Context, userID int64, token string) (*dto.Session, error)
 
 	ListRoles(ctx context.Context) ([]dto.Role, error)
 
 	ListCompanies(ctx context.Context) (*dto.CompanyList, error)
-	GetCompany(ctx context.Context, companyID int64) (*dto.Company, error)
-	CreateCompany(ctx context.Context, req dto.CompanyCreate) (*dto.Company, error)
-	UpdateCompany(ctx context.Context, companyID int64, req dto.CompanyUpdate) (*dto.Company, error)
+	ListMyCompanies(ctx context.Context, actor *domain.User) (*dto.CompanyList, error)
+	CreateCompanyUser(ctx context.Context, actor *domain.User, companyID int64, req dto.CreateUserRequest) (*dto.User, error)
+	UpdateCompanyMember(ctx context.Context, actor *domain.User, companyID, userID int64, req dto.UpdateUserRequest) (*dto.User, error)
+	ResetCompanyMemberPassword(ctx context.Context, actor *domain.User, companyID, userID int64) error
+	GetCompany(ctx context.Context, actor *domain.User, companyID int64) (*dto.Company, error)
+	CreateCompany(ctx context.Context, actor *domain.User, req dto.CompanyCreate) (*dto.Company, error)
+	UpdateCompany(ctx context.Context, actor *domain.User, companyID int64, req dto.CompanyUpdate) (*dto.Company, error)
 	ToggleCompanyActive(ctx context.Context, companyID int64, isActive bool) (*dto.Company, error)
-	DeleteCompany(ctx context.Context, companyID int64) error
+	DeleteCompany(ctx context.Context, actor *domain.User, companyID int64) error
 	GetWeekendSettings(ctx context.Context, actor *domain.User, companyID int64) (*dto.WeekendSettings, error)
 	UpdateWeekendSettings(ctx context.Context, actor *domain.User, companyID int64, days []int) (*dto.WeekendSettings, error)
 	GetGrooveSettings(ctx context.Context, actor *domain.User, companyID int64) (*dto.GrooveSettings, error)
@@ -64,20 +77,29 @@ type AuthService interface {
 }
 
 type Service struct {
-	repo      domain.UserRepository
-	companies domain.CompanyRepository
-	backup    domain.BackupStore
-	throttle  domain.LoginThrottle
-	tokens    *token.Issuer
-	avatars   domain.AvatarStorage
-	log       *slog.Logger
+	repo           domain.UserRepository
+	companies      domain.CompanyRepository
+	backup         domain.BackupStore
+	throttle       domain.LoginThrottle
+	tokens         *token.Issuer
+	avatars        domain.AvatarStorage
+	verifications  domain.VerificationStore
+	passwordResets domain.PasswordResetStore
+	companyInvites domain.CompanyInviteStore
+	mail           domain.MailClient
+	appBaseURL     string // публичный базовый URL для ссылок в письмах
+	log            *slog.Logger
 }
 
 func New(repo domain.UserRepository, companies domain.CompanyRepository,
 	backup domain.BackupStore, throttle domain.LoginThrottle, tokens *token.Issuer,
-	avatars domain.AvatarStorage, log *slog.Logger) *Service {
+	avatars domain.AvatarStorage, verifications domain.VerificationStore,
+	passwordResets domain.PasswordResetStore, companyInvites domain.CompanyInviteStore,
+	mail domain.MailClient, appBaseURL string, log *slog.Logger) *Service {
 	return &Service{repo: repo, companies: companies, backup: backup,
-		throttle: throttle, tokens: tokens, avatars: avatars, log: log}
+		throttle: throttle, tokens: tokens, avatars: avatars,
+		verifications: verifications, passwordResets: passwordResets,
+		companyInvites: companyInvites, mail: mail, appBaseURL: appBaseURL, log: log}
 }
 
 var _ AuthService = (*Service)(nil)
@@ -94,15 +116,14 @@ func companyDisabledErr(name *string) error {
 }
 
 // session — выпуск пары токенов + клеймы и список членств в тело ответа (общая
-// точка для login/select/switch/refresh/change-default). activeCompanyID —
-// выбранная компания сессии: роль и реквизиты берутся из членства; nil —
-// Администратор системы (без компании, роль из users.role_id).
+// точка для login/select/switch/refresh/change-default/register).
+// activeCompanyID — выбранная компания сессии (роль/реквизиты — из членства);
+// nil — активной компании нет (нормальное состояние: мессенджер/профиль).
 func (s *Service) session(ctx context.Context, u *domain.User, activeCompanyID *int64, withRefresh bool) (*dto.Session, error) {
 	claims := token.Claims{
-		UserID:      u.ID,
-		ForceChange: u.IsDefaultPass,
-		RoleLevel:   u.Role.Level,
-		IsRootAdmin: u.IsRootAdmin,
+		UserID:       u.ID,
+		ForceChange:  u.IsDefaultPass,
+		IsSuperAdmin: u.IsSuperAdmin,
 	}
 	if activeCompanyID != nil {
 		m, err := s.repo.GetMembership(ctx, u.ID, *activeCompanyID)
@@ -141,7 +162,7 @@ func (s *Service) session(ctx context.Context, u *domain.User, activeCompanyID *
 		CompanyName:     claims.CompanyName,
 		CompanySettings: claims.CompanySettings,
 		RoleLevel:       claims.RoleLevel,
-		IsRootAdmin:     claims.IsRootAdmin,
+		IsSuperAdmin:    u.IsSuperAdmin,
 		Companies:       dto.NewMemberships(memberships),
 	}
 	if withRefresh {
@@ -150,4 +171,34 @@ func (s *Service) session(ctx context.Context, u *domain.User, activeCompanyID *
 		}
 	}
 	return sess, nil
+}
+
+// startSession — выдать сессию после успешной аутентификации (login/register/
+// change-default). Супер-админ и пользователь без компаний входят без активной
+// компании; одна компания — автоактивна; несколько — этап выбора (login-gate).
+func (s *Service) startSession(ctx context.Context, u *domain.User) (*dto.Session, error) {
+	if u.IsSuperAdmin {
+		return s.session(ctx, u, nil, true)
+	}
+	memberships, err := s.repo.ListMemberships(ctx, u.ID)
+	if err != nil {
+		return nil, err
+	}
+	switch len(memberships) {
+	case 0:
+		return s.session(ctx, u, nil, true)
+	case 1:
+		return s.session(ctx, u, &memberships[0].CompanyID, true)
+	default:
+		selectTok, err := s.tokens.SelectToken(u.ID)
+		if err != nil {
+			return nil, err
+		}
+		return &dto.Session{
+			UserID:                u.ID,
+			NeedsCompanySelection: true,
+			SelectToken:           selectTok,
+			Companies:             dto.NewMemberships(memberships),
+		}, nil
+	}
 }

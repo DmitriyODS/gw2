@@ -3,9 +3,9 @@
 # Сброс пароля суперадмина на продакшен-сервере.
 #
 # Запускается на хосте — через SSH открывает psql в контейнере БД и
-# одним SQL-запросом перевыставляет hash_password у суперадмина (роль
-# уровня 4) с самым младшим id (это «системный» суперадмин, защищён
-# на уровне приложения от скрытия/смены роли). Пароль хешируется тем
+# одним SQL-запросом перевыставляет hash_password у супер-админа
+# (users.is_super_admin) с самым младшим id. Супер-админ — единственный
+# платформенный класс, защищён на уровне приложения. Пароль хешируется тем
 # же способом, что и в приложении — pgcrypto: crypt(pwd, gen_salt('bf')).
 #
 # Использование (см. также `make reset NEWPASS=...`):
@@ -63,11 +63,10 @@ docker exec -i -e PGPASSWORD="\$DB_PASSWORD" "\$CID" \\
   psql -U "\$DB_USER" -d "\$DB_NAME" -v ON_ERROR_STOP=1 <<'SQL'
 \set newpass \`cat /tmp/gw2_newpass\`
 WITH target AS (
-  SELECT u.id
-  FROM users u
-  JOIN roles r ON r.id = u.role_id
-  WHERE r.level = 4
-  ORDER BY u.id ASC
+  SELECT id
+  FROM users
+  WHERE is_super_admin
+  ORDER BY id ASC
   LIMIT 1
 )
 UPDATE users u

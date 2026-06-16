@@ -33,25 +33,21 @@ func NewPlatformRepo(pool *pgxpool.Pool) *PlatformRepo {
 
 // ───────────────────────────── пользователи ────────────────────────
 
+// GetUser — только идентичность пользователя. Роль и компания приходят из
+// access-токена (их проставляет транспорт), не читаются из users.
 func (r *PlatformRepo) GetUser(ctx context.Context, id int64) (*domain.User, error) {
 	var u domain.User
-	var companyActive *bool
 	err := r.pool.QueryRow(ctx, `
-		SELECT u.id, u.fio, u.avatar_path, u.company_id, u.is_hidden, ro.level, c.is_active
+		SELECT u.id, u.fio, u.avatar_path, u.is_active, u.is_super_admin
 		FROM users u
-		JOIN roles ro ON ro.id = u.role_id
-		LEFT JOIN companies c ON c.id = u.company_id
 		WHERE u.id = $1`, id,
-	).Scan(&u.ID, &u.FIO, &u.AvatarPath, &u.CompanyID, &u.IsHidden, &u.RoleLevel,
-		&companyActive)
+	).Scan(&u.ID, &u.FIO, &u.AvatarPath, &u.IsActive, &u.IsSuperAdmin)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, nil
 		}
 		return nil, err
 	}
-	// Пользователь без компании (Администратор системы) считается активным.
-	u.CompanyActive = companyActive == nil || *companyActive
 	return &u, nil
 }
 
@@ -277,7 +273,7 @@ func (r *PlatformRepo) TopEmployees(ctx context.Context, companyID int64,
 		SELECT u.id, u.fio, count(DISTINCT un.task_id),
 		       COALESCE(sum(`+hoursExpr+`), 0)
 		FROM users u JOIN units un ON un.user_id = u.id
-		WHERE un.datetime_start >= $2 AND un.datetime_start <= $3 AND u.company_id = $1
+		WHERE un.datetime_start >= $2 AND un.datetime_start <= $3 AND un.company_id = $1
 		GROUP BY u.id, u.fio
 		ORDER BY sum(`+hoursExpr+`) DESC`, companyID, start, end)
 	if err != nil {

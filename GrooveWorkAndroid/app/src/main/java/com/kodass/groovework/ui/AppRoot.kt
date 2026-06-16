@@ -38,8 +38,8 @@ import com.kodass.groovework.R
 import com.kodass.groovework.calls.CallDirection
 import com.kodass.groovework.calls.CallState
 import com.kodass.groovework.data.session.AuthState
+import com.kodass.groovework.ui.login.AuthFlow
 import com.kodass.groovework.ui.login.ChangeDefaultScreen
-import com.kodass.groovework.ui.login.LoginScreen
 import com.kodass.groovework.ui.main.MainScreen
 
 @Composable
@@ -62,7 +62,7 @@ fun AppRoot(container: AppContainer) {
         Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
             when (val state = authState) {
                 AuthState.Loading -> SplashScreen()
-                AuthState.LoggedOut -> LoginScreen(container)
+                AuthState.LoggedOut -> AuthFlow(container)
                 AuthState.Offline -> OfflineScreen(
                     onRetry = { scope.launch { container.sessionManager.retryBootstrap() } },
                 )

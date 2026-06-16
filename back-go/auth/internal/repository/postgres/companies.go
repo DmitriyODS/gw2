@@ -25,12 +25,12 @@ func NewCompanyRepository(pool *pgxpool.Pool) *CompanyRepository {
 var _ domain.CompanyRepository = (*CompanyRepository)(nil)
 
 const companyColumns = `
-	c.id, c.name, c.description, c.director_id, c.is_active, c.settings, c.created_at, c.invite_code,
+	c.id, c.name, c.description, c.created_by, c.is_active, c.settings, c.created_at, c.invite_code,
 	d.id, d.fio, d.login, d.avatar_path`
 
 const companyFrom = `
 	FROM companies c
-	LEFT JOIN users d ON d.id = c.director_id`
+	LEFT JOIN users d ON d.id = c.created_by`
 
 func scanCompany(row pgx.Row) (*domain.Company, error) {
 	var (
@@ -41,19 +41,19 @@ func scanCompany(row pgx.Row) (*domain.Company, error) {
 		dAvatar *string
 	)
 	err := row.Scan(
-		&c.ID, &c.Name, &c.Description, &c.DirectorID, &c.IsActive, &c.Settings, &c.CreatedAt, &c.InviteCode,
+		&c.ID, &c.Name, &c.Description, &c.CreatedBy, &c.IsActive, &c.Settings, &c.CreatedAt, &c.InviteCode,
 		&dID, &dFIO, &dLogin, &dAvatar,
 	)
 	if err != nil {
 		return nil, err
 	}
 	if dID != nil {
-		c.Director = &domain.CompanyDirector{ID: *dID, AvatarPath: dAvatar}
+		c.Creator = &domain.CompanyCreator{ID: *dID, AvatarPath: dAvatar}
 		if dFIO != nil {
-			c.Director.FIO = *dFIO
+			c.Creator.FIO = *dFIO
 		}
 		if dLogin != nil {
-			c.Director.Login = *dLogin
+			c.Creator.Login = *dLogin
 		}
 	}
 	return &c, nil
@@ -99,18 +99,43 @@ func (r *CompanyRepository) ListCompanies(ctx context.Context) ([]*domain.Compan
 	return out, rows.Err()
 }
 
+// ListCompaniesWhereAdmin — компании, в которых пользователь состоит членом с
+// ролью администратора (раздел «Компании» обычного пользователя).
+func (r *CompanyRepository) ListCompaniesWhereAdmin(ctx context.Context, userID int64) ([]*domain.Company, error) {
+	rows, err := r.pool.Query(ctx,
+		"SELECT"+companyColumns+companyFrom+`
+		  JOIN user_companies uc ON uc.company_id = c.id
+		  JOIN roles r2 ON r2.id = uc.role_id
+		 WHERE uc.user_id = $1 AND r2.level >= $2
+		 ORDER BY c.created_at DESC`, userID, domain.LevelAdmin)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var out []*domain.Company
+	for rows.Next() {
+		c, err := scanCompany(rows)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, c)
+	}
+	return out, rows.Err()
+}
+
 func (r *CompanyRepository) CreateCompany(ctx context.Context, c *domain.Company) error {
 	return r.pool.QueryRow(ctx, `
-		INSERT INTO companies (name, description, director_id, settings, created_at)
+		INSERT INTO companies (name, description, created_by, settings, created_at)
 		VALUES ($1, $2, $3, $4, now())
 		RETURNING id, is_active, created_at`,
-		c.Name, c.Description, c.DirectorID, c.Settings,
+		c.Name, c.Description, c.CreatedBy, c.Settings,
 	).Scan(&c.ID, &c.IsActive, &c.CreatedAt)
 }
 
 // allowedCompanyFields — колонки, которые сервис может менять точечно.
 var allowedCompanyFields = map[string]bool{
-	"name": true, "description": true, "director_id": true,
+	"name": true, "description": true, "created_by": true,
 	"is_active": true, "settings": true, "invite_code": true,
 }
 
@@ -155,10 +180,11 @@ func (r *CompanyRepository) CompanyStats(ctx context.Context, ids []int64) (map[
 	}
 
 	rows, err := r.pool.Query(ctx, `
-		SELECT company_id, COUNT(id)
-		  FROM users
-		 WHERE company_id = ANY($1) AND is_hidden = FALSE
-		 GROUP BY company_id`, ids)
+		SELECT uc.company_id, COUNT(*)
+		  FROM user_companies uc
+		  JOIN users u ON u.id = uc.user_id
+		 WHERE uc.company_id = ANY($1) AND u.is_active
+		 GROUP BY uc.company_id`, ids)
 	if err != nil {
 		return nil, err
 	}

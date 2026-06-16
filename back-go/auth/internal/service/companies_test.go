@@ -16,12 +16,19 @@ func companyService(t *testing.T) (*Service, *fakeRepo, *fakeCompanies) {
 	return svc, repo, companies
 }
 
-func TestCreateCompanyDuplicateName(t *testing.T) {
-	svc, _, companies := companyService(t)
-	companies.CreateCompany(context.Background(), &domain.Company{Name: "Рога и копыта"})
+// superAdmin — платформенный супер-админ: проходит companyAuthority в любой
+// компании (создатель/администратор).
+func superAdmin(repo *fakeRepo, login string) *domain.User {
+	return repo.add(&domain.User{FIO: "Супер " + login, Login: login, IsSuperAdmin: true})
+}
 
-	_, err := svc.CreateCompany(context.Background(), dto.CompanyCreate{
-		Name: "Рога и копыта", IsActive: true,
+func TestCreateCompanyDuplicateName(t *testing.T) {
+	svc, repo, companies := companyService(t)
+	companies.CreateCompany(context.Background(), &domain.Company{Name: "Рога и копыта"})
+	actor := superAdmin(repo, "boss")
+
+	_, err := svc.CreateCompany(context.Background(), actor, dto.CompanyCreate{
+		Name: "Рога и копыта",
 	})
 	de := domain.AsDomainError(err)
 	if de == nil || de.Code != "DUPLICATE" || de.HTTPStatus != 409 {
@@ -29,19 +36,22 @@ func TestCreateCompanyDuplicateName(t *testing.T) {
 	}
 }
 
-func TestCreateCompanyBindsDirectorWithoutCompany(t *testing.T) {
+// Создатель компании становится её администратором, даже если ранее не состоял
+// ни в одной компании; settings мержатся с DEFAULT_SETTINGS.
+func TestCreateCompanyMakesCreatorAdminFresh(t *testing.T) {
 	svc, repo, companies := companyService(t)
-	director := employee(repo, "boss", nil)
+	creator := employee(repo, "founder", nil)
 
-	out, err := svc.CreateCompany(context.Background(), dto.CompanyCreate{
-		Name: "Новая", DirectorID: &director.ID, IsActive: true,
+	out, err := svc.CreateCompany(context.Background(), creator, dto.CompanyCreate{
+		Name:     "Новая",
 		Settings: map[string]any{"uses_calls": false},
 	})
 	if err != nil {
 		t.Fatalf("CreateCompany: %v", err)
 	}
-	if director.CompanyID == nil || *director.CompanyID != out.ID {
-		t.Fatal("директор без компании должен быть привязан к созданной")
+	m, _ := repo.GetMembership(context.Background(), creator.ID, out.ID)
+	if m == nil || m.Role.Level != domain.LevelAdmin {
+		t.Fatalf("создатель должен стать администратором: %+v", m)
 	}
 	// merge с DEFAULT_SETTINGS: переданный ключ поверх, остальные — дефолты.
 	c := companies.companies[out.ID]
@@ -50,33 +60,21 @@ func TestCreateCompanyBindsDirectorWithoutCompany(t *testing.T) {
 	}
 }
 
-func TestCreateCompanyDirectorNotFound(t *testing.T) {
-	svc, _, _ := companyService(t)
-	missing := int64(999)
-	_, err := svc.CreateCompany(context.Background(), dto.CompanyCreate{
-		Name: "X", DirectorID: &missing, IsActive: true,
-	})
-	de := domain.AsDomainError(err)
-	if de == nil || de.Code != "DIRECTOR_NOT_FOUND" || de.HTTPStatus != 404 {
-		t.Fatalf("ожидался DIRECTOR_NOT_FOUND 404, получено %v", err)
-	}
-}
-
 func TestWeekendSettingsAccess(t *testing.T) {
 	svc, repo, companies := companyService(t)
 	c := &domain.Company{Name: "А"}
 	companies.CreateCompany(context.Background(), c)
-	otherID := c.ID + 100
-	stranger := employee(repo, "dir", &otherID)
-	stranger.Role = domain.Role{ID: 3, Name: "Руководитель", Level: domain.LevelDirector}
 
+	// Сотрудник чужой/этой компании без роли администратора — FORBIDDEN.
+	stranger := employee(repo, "emp", &c.ID)
 	_, err := svc.GetWeekendSettings(context.Background(), stranger, c.ID)
 	de := domain.AsDomainError(err)
 	if de == nil || de.Code != "FORBIDDEN" {
-		t.Fatalf("чужая компания: ожидался FORBIDDEN, получено %v", err)
+		t.Fatalf("без прав администратора: ожидался FORBIDDEN, получено %v", err)
 	}
 
-	insider := employee(repo, "dir2", &c.ID)
+	// Администратор компании видит настройки.
+	insider := companyAdmin(repo, "admin", c.ID)
 	got, err := svc.GetWeekendSettings(context.Background(), insider, c.ID)
 	if err != nil {
 		t.Fatalf("GetWeekendSettings: %v", err)
@@ -90,8 +88,7 @@ func TestUpdateWeekendSettingsSortsAndDedupes(t *testing.T) {
 	svc, repo, companies := companyService(t)
 	c := &domain.Company{Name: "А", Settings: domain.DefaultCompanySettings()}
 	companies.CreateCompany(context.Background(), c)
-	admin := employee(repo, "root", nil)
-	admin.IsRootAdmin = true
+	admin := superAdmin(repo, "root")
 
 	got, err := svc.UpdateWeekendSettings(context.Background(), admin, c.ID, []int{6, 4, 6, 5})
 	if err != nil {

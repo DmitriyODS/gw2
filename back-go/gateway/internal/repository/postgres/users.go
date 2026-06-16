@@ -21,19 +21,19 @@ func NewUserReader(pool *pgxpool.Pool) *UserReader {
 }
 
 // AuthInfo — сверка пользователя для pkg-мидлвари. Уровень роли и активная
-// компания — ИЗ ТОКЕНА (active); из БД — is_hidden и активность выбранной
-// компании (active.CompanyID).
+// компания — ИЗ ТОКЕНА (active); из БД — глобальная активность аккаунта,
+// признак супер-админа и активность выбранной компании (active.CompanyID).
 func (r *UserReader) AuthInfo(ctx context.Context, userID int64, active pasetoauth.Claims) (*pasetoauth.AuthInfo, error) {
 	var (
 		info          pasetoauth.AuthInfo
 		companyActive *bool
 	)
 	err := r.pool.QueryRow(ctx, `
-		SELECT u.is_hidden, c.is_active
+		SELECT u.is_active, u.is_super_admin, c.is_active
 		  FROM users u
 		  LEFT JOIN companies c ON c.id = $2
 		 WHERE u.id = $1`, userID, active.CompanyID).
-		Scan(&info.IsHidden, &companyActive)
+		Scan(&info.IsActive, &info.IsSuperAdmin, &companyActive)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, nil
@@ -41,7 +41,7 @@ func (r *UserReader) AuthInfo(ctx context.Context, userID int64, active pasetoau
 		return nil, err
 	}
 	info.RoleLevel = active.RoleLevel
-	// Пользователь без компании (Администратор системы) считается активным.
+	// Нет активной компании — нормальное состояние, считается активным.
 	info.CompanyActive = companyActive == nil || *companyActive
 	return &info, nil
 }

@@ -70,9 +70,13 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.kodass.groovework.AppContainer
+import com.kodass.groovework.DeepLink
 import com.kodass.groovework.ui.about.AboutScreen
 import com.kodass.groovework.ui.chats.ChatScreen
 import com.kodass.groovework.ui.chats.ChatsScreen
+import com.kodass.groovework.ui.companies.AcceptInviteScreen
+import com.kodass.groovework.ui.companies.CompaniesScreen
+import com.kodass.groovework.ui.companies.CompanyManageScreen
 import com.kodass.groovework.ui.employees.EmployeesScreen
 import com.kodass.groovework.ui.profile.ProfileScreen
 import com.kodass.groovework.ui.settings.AiSettingsScreen
@@ -192,6 +196,21 @@ fun MainScreen(container: AppContainer) {
         }
     }
 
+    // Deep link приглашения (App Links) — открываем превью; verify/reset уже не
+    // актуальны для вошедшего пользователя, просто гасим.
+    LaunchedEffect(Unit) {
+        container.pendingDeepLink.collect { link ->
+            when (link) {
+                is DeepLink.Invite -> {
+                    container.pendingDeepLink.value = null
+                    navController.navigate("invite/${link.token}") { launchSingleTop = true }
+                }
+                null -> {}
+                else -> container.pendingDeepLink.value = null
+            }
+        }
+    }
+
     // Модалка текущего юнита: по тапу в плашке/уведомлении (флаг в UnitManager).
     val showUnitSheet by container.unitManager.showSheet.collectAsStateWithLifecycle()
 
@@ -266,9 +285,45 @@ fun MainScreen(container: AppContainer) {
                 ProfileScreen(container = container)
             }
             composable("settings") {
-                SettingsScreen(container = container, onOpen = { section ->
-                    navController.navigate("settings/$section") { launchSingleTop = true }
-                })
+                SettingsScreen(
+                    container = container,
+                    onOpen = { section -> navController.navigate("settings/$section") { launchSingleTop = true } },
+                    onOpenCompanies = { navController.navigate("companies") },
+                )
+            }
+            composable("companies") {
+                CompaniesScreen(
+                    container = container,
+                    onBack = { navController.popBackStack() },
+                    onOpenCompany = { id -> navController.navigate("company/$id") },
+                )
+            }
+            composable(
+                route = "company/{id}",
+                arguments = listOf(navArgument("id") { type = NavType.LongType }),
+            ) { entry ->
+                CompanyManageScreen(
+                    container = container,
+                    companyId = entry.arguments?.getLong("id") ?: 0L,
+                    onBack = { navController.popBackStack() },
+                    onOpenSettings = { route -> navController.navigate(route) { launchSingleTop = true } },
+                )
+            }
+            composable(
+                route = "invite/{token}",
+                arguments = listOf(navArgument("token") { type = NavType.StringType }),
+            ) { entry ->
+                AcceptInviteScreen(
+                    container = container,
+                    token = entry.arguments?.getString("token").orEmpty(),
+                    onAccepted = {
+                        navController.navigate("tasks") {
+                            popUpTo(navController.graph.findStartDestination().id) { inclusive = false }
+                            launchSingleTop = true
+                        }
+                    },
+                    onBack = { navController.popBackStack() },
+                )
             }
             composable("settings/about") {
                 AboutScreen(
@@ -277,11 +332,27 @@ fun MainScreen(container: AppContainer) {
                     onOpenChat = { id -> navController.navigate("chat/$id") },
                 )
             }
-            composable("settings/weekends") {
-                WeekendSettingsScreen(container = container, onBack = { navController.popBackStack() })
+            composable(
+                route = "settings/weekends?companyId={companyId}",
+                arguments = listOf(navArgument("companyId") { type = NavType.LongType; defaultValue = -1L }),
+            ) { entry ->
+                val cid = entry.arguments?.getLong("companyId") ?: -1L
+                WeekendSettingsScreen(
+                    container = container,
+                    onBack = { navController.popBackStack() },
+                    companyIdOverride = cid.takeIf { it > 0 },
+                )
             }
-            composable("settings/groove") {
-                GrooveSettingsScreen(container = container, onBack = { navController.popBackStack() })
+            composable(
+                route = "settings/groove?companyId={companyId}",
+                arguments = listOf(navArgument("companyId") { type = NavType.LongType; defaultValue = -1L }),
+            ) { entry ->
+                val cid = entry.arguments?.getLong("companyId") ?: -1L
+                GrooveSettingsScreen(
+                    container = container,
+                    onBack = { navController.popBackStack() },
+                    companyIdOverride = cid.takeIf { it > 0 },
+                )
             }
             composable("settings/invite") {
                 InviteSettingsScreen(container = container, onBack = { navController.popBackStack() })

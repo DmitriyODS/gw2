@@ -70,7 +70,7 @@ func (r *fakeRepo) GetPair(_ context.Context, a, b int64) (*domain.Conversation,
 	return nil, nil
 }
 
-func (r *fakeRepo) CreatePair(_ context.Context, a, b, companyID int64) (*domain.Conversation, error) {
+func (r *fakeRepo) CreatePair(_ context.Context, a, b int64, companyID *int64) (*domain.Conversation, error) {
 	r.nextConv++
 	c := &domain.Conversation{
 		ID: r.nextConv, UserAID: a, UserBID: &b, CompanyID: companyID, CreatedAt: r.tick(),
@@ -92,8 +92,9 @@ func (r *fakeRepo) GetSolo(_ context.Context, userID int64, pet bool) (*domain.C
 
 func (r *fakeRepo) CreateSolo(_ context.Context, userID, companyID int64, pet bool) (*domain.Conversation, error) {
 	r.nextConv++
+	cid := companyID
 	c := &domain.Conversation{
-		ID: r.nextConv, UserAID: userID, CompanyID: companyID,
+		ID: r.nextConv, UserAID: userID, CompanyID: &cid,
 		IsDevChat: !pet, IsPetChat: pet, CreatedAt: r.tick(),
 	}
 	r.convs[c.ID] = c
@@ -592,7 +593,7 @@ func (f *fakeUsers) ListUsers(_ context.Context, ids []int64) ([]*domain.User, e
 func (f *fakeUsers) DevChatUserIDs(_ context.Context, ownerID int64) ([]int64, error) {
 	var out []int64
 	for _, u := range f.users {
-		if !u.IsHidden && (u.ID == ownerID || u.CompanyID == nil) {
+		if u.IsActive && (u.ID == ownerID || u.IsSuperAdmin) {
 			out = append(out, u.ID)
 		}
 	}
@@ -666,11 +667,11 @@ func str(s string) *string { return &s }
 func newTestEnv() (*Service, *fakeRepo, *fakeFiles, *fakePub) {
 	c10, c20 := int64(10), int64(20)
 	users := &fakeUsers{users: map[int64]*domain.User{
-		1: {ID: 1, FIO: "Админ Системы", Login: "admin", RoleLevel: 4, CompanyActive: true},
-		2: {ID: 2, FIO: "Алиса", Login: "alice", CompanyID: &c10, RoleLevel: 1, CompanyActive: true},
-		3: {ID: 3, FIO: "Боб", Login: "bob", CompanyID: &c10, RoleLevel: 1, CompanyActive: true},
-		4: {ID: 4, FIO: "Кэрол", Login: "carol", CompanyID: &c20, RoleLevel: 1, CompanyActive: true},
-		5: {ID: 5, FIO: "Скрытый", Login: "ghost", CompanyID: &c10, IsHidden: true, CompanyActive: true},
+		1: {ID: 1, FIO: "Супер Админ", Login: "admin", IsSuperAdmin: true, IsActive: true, CompanyActive: true},
+		2: {ID: 2, FIO: "Алиса", Login: "alice", CompanyID: &c10, RoleLevel: 1, IsActive: true, CompanyActive: true},
+		3: {ID: 3, FIO: "Боб", Login: "bob", CompanyID: &c10, RoleLevel: 1, IsActive: true, CompanyActive: true},
+		4: {ID: 4, FIO: "Кэрол", Login: "carol", CompanyID: &c20, RoleLevel: 1, IsActive: true, CompanyActive: true},
+		5: {ID: 5, FIO: "Неактивный", Login: "ghost", CompanyID: &c10, IsActive: false, CompanyActive: true},
 	}}
 	repo := newFakeRepo(users)
 	files := newFakeFiles()
@@ -693,8 +694,8 @@ func TestOpenConversationPairOrder(t *testing.T) {
 	if conv1.UserAID != 2 || conv1.UserBID == nil || *conv1.UserBID != 3 {
 		t.Fatalf("пара не нормализована: a=%d b=%v", conv1.UserAID, conv1.UserBID)
 	}
-	if conv1.CompanyID != 10 {
-		t.Fatalf("company_id = %d, ожидалось 10", conv1.CompanyID)
+	if conv1.CompanyID == nil || *conv1.CompanyID != 10 {
+		t.Fatalf("company_id = %v, ожидалось 10", conv1.CompanyID)
 	}
 	if conv1.OtherUser == nil || conv1.OtherUser.ID != 2 {
 		t.Fatalf("other_user = %+v, ожидался id=2", conv1.OtherUser)
@@ -737,7 +738,7 @@ func TestOpenConversationGuards(t *testing.T) {
 	if err != nil {
 		t.Fatalf("кросс-компанийный чат должен проходить: %v", err)
 	}
-	if cross.CompanyID == 0 {
+	if cross.CompanyID == nil {
 		t.Fatalf("у кросс-компанийного диалога должен быть company_id: %+v", cross)
 	}
 	// Администратор системы тоже может писать сотруднику любой компании.

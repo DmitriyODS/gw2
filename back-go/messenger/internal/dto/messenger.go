@@ -53,12 +53,13 @@ func NewDirectoryUser(u *domain.User) *DirectoryUser {
 	if u == nil {
 		return nil
 	}
+	// Роль/должность/компания развязаны с users (живут в user_companies) и
+	// в объёме мессенджера не грузятся — поля остаются в форме для совместимости
+	// контракта фронта, но пустые.
 	return &DirectoryUser{
 		ID:         u.ID,
 		FIO:        u.FIO,
 		Login:      u.Login,
-		Post:       u.Post,
-		Role:       RoleRef{ID: u.RoleID, Name: u.RoleName, Level: u.RoleLevel},
 		CompanyID:  u.CompanyID,
 		Phone:      u.Phone,
 		Email:      u.Email,
@@ -236,7 +237,7 @@ type Conversation struct {
 	IsDevChat     bool      `json:"is_dev_chat"`
 	IsPetChat     bool      `json:"is_pet_chat"`
 	PetName       *string   `json:"pet_name"`
-	CompanyID     int64     `json:"company_id"`
+	CompanyID     *int64    `json:"company_id"`
 }
 
 func NewConversation(c *domain.Conversation, petName *string) *Conversation {
@@ -272,7 +273,7 @@ type ConversationListItem struct {
 	IsDevChat     bool           `json:"is_dev_chat"`
 	IsPetChat     bool           `json:"is_pet_chat"`
 	PetName       *string        `json:"pet_name"`
-	CompanyID     int64          `json:"company_id"`
+	CompanyID     *int64         `json:"company_id"`
 	CompanyName   *string        `json:"company_name"`
 	OwnerUser     *DirectoryUser `json:"owner_user"`
 }

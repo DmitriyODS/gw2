@@ -354,7 +354,7 @@ func (r *FeedRepo) ListActiveUnits(ctx context.Context, companyID int64) ([]*dom
 		FROM units un
 		JOIN users u ON u.id = un.user_id
 		LEFT JOIN tasks t ON t.id = un.task_id
-		WHERE un.company_id = $1 AND un.datetime_end IS NULL AND u.is_hidden = FALSE
+		WHERE un.company_id = $1 AND un.datetime_end IS NULL AND u.is_active
 		ORDER BY un.datetime_start ASC`, companyID)
 	if err != nil {
 		return nil, err

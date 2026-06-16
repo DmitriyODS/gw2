@@ -17,8 +17,9 @@ export const useCompaniesStore = defineStore('companies', () => {
   const items = ref([])
   const loading = ref(false)
   const loaded = ref(false)
-  // Активная компания. Для обычных ролей всегда равна auth.companyId;
-  // для Администратора системы — выбранная в селекторе или null (нет фильтра).
+  // Локально выбранная компания для платформенных экранов супер-админа
+  // (у него нет активной компании в токене). Обычный пользователь её не
+  // использует — его активная компания приходит из токена (auth.companyId).
   const activeCompanyId = ref(_initActive())
 
   function _initActive() {
@@ -31,9 +32,12 @@ export const useCompaniesStore = defineStore('companies', () => {
     return items.value.find(c => c.id === activeCompanyId.value) || null
   })
 
+  // Компания, в контексте которой работает UI:
+  //   обычный пользователь — активная компания из токена (auth.companyId);
+  //   супер-админ — выбранная локально на платформенных экранах (activeCompanyId).
   const effectiveCompanyId = computed(() => {
-    if (auth.companyId != null) return auth.companyId
-    return activeCompanyId.value
+    if (auth.isSuperAdmin) return activeCompanyId.value
+    return auth.companyId
   })
 
   function setActive(companyId) {
@@ -66,8 +70,8 @@ export const useCompaniesStore = defineStore('companies', () => {
   }
 
   // Локально подмешать изменённые настройки компании в загруженный список —
-  // чтобы UI (меню/гард раздела через useCompanySettings) у Администратора
-  // системы отреагировал сразу, без перезагрузки списка. No-op, если компании
+  // чтобы UI (меню/гард раздела через useCompanySettings) у супер-админа
+  // отреагировал сразу, без перезагрузки списка. No-op, если компании
   // нет в items (обычная роль список компаний не грузит).
   function patchSettings(companyId, patch) {
     const idx = items.value.findIndex(c => c.id === companyId)

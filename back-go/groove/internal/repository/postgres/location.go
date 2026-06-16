@@ -23,20 +23,16 @@ func NewLocationRepo(pool *pgxpool.Pool) *LocationRepo {
 
 func (r *LocationRepo) GetLocation(ctx context.Context, userID int64) (*domain.UserLocation, error) {
 	var loc domain.UserLocation
-	var companyID *int64
 	err := r.pool.QueryRow(ctx, `
-		SELECT ul.user_id, u.company_id, ul.latitude, ul.longitude, ul.city, ul.updated_at
-		FROM user_locations ul JOIN users u ON u.id = ul.user_id
+		SELECT ul.user_id, ul.latitude, ul.longitude, ul.city, ul.updated_at
+		FROM user_locations ul
 		WHERE ul.user_id = $1`, userID,
-	).Scan(&loc.UserID, &companyID, &loc.Lat, &loc.Lon, &loc.City, &loc.UpdatedAt)
+	).Scan(&loc.UserID, &loc.Lat, &loc.Lon, &loc.City, &loc.UpdatedAt)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, nil
 		}
 		return nil, err
-	}
-	if companyID != nil {
-		loc.CompanyID = *companyID
 	}
 	return &loc, nil
 }
@@ -59,11 +55,10 @@ func (r *LocationRepo) DeleteLocation(ctx context.Context, userID int64) error {
 
 func (r *LocationRepo) ListLocations(ctx context.Context) ([]*domain.UserLocation, error) {
 	rows, err := r.pool.Query(ctx, `
-		SELECT ul.user_id, u.company_id, ul.latitude, ul.longitude, ul.city, ul.updated_at
+		SELECT ul.user_id, ul.latitude, ul.longitude, ul.city, ul.updated_at
 		FROM user_locations ul
 		JOIN users u ON u.id = ul.user_id
-		JOIN companies c ON c.id = u.company_id
-		WHERE u.is_hidden = FALSE AND c.is_active = TRUE`)
+		WHERE u.is_active`)
 	if err != nil {
 		return nil, err
 	}
@@ -72,13 +67,9 @@ func (r *LocationRepo) ListLocations(ctx context.Context) ([]*domain.UserLocatio
 	var out []*domain.UserLocation
 	for rows.Next() {
 		var loc domain.UserLocation
-		var companyID *int64
-		if err := rows.Scan(&loc.UserID, &companyID, &loc.Lat, &loc.Lon,
+		if err := rows.Scan(&loc.UserID, &loc.Lat, &loc.Lon,
 			&loc.City, &loc.UpdatedAt); err != nil {
 			return nil, err
-		}
-		if companyID != nil {
-			loc.CompanyID = *companyID
 		}
 		out = append(out, &loc)
 	}

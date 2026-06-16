@@ -1,6 +1,64 @@
 package domain
 
-import "context"
+import (
+	"context"
+	"time"
+)
+
+// VerificationStore — коды/ссылки подтверждения email (таблица
+// email_verifications). Upsert перезаписывает запись пользователя (перевыпуск).
+type VerificationStore interface {
+	Upsert(ctx context.Context, userID int64, code, token string, expiresAt, sentAt time.Time) error
+	GetByToken(ctx context.Context, token string) (*Verification, error)
+	GetByUserID(ctx context.Context, userID int64) (*Verification, error)
+	IncAttempts(ctx context.Context, userID int64) error
+	Delete(ctx context.Context, userID int64) error
+}
+
+// MailClient — gRPC-клиент к mailsvc (межсервисное общение — только gRPC).
+type MailClient interface {
+	SendVerification(ctx context.Context, to, fio, code, link string) error
+	SendPasswordReset(ctx context.Context, to, fio, link string) error
+	SendCompanyInvite(ctx context.Context, to, companyName, roleName, link string) error
+}
+
+// PasswordReset — активный токен сброса пароля (одна заявка на пользователя).
+type PasswordReset struct {
+	UserID     int64
+	Token      string
+	ExpiresAt  time.Time
+	LastSentAt time.Time
+}
+
+// PasswordResetStore — токены сброса пароля (таблица password_resets).
+type PasswordResetStore interface {
+	Upsert(ctx context.Context, userID int64, token string, expiresAt, sentAt time.Time) error
+	GetByToken(ctx context.Context, token string) (*PasswordReset, error)
+	GetByUserID(ctx context.Context, userID int64) (*PasswordReset, error)
+	Delete(ctx context.Context, userID int64) error
+}
+
+// CompanyInvite — email-приглашение в компанию с ролью. GetByToken дозаполняет
+// CompanyName/RoleName/RoleLevel джойнами (для письма и превью).
+type CompanyInvite struct {
+	ID          int64
+	CompanyID   int64
+	Email       string
+	RoleID      int64
+	Token       string
+	InvitedBy   *int64
+	ExpiresAt   time.Time
+	CompanyName string
+	RoleName    string
+	RoleLevel   int
+}
+
+// CompanyInviteStore — email-приглашения в компанию (таблица company_invites).
+type CompanyInviteStore interface {
+	Upsert(ctx context.Context, companyID int64, email string, roleID int64, token string, invitedBy *int64, expiresAt time.Time) error
+	GetByToken(ctx context.Context, token string) (*CompanyInvite, error)
+	Delete(ctx context.Context, id int64) error
+}
 
 // UserRepository — персистентность пользователей. Пароли хешируются и
 // проверяются на стороне PostgreSQL (pgcrypto, bcrypt через crypt/gen_salt) —
@@ -9,30 +67,25 @@ type UserRepository interface {
 	GetByID(ctx context.Context, id int64) (*User, error)
 	GetByLogin(ctx context.Context, login string) (*User, error)
 	GetByEmail(ctx context.Context, email string) (*User, error)
-	// ListVisible — все видимые пользователи (без фильтра по компании,
-	// как user_repo.get_all() в Flask), по id.
-	ListVisible(ctx context.Context) ([]*User, error)
-	// SearchDirectory — каталог: только видимые, ILIKE по fio/login,
-	// опционально без excludeID и по компании; сортировка по fio.
-	SearchDirectory(ctx context.Context, query string, excludeID int64, companyID *int64) ([]*User, error)
+	// ListAll — все активные пользователи платформы (список супер-админа), по id.
+	ListAll(ctx context.Context) ([]*User, error)
+	// SearchDirectory — глобальный каталог (контакты): активные, ILIKE по
+	// fio/login, опционально без excludeID; сортировка по fio.
+	SearchDirectory(ctx context.Context, query string, excludeID int64) ([]*User, error)
 	Create(ctx context.Context, u *User) error
-	// UpdateFields — точечное обновление колонок пользователя.
+	// UpdateFields — точечное обновление колонок идентичности пользователя.
 	UpdateFields(ctx context.Context, id int64, fields map[string]any) error
 	GetRole(ctx context.Context, roleID int64) (*Role, error)
+	// RoleByLevel — роль по уровню (роли фиксированы); nil — нет такой.
+	RoleByLevel(ctx context.Context, level int) (*Role, error)
 	// ListRoles — фиксированные роли по возрастанию уровня (GET /api/roles).
 	ListRoles(ctx context.Context) ([]*Role, error)
-	// CountVisibleByLevel — видимые пользователи с уровнем роли (защита
-	// «последнего Администратора системы»).
-	CountVisibleByLevel(ctx context.Context, level int) (int, error)
-	// IsCompanyDirector — числится ли пользователь корневым Руководителем
-	// какой-либо компании (companies.director_id).
-	IsCompanyDirector(ctx context.Context, userID int64) (bool, error)
 	HashPassword(ctx context.Context, password string) (string, error)
 	VerifyPassword(ctx context.Context, password, hash string) (bool, error)
 
 	// ── Членство в компаниях (user_companies) ──
 	// ListMemberships — все компании пользователя с ролью в каждой и активностью
-	// компании, по created_at ASC (первая — «первичная»).
+	// компании, по created_at ASC.
 	ListMemberships(ctx context.Context, userID int64) ([]Membership, error)
 	// GetMembership — связка для конкретной компании; nil — не состоит.
 	GetMembership(ctx context.Context, userID, companyID int64) (*Membership, error)
@@ -42,20 +95,19 @@ type UserRepository interface {
 	RemoveMembership(ctx context.Context, userID, companyID int64) error
 	// UpdateMembershipRole — сменить роль в конкретной компании.
 	UpdateMembershipRole(ctx context.Context, userID, companyID, roleID int64) error
-	// CountCompanyMembersByLevel — видимые члены компании с уровнем роли
-	// (защита «последнего Руководителя компании»).
+	// SetMembershipPost — должность в конкретной компании.
+	SetMembershipPost(ctx context.Context, userID, companyID int64, post *string) error
+	// CountCompanyMembersByLevel — активные члены компании с уровнем роли
+	// (защита «последнего администратора компании»).
 	CountCompanyMembersByLevel(ctx context.Context, companyID int64, level int) (int, error)
 	// SearchDirectoryMembers — каталог членов КОМПАНИИ (по user_companies) с
-	// ролью в этой компании; только видимые, ILIKE по fio/login.
+	// ролью в этой компании; только активные, ILIKE по fio/login.
 	SearchDirectoryMembers(ctx context.Context, query string, excludeID, companyID int64) ([]*User, error)
-	// SearchNonMembers — видимые пользователи, ЕЩЁ НЕ состоящие в компании
-	// (кандидаты на добавление), ILIKE по fio/login; их первичная роль/компания.
+	// SearchNonMembers — активные пользователи (не супер-админ), ЕЩЁ НЕ
+	// состоящие в компании (кандидаты на добавление), ILIKE по fio/login.
 	SearchNonMembers(ctx context.Context, query string, companyID int64) ([]*User, error)
-	// SyncPrimaryCompany — пересчитать users.company_id/role_id из старейшей
-	// связки (NULL, если членств не осталось). Держит инвариант NULL ⇔ админ.
-	SyncPrimaryCompany(ctx context.Context, userID int64) error
 	// CompanyActive — активна ли компания (auth-гейт по активной компании
-	// сессии из токена). nil → true (Администратор системы).
+	// сессии из токена). nil → true (активной компании нет).
 	CompanyActive(ctx context.Context, companyID *int64) (bool, error)
 }
 
@@ -86,6 +138,9 @@ type AvatarStorage interface {
 type CompanyRepository interface {
 	// ListCompanies — все компании с директором, по created_at DESC.
 	ListCompanies(ctx context.Context) ([]*Company, error)
+	// ListCompaniesWhereAdmin — компании, где пользователь — член с ролью
+	// администратора (раздел «Компании» обычного пользователя), по created_at DESC.
+	ListCompaniesWhereAdmin(ctx context.Context, userID int64) ([]*Company, error)
 	// GetCompany — компания с директором; nil — нет такой.
 	GetCompany(ctx context.Context, id int64) (*Company, error)
 	GetCompanyByName(ctx context.Context, name string) (*Company, error)

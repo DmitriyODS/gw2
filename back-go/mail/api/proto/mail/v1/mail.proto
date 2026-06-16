@@ -1,0 +1,32 @@
+// Контракт микросервиса рассылки писем (gRPC, mailsvc).
+//
+// Сервис stateless: принимает Send (получатель + тип шаблона + параметры),
+// рендерит брендированный HTML-шаблон и отправляет по SMTP. Логика генерации
+// кодов/ссылок подтверждения живёт у вызывающего (authsvc) — mailsvc только
+// доставляет. Бизнес-ошибка уезжает полем Error; транспорт всегда отвечает OK.
+syntax = "proto3";
+
+package mail.v1;
+
+option go_package = "github.com/DmitriyODS/gw2/back-go/pkg/gen/mailpb;mailpb";
+
+service MailService {
+  rpc Send(SendRequest) returns (SendResponse);
+}
+
+message Error {
+  string code = 1;
+  string message = 2;
+  int32 http_status = 3;
+}
+
+message SendRequest {
+  string to = 1;       // email получателя
+  string to_name = 2;  // отображаемое имя (ФИО), может быть пустым
+  string template = 3; // тип письма: verify_email | …
+  map<string, string> params = 4; // параметры шаблона (code, link, fio, …)
+}
+
+message SendResponse {
+  Error error = 1;
+}

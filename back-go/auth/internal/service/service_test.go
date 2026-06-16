@@ -16,11 +16,10 @@ import (
 // ── Фейки портов (без БД/Redis, как в callsvc) ───────────────────
 
 type fakeRepo struct {
-	users     map[int64]*domain.User
-	roles     map[int64]*domain.Role
-	directors map[int64]bool                         // userID → корневой Руководитель компании
-	members   map[int64]map[int64]*domain.Membership // userID → companyID → членство
-	nextID    int64
+	users   map[int64]*domain.User
+	roles   map[int64]*domain.Role
+	members map[int64]map[int64]*domain.Membership // userID → companyID → членство
+	nextID  int64
 }
 
 func newFakeRepo() *fakeRepo {
@@ -29,11 +28,9 @@ func newFakeRepo() *fakeRepo {
 		roles: map[int64]*domain.Role{
 			1: {ID: 1, Name: "Сотрудник", Level: domain.LevelEmployee},
 			2: {ID: 2, Name: "Менеджер", Level: domain.LevelManager},
-			3: {ID: 3, Name: "Руководитель", Level: domain.LevelDirector},
-			4: {ID: 4, Name: "Администратор", Level: domain.LevelAdmin},
+			3: {ID: 3, Name: "Администратор", Level: domain.LevelAdmin},
 		},
-		directors: map[int64]bool{},
-		members:   map[int64]map[int64]*domain.Membership{},
+		members: map[int64]map[int64]*domain.Membership{},
 	}
 }
 
@@ -41,15 +38,26 @@ func (r *fakeRepo) add(u *domain.User) *domain.User {
 	r.nextID++
 	u.ID = r.nextID
 	u.CreatedAt = time.Now()
+	if !u.IsActive {
+		u.IsActive = true // новый аккаунт активен по умолчанию (бывший !is_hidden)
+	}
+	u.EmailVerified = true // фикстуры считаем подтверждёнными (как существующие аккаунты)
 	r.users[u.ID] = u
-	// Авто-членство из первичной компании пользователя (Company-указатель общий,
-	// чтобы мутация u.Company.IsActive в тестах отражалась и в членстве).
+	// Авто-членство из контекста компании пользователя (роль/компания из User
+	// в фикстуре трактуются как членство в активной компании теста).
 	if u.CompanyID != nil {
 		if r.members[u.ID] == nil {
 			r.members[u.ID] = map[int64]*domain.Membership{}
 		}
+		role := u.Role
+		if role.Level == 0 {
+			role = *r.roles[1]
+		}
 		r.members[u.ID][*u.CompanyID] = &domain.Membership{
-			CompanyID: *u.CompanyID, Company: u.Company, Role: u.Role, CreatedAt: u.CreatedAt,
+			CompanyID: *u.CompanyID,
+			Company:   &domain.CompanyRef{ID: *u.CompanyID, Name: "Компания", IsActive: true},
+			Role:      role,
+			CreatedAt: u.CreatedAt,
 		}
 	}
 	return u
@@ -84,10 +92,10 @@ func (r *fakeRepo) GetByEmail(_ context.Context, email string) (*domain.User, er
 	return nil, nil
 }
 
-func (r *fakeRepo) ListVisible(_ context.Context) ([]*domain.User, error) {
+func (r *fakeRepo) ListAll(_ context.Context) ([]*domain.User, error) {
 	var out []*domain.User
 	for _, u := range r.users {
-		if !u.IsHidden {
+		if u.IsActive {
 			cp := *u
 			out = append(out, &cp)
 		}
@@ -95,14 +103,10 @@ func (r *fakeRepo) ListVisible(_ context.Context) ([]*domain.User, error) {
 	return out, nil
 }
 
-func (r *fakeRepo) SearchDirectory(_ context.Context, query string, excludeID int64,
-	companyID *int64) ([]*domain.User, error) {
+func (r *fakeRepo) SearchDirectory(_ context.Context, query string, excludeID int64) ([]*domain.User, error) {
 	var out []*domain.User
 	for _, u := range r.users {
-		if u.IsHidden || u.ID == excludeID {
-			continue
-		}
-		if companyID != nil && (u.CompanyID == nil || *u.CompanyID != *companyID) {
+		if !u.IsActive || u.ID == excludeID {
 			continue
 		}
 		if query != "" && !strings.Contains(strings.ToLower(u.FIO), strings.ToLower(query)) &&
@@ -132,11 +136,8 @@ func (r *fakeRepo) UpdateFields(_ context.Context, id int64, fields map[string]a
 			u.HashPassword = v.(string)
 		case "is_default_pass":
 			u.IsDefaultPass = v.(bool)
-		case "is_hidden":
-			u.IsHidden = v.(bool)
-		case "role_id":
-			role := r.roles[v.(int64)]
-			u.Role = *role
+		case "is_active":
+			u.IsActive = v.(bool)
 		case "avatar_path":
 			if v == nil {
 				u.AvatarPath = nil
@@ -144,13 +145,10 @@ func (r *fakeRepo) UpdateFields(_ context.Context, id int64, fields map[string]a
 				p := v.(string)
 				u.AvatarPath = &p
 			}
-		case "company_id":
-			if v == nil {
-				u.CompanyID = nil
-			} else {
-				cid := v.(int64)
-				u.CompanyID = &cid
-			}
+		case "email":
+			u.Email, _ = v.(*string)
+		case "phone":
+			u.Phone, _ = v.(*string)
 		}
 	}
 	return nil
@@ -175,18 +173,14 @@ func (r *fakeRepo) ListRoles(_ context.Context) ([]*domain.Role, error) {
 	return out, nil
 }
 
-func (r *fakeRepo) CountVisibleByLevel(_ context.Context, level int) (int, error) {
-	n := 0
-	for _, u := range r.users {
-		if !u.IsHidden && u.Role.Level == level {
-			n++
+func (r *fakeRepo) RoleByLevel(_ context.Context, level int) (*domain.Role, error) {
+	for _, role := range r.roles {
+		if role.Level == level {
+			cp := *role
+			return &cp, nil
 		}
 	}
-	return n, nil
-}
-
-func (r *fakeRepo) IsCompanyDirector(_ context.Context, userID int64) (bool, error) {
-	return r.directors[userID], nil
+	return nil, nil
 }
 
 func (r *fakeRepo) HashPassword(_ context.Context, password string) (string, error) {
@@ -252,7 +246,7 @@ func (r *fakeRepo) UpdateMembershipRole(_ context.Context, userID, companyID, ro
 func (r *fakeRepo) CountCompanyMembersByLevel(_ context.Context, companyID int64, level int) (int, error) {
 	n := 0
 	for uid, byCompany := range r.members {
-		if m, ok := byCompany[companyID]; ok && m.Role.Level == level && !r.users[uid].IsHidden {
+		if m, ok := byCompany[companyID]; ok && m.Role.Level == level && r.users[uid].IsActive {
 			n++
 		}
 	}
@@ -267,7 +261,7 @@ func (r *fakeRepo) SearchDirectoryMembers(_ context.Context, query string, exclu
 			continue
 		}
 		u := r.users[uid]
-		if u == nil || u.IsHidden || u.ID == excludeID {
+		if u == nil || !u.IsActive || u.ID == excludeID {
 			continue
 		}
 		if query != "" && !strings.Contains(strings.ToLower(u.FIO), strings.ToLower(query)) &&
@@ -276,6 +270,7 @@ func (r *fakeRepo) SearchDirectoryMembers(_ context.Context, query string, exclu
 		}
 		cp := *u
 		cp.Role = m.Role
+		cp.Post = m.Post
 		cp.CompanyID = &companyID
 		out = append(out, &cp)
 	}
@@ -285,7 +280,7 @@ func (r *fakeRepo) SearchDirectoryMembers(_ context.Context, query string, exclu
 func (r *fakeRepo) SearchNonMembers(_ context.Context, query string, companyID int64) ([]*domain.User, error) {
 	var out []*domain.User
 	for _, u := range r.users {
-		if u.IsHidden {
+		if !u.IsActive || u.IsSuperAdmin {
 			continue
 		}
 		if _, ok := r.members[u.ID][companyID]; ok {
@@ -301,19 +296,10 @@ func (r *fakeRepo) SearchNonMembers(_ context.Context, query string, companyID i
 	return out, nil
 }
 
-func (r *fakeRepo) SyncPrimaryCompany(_ context.Context, userID int64) error {
-	ms, _ := r.ListMemberships(context.Background(), userID)
-	u := r.users[userID]
-	if u == nil {
-		return nil
+func (r *fakeRepo) SetMembershipPost(_ context.Context, userID, companyID int64, post *string) error {
+	if m, ok := r.members[userID][companyID]; ok {
+		m.Post = post
 	}
-	if len(ms) == 0 {
-		u.CompanyID = nil
-		return nil
-	}
-	primary := ms[0]
-	u.CompanyID = &primary.CompanyID
-	u.Role = primary.Role
 	return nil
 }
 
@@ -366,6 +352,16 @@ func (f *fakeCompanies) ListCompanies(_ context.Context) ([]*domain.Company, err
 	return out, nil
 }
 
+func (f *fakeCompanies) ListCompaniesWhereAdmin(_ context.Context, userID int64) ([]*domain.Company, error) {
+	var out []*domain.Company
+	for _, c := range f.companies {
+		if c.CreatedBy != nil && *c.CreatedBy == userID {
+			out = append(out, c)
+		}
+	}
+	return out, nil
+}
+
 func (f *fakeCompanies) GetCompany(_ context.Context, id int64) (*domain.Company, error) {
 	return f.companies[id], nil
 }
@@ -408,8 +404,6 @@ func (f *fakeCompanies) UpdateCompanyFields(_ context.Context, id int64, fields 
 			c.Name = v.(string)
 		case "description":
 			c.Description, _ = v.(*string)
-		case "director_id":
-			c.DirectorID, _ = v.(*int64)
 		case "is_active":
 			c.IsActive = v.(bool)
 		case "settings":
@@ -441,6 +435,122 @@ func (f *fakeCompanies) CompanyStats(_ context.Context, ids []int64) (map[int64]
 	return out, nil
 }
 
+// fakeVerifications — in-memory VerificationStore.
+type fakeVerifications struct {
+	m map[int64]*domain.Verification
+}
+
+func newFakeVerifications() *fakeVerifications {
+	return &fakeVerifications{m: map[int64]*domain.Verification{}}
+}
+
+func (f *fakeVerifications) Upsert(_ context.Context, userID int64, code, token string, expiresAt, sentAt time.Time) error {
+	f.m[userID] = &domain.Verification{UserID: userID, Code: code, Token: token, ExpiresAt: expiresAt, LastSentAt: sentAt}
+	return nil
+}
+
+func (f *fakeVerifications) GetByToken(_ context.Context, token string) (*domain.Verification, error) {
+	for _, v := range f.m {
+		if v.Token == token {
+			return v, nil
+		}
+	}
+	return nil, nil
+}
+
+func (f *fakeVerifications) GetByUserID(_ context.Context, userID int64) (*domain.Verification, error) {
+	return f.m[userID], nil
+}
+
+func (f *fakeVerifications) IncAttempts(_ context.Context, userID int64) error {
+	if v, ok := f.m[userID]; ok {
+		v.Attempts++
+	}
+	return nil
+}
+
+func (f *fakeVerifications) Delete(_ context.Context, userID int64) error {
+	delete(f.m, userID)
+	return nil
+}
+
+// fakeMail — заглушка MailClient (письма в unit-тестах не шлём).
+type fakeMail struct{}
+
+func (fakeMail) SendVerification(context.Context, string, string, string, string) error  { return nil }
+func (fakeMail) SendPasswordReset(context.Context, string, string, string) error         { return nil }
+func (fakeMail) SendCompanyInvite(context.Context, string, string, string, string) error { return nil }
+
+// fakePasswordResets — in-memory PasswordResetStore.
+type fakePasswordResets struct {
+	m       map[int64]*domain.PasswordReset
+	byToken map[string]int64
+}
+
+func newFakePasswordResets() *fakePasswordResets {
+	return &fakePasswordResets{m: map[int64]*domain.PasswordReset{}, byToken: map[string]int64{}}
+}
+
+func (f *fakePasswordResets) Upsert(_ context.Context, userID int64, token string, expiresAt, sentAt time.Time) error {
+	if old, ok := f.m[userID]; ok {
+		delete(f.byToken, old.Token)
+	}
+	f.m[userID] = &domain.PasswordReset{UserID: userID, Token: token, ExpiresAt: expiresAt, LastSentAt: sentAt}
+	f.byToken[token] = userID
+	return nil
+}
+
+func (f *fakePasswordResets) GetByToken(_ context.Context, token string) (*domain.PasswordReset, error) {
+	if uid, ok := f.byToken[token]; ok {
+		return f.m[uid], nil
+	}
+	return nil, nil
+}
+
+func (f *fakePasswordResets) GetByUserID(_ context.Context, userID int64) (*domain.PasswordReset, error) {
+	return f.m[userID], nil
+}
+
+func (f *fakePasswordResets) Delete(_ context.Context, userID int64) error {
+	if r, ok := f.m[userID]; ok {
+		delete(f.byToken, r.Token)
+		delete(f.m, userID)
+	}
+	return nil
+}
+
+// fakeCompanyInvites — in-memory CompanyInviteStore.
+type fakeCompanyInvites struct {
+	seq     int64
+	byToken map[string]*domain.CompanyInvite
+}
+
+func newFakeCompanyInvites() *fakeCompanyInvites {
+	return &fakeCompanyInvites{byToken: map[string]*domain.CompanyInvite{}}
+}
+
+func (f *fakeCompanyInvites) Upsert(_ context.Context, companyID int64, email string, roleID int64, token string, invitedBy *int64, expiresAt time.Time) error {
+	f.seq++
+	f.byToken[token] = &domain.CompanyInvite{
+		ID: f.seq, CompanyID: companyID, Email: email, RoleID: roleID,
+		Token: token, InvitedBy: invitedBy, ExpiresAt: expiresAt,
+	}
+	return nil
+}
+
+func (f *fakeCompanyInvites) GetByToken(_ context.Context, token string) (*domain.CompanyInvite, error) {
+	return f.byToken[token], nil
+}
+
+func (f *fakeCompanyInvites) Delete(_ context.Context, id int64) error {
+	for k, v := range f.byToken {
+		if v.ID == id {
+			delete(f.byToken, k)
+		}
+	}
+	return nil
+}
+
 // fakeBackup — заглушка BackupStore (export/import в unit-тестах не гоняем).
 type fakeBackup struct{}
 
@@ -462,24 +572,27 @@ func newTestService(t *testing.T) (*Service, *fakeRepo, *fakeThrottle) {
 	}
 	repo := newFakeRepo()
 	throttle := newFakeThrottle()
-	svc := New(repo, newFakeCompanies(), fakeBackup{}, throttle, iss, &fakeAvatars{}, slog.Default())
+	svc := New(repo, newFakeCompanies(), fakeBackup{}, throttle, iss, &fakeAvatars{},
+		newFakeVerifications(), newFakePasswordResets(), newFakeCompanyInvites(),
+		fakeMail{}, "http://localhost:5173", slog.Default())
 	return svc, repo, throttle
 }
 
 func employee(repo *fakeRepo, login string, companyID *int64) *domain.User {
 	return repo.add(&domain.User{
 		FIO: "Тест " + login, Login: login, HashPassword: "hash:secret123",
-		Role: *repo.roles[1], CompanyID: companyID,
-		Company: companyOf(companyID), IsDefaultPass: false,
+		Role: *repo.roles[1], CompanyID: companyID, IsDefaultPass: false,
 	})
 }
 
-func companyOf(id *int64) *domain.CompanyRef {
-	if id == nil {
-		return nil
+// disableCompany — пометить компанию (через все членства в ней) отключённой:
+// auth-гейт активной компании сессии должен отдать COMPANY_DISABLED.
+func (r *fakeRepo) disableCompany(companyID int64) {
+	for _, byCompany := range r.members {
+		if m, ok := byCompany[companyID]; ok && m.Company != nil {
+			m.Company.IsActive = false
+		}
 	}
-	return &domain.CompanyRef{ID: *id, Name: "Компания", IsActive: true,
-		Settings: map[string]any{"uses_calls": true}}
 }
 
 func wantCode(t *testing.T, err error, code string) {
@@ -539,8 +652,8 @@ func TestLoginLocked(t *testing.T) {
 func TestLoginCompanyDisabled(t *testing.T) {
 	svc, repo, _ := newTestService(t)
 	cid := int64(1)
-	u := employee(repo, "ivanov", &cid)
-	u.Company.IsActive = false
+	employee(repo, "ivanov", &cid)
+	repo.disableCompany(cid)
 
 	_, err := svc.Login(context.Background(), dto.LoginRequest{Login: "ivanov", Password: "secret123"})
 	wantCode(t, err, "COMPANY_DISABLED")
@@ -599,16 +712,30 @@ func TestChangeDefault(t *testing.T) {
 
 // ── Users ────────────────────────────────────────────────────────
 
+// companyAdmin — администратор компании (роль level 3) с активной компанией
+// cid в токене: именно так actor попадает в управление членами компании.
+func companyAdmin(repo *fakeRepo, login string, cid int64) *domain.User {
+	u := repo.add(&domain.User{
+		FIO: "Админ " + login, Login: login, HashPassword: "hash:secret123",
+		Role: *repo.roles[3], CompanyID: &cid,
+	})
+	return u
+}
+
 func TestCreateUserRoleGuard(t *testing.T) {
 	svc, repo, _ := newTestService(t)
-	director := repo.add(&domain.User{FIO: "Дир", Login: "dir", Role: *repo.roles[3]})
+	cid := int64(1)
+	// Менеджер (level 2) не может завести администратора компании (level 3).
+	manager := repo.add(&domain.User{
+		FIO: "Менеджер", Login: "mgr", Role: *repo.roles[2], CompanyID: &cid,
+	})
 
-	_, err := svc.CreateUser(context.Background(), director, dto.CreateUserRequest{
-		FIO: "Хакер", Login: "hacker", RoleID: 4,
+	_, err := svc.CreateUser(context.Background(), manager, dto.CreateUserRequest{
+		FIO: "Хакер", Login: "hacker", RoleID: 3,
 	})
 	wantCode(t, err, "ROLE_LEVEL_FORBIDDEN")
 
-	created, err := svc.CreateUser(context.Background(), director, dto.CreateUserRequest{
+	created, err := svc.CreateUser(context.Background(), manager, dto.CreateUserRequest{
 		FIO: "Новый", Login: "newbie", RoleID: 1,
 	})
 	if err != nil {
@@ -620,11 +747,27 @@ func TestCreateUserRoleGuard(t *testing.T) {
 	if repo.users[created.ID].HashPassword != "hash:newbie123" {
 		t.Fatal("дефолтный пароль должен быть <login>123")
 	}
+	// Новичок стал членом активной компании актора с ролью Сотрудник.
+	if m, _ := repo.GetMembership(context.Background(), created.ID, cid); m == nil || m.Role.Level != domain.LevelEmployee {
+		t.Fatalf("членство новичка не создано: %+v", m)
+	}
+}
+
+func TestCreateUserRequiresActiveCompany(t *testing.T) {
+	svc, repo, _ := newTestService(t)
+	// Без активной компании в токене заводить сотрудников некуда.
+	admin := repo.add(&domain.User{FIO: "Админ", Login: "admin", Role: *repo.roles[3]})
+
+	_, err := svc.CreateUser(context.Background(), admin, dto.CreateUserRequest{
+		FIO: "Новый", Login: "newbie", RoleID: 1,
+	})
+	wantCode(t, err, "COMPANY_SCOPE_REQUIRED")
 }
 
 func TestCreateUserDuplicateLogin(t *testing.T) {
 	svc, repo, _ := newTestService(t)
-	admin := repo.add(&domain.User{FIO: "Админ", Login: "admin", Role: *repo.roles[4]})
+	cid := int64(1)
+	admin := companyAdmin(repo, "admin", cid)
 	employee(repo, "ivanov", nil)
 
 	_, err := svc.CreateUser(context.Background(), admin, dto.CreateUserRequest{
@@ -635,55 +778,62 @@ func TestCreateUserDuplicateLogin(t *testing.T) {
 
 func TestHideUserGuards(t *testing.T) {
 	svc, repo, _ := newTestService(t)
-	rootAdmin := repo.add(&domain.User{FIO: "Рут", Login: "root", Role: *repo.roles[4], IsRootAdmin: true})
-	admin := repo.add(&domain.User{FIO: "Админ", Login: "admin", Role: *repo.roles[4]})
-	director := repo.add(&domain.User{FIO: "Дир", Login: "dir", Role: *repo.roles[3]})
-	repo.directors[director.ID] = true
+	cid := int64(1)
+	admin := companyAdmin(repo, "admin", cid)
+	// Платформенный супер-админ защищён.
+	superAdmin := repo.add(&domain.User{FIO: "Супер", Login: "super", IsSuperAdmin: true, CompanyID: &cid})
+	repo.AddMembership(context.Background(), superAdmin.ID, cid, 3)
+	outsider := employee(repo, "stranger", nil) // не член компании cid
 
 	// Себя — нельзя.
 	wantCode(t, svc.HideUser(context.Background(), admin, admin.ID), "SELF_HIDE")
-	// Корневого админа — никому.
-	wantCode(t, svc.HideUser(context.Background(), admin, rootAdmin.ID), "ROOT_ADMIN")
-	// Выше себя — нельзя.
-	wantCode(t, svc.HideUser(context.Background(), director, admin.ID), "ROLE_LEVEL_FORBIDDEN")
-	// Корневого Руководителя компании — только Админ системы.
-	otherDirector := repo.add(&domain.User{FIO: "Дир2", Login: "dir2", Role: *repo.roles[3]})
-	repo.directors[otherDirector.ID] = true
-	wantCode(t, svc.HideUser(context.Background(), director, otherDirector.ID), "ROOT_DIRECTOR")
-	// Админ системы может скрыть корневого Руководителя.
-	if err := svc.HideUser(context.Background(), admin, otherDirector.ID); err != nil {
-		t.Fatalf("admin hide director: %v", err)
+	// Супер-админа — нельзя.
+	wantCode(t, svc.HideUser(context.Background(), admin, superAdmin.ID), "SUPER_ADMIN")
+	// Не члена компании — нет такого участника.
+	wantCode(t, svc.HideUser(context.Background(), admin, outsider.ID), "NOT_FOUND")
+	// Участника с более высокой ролью — нельзя.
+	manager := companyAdmin(repo, "mgr", cid) // тоже level 3
+	demoter := repo.add(&domain.User{FIO: "М", Login: "m2", Role: *repo.roles[2], CompanyID: &cid})
+	wantCode(t, svc.HideUser(context.Background(), demoter, manager.ID), "ROLE_LEVEL_FORBIDDEN")
+
+	// Рядового сотрудника админ исключает успешно.
+	emp := employee(repo, "ivanov", &cid)
+	if err := svc.HideUser(context.Background(), admin, emp.ID); err != nil {
+		t.Fatalf("hide employee: %v", err)
+	}
+	if m, _ := repo.GetMembership(context.Background(), emp.ID, cid); m != nil {
+		t.Fatal("членство сотрудника не удалено")
 	}
 }
 
 func TestHideLastAdmin(t *testing.T) {
 	svc, repo, _ := newTestService(t)
-	admin1 := repo.add(&domain.User{FIO: "А1", Login: "a1", Role: *repo.roles[4]})
-	admin2 := repo.add(&domain.User{FIO: "А2", Login: "a2", Role: *repo.roles[4]})
+	cid := int64(1)
+	admin1 := companyAdmin(repo, "a1", cid)
+	admin2 := companyAdmin(repo, "a2", cid)
 
+	// Двое администраторов — одного исключить можно.
 	if err := svc.HideUser(context.Background(), admin1, admin2.ID); err != nil {
 		t.Fatalf("hide admin2: %v", err)
 	}
-	// admin1 остался единственным видимым админом — третий не скроет его…
-	admin3 := repo.add(&domain.User{FIO: "А3", Login: "a3", Role: *repo.roles[4]})
-	_ = admin3
-	// admin3 теперь тоже админ: их двое видимых, скрыть admin1 можно.
-	if err := svc.HideUser(context.Background(), admin3, admin1.ID); err != nil {
-		t.Fatalf("hide admin1: %v", err)
+	// Остался единственный администратор admin1 — понизить/исключить нельзя.
+	// Создаём второго администратора, чтобы было кому исключать, и проверяем
+	// last-admin guard при попытке снять последнего.
+	admin3 := companyAdmin(repo, "a3", cid)
+	if err := svc.HideUser(context.Background(), admin1, admin3.ID); err != nil {
+		t.Fatalf("hide admin3: %v", err)
 	}
-	// Остался один admin3 — last-admin guard.
-	admin4view := repo.add(&domain.User{FIO: "Дир", Login: "d", Role: *repo.roles[3]})
-	wantCode(t, svc.HideUser(context.Background(), admin4view, admin3.ID), "ROLE_LEVEL_FORBIDDEN")
-	wantCode(t, svc.HideUser(context.Background(), admin3, admin3.ID), "SELF_HIDE")
+	// admin1 — последний администратор cid: исключить его (самого себя) нельзя
+	// уже по SELF_HIDE, а попытка другого участника — last-admin/роль-гард.
+	emp := repo.add(&domain.User{FIO: "С", Login: "emp", Role: *repo.roles[1], CompanyID: &cid})
+	wantCode(t, svc.HideUser(context.Background(), emp, admin1.ID), "ROLE_LEVEL_FORBIDDEN")
 }
 
 func TestAssignRoleGuards(t *testing.T) {
 	svc, repo, _ := newTestService(t)
 	cid := int64(1)
-	// Админ системы оперирует в контексте компании (?company_id= → actor.CompanyID
-	// проставляет хендлер; в юнит-тесте задаём напрямую).
-	admin := repo.add(&domain.User{FIO: "Админ", Login: "admin", Role: *repo.roles[4], CompanyID: &cid})
-	repo.add(&domain.User{FIO: "Запас", Login: "admin2", Role: *repo.roles[4]})
+	// Администратор компании оперирует в контексте своей активной компании.
+	admin := companyAdmin(repo, "admin", cid)
 	emp := employee(repo, "ivanov", &cid)
 
 	wantCode(t, errOf(svc.AssignRole(context.Background(), admin, admin.ID, 1)), "SELF_ROLE_CHANGE")
@@ -701,14 +851,16 @@ func TestAssignRoleGuards(t *testing.T) {
 
 func TestResetPasswordGuards(t *testing.T) {
 	svc, repo, _ := newTestService(t)
-	director := repo.add(&domain.User{FIO: "Дир", Login: "dir", Role: *repo.roles[3]})
-	admin := repo.add(&domain.User{FIO: "Админ", Login: "admin", Role: *repo.roles[4]})
-	emp := employee(repo, "ivanov", nil)
+	cid := int64(1)
+	// Менеджер не может сбросить пароль администратору (роль выше).
+	manager := repo.add(&domain.User{FIO: "Менеджер", Login: "mgr", Role: *repo.roles[2], CompanyID: &cid})
+	admin := companyAdmin(repo, "admin", cid)
+	emp := employee(repo, "ivanov", &cid)
 
-	wantCode(t, svc.ResetPassword(context.Background(), director, admin.ID), "ROLE_LEVEL_FORBIDDEN")
-	wantCode(t, svc.ResetPassword(context.Background(), director, director.ID), "SELF_RESET")
+	wantCode(t, svc.ResetPassword(context.Background(), manager, admin.ID), "ROLE_LEVEL_FORBIDDEN")
+	wantCode(t, svc.ResetPassword(context.Background(), manager, manager.ID), "SELF_RESET")
 
-	if err := svc.ResetPassword(context.Background(), director, emp.ID); err != nil {
+	if err := svc.ResetPassword(context.Background(), admin, emp.ID); err != nil {
 		t.Fatalf("ResetPassword: %v", err)
 	}
 	if !repo.users[emp.ID].IsDefaultPass || repo.users[emp.ID].HashPassword != "hash:ivanov123" {
@@ -763,8 +915,8 @@ func TestDirectoryScoping(t *testing.T) {
 		}
 	}
 
-	// Администратор системы выбирает компанию явно.
-	sysAdmin := repo.add(&domain.User{FIO: "Админ", Login: "admin", Role: *repo.roles[4]})
+	// Супер-админ выбирает компанию явно.
+	sysAdmin := repo.add(&domain.User{FIO: "Админ", Login: "admin", IsSuperAdmin: true})
 	got, err = svc.Directory(context.Background(), dto.DirectoryRequest{
 		ActorID: sysAdmin.ID, CompanyID: &c2,
 	})
@@ -814,8 +966,8 @@ func TestSwitchCompanyRescopesRole(t *testing.T) {
 	if err != nil {
 		t.Fatalf("SwitchCompany: %v", err)
 	}
-	if sess.CompanyID == nil || *sess.CompanyID != c2 || sess.RoleLevel != domain.LevelDirector {
-		t.Fatalf("switch c2 не дал роль руководителя: %+v", sess)
+	if sess.CompanyID == nil || *sess.CompanyID != c2 || sess.RoleLevel != domain.LevelAdmin {
+		t.Fatalf("switch c2 не дал роль администратора: %+v", sess)
 	}
 	// В компанию без членства — отказ.
 	if _, err := svc.SwitchCompany(context.Background(), u.ID, int64(99)); err == nil {
@@ -824,19 +976,22 @@ func TestSwitchCompanyRescopesRole(t *testing.T) {
 }
 
 func TestCompanyMembersAdminOnly(t *testing.T) {
-	svc, repo, _ := newTestService(t)
+	svc, repo, companies := companyService(t)
+	// Реальная компания c1 (без создателя): управление участниками — только
+	// создатель компании или супер-админ (creatorAuthority).
+	companies.CreateCompany(context.Background(), &domain.Company{Name: "C1"})
 	c1, c2 := int64(1), int64(2)
-	admin := repo.add(&domain.User{FIO: "Админ", Login: "admin", Role: *repo.roles[4]})
-	director := repo.add(&domain.User{
-		FIO: "Дир", Login: "dir", Role: *repo.roles[3], CompanyID: &c1, Company: companyOf(&c1),
+	admin := repo.add(&domain.User{FIO: "Админ", Login: "admin", IsSuperAdmin: true})
+	// Менеджер компании (level 2, не создатель) НЕ может управлять участниками.
+	manager := repo.add(&domain.User{
+		FIO: "Менеджер", Login: "mgr", Role: *repo.roles[2], CompanyID: &c1,
 	})
 	outsider := employee(repo, "petrov", &c2) // в другой компании
 
-	// Руководитель НЕ может управлять участниками — только Администратор системы.
-	wantCode(t, svc.AddCompanyMember(context.Background(), director, c1, outsider.ID, 1), "FORBIDDEN")
-	wantCode(t, svc.RemoveCompanyMember(context.Background(), director, c1, outsider.ID), "FORBIDDEN")
+	wantCode(t, svc.AddCompanyMember(context.Background(), manager, c1, outsider.ID, 1), "FORBIDDEN")
+	wantCode(t, svc.RemoveCompanyMember(context.Background(), manager, c1, outsider.ID), "FORBIDDEN")
 
-	// Админ добавляет в c1, повышает до Менеджера, затем убирает.
+	// Супер-админ добавляет в c1, повышает до Менеджера, затем убирает.
 	if err := svc.AddCompanyMember(context.Background(), admin, c1, outsider.ID, 1); err != nil {
 		t.Fatalf("AddCompanyMember: %v", err)
 	}
@@ -846,8 +1001,9 @@ func TestCompanyMembersAdminOnly(t *testing.T) {
 	if m, _ := repo.GetMembership(context.Background(), outsider.ID, c1); m == nil || m.Role.Level != domain.LevelManager {
 		t.Fatalf("роль в c1 не выставлена: %+v", m)
 	}
-	// Роль уровня Администратор системы в компании назначать нельзя.
-	wantCode(t, svc.SetMemberRole(context.Background(), admin, c1, outsider.ID, 4), "ROLE_LEVEL_FORBIDDEN")
+	// Роль выше допустимого уровня компании (level 4) назначать нельзя.
+	repo.roles[9] = &domain.Role{ID: 9, Name: "Сверх", Level: domain.LevelAdmin + 1}
+	wantCode(t, svc.SetMemberRole(context.Background(), admin, c1, outsider.ID, 9), "ROLE_LEVEL_FORBIDDEN")
 
 	if err := svc.RemoveCompanyMember(context.Background(), admin, c1, outsider.ID); err != nil {
 		t.Fatalf("RemoveCompanyMember: %v", err)
@@ -862,8 +1018,8 @@ func TestCompanyMembersAdminOnly(t *testing.T) {
 
 func TestInviteAndJoin(t *testing.T) {
 	svc, repo, _ := newTestService(t)
-	admin := repo.add(&domain.User{FIO: "Админ", Login: "admin", Role: *repo.roles[4]})
-	company, err := svc.CreateCompany(context.Background(), dto.CompanyCreate{Name: "Acme", IsActive: true})
+	admin := repo.add(&domain.User{FIO: "Админ", Login: "admin", IsSuperAdmin: true})
+	company, err := svc.CreateCompany(context.Background(), admin, dto.CompanyCreate{Name: "Acme"})
 	if err != nil {
 		t.Fatalf("CreateCompany: %v", err)
 	}
@@ -893,28 +1049,28 @@ func TestInviteAndJoin(t *testing.T) {
 	}
 }
 
-func TestCreateCompanyAssignsDirectorMembership(t *testing.T) {
+func TestCreateCompanyMakesCreatorAdmin(t *testing.T) {
 	svc, repo, _ := newTestService(t)
-	// Руководитель уже состоит в одной компании.
+	// Создатель уже состоит в одной компании; создаёт вторую — становится её
+	// администратором автоматически.
 	existing := int64(99)
-	dir := repo.add(&domain.User{
-		FIO: "Дир", Login: "dir", Role: *repo.roles[3], CompanyID: &existing, Company: companyOf(&existing),
+	creator := repo.add(&domain.User{
+		FIO: "Создатель", Login: "creator", Role: *repo.roles[1], CompanyID: &existing,
 	})
 
-	// Супер-админ создаёт вторую компанию и ставит его руководителем.
-	created, err := svc.CreateCompany(context.Background(), dto.CompanyCreate{
-		Name: "Вторая", DirectorID: &dir.ID, IsActive: true,
+	created, err := svc.CreateCompany(context.Background(), creator, dto.CompanyCreate{
+		Name: "Вторая",
 	})
 	if err != nil {
 		t.Fatalf("CreateCompany: %v", err)
 	}
 
-	ms, _ := repo.ListMemberships(context.Background(), dir.ID)
+	ms, _ := repo.ListMemberships(context.Background(), creator.ID)
 	if len(ms) != 2 {
-		t.Fatalf("ожидалось 2 членства у руководителя двух компаний, получено %d", len(ms))
+		t.Fatalf("ожидалось 2 членства у создателя двух компаний, получено %d", len(ms))
 	}
-	m, _ := repo.GetMembership(context.Background(), dir.ID, created.ID)
-	if m == nil || m.Role.Level != domain.LevelDirector {
-		t.Fatalf("членство Руководителя во второй компании не создано: %+v", m)
+	m, _ := repo.GetMembership(context.Background(), creator.ID, created.ID)
+	if m == nil || m.Role.Level != domain.LevelAdmin {
+		t.Fatalf("создатель не стал администратором новой компании: %+v", m)
 	}
 }

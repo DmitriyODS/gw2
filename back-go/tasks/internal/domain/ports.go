@@ -95,7 +95,7 @@ type CommentRepository interface {
 type UserReader interface {
 	GetUser(ctx Ctx, id int64) (*User, error)
 	// CompanyActive — активна ли компания (для auth-гейта по АКТИВНОЙ компании
-	// сессии из токена). nil (Администратор системы) → true.
+	// сессии из токена). nil (нет активной компании) → true.
 	CompanyActive(ctx Ctx, companyID *int64) (bool, error)
 	// IsCompanyMember — состоит ли пользователь в компании (многокомпанийность:
 	// членство в user_companies, а не первичная users.company_id).

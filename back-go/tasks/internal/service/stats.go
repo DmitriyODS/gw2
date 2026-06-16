@@ -65,7 +65,7 @@ func (s *Service) StatsExtended(ctx context.Context, start, end time.Time, compa
 }
 
 // StatsUserTasks — задачи с участием сотрудника. Гарды доступа: чужие
-// данные — MANAGER+, и только своя компания (Администратор системы — любые).
+// данные — MANAGER+, и только в пределах активной компании.
 func (s *Service) StatsUserTasks(ctx context.Context, actor *domain.User, targetUserID int64,
 	start, end time.Time) (*dto.StatsUserTasks, error) {
 
@@ -80,8 +80,8 @@ func (s *Service) StatsUserTasks(ctx context.Context, actor *domain.User, target
 		if target == nil {
 			return nil, domain.NewError("NOT_FOUND", "Сотрудник не найден", 404)
 		}
-		// Менеджер/Руководитель — только своя компания (членство в активной,
-		// а не первичная users.company_id: цель может быть многокомпанийной).
+		// Менеджер/Администратор — только в своей (активной) компании: цель
+		// должна состоять в ней (членство в user_companies).
 		if actor.CompanyID != nil {
 			member, err := s.users.IsCompanyMember(ctx, targetUserID, *actor.CompanyID)
 			if err != nil {

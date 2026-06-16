@@ -53,6 +53,88 @@ func (h *handlers) login(c *fiber.Ctx) error {
 	return c.JSON(sess)
 }
 
+func (h *handlers) register(c *fiber.Ctx) error {
+	var req dto.RegisterRequest
+	if err := c.BodyParser(&req); err != nil || req.FIO == "" || req.Email == "" || req.Password == "" {
+		return badRequest(c, "Имя, email и пароль обязательны")
+	}
+	// Логин может прийти пустым — сервис сгенерирует из ФИО (транслит).
+	resp, err := h.eps.Register(c.Context(), req)
+	if err != nil {
+		return h.respondError(c, err)
+	}
+	return c.Status(fiber.StatusCreated).JSON(resp)
+}
+
+// suggestLogin — live-подсказка свободного логина по ФИО (публичный, без авторизации).
+func (h *handlers) suggestLogin(c *fiber.Ctx) error {
+	fio := c.Query("fio")
+	if fio == "" {
+		return c.JSON(fiber.Map{"login": ""})
+	}
+	resp, err := h.eps.SuggestLogin(c.Context(), fio)
+	if err != nil {
+		return h.respondError(c, err)
+	}
+	return c.JSON(fiber.Map{"login": resp})
+}
+
+func (h *handlers) verifyEmail(c *fiber.Ctx) error {
+	var req dto.VerifyEmailRequest
+	if err := c.BodyParser(&req); err != nil {
+		return badRequest(c, "Неверный формат запроса")
+	}
+	if req.Token == "" && (req.Email == "" || req.Code == "") {
+		return badRequest(c, "Передайте token или email и code")
+	}
+	resp, err := h.eps.VerifyEmail(c.Context(), req)
+	if err != nil {
+		return h.respondError(c, err)
+	}
+	sess := resp.(*dto.Session)
+	setRefreshCookie(c, sess.RefreshToken)
+	return c.JSON(sess)
+}
+
+func (h *handlers) resendVerification(c *fiber.Ctx) error {
+	var req struct {
+		Email string `json:"email"`
+	}
+	if err := c.BodyParser(&req); err != nil || req.Email == "" {
+		return badRequest(c, "email обязателен")
+	}
+	if _, err := h.eps.ResendVerification(c.Context(), req.Email); err != nil {
+		return h.respondError(c, err)
+	}
+	return c.JSON(fiber.Map{"status": "ok"})
+}
+
+func (h *handlers) forgotPassword(c *fiber.Ctx) error {
+	var req struct {
+		Email string `json:"email"`
+	}
+	if err := c.BodyParser(&req); err != nil || req.Email == "" {
+		return badRequest(c, "email обязателен")
+	}
+	// Ответ всегда ok (не раскрываем наличие аккаунта).
+	if _, err := h.eps.RequestPasswordReset(c.Context(), req.Email); err != nil {
+		return h.respondError(c, err)
+	}
+	return c.JSON(fiber.Map{"status": "ok"})
+}
+
+func (h *handlers) resetPasswordByToken(c *fiber.Ctx) error {
+	var req dto.ResetPasswordRequest
+	if err := c.BodyParser(&req); err != nil || req.Token == "" || req.NewPassword == "" {
+		return badRequest(c, "token и new_password обязательны")
+	}
+	resp, err := h.eps.ResetPasswordByToken(c.Context(), req)
+	if err != nil {
+		return h.respondError(c, err)
+	}
+	return c.JSON(resp)
+}
+
 func (h *handlers) selectCompany(c *fiber.Ctx) error {
 	var req struct {
 		SelectToken string `json:"select_token"`

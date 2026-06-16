@@ -62,7 +62,7 @@ func (r *Repo) TVWeekContext(ctx context.Context, companyID int64, start, end ti
 		  FROM users u
 		  JOIN units un ON un.user_id = u.id
 		 WHERE un.datetime_start >= $2 AND un.datetime_start <= $3
-		   AND u.company_id = $1
+		   AND un.company_id = $1
 		 GROUP BY u.id, u.fio
 		 ORDER BY SUM(EXTRACT(EPOCH FROM COALESCE(un.datetime_end, now()) - un.datetime_start) / 3600) DESC`,
 		companyID, start, end)

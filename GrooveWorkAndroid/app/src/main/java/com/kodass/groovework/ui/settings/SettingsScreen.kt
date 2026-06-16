@@ -15,13 +15,10 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
-import androidx.compose.material.icons.filled.AutoAwesome
+import androidx.compose.material.icons.filled.Apartment
 import androidx.compose.material.icons.filled.Backup
-import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Link
-import androidx.compose.material.icons.filled.Pets
-import androidx.compose.material.icons.filled.Sync
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -46,13 +43,12 @@ import com.kodass.groovework.data.session.AuthState
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun SettingsScreen(container: AppContainer, onOpen: (String) -> Unit) {
+fun SettingsScreen(container: AppContainer, onOpen: (String) -> Unit, onOpenCompanies: () -> Unit) {
     val authState by container.sessionManager.authState.collectAsStateWithLifecycle()
     val claims = (authState as? AuthState.LoggedIn)?.claims
     val role = claims?.roleLevel ?: 0
     val hasCompany = claims?.companyId != null
-    val isDirector = role >= 3 && hasCompany
-    val isAdmin = claims?.isRootAdmin == true || role >= 4
+    val isSuperAdmin = claims?.isRootAdmin == true
 
     Scaffold(topBar = { TopAppBar(title = { Text("Настройки") }) }) { padding ->
         LazyColumn(
@@ -63,17 +59,18 @@ fun SettingsScreen(container: AppContainer, onOpen: (String) -> Unit) {
             item {
                 SettingRow(Icons.Filled.Info, "О приложении", "Версия, что нового, поддержка") { onOpen("about") }
             }
-            if (isDirector) {
-                item { SettingRow(Icons.Filled.CalendarMonth, "Выходные дни", "Когда Грувик отдыхает") { onOpen("weekends") } }
-                item { SettingRow(Icons.Filled.Pets, "Мой Groove", "Геймификация и питомцы") { onOpen("groove") } }
-                item { SettingRow(Icons.Filled.Link, "Ссылка-приглашение", "Пригласить в компанию") { onOpen("invite") } }
-                item { SettingRow(Icons.Filled.AutoAwesome, "Нейро-функции", "ИИ через ProxyAPI") { onOpen("ai") } }
-                item { SettingRow(Icons.Filled.Sync, "Интеграция YouGile", "Синхронизация задач компании") { onOpen("yougile-company") } }
+            // Управление компаниями переехало из настроек в карточку компании
+            // (создать/участники/роли/настройки). Доступно любому — каждый может
+            // создать свою компанию и стать её администратором.
+            item {
+                SettingRow(Icons.Filled.Apartment, "Мои компании", "Создание и управление") { onOpenCompanies() }
             }
+            // Личный коннект YouGile — для рядового сотрудника (админ настраивает
+            // компанийную интеграцию в карточке компании).
             if (hasCompany && role < 3) {
                 item { SettingRow(Icons.Filled.Link, "YouGile", "Личный коннект") { onOpen("yougile") } }
             }
-            if (isAdmin) {
+            if (isSuperAdmin) {
                 item { SettingRow(Icons.Filled.Backup, "Резервная копия", "Экспорт и восстановление") { onOpen("backup") } }
             }
         }

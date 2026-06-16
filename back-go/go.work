@@ -6,6 +6,7 @@ use (
 	./calls
 	./gateway
 	./groove
+	./mail
 	./messenger
 	./migrate
 	./pkg

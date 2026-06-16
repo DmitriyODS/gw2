@@ -107,7 +107,7 @@ func (r *PetRepo) ListCompanyPets(ctx context.Context, companyID int64) ([]*doma
 	rows, err := r.pool.Query(ctx, `
 		SELECT `+petCols+`
 		FROM pets p JOIN users u ON u.id = p.user_id
-		WHERE p.company_id = $1 AND u.is_hidden = FALSE
+		WHERE p.company_id = $1 AND u.is_active
 		ORDER BY p.stage DESC, p.xp DESC`, companyID)
 	if err != nil {
 		return nil, err
@@ -161,7 +161,7 @@ func (r *PetRepo) SoulmateForUser(ctx context.Context, userID int64,
 		WHERE un.task_id IN (
 			SELECT DISTINCT task_id FROM units
 			WHERE user_id = $1 AND datetime_start >= $2
-		) AND un.user_id != $1 AND un.datetime_start >= $2 AND u.is_hidden = FALSE
+		) AND un.user_id != $1 AND un.datetime_start >= $2 AND u.is_active
 		GROUP BY u.id, u.fio, u.avatar_path
 		ORDER BY cnt DESC
 		LIMIT 1`, userID, since).Scan(&ref.ID, &ref.FIO, &ref.AvatarPath, &count)

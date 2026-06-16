@@ -21,8 +21,8 @@ type Server struct {
 }
 
 // authSource — сверка пользователя для pkg-мидлвари. Активная компания и роль
-// в ней — ИЗ ТОКЕНА (active); из БД — is_hidden, профиль и активность выбранной
-// компании.
+// в ней — ИЗ ТОКЕНА (active); из БД — активность пользователя, профиль и
+// активность выбранной компании.
 func authSource(users domain.UserReader) pasetoauth.AuthSource {
 	return func(ctx context.Context, userID int64, active pasetoauth.Claims) (*pasetoauth.AuthInfo, error) {
 		u, err := users.GetUser(ctx, userID)
@@ -38,7 +38,8 @@ func authSource(users domain.UserReader) pasetoauth.AuthSource {
 		u.CompanyActive = companyActive
 		return &pasetoauth.AuthInfo{
 			RoleLevel:     active.RoleLevel,
-			IsHidden:      u.IsHidden,
+			IsActive:      u.IsActive,
+			IsSuperAdmin:  u.IsSuperAdmin,
 			CompanyActive: companyActive,
 			User:          u,
 		}, nil
@@ -100,9 +101,9 @@ func (s *Server) Shutdown() error          { return s.app.Shutdown() }
 
 const localCompanyID = "companyID"
 
-// companyScope — порт @require_company_scope: обычные роли работают со своей
-// компанией; Администратор системы (company_id NULL) обязан передать
-// ?company_id=. Вешается после RequireAuth.
+// companyScope — порт @require_company_scope: если в токене есть активная
+// компания — работаем с ней; иначе (активной компании нет, например супер-
+// админ) требуется ?company_id=. Вешается после RequireAuth.
 func companyScope(c *fiber.Ctx) error {
 	info := pasetoauth.Current(c)
 	user, _ := info.User.(*domain.User)

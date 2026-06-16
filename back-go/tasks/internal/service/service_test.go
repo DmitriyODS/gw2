@@ -438,7 +438,7 @@ func seedTask(store *fakeStore, companyID int64) *domain.Task {
 
 func employee(users *fakeUsers, id, companyID int64) *domain.User {
 	u := &domain.User{ID: id, FIO: "Тест", RoleLevel: domain.LevelEmployee,
-		CompanyID: &companyID, CompanyActive: true}
+		IsActive: true, CompanyID: &companyID, CompanyActive: true}
 	users.users[id] = u
 	return u
 }

@@ -116,12 +116,13 @@ func TestMessageJSONShape(t *testing.T) {
 func TestConversationListItemJSONShape(t *testing.T) {
 	petName := "Грувик"
 	company := "ООО Ромашка"
+	cid := int64(10)
 	item := &ConversationListItem{
 		ID:          7,
 		UnreadCount: 1,
 		IsPetChat:   true,
 		PetName:     &petName,
-		CompanyID:   10,
+		CompanyID:   &cid,
 		CompanyName: &company,
 	}
 	raw, err := json.Marshal(item)
@@ -149,8 +150,9 @@ func TestConversationListItemJSONShape(t *testing.T) {
 func TestConversationWithOtherFlattens(t *testing.T) {
 	created := time.Date(2026, 6, 12, 8, 0, 0, 0, time.UTC)
 	b := int64(3)
+	cid := int64(10)
 	conv := NewConversation(&domain.Conversation{
-		ID: 1, UserAID: 2, UserBID: &b, CompanyID: 10, CreatedAt: created,
+		ID: 1, UserAID: 2, UserBID: &b, CompanyID: &cid, CreatedAt: created,
 	}, nil)
 	raw, err := json.Marshal(&ConversationWithOther{Conversation: *conv})
 	if err != nil {

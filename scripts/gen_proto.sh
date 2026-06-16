@@ -11,7 +11,7 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 
 export PATH="$PATH:$HOME/go/bin"
 
-ALL_SERVICES=(calls messenger ai groove)
+ALL_SERVICES=(calls messenger ai groove mail)
 
 if [ "$#" -gt 0 ]; then
   SERVICES=()

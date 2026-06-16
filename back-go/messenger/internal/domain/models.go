@@ -29,7 +29,7 @@ type Conversation struct {
 	ID            int64
 	UserAID       int64
 	UserBID       *int64
-	CompanyID     int64
+	CompanyID     *int64  // NULL — переписка людей без общей компании
 	CompanyName   *string // подгружается листингами (JOIN companies)
 	IsDevChat     bool
 	IsPetChat     bool
@@ -181,19 +181,22 @@ type NewMessage struct {
 }
 
 // User — пользователь платформы в объёме мессенджера (read-only).
+//
+// Идентичность (id, fio, login, avatar, контакты, активность) грузится из
+// users; роль и принадлежность к компании развязаны с users — RoleLevel и
+// CompanyID заполняются ИЗ ТОКЕНА в authSource (актуальны только для self),
+// в БД их нет.
 type User struct {
 	ID            int64
 	FIO           string
 	Login         string
-	Post          *string
-	RoleID        int64
-	RoleName      string
-	RoleLevel     int
-	CompanyID     *int64
+	RoleLevel     int     // из токена (active company), не из users
+	CompanyID     *int64  // из токена (active company), не из users
 	Phone         *string
 	Email         *string
 	AvatarPath    *string
-	IsHidden      bool
+	IsActive      bool
+	IsSuperAdmin  bool
 	CompanyActive bool
 	LastSeenAt    *time.Time
 }

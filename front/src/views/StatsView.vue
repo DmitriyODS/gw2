@@ -41,7 +41,13 @@
     </div>
 
     <div class="stats-scroll">
-    <div v-if="loading" class="loading-state">
+    <!-- Нет активной компании (например, супер-админ): статистика — контент компании. -->
+    <div v-if="!hasCompany" class="empty-state">
+      <span class="material-symbols-outlined">domain_disabled</span>
+      <p>Статистика доступна в контексте компании. Выберите или создайте компанию.</p>
+    </div>
+
+    <div v-else-if="loading" class="loading-state">
       <ProgressSpinner />
     </div>
 
@@ -336,7 +342,6 @@ import {
   getStatsResponsibles,
 } from '@/api/stats.js'
 import { formatHours } from '@/utils/time.js'
-import { useCompaniesStore } from '@/stores/companies.js'
 import StatsPeriodControl from '@/components/stats/StatsPeriodControl.vue'
 import StatsWidget from '@/components/stats/StatsWidget.vue'
 import CalendarGrid from '@/components/stats/CalendarGrid.vue'
@@ -376,9 +381,9 @@ const employeesLoading = ref(false)
 const selectedEmployeeId = ref(null)
 const responsiblesData = ref([])
 
-const companies = useCompaniesStore()
-const activeCompanyId = computed(() =>
-  authStore.isRootAdmin ? companies.activeCompanyId : authStore.companyId)
+// Статистика — контент компании. Активная компания берётся из токена на бэке
+// (?company_id= больше не используется). Супер-админ без компании контент не видит.
+const hasCompany = computed(() => authStore.companyId != null)
 
 function avatarOf(u) {
   return u.avatar_path ? `/uploads/${u.avatar_path}` : `/api/users/${u.user_id || u.id}/identicon`
@@ -406,13 +411,13 @@ function roundHours(val) {
 
 async function loadData() {
   if (!currentFrom.value || !currentTo.value) return
+  if (!hasCompany.value) { commonData.value = null; extendedData.value = null; return }
   loading.value = true
-  const cid = activeCompanyId.value
   try {
     if (mode.value === 'common') {
-      commonData.value = await getStatsCommon(currentFrom.value, currentTo.value, cid)
+      commonData.value = await getStatsCommon(currentFrom.value, currentTo.value)
     } else {
-      extendedData.value = await getStatsExtended(currentFrom.value, currentTo.value, cid)
+      extendedData.value = await getStatsExtended(currentFrom.value, currentTo.value)
     }
   } catch (e) {
     notif.error(e.message || 'Ошибка загрузки статистики')
@@ -440,7 +445,7 @@ async function loadUserTasks() {
 
 async function loadResponsibles() {
   try {
-    responsiblesData.value = await getStatsResponsibles(activeCompanyId.value)
+    responsiblesData.value = await getStatsResponsibles()
   } catch {
     responsiblesData.value = []
   }
@@ -458,14 +463,14 @@ function switchMode(m) {
 }
 
 async function handleExportCommon() {
-  return exportStatsCommon(currentFrom.value, currentTo.value, activeCompanyId.value)
+  return exportStatsCommon(currentFrom.value, currentTo.value)
 }
 
 async function loadEmployees() {
-  if (!canSelectEmployee.value) return
+  if (!canSelectEmployee.value || !hasCompany.value) return
   employeesLoading.value = true
   try {
-    employees.value = await getStatsEmployees(activeCompanyId.value)
+    employees.value = await getStatsEmployees()
   } catch {
     employees.value = []
   } finally {
@@ -473,15 +478,13 @@ async function loadEmployees() {
   }
 }
 
-watch(activeCompanyId, () => {
+// Пользователь сменил активную компанию (auth.companyId из токена) — перезагружаем.
+watch(() => authStore.companyId, () => {
   loadData()
   loadEmployees()
 })
 
-onMounted(async () => {
-  if (authStore.isRootAdmin) {
-    await companies.load()
-  }
+onMounted(() => {
   loadEmployees()
 })
 </script>

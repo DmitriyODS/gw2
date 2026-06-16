@@ -2,32 +2,15 @@ package http
 
 import (
 	"io"
-	"strconv"
 
 	"github.com/gofiber/fiber/v2"
 
 	"github.com/DmitriyODS/gw2/back-go/auth/internal/avatar"
-	"github.com/DmitriyODS/gw2/back-go/auth/internal/domain"
 	"github.com/DmitriyODS/gw2/back-go/auth/internal/dto"
 	"github.com/DmitriyODS/gw2/back-go/auth/internal/endpoint"
 )
 
 const avatarMaxBytes = 2 * 1024 * 1024
-
-// applyAdminScope — у Администратора системы (actor.CompanyID == nil) активная
-// компания приходит в ?company_id=; проставляем её в actor на время запроса,
-// чтобы company-scoped операции (роль/скрытие/сброс) работали единообразно.
-// У обычного актора компания уже в токене — не трогаем.
-func applyAdminScope(c *fiber.Ctx, actor *domain.User) {
-	if actor == nil || actor.CompanyID != nil {
-		return
-	}
-	if raw := c.Query("company_id"); raw != "" {
-		if cid, err := strconv.ParseInt(raw, 10, 64); err == nil {
-			actor.CompanyID = &cid
-		}
-	}
-}
 
 func (h *handlers) listUsers(c *fiber.Ctx) error {
 	resp, err := h.eps.ListUsers(c.Context(), nil)
@@ -56,9 +39,8 @@ func (h *handlers) createUser(c *fiber.Ctx) error {
 
 func (h *handlers) directory(c *fiber.Ctx) error {
 	me := currentUser(c)
-	// Скоуп — активная компания актора из токена; у Администратора системы её нет,
-	// она приходит в ?company_id= (nil → все видимые пользователи всех компаний).
-	applyAdminScope(c, me)
+	// Скоуп — активная компания актора из токена (её члены). Нет активной
+	// компании → глобальный поиск всех пользователей (контакты мессенджера).
 	req := dto.DirectoryRequest{
 		ActorID:   me.ID,
 		Query:     c.Query("q"),
@@ -68,9 +50,7 @@ func (h *handlers) directory(c *fiber.Ctx) error {
 	case "1", "true", "yes":
 		req.ExcludeID = me.ID
 	}
-	// all=1 — глобальный справочник (все видимые сотрудники всех компаний).
-	// Нужен, чтобы начать чат/звонок с сотрудником другой компании; перебивает
-	// company-scope актора (включая ?company_id= Администратора системы).
+	// all=1 — глобальный каталог (для чата с кем угодно), перебивает company-scope.
 	switch c.Query("all") {
 	case "1", "true", "yes":
 		req.CompanyID = nil
@@ -181,7 +161,6 @@ func (h *handlers) updateUser(c *fiber.Ctx) error {
 
 func (h *handlers) hideUser(c *fiber.Ctx) error {
 	actor := currentUser(c)
-	applyAdminScope(c, actor)
 	_, err := h.eps.HideUser(c.Context(), endpoint.ActorRequest{
 		Actor: actor, UserID: pathID(c),
 	})
@@ -199,7 +178,6 @@ func (h *handlers) assignRole(c *fiber.Ctx) error {
 		return badRequest(c, "role_id обязателен")
 	}
 	actor := currentUser(c)
-	applyAdminScope(c, actor)
 	resp, err := h.eps.AssignRole(c.Context(), endpoint.AssignRoleEpRequest{
 		Actor: actor, UserID: pathID(c), RoleID: body.RoleID,
 	})
@@ -211,7 +189,6 @@ func (h *handlers) assignRole(c *fiber.Ctx) error {
 
 func (h *handlers) resetPassword(c *fiber.Ctx) error {
 	actor := currentUser(c)
-	applyAdminScope(c, actor)
 	_, err := h.eps.ResetPassword(c.Context(), endpoint.ActorRequest{
 		Actor: actor, UserID: pathID(c),
 	})
@@ -308,6 +285,88 @@ func (h *handlers) regenerateInvite(c *fiber.Ctx) error {
 		return h.respondError(c, err)
 	}
 	return c.JSON(fiber.Map{"code": resp})
+}
+
+// ── Сотрудники В КОНКРЕТНОЙ компании (раздел «Компании»; создатель компании) ──
+
+func (h *handlers) createCompanyUser(c *fiber.Ctx) error {
+	var body dto.CreateUserRequest
+	if err := c.BodyParser(&body); err != nil {
+		return badRequest(c, "Неверный формат запроса")
+	}
+	if body.FIO == "" || body.Login == "" || body.RoleID == 0 {
+		return badRequest(c, "fio, login и role_id обязательны")
+	}
+	resp, err := h.eps.CreateCompanyUser(c.Context(), endpoint.CompanyUserCreateEpRequest{
+		Actor: currentUser(c), CompanyID: pathID(c), Body: body,
+	})
+	if err != nil {
+		return h.respondError(c, err)
+	}
+	return c.Status(fiber.StatusCreated).JSON(resp)
+}
+
+func (h *handlers) updateCompanyMember(c *fiber.Ctx) error {
+	userID, _ := c.ParamsInt("userId")
+	var body dto.UpdateUserRequest
+	if err := c.BodyParser(&body); err != nil {
+		return badRequest(c, "Неверный формат запроса")
+	}
+	resp, err := h.eps.UpdateCompanyMember(c.Context(), endpoint.CompanyUserUpdateEpRequest{
+		Actor: currentUser(c), CompanyID: pathID(c), UserID: int64(userID), Body: body,
+	})
+	if err != nil {
+		return h.respondError(c, err)
+	}
+	return c.JSON(resp)
+}
+
+func (h *handlers) resetCompanyMember(c *fiber.Ctx) error {
+	userID, _ := c.ParamsInt("userId")
+	if _, err := h.eps.ResetCompanyMember(c.Context(), endpoint.CompanyMemberResetEpRequest{
+		Actor: currentUser(c), CompanyID: pathID(c), UserID: int64(userID),
+	}); err != nil {
+		return h.respondError(c, err)
+	}
+	return c.JSON(fiber.Map{"message": "Пароль сброшен"})
+}
+
+// ── Email-приглашения в компанию ──
+
+func (h *handlers) createCompanyInvite(c *fiber.Ctx) error {
+	var body struct {
+		Email  string `json:"email"`
+		RoleID int64  `json:"role_id"`
+	}
+	if err := c.BodyParser(&body); err != nil || body.Email == "" || body.RoleID == 0 {
+		return badRequest(c, "email и role_id обязательны")
+	}
+	if _, err := h.eps.CreateCompanyInvite(c.Context(), endpoint.CreateInviteEpRequest{
+		Actor: currentUser(c), CompanyID: pathID(c), Email: body.Email, RoleID: body.RoleID,
+	}); err != nil {
+		return h.respondError(c, err)
+	}
+	return c.Status(fiber.StatusCreated).JSON(fiber.Map{"message": "Приглашение отправлено"})
+}
+
+func (h *handlers) getInvitePreview(c *fiber.Ctx) error {
+	resp, err := h.eps.GetInvitePreview(c.Context(), c.Params("token"))
+	if err != nil {
+		return h.respondError(c, err)
+	}
+	return c.JSON(resp)
+}
+
+func (h *handlers) acceptCompanyInvite(c *fiber.Ctx) error {
+	resp, err := h.eps.AcceptCompanyInvite(c.Context(), endpoint.AcceptInviteEpRequest{
+		UserID: tokenUserID(c), Token: c.Params("token"),
+	})
+	if err != nil {
+		return h.respondError(c, err)
+	}
+	sess := resp.(*dto.Session)
+	setRefreshCookie(c, sess.RefreshToken)
+	return c.JSON(sess)
 }
 
 func (h *handlers) joinByInvite(c *fiber.Ctx) error {

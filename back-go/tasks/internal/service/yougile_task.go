@@ -52,10 +52,10 @@ func wrapTaskClientErr(err error) error {
 	return domain.NewError("YOUGILE_ERROR", "YouGile: "+err.Error(), 400)
 }
 
-// userCompany — YouGile-срез компании пользователя или NO_COMPANY.
+// userCompany — YouGile-срез активной компании пользователя или NO_COMPANY.
 func (y *Yougile) userCompany(ctx context.Context, user *domain.User) (*domain.YougileCompany, error) {
 	if user.CompanyID == nil {
-		return nil, domain.NewError("NO_COMPANY", "Пользователь без компании", 400)
+		return nil, domain.NewError("NO_COMPANY", "Нет активной компании", 400)
 	}
 	company, err := y.repo.GetYougileCompany(ctx, *user.CompanyID)
 	if err != nil {

@@ -1,0 +1,12 @@
+[
+  {
+    "relation": ["delegate_permission/common.handle_all_urls"],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "com.kodass.groovework",
+      "sha256_cert_fingerprints": [
+        "14:EA:AF:B5:3A:92:9D:0D:EF:E5:C5:3C:A9:3C:E0:2C:5B:40:EC:75:33:BC:9E:6A:D6:18:9C:3D:97:B5:39:3E"
+      ]
+    }
+  }
+]

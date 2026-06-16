@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/DmitriyODS/gw2/back-go/auth/internal/avatar"
+	"github.com/DmitriyODS/gw2/back-go/auth/internal/clients"
 	"github.com/DmitriyODS/gw2/back-go/auth/internal/endpoint"
 	"github.com/DmitriyODS/gw2/back-go/auth/internal/repository/postgres"
 	"github.com/DmitriyODS/gw2/back-go/auth/internal/repository/redisx"
@@ -36,6 +37,9 @@ func main() {
 	dbURL := bootstrap.Env("DATABASE_URL", "postgresql://grovework:grovework_local@localhost:5432/grovework")
 	redisURL := bootstrap.Env("REDIS_URL", "redis://localhost:6379/0")
 	uploadFolder := bootstrap.Env("UPLOAD_FOLDER", "/app/uploads")
+	mailAddr := bootstrap.Env("MAIL_GRPC_ADDR", "localhost:9098")
+	// Публичный базовый URL приложения — для ссылок подтверждения email в письмах.
+	appBaseURL := bootstrap.Env("APP_PUBLIC_BASE_URL", "http://localhost:5173")
 
 	privateKey := bootstrap.MustEnv(log, "PASETO_PRIVATE_KEY")
 	refreshKey := bootstrap.MustEnv(log, "PASETO_REFRESH_KEY")
@@ -56,9 +60,21 @@ func main() {
 	repo := postgres.NewUserRepository(pool)
 	companies := postgres.NewCompanyRepository(pool)
 	backup := postgres.NewBackupStore(pool)
+	verifications := postgres.NewVerificationStore(pool)
+	passwordResets := postgres.NewPasswordResetStore(pool)
+	companyInvites := postgres.NewCompanyInviteStore(pool)
 	throttle := redisx.NewLoginThrottle(rdb, log)
 	avatars := avatar.NewStorage(uploadFolder)
-	svc := service.New(repo, companies, backup, throttle, issuer, avatars, log)
+
+	mail, err := clients.NewMail(mailAddr, log)
+	if err != nil {
+		log.Error("mail_grpc.bad_addr", "error", err)
+		os.Exit(1)
+	}
+	defer mail.Close()
+
+	svc := service.New(repo, companies, backup, throttle, issuer, avatars,
+		verifications, passwordResets, companyInvites, mail, appBaseURL, log)
 	eps := endpoint.New(svc)
 
 	httpAddr := bootstrap.Env("HTTP_ADDR", ":8091")

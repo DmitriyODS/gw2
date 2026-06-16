@@ -27,44 +27,48 @@ type CompanyRef struct {
 	Name string `json:"name"`
 }
 
-// User — форма UserSchema.
+// User — профиль пользователя. Идентичность не зависит от компаний; поля
+// контекста (post/role/company_id) заполнены, только когда пользователь
+// рассматривается в рамках конкретной компании (член компании).
 type User struct {
-	ID            int64       `json:"id"`
-	FIO           string      `json:"fio"`
-	Login         string      `json:"login"`
-	Post          *string     `json:"post"`
-	Role          RoleRef     `json:"role"`
-	CompanyID     *int64      `json:"company_id"`
-	Company       *CompanyRef `json:"company"`
-	Phone         *string     `json:"phone"`
-	Email         *string     `json:"email"`
-	AvatarPath    *string     `json:"avatar_path"`
-	IsDefaultPass bool        `json:"is_default_pass"`
-	IsHidden      bool        `json:"is_hidden"`
-	IsRootAdmin   bool        `json:"is_root_admin"`
-	CreatedAt     JSONTime    `json:"created_at"`
+	ID            int64    `json:"id"`
+	FIO           string   `json:"fio"`
+	Login         string   `json:"login"`
+	Post          *string  `json:"post"`
+	Role          *RoleRef `json:"role"`
+	CompanyID     *int64   `json:"company_id"`
+	Phone         *string  `json:"phone"`
+	Email         *string  `json:"email"`
+	AvatarPath    *string  `json:"avatar_path"`
+	IsDefaultPass bool     `json:"is_default_pass"`
+	IsActive      bool     `json:"is_active"`
+	IsSuperAdmin  bool     `json:"is_super_admin"`
+	CreatedAt     JSONTime `json:"created_at"`
+}
+
+func roleRef(r domain.Role) *RoleRef {
+	if r.Level == 0 {
+		return nil
+	}
+	return &RoleRef{ID: r.ID, Name: r.Name, Level: r.Level}
 }
 
 func NewUser(u *domain.User) User {
-	out := User{
+	return User{
 		ID:            u.ID,
 		FIO:           u.FIO,
 		Login:         u.Login,
 		Post:          u.Post,
-		Role:          RoleRef{ID: u.Role.ID, Name: u.Role.Name, Level: u.Role.Level},
+		Role:          roleRef(u.Role),
 		CompanyID:     u.CompanyID,
 		Phone:         u.Phone,
 		Email:         u.Email,
 		AvatarPath:    u.AvatarPath,
 		IsDefaultPass: u.IsDefaultPass,
-		IsHidden:      u.IsHidden,
-		IsRootAdmin:   u.IsRootAdmin,
+		IsActive:      u.IsActive,
+		IsSuperAdmin:  u.IsSuperAdmin,
 		CreatedAt:     JSONTime(u.CreatedAt),
 	}
-	if u.Company != nil {
-		out.Company = &CompanyRef{ID: u.Company.ID, Name: u.Company.Name}
-	}
-	return out
 }
 
 func NewUsers(users []*domain.User) []User {
@@ -75,14 +79,15 @@ func NewUsers(users []*domain.User) []User {
 	return out
 }
 
-// DirectoryUser — форма UserDirectorySchema (публичный профиль: без
-// is_default_pass/is_hidden и прочих внутренних полей).
+// DirectoryUser — публичный профиль (каталог/контакты). Role/Post/CompanyID
+// заполнены только в каталоге членов конкретной компании; в глобальном поиске
+// (контакты) — nil.
 type DirectoryUser struct {
 	ID         int64     `json:"id"`
 	FIO        string    `json:"fio"`
 	Login      string    `json:"login"`
 	Post       *string   `json:"post"`
-	Role       RoleRef   `json:"role"`
+	Role       *RoleRef  `json:"role"`
 	CompanyID  *int64    `json:"company_id"`
 	Phone      *string   `json:"phone"`
 	Email      *string   `json:"email"`
@@ -96,7 +101,7 @@ func NewDirectoryUser(u *domain.User) DirectoryUser {
 		FIO:        u.FIO,
 		Login:      u.Login,
 		Post:       u.Post,
-		Role:       RoleRef{ID: u.Role.ID, Name: u.Role.Name, Level: u.Role.Level},
+		Role:       roleRef(u.Role),
 		CompanyID:  u.CompanyID,
 		Phone:      u.Phone,
 		Email:      u.Email,
@@ -157,7 +162,7 @@ type Session struct {
 	CompanyName     *string         `json:"company_name"`
 	CompanySettings map[string]any  `json:"company_settings"`
 	RoleLevel       int             `json:"role_level"`
-	IsRootAdmin     bool            `json:"is_root_admin"`
+	IsSuperAdmin    bool            `json:"is_super_admin"`
 	Companies       []MembershipDTO `json:"companies"`
 
 	NeedsCompanySelection bool   `json:"needs_company_selection,omitempty"`
@@ -173,6 +178,50 @@ type LoginRequest struct {
 	Password string `json:"password"`
 }
 
+// RegisterRequest — публичная регистрация: самостоятельное создание аккаунта
+// (без компании). Логин генерируется из ФИО (фронт подставляет через
+// suggest-login, пользователь может поправить); пустой — сгенерируем сами.
+// Пароль виден/редактируется пользователем на фронте. После регистрации —
+// подтверждение email кодом/ссылкой.
+type RegisterRequest struct {
+	Login    string `json:"login"`
+	Password string `json:"password"`
+	FIO      string `json:"fio"`
+	Email    string `json:"email"`
+}
+
+// RegisterResult — ответ register: сессия НЕ выдаётся, пока email не
+// подтверждён. Фронт переходит на экран ввода кода.
+type RegisterResult struct {
+	Status string `json:"status"` // "verification_required"
+	Email  string `json:"email"`
+}
+
+// VerifyEmailRequest — подтверждение по ссылке (token) или вводом кода (email+code).
+type VerifyEmailRequest struct {
+	Token string `json:"token"`
+	Email string `json:"email"`
+	Code  string `json:"code"`
+}
+
+// ResetPasswordRequest — установка нового пароля по токену из письма.
+type ResetPasswordRequest struct {
+	Token       string `json:"token"`
+	NewPassword string `json:"new_password"`
+}
+
+// PasswordResetResult — ответ reset-password: логин для префилла на экране входа.
+type PasswordResetResult struct {
+	Login string `json:"login"`
+}
+
+// InvitePreview — превью email-приглашения (что увидит получатель до принятия).
+type InvitePreview struct {
+	CompanyName string `json:"company_name"`
+	RoleName    string `json:"role_name"`
+	Email       string `json:"email"`
+}
+
 type ChangeDefaultRequest struct {
 	UserID          int64  `json:"-"`
 	NewLogin        string `json:"new_login"`
@@ -180,32 +229,34 @@ type ChangeDefaultRequest struct {
 	ConfirmPassword string `json:"confirm_password"`
 }
 
+// CreateUserRequest — компанийный администратор заводит сотрудника в СВОЕЙ
+// активной компании (company берётся из токена актора, не из тела). Post —
+// должность в этой компании (хранится в связке).
 type CreateUserRequest struct {
-	FIO       string  `json:"fio"`
-	Login     string  `json:"login"`
-	Post      *string `json:"post"`
-	RoleID    int64   `json:"role_id"`
-	CompanyID *int64  `json:"company_id"`
-	Phone     *string `json:"phone"`
-	Email     *string `json:"email"`
-	Password  *string `json:"password"`
+	FIO      string  `json:"fio"`
+	Login    string  `json:"login"`
+	Post     *string `json:"post"`
+	RoleID   int64   `json:"role_id"`
+	Phone    *string `json:"phone"`
+	Email    *string `json:"email"`
+	Password *string `json:"password"`
 }
 
-// UpdateUserRequest — PATCH /users/<id>: nil-указатель = поле не передано.
+// UpdateUserRequest — PATCH /users/<id> (член активной компании актора):
+// nil-указатель = поле не передано. Post обновляет должность в активной компании.
 type UpdateUserRequest struct {
-	FIO       *string `json:"fio"`
-	Login     *string `json:"login"`
-	Post      *string `json:"post"`
-	CompanyID *int64  `json:"company_id"`
-	Phone     *string `json:"phone"`
-	Email     *string `json:"email"`
+	FIO   *string `json:"fio"`
+	Login *string `json:"login"`
+	Post  *string `json:"post"`
+	Phone *string `json:"phone"`
+	Email *string `json:"email"`
 }
 
-// UpdateMeRequest — PATCH /users/me.
+// UpdateMeRequest — PATCH /users/me. Должность — атрибут членства в компании,
+// её задаёт администратор компании, не сам пользователь.
 type UpdateMeRequest struct {
 	FIO             *string `json:"fio"`
 	Login           *string `json:"login"`
-	Post            *string `json:"post"`
 	Phone           *string `json:"phone"`
 	Email           *string `json:"email"`
 	CurrentPassword *string `json:"current_password"`

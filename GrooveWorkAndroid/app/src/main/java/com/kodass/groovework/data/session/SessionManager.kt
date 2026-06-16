@@ -1,13 +1,18 @@
 package com.kodass.groovework.data.session
 
 import com.kodass.groovework.data.api.AuthApi
+import com.kodass.groovework.data.api.CompaniesApi
 import com.kodass.groovework.data.dto.ChangeDefaultRequest
+import com.kodass.groovework.data.dto.ForgotPasswordRequest
 import com.kodass.groovework.data.dto.LoginRequest
 import com.kodass.groovework.data.dto.MembershipDto
+import com.kodass.groovework.data.dto.RegisterRequest
+import com.kodass.groovework.data.dto.ResetPasswordRequest
 import com.kodass.groovework.data.dto.SelectCompanyRequest
 import com.kodass.groovework.data.dto.SessionResponse
 import com.kodass.groovework.data.dto.SwitchCompanyRequest
 import com.kodass.groovework.data.dto.UserDto
+import com.kodass.groovework.data.dto.VerifyEmailRequest
 import com.kodass.groovework.data.network.ApiException
 import com.kodass.groovework.data.network.HostSelectionInterceptor
 import com.kodass.groovework.data.network.apiCall
@@ -50,6 +55,7 @@ class SessionManager(
     private val json: Json,
 ) {
     lateinit var authApi: AuthApi
+    lateinit var companiesApi: CompaniesApi
 
     @Volatile
     var accessToken: String? = null
@@ -72,6 +78,9 @@ class SessionManager(
     // Компании пользователя (для переключателя активной компании); пусто у Администратора системы.
     private val _companies = kotlinx.coroutines.flow.MutableStateFlow<List<MembershipDto>>(emptyList())
     val companies: kotlinx.coroutines.flow.StateFlow<List<MembershipDto>> = _companies
+
+    // Текущие клеймы сессии (или null) — для стабильных полей вроде userId.
+    fun claimsOrNull(): SessionClaims? = (_authState.value as? AuthState.LoggedIn)?.claims
 
     suspend fun bootstrap(defaultServerUrl: String) {
         val server = store.serverUrl() ?: defaultServerUrl
@@ -117,6 +126,50 @@ class SessionManager(
         }
         applySession(body)
         return LoginResult.Success
+    }
+
+    // Регистрация: применяет (и сохраняет) сервер как login, но сессию НЕ выдаёт —
+    // возвращает email для перехода на экран подтверждения.
+    suspend fun register(serverUrl: String, fio: String, email: String, login: String, password: String): String {
+        applyServer(serverUrl)
+        store.setServerUrl(_serverUrl.value)
+        val result = apiCall(json) {
+            authApi.register(RegisterRequest(fio = fio, email = email, login = login, password = password))
+        }
+        return result.email.ifBlank { email }
+    }
+
+    suspend fun suggestLogin(fio: String): String =
+        apiCall(json) { authApi.suggestLogin(fio) }.login
+
+    // Подтверждение email (token из ссылки ИЛИ email+code) → полноценная сессия.
+    suspend fun verifyEmail(token: String? = null, email: String? = null, code: String? = null) {
+        val resp = apiCall(json) { authApi.verifyEmail(VerifyEmailRequest(token = token, email = email, code = code)) }
+        applySession(unwrap(resp))
+    }
+
+    suspend fun resendVerification(email: String) {
+        apiCall(json) { authApi.resendVerification(ForgotPasswordRequest(email)) }
+    }
+
+    suspend fun forgotPassword(email: String) {
+        apiCall(json) { authApi.forgotPassword(ForgotPasswordRequest(email)) }
+    }
+
+    // Установка нового пароля по токену из письма (deep link). Возвращает логин
+    // для префилла на экране входа (автологина нет — токены не выдаются).
+    suspend fun resetPassword(token: String, newPassword: String): String =
+        apiCall(json) { authApi.resetPassword(ResetPasswordRequest(token, newPassword)) }.login
+
+    // Приём email-приглашения / вступление по коду → сессия с переключением на компанию.
+    suspend fun acceptInvite(token: String) {
+        val resp = apiCall(json) { companiesApi.acceptInvite(token) }
+        applySession(unwrap(resp))
+    }
+
+    suspend fun joinByCode(code: String) {
+        val resp = apiCall(json) { companiesApi.joinByCode(code) }
+        applySession(unwrap(resp))
     }
 
     suspend fun selectCompany(selectToken: String, companyId: Long) {

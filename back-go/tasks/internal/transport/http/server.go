@@ -9,7 +9,6 @@ package http
 import (
 	"context"
 	"log/slog"
-	"strconv"
 
 	"github.com/gofiber/fiber/v2"
 
@@ -24,9 +23,10 @@ type Server struct {
 }
 
 // authSource — сверка пользователя для pkg-мидлвари. Активная компания и роль
-// в ней берутся ИЗ ТОКЕНА (active), из БД — только is_hidden, ФИО и активность
-// выбранной компании. Так многокомпанийный юзер скоупится по выбранной им
-// компании, а не по «первичной» users.company_id.
+// в ней берутся ИЗ ТОКЕНА (active), из БД — только идентичность (is_active,
+// is_super_admin, ФИО) и активность выбранной компании. Так пользователь
+// скоупится по выбранной им компании (claims.CompanyID), а не по принадлежности
+// в users (её там больше нет).
 func authSource(users domain.UserReader) pasetoauth.AuthSource {
 	return func(ctx context.Context, userID int64, active pasetoauth.Claims) (*pasetoauth.AuthInfo, error) {
 		u, err := users.GetUser(ctx, userID)
@@ -35,7 +35,6 @@ func authSource(users domain.UserReader) pasetoauth.AuthSource {
 		}
 		u.CompanyID = active.CompanyID
 		u.RoleLevel = active.RoleLevel
-		u.IsRootAdmin = active.IsRootAdmin
 		companyActive, err := users.CompanyActive(ctx, active.CompanyID)
 		if err != nil {
 			return nil, err
@@ -43,7 +42,8 @@ func authSource(users domain.UserReader) pasetoauth.AuthSource {
 		u.CompanyActive = companyActive
 		return &pasetoauth.AuthInfo{
 			RoleLevel:     active.RoleLevel,
-			IsHidden:      u.IsHidden,
+			IsActive:      u.IsActive,
+			IsSuperAdmin:  u.IsSuperAdmin,
 			CompanyActive: companyActive,
 			User:          u,
 		}, nil
@@ -66,7 +66,7 @@ func NewServer(eps endpoint.Endpoints, users domain.UserReader,
 
 	employee := auth.RequireRole(domain.LevelEmployee)
 	manager := auth.RequireRole(domain.LevelManager)
-	director := auth.RequireRole(domain.LevelDirector)
+	admin := auth.RequireRole(domain.LevelAdmin)
 
 	// Вебхук YouGile — публичный (без токена): авторизация через secret
 	// в URL. Регистрируется вне auth-группы.
@@ -77,17 +77,17 @@ func NewServer(eps endpoint.Endpoints, users domain.UserReader,
 	ygAPI.Post("/account", h.yougileConnect)
 	ygAPI.Delete("/account", h.yougileDisconnect)
 	ygAPI.Post("/account/rotate", h.yougileRotate)
-	ygAPI.Post("/companies/lookup", director, h.yougileLookupCompanies)
-	ygAPI.Get("/projects", director, h.yougileProjects)
-	ygAPI.Get("/boards", director, h.yougileBoards)
-	ygAPI.Get("/columns", director, h.yougileColumns)
-	ygAPI.Get("/company-settings", director, h.yougileGetSettings)
-	ygAPI.Put("/company-settings", director, h.yougilePutSettings)
-	ygAPI.Post("/reset", director, h.yougileReset)
+	ygAPI.Post("/companies/lookup", admin, h.yougileLookupCompanies)
+	ygAPI.Get("/projects", admin, h.yougileProjects)
+	ygAPI.Get("/boards", admin, h.yougileBoards)
+	ygAPI.Get("/columns", admin, h.yougileColumns)
+	ygAPI.Get("/company-settings", admin, h.yougileGetSettings)
+	ygAPI.Put("/company-settings", admin, h.yougilePutSettings)
+	ygAPI.Post("/reset", admin, h.yougileReset)
 	ygAPI.Post("/import-task", employee, h.yougileImportTask)
 	ygAPI.Post("/export-task", employee, h.yougileExportTask)
 	ygAPI.Delete("/tasks/:id<int>/link", employee, h.yougileUnlinkTask)
-	ygAPI.Post("/webhook/register", director, h.yougileRegisterWebhook)
+	ygAPI.Post("/webhook/register", admin, h.yougileRegisterWebhook)
 
 	tasksAPI := app.Group("/api/tasks", auth.RequireAuth)
 	tasksAPI.Get("", employee, h.listTasks)
@@ -179,37 +179,21 @@ func scopeBadRequest(c *fiber.Ctx, message string) error {
 	})
 }
 
-// requireCompanyScope — как @require_company_scope: обычный пользователь —
-// всегда своя компания, Администратор системы — обязательный ?company_id=.
-// ok=false — ответ уже записан.
+// requireCompanyScope — скоуп компании = АКТИВНАЯ компания из токена. Эндпоинты
+// под RequireRole доступны только участникам компании, так что CompanyID всегда
+// задан; иначе — нет активной компании. ok=false — ответ уже записан.
 func requireCompanyScope(c *fiber.Ctx, u *domain.User) (int64, bool, error) {
 	if u != nil && u.CompanyID != nil {
 		return *u.CompanyID, true, nil
 	}
-	raw := c.Query("company_id")
-	if raw == "" {
-		return 0, false, scopeBadRequest(c, "Требуется указать company_id")
-	}
-	v, err := strconv.ParseInt(raw, 10, 64)
-	if err != nil {
-		return 0, false, scopeBadRequest(c, "Неверный company_id")
-	}
-	return v, true, nil
+	return 0, false, scopeBadRequest(c, "Нет активной компании")
 }
 
-// optionalCompanyScope — как resolve_company_scope: nil = все компании
-// (Администратор системы без выбранного контекста).
+// optionalCompanyScope — скоуп компании = активная компания из токена. Всегда
+// задана для участника компании (эндпоинты под RequireRole).
 func optionalCompanyScope(c *fiber.Ctx, u *domain.User) (*int64, bool, error) {
-	if u != nil && u.CompanyID != nil {
+	if u != nil {
 		return u.CompanyID, true, nil
 	}
-	raw := c.Query("company_id")
-	if raw == "" {
-		return nil, true, nil
-	}
-	v, err := strconv.ParseInt(raw, 10, 64)
-	if err != nil {
-		return nil, false, scopeBadRequest(c, "Неверный company_id")
-	}
-	return &v, true, nil
+	return nil, true, nil
 }

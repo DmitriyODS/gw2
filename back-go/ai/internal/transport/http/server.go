@@ -5,10 +5,9 @@
 // api/ai_settings.py и api/ai_tv.py — фронт не меняется, nginx маршрутизирует
 // regex ^/api/companies/\d+/ai-settings и префикс /api/ai на этот сервис.
 //
-// Доступ к настройкам: уровень роли DIRECTOR+ (мидлварь), причём
-// Руководитель — только своя компания, Администратор системы (is_root_admin) —
-// любая (проверка в сервисном слое — как _check_access во Flask).
-// ТВ-факт — любой авторизованный в company-scope.
+// Доступ к настройкам: администратор ИМЕННО этой компании (роль ≥ 3 в активной
+// компании, мидлварь RequireRole). AI-настройки скоупятся компанией из пути;
+// супер-админ ими не управляет. ТВ-факт — любой авторизованный в company-scope.
 package http
 
 import (
@@ -27,7 +26,8 @@ type Server struct {
 }
 
 // authSource — сверка пользователя для pkg-мидлвари. Активная компания и роль
-// в ней — ИЗ ТОКЕНА (active); из БД — is_hidden и активность выбранной компании.
+// в ней — ИЗ ТОКЕНА (active); из БД — глобальная активность аккаунта и
+// активность выбранной компании.
 func authSource(users domain.UserReader) pasetoauth.AuthSource {
 	return func(ctx context.Context, userID int64, active pasetoauth.Claims) (*pasetoauth.AuthInfo, error) {
 		u, err := users.GetUser(ctx, userID)
@@ -36,7 +36,6 @@ func authSource(users domain.UserReader) pasetoauth.AuthSource {
 		}
 		u.CompanyID = active.CompanyID
 		u.RoleLevel = active.RoleLevel
-		u.IsRootAdmin = active.IsRootAdmin
 		companyActive, err := users.CompanyActive(ctx, active.CompanyID)
 		if err != nil {
 			return nil, err
@@ -44,7 +43,8 @@ func authSource(users domain.UserReader) pasetoauth.AuthSource {
 		u.CompanyActive = companyActive
 		return &pasetoauth.AuthInfo{
 			RoleLevel:     active.RoleLevel,
-			IsHidden:      u.IsHidden,
+			IsActive:      u.IsActive,
+			IsSuperAdmin:  u.IsSuperAdmin,
 			CompanyActive: companyActive,
 			User:          u,
 		}, nil
@@ -66,7 +66,7 @@ func NewServer(eps endpoint.Endpoints, users domain.UserReader,
 	})
 
 	api := app.Group("/api/companies/:companyId<int>/ai-settings",
-		auth.RequireAuth, auth.RequireRole(domain.LevelDirector))
+		auth.RequireAuth, auth.RequireRole(domain.LevelAdmin))
 	api.Get("", h.getSettings)
 	api.Put("", h.updateSettings)
 	api.Post("/test", h.testSettings)

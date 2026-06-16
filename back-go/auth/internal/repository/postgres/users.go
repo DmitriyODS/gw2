@@ -1,6 +1,6 @@
 // Package postgres — доступ к users/roles/companies через pgx.
 // Хеширование/проверка паролей — pgcrypto (crypt + gen_salt('bf')),
-// совместимо с хешами, созданными Flask.
+// совместимо с историческими хешами.
 package postgres
 
 import (
@@ -24,52 +24,69 @@ func NewUserRepository(pool *pgxpool.Pool) *UserRepository { return &UserReposit
 
 var _ domain.UserRepository = (*UserRepository)(nil)
 
-const userColumns = `
-	u.id, u.fio, u.login, u.hash_password, u.post,
-	r.id, r.name, r.level,
-	u.company_id, c.id, c.name, c.is_active, c.settings,
+// identityCols — чистая идентичность (без контекста компании): users развязаны
+// с компаниями, роль/должность живут в связке user_companies.
+const identityCols = `
+	u.id, u.fio, u.login, u.hash_password,
 	u.avatar_path, u.phone, u.email,
-	u.is_default_pass, u.is_hidden, u.is_root_admin,
+	u.is_default_pass, u.is_active, u.is_super_admin, u.email_verified,
 	u.created_at, u.last_seen_at`
 
-const userFrom = `
-	FROM users u
-	JOIN roles r ON r.id = u.role_id
-	LEFT JOIN companies c ON c.id = u.company_id`
+const identityFrom = ` FROM users u`
 
-func scanUser(row pgx.Row) (*domain.User, error) {
-	var (
-		u         domain.User
-		companyID *int64
-		cID       *int64
-		cName     *string
-		cActive   *bool
-		cSettings map[string]any
-	)
+func scanIdentity(row pgx.Row) (*domain.User, error) {
+	var u domain.User
 	err := row.Scan(
-		&u.ID, &u.FIO, &u.Login, &u.HashPassword, &u.Post,
-		&u.Role.ID, &u.Role.Name, &u.Role.Level,
-		&companyID, &cID, &cName, &cActive, &cSettings,
+		&u.ID, &u.FIO, &u.Login, &u.HashPassword,
 		&u.AvatarPath, &u.Phone, &u.Email,
-		&u.IsDefaultPass, &u.IsHidden, &u.IsRootAdmin,
+		&u.IsDefaultPass, &u.IsActive, &u.IsSuperAdmin, &u.EmailVerified,
 		&u.CreatedAt, &u.LastSeenAt,
 	)
 	if err != nil {
 		return nil, err
 	}
-	u.CompanyID = companyID
-	if cID != nil {
-		u.Company = &domain.CompanyRef{ID: *cID, IsActive: cActive != nil && *cActive, Settings: cSettings}
-		if cName != nil {
-			u.Company.Name = *cName
-		}
+	return &u, nil
+}
+
+// memberCols — идентичность + контекст КОМПАНИИ (роль/должность/активность) из
+// связки user_companies: для каталога членов конкретной компании.
+const memberCols = `
+	u.id, u.fio, u.login, u.hash_password,
+	r.id, r.name, r.level, uc.post,
+	uc.company_id, c.is_active,
+	u.avatar_path, u.phone, u.email,
+	u.is_default_pass, u.is_active, u.is_super_admin, u.email_verified,
+	u.created_at, u.last_seen_at`
+
+const memberFrom = `
+	FROM user_companies uc
+	JOIN users u ON u.id = uc.user_id
+	JOIN roles r ON r.id = uc.role_id
+	JOIN companies c ON c.id = uc.company_id`
+
+func scanMember(row pgx.Row) (*domain.User, error) {
+	var (
+		u       domain.User
+		cActive *bool
+	)
+	err := row.Scan(
+		&u.ID, &u.FIO, &u.Login, &u.HashPassword,
+		&u.Role.ID, &u.Role.Name, &u.Role.Level, &u.Post,
+		&u.CompanyID, &cActive,
+		&u.AvatarPath, &u.Phone, &u.Email,
+		&u.IsDefaultPass, &u.IsActive, &u.IsSuperAdmin, &u.EmailVerified,
+		&u.CreatedAt, &u.LastSeenAt,
+	)
+	if err != nil {
+		return nil, err
 	}
+	u.CompanyActive = cActive == nil || *cActive
 	return &u, nil
 }
 
 func (r *UserRepository) getOne(ctx context.Context, where string, arg any) (*domain.User, error) {
-	row := r.pool.QueryRow(ctx, "SELECT"+userColumns+userFrom+" WHERE "+where, arg)
-	u, err := scanUser(row)
+	row := r.pool.QueryRow(ctx, "SELECT"+identityCols+identityFrom+" WHERE "+where, arg)
+	u, err := scanIdentity(row)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, nil
 	}
@@ -91,8 +108,8 @@ func (r *UserRepository) GetByEmail(ctx context.Context, email string) (*domain.
 	return r.getOne(ctx, "lower(u.email) = lower($1)", email)
 }
 
-func (r *UserRepository) list(ctx context.Context, tail string, args ...any) ([]*domain.User, error) {
-	rows, err := r.pool.Query(ctx, "SELECT"+userColumns+userFrom+" "+tail, args...)
+func (r *UserRepository) listIdentity(ctx context.Context, tail string, args ...any) ([]*domain.User, error) {
+	rows, err := r.pool.Query(ctx, "SELECT"+identityCols+identityFrom+" "+tail, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -100,7 +117,7 @@ func (r *UserRepository) list(ctx context.Context, tail string, args ...any) ([]
 
 	var out []*domain.User
 	for rows.Next() {
-		u, err := scanUser(rows)
+		u, err := scanIdentity(rows)
 		if err != nil {
 			return nil, err
 		}
@@ -109,53 +126,48 @@ func (r *UserRepository) list(ctx context.Context, tail string, args ...any) ([]
 	return out, rows.Err()
 }
 
-func (r *UserRepository) ListVisible(ctx context.Context) ([]*domain.User, error) {
-	return r.list(ctx, "WHERE u.is_hidden = FALSE ORDER BY u.id")
+// ListAll — все активные пользователи платформы (список супер-админа), по id.
+func (r *UserRepository) ListAll(ctx context.Context) ([]*domain.User, error) {
+	return r.listIdentity(ctx, "WHERE u.is_active ORDER BY u.id")
 }
 
-func (r *UserRepository) SearchDirectory(ctx context.Context, query string, excludeID int64,
-	companyID *int64) ([]*domain.User, error) {
-
-	where := []string{"u.is_hidden = FALSE"}
+// SearchDirectory — глобальный каталог (контакты): активные пользователи,
+// ILIKE по fio/login, без excludeID; сортировка по fio.
+func (r *UserRepository) SearchDirectory(ctx context.Context, query string, excludeID int64) ([]*domain.User, error) {
+	where := []string{"u.is_active"}
 	var args []any
 	if excludeID > 0 {
 		args = append(args, excludeID)
 		where = append(where, fmt.Sprintf("u.id <> $%d", len(args)))
 	}
-	if companyID != nil {
-		args = append(args, *companyID)
-		where = append(where, fmt.Sprintf("u.company_id = $%d", len(args)))
-	}
 	if q := strings.TrimSpace(query); q != "" {
 		args = append(args, "%"+strings.ToLower(q)+"%")
 		where = append(where, fmt.Sprintf("(lower(u.fio) LIKE $%d OR lower(u.login) LIKE $%d)", len(args), len(args)))
 	}
-	return r.list(ctx, "WHERE "+strings.Join(where, " AND ")+" ORDER BY u.fio ASC", args...)
+	return r.listIdentity(ctx, "WHERE "+strings.Join(where, " AND ")+" ORDER BY u.fio ASC", args...)
 }
 
 func (r *UserRepository) Create(ctx context.Context, u *domain.User) error {
 	return r.pool.QueryRow(ctx, `
-		INSERT INTO users (fio, login, hash_password, role_id, company_id, post,
-		                   phone, email, is_default_pass, is_hidden, is_root_admin, created_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, FALSE, FALSE, now())
+		INSERT INTO users (fio, login, hash_password, phone, email,
+		                   is_default_pass, is_active, email_verified, created_at)
+		VALUES ($1, $2, $3, $4, $5, $6, TRUE, $7, now())
 		RETURNING id, created_at`,
-		u.FIO, u.Login, u.HashPassword, u.Role.ID, u.CompanyID, u.Post,
-		u.Phone, u.Email, u.IsDefaultPass,
+		u.FIO, u.Login, u.HashPassword, u.Phone, u.Email, u.IsDefaultPass, u.EmailVerified,
 	).Scan(&u.ID, &u.CreatedAt)
 }
 
-// allowedUserFields — колонки, которые сервис может менять точечно.
+// allowedUserFields — колонки идентичности, которые сервис меняет точечно.
 var allowedUserFields = map[string]bool{
-	"fio": true, "login": true, "post": true, "phone": true, "email": true,
-	"company_id": true, "role_id": true, "avatar_path": true,
-	"hash_password": true, "is_default_pass": true, "is_hidden": true,
+	"fio": true, "login": true, "phone": true, "email": true,
+	"avatar_path": true, "hash_password": true,
+	"is_default_pass": true, "is_active": true, "email_verified": true,
 }
 
 func (r *UserRepository) UpdateFields(ctx context.Context, id int64, fields map[string]any) error {
 	if len(fields) == 0 {
 		return nil
 	}
-	// Детерминированный порядок — стабильный SQL для логов и тестов.
 	keys := make([]string, 0, len(fields))
 	for k := range fields {
 		if !allowedUserFields[k] {
@@ -192,6 +204,20 @@ func (r *UserRepository) GetRole(ctx context.Context, roleID int64) (*domain.Rol
 	return &role, nil
 }
 
+func (r *UserRepository) RoleByLevel(ctx context.Context, level int) (*domain.Role, error) {
+	var role domain.Role
+	err := r.pool.QueryRow(ctx,
+		`SELECT id, name, level FROM roles WHERE level = $1`, level,
+	).Scan(&role.ID, &role.Name, &role.Level)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	return &role, nil
+}
+
 func (r *UserRepository) ListRoles(ctx context.Context) ([]*domain.Role, error) {
 	rows, err := r.pool.Query(ctx,
 		`SELECT id, name, level FROM roles ORDER BY level`)
@@ -211,42 +237,7 @@ func (r *UserRepository) ListRoles(ctx context.Context) ([]*domain.Role, error) 
 	return out, rows.Err()
 }
 
-func (r *UserRepository) CountVisibleByLevel(ctx context.Context, level int) (int, error) {
-	var n int
-	err := r.pool.QueryRow(ctx, `
-		SELECT count(*) FROM users u
-		JOIN roles r ON r.id = u.role_id
-		WHERE r.level = $1 AND u.is_hidden = FALSE`, level,
-	).Scan(&n)
-	return n, err
-}
-
-func (r *UserRepository) IsCompanyDirector(ctx context.Context, userID int64) (bool, error) {
-	var exists bool
-	err := r.pool.QueryRow(ctx,
-		`SELECT EXISTS(SELECT 1 FROM companies WHERE director_id = $1)`, userID,
-	).Scan(&exists)
-	return exists, err
-}
-
 // ── Членство в компаниях (user_companies) ──
-
-// memberColumns/memberFrom — те же колонки и порядок, что userColumns, но роль
-// и компания берутся из связки user_companies (роль В ЭТОЙ компании), поэтому
-// результат сканируется тем же scanUser.
-const memberColumns = `
-	u.id, u.fio, u.login, u.hash_password, u.post,
-	r.id, r.name, r.level,
-	uc.company_id, c.id, c.name, c.is_active, c.settings,
-	u.avatar_path, u.phone, u.email,
-	u.is_default_pass, u.is_hidden, u.is_root_admin,
-	u.created_at, u.last_seen_at`
-
-const memberFrom = `
-	FROM user_companies uc
-	JOIN users u ON u.id = uc.user_id
-	JOIN roles r ON r.id = uc.role_id
-	JOIN companies c ON c.id = uc.company_id`
 
 func scanMembership(row pgx.Row) (*domain.Membership, error) {
 	var (
@@ -256,7 +247,7 @@ func scanMembership(row pgx.Row) (*domain.Membership, error) {
 	)
 	c := domain.CompanyRef{}
 	err := row.Scan(&m.CompanyID, &cName, &cActive, &c.Settings,
-		&m.Role.ID, &m.Role.Name, &m.Role.Level, &m.CreatedAt)
+		&m.Role.ID, &m.Role.Name, &m.Role.Level, &m.Post, &m.CreatedAt)
 	if err != nil {
 		return nil, err
 	}
@@ -271,7 +262,7 @@ func scanMembership(row pgx.Row) (*domain.Membership, error) {
 
 const membershipSelect = `
 	SELECT uc.company_id, c.name, c.is_active, c.settings,
-	       r.id, r.name, r.level, uc.created_at
+	       r.id, r.name, r.level, uc.post, uc.created_at
 	  FROM user_companies uc
 	  JOIN companies c ON c.id = uc.company_id
 	  JOIN roles r ON r.id = uc.role_id`
@@ -324,20 +315,29 @@ func (r *UserRepository) UpdateMembershipRole(ctx context.Context, userID, compa
 	return err
 }
 
+func (r *UserRepository) SetMembershipPost(ctx context.Context, userID, companyID int64, post *string) error {
+	_, err := r.pool.Exec(ctx,
+		`UPDATE user_companies SET post = $3 WHERE user_id = $1 AND company_id = $2`,
+		userID, companyID, post)
+	return err
+}
+
+// CountCompanyMembersByLevel — активные члены компании с уровнем роли
+// (защита «последнего администратора компании»).
 func (r *UserRepository) CountCompanyMembersByLevel(ctx context.Context, companyID int64, level int) (int, error) {
 	var n int
 	err := r.pool.QueryRow(ctx, `
 		SELECT count(*) FROM user_companies uc
 		JOIN users u ON u.id = uc.user_id
 		JOIN roles r ON r.id = uc.role_id
-		WHERE uc.company_id = $1 AND r.level = $2 AND u.is_hidden = FALSE`, companyID, level,
+		WHERE uc.company_id = $1 AND r.level = $2 AND u.is_active`, companyID, level,
 	).Scan(&n)
 	return n, err
 }
 
 func (r *UserRepository) SearchDirectoryMembers(ctx context.Context, query string, excludeID, companyID int64) ([]*domain.User, error) {
 	args := []any{companyID}
-	where := []string{"uc.company_id = $1", "u.is_hidden = FALSE"}
+	where := []string{"uc.company_id = $1", "u.is_active"}
 	if excludeID > 0 {
 		args = append(args, excludeID)
 		where = append(where, fmt.Sprintf("u.id <> $%d", len(args)))
@@ -347,14 +347,14 @@ func (r *UserRepository) SearchDirectoryMembers(ctx context.Context, query strin
 		where = append(where, fmt.Sprintf("(lower(u.fio) LIKE $%d OR lower(u.login) LIKE $%d)", len(args), len(args)))
 	}
 	rows, err := r.pool.Query(ctx,
-		"SELECT"+memberColumns+memberFrom+" WHERE "+strings.Join(where, " AND ")+" ORDER BY u.fio ASC", args...)
+		"SELECT"+memberCols+memberFrom+" WHERE "+strings.Join(where, " AND ")+" ORDER BY u.fio ASC", args...)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
 	var out []*domain.User
 	for rows.Next() {
-		u, err := scanUser(rows)
+		u, err := scanMember(rows)
 		if err != nil {
 			return nil, err
 		}
@@ -366,29 +366,15 @@ func (r *UserRepository) SearchDirectoryMembers(ctx context.Context, query strin
 func (r *UserRepository) SearchNonMembers(ctx context.Context, query string, companyID int64) ([]*domain.User, error) {
 	args := []any{companyID}
 	where := []string{
-		"u.is_hidden = FALSE",
+		"u.is_active",
+		"u.is_super_admin = FALSE",
 		"NOT EXISTS (SELECT 1 FROM user_companies uc WHERE uc.user_id = u.id AND uc.company_id = $1)",
 	}
 	if q := strings.TrimSpace(query); q != "" {
 		args = append(args, "%"+strings.ToLower(q)+"%")
 		where = append(where, fmt.Sprintf("(lower(u.fio) LIKE $%d OR lower(u.login) LIKE $%d)", len(args), len(args)))
 	}
-	return r.list(ctx, "WHERE "+strings.Join(where, " AND ")+" ORDER BY u.fio ASC LIMIT 20", args...)
-}
-
-func (r *UserRepository) SyncPrimaryCompany(ctx context.Context, userID int64) error {
-	// Первичная компания = старейшая связка; role_id сохраняем при отсутствии
-	// связок (колонка NOT NULL), company_id → NULL (инвариант NULL ⇔ админ).
-	_, err := r.pool.Exec(ctx, `
-		WITH primary_m AS (
-			SELECT company_id, role_id FROM user_companies
-			WHERE user_id = $1 ORDER BY created_at ASC, company_id ASC LIMIT 1
-		)
-		UPDATE users SET
-			company_id = (SELECT company_id FROM primary_m),
-			role_id    = COALESCE((SELECT role_id FROM primary_m), role_id)
-		WHERE id = $1`, userID)
-	return err
+	return r.listIdentity(ctx, "WHERE "+strings.Join(where, " AND ")+" ORDER BY u.fio ASC LIMIT 20", args...)
 }
 
 func (r *UserRepository) CompanyActive(ctx context.Context, companyID *int64) (bool, error) {

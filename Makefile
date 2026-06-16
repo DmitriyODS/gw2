@@ -27,6 +27,7 @@ help:
 	@printf "  make dev-tasks    Go-микросервис задач (HTTP :8095)\n"
 	@printf "  make dev-gateway  Realtime-шлюз (WS /ws, HTTP :8096)\n"
 	@printf "  make dev-push     Go-микросервис пуш-уведомлений (HTTP :8097)\n"
+	@printf "  make dev-mail     Go-микросервис почты (gRPC :9098, HTTP :8098)\n"
 	@printf "  make dev-migrate  Применить миграции (goose)\n"
 	@printf "  make dev-front    Vite dev-сервер  :5173\n"
 	@printf "  make dev-stop     Остановить dev-контейнеры\n"
@@ -49,7 +50,7 @@ help:
 	@printf "\n\033[33mКонфигурация сервера:\033[0m cp .env.deploy.example .env.deploy\n\n"
 
 # ── Разработка ────────────────────────────────────────────────────
-.PHONY: dev-infra dev-migrate dev-front dev-calls dev-auth dev-messenger dev-ai dev-groove dev-tasks dev-gateway dev-push dev-stop dev-stack dev-stack-stop gen-proto
+.PHONY: dev-infra dev-migrate dev-front dev-calls dev-auth dev-messenger dev-ai dev-groove dev-tasks dev-gateway dev-push dev-mail dev-stop dev-stack dev-stack-stop gen-proto
 
 # Dev-ключи PASETO (синхронизированы с dev.sh и
 # deploy/docker-compose.override.yml): приватный — только у authsvc,
@@ -102,6 +103,8 @@ dev-auth: dev-infra
 	PASETO_PRIVATE_KEY="$(PASETO_PRIVATE_KEY_DEV)" \
 	PASETO_REFRESH_KEY="$(PASETO_REFRESH_KEY_DEV)" \
 	UPLOAD_FOLDER="$(CURDIR)/uploads" \
+	MAIL_GRPC_ADDR="localhost:9098" \
+	APP_PUBLIC_BASE_URL="http://localhost:5173" \
 	go run ./cmd/authsvc
 
 # Go-микросервис мессенджера: REST /api/messenger/* (кроме exact presence —
@@ -185,6 +188,20 @@ dev-push: dev-infra
 	FIREBASE_CREDENTIALS_JSON="$${FIREBASE_CREDENTIALS_JSON:-}" \
 	HTTP_ADDR=":8097" \
 	go run ./cmd/pushsvc
+
+# Go-микросервис рассылки писем: gRPC :9098 (Send), HTTP :8098 (/healthz).
+# В dev письма уходят в mailpit (docker compose up поднимает его) — смотреть на
+# http://localhost:8025. Реальный SMTP не нужен.
+dev-mail: dev-infra
+	@printf "\033[1m▶ mailsvc (Go)  gRPC :9098  HTTP :8098\033[0m\n"
+	cd back-go/mail && \
+	SMTP_HOST="localhost" \
+	SMTP_PORT="1025" \
+	SMTP_TLS="none" \
+	SMTP_FROM="noreply@grovework.local" \
+	HTTP_ADDR=":8098" \
+	GRPC_ADDR=":9098" \
+	go run ./cmd/mailsvc
 
 gen-proto:
 	bash scripts/gen_proto.sh

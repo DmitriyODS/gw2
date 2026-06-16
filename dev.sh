@@ -85,6 +85,7 @@ cleanup() {
     pkill -f "exe/tasksvc"       2>/dev/null || true
     pkill -f "exe/gatewaysvc"    2>/dev/null || true
     pkill -f "exe/pushsvc"       2>/dev/null || true
+    pkill -f "exe/mailsvc"       2>/dev/null || true
 
     (cd "$DEPLOY" && docker compose stop 2>/dev/null) || true
     printf "\033[32mВсё остановлено.\033[0m\n"
@@ -133,6 +134,8 @@ printf "\033[1m▶ authsvc (Go)  HTTP :8091...\033[0m\n"
   PASETO_PRIVATE_KEY="$PASETO_PRIVATE_KEY_DEV" \
   PASETO_REFRESH_KEY="$PASETO_REFRESH_KEY_DEV" \
   UPLOAD_FOLDER="$UPLOADS" \
+  MAIL_GRPC_ADDR="localhost:9098" \
+  APP_PUBLIC_BASE_URL="http://${PRIMARY_IP}:5173" \
   exec go run ./cmd/authsvc
 ) &
 AUTH_PID=$!
@@ -233,7 +236,23 @@ printf "\033[1m▶ pushsvc (Go)  HTTP :8097...\033[0m\n"
 ) &
 PUSH_PID=$!
 
-# 11. Vite (--host 0.0.0.0 — слушаем все интерфейсы, чтобы фронт открывался
+# 11. Go-микросервис почты mailsvc (gRPC :9098 — Send; HTTP :8098 — /healthz).
+#     Письма уходят в mailpit (docker compose up поднимает его) — смотреть на
+#     http://localhost:8025. Реальный SMTP в dev не нужен.
+printf "\033[1m▶ mailsvc (Go)  gRPC :9098  HTTP :8098...\033[0m\n"
+(
+  cd "$ROOT/back-go/mail" && \
+  SMTP_HOST="localhost" \
+  SMTP_PORT="1025" \
+  SMTP_TLS="none" \
+  SMTP_FROM="noreply@grovework.local" \
+  HTTP_ADDR=":8098" \
+  GRPC_ADDR=":9098" \
+  exec go run ./cmd/mailsvc
+) &
+MAIL_PID=$!
+
+# 12. Vite (--host 0.0.0.0 — слушаем все интерфейсы, чтобы фронт открывался
 #     с других устройств сети по http://<IP>:5173).
 printf "\033[1m▶ Vite  :5173...\033[0m\n"
 ( cd "$FRONT" && exec npm run dev -- --host 0.0.0.0 ) &
@@ -256,6 +275,7 @@ printf "  Чаты:    \033[4mhttp://localhost:8092/api/messenger\033[0m (gRPC :
 printf "  Groove:  \033[4mhttp://localhost:8094/api/groove\033[0m (gRPC :9094)\n"
 printf "  Задачи:  \033[4mhttp://localhost:8095/api/tasks\033[0m\n"
 printf "  ИИ:      \033[4mhttp://localhost:8093\033[0m (gRPC :9093)\n"
-printf "  Пуши:    \033[4mhttp://localhost:8097/api/push\033[0m\n\n"
+printf "  Пуши:    \033[4mhttp://localhost:8097/api/push\033[0m\n"
+printf "  Почта:   \033[4mhttp://localhost:8025\033[0m (mailpit; gRPC :9098)\n\n"
 
 wait

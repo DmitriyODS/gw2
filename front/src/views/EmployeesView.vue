@@ -82,9 +82,9 @@
           @keydown.space.prevent="openProfile(u)"
         >
           <span
-            v-if="u.is_root_admin"
+            v-if="u.is_super_admin"
             class="root-corner"
-            title="Корневой Администратор системы"
+            title="Супер-администратор платформы"
           >
             <span class="material-symbols-outlined">verified</span>
           </span>
@@ -173,9 +173,9 @@
               </span>
               <span class="user-fio">{{ data.fio }}</span>
               <span
-                v-if="data.is_root_admin"
+                v-if="data.is_super_admin"
                 class="root-badge"
-                title="Корневой Администратор системы"
+                title="Супер-администратор платформы"
               >
                 <span class="material-symbols-outlined">verified</span>
               </span>
@@ -202,7 +202,7 @@
           </template>
         </Column>
 
-        <Column v-if="auth.isRootAdmin" header="Компания" style="min-width: 160px">
+        <Column v-if="auth.isSuperAdmin" header="Компания" style="min-width: 160px">
           <template #body="{ data }">
             <span v-if="companyOf(data)" class="company-chip">{{ companyOf(data) }}</span>
             <span v-else class="muted">—</span>
@@ -224,8 +224,8 @@
               <button v-if="canEdit(data)" class="icon-btn" title="Редактировать" @click="openEdit(data)">
                 <span class="material-symbols-outlined">edit</span>
               </button>
-              <button v-if="canDelete(data)" class="icon-btn danger" title="Скрыть" @click="askDelete(data)">
-                <span class="material-symbols-outlined">delete</span>
+              <button v-if="canDelete(data)" class="icon-btn danger" title="Исключить из компании" @click="askDelete(data)">
+                <span class="material-symbols-outlined">person_remove</span>
               </button>
             </div>
           </template>
@@ -262,9 +262,9 @@
           <h2 class="profile-name">
             {{ selected.fio }}
             <span
-              v-if="selected.is_root_admin"
+              v-if="selected.is_super_admin"
               class="root-badge inline"
-              title="Корневой Администратор системы"
+              title="Супер-администратор платформы"
             >
               <span class="material-symbols-outlined">verified</span>
             </span>
@@ -368,8 +368,8 @@
             Редактировать
           </button>
           <button v-if="canDelete(selected)" class="btn-outlined danger" @click="askDelete(selected)">
-            <span class="material-symbols-outlined">delete</span>
-            Скрыть
+            <span class="material-symbols-outlined">person_remove</span>
+            Исключить
           </button>
         </div>
       </div>
@@ -394,9 +394,9 @@
 
     <ConfirmDialog
       :visible="deleteDlg.open"
-      header="Скрыть сотрудника"
-      :message="`Скрыть сотрудника «${deleteDlg.user?.fio}»? Доступ в систему пропадёт, история работы сохранится.`"
-      confirm-label="Скрыть"
+      header="Исключить из компании"
+      :message="`Исключить сотрудника «${deleteDlg.user?.fio}» из компании? Он потеряет доступ к её данным, история работы сохранится.`"
+      confirm-label="Исключить"
       danger-confirm
       @confirm="doDelete"
       @cancel="deleteDlg.open = false"
@@ -427,7 +427,7 @@ import { useCompaniesStore } from '@/stores/companies.js'
 import { useMessengerStore } from '@/stores/messenger.js'
 import { useCallStore } from '@/stores/call.js'
 import { useNotificationsStore } from '@/stores/notifications.js'
-import { usePermission } from '@/composables/usePermission.js'
+import { usePermission, ROLE_NAMES } from '@/composables/usePermission.js'
 import { formatLastSeen } from '@/utils/presence.js'
 import AvatarLightbox from '@/components/common/AvatarLightbox.vue'
 import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
@@ -481,15 +481,15 @@ const formDlgRef = ref(null)
 
 const deleteDlg = ref({ open: false, user: null })
 
-const canCreate = computed(() => isAtLeast(ROLES.DIRECTOR))
-const callsOn = computed(() => {
-  if (auth.isRootAdmin) return companies.activeCompany?.settings?.uses_calls !== false
-  return true
-})
+// Создание/управление членами — у администратора компании (роль ≥ 3).
+// Супер-админ управляет членами через раздел компаний, здесь только смотрит список.
+const canCreate = computed(() => !auth.isSuperAdmin && isAtLeast(ROLES.ADMIN))
+const callsOn = computed(() => true)
 
 function canEdit(u) {
-  if (!isAtLeast(ROLES.DIRECTOR)) return false
-  if (!auth.isRootAdmin && u.company_id !== auth.companyId) return false
+  if (auth.isSuperAdmin) return false
+  if (!isAtLeast(ROLES.ADMIN)) return false
+  if (u.is_super_admin) return false
   if ((u.role?.level ?? 0) > myLevel()) return false
   return true
 }
@@ -497,14 +497,15 @@ function canEdit(u) {
 function canDelete(u) {
   if (!canEdit(u)) return false
   if (u.id === auth.user?.id) return false
-  if (u.is_root_admin) return false
   return true
 }
 
 async function load() {
   loading.value = true
   try {
-    if (auth.isRootAdmin) {
+    // Супер-админ — все пользователи платформы; член компании — каталог
+    // своей активной компании (компания берётся из токена на бэке).
+    if (auth.isSuperAdmin) {
       users.value = await getUsers()
     } else {
       users.value = await getDirectory()
@@ -525,17 +526,13 @@ onMounted(() => {
   load()
   loadRoles()
   messenger.fetchPresence()
-  if (auth.isRootAdmin) companies.load()
+  if (auth.isSuperAdmin) companies.load()
 })
 
-watch(() => companies.activeCompanyId, () => {
-  if (auth.isRootAdmin) load()
-})
-
-// Многокомпанийный обычный пользователь сменил активную компанию (switchCompany
-// меняет auth.companyId, не companies.activeCompanyId) — перезагружаем каталог.
+// Пользователь сменил активную компанию (switchCompany меняет auth.companyId) —
+// перезагружаем каталог членов новой компании.
 watch(() => auth.companyId, () => {
-  if (!auth.isRootAdmin) load()
+  if (!auth.isSuperAdmin) load()
 })
 
 function statusOf(u) {
@@ -574,11 +571,8 @@ function pluralPeople(n) {
   return 'сотрудников'
 }
 
-const scopedUsers = computed(() => {
-  const cid = auth.isRootAdmin ? companies.activeCompanyId : auth.companyId
-  if (cid == null) return users.value
-  return users.value.filter(u => u.company_id === cid)
-})
+// Каталог уже отфильтрован на бэке (члены активной компании / все для супер-админа).
+const scopedUsers = computed(() => users.value)
 
 const onlineCount = computed(() =>
   scopedUsers.value.reduce((s, u) => s + (messenger.isOnline(u.id) ? 1 : 0), 0)
@@ -594,8 +588,7 @@ const roleFilters = computed(() => {
   const names = {
     1: 'Сотрудники',
     2: 'Менеджеры',
-    3: 'Руководители',
-    4: 'Администраторы',
+    3: 'Администраторы',
   }
   const items = [{ key: 'all', label: 'Все', icon: 'groups', count: scopedUsers.value.length }]
   for (const [lvl, count] of [...counters.entries()].sort((a, b) => a[0] - b[0])) {
@@ -687,13 +680,13 @@ async function doDelete() {
   try {
     await deleteUser(deleteDlg.value.user.id)
     users.value = users.value.filter(x => x.id !== deleteDlg.value.user.id)
-    notif.success('Сотрудник скрыт')
+    notif.success('Сотрудник исключён из компании')
     deleteDlg.value.open = false
     if (profileOpen.value && selected.value?.id === deleteDlg.value.user.id) {
       profileOpen.value = false
     }
   } catch (e) {
-    notif.error(e?.message || 'Не удалось скрыть')
+    notif.error(e?.message || 'Не удалось исключить')
   }
 }
 
@@ -704,9 +697,14 @@ watch(profileOpen, (open) => {
 const RolePill = {
   props: ['level', 'name'],
   setup(p) {
-    return () => h('span', {
-      class: ['role-pill', `lvl-${p.level || 1}`],
-    }, p.name || 'Сотрудник')
+    return () => {
+      // Роль есть только у члена компании; у прочих (например в платформенном
+      // списке супер-админа) роли нет — пилюлю не показываем.
+      if (!p.level && !p.name) return null
+      return h('span', {
+        class: ['role-pill', `lvl-${p.level || 1}`],
+      }, p.name || ROLE_NAMES[p.level] || 'Сотрудник')
+    }
   },
 }
 </script>
@@ -1199,7 +1197,6 @@ const RolePill = {
 .role-pill.lvl-1 { background: var(--color-surface-high); color: var(--color-text-dim); }
 .role-pill.lvl-2 { background: var(--color-secondary-container); color: var(--color-on-secondary-container); }
 .role-pill.lvl-3 { background: var(--color-tertiary-container); color: var(--color-on-tertiary-container); }
-.role-pill.lvl-4 { background: var(--color-primary-container); color: var(--color-on-primary-container); }
 
 /* ============ Profile dialog ============ */
 .emp-profile {
