@@ -129,6 +129,11 @@ const navItems = computed(() => {
       tutorial: 'nav-companies', active: () => route.path.startsWith('/companies') })
   }
 
+  if (isSuperAdmin()) {
+    items.push({ path: '/users', icon: 'people', label: 'Пользователи', tutorial: 'nav-users',
+      active: () => route.path === '/users' })
+  }
+
   items.push({ path: '/settings', icon: 'settings', label: 'Настройки', tutorial: 'nav-settings',
     active: () => route.path === '/settings' })
 

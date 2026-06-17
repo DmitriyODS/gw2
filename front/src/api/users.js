@@ -44,3 +44,17 @@ export const getDirectoryUser = (userId) => apiRequest(`/users/directory/${userI
 
 export const resetUserPassword = (userId) =>
   apiRequest(`/users/${userId}/reset-password`, { method: 'POST' })
+
+// ── Платформенное управление пользователями (раздел «Пользователи», супер-админ).
+// Операции над идентичностью вне контекста компании. ──
+export const createPlatformUser = (data) =>
+  apiRequest('/users/platform', { method: 'POST', body: data })
+
+export const updatePlatformUser = (userId, data) =>
+  apiRequest(`/users/platform/${userId}`, { method: 'PATCH', body: data })
+
+export const resetPlatformUserPassword = (userId) =>
+  apiRequest(`/users/platform/${userId}/reset-password`, { method: 'POST' })
+
+export const deletePlatformUser = (userId) =>
+  apiRequest(`/users/platform/${userId}`, { method: 'DELETE' })

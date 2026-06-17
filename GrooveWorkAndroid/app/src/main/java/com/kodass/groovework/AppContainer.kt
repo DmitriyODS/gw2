@@ -68,6 +68,9 @@ class AppContainer(app: Application) {
 
     val appScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
+    // Персонализация оформления (режим + палитра) — локально на устройстве.
+    val theme = com.kodass.groovework.ui.theme.ThemeController(app, appScope)
+
     private val store = SessionStore(app)
     private val hostInterceptor = HostSelectionInterceptor()
     val sessionManager = SessionManager(store, hostInterceptor, json)

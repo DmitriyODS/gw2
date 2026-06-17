@@ -262,6 +262,26 @@ func (h *handlers) deleteMessage(c *fiber.Ctx) error {
 	return c.JSON(fiber.Map{"deleted": true, "scope": scope, "for_all": resp.(bool)})
 }
 
+func (h *handlers) editMessage(c *fiber.Ctx) error {
+	var body struct {
+		Text *string `json:"text"`
+	}
+	parseBody(c, &body)
+	if body.Text == nil {
+		return validationError(c, "text", "Missing data for required field.")
+	}
+	if utf8.RuneCountInString(*body.Text) > maxTextLength {
+		return validationError(c, "text", "Longer than maximum length 10000.")
+	}
+	resp, err := h.eps.EditMessage(c.Context(), endpoint.EditMessageRequest{
+		MessageID: pathID(c), UserID: currentUserID(c), Text: *body.Text,
+	})
+	if err != nil {
+		return h.respondError(c, err)
+	}
+	return c.JSON(resp)
+}
+
 func (h *handlers) toggleMessagePin(c *fiber.Ctx) error {
 	resp, err := h.eps.ToggleMessagePin(c.Context(), endpoint.MsgUserRequest{
 		MessageID: pathID(c), UserID: currentUserID(c),

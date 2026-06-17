@@ -11,11 +11,13 @@ import com.kodass.groovework.data.dto.OpenedConversationDto
 import com.kodass.groovework.data.dto.PresenceDto
 import com.kodass.groovework.data.dto.SendMessageRequest
 import com.kodass.groovework.data.dto.UnreadDto
+import com.kodass.groovework.data.dto.UpdateMessageRequest
 import okhttp3.MultipartBody
 import retrofit2.http.Body
 import retrofit2.http.DELETE
 import retrofit2.http.GET
 import retrofit2.http.Multipart
+import retrofit2.http.PATCH
 import retrofit2.http.POST
 import retrofit2.http.Part
 import retrofit2.http.Path
@@ -57,6 +59,9 @@ interface MessengerApi {
 
     @DELETE("api/messenger/messages/{id}")
     suspend fun deleteMessage(@Path("id") messageId: Long, @Query("scope") scope: String = "me")
+
+    @PATCH("api/messenger/messages/{id}")
+    suspend fun updateMessage(@Path("id") messageId: Long, @Body body: UpdateMessageRequest): MessageDto
 
     @POST("api/messenger/forward")
     suspend fun forward(@Body body: ForwardRequest)

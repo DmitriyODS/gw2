@@ -46,6 +46,8 @@ class ChatViewModel(
 
     var input by mutableStateOf("")
     var replyTo by mutableStateOf<MessageDto?>(null)
+    var editingMessage by mutableStateOf<MessageDto?>(null)
+        private set
     var attachedTask by mutableStateOf<TaskDto?>(null)
     var pendingAttachment by mutableStateOf<AttachmentDto?>(null)
         private set
@@ -139,7 +141,24 @@ class ChatViewModel(
         get() = !sending && !uploading &&
             (input.isNotBlank() || pendingAttachment != null || attachedTask != null)
 
+    // Начать редактирование своего текстового сообщения — подставляем текст в поле.
+    fun startEdit(message: MessageDto) {
+        editingMessage = message
+        replyTo = null
+        input = message.text ?: ""
+    }
+
+    fun cancelEdit() {
+        editingMessage = null
+        input = ""
+    }
+
     fun send() {
+        val editing = editingMessage
+        if (editing != null) {
+            saveEdit(editing)
+            return
+        }
         if (!canSend) return
         stopTyping()
         val text = input.trim().takeIf { it.isNotEmpty() }
@@ -156,6 +175,26 @@ class ChatViewModel(
                 replyTo = null
                 pendingAttachment = null
                 attachedTask = null
+            } catch (e: ApiException) {
+                actionError = e.message
+            } finally {
+                sending = false
+            }
+        }
+    }
+
+    private fun saveEdit(message: MessageDto) {
+        val text = input.trim()
+        if (text.isEmpty() || sending) return
+        if (text == message.text) { cancelEdit(); return }
+        viewModelScope.launch {
+            sending = true
+            actionError = null
+            try {
+                val updated = repo.updateMessage(message.id, text)
+                messages = messages.map { if (it.id == updated.id) updated else it }
+                editingMessage = null
+                input = ""
             } catch (e: ApiException) {
                 actionError = e.message
             } finally {

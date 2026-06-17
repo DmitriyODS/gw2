@@ -8,6 +8,7 @@ import com.kodass.groovework.data.dto.MessageDto
 import com.kodass.groovework.data.dto.OpenConversationRequest
 import com.kodass.groovework.data.dto.OpenedConversationDto
 import com.kodass.groovework.data.dto.SendMessageRequest
+import com.kodass.groovework.data.dto.UpdateMessageRequest
 import com.kodass.groovework.data.network.apiCall
 import com.kodass.groovework.data.session.AuthState
 import com.kodass.groovework.data.session.SessionManager
@@ -107,6 +108,13 @@ class MessengerRepository(
 
     suspend fun deleteMessage(messageId: Long, scope: String) {
         apiCall(json) { api.deleteMessage(messageId, scope) }
+    }
+
+    // Редактирование текста своего сообщения; бэк проставляет edited_at.
+    suspend fun updateMessage(messageId: Long, text: String): MessageDto {
+        val message = apiCall(json) { api.updateMessage(messageId, UpdateMessageRequest(text)) }
+        patchLastMessage(message, incrementUnread = false)
+        return message
     }
 
     suspend fun forward(messageId: Long, conversationId: Long) {

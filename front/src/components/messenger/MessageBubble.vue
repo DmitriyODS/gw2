@@ -104,6 +104,7 @@
       <MarkdownView v-if="message.text" class="msg-text" :source="message.text" />
       <div class="msg-meta">
         <span v-if="senderName" class="msg-sender">{{ senderName }}</span>
+        <span v-if="message.edited_at" class="msg-edited" title="Сообщение отредактировано">изменено</span>
         <span class="msg-time">{{ formatTime(message.created_at) }}</span>
         <span v-if="isMine" class="msg-read">
           <span class="material-symbols-outlined" :class="{ seen: message.read_at }">
@@ -130,7 +131,7 @@ const props = defineProps({
   showPin: { type: Boolean, default: true },
 })
 
-const emit = defineEmits(['delete', 'reply', 'forward', 'join-call', 'pin', 'open-task', 'context-menu', 'quote-click'])
+const emit = defineEmits(['delete', 'edit', 'reply', 'forward', 'join-call', 'pin', 'open-task', 'context-menu', 'quote-click'])
 
 const isPinned = computed(() => !!props.message.pinned_at)
 // Сообщение от техподдержки: новое серверное поле is_from_support либо старый
@@ -576,6 +577,13 @@ const joinLabel = computed(() => props.isMine ? 'Вернуться' : 'Прис
   font-size: 11px;
   color: var(--color-text-dim);
   opacity: 0.8;
+}
+
+.msg-edited {
+  font-size: 11px;
+  color: var(--color-text-dim);
+  opacity: 0.7;
+  font-style: italic;
 }
 
 .msg-read .material-symbols-outlined {

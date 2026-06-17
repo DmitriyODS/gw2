@@ -68,6 +68,7 @@ data class MessageDto(
     val call: CallInfoDto? = null,
     val task: TaskCardDto? = null,
     @SerialName("pinned_at") val pinnedAt: String? = null,
+    @SerialName("edited_at") val editedAt: String? = null,
     @SerialName("is_from_support") val isFromSupport: Boolean = false,
 )
 
@@ -108,6 +109,11 @@ data class SendMessageRequest(
     @SerialName("attachment_ids") val attachmentIds: List<Long>? = null,
     @SerialName("reply_to_id") val replyToId: Long? = null,
     @SerialName("task_id") val taskId: Long? = null,
+)
+
+@Serializable
+data class UpdateMessageRequest(
+    val text: String,
 )
 
 @Serializable

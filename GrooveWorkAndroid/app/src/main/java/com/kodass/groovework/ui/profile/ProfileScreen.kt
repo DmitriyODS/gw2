@@ -5,6 +5,7 @@ import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -13,19 +14,27 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Logout
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Domain
 import androidx.compose.material.icons.filled.PhotoCamera
+import androidx.compose.material.icons.filled.SwapHoriz
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.ListItem
+import androidx.compose.material3.ListItemDefaults
+import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -45,6 +54,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
@@ -304,6 +314,7 @@ fun ProfileScreen(container: AppContainer) {
     val companies by container.sessionManager.companies.collectAsStateWithLifecycle()
     val claims = (authState as? AuthState.LoggedIn)?.claims
 
+    var showCompanySheet by remember { mutableStateOf(false) }
     var cropUri by remember { mutableStateOf<Uri?>(null) }
     val picker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
         if (uri != null) cropUri = uri
@@ -462,22 +473,23 @@ fun ProfileScreen(container: AppContainer) {
                 }
             }
 
-            // Переключение компании — для многокомпанийных (кроме Администратора системы).
+            // Переключение компании — для многокомпанийных (кроме Администратора
+            // системы). Выбор вынесен в модалку: список не растёт в карточке профиля.
             if (companies.size > 1 && claims?.isRootAdmin != true) {
                 item {
                     SectionCard(title = "Компания") {
-                        companies.forEach { company ->
-                            val active = company.companyId == claims?.companyId
-                            OutlinedButton(
-                                onClick = { if (!active) viewModel.switchCompany(company.companyId) },
-                                enabled = !viewModel.switching && company.isActive && !active,
-                                modifier = Modifier.fillMaxWidth().padding(top = 6.dp),
-                            ) {
-                                Text(
-                                    text = company.companyName + (if (active) " · активна" else "") +
-                                        (if (!company.isActive) " · отключена" else ""),
-                                )
-                            }
+                        Text(
+                            text = claims?.companyName ?: "Не выбрана",
+                            style = MaterialTheme.typography.titleMedium,
+                            modifier = Modifier.padding(top = 2.dp),
+                        )
+                        OutlinedButton(
+                            onClick = { showCompanySheet = true },
+                            enabled = !viewModel.switching,
+                            modifier = Modifier.fillMaxWidth().padding(top = 10.dp),
+                        ) {
+                            Icon(Icons.Filled.SwapHoriz, contentDescription = null, modifier = Modifier.size(18.dp))
+                            Text("Сменить компанию", modifier = Modifier.padding(start = 8.dp))
                         }
                     }
                 }
@@ -498,6 +510,42 @@ fun ProfileScreen(container: AppContainer) {
                         modifier = Modifier.size(18.dp),
                     )
                     Text("Выйти из аккаунта", modifier = Modifier.padding(start = 8.dp))
+                }
+            }
+        }
+    }
+
+    if (showCompanySheet) {
+        val sheetState = rememberModalBottomSheetState()
+        ModalBottomSheet(onDismissRequest = { showCompanySheet = false }, sheetState = sheetState) {
+            Column(modifier = Modifier.fillMaxWidth().navigationBarsPadding()) {
+                Text(
+                    text = "Выберите компанию",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.SemiBold,
+                    modifier = Modifier.padding(start = 20.dp, end = 20.dp, bottom = 8.dp),
+                )
+                companies.forEach { company ->
+                    val active = company.companyId == claims?.companyId
+                    ListItem(
+                        headlineContent = { Text(company.companyName) },
+                        supportingContent = if (!company.isActive) { { Text("отключена") } } else null,
+                        leadingContent = { Icon(Icons.Filled.Domain, contentDescription = null) },
+                        trailingContent = if (active) {
+                            { Icon(Icons.Filled.Check, contentDescription = "Активна", tint = MaterialTheme.colorScheme.primary) }
+                        } else null,
+                        colors = ListItemDefaults.colors(containerColor = Color.Transparent),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .then(
+                                if (!active && company.isActive && !viewModel.switching) {
+                                    Modifier.clickable {
+                                        viewModel.switchCompany(company.companyId)
+                                        showCompanySheet = false
+                                    }
+                                } else Modifier,
+                            ),
+                    )
                 }
             }
         }

@@ -211,7 +211,11 @@ make reset NEWPASS='...'  # сброс пароля суперадмина (pgcr
 
 ## Версионирование
 
-Версия = `front/package.json` + первая запись `data/changelog.json`. Мини-версии за фиксы одного релиза не плодим. Правила changelog — принцип 11.
+**Единый источник истины на сервере, без хардкода в клиентах:**
+- **Версия продукта** = первая запись `data/changelog.json` (`versions[0].version`). И фронт, и мобильное приложение показывают её, подтягивая с сервера (фронт — через `/api/changelog`, composable `useChangelog().latestVersion`; Android — версию из загруженного changelog в «О приложении»). В бандл фронта версия НЕ зашивается (импорт `package.json` убран); `front/package.json` хранит её лишь как npm-метаданные. Android `versionName` Gradle читает из `data/changelog.json` при сборке (regex первой `version`).
+- **Сборка приложения (APK)** = `apps/version.json` (`current_build`, формат ГГММДДН). Используется проверкой OTA-обновлений и как `versionCode` (Gradle читает через Provider API). При релизе APK: поднять `current_build`.
+
+Мини-версии за фиксы одного релиза не плодим. Правила changelog — принцип 11.
 
 ## Логи
 

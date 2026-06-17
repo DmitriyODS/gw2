@@ -37,6 +37,57 @@ func (h *handlers) createUser(c *fiber.Ctx) error {
 	return c.Status(fiber.StatusCreated).JSON(resp)
 }
 
+// ── Платформенное управление пользователями (раздел «Пользователи», супер-админ) ──
+
+func (h *handlers) createPlatformUser(c *fiber.Ctx) error {
+	var body dto.CreateUserRequest
+	if err := c.BodyParser(&body); err != nil {
+		return badRequest(c, "Неверный формат запроса")
+	}
+	if body.FIO == "" || body.Login == "" {
+		return badRequest(c, "fio и login обязательны")
+	}
+	resp, err := h.eps.CreatePlatformUser(c.Context(), endpoint.PlatformCreateEpRequest{Body: body})
+	if err != nil {
+		return h.respondError(c, err)
+	}
+	return c.Status(fiber.StatusCreated).JSON(resp)
+}
+
+func (h *handlers) updatePlatformUser(c *fiber.Ctx) error {
+	var body dto.UpdateUserRequest
+	if err := c.BodyParser(&body); err != nil {
+		return badRequest(c, "Неверный формат запроса")
+	}
+	resp, err := h.eps.UpdatePlatformUser(c.Context(), endpoint.PlatformUpdateEpRequest{
+		UserID: pathID(c), Body: body,
+	})
+	if err != nil {
+		return h.respondError(c, err)
+	}
+	return c.JSON(resp)
+}
+
+func (h *handlers) resetPlatformUser(c *fiber.Ctx) error {
+	_, err := h.eps.ResetPlatformUser(c.Context(), endpoint.ActorRequest{
+		Actor: currentUser(c), UserID: pathID(c),
+	})
+	if err != nil {
+		return h.respondError(c, err)
+	}
+	return c.JSON(fiber.Map{"message": "Пароль сброшен"})
+}
+
+func (h *handlers) deactivatePlatformUser(c *fiber.Ctx) error {
+	_, err := h.eps.DeactivatePlatformUser(c.Context(), endpoint.ActorRequest{
+		Actor: currentUser(c), UserID: pathID(c),
+	})
+	if err != nil {
+		return h.respondError(c, err)
+	}
+	return c.JSON(fiber.Map{"message": "Пользователь удалён"})
+}
+
 func (h *handlers) directory(c *fiber.Ctx) error {
 	me := currentUser(c)
 	// Скоуп — активная компания актора из токена (её члены). Нет активной

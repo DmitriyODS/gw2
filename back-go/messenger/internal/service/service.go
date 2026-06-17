@@ -33,6 +33,7 @@ type MessengerService interface {
 	MarkRead(ctx context.Context, convID, userID int64) (int, error)
 	UploadAttachment(ctx context.Context, uploaderID int64, fileName, mimeType string, data []byte) (*dto.Attachment, error)
 	DeleteMessage(ctx context.Context, messageID, userID int64, scope string) (bool, error)
+	EditMessage(ctx context.Context, messageID, userID int64, text string) (*dto.Message, error)
 	DeleteConversation(ctx context.Context, convID, userID int64, scope string) (bool, error)
 	ToggleConversationPin(ctx context.Context, convID, userID int64) (bool, error)
 	ToggleMessagePin(ctx context.Context, messageID, userID int64) (*dto.Message, bool, error)

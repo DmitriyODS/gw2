@@ -138,6 +138,7 @@ type Message struct {
 	Task           *TaskPreview   `json:"task"`
 	PinnedAt       *JSONTime      `json:"pinned_at"`
 	PinnedByID     *int64         `json:"pinned_by_id"`
+	EditedAt       *JSONTime      `json:"edited_at"`
 	IsFromSupport  bool           `json:"is_from_support"`
 }
 
@@ -166,6 +167,7 @@ func NewMessage(m *domain.Message) *Message {
 		Kind:           m.Kind,
 		PinnedAt:       jsonTimePtr(m.PinnedAt),
 		PinnedByID:     m.PinnedByID,
+		EditedAt:       jsonTimePtr(m.EditedAt),
 		IsFromSupport:  m.IsFromSupport(),
 	}
 	for i := range m.Attachments {

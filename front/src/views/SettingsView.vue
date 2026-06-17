@@ -184,7 +184,6 @@ import { useAuthStore } from '@/stores/auth.js'
 import { useTutorial } from '@/composables/useTutorial.js'
 import { useChangelog } from '@/composables/useChangelog.js'
 import { useBreakpoint } from '@/composables/useBreakpoint.js'
-import { version as appVersion } from '../../package.json'
 import { exportBackup, importBackup } from '@/api/backup.js'
 import ThemeBuilder from '@/components/settings/ThemeBuilder.vue'
 import HelpCenter from '@/components/settings/HelpCenter.vue'
@@ -197,6 +196,8 @@ const notif = useNotificationsStore()
 const authStore = useAuthStore()
 const tutorial = useTutorial()
 const changelog = useChangelog()
+// Версия продукта — только с сервера (первая запись changelog), не из бандла.
+const appVersion = changelog.latestVersion
 const { isMobile } = useBreakpoint()
 const route = useRoute()
 const router = useRouter()
@@ -326,6 +327,7 @@ async function doImportBackup() {
 }
 
 onMounted(() => {
+  changelog.loadLatest()
   // Стартовая секция: ?section=… или дефолт
   const requested = route.query.section
   const initial = (requested && sectionByKey.value[requested]) ? requested : (isMobile.value ? null : 'theme')

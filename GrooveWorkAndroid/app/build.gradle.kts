@@ -22,6 +22,16 @@ val appBuildNumber: Int = run {
     raw?.let { Regex("\"current_build\"\\s*:\\s*(\\d+)").find(it)?.groupValues?.get(1)?.toIntOrNull() } ?: 1
 }
 
+// Имя версии продукта — единый источник истины data/changelog.json (первая
+// запись). Не хардкодим: и фронт, и приложение показывают версию, которую
+// отдаёт сервер; при сборке читаем её же как versionName. Через Provider API —
+// чтобы при configuration-cache правка changelog инвалидировала кэш.
+val appVersionName: String = run {
+    val changelogFile = rootProject.layout.projectDirectory.file("../data/changelog.json")
+    val raw = providers.fileContents(changelogFile).asText.orNull
+    raw?.let { Regex("\"version\"\\s*:\\s*\"([^\"]+)\"").find(it)?.groupValues?.get(1) } ?: "1.0"
+}
+
 // Подпись релиза: секреты лежат в keystore.properties (в .gitignore, шаблон —
 // keystore.properties.example). Без файла release собирается без подписи, а
 // debug-сборка ключа не требует. ВАЖНО: ключ один на все релизы — Android
@@ -42,7 +52,7 @@ android {
         minSdk = 31
         targetSdk = 36
         versionCode = appBuildNumber
-        versionName = "1.0"
+        versionName = appVersionName
 
         buildConfigField("String", "DEFAULT_SERVER_URL", "\"https://gw.kodass.ru\"")
 

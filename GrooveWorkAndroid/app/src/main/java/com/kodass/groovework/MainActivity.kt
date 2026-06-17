@@ -21,7 +21,9 @@ class MainActivity : ComponentActivity() {
         handleIntent(intent)
         val container = container
         setContent {
-            GrooveWorkTheme {
+            val themeMode by container.theme.mode.collectAsStateWithLifecycle()
+            val themePalette by container.theme.palette.collectAsStateWithLifecycle()
+            GrooveWorkTheme(mode = themeMode, palette = themePalette) {
                 val serverUrl by container.sessionManager.serverUrl.collectAsStateWithLifecycle()
                 CompositionLocalProvider(LocalServerUrl provides serverUrl) {
                     AppRoot(container)

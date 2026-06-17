@@ -144,6 +144,7 @@ type Message struct {
 	TaskID              *int64
 	PinnedAt            *time.Time
 	PinnedByID          *int64
+	EditedAt            *time.Time
 
 	Attachments   []Attachment
 	ReplyTo       *ReplyPreview

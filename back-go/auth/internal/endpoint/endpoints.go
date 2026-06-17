@@ -26,27 +26,31 @@ type Endpoints struct {
 	Refresh              endpoint.Endpoint
 	ChangeDefault        endpoint.Endpoint
 
-	ListUsers          endpoint.Endpoint
-	CreateUser         endpoint.Endpoint
-	Directory          endpoint.Endpoint
-	DirectoryUser      endpoint.Endpoint
-	Me                 endpoint.Endpoint
-	UpdateMe           endpoint.Endpoint
-	UploadAvatar       endpoint.Endpoint
-	DeleteAvatar       endpoint.Endpoint
-	GetUser            endpoint.Endpoint
-	UpdateUser         endpoint.Endpoint
-	HideUser           endpoint.Endpoint
-	AssignRole         endpoint.Endpoint
-	ResetPassword      endpoint.Endpoint
-	ListCompanyMembers endpoint.Endpoint
-	AddCompanyMember   endpoint.Endpoint
-	SetMemberRole      endpoint.Endpoint
-	RemoveMember       endpoint.Endpoint
-	SearchCandidates   endpoint.Endpoint
-	CompanyInvite      endpoint.Endpoint
-	RegenerateInvite   endpoint.Endpoint
-	JoinByCode         endpoint.Endpoint
+	ListUsers              endpoint.Endpoint
+	CreateUser             endpoint.Endpoint
+	CreatePlatformUser     endpoint.Endpoint
+	UpdatePlatformUser     endpoint.Endpoint
+	ResetPlatformUser      endpoint.Endpoint
+	DeactivatePlatformUser endpoint.Endpoint
+	Directory              endpoint.Endpoint
+	DirectoryUser          endpoint.Endpoint
+	Me                     endpoint.Endpoint
+	UpdateMe               endpoint.Endpoint
+	UploadAvatar           endpoint.Endpoint
+	DeleteAvatar           endpoint.Endpoint
+	GetUser                endpoint.Endpoint
+	UpdateUser             endpoint.Endpoint
+	HideUser               endpoint.Endpoint
+	AssignRole             endpoint.Endpoint
+	ResetPassword          endpoint.Endpoint
+	ListCompanyMembers     endpoint.Endpoint
+	AddCompanyMember       endpoint.Endpoint
+	SetMemberRole          endpoint.Endpoint
+	RemoveMember           endpoint.Endpoint
+	SearchCandidates       endpoint.Endpoint
+	CompanyInvite          endpoint.Endpoint
+	RegenerateInvite       endpoint.Endpoint
+	JoinByCode             endpoint.Endpoint
 
 	ListRoles endpoint.Endpoint
 
@@ -82,6 +86,16 @@ type ActorRequest struct {
 type CreateUserEpRequest struct {
 	Actor *domain.User
 	Body  dto.CreateUserRequest
+}
+
+// Платформенные операции супер-админа над идентичностью (без компании).
+type PlatformCreateEpRequest struct {
+	Body dto.CreateUserRequest
+}
+
+type PlatformUpdateEpRequest struct {
+	UserID int64
+	Body   dto.UpdateUserRequest
 }
 
 type UpdateUserEpRequest struct {
@@ -246,6 +260,21 @@ func New(svc service.AuthService) Endpoints {
 		CreateUser: func(ctx context.Context, request any) (any, error) {
 			req := request.(CreateUserEpRequest)
 			return svc.CreateUser(ctx, req.Actor, req.Body)
+		},
+		CreatePlatformUser: func(ctx context.Context, request any) (any, error) {
+			return svc.CreatePlatformUser(ctx, request.(PlatformCreateEpRequest).Body)
+		},
+		UpdatePlatformUser: func(ctx context.Context, request any) (any, error) {
+			req := request.(PlatformUpdateEpRequest)
+			return svc.UpdatePlatformUser(ctx, req.UserID, req.Body)
+		},
+		ResetPlatformUser: func(ctx context.Context, request any) (any, error) {
+			req := request.(ActorRequest)
+			return nil, svc.ResetPlatformUserPassword(ctx, req.Actor, req.UserID)
+		},
+		DeactivatePlatformUser: func(ctx context.Context, request any) (any, error) {
+			req := request.(ActorRequest)
+			return nil, svc.DeactivatePlatformUser(ctx, req.Actor, req.UserID)
 		},
 		Directory: func(ctx context.Context, request any) (any, error) {
 			return svc.Directory(ctx, request.(dto.DirectoryRequest))

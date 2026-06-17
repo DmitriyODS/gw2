@@ -74,6 +74,7 @@ func NewServer(eps endpoint.Endpoints, users domain.UserReader,
 	api.Post("/conversations/:id<int>/read", h.markRead)
 	api.Post("/uploads", h.upload)
 	api.Delete("/messages/:id<int>", h.deleteMessage)
+	api.Patch("/messages/:id<int>", h.editMessage)
 	api.Delete("/conversations/:id<int>", h.deleteConversation)
 	api.Post("/conversations/:id<int>/pin", h.toggleConversationPin)
 	api.Post("/messages/:id<int>/pin", h.toggleMessagePin)

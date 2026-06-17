@@ -33,6 +33,8 @@ const routes = [
   // те, что создал/администрирует (доступ к данным проверяет бэкенд).
   { path: '/companies', component: () => import('@/views/CompaniesView.vue'),
     meta: { requiresAuth: true } },
+  { path: '/users', component: () => import('@/views/UsersView.vue'),
+    meta: { requiresAuth: true, requiresSuperAdmin: true } },
   { path: '/companies/:id(\\d+)', component: () => import('@/views/CompanyManageView.vue'),
     meta: { requiresAuth: true }, props: true },
   {

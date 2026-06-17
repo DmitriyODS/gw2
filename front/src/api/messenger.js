@@ -44,6 +44,9 @@ export const getPresence = () =>
 export const deleteMessage = (messageId, scope = 'me') =>
   apiRequest(`/messenger/messages/${messageId}?scope=${scope}`, { method: 'DELETE' })
 
+export const updateMessage = (messageId, text) =>
+  apiRequest(`/messenger/messages/${messageId}`, { method: 'PATCH', body: { text } })
+
 export const deleteConversation = (conversationId, scope = 'me') =>
   apiRequest(`/messenger/conversations/${conversationId}?scope=${scope}`, { method: 'DELETE' })
 

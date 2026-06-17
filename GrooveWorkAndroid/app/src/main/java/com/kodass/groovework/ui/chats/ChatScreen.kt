@@ -44,6 +44,7 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Done
 import androidx.compose.material.icons.filled.DoneAll
 import androidx.compose.material.icons.filled.Download
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.automirrored.filled.InsertDriveFile
 import androidx.compose.material.icons.filled.PushPin
 import androidx.compose.material.icons.filled.TaskAlt
@@ -368,6 +369,10 @@ fun ChatScreen(
                                         onForward = { viewModel.forwardTarget = message },
                                         onTogglePin = { viewModel.togglePin(message) },
                                         onDelete = { forAll -> viewModel.deleteMessage(message, forAll) },
+                                        onEdit = {
+                                            viewModel.startEdit(message)
+                                            inputFocus.requestFocus()
+                                        },
                                         onOpenTask = { message.task?.let { onOpenTask(it.id) } },
                                         onOpenImage = { imageViewer = it },
                                         onConfirm = { spec -> confirm = spec },
@@ -658,6 +663,7 @@ private fun MessageBubble(
     onForward: () -> Unit,
     onTogglePin: () -> Unit,
     onDelete: (forAll: Boolean) -> Unit,
+    onEdit: () -> Unit,
     onOpenTask: () -> Unit,
     onOpenImage: (AttachmentDto) -> Unit,
     onConfirm: (ConfirmSpec) -> Unit,
@@ -756,6 +762,15 @@ private fun MessageBubble(
                                 modifier = Modifier.padding(end = 4.dp).size(13.dp),
                             )
                         }
+                        if (message.editedAt != null) {
+                            Text(
+                                text = "изменено",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                fontStyle = androidx.compose.ui.text.font.FontStyle.Italic,
+                                modifier = Modifier.padding(end = 6.dp),
+                            )
+                        }
                         Text(
                             text = formatTime(message.createdAt),
                             style = MaterialTheme.typography.labelSmall,
@@ -781,6 +796,15 @@ private fun MessageBubble(
                         onReply()
                     },
                 )
+                if (mine && !message.isBot && message.kind == "text" && !message.text.isNullOrBlank()) {
+                    DropdownMenuItem(
+                        text = { Text("Редактировать") },
+                        onClick = {
+                            menuOpen = false
+                            onEdit()
+                        },
+                    )
+                }
                 DropdownMenuItem(
                     text = { Text("Переслать") },
                     onClick = {
@@ -1058,22 +1082,48 @@ private fun MessageInputBar(
                     modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
                 )
             }
-            viewModel.replyTo?.let { reply ->
+            viewModel.editingMessage?.let { editing ->
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
                     modifier = Modifier.fillMaxWidth().padding(start = 16.dp, end = 4.dp, top = 4.dp),
                 ) {
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(
-                            text = "Ответ: ${reply.text?.take(80) ?: "вложение"}",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.primary,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                        )
+                    Icon(
+                        Icons.Filled.Edit,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(18.dp),
+                    )
+                    Text(
+                        text = "Редактирование: ${editing.text?.take(80) ?: ""}",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.primary,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f).padding(start = 6.dp),
+                    )
+                    IconButton(onClick = { viewModel.cancelEdit() }) {
+                        Icon(Icons.Filled.Close, contentDescription = "Отменить редактирование")
                     }
-                    IconButton(onClick = { viewModel.replyTo = null }) {
-                        Icon(Icons.Filled.Close, contentDescription = "Отменить ответ")
+                }
+            }
+            if (viewModel.editingMessage == null) {
+                viewModel.replyTo?.let { reply ->
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.fillMaxWidth().padding(start = 16.dp, end = 4.dp, top = 4.dp),
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = "Ответ: ${reply.text?.take(80) ?: "вложение"}",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.primary,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                        }
+                        IconButton(onClick = { viewModel.replyTo = null }) {
+                            Icon(Icons.Filled.Close, contentDescription = "Отменить ответ")
+                        }
                     }
                 }
             }

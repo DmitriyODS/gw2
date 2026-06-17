@@ -29,6 +29,10 @@ type AuthService interface {
 
 	ListUsers(ctx context.Context) ([]dto.User, error)
 	CreateUser(ctx context.Context, actor *domain.User, req dto.CreateUserRequest) (*dto.User, error)
+	CreatePlatformUser(ctx context.Context, req dto.CreateUserRequest) (*dto.User, error)
+	UpdatePlatformUser(ctx context.Context, userID int64, req dto.UpdateUserRequest) (*dto.User, error)
+	ResetPlatformUserPassword(ctx context.Context, actor *domain.User, userID int64) error
+	DeactivatePlatformUser(ctx context.Context, actor *domain.User, userID int64) error
 	Directory(ctx context.Context, req dto.DirectoryRequest) ([]dto.DirectoryUser, error)
 	DirectoryUser(ctx context.Context, userID int64) (*dto.DirectoryUser, error)
 	Me(ctx context.Context, userID int64) (*dto.User, error)

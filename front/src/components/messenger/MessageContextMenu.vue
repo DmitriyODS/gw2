@@ -13,6 +13,10 @@
           <span class="material-symbols-outlined">reply</span>
           <span>Ответить</span>
         </button>
+        <button v-if="showEdit" class="msg-ctx-item" @click="emitAction('edit')">
+          <span class="material-symbols-outlined">edit</span>
+          <span>Редактировать</span>
+        </button>
         <button v-if="showCopy" class="msg-ctx-item" @click="emitAction('copy')">
           <span class="material-symbols-outlined">content_copy</span>
           <span>Скопировать</span>
@@ -43,6 +47,7 @@ const props = defineProps({
   x: { type: Number, default: 0 },
   y: { type: Number, default: 0 },
   isPinned: { type: Boolean, default: false },
+  showEdit: { type: Boolean, default: false },
   showCopy: { type: Boolean, default: true },
   showForward: { type: Boolean, default: true },
   showPin: { type: Boolean, default: true },

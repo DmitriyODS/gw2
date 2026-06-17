@@ -22,11 +22,13 @@ import androidx.compose.material.icons.filled.BarChart
 import androidx.compose.material.icons.filled.Groups
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.MoreHoriz
+import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.outlined.BarChart
 import androidx.compose.material.icons.outlined.Groups
 import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.MoreHoriz
+import androidx.compose.material.icons.outlined.Palette
 import androidx.compose.material.icons.outlined.Person
 import androidx.compose.material.icons.outlined.TaskAlt
 import androidx.compose.material.icons.filled.TaskAlt
@@ -66,6 +68,7 @@ import androidx.navigation.navArgument
 import com.kodass.groovework.AppContainer
 import com.kodass.groovework.DeepLink
 import com.kodass.groovework.ui.about.AboutScreen
+import com.kodass.groovework.ui.appearance.AppearanceScreen
 import com.kodass.groovework.ui.chats.ChatScreen
 import com.kodass.groovework.ui.chats.ChatsScreen
 import com.kodass.groovework.ui.companies.AcceptInviteScreen
@@ -96,11 +99,14 @@ private val primaryDestinations = listOf(
 private val overflowDestinations = listOf(
     TopLevelDestination("employees", "Сотрудники", Icons.Outlined.Groups, Icons.Filled.Groups),
     TopLevelDestination("stats", "Статистика", Icons.Outlined.BarChart, Icons.Filled.BarChart),
+    TopLevelDestination("appearance", "Оформление", Icons.Outlined.Palette, Icons.Filled.Palette),
     TopLevelDestination("about", "О приложении", Icons.Outlined.Info, Icons.Filled.Info),
 )
 
+// «appearance» — не вкладка, а вложенный экран с кнопкой «назад» и guard'ом на
+// выход (нижняя панель на нём скрыта).
 private val bottomBarRoutes =
-    (primaryDestinations + overflowDestinations).map { it.route }.toSet()
+    (primaryDestinations + overflowDestinations).map { it.route }.toSet() - "appearance"
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -295,6 +301,9 @@ fun MainScreen(container: AppContainer) {
             composable("stats") {
                 StatsScreen(container = container)
             }
+            composable("appearance") {
+                AppearanceScreen(container = container, onBack = { navController.popBackStack() })
+            }
             composable("profile") {
                 ProfileScreen(container = container)
             }
@@ -342,7 +351,12 @@ fun MainScreen(container: AppContainer) {
                         modifier = Modifier
                             .fillMaxWidth()
                             .clickable {
-                                navController.navigateTop(destination.route)
+                                // appearance — вложенный экран (push с back), остальные — вкладки.
+                                if (destination.route == "appearance") {
+                                    navController.navigate("appearance") { launchSingleTop = true }
+                                } else {
+                                    navController.navigateTop(destination.route)
+                                }
                                 scope.launch { moreSheetState.hide() }.invokeOnCompletion {
                                     if (!moreSheetState.isVisible) showMoreSheet = false
                                 }

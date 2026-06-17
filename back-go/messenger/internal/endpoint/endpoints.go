@@ -25,6 +25,7 @@ type Endpoints struct {
 	MarkRead              endpoint.Endpoint
 	UploadAttachment      endpoint.Endpoint
 	DeleteMessage         endpoint.Endpoint
+	EditMessage           endpoint.Endpoint
 	DeleteConversation    endpoint.Endpoint
 	ToggleConversationPin endpoint.Endpoint
 	ToggleMessagePin      endpoint.Endpoint
@@ -78,6 +79,12 @@ type ScopedDeleteRequest struct {
 	ID     int64 // message_id или conversation_id
 	UserID int64
 	Scope  string
+}
+
+type EditMessageRequest struct {
+	MessageID int64
+	UserID    int64
+	Text      string
 }
 
 type UploadRequest struct {
@@ -156,6 +163,10 @@ func New(svc service.MessengerService) Endpoints {
 		DeleteMessage: func(ctx context.Context, request any) (any, error) {
 			req := request.(ScopedDeleteRequest)
 			return svc.DeleteMessage(ctx, req.ID, req.UserID, req.Scope)
+		},
+		EditMessage: func(ctx context.Context, request any) (any, error) {
+			req := request.(EditMessageRequest)
+			return svc.EditMessage(ctx, req.MessageID, req.UserID, req.Text)
 		},
 		DeleteConversation: func(ctx context.Context, request any) (any, error) {
 			req := request.(ScopedDeleteRequest)

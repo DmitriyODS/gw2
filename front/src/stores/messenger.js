@@ -478,6 +478,14 @@ export const useMessengerStore = defineStore('messenger', () => {
     }
   }
 
+  async function editMessage(conversationId, messageId, text) {
+    const msg = await api.updateMessage(messageId, text)
+    // Сокет-эхо message:updated придёт и собеседнику, и нам — оба применят
+    // applyMessageUpdated идемпотентно; локально обновляем сразу для плавности.
+    applyMessageUpdated(conversationId, msg)
+    return msg
+  }
+
   async function deleteConversationAction(conversationId, scope = 'me') {
     try {
       await api.deleteConversation(conversationId, scope)
@@ -605,7 +613,7 @@ export const useMessengerStore = defineStore('messenger', () => {
     applyIncomingMessage, applyReadReceipt, applyMessageUpdated,
     applyMessageDeleted, applyConversationDeleted, applyPinChange,
     applyMessagePin, togglePinMessageAction,
-    deleteMessage, deleteConversationAction, togglePinAction,
+    deleteMessage, editMessage, deleteConversationAction, togglePinAction,
     fetchPresence, applyPresence, isOnline, lastSeenOf,
     reset,
   }

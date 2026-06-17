@@ -8,7 +8,7 @@
         <h3>Groove Work</h3>
         <p class="about-tagline">Внутренняя платформа учёта задач, времени и общения команды.</p>
         <div class="about-version">
-          <span class="version-badge">v{{ appVersion }}</span>
+          <span class="version-badge" v-if="appVersion">v{{ appVersion }}</span>
           <button class="version-link" @click="changelog.open()">
             <span class="material-symbols-outlined">history</span>
             Что нового
@@ -58,9 +58,8 @@
 </template>
 
 <script setup>
-import { ref } from 'vue'
+import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
-import { version as appVersion } from '../../../package.json'
 import { useMessengerStore } from '@/stores/messenger.js'
 import { useNotificationsStore } from '@/stores/notifications.js'
 import { useChangelog } from '@/composables/useChangelog.js'
@@ -72,6 +71,10 @@ const messenger = useMessengerStore()
 const notif = useNotificationsStore()
 const changelog = useChangelog()
 const tutorial = useTutorial()
+
+// Версию продукта берём только с сервера (первая запись changelog), не из бандла.
+const appVersion = changelog.latestVersion
+onMounted(changelog.loadLatest)
 
 const opening = ref(false)
 

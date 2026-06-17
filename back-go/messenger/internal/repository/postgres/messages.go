@@ -15,7 +15,7 @@ import (
 // MessageSchema (аналог _msg_load_options() во Flask), одним запросом.
 const msgCols = `m.id, m.conversation_id, m.sender_id, m.is_bot, m.text, m.created_at,
 	m.read_at, m.hidden_for_a, m.hidden_for_b, m.reply_to_id, m.forwarded_from_user_id,
-	m.kind, m.call_id, m.task_id, m.pinned_at, m.pinned_by_id,
+	m.kind, m.call_id, m.task_id, m.pinned_at, m.pinned_by_id, m.edited_at,
 	c.is_dev_chat, c.user_a_id,
 	r.id, r.sender_id, ru.fio, r.text, r.kind,
 	EXISTS(SELECT 1 FROM message_attachments ra WHERE ra.message_id = r.id),
@@ -66,7 +66,7 @@ func scanMessage(row pgx.Row) (*domain.Message, error) {
 	)
 	err := row.Scan(&m.ID, &m.ConversationID, &m.SenderID, &m.IsBot, &m.Text, &m.CreatedAt,
 		&m.ReadAt, &m.HiddenForA, &m.HiddenForB, &m.ReplyToID, &m.ForwardedFromUserID,
-		&m.Kind, &m.CallID, &m.TaskID, &m.PinnedAt, &m.PinnedByID,
+		&m.Kind, &m.CallID, &m.TaskID, &m.PinnedAt, &m.PinnedByID, &m.EditedAt,
 		&m.ConvIsDevChat, &m.ConvOwnerID,
 		&replyID, &replySndID, &replyFIO, &replyText, &replyKind, &replyAtt,
 		&fwdID, &fwdFIO,
@@ -419,6 +419,12 @@ func (r *Repo) SetMessagePin(ctx context.Context, id int64, pinned bool, byID *i
 	}
 	_, err := r.q(ctx).Exec(ctx,
 		`UPDATE messages SET pinned_at = NULL, pinned_by_id = NULL WHERE id = $1`, id)
+	return err
+}
+
+func (r *Repo) UpdateMessageText(ctx context.Context, id int64, text string) error {
+	_, err := r.q(ctx).Exec(ctx,
+		`UPDATE messages SET text = $2, edited_at = now() WHERE id = $1`, id, text)
 	return err
 }
 

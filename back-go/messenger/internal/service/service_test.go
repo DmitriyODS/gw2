@@ -474,6 +474,15 @@ func (r *fakeRepo) SetMessagePin(_ context.Context, id int64, pinned bool, byID 
 	return nil
 }
 
+func (r *fakeRepo) UpdateMessageText(_ context.Context, id int64, text string) error {
+	if m := r.msgs[id]; m != nil {
+		m.Text = &text
+		t := r.tick()
+		m.EditedAt = &t
+	}
+	return nil
+}
+
 func (r *fakeRepo) HasHumanMessageSince(_ context.Context, convID int64, since time.Time, beforeID int64) (bool, error) {
 	for _, m := range r.convMessages(convID) {
 		if m.ID < beforeID && !m.IsBot && !m.CreatedAt.Before(since) {

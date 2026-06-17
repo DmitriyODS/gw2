@@ -67,6 +67,8 @@ type Repository interface {
 	DeleteMessage(ctx context.Context, id int64) error
 	RecomputeLastMessageAt(ctx context.Context, convID int64) error
 	SetMessagePin(ctx context.Context, id int64, pinned bool, byID *int64) error
+	// UpdateMessageText — новый текст и edited_at = now() (редактирование).
+	UpdateMessageText(ctx context.Context, id int64, text string) error
 	// HasHumanMessageSince — было ли сообщение НЕ бота свежее since и старше
 	// beforeID (нужен ли автоответ техподдержки).
 	HasHumanMessageSince(ctx context.Context, convID int64, since time.Time, beforeID int64) (bool, error)

@@ -542,6 +542,54 @@ func (s *Service) ToggleMessagePin(ctx context.Context, messageID, userID int64)
 	return payload, pinned, nil
 }
 
+// EditMessage — правка текста своего сообщения. Помечается edited_at, что
+// клиенты показывают как «изменено». Редактировать можно только своё текстовое
+// сообщение (не бота, не плашку звонка/задачи).
+func (s *Service) EditMessage(ctx context.Context, messageID, userID int64, text string) (*dto.Message, error) {
+	msg, err := s.repo.GetMessage(ctx, messageID)
+	if err != nil {
+		return nil, err
+	}
+	if msg == nil {
+		return nil, errMsgNotFound()
+	}
+	conv, err := s.repo.GetConversation(ctx, msg.ConversationID)
+	if err != nil {
+		return nil, err
+	}
+	if conv == nil {
+		return nil, errConvNotFound()
+	}
+	if err := s.ensureMember(ctx, conv, userID); err != nil {
+		return nil, err
+	}
+	if msg.SenderID == nil || *msg.SenderID != userID || msg.IsBot {
+		return nil, domain.NewError("FORBIDDEN", "Редактировать можно только своё сообщение", 403)
+	}
+	if msg.Kind != domain.KindText {
+		return nil, domain.NewError("BAD_EDIT", "Это сообщение нельзя редактировать", 400)
+	}
+
+	if err := s.repo.UpdateMessageText(ctx, msg.ID, text); err != nil {
+		return nil, err
+	}
+	updated, err := s.repo.GetMessage(ctx, messageID)
+	if err != nil {
+		return nil, err
+	}
+	payload := dto.NewMessage(updated)
+
+	targets := []int64{conv.UserAID}
+	if conv.UserBID != nil {
+		targets = append(targets, *conv.UserBID)
+	}
+	s.pub.Publish(ctx, "message:updated", rooms(targets...), dto.MessageNewEvent{
+		ConversationID: conv.ID, Message: payload, FromUserID: &userID,
+	})
+	s.log.Info("message.edit", "message_id", messageID, "user_id", userID)
+	return payload, nil
+}
+
 // ListPinnedMessages — закреплённые сообщения диалога (для баннера сверху).
 func (s *Service) ListPinnedMessages(ctx context.Context, convID, userID int64) ([]*dto.Message, error) {
 	conv, err := s.conversationForUser(ctx, convID, userID)

@@ -179,7 +179,7 @@
           <MessageBubble
             v-for="m in messenger.activeMessages"
             :key="m.id"
-            v-memo="[m.id, m.read_at, m.pinned_at, m.call?.status, authStore.user?.id, active?.is_dev_chat]"
+            v-memo="[m.id, m.text, m.edited_at, m.read_at, m.pinned_at, m.call?.status, authStore.user?.id, active?.is_dev_chat]"
             :message="m"
             :is-mine="m.sender_id === authStore.user?.id"
             :sender-name="senderNameFor(m)"
@@ -211,9 +211,12 @@
         ref="messageInputRef"
         :sending="messenger.sending"
         :reply-to="replyTo"
+        :editing-message="editing"
         v-model:attached-task="attachedTask"
         @send="onSend"
+        @save-edit="onSaveEdit"
         @cancel-reply="replyTo = null"
+        @cancel-edit="editing = null"
         @attach-task="attachTaskOpen = true"
       />
     </section>
@@ -263,6 +266,7 @@
       :x="ctxMenu.x"
       :y="ctxMenu.y"
       :is-pinned="!!ctxMenu.message?.pinned_at"
+      :show-edit="canEditCtxMessage"
       :show-pin="!active?.is_dev_chat && !active?.is_pet_chat"
       :show-forward="!active?.is_dev_chat && !active?.is_pet_chat"
       :show-copy="!!ctxMenu.message?.text"
@@ -336,6 +340,15 @@ const ctxMenu = ref({ visible: false, x: 0, y: 0, message: null })
 const messagesEl = ref(null)
 const messageInputRef = ref(null)
 const replyTo = ref(null)
+const editing = ref(null)
+
+// Редактировать можно только своё текстовое сообщение (не бота, не плашку).
+const canEditCtxMessage = computed(() => {
+  const m = ctxMenu.value.message
+  if (!m) return false
+  const isText = !m.kind || m.kind === 'text'
+  return isText && !m.is_bot && m.sender_id === authStore.user?.id && !!m.text
+})
 const {
   dragOver,
   onDragEnter,
@@ -355,10 +368,29 @@ function onCtxAction(action) {
   const m = ctxMenu.value.message
   if (!m) return
   if (action === 'reply') startReply(m)
+  else if (action === 'edit') startEdit(m)
   else if (action === 'forward') startForward(m)
   else if (action === 'pin') onTogglePinMessage(m)
   else if (action === 'delete') askDeleteMessage(m)
   else if (action === 'copy') copyMessageText(m)
+}
+
+function startEdit(message) {
+  replyTo.value = null
+  editing.value = message
+  nextTick(() => messageInputRef.value?.focus())
+}
+
+async function onSaveEdit(text) {
+  const m = editing.value
+  if (!m) return
+  editing.value = null
+  if (!text || text === m.text) return
+  try {
+    await messenger.editMessage(activeId.value, m.id, text)
+  } catch (e) {
+    useNotificationsStore().error(e?.message || 'Не удалось изменить сообщение')
+  }
 }
 
 function copyMessageText(m) {
@@ -419,6 +451,7 @@ const forwardSource = ref(null)
 const forwardDialogRef = ref(null)
 
 function startReply(message) {
+  editing.value = null
   replyTo.value = {
     id: message.id,
     sender_fio: message.sender_id === authStore.user?.id
@@ -689,6 +722,7 @@ function avatarOf(u) {
 
 async function selectConversation(id) {
   replyTo.value = null
+  editing.value = null
   await messenger.setActive(id)
   router.replace(`/messenger/${id}`)
   await nextTick()

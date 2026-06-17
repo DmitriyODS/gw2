@@ -1,6 +1,17 @@
 <template>
   <div class="msg-input">
-    <div v-if="replyTo" class="reply-banner">
+    <div v-if="editingMessage" class="reply-banner">
+      <span class="material-symbols-outlined reply-ico">edit</span>
+      <div class="reply-body">
+        <span class="reply-author">Редактирование</span>
+        <span class="reply-text">{{ editingMessage.text || '' }}</span>
+      </div>
+      <button class="reply-cancel" @click="$emit('cancel-edit')" title="Отменить">
+        <span class="material-symbols-outlined">close</span>
+      </button>
+    </div>
+
+    <div v-if="replyTo && !editingMessage" class="reply-banner">
       <span class="material-symbols-outlined reply-ico">reply</span>
       <div class="reply-body">
         <span class="reply-author">{{ replyTo.sender_fio || replyAuthor || 'Ответ' }}</span>
@@ -130,11 +141,12 @@ const props = defineProps({
   placeholder: { type: String, default: 'Напишите сообщение…' },
   sending: { type: Boolean, default: false },
   replyTo: { type: Object, default: null },
+  editingMessage: { type: Object, default: null },
   attachedTask: { type: Object, default: null },
   canAttachTask: { type: Boolean, default: true },
 })
 
-const emit = defineEmits(['send', 'cancel-reply', 'attach-task', 'update:attachedTask'])
+const emit = defineEmits(['send', 'save-edit', 'cancel-reply', 'cancel-edit', 'attach-task', 'update:attachedTask'])
 
 const text = ref('')
 const pending = ref([])
@@ -185,7 +197,17 @@ const attachedTask = computed({
 const canSend = computed(() => {
   if (props.sending) return false
   if (pending.value.some(p => p.uploading)) return false
+  // В режиме редактирования отправляем только непустой текст.
+  if (props.editingMessage) return Boolean(text.value.trim())
   return Boolean(text.value.trim()) || pending.value.length > 0 || !!attachedTask.value
+})
+
+// Вход в режим редактирования — подставляем текущий текст в поле и фокусируемся.
+watch(() => props.editingMessage, (m) => {
+  if (m) {
+    text.value = m.text || ''
+    nextTick(() => { textarea.value?.focus(); autoresize() })
+  }
 })
 
 /* ── Контекстное меню Markdown по правому клику на выделении ── */
@@ -467,6 +489,14 @@ async function onScreencastStop() {
 
 async function submit() {
   if (!canSend.value) return
+  // Режим редактирования: правим только текст, вложения/ответ не трогаем.
+  if (props.editingMessage) {
+    emit('save-edit', text.value.trim())
+    text.value = ''
+    await nextTick()
+    autoresize()
+    return
+  }
   const payload = {
     text: text.value.trim(),
     attachment_ids: pending.value.filter(p => p.id).map(p => p.id),

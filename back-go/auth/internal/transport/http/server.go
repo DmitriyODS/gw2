@@ -86,6 +86,12 @@ func NewServer(eps endpoint.Endpoints, verifier *pasetoauth.Verifier,
 	usersAPI.Get("", auth.RequireAuth, auth.RequireSuperAdmin, h.listUsers)
 	// Заведение сотрудника в своей активной компании — администратор компании.
 	usersAPI.Post("", auth.RequireAuth, auth.RequireRole(domain.LevelAdmin), h.createUser)
+	// Платформенное управление пользователями (раздел «Пользователи») — супер-админ.
+	// Префикс /platform не пересекается с /:id<int> (int-матчер не ловит строку).
+	usersAPI.Post("/platform", auth.RequireAuth, auth.RequireSuperAdmin, h.createPlatformUser)
+	usersAPI.Patch("/platform/:id<int>", auth.RequireAuth, auth.RequireSuperAdmin, h.updatePlatformUser)
+	usersAPI.Post("/platform/:id<int>/reset-password", auth.RequireAuth, auth.RequireSuperAdmin, h.resetPlatformUser)
+	usersAPI.Delete("/platform/:id<int>", auth.RequireAuth, auth.RequireSuperAdmin, h.deactivatePlatformUser)
 	usersAPI.Get("/directory", auth.RequireAuth, h.directory)
 	usersAPI.Get("/directory/:id<int>", auth.RequireAuth, h.directoryUser)
 	usersAPI.Get("/me", auth.RequireAuth, h.me)

@@ -136,11 +136,14 @@ fun AboutScreen(container: AppContainer, onOpenChat: (Long) -> Unit) {
         AboutViewModel(container.sessionManager, container.messengerRepo, container.metaApi, container.json)
     }
     val context = LocalContext.current
-    val appVersion = remember(context) {
+    // Версию продукта показываем ту, что отдаёт сервер (первая запись changelog) —
+    // единый источник истины. Пока не загрузилась — установленную из пакета.
+    val installedVersion = remember(context) {
         runCatching {
             context.packageManager.getPackageInfo(context.packageName, 0).versionName
-        }.getOrNull() ?: "1.0"
+        }.getOrNull()
     }
+    val appVersion = viewModel.versions.firstOrNull()?.version ?: installedVersion ?: "—"
     val serverUrl by container.sessionManager.serverUrl.collectAsStateWithLifecycle()
     var serverInput by remember(serverUrl) { mutableStateOf(serverUrl) }
     var confirmServer by remember { mutableStateOf(false) }
