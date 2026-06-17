@@ -1,11 +1,16 @@
 // Package smtp — реализация domain.Sender поверх стандартного net/smtp.
 // Поддерживает три режима TLS: starttls (587/25), tls (implicit, 465), none
 // (dev/mailpit без шифрования). Письма — HTML, UTF-8, quoted-printable.
+//
+// Механизм авторизации выбирается по анонсу сервера: предпочитаем LOGIN
+// (Beget и ряд провайдеров не поддерживают PLAIN — отвечают 504), иначе PLAIN.
+// LOGIN в net/smtp не входит — реализован тут (loginAuth).
 package smtp
 
 import (
 	"context"
 	"crypto/tls"
+	"errors"
 	"fmt"
 	"log/slog"
 	"mime"
@@ -40,34 +45,15 @@ func (c *Client) Send(_ context.Context, msg domain.Message) error {
 	addr := net.JoinHostPort(c.cfg.Host, c.cfg.Port)
 	raw := c.buildMessage(msg)
 
-	var auth smtp.Auth
-	if c.cfg.User != "" {
-		auth = smtp.PlainAuth("", c.cfg.User, c.cfg.Password, c.cfg.Host)
-	}
-
-	if c.cfg.TLSMode == "tls" {
-		return c.sendImplicitTLS(addr, auth, msg.To, raw)
-	}
-	// starttls/none: net/smtp сам поднимает STARTTLS, если сервер его анонсирует
-	// (для mailpit без TLS — отправка без шифрования, auth не задаётся).
-	return smtp.SendMail(addr, auth, c.cfg.From, []string{msg.To}, raw)
-}
-
-// sendImplicitTLS — соединение, зашифрованное с первого байта (порт 465).
-func (c *Client) sendImplicitTLS(addr string, auth smtp.Auth, to string, raw []byte) error {
-	conn, err := tls.Dial("tcp", addr, &tls.Config{ServerName: c.cfg.Host})
+	client, err := c.dial(addr)
 	if err != nil {
-		return fmt.Errorf("tls dial: %w", err)
-	}
-	client, err := smtp.NewClient(conn, c.cfg.Host)
-	if err != nil {
-		return fmt.Errorf("smtp client: %w", err)
+		return err
 	}
 	defer func() { _ = client.Close() }()
 
-	if auth != nil {
-		if ok, _ := client.Extension("AUTH"); ok {
-			if err := client.Auth(auth); err != nil {
+	if c.cfg.User != "" {
+		if ok, mechs := client.Extension("AUTH"); ok {
+			if err := client.Auth(c.pickAuth(mechs)); err != nil {
 				return fmt.Errorf("smtp auth: %w", err)
 			}
 		}
@@ -75,7 +61,7 @@ func (c *Client) sendImplicitTLS(addr string, auth smtp.Auth, to string, raw []b
 	if err := client.Mail(c.cfg.From); err != nil {
 		return err
 	}
-	if err := client.Rcpt(to); err != nil {
+	if err := client.Rcpt(msg.To); err != nil {
 		return err
 	}
 	w, err := client.Data()
@@ -89,6 +75,95 @@ func (c *Client) sendImplicitTLS(addr string, auth smtp.Auth, to string, raw []b
 		return err
 	}
 	return client.Quit()
+}
+
+// dial устанавливает SMTP-соединение по режиму TLS:
+//
+//	tls   — зашифровано с первого байта (465);
+//	иначе — открытое соединение + STARTTLS, если сервер его анонсирует
+//	        (587/2525/25); none — без шифрования (dev/mailpit).
+func (c *Client) dial(addr string) (*smtp.Client, error) {
+	if c.cfg.TLSMode == "tls" {
+		conn, err := tls.Dial("tcp", addr, &tls.Config{ServerName: c.cfg.Host})
+		if err != nil {
+			return nil, fmt.Errorf("tls dial: %w", err)
+		}
+		client, err := smtp.NewClient(conn, c.cfg.Host)
+		if err != nil {
+			_ = conn.Close()
+			return nil, fmt.Errorf("smtp client: %w", err)
+		}
+		return client, nil
+	}
+
+	client, err := smtp.Dial(addr)
+	if err != nil {
+		return nil, fmt.Errorf("smtp dial: %w", err)
+	}
+	if c.cfg.TLSMode != "none" {
+		if ok, _ := client.Extension("STARTTLS"); ok {
+			if err := client.StartTLS(&tls.Config{ServerName: c.cfg.Host}); err != nil {
+				_ = client.Close()
+				return nil, fmt.Errorf("starttls: %w", err)
+			}
+		}
+	}
+	return client, nil
+}
+
+// pickAuth выбирает механизм по списку, анонсированному сервером в EHLO.
+// LOGIN предпочтительнее PLAIN: Beget и др. поддерживают только его.
+func (c *Client) pickAuth(mechs string) smtp.Auth {
+	hasPlain := strings.Contains(mechs, "PLAIN")
+	hasLogin := strings.Contains(mechs, "LOGIN")
+	if hasLogin && !hasPlain {
+		return &loginAuth{user: c.cfg.User, password: c.cfg.Password, host: c.cfg.Host}
+	}
+	if hasPlain {
+		return smtp.PlainAuth("", c.cfg.User, c.cfg.Password, c.cfg.Host)
+	}
+	if hasLogin {
+		return &loginAuth{user: c.cfg.User, password: c.cfg.Password, host: c.cfg.Host}
+	}
+	// Неизвестный набор — пробуем PLAIN (исторический дефолт).
+	return smtp.PlainAuth("", c.cfg.User, c.cfg.Password, c.cfg.Host)
+}
+
+// loginAuth — механизм AUTH LOGIN (логин/пароль отдельными base64-шагами).
+// net/smtp его не реализует. Креды шлются почти в открытом виде, поэтому,
+// как и PlainAuth, требуем TLS-соединение (кроме localhost).
+type loginAuth struct {
+	user     string
+	password string
+	host     string
+}
+
+func (a *loginAuth) Start(server *smtp.ServerInfo) (string, []byte, error) {
+	if !server.TLS && !isLocalhost(server.Name) {
+		return "", nil, errors.New("smtp: LOGIN auth requires TLS connection")
+	}
+	if server.Name != a.host {
+		return "", nil, errors.New("smtp: wrong host name")
+	}
+	return "LOGIN", nil, nil
+}
+
+func (a *loginAuth) Next(fromServer []byte, more bool) ([]byte, error) {
+	if !more {
+		return nil, nil
+	}
+	switch strings.ToLower(strings.TrimRight(string(fromServer), ": ")) {
+	case "username":
+		return []byte(a.user), nil
+	case "password":
+		return []byte(a.password), nil
+	default:
+		return nil, fmt.Errorf("smtp: unexpected LOGIN challenge %q", fromServer)
+	}
+}
+
+func isLocalhost(name string) bool {
+	return name == "localhost" || name == "127.0.0.1" || name == "::1"
 }
 
 func (c *Client) buildMessage(msg domain.Message) []byte {
