@@ -38,8 +38,8 @@ type MessengerService interface {
 	ToggleConversationPin(ctx context.Context, convID, userID int64) (bool, error)
 	ToggleMessagePin(ctx context.Context, messageID, userID int64) (*dto.Message, bool, error)
 	ListPinnedMessages(ctx context.Context, convID, userID int64) ([]*dto.Message, error)
-	OpenDevChat(ctx context.Context, userID int64) (*dto.Conversation, error)
-	OpenPetChat(ctx context.Context, userID int64) (*dto.Conversation, error)
+	OpenDevChat(ctx context.Context, userID int64, companyID *int64) (*dto.Conversation, error)
+	OpenPetChat(ctx context.Context, userID int64, companyID *int64) (*dto.Conversation, error)
 	SupportInbox(ctx context.Context, userID int64) ([]*dto.ConversationListItem, error)
 	TotalUnread(ctx context.Context, userID int64) (int, error)
 

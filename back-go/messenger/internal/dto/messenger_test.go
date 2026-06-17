@@ -108,6 +108,7 @@ func TestMessageJSONShape(t *testing.T) {
 		"task": null,
 		"pinned_at": null,
 		"pinned_by_id": null,
+		"edited_at": null,
 		"is_from_support": false
 	}`
 	assertJSONEq(t, raw, want)

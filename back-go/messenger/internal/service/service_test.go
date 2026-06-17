@@ -673,6 +673,9 @@ func (p *fakePub) byName(event string) []pubEvent {
 func i64(v int64) *int64   { return &v }
 func str(s string) *string { return &s }
 
+// i64p — *int64 для активной компании в вызовах соло-чатов (юзер 2 → компания 10).
+func i64p(v int64) *int64 { return &v }
+
 func newTestEnv() (*Service, *fakeRepo, *fakeFiles, *fakePub) {
 	c10, c20 := int64(10), int64(20)
 	users := &fakeUsers{users: map[int64]*domain.User{
@@ -761,7 +764,7 @@ func TestPetChatUnreadCountsBotMessages(t *testing.T) {
 	svc, _, _, pub := newTestEnv()
 	ctx := context.Background()
 
-	pet, err := svc.OpenPetChat(ctx, 2)
+	pet, err := svc.OpenPetChat(ctx, 2, i64p(10))
 	if err != nil {
 		t.Fatalf("open pet chat: %v", err)
 	}
@@ -808,7 +811,7 @@ func TestPetChatTextOnly(t *testing.T) {
 	svc, repo, _, _ := newTestEnv()
 	ctx := context.Background()
 
-	pet, _ := svc.OpenPetChat(ctx, 2)
+	pet, _ := svc.OpenPetChat(ctx, 2, i64p(10))
 	att, err := svc.UploadAttachment(ctx, 2, "doc.pdf", "application/pdf", []byte("data"))
 	if err != nil {
 		t.Fatalf("upload: %v", err)
@@ -922,7 +925,7 @@ func TestDevChatUndeletable(t *testing.T) {
 	svc, _, _, _ := newTestEnv()
 	ctx := context.Background()
 
-	dev, _ := svc.OpenDevChat(ctx, 2)
+	dev, _ := svc.OpenDevChat(ctx, 2, i64p(10))
 	_, err := svc.DeleteConversation(ctx, dev.ID, 2, "all")
 	if de := domain.AsDomainError(err); de == nil || de.Code != "DEV_CHAT_UNDELETABLE" {
 		t.Fatalf("dev-чат: %v", err)
@@ -935,7 +938,7 @@ func TestPetChatDeletesPhysically(t *testing.T) {
 	svc, repo, _, pub := newTestEnv()
 	ctx := context.Background()
 
-	pet, _ := svc.OpenPetChat(ctx, 2)
+	pet, _ := svc.OpenPetChat(ctx, 2, i64p(10))
 	if _, err := svc.SendMessage(ctx, pet.ID, 2, dto.MessageCreate{Text: str("привет")}); err != nil {
 		t.Fatalf("send: %v", err)
 	}
@@ -958,7 +961,7 @@ func TestForwardSkipsSoloAndCopiesAttachments(t *testing.T) {
 	svc, repo, files, _ := newTestEnv()
 	ctx := context.Background()
 
-	dev, _ := svc.OpenDevChat(ctx, 2)
+	dev, _ := svc.OpenDevChat(ctx, 2, i64p(10))
 	src, _ := svc.OpenConversation(ctx, 2, 3)
 	att, _ := svc.UploadAttachment(ctx, 3, "report.pdf", "application/pdf", []byte("pdf"))
 	msg, err := svc.SendMessage(ctx, src.ID, 3, dto.MessageCreate{
@@ -1004,7 +1007,7 @@ func TestSupportAutoReplyOncePerDay(t *testing.T) {
 	svc, repo, _, pub := newTestEnv()
 	ctx := context.Background()
 
-	dev, _ := svc.OpenDevChat(ctx, 2)
+	dev, _ := svc.OpenDevChat(ctx, 2, i64p(10))
 
 	countBots := func() int {
 		n := 0
@@ -1203,7 +1206,7 @@ func TestListRecentMessages(t *testing.T) {
 	svc, _, _, _ := newTestEnv()
 	ctx := context.Background()
 
-	pet, _ := svc.OpenPetChat(ctx, 2)
+	pet, _ := svc.OpenPetChat(ctx, 2, i64p(10))
 	for i := 0; i < 5; i++ {
 		if _, err := svc.SendMessage(ctx, pet.ID, 2, dto.MessageCreate{Text: str(fmt.Sprintf("м%d", i))}); err != nil {
 			t.Fatalf("send: %v", err)
@@ -1271,7 +1274,7 @@ func TestSupportInbox(t *testing.T) {
 	svc, _, _, _ := newTestEnv()
 	ctx := context.Background()
 
-	dev, _ := svc.OpenDevChat(ctx, 2)
+	dev, _ := svc.OpenDevChat(ctx, 2, i64p(10))
 	if _, err := svc.SendMessage(ctx, dev.ID, 2, dto.MessageCreate{Text: str("вопрос")}); err != nil {
 		t.Fatalf("send: %v", err)
 	}

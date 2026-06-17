@@ -10,6 +10,7 @@ import (
 
 	"github.com/gofiber/fiber/v2"
 
+	"github.com/DmitriyODS/gw2/back-go/messenger/internal/domain"
 	"github.com/DmitriyODS/gw2/back-go/messenger/internal/dto"
 	"github.com/DmitriyODS/gw2/back-go/messenger/internal/endpoint"
 	"github.com/DmitriyODS/gw2/back-go/pkg/apierror"
@@ -36,6 +37,15 @@ func (h *handlers) respondError(c *fiber.Ctx, err error) error {
 // currentUserID — id пользователя из Locals (после RequireAuth).
 func currentUserID(c *fiber.Ctx) int64 {
 	return pasetoauth.UserID(c)
+}
+
+// activeCompanyID — активная компания сессии из токена (authSource кладёт её в
+// AuthInfo.User; в самих users её нет). Нужна для соло-чатов (pet/dev).
+func activeCompanyID(c *fiber.Ctx) *int64 {
+	if u, ok := pasetoauth.CurrentUser(c).(*domain.User); ok {
+		return u.CompanyID
+	}
+	return nil
 }
 
 // validationError — форма marshmallow ValidationError: message — словарь
@@ -129,7 +139,9 @@ func (h *handlers) toggleConversationPin(c *fiber.Ctx) error {
 }
 
 func (h *handlers) openDevChat(c *fiber.Ctx) error {
-	resp, err := h.eps.OpenDevChat(c.Context(), currentUserID(c))
+	resp, err := h.eps.OpenDevChat(c.Context(), endpoint.SoloChatRequest{
+		UserID: currentUserID(c), CompanyID: activeCompanyID(c),
+	})
 	if err != nil {
 		return h.respondError(c, err)
 	}
@@ -137,7 +149,9 @@ func (h *handlers) openDevChat(c *fiber.Ctx) error {
 }
 
 func (h *handlers) openPetChat(c *fiber.Ctx) error {
-	resp, err := h.eps.OpenPetChat(c.Context(), currentUserID(c))
+	resp, err := h.eps.OpenPetChat(c.Context(), endpoint.SoloChatRequest{
+		UserID: currentUserID(c), CompanyID: activeCompanyID(c),
+	})
 	if err != nil {
 		return h.respondError(c, err)
 	}

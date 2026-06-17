@@ -87,6 +87,13 @@ type EditMessageRequest struct {
 	Text      string
 }
 
+// SoloChatRequest — открыть/создать соло-чат (pet/dev). CompanyID — активная
+// компания из токена (в users её нет: идентичность развязана с компаниями).
+type SoloChatRequest struct {
+	UserID    int64
+	CompanyID *int64
+}
+
 type UploadRequest struct {
 	UploaderID int64
 	FileName   string
@@ -189,10 +196,12 @@ func New(svc service.MessengerService) Endpoints {
 			return svc.ListPinnedMessages(ctx, req.ConversationID, req.UserID)
 		},
 		OpenDevChat: func(ctx context.Context, request any) (any, error) {
-			return svc.OpenDevChat(ctx, request.(int64))
+			req := request.(SoloChatRequest)
+			return svc.OpenDevChat(ctx, req.UserID, req.CompanyID)
 		},
 		OpenPetChat: func(ctx context.Context, request any) (any, error) {
-			return svc.OpenPetChat(ctx, request.(int64))
+			req := request.(SoloChatRequest)
+			return svc.OpenPetChat(ctx, req.UserID, req.CompanyID)
 		},
 		SupportInbox: func(ctx context.Context, request any) (any, error) {
 			return svc.SupportInbox(ctx, request.(int64))

@@ -189,7 +189,9 @@ func (s *Service) getOrCreateSolo(ctx context.Context, userID, companyID int64, 
 }
 
 // OpenDevChat — личный чат с техподдержкой (нужна активная компания).
-func (s *Service) OpenDevChat(ctx context.Context, userID int64) (*dto.Conversation, error) {
+// companyID — активная компания из токена (в users её нет — идентичность
+// развязана с компаниями; брать из me.CompanyID нельзя).
+func (s *Service) OpenDevChat(ctx context.Context, userID int64, companyID *int64) (*dto.Conversation, error) {
 	me, err := s.users.GetUser(ctx, userID)
 	if err != nil {
 		return nil, err
@@ -197,19 +199,20 @@ func (s *Service) OpenDevChat(ctx context.Context, userID int64) (*dto.Conversat
 	if me == nil {
 		return nil, domain.NewError("USER_NOT_FOUND", "Пользователь не найден", 404)
 	}
-	if me.CompanyID == nil {
+	if companyID == nil {
 		return nil, domain.NewError("NO_ACTIVE_COMPANY",
 			"Нет активной компании для чата с техподдержкой", 400)
 	}
-	conv, err := s.getOrCreateSolo(ctx, userID, *me.CompanyID, false)
+	conv, err := s.getOrCreateSolo(ctx, userID, *companyID, false)
 	if err != nil {
 		return nil, err
 	}
 	return dto.NewConversation(conv, nil), nil
 }
 
-// OpenPetChat — чат пользователя со своим Грувиком.
-func (s *Service) OpenPetChat(ctx context.Context, userID int64) (*dto.Conversation, error) {
+// OpenPetChat — чат пользователя со своим Грувиком. companyID — активная
+// компания из токена (в users её нет — идентичность развязана с компаниями).
+func (s *Service) OpenPetChat(ctx context.Context, userID int64, companyID *int64) (*dto.Conversation, error) {
 	me, err := s.users.GetUser(ctx, userID)
 	if err != nil {
 		return nil, err
@@ -217,10 +220,10 @@ func (s *Service) OpenPetChat(ctx context.Context, userID int64) (*dto.Conversat
 	if me == nil {
 		return nil, domain.NewError("USER_NOT_FOUND", "Пользователь не найден", 404)
 	}
-	if me.CompanyID == nil {
+	if companyID == nil {
 		return nil, domain.NewError("NO_ACTIVE_COMPANY", "Нет активной компании — Грувика нет", 400)
 	}
-	conv, err := s.getOrCreateSolo(ctx, userID, *me.CompanyID, true)
+	conv, err := s.getOrCreateSolo(ctx, userID, *companyID, true)
 	if err != nil {
 		return nil, err
 	}
