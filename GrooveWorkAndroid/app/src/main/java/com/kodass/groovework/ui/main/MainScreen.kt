@@ -78,6 +78,7 @@ import com.kodass.groovework.ui.employees.EmployeesScreen
 import com.kodass.groovework.ui.profile.ProfileScreen
 import com.kodass.groovework.ui.registries.RegistriesScreen
 import com.kodass.groovework.ui.registries.RegistryRecordScreen
+import com.kodass.groovework.ui.registries.RegistryRecordsScreen
 import com.kodass.groovework.ui.stats.StatsScreen
 import com.kodass.groovework.ui.tasks.TaskDetailScreen
 import com.kodass.groovework.ui.tasks.TasksScreen
@@ -309,6 +310,17 @@ fun MainScreen(container: AppContainer) {
             composable("registries") {
                 RegistriesScreen(
                     container = container,
+                    onOpenRegistry = { registryId -> navController.navigate("registry/$registryId") },
+                )
+            }
+            composable(
+                route = "registry/{registryId}",
+                arguments = listOf(navArgument("registryId") { type = NavType.LongType }),
+            ) { entry ->
+                RegistryRecordsScreen(
+                    container = container,
+                    registryId = entry.arguments?.getLong("registryId") ?: 0L,
+                    onBack = { navController.popBackStack() },
                     onOpenRecord = { registryId, recordId ->
                         navController.navigate("registry_record/$registryId/$recordId")
                     },

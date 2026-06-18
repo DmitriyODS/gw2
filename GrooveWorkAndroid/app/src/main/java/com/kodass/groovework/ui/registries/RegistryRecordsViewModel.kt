@@ -10,7 +10,6 @@ import com.kodass.groovework.data.dto.RegistryRecordDto
 import com.kodass.groovework.data.network.ApiException
 import com.kodass.groovework.data.repo.RegistriesRepository
 import com.kodass.groovework.data.repo.RegistriesRepository.Companion.PER_PAGE
-import com.kodass.groovework.data.session.AuthState
 import com.kodass.groovework.data.session.SessionManager
 import com.kodass.groovework.data.ws.GatewayClient
 import com.kodass.groovework.data.ws.longField
@@ -20,25 +19,25 @@ import kotlinx.coroutines.launch
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.decodeFromJsonElement
 
-class RegistriesViewModel(
+// Второй уровень раздела «Реестры» — структура и записи одного реестра.
+class RegistryRecordsViewModel(
+    private val registryId: Long,
     private val repo: RegistriesRepository,
     private val session: SessionManager,
     gateway: GatewayClient,
     private val json: Json,
 ) : ViewModel() {
 
-    var registries by mutableStateOf<List<RegistryDto>>(emptyList())
+    var registry by mutableStateOf<RegistryDto?>(null)
         private set
-    var selectedId by mutableStateOf<Long?>(null)
+    var loadingRegistry by mutableStateOf(true)
         private set
-    var loadingRegistries by mutableStateOf(true)
+    var registryError by mutableStateOf<String?>(null)
         private set
-    var registriesError by mutableStateOf<String?>(null)
+    // Реестр удалён (сокет-событие) — экран сам уходит назад.
+    var registryGone by mutableStateOf(false)
         private set
 
-    val selected: RegistryDto? get() = registries.firstOrNull { it.id == selectedId }
-
-    // ── Записи выбранного реестра ──
     var records by mutableStateOf<List<RegistryRecordDto>>(emptyList())
         private set
     var total by mutableStateOf(0)
@@ -61,7 +60,6 @@ class RegistriesViewModel(
     private var page = 1
     val hasMore: Boolean get() = records.size < total
 
-    // Массовый выбор записей (для удаления).
     var selectedIds by mutableStateOf<Set<Long>>(emptySet())
         private set
     var message by mutableStateOf<String?>(null)
@@ -69,82 +67,55 @@ class RegistriesViewModel(
     private var searchJob: Job? = null
 
     init {
-        loadRegistries(initial = true)
+        loadRegistry()
+        loadRecords(reset = true)
         viewModelScope.launch {
             gateway.events.collect { event ->
                 when (event.event) {
-                    "registry:created", "registry:updated", "registry:deleted" ->
-                        if (companyMatches(event.data.longField("company_id"))) loadRegistries(initial = false)
-                    "record:created" -> onRecordEvent(event.data.longField("registry_id"), event.data.longField("company_id")) { refresh() }
-                    "record:updated" -> onRecordEvent(event.data.longField("registry_id"), event.data.longField("company_id")) {
+                    "registry:updated" ->
+                        if (forThisRegistry(event.data.longField("id"), event.data.longField("company_id"))) loadRegistry()
+                    "registry:deleted" ->
+                        if (forThisRegistry(event.data.longField("id"), event.data.longField("company_id"))) registryGone = true
+                    "record:created" -> onRecordEvent(event.data) { refresh() }
+                    "record:updated" -> onRecordEvent(event.data) {
                         val updated = runCatching { json.decodeFromJsonElement<RegistryRecordDto>(event.data!!) }.getOrNull()
                         if (updated != null) records = records.map { if (it.id == updated.id) updated else it }
                     }
-                    "record:deleted" -> onRecordEvent(event.data.longField("registry_id"), event.data.longField("company_id")) {
+                    "record:deleted" -> onRecordEvent(event.data) {
                         val id = event.data.longField("id") ?: return@onRecordEvent
                         if (records.any { it.id == id }) {
                             records = records.filter { it.id != id }
                             total = (total - 1).coerceAtLeast(0)
                         }
                     }
-                    "record:bulk-deleted" -> onRecordEvent(event.data.longField("registry_id"), event.data.longField("company_id")) { refresh() }
+                    "record:bulk-deleted" -> onRecordEvent(event.data) { refresh() }
                 }
             }
         }
     }
 
-    private fun companyMatches(eventCompanyId: Long?): Boolean {
-        val mine = (session.authState.value as? AuthState.LoggedIn)?.claims?.companyId ?: return true
-        return eventCompanyId == null || eventCompanyId == mine
+    private fun forThisRegistry(id: Long?, companyId: Long?): Boolean =
+        id == registryId && companyMatches(session, companyId)
+
+    private inline fun onRecordEvent(data: kotlinx.serialization.json.JsonElement?, block: () -> Unit) {
+        if (data.longField("registry_id") == registryId && companyMatches(session, data.longField("company_id"))) block()
     }
 
-    private inline fun onRecordEvent(registryId: Long?, companyId: Long?, block: () -> Unit) {
-        if (registryId == selectedId && companyMatches(companyId)) block()
-    }
-
-    fun loadRegistries(initial: Boolean) {
+    fun loadRegistry() {
         viewModelScope.launch {
-            if (initial) loadingRegistries = true
-            registriesError = null
+            loadingRegistry = true
+            registryError = null
             try {
-                val list = repo.registries()
-                registries = list
-                // Сохраняем выбор, если реестр всё ещё существует; иначе — первый.
-                val keep = selectedId?.takeIf { id -> list.any { it.id == id } }
-                val next = keep ?: list.firstOrNull()?.id
-                if (next != selectedId) {
-                    selectedId = next
-                    resetAndFetch()
-                } else if (initial && next != null) {
-                    resetAndFetch()
-                }
+                registry = repo.registry(registryId)
             } catch (e: ApiException) {
-                if (registries.isEmpty()) registriesError = e.message
+                if (registry == null) registryError = e.message
             } finally {
-                loadingRegistries = false
+                loadingRegistry = false
             }
         }
-    }
-
-    fun select(id: Long) {
-        if (id == selectedId) return
-        selectedId = id
-        search = ""
-        sort = ""
-        order = "desc"
-        clearSelection()
-        resetAndFetch()
-    }
-
-    private fun resetAndFetch() {
-        records = emptyList()
-        total = 0
-        page = 1
-        loadRecords(reset = true)
     }
 
     private fun loadRecords(reset: Boolean) {
-        val registryId = selectedId ?: return
         viewModelScope.launch {
             if (reset && records.isEmpty()) loadingRecords = true
             recordsError = null
@@ -161,8 +132,14 @@ class RegistriesViewModel(
         }
     }
 
+    private fun resetAndFetch() {
+        records = emptyList()
+        total = 0
+        page = 1
+        loadRecords(reset = true)
+    }
+
     fun refresh() {
-        val registryId = selectedId ?: return
         viewModelScope.launch {
             refreshing = true
             try {
@@ -179,7 +156,6 @@ class RegistriesViewModel(
     }
 
     fun loadMore() {
-        val registryId = selectedId ?: return
         if (loadingMore || !hasMore) return
         viewModelScope.launch {
             loadingMore = true
@@ -187,7 +163,6 @@ class RegistriesViewModel(
                 val next = page + 1
                 val r = repo.records(registryId, search, sort, order, next, PER_PAGE)
                 page = next
-                // Дедуп по id — сокет-события могли уже что-то вставить.
                 val known = records.map { it.id }.toSet()
                 records = records + r.items.filter { it.id !in known }
                 total = r.total
@@ -219,7 +194,6 @@ class RegistriesViewModel(
         resetAndFetch()
     }
 
-    // ── Выбор записей ──
     fun toggleRow(id: Long) {
         selectedIds = selectedIds.toMutableSet().apply { if (!add(id)) remove(id) }
     }
@@ -239,7 +213,6 @@ class RegistriesViewModel(
     }
 
     fun bulkDelete() {
-        val registryId = selectedId ?: return
         val ids = selectedIds.toList()
         if (ids.isEmpty()) return
         viewModelScope.launch {
