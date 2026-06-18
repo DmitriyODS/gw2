@@ -76,15 +76,23 @@ class UnitManager(
     // мог быть перезапущен и in-memory состояние пусто).
     fun stopUnit(unitId: Long, onDone: (() -> Unit)? = null) {
         scope.launch {
-            try {
-                repo.stopUnit(unitId)
-                if (_activeUnit.value?.id == unitId) _activeUnit.value = null
-                notifier.cancelUnit()
-                onDone?.invoke()
-            } catch (e: Exception) {
-                _errors.tryEmit((e as? com.kodass.groovework.data.network.ApiException)?.message
-                    ?: "Не удалось завершить юнит")
-            }
+            if (stopUnitSuspend(unitId)) onDone?.invoke()
+        }
+    }
+
+    // Suspend-вариант для вызова из BroadcastReceiver под goAsync(): процесс
+    // держится живым до завершения сетевого запроса (иначе при медленной сети
+    // система убивает процесс receiver'а и юнит не завершается).
+    suspend fun stopUnitSuspend(unitId: Long): Boolean {
+        return try {
+            repo.stopUnit(unitId)
+            if (_activeUnit.value?.id == unitId) _activeUnit.value = null
+            notifier.cancelUnit()
+            true
+        } catch (e: Exception) {
+            _errors.tryEmit((e as? com.kodass.groovework.data.network.ApiException)?.message
+                ?: "Не удалось завершить юнит")
+            false
         }
     }
 

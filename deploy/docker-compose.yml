@@ -348,6 +348,38 @@ services:
       retries: 5
       start_period: 10s
 
+  # Микросервис реестров (Go, back-go/registry): HTTP :8099 — настраиваемые
+  # таблицы-справочники компаний (структура полей + записи), REST /api/registries.
+  # Загруженные файлы/картинки — общий uploads-том. Межсервисных вызовов нет.
+  registry:
+    build:
+      context: ../back-go
+      dockerfile: registry/Dockerfile
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    environment:
+      DATABASE_URL: postgresql://${DB_USER}:${DB_PASSWORD}@db:5432/${DB_NAME}
+      REDIS_URL: redis://redis:6379/0
+      PASETO_PUBLIC_KEY: ${PASETO_PUBLIC_KEY}
+      UPLOAD_FOLDER: /app/uploads
+      HTTP_ADDR: ":8099"
+    volumes:
+      - uploads:/app/uploads
+    expose:
+      - "8099"
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8099/healthz"]
+      interval: 15s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
+
   # Микросервис рассылки писем (Go, back-go/mail): gRPC :9098 — Send(шаблон),
   # HTTP :8098 — /healthz. Stateless (без БД/Redis), доставка по SMTP. Зовёт его
   # authsvc (письма подтверждения email). SMTP_* и отправитель задаёт .env /
@@ -386,7 +418,7 @@ services:
     restart: unless-stopped
     # service_healthy, а не started: конфиг nginx резолвит upstream'ы
     # gateway:8096, calls:8090, auth:8091, messenger:8092, ai:8093,
-    # groove:8094, tasks:8095 и push:8097 на старте — без живых контейнеров он падает
+    # groove:8094, tasks:8095, push:8097 и registry:8099 на старте — без живых контейнеров он падает
     # целиком («host not found in upstream»), включая отдачу SPA.
     depends_on:
       gateway:
@@ -404,6 +436,8 @@ services:
       tasks:
         condition: service_healthy
       push:
+        condition: service_healthy
+      registry:
         condition: service_healthy
     volumes:
       - uploads:/app/uploads:ro

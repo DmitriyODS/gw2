@@ -6,6 +6,8 @@ import android.graphics.BitmapFactory
 import android.graphics.Matrix
 import android.media.ExifInterface
 import android.net.Uri
+import android.provider.OpenableColumns
+import android.webkit.MimeTypeMap
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.ByteArrayOutputStream
@@ -113,4 +115,77 @@ suspend fun cropSquareToJpeg(
     }
     scaled.recycle()
     bytes
+}
+
+// Вырезает произвольный прямоугольник (координаты в пикселях исходника),
+// масштабирует длинную сторону до maxDim и сжимает в JPEG под лимит размера.
+// Для свободной обрезки картинок реестра (поле image не обязано быть квадратным).
+suspend fun cropRectToJpeg(
+    source: Bitmap,
+    srcLeft: Int,
+    srcTop: Int,
+    srcWidth: Int,
+    srcHeight: Int,
+    maxDim: Int = 1600,
+    maxBytes: Int = 4 * 1024 * 1024,
+): ByteArray = withContext(Dispatchers.IO) {
+    val left = srcLeft.coerceIn(0, (source.width - 1).coerceAtLeast(0))
+    val top = srcTop.coerceIn(0, (source.height - 1).coerceAtLeast(0))
+    val width = srcWidth.coerceIn(1, source.width - left)
+    val height = srcHeight.coerceIn(1, source.height - top)
+    val cropped = Bitmap.createBitmap(source, left, top, width, height)
+
+    val longest = maxOf(width, height)
+    val scaled = if (longest > maxDim) {
+        val factor = maxDim.toFloat() / longest
+        Bitmap.createScaledBitmap(
+            cropped,
+            (width * factor).toInt().coerceAtLeast(1),
+            (height * factor).toInt().coerceAtLeast(1),
+            true,
+        ).also { if (it != cropped) cropped.recycle() }
+    } else {
+        cropped
+    }
+
+    var quality = 92
+    var bytes: ByteArray
+    while (true) {
+        val out = ByteArrayOutputStream()
+        scaled.compress(Bitmap.CompressFormat.JPEG, quality, out)
+        bytes = out.toByteArray()
+        if (bytes.size <= maxBytes || quality <= 40) break
+        quality -= 10
+    }
+    scaled.recycle()
+    bytes
+}
+
+// Содержимое выбранного файла произвольного типа (для поля «файл»): сырые байты
+// + отображаемое имя + MIME. null — если поток недоступен.
+data class PickedFile(val bytes: ByteArray, val name: String, val mime: String)
+
+suspend fun readPickedFile(
+    context: Context,
+    uri: Uri,
+): PickedFile? = withContext(Dispatchers.IO) {
+    val resolver = context.contentResolver
+    val bytes = resolver.openInputStream(uri)?.use { it.readBytes() } ?: return@withContext null
+    val name = queryDisplayName(context, uri) ?: "file"
+    val mime = resolver.getType(uri)
+        ?: MimeTypeMap.getSingleton().getMimeTypeFromExtension(name.substringAfterLast('.', ""))
+        ?: "application/octet-stream"
+    PickedFile(bytes, name, mime)
+}
+
+private fun queryDisplayName(context: Context, uri: Uri): String? {
+    return runCatching {
+        context.contentResolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)
+            ?.use { cursor ->
+                if (cursor.moveToFirst()) {
+                    val idx = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
+                    if (idx >= 0) cursor.getString(idx) else null
+                } else null
+            }
+    }.getOrNull() ?: uri.lastPathSegment?.substringAfterLast('/')
 }

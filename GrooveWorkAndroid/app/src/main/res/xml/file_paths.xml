@@ -2,4 +2,6 @@
 <paths>
     <!-- getExternalFilesDir(null): сюда AppUpdater качает APK обновления. -->
     <external-files-path name="updates" path="." />
+    <!-- cacheDir/camera: временные снимки камеры для полей-картинок реестра. -->
+    <cache-path name="camera" path="camera/" />
 </paths>

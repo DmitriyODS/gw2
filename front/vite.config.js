@@ -99,6 +99,11 @@ export default defineConfig({
         target: 'http://localhost:8097',
         changeOrigin: true
       },
+      // Реестры — registrysvc (таблицы-справочники компаний).
+      '/api/registries': {
+        target: 'http://localhost:8099',
+        changeOrigin: true
+      },
       // Ядро задач — tasksvc (задачи, юниты, типы, этапы, отделы, статистика).
       '/api/tasks': {
         target: 'http://localhost:8095',

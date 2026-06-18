@@ -162,20 +162,30 @@ class ChatViewModel(
         if (!canSend) return
         stopTyping()
         val text = input.trim().takeIf { it.isNotEmpty() }
-        val attachmentIds = pendingAttachment?.let { listOf(it.id) }
-        val replyId = replyTo?.id
-        val taskId = attachedTask?.id
+        val attachment = pendingAttachment
+        val attachmentIds = attachment?.let { listOf(it.id) }
+        val reply = replyTo
+        val task = attachedTask
+        // Очищаем поле сразу, не дожидаясь ответа сети: при медленном соединении
+        // запрос уже ушёл, и пользователь не должен видеть «не очистившийся» текст
+        // или отправлять повторно.
+        input = ""
+        replyTo = null
+        pendingAttachment = null
+        attachedTask = null
         viewModelScope.launch {
             sending = true
             actionError = null
             try {
-                val message = repo.send(conversationId, text, attachmentIds, replyId, taskId)
+                val message = repo.send(conversationId, text, attachmentIds, reply?.id, task?.id)
                 prepend(message)
-                input = ""
-                replyTo = null
-                pendingAttachment = null
-                attachedTask = null
             } catch (e: ApiException) {
+                // Не удалось отправить — возвращаем введённое для повтора, если поле
+                // ещё пустое (пользователь не начал печатать новое).
+                if (input.isBlank()) input = text ?: ""
+                replyTo = reply
+                pendingAttachment = attachment
+                attachedTask = task
                 actionError = e.message
             } finally {
                 sending = false

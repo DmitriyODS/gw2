@@ -38,7 +38,16 @@ class ChatsViewModel(
         private set
     var actionError by mutableStateOf<String?>(null)
 
+    // Поиск по уже загруженному списку чатов (по имени собеседника и последнему
+    // сообщению) — фильтрация локальная, без запроса к серверу.
+    var chatQuery by mutableStateOf("")
+        private set
+
     private var searchJob: Job? = null
+
+    fun updateChatQuery(query: String) {
+        chatQuery = query
+    }
 
     // Фоновое обновление списка чатов и presence (без спиннера) — вызывается
     // периодически, пока пользователь в разделе, и при входе/смене компании.

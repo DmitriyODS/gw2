@@ -120,6 +120,8 @@ const navItems = computed(() => {
     }
     items.push({ path: '/employees', icon: 'groups', label: 'Сотрудники', tutorial: 'nav-employees',
       active: () => route.path === '/employees' })
+    items.push({ path: '/registries', icon: 'table', label: 'Реестры', tutorial: 'nav-registries',
+      active: () => route.path.startsWith('/registries') })
   }
 
   // Раздел "Компании" — платформенный супер-админ (все компании) ИЛИ

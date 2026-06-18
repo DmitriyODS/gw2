@@ -72,6 +72,10 @@ services:
       PASETO_PUBLIC_KEY: ${PASETO_PUBLIC_KEY:-15ef439747fcad6ca627310942ba14b48f164fcbb5f65c10f61ca2aeb4b53fe1}
       # Dev без Firebase: пуши отключены (no-op). Подложите ключ — заработают.
       FIREBASE_CREDENTIALS_JSON: ${FIREBASE_CREDENTIALS_JSON:-}
+  registry:
+    profiles: ["full"]
+    environment:
+      PASETO_PUBLIC_KEY: ${PASETO_PUBLIC_KEY:-15ef439747fcad6ca627310942ba14b48f164fcbb5f65c10f61ca2aeb4b53fe1}
   mail:
     profiles: ["full"]
     environment:

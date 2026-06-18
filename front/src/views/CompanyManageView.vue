@@ -164,6 +164,14 @@
                 (она привязана к активной сессии).
               </div>
             </div>
+
+            <div v-show="settingsTab === 'registries'" class="settings-fill">
+              <RegistriesManager v-if="company.id === auth.companyId" />
+              <div v-else class="note">
+                Чтобы настроить реестры, переключитесь на эту компанию в боковой панели
+                (они привязаны к активной сессии).
+              </div>
+            </div>
           </div>
         </section>
 
@@ -396,6 +404,7 @@ import WeekendSettings from '@/components/settings/WeekendSettings.vue'
 import AiSettings from '@/components/settings/AiSettings.vue'
 import CompanyListsSettings from '@/components/settings/CompanyListsSettings.vue'
 import YougileCompanySettings from '@/components/settings/YougileCompanySettings.vue'
+import RegistriesManager from '@/components/registry/RegistriesManager.vue'
 import { useAuthStore } from '@/stores/auth.js'
 import { useNotificationsStore } from '@/stores/notifications.js'
 import { usePermission } from '@/composables/usePermission.js'
@@ -438,6 +447,7 @@ const settingsTabs = [
   { value: 'ai', label: 'ИИ', icon: 'smart_toy' },
   { value: 'schedule', label: 'Расписание', icon: 'weekend' },
   { value: 'groove', label: 'Мой Groove', icon: 'celebration' },
+  { value: 'registries', label: 'Реестры', icon: 'table' },
   { value: 'yougile', label: 'YouGile', icon: 'link' },
 ]
 
@@ -818,6 +828,9 @@ async function doDelete() {
 .pane-settings { gap: 16px; }
 .settings-subtabs { flex: none; }
 .settings-content { flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 18px; }
+/* Вкладка реестров сама держит высоту и внутреннюю прокрутку — растягиваем её
+   обёртку на всю область настроек, чтобы конструктор не растягивал .settings-content. */
+.settings-fill { flex: 1; min-height: 0; display: flex; }
 
 .settings-card {
   background: var(--color-surface-high); border-radius: var(--radius-lg); padding: 18px;

@@ -30,6 +30,7 @@ var Channels = []string{
 	"gw2:messenger:events",
 	"gw2:groove:events",
 	"gw2:tasks:events",
+	"gw2:registry:events",
 	"gw2:gateway:events",
 }
 

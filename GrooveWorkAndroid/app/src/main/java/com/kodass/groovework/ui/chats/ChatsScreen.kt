@@ -65,6 +65,7 @@ import com.kodass.groovework.ui.common.ConfirmSpec
 import com.kodass.groovework.ui.common.EmptyState
 import com.kodass.groovework.ui.common.ErrorState
 import com.kodass.groovework.ui.common.RefreshOnResume
+import com.kodass.groovework.ui.common.SearchField
 import com.kodass.groovework.ui.common.UserAvatar
 import com.kodass.groovework.ui.common.formatChatStamp
 import com.kodass.groovework.ui.common.rememberIsScrollingUp
@@ -119,41 +120,58 @@ fun ChatsScreen(container: AppContainer, onOpenChat: (Long) -> Unit) {
             }
         },
     ) { padding ->
-        PullToRefreshBox(
-            isRefreshing = viewModel.refreshing,
-            onRefresh = { viewModel.pullRefresh() },
-            modifier = Modifier.fillMaxSize().padding(padding),
-        ) {
-            when {
-                viewModel.loading && conversations.isEmpty() -> CenteredLoading()
-                viewModel.error != null && conversations.isEmpty() -> LazyColumn(modifier = Modifier.fillMaxSize()) {
-                    item {
-                        ErrorState(
-                            viewModel.error ?: "",
-                            onRetry = { viewModel.refresh() },
-                            modifier = Modifier.fillParentMaxSize(),
-                        )
+        Column(modifier = Modifier.fillMaxSize().padding(padding)) {
+            if (conversations.isNotEmpty() || viewModel.chatQuery.isNotBlank()) {
+                SearchField(
+                    value = viewModel.chatQuery,
+                    onValueChange = viewModel::updateChatQuery,
+                    placeholder = "Поиск по чатам…",
+                )
+            }
+            val query = viewModel.chatQuery.trim()
+            val shown = if (query.isBlank()) conversations
+            else conversations.filter { conversationMatches(it, query) }
+            PullToRefreshBox(
+                isRefreshing = viewModel.refreshing,
+                onRefresh = { viewModel.pullRefresh() },
+                modifier = Modifier.fillMaxSize(),
+            ) {
+                when {
+                    viewModel.loading && conversations.isEmpty() -> CenteredLoading()
+                    viewModel.error != null && conversations.isEmpty() -> LazyColumn(modifier = Modifier.fillMaxSize()) {
+                        item {
+                            ErrorState(
+                                viewModel.error ?: "",
+                                onRetry = { viewModel.refresh() },
+                                modifier = Modifier.fillParentMaxSize(),
+                            )
+                        }
                     }
-                }
-                conversations.isEmpty() -> LazyColumn(modifier = Modifier.fillMaxSize()) {
-                    item {
-                        EmptyState(
-                            "Пока нет диалогов",
-                            "Начните переписку с коллегой по кнопке «+»",
-                            modifier = Modifier.fillParentMaxSize(),
-                        )
+                    conversations.isEmpty() -> LazyColumn(modifier = Modifier.fillMaxSize()) {
+                        item {
+                            EmptyState(
+                                "Пока нет диалогов",
+                                "Начните переписку с коллегой по кнопке «+»",
+                                modifier = Modifier.fillParentMaxSize(),
+                            )
+                        }
                     }
-                }
-                else -> LazyColumn(state = listState, modifier = Modifier.fillMaxSize()) {
-                    items(conversations, key = { it.id }) { conversation ->
-                        ConversationRow(
-                            conversation = conversation,
-                            isOnline = conversation.otherUser?.id in online,
-                            isTyping = conversation.id in typing,
-                            onClick = { onOpenChat(conversation.id) },
-                            onTogglePin = { viewModel.togglePin(conversation.id) },
-                            onDelete = { scope -> viewModel.deleteConversation(conversation.id, scope) },
-                        )
+                    shown.isEmpty() -> LazyColumn(modifier = Modifier.fillMaxSize()) {
+                        item {
+                            EmptyState("Ничего не найдено", modifier = Modifier.fillParentMaxSize())
+                        }
+                    }
+                    else -> LazyColumn(state = listState, modifier = Modifier.fillMaxSize()) {
+                        items(shown, key = { it.id }) { conversation ->
+                            ConversationRow(
+                                conversation = conversation,
+                                isOnline = conversation.otherUser?.id in online,
+                                isTyping = conversation.id in typing,
+                                onClick = { onOpenChat(conversation.id) },
+                                onTogglePin = { viewModel.togglePin(conversation.id) },
+                                onDelete = { scope -> viewModel.deleteConversation(conversation.id, scope) },
+                            )
+                        }
                     }
                 }
             }
@@ -309,6 +327,15 @@ private fun ConversationRow(
             }
         }
     }
+}
+
+// Совпадение чата с поисковым запросом: имя собеседника или текст последнего
+// сообщения (регистронезависимо).
+private fun conversationMatches(conversation: ConversationItemDto, query: String): Boolean {
+    val q = query.lowercase()
+    if (conversationTitle(conversation).lowercase().contains(q)) return true
+    val text = conversation.lastMessage?.text
+    return text != null && text.lowercase().contains(q)
 }
 
 internal fun conversationTitle(conversation: ConversationItemDto): String = when {

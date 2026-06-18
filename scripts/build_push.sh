@@ -36,7 +36,7 @@ set -euo pipefail
 cd "$(cd "$(dirname "$0")/.." && pwd)"
 
 REPO="${DOCKER_REPO:-osipovskijdima/groove_work}"
-ALL_SERVICES=(migrate gateway calls auth messenger ai groove tasks push mail front)
+ALL_SERVICES=(migrate gateway calls auth messenger ai groove tasks push mail registry front)
 # Прод — linux/amd64. На Apple Silicon: Go-стадии кросс-компилируют нативно
 # (см. $BUILDPLATFORM в Dockerfile), python/node-стадии бегут под Rosetta.
 PLATFORM="${DOCKER_PLATFORM:-linux/amd64}"
@@ -50,14 +50,14 @@ context_of() {
     front) echo front ;;
     # Go-сервисы собираются из общего контекста back-go/ (модуль pkg
     # подключён через replace ../pkg), Dockerfile — внутри сервиса.
-    migrate|gateway|calls|auth|messenger|ai|groove|tasks|push|mail) echo back-go ;;
+    migrate|gateway|calls|auth|messenger|ai|groove|tasks|push|mail|registry) echo back-go ;;
     *) printf 'Неизвестный сервис: %s (ожидается migrate|gateway|calls|auth|messenger|ai|groove|tasks|push|mail|front)\n' "$1" >&2; return 2 ;;
   esac
 }
 
 dockerfile_of() {
   case "$1" in
-    migrate|gateway|calls|auth|messenger|ai|groove|tasks|push|mail) echo "back-go/$1/Dockerfile" ;;
+    migrate|gateway|calls|auth|messenger|ai|groove|tasks|push|mail|registry) echo "back-go/$1/Dockerfile" ;;
     *) echo "" ;;
   esac
 }
@@ -103,13 +103,14 @@ changed_services() {
       back-go/tasks/*) hits="$hits tasks" ;;
       back-go/push/*) hits="$hits push" ;;
       back-go/mail/*) hits="$hits mail" ;;
+      back-go/registry/*) hits="$hits registry" ;;
       deploy/*|data/*|scripts/*|*.md|.gitignore|.env*) : ;; # bind-mount/серверное — образ не трогаем
       *) unknown="$unknown $f" ;;
     esac
   done <<EOF
 $files
 EOF
-  [ "$go" = 1 ] && hits="$hits migrate gateway calls auth messenger ai groove tasks push mail"
+  [ "$go" = 1 ] && hits="$hits migrate gateway calls auth messenger ai groove tasks push mail registry"
   [ "$front" = 1 ] && hits="$hits front"
   [ -n "$unknown" ] && printf 'changed: не отнёс к сервисам (образы не трогаю):%s\n' "$unknown" >&2
   local s

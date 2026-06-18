@@ -29,6 +29,8 @@ const routes = [
   { path: '/profile', component: () => import('@/views/ProfileView.vue'), meta: { requiresAuth: true } },
   { path: '/employees', component: () => import('@/views/EmployeesView.vue'),
     meta: { requiresAuth: true, requiresCompany: true } },
+  { path: '/registries', component: () => import('@/views/RegistriesView.vue'),
+    meta: { requiresAuth: true, requiresCompany: true } },
   // Раздел «Компании»: супер-админ видит все (платформа), обычный пользователь —
   // те, что создал/администрирует (доступ к данным проверяет бэкенд).
   { path: '/companies', component: () => import('@/views/CompaniesView.vue'),
@@ -49,6 +51,9 @@ const routes = [
   // Ссылка-приглашение в звонок: доступна и внешним гостям без аккаунта.
   { path: '/call/:code', component: () => import('@/views/CallJoinView.vue'),
     meta: { public: true, fullscreen: true } },
+  // Публичный просмотр реестра по внешней ссылке (read-only, без авторизации).
+  { path: '/registry/:code', component: () => import('@/views/SharedRegistryView.vue'),
+    meta: { public: true } },
   // Вступление в компанию по ссылке-приглашению (нужна авторизация).
   { path: '/join/:code', component: () => import('@/views/JoinView.vue'),
     meta: { requiresAuth: true, fullscreen: true } },

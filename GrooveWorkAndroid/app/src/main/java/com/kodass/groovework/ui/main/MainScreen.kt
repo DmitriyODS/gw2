@@ -30,6 +30,8 @@ import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.MoreHoriz
 import androidx.compose.material.icons.outlined.Palette
 import androidx.compose.material.icons.outlined.Person
+import androidx.compose.material.icons.outlined.TableChart
+import androidx.compose.material.icons.filled.TableChart
 import androidx.compose.material.icons.outlined.TaskAlt
 import androidx.compose.material.icons.filled.TaskAlt
 import androidx.compose.material3.AlertDialog
@@ -74,6 +76,8 @@ import com.kodass.groovework.ui.chats.ChatsScreen
 import com.kodass.groovework.ui.companies.AcceptInviteScreen
 import com.kodass.groovework.ui.employees.EmployeesScreen
 import com.kodass.groovework.ui.profile.ProfileScreen
+import com.kodass.groovework.ui.registries.RegistriesScreen
+import com.kodass.groovework.ui.registries.RegistryRecordScreen
 import com.kodass.groovework.ui.stats.StatsScreen
 import com.kodass.groovework.ui.tasks.TaskDetailScreen
 import com.kodass.groovework.ui.tasks.TasksScreen
@@ -97,6 +101,7 @@ private val primaryDestinations = listOf(
 // Вторичные пункты — прячутся под «Ещё» (M3: nav bar держит 3–5 пунктов, остальное
 // в overflow-меню), доступны через нижний лист.
 private val overflowDestinations = listOf(
+    TopLevelDestination("registries", "Реестры", Icons.Outlined.TableChart, Icons.Filled.TableChart),
     TopLevelDestination("employees", "Сотрудники", Icons.Outlined.Groups, Icons.Filled.Groups),
     TopLevelDestination("stats", "Статистика", Icons.Outlined.BarChart, Icons.Filled.BarChart),
     TopLevelDestination("appearance", "Оформление", Icons.Outlined.Palette, Icons.Filled.Palette),
@@ -300,6 +305,28 @@ fun MainScreen(container: AppContainer) {
             }
             composable("stats") {
                 StatsScreen(container = container)
+            }
+            composable("registries") {
+                RegistriesScreen(
+                    container = container,
+                    onOpenRecord = { registryId, recordId ->
+                        navController.navigate("registry_record/$registryId/$recordId")
+                    },
+                )
+            }
+            composable(
+                route = "registry_record/{registryId}/{recordId}",
+                arguments = listOf(
+                    navArgument("registryId") { type = NavType.LongType },
+                    navArgument("recordId") { type = NavType.LongType },
+                ),
+            ) { entry ->
+                RegistryRecordScreen(
+                    container = container,
+                    registryId = entry.arguments?.getLong("registryId") ?: 0L,
+                    recordId = entry.arguments?.getLong("recordId") ?: 0L,
+                    onBack = { navController.popBackStack() },
+                )
             }
             composable("appearance") {
                 AppearanceScreen(container = container, onBack = { navController.popBackStack() })

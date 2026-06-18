@@ -7,6 +7,7 @@ import { registerTaskSocketHandlers } from '@/socket/tasks.js'
 import { registerMessengerSocketHandlers } from '@/socket/messenger.js'
 import { registerCallSocketHandlers } from '@/socket/calls.js'
 import { registerGrooveSocketHandlers } from '@/socket/groove.js'
+import { registerRegistrySocketHandlers } from '@/socket/registry.js'
 
 let socket = null
 let visibilityHookInstalled = false
@@ -168,6 +169,7 @@ export function connectSocket() {
   registerMessengerSocketHandlers(socket)
   registerCallSocketHandlers(socket)
   registerGrooveSocketHandlers(socket)
+  registerRegistrySocketHandlers(socket)
 }
 
 export function disconnectSocket() {
