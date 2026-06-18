@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -24,6 +25,7 @@ import androidx.compose.material.icons.automirrored.filled.Logout
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Domain
+import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.PhotoCamera
 import androidx.compose.material.icons.filled.SwapHoriz
 import androidx.compose.material3.AssistChip
@@ -55,7 +57,11 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.graphics.Color
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.ViewModel
@@ -171,7 +177,7 @@ class ProfileViewModel(
         }
     }
 
-    fun changePassword() {
+    fun changePassword(onSuccess: () -> Unit = {}) {
         passwordError = null
         if (currentPass.isBlank()) {
             passwordError = "Введите текущий пароль"
@@ -198,15 +204,21 @@ class ProfileViewModel(
                     )
                 }
                 message = "Пароль изменён"
-                currentPass = ""
-                newPass = ""
-                confirmPass = ""
+                resetPasswordForm()
+                onSuccess()
             } catch (e: ApiException) {
                 passwordError = e.message
             } finally {
                 passwordSaving = false
             }
         }
+    }
+
+    fun resetPasswordForm() {
+        currentPass = ""
+        newPass = ""
+        confirmPass = ""
+        passwordError = null
     }
 
     // Загрузка уже обрезанного/сжатого изображения (из конструктора аватара).
@@ -315,6 +327,7 @@ fun ProfileScreen(container: AppContainer) {
     val claims = (authState as? AuthState.LoggedIn)?.claims
 
     var showCompanySheet by remember { mutableStateOf(false) }
+    var showPasswordSheet by remember { mutableStateOf(false) }
     var cropUri by remember { mutableStateOf<Uri?>(null) }
     val picker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
         if (uri != null) cropUri = uri
@@ -435,40 +448,21 @@ fun ProfileScreen(container: AppContainer) {
             }
 
             item {
-                SectionCard(title = "Смена пароля") {
-                    OutlinedTextField(
-                        value = viewModel.currentPass,
-                        onValueChange = { viewModel.currentPass = it },
-                        label = { Text("Текущий пароль") },
-                        singleLine = true,
-                        visualTransformation = PasswordVisualTransformation(),
-                        modifier = Modifier.fillMaxWidth(),
+                SectionCard(title = "Безопасность") {
+                    Text(
+                        text = "Пароль для входа в аккаунт",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
-                    OutlinedTextField(
-                        value = viewModel.newPass,
-                        onValueChange = { viewModel.newPass = it },
-                        label = { Text("Новый пароль") },
-                        singleLine = true,
-                        visualTransformation = PasswordVisualTransformation(),
-                        modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
-                    )
-                    OutlinedTextField(
-                        value = viewModel.confirmPass,
-                        onValueChange = { viewModel.confirmPass = it },
-                        label = { Text("Подтверждение пароля") },
-                        singleLine = true,
-                        visualTransformation = PasswordVisualTransformation(),
-                        modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
-                    )
-                    viewModel.passwordError?.let {
-                        Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(top = 8.dp))
-                    }
-                    Button(
-                        onClick = { viewModel.changePassword() },
-                        enabled = !viewModel.passwordSaving,
-                        modifier = Modifier.fillMaxWidth().padding(top = 12.dp),
+                    OutlinedButton(
+                        onClick = {
+                            viewModel.resetPasswordForm()
+                            showPasswordSheet = true
+                        },
+                        modifier = Modifier.fillMaxWidth().padding(top = 10.dp),
                     ) {
-                        Text(if (viewModel.passwordSaving) "Сохраняю…" else "Изменить пароль")
+                        Icon(Icons.Filled.Lock, contentDescription = null, modifier = Modifier.size(18.dp))
+                        Text("Сменить пароль", modifier = Modifier.padding(start = 8.dp))
                     }
                 }
             }
@@ -515,6 +509,16 @@ fun ProfileScreen(container: AppContainer) {
         }
     }
 
+    if (showPasswordSheet) {
+        ChangePasswordSheet(
+            viewModel = viewModel,
+            onDismiss = {
+                viewModel.resetPasswordForm()
+                showPasswordSheet = false
+            },
+        )
+    }
+
     if (showCompanySheet) {
         val sheetState = rememberModalBottomSheetState()
         ModalBottomSheet(onDismissRequest = { showCompanySheet = false }, sheetState = sheetState) {
@@ -546,6 +550,73 @@ fun ProfileScreen(container: AppContainer) {
                                 } else Modifier,
                             ),
                     )
+                }
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun ChangePasswordSheet(viewModel: ProfileViewModel, onDismiss: () -> Unit) {
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheetState) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .imePadding()
+                .padding(horizontal = 24.dp)
+                .padding(bottom = 24.dp),
+        ) {
+            Text(
+                text = "Смена пароля",
+                style = MaterialTheme.typography.titleLarge,
+                modifier = Modifier.padding(bottom = 16.dp),
+            )
+            OutlinedTextField(
+                value = viewModel.currentPass,
+                onValueChange = { viewModel.currentPass = it },
+                label = { Text("Текущий пароль") },
+                singleLine = true,
+                visualTransformation = PasswordVisualTransformation(),
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password, imeAction = ImeAction.Next),
+                modifier = Modifier.fillMaxWidth(),
+            )
+            OutlinedTextField(
+                value = viewModel.newPass,
+                onValueChange = { viewModel.newPass = it },
+                label = { Text("Новый пароль") },
+                singleLine = true,
+                visualTransformation = PasswordVisualTransformation(),
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password, imeAction = ImeAction.Next),
+                modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+            )
+            OutlinedTextField(
+                value = viewModel.confirmPass,
+                onValueChange = { viewModel.confirmPass = it },
+                label = { Text("Подтверждение пароля") },
+                singleLine = true,
+                visualTransformation = PasswordVisualTransformation(),
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password, imeAction = ImeAction.Done),
+                keyboardActions = KeyboardActions(onDone = { viewModel.changePassword(onSuccess = onDismiss) }),
+                modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+            )
+            viewModel.passwordError?.let {
+                Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(top = 8.dp))
+            }
+            Button(
+                onClick = { viewModel.changePassword(onSuccess = onDismiss) },
+                enabled = !viewModel.passwordSaving,
+                modifier = Modifier.fillMaxWidth().padding(top = 20.dp).height(52.dp),
+            ) {
+                if (viewModel.passwordSaving) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(22.dp),
+                        color = MaterialTheme.colorScheme.onPrimary,
+                        strokeWidth = 2.dp,
+                    )
+                } else {
+                    Text("Изменить пароль")
                 }
             }
         }
