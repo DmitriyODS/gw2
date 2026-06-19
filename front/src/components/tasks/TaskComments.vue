@@ -100,6 +100,16 @@ async function confirmDelete() {
   }
 }
 
+async function copy(c) {
+  if (!c?.text) return
+  try {
+    await navigator.clipboard.writeText(c.text)
+    notify.success('Комментарий скопирован')
+  } catch {
+    notify.error('Не удалось скопировать')
+  }
+}
+
 function avatarOf(a) {
   if (!a) return ''
   return a.avatar_path ? `/uploads/${a.avatar_path}` : `/api/users/${a.id}/identicon`
@@ -150,7 +160,8 @@ function ctxAction(action) {
   const c = ctxMenu.value.comment
   closeCtxMenu()
   if (!c) return
-  if (action === 'edit') startEdit(c)
+  if (action === 'copy') copy(c)
+  else if (action === 'edit') startEdit(c)
   else if (action === 'delete') remove(c)
 }
 
@@ -163,7 +174,7 @@ let pointerActiveId = null
 function onCommentPointerDown(e, c) {
   // ПКМ обрабатывает @contextmenu; long-press — только основное касание/клик.
   if (e.button === 2) return
-  if (!canEdit(c) || editingId.value === c.id) return
+  if (editingId.value === c.id) return
   pointerActiveId = e.pointerId
   longPressFired = false
   pointerStartX = e.clientX
@@ -196,7 +207,7 @@ function onCommentPointerUp(e) {
 }
 
 function onCommentContextMenu(e, c) {
-  if (!canEdit(c) || editingId.value === c.id) return
+  if (editingId.value === c.id) return
   openCtxMenu(e.clientX, e.clientY, c)
 }
 
@@ -255,13 +266,18 @@ onBeforeUnmount(() => {
             </span>
             <!-- Hover-кнопки только для устройств с курсором (CSS гасит на тач);
                  на мобильном — long-press открывает контекстное меню. -->
-            <div class="comment-actions" v-if="canEdit(c) && editingId !== c.id">
-              <button class="ca-btn" @click="startEdit(c)" title="Редактировать">
-                <span class="material-symbols-outlined">edit</span>
+            <div class="comment-actions" v-if="editingId !== c.id">
+              <button class="ca-btn" @click="copy(c)" title="Скопировать комментарий">
+                <span class="material-symbols-outlined">content_copy</span>
               </button>
-              <button class="ca-btn danger" @click="remove(c)" title="Удалить">
-                <span class="material-symbols-outlined">delete</span>
-              </button>
+              <template v-if="canEdit(c)">
+                <button class="ca-btn" @click="startEdit(c)" title="Редактировать">
+                  <span class="material-symbols-outlined">edit</span>
+                </button>
+                <button class="ca-btn danger" @click="remove(c)" title="Удалить">
+                  <span class="material-symbols-outlined">delete</span>
+                </button>
+              </template>
             </div>
           </div>
           <div v-if="editingId === c.id" class="comment-edit">
@@ -296,15 +312,21 @@ onBeforeUnmount(() => {
           role="menu"
           @click.stop
         >
-          <button class="cmt-ctx-item" @click="ctxAction('edit')">
-            <span class="material-symbols-outlined">edit</span>
-            <span>Редактировать</span>
+          <button class="cmt-ctx-item" @click="ctxAction('copy')">
+            <span class="material-symbols-outlined">content_copy</span>
+            <span>Скопировать</span>
           </button>
-          <div class="cmt-ctx-divider" />
-          <button class="cmt-ctx-item danger" @click="ctxAction('delete')">
-            <span class="material-symbols-outlined">delete</span>
-            <span>Удалить</span>
-          </button>
+          <template v-if="canEdit(ctxMenu.comment)">
+            <button class="cmt-ctx-item" @click="ctxAction('edit')">
+              <span class="material-symbols-outlined">edit</span>
+              <span>Редактировать</span>
+            </button>
+            <div class="cmt-ctx-divider" />
+            <button class="cmt-ctx-item danger" @click="ctxAction('delete')">
+              <span class="material-symbols-outlined">delete</span>
+              <span>Удалить</span>
+            </button>
+          </template>
         </div>
       </Transition>
     </Teleport>

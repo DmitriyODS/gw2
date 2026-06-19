@@ -116,7 +116,7 @@ class EmployeesViewModel(
 }
 
 private val roleNames = mapOf(
-    1 to "Сотрудники", 2 to "Менеджеры", 3 to "Руководители", 4 to "Администраторы",
+    1 to "Сотрудники", 2 to "Менеджеры", 3 to "Администраторы",
 )
 
 @OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)

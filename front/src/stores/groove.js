@@ -18,8 +18,9 @@ export const useGrooveStore = defineStore('groove', () => {
   const zoo = ref([])
   const raid = ref(null)
   const shopPrices = ref({})
-  const seasonalItem = ref(null)
+  const seasonalItems = ref([])
   const seasonTitle = ref('')
+  const rareItems = ref([])
   const speciesPrices = ref({})
   const commentsByEvent = ref({})
   const wrapped = ref(null)
@@ -225,8 +226,9 @@ export const useGrooveStore = defineStore('groove', () => {
   async function fetchShop() {
     const state = await api.getShop()
     shopPrices.value = state.prices || {}
-    seasonalItem.value = state.seasonal_item || null
+    seasonalItems.value = state.seasonal_items || []
     seasonTitle.value = state.season_title || ''
+    rareItems.value = state.rare_items || []
     speciesPrices.value = state.species_prices || {}
   }
 
@@ -325,7 +327,7 @@ export const useGrooveStore = defineStore('groove', () => {
 
   return {
     events, hasMore, loadingFeed, live, liveLoaded, zapsLeft, zapsMax, pet, zoo, raid,
-    shopPrices, seasonalItem, seasonTitle, speciesPrices, commentsByEvent,
+    shopPrices, seasonalItems, seasonTitle, rareItems, speciesPrices, commentsByEvent,
     wrapped, wrappedLoading, celebration, myId, myCompanyId, isMine,
     fetchFeed, loadMore, applyNewEvent, celebrate, clearCelebration,
     toggleReaction, applyReaction,

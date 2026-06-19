@@ -379,16 +379,27 @@ func currentSeason() domain.Season {
 }
 
 func (s *Service) GetShopState() map[string]any {
+	now := todayMSK()
 	season := currentSeason()
 	prices := map[string]int{}
 	for k, v := range domain.ShopPrices {
 		prices[k] = v
 	}
-	prices[season.Item] = domain.SeasonalItems[season.Item]
+	for _, it := range season.Items {
+		prices[it] = domain.SeasonalItems[it]
+	}
+	rare := []string{}
+	for key, item := range domain.RareItems {
+		if domain.InDateWindow(now, item.Window) {
+			prices[key] = item.Price
+			rare = append(rare, key)
+		}
+	}
 	return map[string]any{
 		"prices":         prices,
-		"seasonal_item":  season.Item,
+		"seasonal_items": season.Items,
 		"season_title":   season.Title,
+		"rare_items":     rare,
 		"species_prices": domain.SpeciesShop,
 	}
 }
@@ -397,11 +408,20 @@ func (s *Service) BuyItem(ctx context.Context, userID, companyID int64, item str
 	price, ok := domain.ShopPrices[item]
 	if !ok {
 		if seasonalPrice, isSeasonal := domain.SeasonalItems[item]; isSeasonal {
-			if item != currentSeason().Item {
+			if !containsStr(currentSeason().Items, item) {
 				return nil, domain.NewError("OUT_OF_SEASON",
 					"Этот аксессуар вернётся в свой сезон", 422)
 			}
 			price, ok = seasonalPrice, true
+		}
+	}
+	if !ok {
+		if rare, isRare := domain.RareItems[item]; isRare {
+			if !domain.InDateWindow(todayMSK(), rare.Window) {
+				return nil, domain.NewError("OUT_OF_SEASON",
+					"Этот редкий аксессуар вернётся к своему празднику", 422)
+			}
+			price, ok = rare.Price, true
 		}
 	}
 	if !ok {

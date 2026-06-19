@@ -180,7 +180,7 @@ func (s *Service) DeleteComment(ctx context.Context, commentID, userID int64, us
 	if comment == nil {
 		return domain.NewError("NOT_FOUND", "Комментарий не найден", 404)
 	}
-	if (comment.AuthorID == nil || *comment.AuthorID != userID) && userLevel < domain.LevelDirector {
+	if (comment.AuthorID == nil || *comment.AuthorID != userID) && userLevel < domain.LevelAdmin {
 		return domain.NewError("FORBIDDEN", "Недостаточно прав", 403)
 	}
 	event, err := s.feed.GetEvent(ctx, comment.EventID)

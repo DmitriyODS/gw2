@@ -11,11 +11,24 @@
       </div>
       <p class="unit-status">В работе</p>
       <p class="unit-timer">{{ elapsedDisplay }}</p>
-      <button class="stop-btn" @click="handleStop" :disabled="stopping">
-        <span class="material-symbols-outlined">check</span>
-        Завершить
-      </button>
+      <div class="unit-actions">
+        <button v-if="unit.task_id" class="show-task-btn" @click="showTask = true">
+          <span class="material-symbols-outlined">open_in_full</span>
+          Показать задачу
+        </button>
+        <button class="stop-btn" @click="handleStop" :disabled="stopping">
+          <span class="material-symbols-outlined">check</span>
+          Завершить
+        </button>
+      </div>
     </div>
+
+    <TaskFloatWindow
+      v-if="showTask && unit.task_id"
+      :task-id="unit.task_id"
+      :task-name="unit.task_name"
+      @close="showTask = false"
+    />
   </div>
 </template>
 
@@ -23,11 +36,13 @@
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useUnitsStore } from '@/stores/units.js'
 import { useNotificationsStore } from '@/stores/notifications.js'
+import TaskFloatWindow from '@/components/tasks/TaskFloatWindow.vue'
 
 const unitsStore = useUnitsStore()
 const notifications = useNotificationsStore()
 
 const stopping = ref(false)
+const showTask = ref(false)
 let timer = null
 
 const unit = computed(() => unitsStore.activeUnit)
@@ -159,6 +174,38 @@ async function handleStop() {
   font-variant-numeric: tabular-nums;
 }
 
+.unit-actions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  justify-content: center;
+  margin-top: 8px;
+}
+
+.show-task-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--gw-primary-light);
+  color: var(--gw-primary);
+  border: none;
+  border-radius: 10px;
+  padding: 12px 24px;
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: opacity 0.15s, transform 0.1s;
+}
+
+.show-task-btn:hover {
+  opacity: 0.88;
+  transform: translateY(-1px);
+}
+
+.show-task-btn .material-symbols-outlined {
+  font-size: 20px;
+}
+
 .stop-btn {
   display: inline-flex;
   align-items: center;
@@ -172,7 +219,6 @@ async function handleStop() {
   font-weight: 600;
   cursor: pointer;
   transition: opacity 0.15s, transform 0.1s;
-  margin-top: 8px;
 }
 
 .stop-btn:hover:not(:disabled) {

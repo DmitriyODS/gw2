@@ -5,8 +5,8 @@ import "time"
 // MSK — все «дневные» механики Groove считаются по московскому времени.
 var MSK = time.FixedZone("MSK", 3*60*60)
 
-// Уровень роли «Руководитель» (удаление чужих комментариев).
-const LevelDirector = 3
+// Уровень роли «Администратор» компании (удаление чужих комментариев).
+const LevelAdmin = 3
 
 // Фиксированный набор реакций — продублирован на фронте в utils/groove.js.
 var FeedReactions = []string{"🔥", "💪", "👏", "🎉", "😮", "❤️"}
@@ -42,8 +42,9 @@ const DefaultDailyCap = 10
 
 // Магазин аксессуаров (эмодзи-маппинг — на фронте, utils/groove.js).
 var ShopPrices = map[string]int{
-	"party": 30, "cap": 40, "bow": 40, "scarf": 50,
-	"glasses": 60, "headphones": 60, "tophat": 80, "crown": 200,
+	"party": 30, "cap": 40, "bow": 40, "scarf": 50, "tie": 50,
+	"glasses": 60, "headphones": 60, "mask": 70, "tophat": 80,
+	"medal": 90, "crown": 200,
 }
 
 const (
@@ -124,6 +125,9 @@ var PetSpeciesTitles = map[string]string{
 	"cat": "котёнок", "dog": "щенок", "tiger": "тигрёнок", "bear": "медвежонок",
 	"rabbit": "крольчонок", "frog": "лягушонок", "panda": "панда",
 	"penguin": "пингвинёнок", "monkey": "обезьянка", "chick": "цыплёнок",
+	"hamster": "хомячок", "hedgehog": "ёжик", "koala": "коала", "deer": "оленёнок",
+	"bee": "пчёлка", "octopus": "осьминожка", "wolf": "волчонок", "lion": "львёнок",
+	"dolphin": "дельфин", "whale": "китёнок",
 	"unicorn": "единорог", "dragon": "дракон",
 }
 
@@ -132,6 +136,9 @@ var SpeciesShop = map[string]int{
 	"cat": 80, "dog": 80, "rabbit": 80, "frog": 80,
 	"chick": 100, "monkey": 100, "panda": 120,
 	"tiger": 140, "bear": 140, "penguin": 140,
+	"hamster": 90, "hedgehog": 110, "koala": 130, "deer": 150,
+	"bee": 160, "octopus": 170, "wolf": 180, "lion": 200,
+	"dolphin": 200, "whale": 230,
 	"unicorn": 250, "dragon": 250,
 }
 
@@ -140,21 +147,67 @@ var NaturalSpecies = map[string]bool{
 }
 
 // ── Сезонные товары ────────────────────────────────────────────────
+// Несколько аксессуаров на каждый сезон; купить можно только в свой сезон.
 
 var SeasonalItems = map[string]int{
-	"flower": 45, "icecream": 45, "pumpkin": 45, "santa": 45,
+	"santa": 45, "snowman": 45, "mittens": 45,
+	"flower": 45, "butterfly": 45, "rainbow": 45,
+	"icecream": 45, "sunhat": 45, "watermelon": 45,
+	"pumpkin": 45, "leaf": 45, "mushroom": 45,
 }
 
 type Season struct {
 	Title string
-	Item  string
+	Items []string
 }
 
+var (
+	winterItems = []string{"santa", "snowman", "mittens"}
+	springItems = []string{"flower", "butterfly", "rainbow"}
+	summerItems = []string{"icecream", "sunhat", "watermelon"}
+	autumnItems = []string{"pumpkin", "leaf", "mushroom"}
+)
+
 var SeasonByMonth = map[time.Month]Season{
-	time.December: {"Зима", "santa"}, time.January: {"Зима", "santa"}, time.February: {"Зима", "santa"},
-	time.March: {"Весна", "flower"}, time.April: {"Весна", "flower"}, time.May: {"Весна", "flower"},
-	time.June: {"Лето", "icecream"}, time.July: {"Лето", "icecream"}, time.August: {"Лето", "icecream"},
-	time.September: {"Осень", "pumpkin"}, time.October: {"Осень", "pumpkin"}, time.November: {"Осень", "pumpkin"},
+	time.December: {"Зима", winterItems}, time.January: {"Зима", winterItems}, time.February: {"Зима", winterItems},
+	time.March: {"Весна", springItems}, time.April: {"Весна", springItems}, time.May: {"Весна", springItems},
+	time.June: {"Лето", summerItems}, time.July: {"Лето", summerItems}, time.August: {"Лето", summerItems},
+	time.September: {"Осень", autumnItems}, time.October: {"Осень", autumnItems}, time.November: {"Осень", autumnItems},
+}
+
+// ── Редкие праздничные товары ──────────────────────────────────────
+// Уникальные аксессуары, доступные только в короткое окно вокруг своего
+// праздника; вне окна их не купить (вернутся к следующему событию).
+
+type DateWindow struct {
+	FromMonth time.Month
+	FromDay   int
+	ToMonth   time.Month
+	ToDay     int
+}
+
+type RareItem struct {
+	Price  int
+	Window DateWindow
+}
+
+var RareItems = map[string]RareItem{
+	"fireworks":  {80, DateWindow{time.December, 25, time.January, 8}},
+	"love":       {60, DateWindow{time.February, 10, time.February, 16}},
+	"shamrock":   {60, DateWindow{time.March, 14, time.March, 20}},
+	"rocket":     {70, DateWindow{time.April, 8, time.April, 16}},
+	"graduation": {75, DateWindow{time.June, 20, time.July, 10}},
+}
+
+// InDateWindow — попадает ли момент now в окно w (с переносом через Новый год).
+func InDateWindow(now time.Time, w DateWindow) bool {
+	cur := int(now.Month())*100 + now.Day()
+	from := int(w.FromMonth)*100 + w.FromDay
+	to := int(w.ToMonth)*100 + w.ToDay
+	if from <= to {
+		return cur >= from && cur <= to
+	}
+	return cur >= from || cur <= to
 }
 
 // DefaultWeekend — дефолтные выходные (суббота, воскресенье; 0=Пн … 6=Вс).

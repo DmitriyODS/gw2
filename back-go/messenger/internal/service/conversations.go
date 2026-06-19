@@ -107,23 +107,26 @@ func (s *Service) ListConversations(ctx context.Context, userID int64) ([]*dto.C
 		})
 	}
 
-	if me != nil && me.CompanyID != nil {
-		// Личный dev-чат — первым…
-		dev, err := s.soloListItem(ctx, userID, false)
-		if err != nil {
-			return nil, err
-		}
-		if dev != nil {
-			result = append([]*dto.ConversationListItem{dev}, result...)
-		}
-		// …а чат с Грувиком — самым первым (если уже создан в «Моём Groove»).
-		pet, err := s.soloListItem(ctx, userID, true)
-		if err != nil {
-			return nil, err
-		}
-		if pet != nil {
-			result = append([]*dto.ConversationListItem{pet}, result...)
-		}
+	// Соло-чаты владельца (dev/pet) исключены из ListPairConversations —
+	// досыпаем их отдельно, если уже созданы. Условие на активную компанию
+	// тут не ставим: company_id живёт только в токене (в users его нет), а
+	// существующий соло-чат должен показываться при любой активной компании,
+	// иначе после пересоздания pet-чата он не попадает в список и не открывается.
+	// Личный dev-чат — первым…
+	dev, err := s.soloListItem(ctx, userID, false)
+	if err != nil {
+		return nil, err
+	}
+	if dev != nil {
+		result = append([]*dto.ConversationListItem{dev}, result...)
+	}
+	// …а чат с Грувиком — самым первым (если уже создан в «Моём Groove»).
+	pet, err := s.soloListItem(ctx, userID, true)
+	if err != nil {
+		return nil, err
+	}
+	if pet != nil {
+		result = append([]*dto.ConversationListItem{pet}, result...)
 	}
 	return result, nil
 }

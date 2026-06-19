@@ -25,6 +25,16 @@ export const PET_SPECIES = {
   tiger: { emoji: '🐯', title: 'Тигрёнок' },
   bear: { emoji: '🐻', title: 'Медвежонок' },
   penguin: { emoji: '🐧', title: 'Пингвинёнок' },
+  hamster: { emoji: '🐹', title: 'Хомячок' },
+  hedgehog: { emoji: '🦔', title: 'Ёжик' },
+  koala: { emoji: '🐨', title: 'Коала' },
+  deer: { emoji: '🦌', title: 'Оленёнок' },
+  bee: { emoji: '🐝', title: 'Пчёлка' },
+  octopus: { emoji: '🐙', title: 'Осьминожка' },
+  wolf: { emoji: '🐺', title: 'Волчонок' },
+  lion: { emoji: '🦁', title: 'Львёнок' },
+  dolphin: { emoji: '🐬', title: 'Дельфин' },
+  whale: { emoji: '🐋', title: 'Китёнок' },
   unicorn: { emoji: '🦄', title: 'Единорог' },
   dragon: { emoji: '🐲', title: 'Дракон' },
 }
@@ -45,19 +55,38 @@ export function petEmoji(pet) {
 }
 
 export const SHOP_ITEMS = {
+  // Постоянные аксессуары.
   party: { emoji: '🥳', title: 'Колпак на праздник' },
   cap: { emoji: '🧢', title: 'Кепка' },
   bow: { emoji: '🎀', title: 'Бантик' },
   scarf: { emoji: '🧣', title: 'Шарф' },
+  tie: { emoji: '👔', title: 'Галстук' },
   glasses: { emoji: '🕶️', title: 'Очки' },
   headphones: { emoji: '🎧', title: 'Наушники' },
+  mask: { emoji: '🥸', title: 'Инкогнито' },
   tophat: { emoji: '🎩', title: 'Цилиндр' },
+  medal: { emoji: '🏅', title: 'Медаль' },
   crown: { emoji: '👑', title: 'Корона' },
   helmet: { emoji: '⛑️', title: 'Каска дедлайнщика' },
-  flower: { emoji: '🌸', title: 'Весенний цветок' },
-  icecream: { emoji: '🍦', title: 'Летнее мороженое' },
-  pumpkin: { emoji: '🎃', title: 'Осенняя тыква' },
+  // Сезонные.
   santa: { emoji: '🎅', title: 'Новогодний колпак' },
+  snowman: { emoji: '☃️', title: 'Снеговик' },
+  mittens: { emoji: '🧤', title: 'Тёплые варежки' },
+  flower: { emoji: '🌸', title: 'Весенний цветок' },
+  butterfly: { emoji: '🦋', title: 'Бабочка' },
+  rainbow: { emoji: '🌈', title: 'Радуга' },
+  icecream: { emoji: '🍦', title: 'Летнее мороженое' },
+  sunhat: { emoji: '👒', title: 'Летняя шляпка' },
+  watermelon: { emoji: '🍉', title: 'Долька арбуза' },
+  pumpkin: { emoji: '🎃', title: 'Осенняя тыква' },
+  leaf: { emoji: '🍁', title: 'Осенний лист' },
+  mushroom: { emoji: '🍄', title: 'Грибочек' },
+  // Редкие праздничные.
+  fireworks: { emoji: '🎆', title: 'Праздничный салют' },
+  love: { emoji: '💝', title: 'Подарок ко Дню влюблённых' },
+  shamrock: { emoji: '🍀', title: 'Клевер на удачу' },
+  rocket: { emoji: '🚀', title: 'Космическая ракета' },
+  graduation: { emoji: '🎓', title: 'Выпускной колпак' },
 }
 
 // Характеры (≡ PERSONALITIES в pet_service.py).

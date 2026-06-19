@@ -10,8 +10,8 @@
   >
     <div class="shop-balance">
       <span class="shop-balance-chip"><GrooveCoin /> {{ pet?.beans ?? 0 }} грувов</span>
-      <span v-if="groove.seasonalItem" class="shop-season-chip">
-        {{ SHOP_ITEMS[groove.seasonalItem]?.emoji }} Сезон: {{ groove.seasonTitle }}
+      <span v-if="groove.seasonTitle" class="shop-season-chip">
+        🗓️ Сезон: {{ groove.seasonTitle }}
       </span>
     </div>
 
@@ -35,9 +35,10 @@
         v-for="item in items"
         :key="item.key"
         class="shop-item"
-        :class="{ owned: item.owned, seasonal: item.seasonal }"
+        :class="{ owned: item.owned, seasonal: item.seasonal, rare: item.rare }"
       >
-        <span v-if="item.seasonal" class="shop-season-tag">сезонный</span>
+        <span v-if="item.rare" class="shop-season-tag rare">редкий</span>
+        <span v-else-if="item.seasonal" class="shop-season-tag">сезонный</span>
         <span class="shop-emoji">{{ item.emoji }}</span>
         <span class="shop-title">{{ item.title }}</span>
         <button
@@ -118,6 +119,8 @@ const tab = ref('accessories')
 
 const pet = computed(() => groove.pet)
 const hasHelmet = computed(() => (pet.value?.accessories || []).includes('helmet'))
+const seasonalSet = computed(() => new Set(groove.seasonalItems || []))
+const rareSet = computed(() => new Set(groove.rareItems || []))
 
 const items = computed(() =>
   Object.entries(groove.shopPrices)
@@ -127,9 +130,11 @@ const items = computed(() =>
       emoji: SHOP_ITEMS[key]?.emoji || '🎁',
       title: SHOP_ITEMS[key]?.title || key,
       owned: (pet.value?.accessories || []).includes(key),
-      seasonal: key === groove.seasonalItem,
+      seasonal: seasonalSet.value.has(key),
+      rare: rareSet.value.has(key),
     }))
-    .sort((a, b) => a.price - b.price)
+    // Сначала редкие, затем сезонные, дальше — по цене.
+    .sort((a, b) => (b.rare - a.rare) || (b.seasonal - a.seasonal) || (a.price - b.price))
 )
 
 const speciesItems = computed(() => {
@@ -250,6 +255,7 @@ async function pickSpecies(sp) {
 }
 .shop-item.owned { background: var(--color-surface-high); }
 .shop-item.seasonal { border-color: color-mix(in oklch, var(--color-tertiary) 55%, transparent); }
+.shop-item.rare { border-color: color-mix(in oklch, var(--color-primary) 60%, transparent); }
 .shop-item.species.active {
   border-color: var(--color-primary);
   background: var(--color-primary-container);
@@ -268,6 +274,10 @@ async function pickSpecies(sp) {
   padding: 2px 8px;
 }
 .shop-season-tag.active {
+  background: var(--color-primary);
+  color: var(--color-on-primary);
+}
+.shop-season-tag.rare {
   background: var(--color-primary);
   color: var(--color-on-primary);
 }
