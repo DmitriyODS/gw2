@@ -6,6 +6,7 @@ import (
 	"encoding/binary"
 	"encoding/hex"
 	"fmt"
+	"net/url"
 	"strings"
 	"time"
 
@@ -156,7 +157,10 @@ func (s *Service) sendVerification(ctx context.Context, user *domain.User) error
 	if err := s.verifications.Upsert(ctx, user.ID, code, tok, now.Add(verificationTTL), now); err != nil {
 		return err
 	}
-	link := strings.TrimRight(s.appBaseURL, "/") + "/verify-email?token=" + tok
+	// email в ссылке — чтобы экран подтверждения знал адрес и для ввода кода
+	// (без него код-путь падал с «email не задан», работала только ссылка-токен).
+	link := strings.TrimRight(s.appBaseURL, "/") + "/verify-email?token=" + tok +
+		"&email=" + url.QueryEscape(*user.Email)
 	return s.mail.SendVerification(ctx, *user.Email, user.FIO, code, link)
 }
 

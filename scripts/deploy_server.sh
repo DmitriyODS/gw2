@@ -374,6 +374,20 @@ else
   warn "маршрут /api/registries вернул $registry_code (ожидался 401) — проверьте nginx"
 fi
 
+# Микросервис календарей: healthz изнутри контейнера + маршрут /api/calendars
+# через nginx (без токена ожидаем 401, не 404/502).
+if $COMPOSE exec -T calendar wget -qO- --timeout=3 http://127.0.0.1:8100/healthz >/dev/null 2>&1; then
+  ok "calendarsvc отвечает (healthz)"
+else
+  warn "calendarsvc не отвечает — календари не работают: make logs s=calendar"
+fi
+calendar_code=$(curl -skL -o /dev/null -w '%{http_code}' --max-time 5 http://localhost/api/calendars || true)
+if [ "$calendar_code" = "401" ]; then
+  ok "маршрут /api/calendars через nginx ведёт в calendarsvc"
+else
+  warn "маршрут /api/calendars вернул $calendar_code (ожидался 401) — проверьте nginx"
+fi
+
 # Микросервис почты: healthz изнутри контейнера (наружу не торчит — gRPC-only,
 # через nginx не проксируется).
 if $COMPOSE exec -T mail wget -qO- --timeout=3 http://127.0.0.1:8098/healthz >/dev/null 2>&1; then

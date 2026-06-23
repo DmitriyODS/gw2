@@ -67,6 +67,9 @@ services:
   registry:
     image: osipovskijdima/groove_work:${REGISTRY_TAG:-registry}
 
+  calendar:
+    image: osipovskijdima/groove_work:${CALENDAR_TAG:-calendar}
+
   mail:
     image: osipovskijdima/groove_work:${MAIL_TAG:-mail}
     environment:

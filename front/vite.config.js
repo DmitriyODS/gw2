@@ -104,6 +104,11 @@ export default defineConfig({
         target: 'http://localhost:8099',
         changeOrigin: true
       },
+      // Календари — calendarsvc (списки записей с датой/временем).
+      '/api/calendars': {
+        target: 'http://localhost:8100',
+        changeOrigin: true
+      },
       // Ядро задач — tasksvc (задачи, юниты, типы, этапы, отделы, статистика).
       '/api/tasks': {
         target: 'http://localhost:8095',

@@ -122,6 +122,8 @@ const navItems = computed(() => {
       active: () => route.path === '/employees' })
     items.push({ path: '/registries', icon: 'table', label: 'Реестры', tutorial: 'nav-registries',
       active: () => route.path.startsWith('/registries') })
+    items.push({ path: '/calendars', icon: 'calendar_month', label: 'Календари', tutorial: 'nav-calendars',
+      active: () => route.path.startsWith('/calendars') })
   }
 
   // Раздел "Компании" — платформенный супер-админ (все компании) ИЛИ

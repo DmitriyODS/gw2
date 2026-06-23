@@ -172,6 +172,14 @@
                 (они привязаны к активной сессии).
               </div>
             </div>
+
+            <div v-show="settingsTab === 'calendars'" class="settings-fill">
+              <CalendarsManager v-if="company.id === auth.companyId" />
+              <div v-else class="note">
+                Чтобы настроить календари, переключитесь на эту компанию в боковой панели
+                (они привязаны к активной сессии).
+              </div>
+            </div>
           </div>
         </section>
 
@@ -405,6 +413,7 @@ import AiSettings from '@/components/settings/AiSettings.vue'
 import CompanyListsSettings from '@/components/settings/CompanyListsSettings.vue'
 import YougileCompanySettings from '@/components/settings/YougileCompanySettings.vue'
 import RegistriesManager from '@/components/registry/RegistriesManager.vue'
+import CalendarsManager from '@/components/calendar/CalendarsManager.vue'
 import { useAuthStore } from '@/stores/auth.js'
 import { useNotificationsStore } from '@/stores/notifications.js'
 import { usePermission } from '@/composables/usePermission.js'
@@ -448,6 +457,7 @@ const settingsTabs = [
   { value: 'schedule', label: 'Расписание', icon: 'weekend' },
   { value: 'groove', label: 'Мой Groove', icon: 'celebration' },
   { value: 'registries', label: 'Реестры', icon: 'table' },
+  { value: 'calendars', label: 'Календари', icon: 'calendar_month' },
   { value: 'yougile', label: 'YouGile', icon: 'link' },
 ]
 

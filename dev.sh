@@ -89,6 +89,7 @@ cleanup() {
     pkill -f "exe/pushsvc"       2>/dev/null || true
     pkill -f "exe/mailsvc"       2>/dev/null || true
     pkill -f "exe/registrysvc"   2>/dev/null || true
+    pkill -f "exe/calendarsvc"   2>/dev/null || true
 
     (cd "$DEPLOY" && docker compose stop 2>/dev/null) || true
     printf "\033[32mВсё остановлено.\033[0m\n"
@@ -270,6 +271,21 @@ printf "\033[1m▶ registrysvc (Go)  HTTP :8099...\033[0m\n"
 ) &
 REGISTRY_PID=$!
 
+# 12b. Go-микросервис календарей calendarsvc (HTTP :8100 — REST /api/calendars/*).
+#      Загруженные файлы календарей пишутся в общий uploads-том. Межсервисных
+#      вызовов нет: проверка токенов локальная (PASETO_PUBLIC_KEY).
+printf "\033[1m▶ calendarsvc (Go)  HTTP :8100...\033[0m\n"
+(
+  cd "$ROOT/back-go/calendar" && \
+  DATABASE_URL="postgresql://grovework:grovework_local@localhost:5432/grovework" \
+  REDIS_URL="redis://localhost:6379/0" \
+  PASETO_PUBLIC_KEY="$PASETO_PUBLIC_KEY_DEV" \
+  UPLOAD_FOLDER="$ROOT/uploads" \
+  HTTP_ADDR=":8100" \
+  exec go run ./cmd/calendarsvc
+) &
+CALENDAR_PID=$!
+
 # 13. Vite (--host 0.0.0.0 — слушаем все интерфейсы, чтобы фронт открывался
 #     с других устройств сети по http://<IP>:5173).
 printf "\033[1m▶ Vite  :5173...\033[0m\n"
@@ -295,6 +311,7 @@ printf "  Задачи:  \033[4mhttp://localhost:8095/api/tasks\033[0m\n"
 printf "  ИИ:      \033[4mhttp://localhost:8093\033[0m (gRPC :9093)\n"
 printf "  Пуши:    \033[4mhttp://localhost:8097/api/push\033[0m\n"
 printf "  Реестры: \033[4mhttp://localhost:8099/api/registries\033[0m\n"
+printf "  Календари: \033[4mhttp://localhost:8100/api/calendars\033[0m\n"
 printf "  Почта:   \033[4mhttp://localhost:8025\033[0m (mailpit; gRPC :9098)\n\n"
 
 wait

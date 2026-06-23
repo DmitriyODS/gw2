@@ -380,6 +380,39 @@ services:
       retries: 5
       start_period: 10s
 
+  # Микросервис календарей (Go, back-go/calendar): HTTP :8100 — настраиваемые
+  # календари компаний (структура полей + записи с датой/временем), REST
+  # /api/calendars. Загруженные файлы/картинки — общий uploads-том. Межсервисных
+  # вызовов нет.
+  calendar:
+    build:
+      context: ../back-go
+      dockerfile: calendar/Dockerfile
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    environment:
+      DATABASE_URL: postgresql://${DB_USER}:${DB_PASSWORD}@db:5432/${DB_NAME}
+      REDIS_URL: redis://redis:6379/0
+      PASETO_PUBLIC_KEY: ${PASETO_PUBLIC_KEY}
+      UPLOAD_FOLDER: /app/uploads
+      HTTP_ADDR: ":8100"
+    volumes:
+      - uploads:/app/uploads
+    expose:
+      - "8100"
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8100/healthz"]
+      interval: 15s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
+
   # Микросервис рассылки писем (Go, back-go/mail): gRPC :9098 — Send(шаблон),
   # HTTP :8098 — /healthz. Stateless (без БД/Redis), доставка по SMTP. Зовёт его
   # authsvc (письма подтверждения email). SMTP_* и отправитель задаёт .env /
@@ -438,6 +471,8 @@ services:
       push:
         condition: service_healthy
       registry:
+        condition: service_healthy
+      calendar:
         condition: service_healthy
     volumes:
       - uploads:/app/uploads:ro

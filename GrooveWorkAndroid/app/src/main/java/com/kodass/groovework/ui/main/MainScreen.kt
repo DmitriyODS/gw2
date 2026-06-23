@@ -19,12 +19,14 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.Chat
 import androidx.compose.material.icons.automirrored.filled.Chat
 import androidx.compose.material.icons.filled.BarChart
+import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.Groups
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.MoreHoriz
 import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.outlined.BarChart
+import androidx.compose.material.icons.outlined.CalendarMonth
 import androidx.compose.material.icons.outlined.Groups
 import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.MoreHoriz
@@ -73,6 +75,9 @@ import com.kodass.groovework.ui.about.AboutScreen
 import com.kodass.groovework.ui.appearance.AppearanceScreen
 import com.kodass.groovework.ui.chats.ChatScreen
 import com.kodass.groovework.ui.chats.ChatsScreen
+import com.kodass.groovework.ui.calendars.CalendarEntryScreen
+import com.kodass.groovework.ui.calendars.CalendarScreen
+import com.kodass.groovework.ui.calendars.CalendarsListScreen
 import com.kodass.groovework.ui.companies.AcceptInviteScreen
 import com.kodass.groovework.ui.employees.EmployeesScreen
 import com.kodass.groovework.ui.profile.ProfileScreen
@@ -103,6 +108,7 @@ private val primaryDestinations = listOf(
 // в overflow-меню), доступны через нижний лист.
 private val overflowDestinations = listOf(
     TopLevelDestination("registries", "Реестры", Icons.Outlined.TableChart, Icons.Filled.TableChart),
+    TopLevelDestination("calendars", "Календари", Icons.Outlined.CalendarMonth, Icons.Filled.CalendarMonth),
     TopLevelDestination("employees", "Сотрудники", Icons.Outlined.Groups, Icons.Filled.Groups),
     TopLevelDestination("stats", "Статистика", Icons.Outlined.BarChart, Icons.Filled.BarChart),
     TopLevelDestination("appearance", "Оформление", Icons.Outlined.Palette, Icons.Filled.Palette),
@@ -337,6 +343,41 @@ fun MainScreen(container: AppContainer) {
                     container = container,
                     registryId = entry.arguments?.getLong("registryId") ?: 0L,
                     recordId = entry.arguments?.getLong("recordId") ?: 0L,
+                    onBack = { navController.popBackStack() },
+                )
+            }
+            composable("calendars") {
+                CalendarsListScreen(
+                    container = container,
+                    onOpenCalendar = { calendarId -> navController.navigate("calendar/$calendarId") },
+                )
+            }
+            composable(
+                route = "calendar/{calendarId}",
+                arguments = listOf(navArgument("calendarId") { type = NavType.LongType }),
+            ) { entry ->
+                CalendarScreen(
+                    container = container,
+                    calendarId = entry.arguments?.getLong("calendarId") ?: 0L,
+                    onBack = { navController.popBackStack() },
+                    onOpenEntry = { calendarId, entryId, dateMillis ->
+                        navController.navigate("calendar_entry/$calendarId/$entryId?date=$dateMillis")
+                    },
+                )
+            }
+            composable(
+                route = "calendar_entry/{calendarId}/{entryId}?date={date}",
+                arguments = listOf(
+                    navArgument("calendarId") { type = NavType.LongType },
+                    navArgument("entryId") { type = NavType.LongType },
+                    navArgument("date") { type = NavType.LongType; defaultValue = 0L },
+                ),
+            ) { entry ->
+                CalendarEntryScreen(
+                    container = container,
+                    calendarId = entry.arguments?.getLong("calendarId") ?: 0L,
+                    entryId = entry.arguments?.getLong("entryId") ?: 0L,
+                    dateMillis = entry.arguments?.getLong("date") ?: 0L,
                     onBack = { navController.popBackStack() },
                 )
             }

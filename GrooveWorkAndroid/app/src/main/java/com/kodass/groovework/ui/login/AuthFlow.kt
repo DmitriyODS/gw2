@@ -23,7 +23,7 @@ fun AuthFlow(container: AppContainer) {
             when (link) {
                 is DeepLink.VerifyEmail -> {
                     container.pendingDeepLink.value = null
-                    navController.navigate("verify?token=${link.token}")
+                    navController.navigate("verify?email=${Uri.encode(link.email)}&token=${link.token}")
                 }
                 is DeepLink.ResetPassword -> {
                     container.pendingDeepLink.value = null

@@ -1,0 +1,701 @@
+<template>
+  <div class="cv">
+    <!-- ЛЕВАЯ КОЛОНКА: список календарей -->
+    <aside class="cv-side">
+      <div class="cv-side-head">
+        <span class="material-symbols-outlined">calendar_month</span>
+        <span>Календари</span>
+      </div>
+      <div class="cv-side-body">
+        <div v-if="store.loadingList" class="cv-side-note">Загрузка…</div>
+        <div v-else-if="!store.calendars.length" class="cv-side-note">Календари отсутствуют</div>
+        <button
+          v-for="c in store.calendars"
+          :key="c.id"
+          class="cv-side-item"
+          :class="{ active: c.id === store.selectedId }"
+          @click="store.select(c.id)"
+        >
+          <span class="material-symbols-outlined">event_note</span>
+          <span class="cv-side-name">{{ c.name }}</span>
+        </button>
+      </div>
+    </aside>
+
+    <!-- ПРАВАЯ КОЛОНКА -->
+    <section class="cv-main">
+      <!-- Мобайл: выбор календаря лентой чипов -->
+      <div v-if="isMobile && store.calendars.length" class="cv-regstrip">
+        <button
+          v-for="c in store.calendars"
+          :key="c.id"
+          class="cv-regchip"
+          :class="{ active: c.id === store.selectedId }"
+          @click="store.select(c.id)"
+        >{{ c.name }}</button>
+      </div>
+
+      <template v-if="store.selected">
+        <!-- Тулбар -->
+        <header class="cv-toolbar">
+          <div class="cv-nav">
+            <button class="cv-icon-btn" title="Назад" @click="store.step(-1)">
+              <span class="material-symbols-outlined">chevron_left</span>
+            </button>
+            <button class="cv-today" @click="store.today()">Сегодня</button>
+            <button class="cv-icon-btn" title="Вперёд" @click="store.step(1)">
+              <span class="material-symbols-outlined">chevron_right</span>
+            </button>
+            <h2 class="cv-period">{{ periodLabel }}</h2>
+          </div>
+
+          <div class="cv-spacer" />
+
+          <div class="cv-viewseg">
+            <button v-for="v in viewModes" :key="v.value" :class="{ active: store.view === v.value }" @click="store.setView(v.value)">
+              {{ v.label }}
+            </button>
+          </div>
+
+          <div class="cv-search">
+            <span class="material-symbols-outlined">search</span>
+            <input v-model="searchInput" type="text" placeholder="Поиск…" @input="onSearch" />
+            <button v-if="searchInput" class="cv-search-clear" title="Очистить" @click="clearSearch">
+              <span class="material-symbols-outlined">close</span>
+            </button>
+          </div>
+
+          <div class="cv-actions">
+            <button class="cv-icon-btn" title="Внешние ссылки" @click="openShares">
+              <span class="material-symbols-outlined">link</span>
+            </button>
+            <button class="cv-icon-btn" title="Экспорт в XLSX" @click="openExport">
+              <span class="material-symbols-outlined">download</span>
+            </button>
+            <button class="cv-btn-primary" @click="openCreate()">
+              <span class="material-symbols-outlined">add</span>
+              <span class="cv-btn-label">Запись</span>
+            </button>
+          </div>
+        </header>
+
+        <!-- Тело: месяц / неделя / день -->
+        <div class="cv-body">
+          <!-- Десктоп: месяц / неделя — сетка плиток дней -->
+          <div v-if="!isMobile && store.view !== 'day'" class="cv-grid" :class="store.view">
+            <!-- Шапка дней недели — только в месяце; в неделе день уже подписан в плитке. -->
+            <template v-if="store.view === 'month'">
+              <div v-for="(wd, i) in weekdays" :key="'h' + i" class="cv-wd">{{ wd }}</div>
+            </template>
+            <div
+              v-for="day in gridDays"
+              :key="dayKey(day)"
+              class="cv-day"
+              :class="{ dim: store.view === 'month' && !inCurrentMonth(day), today: isToday(day) }"
+              @click="openDay(day)"
+            >
+              <div class="cv-day-head">
+                <span class="cv-day-num">{{ day.getDate() }}</span>
+                <span v-if="store.view === 'week'" class="cv-day-wd">{{ weekdayShort(day) }}</span>
+                <span v-if="dayEntries(day).length" class="cv-day-count">{{ dayEntries(day).length }}</span>
+              </div>
+              <div class="cv-day-events">
+                <div v-for="e in dayPreview(day)" :key="e.id" class="cv-event">
+                  <span class="cv-event-time">{{ hhmm(e.event_at) }}</span>
+                  <span class="cv-event-title">{{ entryTitle(store.selected, e) }}</span>
+                </div>
+                <div v-if="dayEntries(day).length > dayPreview(day).length" class="cv-event-more">
+                  +{{ dayEntries(day).length - dayPreview(day).length }}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Мобайл: месяц / неделя — список по датам с количеством записей -->
+          <div v-else-if="isMobile && store.view !== 'day'" class="cv-agenda">
+            <button
+              v-for="day in agendaDays"
+              :key="dayKey(day)"
+              class="cv-agenda-row"
+              :class="{ today: isToday(day) }"
+              @click="openDay(day)"
+            >
+              <div class="cv-agenda-date">
+                <span class="cv-agenda-dnum">{{ day.getDate() }}</span>
+                <span class="cv-agenda-dwd">{{ weekdayShort(day) }}</span>
+              </div>
+              <div class="cv-agenda-body">
+                <span class="cv-agenda-month">{{ agendaMonth(day) }}</span>
+                <span v-if="dayEntries(day).length" class="cv-agenda-prev">{{ agendaPreview(day) }}</span>
+                <span v-else class="cv-agenda-empty">Нет записей</span>
+              </div>
+              <span v-if="dayEntries(day).length" class="cv-day-count">{{ dayEntries(day).length }}</span>
+              <span class="material-symbols-outlined cv-agenda-chev">chevron_right</span>
+            </button>
+          </div>
+
+          <!-- День — хронологический список записей -->
+          <div v-else class="cv-daylist">
+            <div v-if="!dayEntries(store.cursor).length" class="cv-empty">
+              <span class="material-symbols-outlined">event_busy</span>
+              <p>На этот день записей нет</p>
+              <button class="cv-btn-tonal" @click="openCreate(store.cursor)">
+                <span class="material-symbols-outlined">add</span> Добавить запись
+              </button>
+            </div>
+            <button
+              v-for="e in dayEntries(store.cursor)"
+              :key="e.id"
+              class="cv-dayrow"
+              @click="openEntry(e)"
+            >
+              <span class="cv-dayrow-time">{{ hhmm(e.event_at) }}</span>
+              <span class="cv-dayrow-body">
+                <span class="cv-dayrow-title">{{ entryTitle(store.selected, e) }}</span>
+                <span v-if="subtitle(e)" class="cv-dayrow-sub">{{ subtitle(e) }}</span>
+              </span>
+              <span class="material-symbols-outlined cv-dayrow-chev">chevron_right</span>
+            </button>
+          </div>
+
+          <div v-if="store.loadingEntries" class="cv-overlay">
+            <span class="material-symbols-outlined spin">progress_activity</span>
+          </div>
+        </div>
+      </template>
+
+      <!-- Календарь не выбран -->
+      <div v-else class="cv-placeholder">
+        <span class="material-symbols-outlined">calendar_month</span>
+        <p>{{ isMobile ? 'Выберите календарь сверху' : 'Выберите календарь слева' }}</p>
+      </div>
+    </section>
+
+    <CalendarDayDialog
+      v-model="dayDialogOpen"
+      :calendar="store.selected"
+      :date="dayDialogDate"
+      :entries="dayDialogEntries"
+      @open-entry="openEntry"
+      @add="openCreate(dayDialogDate)"
+    />
+
+    <CalendarEntryDialog
+      v-model="dialogOpen"
+      :calendar="store.selected"
+      :entry="activeEntry"
+      :default-date="defaultDate"
+    />
+
+    <!-- Внешние ссылки -->
+    <AppDialog
+      v-model="sharesOpen"
+      title="Внешние ссылки" icon="link" size="md"
+      :actions="[{ kind: 'cancel', label: 'Закрыть' }]"
+      @cancel="sharesOpen = false"
+    >
+      <div class="cv-shares">
+        <p class="cv-shares-note">
+          По внешней ссылке любой человек (без входа в систему) сможет просматривать
+          этот календарь, открывать карточки записей и выгружать данные — но не редактировать.
+          Ссылку можно отозвать в любой момент.
+        </p>
+        <button class="cv-btn-primary" :disabled="sharesBusy" @click="createShareLink">
+          <span class="material-symbols-outlined">add_link</span> Создать ссылку
+        </button>
+        <div v-if="sharesLoading" class="cv-shares-empty">Загрузка…</div>
+        <div v-else-if="!shares.length" class="cv-shares-empty">Ссылок пока нет</div>
+        <ul v-else class="cv-shares-list">
+          <li v-for="s in shares" :key="s.id" class="cv-share">
+            <input class="cv-share-url" :value="shareUrl(s.code)" readonly @focus="$event.target.select()" />
+            <button class="cv-icon-btn sm" title="Копировать" @click="copyShare(s.code)">
+              <span class="material-symbols-outlined">content_copy</span>
+            </button>
+            <a class="cv-icon-btn sm" :href="shareUrl(s.code)" target="_blank" rel="noopener" title="Открыть">
+              <span class="material-symbols-outlined">open_in_new</span>
+            </a>
+            <button class="cv-icon-btn sm danger" title="Отозвать" @click="revokeShareLink(s.id)">
+              <span class="material-symbols-outlined">delete</span>
+            </button>
+          </li>
+        </ul>
+      </div>
+    </AppDialog>
+
+    <!-- Экспорт в XLSX -->
+    <AppDialog
+      v-model="exportOpen"
+      title="Экспорт в XLSX" icon="download" size="md" :busy="exporting"
+      :actions="[{ kind: 'cancel', label: 'Отмена' }, { kind: 'confirm', label: 'Экспортировать', icon: 'download' }]"
+      @cancel="exportOpen = false" @confirm="doExport"
+    >
+      <div class="cv-export">
+        <p class="cv-export-period">
+          Будут выгружены записи за период: <b>{{ periodLabel }}</b>.
+          Колонка «Дата и время» включается всегда.
+        </p>
+        <div class="cv-export-head">
+          <span class="cv-export-title">Дополнительные поля</span>
+          <div class="cv-export-bulk">
+            <button class="cv-btn-text" @click="selectAllExport">Выбрать всё</button>
+            <button class="cv-btn-text" @click="clearAllExport">Снять всё</button>
+          </div>
+        </div>
+        <div class="cv-export-fields">
+          <label v-for="f in exportableFields" :key="f.id" class="cv-export-row">
+            <Checkbox :model-value="exportFields.has(f.id)" binary @update:model-value="toggleExportField(f.id)" />
+            <span class="material-symbols-outlined">{{ fieldIcon(f.type) }}</span>
+            <span class="cv-export-name">{{ f.label }}</span>
+          </label>
+          <p v-if="!exportableFields.length" class="cv-export-empty">
+            В этом календаре нет дополнительных полей для экспорта (картинки и файлы не выгружаются).
+          </p>
+        </div>
+      </div>
+    </AppDialog>
+  </div>
+</template>
+
+<script setup>
+import { computed, onMounted, ref, watch } from 'vue'
+import Checkbox from 'primevue/checkbox'
+import CalendarEntryDialog from '@/components/calendar/CalendarEntryDialog.vue'
+import CalendarDayDialog from '@/components/calendar/CalendarDayDialog.vue'
+import AppDialog from '@/components/common/AppDialog.vue'
+import { useCalendarsStore, dayKey } from '@/stores/calendars.js'
+import { exportEntries, getShares, createShare, revokeShare } from '@/api/calendars.js'
+import { useNotificationsStore } from '@/stores/notifications.js'
+import { useBreakpoint } from '@/composables/useBreakpoint.js'
+import { fieldIcon, isExportable, entryTitle, hhmm, textValue } from '@/utils/calendarFields.js'
+
+const store = useCalendarsStore()
+const notif = useNotificationsStore()
+const { isMobile } = useBreakpoint()
+
+const viewModes = [
+  { value: 'month', label: 'Месяц' },
+  { value: 'week', label: 'Неделя' },
+  { value: 'day', label: 'День' },
+]
+const weekdays = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс']
+
+function addDays(d, n) { const x = new Date(d); x.setHours(0, 0, 0, 0); x.setDate(x.getDate() + n); return x }
+
+// Дни видимой сетки (месяц — 42, неделя — 7).
+const gridDays = computed(() => {
+  const { from, to } = store.range
+  const n = Math.round((to.getTime() - from.getTime()) / 86400000)
+  const start = new Date(from); start.setHours(0, 0, 0, 0)
+  return Array.from({ length: n }, (_, i) => addDays(start, i))
+})
+
+function dayEntries(day) { return store.entriesByDay[dayKey(day)] || [] }
+function inCurrentMonth(day) { return day.getMonth() === store.cursor.getMonth() }
+function weekdayShort(day) { return weekdays[(day.getDay() + 6) % 7] }
+
+// Превью записей в плитке: месяц тесный (2), неделя просторнее (4).
+function dayPreview(day) { return dayEntries(day).slice(0, store.view === 'week' ? 4 : 2) }
+
+// Мобильная агенда: месяц — все дни месяца курсора (1..N), неделя — её 7 дней.
+const agendaDays = computed(() => {
+  if (store.view === 'week') return gridDays.value
+  const c = store.cursor
+  const days = new Date(c.getFullYear(), c.getMonth() + 1, 0).getDate()
+  return Array.from({ length: days }, (_, i) => new Date(c.getFullYear(), c.getMonth(), i + 1))
+})
+function agendaMonth(day) { return day.toLocaleDateString('ru-RU', { month: 'short' }) }
+function agendaPreview(day) {
+  return dayEntries(day).slice(0, 2)
+    .map((e) => `${hhmm(e.event_at)} ${entryTitle(store.selected, e)}`.trim())
+    .join(' · ')
+}
+
+const todayKey = dayKey(new Date())
+function isToday(day) { return dayKey(day) === todayKey }
+
+// Подзаголовок записи в режиме «День» — второе show_in_table поле.
+function subtitle(e) {
+  const fields = (store.selected?.fields || []).filter((f) => f.show_in_table)
+  const f = fields[1]
+  return f ? textValue(f, e.data?.[String(f.id)]) : ''
+}
+
+const periodLabel = computed(() => {
+  const c = store.cursor
+  if (store.view === 'day') {
+    return c.toLocaleDateString('ru-RU', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })
+  }
+  if (store.view === 'week') {
+    const { from } = store.range
+    const start = new Date(from)
+    const end = addDays(start, 6)
+    const opts = { day: 'numeric', month: 'short' }
+    return `${start.toLocaleDateString('ru-RU', opts)} – ${end.toLocaleDateString('ru-RU', opts)} ${end.getFullYear()}`
+  }
+  return c.toLocaleDateString('ru-RU', { month: 'long', year: 'numeric' })
+})
+
+// ── Поиск ──
+const searchInput = ref('')
+let searchTimer = null
+function onSearch() {
+  clearTimeout(searchTimer)
+  searchTimer = setTimeout(() => store.setSearch(searchInput.value.trim()), 300)
+}
+function clearSearch() { searchInput.value = ''; store.setSearch('') }
+watch(() => store.selectedId, () => { searchInput.value = '' })
+
+// ── Модалка дня (список записей дня → создать/открыть/удалить) ──
+const dayDialogOpen = ref(false)
+const dayDialogDate = ref(null)
+const dayDialogEntries = computed(() => (dayDialogDate.value ? dayEntries(dayDialogDate.value) : []))
+function openDay(day) {
+  dayDialogDate.value = new Date(day)
+  dayDialogOpen.value = true
+}
+
+// ── Диалог записи (поверх модалки дня — стэк PrimeVue) ──
+const dialogOpen = ref(false)
+const activeEntry = ref(null)
+const defaultDate = ref(null)
+function openEntry(e) { activeEntry.value = e; defaultDate.value = null; dialogOpen.value = true }
+function openCreate(day) {
+  activeEntry.value = null
+  const base = day ? new Date(day) : new Date(store.cursor)
+  // Для новой записи на конкретный день — этот день, время 09:00 по умолчанию.
+  if (day) base.setHours(9, 0, 0, 0)
+  defaultDate.value = base
+  dialogOpen.value = true
+}
+
+// ── Внешние ссылки ──
+const sharesOpen = ref(false)
+const shares = ref([])
+const sharesLoading = ref(false)
+const sharesBusy = ref(false)
+function shareUrl(code) { return `${location.origin}/calendar/${code}` }
+async function openShares() {
+  sharesOpen.value = true
+  sharesLoading.value = true
+  try {
+    const d = await getShares(store.selectedId)
+    shares.value = d.shares ?? []
+  } catch (e) {
+    notif.error(e?.message || 'Не удалось загрузить ссылки')
+  } finally {
+    sharesLoading.value = false
+  }
+}
+async function createShareLink() {
+  sharesBusy.value = true
+  try {
+    const s = await createShare(store.selectedId)
+    shares.value.unshift(s)
+  } catch (e) {
+    notif.error(e?.message || 'Не удалось создать ссылку')
+  } finally {
+    sharesBusy.value = false
+  }
+}
+async function revokeShareLink(id) {
+  try {
+    await revokeShare(store.selectedId, id)
+    shares.value = shares.value.filter((s) => s.id !== id)
+  } catch (e) {
+    notif.error(e?.message || 'Не удалось отозвать ссылку')
+  }
+}
+async function copyShare(code) {
+  try {
+    await navigator.clipboard.writeText(shareUrl(code))
+    notif.success('Ссылка скопирована')
+  } catch { /* ignore */ }
+}
+
+// ── Экспорт ──
+const exportOpen = ref(false)
+const exporting = ref(false)
+const exportFields = ref(new Set())
+const exportableFields = computed(() => (store.selected?.fields || []).filter((f) => isExportable(f.type)))
+function openExport() {
+  exportFields.value = new Set(exportableFields.value.map((f) => f.id))
+  exportOpen.value = true
+}
+function toggleExportField(id) {
+  const s = new Set(exportFields.value)
+  s.has(id) ? s.delete(id) : s.add(id)
+  exportFields.value = s
+}
+function selectAllExport() { exportFields.value = new Set(exportableFields.value.map((f) => f.id)) }
+function clearAllExport() { exportFields.value = new Set() }
+async function doExport() {
+  exporting.value = true
+  try {
+    const { from, to } = store.range
+    const params = {
+      fields: [...exportFields.value],
+      from: from.toISOString(),
+      to: to.toISOString(),
+      search: store.search,
+    }
+    const resp = await exportEntries(store.selectedId, params)
+    if (!resp.ok) {
+      let msg = 'Не удалось выгрузить'
+      try { msg = (await resp.json()).message || msg } catch { /* ignore */ }
+      throw new Error(msg)
+    }
+    const blob = await resp.blob()
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `${store.selected?.name || 'calendar'}.xlsx`
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+    URL.revokeObjectURL(url)
+    exportOpen.value = false
+  } catch (e) {
+    notif.error(e?.message || 'Не удалось выгрузить')
+  } finally {
+    exporting.value = false
+  }
+}
+
+onMounted(() => store.fetchCalendars())
+</script>
+
+<style scoped>
+.cv { display: flex; height: 100%; min-height: 0; gap: 16px; padding: 16px; overflow: hidden; }
+
+/* ── Левая колонка ── */
+.cv-side {
+  width: 260px; flex-shrink: 0;
+  display: flex; flex-direction: column; min-height: 0;
+  background: var(--color-surface); border: 1px solid var(--color-outline-dim);
+  border-radius: var(--radius-xl); overflow: hidden;
+}
+.cv-side-head {
+  flex-shrink: 0; display: flex; align-items: center; gap: 8px;
+  padding: 16px; font-weight: 700; color: var(--color-text);
+  border-bottom: 1px solid var(--color-outline-dim);
+}
+.cv-side-body { flex: 1; min-height: 0; overflow-y: auto; padding: 8px; display: flex; flex-direction: column; gap: 2px; }
+.cv-side-note { padding: 24px 12px; color: var(--color-text-dim); font-size: 14px; text-align: center; }
+.cv-side-item {
+  display: flex; align-items: center; gap: 10px; width: 100%;
+  padding: 10px 12px; border: none; background: none; cursor: pointer;
+  border-radius: var(--radius-md); color: var(--color-text-dim);
+  text-align: left; font-size: 14px; font-weight: 600;
+}
+.cv-side-item:hover { background: var(--color-surface-high); color: var(--color-text); }
+.cv-side-item.active { background: var(--color-primary-container); color: var(--color-on-primary-container); }
+.cv-side-item .material-symbols-outlined { font-size: 20px; flex-shrink: 0; }
+.cv-side-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* ── Правая колонка ── */
+.cv-main {
+  flex: 1; min-width: 0; min-height: 0;
+  display: flex; flex-direction: column;
+  background: var(--color-surface); border: 1px solid var(--color-outline-dim);
+  border-radius: var(--radius-xl); overflow: hidden;
+}
+.cv-toolbar {
+  flex-shrink: 0; display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+  padding: 12px 16px; border-bottom: 1px solid var(--color-outline-dim);
+}
+.cv-nav { display: flex; align-items: center; gap: 8px; }
+.cv-period { margin: 0 0 0 6px; font-size: 17px; font-weight: 700; color: var(--color-text); text-transform: capitalize; white-space: nowrap; }
+.cv-today {
+  height: 36px; padding: 0 14px; border: 1px solid var(--color-outline-dim);
+  border-radius: var(--radius-full); background: var(--color-surface);
+  color: var(--color-text); font-weight: 600; font-size: 13px; cursor: pointer;
+}
+.cv-today:hover { background: var(--color-surface-high); }
+.cv-spacer { flex: 1; }
+
+.cv-viewseg { display: inline-flex; border: 1px solid var(--color-outline-dim); border-radius: var(--radius-full); overflow: hidden; }
+.cv-viewseg button {
+  height: 36px; padding: 0 14px; border: none; background: var(--color-surface);
+  color: var(--color-text-dim); cursor: pointer; font-weight: 600; font-size: 13px;
+  border-right: 1px solid var(--color-outline-dim);
+}
+.cv-viewseg button:last-child { border-right: none; }
+.cv-viewseg button.active { background: var(--color-primary); color: var(--color-on-primary); }
+
+.cv-search {
+  display: flex; align-items: center; gap: 8px; height: 38px; padding: 0 12px; min-width: 180px;
+  background: var(--color-surface-low); border: 1px solid var(--color-outline-dim); border-radius: var(--radius-full);
+}
+.cv-search > .material-symbols-outlined { color: var(--color-text-dim); font-size: 20px; flex-shrink: 0; }
+.cv-search input { flex: 1; min-width: 0; border: none; background: none; outline: none; color: var(--color-text); font-size: 14px; }
+.cv-search-clear { flex-shrink: 0; border: none; background: none; cursor: pointer; color: var(--color-text-dim); display: grid; place-items: center; }
+
+.cv-actions { display: flex; align-items: center; gap: 8px; }
+.cv-icon-btn {
+  width: 38px; height: 38px; display: grid; place-items: center;
+  border: 1px solid var(--color-outline-dim); border-radius: var(--radius-full);
+  background: var(--color-surface); color: var(--color-text-dim); cursor: pointer;
+}
+.cv-icon-btn:hover { background: var(--color-surface-high); color: var(--color-text); }
+.cv-icon-btn.sm { width: 34px; height: 34px; flex-shrink: 0; }
+.cv-icon-btn.sm .material-symbols-outlined { font-size: 18px; }
+.cv-icon-btn.danger { color: var(--color-error); }
+
+/* ── Тело ── */
+.cv-body { position: relative; flex: 1; min-height: 0; overflow: auto; }
+
+/* Сетка месяца/недели */
+.cv-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 1px; background: var(--color-outline-dim); min-height: 100%; }
+/* Месяц: шапка дней недели по высоте контента, 6 недель делят остаток поровну.
+   Неделя: один ряд плиток на всю высоту (шапка не дублируется — день подписан в плитке). */
+.cv-grid.month { grid-template-rows: auto repeat(6, 1fr); }
+.cv-grid.week { grid-template-rows: 1fr; }
+.cv-wd {
+  background: var(--color-surface); padding: 8px 10px; text-align: center;
+  font-size: 12px; font-weight: 700; color: var(--color-text-dim); text-transform: uppercase;
+  position: sticky; top: 0; z-index: 1;
+}
+.cv-day {
+  background: var(--color-surface); min-height: 104px; padding: 6px;
+  display: flex; flex-direction: column; gap: 4px; cursor: pointer; overflow: hidden;
+}
+.cv-grid.week .cv-day { min-height: 0; }
+.cv-day:hover { background: var(--color-surface-high); }
+.cv-day.dim { background: var(--color-surface-low); }
+.cv-day.dim .cv-day-num { color: var(--color-text-dim); opacity: 0.6; }
+.cv-day-head { display: flex; align-items: center; justify-content: space-between; }
+.cv-day-num { font-size: 13px; font-weight: 700; color: var(--color-text); width: 24px; height: 24px; display: grid; place-items: center; }
+.cv-day.today .cv-day-num { background: var(--color-primary); color: var(--color-on-primary); border-radius: var(--radius-full); }
+.cv-day-wd { font-size: 11px; color: var(--color-text-dim); text-transform: uppercase; }
+.cv-day-count {
+  flex-shrink: 0; min-width: 18px; height: 18px; padding: 0 5px;
+  display: inline-flex; align-items: center; justify-content: center;
+  border-radius: var(--radius-full); background: var(--color-primary);
+  color: var(--color-on-primary); font-size: 11px; font-weight: 700;
+}
+.cv-day-events { display: flex; flex-direction: column; gap: 3px; min-height: 0; }
+.cv-event {
+  display: flex; align-items: baseline; gap: 6px; width: 100%; text-align: left;
+  padding: 3px 6px; border: none; border-radius: var(--radius-sm);
+  background: var(--color-primary-container); color: var(--color-on-primary-container);
+  font-size: 12px; overflow: hidden;
+}
+.cv-event-time { flex-shrink: 0; font-weight: 700; font-variant-numeric: tabular-nums; }
+.cv-event-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cv-event-more { font-size: 11px; font-weight: 600; color: var(--color-text-dim); padding-left: 6px; }
+
+/* ── Мобильная агенда (список по датам) ── */
+.cv-agenda { display: flex; flex-direction: column; }
+.cv-agenda-row {
+  display: flex; align-items: center; gap: 14px; width: 100%; text-align: left;
+  padding: 12px 16px; border: none; background: none; cursor: pointer;
+  border-bottom: 1px solid var(--color-outline-dim);
+}
+.cv-agenda-row:hover { background: var(--color-surface-high); }
+.cv-agenda-date {
+  flex-shrink: 0; width: 44px; display: flex; flex-direction: column; align-items: center;
+}
+.cv-agenda-dnum { font-size: 18px; font-weight: 700; color: var(--color-text); }
+.cv-agenda-row.today .cv-agenda-dnum {
+  width: 30px; height: 30px; display: grid; place-items: center;
+  background: var(--color-primary); color: var(--color-on-primary); border-radius: var(--radius-full);
+}
+.cv-agenda-dwd { font-size: 11px; color: var(--color-text-dim); text-transform: uppercase; }
+.cv-agenda-body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.cv-agenda-month { font-size: 12px; color: var(--color-text-dim); }
+.cv-agenda-prev { font-size: 14px; color: var(--color-text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cv-agenda-empty { font-size: 13px; color: var(--color-text-dim); }
+.cv-agenda-chev { flex-shrink: 0; color: var(--color-text-dim); }
+
+/* Режим «День» */
+.cv-daylist { display: flex; flex-direction: column; gap: 8px; padding: 16px; }
+.cv-dayrow {
+  display: flex; align-items: center; gap: 14px; width: 100%; text-align: left;
+  padding: 12px 14px; border: 1px solid var(--color-outline-dim); border-radius: var(--radius-lg);
+  background: var(--color-surface); cursor: pointer;
+}
+.cv-dayrow:hover { background: var(--color-surface-high); border-color: var(--color-outline); }
+.cv-dayrow-time {
+  flex-shrink: 0; min-width: 56px; font-size: 16px; font-weight: 700; color: var(--color-primary);
+  font-variant-numeric: tabular-nums;
+}
+.cv-dayrow-body { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.cv-dayrow-title { font-size: 15px; font-weight: 600; color: var(--color-text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cv-dayrow-sub { font-size: 13px; color: var(--color-text-dim); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cv-dayrow-chev { flex-shrink: 0; color: var(--color-text-dim); }
+
+.cv-empty {
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 10px; padding: 48px 16px; color: var(--color-text-dim);
+}
+.cv-empty .material-symbols-outlined { font-size: 44px; }
+.cv-empty p { margin: 0; }
+
+.cv-overlay { position: absolute; inset: 0; display: grid; place-items: center; background: color-mix(in oklch, var(--color-surface) 50%, transparent); }
+
+.cv-placeholder { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; color: var(--color-text-dim); }
+.cv-placeholder .material-symbols-outlined { font-size: 48px; }
+
+/* ── Кнопки ── */
+.cv-btn-primary {
+  display: inline-flex; align-items: center; gap: 6px; height: 38px; padding: 0 16px;
+  border: none; border-radius: var(--radius-full);
+  background: var(--color-primary); color: var(--color-on-primary);
+  font-weight: 600; font-size: 14px; cursor: pointer;
+}
+.cv-btn-tonal {
+  display: inline-flex; align-items: center; gap: 6px; height: 38px; padding: 0 16px;
+  border: none; border-radius: var(--radius-full);
+  background: var(--color-primary-container); color: var(--color-on-primary-container);
+  font-weight: 600; font-size: 14px; cursor: pointer;
+}
+.cv-btn-text { border: none; background: none; cursor: pointer; color: var(--color-primary); font-weight: 600; font-size: 14px; }
+.spin { animation: cvspin 1s linear infinite; font-size: 32px; color: var(--color-primary); }
+@keyframes cvspin { to { transform: rotate(360deg); } }
+
+/* ── Внешние ссылки / экспорт ── */
+.cv-shares { display: flex; flex-direction: column; gap: 14px; }
+.cv-shares-note { margin: 0; font-size: 13px; color: var(--color-text-dim); line-height: 1.5; }
+.cv-shares-empty { padding: 16px; text-align: center; color: var(--color-text-dim); font-size: 14px; }
+.cv-shares-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.cv-share { display: flex; align-items: center; gap: 6px; }
+.cv-share-url {
+  flex: 1; min-width: 0; height: 38px; padding: 0 12px;
+  border: 1px solid var(--color-outline-dim); border-radius: var(--radius-md);
+  background: var(--color-surface-low); color: var(--color-text); font-size: 13px;
+}
+.cv-export { display: flex; flex-direction: column; gap: 16px; }
+.cv-export-period { margin: 0; font-size: 14px; color: var(--color-text); }
+.cv-export-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.cv-export-title { font-size: 13px; font-weight: 700; color: var(--color-text-dim); text-transform: uppercase; }
+.cv-export-bulk { display: flex; gap: 12px; }
+.cv-export-fields { display: flex; flex-direction: column; gap: 2px; max-height: 320px; overflow-y: auto; }
+.cv-export-row { display: flex; align-items: center; gap: 10px; padding: 9px 8px; border-radius: var(--radius-md); cursor: pointer; font-size: 14px; color: var(--color-text); }
+.cv-export-row:hover { background: var(--color-surface-high); }
+.cv-export-row .material-symbols-outlined { font-size: 20px; color: var(--color-text-dim); }
+.cv-export-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cv-export-empty { margin: 0; color: var(--color-text-dim); font-size: 14px; }
+
+/* ── Мобайл ── */
+.cv-regstrip {
+  flex: none; display: flex; gap: 8px; padding: 10px 12px; overflow-x: auto;
+  border-bottom: 1px solid var(--color-outline-dim); -webkit-overflow-scrolling: touch;
+}
+.cv-regchip {
+  flex: none; padding: 8px 14px; border-radius: var(--radius-full);
+  border: 1px solid var(--color-outline-dim); background: var(--color-surface);
+  color: var(--color-text-dim); font-size: 14px; font-weight: 600; cursor: pointer; white-space: nowrap;
+}
+.cv-regchip.active { background: var(--color-primary); color: var(--color-on-primary); border-color: transparent; }
+
+@media (max-width: 768px) {
+  .cv { flex-direction: column; padding: 0; gap: 0; }
+  .cv-side { display: none; }
+  .cv-main { border: none; border-radius: 0; }
+  .cv-toolbar { padding: 10px 12px; }
+  .cv-spacer { display: none; }
+  .cv-period { font-size: 15px; margin-left: 4px; }
+  .cv-search { order: 5; flex-basis: 100%; min-width: 0; }
+  /* На мобайле месяц/неделя — список по датам (cv-agenda), сетка не используется. */
+}
+</style>

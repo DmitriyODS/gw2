@@ -99,6 +99,8 @@ const moreItems = computed(() => {
       active: () => route.path === '/employees' },
     { path: '/registries', icon: 'table', label: 'Реестры',
       active: () => route.path.startsWith('/registries') },
+    { path: '/calendars', icon: 'calendar_month', label: 'Календари',
+      active: () => route.path.startsWith('/calendars') },
     { path: '/settings', icon: 'settings', label: 'Настройки',
       active: () => route.path === '/settings' },
   ]

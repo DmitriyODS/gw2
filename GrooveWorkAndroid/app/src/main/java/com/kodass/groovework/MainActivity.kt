@@ -44,7 +44,7 @@ class MainActivity : ComponentActivity() {
         // Deep link из письма (App Links): verify-email / reset-password / invite.
         if (intent.action == Intent.ACTION_VIEW) {
             intent.data?.let { uri ->
-                DeepLink.parse(uri.path, uri.getQueryParameter("token"))?.let {
+                DeepLink.parse(uri.path, uri.getQueryParameter("token"), uri.getQueryParameter("email"))?.let {
                     container.pendingDeepLink.value = it
                 }
             }

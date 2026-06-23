@@ -31,6 +31,8 @@ const routes = [
     meta: { requiresAuth: true, requiresCompany: true } },
   { path: '/registries', component: () => import('@/views/RegistriesView.vue'),
     meta: { requiresAuth: true, requiresCompany: true } },
+  { path: '/calendars', component: () => import('@/views/CalendarView.vue'),
+    meta: { requiresAuth: true, requiresCompany: true } },
   // Раздел «Компании»: супер-админ видит все (платформа), обычный пользователь —
   // те, что создал/администрирует (доступ к данным проверяет бэкенд).
   { path: '/companies', component: () => import('@/views/CompaniesView.vue'),
@@ -53,6 +55,9 @@ const routes = [
     meta: { public: true, fullscreen: true } },
   // Публичный просмотр реестра по внешней ссылке (read-only, без авторизации).
   { path: '/registry/:code', component: () => import('@/views/SharedRegistryView.vue'),
+    meta: { public: true } },
+  // Публичный просмотр календаря по внешней ссылке (read-only, без авторизации).
+  { path: '/calendar/:code', component: () => import('@/views/SharedCalendarView.vue'),
     meta: { public: true } },
   // Вступление в компанию по ссылке-приглашению (нужна авторизация).
   { path: '/join/:code', component: () => import('@/views/JoinView.vue'),

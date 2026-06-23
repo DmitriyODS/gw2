@@ -65,7 +65,11 @@ const router = useRouter()
 const authStore = useAuthStore()
 const themeStore = useThemeStore()
 
-const email = ref(route.query.email || '')
+// email нужен для подтверждения по коду. Берём из query (ссылка письма /
+// переход с регистрации), иначе — из localStorage (экран мог пересоздаться без
+// query): иначе код-путь уходил с пустым email и падал «email не задан».
+const PENDING_EMAIL_KEY = 'gw_verify_email'
+const email = ref(route.query.email || localStorage.getItem(PENDING_EMAIL_KEY) || '')
 const code = ref('')
 const error = ref('')
 const loading = ref(false)
@@ -75,6 +79,7 @@ let cooldownTimer = null
 
 onMounted(() => {
   themeStore.init()
+  if (email.value) localStorage.setItem(PENDING_EMAIL_KEY, email.value)
   if (route.query.token) {
     verifyWith({ token: route.query.token })
   }
@@ -97,6 +102,7 @@ async function verifyWith(payload) {
   loading.value = true
   try {
     await authStore.verifyEmail(payload)
+    localStorage.removeItem(PENDING_EMAIL_KEY)
     connectSocket()
     router.push('/')
   } catch (e) {

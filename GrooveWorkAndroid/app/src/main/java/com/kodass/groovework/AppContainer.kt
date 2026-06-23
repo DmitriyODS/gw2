@@ -38,17 +38,18 @@ import java.util.concurrent.TimeUnit
 // Deep link из писем (verify-email / reset-password / invite). Парсится из
 // Intent.ACTION_VIEW в MainActivity; потребляется в зависимости от состояния входа.
 sealed interface DeepLink {
-    data class VerifyEmail(val token: String) : DeepLink
+    // email — из query ссылки: нужен экрану для подтверждения по коду, а не только токеном.
+    data class VerifyEmail(val token: String, val email: String = "") : DeepLink
     data class ResetPassword(val token: String) : DeepLink
     data class Invite(val token: String) : DeepLink
 
     companion object {
-        // Разбор пути ссылки приложения: /verify-email?token=, /reset-password?token=,
+        // Разбор пути ссылки приложения: /verify-email?token=&email=, /reset-password?token=,
         // /invite/<token>. Возвращает null, если ссылка не наша.
-        fun parse(path: String?, token: String?): DeepLink? {
+        fun parse(path: String?, token: String?, email: String? = null): DeepLink? {
             if (path == null) return null
             return when {
-                path.startsWith("/verify-email") && !token.isNullOrBlank() -> VerifyEmail(token)
+                path.startsWith("/verify-email") && !token.isNullOrBlank() -> VerifyEmail(token, email.orEmpty())
                 path.startsWith("/reset-password") && !token.isNullOrBlank() -> ResetPassword(token)
                 path.startsWith("/invite/") -> path.removePrefix("/invite/").trim('/')
                     .takeIf { it.isNotBlank() }?.let { Invite(it) }
@@ -131,11 +132,15 @@ class AppContainer(app: Application) {
     val registriesApi: com.kodass.groovework.data.api.RegistriesApi =
         retrofit.create(com.kodass.groovework.data.api.RegistriesApi::class.java)
 
+    val calendarsApi: com.kodass.groovework.data.api.CalendarsApi =
+        retrofit.create(com.kodass.groovework.data.api.CalendarsApi::class.java)
+
     val gateway = GatewayClient(okHttp, sessionManager, json)
     val messengerRepo = MessengerRepository(messengerApi, gateway, sessionManager, json, appScope)
     val tasksRepo = TasksRepository(tasksApi, json)
     val unitsRepo = com.kodass.groovework.data.repo.UnitsRepository(unitsApi, json)
     val registriesRepo = com.kodass.groovework.data.repo.RegistriesRepository(registriesApi, json)
+    val calendarsRepo = com.kodass.groovework.data.repo.CalendarsRepository(calendarsApi, json)
 
     val notifier = Notifier(app)
     val notificationCenter = NotificationCenter(notifier, gateway, messengerRepo, sessionManager, json, appScope)
