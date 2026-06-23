@@ -14,11 +14,14 @@
     </template>
     <template v-else-if="authStore.token">
       <AppSidebar />
-      <main class="main-content">
-        <router-view />
-      </main>
+      <div class="content-col">
+        <ActiveUnitBanner v-if="unitsStore.activeUnit && unitsStore.minimized" />
+        <main class="main-content">
+          <router-view />
+        </main>
+      </div>
       <AppBottomNav />
-      <ActiveUnitModal v-if="unitsStore.activeUnit" />
+      <ActiveUnitModal v-if="unitsStore.activeUnit && !unitsStore.minimized" />
       <AppTutorial v-if="isTutorialOpen" />
       <ChangelogModal v-if="isChangelogOpen" @close="closeChangelog" />
       <MorningBriefingModal v-if="usesGroove && isBriefingOpen" :briefing="briefing" @close="closeBriefing" />
@@ -60,6 +63,7 @@ import AppSidebar from '@/components/layout/AppSidebar.vue'
 import AppBottomNav from '@/components/layout/AppBottomNav.vue'
 import CompanyDisabledScreen from '@/components/layout/CompanyDisabledScreen.vue'
 import ActiveUnitModal from '@/components/layout/ActiveUnitModal.vue'
+import ActiveUnitBanner from '@/components/layout/ActiveUnitBanner.vue'
 import AppTutorial from '@/components/layout/AppTutorial.vue'
 import ChangelogModal from '@/components/layout/ChangelogModal.vue'
 import MorningBriefingModal from '@/components/groove/MorningBriefingModal.vue'
@@ -169,6 +173,17 @@ onBeforeUnmount(() => {
 </script>
 
 <style>
+/* Колонка «баннер активного юнита + контент»: баннер занимает свою высоту,
+   .main-content сжимается под остаток и скроллится сам — без прокрутки шелла. */
+.content-col {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
 .app-loading {
   flex: 1;
   display: flex;

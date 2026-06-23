@@ -1,6 +1,9 @@
 <template>
   <div class="unit-overlay">
     <div class="unit-modal">
+      <button class="minimize-btn" title="Свернуть" @click="minimize">
+        <span class="material-symbols-outlined">remove</span>
+      </button>
       <p class="unit-header">
         Текущий юнит от {{ formatDate(unit.datetime_start) }}, {{ formatTime(unit.datetime_start) }}
       </p>
@@ -16,7 +19,7 @@
           <span class="material-symbols-outlined">open_in_full</span>
           Показать задачу
         </button>
-        <button class="stop-btn" @click="handleStop" :disabled="stopping">
+        <button class="stop-btn" @click="stop" :disabled="stopping">
           <span class="material-symbols-outlined">check</span>
           Завершить
         </button>
@@ -33,50 +36,19 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { ref, computed } from 'vue'
 import { useUnitsStore } from '@/stores/units.js'
-import { useNotificationsStore } from '@/stores/notifications.js'
+import { useActiveUnit } from '@/composables/useActiveUnit.js'
+import { useElapsed } from '@/composables/useElapsed.js'
 import TaskFloatWindow from '@/components/tasks/TaskFloatWindow.vue'
 
 const unitsStore = useUnitsStore()
-const notifications = useNotificationsStore()
+const { stopping, stop, minimize } = useActiveUnit()
 
-const stopping = ref(false)
 const showTask = ref(false)
-let timer = null
-
 const unit = computed(() => unitsStore.activeUnit)
 
-// Реактивный счётчик — обновляем каждую секунду
-const tick = ref(0)
-
-onMounted(() => {
-  timer = setInterval(() => { tick.value++ }, 1000)
-})
-
-onUnmounted(() => {
-  if (timer) clearInterval(timer)
-})
-
-// Используем tick чтобы computed пересчитывался каждую секунду
-const elapsedDisplay = computed(() => {
-  // eslint-disable-next-line no-unused-expressions
-  tick.value // зависимость для реактивности
-  if (!unit.value) return '—'
-  return formatDuration(unit.value.datetime_start, null)
-})
-
-function formatDuration(start) {
-  const totalSec = Math.max(0, Math.floor((Date.now() - new Date(start)) / 1000))
-  const h = Math.floor(totalSec / 3600)
-  const m = Math.floor((totalSec % 3600) / 60)
-  const s = totalSec % 60
-  const ss = String(s).padStart(2, '0')
-  const mm = String(m).padStart(2, '0')
-  if (h > 0) return `${h} ч ${mm} мин ${ss} сек`
-  if (m > 0) return `${m} мин ${ss} сек`
-  return `${s} сек`
-}
+const { display: elapsedDisplay } = useElapsed(() => unit.value?.datetime_start)
 
 function formatDate(d) {
   if (!d) return '—'
@@ -86,18 +58,6 @@ function formatDate(d) {
 function formatTime(d) {
   if (!d) return '—'
   return new Date(d).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })
-}
-
-async function handleStop() {
-  stopping.value = true
-  try {
-    await unitsStore.stop()
-    notifications.success('Юнит успешно завершён')
-  } catch (e) {
-    notifications.error(e?.message || 'Не удалось завершить юнит')
-  } finally {
-    stopping.value = false
-  }
 }
 </script>
 
@@ -114,6 +74,7 @@ async function handleStop() {
 }
 
 .unit-modal {
+  position: relative;
   background: var(--gw-surface);
   border-radius: 16px;
   box-shadow: var(--shadow-xl);
@@ -125,6 +86,28 @@ async function handleStop() {
   align-items: center;
   text-align: center;
   gap: 12px;
+}
+
+.minimize-btn {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  width: 36px;
+  height: 36px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--gw-text-secondary);
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+
+.minimize-btn:hover {
+  background: var(--gw-primary-light);
+  color: var(--gw-primary);
 }
 
 .unit-header {

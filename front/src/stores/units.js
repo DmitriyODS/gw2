@@ -6,6 +6,8 @@ import { useAuthStore } from '@/stores/auth.js'
 
 export const useUnitsStore = defineStore('units', () => {
   const activeUnit = ref(null)
+  // Свёрнут ли активный юнит: false — крупная модалка, true — яркий баннер сверху.
+  const minimized = ref(false)
 
   async function fetchActiveUnit() {
     try {
@@ -15,8 +17,20 @@ export const useUnitsStore = defineStore('units', () => {
     }
   }
 
-  function setActiveUnit(unit) { activeUnit.value = unit }
-  function clearActiveUnit() { activeUnit.value = null }
+  function minimize() { minimized.value = true }
+  function expand() { minimized.value = false }
+
+  // Сбрасываем сворачивание только при СМЕНЕ юнита (новый запуск): обновления
+  // того же юнита (unit:updated) приходят тем же путём и не должны разворачивать
+  // модалку обратно.
+  function setActiveUnit(unit) {
+    if (unit && unit.id !== activeUnit.value?.id) minimized.value = false
+    activeUnit.value = unit
+  }
+  function clearActiveUnit() {
+    activeUnit.value = null
+    minimized.value = false
+  }
 
   // Аватарка активного пользователя для карточки: берём из юнита, иначе из профиля.
   function _activeUserFromUnit(unit) {
@@ -33,6 +47,7 @@ export const useUnitsStore = defineStore('units', () => {
   // даже при последующем дублирующем сокет-событии.
   function startUnit(unit) {
     activeUnit.value = unit
+    minimized.value = false
     if (unit?.task_id) {
       const tasks = useTasksStore()
       tasks.patchTask({ id: unit.task_id, has_units: true })
@@ -51,5 +66,5 @@ export const useUnitsStore = defineStore('units', () => {
     }
   }
 
-  return { activeUnit, fetchActiveUnit, setActiveUnit, clearActiveUnit, startUnit, stop }
+  return { activeUnit, minimized, fetchActiveUnit, setActiveUnit, clearActiveUnit, minimize, expand, startUnit, stop }
 })
