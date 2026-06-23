@@ -76,3 +76,12 @@ app.use(ToastService)
 app.use(ConfirmationService)
 
 app.mount('#app')
+
+// PWA: регистрируем service worker сразу при загрузке (а не только после
+// входа) — Chrome предлагает установку лишь при активном SW с fetch-обработчиком.
+// Регистрация идемпотентна: registerNotifyServiceWorker позже переиспользует её.
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('/sw.js').catch(() => {})
+  })
+}
