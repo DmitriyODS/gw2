@@ -21,8 +21,14 @@ ok()   { printf '\033[32m✓ %s\033[0m\n' "$*"; }
 fail() { printf '\033[31m✗ %s\033[0m\n' "$*" >&2; exit 1; }
 
 [ -f "$ENV_FILE" ] || fail "$ENV_FILE не найден"
-# shellcheck disable=SC1090
-set -a; . "$ENV_FILE"; set +a
+# Извлекаем только нужные ключи (без source: значения с пробелами, напр.
+# SMTP_FROM_NAME, ломают `.` на исполнении).
+getenv() { grep -E "^$1=" "$ENV_FILE" | head -1 | cut -d= -f2-; }
+S3_ENDPOINT="$(getenv S3_ENDPOINT)"
+S3_REGION="$(getenv S3_REGION)"
+S3_BUCKET="$(getenv S3_BUCKET)"
+S3_ACCESS_KEY="$(getenv S3_ACCESS_KEY)"
+S3_SECRET_KEY="$(getenv S3_SECRET_KEY)"
 
 : "${S3_ENDPOINT:?S3_ENDPOINT не задан в $ENV_FILE}"
 : "${S3_BUCKET:?S3_BUCKET не задан в $ENV_FILE}"
