@@ -65,6 +65,43 @@ python3 -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().
 
 Авторизация ingress'а — через `secret`, который мы сами генерируем при включении интеграции и подставляем в URL webhook'а (`/webhook/<companyId>/<secret>`). Утечка `secret` ≡ возможность писать в чужие задачи; ключи компании это не вскрывает.
 
+### Файловое хранилище: S3 Beget (prod)
+
+Весь пользовательский контент (вложения мессенджера, картинки/файлы реестров и
+календарей, аватарки) в проде хранится в S3-бакете Beget (`pkg/storage`,
+`STORAGE_BACKEND=s3`). Один раз настроить:
+
+1. **Создать бакет** в панели Beget (Облако → Хранилище S3), получить
+   `Access Key` и `Secret Key`.
+2. **Прописать в `deploy/.env`:**
+   ```
+   STORAGE_BACKEND=s3
+   S3_ENDPOINT=s3.ru1.storage.beget.cloud
+   S3_REGION=ru1
+   S3_BUCKET=<имя-бакета>
+   S3_ACCESS_KEY=<ключ>
+   S3_SECRET_KEY=<секрет>
+   ```
+3. **Имя бакета в `deploy/nginx/nginx.prod.conf`** (`location /uploads/` →
+   `proxy_pass https://s3.ru1.storage.beget.cloud/<имя-бакета>/;`) — закоммитить.
+   После правки nginx-конфига нужен `--force-recreate` контейнера nginx.
+4. **Перенести существующие файлы** (один раз; идемпотентно — можно повторять):
+   ```
+   bash scripts/migrate_uploads_s3.sh
+   ```
+   Скрипт гоняет `pkg/cmd/uploadmigrate` в одноразовом golang-контейнере: читает
+   том `deploy_uploads` и заливает объекты в бакет с `public-read` ACL.
+
+**Про доступ:** ключ хранилища Beget НЕ имеет прав на политику бакета, поэтому
+публичное чтение обеспечивается **ACL на уровне каждого объекта** — сервисы
+ставят `public-read` при загрузке (`pkg/storage`), миграция — тоже. Делать весь
+бакет публичным не требуется (и Beget это не рекомендует). Файлы доступны по
+неугадываемому пути через nginx — прежняя модель доступа сохранена.
+
+Контракт `/uploads/<key>` не меняется: nginx проксирует его на бакет, фронт и
+Android ничего не знают о бэкенде. В dev `STORAGE_BACKEND` не задают — файлы
+лежат на диске (`uploads/`), раздаёт vite/nginx.
+
 ### 2. Запустить
 
 С локальной машины (предпочтительно):
@@ -194,7 +231,7 @@ nginx (фронт + реверс-прокси)            ↓ (медиа/TURN W
     │                  groove/tasks (Go REST)│
     ├── /ws          → gateway:8096 (WS)     │
     ├── /livekit     → livekit:7880 ─────────┘
-    └── /uploads     → volume (аватарки, вложения)
+    └── /uploads     → S3-бакет Beget (prod) / volume (dev) — аватарки, вложения, файлы реестров/календарей
 
 gateway:8096 (Go, realtime-шлюз)     calls:8090/:9090 (Go, callsvc)
     ├── db:5432 (last_seen_at)           ├── db:5432 (PostgreSQL)

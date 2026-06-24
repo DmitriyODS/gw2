@@ -118,11 +118,15 @@ func (s *Service) stripRemovedFields(ctx context.Context, registryID int64, fiel
 	if err != nil {
 		return err
 	}
+	var orphans []string
 	for _, rec := range records {
 		changed := false
 		for _, fid := range removed {
 			key := domain.FieldID(fid)
-			if _, ok := rec.Data[key]; ok {
+			if v, ok := rec.Data[key]; ok {
+				if p := fileValuePath(v); p != "" {
+					orphans = append(orphans, p)
+				}
 				delete(rec.Data, key)
 				changed = true
 			}
@@ -133,6 +137,9 @@ func (s *Service) stripRemovedFields(ctx context.Context, registryID int64, fiel
 		if err := s.repo.UpdateRecord(ctx, rec.ID, rec.Data, buildSearchText(fields, rec.Data)); err != nil {
 			return err
 		}
+	}
+	if len(orphans) > 0 {
+		s.files.Remove(orphans)
 	}
 	return nil
 }

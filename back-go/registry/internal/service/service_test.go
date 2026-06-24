@@ -91,13 +91,18 @@ func (b *fakeBus) Publish(_ domain.Ctx, event string, _ []string, _ any) {
 	b.events = append(b.events, event)
 }
 
+type fakeFiles struct{ removed []string }
+
+func (f *fakeFiles) Save(_ string, _ []byte) (string, error) { return "registry/x", nil }
+func (f *fakeFiles) Remove(paths []string)                   { f.removed = append(f.removed, paths...) }
+
 func newTestService(fields []domain.Field) (*Service, *fakeRepo, *fakeBus) {
 	repo := &fakeRepo{
 		reg:    &domain.Registry{ID: 1, CompanyID: 7, Name: "Тест"},
 		fields: fields,
 	}
 	bus := &fakeBus{}
-	return New(Deps{Repo: repo, Bus: bus, Log: discardLogger()}), repo, bus
+	return New(Deps{Repo: repo, Files: &fakeFiles{}, Bus: bus, Log: discardLogger()}), repo, bus
 }
 
 func TestCreateRecord_BuildsSearchTextAndValidates(t *testing.T) {

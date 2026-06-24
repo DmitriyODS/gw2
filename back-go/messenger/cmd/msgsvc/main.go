@@ -16,7 +16,6 @@ import (
 
 	googrpc "google.golang.org/grpc"
 
-	"github.com/DmitriyODS/gw2/back-go/pkg/gen/messengerpb"
 	"github.com/DmitriyODS/gw2/back-go/messenger/internal/clients"
 	"github.com/DmitriyODS/gw2/back-go/messenger/internal/endpoint"
 	"github.com/DmitriyODS/gw2/back-go/messenger/internal/files"
@@ -26,7 +25,9 @@ import (
 	httptransport "github.com/DmitriyODS/gw2/back-go/messenger/internal/transport/http"
 	"github.com/DmitriyODS/gw2/back-go/pkg/bootstrap"
 	"github.com/DmitriyODS/gw2/back-go/pkg/events"
+	"github.com/DmitriyODS/gw2/back-go/pkg/gen/messengerpb"
 	"github.com/DmitriyODS/gw2/back-go/pkg/pasetoauth"
+	"github.com/DmitriyODS/gw2/back-go/pkg/storage"
 )
 
 func main() {
@@ -54,7 +55,7 @@ func main() {
 
 	repo := postgres.NewRepo(pool)
 	users := postgres.NewUserReader(pool)
-	store := files.NewStore(uploadFolder, log)
+	store := files.NewStore(storage.FromEnv(log, uploadFolder))
 	pub := events.NewPublisher(rdb, log, "gw2:messenger:events")
 	// Ответ Грувика в pet-чате генерирует groovesvc (gRPC, fire-and-forget).
 	groove, err := clients.NewGroove(grooveAddr, log)

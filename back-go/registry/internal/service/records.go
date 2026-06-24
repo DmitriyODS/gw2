@@ -129,12 +129,14 @@ func (s *Service) UpdateRecord(ctx context.Context, companyID, registryID, recor
 }
 
 func (s *Service) DeleteRecord(ctx context.Context, companyID, registryID, recordID int64) error {
-	if _, err := s.GetRecord(ctx, companyID, registryID, recordID); err != nil {
+	rec, err := s.GetRecord(ctx, companyID, registryID, recordID)
+	if err != nil {
 		return err
 	}
 	if err := s.repo.DeleteRecord(ctx, recordID); err != nil {
 		return err
 	}
+	s.removeRecordFiles(rec)
 	s.bus.Publish(ctx, "record:deleted", []string{roomAll}, map[string]any{
 		"id": recordID, "registry_id": registryID, "company_id": companyID,
 	})
@@ -149,10 +151,13 @@ func (s *Service) DeleteRecords(ctx context.Context, companyID, registryID int64
 	if len(ids) == 0 {
 		return 0, nil
 	}
+	// Снимаем файлы записей до удаления — после DELETE данные уже недоступны.
+	recs, _ := s.repo.RecordsForExport(ctx, registryID, "", ids)
 	n, err := s.repo.DeleteRecords(ctx, registryID, ids)
 	if err != nil {
 		return 0, err
 	}
+	s.removeRecordFiles(recs...)
 	s.bus.Publish(ctx, "record:bulk-deleted", []string{roomAll}, map[string]any{
 		"ids": ids, "registry_id": registryID, "company_id": companyID,
 	})
@@ -160,6 +165,35 @@ func (s *Service) DeleteRecords(ctx context.Context, companyID, registryID int64
 }
 
 // ── Хелперы ──────────────────────────────────────────────────────
+
+// removeRecordFiles — удалить из хранилища файлы/картинки удаляемых записей.
+func (s *Service) removeRecordFiles(recs ...*domain.Record) {
+	var paths []string
+	for _, rec := range recs {
+		if rec == nil {
+			continue
+		}
+		for _, v := range rec.Data {
+			if p := fileValuePath(v); p != "" {
+				paths = append(paths, p)
+			}
+		}
+	}
+	if len(paths) > 0 {
+		s.files.Remove(paths)
+	}
+}
+
+// fileValuePath — путь файла/картинки из значения поля. UploadedFile хранится
+// как объект с ключом "path"; для прочих типов — пусто.
+func fileValuePath(v any) string {
+	if m, ok := v.(map[string]any); ok {
+		if p, ok := m["path"].(string); ok {
+			return p
+		}
+	}
+	return ""
+}
 
 func findField(fields []domain.Field, id int64) *domain.Field {
 	for i := range fields {

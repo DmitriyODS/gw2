@@ -1,35 +1,33 @@
-// Package filestore — запись загруженных в реестры файлов/картинок в общий
-// uploads-том (раздаёт nginx /uploads/). Имя на диске случайное (без утечки
-// исходного имени в путь), оригинальное имя хранится в метаданных записи.
+// Package filestore — запись загруженных в реестры файлов/картинок в хранилище
+// (pkg/storage: локальный том или S3). Ключ на диске случайный (без утечки
+// исходного имени), оригинальное имя хранится в метаданных записи.
 package filestore
 
 import (
+	"context"
 	"crypto/rand"
 	"encoding/hex"
-	"os"
+	"mime"
 	"path/filepath"
 	"strings"
 
+	"github.com/DmitriyODS/gw2/back-go/pkg/storage"
 	"github.com/DmitriyODS/gw2/back-go/registry/internal/domain"
 )
 
 const subdir = "registry"
 
 type Store struct {
-	root string
+	st storage.Storage
 }
 
 var _ domain.FileStore = (*Store)(nil)
 
-func New(uploadFolder string) *Store { return &Store{root: uploadFolder} }
+func New(st storage.Storage) *Store { return &Store{st: st} }
 
-// Save — записать файл под случайным именем с сохранением расширения исходного
+// Save — записать файл под случайным ключом с сохранением расширения исходного
 // файла. Возвращает относительный путь registry/<hex><ext>.
 func (s *Store) Save(fileName string, data []byte) (string, error) {
-	dir := filepath.Join(s.root, subdir)
-	if err := os.MkdirAll(dir, 0o755); err != nil {
-		return "", err
-	}
 	name := make([]byte, 16)
 	if _, err := rand.Read(name); err != nil {
 		return "", err
@@ -38,9 +36,20 @@ func (s *Store) Save(fileName string, data []byte) (string, error) {
 	if len(ext) > 16 {
 		ext = "" // защита от мусорного «расширения»
 	}
-	stored := hex.EncodeToString(name) + ext
-	if err := os.WriteFile(filepath.Join(dir, stored), data, 0o644); err != nil {
+	key := subdir + "/" + hex.EncodeToString(name) + ext
+	if err := s.st.Put(context.Background(), key, data, contentType(ext)); err != nil {
 		return "", err
 	}
-	return subdir + "/" + stored, nil
+	return key, nil
+}
+
+func (s *Store) Remove(paths []string) {
+	s.st.Remove(context.Background(), paths...)
+}
+
+func contentType(ext string) string {
+	if ct := mime.TypeByExtension(ext); ct != "" {
+		return ct
+	}
+	return "application/octet-stream"
 }

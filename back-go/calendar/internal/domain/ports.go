@@ -52,10 +52,13 @@ type UserReader interface {
 	CompanyActive(ctx Ctx, companyID *int64) (bool, error)
 }
 
-// FileStore — хранение загруженных файлов/картинок в общем uploads-томе.
+// FileStore — хранение загруженных файлов/картинок (общий uploads-том или S3).
 type FileStore interface {
-	// Save — записать файл, вернуть относительный путь в uploads.
+	// Save — записать файл, вернуть относительный путь (ключ) хранилища.
 	Save(fileName string, data []byte) (string, error)
+	// Remove — best-effort удаление файлов по ключам (чистка при удалении
+	// записей/полей); ошибки не возвращаются.
+	Remove(paths []string)
 }
 
 // EventBus — сокет-события клиентам через Redis gw2:calendar:events

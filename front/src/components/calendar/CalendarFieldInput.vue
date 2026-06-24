@@ -87,6 +87,7 @@ import DatePicker from 'primevue/datepicker'
 import RegistryFieldValue from '@/components/registry/RegistryFieldValue.vue'
 import * as api from '@/api/calendars.js'
 import { useNotificationsStore } from '@/stores/notifications.js'
+import { compressImage } from '@/utils/imageCompress.js'
 
 const props = defineProps({
   field: { type: Object, required: true },
@@ -113,10 +114,11 @@ function onDate(d) {
 // ── Файл ──
 const uploading = ref(false)
 async function onFile(e) {
-  const file = e.target.files?.[0]
-  if (!file) return
+  const picked = e.target.files?.[0]
+  if (!picked) return
   uploading.value = true
   try {
+    const file = props.field.type === 'image' ? await compressImage(picked) : picked
     const meta = await api.uploadFile(file)
     emit('update:modelValue', meta)
   } catch {

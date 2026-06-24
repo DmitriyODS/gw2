@@ -24,6 +24,7 @@ import (
 	"github.com/DmitriyODS/gw2/back-go/auth/internal/token"
 	httptransport "github.com/DmitriyODS/gw2/back-go/auth/internal/transport/http"
 	"github.com/DmitriyODS/gw2/back-go/pkg/bootstrap"
+	"github.com/DmitriyODS/gw2/back-go/pkg/storage"
 )
 
 const (
@@ -64,7 +65,7 @@ func main() {
 	passwordResets := postgres.NewPasswordResetStore(pool)
 	companyInvites := postgres.NewCompanyInviteStore(pool)
 	throttle := redisx.NewLoginThrottle(rdb, log)
-	avatars := avatar.NewStorage(uploadFolder)
+	avatars := avatar.NewStorage(storage.FromEnv(log, uploadFolder))
 
 	mail, err := clients.NewMail(mailAddr, log)
 	if err != nil {

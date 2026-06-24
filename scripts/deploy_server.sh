@@ -147,6 +147,14 @@ fi
 if ! grep -qE '^APP_PUBLIC_BASE_URL=..*' "$ENV_FILE"; then
   warn "APP_PUBLIC_BASE_URL пуст — ссылки подтверждения email используют домен по умолчанию"
 fi
+# S3-хранилище (Beget) — секреты оператора, не генерируем. При STORAGE_BACKEND=s3
+# без них сервисы с загрузками не стартуют (FromEnv → MustEnv → exit).
+if grep -qE '^STORAGE_BACKEND=s3' "$ENV_FILE"; then
+  if ! grep -qE '^S3_BUCKET=..*' "$ENV_FILE" || ! grep -qE '^S3_ACCESS_KEY=..*' "$ENV_FILE" || ! grep -qE '^S3_SECRET_KEY=..*' "$ENV_FILE"; then
+    warn "STORAGE_BACKEND=s3, но S3_BUCKET/S3_ACCESS_KEY/S3_SECRET_KEY пусты — заполните в $ENV_FILE"
+  fi
+  warn "напоминание: подставьте имя бакета в nginx.prod.conf (location /uploads/) и выставьте бакету анонимный s3:GetObject"
+fi
 
 if [ "$ENV_CHANGED" -eq 1 ]; then
   ok "$ENV_FILE обновлён (бэкап лежит рядом)"

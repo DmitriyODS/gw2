@@ -118,11 +118,15 @@ func (s *Service) stripRemovedFields(ctx context.Context, calendarID int64, fiel
 	if err != nil {
 		return err
 	}
+	var orphans []string
 	for _, e := range entries {
 		changed := false
 		for _, fid := range removed {
 			key := domain.FieldID(fid)
-			if _, ok := e.Data[key]; ok {
+			if v, ok := e.Data[key]; ok {
+				if p := fileValuePath(v); p != "" {
+					orphans = append(orphans, p)
+				}
 				delete(e.Data, key)
 				changed = true
 			}
@@ -133,6 +137,9 @@ func (s *Service) stripRemovedFields(ctx context.Context, calendarID int64, fiel
 		if err := s.repo.UpdateEntry(ctx, e.ID, nil, e.Data, buildSearchText(fields, e.Data)); err != nil {
 			return err
 		}
+	}
+	if len(orphans) > 0 {
+		s.files.Remove(orphans)
 	}
 	return nil
 }

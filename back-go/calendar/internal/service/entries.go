@@ -113,12 +113,14 @@ func (s *Service) UpdateEntry(ctx context.Context, companyID, calendarID, entryI
 }
 
 func (s *Service) DeleteEntry(ctx context.Context, companyID, calendarID, entryID int64) error {
-	if _, err := s.GetEntry(ctx, companyID, calendarID, entryID); err != nil {
+	e, err := s.GetEntry(ctx, companyID, calendarID, entryID)
+	if err != nil {
 		return err
 	}
 	if err := s.repo.DeleteEntry(ctx, entryID); err != nil {
 		return err
 	}
+	s.removeEntryFiles(e)
 	s.bus.Publish(ctx, "entry:deleted", []string{roomAll}, map[string]any{
 		"id": entryID, "calendar_id": calendarID, "company_id": companyID,
 	})
@@ -133,14 +135,46 @@ func (s *Service) DeleteEntries(ctx context.Context, companyID, calendarID int64
 	if len(ids) == 0 {
 		return 0, nil
 	}
+	// Снимаем файлы записей до удаления — после DELETE данные уже недоступны.
+	entries, _ := s.repo.EntriesForExport(ctx, domain.EntryListFilter{CalendarID: calendarID}, ids)
 	n, err := s.repo.DeleteEntries(ctx, calendarID, ids)
 	if err != nil {
 		return 0, err
 	}
+	s.removeEntryFiles(entries...)
 	s.bus.Publish(ctx, "entry:bulk-deleted", []string{roomAll}, map[string]any{
 		"ids": ids, "calendar_id": calendarID, "company_id": companyID,
 	})
 	return n, nil
+}
+
+// removeEntryFiles — удалить из хранилища файлы/картинки удаляемых записей.
+func (s *Service) removeEntryFiles(entries ...*domain.Entry) {
+	var paths []string
+	for _, e := range entries {
+		if e == nil {
+			continue
+		}
+		for _, v := range e.Data {
+			if p := fileValuePath(v); p != "" {
+				paths = append(paths, p)
+			}
+		}
+	}
+	if len(paths) > 0 {
+		s.files.Remove(paths)
+	}
+}
+
+// fileValuePath — путь файла/картинки из значения поля. UploadedFile хранится
+// как объект с ключом "path"; для прочих типов — пусто.
+func fileValuePath(v any) string {
+	if m, ok := v.(map[string]any); ok {
+		if p, ok := m["path"].(string); ok {
+			return p
+		}
+	}
+	return ""
 }
 
 // ── Хелперы ──────────────────────────────────────────────────────

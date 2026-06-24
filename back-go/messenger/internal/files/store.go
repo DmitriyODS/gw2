@@ -1,12 +1,11 @@
-// Package files — файлы вложений мессенджера в общем uploads-каталоге
-// (UPLOAD_FOLDER, тот же volume, что у Flask; наружу отдаёт nginx /uploads/).
+// Package files — файлы вложений мессенджера в хранилище (pkg/storage:
+// локальный том или S3). Наружу файлы отдаёт nginx по /uploads/.
 package files
 
 import (
+	"context"
 	"fmt"
-	"io"
-	"log/slog"
-	"os"
+	"mime"
 	"path/filepath"
 	"strings"
 	"time"
@@ -14,84 +13,56 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/DmitriyODS/gw2/back-go/messenger/internal/domain"
+	"github.com/DmitriyODS/gw2/back-go/pkg/storage"
 )
 
 const messagesSubdir = "messages"
 
 type Store struct {
-	root string
-	log  *slog.Logger
+	st storage.Storage
 }
 
 var _ domain.FileStore = (*Store)(nil)
 
-func NewStore(uploadFolder string, log *slog.Logger) *Store {
-	return &Store{root: uploadFolder, log: log}
+func NewStore(st storage.Storage) *Store {
+	return &Store{st: st}
 }
 
-// relPath — messages/YYYY/MM/{uuid32hex}{ext}; разделители всегда «/»
-// (как во Flask: rel_path.replace(os.sep, "/")).
-func (s *Store) newRelPath(ext string) string {
+// newKey — messages/YYYY/MM/{uuid32hex}{ext}; разделители всегда «/».
+func (s *Store) newKey(ext string) string {
 	now := time.Now().UTC()
 	return fmt.Sprintf("%s/%04d/%02d/%s%s", messagesSubdir, now.Year(), int(now.Month()),
 		strings.ReplaceAll(uuid.NewString(), "-", ""), ext)
 }
 
-func (s *Store) abs(relPath string) string {
-	return filepath.Join(s.root, filepath.FromSlash(relPath))
-}
-
 func (s *Store) Save(data []byte, ext string) (string, error) {
-	relPath := s.newRelPath(ext)
-	absPath := s.abs(relPath)
-	if err := os.MkdirAll(filepath.Dir(absPath), 0o755); err != nil {
+	key := s.newKey(ext)
+	if err := s.st.Put(context.Background(), key, data, contentType(ext)); err != nil {
 		return "", err
 	}
-	if err := os.WriteFile(absPath, data, 0o644); err != nil {
-		return "", err
-	}
-	return relPath, nil
+	return key, nil
 }
 
-// Copy — потоковая физическая копия (вложения бывают до 25 МБ).
+// Copy — серверная копия (пересылка): удаление одной копии не задевает другую.
 func (s *Store) Copy(srcRelPath string) (string, error) {
 	ext := strings.ToLower(filepath.Ext(srcRelPath))
 	if len(ext) > 16 {
 		ext = ext[:16]
 	}
-	dstRel := s.newRelPath(ext)
-	dstAbs := s.abs(dstRel)
-	if err := os.MkdirAll(filepath.Dir(dstAbs), 0o755); err != nil {
+	dstKey := s.newKey(ext)
+	if err := s.st.Copy(context.Background(), srcRelPath, dstKey); err != nil {
 		return "", err
 	}
-
-	src, err := os.Open(s.abs(srcRelPath))
-	if err != nil {
-		return "", err
-	}
-	defer src.Close()
-	dst, err := os.Create(dstAbs)
-	if err != nil {
-		return "", err
-	}
-	if _, err := io.Copy(dst, src); err != nil {
-		dst.Close()
-		os.Remove(dstAbs)
-		return "", err
-	}
-	if err := dst.Close(); err != nil {
-		return "", err
-	}
-	return dstRel, nil
+	return dstKey, nil
 }
 
 func (s *Store) Remove(paths []string) {
-	for _, p := range paths {
-		if p == "" {
-			continue
-		}
-		if err := os.Remove(s.abs(p)); err != nil && !os.IsNotExist(err) {
-			s.log.Warn("attachment.unlink_failed", "path", p, "error", err)
-		}
+	s.st.Remove(context.Background(), paths...)
+}
+
+func contentType(ext string) string {
+	if ct := mime.TypeByExtension(ext); ct != "" {
+		return ct
 	}
+	return "application/octet-stream"
 }

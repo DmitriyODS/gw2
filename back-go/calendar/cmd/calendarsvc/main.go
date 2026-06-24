@@ -23,6 +23,7 @@ import (
 	"github.com/DmitriyODS/gw2/back-go/pkg/bootstrap"
 	"github.com/DmitriyODS/gw2/back-go/pkg/events"
 	"github.com/DmitriyODS/gw2/back-go/pkg/pasetoauth"
+	"github.com/DmitriyODS/gw2/back-go/pkg/storage"
 )
 
 func main() {
@@ -53,7 +54,7 @@ func main() {
 	users := postgres.NewUserReader(pool)
 	svc := service.New(service.Deps{
 		Repo:  repo,
-		Files: filestore.New(uploadFolder),
+		Files: filestore.New(storage.FromEnv(log, uploadFolder)),
 		Bus:   events.NewPublisher(rdb, log, "gw2:calendar:events"),
 		Log:   log,
 	})

@@ -84,6 +84,7 @@ import com.kodass.groovework.ui.common.CenteredLoading
 import com.kodass.groovework.ui.common.ConfirmDialog
 import com.kodass.groovework.ui.common.ConfirmSpec
 import com.kodass.groovework.ui.common.ErrorState
+import com.kodass.groovework.ui.common.LinkifiedText
 import com.kodass.groovework.ui.common.UserAvatar
 import com.kodass.groovework.ui.common.formatDate
 import com.kodass.groovework.ui.common.formatDateTime
@@ -565,7 +566,7 @@ private fun CommentRow(comment: CommentDto, mine: Boolean, onDelete: () -> Unit)
                     modifier = Modifier.padding(start = 8.dp),
                 )
             }
-            Text(
+            LinkifiedText(
                 text = comment.text,
                 style = MaterialTheme.typography.bodyMedium,
                 modifier = Modifier.padding(top = 2.dp),
