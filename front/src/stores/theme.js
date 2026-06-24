@@ -190,13 +190,33 @@ export const useThemeStore = defineStore('theme', () => {
 
   const currentPreset = ref(resolvedPreset)
 
-  /* Режим оформления: light | dark | system. Миграция со старого булевого
-     gw_dark; legacy-пресет 'dark' тоже когда-то означал тёмный режим. */
+  /* Режим оформления: light | dark | system | schedule. Миграция со старого
+     булевого gw_dark; legacy-пресет 'dark' тоже когда-то означал тёмный режим. */
   const storedMode = storageGet('gw_theme_mode', '')
   const legacyDark = storageGet('gw_dark', 'false') === 'true' || storedPreset === 'dark'
-  const mode = ref(['light', 'dark', 'system'].includes(storedMode)
+  const mode = ref(['light', 'dark', 'system', 'schedule'].includes(storedMode)
     ? storedMode
     : (legacyDark ? 'dark' : 'light'))
+
+  /* Расписание тёмной темы: тёмная включается в `from` и выключается в `to`
+     (24-ч формат "HH:MM"). Интервал может пересекать полночь (from > to). */
+  const storedSchedule = storageGetJSON('gw_theme_schedule', null)
+  const isHHMM = v => typeof v === 'string' && /^([01]\d|2[0-3]):[0-5]\d$/.test(v)
+  const schedule = ref({
+    from: isHHMM(storedSchedule?.from) ? storedSchedule.from : '20:00',
+    to:   isHHMM(storedSchedule?.to)   ? storedSchedule.to   : '07:00',
+  })
+
+  function isDarkBySchedule() {
+    const now = new Date()
+    const cur = now.getHours() * 60 + now.getMinutes()
+    const [fh, fm] = schedule.value.from.split(':').map(Number)
+    const [th, tm] = schedule.value.to.split(':').map(Number)
+    const f = fh * 60 + fm
+    const t = th * 60 + tm
+    if (f === t) return false
+    return f < t ? (cur >= f && cur < t) : (cur >= f || cur < t)
+  }
 
   /* matchMedia может отсутствовать в очень старых браузерах — тогда
      «системная» ведёт себя как светлая. */
@@ -209,7 +229,8 @@ export const useThemeStore = defineStore('theme', () => {
   const dark = ref(false)
 
   function applyDark() {
-    dark.value = mode.value === 'system' ? !!systemDarkMq?.matches : mode.value === 'dark'
+    if (mode.value === 'schedule') dark.value = isDarkBySchedule()
+    else dark.value = mode.value === 'system' ? !!systemDarkMq?.matches : mode.value === 'dark'
     document.documentElement.setAttribute('data-dark', dark.value)
     // Сообщаем браузеру фактическую схему: красит родные контролы/скроллбары
     // и отключает агрессивное «автозатемнение» (Android auto-dark и т.п.),
@@ -221,6 +242,13 @@ export const useThemeStore = defineStore('theme', () => {
     mode.value = m
     storageSet('gw_theme_mode', m)
     applyDark()
+  }
+
+  function setSchedule(from, to) {
+    if (isHHMM(from)) schedule.value.from = from
+    if (isHHMM(to)) schedule.value.to = to
+    storageSetJSON('gw_theme_schedule', { ...schedule.value })
+    if (mode.value === 'schedule') applyDark()
   }
 
   const customThemes = ref(storedCustomThemes)
@@ -291,13 +319,15 @@ export const useThemeStore = defineStore('theme', () => {
     const onSystemChange = () => { if (mode.value === 'system') applyDark() }
     if (systemDarkMq?.addEventListener) systemDarkMq.addEventListener('change', onSystemChange)
     else systemDarkMq?.addListener?.(onSystemChange)
+    // Тик расписания: проверяем наступление времени переключения раз в полминуты.
+    setInterval(() => { if (mode.value === 'schedule') applyDark() }, 30000)
   }
 
   return {
-    currentPreset, mode, dark, customThemes,
+    currentPreset, mode, dark, customThemes, schedule,
     presetNames: Object.keys(PRESETS),
     presetLabels: PRESET_LABELS,
-    applyTheme, applyVars, setMode, saveCustomTheme, deleteCustomTheme,
+    applyTheme, applyVars, setMode, setSchedule, saveCustomTheme, deleteCustomTheme,
     exportTheme, importTheme, init, getVars, randomTheme,
   }
 })

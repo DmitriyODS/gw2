@@ -66,7 +66,7 @@
         </div>
         <div>
           <h4 class="tb-card-title">Режим оформления</h4>
-          <p class="tb-card-sub">Светлая, тёмная — или как в системе: приложение само переключится вслед за устройством.</p>
+          <p class="tb-card-sub">Светлая, тёмная, как в системе — или по часам: тёмная сама включится и выключится в заданное время.</p>
         </div>
       </div>
       <div class="seg-group" role="tablist">
@@ -84,6 +84,36 @@
         </button>
         <span class="seg-indicator" :data-pos="modeIndicatorPos" />
       </div>
+
+      <!-- Расписание тёмной темы -->
+      <Transition name="sched-reveal">
+        <div v-if="themeStore.mode === 'schedule'" class="sched-row">
+          <label class="sched-field">
+            <span class="sched-label">
+              <span class="material-symbols-outlined">dark_mode</span>
+              Включать тёмную
+            </span>
+            <input
+              type="time"
+              class="sched-input"
+              :value="themeStore.schedule.from"
+              @change="onScheduleChange('from', $event)"
+            />
+          </label>
+          <label class="sched-field">
+            <span class="sched-label">
+              <span class="material-symbols-outlined">light_mode</span>
+              Выключать тёмную
+            </span>
+            <input
+              type="time"
+              class="sched-input"
+              :value="themeStore.schedule.to"
+              @change="onScheduleChange('to', $event)"
+            />
+          </label>
+        </div>
+      </Transition>
     </div>
 
     <!-- Галерея готовых тем -->
@@ -300,13 +330,23 @@ const notif = useNotificationsStore()
 /* Режим оформления: светлая / системная / тёмная. «Системная» следует за
    настройкой устройства и переключается на лету. */
 const THEME_MODES = [
-  { value: 'light',  label: 'Светлая',   icon: 'light_mode' },
-  { value: 'system', label: 'Системная', icon: 'brightness_auto' },
-  { value: 'dark',   label: 'Тёмная',    icon: 'dark_mode' },
+  { value: 'light',    label: 'Светлая',   icon: 'light_mode' },
+  { value: 'system',   label: 'Системная', icon: 'brightness_auto' },
+  { value: 'dark',     label: 'Тёмная',    icon: 'dark_mode' },
+  { value: 'schedule', label: 'По часам',  icon: 'schedule' },
 ]
 
 const modeIndicatorPos = computed(() =>
-  ({ light: 'left', system: 'center', dark: 'right' }[themeStore.mode] || 'left'))
+  ({ light: 'p0', system: 'p1', dark: 'p2', schedule: 'p3' }[themeStore.mode] || 'p0'))
+
+function onScheduleChange(field, e) {
+  const v = e.target.value
+  if (!v) return
+  themeStore.setSchedule(
+    field === 'from' ? v : themeStore.schedule.from,
+    field === 'to' ? v : themeStore.schedule.to,
+  )
+}
 
 const colorLabels = {
   primary:   { title: 'Основной',   hint: 'Главный акцент: кнопки и активные элементы' },
@@ -776,12 +816,12 @@ function importTheme(event) {
 .seg-group {
   position: relative;
   display: inline-grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(4, 1fr);
   padding: 4px;
   background: var(--color-surface-high);
   border-radius: 999px;
   width: 100%;
-  max-width: 440px;
+  max-width: 560px;
 }
 
 .seg-btn {
@@ -811,15 +851,71 @@ function importTheme(event) {
   top: 4px;
   bottom: 4px;
   left: 4px;
-  width: calc((100% - 8px) / 3);
+  width: calc((100% - 8px) / 4);
   background: var(--color-primary);
   border-radius: 999px;
   transition: transform 0.3s cubic-bezier(0.22, 1, 0.36, 1);
   box-shadow: 0 4px 14px color-mix(in oklch, var(--color-primary) 35%, transparent);
 }
 
-.seg-indicator[data-pos="center"] { transform: translateX(100%); }
-.seg-indicator[data-pos="right"]  { transform: translateX(200%); }
+.seg-indicator[data-pos="p1"] { transform: translateX(100%); }
+.seg-indicator[data-pos="p2"] { transform: translateX(200%); }
+.seg-indicator[data-pos="p3"] { transform: translateX(300%); }
+
+/* ── Расписание тёмной темы ─────────────────────────────────── */
+.sched-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 16px;
+}
+
+.sched-field {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  flex: 1 1 180px;
+}
+
+.sched-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--color-text-dim);
+}
+
+.sched-label .material-symbols-outlined { font-size: 18px; }
+
+.sched-input {
+  padding: 10px 14px;
+  background: var(--color-surface-high);
+  border: 1px solid var(--color-outline-variant);
+  border-radius: var(--radius-md, 14px);
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--color-text);
+  color-scheme: light dark;
+  transition: border-color 0.2s;
+}
+
+.sched-input:focus {
+  outline: none;
+  border-color: var(--color-primary);
+}
+
+.sched-reveal-enter-active,
+.sched-reveal-leave-active {
+  transition: opacity 0.25s, transform 0.25s;
+  overflow: hidden;
+}
+
+.sched-reveal-enter-from,
+.sched-reveal-leave-to {
+  opacity: 0;
+  transform: translateY(-6px);
+}
 
 /* ── Галерея пресетов ───────────────────────────────────────── */
 .preset-gallery {
