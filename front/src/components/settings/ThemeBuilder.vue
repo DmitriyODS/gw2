@@ -93,11 +93,10 @@
               <span class="material-symbols-outlined">dark_mode</span>
               Включать тёмную
             </span>
-            <input
-              type="time"
-              class="sched-input"
-              :value="themeStore.schedule.from"
-              @change="onScheduleChange('from', $event)"
+            <TimePicker
+              :model-value="themeStore.schedule.from"
+              icon="dark_mode"
+              @update:model-value="(v) => onScheduleChange('from', v)"
             />
           </label>
           <label class="sched-field">
@@ -105,11 +104,10 @@
               <span class="material-symbols-outlined">light_mode</span>
               Выключать тёмную
             </span>
-            <input
-              type="time"
-              class="sched-input"
-              :value="themeStore.schedule.to"
-              @change="onScheduleChange('to', $event)"
+            <TimePicker
+              :model-value="themeStore.schedule.to"
+              icon="light_mode"
+              @update:model-value="(v) => onScheduleChange('to', v)"
             />
           </label>
         </div>
@@ -321,6 +319,7 @@ import { ref, reactive, computed, watch, onMounted, onBeforeUnmount } from 'vue'
 import { onBeforeRouteLeave } from 'vue-router'
 import InputText from 'primevue/inputtext'
 import AppDialog from '@/components/common/AppDialog.vue'
+import TimePicker from '@/components/common/TimePicker.vue'
 import { useThemeStore } from '@/stores/theme.js'
 import { useNotificationsStore } from '@/stores/notifications.js'
 
@@ -339,8 +338,7 @@ const THEME_MODES = [
 const modeIndicatorPos = computed(() =>
   ({ light: 'p0', system: 'p1', dark: 'p2', schedule: 'p3' }[themeStore.mode] || 'p0'))
 
-function onScheduleChange(field, e) {
-  const v = e.target.value
+function onScheduleChange(field, v) {
   if (!v) return
   themeStore.setSchedule(
     field === 'from' ? v : themeStore.schedule.from,

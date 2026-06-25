@@ -135,12 +135,16 @@ class AppContainer(app: Application) {
     val calendarsApi: com.kodass.groovework.data.api.CalendarsApi =
         retrofit.create(com.kodass.groovework.data.api.CalendarsApi::class.java)
 
+    val diariesApi: com.kodass.groovework.data.api.DiariesApi =
+        retrofit.create(com.kodass.groovework.data.api.DiariesApi::class.java)
+
     val gateway = GatewayClient(okHttp, sessionManager, json)
     val messengerRepo = MessengerRepository(messengerApi, gateway, sessionManager, json, appScope)
     val tasksRepo = TasksRepository(tasksApi, json)
     val unitsRepo = com.kodass.groovework.data.repo.UnitsRepository(unitsApi, json)
     val registriesRepo = com.kodass.groovework.data.repo.RegistriesRepository(registriesApi, json)
     val calendarsRepo = com.kodass.groovework.data.repo.CalendarsRepository(calendarsApi, json)
+    val diariesRepo = com.kodass.groovework.data.repo.DiariesRepository(diariesApi, json)
 
     val notifier = Notifier(app)
     val notificationCenter = NotificationCenter(notifier, gateway, messengerRepo, sessionManager, json, appScope)

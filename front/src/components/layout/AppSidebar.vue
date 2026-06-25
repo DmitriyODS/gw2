@@ -112,6 +112,10 @@ const navItems = computed(() => {
     active: () => route.path.startsWith('/messenger'),
     badge: () => messenger.totalUnread })
 
+  // Ежедневник — личный (кросс-компанийный), доступен всегда.
+  items.push({ path: '/diaries', icon: 'event_note', label: 'Ежедневник', tutorial: 'nav-diaries',
+    active: () => route.path.startsWith('/diaries') || route.path.startsWith('/diary') })
+
   if (hasActiveCompany.value) {
     // «Мой Groove» — только если компания не выключила режим грувиков.
     if (usesGroove.value) {
@@ -235,13 +239,22 @@ const avatarSrc = computed(() => {
   transition: opacity 0.18s ease;
 }
 
-.sidebar-nav { display: flex; flex-direction: column; gap: 6px; flex: 1; }
+/* Список разделов скроллится сам — логотип, плашка компании и профиль
+   остаются на месте. min-height:0 нужен, чтобы flex-элемент мог сжаться и
+   включить прокрутку; скроллбар прячем, чтобы не ломать узкую свёрнутую колонку. */
+.sidebar-nav {
+  display: flex; flex-direction: column; gap: 6px;
+  flex: 1; min-height: 0; overflow-y: auto; overflow-x: hidden;
+  scrollbar-width: none;
+}
+.sidebar-nav::-webkit-scrollbar { width: 0; height: 0; }
 
 .nav-btn {
   display: flex;
   align-items: center;
   gap: 14px;
   height: 48px;
+  flex-shrink: 0;
   width: 100%;
   padding: 0 12px;
   border-radius: 12px;

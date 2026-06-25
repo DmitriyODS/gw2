@@ -70,6 +70,9 @@ services:
   calendar:
     image: osipovskijdima/groove_work:${CALENDAR_TAG:-calendar}
 
+  diary:
+    image: osipovskijdima/groove_work:${DIARY_TAG:-diary}
+
   mail:
     image: osipovskijdima/groove_work:${MAIL_TAG:-mail}
     environment:

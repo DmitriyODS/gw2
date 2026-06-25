@@ -9,6 +9,7 @@ import { registerCallSocketHandlers } from '@/socket/calls.js'
 import { registerGrooveSocketHandlers } from '@/socket/groove.js'
 import { registerRegistrySocketHandlers } from '@/socket/registry.js'
 import { registerCalendarSocketHandlers } from '@/socket/calendar.js'
+import { registerDiarySocketHandlers } from '@/socket/diary.js'
 
 let socket = null
 let visibilityHookInstalled = false
@@ -172,6 +173,7 @@ export function connectSocket() {
   registerGrooveSocketHandlers(socket)
   registerRegistrySocketHandlers(socket)
   registerCalendarSocketHandlers(socket)
+  registerDiarySocketHandlers(socket)
 }
 
 export function disconnectSocket() {

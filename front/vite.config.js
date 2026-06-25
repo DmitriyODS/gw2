@@ -109,6 +109,11 @@ export default defineConfig({
         target: 'http://localhost:8100',
         changeOrigin: true
       },
+      // Ежедневники — diarysvc (личные заметки-задачи по дням).
+      '/api/diaries': {
+        target: 'http://localhost:8101',
+        changeOrigin: true
+      },
       // Ядро задач — tasksvc (задачи, юниты, типы, этапы, отделы, статистика).
       '/api/tasks': {
         target: 'http://localhost:8095',

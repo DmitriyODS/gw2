@@ -396,6 +396,20 @@ else
   warn "маршрут /api/calendars вернул $calendar_code (ожидался 401) — проверьте nginx"
 fi
 
+# Микросервис ежедневников: healthz изнутри контейнера + маршрут /api/diaries
+# через nginx (без токена ожидаем 401, не 404/502).
+if $COMPOSE exec -T diary wget -qO- --timeout=3 http://127.0.0.1:8101/healthz >/dev/null 2>&1; then
+  ok "diarysvc отвечает (healthz)"
+else
+  warn "diarysvc не отвечает — ежедневники не работают: make logs s=diary"
+fi
+diary_code=$(curl -skL -o /dev/null -w '%{http_code}' --max-time 5 http://localhost/api/diaries || true)
+if [ "$diary_code" = "401" ]; then
+  ok "маршрут /api/diaries через nginx ведёт в diarysvc"
+else
+  warn "маршрут /api/diaries вернул $diary_code (ожидался 401) — проверьте nginx"
+fi
+
 # Микросервис почты: healthz изнутри контейнера (наружу не торчит — gRPC-only,
 # через nginx не проксируется).
 if $COMPOSE exec -T mail wget -qO- --timeout=3 http://127.0.0.1:8098/healthz >/dev/null 2>&1; then

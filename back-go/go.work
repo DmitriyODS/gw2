@@ -5,6 +5,7 @@ use (
 	./auth
 	./calendar
 	./calls
+	./diary
 	./gateway
 	./groove
 	./mail

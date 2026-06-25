@@ -175,6 +175,12 @@ const props = defineProps({
   task: {
     type: Object,
     default: null
+  },
+  // Предзаполнение названия при СОЗДАНИИ (например, из записи ежедневника).
+  // Не влияет на режим редактирования (там имя берётся из task).
+  presetName: {
+    type: String,
+    default: ''
   }
 })
 
@@ -202,7 +208,7 @@ const responsibles = ref([])
 const responsiblesLoading = ref(false)
 
 const form = ref({
-  name: props.task?.name || '',
+  name: props.task?.name || props.presetName || '',
   link_yougile: props.task?.link_yougile || '',
   department_id: props.task?.department?.id || props.task?.department_id || null,
   received_at: props.task?.received_at ? new Date(props.task.received_at) : new Date(),

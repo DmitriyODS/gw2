@@ -20,6 +20,7 @@ import androidx.compose.material.icons.automirrored.outlined.Chat
 import androidx.compose.material.icons.automirrored.filled.Chat
 import androidx.compose.material.icons.filled.BarChart
 import androidx.compose.material.icons.filled.CalendarMonth
+import androidx.compose.material.icons.filled.EventNote
 import androidx.compose.material.icons.filled.Groups
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.MoreHoriz
@@ -27,6 +28,7 @@ import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.outlined.BarChart
 import androidx.compose.material.icons.outlined.CalendarMonth
+import androidx.compose.material.icons.outlined.EventNote
 import androidx.compose.material.icons.outlined.Groups
 import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.MoreHoriz
@@ -78,6 +80,9 @@ import com.kodass.groovework.ui.chats.ChatsScreen
 import com.kodass.groovework.ui.calendars.CalendarEntryScreen
 import com.kodass.groovework.ui.calendars.CalendarScreen
 import com.kodass.groovework.ui.calendars.CalendarsListScreen
+import com.kodass.groovework.ui.diary.DiariesListScreen
+import com.kodass.groovework.ui.diary.DiaryEntryScreen
+import com.kodass.groovework.ui.diary.DiaryScreen
 import com.kodass.groovework.ui.companies.AcceptInviteScreen
 import com.kodass.groovework.ui.employees.EmployeesScreen
 import com.kodass.groovework.ui.profile.ProfileScreen
@@ -109,6 +114,7 @@ private val primaryDestinations = listOf(
 private val overflowDestinations = listOf(
     TopLevelDestination("registries", "Реестры", Icons.Outlined.TableChart, Icons.Filled.TableChart),
     TopLevelDestination("calendars", "Календари", Icons.Outlined.CalendarMonth, Icons.Filled.CalendarMonth),
+    TopLevelDestination("diaries", "Ежедневник", Icons.Outlined.EventNote, Icons.Filled.EventNote),
     TopLevelDestination("employees", "Сотрудники", Icons.Outlined.Groups, Icons.Filled.Groups),
     TopLevelDestination("stats", "Статистика", Icons.Outlined.BarChart, Icons.Filled.BarChart),
     TopLevelDestination("appearance", "Оформление", Icons.Outlined.Palette, Icons.Filled.Palette),
@@ -376,6 +382,41 @@ fun MainScreen(container: AppContainer) {
                 CalendarEntryScreen(
                     container = container,
                     calendarId = entry.arguments?.getLong("calendarId") ?: 0L,
+                    entryId = entry.arguments?.getLong("entryId") ?: 0L,
+                    dateMillis = entry.arguments?.getLong("date") ?: 0L,
+                    onBack = { navController.popBackStack() },
+                )
+            }
+            composable("diaries") {
+                DiariesListScreen(
+                    container = container,
+                    onOpenDiary = { diaryId -> navController.navigate("diary/$diaryId") },
+                )
+            }
+            composable(
+                route = "diary/{diaryId}",
+                arguments = listOf(navArgument("diaryId") { type = NavType.LongType }),
+            ) { entry ->
+                DiaryScreen(
+                    container = container,
+                    diaryId = entry.arguments?.getLong("diaryId") ?: 0L,
+                    onBack = { navController.popBackStack() },
+                    onOpenEntry = { diaryId, entryId, dateMillis ->
+                        navController.navigate("diary_entry/$diaryId/$entryId?date=$dateMillis")
+                    },
+                )
+            }
+            composable(
+                route = "diary_entry/{diaryId}/{entryId}?date={date}",
+                arguments = listOf(
+                    navArgument("diaryId") { type = NavType.LongType },
+                    navArgument("entryId") { type = NavType.LongType },
+                    navArgument("date") { type = NavType.LongType; defaultValue = 0L },
+                ),
+            ) { entry ->
+                DiaryEntryScreen(
+                    container = container,
+                    diaryId = entry.arguments?.getLong("diaryId") ?: 0L,
                     entryId = entry.arguments?.getLong("entryId") ?: 0L,
                     dateMillis = entry.arguments?.getLong("date") ?: 0L,
                     onBack = { navController.popBackStack() },

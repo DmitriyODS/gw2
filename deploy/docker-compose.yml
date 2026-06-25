@@ -445,6 +445,36 @@ services:
       retries: 5
       start_period: 10s
 
+  # Микросервис ежедневников (Go, back-go/diary): HTTP :8101 — личные
+  # ежедневники пользователей (заметки-задачи по дням, архив, шаринг), REST
+  # /api/diaries. Скоуп по владельцу (не по компании); файлов нет. Межсервисных
+  # вызовов нет.
+  diary:
+    build:
+      context: ../back-go
+      dockerfile: diary/Dockerfile
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    environment:
+      DATABASE_URL: postgresql://${DB_USER}:${DB_PASSWORD}@db:5432/${DB_NAME}
+      REDIS_URL: redis://redis:6379/0
+      PASETO_PUBLIC_KEY: ${PASETO_PUBLIC_KEY}
+      HTTP_ADDR: ":8101"
+    expose:
+      - "8101"
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8101/healthz"]
+      interval: 15s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
+
   # Микросервис рассылки писем (Go, back-go/mail): gRPC :9098 — Send(шаблон),
   # HTTP :8098 — /healthz. Stateless (без БД/Redis), доставка по SMTP. Зовёт его
   # authsvc (письма подтверждения email). SMTP_* и отправитель задаёт .env /
@@ -505,6 +535,8 @@ services:
       registry:
         condition: service_healthy
       calendar:
+        condition: service_healthy
+      diary:
         condition: service_healthy
     volumes:
       - uploads:/app/uploads:ro
