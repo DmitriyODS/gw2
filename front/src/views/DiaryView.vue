@@ -87,23 +87,26 @@
         </header>
 
         <div class="dv-body">
-          <!-- АРХИВ — список выполненного -->
+          <!-- АРХИВ — выполненные, сгруппированные по дням -->
           <div v-if="store.subtab === 'archive'" class="dv-archive">
             <div v-if="!store.archive.length" class="dv-empty">
               <span class="material-symbols-outlined">inventory_2</span>
               <p>Архив пуст — выполненные записи появятся здесь</p>
             </div>
-            <button v-for="e in store.archive" :key="e.id" class="dv-arow" @click="openEntry(e)">
-              <span class="material-symbols-outlined dv-arow-check">check_circle</span>
-              <span class="dv-arow-body">
-                <span class="dv-arow-title">{{ e.title }}</span>
-                <span class="dv-arow-meta">{{ archiveMeta(e) }}</span>
-              </span>
-              <span v-if="!store.readonly" class="dv-arow-act" title="Вернуть в активные" @click.stop="toggleDone(e, false)">
-                <span class="material-symbols-outlined">undo</span>
-              </span>
-              <span class="material-symbols-outlined dv-arow-chev">chevron_right</span>
-            </button>
+            <div v-for="g in archiveGroups" :key="g.date" class="dv-arc-group">
+              <div class="dv-arc-daylabel">{{ g.label }}</div>
+              <button v-for="e in g.items" :key="e.id" class="dv-arow" @click="openEntry(e)">
+                <span class="material-symbols-outlined dv-arow-check">check_circle</span>
+                <span class="dv-arow-body">
+                  <span class="dv-arow-title">{{ e.title }}</span>
+                  <span v-if="entryTime(e)" class="dv-arow-meta">{{ entryTime(e) }}</span>
+                </span>
+                <span v-if="!store.readonly" class="dv-arow-act" title="Вернуть в активные" @click.stop="toggleDone(e, false)">
+                  <span class="material-symbols-outlined">undo</span>
+                </span>
+                <span class="material-symbols-outlined dv-arow-chev">chevron_right</span>
+              </button>
+            </div>
           </div>
 
           <!-- АКТИВНЫЕ — календарные виды -->
@@ -149,24 +152,43 @@
             </div>
 
             <div v-else class="dv-daylist">
-              <div v-if="!dayEntries(store.cursor).length" class="dv-empty">
+              <div v-if="!dayEntries(store.cursor).length && !store.dayDone.length" class="dv-empty">
                 <span class="material-symbols-outlined">event_busy</span>
                 <p>На этот день записей нет</p>
                 <button v-if="!store.readonly" class="dv-btn-tonal" @click="openCreate(store.cursor)">
                   <span class="material-symbols-outlined">add</span> Добавить запись
                 </button>
               </div>
-              <button v-for="e in dayEntries(store.cursor)" :key="e.id" class="dv-dayrow" @click="openEntry(e)">
-                <span class="dv-dayrow-time">{{ entryTime(e) || '—' }}</span>
-                <span class="dv-dayrow-body">
-                  <span class="dv-dayrow-title">{{ e.title }}</span>
-                  <span v-if="e.description" class="dv-dayrow-sub">{{ e.description }}</span>
-                </span>
-                <span v-if="!store.readonly" class="dv-dayrow-done" title="Выполнено" @click.stop="toggleDone(e, true)">
-                  <span class="material-symbols-outlined">check_circle</span>
-                </span>
-                <span class="material-symbols-outlined dv-dayrow-chev">chevron_right</span>
-              </button>
+              <template v-else>
+                <template v-if="dayEntries(store.cursor).length">
+                  <div class="dv-day-section">Активные</div>
+                  <button v-for="e in dayEntries(store.cursor)" :key="e.id" class="dv-dayrow" @click="openEntry(e)">
+                    <span class="dv-dayrow-time">{{ entryTime(e) || '—' }}</span>
+                    <span class="dv-dayrow-body">
+                      <span class="dv-dayrow-title">{{ e.title }}</span>
+                      <span v-if="e.description" class="dv-dayrow-sub">{{ e.description }}</span>
+                    </span>
+                    <span v-if="!store.readonly" class="dv-dayrow-done" title="Выполнено" @click.stop="toggleDone(e, true)">
+                      <span class="material-symbols-outlined">check_circle</span>
+                    </span>
+                    <span class="material-symbols-outlined dv-dayrow-chev">chevron_right</span>
+                  </button>
+                </template>
+                <template v-if="store.dayDone.length">
+                  <div class="dv-day-section">Выполнено</div>
+                  <button v-for="e in store.dayDone" :key="e.id" class="dv-dayrow" @click="openEntry(e)">
+                    <span class="dv-dayrow-time">{{ entryTime(e) || '—' }}</span>
+                    <span class="dv-dayrow-body">
+                      <span class="dv-dayrow-title done">{{ e.title }}</span>
+                      <span v-if="e.description" class="dv-dayrow-sub">{{ e.description }}</span>
+                    </span>
+                    <span v-if="!store.readonly" class="dv-dayrow-done undo" title="Вернуть в активные" @click.stop="toggleDone(e, false)">
+                      <span class="material-symbols-outlined">undo</span>
+                    </span>
+                    <span class="material-symbols-outlined dv-dayrow-chev">chevron_right</span>
+                  </button>
+                </template>
+              </template>
             </div>
           </template>
 
@@ -186,17 +208,35 @@
     <!-- Диалог дня -->
     <AppDialog v-model="dayOpen" :title="dayTitle" icon="today" size="md" :actions="dayActions" @cancel="dayOpen = false" @confirm="openCreate(dayDate)">
       <div class="dd">
-        <p v-if="!dayDialogEntries.length" class="dd-empty">На этот день записей нет.</p>
-        <ul v-else class="dd-list">
-          <li v-for="e in dayDialogEntries" :key="e.id" class="dd-row">
-            <button v-if="!store.readonly" class="dd-check" title="Выполнено" @click="toggleDone(e, true)"><span class="material-symbols-outlined">radio_button_unchecked</span></button>
-            <button class="dd-main" @click="openEntry(e)">
-              <span v-if="entryTime(e)" class="dd-time">{{ entryTime(e) }}</span>
-              <span class="dd-title">{{ e.title }}</span>
-              <span class="material-symbols-outlined dd-chev">chevron_right</span>
-            </button>
-          </li>
-        </ul>
+        <p v-if="!dayActive.length && !dayDone.length" class="dd-empty">На этот день записей нет.</p>
+
+        <div v-if="dayActive.length" class="dd-group">
+          <span class="dd-grouplabel">Активные</span>
+          <ul class="dd-list">
+            <li v-for="e in dayActive" :key="e.id" class="dd-row">
+              <button v-if="!store.readonly" class="dd-check" title="Выполнено" @click="dayToggle(e, true)"><span class="material-symbols-outlined">radio_button_unchecked</span></button>
+              <button class="dd-main" @click="openEntry(e)">
+                <span v-if="entryTime(e)" class="dd-time">{{ entryTime(e) }}</span>
+                <span class="dd-title">{{ e.title }}</span>
+                <span class="material-symbols-outlined dd-chev">chevron_right</span>
+              </button>
+            </li>
+          </ul>
+        </div>
+
+        <div v-if="dayDone.length" class="dd-group">
+          <span class="dd-grouplabel">Выполнено</span>
+          <ul class="dd-list">
+            <li v-for="e in dayDone" :key="e.id" class="dd-row">
+              <button v-if="!store.readonly" class="dd-check done" title="Вернуть в активные" @click="dayToggle(e, false)"><span class="material-symbols-outlined">check_circle</span></button>
+              <button class="dd-main" @click="openEntry(e)">
+                <span v-if="entryTime(e)" class="dd-time">{{ entryTime(e) }}</span>
+                <span class="dd-title done">{{ e.title }}</span>
+                <span class="material-symbols-outlined dd-chev">chevron_right</span>
+              </button>
+            </li>
+          </ul>
+        </div>
       </div>
     </AppDialog>
 
@@ -267,7 +307,7 @@ import DiaryEntryDialog from '@/components/diary/DiaryEntryDialog.vue'
 import DiaryShareDialog from '@/components/diary/DiaryShareDialog.vue'
 import TaskForm from '@/components/tasks/TaskForm.vue'
 import { useDiariesStore, dayKey } from '@/stores/diaries.js'
-import { exportEntries } from '@/api/diaries.js'
+import { exportEntries, getEntries } from '@/api/diaries.js'
 import { useNotificationsStore } from '@/stores/notifications.js'
 import { useBreakpoint } from '@/composables/useBreakpoint.js'
 
@@ -324,10 +364,19 @@ function agendaPreview(day) {
 const todayKey = dayKey(new Date())
 function isToday(day) { return dayKey(day) === todayKey }
 
-function archiveMeta(e) {
-  const d = new Date(e.entry_date).toLocaleDateString('ru-RU', { day: 'numeric', month: 'short', year: 'numeric' })
-  const t = entryTime(e)
-  return t ? `${d} · ${t}` : d
+// Архив сгруппирован по дням (store.archive уже отсортирован по дате убыв.).
+const archiveGroups = computed(() => {
+  const map = new Map()
+  for (const e of store.archive) {
+    if (!map.has(e.entry_date)) map.set(e.entry_date, [])
+    map.get(e.entry_date).push(e)
+  }
+  return [...map.entries()].map(([date, items]) => ({ date, label: archiveDayLabel(date), items }))
+})
+function archiveDayLabel(d) {
+  const [y, m, day] = d.split('-').map(Number)
+  const s = new Date(y, m - 1, day).toLocaleDateString('ru-RU', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })
+  return s.charAt(0).toUpperCase() + s.slice(1)
 }
 
 const periodLabel = computed(() => {
@@ -349,10 +398,11 @@ function onSearch() { clearTimeout(searchTimer); searchTimer = setTimeout(() => 
 function clearSearch() { searchInput.value = ''; store.setSearch('') }
 watch(() => store.selectedId, () => { searchInput.value = '' })
 
-// Диалог дня
+// Диалог дня — день делится на активные и выполненные (архив этого дня).
 const dayOpen = ref(false)
 const dayDate = ref(null)
-const dayDialogEntries = computed(() => (dayDate.value ? dayEntries(dayDate.value) : []))
+const dayDone = ref([])           // выполненные записи выбранного дня (догружаются)
+const dayActive = computed(() => (dayDate.value ? dayEntries(dayDate.value) : []))
 const dayTitle = computed(() => {
   if (!dayDate.value) return 'День'
   const s = new Date(dayDate.value).toLocaleDateString('ru-RU', { weekday: 'long', day: 'numeric', month: 'long' })
@@ -361,18 +411,45 @@ const dayTitle = computed(() => {
 const dayActions = computed(() => store.readonly
   ? [{ kind: 'cancel', label: 'Закрыть' }]
   : [{ kind: 'cancel', label: 'Закрыть' }, { kind: 'confirm', label: 'Добавить запись', icon: 'add' }])
-function openDay(day) { dayDate.value = new Date(day); dayOpen.value = true }
+
+async function loadDayDone() {
+  if (!dayDate.value || store.selectedId == null) { dayDone.value = []; return }
+  const from = dayKey(dayDate.value)
+  const to = dayKey(addDays(dayDate.value, 1))
+  try {
+    const data = await getEntries(store.selectedId, { archived: 1, from, to })
+    dayDone.value = data.items ?? []
+  } catch { dayDone.value = [] }
+}
+
+function openDay(day) {
+  dayDate.value = new Date(day)
+  dayOpen.value = true
+  loadDayDone()
+}
+
+// Отметка/возврат прямо из модалки дня: обновляем и активные (в сторе), и
+// выполненные этого дня.
+async function dayToggle(e, done) {
+  try {
+    await store.toggleDone(e.id, done)
+    await loadDayDone()
+  } catch (err) { notif.error(err?.message || 'Не удалось изменить статус') }
+}
 
 // Диалог записи
 const entryOpen = ref(false)
 const activeEntry = ref(null)
 const defaultDate = ref(null)
-function openEntry(e) { activeEntry.value = e; defaultDate.value = null; entryOpen.value = true; dayOpen.value = false }
+// Модалку дня НЕ закрываем: диалог записи открывается поверх неё, после закрытия
+// записи остаёмся в модалке дня (для вызовов вне модалки dayOpen и так false).
+function openEntry(e) { activeEntry.value = e; defaultDate.value = null; entryOpen.value = true }
 function openCreate(day) {
   activeEntry.value = null
   defaultDate.value = day ? new Date(day) : new Date(store.cursor)
   entryOpen.value = true
-  dayOpen.value = false
+  // Модалку дня НЕ закрываем: диалог записи открывается поверх неё, после
+  // сохранения список активных в модалке дня обновится сам.
 }
 
 async function toggleDone(e, done) {
@@ -540,7 +617,10 @@ onMounted(() => store.fetchDiaries())
 .dv-dayrow-sub { font-size: 13px; color: var(--color-text-dim); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .dv-dayrow-done { flex-shrink: 0; color: var(--color-success); display: grid; place-items: center; }
 .dv-dayrow-done:hover { transform: scale(1.1); }
+.dv-dayrow-done.undo { color: var(--color-text-dim); }
+.dv-dayrow-title.done { text-decoration: line-through; color: var(--color-text-dim); }
 .dv-dayrow-chev { flex-shrink: 0; color: var(--color-text-dim); }
+.dv-day-section { padding: 6px 4px 2px; font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; color: var(--color-text-dim); }
 
 /* Архив */
 .dv-archive { display: flex; flex-direction: column; gap: 8px; padding: 16px; }
@@ -575,6 +655,15 @@ onMounted(() => store.fetchDiaries())
 .dd-time { flex-shrink: 0; min-width: 48px; font-weight: 700; color: var(--color-primary); font-variant-numeric: tabular-nums; }
 .dd-title { flex: 1; min-width: 0; font-weight: 600; color: var(--color-text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .dd-chev { flex-shrink: 0; color: var(--color-text-dim); }
+.dd-group { display: flex; flex-direction: column; gap: 8px; }
+.dd-group + .dd-group { margin-top: 16px; }
+.dd-grouplabel { font-size: 12px; font-weight: 700; text-transform: uppercase; color: var(--color-text-dim); letter-spacing: 0.04em; }
+.dd-check.done { color: var(--color-success); }
+.dd-title.done { text-decoration: line-through; color: var(--color-text-dim); }
+
+/* Архив по дням */
+.dv-arc-group + .dv-arc-group { margin-top: 6px; }
+.dv-arc-daylabel { padding: 12px 4px 6px; font-size: 13px; font-weight: 700; color: var(--color-text-dim); text-transform: capitalize; }
 
 .dv-name-input { width: 100%; padding: 12px 14px; font: inherit; color: var(--color-text); background: var(--color-surface-high); border: 1px solid var(--color-outline-variant); border-radius: var(--radius-md); outline: none; }
 .dv-name-input:focus { border-color: var(--color-primary); }

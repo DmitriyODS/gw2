@@ -62,3 +62,8 @@ data class DiaryEntryRequest(
 data class DiaryDoneRequest(
     val done: Boolean,
 )
+
+@Serializable
+data class DiaryLinkRequest(
+    @SerialName("task_id") val taskId: Long?,
+)

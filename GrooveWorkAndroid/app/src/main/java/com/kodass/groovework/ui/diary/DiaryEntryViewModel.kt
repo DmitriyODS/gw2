@@ -51,6 +51,8 @@ class DiaryEntryViewModel(
         private set
     var done by mutableStateOf(false)
         private set
+    var linkedTaskId by mutableStateOf<Long?>(null)
+        private set
 
     init {
         load()
@@ -86,6 +88,22 @@ class DiaryEntryViewModel(
         startMin = rec.startMin
         endMin = rec.endMin
         done = rec.done
+        linkedTaskId = rec.linkedTaskId
+    }
+
+    // Привязать к записи созданную задачу (кнопка «Создать задачу»).
+    fun linkTask(taskId: Long) {
+        if (isNew) return
+        viewModelScope.launch {
+            try {
+                val updated = repo.linkTask(diaryId, entryId, taskId)
+                record = updated
+                linkedTaskId = updated.linkedTaskId
+                message = "Задача создана и привязана к записи"
+            } catch (e: ApiException) {
+                message = e.message ?: "Задача создана, но привязать не удалось"
+            }
+        }
     }
 
     fun updateDate(value: LocalDate) { date = value }

@@ -5,6 +5,7 @@ import com.kodass.groovework.data.dto.DiaryDoneRequest
 import com.kodass.groovework.data.dto.DiaryDto
 import com.kodass.groovework.data.dto.DiaryEntryDto
 import com.kodass.groovework.data.dto.DiaryEntryRequest
+import com.kodass.groovework.data.dto.DiaryLinkRequest
 import com.kodass.groovework.data.dto.DiaryNameRequest
 import com.kodass.groovework.data.network.apiCall
 import kotlinx.serialization.json.Json
@@ -51,6 +52,9 @@ class DiariesRepository(
 
     suspend fun setDone(diaryId: Long, entryId: Long, done: Boolean): DiaryEntryDto =
         apiCall(json) { api.setDone(diaryId, entryId, DiaryDoneRequest(done)) }
+
+    suspend fun linkTask(diaryId: Long, entryId: Long, taskId: Long?): DiaryEntryDto =
+        apiCall(json) { api.setLink(diaryId, entryId, DiaryLinkRequest(taskId)) }
 
     suspend fun deleteEntry(diaryId: Long, entryId: Long) =
         apiCall(json) { api.deleteRecord(diaryId, entryId) }

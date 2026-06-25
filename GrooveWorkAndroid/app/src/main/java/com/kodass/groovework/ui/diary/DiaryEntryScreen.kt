@@ -19,11 +19,13 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Undo
+import androidx.compose.material.icons.filled.AddTask
 import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.Link
 import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -59,6 +61,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.kodass.groovework.AppContainer
+import com.kodass.groovework.ui.tasks.CreateTaskSheet
+import com.kodass.groovework.ui.tasks.TasksViewModel
 import java.time.LocalDate
 import java.time.ZoneOffset
 import java.time.format.DateTimeFormatter
@@ -88,6 +92,7 @@ fun DiaryEntryScreen(
     }
 
     var confirmDelete by remember { mutableStateOf(false) }
+    var showCreateTask by remember { mutableStateOf(false) }
 
     val title = when {
         viewModel.isNew -> "Новая запись"
@@ -174,7 +179,7 @@ fun DiaryEntryScreen(
                     Text(viewModel.error!!, color = MaterialTheme.colorScheme.error)
                 }
                 viewModel.editing -> EditForm(viewModel)
-                else -> ViewBody(viewModel)
+                else -> ViewBody(viewModel, onCreateTask = { showCreateTask = true })
             }
         }
     }
@@ -191,6 +196,24 @@ fun DiaryEntryScreen(
                 }) { Text("Удалить") }
             },
             dismissButton = { TextButton(onClick = { confirmDelete = false }) { Text("Отмена") } },
+        )
+    }
+
+    // Создание задачи из записи (переиспользуем лист создания задачи). После
+    // создания привязываем задачу к записи. Авто-старт юнита — веб-функция.
+    if (showCreateTask) {
+        val tasksVm: TasksViewModel = viewModel {
+            TasksViewModel(container.tasksRepo, container.gateway, container.json)
+        }
+        LaunchedEffect(Unit) { tasksVm.loadDepartments() }
+        CreateTaskSheet(
+            viewModel = tasksVm,
+            presetName = viewModel.title,
+            onDismiss = { showCreateTask = false },
+            onCreated = { task ->
+                showCreateTask = false
+                viewModel.linkTask(task.id)
+            },
         )
     }
 }
@@ -234,7 +257,7 @@ private fun EditForm(viewModel: DiaryEntryViewModel) {
 }
 
 @Composable
-private fun ViewBody(viewModel: DiaryEntryViewModel) {
+private fun ViewBody(viewModel: DiaryEntryViewModel, onCreateTask: () -> Unit) {
     Column(
         modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
@@ -252,6 +275,32 @@ private fun ViewBody(viewModel: DiaryEntryViewModel) {
         Text(viewModel.title, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
         if (viewModel.description.isNotBlank()) {
             Text(viewModel.description, style = MaterialTheme.typography.bodyLarge)
+        }
+
+        if (viewModel.linkedTaskId != null) {
+            Surface(
+                shape = MaterialTheme.shapes.medium,
+                color = MaterialTheme.colorScheme.primaryContainer,
+                modifier = Modifier.padding(top = 4.dp),
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
+                ) {
+                    Icon(Icons.Filled.Link, contentDescription = null, tint = MaterialTheme.colorScheme.onPrimaryContainer, modifier = Modifier.size(18.dp))
+                    Text(
+                        "К записи привязана задача",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onPrimaryContainer,
+                        modifier = Modifier.padding(start = 8.dp),
+                    )
+                }
+            }
+        } else if (!viewModel.readonly) {
+            OutlinedButton(onClick = onCreateTask, modifier = Modifier.padding(top = 4.dp)) {
+                Icon(Icons.Filled.AddTask, contentDescription = null, modifier = Modifier.size(18.dp))
+                Text("Создать задачу", modifier = Modifier.padding(start = 6.dp))
+            }
         }
     }
 }

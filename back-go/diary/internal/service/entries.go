@@ -42,14 +42,16 @@ func (s *Service) ListEntries(ctx context.Context, userID, diaryID int64, p List
 }
 
 func (s *Service) listEntries(ctx context.Context, diaryID int64, p ListParams) (*EntryList, error) {
+	// Диапазон дат honored в обоих режимах: активная вкладка передаёт диапазон
+	// (просмотр по дню/неделе/месяцу), архив-вкладка — нет (весь архив), а
+	// модалка дня тянет выполненные за конкретный день (archived=1 + from/to).
 	f := domain.EntryListFilter{
 		DiaryID:  diaryID,
 		Archived: p.Archived,
 		Search:   strings.TrimSpace(p.Search),
+		From:     p.From,
+		To:       p.To,
 		Limit:    entriesLimit,
-	}
-	if !p.Archived { // диапазон дат — только для активной вкладки (календарные виды)
-		f.From, f.To = p.From, p.To
 	}
 	items, err := s.repo.ListEntries(ctx, f)
 	if err != nil {

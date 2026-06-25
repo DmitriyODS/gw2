@@ -41,8 +41,9 @@ fun CreateTaskSheet(
     viewModel: TasksViewModel,
     onDismiss: () -> Unit,
     onCreated: (TaskDto) -> Unit,
+    presetName: String = "",
 ) {
-    var name by remember { mutableStateOf("") }
+    var name by remember { mutableStateOf(presetName) }
     var department by remember { mutableStateOf<DeptRef?>(null) }
     var deptExpanded by remember { mutableStateOf(false) }
     var deadline by remember { mutableStateOf<LocalDate?>(null) }

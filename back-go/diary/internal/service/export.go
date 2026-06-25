@@ -27,10 +27,9 @@ func (s *Service) buildExport(ctx context.Context, d *domain.Diary, p ListParams
 		DiaryID:  d.ID,
 		Archived: p.Archived,
 		Search:   strings.TrimSpace(p.Search),
+		From:     p.From,
+		To:       p.To,
 		Limit:    entriesLimit,
-	}
-	if !p.Archived {
-		f.From, f.To = p.From, p.To
 	}
 	entries, err := s.repo.EntriesForExport(ctx, f, ids)
 	if err != nil {

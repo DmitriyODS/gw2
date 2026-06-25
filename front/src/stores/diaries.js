@@ -25,6 +25,7 @@ export const useDiariesStore = defineStore('diaries', () => {
   const subtab = ref('active')       // 'active' | 'archive'
   const entries = ref([])            // активные записи текущего диапазона
   const archive = ref([])            // выполненные (вкладка «Архив»)
+  const dayDone = ref([])            // выполненные за день (вид «День» делится на активные/архив)
   const loadingEntries = ref(false)
 
   const view = ref('week')           // по умолчанию — неделя
@@ -136,6 +137,15 @@ export const useDiariesStore = defineStore('diaries', () => {
         data = await api.getEntries(id, { from: dayKey(from), to: dayKey(to), search: search.value }, { signal: fetchCtrl.signal })
         if (seq !== fetchSeq) return
         entries.value = data.items ?? []
+        // В виде «День» дополнительно тянем выполненные за этот день — день
+        // делится на активные и архив прямо в списке.
+        if (view.value === 'day') {
+          const done = await api.getEntries(id, { archived: 1, from: dayKey(from), to: dayKey(to), search: search.value }, { signal: fetchCtrl.signal })
+          if (seq !== fetchSeq) return
+          dayDone.value = done.items ?? []
+        } else {
+          dayDone.value = []
+        }
       }
     } catch (e) {
       if (e?.name !== 'AbortError' && e?.error !== 'ABORTED') throw e
@@ -225,7 +235,7 @@ export const useDiariesStore = defineStore('diaries', () => {
 
   return {
     tab, diaries, loadingList, selectedId, selected, readonly,
-    subtab, entries, archive, loadingEntries, entriesByDay,
+    subtab, entries, archive, dayDone, loadingEntries, entriesByDay,
     view, cursor, search, range,
     fetchDiaries, setTab, select, setSubtab, setView, setCursor, step, today, setSearch, fetchEntries,
     createDiary, renameDiary, removeDiary,

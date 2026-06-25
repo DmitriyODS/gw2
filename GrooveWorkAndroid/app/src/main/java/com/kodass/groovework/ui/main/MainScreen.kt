@@ -106,6 +106,7 @@ private data class TopLevelDestination(
 private val primaryDestinations = listOf(
     TopLevelDestination("tasks", "Задачи", Icons.Outlined.TaskAlt, Icons.Filled.TaskAlt),
     TopLevelDestination("chats", "Чат", Icons.AutoMirrored.Outlined.Chat, Icons.AutoMirrored.Filled.Chat),
+    TopLevelDestination("diaries", "Ежедневник", Icons.Outlined.EventNote, Icons.Filled.EventNote),
     TopLevelDestination("profile", "Профиль", Icons.Outlined.Person, Icons.Filled.Person),
 )
 
@@ -114,7 +115,6 @@ private val primaryDestinations = listOf(
 private val overflowDestinations = listOf(
     TopLevelDestination("registries", "Реестры", Icons.Outlined.TableChart, Icons.Filled.TableChart),
     TopLevelDestination("calendars", "Календари", Icons.Outlined.CalendarMonth, Icons.Filled.CalendarMonth),
-    TopLevelDestination("diaries", "Ежедневник", Icons.Outlined.EventNote, Icons.Filled.EventNote),
     TopLevelDestination("employees", "Сотрудники", Icons.Outlined.Groups, Icons.Filled.Groups),
     TopLevelDestination("stats", "Статистика", Icons.Outlined.BarChart, Icons.Filled.BarChart),
     TopLevelDestination("appearance", "Оформление", Icons.Outlined.Palette, Icons.Filled.Palette),

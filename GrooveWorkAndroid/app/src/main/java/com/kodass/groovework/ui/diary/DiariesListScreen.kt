@@ -95,7 +95,12 @@ fun DiariesListScreen(
                     text = { Text("Поделились") },
                 )
             }
-            Box(modifier = Modifier.fillMaxSize()) {
+            Box(
+                modifier = Modifier.fillMaxSize().swipeTabs(
+                    onPrev = { viewModel.selectTab(DiaryTab.MINE) },
+                    onNext = { viewModel.selectTab(DiaryTab.SHARED) },
+                ),
+            ) {
                 when {
                     viewModel.loading && viewModel.diaries.isEmpty() -> CenteredLoading()
                     viewModel.error != null && viewModel.diaries.isEmpty() ->

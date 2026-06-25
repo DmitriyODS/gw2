@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
@@ -26,6 +27,7 @@ import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.ChevronLeft
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.outlined.RadioButtonUnchecked
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
@@ -147,7 +149,12 @@ fun DiaryScreen(
                         placeholder = "Поиск по записям…",
                     )
 
-                    Box(modifier = Modifier.weight(1f)) {
+                    Box(
+                        modifier = Modifier.weight(1f).swipeTabs(
+                            onPrev = { viewModel.selectSubtab(DiarySubtab.ACTIVE) },
+                            onNext = { viewModel.selectSubtab(DiarySubtab.ARCHIVE) },
+                        ),
+                    ) {
                         if (viewModel.subtab == DiarySubtab.ARCHIVE) {
                             ArchiveList(viewModel, diaryId, onOpenEntry)
                         } else when (viewModel.view) {
@@ -166,6 +173,8 @@ fun DiaryScreen(
             }
         }
     }
+
+    DiaryDayDialog(viewModel, diaryId, onOpenEntry)
 }
 
 @Composable
@@ -228,9 +237,8 @@ private fun MonthGrid(viewModel: DiaryViewModel, diaryId: Long, onOpenEntry: (Lo
                         day = day,
                         inMonth = day.monthValue == currentMonth,
                         isToday = day == today,
-                        entries = viewModel.entriesFor(day),
-                        onClick = { viewModel.openDay(day) },
-                        onEntryClick = { e -> onOpenEntry(diaryId, e.id, 0L) },
+                        count = viewModel.entriesFor(day).size,
+                        onClick = { viewModel.openDayDialog(day) },
                         modifier = Modifier.weight(1f),
                     )
                 }
@@ -244,31 +252,31 @@ private fun MonthCell(
     day: LocalDate,
     inMonth: Boolean,
     isToday: Boolean,
-    entries: List<DiaryEntryDto>,
+    count: Int,
     onClick: () -> Unit,
-    onEntryClick: (DiaryEntryDto) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     Column(
         modifier = modifier
-            .height(84.dp)
+            .height(72.dp)
             .padding(2.dp)
             .clickable { onClick() }
             .background(
                 if (inMonth) MaterialTheme.colorScheme.surfaceContainerLow else MaterialTheme.colorScheme.surface,
                 RoundedCornerShape(8.dp),
             )
-            .padding(3.dp),
+            .padding(4.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         Box(
             modifier = Modifier
-                .size(20.dp)
+                .size(22.dp)
                 .then(if (isToday) Modifier.background(MaterialTheme.colorScheme.primary, RoundedCornerShape(50)) else Modifier),
             contentAlignment = Alignment.Center,
         ) {
             Text(
                 day.dayOfMonth.toString(),
-                style = MaterialTheme.typography.labelSmall,
+                style = MaterialTheme.typography.labelMedium,
                 color = when {
                     isToday -> MaterialTheme.colorScheme.onPrimary
                     inMonth -> MaterialTheme.colorScheme.onSurface
@@ -276,31 +284,20 @@ private fun MonthCell(
                 },
             )
         }
-        val shown = entries.take(2)
-        shown.forEach { e ->
-            Text(
-                e.title,
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onPrimaryContainer,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                fontSize = 9.sp,
+        if (count > 0) {
+            Box(
                 modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(top = 2.dp)
-                    .background(MaterialTheme.colorScheme.primaryContainer, RoundedCornerShape(4.dp))
-                    .clickable { onEntryClick(e) }
-                    .padding(horizontal = 4.dp, vertical = 1.dp),
-            )
-        }
-        if (entries.size > shown.size) {
-            Text(
-                "+${entries.size - shown.size}",
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                fontSize = 9.sp,
-                modifier = Modifier.padding(top = 1.dp, start = 4.dp),
-            )
+                    .padding(top = 4.dp)
+                    .background(MaterialTheme.colorScheme.primaryContainer, RoundedCornerShape(50))
+                    .padding(horizontal = 7.dp, vertical = 1.dp),
+            ) {
+                Text(
+                    count.toString(),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onPrimaryContainer,
+                    fontWeight = FontWeight.Bold,
+                )
+            }
         }
     }
 }
@@ -371,11 +368,12 @@ private fun DayCard(
     }
 }
 
-// ── День ──
+// ── День (делится на активные и выполненные) ──
 @Composable
 private fun DayList(viewModel: DiaryViewModel, diaryId: Long, onOpenEntry: (Long, Long, Long) -> Unit) {
-    val entries = viewModel.entriesFor(viewModel.cursor)
-    if (entries.isEmpty()) {
+    val active = viewModel.entriesFor(viewModel.cursor)
+    val done = viewModel.dayViewDone
+    if (active.isEmpty() && done.isEmpty()) {
         Box(modifier = Modifier.fillMaxSize().padding(32.dp), contentAlignment = Alignment.Center) {
             Text(
                 "На этот день записей нет",
@@ -388,21 +386,28 @@ private fun DayList(viewModel: DiaryViewModel, diaryId: Long, onOpenEntry: (Long
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
         contentPadding = PaddingValues(16.dp),
-        verticalArrangement = Arrangement.spacedBy(10.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        items(entries, key = { it.id }) { e ->
-            Surface(
-                shape = MaterialTheme.shapes.large,
-                color = MaterialTheme.colorScheme.surfaceContainerLow,
-                modifier = Modifier.fillMaxWidth(),
-            ) {
-                EntryRow(e, viewModel.readonly, onClick = { onOpenEntry(diaryId, e.id, 0L) }, onDone = { viewModel.toggleDone(e, true) }, padded = true)
+        if (active.isNotEmpty()) {
+            item(key = "h-active") { DayGroupLabel("Активные") }
+            items(active, key = { it.id }) { e ->
+                Surface(shape = MaterialTheme.shapes.large, color = MaterialTheme.colorScheme.surfaceContainerLow, modifier = Modifier.fillMaxWidth()) {
+                    EntryRow(e, viewModel.readonly, onClick = { onOpenEntry(diaryId, e.id, 0L) }, onDone = { viewModel.toggleDone(e, true) }, padded = true)
+                }
+            }
+        }
+        if (done.isNotEmpty()) {
+            item(key = "h-done") { DayGroupLabel("Выполнено") }
+            items(done, key = { it.id }) { e ->
+                Surface(shape = MaterialTheme.shapes.large, color = MaterialTheme.colorScheme.surfaceContainerLow, modifier = Modifier.fillMaxWidth()) {
+                    EntryRow(e, viewModel.readonly, onClick = { onOpenEntry(diaryId, e.id, 0L) }, onDone = { viewModel.toggleDone(e, false) }, padded = true, done = true)
+                }
             }
         }
     }
 }
 
-// ── Архив ──
+// ── Архив (сгруппирован по дням) ──
 @Composable
 private fun ArchiveList(viewModel: DiaryViewModel, diaryId: Long, onOpenEntry: (Long, Long, Long) -> Unit) {
     val items = viewModel.archive
@@ -417,52 +422,167 @@ private fun ArchiveList(viewModel: DiaryViewModel, diaryId: Long, onOpenEntry: (
         }
         return
     }
+    val groups = groupByDay(items)
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
         contentPadding = PaddingValues(16.dp),
-        verticalArrangement = Arrangement.spacedBy(10.dp),
+        verticalArrangement = Arrangement.spacedBy(6.dp),
     ) {
-        items(items, key = { it.id }) { e ->
-            Surface(
-                onClick = { onOpenEntry(diaryId, e.id, 0L) },
-                shape = MaterialTheme.shapes.large,
-                color = MaterialTheme.colorScheme.surfaceContainerLow,
-                modifier = Modifier.fillMaxWidth(),
-            ) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 12.dp),
+        groups.forEach { (date, dayItems) ->
+            item(key = "h-$date") {
+                Text(
+                    date.format(DAY_FULL).replaceFirstChar { it.titlecase(RU) },
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(top = 8.dp, bottom = 2.dp),
+                )
+            }
+            items(dayItems, key = { it.id }) { e ->
+                Surface(
+                    onClick = { onOpenEntry(diaryId, e.id, 0L) },
+                    shape = MaterialTheme.shapes.large,
+                    color = MaterialTheme.colorScheme.surfaceContainerLow,
+                    modifier = Modifier.fillMaxWidth(),
                 ) {
-                    Icon(
-                        Icons.Filled.CheckCircle,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.padding(end = 12.dp),
-                    )
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(
-                            e.title,
-                            style = MaterialTheme.typography.bodyLarge,
-                            fontWeight = FontWeight.Medium,
-                            textDecoration = TextDecoration.LineThrough,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 12.dp),
+                    ) {
+                        Icon(
+                            Icons.Filled.CheckCircle,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.padding(end = 12.dp),
                         )
-                        Text(
-                            archiveMeta(e),
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
-                    if (!viewModel.readonly) {
-                        IconButton(onClick = { viewModel.toggleDone(e, false) }) {
-                            Icon(Icons.AutoMirrored.Filled.Undo, contentDescription = "Вернуть в активные")
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                e.title,
+                                style = MaterialTheme.typography.bodyLarge,
+                                fontWeight = FontWeight.Medium,
+                                textDecoration = TextDecoration.LineThrough,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                            val t = entryTime(e)
+                            if (t.isNotBlank()) {
+                                Text(t, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
+                        }
+                        if (!viewModel.readonly) {
+                            IconButton(onClick = { viewModel.toggleDone(e, false) }) {
+                                Icon(Icons.AutoMirrored.Filled.Undo, contentDescription = "Вернуть в активные")
+                            }
                         }
                     }
                 }
             }
         }
+    }
+}
+
+// ── Модалка дня: активные + выполненные (архив этого дня) ──
+@Composable
+private fun DiaryDayDialog(viewModel: DiaryViewModel, diaryId: Long, onOpenEntry: (Long, Long, Long) -> Unit) {
+    val date = viewModel.dayDialogDate ?: return
+    val active = viewModel.entriesFor(date)
+    val done = viewModel.dayDone
+    AlertDialog(
+        onDismissRequest = { viewModel.closeDayDialog() },
+        title = { Text(date.format(DAY_HEADER).replaceFirstChar { it.titlecase(RU) }) },
+        text = {
+            if (active.isEmpty() && done.isEmpty()) {
+                Text("На этот день записей нет", color = MaterialTheme.colorScheme.onSurfaceVariant)
+            } else {
+                Column(
+                    modifier = Modifier.fillMaxWidth().heightIn(max = 420.dp).verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(4.dp),
+                ) {
+                    if (active.isNotEmpty()) {
+                        DayGroupLabel("Активные")
+                        active.forEach { e ->
+                            DayDialogRow(e, done = false, readonly = viewModel.readonly,
+                                onOpen = { onOpenEntry(diaryId, e.id, 0L) },
+                                onToggle = { viewModel.toggleDone(e, true) })
+                        }
+                    }
+                    if (done.isNotEmpty()) {
+                        DayGroupLabel("Выполнено")
+                        done.forEach { e ->
+                            DayDialogRow(e, done = true, readonly = viewModel.readonly,
+                                onOpen = { onOpenEntry(diaryId, e.id, 0L) },
+                                onToggle = { viewModel.toggleDone(e, false) })
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            if (!viewModel.readonly) {
+                // Модалку дня НЕ закрываем: уходим на экран записи, а при возврате
+                // диалог дня покажется снова (состояние держит VM) с обновлёнными
+                // активными.
+                TextButton(onClick = {
+                    onOpenEntry(diaryId, 0L, viewModel.defaultDateMillis(date))
+                }) { Text("Добавить") }
+            }
+        },
+        dismissButton = { TextButton(onClick = { viewModel.closeDayDialog() }) { Text("Закрыть") } },
+    )
+}
+
+@Composable
+private fun DayGroupLabel(text: String) {
+    Text(
+        text.uppercase(RU),
+        style = MaterialTheme.typography.labelSmall,
+        fontWeight = FontWeight.Bold,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        modifier = Modifier.padding(top = 6.dp, bottom = 2.dp),
+    )
+}
+
+@Composable
+private fun DayDialogRow(
+    entry: DiaryEntryDto,
+    done: Boolean,
+    readonly: Boolean,
+    onOpen: () -> Unit,
+    onToggle: () -> Unit,
+) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier.fillMaxWidth().clickable { onOpen() }.padding(vertical = 4.dp),
+    ) {
+        if (!readonly) {
+            IconButton(onClick = onToggle, modifier = Modifier.size(36.dp)) {
+                Icon(
+                    if (done) Icons.Filled.CheckCircle else Icons.Outlined.RadioButtonUnchecked,
+                    contentDescription = if (done) "Вернуть в активные" else "Выполнено",
+                    tint = if (done) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
+        val time = entryTime(entry)
+        if (time.isNotBlank()) {
+            Text(
+                time,
+                style = MaterialTheme.typography.labelLarge,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.padding(start = if (readonly) 4.dp else 0.dp, end = 10.dp),
+            )
+        }
+        Text(
+            entry.title,
+            style = MaterialTheme.typography.bodyLarge,
+            color = if (done) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onSurface,
+            textDecoration = if (done) TextDecoration.LineThrough else null,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.weight(1f),
+        )
     }
 }
 
@@ -473,6 +593,7 @@ private fun EntryRow(
     onClick: () -> Unit,
     onDone: () -> Unit,
     padded: Boolean = false,
+    done: Boolean = false,
 ) {
     Row(
         verticalAlignment = Alignment.CenterVertically,
@@ -494,6 +615,8 @@ private fun EntryRow(
                 entry.title,
                 style = MaterialTheme.typography.bodyLarge,
                 fontWeight = FontWeight.Medium,
+                textDecoration = if (done) TextDecoration.LineThrough else null,
+                color = if (done) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onSurface,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
@@ -510,19 +633,13 @@ private fun EntryRow(
         if (!readonly) {
             IconButton(onClick = onDone) {
                 Icon(
-                    Icons.Outlined.RadioButtonUnchecked,
-                    contentDescription = "Выполнено",
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    if (done) Icons.Filled.CheckCircle else Icons.Outlined.RadioButtonUnchecked,
+                    contentDescription = if (done) "Вернуть в активные" else "Выполнено",
+                    tint = if (done) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
         }
     }
-}
-
-private fun archiveMeta(e: DiaryEntryDto): String {
-    val date = runCatching { LocalDate.parse(e.entryDate).format(DM_Y) }.getOrDefault(e.entryDate)
-    val t = entryTime(e)
-    return if (t.isNotBlank()) "$date · $t" else date
 }
 
 private fun periodLabel(viewModel: DiaryViewModel): String = when (viewModel.view) {
@@ -539,4 +656,3 @@ private val DAY_FULL = DateTimeFormatter.ofPattern("EEEE, d MMMM yyyy", RU)
 private val DAY_HEADER = DateTimeFormatter.ofPattern("EEEE, d MMMM", RU)
 private val MONTH_YEAR = DateTimeFormatter.ofPattern("LLLL yyyy", RU)
 private val DM = DateTimeFormatter.ofPattern("d MMM", RU)
-private val DM_Y = DateTimeFormatter.ofPattern("d MMM yyyy", RU)

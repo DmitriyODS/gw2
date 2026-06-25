@@ -57,6 +57,15 @@ class DiaryViewModel(
         private set
     var message by mutableStateOf<String?>(null)
 
+    // Модалка дня: активные берём из entriesFor(date), выполненные догружаем.
+    var dayDialogDate by mutableStateOf<LocalDate?>(null)
+        private set
+    var dayDone by mutableStateOf<List<DiaryEntryDto>>(emptyList())
+        private set
+    // Выполненные за день в виде «День» (день делится на активные/архив).
+    var dayViewDone by mutableStateOf<List<DiaryEntryDto>>(emptyList())
+        private set
+
     private var searchJob: Job? = null
 
     init {
@@ -122,6 +131,11 @@ class DiaryViewModel(
                     val from = start.toString()
                     val to = start.plusDays(rangeDays().toLong()).toString()
                     entries = repo.entries(diaryId, archived = false, from = from, to = to, search = search)
+                    dayViewDone = if (view == DiaryViewMode.DAY) {
+                        repo.entries(diaryId, archived = true, from = from, to = to, search = search)
+                    } else {
+                        emptyList()
+                    }
                 }
             } catch (_: ApiException) {
             } finally {
@@ -164,6 +178,27 @@ class DiaryViewModel(
         loadEntries()
     }
 
+    // День делится на активные (entriesFor) и выполненные (архив этого дня).
+    fun openDayDialog(date: LocalDate) {
+        dayDialogDate = date
+        loadDayDone(date)
+    }
+
+    fun closeDayDialog() {
+        dayDialogDate = null
+        dayDone = emptyList()
+    }
+
+    private fun loadDayDone(date: LocalDate) {
+        viewModelScope.launch {
+            dayDone = try {
+                repo.entries(diaryId, archived = true, from = date.toString(), to = date.plusDays(1).toString(), search = null)
+            } catch (_: ApiException) {
+                emptyList()
+            }
+        }
+    }
+
     fun updateSearch(value: String) {
         if (value == search) return
         search = value
@@ -179,6 +214,7 @@ class DiaryViewModel(
             try {
                 repo.setDone(diaryId, entry.id, done)
                 loadEntries(silent = true)
+                dayDialogDate?.let { loadDayDone(it) }
                 message = if (done) "Перенесено в архив" else "Возвращено в активные"
             } catch (e: ApiException) {
                 message = e.message ?: "Не удалось изменить статус"
