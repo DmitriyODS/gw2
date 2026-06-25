@@ -318,6 +318,7 @@ private fun WeekList(viewModel: DiaryViewModel, diaryId: Long, onOpenEntry: (Lon
                 isToday = day == today,
                 entries = viewModel.entriesFor(day),
                 readonly = viewModel.readonly,
+                onOpenDay = { viewModel.openDayDialog(day) },
                 onAdd = { onOpenEntry(diaryId, 0L, viewModel.defaultDateMillis(day)) },
                 onEntryClick = { e -> onOpenEntry(diaryId, e.id, 0L) },
                 onDone = { e -> viewModel.toggleDone(e, true) },
@@ -332,6 +333,7 @@ private fun DayCard(
     isToday: Boolean,
     entries: List<DiaryEntryDto>,
     readonly: Boolean,
+    onOpenDay: () -> Unit,
     onAdd: () -> Unit,
     onEntryClick: (DiaryEntryDto) -> Unit,
     onDone: (DiaryEntryDto) -> Unit,
@@ -343,12 +345,14 @@ private fun DayCard(
     ) {
         Column(modifier = Modifier.padding(start = 14.dp, top = 10.dp, end = 6.dp, bottom = 10.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
+                // Тап по заголовку дня открывает модалку со всеми записями дня
+                // (активные + выполненные).
                 Text(
                     day.format(DAY_HEADER).replaceFirstChar { it.titlecase(RU) },
                     style = MaterialTheme.typography.titleSmall,
                     fontWeight = FontWeight.SemiBold,
                     color = if (isToday) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
-                    modifier = Modifier.weight(1f),
+                    modifier = Modifier.weight(1f).clickable { onOpenDay() }.padding(vertical = 4.dp),
                 )
                 if (!readonly) IconButton(onClick = onAdd) { Icon(Icons.Filled.Add, contentDescription = "Добавить") }
             }

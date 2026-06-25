@@ -61,6 +61,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
@@ -106,7 +107,9 @@ private data class TopLevelDestination(
 private val primaryDestinations = listOf(
     TopLevelDestination("tasks", "Задачи", Icons.Outlined.TaskAlt, Icons.Filled.TaskAlt),
     TopLevelDestination("chats", "Чат", Icons.AutoMirrored.Outlined.Chat, Icons.AutoMirrored.Filled.Chat),
-    TopLevelDestination("diaries", "Ежедневник", Icons.Outlined.EventNote, Icons.Filled.EventNote),
+    // В нижней панели короткая подпись («Ежедневник» не влезает в 5 пунктов);
+    // сам раздел внутри по-прежнему называется «Ежедневник».
+    TopLevelDestination("diaries", "Дневник", Icons.Outlined.EventNote, Icons.Filled.EventNote),
     TopLevelDestination("profile", "Профиль", Icons.Outlined.Person, Icons.Filled.Person),
 )
 
@@ -253,7 +256,7 @@ fun MainScreen(container: AppContainer) {
                                     badge = if (destination.route == "chats") totalUnread else 0,
                                 )
                             },
-                            label = { Text(destination.label) },
+                            label = { Text(destination.label, maxLines = 1, softWrap = false, overflow = TextOverflow.Ellipsis) },
                         )
                     }
                     val moreSelected = currentRoute in overflowDestinations.map { it.route }
