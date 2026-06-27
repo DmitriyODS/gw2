@@ -3,9 +3,11 @@ package com.kodass.groovework.data.api
 import com.kodass.groovework.data.dto.CreateUnitRequest
 import com.kodass.groovework.data.dto.UnitDto
 import com.kodass.groovework.data.dto.UnitTypeDto
+import com.kodass.groovework.data.dto.UpdateUnitRequest
 import retrofit2.http.Body
 import retrofit2.http.DELETE
 import retrofit2.http.GET
+import retrofit2.http.PATCH
 import retrofit2.http.POST
 import retrofit2.http.Path
 
@@ -19,6 +21,9 @@ interface UnitsApi {
     // null → нет активного юнита (бэкенд отдаёт JSON null со статусом 200).
     @GET("api/units/active")
     suspend fun activeUnit(): UnitDto?
+
+    @PATCH("api/units/{id}")
+    suspend fun updateUnit(@Path("id") unitId: Long, @Body body: UpdateUnitRequest): UnitDto
 
     @POST("api/units/{id}/stop")
     suspend fun stopUnit(@Path("id") unitId: Long): UnitDto

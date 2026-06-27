@@ -31,3 +31,13 @@ data class CreateUnitRequest(
     val name: String,
     @SerialName("unit_type_id") val unitTypeId: Long,
 )
+
+// datetimeEnd шлём только для завершённого юнита; для активного он null и
+// при explicitNulls=false поле опускается — бэкенд не трогает время окончания.
+@Serializable
+data class UpdateUnitRequest(
+    val name: String,
+    @SerialName("unit_type_id") val unitTypeId: Long,
+    @SerialName("datetime_start") val datetimeStart: String,
+    @SerialName("datetime_end") val datetimeEnd: String? = null,
+)

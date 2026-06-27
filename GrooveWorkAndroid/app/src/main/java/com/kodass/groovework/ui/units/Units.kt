@@ -19,12 +19,17 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowDropDown
+import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material.icons.filled.Timer
 import androidx.compose.material.icons.outlined.Delete
+import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.DatePicker
+import androidx.compose.material3.DatePickerDialog
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -36,6 +41,10 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.TimePicker
+import androidx.compose.material3.rememberDatePickerState
+import androidx.compose.material3.rememberTimePickerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -49,14 +58,24 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.Dialog
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.kodass.groovework.AppContainer
 import com.kodass.groovework.data.dto.UnitDto
 import com.kodass.groovework.data.dto.UnitTypeDto
+import com.kodass.groovework.data.dto.UpdateUnitRequest
 import com.kodass.groovework.data.units.unitStartMillis
 import com.kodass.groovework.ui.common.formatDateTime
+import com.kodass.groovework.ui.common.parseIso
+import com.kodass.groovework.ui.tasks.TaskDetailViewModel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import java.time.LocalDate
+import java.time.LocalDateTime
+import java.time.ZoneId
+import java.time.ZoneOffset
+import java.time.format.DateTimeFormatter
+import java.util.Locale
 
 // Живой отсчёт «ЧЧ:ММ:СС» от старта юнита (тикает раз в секунду).
 @Composable
@@ -195,6 +214,204 @@ fun UnitSheet(
     }
 }
 
+private val RU = Locale.forLanguageTag("ru")
+private val UNIT_DATE_FMT = DateTimeFormatter.ofPattern("d MMM yyyy", RU)
+
+private fun unitLocalStart(unit: UnitDto): LocalDateTime =
+    parseIso(unit.datetimeStart)?.toLocalDateTime() ?: LocalDateTime.now()
+
+private fun unitLocalEnd(unit: UnitDto): LocalDateTime? =
+    parseIso(unit.datetimeEnd)?.toLocalDateTime()
+
+private fun isoOffset(dt: LocalDateTime): String =
+    dt.atZone(ZoneId.systemDefault()).format(DateTimeFormatter.ISO_OFFSET_DATE_TIME)
+
+// Модалка редактирования юнита: название, тип, дата/время начала и (если завершён) окончания.
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun EditUnitSheet(
+    container: AppContainer,
+    viewModel: TaskDetailViewModel,
+    unit: UnitDto,
+    onDismiss: () -> Unit,
+) {
+    var types by remember { mutableStateOf<List<UnitTypeDto>>(emptyList()) }
+    var name by remember { mutableStateOf(unit.name) }
+    var selectedType by remember { mutableStateOf(unit.unitType) }
+    var typeMenuOpen by remember { mutableStateOf(false) }
+    var start by remember { mutableStateOf(unitLocalStart(unit)) }
+    val hasEnd = unit.datetimeEnd != null
+    var end by remember { mutableStateOf(unitLocalEnd(unit)) }
+    var error by remember { mutableStateOf<String?>(null) }
+    var submitting by remember { mutableStateOf(false) }
+
+    LaunchedEffect(Unit) {
+        runCatching { container.unitsRepo.unitTypes() }.getOrNull()?.let { list ->
+            types = list
+            if (selectedType == null) selectedType = list.firstOrNull { it.id == unit.unitTypeId }
+        }
+    }
+
+    ModalBottomSheet(onDismissRequest = { if (!submitting) onDismiss() }) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 20.dp)
+                .navigationBarsPadding(),
+        ) {
+            Text("Редактировать юнит", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.SemiBold)
+            OutlinedTextField(
+                value = name,
+                onValueChange = { name = it },
+                label = { Text("Название юнита") },
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth().padding(top = 16.dp),
+            )
+            Box(modifier = Modifier.padding(top = 12.dp)) {
+                OutlinedTextField(
+                    value = selectedType?.name ?: "",
+                    onValueChange = {},
+                    readOnly = true,
+                    enabled = false,
+                    label = { Text("Тип юнита") },
+                    trailingIcon = { Icon(Icons.Filled.ArrowDropDown, contentDescription = null) },
+                    colors = androidx.compose.material3.OutlinedTextFieldDefaults.colors(
+                        disabledTextColor = MaterialTheme.colorScheme.onSurface,
+                        disabledBorderColor = MaterialTheme.colorScheme.outline,
+                        disabledLabelColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                        disabledTrailingIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                    ),
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                Box(modifier = Modifier.matchParentSize().clickable { typeMenuOpen = true })
+                DropdownMenu(expanded = typeMenuOpen, onDismissRequest = { typeMenuOpen = false }) {
+                    if (types.isEmpty()) {
+                        DropdownMenuItem(text = { Text("Нет типов юнитов") }, onClick = { typeMenuOpen = false })
+                    }
+                    types.forEach { type ->
+                        DropdownMenuItem(
+                            text = { Text(type.name) },
+                            onClick = { selectedType = type; typeMenuOpen = false },
+                        )
+                    }
+                }
+            }
+
+            Text(
+                "Дата/время начала",
+                style = MaterialTheme.typography.labelMedium,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(top = 16.dp, bottom = 6.dp),
+            )
+            DateTimeField(value = start, onChange = { start = it })
+
+            if (hasEnd) {
+                Text(
+                    "Дата/время окончания",
+                    style = MaterialTheme.typography.labelMedium,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(top = 16.dp, bottom = 6.dp),
+                )
+                DateTimeField(value = end ?: start, onChange = { end = it })
+            }
+
+            error?.let {
+                Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(top = 8.dp))
+            }
+            Button(
+                onClick = {
+                    error = null
+                    if (name.isBlank()) { error = "Введите название юнита"; return@Button }
+                    val type = selectedType
+                    if (type == null) { error = "Выберите тип юнита"; return@Button }
+                    if (hasEnd && end != null && !end!!.isAfter(start)) {
+                        error = "Окончание должно быть позже начала"; return@Button
+                    }
+                    submitting = true
+                    viewModel.updateUnit(
+                        unit.id,
+                        UpdateUnitRequest(
+                            name = name.trim(),
+                            unitTypeId = type.id,
+                            datetimeStart = isoOffset(start),
+                            datetimeEnd = if (hasEnd) end?.let { isoOffset(it) } else null,
+                        ),
+                    ) { result ->
+                        submitting = false
+                        result.onSuccess { onDismiss() }
+                            .onFailure { e -> error = e.message ?: "Не удалось обновить юнит" }
+                    }
+                },
+                enabled = !submitting,
+                modifier = Modifier.fillMaxWidth().padding(top = 20.dp, bottom = 12.dp),
+            ) {
+                Text(if (submitting) "Сохраняю…" else "Сохранить")
+            }
+        }
+    }
+}
+
+// Поле выбора даты и времени: две кнопки (дата + время) в строку.
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun DateTimeField(value: LocalDateTime, onChange: (LocalDateTime) -> Unit) {
+    var showDate by remember { mutableStateOf(false) }
+    var showTime by remember { mutableStateOf(false) }
+    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        OutlinedButton(onClick = { showDate = true }, modifier = Modifier.weight(1f)) {
+            Icon(Icons.Filled.CalendarMonth, contentDescription = null, modifier = Modifier.size(18.dp))
+            Text(value.toLocalDate().format(UNIT_DATE_FMT), modifier = Modifier.padding(start = 6.dp))
+        }
+        OutlinedButton(onClick = { showTime = true }, modifier = Modifier.weight(1f)) {
+            Icon(Icons.Filled.Schedule, contentDescription = null, modifier = Modifier.size(18.dp))
+            Text("%02d:%02d".format(value.hour, value.minute), modifier = Modifier.padding(start = 6.dp))
+        }
+    }
+    if (showDate) {
+        val state = rememberDatePickerState(
+            initialSelectedDateMillis = value.toLocalDate().atStartOfDay(ZoneOffset.UTC).toInstant().toEpochMilli(),
+        )
+        DatePickerDialog(
+            onDismissRequest = { showDate = false },
+            confirmButton = {
+                TextButton(onClick = {
+                    state.selectedDateMillis?.let {
+                        val d = java.time.Instant.ofEpochMilli(it).atZone(ZoneOffset.UTC).toLocalDate()
+                        onChange(LocalDateTime.of(d, value.toLocalTime()))
+                    }
+                    showDate = false
+                }) { Text("Готово") }
+            },
+            dismissButton = { TextButton(onClick = { showDate = false }) { Text("Отмена") } },
+        ) { DatePicker(state = state) }
+    }
+    if (showTime) {
+        val state = rememberTimePickerState(initialHour = value.hour, initialMinute = value.minute, is24Hour = true)
+        Dialog(onDismissRequest = { showTime = false }) {
+            Box(
+                modifier = Modifier
+                    .clip(RoundedCornerShape(24.dp))
+                    .background(MaterialTheme.colorScheme.surfaceContainerHigh)
+                    .padding(20.dp),
+            ) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text("Время", style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(bottom = 12.dp))
+                    TimePicker(state = state)
+                    Row(modifier = Modifier.fillMaxWidth().padding(top = 8.dp), horizontalArrangement = Arrangement.End) {
+                        TextButton(onClick = { showTime = false }) { Text("Отмена") }
+                        TextButton(onClick = {
+                            onChange(value.withHour(state.hour).withMinute(state.minute))
+                            showTime = false
+                        }) { Text("Готово") }
+                    }
+                }
+            }
+        }
+    }
+}
+
 @Composable
 private fun UnitMetaRow(label: String, value: String) {
     Row(
@@ -328,7 +545,7 @@ fun StartUnitSheet(
 
 // Строка юнита в списке вкладки «Юниты».
 @Composable
-fun UnitRow(unit: UnitDto, canDelete: Boolean, onDelete: () -> Unit) {
+fun UnitRow(unit: UnitDto, canDelete: Boolean, onDelete: () -> Unit, onEdit: (() -> Unit)? = null) {
     var expanded by remember { mutableStateOf(false) }
     val startMillis = unitStartMillis(unit)
     Surface(
@@ -401,14 +618,25 @@ fun UnitRow(unit: UnitDto, canDelete: Boolean, onDelete: () -> Unit) {
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
-                    if (canDelete) {
+                    if (canDelete || onEdit != null) {
                         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-                            IconButton(onClick = onDelete) {
-                                Icon(
-                                    Icons.Outlined.Delete,
-                                    contentDescription = "Удалить юнит",
-                                    tint = MaterialTheme.colorScheme.error,
-                                )
+                            if (onEdit != null) {
+                                IconButton(onClick = onEdit) {
+                                    Icon(
+                                        Icons.Outlined.Edit,
+                                        contentDescription = "Редактировать юнит",
+                                        tint = MaterialTheme.colorScheme.primary,
+                                    )
+                                }
+                            }
+                            if (canDelete) {
+                                IconButton(onClick = onDelete) {
+                                    Icon(
+                                        Icons.Outlined.Delete,
+                                        contentDescription = "Удалить юнит",
+                                        tint = MaterialTheme.colorScheme.error,
+                                    )
+                                }
                             }
                         }
                     }

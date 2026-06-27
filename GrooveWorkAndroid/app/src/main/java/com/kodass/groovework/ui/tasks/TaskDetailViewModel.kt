@@ -11,6 +11,7 @@ import com.kodass.groovework.data.dto.StageDto
 import com.kodass.groovework.data.dto.TaskDto
 import com.kodass.groovework.data.dto.UnitDto
 import com.kodass.groovework.data.dto.UpdateTaskRequest
+import com.kodass.groovework.data.dto.UpdateUnitRequest
 import com.kodass.groovework.data.dto.UserDto
 import com.kodass.groovework.data.network.ApiException
 import com.kodass.groovework.data.network.apiCall
@@ -108,6 +109,14 @@ class TaskDetailViewModel(
                         // чтобы строка перестала тикать и показала длительность.
                         loadUnits()
                     }
+                    "unit:updated" -> {
+                        val unit = runCatching {
+                            json.decodeFromJsonElement<UnitDto>(event.data ?: return@collect)
+                        }.getOrNull() ?: return@collect
+                        if (unit.taskId == taskId) {
+                            units = units.map { if (it.id == unit.id) unit else it }
+                        }
+                    }
                     "unit:deleted" -> {
                         val unitId = event.data.longField("unit_id") ?: return@collect
                         units = units.filter { it.id != unitId }
@@ -136,6 +145,18 @@ class TaskDetailViewModel(
                 units = units.filter { it.id != unit.id }
             } catch (e: ApiException) {
                 actionError = e.message
+            }
+        }
+    }
+
+    fun updateUnit(unitId: Long, body: UpdateUnitRequest, onResult: (Result<Unit>) -> Unit) {
+        viewModelScope.launch {
+            try {
+                val updated = unitsRepo.updateUnit(unitId, body)
+                units = units.map { if (it.id == updated.id) updated else it }
+                onResult(Result.success(Unit))
+            } catch (e: ApiException) {
+                onResult(Result.failure(e))
             }
         }
     }

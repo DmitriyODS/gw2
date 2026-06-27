@@ -80,6 +80,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.kodass.groovework.AppContainer
 import com.kodass.groovework.data.dto.CommentDto
+import com.kodass.groovework.data.dto.UnitDto
 import com.kodass.groovework.ui.common.CenteredLoading
 import com.kodass.groovework.ui.common.ConfirmDialog
 import com.kodass.groovework.ui.common.ConfirmSpec
@@ -88,6 +89,7 @@ import com.kodass.groovework.ui.common.LinkifiedText
 import com.kodass.groovework.ui.common.UserAvatar
 import com.kodass.groovework.ui.common.formatDate
 import com.kodass.groovework.ui.common.formatDateTime
+import com.kodass.groovework.ui.units.EditUnitSheet
 import com.kodass.groovework.ui.units.StartUnitSheet
 import com.kodass.groovework.ui.units.UnitRow
 import kotlinx.coroutines.launch
@@ -212,7 +214,7 @@ fun TaskDetailScreen(container: AppContainer, taskId: Long, onBack: () -> Unit) 
                                 onDeadline = { showDeadlinePicker = true },
                                 onComplete = { showComplete = true },
                             )
-                            1 -> UnitsTab(viewModel = viewModel)
+                            1 -> UnitsTab(viewModel = viewModel, container = container)
                             else -> CommentsTab(viewModel = viewModel)
                         }
                     }
@@ -420,8 +422,9 @@ private fun TaskInfoTab(
 }
 
 @Composable
-private fun UnitsTab(viewModel: TaskDetailViewModel) {
+private fun UnitsTab(viewModel: TaskDetailViewModel, container: AppContainer) {
     LaunchedEffect(Unit) { viewModel.loadUnits() }
+    var editingUnit by remember { mutableStateOf<UnitDto?>(null) }
     Box(modifier = Modifier.fillMaxSize()) {
         when {
             viewModel.unitsLoading && viewModel.units.isEmpty() -> CenteredLoading()
@@ -437,14 +440,24 @@ private fun UnitsTab(viewModel: TaskDetailViewModel) {
                 modifier = Modifier.fillMaxSize(),
             ) {
                 items(viewModel.units, key = { it.id }) { unit ->
+                    val canManage = viewModel.canManageUnit(unit)
                     UnitRow(
                         unit = unit,
-                        canDelete = viewModel.canManageUnit(unit),
+                        canDelete = canManage,
                         onDelete = { viewModel.deleteUnit(unit) },
+                        onEdit = if (canManage) ({ editingUnit = unit }) else null,
                     )
                 }
             }
         }
+    }
+    editingUnit?.let { unit ->
+        EditUnitSheet(
+            container = container,
+            viewModel = viewModel,
+            unit = unit,
+            onDismiss = { editingUnit = null },
+        )
     }
 }
 
