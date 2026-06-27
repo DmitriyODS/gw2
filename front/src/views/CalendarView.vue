@@ -82,7 +82,7 @@
         <!-- Тело: месяц / неделя / день -->
         <div class="cv-body">
           <!-- Десктоп: месяц / неделя — сетка плиток дней -->
-          <div v-if="!isMobile && store.view !== 'day'" class="cv-grid" :class="store.view">
+          <div v-if="!isMobile && store.view !== 'day'" ref="weekGridRef" class="cv-grid" :class="store.view">
             <!-- Шапка дней недели — только в месяце; в неделе день уже подписан в плитке. -->
             <template v-if="store.view === 'month'">
               <div v-for="(wd, i) in weekdays" :key="'h' + i" class="cv-wd">{{ wd }}</div>
@@ -152,7 +152,9 @@
               <span class="cv-dayrow-time">{{ hhmm(e.event_at) }}</span>
               <span class="cv-dayrow-body">
                 <span class="cv-dayrow-title">{{ entryTitle(store.selected, e) }}</span>
-                <span v-if="subtitle(e)" class="cv-dayrow-sub">{{ subtitle(e) }}</span>
+                <span v-for="cf in cardFields(store.selected, e)" :key="cf.field.id" class="cv-dayrow-sub">
+                  <span class="cv-dayrow-flabel">{{ cf.field.label }}:</span> {{ cf.value }}
+                </span>
               </span>
               <span class="material-symbols-outlined cv-dayrow-chev">chevron_right</span>
             </button>
@@ -257,7 +259,7 @@
 </template>
 
 <script setup>
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import Checkbox from 'primevue/checkbox'
 import CalendarEntryDialog from '@/components/calendar/CalendarEntryDialog.vue'
 import CalendarDayDialog from '@/components/calendar/CalendarDayDialog.vue'
@@ -266,7 +268,7 @@ import { useCalendarsStore, dayKey } from '@/stores/calendars.js'
 import { exportEntries, getShares, createShare, revokeShare } from '@/api/calendars.js'
 import { useNotificationsStore } from '@/stores/notifications.js'
 import { useBreakpoint } from '@/composables/useBreakpoint.js'
-import { fieldIcon, isExportable, entryTitle, hhmm, textValue } from '@/utils/calendarFields.js'
+import { fieldIcon, isExportable, entryTitle, hhmm, cardFields } from '@/utils/calendarFields.js'
 
 const store = useCalendarsStore()
 const notif = useNotificationsStore()
@@ -293,8 +295,35 @@ function dayEntries(day) { return store.entriesByDay[dayKey(day)] || [] }
 function inCurrentMonth(day) { return day.getMonth() === store.cursor.getMonth() }
 function weekdayShort(day) { return weekdays[(day.getDay() + 6) % 7] }
 
-// Превью записей в плитке: месяц тесный (2), неделя просторнее (4).
-function dayPreview(day) { return dayEntries(day).slice(0, store.view === 'week' ? 4 : 2) }
+// Превью записей в плитке. Месяц — тесный (2). Неделя — столько, сколько влезает
+// в высоту столбца; при переполнении оставляем строку под «+N».
+const EVENT_H = 22   // .cv-grid.week .cv-event height (var --cv-event-h)
+const EVENT_GAP = 3  // .cv-day-events gap
+const weekGridRef = ref(null)
+const weekColEventsH = ref(0)
+let weekRO = null
+
+function measureWeekColumn() {
+  const el = weekGridRef.value
+  if (!el || store.view !== 'week') return
+  // Неделя — единственный ряд (grid-template-rows: 1fr), высота сетки = высота столбца.
+  // Вычитаем паддинги плитки (6×2), gap между шапкой и событиями (4) и высоту шапки (24).
+  weekColEventsH.value = Math.max(0, el.clientHeight - 12 - 4 - 24)
+}
+
+function weekMaxVisible() {
+  const h = weekColEventsH.value
+  if (h <= 0) return 4 // фолбэк до первого замера
+  return Math.max(1, Math.floor((h + EVENT_GAP) / (EVENT_H + EVENT_GAP)))
+}
+
+function dayPreview(day) {
+  const entries = dayEntries(day)
+  if (store.view !== 'week') return entries.slice(0, 2)
+  const max = weekMaxVisible()
+  if (entries.length <= max) return entries
+  return entries.slice(0, Math.max(0, max - 1)) // одна строка уйдёт под «+N»
+}
 
 // Мобильная агенда: месяц — все дни месяца курсора (1..N), неделя — её 7 дней.
 const agendaDays = computed(() => {
@@ -312,13 +341,6 @@ function agendaPreview(day) {
 
 const todayKey = dayKey(new Date())
 function isToday(day) { return dayKey(day) === todayKey }
-
-// Подзаголовок записи в режиме «День» — второе show_in_table поле.
-function subtitle(e) {
-  const fields = (store.selected?.fields || []).filter((f) => f.show_in_table)
-  const f = fields[1]
-  return f ? textValue(f, e.data?.[String(f.id)]) : ''
-}
 
 const periodLabel = computed(() => {
   const c = store.cursor
@@ -461,7 +483,23 @@ async function doExport() {
   }
 }
 
-onMounted(() => store.fetchCalendars())
+onMounted(() => {
+  store.fetchCalendars()
+  weekRO = new ResizeObserver(() => measureWeekColumn())
+  if (weekGridRef.value) weekRO.observe(weekGridRef.value)
+})
+onBeforeUnmount(() => { weekRO?.disconnect(); weekRO = null })
+
+// Грид появляется/исчезает при смене вида и устройства — переподключаем observer
+// и пересчитываем после рендера.
+watch([() => store.view, isMobile, () => store.selectedId], () => {
+  nextTick(() => {
+    if (weekRO && weekGridRef.value) { weekRO.disconnect(); weekRO.observe(weekGridRef.value) }
+    measureWeekColumn()
+  })
+})
+// После загрузки записей высота шапки могла измениться — пересчитываем.
+watch(() => store.loadingEntries, () => nextTick(measureWeekColumn))
 </script>
 
 <style scoped>
@@ -580,6 +618,8 @@ onMounted(() => store.fetchCalendars())
   background: var(--color-primary-container); color: var(--color-on-primary-container);
   font-size: 12px; overflow: hidden;
 }
+/* В неделе высота строки фиксирована — по ней считаем, сколько событий влезает в столбец. */
+.cv-grid.week .cv-event { height: var(--cv-event-h, 22px); box-sizing: border-box; }
 .cv-event-time { flex-shrink: 0; font-weight: 700; font-variant-numeric: tabular-nums; }
 .cv-event-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .cv-event-more { font-size: 11px; font-weight: 600; color: var(--color-text-dim); padding-left: 6px; }
@@ -622,6 +662,7 @@ onMounted(() => store.fetchCalendars())
 .cv-dayrow-body { flex: 1; min-width: 0; display: flex; flex-direction: column; }
 .cv-dayrow-title { font-size: 15px; font-weight: 600; color: var(--color-text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .cv-dayrow-sub { font-size: 13px; color: var(--color-text-dim); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cv-dayrow-flabel { font-weight: 600; color: var(--color-text); }
 .cv-dayrow-chev { flex-shrink: 0; color: var(--color-text-dim); }
 
 .cv-empty {

@@ -76,8 +76,8 @@ type AuthService interface {
 	GetGrooveSettings(ctx context.Context, actor *domain.User, companyID int64) (*dto.GrooveSettings, error)
 	UpdateGrooveSettings(ctx context.Context, actor *domain.User, companyID int64, enabled bool) (*dto.GrooveSettings, error)
 
-	ExportBackup(ctx context.Context) ([]byte, error)
-	ImportBackup(ctx context.Context, zipBytes []byte) error
+	ExportBackup(ctx context.Context, sections []string) ([]byte, error)
+	ImportBackup(ctx context.Context, zipBytes []byte, sections []string) error
 }
 
 type Service struct {

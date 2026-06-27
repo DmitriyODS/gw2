@@ -109,9 +109,31 @@
             </div>
           </div>
 
+          <!-- ВСЕ ЗАДАЧИ — все активные записи по всем дням единым списком -->
+          <div v-else-if="store.subtab === 'all'" class="dv-all">
+            <div v-if="!store.entries.length" class="dv-empty">
+              <span class="material-symbols-outlined">checklist</span>
+              <p>Активных записей нет</p>
+            </div>
+            <div v-for="g in allGroups" :key="g.date" class="dv-all-group">
+              <div class="dv-arc-daylabel">{{ g.label }}</div>
+              <button v-for="e in g.items" :key="e.id" class="dv-dayrow" @click="openEntry(e)">
+                <span class="dv-dayrow-time">{{ entryTime(e) || '—' }}</span>
+                <span class="dv-dayrow-body">
+                  <span class="dv-dayrow-title">{{ e.title }}</span>
+                  <span v-if="e.description" class="dv-dayrow-sub">{{ e.description }}</span>
+                </span>
+                <span v-if="!store.readonly" class="dv-dayrow-done" title="Выполнено" @click.stop="toggleDone(e, true)">
+                  <span class="material-symbols-outlined">check_circle</span>
+                </span>
+                <span class="material-symbols-outlined dv-dayrow-chev">chevron_right</span>
+              </button>
+            </div>
+          </div>
+
           <!-- АКТИВНЫЕ — календарные виды -->
           <template v-else>
-            <div v-if="!isMobile && store.view !== 'day'" class="dv-grid" :class="store.view">
+            <div v-if="!isMobile && store.view !== 'day'" ref="weekGridRef" class="dv-grid" :class="store.view">
               <template v-if="store.view === 'month'">
                 <div v-for="(wd, i) in weekdays" :key="'h' + i" class="dv-wd">{{ wd }}</div>
               </template>
@@ -299,7 +321,7 @@
 </template>
 
 <script setup>
-import { computed, nextTick, onMounted, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import AppDialog from '@/components/common/AppDialog.vue'
 import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
 import SegmentedTabs from '@/components/common/SegmentedTabs.vue'
@@ -321,6 +343,7 @@ const tabs = [
 ]
 const subtabs = [
   { value: 'active', label: 'Активные', icon: 'checklist' },
+  { value: 'all', label: 'Все задачи', icon: 'list' },
   { value: 'archive', label: 'Архив', icon: 'inventory_2' },
 ]
 const viewModes = [
@@ -348,7 +371,34 @@ const gridDays = computed(() => {
 function dayEntries(day) { return store.entriesByDay[dayKey(day)] || [] }
 function inCurrentMonth(day) { return day.getMonth() === store.cursor.getMonth() }
 function weekdayShort(day) { return weekdays[(day.getDay() + 6) % 7] }
-function dayPreview(day) { return dayEntries(day).slice(0, store.view === 'week' ? 4 : 2) }
+
+// Превью записей в плитке. Месяц — тесный (2). Неделя — столько, сколько влезает
+// в высоту столбца; при переполнении одна строка уходит под «+N».
+const EVENT_H = 22   // .dv-grid.week .dv-event height (var --dv-event-h)
+const EVENT_GAP = 3  // .dv-day-events gap
+const weekGridRef = ref(null)
+const weekColEventsH = ref(0)
+let weekRO = null
+
+function measureWeekColumn() {
+  const el = weekGridRef.value
+  if (!el || store.view !== 'week') return
+  // Неделя — один ряд (grid-template-rows: 1fr), высота сетки = высота столбца.
+  // Вычитаем паддинги плитки (6×2), gap шапка→события (4) и высоту шапки (24).
+  weekColEventsH.value = Math.max(0, el.clientHeight - 12 - 4 - 24)
+}
+function weekMaxVisible() {
+  const h = weekColEventsH.value
+  if (h <= 0) return 4 // фолбэк до первого замера
+  return Math.max(1, Math.floor((h + EVENT_GAP) / (EVENT_H + EVENT_GAP)))
+}
+function dayPreview(day) {
+  const entries = dayEntries(day)
+  if (store.view !== 'week') return entries.slice(0, 2)
+  const max = weekMaxVisible()
+  if (entries.length <= max) return entries
+  return entries.slice(0, Math.max(0, max - 1))
+}
 
 const agendaDays = computed(() => {
   if (store.view === 'week') return gridDays.value
@@ -378,6 +428,17 @@ function archiveDayLabel(d) {
   const s = new Date(y, m - 1, day).toLocaleDateString('ru-RU', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })
   return s.charAt(0).toUpperCase() + s.slice(1)
 }
+
+// «Все задачи» — все активные записи по всем дням, сгруппированы по дню
+// (store.entries отсортирован бэкендом по дате возр.).
+const allGroups = computed(() => {
+  const map = new Map()
+  for (const e of store.entries) {
+    if (!map.has(e.entry_date)) map.set(e.entry_date, [])
+    map.get(e.entry_date).push(e)
+  }
+  return [...map.entries()].map(([date, items]) => ({ date, label: archiveDayLabel(date), items }))
+})
 
 const periodLabel = computed(() => {
   const c = store.cursor
@@ -510,9 +571,10 @@ async function onTaskSaved(task) {
 // Экспорт
 async function doExport() {
   try {
-    const params = store.subtab === 'archive'
-      ? { archived: 1, search: store.search }
-      : { from: dayKey(store.range.from), to: dayKey(store.range.to), search: store.search }
+    let params
+    if (store.subtab === 'archive') params = { archived: 1, search: store.search }
+    else if (store.subtab === 'all') params = { search: store.search }
+    else params = { from: dayKey(store.range.from), to: dayKey(store.range.to), search: store.search }
     const resp = await exportEntries(store.selectedId, params)
     if (!resp.ok) throw new Error('export_failed')
     const blob = await resp.blob()
@@ -527,7 +589,22 @@ async function doExport() {
   }
 }
 
-onMounted(() => store.fetchDiaries())
+onMounted(() => {
+  store.fetchDiaries()
+  weekRO = new ResizeObserver(() => measureWeekColumn())
+  if (weekGridRef.value) weekRO.observe(weekGridRef.value)
+})
+onBeforeUnmount(() => { weekRO?.disconnect(); weekRO = null })
+
+// Грид появляется/исчезает при смене вида/подвкладки/устройства — переподключаем
+// observer и пересчитываем после рендера.
+watch([() => store.view, () => store.subtab, isMobile, () => store.selectedId], () => {
+  nextTick(() => {
+    if (weekRO && weekGridRef.value) { weekRO.disconnect(); weekRO.observe(weekGridRef.value) }
+    measureWeekColumn()
+  })
+})
+watch(() => store.loadingEntries, () => nextTick(measureWeekColumn))
 </script>
 
 <style scoped>
@@ -557,12 +634,12 @@ onMounted(() => store.fetchDiaries())
 .dv-period { margin: 0 0 0 6px; font-size: 16px; font-weight: 700; color: var(--color-text); text-transform: capitalize; white-space: nowrap; }
 .dv-today { height: 36px; padding: 0 14px; border: 1px solid var(--color-outline-dim); border-radius: var(--radius-full); background: var(--color-surface); color: var(--color-text); font-weight: 600; font-size: 13px; cursor: pointer; }
 .dv-today:hover { background: var(--color-surface-high); }
-.dv-spacer { flex: 1; }
+.dv-spacer { flex: 0 1 auto; }
 .dv-viewseg { display: inline-flex; border: 1px solid var(--color-outline-dim); border-radius: var(--radius-full); overflow: hidden; }
 .dv-viewseg button { height: 36px; padding: 0 14px; border: none; background: var(--color-surface); color: var(--color-text-dim); cursor: pointer; font-weight: 600; font-size: 13px; border-right: 1px solid var(--color-outline-dim); }
 .dv-viewseg button:last-child { border-right: none; }
 .dv-viewseg button.active { background: var(--color-primary); color: var(--color-on-primary); }
-.dv-search { display: flex; align-items: center; gap: 8px; height: 38px; padding: 0 12px; min-width: 170px; background: var(--color-surface-low); border: 1px solid var(--color-outline-dim); border-radius: var(--radius-full); }
+.dv-search { flex: 1 1 auto; display: flex; align-items: center; gap: 8px; height: 38px; padding: 0 12px; min-width: 170px; background: var(--color-surface-low); border: 1px solid var(--color-outline-dim); border-radius: var(--radius-full); }
 .dv-search > .material-symbols-outlined { color: var(--color-text-dim); font-size: 20px; }
 .dv-search input { flex: 1; min-width: 0; border: none; background: none; outline: none; color: var(--color-text); font-size: 14px; }
 .dv-search-clear { border: none; background: none; cursor: pointer; color: var(--color-text-dim); display: grid; place-items: center; }
@@ -591,6 +668,8 @@ onMounted(() => store.fetchDiaries())
 .dv-day-count { flex-shrink: 0; min-width: 18px; height: 18px; padding: 0 5px; display: inline-flex; align-items: center; justify-content: center; border-radius: var(--radius-full); background: var(--color-primary); color: var(--color-on-primary); font-size: 11px; font-weight: 700; }
 .dv-day-events { display: flex; flex-direction: column; gap: 3px; min-height: 0; }
 .dv-event { display: flex; align-items: baseline; gap: 6px; width: 100%; text-align: left; padding: 3px 6px; border-radius: var(--radius-sm); background: var(--color-primary-container); color: var(--color-on-primary-container); font-size: 12px; overflow: hidden; }
+/* В неделе высота строки фиксирована — по ней считаем, сколько событий влезает в столбец. */
+.dv-grid.week .dv-event { height: var(--dv-event-h, 22px); box-sizing: border-box; }
 .dv-event-time { flex-shrink: 0; font-weight: 700; font-variant-numeric: tabular-nums; }
 .dv-event-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .dv-event-more { font-size: 11px; font-weight: 600; color: var(--color-text-dim); padding-left: 6px; }
@@ -621,6 +700,10 @@ onMounted(() => store.fetchDiaries())
 .dv-dayrow-title.done { text-decoration: line-through; color: var(--color-text-dim); }
 .dv-dayrow-chev { flex-shrink: 0; color: var(--color-text-dim); }
 .dv-day-section { padding: 6px 4px 2px; font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; color: var(--color-text-dim); }
+
+/* Все задачи */
+.dv-all { display: flex; flex-direction: column; gap: 16px; padding: 16px; }
+.dv-all-group { display: flex; flex-direction: column; gap: 8px; }
 
 /* Архив */
 .dv-archive { display: flex; flex-direction: column; gap: 8px; padding: 16px; }
@@ -698,7 +781,7 @@ onMounted(() => store.fetchDiaries())
 .dv-controls { display: flex; flex-direction: column; gap: 18px; }
 .dv-ctl-block { display: flex; flex-direction: column; gap: 8px; }
 .dv-ctl-label { font-size: 13px; font-weight: 600; color: var(--color-text-dim); }
-.dv-ctl-search { width: 100%; height: 44px; }
+.dv-ctl-search { flex: 0 0 auto; width: 100%; height: 44px; }
 .dv-ctl-actions { display: flex; flex-direction: column; gap: 4px; }
 .dv-ctl-btn {
   display: flex; align-items: center; gap: 12px; width: 100%; padding: 12px 10px;

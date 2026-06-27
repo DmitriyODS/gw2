@@ -109,7 +109,7 @@
               <p>Полный архив базы данных и вложений в одном файле. Сохраняйте регулярно — на всякий случай.</p>
             </div>
             <div class="card-actions">
-              <button class="btn-filled" @click="doExportBackup" :disabled="backupExporting">
+              <button class="btn-filled" @click="exportDialogOpen = true" :disabled="backupExporting">
                 <span class="material-symbols-outlined">download</span>
                 {{ backupExporting ? 'Готовим архив…' : 'Скачать копию' }}
               </button>
@@ -154,14 +154,26 @@
       </section>
     </Transition>
 
+    <BackupSectionsDialog
+      v-model="exportDialogOpen"
+      mode="export"
+      :busy="backupExporting"
+      @confirm="onExportConfirm"
+    />
+    <BackupSectionsDialog
+      v-model="importSectionsOpen"
+      mode="import"
+      @confirm="onImportSectionsConfirm"
+    />
+
     <ConfirmDialog
       :visible="showImportConfirm1"
       header="Восстановление из резервной копии"
-      message="Вы уверены? Текущие данные будут полностью заменены данными из файла резервной копии."
+      message="Вы уверены? Выбранные разделы будут полностью заменены данными из файла резервной копии."
       confirm-label="Продолжить"
       :danger-confirm="true"
       @confirm="showImportConfirm1 = false; showImportConfirm2 = true"
-      @cancel="showImportConfirm1 = false; importFile = null"
+      @cancel="cancelImport"
     />
     <ConfirmDialog
       :visible="showImportConfirm2"
@@ -170,7 +182,7 @@
       confirm-label="Да, восстановить"
       :danger-confirm="true"
       @confirm="doImportBackup"
-      @cancel="showImportConfirm2 = false; importFile = null"
+      @cancel="cancelImport"
     />
   </div>
 </template>
@@ -185,6 +197,7 @@ import { useTutorial } from '@/composables/useTutorial.js'
 import { useChangelog } from '@/composables/useChangelog.js'
 import { useBreakpoint } from '@/composables/useBreakpoint.js'
 import { exportBackup, importBackup } from '@/api/backup.js'
+import BackupSectionsDialog from '@/components/settings/BackupSectionsDialog.vue'
 import ThemeBuilder from '@/components/settings/ThemeBuilder.vue'
 import HelpCenter from '@/components/settings/HelpCenter.vue'
 import AboutApp from '@/components/settings/AboutApp.vue'
@@ -287,11 +300,19 @@ const backupExporting = ref(false)
 const showImportConfirm1 = ref(false)
 const showImportConfirm2 = ref(false)
 const importFile = ref(null)
+const exportDialogOpen = ref(false)
+const importSectionsOpen = ref(false)
+const importSections = ref([])
 
-async function doExportBackup() {
+function onExportConfirm(sections) {
+  exportDialogOpen.value = false
+  doExportBackup(sections)
+}
+
+async function doExportBackup(sections) {
   backupExporting.value = true
   try {
-    const response = await exportBackup()
+    const response = await exportBackup(sections)
     let blob
     if (response instanceof Blob) blob = response
     else if (response && typeof response.blob === 'function') blob = await response.blob()
@@ -311,19 +332,32 @@ function onImportFileSelect(event) {
   const file = event.target.files[0]
   if (!file) return
   importFile.value = file
-  showImportConfirm1.value = true
+  importSectionsOpen.value = true
   event.target.value = ''
+}
+
+function onImportSectionsConfirm(sections) {
+  importSections.value = sections
+  importSectionsOpen.value = false
+  showImportConfirm1.value = true
+}
+
+function cancelImport() {
+  showImportConfirm1.value = false
+  showImportConfirm2.value = false
+  importFile.value = null
+  importSections.value = []
 }
 
 async function doImportBackup() {
   showImportConfirm2.value = false
   if (!importFile.value) return
   try {
-    await importBackup(importFile.value)
+    await importBackup(importFile.value, importSections.value)
     notif.success('База данных восстановлена. Страница перезагрузится.')
     setTimeout(() => window.location.reload(), 2000)
   } catch (e) { notif.error(e.message || 'Ошибка восстановления') }
-  finally { importFile.value = null }
+  finally { importFile.value = null; importSections.value = [] }
 }
 
 onMounted(() => {

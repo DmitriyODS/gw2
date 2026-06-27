@@ -36,6 +36,15 @@ MESSENGER_PID=""
 AI_PID=""
 TASKS_PID=""
 GATEWAY_PID=""
+GROOVE_PID=""
+PUSH_PID=""
+MAIL_PID=""
+REGISTRY_PID=""
+CALENDAR_PID=""
+DIARY_PID=""
+
+# Все Go-сервисы (имя бинаря в go-build/exe — по нему ловим осиротевшие процессы).
+SVCS="callsvc authsvc msgsvc aisvc groovesvc tasksvc gatewaysvc pushsvc mailsvc registrysvc calendarsvc diarysvc"
 
 # Dev-ключи PASETO (синхронизированы с Makefile и
 # deploy/docker-compose.override.yml): приватный — только у authsvc,
@@ -59,7 +68,12 @@ cleanup() {
     if [ -n "$AI_PID" ];    then kill -TERM -- "-$AI_PID"    2>/dev/null || true; fi
     if [ -n "$TASKS_PID" ]; then kill -TERM -- "-$TASKS_PID" 2>/dev/null || true; fi
     if [ -n "$GATEWAY_PID" ]; then kill -TERM -- "-$GATEWAY_PID" 2>/dev/null || true; fi
+    if [ -n "$GROOVE_PID" ]; then kill -TERM -- "-$GROOVE_PID" 2>/dev/null || true; fi
+    if [ -n "$PUSH_PID" ]; then kill -TERM -- "-$PUSH_PID" 2>/dev/null || true; fi
+    if [ -n "$MAIL_PID" ]; then kill -TERM -- "-$MAIL_PID" 2>/dev/null || true; fi
     if [ -n "$REGISTRY_PID" ]; then kill -TERM -- "-$REGISTRY_PID" 2>/dev/null || true; fi
+    if [ -n "$CALENDAR_PID" ]; then kill -TERM -- "-$CALENDAR_PID" 2>/dev/null || true; fi
+    if [ -n "$DIARY_PID" ]; then kill -TERM -- "-$DIARY_PID" 2>/dev/null || true; fi
 
     # Даём ~1 секунду на graceful-shutdown (vite, Go-сервисы).
     sleep 1
@@ -72,31 +86,41 @@ cleanup() {
     if [ -n "$AI_PID" ];    then kill -KILL -- "-$AI_PID"    2>/dev/null || true; fi
     if [ -n "$TASKS_PID" ]; then kill -KILL -- "-$TASKS_PID" 2>/dev/null || true; fi
     if [ -n "$GATEWAY_PID" ]; then kill -KILL -- "-$GATEWAY_PID" 2>/dev/null || true; fi
+    if [ -n "$GROOVE_PID" ]; then kill -KILL -- "-$GROOVE_PID" 2>/dev/null || true; fi
+    if [ -n "$PUSH_PID" ]; then kill -KILL -- "-$PUSH_PID" 2>/dev/null || true; fi
+    if [ -n "$MAIL_PID" ]; then kill -KILL -- "-$MAIL_PID" 2>/dev/null || true; fi
     if [ -n "$REGISTRY_PID" ]; then kill -KILL -- "-$REGISTRY_PID" 2>/dev/null || true; fi
+    if [ -n "$CALENDAR_PID" ]; then kill -KILL -- "-$CALENDAR_PID" 2>/dev/null || true; fi
+    if [ -n "$DIARY_PID" ]; then kill -KILL -- "-$DIARY_PID" 2>/dev/null || true; fi
 
     # Подбираем сирот по имени — защита от случая, когда субшелл уже
     # умер, а его потомки ещё живы. Узко по нашему пути, чужие процессы
-    # не трогаем.
-    pkill -f "$FRONT/.*vite"     2>/dev/null || true
-    # go run собирает бинарь во временный каталог — ловим по имени бинаря.
-    pkill -f "exe/callsvc"       2>/dev/null || true
-    pkill -f "exe/authsvc"       2>/dev/null || true
-    pkill -f "exe/msgsvc"        2>/dev/null || true
-    pkill -f "exe/aisvc"         2>/dev/null || true
-    pkill -f "exe/groovesvc"     2>/dev/null || true
-    pkill -f "exe/tasksvc"       2>/dev/null || true
-    pkill -f "exe/gatewaysvc"    2>/dev/null || true
-    pkill -f "exe/pushsvc"       2>/dev/null || true
-    pkill -f "exe/mailsvc"       2>/dev/null || true
-    pkill -f "exe/registrysvc"   2>/dev/null || true
-    pkill -f "exe/calendarsvc"   2>/dev/null || true
-    pkill -f "exe/diarysvc"      2>/dev/null || true
+    # не трогаем. go run собирает бинарь во временный каталог — ловим по имени.
+    pkill -f "$FRONT/.*vite" 2>/dev/null || true
+    for svc in $SVCS; do pkill -f "exe/$svc" 2>/dev/null || true; done
 
     (cd "$DEPLOY" && docker compose stop 2>/dev/null) || true
     printf "\033[32mВсё остановлено.\033[0m\n"
     exit 0
 }
 trap cleanup INT TERM
+
+# 0. Преполёт: убиваем процессы прошлого запуска (по имени, узко по нашему
+#    репозиторию). Без этого повторный ./dev.sh натыкается на занятые порты —
+#    новый `go run` падает с «address in use», а на порту продолжает отвечать
+#    СТАРЫЙ бинарник со старым кодом (правки словно «не применяются»).
+preflight() {
+    local found=""
+    if pkill -f "$FRONT/.*vite" 2>/dev/null; then found=1; fi
+    for svc in $SVCS; do
+        if pkill -f "exe/$svc" 2>/dev/null; then found=1; fi
+    done
+    if [ -n "$found" ]; then
+        printf "\033[33m▶ Останавливаю процессы прошлого запуска...\033[0m\n"
+        sleep 2  # даём портам освободиться до старта свежих сервисов
+    fi
+}
+preflight
 
 # 1. Инфраструктура (db + redis + livekit). Приложения в dev-оверлее за
 #    профилем "full" и не стартуют — бегут на хосте ниже.

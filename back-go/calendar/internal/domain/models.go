@@ -64,6 +64,7 @@ type Field struct {
 	ColSpan        int            `json:"col_span"` // 1..3 — ширина в сетке карточки
 	RowSpan        int            `json:"row_span"` // ≥1 — высота
 	ShowInTable    bool           `json:"show_in_table"`
+	ShowInCard     bool           `json:"show_in_card"` // показывать в карточке события (виды день/неделя)
 	VisibleFieldID *int64         `json:"visible_field_id"`
 	VisibleValue   *string        `json:"visible_value"`
 	CreatedAt      time.Time      `json:"created_at"`

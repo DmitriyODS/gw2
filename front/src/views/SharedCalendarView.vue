@@ -102,7 +102,12 @@
           </div>
           <button v-for="e in dayEntries(cursor)" :key="e.id" class="sc-dayrow" @click="openEntry(e)">
             <span class="sc-dayrow-time">{{ hhmm(e.event_at) }}</span>
-            <span class="sc-dayrow-title">{{ entryTitle(calendar, e) }}</span>
+            <span class="sc-dayrow-body">
+              <span class="sc-dayrow-title">{{ entryTitle(calendar, e) }}</span>
+              <span v-for="cf in cardFields(calendar, e)" :key="cf.field.id" class="sc-dayrow-sub">
+                <span class="sc-dayrow-flabel">{{ cf.field.label }}:</span> {{ cf.value }}
+              </span>
+            </span>
             <span class="material-symbols-outlined sc-dayrow-chev">chevron_right</span>
           </button>
         </div>
@@ -161,7 +166,7 @@ import AppDialog from '@/components/common/AppDialog.vue'
 import CalendarEntryDialog from '@/components/calendar/CalendarEntryDialog.vue'
 import CalendarDayDialog from '@/components/calendar/CalendarDayDialog.vue'
 import { getSharedCalendar, getSharedEntries, exportSharedEntries } from '@/api/calendars.js'
-import { fieldIcon, isExportable, entryTitle, hhmm } from '@/utils/calendarFields.js'
+import { fieldIcon, isExportable, entryTitle, hhmm, cardFields } from '@/utils/calendarFields.js'
 import { dayKey } from '@/stores/calendars.js'
 import { useBreakpoint } from '@/composables/useBreakpoint.js'
 
@@ -422,7 +427,10 @@ onMounted(load)
 .sc-dayrow { display: flex; align-items: center; gap: 14px; width: 100%; text-align: left; padding: 12px 14px; border: 1px solid var(--color-outline-dim); border-radius: var(--radius-lg); background: var(--color-surface); cursor: pointer; }
 .sc-dayrow:hover { background: var(--color-surface-high); }
 .sc-dayrow-time { flex-shrink: 0; min-width: 56px; font-size: 16px; font-weight: 700; color: var(--color-primary); font-variant-numeric: tabular-nums; }
-.sc-dayrow-title { flex: 1; min-width: 0; font-size: 15px; font-weight: 600; color: var(--color-text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sc-dayrow-body { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.sc-dayrow-title { font-size: 15px; font-weight: 600; color: var(--color-text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sc-dayrow-sub { font-size: 13px; color: var(--color-text-dim); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sc-dayrow-flabel { font-weight: 600; color: var(--color-text); }
 .sc-dayrow-chev { flex-shrink: 0; color: var(--color-text-dim); }
 
 .sc-empty { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; padding: 48px 16px; color: var(--color-text-dim); }

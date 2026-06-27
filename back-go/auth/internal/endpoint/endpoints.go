@@ -83,6 +83,12 @@ type ActorRequest struct {
 	UserID int64
 }
 
+// ImportBackupReq — ZIP-архив и выбранные к восстановлению разделы.
+type ImportBackupReq struct {
+	Zip      []byte
+	Sections []string
+}
+
 type CreateUserEpRequest struct {
 	Actor *domain.User
 	Body  dto.CreateUserRequest
@@ -418,11 +424,13 @@ func New(svc service.AuthService) Endpoints {
 			return svc.UpdateGrooveSettings(ctx, req.Actor, req.CompanyID, req.Enabled)
 		},
 
-		ExportBackup: func(ctx context.Context, _ any) (any, error) {
-			return svc.ExportBackup(ctx)
+		ExportBackup: func(ctx context.Context, request any) (any, error) {
+			sections, _ := request.([]string)
+			return svc.ExportBackup(ctx, sections)
 		},
 		ImportBackup: func(ctx context.Context, request any) (any, error) {
-			return nil, svc.ImportBackup(ctx, request.([]byte))
+			req := request.(ImportBackupReq)
+			return nil, svc.ImportBackup(ctx, req.Zip, req.Sections)
 		},
 	}
 }

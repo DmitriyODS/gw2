@@ -12,8 +12,9 @@ import (
 )
 
 // ExportEntries — xlsx с выбранными полями за период. ids != nil → только эти
-// записи, иначе все записи по фильтру (диапазон дат + поиск). Первой колонкой
-// всегда идёт «Дата и время» записи; картинки/файлы исключаются.
+// записи, иначе все записи по фильтру (диапазон дат + поиск). Колонка A — день
+// недели и дата (ячейки объединяются по дням), B — время внутри дня, далее —
+// выбранные поля; картинки/файлы исключаются.
 func (s *Service) ExportEntries(ctx context.Context, companyID, calendarID int64, fieldIDs []int64, p EntryListParams, ids []int64) ([]byte, string, error) {
 	cal, err := s.requireCalendar(ctx, companyID, calendarID)
 	if err != nil {
@@ -58,18 +59,49 @@ func (s *Service) buildExport(ctx context.Context, cal *domain.Calendar, fieldID
 	const sheet = "Календарь"
 	f.SetSheetName(f.GetSheetName(0), sheet)
 
-	// Первая колонка — всегда дата/время записи.
-	f.SetCellStr(sheet, "A1", "Дата и время")
+	// Колонки: A — день недели + дата (объединяется по дням), B — время внутри дня,
+	// далее — выбранные поля.
+	f.SetCellStr(sheet, "A1", "Дата")
+	f.SetCellStr(sheet, "B1", "Время")
 	for ci, col := range cols {
-		cell, _ := excelize.CoordinatesToCellName(ci+2, 1)
+		cell, _ := excelize.CoordinatesToCellName(ci+3, 1)
 		f.SetCellStr(sheet, cell, col.Label)
 	}
+
+	// Объединённая ячейка даты — текст по верхнему левому краю.
+	dateStyle, _ := f.NewStyle(&excelize.Style{
+		Alignment: &excelize.Alignment{Vertical: "top", Horizontal: "left", WrapText: true},
+	})
+
+	groupStart := 0 // строка начала текущей группы одного дня (0 — группы нет)
+	var groupKey string
+	flush := func(endRow int) {
+		if groupStart == 0 || endRow <= groupStart {
+			return
+		}
+		from := mustCell(1, groupStart)
+		to := mustCell(1, endRow)
+		f.MergeCell(sheet, from, to)            //nolint:errcheck
+		f.SetCellStyle(sheet, from, to, dateStyle) //nolint:errcheck
+	}
 	for ri, e := range entries {
-		f.SetCellStr(sheet, mustCell(1, ri+2), formatEventAt(e.EventAt))
+		row := ri + 2
+		key := e.EventAt.Format("2006-01-02")
+		if key != groupKey {
+			flush(row - 1)
+			groupStart = row
+			groupKey = key
+			f.SetCellStr(sheet, mustCell(1, row), formatDayDate(e.EventAt))
+		}
+		f.SetCellStr(sheet, mustCell(2, row), formatTime(e.EventAt))
 		for ci, col := range cols {
-			f.SetCellStr(sheet, mustCell(ci+2, ri+2), exportValue(col, e.Data[domain.FieldID(col.ID)]))
+			f.SetCellStr(sheet, mustCell(ci+3, row), exportValue(col, e.Data[domain.FieldID(col.ID)]))
 		}
 	}
+	flush(len(entries) + 1)
+
+	f.SetColWidth(sheet, "A", "A", 24) //nolint:errcheck
+	f.SetColWidth(sheet, "B", "B", 8)  //nolint:errcheck
 
 	buf, err := f.WriteToBuffer()
 	if err != nil {
@@ -83,8 +115,14 @@ func mustCell(col, row int) string {
 	return cell
 }
 
-func formatEventAt(t time.Time) string {
-	return fmt.Sprintf("%02d.%02d.%d %02d:%02d", t.Day(), int(t.Month()), t.Year(), t.Hour(), t.Minute())
+var weekdaysRu = [...]string{"Воскресенье", "Понедельник", "Вторник", "Среда", "Четверг", "Пятница", "Суббота"}
+
+func formatDayDate(t time.Time) string {
+	return fmt.Sprintf("%s, %02d.%02d.%d", weekdaysRu[int(t.Weekday())], t.Day(), int(t.Month()), t.Year())
+}
+
+func formatTime(t time.Time) string {
+	return fmt.Sprintf("%02d:%02d", t.Hour(), t.Minute())
 }
 
 // exportValue — текстовое представление значения для ячейки (зеркало

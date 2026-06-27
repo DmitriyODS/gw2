@@ -50,6 +50,25 @@ export function entryTitle(calendar, entry, fallback = 'Запись') {
   return fallback
 }
 
+// cardFields — поля для тела карточки события (виды «День»/«Неделя» и диалог
+// дня): помеченные show_in_card и видимые при текущих значениях записи.
+// Возвращает [{ field, value }] с непустым текстовым значением.
+export function cardFields(calendar, entry) {
+  const fields = calendar?.fields || []
+  const data = entry?.data || {}
+  // Заголовок карточки рисуется отдельно (entryTitle) — не дублируем это поле.
+  const titleField = fields.find((f) => f.show_in_table) || fields[0]
+  const out = []
+  for (const f of fields) {
+    if (f.show_in_card === false) continue
+    if (titleField && f.id === titleField.id) continue
+    if (!isFieldVisible(f, data)) continue
+    const value = textValue(f, data[String(f.id)])
+    if (value) out.push({ field: f, value })
+  }
+  return out
+}
+
 // hhmm — время записи без секунд (для плиток и режима «День»).
 export function hhmm(value) {
   if (!value) return ''

@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"encoding/json"
 	"log/slog"
 	"sort"
 	"strings"
@@ -554,10 +555,13 @@ func (f *fakeCompanyInvites) Delete(_ context.Context, id int64) error {
 // fakeBackup — заглушка BackupStore (export/import в unit-тестах не гоняем).
 type fakeBackup struct{}
 
-func (fakeBackup) ExportData(context.Context) (*domain.BackupData, error) {
-	return &domain.BackupData{}, nil
+func (fakeBackup) AllTables(context.Context) ([]string, error) { return nil, nil }
+func (fakeBackup) ExportTables(context.Context, []string) (map[string]json.RawMessage, error) {
+	return map[string]json.RawMessage{}, nil
 }
-func (fakeBackup) ImportData(context.Context, *domain.BackupData) error { return nil }
+func (fakeBackup) ImportTables(context.Context, []string, map[string]json.RawMessage) error {
+	return nil
+}
 
 // ── Хелперы ──────────────────────────────────────────────────────
 

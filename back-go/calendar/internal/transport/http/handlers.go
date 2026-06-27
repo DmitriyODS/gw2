@@ -424,6 +424,7 @@ type fieldInput struct {
 	ColSpan        int            `json:"col_span"`
 	RowSpan        int            `json:"row_span"`
 	ShowInTable    bool           `json:"show_in_table"`
+	ShowInCard     bool           `json:"show_in_card"`
 	VisibleFieldID *int64         `json:"visible_field_id"`
 	VisibleValue   *string        `json:"visible_value"`
 }
@@ -449,7 +450,7 @@ func parseFields(in []fieldInput) ([]domain.Field, string) {
 		}
 		out = append(out, domain.Field{
 			ID: fi.ID, Label: label, Type: fi.Type, Config: cfg,
-			ColSpan: fi.ColSpan, RowSpan: fi.RowSpan, ShowInTable: fi.ShowInTable,
+			ColSpan: fi.ColSpan, RowSpan: fi.RowSpan, ShowInTable: fi.ShowInTable, ShowInCard: fi.ShowInCard,
 			VisibleFieldID: fi.VisibleFieldID, VisibleValue: fi.VisibleValue,
 		})
 	}

@@ -14,7 +14,9 @@
             <span class="cd-time">{{ hhmm(e.event_at) }}</span>
             <span class="cd-body">
               <span class="cd-title">{{ entryTitle(calendar, e) }}</span>
-              <span v-if="subtitle(e)" class="cd-sub">{{ subtitle(e) }}</span>
+              <span v-for="cf in cardFields(calendar, e)" :key="cf.field.id" class="cd-sub">
+                <span class="cd-field-label">{{ cf.field.label }}:</span> {{ cf.value }}
+              </span>
             </span>
             <span class="material-symbols-outlined cd-chev">chevron_right</span>
           </button>
@@ -48,7 +50,7 @@ import AppDialog from '@/components/common/AppDialog.vue'
 import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
 import { useCalendarsStore } from '@/stores/calendars.js'
 import { useNotificationsStore } from '@/stores/notifications.js'
-import { entryTitle, hhmm, textValue } from '@/utils/calendarFields.js'
+import { cardFields, entryTitle, hhmm } from '@/utils/calendarFields.js'
 
 const props = defineProps({
   modelValue: { type: Boolean, default: false },
@@ -69,13 +71,6 @@ const title = computed(() => {
   const s = d.toLocaleDateString('ru-RU', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })
   return s.charAt(0).toUpperCase() + s.slice(1)
 })
-
-// Подзаголовок строки — второе «таблничное» поле.
-function subtitle(e) {
-  const fields = (props.calendar?.fields || []).filter((f) => f.show_in_table)
-  const f = fields[1]
-  return f ? textValue(f, e.data?.[String(f.id)]) : ''
-}
 
 const confirm = ref(null)
 function askDelete(e) { confirm.value = e }
@@ -110,6 +105,7 @@ async function doDelete() {
 .cd-body { flex: 1; min-width: 0; display: flex; flex-direction: column; }
 .cd-title { font-size: 14px; font-weight: 600; color: var(--color-text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .cd-sub { font-size: 12px; color: var(--color-text-dim); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cd-field-label { font-weight: 600; color: var(--color-text); }
 .cd-chev { flex-shrink: 0; color: var(--color-text-dim); }
 .cd-del {
   flex-shrink: 0; width: 42px; display: grid; place-items: center;

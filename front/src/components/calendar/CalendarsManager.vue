@@ -227,6 +227,7 @@
         </div>
 
         <label class="fd-check"><Checkbox v-model="draft.show_in_table" binary /> Показывать в плитке и таблице</label>
+        <label class="fd-check"><Checkbox v-model="draft.show_in_card" binary /> Показывать в карточке события</label>
       </div>
     </AppDialog>
 
@@ -294,6 +295,7 @@ function normalizeField(f) {
     col_span: clampSpan(f.col_span),
     row_span: clampSpan(f.row_span),
     show_in_table: f.show_in_table !== false,
+    show_in_card: f.show_in_card !== false,
     visible_field_id: f.visible_field_id ?? null,
     visible_value: f.visible_value ?? null,
   }
@@ -314,7 +316,7 @@ const fieldOpen = ref(false)
 const fieldIndex = ref(-1)
 const draft = reactive({
   _k: 0, id: 0, label: '', type: 'text', config: {}, col_span: 1, row_span: 1,
-  show_in_table: true, visible_field_id: null, visible_value: null,
+  show_in_table: true, show_in_card: true, visible_field_id: null, visible_value: null,
 })
 
 // Поля-источники условия: сохранённые (id>0) галочки/списки, кроме редактируемого.
@@ -339,7 +341,7 @@ function onConditionField(val) {
 function openField(i) {
   fieldIndex.value = i
   const src = i === -1
-    ? { id: 0, label: '', type: 'text', config: defaultConfig('text'), col_span: 1, row_span: 1, show_in_table: true, visible_field_id: null, visible_value: null }
+    ? { id: 0, label: '', type: 'text', config: defaultConfig('text'), col_span: 1, row_span: 1, show_in_table: true, show_in_card: true, visible_field_id: null, visible_value: null }
     : editFields.value[i]
   Object.assign(draft, {
     _k: src._k ?? 0,
@@ -350,6 +352,7 @@ function openField(i) {
     col_span: clampSpan(src.col_span),
     row_span: clampSpan(src.row_span),
     show_in_table: src.show_in_table !== false,
+    show_in_card: src.show_in_card !== false,
     visible_field_id: src.visible_field_id ?? null,
     visible_value: src.visible_value ?? null,
   })
@@ -386,6 +389,7 @@ function applyField() {
     col_span: draft.col_span,
     row_span: draft.row_span,
     show_in_table: draft.show_in_table,
+    show_in_card: draft.show_in_card,
     visible_field_id: visibleFieldId,
     visible_value: visibleValue,
   }
@@ -417,7 +421,7 @@ async function save() {
     }
     await api.replaceFields(editId.value, editFields.value.map((f) => ({
       id: f.id || 0, label: f.label.trim(), type: f.type, config: f.config,
-      col_span: f.col_span, row_span: f.row_span, show_in_table: f.show_in_table,
+      col_span: f.col_span, row_span: f.row_span, show_in_table: f.show_in_table, show_in_card: f.show_in_card,
       visible_field_id: f.visible_field_id ?? null, visible_value: f.visible_value ?? null,
     })))
     notif.success('Календарь сохранён')

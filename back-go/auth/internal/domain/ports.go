@@ -2,6 +2,7 @@ package domain
 
 import (
 	"context"
+	"encoding/json"
 	"time"
 )
 
@@ -156,10 +157,14 @@ type CompanyRepository interface {
 	CompanyStats(ctx context.Context, ids []int64) (map[int64]CompanyStats, error)
 }
 
-// BackupStore — выгрузка и восстановление основных таблиц для резервной
-// копии. Import — TRUNCATE ... RESTART IDENTITY CASCADE + вставки + setval,
-// всё в одной транзакции (как прежний backup_service во Flask).
+// BackupStore — универсальный схемо-независимый дамп/восстановление таблиц.
+// Import — TRUNCATE ... RESTART IDENTITY CASCADE + вставки в FK-порядке + setval,
+// всё в одной транзакции (любая ошибка откатывает целиком).
 type BackupStore interface {
-	ExportData(ctx context.Context) (*BackupData, error)
-	ImportData(ctx context.Context, data *BackupData) error
+	// AllTables — все base-таблицы public-схемы минус BackupExcluded.
+	AllTables(ctx context.Context) ([]string, error)
+	// ExportTables — дамп указанных таблиц: имя → JSON-массив строк (to_jsonb).
+	ExportTables(ctx context.Context, tables []string) (map[string]json.RawMessage, error)
+	// ImportTables — деструктивно заменить данные указанных таблиц.
+	ImportTables(ctx context.Context, tables []string, data map[string]json.RawMessage) error
 }

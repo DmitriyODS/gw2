@@ -132,6 +132,12 @@ export const useDiariesStore = defineStore('diaries', () => {
         data = await api.getEntries(id, { archived: 1, search: search.value }, { signal: fetchCtrl.signal })
         if (seq !== fetchSeq) return
         archive.value = data.items ?? []
+      } else if (subtab.value === 'all') {
+        // «Все задачи» — все активные записи по всем дням, единым списком (без диапазона).
+        data = await api.getEntries(id, { search: search.value }, { signal: fetchCtrl.signal })
+        if (seq !== fetchSeq) return
+        entries.value = data.items ?? []
+        dayDone.value = []
       } else {
         const { from, to } = range.value
         data = await api.getEntries(id, { from: dayKey(from), to: dayKey(to), search: search.value }, { signal: fetchCtrl.signal })
@@ -175,7 +181,7 @@ export const useDiariesStore = defineStore('diaries', () => {
   // ── Записи (мутации) ──
   async function createEntry(body) {
     const e = await api.createEntry(selectedId.value, body)
-    if (subtab.value === 'active') await fetchEntries({ silent: true })
+    if (subtab.value === 'active' || subtab.value === 'all') await fetchEntries({ silent: true })
     return e
   }
   async function updateEntry(entryId, body) {

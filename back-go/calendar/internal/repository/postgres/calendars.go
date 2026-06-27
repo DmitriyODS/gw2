@@ -87,12 +87,12 @@ func (r *Repo) NextCalendarPosition(ctx context.Context, companyID int64) (int, 
 // ── Поля ─────────────────────────────────────────────────────────
 
 const fieldCols = `id, calendar_id, label, type, config, position, col_span, row_span,
-	show_in_table, visible_field_id, visible_value, created_at`
+	show_in_table, show_in_card, visible_field_id, visible_value, created_at`
 
 func scanField(row pgx.Row) (domain.Field, error) {
 	var f domain.Field
 	err := row.Scan(&f.ID, &f.CalendarID, &f.Label, &f.Type, &f.Config,
-		&f.Position, &f.ColSpan, &f.RowSpan, &f.ShowInTable,
+		&f.Position, &f.ColSpan, &f.RowSpan, &f.ShowInTable, &f.ShowInCard,
 		&f.VisibleFieldID, &f.VisibleValue, &f.CreatedAt)
 	if f.Config == nil {
 		f.Config = map[string]any{}
@@ -174,10 +174,10 @@ func (r *Repo) ReplaceFields(ctx context.Context, calendarID int64, fields []dom
 			if _, err := tx.Exec(ctx,
 				`UPDATE calendar_fields
 				    SET label=$2, type=$3, config=$4, position=$5,
-				        col_span=$6, row_span=$7, show_in_table=$8,
-				        visible_field_id=$9, visible_value=$10
+				        col_span=$6, row_span=$7, show_in_table=$8, show_in_card=$9,
+				        visible_field_id=$10, visible_value=$11
 				  WHERE id=$1`,
-				f.ID, f.Label, f.Type, f.Config, f.Position, f.ColSpan, f.RowSpan, f.ShowInTable,
+				f.ID, f.Label, f.Type, f.Config, f.Position, f.ColSpan, f.RowSpan, f.ShowInTable, f.ShowInCard,
 				f.VisibleFieldID, f.VisibleValue); err != nil {
 				return nil, err
 			}
@@ -186,9 +186,9 @@ func (r *Repo) ReplaceFields(ctx context.Context, calendarID int64, fields []dom
 		if err := tx.QueryRow(ctx,
 			`INSERT INTO calendar_fields
 			   (calendar_id, label, type, config, position, col_span, row_span,
-			    show_in_table, visible_field_id, visible_value)
-			 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING id, created_at`,
-			calendarID, f.Label, f.Type, f.Config, f.Position, f.ColSpan, f.RowSpan, f.ShowInTable,
+			    show_in_table, show_in_card, visible_field_id, visible_value)
+			 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING id, created_at`,
+			calendarID, f.Label, f.Type, f.Config, f.Position, f.ColSpan, f.RowSpan, f.ShowInTable, f.ShowInCard,
 			f.VisibleFieldID, f.VisibleValue).
 			Scan(&f.ID, &f.CreatedAt); err != nil {
 			return nil, err
