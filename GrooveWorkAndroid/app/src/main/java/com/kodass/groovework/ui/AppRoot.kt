@@ -57,6 +57,12 @@ fun AppRoot(container: AppContainer) {
             Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
         }
     }
+    // Ошибки операций с юнитом (старт/клон/стоп) — пользователю.
+    LaunchedEffect(Unit) {
+        container.unitManager.errors.collect { message ->
+            Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
+        }
+    }
 
     Box(modifier = Modifier.fillMaxSize()) {
         Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {

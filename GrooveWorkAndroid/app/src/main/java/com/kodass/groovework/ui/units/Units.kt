@@ -26,6 +26,7 @@ import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material.icons.filled.Timer
 import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.Edit
+import androidx.compose.material.icons.outlined.RestartAlt
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.DatePicker
@@ -545,7 +546,13 @@ fun StartUnitSheet(
 
 // Строка юнита в списке вкладки «Юниты».
 @Composable
-fun UnitRow(unit: UnitDto, canDelete: Boolean, onDelete: () -> Unit, onEdit: (() -> Unit)? = null) {
+fun UnitRow(
+    unit: UnitDto,
+    canDelete: Boolean,
+    onDelete: () -> Unit,
+    onEdit: (() -> Unit)? = null,
+    onClone: (() -> Unit)? = null,
+) {
     var expanded by remember { mutableStateOf(false) }
     val startMillis = unitStartMillis(unit)
     Surface(
@@ -618,8 +625,17 @@ fun UnitRow(unit: UnitDto, canDelete: Boolean, onDelete: () -> Unit, onEdit: (()
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
-                    if (canDelete || onEdit != null) {
+                    if (canDelete || onEdit != null || onClone != null) {
                         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                            if (onClone != null) {
+                                IconButton(onClick = onClone) {
+                                    Icon(
+                                        Icons.Outlined.RestartAlt,
+                                        contentDescription = "Начать новый юнит с тем же названием и типом",
+                                        tint = MaterialTheme.colorScheme.primary,
+                                    )
+                                }
+                            }
                             if (onEdit != null) {
                                 IconButton(onClick = onEdit) {
                                     Icon(

@@ -424,6 +424,7 @@ private fun TaskInfoTab(
 @Composable
 private fun UnitsTab(viewModel: TaskDetailViewModel, container: AppContainer) {
     LaunchedEffect(Unit) { viewModel.loadUnits() }
+    val scope = rememberCoroutineScope()
     var editingUnit by remember { mutableStateOf<UnitDto?>(null) }
     Box(modifier = Modifier.fillMaxSize()) {
         when {
@@ -446,6 +447,11 @@ private fun UnitsTab(viewModel: TaskDetailViewModel, container: AppContainer) {
                         canDelete = canManage,
                         onDelete = { viewModel.deleteUnit(unit) },
                         onEdit = if (canManage) ({ editingUnit = unit }) else null,
+                        onClone = {
+                            scope.launch {
+                                if (container.unitManager.cloneUnit(unit)) viewModel.loadUnits()
+                            }
+                        },
                     )
                 }
             }

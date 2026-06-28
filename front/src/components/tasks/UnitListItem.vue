@@ -25,6 +25,9 @@
           <span>{{ unit.datetime_end ? `Окончен: ${formatFullDate(unit.datetime_end)}` : 'В работе' }}</span>
         </div>
         <div class="unit-actions">
+          <button v-if="canClone" class="icon-btn" @click.stop="$emit('clone', unit)" title="Начать новый юнит с тем же названием и типом">
+            <span class="material-symbols-outlined">restart_alt</span>
+          </button>
           <button v-if="canEdit" class="icon-btn" @click.stop="$emit('edit', unit)" title="Редактировать">
             <span class="material-symbols-outlined">edit</span>
           </button>
@@ -49,7 +52,7 @@ const props = defineProps({
   }
 })
 
-defineEmits(['edit', 'delete'])
+defineEmits(['edit', 'delete', 'clone'])
 
 const { isAtLeast } = usePermission()
 const authStore = useAuthStore()
@@ -63,6 +66,10 @@ const isOwnUnit = computed(() => props.unit.user_id === authStore.user?.id)
 const canEdit = computed(() => isOwnUnit.value || isAtLeast(ROLES.MANAGER))
 
 const canDelete = computed(() => isOwnUnit.value || isAtLeast(ROLES.MANAGER))
+
+// Создать новый юнит (на себя) с тем же названием и типом — доступно любому,
+// кто вообще может запускать юниты; ограничение «1 активный» проверит сервер.
+const canClone = computed(() => isAtLeast(ROLES.EMPLOYEE))
 
 function formatDuration(start, end) {
   const ms = end ? new Date(end) - new Date(start) : Date.now() - new Date(start)

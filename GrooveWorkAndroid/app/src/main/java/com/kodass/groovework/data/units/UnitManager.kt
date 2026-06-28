@@ -66,6 +66,24 @@ class UnitManager(
         runCatching { repo.createUnit(taskId, name, unitTypeId) }
             .onSuccess { _activeUnit.value = it }
 
+    // Создать новый юнит от существующего (на себя), сохранив название и тип.
+    // Ограничение «1 активный» проверяет сервер (409); ошибки идут в errors.
+    suspend fun cloneUnit(unit: UnitDto): Boolean {
+        if (_activeUnit.value != null) {
+            _errors.tryEmit("У вас уже есть активный юнит")
+            return false
+        }
+        return startUnit(unit.taskId, unit.name, unit.unitType?.id ?: unit.unitTypeId)
+            .onFailure { e ->
+                val api = e as? com.kodass.groovework.data.network.ApiException
+                _errors.tryEmit(
+                    if (api?.status == 409) "У вас уже есть активный юнит"
+                    else api?.message ?: "Не удалось запустить юнит"
+                )
+            }
+            .isSuccess
+    }
+
     // Завершение активного юнита (из плашки/модалки приложения).
     fun stopActiveUnit(onDone: (() -> Unit)? = null) {
         val id = _activeUnit.value?.id ?: return

@@ -326,6 +326,7 @@
               :unit="unit"
               @edit="openEditUnit"
               @delete="confirmDeleteUnit"
+              @clone="cloneUnit"
             />
             <div v-if="units.length === 0" class="no-units">
               <span class="material-symbols-outlined">hourglass_empty</span>
@@ -406,7 +407,7 @@ import { getStages } from '@/api/stages.js'
 import { getDirectoryUser } from '@/api/users.js'
 import StartUnitModal from '@/components/units/StartUnitModal.vue'
 import UnitEditModal from '@/components/units/UnitEditModal.vue'
-import { getUnits, deleteUnit } from '@/api/units.js'
+import { getUnits, deleteUnit, createUnit } from '@/api/units.js'
 import { deleteTask, archiveTask, restoreTask, toggleFavorite as apiFavorite, setTaskColor } from '@/api/tasks.js'
 import { exportYougileTask, unlinkYougileTask } from '@/api/yougile.js'
 import { useYougileStore } from '@/stores/yougile.js'
@@ -760,6 +761,30 @@ async function handleRestore() {
 
 function openEditUnit(unit) {
   editingUnit.value = unit
+}
+
+// Создать новый юнит от существующего — на себя, с тем же названием и типом.
+// Сервер хранит инвариант «1 активный юнит»: при наличии активного вернёт 409.
+async function cloneUnit(unit) {
+  if (unitsStore.activeUnit) {
+    notifications.error('У вас уже есть активный юнит')
+    return
+  }
+  try {
+    const newUnit = await createUnit(props.task.id, {
+      name: unit.name,
+      unit_type_id: unit.unit_type_id ?? unit.unit_type?.id,
+    })
+    unitsStore.startUnit(newUnit)
+    notifications.success('Юнит запущен')
+    loadUnits()
+  } catch (e) {
+    if (e?.status === 409) {
+      notifications.error('У вас уже есть активный юнит')
+    } else {
+      notifications.error(e?.message || 'Не удалось запустить юнит')
+    }
+  }
 }
 
 function confirmDeleteUnit(unit) {
