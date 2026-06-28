@@ -326,7 +326,7 @@
               :unit="unit"
               @edit="openEditUnit"
               @delete="confirmDeleteUnit"
-              @clone="cloneUnit"
+              @clone="confirmCloneUnit"
             />
             <div v-if="units.length === 0" class="no-units">
               <span class="material-symbols-outlined">hourglass_empty</span>
@@ -377,8 +377,8 @@
     <AppDialog
       v-if="confirmDialog.visible"
       v-model="confirmDialog.visible"
-      tone="danger"
-      icon="warning"
+      :tone="confirmDialog.tone || 'danger'"
+      :icon="confirmDialog.icon || 'warning'"
       size="sm"
       :title="confirmDialog.title"
       :subtitle="confirmDialog.message"
@@ -761,6 +761,18 @@ async function handleRestore() {
 
 function openEditUnit(unit) {
   editingUnit.value = unit
+}
+
+function confirmCloneUnit(unit) {
+  confirmDialog.value = {
+    visible: true,
+    tone: 'primary',
+    icon: 'restart_alt',
+    title: 'Создать новый юнит',
+    message: `Начать новый юнит «${unit.name}» с тем же типом? Учёт времени пойдёт заново.`,
+    confirmLabel: 'Создать',
+    onConfirm: () => cloneUnit(unit),
+  }
 }
 
 // Создать новый юнит от существующего — на себя, с тем же названием и типом.

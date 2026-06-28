@@ -426,6 +426,7 @@ private fun UnitsTab(viewModel: TaskDetailViewModel, container: AppContainer) {
     LaunchedEffect(Unit) { viewModel.loadUnits() }
     val scope = rememberCoroutineScope()
     var editingUnit by remember { mutableStateOf<UnitDto?>(null) }
+    var cloningUnit by remember { mutableStateOf<UnitDto?>(null) }
     Box(modifier = Modifier.fillMaxSize()) {
         when {
             viewModel.unitsLoading && viewModel.units.isEmpty() -> CenteredLoading()
@@ -447,11 +448,7 @@ private fun UnitsTab(viewModel: TaskDetailViewModel, container: AppContainer) {
                         canDelete = canManage,
                         onDelete = { viewModel.deleteUnit(unit) },
                         onEdit = if (canManage) ({ editingUnit = unit }) else null,
-                        onClone = {
-                            scope.launch {
-                                if (container.unitManager.cloneUnit(unit)) viewModel.loadUnits()
-                            }
-                        },
+                        onClone = { cloningUnit = unit },
                     )
                 }
             }
@@ -463,6 +460,22 @@ private fun UnitsTab(viewModel: TaskDetailViewModel, container: AppContainer) {
             viewModel = viewModel,
             unit = unit,
             onDismiss = { editingUnit = null },
+        )
+    }
+    cloningUnit?.let { unit ->
+        ConfirmDialog(
+            ConfirmSpec(
+                title = "Создать новый юнит",
+                text = "Начать новый юнит «${unit.name}» с тем же типом? Учёт времени пойдёт заново.",
+                confirmLabel = "Создать",
+                destructive = false,
+                action = {
+                    scope.launch {
+                        if (container.unitManager.cloneUnit(unit)) viewModel.loadUnits()
+                    }
+                },
+            ),
+            onDismiss = { cloningUnit = null },
         )
     }
 }
