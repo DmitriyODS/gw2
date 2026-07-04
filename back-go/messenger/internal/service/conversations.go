@@ -11,7 +11,9 @@ import (
 // ListConversations — список диалогов пользователя: закреплённые → остальные
 // (по last_message_at), сверху pet-чат и личный dev-чат (для пользователей
 // с активной компанией; без активной компании своих соло-чатов нет).
-func (s *Service) ListConversations(ctx context.Context, userID int64) ([]*dto.ConversationListItem, error) {
+// companyID — активная компания сессии ИЗ ТОКЕНА: в users её нет (идентичность
+// развязана с компаниями), поэтому передаётся транспортом.
+func (s *Service) ListConversations(ctx context.Context, userID int64, companyID *int64) ([]*dto.ConversationListItem, error) {
 	me, err := s.users.GetUser(ctx, userID)
 	if err != nil {
 		return nil, err
@@ -19,8 +21,8 @@ func (s *Service) ListConversations(ctx context.Context, userID int64) ([]*dto.C
 	// Личный чат техподдержки должен существовать у сотрудника компании
 	// всегда, даже без переписки. Бизнес-блокировку (доменную ошибку)
 	// глотаем — не валим листинг.
-	if me != nil && me.CompanyID != nil {
-		if _, err := s.getOrCreateSolo(ctx, userID, *me.CompanyID, false); err != nil {
+	if me != nil && companyID != nil {
+		if _, err := s.getOrCreateSolo(ctx, userID, *companyID, false); err != nil {
 			if domain.AsDomainError(err) == nil {
 				return nil, err
 			}

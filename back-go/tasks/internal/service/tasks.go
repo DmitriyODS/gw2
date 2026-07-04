@@ -119,6 +119,19 @@ func (s *Service) GetTask(ctx context.Context, taskID, userID int64) (*dto.Task,
 	return &out, nil
 }
 
+// GetTaskInCompany — задача по id для REST: только в активной компании актора.
+func (s *Service) GetTaskInCompany(ctx context.Context, taskID, userID int64, companyID *int64) (*dto.Task, error) {
+	task, err := s.taskInCompany(ctx, taskID, companyID)
+	if err != nil {
+		return nil, err
+	}
+	out, err := s.enrichTask(ctx, task, userID)
+	if err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
 // createTaskCore — создание задачи с бизнес-проверками, без дампа и
 // сокет-события (общая часть CreateTask и YouGile-импорта).
 func (s *Service) createTaskCore(ctx context.Context, actorID, companyID int64, req dto.TaskCreate) (*domain.Task, error) {
@@ -179,13 +192,10 @@ func (s *Service) CreateTask(ctx context.Context, actorID, companyID int64, req 
 	return out, nil
 }
 
-func (s *Service) UpdateTask(ctx context.Context, taskID, actorID int64, req dto.TaskUpdate) (*dto.Task, error) {
-	task, err := s.tasks.GetTask(ctx, taskID)
+func (s *Service) UpdateTask(ctx context.Context, taskID, actorID int64, companyID *int64, req dto.TaskUpdate) (*dto.Task, error) {
+	task, err := s.taskInCompany(ctx, taskID, companyID)
 	if err != nil {
 		return nil, err
-	}
-	if task == nil {
-		return nil, errTaskNotFound
 	}
 
 	fields := map[string]any{}
@@ -250,13 +260,9 @@ func (s *Service) UpdateTask(ctx context.Context, taskID, actorID int64, req dto
 	return out, nil
 }
 
-func (s *Service) DeleteTask(ctx context.Context, taskID int64) error {
-	task, err := s.tasks.GetTask(ctx, taskID)
-	if err != nil {
+func (s *Service) DeleteTask(ctx context.Context, taskID int64, companyID *int64) error {
+	if _, err := s.taskInCompany(ctx, taskID, companyID); err != nil {
 		return err
-	}
-	if task == nil {
-		return errTaskNotFound
 	}
 	if err := s.tasks.DeleteTask(ctx, taskID); err != nil {
 		return err
@@ -266,13 +272,10 @@ func (s *Service) DeleteTask(ctx context.Context, taskID int64) error {
 	return nil
 }
 
-func (s *Service) ArchiveTask(ctx context.Context, taskID, actorID int64) (*dto.Task, error) {
-	task, err := s.tasks.GetTask(ctx, taskID)
+func (s *Service) ArchiveTask(ctx context.Context, taskID, actorID int64, companyID *int64) (*dto.Task, error) {
+	task, err := s.taskInCompany(ctx, taskID, companyID)
 	if err != nil {
 		return nil, err
-	}
-	if task == nil {
-		return nil, errTaskNotFound
 	}
 	if task.IsArchived {
 		return nil, domain.NewError("ALREADY_ARCHIVED", "Задача уже архивирована", 422)
@@ -309,13 +312,10 @@ func (s *Service) ArchiveTask(ctx context.Context, taskID, actorID int64) (*dto.
 	return out, nil
 }
 
-func (s *Service) RestoreTask(ctx context.Context, taskID, actorID int64) (*dto.Task, error) {
-	task, err := s.tasks.GetTask(ctx, taskID)
+func (s *Service) RestoreTask(ctx context.Context, taskID, actorID int64, companyID *int64) (*dto.Task, error) {
+	task, err := s.taskInCompany(ctx, taskID, companyID)
 	if err != nil {
 		return nil, err
-	}
-	if task == nil {
-		return nil, errTaskNotFound
 	}
 	if !task.IsArchived {
 		return nil, domain.NewError("NOT_ARCHIVED", "Задача не архивирована", 422)
@@ -340,13 +340,10 @@ func (s *Service) RestoreTask(ctx context.Context, taskID, actorID int64) (*dto.
 
 // SetResponsible / SetStage — отдельные PATCH-роуты v3 (двигают задачу и
 // шлют общий task:updated).
-func (s *Service) SetResponsible(ctx context.Context, taskID, actorID int64, responsibleUserID *int64) (*dto.Task, error) {
-	task, err := s.tasks.GetTask(ctx, taskID)
+func (s *Service) SetResponsible(ctx context.Context, taskID, actorID int64, companyID *int64, responsibleUserID *int64) (*dto.Task, error) {
+	task, err := s.taskInCompany(ctx, taskID, companyID)
 	if err != nil {
 		return nil, err
-	}
-	if task == nil {
-		return nil, errTaskNotFound
 	}
 	if err := s.validateResponsible(ctx, responsibleUserID, task.CompanyID); err != nil {
 		return nil, err
@@ -365,13 +362,10 @@ func (s *Service) SetResponsible(ctx context.Context, taskID, actorID int64, res
 	return out, nil
 }
 
-func (s *Service) SetStage(ctx context.Context, taskID, actorID int64, stageID *int64) (*dto.Task, error) {
-	task, err := s.tasks.GetTask(ctx, taskID)
+func (s *Service) SetStage(ctx context.Context, taskID, actorID int64, companyID *int64, stageID *int64) (*dto.Task, error) {
+	task, err := s.taskInCompany(ctx, taskID, companyID)
 	if err != nil {
 		return nil, err
-	}
-	if task == nil {
-		return nil, errTaskNotFound
 	}
 	if err := s.validateStage(ctx, stageID, task.CompanyID); err != nil {
 		return nil, err
@@ -389,35 +383,23 @@ func (s *Service) SetStage(ctx context.Context, taskID, actorID int64, stageID *
 	return out, nil
 }
 
-func (s *Service) SetTaskColor(ctx context.Context, taskID, userID int64, color *string) error {
-	task, err := s.tasks.GetTask(ctx, taskID)
-	if err != nil {
+func (s *Service) SetTaskColor(ctx context.Context, taskID, userID int64, companyID *int64, color *string) error {
+	if _, err := s.taskInCompany(ctx, taskID, companyID); err != nil {
 		return err
-	}
-	if task == nil {
-		return errTaskNotFound
 	}
 	return s.tasks.SetUserColor(ctx, taskID, userID, color)
 }
 
-func (s *Service) ToggleFavorite(ctx context.Context, taskID, userID int64) (bool, error) {
-	task, err := s.tasks.GetTask(ctx, taskID)
-	if err != nil {
+func (s *Service) ToggleFavorite(ctx context.Context, taskID, userID int64, companyID *int64) (bool, error) {
+	if _, err := s.taskInCompany(ctx, taskID, companyID); err != nil {
 		return false, err
-	}
-	if task == nil {
-		return false, errTaskNotFound
 	}
 	return s.tasks.ToggleFavorite(ctx, taskID, userID)
 }
 
-func (s *Service) Contributors(ctx context.Context, taskID int64) ([]dto.UserRef, error) {
-	task, err := s.tasks.GetTask(ctx, taskID)
-	if err != nil {
+func (s *Service) Contributors(ctx context.Context, taskID int64, companyID *int64) ([]dto.UserRef, error) {
+	if _, err := s.taskInCompany(ctx, taskID, companyID); err != nil {
 		return nil, err
-	}
-	if task == nil {
-		return nil, errTaskNotFound
 	}
 	users, err := s.tasks.Contributors(ctx, taskID)
 	if err != nil {

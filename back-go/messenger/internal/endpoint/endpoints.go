@@ -94,6 +94,14 @@ type SoloChatRequest struct {
 	CompanyID *int64
 }
 
+// ListConversationsRequest — список диалогов. CompanyID — активная компания
+// сессии из токена: нужна, чтобы автосоздать личный чат техподдержки члена
+// компании (в users активной компании нет).
+type ListConversationsRequest struct {
+	UserID    int64
+	CompanyID *int64
+}
+
 type UploadRequest struct {
 	UploaderID int64
 	FileName   string
@@ -141,7 +149,8 @@ type CallMessageResponse struct {
 func New(svc service.MessengerService) Endpoints {
 	return Endpoints{
 		ListConversations: func(ctx context.Context, request any) (any, error) {
-			return svc.ListConversations(ctx, request.(int64))
+			req := request.(ListConversationsRequest)
+			return svc.ListConversations(ctx, req.UserID, req.CompanyID)
 		},
 		OpenConversation: func(ctx context.Context, request any) (any, error) {
 			req := request.(OpenConversationRequest)

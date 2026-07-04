@@ -32,6 +32,14 @@ type EntryInput struct {
 	Description string
 }
 
+// day — календарный день значения В ЕГО СОБСТВЕННОЙ зоне (полночь UTC).
+// Truncate(24h) здесь не годится: он режет по суткам UTC, из-за чего
+// RFC3339-дата с не-UTC смещением («2026-07-05T00:30:00+05:00») уплывала на
+// соседний день — клиент прислал 5 июля своей зоны, запись обязана лечь на 5 июля.
+func day(t time.Time) time.Time {
+	return time.Date(t.Year(), t.Month(), t.Day(), 0, 0, 0, 0, time.UTC)
+}
+
 // ListEntries — записи ежедневника: активные за диапазон дат (день/неделя/месяц)
 // либо весь архив выполненных. Доступно владельцу и адресату (read-only).
 func (s *Service) ListEntries(ctx context.Context, userID, diaryID int64, p ListParams) (*EntryList, error) {
@@ -87,7 +95,7 @@ func (s *Service) CreateEntry(ctx context.Context, userID, diaryID int64, in Ent
 		return nil, err
 	}
 	e := &domain.Entry{
-		DiaryID: diaryID, Date: in.Date.Truncate(24 * time.Hour),
+		DiaryID: diaryID, Date: day(in.Date),
 		StartMin: in.StartMin, EndMin: in.EndMin,
 		Title: in.Title, Description: in.Description,
 	}
@@ -110,7 +118,7 @@ func (s *Service) UpdateEntry(ctx context.Context, userID, diaryID, entryID int6
 	if err := validateInput(in); err != nil {
 		return nil, err
 	}
-	e.Date = in.Date.Truncate(24 * time.Hour)
+	e.Date = day(in.Date)
 	e.StartMin, e.EndMin = in.StartMin, in.EndMin
 	e.Title, e.Description = in.Title, in.Description
 	if err := s.repo.UpdateEntry(ctx, e, searchText(e)); err != nil {
@@ -164,12 +172,12 @@ func (s *Service) MoveEntry(ctx context.Context, userID, diaryID, entryID, targe
 	if date.IsZero() {
 		date = e.Date
 	}
-	day := date.Truncate(24 * time.Hour)
+	dayVal := day(date)
 	oldDiaryID := e.DiaryID
-	if err := s.repo.MoveEntry(ctx, entryID, target.ID, day); err != nil {
+	if err := s.repo.MoveEntry(ctx, entryID, target.ID, dayVal); err != nil {
 		return nil, err
 	}
-	e.DiaryID, e.Date = target.ID, day
+	e.DiaryID, e.Date = target.ID, dayVal
 	if target.ID == oldDiaryID {
 		s.bus.Publish(ctx, "diary_entry:updated", s.diaryRooms(ctx, d), entryPayload(d.OwnerID, e))
 	} else {
@@ -196,13 +204,13 @@ func (s *Service) ReorderEntries(ctx context.Context, userID, diaryID int64, dat
 	if len(ids) == 0 {
 		return nil
 	}
-	day := date.Truncate(24 * time.Hour)
-	if err := s.repo.ReorderEntries(ctx, diaryID, day, ids); err != nil {
+	dayVal := day(date)
+	if err := s.repo.ReorderEntries(ctx, diaryID, dayVal, ids); err != nil {
 		return err
 	}
 	s.bus.Publish(ctx, "diary_entry:reordered", s.diaryRooms(ctx, d), map[string]any{
 		"diary_id": diaryID, "owner_id": userID,
-		"entry_date": day.Format(domain.DateLayout), "ids": ids,
+		"entry_date": dayVal.Format(domain.DateLayout), "ids": ids,
 	})
 	return nil
 }

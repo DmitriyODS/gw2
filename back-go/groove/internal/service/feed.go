@@ -221,6 +221,15 @@ func (s *Service) SendKudos(ctx context.Context, companyID, fromUserID,
 	if target == nil || !target.IsActive {
 		return domain.NewError("USER_NOT_FOUND", "Сотрудник не найден", 404)
 	}
+	// Благодарить можно только коллегу по компании: иначе подделанным запросом
+	// можно создать событие ленты и питомца постороннему (скоуп компании).
+	member, err := s.users.IsCompanyMember(ctx, toUserID, companyID)
+	if err != nil {
+		return err
+	}
+	if !member {
+		return domain.NewError("USER_NOT_FOUND", "Сотрудник не найден", 404)
+	}
 	_, err = s.recordEvent(ctx, companyID, &fromUserID, "kudos", map[string]any{
 		"to_user_id":     target.ID,
 		"to_fio":         target.FIO,

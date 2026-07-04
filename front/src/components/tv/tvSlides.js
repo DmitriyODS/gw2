@@ -26,6 +26,18 @@ export const SLIDE_COMPONENTS = {
   responsibles: SlideResponsibles,
 }
 
+// Отбор слайдов, которые сейчас показываются на табло: без выключенных в
+// настройках (disabledIds) и без слайда «долг», когда долга нет. Если всё
+// выключили — табло не гаснет, показываем хотя бы брендовый слайд.
+export function visibleSlides(disabledIds = [], { debtValue = 0 } = {}) {
+  const list = SLIDES.filter((s) => {
+    if (disabledIds.includes(s.id)) return false
+    if (s.kind === 'debt' && debtValue <= 0) return false
+    return true
+  })
+  return list.length ? list : SLIDES.filter((s) => s.kind === 'brand')
+}
+
 export const SLIDES = [
   // 1. Сегодня • закрытия
   {

@@ -93,7 +93,9 @@ func scopeParam(c *fiber.Ctx) string {
 // ── Диалоги ──────────────────────────────────────────────────────
 
 func (h *handlers) listConversations(c *fiber.Ctx) error {
-	resp, err := h.eps.ListConversations(c.Context(), currentUserID(c))
+	resp, err := h.eps.ListConversations(c.Context(), endpoint.ListConversationsRequest{
+		UserID: currentUserID(c), CompanyID: activeCompanyID(c),
+	})
 	if err != nil {
 		return h.respondError(c, err)
 	}

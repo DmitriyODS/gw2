@@ -641,7 +641,8 @@ func (s *Service) AddCompanyMember(ctx context.Context, actor *domain.User, comp
 	if err := s.creatorAuthority(ctx, actor, companyID); err != nil {
 		return err
 	}
-	if _, err := s.validMemberRole(ctx, roleID); err != nil {
+	role, err := s.validMemberRole(ctx, roleID)
+	if err != nil {
 		return err
 	}
 	target, err := s.repo.GetByID(ctx, userID)
@@ -653,6 +654,17 @@ func (s *Service) AddCompanyMember(ctx context.Context, actor *domain.User, comp
 	}
 	if target.IsSuperAdmin {
 		return errSuperAdminProtected
+	}
+	// Повторное добавление существующего участника апсертит роль — это смена
+	// роли, и гард «последнего администратора» обязан действовать и здесь.
+	existing, err := s.repo.GetMembership(ctx, userID, companyID)
+	if err != nil {
+		return err
+	}
+	if existing != nil {
+		if err := s.guardLastAdmin(ctx, companyID, existing.Role.Level, role.Level); err != nil {
+			return err
+		}
 	}
 	if err := s.repo.AddMembership(ctx, userID, companyID, roleID); err != nil {
 		return err

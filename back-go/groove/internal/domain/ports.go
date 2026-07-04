@@ -58,6 +58,9 @@ type PetRepo interface {
 // UserReader — read-only пользователи платформы (владелец — authsvc).
 type UserReader interface {
 	GetUser(ctx context.Context, id int64) (*User, error)
+	// IsCompanyMember — состоит ли пользователь в компании (для скоупа
+	// адресных действий — кудосов — рамками компании отправителя).
+	IsCompanyMember(ctx context.Context, userID, companyID int64) (bool, error)
 	// CompanyActive — активна ли выбранная (активная) компания сессии из
 	// токена. nil (Администратор системы) → true.
 	CompanyActive(ctx context.Context, companyID *int64) (bool, error)

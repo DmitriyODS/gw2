@@ -25,7 +25,7 @@ const SupportAutoReplyAfter = 24 * time.Hour
 
 // MessengerService — все use-case'ы сервиса (REST + gRPC).
 type MessengerService interface {
-	ListConversations(ctx context.Context, userID int64) ([]*dto.ConversationListItem, error)
+	ListConversations(ctx context.Context, userID int64, companyID *int64) ([]*dto.ConversationListItem, error)
 	OpenConversation(ctx context.Context, meID, otherUserID int64) (*dto.ConversationWithOther, error)
 	ListMessages(ctx context.Context, convID, userID int64, beforeID, afterID *int64, limit int) ([]*dto.Message, error)
 	SendMessage(ctx context.Context, convID, senderID int64, req dto.MessageCreate) (*dto.Message, error)

@@ -10,13 +10,9 @@ import (
 
 var errUnitNotFound = domain.NewError("NOT_FOUND", "Юнит не найден", 404)
 
-func (s *Service) TaskUnits(ctx context.Context, taskID int64) ([]dto.Unit, error) {
-	task, err := s.tasks.GetTask(ctx, taskID)
-	if err != nil {
+func (s *Service) TaskUnits(ctx context.Context, taskID int64, companyID *int64) ([]dto.Unit, error) {
+	if _, err := s.taskInCompany(ctx, taskID, companyID); err != nil {
 		return nil, err
-	}
-	if task == nil {
-		return nil, errTaskNotFound
 	}
 	units, err := s.units.UnitsByTask(ctx, taskID)
 	if err != nil {
@@ -38,13 +34,10 @@ func (s *Service) ActiveUnit(ctx context.Context, userID int64) (*dto.Unit, erro
 	return &out, nil
 }
 
-func (s *Service) CreateUnit(ctx context.Context, taskID, userID int64, name string, unitTypeID int64) (*dto.Unit, error) {
-	task, err := s.tasks.GetTask(ctx, taskID)
+func (s *Service) CreateUnit(ctx context.Context, taskID, userID int64, companyID *int64, name string, unitTypeID int64) (*dto.Unit, error) {
+	task, err := s.taskInCompany(ctx, taskID, companyID)
 	if err != nil {
 		return nil, err
-	}
-	if task == nil {
-		return nil, domain.NewError("TASK_NOT_FOUND", "Задача не найдена", 404)
 	}
 	if task.IsArchived {
 		return nil, domain.NewError("TASK_ARCHIVED", "Нельзя создать юнит для архивной задачи", 422)
@@ -91,13 +84,10 @@ func (s *Service) CreateUnit(ctx context.Context, taskID, userID int64, name str
 	return &out, nil
 }
 
-func (s *Service) UpdateUnit(ctx context.Context, unitID, actorID int64, actorLevel int, req dto.UnitUpdate) (*dto.Unit, error) {
-	unit, err := s.units.GetUnit(ctx, unitID)
+func (s *Service) UpdateUnit(ctx context.Context, unitID, actorID int64, actorLevel int, companyID *int64, req dto.UnitUpdate) (*dto.Unit, error) {
+	unit, err := s.unitInCompany(ctx, unitID, companyID)
 	if err != nil {
 		return nil, err
-	}
-	if unit == nil {
-		return nil, errUnitNotFound
 	}
 	if unit.UserID != actorID && actorLevel < domain.LevelManager {
 		return nil, domain.NewError("FORBIDDEN", "Недостаточно прав для редактирования чужого юнита", 403)
@@ -114,6 +104,10 @@ func (s *Service) UpdateUnit(ctx context.Context, unitID, actorID int64, actorLe
 		}
 		if unitType == nil {
 			return nil, domain.NewError("TYPE_NOT_FOUND", "Тип юнита не найден", 404)
+		}
+		// Как в CreateUnit: чужой тип юнита к юниту не привязать (multi-tenancy).
+		if unitType.CompanyID != unit.CompanyID {
+			return nil, domain.NewError("TYPE_FOREIGN", "Тип юнита принадлежит другой компании", 422)
 		}
 		fields["unit_type_id"] = *req.UnitTypeID
 	}
@@ -140,13 +134,10 @@ func (s *Service) UpdateUnit(ctx context.Context, unitID, actorID int64, actorLe
 	return &out, nil
 }
 
-func (s *Service) StopUnit(ctx context.Context, unitID, actorID int64, actorLevel int) (*dto.Unit, error) {
-	unit, err := s.units.GetUnit(ctx, unitID)
+func (s *Service) StopUnit(ctx context.Context, unitID, actorID int64, actorLevel int, companyID *int64) (*dto.Unit, error) {
+	unit, err := s.unitInCompany(ctx, unitID, companyID)
 	if err != nil {
 		return nil, err
-	}
-	if unit == nil {
-		return nil, errUnitNotFound
 	}
 	if unit.DatetimeEnd != nil {
 		return nil, domain.NewError("ALREADY_STOPPED", "Юнит уже завершён", 422)
@@ -190,13 +181,10 @@ func (s *Service) StopUnit(ctx context.Context, unitID, actorID int64, actorLeve
 	return &out, nil
 }
 
-func (s *Service) DeleteUnit(ctx context.Context, unitID, actorID int64, actorLevel int) error {
-	unit, err := s.units.GetUnit(ctx, unitID)
+func (s *Service) DeleteUnit(ctx context.Context, unitID, actorID int64, actorLevel int, companyID *int64) error {
+	unit, err := s.unitInCompany(ctx, unitID, companyID)
 	if err != nil {
 		return err
-	}
-	if unit == nil {
-		return errUnitNotFound
 	}
 	if unit.UserID != actorID && actorLevel < domain.LevelManager {
 		return domain.NewError("FORBIDDEN", "Недостаточно прав для удаления чужого юнита", 403)

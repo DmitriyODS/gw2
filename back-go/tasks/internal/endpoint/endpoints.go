@@ -90,38 +90,47 @@ type CreateTaskRequest struct {
 	Body      dto.TaskCreate
 }
 
+// CompanyID во всех by-id запросах — активная компания актора из токена:
+// сервис отвечает 404 на задачи/юниты чужих компаний (multi-tenancy).
+
 type UpdateTaskRequest struct {
-	TaskID  int64
-	ActorID int64
-	Body    dto.TaskUpdate
+	TaskID    int64
+	ActorID   int64
+	CompanyID *int64
+	Body      dto.TaskUpdate
 }
 
 type TaskActorRequest struct {
-	TaskID  int64
-	ActorID int64
+	TaskID    int64
+	ActorID   int64
+	CompanyID *int64
 }
 
 type TaskColorRequest struct {
-	TaskID int64
-	UserID int64
-	Color  *string
+	TaskID    int64
+	UserID    int64
+	CompanyID *int64
+	Color     *string
 }
 
 type SetResponsibleRequest struct {
 	TaskID            int64
 	ActorID           int64
+	CompanyID         *int64
 	ResponsibleUserID *int64
 }
 
 type SetStageRequest struct {
-	TaskID  int64
-	ActorID int64
-	StageID *int64
+	TaskID    int64
+	ActorID   int64
+	CompanyID *int64
+	StageID   *int64
 }
 
 type CreateUnitRequest struct {
 	TaskID     int64
 	UserID     int64
+	CompanyID  *int64
 	Name       string
 	UnitTypeID int64
 }
@@ -130,26 +139,31 @@ type UnitActorRequest struct {
 	UnitID     int64
 	ActorID    int64
 	ActorLevel int
+	CompanyID  *int64
 }
 
 type UpdateUnitRequest struct {
 	UnitID     int64
 	ActorID    int64
 	ActorLevel int
+	CompanyID  *int64
 	Body       dto.UnitUpdate
 }
 
 type CommentCreateRequest struct {
-	TaskID   int64
-	AuthorID int64
-	Text     string
+	TaskID    int64
+	AuthorID  int64
+	CompanyID *int64
+	Text      string
 }
 
 type CommentEditRequest struct {
-	TaskID    int64
-	CommentID int64
-	UserID    int64
-	Text      string
+	TaskID     int64
+	CommentID  int64
+	UserID     int64
+	ActorLevel int
+	CompanyID  *int64
+	Text       string
 }
 
 type CompanyNameRequest struct {
@@ -269,80 +283,84 @@ func New(svc *service.Service, yg *service.Yougile) Endpoints {
 		},
 		GetTask: func(ctx context.Context, request any) (any, error) {
 			req := request.(TaskActorRequest)
-			return svc.GetTask(ctx, req.TaskID, req.ActorID)
+			return svc.GetTaskInCompany(ctx, req.TaskID, req.ActorID, req.CompanyID)
 		},
 		UpdateTask: func(ctx context.Context, request any) (any, error) {
 			req := request.(UpdateTaskRequest)
-			return svc.UpdateTask(ctx, req.TaskID, req.ActorID, req.Body)
+			return svc.UpdateTask(ctx, req.TaskID, req.ActorID, req.CompanyID, req.Body)
 		},
 		DeleteTask: func(ctx context.Context, request any) (any, error) {
-			return nil, svc.DeleteTask(ctx, request.(int64))
+			req := request.(TaskActorRequest)
+			return nil, svc.DeleteTask(ctx, req.TaskID, req.CompanyID)
 		},
 		ArchiveTask: func(ctx context.Context, request any) (any, error) {
 			req := request.(TaskActorRequest)
-			return svc.ArchiveTask(ctx, req.TaskID, req.ActorID)
+			return svc.ArchiveTask(ctx, req.TaskID, req.ActorID, req.CompanyID)
 		},
 		RestoreTask: func(ctx context.Context, request any) (any, error) {
 			req := request.(TaskActorRequest)
-			return svc.RestoreTask(ctx, req.TaskID, req.ActorID)
+			return svc.RestoreTask(ctx, req.TaskID, req.ActorID, req.CompanyID)
 		},
 		SetTaskColor: func(ctx context.Context, request any) (any, error) {
 			req := request.(TaskColorRequest)
-			return nil, svc.SetTaskColor(ctx, req.TaskID, req.UserID, req.Color)
+			return nil, svc.SetTaskColor(ctx, req.TaskID, req.UserID, req.CompanyID, req.Color)
 		},
 		ToggleFavorite: func(ctx context.Context, request any) (any, error) {
 			req := request.(TaskActorRequest)
-			return svc.ToggleFavorite(ctx, req.TaskID, req.ActorID)
+			return svc.ToggleFavorite(ctx, req.TaskID, req.ActorID, req.CompanyID)
 		},
 		SetResponsible: func(ctx context.Context, request any) (any, error) {
 			req := request.(SetResponsibleRequest)
-			return svc.SetResponsible(ctx, req.TaskID, req.ActorID, req.ResponsibleUserID)
+			return svc.SetResponsible(ctx, req.TaskID, req.ActorID, req.CompanyID, req.ResponsibleUserID)
 		},
 		SetStage: func(ctx context.Context, request any) (any, error) {
 			req := request.(SetStageRequest)
-			return svc.SetStage(ctx, req.TaskID, req.ActorID, req.StageID)
+			return svc.SetStage(ctx, req.TaskID, req.ActorID, req.CompanyID, req.StageID)
 		},
 		Contributors: func(ctx context.Context, request any) (any, error) {
-			return svc.Contributors(ctx, request.(int64))
+			req := request.(TaskActorRequest)
+			return svc.Contributors(ctx, req.TaskID, req.CompanyID)
 		},
 
 		TaskUnits: func(ctx context.Context, request any) (any, error) {
-			return svc.TaskUnits(ctx, request.(int64))
+			req := request.(TaskActorRequest)
+			return svc.TaskUnits(ctx, req.TaskID, req.CompanyID)
 		},
 		CreateUnit: func(ctx context.Context, request any) (any, error) {
 			req := request.(CreateUnitRequest)
-			return svc.CreateUnit(ctx, req.TaskID, req.UserID, req.Name, req.UnitTypeID)
+			return svc.CreateUnit(ctx, req.TaskID, req.UserID, req.CompanyID, req.Name, req.UnitTypeID)
 		},
 		ActiveUnit: func(ctx context.Context, request any) (any, error) {
 			return svc.ActiveUnit(ctx, request.(int64))
 		},
 		UpdateUnit: func(ctx context.Context, request any) (any, error) {
 			req := request.(UpdateUnitRequest)
-			return svc.UpdateUnit(ctx, req.UnitID, req.ActorID, req.ActorLevel, req.Body)
+			return svc.UpdateUnit(ctx, req.UnitID, req.ActorID, req.ActorLevel, req.CompanyID, req.Body)
 		},
 		StopUnit: func(ctx context.Context, request any) (any, error) {
 			req := request.(UnitActorRequest)
-			return svc.StopUnit(ctx, req.UnitID, req.ActorID, req.ActorLevel)
+			return svc.StopUnit(ctx, req.UnitID, req.ActorID, req.ActorLevel, req.CompanyID)
 		},
 		DeleteUnit: func(ctx context.Context, request any) (any, error) {
 			req := request.(UnitActorRequest)
-			return nil, svc.DeleteUnit(ctx, req.UnitID, req.ActorID, req.ActorLevel)
+			return nil, svc.DeleteUnit(ctx, req.UnitID, req.ActorID, req.ActorLevel, req.CompanyID)
 		},
 
 		ListComments: func(ctx context.Context, request any) (any, error) {
-			return svc.ListComments(ctx, request.(int64))
+			req := request.(TaskActorRequest)
+			return svc.ListComments(ctx, req.TaskID, req.CompanyID)
 		},
 		CreateComment: func(ctx context.Context, request any) (any, error) {
 			req := request.(CommentCreateRequest)
-			return svc.CreateComment(ctx, req.TaskID, req.AuthorID, req.Text)
+			return svc.CreateComment(ctx, req.TaskID, req.AuthorID, req.CompanyID, req.Text)
 		},
 		UpdateComment: func(ctx context.Context, request any) (any, error) {
 			req := request.(CommentEditRequest)
-			return svc.UpdateComment(ctx, req.CommentID, req.UserID, req.Text)
+			return svc.UpdateComment(ctx, req.CommentID, req.UserID, req.ActorLevel, req.CompanyID, req.Text)
 		},
 		DeleteComment: func(ctx context.Context, request any) (any, error) {
 			req := request.(CommentEditRequest)
-			return nil, svc.DeleteComment(ctx, req.TaskID, req.CommentID, req.UserID)
+			return nil, svc.DeleteComment(ctx, req.TaskID, req.CommentID, req.UserID, req.ActorLevel, req.CompanyID)
 		},
 
 		ListUnitTypes: func(ctx context.Context, request any) (any, error) {

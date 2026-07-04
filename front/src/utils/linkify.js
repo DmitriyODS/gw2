@@ -7,7 +7,9 @@
  * в ссылку — частый случай «зайди на https://site.ru.» или «(см. http://x)».
  */
 const URL_RE = /((?:https?:\/\/|www\.)[^\s<]+)/gi
-const TRAILING_RE = /[.,;:!?)\]}'"»…]+$/
+// Хвостовые символы, которые не должны попадать в ссылку. Закрывающие скобки
+// тут НЕ перечислены — их разбираем отдельно, с учётом баланса.
+const TRAILING_RE = /[.,;:!?'"»…]$/
 
 export function linkifyParts(text) {
   if (!text) return []
@@ -18,14 +20,21 @@ export function linkifyParts(text) {
   while ((m = URL_RE.exec(text)) !== null) {
     let raw = m[0]
     let offset = m.index
-    // Откусываем хвостовую пунктуацию обратно в обычный текст.
-    const trailing = raw.match(TRAILING_RE)
+    // Откусываем хвостовую пунктуацию обратно в обычный текст. Закрывающую
+    // скобку/квадратную скобку отрезаем, только если она непарная (нет
+    // соответствующей открывающей в ссылке) — иначе рвём валидные URL вида
+    // …/Foo_(bar) (Wikipedia).
     let tail = ''
-    if (trailing) {
-      // Не трогаем закрывающую скобку, если в самой ссылке есть открывающая
-      // (например, ссылки на Wikipedia вида …(disambiguation)).
-      tail = trailing[0]
-      raw = raw.slice(0, raw.length - tail.length)
+    for (;;) {
+      const ch = raw.slice(-1)
+      if (TRAILING_RE.test(ch)) { tail = ch + tail; raw = raw.slice(0, -1); continue }
+      if (ch === ')' && (raw.match(/\)/g)?.length || 0) > (raw.match(/\(/g)?.length || 0)) {
+        tail = ch + tail; raw = raw.slice(0, -1); continue
+      }
+      if (ch === ']' && (raw.match(/]/g)?.length || 0) > (raw.match(/\[/g)?.length || 0)) {
+        tail = ch + tail; raw = raw.slice(0, -1); continue
+      }
+      break
     }
     if (!raw) {
       continue

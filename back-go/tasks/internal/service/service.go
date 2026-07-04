@@ -60,6 +60,33 @@ func New(d Deps) *Service {
 
 var errTaskNotFound = domain.NewError("NOT_FOUND", "Задача не найдена", 404)
 
+// taskInCompany — задача по id В СКОУПЕ активной компании актора. Чужая
+// компания или отсутствие активной компании неотличимы от несуществующей
+// задачи (404) — существование чужих задач не раскрываем.
+func (s *Service) taskInCompany(ctx context.Context, taskID int64, companyID *int64) (*domain.Task, error) {
+	task, err := s.tasks.GetTask(ctx, taskID)
+	if err != nil {
+		return nil, err
+	}
+	if task == nil || companyID == nil || task.CompanyID != *companyID {
+		return nil, errTaskNotFound
+	}
+	return task, nil
+}
+
+// unitInCompany — юнит по id в скоупе активной компании актора (та же
+// семантика 404, что и taskInCompany).
+func (s *Service) unitInCompany(ctx context.Context, unitID int64, companyID *int64) (*domain.Unit, error) {
+	unit, err := s.units.GetUnit(ctx, unitID)
+	if err != nil {
+		return nil, err
+	}
+	if unit == nil || companyID == nil || unit.CompanyID != *companyID {
+		return nil, errUnitNotFound
+	}
+	return unit, nil
+}
+
 // yougileEnabled — fail-open: ошибка чтения настроек трактуется как
 // «интеграция включена» (как дефолт True во Flask).
 func (s *Service) yougileEnabled(ctx context.Context, companyID int64) bool {

@@ -430,6 +430,10 @@ func newTestService() (*Service, *fakeStore, *fakeGroove, *fakeAI, *fakeBus, *fa
 	return svc, store, groove, ai, bus, users
 }
 
+
+// cid — указатель на id компании для скоуп-параметров сервисных методов.
+func cid(v int64) *int64 { return &v }
+
 func seedTask(store *fakeStore, companyID int64) *domain.Task {
 	task := &domain.Task{Name: "Задача", AuthorID: 1, DepartmentID: 1, CompanyID: companyID}
 	_ = store.CreateTask(context.Background(), task)
@@ -450,13 +454,13 @@ func TestCreateUnitSecondActiveForbidden(t *testing.T) {
 	task := seedTask(store, 1)
 	store.unitTypes[10] = &domain.UnitType{ID: 10, Name: "Код", CompanyID: 1}
 
-	if _, err := svc.CreateUnit(context.Background(), task.ID, 5, "первый", 10); err != nil {
+	if _, err := svc.CreateUnit(context.Background(), task.ID, 5, cid(1), "первый", 10); err != nil {
 		t.Fatalf("первый юнит: %v", err)
 	}
 	if groove.started != 1 {
 		t.Fatal("groove.OnUnitStarted не вызван")
 	}
-	_, err := svc.CreateUnit(context.Background(), task.ID, 5, "второй", 10)
+	_, err := svc.CreateUnit(context.Background(), task.ID, 5, cid(1), "второй", 10)
 	de := domain.AsDomainError(err)
 	if de == nil || de.Code != "ACTIVE_UNIT_EXISTS" || de.HTTPStatus != 409 {
 		t.Fatalf("ожидался ACTIVE_UNIT_EXISTS 409, получено %v", err)
@@ -468,7 +472,7 @@ func TestCreateUnitForeignTypeForbidden(t *testing.T) {
 	task := seedTask(store, 1)
 	store.unitTypes[10] = &domain.UnitType{ID: 10, Name: "Чужой", CompanyID: 2}
 
-	_, err := svc.CreateUnit(context.Background(), task.ID, 5, "юнит", 10)
+	_, err := svc.CreateUnit(context.Background(), task.ID, 5, cid(1), "юнит", 10)
 	de := domain.AsDomainError(err)
 	if de == nil || de.Code != "TYPE_FOREIGN" || de.HTTPStatus != 422 {
 		t.Fatalf("ожидался TYPE_FOREIGN 422, получено %v", err)
@@ -479,11 +483,11 @@ func TestArchiveTaskWithActiveUnitForbidden(t *testing.T) {
 	svc, store, groove, _, bus, _ := newTestService()
 	task := seedTask(store, 1)
 	store.unitTypes[10] = &domain.UnitType{ID: 10, Name: "Код", CompanyID: 1}
-	if _, err := svc.CreateUnit(context.Background(), task.ID, 5, "работа", 10); err != nil {
+	if _, err := svc.CreateUnit(context.Background(), task.ID, 5, cid(1), "работа", 10); err != nil {
 		t.Fatalf("юнит: %v", err)
 	}
 
-	_, err := svc.ArchiveTask(context.Background(), task.ID, 5)
+	_, err := svc.ArchiveTask(context.Background(), task.ID, 5, cid(1))
 	de := domain.AsDomainError(err)
 	if de == nil || de.Code != "HAS_ACTIVE_UNIT" || de.HTTPStatus != 422 {
 		t.Fatalf("ожидался HAS_ACTIVE_UNIT 422, получено %v", err)
@@ -491,11 +495,11 @@ func TestArchiveTaskWithActiveUnitForbidden(t *testing.T) {
 
 	// Останавливаем юнит — архивирование проходит, хук и события на месте.
 	for id := range store.units {
-		if _, err := svc.StopUnit(context.Background(), id, 5, domain.LevelEmployee); err != nil {
+		if _, err := svc.StopUnit(context.Background(), id, 5, domain.LevelEmployee, cid(1)); err != nil {
 			t.Fatalf("stop: %v", err)
 		}
 	}
-	if _, err := svc.ArchiveTask(context.Background(), task.ID, 5); err != nil {
+	if _, err := svc.ArchiveTask(context.Background(), task.ID, 5, cid(1)); err != nil {
 		t.Fatalf("archive: %v", err)
 	}
 	if groove.closedHero != 5 {
@@ -510,7 +514,7 @@ func TestArchiveTaskWithActiveUnitForbidden(t *testing.T) {
 		t.Fatalf("событие архивирования не опубликовано: %v", names)
 	}
 
-	_, err = svc.ArchiveTask(context.Background(), task.ID, 5)
+	_, err = svc.ArchiveTask(context.Background(), task.ID, 5, cid(1))
 	if de := domain.AsDomainError(err); de == nil || de.Code != "ALREADY_ARCHIVED" {
 		t.Fatalf("повторный архив: %v", err)
 	}
@@ -521,17 +525,17 @@ func TestStopForeignUnitNeedsManager(t *testing.T) {
 	task := seedTask(store, 1)
 	store.unitTypes[10] = &domain.UnitType{ID: 10, Name: "Код", CompanyID: 1}
 	employee(users, 7, 1)
-	unit, err := svc.CreateUnit(context.Background(), task.ID, 5, "чужой", 10)
+	unit, err := svc.CreateUnit(context.Background(), task.ID, 5, cid(1), "чужой", 10)
 	if err != nil {
 		t.Fatalf("юнит: %v", err)
 	}
 
-	_, err = svc.StopUnit(context.Background(), unit.ID, 7, domain.LevelEmployee)
+	_, err = svc.StopUnit(context.Background(), unit.ID, 7, domain.LevelEmployee, cid(1))
 	if de := domain.AsDomainError(err); de == nil || de.Code != "FORBIDDEN" {
 		t.Fatalf("сотрудник остановил чужой юнит: %v", err)
 	}
 
-	if _, err := svc.StopUnit(context.Background(), unit.ID, 7, domain.LevelManager); err != nil {
+	if _, err := svc.StopUnit(context.Background(), unit.ID, 7, domain.LevelManager, cid(1)); err != nil {
 		t.Fatalf("менеджер не смог остановить: %v", err)
 	}
 	var forced *busEvent
@@ -550,7 +554,7 @@ func TestUpdateTaskReindexAndBroadcast(t *testing.T) {
 	task := seedTask(store, 1)
 
 	newName := "Новое имя"
-	if _, err := svc.UpdateTask(context.Background(), task.ID, 1,
+	if _, err := svc.UpdateTask(context.Background(), task.ID, 1, cid(1),
 		dto.TaskUpdate{Name: &newName}); err != nil {
 		t.Fatalf("update: %v", err)
 	}

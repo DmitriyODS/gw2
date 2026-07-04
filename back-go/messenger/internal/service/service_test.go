@@ -772,7 +772,7 @@ func TestPetChatUnreadCountsBotMessages(t *testing.T) {
 		t.Fatalf("post bot message: %v", err)
 	}
 
-	items, err := svc.ListConversations(ctx, 2)
+	items, err := svc.ListConversations(ctx, 2, i64p(10))
 	if err != nil {
 		t.Fatalf("list conversations: %v", err)
 	}
@@ -800,7 +800,7 @@ func TestPetChatUnreadCountsBotMessages(t *testing.T) {
 	if err != nil || n != 1 {
 		t.Fatalf("mark read: n=%d err=%v", n, err)
 	}
-	items, _ = svc.ListConversations(ctx, 2)
+	items, _ = svc.ListConversations(ctx, 2, i64p(10))
 	if items[0].UnreadCount != 0 {
 		t.Fatalf("после прочтения unread_count = %d", items[0].UnreadCount)
 	}
@@ -1138,7 +1138,7 @@ func TestConversationPinPersonal(t *testing.T) {
 
 	// …но закреплённый convA всё равно первый среди пар (выше только
 	// автосозданный dev-чат, он всегда сверху).
-	items, _ := svc.ListConversations(ctx, 2)
+	items, _ := svc.ListConversations(ctx, 2, i64p(10))
 	var pairs []*dto.ConversationListItem
 	for _, it := range items {
 		if !it.IsDevChat && !it.IsPetChat {
@@ -1149,7 +1149,7 @@ func TestConversationPinPersonal(t *testing.T) {
 		t.Fatalf("закреплённый диалог не первый: %+v", pairs)
 	}
 	// А у пользователя 3 закрепление не видно (оно личное).
-	items3, _ := svc.ListConversations(ctx, 3)
+	items3, _ := svc.ListConversations(ctx, 3, nil)
 	for _, it := range items3 {
 		if it.ID == convA.ID && it.IsPinned {
 			t.Fatal("закрепление утекло собеседнику")

@@ -139,7 +139,7 @@ import { getStatsResponsibles } from '@/api/stats.js'
 import { useTvPeriodData } from '@/composables/useTvPeriodData.js'
 import { num, sumHours } from '@/components/tv/tvFormat.js'
 import { buildAsideContent } from '@/components/tv/tvAside.js'
-import { SLIDES as slides, SLIDE_COMPONENTS } from '@/components/tv/tvSlides.js'
+import { SLIDES as slides, SLIDE_COMPONENTS, visibleSlides as pickVisibleSlides } from '@/components/tv/tvSlides.js'
 import TvKpiTile from '@/components/tv/TvKpiTile.vue'
 import TvAsideCard from '@/components/tv/TvAsideCard.vue'
 import TvTicker from '@/components/tv/TvTicker.vue'
@@ -268,15 +268,8 @@ const paused = ref(false)
 // Долг показываем, только когда он есть — по данным периода слайда (неделя).
 const debtValue = computed(() => num(commonByPeriod.value['week']?.tasks?.debt))
 
-const visibleSlides = computed(() => {
-  const list = slides.filter(s => {
-    if (settings.value.disabled.includes(s.id)) return false
-    if (s.kind === 'debt' && debtValue.value <= 0) return false
-    return true
-  })
-  // Всё выключили — показываем хотя бы брендовый слайд, табло не гаснет.
-  return list.length ? list : slides.filter(s => s.kind === 'brand')
-})
+const visibleSlides = computed(() =>
+  pickVisibleSlides(settings.value.disabled, { debtValue: debtValue.value }))
 
 const currentSlide = computed(() =>
   visibleSlides.value[activeIdx.value] || visibleSlides.value[0])

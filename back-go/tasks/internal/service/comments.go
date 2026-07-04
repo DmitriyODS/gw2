@@ -9,28 +9,22 @@ import (
 	"github.com/DmitriyODS/gw2/back-go/tasks/internal/dto"
 )
 
-// ensureCanEditComment — автор может всегда, остальные — MANAGER+.
-func (s *Service) ensureCanEditComment(ctx context.Context, c *domain.Comment, userID int64) error {
+// ensureCanEditComment — автор может всегда, остальные — MANAGER+. Роль актора
+// приходит ИЗ ТОКЕНА (роль в активной компании): в users её больше нет, поэтому
+// чтение из БД здесь всегда давало бы 0 и глухой 403 даже менеджеру.
+func ensureCanEditComment(c *domain.Comment, userID int64, actorLevel int) error {
 	if c.AuthorID == userID {
 		return nil
 	}
-	user, err := s.users.GetUser(ctx, userID)
-	if err != nil {
-		return err
-	}
-	if user == nil || user.RoleLevel < domain.LevelManager {
+	if actorLevel < domain.LevelManager {
 		return domain.NewError("FORBIDDEN", "Нет прав на действие", 403)
 	}
 	return nil
 }
 
-func (s *Service) ListComments(ctx context.Context, taskID int64) ([]dto.Comment, error) {
-	task, err := s.tasks.GetTask(ctx, taskID)
-	if err != nil {
+func (s *Service) ListComments(ctx context.Context, taskID int64, companyID *int64) ([]dto.Comment, error) {
+	if _, err := s.taskInCompany(ctx, taskID, companyID); err != nil {
 		return nil, err
-	}
-	if task == nil {
-		return nil, domain.NewError("TASK_NOT_FOUND", "Задача не найдена", 404)
 	}
 	comments, err := s.comments.ListComments(ctx, taskID)
 	if err != nil {
@@ -39,13 +33,9 @@ func (s *Service) ListComments(ctx context.Context, taskID int64) ([]dto.Comment
 	return dto.NewComments(comments), nil
 }
 
-func (s *Service) CreateComment(ctx context.Context, taskID, authorID int64, text string) (*dto.Comment, error) {
-	task, err := s.tasks.GetTask(ctx, taskID)
-	if err != nil {
+func (s *Service) CreateComment(ctx context.Context, taskID, authorID int64, companyID *int64, text string) (*dto.Comment, error) {
+	if _, err := s.taskInCompany(ctx, taskID, companyID); err != nil {
 		return nil, err
-	}
-	if task == nil {
-		return nil, domain.NewError("TASK_NOT_FOUND", "Задача не найдена", 404)
 	}
 	text = strings.TrimSpace(text)
 	if text == "" {
@@ -65,7 +55,7 @@ func (s *Service) CreateComment(ctx context.Context, taskID, authorID int64, tex
 	return &out, nil
 }
 
-func (s *Service) UpdateComment(ctx context.Context, commentID, userID int64, text string) (*dto.Comment, error) {
+func (s *Service) UpdateComment(ctx context.Context, commentID, userID int64, actorLevel int, companyID *int64, text string) (*dto.Comment, error) {
 	comment, err := s.comments.GetComment(ctx, commentID)
 	if err != nil {
 		return nil, err
@@ -73,7 +63,11 @@ func (s *Service) UpdateComment(ctx context.Context, commentID, userID int64, te
 	if comment == nil || comment.DeletedAt != nil {
 		return nil, domain.NewError("NOT_FOUND", "Комментарий не найден", 404)
 	}
-	if err := s.ensureCanEditComment(ctx, comment, userID); err != nil {
+	// Комментарий чужой компании неотличим от несуществующего.
+	if _, err := s.taskInCompany(ctx, comment.TaskID, companyID); err != nil {
+		return nil, domain.NewError("NOT_FOUND", "Комментарий не найден", 404)
+	}
+	if err := ensureCanEditComment(comment, userID, actorLevel); err != nil {
 		return nil, err
 	}
 	text = strings.TrimSpace(text)
@@ -93,7 +87,7 @@ func (s *Service) UpdateComment(ctx context.Context, commentID, userID int64, te
 	return &out, nil
 }
 
-func (s *Service) DeleteComment(ctx context.Context, taskID, commentID, userID int64) error {
+func (s *Service) DeleteComment(ctx context.Context, taskID, commentID, userID int64, actorLevel int, companyID *int64) error {
 	comment, err := s.comments.GetComment(ctx, commentID)
 	if err != nil {
 		return err
@@ -101,7 +95,10 @@ func (s *Service) DeleteComment(ctx context.Context, taskID, commentID, userID i
 	if comment == nil || comment.DeletedAt != nil {
 		return domain.NewError("NOT_FOUND", "Комментарий не найден", 404)
 	}
-	if err := s.ensureCanEditComment(ctx, comment, userID); err != nil {
+	if _, err := s.taskInCompany(ctx, comment.TaskID, companyID); err != nil {
+		return domain.NewError("NOT_FOUND", "Комментарий не найден", 404)
+	}
+	if err := ensureCanEditComment(comment, userID, actorLevel); err != nil {
 		return err
 	}
 	if err := s.comments.SoftDeleteComment(ctx, commentID, time.Now().UTC()); err != nil {

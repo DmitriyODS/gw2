@@ -32,9 +32,18 @@ const parts = computed(() => {
   for (const m of text.matchAll(URL_RE)) {
     if (m.index > last) out.push({ text: text.slice(last, m.index) })
     // Хвостовую пунктуацию не включаем в ссылку («см. https://a.ru.» → точка — текст).
+    // Закрывающую скобку отрезаем только когда она непарная (нет открывающей
+    // в самой ссылке) — иначе рвём валидные URL вида …/Foo_(bar).
     let url = m[0]
     let tail = ''
-    while (/[.,;:!?)»”]$/.test(url)) { tail = url.slice(-1) + tail; url = url.slice(0, -1) }
+    for (;;) {
+      const last = url.slice(-1)
+      if (/[.,;:!?»”]/.test(last)) { tail = last + tail; url = url.slice(0, -1); continue }
+      if (last === ')' && (url.match(/\)/g)?.length || 0) > (url.match(/\(/g)?.length || 0)) {
+        tail = last + tail; url = url.slice(0, -1); continue
+      }
+      break
+    }
     out.push({ text: url, url: url.startsWith('www.') ? `https://${url}` : url })
     if (tail) out.push({ text: tail })
     last = m.index + m[0].length

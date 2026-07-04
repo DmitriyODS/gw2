@@ -94,8 +94,9 @@ func (h *handlers) createTask(c *fiber.Ctx) error {
 }
 
 func (h *handlers) getTask(c *fiber.Ctx) error {
+	user := currentUser(c)
 	resp, err := h.eps.GetTask(c.Context(), endpoint.TaskActorRequest{
-		TaskID: pathID(c), ActorID: currentUser(c).ID,
+		TaskID: pathID(c), ActorID: user.ID, CompanyID: user.CompanyID,
 	})
 	if err != nil {
 		return h.respondError(c, err)
@@ -108,8 +109,9 @@ func (h *handlers) updateTask(c *fiber.Ctx) error {
 	if details != nil {
 		return validationError(c, details)
 	}
+	user := currentUser(c)
 	resp, err := h.eps.UpdateTask(c.Context(), endpoint.UpdateTaskRequest{
-		TaskID: pathID(c), ActorID: currentUser(c).ID, Body: req,
+		TaskID: pathID(c), ActorID: user.ID, CompanyID: user.CompanyID, Body: req,
 	})
 	if err != nil {
 		return h.respondError(c, err)
@@ -118,15 +120,19 @@ func (h *handlers) updateTask(c *fiber.Ctx) error {
 }
 
 func (h *handlers) deleteTask(c *fiber.Ctx) error {
-	if _, err := h.eps.DeleteTask(c.Context(), pathID(c)); err != nil {
+	user := currentUser(c)
+	if _, err := h.eps.DeleteTask(c.Context(), endpoint.TaskActorRequest{
+		TaskID: pathID(c), ActorID: user.ID, CompanyID: user.CompanyID,
+	}); err != nil {
 		return h.respondError(c, err)
 	}
 	return c.JSON(fiber.Map{"message": "Задача удалена"})
 }
 
 func (h *handlers) archiveTask(c *fiber.Ctx) error {
+	user := currentUser(c)
 	resp, err := h.eps.ArchiveTask(c.Context(), endpoint.TaskActorRequest{
-		TaskID: pathID(c), ActorID: currentUser(c).ID,
+		TaskID: pathID(c), ActorID: user.ID, CompanyID: user.CompanyID,
 	})
 	if err != nil {
 		return h.respondError(c, err)
@@ -135,8 +141,9 @@ func (h *handlers) archiveTask(c *fiber.Ctx) error {
 }
 
 func (h *handlers) restoreTask(c *fiber.Ctx) error {
+	user := currentUser(c)
 	resp, err := h.eps.RestoreTask(c.Context(), endpoint.TaskActorRequest{
-		TaskID: pathID(c), ActorID: currentUser(c).ID,
+		TaskID: pathID(c), ActorID: user.ID, CompanyID: user.CompanyID,
 	})
 	if err != nil {
 		return h.respondError(c, err)
@@ -150,8 +157,9 @@ func (h *handlers) setTaskColor(c *fiber.Ctx) error {
 		return validationError(c, details)
 	}
 	taskID := pathID(c)
+	user := currentUser(c)
 	if _, err := h.eps.SetTaskColor(c.Context(), endpoint.TaskColorRequest{
-		TaskID: taskID, UserID: currentUser(c).ID, Color: color,
+		TaskID: taskID, UserID: user.ID, CompanyID: user.CompanyID, Color: color,
 	}); err != nil {
 		return h.respondError(c, err)
 	}
@@ -159,8 +167,9 @@ func (h *handlers) setTaskColor(c *fiber.Ctx) error {
 }
 
 func (h *handlers) toggleFavorite(c *fiber.Ctx) error {
+	user := currentUser(c)
 	isFav, err := h.eps.ToggleFavorite(c.Context(), endpoint.TaskActorRequest{
-		TaskID: pathID(c), ActorID: currentUser(c).ID,
+		TaskID: pathID(c), ActorID: user.ID, CompanyID: user.CompanyID,
 	})
 	if err != nil {
 		return h.respondError(c, err)
@@ -173,8 +182,9 @@ func (h *handlers) setResponsible(c *fiber.Ctx) error {
 	if details != nil {
 		return validationError(c, details)
 	}
+	user := currentUser(c)
 	resp, err := h.eps.SetResponsible(c.Context(), endpoint.SetResponsibleRequest{
-		TaskID: pathID(c), ActorID: currentUser(c).ID, ResponsibleUserID: value,
+		TaskID: pathID(c), ActorID: user.ID, CompanyID: user.CompanyID, ResponsibleUserID: value,
 	})
 	if err != nil {
 		return h.respondError(c, err)
@@ -187,8 +197,9 @@ func (h *handlers) setStage(c *fiber.Ctx) error {
 	if details != nil {
 		return validationError(c, details)
 	}
+	user := currentUser(c)
 	resp, err := h.eps.SetStage(c.Context(), endpoint.SetStageRequest{
-		TaskID: pathID(c), ActorID: currentUser(c).ID, StageID: value,
+		TaskID: pathID(c), ActorID: user.ID, CompanyID: user.CompanyID, StageID: value,
 	})
 	if err != nil {
 		return h.respondError(c, err)
@@ -197,7 +208,10 @@ func (h *handlers) setStage(c *fiber.Ctx) error {
 }
 
 func (h *handlers) contributors(c *fiber.Ctx) error {
-	resp, err := h.eps.Contributors(c.Context(), pathID(c))
+	user := currentUser(c)
+	resp, err := h.eps.Contributors(c.Context(), endpoint.TaskActorRequest{
+		TaskID: pathID(c), ActorID: user.ID, CompanyID: user.CompanyID,
+	})
 	if err != nil {
 		return h.respondError(c, err)
 	}
@@ -207,7 +221,10 @@ func (h *handlers) contributors(c *fiber.Ctx) error {
 // ── Комментарии задач ────────────────────────────────────────────
 
 func (h *handlers) listComments(c *fiber.Ctx) error {
-	resp, err := h.eps.ListComments(c.Context(), pathID(c))
+	user := currentUser(c)
+	resp, err := h.eps.ListComments(c.Context(), endpoint.TaskActorRequest{
+		TaskID: pathID(c), ActorID: user.ID, CompanyID: user.CompanyID,
+	})
 	if err != nil {
 		return h.respondError(c, err)
 	}
@@ -219,8 +236,9 @@ func (h *handlers) createComment(c *fiber.Ctx) error {
 	if details != nil {
 		return validationError(c, details)
 	}
+	user := currentUser(c)
 	resp, err := h.eps.CreateComment(c.Context(), endpoint.CommentCreateRequest{
-		TaskID: pathID(c), AuthorID: currentUser(c).ID, Text: text,
+		TaskID: pathID(c), AuthorID: user.ID, CompanyID: user.CompanyID, Text: text,
 	})
 	if err != nil {
 		return h.respondError(c, err)
@@ -238,8 +256,10 @@ func (h *handlers) updateComment(c *fiber.Ctx) error {
 	if details != nil {
 		return validationError(c, details)
 	}
+	user := currentUser(c)
 	resp, err := h.eps.UpdateComment(c.Context(), endpoint.CommentEditRequest{
-		TaskID: pathID(c), CommentID: commentID(c), UserID: currentUser(c).ID, Text: text,
+		TaskID: pathID(c), CommentID: commentID(c), UserID: user.ID,
+		ActorLevel: user.RoleLevel, CompanyID: user.CompanyID, Text: text,
 	})
 	if err != nil {
 		return h.respondError(c, err)
@@ -248,8 +268,10 @@ func (h *handlers) updateComment(c *fiber.Ctx) error {
 }
 
 func (h *handlers) deleteComment(c *fiber.Ctx) error {
+	user := currentUser(c)
 	if _, err := h.eps.DeleteComment(c.Context(), endpoint.CommentEditRequest{
-		TaskID: pathID(c), CommentID: commentID(c), UserID: currentUser(c).ID,
+		TaskID: pathID(c), CommentID: commentID(c), UserID: user.ID,
+		ActorLevel: user.RoleLevel, CompanyID: user.CompanyID,
 	}); err != nil {
 		return h.respondError(c, err)
 	}

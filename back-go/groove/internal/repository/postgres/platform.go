@@ -51,6 +51,15 @@ func (r *PlatformRepo) GetUser(ctx context.Context, id int64) (*domain.User, err
 	return &u, nil
 }
 
+// IsCompanyMember — членство пользователя в компании (таблица user_companies).
+func (r *PlatformRepo) IsCompanyMember(ctx context.Context, userID, companyID int64) (bool, error) {
+	var ok bool
+	err := r.pool.QueryRow(ctx,
+		`SELECT EXISTS(SELECT 1 FROM user_companies WHERE user_id = $1 AND company_id = $2)`,
+		userID, companyID).Scan(&ok)
+	return ok, err
+}
+
 // CompanyActive — активность ИМЕННО выбранной (активной) компании сессии.
 func (r *PlatformRepo) CompanyActive(ctx context.Context, companyID *int64) (bool, error) {
 	if companyID == nil {

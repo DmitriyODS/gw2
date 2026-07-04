@@ -96,6 +96,22 @@ func (s *Service) AcceptCompanyInvite(ctx context.Context, userID int64, token s
 	if !company.IsActive {
 		return nil, companyDisabledErr(&company.Name)
 	}
+	// Принятие инвайта существующим участником апсертит роль — это смена роли,
+	// поэтому гард «последнего администратора» действует и на этом пути.
+	if existing, err := s.repo.GetMembership(ctx, userID, inv.CompanyID); err != nil {
+		return nil, err
+	} else if existing != nil {
+		role, err := s.repo.GetRole(ctx, inv.RoleID)
+		if err != nil {
+			return nil, err
+		}
+		if role == nil {
+			return nil, domain.NewError("ROLE_NOT_FOUND", "Роль не найдена", 500)
+		}
+		if err := s.guardLastAdmin(ctx, inv.CompanyID, existing.Role.Level, role.Level); err != nil {
+			return nil, err
+		}
+	}
 	if err := s.repo.AddMembership(ctx, userID, inv.CompanyID, inv.RoleID); err != nil {
 		return nil, err
 	}
