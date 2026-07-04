@@ -20,45 +20,22 @@ type UnitHook struct {
 	Minutes   int
 }
 
-func taskNamePayload(name string) any {
-	if name == "" {
-		return nil
-	}
-	return name
-}
+// OnUnitStarted — событие ленты больше не создаётся (доска признания без
+// машинного спама); хук сохранён как точка расширения gRPC-контракта.
+func (s *Service) OnUnitStarted(ctx context.Context, h UnitHook) {}
 
-func (s *Service) OnUnitStarted(ctx context.Context, h UnitHook) {
-	if !s.grooveEnabled(ctx, h.CompanyID) {
-		return
-	}
-	_, err := s.recordEvent(ctx, h.CompanyID, &h.UserID, "unit_started", map[string]any{
-		"unit_id":   h.UnitID,
-		"unit_name": h.UnitName,
-		"task_id":   h.TaskID,
-		"task_name": taskNamePayload(h.TaskName),
-	}, false)
-	if err != nil {
-		s.log.Warn("groove.hook_failed", "hook", "unit_started", "error", err)
-	}
-}
-
+// OnUnitStopped — начисления за работу без записи в ленту: сводка дня
+// публикуется одним событием day_summary (см. maybeDaySummary).
 func (s *Service) OnUnitStopped(ctx context.Context, h UnitHook) {
 	if !s.grooveEnabled(ctx, h.CompanyID) {
 		return
 	}
-	_, err := s.recordEvent(ctx, h.CompanyID, &h.UserID, "unit_stopped", map[string]any{
-		"unit_id":   h.UnitID,
-		"unit_name": h.UnitName,
-		"task_id":   h.TaskID,
-		"task_name": taskNamePayload(h.TaskName),
-		"minutes":   h.Minutes,
-	}, false)
-	if err != nil {
-		s.log.Warn("groove.hook_failed", "hook", "unit_stopped", "error", err)
-		return
-	}
 	// 1 грув за каждые 5 минут работы; дневной кап источника «unit» = 15.
 	s.AwardBeans(ctx, h.UserID, h.CompanyID, "unit", h.Minutes/5)
+	// Работа растит питомца напрямую: XP за минуты юнита (кап в день,
+	// сытость после кормления даёт множитель — см. AwardXP).
+	s.AwardXP(ctx, h.UserID, h.CompanyID, "xp_unit",
+		h.Minutes/domain.XPUnitMinutesPer, domain.XPUnitDailyCap)
 	// Работа лечит больного Грувика (совсем короткие юниты не считаются).
 	if h.Minutes >= domain.RecoveryMinUnitMinutes {
 		s.AddRecovery(ctx, h.UserID, h.CompanyID, 1)
@@ -90,6 +67,8 @@ func (s *Service) OnTaskClosed(ctx context.Context, companyID, heroUserID,
 	}
 	if heroUserID > 0 {
 		s.AwardBeans(ctx, heroUserID, companyID, "task_closed", 5)
+		s.AwardXP(ctx, heroUserID, companyID, "xp_task",
+			domain.XPTaskClosed, domain.XPTaskDailyCap)
 		s.AddRecovery(ctx, heroUserID, companyID, 1)
 		s.BumpQuest(ctx, heroUserID, "tasks_closed", 1)
 	}

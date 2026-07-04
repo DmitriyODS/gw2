@@ -21,6 +21,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.automirrored.filled.Logout
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Delete
@@ -28,6 +29,7 @@ import androidx.compose.material.icons.filled.Domain
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.PhotoCamera
 import androidx.compose.material.icons.filled.SwapHoriz
+import androidx.compose.material.icons.filled.SystemUpdate
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -78,6 +80,7 @@ import com.kodass.groovework.data.network.ApiException
 import com.kodass.groovework.data.network.apiCall
 import com.kodass.groovework.data.session.AuthState
 import com.kodass.groovework.data.session.SessionManager
+import com.kodass.groovework.data.update.UpdateState
 import com.kodass.groovework.ui.common.RefreshOnResume
 import com.kodass.groovework.ui.common.UserAvatar
 import kotlinx.coroutines.launch
@@ -312,7 +315,7 @@ class ProfileViewModel(
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun ProfileScreen(container: AppContainer) {
+fun ProfileScreen(container: AppContainer, onOpenAbout: () -> Unit) {
     val viewModel: ProfileViewModel = viewModel {
         ProfileViewModel(
             container.sessionManager, container.authApi, container.statsApi,
@@ -350,12 +353,59 @@ fun ProfileScreen(container: AppContainer) {
         }
     }
 
+    val updateState by container.appUpdater.state.collectAsStateWithLifecycle()
+
     Scaffold(topBar = { TopAppBar(title = { Text("Профиль") }) }) { padding ->
         LazyColumn(
             modifier = Modifier.fillMaxSize().padding(padding),
             contentPadding = PaddingValues(16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
+            // Ненавязчивое уведомление о доступном обновлении (автопроверка при
+            // старте) — ведёт в «О приложении», где кнопки скачивания/установки.
+            val updateBuild = when (val s = updateState) {
+                is UpdateState.Available -> s.build
+                is UpdateState.ReadyToInstall -> s.build
+                else -> null
+            }
+            if (updateBuild != null) {
+                item {
+                    Card(
+                        onClick = onOpenAbout,
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer),
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp),
+                        ) {
+                            Icon(
+                                Icons.Filled.SystemUpdate,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                            )
+                            Column(modifier = Modifier.weight(1f).padding(start = 12.dp)) {
+                                Text(
+                                    "Доступно обновление · сборка $updateBuild",
+                                    style = MaterialTheme.typography.titleSmall,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = MaterialTheme.colorScheme.onPrimaryContainer,
+                                )
+                                Text(
+                                    "Нажмите, чтобы перейти к установке",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onPrimaryContainer,
+                                )
+                            }
+                            Icon(
+                                Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                            )
+                        }
+                    }
+                }
+            }
             item {
                 Column(
                     horizontalAlignment = Alignment.CenterHorizontally,

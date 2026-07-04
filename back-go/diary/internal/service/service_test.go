@@ -16,7 +16,7 @@ func discardLogger() *slog.Logger { return slog.New(slog.NewTextHandler(io.Disca
 type fakeRepo struct {
 	diaries    map[int64]*domain.Diary
 	entries    map[int64]*domain.Entry
-	members    map[int64]map[int64]bool // diaryID → set(userID)
+	members    map[int64]map[int64]bool // diaryID → userID → canCheck
 	lastSearch string
 	nextID     int64
 }
@@ -41,7 +41,7 @@ func (f *fakeRepo) ListOwned(_ domain.Ctx, ownerID int64) ([]*domain.Diary, erro
 func (f *fakeRepo) ListShared(_ domain.Ctx, userID int64) ([]*domain.Diary, error) {
 	out := []*domain.Diary{}
 	for id, set := range f.members {
-		if set[userID] {
+		if _, ok := set[userID]; ok {
 			if d := f.diaries[id]; d != nil {
 				out = append(out, d)
 			}
@@ -121,14 +121,29 @@ func (f *fakeRepo) MemberIDs(_ domain.Ctx, diaryID int64) ([]int64, error) {
 	}
 	return out, nil
 }
-func (f *fakeRepo) HasMember(_ domain.Ctx, diaryID, userID int64) (bool, error) {
-	return f.members[diaryID][userID], nil
+func (f *fakeRepo) MemberAccess(_ domain.Ctx, diaryID, userID int64) (bool, bool, error) {
+	canCheck, ok := f.members[diaryID][userID]
+	return ok, canCheck, nil
 }
-func (f *fakeRepo) AddMember(_ domain.Ctx, diaryID, userID int64) error {
+func (f *fakeRepo) AddMember(_ domain.Ctx, diaryID, userID int64, canCheck bool) error {
 	if f.members[diaryID] == nil {
 		f.members[diaryID] = map[int64]bool{}
 	}
-	f.members[diaryID][userID] = true
+	f.members[diaryID][userID] = canCheck
+	return nil
+}
+func (f *fakeRepo) MoveEntry(_ domain.Ctx, id, diaryID int64, date time.Time) error {
+	if e := f.entries[id]; e != nil {
+		e.DiaryID, e.Date = diaryID, date
+	}
+	return nil
+}
+func (f *fakeRepo) ReorderEntries(_ domain.Ctx, diaryID int64, date time.Time, ids []int64) error {
+	for i, id := range ids {
+		if e := f.entries[id]; e != nil && e.DiaryID == diaryID && e.Date.Equal(date) {
+			e.Position = i + 1
+		}
+	}
 	return nil
 }
 func (f *fakeRepo) RemoveMember(_ domain.Ctx, diaryID, userID int64) error {
@@ -236,6 +251,91 @@ func TestSetDone_MovesBetweenTabs(t *testing.T) {
 	}
 	if len(archived.Items) != 1 {
 		t.Error("выполненная запись должна быть в архиве")
+	}
+}
+
+func TestSetDone_MemberCanCheck(t *testing.T) {
+	svc, repo, _ := newTestService()
+	at := time.Date(2026, 6, 25, 0, 0, 0, 0, time.UTC)
+	e, _ := svc.CreateEntry(context.Background(), 7, 1, EntryInput{Date: at, Title: "Поручение"})
+
+	// Адресат без права отметки — только чтение.
+	repo.members[1] = map[int64]bool{42: false}
+	if _, err := svc.SetDone(context.Background(), 42, 1, e.ID, true); err != domain.ErrReadOnly {
+		t.Errorf("адресат без can_check не должен отмечать, получено %v", err)
+	}
+	// Адресат с правом отметки — может закрыть запись.
+	repo.members[1][42] = true
+	if _, err := svc.SetDone(context.Background(), 42, 1, e.ID, true); err != nil {
+		t.Errorf("адресат с can_check должен отмечать: %v", err)
+	}
+	// Но по-прежнему не может редактировать содержимое.
+	if _, err := svc.UpdateEntry(context.Background(), 42, 1, e.ID, EntryInput{Date: at, Title: "Взлом"}); err != domain.ErrDiaryNotFound {
+		t.Errorf("can_check не даёт права правки, получено %v", err)
+	}
+}
+
+func TestMoveEntry_BetweenOwnDiaries(t *testing.T) {
+	svc, repo, bus := newTestService()
+	repo.diaries[2] = &domain.Diary{ID: 2, OwnerID: 7, Name: "Второй"}
+	repo.diaries[3] = &domain.Diary{ID: 3, OwnerID: 99, Name: "Чужой"}
+	at := time.Date(2026, 6, 25, 0, 0, 0, 0, time.UTC)
+	e, _ := svc.CreateEntry(context.Background(), 7, 1, EntryInput{Date: at, Title: "Переносимая"})
+
+	// Перенос на другой день внутри ежедневника — просто updated.
+	day2 := at.AddDate(0, 0, 1)
+	if _, err := svc.MoveEntry(context.Background(), 7, 1, e.ID, 1, day2); err != nil {
+		t.Fatalf("move date: %v", err)
+	}
+	if !repo.entries[e.ID].Date.Equal(day2) {
+		t.Error("день записи должен смениться")
+	}
+	if bus.events[len(bus.events)-1] != "diary_entry:updated" {
+		t.Errorf("ожидалось diary_entry:updated, получено %v", bus.events)
+	}
+
+	// Перенос в другой свой ежедневник — deleted в старом + created в новом.
+	if _, err := svc.MoveEntry(context.Background(), 7, 1, e.ID, 2, time.Time{}); err != nil {
+		t.Fatalf("move diary: %v", err)
+	}
+	if repo.entries[e.ID].DiaryID != 2 {
+		t.Error("запись должна переехать в ежедневник 2")
+	}
+	if !repo.entries[e.ID].Date.Equal(day2) {
+		t.Error("нулевая дата не должна менять день записи")
+	}
+	n := len(bus.events)
+	if n < 2 || bus.events[n-2] != "diary_entry:deleted" || bus.events[n-1] != "diary_entry:created" {
+		t.Errorf("ожидались deleted+created, получено %v", bus.events)
+	}
+
+	// В чужой ежедневник переносить нельзя.
+	if _, err := svc.MoveEntry(context.Background(), 7, 2, e.ID, 3, time.Time{}); err != domain.ErrDiaryNotFound {
+		t.Errorf("перенос в чужой ежедневник должен быть запрещён, получено %v", err)
+	}
+}
+
+func TestReorderEntries_OwnerOnlyAndPositions(t *testing.T) {
+	svc, repo, bus := newTestService()
+	at := time.Date(2026, 7, 4, 0, 0, 0, 0, time.UTC)
+	a, _ := svc.CreateEntry(context.Background(), 7, 1, EntryInput{Date: at, Title: "А"})
+	b, _ := svc.CreateEntry(context.Background(), 7, 1, EntryInput{Date: at, Title: "Б"})
+
+	// Чужому (даже адресату) порядок менять нельзя.
+	repo.members[1] = map[int64]bool{42: true}
+	if err := svc.ReorderEntries(context.Background(), 42, 1, at, []int64{b.ID, a.ID}); err != domain.ErrDiaryNotFound {
+		t.Errorf("reorder чужим должен быть запрещён, получено %v", err)
+	}
+
+	if err := svc.ReorderEntries(context.Background(), 7, 1, at, []int64{b.ID, a.ID}); err != nil {
+		t.Fatalf("reorder: %v", err)
+	}
+	if repo.entries[b.ID].Position != 1 || repo.entries[a.ID].Position != 2 {
+		t.Errorf("позиции: Б=%d А=%d, ожидалось 1 и 2",
+			repo.entries[b.ID].Position, repo.entries[a.ID].Position)
+	}
+	if bus.events[len(bus.events)-1] != "diary_entry:reordered" {
+		t.Errorf("ожидалось diary_entry:reordered, получено %v", bus.events)
 	}
 }
 

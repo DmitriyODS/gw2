@@ -2,10 +2,9 @@ package service
 
 import (
 	"context"
-	"crypto/rand"
-	"encoding/hex"
 
 	"github.com/DmitriyODS/gw2/back-go/calendar/internal/domain"
+	"github.com/DmitriyODS/gw2/back-go/pkg/records"
 )
 
 var errShareNotFound = domain.NewError("NOT_FOUND", "Ссылка не найдена или отозвана", 404)
@@ -23,7 +22,7 @@ func (s *Service) CreateShare(ctx context.Context, companyID, calendarID, userID
 	if _, err := s.requireCalendar(ctx, companyID, calendarID); err != nil {
 		return nil, err
 	}
-	code, err := newShareCode()
+	code, err := records.NewShareCode()
 	if err != nil {
 		return nil, err
 	}
@@ -93,10 +92,3 @@ func (s *Service) SharedExport(ctx context.Context, code string, fieldIDs []int6
 	return s.buildExport(ctx, cal, fieldIDs, p, ids)
 }
 
-func newShareCode() (string, error) {
-	b := make([]byte, 16)
-	if _, err := rand.Read(b); err != nil {
-		return "", err
-	}
-	return hex.EncodeToString(b), nil
-}

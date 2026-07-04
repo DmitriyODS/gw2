@@ -120,15 +120,13 @@
           </div>
         </article>
 
-        <div v-if="!filtered.length" class="emp-grid-empty">
-          <div class="empty-icon">
-            <span class="material-symbols-outlined">
-              {{ search ? 'search_off' : 'person_off' }}
-            </span>
-          </div>
-          <h3>{{ search ? 'Никого не нашли' : 'Сотрудников пока нет' }}</h3>
-          <p v-if="search">Попробуйте уточнить запрос или сбросить фильтры.</p>
-        </div>
+        <EmptyState
+          v-if="!filtered.length"
+          class="emp-grid-empty"
+          :icon="search ? 'search_off' : 'person_off'"
+          :title="search ? 'Никого не нашли' : 'Сотрудников пока нет'"
+          :subtitle="search ? 'Попробуйте уточнить запрос или сбросить фильтры.' : ''"
+        />
       </div>
     </div>
 
@@ -283,6 +281,7 @@ import { useNotificationsStore } from '@/stores/notifications.js'
 import { ROLE_NAMES } from '@/composables/usePermission.js'
 import { formatLastSeen } from '@/utils/presence.js'
 import AvatarLightbox from '@/components/common/AvatarLightbox.vue'
+import EmptyState from '@/components/common/EmptyState.vue'
 import { useBreakpoint } from '@/composables/useBreakpoint.js'
 
 const { isMobile } = useBreakpoint()
@@ -733,32 +732,9 @@ const RolePill = {
 
 .emp-grid-empty {
   grid-column: 1 / -1;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 12px;
-  padding: 56px 20px;
   background: var(--color-surface-high);
   border-radius: var(--radius-xl);
-  text-align: center;
 }
-.empty-icon {
-  width: 84px;
-  height: 84px;
-  border-radius: var(--radius-xl);
-  background: var(--color-primary-container);
-  color: var(--color-on-primary-container);
-  display: grid;
-  place-items: center;
-}
-.empty-icon .material-symbols-outlined { font-size: 40px; }
-.emp-grid-empty h3 {
-  margin: 4px 0 0;
-  color: var(--color-text);
-  font-size: 18px;
-  font-weight: 700;
-}
-.emp-grid-empty p { margin: 0; color: var(--color-text-dim); font-size: 14px; max-width: 360px; }
 
 /* ============ Аватары с presence-ring ============ */
 .avatar {

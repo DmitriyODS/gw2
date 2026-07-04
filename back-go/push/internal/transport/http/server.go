@@ -6,6 +6,7 @@ import (
 
 	"github.com/gofiber/fiber/v2"
 
+	"github.com/DmitriyODS/gw2/back-go/pkg/httpserver"
 	"github.com/DmitriyODS/gw2/back-go/pkg/pasetoauth"
 	"github.com/DmitriyODS/gw2/back-go/push/internal/service"
 )
@@ -13,12 +14,8 @@ import (
 type Server struct{ app *fiber.App }
 
 func NewServer(svc *service.Service, verifier *pasetoauth.Verifier, log *slog.Logger) *Server {
-	app := fiber.New(fiber.Config{DisableStartupMessage: true})
+	app := httpserver.New(httpserver.Config{AppName: "gw2-pushsvc", Log: log})
 	h := &handlers{svc: svc, log: log}
-
-	app.Get("/healthz", func(c *fiber.Ctx) error {
-		return c.JSON(fiber.Map{"status": "ok"})
-	})
 
 	// Только валидность токена: токены регистрирует любой авторизованный
 	// пользователь (force_change-гейт тут не нужен — pushsvc вне основного API).

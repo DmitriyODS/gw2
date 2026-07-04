@@ -1,7 +1,14 @@
-// Константы раздела «Мой Groove». Набор реакций продублирован на бэке
-// в schemas/groove.py (FEED_REACTIONS), магазин — в services/pet_service.py.
+// Константы раздела «Мой Groove». Набор реакций и категории кудосов
+// продублированы на бэке в groovesvc (domain/consts.go).
 
 export const FEED_REACTIONS = ['🔥', '💪', '👏', '🎉', '😮', '❤️']
+
+// Категории благодарностей (≡ domain.KudosCategories в groovesvc).
+export const KUDOS_CATEGORIES = {
+  helped: { icon: 'handshake', title: 'Выручил' },
+  quality: { icon: 'verified', title: 'Качество' },
+  speed: { icon: 'bolt', title: 'Скорость' },
+}
 
 export const PET_STAGES = [
   'Яйцо', 'Малыш', 'Непоседа', 'Подросток', 'Взрослый', 'Герой', 'Легенда',
@@ -89,14 +96,33 @@ export const SHOP_ITEMS = {
   graduation: { emoji: '🎓', title: 'Выпускной колпак' },
 }
 
-// Характеры (≡ PERSONALITIES в pet_service.py).
+// Характеры (≡ domain.Personalities в groovesvc). Характер пересчитывается
+// по юнитам за 21 день; desc — критерий, по которому он был присвоен.
 export const PERSONALITIES = {
-  lazy: { emoji: '🦥', title: 'Ленивец-мечтатель' },
-  night: { emoji: '🌙', title: 'Ночной активист' },
-  early: { emoji: '🌅', title: 'Ранняя пташка' },
-  energizer: { emoji: '⚡', title: 'Бодрячок-энерджайзер' },
-  zen: { emoji: '🧘', title: 'Дзен-марафонец' },
-  steady: { emoji: '🪨', title: 'Уравновешенный трудяга' },
+  lazy: {
+    emoji: '🦥', title: 'Ленивец-мечтатель',
+    desc: 'За последние 3 недели — не больше 3 юнитов в неделю',
+  },
+  night: {
+    emoji: '🌙', title: 'Ночной активист',
+    desc: 'Юниты чаще всего стартуют после 19:00',
+  },
+  early: {
+    emoji: '🌅', title: 'Ранняя пташка',
+    desc: 'Юниты чаще всего стартуют до 10 утра',
+  },
+  energizer: {
+    emoji: '⚡', title: 'Бодрячок-энерджайзер',
+    desc: 'От 12 юнитов в неделю, в среднем до часа каждый',
+  },
+  zen: {
+    emoji: '🧘', title: 'Дзен-марафонец',
+    desc: 'Длинные сессии — в среднем от 110 минут',
+  },
+  steady: {
+    emoji: '🪨', title: 'Уравновешенный трудяга',
+    desc: 'Ровный ритм без перекосов по времени и длине сессий',
+  },
 }
 
 // Вехи ленты: рендерятся полноширинными hero-карточками с декоративным эмодзи.

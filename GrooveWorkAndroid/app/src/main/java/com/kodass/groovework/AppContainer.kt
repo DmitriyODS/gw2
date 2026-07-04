@@ -167,12 +167,14 @@ class AppContainer(app: Application) {
         sessionManager.onLogout = { pushTokens.unregisterCurrentToken() }
         appScope.launch { sessionManager.bootstrap(BuildConfig.DEFAULT_SERVER_URL) }
 
-        // FCM-токен регистрируем при входе (фоновая доставка пушей).
+        // FCM-токен регистрируем при входе (фоновая доставка пушей); заодно —
+        // автопроверка обновления приложения (не чаще раза в 6 часов, троттлинг внутри).
         appScope.launch {
             sessionManager.authState.collect { state ->
                 if (state is AuthState.LoggedIn && !state.claims.forceChange) {
                     pushTokens.registerCurrentToken()
                 }
+                if (state is AuthState.LoggedIn) appUpdater.autoCheck()
             }
         }
 

@@ -87,7 +87,7 @@ type QuestDTO struct {
 }
 
 // PetDTO — PetSchema + расширения dump_pet. Контекстные поля (feeds_left,
-// phrase, evolved, strokes_today…) добавляются по месту использования.
+// phrase, evolved…) добавляются по месту использования.
 type PetDTO struct {
 	UserID           int64           `json:"user_id"`
 	Name             string          `json:"name"`
@@ -110,13 +110,11 @@ type PetDTO struct {
 	Quest            *QuestDTO       `json:"quest"`
 
 	// Контекстные поля.
-	FeedsLeft    *int    `json:"feeds_left,omitempty"`
-	FeedsMax     *int    `json:"feeds_max,omitempty"`
-	Phrase       *string `json:"phrase,omitempty"`
-	Evolved      *bool   `json:"evolved,omitempty"`
-	Recovered    *bool   `json:"recovered,omitempty"`
-	StrokesToday *int    `json:"strokes_today,omitempty"`
-	StrokedByMe  *bool   `json:"stroked_by_me,omitempty"`
+	FeedsLeft *int    `json:"feeds_left,omitempty"`
+	FeedsMax  *int    `json:"feeds_max,omitempty"`
+	Phrase    *string `json:"phrase,omitempty"`
+	Evolved   *bool   `json:"evolved,omitempty"`
+	Recovered *bool   `json:"recovered,omitempty"`
 }
 
 // NewPet — порт dump_pet из pet_service.py.
@@ -192,13 +190,10 @@ type LiveItemDTO struct {
 	TaskName  *string         `json:"task_name"`
 	StartedAt string          `json:"started_at"`
 	User      *domain.UserRef `json:"user"`
-	Zaps      int             `json:"zaps"`
 }
 
 type LiveDTO struct {
-	Items    []*LiveItemDTO `json:"items"`
-	ZapsLeft int            `json:"zaps_left"`
-	ZapsMax  int            `json:"zaps_max"`
+	Items []*LiveItemDTO `json:"items"`
 }
 
 type RaidDTO struct {
@@ -206,13 +201,14 @@ type RaidDTO struct {
 	Boss      string `json:"boss"`
 	Target    int    `json:"target"`
 	Progress  int    `json:"progress"`
+	MyClosed  int    `json:"my_closed"`
 	Reward    string `json:"reward"`
 	Defeated  bool   `json:"defeated"`
 	WeekStart string `json:"week_start"`
 	DaysLeft  int    `json:"days_left"`
 }
 
-func NewLiveItem(u *domain.ActiveUnit, zaps int) *LiveItemDTO {
+func NewLiveItem(u *domain.ActiveUnit) *LiveItemDTO {
 	return &LiveItemDTO{
 		UnitID:    u.ID,
 		UnitName:  u.Name,
@@ -220,7 +216,6 @@ func NewLiveItem(u *domain.ActiveUnit, zaps int) *LiveItemDTO {
 		TaskName:  u.TaskName,
 		StartedAt: isoTime(u.StartedAt),
 		User:      u.User,
-		Zaps:      zaps,
 	}
 }
 

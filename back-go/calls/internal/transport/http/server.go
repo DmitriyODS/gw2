@@ -15,6 +15,7 @@ import (
 	"github.com/DmitriyODS/gw2/back-go/calls/internal/endpoint"
 	"github.com/DmitriyODS/gw2/back-go/calls/internal/livekit"
 	"github.com/DmitriyODS/gw2/back-go/calls/internal/service"
+	"github.com/DmitriyODS/gw2/back-go/pkg/httpserver"
 	"github.com/DmitriyODS/gw2/back-go/pkg/pasetoauth"
 )
 
@@ -51,17 +52,10 @@ func authSource(users domain.UserReader) pasetoauth.AuthSource {
 func NewServer(eps endpoint.Endpoints, svc service.CallService, lk *livekit.Client,
 	users domain.UserReader, verifier *pasetoauth.Verifier, log *slog.Logger) *Server {
 
-	app := fiber.New(fiber.Config{
-		AppName:               "gw2-callsvc",
-		DisableStartupMessage: true,
-		// Тело вебхука читаем как есть; JSON-парсинг — вручную в хендлерах.
-	})
+	// Тело вебхука читаем как есть; JSON-парсинг — вручную в хендлерах.
+	app := httpserver.New(httpserver.Config{AppName: "gw2-callsvc", Log: log})
 	auth := pasetoauth.NewMiddleware(verifier, authSource(users))
 	h := &handlers{eps: eps, svc: svc, lk: lk, auth: auth, log: log}
-
-	app.Get("/healthz", func(c *fiber.Ctx) error {
-		return c.JSON(fiber.Map{"ok": true})
-	})
 
 	api := app.Group("/api/calls")
 	api.Get("/history", auth.RequireAuth, h.history)

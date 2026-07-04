@@ -42,10 +42,11 @@
 
     <div class="stats-scroll">
     <!-- Нет активной компании (например, супер-админ): статистика — контент компании. -->
-    <div v-if="!hasCompany" class="empty-state">
-      <span class="material-symbols-outlined">domain_disabled</span>
-      <p>Статистика доступна в контексте компании. Выберите или создайте компанию.</p>
-    </div>
+    <EmptyState
+      v-if="!hasCompany"
+      icon="domain_disabled"
+      subtitle="Статистика доступна в контексте компании. Выберите или создайте компанию."
+    />
 
     <div v-else-if="loading" class="loading-state">
       <ProgressSpinner />
@@ -317,10 +318,7 @@
     </template>
 
     <!-- Пустое состояние -->
-    <div v-else-if="!loading" class="empty-state">
-      <span class="material-symbols-outlined">bar_chart</span>
-      <p>Нет данных за выбранный период</p>
-    </div>
+    <EmptyState v-else-if="!loading" icon="bar_chart" subtitle="Нет данных за выбранный период" />
     </div>
   </div>
 </template>
@@ -346,6 +344,7 @@ import StatsPeriodControl from '@/components/stats/StatsPeriodControl.vue'
 import StatsWidget from '@/components/stats/StatsWidget.vue'
 import CalendarGrid from '@/components/stats/CalendarGrid.vue'
 import SegmentedTabs from '@/components/common/SegmentedTabs.vue'
+import EmptyState from '@/components/common/EmptyState.vue'
 import DataTable from 'primevue/datatable'
 import Column from 'primevue/column'
 import ProgressSpinner from 'primevue/progressspinner'
@@ -662,25 +661,6 @@ onMounted(() => {
 .resp-num.closed {
   background: var(--color-success-container, var(--color-surface-high));
   color: var(--color-on-success-container, var(--color-success));
-}
-
-.empty-state {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 12px;
-  padding: 80px;
-  color: var(--color-text-dim);
-}
-
-.empty-state .material-symbols-outlined {
-  font-size: 56px;
-  color: var(--color-outline-dim);
-}
-
-.empty-state p {
-  margin: 0;
-  font-size: 15px;
 }
 
 .stats-grid {

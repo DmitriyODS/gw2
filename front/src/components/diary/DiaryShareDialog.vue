@@ -11,7 +11,8 @@
         <h4 class="ds-title"><span class="material-symbols-outlined">group</span> Доступ людям</h4>
         <p class="ds-note">
           Выбранные пользователи увидят этот ежедневник у себя во вкладке
-          «Поделились» — только для чтения.
+          «Поделились». С правом «отмечать» они смогут закрывать записи как
+          выполненные — удобно, чтобы раздавать задачи списком.
         </p>
 
         <div class="ds-search">
@@ -34,6 +35,10 @@
           <li v-for="m in members" :key="m.user_id" class="ds-member">
             <img :src="avatarOf({ id: m.user_id, avatar_path: m.avatar_path })" class="ds-ava" alt="" />
             <span class="ds-mname">{{ m.fio }}</span>
+            <label class="ds-check" :title="m.can_check ? 'Может отмечать записи выполненными' : 'Только просмотр'">
+              <input type="checkbox" :checked="m.can_check" :disabled="busyUser === m.user_id" @change="setCanCheck(m, $event.target.checked)" />
+              <span>Отмечать</span>
+            </label>
             <button class="ds-remove" title="Закрыть доступ" @click="remove(m.user_id)">
               <span class="material-symbols-outlined">close</span>
             </button>
@@ -145,13 +150,27 @@ watch(query, (q) => {
 async function add(u) {
   busyUser.value = u.id
   try {
-    const m = await api.addMember(props.diaryId, u.id)
+    // Новому адресату сразу даём право отметки — основной сценарий раздачи задач.
+    const m = await api.addMember(props.diaryId, u.id, true)
     members.value.push(m)
     results.value = results.value.filter((x) => x.id !== u.id)
     query.value = ''
     notif.success(`Доступ открыт: ${u.fio}`)
   } catch (e) {
     notif.error(e?.message || 'Не удалось открыть доступ')
+  } finally {
+    busyUser.value = null
+  }
+}
+
+// Переключение права «отмечать выполнение» — идемпотентный upsert участника.
+async function setCanCheck(m, value) {
+  busyUser.value = m.user_id
+  try {
+    await api.addMember(props.diaryId, m.user_id, value)
+    m.can_check = value
+  } catch (e) {
+    notif.error(e?.message || 'Не удалось изменить право')
   } finally {
     busyUser.value = null
   }
@@ -221,6 +240,8 @@ function close() { emit('update:modelValue', false) }
 .ds-member { display: flex; align-items: center; gap: 10px; padding: 6px 8px; border-radius: var(--radius-md); background: var(--color-surface-high); }
 .ds-mname { flex: 1; min-width: 0; font-weight: 600; color: var(--color-text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ds-ava { width: 30px; height: 30px; border-radius: 50%; object-fit: cover; flex-shrink: 0; }
+.ds-check { flex-shrink: 0; display: inline-flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 600; color: var(--color-text-dim); cursor: pointer; user-select: none; }
+.ds-check input { accent-color: var(--color-primary); cursor: pointer; }
 .ds-remove { flex-shrink: 0; width: 30px; height: 30px; display: grid; place-items: center; border: none; background: none; cursor: pointer; color: var(--color-text-dim); border-radius: var(--radius-full); }
 .ds-remove:hover { background: var(--color-surface); color: var(--color-error); }
 

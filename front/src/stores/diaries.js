@@ -36,8 +36,11 @@ export const useDiariesStore = defineStore('diaries', () => {
   let fetchCtrl = null
 
   const selected = computed(() => diaries.value.find((d) => d.id === selectedId.value) || null)
-  // Read-only: чужой ежедневник (вкладка «Поделились»).
+  // Read-only: чужой ежедневник (вкладка «Поделились») — структуру не правим.
   const readonly = computed(() => tab.value === 'shared' || selected.value?.shared === true)
+  // Отмечать выполнение может владелец и адресат с правом can_check
+  // (сценарий «руководитель раздаёт задачи, сотрудник закрывает»).
+  const canToggle = computed(() => !readonly.value || selected.value?.can_check === true)
 
   const range = computed(() => {
     const base = cursor.value
@@ -61,8 +64,8 @@ export const useDiariesStore = defineStore('diaries', () => {
 
   function myId() { return useAuthStore().userId ?? useAuthStore().user?.id ?? null }
 
-  async function fetchDiaries() {
-    loadingList.value = true
+  async function fetchDiaries({ silent = false } = {}) {
+    if (!silent) loadingList.value = true
     try {
       const data = await api.getDiaries(tab.value)
       diaries.value = data.diaries ?? []
@@ -70,7 +73,7 @@ export const useDiariesStore = defineStore('diaries', () => {
         selectedId.value = null
       }
     } finally {
-      loadingList.value = false
+      if (!silent) loadingList.value = false
     }
   }
 
@@ -192,6 +195,46 @@ export const useDiariesStore = defineStore('diaries', () => {
   async function toggleDone(entryId, done) {
     await api.setEntryDone(selectedId.value, entryId, done)
     await fetchEntries({ silent: true })
+    bumpCounts(selectedId.value, done)
+  }
+
+  // Локальная поправка прогресса в списке (не ждём refetch всего списка).
+  function bumpCounts(diaryId, done) {
+    const d = diaries.value.find((x) => x.id === diaryId)
+    if (!d) return
+    const delta = done ? 1 : -1
+    d.done_count = Math.max(0, (d.done_count || 0) + delta)
+    d.active_count = Math.max(0, (d.active_count || 0) - delta)
+  }
+
+  // Ручной порядок записей дня (перетаскивание в модалке дня). Оптимистично
+  // переставляем записи дня в сторе (их относительный порядок в entries),
+  // затем сохраняем; при ошибке — refetch вернёт серверный порядок.
+  async function reorderDay(entryDate, ids) {
+    const dayIdx = []
+    entries.value.forEach((e, i) => { if (e.entry_date === entryDate) dayIdx.push(i) })
+    const byId = new Map(entries.value.filter((e) => e.entry_date === entryDate).map((e) => [e.id, e]))
+    if (dayIdx.length === ids.length && ids.every((id) => byId.has(id))) {
+      const next = entries.value.slice()
+      ids.forEach((id, k) => { next[dayIdx[k]] = byId.get(id) })
+      entries.value = next
+    }
+    try {
+      await api.reorderEntries(selectedId.value, entryDate, ids)
+    } catch (e) {
+      await fetchEntries({ silent: true })
+      throw e
+    }
+  }
+
+  // Перенос записи drag-and-drop'ом: на другой день и/или в другой ежедневник.
+  async function moveEntry(entryId, { diaryId = null, entryDate = null } = {}) {
+    const body = {}
+    if (diaryId != null) body.diary_id = diaryId
+    if (entryDate != null) body.entry_date = entryDate
+    await api.moveEntry(selectedId.value, entryId, body)
+    await fetchEntries({ silent: true })
+    if (diaryId != null && diaryId !== selectedId.value) fetchDiaries({ silent: true })
   }
   async function linkTask(entryId, taskId) {
     const e = await api.linkEntryTask(selectedId.value, entryId, taskId)
@@ -229,23 +272,26 @@ export const useDiariesStore = defineStore('diaries', () => {
   function upsertDiary(payload) {
     const i = diaries.value.findIndex((d) => d.id === payload.id)
     const d = { id: payload.id, owner_id: payload.owner_id, name: payload.name, position: payload.position,
-      shared: !!payload.shared, owner_name: payload.owner_name, owner_avatar: payload.owner_avatar }
+      shared: !!payload.shared, can_check: !!payload.can_check,
+      owner_name: payload.owner_name, owner_avatar: payload.owner_avatar }
     if (i === -1) diaries.value.push(d)
     else diaries.value[i] = { ...diaries.value[i], ...d }
   }
 
   function applyEntrySocket(payload) {
+    // Прогресс в списке меняется от любых событий записей — обновляем счётчики.
+    fetchDiaries({ silent: true })
     if (payload?.diary_id !== selectedId.value) return
     fetchEntries({ silent: true })
   }
 
   return {
-    tab, diaries, loadingList, selectedId, selected, readonly,
+    tab, diaries, loadingList, selectedId, selected, readonly, canToggle,
     subtab, entries, archive, dayDone, loadingEntries, entriesByDay,
     view, cursor, search, range,
     fetchDiaries, setTab, select, setSubtab, setView, setCursor, step, today, setSearch, fetchEntries,
     createDiary, renameDiary, removeDiary,
-    createEntry, updateEntry, toggleDone, linkTask, deleteEntry, bulkDelete,
+    createEntry, updateEntry, toggleDone, moveEntry, reorderDay, linkTask, deleteEntry, bulkDelete,
     applyDiarySocket, applyEntrySocket,
   }
 })

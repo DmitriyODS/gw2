@@ -2,6 +2,7 @@ package com.kodass.groovework.ui.diary
 
 import android.widget.Toast
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -18,6 +19,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.DriveFileMove
 import androidx.compose.material.icons.automirrored.filled.Undo
 import androidx.compose.material.icons.filled.AddTask
 import androidx.compose.material.icons.filled.CalendarMonth
@@ -27,6 +29,7 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Link
 import androidx.compose.material.icons.filled.Schedule
+import androidx.compose.material.icons.outlined.Book
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
@@ -35,7 +38,9 @@ import androidx.compose.material3.DatePickerDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
@@ -61,6 +66,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.kodass.groovework.AppContainer
+import com.kodass.groovework.ui.common.LinkifiedText
 import com.kodass.groovework.ui.tasks.CreateTaskSheet
 import com.kodass.groovework.ui.tasks.TasksViewModel
 import java.time.LocalDate
@@ -93,6 +99,7 @@ fun DiaryEntryScreen(
 
     var confirmDelete by remember { mutableStateOf(false) }
     var showCreateTask by remember { mutableStateOf(false) }
+    var showMove by remember { mutableStateOf(false) }
 
     val title = when {
         viewModel.isNew -> "Новая запись"
@@ -111,6 +118,13 @@ fun DiaryEntryScreen(
                 },
                 actions = {
                     if (!viewModel.isNew && !viewModel.readonly && !viewModel.loading) {
+                        // Перенос в другой свой ежедневник (смена даты — через редактирование).
+                        IconButton(onClick = {
+                            showMove = true
+                            viewModel.loadOwnDiaries()
+                        }) {
+                            Icon(Icons.AutoMirrored.Filled.DriveFileMove, contentDescription = "Перенести")
+                        }
                         IconButton(onClick = { confirmDelete = true }) {
                             Icon(Icons.Filled.Delete, contentDescription = "Удалить")
                         }
@@ -166,6 +180,20 @@ fun DiaryEntryScreen(
                                     Text("Изменить", modifier = Modifier.padding(start = 6.dp))
                                 }
                             }
+                            // Чужой ежедневник с правом отметки (can_check): только
+                            // «выполнено/вернуть», без редактирования.
+                            viewModel.canCheck -> {
+                                OutlinedButton(
+                                    onClick = { viewModel.toggleDone(onSuccess = {}) },
+                                    modifier = Modifier.weight(1f),
+                                ) {
+                                    Icon(
+                                        if (viewModel.done) Icons.AutoMirrored.Filled.Undo else Icons.Filled.Check,
+                                        contentDescription = null, modifier = Modifier.size(18.dp),
+                                    )
+                                    Text(if (viewModel.done) "В активные" else "Выполнено", modifier = Modifier.padding(start = 6.dp))
+                                }
+                            }
                         }
                     }
                 }
@@ -197,6 +225,44 @@ fun DiaryEntryScreen(
             },
             dismissButton = { TextButton(onClick = { confirmDelete = false }) { Text("Отмена") } },
         )
+    }
+
+    // Перенос записи в другой свой ежедневник (аналог веб-DnD между ежедневниками).
+    if (showMove) {
+        ModalBottomSheet(onDismissRequest = { showMove = false }) {
+            Column(modifier = Modifier.fillMaxWidth().navigationBarsPadding().padding(bottom = 16.dp)) {
+                Text(
+                    "Перенести в ежедневник",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.SemiBold,
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                )
+                when {
+                    viewModel.loadingOwnDiaries -> Box(
+                        modifier = Modifier.fillMaxWidth().padding(24.dp),
+                        contentAlignment = Alignment.Center,
+                    ) { CircularProgressIndicator() }
+                    viewModel.ownDiaries.isEmpty() -> Text(
+                        "Других ежедневников нет",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
+                    )
+                    else -> viewModel.ownDiaries.forEach { d ->
+                        ListItem(
+                            headlineContent = { Text(d.name) },
+                            leadingContent = { Icon(Icons.Outlined.Book, contentDescription = null) },
+                            modifier = Modifier.fillMaxWidth().clickable(enabled = !viewModel.moving) {
+                                viewModel.moveTo(d.id) {
+                                    showMove = false
+                                    onBack()
+                                }
+                            },
+                        )
+                    }
+                }
+            }
+        }
     }
 
     // Создание задачи из записи (переиспользуем лист создания задачи). После
@@ -274,7 +340,7 @@ private fun ViewBody(viewModel: DiaryEntryViewModel, onCreateTask: () -> Unit) {
         }
         Text(viewModel.title, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
         if (viewModel.description.isNotBlank()) {
-            Text(viewModel.description, style = MaterialTheme.typography.bodyLarge)
+            LinkifiedText(viewModel.description, style = MaterialTheme.typography.bodyLarge)
         }
 
         if (viewModel.linkedTaskId != null) {

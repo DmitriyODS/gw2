@@ -429,7 +429,10 @@ fun MainScreen(container: AppContainer) {
                 AppearanceScreen(container = container, onBack = { navController.popBackStack() })
             }
             composable("profile") {
-                ProfileScreen(container = container)
+                ProfileScreen(
+                    container = container,
+                    onOpenAbout = { navController.navigateTop("about") },
+                )
             }
             composable("about") {
                 AboutScreen(

@@ -243,6 +243,55 @@ func (r *PlatformRepo) ActiveUnitForUser(ctx context.Context, userID int64) (int
 	return unitID, companyID, nil
 }
 
+// DaySummary — активность компании за интервал [start, end) для события
+// «Итоги дня»: юниты и часы (незавершённые считаются по текущему моменту),
+// закрытые задачи и лидер дня по часам юнитов.
+func (r *PlatformRepo) DaySummary(ctx context.Context, companyID int64,
+	start, end time.Time) (*domain.DaySummaryStats, error) {
+
+	var s domain.DaySummaryStats
+	err := r.pool.QueryRow(ctx, `
+		SELECT count(id), COALESCE(sum(`+hoursExpr+`), 0)
+		FROM units un
+		WHERE un.company_id = $1 AND un.datetime_start >= $2 AND un.datetime_start < $3`,
+		companyID, start, end,
+	).Scan(&s.UnitsCount, &s.TotalHours)
+	if err != nil {
+		return nil, err
+	}
+	err = r.pool.QueryRow(ctx, `
+		SELECT count(id) FROM tasks
+		WHERE company_id = $1 AND is_archived = TRUE
+		  AND archived_at >= $2 AND archived_at < $3`,
+		companyID, start, end,
+	).Scan(&s.TasksClosed)
+	if err != nil {
+		return nil, err
+	}
+	var leaderID int64
+	var fio string
+	var avatar *string
+	var hours float64
+	err = r.pool.QueryRow(ctx, `
+		SELECT u.id, u.fio, u.avatar_path, COALESCE(sum(`+hoursExpr+`), 0) AS h
+		FROM units un JOIN users u ON u.id = un.user_id
+		WHERE un.company_id = $1 AND un.datetime_start >= $2 AND un.datetime_start < $3
+		GROUP BY u.id, u.fio, u.avatar_path
+		ORDER BY h DESC
+		LIMIT 1`, companyID, start, end,
+	).Scan(&leaderID, &fio, &avatar, &hours)
+	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
+		return nil, err
+	}
+	if err == nil {
+		s.LeaderID = &leaderID
+		s.LeaderFIO = fio
+		s.LeaderAvatar = avatar
+		s.LeaderHours = hours
+	}
+	return &s, nil
+}
+
 // ─────────────── статистика (инструменты Грувика, дайджест) ────────
 
 const hoursExpr = `EXTRACT(EPOCH FROM (COALESCE(un.datetime_end, now()) - un.datetime_start)) / 3600`

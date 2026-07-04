@@ -17,9 +17,9 @@ import (
 	"github.com/DmitriyODS/gw2/back-go/pkg/bootstrap"
 	"github.com/DmitriyODS/gw2/back-go/pkg/events"
 	"github.com/DmitriyODS/gw2/back-go/pkg/pasetoauth"
+	"github.com/DmitriyODS/gw2/back-go/pkg/records"
 	"github.com/DmitriyODS/gw2/back-go/pkg/storage"
 	"github.com/DmitriyODS/gw2/back-go/registry/internal/endpoint"
-	"github.com/DmitriyODS/gw2/back-go/registry/internal/filestore"
 	"github.com/DmitriyODS/gw2/back-go/registry/internal/repository/postgres"
 	"github.com/DmitriyODS/gw2/back-go/registry/internal/service"
 	httptransport "github.com/DmitriyODS/gw2/back-go/registry/internal/transport/http"
@@ -53,7 +53,7 @@ func main() {
 	users := postgres.NewUserReader(pool)
 	svc := service.New(service.Deps{
 		Repo:  repo,
-		Files: filestore.New(storage.FromEnv(log, uploadFolder)),
+		Files: records.NewFileStore(storage.FromEnv(log, uploadFolder), "registry"),
 		Bus:   events.NewPublisher(rdb, log, "gw2:registry:events"),
 		Log:   log,
 	})

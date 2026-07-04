@@ -3,16 +3,19 @@ import { useNotificationsStore } from '@/stores/notifications.js'
 
 export function registerGrooveSocketHandlers(socket) {
   socket.on('feed:new', (data) => {
+    try { useGrooveStore().applyNewEvent(data) } catch {}
+  })
+
+  // Опорные точки блока «Сейчас в эфире» — сокет-события юнитов tasksvc
+  // (машинных событий ленты unit_started/unit_stopped больше нет).
+  const refreshLive = () => {
     try {
       const groove = useGrooveStore()
-      groove.applyNewEvent(data)
-      // Опорные точки live-блока меняются вместе с юнитами.
-      if (groove.liveLoaded && groove.isMine(data.company_id)
-          && (data.kind === 'unit_started' || data.kind === 'unit_stopped')) {
-        groove.fetchLive().catch(() => {})
-      }
+      if (groove.liveLoaded) groove.fetchLive().catch(() => {})
     } catch {}
-  })
+  }
+  socket.on('unit:started', refreshLive)
+  socket.on('unit:stopped', refreshLive)
 
   socket.on('feed:reaction', (data) => {
     try { useGrooveStore().applyReaction(data) } catch {}
@@ -28,33 +31,6 @@ export function registerGrooveSocketHandlers(socket) {
 
   socket.on('pet:update', (data) => {
     try { useGrooveStore().applyPetUpdate(data) } catch {}
-  })
-
-  socket.on('groove:zap', (data) => {
-    try {
-      useNotificationsStore().notify({
-        severity: 'success',
-        summary: 'Заряд энергии!',
-        detail: `⚡ ${data.from_fio} зарядил(а) вас энергией`,
-      })
-    } catch {}
-  })
-
-  socket.on('groove:zap-count', (data) => {
-    try {
-      const groove = useGrooveStore()
-      if (groove.isMine(data.company_id)) groove.applyZapCount(data)
-    } catch {}
-  })
-
-  socket.on('groove:stroke', (data) => {
-    try {
-      useNotificationsStore().notify({
-        severity: 'info',
-        summary: 'Вашего Грувика погладили',
-        detail: `${data.from_fio} погладил(а) «${data.pet_name}» — вам обоим по груву`,
-      })
-    } catch {}
   })
 
   socket.on('raid:update', (data) => {

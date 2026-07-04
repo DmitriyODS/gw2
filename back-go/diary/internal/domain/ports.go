@@ -1,6 +1,9 @@
 package domain
 
-import "context"
+import (
+	"context"
+	"time"
+)
 
 // Ctx — алиас, чтобы сигнатуры портов не разбухали.
 type Ctx = context.Context
@@ -26,6 +29,12 @@ type DiaryRepository interface {
 	UpdateEntry(ctx Ctx, e *Entry, searchText string) error
 	SetEntryDone(ctx Ctx, id int64, done bool) error
 	SetEntryTask(ctx Ctx, id int64, taskID *int64) error
+	// MoveEntry — перенос записи на другой день и/или в другой ежедневник
+	// (drag-and-drop). Дата — начало дня.
+	MoveEntry(ctx Ctx, id, diaryID int64, date time.Time) error
+	// ReorderEntries — ручной порядок записей дня: ids в желаемом порядке
+	// получают position 1..N (в рамках ежедневника и дня).
+	ReorderEntries(ctx Ctx, diaryID int64, date time.Time, ids []int64) error
 	DeleteEntry(ctx Ctx, id int64) error
 	DeleteEntries(ctx Ctx, diaryID int64, ids []int64) (int64, error)
 	EntriesForExport(ctx Ctx, f EntryListFilter, ids []int64) ([]*Entry, error)
@@ -40,9 +49,11 @@ type DiaryRepository interface {
 	ListMembers(ctx Ctx, diaryID int64) ([]*Member, error)
 	// MemberIDs — id пользователей с адресным доступом (для адресации сокет-событий).
 	MemberIDs(ctx Ctx, diaryID int64) ([]int64, error)
-	// HasMember — есть ли у пользователя адресный доступ к ежедневнику.
-	HasMember(ctx Ctx, diaryID, userID int64) (bool, error)
-	AddMember(ctx Ctx, diaryID, userID int64) error
+	// MemberAccess — адресный доступ пользователя: есть ли он и разрешено ли
+	// ему отмечать записи выполненными.
+	MemberAccess(ctx Ctx, diaryID, userID int64) (found bool, canCheck bool, err error)
+	// AddMember — идемпотентный upsert: повторный вызов обновляет can_check.
+	AddMember(ctx Ctx, diaryID, userID int64, canCheck bool) error
 	RemoveMember(ctx Ctx, diaryID, userID int64) error
 }
 

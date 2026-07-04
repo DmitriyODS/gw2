@@ -44,6 +44,15 @@ export const setEntryDone = (diaryId, entryId, done) =>
 export const linkEntryTask = (diaryId, entryId, taskId) =>
   apiRequest(`/diaries/${diaryId}/records/${entryId}/link`, { method: 'PATCH', body: { task_id: taskId } })
 
+// Перенос записи drag-and-drop'ом: на другой день и/или в другой свой ежедневник.
+// body: { diary_id?, entry_date? } — пустые поля не меняются.
+export const moveEntry = (diaryId, entryId, body) =>
+  apiRequest(`/diaries/${diaryId}/records/${entryId}/move`, { method: 'PATCH', body })
+
+// Ручной порядок записей дня: ids — записи дня в желаемом порядке.
+export const reorderEntries = (diaryId, entryDate, ids) =>
+  apiRequest(`/diaries/${diaryId}/records/reorder`, { method: 'POST', body: { entry_date: entryDate, ids } })
+
 export const deleteEntry = (diaryId, entryId) =>
   apiRequest(`/diaries/${diaryId}/records/${entryId}`, { method: 'DELETE' })
 
@@ -70,8 +79,10 @@ export const revokeShare = (diaryId, shareId) =>
 
 // ── Адресный доступ (поделиться с пользователем) ──
 export const getMembers = (diaryId) => apiRequest(`/diaries/${diaryId}/members`)
-export const addMember = (diaryId, userId) =>
-  apiRequest(`/diaries/${diaryId}/members`, { method: 'POST', body: { user_id: userId } })
+// canCheck — адресату разрешено отмечать записи выполненными. Повторный вызов
+// для того же пользователя обновляет право (upsert).
+export const addMember = (diaryId, userId, canCheck = false) =>
+  apiRequest(`/diaries/${diaryId}/members`, { method: 'POST', body: { user_id: userId, can_check: canCheck } })
 export const removeMember = (diaryId, userId) =>
   apiRequest(`/diaries/${diaryId}/members/${userId}`, { method: 'DELETE' })
 

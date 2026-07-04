@@ -14,4 +14,5 @@ export function registerDiarySocketHandlers(socket) {
   socket.on('diary_entry:updated', (p) => useDiariesStore().applyEntrySocket(p))
   socket.on('diary_entry:deleted', (p) => useDiariesStore().applyEntrySocket(p))
   socket.on('diary_entry:bulk-deleted', (p) => useDiariesStore().applyEntrySocket(p))
+  socket.on('diary_entry:reordered', (p) => useDiariesStore().applyEntrySocket(p))
 }

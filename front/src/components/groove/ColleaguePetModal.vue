@@ -63,52 +63,31 @@
         <span class="material-symbols-outlined">local_fire_department</span>
         {{ pet?.feed_streak ?? 0 }} дн.
       </span>
-      <span v-if="strokesToday" class="cpm-chip cpm-chip-strokes">
-        ❤️ {{ strokesToday }} сегодня
-      </span>
     </div>
 
-    <div class="cpm-actions">
-      <p v-if="isOwn" class="cpm-own-hint">
+    <div v-if="isOwn" class="cpm-actions">
+      <p class="cpm-own-hint">
         <span class="material-symbols-outlined">waving_hand</span>
         Это ваш Грувик
       </p>
-      <template v-else>
-        <button
-          class="cpm-stroke-btn"
-          :class="{ done: strokedByMe }"
-          type="button"
-          :disabled="strokedByMe || stroking"
-          @click="stroke"
-        >
-          <span class="material-symbols-outlined">{{ strokedByMe ? 'favorite' : 'waving_hand' }}</span>
-          {{ strokedByMe ? 'Уже погладили сегодня' : 'Погладить · по груву обоим' }}
-        </button>
-        <p v-if="pet?.sick && !strokedByMe" class="cpm-sick-hint">
-          🤒 Поглаживание лечит больного Грувика
-        </p>
-      </template>
     </div>
   </AppDialog>
 </template>
 
 <script setup>
-import { computed, ref } from 'vue'
+import { computed } from 'vue'
 import AppDialog from '@/components/common/AppDialog.vue'
 import GrooveCoin from '@/components/groove/GrooveCoin.vue'
 import { useGrooveStore } from '@/stores/groove.js'
-import { useNotificationsStore } from '@/stores/notifications.js'
 import { petEmoji, PET_STAGES, PET_SPECIES, PERSONALITIES, SHOP_ITEMS } from '@/utils/groove.js'
 
 const props = defineProps({
   modelValue: { type: Boolean, default: false },
   pet: { type: Object, default: null },
 })
-const emit = defineEmits(['update:modelValue', 'stroked'])
+defineEmits(['update:modelValue'])
 
 const groove = useGrooveStore()
-const notify = useNotificationsStore()
-const stroking = ref(false)
 
 const maxStage = PET_STAGES.length - 1
 
@@ -130,28 +109,12 @@ const personality = computed(() =>
   props.pet?.personality ? PERSONALITIES[props.pet.personality] : null
 )
 const ownedItems = computed(() => props.pet?.accessories || [])
-const strokesToday = computed(() => props.pet?.strokes_today || 0)
-const strokedByMe = computed(() => props.pet?.stroked_by_me || false)
 
 const xpPercent = computed(() => {
   const p = props.pet
   if (!p || !p.next_stage_xp) return 100
   return Math.min(100, Math.round((p.xp / p.next_stage_xp) * 100))
 })
-
-async function stroke() {
-  if (stroking.value || strokedByMe.value) return
-  stroking.value = true
-  try {
-    await groove.strokePet(props.pet.user_id)
-    notify.success(`Вы погладили «${props.pet.name}» — вам обоим по груву ❤`)
-    emit('stroked', props.pet.user_id)
-  } catch (e) {
-    notify.warn(e?.message || 'Не получилось погладить')
-  } finally {
-    stroking.value = false
-  }
-}
 </script>
 
 <style scoped>
@@ -294,38 +257,8 @@ async function stroke() {
   font-weight: 600;
 }
 .cpm-chip .material-symbols-outlined { font-size: 15px; }
-.cpm-chip-strokes { background: color-mix(in oklch, var(--color-error) 14%, transparent); }
 
 .cpm-actions { width: 100%; margin-top: 14px; }
-.cpm-stroke-btn {
-  width: 100%;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  border: none;
-  border-radius: var(--radius-full);
-  background: var(--color-primary);
-  color: var(--color-on-primary);
-  font-size: 14px;
-  font-weight: 600;
-  padding: 12px 18px;
-  cursor: pointer;
-  transition: transform 0.1s, opacity 0.15s;
-}
-.cpm-stroke-btn .material-symbols-outlined { font-size: 18px; }
-.cpm-stroke-btn:active { transform: scale(0.97); }
-.cpm-stroke-btn:disabled { opacity: 0.45; cursor: default; }
-.cpm-stroke-btn.done {
-  background: var(--color-surface-high);
-  color: var(--color-text-dim);
-}
-.cpm-sick-hint {
-  margin: 8px 0 0;
-  font-size: 11.5px;
-  color: var(--color-error);
-  text-align: center;
-}
 .cpm-own-hint {
   display: flex;
   align-items: center;

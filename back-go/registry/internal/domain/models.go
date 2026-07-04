@@ -1,6 +1,10 @@
 package domain
 
-import "time"
+import (
+	"time"
+
+	"github.com/DmitriyODS/gw2/back-go/pkg/records"
+)
 
 // Уровни ролей в компании (общие с authsvc/tasksvc domain.Level*).
 const (
@@ -9,24 +13,21 @@ const (
 	LevelAdmin    = 3
 )
 
-// Типы полей реестра. Набор продублирован во фронте
-// (front/src/utils/registryFields.js) — держать синхронным.
+// Типы полей реестра — общий набор pkg/records (продублирован во фронте,
+// front/src/utils/registryFields.js — держать синхронным).
 const (
-	FieldImage    = "image"    // картинка (превью + полноэкранный просмотр)
-	FieldFile     = "file"     // произвольный файл
-	FieldText     = "text"     // текстовое поле (config.multiline — textarea)
-	FieldNumber   = "number"   // число (config.pattern — опц. regex шаблона)
-	FieldCheckbox = "checkbox" // галочка
-	FieldSelect   = "select"   // выбор из вариантов (config.options, config.multiple)
-	FieldLink     = "link"     // ссылка на сайт
-	FieldDatetime = "datetime" // дата/время (config.year/month_day/time — части)
+	FieldImage    = records.FieldImage
+	FieldFile     = records.FieldFile
+	FieldText     = records.FieldText
+	FieldNumber   = records.FieldNumber
+	FieldCheckbox = records.FieldCheckbox
+	FieldSelect   = records.FieldSelect
+	FieldLink     = records.FieldLink
+	FieldDatetime = records.FieldDatetime
 )
 
 // FieldTypes — допустимые типы (для валидации структуры реестра).
-var FieldTypes = map[string]bool{
-	FieldImage: true, FieldFile: true, FieldText: true, FieldNumber: true,
-	FieldCheckbox: true, FieldSelect: true, FieldLink: true, FieldDatetime: true,
-}
+var FieldTypes = records.FieldTypes
 
 // Registry — реестр компании (таблица-справочник).
 type Registry struct {

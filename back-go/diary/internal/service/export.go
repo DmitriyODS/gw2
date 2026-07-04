@@ -15,7 +15,7 @@ import (
 // nil → только эти записи, иначе все по фильтру (диапазон/поиск). Доступно
 // владельцу и адресату.
 func (s *Service) ExportEntries(ctx context.Context, userID, diaryID int64, p ListParams, ids []int64) ([]byte, string, error) {
-	d, _, err := s.requireReadable(ctx, userID, diaryID)
+	d, _, _, err := s.requireReadable(ctx, userID, diaryID)
 	if err != nil {
 		return nil, "", err
 	}

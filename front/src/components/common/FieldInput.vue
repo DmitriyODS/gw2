@@ -1,5 +1,5 @@
 <template>
-  <div class="cfi">
+  <div class="fi">
     <!-- Текст -->
     <textarea
       v-if="field.type === 'text' && field.config?.multiline"
@@ -22,7 +22,7 @@
     </template>
 
     <!-- Галочка -->
-    <label v-else-if="field.type === 'checkbox'" class="cfi-check">
+    <label v-else-if="field.type === 'checkbox'" class="fi-check">
       <Checkbox :model-value="!!modelValue" binary @update:model-value="emit('update:modelValue', $event)" />
       <span>{{ field.label }}</span>
     </label>
@@ -62,14 +62,14 @@
     />
 
     <!-- Картинка / Файл -->
-    <div v-else-if="field.type === 'image' || field.type === 'file'" class="cfi-file">
-      <div v-if="modelValue?.path" class="cfi-file-cur">
-        <RegistryFieldValue :field="field" :value="modelValue" />
-        <button class="cfi-file-rm" title="Убрать" @click="emit('update:modelValue', null)">
+    <div v-else-if="field.type === 'image' || field.type === 'file'" class="fi-file">
+      <div v-if="modelValue?.path" class="fi-file-cur">
+        <FieldValue :field="field" :value="modelValue" />
+        <button class="fi-file-rm" title="Убрать" @click="emit('update:modelValue', null)">
           <span class="material-symbols-outlined">close</span>
         </button>
       </div>
-      <label class="cfi-upload" :class="{ busy: uploading }">
+      <label class="fi-upload" :class="{ busy: uploading }">
         <input type="file" :accept="field.type === 'image' ? 'image/*' : undefined" hidden @change="onFile" />
         <span class="material-symbols-outlined">{{ uploading ? 'hourglass_top' : 'upload' }}</span>
         {{ uploading ? 'Загрузка…' : (modelValue?.path ? 'Заменить' : 'Загрузить') }}
@@ -84,14 +84,15 @@ import Select from 'primevue/select'
 import MultiSelect from 'primevue/multiselect'
 import Checkbox from 'primevue/checkbox'
 import DatePicker from 'primevue/datepicker'
-import RegistryFieldValue from '@/components/registry/RegistryFieldValue.vue'
-import * as api from '@/api/calendars.js'
+import FieldValue from './FieldValue.vue'
 import { useNotificationsStore } from '@/stores/notifications.js'
 import { compressImage } from '@/utils/imageCompress.js'
 
 const props = defineProps({
   field: { type: Object, required: true },
   modelValue: { default: null },
+  /* Загрузчик файла своего раздела: async (file) => метаданные { path, name, … } */
+  upload: { type: Function, required: true },
 })
 const emit = defineEmits(['update:modelValue'])
 
@@ -119,7 +120,7 @@ async function onFile(e) {
   uploading.value = true
   try {
     const file = props.field.type === 'image' ? await compressImage(picked) : picked
-    const meta = await api.uploadFile(file)
+    const meta = await props.upload(file)
     emit('update:modelValue', meta)
   } catch {
     useNotificationsStore().error('Не удалось загрузить файл')
@@ -131,31 +132,32 @@ async function onFile(e) {
 </script>
 
 <style scoped>
-.cfi { width: 100%; }
-.cfi .ctl { width: 100%; padding: 10px 12px; font: inherit; appearance: none; }
-.cfi textarea.ctl { resize: vertical; }
-.cfi :deep(.p-select),
-.cfi :deep(.p-multiselect),
-.cfi :deep(.p-datepicker) { width: 100%; }
+.fi { width: 100%; }
+/* Глобальный input.ctl задаёт фон/рамку, но не padding — добавляем. */
+.fi .ctl { width: 100%; padding: 10px 12px; font: inherit; appearance: none; }
+.fi textarea.ctl { resize: vertical; }
+.fi :deep(.p-select),
+.fi :deep(.p-multiselect),
+.fi :deep(.p-datepicker) { width: 100%; }
 
-.cfi-check { display: inline-flex; align-items: center; gap: 8px; cursor: pointer; }
+.fi-check { display: inline-flex; align-items: center; gap: 8px; cursor: pointer; }
 
-.cfi-file { display: flex; flex-direction: column; gap: 8px; align-items: flex-start; max-width: 100%; }
-.cfi-file-cur { display: flex; align-items: flex-start; gap: 8px; max-width: 100%; min-width: 0; }
-.cfi-file-cur :deep(.rf-value) { min-width: 0; }
-.cfi-file-rm {
+.fi-file { display: flex; flex-direction: column; gap: 8px; align-items: flex-start; max-width: 100%; }
+.fi-file-cur { display: flex; align-items: flex-start; gap: 8px; max-width: 100%; min-width: 0; }
+.fi-file-cur :deep(.fv-value) { min-width: 0; }
+.fi-file-rm {
   width: 28px; height: 28px; flex-shrink: 0;
   display: grid; place-items: center;
   border: none; border-radius: var(--radius-full);
   background: var(--color-surface-low); color: var(--color-error);
   cursor: pointer;
 }
-.cfi-file-rm:hover { background: var(--color-error-container, var(--color-surface-high)); }
-.cfi-upload {
+.fi-file-rm:hover { background: var(--color-error-container, var(--color-surface-high)); }
+.fi-upload {
   display: inline-flex; align-items: center; gap: 8px;
   padding: 8px 14px; border-radius: var(--radius-full);
   background: var(--color-primary-container); color: var(--color-on-primary-container);
   cursor: pointer; font-size: 14px; font-weight: 600;
 }
-.cfi-upload.busy { opacity: 0.6; pointer-events: none; }
+.fi-upload.busy { opacity: 0.6; pointer-events: none; }
 </style>

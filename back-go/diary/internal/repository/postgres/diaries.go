@@ -32,20 +32,34 @@ func scanDiary(row pgx.Row) (*domain.Diary, error) {
 	return &d, nil
 }
 
+// diaryCounts — прогресс списка: активные/выполненные записи на ежедневник.
+const diaryCounts = `LEFT JOIN (
+		SELECT diary_id,
+		       COUNT(*) FILTER (WHERE NOT done) AS active,
+		       COUNT(*) FILTER (WHERE done)     AS done
+		  FROM diary_records GROUP BY diary_id
+	) c ON c.diary_id = d.id`
+
 func (r *Repo) ListOwned(ctx context.Context, ownerID int64) ([]*domain.Diary, error) {
-	rows, err := r.pool.Query(ctx,
-		`SELECT `+diaryCols+` FROM diaries WHERE owner_id = $1 ORDER BY position, id`, ownerID)
+	rows, err := r.pool.Query(ctx, `
+		SELECT d.id, d.owner_id, d.name, d.position, d.created_at, d.updated_at,
+		       COALESCE(c.active, 0), COALESCE(c.done, 0)
+		  FROM diaries d `+diaryCounts+`
+		 WHERE d.owner_id = $1
+		 ORDER BY d.position, d.id`, ownerID)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
 	out := []*domain.Diary{}
 	for rows.Next() {
-		d, err := scanDiary(rows)
-		if err != nil {
+		var d domain.Diary
+		if err := rows.Scan(&d.ID, &d.OwnerID, &d.Name, &d.Position, &d.CreatedAt, &d.UpdatedAt,
+			&d.ActiveCount, &d.DoneCount); err != nil {
 			return nil, err
 		}
-		out = append(out, d)
+		d.CanCheck = true
+		out = append(out, &d)
 	}
 	return out, rows.Err()
 }
@@ -53,10 +67,11 @@ func (r *Repo) ListOwned(ctx context.Context, ownerID int64) ([]*domain.Diary, e
 func (r *Repo) ListShared(ctx context.Context, userID int64) ([]*domain.Diary, error) {
 	rows, err := r.pool.Query(ctx, `
 		SELECT d.id, d.owner_id, d.name, d.position, d.created_at, d.updated_at,
-		       u.fio, u.avatar_path
+		       u.fio, u.avatar_path, s.can_check,
+		       COALESCE(c.active, 0), COALESCE(c.done, 0)
 		  FROM diary_user_shares s
 		  JOIN diaries d ON d.id = s.diary_id
-		  JOIN users   u ON u.id = d.owner_id
+		  JOIN users   u ON u.id = d.owner_id `+diaryCounts+`
 		 WHERE s.user_id = $1
 		 ORDER BY u.fio, d.name, d.id`, userID)
 	if err != nil {
@@ -67,7 +82,8 @@ func (r *Repo) ListShared(ctx context.Context, userID int64) ([]*domain.Diary, e
 	for rows.Next() {
 		var d domain.Diary
 		if err := rows.Scan(&d.ID, &d.OwnerID, &d.Name, &d.Position, &d.CreatedAt, &d.UpdatedAt,
-			&d.OwnerName, &d.OwnerAvatar); err != nil {
+			&d.OwnerName, &d.OwnerAvatar, &d.CanCheck,
+			&d.ActiveCount, &d.DoneCount); err != nil {
 			return nil, err
 		}
 		d.Shared = true

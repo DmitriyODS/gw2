@@ -5,7 +5,7 @@
         <span class="material-symbols-outlined">pets</span>
         Зоопарк команды
       </h3>
-      <span class="zoo-hint">Нажмите на Грувика, чтобы посмотреть или погладить</span>
+      <span class="zoo-hint">Нажмите на Грувика, чтобы посмотреть, как он растёт</span>
     </header>
 
     <div class="zoo-strip">
@@ -18,18 +18,10 @@
         >
           <span class="zoo-emoji" :class="{ sick: p.sick }">{{ petEmoji(p) }}</span>
           <span v-if="hatOf(p)" class="zoo-hat">{{ hatOf(p) }}</span>
-          <span v-if="p.sick" class="zoo-sick" title="Болеет — поглаживание лечит">🤒</span>
-          <span
-            v-if="p.user_id !== groove.myId"
-            class="zoo-stroke-badge"
-            :class="{ done: p.stroked_by_me }"
-          >
-            <span class="material-symbols-outlined">{{ p.stroked_by_me ? 'favorite' : 'waving_hand' }}</span>
-          </span>
+          <span v-if="p.sick" class="zoo-sick" title="Болеет — хозяину пора поработать">🤒</span>
         </button>
         <span class="zoo-pet-name">{{ p.name }}</span>
         <span class="zoo-owner">{{ firstName(p.user?.fio) }}</span>
-        <span v-if="p.strokes_today" class="zoo-strokes">❤ {{ p.strokes_today }}</span>
       </div>
 
       <p v-if="!pets.length" class="zoo-empty">
@@ -67,8 +59,7 @@ function firstName(fio) {
 }
 
 function figureTitle(p) {
-  if (p.user_id === groove.myId) return 'Ваш Грувик'
-  return p.stroked_by_me ? `${p.name} — сегодня погладили ❤` : `Посмотреть на ${p.name}`
+  return p.user_id === groove.myId ? 'Ваш Грувик' : `Посмотреть на ${p.name}`
 }
 
 function openPet(p) {
@@ -144,23 +135,6 @@ function openPet(p) {
   font-size: 17px;
   transform: rotate(12deg);
 }
-.zoo-stroke-badge {
-  position: absolute;
-  bottom: -4px;
-  right: -4px;
-  width: 22px;
-  height: 22px;
-  border-radius: 50%;
-  background: var(--color-surface);
-  border: 1px solid var(--color-outline-dim);
-  display: grid;
-  place-items: center;
-}
-.zoo-stroke-badge .material-symbols-outlined {
-  font-size: 13px;
-  color: var(--color-text-dim);
-}
-.zoo-stroke-badge.done .material-symbols-outlined { color: var(--color-error); }
 .zoo-pet-name {
   font-size: 12px;
   font-weight: 600;
@@ -177,6 +151,5 @@ function openPet(p) {
   overflow: hidden;
   text-overflow: ellipsis;
 }
-.zoo-strokes { font-size: 10.5px; color: var(--color-error); }
 .zoo-empty { margin: 0; font-size: 12.5px; color: var(--color-text-dim); }
 </style>

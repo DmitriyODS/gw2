@@ -136,13 +136,13 @@
           </Transition>
         </div>
       </header>
-      <div v-else class="chat-empty">
-        <div class="chat-empty-icon">
-          <span class="material-symbols-outlined">chat</span>
-        </div>
-        <h3 class="chat-empty-title">Выберите чат</h3>
-        <p class="chat-empty-text">Откройте беседу слева — или начните новую из списка.</p>
-      </div>
+      <EmptyState
+        v-else
+        class="chat-empty"
+        icon="chat"
+        title="Выберите чат"
+        subtitle="Откройте беседу слева — или начните новую из списка."
+      />
 
       <!-- Баннер закреплённых сообщений. Клик по тексту прокручивает к
            сообщению и листает закреплённые; кнопка справа — открепить. -->
@@ -302,6 +302,7 @@ import AttachTaskDialog from '@/components/messenger/AttachTaskDialog.vue'
 import MessageContextMenu from '@/components/messenger/MessageContextMenu.vue'
 import AvatarLightbox from '@/components/common/AvatarLightbox.vue'
 import AppFab from '@/components/common/AppFab.vue'
+import EmptyState from '@/components/common/EmptyState.vue'
 import ProgressSpinner from 'primevue/progressspinner'
 
 const route = useRoute()
@@ -1107,46 +1108,6 @@ watch(() => route.params.conversationId, async (id) => {
 
 .chat-empty {
   flex: 1;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 10px;
-  color: var(--color-text-dim);
-  text-align: center;
-  padding: 24px;
-}
-
-.chat-empty-icon {
-  width: 96px;
-  height: 96px;
-  border-radius: 50%;
-  background: var(--color-surface-high);
-  color: var(--color-primary);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  margin-bottom: 6px;
-}
-
-.chat-empty-icon .material-symbols-outlined {
-  font-size: 48px;
-  font-variation-settings: 'FILL' 1, 'wght' 400, 'GRAD' 0, 'opsz' 48;
-}
-
-.chat-empty-title {
-  margin: 0;
-  font-size: 18px;
-  font-weight: 600;
-  color: var(--color-text);
-}
-
-.chat-empty-text {
-  margin: 0;
-  font-size: 13.5px;
-  line-height: 1.45;
-  color: var(--color-text-dim);
-  max-width: 320px;
 }
 
 .messages-area {
@@ -1344,17 +1305,6 @@ watch(() => route.params.conversationId, async (id) => {
     gap: 4px !important;
   }
 
-  /* Empty-state правой панели (только если активен чат — на мобиле не виден,
-     но дополнительно поджимаем шрифт). */
-  .chat-empty {
-    padding: 32px 18px;
-  }
-  .chat-empty-icon {
-    width: 72px;
-    height: 72px;
-  }
-  .chat-empty-title { font-size: 17px; }
-  .chat-empty-text { font-size: 13px; }
 }
 
 </style>

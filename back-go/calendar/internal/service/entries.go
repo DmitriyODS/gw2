@@ -2,12 +2,11 @@ package service
 
 import (
 	"context"
-	"regexp"
-	"strconv"
 	"strings"
 	"time"
 
 	"github.com/DmitriyODS/gw2/back-go/calendar/internal/domain"
+	"github.com/DmitriyODS/gw2/back-go/pkg/records"
 )
 
 // EntryList — выборка записей календаря за период.
@@ -181,93 +180,21 @@ func fileValuePath(v any) string {
 
 // buildSearchText — единая строка для поиска (текст/число/дата/список/ссылка).
 func buildSearchText(fields []domain.Field, data map[string]any) string {
-	var b strings.Builder
-	for _, f := range fields {
-		v, ok := data[domain.FieldID(f.ID)]
-		if !ok {
-			continue
-		}
-		if part := domain.SearchContribution(f.Type, v); part != "" {
-			b.WriteString(part)
-			b.WriteByte(' ')
-		}
-	}
-	return strings.TrimSpace(b.String())
+	return records.SearchText(fieldInfos(fields), data)
 }
 
 // coerceData — оставить только значения определённых полей и проверить их по
 // типу (number-маска, варианты select). Неизвестные ключи отбрасываются.
 func coerceData(fields []domain.Field, data map[string]any) (map[string]any, error) {
-	out := map[string]any{}
-	for _, f := range fields {
-		key := domain.FieldID(f.ID)
-		v, ok := data[key]
-		if !ok || v == nil {
-			continue
-		}
-		if err := validateValue(f, v); err != nil {
-			return nil, err
-		}
-		out[key] = v
-	}
-	return out, nil
+	return records.CoerceData(fieldInfos(fields), data)
 }
 
-func validateValue(f domain.Field, v any) error {
-	switch f.Type {
-	case domain.FieldNumber:
-		s := valueString(v)
-		if pat := f.NumberPattern(); pat != "" && s != "" {
-			re, err := regexp.Compile(pat)
-			if err == nil && !re.MatchString(s) {
-				return domain.NewError("VALIDATION",
-					"Значение поля «"+f.Label+"» не соответствует шаблону", 400)
-			}
-		}
-	case domain.FieldSelect:
-		opts := f.FieldOptions()
-		if len(opts) == 0 {
-			return nil
-		}
-		allowed := map[string]bool{}
-		for _, o := range opts {
-			allowed[o] = true
-		}
-		for _, chosen := range selectValues(v) {
-			if !allowed[chosen] {
-				return domain.NewError("VALIDATION",
-					"Недопустимый вариант поля «"+f.Label+"»", 400)
-			}
-		}
+func fieldInfos(fields []domain.Field) []records.FieldInfo {
+	out := make([]records.FieldInfo, len(fields))
+	for i, f := range fields {
+		out[i] = records.FieldInfo{ID: f.ID, Type: f.Type, Label: f.Label, Config: f.Config}
 	}
-	return nil
-}
-
-func valueString(v any) string {
-	if s, ok := v.(string); ok {
-		return s
-	}
-	switch n := v.(type) {
-	case float64:
-		return strconv.FormatFloat(n, 'f', -1, 64)
-	}
-	return ""
-}
-
-func selectValues(v any) []string {
-	switch x := v.(type) {
-	case string:
-		return []string{x}
-	case []any:
-		out := make([]string, 0, len(x))
-		for _, it := range x {
-			if s, ok := it.(string); ok {
-				out = append(out, s)
-			}
-		}
-		return out
-	}
-	return nil
+	return out
 }
 
 func entryPayload(companyID int64, e *domain.Entry) map[string]any {

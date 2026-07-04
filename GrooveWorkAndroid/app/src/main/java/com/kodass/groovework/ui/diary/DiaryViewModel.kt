@@ -40,6 +40,10 @@ class DiaryViewModel(
 
     val readonly: Boolean get() = diary?.shared == true
 
+    // Отметка «выполнено/вернуть» доступна и адресату шаринга, если владелец
+    // разрешил (can_check); редактирование/удаление/создание — только владельцу.
+    val canCheck: Boolean get() = diary?.let { !it.shared || it.canCheck } == true
+
     var subtab by mutableStateOf(DiarySubtab.ACTIVE)
         private set
     var entries by mutableStateOf<List<DiaryEntryDto>>(emptyList())

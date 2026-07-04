@@ -1,6 +1,7 @@
 package com.kodass.groovework.data.update
 
 import android.app.Application
+import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.provider.Settings
@@ -49,12 +50,42 @@ class AppUpdater(
     private val _state = MutableStateFlow<UpdateState>(UpdateState.Idle)
     val state: StateFlow<UpdateState> = _state
 
+    private val prefs = app.getSharedPreferences("app_update", Context.MODE_PRIVATE)
+
     val currentBuild: Long = runCatching {
         app.packageManager.getPackageInfo(app.packageName, 0).longVersionCode
     }.getOrDefault(0L)
 
     private val apkFile: File
         get() = File(app.getExternalFilesDir(null), "groovework-update.apk")
+
+    init {
+        // Мусор после успешного обновления: скачанный APK со сборкой не новее
+        // установленной (или нечитаемый) больше не нужен.
+        scope.launch(Dispatchers.IO) {
+            val file = apkFile
+            if (file.exists()) {
+                val info = app.packageManager.getPackageArchiveInfo(file.path, 0)
+                if (info == null || info.longVersionCode <= currentBuild) file.delete()
+            }
+        }
+    }
+
+    // Автопроверка при старте (после появления сессии): не чаще раза в 6 часов,
+    // ошибки — молча (ручная проверка на экране «О приложении» покажет их сама).
+    fun autoCheck() {
+        if (_state.value !is UpdateState.Idle) return
+        val now = System.currentTimeMillis()
+        if (now - prefs.getLong(KEY_LAST_CHECK, 0L) < AUTO_CHECK_INTERVAL_MS) return
+        scope.launch {
+            try {
+                val serverBuild = apiCall(json) { metaApi.appBuild() }.currentBuild
+                prefs.edit().putLong(KEY_LAST_CHECK, System.currentTimeMillis()).apply()
+                if (serverBuild > currentBuild) _state.value = UpdateState.Available(serverBuild)
+            } catch (_: Exception) {
+            }
+        }
+    }
 
     fun check() {
         when (_state.value) {
@@ -82,6 +113,14 @@ class AppUpdater(
             _state.value = UpdateState.Downloading(0f)
             try {
                 downloadApk { progress -> _state.value = UpdateState.Downloading(progress) }
+                // Проверяем скачанное перед установкой: это наш пакет и сборка не
+                // ниже заявленной — иначе файл битый либо сервер ещё раздаёт старый
+                // APK (version.json при деплое обновляется раньше самого файла).
+                if (!verifyApk(available.build)) {
+                    apkFile.delete()
+                    _state.value = UpdateState.Failed("Файл обновления повреждён — попробуйте ещё раз")
+                    return@launch
+                }
                 _state.value = UpdateState.ReadyToInstall(available.build)
                 launchInstall()
             } catch (_: Exception) {
@@ -120,6 +159,11 @@ class AppUpdater(
         runCatching { app.startActivity(intent) }
     }
 
+    private suspend fun verifyApk(build: Long): Boolean = withContext(Dispatchers.IO) {
+        val info = app.packageManager.getPackageArchiveInfo(apkFile.path, 0)
+        info != null && info.packageName == app.packageName && info.longVersionCode >= build
+    }
+
     private suspend fun downloadApk(onProgress: (Float) -> Unit) = withContext(Dispatchers.IO) {
         val base = normalizeServerUrl(sessionManager.serverUrl.value)
         val response = downloadHttp.newCall(Request.Builder().url("$base/apps/groovework.apk").build()).execute()
@@ -143,5 +187,10 @@ class AppUpdater(
                 }
             }
         }
+    }
+
+    private companion object {
+        const val KEY_LAST_CHECK = "last_check"
+        const val AUTO_CHECK_INTERVAL_MS = 6 * 60 * 60 * 1000L
     }
 }

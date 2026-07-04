@@ -16,13 +16,13 @@ import (
 	"os"
 
 	"github.com/DmitriyODS/gw2/back-go/calendar/internal/endpoint"
-	"github.com/DmitriyODS/gw2/back-go/calendar/internal/filestore"
 	"github.com/DmitriyODS/gw2/back-go/calendar/internal/repository/postgres"
 	"github.com/DmitriyODS/gw2/back-go/calendar/internal/service"
 	httptransport "github.com/DmitriyODS/gw2/back-go/calendar/internal/transport/http"
 	"github.com/DmitriyODS/gw2/back-go/pkg/bootstrap"
 	"github.com/DmitriyODS/gw2/back-go/pkg/events"
 	"github.com/DmitriyODS/gw2/back-go/pkg/pasetoauth"
+	"github.com/DmitriyODS/gw2/back-go/pkg/records"
 	"github.com/DmitriyODS/gw2/back-go/pkg/storage"
 )
 
@@ -54,7 +54,7 @@ func main() {
 	users := postgres.NewUserReader(pool)
 	svc := service.New(service.Deps{
 		Repo:  repo,
-		Files: filestore.New(storage.FromEnv(log, uploadFolder)),
+		Files: records.NewFileStore(storage.FromEnv(log, uploadFolder), "calendar"),
 		Bus:   events.NewPublisher(rdb, log, "gw2:calendar:events"),
 		Log:   log,
 	})

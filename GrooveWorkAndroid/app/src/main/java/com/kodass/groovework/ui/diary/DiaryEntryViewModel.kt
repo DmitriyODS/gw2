@@ -35,6 +35,9 @@ class DiaryEntryViewModel(
 
     val readonly: Boolean get() = diary?.shared == true
 
+    // Отметка «выполнено/вернуть» доступна и адресату шаринга при can_check.
+    val canCheck: Boolean get() = diary?.let { !it.shared || it.canCheck } == true
+
     var editing by mutableStateOf(isNew)
         private set
     var saving by mutableStateOf(false)
@@ -52,6 +55,14 @@ class DiaryEntryViewModel(
     var done by mutableStateOf(false)
         private set
     var linkedTaskId by mutableStateOf<Long?>(null)
+        private set
+
+    // Перенос записи в другой свой ежедневник (лист «Перенести…»).
+    var ownDiaries by mutableStateOf<List<DiaryDto>>(emptyList())
+        private set
+    var loadingOwnDiaries by mutableStateOf(false)
+        private set
+    var moving by mutableStateOf(false)
         private set
 
     init {
@@ -102,6 +113,36 @@ class DiaryEntryViewModel(
                 message = "Задача создана и привязана к записи"
             } catch (e: ApiException) {
                 message = e.message ?: "Задача создана, но привязать не удалось"
+            }
+        }
+    }
+
+    // Цели переноса — свои другие ежедневники.
+    fun loadOwnDiaries() {
+        viewModelScope.launch {
+            loadingOwnDiaries = true
+            try {
+                ownDiaries = repo.diaries("mine").filter { it.id != diaryId }
+            } catch (_: ApiException) {
+                ownDiaries = emptyList()
+            } finally {
+                loadingOwnDiaries = false
+            }
+        }
+    }
+
+    fun moveTo(targetDiaryId: Long, onSuccess: () -> Unit) {
+        if (isNew || moving) return
+        viewModelScope.launch {
+            moving = true
+            try {
+                repo.moveEntry(diaryId, entryId, targetDiaryId)
+                message = "Запись перенесена"
+                onSuccess()
+            } catch (e: ApiException) {
+                message = e.message ?: "Не удалось перенести запись"
+            } finally {
+                moving = false
             }
         }
     }

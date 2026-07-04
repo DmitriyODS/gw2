@@ -46,14 +46,13 @@
         <div v-if="loading" class="state-block">
           <ProgressSpinner />
         </div>
-        <div v-else-if="!visible.length" class="cmp-cards-empty">
-          <div class="empty-icon-circle">
-            <span class="material-symbols-outlined">{{ search ? 'search_off' : 'domain' }}</span>
-          </div>
-          <h3>{{ search ? 'Ничего не нашли' : 'Компаний пока нет' }}</h3>
-          <p v-if="search">Попробуйте уточнить запрос.</p>
-          <p v-else>Создайте компанию — вы станете её администратором.</p>
-        </div>
+        <EmptyState
+          v-else-if="!visible.length"
+          class="cmp-cards-empty"
+          :icon="search ? 'search_off' : 'domain'"
+          :title="search ? 'Ничего не нашли' : 'Компаний пока нет'"
+          :subtitle="search ? 'Попробуйте уточнить запрос.' : 'Создайте компанию — вы станете её администратором.'"
+        />
         <template v-else>
           <article
             v-for="c in visible"
@@ -232,6 +231,7 @@ import AppDialog from '@/components/common/AppDialog.vue'
 import AppDataTable from '@/components/common/AppDataTable.vue'
 import AppFab from '@/components/common/AppFab.vue'
 import CreateCompanyDialog from '@/components/common/CreateCompanyDialog.vue'
+import EmptyState from '@/components/common/EmptyState.vue'
 import { useCompaniesStore } from '@/stores/companies.js'
 import { useNotificationsStore } from '@/stores/notifications.js'
 import { useAuthStore } from '@/stores/auth.js'
@@ -785,27 +785,9 @@ async function doDelete() {
 .card-act .material-symbols-outlined { font-size: 20px; }
 
 .cmp-cards-empty {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 10px;
-  padding: 56px 20px;
   background: var(--color-surface-high);
   border-radius: var(--radius-xl);
-  text-align: center;
 }
-.empty-icon-circle {
-  width: 84px;
-  height: 84px;
-  border-radius: var(--radius-xl);
-  background: var(--color-primary-container);
-  color: var(--color-on-primary-container);
-  display: grid;
-  place-items: center;
-}
-.empty-icon-circle .material-symbols-outlined { font-size: 40px; }
-.cmp-cards-empty h3 { margin: 4px 0 0; color: var(--color-text); font-size: 18px; font-weight: 700; }
-.cmp-cards-empty p { margin: 0; color: var(--color-text-dim); font-size: 14px; max-width: 320px; }
 
 .state-block { display: grid; place-items: center; padding: 48px; }
 

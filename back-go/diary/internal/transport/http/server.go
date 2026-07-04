@@ -15,6 +15,7 @@ import (
 	"github.com/DmitriyODS/gw2/back-go/diary/internal/domain"
 	"github.com/DmitriyODS/gw2/back-go/diary/internal/endpoint"
 	"github.com/DmitriyODS/gw2/back-go/pkg/apierror"
+	"github.com/DmitriyODS/gw2/back-go/pkg/httpserver"
 	"github.com/DmitriyODS/gw2/back-go/pkg/pasetoauth"
 )
 
@@ -43,16 +44,9 @@ func authSource(users domain.UserReader) pasetoauth.AuthSource {
 func NewServer(eps endpoint.Endpoints, users domain.UserReader,
 	verifier *pasetoauth.Verifier, log *slog.Logger) *Server {
 
-	app := fiber.New(fiber.Config{
-		AppName:               "gw2-diarysvc",
-		DisableStartupMessage: true,
-	})
+	app := httpserver.New(httpserver.Config{AppName: "gw2-diarysvc", Log: log})
 	auth := pasetoauth.NewMiddleware(verifier, authSource(users))
 	h := &handlers{eps: eps, log: log}
-
-	app.Get("/healthz", func(c *fiber.Ctx) error {
-		return c.JSON(fiber.Map{"ok": true})
-	})
 
 	// Middleware группы монтируется на весь префикс (Fiber), поэтому публичные
 	// ссылки /api/diaries/shared/* пропускаем мимо авторизации — доступ по
@@ -91,10 +85,12 @@ func NewServer(eps endpoint.Endpoints, users domain.UserReader,
 	api.Get("/:id<int>/export", h.exportEntries)
 	api.Post("/:id<int>/records", h.createEntry)
 	api.Post("/:id<int>/records/bulk-delete", h.bulkDeleteEntries)
+	api.Post("/:id<int>/records/reorder", h.reorderEntries)
 	api.Get("/:id<int>/records/:rid<int>", h.getEntry)
 	api.Patch("/:id<int>/records/:rid<int>", h.updateEntry)
 	api.Patch("/:id<int>/records/:rid<int>/done", h.setDone)
 	api.Patch("/:id<int>/records/:rid<int>/link", h.setLink)
+	api.Patch("/:id<int>/records/:rid<int>/move", h.moveEntry)
 	api.Delete("/:id<int>/records/:rid<int>", h.deleteEntry)
 
 	return &Server{app: app}

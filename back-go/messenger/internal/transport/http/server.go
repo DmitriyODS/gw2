@@ -14,6 +14,7 @@ import (
 
 	"github.com/DmitriyODS/gw2/back-go/messenger/internal/domain"
 	"github.com/DmitriyODS/gw2/back-go/messenger/internal/endpoint"
+	"github.com/DmitriyODS/gw2/back-go/pkg/httpserver"
 	"github.com/DmitriyODS/gw2/back-go/pkg/pasetoauth"
 )
 
@@ -51,19 +52,13 @@ func authSource(users domain.UserReader) pasetoauth.AuthSource {
 func NewServer(eps endpoint.Endpoints, users domain.UserReader,
 	verifier *pasetoauth.Verifier, log *slog.Logger) *Server {
 
-	app := fiber.New(fiber.Config{
-		AppName:               "gw2-msgsvc",
-		DisableStartupMessage: true,
-		// Вложения ≤25МБ проверяются в сервисе; лимит тела — с запасом
-		// (как MAX_CONTENT_LENGTH=50МБ во Flask).
-		BodyLimit: 50 * 1024 * 1024,
+	// Вложения ≤25МБ проверяются в сервисе; лимит тела — с запасом
+	// (как MAX_CONTENT_LENGTH=50МБ во Flask).
+	app := httpserver.New(httpserver.Config{
+		AppName: "gw2-msgsvc", Log: log, BodyLimit: 50 * 1024 * 1024,
 	})
 	auth := pasetoauth.NewMiddleware(verifier, authSource(users))
 	h := &handlers{eps: eps, log: log}
-
-	app.Get("/healthz", func(c *fiber.Ctx) error {
-		return c.JSON(fiber.Map{"ok": true})
-	})
 
 	api := app.Group("/api/messenger", auth.RequireAuth)
 	api.Get("/conversations", h.listConversations)

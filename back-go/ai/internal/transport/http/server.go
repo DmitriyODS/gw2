@@ -19,6 +19,7 @@ import (
 
 	"github.com/DmitriyODS/gw2/back-go/ai/internal/domain"
 	"github.com/DmitriyODS/gw2/back-go/ai/internal/endpoint"
+	"github.com/DmitriyODS/gw2/back-go/pkg/httpserver"
 	"github.com/DmitriyODS/gw2/back-go/pkg/pasetoauth"
 )
 
@@ -55,16 +56,9 @@ func authSource(users domain.UserReader) pasetoauth.AuthSource {
 func NewServer(eps endpoint.Endpoints, users domain.UserReader,
 	verifier *pasetoauth.Verifier, log *slog.Logger) *Server {
 
-	app := fiber.New(fiber.Config{
-		AppName:               "gw2-aisvc",
-		DisableStartupMessage: true,
-	})
+	app := httpserver.New(httpserver.Config{AppName: "gw2-aisvc", Log: log})
 	auth := pasetoauth.NewMiddleware(verifier, authSource(users))
 	h := &handlers{eps: eps, log: log}
-
-	app.Get("/healthz", func(c *fiber.Ctx) error {
-		return c.JSON(fiber.Map{"ok": true})
-	})
 
 	api := app.Group("/api/companies/:companyId<int>/ai-settings", auth.RequireAuth)
 	api.Get("", h.getSettings)

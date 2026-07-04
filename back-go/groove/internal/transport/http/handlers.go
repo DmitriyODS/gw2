@@ -139,25 +139,32 @@ func (h *handlers) deleteComment(c *fiber.Ctx) error {
 	return c.JSON(fiber.Map{"message": "Комментарий удалён"})
 }
 
-// ─────────────────────── кудосы, live, заряды ──────────────────────
+// ───────────────────────── кудосы и live ───────────────────────────
 
 func (h *handlers) sendKudos(c *fiber.Ctx) error {
 	var body struct {
 		ToUserID *int64  `json:"to_user_id"`
+		Category *string `json:"category"`
 		Text     *string `json:"text"`
 	}
 	parseBody(c, &body)
 	if body.ToUserID == nil {
 		return validationError(c, "to_user_id", "Обязательное поле")
 	}
-	if body.Text == nil {
+	if body.Category == nil || strings.TrimSpace(*body.Category) == "" {
+		return validationError(c, "category", "Обязательное поле")
+	}
+	if body.Text == nil || strings.TrimSpace(*body.Text) == "" {
 		return validationError(c, "text", "Обязательное поле")
 	}
-	if n := runeLen(*body.Text); n < 1 || n > 500 {
+	if runeLen(*body.Text) > 500 {
 		return validationError(c, "text", "Длина должна быть от 1 до 500 символов")
 	}
 	_, err := h.eps.SendKudos(c.Context(), endpoint.KudosRequest{
-		Scope: scope(c), ToUserID: *body.ToUserID, Text: *body.Text,
+		Scope:    scope(c),
+		ToUserID: *body.ToUserID,
+		Category: strings.TrimSpace(*body.Category),
+		Text:     *body.Text,
 	})
 	if err != nil {
 		return h.respondError(c, err)
@@ -167,23 +174,6 @@ func (h *handlers) sendKudos(c *fiber.Ctx) error {
 
 func (h *handlers) getLive(c *fiber.Ctx) error {
 	resp, err := h.eps.GetLive(c.Context(), scope(c))
-	if err != nil {
-		return h.respondError(c, err)
-	}
-	return c.JSON(resp)
-}
-
-func (h *handlers) sendZap(c *fiber.Ctx) error {
-	var body struct {
-		ToUserID *int64 `json:"to_user_id"`
-	}
-	parseBody(c, &body)
-	if body.ToUserID == nil {
-		return validationError(c, "to_user_id", "Обязательное поле")
-	}
-	resp, err := h.eps.SendZap(c.Context(), endpoint.ZapRequest{
-		Scope: scope(c), ToUserID: *body.ToUserID,
-	})
 	if err != nil {
 		return h.respondError(c, err)
 	}
@@ -326,19 +316,16 @@ func (h *handlers) getZoo(c *fiber.Ctx) error {
 	return c.JSON(resp)
 }
 
-func (h *handlers) strokePet(c *fiber.Ctx) error {
-	targetID, _ := c.ParamsInt("user_id")
-	resp, err := h.eps.StrokePet(c.Context(), endpoint.StrokeRequest{
-		Scope: scope(c), TargetUserID: int64(targetID),
-	})
+func (h *handlers) getRaid(c *fiber.Ctx) error {
+	resp, err := h.eps.GetRaid(c.Context(), scope(c))
 	if err != nil {
 		return h.respondError(c, err)
 	}
 	return c.JSON(resp)
 }
 
-func (h *handlers) getRaid(c *fiber.Ctx) error {
-	resp, err := h.eps.GetRaid(c.Context(), scope(c))
+func (h *handlers) getRating(c *fiber.Ctx) error {
+	resp, err := h.eps.GetRating(c.Context(), scope(c))
 	if err != nil {
 		return h.respondError(c, err)
 	}

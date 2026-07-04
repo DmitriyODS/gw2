@@ -11,26 +11,15 @@
           <span v-if="c.is_bot" class="fc-bot-tag">ИИ</span>
           <span class="fc-time">{{ timeOf(c.created_at) }}</span>
         </div>
-        <div v-if="quoted(c)" class="fc-quote">↳ {{ quoted(c) }}</div>
         <p class="fc-text">{{ c.text }}</p>
-        <div class="fc-actions">
-          <button class="fc-link" type="button" @click="replyTo = c">Ответить</button>
+        <div v-if="canDelete(c)" class="fc-actions">
           <button
-            v-if="canDelete(c)"
             class="fc-link danger"
             type="button"
             @click="remove(c)"
           >Удалить</button>
         </div>
       </div>
-    </div>
-
-    <div v-if="replyTo" class="fc-replying">
-      <span class="material-symbols-outlined">reply</span>
-      <span class="fc-replying-text">Ответ: {{ shortText(replyTo) }}</span>
-      <button class="fc-link" type="button" @click="replyTo = null" aria-label="Отменить ответ">
-        <span class="material-symbols-outlined">close</span>
-      </button>
     </div>
 
     <form class="fc-input" @submit.prevent="send">
@@ -64,8 +53,8 @@ const { myLevel, ROLES } = usePermission()
 const loading = ref(false)
 const sending = ref(false)
 const text = ref('')
-const replyTo = ref(null)
 
+// Комментарии плоские: старые ответы (reply_to_id) рендерятся общим списком.
 const comments = computed(() => groove.commentsByEvent[props.eventId] || [])
 
 onMounted(async () => {
@@ -78,19 +67,6 @@ function timeOf(iso) {
   return new Date(iso).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })
 }
 
-function shortText(c) {
-  const t = c.text || ''
-  return t.length > 60 ? t.slice(0, 60) + '…' : t
-}
-
-function quoted(c) {
-  if (!c.reply_to_id) return null
-  const parent = comments.value.find(x => x.id === c.reply_to_id)
-  if (!parent) return null
-  const name = parent.is_bot ? 'Грувик' : (parent.author?.fio || '')
-  return `${name}: ${shortText(parent)}`
-}
-
 function canDelete(c) {
   if (c.is_bot) return myLevel.value >= ROLES.ADMIN
   return c.author?.id === groove.myId || myLevel.value >= ROLES.ADMIN
@@ -100,9 +76,8 @@ async function send() {
   if (!text.value || sending.value) return
   sending.value = true
   try {
-    await groove.addComment(props.eventId, text.value, replyTo.value?.id || null)
+    await groove.addComment(props.eventId, text.value)
     text.value = ''
-    replyTo.value = null
   } catch (e) {
     notify.error(e?.message || 'Не удалось отправить комментарий')
   } finally {
@@ -155,16 +130,6 @@ async function remove(c) {
   color: var(--color-on-tertiary-container);
 }
 .fc-time { font-size: 11px; color: var(--color-text-dim); }
-.fc-quote {
-  font-size: 12px;
-  color: var(--color-text-dim);
-  border-left: 2px solid var(--color-outline-dim);
-  padding-left: 8px;
-  margin: 2px 0;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
 .fc-text { margin: 2px 0 0; font-size: 13.5px; line-height: 1.45; word-break: break-word; }
 .fc-item.bot .fc-text { font-style: italic; }
 .fc-actions { display: flex; gap: 10px; margin-top: 2px; }
@@ -180,23 +145,6 @@ async function remove(c) {
 }
 .fc-link.danger { color: var(--color-error); }
 .fc-link .material-symbols-outlined { font-size: 16px; }
-.fc-replying {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 12px;
-  color: var(--color-text-dim);
-  background: var(--color-surface-high);
-  border-radius: var(--radius-md, 10px);
-  padding: 4px 8px;
-}
-.fc-replying .material-symbols-outlined { font-size: 16px; }
-.fc-replying-text {
-  flex: 1;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
 .fc-input { display: flex; gap: 6px; }
 .fc-input input {
   flex: 1;

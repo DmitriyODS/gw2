@@ -22,6 +22,9 @@
       <div class="raid-hp-bar">
         <div class="raid-hp-fill" :style="{ width: hpPercent + '%' }"></div>
       </div>
+      <p v-if="raid.my_closed != null" class="raid-my">
+        Твой вклад: <strong>{{ raid.my_closed }}</strong> из {{ raid.target }}
+      </p>
     </div>
 
     <p class="raid-note">
@@ -125,6 +128,12 @@ const daysLabel = computed(() => {
   transition: width 0.6s ease;
 }
 .defeated .raid-hp-fill { background: var(--color-success); }
+.raid-my {
+  margin: 6px 0 0;
+  font-size: 12px;
+  color: var(--color-text-dim);
+}
+.raid-my strong { color: var(--color-text); }
 .raid-note {
   margin: 0;
   font-size: 12.5px;

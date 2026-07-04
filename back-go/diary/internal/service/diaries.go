@@ -18,13 +18,15 @@ func (s *Service) ListShared(ctx context.Context, userID int64) ([]*domain.Diary
 }
 
 // GetDiary — один ежедневник, доступный пользователю (свой или открытый адресно).
-// Поле Shared проставляется для чужого, чтобы фронт показал read-only.
+// Поле Shared проставляется для чужого, чтобы фронт показал read-only; CanCheck —
+// можно ли отмечать записи выполненными.
 func (s *Service) GetDiary(ctx context.Context, userID, id int64) (*domain.Diary, error) {
-	d, canEdit, err := s.requireReadable(ctx, userID, id)
+	d, canEdit, canCheck, err := s.requireReadable(ctx, userID, id)
 	if err != nil {
 		return nil, err
 	}
 	d.Shared = !canEdit
+	d.CanCheck = canCheck
 	return d, nil
 }
 
@@ -70,7 +72,7 @@ func (s *Service) DeleteDiary(ctx context.Context, userID, id int64) error {
 func diaryPayload(d *domain.Diary) map[string]any {
 	return map[string]any{
 		"id": d.ID, "owner_id": d.OwnerID, "name": d.Name,
-		"position": d.Position, "shared": d.Shared,
+		"position": d.Position, "shared": d.Shared, "can_check": d.CanCheck,
 		"owner_name": d.OwnerName, "owner_avatar": d.OwnerAvatar,
 	}
 }

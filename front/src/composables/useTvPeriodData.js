@@ -5,6 +5,8 @@ export function useTvPeriodData(makeRange) {
   const commonByPeriod = ref({})
   const extendedByPeriod = ref({})
   const loading = ref(false)
+  // Момент последнего УСПЕШНОГО обновления — для честного LIVE-индикатора.
+  const lastSuccessAt = ref(0)
   const periodLoadPromises = new Map()
 
   async function loadPeriod(period, { silent = false } = {}) {
@@ -20,8 +22,9 @@ export function useTvPeriodData(makeRange) {
         ])
         commonByPeriod.value = { ...commonByPeriod.value, [period]: common }
         extendedByPeriod.value = { ...extendedByPeriod.value, [period]: extended }
+        lastSuccessAt.value = Date.now()
       } catch {
-        // TV mode is unattended; keep the last good frame.
+        // Табло на стене — ошибки молчим, держим последний удачный кадр.
       } finally {
         if (!silent) loading.value = false
         periodLoadPromises.delete(period)
@@ -36,6 +39,7 @@ export function useTvPeriodData(makeRange) {
     commonByPeriod,
     extendedByPeriod,
     loading,
+    lastSuccessAt,
     loadPeriod,
   }
 }

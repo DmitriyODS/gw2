@@ -122,6 +122,18 @@ preflight() {
 }
 preflight
 
+# 0b. Пересборка ВСЕХ Go-модулей до запуска. Ошибка компиляции валит скрипт
+#     сразу, а не молча роняет сервис в фоне; заодно прогревается build-кеш —
+#     go run ниже стартует мгновенно. `go build ./...` из корня workspace не
+#     работает (back-go без своего go.mod), поэтому обходим модули через -C.
+printf "\033[1m▶ Сборка Go-сервисов...\033[0m\n"
+for mod in pkg migrate calls auth messenger ai groove tasks gateway push mail registry calendar diary; do
+    printf "  %s" "$mod"
+    go build -C "$ROOT/back-go/$mod" ./...
+    printf "\033[32m ✓\033[0m\n"
+done
+printf "\033[32m  Скомпилировано\033[0m\n\n"
+
 # 1. Инфраструктура (db + redis + livekit). Приложения в dev-оверлее за
 #    профилем "full" и не стартуют — бегут на хосте ниже.
 printf "\033[1m▶ DB + Redis + LiveKit...\033[0m\n"

@@ -38,7 +38,13 @@
       </template>
     </div>
     <p class="pet-subtitle">{{ stageTitle }}<template v-if="speciesTitle"> · {{ speciesTitle }}</template></p>
-    <p v-if="personality" class="pet-personality">{{ personality.emoji }} {{ personality.title }}</p>
+
+    <!-- Характер: название + критерий, по которому он присвоен
+         (пересчитывается по юнитам хозяина за 21 день). -->
+    <div v-if="personality" class="pet-personality">
+      <span class="pet-personality-title">{{ personality.emoji }} {{ personality.title }}</span>
+      <span v-if="personality.desc" class="pet-personality-desc">{{ personality.desc }}</span>
+    </div>
 
     <div v-if="pet.sick" class="pet-sick-bar">
       <div class="pet-sick-head">
@@ -562,13 +568,23 @@ async function toggleEquip(item) {
 }
 
 .pet-personality {
-  margin: 4px 0 0;
-  font-size: 12px;
-  font-weight: 600;
-  padding: 3px 10px;
-  border-radius: var(--radius-full);
+  margin: 6px 0 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  padding: 7px 14px;
+  border-radius: 14px;
   background: var(--color-tertiary-container);
   color: var(--color-on-tertiary-container);
+  max-width: 100%;
+}
+.pet-personality-title { font-size: 12px; font-weight: 700; }
+.pet-personality-desc {
+  font-size: 11px;
+  line-height: 1.35;
+  text-align: center;
+  opacity: 0.85;
 }
 .pet-sick-bar {
   width: 100%;

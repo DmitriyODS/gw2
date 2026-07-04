@@ -15,7 +15,8 @@ const (
 	aiTickInterval   = 15 * time.Minute
 )
 
-// RunCareLoop — раз в час: проверка болезней + дневной пересчёт характеров.
+// RunCareLoop — раз в час: проверка болезней, дневной пересчёт характеров
+// и вечерние «Итоги дня».
 // Работает для ВСЕХ активных компаний (болезнь не требует включённого ИИ).
 func (s *Service) RunCareLoop(ctx context.Context) {
 	s.log.Info("groove.care.loop_start", "interval", careTickInterval.String())
@@ -56,6 +57,58 @@ func (s *Service) careTick(ctx context.Context) {
 			}
 			s.daily.SetCache(ctx, key, "1", 48*time.Hour)
 		}
+		s.maybeDaySummary(ctx, cid)
+	}
+}
+
+// ─────────────────────────── «Итоги дня» ───────────────────────────
+
+const daySummaryHourMSK = 19
+
+// maybeDaySummary — одно вечернее событие day_summary на компанию в день:
+// после 19:00 МСК, только если за день была активность (юниты или закрытые
+// задачи). Дедуп — Redis-флаг; при недоступном Redis пропускаем, чтобы не
+// дублировать (fail-open в сторону тишины, а не спама).
+func (s *Service) maybeDaySummary(ctx context.Context, companyID int64) {
+	now := time.Now().In(domain.MSK)
+	if now.Hour() < daySummaryHourMSK {
+		return
+	}
+	start := mskMidnight(todayMSK())
+	stats, err := s.work.DaySummary(ctx, companyID, start, start.AddDate(0, 0, 1))
+	if err != nil {
+		s.log.Warn("groove.day_summary_failed", "company_id", companyID, "error", err)
+		return
+	}
+	// Тихий день — без события; активность позже вечером поймает следующий тик.
+	if stats.UnitsCount == 0 && stats.TasksClosed == 0 {
+		return
+	}
+	key := "gw2:groove:day_summary:" + strconvI64(companyID) + ":" + now.Format("2006-01-02")
+	if s.daily.Exists(ctx, key) {
+		return
+	}
+	s.daily.SetCache(ctx, key, "1", 48*time.Hour)
+	if s.daily.GetCache(ctx, key) != "1" {
+		return // Redis недоступен — флаг не записался, событие не создаём
+	}
+	var leader map[string]any
+	if stats.LeaderID != nil {
+		leader = map[string]any{
+			"user_id":     *stats.LeaderID,
+			"fio":         stats.LeaderFIO,
+			"avatar_path": stats.LeaderAvatar,
+			"hours":       roundHours(stats.LeaderHours),
+		}
+	}
+	_, err = s.recordEvent(ctx, companyID, nil, "day_summary", map[string]any{
+		"units_count":  stats.UnitsCount,
+		"tasks_closed": stats.TasksClosed,
+		"total_hours":  roundHours(stats.TotalHours),
+		"leader":       leader,
+	}, false)
+	if err != nil {
+		s.log.Warn("groove.day_summary_failed", "company_id", companyID, "error", err)
 	}
 }
 

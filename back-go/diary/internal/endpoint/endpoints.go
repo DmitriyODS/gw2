@@ -4,6 +4,7 @@ package endpoint
 
 import (
 	"context"
+	"time"
 
 	"github.com/go-kit/kit/endpoint"
 
@@ -22,8 +23,10 @@ type Endpoints struct {
 	GetEntry      endpoint.Endpoint
 	CreateEntry   endpoint.Endpoint
 	UpdateEntry   endpoint.Endpoint
-	SetDone       endpoint.Endpoint
-	SetLink       endpoint.Endpoint
+	SetDone        endpoint.Endpoint
+	SetLink        endpoint.Endpoint
+	MoveEntry      endpoint.Endpoint
+	ReorderEntries endpoint.Endpoint
 	DeleteEntry   endpoint.Endpoint
 	DeleteEntries endpoint.Endpoint
 	ExportEntries endpoint.Endpoint
@@ -94,6 +97,21 @@ type LinkReq struct {
 	TaskID  *int64
 }
 
+type MoveEntryReq struct {
+	UserID        int64
+	DiaryID       int64
+	EntryID       int64
+	TargetDiaryID int64
+	Date          time.Time // нулевая — день не меняется
+}
+
+type ReorderEntriesReq struct {
+	UserID  int64
+	DiaryID int64
+	Date    time.Time
+	IDs     []int64 // записи дня в желаемом порядке
+}
+
 type DeleteEntriesReq struct {
 	UserID  int64
 	DiaryID int64
@@ -122,6 +140,7 @@ type MemberReq struct {
 	UserID   int64
 	DiaryID  int64
 	MemberID int64
+	CanCheck bool
 }
 
 type SharedEntriesReq struct {
@@ -183,6 +202,14 @@ func New(s *service.Service) Endpoints {
 			r := request.(LinkReq)
 			return s.SetLink(ctx, r.UserID, r.DiaryID, r.EntryID, r.TaskID)
 		},
+		MoveEntry: func(ctx context.Context, request any) (any, error) {
+			r := request.(MoveEntryReq)
+			return s.MoveEntry(ctx, r.UserID, r.DiaryID, r.EntryID, r.TargetDiaryID, r.Date)
+		},
+		ReorderEntries: func(ctx context.Context, request any) (any, error) {
+			r := request.(ReorderEntriesReq)
+			return nil, s.ReorderEntries(ctx, r.UserID, r.DiaryID, r.Date, r.IDs)
+		},
 		DeleteEntry: func(ctx context.Context, request any) (any, error) {
 			r := request.(EntryReq)
 			return nil, s.DeleteEntry(ctx, r.UserID, r.DiaryID, r.EntryID)
@@ -217,7 +244,7 @@ func New(s *service.Service) Endpoints {
 		},
 		AddMember: func(ctx context.Context, request any) (any, error) {
 			r := request.(MemberReq)
-			return s.AddMember(ctx, r.UserID, r.DiaryID, r.MemberID)
+			return s.AddMember(ctx, r.UserID, r.DiaryID, r.MemberID, r.CanCheck)
 		},
 		RemoveMember: func(ctx context.Context, request any) (any, error) {
 			r := request.(MemberReq)

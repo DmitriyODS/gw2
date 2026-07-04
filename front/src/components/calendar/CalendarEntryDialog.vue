@@ -29,13 +29,14 @@
         :style="cellStyle(f)"
       >
         <div class="ce-label">{{ f.label }}</div>
-        <CalendarFieldInput
+        <FieldInput
           v-if="editing"
           :field="f"
           :model-value="form[String(f.id)] ?? null"
+          :upload="uploadFile"
           @update:model-value="form[String(f.id)] = $event"
         />
-        <RegistryFieldValue v-else :field="f" :value="entry?.data?.[String(f.id)] ?? null" />
+        <FieldValue v-else :field="f" :value="entry?.data?.[String(f.id)] ?? null" />
       </div>
     </div>
 
@@ -74,8 +75,9 @@ import { computed, reactive, ref, watch } from 'vue'
 import DatePicker from 'primevue/datepicker'
 import AppDialog from '@/components/common/AppDialog.vue'
 import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
-import RegistryFieldValue from '@/components/registry/RegistryFieldValue.vue'
-import CalendarFieldInput from './CalendarFieldInput.vue'
+import FieldInput from '@/components/common/FieldInput.vue'
+import FieldValue from '@/components/common/FieldValue.vue'
+import { uploadFile } from '@/api/calendars.js'
 import { useCalendarsStore } from '@/stores/calendars.js'
 import { useNotificationsStore } from '@/stores/notifications.js'
 import { isFieldVisible } from '@/utils/calendarFields.js'

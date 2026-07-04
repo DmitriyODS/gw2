@@ -2,7 +2,7 @@
   <AppDialog
     :model-value="modelValue"
     title="Поблагодарить коллегу"
-    subtitle="Кудос появится в ленте — пусть все видят, кто молодец"
+    subtitle="Благодарность появится на доске признания — пусть все видят, кто молодец"
     icon="volunteer_activism"
     tone="success"
     size="md"
@@ -29,12 +29,28 @@
       <p v-if="!filtered.length" class="kudos-empty">Никого не нашлось</p>
     </div>
 
+    <div class="kudos-cats" role="radiogroup" aria-label="За что благодарите">
+      <button
+        v-for="(cat, key) in KUDOS_CATEGORIES"
+        :key="key"
+        type="button"
+        class="kudos-cat"
+        :class="{ active: category === key }"
+        role="radio"
+        :aria-checked="category === key"
+        @click="category = key"
+      >
+        <span class="material-symbols-outlined">{{ cat.icon }}</span>
+        {{ cat.title }}
+      </button>
+    </div>
+
     <textarea
       v-model.trim="text"
       class="kudos-text"
       rows="3"
       maxlength="500"
-      placeholder="За что благодарите? Например: «Спасибо за помощь с релизом!»"
+      placeholder="За что конкретно: «Разобрал блокер по релизу за час»"
     ></textarea>
 
     <template #footer>
@@ -43,7 +59,7 @@
         <button
           class="kudos-send"
           type="button"
-          :disabled="!selected || !text || sending"
+          :disabled="!selected || !category || !text || sending"
           @click="send"
         >
           <span class="material-symbols-outlined">volunteer_activism</span>
@@ -60,7 +76,7 @@ import AppDialog from '@/components/common/AppDialog.vue'
 import { getDirectory } from '@/api/users.js'
 import { useGrooveStore } from '@/stores/groove.js'
 import { useNotificationsStore } from '@/stores/notifications.js'
-import { avatarUrl } from '@/utils/groove.js'
+import { avatarUrl, KUDOS_CATEGORIES } from '@/utils/groove.js'
 
 const props = defineProps({
   modelValue: { type: Boolean, default: false },
@@ -73,12 +89,14 @@ const notify = useNotificationsStore()
 const users = ref([])
 const query = ref('')
 const selected = ref(null)
+const category = ref(null)
 const text = ref('')
 const sending = ref(false)
 
 watch(() => props.modelValue, async (open) => {
   if (!open) return
   selected.value = null
+  category.value = null
   text.value = ''
   query.value = ''
   try {
@@ -97,8 +115,8 @@ const filtered = computed(() => {
 async function send() {
   sending.value = true
   try {
-    await groove.sendKudos(selected.value.id, text.value)
-    notify.success(`Кудос для ${selected.value.fio} улетел в ленту 💚`)
+    await groove.sendKudos(selected.value.id, category.value, text.value)
+    notify.success(`Кудос для ${selected.value.fio} улетел на доску признания 💚`)
     emit('update:modelValue', false)
   } catch (e) {
     notify.error(e?.message || 'Не удалось отправить')
@@ -156,6 +174,28 @@ async function send() {
 .kudos-fio { flex: 1; font-size: 14px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .kudos-check { color: var(--color-primary); font-size: 20px; }
 .kudos-empty { font-size: 13px; color: var(--color-text-dim); text-align: center; margin: 12px 0; }
+.kudos-cats { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 10px; }
+.kudos-cat {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid var(--color-outline-dim);
+  background: var(--color-surface);
+  color: var(--color-text);
+  border-radius: var(--radius-full);
+  padding: 7px 14px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s, color 0.15s;
+}
+.kudos-cat .material-symbols-outlined { font-size: 16px; }
+.kudos-cat:hover { background: var(--color-surface-high); }
+.kudos-cat.active {
+  background: var(--color-secondary-container);
+  border-color: transparent;
+  color: var(--color-on-secondary-container);
+}
 .kudos-text {
   width: 100%;
   box-sizing: border-box;

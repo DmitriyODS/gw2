@@ -45,10 +45,13 @@
             <span class="material-symbols-outlined nav-chevron">chevron_right</span>
           </button>
         </template>
-        <div v-if="!visibleGroups.length && searchQuery" class="settings-nav-empty">
-          <span class="material-symbols-outlined">search_off</span>
-          <p>Ничего не нашли. Попробуйте другие слова.</p>
-        </div>
+        <EmptyState
+          v-if="!visibleGroups.length && searchQuery"
+          size="sm"
+          icon="search_off"
+          title="Ничего не нашли"
+          subtitle="Попробуйте другие слова."
+        />
       </nav>
 
       <button
@@ -203,6 +206,7 @@ import HelpCenter from '@/components/settings/HelpCenter.vue'
 import AboutApp from '@/components/settings/AboutApp.vue'
 import YougileUserSettings from '@/components/settings/YougileUserSettings.vue'
 import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
+import EmptyState from '@/components/common/EmptyState.vue'
 
 const { isAtLeast } = usePermission()
 const notif = useNotificationsStore()
@@ -1296,27 +1300,6 @@ onMounted(() => {
 .pane-title-icon[data-tone="error"]     { --tone-bg: var(--color-error-container);     --tone-fg: var(--color-on-error-container); }
 
 .pane-title-icon .material-symbols-outlined { font-size: 24px; }
-
-/* ── Empty state в навигации (пустой поиск) ─────────────────── */
-.settings-nav-empty {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 8px;
-  padding: 28px 16px;
-  text-align: center;
-  color: var(--color-text-dim);
-}
-
-.settings-nav-empty .material-symbols-outlined {
-  font-size: 32px;
-  opacity: 0.5;
-}
-
-.settings-nav-empty p {
-  margin: 0;
-  font-size: 13px;
-}
 
 /* ── Transition между секциями (десктоп) ────────────────────── */
 .pane-swap-enter-active, .pane-swap-leave-active {

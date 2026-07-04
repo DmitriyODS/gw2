@@ -16,6 +16,7 @@ import (
 	"github.com/DmitriyODS/gw2/back-go/auth/internal/domain"
 	"github.com/DmitriyODS/gw2/back-go/auth/internal/endpoint"
 	"github.com/DmitriyODS/gw2/back-go/pkg/apierror"
+	"github.com/DmitriyODS/gw2/back-go/pkg/httpserver"
 	"github.com/DmitriyODS/gw2/back-go/pkg/pasetoauth"
 )
 
@@ -53,19 +54,13 @@ func authSource(users domain.UserRepository) pasetoauth.AuthSource {
 func NewServer(eps endpoint.Endpoints, verifier *pasetoauth.Verifier,
 	users domain.UserRepository, log *slog.Logger) *Server {
 
-	app := fiber.New(fiber.Config{
-		AppName:               "gw2-authsvc",
-		DisableStartupMessage: true,
-		// Лимит тела — под импорт ZIP-бэкапа (в проде фактический потолок —
-		// client_max_body_size nginx); аватарка ≤2МБ проверяется в хендлере.
-		BodyLimit: 64 * 1024 * 1024,
+	// Лимит тела — под импорт ZIP-бэкапа (в проде фактический потолок —
+	// client_max_body_size nginx); аватарка ≤2МБ проверяется в хендлере.
+	app := httpserver.New(httpserver.Config{
+		AppName: "gw2-authsvc", Log: log, BodyLimit: 64 * 1024 * 1024,
 	})
 	auth := pasetoauth.NewMiddleware(verifier, authSource(users))
 	h := &handlers{eps: eps, log: log}
-
-	app.Get("/healthz", func(c *fiber.Ctx) error {
-		return c.JSON(fiber.Map{"ok": true})
-	})
 
 	authAPI := app.Group("/api/auth")
 	authAPI.Post("/login", h.login)

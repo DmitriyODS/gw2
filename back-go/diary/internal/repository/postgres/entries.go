@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/jackc/pgx/v5"
 
@@ -11,12 +12,12 @@ import (
 )
 
 const entryCols = `id, diary_id, entry_date, start_min, end_min, title, description,
-	done, linked_task_id, created_at, updated_at`
+	done, linked_task_id, position, created_at, updated_at`
 
 func scanEntry(row pgx.Row) (*domain.Entry, error) {
 	var e domain.Entry
 	err := row.Scan(&e.ID, &e.DiaryID, &e.Date, &e.StartMin, &e.EndMin, &e.Title,
-		&e.Description, &e.Done, &e.LinkedTaskID, &e.CreatedAt, &e.UpdatedAt)
+		&e.Description, &e.Done, &e.LinkedTaskID, &e.Position, &e.CreatedAt, &e.UpdatedAt)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, nil
 	}
@@ -46,13 +47,14 @@ func buildWhere(f domain.EntryListFilter) (string, []any) {
 	return where, args
 }
 
-// orderBy — активные сортируем по дню и времени начала (без времени — первыми),
-// архив — свежие выполненные сверху.
+// orderBy — активные сортируем по дню, затем ручной порядок (position 1..N;
+// 0 = «не упорядочено» — уходит после упорядоченных и сортируется по времени
+// начала, без времени — первыми). Архив — свежие выполненные сверху.
 func orderBy(archived bool) string {
 	if archived {
 		return ` ORDER BY entry_date DESC, id DESC`
 	}
-	return ` ORDER BY entry_date ASC, COALESCE(start_min, -1) ASC, id ASC`
+	return ` ORDER BY entry_date ASC, NULLIF(position, 0) ASC NULLS LAST, COALESCE(start_min, -1) ASC, id ASC`
 }
 
 func (r *Repo) queryEntries(ctx context.Context, where, order string, args []any, limit int) ([]*domain.Entry, error) {
@@ -95,6 +97,16 @@ func (r *Repo) CreateEntry(ctx context.Context, e *domain.Entry, searchText stri
 		Scan(&e.ID, &e.Done, &e.LinkedTaskID, &e.CreatedAt, &e.UpdatedAt)
 }
 
+func (r *Repo) ReorderEntries(ctx context.Context, diaryID int64, date time.Time, ids []int64) error {
+	_, err := r.pool.Exec(ctx, `
+		UPDATE diary_records AS r
+		   SET position = u.pos, updated_at = now()
+		  FROM unnest($3::bigint[]) WITH ORDINALITY AS u(id, pos)
+		 WHERE r.id = u.id AND r.diary_id = $1 AND r.entry_date = $2::date`,
+		diaryID, date, ids)
+	return err
+}
+
 func (r *Repo) UpdateEntry(ctx context.Context, e *domain.Entry, searchText string) error {
 	_, err := r.pool.Exec(ctx,
 		`UPDATE diary_records
@@ -108,6 +120,13 @@ func (r *Repo) UpdateEntry(ctx context.Context, e *domain.Entry, searchText stri
 func (r *Repo) SetEntryDone(ctx context.Context, id int64, done bool) error {
 	_, err := r.pool.Exec(ctx,
 		`UPDATE diary_records SET done = $2, updated_at = now() WHERE id = $1`, id, done)
+	return err
+}
+
+func (r *Repo) MoveEntry(ctx context.Context, id, diaryID int64, date time.Time) error {
+	_, err := r.pool.Exec(ctx,
+		`UPDATE diary_records SET diary_id = $2, entry_date = $3, updated_at = now() WHERE id = $1`,
+		id, diaryID, date)
 	return err
 }
 

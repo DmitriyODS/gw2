@@ -202,10 +202,17 @@ func (s *Service) DeleteComment(ctx context.Context, commentID, userID int64, us
 // ───────────────────────────── кудосы ──────────────────────────────
 
 func (s *Service) SendKudos(ctx context.Context, companyID, fromUserID,
-	toUserID int64, text string) error {
+	toUserID int64, category, text string) error {
 
 	if fromUserID == toUserID {
 		return domain.NewError("SELF_KUDOS", "Нельзя благодарить самого себя", 422)
+	}
+	if _, ok := domain.KudosCategories[category]; !ok {
+		return domain.NewError("BAD_CATEGORY", "Неизвестная категория благодарности", 422)
+	}
+	text = strings.TrimSpace(text)
+	if text == "" {
+		return domain.NewError("EMPTY_TEXT", "Текст благодарности обязателен", 422)
 	}
 	target, err := s.users.GetUser(ctx, toUserID)
 	if err != nil {
@@ -218,7 +225,8 @@ func (s *Service) SendKudos(ctx context.Context, companyID, fromUserID,
 		"to_user_id":     target.ID,
 		"to_fio":         target.FIO,
 		"to_avatar_path": target.AvatarPath,
-		"text":           strings.TrimSpace(text),
+		"category":       category,
+		"text":           text,
 	}, true)
 	if err != nil {
 		return err
@@ -227,68 +235,18 @@ func (s *Service) SendKudos(ctx context.Context, companyID, fromUserID,
 	return nil
 }
 
-// ─────────────────────── live и заряды энергии ─────────────────────
+// ─────────────────────── «Сейчас в эфире» ──────────────────────────
 
-func (s *Service) GetLive(ctx context.Context, companyID, viewerID int64) (*dto.LiveDTO, error) {
+func (s *Service) GetLive(ctx context.Context, companyID int64) (*dto.LiveDTO, error) {
 	units, err := s.feed.ListActiveUnits(ctx, companyID)
 	if err != nil {
 		return nil, err
 	}
-	unitIDs := make([]int64, len(units))
-	for i, u := range units {
-		unitIDs[i] = u.ID
-	}
-	zaps := s.daily.GetZaps(ctx, unitIDs)
 	items := make([]*dto.LiveItemDTO, 0, len(units))
 	for _, u := range units {
-		items = append(items, dto.NewLiveItem(u, zaps[u.ID]))
+		items = append(items, dto.NewLiveItem(u))
 	}
-	return &dto.LiveDTO{
-		Items:    items,
-		ZapsLeft: s.daily.Left(ctx, viewerID, "zap_sent", domain.ZapSentDailyMax),
-		ZapsMax:  domain.ZapSentDailyMax,
-	}, nil
-}
-
-func (s *Service) SendZap(ctx context.Context, companyID, fromUserID,
-	toUserID int64) (map[string]any, error) {
-
-	if fromUserID == toUserID {
-		return nil, domain.NewError("SELF_ZAP", "Себя зарядить нельзя", 422)
-	}
-	unitID, unitCompanyID, err := s.work.ActiveUnitForUser(ctx, toUserID)
-	if err != nil {
-		return nil, err
-	}
-	if unitID == 0 || unitCompanyID != companyID {
-		return nil, domain.NewError("NOT_LIVE", "Коллега сейчас не в эфире", 422)
-	}
-	if s.daily.TakeBudget(ctx, fromUserID, "zap_sent", 1, domain.ZapSentDailyMax) <= 0 {
-		return nil, domain.NewError("ZAP_LIMIT", "Заряды на сегодня закончились", 429)
-	}
-
-	zaps := s.daily.IncrZap(ctx, unitID)
-	s.AwardBeans(ctx, toUserID, companyID, "zap", 1)
-
-	fromFIO := "Коллега"
-	if sender, err := s.users.GetUser(ctx, fromUserID); err == nil && sender != nil {
-		fromFIO = sender.FIO
-	}
-	s.pub.Publish(ctx, "groove:zap", []string{userRoom(toUserID)}, map[string]any{
-		"from_user_id": fromUserID,
-		"from_fio":     fromFIO,
-		"to_user_id":   toUserID,
-		"unit_id":      unitID,
-		"zaps":         zaps,
-	})
-	s.pub.Publish(ctx, "groove:zap-count", []string{"all"}, map[string]any{
-		"unit_id": unitID, "zaps": zaps, "company_id": companyID,
-	})
-	return map[string]any{
-		"zaps":      zaps,
-		"zaps_left": s.daily.Left(ctx, fromUserID, "zap_sent", domain.ZapSentDailyMax),
-		"zaps_max":  domain.ZapSentDailyMax,
-	}, nil
+	return &dto.LiveDTO{Items: items}, nil
 }
 
 // ───────────────────── wrapped «Моя неделя» ────────────────────────
@@ -428,11 +386,11 @@ var greetings = map[string]string{
 
 // Идеи для выходного, когда AI выключен — Грувик зовёт отдыхать, не работать.
 var weekendFallbacks = []string{
-	"Сегодня выходной — никаких задач! Может, прогуляемся? Говорят, на улице целый мир. 🌞",
-	"Выходной! План такой: вкусный завтрак, любимое хобби и ноль рабочих мыслей. 🧘",
-	"Объявляю день отдыха! Фильм, плед и что-нибудь вкусное — я уже занял место рядом. 🍿",
-	"Задачи подождут до будней. А нам — гулять, отдыхать и набираться сил! 🌿",
-	"Сегодня по плану: отдых, отдых и ещё раз отдых. Ты заслужил — я проверял. 🎈",
+	"Сегодня выходной. Задачи закрыты на переучёт, рекомендую прогулку.",
+	"Выходной. План простой: завтрак, хобби, ноль рабочих мыслей.",
+	"День отдыха. Фильм и плед — решение, проверенное поколениями питомцев.",
+	"Задачи подождут до будней. Это не лень, это регламент.",
+	"Выходной по расписанию компании. Возражений не принимаю.",
 }
 
 type briefingCtx struct {
@@ -458,24 +416,23 @@ func (s *Service) morningFallback(ctx briefingCtx) string {
 	}
 	switch {
 	case ctx.Mood == "sick":
-		return "Я что-то расклеился, пока мы отдыхали… На нас " +
-			strconvInt(ctx.OpenCount) + " " + openWord + ". " +
-			"Закроем парочку — и мне сразу полегчает. 🤒"
+		return "Я болею: ты давно не работал. В активе " +
+			strconvInt(ctx.OpenCount) + " " + openWord +
+			" — пара закрытых меня и вылечит."
 	case ctx.Mood == "buried":
-		return "Кажется, я закопался в бумагах: у нас с тобой " +
-			strconvInt(ctx.OpenCount) + " " + openWord + ", и " +
-			strconvInt(ctx.StaleCount) + " засиделись дольше недели. Разгребём вместе? 💪"
+		return "Факты: " + strconvInt(ctx.OpenCount) + " " + openWord + " в работе, " +
+			strconvInt(ctx.StaleCount) + " висят дольше недели. Предлагаю начать с одной."
 	case ctx.Mood == "reminder" && oldest != nil:
 		days, _ := oldest["days_pending"].(int)
 		name, _ := oldest["name"].(string)
-		return "У нас с тобой " + strconvInt(ctx.OpenCount) + " " + openWord +
-			". Вот эта засиделась (" + strconvInt(days) + " " +
-			plural(days, "день", "дня", "дней") + ") — «" + truncateRunes(name, 60) + "». Глянем?"
+		return "В работе " + strconvInt(ctx.OpenCount) + " " + openWord +
+			". Дольше всех висит «" + truncateRunes(name, 60) + "» — " +
+			strconvInt(days) + " " + plural(days, "день", "дня", "дней") + "."
 	case ctx.Mood == "fresh":
 		return strconvInt(ctx.OpenCount) + " " + openWord +
-			" в работе — и все свежие, ни одна не залежалась. Красота, держим темп! ✨"
+			" в работе, залежавшихся нет. Редкий кадр — фиксирую."
 	}
-	return "У нас с тобой сегодня " + strconvInt(ctx.OpenCount) + " " + openWord + ". За дело!"
+	return "На сегодня " + strconvInt(ctx.OpenCount) + " " + openWord + ". Данные точные."
 }
 
 func (s *Service) MorningBriefing(ctx context.Context, companyID, userID int64,

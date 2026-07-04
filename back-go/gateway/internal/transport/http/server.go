@@ -22,6 +22,7 @@ import (
 	"github.com/DmitriyODS/gw2/back-go/gateway/internal/hub"
 	"github.com/DmitriyODS/gw2/back-go/gateway/internal/presence"
 	"github.com/DmitriyODS/gw2/back-go/gateway/internal/ring"
+	"github.com/DmitriyODS/gw2/back-go/pkg/httpserver"
 	"github.com/DmitriyODS/gw2/back-go/pkg/pasetoauth"
 )
 
@@ -47,15 +48,8 @@ type Deps struct {
 }
 
 func NewServer(d Deps) *Server {
-	app := fiber.New(fiber.Config{
-		AppName:               "gw2-gatewaysvc",
-		DisableStartupMessage: true,
-	})
+	app := httpserver.New(httpserver.Config{AppName: "gw2-gatewaysvc", Log: d.Log})
 	s := &wsHandler{deps: d}
-
-	app.Get("/healthz", func(c *fiber.Ctx) error {
-		return c.JSON(fiber.Map{"ok": true})
-	})
 
 	// Онлайн-пользователи (presence) — прежний exact-роут Flask
 	// /api/messenger/presence; presence-домен теперь живёт в шлюзе.

@@ -70,7 +70,7 @@
         <span>{{ viewDate }}<template v-if="viewTime"> · {{ viewTime }}</template></span>
       </div>
       <h3 class="de-vtitle" :class="{ done: entry?.done }">{{ entry?.title }}</h3>
-      <p v-if="entry?.description" class="de-vdesc">{{ entry.description }}</p>
+      <p v-if="entry?.description" class="de-vdesc"><LinkifiedText :text="entry.description" /></p>
 
       <div v-if="entry?.linked_task_id" class="de-task">
         <span class="material-symbols-outlined">link</span>
@@ -101,7 +101,7 @@
             <span class="material-symbols-outlined">add_task</span>
             <span class="de-btn-label">Задача</span>
           </button>
-          <button v-if="canEdit" class="btn-tonal" @click="toggleDone">
+          <button v-if="canEdit || canToggle" class="btn-tonal" @click="toggleDone">
             <span class="material-symbols-outlined">{{ entry?.done ? 'undo' : 'check' }}</span>
             <span class="de-btn-label">{{ entry?.done ? 'В активные' : 'Выполнено' }}</span>
           </button>
@@ -129,6 +129,7 @@ import { computed, nextTick, reactive, ref, watch } from 'vue'
 import DatePicker from 'primevue/datepicker'
 import AppDialog from '@/components/common/AppDialog.vue'
 import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
+import LinkifiedText from '@/components/common/LinkifiedText.vue'
 import TimePicker from '@/components/common/TimePicker.vue'
 import { useDiariesStore, dayKey } from '@/stores/diaries.js'
 import { useAuthStore } from '@/stores/auth.js'
@@ -138,6 +139,8 @@ const props = defineProps({
   modelValue: { type: Boolean, default: false },
   entry: { type: Object, default: null },       // null → создание
   readonly: { type: Boolean, default: false },   // чужой/публичный — только чтение
+  // Адресат с правом can_check: содержимое read-only, но можно отмечать выполнение.
+  canToggle: { type: Boolean, default: false },
   defaultDate: { type: [Date, String, Number], default: null },
 })
 const emit = defineEmits(['update:modelValue', 'create-task'])
@@ -156,6 +159,7 @@ const titleInput = ref(null)
 const form = reactive({ title: '', description: '', date: new Date(), start: null, end: null })
 
 const canEdit = computed(() => !props.readonly)
+const canToggle = computed(() => props.canToggle)
 const canCreateTask = computed(() => !auth.isSuperAdmin && auth.roleLevel > 0)
 
 const pad = (n) => String(n).padStart(2, '0')

@@ -44,26 +44,27 @@ func (s *Service) requireOwned(ctx domain.Ctx, userID, id int64) (*domain.Diary,
 }
 
 // requireReadable — ежедневник, доступный пользователю на чтение: свой (canEdit)
-// или открытый адресно (read-only). Неизвестный/чужой без доступа — 404.
-func (s *Service) requireReadable(ctx domain.Ctx, userID, id int64) (*domain.Diary, bool, error) {
-	d, err := s.repo.GetDiary(ctx, id)
+// или открытый адресно. canCheck — можно отмечать записи выполненными (у
+// владельца всегда, у адресата — по флагу шаринга). Чужой без доступа — 404.
+func (s *Service) requireReadable(ctx domain.Ctx, userID, id int64) (d *domain.Diary, canEdit, canCheck bool, err error) {
+	d, err = s.repo.GetDiary(ctx, id)
 	if err != nil {
-		return nil, false, err
+		return nil, false, false, err
 	}
 	if d == nil {
-		return nil, false, domain.ErrDiaryNotFound
+		return nil, false, false, domain.ErrDiaryNotFound
 	}
 	if d.OwnerID == userID {
-		return d, true, nil
+		return d, true, true, nil
 	}
-	ok, err := s.repo.HasMember(ctx, id, userID)
+	found, canCheck, err := s.repo.MemberAccess(ctx, id, userID)
 	if err != nil {
-		return nil, false, err
+		return nil, false, false, err
 	}
-	if !ok {
-		return nil, false, domain.ErrDiaryNotFound
+	if !found {
+		return nil, false, false, domain.ErrDiaryNotFound
 	}
-	return d, false, nil
+	return d, false, canCheck, nil
 }
 
 // diaryRooms — WS-комнаты доставки событий ежедневника: владелец + все, кому он

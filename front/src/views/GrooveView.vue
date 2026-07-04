@@ -51,10 +51,21 @@
           <div ref="petBoxRef">
             <PetCard @open-shop="showShop = true" />
           </div>
-          <RaidCard />
         </aside>
 
         <main ref="grooveMainRef" class="groove-main">
+          <!-- Пульс команды: рейд и рейтинг рядом, под ними зоопарк -->
+          <section class="team-pulse" aria-label="Пульс команды">
+            <h2 class="pulse-title">
+              <span class="material-symbols-outlined">monitor_heart</span>
+              Пульс команды
+            </h2>
+            <div class="pulse-grid">
+              <RaidCard />
+              <RatingCard />
+            </div>
+          </section>
+
           <ZooStrip />
 
           <div v-if="newCount" class="feed-newpill-wrap">
@@ -77,19 +88,21 @@
             >{{ f.title }}</button>
           </div>
 
-          <div v-if="!groove.events.length && groove.loadingFeed" class="groove-empty">
+          <div v-if="!groove.events.length && groove.loadingFeed" class="groove-loading">
             Загружаем ленту…
           </div>
-          <div v-else-if="!groove.events.length" class="groove-empty">
-            <span class="groove-empty-icon">👾</span>
-            <h3>Лента пока пуста</h3>
-            <p>Запустите юнит или закройте задачу — здесь появится первая опорная точка</p>
-          </div>
-          <div v-else-if="!filteredEvents.length" class="groove-empty">
-            <span class="groove-empty-icon">🔍</span>
-            <h3>Ничего не нашлось</h3>
-            <p>В загруженной части ленты таких событий нет — листайте, история подгружается</p>
-          </div>
+          <EmptyState
+            v-else-if="!groove.events.length"
+            icon="volunteer_activism"
+            title="Пока тихо"
+            subtitle="Закрытые задачи и благодарности появятся здесь"
+          />
+          <EmptyState
+            v-else-if="!filteredEvents.length"
+            icon="search"
+            title="Ничего не нашлось"
+            subtitle="В загруженной части ленты таких событий нет — листайте, история подгружается"
+          />
 
           <!-- Река дня: дни — полноширинные секции, события внутри
                раскладываются адаптивным гридом и заполняют всю ширину. -->
@@ -171,10 +184,12 @@
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useGrooveStore } from '@/stores/groove.js'
 import { dayKey, dayTitle, petEmoji, timeZoneOf } from '@/utils/groove.js'
+import EmptyState from '@/components/common/EmptyState.vue'
 import GrooveCoin from '@/components/groove/GrooveCoin.vue'
 import LiveNowBar from '@/components/groove/LiveNowBar.vue'
 import PetCard from '@/components/groove/PetCard.vue'
 import RaidCard from '@/components/groove/RaidCard.vue'
+import RatingCard from '@/components/groove/RatingCard.vue'
 import ZooStrip from '@/components/groove/ZooStrip.vue'
 import FeedCard from '@/components/groove/FeedCard.vue'
 import PetShopDialog from '@/components/groove/PetShopDialog.vue'
@@ -321,6 +336,7 @@ onMounted(async () => {
     groove.fetchLive(),
     groove.fetchPet(),
     groove.fetchRaid(),
+    groove.fetchRating(),
     groove.fetchZoo(),
   ])
   setupObserver()
@@ -621,27 +637,32 @@ onBeforeUnmount(() => {
 }
 .river-loading { color: var(--color-text-dim); }
 
-.groove-empty {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 6px;
+.groove-loading {
   padding: 48px 16px;
   text-align: center;
   color: var(--color-text-dim);
 }
-.groove-empty-icon {
-  width: 72px;
-  height: 72px;
-  border-radius: 50%;
-  background: var(--color-primary-container);
-  display: grid;
-  place-items: center;
-  font-size: 34px;
-  margin-bottom: 6px;
+
+/* ── Пульс команды ─────────────────────────────────────────── */
+.team-pulse { display: flex; flex-direction: column; gap: 10px; }
+.pulse-title {
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 15px;
+  font-weight: 700;
 }
-.groove-empty h3 { margin: 0; color: var(--color-text); }
-.groove-empty p { margin: 0; font-size: 13.5px; max-width: 360px; }
+.pulse-title .material-symbols-outlined { font-size: 19px; color: var(--color-primary); }
+.pulse-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  align-items: start;
+}
+@media (max-width: 900px) {
+  .pulse-grid { grid-template-columns: 1fr; }
+}
 
 /* ── Мобильная вертикаль ──────────────────────────────────── */
 @media (max-width: 1100px) {

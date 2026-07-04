@@ -93,11 +93,13 @@
 
     <div class="tasks-body">
       <!-- Рут-админ без выбранной компании -->
-      <div v-if="auth.isSuperAdmin && !companiesStore.effectiveCompanyId" class="state-block empty-state">
-        <span class="material-symbols-outlined empty-icon">domain</span>
-        <p class="empty-title">Выберите компанию</p>
-        <p class="empty-sub">Задачи ведутся в рамках компании. Выберите её в боковом меню.</p>
-      </div>
+      <EmptyState
+        v-if="auth.isSuperAdmin && !companiesStore.effectiveCompanyId"
+        class="tasks-empty"
+        icon="domain"
+        title="Выберите компанию"
+        subtitle="Задачи ведутся в рамках компании. Выберите её в боковом меню."
+      />
 
       <template v-else>
       <TaskFilters :mobile-visible="showMobileFilters" @close="showMobileFilters = false" />
@@ -111,20 +113,27 @@
           <ProgressSpinner />
         </div>
         <template v-else>
-          <div v-if="tasksStore.error" class="state-block empty-state error-state">
-            <span class="material-symbols-outlined">error_outline</span>
-            <p>{{ tasksStore.error }}</p>
+          <EmptyState
+            v-if="tasksStore.error"
+            class="tasks-empty"
+            icon="error_outline"
+            tone="error"
+            :subtitle="tasksStore.error"
+          >
             <button class="btn-retry" @click="tasksStore.fetchTasks()">Повторить</button>
-          </div>
-          <div v-else-if="tasksStore.tasks.length === 0" class="state-block empty-state">
-            <span class="empty-icon material-symbols-outlined">{{ emptyIcon }}</span>
-            <p class="empty-title">{{ emptyTitle }}</p>
-            <p class="empty-sub">{{ emptySub }}</p>
+          </EmptyState>
+          <EmptyState
+            v-else-if="tasksStore.tasks.length === 0"
+            class="tasks-empty"
+            :icon="emptyIcon"
+            :title="emptyTitle"
+            :subtitle="emptySub"
+          >
             <button v-if="canCreateTask && tasksStore.filters.tab === 'active'" class="btn-add" @click="showCreateTask = true">
               <span class="material-symbols-outlined">add</span>
               Создать задачу
             </button>
-          </div>
+          </EmptyState>
           <TaskKanban
             v-else-if="viewMode === 'board'"
             @open-task="openTask"
@@ -274,6 +283,7 @@ import TaskContextMenu from '@/components/tasks/TaskContextMenu.vue'
 import SendTaskDialog from '@/components/tasks/SendTaskDialog.vue'
 import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
 import AppFab from '@/components/common/AppFab.vue'
+import EmptyState from '@/components/common/EmptyState.vue'
 import SegmentedTabs from '@/components/common/SegmentedTabs.vue'
 import ProgressSpinner from 'primevue/progressspinner'
 import { useCompanySettings } from '@/composables/useCompanySettings.js'
@@ -822,45 +832,8 @@ watch(() => companiesStore.effectiveCompanyId, () => {
   padding: 48px;
 }
 
-.empty-state {
-  flex-direction: column;
-  gap: 8px;
-  color: var(--color-text-dim);
-  text-align: center;
+.tasks-empty {
   margin: auto;
-}
-
-.empty-icon {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 88px;
-  height: 88px;
-  border-radius: 50%;
-  background: var(--color-primary-container);
-  color: var(--color-on-primary-container);
-  font-size: 44px;
-  margin-bottom: 8px;
-}
-
-.empty-title {
-  margin: 0;
-  font-size: 17px;
-  font-weight: 650;
-  color: var(--color-text);
-}
-
-.empty-sub {
-  margin: 0 0 8px;
-  font-size: 14px;
-  max-width: 320px;
-}
-
-.error-state .empty-icon,
-.error-state .material-symbols-outlined {
-  background: var(--color-error-container);
-  color: var(--color-on-error-container);
-  font-size: 48px;
 }
 
 .btn-retry {

@@ -79,7 +79,7 @@
     <AppDialog v-model="entryOpen" :title="activeEntry?.title || 'Запись'" icon="event_note" size="md" :actions="[{ kind: 'cancel', label: 'Закрыть' }]" @cancel="entryOpen = false">
       <div v-if="activeEntry" class="sv-detail">
         <div class="sv-drow"><span class="material-symbols-outlined">calendar_today</span><span>{{ detailDate }}<template v-if="entryTime(activeEntry)"> · {{ entryTime(activeEntry) }}</template></span></div>
-        <p v-if="activeEntry.description" class="sv-ddesc">{{ activeEntry.description }}</p>
+        <p v-if="activeEntry.description" class="sv-ddesc"><LinkifiedText :text="activeEntry.description" /></p>
         <p v-else class="sv-dnone">Без описания.</p>
       </div>
     </AppDialog>
@@ -98,6 +98,7 @@
 import { computed, onMounted, ref } from 'vue'
 import { useRoute } from 'vue-router'
 import AppDialog from '@/components/common/AppDialog.vue'
+import LinkifiedText from '@/components/common/LinkifiedText.vue'
 import SegmentedTabs from '@/components/common/SegmentedTabs.vue'
 import { getSharedDiary, getSharedEntries } from '@/api/diaries.js'
 

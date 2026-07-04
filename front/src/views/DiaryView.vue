@@ -16,13 +16,20 @@
             v-for="d in store.diaries"
             :key="d.id"
             class="dv-side-item"
-            :class="{ active: d.id === store.selectedId }"
+            :class="{ active: d.id === store.selectedId, 'drop-target': dropDiaryId === d.id }"
             @click="store.select(d.id)"
+            @dragover="onDiaryDragOver($event, d)"
+            @dragleave="dropDiaryId === d.id && (dropDiaryId = null)"
+            @drop="onDiaryDrop($event, d)"
           >
             <span class="material-symbols-outlined">{{ store.tab === 'shared' ? 'folder_shared' : 'book' }}</span>
             <span class="dv-side-main">
               <span class="dv-side-name">{{ d.name }}</span>
               <span v-if="store.tab === 'shared'" class="dv-side-owner">{{ d.owner_name }}</span>
+              <span v-if="diaryTotal(d)" class="dv-side-progress">
+                <span class="dv-side-bar"><span class="dv-side-fill" :style="{ width: diaryPct(d) + '%' }" /></span>
+                <span class="dv-side-count">{{ d.done_count || 0 }}/{{ diaryTotal(d) }}</span>
+              </span>
             </span>
           </button>
           <p v-if="!store.diaries.length" class="dv-side-note">
@@ -101,7 +108,7 @@
                   <span class="dv-arow-title">{{ e.title }}</span>
                   <span v-if="entryTime(e)" class="dv-arow-meta">{{ entryTime(e) }}</span>
                 </span>
-                <span v-if="!store.readonly" class="dv-arow-act" title="Вернуть в активные" @click.stop="toggleDone(e, false)">
+                <span v-if="store.canToggle" class="dv-arow-act" title="Вернуть в активные" @click.stop="toggleDone(e, false)">
                   <span class="material-symbols-outlined">undo</span>
                 </span>
                 <span class="material-symbols-outlined dv-arow-chev">chevron_right</span>
@@ -117,13 +124,18 @@
             </div>
             <div v-for="g in allGroups" :key="g.date" class="dv-all-group">
               <div class="dv-arc-daylabel">{{ g.label }}</div>
-              <button v-for="e in g.items" :key="e.id" class="dv-dayrow" @click="openEntry(e)">
+              <button
+                v-for="e in g.items" :key="e.id" class="dv-dayrow"
+                :class="{ dragging: dragEntryId === e.id }"
+                :draggable="canDrag" @dragstart="onDragStart($event, e)" @dragend="onDragEnd"
+                @click="openEntry(e)"
+              >
                 <span class="dv-dayrow-time">{{ entryTime(e) || '—' }}</span>
                 <span class="dv-dayrow-body">
                   <span class="dv-dayrow-title">{{ e.title }}</span>
                   <span v-if="e.description" class="dv-dayrow-sub">{{ e.description }}</span>
                 </span>
-                <span v-if="!store.readonly" class="dv-dayrow-done" title="Выполнено" @click.stop="toggleDone(e, true)">
+                <span v-if="store.canToggle" class="dv-dayrow-done" title="Выполнено" @click.stop="toggleDone(e, true)">
                   <span class="material-symbols-outlined">check_circle</span>
                 </span>
                 <span class="material-symbols-outlined dv-dayrow-chev">chevron_right</span>
@@ -139,8 +151,11 @@
               </template>
               <div
                 v-for="day in gridDays" :key="dayKey(day)"
-                class="dv-day" :class="{ dim: store.view === 'month' && !inCurrentMonth(day), today: isToday(day) }"
+                class="dv-day" :class="{ dim: store.view === 'month' && !inCurrentMonth(day), today: isToday(day), 'drop-target': dropDayKey === dayKey(day) }"
                 @click="openDay(day)"
+                @dragover="onDayDragOver($event, day)"
+                @dragleave="dropDayKey === dayKey(day) && (dropDayKey = null)"
+                @drop="onDayDrop($event, day)"
               >
                 <div class="dv-day-head">
                   <span class="dv-day-num">{{ day.getDate() }}</span>
@@ -148,7 +163,11 @@
                   <span v-if="dayEntries(day).length" class="dv-day-count">{{ dayEntries(day).length }}</span>
                 </div>
                 <div class="dv-day-events">
-                  <div v-for="e in dayPreview(day)" :key="e.id" class="dv-event">
+                  <div
+                    v-for="e in dayPreview(day)" :key="e.id" class="dv-event"
+                    :class="{ dragging: dragEntryId === e.id }"
+                    :draggable="canDrag" @dragstart="onDragStart($event, e)" @dragend="onDragEnd"
+                  >
                     <span v-if="entryTime(e)" class="dv-event-time">{{ entryTime(e) }}</span>
                     <span class="dv-event-title">{{ e.title }}</span>
                   </div>
@@ -184,13 +203,18 @@
               <template v-else>
                 <template v-if="dayEntries(store.cursor).length">
                   <div class="dv-day-section">Активные</div>
-                  <button v-for="e in dayEntries(store.cursor)" :key="e.id" class="dv-dayrow" @click="openEntry(e)">
+                  <button
+                    v-for="e in dayEntries(store.cursor)" :key="e.id" class="dv-dayrow"
+                    :class="{ dragging: dragEntryId === e.id }"
+                    :draggable="canDrag" @dragstart="onDragStart($event, e)" @dragend="onDragEnd"
+                    @click="openEntry(e)"
+                  >
                     <span class="dv-dayrow-time">{{ entryTime(e) || '—' }}</span>
                     <span class="dv-dayrow-body">
                       <span class="dv-dayrow-title">{{ e.title }}</span>
                       <span v-if="e.description" class="dv-dayrow-sub">{{ e.description }}</span>
                     </span>
-                    <span v-if="!store.readonly" class="dv-dayrow-done" title="Выполнено" @click.stop="toggleDone(e, true)">
+                    <span v-if="store.canToggle" class="dv-dayrow-done" title="Выполнено" @click.stop="toggleDone(e, true)">
                       <span class="material-symbols-outlined">check_circle</span>
                     </span>
                     <span class="material-symbols-outlined dv-dayrow-chev">chevron_right</span>
@@ -204,7 +228,7 @@
                       <span class="dv-dayrow-title done">{{ e.title }}</span>
                       <span v-if="e.description" class="dv-dayrow-sub">{{ e.description }}</span>
                     </span>
-                    <span v-if="!store.readonly" class="dv-dayrow-done undo" title="Вернуть в активные" @click.stop="toggleDone(e, false)">
+                    <span v-if="store.canToggle" class="dv-dayrow-done undo" title="Вернуть в активные" @click.stop="toggleDone(e, false)">
                       <span class="material-symbols-outlined">undo</span>
                     </span>
                     <span class="material-symbols-outlined dv-dayrow-chev">chevron_right</span>
@@ -235,8 +259,17 @@
         <div v-if="dayActive.length" class="dd-group">
           <span class="dd-grouplabel">Активные</span>
           <ul class="dd-list">
-            <li v-for="e in dayActive" :key="e.id" class="dd-row">
-              <button v-if="!store.readonly" class="dd-check" title="Выполнено" @click="dayToggle(e, true)"><span class="material-symbols-outlined">radio_button_unchecked</span></button>
+            <li
+              v-for="e in dayOrdered" :key="e.id" class="dd-row"
+              :class="{ dragging: ddDragId === e.id }"
+              :draggable="canDrag && dayOrdered.length > 1"
+              @dragstart="ddDragStart($event, e)" @dragend="ddDragEnd"
+              @dragover="ddDragOver($event, e)" @drop.prevent="ddDrop"
+            >
+              <span v-if="canDrag && dayOrdered.length > 1" class="dd-grip" title="Перетащите, чтобы изменить порядок">
+                <span class="material-symbols-outlined">drag_indicator</span>
+              </span>
+              <button v-if="store.canToggle" class="dd-check" title="Выполнено" @click="dayToggle(e, true)"><span class="material-symbols-outlined">radio_button_unchecked</span></button>
               <button class="dd-main" @click="openEntry(e)">
                 <span v-if="entryTime(e)" class="dd-time">{{ entryTime(e) }}</span>
                 <span class="dd-title">{{ e.title }}</span>
@@ -250,7 +283,7 @@
           <span class="dd-grouplabel">Выполнено</span>
           <ul class="dd-list">
             <li v-for="e in dayDone" :key="e.id" class="dd-row">
-              <button v-if="!store.readonly" class="dd-check done" title="Вернуть в активные" @click="dayToggle(e, false)"><span class="material-symbols-outlined">check_circle</span></button>
+              <button v-if="store.canToggle" class="dd-check done" title="Вернуть в активные" @click="dayToggle(e, false)"><span class="material-symbols-outlined">check_circle</span></button>
               <button class="dd-main" @click="openEntry(e)">
                 <span v-if="entryTime(e)" class="dd-time">{{ entryTime(e) }}</span>
                 <span class="dd-title done">{{ e.title }}</span>
@@ -266,6 +299,7 @@
       v-model="entryOpen"
       :entry="activeEntry"
       :readonly="store.readonly"
+      :can-toggle="store.canToggle"
       :default-date="defaultDate"
       @create-task="onCreateTask"
     />
@@ -371,6 +405,57 @@ const gridDays = computed(() => {
 function dayEntries(day) { return store.entriesByDay[dayKey(day)] || [] }
 function inCurrentMonth(day) { return day.getMonth() === store.cursor.getMonth() }
 function weekdayShort(day) { return weekdays[(day.getDay() + 6) % 7] }
+
+// Прогресс ежедневника (выполнено/всего) в боковом списке.
+function diaryTotal(d) { return (d.active_count || 0) + (d.done_count || 0) }
+function diaryPct(d) { const t = diaryTotal(d); return t ? Math.round(((d.done_count || 0) / t) * 100) : 0 }
+
+// ── Drag-and-drop: перенос записи на другой день (плитки сетки) или в другой
+// свой ежедневник (боковой список). Перенос доступен только владельцу.
+const dragEntryId = ref(null)
+const dropDayKey = ref(null)
+const dropDiaryId = ref(null)
+const canDrag = computed(() => !store.readonly)
+
+function onDragStart(ev, e) {
+  dragEntryId.value = e.id
+  ev.dataTransfer.effectAllowed = 'move'
+  ev.dataTransfer.setData('text/plain', String(e.id))
+}
+function onDragEnd() { dragEntryId.value = null; dropDayKey.value = null; dropDiaryId.value = null }
+
+function onDayDragOver(ev, day) {
+  if (dragEntryId.value == null) return
+  ev.preventDefault()
+  ev.dataTransfer.dropEffect = 'move'
+  dropDayKey.value = dayKey(day)
+}
+async function onDayDrop(ev, day) {
+  if (dragEntryId.value == null) return
+  ev.preventDefault()
+  ev.stopPropagation()
+  const id = dragEntryId.value
+  onDragEnd()
+  try { await store.moveEntry(id, { entryDate: dayKey(day) }) }
+  catch (e) { notif.error(e?.message || 'Не удалось перенести запись') }
+}
+
+function onDiaryDragOver(ev, d) {
+  if (dragEntryId.value == null || store.tab !== 'mine' || d.id === store.selectedId) return
+  ev.preventDefault()
+  ev.dataTransfer.dropEffect = 'move'
+  dropDiaryId.value = d.id
+}
+async function onDiaryDrop(ev, d) {
+  if (dragEntryId.value == null || d.id === store.selectedId) return
+  ev.preventDefault()
+  const id = dragEntryId.value
+  onDragEnd()
+  try {
+    await store.moveEntry(id, { diaryId: d.id })
+    notif.success(`Запись перенесена в «${d.name}»`)
+  } catch (e) { notif.error(e?.message || 'Не удалось перенести запись') }
+}
 
 // Превью записей в плитке. Месяц — тесный (2). Неделя — столько, сколько влезает
 // в высоту столбца; при переполнении одна строка уходит под «+N».
@@ -488,6 +573,51 @@ function openDay(day) {
   dayOpen.value = true
   loadDayDone()
 }
+
+// ── Сортировка записей дня перетаскиванием (модалка дня, только владелец).
+// Пока тянем — живой предпросмотр в ddOrder; на отпускании порядок сохраняется.
+const ddDragId = ref(null)
+const ddOrder = ref(null) // массив id в текущем (предпросмотровом) порядке
+const dayOrdered = computed(() => {
+  if (!ddOrder.value) return dayActive.value
+  const byId = new Map(dayActive.value.map((e) => [e.id, e]))
+  return ddOrder.value.map((id) => byId.get(id)).filter(Boolean)
+})
+
+function ddDragStart(ev, e) {
+  ddDragId.value = e.id
+  ddOrder.value = dayActive.value.map((x) => x.id)
+  ev.dataTransfer.effectAllowed = 'move'
+  ev.dataTransfer.setData('text/plain', String(e.id))
+}
+function ddDragOver(ev, target) {
+  if (ddDragId.value == null || target.id === ddDragId.value || !ddOrder.value) return
+  ev.preventDefault()
+  ev.dataTransfer.dropEffect = 'move'
+  const order = ddOrder.value.slice()
+  const from = order.indexOf(ddDragId.value)
+  const to = order.indexOf(target.id)
+  if (from === -1 || to === -1 || from === to) return
+  order.splice(from, 1)
+  order.splice(to, 0, ddDragId.value)
+  ddOrder.value = order
+}
+async function ddDrop() {
+  if (ddDragId.value == null || !ddOrder.value || !dayDate.value) return
+  const ids = ddOrder.value.slice()
+  const changed = dayActive.value.some((e, i) => e.id !== ids[i])
+  const date = dayKey(dayDate.value)
+  ddDragId.value = null
+  if (!changed) { ddOrder.value = null; return }
+  try {
+    await store.reorderDay(date, ids)
+  } catch (e) {
+    notif.error(e?.message || 'Не удалось сохранить порядок')
+  } finally {
+    ddOrder.value = null
+  }
+}
+function ddDragEnd() { ddDragId.value = null; ddOrder.value = null }
 
 // Отметка/возврат прямо из модалки дня: обновляем и активные (в сторе), и
 // выполненные этого дня.
@@ -623,6 +753,12 @@ watch(() => store.loadingEntries, () => nextTick(measureWeekColumn))
 .dv-side-main { display: flex; flex-direction: column; min-width: 0; }
 .dv-side-name { font-size: 14px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .dv-side-owner { font-size: 12px; opacity: 0.8; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dv-side-progress { display: flex; align-items: center; gap: 8px; margin-top: 4px; }
+.dv-side-bar { flex: 1; height: 4px; border-radius: var(--radius-full); background: var(--color-surface-highest); overflow: hidden; }
+.dv-side-item.active .dv-side-bar { background: color-mix(in oklch, var(--color-on-primary-container) 20%, transparent); }
+.dv-side-fill { display: block; height: 100%; border-radius: inherit; background: var(--color-success); transition: width 0.25s; }
+.dv-side-count { flex-shrink: 0; font-size: 11px; font-weight: 600; font-variant-numeric: tabular-nums; opacity: 0.85; }
+.dv-side-item.drop-target { outline: 2px dashed var(--color-primary); outline-offset: -2px; background: var(--color-surface-high); }
 .dv-side-add { flex-shrink: 0; display: flex; align-items: center; justify-content: center; gap: 6px; margin: 8px; padding: 10px; border: 1px dashed var(--color-outline); border-radius: var(--radius-md); background: none; color: var(--color-primary); font-weight: 600; font-size: 14px; cursor: pointer; }
 .dv-side-add:hover { background: var(--color-surface-high); }
 
@@ -659,6 +795,9 @@ watch(() => store.loadingEntries, () => nextTick(measureWeekColumn))
 .dv-day { background: var(--color-surface); min-height: 104px; padding: 6px; display: flex; flex-direction: column; gap: 4px; cursor: pointer; overflow: hidden; }
 .dv-grid.week .dv-day { min-height: 0; }
 .dv-day:hover { background: var(--color-surface-high); }
+.dv-day.drop-target { background: var(--color-primary-container); outline: 2px dashed var(--color-primary); outline-offset: -2px; }
+.dv-event[draggable='true'] { cursor: grab; }
+.dv-event.dragging, .dv-dayrow.dragging { opacity: 0.4; }
 .dv-day.dim { background: var(--color-surface-low); }
 .dv-day.dim .dv-day-num { color: var(--color-text-dim); opacity: 0.6; }
 .dv-day-head { display: flex; align-items: center; justify-content: space-between; }
@@ -731,6 +870,10 @@ watch(() => store.loadingEntries, () => nextTick(measureWeekColumn))
 .dd-empty { margin: 8px 0; color: var(--color-text-dim); text-align: center; }
 .dd-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
 .dd-row { display: flex; align-items: stretch; gap: 6px; }
+.dd-row[draggable='true'] { cursor: grab; }
+.dd-row.dragging { opacity: 0.45; }
+.dd-grip { flex-shrink: 0; display: grid; place-items: center; color: var(--color-text-dim); }
+.dd-grip .material-symbols-outlined { font-size: 20px; }
 .dd-check { flex-shrink: 0; width: 42px; display: grid; place-items: center; border: 1px solid var(--color-outline-dim); border-radius: var(--radius-md); background: var(--color-surface); color: var(--color-text-dim); cursor: pointer; }
 .dd-check:hover { color: var(--color-success); }
 .dd-main { flex: 1; min-width: 0; display: flex; align-items: center; gap: 12px; text-align: left; padding: 10px 12px; border: 1px solid var(--color-outline-dim); border-radius: var(--radius-md); background: var(--color-surface); cursor: pointer; }

@@ -23,7 +23,6 @@ type Endpoints struct {
 	DeleteComment  endpoint.Endpoint
 	SendKudos      endpoint.Endpoint
 	GetLive        endpoint.Endpoint
-	SendZap        endpoint.Endpoint
 
 	GetMyPet      endpoint.Endpoint
 	FeedPet       endpoint.Endpoint
@@ -36,8 +35,8 @@ type Endpoints struct {
 	ClaimQuest    endpoint.Endpoint
 
 	GetZoo    endpoint.Endpoint
-	StrokePet endpoint.Endpoint
 	GetRaid   endpoint.Endpoint
+	GetRating endpoint.Endpoint
 
 	GetWrapped   endpoint.Endpoint
 	ShareWrapped endpoint.Endpoint
@@ -89,12 +88,8 @@ type DeleteCommentRequest struct {
 type KudosRequest struct {
 	Scope
 	ToUserID int64
+	Category string
 	Text     string
-}
-
-type ZapRequest struct {
-	Scope
-	ToUserID int64
 }
 
 type NameRequest struct {
@@ -110,11 +105,6 @@ type ItemRequest struct {
 type EquipRequest struct {
 	Scope
 	Item *string
-}
-
-type StrokeRequest struct {
-	Scope
-	TargetUserID int64
 }
 
 type MorningRequest struct {
@@ -158,15 +148,11 @@ func New(svc *service.Service) Endpoints {
 		},
 		SendKudos: func(ctx context.Context, request any) (any, error) {
 			r := request.(KudosRequest)
-			return nil, svc.SendKudos(ctx, r.CompanyID, r.UserID, r.ToUserID, r.Text)
+			return nil, svc.SendKudos(ctx, r.CompanyID, r.UserID, r.ToUserID, r.Category, r.Text)
 		},
 		GetLive: func(ctx context.Context, request any) (any, error) {
 			r := request.(Scope)
-			return svc.GetLive(ctx, r.CompanyID, r.UserID)
-		},
-		SendZap: func(ctx context.Context, request any) (any, error) {
-			r := request.(ZapRequest)
-			return svc.SendZap(ctx, r.CompanyID, r.UserID, r.ToUserID)
+			return svc.GetLive(ctx, r.CompanyID)
 		},
 
 		GetMyPet: func(ctx context.Context, request any) (any, error) {
@@ -207,15 +193,15 @@ func New(svc *service.Service) Endpoints {
 
 		GetZoo: func(ctx context.Context, request any) (any, error) {
 			r := request.(Scope)
-			return svc.GetZoo(ctx, r.CompanyID, r.UserID)
-		},
-		StrokePet: func(ctx context.Context, request any) (any, error) {
-			r := request.(StrokeRequest)
-			return svc.StrokePet(ctx, r.UserID, r.TargetUserID, r.CompanyID)
+			return svc.GetZoo(ctx, r.CompanyID)
 		},
 		GetRaid: func(ctx context.Context, request any) (any, error) {
 			r := request.(Scope)
-			return svc.GetRaidState(ctx, r.CompanyID)
+			return svc.GetRaidState(ctx, r.CompanyID, r.UserID)
+		},
+		GetRating: func(ctx context.Context, request any) (any, error) {
+			r := request.(Scope)
+			return svc.GetRating(ctx, r.CompanyID, r.UserID)
 		},
 
 		GetWrapped: func(ctx context.Context, request any) (any, error) {

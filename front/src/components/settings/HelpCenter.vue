@@ -116,13 +116,13 @@
           </div>
         </div>
 
-        <div v-if="!filteredGroups.length" class="hc-empty">
-          <div class="hc-empty-icon">
-            <span class="material-symbols-outlined">search_off</span>
-          </div>
-          <h4>Ничего не нашли</h4>
-          <p>Попробуйте другие слова — например, «время», «отдел» или «звонок».</p>
-        </div>
+        <EmptyState
+          v-if="!filteredGroups.length"
+          size="sm"
+          icon="search_off"
+          title="Ничего не нашли"
+          subtitle="Попробуйте другие слова — например, «время», «отдел» или «звонок»."
+        />
       </div>
     </Transition>
   </div>
@@ -133,6 +133,7 @@ import { ref, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { useTutorial } from '@/composables/useTutorial.js'
 import { usePermission, ROLES } from '@/composables/usePermission.js'
+import EmptyState from '@/components/common/EmptyState.vue'
 
 const router = useRouter()
 const tutorial = useTutorial()
@@ -648,31 +649,6 @@ function startFullTour() {
   color: var(--color-text-dim);
   opacity: 0.7;
 }
-
-/* ── Empty ───────────────────────────────────────────────────── */
-.hc-empty {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 8px;
-  padding: 40px 20px;
-  text-align: center;
-  color: var(--color-text-dim);
-}
-
-.hc-empty-icon {
-  width: 72px;
-  height: 72px;
-  border-radius: 50%;
-  background: var(--color-surface-high);
-  display: grid;
-  place-items: center;
-}
-
-.hc-empty-icon .material-symbols-outlined { font-size: 32px; opacity: 0.6; }
-
-.hc-empty h4 { margin: 0; font-size: 16px; font-weight: 700; color: var(--color-text); }
-.hc-empty p { margin: 0; font-size: 13px; max-width: 320px; line-height: 1.5; }
 
 /* ── Article ─────────────────────────────────────────────────── */
 .hc-article {

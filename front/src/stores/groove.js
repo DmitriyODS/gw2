@@ -11,9 +11,6 @@ export const useGrooveStore = defineStore('groove', () => {
   const loadingFeed = ref(false)
   const live = ref([])
   const liveLoaded = ref(false)
-  // Личный дневной запас зарядов ⚡ (обновляется каждый день).
-  const zapsLeft = ref(null)
-  const zapsMax = ref(10)
   const pet = ref(null)
   const zoo = ref([])
   const raid = ref(null)
@@ -175,29 +172,15 @@ export const useGrooveStore = defineStore('groove', () => {
     }
   }
 
-  // ───────────────────── live, заряды, кудосы ────────────────────
+  // ───────────────────────── live и кудосы ───────────────────────
 
   async function fetchLive() {
     const res = await api.getLive()
     live.value = res.items || []
-    zapsLeft.value = res.zaps_left ?? null
-    zapsMax.value = res.zaps_max ?? 10
     liveLoaded.value = true
   }
 
-  function applyZapCount(data) {
-    const entry = live.value.find(u => u.unit_id === data.unit_id)
-    if (entry) entry.zaps = data.zaps
-  }
-
-  async function zap(toUserId) {
-    const res = await api.sendZap(toUserId)
-    const entry = live.value.find(u => u.user?.id === toUserId)
-    if (entry) entry.zaps = res.zaps
-    if (res.zaps_left != null) zapsLeft.value = res.zaps_left
-  }
-
-  const sendKudos = (toUserId, text) => api.sendKudos(toUserId, text)
+  const sendKudos = (toUserId, category, text) => api.sendKudos(toUserId, category, text)
 
   // ─────────────────────────── питомец ──────────────────────────
 
@@ -297,19 +280,18 @@ export const useGrooveStore = defineStore('groove', () => {
     zoo.value = await api.getZoo()
   }
 
-  async function strokePet(userId) {
-    const res = await api.strokePet(userId)
-    const entry = zoo.value.find(p => p.user_id === userId)
-    if (entry) {
-      entry.strokes_today = res.strokes_today
-      entry.stroked_by_me = true
-    }
-  }
-
   // ──────────────────────────── рейд ────────────────────────────
 
   async function fetchRaid() {
     raid.value = await api.getRaid()
+  }
+
+  // ─────────────────── рейтинг питомцев компании ────────────────
+
+  const rating = ref(null)
+
+  async function fetchRating() {
+    rating.value = await api.getRating()
   }
 
   function applyRaidUpdate(data) {
@@ -326,18 +308,19 @@ export const useGrooveStore = defineStore('groove', () => {
   }
 
   return {
-    events, hasMore, loadingFeed, live, liveLoaded, zapsLeft, zapsMax, pet, zoo, raid,
+    events, hasMore, loadingFeed, live, liveLoaded, pet, zoo, raid,
     shopPrices, seasonalItems, seasonTitle, rareItems, speciesPrices, commentsByEvent,
     wrapped, wrappedLoading, celebration, myId, myCompanyId, isMine,
     fetchFeed, loadMore, applyNewEvent, celebrate, clearCelebration,
     toggleReaction, applyReaction,
     fetchComments, addComment, applyComment, removeComment, applyCommentDeleted,
-    fetchLive, applyZapCount, zap, sendKudos,
+    fetchLive, sendKudos,
     fetchPet, feedPet, renamePet, equipItem, buyItem, fetchShop,
     buySpecies, switchSpecies, claimQuest, applyPetUpdate,
     location, weather, locationLoaded, fetchLocation, saveLocation, removeLocation,
-    fetchZoo, strokePet,
+    fetchZoo,
     fetchRaid, applyRaidUpdate,
+    rating, fetchRating,
     fetchWrapped, shareWrapped,
   }
 })

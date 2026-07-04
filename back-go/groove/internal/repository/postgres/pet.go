@@ -198,64 +198,6 @@ func (r *PetRepo) FinishedUnitsForUser(ctx context.Context, userID int64,
 	return out, rows.Err()
 }
 
-// ──────────────────────────── поглаживания ─────────────────────────
-
-func (r *PetRepo) AddStroke(ctx context.Context, petUserID, userID int64, day time.Time) (bool, error) {
-	tag, err := r.pool.Exec(ctx, `
-		INSERT INTO pet_strokes (pet_user_id, user_id, day, created_at)
-		VALUES ($1, $2, $3, now())
-		ON CONFLICT (pet_user_id, user_id, day) DO NOTHING`,
-		petUserID, userID, day)
-	if err != nil {
-		return false, err
-	}
-	return tag.RowsAffected() > 0, nil
-}
-
-func (r *PetRepo) StrokesToday(ctx context.Context, petUserIDs []int64, day time.Time) (map[int64]int, error) {
-	result := map[int64]int{}
-	if len(petUserIDs) == 0 {
-		return result, nil
-	}
-	rows, err := r.pool.Query(ctx, `
-		SELECT pet_user_id, count(id) FROM pet_strokes
-		WHERE pet_user_id = ANY($1) AND day = $2
-		GROUP BY pet_user_id`, petUserIDs, day)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	for rows.Next() {
-		var petUserID int64
-		var count int
-		if err := rows.Scan(&petUserID, &count); err != nil {
-			return nil, err
-		}
-		result[petUserID] = count
-	}
-	return result, rows.Err()
-}
-
-func (r *PetRepo) MyStrokesToday(ctx context.Context, userID int64, day time.Time) (map[int64]bool, error) {
-	rows, err := r.pool.Query(ctx, `
-		SELECT pet_user_id FROM pet_strokes WHERE user_id = $1 AND day = $2`,
-		userID, day)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	result := map[int64]bool{}
-	for rows.Next() {
-		var petUserID int64
-		if err := rows.Scan(&petUserID); err != nil {
-			return nil, err
-		}
-		result[petUserID] = true
-	}
-	return result, rows.Err()
-}
-
 // ────────────────────────────── рейды ──────────────────────────────
 
 func scanRaid(row pgx.Row) (*domain.Raid, error) {

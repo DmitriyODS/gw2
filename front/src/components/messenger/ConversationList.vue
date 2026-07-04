@@ -41,25 +41,18 @@
     <div v-if="loading" class="conv-empty">
       <ProgressSpinner />
     </div>
-    <div v-else-if="!visible.length" class="conv-empty conv-empty--rich">
-      <div class="empty-icon">
-        <span class="material-symbols-outlined">
-          {{ filter ? 'person_search' : (tab === 'support' ? 'support_agent' : 'forum') }}
-        </span>
-      </div>
-      <h3 class="empty-title">
-        {{ filter
-          ? 'Никого не нашли'
-          : (tab === 'support' ? 'Обращений пока нет' : 'Тут пока тишина') }}
-      </h3>
-      <p class="empty-sub">
-        {{ emptySub }}
-      </p>
+    <EmptyState
+      v-else-if="!visible.length"
+      class="conv-empty--rich"
+      :icon="filter ? 'person_search' : (tab === 'support' ? 'support_agent' : 'forum')"
+      :title="filter ? 'Никого не нашли' : (tab === 'support' ? 'Обращений пока нет' : 'Тут пока тишина')"
+      :subtitle="emptySub"
+    >
       <button v-if="!filter && tab !== 'support'" class="btn-filled-tonal" @click="$emit('new-chat')">
         <span class="material-symbols-outlined">edit_square</span>
         Начать переписку
       </button>
-    </div>
+    </EmptyState>
     <ul v-else class="conv-items">
       <li
         v-for="c in visible"
@@ -141,6 +134,7 @@
 import { ref, computed } from 'vue'
 import ProgressSpinner from 'primevue/progressspinner'
 import SegmentedTabs from '@/components/common/SegmentedTabs.vue'
+import EmptyState from '@/components/common/EmptyState.vue'
 import { useGrooveStore } from '@/stores/groove.js'
 import { useMessengerStore } from '@/stores/messenger.js'
 
@@ -388,55 +382,9 @@ function formatTime(iso) {
   text-align: center;
 }
 
-/* M3 Expressive empty state: иконка в круглом tinted container,
-   крупный заголовок, мягкая подпись и filled-tonal pill-кнопка с иконкой.
-   Все цвета — через семантические токены, чтобы тёмная тема и кастомные
-   палитры подхватывались автоматически. */
+/* Пустой список — общий EmptyState, здесь только растягивание на всю высоту. */
 .conv-empty--rich {
-  gap: 14px;
-  padding: 48px 24px;
   flex: 1;
-  justify-content: center;
-}
-
-.empty-icon {
-  width: 80px;
-  height: 80px;
-  border-radius: 50%;
-  background: var(--color-primary-container);
-  color: var(--color-on-primary-container);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  margin-bottom: 4px;
-  box-shadow: var(--shadow-sm);
-  transition: transform 0.25s ease, box-shadow 0.25s ease;
-}
-
-.empty-icon:hover {
-  transform: translateY(-1px);
-  box-shadow: var(--shadow-md);
-}
-
-.empty-icon .material-symbols-outlined {
-  font-size: 40px;
-  font-variation-settings: 'FILL' 1, 'wght' 400, 'GRAD' 0, 'opsz' 40;
-}
-
-.empty-title {
-  margin: 0;
-  font-size: 18px;
-  font-weight: 600;
-  letter-spacing: -0.1px;
-  color: var(--color-text);
-}
-
-.empty-sub {
-  margin: 0 0 4px;
-  font-size: 13.5px;
-  line-height: 1.45;
-  color: var(--color-text-dim);
-  max-width: 260px;
 }
 
 /* M3 filled tonal button: secondary container fill, pill-shape,

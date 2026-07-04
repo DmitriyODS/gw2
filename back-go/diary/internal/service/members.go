@@ -14,10 +14,11 @@ func (s *Service) ListMembers(ctx context.Context, userID, diaryID int64) ([]*do
 	return s.repo.ListMembers(ctx, diaryID)
 }
 
-// AddMember — открыть ежедневник пользователю (read-only). Идемпотентно. Шлёт
-// адресату событие diary:shared — у него ежедневник появляется во вкладке
-// «Поделились» без перезагрузки. Возвращает добавленного участника.
-func (s *Service) AddMember(ctx context.Context, userID, diaryID, memberID int64) (*domain.Member, error) {
+// AddMember — открыть ежедневник пользователю. canCheck — разрешить отмечать
+// записи выполненными (иначе только чтение). Идемпотентный upsert: повторный
+// вызов обновляет право. Шлёт адресату событие diary:shared — у него
+// ежедневник появляется во вкладке «Поделились» без перезагрузки.
+func (s *Service) AddMember(ctx context.Context, userID, diaryID, memberID int64, canCheck bool) (*domain.Member, error) {
 	d, err := s.requireOwned(ctx, userID, diaryID)
 	if err != nil {
 		return nil, err
@@ -32,15 +33,16 @@ func (s *Service) AddMember(ctx context.Context, userID, diaryID, memberID int64
 	if member == nil || !member.IsActive {
 		return nil, domain.ErrMemberNotFound
 	}
-	if err := s.repo.AddMember(ctx, diaryID, memberID); err != nil {
+	if err := s.repo.AddMember(ctx, diaryID, memberID, canCheck); err != nil {
 		return nil, err
 	}
 	if owner, err := s.users.GetUser(ctx, userID); err == nil && owner != nil {
 		d.OwnerName, d.OwnerAvatar = owner.FIO, owner.AvatarPath
 	}
 	d.Shared = true
+	d.CanCheck = canCheck
 	s.bus.Publish(ctx, "diary:shared", []string{userRoom(memberID)}, diaryPayload(d))
-	return &domain.Member{UserID: member.ID, FIO: member.FIO, AvatarPath: member.AvatarPath}, nil
+	return &domain.Member{UserID: member.ID, FIO: member.FIO, AvatarPath: member.AvatarPath, CanCheck: canCheck}, nil
 }
 
 // RemoveMember — закрыть адресный доступ. Шлёт адресату diary:unshared.

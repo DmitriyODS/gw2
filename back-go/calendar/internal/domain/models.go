@@ -1,6 +1,10 @@
 package domain
 
-import "time"
+import (
+	"time"
+
+	"github.com/DmitriyODS/gw2/back-go/pkg/records"
+)
 
 // Уровни ролей в компании (общие с authsvc/tasksvc domain.Level*).
 const (
@@ -9,26 +13,23 @@ const (
 	LevelAdmin    = 3
 )
 
-// Типы полей карточки записи календаря. Набор совпадает с реестрами и
-// продублирован во фронте (front/src/utils/registryFields.js) — держать
-// синхронным. Встроенное поле «Дата и время» хранится отдельной колонкой
+// Типы полей карточки записи календаря — общий набор pkg/records (совпадает с
+// реестрами, продублирован во фронте front/src/utils/registryFields.js).
+// Встроенное поле «Дата и время» хранится отдельной колонкой
 // calendar_records.event_at и в этот набор НЕ входит.
 const (
-	FieldImage    = "image"    // картинка (превью + полноэкранный просмотр)
-	FieldFile     = "file"     // произвольный файл
-	FieldText     = "text"     // текстовое поле (config.multiline — textarea)
-	FieldNumber   = "number"   // число (config.pattern — опц. regex шаблона)
-	FieldCheckbox = "checkbox" // галочка
-	FieldSelect   = "select"   // выбор из вариантов (config.options, config.multiple)
-	FieldLink     = "link"     // ссылка на сайт
-	FieldDatetime = "datetime" // дата/время (config.year/month_day/time — части)
+	FieldImage    = records.FieldImage
+	FieldFile     = records.FieldFile
+	FieldText     = records.FieldText
+	FieldNumber   = records.FieldNumber
+	FieldCheckbox = records.FieldCheckbox
+	FieldSelect   = records.FieldSelect
+	FieldLink     = records.FieldLink
+	FieldDatetime = records.FieldDatetime
 )
 
 // FieldTypes — допустимые типы (для валидации структуры календаря).
-var FieldTypes = map[string]bool{
-	FieldImage: true, FieldFile: true, FieldText: true, FieldNumber: true,
-	FieldCheckbox: true, FieldSelect: true, FieldLink: true, FieldDatetime: true,
-}
+var FieldTypes = records.FieldTypes
 
 // Calendar — календарь компании: набор полей карточки + записи, привязанные
 // к дате/времени (см. Entry.EventAt).

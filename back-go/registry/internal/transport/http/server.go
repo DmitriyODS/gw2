@@ -11,6 +11,7 @@ import (
 	"github.com/gofiber/fiber/v2"
 
 	"github.com/DmitriyODS/gw2/back-go/pkg/apierror"
+	"github.com/DmitriyODS/gw2/back-go/pkg/httpserver"
 	"github.com/DmitriyODS/gw2/back-go/pkg/pasetoauth"
 	"github.com/DmitriyODS/gw2/back-go/registry/internal/domain"
 	"github.com/DmitriyODS/gw2/back-go/registry/internal/endpoint"
@@ -50,17 +51,11 @@ func authSource(users domain.UserReader) pasetoauth.AuthSource {
 func NewServer(eps endpoint.Endpoints, users domain.UserReader,
 	verifier *pasetoauth.Verifier, log *slog.Logger) *Server {
 
-	app := fiber.New(fiber.Config{
-		AppName:               "gw2-registrysvc",
-		DisableStartupMessage: true,
-		BodyLimit:             uploadMaxBytes + 1024*1024,
+	app := httpserver.New(httpserver.Config{
+		AppName: "gw2-registrysvc", Log: log, BodyLimit: uploadMaxBytes + 1024*1024,
 	})
 	auth := pasetoauth.NewMiddleware(verifier, authSource(users))
 	h := &handlers{eps: eps, log: log}
-
-	app.Get("/healthz", func(c *fiber.Ctx) error {
-		return c.JSON(fiber.Map{"ok": true})
-	})
 
 	employee := auth.RequireRole(domain.LevelEmployee)
 	admin := auth.RequireRole(domain.LevelAdmin)

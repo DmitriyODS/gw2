@@ -16,6 +16,12 @@ data class DiaryDto(
     val shared: Boolean = false,
     @SerialName("owner_name") val ownerName: String? = null,
     @SerialName("owner_avatar") val ownerAvatar: String? = null,
+    // Для чужого ежедневника: можно ли адресату отмечать записи выполненными
+    // (у своих всегда true).
+    @SerialName("can_check") val canCheck: Boolean = true,
+    // Прогресс: количество активных и выполненных записей.
+    @SerialName("active_count") val activeCount: Int = 0,
+    @SerialName("done_count") val doneCount: Int = 0,
 )
 
 @Serializable
@@ -66,4 +72,11 @@ data class DiaryDoneRequest(
 @Serializable
 data class DiaryLinkRequest(
     @SerialName("task_id") val taskId: Long?,
+)
+
+// Перенос записи на другой день и/или в другой СВОЙ ежедневник (пустые поля не меняются).
+@Serializable
+data class DiaryMoveRequest(
+    @SerialName("diary_id") val diaryId: Long? = null,
+    @SerialName("entry_date") val entryDate: String? = null,
 )

@@ -7,6 +7,7 @@ import com.kodass.groovework.data.dto.DiaryEntryDto
 import com.kodass.groovework.data.dto.DiaryEntryListDto
 import com.kodass.groovework.data.dto.DiaryEntryRequest
 import com.kodass.groovework.data.dto.DiaryLinkRequest
+import com.kodass.groovework.data.dto.DiaryMoveRequest
 import com.kodass.groovework.data.dto.DiaryNameRequest
 import retrofit2.http.Body
 import retrofit2.http.DELETE
@@ -64,6 +65,14 @@ interface DiariesApi {
         @Path("id") id: Long,
         @Path("rid") rid: Long,
         @Body body: DiaryDoneRequest,
+    ): DiaryEntryDto
+
+    // Перенос записи (владелец обоих ежедневников).
+    @PATCH("api/diaries/{id}/records/{rid}/move")
+    suspend fun moveRecord(
+        @Path("id") id: Long,
+        @Path("rid") rid: Long,
+        @Body body: DiaryMoveRequest,
     ): DiaryEntryDto
 
     @PATCH("api/diaries/{id}/records/{rid}/link")

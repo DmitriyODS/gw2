@@ -318,6 +318,7 @@ private fun WeekList(viewModel: DiaryViewModel, diaryId: Long, onOpenEntry: (Lon
                 isToday = day == today,
                 entries = viewModel.entriesFor(day),
                 readonly = viewModel.readonly,
+                canCheck = viewModel.canCheck,
                 onOpenDay = { viewModel.openDayDialog(day) },
                 onAdd = { onOpenEntry(diaryId, 0L, viewModel.defaultDateMillis(day)) },
                 onEntryClick = { e -> onOpenEntry(diaryId, e.id, 0L) },
@@ -333,6 +334,7 @@ private fun DayCard(
     isToday: Boolean,
     entries: List<DiaryEntryDto>,
     readonly: Boolean,
+    canCheck: Boolean,
     onOpenDay: () -> Unit,
     onAdd: () -> Unit,
     onEntryClick: (DiaryEntryDto) -> Unit,
@@ -365,7 +367,7 @@ private fun DayCard(
                 )
             } else {
                 entries.forEach { e ->
-                    EntryRow(e, readonly, onClick = { onEntryClick(e) }, onDone = { onDone(e) })
+                    EntryRow(e, canCheck, onClick = { onEntryClick(e) }, onDone = { onDone(e) })
                 }
             }
         }
@@ -396,7 +398,7 @@ private fun DayList(viewModel: DiaryViewModel, diaryId: Long, onOpenEntry: (Long
             item(key = "h-active") { DayGroupLabel("Активные") }
             items(active, key = { it.id }) { e ->
                 Surface(shape = MaterialTheme.shapes.large, color = MaterialTheme.colorScheme.surfaceContainerLow, modifier = Modifier.fillMaxWidth()) {
-                    EntryRow(e, viewModel.readonly, onClick = { onOpenEntry(diaryId, e.id, 0L) }, onDone = { viewModel.toggleDone(e, true) }, padded = true)
+                    EntryRow(e, viewModel.canCheck, onClick = { onOpenEntry(diaryId, e.id, 0L) }, onDone = { viewModel.toggleDone(e, true) }, padded = true)
                 }
             }
         }
@@ -404,7 +406,7 @@ private fun DayList(viewModel: DiaryViewModel, diaryId: Long, onOpenEntry: (Long
             item(key = "h-done") { DayGroupLabel("Выполнено") }
             items(done, key = { it.id }) { e ->
                 Surface(shape = MaterialTheme.shapes.large, color = MaterialTheme.colorScheme.surfaceContainerLow, modifier = Modifier.fillMaxWidth()) {
-                    EntryRow(e, viewModel.readonly, onClick = { onOpenEntry(diaryId, e.id, 0L) }, onDone = { viewModel.toggleDone(e, false) }, padded = true, done = true)
+                    EntryRow(e, viewModel.canCheck, onClick = { onOpenEntry(diaryId, e.id, 0L) }, onDone = { viewModel.toggleDone(e, false) }, padded = true, done = true)
                 }
             }
         }
@@ -474,7 +476,7 @@ private fun ArchiveList(viewModel: DiaryViewModel, diaryId: Long, onOpenEntry: (
                                 Text(t, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                             }
                         }
-                        if (!viewModel.readonly) {
+                        if (viewModel.canCheck) {
                             IconButton(onClick = { viewModel.toggleDone(e, false) }) {
                                 Icon(Icons.AutoMirrored.Filled.Undo, contentDescription = "Вернуть в активные")
                             }
@@ -506,7 +508,7 @@ private fun DiaryDayDialog(viewModel: DiaryViewModel, diaryId: Long, onOpenEntry
                     if (active.isNotEmpty()) {
                         DayGroupLabel("Активные")
                         active.forEach { e ->
-                            DayDialogRow(e, done = false, readonly = viewModel.readonly,
+                            DayDialogRow(e, done = false, canCheck = viewModel.canCheck,
                                 onOpen = { onOpenEntry(diaryId, e.id, 0L) },
                                 onToggle = { viewModel.toggleDone(e, true) })
                         }
@@ -514,7 +516,7 @@ private fun DiaryDayDialog(viewModel: DiaryViewModel, diaryId: Long, onOpenEntry
                     if (done.isNotEmpty()) {
                         DayGroupLabel("Выполнено")
                         done.forEach { e ->
-                            DayDialogRow(e, done = true, readonly = viewModel.readonly,
+                            DayDialogRow(e, done = true, canCheck = viewModel.canCheck,
                                 onOpen = { onOpenEntry(diaryId, e.id, 0L) },
                                 onToggle = { viewModel.toggleDone(e, false) })
                         }
@@ -551,7 +553,7 @@ private fun DayGroupLabel(text: String) {
 private fun DayDialogRow(
     entry: DiaryEntryDto,
     done: Boolean,
-    readonly: Boolean,
+    canCheck: Boolean,
     onOpen: () -> Unit,
     onToggle: () -> Unit,
 ) {
@@ -559,7 +561,7 @@ private fun DayDialogRow(
         verticalAlignment = Alignment.CenterVertically,
         modifier = Modifier.fillMaxWidth().clickable { onOpen() }.padding(vertical = 4.dp),
     ) {
-        if (!readonly) {
+        if (canCheck) {
             IconButton(onClick = onToggle, modifier = Modifier.size(36.dp)) {
                 Icon(
                     if (done) Icons.Filled.CheckCircle else Icons.Outlined.RadioButtonUnchecked,
@@ -575,7 +577,7 @@ private fun DayDialogRow(
                 style = MaterialTheme.typography.labelLarge,
                 fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.padding(start = if (readonly) 4.dp else 0.dp, end = 10.dp),
+                modifier = Modifier.padding(start = if (canCheck) 0.dp else 4.dp, end = 10.dp),
             )
         }
         Text(
@@ -593,7 +595,7 @@ private fun DayDialogRow(
 @Composable
 private fun EntryRow(
     entry: DiaryEntryDto,
-    readonly: Boolean,
+    canCheck: Boolean,
     onClick: () -> Unit,
     onDone: () -> Unit,
     padded: Boolean = false,
@@ -634,7 +636,7 @@ private fun EntryRow(
                 )
             }
         }
-        if (!readonly) {
+        if (canCheck) {
             IconButton(onClick = onDone) {
                 Icon(
                     if (done) Icons.Filled.CheckCircle else Icons.Outlined.RadioButtonUnchecked,

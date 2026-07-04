@@ -129,7 +129,10 @@ func TestApplyRecovery(t *testing.T) {
 
 type fakePets struct {
 	domain.PetRepo
-	pet *domain.Pet
+	pet           *domain.Pet
+	company       []*domain.Pet
+	raid          *domain.Raid
+	closedBetween int
 }
 
 func (f *fakePets) GetOrCreate(_ context.Context, userID, companyID int64) (*domain.Pet, error) {
@@ -153,7 +156,9 @@ func (f *fakePets) FinishedUnitsForUser(context.Context, int64, time.Time, int) 
 
 type fakeFeed struct {
 	domain.FeedRepo
-	kinds []string
+	kinds     []string
+	myClosed  int
+	kudosWeek map[int64]int
 }
 
 func (f *fakeFeed) CreateEvent(_ context.Context, companyID int64, userID *int64,

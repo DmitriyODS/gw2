@@ -15,13 +15,14 @@
         :style="cellStyle(f)"
       >
         <div class="rec-label">{{ f.label }}</div>
-        <RegistryFieldInput
+        <FieldInput
           v-if="editing"
           :field="f"
           :model-value="form[String(f.id)] ?? null"
+          :upload="uploadFile"
           @update:model-value="form[String(f.id)] = $event"
         />
-        <RegistryFieldValue v-else :field="f" :value="record?.data?.[String(f.id)] ?? null" />
+        <FieldValue v-else :field="f" :value="record?.data?.[String(f.id)] ?? null" />
       </div>
     </div>
     <p v-else class="rec-empty">В этом реестре пока нет полей.</p>
@@ -47,8 +48,9 @@
 <script setup>
 import { reactive, ref, watch } from 'vue'
 import AppDialog from '@/components/common/AppDialog.vue'
-import RegistryFieldInput from './RegistryFieldInput.vue'
-import RegistryFieldValue from './RegistryFieldValue.vue'
+import FieldInput from '@/components/common/FieldInput.vue'
+import FieldValue from '@/components/common/FieldValue.vue'
+import { uploadFile } from '@/api/registries.js'
 import { useRegistriesStore } from '@/stores/registries.js'
 import { useNotificationsStore } from '@/stores/notifications.js'
 

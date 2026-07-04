@@ -23,6 +23,13 @@ type Diary struct {
 	OwnerName   string    `json:"owner_name,omitempty"`
 	OwnerAvatar *string   `json:"owner_avatar,omitempty"`
 	Shared      bool      `json:"shared"`
+	// CanCheck — для чужого ежедневника: адресату разрешено отмечать записи
+	// выполненными (сценарий «руководитель раздаёт задачи»). У владельца всегда true.
+	CanCheck bool `json:"can_check"`
+	// ActiveCount/DoneCount — прогресс списка (активные/выполненные записи),
+	// заполняются в списках ежедневников.
+	ActiveCount int `json:"active_count"`
+	DoneCount   int `json:"done_count"`
 }
 
 // Entry — запись (заметка-задача) ежедневника. Date — день, к которому привязана
@@ -39,8 +46,11 @@ type Entry struct {
 	Description  string    `json:"-"`
 	Done         bool      `json:"-"`
 	LinkedTaskID *int64    `json:"-"`
-	CreatedAt    time.Time `json:"-"`
-	UpdatedAt    time.Time `json:"-"`
+	// Position — ручной порядок внутри дня (0 — не упорядочено, сортируется по
+	// времени после упорядоченных; reorder проставляет 1..N).
+	Position  int       `json:"-"`
+	CreatedAt time.Time `json:"-"`
+	UpdatedAt time.Time `json:"-"`
 }
 
 // MarshalJSON — день записи отдаётся как дата YYYY-MM-DD (без времени/таймзоны),
@@ -56,12 +66,14 @@ func (e Entry) MarshalJSON() ([]byte, error) {
 		Description  string    `json:"description"`
 		Done         bool      `json:"done"`
 		LinkedTaskID *int64    `json:"linked_task_id"`
+		Position     int       `json:"position"`
 		CreatedAt    time.Time `json:"created_at"`
 		UpdatedAt    time.Time `json:"updated_at"`
 	}{
 		ID: e.ID, DiaryID: e.DiaryID, EntryDate: e.Date.Format(DateLayout),
 		StartMin: e.StartMin, EndMin: e.EndMin, Title: e.Title, Description: e.Description,
-		Done: e.Done, LinkedTaskID: e.LinkedTaskID, CreatedAt: e.CreatedAt, UpdatedAt: e.UpdatedAt,
+		Done: e.Done, LinkedTaskID: e.LinkedTaskID, Position: e.Position,
+		CreatedAt: e.CreatedAt, UpdatedAt: e.UpdatedAt,
 	})
 }
 
@@ -87,11 +99,13 @@ type Share struct {
 	CreatedAt time.Time `json:"created_at"`
 }
 
-// Member — пользователь, которому адресно открыт ежедневник (read-only).
+// Member — пользователь, которому адресно открыт ежедневник. CanCheck —
+// разрешено отмечать записи выполненными (иначе только чтение).
 type Member struct {
 	UserID     int64     `json:"user_id"`
 	FIO        string    `json:"fio"`
 	AvatarPath *string   `json:"avatar_path"`
+	CanCheck   bool      `json:"can_check"`
 	CreatedAt  time.Time `json:"created_at"`
 }
 

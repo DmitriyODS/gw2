@@ -2,16 +2,16 @@
 // проксируется, нужен для docker healthcheck). Вся отправка идёт по gRPC.
 package http
 
-import "github.com/gofiber/fiber/v2"
+import (
+	"github.com/gofiber/fiber/v2"
+
+	"github.com/DmitriyODS/gw2/back-go/pkg/httpserver"
+)
 
 type Server struct{ app *fiber.App }
 
 func NewServer() *Server {
-	app := fiber.New(fiber.Config{DisableStartupMessage: true})
-	app.Get("/healthz", func(c *fiber.Ctx) error {
-		return c.JSON(fiber.Map{"status": "ok"})
-	})
-	return &Server{app: app}
+	return &Server{app: httpserver.New(httpserver.Config{AppName: "gw2-mailsvc"})}
 }
 
 func (s *Server) Listen(addr string) error { return s.app.Listen(addr) }

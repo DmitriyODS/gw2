@@ -2,7 +2,7 @@
   <article class="feed-card" :class="[`kind-${event.kind}`, { hero: !!heroEmoji }]">
     <span v-if="heroEmoji" class="fcard-hero-emoji" aria-hidden="true">{{ heroEmoji }}</span>
     <div class="fcard-head">
-      <span v-if="isSystem" class="fcard-avatar bot" aria-hidden="true">👾</span>
+      <span v-if="isSystem" class="fcard-avatar bot" aria-hidden="true">{{ event.kind === 'day_summary' ? '📊' : '👾' }}</span>
       <img v-else class="fcard-avatar" :src="avatarUrl(event.user)" :alt="event.user?.fio || ''" />
       <div class="fcard-who">
         <span class="fcard-name">{{ authorName }}</span>
@@ -13,10 +13,39 @@
       </span>
     </div>
 
-    <!-- Кудос: адресат + цитата -->
+    <!-- Кудос: адресат + категория + цитата -->
     <div v-if="event.kind === 'kudos'" class="fcard-kudos">
-      <p class="fcard-text">поблагодарил(а) <strong>{{ event.payload?.to_fio }}</strong></p>
+      <p class="fcard-text">
+        поблагодарил(а) <strong>{{ event.payload?.to_fio }}</strong>
+        <span v-if="kudosCategory" class="fcard-kudos-cat">
+          <span class="material-symbols-outlined">{{ kudosCategory.icon }}</span>
+          {{ kudosCategory.title }}
+        </span>
+      </p>
       <blockquote class="fcard-quote">«{{ event.payload?.text }}»</blockquote>
+    </div>
+
+    <!-- Итоги дня: метрики в строку + лидер дня -->
+    <div v-else-if="event.kind === 'day_summary'" class="fcard-summary">
+      <div class="fcard-summary-metrics">
+        <span class="fcard-metric">
+          <span class="material-symbols-outlined">timer</span>
+          {{ summaryUnits }}
+        </span>
+        <span class="fcard-metric">
+          <span class="material-symbols-outlined">task_alt</span>
+          {{ summaryTasks }}
+        </span>
+        <span class="fcard-metric">
+          <span class="material-symbols-outlined">schedule</span>
+          {{ summaryHours }}
+        </span>
+      </div>
+      <div v-if="event.payload?.leader" class="fcard-summary-leader">
+        <img class="fcard-leader-avatar" :src="avatarUrl({ id: event.payload.leader.user_id, avatar_path: event.payload.leader.avatar_path })" alt="" />
+        <span class="fcard-leader-name">{{ event.payload.leader.fio }}</span>
+        <span class="fcard-leader-hours">лидер дня · {{ event.payload.leader.hours }} ч</span>
+      </div>
     </div>
 
     <!-- AI-дайджест: текст от Грувика -->
@@ -52,7 +81,7 @@
 <script setup>
 import { computed, ref } from 'vue'
 import { useGrooveStore } from '@/stores/groove.js'
-import { avatarUrl, formatMinutes, PET_STAGES, PET_SPECIES, BOSS_EMOJI, SHOP_ITEMS, FEED_HERO_KINDS } from '@/utils/groove.js'
+import { avatarUrl, formatMinutes, PET_STAGES, PET_SPECIES, BOSS_EMOJI, SHOP_ITEMS, FEED_HERO_KINDS, KUDOS_CATEGORIES } from '@/utils/groove.js'
 import ReactionBar from './ReactionBar.vue'
 import FeedComments from './FeedComments.vue'
 
@@ -64,9 +93,8 @@ const groove = useGrooveStore()
 const showComments = ref(false)
 
 const KIND_META = {
-  unit_started: { icon: 'play_arrow', tone: 'primary' },
-  unit_stopped: { icon: 'timer', tone: 'secondary' },
   task_closed: { icon: 'task_alt', tone: 'success' },
+  day_summary: { icon: 'bar_chart', tone: 'primary' },
   streak: { icon: 'local_fire_department', tone: 'warning' },
   pet_evolved: { icon: 'auto_awesome', tone: 'tertiary' },
   kudos: { icon: 'volunteer_activism', tone: 'success' },
@@ -84,15 +112,34 @@ const meta = computed(() => KIND_META[props.event.kind] || { icon: 'bolt', tone:
 const heroEmoji = computed(() => FEED_HERO_KINDS[props.event.kind] || null)
 
 const isSystem = computed(() => !props.event.user)
-const authorName = computed(() => props.event.user?.fio || 'Грувик')
+const authorName = computed(() =>
+  props.event.kind === 'day_summary' ? 'Итоги дня' : (props.event.user?.fio || 'Грувик')
+)
+
+const kudosCategory = computed(() =>
+  props.event.kind === 'kudos' ? KUDOS_CATEGORIES[props.event.payload?.category] || null : null
+)
+
+// ── Итоги дня ──
+const plural = (n, one, few, many) => {
+  const abs = Math.abs(n)
+  if (abs % 10 === 1 && abs % 100 !== 11) return one
+  if (abs % 10 >= 2 && abs % 10 <= 4 && (abs % 100 < 12 || abs % 100 > 14)) return few
+  return many
+}
+const summaryUnits = computed(() => {
+  const n = props.event.payload?.units_count || 0
+  return `${n} ${plural(n, 'юнит', 'юнита', 'юнитов')}`
+})
+const summaryTasks = computed(() => {
+  const n = props.event.payload?.tasks_closed || 0
+  return `${n} ${plural(n, 'задача закрыта', 'задачи закрыты', 'задач закрыто')}`
+})
+const summaryHours = computed(() => `${props.event.payload?.total_hours || 0} ч в работе`)
 
 const sentence = computed(() => {
   const p = props.event.payload || {}
   switch (props.event.kind) {
-    case 'unit_started':
-      return `взял(а) в работу «${p.unit_name}»`
-    case 'unit_stopped':
-      return `поработал(а) «${p.unit_name}» — ${formatMinutes(p.minutes)}`
     case 'task_closed':
       return 'закрыл(а) задачу'
     case 'streak':
@@ -107,7 +154,7 @@ const sentence = computed(() => {
     case 'raid_won':
       return `${BOSS_EMOJI[p.boss] || '👾'} «${p.boss}» повержен! Всем Грувикам — ${SHOP_ITEMS[p.reward]?.title || 'награда'} и +${p.beans} грувов`
     case 'pet_sick':
-      return `«${p.pet_name || 'Грувик'}» приболел 🤒 — хозяину пора вернуться в строй. Поглаживания тоже лечат!`
+      return `«${p.pet_name || 'Грувик'}» приболел 🤒 — лечат юниты от 15 минут и закрытые задачи`
     case 'pet_recovered':
       return `«${p.pet_name || 'Грувик'}» выздоровел и снова сияет! 💚`
     case 'quest_done':
@@ -127,16 +174,11 @@ const sentence = computed(() => {
 
 const taskLink = computed(() => {
   const p = props.event.payload || {}
-  if (!p.task_id) return null
-  if (!['unit_started', 'unit_stopped', 'task_closed'].includes(props.event.kind)) return null
+  if (!p.task_id || props.event.kind !== 'task_closed') return null
   return `/tasks/${p.task_id}`
 })
 
-const taskLinkLabel = computed(() => {
-  const p = props.event.payload || {}
-  if (props.event.kind === 'task_closed') return `«${p.task_name}»`
-  return p.task_name && p.task_name !== p.unit_name ? `· ${p.task_name}` : ''
-})
+const taskLinkLabel = computed(() => `«${props.event.payload?.task_name}»`)
 
 function timeOf(iso) {
   return new Date(iso).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })
@@ -237,6 +279,59 @@ function timeOf(iso) {
 }
 .fcard-task-link:hover { text-decoration: underline; }
 .fcard-kudos { display: flex; flex-direction: column; gap: 6px; }
+.fcard-kudos-cat {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: 6px;
+  padding: 2px 10px;
+  border-radius: var(--radius-full);
+  background: color-mix(in oklch, var(--color-success) 16%, transparent);
+  color: var(--color-success);
+  font-size: 12px;
+  font-weight: 600;
+  vertical-align: middle;
+}
+.fcard-kudos-cat .material-symbols-outlined { font-size: 14px; }
+
+/* ── Итоги дня ── */
+.fcard-summary { display: flex; flex-direction: column; gap: 8px; }
+.fcard-summary-metrics { display: flex; gap: 8px; flex-wrap: wrap; }
+.fcard-metric {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 10px;
+  border-radius: var(--radius-full);
+  background: var(--color-surface-high);
+  font-size: 12.5px;
+  font-weight: 600;
+}
+.fcard-metric .material-symbols-outlined { font-size: 15px; color: var(--color-primary); }
+.fcard-summary-leader {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  border-radius: 12px;
+  background: color-mix(in oklch, var(--color-warning) 12%, transparent);
+}
+.fcard-leader-avatar {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  object-fit: cover;
+  flex-shrink: 0;
+}
+.fcard-leader-name {
+  font-size: 13px;
+  font-weight: 600;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.fcard-leader-hours { font-size: 12px; color: var(--color-text-dim); white-space: nowrap; }
 .fcard-quote {
   margin: 0;
   padding: 8px 12px;

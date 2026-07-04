@@ -1,9 +1,9 @@
-// Package domain — модели и порты раздела «Мой Groove»: лента активности,
-// реакции, комментарии, кудосы, заряды, питомцы-Грувики, зоопарк, магазин,
-// недельные рейды и AI-механики Грувика.
+// Package domain — модели и порты раздела «Мой Groove»: доска признания
+// (лента вех и благодарностей), реакции, комментарии, кудосы,
+// питомцы-Грувики, зоопарк, магазин, недельные рейды и AI-механики Грувика.
 //
-// Таблицы (feed_events, feed_reactions, feed_comments, pets, pet_strokes,
-// groove_raids) живут в общей PostgreSQL платформы, схему ведёт Alembic.
+// Таблицы (feed_events, feed_reactions, feed_comments, pets, groove_raids)
+// живут в общей PostgreSQL платформы, схему ведёт migrate (goose).
 package domain
 
 import "time"
@@ -15,7 +15,7 @@ type UserRef struct {
 	AvatarPath *string `json:"avatar_path"`
 }
 
-// User — пользователь в объёме проверок groove (кудосы, поглаживания).
+// User — пользователь в объёме проверок groove (кудосы).
 // Идентичность пользователя — из users; активная компания и роль приходят
 // из access-токена и проставляются транспортом, не читаются из users.
 type User struct {
@@ -29,9 +29,11 @@ type User struct {
 	CompanyActive bool
 }
 
-// FeedEvent — событие ленты. Kind: unit_started | unit_stopped | task_closed
-// | streak | pet_evolved | pet_sick | pet_recovered | kudos | ai_digest
-// | raid_started | raid_won | wrapped | quest_done.
+// FeedEvent — событие доски признания. Kind: task_closed | streak
+// | pet_evolved | pet_sick | pet_recovered | kudos | ai_digest | day_summary
+// | raid_started | raid_won | wrapped | quest_done. Исторические
+// unit_started/unit_stopped не создаются и скрыты из выборки
+// (FeedExcludedKinds).
 type FeedEvent struct {
 	ID        int64
 	CompanyID int64
@@ -106,6 +108,17 @@ type FinishedUnit struct {
 	Name  string
 	Start time.Time
 	End   time.Time
+}
+
+// DaySummaryStats — активность компании за день для события «Итоги дня».
+type DaySummaryStats struct {
+	UnitsCount   int
+	TasksClosed  int
+	TotalHours   float64
+	LeaderID     *int64 // nil — лидера нет (никто не работал юнитами)
+	LeaderFIO    string
+	LeaderAvatar *string
+	LeaderHours  float64
 }
 
 // StaleTask — засидевшаяся задача для утреннего брифинга.

@@ -2,10 +2,9 @@ package service
 
 import (
 	"context"
-	"crypto/rand"
-	"encoding/hex"
 
 	"github.com/DmitriyODS/gw2/back-go/diary/internal/domain"
+	"github.com/DmitriyODS/gw2/back-go/pkg/records"
 )
 
 // ── Управление публичными ссылками (владелец) ──
@@ -21,7 +20,7 @@ func (s *Service) CreateShare(ctx context.Context, userID, diaryID int64) (*doma
 	if _, err := s.requireOwned(ctx, userID, diaryID); err != nil {
 		return nil, err
 	}
-	code, err := newShareCode()
+	code, err := records.NewShareCode()
 	if err != nil {
 		return nil, err
 	}
@@ -83,12 +82,4 @@ func (s *Service) SharedExport(ctx context.Context, code string, p ListParams, i
 		return nil, "", err
 	}
 	return s.buildExport(ctx, d, p, ids)
-}
-
-func newShareCode() (string, error) {
-	b := make([]byte, 16)
-	if _, err := rand.Read(b); err != nil {
-		return "", err
-	}
-	return hex.EncodeToString(b), nil
 }

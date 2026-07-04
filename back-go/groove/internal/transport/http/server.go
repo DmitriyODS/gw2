@@ -13,6 +13,7 @@ import (
 
 	"github.com/DmitriyODS/gw2/back-go/groove/internal/domain"
 	"github.com/DmitriyODS/gw2/back-go/groove/internal/endpoint"
+	"github.com/DmitriyODS/gw2/back-go/pkg/httpserver"
 	"github.com/DmitriyODS/gw2/back-go/pkg/pasetoauth"
 )
 
@@ -49,16 +50,9 @@ func authSource(users domain.UserReader) pasetoauth.AuthSource {
 func NewServer(eps endpoint.Endpoints, users domain.UserReader,
 	companies domain.CompanyReader, verifier *pasetoauth.Verifier, log *slog.Logger) *Server {
 
-	app := fiber.New(fiber.Config{
-		AppName:               "gw2-groovesvc",
-		DisableStartupMessage: true,
-	})
+	app := httpserver.New(httpserver.Config{AppName: "gw2-groovesvc", Log: log})
 	auth := pasetoauth.NewMiddleware(verifier, authSource(users))
 	h := &handlers{eps: eps, log: log}
-
-	app.Get("/healthz", func(c *fiber.Ctx) error {
-		return c.JSON(fiber.Map{"ok": true})
-	})
 
 	api := app.Group("/api/groove", auth.RequireAuth)
 	// Магазин — без company-scope (глобальный прайс), как во Flask.
@@ -72,7 +66,6 @@ func NewServer(eps endpoint.Endpoints, users domain.UserReader,
 	scoped.Delete("/comments/:id<int>", h.deleteComment)
 	scoped.Post("/kudos", h.sendKudos)
 	scoped.Get("/live", h.getLive)
-	scoped.Post("/zap", h.sendZap)
 	scoped.Get("/pet", h.getMyPet)
 	scoped.Post("/pet/feed", h.feedPet)
 	scoped.Post("/pet/name", h.renamePet)
@@ -82,8 +75,8 @@ func NewServer(eps endpoint.Endpoints, users domain.UserReader,
 	scoped.Post("/pet/quest/claim", h.claimQuest)
 	scoped.Post("/pet/species", h.switchSpecies)
 	scoped.Get("/zoo", h.getZoo)
-	scoped.Post("/zoo/:user_id<int>/stroke", h.strokePet)
 	scoped.Get("/raid", h.getRaid)
+	scoped.Get("/rating", h.getRating)
 	scoped.Get("/wrapped", h.getWrapped)
 	scoped.Post("/wrapped/share", h.shareWrapped)
 	scoped.Get("/morning", h.morning)

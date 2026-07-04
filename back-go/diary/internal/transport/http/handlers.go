@@ -245,6 +245,32 @@ func (h *handlers) setDone(c *fiber.Ctx) error {
 	return c.JSON(resp)
 }
 
+// moveEntry — drag-and-drop перенос записи: на другой день (entry_date) и/или в
+// другой ежедневник владельца (diary_id). Пустые поля — не меняются.
+func (h *handlers) moveEntry(c *fiber.Ctx) error {
+	var body struct {
+		DiaryID   int64  `json:"diary_id"`
+		EntryDate string `json:"entry_date"`
+	}
+	parseBody(c, &body)
+	target := body.DiaryID
+	if target <= 0 {
+		target = pathID(c)
+	}
+	var date time.Time
+	if at := parseTime(body.EntryDate); at != nil {
+		date = *at
+	}
+	resp, err := h.eps.MoveEntry(c.Context(), endpoint.MoveEntryReq{
+		UserID: currentUserID(c), DiaryID: pathID(c), EntryID: recordID(c),
+		TargetDiaryID: target, Date: date,
+	})
+	if err != nil {
+		return h.respondError(c, err)
+	}
+	return c.JSON(resp)
+}
+
 func (h *handlers) setLink(c *fiber.Ctx) error {
 	var body struct {
 		TaskID *int64 `json:"task_id"`
@@ -266,6 +292,26 @@ func (h *handlers) deleteEntry(c *fiber.Ctx) error {
 		return h.respondError(c, err)
 	}
 	return c.JSON(fiber.Map{"deleted": true})
+}
+
+// reorderEntries — ручной порядок записей дня: {entry_date, ids} — записи дня
+// в желаемом порядке (перетаскивание в модалке дня).
+func (h *handlers) reorderEntries(c *fiber.Ctx) error {
+	var body struct {
+		EntryDate string  `json:"entry_date"`
+		IDs       []int64 `json:"ids"`
+	}
+	parseBody(c, &body)
+	at := parseTime(body.EntryDate)
+	if at == nil {
+		return validationError(c, "Укажите дату дня")
+	}
+	if _, err := h.eps.ReorderEntries(c.Context(), endpoint.ReorderEntriesReq{
+		UserID: currentUserID(c), DiaryID: pathID(c), Date: *at, IDs: body.IDs,
+	}); err != nil {
+		return h.respondError(c, err)
+	}
+	return c.JSON(fiber.Map{"reordered": true})
 }
 
 func (h *handlers) bulkDeleteEntries(c *fiber.Ctx) error {
@@ -333,14 +379,15 @@ func (h *handlers) listMembers(c *fiber.Ctx) error {
 
 func (h *handlers) addMember(c *fiber.Ctx) error {
 	var body struct {
-		UserID int64 `json:"user_id"`
+		UserID   int64 `json:"user_id"`
+		CanCheck bool  `json:"can_check"`
 	}
 	parseBody(c, &body)
 	if body.UserID <= 0 {
 		return validationError(c, "Укажите пользователя")
 	}
 	resp, err := h.eps.AddMember(c.Context(), endpoint.MemberReq{
-		UserID: currentUserID(c), DiaryID: pathID(c), MemberID: body.UserID,
+		UserID: currentUserID(c), DiaryID: pathID(c), MemberID: body.UserID, CanCheck: body.CanCheck,
 	})
 	if err != nil {
 		return h.respondError(c, err)

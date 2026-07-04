@@ -2,9 +2,8 @@ package service
 
 import (
 	"context"
-	"crypto/rand"
-	"encoding/hex"
 
+	"github.com/DmitriyODS/gw2/back-go/pkg/records"
 	"github.com/DmitriyODS/gw2/back-go/registry/internal/domain"
 )
 
@@ -23,7 +22,7 @@ func (s *Service) CreateShare(ctx context.Context, companyID, registryID, userID
 	if _, err := s.requireRegistry(ctx, companyID, registryID); err != nil {
 		return nil, err
 	}
-	code, err := newShareCode()
+	code, err := records.NewShareCode()
 	if err != nil {
 		return nil, err
 	}
@@ -91,12 +90,4 @@ func (s *Service) SharedExport(ctx context.Context, code string, fieldIDs []int6
 		return nil, "", err
 	}
 	return s.buildExport(ctx, reg, fieldIDs, search, ids)
-}
-
-func newShareCode() (string, error) {
-	b := make([]byte, 16)
-	if _, err := rand.Read(b); err != nil {
-		return "", err
-	}
-	return hex.EncodeToString(b), nil
 }

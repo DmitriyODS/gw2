@@ -35,7 +35,7 @@ type EntryInput struct {
 // ListEntries — записи ежедневника: активные за диапазон дат (день/неделя/месяц)
 // либо весь архив выполненных. Доступно владельцу и адресату (read-only).
 func (s *Service) ListEntries(ctx context.Context, userID, diaryID int64, p ListParams) (*EntryList, error) {
-	if _, _, err := s.requireReadable(ctx, userID, diaryID); err != nil {
+	if _, _, _, err := s.requireReadable(ctx, userID, diaryID); err != nil {
 		return nil, err
 	}
 	return s.listEntries(ctx, diaryID, p)
@@ -61,7 +61,7 @@ func (s *Service) listEntries(ctx context.Context, diaryID int64, p ListParams) 
 }
 
 func (s *Service) GetEntry(ctx context.Context, userID, diaryID, entryID int64) (*domain.Entry, error) {
-	if _, _, err := s.requireReadable(ctx, userID, diaryID); err != nil {
+	if _, _, _, err := s.requireReadable(ctx, userID, diaryID); err != nil {
 		return nil, err
 	}
 	return s.getOwnedEntry(ctx, diaryID, entryID)
@@ -120,11 +120,16 @@ func (s *Service) UpdateEntry(ctx context.Context, userID, diaryID, entryID int6
 	return e, nil
 }
 
-// SetDone — отметить запись выполненной/невыполненной (перенос в архив и обратно).
+// SetDone — отметить запись выполненной/невыполненной (перенос в архив и
+// обратно). Доступно владельцу и адресату с правом отметки (can_check) —
+// сценарий «руководитель раздаёт задачи, сотрудник закрывает».
 func (s *Service) SetDone(ctx context.Context, userID, diaryID, entryID int64, done bool) (*domain.Entry, error) {
-	d, err := s.requireOwned(ctx, userID, diaryID)
+	d, _, canCheck, err := s.requireReadable(ctx, userID, diaryID)
 	if err != nil {
 		return nil, err
+	}
+	if !canCheck {
+		return nil, domain.ErrReadOnly
 	}
 	e, err := s.getOwnedEntry(ctx, diaryID, entryID)
 	if err != nil {
@@ -136,6 +141,70 @@ func (s *Service) SetDone(ctx context.Context, userID, diaryID, entryID int64, d
 	e.Done = done
 	s.bus.Publish(ctx, "diary_entry:updated", s.diaryRooms(ctx, d), entryPayload(d.OwnerID, e))
 	return e, nil
+}
+
+// MoveEntry — перенос записи drag-and-drop'ом: на другой день и/или в другой
+// ежедневник владельца (раздача задач по спискам). Оба ежедневника должны
+// принадлежать пользователю.
+func (s *Service) MoveEntry(ctx context.Context, userID, diaryID, entryID, targetDiaryID int64, date time.Time) (*domain.Entry, error) {
+	d, err := s.requireOwned(ctx, userID, diaryID)
+	if err != nil {
+		return nil, err
+	}
+	e, err := s.getOwnedEntry(ctx, diaryID, entryID)
+	if err != nil {
+		return nil, err
+	}
+	target := d
+	if targetDiaryID != diaryID {
+		if target, err = s.requireOwned(ctx, userID, targetDiaryID); err != nil {
+			return nil, err
+		}
+	}
+	if date.IsZero() {
+		date = e.Date
+	}
+	day := date.Truncate(24 * time.Hour)
+	oldDiaryID := e.DiaryID
+	if err := s.repo.MoveEntry(ctx, entryID, target.ID, day); err != nil {
+		return nil, err
+	}
+	e.DiaryID, e.Date = target.ID, day
+	if target.ID == oldDiaryID {
+		s.bus.Publish(ctx, "diary_entry:updated", s.diaryRooms(ctx, d), entryPayload(d.OwnerID, e))
+	} else {
+		// Перенос между ежедневниками: для подписчиков старого — запись исчезла,
+		// для подписчиков нового — появилась.
+		s.bus.Publish(ctx, "diary_entry:deleted", s.diaryRooms(ctx, d), map[string]any{
+			"id": entryID, "diary_id": oldDiaryID, "owner_id": userID,
+		})
+		s.bus.Publish(ctx, "diary_entry:created", s.diaryRooms(ctx, target), entryPayload(target.OwnerID, e))
+	}
+	return e, nil
+}
+
+// ReorderEntries — ручной порядок записей дня (перетаскивание в модалке дня):
+// ids в желаемом порядке получают position 1..N. Только владелец.
+func (s *Service) ReorderEntries(ctx context.Context, userID, diaryID int64, date time.Time, ids []int64) error {
+	d, err := s.requireOwned(ctx, userID, diaryID)
+	if err != nil {
+		return err
+	}
+	if date.IsZero() {
+		return domain.ErrDateRequired
+	}
+	if len(ids) == 0 {
+		return nil
+	}
+	day := date.Truncate(24 * time.Hour)
+	if err := s.repo.ReorderEntries(ctx, diaryID, day, ids); err != nil {
+		return err
+	}
+	s.bus.Publish(ctx, "diary_entry:reordered", s.diaryRooms(ctx, d), map[string]any{
+		"diary_id": diaryID, "owner_id": userID,
+		"entry_date": day.Format(domain.DateLayout), "ids": ids,
+	})
+	return nil
 }
 
 // SetLink — привязать/отвязать задачу tasksvc (taskID==nil — отвязать).
@@ -212,7 +281,7 @@ func entryPayload(ownerID int64, e *domain.Entry) map[string]any {
 		"entry_date": e.Date.Format(domain.DateLayout),
 		"start_min":  e.StartMin, "end_min": e.EndMin,
 		"title": e.Title, "description": e.Description, "done": e.Done,
-		"linked_task_id": e.LinkedTaskID,
-		"created_at":     e.CreatedAt, "updated_at": e.UpdatedAt,
+		"linked_task_id": e.LinkedTaskID, "position": e.Position,
+		"created_at": e.CreatedAt, "updated_at": e.UpdatedAt,
 	}
 }

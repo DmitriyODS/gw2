@@ -18,13 +18,10 @@ export const addComment = (eventId, text, replyToId = null) =>
 export const deleteComment = (commentId) =>
   apiRequest(`/groove/comments/${commentId}`, { method: 'DELETE' })
 
-export const sendKudos = (toUserId, text) =>
-  apiRequest('/groove/kudos', { method: 'POST', body: { to_user_id: toUserId, text } })
+export const sendKudos = (toUserId, category, text) =>
+  apiRequest('/groove/kudos', { method: 'POST', body: { to_user_id: toUserId, category, text } })
 
 export const getLive = () => apiRequest('/groove/live')
-
-export const sendZap = (toUserId) =>
-  apiRequest('/groove/zap', { method: 'POST', body: { to_user_id: toUserId } })
 
 export const getMyPet = () => apiRequest('/groove/pet')
 
@@ -52,10 +49,9 @@ export const claimQuest = () =>
 
 export const getZoo = () => apiRequest('/groove/zoo')
 
-export const strokePet = (userId) =>
-  apiRequest(`/groove/zoo/${userId}/stroke`, { method: 'POST' })
-
 export const getRaid = () => apiRequest('/groove/raid')
+
+export const getRating = () => apiRequest('/groove/rating')
 
 export const getMorningBriefing = (part) =>
   apiRequest(`/groove/morning?part=${encodeURIComponent(part)}`, { timeout: 20000 })

@@ -27,12 +27,15 @@ type FeedRepo interface {
 	CountUserEvents(ctx context.Context, companyID, userID int64, kind string, since time.Time) (int, error)
 	ReactionsReceived(ctx context.Context, userID int64, since time.Time) (int, error)
 	KudosReceived(ctx context.Context, companyID, userID int64, since time.Time) (int, error)
+	// KudosWeekCounts — полученные кудосы по адресатам с момента since
+	// (счётчик признания в рейтинге).
+	KudosWeekCounts(ctx context.Context, companyID int64, since time.Time) (map[int64]int, error)
 
 	// «Сейчас в эфире»: активные юниты с видимыми владельцами.
 	ListActiveUnits(ctx context.Context, companyID int64) ([]*ActiveUnit, error)
 }
 
-// PetRepo — питомцы, поглаживания, рейды.
+// PetRepo — питомцы и рейды.
 type PetRepo interface {
 	GetPet(ctx context.Context, userID int64) (*Pet, error)
 	GetOrCreate(ctx context.Context, userID, companyID int64) (*Pet, error)
@@ -43,11 +46,6 @@ type PetRepo interface {
 	// SoulmateForUser: (nil, 0, nil) — напарника нет.
 	SoulmateForUser(ctx context.Context, userID int64, since time.Time) (*UserRef, int, error)
 	FinishedUnitsForUser(ctx context.Context, userID int64, since time.Time, limit int) ([]FinishedUnit, error)
-
-	// AddStroke: true — погладил; false — уже гладил сегодня.
-	AddStroke(ctx context.Context, petUserID, userID int64, day time.Time) (bool, error)
-	StrokesToday(ctx context.Context, petUserIDs []int64, day time.Time) (map[int64]int, error)
-	MyStrokesToday(ctx context.Context, userID int64, day time.Time) (map[int64]bool, error)
 
 	GetRaid(ctx context.Context, companyID int64, weekStart time.Time) (*Raid, error)
 	CreateRaid(ctx context.Context, companyID int64, weekStart time.Time, boss string, target int, reward string) (*Raid, error)
@@ -77,12 +75,15 @@ type CompanyReader interface {
 	GrooveEnabled(ctx context.Context, companyID int64) (bool, error)
 }
 
-// WorkReader — read-only задачи/юниты (брифинг, заряды, статистика Грувика).
+// WorkReader — read-only задачи/юниты (брифинг, итоги дня, статистика Грувика).
 type WorkReader interface {
 	CountUserActive(ctx context.Context, userID, companyID int64) (int, error)
 	UserStale(ctx context.Context, userID, companyID int64, threshold time.Time, limit int) ([]*StaleTask, error)
 	// ActiveUnitForUser: (0, 0, nil) — активного юнита нет.
 	ActiveUnitForUser(ctx context.Context, userID int64) (unitID, companyID int64, err error)
+	// DaySummary — активность компании за интервал [start, end): юниты,
+	// закрытые задачи, часы и лидер по часам (событие «Итоги дня»).
+	DaySummary(ctx context.Context, companyID int64, start, end time.Time) (*DaySummaryStats, error)
 
 	CommonMetrics(ctx context.Context, companyID int64, start, end time.Time) (*CommonMetrics, error)
 	TopEmployees(ctx context.Context, companyID int64, start, end time.Time) ([]EmployeeStat, error)
@@ -126,9 +127,6 @@ type Daily interface {
 	GetCache(ctx context.Context, key string) string
 	SetCache(ctx context.Context, key, value string, ttl time.Duration)
 	Exists(ctx context.Context, key string) bool
-
-	IncrZap(ctx context.Context, unitID int64) int
-	GetZaps(ctx context.Context, unitIDs []int64) map[int64]int
 }
 
 // EventPublisher — Socket.IO-события через Flask-мост (gw2:groove:events).

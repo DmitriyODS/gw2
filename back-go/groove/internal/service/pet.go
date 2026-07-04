@@ -45,6 +45,72 @@ func (s *Service) AwardBeans(ctx context.Context, userID, companyID int64,
 	return granted
 }
 
+// ──────────────────── прямой XP за работу ──────────────────────────
+
+// applyEvolution — поднять стадию по накопленному XP (без сохранения).
+// >0 — питомец эволюционировал до этой стадии (вид и характер пересчитаны).
+func (s *Service) applyEvolution(ctx context.Context, pet *domain.Pet) int {
+	evolvedTo := 0
+	for pet.Stage < domain.MaxStage && pet.XP >= domain.StageXP[pet.Stage+1] {
+		pet.Stage++
+		evolvedTo = pet.Stage
+	}
+	if evolvedTo > 0 {
+		pet.Species = s.detectSpecies(ctx, pet.UserID)
+		personality := s.detectPersonality(ctx, pet.UserID)
+		pet.Personality = &personality
+		if !containsStr(pet.UnlockedSpecies, pet.Species) {
+			pet.UnlockedSpecies = append(pet.UnlockedSpecies, pet.Species)
+		}
+	}
+	return evolvedTo
+}
+
+// fedToday — питомца сегодня хотя бы раз кормили («сытость» до конца дня).
+func fedToday(pet *domain.Pet) bool {
+	return pet.LastFedDate != nil && pet.LastFedDate.Equal(todayMSK())
+}
+
+// AwardXP — прямой XP за работу с дневным капом источника (source —
+// "xp_unit"/"xp_task"). Сытость умножает начисление на FedXPBoost; больному
+// питомцу XP заморожен. Может эволюционировать. Никогда не возвращает
+// ошибку наружу (зовётся из хуков).
+func (s *Service) AwardXP(ctx context.Context, userID, companyID int64,
+	source string, amount, cap int) int {
+
+	if amount <= 0 {
+		return 0
+	}
+	pet, err := s.pets.GetOrCreate(ctx, userID, companyID)
+	if err != nil {
+		s.log.Warn("groove.award_xp_failed", "user_id", userID, "source", source, "error", err)
+		return 0
+	}
+	if pet.SickSince != nil {
+		return 0 // болезнь замораживает XP — и прямой тоже
+	}
+	granted := s.daily.TakeBudget(ctx, userID, source, amount, cap)
+	if granted <= 0 {
+		return 0
+	}
+	if fedToday(pet) {
+		granted = int(float64(granted) * domain.FedXPBoost)
+	}
+	pet.XP += granted
+	evolvedTo := s.applyEvolution(ctx, pet)
+	if err := s.pets.SavePet(ctx, pet); err != nil {
+		s.log.Warn("groove.award_xp_failed", "user_id", userID, "source", source, "error", err)
+		return 0
+	}
+	if evolvedTo > 0 {
+		_, _ = s.recordEvent(ctx, companyID, &userID, "pet_evolved",
+			map[string]any{"stage": evolvedTo, "species": pet.Species,
+				"pet_name": pet.Name}, true)
+	}
+	s.emitPetUpdate(ctx, pet)
+	return granted
+}
+
 // ────────────────────────── питомец владельца ──────────────────────
 
 func (s *Service) GetMyPet(ctx context.Context, userID, companyID int64) (*dto.PetDTO, error) {
@@ -155,7 +221,7 @@ func applyRecovery(pet *domain.Pet, amount int) bool {
 	return false
 }
 
-// AddRecovery — лечение работой/заботой. Никогда не бросает (хуки).
+// AddRecovery — лечение работой. Никогда не бросает (хуки).
 func (s *Service) AddRecovery(ctx context.Context, userID, companyID int64, amount int) {
 	pet, err := s.pets.GetPet(ctx, userID)
 	if err != nil || pet == nil || pet.SickSince == nil {
@@ -249,10 +315,10 @@ func (s *Service) RefreshPersonalitiesForCompany(ctx context.Context, companyID 
 }
 
 var sickPhrases = []string{
-	"Апчхи… Спасибо за бульон. Кажется, мне уже чуточку лучше.",
-	"Тёплый бульончик… Ещё бы пару закрытых задач — и я на ногах!",
-	"Болею… Поработай немного — твоя энергия меня лечит.",
-	"Кх-кх… Говорят, лучшее лекарство — завершённый юнит хозяина.",
+	"Бульон принят. Медицинский факт: закрытые задачи лечат быстрее.",
+	"Спасибо за бульон. До выздоровления — по протоколу: работа и забота.",
+	"Болею. Бульон помогает, юнит от 15 минут — эффективнее.",
+	"Апчхи. Бульон зачтён в курс лечения, продолжаем наблюдение.",
 }
 
 // ───────────────────────────── кормление ───────────────────────────
@@ -286,7 +352,7 @@ func (s *Service) FeedPet(ctx context.Context, userID, companyID int64) (*dto.Pe
 		s.fillFeedCounters(ctx, data, pet)
 		phrase := sickPhrases[randIntn(len(sickPhrases))]
 		if recovered {
-			phrase = "Ура, я снова здоров! Спасибо, что выходил меня!"
+			phrase = "Выздоровел. Официально: лечение работой и бульоном подтверждено."
 		}
 		evolved := false
 		data.Phrase, data.Evolved, data.Recovered = &phrase, &evolved, &recovered
@@ -318,19 +384,7 @@ func (s *Service) FeedPet(ctx context.Context, userID, companyID int64) (*dto.Pe
 		}
 	}
 
-	evolvedTo := 0
-	for pet.Stage < domain.MaxStage && pet.XP >= domain.StageXP[pet.Stage+1] {
-		pet.Stage++
-		evolvedTo = pet.Stage
-	}
-	if evolvedTo > 0 {
-		pet.Species = s.detectSpecies(ctx, userID)
-		personality := s.detectPersonality(ctx, userID)
-		pet.Personality = &personality
-		if !containsStr(pet.UnlockedSpecies, pet.Species) {
-			pet.UnlockedSpecies = append(pet.UnlockedSpecies, pet.Species)
-		}
-	}
+	evolvedTo := s.applyEvolution(ctx, pet)
 
 	if err := s.pets.SavePet(ctx, pet); err != nil {
 		return nil, err
@@ -606,78 +660,17 @@ func (s *Service) ClaimQuest(ctx context.Context, userID, companyID int64) (*dto
 
 // ─────────────────────────── зоопарк ───────────────────────────────
 
-func (s *Service) GetZoo(ctx context.Context, companyID, viewerID int64) ([]*dto.PetDTO, error) {
+// GetZoo — витрина питомцев компании.
+func (s *Service) GetZoo(ctx context.Context, companyID int64) ([]*dto.PetDTO, error) {
 	pets, err := s.pets.ListCompanyPets(ctx, companyID)
-	if err != nil {
-		return nil, err
-	}
-	today := todayMSK()
-	ids := make([]int64, len(pets))
-	for i, p := range pets {
-		ids[i] = p.UserID
-	}
-	strokes, err := s.pets.StrokesToday(ctx, ids, today)
-	if err != nil {
-		return nil, err
-	}
-	my, err := s.pets.MyStrokesToday(ctx, viewerID, today)
 	if err != nil {
 		return nil, err
 	}
 	result := make([]*dto.PetDTO, 0, len(pets))
 	for _, p := range pets {
-		data := dto.NewPet(p)
-		count := strokes[p.UserID]
-		stroked := my[p.UserID]
-		data.StrokesToday, data.StrokedByMe = &count, &stroked
-		result = append(result, data)
+		result = append(result, dto.NewPet(p))
 	}
 	return result, nil
-}
-
-func (s *Service) StrokePet(ctx context.Context, viewerID, targetUserID,
-	companyID int64) (map[string]any, error) {
-
-	if viewerID == targetUserID {
-		return nil, domain.NewError("SELF_STROKE",
-			"Своего Грувика гладьте сколько угодно — грувы за это не положены", 422)
-	}
-	target, err := s.users.GetUser(ctx, targetUserID)
-	if err != nil {
-		return nil, err
-	}
-	if target == nil || !target.IsActive {
-		return nil, domain.NewError("USER_NOT_FOUND", "Сотрудник не найден", 404)
-	}
-	pet, err := s.pets.GetOrCreate(ctx, targetUserID, companyID)
-	if err != nil {
-		return nil, err
-	}
-	added, err := s.pets.AddStroke(ctx, targetUserID, viewerID, todayMSK())
-	if err != nil {
-		return nil, err
-	}
-	if !added {
-		return nil, domain.NewError("ALREADY_STROKED", "Сегодня вы уже погладили этого Грувика", 422)
-	}
-	s.AwardBeans(ctx, targetUserID, companyID, "stroke_in", 1)
-	s.AwardBeans(ctx, viewerID, companyID, "stroke_out", 1)
-	// Забота лечит: поглаживание больного Грувика даёт очко выздоровления.
-	s.AddRecovery(ctx, targetUserID, companyID, 1)
-
-	fromFIO := "Коллега"
-	if viewer, err := s.users.GetUser(ctx, viewerID); err == nil && viewer != nil {
-		fromFIO = viewer.FIO
-	}
-	s.pub.Publish(ctx, "groove:stroke", []string{userRoom(targetUserID)}, map[string]any{
-		"from_fio": fromFIO,
-		"pet_name": pet.Name,
-	})
-	strokes, err := s.pets.StrokesToday(ctx, []int64{targetUserID}, todayMSK())
-	if err != nil {
-		return nil, err
-	}
-	return map[string]any{"strokes_today": strokes[targetUserID]}, nil
 }
 
 // ────────────────────────────── рейды ──────────────────────────────
@@ -717,7 +710,9 @@ func (s *Service) raidProgress(ctx context.Context, companyID int64, raid *domai
 		mskMidnight(raid.WeekStart), time.Now().UTC().Add(time.Second))
 }
 
-func (s *Service) GetRaidState(ctx context.Context, companyID int64) (*dto.RaidDTO, error) {
+// GetRaidState — состояние рейда недели; viewerID > 0 добавляет личный
+// вклад зрителя (my_closed — его закрытые задачи с начала недели рейда).
+func (s *Service) GetRaidState(ctx context.Context, companyID, viewerID int64) (*dto.RaidDTO, error) {
 	raid, err := s.ensureRaid(ctx, companyID)
 	if err != nil {
 		return nil, err
@@ -729,12 +724,21 @@ func (s *Service) GetRaidState(ctx context.Context, companyID int64) (*dto.RaidD
 	if raid.DefeatedAt != nil {
 		progress = min(progress, raid.Target)
 	}
+	myClosed := 0
+	if viewerID > 0 {
+		// Fail-open: личный счётчик не должен ронять карточку рейда.
+		if n, err := s.feed.CountUserEvents(ctx, companyID, viewerID,
+			"task_closed", mskMidnight(raid.WeekStart)); err == nil {
+			myClosed = n
+		}
+	}
 	weekEnd := raid.WeekStart.AddDate(0, 0, 7)
 	return &dto.RaidDTO{
 		ID:        raid.ID,
 		Boss:      raid.Boss,
 		Target:    raid.Target,
 		Progress:  progress,
+		MyClosed:  myClosed,
 		Reward:    raid.Reward,
 		Defeated:  raid.DefeatedAt != nil,
 		WeekStart: raid.WeekStart.Format("2006-01-02"),
@@ -782,6 +786,60 @@ func (s *Service) OnTaskClosedRaid(ctx context.Context, companyID int64) {
 	})
 }
 
+// ─────────────────── рейтинг питомцев компании ─────────────────────
+
+const ratingTopLimit = 10
+
+// GetRating — топ питомцев компании по стадии/XP для карточки рейтинга;
+// отдельно — строка зрителя, даже если он не попал в топ. kudos_week —
+// счётчик признания: полученные кудосы с начала ISO-недели.
+func (s *Service) GetRating(ctx context.Context, companyID, viewerID int64) (map[string]any, error) {
+	pets, err := s.pets.ListCompanyPets(ctx, companyID)
+	if err != nil {
+		return nil, err
+	}
+	// Fail-open: счётчик признания не должен ронять карточку рейтинга.
+	kudosWeek, err := s.feed.KudosWeekCounts(ctx, companyID, mskMidnight(weekStartMSK()))
+	if err != nil {
+		s.log.Warn("groove.rating_kudos_failed", "company_id", companyID, "error", err)
+		kudosWeek = map[int64]int{}
+	}
+	entry := func(p *domain.Pet, position int) map[string]any {
+		var nextXP any
+		if p.Stage < domain.MaxStage {
+			nextXP = domain.StageXP[p.Stage+1]
+		}
+		return map[string]any{
+			"position":      position,
+			"pet_name":      p.Name,
+			"species":       p.Species,
+			"stage":         p.Stage,
+			"xp":            p.XP,
+			"next_stage_xp": nextXP,
+			"hat":           p.Hat,
+			"sick":          p.SickSince != nil,
+			"kudos_week":    kudosWeek[p.UserID],
+			"user":          p.User,
+		}
+	}
+	items := make([]map[string]any, 0, min(len(pets), ratingTopLimit))
+	var me map[string]any
+	for i, p := range pets { // список уже отсортирован по stage DESC, xp DESC
+		e := entry(p, i+1)
+		if i < ratingTopLimit {
+			items = append(items, e)
+		}
+		if p.UserID == viewerID {
+			me = e
+		}
+	}
+	return map[string]any{
+		"items": items,
+		"me":    me,
+		"total": len(pets),
+	}, nil
+}
+
 // ───────────────────── ТВ-витрина Groove ───────────────────────────
 
 func (s *Service) GetGrooveTV(ctx context.Context, companyID int64) (map[string]any, error) {
@@ -789,43 +847,28 @@ func (s *Service) GetGrooveTV(ctx context.Context, companyID int64) (map[string]
 	if err != nil {
 		return nil, err
 	}
-	ids := make([]int64, len(pets))
-	for i, p := range pets {
-		ids[i] = p.UserID
-	}
-	strokes, err := s.pets.StrokesToday(ctx, ids, todayMSK())
-	if err != nil {
-		return nil, err
-	}
 	top := make([]*dto.PetDTO, 0, 8)
 	for _, p := range pets[:min(len(pets), 8)] {
-		data := dto.NewPet(p)
-		count := strokes[p.UserID]
-		data.StrokesToday = &count
-		top = append(top, data)
+		top = append(top, dto.NewPet(p))
 	}
-	raid, err := s.GetRaidState(ctx, companyID)
+	raid, err := s.GetRaidState(ctx, companyID, 0)
 	if err != nil {
 		return nil, err
 	}
-	sick, beans, totalStrokes := 0, 0, 0
+	sick, beans := 0, 0
 	for _, p := range pets {
 		if p.SickSince != nil {
 			sick++
 		}
 		beans += p.Beans
 	}
-	for _, n := range strokes {
-		totalStrokes += n
-	}
 	return map[string]any{
 		"pets": top,
 		"raid": raid,
 		"totals": map[string]any{
-			"pets":          len(pets),
-			"sick":          sick,
-			"beans":         beans,
-			"strokes_today": totalStrokes,
+			"pets":  len(pets),
+			"sick":  sick,
+			"beans": beans,
 		},
 	}, nil
 }

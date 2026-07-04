@@ -112,15 +112,17 @@ func (r *FeedRepo) GetEvent(ctx context.Context, id int64) (*domain.FeedEvent, e
 func (r *FeedRepo) ListEvents(ctx context.Context, companyID, beforeID int64,
 	limit int) ([]*domain.FeedEvent, error) {
 
+	// Машинные события старой ленты (unit_started/unit_stopped) скрываем и
+	// для исторических записей.
 	q := `SELECT ` + eventCols + `
 		FROM feed_events e LEFT JOIN users u ON u.id = e.user_id
-		WHERE e.company_id = $1`
-	args := []any{companyID}
+		WHERE e.company_id = $1 AND e.kind != ALL($2)`
+	args := []any{companyID, domain.FeedExcludedKinds}
 	if beforeID > 0 {
-		q += ` AND e.id < $2 ORDER BY e.id DESC LIMIT $3`
+		q += ` AND e.id < $3 ORDER BY e.id DESC LIMIT $4`
 		args = append(args, beforeID, limit)
 	} else {
-		q += ` ORDER BY e.id DESC LIMIT $2`
+		q += ` ORDER BY e.id DESC LIMIT $3`
 		args = append(args, limit)
 	}
 	rows, err := r.pool.Query(ctx, q, args...)
@@ -343,6 +345,29 @@ func (r *FeedRepo) KudosReceived(ctx context.Context, companyID, userID int64, s
 		  AND (payload->>'to_user_id')::bigint = $3`,
 		companyID, since, userID).Scan(&count)
 	return count, err
+}
+
+func (r *FeedRepo) KudosWeekCounts(ctx context.Context, companyID int64, since time.Time) (map[int64]int, error) {
+	rows, err := r.pool.Query(ctx, `
+		SELECT (payload->>'to_user_id')::bigint, count(id) FROM feed_events
+		WHERE company_id = $1 AND kind = 'kudos' AND created_at >= $2
+		  AND payload->>'to_user_id' IS NOT NULL
+		GROUP BY 1`, companyID, since)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	result := map[int64]int{}
+	for rows.Next() {
+		var userID int64
+		var count int
+		if err := rows.Scan(&userID, &count); err != nil {
+			return nil, err
+		}
+		result[userID] = count
+	}
+	return result, rows.Err()
 }
 
 // ─────────────────────────── live-блок ─────────────────────────────

@@ -1,8 +1,8 @@
 // Package redisx — дневные счётчики и кэши Groove в Redis.
 //
 // ВСЁ fail-open: Redis лёг — капы не применяются (начисляем без лимита,
-// лучше так, чем ронять), кэши пустые, заряды не считаются. Ключи 1-в-1
-// совпадают с прежними ключами Flask — данные переживают переезд.
+// лучше так, чем ронять), кэши пустые. Ключи 1-в-1 совпадают с прежними
+// ключами Flask — данные переживают переезд.
 package redisx
 
 import (
@@ -85,43 +85,4 @@ func (d *Daily) SetCache(ctx context.Context, key, value string, ttl time.Durati
 func (d *Daily) Exists(ctx context.Context, key string) bool {
 	n, err := d.rdb.Exists(ctx, key).Result()
 	return err == nil && n > 0
-}
-
-// ─────────────────────────── заряды ────────────────────────────────
-
-func zapKey(unitID int64) string {
-	return "gw2:groove:zaps:" + strconv.FormatInt(unitID, 10)
-}
-
-func (d *Daily) IncrZap(ctx context.Context, unitID int64) int {
-	key := zapKey(unitID)
-	n, err := d.rdb.Incr(ctx, key).Result()
-	if err != nil {
-		return 1
-	}
-	d.rdb.Expire(ctx, key, 24*time.Hour)
-	return int(n)
-}
-
-func (d *Daily) GetZaps(ctx context.Context, unitIDs []int64) map[int64]int {
-	result := map[int64]int{}
-	if len(unitIDs) == 0 {
-		return result
-	}
-	keys := make([]string, len(unitIDs))
-	for i, id := range unitIDs {
-		keys[i] = zapKey(id)
-	}
-	values, err := d.rdb.MGet(ctx, keys...).Result()
-	if err != nil {
-		return result
-	}
-	for i, v := range values {
-		if s, ok := v.(string); ok {
-			if n, err := strconv.Atoi(s); err == nil {
-				result[unitIDs[i]] = n
-			}
-		}
-	}
-	return result
 }
