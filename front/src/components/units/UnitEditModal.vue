@@ -49,8 +49,14 @@
           showTime
           hourFormat="24"
           dateFormat="dd.mm.yy"
+          placeholder="дд.мм.гггг чч:мм"
+          showIcon
+          iconDisplay="input"
+          :showOnFocus="false"
+          :pt="{ pcInputText: { root: { inputmode: 'text' } } }"
           class="w-full"
           :invalid="!!errors.datetime_start"
+          @blur="onDateBlur('datetime_start', $event)"
         />
         <span v-if="errors.datetime_start" class="field-error">{{ errors.datetime_start }}</span>
       </div>
@@ -62,8 +68,14 @@
           showTime
           hourFormat="24"
           dateFormat="dd.mm.yy"
+          placeholder="дд.мм.гггг чч:мм"
+          showIcon
+          iconDisplay="input"
+          :showOnFocus="false"
+          :pt="{ pcInputText: { root: { inputmode: 'text' } } }"
           class="w-full"
           :invalid="!!errors.datetime_end"
+          @blur="onDateBlur('datetime_end', $event)"
         />
         <span v-if="errors.datetime_end" class="field-error">{{ errors.datetime_end }}</span>
       </div>
@@ -146,6 +158,35 @@ function validate() {
 function toISOLocal(d) {
   if (!d) return null
   return d instanceof Date ? d.toISOString() : new Date(d).toISOString()
+}
+
+// PrimeVue DatePicker при ручном вводе требует строго "дд.мм.гггг чч:мм" (двузначные часы/минуты,
+// один пробел-разделитель) и при малейшем отклонении молча откатывает поле на blur, не обновив
+// модель. Разбираем введённый текст сами (терпимо к разделителям и одиночным цифрам) как страховку.
+function parseManualDateTime(raw, fallback) {
+  const match = raw.trim().match(
+    /^(\d{1,2})[.\-/](\d{1,2})[.\-/](\d{2,4})(?:[\s,T]+(\d{1,2})[:.](\d{1,2}))?$/
+  )
+  if (!match) return null
+  const [, dStr, mStr, yStr, hStr, minStr] = match
+  const day = Number(dStr)
+  const month = Number(mStr)
+  const year = yStr.length === 2 ? 2000 + Number(yStr) : Number(yStr)
+  const hour = hStr ? Number(hStr) : (fallback instanceof Date ? fallback.getHours() : 0)
+  const minute = minStr ? Number(minStr) : (fallback instanceof Date ? fallback.getMinutes() : 0)
+  if (month < 1 || month > 12 || hour > 23 || minute > 59) return null
+  const date = new Date(year, month - 1, day, hour, minute, 0, 0)
+  if (date.getFullYear() !== year || date.getMonth() !== month - 1 || date.getDate() !== day) {
+    return null
+  }
+  return date
+}
+
+function onDateBlur(field, event) {
+  const raw = event?.value
+  if (!raw) return
+  const parsed = parseManualDateTime(raw, form.value[field])
+  if (parsed) form.value[field] = parsed
 }
 
 async function handleSubmit() {
