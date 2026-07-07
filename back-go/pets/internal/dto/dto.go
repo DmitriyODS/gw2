@@ -71,6 +71,9 @@ type PetDTO struct {
 	// AdventureReward — разовая награда за вернувшееся приключение
 	// (только в ответе GetMyPet, зафиксировавшем возврат — как Recovered).
 	AdventureReward *AdventureRewardDTO `json:"adventure_reward,omitempty"`
+	// StrokesToday — сколько раз ЗРИТЕЛЬ сегодня погладил этого питомца
+	// (только в выдаче зоопарка; лимит — domain.StrokeDailyMaxPerPet).
+	StrokesToday *int `json:"strokes_today,omitempty"`
 }
 
 // AdventureRewardDTO — что принёс питомец из приключения.

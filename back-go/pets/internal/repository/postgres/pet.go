@@ -288,6 +288,28 @@ func (r *PetRepo) StrokesToday(ctx context.Context, petOwnerID, strokerID int64,
 	return count, err
 }
 
+func (r *PetRepo) StrokesTodayByStroker(ctx context.Context, strokerID int64, day time.Time) (map[int64]int, error) {
+	rows, err := r.pool.Query(ctx, `
+		SELECT pet_user_id, count(id) FROM pet_strokes
+		WHERE user_id = $1 AND day = $2
+		GROUP BY pet_user_id`,
+		strokerID, day)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := map[int64]int{}
+	for rows.Next() {
+		var owner int64
+		var count int
+		if err := rows.Scan(&owner, &count); err != nil {
+			return nil, err
+		}
+		out[owner] = count
+	}
+	return out, rows.Err()
+}
+
 // RecordStroke — один INSERT на поглаживание (не upsert): дневной лимит
 // StrokeDailyMaxPerPet считается по количеству строк за день, поэтому
 // старое ограничение UNIQUE(pet_user_id, user_id, day) снято миграцией

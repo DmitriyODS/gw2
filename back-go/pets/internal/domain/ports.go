@@ -44,6 +44,10 @@ type PetRepo interface {
 	// (таблица pet_strokes: StrokesToday считает строки за день на пару
 	// «гладящий → питомец», лимит StrokeDailyMaxPerPet проверяет сервис).
 	StrokesToday(ctx context.Context, petOwnerID, strokerID int64, day time.Time) (int, error)
+	// StrokesTodayByStroker — сколько раз гладящий сегодня погладил КАЖДОГО
+	// питомца (map[владелец]count) — витрине зоопарка, чтобы «наглажен до
+	// завтра» переживал перезагрузку страницы.
+	StrokesTodayByStroker(ctx context.Context, strokerID int64, day time.Time) (map[int64]int, error)
 	RecordStroke(ctx context.Context, petOwnerID, strokerID int64, day time.Time) error
 }
 

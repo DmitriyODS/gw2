@@ -131,7 +131,7 @@ func New(svc *service.Service) Endpoints {
 
 		GetZoo: func(ctx context.Context, request any) (any, error) {
 			r := request.(Scope)
-			return svc.GetZoo(ctx, r.CompanyID)
+			return svc.GetZoo(ctx, r.CompanyID, r.UserID)
 		},
 		GetRating: func(ctx context.Context, request any) (any, error) {
 			r := request.(Scope)

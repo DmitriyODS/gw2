@@ -208,6 +208,17 @@ func (f *fakePets) RecordStroke(_ context.Context, ownerID, strokerID int64, day
 	f.strokes[strokeKey(ownerID, strokerID, day)]++
 	return nil
 }
+func (f *fakePets) StrokesTodayByStroker(_ context.Context, strokerID int64, day time.Time) (map[int64]int, error) {
+	out := map[int64]int{}
+	for ownerID, p := range f.byUser {
+		_ = p
+		key := strokeKey(ownerID, strokerID, day)
+		if n := f.strokes[key]; n > 0 {
+			out[ownerID] = n
+		}
+	}
+	return out, nil
+}
 
 // errNoPet — фейковая инфраструктурная ошибка «питомец не найден».
 var errNoPet = domain.NewError("NO_PET", "нет питомца", 500)

@@ -727,15 +727,27 @@ func (s *Service) StrokePet(ctx context.Context, strokerID, petOwnerID, companyI
 
 // ─────────────────────────── зоопарк ───────────────────────────────
 
-// GetZoo — витрина питомцев компании.
-func (s *Service) GetZoo(ctx context.Context, companyID int64) ([]*dto.PetDTO, error) {
+// GetZoo — витрина питомцев компании. viewerID нужен для strokes_today:
+// «наглажен до завтра» должен переживать перезагрузку страницы.
+func (s *Service) GetZoo(ctx context.Context, companyID, viewerID int64) ([]*dto.PetDTO, error) {
 	pets, err := s.pets.ListCompanyPets(ctx, companyID)
 	if err != nil {
 		return nil, err
 	}
+	// Fail-open: без счётчика витрина всё равно полезна, а лимит честно
+	// защитит сам StrokePet.
+	strokes, err := s.pets.StrokesTodayByStroker(ctx, viewerID, todayMSK())
+	if err != nil {
+		strokes = nil
+	}
 	result := make([]*dto.PetDTO, 0, len(pets))
 	for _, p := range pets {
-		result = append(result, dto.NewPet(p))
+		d := dto.NewPet(p)
+		if p.UserID != viewerID {
+			n := strokes[p.UserID]
+			d.StrokesToday = &n
+		}
+		result = append(result, d)
 	}
 	return result, nil
 }

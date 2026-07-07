@@ -5,7 +5,7 @@
         <span class="material-symbols-outlined">pets</span>
         Питомцы коллег
       </h3>
-      <span class="cp-hint">Тап по питомцу — погладить (<KudosCoin class="cp-hint-coin" /> 1, до 3 раз в день)</span>
+      <span class="cp-hint">Тап по питомцу — погладить ладошкой (<KudosCoin class="cp-hint-coin" /> 1 за поглаживание, до 3 в день)</span>
     </header>
 
     <div v-if="pets.zoo.length" class="cp-grid">
@@ -16,11 +16,11 @@
         class="cp-card"
         :class="{
           mine: p.user_id === pets.myId,
-          stroked: strokedOut[p.user_id],
-          disabled: p.user_id !== pets.myId && (isAway(p) || (!canAfford && !strokedOut[p.user_id])),
+          stroked: isStrokedOut(p),
+          disabled: p.user_id !== pets.myId && (isAway(p) || (!canAfford && !isStrokedOut(p))),
         }"
         :type="p.user_id === pets.myId ? undefined : 'button'"
-        :disabled="p.user_id === pets.myId ? undefined : (isAway(p) || !canAfford || !!strokedOut[p.user_id])"
+        :disabled="p.user_id === pets.myId ? undefined : (isAway(p) || !canAfford || isStrokedOut(p))"
         :aria-label="p.user_id === pets.myId ? undefined : `Погладить питомца «${p.name}»`"
         @click="stroke(p)"
       >
@@ -29,9 +29,6 @@
           <span v-if="p.hat" class="cp-hat">{{ shopItemEmoji({ kind: 'accessory', key: p.hat }) }}</span>
           <span v-if="p.sick" class="cp-sick" title="Болеет">🤒</span>
           <span v-else-if="isAway(p)" class="cp-sick" title="В приключении">🧭</span>
-          <transition-group name="cp-heart" tag="div" class="cp-hearts" aria-hidden="true">
-            <span v-for="h in hearts[p.user_id] || []" :key="h.id" class="cp-heart" :style="{ left: h.left + '%' }">💗</span>
-          </transition-group>
         </div>
         <span class="cp-name">{{ p.name }}</span>
         <span class="cp-owner">{{ firstName(p.user?.fio) }}</span>
@@ -39,12 +36,12 @@
 
         <span v-if="p.user_id === pets.myId" class="cp-tag">Ваш питомец</span>
         <span v-else-if="isAway(p)" class="cp-tag">🧭 В приключении</span>
-        <span v-else-if="strokedOut[p.user_id]" class="cp-tag done">
+        <span v-else-if="isStrokedOut(p)" class="cp-tag done">
           <span class="material-symbols-outlined">check</span> Поглажен
         </span>
         <span v-else class="cp-tag action">
           <span class="material-symbols-outlined">volunteer_activism</span>
-          Погладить · <KudosCoin class="cp-tag-coin" /> 1
+          Погладить&nbsp;<KudosCoin class="cp-tag-coin" />&nbsp;1
         </span>
       </component>
     </div>
@@ -55,30 +52,43 @@
       title="Пока пусто"
       subtitle="Питомцы коллег появятся здесь, как только кто-то войдёт в раздел"
     />
+
+    <StrokeMiniGame
+      v-if="strokeTarget"
+      :pet="strokeTarget"
+      :initial-strokes="strokeTarget.strokes_today || 0"
+      @exhausted="strokedOut[strokeTarget.user_id] = true"
+      @close="strokeTarget = null"
+    />
   </section>
 </template>
 
 <script setup>
-import { computed, onMounted, reactive } from 'vue'
+import { computed, onMounted, reactive, ref } from 'vue'
 import EmptyState from '@/components/common/EmptyState.vue'
 import KudosCoin from '@/components/pets/KudosCoin.vue'
+import StrokeMiniGame from '@/components/pets/StrokeMiniGame.vue'
 import { usePetsStore } from '@/stores/pets.js'
-import { useNotificationsStore } from '@/stores/notifications.js'
 import { petEmoji, shopItemEmoji, PET_STAGES } from '@/utils/pets.js'
 
 const STROKE_COST = 1 // = domain.StrokeCost в petsvc
 
 const pets = usePetsStore()
-const notify = useNotificationsStore()
 
 const canAfford = computed(() => (pets.pet?.kudos ?? 0) >= STROKE_COST)
 
-// Поглаживание — в один тап по карточке: сердечки сразу, запрос следом.
-const hearts = reactive({})
+// Тап по карточке открывает мини-игру «трение ладошкой» (StrokeMiniGame) —
+// она сама списывает кудосы за каждый цикл и сообщает об исчерпании лимита.
+const strokeTarget = ref(null)
 const pulsing = reactive({})
 const strokedOut = reactive({})
-const busy = reactive({})
-let heartSeq = 0
+
+// «Наглажен до завтра»: серверный счётчик strokes_today (переживает
+// перезагрузку) ИЛИ исчерпание в текущей сессии.
+const STROKE_DAILY_MAX = 3 // = domain.StrokeDailyMaxPerPet
+function isStrokedOut(p) {
+  return !!strokedOut[p.user_id] || (p.strokes_today ?? 0) >= STROKE_DAILY_MAX
+}
 
 // Питомец коллеги в приключении — поглаживание недоступно, пока не вернётся.
 function isAway(p) {
@@ -91,36 +101,12 @@ function firstName(fio) {
   return parts.length > 1 ? `${parts[0]} ${parts[1]}` : fio
 }
 
-function spawnHearts(userId) {
-  const list = hearts[userId] || (hearts[userId] = [])
-  for (let i = 0; i < 3; i++) {
-    const id = heartSeq++
-    list.push({ id, left: 20 + Math.random() * 60 })
-    setTimeout(() => {
-      const cur = hearts[userId] || []
-      hearts[userId] = cur.filter((h) => h.id !== id)
-    }, 750)
-  }
-  pulsing[userId] = true
-  setTimeout(() => { pulsing[userId] = false }, 450)
-}
-
-async function stroke(p) {
-  if (p.user_id === pets.myId || busy[p.user_id] || strokedOut[p.user_id] || isAway(p)) return
+function stroke(p) {
+  if (p.user_id === pets.myId || isStrokedOut(p) || isAway(p)) return
   if (!canAfford.value) return
-  busy[p.user_id] = true
-  spawnHearts(p.user_id)
-  try {
-    await pets.strokePet(p.user_id)
-  } catch (e) {
-    if (e?.error === 'STROKED_ENOUGH') {
-      strokedOut[p.user_id] = true
-    } else {
-      notify.warn(e?.message || 'Не получилось погладить')
-    }
-  } finally {
-    busy[p.user_id] = false
-  }
+  pulsing[p.user_id] = true
+  setTimeout(() => { pulsing[p.user_id] = false }, 450)
+  strokeTarget.value = p
 }
 
 onMounted(() => {
@@ -190,18 +176,6 @@ button.cp-card:disabled { cursor: default; }
 .cp-figure.sick .cp-emoji { filter: grayscale(0.55) brightness(0.92); }
 .cp-hat { position: absolute; top: -8px; right: -2px; font-size: 18px; transform: rotate(12deg); }
 .cp-sick { position: absolute; bottom: -4px; left: -4px; font-size: 16px; }
-
-.cp-hearts { position: absolute; inset: 0; pointer-events: none; }
-.cp-heart {
-  position: absolute;
-  bottom: 8%;
-  font-size: 16px;
-  transform: translateX(-50%);
-}
-.cp-heart-enter-active { transition: opacity 0.15s, transform 0.65s ease-out; }
-.cp-heart-enter-from { opacity: 0; }
-.cp-heart-leave-active { transition: opacity 0.4s, transform 0.4s; }
-.cp-heart-leave-to { opacity: 0; transform: translate(-50%, -36px); }
 
 .cp-name {
   font-size: 13px;
