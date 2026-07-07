@@ -49,7 +49,10 @@
                 >
                   <div class="assistant-msg">
                     <div class="assistant-bubble">
-                      <LinkifiedText :text="m.text" />
+                      <!-- Ответы ассистента приходят в Markdown (LLM), реплики
+                           пользователя — простой текст с линкификацией. -->
+                      <MarkdownView v-if="m.role === 'assistant'" :source="m.text" />
+                      <LinkifiedText v-else :text="m.text" />
                     </div>
                     <div v-if="m.role === 'assistant' && m.sources" class="assistant-sources">{{ m.sources }}</div>
                     <div v-if="canRate(m)" class="assistant-feedback">
@@ -286,6 +289,7 @@ import AttachTaskDialog from './AttachTaskDialog.vue'
 import MessageContextMenu from './MessageContextMenu.vue'
 import SegmentedTabs from '@/components/common/SegmentedTabs.vue'
 import LinkifiedText from '@/components/common/LinkifiedText.vue'
+import MarkdownView from '@/components/common/MarkdownView.vue'
 import ProgressSpinner from 'primevue/progressspinner'
 
 const route = useRoute()
