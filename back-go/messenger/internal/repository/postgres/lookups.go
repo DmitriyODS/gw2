@@ -9,7 +9,7 @@ import (
 	"github.com/DmitriyODS/gw2/back-go/messenger/internal/domain"
 )
 
-// Read-only лукапы чужих таблиц (владельцы — callsvc, Flask, groove).
+// Read-only лукапы чужих таблиц (владельцы — callsvc, tasksvc).
 
 func (r *Repo) GetCall(ctx context.Context, id int64) (*domain.CallInfo, error) {
 	var c domain.CallInfo
@@ -42,16 +42,4 @@ func (r *Repo) GetTask(ctx context.Context, id int64) (*domain.TaskPreview, erro
 		return nil, err
 	}
 	return &t, nil
-}
-
-func (r *Repo) PetName(ctx context.Context, ownerID int64) (*string, error) {
-	var name string
-	err := r.q(ctx).QueryRow(ctx, `SELECT name FROM pets WHERE user_id = $1`, ownerID).Scan(&name)
-	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			return nil, nil
-		}
-		return nil, err
-	}
-	return &name, nil
 }

@@ -43,11 +43,11 @@
 import { computed } from 'vue'
 import TvCount from '../TvCount.vue'
 import { num, barPercent } from '../tvFormat.js'
-import { petEmoji, PET_STAGES, SHOP_ITEMS } from '@/utils/groove.js'
+import { petEmoji, PET_STAGES, SHOP_ITEMS } from '@/utils/pets.js'
 
 const props = defineProps({
   slide: { type: Object, required: true },
-  groove: { type: Object, default: null }, // ответ getGrooveTv(): {pets, raid}
+  groove: { type: Object, default: null }, // { pets } — зоопарк компании (api/pets.js getZoo)
 })
 
 const pets = computed(() => (props.groove?.pets || []).slice(0, 5))

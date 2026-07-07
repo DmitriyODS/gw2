@@ -1,0 +1,57 @@
+syntax = "proto3";
+
+// Контракт petsvc: хуки доменных событий других сервисов → petsvc.
+// Вызовы fire-and-forget (семантика прежних feed_service.on_* во Flask):
+// вызывающий логирует ошибку и НИКОГДА не роняет свой запрос.
+// Транспорт всегда OK; бизнес-ошибка — в поле error.
+package pets.v1;
+
+option go_package = "github.com/DmitriyODS/gw2/back-go/pkg/gen/petspb;petspb";
+
+service PetsService {
+  // Сотрудник начал юнит (после коммита unit_service).
+  rpc OnUnitStarted(UnitStartedRequest) returns (HookResponse);
+  // Сотрудник завершил юнит: кудосы + XP + лечение + квесты.
+  rpc OnUnitStopped(UnitStoppedRequest) returns (HookResponse);
+  // Задача закрыта: кудосы героя + XP + лечение + квесты.
+  rpc OnTaskClosed(TaskClosedRequest) returns (HookResponse);
+}
+
+message Error {
+  string code = 1;
+  string message = 2;
+  int32 http_status = 3;
+}
+
+message HookResponse {
+  Error error = 1;
+}
+
+message UnitStartedRequest {
+  int64 company_id = 1;
+  int64 user_id = 2;
+  int64 unit_id = 3;
+  string unit_name = 4;
+  int64 task_id = 5;
+  string task_name = 6;
+}
+
+message UnitStoppedRequest {
+  int64 company_id = 1;
+  int64 user_id = 2;
+  int64 unit_id = 3;
+  string unit_name = 4;
+  int64 task_id = 5;
+  string task_name = 6;
+  // Длительность юнита в минутах (считает вызывающий по datetime_start/end).
+  int32 minutes = 7;
+}
+
+message TaskClosedRequest {
+  int64 company_id = 1;
+  // «Герой» закрытия: actor → responsible → author (выбирает вызывающий);
+  // 0 — героя нет (событие всё равно пишется).
+  int64 hero_user_id = 2;
+  int64 task_id = 3;
+  string task_name = 4;
+}

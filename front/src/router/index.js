@@ -33,6 +33,12 @@ const routes = [
     meta: { requiresAuth: true, requiresCompany: true } },
   { path: '/calendars', component: () => import('@/views/CalendarView.vue'),
     meta: { requiresAuth: true, requiresCompany: true } },
+  { path: '/portal', component: () => import('@/views/PortalView.vue'),
+    meta: { requiresAuth: true, requiresCompany: true } },
+  // Ссылка на конкретный пост (в т.ч. из пересланной в мессенджере плашки) —
+  // открывает тот же PortalView, он сам разворачивает пост по route.params.id.
+  { path: '/portal/:id(\\d+)', component: () => import('@/views/PortalView.vue'),
+    meta: { requiresAuth: true, requiresCompany: true }, props: true },
   // Ежедневник — личный (кросс-компанийный): нужна только авторизация, активная
   // компания не требуется.
   { path: '/diaries', component: () => import('@/views/DiaryView.vue'),
@@ -51,8 +57,10 @@ const routes = [
     meta: { requiresAuth: true },
     props: true,
   },
-  { path: '/groove', component: () => import('@/views/GrooveView.vue'),
+  { path: '/pets', component: () => import('@/views/PetsView.vue'),
     meta: { requiresAuth: true, requiresCompany: true, feature: 'uses_groove' } },
+  // Старые закладки раздела до переименования.
+  { path: '/groove', redirect: '/pets' },
   { path: '/tv', component: () => import('@/views/TvView.vue'), meta: { requiresAuth: true, fullscreen: true } },
   // Ссылка-приглашение в звонок: доступна и внешним гостям без аккаунта.
   { path: '/call/:code', component: () => import('@/views/CallJoinView.vue'),

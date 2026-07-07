@@ -20,7 +20,6 @@ type fakeRepo struct {
 	atts  map[int64]*domain.Attachment
 	calls map[int64]*domain.CallInfo
 	tasks map[int64]*domain.TaskPreview
-	pets  map[int64]string
 	users *fakeUsers // ФИО для reply/forwarded_from
 
 	nextConv, nextMsg, nextAtt int64
@@ -34,7 +33,6 @@ func newFakeRepo(users *fakeUsers) *fakeRepo {
 		atts:  map[int64]*domain.Attachment{},
 		calls: map[int64]*domain.CallInfo{},
 		tasks: map[int64]*domain.TaskPreview{},
-		pets:  map[int64]string{},
 		users: users,
 		// Автоответ техподдержки сверяется с реальными часами сервиса —
 		// фейковое «сейчас» держим возле time.Now().
@@ -80,9 +78,9 @@ func (r *fakeRepo) CreatePair(_ context.Context, a, b int64, companyID *int64) (
 	return &cp, nil
 }
 
-func (r *fakeRepo) GetSolo(_ context.Context, userID int64, pet bool) (*domain.Conversation, error) {
+func (r *fakeRepo) GetSolo(_ context.Context, userID int64) (*domain.Conversation, error) {
 	for _, c := range r.convs {
-		if c.UserAID == userID && ((pet && c.IsPetChat) || (!pet && c.IsDevChat)) {
+		if c.UserAID == userID && c.IsDevChat {
 			cp := *c
 			return &cp, nil
 		}
@@ -90,12 +88,12 @@ func (r *fakeRepo) GetSolo(_ context.Context, userID int64, pet bool) (*domain.C
 	return nil, nil
 }
 
-func (r *fakeRepo) CreateSolo(_ context.Context, userID, companyID int64, pet bool) (*domain.Conversation, error) {
+func (r *fakeRepo) CreateSolo(_ context.Context, userID, companyID int64) (*domain.Conversation, error) {
 	r.nextConv++
 	cid := companyID
 	c := &domain.Conversation{
 		ID: r.nextConv, UserAID: userID, CompanyID: &cid,
-		IsDevChat: !pet, IsPetChat: pet, CreatedAt: r.tick(),
+		IsDevChat: true, CreatedAt: r.tick(),
 	}
 	r.convs[c.ID] = c
 	cp := *c
@@ -565,14 +563,6 @@ func (r *fakeRepo) GetTask(_ context.Context, id int64) (*domain.TaskPreview, er
 	return &cp, nil
 }
 
-func (r *fakeRepo) PetName(_ context.Context, ownerID int64) (*string, error) {
-	name, ok := r.pets[ownerID]
-	if !ok {
-		return nil, nil
-	}
-	return &name, nil
-}
-
 type fakeUsers struct {
 	users map[int64]*domain.User
 }
@@ -645,11 +635,6 @@ type pubEvent struct {
 	Payload any
 }
 
-// noopGroove — pet-хук groovesvc в тестах не дёргаем.
-type noopGroove struct{}
-
-func (noopGroove) OnPetMessage(int64) {}
-
 type fakePub struct {
 	events []pubEvent
 }
@@ -688,7 +673,7 @@ func newTestEnv() (*Service, *fakeRepo, *fakeFiles, *fakePub) {
 	repo := newFakeRepo(users)
 	files := newFakeFiles()
 	pub := &fakePub{}
-	svc := New(repo, users, files, pub, noopGroove{}, slog.New(slog.DiscardHandler))
+	svc := New(repo, users, files, pub, slog.New(slog.DiscardHandler))
 	return svc, repo, files, pub
 }
 
@@ -756,80 +741,6 @@ func TestOpenConversationGuards(t *testing.T) {
 	// Администратор системы тоже может писать сотруднику любой компании.
 	if _, err := svc.OpenConversation(ctx, 1, 4); err != nil {
 		t.Fatalf("админ → сотрудник: %v", err)
-	}
-}
-
-// Unread-инвариант: бот-сообщения (sender NULL) обязаны попадать в счётчик.
-func TestPetChatUnreadCountsBotMessages(t *testing.T) {
-	svc, _, _, pub := newTestEnv()
-	ctx := context.Background()
-
-	pet, err := svc.OpenPetChat(ctx, 2, i64p(10))
-	if err != nil {
-		t.Fatalf("open pet chat: %v", err)
-	}
-	if _, err := svc.PostBotMessage(ctx, pet.ID, "Привет! Я Грувик"); err != nil {
-		t.Fatalf("post bot message: %v", err)
-	}
-
-	items, err := svc.ListConversations(ctx, 2, i64p(10))
-	if err != nil {
-		t.Fatalf("list conversations: %v", err)
-	}
-	if len(items) == 0 || !items[0].IsPetChat {
-		t.Fatalf("pet-чат не первый в списке: %+v", items)
-	}
-	if items[0].UnreadCount != 1 {
-		t.Fatalf("unread_count = %d, бот-сообщение потерялось", items[0].UnreadCount)
-	}
-	if items[0].LastMessage == nil || !items[0].LastMessage.IsBot {
-		t.Fatalf("last_message не бот: %+v", items[0].LastMessage)
-	}
-
-	// message:new ушло владельцу.
-	news := pub.byName("message:new")
-	if len(news) != 1 || news[0].Rooms[0] != "user_2" {
-		t.Fatalf("message:new события: %+v", news)
-	}
-	ev := news[0].Payload.(dto.MessageNewEvent)
-	if ev.FromUserID != nil {
-		t.Fatalf("from_user_id у бота должен быть null, получено %v", *ev.FromUserID)
-	}
-
-	n, err := svc.MarkRead(ctx, pet.ID, 2)
-	if err != nil || n != 1 {
-		t.Fatalf("mark read: n=%d err=%v", n, err)
-	}
-	items, _ = svc.ListConversations(ctx, 2, i64p(10))
-	if items[0].UnreadCount != 0 {
-		t.Fatalf("после прочтения unread_count = %d", items[0].UnreadCount)
-	}
-}
-
-// Pet-чат принимает только текст.
-func TestPetChatTextOnly(t *testing.T) {
-	svc, repo, _, _ := newTestEnv()
-	ctx := context.Background()
-
-	pet, _ := svc.OpenPetChat(ctx, 2, i64p(10))
-	att, err := svc.UploadAttachment(ctx, 2, "doc.pdf", "application/pdf", []byte("data"))
-	if err != nil {
-		t.Fatalf("upload: %v", err)
-	}
-
-	_, err = svc.SendMessage(ctx, pet.ID, 2, dto.MessageCreate{AttachmentIDs: []int64{att.ID}})
-	if de := domain.AsDomainError(err); de == nil || de.Code != "PET_CHAT_TEXT_ONLY" {
-		t.Fatalf("вложение в pet-чат: ожидался PET_CHAT_TEXT_ONLY, получено %v", err)
-	}
-
-	repo.tasks[7] = &domain.TaskPreview{ID: 7, Name: "Задача", CompanyID: 10}
-	_, err = svc.SendMessage(ctx, pet.ID, 2, dto.MessageCreate{TaskID: i64(7)})
-	if de := domain.AsDomainError(err); de == nil || de.Code != "PET_CHAT_TEXT_ONLY" {
-		t.Fatalf("задача в pet-чат: ожидался PET_CHAT_TEXT_ONLY, получено %v", err)
-	}
-
-	if _, err := svc.SendMessage(ctx, pet.ID, 2, dto.MessageCreate{Text: str("привет")}); err != nil {
-		t.Fatalf("текст в pet-чат: %v", err)
 	}
 }
 
@@ -929,30 +840,6 @@ func TestDevChatUndeletable(t *testing.T) {
 	_, err := svc.DeleteConversation(ctx, dev.ID, 2, "all")
 	if de := domain.AsDomainError(err); de == nil || de.Code != "DEV_CHAT_UNDELETABLE" {
 		t.Fatalf("dev-чат: %v", err)
-	}
-}
-
-// Чат с Грувиком — соло-диалог: удаляется физически при любом scope,
-// владелец получает conversation:deleted в свои вкладки.
-func TestPetChatDeletesPhysically(t *testing.T) {
-	svc, repo, _, pub := newTestEnv()
-	ctx := context.Background()
-
-	pet, _ := svc.OpenPetChat(ctx, 2, i64p(10))
-	if _, err := svc.SendMessage(ctx, pet.ID, 2, dto.MessageCreate{Text: str("привет")}); err != nil {
-		t.Fatalf("send: %v", err)
-	}
-
-	physical, err := svc.DeleteConversation(ctx, pet.ID, 2, "me")
-	if err != nil || !physical {
-		t.Fatalf("pet-чат: physical=%v err=%v", physical, err)
-	}
-	if _, ok := repo.convs[pet.ID]; ok {
-		t.Fatal("pet-чат не удалён физически")
-	}
-	evs := pub.byName("conversation:deleted")
-	if len(evs) != 1 || len(evs[0].Rooms) != 1 || evs[0].Rooms[0] != "user_2" {
-		t.Fatalf("conversation:deleted: %+v", evs)
 	}
 }
 
@@ -1141,7 +1028,7 @@ func TestConversationPinPersonal(t *testing.T) {
 	items, _ := svc.ListConversations(ctx, 2, i64p(10))
 	var pairs []*dto.ConversationListItem
 	for _, it := range items {
-		if !it.IsDevChat && !it.IsPetChat {
+		if !it.IsDevChat {
 			pairs = append(pairs, it)
 		}
 	}
@@ -1198,26 +1085,6 @@ func TestCallMessageLifecycle(t *testing.T) {
 	}
 	if updated.Call.Status != "ended" || updated.Call.DurationSec == nil || *updated.Call.DurationSec != 90 {
 		t.Fatalf("обновлённая плашка: %+v", updated.Call)
-	}
-}
-
-// ListRecentMessages — хронологический порядок и лимит.
-func TestListRecentMessages(t *testing.T) {
-	svc, _, _, _ := newTestEnv()
-	ctx := context.Background()
-
-	pet, _ := svc.OpenPetChat(ctx, 2, i64p(10))
-	for i := 0; i < 5; i++ {
-		if _, err := svc.SendMessage(ctx, pet.ID, 2, dto.MessageCreate{Text: str(fmt.Sprintf("м%d", i))}); err != nil {
-			t.Fatalf("send: %v", err)
-		}
-	}
-	msgs, err := svc.ListRecentMessages(ctx, pet.ID, 3)
-	if err != nil {
-		t.Fatalf("list recent: %v", err)
-	}
-	if len(msgs) != 3 || *msgs[0].Text != "м2" || *msgs[2].Text != "м4" {
-		t.Fatalf("порядок/лимит: %+v", msgs)
 	}
 }
 

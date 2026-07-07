@@ -1,0 +1,147 @@
+// Исходящий gRPC-контракт tasksvc для ИИ-ассистента (aisvc): статистика
+// компании и поиск/ссылки на задачи. tasksvc — единственный владелец этих
+// данных, aisvc больше не читает его таблицы напрямую (было архитектурным
+// долгом старого groove-tools.go). Транспорт всегда OK; бизнес-ошибка —
+// в поле error (см. Error).
+syntax = "proto3";
+
+package tasks.v1;
+
+option go_package = "github.com/DmitriyODS/gw2/back-go/pkg/gen/taskspb;taskspb";
+
+service TasksService {
+  rpc GetStatsSummary(GetStatsSummaryRequest) returns (GetStatsSummaryResponse);
+  rpc ListDepartments(ListDepartmentsRequest) returns (ListDepartmentsResponse);
+  rpc GetTopEmployees(GetTopEmployeesRequest) returns (GetTopEmployeesResponse);
+  rpc GetStatsByUnitTypes(GetStatsByUnitTypesRequest) returns (GetStatsByUnitTypesResponse);
+  rpc GetStatsCalendar(GetStatsCalendarRequest) returns (GetStatsCalendarResponse);
+  rpc SearchTasks(SearchTasksRequest) returns (SearchTasksResponse);
+  rpc GetTaskLink(GetTaskLinkRequest) returns (GetTaskLinkResponse);
+}
+
+message Error {
+  string code = 1;
+  string message = 2;
+  int32 http_status = 3;
+}
+
+// period — человекочитаемый код окна статистики: today/yesterday/
+// this_week/last_week/this_month/last_month/7d/30d (МСК-сутки). Пустая
+// строка/незнакомый код — this_week.
+
+message GetStatsSummaryRequest {
+  int64 company_id = 1;
+  string period = 2;
+}
+
+message GetStatsSummaryResponse {
+  Error error = 1;
+  int32 new_count = 2;
+  int32 closed_count = 3;
+  int32 in_progress_count = 4;
+  int32 debt_count = 5;
+  double total_hours = 6;
+  string period_label = 7;
+}
+
+message ListDepartmentsRequest {
+  int64 company_id = 1;
+  string period = 2;
+}
+
+message DepartmentStat {
+  int64 id = 1;
+  string name = 2;
+  int32 new_count = 3;
+}
+
+message ListDepartmentsResponse {
+  Error error = 1;
+  repeated DepartmentStat departments = 2;
+  string period_label = 3;
+}
+
+message GetTopEmployeesRequest {
+  int64 company_id = 1;
+  string period = 2;
+  int32 limit = 3; // 0 → дефолт 10, максимум 30.
+}
+
+message EmployeeStat {
+  string fio = 1;
+  int32 task_count = 2;
+  double hours = 3;
+}
+
+message GetTopEmployeesResponse {
+  Error error = 1;
+  repeated EmployeeStat employees = 2;
+  string period_label = 3;
+}
+
+message GetStatsByUnitTypesRequest {
+  int64 company_id = 1;
+  string period = 2;
+}
+
+message UnitTypeStat {
+  string unit_type_name = 1;
+  double hours = 2;
+  int32 task_count = 3;
+}
+
+message GetStatsByUnitTypesResponse {
+  Error error = 1;
+  repeated UnitTypeStat unit_types = 2;
+  string period_label = 3;
+}
+
+message GetStatsCalendarRequest {
+  int64 company_id = 1;
+  string period = 2;
+}
+
+message CalendarDayStat {
+  string date = 1;
+  int32 new_count = 2;
+  int32 closed_count = 3;
+  double hours = 4;
+}
+
+message GetStatsCalendarResponse {
+  Error error = 1;
+  repeated CalendarDayStat days = 2;
+  string period_label = 3;
+}
+
+message SearchTasksRequest {
+  int64 company_id = 1;
+  string query = 2;
+  int32 limit = 3; // 0 → дефолт 10.
+}
+
+// TaskRef — минимум для ссылки в ответе ассистента. color — личный цвет
+// задачи (per-user), у безличного gRPC-вызова его нет — всегда "".
+message TaskRef {
+  int64 id = 1;
+  string name = 2;
+  string color = 3;
+}
+
+message SearchTasksResponse {
+  Error error = 1;
+  repeated TaskRef tasks = 2;
+}
+
+message GetTaskLinkRequest {
+  int64 company_id = 1;
+  int64 task_id = 2;
+}
+
+message GetTaskLinkResponse {
+  Error error = 1; // NOT_FOUND — задачи нет либо она не в этой компании.
+  int64 id = 2;
+  string name = 3;
+  string color = 4;
+  string responsible_fio = 5; // "" — ответственный не назначен.
+}

@@ -1,5 +1,6 @@
 # Микросервис задач (tasksvc): HTTP/Fiber :8095 — ядро платформы
-# (задачи, юниты, типы юнитов, этапы, отделы, комментарии, статистика).
+# (задачи, юниты, типы юнитов, этапы, отделы, комментарии, статистика);
+# gRPC :9095 — TasksService (статистика/поиск задач для ИИ-ассистента aisvc).
 # Контекст сборки — back-go/ (общий модуль pkg подключается через
 # replace ../pkg в go.mod). Стадия сборки бежит на платформе билдера
 # ($BUILDPLATFORM): при сборке amd64-образа на Apple Silicon компилятор Go
@@ -20,7 +21,7 @@ FROM alpine:3.21
 RUN apk add --no-cache ca-certificates && adduser -D tasksvc
 COPY --from=build /out/tasksvc /usr/local/bin/tasksvc
 USER tasksvc
-EXPOSE 8095
+EXPOSE 8095 9095
 # busybox wget — для healthcheck в docker-compose. Именно 127.0.0.1:
 # localhost в alpine резолвится сначала в ::1, busybox wget не делает
 # фолбэк на IPv4, а fiber слушает только tcp4 → ложный unhealthy.

@@ -4,7 +4,8 @@
 // - protoc             (unknown)
 // source: messenger/v1/messenger.proto
 
-// Контракт мессенджера: вызовы Flask (и в будущем groovesvc) → msgsvc.
+// Контракт мессенджера: callsvc → msgsvc (плашки звонков),
+// portalsvc → msgsvc (пересылка поста портала).
 // Транспорт всегда OK; бизнес-ошибка — в поле error.
 // message_json — готовый снапшот сообщения в форме REST-ответа
 // (эмитится в Socket.IO без чтения БД на стороне вызывающего).
@@ -24,11 +25,10 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	MessengerService_EnsureDialog_FullMethodName       = "/messenger.v1.MessengerService/EnsureDialog"
-	MessengerService_CreateCallMessage_FullMethodName  = "/messenger.v1.MessengerService/CreateCallMessage"
-	MessengerService_GetCallMessage_FullMethodName     = "/messenger.v1.MessengerService/GetCallMessage"
-	MessengerService_PostBotMessage_FullMethodName     = "/messenger.v1.MessengerService/PostBotMessage"
-	MessengerService_ListRecentMessages_FullMethodName = "/messenger.v1.MessengerService/ListRecentMessages"
+	MessengerService_EnsureDialog_FullMethodName      = "/messenger.v1.MessengerService/EnsureDialog"
+	MessengerService_CreateCallMessage_FullMethodName = "/messenger.v1.MessengerService/CreateCallMessage"
+	MessengerService_GetCallMessage_FullMethodName    = "/messenger.v1.MessengerService/GetCallMessage"
+	MessengerService_CreatePostMessage_FullMethodName = "/messenger.v1.MessengerService/CreatePostMessage"
 )
 
 // MessengerServiceClient is the client API for MessengerService service.
@@ -41,10 +41,8 @@ type MessengerServiceClient interface {
 	CreateCallMessage(ctx context.Context, in *CreateCallMessageRequest, opts ...grpc.CallOption) (*CreateCallMessageResponse, error)
 	// Актуальный снапшот плашки звонка — для message:updated при смене статуса.
 	GetCallMessage(ctx context.Context, in *GetCallMessageRequest, opts ...grpc.CallOption) (*GetCallMessageResponse, error)
-	// Бот-сообщение Грувика (sender NULL + is_bot) в pet-чат; msgsvc сам публикует message:new.
-	PostBotMessage(ctx context.Context, in *PostBotMessageRequest, opts ...grpc.CallOption) (*PostBotMessageResponse, error)
-	// Последние сообщения диалога — контекст для AI-ответа pet-чата.
-	ListRecentMessages(ctx context.Context, in *ListRecentMessagesRequest, opts ...grpc.CallOption) (*ListRecentMessagesResponse, error)
+	// Системная плашка пересланного поста kind='post' в диалоге (portalsvc).
+	CreatePostMessage(ctx context.Context, in *CreatePostMessageRequest, opts ...grpc.CallOption) (*CreatePostMessageResponse, error)
 }
 
 type messengerServiceClient struct {
@@ -85,20 +83,10 @@ func (c *messengerServiceClient) GetCallMessage(ctx context.Context, in *GetCall
 	return out, nil
 }
 
-func (c *messengerServiceClient) PostBotMessage(ctx context.Context, in *PostBotMessageRequest, opts ...grpc.CallOption) (*PostBotMessageResponse, error) {
+func (c *messengerServiceClient) CreatePostMessage(ctx context.Context, in *CreatePostMessageRequest, opts ...grpc.CallOption) (*CreatePostMessageResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(PostBotMessageResponse)
-	err := c.cc.Invoke(ctx, MessengerService_PostBotMessage_FullMethodName, in, out, cOpts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-func (c *messengerServiceClient) ListRecentMessages(ctx context.Context, in *ListRecentMessagesRequest, opts ...grpc.CallOption) (*ListRecentMessagesResponse, error) {
-	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(ListRecentMessagesResponse)
-	err := c.cc.Invoke(ctx, MessengerService_ListRecentMessages_FullMethodName, in, out, cOpts...)
+	out := new(CreatePostMessageResponse)
+	err := c.cc.Invoke(ctx, MessengerService_CreatePostMessage_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -115,10 +103,8 @@ type MessengerServiceServer interface {
 	CreateCallMessage(context.Context, *CreateCallMessageRequest) (*CreateCallMessageResponse, error)
 	// Актуальный снапшот плашки звонка — для message:updated при смене статуса.
 	GetCallMessage(context.Context, *GetCallMessageRequest) (*GetCallMessageResponse, error)
-	// Бот-сообщение Грувика (sender NULL + is_bot) в pet-чат; msgsvc сам публикует message:new.
-	PostBotMessage(context.Context, *PostBotMessageRequest) (*PostBotMessageResponse, error)
-	// Последние сообщения диалога — контекст для AI-ответа pet-чата.
-	ListRecentMessages(context.Context, *ListRecentMessagesRequest) (*ListRecentMessagesResponse, error)
+	// Системная плашка пересланного поста kind='post' в диалоге (portalsvc).
+	CreatePostMessage(context.Context, *CreatePostMessageRequest) (*CreatePostMessageResponse, error)
 	mustEmbedUnimplementedMessengerServiceServer()
 }
 
@@ -138,11 +124,8 @@ func (UnimplementedMessengerServiceServer) CreateCallMessage(context.Context, *C
 func (UnimplementedMessengerServiceServer) GetCallMessage(context.Context, *GetCallMessageRequest) (*GetCallMessageResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method GetCallMessage not implemented")
 }
-func (UnimplementedMessengerServiceServer) PostBotMessage(context.Context, *PostBotMessageRequest) (*PostBotMessageResponse, error) {
-	return nil, status.Error(codes.Unimplemented, "method PostBotMessage not implemented")
-}
-func (UnimplementedMessengerServiceServer) ListRecentMessages(context.Context, *ListRecentMessagesRequest) (*ListRecentMessagesResponse, error) {
-	return nil, status.Error(codes.Unimplemented, "method ListRecentMessages not implemented")
+func (UnimplementedMessengerServiceServer) CreatePostMessage(context.Context, *CreatePostMessageRequest) (*CreatePostMessageResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method CreatePostMessage not implemented")
 }
 func (UnimplementedMessengerServiceServer) mustEmbedUnimplementedMessengerServiceServer() {}
 func (UnimplementedMessengerServiceServer) testEmbeddedByValue()                          {}
@@ -219,38 +202,20 @@ func _MessengerService_GetCallMessage_Handler(srv interface{}, ctx context.Conte
 	return interceptor(ctx, in, info, handler)
 }
 
-func _MessengerService_PostBotMessage_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(PostBotMessageRequest)
+func _MessengerService_CreatePostMessage_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(CreatePostMessageRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(MessengerServiceServer).PostBotMessage(ctx, in)
+		return srv.(MessengerServiceServer).CreatePostMessage(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: MessengerService_PostBotMessage_FullMethodName,
+		FullMethod: MessengerService_CreatePostMessage_FullMethodName,
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(MessengerServiceServer).PostBotMessage(ctx, req.(*PostBotMessageRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
-func _MessengerService_ListRecentMessages_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(ListRecentMessagesRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(MessengerServiceServer).ListRecentMessages(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: MessengerService_ListRecentMessages_FullMethodName,
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(MessengerServiceServer).ListRecentMessages(ctx, req.(*ListRecentMessagesRequest))
+		return srv.(MessengerServiceServer).CreatePostMessage(ctx, req.(*CreatePostMessageRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -275,12 +240,8 @@ var MessengerService_ServiceDesc = grpc.ServiceDesc{
 			Handler:    _MessengerService_GetCallMessage_Handler,
 		},
 		{
-			MethodName: "PostBotMessage",
-			Handler:    _MessengerService_PostBotMessage_Handler,
-		},
-		{
-			MethodName: "ListRecentMessages",
-			Handler:    _MessengerService_ListRecentMessages_Handler,
+			MethodName: "CreatePostMessage",
+			Handler:    _MessengerService_CreatePostMessage_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

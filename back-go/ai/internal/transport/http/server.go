@@ -69,6 +69,10 @@ func NewServer(eps endpoint.Endpoints, users domain.UserReader,
 
 	app.Get("/api/ai/tv-fact", auth.RequireAuth, h.tvFact)
 
+	app.Post("/api/ai/assistant/messages", auth.RequireAuth, h.sendAssistantMessage)
+	app.Get("/api/ai/assistant/history", auth.RequireAuth, h.getAssistantHistory)
+	app.Post("/api/ai/assistant/feedback", auth.RequireAuth, h.sendAssistantFeedback)
+
 	return &Server{app: app}
 }
 

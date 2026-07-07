@@ -10,11 +10,12 @@
 #
 # Прод НЕ собирает образы: их пушит локальная машина (`make push` →
 # scripts/build_push.sh) в один репозиторий osipovskijdima/groove_work
-# под тегами migrate/gateway/calls/auth/messenger/ai/groove/tasks/front.
+# под тегами migrate/gateway/calls/auth/messenger/ai/pets/tasks/portal/front.
 # Деплой-скрипт делает `compose pull` + `up --no-build`. Откат: в deploy/.env
 # выставить версионный тег, например GATEWAY_TAG=gateway-3.7.0 (MIGRATE_TAG /
-# CALLS_TAG / AUTH_TAG / MESSENGER_TAG / AI_TAG / GROOVE_TAG / TASKS_TAG /
-# PUSH_TAG / REGISTRY_TAG / MAIL_TAG / FRONT_TAG — аналогично).
+# CALLS_TAG / AUTH_TAG / MESSENGER_TAG / AI_TAG / PETS_TAG / TASKS_TAG /
+# PUSH_TAG / REGISTRY_TAG / CALENDAR_TAG / DIARY_TAG / PORTAL_TAG / MAIL_TAG /
+# FRONT_TAG — аналогично).
 # ================================================================
 services:
   migrate:
@@ -41,9 +42,13 @@ services:
 
   ai:
     image: osipovskijdima/groove_work:${AI_TAG:-ai}
+    environment:
+      # Публичный базовый URL — ссылки на задачи в ответах ИИ-ассистента
+      # (https://gw.example.com/tasks/:id), тот же паттерн, что у auth.
+      APP_PUBLIC_BASE_URL: ${APP_PUBLIC_BASE_URL:-https://gw.kodass.ru}
 
-  groove:
-    image: osipovskijdima/groove_work:${GROOVE_TAG:-groove}
+  pets:
+    image: osipovskijdima/groove_work:${PETS_TAG:-pets}
 
   tasks:
     image: osipovskijdima/groove_work:${TASKS_TAG:-tasks}
@@ -72,6 +77,9 @@ services:
 
   diary:
     image: osipovskijdima/groove_work:${DIARY_TAG:-diary}
+
+  portal:
+    image: osipovskijdima/groove_work:${PORTAL_TAG:-portal}
 
   mail:
     image: osipovskijdima/groove_work:${MAIL_TAG:-mail}

@@ -109,6 +109,18 @@ type EmployeeRef struct {
 	ID  int64  `json:"id"`
 }
 
+// AssistantSummary — ответ инструмента get_stats_summary ИИ-ассистента
+// (gRPC GetStatsSummary): период задаётся человекочитаемым кодом, не парой
+// from/to, поэтому это отдельная от StatsCommon форма.
+type AssistantSummary struct {
+	PeriodLabel     string
+	NewCount        int
+	ClosedCount     int
+	InProgressCount int
+	DebtCount       int
+	TotalHours      float64
+}
+
 func NewTaskByHours(items []domain.TaskHours) []TaskByHours {
 	out := make([]TaskByHours, 0, len(items))
 	for _, r := range items {

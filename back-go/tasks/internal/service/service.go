@@ -25,7 +25,7 @@ type Service struct {
 	stats     domain.StatsRepository
 	users     domain.UserReader
 	companies domain.CompanyReader
-	groove    domain.GrooveHooks
+	pets      domain.PetsHooks
 	ai        domain.AIClient
 	bus       domain.EventBus
 	log       *slog.Logger
@@ -44,7 +44,7 @@ type Deps struct {
 	Stats     domain.StatsRepository
 	Users     domain.UserReader
 	Companies domain.CompanyReader
-	Groove    domain.GrooveHooks
+	Pets      domain.PetsHooks
 	AI        domain.AIClient
 	Bus       domain.EventBus
 	Log       *slog.Logger
@@ -54,7 +54,7 @@ func New(d Deps) *Service {
 	return &Service{
 		tasks: d.Tasks, units: d.Units, unitTypes: d.UnitTypes, depts: d.Depts,
 		stages: d.Stages, comments: d.Comments, stats: d.Stats, users: d.Users,
-		companies: d.Companies, groove: d.Groove, ai: d.AI, bus: d.Bus, log: d.Log,
+		companies: d.Companies, pets: d.Pets, ai: d.AI, bus: d.Bus, log: d.Log,
 	}
 }
 

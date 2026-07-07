@@ -9,10 +9,10 @@
 // (`go run ./cmd/migrate`), затем стартуют реальные сервисы (go run) на портах
 // +10000 к dev-портам: authsvc :18091, diarysvc :18101, tasksvc :18095,
 // registrysvc :18099, calendarsvc :18100, msgsvc :18092/:19092,
-// groovesvc :18094/:19094, gatewaysvc :18096, pushsvc :18097 (FCM off),
-// mailsvc gRPC :19098. aisvc и callsvc НЕ поднимаются: AI-пути обязаны быть
-// fail-open (поиск → LIKE, Грувик → статичные реплики), а команды call:*
-// шлюза — отвечать CALLS_UNAVAILABLE (это тоже проверка).
+// petsvc :18094/:19094, gatewaysvc :18096, pushsvc :18097 (FCM off),
+// portalsvc :18102, mailsvc gRPC :19098. aisvc и callsvc НЕ поднимаются: AI-пути обязаны быть
+// fail-open (поиск → LIKE), а команды call:* шлюза — отвечать
+// CALLS_UNAVAILABLE (это тоже проверка).
 // Тесты ходят по HTTP как настоящий клиент; коды подтверждения email и токены
 // сброса пароля читаются напрямую из тестовой БД (надёжнее парсинга писем).
 package apitest
@@ -53,17 +53,18 @@ const (
 
 	authBase      = "http://localhost:18091"
 	diaryBase     = "http://localhost:18101"
+	portalBase    = "http://localhost:18102"
 	tasksBase     = "http://localhost:18095"
 	registryBase  = "http://localhost:18099"
 	calendarBase  = "http://localhost:18100"
 	messengerBase = "http://localhost:18092"
-	grooveBase    = "http://localhost:18094"
+	petsBase      = "http://localhost:18094"
 	gatewayBase   = "http://localhost:18096"
 	pushBase      = "http://localhost:18097"
 	gatewayWSURL  = "ws://localhost:18096/ws"
 
 	// Тестам выделена СВОЯ база Redis того же dev-инстанса: ключи presence
-	// (gw2:presence:*) и дневных капов Groove (gw2:groove:daily:*) не должны
+	// (gw2:presence:*) и дневных капов питомцев (gw2:pets:daily:*) не должны
 	// пересекаться с dev-данными db0 — id пользователей тестовой БД начинаются
 	// с 1 на каждый прогон и совпали бы с dev-остатками. FLUSHDB на старте
 	// прогона даёт детерминированные капы/бюджеты. Pub/sub-каналы в Redis
@@ -123,7 +124,7 @@ func runMain(m *testing.M) int {
 	defer cancel()
 
 	// 1. Чистая тестовая БД на каждый прогон + чистая тестовая база Redis
-	// (капы/бюджеты Groove и presence детерминированы в рамках прогона).
+	// (капы/бюджеты питомцев и presence детерминированы в рамках прогона).
 	if err := recreateTestDB(ctx); err != nil {
 		fmt.Println("apitest: пересоздание БД:", err)
 		return 1
@@ -179,17 +180,18 @@ func runMain(m *testing.M) int {
 		"PASETO_PUBLIC_KEY=" + pasetoPublicKey,
 		"HTTP_ADDR=:18101",
 	})
-	// tasksvc: groovesvc/aisvc НЕ поднимаем нарочно — хуки геймификации
+	// tasksvc: petsvc/aisvc НЕ поднимаем нарочно — хуки геймификации
 	// fire-and-forget, а AI fail-open (поиск падает в LIKE); сервис обязан
 	// переживать их недоступность. Ключ Fernet YouGile — dev-ключ из dev.sh.
 	procs.start("tasksvc", filepath.Join(repoRoot, "back-go/tasks"), "./cmd/tasksvc", []string{
 		"DATABASE_URL=" + testDBURL,
 		"REDIS_URL=" + testRedisURL,
 		"PASETO_PUBLIC_KEY=" + pasetoPublicKey,
-		"GROOVE_GRPC_ADDR=localhost:19094",
+		"PETS_GRPC_ADDR=localhost:19094",
 		"AI_GRPC_ADDR=localhost:19093",
 		"YOUGILE_ENC_KEY=CT5VF1jg6uFFbj4W_6RW3z3416bPlfbxdMYelrEOIXc=",
 		"HTTP_ADDR=:18095",
+		"GRPC_ADDR=:19095",
 	})
 	procs.start("registrysvc", filepath.Join(repoRoot, "back-go/registry"), "./cmd/registrysvc", []string{
 		"DATABASE_URL=" + testDBURL,
@@ -205,31 +207,40 @@ func runMain(m *testing.M) int {
 		"UPLOAD_FOLDER=" + uploads,
 		"HTTP_ADDR=:18100",
 	})
-	// Волна 3: msgsvc, groovesvc, pushsvc. Порядок env-зависимостей:
-	//   - msgsvc зовёт groovesvc по gRPC (:19094) для ответа Грувика в pet-чате;
-	//   - groovesvc зовёт msgsvc по gRPC (:19092) для публикации ответа Грувика,
-	//     а AI (:19093) НЕ поднят — s.ai.Enabled даёт false, Грувик отвечает
-	//     статичной офлайн-репликой (fail-open, не падаем);
-	//   - pushsvc без FIREBASE_* — отправка выключена (no-op sender), REST живёт.
-	// Все gRPC-клиенты дозваниваются лениво (grpc.NewClient), поэтому порядок
-	// старта внутри волны не важен.
+	// Волна 3: msgsvc, petsvc, pushsvc, portalsvc. Межсервисные вызовы внутри
+	// волны fire-and-forget/ленивые (petsvc → portalsvc — пост эволюции,
+	// portalsvc → msgsvc — пересылка поста), поэтому порядок старта не важен;
+	// pushsvc без FIREBASE_* — отправка выключена (no-op sender), REST живёт.
 	procs.start("msgsvc", filepath.Join(repoRoot, "back-go/messenger"), "./cmd/msgsvc", []string{
 		"DATABASE_URL=" + testDBURL,
 		"REDIS_URL=" + testRedisURL,
 		"PASETO_PUBLIC_KEY=" + pasetoPublicKey,
 		"UPLOAD_FOLDER=" + uploads,
-		"GROOVE_GRPC_ADDR=localhost:19094",
 		"GRPC_ADDR=:19092",
 		"HTTP_ADDR=:18092",
 	})
-	procs.start("groovesvc", filepath.Join(repoRoot, "back-go/groove"), "./cmd/groovesvc", []string{
+	// petsvc: исходящий gRPC — portalsvc (fire-and-forget пост-поздравление
+	// при эволюции; portalsvc стартует в этой же волне, gRPC-клиент ленивый).
+	procs.start("petsvc", filepath.Join(repoRoot, "back-go/pets"), "./cmd/petsvc", []string{
 		"DATABASE_URL=" + testDBURL,
 		"REDIS_URL=" + testRedisURL,
 		"PASETO_PUBLIC_KEY=" + pasetoPublicKey,
-		"AI_GRPC_ADDR=localhost:19093",
-		"MESSENGER_GRPC_ADDR=localhost:19092",
+		"PORTAL_GRPC_ADDR=localhost:19102",
 		"GRPC_ADDR=:19094",
 		"HTTP_ADDR=:18094",
+	})
+	// portalsvc: корпоративный портал (посты/комментарии/реакции/разделы),
+	// полностью независим от petsvc. Единственный межсервисный вызов —
+	// пересылка поста в мессенджер (gRPC msgsvc CreatePostMessage), тот
+	// стартует выше в этой же волне.
+	procs.start("portalsvc", filepath.Join(repoRoot, "back-go/portal"), "./cmd/portalsvc", []string{
+		"DATABASE_URL=" + testDBURL,
+		"REDIS_URL=" + testRedisURL,
+		"PASETO_PUBLIC_KEY=" + pasetoPublicKey,
+		"UPLOAD_FOLDER=" + uploads,
+		"MESSENGER_GRPC_ADDR=localhost:19092",
+		"HTTP_ADDR=:18102",
+		"GRPC_ADDR=:19102",
 	})
 	procs.start("pushsvc", filepath.Join(repoRoot, "back-go/push"), "./cmd/pushsvc", []string{
 		"DATABASE_URL=" + testDBURL,
@@ -256,8 +267,8 @@ func runMain(m *testing.M) int {
 	for _, hc := range []string{
 		authBase + "/healthz", diaryBase + "/healthz", "http://localhost:18098/healthz",
 		tasksBase + "/healthz", registryBase + "/healthz", calendarBase + "/healthz",
-		messengerBase + "/healthz", grooveBase + "/healthz", pushBase + "/healthz",
-		gatewayBase + "/healthz",
+		messengerBase + "/healthz", petsBase + "/healthz", pushBase + "/healthz",
+		gatewayBase + "/healthz", portalBase + "/healthz",
 	} {
 		if err := waitHealthz(hc, 30*time.Second); err != nil {
 			fmt.Println("apitest:", err)
@@ -512,8 +523,9 @@ var tasksAPI = &svcClient{base: tasksBase}
 var registryAPI = &svcClient{base: registryBase}
 var calendarAPI = &svcClient{base: calendarBase}
 var messengerAPI = &svcClient{base: messengerBase}
-var grooveAPI = &svcClient{base: grooveBase}
+var petsAPI = &svcClient{base: petsBase}
 var pushAPI = &svcClient{base: pushBase}
+var portalAPI = &svcClient{base: portalBase}
 
 type reqOpt func(*http.Request)
 

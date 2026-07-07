@@ -12,7 +12,7 @@ import (
 
 // convCols — колонки диалога (+ имя компании) для scanConversation.
 const convCols = `c.id, c.user_a_id, c.user_b_id, c.company_id, co.name,
-	c.is_dev_chat, c.is_pet_chat, c.created_at, c.last_message_at,
+	c.is_dev_chat, c.created_at, c.last_message_at,
 	c.hidden_for_a, c.hidden_for_b, c.pinned_at_a, c.pinned_at_b`
 
 const convFrom = ` FROM conversations c LEFT JOIN companies co ON co.id = c.company_id `
@@ -20,7 +20,7 @@ const convFrom = ` FROM conversations c LEFT JOIN companies co ON co.id = c.comp
 func scanConversation(row pgx.Row) (*domain.Conversation, error) {
 	var c domain.Conversation
 	err := row.Scan(&c.ID, &c.UserAID, &c.UserBID, &c.CompanyID, &c.CompanyName,
-		&c.IsDevChat, &c.IsPetChat, &c.CreatedAt, &c.LastMessageAt,
+		&c.IsDevChat, &c.CreatedAt, &c.LastMessageAt,
 		&c.HiddenForA, &c.HiddenForB, &c.PinnedAtA, &c.PinnedAtB)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -43,9 +43,9 @@ func (r *Repo) GetPair(ctx context.Context, a, b int64) (*domain.Conversation, e
 
 func (r *Repo) CreatePair(ctx context.Context, a, b int64, companyID *int64) (*domain.Conversation, error) {
 	row := r.q(ctx).QueryRow(ctx, `
-		INSERT INTO conversations (user_a_id, user_b_id, company_id, is_dev_chat, is_pet_chat,
+		INSERT INTO conversations (user_a_id, user_b_id, company_id, is_dev_chat,
 			created_at, hidden_for_a, hidden_for_b)
-		VALUES ($1, $2, $3, FALSE, FALSE, now(), FALSE, FALSE)
+		VALUES ($1, $2, $3, FALSE, now(), FALSE, FALSE)
 		RETURNING id`, a, b, companyID)
 	var id int64
 	if err := row.Scan(&id); err != nil {
@@ -59,29 +59,22 @@ func (r *Repo) CreatePair(ctx context.Context, a, b int64, companyID *int64) (*d
 	return r.GetConversation(ctx, id)
 }
 
-func soloFlag(pet bool) string {
-	if pet {
-		return "c.is_pet_chat"
-	}
-	return "c.is_dev_chat"
-}
-
-func (r *Repo) GetSolo(ctx context.Context, userID int64, pet bool) (*domain.Conversation, error) {
+func (r *Repo) GetSolo(ctx context.Context, userID int64) (*domain.Conversation, error) {
 	return scanConversation(r.q(ctx).QueryRow(ctx,
-		`SELECT `+convCols+convFrom+`WHERE `+soloFlag(pet)+` = TRUE AND c.user_a_id = $1`, userID))
+		`SELECT `+convCols+convFrom+`WHERE c.is_dev_chat = TRUE AND c.user_a_id = $1`, userID))
 }
 
-func (r *Repo) CreateSolo(ctx context.Context, userID, companyID int64, pet bool) (*domain.Conversation, error) {
+func (r *Repo) CreateSolo(ctx context.Context, userID, companyID int64) (*domain.Conversation, error) {
 	row := r.q(ctx).QueryRow(ctx, `
-		INSERT INTO conversations (user_a_id, user_b_id, company_id, is_dev_chat, is_pet_chat,
+		INSERT INTO conversations (user_a_id, user_b_id, company_id, is_dev_chat,
 			created_at, hidden_for_a, hidden_for_b)
-		VALUES ($1, NULL, $2, $3, $4, now(), FALSE, FALSE)
-		RETURNING id`, userID, companyID, !pet, pet)
+		VALUES ($1, NULL, $2, TRUE, now(), FALSE, FALSE)
+		RETURNING id`, userID, companyID)
 	var id int64
 	if err := row.Scan(&id); err != nil {
 		var pgErr *pgconn.PgError
 		if errors.As(err, &pgErr) && pgErr.Code == "23505" {
-			return r.GetSolo(ctx, userID, pet)
+			return r.GetSolo(ctx, userID)
 		}
 		return nil, err
 	}
@@ -109,7 +102,7 @@ func (r *Repo) listConversations(ctx context.Context, sql string, args ...any) (
 func (r *Repo) ListPairConversations(ctx context.Context, userID int64) ([]*domain.Conversation, error) {
 	return r.listConversations(ctx, `
 		SELECT `+convCols+convFrom+`
-		WHERE c.is_dev_chat = FALSE AND c.is_pet_chat = FALSE
+		WHERE c.is_dev_chat = FALSE
 		  AND ((c.user_a_id = $1 AND c.hidden_for_a = FALSE)
 		    OR (c.user_b_id = $1 AND c.hidden_for_b = FALSE))
 		ORDER BY c.last_message_at DESC NULLS LAST, c.created_at DESC`, userID)

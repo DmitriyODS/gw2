@@ -19,7 +19,7 @@ import { getStatsProfile } from '@/api/stats.js'
 import { getDiaries } from '@/api/diaries.js'
 import { getRegistries } from '@/api/registries.js'
 import { getCalendars } from '@/api/calendars.js'
-import { getMyPet } from '@/api/groove.js'
+import { getMyPet } from '@/api/pets.js'
 import { listConversations } from '@/api/messenger.js'
 import { getYougileStatus } from '@/api/yougile.js'
 import { exportBackup } from '@/api/backup.js'
@@ -112,7 +112,7 @@ describeIntegration('smoke: главный GET каждого api-модуля',
     expect(Array.isArray(c.calendars ?? c.items ?? c)).toBe(true)
   })
 
-  it('groove.getMyPet → питомец', async () => {
+  it('pets.getMyPet → питомец', async () => {
     admin.session.use()
     const p = await getMyPet()
     expect(p.user_id).toBe(admin.auth.userId)

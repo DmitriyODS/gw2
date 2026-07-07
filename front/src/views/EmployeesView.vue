@@ -1,6 +1,7 @@
 <template>
   <div class="admin-page">
     <header class="admin-sticky">
+      <PortalHubTabs class="emp-hub-tabs" />
       <div class="page-head">
         <div class="page-head-text">
           <h1 class="page-head-title">{{ pageTitle }}</h1>
@@ -282,6 +283,7 @@ import { ROLE_NAMES } from '@/composables/usePermission.js'
 import { formatLastSeen } from '@/utils/presence.js'
 import AvatarLightbox from '@/components/common/AvatarLightbox.vue'
 import EmptyState from '@/components/common/EmptyState.vue'
+import PortalHubTabs from '@/components/portal/PortalHubTabs.vue'
 import { useBreakpoint } from '@/composables/useBreakpoint.js'
 
 const { isMobile } = useBreakpoint()
@@ -477,6 +479,17 @@ const RolePill = {
   background: color-mix(in oklch, var(--color-success) 18%, transparent);
   color: var(--color-text);
 }
+
+/* Геометрия вкладок хаба синхронизирована с PortalView (отступ — gap
+   admin-sticky): переключение «Лента ⇄ Сотрудники» не сдвигает интерфейс. */
+.emp-hub-tabs { align-self: flex-start; }
+
+.admin-body { animation: emp-fade 0.2s ease; }
+@keyframes emp-fade {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@media (prefers-reduced-motion: reduce) { .admin-body { animation: none; } }
 
 .emp-search {
   display: inline-flex;

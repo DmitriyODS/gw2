@@ -7,9 +7,6 @@ import (
 	"github.com/DmitriyODS/gw2/back-go/messenger/internal/dto"
 )
 
-// petChatHistoryLimit — дефолт глубины контекста pet-чата (как last_messages).
-const petChatHistoryLimit = 12
-
 // EnsureDialog — найти/создать парный диалог (зовётся ДО StartCall).
 func (s *Service) EnsureDialog(ctx context.Context, userAID, userBID int64) (int64, error) {
 	conv, err := s.ensureConversation(ctx, userAID, userBID)
@@ -71,42 +68,45 @@ func (s *Service) GetCallMessage(ctx context.Context, callID int64) (int64, *dto
 	return conv.ID, dto.NewMessage(msg), pairNotifyIDs(conv), nil
 }
 
-// PostBotMessage — бот-сообщение Грувика (sender NULL + is_bot) в pet-чат;
-// message:new владельцу публикуем сами.
-func (s *Service) PostBotMessage(ctx context.Context, convID int64, text string) (int64, error) {
-	conv, err := s.repo.GetConversation(ctx, convID)
+// CreatePostMessage — системная плашка пересланного поста kind='post' в
+// диалоге (зовёт portalsvc). Превью — замороженный снапшот, переданный
+// вызывающим (не JOIN на portal_posts — мессенджер не завязывается на схему
+// portalsvc). Отправитель обязан быть участником диалога (как в
+// ForwardMessage), в соло-чат (техподдержку) пересылка не имеет смысла.
+// message:new публикует сам msgsvc (gw2:messenger:events) — тем же путём
+// идут и пуши pushsvc. Возвращает снапшот сообщения и адресатов события.
+func (s *Service) CreatePostMessage(ctx context.Context, convID, senderID, postID int64, title, excerpt, coverURL string) (*dto.Message, []int64, error) {
+	conv, err := s.conversationForUser(ctx, convID, senderID)
 	if err != nil {
-		return 0, err
+		return nil, nil, err
 	}
-	if conv == nil {
-		return 0, errConvNotFound()
-	}
-	if !conv.IsPetChat {
-		return 0, domain.NewError("NOT_PET_CHAT", "Диалог не является pet-чатом", 400)
-	}
-	if text == "" {
-		return 0, domain.NewError("EMPTY_MESSAGE", "Пустое сообщение", 400)
+	if conv.IsSolo() {
+		return nil, nil, domain.NewError("BAD_CONVERSATION",
+			"В этот чат нельзя переслать пост", 400)
 	}
 	msg, err := s.repo.CreateMessage(ctx, domain.NewMessage{
-		ConversationID: convID,
-		Text:           &text,
-		Kind:           domain.KindText,
-		IsBot:          true,
+		ConversationID: conv.ID,
+		SenderID:       &senderID,
+		Kind:           domain.KindPost,
+		PostID:         &postID,
+		PostTitle:      &title,
+		PostExcerpt:    &excerpt,
+		PostCoverURL:   nonEmpty(coverURL),
 	})
 	if err != nil {
-		return 0, err
+		return nil, nil, err
 	}
-	s.pub.Publish(ctx, "message:new", rooms(conv.UserAID), dto.MessageNewEvent{
-		ConversationID: convID, Message: dto.NewMessage(msg), FromUserID: nil,
+	payload := dto.NewMessage(msg)
+	notify := pairNotifyIDs(conv)
+	s.pub.Publish(ctx, "message:new", rooms(notify...), dto.MessageNewEvent{
+		ConversationID: conv.ID, Message: payload, FromUserID: &senderID,
 	})
-	return msg.ID, nil
+	return payload, notify, nil
 }
 
-// ListRecentMessages — последние limit сообщений диалога в хронологическом
-// порядке (контекст AI-ответа pet-чата).
-func (s *Service) ListRecentMessages(ctx context.Context, convID int64, limit int) ([]*domain.Message, error) {
-	if limit <= 0 {
-		limit = petChatHistoryLimit
+func nonEmpty(s string) *string {
+	if s == "" {
+		return nil
 	}
-	return s.repo.ListRecent(ctx, convID, limit)
+	return &s
 }

@@ -36,15 +36,16 @@ MESSENGER_PID=""
 AI_PID=""
 TASKS_PID=""
 GATEWAY_PID=""
-GROOVE_PID=""
+PETS_PID=""
 PUSH_PID=""
 MAIL_PID=""
 REGISTRY_PID=""
 CALENDAR_PID=""
 DIARY_PID=""
+PORTAL_PID=""
 
 # Все Go-сервисы (имя бинаря в go-build/exe — по нему ловим осиротевшие процессы).
-SVCS="callsvc authsvc msgsvc aisvc groovesvc tasksvc gatewaysvc pushsvc mailsvc registrysvc calendarsvc diarysvc"
+SVCS="callsvc authsvc msgsvc aisvc petsvc tasksvc gatewaysvc pushsvc mailsvc registrysvc calendarsvc diarysvc portalsvc"
 
 # Dev-ключи PASETO (синхронизированы с Makefile и
 # deploy/docker-compose.override.yml): приватный — только у authsvc,
@@ -68,12 +69,13 @@ cleanup() {
     if [ -n "$AI_PID" ];    then kill -TERM -- "-$AI_PID"    2>/dev/null || true; fi
     if [ -n "$TASKS_PID" ]; then kill -TERM -- "-$TASKS_PID" 2>/dev/null || true; fi
     if [ -n "$GATEWAY_PID" ]; then kill -TERM -- "-$GATEWAY_PID" 2>/dev/null || true; fi
-    if [ -n "$GROOVE_PID" ]; then kill -TERM -- "-$GROOVE_PID" 2>/dev/null || true; fi
+    if [ -n "$PETS_PID" ]; then kill -TERM -- "-$PETS_PID" 2>/dev/null || true; fi
     if [ -n "$PUSH_PID" ]; then kill -TERM -- "-$PUSH_PID" 2>/dev/null || true; fi
     if [ -n "$MAIL_PID" ]; then kill -TERM -- "-$MAIL_PID" 2>/dev/null || true; fi
     if [ -n "$REGISTRY_PID" ]; then kill -TERM -- "-$REGISTRY_PID" 2>/dev/null || true; fi
     if [ -n "$CALENDAR_PID" ]; then kill -TERM -- "-$CALENDAR_PID" 2>/dev/null || true; fi
     if [ -n "$DIARY_PID" ]; then kill -TERM -- "-$DIARY_PID" 2>/dev/null || true; fi
+    if [ -n "$PORTAL_PID" ]; then kill -TERM -- "-$PORTAL_PID" 2>/dev/null || true; fi
 
     # Даём ~1 секунду на graceful-shutdown (vite, Go-сервисы).
     sleep 1
@@ -86,12 +88,13 @@ cleanup() {
     if [ -n "$AI_PID" ];    then kill -KILL -- "-$AI_PID"    2>/dev/null || true; fi
     if [ -n "$TASKS_PID" ]; then kill -KILL -- "-$TASKS_PID" 2>/dev/null || true; fi
     if [ -n "$GATEWAY_PID" ]; then kill -KILL -- "-$GATEWAY_PID" 2>/dev/null || true; fi
-    if [ -n "$GROOVE_PID" ]; then kill -KILL -- "-$GROOVE_PID" 2>/dev/null || true; fi
+    if [ -n "$PETS_PID" ]; then kill -KILL -- "-$PETS_PID" 2>/dev/null || true; fi
     if [ -n "$PUSH_PID" ]; then kill -KILL -- "-$PUSH_PID" 2>/dev/null || true; fi
     if [ -n "$MAIL_PID" ]; then kill -KILL -- "-$MAIL_PID" 2>/dev/null || true; fi
     if [ -n "$REGISTRY_PID" ]; then kill -KILL -- "-$REGISTRY_PID" 2>/dev/null || true; fi
     if [ -n "$CALENDAR_PID" ]; then kill -KILL -- "-$CALENDAR_PID" 2>/dev/null || true; fi
     if [ -n "$DIARY_PID" ]; then kill -KILL -- "-$DIARY_PID" 2>/dev/null || true; fi
+    if [ -n "$PORTAL_PID" ]; then kill -KILL -- "-$PORTAL_PID" 2>/dev/null || true; fi
 
     # Подбираем сирот по имени — защита от случая, когда субшелл уже
     # умер, а его потомки ещё живы. Узко по нашему пути, чужие процессы
@@ -127,7 +130,7 @@ preflight
 #     go run ниже стартует мгновенно. `go build ./...` из корня workspace не
 #     работает (back-go без своего go.mod), поэтому обходим модули через -C.
 printf "\033[1m▶ Сборка Go-сервисов...\033[0m\n"
-for mod in pkg migrate calls auth messenger ai groove tasks gateway push mail registry calendar diary; do
+for mod in pkg migrate calls auth messenger ai pets tasks gateway push mail registry calendar diary portal; do
     printf "  %s" "$mod"
     go build -C "$ROOT/back-go/$mod" ./...
     printf "\033[32m ✓\033[0m\n"
@@ -181,8 +184,8 @@ printf "\033[1m▶ authsvc (Go)  HTTP :8091...\033[0m\n"
 ) &
 AUTH_PID=$!
 
-# 5. Go-микросервис мессенджера (gRPC :9092 — плашки звонков callsvc и
-#    pet-чат groovesvc, HTTP :8092 — /api/messenger/* кроме exact presence).
+# 5. Go-микросервис мессенджера (gRPC :9092 — плашки звонков callsvc,
+#    HTTP :8092 — /api/messenger/* кроме exact presence).
 printf "\033[1m▶ msgsvc (Go)  gRPC :9092  HTTP :8092...\033[0m\n"
 (
   cd "$ROOT/back-go/messenger" && \
@@ -196,7 +199,7 @@ printf "\033[1m▶ msgsvc (Go)  gRPC :9092  HTTP :8092...\033[0m\n"
 ) &
 MESSENGER_PID=$!
 
-# 6. Go-микросервис ИИ (gRPC :9093 — tasksvc/groovesvc, HTTP :8093 —
+# 6. Go-микросервис ИИ (gRPC :9093 — tasksvc, HTTP :8093 —
 #    regex-роут /api/companies/<id>/ai-settings + /api/ai/tv-fact;
 #    Redis — кэш ТВ-фактов).
 printf "\033[1m▶ aisvc (Go)  gRPC :9093  HTTP :8093...\033[0m\n"
@@ -212,24 +215,24 @@ printf "\033[1m▶ aisvc (Go)  gRPC :9093  HTTP :8093...\033[0m\n"
 ) &
 AI_PID=$!
 
-# 7. Go-микросервис «Мой Groove» (gRPC :9094 — хуки tasksvc/msgsvc, HTTP
-#    :8094 — /api/groove/*). Зовёт aisvc и msgsvc по gRPC.
-printf "\033[1m▶ groovesvc (Go)  gRPC :9094  HTTP :8094...\033[0m\n"
+# 7. Go-микросервис питомцев-грувиков (gRPC :9094 — хуки tasksvc, HTTP
+#    :8094 — /api/pets/*). Исходящий gRPC — portalsvc :9102
+#    (fire-and-forget пост-поздравление при эволюции питомца).
+printf "\033[1m▶ petsvc (Go)  gRPC :9094  HTTP :8094...\033[0m\n"
 (
-  cd "$ROOT/back-go/groove" && \
+  cd "$ROOT/back-go/pets" && \
   DATABASE_URL="postgresql://grovework:grovework_local@localhost:5432/grovework" \
   REDIS_URL="redis://localhost:6379/0" \
   PASETO_PUBLIC_KEY="$PASETO_PUBLIC_KEY_DEV" \
-  AI_GRPC_ADDR="localhost:9093" \
-  MESSENGER_GRPC_ADDR="localhost:9092" \
+  PORTAL_GRPC_ADDR="localhost:9102" \
   HTTP_ADDR=":8094" \
   GRPC_ADDR=":9094" \
-  exec go run ./cmd/groovesvc
+  exec go run ./cmd/petsvc
 ) &
-GROOVE_PID=$!
+PETS_PID=$!
 
 # 8. Go-микросервис задач (HTTP :8095 — /api/tasks|units|unit-types|
-#    departments|stages|stats|yougile). Зовёт groovesvc и aisvc по gRPC,
+#    departments|stages|stats|yougile). Зовёт petsvc и aisvc по gRPC,
 #    события — в Redis gw2:tasks:events. env синхронизированы с
 #    deploy/docker-compose.override.yml. Dev-ключ Fernet YouGile — тот же,
 #    что в Makefile/override.
@@ -239,7 +242,7 @@ printf "\033[1m▶ tasksvc (Go)  HTTP :8095...\033[0m\n"
   DATABASE_URL="postgresql://grovework:grovework_local@localhost:5432/grovework" \
   REDIS_URL="redis://localhost:6379/0" \
   PASETO_PUBLIC_KEY="$PASETO_PUBLIC_KEY_DEV" \
-  GROOVE_GRPC_ADDR="localhost:9094" \
+  PETS_GRPC_ADDR="localhost:9094" \
   AI_GRPC_ADDR="localhost:9093" \
   YOUGILE_ENC_KEY="CT5VF1jg6uFFbj4W_6RW3z3416bPlfbxdMYelrEOIXc=" \
   HTTP_ADDR=":8095" \
@@ -337,6 +340,24 @@ printf "\033[1m▶ diarysvc (Go)  HTTP :8101...\033[0m\n"
 ) &
 DIARY_PID=$!
 
+# 12d. Go-микросервис корпоративного портала portalsvc (HTTP :8102 — REST
+#      /api/portal/*; gRPC :9102 — системные посты CreateSystemPost для
+#      petsvc). Посты компании, комментарии, реакции, закрепление,
+#      разделы; пересылка поста в мессенджер — gRPC msgsvc.
+printf "\033[1m▶ portalsvc (Go)  gRPC :9102  HTTP :8102...\033[0m\n"
+(
+  cd "$ROOT/back-go/portal" && \
+  DATABASE_URL="postgresql://grovework:grovework_local@localhost:5432/grovework" \
+  REDIS_URL="redis://localhost:6379/0" \
+  PASETO_PUBLIC_KEY="$PASETO_PUBLIC_KEY_DEV" \
+  UPLOAD_FOLDER="$UPLOADS" \
+  MESSENGER_GRPC_ADDR="localhost:9092" \
+  HTTP_ADDR=":8102" \
+  GRPC_ADDR=":9102" \
+  exec go run ./cmd/portalsvc
+) &
+PORTAL_PID=$!
+
 # 13. Vite (--host 0.0.0.0 — слушаем все интерфейсы, чтобы фронт открывался
 #     с других устройств сети по http://<IP>:5173).
 printf "\033[1m▶ Vite  :5173...\033[0m\n"
@@ -357,13 +378,14 @@ printf "\n  Шлюз:    \033[4mws://localhost:8096/ws\033[0m\n"
 printf "  Звонки:  \033[4mhttp://localhost:8090/api/calls\033[0m (gRPC :9090)\n"
 printf "  Auth:    \033[4mhttp://localhost:8091/api/auth\033[0m\n"
 printf "  Чаты:    \033[4mhttp://localhost:8092/api/messenger\033[0m (gRPC :9092)\n"
-printf "  Groove:  \033[4mhttp://localhost:8094/api/groove\033[0m (gRPC :9094)\n"
+printf "  Pets:    \033[4mhttp://localhost:8094/api/pets\033[0m (gRPC :9094)\n"
 printf "  Задачи:  \033[4mhttp://localhost:8095/api/tasks\033[0m\n"
 printf "  ИИ:      \033[4mhttp://localhost:8093\033[0m (gRPC :9093)\n"
 printf "  Пуши:    \033[4mhttp://localhost:8097/api/push\033[0m\n"
 printf "  Реестры: \033[4mhttp://localhost:8099/api/registries\033[0m\n"
 printf "  Календари: \033[4mhttp://localhost:8100/api/calendars\033[0m\n"
 printf "  Ежедневники: \033[4mhttp://localhost:8101/api/diaries\033[0m\n"
+printf "  Портал:  \033[4mhttp://localhost:8102/api/portal\033[0m\n"
 printf "  Почта:   \033[4mhttp://localhost:8025\033[0m (mailpit; gRPC :9098)\n\n"
 
 wait

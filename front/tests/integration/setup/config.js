@@ -35,7 +35,7 @@ export const HTTP = {
   auth: 18191,
   messenger: 18192,
   // ai: 18193 — НЕ поднимается (AI fail-open), пути /api/ai и ai-settings → skip
-  groove: 18194,
+  pets: 18194,
   tasks: 18195,
   // gateway: 18196 — НЕ поднимается (не нужен сценариям), presence → skip
   // push: 18197 — НЕ поднимается, /api/push → skip
@@ -48,7 +48,7 @@ export const HTTP = {
 // gRPC-порты (+10100).
 export const GRPC = {
   messenger: 19192,
-  groove: 19194,
+  pets: 19194,
   mail: 19198,
 }
 
@@ -77,7 +77,7 @@ export function routeBase(path) {
     ['/api/ai', null], // aisvc не поднят
     ['/api/messenger/presence', null], // gateway не поднят (exact)
     ['/api/messenger', HTTP.messenger],
-    ['/api/groove', HTTP.groove],
+    ['/api/pets', HTTP.pets],
     ['/api/tasks', HTTP.tasks],
     ['/api/units', HTTP.tasks],
     ['/api/unit-types', HTTP.tasks],

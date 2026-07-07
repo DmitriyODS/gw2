@@ -68,8 +68,9 @@
 </template>
 
 <script setup>
-import { computed } from 'vue'
+import { computed, onBeforeUnmount, watch } from 'vue'
 import Dialog from 'primevue/dialog'
+import { registerOpenModal, unregisterOpenModal } from '@/composables/useOpenModals.js'
 
 /* Унифицированный диалог в стиле Material You Expressive.
    Использование:
@@ -126,6 +127,16 @@ const props = defineProps({
 })
 
 const emit = defineEmits(['update:modelValue', 'confirm', 'cancel'])
+
+// Регистрируем открытие в глобальном счётчике — плавающие виджеты прячутся,
+// пока открыт хоть один диалог (см. composables/useOpenModals.js).
+watch(() => props.modelValue, (open, prev) => {
+  if (open && !prev) registerOpenModal()
+  else if (!open && prev) unregisterOpenModal()
+}, { immediate: true })
+onBeforeUnmount(() => {
+  if (props.modelValue) unregisterOpenModal()
+})
 
 // Иконка по умолчанию для каждого тона — если её не передали явно.
 const TONE_ICON_DEFAULT = {

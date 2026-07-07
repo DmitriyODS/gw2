@@ -28,11 +28,12 @@ import (
 var Channels = []string{
 	"gw2:calls:events",
 	"gw2:messenger:events",
-	"gw2:groove:events",
+	"gw2:pets:events",
 	"gw2:tasks:events",
 	"gw2:registry:events",
 	"gw2:calendar:events",
 	"gw2:diary:events",
+	"gw2:portal:events",
 	"gw2:gateway:events",
 }
 

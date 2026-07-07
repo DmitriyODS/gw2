@@ -8,11 +8,12 @@ use (
 	./calls
 	./diary
 	./gateway
-	./groove
 	./mail
 	./messenger
 	./migrate
+	./pets
 	./pkg
+	./portal
 	./push
 	./registry
 	./tasks

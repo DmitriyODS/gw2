@@ -216,7 +216,7 @@ export default async function setup() {
   })
   startSvc('tasksvc', repoRoot, 'back-go/tasks', './cmd/tasksvc', {
     ...baseEnv,
-    GROOVE_GRPC_ADDR: `localhost:${GRPC.groove}`,
+    PETS_GRPC_ADDR: `localhost:${GRPC.pets}`,
     AI_GRPC_ADDR: 'localhost:19193', // aisvc не поднят — поиск fail-open в LIKE
     YOUGILE_ENC_KEY: 'CT5VF1jg6uFFbj4W_6RW3z3416bPlfbxdMYelrEOIXc=',
     HTTP_ADDR: `:${HTTP.tasks}`,
@@ -234,21 +234,20 @@ export default async function setup() {
   startSvc('msgsvc', repoRoot, 'back-go/messenger', './cmd/msgsvc', {
     ...baseEnv,
     UPLOAD_FOLDER: fs.mkdtempSync(path.join(process.env.TMPDIR || '/tmp', 'gw2-front-msg-')),
-    GROOVE_GRPC_ADDR: `localhost:${GRPC.groove}`,
     GRPC_ADDR: `:${GRPC.messenger}`, HTTP_ADDR: `:${HTTP.messenger}`,
   })
-  startSvc('groovesvc', repoRoot, 'back-go/groove', './cmd/groovesvc', {
+  // petsvc — чистая гейм-механика (без ленты/AI/pet-чата), поэтому не нуждается
+  // в AI_GRPC_ADDR/MESSENGER_GRPC_ADDR.
+  startSvc('petsvc', repoRoot, 'back-go/pets', './cmd/petsvc', {
     ...baseEnv,
-    AI_GRPC_ADDR: 'localhost:19193', // не поднят — статичные реплики
-    MESSENGER_GRPC_ADDR: `localhost:${GRPC.messenger}`,
-    GRPC_ADDR: `:${GRPC.groove}`, HTTP_ADDR: `:${HTTP.groove}`,
+    GRPC_ADDR: `:${GRPC.pets}`, HTTP_ADDR: `:${HTTP.pets}`,
   })
 
   try {
     await Promise.all([
       waitHealthz(HTTP.mail), waitHealthz(HTTP.auth), waitHealthz(HTTP.diary),
       waitHealthz(HTTP.tasks), waitHealthz(HTTP.registry), waitHealthz(HTTP.calendar),
-      waitHealthz(HTTP.messenger), waitHealthz(HTTP.groove),
+      waitHealthz(HTTP.messenger), waitHealthz(HTTP.pets),
     ])
   } catch (e) {
     console.error('[integration] сервис не поднялся:', e.message)
@@ -259,7 +258,7 @@ export default async function setup() {
   }
 
   writeStatus({ ready: true, dbURL: PG.dbURL, pgContainer: PG.container })
-  console.log('[integration] бэкенд готов (auth/diary/tasks/registry/calendar/messenger/groove)')
+  console.log('[integration] бэкенд готов (auth/diary/tasks/registry/calendar/messenger/pets)')
 
   return async () => {
     stopAll()

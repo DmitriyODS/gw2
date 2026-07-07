@@ -13,7 +13,7 @@ func tvService() (*Service, *fakeRepo, *fakeLLM, *fakeFacts) {
 	repo := newFakeRepo()
 	llm := &fakeLLM{}
 	facts := newFakeFacts()
-	svc := New(repo, llm, &fakeCipher{}, facts, slog.New(slog.DiscardHandler))
+	svc := New(repo, llm, &fakeCipher{}, facts, nil, nil, "", slog.New(slog.DiscardHandler))
 	return svc, repo, llm, facts
 }
 

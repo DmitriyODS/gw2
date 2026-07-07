@@ -21,7 +21,8 @@ const msgCols = `m.id, m.conversation_id, m.sender_id, m.is_bot, m.text, m.creat
 	EXISTS(SELECT 1 FROM message_attachments ra WHERE ra.message_id = r.id),
 	fu.id, fu.fio,
 	cl.id, cl.kind, cl.media, cl.status, cl.started_at, cl.ended_at, cl.initiator_id, cl.conversation_id,
-	t.id, t.name, t.is_archived, t.color, tu.fio, t.deadline, t.company_id`
+	t.id, t.name, t.is_archived, t.color, tu.fio, t.deadline, t.company_id,
+	m.post_id, m.post_title, m.post_excerpt, m.post_cover_url`
 
 const msgFrom = `
 	FROM messages m
@@ -63,6 +64,11 @@ func scanMessage(row pgx.Row) (*domain.Message, error) {
 		taskRespFIO  *string
 		taskDeadline *time.Time
 		taskCompany  *int64
+
+		postID      *int64
+		postTitle   *string
+		postExcerpt *string
+		postCover   *string
 	)
 	err := row.Scan(&m.ID, &m.ConversationID, &m.SenderID, &m.IsBot, &m.Text, &m.CreatedAt,
 		&m.ReadAt, &m.HiddenForA, &m.HiddenForB, &m.ReplyToID, &m.ForwardedFromUserID,
@@ -72,7 +78,8 @@ func scanMessage(row pgx.Row) (*domain.Message, error) {
 		&fwdID, &fwdFIO,
 		&callID, &callKind, &callMedia, &callStatus, &callStartedAt, &callEndedAt,
 		&callInitiator, &callConvID,
-		&taskID, &taskName, &taskArchived, &taskColor, &taskRespFIO, &taskDeadline, &taskCompany)
+		&taskID, &taskName, &taskArchived, &taskColor, &taskRespFIO, &taskDeadline, &taskCompany,
+		&postID, &postTitle, &postExcerpt, &postCover)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, nil
@@ -114,6 +121,14 @@ func scanMessage(row pgx.Row) (*domain.Message, error) {
 			ResponsibleFIO: taskRespFIO,
 			Deadline:       taskDeadline,
 			CompanyID:      derefInt(taskCompany),
+		}
+	}
+	m.PostID = postID
+	// Превью строится по kind='post', а не только по post_id: снапшот
+	// заморожен на сообщении и обязан переживать удаление самого поста.
+	if postID != nil || m.Kind == domain.KindPost {
+		m.Post = &domain.PostPreview{
+			ID: derefInt(postID), Title: deref(postTitle), Excerpt: deref(postExcerpt), CoverURL: postCover,
 		}
 	}
 	return &m, nil
@@ -345,11 +360,12 @@ func (r *Repo) CreateMessage(ctx context.Context, nm domain.NewMessage) (*domain
 		err := r.q(ctx).QueryRow(ctx, `
 			INSERT INTO messages (conversation_id, sender_id, is_bot, text, created_at,
 				hidden_for_a, hidden_for_b, reply_to_id, forwarded_from_user_id,
-				kind, call_id, task_id)
-			VALUES ($1, $2, $3, $4, now(), FALSE, FALSE, $5, $6, $7, $8, $9)
+				kind, call_id, task_id, post_id, post_title, post_excerpt, post_cover_url)
+			VALUES ($1, $2, $3, $4, now(), FALSE, FALSE, $5, $6, $7, $8, $9, $10, $11, $12, $13)
 			RETURNING id, created_at`,
 			nm.ConversationID, nm.SenderID, nm.IsBot, nm.Text, nm.ReplyToID,
 			nm.ForwardedFromUserID, kind, nm.CallID, nm.TaskID,
+			nm.PostID, nm.PostTitle, nm.PostExcerpt, nm.PostCoverURL,
 		).Scan(&id, &createdAt)
 		if err != nil {
 			return err
@@ -436,17 +452,6 @@ func (r *Repo) HasHumanMessageSince(ctx context.Context, convID int64, since tim
 			WHERE conversation_id = $1 AND id < $2 AND is_bot = FALSE AND created_at >= $3
 		)`, convID, beforeID, since).Scan(&exists)
 	return exists, err
-}
-
-func (r *Repo) ListRecent(ctx context.Context, convID int64, limit int) ([]*domain.Message, error) {
-	msgs, err := r.queryMessages(ctx, `SELECT `+msgCols+msgFrom+`
-		WHERE m.conversation_id = $1
-		ORDER BY m.id DESC LIMIT $2`, convID, limit)
-	if err != nil {
-		return nil, err
-	}
-	reverse(msgs)
-	return msgs, nil
 }
 
 func (r *Repo) FindCallMessage(ctx context.Context, callID, convID int64) (*domain.Message, error) {

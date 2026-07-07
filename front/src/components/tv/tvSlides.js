@@ -140,13 +140,13 @@ export const SLIDES = [
     asideTone: 'secondary', asideIcon: 'show_chart', asideTitle: 'Динамика',
     asideKind: 'sparkline-hours',
   },
-  // 12. Мой Groove • зал славы Грувиков
+  // 12. Питомцы • зал славы Грувиков
   {
     id: 'groove-pets', title: 'Зал славы Грувиков', period: 'day', kind: 'groove',
-    icon: 'celebration', periodLabel: 'Мой Groove',
+    icon: 'pets', periodLabel: 'Питомцы',
     heroEyebrow: 'Зал славы Грувиков',
-    asideTone: 'error', asideIcon: 'sports_mma', asideTitle: 'Рейд недели',
-    asideKind: 'groove-raid',
+    asideTone: 'tertiary', asideIcon: 'military_tech', asideTitle: 'Лидер зала славы',
+    asideKind: 'top-pet',
   },
   // 13. Брендовый слайд
   {

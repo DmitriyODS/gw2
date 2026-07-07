@@ -31,6 +31,7 @@
       aria-label="Ещё"
     >
       <span class="material-symbols-outlined">{{ moreOpen ? 'close' : 'more_horiz' }}</span>
+      <span v-if="moreBadge" class="bottom-badge">{{ moreBadge > 99 ? '99+' : moreBadge }}</span>
       <span class="bottom-nav-label">Ещё</span>
     </button>
   </nav>
@@ -49,6 +50,9 @@
         >
           <span class="more-item-ico material-symbols-outlined">{{ item.icon }}</span>
           <span class="more-item-label">{{ item.label }}</span>
+          <span v-if="item.badge && item.badge()" class="more-item-badge">
+            {{ item.badge() > 99 ? '99+' : item.badge() }}
+          </span>
           <span v-if="item.active()" class="material-symbols-outlined more-item-check">check</span>
         </button>
       </div>
@@ -62,6 +66,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth.js'
 import { useUnitsStore } from '@/stores/units.js'
 import { useMessengerStore } from '@/stores/messenger.js'
+import { usePortalStore } from '@/stores/portal.js'
 import { usePermission, ROLES } from '@/composables/usePermission.js'
 import { useCompanySettings } from '@/composables/useCompanySettings.js'
 
@@ -70,6 +75,7 @@ const router = useRouter()
 const authStore = useAuthStore()
 const unitsStore = useUnitsStore()
 const messenger = useMessengerStore()
+const portal = usePortalStore()
 const { isAtLeast } = usePermission()
 const { usesGroove } = useCompanySettings()
 
@@ -92,15 +98,17 @@ const mainItems = computed(() => [
 
 const moreItems = computed(() => {
   const arr = [
-    // «Мой Groove» — только если компания не выключила режим грувиков.
-    ...(usesGroove.value ? [{ path: '/groove', icon: 'celebration', label: 'Мой Groove',
-      active: () => route.path === '/groove' }] : []),
-    { path: '/employees', icon: 'groups', label: 'Сотрудники',
-      active: () => route.path === '/employees' },
+    // Питомцы-грувики — только если компания не выключила режим.
+    ...(usesGroove.value ? [{ path: '/pets', icon: 'pets', label: 'Грувики',
+      active: () => route.path === '/pets' }] : []),
     { path: '/registries', icon: 'table', label: 'Реестры',
       active: () => route.path.startsWith('/registries') },
     { path: '/calendars', icon: 'calendar_month', label: 'Календари',
       active: () => route.path.startsWith('/calendars') },
+    // Единый раздел: лента портала + сотрудники (вкладки внутри).
+    { path: '/portal', icon: 'campaign', label: 'Портал',
+      active: () => route.path.startsWith('/portal') || route.path === '/employees',
+      badge: () => portal.unread },
     { path: '/settings', icon: 'settings', label: 'Настройки',
       active: () => route.path === '/settings' },
   ]
@@ -112,6 +120,10 @@ const moreItems = computed(() => {
 })
 
 const moreActive = computed(() => moreItems.value.some((i) => i.active()))
+
+// Бейджи разделов, спрятанных за «Ещё», суммируются на самой кнопке —
+// иначе непрочитанное не видно, пока лист закрыт.
+const moreBadge = computed(() => moreItems.value.reduce((sum, i) => sum + (i.badge ? i.badge() : 0), 0))
 
 function goMore(item) {
   moreOpen.value = false
@@ -283,6 +295,20 @@ const avatarSrc = computed(() => {
 
 .more-item-label {
   flex: 1;
+}
+
+.more-item-badge {
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: var(--radius-full);
+  background: var(--color-error);
+  color: var(--color-on-error);
+  font-size: 11px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .more-item-check {

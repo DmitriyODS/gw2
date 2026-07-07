@@ -72,7 +72,7 @@ func (s *Service) CreateUnit(ctx context.Context, taskID, userID int64, companyI
 		return nil, err
 	}
 	s.log.Info("unit.start", "unit_id", unit.ID, "task_id", taskID, "user_id", userID)
-	s.groove.OnUnitStarted(unit, task.Name)
+	s.pets.OnUnitStarted(unit, task.Name)
 
 	// Перечитываем с user/unit_type для дампа и сокет-события.
 	created, err := s.units.GetUnit(ctx, unit.ID)
@@ -157,7 +157,7 @@ func (s *Service) StopUnit(ctx context.Context, unitID, actorID int64, actorLeve
 	if task, err := s.tasks.GetTask(ctx, unit.TaskID); err == nil && task != nil {
 		taskName = task.Name
 	}
-	s.groove.OnUnitStopped(unit, taskName)
+	s.pets.OnUnitStopped(unit, taskName)
 
 	s.bus.Publish(ctx, "unit:stopped", []string{roomAll}, map[string]any{
 		"unit_id":      unit.ID,

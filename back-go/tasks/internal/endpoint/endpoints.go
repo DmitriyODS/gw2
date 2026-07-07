@@ -55,14 +55,23 @@ type Endpoints struct {
 	DeleteStage   endpoint.Endpoint
 	ReorderStages endpoint.Endpoint
 
-	StatsCommon         endpoint.Endpoint
-	StatsExtended       endpoint.Endpoint
-	ExportCommonXLSX    endpoint.Endpoint
-	ExportExtendedXLSX  endpoint.Endpoint
-	StatsUserTasks      endpoint.Endpoint
-	StatsProfile        endpoint.Endpoint
-	StatsEmployees      endpoint.Endpoint
-	StatsResponsibles   endpoint.Endpoint
+	StatsCommon        endpoint.Endpoint
+	StatsExtended      endpoint.Endpoint
+	ExportCommonXLSX   endpoint.Endpoint
+	ExportExtendedXLSX endpoint.Endpoint
+	StatsUserTasks     endpoint.Endpoint
+	StatsProfile       endpoint.Endpoint
+	StatsEmployees     endpoint.Endpoint
+	StatsResponsibles  endpoint.Endpoint
+
+	// Инструменты ИИ-ассистента (gRPC TasksService, зовёт aisvc).
+	AssistantStatsSummary endpoint.Endpoint
+	AssistantDepartments  endpoint.Endpoint
+	AssistantTopEmployees endpoint.Endpoint
+	AssistantByUnitTypes  endpoint.Endpoint
+	AssistantCalendar     endpoint.Endpoint
+	AssistantSearchTasks  endpoint.Endpoint
+	AssistantTaskLink     endpoint.Endpoint
 
 	YougileStatus          endpoint.Endpoint
 	YougileConnect         endpoint.Endpoint
@@ -212,6 +221,40 @@ type ProfileRequest struct {
 	UserID int64
 	Start  time.Time
 	End    time.Time
+}
+
+// ── ИИ-ассистент (gRPC TasksService) ──────────────────────────────
+
+// AssistantPeriodRequest — период задаётся человекочитаемым кодом
+// (today/this_week/…), см. service.ResolveAssistantPeriod.
+type AssistantPeriodRequest struct {
+	CompanyID int64
+	Period    string
+}
+
+type AssistantTopEmployeesRequest struct {
+	CompanyID int64
+	Period    string
+	Limit     int
+}
+
+type AssistantSearchRequest struct {
+	CompanyID int64
+	Query     string
+	Limit     int
+}
+
+type AssistantTaskLinkRequest struct {
+	CompanyID int64
+	TaskID    int64
+}
+
+// AssistantStatsSummaryResult / AssistantListResult — ответы эндпоинтов
+// статистики ассистента: срез данных + человекочитаемый ярлык периода
+// (транспорт gRPC кладёт его прямо в response.PeriodLabel).
+type AssistantListResult[T any] struct {
+	Items       T
+	PeriodLabel string
 }
 
 // ── YouGile ──────────────────────────────────────────────────────
@@ -444,6 +487,51 @@ func New(svc *service.Service, yg *service.Yougile) Endpoints {
 		},
 		StatsResponsibles: func(ctx context.Context, request any) (any, error) {
 			return svc.StatsResponsibles(ctx, request.(*int64))
+		},
+
+		AssistantStatsSummary: func(ctx context.Context, request any) (any, error) {
+			req := request.(AssistantPeriodRequest)
+			return svc.AssistantStatsSummary(ctx, req.CompanyID, req.Period)
+		},
+		AssistantDepartments: func(ctx context.Context, request any) (any, error) {
+			req := request.(AssistantPeriodRequest)
+			items, label, err := svc.AssistantDepartments(ctx, req.CompanyID, req.Period)
+			if err != nil {
+				return nil, err
+			}
+			return AssistantListResult[[]dto.DeptStats]{Items: items, PeriodLabel: label}, nil
+		},
+		AssistantTopEmployees: func(ctx context.Context, request any) (any, error) {
+			req := request.(AssistantTopEmployeesRequest)
+			items, label, err := svc.AssistantTopEmployees(ctx, req.CompanyID, req.Period, req.Limit)
+			if err != nil {
+				return nil, err
+			}
+			return AssistantListResult[[]dto.TaskByEmployee]{Items: items, PeriodLabel: label}, nil
+		},
+		AssistantByUnitTypes: func(ctx context.Context, request any) (any, error) {
+			req := request.(AssistantPeriodRequest)
+			items, label, err := svc.AssistantByUnitTypes(ctx, req.CompanyID, req.Period)
+			if err != nil {
+				return nil, err
+			}
+			return AssistantListResult[[]dto.UnitTypeStats]{Items: items, PeriodLabel: label}, nil
+		},
+		AssistantCalendar: func(ctx context.Context, request any) (any, error) {
+			req := request.(AssistantPeriodRequest)
+			items, label, err := svc.AssistantCalendar(ctx, req.CompanyID, req.Period)
+			if err != nil {
+				return nil, err
+			}
+			return AssistantListResult[[]dto.CalendarDay]{Items: items, PeriodLabel: label}, nil
+		},
+		AssistantSearchTasks: func(ctx context.Context, request any) (any, error) {
+			req := request.(AssistantSearchRequest)
+			return svc.AssistantSearchTasks(ctx, req.CompanyID, req.Query, req.Limit)
+		},
+		AssistantTaskLink: func(ctx context.Context, request any) (any, error) {
+			req := request.(AssistantTaskLinkRequest)
+			return svc.AssistantTaskLink(ctx, req.CompanyID, req.TaskID)
 		},
 
 		YougileStatus: func(ctx context.Context, request any) (any, error) {

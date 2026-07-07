@@ -7,24 +7,32 @@
 // вебхук). Схему таблиц ведёт migrate-контейнер (goose, back-go/migrate).
 //
 // Транспорт: HTTP/Fiber (HTTP_ADDR) — REST /api/tasks|units|unit-types|
-// departments|stages|stats|yougile (за nginx).
+// departments|stages|stats|yougile (за nginx); gRPC (GRPC_ADDR) —
+// TasksService, исходящий контракт для aisvc (статистика/поиск задач для
+// инструментов ИИ-ассистента).
 //
-// Межсервисное: groovesvc (gRPC, хуки геймификации), aisvc (gRPC,
-// семантический поиск + реиндекс эмбеддингов). Сокет-события клиентам —
-// Redis-канал gw2:tasks:events (доставляет gatewaysvc).
+// Межсервисное: petsvc (gRPC, хуки геймификации), aisvc (gRPC-клиент,
+// семантический поиск + реиндекс эмбеддингов; и gRPC-сервер — наоборот,
+// aisvc зовёт нас). Сокет-события клиентам — Redis-канал gw2:tasks:events
+// (доставляет gatewaysvc).
 package main
 
 import (
+	"net"
 	"os"
+
+	googrpc "google.golang.org/grpc"
 
 	"github.com/DmitriyODS/gw2/back-go/pkg/bootstrap"
 	"github.com/DmitriyODS/gw2/back-go/pkg/events"
+	"github.com/DmitriyODS/gw2/back-go/pkg/gen/taskspb"
 	"github.com/DmitriyODS/gw2/back-go/pkg/pasetoauth"
 	"github.com/DmitriyODS/gw2/back-go/tasks/internal/clients"
 	"github.com/DmitriyODS/gw2/back-go/tasks/internal/domain"
 	"github.com/DmitriyODS/gw2/back-go/tasks/internal/endpoint"
 	"github.com/DmitriyODS/gw2/back-go/tasks/internal/repository/postgres"
 	"github.com/DmitriyODS/gw2/back-go/tasks/internal/service"
+	grpctransport "github.com/DmitriyODS/gw2/back-go/tasks/internal/transport/grpc"
 	httptransport "github.com/DmitriyODS/gw2/back-go/tasks/internal/transport/http"
 	"github.com/DmitriyODS/gw2/back-go/tasks/internal/yougile"
 )
@@ -34,9 +42,10 @@ func main() {
 
 	dbURL := bootstrap.Env("DATABASE_URL", "postgresql://grovework:grovework_local@localhost:5432/grovework")
 	redisURL := bootstrap.Env("REDIS_URL", "redis://localhost:6379/0")
-	grooveAddr := bootstrap.Env("GROOVE_GRPC_ADDR", "localhost:9094")
+	petsAddr := bootstrap.Env("PETS_GRPC_ADDR", "localhost:9094")
 	aiAddr := bootstrap.Env("AI_GRPC_ADDR", "localhost:9093")
 	httpAddr := bootstrap.Env("HTTP_ADDR", ":8095")
+	grpcAddr := bootstrap.Env("GRPC_ADDR", ":9095")
 
 	// Публичный ключ access-токенов PASETO (v4.public): токены выпускает
 	// authsvc, мы только проверяем подпись.
@@ -54,12 +63,12 @@ func main() {
 	rdb := bootstrap.MustRedis(log, redisURL)
 	defer rdb.Close()
 
-	groove, err := clients.NewGroove(grooveAddr, log)
+	pets, err := clients.NewPets(petsAddr, log)
 	if err != nil {
-		log.Error("groove.client_failed", "error", err)
+		log.Error("pets.client_failed", "error", err)
 		os.Exit(1)
 	}
-	defer groove.Close()
+	defer pets.Close()
 	ai, err := clients.NewAI(aiAddr, log)
 	if err != nil {
 		log.Error("ai.client_failed", "error", err)
@@ -72,7 +81,7 @@ func main() {
 	svc := service.New(service.Deps{
 		Tasks: repo, Units: repo, UnitTypes: repo, Depts: repo, Stages: repo,
 		Comments: repo, Stats: repo, Users: users, Companies: users,
-		Groove: groove, AI: ai,
+		Pets: pets, AI: ai,
 		Bus: events.NewPublisher(rdb, log, "gw2:tasks:events"),
 		Log: log,
 	})
@@ -90,7 +99,15 @@ func main() {
 
 	httpServer := httptransport.NewServer(eps, users, verifier, log)
 
-	log.Info("listening", "http", httpAddr)
+	grpcServer := googrpc.NewServer()
+	taskspb.RegisterTasksServiceServer(grpcServer, grpctransport.NewServer(eps))
+	listener, err := net.Listen("tcp", grpcAddr)
+	if err != nil {
+		log.Error("grpc.listen_failed", "addr", grpcAddr, "error", err)
+		os.Exit(1)
+	}
+
+	log.Info("listening", "http", httpAddr, "grpc", grpcAddr)
 	bootstrap.Run(ctx, log,
 		bootstrap.Component{
 			Name: "http",
@@ -100,6 +117,11 @@ func main() {
 					log.Warn("http.shutdown_failed", "error", err)
 				}
 			},
+		},
+		bootstrap.Component{
+			Name: "grpc",
+			Run:  func() error { return grpcServer.Serve(listener) },
+			Stop: grpcServer.GracefulStop,
 		},
 	)
 }

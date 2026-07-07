@@ -175,9 +175,9 @@ services:
 
   # Микросервис мессенджера (Go, back-go/messenger): REST /api/messenger/*
   # (исключение — exact /api/messenger/presence, он в gateway) и gRPC
-  # (плашки звонков для callsvc, pet-чат для groovesvc). Вложения сообщений
-  # пишет в общий uploads-volume (отдаёт их nginx). События клиентам
-  # публикует в Redis-канал gw2:messenger:events.
+  # (плашки звонков для callsvc). Вложения сообщений пишет в общий
+  # uploads-volume (отдаёт их nginx). События клиентам публикует в
+  # Redis-канал gw2:messenger:events.
   messenger:
     build:
       context: ../back-go
@@ -204,8 +204,6 @@ services:
       S3_BUCKET: ${S3_BUCKET:-}
       S3_ACCESS_KEY: ${S3_ACCESS_KEY:-}
       S3_SECRET_KEY: ${S3_SECRET_KEY:-}
-      # Pet-чат: хук «хозяин написал» уходит в groovesvc по gRPC.
-      GROOVE_GRPC_ADDR: groove:9094
       HTTP_ADDR: ":8092"
       GRPC_ADDR: ":9092"
     volumes:
@@ -223,8 +221,8 @@ services:
   # Микросервис ИИ (Go, back-go/ai): ключи компаний (Fernet), вызовы
   # ProxyAPI/OpenAI (chat + embeddings), task_embeddings (pgvector), ТВ-факт
   # дня (фоновый цикл + кэш в Redis gw2:ai:tv_fact:*), REST
-  # /api/companies/<id>/ai-settings и /api/ai/tv-fact, gRPC для tasksvc и
-  # groovesvc. Uploads не нужны.
+  # /api/companies/<id>/ai-settings и /api/ai/tv-fact, gRPC для tasksvc.
+  # Uploads не нужны.
   ai:
     build:
       context: ../back-go
@@ -246,6 +244,11 @@ services:
       AI_KEY_ENCRYPTION_KEY: ${AI_KEY_ENCRYPTION_KEY:-}
       HTTP_ADDR: ":8093"
       GRPC_ADDR: ":9093"
+      # gRPC-клиент к tasksvc (инструменты статистики/поиска ИИ-ассистента).
+      # Без depends_on на tasks — иначе цикл (tasks зовёт ai для семантики):
+      # клиент лениво коннектится, как остальные fail-open gRPC-клиенты.
+      TASKS_GRPC_ADDR: tasks:9095
+      APP_PUBLIC_BASE_URL: ${APP_PUBLIC_BASE_URL:-http://localhost:8080}
     expose:
       - "8093"
       - "9093"
@@ -256,14 +259,16 @@ services:
       retries: 5
       start_period: 10s
 
-  # Микросервис «Мой Groove» (Go, back-go/groove): лента, питомцы, рейды,
-  # магазин и AI-механики Грувика. REST /api/groove/*, gRPC-хуки доменных
-  # событий (tasks — юниты/задачи, messenger — pet-чат). События клиентам
-  # публикует в Redis-канал gw2:groove:events.
-  groove:
+  # Микросервис питомцев-грувиков (Go, back-go/pets): экономика (XP,
+  # кудосы), эволюция, магазин, прогулка/лечение/поглаживание, рейтинг
+  # признания. REST /api/pets/*, gRPC-хуки доменных событий tasksvc
+  # (юниты/задачи). Единственный исходящий gRPC — portalsvc
+  # (fire-and-forget пост-поздравление при эволюции). События клиентам
+  # публикует в Redis-канал gw2:pets:events.
+  pets:
     build:
       context: ../back-go
-      dockerfile: groove/Dockerfile
+      dockerfile: pets/Dockerfile
     restart: unless-stopped
     depends_on:
       db:
@@ -273,16 +278,14 @@ services:
       # Схема — migrate-контейнер (goose): completed = миграции применены.
       migrate:
         condition: service_completed_successfully
-      messenger:
-        condition: service_healthy
-      ai:
+      # Портал: адресат постов-поздравлений об эволюции.
+      portal:
         condition: service_healthy
     environment:
       DATABASE_URL: postgresql://${DB_USER}:${DB_PASSWORD}@db:5432/${DB_NAME}
       REDIS_URL: redis://redis:6379/0
       PASETO_PUBLIC_KEY: ${PASETO_PUBLIC_KEY}
-      AI_GRPC_ADDR: ai:9093
-      MESSENGER_GRPC_ADDR: messenger:9092
+      PORTAL_GRPC_ADDR: portal:9102
       HTTP_ADDR: ":8094"
       GRPC_ADDR: ":9094"
     expose:
@@ -299,7 +302,7 @@ services:
   # типы юнитов, этапы, отделы, комментарии, избранное, цвета, статистика
   # с xlsx-экспортом и YouGile-интеграция (личные ключи, импорт/экспорт,
   # вебхук). REST /api/tasks|units|unit-types|departments|stages|stats|
-  # yougile. Хуки геймификации — gRPC groovesvc, семантический поиск/
+  # yougile. Хуки геймификации — gRPC petsvc, семантический поиск/
   # реиндекс — gRPC aisvc. Сокет-события публикует в Redis-канал
   # gw2:tasks:events (слушает gateway).
   tasks:
@@ -315,7 +318,7 @@ services:
       # Схема — migrate-контейнер (goose): completed = миграции применены.
       migrate:
         condition: service_completed_successfully
-      groove:
+      pets:
         condition: service_healthy
       ai:
         condition: service_healthy
@@ -323,11 +326,13 @@ services:
       DATABASE_URL: postgresql://${DB_USER}:${DB_PASSWORD}@db:5432/${DB_NAME}
       REDIS_URL: redis://redis:6379/0
       PASETO_PUBLIC_KEY: ${PASETO_PUBLIC_KEY}
-      GROOVE_GRPC_ADDR: groove:9094
+      PETS_GRPC_ADDR: pets:9094
       AI_GRPC_ADDR: ai:9093
       HTTP_ADDR: ":8095"
+      GRPC_ADDR: ":9095"
     expose:
       - "8095"
+      - "9095"
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8095/healthz"]
       interval: 15s
@@ -475,6 +480,54 @@ services:
       retries: 5
       start_period: 10s
 
+  # Микросервис корпоративного портала (Go, back-go/portal): HTTP :8102 —
+  # посты компании (с вложениями), плоские комментарии, реакции, закрепление
+  # (лимит 10 на компанию, автоистечение pinned_until), тематические разделы.
+  # REST /api/portal; gRPC :9102 — системные посты (CreateSystemPost, зовёт
+  # petsvc). Исходящий межсервисный вызов — пересылка поста в мессенджер
+  # (gRPC msgsvc CreatePostMessage).
+  portal:
+    build:
+      context: ../back-go
+      dockerfile: portal/Dockerfile
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+      messenger:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql://${DB_USER}:${DB_PASSWORD}@db:5432/${DB_NAME}
+      REDIS_URL: redis://redis:6379/0
+      PASETO_PUBLIC_KEY: ${PASETO_PUBLIC_KEY}
+      UPLOAD_FOLDER: /app/uploads
+      # Хранилище файлов: local (диск, dev) | s3 (Beget, prod). В prod выставить
+      # STORAGE_BACKEND=s3 и S3_* в deploy/.env.
+      STORAGE_BACKEND: ${STORAGE_BACKEND:-local}
+      S3_ENDPOINT: ${S3_ENDPOINT:-}
+      S3_REGION: ${S3_REGION:-ru1}
+      S3_BUCKET: ${S3_BUCKET:-}
+      S3_ACCESS_KEY: ${S3_ACCESS_KEY:-}
+      S3_SECRET_KEY: ${S3_SECRET_KEY:-}
+      MESSENGER_GRPC_ADDR: messenger:9092
+      HTTP_ADDR: ":8102"
+      GRPC_ADDR: ":9102"
+    volumes:
+      - uploads:/app/uploads
+    expose:
+      - "8102"
+      - "9102"
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8102/healthz"]
+      interval: 15s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
+
   # Микросервис рассылки писем (Go, back-go/mail): gRPC :9098 — Send(шаблон),
   # HTTP :8098 — /healthz. Stateless (без БД/Redis), доставка по SMTP. Зовёт его
   # authsvc (письма подтверждения email). SMTP_* и отправитель задаёт .env /
@@ -513,7 +566,8 @@ services:
     restart: unless-stopped
     # service_healthy, а не started: конфиг nginx резолвит upstream'ы
     # gateway:8096, calls:8090, auth:8091, messenger:8092, ai:8093,
-    # groove:8094, tasks:8095, push:8097 и registry:8099 на старте — без живых контейнеров он падает
+    # pets:8094, tasks:8095, push:8097, registry:8099, calendar:8100,
+    # diary:8101 и portal:8102 на старте — без живых контейнеров он падает
     # целиком («host not found in upstream»), включая отдачу SPA.
     depends_on:
       gateway:
@@ -526,7 +580,7 @@ services:
         condition: service_healthy
       ai:
         condition: service_healthy
-      groove:
+      pets:
         condition: service_healthy
       tasks:
         condition: service_healthy
@@ -537,6 +591,8 @@ services:
       calendar:
         condition: service_healthy
       diary:
+        condition: service_healthy
+      portal:
         condition: service_healthy
     volumes:
       - uploads:/app/uploads:ro

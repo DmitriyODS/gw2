@@ -61,6 +61,7 @@ import { computed, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth.js'
 import { useMessengerStore } from '@/stores/messenger.js'
+import { usePortalStore } from '@/stores/portal.js'
 import { usePermission } from '@/composables/usePermission.js'
 import { useCompanySettings } from '@/composables/useCompanySettings.js'
 import { useChangelog } from '@/composables/useChangelog.js'
@@ -71,6 +72,7 @@ const route = useRoute()
 const router = useRouter()
 const authStore = useAuthStore()
 const messenger = useMessengerStore()
+const portal = usePortalStore()
 const { isSuperAdmin, canManageCompanies } = usePermission()
 const { usesGroove } = useCompanySettings()
 const { open: openChangelog } = useChangelog()
@@ -117,17 +119,19 @@ const navItems = computed(() => {
     active: () => route.path.startsWith('/diaries') || route.path.startsWith('/diary') })
 
   if (hasActiveCompany.value) {
-    // «Мой Groove» — только если компания не выключила режим грувиков.
+    // Питомцы-грувики — только если компания не выключила режим.
     if (usesGroove.value) {
-      items.push({ path: '/groove', icon: 'celebration', label: 'Мой Groove', tutorial: 'nav-groove',
-        active: () => route.path === '/groove' })
+      items.push({ path: '/pets', icon: 'pets', label: 'Грувики', tutorial: 'nav-groove',
+        active: () => route.path === '/pets' })
     }
-    items.push({ path: '/employees', icon: 'groups', label: 'Сотрудники', tutorial: 'nav-employees',
-      active: () => route.path === '/employees' })
     items.push({ path: '/registries', icon: 'table', label: 'Реестры', tutorial: 'nav-registries',
       active: () => route.path.startsWith('/registries') })
     items.push({ path: '/calendars', icon: 'calendar_month', label: 'Календари', tutorial: 'nav-calendars',
       active: () => route.path.startsWith('/calendars') })
+    // Единый раздел: лента портала + сотрудники (вкладки внутри).
+    items.push({ path: '/portal', icon: 'campaign', label: 'Портал', tutorial: 'nav-portal',
+      active: () => route.path.startsWith('/portal') || route.path === '/employees',
+      badge: () => portal.unread })
   }
 
   // Раздел "Компании" — платформенный супер-админ (все компании) ИЛИ

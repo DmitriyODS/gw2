@@ -106,6 +106,15 @@ type TaskPreview struct {
 	Deadline       *JSONTime `json:"deadline"`
 }
 
+// PostPreview — снапшот пересланного поста портала (заморожен на момент
+// пересылки — не живой JOIN, см. domain.PostPreview).
+type PostPreview struct {
+	ID       int64   `json:"id"`
+	Title    string  `json:"title"`
+	Excerpt  string  `json:"excerpt"`
+	CoverURL *string `json:"cover_url"`
+}
+
 type CallInfo struct {
 	ID          int64     `json:"id"`
 	Kind        string    `json:"kind"`
@@ -136,6 +145,7 @@ type Message struct {
 	Kind           string         `json:"kind"`
 	Call           *CallInfo      `json:"call"`
 	Task           *TaskPreview   `json:"task"`
+	Post           *PostPreview   `json:"post"`
 	PinnedAt       *JSONTime      `json:"pinned_at"`
 	PinnedByID     *int64         `json:"pinned_by_id"`
 	EditedAt       *JSONTime      `json:"edited_at"`
@@ -216,6 +226,9 @@ func NewMessage(m *domain.Message) *Message {
 			Deadline:       jsonTimePtr(t.Deadline),
 		}
 	}
+	if p := m.Post; p != nil {
+		out.Post = &PostPreview{ID: p.ID, Title: p.Title, Excerpt: p.Excerpt, CoverURL: p.CoverURL}
+	}
 	return out
 }
 
@@ -237,12 +250,10 @@ type Conversation struct {
 	CreatedAt     JSONTime  `json:"created_at"`
 	LastMessageAt *JSONTime `json:"last_message_at"`
 	IsDevChat     bool      `json:"is_dev_chat"`
-	IsPetChat     bool      `json:"is_pet_chat"`
-	PetName       *string   `json:"pet_name"`
 	CompanyID     *int64    `json:"company_id"`
 }
 
-func NewConversation(c *domain.Conversation, petName *string) *Conversation {
+func NewConversation(c *domain.Conversation) *Conversation {
 	return &Conversation{
 		ID:            c.ID,
 		UserAID:       c.UserAID,
@@ -250,8 +261,6 @@ func NewConversation(c *domain.Conversation, petName *string) *Conversation {
 		CreatedAt:     JSONTime(c.CreatedAt),
 		LastMessageAt: jsonTimePtr(c.LastMessageAt),
 		IsDevChat:     c.IsDevChat,
-		IsPetChat:     c.IsPetChat,
-		PetName:       petName,
 		CompanyID:     c.CompanyID,
 	}
 }
@@ -273,8 +282,6 @@ type ConversationListItem struct {
 	IsPinned      bool           `json:"is_pinned"`
 	PinnedAt      *JSONTime      `json:"pinned_at"`
 	IsDevChat     bool           `json:"is_dev_chat"`
-	IsPetChat     bool           `json:"is_pet_chat"`
-	PetName       *string        `json:"pet_name"`
 	CompanyID     *int64         `json:"company_id"`
 	CompanyName   *string        `json:"company_name"`
 	OwnerUser     *DirectoryUser `json:"owner_user"`

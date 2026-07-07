@@ -24,7 +24,7 @@
       <ActiveUnitModal v-if="unitsStore.activeUnit && !unitsStore.minimized" />
       <AppTutorial v-if="isTutorialOpen" />
       <ChangelogModal v-if="isChangelogOpen" @close="closeChangelog" />
-      <MorningBriefingModal v-if="usesGroove && isBriefingOpen" :briefing="briefing" @close="closeBriefing" />
+      <FloatingPet v-if="usesGroove" />
       <MiniMessenger />
       <IncomingCallOverlay @accept="callStore.accept()" @decline="callStore.decline()" />
       <CallView />
@@ -47,13 +47,15 @@ import { useAuthStore } from '@/stores/auth.js'
 import { useThemeStore } from '@/stores/theme.js'
 import { useUnitsStore } from '@/stores/units.js'
 import { useMessengerStore } from '@/stores/messenger.js'
+import { usePetsStore } from '@/stores/pets.js'
+import { usePortalStore } from '@/stores/portal.js'
+import { useAssistantStore } from '@/stores/assistant.js'
 import { useCallStore } from '@/stores/call.js'
 import { useNotificationsStore } from '@/stores/notifications.js'
 import { useBreakpoint } from '@/composables/useBreakpoint.js'
 import { useCompanySettings } from '@/composables/useCompanySettings.js'
 import { useTutorial } from '@/composables/useTutorial.js'
 import { useChangelog } from '@/composables/useChangelog.js'
-import { useMorningBriefing } from '@/composables/useMorningBriefing.js'
 import { connectSocket } from '@/socket/index.js'
 import { navProgress } from '@/composables/useNavProgress.js'
 import {
@@ -66,7 +68,7 @@ import ActiveUnitModal from '@/components/layout/ActiveUnitModal.vue'
 import ActiveUnitBanner from '@/components/layout/ActiveUnitBanner.vue'
 import AppTutorial from '@/components/layout/AppTutorial.vue'
 import ChangelogModal from '@/components/layout/ChangelogModal.vue'
-import MorningBriefingModal from '@/components/groove/MorningBriefingModal.vue'
+import FloatingPet from '@/components/pets/FloatingPet.vue'
 import MiniMessenger from '@/components/messenger/MiniMessenger.vue'
 import IncomingCallOverlay from '@/components/call/IncomingCallOverlay.vue'
 import CallView from '@/components/call/CallView.vue'
@@ -78,6 +80,9 @@ const authStore = useAuthStore()
 const themeStore = useThemeStore()
 const unitsStore = useUnitsStore()
 const messengerStore = useMessengerStore()
+const petsStore = usePetsStore()
+const portalStore = usePortalStore()
+const assistantStore = useAssistantStore()
 const callStore = useCallStore()
 const notif = useNotificationsStore()
 const route = useRoute()
@@ -88,9 +93,7 @@ const isFullscreenRoute = computed(() => !!route.meta?.fullscreen && !!authStore
 // isOpen деструктурирован как топ-левел ref — Vue auto-unwraps в шаблоне
 const { isOpen: isTutorialOpen, open: openTutorial, shouldAutoShow } = useTutorial()
 const { isOpen: isChangelogOpen, close: closeChangelog, checkForNewVersion } = useChangelog()
-const { isOpen: isBriefingOpen, briefing, close: closeBriefing, check: checkMorningBriefing } = useMorningBriefing()
 let tutorialTimer = null
-let briefingTimer = null
 
 watch(() => authStore.user, (user, prev) => {
   if (user && !prev && shouldAutoShow()) {
@@ -129,6 +132,8 @@ onMounted(async () => {
     // Список диалогов нужен сразу после входа: бейдж непрочитанных, мини-чат
     // и корректный заголовок в push-уведомлении (иначе fio неизвестно).
     await messengerStore.fetchConversations().catch(() => {})
+    // Бейдж непрочитанных постов портала — только при активной компании.
+    if (authStore.companyId != null) portalStore.fetchUnread()
     // Если страницу перезагрузили во время звонка — звонок ещё «жив» на
     // сервере (grace-окно). Предложим вернуться к нему.
     callStore.checkRejoin()
@@ -137,22 +142,28 @@ onMounted(async () => {
     if (!shouldAutoShow()) {
       checkForNewVersion()
     }
-    // Утренний брифинг от Грувика — раз в день, и только если не показываем
-    // тур/лог версий (чтобы не громоздить модалки друг на друга).
-    clearTimeout(briefingTimer)
-    briefingTimer = setTimeout(() => {
-      if (usesGroove.value && !isTutorialOpen.value && !isChangelogOpen.value) {
-        checkMorningBriefing()
-      }
-    }, 1200)
   }
 })
 
-// Сброс данных мессенджера при логауте, чтобы не утекли между сессиями.
+// Сброс данных при логауте, чтобы не утекли между сессиями.
 watch(() => authStore.user, (user) => {
   if (!user) {
     messengerStore.reset()
+    petsStore.reset()
+    portalStore.reset()
+    assistantStore.reset()
   }
+})
+
+// Смена активной компании — company-scoped сторы обнуляем; питомец нужен
+// плавающему виджету сразу (он смонтирован постоянно и сам не перечитает).
+watch(() => authStore.companyId, (id, prev) => {
+  if (prev == null || id === prev) return
+  petsStore.reset()
+  portalStore.reset()
+  assistantStore.reset()
+  if (id != null && usesGroove.value) petsStore.fetchPet().catch(() => {})
+  if (id != null) portalStore.fetchUnread()
 })
 
 /* Клик по системному уведомлению о звонке (через service worker) приходит
@@ -168,7 +179,6 @@ onMounted(() => {
 onBeforeUnmount(() => {
   window.removeEventListener('call:focus-overlay', onCallFocusOverlay)
   clearTimeout(tutorialTimer)
-  clearTimeout(briefingTimer)
 })
 </script>
 

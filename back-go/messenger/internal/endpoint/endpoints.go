@@ -31,15 +31,13 @@ type Endpoints struct {
 	ToggleMessagePin      endpoint.Endpoint
 	ListPinnedMessages    endpoint.Endpoint
 	OpenDevChat           endpoint.Endpoint
-	OpenPetChat           endpoint.Endpoint
 	SupportInbox          endpoint.Endpoint
 	TotalUnread           endpoint.Endpoint
 
-	EnsureDialog       endpoint.Endpoint
-	CreateCallMessage  endpoint.Endpoint
-	GetCallMessage     endpoint.Endpoint
-	PostBotMessage     endpoint.Endpoint
-	ListRecentMessages endpoint.Endpoint
+	EnsureDialog      endpoint.Endpoint
+	CreateCallMessage endpoint.Endpoint
+	GetCallMessage    endpoint.Endpoint
+	CreatePostMessage endpoint.Endpoint
 }
 
 // ── Транспорт-независимые запросы/ответы ─────────────────────────
@@ -125,14 +123,13 @@ type CreateCallMessageRequest struct {
 	CallID         int64
 }
 
-type PostBotMessageRequest struct {
+type CreatePostMessageRequest struct {
 	ConversationID int64
-	Text           string
-}
-
-type ListRecentRequest struct {
-	ConversationID int64
-	Limit          int
+	SenderID       int64
+	PostID         int64
+	Title          string
+	Excerpt        string
+	CoverURL       string
 }
 
 type MessagePinResponse struct {
@@ -140,6 +137,9 @@ type MessagePinResponse struct {
 	Pinned  bool
 }
 
+// CallMessageResponse — снапшот системного сообщения + адресаты message:new.
+// Форма общая для плашек звонка (CreateCallMessage/GetCallMessage) и
+// пересланного поста (CreatePostMessage) — оба возвращают одно и то же.
 type CallMessageResponse struct {
 	ConversationID int64
 	Message        *dto.Message
@@ -208,10 +208,6 @@ func New(svc service.MessengerService) Endpoints {
 			req := request.(SoloChatRequest)
 			return svc.OpenDevChat(ctx, req.UserID, req.CompanyID)
 		},
-		OpenPetChat: func(ctx context.Context, request any) (any, error) {
-			req := request.(SoloChatRequest)
-			return svc.OpenPetChat(ctx, req.UserID, req.CompanyID)
-		},
 		SupportInbox: func(ctx context.Context, request any) (any, error) {
 			return svc.SupportInbox(ctx, request.(int64))
 		},
@@ -238,13 +234,14 @@ func New(svc service.MessengerService) Endpoints {
 			}
 			return CallMessageResponse{ConversationID: convID, Message: msg, NotifyUserIDs: notify}, nil
 		},
-		PostBotMessage: func(ctx context.Context, request any) (any, error) {
-			req := request.(PostBotMessageRequest)
-			return svc.PostBotMessage(ctx, req.ConversationID, req.Text)
-		},
-		ListRecentMessages: func(ctx context.Context, request any) (any, error) {
-			req := request.(ListRecentRequest)
-			return svc.ListRecentMessages(ctx, req.ConversationID, req.Limit)
+		CreatePostMessage: func(ctx context.Context, request any) (any, error) {
+			req := request.(CreatePostMessageRequest)
+			msg, notify, err := svc.CreatePostMessage(ctx, req.ConversationID, req.SenderID, req.PostID,
+				req.Title, req.Excerpt, req.CoverURL)
+			if err != nil {
+				return nil, err
+			}
+			return CallMessageResponse{ConversationID: req.ConversationID, Message: msg, NotifyUserIDs: notify}, nil
 		},
 	}
 }

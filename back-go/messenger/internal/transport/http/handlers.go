@@ -150,16 +150,6 @@ func (h *handlers) openDevChat(c *fiber.Ctx) error {
 	return c.JSON(resp)
 }
 
-func (h *handlers) openPetChat(c *fiber.Ctx) error {
-	resp, err := h.eps.OpenPetChat(c.Context(), endpoint.SoloChatRequest{
-		UserID: currentUserID(c), CompanyID: activeCompanyID(c),
-	})
-	if err != nil {
-		return h.respondError(c, err)
-	}
-	return c.JSON(resp)
-}
-
 func (h *handlers) supportInbox(c *fiber.Ctx) error {
 	resp, err := h.eps.SupportInbox(c.Context(), currentUserID(c))
 	if err != nil {

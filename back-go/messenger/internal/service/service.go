@@ -39,32 +39,29 @@ type MessengerService interface {
 	ToggleMessagePin(ctx context.Context, messageID, userID int64) (*dto.Message, bool, error)
 	ListPinnedMessages(ctx context.Context, convID, userID int64) ([]*dto.Message, error)
 	OpenDevChat(ctx context.Context, userID int64, companyID *int64) (*dto.Conversation, error)
-	OpenPetChat(ctx context.Context, userID int64, companyID *int64) (*dto.Conversation, error)
 	SupportInbox(ctx context.Context, userID int64) ([]*dto.ConversationListItem, error)
 	TotalUnread(ctx context.Context, userID int64) (int, error)
 
-	// gRPC (Flask и groovesvc).
+	// gRPC (callsvc, portalsvc).
 	EnsureDialog(ctx context.Context, userAID, userBID int64) (int64, error)
 	CreateCallMessage(ctx context.Context, convID, senderID, callID int64) (*dto.Message, []int64, error)
 	GetCallMessage(ctx context.Context, callID int64) (int64, *dto.Message, []int64, error)
-	PostBotMessage(ctx context.Context, convID int64, text string) (int64, error)
-	ListRecentMessages(ctx context.Context, convID int64, limit int) ([]*domain.Message, error)
+	CreatePostMessage(ctx context.Context, convID, senderID, postID int64, title, excerpt, coverURL string) (*dto.Message, []int64, error)
 }
 
 type Service struct {
-	repo   domain.Repository
-	users  domain.UserReader
-	files  domain.FileStore
-	pub    domain.EventPublisher
-	groove domain.GrooveNotifier
-	log    *slog.Logger
+	repo  domain.Repository
+	users domain.UserReader
+	files domain.FileStore
+	pub   domain.EventPublisher
+	log   *slog.Logger
 }
 
 var _ MessengerService = (*Service)(nil)
 
 func New(repo domain.Repository, users domain.UserReader, files domain.FileStore,
-	pub domain.EventPublisher, groove domain.GrooveNotifier, log *slog.Logger) *Service {
-	return &Service{repo: repo, users: users, files: files, pub: pub, groove: groove, log: log}
+	pub domain.EventPublisher, log *slog.Logger) *Service {
+	return &Service{repo: repo, users: users, files: files, pub: pub, log: log}
 }
 
 // ── Общие ошибки ─────────────────────────────────────────────────
@@ -94,14 +91,8 @@ func rooms(ids ...int64) []string {
 }
 
 // ensureMember — доступ к диалогу: p2p — только участники; dev-чат —
-// владелец (user_a) + любой супер-админ; pet-чат — только владелец.
+// владелец (user_a) + любой супер-админ.
 func (s *Service) ensureMember(ctx context.Context, conv *domain.Conversation, userID int64) error {
-	if conv.IsPetChat {
-		if conv.UserAID == userID {
-			return nil
-		}
-		return errNoAccess()
-	}
 	if conv.IsDevChat {
 		if conv.UserAID == userID {
 			return nil // владелец

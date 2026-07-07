@@ -139,6 +139,8 @@ func messagePreview(text *string, kind string, hasTask, hasAttachment bool) stri
 	switch {
 	case kind == "call":
 		return "Звонок"
+	case kind == "post":
+		return "Пересланный пост"
 	case hasTask:
 		return "Прикреплена задача"
 	case hasAttachment:

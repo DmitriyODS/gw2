@@ -6,10 +6,11 @@ import { useCallStore } from '@/stores/call.js'
 import { registerTaskSocketHandlers } from '@/socket/tasks.js'
 import { registerMessengerSocketHandlers } from '@/socket/messenger.js'
 import { registerCallSocketHandlers } from '@/socket/calls.js'
-import { registerGrooveSocketHandlers } from '@/socket/groove.js'
+import { registerPetsSocketHandlers } from '@/socket/pets.js'
 import { registerRegistrySocketHandlers } from '@/socket/registry.js'
 import { registerCalendarSocketHandlers } from '@/socket/calendar.js'
 import { registerDiarySocketHandlers } from '@/socket/diary.js'
+import { registerPortalSocketHandlers } from '@/socket/portal.js'
 
 let socket = null
 let visibilityHookInstalled = false
@@ -170,10 +171,11 @@ export function connectSocket() {
   registerTaskSocketHandlers(socket)
   registerMessengerSocketHandlers(socket)
   registerCallSocketHandlers(socket)
-  registerGrooveSocketHandlers(socket)
+  registerPetsSocketHandlers(socket)
   registerRegistrySocketHandlers(socket)
   registerCalendarSocketHandlers(socket)
   registerDiarySocketHandlers(socket)
+  registerPortalSocketHandlers(socket)
 }
 
 export function disconnectSocket() {

@@ -95,13 +95,13 @@ export function buildAsideContent(slide, ctx) {
       sparkline: arr,
     }
   }
-  if (kind === 'groove-raid') {
-    const raid = grooveData?.raid
-    if (!raid) return { headline: 'нет данных' }
+  if (kind === 'top-pet') {
+    const leader = (grooveData?.pets || [])[0]
+    if (!leader) return { headline: 'нет данных' }
     return {
-      headline: `${raid.defeated ? 'Повержен: ' : ''}${raid.boss}`,
-      value: raid.progress, format: 'int',
-      sub: `из ${raid.target} задач · ${raid.defeated ? 'победа! 🏆' : 'бой идёт'}`,
+      headline: leader.name,
+      value: num(leader.xp), format: 'int',
+      sub: `XP у лидера зала славы · ${leader.user?.fio || ''}`,
     }
   }
   if (kind === 'today-snapshot') {

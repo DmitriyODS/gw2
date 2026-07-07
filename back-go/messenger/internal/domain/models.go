@@ -2,7 +2,7 @@
 //
 // Таблицами conversations/messages/message_attachments в рантайме владеет
 // этот сервис; схему ведёт migrate-контейнер (goose). Чужие
-// таблицы (users, companies, pets, tasks, calls) читаются read-only.
+// таблицы (users, companies, tasks, calls) читаются read-only.
 package domain
 
 import "time"
@@ -20,11 +20,12 @@ const (
 	KindText     = "text"
 	KindCall     = "call"
 	KindTask     = "task"
+	KindPost     = "post"
 	KindDevReply = "system_dev_reply"
 )
 
-// Conversation — диалог. Пара user_a<user_b либо соло-чат (dev/pet,
-// user_b NULL, владелец — user_a).
+// Conversation — диалог. Пара user_a<user_b либо соло-чат (dev, user_b NULL,
+// владелец — user_a).
 type Conversation struct {
 	ID            int64
 	UserAID       int64
@@ -32,7 +33,6 @@ type Conversation struct {
 	CompanyID     *int64  // NULL — переписка людей без общей компании
 	CompanyName   *string // подгружается листингами (JOIN companies)
 	IsDevChat     bool
-	IsPetChat     bool
 	CreatedAt     time.Time
 	LastMessageAt *time.Time
 	HiddenForA    bool
@@ -41,8 +41,8 @@ type Conversation struct {
 	PinnedAtB     *time.Time
 }
 
-// IsSolo — чат без «второй стороны»: dev-чат или чат с Грувиком.
-func (c *Conversation) IsSolo() bool { return c.IsDevChat || c.IsPetChat }
+// IsSolo — чат без «второй стороны»: dev-чат техподдержки.
+func (c *Conversation) IsSolo() bool { return c.IsDevChat }
 
 // OtherUserID — собеседник; nil для соло-чатов.
 func (c *Conversation) OtherUserID(userID int64) *int64 {
@@ -125,6 +125,18 @@ type TaskPreview struct {
 	CompanyID      int64 // не сериализуется; проверка TASK_WRONG_COMPANY
 }
 
+// PostPreview — ЗАМОРОЖЕННЫЙ снапшот пересланного поста портала (в отличие от
+// TaskPreview — не живой JOIN на чужую таблицу: portalsvc передаёт
+// title/excerpt/cover_url в момент пересылки через gRPC CreatePostMessage,
+// мессенджер хранит их как есть на самом сообщении — так он не завязывается
+// на схему portalsvc).
+type PostPreview struct {
+	ID       int64
+	Title    string
+	Excerpt  string
+	CoverURL *string
+}
+
 // Message — сообщение со всем, что сериализует снапшот REST-ответа
 // (аналог _msg_load_options() во Flask-репозитории).
 type Message struct {
@@ -142,6 +154,7 @@ type Message struct {
 	Kind                string
 	CallID              *int64
 	TaskID              *int64
+	PostID              *int64
 	PinnedAt            *time.Time
 	PinnedByID          *int64
 	EditedAt            *time.Time
@@ -151,6 +164,7 @@ type Message struct {
 	ForwardedFrom *UserRef
 	Call          *CallInfo
 	Task          *TaskPreview
+	Post          *PostPreview
 
 	// Контекст диалога для is_from_support (conversation.is_dev_chat,
 	// владелец = conversation.user_a_id).
@@ -178,6 +192,10 @@ type NewMessage struct {
 	Kind                string
 	TaskID              *int64
 	CallID              *int64
+	PostID              *int64
+	PostTitle           *string
+	PostExcerpt         *string
+	PostCoverURL        *string
 	IsBot               bool
 }
 
@@ -191,8 +209,8 @@ type User struct {
 	ID            int64
 	FIO           string
 	Login         string
-	RoleLevel     int     // из токена (active company), не из users
-	CompanyID     *int64  // из токена (active company), не из users
+	RoleLevel     int    // из токена (active company), не из users
+	CompanyID     *int64 // из токена (active company), не из users
 	Phone         *string
 	Email         *string
 	AvatarPath    *string

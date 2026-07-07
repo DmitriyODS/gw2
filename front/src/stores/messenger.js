@@ -143,36 +143,6 @@ export const useMessengerStore = defineStore('messenger', () => {
     return data.id
   }
 
-  async function openPetChat() {
-    // Чат с Грувиком текущего пользователя (get-or-create на бэке).
-    const data = await api.openPetChat()
-    const existing = conversationById.value.get(data.id)
-    if (!existing) {
-      conversations.value = sortConversations([
-        {
-          id: data.id,
-          other_user: null,
-          last_message: null,
-          unread_count: 0,
-          last_message_at: data.last_message_at,
-          is_pinned: false,
-          pinned_at: null,
-          is_dev_chat: false,
-          is_pet_chat: true,
-          pet_name: data.pet_name || null,
-          company_id: data.company_id,
-          company_name: null,
-        },
-        ...conversations.value,
-      ])
-    }
-    activeConversationId.value = data.id
-    if (!messagesByConv.value[data.id]) {
-      await fetchMessages(data.id)
-    }
-    return data.id
-  }
-
   async function fetchSupportInbox() {
     const seq = ++supportSeq
     supportCtrl?.abort()
@@ -606,7 +576,7 @@ export const useMessengerStore = defineStore('messenger', () => {
     loadingList, loadingMessages, sending,
     onlineIds, lastSeenById,
     activeConversation, activeMessages, activePinned,
-    fetchConversations, fetchUnreadCount, openWith, openDevChat, openPetChat,
+    fetchConversations, fetchUnreadCount, openWith, openDevChat,
     fetchSupportInbox, setActive, fetchMessages,
     fetchPinned, pollNewMessages, hasMoreHistory,
     send, forwardMessage, markRead,

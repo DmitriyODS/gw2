@@ -22,7 +22,7 @@ func (s *Service) ListConversations(ctx context.Context, userID int64, companyID
 	// всегда, даже без переписки. Бизнес-блокировку (доменную ошибку)
 	// глотаем — не валим листинг.
 	if me != nil && companyID != nil {
-		if _, err := s.getOrCreateSolo(ctx, userID, *companyID, false); err != nil {
+		if _, err := s.getOrCreateSolo(ctx, userID, *companyID); err != nil {
 			if domain.AsDomainError(err) == nil {
 				return nil, err
 			}
@@ -109,33 +109,21 @@ func (s *Service) ListConversations(ctx context.Context, userID int64, companyID
 		})
 	}
 
-	// Соло-чаты владельца (dev/pet) исключены из ListPairConversations —
-	// досыпаем их отдельно, если уже созданы. Условие на активную компанию
-	// тут не ставим: company_id живёт только в токене (в users его нет), а
-	// существующий соло-чат должен показываться при любой активной компании,
-	// иначе после пересоздания pet-чата он не попадает в список и не открывается.
-	// Личный dev-чат — первым…
-	dev, err := s.soloListItem(ctx, userID, false)
+	// Личный dev-чат владельца исключён из ListPairConversations — досыпаем
+	// его отдельно первым, если уже создан.
+	dev, err := s.soloListItem(ctx, userID)
 	if err != nil {
 		return nil, err
 	}
 	if dev != nil {
 		result = append([]*dto.ConversationListItem{dev}, result...)
 	}
-	// …а чат с Грувиком — самым первым (если уже создан в «Моём Groove»).
-	pet, err := s.soloListItem(ctx, userID, true)
-	if err != nil {
-		return nil, err
-	}
-	if pet != nil {
-		result = append([]*dto.ConversationListItem{pet}, result...)
-	}
 	return result, nil
 }
 
-// soloListItem — элемент списка для dev/pet-чата владельца; nil — чата нет.
-func (s *Service) soloListItem(ctx context.Context, userID int64, pet bool) (*dto.ConversationListItem, error) {
-	conv, err := s.repo.GetSolo(ctx, userID, pet)
+// soloListItem — элемент списка для dev-чата владельца; nil — чата нет.
+func (s *Service) soloListItem(ctx context.Context, userID int64) (*dto.ConversationListItem, error) {
+	conv, err := s.repo.GetSolo(ctx, userID)
 	if err != nil || conv == nil {
 		return nil, err
 	}
@@ -147,20 +135,12 @@ func (s *Service) soloListItem(ctx context.Context, userID int64, pet bool) (*dt
 	if err != nil {
 		return nil, err
 	}
-	var petName *string
-	if pet {
-		if petName, err = s.repo.PetName(ctx, userID); err != nil {
-			return nil, err
-		}
-	}
 	return &dto.ConversationListItem{
 		ID:            conv.ID,
 		LastMessage:   dto.NewMessage(last[conv.ID]),
 		UnreadCount:   unread[conv.ID],
 		LastMessageAt: dto.JSONTimePtr(conv.LastMessageAt),
 		IsDevChat:     conv.IsDevChat,
-		IsPetChat:     conv.IsPetChat,
-		PetName:       petName,
 		CompanyID:     conv.CompanyID,
 		CompanyName:   conv.CompanyName,
 	}, nil
@@ -179,18 +159,18 @@ func (s *Service) OpenConversation(ctx context.Context, meID, otherUserID int64)
 		}
 	}
 	return &dto.ConversationWithOther{
-		Conversation: *dto.NewConversation(conv, nil),
+		Conversation: *dto.NewConversation(conv),
 		OtherUser:    dto.NewDirectoryUser(other),
 	}, nil
 }
 
-// getOrCreateSolo — dev/pet-чат владельца (get_or_create_*_chat_for_user).
-func (s *Service) getOrCreateSolo(ctx context.Context, userID, companyID int64, pet bool) (*domain.Conversation, error) {
-	conv, err := s.repo.GetSolo(ctx, userID, pet)
+// getOrCreateSolo — dev-чат владельца (get_or_create_dev_chat_for_user).
+func (s *Service) getOrCreateSolo(ctx context.Context, userID, companyID int64) (*domain.Conversation, error) {
+	conv, err := s.repo.GetSolo(ctx, userID)
 	if err != nil || conv != nil {
 		return conv, err
 	}
-	return s.repo.CreateSolo(ctx, userID, companyID, pet)
+	return s.repo.CreateSolo(ctx, userID, companyID)
 }
 
 // OpenDevChat — личный чат с техподдержкой (нужна активная компания).
@@ -208,35 +188,11 @@ func (s *Service) OpenDevChat(ctx context.Context, userID int64, companyID *int6
 		return nil, domain.NewError("NO_ACTIVE_COMPANY",
 			"Нет активной компании для чата с техподдержкой", 400)
 	}
-	conv, err := s.getOrCreateSolo(ctx, userID, *companyID, false)
+	conv, err := s.getOrCreateSolo(ctx, userID, *companyID)
 	if err != nil {
 		return nil, err
 	}
-	return dto.NewConversation(conv, nil), nil
-}
-
-// OpenPetChat — чат пользователя со своим Грувиком. companyID — активная
-// компания из токена (в users её нет — идентичность развязана с компаниями).
-func (s *Service) OpenPetChat(ctx context.Context, userID int64, companyID *int64) (*dto.Conversation, error) {
-	me, err := s.users.GetUser(ctx, userID)
-	if err != nil {
-		return nil, err
-	}
-	if me == nil {
-		return nil, domain.NewError("USER_NOT_FOUND", "Пользователь не найден", 404)
-	}
-	if companyID == nil {
-		return nil, domain.NewError("NO_ACTIVE_COMPANY", "Нет активной компании — Грувика нет", 400)
-	}
-	conv, err := s.getOrCreateSolo(ctx, userID, *companyID, true)
-	if err != nil {
-		return nil, err
-	}
-	petName, err := s.repo.PetName(ctx, userID)
-	if err != nil {
-		return nil, err
-	}
-	return dto.NewConversation(conv, petName), nil
+	return dto.NewConversation(conv), nil
 }
 
 // SupportInbox — все личные dev-чаты пользователей (вкладка «Техподдержка»
@@ -308,19 +264,6 @@ func (s *Service) DeleteConversation(ctx context.Context, convID, userID int64, 
 	// Чат техподдержки живёт сколько живёт владелец — удалять нельзя.
 	if conv.IsDevChat {
 		return false, domain.NewError("DEV_CHAT_UNDELETABLE", "Чат техподдержки удалить нельзя", 400)
-	}
-	// Чат с Грувиком — соло-диалог без второй стороны: scope неприменим,
-	// удаляем физически (история и вложения стираются). Грувик никуда не
-	// девается — при следующем открытии pet-чат создаётся заново пустым.
-	if conv.IsPetChat {
-		if err := s.destroyConversation(ctx, convID); err != nil {
-			return false, err
-		}
-		s.log.Info("conversation.delete", "conversation_id", convID,
-			"user_id", userID, "scope", "all", "physical", true)
-		s.pub.Publish(ctx, "conversation:deleted", rooms(userID),
-			dto.ConversationDeletedEvent{ConversationID: convID})
-		return true, nil
 	}
 	otherID := conv.OtherUserID(userID)
 

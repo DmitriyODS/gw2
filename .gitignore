@@ -47,3 +47,6 @@ backups/
 # Logs
 *.log
 ./apps/groovework.apk
+
+# Случайно собранные Go-бинарники сервисов (go build без -o в каталоге сервиса)
+back-go/*/*svc

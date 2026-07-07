@@ -99,33 +99,3 @@ func TestMessengerDevChatAndSupportInbox(t *testing.T) {
 		fmt.Sprintf("/api/messenger/conversations/%d?scope=all", devConv), owner.Token, nil)
 	requireError(t, r, 400, "DEV_CHAT_UNDELETABLE", "удаление dev-чата")
 }
-
-// TestMessengerPetChatDeleteRecreates — удаление pet-чата всегда физическое;
-// следующий открывший запрос создаёт его заново пустым.
-func TestMessengerPetChatDeleteRecreates(t *testing.T) {
-	owner := newVerifiedUser(t)
-	owner.createCompany(t, uniq("Грувик-чат "))
-
-	r := messengerAPI.doJSON(t, http.MethodGet, "/api/messenger/pet-chat", owner.Token, nil)
-	requireStatus(t, r, 200, "открытие pet-чата")
-	petConv := int64(r.Num("id"))
-	requireStatus(t, sendMsg(t, owner, petConv, map[string]any{"text": "история"}),
-		201, "сообщение в pet-чат")
-
-	r = messengerAPI.doJSON(t, http.MethodDelete,
-		fmt.Sprintf("/api/messenger/conversations/%d?scope=me", petConv), owner.Token, nil)
-	requireStatus(t, r, 200, "удаление pet-чата")
-	if !r.Bool("physical") {
-		t.Fatalf("удаление pet-чата должно быть физическим: %s", r.Raw)
-	}
-
-	r = messengerAPI.doJSON(t, http.MethodGet, "/api/messenger/pet-chat", owner.Token, nil)
-	requireStatus(t, r, 200, "пересоздание pet-чата")
-	newConv := int64(r.Num("id"))
-	if newConv == petConv {
-		t.Fatalf("pet-чат не пересоздался (тот же id %d)", petConv)
-	}
-	if msgs := listMsgs(t, owner, newConv, ""); len(msgs) != 0 {
-		t.Fatalf("пересозданный pet-чат не пуст: %v", msgs)
-	}
-}

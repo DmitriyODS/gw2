@@ -23,7 +23,7 @@ help:
 	@printf "  make dev-auth     Go-микросервис авторизации (HTTP :8091)\n"
 	@printf "  make dev-messenger  Go-микросервис мессенджера (gRPC :9092, HTTP :8092)\n"
 	@printf "  make dev-ai       Go-микросервис ИИ (gRPC :9093, HTTP :8093)\n"
-	@printf "  make dev-groove   Go-микросервис «Мой Groove» (gRPC :9094, HTTP :8094)\n"
+	@printf "  make dev-pets     Go-микросервис питомцев-грувиков (gRPC :9094, HTTP :8094)\n"
 	@printf "  make dev-tasks    Go-микросервис задач (HTTP :8095)\n"
 	@printf "  make dev-gateway  Realtime-шлюз (WS /ws, HTTP :8096)\n"
 	@printf "  make dev-push     Go-микросервис пуш-уведомлений (HTTP :8097)\n"
@@ -31,6 +31,7 @@ help:
 	@printf "  make dev-registry Go-микросервис реестров (HTTP :8099)\n"
 	@printf "  make dev-calendar Go-микросервис календарей (HTTP :8100)\n"
 	@printf "  make dev-diary    Go-микросервис ежедневников (HTTP :8101)\n"
+	@printf "  make dev-portal   Go-микросервис корпоративного портала (gRPC :9102, HTTP :8102)\n"
 	@printf "  make dev-migrate  Применить миграции (goose)\n"
 	@printf "  make dev-front    Vite dev-сервер  :5173\n"
 	@printf "  make dev-stop     Остановить dev-контейнеры\n"
@@ -54,7 +55,7 @@ help:
 	@printf "\n\033[33mКонфигурация сервера:\033[0m cp .env.deploy.example .env.deploy\n\n"
 
 # ── Разработка ────────────────────────────────────────────────────
-.PHONY: dev-infra dev-migrate dev-front dev-calls dev-auth dev-messenger dev-ai dev-groove dev-tasks dev-gateway dev-push dev-mail dev-registry dev-calendar dev-diary dev-stop dev-stack dev-stack-stop gen-proto
+.PHONY: dev-infra dev-migrate dev-front dev-calls dev-auth dev-messenger dev-ai dev-pets dev-tasks dev-gateway dev-push dev-mail dev-registry dev-calendar dev-diary dev-portal dev-stop dev-stack dev-stack-stop gen-proto
 
 # Dev-ключи PASETO (синхронизированы с dev.sh и
 # deploy/docker-compose.override.yml): приватный — только у authsvc,
@@ -125,7 +126,7 @@ dev-messenger: dev-infra
 	go run ./cmd/msgsvc
 
 # Go-микросервис ИИ: REST /api/companies/<id>/ai-settings (regex-роут в
-# nginx/vite) + /api/ai/tv-fact и gRPC для tasksvc/groovesvc. Redis — кэш
+# nginx/vite) + /api/ai/tv-fact и gRPC для tasksvc. Redis — кэш
 # ТВ-фактов. env синхронизированы с dev.sh.
 dev-ai: dev-infra
 	@printf "\033[1m▶ aisvc (Go)  gRPC :9093  HTTP :8093\033[0m\n"
@@ -138,23 +139,22 @@ dev-ai: dev-infra
 	GRPC_ADDR=":9093" \
 	go run ./cmd/aisvc
 
-# Go-микросервис «Мой Groove»: REST /api/groove/* и gRPC-хуки доменных
-# событий (tasksvc — юниты/задачи, msgsvc — pet-чат). env синхронизированы
-# с dev.sh.
-dev-groove: dev-infra
-	@printf "\033[1m▶ groovesvc (Go)  gRPC :9094  HTTP :8094\033[0m\n"
-	cd back-go/groove && \
+# Go-микросервис питомцев-грувиков: REST /api/pets/* и gRPC-хуки доменных
+# событий (tasksvc — юниты/задачи). Исходящий gRPC — portalsvc (пост-
+# поздравление при эволюции). env синхронизированы с dev.sh.
+dev-pets: dev-infra
+	@printf "\033[1m▶ petsvc (Go)  gRPC :9094  HTTP :8094\033[0m\n"
+	cd back-go/pets && \
 	DATABASE_URL="postgresql://grovework:grovework_local@localhost:5432/grovework" \
 	REDIS_URL="redis://localhost:6379/0" \
 	PASETO_PUBLIC_KEY="$(PASETO_PUBLIC_KEY_DEV)" \
-	AI_GRPC_ADDR="localhost:9093" \
-	MESSENGER_GRPC_ADDR="localhost:9092" \
+	PORTAL_GRPC_ADDR="localhost:9102" \
 	HTTP_ADDR=":8094" \
 	GRPC_ADDR=":9094" \
-	go run ./cmd/groovesvc
+	go run ./cmd/petsvc
 
 # Go-микросервис задач: ядро платформы — REST /api/tasks|units|unit-types|
-# departments|stages|stats|yougile. Хуки геймификации — gRPC groovesvc,
+# departments|stages|stats|yougile. Хуки геймификации — gRPC petsvc,
 # поиск/реиндекс — gRPC aisvc. env синхронизированы с dev.sh.
 dev-tasks: dev-infra
 	@printf "\033[1m▶ tasksvc (Go)  HTTP :8095\033[0m\n"
@@ -162,7 +162,7 @@ dev-tasks: dev-infra
 	DATABASE_URL="postgresql://grovework:grovework_local@localhost:5432/grovework" \
 	REDIS_URL="redis://localhost:6379/0" \
 	PASETO_PUBLIC_KEY="$(PASETO_PUBLIC_KEY_DEV)" \
-	GROOVE_GRPC_ADDR="localhost:9094" \
+	PETS_GRPC_ADDR="localhost:9094" \
 	AI_GRPC_ADDR="localhost:9093" \
 	YOUGILE_ENC_KEY="CT5VF1jg6uFFbj4W_6RW3z3416bPlfbxdMYelrEOIXc=" \
 	HTTP_ADDR=":8095" \
@@ -239,6 +239,19 @@ dev-diary: dev-infra
 	HTTP_ADDR=":8101" \
 	go run ./cmd/diarysvc
 
+# Go-микросервис корпоративного портала: REST /api/portal/*. env синхронизированы с dev.sh.
+dev-portal: dev-infra
+	@printf "\033[1m▶ portalsvc (Go)  gRPC :9102  HTTP :8102\033[0m\n"
+	cd back-go/portal && \
+	DATABASE_URL="postgresql://grovework:grovework_local@localhost:5432/grovework" \
+	REDIS_URL="redis://localhost:6379/0" \
+	PASETO_PUBLIC_KEY="$(PASETO_PUBLIC_KEY_DEV)" \
+	UPLOAD_FOLDER="$(PWD)/uploads" \
+	MESSENGER_GRPC_ADDR="localhost:9092" \
+	HTTP_ADDR=":8102" \
+	GRPC_ADDR=":9102" \
+	go run ./cmd/portalsvc
+
 gen-proto:
 	bash scripts/gen_proto.sh
 
@@ -267,7 +280,7 @@ s ?= gateway
 
 # Сборка прод-образов (linux/amd64) и push в Docker Hub
 # osipovskijdima/groove_work (теги migrate/gateway/calls/auth/messenger/ai/
-# groove/tasks/front + версионные). Нужен одноразовый docker login.
+# pets/tasks/front + версионные). Нужен одноразовый docker login.
 # По умолчанию (и в `make deploy`) пушит ТОЛЬКО изменившиеся образы
 # (git diff origin/main..рабочее дерево; back-go/pkg/* → все Go-сервисы).
 # Выборочно:    make push only="gateway front"

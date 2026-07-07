@@ -110,9 +110,9 @@ type CompanyReader interface {
 	YougileEnabled(ctx Ctx, companyID int64) (bool, error)
 }
 
-// GrooveHooks — gRPC-хуки геймификации (fire-and-forget ПОСЛЕ коммита;
+// PetsHooks — gRPC-хуки геймификации (fire-and-forget ПОСЛЕ коммита;
 // ошибки только в лог — геймификация не роняет основной флоу).
-type GrooveHooks interface {
+type PetsHooks interface {
 	OnUnitStarted(u *Unit, taskName string)
 	OnUnitStopped(u *Unit, taskName string)
 	OnTaskClosed(t *Task, actorID int64)

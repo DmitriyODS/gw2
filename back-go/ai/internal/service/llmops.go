@@ -31,7 +31,8 @@ func (s *Service) Status(ctx context.Context, companyID int64) (*StatusResult, e
 }
 
 // Chat — РОВНО ОДИН ход chat completion: messages → content | tool_calls.
-// Циклы tool-calling крутит вызывающий (Flask/groovesvc).
+// Цикл tool-calling крутит вызывающий — для делового ассистента это сам aisvc
+// (chatWithTools в assistant.go, внутрипроцессный вызов, не gRPC).
 func (s *Service) Chat(ctx context.Context, args ChatArgs) (*domain.ChatResult, error) {
 	client, err := s.clientFor(ctx, args.CompanyID)
 	if err != nil {

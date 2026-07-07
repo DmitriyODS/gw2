@@ -1,6 +1,7 @@
 syntax = "proto3";
 
-// Контракт мессенджера: вызовы Flask (и в будущем groovesvc) → msgsvc.
+// Контракт мессенджера: callsvc → msgsvc (плашки звонков),
+// portalsvc → msgsvc (пересылка поста портала).
 // Транспорт всегда OK; бизнес-ошибка — в поле error.
 // message_json — готовый снапшот сообщения в форме REST-ответа
 // (эмитится в Socket.IO без чтения БД на стороне вызывающего).
@@ -15,10 +16,8 @@ service MessengerService {
   rpc CreateCallMessage(CreateCallMessageRequest) returns (CreateCallMessageResponse);
   // Актуальный снапшот плашки звонка — для message:updated при смене статуса.
   rpc GetCallMessage(GetCallMessageRequest) returns (GetCallMessageResponse);
-  // Бот-сообщение Грувика (sender NULL + is_bot) в pet-чат; msgsvc сам публикует message:new.
-  rpc PostBotMessage(PostBotMessageRequest) returns (PostBotMessageResponse);
-  // Последние сообщения диалога — контекст для AI-ответа pet-чата.
-  rpc ListRecentMessages(ListRecentMessagesRequest) returns (ListRecentMessagesResponse);
+  // Системная плашка пересланного поста kind='post' в диалоге (portalsvc).
+  rpc CreatePostMessage(CreatePostMessageRequest) returns (CreatePostMessageResponse);
 }
 
 message Error {
@@ -60,33 +59,17 @@ message GetCallMessageResponse {
   repeated int64 notify_user_ids = 4;
 }
 
-message PostBotMessageRequest {
+message CreatePostMessageRequest {
   int64 conversation_id = 1;
-  string text = 2;
+  int64 sender_id = 2;
+  int64 post_id = 3;
+  string title = 4;
+  string excerpt = 5;
+  string cover_url = 6;
 }
 
-message PostBotMessageResponse {
+message CreatePostMessageResponse {
   Error error = 1;
-  int64 message_id = 2;
-}
-
-message ChatMessage {
-  int64 id = 1;
-  bool is_bot = 2;
-  // 0 — системное/бот-сообщение (sender NULL).
-  int64 sender_id = 3;
-  string text = 4;
-  // RFC3339.
-  string created_at = 5;
-}
-
-message ListRecentMessagesRequest {
-  int64 conversation_id = 1;
-  int32 limit = 2;
-}
-
-message ListRecentMessagesResponse {
-  Error error = 1;
-  // В хронологическом порядке (старые → новые).
-  repeated ChatMessage messages = 2;
+  string message_json = 2;
+  repeated int64 notify_user_ids = 3;
 }

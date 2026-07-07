@@ -28,8 +28,8 @@ services:
 
   # Приложения за профилем full: голый `docker compose up` их не стартует —
   # gatewaysvc (:8096), callsvc (:8090/:9090), authsvc (:8091),
-  # msgsvc (:8092/:9092), aisvc (:8093/:9093), groovesvc (:8094/:9094),
-  # tasksvc (:8095) и Vite (:5173) бегут на хосте (см. ./dev.sh).
+  # msgsvc (:8092/:9092), aisvc (:8093/:9093), petsvc (:8094/:9094),
+  # tasksvc (:8095), portalsvc (:8102/:9102) и Vite (:5173) бегут на хосте (см. ./dev.sh).
   # Dev-ключи PASETO — та же пара, что в dev.sh/Makefile.
   migrate:
     profiles: ["full"]
@@ -51,7 +51,7 @@ services:
       PASETO_PUBLIC_KEY: ${PASETO_PUBLIC_KEY:-15ef439747fcad6ca627310942ba14b48f164fcbb5f65c10f61ca2aeb4b53fe1}
       # Dev-ключ Fernet — тот же, что в dev.sh/Makefile.
       AI_KEY_ENCRYPTION_KEY: ${AI_KEY_ENCRYPTION_KEY:-X3hFOVZ6XbAzlaygv2PfLbnmBIaH373CK8MqrrAhr8k=}
-  groove:
+  pets:
     profiles: ["full"]
     environment:
       PASETO_PUBLIC_KEY: ${PASETO_PUBLIC_KEY:-15ef439747fcad6ca627310942ba14b48f164fcbb5f65c10f61ca2aeb4b53fe1}
@@ -81,6 +81,10 @@ services:
     environment:
       PASETO_PUBLIC_KEY: ${PASETO_PUBLIC_KEY:-15ef439747fcad6ca627310942ba14b48f164fcbb5f65c10f61ca2aeb4b53fe1}
   diary:
+    profiles: ["full"]
+    environment:
+      PASETO_PUBLIC_KEY: ${PASETO_PUBLIC_KEY:-15ef439747fcad6ca627310942ba14b48f164fcbb5f65c10f61ca2aeb4b53fe1}
+  portal:
     profiles: ["full"]
     environment:
       PASETO_PUBLIC_KEY: ${PASETO_PUBLIC_KEY:-15ef439747fcad6ca627310942ba14b48f164fcbb5f65c10f61ca2aeb4b53fe1}

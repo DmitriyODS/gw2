@@ -75,7 +75,6 @@ func NewServer(eps endpoint.Endpoints, users domain.UserReader,
 	api.Post("/messages/:id<int>/pin", h.toggleMessagePin)
 	api.Get("/conversations/:id<int>/pinned", h.listPinned)
 	api.Get("/dev-chat", h.openDevChat)
-	api.Get("/pet-chat", h.openPetChat)
 	api.Get("/support-inbox", h.supportInbox)
 	api.Get("/unread", h.unread)
 

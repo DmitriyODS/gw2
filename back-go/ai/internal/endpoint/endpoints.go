@@ -8,6 +8,7 @@ package endpoint
 
 import (
 	"context"
+	"time"
 
 	"github.com/go-kit/kit/endpoint"
 
@@ -30,6 +31,11 @@ type Endpoints struct {
 	Embed          endpoint.Endpoint
 	SemanticSearch endpoint.Endpoint
 	ReindexTask    endpoint.Endpoint
+
+	// ИИ-ассистент (REST /api/ai/assistant/*).
+	SendAssistantMessage  endpoint.Endpoint
+	GetAssistantHistory   endpoint.Endpoint
+	SendAssistantFeedback endpoint.Endpoint
 }
 
 // ── Транспорт-независимые запросы/ответы ─────────────────────────
@@ -58,6 +64,29 @@ type SearchRequest struct {
 type EmbedResponse struct {
 	Vector []float32
 	Model  string
+}
+
+// ── ИИ-ассистент ───────────────────────────────────────────────────
+
+type SendAssistantMessageRequest struct {
+	UserID    int64
+	CompanyID int64
+	Text      string
+}
+
+type GetAssistantHistoryRequest struct {
+	UserID    int64
+	CompanyID int64
+	Limit     int
+	Before    *time.Time
+}
+
+type SendAssistantFeedbackRequest struct {
+	UserID    int64
+	CompanyID int64
+	MessageID int64
+	Verdict   string
+	Reason    *string
 }
 
 func New(svc service.AiService) Endpoints {
@@ -107,6 +136,19 @@ func New(svc service.AiService) Endpoints {
 		ReindexTask: func(ctx context.Context, request any) (any, error) {
 			svc.ScheduleReindexTask(request.(int64))
 			return nil, nil
+		},
+
+		SendAssistantMessage: func(ctx context.Context, request any) (any, error) {
+			req := request.(SendAssistantMessageRequest)
+			return svc.SendAssistantMessage(ctx, req.UserID, req.CompanyID, req.Text)
+		},
+		GetAssistantHistory: func(ctx context.Context, request any) (any, error) {
+			req := request.(GetAssistantHistoryRequest)
+			return svc.GetAssistantHistory(ctx, req.UserID, req.CompanyID, req.Limit, req.Before)
+		},
+		SendAssistantFeedback: func(ctx context.Context, request any) (any, error) {
+			req := request.(SendAssistantFeedbackRequest)
+			return nil, svc.SendAssistantFeedback(ctx, req.UserID, req.CompanyID, req.MessageID, req.Verdict, req.Reason)
 		},
 	}
 }

@@ -89,8 +89,8 @@ export default defineConfig({
         target: 'http://localhost:8092',
         changeOrigin: true
       },
-      // «Мой Groove» — groovesvc.
-      '/api/groove': {
+      // Питомцы-грувики — petsvc.
+      '/api/pets': {
         target: 'http://localhost:8094',
         changeOrigin: true
       },
@@ -112,6 +112,11 @@ export default defineConfig({
       // Ежедневники — diarysvc (личные заметки-задачи по дням).
       '/api/diaries': {
         target: 'http://localhost:8101',
+        changeOrigin: true
+      },
+      // Корпоративный портал — portalsvc (посты, комментарии, реакции, разделы).
+      '/api/portal': {
+        target: 'http://localhost:8102',
         changeOrigin: true
       },
       // Ядро задач — tasksvc (задачи, юниты, типы, этапы, отделы, статистика).

@@ -29,7 +29,7 @@ func (s *Service) ListMessages(ctx context.Context, convID, userID int64,
 }
 
 // SendMessage — отправка сообщения + все сокет-события (включая автоответ
-// техподдержки и служебный хук pet-чата).
+// техподдержки).
 func (s *Service) SendMessage(ctx context.Context, convID, senderID int64,
 	req dto.MessageCreate) (*dto.Message, error) {
 
@@ -69,11 +69,6 @@ func (s *Service) SendMessage(ctx context.Context, convID, senderID int64,
 		if target == nil || target.ConversationID != conv.ID {
 			return nil, domain.NewError("BAD_REPLY", "Недопустимый ответ", 400)
 		}
-	}
-
-	// Pet-чат: только текст — Грувик не умеет читать файлы и плашки задач.
-	if conv.IsPetChat && (len(attachmentIDs) > 0 || req.TaskID != nil) {
-		return nil, domain.NewError("PET_CHAT_TEXT_ONLY", "Грувик понимает только текст", 400)
 	}
 
 	// Прикреплённая задача: из той же компании, что и диалог.
@@ -139,11 +134,6 @@ func (s *Service) SendMessage(ctx context.Context, convID, senderID int64,
 				ConversationID: conv.ID, Message: dto.NewMessage(auto), FromUserID: nil,
 			})
 		}
-	case conv.IsPetChat:
-		// Чат с Грувиком видит только владелец: эхо в его вкладки; ответ
-		// питомца генерирует groovesvc (gRPC-хук, fire-and-forget).
-		s.pub.Publish(ctx, "message:new", rooms(senderID), event)
-		s.groove.OnPetMessage(conv.ID)
 	default:
 		recipientID := conv.OtherUserID(senderID)
 		// Получателю + эхо отправителю (другие его вкладки/устройства).
@@ -181,7 +171,7 @@ func (s *Service) maybeSupportAutoReply(ctx context.Context, conv *domain.Conver
 }
 
 // ForwardMessage — пересылка в диалоги/пользователям: текст и файлы
-// копируются (файлы — физически), плашка звонка остаётся плашкой.
+// копируются (файлы — физически), плашки звонка и поста остаются плашками.
 func (s *Service) ForwardMessage(ctx context.Context, senderID, messageID int64,
 	conversationIDs, userIDs []int64) ([]dto.ForwardResult, error) {
 
@@ -219,7 +209,7 @@ func (s *Service) ForwardMessage(ctx context.Context, senderID, messageID int64,
 			if err != nil {
 				return err
 			}
-			// Пересылать в соло-чаты смысла нет (техподдержка / Грувик).
+			// Пересылать в соло-чат (техподдержку) смысла нет.
 			if conv.IsSolo() || seen[conv.ID] {
 				continue
 			}
@@ -256,19 +246,29 @@ func (s *Service) ForwardMessage(ctx context.Context, senderID, messageID int64,
 				}
 				newAttIDs = append(newAttIDs, att.ID)
 			}
-			kind, callID := domain.KindText, (*int64)(nil)
-			if src.Kind == domain.KindCall {
-				kind, callID = domain.KindCall, src.CallID
-			}
-			msg, err := s.repo.CreateMessage(ctx, domain.NewMessage{
+			nm := domain.NewMessage{
 				ConversationID:      conv.ID,
 				SenderID:            &senderID,
 				Text:                src.Text,
 				AttachmentIDs:       newAttIDs,
 				ForwardedFromUserID: originUserID,
-				Kind:                kind,
-				CallID:              callID,
-			})
+				Kind:                domain.KindText,
+			}
+			switch src.Kind {
+			case domain.KindCall:
+				nm.Kind, nm.CallID = domain.KindCall, src.CallID
+			case domain.KindPost:
+				// Плашка поста остаётся плашкой: замороженное превью
+				// копируется вместе с kind (post_id может быть уже пуст,
+				// превью — самодостаточный снапшот).
+				nm.Kind, nm.PostID = domain.KindPost, src.PostID
+				if src.Post != nil {
+					nm.PostTitle = &src.Post.Title
+					nm.PostExcerpt = &src.Post.Excerpt
+					nm.PostCoverURL = src.Post.CoverURL
+				}
+			}
+			msg, err := s.repo.CreateMessage(ctx, nm)
 			if err != nil {
 				return err
 			}
@@ -347,8 +347,6 @@ func (s *Service) MarkRead(ctx context.Context, convID, userID int64) (int, erro
 			if len(targets) > 0 {
 				s.pub.Publish(ctx, "message:read", rooms(targets...), payload)
 			}
-		case conv.IsPetChat:
-			// Никому: чат видит только владелец.
 		default:
 			otherID := conv.OtherUserID(userID)
 			s.pub.Publish(ctx, "message:read", rooms(*otherID), payload)

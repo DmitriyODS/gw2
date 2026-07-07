@@ -19,9 +19,9 @@ type Repository interface {
 	// CreatePair — INSERT пары; при гонке по уникальному индексу возвращает
 	// существующий диалог. companyID может быть nil (нет общей компании).
 	CreatePair(ctx context.Context, a, b int64, companyID *int64) (*Conversation, error)
-	// GetSolo / CreateSolo — личный dev-чат или pet-чат владельца.
-	GetSolo(ctx context.Context, userID int64, pet bool) (*Conversation, error)
-	CreateSolo(ctx context.Context, userID, companyID int64, pet bool) (*Conversation, error)
+	// GetSolo / CreateSolo — личный dev-чат владельца (техподдержка).
+	GetSolo(ctx context.Context, userID int64) (*Conversation, error)
+	CreateSolo(ctx context.Context, userID, companyID int64) (*Conversation, error)
 	// ListPairConversations — не скрытые на стороне userID, с именем
 	// компании, порядок: last_message_at DESC NULLS LAST, created_at DESC.
 	ListPairConversations(ctx context.Context, userID int64) ([]*Conversation, error)
@@ -72,8 +72,6 @@ type Repository interface {
 	// HasHumanMessageSince — было ли сообщение НЕ бота свежее since и старше
 	// beforeID (нужен ли автоответ техподдержки).
 	HasHumanMessageSince(ctx context.Context, convID int64, since time.Time, beforeID int64) (bool, error)
-	// ListRecent — последние limit сообщений в хронологическом порядке.
-	ListRecent(ctx context.Context, convID int64, limit int) ([]*Message, error)
 	// FindCallMessage — свежайшая плашка kind='call' звонка в его диалоге
 	// (фильтр по диалогу обязателен: пересланные плашки живут в чужих).
 	FindCallMessage(ctx context.Context, callID, convID int64) (*Message, error)
@@ -86,8 +84,6 @@ type Repository interface {
 	// ── Read-only лукапы чужих таблиц ────────────────────────────
 	GetCall(ctx context.Context, id int64) (*CallInfo, error)
 	GetTask(ctx context.Context, id int64) (*TaskPreview, error)
-	// PetName — имя Грувика владельца; nil, если питомца ещё нет.
-	PetName(ctx context.Context, ownerID int64) (*string, error)
 }
 
 // UserReader — read-only доступ к пользователям платформы.
@@ -115,13 +111,6 @@ type FileStore interface {
 	Copy(srcRelPath string) (string, error)
 	// Remove — best-effort удаление; ошибки — только warn-лог.
 	Remove(paths []string)
-}
-
-// GrooveNotifier — уведомление groovesvc о сообщении хозяина в pet-чате
-// (gRPC, fire-and-forget): Грувик отвечает асинхронно, ошибка не валит
-// отправку сообщения.
-type GrooveNotifier interface {
-	OnPetMessage(conversationID int64)
 }
 
 // EventPublisher — доставка событий Socket.IO через Flask-мост

@@ -371,14 +371,14 @@ func (f *fakeUsers) IsCompanyMember(_ context.Context, userID, companyID int64) 
 
 func (f *fakeUsers) YougileEnabled(_ context.Context, _ int64) (bool, error) { return true, nil }
 
-type fakeGroove struct {
+type fakePets struct {
 	started, stopped int
 	closedHero       int64
 }
 
-func (f *fakeGroove) OnUnitStarted(*domain.Unit, string) { f.started++ }
-func (f *fakeGroove) OnUnitStopped(*domain.Unit, string) { f.stopped++ }
-func (f *fakeGroove) OnTaskClosed(_ *domain.Task, actorID int64) {
+func (f *fakePets) OnUnitStarted(*domain.Unit, string) { f.started++ }
+func (f *fakePets) OnUnitStopped(*domain.Unit, string) { f.stopped++ }
+func (f *fakePets) OnTaskClosed(_ *domain.Task, actorID int64) {
 	f.closedHero = actorID
 }
 
@@ -416,18 +416,18 @@ func (f *fakeBus) names() []string {
 
 // ── Хелперы ──────────────────────────────────────────────────────
 
-func newTestService() (*Service, *fakeStore, *fakeGroove, *fakeAI, *fakeBus, *fakeUsers) {
+func newTestService() (*Service, *fakeStore, *fakePets, *fakeAI, *fakeBus, *fakeUsers) {
 	store := newFakeStore()
-	groove := &fakeGroove{}
+	pets := &fakePets{}
 	ai := &fakeAI{}
 	bus := &fakeBus{}
 	users := &fakeUsers{users: map[int64]*domain.User{}}
 	svc := New(Deps{
 		Tasks: store, Units: store, UnitTypes: store, Depts: store, Stages: store,
 		Comments: store, Stats: nil, Users: users, Companies: users,
-		Groove: groove, AI: ai, Bus: bus, Log: slog.New(slog.DiscardHandler),
+		Pets: pets, AI: ai, Bus: bus, Log: slog.New(slog.DiscardHandler),
 	})
-	return svc, store, groove, ai, bus, users
+	return svc, store, pets, ai, bus, users
 }
 
 
@@ -450,15 +450,15 @@ func employee(users *fakeUsers, id, companyID int64) *domain.User {
 // ── Тесты инвариантов ────────────────────────────────────────────
 
 func TestCreateUnitSecondActiveForbidden(t *testing.T) {
-	svc, store, groove, _, _, _ := newTestService()
+	svc, store, pets, _, _, _ := newTestService()
 	task := seedTask(store, 1)
 	store.unitTypes[10] = &domain.UnitType{ID: 10, Name: "Код", CompanyID: 1}
 
 	if _, err := svc.CreateUnit(context.Background(), task.ID, 5, cid(1), "первый", 10); err != nil {
 		t.Fatalf("первый юнит: %v", err)
 	}
-	if groove.started != 1 {
-		t.Fatal("groove.OnUnitStarted не вызван")
+	if pets.started != 1 {
+		t.Fatal("pets.OnUnitStarted не вызван")
 	}
 	_, err := svc.CreateUnit(context.Background(), task.ID, 5, cid(1), "второй", 10)
 	de := domain.AsDomainError(err)
@@ -480,7 +480,7 @@ func TestCreateUnitForeignTypeForbidden(t *testing.T) {
 }
 
 func TestArchiveTaskWithActiveUnitForbidden(t *testing.T) {
-	svc, store, groove, _, bus, _ := newTestService()
+	svc, store, pets, _, bus, _ := newTestService()
 	task := seedTask(store, 1)
 	store.unitTypes[10] = &domain.UnitType{ID: 10, Name: "Код", CompanyID: 1}
 	if _, err := svc.CreateUnit(context.Background(), task.ID, 5, cid(1), "работа", 10); err != nil {
@@ -502,8 +502,8 @@ func TestArchiveTaskWithActiveUnitForbidden(t *testing.T) {
 	if _, err := svc.ArchiveTask(context.Background(), task.ID, 5, cid(1)); err != nil {
 		t.Fatalf("archive: %v", err)
 	}
-	if groove.closedHero != 5 {
-		t.Fatalf("OnTaskClosed hero = %d", groove.closedHero)
+	if pets.closedHero != 5 {
+		t.Fatalf("OnTaskClosed hero = %d", pets.closedHero)
 	}
 	names := bus.names()
 	found := map[string]bool{}

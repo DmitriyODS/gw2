@@ -47,9 +47,6 @@
         <div v-else-if="active.is_dev_chat" class="chat-avatar-wrap dev">
           <span class="material-symbols-outlined">support_agent</span>
         </div>
-        <div v-else-if="active.is_pet_chat" class="chat-avatar-wrap pet">
-          <span class="chat-pet-emoji">👾</span>
-        </div>
         <button
           v-else
           class="chat-avatar-wrap as-btn"
@@ -63,7 +60,6 @@
           <div class="chat-fio">
             <template v-if="active.is_dev_chat && devChatOwner">{{ devChatOwner.fio }}</template>
             <template v-else-if="active.is_dev_chat">Техподдержка</template>
-            <template v-else-if="active.is_pet_chat">{{ petName }}</template>
             <template v-else>{{ active.other_user?.fio }}</template>
           </div>
           <div class="chat-status" :class="{ online: chatOnline }">
@@ -74,9 +70,6 @@
             </template>
             <template v-else-if="active.is_dev_chat">
               Личный чат с командой разработчиков
-            </template>
-            <template v-else-if="active.is_pet_chat">
-              {{ petTyping ? 'печатает…' : 'ваш Грувик · всегда на связи' }}
             </template>
             <template v-else>{{ otherOnline ? 'в сети' : lastSeenText }}</template>
           </div>
@@ -95,7 +88,7 @@
           <Transition name="chat-menu">
             <div v-if="chatMenuOpen" class="chat-menu" role="menu">
               <button
-                v-if="!active.is_dev_chat && !active.is_pet_chat"
+                v-if="!active.is_dev_chat"
                 class="chat-menu-item"
                 data-tutorial="chat-call-audio"
                 @click="onMenuAction(() => startCall('audio'))"
@@ -104,7 +97,7 @@
                 <span>Аудиозвонок</span>
               </button>
               <button
-                v-if="!active.is_dev_chat && !active.is_pet_chat"
+                v-if="!active.is_dev_chat"
                 class="chat-menu-item"
                 data-tutorial="chat-call-video"
                 @click="onMenuAction(() => startCall('video'))"
@@ -113,7 +106,6 @@
                 <span>Видеозвонок</span>
               </button>
               <button
-                v-if="!active.is_pet_chat"
                 class="chat-menu-item"
                 @click="onMenuAction(() => onTogglePin(active.id))"
               >
@@ -123,7 +115,7 @@
                 <span>{{ active.is_pinned ? 'Открепить чат' : 'Закрепить чат' }}</span>
               </button>
               <template v-if="!active.is_dev_chat">
-                <div v-if="!active.is_pet_chat" class="chat-menu-divider" />
+                <div class="chat-menu-divider" />
                 <button
                   class="chat-menu-item danger"
                   @click="onMenuAction(() => askDeleteConversation(active))"
@@ -189,6 +181,7 @@
             @pin="onTogglePinMessage"
             @join-call="onJoinCall"
             @open-task="openTask"
+            @open-post="openPost"
             @context-menu="openContextMenu"
             @quote-click="onQuoteClick"
           />
@@ -267,8 +260,8 @@
       :y="ctxMenu.y"
       :is-pinned="!!ctxMenu.message?.pinned_at"
       :show-edit="canEditCtxMessage"
-      :show-pin="!active?.is_dev_chat && !active?.is_pet_chat"
-      :show-forward="!active?.is_dev_chat && !active?.is_pet_chat"
+      :show-pin="!active?.is_dev_chat"
+      :show-forward="!active?.is_dev_chat"
       :show-copy="!!ctxMenu.message?.text"
       :show-delete="true"
       @close="ctxMenu.visible = false"
@@ -280,7 +273,6 @@
 <script setup>
 import { ref, computed, watch, onMounted, onBeforeUnmount, nextTick } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { useGrooveStore } from '@/stores/groove.js'
 import { useMessengerStore } from '@/stores/messenger.js'
 import { useAuthStore } from '@/stores/auth.js'
 import { useNotificationsStore } from '@/stores/notifications.js'
@@ -407,6 +399,10 @@ function openTask(taskId) {
   router.push({ path: '/tasks', query: { open: taskId } })
 }
 
+function openPost(postId) {
+  router.push(`/portal/${postId}`)
+}
+
 function senderNameFor(m) {
   // В dev-чате сообщения от админа техподдержки всегда подписываются
   // «Техподдержка» — ФИО админа намеренно скрыто (как у Telegram support-ботов).
@@ -510,19 +506,6 @@ function askDeleteMessage(message) {
 }
 
 function askDeleteConversation(conv) {
-  if (conv?.is_pet_chat) {
-    // У чата с Грувиком нет второй стороны — выбора «у себя/у всех» нет:
-    // переписка стирается полностью, питомец вернётся пустым чатом.
-    deleteDialog.value = {
-      title: 'Удалить чат с Грувиком?',
-      text: 'Вся переписка с Грувиком сотрётся безвозвратно. Сам он никуда не денется — чат начнётся заново, как только вы ему напишете.',
-      canForAll: false,
-      otherName: '',
-      payload: { kind: 'conversation', id: conv.id },
-    }
-    deleteDialogOpen.value = true
-    return
-  }
   const other = conv?.other_user?.fio || ''
   deleteDialog.value = {
     title: 'Удалить чат?',
@@ -659,40 +642,6 @@ const lastSeenText = computed(() => {
 // Владелец dev-чата (для админа в support-inbox): данные кладутся бэком
 // в поле owner_user. У собственного dev-чата сотрудника поля нет.
 const devChatOwner = computed(() => active.value?.owner_user || null)
-
-// ── Чат с Грувиком ──────────────────────────────────────────────
-const grooveStore = useGrooveStore()
-const petName = computed(() =>
-  grooveStore.pet?.name || active.value?.pet_name || 'Грувик')
-const petTyping = ref(false)
-let petTypingTimer = null
-
-// «печатает…» — между моим сообщением и ответом бота (страховочный таймаут
-// на случай, если ИИ выключен/упал и ответа не будет).
-watch(() => {
-  const msgs = messenger.activeMessages
-  return msgs.length ? msgs[msgs.length - 1] : null
-}, (last) => {
-  if (!active.value?.is_pet_chat || !last) {
-    petTyping.value = false
-    clearTimeout(petTypingTimer)
-    return
-  }
-  if (last.is_bot) {
-    petTyping.value = false
-    clearTimeout(petTypingTimer)
-  } else if (last.sender_id === authStore.user?.id) {
-    petTyping.value = true
-    clearTimeout(petTypingTimer)
-    petTypingTimer = setTimeout(() => { petTyping.value = false }, 45000)
-  }
-})
-
-watch(active, (a) => {
-  if (a?.is_pet_chat && !grooveStore.pet) {
-    grooveStore.fetchPet().catch(() => {})
-  }
-})
 
 const chatOnline = computed(() => {
   if (active.value?.is_dev_chat) {
@@ -936,17 +885,6 @@ watch(() => route.params.conversationId, async (id) => {
   padding: 0;
   cursor: pointer;
 }
-
-.chat-avatar-wrap.pet {
-  width: 44px;
-  height: 44px;
-  border-radius: 50%;
-  background: var(--color-tertiary-container);
-  display: grid;
-  place-items: center;
-  flex-shrink: 0;
-}
-.chat-pet-emoji { font-size: 22px; }
 
 .chat-avatar-wrap.dev {
   width: 40px;

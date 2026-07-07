@@ -6,7 +6,6 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
-	"time"
 )
 
 // ── Хелперы мессенджера ──────────────────────────────────────────
@@ -379,71 +378,4 @@ func TestMessengerCrossCompany(t *testing.T) {
 		t.Fatalf("B не видит сообщение кросс-компанийного диалога")
 	}
 	requireStatus(t, sendMsg(t, b, conv, map[string]any{"text": "и тебе"}), 201, "ответ B")
-}
-
-// TestMessengerPetChat — pet-чат требует активной компании; отправка не падает,
-// а инвариант unread/mark-read не теряет бот-сообщения (sender_id IS NULL).
-func TestMessengerPetChat(t *testing.T) {
-	// Пользователь без компании — pet-чата нет.
-	solo := newVerifiedUser(t)
-	r := messengerAPI.doJSON(t, http.MethodGet, "/api/messenger/pet-chat", solo.Token, nil)
-	requireError(t, r, 400, "NO_ACTIVE_COMPANY", "pet-чат без активной компании")
-
-	admin := newVerifiedUser(t)
-	companyID := admin.createCompany(t, uniq("Грувик "))
-	a := newMember(t, admin, companyID, roleEmployee)
-
-	// Открытие pet-чата.
-	pc := messengerAPI.doJSON(t, http.MethodGet, "/api/messenger/pet-chat", a.Token, nil)
-	requireStatus(t, pc, 200, "открытие pet-чата")
-	if pc.JSON["is_pet_chat"] != true {
-		t.Fatalf("это не pet-чат: %s", pc.Raw)
-	}
-	petConv := int64(pc.Num("id"))
-
-	// Файлы/задачи в pet-чат запрещены.
-	up := messengerAPI.doMultipart(t, "/api/messenger/uploads", a.Token, "x.png", []byte("data"))
-	requireStatus(t, up, 201, "upload")
-	rf := sendMsg(t, a, petConv, map[string]any{"attachment_ids": []int64{int64(up.Num("id"))}})
-	requireError(t, rf, 400, "PET_CHAT_TEXT_ONLY", "файл в pet-чат")
-
-	// Отправка текста — не падает.
-	m := sendMsg(t, a, petConv, map[string]any{"text": "Грувик, привет!"})
-	requireStatus(t, m, 201, "сообщение в pet-чат")
-
-	// Грувик отвечает асинхронно (AI выключен → статичная офлайн-реплика через
-	// gRPC groove→msgsvc PostBotMessage; sender_id NULL, is_bot=true). Ждём.
-	var botFound bool
-	deadline := time.Now().Add(20 * time.Second)
-	for time.Now().Before(deadline) {
-		for _, mm := range listMsgs(t, a, petConv, "") {
-			if mm["sender_id"] == nil && mm["is_bot"] == true {
-				botFound = true
-				break
-			}
-		}
-		if botFound {
-			break
-		}
-		time.Sleep(400 * time.Millisecond)
-	}
-	if !botFound {
-		t.Fatalf("Грувик не ответил бот-сообщением за 20с (pet-чат %d)", petConv)
-	}
-
-	// Инвариант: бот-сообщение (sender_id IS NULL) считается непрочитанным у
-	// владельца и очищается mark-read (фильтр sender_id IS NULL OR != me).
-	it := convItem(t, a, petConv)
-	if it == nil || it["unread_count"].(float64) < 1 {
-		t.Fatalf("бот-сообщение не попало в unread: %v", it)
-	}
-	rr := messengerAPI.doJSON(t, http.MethodPost,
-		fmt.Sprintf("/api/messenger/conversations/%d/read", petConv), a.Token, nil)
-	requireStatus(t, rr, 200, "mark-read pet-чата")
-	if rr.Num("updated") < 1 {
-		t.Fatalf("mark-read не отметил бот-сообщение: %s", rr.Raw)
-	}
-	if it := convItem(t, a, petConv); it == nil || it["unread_count"].(float64) != 0 {
-		t.Fatalf("после mark-read остались непрочитанные: %v", it)
-	}
 }

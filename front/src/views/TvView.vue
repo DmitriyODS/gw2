@@ -134,7 +134,7 @@ import ProgressSpinner from 'primevue/progressspinner'
 import { useThemeStore } from '@/stores/theme.js'
 import { getDirectory } from '@/api/users.js'
 import { getTvFact } from '@/api/ai.js'
-import { getGrooveTv } from '@/api/groove.js'
+import { getZoo } from '@/api/pets.js'
 import { getStatsResponsibles } from '@/api/stats.js'
 import { useTvPeriodData } from '@/composables/useTvPeriodData.js'
 import { num, sumHours } from '@/components/tv/tvFormat.js'
@@ -228,7 +228,9 @@ const {
 const grooveData = ref(null)
 async function loadGroove() {
   try {
-    grooveData.value = await getGrooveTv()
+    // Зоопарк компании уже отсортирован по стадии/XP (ListCompanyPets) —
+    // ровно то, что нужно «Залу славы Грувиков».
+    grooveData.value = { pets: await getZoo() }
     markFresh()
   } catch {
     grooveData.value = null

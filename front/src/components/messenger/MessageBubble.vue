@@ -73,6 +73,25 @@
         <span class="material-symbols-outlined">task_alt</span>
         Задача удалена
       </div>
+      <button
+        v-if="message.kind === 'post' && message.post"
+        class="post-pill"
+        @click="$emit('open-post', message.post.id)"
+      >
+        <img v-if="message.post.cover_url" class="post-pill-cover" :src="message.post.cover_url" alt="" />
+        <span v-else class="material-symbols-outlined post-pill-icon">campaign</span>
+        <div class="post-pill-body">
+          <div class="post-pill-title">{{ message.post.title }}</div>
+          <div v-if="message.post.excerpt" class="post-pill-sub">{{ message.post.excerpt }}</div>
+        </div>
+      </button>
+      <div
+        v-else-if="message.kind === 'post'"
+        class="post-pill missing"
+      >
+        <span class="material-symbols-outlined">campaign</span>
+        Пост удалён
+      </div>
       <!-- Звонок — обычное сообщение с карточкой звонка внутри пузыря:
            переслать/удалить/ответить/закрепить работает как у текста. -->
       <div
@@ -131,7 +150,7 @@ const props = defineProps({
   showPin: { type: Boolean, default: true },
 })
 
-const emit = defineEmits(['delete', 'edit', 'reply', 'forward', 'join-call', 'pin', 'open-task', 'context-menu', 'quote-click'])
+const emit = defineEmits(['delete', 'edit', 'reply', 'forward', 'join-call', 'pin', 'open-task', 'open-post', 'context-menu', 'quote-click'])
 
 const isPinned = computed(() => !!props.message.pinned_at)
 // Сообщение от техподдержки: новое серверное поле is_from_support либо старый
@@ -547,6 +566,68 @@ const joinLabel = computed(() => props.isMine ? 'Вернуться' : 'Прис
   color: var(--color-text-dim);
 }
 .task-pill-sub .material-symbols-outlined { font-size: 14px; }
+
+/* Пересланный пост портала — плашка-превью (снапшот на момент пересылки). */
+.post-pill {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border: 1px solid var(--color-outline-dim);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  color: var(--color-text);
+  cursor: pointer;
+  width: 100%;
+  text-align: left;
+  margin-bottom: 6px;
+  font: inherit;
+  transition: transform 0.12s, box-shadow 0.15s;
+}
+
+.post-pill:hover {
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-sm);
+}
+
+.post-pill.missing {
+  cursor: default;
+  color: var(--color-text-dim);
+  font-style: italic;
+}
+
+.post-pill-cover {
+  width: 40px;
+  height: 40px;
+  border-radius: var(--radius-sm);
+  object-fit: cover;
+  flex-shrink: 0;
+}
+
+.post-pill-icon {
+  font-size: 22px;
+  color: var(--color-tertiary);
+  flex-shrink: 0;
+  font-variation-settings: 'FILL' 1;
+}
+
+.post-pill-body { min-width: 0; flex: 1; }
+
+.post-pill-title {
+  font-size: 13.5px;
+  font-weight: 700;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.post-pill-sub {
+  font-size: 12px;
+  color: var(--color-text-dim);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
 
 .msg-attachments {
   display: flex;

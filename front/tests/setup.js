@@ -4,12 +4,16 @@
 import { config } from '@vue/test-utils'
 
 // Заглушка диалога-обёртки: рендерит и тело (default), и подвал (footer) —
-// именно в них живёт тестируемая разметка форм.
+// именно в них живёт тестируемая разметка форм. Как и реальный AppDialog
+// (PrimeVue Dialog внутри), тело не рендерится, пока modelValue=false —
+// иначе закрытые вложенные диалоги (например «Перенести в другой ежедневник»)
+// монтируют настоящие тяжёлые PrimeVue-компоненты (Select и т.п.) без
+// плагина PrimeVue в тестовом окружении.
 const AppDialogStub = {
   name: 'AppDialog',
   props: ['modelValue', 'title', 'subtitle', 'icon', 'tone', 'size', 'busy', 'closable'],
   emits: ['update:modelValue'],
-  template: `<div class="app-dialog-stub"><slot /><slot name="footer" /></div>`,
+  template: `<div v-if="modelValue" class="app-dialog-stub"><slot /><slot name="footer" /></div>`,
 }
 
 const InputStub = (cls) => ({

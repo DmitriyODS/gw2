@@ -17,11 +17,11 @@
             <span class="material-symbols-outlined">celebration</span>
           </div>
           <div class="card-text">
-            <h3>Режим «Мой Groove»</h3>
+            <h3>Питомцы-Грувики</h3>
             <p>
-              Геймификация компании: питомцы-Грувики, лента активности с
-              реакциями и комментариями, кудосы, заряды, недельные рейды и
-              квесты дня.
+              Игровая механика компании: у каждого сотрудника — питомец,
+              растущий за работу (XP, кудосы, магазин, прогулки, лечение,
+              поглаживание питомцев коллег, рейтинг недели).
             </p>
           </div>
         </header>
@@ -30,10 +30,10 @@
           <span class="switch-text">
             <span class="material-symbols-outlined">pets</span>
             <span>
-              <strong>Включить «Мой Groove» для компании</strong>
+              <strong>Включить питомцев для компании</strong>
               <small>
-                Когда выключено — раздел и питомцы скрыты у всех сотрудников,
-                Грувики не пишут в чат и не присылают напоминания.
+                Когда выключено — раздел и плавающий питомец скрыты у всех
+                сотрудников компании.
               </small>
             </span>
           </span>
@@ -77,8 +77,8 @@ const dirty = computed(() => enabled.value !== initial.value)
 
 const summary = computed(() =>
   enabled.value
-    ? 'Грувики на месте: сотрудники получают питомцев, ленту, рейды и квесты.'
-    : 'Режим выключен — раздел «Мой Groove» скрыт у всех сотрудников компании.',
+    ? 'Грувики на месте: сотрудники получают питомцев, магазин и рейтинг недели.'
+    : 'Режим выключен — раздел «Грувики» скрыт у всех сотрудников компании.',
 )
 
 async function load() {
@@ -106,7 +106,7 @@ async function onSave() {
       auth.patchCompanySettings({ uses_groove: enabled.value })
     }
     companies.patchSettings(companyId.value, { uses_groove: enabled.value })
-    notif.success(enabled.value ? 'Режим «Мой Groove» включён' : 'Режим «Мой Groove» выключен')
+    notif.success(enabled.value ? 'Питомцы включены' : 'Питомцы выключены')
   } catch (e) {
     notif.error(e.message || 'Не удалось сохранить настройки Groove')
   } finally {

@@ -4,7 +4,8 @@
 // 	protoc        (unknown)
 // source: messenger/v1/messenger.proto
 
-// Контракт мессенджера: вызовы Flask (и в будущем groovesvc) → msgsvc.
+// Контракт мессенджера: callsvc → msgsvc (плашки звонков),
+// portalsvc → msgsvc (пересылка поста портала).
 // Транспорт всегда OK; бизнес-ошибка — в поле error.
 // message_json — готовый снапшот сообщения в форме REST-ответа
 // (эмитится в Socket.IO без чтения БД на стороне вызывающего).
@@ -422,28 +423,32 @@ func (x *GetCallMessageResponse) GetNotifyUserIds() []int64 {
 	return nil
 }
 
-type PostBotMessageRequest struct {
+type CreatePostMessageRequest struct {
 	state          protoimpl.MessageState `protogen:"open.v1"`
 	ConversationId int64                  `protobuf:"varint,1,opt,name=conversation_id,json=conversationId,proto3" json:"conversation_id,omitempty"`
-	Text           string                 `protobuf:"bytes,2,opt,name=text,proto3" json:"text,omitempty"`
+	SenderId       int64                  `protobuf:"varint,2,opt,name=sender_id,json=senderId,proto3" json:"sender_id,omitempty"`
+	PostId         int64                  `protobuf:"varint,3,opt,name=post_id,json=postId,proto3" json:"post_id,omitempty"`
+	Title          string                 `protobuf:"bytes,4,opt,name=title,proto3" json:"title,omitempty"`
+	Excerpt        string                 `protobuf:"bytes,5,opt,name=excerpt,proto3" json:"excerpt,omitempty"`
+	CoverUrl       string                 `protobuf:"bytes,6,opt,name=cover_url,json=coverUrl,proto3" json:"cover_url,omitempty"`
 	unknownFields  protoimpl.UnknownFields
 	sizeCache      protoimpl.SizeCache
 }
 
-func (x *PostBotMessageRequest) Reset() {
-	*x = PostBotMessageRequest{}
+func (x *CreatePostMessageRequest) Reset() {
+	*x = CreatePostMessageRequest{}
 	mi := &file_messenger_v1_messenger_proto_msgTypes[7]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *PostBotMessageRequest) String() string {
+func (x *CreatePostMessageRequest) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*PostBotMessageRequest) ProtoMessage() {}
+func (*CreatePostMessageRequest) ProtoMessage() {}
 
-func (x *PostBotMessageRequest) ProtoReflect() protoreflect.Message {
+func (x *CreatePostMessageRequest) ProtoReflect() protoreflect.Message {
 	mi := &file_messenger_v1_messenger_proto_msgTypes[7]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -455,231 +460,77 @@ func (x *PostBotMessageRequest) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use PostBotMessageRequest.ProtoReflect.Descriptor instead.
-func (*PostBotMessageRequest) Descriptor() ([]byte, []int) {
+// Deprecated: Use CreatePostMessageRequest.ProtoReflect.Descriptor instead.
+func (*CreatePostMessageRequest) Descriptor() ([]byte, []int) {
 	return file_messenger_v1_messenger_proto_rawDescGZIP(), []int{7}
 }
 
-func (x *PostBotMessageRequest) GetConversationId() int64 {
+func (x *CreatePostMessageRequest) GetConversationId() int64 {
 	if x != nil {
 		return x.ConversationId
 	}
 	return 0
 }
 
-func (x *PostBotMessageRequest) GetText() string {
-	if x != nil {
-		return x.Text
-	}
-	return ""
-}
-
-type PostBotMessageResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Error         *Error                 `protobuf:"bytes,1,opt,name=error,proto3" json:"error,omitempty"`
-	MessageId     int64                  `protobuf:"varint,2,opt,name=message_id,json=messageId,proto3" json:"message_id,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *PostBotMessageResponse) Reset() {
-	*x = PostBotMessageResponse{}
-	mi := &file_messenger_v1_messenger_proto_msgTypes[8]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *PostBotMessageResponse) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*PostBotMessageResponse) ProtoMessage() {}
-
-func (x *PostBotMessageResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_messenger_v1_messenger_proto_msgTypes[8]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use PostBotMessageResponse.ProtoReflect.Descriptor instead.
-func (*PostBotMessageResponse) Descriptor() ([]byte, []int) {
-	return file_messenger_v1_messenger_proto_rawDescGZIP(), []int{8}
-}
-
-func (x *PostBotMessageResponse) GetError() *Error {
-	if x != nil {
-		return x.Error
-	}
-	return nil
-}
-
-func (x *PostBotMessageResponse) GetMessageId() int64 {
-	if x != nil {
-		return x.MessageId
-	}
-	return 0
-}
-
-type ChatMessage struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
-	Id    int64                  `protobuf:"varint,1,opt,name=id,proto3" json:"id,omitempty"`
-	IsBot bool                   `protobuf:"varint,2,opt,name=is_bot,json=isBot,proto3" json:"is_bot,omitempty"`
-	// 0 — системное/бот-сообщение (sender NULL).
-	SenderId int64  `protobuf:"varint,3,opt,name=sender_id,json=senderId,proto3" json:"sender_id,omitempty"`
-	Text     string `protobuf:"bytes,4,opt,name=text,proto3" json:"text,omitempty"`
-	// RFC3339.
-	CreatedAt     string `protobuf:"bytes,5,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *ChatMessage) Reset() {
-	*x = ChatMessage{}
-	mi := &file_messenger_v1_messenger_proto_msgTypes[9]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *ChatMessage) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*ChatMessage) ProtoMessage() {}
-
-func (x *ChatMessage) ProtoReflect() protoreflect.Message {
-	mi := &file_messenger_v1_messenger_proto_msgTypes[9]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use ChatMessage.ProtoReflect.Descriptor instead.
-func (*ChatMessage) Descriptor() ([]byte, []int) {
-	return file_messenger_v1_messenger_proto_rawDescGZIP(), []int{9}
-}
-
-func (x *ChatMessage) GetId() int64 {
-	if x != nil {
-		return x.Id
-	}
-	return 0
-}
-
-func (x *ChatMessage) GetIsBot() bool {
-	if x != nil {
-		return x.IsBot
-	}
-	return false
-}
-
-func (x *ChatMessage) GetSenderId() int64 {
+func (x *CreatePostMessageRequest) GetSenderId() int64 {
 	if x != nil {
 		return x.SenderId
 	}
 	return 0
 }
 
-func (x *ChatMessage) GetText() string {
+func (x *CreatePostMessageRequest) GetPostId() int64 {
 	if x != nil {
-		return x.Text
-	}
-	return ""
-}
-
-func (x *ChatMessage) GetCreatedAt() string {
-	if x != nil {
-		return x.CreatedAt
-	}
-	return ""
-}
-
-type ListRecentMessagesRequest struct {
-	state          protoimpl.MessageState `protogen:"open.v1"`
-	ConversationId int64                  `protobuf:"varint,1,opt,name=conversation_id,json=conversationId,proto3" json:"conversation_id,omitempty"`
-	Limit          int32                  `protobuf:"varint,2,opt,name=limit,proto3" json:"limit,omitempty"`
-	unknownFields  protoimpl.UnknownFields
-	sizeCache      protoimpl.SizeCache
-}
-
-func (x *ListRecentMessagesRequest) Reset() {
-	*x = ListRecentMessagesRequest{}
-	mi := &file_messenger_v1_messenger_proto_msgTypes[10]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *ListRecentMessagesRequest) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*ListRecentMessagesRequest) ProtoMessage() {}
-
-func (x *ListRecentMessagesRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_messenger_v1_messenger_proto_msgTypes[10]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use ListRecentMessagesRequest.ProtoReflect.Descriptor instead.
-func (*ListRecentMessagesRequest) Descriptor() ([]byte, []int) {
-	return file_messenger_v1_messenger_proto_rawDescGZIP(), []int{10}
-}
-
-func (x *ListRecentMessagesRequest) GetConversationId() int64 {
-	if x != nil {
-		return x.ConversationId
+		return x.PostId
 	}
 	return 0
 }
 
-func (x *ListRecentMessagesRequest) GetLimit() int32 {
+func (x *CreatePostMessageRequest) GetTitle() string {
 	if x != nil {
-		return x.Limit
+		return x.Title
 	}
-	return 0
+	return ""
 }
 
-type ListRecentMessagesResponse struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
-	Error *Error                 `protobuf:"bytes,1,opt,name=error,proto3" json:"error,omitempty"`
-	// В хронологическом порядке (старые → новые).
-	Messages      []*ChatMessage `protobuf:"bytes,2,rep,name=messages,proto3" json:"messages,omitempty"`
+func (x *CreatePostMessageRequest) GetExcerpt() string {
+	if x != nil {
+		return x.Excerpt
+	}
+	return ""
+}
+
+func (x *CreatePostMessageRequest) GetCoverUrl() string {
+	if x != nil {
+		return x.CoverUrl
+	}
+	return ""
+}
+
+type CreatePostMessageResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Error         *Error                 `protobuf:"bytes,1,opt,name=error,proto3" json:"error,omitempty"`
+	MessageJson   string                 `protobuf:"bytes,2,opt,name=message_json,json=messageJson,proto3" json:"message_json,omitempty"`
+	NotifyUserIds []int64                `protobuf:"varint,3,rep,packed,name=notify_user_ids,json=notifyUserIds,proto3" json:"notify_user_ids,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *ListRecentMessagesResponse) Reset() {
-	*x = ListRecentMessagesResponse{}
-	mi := &file_messenger_v1_messenger_proto_msgTypes[11]
+func (x *CreatePostMessageResponse) Reset() {
+	*x = CreatePostMessageResponse{}
+	mi := &file_messenger_v1_messenger_proto_msgTypes[8]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *ListRecentMessagesResponse) String() string {
+func (x *CreatePostMessageResponse) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*ListRecentMessagesResponse) ProtoMessage() {}
+func (*CreatePostMessageResponse) ProtoMessage() {}
 
-func (x *ListRecentMessagesResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_messenger_v1_messenger_proto_msgTypes[11]
+func (x *CreatePostMessageResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_messenger_v1_messenger_proto_msgTypes[8]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -690,21 +541,28 @@ func (x *ListRecentMessagesResponse) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use ListRecentMessagesResponse.ProtoReflect.Descriptor instead.
-func (*ListRecentMessagesResponse) Descriptor() ([]byte, []int) {
-	return file_messenger_v1_messenger_proto_rawDescGZIP(), []int{11}
+// Deprecated: Use CreatePostMessageResponse.ProtoReflect.Descriptor instead.
+func (*CreatePostMessageResponse) Descriptor() ([]byte, []int) {
+	return file_messenger_v1_messenger_proto_rawDescGZIP(), []int{8}
 }
 
-func (x *ListRecentMessagesResponse) GetError() *Error {
+func (x *CreatePostMessageResponse) GetError() *Error {
 	if x != nil {
 		return x.Error
 	}
 	return nil
 }
 
-func (x *ListRecentMessagesResponse) GetMessages() []*ChatMessage {
+func (x *CreatePostMessageResponse) GetMessageJson() string {
 	if x != nil {
-		return x.Messages
+		return x.MessageJson
+	}
+	return ""
+}
+
+func (x *CreatePostMessageResponse) GetNotifyUserIds() []int64 {
+	if x != nil {
+		return x.NotifyUserIds
 	}
 	return nil
 }
@@ -739,33 +597,23 @@ const file_messenger_v1_messenger_proto_rawDesc = "" +
 	"\x05error\x18\x01 \x01(\v2\x13.messenger.v1.ErrorR\x05error\x12'\n" +
 	"\x0fconversation_id\x18\x02 \x01(\x03R\x0econversationId\x12!\n" +
 	"\fmessage_json\x18\x03 \x01(\tR\vmessageJson\x12&\n" +
-	"\x0fnotify_user_ids\x18\x04 \x03(\x03R\rnotifyUserIds\"T\n" +
-	"\x15PostBotMessageRequest\x12'\n" +
-	"\x0fconversation_id\x18\x01 \x01(\x03R\x0econversationId\x12\x12\n" +
-	"\x04text\x18\x02 \x01(\tR\x04text\"b\n" +
-	"\x16PostBotMessageResponse\x12)\n" +
-	"\x05error\x18\x01 \x01(\v2\x13.messenger.v1.ErrorR\x05error\x12\x1d\n" +
-	"\n" +
-	"message_id\x18\x02 \x01(\x03R\tmessageId\"\x84\x01\n" +
-	"\vChatMessage\x12\x0e\n" +
-	"\x02id\x18\x01 \x01(\x03R\x02id\x12\x15\n" +
-	"\x06is_bot\x18\x02 \x01(\bR\x05isBot\x12\x1b\n" +
-	"\tsender_id\x18\x03 \x01(\x03R\bsenderId\x12\x12\n" +
-	"\x04text\x18\x04 \x01(\tR\x04text\x12\x1d\n" +
-	"\n" +
-	"created_at\x18\x05 \x01(\tR\tcreatedAt\"Z\n" +
-	"\x19ListRecentMessagesRequest\x12'\n" +
-	"\x0fconversation_id\x18\x01 \x01(\x03R\x0econversationId\x12\x14\n" +
-	"\x05limit\x18\x02 \x01(\x05R\x05limit\"~\n" +
-	"\x1aListRecentMessagesResponse\x12)\n" +
-	"\x05error\x18\x01 \x01(\v2\x13.messenger.v1.ErrorR\x05error\x125\n" +
-	"\bmessages\x18\x02 \x03(\v2\x19.messenger.v1.ChatMessageR\bmessages2\xf2\x03\n" +
+	"\x0fnotify_user_ids\x18\x04 \x03(\x03R\rnotifyUserIds\"\xc6\x01\n" +
+	"\x18CreatePostMessageRequest\x12'\n" +
+	"\x0fconversation_id\x18\x01 \x01(\x03R\x0econversationId\x12\x1b\n" +
+	"\tsender_id\x18\x02 \x01(\x03R\bsenderId\x12\x17\n" +
+	"\apost_id\x18\x03 \x01(\x03R\x06postId\x12\x14\n" +
+	"\x05title\x18\x04 \x01(\tR\x05title\x12\x18\n" +
+	"\aexcerpt\x18\x05 \x01(\tR\aexcerpt\x12\x1b\n" +
+	"\tcover_url\x18\x06 \x01(\tR\bcoverUrl\"\x91\x01\n" +
+	"\x19CreatePostMessageResponse\x12)\n" +
+	"\x05error\x18\x01 \x01(\v2\x13.messenger.v1.ErrorR\x05error\x12!\n" +
+	"\fmessage_json\x18\x02 \x01(\tR\vmessageJson\x12&\n" +
+	"\x0fnotify_user_ids\x18\x03 \x03(\x03R\rnotifyUserIds2\x92\x03\n" +
 	"\x10MessengerService\x12U\n" +
 	"\fEnsureDialog\x12!.messenger.v1.EnsureDialogRequest\x1a\".messenger.v1.EnsureDialogResponse\x12d\n" +
 	"\x11CreateCallMessage\x12&.messenger.v1.CreateCallMessageRequest\x1a'.messenger.v1.CreateCallMessageResponse\x12[\n" +
-	"\x0eGetCallMessage\x12#.messenger.v1.GetCallMessageRequest\x1a$.messenger.v1.GetCallMessageResponse\x12[\n" +
-	"\x0ePostBotMessage\x12#.messenger.v1.PostBotMessageRequest\x1a$.messenger.v1.PostBotMessageResponse\x12g\n" +
-	"\x12ListRecentMessages\x12'.messenger.v1.ListRecentMessagesRequest\x1a(.messenger.v1.ListRecentMessagesResponseBCZAgithub.com/DmitriyODS/gw2/back-go/pkg/gen/messengerpb;messengerpbb\x06proto3"
+	"\x0eGetCallMessage\x12#.messenger.v1.GetCallMessageRequest\x1a$.messenger.v1.GetCallMessageResponse\x12d\n" +
+	"\x11CreatePostMessage\x12&.messenger.v1.CreatePostMessageRequest\x1a'.messenger.v1.CreatePostMessageResponseBCZAgithub.com/DmitriyODS/gw2/back-go/pkg/gen/messengerpb;messengerpbb\x06proto3"
 
 var (
 	file_messenger_v1_messenger_proto_rawDescOnce sync.Once
@@ -779,43 +627,36 @@ func file_messenger_v1_messenger_proto_rawDescGZIP() []byte {
 	return file_messenger_v1_messenger_proto_rawDescData
 }
 
-var file_messenger_v1_messenger_proto_msgTypes = make([]protoimpl.MessageInfo, 12)
+var file_messenger_v1_messenger_proto_msgTypes = make([]protoimpl.MessageInfo, 9)
 var file_messenger_v1_messenger_proto_goTypes = []any{
-	(*Error)(nil),                      // 0: messenger.v1.Error
-	(*EnsureDialogRequest)(nil),        // 1: messenger.v1.EnsureDialogRequest
-	(*EnsureDialogResponse)(nil),       // 2: messenger.v1.EnsureDialogResponse
-	(*CreateCallMessageRequest)(nil),   // 3: messenger.v1.CreateCallMessageRequest
-	(*CreateCallMessageResponse)(nil),  // 4: messenger.v1.CreateCallMessageResponse
-	(*GetCallMessageRequest)(nil),      // 5: messenger.v1.GetCallMessageRequest
-	(*GetCallMessageResponse)(nil),     // 6: messenger.v1.GetCallMessageResponse
-	(*PostBotMessageRequest)(nil),      // 7: messenger.v1.PostBotMessageRequest
-	(*PostBotMessageResponse)(nil),     // 8: messenger.v1.PostBotMessageResponse
-	(*ChatMessage)(nil),                // 9: messenger.v1.ChatMessage
-	(*ListRecentMessagesRequest)(nil),  // 10: messenger.v1.ListRecentMessagesRequest
-	(*ListRecentMessagesResponse)(nil), // 11: messenger.v1.ListRecentMessagesResponse
+	(*Error)(nil),                     // 0: messenger.v1.Error
+	(*EnsureDialogRequest)(nil),       // 1: messenger.v1.EnsureDialogRequest
+	(*EnsureDialogResponse)(nil),      // 2: messenger.v1.EnsureDialogResponse
+	(*CreateCallMessageRequest)(nil),  // 3: messenger.v1.CreateCallMessageRequest
+	(*CreateCallMessageResponse)(nil), // 4: messenger.v1.CreateCallMessageResponse
+	(*GetCallMessageRequest)(nil),     // 5: messenger.v1.GetCallMessageRequest
+	(*GetCallMessageResponse)(nil),    // 6: messenger.v1.GetCallMessageResponse
+	(*CreatePostMessageRequest)(nil),  // 7: messenger.v1.CreatePostMessageRequest
+	(*CreatePostMessageResponse)(nil), // 8: messenger.v1.CreatePostMessageResponse
 }
 var file_messenger_v1_messenger_proto_depIdxs = []int32{
-	0,  // 0: messenger.v1.EnsureDialogResponse.error:type_name -> messenger.v1.Error
-	0,  // 1: messenger.v1.CreateCallMessageResponse.error:type_name -> messenger.v1.Error
-	0,  // 2: messenger.v1.GetCallMessageResponse.error:type_name -> messenger.v1.Error
-	0,  // 3: messenger.v1.PostBotMessageResponse.error:type_name -> messenger.v1.Error
-	0,  // 4: messenger.v1.ListRecentMessagesResponse.error:type_name -> messenger.v1.Error
-	9,  // 5: messenger.v1.ListRecentMessagesResponse.messages:type_name -> messenger.v1.ChatMessage
-	1,  // 6: messenger.v1.MessengerService.EnsureDialog:input_type -> messenger.v1.EnsureDialogRequest
-	3,  // 7: messenger.v1.MessengerService.CreateCallMessage:input_type -> messenger.v1.CreateCallMessageRequest
-	5,  // 8: messenger.v1.MessengerService.GetCallMessage:input_type -> messenger.v1.GetCallMessageRequest
-	7,  // 9: messenger.v1.MessengerService.PostBotMessage:input_type -> messenger.v1.PostBotMessageRequest
-	10, // 10: messenger.v1.MessengerService.ListRecentMessages:input_type -> messenger.v1.ListRecentMessagesRequest
-	2,  // 11: messenger.v1.MessengerService.EnsureDialog:output_type -> messenger.v1.EnsureDialogResponse
-	4,  // 12: messenger.v1.MessengerService.CreateCallMessage:output_type -> messenger.v1.CreateCallMessageResponse
-	6,  // 13: messenger.v1.MessengerService.GetCallMessage:output_type -> messenger.v1.GetCallMessageResponse
-	8,  // 14: messenger.v1.MessengerService.PostBotMessage:output_type -> messenger.v1.PostBotMessageResponse
-	11, // 15: messenger.v1.MessengerService.ListRecentMessages:output_type -> messenger.v1.ListRecentMessagesResponse
-	11, // [11:16] is the sub-list for method output_type
-	6,  // [6:11] is the sub-list for method input_type
-	6,  // [6:6] is the sub-list for extension type_name
-	6,  // [6:6] is the sub-list for extension extendee
-	0,  // [0:6] is the sub-list for field type_name
+	0, // 0: messenger.v1.EnsureDialogResponse.error:type_name -> messenger.v1.Error
+	0, // 1: messenger.v1.CreateCallMessageResponse.error:type_name -> messenger.v1.Error
+	0, // 2: messenger.v1.GetCallMessageResponse.error:type_name -> messenger.v1.Error
+	0, // 3: messenger.v1.CreatePostMessageResponse.error:type_name -> messenger.v1.Error
+	1, // 4: messenger.v1.MessengerService.EnsureDialog:input_type -> messenger.v1.EnsureDialogRequest
+	3, // 5: messenger.v1.MessengerService.CreateCallMessage:input_type -> messenger.v1.CreateCallMessageRequest
+	5, // 6: messenger.v1.MessengerService.GetCallMessage:input_type -> messenger.v1.GetCallMessageRequest
+	7, // 7: messenger.v1.MessengerService.CreatePostMessage:input_type -> messenger.v1.CreatePostMessageRequest
+	2, // 8: messenger.v1.MessengerService.EnsureDialog:output_type -> messenger.v1.EnsureDialogResponse
+	4, // 9: messenger.v1.MessengerService.CreateCallMessage:output_type -> messenger.v1.CreateCallMessageResponse
+	6, // 10: messenger.v1.MessengerService.GetCallMessage:output_type -> messenger.v1.GetCallMessageResponse
+	8, // 11: messenger.v1.MessengerService.CreatePostMessage:output_type -> messenger.v1.CreatePostMessageResponse
+	8, // [8:12] is the sub-list for method output_type
+	4, // [4:8] is the sub-list for method input_type
+	4, // [4:4] is the sub-list for extension type_name
+	4, // [4:4] is the sub-list for extension extendee
+	0, // [0:4] is the sub-list for field type_name
 }
 
 func init() { file_messenger_v1_messenger_proto_init() }
@@ -829,7 +670,7 @@ func file_messenger_v1_messenger_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_messenger_v1_messenger_proto_rawDesc), len(file_messenger_v1_messenger_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   12,
+			NumMessages:   9,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

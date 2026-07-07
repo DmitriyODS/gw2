@@ -156,7 +156,7 @@ func (y *Yougile) applyUpdated(ctx context.Context, company *domain.YougileCompa
 	// Закрытие, пришедшее из YouGile, — тоже опорная точка ленты «Мой Groove».
 	if archivedNow {
 		task.IsArchived = true
-		y.svc.groove.OnTaskClosed(task, 0)
+		y.svc.pets.OnTaskClosed(task, 0)
 	}
 
 	payload, err := y.broadcastTaskUpdate(ctx, task.ID)

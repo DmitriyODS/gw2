@@ -6,10 +6,12 @@
 // (фоновая генерация раз в час, кэш в Redis gw2:ai:tv_fact:{cid}).
 //
 // Транспорты:
-//   - HTTP/Fiber (HTTP_ADDR) — REST /api/companies/:id/ai-settings* и
-//     /api/ai/tv-fact (за nginx);
+//   - HTTP/Fiber (HTTP_ADDR) — REST /api/companies/:id/ai-settings*,
+//     /api/ai/tv-fact и /api/ai/assistant/* (деловой ИИ-ассистент, свой
+//     tools-цикл и хранилище диалога — внутри aisvc, см. internal/service/assistant.go);
 //   - gRPC (GRPC_ADDR) — Status/Chat/Embed/SemanticSearch/ReindexTask
-//     (зовут Flask и groovesvc; промпты и циклы tool-calling — у вызывающих).
+//     (SemanticSearch/Embed зовёт tasksvc; Chat используется и снаружи, и
+//     внутрипроцессно самим ассистентом).
 //
 // Зависимости: общая PostgreSQL платформы (схему ведёт goose-migrate) + Redis
 // (кэш ТВ-фактов).
@@ -21,7 +23,7 @@ import (
 
 	googrpc "google.golang.org/grpc"
 
-	"github.com/DmitriyODS/gw2/back-go/pkg/gen/aipb"
+	"github.com/DmitriyODS/gw2/back-go/ai/internal/clients"
 	"github.com/DmitriyODS/gw2/back-go/ai/internal/endpoint"
 	"github.com/DmitriyODS/gw2/back-go/ai/internal/llm"
 	"github.com/DmitriyODS/gw2/back-go/ai/internal/repository/postgres"
@@ -31,6 +33,7 @@ import (
 	grpctransport "github.com/DmitriyODS/gw2/back-go/ai/internal/transport/grpc"
 	httptransport "github.com/DmitriyODS/gw2/back-go/ai/internal/transport/http"
 	"github.com/DmitriyODS/gw2/back-go/pkg/bootstrap"
+	"github.com/DmitriyODS/gw2/back-go/pkg/gen/aipb"
 	"github.com/DmitriyODS/gw2/back-go/pkg/pasetoauth"
 )
 
@@ -47,6 +50,12 @@ func main() {
 	if encKey == "" {
 		log.Warn("AI_KEY_ENCRYPTION_KEY не задан — AI-фичи будут выключены")
 	}
+	// tasksvc — gRPC-клиент для инструментов ИИ-ассистента (статистика,
+	// поиск/ссылки на задачи).
+	tasksAddr := bootstrap.Env("TASKS_GRPC_ADDR", "localhost:9095")
+	// APP_PUBLIC_BASE_URL — тот же паттерн формирования абсолютных ссылок,
+	// что уже использует authsvc для писем (verify-email/reset-password).
+	appBaseURL := bootstrap.Env("APP_PUBLIC_BASE_URL", "http://localhost:5173")
 	// Публичный ключ access-токенов PASETO (v4.public): токены выпускает
 	// authsvc, мы только проверяем подпись.
 	verifier, err := pasetoauth.NewVerifier(bootstrap.MustEnv(log, "PASETO_PUBLIC_KEY"))
@@ -66,7 +75,15 @@ func main() {
 	repo := postgres.NewRepo(pool)
 	users := postgres.NewUserReader(pool)
 	facts := redisx.NewFactCache(rdb, log)
-	svc := service.New(repo, llm.New(baseURL, log), secret.New(encKey), facts, log)
+	assistants := postgres.NewAssistantRepo(pool)
+	tasksClient, err := clients.NewTasks(tasksAddr, log)
+	if err != nil {
+		log.Error("tasks.client_failed", "error", err)
+		os.Exit(1)
+	}
+	defer tasksClient.Close()
+	svc := service.New(repo, llm.New(baseURL, log), secret.New(encKey), facts,
+		assistants, tasksClient, appBaseURL, log)
 	eps := endpoint.New(svc)
 
 	// Фоновый цикл ТВ-фактов: стартовый проход + тик раз в час.

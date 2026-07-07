@@ -2,12 +2,12 @@
 //
 // Транспорты:
 //   - HTTP/Fiber (HTTP_ADDR) — REST /api/messenger/* (за nginx; кроме
-//     exact /api/messenger/presence — он остаётся во Flask);
-//   - gRPC (GRPC_ADDR) — плашки звонков (Flask) и бот Грувика (groove).
+//     exact /api/messenger/presence — он остаётся в gatewaysvc);
+//   - gRPC (GRPC_ADDR) — плашки звонков (callsvc).
 //
 // Зависимости: общая PostgreSQL платформы (схему ведёт goose-migrate), Redis
-// (публикация событий Socket.IO для Flask-моста, канал gw2:messenger:events),
-// общий uploads-volume (файлы вложений).
+// (публикация сокет-событий, канал gw2:messenger:events), общий
+// uploads-volume (файлы вложений).
 package main
 
 import (
@@ -16,7 +16,6 @@ import (
 
 	googrpc "google.golang.org/grpc"
 
-	"github.com/DmitriyODS/gw2/back-go/messenger/internal/clients"
 	"github.com/DmitriyODS/gw2/back-go/messenger/internal/endpoint"
 	"github.com/DmitriyODS/gw2/back-go/messenger/internal/files"
 	"github.com/DmitriyODS/gw2/back-go/messenger/internal/repository/postgres"
@@ -36,7 +35,6 @@ func main() {
 	dbURL := bootstrap.Env("DATABASE_URL", "postgresql://grovework:grovework_local@localhost:5432/grovework")
 	redisURL := bootstrap.Env("REDIS_URL", "redis://localhost:6379/0")
 	uploadFolder := bootstrap.Env("UPLOAD_FOLDER", "/app/uploads")
-	grooveAddr := bootstrap.Env("GROOVE_GRPC_ADDR", "localhost:9094")
 	// Публичный ключ access-токенов PASETO (v4.public): токены выпускает
 	// authsvc, мы только проверяем подпись.
 	verifier, err := pasetoauth.NewVerifier(bootstrap.MustEnv(log, "PASETO_PUBLIC_KEY"))
@@ -57,14 +55,7 @@ func main() {
 	users := postgres.NewUserReader(pool)
 	store := files.NewStore(storage.FromEnv(log, uploadFolder))
 	pub := events.NewPublisher(rdb, log, "gw2:messenger:events")
-	// Ответ Грувика в pet-чате генерирует groovesvc (gRPC, fire-and-forget).
-	groove, err := clients.NewGroove(grooveAddr, log)
-	if err != nil {
-		log.Error("groove_grpc.bad_addr", "error", err)
-		os.Exit(1)
-	}
-	defer groove.Close()
-	svc := service.New(repo, users, store, pub, groove, log)
+	svc := service.New(repo, users, store, pub, log)
 	eps := endpoint.New(svc)
 
 	grpcAddr := bootstrap.Env("GRPC_ADDR", ":9092")

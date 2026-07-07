@@ -106,6 +106,7 @@ func TestMessageJSONShape(t *testing.T) {
 			"duration_sec": 65
 		},
 		"task": null,
+		"post": null,
 		"pinned_at": null,
 		"pinned_by_id": null,
 		"edited_at": null,
@@ -115,14 +116,12 @@ func TestMessageJSONShape(t *testing.T) {
 }
 
 func TestConversationListItemJSONShape(t *testing.T) {
-	petName := "Грувик"
 	company := "ООО Ромашка"
 	cid := int64(10)
 	item := &ConversationListItem{
 		ID:          7,
 		UnreadCount: 1,
-		IsPetChat:   true,
-		PetName:     &petName,
+		IsDevChat:   true,
 		CompanyID:   &cid,
 		CompanyName: &company,
 	}
@@ -138,9 +137,7 @@ func TestConversationListItemJSONShape(t *testing.T) {
 		"last_message_at": null,
 		"is_pinned": false,
 		"pinned_at": null,
-		"is_dev_chat": false,
-		"is_pet_chat": true,
-		"pet_name": "Грувик",
+		"is_dev_chat": true,
 		"company_id": 10,
 		"company_name": "ООО Ромашка",
 		"owner_user": null
@@ -154,7 +151,7 @@ func TestConversationWithOtherFlattens(t *testing.T) {
 	cid := int64(10)
 	conv := NewConversation(&domain.Conversation{
 		ID: 1, UserAID: 2, UserBID: &b, CompanyID: &cid, CreatedAt: created,
-	}, nil)
+	})
 	raw, err := json.Marshal(&ConversationWithOther{Conversation: *conv})
 	if err != nil {
 		t.Fatal(err)
@@ -166,8 +163,6 @@ func TestConversationWithOtherFlattens(t *testing.T) {
 		"created_at": "2026-06-12T08:00:00+00:00",
 		"last_message_at": null,
 		"is_dev_chat": false,
-		"is_pet_chat": false,
-		"pet_name": null,
 		"company_id": 10,
 		"other_user": null
 	}`

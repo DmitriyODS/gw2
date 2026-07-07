@@ -67,13 +67,19 @@ type AiService interface {
 	// REST /api/ai/tv-fact — текущий ТВ-факт дня (nil → JSON null).
 	GetTVFact(ctx context.Context, companyID int64) (*domain.TVFact, error)
 
-	// gRPC ai.v1 (Flask и groovesvc).
+	// gRPC ai.v1 (SemanticSearch/Embed зовёт tasksvc; Chat — и снаружи, и
+	// внутрипроцессно самим ассистентом, см. assistant.go).
 	Status(ctx context.Context, companyID int64) (*StatusResult, error)
 	Chat(ctx context.Context, args ChatArgs) (*domain.ChatResult, error)
 	Embed(ctx context.Context, companyID int64, text string) ([]float32, string, error)
 	SemanticSearch(ctx context.Context, companyID int64, query string) ([]domain.SearchHit, error)
 	// ScheduleReindexTask — асинхронно, ошибки только в лог (fail-open).
 	ScheduleReindexTask(taskID int64)
+
+	// REST /api/ai/assistant/* — деловой ИИ-ассистент (статистика/задачи).
+	SendAssistantMessage(ctx context.Context, userID, companyID int64, text string) (*AssistantReply, error)
+	GetAssistantHistory(ctx context.Context, userID, companyID int64, limit int, before *time.Time) ([]domain.AssistantMessage, error)
+	SendAssistantFeedback(ctx context.Context, userID, companyID, messageID int64, verdict string, reason *string) error
 }
 
 type Service struct {
@@ -82,6 +88,12 @@ type Service struct {
 	cipher domain.SecretCipher
 	facts  domain.FactCache
 	log    *slog.Logger
+
+	// ИИ-ассистент (Сущность 3): хранилище диалога + gRPC-клиент tasksvc
+	// (инструменты статистики/поиска задач) + база публичных ссылок на задачи.
+	assistants domain.AssistantRepository
+	tasks      domain.TasksClient
+	appBaseURL string
 
 	// кэш «готовых клиентов» per-company (как _cache во Flask ai_client).
 	mu    sync.Mutex
@@ -111,12 +123,16 @@ type aiClient struct {
 var _ AiService = (*Service)(nil)
 
 func New(repo domain.Repository, llmClient domain.LLMClient, cipher domain.SecretCipher,
-	facts domain.FactCache, log *slog.Logger) *Service {
+	facts domain.FactCache, assistants domain.AssistantRepository, tasks domain.TasksClient,
+	appBaseURL string, log *slog.Logger) *Service {
 	return &Service{
 		repo:       repo,
 		llm:        llmClient,
 		cipher:     cipher,
 		facts:      facts,
+		assistants: assistants,
+		tasks:      tasks,
+		appBaseURL: appBaseURL,
 		log:        log,
 		cache:      map[int64]cacheEntry{},
 		reindexSem: make(chan struct{}, reindexWorkers),
