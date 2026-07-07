@@ -166,7 +166,7 @@ export const useDiariesStore = defineStore('diaries', () => {
   // ── Ежедневники (мутации) ──
   async function createDiary(name) {
     const d = await api.createDiary(name)
-    if (tab.value === 'mine') diaries.value.push(d)
+    if (tab.value === 'mine') upsertDiary(d)
     return d
   }
   async function renameDiary(id, name) {

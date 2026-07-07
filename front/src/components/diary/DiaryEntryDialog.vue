@@ -93,6 +93,9 @@
           <button v-if="canEdit" class="btn-icon danger" title="Удалить" @click="confirmDelete = true">
             <span class="material-symbols-outlined">delete</span>
           </button>
+          <button v-if="canEdit && moveTargets.length" class="btn-icon" title="Перенести в другой ежедневник" @click="openMove">
+            <span class="material-symbols-outlined">drive_file_move</span>
+          </button>
           <span class="de-foot-spacer" />
           <button
             v-if="canEdit && canCreateTask && !entry?.linked_task_id"
@@ -121,12 +124,39 @@
       confirm-label="Удалить" danger-confirm
       @confirm="doDelete" @cancel="confirmDelete = false"
     />
+
+    <AppDialog
+      v-model="moveOpen"
+      title="Перенести в другой ежедневник"
+      icon="drive_file_move" size="sm"
+      :busy="moving"
+      :actions="[{ kind: 'cancel', label: 'Отмена' }, { kind: 'confirm', label: 'Перенести' }]"
+      @cancel="moveOpen = false" @confirm="doMove"
+    >
+      <div class="de-move">
+        <label class="de-field">
+          <span class="de-label">Ежедневник</span>
+          <Select
+            v-model="moveDiaryId"
+            :options="moveTargets"
+            option-label="name" option-value="id"
+            placeholder="Выберите ежедневник"
+            class="de-move-select"
+          />
+        </label>
+        <label class="de-field">
+          <span class="de-label">Дата</span>
+          <DatePicker v-model="moveDate" date-format="dd.mm.yy" placeholder="Выберите день" show-button-bar class="de-date" />
+        </label>
+      </div>
+    </AppDialog>
   </AppDialog>
 </template>
 
 <script setup>
 import { computed, nextTick, reactive, ref, watch } from 'vue'
 import DatePicker from 'primevue/datepicker'
+import Select from 'primevue/select'
 import AppDialog from '@/components/common/AppDialog.vue'
 import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
 import LinkifiedText from '@/components/common/LinkifiedText.vue'
@@ -155,6 +185,10 @@ const isNew = ref(false)
 const showDetails = ref(false)
 const confirmDelete = ref(false)
 const titleInput = ref(null)
+const moveOpen = ref(false)
+const moveDiaryId = ref(null)
+const moveDate = ref(new Date())
+const moving = ref(false)
 
 const form = reactive({ title: '', description: '', date: new Date(), start: null, end: null })
 
@@ -273,6 +307,30 @@ async function doDelete() {
   }
 }
 
+// Перенос в другой (свой) ежедневник — с выбором даты назначения (по
+// умолчанию текущая дата записи, drag-and-drop на сайдбар дату не спрашивает).
+const moveTargets = computed(() => store.diaries.filter((d) => d.id !== store.selectedId))
+function openMove() {
+  moveDiaryId.value = moveTargets.value[0]?.id ?? null
+  moveDate.value = props.entry ? parseEntryDate(props.entry.entry_date) : new Date()
+  moveOpen.value = true
+}
+async function doMove() {
+  if (moveDiaryId.value == null) { notif.error('Выберите ежедневник'); return }
+  if (!moveDate.value) { notif.error('Укажите дату'); return }
+  moving.value = true
+  try {
+    await store.moveEntry(props.entry.id, { diaryId: moveDiaryId.value, entryDate: dayKey(moveDate.value) })
+    notif.success('Запись перенесена')
+    moveOpen.value = false
+    onClose(false)
+  } catch (e) {
+    notif.error(e?.message || 'Не удалось перенести запись')
+  } finally {
+    moving.value = false
+  }
+}
+
 function onClose(v) { emit('update:modelValue', v) }
 </script>
 
@@ -289,6 +347,8 @@ function onClose(v) { emit('update:modelValue', v) }
 .de-input:focus { border-color: var(--color-primary); }
 .de-textarea { resize: vertical; min-height: 72px; }
 .de-date { width: 100%; }
+.de-move { display: flex; flex-direction: column; gap: 14px; }
+.de-move-select { width: 100%; }
 
 .de-more {
   display: inline-flex; align-items: center; gap: 6px; align-self: flex-start;
