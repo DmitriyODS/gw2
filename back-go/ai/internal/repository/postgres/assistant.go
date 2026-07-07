@@ -124,13 +124,16 @@ func (r *AssistantRepo) AppendMessage(ctx context.Context, conversationID int64,
 // пары (userID, companyID) — чужой message_id не проходит фильтр SELECT и
 // возвращает false без ошибки.
 func (r *AssistantRepo) UpsertFeedback(ctx context.Context, messageID, userID, companyID int64, verdict string, reason *string) (bool, error) {
+	// Явные касты обязательны: $2 стоит и в SELECT-списке, и в WHERE —
+	// без каста Postgres не может однозначно вывести тип параметра
+	// («inconsistent types deduced», SQLSTATE 42P08).
 	tag, err := r.pool.Exec(ctx, `
 		INSERT INTO ai_assistant_feedback (message_id, user_id, verdict, reason)
-		SELECT m.id, $2, $4, $5
+		SELECT m.id, $2::bigint, $4::text, $5::text
 		  FROM ai_assistant_messages m
 		  JOIN ai_assistant_conversations c ON c.id = m.conversation_id
 		 WHERE m.id = $1 AND m.role = 'assistant'
-		   AND c.user_id = $2 AND c.company_id = $3
+		   AND c.user_id = $2::bigint AND c.company_id = $3
 		ON CONFLICT (message_id, user_id)
 		DO UPDATE SET verdict = EXCLUDED.verdict, reason = EXCLUDED.reason, created_at = now()`,
 		messageID, userID, companyID, verdict, reason)
