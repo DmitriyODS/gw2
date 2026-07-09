@@ -96,8 +96,8 @@ async function submit() {
 .login-card {
   width: 100%;
   background: var(--acrylic-card-bg);
-  backdrop-filter: var(--acrylic-blur);
   -webkit-backdrop-filter: var(--acrylic-blur);
+  backdrop-filter: var(--acrylic-blur);
   border: 1px solid var(--acrylic-border);
   border-radius: var(--radius-xl);
   padding: 64px 40px 40px;

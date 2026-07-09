@@ -823,8 +823,8 @@ watch([open, activeTab], async ([isOpen, tab]) => {
   height: 70dvh;
   max-height: 560px;
   background: var(--acrylic-bg);
-  backdrop-filter: var(--acrylic-blur);
   -webkit-backdrop-filter: var(--acrylic-blur);
+  backdrop-filter: var(--acrylic-blur);
   border: 1px solid var(--acrylic-border);
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow-xl);

@@ -67,8 +67,8 @@ function resetAll() {
   left: 0;
   right: 0;
   background: var(--acrylic-bg);
-  backdrop-filter: var(--acrylic-blur);
   -webkit-backdrop-filter: var(--acrylic-blur);
+  backdrop-filter: var(--acrylic-blur);
   border-top: 1px solid var(--color-outline-dim);
   border-radius: 24px 24px 0 0;
   z-index: 400;

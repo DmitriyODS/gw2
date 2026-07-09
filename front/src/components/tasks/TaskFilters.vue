@@ -557,8 +557,8 @@ function closeCustomDialog() {
     height: auto;
     max-height: 85dvh;
     background: var(--acrylic-bg);
-    backdrop-filter: var(--acrylic-blur);
     -webkit-backdrop-filter: var(--acrylic-blur);
+    backdrop-filter: var(--acrylic-blur);
     border: none;
     border-top: 1px solid var(--color-outline-dim);
     border-radius: 24px 24px 0 0;

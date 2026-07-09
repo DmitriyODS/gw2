@@ -138,8 +138,8 @@ onBeforeUnmount(() => document.removeEventListener('mousedown', onClickOutside))
   position: absolute; z-index: 70; top: calc(100% + 6px); left: 0;
   display: flex; align-items: stretch; gap: 2px; padding: 6px;
   background: var(--acrylic-bg);
-  backdrop-filter: var(--acrylic-blur);
   -webkit-backdrop-filter: var(--acrylic-blur);
+  backdrop-filter: var(--acrylic-blur);
   border: 1px solid var(--acrylic-border);
   border-radius: var(--radius-lg, 16px); box-shadow: var(--shadow-lg);
 }

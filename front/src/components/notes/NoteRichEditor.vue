@@ -248,8 +248,8 @@ defineExpose({ editor })
   padding: 6px 8px;
   border-radius: var(--radius-lg);
   background: var(--acrylic-bg-strong);
-  backdrop-filter: var(--acrylic-blur);
   -webkit-backdrop-filter: var(--acrylic-blur);
+  backdrop-filter: var(--acrylic-blur);
   border: 1px solid var(--acrylic-border);
 }
 .ne-tgroup { display: inline-flex; align-items: center; gap: 2px; }
@@ -294,8 +294,8 @@ defineExpose({ editor })
   padding: 8px;
   border-radius: var(--radius-md);
   background: var(--acrylic-bg);
-  backdrop-filter: var(--acrylic-blur);
   -webkit-backdrop-filter: var(--acrylic-blur);
+  backdrop-filter: var(--acrylic-blur);
   border: 1px solid var(--acrylic-border);
   box-shadow: var(--shadow-md);
 }

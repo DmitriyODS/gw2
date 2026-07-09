@@ -140,7 +140,7 @@ onMounted(async () => {
 
 <style scoped>
 /* Тулбар без подложки — прозрачная «плавающая» шапка как в «Задачах». */
-.admin-sticky { background: transparent; backdrop-filter: none; -webkit-backdrop-filter: none; }
+.admin-sticky { background: transparent; -webkit-backdrop-filter: none; backdrop-filter: none; }
 .admin-sticky::after { display: none; }
 
 .pets-toolbar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }

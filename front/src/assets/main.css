@@ -220,8 +220,8 @@ textarea.ctl.invalid:focus {
 .p-datepicker-panel,
 .p-autocomplete-overlay {
   background: var(--acrylic-bg);
-  backdrop-filter: var(--acrylic-blur);
   -webkit-backdrop-filter: var(--acrylic-blur);
+  backdrop-filter: var(--acrylic-blur);
   border: 1px solid var(--acrylic-border);
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow-lg);
@@ -255,8 +255,8 @@ textarea.ctl.invalid:focus {
    (верх) и футера/контента (низ). */
 .p-dialog {
   background: var(--acrylic-bg);
-  backdrop-filter: var(--acrylic-blur);
   -webkit-backdrop-filter: var(--acrylic-blur);
+  backdrop-filter: var(--acrylic-blur);
   color: var(--color-text);
 }
 .p-dialog .p-dialog-header,
@@ -315,8 +315,8 @@ textarea.ctl.invalid:focus {
    размытая страница, а не тёмная пелена (единый вид с панелью ассистента). */
 .p-overlay-mask {
   background: color-mix(in oklch, var(--color-scrim) 45%, transparent) !important;
-  backdrop-filter: blur(12px) saturate(1.2);
   -webkit-backdrop-filter: blur(12px) saturate(1.2);
+  backdrop-filter: blur(12px) saturate(1.2);
 }
 
 /* Модалка профиля сотрудника — без шапки PrimeVue, контент заполняет
@@ -325,8 +325,8 @@ textarea.ctl.invalid:focus {
   border-radius: var(--radius-xl) !important;
   overflow: hidden !important;
   background: var(--acrylic-bg) !important;
-  backdrop-filter: var(--acrylic-blur);
   -webkit-backdrop-filter: var(--acrylic-blur);
+  backdrop-filter: var(--acrylic-blur);
   box-shadow: var(--shadow-lg) !important;
   padding: 0 !important;
 }
@@ -362,8 +362,8 @@ textarea.ctl.invalid:focus {
   /* Акрил: контент прокручивается ПОД шапкой — стекло с blur вместо
      глухой заливки фоном. */
   background: var(--acrylic-bg);
-  backdrop-filter: var(--acrylic-blur);
   -webkit-backdrop-filter: var(--acrylic-blur);
+  backdrop-filter: var(--acrylic-blur);
 }
 .admin-sticky::after {
   content: '';
@@ -453,8 +453,8 @@ textarea.ctl.invalid:focus {
   display: flex;
   flex-direction: column;
   background: var(--acrylic-card-bg);
-  backdrop-filter: var(--acrylic-blur);
   -webkit-backdrop-filter: var(--acrylic-blur);
+  backdrop-filter: var(--acrylic-blur);
   border: 1px solid var(--acrylic-border);
   border-radius: var(--radius-xl);
   padding: 10px;
@@ -717,8 +717,8 @@ textarea.ctl.invalid:focus {
   flex-direction: column;
   min-height: 0;
   background: var(--acrylic-card-bg);
-  backdrop-filter: var(--acrylic-blur);
   -webkit-backdrop-filter: var(--acrylic-blur);
+  backdrop-filter: var(--acrylic-blur);
   border: 1px solid var(--acrylic-border);
   border-radius: var(--radius-xl);
   overflow: hidden;
@@ -858,8 +858,8 @@ textarea.ctl.invalid:focus {
   display: flex;
   flex-direction: column;
   background: var(--acrylic-card-bg);
-  backdrop-filter: var(--acrylic-blur);
   -webkit-backdrop-filter: var(--acrylic-blur);
+  backdrop-filter: var(--acrylic-blur);
   border: 1px solid var(--acrylic-border);
   border-radius: var(--radius-xl);
   overflow: hidden;

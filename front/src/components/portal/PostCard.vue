@@ -421,8 +421,8 @@ function onDelete() {
   min-width: 190px;
   /* Плавающий поповер — стекло (Expressive Glass). */
   background: var(--acrylic-bg);
-  backdrop-filter: var(--acrylic-blur);
   -webkit-backdrop-filter: var(--acrylic-blur);
+  backdrop-filter: var(--acrylic-blur);
   border: 1px solid var(--acrylic-border);
   border-radius: var(--radius-md);
   box-shadow: var(--shadow-lg);

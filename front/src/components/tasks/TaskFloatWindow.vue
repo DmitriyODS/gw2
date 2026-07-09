@@ -298,8 +298,8 @@ onBeforeUnmount(() => {
   display: flex;
   flex-direction: column;
   background: var(--acrylic-bg);
-  backdrop-filter: var(--acrylic-blur);
   -webkit-backdrop-filter: var(--acrylic-blur);
+  backdrop-filter: var(--acrylic-blur);
   border: 1px solid var(--acrylic-border);
   border-radius: 18px;
   box-shadow: var(--shadow-xl);

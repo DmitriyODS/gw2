@@ -410,8 +410,8 @@ function gotoPets() {
   max-height: min(88dvh, 780px);
   overflow: hidden;
   background: var(--acrylic-bg);
-  backdrop-filter: var(--acrylic-blur);
   -webkit-backdrop-filter: var(--acrylic-blur);
+  backdrop-filter: var(--acrylic-blur);
   border: 1px solid var(--acrylic-border);
   border-radius: var(--radius-xl);
   box-shadow: var(--shadow-lg);
@@ -475,6 +475,7 @@ function gotoPets() {
   display: grid;
   place-items: center;
   cursor: pointer;
+  -webkit-backdrop-filter: blur(8px);
   backdrop-filter: blur(8px);
 }
 .pdm-close:hover { background: var(--color-surface); }

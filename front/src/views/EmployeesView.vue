@@ -270,7 +270,7 @@ watch(profileOpen, (open) => {
 <style scoped>
 /* Тулбар без подложки — прозрачная «плавающая» шапка как в «Задачах»
    (и как во второй вкладке хаба — «Ленте»). */
-.admin-sticky { background: transparent; backdrop-filter: none; -webkit-backdrop-filter: none; }
+.admin-sticky { background: transparent; -webkit-backdrop-filter: none; backdrop-filter: none; }
 .admin-sticky::after { display: none; }
 
 /* Вкладки хаба и статы — самостоятельные элементы одной строки тулбара. */

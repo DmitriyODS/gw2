@@ -207,8 +207,8 @@ watch(() => props.modelValue, syncSelected)
   right: 0;
   min-width: 260px;
   background: var(--acrylic-bg);
-  backdrop-filter: var(--acrylic-blur);
   -webkit-backdrop-filter: var(--acrylic-blur);
+  backdrop-filter: var(--acrylic-blur);
   border-radius: var(--radius-md, 10px);
   box-shadow: var(--shadow-lg);
   border: 1px solid var(--acrylic-border);

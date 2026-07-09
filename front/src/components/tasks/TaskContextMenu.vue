@@ -112,8 +112,8 @@ onBeforeUnmount(() => {
 .task-ctx-menu {
   min-width: 220px;
   background: var(--acrylic-bg);
-  backdrop-filter: var(--acrylic-blur);
   -webkit-backdrop-filter: var(--acrylic-blur);
+  backdrop-filter: var(--acrylic-blur);
   border: 1px solid var(--color-outline-dim);
   border-radius: var(--radius-md, 12px);
   padding: 6px;

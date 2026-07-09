@@ -583,3 +583,19 @@
     --tag-pink-surface: #3a1f2e;   --tag-pink-border: #5e354b;   --tag-pink-accent: #f09dc7;
   }
 }
+
+/* ── Фолбэк без backdrop-filter ─────────────────────────────────────────
+   Часть мобильных браузеров не умеет блюр (старые версии, урезанные
+   WebView): стекло без размытия — просто прозрачная карточка, сквозь
+   которую просвечивает контент. Делаем акрил почти непрозрачным, чтобы
+   текст оставался читаемым. Только простые значения (var, без color-mix):
+   браузеры без backdrop-filter обычно не знают и color-mix. Блок в конце
+   файла, чтобы перебить и светлую, и тёмную ([data-dark]) настройку. */
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  :root,
+  [data-dark="true"] {
+    --acrylic-bg:        var(--color-surface);
+    --acrylic-bg-strong: var(--color-surface);
+    --acrylic-card-bg:   var(--color-surface);
+  }
+}

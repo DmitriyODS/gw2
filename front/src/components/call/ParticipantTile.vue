@@ -197,6 +197,7 @@ onBeforeUnmount(() => {
   font-size: 12px;
   font-weight: 600;
   max-width: calc(100% - 24px);
+  -webkit-backdrop-filter: blur(8px);
   backdrop-filter: blur(8px);
 }
 

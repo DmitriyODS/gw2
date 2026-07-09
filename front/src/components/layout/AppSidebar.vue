@@ -233,8 +233,8 @@ watch(() => authStore.companyId, () => { tasksStore.fetchMyActiveCount() })
   height: calc(100dvh - 24px);
   width: 72px;
   background: var(--acrylic-bg);
-  backdrop-filter: var(--acrylic-blur);
   -webkit-backdrop-filter: var(--acrylic-blur);
+  backdrop-filter: var(--acrylic-blur);
   border: 1px solid var(--acrylic-border);
   border-radius: var(--radius-xl);
   display: flex;

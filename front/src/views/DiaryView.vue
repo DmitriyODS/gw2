@@ -805,7 +805,7 @@ watch(() => store.loadingEntries, () => nextTick(measureWeekColumn))
 .dv-grid.month { grid-template-rows: auto repeat(6, 1fr); }
 .dv-grid.week { grid-template-rows: 1fr; }
 /* Sticky-шапка дней недели: записи прокручиваются под ней — полный акрил. */
-.dv-wd { background: var(--acrylic-bg-strong); backdrop-filter: var(--acrylic-blur); -webkit-backdrop-filter: var(--acrylic-blur); padding: 8px 10px; text-align: center; font-size: 12px; font-weight: 700; color: var(--color-text-dim); text-transform: uppercase; position: sticky; top: 0; z-index: 1; }
+.dv-wd { background: var(--acrylic-bg-strong); -webkit-backdrop-filter: var(--acrylic-blur); backdrop-filter: var(--acrylic-blur); padding: 8px 10px; text-align: center; font-size: 12px; font-weight: 700; color: var(--color-text-dim); text-transform: uppercase; position: sticky; top: 0; z-index: 1; }
 .dv-day { background: var(--acrylic-card-bg); min-height: 104px; padding: 6px; display: flex; flex-direction: column; gap: 4px; cursor: pointer; overflow: hidden; }
 .dv-grid.week .dv-day { min-height: 0; }
 .dv-day:hover { background: var(--color-surface-high); }

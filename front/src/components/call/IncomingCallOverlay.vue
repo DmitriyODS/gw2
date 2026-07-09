@@ -155,6 +155,7 @@ onBeforeUnmount(stopRing)
   position: fixed;
   inset: 0;
   background: color-mix(in oklch, var(--color-scrim) 100%, transparent);
+  -webkit-backdrop-filter: blur(12px);
   backdrop-filter: blur(12px);
   z-index: 12000;
   display: grid;

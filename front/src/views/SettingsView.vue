@@ -410,8 +410,8 @@ onMounted(() => {
   flex-direction: column;
   gap: 16px;
   background: var(--acrylic-bg);
-  backdrop-filter: var(--acrylic-blur);
   -webkit-backdrop-filter: var(--acrylic-blur);
+  backdrop-filter: var(--acrylic-blur);
   border: 1px solid var(--acrylic-border);
   border-radius: 24px;
   padding: 20px 14px;
@@ -618,8 +618,8 @@ onMounted(() => {
   display: flex;
   flex-direction: column;
   background: var(--acrylic-bg);
-  backdrop-filter: var(--acrylic-blur);
   -webkit-backdrop-filter: var(--acrylic-blur);
+  backdrop-filter: var(--acrylic-blur);
   border: 1px solid var(--acrylic-border);
   border-radius: 24px;
   min-height: 0;
@@ -1411,8 +1411,8 @@ onMounted(() => {
     inset: 0;
     z-index: 90;
     background: var(--color-bg);
-    backdrop-filter: none;
     -webkit-backdrop-filter: none;
+    backdrop-filter: none;
     border-radius: 0;
     border: 0;
     display: flex;
@@ -1433,8 +1433,8 @@ onMounted(() => {
     z-index: 2;
     padding: 12px 12px 12px;
     background: var(--acrylic-bg-strong);
-    backdrop-filter: var(--acrylic-blur);
     -webkit-backdrop-filter: var(--acrylic-blur);
+    backdrop-filter: var(--acrylic-blur);
     border-bottom: 1px solid var(--color-outline-dim);
     padding-top: calc(12px + env(safe-area-inset-top, 0px));
   }

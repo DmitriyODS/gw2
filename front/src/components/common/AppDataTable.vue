@@ -241,6 +241,7 @@ const ptOverrides = {
 /* Loading-плёнка PrimeVue. */
 .app-table :deep(.p-datatable-loading-overlay) {
   background: color-mix(in oklch, var(--color-surface) 70%, transparent);
+  -webkit-backdrop-filter: blur(2px);
   backdrop-filter: blur(2px);
 }
 

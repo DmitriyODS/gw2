@@ -834,8 +834,8 @@ watch(() => route.params.conversationId, async (id) => {
   min-height: 0;
   position: relative;
   background: var(--acrylic-card-bg);
-  backdrop-filter: var(--acrylic-blur);
   -webkit-backdrop-filter: var(--acrylic-blur);
+  backdrop-filter: var(--acrylic-blur);
   border: 1px solid var(--acrylic-border);
   border-radius: var(--radius-xl);
   overflow: hidden;

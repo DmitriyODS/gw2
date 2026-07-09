@@ -1392,8 +1392,8 @@ async function handleSetColor(color) {
   padding: 6px 4px 6px 4px;
   padding-top: calc(6px + env(safe-area-inset-top, 0px));
   background: var(--acrylic-bg-strong);
-  backdrop-filter: var(--acrylic-blur);
   -webkit-backdrop-filter: var(--acrylic-blur);
+  backdrop-filter: var(--acrylic-blur);
   border-bottom: 1px solid var(--color-outline-dim);
   flex-shrink: 0;
   min-height: 56px;
@@ -1473,8 +1473,8 @@ async function handleSetColor(color) {
   gap: 0;
   padding: 0;
   background: var(--acrylic-bg-strong);
-  backdrop-filter: var(--acrylic-blur);
   -webkit-backdrop-filter: var(--acrylic-blur);
+  backdrop-filter: var(--acrylic-blur);
   border-bottom: 1px solid var(--color-outline-dim);
   flex-shrink: 0;
 }
@@ -1528,8 +1528,8 @@ async function handleSetColor(color) {
   flex-shrink: 0;
   padding: 12px 16px calc(12px + env(safe-area-inset-bottom, 0px));
   background: var(--acrylic-bg-strong);
-  backdrop-filter: var(--acrylic-blur);
   -webkit-backdrop-filter: var(--acrylic-blur);
+  backdrop-filter: var(--acrylic-blur);
   border-top: 1px solid var(--color-outline-dim);
   display: flex;
   gap: 8px;
@@ -1628,8 +1628,8 @@ async function handleSetColor(color) {
   min-width: 220px;
   padding: 6px;
   background: var(--acrylic-bg);
-  backdrop-filter: var(--acrylic-blur);
   -webkit-backdrop-filter: var(--acrylic-blur);
+  backdrop-filter: var(--acrylic-blur);
   border-radius: var(--radius-lg, 16px);
   box-shadow: var(--shadow-lg, 0 12px 32px rgba(0, 0, 0, 0.18));
   border: 1px solid var(--color-outline-dim);

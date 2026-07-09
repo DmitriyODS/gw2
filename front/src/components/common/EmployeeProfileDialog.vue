@@ -229,6 +229,7 @@ async function callTo(u, media) {
   display: grid;
   place-items: center;
   cursor: pointer;
+  -webkit-backdrop-filter: blur(8px);
   backdrop-filter: blur(8px);
   transition: background .12s, color .12s;
 }

@@ -1219,8 +1219,8 @@ function importTheme(event) {
   gap: 10px;
   padding: 10px 14px;
   background: var(--acrylic-bg);
-  backdrop-filter: var(--acrylic-blur);
   -webkit-backdrop-filter: var(--acrylic-blur);
+  backdrop-filter: var(--acrylic-blur);
   color: var(--color-text);
   border: 1px solid var(--acrylic-border);
   border-radius: 999px;

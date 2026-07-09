@@ -153,8 +153,8 @@ const avatarSrc = computed(() => {
     right: 0;
     min-height: calc(64px + env(safe-area-inset-bottom, 0px));
     background: var(--acrylic-bg);
-    backdrop-filter: var(--acrylic-blur);
     -webkit-backdrop-filter: var(--acrylic-blur);
+    backdrop-filter: var(--acrylic-blur);
     border-top: 1px solid var(--acrylic-border);
     display: flex;
     align-items: stretch;
@@ -263,8 +263,8 @@ const avatarSrc = computed(() => {
   bottom: 0;
   z-index: 251;
   background: var(--acrylic-bg);
-  backdrop-filter: var(--acrylic-blur);
   -webkit-backdrop-filter: var(--acrylic-blur);
+  backdrop-filter: var(--acrylic-blur);
   border-top-left-radius: 20px;
   border-top-right-radius: 20px;
   padding: 10px 12px calc(16px + env(safe-area-inset-bottom, 0px));

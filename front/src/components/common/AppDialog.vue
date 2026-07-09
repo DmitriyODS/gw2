@@ -462,8 +462,8 @@ function actionClass(a) {
   border-radius: var(--radius-xl, 28px) !important;
   /* Акрил: полупрозрачная карточка с блюром контента под ней */
   background: var(--acrylic-bg) !important;
-  backdrop-filter: var(--acrylic-blur);
   -webkit-backdrop-filter: var(--acrylic-blur);
+  backdrop-filter: var(--acrylic-blur);
   border: 1px solid var(--acrylic-border) !important;
   box-shadow: var(--shadow-xl, 0 24px 60px rgba(0, 0, 0, 0.25)) !important;
   overflow: hidden !important;
@@ -475,8 +475,8 @@ function actionClass(a) {
    контент страницы, а не тёмную пелену (как панель ассистента). */
 .app-dialog-mask {
   background: color-mix(in oklch, var(--color-scrim) 45%, transparent) !important;
-  backdrop-filter: blur(12px) saturate(1.2);
   -webkit-backdrop-filter: blur(12px) saturate(1.2);
+  backdrop-filter: blur(12px) saturate(1.2);
 }
 
 .app-dialog-content {

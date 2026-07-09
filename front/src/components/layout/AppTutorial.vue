@@ -440,8 +440,8 @@ function clamp(v, lo, hi) { return Math.min(Math.max(v, lo), hi) }
 .tour-card {
   position: absolute;
   background: var(--acrylic-bg);
-  backdrop-filter: var(--acrylic-blur);
   -webkit-backdrop-filter: var(--acrylic-blur);
+  backdrop-filter: var(--acrylic-blur);
   border: 1px solid var(--color-outline-dim);
   border-radius: var(--radius-xl);
   box-shadow: var(--shadow-xl);

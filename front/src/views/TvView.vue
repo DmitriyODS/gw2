@@ -481,6 +481,7 @@ onBeforeUnmount(() => {
   padding: clamp(12px, 1.6vmin, 22px) clamp(20px, 2.6vmin, 36px);
   border-bottom: 1px solid var(--color-outline-dim);
   background: color-mix(in oklch, var(--color-surface) 75%, transparent);
+  -webkit-backdrop-filter: blur(8px);
   backdrop-filter: blur(8px);
   gap: clamp(12px, 2vmin, 28px);
 }
@@ -688,6 +689,7 @@ onBeforeUnmount(() => {
   border: 1px solid var(--color-outline-dim);
   border-radius: 999px;
   box-shadow: var(--shadow-lg);
+  -webkit-backdrop-filter: blur(8px);
   backdrop-filter: blur(8px);
   opacity: 0;
   transform: translateY(8px);

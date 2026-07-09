@@ -564,8 +564,8 @@ watch(() => store.loadingEntries, () => nextTick(measureWeekColumn))
 .cv-wd {
   /* Sticky-шапка: записи прокручиваются под ней — полный акрил */
   background: var(--acrylic-bg-strong);
-  backdrop-filter: var(--acrylic-blur);
   -webkit-backdrop-filter: var(--acrylic-blur);
+  backdrop-filter: var(--acrylic-blur);
   padding: 8px 10px; text-align: center;
   font-size: 12px; font-weight: 700; color: var(--color-text-dim); text-transform: uppercase;
   position: sticky; top: 0; z-index: 1;

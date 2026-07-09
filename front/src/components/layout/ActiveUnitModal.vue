@@ -66,6 +66,7 @@ function formatTime(d) {
   position: fixed;
   inset: 0;
   background: color-mix(in oklch, var(--color-bg) 40%, transparent);
+  -webkit-backdrop-filter: blur(4px);
   backdrop-filter: blur(4px);
   z-index: 9999;
   display: flex;

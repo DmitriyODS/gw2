@@ -75,6 +75,7 @@ onBeforeUnmount(() => {
   background: color-mix(in oklab, var(--color-surface) 60%, transparent);
   color: var(--color-on-surface);
   cursor: pointer;
+  -webkit-backdrop-filter: blur(8px);
   backdrop-filter: blur(8px);
 }
 .lb-close .material-symbols-outlined { font-size: 24px; }
@@ -102,6 +103,7 @@ onBeforeUnmount(() => {
   background: color-mix(in oklab, var(--color-surface) 70%, transparent);
   padding: 6px 12px;
   border-radius: var(--radius-full, 999px);
+  -webkit-backdrop-filter: blur(8px);
   backdrop-filter: blur(8px);
 }
 

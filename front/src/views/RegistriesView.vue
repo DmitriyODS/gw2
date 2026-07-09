@@ -673,8 +673,8 @@ onMounted(() => store.fetchRegistries())
   top: 0;
   z-index: 1;
   background: var(--acrylic-bg-strong);
-  backdrop-filter: var(--acrylic-blur);
   -webkit-backdrop-filter: var(--acrylic-blur);
+  backdrop-filter: var(--acrylic-blur);
   border-bottom: 1px solid var(--color-outline-dim);
   padding: 12px 14px;
   text-align: left;

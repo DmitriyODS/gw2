@@ -678,8 +678,8 @@ watch(() => auth.companyId, (v) => {
   position: fixed;
   z-index: 2000;
   background: var(--acrylic-bg);
-  backdrop-filter: var(--acrylic-blur);
   -webkit-backdrop-filter: var(--acrylic-blur);
+  backdrop-filter: var(--acrylic-blur);
   border-radius: var(--radius-xl, 18px);
   border: 1px solid var(--acrylic-border);
   box-shadow: var(--shadow-lg);

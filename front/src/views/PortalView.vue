@@ -264,7 +264,7 @@ watch(() => useAuthStore().companyId, (id, prev) => {
 <style scoped>
 /* Тулбар без подложки — прозрачная «плавающая» шапка как в «Задачах»
    (контент скроллится в .admin-body ниже, не под шапкой). */
-.admin-sticky { background: transparent; backdrop-filter: none; -webkit-backdrop-filter: none; }
+.admin-sticky { background: transparent; -webkit-backdrop-filter: none; backdrop-filter: none; }
 .admin-sticky::after { display: none; }
 
 .portal-hub-tabs { flex-shrink: 0; }
