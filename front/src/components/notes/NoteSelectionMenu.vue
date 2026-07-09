@@ -18,70 +18,73 @@
             v-for="item in AI_TOP"
             :key="item.action"
             class="nsm-item"
-            @mouseenter="openSub = null"
+            @mouseenter="closeFly"
             @click="pickAi(item)"
           >
             <span class="material-symbols-outlined">{{ item.icon }}</span>
             <span>{{ item.label }}</span>
           </button>
 
-          <div
+          <button
             v-for="group in AI_GROUPS"
             :key="group.key"
-            class="nsm-sub"
-            @mouseenter="openSub = group.key"
-            @mouseleave="openSub === group.key && (openSub = null)"
+            class="nsm-item"
+            :class="{ open: openSub === group.key }"
+            @mouseenter="openFly(group.key, $event)"
+            @mouseleave="scheduleFlyClose"
+            @click="openFly(group.key, $event, true)"
           >
-            <button class="nsm-item" @click="toggleSub(group.key)">
-              <span class="material-symbols-outlined">{{ group.icon }}</span>
-              <span>{{ group.label }}</span>
-              <span class="material-symbols-outlined nsm-arrow">chevron_right</span>
-            </button>
-            <div v-if="openSub === group.key" :ref="setFlyoutEl" class="nsm-flyout" :class="{ left: flyLeft, up: flyUp }">
-              <button
-                v-for="(opt, i) in group.options"
-                :key="i"
-                class="nsm-item"
-                @click="pickAi(opt, group)"
-              >
-                <span v-if="opt.icon" class="material-symbols-outlined">{{ opt.icon }}</span>
-                <span>{{ opt.label }}</span>
-              </button>
-            </div>
-          </div>
+            <span class="material-symbols-outlined">{{ group.icon }}</span>
+            <span>{{ group.label }}</span>
+            <span class="material-symbols-outlined nsm-arrow">chevron_right</span>
+          </button>
 
           <div class="nsm-divider" />
         </template>
 
-        <div
-          class="nsm-sub"
-          @mouseenter="openSub = 'create'"
-          @mouseleave="openSub === 'create' && (openSub = null)"
+        <button
+          class="nsm-item"
+          :class="{ open: openSub === 'create' }"
+          @mouseenter="openFly('create', $event)"
+          @mouseleave="scheduleFlyClose"
+          @click="openFly('create', $event, true)"
         >
-          <button class="nsm-item" @click="toggleSub('create')">
-            <span class="material-symbols-outlined">add_circle</span>
-            <span>Создать из выделенного</span>
-            <span class="material-symbols-outlined nsm-arrow">chevron_right</span>
-          </button>
-          <div v-if="openSub === 'create'" :ref="setFlyoutEl" class="nsm-flyout" :class="{ left: flyLeft, up: flyUp }">
-            <button v-if="canTask" class="nsm-item" @click="pickCreate('task')">
-              <span class="material-symbols-outlined">task_alt</span>
-              <span>Задачу</span>
-            </button>
-            <button class="nsm-item" @click="pickCreate('diary')">
-              <span class="material-symbols-outlined">book</span>
-              <span>Пункт в ежедневник</span>
-            </button>
-          </div>
-        </div>
+          <span class="material-symbols-outlined">add_circle</span>
+          <span>Создать из выделенного</span>
+          <span class="material-symbols-outlined nsm-arrow">chevron_right</span>
+        </button>
 
         <div class="nsm-divider" />
-        <button class="nsm-item" @mouseenter="openSub = null" @click="pickCopy">
+        <button class="nsm-item" @mouseenter="closeFly" @click="pickCopy">
           <span class="material-symbols-outlined">content_copy</span>
           <span>Копировать</span>
         </button>
       </div>
     </Transition>
+
+    <!-- Flyout — НЕ вложен в .nsm: backdrop-filter родителя делает его
+         backdrop root'ом, и блюр вложенного подменю не захватывал бы страницу
+         за пределами меню (стекло «пропадает»). Позиция — от строки-родителя. -->
+    <div
+      v-if="visible && activeGroup"
+      ref="flyEl"
+      class="nsm-flyout"
+      :style="flyStyle"
+      role="menu"
+      @click.stop
+      @mouseenter="cancelFlyClose"
+      @mouseleave="scheduleFlyClose"
+    >
+      <button
+        v-for="(opt, i) in activeGroup.options"
+        :key="i"
+        class="nsm-item"
+        @click="pickOption(opt)"
+      >
+        <span v-if="opt.icon" class="material-symbols-outlined">{{ opt.icon }}</span>
+        <span>{{ opt.label }}</span>
+      </button>
+    </div>
   </Teleport>
 </template>
 
@@ -152,13 +155,6 @@ const BOTTOM_GAP = 16 // отступ меню от нижнего края
 
 const menuEl = ref(null)
 const pos = ref({ x: 0, y: 0 })
-const openSub = ref(null)
-// Куда раскрывать flyout: влево — когда справа не влезает, вверх — когда
-// подменю упирается в нижний край.
-const flyLeft = ref(false)
-const flyUp = ref(false)
-const flyoutEl = ref(null)
-function setFlyoutEl(el) { if (el) flyoutEl.value = el }
 
 const style = computed(() => ({
   position: 'fixed',
@@ -168,7 +164,7 @@ const style = computed(() => ({
 }))
 
 watch(() => props.visible, async (v) => {
-  if (!v) { openSub.value = null; return }
+  if (!v) { closeFly(); return }
   pos.value = { x: props.x, y: props.y }
   await nextTick()
   const el = menuEl.value
@@ -182,20 +178,77 @@ watch(() => props.visible, async (v) => {
   if (ny + r.height > window.innerHeight - BOTTOM_GAP) ny = pos.value.y - r.height - 6
   if (ny < PAD) ny = Math.max(PAD, window.innerHeight - BOTTOM_GAP - r.height)
   pos.value = { x: nx, y: ny }
-  flyLeft.value = nx + r.width + 210 > window.innerWidth - PAD
 })
 
-// Открывшийся flyout меряем по факту: не влезает снизу — прижимаем к низу
-// строки-родителя (класс up).
-watch(openSub, async (v) => {
-  flyUp.value = false
-  if (!v) return
+// ── Flyout-подменю ──
+const openSub = ref(null)
+const flyEl = ref(null)
+const flyPos = ref({ x: 0, y: 0 })
+let flyCloseTimer = null
+
+const createGroup = computed(() => ({
+  key: 'create',
+  options: [
+    ...(props.canTask ? [{ create: 'task', icon: 'task_alt', label: 'Задачу' }] : []),
+    { create: 'diary', icon: 'book', label: 'Пункт в ежедневник' },
+  ],
+}))
+
+const activeGroup = computed(() => {
+  if (!openSub.value) return null
+  if (openSub.value === 'create') return createGroup.value
+  return AI_GROUPS.find((g) => g.key === openSub.value) || null
+})
+
+const flyStyle = computed(() => ({
+  position: 'fixed',
+  left: flyPos.value.x + 'px',
+  top: flyPos.value.y + 'px',
+  zIndex: 12001,
+}))
+
+// openFly — открыть подменю от строки-родителя (hover или тап; toggle — тап
+// по уже открытой строке закрывает). Позиция меряется по факту: не влезает
+// справа — уходит влево от меню, снизу — прижимается к низу строки.
+async function openFly(key, e, toggle = false) {
+  cancelFlyClose()
+  if (toggle && openSub.value === key) { openSub.value = null; return }
+  const anchor = e.currentTarget.getBoundingClientRect()
+  openSub.value = key
+  flyPos.value = { x: anchor.right + 2, y: anchor.top - 6 }
   await nextTick()
-  const r = flyoutEl.value?.getBoundingClientRect()
-  if (r && r.bottom > window.innerHeight - BOTTOM_GAP) flyUp.value = true
-})
+  const r = flyEl.value?.getBoundingClientRect()
+  if (!r) return
+  let nx = flyPos.value.x
+  let ny = flyPos.value.y
+  if (nx + r.width > window.innerWidth - PAD) nx = anchor.left - r.width - 2
+  if (nx < PAD) nx = PAD
+  if (ny + r.height > window.innerHeight - BOTTOM_GAP) ny = anchor.bottom - r.height + 6
+  if (ny < PAD) ny = PAD
+  flyPos.value = { x: nx, y: ny }
+}
 
-function toggleSub(key) { openSub.value = openSub.value === key ? null : key }
+function closeFly() {
+  cancelFlyClose()
+  openSub.value = null
+}
+
+// Между строкой и flyout есть зазор в пару пикселей — закрываем с задержкой,
+// чтобы курсор успел переехать.
+function scheduleFlyClose() {
+  cancelFlyClose()
+  flyCloseTimer = setTimeout(() => { openSub.value = null }, 150)
+}
+
+function cancelFlyClose() {
+  clearTimeout(flyCloseTimer)
+  flyCloseTimer = null
+}
+
+function pickOption(opt) {
+  if (opt.create) pickCreate(opt.create)
+  else pickAi(opt, activeGroup.value)
+}
 
 function pickAi(opt, group = null) {
   const label = group && opt.style ? `${group.label}: ${opt.label.toLowerCase()}` : opt.label
@@ -214,7 +267,9 @@ function pickCopy() {
 }
 
 function onDocClick(e) {
-  if (props.visible && !menuEl.value?.contains(e.target)) emit('close')
+  if (!props.visible) return
+  if (menuEl.value?.contains(e.target) || flyEl.value?.contains(e.target)) return
+  emit('close')
 }
 function onScroll() { if (props.visible) emit('close') }
 function onKey(e) { if (e.key === 'Escape' && props.visible) emit('close') }
@@ -227,6 +282,7 @@ onMounted(() => {
 })
 
 onBeforeUnmount(() => {
+  cancelFlyClose()
   document.removeEventListener('mousedown', onDocClick, true)
   document.removeEventListener('touchstart', onDocClick, true)
   document.removeEventListener('scroll', onScroll, true)
@@ -235,10 +291,8 @@ onBeforeUnmount(() => {
 </script>
 
 <style scoped>
-.nsm {
-  /* Без overflow: он обрезал бы flyout-подменю; в экран меню вписывает
-     кламп позиции (с переворотом вверх у нижнего края). */
-  min-width: 230px;
+.nsm,
+.nsm-flyout {
   background: var(--acrylic-bg);
   -webkit-backdrop-filter: var(--acrylic-blur);
   backdrop-filter: var(--acrylic-blur);
@@ -250,6 +304,8 @@ onBeforeUnmount(() => {
   flex-direction: column;
   gap: 1px;
 }
+.nsm { min-width: 230px; }
+.nsm-flyout { min-width: 190px; }
 
 .nsm-caption {
   display: flex;
@@ -281,9 +337,11 @@ onBeforeUnmount(() => {
   cursor: pointer;
   transition: background 0.15s, color 0.15s;
 }
-.nsm-item:hover { background: var(--color-surface-low); }
+.nsm-item:hover,
+.nsm-item.open { background: var(--color-surface-low); }
 .nsm-item .material-symbols-outlined { font-size: 18px; color: var(--color-text-dim); }
-.nsm-item:hover .material-symbols-outlined { color: var(--color-primary); }
+.nsm-item:hover .material-symbols-outlined,
+.nsm-item.open .material-symbols-outlined { color: var(--color-primary); }
 .nsm-arrow { margin-left: auto; }
 
 .nsm-divider {
@@ -291,27 +349,6 @@ onBeforeUnmount(() => {
   background: var(--color-outline-dim);
   margin: 4px 4px;
 }
-
-.nsm-sub { position: relative; }
-.nsm-flyout {
-  position: absolute;
-  top: -6px;
-  left: calc(100% + 2px);
-  min-width: 190px;
-  background: var(--acrylic-bg);
-  -webkit-backdrop-filter: var(--acrylic-blur);
-  backdrop-filter: var(--acrylic-blur);
-  border: 1px solid var(--color-outline-dim);
-  border-radius: var(--radius-md, 12px);
-  padding: 6px;
-  box-shadow: var(--shadow-lg);
-  display: flex;
-  flex-direction: column;
-  gap: 1px;
-  z-index: 1;
-}
-.nsm-flyout.left { left: auto; right: calc(100% + 2px); }
-.nsm-flyout.up { top: auto; bottom: -6px; }
 
 .nsm-enter-active, .nsm-leave-active {
   transition: opacity 0.14s, transform 0.14s;
