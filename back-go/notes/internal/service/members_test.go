@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"slices"
+	"strings"
 	"testing"
 
 	"github.com/DmitriyODS/gw2/back-go/notes/internal/domain"
@@ -268,5 +269,34 @@ func TestPinNote(t *testing.T) {
 	}
 	if got.PinnedAt != nil || repo.notes[b.ID].PinnedAt != nil {
 		t.Fatal("pinned_at не сброшен")
+	}
+}
+
+// ── Экспорт в .txt доступен адресату шаринга (чтение есть — выгрузка тоже) ──
+
+func TestExportSharedWithMe(t *testing.T) {
+	svc, _, _, _, _ := newTestService()
+	ctx := context.Background()
+
+	n, _ := svc.CreateNote(ctx, 1, "Общая")
+	doc := docWith("текст для выгрузки")
+	if _, err := svc.UpdateNote(ctx, 1, n.ID, domain.NoteUpdate{Doc: doc}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := svc.AddMember(ctx, 1, n.ID, 2, false); err != nil {
+		t.Fatal(err)
+	}
+
+	data, name, err := svc.Export(ctx, 2, n.ID)
+	if err != nil {
+		t.Fatalf("экспорт view-адресатом: %v", err)
+	}
+	if name != "Общая" || !strings.Contains(string(data), "текст для выгрузки") {
+		t.Fatalf("содержимое экспорта: name=%q data=%q", name, data)
+	}
+
+	// Посторонний по-прежнему получает 404.
+	if _, _, err := svc.Export(ctx, 5, n.ID); !errors.Is(err, domain.ErrNoteNotFound) {
+		t.Fatalf("экспорт посторонним: ожидалась 404, получено %v", err)
 	}
 }

@@ -236,6 +236,33 @@ func (s *Service) SwitchSpecies(ctx context.Context, userID, companyID int64, sp
 	return dto.NewPet(pet), nil
 }
 
+// ResetSpecies — снять купленный облик: питомец возвращается к природному
+// виду (по паттерну работы; до первой эволюции — яйцо/малыш как есть).
+// Разблокированные виды не теряются — облик можно надеть обратно.
+func (s *Service) ResetSpecies(ctx context.Context, userID, companyID int64) (*dto.PetDTO, error) {
+	pet, err := s.pets.GetOrCreate(ctx, userID, companyID)
+	if err != nil {
+		return nil, err
+	}
+	natural := "egg"
+	if pet.Stage >= 1 {
+		natural = s.detectSpecies(ctx, pet.UserID)
+	}
+	if pet.Species == natural {
+		return dto.NewPet(pet), nil
+	}
+	pet.Species = natural
+	if !containsStr(pet.UnlockedSpecies, natural) && natural != "egg" {
+		pet.UnlockedSpecies = append(pet.UnlockedSpecies, natural)
+	}
+	if err := s.pets.SavePet(ctx, pet); err != nil {
+		return nil, err
+	}
+	s.appendActivity(ctx, userID, "species_reset", map[string]any{"species": natural})
+	s.emitPetUpdate(ctx, pet)
+	return dto.NewPet(pet), nil
+}
+
 // ──────────────────────── мистери-слот ─────────────────────────────
 // Раз в день — бесплатный взвешенный по редкости сюрприз-предмет: не
 // платный лутбокс (оплаты нет вообще), а приятный бонус, чтобы витрина

@@ -569,3 +569,34 @@ func TestClaimQuestRewardsKudos(t *testing.T) {
 		t.Fatal("повторный клейм должен быть ALREADY_CLAIMED")
 	}
 }
+
+// ── Сброс купленного облика к природному виду ──────────────────────
+
+func TestResetSpecies(t *testing.T) {
+	pets := &fakePets{}
+	svc := newTestService(pets, &fakeDaily{}, &fakePub{}, &fakeActivity{})
+	ctx := context.Background()
+
+	pet, _ := pets.GetOrCreate(ctx, 1, 10)
+	pet.Stage = 2
+	pet.Species = "dragon"
+	pet.UnlockedSpecies = []string{"dragon"}
+
+	out, err := svc.ResetSpecies(ctx, 1, 10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Без юнитов в истории природный вид — fox; купленный не теряется.
+	if out.Species != "fox" {
+		t.Fatalf("после сброса ожидался природный fox, получен %q", out.Species)
+	}
+	if !containsStr(pet.UnlockedSpecies, "dragon") {
+		t.Fatalf("купленный облик пропал из разблокированных: %v", pet.UnlockedSpecies)
+	}
+
+	// Повторный сброс — идемпотентен.
+	out2, err := svc.ResetSpecies(ctx, 1, 10)
+	if err != nil || out2.Species != "fox" {
+		t.Fatalf("повторный сброс: %v, species=%q", err, out2.Species)
+	}
+}

@@ -8,6 +8,9 @@ export const renamePet = (name) => apiRequest('/pets/pet/name', { method: 'POST'
 export const equipItem = (item) => apiRequest('/pets/pet/equip', { method: 'POST', body: { item } })
 export const switchSpecies = (species) =>
   apiRequest('/pets/pet/species', { method: 'POST', body: { species } })
+// Сброс купленного облика — возврат к природному виду.
+export const resetSpecies = () =>
+  apiRequest('/pets/pet/species', { method: 'DELETE' })
 export const claimQuest = () => apiRequest('/pets/pet/quest/claim', { method: 'POST' })
 export const startAdventure = () => apiRequest('/pets/pet/adventure', { method: 'POST' })
 

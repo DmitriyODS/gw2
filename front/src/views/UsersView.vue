@@ -554,5 +554,11 @@ async function doDelete() {
   .admin-toolbar :deep(.search-field) { flex: 1 1 100%; max-width: 100%; }
   .hide-narrow { display: none; }
   .show-narrow { display: inline; }
+  /* Резерв под нижнюю навигацию (64px) + 12px воздуха: карточки скроллятся
+     под стекло. Если под списком есть пагинация — резерв переезжает к ней
+     (она вне скроллера и иначе спряталась бы за навигацией). */
+  .users-cards { padding-bottom: calc(76px + env(safe-area-inset-bottom, 0px)); }
+  .users-content:has(.pagination) .users-cards { padding-bottom: 0; }
+  .pagination { margin-bottom: calc(76px + env(safe-area-inset-bottom, 0px)); }
 }
 </style>

@@ -913,6 +913,9 @@ watch(() => store.loadingEntries, () => nextTick(measureWeekColumn))
 
 @media (max-width: 768px) {
   /* Скрытие левой панели и разворот правой — в глобальном .split-* */
+  /* Резерв под нижнюю навигацию (64px) + 12px воздуха: сетка/списки
+     скроллятся под стекло, последние записи не прячутся за навигацией. */
+  .dv-body { padding-bottom: calc(76px + env(safe-area-inset-bottom, 0px)); }
   .dv-toolbar { padding: 10px 12px; gap: 8px; }
   .dv-period { font-size: 14px; }
   /* Вид, поиск и управляющие иконки уезжают в лист «Управление» — на узком

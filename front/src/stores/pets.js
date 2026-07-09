@@ -67,6 +67,10 @@ export const usePetsStore = defineStore('pets', () => {
     pet.value = { ...pet.value, ...(await api.switchSpecies(species)) }
   }
 
+  async function resetSpecies() {
+    pet.value = { ...pet.value, ...(await api.resetSpecies()) }
+  }
+
   async function claimQuest() {
     pet.value = { ...pet.value, ...(await api.claimQuest()) }
   }
@@ -198,7 +202,7 @@ export const usePetsStore = defineStore('pets', () => {
   return {
     pet, shop, shopLoaded, zoo, rating, live, liveLoaded, activityLog, activityLoaded,
     myId, myCompanyId, isMine,
-    fetchPet, feedPet, renamePet, equipItem, switchSpecies, claimQuest, startAdventure,
+    fetchPet, feedPet, renamePet, equipItem, switchSpecies, resetSpecies, claimQuest, startAdventure,
     fetchShop, buyItem, buySpecies, claimMystery,
     walkPet, healPet, strokePet,
     fetchZoo, deleteColleaguePet, fetchRating, fetchLive, fetchActivityLog,

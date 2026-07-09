@@ -8,9 +8,10 @@ import (
 )
 
 // Export — заметка плоским текстом: заголовок, пустая строка, текст документа.
-// Имя файла — заголовок заметки (fallback «Заметка»).
+// Имя файла — заголовок заметки (fallback «Заметка»). Доступен и адресатам
+// шаринга (чтение есть — выгрузка тоже).
 func (s *Service) Export(ctx context.Context, userID, id int64) (data []byte, name string, err error) {
-	n, err := s.requireOwned(ctx, userID, id)
+	n, _, err := s.requireReadable(ctx, userID, id)
 	if err != nil {
 		return nil, "", err
 	}

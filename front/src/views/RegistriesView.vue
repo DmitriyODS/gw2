@@ -819,6 +819,12 @@ onMounted(() => store.fetchRegistries())
   .rg-toolbar { flex-wrap: wrap; gap: 8px; padding: 10px 12px; }
   .rg-toolbar :deep(.search-field) { order: 2; flex-basis: 100%; }
   .rg-actions { order: 1; margin-left: auto; }
-  .rg-foot { padding: 10px 12px; }
+  /* Футер (итого/пагинация) всегда под списком — резерв под нижнюю
+     навигацию (64px) + 12px воздуха вешаем ему, иначе fixed-навигация
+     его накрывает; сам список карточек упирается в футер. */
+  .rg-foot {
+    padding: 10px 12px;
+    padding-bottom: calc(76px + env(safe-area-inset-bottom, 0px));
+  }
 }
 </style>

@@ -185,6 +185,14 @@ func (h *handlers) switchSpecies(c *fiber.Ctx) error {
 	return c.JSON(resp)
 }
 
+func (h *handlers) resetSpecies(c *fiber.Ctx) error {
+	resp, err := h.eps.ResetSpecies(c.Context(), scope(c))
+	if err != nil {
+		return h.respondError(c, err)
+	}
+	return c.JSON(resp)
+}
+
 func (h *handlers) claimQuest(c *fiber.Ctx) error {
 	resp, err := h.eps.ClaimQuest(c.Context(), scope(c))
 	if err != nil {

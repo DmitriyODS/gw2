@@ -921,10 +921,10 @@ textarea.ctl.invalid:focus {
 }
 
 @media (max-width: 768px) {
-  .main-content {
-    /* Отступ под нижнюю навигацию — для вью без собственного скролла (Settings) */
-    padding-bottom: calc(60px + env(safe-area-inset-bottom, 0px));
-  }
+  /* У .main-content намеренно НЕТ mobile padding-bottom: резерв под нижнюю
+     навигацию живёт внутри скролл-контента каждого раздела — тогда контент
+     при прокрутке уходит ПОД акриловую навигацию и просвечивает сквозь стекло,
+     а вью с внутренними скроллерами (height:100%/overflow:hidden) не сжимаются. */
 
   /* Увеличиваем минимальный размер tap target */
   button, a, [role="button"] {

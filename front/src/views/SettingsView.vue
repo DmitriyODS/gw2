@@ -1363,7 +1363,9 @@ onMounted(() => {
     min-height: 100%;
     overflow: visible;
     max-width: 100%;
-    padding-bottom: calc(60px + 12px + env(safe-area-inset-bottom, 0px));
+    /* Резерв под нижнюю навигацию (64px) + 12px воздуха: шелл скроллится
+       через .main-content, список секций уходит под стекло навигации. */
+    padding-bottom: calc(76px + env(safe-area-inset-bottom, 0px));
   }
 
   /* Когда выбрана секция — список секций прячется, контент секции
@@ -1417,8 +1419,8 @@ onMounted(() => {
     border: 0;
     display: flex;
     flex-direction: column;
-    /* Учитываем нижнюю навигацию */
-    padding-bottom: calc(60px + env(safe-area-inset-bottom, 0px));
+    /* Резерв под нижнюю навигацию — НЕ на этой fixed-обёртке, а внутри
+       скроллера (.settings-pane-body ниже): контент уходит под стекло. */
   }
 
   /* При включённом градиенте фона фуллскрин-панель не глушит его:
@@ -1451,7 +1453,8 @@ onMounted(() => {
   .pane-sub { font-size: 12px; }
 
   .settings-pane.mobile-full .settings-pane-body {
-    padding: 16px 12px 24px;
+    /* 64px навигации + 12px воздуха — последние настройки не прячутся. */
+    padding: 16px 12px calc(76px + env(safe-area-inset-bottom, 0px));
     -webkit-overflow-scrolling: touch;
   }
 

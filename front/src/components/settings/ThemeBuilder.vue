@@ -1422,6 +1422,20 @@ function importTheme(event) {
     gap: 12px;
   }
   .tb-card { padding: 16px; border-radius: 18px; }
+
+  /* Четыре режима в одну строку не влезают — сетка 2×2; бегунок-индикатор
+     рассчитан на одну строку, на мобильном активность красит сама кнопка. */
+  .seg-group {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 4px;
+    border-radius: 22px;
+  }
+  .seg-btn { padding: 9px 6px; font-size: 13px; }
+  .seg-indicator { display: none; }
+  .seg-btn.active {
+    background: var(--color-primary);
+    box-shadow: 0 4px 14px color-mix(in oklch, var(--color-primary) 35%, transparent);
+  }
   .tb-hero { padding: 18px; gap: 16px; border-radius: 22px; }
   .tb-hero-title { font-size: 20px; }
   .tb-hero-actions { width: 100%; }

@@ -213,6 +213,7 @@
       :archived="!!menuNote?.archived"
       :pinned="!!menuNote?.pinned_at"
       :can-post="hasCompany"
+      :shared="store.showShared"
       @action="onMenuAction"
       @color="setNoteColor"
       @close="menu.visible = false"
@@ -315,8 +316,7 @@ const shareOpen = ref(false)
 const noteToDelete = ref(null)
 
 function openMenu(x, y, n) {
-  // Чужие (шаренные) заметки правкам с плитки не подлежат — меню только у своих.
-  if (store.showShared) return
+  // У чужих (шаренных) заметок меню ограничено (shared-prop): открыть/экспорт.
   menuNote.value = n
   menu.value = { visible: true, x, y }
 }
@@ -774,6 +774,11 @@ function formatDate(iso) {
   .nt-grid { grid-template-columns: 1fr; }
   .nt-btn-label { display: none; }
   .nt-toolbar { padding: 12px 12px 8px; }
-  .nt-body { padding: 4px 12px 12px; }
+  /* Резерв под нижнюю навигацию (64px) + 12px воздуха — контент скроллится
+     под стекло, последние плитки не прячутся за навигацией. */
+  .nt-body {
+    padding: 4px 12px;
+    padding-bottom: calc(76px + env(safe-area-inset-bottom, 0px));
+  }
 }
 </style>

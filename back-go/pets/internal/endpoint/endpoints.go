@@ -25,6 +25,7 @@ type Endpoints struct {
 	BuyItem        endpoint.Endpoint
 	BuySpecies     endpoint.Endpoint
 	SwitchSpecies  endpoint.Endpoint
+	ResetSpecies   endpoint.Endpoint
 	ClaimQuest     endpoint.Endpoint
 	StartAdventure endpoint.Endpoint
 
@@ -114,6 +115,10 @@ func New(svc *service.Service) Endpoints {
 		SwitchSpecies: func(ctx context.Context, request any) (any, error) {
 			r := request.(ItemRequest)
 			return svc.SwitchSpecies(ctx, r.UserID, r.CompanyID, r.Item)
+		},
+		ResetSpecies: func(ctx context.Context, request any) (any, error) {
+			r := request.(Scope)
+			return svc.ResetSpecies(ctx, r.UserID, r.CompanyID)
 		},
 		ClaimQuest: func(ctx context.Context, request any) (any, error) {
 			r := request.(Scope)

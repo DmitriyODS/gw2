@@ -10,7 +10,7 @@
         @click.stop
       >
         <!-- Цвет плитки — палитра тегов задач -->
-        <div class="note-ctx-colors">
+        <div v-if="!shared" class="note-ctx-colors">
           <button
             v-for="c in TASK_COLORS"
             :key="c.id"
@@ -24,44 +24,48 @@
             <span class="material-symbols-outlined">format_color_reset</span>
           </button>
         </div>
-        <div class="note-ctx-divider" />
+        <div v-if="!shared" class="note-ctx-divider" />
         <button class="note-ctx-item" @click="emitAction('open')">
           <span class="material-symbols-outlined">edit_note</span>
           <span>Открыть</span>
         </button>
-        <button class="note-ctx-item" @click="emitAction('groups')">
-          <span class="material-symbols-outlined">folder</span>
-          <span>Группы</span>
-        </button>
-        <button class="note-ctx-item" @click="emitAction('pin')">
-          <span class="material-symbols-outlined">{{ pinned ? 'keep_off' : 'keep' }}</span>
-          <span>{{ pinned ? 'Открепить' : 'Закрепить' }}</span>
-        </button>
-        <button class="note-ctx-item" @click="emitAction('share')">
-          <span class="material-symbols-outlined">share</span>
-          <span>Поделиться</span>
-        </button>
-        <button class="note-ctx-item" @click="emitAction('send-chat')">
-          <span class="material-symbols-outlined">send</span>
-          <span>Отправить в чат</span>
-        </button>
-        <button v-if="canPost" class="note-ctx-item" @click="emitAction('publish')">
-          <span class="material-symbols-outlined">campaign</span>
-          <span>Опубликовать на портале</span>
-        </button>
+        <template v-if="!shared">
+          <button class="note-ctx-item" @click="emitAction('groups')">
+            <span class="material-symbols-outlined">folder</span>
+            <span>Группы</span>
+          </button>
+          <button class="note-ctx-item" @click="emitAction('pin')">
+            <span class="material-symbols-outlined">{{ pinned ? 'keep_off' : 'keep' }}</span>
+            <span>{{ pinned ? 'Открепить' : 'Закрепить' }}</span>
+          </button>
+          <button class="note-ctx-item" @click="emitAction('share')">
+            <span class="material-symbols-outlined">share</span>
+            <span>Поделиться</span>
+          </button>
+          <button class="note-ctx-item" @click="emitAction('send-chat')">
+            <span class="material-symbols-outlined">send</span>
+            <span>Отправить в чат</span>
+          </button>
+          <button v-if="canPost" class="note-ctx-item" @click="emitAction('publish')">
+            <span class="material-symbols-outlined">campaign</span>
+            <span>Опубликовать на портале</span>
+          </button>
+        </template>
         <button class="note-ctx-item" @click="emitAction('export')">
           <span class="material-symbols-outlined">download</span>
           <span>Экспорт .txt</span>
         </button>
-        <button class="note-ctx-item" @click="emitAction('archive')">
-          <span class="material-symbols-outlined">{{ archived ? 'unarchive' : 'archive' }}</span>
-          <span>{{ archived ? 'Вернуть из архива' : 'В архив' }}</span>
-        </button>
-        <div class="note-ctx-divider" />
-        <button class="note-ctx-item danger" @click="emitAction('delete')">
-          <span class="material-symbols-outlined">delete</span>
-          <span>Удалить</span>
-        </button>
+        <template v-if="!shared">
+          <button class="note-ctx-item" @click="emitAction('archive')">
+            <span class="material-symbols-outlined">{{ archived ? 'unarchive' : 'archive' }}</span>
+            <span>{{ archived ? 'Вернуть из архива' : 'В архив' }}</span>
+          </button>
+          <div class="note-ctx-divider" />
+          <button class="note-ctx-item danger" @click="emitAction('delete')">
+            <span class="material-symbols-outlined">delete</span>
+            <span>Удалить</span>
+          </button>
+        </template>
       </div>
     </Transition>
   </Teleport>
@@ -86,6 +90,8 @@ const props = defineProps({
   pinned: { type: Boolean, default: false },
   // Есть активная компания — доступна публикация на корпоративном портале.
   canPost: { type: Boolean, default: false },
+  // Чужая заметка (вкладка «Поделились») — только открыть и экспорт.
+  shared: { type: Boolean, default: false },
 })
 
 const emit = defineEmits(['close', 'action', 'color'])

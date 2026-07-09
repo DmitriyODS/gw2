@@ -283,9 +283,9 @@
        backdrop-filter: var(--acrylic-blur);
      --acrylic-bg-strong — для мелких плотных элементов (бейджи, чипы),
      где за стеклом мало контента и нужна читаемость.                */
-  --acrylic-bg:        color-mix(in oklch, var(--color-surface) 72%, transparent);
+  --acrylic-bg:        color-mix(in oklch, var(--color-surface) 62%, transparent);
   --acrylic-bg-strong: color-mix(in oklch, var(--color-surface) 86%, transparent);
-  --acrylic-blur:      blur(20px) saturate(1.5);
+  --acrylic-blur:      blur(28px) saturate(1.7);
   --acrylic-border:    color-mix(in oklch, var(--color-outline-dim) 55%, transparent);
   /* Подложка карточек В ПОТОКЕ страницы: та же матовая плотность, что у
      плавающего стекла (эталон — окно мини-мессенджера), но БЕЗ backdrop-filter —
@@ -329,7 +329,7 @@
   /* Акрил в тёмной теме плотнее: за стеклом тёмный контент, при 72%
      непрозрачности текст на нём терял контраст. --acrylic-card-bg следует
      за --acrylic-bg автоматически (см. светлую тему). */
-  --acrylic-bg:        color-mix(in oklch, var(--color-surface) 80%, transparent);
+  --acrylic-bg:        color-mix(in oklch, var(--color-surface) 72%, transparent);
   --acrylic-bg-strong: color-mix(in oklch, var(--color-surface) 90%, transparent);
 
   /* Пастельные тона палитры (тон 80) на тёмном фоне светятся сильнее —
@@ -498,7 +498,7 @@
     --grad-primary:      linear-gradient(90deg, #006cdc, #79b6f2);
     --grad-primary-soft: linear-gradient(90deg, #e1effb, #f3f9fe);
     --grad-hero:         linear-gradient(135deg, #006cdc, #2499ec);
-    --acrylic-bg:        rgba(255, 255, 255, 0.72);
+    --acrylic-bg:        rgba(255, 255, 255, 0.62);
     --acrylic-bg-strong: rgba(255, 255, 255, 0.86);
     --acrylic-border:    rgba(202, 196, 208, 0.55);
     --acrylic-card-bg:   rgba(255, 255, 255, 0.62);
@@ -568,7 +568,7 @@
     --grad-primary:      linear-gradient(90deg, #9ccaff, #4a7cb8);
     --grad-primary-soft: linear-gradient(90deg, #1d3a5c, #1c2530);
     --grad-hero:         linear-gradient(135deg, #9ccaff, #86c4f5);
-    --acrylic-bg:        rgba(24, 29, 36, 0.8);
+    --acrylic-bg:        rgba(24, 29, 36, 0.72);
     --acrylic-bg-strong: rgba(24, 29, 36, 0.9);
     --acrylic-border:    rgba(69, 80, 93, 0.55);
     --acrylic-card-bg:   rgba(24, 29, 36, 0.74);

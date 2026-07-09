@@ -55,13 +55,14 @@
               <button class="np-icon" title="Поделиться" @click="shareOpen = true">
                 <span class="material-symbols-outlined">share</span>
               </button>
-              <button class="np-icon" title="Экспорт в .txt" @click="exportTxt">
-                <span class="material-symbols-outlined">download</span>
-              </button>
-              <button class="np-icon danger" title="Удалить заметку" @click="deleteOpen = true">
-                <span class="material-symbols-outlined">delete</span>
-              </button>
             </template>
+            <!-- Экспорт доступен и адресатам шаринга (чтение есть — выгрузка тоже) -->
+            <button class="np-icon" title="Экспорт в .txt" @click="exportTxt">
+              <span class="material-symbols-outlined">download</span>
+            </button>
+            <button v-if="isOwner" class="np-icon danger" title="Удалить заметку" @click="deleteOpen = true">
+              <span class="material-symbols-outlined">delete</span>
+            </button>
           </template>
 
           <!-- Мобайл: в узкой шапке ряд иконок не помещается — всё в меню «⋮» -->
@@ -80,8 +81,8 @@
                     <span class="material-symbols-outlined">zoom_in</span>
                   </button>
                 </div>
+                <div class="np-more-divider" />
                 <template v-if="isOwner">
-                  <div class="np-more-divider" />
                   <button class="np-more-item" @click="pickMore(() => groupsOpen = true)">
                     <span class="material-symbols-outlined">folder</span>
                     Группы
@@ -90,10 +91,12 @@
                     <span class="material-symbols-outlined">share</span>
                     Поделиться
                   </button>
-                  <button class="np-more-item" @click="pickMore(exportTxt)">
-                    <span class="material-symbols-outlined">download</span>
-                    Экспорт в .txt
-                  </button>
+                </template>
+                <button class="np-more-item" @click="pickMore(exportTxt)">
+                  <span class="material-symbols-outlined">download</span>
+                  Экспорт в .txt
+                </button>
+                <template v-if="isOwner">
                   <div class="np-more-divider" />
                   <button class="np-more-item danger" @click="pickMore(() => deleteOpen = true)">
                     <span class="material-symbols-outlined">delete</span>
@@ -772,8 +775,7 @@ async function confirmDelete() {
 }
 
 @media (max-width: 768px) {
-  /* Во всю страницу: без рамки-«карточки» и без собственного нижнего отступа —
-     место под bottom-nav уже резервирует .main-content (main.css). */
+  /* Во всю страницу: без рамки-«карточки». */
   .np { padding: 0; }
   .np-panel {
     border: none;
@@ -782,7 +784,12 @@ async function confirmDelete() {
   }
   .np-back-label { display: none; }
   .np-title { margin: 2px 14px 0; font-size: 22px; }
-  .np-editor { padding: 6px 14px 0; }
+  /* Резерв под нижнюю навигацию (64px) + 12px воздуха внутри скроллера —
+     текст при прокрутке уходит под стекло и не прячется за навигацией. */
+  .np-editor {
+    padding: 6px 14px 0;
+    padding-bottom: calc(76px + env(safe-area-inset-bottom, 0px));
+  }
   .np-owner { display: none; }
 }
 </style>

@@ -14,6 +14,7 @@ export const PET_SPECIES = {
   marathoner: { emoji: '🐢', title: 'Марафонец' },
   fox: { emoji: '🦊', title: 'Универсал' },
   // Покупные виды (магазин обликов).
+  foxy: { emoji: '🦊', title: 'Лисёнок' },
   cat: { emoji: '🐱', title: 'Котёнок' },
   dog: { emoji: '🐶', title: 'Щенок' },
   rabbit: { emoji: '🐰', title: 'Крольчонок' },

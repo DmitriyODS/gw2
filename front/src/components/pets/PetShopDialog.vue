@@ -43,6 +43,18 @@
       >Облики</button>
     </div>
 
+    <!-- Надет купленный облик — можно вернуть природный вид (без потери покупки) -->
+    <button
+      v-if="tab === 'species' && boughtSpeciesOn"
+      class="shop-reset-species"
+      type="button"
+      :disabled="switching"
+      @click="resetSpeciesToNatural"
+    >
+      <span class="material-symbols-outlined">restart_alt</span>
+      Вернуть природный облик
+    </button>
+
     <div v-if="loading" class="shop-loading">
       <ProgressSpinner style="width:32px;height:32px" />
     </div>
@@ -116,7 +128,7 @@ import KudosCoin from '@/components/pets/KudosCoin.vue'
 import { getShop } from '@/api/pets.js'
 import { usePetsStore } from '@/stores/pets.js'
 import { useNotificationsStore } from '@/stores/notifications.js'
-import { RARITY_TAG, RARITY_TITLE, shopItemEmoji, shopItemTitle } from '@/utils/pets.js'
+import { NATURAL_SPECIES, RARITY_TAG, RARITY_TITLE, shopItemEmoji, shopItemTitle } from '@/utils/pets.js'
 
 defineProps({
   modelValue: { type: Boolean, default: false },
@@ -209,6 +221,24 @@ async function buySpeciesItem(item) {
   }
 }
 
+// Надет ли купленный (не природный) облик — тогда доступен сброс.
+const boughtSpeciesOn = computed(() => {
+  const s = pet.value?.species
+  return !!s && s !== 'egg' && !NATURAL_SPECIES.has(s)
+})
+
+async function resetSpeciesToNatural() {
+  switching.value = true
+  try {
+    await pets.resetSpecies()
+    notify.success('Грувик вернулся к природному облику')
+  } catch (e) {
+    notify.warn(e?.message || 'Не удалось сбросить облик')
+  } finally {
+    switching.value = false
+  }
+}
+
 async function pickSpecies(item) {
   switching.value = true
   try {
@@ -280,6 +310,27 @@ async function claimMystery() {
   width: max-content;
   max-width: 100%;
 }
+.shop-reset-species {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  margin: -6px auto 12px;
+  padding: 8px 16px;
+  border: 1px solid var(--color-outline-dim);
+  border-radius: var(--radius-full);
+  background: var(--acrylic-card-bg);
+  color: var(--color-text-dim);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: color 0.15s, border-color 0.15s;
+}
+.shop-reset-species:hover:not(:disabled) { color: var(--color-primary); border-color: var(--color-primary); }
+.shop-reset-species:disabled { opacity: 0.6; }
+.shop-reset-species .material-symbols-outlined { font-size: 17px; }
+
 .shop-tab {
   border: none;
   background: none;

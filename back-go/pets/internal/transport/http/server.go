@@ -59,6 +59,7 @@ func NewServer(eps endpoint.Endpoints, users domain.UserReader,
 	scoped.Post("/pet/name", h.renamePet)
 	scoped.Post("/pet/equip", h.equipItem)
 	scoped.Post("/pet/species", h.switchSpecies)
+	scoped.Delete("/pet/species", h.resetSpecies)
 	scoped.Post("/pet/quest/claim", h.claimQuest)
 	scoped.Post("/pet/adventure", h.startAdventure)
 	scoped.Get("/shop/mystery", h.getMystery)

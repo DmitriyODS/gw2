@@ -962,6 +962,12 @@ async function doDelete() {
 
 @media (max-width: 768px) {
   .manage-page { padding: 12px; }
+  /* Резерв под нижнюю навигацию (64px) + 12px воздуха: вкладки со своим
+     скроллом (.pane-scroll) уводят контент под стекло; карточка-таблица
+     участников скроллится внутри себя — резерв вешаем на саму вкладку,
+     чтобы таблица (и её последние строки) не пряталась за навигацией. */
+  .pane-scroll { padding-bottom: calc(76px + env(safe-area-inset-bottom, 0px)); }
+  .pane-members { padding-bottom: calc(76px + env(safe-area-inset-bottom, 0px)); }
   .manage-tabs, .settings-subtabs { margin-bottom: 12px; }
   .danger-card { flex-direction: column; align-items: flex-start; }
 

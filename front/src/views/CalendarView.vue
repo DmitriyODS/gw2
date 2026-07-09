@@ -699,6 +699,9 @@ watch(() => store.loadingEntries, () => nextTick(measureWeekColumn))
 
 @media (max-width: 768px) {
   /* Скрытие левой панели и разворот правой — в глобальном .split-* */
+  /* Резерв под нижнюю навигацию (64px) + 12px воздуха: список по датам
+     скроллится под стекло, последние записи не прячутся за навигацией. */
+  .cv-body { padding-bottom: calc(76px + env(safe-area-inset-bottom, 0px)); }
   .cv-toolbar { padding: 10px 12px; }
   .cv-period { font-size: 15px; margin-left: 4px; }
   .cv-toolbar :deep(.search-field) { order: 5; flex-basis: 100%; min-width: 0; }

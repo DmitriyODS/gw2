@@ -1015,7 +1015,9 @@ onMounted(() => {
 @media (max-width: 768px) {
   .profile-view {
     padding: 12px;
-    padding-bottom: calc(60px + 12px + env(safe-area-inset-bottom, 0px));
+    /* Резерв под нижнюю навигацию (64px) + 12px воздуха: контент профиля
+       скроллится под стекло навигации. */
+    padding-bottom: calc(76px + env(safe-area-inset-bottom, 0px));
   }
 
   .profile-container {
