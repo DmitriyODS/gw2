@@ -881,7 +881,7 @@ async function handleSetColor(color) {
   flex-direction: column;
   gap: 12px;
   padding: 24px 24px 24px 28px;
-  background: var(--color-surface);
+  background: transparent; /* фон даёт акриловый .p-dialog */
   border-right: 1px solid var(--gw-border);
   overflow-y: auto;
   min-height: 0;
@@ -1159,7 +1159,7 @@ async function handleSetColor(color) {
   min-height: 0;
   display: flex;
   flex-direction: column;
-  background: var(--color-bg);
+  background: color-mix(in oklch, var(--color-surface-low) 55%, transparent);
   padding: 20px;
   gap: 14px;
   overflow: hidden;
@@ -1391,7 +1391,9 @@ async function handleSetColor(color) {
   gap: 6px;
   padding: 6px 4px 6px 4px;
   padding-top: calc(6px + env(safe-area-inset-top, 0px));
-  background: var(--color-surface);
+  background: var(--acrylic-bg-strong);
+  backdrop-filter: var(--acrylic-blur);
+  -webkit-backdrop-filter: var(--acrylic-blur);
   border-bottom: 1px solid var(--color-outline-dim);
   flex-shrink: 0;
   min-height: 56px;
@@ -1470,7 +1472,9 @@ async function handleSetColor(color) {
   align-items: stretch;
   gap: 0;
   padding: 0;
-  background: var(--color-surface);
+  background: var(--acrylic-bg-strong);
+  backdrop-filter: var(--acrylic-blur);
+  -webkit-backdrop-filter: var(--acrylic-blur);
   border-bottom: 1px solid var(--color-outline-dim);
   flex-shrink: 0;
 }
@@ -1523,7 +1527,9 @@ async function handleSetColor(color) {
 .mobile-bottom-bar {
   flex-shrink: 0;
   padding: 12px 16px calc(12px + env(safe-area-inset-bottom, 0px));
-  background: var(--color-surface);
+  background: var(--acrylic-bg-strong);
+  backdrop-filter: var(--acrylic-blur);
+  -webkit-backdrop-filter: var(--acrylic-blur);
   border-top: 1px solid var(--color-outline-dim);
   display: flex;
   gap: 8px;
@@ -1621,7 +1627,9 @@ async function handleSetColor(color) {
   z-index: 10001;
   min-width: 220px;
   padding: 6px;
-  background: var(--color-surface);
+  background: var(--acrylic-bg);
+  backdrop-filter: var(--acrylic-blur);
+  -webkit-backdrop-filter: var(--acrylic-blur);
   border-radius: var(--radius-lg, 16px);
   box-shadow: var(--shadow-lg, 0 12px 32px rgba(0, 0, 0, 0.18));
   border: 1px solid var(--color-outline-dim);

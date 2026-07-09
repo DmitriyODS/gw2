@@ -403,12 +403,16 @@ function gotoPets() {
   place-items: center;
   padding: 16px;
 }
+/* Акриловая панель — как у остальных модалок (AppDialog): стекло + blur. */
 .pdm-panel {
   position: relative;
   width: min(420px, 100%);
   max-height: min(88dvh, 780px);
   overflow: hidden;
-  background: var(--color-surface);
+  background: var(--acrylic-bg);
+  backdrop-filter: var(--acrylic-blur);
+  -webkit-backdrop-filter: var(--acrylic-blur);
+  border: 1px solid var(--acrylic-border);
   border-radius: var(--radius-xl);
   box-shadow: var(--shadow-lg);
   display: flex;

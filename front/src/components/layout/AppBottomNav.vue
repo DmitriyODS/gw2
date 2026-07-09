@@ -105,6 +105,9 @@ const moreItems = computed(() => {
       active: () => route.path.startsWith('/registries') },
     { path: '/calendars', icon: 'calendar_month', label: 'Календари',
       active: () => route.path.startsWith('/calendars') },
+    // Единый раздел: заметки (заготовка) + ежедневник (вкладки внутри).
+    { path: '/notes', icon: 'note_stack', label: 'Заметки',
+      active: () => route.path.startsWith('/notes') || route.path.startsWith('/diaries') },
     // Единый раздел: лента портала + сотрудники (вкладки внутри).
     { path: '/portal', icon: 'campaign', label: 'Портал',
       active: () => route.path.startsWith('/portal') || route.path === '/employees',
@@ -142,14 +145,17 @@ const avatarSrc = computed(() => {
 .bottom-nav { display: none; }
 
 @media (max-width: 768px) {
+  /* Акриловая панель: контент мягко просвечивает при прокрутке под ней. */
   .bottom-nav {
     position: fixed;
     bottom: 0;
     left: 0;
     right: 0;
     min-height: calc(64px + env(safe-area-inset-bottom, 0px));
-    background: var(--gw-surface);
-    border-top: 1px solid var(--gw-border);
+    background: var(--acrylic-bg);
+    backdrop-filter: var(--acrylic-blur);
+    -webkit-backdrop-filter: var(--acrylic-blur);
+    border-top: 1px solid var(--acrylic-border);
     display: flex;
     align-items: stretch;
     z-index: 200;
@@ -176,10 +182,22 @@ const avatarSrc = computed(() => {
   min-width: 0;
 }
 
-.bottom-nav-item:active { background: var(--gw-primary-light); }
+.bottom-nav-item:active { background: color-mix(in oklch, var(--color-primary) 10%, transparent); }
 .bottom-nav-item.active { color: var(--gw-primary); }
 
-.bottom-nav-item .material-symbols-outlined { font-size: 22px; }
+/* Иконка в «пилюле»: у активного пункта — фирменный градиент (M3-индикатор). */
+.bottom-nav-item .material-symbols-outlined {
+  font-size: 22px;
+  padding: 3px 14px;
+  border-radius: var(--radius-full);
+  transition: background 0.15s, color 0.15s;
+}
+
+.bottom-nav-item.active .material-symbols-outlined {
+  background: var(--grad-primary);
+  color: var(--color-on-primary);
+  font-variation-settings: 'FILL' 1, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+}
 
 .bottom-nav-label {
   font-size: 11px;
@@ -201,20 +219,20 @@ const avatarSrc = computed(() => {
 
 .bottom-badge {
   position: absolute;
-  top: 4px;
-  right: calc(50% - 18px);
-  min-width: 16px;
-  height: 16px;
+  top: 2px;
+  right: calc(50% - 22px);
+  min-width: 17px;
+  height: 17px;
   padding: 0 4px;
-  border-radius: var(--radius-full);
-  background: var(--color-error);
-  color: var(--color-on-error);
+  border-radius: 6px;
+  background: color-mix(in oklch, var(--color-primary) 16%, var(--color-surface));
+  color: var(--color-primary);
   font-size: 10px;
   font-weight: 700;
   display: flex;
   align-items: center;
   justify-content: center;
-  border: 2px solid var(--color-surface);
+  border: 1px solid color-mix(in oklch, var(--color-primary) 26%, transparent);
 }
 
 .unit-dot {
@@ -244,7 +262,9 @@ const avatarSrc = computed(() => {
   right: 0;
   bottom: 0;
   z-index: 251;
-  background: var(--color-surface);
+  background: var(--acrylic-bg);
+  backdrop-filter: var(--acrylic-blur);
+  -webkit-backdrop-filter: var(--acrylic-blur);
   border-top-left-radius: 20px;
   border-top-right-radius: 20px;
   padding: 10px 12px calc(16px + env(safe-area-inset-bottom, 0px));
@@ -285,8 +305,8 @@ const avatarSrc = computed(() => {
 }
 
 .more-item.active {
-  background: var(--color-primary-container);
-  color: var(--color-on-primary-container);
+  background: var(--grad-primary);
+  color: var(--color-on-primary);
 }
 
 .more-item-ico {
@@ -298,17 +318,23 @@ const avatarSrc = computed(() => {
 }
 
 .more-item-badge {
-  min-width: 18px;
-  height: 18px;
-  padding: 0 5px;
-  border-radius: var(--radius-full);
-  background: var(--color-error);
-  color: var(--color-on-error);
+  min-width: 20px;
+  height: 20px;
+  padding: 0 6px;
+  border-radius: 7px;
+  background: color-mix(in oklch, var(--color-primary) 16%, var(--color-surface));
+  color: var(--color-primary);
+  border: 1px solid color-mix(in oklch, var(--color-primary) 26%, transparent);
   font-size: 11px;
   font-weight: 700;
   display: flex;
   align-items: center;
   justify-content: center;
+}
+
+.more-item.active .more-item-badge {
+  background: var(--color-surface);
+  border-color: transparent;
 }
 
 .more-item-check {

@@ -145,7 +145,9 @@ function close() {
   /* Выше PrimeVue Dialog (~1100) и мобильного меню действий внутри TaskModal
      (z-index 10001), чтобы попап не прятался под открытым диалогом. */
   z-index: 10200;
-  background: var(--color-surface);
+  background: var(--acrylic-bg);
+  backdrop-filter: var(--acrylic-blur);
+  -webkit-backdrop-filter: var(--acrylic-blur);
   border: 1px solid var(--color-outline-dim);
   border-radius: var(--radius-md);
   box-shadow: var(--shadow-lg);
@@ -168,7 +170,9 @@ function close() {
 .task-color-sheet {
   width: 100%;
   max-width: 420px;
-  background: var(--color-surface);
+  background: var(--acrylic-bg);
+  backdrop-filter: var(--acrylic-blur);
+  -webkit-backdrop-filter: var(--acrylic-blur);
   border-radius: var(--radius-lg, 20px);
   box-shadow: var(--shadow-lg);
   padding: 16px 18px 18px;

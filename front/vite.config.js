@@ -114,6 +114,11 @@ export default defineConfig({
         target: 'http://localhost:8101',
         changeOrigin: true
       },
+      // Заметки — notesvc (личные rich-заметки с группами и шарингом).
+      '/api/notes': {
+        target: 'http://localhost:8103',
+        changeOrigin: true
+      },
       // Корпоративный портал — portalsvc (посты, комментарии, реакции, разделы).
       '/api/portal': {
         target: 'http://localhost:8102',

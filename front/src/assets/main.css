@@ -1,7 +1,45 @@
 @import './tokens.css';
 
 * { box-sizing: border-box; margin: 0; padding: 0; }
-body { font-family: 'Roboto', sans-serif; background: var(--color-bg); color: var(--color-text); }
+/* Roboto Flex — вариативный: opsz 8..144 и вес 100..1000 (ExtraBlack для wordmark). */
+body { font-family: 'Roboto Flex', 'Roboto', sans-serif; background: var(--color-bg); color: var(--color-text); }
+
+/* ── Ползунки прокрутки ──
+   Системный серый брусок спорит со стеклом — везде тонкий скруглённый ползунок
+   на токенах: прозрачный трек, тинт primary, ярче под курсором. Firefox — свои
+   свойства (scrollbar-width/color), WebKit — псевдоэлементы. */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in oklch, var(--color-primary) 28%, var(--color-outline-dim)) transparent;
+}
+*::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+*::-webkit-scrollbar-track { background: transparent; }
+*::-webkit-scrollbar-thumb {
+  background: color-mix(in oklch, var(--color-primary) 24%, var(--color-outline-dim));
+  border-radius: var(--radius-full);
+  /* Прозрачная кромка «отжимает» ползунок от контента (padding у скроллбара
+     задать нельзя — имитируем через background-clip). */
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+*::-webkit-scrollbar-thumb:hover {
+  background: color-mix(in oklch, var(--color-primary) 45%, var(--color-outline-dim));
+  background-clip: padding-box;
+}
+*::-webkit-scrollbar-corner { background: transparent; }
+
+/* Плавающие виджеты (питомец, FAB хаба, FAB раздела) прячутся на время скролла
+   на мобильном — класс float-hidden вешает composables/useFloatingHide.js.
+   Только opacity: у питомца позиционирование через transform, его не трогаем. */
+.float-fade { transition: opacity 0.18s ease; }
+.float-fade.float-hidden { opacity: 0; pointer-events: none; }
+/* «Кружок» виджета сжимается при уходе и возвращается пружиной (overshoot). */
+.float-spring { transition: transform 0.42s cubic-bezier(0.34, 1.56, 0.64, 1); }
+.float-hidden .float-spring,
+.float-hidden.float-spring { transform: scale(0.55); transition-duration: 0.16s; }
 
 /* Скрываем нативный крестик-очистку у <input type="search"> во всех браузерах.
    У нас везде свой кастомный крестик (`.users-search-clear` и аналоги),
@@ -161,14 +199,30 @@ textarea.ctl.invalid:focus {
   box-shadow: 0 0 0 3px color-mix(in oklch, var(--color-error) 18%, transparent);
 }
 
-/* PrimeVue Select / Datepicker панели overlay — пусть лежат на surface
-   (повыше фона), чтобы выделялись на фоне страницы. */
+/* ── Primary-кнопки PrimeVue — фирменный градиент ───────────────────
+   Только дефолтная (primary) severity без text/outlined/link-вариантов.
+   !important перебивает runtime-тему PrimeVue; hover у пресета меняет
+   background-color ПОД градиентом (не видно) — вместо него brightness. */
+.p-button:not(.p-button-secondary):not(.p-button-success):not(.p-button-info):not(.p-button-warn):not(.p-button-danger):not(.p-button-help):not(.p-button-contrast):not(.p-button-text):not(.p-button-outlined):not(.p-button-link) {
+  background: var(--grad-primary) !important;
+  border-color: transparent !important;
+  transition: filter 0.15s, box-shadow 0.15s;
+}
+.p-button:not(.p-button-secondary):not(.p-button-success):not(.p-button-info):not(.p-button-warn):not(.p-button-danger):not(.p-button-help):not(.p-button-contrast):not(.p-button-text):not(.p-button-outlined):not(.p-button-link):not(:disabled):hover {
+  filter: brightness(1.06);
+  box-shadow: var(--shadow-sm);
+}
+
+/* PrimeVue Select / Datepicker панели overlay — акрил: полупрозрачные,
+   с блюром контента под ними. */
 .p-select-overlay,
 .p-multiselect-overlay,
 .p-datepicker-panel,
 .p-autocomplete-overlay {
-  background: var(--color-surface);
-  border: 1px solid var(--color-outline-dim);
+  background: var(--acrylic-bg);
+  backdrop-filter: var(--acrylic-blur);
+  -webkit-backdrop-filter: var(--acrylic-blur);
+  border: 1px solid var(--acrylic-border);
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow-lg);
   color: var(--color-text);
@@ -195,15 +249,20 @@ textarea.ctl.invalid:focus {
   color: var(--color-text);
 }
 
-/* Диалоги PrimeVue — единый фон, скругления углов у крайних секций.
-   Дочерние элементы имеют явный background, поэтому они перекрывают
-   border-radius родителя. Решение — не overflow:hidden (ломает выпадашки),
-   а явные скругления у шапки (верх) и футера/контента (низ). */
-.p-dialog,
+/* Диалоги PrimeVue — акриловая карточка (полупрозрачный фон + blur на
+   контейнере), секции прозрачные. Скругления углов у крайних секций:
+   не overflow:hidden (ломает выпадашки), а явные скругления у шапки
+   (верх) и футера/контента (низ). */
+.p-dialog {
+  background: var(--acrylic-bg);
+  backdrop-filter: var(--acrylic-blur);
+  -webkit-backdrop-filter: var(--acrylic-blur);
+  color: var(--color-text);
+}
 .p-dialog .p-dialog-header,
 .p-dialog .p-dialog-content,
 .p-dialog .p-dialog-footer {
-  background: var(--color-surface);
+  background: transparent;
   color: var(--color-text);
 }
 .p-dialog .p-dialog-header {
@@ -252,12 +311,22 @@ textarea.ctl.invalid:focus {
   }
 }
 
+/* Маска всех PrimeVue-модалок: светлее и с блюром — за стеклом модалки
+   размытая страница, а не тёмная пелена (единый вид с панелью ассистента). */
+.p-overlay-mask {
+  background: color-mix(in oklch, var(--color-scrim) 45%, transparent) !important;
+  backdrop-filter: blur(12px) saturate(1.2);
+  -webkit-backdrop-filter: blur(12px) saturate(1.2);
+}
+
 /* Модалка профиля сотрудника — без шапки PrimeVue, контент заполняет
    весь dialog. Overflow hidden клипует градиентный hero к скруглениям. */
 .emp-dialog.p-dialog {
   border-radius: var(--radius-xl) !important;
   overflow: hidden !important;
-  background: var(--color-surface) !important;
+  background: var(--acrylic-bg) !important;
+  backdrop-filter: var(--acrylic-blur);
+  -webkit-backdrop-filter: var(--acrylic-blur);
   box-shadow: var(--shadow-lg) !important;
   padding: 0 !important;
 }
@@ -290,7 +359,11 @@ textarea.ctl.invalid:focus {
   display: flex;
   flex-direction: column;
   gap: 14px;
-  background: var(--color-bg);
+  /* Акрил: контент прокручивается ПОД шапкой — стекло с blur вместо
+     глухой заливки фоном. */
+  background: var(--acrylic-bg);
+  backdrop-filter: var(--acrylic-blur);
+  -webkit-backdrop-filter: var(--acrylic-blur);
 }
 .admin-sticky::after {
   content: '';
@@ -363,6 +436,455 @@ textarea.ctl.invalid:focus {
   }
 }
 
+/* ── Паттерны экрана-списка («Expressive Glass») ────────────────────
+   Общий язык разделов-списков (Задачи, Реестры, Календари, Пользователи,
+   Компании): стеклянная рейка фильтров слева, тинтованные чипы статусов,
+   градиентная primary-кнопка. Подробности — front/DESIGN.md,
+   раздел «Паттерны экрана-списка». */
+
+/* Рейка фильтров: стеклянная sticky-колонка с вертикальными пунктами. */
+.rail {
+  width: 250px;
+  min-width: 250px;
+  align-self: flex-start;
+  position: sticky;
+  top: 0;
+  max-height: 100%;
+  display: flex;
+  flex-direction: column;
+  background: var(--acrylic-card-bg);
+  backdrop-filter: var(--acrylic-blur);
+  -webkit-backdrop-filter: var(--acrylic-blur);
+  border: 1px solid var(--acrylic-border);
+  border-radius: var(--radius-xl);
+  padding: 10px;
+  overflow: hidden;
+}
+
+/* Прокручиваемая середина рейки (низ — .rail-reset — остаётся на месте). */
+.rail-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.rail-section {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.rail-label {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--color-text-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+  margin: 0 0 4px;
+  padding: 0 10px;
+}
+
+/* Пункт рейки: иконка 20px + подпись; активный — тинтованная primary-пилюля. */
+.rail-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 38px;
+  padding: 0 10px;
+  border: none;
+  background: transparent;
+  border-radius: var(--radius-md);
+  font: inherit;
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--color-text);
+  cursor: pointer;
+  text-align: left;
+  transition: background 0.14s, color 0.14s;
+}
+
+.rail-item .material-symbols-outlined {
+  font-size: 20px;
+  color: var(--color-text-dim);
+  flex-shrink: 0;
+  transition: color 0.14s;
+}
+
+.rail-item:hover {
+  background: color-mix(in oklch, var(--color-primary) 8%, transparent);
+}
+
+.rail-item.active {
+  background: color-mix(in oklch, var(--color-primary) 14%, var(--color-surface));
+  color: var(--color-primary);
+}
+
+.rail-item.active .material-symbols-outlined {
+  color: var(--color-primary);
+  font-variation-settings: 'FILL' 1, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+}
+
+/* Бейдж-счётчик пункта (правый край); на активной пилюле — инвертирован. */
+.rail-badge {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 22px;
+  height: 20px;
+  padding: 0 7px;
+  border-radius: var(--radius-full);
+  background: color-mix(in oklch, var(--color-primary) 14%, var(--color-surface));
+  color: var(--color-primary);
+  font-size: 11.5px;
+  font-weight: 700;
+}
+
+.rail-item.active .rail-badge {
+  background: var(--color-primary);
+  color: var(--color-on-primary);
+}
+
+/* Низ рейки: ghost-кнопка сброса фильтров. */
+.rail-reset {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  width: 100%;
+  min-height: 38px;
+  margin-top: 10px;
+  padding: 0 10px;
+  border: none;
+  background: transparent;
+  border-radius: var(--radius-md);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--color-text-dim);
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: background 0.14s, color 0.14s;
+}
+
+.rail-reset .material-symbols-outlined { font-size: 18px; }
+
+.rail-reset:hover:not(:disabled) {
+  background: color-mix(in oklch, var(--color-error) 10%, transparent);
+  color: var(--color-error);
+}
+
+.rail-reset:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+/* Тинтованные чипы статусов/меты: фон *-container, текст on-*-container. */
+.chip-tint {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 10px;
+  border-radius: var(--radius-full);
+  background: var(--color-surface-high);
+  color: var(--color-text-dim);
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.chip-tint .material-symbols-outlined { font-size: 16px; flex-shrink: 0; }
+
+.chip-tint--primary {
+  background: var(--color-primary-container);
+  color: var(--color-on-primary-container);
+}
+.chip-tint--error {
+  background: var(--color-error-container);
+  color: var(--color-on-error-container);
+}
+.chip-tint--warning {
+  background: var(--color-warning-container);
+  color: var(--color-on-warning-container);
+}
+.chip-tint--success {
+  background: var(--color-success-container);
+  color: var(--color-on-success-container);
+}
+
+/* Главная кнопка экрана: пилюля на фирменном градиенте. */
+.btn-grad {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: none;
+  border-radius: var(--radius-full);
+  padding: 10px 20px;
+  background: var(--grad-primary);
+  color: var(--color-on-primary);
+  font: inherit;
+  font-size: 14px;
+  font-weight: 650;
+  cursor: pointer;
+  white-space: nowrap;
+  box-shadow: var(--shadow-sm);
+  transition: filter 0.15s, box-shadow 0.15s;
+}
+
+.btn-grad .material-symbols-outlined { font-size: 20px; }
+
+.btn-grad:hover:not(:disabled) {
+  filter: brightness(1.06);
+  box-shadow: var(--shadow-md);
+}
+
+.btn-grad:disabled { opacity: 0.55; cursor: not-allowed; }
+
+/* Вторичная стеклянная кнопка (рядом с .btn-grad). */
+.btn-glass {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid var(--acrylic-border);
+  border-radius: var(--radius-full);
+  padding: 10px 18px;
+  background: var(--acrylic-card-bg);
+  color: var(--color-text);
+  font: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.btn-glass .material-symbols-outlined { font-size: 20px; }
+
+.btn-glass:hover {
+  background: color-mix(in oklch, var(--color-primary) 8%, var(--acrylic-card-bg));
+  border-color: color-mix(in oklch, var(--color-primary) 30%, var(--acrylic-border));
+}
+
+/* Мягкая success-кнопка действия («В работу» и аналоги). */
+.btn-soft-success {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  border: none;
+  border-radius: var(--radius-full);
+  padding: 6px 14px 6px 10px;
+  background: var(--color-success-container);
+  color: var(--color-on-success-container);
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 650;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.15s, transform 0.1s;
+}
+
+.btn-soft-success .material-symbols-outlined { font-size: 18px; }
+
+.btn-soft-success:hover {
+  background: color-mix(in oklch, var(--color-success) 26%, var(--color-success-container));
+}
+
+.btn-soft-success:active { transform: scale(0.96); }
+
+/* ── Мастер-детейл разделы (Реестры, Календари, Заметки/Ежедневник) ──
+   Каркас: .split-view — ряд из стеклянной панели-списка слева (.split-side)
+   и ОДНОЙ большой стеклянной панели контента справа (.split-main); внутренние
+   тулбары/таблицы живут на прозрачном фоне внутри неё. Подробности —
+   front/DESIGN.md, раздел «Мастер-детейл разделы». */
+.split-view {
+  display: flex;
+  height: 100%;
+  min-height: 0;
+  gap: 16px;
+  padding: 16px;
+  overflow: hidden;
+}
+
+/* Левая панель: стеклянная колонка со списком сущностей раздела. */
+.split-side {
+  width: 300px;
+  min-width: 300px;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  background: var(--acrylic-card-bg);
+  backdrop-filter: var(--acrylic-blur);
+  -webkit-backdrop-filter: var(--acrylic-blur);
+  border: 1px solid var(--acrylic-border);
+  border-radius: var(--radius-xl);
+  overflow: hidden;
+}
+
+/* Шапка панели: иконка-тайл раздела + название. */
+.split-side-head {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 14px 14px 10px;
+}
+
+.split-side-tile {
+  width: 40px;
+  height: 40px;
+  flex-shrink: 0;
+  display: grid;
+  place-items: center;
+  border-radius: var(--radius-md);
+  background: var(--color-primary-container);
+  color: var(--color-primary);
+}
+
+.split-side-tile .material-symbols-outlined { font-size: 22px; }
+
+.split-side-title {
+  font-size: 17px;
+  font-weight: 750;
+  color: var(--color-text);
+}
+
+/* Прокручиваемый список пунктов. */
+.split-side-list {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 6px 10px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.split-side-note {
+  padding: 24px 12px;
+  color: var(--color-text-dim);
+  font-size: 14px;
+  text-align: center;
+}
+
+/* Пункт списка: мини-тайл с иконкой + название; активный — тинтованная пилюля. */
+.split-side-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 6px 8px;
+  border: none;
+  background: transparent;
+  border-radius: var(--radius-md);
+  font: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--color-text);
+  cursor: pointer;
+  text-align: left;
+  transition: background 0.14s, color 0.14s;
+}
+
+.split-side-item:hover {
+  background: color-mix(in oklch, var(--color-primary) 8%, transparent);
+}
+
+.split-side-item.active {
+  background: color-mix(in oklch, var(--color-primary) 14%, var(--color-surface));
+  color: var(--color-primary);
+}
+
+.split-item-tile {
+  width: 32px;
+  height: 32px;
+  flex-shrink: 0;
+  display: grid;
+  place-items: center;
+  border-radius: var(--radius-sm);
+  background: color-mix(in oklch, var(--color-primary) 11%, transparent);
+  color: var(--color-primary);
+}
+
+.split-item-tile .material-symbols-outlined { font-size: 18px; }
+
+.split-side-item.active .split-item-tile .material-symbols-outlined {
+  font-variation-settings: 'FILL' 1, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+}
+
+.split-side-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Ghost-пункт создания внизу списка (как .rail-reset, но primary). */
+.split-side-add {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  flex-shrink: 0;
+  margin: 6px 10px 10px;
+  min-height: 38px;
+  padding: 0 10px;
+  border: none;
+  background: transparent;
+  border-radius: var(--radius-md);
+  font: inherit;
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--color-primary);
+  cursor: pointer;
+  transition: background 0.14s;
+}
+
+.split-side-add .material-symbols-outlined { font-size: 18px; }
+
+.split-side-add:hover {
+  background: color-mix(in oklch, var(--color-primary) 10%, transparent);
+}
+
+/* Правая область: единственная большая стеклянная панель раздела. */
+.split-main {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--acrylic-card-bg);
+  backdrop-filter: var(--acrylic-blur);
+  -webkit-backdrop-filter: var(--acrylic-blur);
+  border: 1px solid var(--acrylic-border);
+  border-radius: var(--radius-xl);
+  overflow: hidden;
+}
+
+/* Пустое состояние правой панели (EmptyState tone="soft") — по центру. */
+.split-empty { flex: 1; }
+
+@media (max-width: 768px) {
+  /* Мобайл: левая панель скрыта (выбор — чипами/шторками своего раздела),
+     правая панель — во весь экран без стеклянной рамки. */
+  .split-view {
+    flex-direction: column;
+    gap: 0;
+    padding: 0;
+  }
+
+  .split-side { display: none; }
+
+  .split-main {
+    border: none;
+    border-radius: 0;
+  }
+}
+
 /* dvh, не vh: на мобильных vh = высота при СКРЫТОЙ панели браузера, поэтому
    shell вылезал за видимую область и заставлял скроллить документ (адресная
    строка пряталась/появлялась). dvh держит shell ровно в видимой высоте —
@@ -371,6 +893,25 @@ textarea.ctl.invalid:focus {
   display: flex;
   height: 100dvh;
   overflow: hidden;
+  /* Мягкая градиентная подсветка фона из цветов темы: именно её «ловят»
+     полупрозрачные акриловые карточки (--acrylic-card-bg) — на плоском
+     фоне стекло не читалось бы. Радиальные градиенты статичны и дёшевы. */
+  background:
+    radial-gradient(42vmax at 6% -6%, color-mix(in oklch, var(--color-primary) 9%, transparent), transparent 62%),
+    radial-gradient(38vmax at 104% 28%, color-mix(in oklch, var(--color-tertiary) 7%, transparent), transparent 60%),
+    radial-gradient(46vmax at 38% 112%, color-mix(in oklch, var(--color-secondary) 6%, transparent), transparent 60%),
+    var(--color-bg);
+}
+
+/* Пользовательский акриловый градиент фона (Настройки → Внешний вид):
+   выразительная версия подсветки выше. Слои --bgg-1..4 собирает theme.js
+   из рецепта, цвета внутри — токены темы, поэтому фон живёт вместе с темой
+   и тёмным режимом. @supports повторяет собираемое выражение: браузер без
+   color-mix/calc-процентов остаётся на базовой подсветке, а не на пустом фоне. */
+@supports (background: color-mix(in oklch, red calc(50% * 1), transparent)) {
+  [data-bg-gradient="true"] .app-layout {
+    background: var(--bgg-1), var(--bgg-2), var(--bgg-3), var(--bgg-4), var(--color-bg);
+  }
 }
 
 .main-content {

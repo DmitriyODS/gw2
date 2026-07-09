@@ -68,6 +68,7 @@ func NewServer(eps endpoint.Endpoints, users domain.UserReader,
 	scoped.Post("/heal", h.healPet)
 	scoped.Post("/stroke/:userId<int>", h.strokePet)
 	scoped.Get("/zoo", h.getZoo)
+	scoped.Delete("/zoo/:userId<int>", h.deleteZooPet)
 	scoped.Get("/rating", h.getRating)
 	scoped.Get("/live", h.getLive)
 	scoped.Get("/activity", h.getActivityLog)

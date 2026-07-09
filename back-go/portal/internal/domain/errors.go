@@ -27,10 +27,6 @@ var (
 	ErrForbidden    = NewError("FORBIDDEN", "Недостаточно прав", 403)
 	// BadCursor — нечитаемый keyset-курсор пагинации ленты (query ?cursor=).
 	ErrBadCursor = NewError("VALIDATION", "Некорректный курсор пагинации", 400)
-	// SystemKindReq — CreateSystemPost (gRPC) без типа системного поста.
-	ErrSystemKindReq = NewError("VALIDATION", "Укажите тип системного поста", 400)
-	// CompanyDisabled — системный пост в отключённую компанию не создаётся.
-	ErrCompanyDisabled = NewError("COMPANY_DISABLED", "Компания отключена", 403)
 	// TooManyPinned — лимит одновременно закреплённых постов на компанию
 	// (аналог SharePoint boost-лимита: не более 10, иначе закреплённые
 	// перегружают ленту и теряют смысл «важного сверху»).

@@ -278,14 +278,10 @@ services:
       # Схема — migrate-контейнер (goose): completed = миграции применены.
       migrate:
         condition: service_completed_successfully
-      # Портал: адресат постов-поздравлений об эволюции.
-      portal:
-        condition: service_healthy
     environment:
       DATABASE_URL: postgresql://${DB_USER}:${DB_PASSWORD}@db:5432/${DB_NAME}
       REDIS_URL: redis://redis:6379/0
       PASETO_PUBLIC_KEY: ${PASETO_PUBLIC_KEY}
-      PORTAL_GRPC_ADDR: portal:9102
       HTTP_ADDR: ":8094"
       GRPC_ADDR: ":9094"
     expose:
@@ -480,12 +476,52 @@ services:
       retries: 5
       start_period: 10s
 
+  # Микросервис заметок (Go, back-go/notes): HTTP :8103 — личные заметки
+  # пользователей (rich-текст TipTap, группы, публичные ссылки view/edit,
+  # экспорт/импорт txt), REST /api/notes. Скоуп по владельцу (не по компании);
+  # картинки редактора — общий uploads-том. Межсервисных вызовов нет.
+  notes:
+    build:
+      context: ../back-go
+      dockerfile: notes/Dockerfile
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    environment:
+      DATABASE_URL: postgresql://${DB_USER}:${DB_PASSWORD}@db:5432/${DB_NAME}
+      REDIS_URL: redis://redis:6379/0
+      PASETO_PUBLIC_KEY: ${PASETO_PUBLIC_KEY}
+      UPLOAD_FOLDER: /app/uploads
+      # Хранилище файлов: local (диск, dev) | s3 (Beget, prod). В prod выставить
+      # STORAGE_BACKEND=s3 и S3_* в deploy/.env.
+      STORAGE_BACKEND: ${STORAGE_BACKEND:-local}
+      S3_ENDPOINT: ${S3_ENDPOINT:-}
+      S3_REGION: ${S3_REGION:-ru1}
+      S3_BUCKET: ${S3_BUCKET:-}
+      S3_ACCESS_KEY: ${S3_ACCESS_KEY:-}
+      S3_SECRET_KEY: ${S3_SECRET_KEY:-}
+      HTTP_ADDR: ":8103"
+    volumes:
+      - uploads:/app/uploads
+    expose:
+      - "8103"
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8103/healthz"]
+      interval: 15s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
+
   # Микросервис корпоративного портала (Go, back-go/portal): HTTP :8102 —
   # посты компании (с вложениями), плоские комментарии, реакции, закрепление
   # (лимит 10 на компанию, автоистечение pinned_until), тематические разделы.
-  # REST /api/portal; gRPC :9102 — системные посты (CreateSystemPost, зовёт
-  # petsvc). Исходящий межсервисный вызов — пересылка поста в мессенджер
-  # (gRPC msgsvc CreatePostMessage).
+  # REST /api/portal. Исходящий межсервисный вызов — пересылка поста в
+  # мессенджер (gRPC msgsvc CreatePostMessage).
   portal:
     build:
       context: ../back-go
@@ -515,12 +551,10 @@ services:
       S3_SECRET_KEY: ${S3_SECRET_KEY:-}
       MESSENGER_GRPC_ADDR: messenger:9092
       HTTP_ADDR: ":8102"
-      GRPC_ADDR: ":9102"
     volumes:
       - uploads:/app/uploads
     expose:
       - "8102"
-      - "9102"
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8102/healthz"]
       interval: 15s
@@ -567,8 +601,8 @@ services:
     # service_healthy, а не started: конфиг nginx резолвит upstream'ы
     # gateway:8096, calls:8090, auth:8091, messenger:8092, ai:8093,
     # pets:8094, tasks:8095, push:8097, registry:8099, calendar:8100,
-    # diary:8101 и portal:8102 на старте — без живых контейнеров он падает
-    # целиком («host not found in upstream»), включая отдачу SPA.
+    # diary:8101, portal:8102 и notes:8103 на старте — без живых контейнеров
+    # он падает целиком («host not found in upstream»), включая отдачу SPA.
     depends_on:
       gateway:
         condition: service_healthy
@@ -593,6 +627,8 @@ services:
       diary:
         condition: service_healthy
       portal:
+        condition: service_healthy
+      notes:
         condition: service_healthy
     volumes:
       - uploads:/app/uploads:ro

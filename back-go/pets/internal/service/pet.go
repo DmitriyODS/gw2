@@ -2,7 +2,6 @@ package service
 
 import (
 	"context"
-	"fmt"
 	"sort"
 	"strings"
 	"time"
@@ -58,7 +57,10 @@ func (s *Service) AwardKudos(ctx context.Context, userID, companyID int64,
 // ──────────────────── прямой XP за работу ──────────────────────────
 
 // applyEvolution — поднять стадию по накопленному XP (без сохранения).
-// >0 — питомец эволюционировал до этой стадии (вид и характер пересчитаны).
+// >0 — питомец эволюционировал до этой стадии (характер пересчитан).
+// Природный вид пересчитывается тоже, но КУПЛЕННЫЙ облик эволюция не
+// сбрасывает — надетый из магазина скин переживает смену стадии (новый
+// природный вид лишь разблокируется на будущее).
 func (s *Service) applyEvolution(ctx context.Context, pet *domain.Pet) int {
 	evolvedTo := 0
 	for pet.Stage < domain.MaxStage && pet.XP >= domain.StageXP[pet.Stage+1] {
@@ -66,34 +68,24 @@ func (s *Service) applyEvolution(ctx context.Context, pet *domain.Pet) int {
 		evolvedTo = pet.Stage
 	}
 	if evolvedTo > 0 {
-		pet.Species = s.detectSpecies(ctx, pet.UserID)
+		species := s.detectSpecies(ctx, pet.UserID)
+		if !containsStr(pet.UnlockedSpecies, species) {
+			pet.UnlockedSpecies = append(pet.UnlockedSpecies, species)
+		}
+		if pet.Species == "" || pet.Species == "egg" || domain.NaturalSpecies[pet.Species] {
+			pet.Species = species
+		}
 		personality := s.detectPersonality(ctx, pet.UserID)
 		pet.Personality = &personality
-		if !containsStr(pet.UnlockedSpecies, pet.Species) {
-			pet.UnlockedSpecies = append(pet.UnlockedSpecies, pet.Species)
-		}
 	}
 	return evolvedTo
 }
 
-// celebrateEvolution — единая фиксация состоявшейся эволюции: запись в
-// приватную историю + системный пост-поздравление в корпоративном портале
-// (system_kind='pet_evolved'). Клиент портала fire-and-forget (горутина с
-// таймаутом внутри клиента), дедуп повторов — на стороне portalsvc;
-// nil-клиент — портал не настроен, публикуем только историю.
+// celebrateEvolution — фиксация состоявшейся эволюции в приватной истории
+// питомца (никуда наружу не публикуется).
 func (s *Service) celebrateEvolution(ctx context.Context, pet *domain.Pet, evolvedTo int) {
 	s.appendActivity(ctx, pet.UserID, "evolved",
 		map[string]any{"stage": evolvedTo, "species": pet.Species})
-	if s.portal == nil {
-		return
-	}
-	stage := ""
-	if evolvedTo > 0 && evolvedTo < len(domain.StageTitles) {
-		stage = domain.StageTitles[evolvedTo]
-	}
-	s.portal.CreateSystemPost(pet.CompanyID, pet.UserID, "pet_evolved",
-		"🎉 Эволюция грувика",
-		fmt.Sprintf("«%s» дорос до стадии «%s»!", pet.Name, stage))
 }
 
 // fedToday — питомца сегодня хотя бы раз кормили («сытость» до конца дня).
@@ -750,6 +742,32 @@ func (s *Service) GetZoo(ctx context.Context, companyID, viewerID int64) ([]*dto
 		result = append(result, d)
 	}
 	return result, nil
+}
+
+// DeleteColleaguePet — администратор компании (роль 3) удаляет питомца
+// сотрудника СВОЕЙ активной компании вместе со связанными данными (покупки,
+// поглаживания, недельные кудосы; история — каскадом). Свой питомец у
+// владельца пересоздастся штатным путём при следующем GetMyPet.
+func (s *Service) DeleteColleaguePet(ctx context.Context, adminLevel int, targetUserID, companyID int64) error {
+	if adminLevel < domain.LevelAdmin {
+		return domain.NewError("FORBIDDEN", "Удалять питомцев может только администратор компании", 403)
+	}
+	pet, err := s.pets.GetPet(ctx, targetUserID)
+	if err != nil {
+		return err
+	}
+	if pet == nil || pet.CompanyID != companyID {
+		return domain.NewError("PET_NOT_FOUND", "Питомец не найден", 404)
+	}
+	if err := s.pets.DeletePet(ctx, targetUserID); err != nil {
+		return err
+	}
+	// Комната all: владельцу — сброс своего питомца, остальным — обновление
+	// зоопарка; клиенты чужих компаний отфильтруют по company_id.
+	s.pub.Publish(ctx, "pet:deleted", []string{"all"}, map[string]any{
+		"user_id": targetUserID, "company_id": companyID,
+	})
+	return nil
 }
 
 // ─────────────────── рейтинг питомцев компании ─────────────────────

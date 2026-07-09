@@ -28,8 +28,7 @@ type Topic struct {
 // Post — пост портала. TopicID — опциональная привязка к разделу.
 // PinnedAt/PinnedBy — закрепление (автор поста или администратор компании);
 // PinnedUntil — автоистечение пина (NULL = бессрочно), истёкший пин везде
-// трактуется как незакреплённый. SystemKind — тип системного поста
-// ('pet_evolved' и будущие; NULL = обычный пост).
+// трактуется как незакреплённый.
 type Post struct {
 	ID          int64      `json:"id"`
 	CompanyID   int64      `json:"company_id"`
@@ -40,7 +39,6 @@ type Post struct {
 	PinnedAt    *time.Time `json:"pinned_at"`
 	PinnedBy    *int64     `json:"pinned_by"`
 	PinnedUntil *time.Time `json:"pinned_until"`
-	SystemKind  *string    `json:"system_kind"`
 	CreatedAt   time.Time  `json:"created_at"`
 	UpdatedAt   time.Time  `json:"updated_at"`
 

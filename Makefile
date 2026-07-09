@@ -31,7 +31,8 @@ help:
 	@printf "  make dev-registry Go-микросервис реестров (HTTP :8099)\n"
 	@printf "  make dev-calendar Go-микросервис календарей (HTTP :8100)\n"
 	@printf "  make dev-diary    Go-микросервис ежедневников (HTTP :8101)\n"
-	@printf "  make dev-portal   Go-микросервис корпоративного портала (gRPC :9102, HTTP :8102)\n"
+	@printf "  make dev-portal   Go-микросервис корпоративного портала (HTTP :8102)\n"
+	@printf "  make dev-notes    Go-микросервис заметок (HTTP :8103)\n"
 	@printf "  make dev-migrate  Применить миграции (goose)\n"
 	@printf "  make dev-front    Vite dev-сервер  :5173\n"
 	@printf "  make dev-stop     Остановить dev-контейнеры\n"
@@ -55,7 +56,7 @@ help:
 	@printf "\n\033[33mКонфигурация сервера:\033[0m cp .env.deploy.example .env.deploy\n\n"
 
 # ── Разработка ────────────────────────────────────────────────────
-.PHONY: dev-infra dev-migrate dev-front dev-calls dev-auth dev-messenger dev-ai dev-pets dev-tasks dev-gateway dev-push dev-mail dev-registry dev-calendar dev-diary dev-portal dev-stop dev-stack dev-stack-stop gen-proto
+.PHONY: dev-infra dev-migrate dev-front dev-calls dev-auth dev-messenger dev-ai dev-pets dev-tasks dev-gateway dev-push dev-mail dev-registry dev-calendar dev-diary dev-portal dev-notes dev-stop dev-stack dev-stack-stop gen-proto
 
 # Dev-ключи PASETO (синхронизированы с dev.sh и
 # deploy/docker-compose.override.yml): приватный — только у authsvc,
@@ -140,15 +141,14 @@ dev-ai: dev-infra
 	go run ./cmd/aisvc
 
 # Go-микросервис питомцев-грувиков: REST /api/pets/* и gRPC-хуки доменных
-# событий (tasksvc — юниты/задачи). Исходящий gRPC — portalsvc (пост-
-# поздравление при эволюции). env синхронизированы с dev.sh.
+# событий (tasksvc — юниты/задачи). Исходящих межсервисных вызовов нет.
+# env синхронизированы с dev.sh.
 dev-pets: dev-infra
 	@printf "\033[1m▶ petsvc (Go)  gRPC :9094  HTTP :8094\033[0m\n"
 	cd back-go/pets && \
 	DATABASE_URL="postgresql://grovework:grovework_local@localhost:5432/grovework" \
 	REDIS_URL="redis://localhost:6379/0" \
 	PASETO_PUBLIC_KEY="$(PASETO_PUBLIC_KEY_DEV)" \
-	PORTAL_GRPC_ADDR="localhost:9102" \
 	HTTP_ADDR=":8094" \
 	GRPC_ADDR=":9094" \
 	go run ./cmd/petsvc
@@ -241,7 +241,7 @@ dev-diary: dev-infra
 
 # Go-микросервис корпоративного портала: REST /api/portal/*. env синхронизированы с dev.sh.
 dev-portal: dev-infra
-	@printf "\033[1m▶ portalsvc (Go)  gRPC :9102  HTTP :8102\033[0m\n"
+	@printf "\033[1m▶ portalsvc (Go)  HTTP :8102\033[0m\n"
 	cd back-go/portal && \
 	DATABASE_URL="postgresql://grovework:grovework_local@localhost:5432/grovework" \
 	REDIS_URL="redis://localhost:6379/0" \
@@ -249,8 +249,18 @@ dev-portal: dev-infra
 	UPLOAD_FOLDER="$(PWD)/uploads" \
 	MESSENGER_GRPC_ADDR="localhost:9092" \
 	HTTP_ADDR=":8102" \
-	GRPC_ADDR=":9102" \
 	go run ./cmd/portalsvc
+
+# Go-микросервис заметок: REST /api/notes/*. env синхронизированы с dev.sh.
+dev-notes: dev-infra
+	@printf "\033[1m▶ notesvc (Go)  HTTP :8103\033[0m\n"
+	cd back-go/notes && \
+	DATABASE_URL="postgresql://grovework:grovework_local@localhost:5432/grovework" \
+	REDIS_URL="redis://localhost:6379/0" \
+	PASETO_PUBLIC_KEY="$(PASETO_PUBLIC_KEY_DEV)" \
+	UPLOAD_FOLDER="$(PWD)/uploads" \
+	HTTP_ADDR=":8103" \
+	go run ./cmd/notesvc
 
 gen-proto:
 	bash scripts/gen_proto.sh

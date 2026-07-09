@@ -393,7 +393,7 @@ onMounted(load)
 .sr-head {
   flex: none;
   display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap;
-  padding: 16px 20px; border-bottom: 1px solid var(--color-outline-dim); background: var(--color-surface);
+  padding: 16px 20px; border-bottom: 1px solid var(--color-outline-dim); background: var(--acrylic-card-bg);
 }
 .sr-title { display: flex; align-items: center; gap: 10px; min-width: 0; }
 .sr-title .material-symbols-outlined { color: var(--color-primary); }
@@ -414,10 +414,14 @@ onMounted(load)
 .sr-selbar { flex: none; display: flex; align-items: center; gap: 12px; padding: 10px 20px; background: var(--color-primary-container); color: var(--color-on-primary-container); font-size: 14px; font-weight: 600; }
 
 .sr-tablebox { position: relative; flex: 1; min-height: 0; display: flex; padding: 12px 16px; }
-.sr-scroll { position: relative; flex: 1; min-height: 0; overflow: auto; background: var(--color-surface); border: 1px solid var(--color-outline-dim); border-radius: var(--radius-lg); }
+.sr-scroll { position: relative; flex: 1; min-height: 0; overflow: auto; background: var(--acrylic-card-bg); border: 1px solid var(--color-outline-dim); border-radius: var(--radius-lg); }
 .sr-table { width: 100%; border-collapse: collapse; font-size: 14px; }
 .sr-table thead th {
-  position: sticky; top: 0; z-index: 1; background: var(--color-surface);
+  /* Sticky-шапка таблицы: строки уезжают под неё — плотное стекло с блюром */
+  position: sticky; top: 0; z-index: 1;
+  background: var(--acrylic-bg-strong);
+  backdrop-filter: var(--acrylic-blur);
+  -webkit-backdrop-filter: var(--acrylic-blur);
   border-bottom: 1px solid var(--color-outline-dim); padding: 12px 14px; text-align: left;
   font-weight: 700; color: var(--color-text); white-space: nowrap; user-select: none;
 }
@@ -439,21 +443,21 @@ onMounted(load)
 .sr-empty .material-symbols-outlined { font-size: 44px; }
 .sr-empty p { margin: 0; }
 
-.sr-foot { flex: none; display: flex; align-items: center; gap: 12px; padding: 10px 20px; border-top: 1px solid var(--color-outline-dim); background: var(--color-surface); }
+.sr-foot { flex: none; display: flex; align-items: center; gap: 12px; padding: 10px 20px; border-top: 1px solid var(--color-outline-dim); background: var(--acrylic-card-bg); }
 .sr-total { font-size: 13px; color: var(--color-text-dim); }
 .sr-pager { display: flex; align-items: center; gap: 8px; margin: 0 auto; }
-.sr-page-btn { width: 34px; height: 34px; display: grid; place-items: center; border: 1px solid var(--color-outline-dim); border-radius: var(--radius-full); background: var(--color-surface); color: var(--color-text); cursor: pointer; }
+.sr-page-btn { width: 34px; height: 34px; display: grid; place-items: center; border: 1px solid var(--color-outline-dim); border-radius: var(--radius-full); background: var(--acrylic-card-bg); color: var(--color-text); cursor: pointer; }
 .sr-page-btn:hover:not(:disabled) { background: var(--color-surface-high); }
 .sr-page-btn:disabled { opacity: 0.4; cursor: default; }
 .sr-page-info { font-size: 13px; color: var(--color-text-dim); min-width: 56px; text-align: center; }
 .sr-brand { font-size: 12px; font-weight: 700; color: var(--color-text-dim); }
 
 .sr-cols { position: relative; }
-.sr-icon-btn { width: 40px; height: 40px; display: grid; place-items: center; border: 1px solid var(--color-outline-dim); border-radius: var(--radius-full); background: var(--color-surface); color: var(--color-text-dim); cursor: pointer; }
+.sr-icon-btn { width: 40px; height: 40px; display: grid; place-items: center; border: 1px solid var(--color-outline-dim); border-radius: var(--radius-full); background: var(--acrylic-card-bg); color: var(--color-text-dim); cursor: pointer; }
 .sr-icon-btn:hover { background: var(--color-surface-high); color: var(--color-text); }
 /* Поповер столбцов вынесен в body (Teleport), позиция — по кнопке. */
 .sr-cols-backdrop { position: fixed; inset: 0; z-index: 10800; }
-.sr-cols-pop { position: fixed; z-index: 10801; min-width: 220px; max-height: 60vh; overflow-y: auto; padding: 8px; background: var(--color-surface); border: 1px solid var(--color-outline-dim); border-radius: var(--radius-lg); box-shadow: var(--shadow-lg); }
+.sr-cols-pop { position: fixed; z-index: 10801; min-width: 220px; max-height: 60vh; overflow-y: auto; padding: 8px; background: var(--acrylic-card-bg); border: 1px solid var(--color-outline-dim); border-radius: var(--radius-lg); box-shadow: var(--shadow-lg); }
 .sr-cols-title { padding: 6px 10px; font-size: 12px; font-weight: 700; color: var(--color-text-dim); text-transform: uppercase; }
 .sr-cols-row { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-radius: var(--radius-md); cursor: pointer; font-size: 14px; color: var(--color-text); }
 .sr-cols-row:hover { background: var(--color-surface-high); }
@@ -489,12 +493,12 @@ onMounted(load)
 .sr-msort-dir {
   width: 38px; height: 38px; flex-shrink: 0; display: grid; place-items: center;
   border: 1px solid var(--color-outline-dim); border-radius: var(--radius-md);
-  background: var(--color-surface); color: var(--color-text); cursor: pointer;
+  background: var(--acrylic-card-bg); color: var(--color-text); cursor: pointer;
 }
 
 .sr-cards { flex: 1; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 10px; }
 .sr-cards-selall { display: flex; align-items: center; gap: 10px; padding: 2px 2px 0; font-size: 13px; color: var(--color-text-dim); }
-.sr-card { border: 1px solid var(--color-outline-dim); border-radius: var(--radius-lg); background: var(--color-surface); overflow: hidden; cursor: pointer; }
+.sr-card { border: 1px solid var(--color-outline-dim); border-radius: var(--radius-lg); background: var(--acrylic-card-bg); overflow: hidden; cursor: pointer; }
 .sr-card.selected { border-color: var(--color-primary); background: var(--color-primary-container); }
 .sr-card-head { display: flex; align-items: center; gap: 10px; padding: 12px 14px; }
 .sr-card-check { flex: none; display: inline-flex; }

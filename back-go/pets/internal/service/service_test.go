@@ -173,6 +173,16 @@ func (f *fakePets) FinishAdventure(_ context.Context, userID int64, now time.Tim
 	return place, true, nil
 }
 
+func (f *fakePets) DeletePet(_ context.Context, userID int64) error {
+	delete(f.byUser, userID)
+	for i, p := range f.company {
+		if p.UserID == userID {
+			f.company = append(f.company[:i], f.company[i+1:]...)
+			break
+		}
+	}
+	return nil
+}
 func (f *fakePets) FinishedUnitsForUser(context.Context, int64, time.Time, int) ([]domain.FinishedUnit, error) {
 	return nil, nil
 }
@@ -433,7 +443,7 @@ func newEnv() *testEnv {
 	daily := &capDaily{}
 	pub := &fakePub{}
 	svc := New(pets, shop, activity, users, fakeCompanies{}, &fakeWork{}, daily, pub,
-		nil, slog.New(slog.DiscardHandler))
+		slog.New(slog.DiscardHandler))
 	return &testEnv{pets: pets, shop: shop, activity: activity, users: users, daily: daily, pub: pub, svc: svc}
 }
 
@@ -441,7 +451,7 @@ func newEnv() *testEnv {
 // использовалось для тестов кормления.
 func newTestService(pets *fakePets, daily *fakeDaily, pub *fakePub, activity *fakeActivity) *Service {
 	return New(pets, newFakeShop(), activity, &fakeUsers{}, fakeCompanies{}, &fakeWork{}, daily, pub,
-		nil, slog.New(slog.DiscardHandler))
+		slog.New(slog.DiscardHandler))
 }
 
 // ── FeedPet на фейках портов ───────────────────────────────────────

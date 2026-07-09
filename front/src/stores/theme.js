@@ -1,5 +1,5 @@
 import { defineStore } from 'pinia'
-import { ref } from 'vue'
+import { ref, reactive } from 'vue'
 import {
   storageGet, storageGetJSON, storageSet, storageSetJSON,
 } from '@/utils/storage.js'
@@ -13,7 +13,7 @@ import {
    что и акценты. Это даёт «единое лицо» интерфейса: и кнопки, и фоны
    живут в одной палитре, а не на нейтрально-сером заднике. */
 const PRESETS = {
-  classic: { primary: '#9b4dff', secondary: '#00bfa5', tertiary: '#3d6ce7', neutral: '#ece8f2' },
+  classic: { primary: '#006cdc', secondary: '#2499ec', tertiary: '#2499ec', neutral: '#e1effb' },
   blue:    { primary: '#1e88e5', secondary: '#00acc1', tertiary: '#7e57c2', neutral: '#e6ecf4' },
   pink:    { primary: '#ec4899', secondary: '#e91e63', tertiary: '#ce93d8', neutral: '#f5e8ee' },
   red:     { primary: '#e53935', secondary: '#ff7043', tertiary: '#f06292', neutral: '#f4e6e3' },
@@ -181,6 +181,64 @@ function randomTheme() {
   }
 }
 
+/* ── Градиент фона приложения ────────────────────────────────────
+   Пользовательский акриловый фон: четыре размытых «пятна» поверх
+   --color-bg на всех разделах. Храним НЕ цвета, а рецепт композиции —
+   роль токена темы, позицию, размер и долю; цвет собирается в CSS через
+   color-mix от var(--color-*), поэтому фон сам адаптируется к смене
+   темы и тёмному режиму без перегенерации. */
+const BG_ROLES = ['primary', 'secondary', 'tertiary']
+
+/* Дефолтная композиция повторяет фон экрана входа: primary сверху слева,
+   tertiary справа, secondary снизу + лёгкое четвёртое пятно для глубины. */
+const BG_GRADIENT_DEFAULT_BLOBS = [
+  { role: 'primary',   x: 6,   y: -6,  size: 44, alpha: 24 },
+  { role: 'tertiary',  x: 104, y: 24,  size: 40, alpha: 20 },
+  { role: 'secondary', x: 32,  y: 110, size: 48, alpha: 18 },
+  { role: 'primary',   x: 84,  y: 98,  size: 34, alpha: 12 },
+]
+
+/* Рецепт приходит и из localStorage — числа клампим, роль проверяем. */
+function normalizeBgBlobs(blobs) {
+  if (!Array.isArray(blobs) || blobs.length !== 4) return null
+  const clampNum = (v, min, max) => Number.isFinite(v) ? Math.min(Math.max(v, min), max) : null
+  const norm = []
+  for (const b of blobs) {
+    const x = clampNum(b?.x, -30, 130)
+    const y = clampNum(b?.y, -30, 130)
+    const size = clampNum(b?.size, 20, 70)
+    const alpha = clampNum(b?.alpha, 4, 45)
+    if (x === null || y === null || size === null || alpha === null) return null
+    norm.push({ role: BG_ROLES.includes(b?.role) ? b.role : 'primary', x, y, size, alpha })
+  }
+  return norm
+}
+
+/* Случайная композиция: пятна якорятся к краям/углам (центр остаётся
+   спокойным под контент), роли — все три цвета темы + случайный четвёртый. */
+function randomBgBlobs() {
+  const zones = [
+    { x: [-12, 14], y: [-14, 8] },   // верх-лево
+    { x: [40, 66],  y: [-16, 4] },   // верх-центр
+    { x: [88, 114], y: [-12, 12] },  // верх-право
+    { x: [96, 114], y: [30, 62] },   // право
+    { x: [-14, 8],  y: [34, 68] },   // лево
+    { x: [-12, 12], y: [78, 112] },  // низ-лево
+    { x: [30, 62],  y: [96, 118] },  // низ-центр
+    { x: [80, 110], y: [86, 114] },  // низ-право
+  ]
+  const shuffled = [...zones].sort(() => Math.random() - 0.5).slice(0, 4)
+  const roles = [...BG_ROLES].sort(() => Math.random() - 0.5)
+  roles.push(pickOne(BG_ROLES))
+  return shuffled.map((z, i) => ({
+    role: roles[i],
+    x: Math.round(rand(z.x[0], z.x[1])),
+    y: Math.round(rand(z.y[0], z.y[1])),
+    size: Math.round(rand(34, 52)),
+    alpha: Math.round(rand(i === 0 ? 20 : 12, i === 0 ? 30 : 24)),
+  }))
+}
+
 export const useThemeStore = defineStore('theme', () => {
   /* Resolve stored preset name — map legacy 'dark' to 'classic' */
   const storedPreset = storageGet('gw_theme', 'classic')
@@ -253,6 +311,49 @@ export const useThemeStore = defineStore('theme', () => {
 
   const customThemes = ref(storedCustomThemes)
 
+  /* ── Градиент фона ── */
+  const storedBgGradient = storageGetJSON('gw_bg_gradient', null)
+  const bgGradient = reactive({
+    // Включён по умолчанию: акриловая концепция строится на просвечивающем
+    // градиенте. Выключается тумблером в настройках внешнего вида.
+    enabled: storedBgGradient ? storedBgGradient.enabled === true : true,
+    blobs: normalizeBgBlobs(storedBgGradient?.blobs) || BG_GRADIENT_DEFAULT_BLOBS.map(b => ({ ...b })),
+  })
+
+  function persistBgGradient() {
+    storageSetJSON('gw_bg_gradient', { enabled: bgGradient.enabled, blobs: bgGradient.blobs })
+  }
+
+  /* Слои --bgg-1..4 читает main.css (правило [data-bg-gradient="true"]).
+     --bg-grad-dim — гаситель для тёмной темы, задан в tokens.css. */
+  function applyBgGradient() {
+    const root = document.documentElement
+    root.setAttribute('data-bg-gradient', bgGradient.enabled)
+    bgGradient.blobs.forEach((b, i) => {
+      root.style.setProperty(`--bgg-${i + 1}`,
+        `radial-gradient(${b.size}vmax at ${b.x}% ${b.y}%, ` +
+        `color-mix(in oklch, var(--color-${b.role}) calc(${b.alpha}% * var(--bg-grad-dim, 1)), transparent), transparent 64%)`)
+    })
+  }
+
+  function setBgGradientEnabled(v) {
+    bgGradient.enabled = !!v
+    persistBgGradient()
+    applyBgGradient()
+  }
+
+  function regenerateBgGradient() {
+    bgGradient.blobs = randomBgBlobs()
+    persistBgGradient()
+    applyBgGradient()
+  }
+
+  function resetBgGradient() {
+    bgGradient.blobs = BG_GRADIENT_DEFAULT_BLOBS.map(b => ({ ...b }))
+    persistBgGradient()
+    applyBgGradient()
+  }
+
   function getVars(name) {
     if (PRESETS[name]) return PRESETS[name]
     const custom = customThemes.value.find(t => t.name === name)
@@ -315,6 +416,7 @@ export const useThemeStore = defineStore('theme', () => {
   function init() {
     applyVars(getVars(currentPreset.value))
     applyDark()
+    applyBgGradient()
     // Живое переключение вслед за системой (addListener — старый Safari).
     const onSystemChange = () => { if (mode.value === 'system') applyDark() }
     if (systemDarkMq?.addEventListener) systemDarkMq.addEventListener('change', onSystemChange)
@@ -324,10 +426,11 @@ export const useThemeStore = defineStore('theme', () => {
   }
 
   return {
-    currentPreset, mode, dark, customThemes, schedule,
+    currentPreset, mode, dark, customThemes, schedule, bgGradient,
     presetNames: Object.keys(PRESETS),
     presetLabels: PRESET_LABELS,
     applyTheme, applyVars, setMode, setSchedule, saveCustomTheme, deleteCustomTheme,
     exportTheme, importTheme, init, getVars, randomTheme,
+    setBgGradientEnabled, regenerateBgGradient, resetBgGradient,
   }
 })

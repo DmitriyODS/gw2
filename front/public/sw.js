@@ -7,12 +7,16 @@
       PWA (Chrome предлагает «Установить» только при SW с fetch-обработчиком) и
       открывалось офлайн. API/WS/uploads/livekit НЕ кэшируем — это живой трафик. */
 
-const CACHE = 'gw-shell-v1'
+const CACHE = 'gw-shell-v2'
 const APP_SHELL = ['/', '/index.html', '/logo.svg', '/manifest.webmanifest']
 
 self.addEventListener('install', (event) => {
   event.waitUntil(
-    caches.open(CACHE).then((c) => c.addAll(APP_SHELL)).catch(() => {})
+    // cache: 'reload' — мимо HTTP-кэша браузера: иначе в оболочку попадает
+    // залежавшийся index.html и клиент остаётся на старой сборке.
+    caches.open(CACHE)
+      .then((c) => c.addAll(APP_SHELL.map((u) => new Request(u, { cache: 'reload' }))))
+      .catch(() => {})
   )
   self.skipWaiting()
 })
@@ -44,10 +48,12 @@ self.addEventListener('fetch', (event) => {
 
   // Навигация (открытие страницы) — network-first с откатом на кэш оболочки,
   // чтобы офлайн SPA всё равно загрузилась (роутинг разрулит Vue Router).
+  // cache: 'no-cache' — ревалидация у сервера (дешёвый 304), а не залежавшийся
+  // index.html из HTTP-кэша браузера.
   if (req.mode === 'navigate') {
     event.respondWith((async () => {
       try {
-        const fresh = await fetch(req)
+        const fresh = await fetch(req, { cache: 'no-cache' })
         const cache = await caches.open(CACHE)
         cache.put('/index.html', fresh.clone()).catch(() => {})
         return fresh

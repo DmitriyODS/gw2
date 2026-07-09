@@ -399,7 +399,7 @@ async function onStageReorder(e) {
 
 .row-name { font-weight: 600; color: var(--color-text); font-size: 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .row-input {
-  border: none; outline: none; background: var(--color-surface); font: inherit; font-weight: 600; font-size: 14px;
+  border: none; outline: none; background: var(--acrylic-card-bg); font: inherit; font-weight: 600; font-size: 14px;
   color: var(--color-text); padding: 8px 14px; border-radius: var(--radius-full); width: 100%; box-sizing: border-box;
   box-shadow: inset 0 0 0 2px var(--color-primary);
 }

@@ -1,13 +1,19 @@
 <template>
-  <div v-if="!hidden" class="mini-mess">
+  <div v-if="!hidden" class="mini-mess float-fade" :class="{ 'panel-open': open, raised, 'float-hidden': floatingHidden && !open }">
+    <!-- Скрим под мобильным листом (на десктопе скрыт CSS'ом). -->
+    <transition name="mini-fade">
+      <div v-if="open" class="mini-backdrop" @click="closePanel" />
+    </transition>
+
     <!-- Панель -->
     <transition name="mini-pop">
       <div v-if="open" class="mini-panel" :style="panelStyle">
+        <div class="mini-handle" aria-hidden="true"></div>
         <!-- Режим: вкладки хаба (Ассистент / список диалогов) -->
         <template v-if="!(activeTab === 'messages' && threadId)">
           <header class="mini-head">
-            <SegmentedTabs v-model="activeTab" :tabs="hubTabs" dense />
-            <button class="mini-icon" title="Свернуть" aria-label="Свернуть" @click="open = false">
+            <SegmentedTabs v-model="activeTab" :tabs="hubTabs" full-width dense />
+            <button class="mini-icon" title="Свернуть" aria-label="Свернуть" @click="closePanel">
               <span class="material-symbols-outlined">close</span>
             </button>
           </header>
@@ -161,7 +167,7 @@
                 <template v-else>{{ threadOnline ? 'в сети' : threadLastSeen }}</template>
               </span>
             </div>
-            <button class="mini-icon" title="Свернуть" aria-label="Свернуть" @click="open = false">
+            <button class="mini-icon" title="Свернуть" aria-label="Свернуть" @click="closePanel">
               <span class="material-symbols-outlined">close</span>
             </button>
           </header>
@@ -255,8 +261,9 @@
          bottom sheet живёт в той же нижней зоне экрана) -->
     <button
       v-show="!anyModalOpen || open"
-      class="mini-fab"
+      class="mini-fab float-spring"
       :class="{ active: open }"
+      data-tutorial="mini-hub"
       @click="toggle"
       :title="fabTitle"
       :aria-label="fabTitle"
@@ -272,7 +279,8 @@
 <script setup>
 import { ref, computed, watch, nextTick, onMounted, onBeforeUnmount } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { anyModalOpen } from '@/composables/useOpenModals.js'
+import { anyModalOpen, registerOpenModal, unregisterOpenModal } from '@/composables/useOpenModals.js'
+import { floatingHidden, installFloatingHide } from '@/composables/useFloatingHide.js'
 import { useMessengerStore } from '@/stores/messenger.js'
 import { useAuthStore } from '@/stores/auth.js'
 import { useCallStore } from '@/stores/call.js'
@@ -366,6 +374,10 @@ const hidden = computed(() => {
   return callStore.isInCall && !callStore.isMinimized
 })
 
+// В полном мессенджере поле ввода упирается в правый нижний угол — FAB в
+// стандартной позиции заслонял бы кнопку отправки, поднимаем его выше.
+const raised = computed(() => route.path.startsWith('/messenger'))
+
 /* ── Вкладки хаба: «Ассистент» (дефолт) / «Сообщения» ──────── */
 const TAB_STORAGE_KEY = 'gw_assistant_hub_tab'
 function loadStoredTab() {
@@ -436,8 +448,9 @@ const ASSISTANT_SUGGESTIONS = [
   'Найди задачу про отчёт',
 ]
 
-// Мобильная панель — во весь экран; при открытой клавиатуре iOS поджимаем
-// высоту под visualViewport (fixed-элементы клавиатура не двигает).
+// Мобильная панель — нижний лист почти во весь экран; при открытой клавиатуре
+// iOS перевешиваем лист к верху и поджимаем высоту под visualViewport
+// (fixed-элементы клавиатура не двигает, bottom-якорь ушёл бы под неё).
 const panelStyle = ref({})
 function updatePanelViewport() {
   const vv = typeof window !== 'undefined' ? window.visualViewport : null
@@ -446,27 +459,50 @@ function updatePanelViewport() {
     return
   }
   panelStyle.value = vv.height < window.innerHeight - 60
-    ? { height: `${Math.round(vv.height)}px` }
+    ? { top: '0px', bottom: 'auto', height: `${Math.round(vv.height)}px`, borderRadius: '0px' }
     : {}
 }
 watch(open, () => nextTick(updatePanelViewport))
+
+// На мобильном открытый лист — полноэкранная модалка: регистрируем его в
+// глобальном счётчике, чтобы плавающий питомец (z-index выше) не висел поверх
+// переписки. На десктопе панель — угловой поповер, там виджеты не мешают.
+let hubRegistered = false
+watch(open, (v) => {
+  const mobile = typeof window !== 'undefined' && window.innerWidth <= 768
+  if (v && mobile && !hubRegistered) {
+    registerOpenModal()
+    hubRegistered = true
+  } else if (!v && hubRegistered) {
+    unregisterOpenModal()
+    hubRegistered = false
+  }
+})
+
 onMounted(() => {
   window.visualViewport?.addEventListener('resize', updatePanelViewport)
+  installFloatingHide()
 })
 onBeforeUnmount(() => {
   window.visualViewport?.removeEventListener('resize', updatePanelViewport)
+  if (hubRegistered) unregisterOpenModal()
 })
 
+// Единая точка закрытия (FAB, крестик в шапке, тап по скриму): тред больше
+// не виден — входящие в него не должны тихо помечаться прочитанными.
+function closePanel() {
+  open.value = false
+  if (threadId.value) messenger.activeConversationId = null
+}
+
 function toggle() {
-  open.value = !open.value
   if (open.value) {
-    if (activeTab.value === 'messages') ensureMessagesFresh()
-    else ensureAssistantHistory()
-  } else if (threadId.value) {
-    // Панель закрыта — тред больше не виден, входящие в него не должны
-    // тихо помечаться прочитанными.
-    messenger.activeConversationId = null
+    closePanel()
+    return
   }
+  open.value = true
+  if (activeTab.value === 'messages') ensureMessagesFresh()
+  else ensureAssistantHistory()
 }
 
 async function openThread(id) {
@@ -750,6 +786,12 @@ watch([open, activeTab], async ([isOpen, tab]) => {
   transition: background 0.15s, transform 0.12s;
 }
 
+/* Выше поля ввода мессенджера (десктоп): нижний правый угол занят кнопкой
+   отправки. На мобильном своя геометрия ниже. */
+@media (min-width: 769px) {
+  .mini-mess.raised { bottom: 96px; }
+}
+
 .mini-fab:hover { background: var(--color-primary-hover); transform: translateY(-1px); }
 .mini-fab:active { transform: scale(0.96); }
 .mini-fab.active { background: var(--color-surface-high); color: var(--color-text); }
@@ -773,13 +815,17 @@ watch([open, activeTab], async ([isOpen, tab]) => {
   border: 2px solid var(--color-bg);
 }
 
+/* Плавающая панель — стекло (Expressive Glass): контент просвечивает,
+   внутренние поверхности прозрачные, текст лежит на плотных пузырях. */
 .mini-panel {
   width: 360px;
   max-width: calc(100vw - 32px);
   height: 70dvh;
   max-height: 560px;
-  background: var(--color-surface);
-  border: 1px solid var(--color-outline-dim);
+  background: var(--acrylic-bg);
+  backdrop-filter: var(--acrylic-blur);
+  -webkit-backdrop-filter: var(--acrylic-blur);
+  border: 1px solid var(--acrylic-border);
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow-xl);
   display: flex;
@@ -787,13 +833,20 @@ watch([open, activeTab], async ([isOpen, tab]) => {
   overflow: hidden;
 }
 
+/* Ручка листа и скрим — только для мобильного нижнего листа. */
+.mini-handle { display: none; }
+.mini-backdrop { display: none; }
+
+.mini-fade-enter-active, .mini-fade-leave-active { transition: opacity 0.18s ease; }
+.mini-fade-enter-from, .mini-fade-leave-to { opacity: 0; }
+
 .mini-head {
   display: flex;
   align-items: center;
   gap: 8px;
   padding: 10px 12px;
-  border-bottom: 1px solid var(--color-outline-dim);
-  background: var(--color-surface);
+  border-bottom: 1px solid var(--acrylic-border);
+  background: transparent;
   flex-shrink: 0;
 }
 
@@ -806,8 +859,9 @@ watch([open, activeTab], async ([isOpen, tab]) => {
   color: var(--color-text);
 }
 
-/* Хаб-шапка (вкладки хаба вместо статичного заголовка): кнопка «Свернуть» —
-   у правого края, вкладки — компактно слева. */
+/* Хаб-шапка: вкладки растянуты на всю доступную ширину, кнопка «Свернуть» —
+   у правого края. */
+.mini-head :deep(.seg-tabs) { flex: 1; min-width: 0; }
 .mini-head > .mini-icon:last-child {
   margin-left: auto;
 }
@@ -967,7 +1021,7 @@ watch([open, activeTab], async ([isOpen, tab]) => {
   flex: 1;
   overflow-y: auto;
   padding: 12px;
-  background: var(--color-bg);
+  background: transparent;
   min-height: 0;
   position: relative;
 }
@@ -1023,18 +1077,58 @@ watch([open, activeTab], async ([isOpen, tab]) => {
        поднимаем выше, чтобы 56px-кружки не накладывались друг на друга. */
     bottom: calc(150px + env(safe-area-inset-bottom, 0px));
   }
-  /* Открытая панель — во весь экран: 70dvh-поповер тесен, а fixed-элемент
-     над клавиатурой iOS перекрывал поле ввода. Высота дополнительно
-     поджимается JS'ом под visualViewport при открытой клавиатуре. */
-  .mini-panel {
+
+  /* Пока открыт лист, FAB не нужен (закрытие — крестик в шапке или скрим),
+     иначе он висит поверх листа посреди переписки. */
+  .mini-mess.panel-open .mini-fab { display: none; }
+
+  .mini-backdrop {
+    display: block;
     position: fixed;
     inset: 0;
-    width: 100vw;
-    height: 100dvh;
+    background: var(--color-scrim, color-mix(in oklch, var(--color-text) 45%, transparent));
+  }
+
+  /* Открытая панель — нижний лист почти во весь экран, как остальные
+     мобильные модалки (AppDialog mobile-sheet, шторка «Ещё»): 70dvh-поповер
+     тесен, а «окошко в углу» на телефоне неуместно. При открытой клавиатуре
+     iOS высота/якорь поджимаются JS'ом под visualViewport. */
+  .mini-panel {
+    position: fixed;
+    top: auto;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    width: auto;
+    /* Базовый max-width (100vw - 32px) оставлял справа полосу — лист обязан
+       прижиматься к обоим краям. */
+    max-width: none;
+    height: calc(100dvh - 28px);
     max-height: none;
-    border-radius: 0;
     border: none;
-    padding-top: env(safe-area-inset-top, 0px);
+    border-top: 1px solid var(--acrylic-border);
+    border-radius: var(--radius-xl) var(--radius-xl) 0 0;
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+
+  .mini-handle {
+    display: block;
+    flex-shrink: 0;
+    align-self: center;
+    width: 36px;
+    height: 4px;
+    border-radius: var(--radius-full);
+    background: var(--color-outline-dim);
+    margin: 8px 0 2px;
+  }
+
+  /* Лист выезжает снизу (как шторка «Ещё»), а не «выпрыгивает» из угла. */
+  .mini-pop-enter-active, .mini-pop-leave-active {
+    transform-origin: center bottom;
+    transition: transform 0.22s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.18s ease;
+  }
+  .mini-pop-enter-from, .mini-pop-leave-to {
+    transform: translateY(100%);
   }
 }
 

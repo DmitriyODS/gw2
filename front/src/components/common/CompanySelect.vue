@@ -677,9 +677,11 @@ watch(() => auth.companyId, (v) => {
 .company-popover {
   position: fixed;
   z-index: 2000;
-  background: var(--color-surface);
+  background: var(--acrylic-bg);
+  backdrop-filter: var(--acrylic-blur);
+  -webkit-backdrop-filter: var(--acrylic-blur);
   border-radius: var(--radius-xl, 18px);
-  border: 1px solid var(--color-outline-dim);
+  border: 1px solid var(--acrylic-border);
   box-shadow: var(--shadow-lg);
   display: flex;
   flex-direction: column;
@@ -814,7 +816,7 @@ watch(() => auth.companyId, (v) => {
 }
 
 .company-popover-item.active {
-  background: var(--color-primary-container);
+  background: var(--grad-primary-soft);
   color: var(--color-on-primary-container);
 }
 
@@ -839,7 +841,7 @@ watch(() => auth.companyId, (v) => {
 }
 
 .company-popover-item.active .company-popover-badge {
-  background: var(--color-primary);
+  background: var(--grad-primary);
   color: var(--color-on-primary);
 }
 

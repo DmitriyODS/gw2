@@ -1,43 +1,25 @@
 <template>
   <div class="admin-page">
     <header class="admin-sticky">
-      <div class="page-head">
-        <div class="page-head-text">
-          <h1 class="page-head-title">{{ isSuper ? 'Компании' : 'Мои компании' }}</h1>
-          <div class="page-head-meta">
-            <span class="meta-stat">
-              <span class="material-symbols-outlined">domain</span>
-              <strong>{{ rows.length }}</strong> {{ isSuper ? 'всего' : 'под управлением' }}
-            </span>
-            <template v-if="isSuper">
-              <span class="meta-dot" aria-hidden="true">·</span>
-              <span class="meta-stat online">
-                <span class="presence-pulse" />
-                <strong>{{ activeCount }}</strong> активных
-              </span>
-              <template v-if="disabledCount">
-                <span class="meta-dot" aria-hidden="true">·</span>
-                <span class="meta-stat error">
-                  <strong>{{ disabledCount }}</strong> отключённых
-                </span>
-              </template>
-            </template>
-          </div>
-        </div>
-        <button class="btn-filled desktop-only" @click="openCreate">
+      <!-- Тулбар в стиле «Задач»: поиск на всю ширину, статы-чипы, главное действие. -->
+      <div class="admin-toolbar">
+        <SearchField v-model="search" placeholder="Поиск по названию" hotkey />
+        <span class="chip-tint chip-tint--primary cmp-chip">
+          <span class="material-symbols-outlined">domain</span>
+          <strong>{{ rows.length }}</strong>&nbsp;{{ isSuper ? 'всего' : 'под управлением' }}
+        </span>
+        <template v-if="isSuper">
+          <span class="chip-tint chip-tint--success cmp-chip">
+            <strong>{{ activeCount }}</strong>&nbsp;активных
+          </span>
+          <span v-if="disabledCount" class="chip-tint chip-tint--error cmp-chip">
+            <strong>{{ disabledCount }}</strong>&nbsp;отключённых
+          </span>
+        </template>
+        <button class="btn-grad desktop-only" @click="openCreate">
           <span class="material-symbols-outlined">add</span>
           <span>Новая компания</span>
         </button>
-      </div>
-
-      <div class="admin-toolbar">
-        <div class="cmp-search">
-          <span class="material-symbols-outlined">search</span>
-          <input v-model.trim="search" placeholder="Поиск по названию" />
-          <button v-if="search" class="cmp-search-clear" @click="search = ''" aria-label="Очистить">
-            <span class="material-symbols-outlined">close</span>
-          </button>
-        </div>
       </div>
     </header>
 
@@ -232,6 +214,7 @@ import AppDataTable from '@/components/common/AppDataTable.vue'
 import AppFab from '@/components/common/AppFab.vue'
 import CreateCompanyDialog from '@/components/common/CreateCompanyDialog.vue'
 import EmptyState from '@/components/common/EmptyState.vue'
+import SearchField from '@/components/common/SearchField.vue'
 import { useCompaniesStore } from '@/stores/companies.js'
 import { useNotificationsStore } from '@/stores/notifications.js'
 import { useAuthStore } from '@/stores/auth.js'
@@ -291,7 +274,7 @@ const activeCount = computed(() => rows.value.filter((c) => c.is_active).length)
 const disabledCount = computed(() => rows.value.filter((c) => !c.is_active).length)
 
 const visible = computed(() => {
-  const q = search.value.toLowerCase()
+  const q = search.value.trim().toLowerCase()
   return q ? rows.value.filter((c) => c.name.toLowerCase().includes(q)) : rows.value
 })
 
@@ -374,88 +357,9 @@ async function doDelete() {
 </script>
 
 <style scoped>
-.page-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  flex-wrap: wrap;
-}
-.page-head-text { min-width: 0; }
-.page-head-title {
-  margin: 0 0 6px;
-  font-size: 24px;
-  font-weight: 800;
-  letter-spacing: -0.01em;
-  color: var(--color-text);
-}
-.page-head-meta {
-  display: inline-flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 10px;
-  font-size: 13px;
-  color: var(--color-text-dim);
-}
-.page-head-meta .meta-stat {
-  background: var(--color-surface-high);
-  color: var(--color-text);
-}
-.page-head-meta .meta-stat.online {
-  background: color-mix(in oklch, var(--color-success) 18%, transparent);
-  color: var(--color-text);
-}
-.page-head-meta .meta-stat.error {
-  background: color-mix(in oklch, var(--color-error) 18%, transparent);
-  color: var(--color-text);
-}
-
-.cmp-search {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  height: 44px;
-  padding: 0 10px 0 14px;
-  background: var(--color-surface-high);
-  border: 1px solid transparent;
-  border-radius: var(--radius-full);
-  flex: 1 1 320px;
-  max-width: 520px;
-  min-width: 0;
-  transition: border-color .12s, background .12s, box-shadow .12s;
-}
-.cmp-search:focus-within {
-  background: var(--color-surface);
-  border-color: var(--color-primary);
-  box-shadow: 0 0 0 3px color-mix(in oklch, var(--color-primary) 18%, transparent);
-}
-.cmp-search > .material-symbols-outlined { color: var(--color-text-dim); font-size: 20px; }
-.cmp-search input {
-  flex: 1;
-  border: none;
-  outline: none;
-  background: transparent;
-  color: var(--color-text);
-  font: inherit;
-  min-width: 0;
-}
-.cmp-search-clear {
-  border: none;
-  background: var(--color-surface-highest);
-  width: 26px;
-  height: 26px;
-  border-radius: 50%;
-  display: grid;
-  place-items: center;
-  cursor: pointer;
-  color: var(--color-text-dim);
-  transition: background .12s, color .12s;
-}
-.cmp-search-clear:hover {
-  background: var(--color-primary-container);
-  color: var(--color-on-primary-container);
-}
-.cmp-search-clear .material-symbols-outlined { font-size: 14px; }
+/* Тулбар без подложки — прозрачная «плавающая» шапка как в «Задачах». */
+.admin-sticky { background: transparent; backdrop-filter: none; -webkit-backdrop-filter: none; }
+.admin-sticky::after { display: none; }
 
 .cell-company {
   display: flex;
@@ -658,25 +562,6 @@ async function doDelete() {
 }
 .icon-btn .material-symbols-outlined { font-size: 18px; }
 
-.btn-filled {
-  appearance: none;
-  border: none;
-  cursor: pointer;
-  border-radius: var(--radius-full);
-  padding: 10px 18px;
-  font: inherit;
-  font-weight: 600;
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  background: var(--color-primary);
-  color: var(--color-on-primary);
-  box-shadow: var(--shadow-sm);
-  transition: background .14s, box-shadow .14s;
-}
-.btn-filled:hover { background: var(--color-primary-hover); }
-.btn-filled .material-symbols-outlined { font-size: 18px; }
-
 .confirm-warn { color: var(--color-text); }
 .confirm-warn strong { color: var(--color-error); }
 
@@ -687,8 +572,8 @@ async function doDelete() {
 }
 
 .cmp-card {
-  background: var(--color-surface);
-  border: 1px solid var(--color-outline-dim);
+  background: var(--acrylic-card-bg);
+  border: 1px solid var(--acrylic-border);
   border-radius: var(--radius-lg);
   padding: 14px;
   display: flex;
@@ -785,7 +670,7 @@ async function doDelete() {
 .card-act .material-symbols-outlined { font-size: 20px; }
 
 .cmp-cards-empty {
-  background: var(--color-surface-high);
+  background: var(--acrylic-card-bg);
   border-radius: var(--radius-xl);
 }
 
@@ -795,10 +680,6 @@ async function doDelete() {
   .hide-narrow { display: none; }
   .desktop-only { display: none; }
 
-  .page-head-title { font-size: 20px; }
-  .page-head-meta { font-size: 12px; }
-  .meta-dot { display: none; }
-
-  .cmp-search { flex: 1 1 100%; max-width: 100%; }
+  .admin-toolbar :deep(.search-field) { flex: 1 1 100%; max-width: 100%; }
 }
 </style>

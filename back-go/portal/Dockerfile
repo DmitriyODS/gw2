@@ -1,7 +1,6 @@
 # Микросервис корпоративного портала (portalsvc): HTTP/Fiber :8102 — посты
 # компании (с вложениями), комментарии, реакции, закрепление, тематические
-# разделы; gRPC :9102 — системные посты (CreateSystemPost, зовёт petsvc,
-# внутрисетевой). Контекст сборки — back-go/ (общий модуль pkg подключается через
+# разделы. Контекст сборки — back-go/ (общий модуль pkg подключается через
 # replace ../pkg в go.mod). Стадия сборки бежит на платформе билдера
 # ($BUILDPLATFORM): при сборке amd64-образа на Apple Silicon компилятор Go
 # работает нативно (кросс через GOOS/GOARCH), а не под эмуляцией.
@@ -25,7 +24,7 @@ COPY portal/docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
 RUN chmod +x /usr/local/bin/docker-entrypoint.sh
 # USER не задаём: контейнер стартует root'ом, entrypoint чинит права на
 # uploads-том и сам сбрасывает привилегии на portalsvc (su-exec).
-EXPOSE 8102 9102
+EXPOSE 8102
 # busybox wget — для healthcheck в docker-compose. Именно 127.0.0.1:
 # localhost в alpine резолвится сначала в ::1, busybox wget не делает
 # фолбэк на IPv4, а fiber слушает только tcp4 → ложный unhealthy.

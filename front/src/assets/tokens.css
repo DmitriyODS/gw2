@@ -15,21 +15,24 @@
 /* ── Layer 1: Key colour parameters ──────────────────────────────
    Only H (hue °) and C (chroma) are stored — lightness is always
    derived per-tone so that the full palette auto-generates.       */
+/* Дефолты = классическая тема (#006cdc / #2499ec / #e1effb) — те же
+   значения theme.js выводит из PRESETS.classic; здесь они нужны до его
+   запуска (флеш первой отрисовки) и вне Vue-контекста. */
 :root {
-  --ref-primary-h:    295;
-  --ref-primary-c:    0.26;
+  --ref-primary-h:    256.5;
+  --ref-primary-c:    0.19;
   /* --ref-*-l — реальная светлота выбранного цвета (OKLCH L).
      Используется в светлой теме для тона 40, чтобы светлый/тёмный hex
-     действительно влиял на цвет кнопки. Дефолт 0.50 ≈ старое поведение. */
-  --ref-primary-l:    0.50;
+     действительно влиял на цвет кнопки. */
+  --ref-primary-l:    0.547;
 
-  --ref-secondary-h:  177;
-  --ref-secondary-c:  0.18;
-  --ref-secondary-l:  0.50;
+  --ref-secondary-h:  245.9;
+  --ref-secondary-c:  0.157;
+  --ref-secondary-l:  0.66;
 
-  --ref-tertiary-h:   253;
-  --ref-tertiary-c:   0.27;
-  --ref-tertiary-l:   0.50;
+  --ref-tertiary-h:   245.9;
+  --ref-tertiary-c:   0.157;
+  --ref-tertiary-l:   0.66;
 
   /* Fixed hues — unaffected by theme colour changes */
   --ref-error-h:      22;
@@ -258,6 +261,50 @@
   --radius-xl:   24px;
   --radius-full: 999px;
 
+  /* ── Экспрессивные градиенты ──────────────────────────────────
+     Все от семантических ролей — следуют за темой и конструктором тем.
+     --grad-primary       активные пункты навигации, primary-кнопки, FAB
+     --grad-primary-soft  тинтованные плашки (карточка компании, профиль)
+     --grad-hero          крупные hero-заголовки разделов               */
+  --grad-primary: linear-gradient(90deg,
+    var(--color-primary) 0%,
+    color-mix(in oklch, var(--color-primary) 45%, var(--color-primary-container)) 100%);
+  --grad-primary-soft: linear-gradient(90deg,
+    color-mix(in oklch, var(--color-primary-container) 85%, var(--color-surface)) 0%,
+    color-mix(in oklch, var(--color-primary-container) 40%, var(--color-surface)) 100%);
+  --grad-hero: linear-gradient(135deg,
+    var(--color-primary) 0%,
+    color-mix(in oklch, var(--color-primary) 55%, var(--color-tertiary)) 100%);
+
+  /* ── Акрил (полупрозрачность + blur) ──────────────────────────
+     Поверхности, «плавающие» над контентом: сайдбар, нижняя навигация,
+     поповеры, шторки, диалоги. Использовать ПАРОЙ:
+       background: var(--acrylic-bg);
+       backdrop-filter: var(--acrylic-blur);
+     --acrylic-bg-strong — для мелких плотных элементов (бейджи, чипы),
+     где за стеклом мало контента и нужна читаемость.                */
+  --acrylic-bg:        color-mix(in oklch, var(--color-surface) 72%, transparent);
+  --acrylic-bg-strong: color-mix(in oklch, var(--color-surface) 86%, transparent);
+  --acrylic-blur:      blur(20px) saturate(1.5);
+  --acrylic-border:    color-mix(in oklch, var(--color-outline-dim) 55%, transparent);
+  /* Подложка карточек В ПОТОКЕ страницы: та же матовая плотность, что у
+     плавающего стекла (эталон — окно мини-мессенджера), но БЕЗ backdrop-filter —
+     за карточкой только фон приложения (градиент .app-layout), картинка
+     гладкая и blur её не меняет, а десятки blur-слоёв в сетках дорого.
+     Blur — плавающим элементам и крупным панелям-каркасам (.rail, .split-*). */
+  --acrylic-card-bg:   var(--acrylic-bg);
+
+  /* ── Градиент фона приложения (опция в настройках внешнего вида) ──
+     Слои --bgg-1..4 пишет theme.js из пользовательского рецепта: цвета
+     внутри — color-mix от var(--color-*), т.е. градиент следует за темой.
+     Дефолты ниже = композиция экрана входа (нужны до запуска JS).
+     --bg-grad-dim гасит доли в тёмной теме, чтобы «аврора» не горела. */
+  --bg-grad-dim: 1;
+  --bgg-1: radial-gradient(44vmax at 6% -6%,   color-mix(in oklch, var(--color-primary)   calc(24% * var(--bg-grad-dim, 1)), transparent), transparent 64%);
+  --bgg-2: radial-gradient(40vmax at 104% 24%, color-mix(in oklch, var(--color-tertiary)  calc(20% * var(--bg-grad-dim, 1)), transparent), transparent 64%);
+  --bgg-3: radial-gradient(48vmax at 32% 110%, color-mix(in oklch, var(--color-secondary) calc(18% * var(--bg-grad-dim, 1)), transparent), transparent 64%);
+  --bgg-4: radial-gradient(34vmax at 84% 98%,  color-mix(in oklch, var(--color-primary)   calc(12% * var(--bg-grad-dim, 1)), transparent), transparent 64%);
+
   /* Монетка грувов (GrooveCoin) — фиксированное золото, не зависит от темы */
   --groove-coin-rim:   oklch(0.72 0.135 80);
   --groove-coin-face:  oklch(0.86 0.140 88);
@@ -278,6 +325,16 @@
   --groove-coin-face:  oklch(0.78 0.125 86);
   --groove-coin-mark:  oklch(0.36 0.085 70);
   --groove-coin-shine: oklch(0.90 0.050 95);
+
+  /* Акрил в тёмной теме плотнее: за стеклом тёмный контент, при 72%
+     непрозрачности текст на нём терял контраст. --acrylic-card-bg следует
+     за --acrylic-bg автоматически (см. светлую тему). */
+  --acrylic-bg:        color-mix(in oklch, var(--color-surface) 80%, transparent);
+  --acrylic-bg-strong: color-mix(in oklch, var(--color-surface) 90%, transparent);
+
+  /* Пастельные тона палитры (тон 80) на тёмном фоне светятся сильнее —
+     градиент фона приглушаем, не меняя пользовательский рецепт. */
+  --bg-grad-dim: 0.6;
 }
 
 
@@ -381,23 +438,23 @@
 ══════════════════════════════════════════════════════════════════ */
 @supports not ((color: oklch(0 0 0)) and (color: color-mix(in oklch, red, blue))) {
   :root {
-    --color-primary:                #b425c9;
+    --color-primary:                #006cdc;
     --color-on-primary:             #ffffff;
-    --color-primary-container:      #fbd6ff;
-    --color-on-primary-container:   #3a0048;
-    --color-primary-hover:          #9b1fae;
+    --color-primary-container:      #e1effb;
+    --color-on-primary-container:   #002a55;
+    --color-primary-hover:          #0059b8;
 
-    --color-secondary:              #00897b;
+    --color-secondary:              #2499ec;
     --color-on-secondary:           #ffffff;
-    --color-secondary-container:    #a7f3e8;
-    --color-on-secondary-container: #00201c;
-    --color-secondary-hover:        #006b60;
+    --color-secondary-container:    #d6ebfc;
+    --color-on-secondary-container: #072f4e;
+    --color-secondary-hover:        #1d84cd;
 
-    --color-tertiary:               #3d6ce7;
+    --color-tertiary:               #2499ec;
     --color-on-tertiary:            #ffffff;
-    --color-tertiary-container:     #dbe4ff;
-    --color-on-tertiary-container:  #001a43;
-    --color-tertiary-hover:         #3057c0;
+    --color-tertiary-container:     #d6ebfc;
+    --color-on-tertiary-container:  #072f4e;
+    --color-tertiary-hover:         #1d84cd;
 
     --color-error:                  #d32f2f;
     --color-on-error:               #ffffff;
@@ -416,17 +473,17 @@
     --color-warning-container:      #ffe08a;
     --color-on-warning-container:   #261a00;
 
-    --color-bg:                     #faf7fb;
+    --color-bg:                     #f7fafd;
     --color-surface:                #ffffff;
-    --color-surface-low:            #f4f0f5;
-    --color-surface-high:           #ece7ee;
-    --color-surface-highest:        #e4dee6;
+    --color-surface-low:            #eff4fa;
+    --color-surface-high:           #e5edf6;
+    --color-surface-highest:        #dae6f1;
 
-    --color-text:                   #1c1b1f;
-    --color-text-dim:               #5d5a63;
+    --color-text:                   #1a1c1f;
+    --color-text-dim:               #59616d;
 
-    --color-outline:                #79747e;
-    --color-outline-dim:            #cac4d0;
+    --color-outline:                #73808f;
+    --color-outline-dim:            #c8d3e0;
 
     --groove-coin-rim:              #d9a514;
     --groove-coin-face:             #f3c83b;
@@ -434,7 +491,17 @@
     --groove-coin-shine:            #fdeeb5;
 
     --color-scrim:                  rgba(0, 0, 0, 0.32);
-    --shadow-color:                 rgba(60, 0, 70, 0.12);
+    --shadow-color:                 rgba(0, 60, 130, 0.12);
+
+    /* Градиенты и акрил — плоский фолбэк без color-mix. Акрил остаётся
+       полупрозрачным (rgba), blur работает и на старых Safari. */
+    --grad-primary:      linear-gradient(90deg, #006cdc, #79b6f2);
+    --grad-primary-soft: linear-gradient(90deg, #e1effb, #f3f9fe);
+    --grad-hero:         linear-gradient(135deg, #006cdc, #2499ec);
+    --acrylic-bg:        rgba(255, 255, 255, 0.72);
+    --acrylic-bg-strong: rgba(255, 255, 255, 0.86);
+    --acrylic-border:    rgba(202, 196, 208, 0.55);
+    --acrylic-card-bg:   rgba(255, 255, 255, 0.62);
 
     /* Цвета-теги задач — мягкие пастельные заливки */
     --tag-red-surface: #fbeae8;    --tag-red-border: #f3c3bc;    --tag-red-accent: #d35344;
@@ -448,23 +515,23 @@
   }
 
   [data-dark="true"] {
-    --color-primary:                #edaffb;
-    --color-on-primary:             #4a0050;
-    --color-primary-container:      #6d2178;
-    --color-on-primary-container:   #fbd6ff;
-    --color-primary-hover:          #f3c2fc;
+    --color-primary:                #9ccaff;
+    --color-on-primary:             #002f5e;
+    --color-primary-container:      #14497e;
+    --color-on-primary-container:   #d6e7ff;
+    --color-primary-hover:          #b3d7ff;
 
-    --color-secondary:              #5fd9c8;
-    --color-on-secondary:           #00382f;
-    --color-secondary-container:    #005046;
-    --color-on-secondary-container: #a7f3e8;
-    --color-secondary-hover:        #79e0d2;
+    --color-secondary:              #86c4f5;
+    --color-on-secondary:           #0a3050;
+    --color-secondary-container:    #1a5480;
+    --color-on-secondary-container: #d6ebfc;
+    --color-secondary-hover:        #a0d1f8;
 
-    --color-tertiary:               #adc6ff;
-    --color-on-tertiary:            #002e6b;
-    --color-tertiary-container:     #234578;
-    --color-on-tertiary-container:  #dbe4ff;
-    --color-tertiary-hover:         #c2d4ff;
+    --color-tertiary:               #86c4f5;
+    --color-on-tertiary:            #0a3050;
+    --color-tertiary-container:     #1a5480;
+    --color-on-tertiary-container:  #d6ebfc;
+    --color-tertiary-hover:         #a0d1f8;
 
     --color-error:                  #ffb4ab;
     --color-on-error:               #690005;
@@ -483,20 +550,28 @@
     --color-warning-container:      #5c4800;
     --color-on-warning-container:   #ffe08a;
 
-    --color-bg:                     #141218;
-    --color-surface:                #1c1b1f;
-    --color-surface-low:            #211f26;
-    --color-surface-high:           #2b2930;
-    --color-surface-highest:        #36343b;
+    --color-bg:                     #12161c;
+    --color-surface:                #181d24;
+    --color-surface-low:            #1d232c;
+    --color-surface-high:           #262e39;
+    --color-surface-highest:        #303a47;
 
-    --color-text:                   #e6e1e9;
-    --color-text-dim:               #cac4d0;
+    --color-text:                   #e2e7ee;
+    --color-text-dim:               #c2ccd8;
 
-    --color-outline:                #938f99;
-    --color-outline-dim:            #49454f;
+    --color-outline:                #8e9aa9;
+    --color-outline-dim:            #45505d;
 
     --color-scrim:                  rgba(0, 0, 0, 0.5);
     --shadow-color:                 rgba(0, 0, 0, 0.4);
+
+    --grad-primary:      linear-gradient(90deg, #9ccaff, #4a7cb8);
+    --grad-primary-soft: linear-gradient(90deg, #1d3a5c, #1c2530);
+    --grad-hero:         linear-gradient(135deg, #9ccaff, #86c4f5);
+    --acrylic-bg:        rgba(24, 29, 36, 0.8);
+    --acrylic-bg-strong: rgba(24, 29, 36, 0.9);
+    --acrylic-border:    rgba(69, 80, 93, 0.55);
+    --acrylic-card-bg:   rgba(24, 29, 36, 0.74);
 
     --tag-red-surface: #3a2422;    --tag-red-border: #5e3a35;    --tag-red-accent: #f0a59a;
     --tag-orange-surface: #3a2c1a; --tag-orange-border: #5e482c; --tag-orange-accent: #e8b87e;

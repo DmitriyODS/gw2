@@ -242,11 +242,18 @@ function formatTime(iso) {
 .conv-list {
   width: 320px;
   flex-shrink: 0;
-  background: var(--color-surface);
-  border-right: 1px solid var(--color-outline-dim);
+  background: var(--acrylic-card-bg);
+  border: 1px solid var(--acrylic-border);
+  border-radius: var(--radius-xl);
+  overflow: hidden;
   display: flex;
   flex-direction: column;
   min-height: 0;
+}
+
+@media (max-width: 768px) {
+  /* На мобильном список — полноэкранный слой (как раньше), без рамки-стекла. */
+  .conv-list { border: none; border-radius: 0; }
 }
 
 .conv-list-header {

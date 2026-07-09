@@ -223,14 +223,15 @@ function actionClass(a) {
   min-height: 0;
   flex: 1 1 auto;
   border-radius: var(--radius-xl, 28px);
-  background: var(--color-surface);
+  background: transparent; /* фон даёт акриловый .app-dialog-root */
   overflow: hidden;
 }
 
-/* Шапка — иконка-тон + текст + крестик. */
+/* Шапка — иконка-тон + текст + крестик. Текстовый блок (заголовок+подпись)
+   центрируется по вертикали относительно иконки раздела. */
 .dlg-header {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   gap: 16px;
   padding: 24px 24px 8px;
 }
@@ -275,7 +276,6 @@ function actionClass(a) {
 .dlg-title-wrap {
   flex: 1;
   min-width: 0;
-  padding-top: 8px;
 }
 
 .dlg-title {
@@ -439,9 +439,10 @@ function actionClass(a) {
   to { transform: rotate(360deg); }
 }
 
-/* Мобильная адаптация: на ≤600 — bottom sheet (по умолчанию),
-   полный экран (mobile="full") или авто (sheet). */
-@media (max-width: 600px) {
+/* Мобильная адаптация: на ≤768 (единый мобильный брейкпоинт приложения,
+   см. useBreakpoint) — bottom sheet (по умолчанию), полный экран
+   (mobile="full") или авто (sheet). */
+@media (max-width: 768px) {
   .app-dialog {
     border-radius: var(--radius-xl, 28px) var(--radius-xl, 28px) 0 0;
     /* dvh — учитывает динамическую панель браузера; иначе sheet выше экрана. */
@@ -459,17 +460,23 @@ function actionClass(a) {
 <style>
 .app-dialog-root {
   border-radius: var(--radius-xl, 28px) !important;
-  background: var(--color-surface) !important;
-  border: 1px solid var(--color-outline-dim) !important;
+  /* Акрил: полупрозрачная карточка с блюром контента под ней */
+  background: var(--acrylic-bg) !important;
+  backdrop-filter: var(--acrylic-blur);
+  -webkit-backdrop-filter: var(--acrylic-blur);
+  border: 1px solid var(--acrylic-border) !important;
   box-shadow: var(--shadow-xl, 0 24px 60px rgba(0, 0, 0, 0.25)) !important;
   overflow: hidden !important;
   display: flex !important;
   flex-direction: column !important;
 }
 
+/* Маска светлее и с сильным блюром: стекло модалки показывает размытый
+   контент страницы, а не тёмную пелену (как панель ассистента). */
 .app-dialog-mask {
-  background: var(--color-scrim, color-mix(in oklch, var(--color-text) 60%, transparent)) !important;
-  backdrop-filter: blur(2px);
+  background: color-mix(in oklch, var(--color-scrim) 45%, transparent) !important;
+  backdrop-filter: blur(12px) saturate(1.2);
+  -webkit-backdrop-filter: blur(12px) saturate(1.2);
 }
 
 .app-dialog-content {
@@ -484,7 +491,7 @@ function actionClass(a) {
 }
 
 /* На мобильном — bottom sheet: прижимаем диалог к низу, скругление сверху. */
-@media (max-width: 600px) {
+@media (max-width: 768px) {
   .app-dialog-root.mobile-auto,
   .app-dialog-root.mobile-sheet {
     position: fixed !important;

@@ -43,9 +43,10 @@ REGISTRY_PID=""
 CALENDAR_PID=""
 DIARY_PID=""
 PORTAL_PID=""
+NOTES_PID=""
 
 # Все Go-сервисы (имя бинаря в go-build/exe — по нему ловим осиротевшие процессы).
-SVCS="callsvc authsvc msgsvc aisvc petsvc tasksvc gatewaysvc pushsvc mailsvc registrysvc calendarsvc diarysvc portalsvc"
+SVCS="callsvc authsvc msgsvc aisvc petsvc tasksvc gatewaysvc pushsvc mailsvc registrysvc calendarsvc diarysvc portalsvc notesvc"
 
 # Dev-ключи PASETO (синхронизированы с Makefile и
 # deploy/docker-compose.override.yml): приватный — только у authsvc,
@@ -76,6 +77,7 @@ cleanup() {
     if [ -n "$CALENDAR_PID" ]; then kill -TERM -- "-$CALENDAR_PID" 2>/dev/null || true; fi
     if [ -n "$DIARY_PID" ]; then kill -TERM -- "-$DIARY_PID" 2>/dev/null || true; fi
     if [ -n "$PORTAL_PID" ]; then kill -TERM -- "-$PORTAL_PID" 2>/dev/null || true; fi
+    if [ -n "$NOTES_PID" ]; then kill -TERM -- "-$NOTES_PID" 2>/dev/null || true; fi
 
     # Даём ~1 секунду на graceful-shutdown (vite, Go-сервисы).
     sleep 1
@@ -95,6 +97,7 @@ cleanup() {
     if [ -n "$CALENDAR_PID" ]; then kill -KILL -- "-$CALENDAR_PID" 2>/dev/null || true; fi
     if [ -n "$DIARY_PID" ]; then kill -KILL -- "-$DIARY_PID" 2>/dev/null || true; fi
     if [ -n "$PORTAL_PID" ]; then kill -KILL -- "-$PORTAL_PID" 2>/dev/null || true; fi
+    if [ -n "$NOTES_PID" ]; then kill -KILL -- "-$NOTES_PID" 2>/dev/null || true; fi
 
     # Подбираем сирот по имени — защита от случая, когда субшелл уже
     # умер, а его потомки ещё живы. Узко по нашему пути, чужие процессы
@@ -130,7 +133,7 @@ preflight
 #     go run ниже стартует мгновенно. `go build ./...` из корня workspace не
 #     работает (back-go без своего go.mod), поэтому обходим модули через -C.
 printf "\033[1m▶ Сборка Go-сервисов...\033[0m\n"
-for mod in pkg migrate calls auth messenger ai pets tasks gateway push mail registry calendar diary portal; do
+for mod in pkg migrate calls auth messenger ai pets tasks gateway push mail registry calendar diary portal notes; do
     printf "  %s" "$mod"
     go build -C "$ROOT/back-go/$mod" ./...
     printf "\033[32m ✓\033[0m\n"
@@ -216,15 +219,13 @@ printf "\033[1m▶ aisvc (Go)  gRPC :9093  HTTP :8093...\033[0m\n"
 AI_PID=$!
 
 # 7. Go-микросервис питомцев-грувиков (gRPC :9094 — хуки tasksvc, HTTP
-#    :8094 — /api/pets/*). Исходящий gRPC — portalsvc :9102
-#    (fire-and-forget пост-поздравление при эволюции питомца).
+#    :8094 — /api/pets/*). Исходящих межсервисных вызовов нет.
 printf "\033[1m▶ petsvc (Go)  gRPC :9094  HTTP :8094...\033[0m\n"
 (
   cd "$ROOT/back-go/pets" && \
   DATABASE_URL="postgresql://grovework:grovework_local@localhost:5432/grovework" \
   REDIS_URL="redis://localhost:6379/0" \
   PASETO_PUBLIC_KEY="$PASETO_PUBLIC_KEY_DEV" \
-  PORTAL_GRPC_ADDR="localhost:9102" \
   HTTP_ADDR=":8094" \
   GRPC_ADDR=":9094" \
   exec go run ./cmd/petsvc
@@ -341,10 +342,9 @@ printf "\033[1m▶ diarysvc (Go)  HTTP :8101...\033[0m\n"
 DIARY_PID=$!
 
 # 12d. Go-микросервис корпоративного портала portalsvc (HTTP :8102 — REST
-#      /api/portal/*; gRPC :9102 — системные посты CreateSystemPost для
-#      petsvc). Посты компании, комментарии, реакции, закрепление,
+#      /api/portal/*). Посты компании, комментарии, реакции, закрепление,
 #      разделы; пересылка поста в мессенджер — gRPC msgsvc.
-printf "\033[1m▶ portalsvc (Go)  gRPC :9102  HTTP :8102...\033[0m\n"
+printf "\033[1m▶ portalsvc (Go)  HTTP :8102...\033[0m\n"
 (
   cd "$ROOT/back-go/portal" && \
   DATABASE_URL="postgresql://grovework:grovework_local@localhost:5432/grovework" \
@@ -353,10 +353,25 @@ printf "\033[1m▶ portalsvc (Go)  gRPC :9102  HTTP :8102...\033[0m\n"
   UPLOAD_FOLDER="$UPLOADS" \
   MESSENGER_GRPC_ADDR="localhost:9092" \
   HTTP_ADDR=":8102" \
-  GRPC_ADDR=":9102" \
   exec go run ./cmd/portalsvc
 ) &
 PORTAL_PID=$!
+
+# 12e. Go-микросервис заметок notesvc (HTTP :8103 — REST /api/notes/*).
+#      Личные rich-заметки пользователя (TipTap, группы, ссылки view/edit);
+#      картинки редактора — uploads. Межсервисных вызовов нет: проверка
+#      токенов локальная (PASETO_PUBLIC_KEY).
+printf "\033[1m▶ notesvc (Go)  HTTP :8103...\033[0m\n"
+(
+  cd "$ROOT/back-go/notes" && \
+  DATABASE_URL="postgresql://grovework:grovework_local@localhost:5432/grovework" \
+  REDIS_URL="redis://localhost:6379/0" \
+  PASETO_PUBLIC_KEY="$PASETO_PUBLIC_KEY_DEV" \
+  UPLOAD_FOLDER="$UPLOADS" \
+  HTTP_ADDR=":8103" \
+  exec go run ./cmd/notesvc
+) &
+NOTES_PID=$!
 
 # 13. Vite (--host 0.0.0.0 — слушаем все интерфейсы, чтобы фронт открывался
 #     с других устройств сети по http://<IP>:5173).

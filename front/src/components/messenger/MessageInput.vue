@@ -524,7 +524,7 @@ function iconFor(mime) {
 .msg-input {
   position: relative;
   border-top: 1px solid var(--color-outline-dim);
-  background: var(--color-surface);
+  background: var(--acrylic-card-bg);
   /* Safe-area под полем добавляет родитель (chat-panel / mini-thread), чтобы
      отступ не складывался дважды на мобильном. Сам ввод держим компактным. */
   padding: 10px 14px 12px;
@@ -688,7 +688,7 @@ function iconFor(mime) {
   bottom: calc(100% + 8px);
   left: 0;
   min-width: 210px;
-  background: var(--color-surface);
+  background: var(--acrylic-card-bg);
   border: 1px solid var(--color-outline-dim);
   border-radius: var(--radius-md);
   padding: 6px;
@@ -832,7 +832,7 @@ function iconFor(mime) {
   display: flex;
   gap: 2px;
   padding: 4px;
-  background: var(--color-surface);
+  background: var(--acrylic-card-bg);
   border: 1px solid var(--color-outline-dim);
   border-radius: var(--radius-md);
   box-shadow: var(--shadow-lg);

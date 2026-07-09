@@ -133,19 +133,4 @@ describe('PostCard', () => {
     expect(forever.find('.post-pin-until').exists()).toBe(false)
   })
 
-  it('системный пост: бейдж «🎉 Грувик» для pet_evolved и без пункта «Редактировать»', async () => {
-    const w = factory(mkPost({ author_id: 1, system_kind: 'pet_evolved' }), { userId: 1 })
-    expect(w.find('.post-system-chip').text()).toBe('🎉 Грувик')
-
-    await w.find('.post-icon-btn').trigger('click')
-    const items = w.findAll('.post-menu-item').map((b) => b.text())
-    expect(items.some((x) => x.includes('Редактировать'))).toBe(false)
-    expect(items.some((x) => x.includes('Удалить'))).toBe(true)
-
-    const other = factory(mkPost({ system_kind: 'anniversary' }))
-    expect(other.find('.post-system-chip').text()).toBe('🎉 Событие')
-
-    const normal = factory(mkPost())
-    expect(normal.find('.post-system-chip').exists()).toBe(false)
-  })
 })

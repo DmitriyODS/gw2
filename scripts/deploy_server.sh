@@ -410,6 +410,20 @@ else
   warn "маршрут /api/diaries вернул $diary_code (ожидался 401) — проверьте nginx"
 fi
 
+# Микросервис заметок: healthz изнутри контейнера + маршрут /api/notes через
+# nginx (без токена ожидаем 401, не 404/502).
+if $COMPOSE exec -T notes wget -qO- --timeout=3 http://127.0.0.1:8103/healthz >/dev/null 2>&1; then
+  ok "notesvc отвечает (healthz)"
+else
+  warn "notesvc не отвечает — заметки не работают: make logs s=notes"
+fi
+notes_code=$(curl -skL -o /dev/null -w '%{http_code}' --max-time 5 http://localhost/api/notes || true)
+if [ "$notes_code" = "401" ]; then
+  ok "маршрут /api/notes через nginx ведёт в notesvc"
+else
+  warn "маршрут /api/notes вернул $notes_code (ожидался 401) — проверьте nginx"
+fi
+
 # Микросервис почты: healthz изнутри контейнера (наружу не торчит — gRPC-only,
 # через nginx не проксируется).
 if $COMPOSE exec -T mail wget -qO- --timeout=3 http://127.0.0.1:8098/healthz >/dev/null 2>&1; then

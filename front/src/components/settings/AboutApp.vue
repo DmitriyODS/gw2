@@ -115,7 +115,7 @@ async function openSupport() {
   width: 84px;
   height: 84px;
   border-radius: var(--radius-lg);
-  background: var(--color-surface);
+  background: var(--acrylic-card-bg);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -156,7 +156,7 @@ async function openSupport() {
   align-items: center;
   padding: 4px 12px;
   border-radius: var(--radius-full);
-  background: var(--color-surface);
+  background: var(--acrylic-card-bg);
   color: var(--color-text);
   font-size: 13px;
   font-weight: 700;
@@ -211,7 +211,7 @@ async function openSupport() {
   align-items: center;
   justify-content: center;
   border-radius: var(--radius-md);
-  background: var(--color-surface);
+  background: var(--acrylic-card-bg);
   color: var(--color-tertiary);
   flex-shrink: 0;
 }
@@ -262,7 +262,7 @@ async function openSupport() {
   gap: 16px;
   padding: 16px 20px;
   border-radius: var(--radius-lg);
-  background: var(--color-surface);
+  background: var(--acrylic-card-bg);
   border: 1px solid var(--color-outline-dim);
   cursor: pointer;
   text-align: left;

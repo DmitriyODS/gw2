@@ -27,6 +27,7 @@
 
 <script setup>
 import { useTasksStore } from '@/stores/tasks.js'
+import { TASK_SORTS } from '@/components/tasks/taskSorts.js'
 
 const props = defineProps({
   visible: {
@@ -39,12 +40,7 @@ const emit = defineEmits(['close'])
 
 const tasksStore = useTasksStore()
 
-const sorts = [
-  { label: 'Последняя активность', value: 'last_activity', icon: 'history' },
-  { label: 'Дата создания',        value: 'created_at',    icon: 'calendar_today' },
-  { label: 'Дата поступления',     value: 'received_at',   icon: 'inbox' },
-  { label: 'Срок исполнения',      value: 'deadline',      icon: 'event' },
-]
+const sorts = TASK_SORTS
 
 function select(value) {
   tasksStore.setFilter('sort', value)
@@ -70,7 +66,9 @@ function resetAll() {
   bottom: 0;
   left: 0;
   right: 0;
-  background: var(--color-surface);
+  background: var(--acrylic-bg);
+  backdrop-filter: var(--acrylic-blur);
+  -webkit-backdrop-filter: var(--acrylic-blur);
   border-top: 1px solid var(--color-outline-dim);
   border-radius: 24px 24px 0 0;
   z-index: 400;

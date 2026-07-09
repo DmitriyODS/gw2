@@ -131,6 +131,13 @@ export const usePetsStore = defineStore('pets', () => {
     zoo.value = await api.getZoo()
   }
 
+  // Удаление питомца сотрудника администратором: оптимистично убираем из
+  // зоопарка, сокет pet:deleted продублирует остальным (обработчик идемпотентен).
+  async function deleteColleaguePet(userId) {
+    await api.deleteColleaguePet(userId)
+    zoo.value = zoo.value.filter((p) => p.user_id !== userId)
+  }
+
   // ─────────────────────────── рейтинг ──────────────────────────
 
   async function fetchRating() {
@@ -163,6 +170,17 @@ export const usePetsStore = defineStore('pets', () => {
     if (entry) Object.assign(entry, data)
   }
 
+  // Администратор удалил питомца: убираем из зоопарка; владельцу — свежий
+  // питомец пересоздастся штатным GET (пересобираем сразу же).
+  function applyPetDeleted(data) {
+    if (!isMine(data.company_id)) return
+    zoo.value = zoo.value.filter((p) => p.user_id !== data.user_id)
+    if (myId.value === data.user_id) {
+      pet.value = null
+      fetchPet().catch(() => {})
+    }
+  }
+
   // Смена компании / логаут — питомец и кэши прежней компании не должны
   // показываться новой сессии.
   function reset() {
@@ -183,8 +201,8 @@ export const usePetsStore = defineStore('pets', () => {
     fetchPet, feedPet, renamePet, equipItem, switchSpecies, claimQuest, startAdventure,
     fetchShop, buyItem, buySpecies, claimMystery,
     walkPet, healPet, strokePet,
-    fetchZoo, fetchRating, fetchLive, fetchActivityLog,
-    applyPetUpdate,
+    fetchZoo, deleteColleaguePet, fetchRating, fetchLive, fetchActivityLog,
+    applyPetUpdate, applyPetDeleted,
     reset,
   }
 })

@@ -282,7 +282,7 @@ func postPayload(p *domain.Post) map[string]any {
 	return map[string]any{
 		"id": p.ID, "company_id": p.CompanyID, "topic_id": p.TopicID, "author_id": p.AuthorID,
 		"title": p.Title, "body": p.Body, "pinned_at": p.PinnedAt, "pinned_by": p.PinnedBy,
-		"pinned_until": p.PinnedUntil, "system_kind": p.SystemKind,
+		"pinned_until": p.PinnedUntil,
 		"created_at": p.CreatedAt, "updated_at": p.UpdatedAt,
 		"attachments": p.Attachments, "comment_count": p.CommentCount,
 		"reaction_counts": p.ReactionCount, "my_reactions": p.MyReactions,

@@ -2,10 +2,10 @@
   <Teleport to="body">
     <button
       v-if="visible"
-      class="fab"
+      class="fab float-fade"
       :class="[
         `fab--${tone}`,
-        { 'fab--collapsed': collapsed, 'fab--icon-only': !label },
+        { 'fab--collapsed': collapsed, 'fab--icon-only': !label, 'float-hidden': floatingHidden },
       ]"
       :data-tutorial="tutorial || null"
       :aria-label="ariaLabel || label || icon"
@@ -18,6 +18,11 @@
 </template>
 
 <script setup>
+import { onMounted } from 'vue'
+import { floatingHidden, installFloatingHide } from '@/composables/useFloatingHide.js'
+
+onMounted(installFloatingHide)
+
 defineProps({
   icon: { type: String, default: 'add' },
   label: { type: String, default: '' },
@@ -54,19 +59,20 @@ defineEmits(['click'])
     transition: padding 0.26s cubic-bezier(0.34, 1.36, 0.64, 1),
                 min-width 0.26s cubic-bezier(0.34, 1.36, 0.64, 1),
                 border-radius 0.26s cubic-bezier(0.34, 1.36, 0.64, 1),
-                background 0.15s, box-shadow 0.2s, transform 0.12s;
+                background 0.15s, box-shadow 0.2s, transform 0.12s,
+                opacity 0.22s ease;
   }
 
   .fab--primary {
-    background: var(--color-primary-container);
-    color: var(--color-on-primary-container);
+    background: var(--grad-primary);
+    color: var(--color-on-primary);
     box-shadow:
       0 6px 16px color-mix(in oklch, var(--color-primary) 38%, transparent),
       0 2px 6px color-mix(in oklch, var(--color-primary) 20%, transparent);
   }
   .fab--primary:active {
     transform: scale(0.96);
-    background: color-mix(in oklch, var(--color-primary) 22%, var(--color-primary-container));
+    filter: brightness(1.06);
   }
 
   .fab--tertiary {

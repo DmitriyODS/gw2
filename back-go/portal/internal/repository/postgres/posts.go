@@ -12,7 +12,7 @@ import (
 	"github.com/DmitriyODS/gw2/back-go/portal/internal/domain"
 )
 
-const postCols = `id, company_id, topic_id, author_id, title, body, pinned_at, pinned_by, pinned_until, system_kind, created_at, updated_at`
+const postCols = `id, company_id, topic_id, author_id, title, body, pinned_at, pinned_by, pinned_until, created_at, updated_at`
 
 // pinActiveCond — актуальный пин: закреплён и срок не истёк (истёкший
 // pinned_until везде трактуется как незакреплённый — ленивую чистку колонок
@@ -22,7 +22,7 @@ const pinActiveCond = `(pinned_at IS NOT NULL AND (pinned_until IS NULL OR pinne
 func scanPost(row pgx.Row) (*domain.Post, error) {
 	var p domain.Post
 	err := row.Scan(&p.ID, &p.CompanyID, &p.TopicID, &p.AuthorID, &p.Title, &p.Body,
-		&p.PinnedAt, &p.PinnedBy, &p.PinnedUntil, &p.SystemKind, &p.CreatedAt, &p.UpdatedAt)
+		&p.PinnedAt, &p.PinnedBy, &p.PinnedUntil, &p.CreatedAt, &p.UpdatedAt)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, nil
 	}
@@ -216,18 +216,11 @@ func (r *Repo) attachDerived(ctx context.Context, posts []*domain.Post, viewerID
 
 func (r *Repo) CreatePost(ctx context.Context, p *domain.Post) error {
 	return r.pool.QueryRow(ctx, `
-		INSERT INTO portal_posts (company_id, topic_id, author_id, title, body, system_kind)
-		VALUES ($1, $2, $3, $4, $5, $6)
+		INSERT INTO portal_posts (company_id, topic_id, author_id, title, body)
+		VALUES ($1, $2, $3, $4, $5)
 		RETURNING id, created_at, updated_at`,
-		p.CompanyID, p.TopicID, p.AuthorID, p.Title, p.Body, p.SystemKind,
+		p.CompanyID, p.TopicID, p.AuthorID, p.Title, p.Body,
 	).Scan(&p.ID, &p.CreatedAt, &p.UpdatedAt)
-}
-
-func (r *Repo) FindRecentSystemPost(ctx context.Context, companyID, authorID int64, kind string, since time.Time) (*domain.Post, error) {
-	return scanPost(r.pool.QueryRow(ctx, `
-		SELECT `+postCols+` FROM portal_posts
-		WHERE company_id = $1 AND author_id = $2 AND system_kind = $3 AND created_at > $4
-		ORDER BY id DESC LIMIT 1`, companyID, authorID, kind, since))
 }
 
 func (r *Repo) UpdatePost(ctx context.Context, p *domain.Post) error {

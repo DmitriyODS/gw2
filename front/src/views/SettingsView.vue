@@ -409,8 +409,10 @@ onMounted(() => {
   display: flex;
   flex-direction: column;
   gap: 16px;
-  background: var(--color-surface-low);
-  border: 1px solid var(--color-outline-dim);
+  background: var(--acrylic-bg);
+  backdrop-filter: var(--acrylic-blur);
+  -webkit-backdrop-filter: var(--acrylic-blur);
+  border: 1px solid var(--acrylic-border);
   border-radius: 24px;
   padding: 20px 14px;
   overflow-y: auto;
@@ -447,7 +449,7 @@ onMounted(() => {
 }
 
 .settings-search:focus-within {
-  background: var(--color-surface);
+  background: var(--acrylic-card-bg);
   border-color: var(--color-primary);
 }
 
@@ -481,7 +483,7 @@ onMounted(() => {
   cursor: pointer;
 }
 
-.settings-search-clear:hover { background: var(--color-surface); color: var(--color-text); }
+.settings-search-clear:hover { background: var(--acrylic-card-bg); color: var(--color-text); }
 .settings-search-clear .material-symbols-outlined { font-size: 16px; }
 
 .settings-sections {
@@ -515,7 +517,7 @@ onMounted(() => {
 }
 
 .settings-nav-item:hover {
-  background: var(--color-surface);
+  background: var(--acrylic-card-bg);
 }
 
 .settings-nav-item.active {
@@ -578,7 +580,7 @@ onMounted(() => {
   align-items: center;
   gap: 10px;
   padding: 10px 14px;
-  background: var(--color-surface);
+  background: var(--acrylic-card-bg);
   border: 0;
   border-radius: 16px;
   font-size: 12px;
@@ -615,8 +617,10 @@ onMounted(() => {
 .settings-pane {
   display: flex;
   flex-direction: column;
-  background: var(--color-surface-low);
-  border: 1px solid var(--color-outline-dim);
+  background: var(--acrylic-bg);
+  backdrop-filter: var(--acrylic-blur);
+  -webkit-backdrop-filter: var(--acrylic-blur);
+  border: 1px solid var(--acrylic-border);
   border-radius: 24px;
   min-height: 0;
   overflow: hidden;
@@ -643,7 +647,7 @@ onMounted(() => {
   transition: background 0.15s;
 }
 
-.settings-back:hover { background: var(--color-surface); }
+.settings-back:hover { background: var(--acrylic-card-bg); }
 
 .pane-title-wrap { min-width: 0; }
 
@@ -724,7 +728,7 @@ onMounted(() => {
 
 .search-input:focus {
   border-color: var(--color-primary);
-  background: var(--color-surface);
+  background: var(--acrylic-card-bg);
 }
 
 /* ── Кнопки M3 ─────────────────────────────────────────────────── */
@@ -793,7 +797,7 @@ onMounted(() => {
   align-items: center;
   gap: 18px;
   padding: 20px 22px;
-  background: var(--color-surface);
+  background: var(--acrylic-card-bg);
   border: 1px solid var(--color-outline-dim);
   border-radius: 20px;
   transition: border-color 0.15s, box-shadow 0.15s;
@@ -870,7 +874,7 @@ onMounted(() => {
   align-items: center;
   gap: 8px;
   padding: 0 14px;
-  background: var(--color-surface);
+  background: var(--acrylic-card-bg);
   border: 1px solid var(--color-outline-dim);
   border-radius: 999px;
   transition: border-color 0.15s, background 0.15s;
@@ -943,7 +947,7 @@ onMounted(() => {
   align-items: center;
   gap: 14px;
   padding: 12px 16px;
-  background: var(--color-surface);
+  background: var(--acrylic-card-bg);
   border: 1px solid var(--color-outline-dim);
   border-radius: 16px;
   transition: border-color 0.15s, background 0.15s, transform 0.15s;
@@ -1129,7 +1133,7 @@ onMounted(() => {
   align-items: center;
   gap: 12px;
   padding: 10px 14px;
-  background: var(--color-surface);
+  background: var(--acrylic-card-bg);
   border: 1px solid var(--color-outline-dim);
   border-radius: 14px;
   transition: border-color 0.15s, background 0.15s;
@@ -1380,7 +1384,7 @@ onMounted(() => {
 
   /* На мобильном — карточки секций крупнее и видимее */
   .settings-nav-item {
-    background: var(--color-surface);
+    background: var(--acrylic-card-bg);
     border: 1px solid var(--color-outline-dim);
     padding: 14px 14px;
     border-radius: 18px;
@@ -1407,6 +1411,8 @@ onMounted(() => {
     inset: 0;
     z-index: 90;
     background: var(--color-bg);
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
     border-radius: 0;
     border: 0;
     display: flex;
@@ -1415,12 +1421,20 @@ onMounted(() => {
     padding-bottom: calc(60px + env(safe-area-inset-bottom, 0px));
   }
 
+  /* При включённом градиенте фона фуллскрин-панель не глушит его:
+     позади лежит статичный фон .app-layout — пусть просвечивает. */
+  [data-bg-gradient="true"] .settings-pane.mobile-full {
+    background: transparent;
+  }
+
   .settings-pane.mobile-full .settings-pane-header {
     position: sticky;
     top: 0;
     z-index: 2;
     padding: 12px 12px 12px;
-    background: var(--color-bg);
+    background: var(--acrylic-bg-strong);
+    backdrop-filter: var(--acrylic-blur);
+    -webkit-backdrop-filter: var(--acrylic-blur);
     border-bottom: 1px solid var(--color-outline-dim);
     padding-top: calc(12px + env(safe-area-inset-top, 0px));
   }

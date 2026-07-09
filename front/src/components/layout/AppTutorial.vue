@@ -38,41 +38,40 @@
           </svg>
         </div>
 
-        <!-- Карточка с шагом -->
-        <div class="tour-card" :style="cardStyle" @click.stop>
-          <button class="tour-close" @click="skip" aria-label="Пропустить">
-            <span class="material-symbols-outlined">close</span>
-          </button>
+        <!-- Карточка с шагом: шапка и футер фиксированы, скроллится только текст -->
+        <div ref="cardEl" class="tour-card" :style="cardStyle" @click.stop>
+          <header class="tour-head">
+            <div class="tour-icon" :data-tone="step.tone || 'primary'">
+              <span class="material-symbols-outlined">{{ step.icon }}</span>
+            </div>
+            <div class="tour-head-text">
+              <span class="tour-step-label">Шаг {{ stepIndex + 1 }} из {{ steps.length }}</span>
+              <h3 class="tour-title">{{ step.title }}</h3>
+            </div>
+            <button class="tour-close" @click="skip" aria-label="Пропустить">
+              <span class="material-symbols-outlined">close</span>
+            </button>
+          </header>
 
-          <div class="tour-progress">
-            <span v-for="(s, i) in steps" :key="s.id"
-                  class="tour-dot"
-                  :class="{ active: i === stepIndex, done: i < stepIndex }" />
+          <div class="tour-body">
+            <p class="tour-text">{{ step.text }}</p>
+            <p v-if="step.tip" class="tour-tip">
+              <span class="material-symbols-outlined">tips_and_updates</span>
+              {{ step.tip }}
+            </p>
           </div>
 
-          <div class="tour-icon" :data-tone="step.tone || 'primary'">
-            <span class="material-symbols-outlined">{{ step.icon }}</span>
-          </div>
-
-          <h3 class="tour-title">{{ step.title }}</h3>
-          <p class="tour-text">{{ step.text }}</p>
-          <p v-if="step.tip" class="tour-tip">
-            <span class="material-symbols-outlined">tips_and_updates</span>
-            {{ step.tip }}
-          </p>
-
-          <div class="tour-actions">
+          <footer class="tour-actions">
             <button v-if="stepIndex > 0" class="btn-text" @click="prev">
               <span class="material-symbols-outlined">arrow_back</span>
               Назад
             </button>
-            <span class="tour-count">{{ stepIndex + 1 }} / {{ steps.length }}</span>
             <button class="btn-filled" @click="next">
               {{ isLast ? 'Готово' : 'Дальше' }}
               <span v-if="!isLast" class="material-symbols-outlined">arrow_forward</span>
               <span v-else class="material-symbols-outlined">check</span>
             </button>
-          </div>
+          </footer>
         </div>
       </div>
     </Transition>
@@ -83,21 +82,40 @@
 import { ref, computed, watch, nextTick, onMounted, onBeforeUnmount } from 'vue'
 import { useRouter } from 'vue-router'
 import { useTutorial } from '@/composables/useTutorial.js'
-import { usePermission, ROLES } from '@/composables/usePermission.js'
+import { usePermission } from '@/composables/usePermission.js'
+import { useCompanySettings } from '@/composables/useCompanySettings.js'
 
 const tutorial = useTutorial()
 const router = useRouter()
-const { isAtLeast } = usePermission()
+const { isAtLeast, canManageCompanies, ROLES: R } = usePermission()
+const { usesGroove } = useCompanySettings()
+
+// Роль ≥ Сотрудник означает «есть активная компания» (у супер-админа её нет).
+const hasCompany = () => isAtLeast(R.EMPLOYEE)
 
 const PAD = 8
 const RADIUS = 12
-const CARD_W = 360
+const CARD_W = 440
 const CARD_GAP = 16
 
 const vw = ref(window.innerWidth)
 const vh = ref(window.innerHeight)
 const spotRect = ref(null)
 const stepIndex = ref(0)
+
+// Реальная высота карточки (следит ResizeObserver) — позиционирование по ней,
+// а не по константе: тексты шагов разной длины, и карточка не должна уезжать
+// за нижнюю границу окна.
+const cardEl = ref(null)
+const cardH = ref(320)
+let cardRO = null
+watch(cardEl, (el) => {
+  cardRO?.disconnect()
+  cardRO = null
+  if (!el) return
+  cardRO = new ResizeObserver(() => { cardH.value = el.offsetHeight })
+  cardRO.observe(el)
+})
 
 // Каталог шагов. Каждый — id, иконка, тон, заголовок, текст, опц. подсказка,
 // target (CSS-селектор, может быть null — карточка по центру), navigateTo и
@@ -107,56 +125,106 @@ const allSteps = computed(() => [
     id: 'welcome',
     icon: 'waving_hand', tone: 'primary',
     title: 'Добро пожаловать в Groove Work',
-    text: 'Короткий тур по основным разделам. Можно пропустить в любой момент — крестик справа сверху.',
+    text: 'Платформа для работы команды: задачи и учёт времени, мессенджер со звонками, корпоративный портал и личные инструменты — заметки, ежедневники, календари. Короткий тур по разделам; пропустить можно в любой момент — крестик справа сверху.',
     target: null,
   },
   {
     id: 'tasks',
-    icon: 'grid_view', tone: 'primary',
+    icon: 'dashboard_customize', tone: 'primary',
     title: 'Задачи',
-    text: 'Главный раздел: список задач компании, поиск, фильтры, активные/избранные/архив. Здесь же запускаются юниты — отрезки рабочего времени.',
+    text: 'Главный рабочий раздел: задачи компании, поиск, фильтры, избранное и архив. Внутри задачи запускаются юниты — отрезки рабочего времени, из которых складывается вся статистика.',
+    tip: 'Одновременно может быть только один активный юнит. Цвет-тег задачи — личный: ваш цвет видите только вы.',
     target: '[data-tutorial="nav-tasks"]',
     navigateTo: '/tasks',
+    check: hasCompany,
+  },
+  {
+    id: 'registries',
+    icon: 'view_agenda', tone: 'secondary',
+    title: 'Реестры',
+    text: 'Настраиваемые таблицы-справочники компании: клиенты, оборудование, договоры — что угодно. Администратор собирает структуру карточки из полей разных типов, записи ведут все. Есть сквозной поиск, экспорт в Excel и публичные ссылки только для чтения.',
+    target: '[data-tutorial="nav-registries"]',
+    navigateTo: '/registries',
+    check: hasCompany,
+  },
+  {
+    id: 'notes',
+    icon: 'note_stack', tone: 'tertiary',
+    title: 'Заметки и ежедневники',
+    text: 'Личное пространство, не привязанное к компании. Заметки — полноценный редактор с форматированием, картинками и таблицами, группы-фильтры и публичные ссылки. Ежедневники — задачи по дням с архивом выполненного; ежедневником можно поделиться с коллегой.',
+    tip: 'Запись ежедневника перетаскивается на другой день, а из карточки создаётся полноценная задача компании.',
+    target: '[data-tutorial="nav-diaries"]',
+    navigateTo: '/notes',
+  },
+  {
+    id: 'calendars',
+    icon: 'calendar_month', tone: 'primary',
+    title: 'Календари',
+    text: 'Общие календари компании: события с настраиваемыми карточками, просмотр по дню, неделе и месяцу, экспорт за период и публичные ссылки. Удобно для дежурств, брони переговорок и общих планов.',
+    target: '[data-tutorial="nav-calendars"]',
+    navigateTo: '/calendars',
+    check: hasCompany,
   },
   {
     id: 'messenger',
     icon: 'chat', tone: 'secondary',
     title: 'Мессенджер',
-    text: 'Личные чаты, файлы, ответы и пересылка. Из шапки можно позвонить голосом или с видео, прямо внутри платформы.',
+    text: 'Личные чаты: файлы, ответы, пересылка, закрепление сообщений и чатов. Отсюда же звонки — голосом или с видео, с демонстрацией экрана и приглашением гостей по ссылке, прямо внутри платформы.',
+    tip: 'Мессенджер и звонки работают даже без компании — это ваш личный аккаунт.',
     target: '[data-tutorial="nav-messenger"]',
     navigateTo: '/messenger',
+  },
+  {
+    id: 'portal',
+    icon: 'brand_awareness', tone: 'tertiary',
+    title: 'Портал',
+    text: 'Внутренняя жизнь компании: лента постов с комментариями и реакциями, тематические разделы, закрепление важного и пересылка поста в мессенджер. Рядом, на вкладке «Сотрудники», — все коллеги: кто в сети, профиль, быстрые «Написать» и «Позвонить».',
+    tip: 'Бейдж на пункте «Портал» показывает непрочитанные посты.',
+    target: '[data-tutorial="nav-portal"]',
+    navigateTo: '/portal',
+    check: hasCompany,
   },
   {
     id: 'groove',
     icon: 'pets', tone: 'primary',
     title: 'Грувики',
-    text: 'Питомец, который растёт от вашей работы: кормите его, гуляйте, лечите и гладьте питомцев коллег — это плавающий компаньон поверх всего интерфейса, а полный магазин, рейтинг недели и питомцы коллег — на отдельной странице.',
+    text: 'Питомец, который растёт от вашей работы: юниты и закрытые задачи приносят опыт и кудосы. Кормите его, гуляйте, отправляйте в приключения и гладьте питомцев коллег. Живёт плавающим компаньоном поверх интерфейса, а магазин, рейтинг недели и питомцы коллег — на отдельной странице.',
     tip: 'Грувик может заболеть, если долго не работать. Лечится юнитами, задачами, прогулкой и заботой коллег.',
     target: '[data-tutorial="nav-groove"]',
     navigateTo: '/pets',
+    check: () => hasCompany() && usesGroove.value,
   },
   {
-    id: 'portal',
-    icon: 'campaign', tone: 'tertiary',
-    title: 'Портал',
-    text: 'Лента компании: посты с комментариями и реакциями, закрепление важного и пересылка в мессенджер. Рядом, на вкладке «Сотрудники», — все коллеги: кто в сети, профиль, быстрые «Написать» и «Позвонить».',
-    target: '[data-tutorial="nav-portal"]',
-    navigateTo: '/portal',
+    id: 'assistant',
+    icon: 'smart_toy', tone: 'secondary',
+    title: 'Плавающий хаб: ассистент и сообщения',
+    text: 'Кнопка в правом нижнем углу открывает мини-хаб, доступный из любого раздела. Внутри две вкладки: ИИ-ассистент, который отвечает на вопросы о задачах и статистике компании по реальным данным, и компактный мессенджер, чтобы не уходить со страницы.',
+    target: '[data-tutorial="mini-hub"]',
   },
   {
     id: 'stats',
-    icon: 'query_stats', tone: 'secondary',
+    icon: 'bar_chart', tone: 'primary',
     title: 'Статистика',
-    text: 'Сколько часов команда отработала за период, по сотрудникам, отделам и типам юнитов. Включая карточку «Ответственные по задачам».',
+    text: 'Сколько часов команда отработала за период: по сотрудникам, отделам и типам юнитов, с карточкой «Ответственные по задачам» и экспортом в Excel. Отсюда же включается ТВ-режим — живое табло для офисного экрана.',
     target: '[data-tutorial="nav-stats"]',
     navigateTo: '/stats',
-    check: () => isAtLeast(ROLES.EMPLOYEE),
+    check: hasCompany,
+  },
+  {
+    id: 'companies',
+    icon: 'business_center', tone: 'tertiary',
+    title: 'Мои компании',
+    text: 'Управление компаниями, где вы администратор: настройки, участники и роли, приглашения по ссылке или на email. Один аккаунт может состоять в нескольких компаниях — активная переключается в шапке бокового меню.',
+    tip: 'Любой пользователь может создать свою компанию и стать её администратором.',
+    target: '[data-tutorial="nav-companies"]',
+    navigateTo: '/companies',
+    check: () => canManageCompanies(),
   },
   {
     id: 'settings',
-    icon: 'settings', tone: 'tertiary',
+    icon: 'settings', tone: 'secondary',
     title: 'Настройки',
-    text: 'Внешний вид, справка по разделам и «О приложении» с быстрой кнопкой «Написать в техподдержку».',
+    text: 'Внешний вид, справка по разделам и «О приложении» — версия, что нового и быстрая кнопка «Написать в техподдержку».',
     target: '[data-tutorial="nav-settings"]',
     navigateTo: '/settings',
   },
@@ -164,23 +232,23 @@ const allSteps = computed(() => [
     id: 'theme',
     icon: 'palette', tone: 'primary',
     title: 'Свой стиль',
-    text: 'В разделе «Внешний вид» соберите тему из четырёх цветов или выберите готовую. «Мне повезёт» — для смелых.',
-    tip: 'Светлая или тёмная тема переключается отдельным сегментом.',
+    text: 'В разделе «Внешний вид» соберите тему из четырёх цветов или выберите готовую, включите градиентный фон и его вариации. «Мне повезёт» — для смелых.',
+    tip: 'Светлая, тёмная или системная тема переключается отдельным сегментом.',
     target: '[data-tutorial="settings-section-theme"]',
     onEnter: () => document.querySelector('[data-tutorial="settings-section-theme"]')?.click(),
   },
   {
-    id: 'about',
-    icon: 'info', tone: 'tertiary',
-    title: 'О приложении',
-    text: 'Версия, что нового в последнем обновлении и быстрая кнопка «Написать в техподдержку» — попадёте в спец-чат вашей компании с разработчиками.',
-    target: '[data-tutorial="settings-section-about"]',
-    onEnter: () => document.querySelector('[data-tutorial="settings-section-about"]')?.click(),
+    id: 'help',
+    icon: 'help_center', tone: 'tertiary',
+    title: 'Справка',
+    text: 'Подробные статьи по каждому разделу: как устроены задачи и юниты, статистика, реестры и остальное. Если что-то забудется после тура — ответ здесь.',
+    target: '[data-tutorial="settings-section-help"]',
+    onEnter: () => document.querySelector('[data-tutorial="settings-section-help"]')?.click(),
   },
   {
     id: 'profile',
     icon: 'account_circle', tone: 'primary',
-    title: 'Профиль и Аккаунт',
+    title: 'Профиль и аккаунт',
     text: 'Кликните по аватару в сайдбаре или нижней навигации — попадёте в свой аккаунт. Там фото, телефон, email и пароль.',
     target: '[data-tutorial="profile-avatar"]',
   },
@@ -188,7 +256,7 @@ const allSteps = computed(() => [
     id: 'done',
     icon: 'celebration', tone: 'primary',
     title: 'Готово',
-    text: 'Это всё базовое. Подробная справка по каждому разделу — в Настройках → Справка. Удачной работы!',
+    text: 'Это всё базовое. Тур всегда можно повторить из «О приложении», а подробная справка по разделам — в Настройках → Справка. Удачной работы!',
     target: null,
   },
 ])
@@ -281,6 +349,7 @@ onBeforeUnmount(() => {
   window.removeEventListener('resize', onResize)
   window.removeEventListener('scroll', refreshSpot, true)
   window.removeEventListener('keydown', onKeydown)
+  cardRO?.disconnect()
 })
 
 // Позиционируем карточку: рядом с подсвеченным элементом (если влезает) —
@@ -296,31 +365,34 @@ const cardStyle = computed(() => {
       maxWidth: 'none',
     }
   }
+  const h = cardH.value
   if (!spotRect.value) {
     return {
       left: `${Math.max(16, (vw.value - CARD_W) / 2)}px`,
-      top: `${Math.max(16, (vh.value - 360) / 2)}px`,
+      top: `${Math.max(16, (vh.value - h) / 2)}px`,
       width: `${CARD_W}px`,
     }
   }
   const r = spotRect.value
   // Пытаемся справа от spot, потом слева, потом снизу, потом сверху.
+  // Вертикаль всегда клампится по реальной высоте — кнопки не должны
+  // оказаться ниже края окна.
   const fitsRight = r.right + CARD_GAP + CARD_W < vw.value - 12
   const fitsLeft = r.left - CARD_GAP - CARD_W > 12
-  const fitsBelow = r.bottom + CARD_GAP + 360 < vh.value - 12
+  const fitsBelow = r.bottom + CARD_GAP + h < vh.value - 12
   let left, top
   if (fitsRight) {
     left = r.right + CARD_GAP
-    top = clamp(r.top, 16, vh.value - 360 - 16)
+    top = clamp(r.top, 16, vh.value - h - 16)
   } else if (fitsLeft) {
     left = r.left - CARD_GAP - CARD_W
-    top = clamp(r.top, 16, vh.value - 360 - 16)
+    top = clamp(r.top, 16, vh.value - h - 16)
   } else if (fitsBelow) {
     left = clamp(r.left, 16, vw.value - CARD_W - 16)
-    top = r.bottom + CARD_GAP
+    top = clamp(r.bottom + CARD_GAP, 16, vh.value - h - 16)
   } else {
     left = clamp(r.left, 16, vw.value - CARD_W - 16)
-    top = Math.max(16, r.top - CARD_GAP - 360)
+    top = Math.max(16, Math.min(r.top - CARD_GAP - h, vh.value - h - 16))
   }
   return { left: `${left}px`, top: `${top}px`, width: `${CARD_W}px` }
 })
@@ -367,22 +439,45 @@ function clamp(v, lo, hi) { return Math.min(Math.max(v, lo), hi) }
 
 .tour-card {
   position: absolute;
-  background: var(--color-surface);
+  background: var(--acrylic-bg);
+  backdrop-filter: var(--acrylic-blur);
+  -webkit-backdrop-filter: var(--acrylic-blur);
   border: 1px solid var(--color-outline-dim);
   border-radius: var(--radius-xl);
   box-shadow: var(--shadow-xl);
-  padding: 22px 22px 18px;
+  padding: 20px 22px 16px;
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 12px;
   max-height: calc(100dvh - 32px);
-  overflow: auto;
+  overflow: hidden;
+}
+
+.tour-head {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  flex-shrink: 0;
+}
+
+.tour-head-text {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.tour-step-label {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.3px;
+  text-transform: uppercase;
+  color: var(--color-primary);
 }
 
 .tour-close {
-  position: absolute;
-  top: 10px;
-  right: 10px;
+  flex-shrink: 0;
   width: 32px;
   height: 32px;
   border: none;
@@ -397,48 +492,42 @@ function clamp(v, lo, hi) { return Math.min(Math.max(v, lo), hi) }
 .tour-close:hover { background: var(--color-error-container); color: var(--color-on-error-container); }
 .tour-close .material-symbols-outlined { font-size: 18px; }
 
-.tour-progress {
-  display: flex;
-  gap: 4px;
-  margin-bottom: 4px;
-}
-
-.tour-dot {
-  flex: 1;
-  height: 4px;
-  border-radius: var(--radius-full);
-  background: var(--color-outline-dim);
-  transition: background 0.25s;
-}
-.tour-dot.done { background: var(--color-primary); opacity: 0.55; }
-.tour-dot.active { background: var(--color-primary); }
-
 .tour-icon {
-  width: 44px;
-  height: 44px;
+  flex-shrink: 0;
+  width: 48px;
+  height: 48px;
   border-radius: var(--radius-md);
   display: flex;
   align-items: center;
   justify-content: center;
-  margin-bottom: 4px;
 }
 .tour-icon[data-tone="primary"]   { background: var(--color-primary-container);   color: var(--color-on-primary-container); }
 .tour-icon[data-tone="secondary"] { background: var(--color-secondary-container); color: var(--color-on-secondary-container); }
 .tour-icon[data-tone="tertiary"]  { background: var(--color-tertiary-container);  color: var(--color-on-tertiary-container); }
-.tour-icon .material-symbols-outlined { font-size: 24px; }
+.tour-icon .material-symbols-outlined { font-size: 26px; }
 
 .tour-title {
   margin: 0;
   font-size: 19px;
   font-weight: 800;
   letter-spacing: -0.2px;
+  line-height: 1.25;
   color: var(--color-text);
+}
+
+/* Скроллится только тело — шапка и кнопки всегда на экране. */
+.tour-body {
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
 }
 
 .tour-text {
   margin: 0;
-  font-size: 14px;
-  line-height: 1.5;
+  font-size: 14.5px;
+  line-height: 1.55;
   color: var(--color-text);
 }
 
@@ -459,17 +548,11 @@ function clamp(v, lo, hi) { return Math.min(Math.max(v, lo), hi) }
 .tour-actions {
   display: flex;
   align-items: center;
+  justify-content: flex-end;
   gap: 8px;
-  margin-top: 8px;
+  flex-shrink: 0;
 }
-
-.tour-count {
-  font-size: 12px;
-  color: var(--color-text-dim);
-  font-weight: 600;
-  margin-left: auto;
-  margin-right: 4px;
-}
+.tour-actions .btn-text { margin-right: auto; }
 
 .btn-text, .btn-filled {
   display: inline-flex;

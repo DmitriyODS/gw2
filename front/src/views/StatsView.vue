@@ -1,33 +1,7 @@
 <template>
   <div class="stats-view">
+    <!-- Прозрачный тулбар в стиле «Задач»: вкладки-режимы, период, действия. -->
     <div class="stats-sticky">
-      <div class="stats-title-row">
-        <h1>Статистика</h1>
-        <div class="stats-title-actions">
-          <button
-            class="reset-layout-btn"
-            title="Сбросить раскладку виджетов"
-            aria-label="Сбросить раскладку"
-            @click="resetLayout"
-          >
-            <span class="material-symbols-outlined">restart_alt</span>
-            <span class="reset-layout-label">Сбросить вид</span>
-          </button>
-          <a
-            href="/tv"
-            target="_blank"
-            rel="noopener"
-            class="tv-link-btn"
-            :title="isMobile ? 'ТВ-режим' : 'Открыть ТВ-режим в новой вкладке'"
-            :aria-label="'ТВ-режим'"
-          >
-            <span class="material-symbols-outlined">tv</span>
-            <span class="tv-link-label">ТВ-режим</span>
-          </a>
-        </div>
-      </div>
-
-      <!-- Табы и выбор периода в одной строке; переносятся, когда не влезают. -->
       <div class="stats-controls-row">
         <SegmentedTabs
           class="stats-mode-tabs"
@@ -37,6 +11,28 @@
           @update:model-value="switchMode($event)"
         />
         <StatsPeriodControl class="stats-period" @change="onPeriodChange" />
+        <div class="stats-actions">
+          <button
+            class="btn-glass"
+            title="Сбросить раскладку виджетов"
+            aria-label="Сбросить раскладку"
+            @click="resetLayout"
+          >
+            <span class="material-symbols-outlined">restart_alt</span>
+            <span class="stats-btn-label">Сбросить вид</span>
+          </button>
+          <a
+            href="/tv"
+            target="_blank"
+            rel="noopener"
+            class="btn-glass"
+            :title="isMobile ? 'ТВ-режим' : 'Открыть ТВ-режим в новой вкладке'"
+            :aria-label="'ТВ-режим'"
+          >
+            <span class="material-symbols-outlined">tv</span>
+            <span class="stats-btn-label">ТВ-режим</span>
+          </a>
+        </div>
       </div>
     </div>
 
@@ -502,9 +498,7 @@ onMounted(() => {
   display: flex;
   flex-direction: column;
   gap: 8px;
-  padding: 24px 24px 12px;
-  background: var(--color-bg, var(--color-surface));
-  border-bottom: 1px solid var(--color-outline-dim);
+  padding: 16px 24px 10px;
   z-index: 2;
 }
 
@@ -526,87 +520,13 @@ onMounted(() => {
   padding: 2px 0;
 }
 
-/* Период уезжает вправо, когда влезает в одну строку с табами;
-   при нехватке места переносится на следующую строку (flex-wrap). */
-.stats-period {
+.stats-actions {
   margin-left: auto;
-}
-
-.stats-title-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  flex-wrap: wrap;
-}
-
-.stats-title-row h1 {
-  margin: 0;
-  font-size: 24px;
-  font-weight: 800;
-  letter-spacing: -0.02em;
-  color: var(--color-text);
-}
-
-.stats-title-actions {
   display: flex;
   align-items: center;
   gap: 8px;
-  flex-wrap: wrap;
 }
 
-.reset-layout-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  padding: 10px 18px;
-  min-height: 44px;
-  border: 1px solid var(--color-outline-dim);
-  border-radius: var(--radius-full);
-  background: var(--color-surface);
-  color: var(--color-text-dim);
-  font-size: 13px;
-  font-weight: 600;
-  cursor: pointer;
-  transition: background 0.15s, color 0.15s, border-color 0.15s;
-}
-
-.reset-layout-btn:hover {
-  background: var(--color-surface-high);
-  color: var(--color-text);
-}
-
-.reset-layout-btn .material-symbols-outlined {
-  font-size: 20px;
-}
-
-.tv-link-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  padding: 10px 18px;
-  min-height: 44px;
-  border: 1px solid var(--color-outline-dim);
-  border-radius: var(--radius-full);
-  background: var(--color-surface);
-  color: var(--color-text);
-  font-size: 13px;
-  font-weight: 600;
-  cursor: pointer;
-  text-decoration: none;
-  transition: background 0.15s, color 0.15s, border-color 0.15s, box-shadow 0.15s;
-}
-
-.tv-link-btn:hover {
-  background: var(--color-primary);
-  color: var(--color-on-primary);
-  border-color: var(--color-primary);
-  box-shadow: var(--shadow-sm);
-}
-
-.tv-link-btn .material-symbols-outlined {
-  font-size: 20px;
-}
 
 .loading-state {
   display: flex;
@@ -930,18 +850,15 @@ onMounted(() => {
     gap: 8px;
   }
 
-  .stats-period {
+  .stats-actions {
     margin-left: 0;
+    justify-content: flex-end;
   }
 
   .stats-scroll {
     padding: 12px 14px;
     padding-bottom: calc(64px + 12px + env(safe-area-inset-bottom, 0px));
     gap: 12px;
-  }
-
-  .stats-title-row h1 {
-    font-size: 22px;
   }
 
   .stats-grid {
@@ -974,24 +891,8 @@ onMounted(() => {
     padding-bottom: calc(64px + 12px + env(safe-area-inset-bottom, 0px));
   }
 
-  .stats-title-row h1 {
-    font-size: 20px;
-  }
-
-  .tv-link-btn,
-  .reset-layout-btn {
-    padding: 0;
-    width: 44px;
-    height: 44px;
-    min-height: 44px;
-    justify-content: center;
-    gap: 0;
-  }
-
-  .tv-link-label,
-  .reset-layout-label {
-    display: none;
-  }
+  /* Кнопки действий — только иконки. */
+  .stats-btn-label { display: none; }
 
   .task-tile {
     padding: 12px;

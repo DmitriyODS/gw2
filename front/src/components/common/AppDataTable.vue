@@ -78,7 +78,7 @@ const ptOverrides = {
   min-height: 0;
   display: flex;
   flex-direction: column;
-  background: var(--color-surface);
+  background: var(--acrylic-card-bg);
   border-radius: var(--radius-xl);
   overflow: hidden;
 }
@@ -182,7 +182,7 @@ const ptOverrides = {
 }
 
 .app-table :deep(.p-datatable-tbody > tr) {
-  background: var(--color-surface);
+  background: var(--acrylic-card-bg);
   color: var(--color-text);
   outline: none;
   transition: background .14s;

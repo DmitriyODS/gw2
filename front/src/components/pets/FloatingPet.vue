@@ -3,8 +3,8 @@
     <div
       v-if="pet"
       v-show="!anyModalOpen"
-      class="fp-root"
-      :class="{ dragging }"
+      class="fp-root float-fade"
+      :class="{ dragging, 'float-hidden': floatingHidden }"
       :style="rootStyle"
     >
       <transition name="fp-bubble">
@@ -14,7 +14,7 @@
       </transition>
 
       <button
-        class="fp-avatar"
+        class="fp-avatar float-spring"
         type="button"
         aria-label="Открыть питомца"
         @pointerdown="onPointerDown"
@@ -38,6 +38,7 @@
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useDraggable } from '@/composables/useDraggable.js'
 import { anyModalOpen } from '@/composables/useOpenModals.js'
+import { floatingHidden, installFloatingHide } from '@/composables/useFloatingHide.js'
 import { usePetsStore } from '@/stores/pets.js'
 import { petEmoji } from '@/utils/pets.js'
 import { storageGet, storageSet } from '@/utils/storage.js'
@@ -148,6 +149,7 @@ watch(pet, (next, prev) => {
 
 onMounted(() => {
   if (!pets.pet) pets.fetchPet().catch(() => {})
+  installFloatingHide()
 })
 
 onBeforeUnmount(() => clearTimeout(bubbleTimer))

@@ -24,7 +24,6 @@
       <ActiveUnitModal v-if="unitsStore.activeUnit && !unitsStore.minimized" />
       <AppTutorial v-if="isTutorialOpen" />
       <ChangelogModal v-if="isChangelogOpen" @close="closeChangelog" />
-      <FloatingPet v-if="usesGroove" />
       <MiniMessenger />
       <IncomingCallOverlay @accept="callStore.accept()" @decline="callStore.decline()" />
       <CallView />
@@ -61,6 +60,7 @@ import { navProgress } from '@/composables/useNavProgress.js'
 import {
   registerNotifyServiceWorker, installNotifyUnlock, requestNotificationPermission,
 } from '@/utils/systemNotify.js'
+import { installAppUpdateWatcher } from '@/utils/appUpdate.js'
 import AppSidebar from '@/components/layout/AppSidebar.vue'
 import AppBottomNav from '@/components/layout/AppBottomNav.vue'
 import CompanyDisabledScreen from '@/components/layout/CompanyDisabledScreen.vue'
@@ -68,7 +68,6 @@ import ActiveUnitModal from '@/components/layout/ActiveUnitModal.vue'
 import ActiveUnitBanner from '@/components/layout/ActiveUnitBanner.vue'
 import AppTutorial from '@/components/layout/AppTutorial.vue'
 import ChangelogModal from '@/components/layout/ChangelogModal.vue'
-import FloatingPet from '@/components/pets/FloatingPet.vue'
 import MiniMessenger from '@/components/messenger/MiniMessenger.vue'
 import IncomingCallOverlay from '@/components/call/IncomingCallOverlay.vue'
 import CallView from '@/components/call/CallView.vue'
@@ -120,6 +119,18 @@ onMounted(async () => {
   // фоном и НЕ должна держать первый рендер: иначе по deep-link (/tasks/:id)
   // экран остаётся белым до конца всей цепочки запросов.
   initializing.value = false
+  // Слежение за новой версией приложения (SW + /api/changelog): тост о
+  // доступном обновлении, мягкая перезагрузка при уходе вкладки в фон —
+  // но не во время звонка.
+  installAppUpdateWatcher({
+    canReload: () => callStore.phase === 'idle',
+    onUpdateAvailable: () => notif.notify({
+      severity: 'info',
+      summary: 'Доступно обновление',
+      detail: 'Вышла новая версия приложения — страница обновится автоматически, когда вкладка будет неактивна.',
+      life: 8000,
+    }),
+  })
   if (authStore.token) {
     connectSocket()
     await unitsStore.fetchActiveUnit()

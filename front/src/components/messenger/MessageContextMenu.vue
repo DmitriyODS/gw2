@@ -113,7 +113,9 @@ function onKey(e) {
 <style scoped>
 .msg-ctx-menu {
   min-width: 200px;
-  background: var(--color-surface);
+  background: var(--acrylic-bg);
+  backdrop-filter: var(--acrylic-blur);
+  -webkit-backdrop-filter: var(--acrylic-blur);
   border: 1px solid var(--color-outline-dim);
   border-radius: var(--radius-md);
   padding: 6px;

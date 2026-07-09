@@ -90,8 +90,8 @@ function isMine(row) {
 
 <style scoped>
 .rating-card {
-  background: var(--color-surface);
-  border: 1px solid var(--color-outline-dim);
+  background: var(--acrylic-card-bg);
+  border: 1px solid var(--acrylic-border);
   border-radius: var(--radius-lg, 16px);
   padding: 14px 16px;
   display: flex;

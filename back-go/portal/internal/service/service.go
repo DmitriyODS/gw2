@@ -16,7 +16,6 @@ const roomAll = "all"
 
 type Service struct {
 	repo      domain.Repository
-	users     domain.UserReader
 	files     domain.FileStore
 	bus       domain.EventBus
 	messenger domain.MessengerClient
@@ -25,7 +24,6 @@ type Service struct {
 
 type Deps struct {
 	Repo      domain.Repository
-	Users     domain.UserReader
 	Files     domain.FileStore
 	Bus       domain.EventBus
 	Messenger domain.MessengerClient
@@ -34,7 +32,7 @@ type Deps struct {
 
 func New(d Deps) *Service {
 	return &Service{
-		repo: d.Repo, users: d.Users, files: d.Files,
+		repo: d.Repo, files: d.Files,
 		bus: d.Bus, messenger: d.Messenger, log: d.Log,
 	}
 }

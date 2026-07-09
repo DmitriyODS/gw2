@@ -364,7 +364,7 @@ onMounted(async () => {
 .settings-card {
   display: flex; align-items: flex-start; gap: 18px;
   padding: 20px 22px;
-  background: var(--color-surface);
+  background: var(--acrylic-card-bg);
   border: 1px solid var(--color-outline-dim);
   border-radius: 20px;
 }
@@ -398,7 +398,7 @@ onMounted(async () => {
 .ctl {
   appearance: none; width: 100%;
   border: 1px solid var(--color-outline-variant);
-  background: var(--color-surface); color: var(--color-on-surface);
+  background: var(--acrylic-card-bg); color: var(--color-on-surface);
   padding: 10px 12px; border-radius: var(--radius-md, 12px);
   font: inherit;
 }
@@ -412,7 +412,7 @@ onMounted(async () => {
 .picker-item {
   display: flex; align-items: center; gap: 10px;
   padding: 12px 14px; border-radius: 14px;
-  background: var(--color-surface); color: var(--color-text);
+  background: var(--acrylic-card-bg); color: var(--color-text);
   border: 1px solid var(--color-outline-variant);
   font: inherit; text-align: left; cursor: pointer;
 }

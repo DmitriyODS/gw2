@@ -4,7 +4,7 @@
     tone="primary"
     :icon="task ? 'edit' : 'add_task'"
     size="md"
-    mobile="full"
+    mobile="sheet"
     :title="task ? 'Редактировать задачу' : 'Новая задача'"
     :subtitle="task ? '' : 'Заполните основные поля. Юнит можно начать прямо отсюда.'"
     :busy="submitting"

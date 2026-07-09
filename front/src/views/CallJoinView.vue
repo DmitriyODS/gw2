@@ -166,8 +166,10 @@ watch(() => callStore.phase, (phase, prev) => {
   gap: 14px;
   padding: 36px 32px;
   border-radius: 28px;
-  background: var(--color-surface);
-  border: 1px solid var(--color-outline-dim);
+  background: var(--acrylic-card-bg);
+  backdrop-filter: var(--acrylic-blur);
+  -webkit-backdrop-filter: var(--acrylic-blur);
+  border: 1px solid var(--acrylic-border);
   box-shadow: var(--shadow-lg, 0 12px 36px color-mix(in oklch, var(--color-scrim) 20%, transparent));
   text-align: center;
 }

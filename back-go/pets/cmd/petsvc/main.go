@@ -8,9 +8,8 @@
 //   - gRPC (GRPC_ADDR) — хуки доменных событий tasksvc (юниты/задачи).
 //
 // Зависимости: общая PostgreSQL платформы (схему ведёт goose-migrate), Redis
-// (дневные капы, кэши, события через канал gw2:pets:events). Единственный
-// исходящий gRPC — portalsvc CreateSystemPost (fire-and-forget пост-
-// поздравление при эволюции питомца; недоступность портала не мешает).
+// (дневные капы, кэши, события через канал gw2:pets:events). Исходящих
+// межсервисных вызовов нет.
 package main
 
 import (
@@ -19,8 +18,6 @@ import (
 
 	googrpc "google.golang.org/grpc"
 
-	"github.com/DmitriyODS/gw2/back-go/pets/internal/clients"
-	"github.com/DmitriyODS/gw2/back-go/pets/internal/domain"
 	"github.com/DmitriyODS/gw2/back-go/pets/internal/endpoint"
 	"github.com/DmitriyODS/gw2/back-go/pets/internal/repository/postgres"
 	"github.com/DmitriyODS/gw2/back-go/pets/internal/repository/redisx"
@@ -61,19 +58,8 @@ func main() {
 	daily := redisx.New(rdb, log)
 	pub := events.NewPublisher(rdb, log, "gw2:pets:events")
 
-	// Портал: системный пост-поздравление при эволюции (fire-and-forget).
-	// Ошибка инициализации клиента — fail-open: сервис живёт без постов.
-	var portalClient domain.PortalClient
-	portalAddr := bootstrap.Env("PORTAL_GRPC_ADDR", "localhost:9102")
-	if portal, err := clients.NewPortal(portalAddr, log); err != nil {
-		log.Warn("portal.client_init_failed", "addr", portalAddr, "error", err)
-	} else {
-		defer portal.Close()
-		portalClient = portal
-	}
-
 	svc := service.New(petRepo, shopRepo, activityRepo, platform, platform,
-		platform, daily, pub, portalClient, log)
+		platform, daily, pub, log)
 	eps := endpoint.New(svc)
 
 	// Фоновый цикл заботы: болезни + дневной пересчёт характеров.

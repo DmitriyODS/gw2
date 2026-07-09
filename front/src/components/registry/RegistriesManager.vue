@@ -404,7 +404,7 @@ onMounted(() => store.fetchRegistries())
   width: 240px; flex-shrink: 0;
   display: flex; flex-direction: column; min-height: 0;
   border: 1px solid var(--color-outline-dim); border-radius: var(--radius-lg);
-  background: var(--color-surface); overflow: hidden;
+  background: var(--acrylic-card-bg); overflow: hidden;
 }
 .rm-side-head {
   flex: none;
@@ -437,7 +437,7 @@ onMounted(() => store.fetchRegistries())
   flex: 1; min-width: 0; min-height: 0;
   display: flex; flex-direction: column;
   border: 1px solid var(--color-outline-dim); border-radius: var(--radius-lg);
-  background: var(--color-surface); overflow: hidden;
+  background: var(--acrylic-card-bg); overflow: hidden;
 }
 .rm-detail-head {
   flex: none; display: flex; align-items: center; gap: 10px;
@@ -451,7 +451,7 @@ onMounted(() => store.fetchRegistries())
   display: flex; align-items: center; gap: 12px;
   padding: 10px 12px; cursor: pointer;
   border: 1px solid var(--color-outline-dim); border-radius: var(--radius-md);
-  background: var(--color-surface);
+  background: var(--acrylic-card-bg);
   transition: border-color .12s, background .12s;
 }
 .rm-field-row:hover { background: var(--color-surface-high); border-color: var(--color-outline); }
@@ -527,7 +527,7 @@ onMounted(() => store.fetchRegistries())
 
 .fd-seg { display: inline-flex; border: 1px solid var(--color-outline-dim); border-radius: var(--radius-md); overflow: hidden; width: max-content; }
 .fd-seg button {
-  width: 44px; height: 38px; border: none; background: var(--color-surface);
+  width: 44px; height: 38px; border: none; background: var(--acrylic-card-bg);
   color: var(--color-text-dim); cursor: pointer; font-weight: 700; font-size: 14px;
   border-right: 1px solid var(--color-outline-dim);
 }

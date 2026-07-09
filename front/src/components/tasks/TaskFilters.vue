@@ -6,9 +6,10 @@
     @click="$emit('close')"
   />
 
-  <aside class="task-filters" :class="{ 'mobile-sheet--open': isMobileVisible }">
+  <aside class="task-filters rail" :class="{ 'mobile-sheet--open': isMobileVisible }">
     <div class="filters-handle" />
 
+    <!-- Шапка только для мобильной шторки -->
     <div class="filters-head">
       <h3 class="filters-head-title">
         <span class="material-symbols-outlined">tune</span>
@@ -17,59 +18,71 @@
       <span class="filters-count">{{ tasksStore.total }}</span>
     </div>
 
-    <div class="filters-scroll">
-      <!-- Сортировки (на мобильном — в отдельной шторке) -->
-      <section class="filter-section sort-section">
-        <h4 class="filter-title">Сортировка</h4>
-        <div class="chip-group">
-          <button
-            v-for="s in sorts"
-            :key="s.value"
-            class="chip"
-            :class="{ active: tasksStore.filters.sort === s.value }"
-            @click="tasksStore.setFilter('sort', s.value)"
-          >
-            <span class="material-symbols-outlined">{{ s.icon }}</span>
-            {{ s.label }}
-          </button>
-        </div>
+    <div class="rail-scroll filters-scroll">
+      <!-- Вкладки (на мобильном — SegmentedTabs в шапке экрана) -->
+      <section class="rail-section tabs-section">
+        <button
+          v-for="t in tabs"
+          :key="t.value"
+          class="rail-item"
+          :class="{ active: tasksStore.filters.tab === t.value }"
+          :data-tutorial="t.tutorial"
+          @click="tasksStore.setTab(t.value)"
+        >
+          <span class="material-symbols-outlined">{{ t.icon }}</span>
+          {{ t.label }}
+          <span v-if="tasksStore.filters.tab === t.value" class="rail-badge">
+            {{ tasksStore.total }}
+          </span>
+        </button>
+      </section>
+
+      <!-- Сортировки (на мобильном — в отдельной шторке SortSheet) -->
+      <section class="rail-section sort-section">
+        <h4 class="rail-label">Сортировка</h4>
+        <button
+          v-for="s in sorts"
+          :key="s.value"
+          class="rail-item"
+          :class="{ active: tasksStore.filters.sort === s.value }"
+          @click="tasksStore.setFilter('sort', s.value)"
+        >
+          <span class="material-symbols-outlined">{{ s.icon }}</span>
+          {{ s.label }}
+        </button>
       </section>
 
       <!-- Фильтры по юнитам -->
-      <section class="filter-section">
-        <h4 class="filter-title">Участие</h4>
-        <div class="chip-group">
-          <button
-            v-for="f in unitFilters"
-            :key="String(f.value)"
-            class="chip"
-            :class="{ active: tasksStore.filters.has_units === f.value }"
-            @click="tasksStore.setFilter('has_units', f.value)"
-          >
-            <span class="material-symbols-outlined">{{ f.icon }}</span>
-            {{ f.label }}
-          </button>
-        </div>
+      <section class="rail-section">
+        <h4 class="rail-label">Участие</h4>
+        <button
+          v-for="f in unitFilters"
+          :key="String(f.value)"
+          class="rail-item"
+          :class="{ active: tasksStore.filters.has_units === f.value }"
+          @click="tasksStore.setFilter('has_units', f.value)"
+        >
+          <span class="material-symbols-outlined">{{ f.icon }}</span>
+          {{ f.label }}
+        </button>
       </section>
 
       <!-- Автор -->
-      <section class="filter-section">
-        <h4 class="filter-title">Авторство</h4>
-        <div class="chip-group">
-          <button
-            class="chip"
-            :class="{ active: tasksStore.filters.created_by_me }"
-            @click="tasksStore.setFilter('created_by_me', !tasksStore.filters.created_by_me)"
-          >
-            <span class="material-symbols-outlined">edit_note</span>
-            Создано мной
-          </button>
-        </div>
+      <section class="rail-section">
+        <h4 class="rail-label">Авторство</h4>
+        <button
+          class="rail-item"
+          :class="{ active: tasksStore.filters.created_by_me }"
+          @click="tasksStore.setFilter('created_by_me', !tasksStore.filters.created_by_me)"
+        >
+          <span class="material-symbols-outlined">edit_note</span>
+          Создано мной
+        </button>
       </section>
 
       <!-- От отдела -->
-      <section class="filter-section">
-        <h4 class="filter-title">Заказчик</h4>
+      <section class="rail-section">
+        <h4 class="rail-label">Заказчик</h4>
         <Select
           :model-value="tasksStore.filters.dept_id"
           :options="deptOptions"
@@ -88,8 +101,8 @@
       </section>
 
       <!-- Этапы (условно) -->
-      <section v-if="usesStages && stages.length" class="filter-section">
-        <h4 class="filter-title">Этап</h4>
+      <section v-if="usesStages && stages.length" class="rail-section">
+        <h4 class="rail-label">Этап</h4>
         <div class="chip-group">
           <button
             class="chip"
@@ -113,8 +126,8 @@
       </section>
 
       <!-- Период поступления -->
-      <section class="filter-section">
-        <h4 class="filter-title">Период поступления</h4>
+      <section class="rail-section">
+        <h4 class="rail-label">Период поступления</h4>
         <div class="chip-group">
           <button
             v-for="p in periods"
@@ -165,7 +178,7 @@
 
     <div class="filters-foot">
       <button
-        class="reset-btn"
+        class="rail-reset"
         :disabled="!hasActiveFilters"
         @click="tasksStore.resetFilters()"
         title="Сбросить сортировку и фильтры"
@@ -190,6 +203,7 @@ import { useTasksStore } from '@/stores/tasks.js'
 import { getDepartments } from '@/api/departments.js'
 import { getStages } from '@/api/stages.js'
 import { useCompanySettings } from '@/composables/useCompanySettings.js'
+import { TASK_SORTS } from '@/components/tasks/taskSorts.js'
 
 const props = defineProps({
   mobileVisible: {
@@ -233,12 +247,13 @@ function onDeptChange(value) {
   tasksStore.setFilter('dept_id', value ?? null)
 }
 
-const sorts = [
-  { label: 'Последняя активность', value: 'last_activity', icon: 'history' },
-  { label: 'Дата создания', value: 'created_at', icon: 'calendar_today' },
-  { label: 'Дата поступления', value: 'received_at', icon: 'inbox' },
-  { label: 'Срок исполнения', value: 'deadline', icon: 'event' },
+const tabs = [
+  { value: 'active', label: 'Активные', icon: 'checklist', tutorial: 'tab-active' },
+  { value: 'favorites', label: 'Избранное', icon: 'star', tutorial: 'tab-favorites' },
+  { value: 'archive', label: 'Архив', icon: 'inventory_2', tutorial: 'tab-archive' },
 ]
+
+const sorts = TASK_SORTS
 
 const unitFilters = [
   { label: 'Все', value: null, icon: 'apps' },
@@ -351,86 +366,28 @@ function closeCustomDialog() {
 </script>
 
 <style scoped>
+/* Каркас рейки — глобальные классы .rail/.rail-* (main.css).
+   Здесь — только привязка к странице задач и мобильная шторка. */
 .task-filters {
-  width: 256px;
-  min-width: 256px;
-  background: var(--color-surface);
-  border-right: 1px solid var(--color-outline-dim);
-  display: flex;
-  flex-direction: column;
-  height: 100%;
-  overflow: hidden;
+  margin: 22px 0 22px 24px;
+  max-height: calc(100% - 44px);
 }
 
-.filters-handle {
+.filters-handle,
+.filters-head {
   display: none;
 }
 
-.filters-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 18px 18px 12px;
-  flex-shrink: 0;
-}
-
-.filters-head-title {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  margin: 0;
-  font-size: 15px;
-  font-weight: 700;
-  color: var(--color-text);
-}
-
-.filters-head-title .material-symbols-outlined {
-  font-size: 20px;
-  color: var(--color-primary);
-}
-
-.filters-count {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-width: 28px;
-  height: 24px;
-  padding: 0 8px;
-  border-radius: var(--radius-full);
-  background: var(--color-primary-container);
-  color: var(--color-on-primary-container);
-  font-size: 13px;
-  font-weight: 700;
-}
-
 .filters-scroll {
-  flex: 1;
-  overflow-y: auto;
-  padding: 0 18px 12px;
-  display: flex;
-  flex-direction: column;
-  gap: 22px;
+  padding: 4px 2px;
 }
 
-.filter-section {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-
-.filter-title {
-  font-size: 11px;
-  font-weight: 700;
-  color: var(--color-text-dim);
-  text-transform: uppercase;
-  letter-spacing: 0.6px;
-  margin: 0;
-}
-
+/* ── Чипы (этапы, период) ── */
 .chip-group {
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
+  padding: 0 6px;
 }
 
 .chip {
@@ -474,12 +431,13 @@ function closeCustomDialog() {
 }
 
 /* PrimeVue Select под визуал панели */
+.dept-select {
+  margin: 0 6px;
+}
+
 :deep(.dept-select.p-select) {
-  width: 100%;
   font-size: 13px;
   border-radius: var(--radius-md);
-  background: var(--color-surface-high);
-  border-color: transparent;
 }
 
 :deep(.dept-select .p-select-label) {
@@ -490,6 +448,7 @@ function closeCustomDialog() {
   display: inline-flex;
   align-items: center;
   gap: 6px;
+  margin: 6px 6px 0;
   padding: 7px 12px;
   border-radius: var(--radius-md);
   background: var(--color-primary-container);
@@ -521,7 +480,7 @@ function closeCustomDialog() {
   font-size: 13px;
   font-weight: 600;
   cursor: pointer;
-  transition: background 0.12s, opacity 0.12s;
+  transition: background 0.12s, opacity 0.12s, filter 0.12s;
   border: none;
 }
 
@@ -536,7 +495,7 @@ function closeCustomDialog() {
 }
 
 .btn-filled {
-  background: var(--color-primary);
+  background: var(--grad-primary);
   color: var(--color-on-primary);
 }
 
@@ -546,46 +505,12 @@ function closeCustomDialog() {
 }
 
 .btn-filled:not(:disabled):hover {
-  background: var(--color-primary-hover);
+  filter: brightness(1.06);
 }
 
-/* Подвал */
+/* Подвал (на десктопе — только кнопка сброса) */
 .filters-foot {
   flex-shrink: 0;
-  padding: 12px 18px;
-  border-top: 1px solid var(--color-outline-dim);
-}
-
-.reset-btn {
-  width: 100%;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  padding: 10px 12px;
-  border: 1px solid var(--color-outline-dim);
-  border-radius: var(--radius-full);
-  background: var(--color-surface);
-  color: var(--color-text);
-  font-size: 13px;
-  font-weight: 600;
-  cursor: pointer;
-  transition: background 0.12s, color 0.12s, border-color 0.12s;
-}
-
-.reset-btn:hover:not(:disabled) {
-  background: var(--color-error-container);
-  color: var(--color-on-error-container);
-  border-color: color-mix(in oklch, var(--color-error) 40%, var(--color-outline-dim));
-}
-
-.reset-btn:disabled {
-  opacity: 0.45;
-  cursor: not-allowed;
-}
-
-.reset-btn .material-symbols-outlined {
-  font-size: 18px;
 }
 
 .filters-close-btn {
@@ -613,22 +538,28 @@ function closeCustomDialog() {
     opacity: 1;
   }
 
+  /* Шторка перекрывает глобальный .rail: фиксированная снизу, стекло с blur. */
   .task-filters {
     position: fixed;
     /* Прижимаем к нижней кромке экрана — нижняя навигация перекрывается
        шторкой так же, как в SortSheet. Если оставлять зазор (bottom: 60px),
        шторка «висит в воздухе» и выглядит оторванной. */
+    top: auto;
     bottom: 0;
     left: 0;
     right: 0;
     width: 100%;
     min-width: unset;
-    /* Переопределяем десктопный height: 100% — иначе шторка тянется на весь
-       экран даже если фильтров всего пара. Максимум 85dvh, минимум — чтобы
-       поместился sticky-header и хоть одна секция. */
+    margin: 0;
+    padding: 0;
+    /* Максимум 85dvh, минимум — чтобы поместился sticky-header и хоть одна
+       секция. */
     height: auto;
     max-height: 85dvh;
-    border-right: none;
+    background: var(--acrylic-bg);
+    backdrop-filter: var(--acrylic-blur);
+    -webkit-backdrop-filter: var(--acrylic-blur);
+    border: none;
     border-top: 1px solid var(--color-outline-dim);
     border-radius: 24px 24px 0 0;
     z-index: 300;
@@ -639,8 +570,14 @@ function closeCustomDialog() {
     box-shadow: 0 -8px 24px color-mix(in oklch, var(--color-scrim) 60%, transparent);
   }
 
-  /* На мобильном — handle, sticky header и sticky footer.
-     Padding-bottom safe-area уезжает в footer. */
+  .task-filters.mobile-sheet--open {
+    transform: translateY(0);
+    visibility: visible;
+    transition: transform 0.32s cubic-bezier(0.4, 0, 0.2, 1),
+                visibility 0s linear 0s;
+  }
+
+  /* На мобильном — handle, sticky header и sticky footer. */
   .filters-handle {
     display: block;
     width: 36px;
@@ -652,16 +589,55 @@ function closeCustomDialog() {
   }
 
   .filters-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
     padding: 6px 18px 12px;
     border-bottom: 1px solid var(--color-outline-dim);
+    flex-shrink: 0;
+  }
+
+  .filters-head-title {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    margin: 0;
+    font-size: 15px;
+    font-weight: 700;
+    color: var(--color-text);
+  }
+
+  .filters-head-title .material-symbols-outlined {
+    font-size: 20px;
+    color: var(--color-primary);
+  }
+
+  .filters-count {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 28px;
+    height: 24px;
+    padding: 0 8px;
+    border-radius: var(--radius-full);
+    background: var(--color-primary-container);
+    color: var(--color-on-primary-container);
+    font-size: 13px;
+    font-weight: 700;
   }
 
   .filters-scroll {
-    padding: 16px 18px 8px;
+    padding: 16px 16px 8px;
     gap: 18px;
     /* Включаем плавный momentum-скролл в шторке на iOS. */
     -webkit-overflow-scrolling: touch;
     overscroll-behavior: contain;
+  }
+
+  /* Пункты — тач-зона ≥44px. */
+  .task-filters .rail-item {
+    min-height: 44px;
+    font-size: 14px;
   }
 
   /* Чипы крупнее — тач-зона ≥40px. */
@@ -681,38 +657,31 @@ function closeCustomDialog() {
     font-size: 14px;
   }
 
-  /* Сортировки на мобильном — в отдельной шторке SortSheet */
+  /* Вкладки — в SegmentedTabs шапки экрана, сортировки — в шторке SortSheet. */
+  .tabs-section,
   .sort-section {
     display: none;
-  }
-
-  .task-filters.mobile-sheet--open {
-    transform: translateY(0);
-    visibility: visible;
-    transition: transform 0.32s cubic-bezier(0.4, 0, 0.2, 1),
-                visibility 0s linear 0s;
   }
 
   .filters-foot {
     display: flex;
     gap: 10px;
     padding: 12px 16px calc(12px + env(safe-area-inset-bottom, 0px));
-    background: var(--color-surface);
+    border-top: 1px solid var(--color-outline-dim);
   }
 
-  .filters-foot .reset-btn {
+  .filters-foot .rail-reset {
     flex: 0 0 auto;
     width: auto;
+    margin-top: 0;
     padding: 11px 16px;
+    border: 1px solid var(--color-outline-dim);
+    border-radius: var(--radius-full);
+    color: var(--color-text);
   }
 
-  .filters-foot .reset-btn .material-symbols-outlined {
+  .filters-foot .rail-reset .material-symbols-outlined {
     font-size: 20px;
-  }
-
-  /* На очень узких — скрываем подпись reset, остаётся только иконка-круг. */
-  .filters-foot .reset-btn-label {
-    display: inline;
   }
 
   .filters-close-btn {
@@ -721,22 +690,22 @@ function closeCustomDialog() {
     padding: 12px 16px;
     border: none;
     border-radius: var(--radius-full);
-    background: var(--color-primary);
+    background: var(--grad-primary);
     color: var(--color-on-primary);
     font-size: 14.5px;
     font-weight: 650;
     cursor: pointer;
     min-height: 44px;
-    transition: background 0.15s;
+    transition: filter 0.15s;
   }
 
   .filters-close-btn:active {
-    background: var(--color-primary-hover);
+    filter: brightness(1.06);
   }
 }
 
 @media (max-width: 380px) {
-  .filters-foot .reset-btn {
+  .filters-foot .rail-reset {
     padding: 11px;
   }
   .filters-foot .reset-btn-label {

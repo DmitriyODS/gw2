@@ -22,19 +22,16 @@ type Service struct {
 	work      domain.WorkReader
 	daily     domain.Daily
 	pub       domain.EventPublisher
-	portal    domain.PortalClient // nil-able: без клиента посты эволюции не публикуются
 	log       *slog.Logger
 }
 
 func New(pets domain.PetRepo, shop domain.ShopRepo, activity domain.ActivityRepo,
 	users domain.UserReader, companies domain.CompanyReader, work domain.WorkReader,
-	daily domain.Daily, pub domain.EventPublisher, portal domain.PortalClient,
-	log *slog.Logger) *Service {
+	daily domain.Daily, pub domain.EventPublisher, log *slog.Logger) *Service {
 
 	return &Service{
 		pets: pets, shop: shop, activity: activity, users: users,
-		companies: companies, work: work, daily: daily, pub: pub,
-		portal: portal, log: log,
+		companies: companies, work: work, daily: daily, pub: pub, log: log,
 	}
 }
 

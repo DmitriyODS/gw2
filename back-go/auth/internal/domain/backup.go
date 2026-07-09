@@ -38,6 +38,7 @@ var BackupSections = []BackupSection{
 	{Key: "registry", Tables: []string{"registries", "registry_fields", "registry_records", "registry_shares"}},
 	{Key: "calendar", Tables: []string{"calendars", "calendar_fields", "calendar_records", "calendar_shares"}},
 	{Key: "diary", Tables: []string{"diaries", "diary_records", "diary_shares", "diary_user_shares"}},
+	{Key: "notes", Tables: []string{"notes", "note_groups", "note_group_items", "note_shares"}},
 	{Key: "messenger", Tables: []string{"conversations", "messages", "message_attachments"}},
 	{Key: "calls", Tables: []string{"calls", "call_participants"}},
 	{Key: "groove", Tables: []string{"feed_events", "feed_comments", "feed_reactions", "groove_raids", "pets", "pet_strokes", "user_locations"}},

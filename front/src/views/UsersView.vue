@@ -18,13 +18,7 @@
       </div>
 
       <div class="admin-toolbar">
-        <div class="u-search">
-          <span class="material-symbols-outlined">search</span>
-          <input v-model.trim="search" placeholder="Поиск по ФИО, логину, email…" />
-          <button v-if="search" class="search-clear" @click="search = ''" aria-label="Очистить">
-            <span class="material-symbols-outlined">close</span>
-          </button>
-        </div>
+        <SearchField v-model="search" placeholder="Поиск по ФИО, логину, email…" hotkey />
       </div>
     </header>
 
@@ -259,6 +253,7 @@ import Column from 'primevue/column'
 import Dialog from 'primevue/dialog'
 import AppDataTable from '@/components/common/AppDataTable.vue'
 import AppDialog from '@/components/common/AppDialog.vue'
+import SearchField from '@/components/common/SearchField.vue'
 import { useBreakpoint } from '@/composables/useBreakpoint.js'
 import { useNotificationsStore } from '@/stores/notifications.js'
 import {
@@ -424,25 +419,6 @@ async function doDelete() {
 .page-head-title { margin: 0 0 6px; font-size: 24px; font-weight: 800; letter-spacing: -0.01em; color: var(--color-text); }
 .page-head-meta { display: inline-flex; align-items: center; gap: 10px; }
 
-/* ── Поиск ── */
-.u-search {
-  display: inline-flex; align-items: center; gap: 6px; height: 44px; padding: 0 10px 0 14px;
-  background: var(--color-surface-high); border: 1px solid transparent; border-radius: var(--radius-full);
-  flex: 1 1 280px; max-width: 540px; min-width: 0; transition: border-color .12s, background .12s, box-shadow .12s;
-}
-.u-search:focus-within {
-  background: var(--color-surface); border-color: var(--color-primary);
-  box-shadow: 0 0 0 3px color-mix(in oklch, var(--color-primary) 18%, transparent);
-}
-.u-search > .material-symbols-outlined { color: var(--color-text-dim); font-size: 20px; }
-.u-search input { flex: 1; border: none; outline: none; background: transparent; color: var(--color-text); font: inherit; min-width: 0; }
-.search-clear {
-  border: none; background: var(--color-surface-highest); width: 26px; height: 26px; border-radius: 50%;
-  display: grid; place-items: center; cursor: pointer; color: var(--color-text-dim);
-}
-.search-clear:hover { background: var(--color-primary-container); color: var(--color-on-primary-container); }
-.search-clear .material-symbols-outlined { font-size: 14px; }
-
 /* ── Кнопки ── */
 .btn-filled, .btn-tonal {
   appearance: none; border: none; cursor: pointer; border-radius: var(--radius-full); padding: 10px 18px;
@@ -476,7 +452,7 @@ async function doDelete() {
 .users-cards { flex: 1; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; }
 .user-card {
   display: flex; align-items: center; gap: 12px; padding: 12px 14px; cursor: pointer;
-  background: var(--color-surface); border: 1px solid var(--color-outline-dim); border-radius: var(--radius-lg);
+  background: var(--acrylic-card-bg); border: 1px solid var(--acrylic-border); border-radius: var(--radius-lg);
 }
 .user-card:hover { background: var(--color-surface-high); }
 .user-card-main { flex: 1; min-width: 0; }
@@ -490,7 +466,7 @@ async function doDelete() {
 .pagination { display: flex; align-items: center; justify-content: center; gap: 6px; flex-wrap: wrap; }
 .page-btn, .page-num {
   min-width: 38px; height: 38px; padding: 0 8px; border: 1px solid var(--color-outline-dim); border-radius: var(--radius-full);
-  background: var(--color-surface); color: var(--color-text); cursor: pointer; display: grid; place-items: center;
+  background: var(--acrylic-card-bg); color: var(--color-text); cursor: pointer; display: grid; place-items: center;
   font-size: 14px; transition: background .14s, border-color .14s;
 }
 .page-btn:disabled { opacity: 0.4; cursor: default; }
@@ -513,13 +489,13 @@ async function doDelete() {
 }
 .root-badge.inline .material-symbols-outlined { font-size: 14px; font-variation-settings: 'FILL' 1; }
 
-.emp-profile { display: flex; flex-direction: column; background: var(--color-surface); width: 100%; box-sizing: border-box; position: relative; }
+.emp-profile { display: flex; flex-direction: column; background: var(--acrylic-card-bg); width: 100%; box-sizing: border-box; position: relative; }
 .profile-close {
   position: absolute; top: 12px; right: 12px; z-index: 2; width: 36px; height: 36px; border-radius: 50%;
   border: none; background: color-mix(in oklch, var(--color-surface) 60%, transparent); color: var(--color-text-dim);
   display: grid; place-items: center; cursor: pointer; backdrop-filter: blur(8px); transition: background .12s, color .12s;
 }
-.profile-close:hover { background: var(--color-surface); color: var(--color-text); }
+.profile-close:hover { background: var(--acrylic-card-bg); color: var(--color-text); }
 .profile-close .material-symbols-outlined { font-size: 20px; }
 .profile-cover {
   position: absolute; inset: 0 0 auto; height: 150px;
@@ -540,7 +516,7 @@ async function doDelete() {
   display: inline-flex; align-items: center; gap: 6px; padding: 4px 12px; border-radius: var(--radius-full);
   font-size: 12px; font-weight: 600; background: color-mix(in oklch, var(--color-text) 8%, transparent); color: var(--color-text-dim);
 }
-.profile-list { display: flex; flex-direction: column; gap: 4px; padding: 16px; background: var(--color-surface); }
+.profile-list { display: flex; flex-direction: column; gap: 4px; padding: 16px; background: var(--acrylic-card-bg); }
 .profile-row {
   display: flex; align-items: center; gap: 12px; padding: 10px 12px; border-radius: var(--radius-lg);
   text-decoration: none; color: var(--color-text); background: var(--color-surface-low); transition: background .12s;
@@ -575,7 +551,7 @@ async function doDelete() {
 
 @media (max-width: 768px) {
   .page-head-title { font-size: 20px; }
-  .u-search { flex: 1 1 100%; max-width: 100%; }
+  .admin-toolbar :deep(.search-field) { flex: 1 1 100%; max-width: 100%; }
   .hide-narrow { display: none; }
   .show-narrow { display: inline; }
 }

@@ -4,6 +4,7 @@
     :class="{
       'seg-tabs--full-width': fullWidth,
       'seg-tabs--dense': dense,
+      'seg-tabs--glass': variant === 'glass',
     }"
     role="tablist"
   >
@@ -33,6 +34,13 @@ const props = defineProps({
   fullWidth: { type: Boolean, default: false },
   /* На мобиле скрывает подписи (для is-compact в Tasks) */
   dense: { type: Boolean, default: false },
+  /* 'default' — градиентная активная вкладка; 'glass' — стеклянный контейнер,
+     активная вкладка — тинтованная primary-пилюля (компактные icon-переключатели). */
+  variant: {
+    type: String,
+    default: 'default',
+    validator: (v) => ['default', 'glass'].includes(v),
+  },
 })
 const emit = defineEmits(['update:modelValue', 'change'])
 
@@ -95,8 +103,8 @@ function select(t) {
 .seg-tab:hover:not(.active) { color: var(--color-text); }
 
 .seg-tab.active {
-  background: var(--color-surface);
-  color: var(--color-primary);
+  background: var(--grad-primary);
+  color: var(--color-on-primary);
   box-shadow: var(--shadow-sm);
 }
 
@@ -115,6 +123,29 @@ function select(t) {
 }
 
 .seg-tab.active .seg-tab-badge {
+  background: var(--color-surface);
+  color: var(--color-primary);
+}
+
+/* ── Вариант «glass»: стеклянный контейнер + тинтованная активная пилюля ── */
+.seg-tabs--glass {
+  background: var(--acrylic-card-bg);
+  border: 1px solid var(--acrylic-border);
+  padding: 3px;
+}
+
+.seg-tabs--glass .seg-tab {
+  padding: 6px 10px;
+  min-height: 32px;
+}
+
+.seg-tabs--glass .seg-tab.active {
+  background: color-mix(in oklch, var(--color-primary) 14%, var(--color-surface));
+  color: var(--color-primary);
+  box-shadow: none;
+}
+
+.seg-tabs--glass .seg-tab.active .seg-tab-badge {
   background: var(--color-primary);
   color: var(--color-on-primary);
 }
@@ -128,12 +159,15 @@ function select(t) {
   .seg-tab-label { font-size: 13px; }
 }
 
+/* Подписи вкладок на мобильном НЕ прячем (дезориентирует — иконки без текста
+   читаются плохо); вместо этого ужимаем типографику и отступы. */
 @media (max-width: 480px) {
+  .seg-tab { padding: 10px 6px; gap: 5px; }
   .seg-tab-label { font-size: 12px; }
-  .seg-tabs--dense .seg-tab-label { display: none; }
 }
 
 @media (max-width: 360px) {
-  .seg-tab-label { display: none; }
+  .seg-tab { padding: 10px 5px; gap: 4px; }
+  .seg-tab-label { font-size: 11.5px; }
 }
 </style>

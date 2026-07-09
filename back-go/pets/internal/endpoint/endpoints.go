@@ -33,6 +33,7 @@ type Endpoints struct {
 	StrokePet endpoint.Endpoint
 
 	GetZoo         endpoint.Endpoint
+	DeleteZooPet   endpoint.Endpoint
 	GetRating      endpoint.Endpoint
 	GetLive        endpoint.Endpoint
 	GetActivityLog endpoint.Endpoint
@@ -67,6 +68,13 @@ type EquipRequest struct {
 type StrokeRequest struct {
 	Scope
 	PetOwnerID int64
+}
+
+// ZooDeleteRequest — удаление питомца сотрудника администратором компании:
+// TargetUserID — владелец удаляемого питомца из пути.
+type ZooDeleteRequest struct {
+	Scope
+	TargetUserID int64
 }
 
 func New(svc *service.Service) Endpoints {
@@ -132,6 +140,10 @@ func New(svc *service.Service) Endpoints {
 		GetZoo: func(ctx context.Context, request any) (any, error) {
 			r := request.(Scope)
 			return svc.GetZoo(ctx, r.CompanyID, r.UserID)
+		},
+		DeleteZooPet: func(ctx context.Context, request any) (any, error) {
+			r := request.(ZooDeleteRequest)
+			return nil, svc.DeleteColleaguePet(ctx, r.UserLevel, r.TargetUserID, r.CompanyID)
 		},
 		GetRating: func(ctx context.Context, request any) (any, error) {
 			r := request.(Scope)

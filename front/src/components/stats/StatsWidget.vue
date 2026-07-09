@@ -178,17 +178,19 @@ async function handleExport() {
 
 <style scoped>
 .stats-widget {
-  background: var(--color-surface);
-  border: 1px solid var(--color-outline-dim);
+  /* Карточка в потоке (Expressive Glass): стекло без blur, тени почти нет —
+     как у карточек задач. */
+  background: var(--acrylic-card-bg);
+  border: 1px solid var(--acrylic-border);
   border-radius: var(--radius-xl, 20px);
   padding: 20px;
   display: flex;
   flex-direction: column;
   gap: 14px;
-  box-shadow: var(--shadow-sm);
   max-height: var(--widget-max-height, 400px);
   transition: box-shadow 0.18s ease, border-color 0.18s ease, opacity 0.18s ease;
 }
+.stats-widget:hover { box-shadow: var(--shadow-sm); }
 
 /* ── Размеры (ширина по колонкам сетки + высота) ── */
 .stats-widget.size-small {

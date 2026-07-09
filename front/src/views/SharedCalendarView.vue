@@ -345,7 +345,7 @@ onMounted(load)
 
 .sc-head {
   flex: none; display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap;
-  padding: 16px 20px; border-bottom: 1px solid var(--color-outline-dim); background: var(--color-surface);
+  padding: 16px 20px; border-bottom: 1px solid var(--color-outline-dim); background: var(--acrylic-card-bg);
 }
 .sc-title { display: flex; align-items: center; gap: 10px; min-width: 0; }
 .sc-title .material-symbols-outlined { color: var(--color-primary); }
@@ -363,18 +363,23 @@ onMounted(load)
 
 .sc-toolbar {
   flex: none; display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
-  padding: 10px 20px; border-bottom: 1px solid var(--color-outline-dim); background: var(--color-surface);
+  padding: 10px 20px; border-bottom: 1px solid var(--color-outline-dim); background: var(--acrylic-card-bg);
 }
 .sc-nav { display: flex; align-items: center; gap: 8px; }
 .sc-period { margin: 0 0 0 6px; font-size: 16px; font-weight: 700; color: var(--color-text); text-transform: capitalize; white-space: nowrap; }
-.sc-today { height: 34px; padding: 0 12px; border: 1px solid var(--color-outline-dim); border-radius: var(--radius-full); background: var(--color-surface); color: var(--color-text); font-weight: 600; font-size: 13px; cursor: pointer; }
+.sc-today { height: 34px; padding: 0 12px; border: 1px solid var(--color-outline-dim); border-radius: var(--radius-full); background: var(--acrylic-card-bg); color: var(--color-text); font-weight: 600; font-size: 13px; cursor: pointer; }
 .sc-spacer { flex: 1; }
-.sc-viewseg { display: inline-flex; border: 1px solid var(--color-outline-dim); border-radius: var(--radius-full); overflow: hidden; }
-.sc-viewseg button { height: 34px; padding: 0 14px; border: none; background: var(--color-surface); color: var(--color-text-dim); cursor: pointer; font-weight: 600; font-size: 13px; border-right: 1px solid var(--color-outline-dim); }
-.sc-viewseg button:last-child { border-right: none; }
-.sc-viewseg button.active { background: var(--color-primary); color: var(--color-on-primary); }
+/* Сегмент вида — единый стиль с периодами статистики (StatsPeriodControl). */
+.sc-viewseg { display: inline-flex; gap: 2px; padding: 4px; background: var(--color-surface-high); border-radius: var(--radius-full); }
+.sc-viewseg button {
+  min-height: 34px; padding: 7px 14px; border: none; background: transparent;
+  border-radius: var(--radius-full); color: var(--color-text-dim); cursor: pointer;
+  font-weight: 600; font-size: 13px; transition: background 0.15s, color 0.15s, box-shadow 0.15s;
+}
+.sc-viewseg button:hover:not(.active) { color: var(--color-text); }
+.sc-viewseg button.active { background: var(--acrylic-card-bg); color: var(--color-primary); font-weight: 700; box-shadow: var(--shadow-sm); }
 
-.sc-icon-btn { width: 36px; height: 36px; display: grid; place-items: center; border: 1px solid var(--color-outline-dim); border-radius: var(--radius-full); background: var(--color-surface); color: var(--color-text-dim); cursor: pointer; }
+.sc-icon-btn { width: 36px; height: 36px; display: grid; place-items: center; border: 1px solid var(--color-outline-dim); border-radius: var(--radius-full); background: var(--acrylic-card-bg); color: var(--color-text-dim); cursor: pointer; }
 .sc-icon-btn:hover { background: var(--color-surface-high); color: var(--color-text); }
 
 .sc-body { position: relative; flex: 1; min-height: 0; overflow: auto; padding: 16px; }
@@ -382,8 +387,8 @@ onMounted(load)
 .sc-grid.month { grid-template-rows: auto repeat(6, 1fr); }
 .sc-grid.week { grid-template-rows: 1fr; }
 .sc-grid.week .sc-day { min-height: 160px; }
-.sc-wd { background: var(--color-surface); padding: 8px 10px; text-align: center; font-size: 12px; font-weight: 700; color: var(--color-text-dim); text-transform: uppercase; }
-.sc-day { background: var(--color-surface); min-height: 104px; padding: 6px; display: flex; flex-direction: column; gap: 4px; overflow: hidden; }
+.sc-wd { background: var(--acrylic-card-bg); padding: 8px 10px; text-align: center; font-size: 12px; font-weight: 700; color: var(--color-text-dim); text-transform: uppercase; }
+.sc-day { background: var(--acrylic-card-bg); min-height: 104px; padding: 6px; display: flex; flex-direction: column; gap: 4px; overflow: hidden; }
 .sc-day.dim { background: var(--color-surface-low); }
 .sc-day.dim .sc-day-num { opacity: 0.55; }
 .sc-day-head { display: flex; align-items: center; justify-content: space-between; }
@@ -424,7 +429,7 @@ onMounted(load)
 .sc-agenda-chev { flex-shrink: 0; color: var(--color-text-dim); }
 
 .sc-daylist { display: flex; flex-direction: column; gap: 8px; }
-.sc-dayrow { display: flex; align-items: center; gap: 14px; width: 100%; text-align: left; padding: 12px 14px; border: 1px solid var(--color-outline-dim); border-radius: var(--radius-lg); background: var(--color-surface); cursor: pointer; }
+.sc-dayrow { display: flex; align-items: center; gap: 14px; width: 100%; text-align: left; padding: 12px 14px; border: 1px solid var(--color-outline-dim); border-radius: var(--radius-lg); background: var(--acrylic-card-bg); cursor: pointer; }
 .sc-dayrow:hover { background: var(--color-surface-high); }
 .sc-dayrow-time { flex-shrink: 0; min-width: 56px; font-size: 16px; font-weight: 700; color: var(--color-primary); font-variant-numeric: tabular-nums; }
 .sc-dayrow-body { flex: 1; min-width: 0; display: flex; flex-direction: column; }
@@ -441,7 +446,7 @@ onMounted(load)
 .spin { animation: scspin 1s linear infinite; font-size: 32px; color: var(--color-primary); }
 @keyframes scspin { to { transform: rotate(360deg); } }
 
-.sc-foot { flex: none; display: flex; align-items: center; justify-content: flex-end; padding: 10px 20px; border-top: 1px solid var(--color-outline-dim); background: var(--color-surface); }
+.sc-foot { flex: none; display: flex; align-items: center; justify-content: flex-end; padding: 10px 20px; border-top: 1px solid var(--color-outline-dim); background: var(--acrylic-card-bg); }
 .sc-brand { font-size: 12px; font-weight: 700; color: var(--color-text-dim); }
 
 .sc-btn { display: inline-flex; align-items: center; gap: 6px; height: 40px; padding: 0 16px; border: none; border-radius: var(--radius-full); background: var(--color-primary); color: var(--color-on-primary); font-weight: 600; font-size: 14px; cursor: pointer; }

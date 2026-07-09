@@ -243,6 +243,21 @@ func (h *handlers) getZoo(c *fiber.Ctx) error {
 	return c.JSON(resp)
 }
 
+// deleteZooPet — удаление питомца сотрудника; право (администратор компании)
+// проверяет сервис по уровню роли из токена.
+func (h *handlers) deleteZooPet(c *fiber.Ctx) error {
+	targetID, err := c.ParamsInt("userId")
+	if err != nil {
+		return validationError(c, "userId", "Неверный идентификатор пользователя")
+	}
+	if _, err := h.eps.DeleteZooPet(c.Context(), endpoint.ZooDeleteRequest{
+		Scope: scope(c), TargetUserID: int64(targetID),
+	}); err != nil {
+		return h.respondError(c, err)
+	}
+	return c.JSON(fiber.Map{"status": "ok"})
+}
+
 func (h *handlers) getRating(c *fiber.Ctx) error {
 	resp, err := h.eps.GetRating(c.Context(), scope(c))
 	if err != nil {

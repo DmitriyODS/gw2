@@ -210,7 +210,7 @@ onMounted(async () => {
 
 <style scoped>
 .sv-page { min-height: 100vh; background: var(--color-surface-low); display: flex; flex-direction: column; }
-.sv-top { display: flex; align-items: center; gap: 16px; padding: 14px 20px; background: var(--color-surface); border-bottom: 1px solid var(--color-outline-dim); }
+.sv-top { display: flex; align-items: center; gap: 16px; padding: 14px 20px; background: var(--acrylic-card-bg); border-bottom: 1px solid var(--color-outline-dim); }
 .sv-brand { display: inline-flex; align-items: center; gap: 8px; font-weight: 700; color: var(--color-primary); }
 .sv-titlebox { display: flex; flex-direction: column; min-width: 0; }
 .sv-title { margin: 0; font-size: 18px; font-weight: 700; color: var(--color-text); }
@@ -220,24 +220,29 @@ onMounted(async () => {
 .sv-state { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; color: var(--color-text-dim); }
 .sv-state .material-symbols-outlined { font-size: 44px; }
 
-.sv-shell { flex: 1; min-height: 0; display: flex; flex-direction: column; margin: 16px; background: var(--color-surface); border: 1px solid var(--color-outline-dim); border-radius: var(--radius-xl); overflow: hidden; }
+.sv-shell { flex: 1; min-height: 0; display: flex; flex-direction: column; margin: 16px; background: var(--acrylic-card-bg); border: 1px solid var(--color-outline-dim); border-radius: var(--radius-xl); overflow: hidden; }
 .sv-toolbar { flex-shrink: 0; display: flex; align-items: center; gap: 12px; flex-wrap: wrap; padding: 12px 16px; border-bottom: 1px solid var(--color-outline-dim); }
 .sv-nav { display: flex; align-items: center; gap: 8px; }
 .sv-period { margin: 0 0 0 6px; font-size: 16px; font-weight: 700; color: var(--color-text); text-transform: capitalize; }
-.sv-today { height: 36px; padding: 0 14px; border: 1px solid var(--color-outline-dim); border-radius: var(--radius-full); background: var(--color-surface); color: var(--color-text); font-weight: 600; font-size: 13px; cursor: pointer; }
+.sv-today { height: 36px; padding: 0 14px; border: 1px solid var(--color-outline-dim); border-radius: var(--radius-full); background: var(--acrylic-card-bg); color: var(--color-text); font-weight: 600; font-size: 13px; cursor: pointer; }
 .sv-spacer { flex: 1; }
-.sv-icon-btn { width: 36px; height: 36px; display: grid; place-items: center; border: 1px solid var(--color-outline-dim); border-radius: var(--radius-full); background: var(--color-surface); color: var(--color-text-dim); cursor: pointer; }
-.sv-viewseg { display: inline-flex; border: 1px solid var(--color-outline-dim); border-radius: var(--radius-full); overflow: hidden; }
-.sv-viewseg button { height: 36px; padding: 0 14px; border: none; background: var(--color-surface); color: var(--color-text-dim); cursor: pointer; font-weight: 600; font-size: 13px; border-right: 1px solid var(--color-outline-dim); }
-.sv-viewseg button:last-child { border-right: none; }
-.sv-viewseg button.active { background: var(--color-primary); color: var(--color-on-primary); }
+.sv-icon-btn { width: 36px; height: 36px; display: grid; place-items: center; border: 1px solid var(--color-outline-dim); border-radius: var(--radius-full); background: var(--acrylic-card-bg); color: var(--color-text-dim); cursor: pointer; }
+/* Сегмент вида — единый стиль с периодами статистики (StatsPeriodControl). */
+.sv-viewseg { display: inline-flex; gap: 2px; padding: 4px; background: var(--color-surface-high); border-radius: var(--radius-full); }
+.sv-viewseg button {
+  min-height: 36px; padding: 8px 14px; border: none; background: transparent;
+  border-radius: var(--radius-full); color: var(--color-text-dim); cursor: pointer;
+  font-weight: 600; font-size: 13px; transition: background 0.15s, color 0.15s, box-shadow 0.15s;
+}
+.sv-viewseg button:hover:not(.active) { color: var(--color-text); }
+.sv-viewseg button.active { background: var(--acrylic-card-bg); color: var(--color-primary); font-weight: 700; box-shadow: var(--shadow-sm); }
 
 .sv-body { flex: 1; min-height: 0; overflow: auto; }
 .sv-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 1px; background: var(--color-outline-dim); min-height: 100%; }
 .sv-grid.month { grid-template-rows: auto repeat(6, 1fr); }
 .sv-grid.week { grid-template-rows: 1fr; }
-.sv-wd { background: var(--color-surface); padding: 8px 10px; text-align: center; font-size: 12px; font-weight: 700; color: var(--color-text-dim); text-transform: uppercase; }
-.sv-day { background: var(--color-surface); min-height: 100px; padding: 6px; display: flex; flex-direction: column; gap: 4px; cursor: pointer; overflow: hidden; }
+.sv-wd { background: var(--acrylic-card-bg); padding: 8px 10px; text-align: center; font-size: 12px; font-weight: 700; color: var(--color-text-dim); text-transform: uppercase; }
+.sv-day { background: var(--acrylic-card-bg); min-height: 100px; padding: 6px; display: flex; flex-direction: column; gap: 4px; cursor: pointer; overflow: hidden; }
 .sv-grid.week .sv-day { min-height: 0; }
 .sv-day:hover { background: var(--color-surface-high); }
 .sv-day.dim { background: var(--color-surface-low); }
@@ -252,7 +257,7 @@ onMounted(async () => {
 .sv-event-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 .sv-daylist, .sv-archive { display: flex; flex-direction: column; gap: 8px; padding: 16px; }
-.sv-dayrow, .sv-arow { display: flex; align-items: center; gap: 14px; width: 100%; text-align: left; padding: 12px 14px; border: 1px solid var(--color-outline-dim); border-radius: var(--radius-lg); background: var(--color-surface); cursor: pointer; }
+.sv-dayrow, .sv-arow { display: flex; align-items: center; gap: 14px; width: 100%; text-align: left; padding: 12px 14px; border: 1px solid var(--color-outline-dim); border-radius: var(--radius-lg); background: var(--acrylic-card-bg); cursor: pointer; }
 .sv-dayrow:hover, .sv-arow:hover { background: var(--color-surface-high); }
 .sv-dayrow-time { flex-shrink: 0; min-width: 56px; font-weight: 700; color: var(--color-primary); }
 .sv-dayrow-body, .sv-arow-body { flex: 1; min-width: 0; display: flex; flex-direction: column; }
@@ -270,7 +275,7 @@ onMounted(async () => {
 .sv-ddesc { margin: 0; white-space: pre-wrap; line-height: 1.5; color: var(--color-text); }
 .sv-dnone { margin: 0; color: var(--color-text-dim); }
 .sv-ddlist { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
-.sv-ddmain { display: flex; align-items: center; gap: 12px; width: 100%; padding: 10px 12px; border: 1px solid var(--color-outline-dim); border-radius: var(--radius-md); background: var(--color-surface); cursor: pointer; text-align: left; }
+.sv-ddmain { display: flex; align-items: center; gap: 12px; width: 100%; padding: 10px 12px; border: 1px solid var(--color-outline-dim); border-radius: var(--radius-md); background: var(--acrylic-card-bg); cursor: pointer; text-align: left; }
 .sv-ddtime { flex-shrink: 0; font-weight: 700; color: var(--color-primary); }
 .sv-ddtitle { flex: 1; min-width: 0; font-weight: 600; color: var(--color-text); }
 .spin { animation: svspin 1s linear infinite; }

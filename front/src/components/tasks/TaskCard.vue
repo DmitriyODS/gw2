@@ -11,9 +11,13 @@
 
     <div class="card-main">
       <div class="card-header">
-        <span class="dept-badge" :title="task.department?.name || '—'">
-          <span class="material-symbols-outlined">apartment</span>
-          {{ task.department?.name || '—' }}
+        <span
+          v-if="task.department?.name"
+          class="chip-tint chip-tint--primary dept-badge"
+          :title="task.department.name"
+        >
+          <span class="material-symbols-outlined">domain</span>
+          <span class="dept-badge-name">{{ task.department.name }}</span>
         </span>
 
         <div class="card-actions">
@@ -61,7 +65,7 @@
       <div class="task-meta">
         <span
           v-if="task.stage"
-          class="meta-chip stage-chip"
+          class="chip-tint stage-chip"
           :style="stageChipStyle"
           :title="`Этап: ${task.stage.name}`"
         >
@@ -70,15 +74,15 @@
         </span>
         <span
           v-if="deadlineInfo"
-          class="meta-chip"
-          :class="`deadline-${deadlineInfo.level}`"
+          class="chip-tint"
+          :class="deadlineChipClass"
           :title="`Срок: ${formatDate(task.deadline)}`"
         >
           <span class="material-symbols-outlined">{{ deadlineInfo.icon }}</span>
           {{ deadlineInfo.label }}
         </span>
-        <span class="meta-chip muted" :title="`Поступила: ${formatDate(task.received_at)}`">
-          <span class="material-symbols-outlined">inbox</span>
+        <span class="chip-tint meta-date" :title="`Поступила: ${formatDate(task.received_at)}`">
+          <span class="material-symbols-outlined">calendar_today</span>
           {{ formatDate(task.received_at) }}
         </span>
       </div>
@@ -87,7 +91,7 @@
         <div class="footer-left">
           <button
             v-if="!task.is_archived"
-            class="work-btn"
+            class="btn-soft-success work-btn"
             :class="{ 'is-running': isRunningHere }"
             @click.stop="onWorkClick"
             :title="isRunningHere ? 'Остановить юнит' : 'Начать юнит'"
@@ -184,6 +188,14 @@ const deadlineInfo = computed(() => {
   return { level: 'normal', icon: 'event', label: formatDate(props.task.deadline) }
 })
 
+// Тон чипа срока — через глобальные модификаторы .chip-tint--*.
+const deadlineChipClass = computed(() => {
+  const level = deadlineInfo.value?.level
+  if (level === 'overdue') return 'chip-tint--error'
+  if (level === 'soon') return 'chip-tint--warning'
+  return ''
+})
+
 function onWorkClick() {
   if (isRunningHere.value) emit('stop-unit', props.task)
   else emit('start-unit', props.task)
@@ -201,20 +213,21 @@ function formatDate(d) {
 </script>
 
 <style scoped>
+/* Стеклянная карточка в потоке: почти без теней, лёгкий подъём на hover. */
 .task-card {
   position: relative;
-  background: var(--color-surface);
-  border: 1px solid var(--color-outline-dim);
-  border-radius: var(--radius-lg);
+  background: var(--acrylic-card-bg);
+  border: 1px solid var(--acrylic-border);
+  border-radius: 18px;
   cursor: pointer;
   overflow: hidden;
   transition: box-shadow 0.18s ease, transform 0.14s ease, border-color 0.18s ease;
 }
 
 .task-card:hover {
-  box-shadow: var(--shadow-lg);
-  transform: translateY(-3px);
-  border-color: color-mix(in oklch, var(--color-primary) 35%, var(--color-outline-dim));
+  box-shadow: var(--shadow-sm);
+  transform: translateY(-2px);
+  border-color: color-mix(in oklch, var(--color-primary) 35%, var(--acrylic-border));
 }
 
 .task-card:active {
@@ -262,32 +275,29 @@ function formatDate(d) {
   gap: 8px;
 }
 
+/* Чип отдела-заказчика — глобальный .chip-tint--primary, здесь только обрезка. */
 .dept-badge {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  background: var(--color-tertiary-container);
-  color: var(--color-on-tertiary-container);
-  border-radius: var(--radius-full);
-  padding: 3px 10px 3px 8px;
-  font-size: 12px;
-  font-weight: 600;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  max-width: 100%;
+  min-width: 0;
+  padding-left: 8px;
 }
 
 .dept-badge .material-symbols-outlined {
   font-size: 14px;
-  flex-shrink: 0;
 }
 
+.dept-badge-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* margin-left: auto — экшены прижаты вправо и без чипа отдела. */
 .card-actions {
   display: flex;
   align-items: center;
   gap: 2px;
   flex-shrink: 0;
+  margin-left: auto;
 }
 
 .card-action-btn {
@@ -335,12 +345,12 @@ function formatDate(d) {
 
 .task-name {
   font-size: 15px;
-  font-weight: 650;
+  font-weight: 700;
   color: var(--color-text);
   margin: 0;
   line-height: 1.4;
   display: -webkit-box;
-  -webkit-line-clamp: 3;
+  -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
   overflow: hidden;
 }
@@ -351,42 +361,16 @@ function formatDate(d) {
   gap: 6px;
 }
 
-.meta-chip {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  font-size: 12px;
-  font-weight: 600;
-  padding: 3px 9px;
-  border-radius: var(--radius-full);
-  background: var(--color-surface-high);
-  color: var(--color-text-dim);
-  white-space: nowrap;
-}
-
-.meta-chip .material-symbols-outlined {
+.task-meta .chip-tint .material-symbols-outlined {
   font-size: 14px;
 }
 
-.meta-chip.muted {
+/* Дата поступления — приглушённая, без плашки. */
+.meta-date {
   background: transparent;
   padding-left: 2px;
+  padding-right: 2px;
   font-weight: 500;
-}
-
-.deadline-overdue {
-  background: var(--color-error-container);
-  color: var(--color-on-error-container);
-}
-
-.deadline-soon {
-  background: var(--color-warning-container);
-  color: var(--color-on-warning-container);
-}
-
-.deadline-normal {
-  background: var(--color-surface-high);
-  color: var(--color-text-dim);
 }
 
 .stage-chip {
@@ -415,33 +399,8 @@ function formatDate(d) {
   gap: 8px;
 }
 
-.work-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  border: none;
-  cursor: pointer;
-  border-radius: var(--radius-full);
-  padding: 5px 12px 5px 9px;
-  font-size: 12px;
-  font-weight: 650;
-  background: var(--color-secondary-container);
-  color: var(--color-on-secondary-container);
-  transition: background 0.15s, transform 0.1s;
-}
-
-.work-btn:hover {
-  background: color-mix(in oklch, var(--color-secondary) 28%, var(--color-secondary-container));
-}
-
-.work-btn:active {
-  transform: scale(0.96);
-}
-
-.work-btn .material-symbols-outlined {
-  font-size: 18px;
-}
-
+/* «В работу» — глобальный .btn-soft-success; запущенный юнит остаётся
+   в secondary-акценте юнитов (плашка активного юнита, ринг карточки). */
 .work-btn.is-running {
   background: var(--color-secondary);
   color: var(--color-on-secondary);
@@ -536,7 +495,7 @@ function formatDate(d) {
   flex-shrink: 0;
 }
 
-.task-card.view-list .task-meta .meta-chip.muted {
+.task-card.view-list .task-meta .meta-date {
   display: none;
 }
 
@@ -558,7 +517,7 @@ function formatDate(d) {
 
 .task-card.view-list:hover {
   transform: none;
-  box-shadow: var(--shadow-md);
+  box-shadow: var(--shadow-sm);
 }
 
 @media (max-width: 600px) {
@@ -576,8 +535,8 @@ function formatDate(d) {
   /* Hover-эффект — лишний на тач-устройствах, на тапе у нас уже :active. */
   .task-card:hover {
     transform: none;
-    box-shadow: var(--shadow-sm);
-    border-color: var(--color-outline-dim);
+    box-shadow: none;
+    border-color: var(--acrylic-border);
   }
 
   .task-card:active {
@@ -614,12 +573,12 @@ function formatDate(d) {
   }
 
   /* Чипы метаданных чуть компактнее — на узких экранах хорошо умещаются в ряд. */
-  .meta-chip {
+  .task-meta .chip-tint {
     font-size: 11.5px;
     padding: 3px 8px;
   }
 
-  .meta-chip .material-symbols-outlined {
+  .task-meta .chip-tint .material-symbols-outlined {
     font-size: 13px;
   }
 

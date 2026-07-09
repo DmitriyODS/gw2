@@ -67,6 +67,32 @@ export const useTasksStore = defineStore('tasks', () => {
     return companies.activeCompanyId != null
   }
 
+  // Бейдж навигации: сколько активных задач, где я ответственный.
+  // Отдельный лёгкий запрос (per_page=1, читаем только total) — основная
+  // выборка живёт своими фильтрами и не годится как источник счётчика.
+  const myActiveCount = ref(0)
+  let badgeTimer = null
+
+  async function fetchMyActiveCount() {
+    const auth = useAuthStore()
+    if (!_hasCompanyScope() || auth.userId == null) {
+      myActiveCount.value = 0
+      return
+    }
+    try {
+      const data = await tasksApi.getTasks({
+        tab: 'active', responsible_id: auth.userId, page: 1, per_page: 1,
+      })
+      myActiveCount.value = data.total ?? 0
+    } catch { /* бейдж некритичен — молча пропускаем */ }
+  }
+
+  // Сокет-события задач приходят сериями — пересчёт с дебаунсом.
+  function refreshMyActiveCount() {
+    clearTimeout(badgeTimer)
+    badgeTimer = setTimeout(() => { fetchMyActiveCount() }, 1500)
+  }
+
   async function fetchTasks({ silent = false } = {}) {
     if (!_hasCompanyScope()) {
       tasks.value = []
@@ -302,6 +328,7 @@ export const useTasksStore = defineStore('tasks', () => {
   return {
     tasks, taskById, total, loading, error, filters, activeTask,
     commentsByTask, contributorsByTask,
+    myActiveCount, fetchMyActiveCount, refreshMyActiveCount,
     fetchTasks, setFilter, setTab, resetFilters, openTask, closeTask,
     upsertTask, patchTask, addTaskFromSocket, removeTask, archiveTask, restoreTask,
     setFavorite, addActiveUser, removeActiveUser,

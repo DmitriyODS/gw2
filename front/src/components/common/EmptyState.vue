@@ -1,5 +1,5 @@
 <template>
-  <div class="empty-state" :class="[`empty-state--${size}`, { 'empty-state--error': tone === 'error' }]">
+  <div class="empty-state" :class="[`empty-state--${size}`, { 'empty-state--error': tone === 'error', 'empty-state--soft': tone === 'soft' }]">
     <div class="es-icon">
       <span class="material-symbols-outlined">{{ icon }}</span>
     </div>
@@ -16,7 +16,8 @@ defineProps({
   subtitle: { type: String, default: '' },
   /* md — обычный (страницы/панели), sm — компактный (сайдбары, узкие списки) */
   size: { type: String, default: 'md' },
-  /* primary — обычное пустое состояние, error — состояние ошибки */
+  /* primary — обычное пустое состояние, error — ошибка,
+     soft — «ничего не выбрано» правой панели мастер-детейл разделов */
   tone: { type: String, default: 'primary' },
 })
 </script>
@@ -49,6 +50,22 @@ defineProps({
 .empty-state--error .es-icon {
   background: var(--color-error-container);
   color: var(--color-on-error-container);
+}
+
+/* Мягкий круг: полупрозрачная surface-подложка вместо тонального контейнера. */
+.empty-state--soft .es-icon {
+  width: 96px;
+  height: 96px;
+  background: color-mix(in oklch, var(--color-surface) 70%, transparent);
+  color: var(--color-primary);
+  box-shadow: var(--shadow-sm);
+}
+
+.empty-state--soft .es-icon .material-symbols-outlined { font-size: 44px; }
+
+.empty-state--soft .es-title {
+  font-size: 16px;
+  font-weight: 700;
 }
 
 .es-title {

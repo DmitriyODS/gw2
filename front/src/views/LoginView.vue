@@ -1,13 +1,6 @@
 <template>
-  <div class="login-page">
-    <div class="login-wrapper">
-      <!-- Лого выше карточки, перекрывает её верхний край -->
-      <div class="login-logo-wrap">
-        <Logo class="login-logo-img" :size="80" />
-      </div>
-
-      <div class="login-card">
-        <form @submit.prevent="handleLogin" class="login-form">
+  <AuthShell title="С возвращением!" subtitle="Войдите, чтобы продолжить работу.">
+    <form @submit.prevent="handleLogin" class="login-form">
           <div class="form-group">
             <label>Логин</label>
             <input
@@ -50,15 +43,14 @@
           <button type="submit" class="btn-login" :disabled="isLoginDisabled">
             {{ loginButtonLabel }}
           </button>
-        </form>
+    </form>
 
-        <p class="switch-line">
-          Нет аккаунта?
-          <RouterLink to="/register" class="switch-link">Зарегистрироваться</RouterLink>
-        </p>
-      </div>
-    </div>
+    <p class="switch-line">
+      Нет аккаунта?
+      <RouterLink to="/register" class="switch-link">Зарегистрироваться</RouterLink>
+    </p>
 
+    <template #overlays>
     <!-- Неклозабельная модалка смены учётных данных -->
     <AppDialog
       v-if="showChangeModal"
@@ -152,7 +144,8 @@
         {{ loading ? 'Входим...' : 'Войти' }}
       </button>
     </AppDialog>
-  </div>
+    </template>
+  </AuthShell>
 </template>
 
 <script setup>
@@ -162,7 +155,7 @@ import { useAuthStore } from '@/stores/auth.js'
 import { useThemeStore } from '@/stores/theme.js'
 import { connectSocket } from '@/socket/index.js'
 import AppDialog from '@/components/common/AppDialog.vue'
-import Logo from '@/components/common/Logo.vue'
+import AuthShell from '@/components/auth/AuthShell.vue'
 
 const router = useRouter()
 const route = useRoute()
@@ -327,50 +320,8 @@ async function handleChangeDefault() {
 </script>
 
 <style scoped>
-.login-page {
-  min-height: 100vh;
-  min-height: 100dvh;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: var(--color-bg);
-  padding: 24px;
-}
-
-/* Обёртка: лого + карточка в одной колонке */
-.login-wrapper {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  width: 100%;
-  max-width: 420px;
-}
-
-/* Лого перекрывает верхний край карточки */
-.login-logo-wrap {
-  position: relative;
-  z-index: 2;
-  margin-bottom: -36px;
-}
-
-.login-logo-img {
-  width: 72px;
-  height: 72px;
-  border-radius: 50%;
-  display: block;
-  filter: drop-shadow(var(--shadow-lg));
-}
-
-.login-card {
-  width: 100%;
-  background: var(--color-surface);
-  border-radius: var(--radius-xl);
-  padding: 64px 40px 40px;
-  display: flex;
-  flex-direction: column;
-  box-shadow: var(--shadow-lg);
-}
-
+/* Каркас страницы (фон, сплит-карточка, промо) — в AuthShell.vue;
+   здесь только форма входа и содержимое диалогов. */
 .login-form {
   display: flex;
   flex-direction: column;
@@ -391,24 +342,25 @@ async function handleChangeDefault() {
   letter-spacing: 0.08em;
 }
 
-/* Pill-инпут: только border, без фона */
+/* Pill-инпут: полупрозрачное стекло с мягкой обводкой */
 .pill-input {
   width: 100%;
   height: 48px;
   border-radius: var(--radius-full);
-  border: 1.5px solid var(--color-outline);
-  background: transparent;
+  border: 1.5px solid color-mix(in oklch, var(--color-outline) 55%, transparent);
+  background: color-mix(in oklch, var(--color-surface) 42%, transparent);
   padding: 0 20px;
   font-size: 15px;
   color: var(--color-text);
   outline: none;
-  transition: border-color 0.15s, box-shadow 0.15s;
+  transition: border-color 0.15s, box-shadow 0.15s, background 0.15s;
   box-sizing: border-box;
   font-family: inherit;
 }
 
 .pill-input:focus {
   border-color: var(--color-primary);
+  background: color-mix(in oklch, var(--color-surface) 65%, transparent);
   box-shadow: 0 0 0 3px color-mix(in oklch, var(--color-primary) 15%, transparent);
 }
 
@@ -500,19 +452,18 @@ async function handleChangeDefault() {
   height: 52px;
   border-radius: 999px;
   border: none;
-  background: var(--color-primary);
+  background: var(--grad-primary);
   color: var(--color-on-primary);
   font-size: 16px;
   font-weight: 700;
   cursor: pointer;
-  transition: background 0.15s, transform 0.1s, box-shadow 0.15s;
+  transition: filter 0.15s, transform 0.1s;
   margin-top: 8px;
   letter-spacing: 0.02em;
 }
 
 .btn-login:hover:not(:disabled) {
-  background: var(--color-primary-hover);
-  box-shadow: var(--shadow-lg);
+  filter: brightness(1.06);
   transform: translateY(-1px);
 }
 
@@ -626,13 +577,4 @@ async function handleChangeDefault() {
   gap: 16px;
 }
 
-@media (max-width: 480px) {
-  .login-page {
-    padding: 16px;
-  }
-
-  .login-card {
-    padding: 56px 24px 28px;
-  }
-}
 </style>

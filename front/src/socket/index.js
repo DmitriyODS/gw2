@@ -10,6 +10,7 @@ import { registerPetsSocketHandlers } from '@/socket/pets.js'
 import { registerRegistrySocketHandlers } from '@/socket/registry.js'
 import { registerCalendarSocketHandlers } from '@/socket/calendar.js'
 import { registerDiarySocketHandlers } from '@/socket/diary.js'
+import { registerNotesSocketHandlers } from '@/socket/notes.js'
 import { registerPortalSocketHandlers } from '@/socket/portal.js'
 
 let socket = null
@@ -175,6 +176,7 @@ export function connectSocket() {
   registerRegistrySocketHandlers(socket)
   registerCalendarSocketHandlers(socket)
   registerDiarySocketHandlers(socket)
+  registerNotesSocketHandlers(socket)
   registerPortalSocketHandlers(socket)
 }
 

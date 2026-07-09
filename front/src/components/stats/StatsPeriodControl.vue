@@ -136,7 +136,7 @@ watch(
   border: 1px solid var(--color-outline-dim);
   border-radius: var(--radius-full);
   cursor: pointer;
-  background: var(--color-surface);
+  background: var(--acrylic-card-bg);
   font-size: 14px;
   font-weight: 600;
   color: var(--color-text);
@@ -158,7 +158,7 @@ watch(
 .period-picker {
   position: fixed;
   z-index: 1001;
-  background: var(--color-surface);
+  background: var(--acrylic-card-bg);
   border: 1px solid var(--color-outline-dim);
   border-radius: var(--radius-xl, 20px);
   box-shadow: var(--shadow-lg);
@@ -198,7 +198,7 @@ watch(
 }
 
 .mode-btn.active {
-  background: var(--color-surface);
+  background: var(--acrylic-card-bg);
   color: var(--color-primary);
   font-weight: 700;
   box-shadow: var(--shadow-sm);
@@ -215,7 +215,7 @@ watch(
   height: 40px;
   border: 1px solid var(--color-outline-dim);
   border-radius: var(--radius-full);
-  background: var(--color-surface);
+  background: var(--acrylic-card-bg);
   color: var(--color-text);
   cursor: pointer;
   display: flex;
@@ -249,7 +249,7 @@ watch(
   min-height: 40px;
   border: 1px solid var(--color-outline-dim);
   border-radius: var(--radius-full);
-  background: var(--color-surface);
+  background: var(--acrylic-card-bg);
   color: var(--color-text);
   font-size: 13px;
   font-weight: 600;

@@ -520,7 +520,7 @@ const joinLabel = computed(() => props.isMine ? 'Вернуться' : 'Прис
   padding: 8px 10px;
   border: 1px solid var(--color-outline-dim);
   border-radius: var(--radius-md);
-  background: var(--color-surface);
+  background: var(--acrylic-card-bg);
   color: var(--color-text);
   cursor: pointer;
   width: 100%;
@@ -575,7 +575,7 @@ const joinLabel = computed(() => props.isMine ? 'Вернуться' : 'Прис
   padding: 8px 10px;
   border: 1px solid var(--color-outline-dim);
   border-radius: var(--radius-md);
-  background: var(--color-surface);
+  background: var(--acrylic-card-bg);
   color: var(--color-text);
   cursor: pointer;
   width: 100%;
@@ -705,7 +705,7 @@ const joinLabel = computed(() => props.isMine ? 'Вернуться' : 'Прис
   border-radius: 50%;
   display: grid;
   place-items: center;
-  background: var(--color-surface);
+  background: var(--acrylic-card-bg);
   color: var(--color-primary);
   flex-shrink: 0;
 }

@@ -81,6 +81,9 @@ services:
   portal:
     image: osipovskijdima/groove_work:${PORTAL_TAG:-portal}
 
+  notes:
+    image: osipovskijdima/groove_work:${NOTES_TAG:-notes}
+
   mail:
     image: osipovskijdima/groove_work:${MAIL_TAG:-mail}
     environment:

@@ -1,29 +1,29 @@
 <template>
-  <div class="cv">
-    <!-- ЛЕВАЯ КОЛОНКА: список календарей -->
-    <aside class="cv-side">
-      <div class="cv-side-head">
-        <span class="material-symbols-outlined">calendar_month</span>
-        <span>Календари</span>
+  <div class="cv split-view">
+    <!-- ЛЕВАЯ ПАНЕЛЬ: список календарей -->
+    <aside class="split-side">
+      <div class="split-side-head">
+        <span class="split-side-tile"><span class="material-symbols-outlined">calendar_month</span></span>
+        <span class="split-side-title">Календари</span>
       </div>
-      <div class="cv-side-body">
-        <div v-if="store.loadingList" class="cv-side-note">Загрузка…</div>
-        <div v-else-if="!store.calendars.length" class="cv-side-note">Календари отсутствуют</div>
+      <div class="split-side-list">
+        <div v-if="store.loadingList" class="split-side-note">Загрузка…</div>
+        <div v-else-if="!store.calendars.length" class="split-side-note">Календари отсутствуют</div>
         <button
           v-for="c in store.calendars"
           :key="c.id"
-          class="cv-side-item"
+          class="split-side-item"
           :class="{ active: c.id === store.selectedId }"
           @click="store.select(c.id)"
         >
-          <span class="material-symbols-outlined">event_note</span>
-          <span class="cv-side-name">{{ c.name }}</span>
+          <span class="split-item-tile"><span class="material-symbols-outlined">event_note</span></span>
+          <span class="split-side-name">{{ c.name }}</span>
         </button>
       </div>
     </aside>
 
-    <!-- ПРАВАЯ КОЛОНКА -->
-    <section class="cv-main">
+    <!-- ПРАВАЯ ПАНЕЛЬ -->
+    <section class="split-main">
       <!-- Мобайл: выбор календаря лентой чипов -->
       <div v-if="isMobile && store.calendars.length" class="cv-regstrip">
         <button
@@ -49,19 +49,17 @@
             <h2 class="cv-period">{{ periodLabel }}</h2>
           </div>
 
-          <div class="cv-spacer" />
+          <SearchField
+            v-model="searchInput"
+            placeholder="Поиск по записям…"
+            hotkey
+            @update:model-value="onSearch"
+            @clear="clearSearch"
+          />
 
           <div class="cv-viewseg">
             <button v-for="v in viewModes" :key="v.value" :class="{ active: store.view === v.value }" @click="store.setView(v.value)">
               {{ v.label }}
-            </button>
-          </div>
-
-          <div class="cv-search">
-            <span class="material-symbols-outlined">search</span>
-            <input v-model="searchInput" type="text" placeholder="Поиск…" @input="onSearch" />
-            <button v-if="searchInput" class="cv-search-clear" title="Очистить" @click="clearSearch">
-              <span class="material-symbols-outlined">close</span>
             </button>
           </div>
 
@@ -72,7 +70,7 @@
             <button class="cv-icon-btn" title="Экспорт в XLSX" @click="openExport">
               <span class="material-symbols-outlined">download</span>
             </button>
-            <button class="cv-btn-primary" @click="openCreate()">
+            <button class="btn-grad" @click="openCreate()">
               <span class="material-symbols-outlined">add</span>
               <span class="cv-btn-label">Запись</span>
             </button>
@@ -167,10 +165,14 @@
       </template>
 
       <!-- Календарь не выбран -->
-      <div v-else class="cv-placeholder">
-        <span class="material-symbols-outlined">calendar_month</span>
-        <p>{{ isMobile ? 'Выберите календарь сверху' : 'Выберите календарь слева' }}</p>
-      </div>
+      <EmptyState
+        v-else
+        class="split-empty"
+        icon="calendar_month"
+        tone="soft"
+        :title="isMobile ? 'Выберите календарь сверху' : 'Выберите календарь слева'"
+        subtitle="Выберите календарь в списке, чтобы просмотреть его записи"
+      />
     </section>
 
     <CalendarDayDialog
@@ -202,7 +204,7 @@
           этот календарь, открывать карточки записей и выгружать данные — но не редактировать.
           Ссылку можно отозвать в любой момент.
         </p>
-        <button class="cv-btn-primary" :disabled="sharesBusy" @click="createShareLink">
+        <button class="btn-grad" :disabled="sharesBusy" @click="createShareLink">
           <span class="material-symbols-outlined">add_link</span> Создать ссылку
         </button>
         <div v-if="sharesLoading" class="cv-shares-empty">Загрузка…</div>
@@ -264,6 +266,8 @@ import Checkbox from 'primevue/checkbox'
 import CalendarEntryDialog from '@/components/calendar/CalendarEntryDialog.vue'
 import CalendarDayDialog from '@/components/calendar/CalendarDayDialog.vue'
 import AppDialog from '@/components/common/AppDialog.vue'
+import EmptyState from '@/components/common/EmptyState.vue'
+import SearchField from '@/components/common/SearchField.vue'
 import { useCalendarsStore, dayKey } from '@/stores/calendars.js'
 import { exportEntries, getShares, createShare, revokeShare } from '@/api/calendars.js'
 import { useNotificationsStore } from '@/stores/notifications.js'
@@ -364,7 +368,7 @@ function onSearch() {
   clearTimeout(searchTimer)
   searchTimer = setTimeout(() => store.setSearch(searchInput.value.trim()), 300)
 }
-function clearSearch() { searchInput.value = ''; store.setSearch('') }
+function clearSearch() { clearTimeout(searchTimer); searchInput.value = ''; store.setSearch('') }
 watch(() => store.selectedId, () => { searchInput.value = '' })
 
 // ── Модалка дня (список записей дня → создать/открыть/удалить) ──
@@ -503,40 +507,9 @@ watch(() => store.loadingEntries, () => nextTick(measureWeekColumn))
 </script>
 
 <style scoped>
-.cv { display: flex; height: 100%; min-height: 0; gap: 16px; padding: 16px; overflow: hidden; }
-
-/* ── Левая колонка ── */
-.cv-side {
-  width: 260px; flex-shrink: 0;
-  display: flex; flex-direction: column; min-height: 0;
-  background: var(--color-surface); border: 1px solid var(--color-outline-dim);
-  border-radius: var(--radius-xl); overflow: hidden;
-}
-.cv-side-head {
-  flex-shrink: 0; display: flex; align-items: center; gap: 8px;
-  padding: 16px; font-weight: 700; color: var(--color-text);
-  border-bottom: 1px solid var(--color-outline-dim);
-}
-.cv-side-body { flex: 1; min-height: 0; overflow-y: auto; padding: 8px; display: flex; flex-direction: column; gap: 2px; }
-.cv-side-note { padding: 24px 12px; color: var(--color-text-dim); font-size: 14px; text-align: center; }
-.cv-side-item {
-  display: flex; align-items: center; gap: 10px; width: 100%;
-  padding: 10px 12px; border: none; background: none; cursor: pointer;
-  border-radius: var(--radius-md); color: var(--color-text-dim);
-  text-align: left; font-size: 14px; font-weight: 600;
-}
-.cv-side-item:hover { background: var(--color-surface-high); color: var(--color-text); }
-.cv-side-item.active { background: var(--color-primary-container); color: var(--color-on-primary-container); }
-.cv-side-item .material-symbols-outlined { font-size: 20px; flex-shrink: 0; }
-.cv-side-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-
-/* ── Правая колонка ── */
-.cv-main {
-  flex: 1; min-width: 0; min-height: 0;
-  display: flex; flex-direction: column;
-  background: var(--color-surface); border: 1px solid var(--color-outline-dim);
-  border-radius: var(--radius-xl); overflow: hidden;
-}
+/* Каркас (стеклянные панели, раскладка, мобильное скрытие левой панели) —
+   глобальный паттерн .split-* (main.css). Здесь — только внутренности
+   правой панели. */
 .cv-toolbar {
   flex-shrink: 0; display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
   padding: 12px 16px; border-bottom: 1px solid var(--color-outline-dim);
@@ -545,34 +518,34 @@ watch(() => store.loadingEntries, () => nextTick(measureWeekColumn))
 .cv-period { margin: 0 0 0 6px; font-size: 17px; font-weight: 700; color: var(--color-text); text-transform: capitalize; white-space: nowrap; }
 .cv-today {
   height: 36px; padding: 0 14px; border: 1px solid var(--color-outline-dim);
-  border-radius: var(--radius-full); background: var(--color-surface);
+  border-radius: var(--radius-full); background: var(--acrylic-card-bg);
   color: var(--color-text); font-weight: 600; font-size: 13px; cursor: pointer;
 }
 .cv-today:hover { background: var(--color-surface-high); }
-.cv-spacer { flex: 1; }
 
-.cv-viewseg { display: inline-flex; border: 1px solid var(--color-outline-dim); border-radius: var(--radius-full); overflow: hidden; }
+/* Сегмент вида — как режимы периода в статистике (StatsPeriodControl):
+   мягкий контейнер-пилюля, активный пункт — стеклянная пилюля с primary. */
+.cv-viewseg {
+  display: inline-flex; gap: 2px; padding: 4px;
+  background: var(--color-surface-high); border-radius: var(--radius-full);
+}
 .cv-viewseg button {
-  height: 36px; padding: 0 14px; border: none; background: var(--color-surface);
-  color: var(--color-text-dim); cursor: pointer; font-weight: 600; font-size: 13px;
-  border-right: 1px solid var(--color-outline-dim);
+  min-height: 36px; padding: 8px 14px; border: none; background: transparent;
+  border-radius: var(--radius-full); color: var(--color-text-dim); cursor: pointer;
+  font-weight: 600; font-size: 13px;
+  transition: background 0.15s, color 0.15s, box-shadow 0.15s;
 }
-.cv-viewseg button:last-child { border-right: none; }
-.cv-viewseg button.active { background: var(--color-primary); color: var(--color-on-primary); }
-
-.cv-search {
-  display: flex; align-items: center; gap: 8px; height: 38px; padding: 0 12px; min-width: 180px;
-  background: var(--color-surface-low); border: 1px solid var(--color-outline-dim); border-radius: var(--radius-full);
+.cv-viewseg button:hover:not(.active) { color: var(--color-text); }
+.cv-viewseg button.active {
+  background: var(--acrylic-card-bg); color: var(--color-primary);
+  font-weight: 700; box-shadow: var(--shadow-sm);
 }
-.cv-search > .material-symbols-outlined { color: var(--color-text-dim); font-size: 20px; flex-shrink: 0; }
-.cv-search input { flex: 1; min-width: 0; border: none; background: none; outline: none; color: var(--color-text); font-size: 14px; }
-.cv-search-clear { flex-shrink: 0; border: none; background: none; cursor: pointer; color: var(--color-text-dim); display: grid; place-items: center; }
 
 .cv-actions { display: flex; align-items: center; gap: 8px; }
 .cv-icon-btn {
   width: 38px; height: 38px; display: grid; place-items: center;
   border: 1px solid var(--color-outline-dim); border-radius: var(--radius-full);
-  background: var(--color-surface); color: var(--color-text-dim); cursor: pointer;
+  background: var(--acrylic-card-bg); color: var(--color-text-dim); cursor: pointer;
 }
 .cv-icon-btn:hover { background: var(--color-surface-high); color: var(--color-text); }
 .cv-icon-btn.sm { width: 34px; height: 34px; flex-shrink: 0; }
@@ -589,12 +562,16 @@ watch(() => store.loadingEntries, () => nextTick(measureWeekColumn))
 .cv-grid.month { grid-template-rows: auto repeat(6, 1fr); }
 .cv-grid.week { grid-template-rows: 1fr; }
 .cv-wd {
-  background: var(--color-surface); padding: 8px 10px; text-align: center;
+  /* Sticky-шапка: записи прокручиваются под ней — полный акрил */
+  background: var(--acrylic-bg-strong);
+  backdrop-filter: var(--acrylic-blur);
+  -webkit-backdrop-filter: var(--acrylic-blur);
+  padding: 8px 10px; text-align: center;
   font-size: 12px; font-weight: 700; color: var(--color-text-dim); text-transform: uppercase;
   position: sticky; top: 0; z-index: 1;
 }
 .cv-day {
-  background: var(--color-surface); min-height: 104px; padding: 6px;
+  background: var(--acrylic-card-bg); min-height: 104px; padding: 6px;
   display: flex; flex-direction: column; gap: 4px; cursor: pointer; overflow: hidden;
 }
 .cv-grid.week .cv-day { min-height: 0; }
@@ -652,7 +629,7 @@ watch(() => store.loadingEntries, () => nextTick(measureWeekColumn))
 .cv-dayrow {
   display: flex; align-items: center; gap: 14px; width: 100%; text-align: left;
   padding: 12px 14px; border: 1px solid var(--color-outline-dim); border-radius: var(--radius-lg);
-  background: var(--color-surface); cursor: pointer;
+  background: var(--acrylic-card-bg); cursor: pointer;
 }
 .cv-dayrow:hover { background: var(--color-surface-high); border-color: var(--color-outline); }
 .cv-dayrow-time {
@@ -674,16 +651,7 @@ watch(() => store.loadingEntries, () => nextTick(measureWeekColumn))
 
 .cv-overlay { position: absolute; inset: 0; display: grid; place-items: center; background: color-mix(in oklch, var(--color-surface) 50%, transparent); }
 
-.cv-placeholder { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; color: var(--color-text-dim); }
-.cv-placeholder .material-symbols-outlined { font-size: 48px; }
-
 /* ── Кнопки ── */
-.cv-btn-primary {
-  display: inline-flex; align-items: center; gap: 6px; height: 38px; padding: 0 16px;
-  border: none; border-radius: var(--radius-full);
-  background: var(--color-primary); color: var(--color-on-primary);
-  font-weight: 600; font-size: 14px; cursor: pointer;
-}
 .cv-btn-tonal {
   display: inline-flex; align-items: center; gap: 6px; height: 38px; padding: 0 16px;
   border: none; border-radius: var(--radius-full);
@@ -724,19 +692,16 @@ watch(() => store.loadingEntries, () => nextTick(measureWeekColumn))
 }
 .cv-regchip {
   flex: none; padding: 8px 14px; border-radius: var(--radius-full);
-  border: 1px solid var(--color-outline-dim); background: var(--color-surface);
+  border: 1px solid var(--color-outline-dim); background: var(--acrylic-card-bg);
   color: var(--color-text-dim); font-size: 14px; font-weight: 600; cursor: pointer; white-space: nowrap;
 }
 .cv-regchip.active { background: var(--color-primary); color: var(--color-on-primary); border-color: transparent; }
 
 @media (max-width: 768px) {
-  .cv { flex-direction: column; padding: 0; gap: 0; }
-  .cv-side { display: none; }
-  .cv-main { border: none; border-radius: 0; }
+  /* Скрытие левой панели и разворот правой — в глобальном .split-* */
   .cv-toolbar { padding: 10px 12px; }
-  .cv-spacer { display: none; }
   .cv-period { font-size: 15px; margin-left: 4px; }
-  .cv-search { order: 5; flex-basis: 100%; min-width: 0; }
+  .cv-toolbar :deep(.search-field) { order: 5; flex-basis: 100%; min-width: 0; }
   /* На мобайле месяц/неделя — список по датам (cv-agenda), сетка не используется. */
 }
 </style>

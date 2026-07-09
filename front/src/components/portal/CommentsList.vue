@@ -5,10 +5,26 @@
     </div>
     <ul v-else-if="comments.length" class="comments-items">
       <li v-for="c in comments" :key="c.id" class="comment-item">
-        <img class="comment-avatar" :src="authorOf(c.author_id).avatarUrl" :alt="authorOf(c.author_id).fio" />
+        <!-- Автор кликабелен, только пока он есть в каталоге сотрудников. -->
+        <button
+          v-if="isKnown(c.author_id)"
+          class="comment-avatar-btn"
+          type="button"
+          :aria-label="`Открыть профиль: ${authorOf(c.author_id).fio}`"
+          @click="$emit('open-profile', c.author_id)"
+        >
+          <img class="comment-avatar" :src="authorOf(c.author_id).avatarUrl" :alt="authorOf(c.author_id).fio" />
+        </button>
+        <img v-else class="comment-avatar" :src="authorOf(c.author_id).avatarUrl" :alt="authorOf(c.author_id).fio" />
         <div class="comment-body">
           <div class="comment-head">
-            <span class="comment-author">{{ authorOf(c.author_id).fio }}</span>
+            <button
+              v-if="isKnown(c.author_id)"
+              class="comment-author comment-author-link"
+              type="button"
+              @click="$emit('open-profile', c.author_id)"
+            >{{ authorOf(c.author_id).fio }}</button>
+            <span v-else class="comment-author">{{ authorOf(c.author_id).fio }}</span>
             <span class="comment-time">{{ formatTime(c.created_at) }}</span>
           </div>
           <LinkifiedText :text="c.text" />
@@ -41,6 +57,8 @@ import LinkifiedText from '@/components/common/LinkifiedText.vue'
 const props = defineProps({
   postId: { type: Number, required: true },
 })
+// Клик по автору — профиль открывает родительский PostCard (один диалог на карточку).
+defineEmits(['open-profile'])
 
 const portal = usePortalStore()
 const auth = useAuthStore()
@@ -53,6 +71,10 @@ const sending = ref(false)
 
 function authorOf(id) {
   return portal.resolveAuthor(id)
+}
+
+function isKnown(id) {
+  return portal.authorMap.has(id)
 }
 
 function canDelete(c) {
@@ -131,6 +153,21 @@ onMounted(() => portal.fetchComments(props.postId))
   flex-shrink: 0;
 }
 
+.comment-avatar-btn {
+  padding: 0;
+  border: none;
+  background: transparent;
+  border-radius: 50%;
+  line-height: 0;
+  flex-shrink: 0;
+  cursor: pointer;
+  transition: box-shadow .12s;
+}
+.comment-avatar-btn:hover,
+.comment-avatar-btn:focus-visible {
+  box-shadow: 0 0 0 3px color-mix(in oklch, var(--color-primary) 30%, transparent);
+}
+
 .comment-body {
   min-width: 0;
   flex: 1;
@@ -146,6 +183,25 @@ onMounted(() => portal.fetchComments(props.postId))
   align-items: baseline;
   gap: 8px;
   margin-bottom: 2px;
+}
+
+/* Кликабельное имя автора (до .comment-author, чтобы font: inherit не перебил
+   размер/насыщенность имени). */
+.comment-author-link {
+  border: none;
+  background: transparent;
+  padding: 0;
+  font: inherit;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+  border-radius: var(--radius-xs);
+  transition: color .12s;
+}
+.comment-author-link:hover,
+.comment-author-link:focus-visible {
+  color: var(--color-primary);
+  text-decoration: underline;
 }
 
 .comment-author { font-weight: 700; font-size: 12.5px; }
@@ -178,7 +234,7 @@ onMounted(() => portal.fetchComments(props.postId))
   padding: 8px 12px;
   border: 1px solid var(--color-outline-dim);
   border-radius: var(--radius-full);
-  background: var(--color-surface);
+  background: var(--acrylic-card-bg);
   color: var(--color-text);
   font: inherit;
   font-size: 13.5px;

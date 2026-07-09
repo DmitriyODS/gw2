@@ -150,7 +150,7 @@ watch(companyId, load)
   align-items: flex-start;
   gap: 18px;
   padding: 20px 22px;
-  background: var(--color-surface);
+  background: var(--acrylic-card-bg);
   border: 1px solid var(--color-outline-dim);
   border-radius: 20px;
   transition: border-color 0.15s, box-shadow 0.15s;
@@ -213,7 +213,7 @@ watch(companyId, load)
   padding: 10px 16px;
   border-radius: 999px;
   border: 1px solid var(--color-outline-variant);
-  background: var(--color-surface);
+  background: var(--acrylic-card-bg);
   color: var(--color-text);
   font: inherit;
   font-size: 14px;

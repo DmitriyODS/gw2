@@ -297,8 +297,10 @@ onBeforeUnmount(() => {
   max-height: 92vh;
   display: flex;
   flex-direction: column;
-  background: var(--color-surface);
-  border: 1px solid var(--color-outline-dim);
+  background: var(--acrylic-bg);
+  backdrop-filter: var(--acrylic-blur);
+  -webkit-backdrop-filter: var(--acrylic-blur);
+  border: 1px solid var(--acrylic-border);
   border-radius: 18px;
   box-shadow: var(--shadow-xl);
   overflow: hidden;
@@ -362,7 +364,7 @@ onBeforeUnmount(() => {
   flex-direction: column;
   gap: 10px;
   padding: 14px 16px;
-  background: var(--color-surface);
+  background: transparent; /* фон даёт акриловый корень окна */
   border-right: 1px solid var(--color-outline-dim);
   overflow-y: auto;
   min-height: 0;

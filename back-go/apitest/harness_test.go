@@ -53,6 +53,7 @@ const (
 
 	authBase      = "http://localhost:18091"
 	diaryBase     = "http://localhost:18101"
+	notesBase     = "http://localhost:18103"
 	portalBase    = "http://localhost:18102"
 	tasksBase     = "http://localhost:18095"
 	registryBase  = "http://localhost:18099"
@@ -180,6 +181,14 @@ func runMain(m *testing.M) int {
 		"PASETO_PUBLIC_KEY=" + pasetoPublicKey,
 		"HTTP_ADDR=:18101",
 	})
+	// notesvc: личные заметки; межсервисных вызовов нет.
+	procs.start("notesvc", filepath.Join(repoRoot, "back-go/notes"), "./cmd/notesvc", []string{
+		"DATABASE_URL=" + testDBURL,
+		"REDIS_URL=" + testRedisURL,
+		"PASETO_PUBLIC_KEY=" + pasetoPublicKey,
+		"UPLOAD_FOLDER=" + uploads,
+		"HTTP_ADDR=:18103",
+	})
 	// tasksvc: petsvc/aisvc НЕ поднимаем нарочно — хуки геймификации
 	// fire-and-forget, а AI fail-open (поиск падает в LIKE); сервис обязан
 	// переживать их недоступность. Ключ Fernet YouGile — dev-ключ из dev.sh.
@@ -208,9 +217,9 @@ func runMain(m *testing.M) int {
 		"HTTP_ADDR=:18100",
 	})
 	// Волна 3: msgsvc, petsvc, pushsvc, portalsvc. Межсервисные вызовы внутри
-	// волны fire-and-forget/ленивые (petsvc → portalsvc — пост эволюции,
-	// portalsvc → msgsvc — пересылка поста), поэтому порядок старта не важен;
-	// pushsvc без FIREBASE_* — отправка выключена (no-op sender), REST живёт.
+	// волны fire-and-forget/ленивые (portalsvc → msgsvc — пересылка поста),
+	// поэтому порядок старта не важен; pushsvc без FIREBASE_* — отправка
+	// выключена (no-op sender), REST живёт.
 	procs.start("msgsvc", filepath.Join(repoRoot, "back-go/messenger"), "./cmd/msgsvc", []string{
 		"DATABASE_URL=" + testDBURL,
 		"REDIS_URL=" + testRedisURL,
@@ -219,13 +228,11 @@ func runMain(m *testing.M) int {
 		"GRPC_ADDR=:19092",
 		"HTTP_ADDR=:18092",
 	})
-	// petsvc: исходящий gRPC — portalsvc (fire-and-forget пост-поздравление
-	// при эволюции; portalsvc стартует в этой же волне, gRPC-клиент ленивый).
+	// petsvc: исходящих межсервисных вызовов нет.
 	procs.start("petsvc", filepath.Join(repoRoot, "back-go/pets"), "./cmd/petsvc", []string{
 		"DATABASE_URL=" + testDBURL,
 		"REDIS_URL=" + testRedisURL,
 		"PASETO_PUBLIC_KEY=" + pasetoPublicKey,
-		"PORTAL_GRPC_ADDR=localhost:19102",
 		"GRPC_ADDR=:19094",
 		"HTTP_ADDR=:18094",
 	})
@@ -240,7 +247,6 @@ func runMain(m *testing.M) int {
 		"UPLOAD_FOLDER=" + uploads,
 		"MESSENGER_GRPC_ADDR=localhost:19092",
 		"HTTP_ADDR=:18102",
-		"GRPC_ADDR=:19102",
 	})
 	procs.start("pushsvc", filepath.Join(repoRoot, "back-go/push"), "./cmd/pushsvc", []string{
 		"DATABASE_URL=" + testDBURL,
@@ -268,7 +274,7 @@ func runMain(m *testing.M) int {
 		authBase + "/healthz", diaryBase + "/healthz", "http://localhost:18098/healthz",
 		tasksBase + "/healthz", registryBase + "/healthz", calendarBase + "/healthz",
 		messengerBase + "/healthz", petsBase + "/healthz", pushBase + "/healthz",
-		gatewayBase + "/healthz", portalBase + "/healthz",
+		gatewayBase + "/healthz", portalBase + "/healthz", notesBase + "/healthz",
 	} {
 		if err := waitHealthz(hc, 30*time.Second); err != nil {
 			fmt.Println("apitest:", err)
@@ -526,6 +532,7 @@ var messengerAPI = &svcClient{base: messengerBase}
 var petsAPI = &svcClient{base: petsBase}
 var pushAPI = &svcClient{base: pushBase}
 var portalAPI = &svcClient{base: portalBase}
+var notesAPI = &svcClient{base: notesBase}
 
 type reqOpt func(*http.Request)
 

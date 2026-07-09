@@ -407,7 +407,7 @@ onBeforeUnmount(() => {
   gap: 2px;
   opacity: 0;
   transition: opacity 0.15s;
-  background: var(--color-surface);
+  background: var(--acrylic-card-bg);
   border-radius: var(--radius-full, 999px);
   padding: 2px;
 }
@@ -513,7 +513,7 @@ onBeforeUnmount(() => {
 <style>
 .cmt-ctx-menu {
   min-width: 200px;
-  background: var(--color-surface);
+  background: var(--acrylic-card-bg);
   border: 1px solid var(--color-outline-dim);
   border-radius: var(--radius-md, 12px);
   padding: 6px;

@@ -91,7 +91,7 @@ function formatFullDate(d) {
   display: flex;
   flex-direction: column;
   border-radius: 12px;
-  background: var(--color-surface);
+  background: var(--acrylic-card-bg);
   border: 1px solid var(--gw-border);
   box-shadow: var(--shadow-sm);
   overflow: hidden;

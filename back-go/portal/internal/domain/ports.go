@@ -36,10 +36,6 @@ type PostRepository interface {
 	// SetPinned — открепление (pinnedAt=nil, pinned_until сбрасывается);
 	// лимит не участвует.
 	SetPinned(ctx Ctx, id int64, pinnedAt *time.Time, pinnedBy *int64) error
-	// FindRecentSystemPost — последний системный пост (company, author, kind)
-	// с created_at > since; nil — не было. Дедуп ретраев хука CreateSystemPost.
-	FindRecentSystemPost(ctx Ctx, companyID, authorID int64, kind string, since time.Time) (*Post, error)
-
 	AddAttachment(ctx Ctx, a *Attachment) error
 	ListAttachments(ctx Ctx, postID int64) ([]Attachment, error)
 	// AttachmentPaths — пути файлов поста (для чистки хранилища при удалении).

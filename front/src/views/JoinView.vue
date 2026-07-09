@@ -60,7 +60,10 @@ onMounted(async () => {
   gap: 16px;
   padding: 40px 32px;
   border-radius: var(--radius-xl, 20px);
-  background: var(--color-surface);
+  background: var(--acrylic-card-bg);
+  backdrop-filter: var(--acrylic-blur);
+  -webkit-backdrop-filter: var(--acrylic-blur);
+  border: 1px solid var(--acrylic-border);
   box-shadow: var(--shadow-lg);
   max-width: 360px;
   text-align: center;

@@ -171,6 +171,30 @@ func (r *PetRepo) SaveEvolution(ctx context.Context, p *domain.Pet) error {
 	return err
 }
 
+// DeletePet — питомец и связанные данные одной транзакцией. pet_strokes,
+// pet_shop_purchases и pet_kudos_weekly ссылаются на users, а не на pets —
+// каскада от удаления питомца нет, чистим явно; pet_activity_log удаляет
+// каскад FK (pets ON DELETE CASCADE).
+func (r *PetRepo) DeletePet(ctx context.Context, userID int64) error {
+	tx, err := r.pool.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback(ctx) //nolint:errcheck // после Commit — no-op
+
+	for _, q := range []string{
+		`DELETE FROM pet_strokes WHERE pet_user_id = $1`,
+		`DELETE FROM pet_shop_purchases WHERE user_id = $1`,
+		`DELETE FROM pet_kudos_weekly WHERE user_id = $1`,
+		`DELETE FROM pets WHERE user_id = $1`,
+	} {
+		if _, err := tx.Exec(ctx, q, userID); err != nil {
+			return err
+		}
+	}
+	return tx.Commit(ctx)
+}
+
 func (r *PetRepo) ListCompanyPets(ctx context.Context, companyID int64) ([]*domain.Pet, error) {
 	rows, err := r.pool.Query(ctx, `
 		SELECT `+petCols+`

@@ -148,8 +148,8 @@ onMounted(load)
   flex: 0 0 280px;
   display: flex;
   flex-direction: column;
-  background: var(--color-surface-low);
-  border: 1px solid var(--color-outline-dim);
+  background: var(--acrylic-card-bg);
+  border: 1px solid var(--acrylic-border);
   border-radius: var(--radius-lg, 16px);
   overflow: hidden;
   transition: border-color 0.15s, background 0.15s;

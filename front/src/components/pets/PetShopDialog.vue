@@ -5,7 +5,7 @@
     subtitle="Аксессуары и облики за кудосы — заработанные честным трудом"
     icon="storefront"
     tone="primary"
-    size="md"
+    size="lg"
     @update:model-value="$emit('update:modelValue', $event)"
   >
     <div class="shop-balance">

@@ -27,6 +27,9 @@ type PetRepo interface {
 	// только если срок истёк (WHERE … adventure_until <= now RETURNING) —
 	// true отдаётся ровно один раз, двойной GET не начислит награду дважды.
 	FinishAdventure(ctx context.Context, userID int64, now time.Time) (place string, returned bool, err error)
+	// DeletePet — удалить питомца и связанные данные (поглаживания, покупки,
+	// недельные кудосы; история — каскадом FK) одной транзакцией.
+	DeletePet(ctx context.Context, userID int64) error
 	ListCompanyPets(ctx context.Context, companyID int64) ([]*Pet, error)
 
 	LastUnitEndByUsers(ctx context.Context, userIDs []int64) (map[int64]time.Time, error)
@@ -113,13 +116,4 @@ type Daily interface {
 // EventPublisher — сокет-события через gatewaysvc (gw2:pets:events).
 type EventPublisher interface {
 	Publish(ctx context.Context, event string, rooms []string, payload any)
-}
-
-// PortalClient — системный пост-поздравление в корпоративном портале
-// (gRPC portalsvc CreateSystemPost). Fire-and-forget: реализация сама
-// уходит в горутину с таймаутом, ошибки — только в лог (недоступный
-// portalsvc гейм-механику не роняет; дедуп повторов — на стороне
-// portalsvc). Поле в Service nil-able — без клиента посты не публикуются.
-type PortalClient interface {
-	CreateSystemPost(companyID, authorUserID int64, systemKind, title, body string)
 }

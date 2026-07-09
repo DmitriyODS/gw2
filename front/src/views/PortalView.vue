@@ -3,31 +3,30 @@
        переключение вкладок хаба не должно сдвигать интерфейс. -->
   <div class="admin-page portal">
     <header class="admin-sticky">
-      <PortalHubTabs class="portal-hub-tabs" />
-
       <div class="portal-toolbar">
-        <h1 class="portal-title">
-          <span class="material-symbols-outlined">campaign</span>
-          Портал
-        </h1>
+        <PortalHubTabs class="portal-hub-tabs" />
+        <SearchField
+          v-model="searchInput"
+          placeholder="Поиск по постам…"
+          hotkey
+          @update:model-value="onSearch"
+          @clear="clearSearch"
+        />
 
-        <div class="portal-search">
-          <span class="material-symbols-outlined">search</span>
-          <input v-model="searchInput" type="text" placeholder="Поиск по постам…" @input="onSearch" />
-          <button v-if="searchInput" class="portal-search-clear" title="Очистить" aria-label="Очистить поиск" @click="clearSearch">
-            <span class="material-symbols-outlined">close</span>
-          </button>
-        </div>
-
-        <div class="portal-actions">
-          <button v-if="isAdmin()" class="portal-icon-btn" title="Управление разделами" aria-label="Управление разделами" @click="topicsDialogOpen = true">
-            <span class="material-symbols-outlined">tune</span>
-          </button>
-          <button class="portal-btn-primary" @click="openComposer(null)">
-            <span class="material-symbols-outlined">edit</span>
-            <span class="portal-btn-label">Написать пост</span>
-          </button>
-        </div>
+        <button
+          v-if="isAdmin()"
+          class="btn-glass portal-manage-btn"
+          title="Управление разделами"
+          aria-label="Управление разделами"
+          @click="topicsDialogOpen = true"
+        >
+          <span class="material-symbols-outlined">tune</span>
+          <span class="portal-btn-label">Разделы</span>
+        </button>
+        <button class="btn-grad" @click="openComposer(null)">
+          <span class="material-symbols-outlined">edit</span>
+          <span class="portal-btn-label">Написать пост</span>
+        </button>
       </div>
 
       <div class="portal-topics">
@@ -139,6 +138,7 @@ import { usePortalStore } from '@/stores/portal.js'
 import { usePermission } from '@/composables/usePermission.js'
 import { useNotificationsStore } from '@/stores/notifications.js'
 import EmptyState from '@/components/common/EmptyState.vue'
+import SearchField from '@/components/common/SearchField.vue'
 import AppDialog from '@/components/common/AppDialog.vue'
 import PortalHubTabs from '@/components/portal/PortalHubTabs.vue'
 import PostCard from '@/components/portal/PostCard.vue'
@@ -158,6 +158,7 @@ function onSearch() {
   searchTimer = setTimeout(() => store.setSearch(searchInput.value), 300)
 }
 function clearSearch() {
+  clearTimeout(searchTimer)
   searchInput.value = ''
   store.setSearch('')
 }
@@ -261,7 +262,15 @@ watch(() => useAuthStore().companyId, (id, prev) => {
 </script>
 
 <style scoped>
-.portal-hub-tabs { align-self: flex-start; }
+/* Тулбар без подложки — прозрачная «плавающая» шапка как в «Задачах»
+   (контент скроллится в .admin-body ниже, не под шапкой). */
+.admin-sticky { background: transparent; backdrop-filter: none; -webkit-backdrop-filter: none; }
+.admin-sticky::after { display: none; }
+
+.portal-hub-tabs { flex-shrink: 0; }
+/* Поиск не сжимается меньше комфортной ширины — при нехватке места первыми
+   переносятся кнопки/вкладки, а не поле ввода. */
+.portal-toolbar :deep(.search-field) { min-width: 240px; }
 
 @keyframes portal-fade {
   from { opacity: 0; transform: translateY(4px); }
@@ -272,105 +281,25 @@ watch(() => useAuthStore().companyId, (id, prev) => {
 .portal-toolbar {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 10px;
   flex-wrap: wrap;
 }
-
-.portal-title {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin: 0;
-  font-size: 20px;
-  font-weight: 700;
-  color: var(--color-text);
-}
-.portal-title .material-symbols-outlined { font-size: 24px; color: var(--color-primary); }
-
-.portal-search {
-  position: relative;
-  flex: 1;
-  min-width: 180px;
-  display: flex;
-  align-items: center;
-}
-.portal-search .material-symbols-outlined {
-  position: absolute;
-  left: 12px;
-  font-size: 18px;
-  color: var(--color-text-dim);
-  pointer-events: none;
-}
-.portal-search input {
-  width: 100%;
-  padding: 9px 12px 9px 38px;
-  border: 1px solid var(--color-outline-dim);
-  border-radius: var(--radius-full);
-  background: var(--color-surface);
-  color: var(--color-text);
-  font: inherit;
-  font-size: 14px;
-  outline: none;
-  box-sizing: border-box;
-}
-.portal-search input:focus { border-color: var(--color-primary); }
-
-.portal-search-clear {
-  position: absolute;
-  right: 8px;
-  border: none;
-  background: transparent;
-  color: var(--color-text-dim);
-  cursor: pointer;
-  display: grid;
-  place-items: center;
-}
-
-.portal-actions { display: flex; align-items: center; gap: 8px; }
-
-.portal-icon-btn {
-  width: 40px;
-  height: 40px;
-  border: 1px solid var(--color-outline-dim);
-  border-radius: 50%;
-  background: var(--color-surface);
-  color: var(--color-text);
-  cursor: pointer;
-  display: grid;
-  place-items: center;
-}
-.portal-icon-btn:hover { background: var(--color-surface-high); }
-
-.portal-btn-primary {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  height: 40px;
-  padding: 0 18px;
-  border: none;
-  border-radius: var(--radius-full);
-  background: var(--color-primary);
-  color: var(--color-on-primary);
-  font: inherit;
-  font-size: 14px;
-  font-weight: 700;
-  cursor: pointer;
-}
-.portal-btn-primary:hover { box-shadow: var(--shadow-sm); }
 
 .portal-topics {
   display: flex;
   gap: 8px;
   overflow-x: auto;
   padding-bottom: 2px;
+  scrollbar-width: none;
 }
+.portal-topics::-webkit-scrollbar { display: none; }
 
 .portal-topic-chip {
   flex-shrink: 0;
   padding: 7px 16px;
   border-radius: var(--radius-full);
-  border: 1px solid var(--color-outline-dim);
-  background: var(--color-surface);
+  border: 1px solid var(--acrylic-border);
+  background: var(--acrylic-card-bg);
   color: var(--color-text-dim);
   font: inherit;
   font-size: 13.5px;
@@ -427,9 +356,9 @@ watch(() => useAuthStore().companyId, (id, prev) => {
   align-self: center;
   margin-top: 4px;
   padding: 9px 20px;
-  border: 1px solid var(--color-outline-dim);
+  border: 1px solid var(--acrylic-border);
   border-radius: var(--radius-full);
-  background: var(--color-surface);
+  background: var(--acrylic-card-bg);
   color: var(--color-text);
   font: inherit;
   font-size: 13.5px;
@@ -440,6 +369,11 @@ watch(() => useAuthStore().companyId, (id, prev) => {
 
 @media (max-width: 640px) {
   .portal-btn-label { display: none; }
-  .portal-btn-primary { padding: 0 12px; }
+  /* Без подписи кнопки тулбара сжимаются в квадратные иконки — язык .btn-icon
+     из «Задач», а не растянутая пилюля. */
+  .portal-toolbar .btn-glass,
+  .portal-toolbar .btn-grad { padding: 0; width: 42px; height: 42px; justify-content: center; }
+  /* Поиск переносится на всю ширину под вкладками/кнопками. */
+  .portal-toolbar :deep(.search-field) { min-width: 0; flex: 1 1 100%; order: 1; }
 }
 </style>

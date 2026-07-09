@@ -371,7 +371,7 @@ onBeforeUnmount(() => {
   align-items: flex-start;
   gap: 18px;
   padding: 20px 22px;
-  background: var(--color-surface);
+  background: var(--acrylic-card-bg);
   border: 1px solid var(--color-outline-dim);
   border-radius: 20px;
   transition: border-color 0.15s, box-shadow 0.15s;
@@ -443,7 +443,7 @@ onBeforeUnmount(() => {
   appearance: none;
   width: 100%;
   border: 1px solid var(--color-outline-variant);
-  background: var(--color-surface);
+  background: var(--acrylic-card-bg);
   color: var(--color-on-surface);
   padding: 10px 12px;
   border-radius: var(--radius-md, 12px);
@@ -488,7 +488,7 @@ onBeforeUnmount(() => {
   min-height: 40px;
   border-radius: var(--radius-md, 12px);
   border: 1px solid var(--color-outline-variant);
-  background: var(--color-surface);
+  background: var(--acrylic-card-bg);
   color: var(--color-on-surface-variant);
   cursor: pointer;
   transition: background 0.12s, color 0.12s, border-color 0.12s;

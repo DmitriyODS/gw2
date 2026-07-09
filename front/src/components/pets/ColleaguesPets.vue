@@ -9,41 +9,53 @@
     </header>
 
     <div v-if="pets.zoo.length" class="cp-grid">
-      <component
-        :is="p.user_id === pets.myId ? 'div' : 'button'"
-        v-for="p in pets.zoo"
-        :key="p.user_id"
-        class="cp-card"
-        :class="{
-          mine: p.user_id === pets.myId,
-          stroked: isStrokedOut(p),
-          disabled: p.user_id !== pets.myId && (isAway(p) || (!canAfford && !isStrokedOut(p))),
-        }"
-        :type="p.user_id === pets.myId ? undefined : 'button'"
-        :disabled="p.user_id === pets.myId ? undefined : (isAway(p) || !canAfford || isStrokedOut(p))"
-        :aria-label="p.user_id === pets.myId ? undefined : `Погладить питомца «${p.name}»`"
-        @click="stroke(p)"
-      >
-        <div class="cp-figure" :class="{ sick: p.sick, pulse: pulsing[p.user_id] }">
-          <span class="cp-emoji">{{ petEmoji(p) }}</span>
-          <span v-if="p.hat" class="cp-hat">{{ shopItemEmoji({ kind: 'accessory', key: p.hat }) }}</span>
-          <span v-if="p.sick" class="cp-sick" title="Болеет">🤒</span>
-          <span v-else-if="isAway(p)" class="cp-sick" title="В приключении">🧭</span>
-        </div>
-        <span class="cp-name">{{ p.name }}</span>
-        <span class="cp-owner">{{ firstName(p.user?.fio) }}</span>
-        <span class="cp-stage">{{ PET_STAGES[p.stage] || '' }}</span>
+      <div v-for="p in pets.zoo" :key="p.user_id" class="cp-cell">
+        <component
+          :is="p.user_id === pets.myId ? 'div' : 'button'"
+          class="cp-card"
+          :class="{
+            mine: p.user_id === pets.myId,
+            stroked: isStrokedOut(p),
+            disabled: p.user_id !== pets.myId && (isAway(p) || (!canAfford && !isStrokedOut(p))),
+          }"
+          :type="p.user_id === pets.myId ? undefined : 'button'"
+          :disabled="p.user_id === pets.myId ? undefined : (isAway(p) || !canAfford || isStrokedOut(p))"
+          :aria-label="p.user_id === pets.myId ? undefined : `Погладить питомца «${p.name}»`"
+          @click="stroke(p)"
+        >
+          <div class="cp-figure" :class="{ sick: p.sick, pulse: pulsing[p.user_id] }">
+            <span class="cp-emoji">{{ petEmoji(p) }}</span>
+            <span v-if="p.hat" class="cp-hat">{{ shopItemEmoji({ kind: 'accessory', key: p.hat }) }}</span>
+            <span v-if="p.sick" class="cp-sick" title="Болеет">🤒</span>
+            <span v-else-if="isAway(p)" class="cp-sick" title="В приключении">🧭</span>
+          </div>
+          <span class="cp-name">{{ p.name }}</span>
+          <span class="cp-owner">{{ firstName(p.user?.fio) }}</span>
+          <span class="cp-stage">{{ PET_STAGES[p.stage] || '' }}</span>
 
-        <span v-if="p.user_id === pets.myId" class="cp-tag">Ваш питомец</span>
-        <span v-else-if="isAway(p)" class="cp-tag">🧭 В приключении</span>
-        <span v-else-if="isStrokedOut(p)" class="cp-tag done">
-          <span class="material-symbols-outlined">check</span> Поглажен
-        </span>
-        <span v-else class="cp-tag action">
-          <span class="material-symbols-outlined">volunteer_activism</span>
-          Погладить&nbsp;<KudosCoin class="cp-tag-coin" />&nbsp;1
-        </span>
-      </component>
+          <span v-if="p.user_id === pets.myId" class="cp-tag">Ваш питомец</span>
+          <span v-else-if="isAway(p)" class="cp-tag">🧭 В приключении</span>
+          <span v-else-if="isStrokedOut(p)" class="cp-tag done">
+            <span class="material-symbols-outlined">check</span> Поглажен
+          </span>
+          <span v-else class="cp-tag action">
+            <span class="material-symbols-outlined">volunteer_activism</span>
+            Погладить&nbsp;<KudosCoin class="cp-tag-coin" />&nbsp;1
+          </span>
+        </component>
+        <!-- Удаление питомца сотрудника — только администратор компании;
+             кнопка — сиблинг карточки (карточка сама <button>). -->
+        <button
+          v-if="isAdmin() && p.user_id !== pets.myId"
+          class="cp-delete"
+          type="button"
+          :aria-label="`Удалить питомца «${p.name}»`"
+          title="Удалить питомца"
+          @click.stop="deleteTarget = p"
+        >
+          <span class="material-symbols-outlined">delete</span>
+        </button>
+      </div>
     </div>
 
     <EmptyState
@@ -60,20 +72,35 @@
       @exhausted="strokedOut[strokeTarget.user_id] = true"
       @close="strokeTarget = null"
     />
+
+    <ConfirmDialog
+      :visible="!!deleteTarget"
+      header="Удалить питомца?"
+      :message="deleteMessage"
+      confirm-label="Удалить"
+      danger-confirm
+      @confirm="confirmDelete"
+      @cancel="deleteTarget = null"
+    />
   </section>
 </template>
 
 <script setup>
 import { computed, onMounted, reactive, ref } from 'vue'
+import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
 import EmptyState from '@/components/common/EmptyState.vue'
 import KudosCoin from '@/components/pets/KudosCoin.vue'
 import StrokeMiniGame from '@/components/pets/StrokeMiniGame.vue'
+import { usePermission } from '@/composables/usePermission.js'
 import { usePetsStore } from '@/stores/pets.js'
+import { useNotificationsStore } from '@/stores/notifications.js'
 import { petEmoji, shopItemEmoji, PET_STAGES } from '@/utils/pets.js'
 
 const STROKE_COST = 1 // = domain.StrokeCost в petsvc
 
 const pets = usePetsStore()
+const notify = useNotificationsStore()
+const { isAdmin } = usePermission()
 
 const canAfford = computed(() => (pets.pet?.kudos ?? 0) >= STROKE_COST)
 
@@ -109,6 +136,27 @@ function stroke(p) {
   strokeTarget.value = p
 }
 
+// ── Удаление питомца сотрудника (администратор) ────────────────────
+
+const deleteTarget = ref(null)
+const deleteMessage = computed(() => {
+  const p = deleteTarget.value
+  if (!p) return ''
+  return `Питомец «${p.name}» (${firstName(p.user?.fio)}) будет удалён вместе с прогрессом. У сотрудника появится новый — с нуля.`
+})
+
+async function confirmDelete() {
+  const p = deleteTarget.value
+  deleteTarget.value = null
+  if (!p) return
+  try {
+    await pets.deleteColleaguePet(p.user_id)
+    notify.success(`Питомец «${p.name}» удалён`)
+  } catch (e) {
+    notify.warn(e?.message || 'Не удалось удалить питомца')
+  }
+}
+
 onMounted(() => {
   if (!pets.zoo.length) pets.fetchZoo().catch(() => {})
 })
@@ -134,20 +182,42 @@ onMounted(() => {
   grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
   gap: 14px;
 }
+.cp-cell { position: relative; display: flex; }
 .cp-card {
+  flex: 1;
+  width: 100%;
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: 4px;
   padding: 14px 10px;
   border-radius: var(--radius-lg);
-  background: var(--color-surface);
-  border: 1px solid var(--color-outline-dim);
+  background: var(--acrylic-card-bg);
+  border: 1px solid var(--acrylic-border);
   font: inherit;
   color: var(--color-text);
   cursor: default;
   text-align: center;
 }
+
+/* Кнопка удаления (администратор) — поверх карточки, сиблинг, не вложена. */
+.cp-delete {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  width: 28px;
+  height: 28px;
+  border: none;
+  border-radius: 50%;
+  background: none;
+  color: var(--color-text-dim);
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+.cp-delete .material-symbols-outlined { font-size: 17px; }
+.cp-delete:hover { background: var(--color-error-container); color: var(--color-error); }
 button.cp-card { cursor: pointer; transition: transform 0.1s, border-color 0.15s; }
 button.cp-card:hover:not(:disabled) { border-color: color-mix(in oklch, var(--color-primary) 45%, var(--color-outline-dim)); }
 button.cp-card:active:not(:disabled) { transform: scale(0.97); }

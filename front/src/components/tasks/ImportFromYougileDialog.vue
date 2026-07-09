@@ -4,7 +4,7 @@
     tone="primary"
     icon="download"
     size="md"
-    mobile="full"
+    mobile="sheet"
     title="Импорт из YouGile"
     subtitle="Вставьте ссылку на карточку — задача появится в нужном отделе."
     :busy="busy"

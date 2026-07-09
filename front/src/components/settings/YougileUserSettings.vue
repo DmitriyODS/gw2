@@ -164,7 +164,7 @@ onMounted(() => { yg.refreshStatus().catch(() => {}) })
 .settings-card {
   display: flex; align-items: flex-start; gap: 18px;
   padding: 20px 22px;
-  background: var(--color-surface);
+  background: var(--acrylic-card-bg);
   border: 1px solid var(--color-outline-dim);
   border-radius: 20px;
 }
@@ -192,7 +192,7 @@ onMounted(() => { yg.refreshStatus().catch(() => {}) })
 .ctl {
   appearance: none; width: 100%;
   border: 1px solid var(--color-outline-variant);
-  background: var(--color-surface); color: var(--color-on-surface);
+  background: var(--acrylic-card-bg); color: var(--color-on-surface);
   padding: 10px 12px; border-radius: var(--radius-md, 12px);
   font: inherit;
 }

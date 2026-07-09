@@ -816,11 +816,14 @@ watch(() => route.params.conversationId, async (id) => {
 </script>
 
 <style scoped>
+/* Каркас как у мастер-детейл разделов (Заметки/Реестры): страница на «сиянии»
+   .app-layout, две стеклянные панели с зазором. */
 .messenger {
   display: flex;
+  gap: 16px;
+  padding: 16px;
   height: 100%;
   min-height: 0;
-  background: var(--color-bg);
 }
 
 .chat-panel {
@@ -830,6 +833,12 @@ watch(() => route.params.conversationId, async (id) => {
   min-width: 0;
   min-height: 0;
   position: relative;
+  background: var(--acrylic-card-bg);
+  backdrop-filter: var(--acrylic-blur);
+  -webkit-backdrop-filter: var(--acrylic-blur);
+  border: 1px solid var(--acrylic-border);
+  border-radius: var(--radius-xl);
+  overflow: hidden;
 }
 
 /* Зона сброса файлов — на всю область чата, а не только на поле ввода. */
@@ -861,7 +870,7 @@ watch(() => route.params.conversationId, async (id) => {
   gap: 12px;
   padding: 12px 16px;
   border-bottom: 1px solid var(--color-outline-dim);
-  background: var(--color-surface);
+  background: var(--acrylic-card-bg);
   flex-shrink: 0;
 }
 
@@ -968,7 +977,7 @@ watch(() => route.params.conversationId, async (id) => {
   top: calc(100% + 6px);
   right: 0;
   min-width: 220px;
-  background: var(--color-surface);
+  background: var(--acrylic-card-bg);
   border: 1px solid var(--color-outline-dim);
   border-radius: var(--radius-md);
   padding: 6px;
@@ -1092,7 +1101,7 @@ watch(() => route.params.conversationId, async (id) => {
   align-items: center;
   gap: 10px;
   padding: 8px 16px;
-  background: var(--color-surface);
+  background: var(--acrylic-card-bg);
   border-bottom: 1px solid var(--color-outline-dim);
   border-left: 3px solid var(--color-tertiary);
   cursor: pointer;
@@ -1183,6 +1192,8 @@ watch(() => route.params.conversationId, async (id) => {
     inset: 0;
     height: auto;
     z-index: 100;
+    padding: 0;
+    gap: 0;
   }
 
   .chat-panel {
@@ -1190,6 +1201,8 @@ watch(() => route.params.conversationId, async (id) => {
     inset: 0;
     z-index: 150;
     background: var(--color-bg);
+    border: none;
+    border-radius: 0;
     padding-bottom: calc(64px + env(safe-area-inset-bottom, 0px));
   }
   .messenger.mobile-chat-open .chat-panel {

@@ -114,6 +114,42 @@
       </Transition>
     </div>
 
+    <!-- Градиент фона -->
+    <div class="tb-card">
+      <div class="tb-card-head">
+        <div class="tb-card-head-icon" data-tone="tertiary">
+          <span class="material-symbols-outlined">blur_on</span>
+        </div>
+        <div class="tb-card-head-text">
+          <h4 class="tb-card-title">Градиент фона</h4>
+          <p class="tb-card-sub">
+            Акриловое сияние на фоне всех разделов — как на экране входа.
+            Цвета берутся из активной темы и меняются вместе с ней.
+          </p>
+        </div>
+        <label class="gw-switch" title="Использовать градиент на фоне">
+          <input
+            type="checkbox"
+            :checked="themeStore.bgGradient.enabled"
+            @change="themeStore.setBgGradientEnabled($event.target.checked)"
+          />
+          <span class="gw-switch-track"><span class="gw-switch-thumb" /></span>
+        </label>
+      </div>
+      <Transition name="sched-reveal">
+        <div v-if="themeStore.bgGradient.enabled" class="bgg-actions">
+          <button class="btn-grad-gen" @click="themeStore.regenerateBgGradient()" title="Случайная композиция из цветов темы">
+            <span class="material-symbols-outlined">shuffle</span>
+            Сгенерировать вариант
+          </button>
+          <button class="btn-tonal" @click="themeStore.resetBgGradient()" title="Композиция как на экране входа">
+            <span class="material-symbols-outlined">restart_alt</span>
+            Стандартный
+          </button>
+        </div>
+      </Transition>
+    </div>
+
     <!-- Галерея готовых тем -->
     <div class="tb-card">
       <div class="tb-card-head">
@@ -631,7 +667,7 @@ function importTheme(event) {
   border-radius: 20px;
   overflow: hidden;
   box-shadow: 0 16px 36px color-mix(in oklch, var(--color-scrim) 25%, transparent);
-  background: var(--color-surface);
+  background: var(--acrylic-card-bg);
   border: 1px solid color-mix(in oklch, var(--color-outline-dim) 50%, transparent);
 }
 
@@ -693,7 +729,7 @@ function importTheme(event) {
 
 .hp-card {
   padding: 10px;
-  background: var(--color-surface);
+  background: var(--acrylic-card-bg);
   border: 1px solid var(--color-outline-dim);
   border-radius: 12px;
   display: flex;
@@ -703,7 +739,7 @@ function importTheme(event) {
 
 .hp-mini-card {
   padding: 10px;
-  background: var(--color-surface);
+  background: var(--acrylic-card-bg);
   border: 1px solid var(--color-outline-dim);
   border-radius: 12px;
   display: flex;
@@ -764,7 +800,7 @@ function importTheme(event) {
 /* ── Базовая карточка ────────────────────────────────────────── */
 .tb-card {
   padding: 20px;
-  background: var(--color-surface);
+  background: var(--acrylic-card-bg);
   border: 1px solid var(--color-outline-dim);
   border-radius: 22px;
   display: flex;
@@ -809,6 +845,90 @@ function importTheme(event) {
   color: var(--color-text-dim);
   line-height: 1.4;
 }
+
+/* ── Градиент фона ──────────────────────────────────────────── */
+.tb-card-head-text {
+  flex: 1;
+  min-width: 0;
+}
+
+.gw-switch {
+  position: relative;
+  flex-shrink: 0;
+  cursor: pointer;
+  margin-left: auto;
+}
+
+.gw-switch input {
+  position: absolute;
+  opacity: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  cursor: pointer;
+}
+
+.gw-switch-track {
+  display: block;
+  width: 52px;
+  height: 30px;
+  border-radius: 999px;
+  background: var(--color-surface-highest);
+  border: 1px solid var(--color-outline-dim);
+  transition: background 0.2s, border-color 0.2s;
+}
+
+.gw-switch-thumb {
+  display: block;
+  width: 22px;
+  height: 22px;
+  margin: 3px;
+  border-radius: 50%;
+  background: var(--color-surface);
+  box-shadow: 0 1px 4px color-mix(in oklch, var(--color-scrim) 30%, transparent);
+  transition: transform 0.2s cubic-bezier(0.22, 1, 0.36, 1), background 0.2s;
+}
+
+.gw-switch input:checked + .gw-switch-track {
+  background: var(--grad-primary);
+  border-color: transparent;
+}
+
+.gw-switch input:checked + .gw-switch-track .gw-switch-thumb {
+  transform: translateX(22px);
+  background: var(--color-on-primary);
+}
+
+.gw-switch input:focus-visible + .gw-switch-track {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
+}
+
+.bgg-actions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.btn-grad-gen {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 11px 20px;
+  border-radius: 999px;
+  border: 0;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--color-on-primary);
+  background: var(--grad-primary);
+  box-shadow: 0 6px 16px color-mix(in oklch, var(--color-primary) 30%, transparent);
+  transition: transform 0.15s, box-shadow 0.15s;
+}
+
+.btn-grad-gen:hover { transform: translateY(-2px); box-shadow: 0 10px 24px color-mix(in oklch, var(--color-primary) 40%, transparent); }
+.btn-grad-gen:active { transform: translateY(0); }
+.btn-grad-gen .material-symbols-outlined { font-size: 18px; }
 
 /* ── Segmented светлая/тёмная ───────────────────────────────── */
 .seg-group {
@@ -1000,8 +1120,8 @@ function importTheme(event) {
   align-items: center;
   gap: 14px;
   padding: 14px 16px;
-  background: var(--color-surface-low);
-  border: 1px solid var(--color-outline-dim);
+  background: var(--acrylic-card-bg);
+  border: 1px solid var(--acrylic-border);
   border-radius: 18px;
   cursor: pointer;
   transition: border-color 0.15s, background 0.15s;
@@ -1010,7 +1130,7 @@ function importTheme(event) {
 
 .color-swatch:hover {
   border-color: color-mix(in oklch, var(--swatch-color) 70%, var(--color-outline-dim));
-  background: var(--color-surface);
+  background: var(--acrylic-card-bg);
 }
 
 .cs-circle {
@@ -1036,7 +1156,7 @@ function importTheme(event) {
   bottom: -2px;
   width: 22px;
   height: 22px;
-  background: var(--color-surface);
+  background: var(--acrylic-card-bg);
   color: var(--color-text);
   border-radius: 50%;
   display: grid;
@@ -1098,9 +1218,11 @@ function importTheme(event) {
   align-items: center;
   gap: 10px;
   padding: 10px 14px;
-  background: var(--color-surface);
+  background: var(--acrylic-bg);
+  backdrop-filter: var(--acrylic-blur);
+  -webkit-backdrop-filter: var(--acrylic-blur);
   color: var(--color-text);
-  border: 1px solid var(--color-outline-dim);
+  border: 1px solid var(--acrylic-border);
   border-radius: 999px;
   box-shadow: var(--shadow-lg);
 }
@@ -1219,8 +1341,8 @@ function importTheme(event) {
 .custom-tile {
   display: flex;
   flex-direction: column;
-  background: var(--color-surface-low);
-  border: 1px solid var(--color-outline-dim);
+  background: var(--acrylic-card-bg);
+  border: 1px solid var(--acrylic-border);
   border-radius: 18px;
   overflow: hidden;
   transition: border-color 0.15s;

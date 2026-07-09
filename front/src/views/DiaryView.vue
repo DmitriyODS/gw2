@@ -1,30 +1,31 @@
 <template>
-  <div class="dv">
-    <!-- ЛЕВАЯ КОЛОНКА -->
-    <aside class="dv-side">
+  <div class="dv split-view">
+    <!-- ЛЕВАЯ ПАНЕЛЬ -->
+    <aside class="split-side">
       <div class="dv-side-head">
-        <span class="material-symbols-outlined">event_note</span>
-        <span>Ежедневник</span>
+        <NotesHubTabs full-width />
       </div>
       <div class="dv-side-tabs">
         <SegmentedTabs :model-value="store.tab" :tabs="tabs" full-width dense @update:model-value="store.setTab" />
       </div>
-      <div class="dv-side-body">
-        <div v-if="store.loadingList" class="dv-side-note">Загрузка…</div>
+      <div class="split-side-list">
+        <div v-if="store.loadingList" class="split-side-note">Загрузка…</div>
         <template v-else>
           <button
             v-for="d in store.diaries"
             :key="d.id"
-            class="dv-side-item"
+            class="split-side-item"
             :class="{ active: d.id === store.selectedId, 'drop-target': dropDiaryId === d.id }"
             @click="store.select(d.id)"
             @dragover="onDiaryDragOver($event, d)"
             @dragleave="dropDiaryId === d.id && (dropDiaryId = null)"
             @drop="onDiaryDrop($event, d)"
           >
-            <span class="material-symbols-outlined">{{ store.tab === 'shared' ? 'folder_shared' : 'book' }}</span>
+            <span class="split-item-tile">
+              <span class="material-symbols-outlined">{{ store.tab === 'shared' ? 'folder_shared' : 'book' }}</span>
+            </span>
             <span class="dv-side-main">
-              <span class="dv-side-name">{{ d.name }}</span>
+              <span class="split-side-name">{{ d.name }}</span>
               <span v-if="store.tab === 'shared'" class="dv-side-owner">{{ d.owner_name }}</span>
               <span v-if="diaryTotal(d)" class="dv-side-progress">
                 <span class="dv-side-bar"><span class="dv-side-fill" :style="{ width: diaryPct(d) + '%' }" /></span>
@@ -32,18 +33,22 @@
               </span>
             </span>
           </button>
-          <p v-if="!store.diaries.length" class="dv-side-note">
+          <p v-if="!store.diaries.length" class="split-side-note">
             {{ store.tab === 'shared' ? 'С вами пока не делились' : 'Ежедневников нет' }}
           </p>
         </template>
       </div>
-      <button v-if="store.tab === 'mine'" class="dv-side-add" @click="openCreateDiary">
+      <button v-if="store.tab === 'mine'" class="split-side-add" @click="openCreateDiary">
         <span class="material-symbols-outlined">add</span> Новый ежедневник
       </button>
     </aside>
 
-    <!-- ПРАВАЯ КОЛОНКА -->
-    <section class="dv-main">
+    <!-- ПРАВАЯ ПАНЕЛЬ -->
+    <section class="split-main">
+      <!-- Мобайл: левая колонка скрыта, переключатель Заметки/Ежедневник — здесь -->
+      <div v-if="isMobile" class="dv-mobile-hub">
+        <NotesHubTabs full-width />
+      </div>
       <div v-if="isMobile && store.diaries.length" class="dv-regstrip">
         <button
           v-for="d in store.diaries" :key="d.id"
@@ -58,24 +63,24 @@
             <SegmentedTabs :model-value="store.subtab" :tabs="subtabs" dense @update:model-value="store.setSubtab" />
           </div>
 
-          <template v-if="store.subtab === 'active'">
-            <div class="dv-nav">
-              <button class="dv-icon-btn" title="Назад" @click="store.step(-1)"><span class="material-symbols-outlined">chevron_left</span></button>
-              <button class="dv-today" @click="store.today()">Сегодня</button>
-              <button class="dv-icon-btn" title="Вперёд" @click="store.step(1)"><span class="material-symbols-outlined">chevron_right</span></button>
-              <h2 class="dv-period">{{ periodLabel }}</h2>
-            </div>
-            <div class="dv-spacer" />
-            <div class="dv-viewseg">
-              <button v-for="v in viewModes" :key="v.value" :class="{ active: store.view === v.value }" @click="store.setView(v.value)">{{ v.label }}</button>
-            </div>
-          </template>
-          <div v-else class="dv-spacer" />
+          <div v-if="store.subtab === 'active'" class="dv-nav">
+            <button class="dv-icon-btn" title="Назад" @click="store.step(-1)"><span class="material-symbols-outlined">chevron_left</span></button>
+            <button class="dv-today" @click="store.today()">Сегодня</button>
+            <button class="dv-icon-btn" title="Вперёд" @click="store.step(1)"><span class="material-symbols-outlined">chevron_right</span></button>
+            <h2 class="dv-period">{{ periodLabel }}</h2>
+          </div>
 
-          <div class="dv-search">
-            <span class="material-symbols-outlined">search</span>
-            <input v-model="searchInput" type="text" placeholder="Поиск…" @input="onSearch" />
-            <button v-if="searchInput" class="dv-search-clear" @click="clearSearch"><span class="material-symbols-outlined">close</span></button>
+          <SearchField
+            v-model="searchInput"
+            class="dv-toolbar-search"
+            placeholder="Поиск по записям…"
+            hotkey
+            @update:model-value="onSearch"
+            @clear="clearSearch"
+          />
+
+          <div v-if="store.subtab === 'active'" class="dv-viewseg">
+            <button v-for="v in viewModes" :key="v.value" :class="{ active: store.view === v.value }" @click="store.setView(v.value)">{{ v.label }}</button>
           </div>
 
           <div class="dv-actions">
@@ -87,7 +92,7 @@
               <button class="dv-icon-btn dv-manage" title="Поделиться" @click="shareOpen = true"><span class="material-symbols-outlined">share</span></button>
             </template>
             <button class="dv-icon-btn dv-manage" title="Экспорт в XLSX" @click="doExport"><span class="material-symbols-outlined">download</span></button>
-            <button v-if="!store.readonly" class="dv-btn-primary" @click="openCreate()">
+            <button v-if="!store.readonly" class="btn-grad" @click="openCreate()">
               <span class="material-symbols-outlined">add</span><span class="dv-btn-label">Запись</span>
             </button>
           </div>
@@ -242,13 +247,20 @@
         </div>
       </template>
 
-      <div v-else class="dv-placeholder">
-        <span class="material-symbols-outlined">event_note</span>
-        <p>{{ store.diaries.length ? (isMobile ? 'Выберите ежедневник сверху' : 'Выберите ежедневник слева') : 'Создайте свой первый ежедневник' }}</p>
-        <button v-if="store.tab === 'mine' && !store.diaries.length" class="dv-btn-primary" @click="openCreateDiary">
+      <EmptyState
+        v-else
+        class="split-empty"
+        icon="event_note"
+        tone="soft"
+        :title="store.diaries.length ? (isMobile ? 'Выберите ежедневник сверху' : 'Выберите ежедневник слева') : 'Создайте свой первый ежедневник'"
+        :subtitle="store.diaries.length
+          ? 'Выберите ежедневник в списке, чтобы посмотреть записи'
+          : 'Планируйте дела по дням и отмечайте выполненное'"
+      >
+        <button v-if="store.tab === 'mine' && !store.diaries.length" class="btn-grad" @click="openCreateDiary">
           <span class="material-symbols-outlined">add</span> Новый ежедневник
         </button>
-      </div>
+      </EmptyState>
     </section>
 
     <!-- Диалог дня -->
@@ -358,7 +370,10 @@
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import AppDialog from '@/components/common/AppDialog.vue'
 import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
+import EmptyState from '@/components/common/EmptyState.vue'
 import SegmentedTabs from '@/components/common/SegmentedTabs.vue'
+import SearchField from '@/components/common/SearchField.vue'
+import NotesHubTabs from '@/components/notes/NotesHubTabs.vue'
 import DiaryEntryDialog from '@/components/diary/DiaryEntryDialog.vue'
 import DiaryShareDialog from '@/components/diary/DiaryShareDialog.vue'
 import TaskForm from '@/components/tasks/TaskForm.vue'
@@ -541,7 +556,7 @@ const periodLabel = computed(() => {
 const searchInput = ref('')
 let searchTimer = null
 function onSearch() { clearTimeout(searchTimer); searchTimer = setTimeout(() => store.setSearch(searchInput.value.trim()), 300) }
-function clearSearch() { searchInput.value = ''; store.setSearch('') }
+function clearSearch() { clearTimeout(searchTimer); searchInput.value = ''; store.setSearch('') }
 watch(() => store.selectedId, () => { searchInput.value = '' })
 
 // Диалог дня — день делится на активные и выполненные (архив этого дня).
@@ -738,52 +753,50 @@ watch(() => store.loadingEntries, () => nextTick(measureWeekColumn))
 </script>
 
 <style scoped>
-.dv { display: flex; height: 100%; min-height: 0; gap: 16px; padding: 16px; overflow: hidden; }
-
-/* Левая колонка */
-.dv-side { width: 270px; flex-shrink: 0; display: flex; flex-direction: column; min-height: 0; background: var(--color-surface); border: 1px solid var(--color-outline-dim); border-radius: var(--radius-xl); overflow: hidden; }
-.dv-side-head { flex-shrink: 0; display: flex; align-items: center; gap: 8px; padding: 16px; font-weight: 700; color: var(--color-text); border-bottom: 1px solid var(--color-outline-dim); }
+/* Каркас (стеклянные панели, список, кнопка добавления, мобильное скрытие
+   левой панели) — глобальный паттерн .split-* (main.css). Здесь — только
+   специфика ежедневников: шапка с NotesHubTabs, прогресс и drop-цель пункта. */
+.dv-side-head { flex-shrink: 0; display: flex; align-items: center; gap: 8px; padding: 12px; border-bottom: 1px solid var(--color-outline-dim); }
+.dv-side-head :deep(.seg-tabs) { flex: 1; }
+.dv-mobile-hub { flex-shrink: 0; padding: 10px 12px 0; }
 .dv-side-tabs { padding: 10px 10px 4px; }
-.dv-side-body { flex: 1; min-height: 0; overflow-y: auto; padding: 8px; display: flex; flex-direction: column; gap: 2px; }
-.dv-side-note { padding: 24px 12px; color: var(--color-text-dim); font-size: 14px; text-align: center; }
-.dv-side-item { display: flex; align-items: center; gap: 10px; width: 100%; padding: 10px 12px; border: none; background: none; cursor: pointer; border-radius: var(--radius-md); color: var(--color-text-dim); text-align: left; }
-.dv-side-item:hover { background: var(--color-surface-high); color: var(--color-text); }
-.dv-side-item.active { background: var(--color-primary-container); color: var(--color-on-primary-container); }
-.dv-side-item .material-symbols-outlined { font-size: 20px; flex-shrink: 0; }
-.dv-side-main { display: flex; flex-direction: column; min-width: 0; }
-.dv-side-name { font-size: 14px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dv-side-main { flex: 1; display: flex; flex-direction: column; min-width: 0; }
 .dv-side-owner { font-size: 12px; opacity: 0.8; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .dv-side-progress { display: flex; align-items: center; gap: 8px; margin-top: 4px; }
 .dv-side-bar { flex: 1; height: 4px; border-radius: var(--radius-full); background: var(--color-surface-highest); overflow: hidden; }
-.dv-side-item.active .dv-side-bar { background: color-mix(in oklch, var(--color-on-primary-container) 20%, transparent); }
+.split-side-item.active .dv-side-bar { background: color-mix(in oklch, var(--color-primary) 20%, transparent); }
 .dv-side-fill { display: block; height: 100%; border-radius: inherit; background: var(--color-success); transition: width 0.25s; }
 .dv-side-count { flex-shrink: 0; font-size: 11px; font-weight: 600; font-variant-numeric: tabular-nums; opacity: 0.85; }
-.dv-side-item.drop-target { outline: 2px dashed var(--color-primary); outline-offset: -2px; background: var(--color-surface-high); }
-.dv-side-add { flex-shrink: 0; display: flex; align-items: center; justify-content: center; gap: 6px; margin: 8px; padding: 10px; border: 1px dashed var(--color-outline); border-radius: var(--radius-md); background: none; color: var(--color-primary); font-weight: 600; font-size: 14px; cursor: pointer; }
-.dv-side-add:hover { background: var(--color-surface-high); }
+.split-side-item.drop-target {
+  outline: 2px dashed var(--color-primary);
+  outline-offset: -2px;
+  background: color-mix(in oklch, var(--color-primary) 8%, transparent);
+}
 
-/* Правая колонка */
-.dv-main { flex: 1; min-width: 0; min-height: 0; display: flex; flex-direction: column; background: var(--color-surface); border: 1px solid var(--color-outline-dim); border-radius: var(--radius-xl); overflow: hidden; }
+/* Правая панель */
 .dv-toolbar { flex-shrink: 0; display: flex; align-items: center; gap: 12px; flex-wrap: wrap; padding: 12px 16px; border-bottom: 1px solid var(--color-outline-dim); }
 .dv-subtabs { flex-shrink: 0; }
 .dv-nav { display: flex; align-items: center; gap: 8px; }
 .dv-period { margin: 0 0 0 6px; font-size: 16px; font-weight: 700; color: var(--color-text); text-transform: capitalize; white-space: nowrap; }
-.dv-today { height: 36px; padding: 0 14px; border: 1px solid var(--color-outline-dim); border-radius: var(--radius-full); background: var(--color-surface); color: var(--color-text); font-weight: 600; font-size: 13px; cursor: pointer; }
+.dv-today { height: 36px; padding: 0 14px; border: 1px solid var(--color-outline-dim); border-radius: var(--radius-full); background: var(--acrylic-card-bg); color: var(--color-text); font-weight: 600; font-size: 13px; cursor: pointer; }
 .dv-today:hover { background: var(--color-surface-high); }
-.dv-spacer { flex: 0 1 auto; }
-.dv-viewseg { display: inline-flex; border: 1px solid var(--color-outline-dim); border-radius: var(--radius-full); overflow: hidden; }
-.dv-viewseg button { height: 36px; padding: 0 14px; border: none; background: var(--color-surface); color: var(--color-text-dim); cursor: pointer; font-weight: 600; font-size: 13px; border-right: 1px solid var(--color-outline-dim); }
-.dv-viewseg button:last-child { border-right: none; }
-.dv-viewseg button.active { background: var(--color-primary); color: var(--color-on-primary); }
+/* Сегмент вида — единый стиль с периодами статистики (StatsPeriodControl). */
+.dv-viewseg { display: inline-flex; gap: 2px; padding: 4px; background: var(--color-surface-high); border-radius: var(--radius-full); }
+.dv-viewseg button {
+  min-height: 36px; padding: 8px 14px; border: none; background: transparent;
+  border-radius: var(--radius-full); color: var(--color-text-dim); cursor: pointer;
+  font-weight: 600; font-size: 13px; transition: background 0.15s, color 0.15s, box-shadow 0.15s;
+}
+.dv-viewseg button:hover:not(.active) { color: var(--color-text); }
+.dv-viewseg button.active { background: var(--acrylic-card-bg); color: var(--color-primary); font-weight: 700; box-shadow: var(--shadow-sm); }
 .dv-search { flex: 1 1 auto; display: flex; align-items: center; gap: 8px; height: 38px; padding: 0 12px; min-width: 170px; background: var(--color-surface-low); border: 1px solid var(--color-outline-dim); border-radius: var(--radius-full); }
 .dv-search > .material-symbols-outlined { color: var(--color-text-dim); font-size: 20px; }
 .dv-search input { flex: 1; min-width: 0; border: none; background: none; outline: none; color: var(--color-text); font-size: 14px; }
 .dv-search-clear { border: none; background: none; cursor: pointer; color: var(--color-text-dim); display: grid; place-items: center; }
 .dv-actions { display: flex; align-items: center; gap: 8px; }
-.dv-icon-btn { width: 38px; height: 38px; display: grid; place-items: center; border: 1px solid var(--color-outline-dim); border-radius: var(--radius-full); background: var(--color-surface); color: var(--color-text-dim); cursor: pointer; }
+.dv-icon-btn { width: 38px; height: 38px; display: grid; place-items: center; border: 1px solid var(--color-outline-dim); border-radius: var(--radius-full); background: var(--acrylic-card-bg); color: var(--color-text-dim); cursor: pointer; }
 .dv-icon-btn:hover { background: var(--color-surface-high); color: var(--color-text); }
 .dv-mobile-controls { display: none; } /* кнопка «Управление» — только на мобайле */
-.dv-btn-primary { display: inline-flex; align-items: center; gap: 6px; height: 38px; padding: 0 16px; border: none; border-radius: var(--radius-full); background: var(--color-primary); color: var(--color-on-primary); font-weight: 600; font-size: 14px; cursor: pointer; }
 .dv-btn-tonal { display: inline-flex; align-items: center; gap: 6px; height: 38px; padding: 0 16px; border: none; border-radius: var(--radius-full); background: var(--color-primary-container); color: var(--color-on-primary-container); font-weight: 600; font-size: 14px; cursor: pointer; }
 
 /* Тело */
@@ -791,8 +804,9 @@ watch(() => store.loadingEntries, () => nextTick(measureWeekColumn))
 .dv-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 1px; background: var(--color-outline-dim); min-height: 100%; }
 .dv-grid.month { grid-template-rows: auto repeat(6, 1fr); }
 .dv-grid.week { grid-template-rows: 1fr; }
-.dv-wd { background: var(--color-surface); padding: 8px 10px; text-align: center; font-size: 12px; font-weight: 700; color: var(--color-text-dim); text-transform: uppercase; position: sticky; top: 0; z-index: 1; }
-.dv-day { background: var(--color-surface); min-height: 104px; padding: 6px; display: flex; flex-direction: column; gap: 4px; cursor: pointer; overflow: hidden; }
+/* Sticky-шапка дней недели: записи прокручиваются под ней — полный акрил. */
+.dv-wd { background: var(--acrylic-bg-strong); backdrop-filter: var(--acrylic-blur); -webkit-backdrop-filter: var(--acrylic-blur); padding: 8px 10px; text-align: center; font-size: 12px; font-weight: 700; color: var(--color-text-dim); text-transform: uppercase; position: sticky; top: 0; z-index: 1; }
+.dv-day { background: var(--acrylic-card-bg); min-height: 104px; padding: 6px; display: flex; flex-direction: column; gap: 4px; cursor: pointer; overflow: hidden; }
 .dv-grid.week .dv-day { min-height: 0; }
 .dv-day:hover { background: var(--color-surface-high); }
 .dv-day.drop-target { background: var(--color-primary-container); outline: 2px dashed var(--color-primary); outline-offset: -2px; }
@@ -827,7 +841,7 @@ watch(() => store.loadingEntries, () => nextTick(measureWeekColumn))
 .dv-agenda-chev { flex-shrink: 0; color: var(--color-text-dim); }
 
 .dv-daylist { display: flex; flex-direction: column; gap: 8px; padding: 16px; }
-.dv-dayrow { display: flex; align-items: center; gap: 14px; width: 100%; text-align: left; padding: 12px 14px; border: 1px solid var(--color-outline-dim); border-radius: var(--radius-lg); background: var(--color-surface); cursor: pointer; }
+.dv-dayrow { display: flex; align-items: center; gap: 14px; width: 100%; text-align: left; padding: 12px 14px; border: 1px solid var(--color-outline-dim); border-radius: var(--radius-lg); background: var(--acrylic-card-bg); cursor: pointer; }
 .dv-dayrow:hover { background: var(--color-surface-high); border-color: var(--color-outline); }
 .dv-dayrow-time { flex-shrink: 0; min-width: 56px; font-size: 15px; font-weight: 700; color: var(--color-primary); font-variant-numeric: tabular-nums; }
 .dv-dayrow-body { flex: 1; min-width: 0; display: flex; flex-direction: column; }
@@ -846,7 +860,7 @@ watch(() => store.loadingEntries, () => nextTick(measureWeekColumn))
 
 /* Архив */
 .dv-archive { display: flex; flex-direction: column; gap: 8px; padding: 16px; }
-.dv-arow { display: flex; align-items: center; gap: 12px; width: 100%; text-align: left; padding: 12px 14px; border: 1px solid var(--color-outline-dim); border-radius: var(--radius-lg); background: var(--color-surface); cursor: pointer; }
+.dv-arow { display: flex; align-items: center; gap: 12px; width: 100%; text-align: left; padding: 12px 14px; border: 1px solid var(--color-outline-dim); border-radius: var(--radius-lg); background: var(--acrylic-card-bg); cursor: pointer; }
 .dv-arow:hover { background: var(--color-surface-high); }
 .dv-arow-check { color: var(--color-success); flex-shrink: 0; }
 .dv-arow-body { flex: 1; min-width: 0; display: flex; flex-direction: column; }
@@ -860,8 +874,6 @@ watch(() => store.loadingEntries, () => nextTick(measureWeekColumn))
 .dv-empty .material-symbols-outlined { font-size: 44px; }
 .dv-empty p { margin: 0; }
 .dv-overlay { position: absolute; inset: 0; display: grid; place-items: center; background: color-mix(in oklch, var(--color-surface) 50%, transparent); }
-.dv-placeholder { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; color: var(--color-text-dim); }
-.dv-placeholder .material-symbols-outlined { font-size: 48px; }
 .spin { animation: dvspin 1s linear infinite; font-size: 32px; color: var(--color-primary); }
 @keyframes dvspin { to { transform: rotate(360deg); } }
 
@@ -874,9 +886,9 @@ watch(() => store.loadingEntries, () => nextTick(measureWeekColumn))
 .dd-row.dragging { opacity: 0.45; }
 .dd-grip { flex-shrink: 0; display: grid; place-items: center; color: var(--color-text-dim); }
 .dd-grip .material-symbols-outlined { font-size: 20px; }
-.dd-check { flex-shrink: 0; width: 42px; display: grid; place-items: center; border: 1px solid var(--color-outline-dim); border-radius: var(--radius-md); background: var(--color-surface); color: var(--color-text-dim); cursor: pointer; }
+.dd-check { flex-shrink: 0; width: 42px; display: grid; place-items: center; border: 1px solid var(--color-outline-dim); border-radius: var(--radius-md); background: var(--acrylic-card-bg); color: var(--color-text-dim); cursor: pointer; }
 .dd-check:hover { color: var(--color-success); }
-.dd-main { flex: 1; min-width: 0; display: flex; align-items: center; gap: 12px; text-align: left; padding: 10px 12px; border: 1px solid var(--color-outline-dim); border-radius: var(--radius-md); background: var(--color-surface); cursor: pointer; }
+.dd-main { flex: 1; min-width: 0; display: flex; align-items: center; gap: 12px; text-align: left; padding: 10px 12px; border: 1px solid var(--color-outline-dim); border-radius: var(--radius-md); background: var(--acrylic-card-bg); cursor: pointer; }
 .dd-main:hover { background: var(--color-surface-high); }
 .dd-time { flex-shrink: 0; min-width: 48px; font-weight: 700; color: var(--color-primary); font-variant-numeric: tabular-nums; }
 .dd-title { flex: 1; min-width: 0; font-weight: 600; color: var(--color-text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -896,20 +908,17 @@ watch(() => store.loadingEntries, () => nextTick(measureWeekColumn))
 
 /* Мобайл */
 .dv-regstrip { flex: none; display: flex; gap: 8px; padding: 10px 12px; overflow-x: auto; border-bottom: 1px solid var(--color-outline-dim); }
-.dv-regchip { flex: none; padding: 8px 14px; border-radius: var(--radius-full); border: 1px solid var(--color-outline-dim); background: var(--color-surface); color: var(--color-text-dim); font-size: 14px; font-weight: 600; cursor: pointer; white-space: nowrap; }
+.dv-regchip { flex: none; padding: 8px 14px; border-radius: var(--radius-full); border: 1px solid var(--color-outline-dim); background: var(--acrylic-card-bg); color: var(--color-text-dim); font-size: 14px; font-weight: 600; cursor: pointer; white-space: nowrap; }
 .dv-regchip.active { background: var(--color-primary); color: var(--color-on-primary); border-color: transparent; }
 
 @media (max-width: 768px) {
-  .dv { flex-direction: column; padding: 0; gap: 0; }
-  .dv-side { display: none; }
-  .dv-main { border: none; border-radius: 0; }
+  /* Скрытие левой панели и разворот правой — в глобальном .split-* */
   .dv-toolbar { padding: 10px 12px; gap: 8px; }
-  .dv-spacer { display: none; }
   .dv-period { font-size: 14px; }
   /* Вид, поиск и управляющие иконки уезжают в лист «Управление» — на узком
      экране в панели остаются только вкладки, навигация по периоду и «Запись». */
   .dv-toolbar .dv-viewseg,
-  .dv-toolbar .dv-search,
+  .dv-toolbar .dv-toolbar-search,
   .dv-manage { display: none; }
   .dv-mobile-controls { display: grid; }
   .dv-subtabs { order: 0; flex-basis: 100%; }

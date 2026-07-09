@@ -785,7 +785,7 @@ async function doDelete() {
 .ov-stats { display: flex; gap: 12px; flex-wrap: wrap; }
 .ov-stat {
   display: flex; align-items: center; gap: 12px; padding: 14px 18px; flex: 1 1 160px;
-  background: var(--color-surface-high); border-radius: var(--radius-lg);
+  background: var(--acrylic-card-bg); border-radius: var(--radius-lg);
 }
 .ov-stat .material-symbols-outlined { font-size: 26px; color: var(--color-primary); }
 .ov-stat strong { display: block; font-size: 18px; font-weight: 800; color: var(--color-text); }
@@ -794,7 +794,7 @@ async function doDelete() {
 
 .note {
   padding: 12px 14px; border-radius: var(--radius-md, 12px);
-  background: var(--color-surface-high); color: var(--color-text-dim); font-size: 13px; line-height: 1.5;
+  background: var(--acrylic-card-bg); color: var(--color-text-dim); font-size: 13px; line-height: 1.5;
 }
 
 /* ── Участники: таблица занимает всю высоту и скроллится отдельно ── */
@@ -843,7 +843,7 @@ async function doDelete() {
 .settings-fill { flex: 1; min-height: 0; display: flex; }
 
 .settings-card {
-  background: var(--color-surface-high); border-radius: var(--radius-lg); padding: 18px;
+  background: var(--acrylic-card-bg); border-radius: var(--radius-lg); padding: 18px;
   display: flex; flex-direction: column; gap: 12px;
 }
 .card-title { margin: 0; font-size: 16px; font-weight: 700; color: var(--color-text); }
@@ -883,7 +883,7 @@ async function doDelete() {
 .switch-list { display: flex; flex-direction: column; gap: 6px; }
 .switch-row {
   display: flex; align-items: center; justify-content: space-between; gap: 12px;
-  padding: 10px 12px; background: var(--color-surface); border-radius: var(--radius-md, 12px);
+  padding: 10px 12px; background: var(--acrylic-card-bg); border-radius: var(--radius-md, 12px);
   cursor: pointer; transition: background .12s;
 }
 .switch-row:hover { background: var(--color-surface-highest, var(--color-surface-high)); }
@@ -922,7 +922,7 @@ async function doDelete() {
 .ctl {
   appearance: none; width: 100%; box-sizing: border-box;
   border: 1px solid var(--color-outline-variant, var(--color-outline-dim));
-  background: var(--color-surface); color: var(--color-text); padding: 10px 12px;
+  background: var(--acrylic-card-bg); color: var(--color-text); padding: 10px 12px;
   border-radius: var(--radius-md, 12px); font: inherit; transition: border-color .15s, box-shadow .15s;
 }
 .ctl:focus { outline: none; border-color: var(--color-primary); box-shadow: 0 0 0 3px color-mix(in oklch, var(--color-primary) 18%, transparent); }
@@ -935,7 +935,7 @@ async function doDelete() {
 .cand-item {
   display: flex; align-items: center; gap: 10px; padding: 8px 10px; text-align: left;
   border: 1px solid var(--color-outline-dim); border-radius: var(--radius-md, 12px);
-  background: var(--color-surface); color: var(--color-text); cursor: pointer;
+  background: var(--acrylic-card-bg); color: var(--color-text); cursor: pointer;
 }
 .cand-item:hover { border-color: var(--color-primary); }
 .cand-text { display: flex; flex-direction: column; min-width: 0; flex: 1; }

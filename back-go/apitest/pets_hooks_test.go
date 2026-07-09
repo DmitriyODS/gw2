@@ -3,7 +3,6 @@ package apitest
 import (
 	"fmt"
 	"net/http"
-	"strings"
 	"testing"
 	"time"
 )
@@ -94,57 +93,5 @@ func TestPetsUnitStoppedAwardsKudosAndXP(t *testing.T) {
 	// 30 минут → 6 кудосов (30/5), 10 XP (30/3).
 	if kudos != 6 || xp != 10 {
 		t.Fatalf("начисления за 30-минутный юнит: kudos=%v xp=%v, ожидалось 6/10", kudos, xp)
-	}
-}
-
-// TestPetsEvolutionCreatesPortalPost — сквозной сценарий petsvc → portalsvc:
-// эволюция питомца (XP подводится под порог прямым UPDATE, кормление
-// переводит через него) публикует в ленте корпоративного портала системный
-// пост system_kind='pet_evolved' от имени владельца (gRPC CreateSystemPost,
-// fire-and-forget — поэтому пост ждём поллингом).
-func TestPetsEvolutionCreatesPortalPost(t *testing.T) {
-	_, member, _ := petsCompany(t)
-
-	r := petsAPI.doJSON(t, http.MethodGet, "/api/pets/pet", member.Token, nil)
-	requireStatus(t, r, 200, "GET /pet (создание)")
-
-	// Кудосы на кормление + XP на 1 меньше порога «Малыша» (StageXP[1]=40).
-	if _, err := db.Exec(dbCtx(t), `UPDATE pets SET kudos=10, xp=39 WHERE user_id=$1`, member.ID); err != nil {
-		t.Fatalf("подводка XP к порогу: %v", err)
-	}
-
-	fr := petsAPI.doJSON(t, http.MethodPost, "/api/pets/pet/feed", member.Token, nil)
-	requireStatus(t, fr, 200, "кормление до эволюции")
-	if !fr.Bool("evolved") {
-		t.Fatalf("кормление не привело к эволюции: %s", fr.Raw)
-	}
-
-	// Пост публикуется асинхронной горутиной — ждём его в ленте портала.
-	deadline := time.Now().Add(10 * time.Second)
-	for {
-		pr := portalAPI.doJSON(t, http.MethodGet, "/api/portal/posts", member.Token, nil)
-		requireStatus(t, pr, 200, "лента портала")
-		for _, raw := range pr.List("posts") {
-			post, _ := raw.(map[string]any)
-			if post == nil {
-				continue
-			}
-			kind, _ := post["system_kind"].(string)
-			if kind != "pet_evolved" {
-				continue
-			}
-			if int64(post["author_id"].(float64)) != member.ID {
-				t.Fatalf("автор системного поста: %v, ожидался %d", post["author_id"], member.ID)
-			}
-			body, _ := post["body"].(string)
-			if !strings.Contains(body, "Малыш") {
-				t.Fatalf("тело поста без названия стадии: %q", body)
-			}
-			return
-		}
-		if time.Now().After(deadline) {
-			t.Fatalf("системный пост pet_evolved не появился в ленте за 10с")
-		}
-		time.Sleep(300 * time.Millisecond)
 	}
 }

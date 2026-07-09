@@ -1,11 +1,27 @@
 <template>
   <article class="post-card" :class="{ pinned: !!post.pinned_at }">
     <header class="post-head">
-      <img class="post-avatar" :src="author.avatarUrl" :alt="author.fio" />
+      <!-- Автор кликабелен, только пока он состоит в компании (есть в
+           каталоге сотрудников) — иначе профиль показать нечем. -->
+      <button
+        v-if="authorClickable"
+        class="post-avatar-btn"
+        type="button"
+        :aria-label="`Открыть профиль: ${author.fio}`"
+        @click="openAuthorProfile(post.author_id)"
+      >
+        <img class="post-avatar" :src="author.avatarUrl" :alt="author.fio" />
+      </button>
+      <img v-else class="post-avatar" :src="author.avatarUrl" :alt="author.fio" />
       <div class="post-head-info">
         <div class="post-head-top">
-          <span class="post-author">{{ author.fio }}</span>
-          <span v-if="post.system_kind" class="post-topic-chip post-system-chip">{{ systemBadge }}</span>
+          <button
+            v-if="authorClickable"
+            class="post-author post-author-link"
+            type="button"
+            @click="openAuthorProfile(post.author_id)"
+          >{{ author.fio }}</button>
+          <span v-else class="post-author">{{ author.fio }}</span>
           <span v-if="topic" class="post-topic-chip" :style="topicChipStyle">{{ topic.name }}</span>
         </div>
         <div class="post-meta">
@@ -42,9 +58,7 @@
               >{{ opt.label }}</button>
             </template>
           </template>
-          <!-- Правка системного поста бессмысленна (генерируется платформой);
-               удаление остаётся по обычным правам. -->
-          <button v-if="!post.system_kind" class="post-menu-item" @click="onEdit">
+          <button class="post-menu-item" @click="onEdit">
             <span class="material-symbols-outlined">edit</span>
             Редактировать
           </button>
@@ -104,18 +118,31 @@
       </button>
     </footer>
 
-    <CommentsList v-if="commentsOpen" :post-id="post.id" class="post-comments" />
+    <CommentsList
+      v-if="commentsOpen"
+      :post-id="post.id"
+      class="post-comments"
+      @open-profile="openAuthorProfile"
+    />
+
+    <!-- Профиль автора: монтируем лениво после первого клика — на ленте
+         десятки карточек, пустые диалоги в каждой не нужны. -->
+    <EmployeeProfileDialog v-if="profileUser" v-model="profileOpen" :user="profileUser" />
   </article>
 </template>
 
 <script setup>
-import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
+import { computed, defineAsyncComponent, onBeforeUnmount, onMounted, ref } from 'vue'
 import { usePortalStore } from '@/stores/portal.js'
 import { useAuthStore } from '@/stores/auth.js'
 import { usePermission } from '@/composables/usePermission.js'
 import { useNotificationsStore } from '@/stores/notifications.js'
 import LinkifiedText from '@/components/common/LinkifiedText.vue'
 import CommentsList from './CommentsList.vue'
+
+// Async: диалог профиля тянет тяжёлые сторы (звонки) — грузим по первому клику.
+const EmployeeProfileDialog = defineAsyncComponent(() =>
+  import('@/components/common/EmployeeProfileDialog.vue'))
 
 const props = defineProps({
   post: { type: Object, required: true },
@@ -130,6 +157,19 @@ const REACTIONS = ['👍', '❤️', '🎉', '😂', '👏']
 const BODY_LIMIT = 320
 
 const author = computed(() => portal.resolveAuthor(props.post.author_id))
+
+// Профиль автора: данные — из уже загруженного каталога сотрудников
+// (portal.loadAuthors → getDirectory, тот же источник, что у EmployeesView).
+const authorClickable = computed(() => portal.authorMap.has(props.post.author_id))
+const profileOpen = ref(false)
+const profileUser = ref(null)
+
+function openAuthorProfile(id) {
+  const u = portal.authorMap.get(id)
+  if (!u) return // автор уже не сотрудник компании — профиля нет
+  profileUser.value = u
+  profileOpen.value = true
+}
 const topic = computed(() => portal.topics.find((t) => t.id === props.post.topic_id) || null)
 const topicChipStyle = computed(() => (topic.value?.color
   ? { background: `var(--tag-${topic.value.color}-surface)`, borderColor: `var(--tag-${topic.value.color}-border)`, color: 'var(--color-text)' }
@@ -169,10 +209,6 @@ const pinnedUntilText = computed(() => {
   if (!props.post.pinned_until) return ''
   return new Date(props.post.pinned_until).toLocaleDateString('ru', { day: '2-digit', month: '2-digit' })
 })
-
-// Бейдж системного поста (system_kind проставляет платформа, не человек).
-const systemBadge = computed(() =>
-  (props.post.system_kind === 'pet_evolved' ? '🎉 Грувик' : '🎉 Событие'))
 
 const menuOpen = ref(false)
 const menuRef = ref(null)
@@ -262,7 +298,9 @@ function onDelete() {
   gap: 10px;
   padding: 16px;
   border-radius: var(--radius-lg);
-  background: var(--color-surface-low);
+  /* Карточка в потоке ленты: полупрозрачная подложка без blur (см. tokens.css). */
+  background: var(--acrylic-card-bg);
+  border: 1px solid var(--acrylic-border);
   box-shadow: var(--shadow-sm);
 }
 
@@ -284,6 +322,21 @@ function onDelete() {
   flex-shrink: 0;
 }
 
+.post-avatar-btn {
+  padding: 0;
+  border: none;
+  background: transparent;
+  border-radius: 50%;
+  line-height: 0;
+  flex-shrink: 0;
+  cursor: pointer;
+  transition: box-shadow .12s;
+}
+.post-avatar-btn:hover,
+.post-avatar-btn:focus-visible {
+  box-shadow: 0 0 0 3px color-mix(in oklch, var(--color-primary) 30%, transparent);
+}
+
 .post-head-info { min-width: 0; flex: 1; }
 
 .post-head-top {
@@ -291,6 +344,24 @@ function onDelete() {
   align-items: center;
   gap: 8px;
   flex-wrap: wrap;
+}
+
+/* Кликабельное имя автора (до .post-author, чтобы font: inherit не перебил
+   размер/насыщенность имени). */
+.post-author-link {
+  border: none;
+  background: transparent;
+  padding: 0;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  border-radius: var(--radius-xs);
+  transition: color .12s;
+}
+.post-author-link:hover,
+.post-author-link:focus-visible {
+  color: var(--color-primary);
+  text-decoration: underline;
 }
 
 .post-author {
@@ -348,8 +419,11 @@ function onDelete() {
   right: 0;
   z-index: 20;
   min-width: 190px;
-  background: var(--color-surface);
-  border: 1px solid var(--color-outline-dim);
+  /* Плавающий поповер — стекло (Expressive Glass). */
+  background: var(--acrylic-bg);
+  backdrop-filter: var(--acrylic-blur);
+  -webkit-backdrop-filter: var(--acrylic-blur);
+  border: 1px solid var(--acrylic-border);
   border-radius: var(--radius-md);
   box-shadow: var(--shadow-lg);
   padding: 6px;
@@ -378,12 +452,6 @@ function onDelete() {
 /* Инлайн-подменю выбора срока закрепления */
 .post-menu-caret { margin-left: auto; color: var(--color-text-dim); }
 .post-menu-sub { padding-left: 38px; font-size: 13px; }
-
-.post-system-chip {
-  background: var(--color-primary-container);
-  border-color: var(--color-primary);
-  color: var(--color-on-primary-container);
-}
 
 .post-title {
   margin: 0;

@@ -236,6 +236,60 @@ func TestWalkPetChargesKudosAndGrantsXP(t *testing.T) {
 	}
 }
 
+// Ответ WalkPet — полный снапшот питомца: экипировка (hat) и купленный облик
+// не теряются, даже если прогулочный XP перевёл питомца через порог стадии
+// (applyEvolution пересчитывает только природный вид; купленный скин —
+// неприкосновенен, новый природный вид лишь разблокируется).
+func TestWalkPetKeepsEquipmentAndBoughtSkin(t *testing.T) {
+	env := newEnv()
+	ctx := context.Background()
+	pet, _ := env.pets.GetOrCreate(ctx, 1, 10)
+	hat := "cap"
+	pet.Kudos = domain.WalkCost
+	pet.XP = domain.StageXP[1] - 1 // +WalkXP переведёт через порог «Малыша»
+	pet.Hat = &hat
+	pet.Accessories = []string{"cap"}
+	pet.Species = "dragon" // купленный облик (не природный)
+	pet.UnlockedSpecies = []string{"dragon"}
+
+	data, err := env.svc.WalkPet(ctx, 1, 10)
+	if err != nil {
+		t.Fatalf("WalkPet: %v", err)
+	}
+	if pet.Stage != 1 {
+		t.Fatalf("прогулка должна была привести к эволюции, stage = %d", pet.Stage)
+	}
+	if data.Hat == nil || *data.Hat != "cap" || len(data.Accessories) != 1 {
+		t.Errorf("экипировка потеряна: hat=%v accessories=%v", data.Hat, data.Accessories)
+	}
+	if data.Species != "dragon" {
+		t.Errorf("купленный облик сброшен эволюцией: species = %q", data.Species)
+	}
+	// Природный вид (fox — фолбэк без юнитов) разблокирован на будущее.
+	if !containsStr(data.UnlockedSpecies, "fox") {
+		t.Errorf("природный вид не разблокирован: unlocked = %v", data.UnlockedSpecies)
+	}
+}
+
+// Прогулка БЕЗ эволюции: природный вид не пересчитывается вовсе.
+func TestWalkPetWithoutEvolutionKeepsSpecies(t *testing.T) {
+	env := newEnv()
+	ctx := context.Background()
+	pet, _ := env.pets.GetOrCreate(ctx, 1, 10)
+	pet.Kudos = domain.WalkCost
+	pet.Stage = 2
+	pet.XP = domain.StageXP[2]
+	pet.Species = "owl"
+
+	data, err := env.svc.WalkPet(ctx, 1, 10)
+	if err != nil {
+		t.Fatalf("WalkPet: %v", err)
+	}
+	if data.Species != "owl" {
+		t.Errorf("species = %q, want owl", data.Species)
+	}
+}
+
 func TestWalkPetDailyCap(t *testing.T) {
 	env := newEnv()
 	ctx := context.Background()

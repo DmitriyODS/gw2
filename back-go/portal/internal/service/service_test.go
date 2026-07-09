@@ -154,20 +154,6 @@ func (f *fakeRepo) PinPost(_ domain.Ctx, id, companyID, pinnedBy int64, until *t
 	p.PinnedAt, p.PinnedBy, p.PinnedUntil = &now, &pinnedBy, until
 	return true, nil
 }
-
-func (f *fakeRepo) FindRecentSystemPost(_ domain.Ctx, companyID, authorID int64, kind string, since time.Time) (*domain.Post, error) {
-	var found *domain.Post
-	for _, p := range f.posts {
-		if p.CompanyID != companyID || p.AuthorID != authorID ||
-			p.SystemKind == nil || *p.SystemKind != kind || !p.CreatedAt.After(since) {
-			continue
-		}
-		if found == nil || p.ID > found.ID {
-			found = p
-		}
-	}
-	return found, nil
-}
 func (f *fakeRepo) SetPinned(_ domain.Ctx, id int64, pinnedAt *time.Time, pinnedBy *int64) error {
 	if p := f.posts[id]; p != nil {
 		p.PinnedAt, p.PinnedBy, p.PinnedUntil = pinnedAt, pinnedBy, nil
@@ -292,26 +278,10 @@ func (m *fakeMessenger) CreatePostMessage(_ domain.Ctx, convID, _, _ int64, _ do
 
 var _ domain.MessengerClient = (*fakeMessenger)(nil)
 
-// fakeUsers — UserReader для тестов: все компании активны, кроме перечисленных
-// в inactive.
-type fakeUsers struct{ inactive map[int64]bool }
-
-func (u *fakeUsers) GetUser(_ domain.Ctx, id int64) (*domain.User, error) {
-	return &domain.User{ID: id, IsActive: true}, nil
-}
-func (u *fakeUsers) CompanyActive(_ domain.Ctx, companyID *int64) (bool, error) {
-	if companyID == nil {
-		return true, nil
-	}
-	return !u.inactive[*companyID], nil
-}
-
-var _ domain.UserReader = (*fakeUsers)(nil)
-
 func newTestService() (*Service, *fakeRepo, *fakeBus) {
 	repo := newFakeRepo()
 	bus := &fakeBus{}
-	svc := New(Deps{Repo: repo, Users: &fakeUsers{}, Files: &fakeFiles{}, Bus: bus, Messenger: &fakeMessenger{}, Log: discardLogger()})
+	svc := New(Deps{Repo: repo, Files: &fakeFiles{}, Bus: bus, Messenger: &fakeMessenger{}, Log: discardLogger()})
 	return svc, repo, bus
 }
 

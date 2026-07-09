@@ -137,7 +137,10 @@ onBeforeUnmount(() => document.removeEventListener('mousedown', onClickOutside))
 .tp-pop {
   position: absolute; z-index: 70; top: calc(100% + 6px); left: 0;
   display: flex; align-items: stretch; gap: 2px; padding: 6px;
-  background: var(--color-surface); border: 1px solid var(--color-outline-variant);
+  background: var(--acrylic-bg);
+  backdrop-filter: var(--acrylic-blur);
+  -webkit-backdrop-filter: var(--acrylic-blur);
+  border: 1px solid var(--acrylic-border);
   border-radius: var(--radius-lg, 16px); box-shadow: var(--shadow-lg);
 }
 .tp-col { display: flex; flex-direction: column; gap: 2px; max-height: 220px; overflow-y: auto; padding: 0 2px; scrollbar-width: thin; }

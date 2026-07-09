@@ -154,7 +154,7 @@ async function submit() {
   padding: 10px 12px;
   border: 1px solid var(--color-outline-dim);
   border-radius: var(--radius-md);
-  background: var(--color-surface);
+  background: var(--acrylic-card-bg);
   color: var(--color-text);
   font: inherit;
   font-size: 14px;

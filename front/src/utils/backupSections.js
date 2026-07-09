@@ -9,6 +9,7 @@ export const BACKUP_SECTIONS = [
   { key: 'registry', label: 'Реестры', desc: 'Справочники, поля, записи, ссылки' },
   { key: 'calendar', label: 'Календари', desc: 'Календари, поля, записи, ссылки' },
   { key: 'diary', label: 'Ежедневники', desc: 'Ежедневники, записи и доступы' },
+  { key: 'notes', label: 'Заметки', desc: 'Заметки, группы и ссылки' },
   { key: 'messenger', label: 'Мессенджер', desc: 'Чаты, сообщения, вложения' },
   { key: 'calls', label: 'Звонки', desc: 'Звонки и участники' },
   { key: 'groove', label: 'Мой Groove', desc: 'Питомцы, лента, рейды, локации' },

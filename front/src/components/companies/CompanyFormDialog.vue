@@ -372,7 +372,7 @@ defineExpose({
   appearance: none;
   width: 100%;
   border: 1px solid var(--color-outline-variant);
-  background: var(--color-surface);
+  background: var(--acrylic-card-bg);
   color: var(--color-on-surface);
   padding: 10px 12px;
   border-radius: var(--radius-md, 12px);
@@ -509,7 +509,7 @@ select.ctl {
 .cand-item {
   display: flex; align-items: center; gap: 8px; padding: 8px 10px; text-align: left;
   border: 1px solid var(--color-outline-variant); border-radius: var(--radius-md, 12px);
-  background: var(--color-surface); color: var(--color-on-surface); cursor: pointer;
+  background: var(--acrylic-card-bg); color: var(--color-on-surface); cursor: pointer;
 }
 .cand-item:hover { border-color: var(--color-primary); }
 .cand-item .member-login { flex: 1; }
@@ -521,7 +521,7 @@ select.ctl {
 .invite-btn {
   flex: none; display: grid; place-items: center; width: 40px; height: 40px;
   border: 1px solid var(--color-outline-variant); border-radius: var(--radius-md, 12px);
-  background: var(--color-surface); color: var(--color-on-surface); cursor: pointer;
+  background: var(--acrylic-card-bg); color: var(--color-on-surface); cursor: pointer;
 }
 .invite-btn:hover:not(:disabled) { border-color: var(--color-primary); color: var(--color-primary); }
 .invite-btn:disabled { opacity: .5; cursor: not-allowed; }

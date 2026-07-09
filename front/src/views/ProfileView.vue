@@ -516,8 +516,10 @@ onMounted(() => {
   flex-direction: column;
   align-items: center;
   gap: 14px;
-  background: var(--color-surface);
-  border: 1px solid var(--color-outline-dim);
+  background: var(--acrylic-card-bg);
+  backdrop-filter: var(--acrylic-blur);
+  -webkit-backdrop-filter: var(--acrylic-blur);
+  border: 1px solid var(--acrylic-border);
   border-radius: var(--radius-xl);
   padding: 0 20px 20px;
   box-shadow: var(--shadow-sm);
@@ -555,7 +557,7 @@ onMounted(() => {
   box-shadow: 0 0 0 4px var(--color-surface);
   flex-shrink: 0;
   padding: 0;
-  background: var(--color-surface);
+  background: var(--acrylic-card-bg);
   cursor: zoom-in;
   transition: transform .18s, box-shadow .18s;
 }
@@ -649,7 +651,7 @@ onMounted(() => {
   font-weight: 500;
   cursor: pointer;
   border: 1px solid var(--color-outline-dim);
-  background: var(--color-surface);
+  background: var(--acrylic-card-bg);
   color: var(--color-text);
   transition: background 0.15s, color 0.15s;
 }
@@ -773,8 +775,10 @@ onMounted(() => {
 }
 
 .profile-card {
-  background: var(--color-surface);
-  border: 1px solid var(--color-outline-dim);
+  background: var(--acrylic-card-bg);
+  backdrop-filter: var(--acrylic-blur);
+  -webkit-backdrop-filter: var(--acrylic-blur);
+  border: 1px solid var(--acrylic-border);
   border-radius: var(--radius-lg);
   padding: 22px;
   display: flex;

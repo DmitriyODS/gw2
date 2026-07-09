@@ -28,6 +28,9 @@ export const strokePet = (userId) => apiRequest(`/pets/stroke/${userId}`, { meth
 // ────────────────────── зоопарк / рейтинг / эфир ────────────────
 
 export const getZoo = () => apiRequest('/pets/zoo')
+// Удаление питомца сотрудника — только администратор компании.
+export const deleteColleaguePet = (userId) =>
+  apiRequest(`/pets/zoo/${userId}`, { method: 'DELETE' })
 export const getRating = () => apiRequest('/pets/rating')
 export const getLive = () => apiRequest('/pets/live')
 export const getActivityLog = () => apiRequest('/pets/activity')

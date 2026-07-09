@@ -1,21 +1,17 @@
 <template>
   <div class="admin-page">
     <header class="admin-sticky">
-      <div class="page-head">
-        <div class="page-head-text">
-          <h1 class="pets-title">Грувики</h1>
-          <div class="pets-meta">
-            <span v-if="pet" class="meta-stat">
-              <KudosCoin class="meta-emoji" />
-              <strong>{{ pet.kudos }}</strong> кудосов
-            </span>
-            <span v-if="pet?.feed_streak" class="meta-stat warning">
-              <span class="material-symbols-outlined">local_fire_department</span>
-              стрик <strong>{{ pet.feed_streak }}</strong> дн.
-            </span>
-          </div>
-        </div>
-        <button class="shop-cta" type="button" @click="showShop = true">
+      <!-- Тулбар в стиле «Задач»: статы-чипы слева, главное действие справа. -->
+      <div class="pets-toolbar">
+        <span v-if="pet" class="chip-tint chip-tint--primary">
+          <KudosCoin class="meta-emoji" />
+          <strong>{{ pet.kudos }}</strong>&nbsp;кудосов
+        </span>
+        <span v-if="pet?.feed_streak" class="chip-tint chip-tint--warning">
+          <span class="material-symbols-outlined">local_fire_department</span>
+          стрик&nbsp;<strong>{{ pet.feed_streak }}</strong>&nbsp;дн.
+        </span>
+        <button class="btn-grad pets-shop-btn" type="button" @click="showShop = true">
           <span class="material-symbols-outlined">storefront</span>
           <span class="shop-cta-label">Магазин</span>
         </button>
@@ -143,30 +139,13 @@ onMounted(async () => {
 </script>
 
 <style scoped>
-.pets-title { margin: 0; font-size: 26px; font-weight: 800; }
-.page-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
-.page-head-text { display: flex; flex-direction: column; gap: 8px; }
-.pets-meta { display: flex; gap: 8px; flex-wrap: wrap; font-size: 13px; }
-.meta-emoji { font-size: 14px; }
-.meta-stat { display: inline-flex; align-items: center; gap: 4px; }
-.meta-stat .material-symbols-outlined { font-size: 15px; }
-.meta-stat.warning { color: var(--color-warning); }
+/* Тулбар без подложки — прозрачная «плавающая» шапка как в «Задачах». */
+.admin-sticky { background: transparent; backdrop-filter: none; -webkit-backdrop-filter: none; }
+.admin-sticky::after { display: none; }
 
-.shop-cta {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  border: none;
-  border-radius: var(--radius-full);
-  background: var(--color-primary);
-  color: var(--color-on-primary);
-  font-size: 14px;
-  font-weight: 600;
-  padding: 11px 20px;
-  cursor: pointer;
-  transition: transform 0.1s;
-}
-.shop-cta:active { transform: scale(0.97); }
+.pets-toolbar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.pets-shop-btn { margin-left: auto; }
+.meta-emoji { font-size: 14px; }
 
 .pets-live { margin-bottom: 16px; }
 
@@ -177,8 +156,8 @@ onMounted(async () => {
   display: flex;
   align-items: center;
   gap: 16px;
-  background: var(--color-surface);
-  border: 1px solid var(--color-outline-dim);
+  background: var(--acrylic-card-bg);
+  border: 1px solid var(--acrylic-border);
   border-radius: var(--radius-lg, 20px);
   padding: 18px 20px;
   flex-wrap: wrap;
@@ -238,8 +217,6 @@ onMounted(async () => {
 .quest-claimed { font-weight: 700; color: var(--color-success); }
 
 @media (max-width: 768px) {
-  .pets-title { font-size: 22px; }
   .shop-cta-label { display: none; }
-  .shop-cta { padding: 11px 14px; }
 }
 </style>

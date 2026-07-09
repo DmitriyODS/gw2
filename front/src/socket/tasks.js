@@ -4,24 +4,36 @@ import { useUnitsStore } from '@/stores/units.js'
 import { useNotificationsStore } from '@/stores/notifications.js'
 
 export function registerTaskSocketHandlers(socket) {
+  // refreshMyActiveCount — бейдж «моих» активных задач в навигации: любое
+  // событие задач могло изменить счётчик (дебаунс внутри стора).
   socket.on('task:created', (task) => {
-    useTasksStore().addTaskFromSocket(task)
+    const tasks = useTasksStore()
+    tasks.addTaskFromSocket(task)
+    tasks.refreshMyActiveCount()
   })
 
   socket.on('task:updated', (data) => {
-    useTasksStore().patchTask(data)
+    const tasks = useTasksStore()
+    tasks.patchTask(data)
+    tasks.refreshMyActiveCount()
   })
 
   socket.on('task:archived', ({ task_id, archived_at }) => {
-    useTasksStore().archiveTask(task_id, archived_at)
+    const tasks = useTasksStore()
+    tasks.archiveTask(task_id, archived_at)
+    tasks.refreshMyActiveCount()
   })
 
   socket.on('task:restored', ({ task_id }) => {
-    useTasksStore().restoreTask(task_id)
+    const tasks = useTasksStore()
+    tasks.restoreTask(task_id)
+    tasks.refreshMyActiveCount()
   })
 
   socket.on('task:deleted', ({ task_id }) => {
-    useTasksStore().removeTask(task_id)
+    const tasks = useTasksStore()
+    tasks.removeTask(task_id)
+    tasks.refreshMyActiveCount()
   })
 
   socket.on('comment:new', (payload) => {

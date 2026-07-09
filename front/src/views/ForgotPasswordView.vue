@@ -95,7 +95,10 @@ async function submit() {
 .login-logo-img { width: 72px; height: 72px; border-radius: 50%; display: block; filter: drop-shadow(var(--shadow-lg)); }
 .login-card {
   width: 100%;
-  background: var(--color-surface);
+  background: var(--acrylic-card-bg);
+  backdrop-filter: var(--acrylic-blur);
+  -webkit-backdrop-filter: var(--acrylic-blur);
+  border: 1px solid var(--acrylic-border);
   border-radius: var(--radius-xl);
   padding: 64px 40px 40px;
   display: flex;

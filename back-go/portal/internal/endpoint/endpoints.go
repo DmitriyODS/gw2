@@ -23,7 +23,6 @@ type Endpoints struct {
 	DeletePost       endpoint.Endpoint
 	Pin              endpoint.Endpoint
 	Unpin            endpoint.Endpoint
-	CreateSystemPost endpoint.Endpoint
 
 	Upload endpoint.Endpoint
 
@@ -87,15 +86,6 @@ type PinReq struct {
 	RoleLevel int
 	// Days — автоистечение пина в днях (0 — бессрочно, кламп 1..30 в сервисе).
 	Days int
-}
-
-// CreateSystemPostReq — gRPC CreateSystemPost (petsvc → portalsvc).
-type CreateSystemPostReq struct {
-	CompanyID  int64
-	AuthorID   int64
-	SystemKind string
-	Title      string
-	Body       string
 }
 
 type UploadReq struct {
@@ -188,10 +178,6 @@ func New(s *service.Service) Endpoints {
 		Pin: func(ctx context.Context, request any) (any, error) {
 			r := request.(PinReq)
 			return s.Pin(ctx, r.CompanyID, r.ID, r.UserID, r.RoleLevel, r.Days)
-		},
-		CreateSystemPost: func(ctx context.Context, request any) (any, error) {
-			r := request.(CreateSystemPostReq)
-			return s.CreateSystemPost(ctx, r.CompanyID, r.AuthorID, r.SystemKind, r.Title, r.Body)
 		},
 		Unpin: func(ctx context.Context, request any) (any, error) {
 			r := request.(PinReq)

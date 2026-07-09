@@ -39,8 +39,13 @@ const routes = [
   // открывает тот же PortalView, он сам разворачивает пост по route.params.id.
   { path: '/portal/:id(\\d+)', component: () => import('@/views/PortalView.vue'),
     meta: { requiresAuth: true, requiresCompany: true }, props: true },
-  // Ежедневник — личный (кросс-компанийный): нужна только авторизация, активная
-  // компания не требуется.
+  // Раздел «Заметки» — личный (кросс-компанийный) хаб из двух вкладок:
+  // /notes (заметки, пока заготовка) и /diaries (ежедневник).
+  { path: '/notes', component: () => import('@/views/NotesView.vue'),
+    meta: { requiresAuth: true } },
+  // Страница заметки (rich-редактор) — личная, компания не нужна.
+  { path: '/notes/:id(\\d+)', component: () => import('@/views/NoteEditorView.vue'),
+    meta: { requiresAuth: true }, props: true },
   { path: '/diaries', component: () => import('@/views/DiaryView.vue'),
     meta: { requiresAuth: true } },
   // Раздел «Компании»: супер-админ видит все (платформа), обычный пользователь —
@@ -73,6 +78,9 @@ const routes = [
     meta: { public: true } },
   // Публичный просмотр ежедневника по внешней ссылке (read-only, без авторизации).
   { path: '/diary/:code', component: () => import('@/views/SharedDiaryView.vue'),
+    meta: { public: true } },
+  // Публичная заметка по внешней ссылке (режим view/edit решает сервер).
+  { path: '/note/:code', component: () => import('@/views/SharedNoteView.vue'),
     meta: { public: true } },
   // Вступление в компанию по ссылке-приглашению (нужна авторизация).
   { path: '/join/:code', component: () => import('@/views/JoinView.vue'),

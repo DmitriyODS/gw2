@@ -1,29 +1,29 @@
 <template>
-  <div class="registries">
-    <!-- ЛЕВАЯ КОЛОНКА: список реестров -->
-    <aside class="rg-side">
-      <div class="rg-side-head">
-        <span class="material-symbols-outlined">table</span>
-        <span>Реестры</span>
+  <div class="registries split-view">
+    <!-- ЛЕВАЯ ПАНЕЛЬ: список реестров -->
+    <aside class="split-side">
+      <div class="split-side-head">
+        <span class="split-side-tile"><span class="material-symbols-outlined">table_view</span></span>
+        <span class="split-side-title">Реестры</span>
       </div>
-      <div class="rg-side-body">
-        <div v-if="store.loadingList" class="rg-side-note">Загрузка…</div>
-        <div v-else-if="!store.registries.length" class="rg-side-note">Реестры отсутствуют</div>
+      <div class="split-side-list">
+        <div v-if="store.loadingList" class="split-side-note">Загрузка…</div>
+        <div v-else-if="!store.registries.length" class="split-side-note">Реестры отсутствуют</div>
         <button
           v-for="r in store.registries"
           :key="r.id"
-          class="rg-side-item"
+          class="split-side-item"
           :class="{ active: r.id === store.selectedId }"
           @click="store.select(r.id)"
         >
-          <span class="material-symbols-outlined">list_alt</span>
-          <span class="rg-side-name">{{ r.name }}</span>
+          <span class="split-item-tile"><span class="material-symbols-outlined">list_alt</span></span>
+          <span class="split-side-name">{{ r.name }}</span>
         </button>
       </div>
     </aside>
 
-    <!-- ПРАВАЯ КОЛОНКА: содержимое выбранного реестра -->
-    <section class="rg-main">
+    <!-- ПРАВАЯ ПАНЕЛЬ: содержимое выбранного реестра -->
+    <section class="split-main">
       <!-- Мобайл: выбор реестра горизонтальной лентой чипов (вместо боковой панели) -->
       <div v-if="isMobile && store.registries.length" class="rg-regstrip">
         <button
@@ -40,13 +40,13 @@
         <header class="rg-toolbar">
           <h2 class="rg-name" :title="store.selected.name">{{ store.selected.name }}</h2>
 
-          <div class="rg-search">
-            <span class="material-symbols-outlined">search</span>
-            <input v-model="searchInput" type="text" placeholder="Поиск по записям…" @input="onSearch" />
-            <button v-if="searchInput" class="rg-search-clear" title="Очистить" @click="clearSearch">
-              <span class="material-symbols-outlined">close</span>
-            </button>
-          </div>
+          <SearchField
+            v-model="searchInput"
+            placeholder="Поиск по записям…"
+            hotkey
+            @update:model-value="onSearch"
+            @clear="clearSearch"
+          />
 
           <div class="rg-actions">
             <div v-if="!isMobile && store.selected.fields.length" class="rg-cols">
@@ -72,7 +72,7 @@
             <button v-if="store.selected.fields.length" class="rg-icon-btn" title="Экспорт в XLSX" @click="openExport">
               <span class="material-symbols-outlined">download</span>
             </button>
-            <button class="rg-btn-primary" @click="openCreate">
+            <button class="btn-grad" @click="openCreate">
               <span class="material-symbols-outlined">add</span>
               <span class="rg-btn-label">Добавить</span>
             </button>
@@ -208,10 +208,14 @@
       </template>
 
       <!-- Реестр не выбран -->
-      <div v-else class="rg-placeholder">
-        <span class="material-symbols-outlined">table_view</span>
-        <p>{{ isMobile ? 'Выберите реестр сверху' : 'Выберите реестр слева' }}</p>
-      </div>
+      <EmptyState
+        v-else
+        class="split-empty"
+        icon="table_view"
+        tone="soft"
+        :title="isMobile ? 'Выберите реестр сверху' : 'Выберите реестр слева'"
+        subtitle="Выберите реестр в списке, чтобы просмотреть его данные"
+      />
     </section>
 
     <RegistryRecordDialog v-model="dialogOpen" :registry="store.selected" :record="activeRecord" />
@@ -236,7 +240,7 @@
           этого реестра, открывать карточки и выгружать данные — но не редактировать.
           Ссылку можно отозвать в любой момент.
         </p>
-        <button class="rg-btn-primary" :disabled="sharesBusy" @click="createShareLink">
+        <button class="btn-grad" :disabled="sharesBusy" @click="createShareLink">
           <span class="material-symbols-outlined">add_link</span> Создать ссылку
         </button>
 
@@ -308,6 +312,8 @@ import Select from 'primevue/select'
 import RegistryRecordDialog from '@/components/registry/RegistryRecordDialog.vue'
 import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
 import AppDialog from '@/components/common/AppDialog.vue'
+import EmptyState from '@/components/common/EmptyState.vue'
+import SearchField from '@/components/common/SearchField.vue'
 import { useRegistriesStore } from '@/stores/registries.js'
 import { exportRecords, getShares, createShare, revokeShare } from '@/api/registries.js'
 import { useNotificationsStore } from '@/stores/notifications.js'
@@ -431,7 +437,7 @@ function onSearch() {
   clearTimeout(searchTimer)
   searchTimer = setTimeout(() => store.setSearch(searchInput.value.trim()), 300)
 }
-function clearSearch() { searchInput.value = ''; store.setSearch('') }
+function clearSearch() { clearTimeout(searchTimer); searchInput.value = ''; store.setSearch('') }
 
 // ── Диалог записи ──
 function openRecord(rec) { activeRecord.value = rec; dialogOpen.value = true }
@@ -550,82 +556,9 @@ onMounted(() => store.fetchRegistries())
 </script>
 
 <style scoped>
-/* Жёсткая раскладка: вписана в высоту .main-content (100dvh, overflow:hidden у
-   оболочки). Сама страница не скроллится — внутренний скролл только у списка
-   слева и тела таблицы справа. */
-.registries {
-  display: flex;
-  height: 100%;
-  min-height: 0;
-  gap: 16px;
-  padding: 16px;
-  overflow: hidden;
-}
-
-/* ── Левая колонка ── */
-.rg-side {
-  width: 260px;
-  flex-shrink: 0;
-  display: flex;
-  flex-direction: column;
-  min-height: 0;
-  background: var(--color-surface);
-  border: 1px solid var(--color-outline-dim);
-  border-radius: var(--radius-xl);
-  overflow: hidden;
-}
-.rg-side-head {
-  flex-shrink: 0;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 16px;
-  font-weight: 700;
-  color: var(--color-text);
-  border-bottom: 1px solid var(--color-outline-dim);
-}
-.rg-side-body {
-  flex: 1;
-  min-height: 0;
-  overflow-y: auto;
-  padding: 8px;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-.rg-side-note { padding: 24px 12px; color: var(--color-text-dim); font-size: 14px; text-align: center; }
-.rg-side-item {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  width: 100%;
-  padding: 10px 12px;
-  border: none;
-  background: none;
-  cursor: pointer;
-  border-radius: var(--radius-md);
-  color: var(--color-text-dim);
-  text-align: left;
-  font-size: 14px;
-  font-weight: 600;
-}
-.rg-side-item:hover { background: var(--color-surface-high); color: var(--color-text); }
-.rg-side-item.active { background: var(--color-primary-container); color: var(--color-on-primary-container); }
-.rg-side-item .material-symbols-outlined { font-size: 20px; flex-shrink: 0; }
-.rg-side-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-
-/* ── Правая колонка ── */
-.rg-main {
-  flex: 1;
-  min-width: 0;
-  min-height: 0;
-  display: flex;
-  flex-direction: column;
-  background: var(--color-surface);
-  border: 1px solid var(--color-outline-dim);
-  border-radius: var(--radius-xl);
-  overflow: hidden;
-}
+/* Каркас (стеклянные панели, раскладка, мобильное скрытие левой панели) —
+   глобальный паттерн .split-* (main.css). Здесь — только внутренности
+   правой панели. */
 
 .rg-toolbar {
   flex-shrink: 0;
@@ -646,21 +579,6 @@ onMounted(() => store.fetchRegistries())
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.rg-search {
-  flex: 1;
-  min-width: 0;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  height: 40px;
-  padding: 0 12px;
-  background: var(--color-surface-low);
-  border: 1px solid var(--color-outline-dim);
-  border-radius: var(--radius-full);
-}
-.rg-search > .material-symbols-outlined { color: var(--color-text-dim); font-size: 20px; flex-shrink: 0; }
-.rg-search input { flex: 1; min-width: 0; border: none; background: none; outline: none; color: var(--color-text); font-size: 14px; }
-.rg-search-clear { flex-shrink: 0; border: none; background: none; cursor: pointer; color: var(--color-text-dim); display: grid; place-items: center; }
 .rg-actions { flex-shrink: 0; display: flex; align-items: center; gap: 8px; }
 
 .rg-cols { position: relative; }
@@ -669,7 +587,7 @@ onMounted(() => store.fetchRegistries())
   display: grid; place-items: center;
   border: 1px solid var(--color-outline-dim);
   border-radius: var(--radius-full);
-  background: var(--color-surface);
+  background: var(--acrylic-card-bg);
   color: var(--color-text-dim);
   cursor: pointer;
 }
@@ -715,7 +633,7 @@ onMounted(() => store.fetchRegistries())
   max-height: 60vh;
   overflow-y: auto;
   padding: 8px;
-  background: var(--color-surface);
+  background: var(--acrylic-card-bg);
   border: 1px solid var(--color-outline-dim);
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow-lg);
@@ -750,10 +668,13 @@ onMounted(() => store.fetchRegistries())
   font-size: 14px;
 }
 .rg-table thead th {
+  /* Sticky-шапка таблицы: строки уезжают под неё — плотное стекло с блюром */
   position: sticky;
   top: 0;
   z-index: 1;
-  background: var(--color-surface);
+  background: var(--acrylic-bg-strong);
+  backdrop-filter: var(--acrylic-blur);
+  -webkit-backdrop-filter: var(--acrylic-blur);
   border-bottom: 1px solid var(--color-outline-dim);
   padding: 12px 14px;
   text-align: left;
@@ -824,7 +745,7 @@ onMounted(() => store.fetchRegistries())
   display: grid; place-items: center;
   border: 1px solid var(--color-outline-dim);
   border-radius: var(--radius-full);
-  background: var(--color-surface);
+  background: var(--acrylic-card-bg);
   color: var(--color-text);
   cursor: pointer;
 }
@@ -832,32 +753,7 @@ onMounted(() => store.fetchRegistries())
 .rg-page-btn:disabled { opacity: 0.4; cursor: default; }
 .rg-page-info { font-size: 13px; color: var(--color-text-dim); min-width: 56px; text-align: center; }
 
-.rg-placeholder {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  color: var(--color-text-dim);
-}
-.rg-placeholder .material-symbols-outlined { font-size: 48px; }
-
 /* ── Кнопки ── */
-.rg-btn-primary {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  height: 40px;
-  padding: 0 18px;
-  border: none;
-  border-radius: var(--radius-full);
-  background: var(--color-primary);
-  color: var(--color-on-primary);
-  font-weight: 600;
-  font-size: 14px;
-  cursor: pointer;
-}
 .rg-btn-danger {
   display: inline-flex;
   align-items: center;
@@ -884,7 +780,7 @@ onMounted(() => store.fetchRegistries())
 }
 .rg-regchip {
   flex: none; padding: 8px 14px; border-radius: var(--radius-full);
-  border: 1px solid var(--color-outline-dim); background: var(--color-surface);
+  border: 1px solid var(--color-outline-dim); background: var(--acrylic-card-bg);
   color: var(--color-text-dim); font-size: 14px; font-weight: 600; cursor: pointer; white-space: nowrap;
 }
 .rg-regchip.active { background: var(--color-primary); color: var(--color-on-primary); border-color: transparent; }
@@ -898,14 +794,14 @@ onMounted(() => store.fetchRegistries())
 .rg-msort-dir {
   width: 38px; height: 38px; flex-shrink: 0; display: grid; place-items: center;
   border: 1px solid var(--color-outline-dim); border-radius: var(--radius-md);
-  background: var(--color-surface); color: var(--color-text); cursor: pointer;
+  background: var(--acrylic-card-bg); color: var(--color-text); cursor: pointer;
 }
 
 .rg-cards { flex: 1; min-height: 0; overflow-y: auto; padding: 12px; display: flex; flex-direction: column; gap: 10px; }
 .rg-cards-selall { display: flex; align-items: center; gap: 10px; padding: 4px 4px 0; font-size: 13px; color: var(--color-text-dim); }
 .rg-card {
   border: 1px solid var(--color-outline-dim); border-radius: var(--radius-lg);
-  background: var(--color-surface); overflow: hidden; cursor: pointer;
+  background: var(--acrylic-card-bg); overflow: hidden; cursor: pointer;
 }
 .rg-card.selected { border-color: var(--color-primary); background: var(--color-primary-container); }
 .rg-card-head { display: flex; align-items: center; gap: 10px; padding: 12px 14px; }
@@ -918,12 +814,10 @@ onMounted(() => store.fetchRegistries())
 .rg-card-val { flex: 1; min-width: 0; color: var(--color-text); word-break: break-word; }
 
 @media (max-width: 768px) {
-  .registries { flex-direction: column; padding: 0; gap: 0; }
-  .rg-side { display: none; }            /* на мобайле выбор реестра — ленте чипов сверху */
-  .rg-main { border: none; border-radius: 0; }
+  /* Скрытие левой панели и разворот правой — в глобальном .split-* */
   .rg-name { display: none; }
   .rg-toolbar { flex-wrap: wrap; gap: 8px; padding: 10px 12px; }
-  .rg-search { order: 2; flex-basis: 100%; }
+  .rg-toolbar :deep(.search-field) { order: 2; flex-basis: 100%; }
   .rg-actions { order: 1; margin-left: auto; }
   .rg-foot { padding: 10px 12px; }
 }
