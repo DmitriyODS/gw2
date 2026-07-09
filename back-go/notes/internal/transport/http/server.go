@@ -74,7 +74,7 @@ func NewServer(eps endpoint.Endpoints, users domain.UserReader,
 	api.Delete("/groups/:id<int>", h.deleteGroup)
 
 	// Заметки.
-	api.Get("", h.listNotes) // ?group_id=&search=
+	api.Get("", h.listNotes) // ?group_id=&search=&archived=1 | ?shared=1 (поделились со мной)
 	api.Post("", h.createNote)
 	api.Post("/import", h.importNote)
 	api.Get("/:id<int>", h.getNote)
@@ -86,6 +86,13 @@ func NewServer(eps endpoint.Endpoints, users domain.UserReader,
 	api.Get("/:id<int>/shares", h.listShares)
 	api.Post("/:id<int>/shares", h.createShare)
 	api.Delete("/:id<int>/shares/:shareId<int>", h.revokeShare)
+
+	// Адресный шаринг пользователям платформы (управление владельцем) и
+	// collab-броадкаст совместного редактирования (владелец или адресат).
+	api.Get("/:id<int>/members", h.listMembers)
+	api.Post("/:id<int>/members", h.addMember)
+	api.Delete("/:id<int>/members/:userId<int>", h.removeMember)
+	api.Post("/:id<int>/collab", h.collab)
 
 	// Картинки редактора и txt-экспорт.
 	api.Post("/:id<int>/uploads", h.upload)

@@ -1,5 +1,11 @@
 <template>
-  <div class="app-layout" :data-dark="themeStore.dark">
+  <!-- has-unit-banner: мобильные fixed-экраны (мессенджер) сдвигаются под
+       плашку активного юнита на --unit-banner-height. -->
+  <div
+    class="app-layout"
+    :class="{ 'has-unit-banner': authStore.token && unitsStore.activeUnit && unitsStore.minimized }"
+    :data-dark="themeStore.dark"
+  >
     <div v-if="navProgress" class="nav-progress" aria-hidden="true">
       <div class="nav-progress-bar" />
     </div>
@@ -194,6 +200,12 @@ onBeforeUnmount(() => {
 </script>
 
 <style>
+/* Высота плашки активного юнита на мобильном — синхронизирована с
+   ActiveUnitBanner; мобильные fixed-экраны отступают на неё сверху. */
+.app-layout {
+  --unit-banner-height: 54px;
+}
+
 /* Колонка «баннер активного юнита + контент»: баннер занимает свою высоту,
    .main-content сжимается под остаток и скроллится сам — без прокрутки шелла. */
 .content-col {

@@ -1259,3 +1259,17 @@ watch(() => route.params.conversationId, async (id) => {
 }
 
 </style>
+
+<!-- Вне scoped: :global() внутри scoped-блока LightningCSS компилирует в
+     битый селектор. Классы .messenger/.chat-panel на элементах сохраняются
+     и без атрибута скоупа — правило работает как есть. -->
+<style>
+@media (max-width: 768px) {
+  /* Идёт работа: плашка юнита занимает верх экрана — fixed-мессенджер
+     начинается под ней, иначе список рисуется поверх плашки. */
+  .app-layout.has-unit-banner .messenger,
+  .app-layout.has-unit-banner .messenger .chat-panel {
+    top: var(--unit-banner-height, 54px);
+  }
+}
+</style>

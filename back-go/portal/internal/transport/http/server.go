@@ -74,6 +74,7 @@ func NewServer(eps endpoint.Endpoints, users domain.UserReader,
 	api.Post("/posts/:id<int>/pin", employee, h.pinPost)
 	api.Delete("/posts/:id<int>/pin", employee, h.unpinPost)
 	api.Post("/posts/:id<int>/attachments", employee, h.upload)
+	api.Delete("/attachments/:id<int>", employee, h.removeAttachment)
 	api.Post("/posts/:id<int>/forward", employee, h.forwardPost)
 
 	api.Get("/posts/:id<int>/comments", employee, h.listComments)

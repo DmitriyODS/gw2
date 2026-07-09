@@ -38,6 +38,20 @@ type NoteRepository interface {
 	CreateShare(ctx Ctx, s *Share) error
 	GetShareByCode(ctx Ctx, code string) (*Share, error)
 	DeleteShare(ctx Ctx, id, noteID int64) error
+
+	// ── Адресный шаринг ──
+	// ListMembers — адресаты заметки с ФИО/аватаром (JOIN users).
+	ListMembers(ctx Ctx, noteID int64) ([]*NoteMember, error)
+	// UpsertMember — идемпотентно открыть доступ / поменять право.
+	UpsertMember(ctx Ctx, noteID, userID int64, canEdit bool) error
+	DeleteMember(ctx Ctx, noteID, userID int64) error
+	// GetMember — (есть ли адресный доступ, can_edit).
+	GetMember(ctx Ctx, noteID, userID int64) (found, canEdit bool, err error)
+	// MemberIDs — user_id всех адресатов заметки (адресация сокет-событий).
+	MemberIDs(ctx Ctx, noteID int64) ([]int64, error)
+	// ListSharedWithMe — чужие заметки, открытые пользователю адресно: плитки
+	// без doc, с владельцем (owner_name/owner_avatar) и my_access (edit|view).
+	ListSharedWithMe(ctx Ctx, userID int64, search string) ([]*Note, error)
 }
 
 // UserReader — read-only идентичность пользователей (владелец таблицы — authsvc).

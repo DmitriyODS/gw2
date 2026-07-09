@@ -58,6 +58,7 @@ func main() {
 	users := postgres.NewUserReader(pool)
 	svc := service.New(service.Deps{
 		Repo:    repo,
+		Users:   users,
 		Files:   records.NewFileStore(storage.FromEnv(log, uploadFolder), "notes"),
 		Bus:     events.NewPublisher(rdb, log, "gw2:notes:events"),
 		Limiter: redisrepo.NewWriteLimiter(rdb, sharedWriteLimit),

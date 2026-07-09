@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"regexp"
 	"strings"
 
 	"github.com/DmitriyODS/gw2/back-go/portal/internal/domain"
@@ -68,16 +69,16 @@ func (s *Service) ForwardPost(ctx context.Context, companyID, postID, senderID i
 const excerptLen = 150
 
 // postPreview — снапшот поста для плашки в мессенджере: заголовок (или
-// первые слова тела, если без заголовка), сокращённый текст, обложка —
-// первое вложение-картинка.
+// первые слова тела, если без заголовка), сокращённый текст без
+// markdown-разметки, обложка — первое вложение-картинка.
 func (s *Service) postPreview(ctx context.Context, p *domain.Post) domain.PostPreview {
 	title := p.Body
 	if p.Title != nil && *p.Title != "" {
 		title = *p.Title
 	}
-	title = truncateRunes(strings.TrimSpace(title), excerptLen)
+	title = truncateRunes(stripMarkdown(title), excerptLen)
 
-	excerpt := truncateRunes(strings.TrimSpace(p.Body), excerptLen)
+	excerpt := truncateRunes(stripMarkdown(p.Body), excerptLen)
 
 	var cover string
 	atts, err := s.repo.ListAttachments(ctx, p.ID)
@@ -91,6 +92,32 @@ func (s *Service) postPreview(ctx context.Context, p *domain.Post) domain.PostPr
 		}
 	}
 	return domain.PostPreview{Title: title, Excerpt: excerpt, CoverURL: cover}
+}
+
+var (
+	mdImage   = regexp.MustCompile(`!\[([^\]]*)\]\([^)]*\)`)
+	mdLink    = regexp.MustCompile(`\[([^\]]*)\]\([^)]*\)`)
+	mdFence   = regexp.MustCompile("(?m)^[ \t]*`{3,}.*$")
+	mdRule    = regexp.MustCompile(`(?m)^[ \t]*(?:-{3,}|\*{3,}|_{3,})[ \t]*$`)
+	mdHeading = regexp.MustCompile(`(?m)^[ \t]*#{1,6}[ \t]*`)
+	mdQuote   = regexp.MustCompile(`(?m)^[ \t]*(?:>[ \t]*)+`)
+	mdBullet  = regexp.MustCompile(`(?m)^[ \t]*(?:[-*+][ \t]+\[[ xX]\][ \t]*|[-*+][ \t]+|\d+\.[ \t]+)`)
+	mdSpaces  = regexp.MustCompile(`\s+`)
+)
+
+// stripMarkdown — очистка markdown-разметки для текстового превью (плашка
+// поста в мессенджере): маркеры убираются, содержимое остаётся, ссылки и
+// картинки сводятся к тексту/alt, всё схлопывается в одну строку.
+func stripMarkdown(s string) string {
+	s = mdFence.ReplaceAllString(s, " ")
+	s = mdRule.ReplaceAllString(s, " ")
+	s = mdImage.ReplaceAllString(s, "$1")
+	s = mdLink.ReplaceAllString(s, "$1")
+	s = mdHeading.ReplaceAllString(s, "")
+	s = mdQuote.ReplaceAllString(s, "")
+	s = mdBullet.ReplaceAllString(s, "")
+	s = strings.NewReplacer("**", "", "~~", "", "*", "", "`", "", "|", " ").Replace(s)
+	return strings.TrimSpace(mdSpaces.ReplaceAllString(s, " "))
 }
 
 func truncateRunes(s string, n int) string {

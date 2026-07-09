@@ -840,23 +840,43 @@ onMounted(() => {
 
 @media (max-width: 768px) {
   .stats-sticky {
-    padding: 12px 14px 10px;
-    gap: 8px;
+    padding: 10px 14px 6px;
+    gap: 6px;
   }
 
+  /* Компактная шапка: вкладки + действия в одной строке, период — под ними.
+     Иначе управление съедает пол-экрана, а контенту остаётся узкая полоска. */
   .stats-controls-row {
-    flex-direction: column;
-    align-items: stretch;
-    gap: 8px;
+    display: grid;
+    grid-template-areas:
+      'tabs actions'
+      'period period';
+    grid-template-columns: 1fr auto;
+    align-items: center;
+    gap: 6px 8px;
+    padding: 0;
   }
+
+  .stats-mode-tabs { grid-area: tabs; min-width: 0; }
+  .stats-period { grid-area: period; }
 
   .stats-actions {
+    grid-area: actions;
     margin-left: 0;
-    justify-content: flex-end;
+    gap: 6px;
+  }
+
+  /* Кнопки действий — только иконки, 38px. */
+  .stats-btn-label { display: none; }
+  .stats-actions .btn-glass {
+    width: 38px;
+    height: 38px;
+    padding: 0;
+    justify-content: center;
   }
 
   .stats-scroll {
-    padding: 12px 14px;
+    padding: 10px 14px;
     padding-bottom: calc(64px + 12px + env(safe-area-inset-bottom, 0px));
     gap: 12px;
   }
@@ -883,16 +903,13 @@ onMounted(() => {
 
 @media (max-width: 480px) {
   .stats-sticky {
-    padding: 10px 12px 8px;
+    padding: 8px 12px 6px;
   }
 
   .stats-scroll {
     padding: 10px 12px;
     padding-bottom: calc(64px + 12px + env(safe-area-inset-bottom, 0px));
   }
-
-  /* Кнопки действий — только иконки. */
-  .stats-btn-label { display: none; }
 
   .task-tile {
     padding: 12px;

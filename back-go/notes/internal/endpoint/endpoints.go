@@ -8,16 +8,18 @@ import (
 
 	"github.com/go-kit/kit/endpoint"
 
+	"github.com/DmitriyODS/gw2/back-go/notes/internal/domain"
 	"github.com/DmitriyODS/gw2/back-go/notes/internal/service"
 )
 
 type Endpoints struct {
-	ListNotes  endpoint.Endpoint
-	GetNote    endpoint.Endpoint
-	CreateNote endpoint.Endpoint
-	UpdateNote endpoint.Endpoint
-	DeleteNote endpoint.Endpoint
-	SetGroups  endpoint.Endpoint
+	ListNotes       endpoint.Endpoint
+	ListSharedNotes endpoint.Endpoint
+	GetNote         endpoint.Endpoint
+	CreateNote      endpoint.Endpoint
+	UpdateNote      endpoint.Endpoint
+	DeleteNote      endpoint.Endpoint
+	SetGroups       endpoint.Endpoint
 
 	ListGroups  endpoint.Endpoint
 	CreateGroup endpoint.Endpoint
@@ -27,6 +29,11 @@ type Endpoints struct {
 	ListShares  endpoint.Endpoint
 	CreateShare endpoint.Endpoint
 	RevokeShare endpoint.Endpoint
+
+	ListMembers  endpoint.Endpoint
+	AddMember    endpoint.Endpoint
+	RemoveMember endpoint.Endpoint
+	Collab       endpoint.Endpoint
 
 	Upload endpoint.Endpoint
 	Export endpoint.Endpoint
@@ -62,7 +69,28 @@ type UpdateNoteReq struct {
 	Title    *string
 	Color    *string
 	Archived *bool
+	Pinned   *bool
 	Doc      json.RawMessage
+}
+
+type SharedNotesReq struct {
+	UserID int64
+	Search string
+}
+
+type MemberReq struct {
+	UserID   int64
+	NoteID   int64
+	MemberID int64
+	CanEdit  bool
+}
+
+type CollabReq struct {
+	UserID int64
+	NoteID int64
+	Kind   string
+	Cursor *domain.CollabCursor
+	Doc    json.RawMessage
 }
 
 type SetGroupsReq struct {
@@ -123,7 +151,13 @@ func New(s *service.Service) Endpoints {
 		},
 		UpdateNote: func(ctx context.Context, request any) (any, error) {
 			r := request.(UpdateNoteReq)
-			return s.UpdateNote(ctx, r.UserID, r.ID, r.Title, r.Color, r.Archived, r.Doc)
+			return s.UpdateNote(ctx, r.UserID, r.ID, domain.NoteUpdate{
+				Title: r.Title, Color: r.Color, Archived: r.Archived, Pinned: r.Pinned, Doc: r.Doc,
+			})
+		},
+		ListSharedNotes: func(ctx context.Context, request any) (any, error) {
+			r := request.(SharedNotesReq)
+			return s.ListSharedNotes(ctx, r.UserID, r.Search)
 		},
 		DeleteNote: func(ctx context.Context, request any) (any, error) {
 			r := request.(NoteReq)
@@ -160,6 +194,22 @@ func New(s *service.Service) Endpoints {
 		RevokeShare: func(ctx context.Context, request any) (any, error) {
 			r := request.(ShareReq)
 			return nil, s.RevokeShare(ctx, r.UserID, r.NoteID, r.ShareID)
+		},
+		ListMembers: func(ctx context.Context, request any) (any, error) {
+			r := request.(MemberReq)
+			return s.ListMembers(ctx, r.UserID, r.NoteID)
+		},
+		AddMember: func(ctx context.Context, request any) (any, error) {
+			r := request.(MemberReq)
+			return s.AddMember(ctx, r.UserID, r.NoteID, r.MemberID, r.CanEdit)
+		},
+		RemoveMember: func(ctx context.Context, request any) (any, error) {
+			r := request.(MemberReq)
+			return nil, s.RemoveMember(ctx, r.UserID, r.NoteID, r.MemberID)
+		},
+		Collab: func(ctx context.Context, request any) (any, error) {
+			r := request.(CollabReq)
+			return nil, s.Collab(ctx, r.UserID, r.NoteID, r.Kind, r.Cursor, r.Doc)
 		},
 		Upload: func(ctx context.Context, request any) (any, error) {
 			r := request.(UploadReq)

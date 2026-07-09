@@ -37,6 +37,9 @@ type PostRepository interface {
 	// лимит не участвует.
 	SetPinned(ctx Ctx, id int64, pinnedAt *time.Time, pinnedBy *int64) error
 	AddAttachment(ctx Ctx, a *Attachment) error
+	// GetAttachment — вложение по id; nil — не найдено.
+	GetAttachment(ctx Ctx, id int64) (*Attachment, error)
+	DeleteAttachment(ctx Ctx, id int64) error
 	ListAttachments(ctx Ctx, postID int64) ([]Attachment, error)
 	// AttachmentPaths — пути файлов поста (для чистки хранилища при удалении).
 	AttachmentPaths(ctx Ctx, postID int64) ([]string, error)

@@ -6,6 +6,7 @@ import (
 	"errors"
 	"io"
 	"log/slog"
+	"maps"
 	"slices"
 	"strings"
 	"testing"
@@ -17,19 +18,21 @@ func discardLogger() *slog.Logger { return slog.New(slog.NewTextHandler(io.Disca
 
 // fakeRepo — in-memory реализация порта для тестов бизнес-логики.
 type fakeRepo struct {
-	notes  map[int64]*domain.Note
-	groups map[int64]*domain.Group
-	items  map[int64][]int64 // noteID → groupIDs
-	shares map[string]*domain.Share
-	nextID int64
+	notes   map[int64]*domain.Note
+	groups  map[int64]*domain.Group
+	items   map[int64][]int64 // noteID → groupIDs
+	shares  map[string]*domain.Share
+	members map[int64]map[int64]bool // noteID → userID → can_edit
+	nextID  int64
 }
 
 func newFakeRepo() *fakeRepo {
 	return &fakeRepo{
-		notes:  map[int64]*domain.Note{},
-		groups: map[int64]*domain.Group{},
-		items:  map[int64][]int64{},
-		shares: map[string]*domain.Share{},
+		notes:   map[int64]*domain.Note{},
+		groups:  map[int64]*domain.Group{},
+		items:   map[int64][]int64{},
+		shares:  map[string]*domain.Share{},
+		members: map[int64]map[int64]bool{},
 	}
 }
 
@@ -47,6 +50,19 @@ func (f *fakeRepo) ListNotes(_ domain.Ctx, fl domain.NoteListFilter) ([]*domain.
 		}
 		out = append(out, n)
 	}
+	// Как в SQL: pinned_at DESC NULLS LAST, затем id DESC.
+	slices.SortFunc(out, func(a, b *domain.Note) int {
+		switch {
+		case a.PinnedAt != nil && b.PinnedAt == nil:
+			return -1
+		case a.PinnedAt == nil && b.PinnedAt != nil:
+			return 1
+		case a.PinnedAt != nil && b.PinnedAt != nil && !a.PinnedAt.Equal(*b.PinnedAt):
+			return b.PinnedAt.Compare(*a.PinnedAt)
+		default:
+			return int(b.ID - a.ID)
+		}
+	})
 	return out, nil
 }
 func (f *fakeRepo) GetNote(_ domain.Ctx, id int64) (*domain.Note, error) {
@@ -72,6 +88,7 @@ func (f *fakeRepo) UpdateNote(_ domain.Ctx, n *domain.Note) error {
 func (f *fakeRepo) DeleteNote(_ domain.Ctx, id int64) error {
 	delete(f.notes, id)
 	delete(f.items, id)
+	delete(f.members, id) // каскад по FK
 	return nil
 }
 func (f *fakeRepo) SetNoteGroups(_ domain.Ctx, noteID int64, groupIDs []int64) error {
@@ -144,10 +161,83 @@ func (f *fakeRepo) DeleteShare(_ domain.Ctx, id, noteID int64) error {
 	return nil
 }
 
-type fakeBus struct{ events []string }
+func (f *fakeRepo) memberIDsSorted(noteID int64) []int64 {
+	return slices.Sorted(maps.Keys(f.members[noteID]))
+}
+func (f *fakeRepo) ListMembers(_ domain.Ctx, noteID int64) ([]*domain.NoteMember, error) {
+	out := []*domain.NoteMember{}
+	for _, id := range f.memberIDsSorted(noteID) {
+		out = append(out, &domain.NoteMember{UserID: id, CanEdit: f.members[noteID][id]})
+	}
+	return out, nil
+}
+func (f *fakeRepo) UpsertMember(_ domain.Ctx, noteID, userID int64, canEdit bool) error {
+	if f.members[noteID] == nil {
+		f.members[noteID] = map[int64]bool{}
+	}
+	f.members[noteID][userID] = canEdit
+	return nil
+}
+func (f *fakeRepo) DeleteMember(_ domain.Ctx, noteID, userID int64) error {
+	delete(f.members[noteID], userID)
+	return nil
+}
+func (f *fakeRepo) GetMember(_ domain.Ctx, noteID, userID int64) (bool, bool, error) {
+	canEdit, ok := f.members[noteID][userID]
+	return ok, canEdit, nil
+}
+func (f *fakeRepo) MemberIDs(_ domain.Ctx, noteID int64) ([]int64, error) {
+	return f.memberIDsSorted(noteID), nil
+}
+func (f *fakeRepo) ListSharedWithMe(_ domain.Ctx, userID int64, search string) ([]*domain.Note, error) {
+	out := []*domain.Note{}
+	for noteID, m := range f.members {
+		canEdit, ok := m[userID]
+		n := f.notes[noteID]
+		if !ok || n == nil {
+			continue
+		}
+		if search != "" && !strings.Contains(n.Title+" "+n.TextContent, search) {
+			continue
+		}
+		cp := *n
+		cp.MyAccess = domain.AccessView
+		if canEdit {
+			cp.MyAccess = domain.AccessEdit
+		}
+		cp.GroupIDs = []int64{}
+		out = append(out, &cp)
+	}
+	return out, nil
+}
 
-func (f *fakeBus) Publish(_ domain.Ctx, event string, _ []string, _ any) {
+type fakeBus struct {
+	events   []string
+	rooms    [][]string
+	payloads []any
+}
+
+func (f *fakeBus) Publish(_ domain.Ctx, event string, rooms []string, payload any) {
 	f.events = append(f.events, event)
+	f.rooms = append(f.rooms, rooms)
+	f.payloads = append(f.payloads, payload)
+}
+
+// last — последнее опубликованное событие (имя, комнаты, payload-карта).
+func (f *fakeBus) last(t *testing.T) (string, []string, map[string]any) {
+	t.Helper()
+	if len(f.events) == 0 {
+		t.Fatal("событий не публиковалось")
+	}
+	i := len(f.events) - 1
+	payload, _ := f.payloads[i].(map[string]any)
+	return f.events[i], f.rooms[i], payload
+}
+
+type fakeUsers struct{ users map[int64]*domain.User }
+
+func (f *fakeUsers) GetUser(_ domain.Ctx, id int64) (*domain.User, error) {
+	return f.users[id], nil
 }
 
 type fakeFiles struct{ removed []string }
@@ -164,7 +254,13 @@ func newTestService() (*Service, *fakeRepo, *fakeBus, *fakeFiles, *fakeLimiter) 
 	bus := &fakeBus{}
 	files := &fakeFiles{}
 	limiter := &fakeLimiter{}
-	svc := New(Deps{Repo: repo, Files: files, Bus: bus, Limiter: limiter, Log: discardLogger()})
+	// Пользователи платформы: 1–2 активные, 3 — деактивирован (для адресного шаринга).
+	users := &fakeUsers{users: map[int64]*domain.User{
+		1: {ID: 1, FIO: "Владелец Тест", IsActive: true},
+		2: {ID: 2, FIO: "Адресат Тест", IsActive: true},
+		3: {ID: 3, FIO: "Уволенный Тест", IsActive: false},
+	}}
+	svc := New(Deps{Repo: repo, Users: users, Files: files, Bus: bus, Limiter: limiter, Log: discardLogger()})
 	return svc, repo, bus, files, limiter
 }
 
@@ -194,7 +290,7 @@ func TestOwnerScope(t *testing.T) {
 		t.Fatalf("GetNote чужим: ожидалась 404, получено %v", err)
 	}
 	title := "hack"
-	if _, err := svc.UpdateNote(ctx, 2, n.ID, &title, nil, nil, nil); !errors.Is(err, domain.ErrNoteNotFound) {
+	if _, err := svc.UpdateNote(ctx, 2, n.ID, domain.NoteUpdate{Title: &title}); !errors.Is(err, domain.ErrNoteNotFound) {
 		t.Fatalf("UpdateNote чужим: ожидалась 404, получено %v", err)
 	}
 	if err := svc.DeleteNote(ctx, 2, n.ID); !errors.Is(err, domain.ErrNoteNotFound) {
@@ -212,7 +308,7 @@ func TestUpdateRecomputesTextContent(t *testing.T) {
 	ctx := context.Background()
 
 	n, _ := svc.CreateNote(ctx, 1, "")
-	if _, err := svc.UpdateNote(ctx, 1, n.ID, nil, nil, nil, docWith("привет мир")); err != nil {
+	if _, err := svc.UpdateNote(ctx, 1, n.ID, domain.NoteUpdate{Doc: docWith("привет мир")}); err != nil {
 		t.Fatal(err)
 	}
 	if got := repo.notes[n.ID].TextContent; got != "привет мир" {
@@ -221,7 +317,7 @@ func TestUpdateRecomputesTextContent(t *testing.T) {
 
 	// Правка только заголовка не трогает text_content.
 	title := "Заголовок"
-	if _, err := svc.UpdateNote(ctx, 1, n.ID, &title, nil, nil, nil); err != nil {
+	if _, err := svc.UpdateNote(ctx, 1, n.ID, domain.NoteUpdate{Title: &title}); err != nil {
 		t.Fatal(err)
 	}
 	if got := repo.notes[n.ID].TextContent; got != "привет мир" {
@@ -276,7 +372,7 @@ func TestExportImport(t *testing.T) {
 	ctx := context.Background()
 
 	n, _ := svc.CreateNote(ctx, 1, "Список покупок")
-	_, _ = svc.UpdateNote(ctx, 1, n.ID, nil, nil, nil, docWith("хлеб и молоко"))
+	_, _ = svc.UpdateNote(ctx, 1, n.ID, domain.NoteUpdate{Doc: docWith("хлеб и молоко")})
 
 	data, name, err := svc.Export(ctx, 1, n.ID)
 	if err != nil {
@@ -362,7 +458,7 @@ func TestDeleteNoteRemovesFiles(t *testing.T) {
 	doc := json.RawMessage(`{"type":"doc","content":[
 		{"type":"image","attrs":{"src":"/uploads/notes/abc.png"}},
 		{"type":"paragraph","content":[{"type":"text","text":"с картинкой"}]}]}`)
-	if _, err := svc.UpdateNote(ctx, 1, n.ID, nil, nil, nil, doc); err != nil {
+	if _, err := svc.UpdateNote(ctx, 1, n.ID, domain.NoteUpdate{Doc: doc}); err != nil {
 		t.Fatal(err)
 	}
 	if err := svc.DeleteNote(ctx, 1, n.ID); err != nil {
@@ -381,7 +477,7 @@ func TestNoteColor(t *testing.T) {
 
 	n, _ := svc.CreateNote(ctx, 1, "Цветная")
 	blue := "blue"
-	if _, err := svc.UpdateNote(ctx, 1, n.ID, nil, &blue, nil, nil); err != nil {
+	if _, err := svc.UpdateNote(ctx, 1, n.ID, domain.NoteUpdate{Color: &blue}); err != nil {
 		t.Fatal(err)
 	}
 	if repo.notes[n.ID].Color != "blue" {
@@ -390,7 +486,7 @@ func TestNoteColor(t *testing.T) {
 
 	// Сброс цвета пустой строкой.
 	none := ""
-	if _, err := svc.UpdateNote(ctx, 1, n.ID, nil, &none, nil, nil); err != nil {
+	if _, err := svc.UpdateNote(ctx, 1, n.ID, domain.NoteUpdate{Color: &none}); err != nil {
 		t.Fatal(err)
 	}
 	if repo.notes[n.ID].Color != "" {
@@ -399,7 +495,7 @@ func TestNoteColor(t *testing.T) {
 
 	// Неизвестный цвет — валидация.
 	bad := "magenta"
-	if _, err := svc.UpdateNote(ctx, 1, n.ID, nil, &bad, nil, nil); !errors.Is(err, domain.ErrBadColor) {
+	if _, err := svc.UpdateNote(ctx, 1, n.ID, domain.NoteUpdate{Color: &bad}); !errors.Is(err, domain.ErrBadColor) {
 		t.Fatalf("неизвестный цвет: ожидалась валидация, получено %v", err)
 	}
 }
@@ -411,7 +507,7 @@ func TestArchiveNote(t *testing.T) {
 	n, _ := svc.CreateNote(ctx, 1, "В архив")
 
 	on := true
-	if _, err := svc.UpdateNote(ctx, 1, n.ID, nil, nil, &on, nil); err != nil {
+	if _, err := svc.UpdateNote(ctx, 1, n.ID, domain.NoteUpdate{Archived: &on}); err != nil {
 		t.Fatalf("archive: %v", err)
 	}
 	active, _ := svc.ListNotes(ctx, 1, 0, "", false)
@@ -424,7 +520,7 @@ func TestArchiveNote(t *testing.T) {
 	}
 
 	off := false
-	if _, err := svc.UpdateNote(ctx, 1, n.ID, nil, nil, &off, nil); err != nil {
+	if _, err := svc.UpdateNote(ctx, 1, n.ID, domain.NoteUpdate{Archived: &off}); err != nil {
 		t.Fatalf("unarchive: %v", err)
 	}
 	active, _ = svc.ListNotes(ctx, 1, 0, "", false)

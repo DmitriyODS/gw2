@@ -166,6 +166,28 @@ func (f *fakeRepo) AddAttachment(_ domain.Ctx, a *domain.Attachment) error {
 	f.atts[a.PostID] = append(f.atts[a.PostID], *a)
 	return nil
 }
+func (f *fakeRepo) GetAttachment(_ domain.Ctx, id int64) (*domain.Attachment, error) {
+	for _, list := range f.atts {
+		for _, a := range list {
+			if a.ID == id {
+				return &a, nil
+			}
+		}
+	}
+	return nil, nil
+}
+func (f *fakeRepo) DeleteAttachment(_ domain.Ctx, id int64) error {
+	for postID, list := range f.atts {
+		out := list[:0]
+		for _, a := range list {
+			if a.ID != id {
+				out = append(out, a)
+			}
+		}
+		f.atts[postID] = out
+	}
+	return nil
+}
 func (f *fakeRepo) ListAttachments(_ domain.Ctx, postID int64) ([]domain.Attachment, error) {
 	return f.atts[postID], nil
 }
@@ -400,6 +422,64 @@ func TestDeletePost_RemovesAttachmentFiles(t *testing.T) {
 	}
 }
 
+// ── Удаление вложения ────────────────────────────────────────────
+
+func mustAddAttachment(t *testing.T, svc *Service, companyID int64, p *domain.Post) *domain.Attachment {
+	t.Helper()
+	a, err := svc.AddAttachment(context.Background(), companyID, p.ID, p.AuthorID, domain.LevelEmployee, "a.png", "image/png", []byte("x"))
+	if err != nil {
+		t.Fatalf("AddAttachment: %v", err)
+	}
+	return a
+}
+
+func TestRemoveAttachment_ByAuthor(t *testing.T) {
+	svc, repo, bus := newTestService()
+	files := svc.files.(*fakeFiles)
+	p := mustCreatePost(t, svc, 1, 10)
+	a := mustAddAttachment(t, svc, 1, p)
+
+	if err := svc.RemoveAttachment(context.Background(), 1, a.ID, 10, domain.LevelEmployee); err != nil {
+		t.Fatalf("RemoveAttachment автором: %v", err)
+	}
+	if got, _ := repo.GetAttachment(context.Background(), a.ID); got != nil {
+		t.Fatalf("вложение не удалено из репозитория")
+	}
+	if len(files.removed) != 1 || files.removed[0] != a.FilePath {
+		t.Fatalf("ожидалось удаление файла %q, получено %v", a.FilePath, files.removed)
+	}
+	if last := bus.events[len(bus.events)-1]; last != "post:updated" {
+		t.Fatalf("ожидалось событие post:updated, получено %q", last)
+	}
+}
+
+func TestRemoveAttachment_ForbiddenForStranger(t *testing.T) {
+	svc, _, _ := newTestService()
+	p := mustCreatePost(t, svc, 1, 10)
+	a := mustAddAttachment(t, svc, 1, p)
+
+	if err := svc.RemoveAttachment(context.Background(), 1, a.ID, 20, domain.LevelEmployee); err != domain.ErrForbidden {
+		t.Fatalf("ожидалась ErrForbidden для постороннего, получено %v", err)
+	}
+	// Администратор — можно (та же проверка, что AddAttachment).
+	if err := svc.RemoveAttachment(context.Background(), 1, a.ID, 99, domain.LevelAdmin); err != nil {
+		t.Fatalf("RemoveAttachment администратором: %v", err)
+	}
+}
+
+func TestRemoveAttachment_WrongCompanyNotFound(t *testing.T) {
+	svc, _, _ := newTestService()
+	p := mustCreatePost(t, svc, 1, 10)
+	a := mustAddAttachment(t, svc, 1, p)
+
+	if err := svc.RemoveAttachment(context.Background(), 2, a.ID, 10, domain.LevelAdmin); err != domain.ErrPostNotFound {
+		t.Fatalf("ожидалась ErrPostNotFound для чужой компании, получено %v", err)
+	}
+	if err := svc.RemoveAttachment(context.Background(), 1, 9999, 10, domain.LevelAdmin); err != domain.ErrAttachmentNotFound {
+		t.Fatalf("ожидалась ErrAttachmentNotFound для несуществующего id, получено %v", err)
+	}
+}
+
 // ── Комментарии ──────────────────────────────────────────────────
 
 func TestComment_DeleteByAuthorOrAdmin(t *testing.T) {
@@ -491,6 +571,34 @@ func TestForwardPost_DeduplicatesConversations(t *testing.T) {
 	}
 	if len(msgr.calls) != 1 {
 		t.Fatalf("ожидалась 1 плашка, получено %d", len(msgr.calls))
+	}
+}
+
+func TestStripMarkdown(t *testing.T) {
+	cases := []struct {
+		name, in, want string
+	}{
+		{"без разметки", "просто текст", "просто текст"},
+		{"заголовок", "## Заголовок недели", "Заголовок недели"},
+		{"жирный и курсив", "**важно** и *слегка*", "важно и слегка"},
+		{"зачёркнутый и код", "~~старое~~ `new()`", "старое new()"},
+		{"ссылка", "смотри [доку](https://example.com) тут", "смотри доку тут"},
+		{"картинка", "![схема](https://x/y.png) рядом", "схема рядом"},
+		{"маркированный список", "- один\n* два\n+ три", "один два три"},
+		{"нумерованный список", "1. первый\n2. второй", "первый второй"},
+		{"чекбоксы", "- [ ] сделать\n- [x] готово", "сделать готово"},
+		{"цитата", "> мудрая мысль", "мудрая мысль"},
+		{"фенс и линейка", "```go\ncode()\n```\n---\nтекст", "code() текст"},
+		{"таблица", "| a | b |\n| 1 | 2 |", "a b 1 2"},
+		{"схлопывание пробелов", "много\n\n\nстрок   и  пробелов", "много строк и пробелов"},
+		{"комбинированный", "# Титул\n\n> цитата **жирная**\n\n- [пункт](http://a)\n", "Титул цитата жирная пункт"},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			if got := stripMarkdown(c.in); got != c.want {
+				t.Fatalf("stripMarkdown(%q) = %q, ожидалось %q", c.in, got, c.want)
+			}
+		})
 	}
 }
 

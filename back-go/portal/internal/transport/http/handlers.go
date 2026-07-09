@@ -273,6 +273,20 @@ func (h *handlers) upload(c *fiber.Ctx) error {
 	return c.Status(fiber.StatusCreated).JSON(resp)
 }
 
+func (h *handlers) removeAttachment(c *fiber.Ctx) error {
+	companyID, ok := companyScope(c)
+	if !ok {
+		return nil
+	}
+	u := currentUser(c)
+	if _, err := h.eps.RemoveAttachment(c.Context(), endpoint.AttachmentReq{
+		CompanyID: companyID, ID: pathID(c), UserID: u.ID, RoleLevel: u.RoleLevel,
+	}); err != nil {
+		return h.respondError(c, err)
+	}
+	return c.JSON(fiber.Map{"deleted": true})
+}
+
 // ── Комментарии ──────────────────────────────────────────────────
 
 func (h *handlers) listComments(c *fiber.Ctx) error {

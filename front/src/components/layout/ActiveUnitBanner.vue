@@ -175,8 +175,15 @@ async function handleStop() {
 
 /* На узких экранах прячем вторичный текст и подписи кнопок — остаётся
    таймер, точка записи и круглые иконки. */
-@media (max-width: 640px) {
-  .unit-banner { gap: 8px; padding: 9px 12px; }
+@media (max-width: 768px) {
+  /* Фиксированная высота — под неё отступают мобильные fixed-экраны
+     (--unit-banner-height в App.vue). */
+  .unit-banner {
+    gap: 8px;
+    padding: 0 12px;
+    height: var(--unit-banner-height, 54px);
+    box-sizing: border-box;
+  }
   .ub-task { display: none; }
   .ub-btn-label { display: none; }
   .ub-btn { padding: 9px; }

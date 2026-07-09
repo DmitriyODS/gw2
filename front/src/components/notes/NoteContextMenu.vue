@@ -33,9 +33,21 @@
           <span class="material-symbols-outlined">folder</span>
           <span>Группы</span>
         </button>
+        <button class="note-ctx-item" @click="emitAction('pin')">
+          <span class="material-symbols-outlined">{{ pinned ? 'keep_off' : 'keep' }}</span>
+          <span>{{ pinned ? 'Открепить' : 'Закрепить' }}</span>
+        </button>
         <button class="note-ctx-item" @click="emitAction('share')">
           <span class="material-symbols-outlined">share</span>
           <span>Поделиться</span>
+        </button>
+        <button class="note-ctx-item" @click="emitAction('send-chat')">
+          <span class="material-symbols-outlined">send</span>
+          <span>Отправить в чат</span>
+        </button>
+        <button v-if="canPost" class="note-ctx-item" @click="emitAction('publish')">
+          <span class="material-symbols-outlined">campaign</span>
+          <span>Опубликовать на портале</span>
         </button>
         <button class="note-ctx-item" @click="emitAction('export')">
           <span class="material-symbols-outlined">download</span>
@@ -70,6 +82,10 @@ const props = defineProps({
   color: { type: String, default: '' },
   // Архивна ли заметка — меняет пункт «В архив» на «Вернуть из архива».
   archived: { type: Boolean, default: false },
+  // Закреплена ли — меняет пункт «Закрепить» на «Открепить».
+  pinned: { type: Boolean, default: false },
+  // Есть активная компания — доступна публикация на корпоративном портале.
+  canPost: { type: Boolean, default: false },
 })
 
 const emit = defineEmits(['close', 'action', 'color'])

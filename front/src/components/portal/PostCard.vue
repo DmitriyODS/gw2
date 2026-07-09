@@ -72,17 +72,34 @@
 
     <h3 v-if="post.title" class="post-title">{{ post.title }}</h3>
     <div class="post-body">
-      <LinkifiedText :text="displayBody" />
+      <div ref="bodyEl" class="post-body-md" :class="{ collapsed: isTruncated && !expanded }">
+        <MarkdownView :source="post.body || ''" />
+      </div>
       <button v-if="isTruncated" class="post-more-btn" @click="expanded = !expanded">
         {{ expanded ? 'Свернуть' : 'Показать полностью' }}
       </button>
     </div>
 
-    <div v-if="images.length" class="post-images" :class="`cols-${Math.min(images.length, 3)}`">
-      <a v-for="a in images" :key="a.id" class="post-image" :href="a.url" target="_blank" rel="noopener noreferrer">
+    <!-- Одно фото — как загружено (без обрезки, пост тянется по высоте);
+         несколько — плитки-миниатюры сеткой, свыше 6 — «+N» на последней.
+         Клик открывает лайтбокс с пролисткой (как аватар в профиле). -->
+    <div v-if="images.length" class="post-images" :class="imagesLayoutClass">
+      <button
+        v-for="(a, i) in visibleImages"
+        :key="a.id"
+        type="button"
+        class="post-image"
+        :class="{ tile: images.length > 1 }"
+        :aria-label="`Открыть изображение: ${a.name}`"
+        @click="openLightbox(a)"
+      >
         <img :src="a.url" :alt="a.name" loading="lazy" />
-      </a>
+        <span v-if="hiddenImagesCount && i === visibleImages.length - 1" class="post-image-more">
+          +{{ hiddenImagesCount }}
+        </span>
+      </button>
     </div>
+    <ImageLightbox v-model="lightboxOpen" :items="lightboxItems" :start-index="lightboxIndex" />
 
     <div v-if="files.length" class="post-files">
       <a v-for="a in files" :key="a.id" class="post-file" :href="a.url" target="_blank" rel="noopener noreferrer">
@@ -132,12 +149,13 @@
 </template>
 
 <script setup>
-import { computed, defineAsyncComponent, onBeforeUnmount, onMounted, ref } from 'vue'
+import { computed, defineAsyncComponent, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { usePortalStore } from '@/stores/portal.js'
 import { useAuthStore } from '@/stores/auth.js'
 import { usePermission } from '@/composables/usePermission.js'
 import { useNotificationsStore } from '@/stores/notifications.js'
-import LinkifiedText from '@/components/common/LinkifiedText.vue'
+import ImageLightbox from '@/components/common/ImageLightbox.vue'
+import MarkdownView from '@/components/common/MarkdownView.vue'
 import CommentsList from './CommentsList.vue'
 
 // Async: диалог профиля тянет тяжёлые сторы (звонки) — грузим по первому клику.
@@ -154,7 +172,8 @@ const auth = useAuthStore()
 const { isAdmin } = usePermission()
 
 const REACTIONS = ['👍', '❤️', '🎉', '😂', '👏']
-const BODY_LIMIT = 320
+// Порог сворачивания тела поста, px (синхронизирован с max-height .collapsed).
+const BODY_MAX_PX = 260
 
 const author = computed(() => portal.resolveAuthor(props.post.author_id))
 
@@ -180,15 +199,41 @@ const canManage = computed(() => props.post.author_id === auth.userId || isAdmin
 const reactionCounts = computed(() => props.post.reaction_counts || {})
 const myReactions = computed(() => new Set(props.post.my_reactions || []))
 
+// Сворачивание длинного поста — по фактической высоте отрендеренного
+// markdown (срез по символам ломал бы разметку: списки, фенсы, таблицы).
 const expanded = ref(false)
-const isTruncated = computed(() => (props.post.body || '').length > BODY_LIMIT)
-const displayBody = computed(() => {
-  if (!isTruncated.value || expanded.value) return props.post.body || ''
-  return props.post.body.slice(0, BODY_LIMIT) + '…'
-})
+const isTruncated = ref(false)
+const bodyEl = ref(null)
+
+function measureTruncated() {
+  const el = bodyEl.value
+  // Запас 24px — чтобы не прятать за кнопкой одну-две строки.
+  if (el) isTruncated.value = el.scrollHeight > BODY_MAX_PX + 24
+}
+
+watch(() => props.post.body, () => nextTick(measureTruncated))
 
 const images = computed(() => (props.post.attachments || []).filter((a) => a.mime?.startsWith('image/')))
 const files = computed(() => (props.post.attachments || []).filter((a) => !a.mime?.startsWith('image/')))
+
+// Альбом: в ленте показываем не больше 6 плиток, остальные — за «+N».
+const MAX_TILES = 6
+const visibleImages = computed(() => (images.value.length > 1 ? images.value.slice(0, MAX_TILES) : images.value))
+const hiddenImagesCount = computed(() => Math.max(0, images.value.length - MAX_TILES))
+const imagesLayoutClass = computed(() => {
+  const n = images.value.length
+  if (n <= 1) return ''
+  return [2, 4].includes(n) ? 'grid cols-2' : 'grid cols-3'
+})
+
+const lightboxOpen = ref(false)
+const lightboxIndex = ref(0)
+const lightboxItems = computed(() => images.value.map((a) => ({ src: a.url, caption: a.name || '' })))
+
+function openLightbox(a) {
+  lightboxIndex.value = Math.max(0, images.value.findIndex((x) => x.id === a.id))
+  lightboxOpen.value = true
+}
 
 function formatSize(bytes) {
   if (!bytes) return ''
@@ -234,6 +279,7 @@ onMounted(() => {
   document.addEventListener('mousedown', onDocPointerDown, true)
   document.addEventListener('touchstart', onDocPointerDown, { passive: true, capture: true })
   document.addEventListener('keydown', onDocKeydown)
+  measureTruncated()
 })
 
 onBeforeUnmount(() => {
@@ -464,8 +510,15 @@ function onDelete() {
   font-size: 14px;
   line-height: 1.5;
   color: var(--color-text);
-  white-space: pre-wrap;
   word-break: break-word;
+}
+
+/* Свёрнутый длинный пост: ограничение по высоте + растворение к кнопке. */
+.post-body-md.collapsed {
+  max-height: 260px;
+  overflow: hidden;
+  -webkit-mask-image: linear-gradient(to bottom, black 75%, transparent 100%);
+  mask-image: linear-gradient(to bottom, black 75%, transparent 100%);
 }
 
 .post-more-btn {
@@ -482,20 +535,46 @@ function onDelete() {
 }
 
 .post-images {
-  display: grid;
-  gap: 6px;
-  grid-template-columns: repeat(2, 1fr);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
 }
-.post-images.cols-1 { grid-template-columns: 1fr; }
 
+/* Альбом из нескольких фото — плитки-миниатюры сеткой. */
+.post-images.grid { display: grid; gap: 6px; }
+.post-images.cols-2 { grid-template-columns: repeat(2, 1fr); }
+.post-images.cols-3 { grid-template-columns: repeat(3, 1fr); }
+
+/* Одиночное фото — натуральные пропорции: без aspect-ratio и object-fit —
+   что загрузили, то и видно, карточка тянется по высоте. */
 .post-image {
+  position: relative;
   display: block;
+  padding: 0;
+  border: none;
+  background: var(--color-surface-high);
   border-radius: var(--radius-md);
   overflow: hidden;
-  aspect-ratio: 4 / 3;
-  background: var(--color-surface-high);
+  cursor: zoom-in;
+  line-height: 0;
 }
-.post-image img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.post-image img { width: 100%; height: auto; display: block; }
+
+/* Плитка альбома — квадратная миниатюра с кадрированием. */
+.post-image.tile { aspect-ratio: 1 / 1; }
+.post-image.tile img { height: 100%; object-fit: cover; }
+
+.post-image-more {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  background: color-mix(in oklch, var(--color-scrim, #000) 45%, transparent);
+  color: var(--color-on-primary, #fff);
+  font-size: 22px;
+  font-weight: 800;
+  line-height: 1;
+}
 
 .post-files {
   display: flex;

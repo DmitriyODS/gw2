@@ -245,6 +245,12 @@ export const usePortalStore = defineStore('portal', () => {
     return att
   }
 
+  async function deleteAttachment(postId, attachmentId) {
+    await api.deleteAttachment(attachmentId)
+    const p = findPost(postId)
+    if (p) p.attachments = (p.attachments || []).filter((a) => a.id !== attachmentId)
+  }
+
   async function refreshPost(id) {
     try {
       applyLocalPost(await api.getPost(id))
@@ -439,7 +445,7 @@ export const usePortalStore = defineStore('portal', () => {
     fetchTopics, createTopic, updateTopic, deleteTopic,
     fetchPosts, fetchMore, setTopic, setSearch, loadHighlight,
     createPost, updatePost, deletePost, pinPost, unpinPost,
-    uploadAttachment, addReaction, removeReaction,
+    uploadAttachment, deleteAttachment, addReaction, removeReaction,
     fetchComments, createComment, deleteComment,
     forwardPost,
     applyTopicSocket, applyPostSocket, applyCommentSocket, applyReactionSocket,

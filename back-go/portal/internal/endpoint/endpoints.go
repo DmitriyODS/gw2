@@ -16,15 +16,16 @@ type Endpoints struct {
 	UpdateTopic endpoint.Endpoint
 	DeleteTopic endpoint.Endpoint
 
-	ListPosts        endpoint.Endpoint
-	GetPost          endpoint.Endpoint
-	CreatePost       endpoint.Endpoint
-	UpdatePost       endpoint.Endpoint
-	DeletePost       endpoint.Endpoint
-	Pin              endpoint.Endpoint
-	Unpin            endpoint.Endpoint
+	ListPosts  endpoint.Endpoint
+	GetPost    endpoint.Endpoint
+	CreatePost endpoint.Endpoint
+	UpdatePost endpoint.Endpoint
+	DeletePost endpoint.Endpoint
+	Pin        endpoint.Endpoint
+	Unpin      endpoint.Endpoint
 
-	Upload endpoint.Endpoint
+	Upload           endpoint.Endpoint
+	RemoveAttachment endpoint.Endpoint
 
 	ListComments  endpoint.Endpoint
 	CreateComment endpoint.Endpoint
@@ -96,6 +97,13 @@ type UploadReq struct {
 	FileName  string
 	Mime      string
 	Data      []byte
+}
+
+type AttachmentReq struct {
+	CompanyID int64
+	ID        int64
+	UserID    int64
+	RoleLevel int
 }
 
 type ListCommentsReq struct {
@@ -186,6 +194,10 @@ func New(s *service.Service) Endpoints {
 		Upload: func(ctx context.Context, request any) (any, error) {
 			r := request.(UploadReq)
 			return s.AddAttachment(ctx, r.CompanyID, r.PostID, r.UserID, r.RoleLevel, r.FileName, r.Mime, r.Data)
+		},
+		RemoveAttachment: func(ctx context.Context, request any) (any, error) {
+			r := request.(AttachmentReq)
+			return nil, s.RemoveAttachment(ctx, r.CompanyID, r.ID, r.UserID, r.RoleLevel)
 		},
 		ListComments: func(ctx context.Context, request any) (any, error) {
 			r := request.(ListCommentsReq)

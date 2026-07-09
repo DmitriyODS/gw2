@@ -50,8 +50,16 @@
         </button>
       </div>
 
-      <!-- Архив — отдельный фильтр вне групп -->
+      <!-- Поделились и Архив — отдельные фильтры вне групп -->
       <div class="split-side-list nt-archive-slot">
+        <button
+          class="split-side-item"
+          :class="{ active: store.showShared }"
+          @click="store.selectShared()"
+        >
+          <span class="split-item-tile"><span class="material-symbols-outlined">group</span></span>
+          <span class="split-side-name">Поделились</span>
+        </button>
         <button
           class="split-side-item"
           :class="{ active: store.showArchived }"
@@ -95,6 +103,7 @@
           :class="{ active: g.id === store.activeGroupId }"
           @click="store.selectGroup(g.id)"
         >{{ g.name }}</button>
+        <button class="nt-groupchip" :class="{ active: store.showShared }" @click="store.selectShared()">Поделились</button>
         <button class="nt-groupchip" :class="{ active: store.showArchived }" @click="store.selectArchive()">Архив</button>
       </div>
 
@@ -163,12 +172,22 @@
             @pointerup="onTilePointerUp"
             @pointercancel="onTilePointerUp"
           >
+            <span v-if="n.pinned_at" class="nt-card-pin material-symbols-outlined" title="Закреплена">keep</span>
             <h3 class="nt-card-title">{{ n.title || 'Без названия' }}</h3>
             <p v-if="n.excerpt" class="nt-card-excerpt">{{ n.excerpt }}</p>
             <p v-else class="nt-card-excerpt dim">Пустая заметка</p>
             <footer class="nt-card-foot">
-              <span class="material-symbols-outlined">calendar_today</span>
-              {{ formatDate(n.created_at) }}
+              <template v-if="store.showShared">
+                <img class="nt-card-owner-avatar" :src="ownerAvatar(n)" :alt="n.owner_name || ''" />
+                <span class="nt-card-owner">{{ n.owner_name || 'Владелец' }}</span>
+                <span class="nt-card-access" :class="n.my_access">
+                  {{ n.my_access === 'edit' ? 'редактирование' : 'просмотр' }}
+                </span>
+              </template>
+              <template v-else>
+                <span class="material-symbols-outlined">calendar_today</span>
+                {{ formatDate(n.created_at) }}
+              </template>
             </footer>
           </article>
         </div>
@@ -192,10 +211,21 @@
       :y="menu.y"
       :color="menuNote?.color || ''"
       :archived="!!menuNote?.archived"
+      :pinned="!!menuNote?.pinned_at"
+      :can-post="hasCompany"
       @action="onMenuAction"
       @color="setNoteColor"
       @close="menu.visible = false"
     />
+    <!-- Публикация целой заметки на портал: контент уходит статьёй (Markdown) -->
+    <PostComposer
+      v-if="postPreset"
+      v-model="postComposerOpen"
+      :preset="postPreset"
+      @saved="notif.success('Опубликовано на портале')"
+    />
+    <!-- Целая заметка в чат: адресат получает доступ на просмотр + ссылку -->
+    <NoteSendToChatDialog v-model="sendChatOpen" mode="note" :note="menuNote" />
     <NoteGroupsDialog
       v-model="groupsOpen"
       :note-id="menuNote?.id"
@@ -216,7 +246,7 @@
 </template>
 
 <script setup>
-import { computed, nextTick, onMounted, ref, watch } from 'vue'
+import { computed, defineAsyncComponent, nextTick, onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { useBreakpoint } from '@/composables/useBreakpoint.js'
 import NotesHubTabs from '@/components/notes/NotesHubTabs.vue'
@@ -226,13 +256,21 @@ import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
 import NoteContextMenu from '@/components/notes/NoteContextMenu.vue'
 import NoteGroupsDialog from '@/components/notes/NoteGroupsDialog.vue'
 import NoteShareDialog from '@/components/notes/NoteShareDialog.vue'
+import NoteSendToChatDialog from '@/components/notes/NoteSendToChatDialog.vue'
 import * as api from '@/api/notes.js'
+import { docToMarkdown } from '@/utils/tiptapMarkdown.js'
+import { useAuthStore } from '@/stores/auth.js'
 import { useNotesStore } from '@/stores/notes.js'
 import { useNotificationsStore } from '@/stores/notifications.js'
+
+// Композер портала тяжёлый (стор портала) — грузим по первому использованию.
+const PostComposer = defineAsyncComponent(() => import('@/components/portal/PostComposer.vue'))
 
 const router = useRouter()
 const store = useNotesStore()
 const notif = useNotificationsStore()
+const auth = useAuthStore()
+const hasCompany = computed(() => !!auth.companyId)
 
 const { isMobile } = useBreakpoint()
 
@@ -277,8 +315,14 @@ const shareOpen = ref(false)
 const noteToDelete = ref(null)
 
 function openMenu(x, y, n) {
+  // Чужие (шаренные) заметки правкам с плитки не подлежат — меню только у своих.
+  if (store.showShared) return
   menuNote.value = n
   menu.value = { visible: true, x, y }
+}
+
+function ownerAvatar(n) {
+  return n.owner_avatar ? `/uploads/${n.owner_avatar}` : `/api/users/${n.owner_id}/identicon`
 }
 
 // Long-press 500мс: отменяется движением пальца (скролл); после срабатывания
@@ -323,9 +367,35 @@ function onMenuAction(action) {
   if (action === 'open') openNote(n)
   else if (action === 'groups') groupsOpen.value = true
   else if (action === 'share') shareOpen.value = true
+  else if (action === 'send-chat') sendChatOpen.value = true
+  else if (action === 'publish') publishToPortal(n)
+  else if (action === 'pin') togglePin(n)
   else if (action === 'export') exportNoteTxt(n)
   else if (action === 'archive') toggleArchive(n)
   else if (action === 'delete') noteToDelete.value = n
+}
+
+// ── Публикация целой заметки на портал (статьёй, с форматированием) ──
+const postComposerOpen = ref(false)
+const postPreset = ref(null)
+const sendChatOpen = ref(false)
+
+async function publishToPortal(n) {
+  try {
+    const full = await api.getNote(n.id) // плитка без doc — тянем целиком
+    postPreset.value = { title: full.title || '', body: docToMarkdown(full.doc) }
+    postComposerOpen.value = true
+  } catch (e) {
+    notif.error(e?.message || 'Не удалось открыть заметку')
+  }
+}
+
+async function togglePin(n) {
+  try {
+    await store.setPinned(n.id, !n.pinned_at)
+  } catch (e) {
+    notif.error(e?.message || 'Не удалось изменить закрепление')
+  }
 }
 
 async function toggleArchive(n) {
@@ -598,6 +668,43 @@ function formatDate(iso) {
 }
 .nt-card:hover { transform: translateY(-2px); box-shadow: var(--shadow-sm); }
 .nt-card:focus-visible { outline: 2px solid var(--color-primary); outline-offset: 2px; }
+
+.nt-card { position: relative; }
+.nt-card-pin {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  font-size: 17px;
+  color: var(--color-tertiary);
+  font-variation-settings: 'FILL' 1;
+}
+
+.nt-card-owner-avatar {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  object-fit: cover;
+}
+.nt-card-owner {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.nt-card-access {
+  margin-left: auto;
+  flex-shrink: 0;
+  padding: 1px 8px;
+  border-radius: var(--radius-full);
+  font-size: 11px;
+  font-weight: 700;
+  background: var(--color-surface-high);
+  border: 1px solid var(--color-outline-dim);
+}
+.nt-card-access.edit {
+  background: var(--color-primary-container);
+  border-color: transparent;
+  color: var(--color-on-primary-container);
+}
 
 .nt-card-title {
   margin: 0;

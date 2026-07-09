@@ -67,4 +67,61 @@ const html = computed(() => renderMarkdown(props.source))
   background: transparent;
   padding: 0;
 }
+.markdown-view :deep(.md-list) {
+  margin: 4px 0 8px;
+  padding-left: 22px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.markdown-view :deep(.md-task) {
+  list-style: none;
+  margin-left: -22px;
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+.markdown-view :deep(.md-task input) {
+  accent-color: var(--color-primary);
+  transform: translateY(1px);
+}
+.markdown-view :deep(.md-quote) {
+  margin: 8px 0;
+  padding: 6px 12px;
+  border-left: 3px solid var(--color-primary);
+  background: var(--color-surface-high);
+  border-radius: 0 var(--radius-sm, 8px) var(--radius-sm, 8px) 0;
+  color: var(--color-text-dim);
+}
+.markdown-view :deep(.md-hr) {
+  border: none;
+  height: 1px;
+  background: var(--color-outline-dim);
+  margin: 12px 0;
+}
+.markdown-view :deep(.md-img) {
+  max-width: 100%;
+  border-radius: var(--radius-md, 12px);
+  display: block;
+  margin: 8px 0;
+}
+.markdown-view :deep(.md-table-wrap) {
+  overflow-x: auto;
+  margin: 8px 0;
+}
+.markdown-view :deep(.md-table) {
+  border-collapse: collapse;
+  font-size: 0.95em;
+  min-width: 60%;
+}
+.markdown-view :deep(.md-table th),
+.markdown-view :deep(.md-table td) {
+  border: 1px solid var(--color-outline-dim);
+  padding: 6px 10px;
+  text-align: left;
+}
+.markdown-view :deep(.md-table th) {
+  background: var(--color-surface-high);
+  font-weight: 700;
+}
 </style>

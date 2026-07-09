@@ -9,34 +9,100 @@
           <span class="np-back-label">Заметки</span>
         </button>
 
-        <span class="np-savestate" :class="saveState">
+        <span v-if="!readOnly" class="np-savestate" :class="saveState">
           <span class="material-symbols-outlined">{{ saveIcon }}</span>
           {{ saveLabel }}
         </span>
+        <span v-else class="np-savestate">
+          <span class="material-symbols-outlined">visibility</span>
+          Только просмотр
+        </span>
+
+        <!-- Чужая заметка: владелец -->
+        <span v-if="!isOwner && ownerName" class="np-owner" :title="`Владелец: ${ownerName}`">
+          <img class="np-owner-avatar" :src="ownerAvatarUrl" :alt="ownerName" />
+          {{ ownerName }}
+        </span>
+
+        <!-- Кто сейчас в заметке (совместная работа) -->
+        <div v-if="collabOthers.length" class="np-presence" title="Сейчас в заметке">
+          <span
+            v-for="p in collabOthers"
+            :key="p.id"
+            class="np-presence-dot"
+            :style="{ background: `var(--tag-${p.color}-surface)`, borderColor: `var(--tag-${p.color}-accent)` }"
+            :title="p.fio"
+          >{{ initials(p.fio) }}</span>
+        </div>
 
         <div class="np-actions">
-          <!-- Масштаб листа: −/процент (клик — сброс)/+ -->
-          <div class="np-zoom">
-            <button class="np-icon np-zoom-btn" title="Уменьшить масштаб" :disabled="zoom <= ZOOM_MIN" @click="stepZoom(-1)">
-              <span class="material-symbols-outlined">zoom_out</span>
+          <!-- Десктоп: масштаб и действия отдельными кнопками -->
+          <template v-if="!isMobile">
+            <!-- Масштаб листа: −/процент (клик — сброс)/+ -->
+            <div class="np-zoom">
+              <button class="np-icon np-zoom-btn" title="Уменьшить масштаб" :disabled="zoom <= ZOOM_MIN" @click="stepZoom(-1)">
+                <span class="material-symbols-outlined">zoom_out</span>
+              </button>
+              <button class="np-zoom-value" title="Сбросить масштаб" @click="resetZoom">{{ Math.round(zoom * 100) }}%</button>
+              <button class="np-icon np-zoom-btn" title="Увеличить масштаб" :disabled="zoom >= ZOOM_MAX" @click="stepZoom(1)">
+                <span class="material-symbols-outlined">zoom_in</span>
+              </button>
+            </div>
+            <template v-if="isOwner">
+              <button class="np-icon" title="Группы" @click="groupsOpen = true">
+                <span class="material-symbols-outlined">folder</span>
+              </button>
+              <button class="np-icon" title="Поделиться" @click="shareOpen = true">
+                <span class="material-symbols-outlined">share</span>
+              </button>
+              <button class="np-icon" title="Экспорт в .txt" @click="exportTxt">
+                <span class="material-symbols-outlined">download</span>
+              </button>
+              <button class="np-icon danger" title="Удалить заметку" @click="deleteOpen = true">
+                <span class="material-symbols-outlined">delete</span>
+              </button>
+            </template>
+          </template>
+
+          <!-- Мобайл: в узкой шапке ряд иконок не помещается — всё в меню «⋮» -->
+          <div v-else ref="moreRef" class="np-more">
+            <button class="np-icon" title="Ещё" aria-label="Действия с заметкой" @click="moreOpen = !moreOpen">
+              <span class="material-symbols-outlined">more_vert</span>
             </button>
-            <button class="np-zoom-value" title="Сбросить масштаб" @click="resetZoom">{{ Math.round(zoom * 100) }}%</button>
-            <button class="np-icon np-zoom-btn" title="Увеличить масштаб" :disabled="zoom >= ZOOM_MAX" @click="stepZoom(1)">
-              <span class="material-symbols-outlined">zoom_in</span>
-            </button>
+            <Transition name="np-more">
+              <div v-if="moreOpen" class="np-more-pop">
+                <div class="np-more-zoom">
+                  <button class="np-icon np-zoom-btn" title="Уменьшить масштаб" :disabled="zoom <= ZOOM_MIN" @click="stepZoom(-1)">
+                    <span class="material-symbols-outlined">zoom_out</span>
+                  </button>
+                  <button class="np-zoom-value" title="Сбросить масштаб" @click="resetZoom">{{ Math.round(zoom * 100) }}%</button>
+                  <button class="np-icon np-zoom-btn" title="Увеличить масштаб" :disabled="zoom >= ZOOM_MAX" @click="stepZoom(1)">
+                    <span class="material-symbols-outlined">zoom_in</span>
+                  </button>
+                </div>
+                <template v-if="isOwner">
+                  <div class="np-more-divider" />
+                  <button class="np-more-item" @click="pickMore(() => groupsOpen = true)">
+                    <span class="material-symbols-outlined">folder</span>
+                    Группы
+                  </button>
+                  <button class="np-more-item" @click="pickMore(() => shareOpen = true)">
+                    <span class="material-symbols-outlined">share</span>
+                    Поделиться
+                  </button>
+                  <button class="np-more-item" @click="pickMore(exportTxt)">
+                    <span class="material-symbols-outlined">download</span>
+                    Экспорт в .txt
+                  </button>
+                  <div class="np-more-divider" />
+                  <button class="np-more-item danger" @click="pickMore(() => deleteOpen = true)">
+                    <span class="material-symbols-outlined">delete</span>
+                    Удалить заметку
+                  </button>
+                </template>
+              </div>
+            </Transition>
           </div>
-          <button class="np-icon" title="Группы" @click="groupsOpen = true">
-            <span class="material-symbols-outlined">folder</span>
-          </button>
-          <button class="np-icon" title="Поделиться" @click="shareOpen = true">
-            <span class="material-symbols-outlined">share</span>
-          </button>
-          <button class="np-icon" title="Экспорт в .txt" @click="exportTxt">
-            <span class="material-symbols-outlined">download</span>
-          </button>
-          <button class="np-icon danger" title="Удалить заметку" @click="deleteOpen = true">
-            <span class="material-symbols-outlined">delete</span>
-          </button>
         </div>
       </header>
 
@@ -54,6 +120,7 @@
           type="text"
           placeholder="Название заметки"
           maxlength="300"
+          :readonly="readOnly"
           @input="markDirty"
           @blur="flush"
           @keydown.enter.prevent="focusEditor"
@@ -63,7 +130,8 @@
           class="np-editor"
           :doc="doc"
           :zoom="zoom"
-          :upload-image="uploadImageFile"
+          :editable="!readOnly"
+          :upload-image="isOwner ? uploadImageFile : null"
           selection-menu
           @change="onDocChange"
           @blur="flush"
@@ -80,12 +148,13 @@
       :visible="selMenu.visible"
       :x="selMenu.x"
       :y="selMenu.y"
-      :ai-available="hasCompany"
+      :ai-available="hasCompany && !readOnly"
       :can-task="hasCompany"
       @close="selMenu.visible = false"
       @ai="onAiAction"
       @create="onCreateFrom"
       @copy="copySelection"
+      @send-chat="sendChatOpen = true"
     />
     <NoteAiDialog
       v-model="ai.open"
@@ -104,6 +173,15 @@
       @close="taskFormOpen = false"
       @saved="taskFormOpen = false"
     />
+    <!-- Публикация выделенного на портал (Markdown с сохранением форматирования) -->
+    <PostComposer
+      v-if="postPreset"
+      v-model="postComposerOpen"
+      :preset="postPreset"
+      @saved="notif.success('Опубликовано на портале')"
+    />
+    <!-- Выделенный фрагмент в чат — уходит текстом с форматированием -->
+    <NoteSendToChatDialog v-model="sendChatOpen" mode="text" :text="selectionMarkdown()" />
     <ConfirmDialog
       :visible="deleteOpen"
       header="Удалить заметку?"
@@ -119,8 +197,9 @@
 <script setup>
 // Страница заметки: крупный заголовок + rich-редактор. Автосохранение —
 // дебаунс 1.5с после правок, немедленно на blur/beforeunload/Cmd+S.
-import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
+import { computed, defineAsyncComponent, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
+import { useBreakpoint } from '@/composables/useBreakpoint.js'
 import EmptyState from '@/components/common/EmptyState.vue'
 import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
 import NoteRichEditor from '@/components/notes/NoteRichEditor.vue'
@@ -129,18 +208,38 @@ import NoteShareDialog from '@/components/notes/NoteShareDialog.vue'
 import NoteSelectionMenu from '@/components/notes/NoteSelectionMenu.vue'
 import NoteAiDialog from '@/components/notes/NoteAiDialog.vue'
 import NoteToDiaryDialog from '@/components/notes/NoteToDiaryDialog.vue'
+import NoteSendToChatDialog from '@/components/notes/NoteSendToChatDialog.vue'
 import TaskForm from '@/components/tasks/TaskForm.vue'
+import { docToMarkdown } from '@/utils/tiptapMarkdown.js'
+
+// Композер портала тяжёлый (стор портала) — грузим по первому использованию.
+const PostComposer = defineAsyncComponent(() => import('@/components/portal/PostComposer.vue'))
 import * as api from '@/api/notes.js'
 import { transformText } from '@/api/ai.js'
 import { useAuthStore } from '@/stores/auth.js'
 import { useNotesStore } from '@/stores/notes.js'
 import { useNotificationsStore } from '@/stores/notifications.js'
+import { useNoteCollab } from '@/composables/useNoteCollab.js'
 
 const props = defineProps({ id: { type: String, required: true } })
 
 const router = useRouter()
 const store = useNotesStore()
 const notif = useNotificationsStore()
+const { isMobile } = useBreakpoint()
+
+// ── Мобильное меню «⋮» в шапке ──
+const moreOpen = ref(false)
+const moreRef = ref(null)
+
+function pickMore(action) {
+  moreOpen.value = false
+  action()
+}
+
+function onDocPointerDown(e) {
+  if (moreOpen.value && !moreRef.value?.contains(e.target)) moreOpen.value = false
+}
 
 const noteId = computed(() => Number(props.id))
 const loading = ref(true)
@@ -149,6 +248,17 @@ const title = ref('')
 const doc = ref(null)
 const groupIds = ref([])
 const editorRef = ref(null)
+
+// Доступ: owner | edit | view (заметка может быть чужой — адресный шаринг).
+const myAccess = ref('owner')
+const ownerName = ref('')
+const ownerAvatarUrl = ref('')
+const isOwner = computed(() => myAccess.value === 'owner')
+const readOnly = computed(() => myAccess.value === 'view')
+
+function initials(fio = '') {
+  return fio.split(/\s+/).slice(0, 2).map((w) => w[0] || '').join('').toUpperCase() || '?'
+}
 
 // ── Автосохранение ──
 const saveState = ref('saved') // saved | dirty | saving | error
@@ -168,6 +278,12 @@ onMounted(async () => {
     title.value = n.title
     doc.value = n.doc && Object.keys(n.doc).length ? n.doc : null
     groupIds.value = n.group_ids ?? []
+    myAccess.value = n.my_access || 'owner'
+    ownerName.value = n.owner_name || ''
+    ownerAvatarUrl.value = n.owner_avatar
+      ? `/uploads/${n.owner_avatar}`
+      : (n.owner_id ? `/api/users/${n.owner_id}/identicon` : '')
+    startCollab(n)
   } catch (e) {
     if (e?.status === 404) notFound.value = true
     else notif.error(e?.message || 'Не удалось загрузить заметку')
@@ -176,11 +292,15 @@ onMounted(async () => {
   }
   window.addEventListener('beforeunload', flush)
   window.addEventListener('keydown', onKeydown)
+  document.addEventListener('mousedown', onDocPointerDown, true)
+  document.addEventListener('touchstart', onDocPointerDown, { passive: true, capture: true })
 })
 
 onBeforeUnmount(() => {
   window.removeEventListener('beforeunload', flush)
   window.removeEventListener('keydown', onKeydown)
+  document.removeEventListener('mousedown', onDocPointerDown, true)
+  document.removeEventListener('touchstart', onDocPointerDown, true)
   flush()
 })
 
@@ -189,6 +309,7 @@ function onKeydown(e) {
     e.preventDefault()
     flush()
   }
+  if (e.key === 'Escape' && moreOpen.value) moreOpen.value = false
 }
 
 function markDirty() {
@@ -203,6 +324,7 @@ function onDocChange(json) {
 }
 
 async function flush() {
+  if (readOnly.value) return
   if (saveState.value !== 'dirty' && saveState.value !== 'error') return
   clearTimeout(saveTimer)
   saveState.value = 'saving'
@@ -288,6 +410,31 @@ async function exportTxt() {
   }
 }
 
+// ── Совместное редактирование (присутствие, курсоры, живые правки) ──
+const namesMap = ref({}) // user_id → ФИО (владелец + адресаты) для подписей курсоров
+
+const collab = useNoteCollab({
+  noteId,
+  editorRef,
+  canEdit: computed(() => !readOnly.value),
+  isLocallyDirty: () => saveState.value !== 'saved',
+  fallbackNames: (id) => namesMap.value[id],
+})
+const collabOthers = collab.others
+
+function startCollab(n) {
+  if (n.owner_id && n.owner_name) namesMap.value[n.owner_id] = n.owner_name
+  collab.start()
+  // Владелец знает адресатов — подписи курсоров без ожидания их join.
+  if ((n.my_access || 'owner') === 'owner') {
+    api.getMembers(noteId.value)
+      .then((data) => {
+        for (const m of data.members ?? []) namesMap.value[m.user_id] = m.fio
+      })
+      .catch(() => { /* подписи — не критично */ })
+  }
+}
+
 // ── ИИ и «создать из выделенного» (контекстное меню выделения) ──
 const auth = useAuthStore()
 const hasCompany = computed(() => !!auth.companyId)
@@ -352,14 +499,33 @@ function applyAi(mode) {
 
 const diaryOpen = ref(false)
 const taskFormOpen = ref(false)
+const sendChatOpen = ref(false)
+const postComposerOpen = ref(false)
+const postPreset = ref(null)
 const taskPresetName = computed(() => {
   const firstLine = sel.value.text.split('\n').map((s) => s.trim()).find(Boolean) || ''
   return firstLine.slice(0, 200)
 })
 
+// Markdown выделенного фрагмента — с форматированием (жирный, списки, …);
+// fallback на плоский текст, если слайс не собрался.
+function selectionMarkdown() {
+  const ed = editorRef.value?.editor
+  if (!ed) return sel.value.text
+  try {
+    const slice = ed.state.doc.slice(sel.value.from, sel.value.to)
+    return docToMarkdown(slice.content.toJSON() || []) || sel.value.text
+  } catch {
+    return sel.value.text
+  }
+}
+
 function onCreateFrom(kind) {
   if (kind === 'task') taskFormOpen.value = true
-  else diaryOpen.value = true
+  else if (kind === 'post') {
+    postPreset.value = { title: '', body: selectionMarkdown() }
+    postComposerOpen.value = true
+  } else diaryOpen.value = true
 }
 
 async function copySelection() {
@@ -445,6 +611,40 @@ async function confirmDelete() {
 .np-savestate.error { color: var(--color-error); }
 @keyframes npspin { to { transform: rotate(360deg); } }
 
+/* Владелец чужой заметки */
+.np-owner {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 10px 3px 4px;
+  border: 1px solid var(--color-outline-dim);
+  border-radius: var(--radius-full);
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--color-text-dim);
+  max-width: 220px;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.np-owner-avatar { width: 22px; height: 22px; border-radius: 50%; object-fit: cover; }
+
+/* Присутствие: кто сейчас в заметке */
+.np-presence { display: inline-flex; align-items: center; }
+.np-presence-dot {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  border: 2px solid;
+  display: grid;
+  place-items: center;
+  font-size: 10px;
+  font-weight: 800;
+  color: var(--color-text);
+  margin-left: -6px;
+}
+.np-presence-dot:first-child { margin-left: 0; }
+
 .np-actions { display: flex; align-items: center; gap: 4px; margin-left: auto; }
 
 .np-zoom {
@@ -482,6 +682,64 @@ async function confirmDelete() {
 .np-icon:hover { background: color-mix(in oklch, var(--color-primary) 10%, transparent); color: var(--color-primary); }
 .np-icon.danger:hover { background: color-mix(in oklch, var(--color-error) 10%, transparent); color: var(--color-error); }
 
+/* ── Мобильное меню «⋮» (стекло, как поповеры карточек) ── */
+.np-more { position: relative; }
+.np-more-pop {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 30;
+  min-width: 210px;
+  background: var(--acrylic-bg);
+  -webkit-backdrop-filter: var(--acrylic-blur);
+  backdrop-filter: var(--acrylic-blur);
+  border: 1px solid var(--color-outline-dim);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-lg);
+  padding: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+.np-more-zoom {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  padding: 2px 6px;
+}
+/* В меню проценты нужны всегда (глобальный мобильный скрыватель не про нас). */
+.np-more-zoom .np-zoom-value { display: block; }
+.np-more-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border: none;
+  background: transparent;
+  color: var(--color-text);
+  font: inherit;
+  font-size: 14px;
+  font-weight: 500;
+  text-align: left;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+.np-more-item:hover { background: var(--color-surface-low); }
+.np-more-item .material-symbols-outlined { font-size: 18px; color: var(--color-text-dim); }
+.np-more-item.danger,
+.np-more-item.danger .material-symbols-outlined { color: var(--color-error); }
+.np-more-divider { height: 1px; background: var(--color-outline-dim); margin: 4px 4px; }
+
+.np-more-enter-active, .np-more-leave-active {
+  transition: opacity 0.14s, transform 0.14s;
+  transform-origin: top right;
+}
+.np-more-enter-from, .np-more-leave-to {
+  opacity: 0;
+  transform: scale(0.96) translateY(-4px);
+}
+
 .np-loading {
   flex: 1;
   display: flex;
@@ -514,12 +772,44 @@ async function confirmDelete() {
 }
 
 @media (max-width: 768px) {
-  .np { padding: 12px 12px calc(64px + env(safe-area-inset-bottom, 0px)); }
+  /* Во всю страницу: без рамки-«карточки» и без собственного нижнего отступа —
+     место под bottom-nav уже резервирует .main-content (main.css). */
+  .np { padding: 0; }
+  .np-panel {
+    border: none;
+    border-radius: 0;
+    background: transparent;
+  }
   .np-back-label { display: none; }
-  /* Узкая шапка: проценты убираем, остаются кнопки −/+ (сброс — долгим
-     сведением к 100% кнопками). */
-  .np-zoom-value { display: none; }
   .np-title { margin: 2px 14px 0; font-size: 22px; }
   .np-editor { padding: 6px 14px 0; }
+  .np-owner { display: none; }
 }
+</style>
+
+<!-- Курсоры соавторов рисуются ProseMirror-декорациями внутри контента
+     редактора — стили вне scoped. -->
+<style>
+.nc-caret {
+  position: relative;
+  display: inline;
+  border-left: 2px solid var(--nc-color);
+  margin-left: -1px;
+}
+.nc-caret-label {
+  position: absolute;
+  top: -1.35em;
+  left: -2px;
+  padding: 1px 6px;
+  border-radius: var(--radius-xs, 6px) var(--radius-xs, 6px) var(--radius-xs, 6px) 0;
+  background: var(--nc-color);
+  color: var(--color-surface);
+  font-size: 10.5px;
+  font-weight: 700;
+  line-height: 1.4;
+  white-space: nowrap;
+  pointer-events: none;
+  user-select: none;
+}
+.nc-selection { border-radius: 2px; }
 </style>

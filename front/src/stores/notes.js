@@ -1,10 +1,12 @@
 import { defineStore } from 'pinia'
 import { computed, ref } from 'vue'
 import * as api from '@/api/notes.js'
+import { useAuthStore } from '@/stores/auth.js'
 
-// Заметки: плитки-стикеры владельца + группы-фильтры. Все данные личные
-// (скоуп по владельцу на сервере), сокет-события приходят только в комнату
-// владельца — фильтровать по компании не нужно.
+// Заметки: плитки-стикеры владельца + группы-фильтры + вкладка «Поделились»
+// (адресный шаринг). Скоуп по владельцу на сервере; события приходят в
+// комнаты владельца и адресатов — чужие (шаренные) плитки отфильтровываются
+// от владельческих по owner_id.
 export const useNotesStore = defineStore('notes', () => {
   const notes = ref([])          // плитки текущей выборки (группа+поиск)
   const groups = ref([])
@@ -12,6 +14,7 @@ export const useNotesStore = defineStore('notes', () => {
   const loadingGroups = ref(false)
   const activeGroupId = ref(0)   // 0 — «Все»
   const showArchived = ref(false) // true — фильтр «Архив» (вместо групп)
+  const showShared = ref(false)  // true — вкладка «Поделились» (чужие заметки)
   const search = ref('')
 
   let fetchSeq = 0
@@ -19,7 +22,8 @@ export const useNotesStore = defineStore('notes', () => {
 
   const activeGroup = computed(() => groups.value.find((g) => g.id === activeGroupId.value) || null)
   const totalCount = computed(() =>
-    activeGroupId.value === 0 && !showArchived.value && !search.value ? notes.value.length : null)
+    activeGroupId.value === 0 && !showArchived.value && !showShared.value && !search.value
+      ? notes.value.length : null)
 
   async function fetchGroups({ silent = false } = {}) {
     if (!silent) loadingGroups.value = true
@@ -41,11 +45,13 @@ export const useNotesStore = defineStore('notes', () => {
     if (!silent) loading.value = true
     try {
       const data = await api.getNotes(
-        {
-          group_id: activeGroupId.value || '',
-          search: search.value,
-          archived: showArchived.value ? '1' : '',
-        },
+        showShared.value
+          ? { shared: '1', search: search.value }
+          : {
+              group_id: activeGroupId.value || '',
+              search: search.value,
+              archived: showArchived.value ? '1' : '',
+            },
         { signal: fetchCtrl.signal },
       )
       if (seq !== fetchSeq) return
@@ -58,9 +64,10 @@ export const useNotesStore = defineStore('notes', () => {
   }
 
   function selectGroup(id) {
-    if (activeGroupId.value === id && !showArchived.value) return
+    if (activeGroupId.value === id && !showArchived.value && !showShared.value) return
     activeGroupId.value = id
     showArchived.value = false
+    showShared.value = false
     fetchNotes()
   }
 
@@ -68,6 +75,15 @@ export const useNotesStore = defineStore('notes', () => {
     if (showArchived.value) return
     activeGroupId.value = 0
     showArchived.value = true
+    showShared.value = false
+    fetchNotes()
+  }
+
+  function selectShared() {
+    if (showShared.value) return
+    activeGroupId.value = 0
+    showArchived.value = false
+    showShared.value = true
     fetchNotes()
   }
 
@@ -108,6 +124,14 @@ export const useNotesStore = defineStore('notes', () => {
     }
   }
 
+  // Закрепление: закреплённые всегда наверху списка (сортирует и сервер).
+  async function setPinned(id, pinned) {
+    const n = await api.updateNote(id, { pinned })
+    upsertNote(n)
+    sortTiles()
+    return n
+  }
+
   async function createGroup(name) {
     const g = await api.createGroup(name)
     upsertGroup(g)
@@ -143,13 +167,32 @@ export const useNotesStore = defineStore('notes', () => {
     else groups.value[i] = { ...groups.value[i], ...payload }
   }
 
-  // ── Сокет-события (только комната владельца) ──
+  // Закреплённые первыми (как на сервере), затем updated_at DESC.
+  function sortTiles() {
+    notes.value = [...notes.value].sort((a, b) =>
+      String(b.pinned_at || '').localeCompare(String(a.pinned_at || ''))
+      || String(b.updated_at).localeCompare(String(a.updated_at)))
+  }
+
+  // ── Сокет-события (комнаты владельца и адресатов) ──
   function applyNoteSocket(kind, payload) {
     if (kind === 'deleted') {
       dropNote(payload.id)
       fetchGroups({ silent: true })
       return
     }
+    // Вкладка «Поделились»: обновляем только уже видимые чужие плитки —
+    // появление новых ведёт note_member:added, а свои заметки сюда не входят.
+    if (showShared.value) {
+      if (notes.value.some((n) => n.id === payload.id)) {
+        upsertNote(payload)
+        sortTiles()
+      }
+      return
+    }
+    // Владельческие вкладки: чужая (шаренная со мной) заметка сюда не попадает.
+    const myId = useAuthStore().userId
+    if (payload.owner_id && myId && payload.owner_id !== myId) return
     // created / updated: событие несёт плитку (без doc). Выборка с фильтром
     // группы/поиска на клиенте не повторяется — плитку не из текущей группы
     // (или не из текущей архивности) просто убираем из списка.
@@ -159,14 +202,24 @@ export const useNotesStore = defineStore('notes', () => {
       dropNote(payload.id)
     } else if (!search.value) {
       upsertNote(payload)
-      // Сортировка updated_at DESC — обновлённая заметка всплывает наверх.
-      notes.value = [...notes.value].sort((a, b) =>
-        String(b.updated_at).localeCompare(String(a.updated_at)))
+      sortTiles()
     } else {
       // Активен серверный поиск — совпадение может измениться, перечитываем.
       fetchNotes({ silent: true })
     }
     fetchGroups({ silent: true })
+  }
+
+  // Адресный шаринг: заметка появилась/пропала во вкладке «Поделились».
+  function applyMemberSocket(kind, payload) {
+    if (kind === 'removed') {
+      dropNote(payload.note_id)
+      return
+    }
+    if (!showShared.value) return
+    const tile = { ...payload.note, my_access: payload.can_edit ? 'edit' : 'view' }
+    upsertNote(tile)
+    sortTiles()
   }
 
   function applyGroupSocket(kind, payload) {
@@ -179,10 +232,11 @@ export const useNotesStore = defineStore('notes', () => {
   }
 
   return {
-    notes, groups, loading, loadingGroups, activeGroupId, activeGroup, showArchived, search, totalCount,
-    fetchGroups, fetchNotes, selectGroup, selectArchive, setSearch,
-    createNote, importNote, removeNote, setArchived,
+    notes, groups, loading, loadingGroups, activeGroupId, activeGroup,
+    showArchived, showShared, search, totalCount,
+    fetchGroups, fetchNotes, selectGroup, selectArchive, selectShared, setSearch,
+    createNote, importNote, removeNote, setArchived, setPinned,
     createGroup, renameGroup, removeGroup,
-    upsertNote, applyNoteSocket, applyGroupSocket,
+    upsertNote, applyNoteSocket, applyGroupSocket, applyMemberSocket,
   }
 })

@@ -9,6 +9,7 @@ import (
 
 	"github.com/gofiber/fiber/v2"
 
+	"github.com/DmitriyODS/gw2/back-go/notes/internal/domain"
 	"github.com/DmitriyODS/gw2/back-go/notes/internal/endpoint"
 )
 
@@ -19,11 +20,13 @@ func validationError(c *fiber.Ctx, msg string) error {
 }
 
 // noteBody — частичная правка заметки: отсутствующие поля не меняются.
-// Color и Archived правятся только владельцем (PATCH), по edit-ссылке игнорируются.
+// Color, Archived и Pinned правятся только владельцем (PATCH), по edit-ссылке
+// и адресатом с can_edit игнорируются.
 type noteBody struct {
 	Title    *string         `json:"title"`
 	Color    *string         `json:"color"`
 	Archived *bool           `json:"archived"`
+	Pinned   *bool           `json:"pinned"`
 	Doc      json.RawMessage `json:"doc"`
 }
 
@@ -47,6 +50,17 @@ func (b *noteBody) validate(c *fiber.Ctx) bool {
 // ── Заметки ──────────────────────────────────────────────────────
 
 func (h *handlers) listNotes(c *fiber.Ctx) error {
+	// ?shared=1 — чужие заметки, открытые мне адресно; фильтры группы/архива
+	// не применяются (личная организация владельца), поиск — работает.
+	if c.Query("shared") == "1" {
+		resp, err := h.eps.ListSharedNotes(c.Context(), endpoint.SharedNotesReq{
+			UserID: currentUserID(c), Search: c.Query("search"),
+		})
+		if err != nil {
+			return h.respondError(c, err)
+		}
+		return c.JSON(fiber.Map{"notes": resp})
+	}
 	groupID, _ := strconv.ParseInt(c.Query("group_id"), 10, 64)
 	resp, err := h.eps.ListNotes(c.Context(), endpoint.ListNotesReq{
 		UserID: currentUserID(c), GroupID: groupID, Search: c.Query("search"),
@@ -90,7 +104,7 @@ func (h *handlers) updateNote(c *fiber.Ctx) error {
 	}
 	resp, err := h.eps.UpdateNote(c.Context(), endpoint.UpdateNoteReq{
 		UserID: currentUserID(c), ID: pathID(c), Title: body.Title, Color: body.Color,
-		Archived: body.Archived, Doc: body.Doc,
+		Archived: body.Archived, Pinned: body.Pinned, Doc: body.Doc,
 	})
 	if err != nil {
 		return h.respondError(c, err)
@@ -211,6 +225,62 @@ func (h *handlers) revokeShare(c *fiber.Ctx) error {
 		return h.respondError(c, err)
 	}
 	return c.JSON(fiber.Map{"deleted": true})
+}
+
+// ── Адресный шаринг (владелец) и collab-броадкаст ────────────────
+
+func (h *handlers) listMembers(c *fiber.Ctx) error {
+	resp, err := h.eps.ListMembers(c.Context(), endpoint.MemberReq{UserID: currentUserID(c), NoteID: pathID(c)})
+	if err != nil {
+		return h.respondError(c, err)
+	}
+	return c.JSON(fiber.Map{"members": resp})
+}
+
+func (h *handlers) addMember(c *fiber.Ctx) error {
+	var body struct {
+		UserID  int64 `json:"user_id"`
+		CanEdit bool  `json:"can_edit"`
+	}
+	parseBody(c, &body)
+	if body.UserID <= 0 {
+		return validationError(c, "Укажите пользователя")
+	}
+	resp, err := h.eps.AddMember(c.Context(), endpoint.MemberReq{
+		UserID: currentUserID(c), NoteID: pathID(c), MemberID: body.UserID, CanEdit: body.CanEdit,
+	})
+	if err != nil {
+		return h.respondError(c, err)
+	}
+	return c.Status(fiber.StatusCreated).JSON(resp)
+}
+
+func (h *handlers) removeMember(c *fiber.Ctx) error {
+	memberID, _ := c.ParamsInt("userId")
+	if _, err := h.eps.RemoveMember(c.Context(), endpoint.MemberReq{
+		UserID: currentUserID(c), NoteID: pathID(c), MemberID: int64(memberID),
+	}); err != nil {
+		return h.respondError(c, err)
+	}
+	return c.JSON(fiber.Map{"deleted": true})
+}
+
+func (h *handlers) collab(c *fiber.Ctx) error {
+	var body struct {
+		Kind   string               `json:"kind"`
+		Cursor *domain.CollabCursor `json:"cursor"`
+		Doc    json.RawMessage      `json:"doc"`
+	}
+	parseBody(c, &body)
+	if body.Doc != nil && !json.Valid(body.Doc) {
+		return validationError(c, "Некорректный документ")
+	}
+	if _, err := h.eps.Collab(c.Context(), endpoint.CollabReq{
+		UserID: currentUserID(c), NoteID: pathID(c), Kind: body.Kind, Cursor: body.Cursor, Doc: body.Doc,
+	}); err != nil {
+		return h.respondError(c, err)
+	}
+	return c.SendStatus(fiber.StatusNoContent)
 }
 
 // ── Картинки редактора, экспорт/импорт ───────────────────────────

@@ -290,6 +290,27 @@ func (r *Repo) AddAttachment(ctx context.Context, a *domain.Attachment) error {
 	).Scan(&a.ID, &a.CreatedAt)
 }
 
+func (r *Repo) GetAttachment(ctx context.Context, id int64) (*domain.Attachment, error) {
+	var a domain.Attachment
+	err := r.pool.QueryRow(ctx, `
+		SELECT id, post_id, file_path, name, size, mime, created_at
+		FROM portal_attachments WHERE id = $1`, id,
+	).Scan(&a.ID, &a.PostID, &a.FilePath, &a.Name, &a.Size, &a.Mime, &a.CreatedAt)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	a.URL = "/uploads/" + a.FilePath
+	return &a, nil
+}
+
+func (r *Repo) DeleteAttachment(ctx context.Context, id int64) error {
+	_, err := r.pool.Exec(ctx, `DELETE FROM portal_attachments WHERE id = $1`, id)
+	return err
+}
+
 func (r *Repo) ListAttachments(ctx context.Context, postID int64) ([]domain.Attachment, error) {
 	rows, err := r.pool.Query(ctx, `
 		SELECT id, post_id, file_path, name, size, mime, created_at

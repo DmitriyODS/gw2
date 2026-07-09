@@ -14,13 +14,14 @@ func NewError(code, message string, httpStatus int) *Error {
 func AsDomainError(err error) *Error { return apierror.As(err) }
 
 var (
-	ErrTopicNotFound   = NewError("NOT_FOUND", "Раздел не найден", 404)
-	ErrTopicNameReq    = NewError("VALIDATION", "Укажите название раздела", 400)
-	ErrPostNotFound    = NewError("NOT_FOUND", "Пост не найден", 404)
-	ErrPostBodyReq     = NewError("VALIDATION", "Укажите текст поста", 400)
-	ErrCommentNotFound = NewError("NOT_FOUND", "Комментарий не найден", 404)
-	ErrCommentTextReq  = NewError("VALIDATION", "Укажите текст комментария", 400)
-	ErrEmojiRequired   = NewError("VALIDATION", "Укажите эмодзи реакции", 400)
+	ErrTopicNotFound      = NewError("NOT_FOUND", "Раздел не найден", 404)
+	ErrTopicNameReq       = NewError("VALIDATION", "Укажите название раздела", 400)
+	ErrPostNotFound       = NewError("NOT_FOUND", "Пост не найден", 404)
+	ErrPostBodyReq        = NewError("VALIDATION", "Укажите текст поста", 400)
+	ErrCommentNotFound    = NewError("NOT_FOUND", "Комментарий не найден", 404)
+	ErrAttachmentNotFound = NewError("NOT_FOUND", "Вложение не найдено", 404)
+	ErrCommentTextReq     = NewError("VALIDATION", "Укажите текст комментария", 400)
+	ErrEmojiRequired      = NewError("VALIDATION", "Укажите эмодзи реакции", 400)
 	// EmojiInvalid — реакция длиннее, чем бывает эмодзи (≤16 байт / ≤4 рун):
 	// в поле реакции пытаются протащить произвольный текст.
 	ErrEmojiInvalid = NewError("VALIDATION", "Некорректная реакция", 422)

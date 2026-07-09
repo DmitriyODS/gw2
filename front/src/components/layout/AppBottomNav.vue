@@ -44,11 +44,13 @@
         <button
           v-for="item in moreItems"
           :key="item.path"
+          :data-tutorial="item.tutorial"
           class="more-item"
           :class="{ active: item.active() }"
           @click="goMore(item)"
         >
-          <span class="more-item-ico material-symbols-outlined">{{ item.icon }}</span>
+          <img v-if="item.avatar" class="more-item-avatar" :src="avatarSrc" :alt="authStore.user?.fio" />
+          <span v-else class="more-item-ico material-symbols-outlined">{{ item.icon }}</span>
           <span class="more-item-label">{{ item.label }}</span>
           <span v-if="item.badge && item.badge()" class="more-item-badge">
             {{ item.badge() > 99 ? '99+' : item.badge() }}
@@ -82,7 +84,8 @@ const { usesGroove } = useCompanySettings()
 const moreOpen = ref(false)
 watch(() => route.path, () => { moreOpen.value = false })
 
-// 4 главные кнопки слева — самые частые сценарии. Всё прочее уходит в «Ещё».
+// 4 главные кнопки слева — самые частые сценарии. Всё прочее (вкл. профиль)
+// уходит в «Ещё».
 const mainItems = computed(() => [
   { path: '/tasks', icon: 'grid_view', label: 'Задачи', tutorial: 'nav-tasks',
     active: () => route.path === '/tasks',
@@ -90,14 +93,17 @@ const mainItems = computed(() => [
   { path: '/messenger', icon: 'chat', label: 'Чаты', tutorial: 'nav-messenger',
     active: () => route.path.startsWith('/messenger'),
     badge: () => messenger.totalUnread },
+  // Единый раздел: заметки + ежедневник (вкладки внутри).
+  { path: '/notes', icon: 'note_stack', label: 'Заметки',
+    active: () => route.path.startsWith('/notes') || route.path.startsWith('/diaries') },
   { path: '/stats', icon: 'query_stats', label: 'Статистика', tutorial: 'nav-stats',
     active: () => route.path === '/stats' },
-  { path: '/profile', avatar: true, label: 'Профиль', tutorial: 'profile-avatar',
-    active: () => route.path === '/profile' },
 ])
 
 const moreItems = computed(() => {
   const arr = [
+    { path: '/profile', avatar: true, icon: 'account_circle', label: 'Профиль', tutorial: 'profile-avatar',
+      active: () => route.path === '/profile' },
     // Питомцы-грувики — только если компания не выключила режим.
     ...(usesGroove.value ? [{ path: '/pets', icon: 'pets', label: 'Грувики',
       active: () => route.path === '/pets' }] : []),
@@ -105,9 +111,6 @@ const moreItems = computed(() => {
       active: () => route.path.startsWith('/registries') },
     { path: '/calendars', icon: 'calendar_month', label: 'Календари',
       active: () => route.path.startsWith('/calendars') },
-    // Единый раздел: заметки (заготовка) + ежедневник (вкладки внутри).
-    { path: '/notes', icon: 'note_stack', label: 'Заметки',
-      active: () => route.path.startsWith('/notes') || route.path.startsWith('/diaries') },
     // Единый раздел: лента портала + сотрудники (вкладки внутри).
     { path: '/portal', icon: 'campaign', label: 'Портал',
       active: () => route.path.startsWith('/portal') || route.path === '/employees',
@@ -116,7 +119,7 @@ const moreItems = computed(() => {
       active: () => route.path === '/settings' },
   ]
   if (isAtLeast(ROLES.ADMIN)) {
-    arr.splice(1, 0, { path: '/companies', icon: 'domain', label: 'Компании',
+    arr.splice(2, 0, { path: '/companies', icon: 'domain', label: 'Компании',
       active: () => route.path.startsWith('/companies') })
   }
   return arr
@@ -311,6 +314,13 @@ const avatarSrc = computed(() => {
 
 .more-item-ico {
   font-size: 24px;
+}
+
+.more-item-avatar {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  object-fit: cover;
 }
 
 .more-item-label {

@@ -54,6 +54,11 @@
           <span class="material-symbols-outlined nsm-arrow">chevron_right</span>
         </button>
 
+        <button class="nsm-item" @mouseenter="closeFly" @click="pickSendChat">
+          <span class="material-symbols-outlined">send</span>
+          <span>Отправить в чат</span>
+        </button>
+
         <div class="nsm-divider" />
         <button class="nsm-item" @mouseenter="closeFly" @click="pickCopy">
           <span class="material-symbols-outlined">content_copy</span>
@@ -105,7 +110,7 @@ const props = defineProps({
   canTask: { type: Boolean, default: false },
 })
 
-const emit = defineEmits(['close', 'ai', 'create', 'copy'])
+const emit = defineEmits(['close', 'ai', 'create', 'copy', 'send-chat'])
 
 const AI_TOP = [
   { action: 'improve', icon: 'auto_fix_high', label: 'Улучшить текст' },
@@ -191,6 +196,8 @@ const createGroup = computed(() => ({
   options: [
     ...(props.canTask ? [{ create: 'task', icon: 'task_alt', label: 'Задачу' }] : []),
     { create: 'diary', icon: 'book', label: 'Пункт в ежедневник' },
+    // Публикация на портале — только при активной компании (портал company-scoped).
+    ...(props.canTask ? [{ create: 'post', icon: 'campaign', label: 'Публикацию на портале' }] : []),
   ],
 }))
 
@@ -263,6 +270,11 @@ function pickCreate(kind) {
 
 function pickCopy() {
   emit('copy')
+  emit('close')
+}
+
+function pickSendChat() {
+  emit('send-chat')
   emit('close')
 }
 

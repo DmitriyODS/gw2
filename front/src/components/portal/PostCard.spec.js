@@ -91,11 +91,26 @@ describe('PostCard', () => {
     expect(w.text()).toContain('4')
   })
 
-  it('длинный текст обрезается с кнопкой «Показать полностью»', () => {
-    const longBody = 'A'.repeat(400)
-    const w = factory(mkPost({ body: longBody }))
+  it('тело поста рендерится как markdown', () => {
+    const w = factory(mkPost({ body: '# Итоги\n**важно** и `код`\n- [x] готово' }))
+    expect(w.find('.post-body-md h1').text()).toBe('Итоги')
+    expect(w.find('.post-body-md strong').text()).toBe('важно')
+    expect(w.find('.post-body-md .md-code').text()).toBe('код')
+    expect(w.find('.post-body-md .md-task input[checked]').exists()).toBe(true)
+  })
+
+  it('сворачивание — по фактической высоте: высокий блок получает кнопку и класс collapsed', async () => {
+    // В jsdom layout нет — scrollHeight мокается, замер триггерится watch'ем на body.
+    const w = factory(mkPost({ body: 'x' }))
+    Object.defineProperty(w.find('.post-body-md').element, 'scrollHeight', { value: 900 })
+    await w.setProps({ post: mkPost({ body: 'длинный текст' }) })
+    await w.vm.$nextTick()
+    await w.vm.$nextTick()
     expect(w.find('.post-more-btn').exists()).toBe(true)
-    expect(w.text()).toContain('…')
+    expect(w.find('.post-body-md').classes()).toContain('collapsed')
+
+    await w.find('.post-more-btn').trigger('click')
+    expect(w.find('.post-body-md').classes()).not.toContain('collapsed')
   })
 
   it('пункт «Закрепить» раскрывает выбор срока; выбор «7 дней» зовёт API с days=7', async () => {

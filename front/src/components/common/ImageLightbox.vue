@@ -17,7 +17,7 @@
           <button class="ilb-btn" title="Сбросить" @click="reset">
             <span class="material-symbols-outlined">restart_alt</span>
           </button>
-          <a class="ilb-btn" :href="src" :download="caption || ''" title="Скачать" @click.stop>
+          <a class="ilb-btn" :href="currentSrc" :download="currentCaption || ''" title="Скачать" @click.stop>
             <span class="material-symbols-outlined">download</span>
           </a>
           <button class="ilb-btn" title="Закрыть" @click="close">
@@ -25,16 +25,26 @@
           </button>
         </div>
 
+        <!-- Галерея: стрелки пролистывания при нескольких картинках -->
+        <button v-if="hasGallery" class="ilb-btn ilb-nav prev" title="Предыдущая" @click.stop="step(-1)">
+          <span class="material-symbols-outlined">chevron_left</span>
+        </button>
+        <button v-if="hasGallery" class="ilb-btn ilb-nav next" title="Следующая" @click.stop="step(1)">
+          <span class="material-symbols-outlined">chevron_right</span>
+        </button>
+
         <img
-          :src="src"
-          :alt="caption || 'Изображение'"
+          :src="currentSrc"
+          :alt="currentCaption || 'Изображение'"
           class="ilb-img"
           :class="{ grabbing: dragging }"
           :style="imgStyle"
           @mousedown.prevent="startDrag"
           @click.stop
         />
-        <div v-if="caption" class="ilb-caption" @click.stop>{{ caption }}</div>
+        <div v-if="currentCaption || hasGallery" class="ilb-caption" @click.stop>
+          <template v-if="hasGallery">{{ index + 1 }} / {{ items.length }}<template v-if="currentCaption"> · </template></template>{{ currentCaption }}
+        </div>
       </div>
     </transition>
   </teleport>
@@ -47,8 +57,22 @@ const props = defineProps({
   modelValue: { type: Boolean, required: true },
   src: { type: String, default: '' },
   caption: { type: String, default: '' },
+  // Галерея: [{src, caption}] + стартовый индекс — тогда src/caption не нужны.
+  items: { type: Array, default: () => [] },
+  startIndex: { type: Number, default: 0 },
 })
 const emit = defineEmits(['update:modelValue'])
+
+const index = ref(0)
+const hasGallery = computed(() => props.items.length > 1)
+const currentSrc = computed(() => (props.items.length ? props.items[index.value]?.src : props.src))
+const currentCaption = computed(() => (props.items.length ? props.items[index.value]?.caption || '' : props.caption))
+
+function step(d) {
+  if (!props.items.length) return
+  index.value = (index.value + d + props.items.length) % props.items.length
+  reset()
+}
 
 const scale = ref(1)
 const angle = ref(0)
@@ -83,10 +107,18 @@ function endDrag() {
   window.removeEventListener('mousemove', onDrag)
 }
 
-function onKey(e) { if (e.key === 'Escape' && props.modelValue) close() }
+function onKey(e) {
+  if (!props.modelValue) return
+  if (e.key === 'Escape') close()
+  else if (e.key === 'ArrowLeft') step(-1)
+  else if (e.key === 'ArrowRight') step(1)
+}
 watch(() => props.modelValue, (v) => {
-  if (v) { reset(); window.addEventListener('keydown', onKey) }
-  else window.removeEventListener('keydown', onKey)
+  if (v) {
+    index.value = Math.min(Math.max(props.startIndex, 0), Math.max(props.items.length - 1, 0))
+    reset()
+    window.addEventListener('keydown', onKey)
+  } else window.removeEventListener('keydown', onKey)
 })
 </script>
 
@@ -122,6 +154,17 @@ watch(() => props.modelValue, (v) => {
   transition: background 0.15s;
 }
 .ilb-btn:hover { background: color-mix(in oklch, var(--color-surface) 42%, transparent); }
+.ilb-nav {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 2;
+  width: 48px;
+  height: 48px;
+}
+.ilb-nav.prev { left: 16px; }
+.ilb-nav.next { right: 16px; }
+.ilb-nav .material-symbols-outlined { font-size: 28px; }
 .ilb-img {
   max-width: 88vw;
   max-height: 84vh;

@@ -1,8 +1,19 @@
 <template>
   <div class="period-control">
-    <div ref="displayRef" class="period-display" @click="openPicker">
-      <span class="material-symbols-outlined">calendar_month</span>
-      {{ period.displayLabel.value }}
+    <!-- Дата + стрелки сдвига — одной группой (стрелки двигают именно даты). -->
+    <div class="period-main">
+      <div ref="displayRef" class="period-display" @click="openPicker">
+        <span class="material-symbols-outlined">calendar_month</span>
+        {{ period.displayLabel.value }}
+      </div>
+      <div class="period-shift">
+        <button class="period-btn" @click="period.shift(-1)" :disabled="!canShift" title="Назад">
+          <span class="material-symbols-outlined">chevron_left</span>
+        </button>
+        <button class="period-btn" @click="period.shift(1)" :disabled="!canShift" title="Вперёд">
+          <span class="material-symbols-outlined">chevron_right</span>
+        </button>
+      </div>
     </div>
 
     <Teleport to="body">
@@ -30,15 +41,6 @@
         </button>
       </div>
 
-      <div class="period-shift">
-        <button class="period-btn" @click="period.shift(-1)" :disabled="!canShift" title="Назад">
-          <span class="material-symbols-outlined">chevron_left</span>
-        </button>
-        <button class="period-btn" @click="period.shift(1)" :disabled="!canShift" title="Вперёд">
-          <span class="material-symbols-outlined">chevron_right</span>
-        </button>
-      </div>
-
       <button
         class="all-time-btn"
         :class="{ active: period.mode.value === 'all' }"
@@ -46,7 +48,7 @@
         title="Показать все задачи за весь срок"
       >
         <span class="material-symbols-outlined">all_inclusive</span>
-        Весь срок
+        <span class="all-time-label">Весь срок</span>
       </button>
     </div>
   </div>
@@ -125,6 +127,12 @@ watch(
   flex-wrap: wrap;
   padding: 4px 0;
   position: relative;
+}
+
+.period-main {
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 
 .period-display {
@@ -273,52 +281,56 @@ watch(
   font-size: 18px;
 }
 
+/* Мобайл: две компактные строки — «дата + стрелки» и «режимы + весь срок». */
 @media (max-width: 768px) {
   .period-control {
-    gap: 10px;
-    padding: 4px 0;
+    gap: 6px;
+    padding: 0;
+  }
+
+  .period-main {
+    width: 100%;
+    gap: 6px;
   }
 
   .period-display {
-    padding: 10px 14px;
+    flex: 1;
+    min-width: 0;
+    min-height: 38px;
+    padding: 7px 12px;
     font-size: 13px;
-    width: 100%;
     justify-content: center;
   }
 
+  .period-btn {
+    width: 38px;
+    height: 38px;
+  }
+
   .period-buttons {
-    gap: 8px;
+    gap: 6px;
     width: 100%;
-    justify-content: space-between;
   }
 
   .period-modes {
     flex: 1;
     justify-content: center;
+    padding: 3px;
   }
 
   .mode-btn {
     flex: 1;
-    padding: 10px 8px;
-    min-height: 40px;
-    font-size: 13px;
+    padding: 7px 6px;
+    min-height: 32px;
+    font-size: 12.5px;
   }
 
-  .period-btn {
-    width: 40px;
-    height: 40px;
-  }
-
+  /* «Весь срок» — компактная иконка-«пилюля» в одной строке с режимами. */
   .all-time-btn {
-    padding: 10px 14px;
-    font-size: 13px;
-    min-height: 40px;
+    min-height: 38px;
+    padding: 7px 12px;
   }
-}
-
-@media (max-width: 480px) {
-  .all-time-btn .material-symbols-outlined {
-    margin: 0;
-  }
+  .all-time-label { display: none; }
+  .all-time-btn .material-symbols-outlined { margin: 0; }
 }
 </style>

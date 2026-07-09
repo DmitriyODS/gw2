@@ -48,6 +48,9 @@ export const uploadAttachment = (postId, file) => {
   return apiRequest(`/portal/posts/${postId}/attachments`, { method: 'POST', body: form })
 }
 
+export const deleteAttachment = (attachmentId) =>
+  apiRequest(`/portal/attachments/${attachmentId}`, { method: 'DELETE' })
+
 // ── Комментарии (плоские) ──
 export const getComments = (postId) => apiRequest(`/portal/posts/${postId}/comments`)
 

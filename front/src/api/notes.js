@@ -46,6 +46,20 @@ export const createShare = (noteId, access) =>
 export const revokeShare = (noteId, shareId) =>
   apiRequest(`/notes/${noteId}/shares/${shareId}`, { method: 'DELETE' })
 
+// ── Адресный шаринг пользователям платформы (владелец) ──
+export const getMembers = (noteId) => apiRequest(`/notes/${noteId}/members`)
+// Идемпотентный upsert: повторный вызов меняет право.
+export const upsertMember = (noteId, userId, canEdit) =>
+  apiRequest(`/notes/${noteId}/members`, { method: 'POST', body: { user_id: userId, can_edit: canEdit } })
+export const removeMember = (noteId, userId) =>
+  apiRequest(`/notes/${noteId}/members/${userId}`, { method: 'DELETE' })
+
+// ── Совместное редактирование: присутствие/курсоры/живые правки ──
+// kind: 'join' | 'leave' | 'cursor' | 'doc'; ничего не сохраняет — только
+// broadcast note_collab:* в комнаты владельца и адресатов.
+export const sendCollab = (noteId, body) =>
+  apiRequest(`/notes/${noteId}/collab`, { method: 'POST', body })
+
 // ── Картинки редактора ──
 // → { path: '/uploads/notes/…' } — готовый src для вставки в документ.
 export const uploadImage = (noteId, file) => {

@@ -22,4 +22,9 @@ var (
 	ErrBadAccess     = NewError("VALIDATION", "Режим доступа: view или edit", 400)
 	ErrBadColor      = NewError("VALIDATION", "Неизвестный цвет заметки", 400)
 	ErrNameRequired  = NewError("VALIDATION", "Укажите название группы", 400)
+
+	ErrMemberNotFound = NewError("NOT_FOUND", "Пользователь не найден", 404)
+	ErrSelfShare      = NewError("VALIDATION", "Нельзя поделиться с самим собой", 400)
+	ErrMemberReadOnly = NewError("FORBIDDEN", "Заметка доступна только для чтения", 403)
+	ErrBadCollabKind  = NewError("VALIDATION", "Тип collab-события: join, leave, cursor или doc", 400)
 )

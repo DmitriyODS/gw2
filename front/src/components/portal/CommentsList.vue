@@ -27,7 +27,7 @@
             <span v-else class="comment-author">{{ authorOf(c.author_id).fio }}</span>
             <span class="comment-time">{{ formatTime(c.created_at) }}</span>
           </div>
-          <LinkifiedText :text="c.text" />
+          <MarkdownView class="comment-md" :source="c.text" />
         </div>
         <button v-if="canDelete(c)" class="comment-delete" title="Удалить" aria-label="Удалить комментарий" @click="remove(c.id)">
           <span class="material-symbols-outlined">delete</span>
@@ -52,7 +52,7 @@ import { usePortalStore } from '@/stores/portal.js'
 import { useAuthStore } from '@/stores/auth.js'
 import { usePermission } from '@/composables/usePermission.js'
 import { useNotificationsStore } from '@/stores/notifications.js'
-import LinkifiedText from '@/components/common/LinkifiedText.vue'
+import MarkdownView from '@/components/common/MarkdownView.vue'
 
 const props = defineProps({
   postId: { type: Number, required: true },
