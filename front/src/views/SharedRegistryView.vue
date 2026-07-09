@@ -457,7 +457,7 @@ onMounted(load)
 .sr-icon-btn:hover { background: var(--color-surface-high); color: var(--color-text); }
 /* Поповер столбцов вынесен в body (Teleport), позиция — по кнопке. */
 .sr-cols-backdrop { position: fixed; inset: 0; z-index: 10800; }
-.sr-cols-pop { position: fixed; z-index: 10801; min-width: 220px; max-height: 60vh; overflow-y: auto; padding: 8px; background: var(--acrylic-card-bg); border: 1px solid var(--color-outline-dim); border-radius: var(--radius-lg); box-shadow: var(--shadow-lg); }
+.sr-cols-pop { position: fixed; z-index: 10801; min-width: 220px; max-height: 60vh; overflow-y: auto; padding: 8px; background: var(--acrylic-bg); -webkit-backdrop-filter: var(--acrylic-blur); backdrop-filter: var(--acrylic-blur); border: 1px solid var(--color-outline-dim); border-radius: var(--radius-lg); box-shadow: var(--shadow-lg); }
 .sr-cols-title { padding: 6px 10px; font-size: 12px; font-weight: 700; color: var(--color-text-dim); text-transform: uppercase; }
 .sr-cols-row { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-radius: var(--radius-md); cursor: pointer; font-size: 14px; color: var(--color-text); }
 .sr-cols-row:hover { background: var(--color-surface-high); }

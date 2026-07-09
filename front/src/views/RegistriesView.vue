@@ -633,7 +633,9 @@ onMounted(() => store.fetchRegistries())
   max-height: 60vh;
   overflow-y: auto;
   padding: 8px;
-  background: var(--acrylic-card-bg);
+  background: var(--acrylic-bg);
+  -webkit-backdrop-filter: var(--acrylic-blur);
+  backdrop-filter: var(--acrylic-blur);
   border: 1px solid var(--color-outline-dim);
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow-lg);
