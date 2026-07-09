@@ -36,6 +36,9 @@ type Endpoints struct {
 	SendAssistantMessage  endpoint.Endpoint
 	GetAssistantHistory   endpoint.Endpoint
 	SendAssistantFeedback endpoint.Endpoint
+
+	// ИИ-инструменты текста заметок (REST /api/ai/text-tools).
+	TransformText endpoint.Endpoint
 }
 
 // ── Транспорт-независимые запросы/ответы ─────────────────────────
@@ -87,6 +90,13 @@ type SendAssistantFeedbackRequest struct {
 	MessageID int64
 	Verdict   string
 	Reason    *string
+}
+
+type TransformTextRequest struct {
+	CompanyID int64
+	Action    string
+	Style     string
+	Text      string
 }
 
 func New(svc service.AiService) Endpoints {
@@ -149,6 +159,10 @@ func New(svc service.AiService) Endpoints {
 		SendAssistantFeedback: func(ctx context.Context, request any) (any, error) {
 			req := request.(SendAssistantFeedbackRequest)
 			return nil, svc.SendAssistantFeedback(ctx, req.UserID, req.CompanyID, req.MessageID, req.Verdict, req.Reason)
+		},
+		TransformText: func(ctx context.Context, request any) (any, error) {
+			req := request.(TransformTextRequest)
+			return svc.TransformText(ctx, req.CompanyID, req.Action, req.Style, req.Text)
 		},
 	}
 }

@@ -16,3 +16,10 @@ export const reindexAiTasks = (companyId) =>
   apiRequest(`/companies/${companyId}/ai-settings/reindex-tasks`, { method: 'POST' })
 
 export const getTvFact = () => apiRequest('/ai/tv-fact')
+
+// ИИ-инструменты текста (заметки): одна операция над фрагментом.
+// action: improve|fix|rephrase|shorten|expand|simplify|summarize|bullets|
+// continue|tone|translate; style — тон (formal|friendly|confident|casual)
+// или язык перевода (en|ru) для tone/translate. Ответ: { text }.
+export const transformText = ({ action, text, style = null }) =>
+  apiRequest('/ai/text-tools', { method: 'POST', body: { action, text, style } })

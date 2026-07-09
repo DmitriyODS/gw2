@@ -64,14 +64,46 @@
           :doc="doc"
           :zoom="zoom"
           :upload-image="uploadImageFile"
+          selection-menu
           @change="onDocChange"
           @blur="flush"
+          @selection-menu="onSelectionMenu"
         />
       </template>
     </div>
 
     <NoteGroupsDialog v-model="groupsOpen" :note-id="noteId" :group-ids="groupIds" @saved="onGroupsSaved" />
     <NoteShareDialog v-model="shareOpen" :note-id="noteId" />
+
+    <!-- ПКМ на выделенном тексте: ИИ-действия + «Создать из выделенного» -->
+    <NoteSelectionMenu
+      :visible="selMenu.visible"
+      :x="selMenu.x"
+      :y="selMenu.y"
+      :ai-available="hasCompany"
+      :can-task="hasCompany"
+      @close="selMenu.visible = false"
+      @ai="onAiAction"
+      @create="onCreateFrom"
+      @copy="copySelection"
+    />
+    <NoteAiDialog
+      v-model="ai.open"
+      :label="ai.label"
+      :loading="ai.loading"
+      :error="ai.error"
+      :result="ai.result"
+      :is-continue="ai.action === 'continue'"
+      @apply="applyAi"
+      @retry="runAi"
+    />
+    <NoteToDiaryDialog v-model="diaryOpen" :text="sel.text" />
+    <TaskForm
+      v-if="taskFormOpen"
+      :preset-name="taskPresetName"
+      @close="taskFormOpen = false"
+      @saved="taskFormOpen = false"
+    />
     <ConfirmDialog
       :visible="deleteOpen"
       header="Удалить заметку?"
@@ -94,7 +126,13 @@ import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
 import NoteRichEditor from '@/components/notes/NoteRichEditor.vue'
 import NoteGroupsDialog from '@/components/notes/NoteGroupsDialog.vue'
 import NoteShareDialog from '@/components/notes/NoteShareDialog.vue'
+import NoteSelectionMenu from '@/components/notes/NoteSelectionMenu.vue'
+import NoteAiDialog from '@/components/notes/NoteAiDialog.vue'
+import NoteToDiaryDialog from '@/components/notes/NoteToDiaryDialog.vue'
+import TaskForm from '@/components/tasks/TaskForm.vue'
 import * as api from '@/api/notes.js'
+import { transformText } from '@/api/ai.js'
+import { useAuthStore } from '@/stores/auth.js'
 import { useNotesStore } from '@/stores/notes.js'
 import { useNotificationsStore } from '@/stores/notifications.js'
 
@@ -247,6 +285,89 @@ async function exportTxt() {
     URL.revokeObjectURL(url)
   } catch (e) {
     notif.error(e?.message || 'Не удалось экспортировать')
+  }
+}
+
+// ── ИИ и «создать из выделенного» (контекстное меню выделения) ──
+const auth = useAuthStore()
+const hasCompany = computed(() => !!auth.companyId)
+
+const selMenu = ref({ visible: false, x: 0, y: 0 })
+const sel = ref({ text: '', from: 0, to: 0 })
+
+function onSelectionMenu({ x, y, text, from, to }) {
+  sel.value = { text, from, to }
+  selMenu.value = { visible: true, x, y }
+}
+
+const ai = ref({ open: false, loading: false, action: '', style: null, label: '', result: '', error: '' })
+
+function onAiAction({ action, style, label }) {
+  ai.value = { open: true, loading: true, action, style, label, result: '', error: '' }
+  runAi()
+}
+
+async function runAi() {
+  ai.value.loading = true
+  ai.value.error = ''
+  try {
+    const { text } = await transformText({ action: ai.value.action, style: ai.value.style, text: sel.value.text })
+    ai.value.result = text
+  } catch (e) {
+    ai.value.error = e?.error === 'AI_DISABLED'
+      ? 'ИИ не включён в активной компании. Администратор может включить его в настройках компании.'
+      : (e?.message || 'Не удалось обработать текст')
+  } finally {
+    ai.value.loading = false
+  }
+}
+
+function escapeHtml(s) {
+  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
+}
+
+// applyAi — вставка результата: replace — на место выделения (переносы строк
+// внутри абзаца — <br>), below — новыми абзацами после блока с выделением;
+// «продолжить» дописывается сразу за выделением, продолжая предложение.
+function applyAi(mode) {
+  const ed = editorRef.value?.editor
+  if (!ed) return
+  const { from, to } = sel.value
+  const inline = escapeHtml(ai.value.result).replace(/\n/g, '<br>')
+  const chain = ed.chain().focus()
+  if (mode === 'replace') {
+    chain.insertContentAt({ from, to }, inline).run()
+  } else if (ai.value.action === 'continue') {
+    chain.insertContentAt(to, ' ' + inline).run()
+  } else {
+    const paragraphs = ai.value.result
+      .split(/\n{2,}/)
+      .map((p) => '<p>' + escapeHtml(p).replace(/\n/g, '<br>') + '</p>')
+      .join('')
+    const end = ed.state.doc.resolve(Math.min(to, ed.state.doc.content.size)).end()
+    chain.insertContentAt(end, paragraphs).run()
+  }
+  ai.value.open = false
+}
+
+const diaryOpen = ref(false)
+const taskFormOpen = ref(false)
+const taskPresetName = computed(() => {
+  const firstLine = sel.value.text.split('\n').map((s) => s.trim()).find(Boolean) || ''
+  return firstLine.slice(0, 200)
+})
+
+function onCreateFrom(kind) {
+  if (kind === 'task') taskFormOpen.value = true
+  else diaryOpen.value = true
+}
+
+async function copySelection() {
+  try {
+    await navigator.clipboard.writeText(sel.value.text)
+    notif.success('Скопировано в буфер обмена')
+  } catch {
+    notif.error('Не удалось скопировать')
   }
 }
 

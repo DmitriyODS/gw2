@@ -126,7 +126,7 @@
 
     <!-- zoom масштабирует только «лист» (текст, картинки, таблицы); панель
          форматирования остаётся обычного размера. -->
-    <EditorContent class="ne-content" :style="zoom !== 1 ? { zoom } : {}" :editor="editor" />
+    <EditorContent class="ne-content" :style="zoom !== 1 ? { zoom } : {}" :editor="editor" @contextmenu="onContextMenu" />
   </div>
 </template>
 
@@ -162,8 +162,12 @@ const props = defineProps({
   uploadImage: { type: Function, default: null },
   // Масштаб листа (1 = 100%): управляется кнопками страницы заметки.
   zoom: { type: Number, default: 1 },
+  // ПКМ на выделении открывает меню действий (событие selection-menu) вместо
+  // браузерного. Включает только страница заметки владельца — на публичных
+  // ссылках ИИ/создание задач недоступны.
+  selectionMenu: { type: Boolean, default: false },
 })
-const emit = defineEmits(['change', 'blur'])
+const emit = defineEmits(['change', 'blur', 'selection-menu'])
 
 const canUpload = !!props.uploadImage
 const hlOpen = ref(false)
@@ -220,6 +224,19 @@ function editLink() {
   if (url === null) return
   if (url === '') ed.chain().focus().extendMarkRange('link').unsetLink().run()
   else ed.chain().focus().extendMarkRange('link').setLink({ href: url }).run()
+}
+
+// ПКМ на непустом выделении → меню действий с фрагментом; пустое выделение
+// оставляет системное меню (правописание, вставка).
+function onContextMenu(e) {
+  if (!props.selectionMenu || !editor.value) return
+  const { state } = editor.value
+  const { from, to } = state.selection
+  if (to <= from) return
+  const text = state.doc.textBetween(from, to, '\n', ' ')
+  if (!text.trim()) return
+  e.preventDefault()
+  emit('selection-menu', { x: e.clientX, y: e.clientY, text, from, to })
 }
 
 async function onImageFile(e) {
@@ -321,11 +338,18 @@ defineExpose({ editor })
 .ne-content :deep(.tiptap) {
   outline: none;
   min-height: 240px;
-  padding: 16px 4px 40px;
+  padding: 20px 18px 40px;
   color: var(--color-text);
   font-size: 15px;
   line-height: 1.65;
 }
+.ne-content :deep(.tiptap ul),
+.ne-content :deep(.tiptap ol) {
+  padding-left: 28px;
+  margin: 8px 0;
+}
+.ne-content :deep(.tiptap li) { margin: 3px 0; }
+.ne-content :deep(.tiptap li p) { margin: 0; }
 .ne-content :deep(.tiptap h1) { font-size: 26px; margin: 20px 0 8px; }
 .ne-content :deep(.tiptap h2) { font-size: 21px; margin: 16px 0 6px; }
 .ne-content :deep(.tiptap h3) { font-size: 17px; margin: 12px 0 4px; }

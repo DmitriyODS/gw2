@@ -80,6 +80,9 @@ type AiService interface {
 	SendAssistantMessage(ctx context.Context, userID, companyID int64, text string) (*AssistantReply, error)
 	GetAssistantHistory(ctx context.Context, userID, companyID int64, limit int, before *time.Time) ([]domain.AssistantMessage, error)
 	SendAssistantFeedback(ctx context.Context, userID, companyID, messageID int64, verdict string, reason *string) error
+
+	// REST /api/ai/text-tools — ИИ-инструменты текста заметок (texttools.go).
+	TransformText(ctx context.Context, companyID int64, action, style, text string) (string, error)
 }
 
 type Service struct {
