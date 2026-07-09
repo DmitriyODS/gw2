@@ -784,11 +784,13 @@ async function confirmDelete() {
   }
   .np-back-label { display: none; }
   .np-title { margin: 2px 14px 0; font-size: 22px; }
-  /* Резерв под нижнюю навигацию (64px) + 12px воздуха внутри скроллера —
-     текст при прокрутке уходит под стекло и не прячется за навигацией. */
-  .np-editor {
-    padding: 6px 14px 0;
-    padding-bottom: calc(76px + env(safe-area-inset-bottom, 0px));
+  .np-editor { padding: 6px 14px 0; }
+  /* Резерв под нижнюю навигацию (64px) + воздух. Именно на .tiptap, а не на
+     скроллер .np-editor: длинный документ переполняет flex-бокс .ne-content
+     (flex:1 + min-height:0), и padding-bottom контейнера остаётся у края
+     бокса — последние строки прятались за акриловой навигацией. */
+  .np-editor :deep(.tiptap) {
+    padding-bottom: calc(116px + env(safe-area-inset-bottom, 0px));
   }
   .np-owner { display: none; }
 }
