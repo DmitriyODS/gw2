@@ -42,6 +42,9 @@ func (f *fakeRepo) ListNotes(_ domain.Ctx, fl domain.NoteListFilter) ([]*domain.
 		if fl.GroupID > 0 && !slices.Contains(f.items[n.ID], fl.GroupID) {
 			continue
 		}
+		if n.Archived != fl.Archived {
+			continue
+		}
 		out = append(out, n)
 	}
 	return out, nil
@@ -191,7 +194,7 @@ func TestOwnerScope(t *testing.T) {
 		t.Fatalf("GetNote чужим: ожидалась 404, получено %v", err)
 	}
 	title := "hack"
-	if _, err := svc.UpdateNote(ctx, 2, n.ID, &title, nil, nil); !errors.Is(err, domain.ErrNoteNotFound) {
+	if _, err := svc.UpdateNote(ctx, 2, n.ID, &title, nil, nil, nil); !errors.Is(err, domain.ErrNoteNotFound) {
 		t.Fatalf("UpdateNote чужим: ожидалась 404, получено %v", err)
 	}
 	if err := svc.DeleteNote(ctx, 2, n.ID); !errors.Is(err, domain.ErrNoteNotFound) {
@@ -209,7 +212,7 @@ func TestUpdateRecomputesTextContent(t *testing.T) {
 	ctx := context.Background()
 
 	n, _ := svc.CreateNote(ctx, 1, "")
-	if _, err := svc.UpdateNote(ctx, 1, n.ID, nil, nil, docWith("привет мир")); err != nil {
+	if _, err := svc.UpdateNote(ctx, 1, n.ID, nil, nil, nil, docWith("привет мир")); err != nil {
 		t.Fatal(err)
 	}
 	if got := repo.notes[n.ID].TextContent; got != "привет мир" {
@@ -218,7 +221,7 @@ func TestUpdateRecomputesTextContent(t *testing.T) {
 
 	// Правка только заголовка не трогает text_content.
 	title := "Заголовок"
-	if _, err := svc.UpdateNote(ctx, 1, n.ID, &title, nil, nil); err != nil {
+	if _, err := svc.UpdateNote(ctx, 1, n.ID, &title, nil, nil, nil); err != nil {
 		t.Fatal(err)
 	}
 	if got := repo.notes[n.ID].TextContent; got != "привет мир" {
@@ -273,7 +276,7 @@ func TestExportImport(t *testing.T) {
 	ctx := context.Background()
 
 	n, _ := svc.CreateNote(ctx, 1, "Список покупок")
-	_, _ = svc.UpdateNote(ctx, 1, n.ID, nil, nil, docWith("хлеб и молоко"))
+	_, _ = svc.UpdateNote(ctx, 1, n.ID, nil, nil, nil, docWith("хлеб и молоко"))
 
 	data, name, err := svc.Export(ctx, 1, n.ID)
 	if err != nil {
@@ -359,7 +362,7 @@ func TestDeleteNoteRemovesFiles(t *testing.T) {
 	doc := json.RawMessage(`{"type":"doc","content":[
 		{"type":"image","attrs":{"src":"/uploads/notes/abc.png"}},
 		{"type":"paragraph","content":[{"type":"text","text":"с картинкой"}]}]}`)
-	if _, err := svc.UpdateNote(ctx, 1, n.ID, nil, nil, doc); err != nil {
+	if _, err := svc.UpdateNote(ctx, 1, n.ID, nil, nil, nil, doc); err != nil {
 		t.Fatal(err)
 	}
 	if err := svc.DeleteNote(ctx, 1, n.ID); err != nil {
@@ -378,7 +381,7 @@ func TestNoteColor(t *testing.T) {
 
 	n, _ := svc.CreateNote(ctx, 1, "Цветная")
 	blue := "blue"
-	if _, err := svc.UpdateNote(ctx, 1, n.ID, nil, &blue, nil); err != nil {
+	if _, err := svc.UpdateNote(ctx, 1, n.ID, nil, &blue, nil, nil); err != nil {
 		t.Fatal(err)
 	}
 	if repo.notes[n.ID].Color != "blue" {
@@ -387,7 +390,7 @@ func TestNoteColor(t *testing.T) {
 
 	// Сброс цвета пустой строкой.
 	none := ""
-	if _, err := svc.UpdateNote(ctx, 1, n.ID, nil, &none, nil); err != nil {
+	if _, err := svc.UpdateNote(ctx, 1, n.ID, nil, &none, nil, nil); err != nil {
 		t.Fatal(err)
 	}
 	if repo.notes[n.ID].Color != "" {
@@ -396,7 +399,36 @@ func TestNoteColor(t *testing.T) {
 
 	// Неизвестный цвет — валидация.
 	bad := "magenta"
-	if _, err := svc.UpdateNote(ctx, 1, n.ID, nil, &bad, nil); !errors.Is(err, domain.ErrBadColor) {
+	if _, err := svc.UpdateNote(ctx, 1, n.ID, nil, &bad, nil, nil); !errors.Is(err, domain.ErrBadColor) {
 		t.Fatalf("неизвестный цвет: ожидалась валидация, получено %v", err)
+	}
+}
+
+// Архив: архивная заметка уходит из основного списка в архивный и возвращается.
+func TestArchiveNote(t *testing.T) {
+	svc, _, _, _, _ := newTestService()
+	ctx := context.Background()
+	n, _ := svc.CreateNote(ctx, 1, "В архив")
+
+	on := true
+	if _, err := svc.UpdateNote(ctx, 1, n.ID, nil, nil, &on, nil); err != nil {
+		t.Fatalf("archive: %v", err)
+	}
+	active, _ := svc.ListNotes(ctx, 1, 0, "", false)
+	if len(active) != 0 {
+		t.Fatalf("архивная заметка осталась в основном списке: %d", len(active))
+	}
+	archived, _ := svc.ListNotes(ctx, 1, 0, "", true)
+	if len(archived) != 1 || !archived[0].Archived {
+		t.Fatalf("заметка не попала в архивный список")
+	}
+
+	off := false
+	if _, err := svc.UpdateNote(ctx, 1, n.ID, nil, nil, &off, nil); err != nil {
+		t.Fatalf("unarchive: %v", err)
+	}
+	active, _ = svc.ListNotes(ctx, 1, 0, "", false)
+	if len(active) != 1 {
+		t.Fatalf("заметка не вернулась из архива")
 	}
 }

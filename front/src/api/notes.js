@@ -8,7 +8,7 @@ function qs(params = {}) {
 }
 
 // ── Заметки ──
-// params: { group_id?, search? }. → { notes: [плитки без doc] }.
+// params: { group_id?, search?, archived? ('1' — архив) }. → { notes: [плитки без doc] }.
 export const getNotes = (params = {}, options = {}) =>
   apiRequest(`/notes?${qs(params)}`, options)
 
@@ -18,7 +18,7 @@ export const getNote = (id) => apiRequest(`/notes/${id}`)
 export const createNote = (title = '') =>
   apiRequest('/notes', { method: 'POST', body: { title } })
 
-// Частичная правка: { title?, doc? } — отсутствующие поля не меняются.
+// Частичная правка: { title?, doc?, color?, archived? } — отсутствующие поля не меняются.
 export const updateNote = (id, body) =>
   apiRequest(`/notes/${id}`, { method: 'PATCH', body })
 

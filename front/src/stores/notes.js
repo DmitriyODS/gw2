@@ -11,6 +11,7 @@ export const useNotesStore = defineStore('notes', () => {
   const loading = ref(false)
   const loadingGroups = ref(false)
   const activeGroupId = ref(0)   // 0 — «Все»
+  const showArchived = ref(false) // true — фильтр «Архив» (вместо групп)
   const search = ref('')
 
   let fetchSeq = 0
@@ -18,7 +19,7 @@ export const useNotesStore = defineStore('notes', () => {
 
   const activeGroup = computed(() => groups.value.find((g) => g.id === activeGroupId.value) || null)
   const totalCount = computed(() =>
-    activeGroupId.value === 0 && !search.value ? notes.value.length : null)
+    activeGroupId.value === 0 && !showArchived.value && !search.value ? notes.value.length : null)
 
   async function fetchGroups({ silent = false } = {}) {
     if (!silent) loadingGroups.value = true
@@ -40,7 +41,11 @@ export const useNotesStore = defineStore('notes', () => {
     if (!silent) loading.value = true
     try {
       const data = await api.getNotes(
-        { group_id: activeGroupId.value || '', search: search.value },
+        {
+          group_id: activeGroupId.value || '',
+          search: search.value,
+          archived: showArchived.value ? '1' : '',
+        },
         { signal: fetchCtrl.signal },
       )
       if (seq !== fetchSeq) return
@@ -53,8 +58,16 @@ export const useNotesStore = defineStore('notes', () => {
   }
 
   function selectGroup(id) {
-    if (activeGroupId.value === id) return
+    if (activeGroupId.value === id && !showArchived.value) return
     activeGroupId.value = id
+    showArchived.value = false
+    fetchNotes()
+  }
+
+  function selectArchive() {
+    if (showArchived.value) return
+    activeGroupId.value = 0
+    showArchived.value = true
     fetchNotes()
   }
 
@@ -80,6 +93,19 @@ export const useNotesStore = defineStore('notes', () => {
     await api.deleteNote(id)
     dropNote(id)
     fetchGroups({ silent: true })
+  }
+
+  // Архивирование/возврат — оптимистично: плитка сразу уходит из текущей
+  // выборки (архив и основной список не пересекаются), при ошибке вернётся.
+  async function setArchived(id, archived) {
+    const prev = notes.value.find((n) => n.id === id)
+    dropNote(id)
+    try {
+      await api.updateNote(id, { archived })
+    } catch (e) {
+      if (prev) upsertNote(prev)
+      throw e
+    }
   }
 
   async function createGroup(name) {
@@ -126,10 +152,10 @@ export const useNotesStore = defineStore('notes', () => {
     }
     // created / updated: событие несёт плитку (без doc). Выборка с фильтром
     // группы/поиска на клиенте не повторяется — плитку не из текущей группы
-    // просто убираем из списка.
+    // (или не из текущей архивности) просто убираем из списка.
     const inGroup = activeGroupId.value === 0
       || (payload.group_ids || []).includes(activeGroupId.value)
-    if (!inGroup) {
+    if (!!payload.archived !== showArchived.value || !inGroup) {
       dropNote(payload.id)
     } else if (!search.value) {
       upsertNote(payload)
@@ -153,9 +179,9 @@ export const useNotesStore = defineStore('notes', () => {
   }
 
   return {
-    notes, groups, loading, loadingGroups, activeGroupId, activeGroup, search, totalCount,
-    fetchGroups, fetchNotes, selectGroup, setSearch,
-    createNote, importNote, removeNote,
+    notes, groups, loading, loadingGroups, activeGroupId, activeGroup, showArchived, search, totalCount,
+    fetchGroups, fetchNotes, selectGroup, selectArchive, setSearch,
+    createNote, importNote, removeNote, setArchived,
     createGroup, renameGroup, removeGroup,
     upsertNote, applyNoteSocket, applyGroupSocket,
   }

@@ -41,6 +41,10 @@
           <span class="material-symbols-outlined">download</span>
           <span>Экспорт .txt</span>
         </button>
+        <button class="note-ctx-item" @click="emitAction('archive')">
+          <span class="material-symbols-outlined">{{ archived ? 'unarchive' : 'archive' }}</span>
+          <span>{{ archived ? 'Вернуть из архива' : 'В архив' }}</span>
+        </button>
         <div class="note-ctx-divider" />
         <button class="note-ctx-item danger" @click="emitAction('delete')">
           <span class="material-symbols-outlined">delete</span>
@@ -64,6 +68,8 @@ const props = defineProps({
   y: { type: Number, default: 0 },
   // Текущий цвет заметки ('' — без цвета) — для отметки в палитре.
   color: { type: String, default: '' },
+  // Архивна ли заметка — меняет пункт «В архив» на «Вернуть из архива».
+  archived: { type: Boolean, default: false },
 })
 
 const emit = defineEmits(['close', 'action', 'color'])

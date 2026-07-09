@@ -1,23 +1,22 @@
 <template>
+  <!-- Ряд свотчей — в едином стиле с палитрой контекстного меню задач/заметок. -->
   <div class="color-picker">
     <button
-      class="color-swatch none"
-      :class="{ selected: !modelValue }"
+      v-for="c in colors"
+      :key="c.id"
+      class="cp-swatch"
+      :class="{ active: modelValue === c.id }"
+      :style="{ background: `var(--tag-${c.id}-surface)`, borderColor: `var(--tag-${c.id}-border)` }"
+      :title="c.label"
+      @click.stop="select(c.id)"
+    />
+    <button
+      class="cp-swatch off"
+      :class="{ active: !modelValue }"
       title="Без цвета"
       @click.stop="select(null)"
     >
       <span class="material-symbols-outlined">format_color_reset</span>
-    </button>
-    <button
-      v-for="c in colors"
-      :key="c.id"
-      class="color-swatch"
-      :class="{ selected: modelValue === c.id }"
-      :style="{ '--swatch': `var(--tag-${c.id}-accent)` }"
-      :title="c.label"
-      @click.stop="select(c.id)"
-    >
-      <span v-if="modelValue === c.id" class="material-symbols-outlined">check</span>
     </button>
   </div>
 </template>
@@ -43,65 +42,43 @@ function select(id) {
 .color-picker {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px;
+  align-items: center;
+  gap: 6px;
 }
 
-.color-swatch {
-  width: 28px;
-  height: 28px;
-  min-height: 28px;
-  border-radius: 50%;
-  border: 2px solid transparent;
-  background: var(--swatch);
+.cp-swatch {
+  width: 22px;
+  height: 22px;
+  min-height: 22px;
+  border-radius: var(--radius-sm);
+  border: 1px solid;
   cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
   padding: 0;
   flex-shrink: 0;
-  flex-grow: 0;
-  box-sizing: border-box;
-  aspect-ratio: 1 / 1;
-  transition: transform 0.12s, border-color 0.12s;
-  box-shadow: var(--shadow-sm);
 }
 
-/* На мобильных глобально включён min-height: 36px для тап-таргетов —
-   синхронизируем ширину/высоту, чтобы свотчи оставались круглыми. */
+.cp-swatch.active {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 1px;
+}
+
+.cp-swatch.off {
+  display: grid;
+  place-items: center;
+  background: var(--color-surface);
+  border-color: var(--color-outline-variant);
+  color: var(--color-text-dim);
+}
+
+.cp-swatch.off .material-symbols-outlined { font-size: 15px; }
+
+/* Тач-зоны на мобильных крупнее (глобальный минимум тап-таргета). */
 @media (max-width: 768px) {
-  .color-swatch {
+  .cp-swatch {
     width: 36px;
     height: 36px;
     min-height: 36px;
   }
-}
-
-.color-swatch:hover {
-  transform: scale(1.12);
-}
-
-.color-swatch.selected {
-  border-color: var(--color-text);
-}
-
-.color-swatch .material-symbols-outlined {
-  font-size: 16px;
-  color: oklch(1 0 0);
-  font-variation-settings: 'FILL' 1, 'wght' 600;
-}
-
-.color-swatch.none {
-  background: var(--color-surface);
-  border: 2px solid var(--gw-border);
-  color: var(--gw-text-secondary);
-}
-
-.color-swatch.none.selected {
-  border-color: var(--color-text);
-}
-
-.color-swatch.none .material-symbols-outlined {
-  font-size: 16px;
-  color: var(--gw-text-secondary);
+  .cp-swatch.off .material-symbols-outlined { font-size: 18px; }
 }
 </style>

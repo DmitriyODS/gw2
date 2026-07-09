@@ -10,7 +10,7 @@
       <div class="split-side-list">
         <button
           class="split-side-item"
-          :class="{ active: store.activeGroupId === 0 }"
+          :class="{ active: store.activeGroupId === 0 && !store.showArchived }"
           @click="store.selectGroup(0)"
         >
           <span class="split-item-tile"><span class="material-symbols-outlined">apps</span></span>
@@ -50,6 +50,18 @@
         </button>
       </div>
 
+      <!-- Архив — отдельный фильтр вне групп -->
+      <div class="split-side-list nt-archive-slot">
+        <button
+          class="split-side-item"
+          :class="{ active: store.showArchived }"
+          @click="store.selectArchive()"
+        >
+          <span class="split-item-tile"><span class="material-symbols-outlined">archive</span></span>
+          <span class="split-side-name">Архив</span>
+        </button>
+      </div>
+
       <!-- Добавить группу: ghost-пункт → инлайн-инпут -->
       <form v-if="addingGroup" class="nt-addform" @submit.prevent="submitGroup">
         <input
@@ -75,7 +87,7 @@
         <NotesHubTabs full-width />
       </div>
       <div v-if="isMobile" class="nt-groupstrip">
-        <button class="nt-groupchip" :class="{ active: store.activeGroupId === 0 }" @click="store.selectGroup(0)">Все</button>
+        <button class="nt-groupchip" :class="{ active: store.activeGroupId === 0 && !store.showArchived }" @click="store.selectGroup(0)">Все</button>
         <button
           v-for="g in store.groups"
           :key="g.id"
@@ -83,6 +95,7 @@
           :class="{ active: g.id === store.activeGroupId }"
           @click="store.selectGroup(g.id)"
         >{{ g.name }}</button>
+        <button class="nt-groupchip" :class="{ active: store.showArchived }" @click="store.selectArchive()">Архив</button>
       </div>
 
       <header class="nt-toolbar">
@@ -108,6 +121,12 @@
           class="split-empty" icon="search_off" tone="soft"
           title="Ничего не найдено"
           subtitle="Попробуйте изменить запрос — ищем по заголовку и тексту заметок."
+        />
+        <EmptyState
+          v-else-if="!store.notes.length && store.showArchived"
+          class="split-empty" icon="archive" tone="soft"
+          title="Архив пуст"
+          subtitle="Сюда попадают заметки, отправленные в архив из контекстного меню плитки."
         />
         <EmptyState
           v-else-if="!store.notes.length && store.activeGroupId !== 0"
@@ -172,6 +191,7 @@
       :x="menu.x"
       :y="menu.y"
       :color="menuNote?.color || ''"
+      :archived="!!menuNote?.archived"
       @action="onMenuAction"
       @color="setNoteColor"
       @close="menu.visible = false"
@@ -304,7 +324,16 @@ function onMenuAction(action) {
   else if (action === 'groups') groupsOpen.value = true
   else if (action === 'share') shareOpen.value = true
   else if (action === 'export') exportNoteTxt(n)
+  else if (action === 'archive') toggleArchive(n)
   else if (action === 'delete') noteToDelete.value = n
+}
+
+async function toggleArchive(n) {
+  try {
+    await store.setArchived(n.id, !n.archived)
+  } catch (e) {
+    notif.error(e.message || 'Не удалось изменить архив')
+  }
 }
 
 function onGroupsSaved() {
@@ -466,6 +495,15 @@ function formatDate(iso) {
 </script>
 
 <style scoped>
+/* Пункт «Архив» — вне скролла групп, прижат к блоку «Добавить группу». */
+.nt-archive-slot {
+  flex: none;
+  overflow: visible;
+  border-top: 1px solid var(--color-outline-dim);
+  margin-top: 4px;
+  padding-top: 6px;
+}
+
 /* Счётчик пункта — тинтованная плашка (как .rail-badge). */
 .nt-count {
   flex-shrink: 0;

@@ -9,6 +9,22 @@
         role="menu"
         @click.stop
       >
+        <!-- Цвет карточки — личная палитра тегов (механика как у плиток заметок) -->
+        <div class="task-ctx-colors">
+          <button
+            v-for="c in TASK_COLORS"
+            :key="c.id"
+            class="task-ctx-swatch"
+            :class="{ active: color === c.id }"
+            :style="{ background: `var(--tag-${c.id}-surface)`, borderColor: `var(--tag-${c.id}-border)` }"
+            :title="c.label"
+            @click="pickColor(c.id)"
+          />
+          <button class="task-ctx-swatch off" :class="{ active: !color }" title="Без цвета" @click="pickColor('')">
+            <span class="material-symbols-outlined">format_color_reset</span>
+          </button>
+        </div>
+        <div class="task-ctx-divider" />
         <button class="task-ctx-item" @click="emitAction('open')">
           <span class="material-symbols-outlined">open_in_new</span>
           <span>Открыть</span>
@@ -45,6 +61,7 @@
 
 <script setup>
 import { computed, nextTick, ref, watch, onMounted, onBeforeUnmount } from 'vue'
+import { TASK_COLORS } from '@/utils/taskColors.js'
 
 const props = defineProps({
   visible: { type: Boolean, default: false },
@@ -53,9 +70,16 @@ const props = defineProps({
   canEdit: { type: Boolean, default: true },
   isArchived: { type: Boolean, default: false },
   isRunning: { type: Boolean, default: false },
+  // Текущий личный цвет задачи ('' — без цвета) — для отметки в палитре.
+  color: { type: String, default: '' },
 })
 
-const emit = defineEmits(['close', 'action'])
+const emit = defineEmits(['close', 'action', 'color'])
+
+function pickColor(id) {
+  emit('color', id)
+  emit('close')
+}
 const menuEl = ref(null)
 const pos = ref({ x: 0, y: 0 })
 
@@ -153,6 +177,34 @@ onBeforeUnmount(() => {
   background: var(--color-outline-dim);
   margin: 4px 4px;
 }
+
+.task-ctx-colors {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 10px 6px;
+}
+.task-ctx-swatch {
+  width: 22px;
+  height: 22px;
+  border-radius: var(--radius-sm);
+  border: 1px solid;
+  cursor: pointer;
+  padding: 0;
+  flex-shrink: 0;
+}
+.task-ctx-swatch.active {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 1px;
+}
+.task-ctx-swatch.off {
+  display: grid;
+  place-items: center;
+  background: var(--color-surface);
+  border-color: var(--color-outline-variant);
+  color: var(--color-text-dim);
+}
+.task-ctx-swatch.off .material-symbols-outlined { font-size: 15px; }
 
 .task-ctx-enter-active, .task-ctx-leave-active {
   transition: opacity 0.14s, transform 0.14s;

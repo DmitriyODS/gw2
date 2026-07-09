@@ -24,15 +24,15 @@ const noteGroups = `COALESCE((SELECT array_agg(group_id ORDER BY group_id)
 	FROM note_group_items WHERE note_id = n.id), '{}')`
 
 func (r *Repo) ListNotes(ctx context.Context, f domain.NoteListFilter) ([]*domain.Note, error) {
-	q := `SELECT n.id, n.owner_id, n.title, n.color, left(n.text_content, 300),
+	q := `SELECT n.id, n.owner_id, n.title, n.color, n.archived, left(n.text_content, 300),
 	             n.created_at, n.updated_at, ` + noteGroups + `
 	        FROM notes n
-	       WHERE n.owner_id = $1`
-	args := []any{f.OwnerID}
+	       WHERE n.owner_id = $1 AND n.archived = $2`
+	args := []any{f.OwnerID, f.Archived}
 	if f.GroupID > 0 {
 		args = append(args, f.GroupID)
 		q += ` AND EXISTS (SELECT 1 FROM note_group_items gi
-			WHERE gi.note_id = n.id AND gi.group_id = $2)`
+			WHERE gi.note_id = n.id AND gi.group_id = $` + strconv.Itoa(len(args)) + `)`
 	}
 	if f.Search != "" {
 		args = append(args, "%"+f.Search+"%")
@@ -48,7 +48,7 @@ func (r *Repo) ListNotes(ctx context.Context, f domain.NoteListFilter) ([]*domai
 	out := []*domain.Note{}
 	for rows.Next() {
 		var n domain.Note
-		if err := rows.Scan(&n.ID, &n.OwnerID, &n.Title, &n.Color, &n.Excerpt,
+		if err := rows.Scan(&n.ID, &n.OwnerID, &n.Title, &n.Color, &n.Archived, &n.Excerpt,
 			&n.CreatedAt, &n.UpdatedAt, &n.GroupIDs); err != nil {
 			return nil, err
 		}
@@ -60,10 +60,10 @@ func (r *Repo) ListNotes(ctx context.Context, f domain.NoteListFilter) ([]*domai
 func (r *Repo) GetNote(ctx context.Context, id int64) (*domain.Note, error) {
 	var n domain.Note
 	err := r.pool.QueryRow(ctx, `
-		SELECT n.id, n.owner_id, n.title, n.color, n.doc, n.text_content,
+		SELECT n.id, n.owner_id, n.title, n.color, n.archived, n.doc, n.text_content,
 		       n.created_at, n.updated_at, `+noteGroups+`
 		  FROM notes n WHERE n.id = $1`, id).
-		Scan(&n.ID, &n.OwnerID, &n.Title, &n.Color, &n.Doc, &n.TextContent,
+		Scan(&n.ID, &n.OwnerID, &n.Title, &n.Color, &n.Archived, &n.Doc, &n.TextContent,
 			&n.CreatedAt, &n.UpdatedAt, &n.GroupIDs)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, nil
@@ -89,9 +89,9 @@ func (r *Repo) CreateNote(ctx context.Context, n *domain.Note) error {
 
 func (r *Repo) UpdateNote(ctx context.Context, n *domain.Note) error {
 	return r.pool.QueryRow(ctx, `
-		UPDATE notes SET title = $2, color = $3, doc = $4, text_content = $5, updated_at = now()
+		UPDATE notes SET title = $2, color = $3, archived = $4, doc = $5, text_content = $6, updated_at = now()
 		 WHERE id = $1 RETURNING updated_at`,
-		n.ID, n.Title, n.Color, n.Doc, n.TextContent).Scan(&n.UpdatedAt)
+		n.ID, n.Title, n.Color, n.Archived, n.Doc, n.TextContent).Scan(&n.UpdatedAt)
 }
 
 func (r *Repo) DeleteNote(ctx context.Context, id int64) error {

@@ -49,16 +49,17 @@ const positionStyle = ref({})
 const SCREEN_PADDING = 12
 const GAP = 8
 
-// Подбираем ширину так, чтобы 9 свотчей (28 или 36 пкс + 8px gap) разложились
-// аккуратной сеткой. 3 ряда по 3 на десктопе, 3 ряда по 3 на мобильном.
+// Ширина под один ряд из 9 квадратных свотчей (22 пкс десктоп / 36 мобайл,
+// gap 6) — как палитра в контекстном меню; на узких экранах ряд переносится.
 function pickPopoverWidth(vw) {
   const mobile = vw <= 768
-  const swatch = mobile ? 36 : 28
-  const cols = 3
+  const swatch = mobile ? 36 : 22
+  const gap = 6
+  const cols = 9
   const padding = 12 * 2
   return Math.min(
     vw - SCREEN_PADDING * 2,
-    swatch * cols + GAP * (cols - 1) + padding,
+    swatch * cols + gap * (cols - 1) + padding,
   )
 }
 

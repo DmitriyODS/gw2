@@ -33,15 +33,6 @@
             <span class="material-symbols-outlined">sync_alt</span>
           </a>
           <button
-            ref="colorBtnRef"
-            class="card-action-btn"
-            :class="{ active: showColors }"
-            title="Цвет задачи"
-            @click.stop="showColors = !showColors"
-          >
-            <span class="material-symbols-outlined">palette</span>
-          </button>
-          <button
             class="card-action-btn favorite-btn"
             :class="{ 'is-fav': task.is_favorite }"
             @click.stop="$emit('toggle-favorite', task)"
@@ -51,12 +42,6 @@
               {{ task.is_favorite ? 'favorite' : 'favorite_border' }}
             </span>
           </button>
-          <TaskColorPopover
-            v-model="showColors"
-            :anchor="colorBtnRef"
-            :value="task.color || null"
-            @select="onSelectColor"
-          />
         </div>
       </div>
 
@@ -126,8 +111,7 @@
 </template>
 
 <script setup>
-import { ref, computed } from 'vue'
-import TaskColorPopover from '@/components/tasks/TaskColorPopover.vue'
+import { computed } from 'vue'
 import { cardColorStyle } from '@/utils/taskColors.js'
 import { useUnitsStore } from '@/stores/units.js'
 
@@ -142,16 +126,13 @@ const props = defineProps({
   }
 })
 
-const emit = defineEmits(['click', 'toggle-favorite', 'set-color', 'start-unit', 'stop-unit', 'context-menu'])
+const emit = defineEmits(['click', 'toggle-favorite', 'start-unit', 'stop-unit', 'context-menu'])
 
 function onContextMenu(e) {
   emit('context-menu', { x: e.clientX, y: e.clientY, task: props.task })
 }
 
 const unitsStore = useUnitsStore()
-
-const showColors = ref(false)
-const colorBtnRef = ref(null)
 
 const cardStyle = computed(() => cardColorStyle(props.task.color))
 
@@ -199,11 +180,6 @@ const deadlineChipClass = computed(() => {
 function onWorkClick() {
   if (isRunningHere.value) emit('stop-unit', props.task)
   else emit('start-unit', props.task)
-}
-
-function onSelectColor(color) {
-  if ((props.task.color || null) === color) return
-  emit('set-color', { task: props.task, color })
 }
 
 function formatDate(d) {

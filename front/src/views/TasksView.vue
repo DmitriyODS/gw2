@@ -115,7 +115,6 @@
             v-else-if="viewMode === 'board'"
             @open-task="openTask"
             @toggle-favorite="toggleFavorite"
-            @set-color="setColor"
             @start-unit="onStartUnit"
             @stop-unit="onStopUnit"
             @context-menu="openTaskContextMenu"
@@ -129,7 +128,6 @@
               :view="viewMode"
               @click="openTask(task)"
               @toggle-favorite="toggleFavorite"
-              @set-color="setColor"
               @start-unit="onStartUnit"
               @stop-unit="onStopUnit"
               @context-menu="openTaskContextMenu"
@@ -212,8 +210,10 @@
       :can-edit="taskCtxCanEdit"
       :is-archived="!!taskCtxMenu.task?.is_archived"
       :is-running="taskCtxIsRunning"
+      :color="taskCtxMenu.task?.color || ''"
       @close="taskCtxMenu.visible = false"
       @action="onTaskCtxAction"
+      @color="onTaskCtxColor"
     />
 
     <!-- Диалог отправки задачи в чат -->
@@ -446,6 +446,13 @@ const taskCtxIsRunning = computed(() => {
 
 function openTaskContextMenu({ x, y, task }) {
   taskCtxMenu.value = { visible: true, x, y, task }
+}
+
+function onTaskCtxColor(colorId) {
+  const task = taskCtxMenu.value.task
+  if (!task) return
+  // API снимает цвет по null; '' приходит от кнопки «Без цвета» в палитре.
+  setColor({ task, color: colorId || null })
 }
 
 function onTaskCtxAction(action) {

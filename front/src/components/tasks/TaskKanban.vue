@@ -5,7 +5,7 @@ import { useNotificationsStore } from '@/stores/notifications.js'
 import { getStages } from '@/api/stages.js'
 import TaskCard from '@/components/tasks/TaskCard.vue'
 
-const emit = defineEmits(['open-task', 'toggle-favorite', 'set-color', 'start-unit', 'stop-unit', 'context-menu'])
+const emit = defineEmits(['open-task', 'toggle-favorite', 'start-unit', 'stop-unit', 'context-menu'])
 
 const tasks = useTasksStore()
 const notify = useNotificationsStore()
@@ -120,7 +120,6 @@ onMounted(load)
             view="grid"
             @click="emit('open-task', t)"
             @toggle-favorite="emit('toggle-favorite', $event)"
-            @set-color="emit('set-color', $event)"
             @start-unit="emit('start-unit', $event)"
             @stop-unit="emit('stop-unit', $event)"
             @context-menu="emit('context-menu', $event)"

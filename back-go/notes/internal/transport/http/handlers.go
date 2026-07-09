@@ -19,11 +19,12 @@ func validationError(c *fiber.Ctx, msg string) error {
 }
 
 // noteBody — частичная правка заметки: отсутствующие поля не меняются.
-// Color правится только владельцем (PATCH), по edit-ссылке игнорируется.
+// Color и Archived правятся только владельцем (PATCH), по edit-ссылке игнорируются.
 type noteBody struct {
-	Title *string         `json:"title"`
-	Color *string         `json:"color"`
-	Doc   json.RawMessage `json:"doc"`
+	Title    *string         `json:"title"`
+	Color    *string         `json:"color"`
+	Archived *bool           `json:"archived"`
+	Doc      json.RawMessage `json:"doc"`
 }
 
 // validate — общая валидация правки (владелец и edit-ссылка).
@@ -49,6 +50,7 @@ func (h *handlers) listNotes(c *fiber.Ctx) error {
 	groupID, _ := strconv.ParseInt(c.Query("group_id"), 10, 64)
 	resp, err := h.eps.ListNotes(c.Context(), endpoint.ListNotesReq{
 		UserID: currentUserID(c), GroupID: groupID, Search: c.Query("search"),
+		Archived: c.Query("archived") == "1",
 	})
 	if err != nil {
 		return h.respondError(c, err)
@@ -87,7 +89,8 @@ func (h *handlers) updateNote(c *fiber.Ctx) error {
 		return nil
 	}
 	resp, err := h.eps.UpdateNote(c.Context(), endpoint.UpdateNoteReq{
-		UserID: currentUserID(c), ID: pathID(c), Title: body.Title, Color: body.Color, Doc: body.Doc,
+		UserID: currentUserID(c), ID: pathID(c), Title: body.Title, Color: body.Color,
+		Archived: body.Archived, Doc: body.Doc,
 	})
 	if err != nil {
 		return h.respondError(c, err)

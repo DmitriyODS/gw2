@@ -23,6 +23,7 @@ type Note struct {
 	OwnerID     int64           `json:"owner_id"`
 	Title       string          `json:"title"`
 	Color       string          `json:"color"`
+	Archived    bool            `json:"archived"`
 	Doc         json.RawMessage `json:"doc,omitempty"`
 	TextContent string          `json:"-"`
 	Excerpt     string          `json:"excerpt"`
@@ -63,9 +64,10 @@ type Share struct {
 // NoteListFilter — выборка плиток владельца: по группе (0 — все) и сквозному
 // поиску по заголовку+тексту.
 type NoteListFilter struct {
-	OwnerID int64
-	GroupID int64
-	Search  string
+	OwnerID  int64
+	GroupID  int64
+	Search   string
+	Archived bool
 }
 
 // User — идентичность пользователя для авторизации.

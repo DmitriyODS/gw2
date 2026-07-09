@@ -12,10 +12,11 @@ import (
 // TipTap, редактор открывается сразу с курсором).
 var emptyDoc = json.RawMessage(`{"type":"doc","content":[{"type":"paragraph"}]}`)
 
-// ListNotes — плитки владельца: по группе (0 — все) и сквозному поиску.
-func (s *Service) ListNotes(ctx context.Context, userID, groupID int64, search string) ([]*domain.Note, error) {
+// ListNotes — плитки владельца: по группе (0 — все), сквозному поиску и
+// архивности (архив — отдельный фильтр, в основной список не попадает).
+func (s *Service) ListNotes(ctx context.Context, userID, groupID int64, search string, archived bool) ([]*domain.Note, error) {
 	return s.repo.ListNotes(ctx, domain.NoteListFilter{
-		OwnerID: userID, GroupID: groupID, Search: strings.TrimSpace(search),
+		OwnerID: userID, GroupID: groupID, Search: strings.TrimSpace(search), Archived: archived,
 	})
 }
 
@@ -35,8 +36,9 @@ func (s *Service) CreateNote(ctx context.Context, userID int64, title string) (*
 
 // UpdateNote — частичная правка: nil-поля не меняются. При правке doc сервер
 // пересчитывает text_content (поиск и txt-экспорт всегда согласованы с doc).
-// Color — цвет плитки ('' — сбросить); по edit-ссылке не правится (личный стиль).
-func (s *Service) UpdateNote(ctx context.Context, userID, id int64, title, color *string, doc json.RawMessage) (*domain.Note, error) {
+// Color — цвет плитки ('' — сбросить); Archived — архивирование/возврат.
+// Оба правятся только владельцем, по edit-ссылке недоступны (личный стиль).
+func (s *Service) UpdateNote(ctx context.Context, userID, id int64, title, color *string, archived *bool, doc json.RawMessage) (*domain.Note, error) {
 	if color != nil && *color != "" && !domain.NoteColors[*color] {
 		return nil, domain.ErrBadColor
 	}
@@ -46,6 +48,9 @@ func (s *Service) UpdateNote(ctx context.Context, userID, id int64, title, color
 	}
 	if color != nil {
 		n.Color = *color
+	}
+	if archived != nil {
+		n.Archived = *archived
 	}
 	return s.applyUpdate(ctx, n, title, doc)
 }

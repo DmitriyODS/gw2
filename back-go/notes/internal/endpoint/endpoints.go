@@ -39,9 +39,10 @@ type Endpoints struct {
 // ── Request-типы ──
 
 type ListNotesReq struct {
-	UserID  int64
-	GroupID int64
-	Search  string
+	UserID   int64
+	GroupID  int64
+	Search   string
+	Archived bool
 }
 
 type NoteReq struct {
@@ -56,11 +57,12 @@ type CreateNoteReq struct {
 
 // UpdateNoteReq — частичная правка: nil-поля не меняются.
 type UpdateNoteReq struct {
-	UserID int64
-	ID     int64
-	Title  *string
-	Color  *string
-	Doc    json.RawMessage
+	UserID   int64
+	ID       int64
+	Title    *string
+	Color    *string
+	Archived *bool
+	Doc      json.RawMessage
 }
 
 type SetGroupsReq struct {
@@ -109,7 +111,7 @@ func New(s *service.Service) Endpoints {
 	return Endpoints{
 		ListNotes: func(ctx context.Context, request any) (any, error) {
 			r := request.(ListNotesReq)
-			return s.ListNotes(ctx, r.UserID, r.GroupID, r.Search)
+			return s.ListNotes(ctx, r.UserID, r.GroupID, r.Search, r.Archived)
 		},
 		GetNote: func(ctx context.Context, request any) (any, error) {
 			r := request.(NoteReq)
@@ -121,7 +123,7 @@ func New(s *service.Service) Endpoints {
 		},
 		UpdateNote: func(ctx context.Context, request any) (any, error) {
 			r := request.(UpdateNoteReq)
-			return s.UpdateNote(ctx, r.UserID, r.ID, r.Title, r.Color, r.Doc)
+			return s.UpdateNote(ctx, r.UserID, r.ID, r.Title, r.Color, r.Archived, r.Doc)
 		},
 		DeleteNote: func(ctx context.Context, request any) (any, error) {
 			r := request.(NoteReq)
