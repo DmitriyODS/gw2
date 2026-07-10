@@ -253,7 +253,7 @@ function onCaptionKey(e) {
   cursor: pointer;
   color: var(--color-text-dim);
   width: 32px;
-  height: 32px;
+  height: 32px; min-height: 0;
   border-radius: 50%;
   display: inline-flex;
   align-items: center;

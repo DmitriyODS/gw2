@@ -476,7 +476,7 @@ onMounted(() => {
 
 .settings-search-clear {
   width: 28px;
-  height: 28px;
+  height: 28px; min-height: 0;
   border-radius: 50%;
   border: 0;
   background: transparent;
@@ -911,7 +911,7 @@ onMounted(() => {
 
 .users-search-clear {
   width: 28px;
-  height: 28px;
+  height: 28px; min-height: 0;
   border: 0;
   border-radius: 50%;
   background: transparent;

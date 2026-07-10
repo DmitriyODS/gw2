@@ -424,7 +424,7 @@ onBeforeUnmount(() => {
   border: none;
   cursor: pointer;
   width: 26px;
-  height: 26px;
+  height: 26px; min-height: 0;
   border-radius: 50%;
   display: inline-flex;
   align-items: center;

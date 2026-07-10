@@ -623,7 +623,7 @@ function gotoPets() {
   outline: none;
 }
 .pdm-icon-btn {
-  width: 30px; height: 30px; border-radius: 50%; border: none; background: none;
+  width: 30px; height: 30px; min-height: 0; border-radius: 50%; border: none; background: none;
   display: grid; place-items: center; cursor: pointer; color: var(--color-text-dim);
 }
 .pdm-icon-btn:hover { background: var(--color-surface-high); }

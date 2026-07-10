@@ -320,7 +320,7 @@ onBeforeUnmount(() => clearTimeout(closeTimer))
 .mg-head { display: flex; align-items: center; justify-content: space-between; }
 .mg-head h3 { margin: 0; font-size: 16px; font-weight: 700; }
 .mg-close {
-  width: 32px; height: 32px; border-radius: 50%; border: none; background: none;
+  width: 32px; height: 32px; min-height: 0; border-radius: 50%; border: none; background: none;
   color: var(--color-text-dim); display: grid; place-items: center; cursor: pointer;
 }
 .mg-close:hover { background: var(--color-surface-high); }

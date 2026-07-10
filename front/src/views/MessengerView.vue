@@ -1228,7 +1228,7 @@ watch(() => route.params.conversationId, async (id) => {
 
 .pinned-bar-unpin {
   width: 32px;
-  height: 32px;
+  height: 32px; min-height: 0;
   border: none;
   border-radius: 50%;
   background: transparent;

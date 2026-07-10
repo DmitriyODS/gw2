@@ -184,7 +184,7 @@ function clear() {
   display: inline-grid;
   place-items: center;
   width: 26px;
-  height: 26px;
+  height: 26px; min-height: 0;
   border: none;
   border-radius: 50%;
   background: var(--color-surface-high);

@@ -973,7 +973,7 @@ async function handleSetColor(color) {
 
 .icon-btn-round {
   width: 30px;
-  height: 30px;
+  height: 30px; min-height: 0;
   border-radius: 50%;
   border: 1px solid var(--gw-border);
   background: none;
@@ -1174,6 +1174,10 @@ async function handleSetColor(color) {
 .action-btn-round {
   width: 26px;
   height: 26px;
+  /* min-height перебивает глобальный мобильный tap-target у button/a —
+     без него кнопки растягиваются в овалы. */
+  min-height: 26px;
+  aspect-ratio: 1;
   border-radius: 50%;
   border: 1px solid var(--gw-border);
   background: none;

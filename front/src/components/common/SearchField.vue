@@ -251,7 +251,7 @@ defineExpose({ focus: focusSearch })
   align-items: center;
   justify-content: center;
   width: 26px;
-  height: 26px;
+  height: 26px; min-height: 0;
   border: none;
   border-radius: 50%;
   background: transparent;
@@ -341,7 +341,7 @@ defineExpose({ focus: focusSearch })
   align-items: center;
   justify-content: center;
   width: 30px;
-  height: 30px;
+  height: 30px; min-height: 0;
   border: none;
   border-radius: 50%;
   background: transparent;

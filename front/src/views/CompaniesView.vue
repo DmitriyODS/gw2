@@ -556,7 +556,7 @@ async function doDelete() {
   border: none;
   background: transparent;
   width: 34px;
-  height: 34px;
+  height: 34px; min-height: 0;
   display: grid;
   place-items: center;
   border-radius: 50%;

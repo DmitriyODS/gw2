@@ -415,7 +415,7 @@ async function onStageReorder(e) {
 .pill-btn .material-symbols-outlined { font-size: 16px; }
 
 .icon-btn {
-  appearance: none; border: none; background: transparent; width: 34px; height: 34px; display: grid;
+  appearance: none; border: none; background: transparent; width: 34px; height: 34px; min-height: 0; display: grid;
   place-items: center; border-radius: 50%; color: var(--color-text-dim); cursor: pointer;
   transition: background .14s, color .14s;
 }
@@ -466,7 +466,7 @@ async function onStageReorder(e) {
 .color-dots { display: inline-flex; gap: 4px; flex-wrap: wrap; }
 .color-dot {
   appearance: none; border: 2.5px solid var(--tag-accent, var(--tag-border)); background: var(--tag-surface);
-  width: 22px; height: 22px; border-radius: 50%; cursor: pointer; transition: transform .12s, box-shadow .12s; padding: 0;
+  width: 22px; height: 22px; min-height: 0; border-radius: 50%; cursor: pointer; transition: transform .12s, box-shadow .12s; padding: 0;
 }
 .color-dot:hover { transform: scale(1.12); }
 .color-dot.selected { box-shadow: 0 0 0 2px var(--color-surface), 0 0 0 4px var(--color-primary); transform: scale(1.12); }

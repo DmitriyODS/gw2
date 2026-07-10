@@ -967,7 +967,7 @@ watch(isRinging, (v) => {
 .error-close {
   flex-shrink: 0;
   width: 22px;
-  height: 22px;
+  height: 22px; min-height: 0;
   border: 0;
   border-radius: 50%;
   background: transparent;

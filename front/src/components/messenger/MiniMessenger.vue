@@ -1060,7 +1060,7 @@ watch([open, activeTab], async ([isOpen, tab]) => {
 
 .mini-icon {
   width: 34px;
-  height: 34px;
+  height: 34px; min-height: 0;
   border: none;
   border-radius: 50%;
   background: transparent;

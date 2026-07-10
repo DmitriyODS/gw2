@@ -230,7 +230,7 @@ onMounted(() => {
   top: 6px;
   left: 6px;
   width: 28px;
-  height: 28px;
+  height: 28px; min-height: 0;
   border: none;
   border-radius: 50%;
   background: none;
@@ -264,7 +264,7 @@ onMounted(() => {
   top: 6px;
   right: 6px;
   width: 28px;
-  height: 28px;
+  height: 28px; min-height: 0;
   border: none;
   border-radius: 50%;
   background: none;

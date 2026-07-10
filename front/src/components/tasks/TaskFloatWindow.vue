@@ -335,7 +335,7 @@ onBeforeUnmount(() => {
 .tfw-icon-btn {
   flex-shrink: 0;
   width: 30px;
-  height: 30px;
+  height: 30px; min-height: 0;
   border: none;
   border-radius: 50%;
   background: transparent;

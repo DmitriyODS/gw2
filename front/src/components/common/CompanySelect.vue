@@ -709,7 +709,7 @@ watch(() => auth.companyId, (v) => {
   display: grid;
   place-items: center;
   width: 28px;
-  height: 28px;
+  height: 28px; min-height: 0;
   border-radius: 50%;
   background: transparent;
   border: none;
@@ -765,7 +765,7 @@ watch(() => auth.companyId, (v) => {
   display: grid;
   place-items: center;
   width: 22px;
-  height: 22px;
+  height: 22px; min-height: 0;
   border-radius: 50%;
   background: transparent;
   border: none;

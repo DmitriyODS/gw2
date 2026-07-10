@@ -492,7 +492,7 @@ select.ctl {
 .member-login { font-size: 12px; color: var(--color-on-surface-variant); }
 .member-role { width: auto; min-width: 130px; padding: 6px 28px 6px 10px; }
 .member-del {
-  flex: none; display: grid; place-items: center; width: 30px; height: 30px;
+  flex: none; display: grid; place-items: center; width: 30px; height: 30px; min-height: 0;
   border: none; background: transparent; color: var(--color-on-surface-variant);
   border-radius: 50%; cursor: pointer;
 }

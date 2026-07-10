@@ -602,7 +602,7 @@ function formatTime(iso) {
 
 .conv-action {
   width: 32px;
-  height: 32px;
+  height: 32px; min-height: 0;
   border-radius: 50%;
   border: none;
   background: transparent;

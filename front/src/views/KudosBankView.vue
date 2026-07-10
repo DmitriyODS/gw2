@@ -1036,7 +1036,7 @@ onMounted(() => {
 .kb-generous-name { font-weight: 600; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .kb-generous-sent { color: var(--color-text-dim); font-size: 12.5px; display: inline-flex; gap: 3px; align-items: center; }
 .kb-generous-thank {
-  width: 32px; height: 32px;
+  width: 32px; height: 32px; min-height: 0;
   border: none; border-radius: 50%;
   background: var(--color-primary-container);
   color: var(--color-on-primary-container);
