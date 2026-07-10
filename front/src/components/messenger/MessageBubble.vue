@@ -289,6 +289,9 @@ function onPointerUp(e) {
 function maybeTapMenu(e) {
   if (Date.now() - downAt > 400) return
   if (Math.abs(e.clientX - swipeStartX) > 10 || Math.abs(e.clientY - swipeStartY) > 10) return
+  // Только тап ПО ПУЗЫРЮ: строка .msg-row растянута на всю ширину чата,
+  // и без этого гарда меню открывал тап по пустому месту рядом.
+  if (!e.target.closest('.msg-bubble')) return
   const sel = window.getSelection?.()
   if (sel && !sel.isCollapsed) return
   // Тапы по интерактивным элементам пузыря — не повод открывать меню.
