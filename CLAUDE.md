@@ -265,6 +265,9 @@ make deploy    # make push → git push → SSH → git reset --hard → scripts
 make logs s=auth|calls   make status   make restart s=...   make shell s=...
 make backup    # pg_dump прод-БД → локально backups/gw2_<дата>.sql.gz (накат на dev-БД: gunzip -c ... | docker exec -i deploy-db-1 psql -U grovework -d grovework)
 make reset NEWPASS='...'  # сброс пароля суперадмина (pgcrypto, без утечки в ps)
+make release MSG="..." [V=1.0.6] [BUILD=2607111]  # ПОЛНЫЙ релиз одной командой: коммит рабочего дерева,
+               # автоинкремент мобильного versionCode (ГГММДДН; BUILD — явно) и версии десктопа (V),
+               # make apk + make desktop, докоммит version.json, make deploy + deploy-apk + deploy-desktop
 ```
 
 **Сервер образы НЕ собирает.** `scripts/build_push.sh` собирает их локально под `linux/amd64` (Go-стадии — нативный кросс через `$BUILDPLATFORM`, node — Rosetta) и пушит в ОДИН репозиторий Docker Hub `osipovskijdima/groove_work` с тегами `migrate` / `gateway` / `calls` / `auth` / `messenger` / `ai` / `pets` / `tasks` / `push` / `mail` / `registry` / `calendar` / `diary` / `notes` / `portal` / `front` + версионными `<svc>-X.Y.Z` (версия из `front/package.json`). Go-образы собираются из общего контекста `back-go/` (`-f back-go/<svc>/Dockerfile` — внутрь копируется и модуль pkg). Откат: в `deploy/.env` на сервере `GATEWAY_TAG=gateway-3.7.0` (аналогично `MIGRATE_TAG`/`CALLS_TAG`/`AUTH_TAG`/`MESSENGER_TAG`/`AI_TAG`/`PETS_TAG`/`TASKS_TAG`/`PUSH_TAG`/`MAIL_TAG`/`REGISTRY_TAG`/`CALENDAR_TAG`/`DIARY_TAG`/`NOTES_TAG`/`PORTAL_TAG`/`FRONT_TAG`), затем pull+up. Приватный репозиторий → одноразовый `docker login` локально и на сервере.

@@ -48,6 +48,7 @@ help:
 	@printf "  make deploy-apk   Залить APK и version.json обоих каналов на сервер\n"
 	@printf "  make desktop      Собрать десктоп-клиент (dmg+exe+AppImage) → apps/desktop/ (версия: V=1.0.1)\n"
 	@printf "  make deploy-desktop  Залить десктоп-клиент из apps/desktop/ на сервер\n"
+	@printf "  make release MSG=\"...\" [V=1.0.6] [BUILD=2607111]  ПОЛНЫЙ релиз: коммит, версии+сборка обоих приложений, деплой сервера и артефактов\n"
 	@printf "  make logs [s=calls]     Логи контейнера (по умолчанию gateway)\n"
 	@printf "  make status       docker compose ps на сервере\n"
 	@printf "  make restart [s=calls]  Перезапустить контейнер без пересборки\n"
@@ -283,7 +284,7 @@ dev-stack-stop:
 	@printf "\033[32m✓ Полный стек остановлен\033[0m\n"
 
 # ── Деплой ───────────────────────────────────────────────────────
-.PHONY: push push-all deploy deploy-only apk deploy-apk desktop deploy-desktop logs status restart shell
+.PHONY: push push-all deploy deploy-only apk deploy-apk desktop deploy-desktop release logs status restart shell
 
 # Прод-стек = база + оверлей (см. шапку deploy/docker-compose.prod.yml).
 COMPOSE_PROD := docker compose -f docker-compose.yml -f docker-compose.prod.yml
@@ -400,6 +401,37 @@ deploy-desktop:
 	$(SSH) "mkdir -p $(SERVER_DIR)/apps/desktop"
 	cd apps/desktop && scp -i $(SSH_KEY) $$(node -p "Object.values(require('./version.json').files).join(' ')") version.json $(SERVER_USER)@$(SERVER_HOST):$(SERVER_DIR)/apps/desktop/
 	@printf "\033[32m✓ Десктоп-клиент выложен — карточка в «О приложении» и автопроверка обновлений увидят новую версию\033[0m\n"
+
+# ── Полный релиз одной командой ──────────────────────────────────────
+# make release MSG="текст коммита" [V=1.0.6] [BUILD=2607111]
+#   1) коммитит рабочее дерево (MSG обязателен, если есть изменения);
+#   2) поднимает версии приложений: BUILD → apps/mobile/version.json
+#      (без BUILD versionCode инкрементируется сам по схеме ГГММДДН),
+#      V → desktop/package.json (без V версия обёртки не меняется);
+#   3) собирает APK и десктоп-установщики;
+#   4) докоммичивает обновлённые version.json;
+#   5) make deploy (образы → Docker Hub, git push, выкат сервера) и
+#      заливает артефакты обоих приложений (deploy-apk + deploy-desktop).
+release:
+	@if [ -n "$$(git status --porcelain)" ] && [ -z "$(MSG)" ]; then \
+		printf "\033[31m✗ Есть незакоммиченные изменения — передай MSG=\"текст коммита\"\033[0m\n"; exit 2; fi
+	@if [ -n "$(MSG)" ] && [ -n "$$(git status --porcelain)" ]; then \
+		git add -A && git commit -m "$(MSG)"; fi
+	@node -e "const fs=require('fs'); const p='apps/mobile/version.json'; \
+		const m=JSON.parse(fs.readFileSync(p)); \
+		const today=new Date().toLocaleDateString('sv',{timeZone:'Europe/Moscow'}).slice(2).replaceAll('-',''); \
+		const next=$(if $(BUILD),$(BUILD),String(m.current_build).startsWith(today) ? m.current_build+1 : Number(today+'0')); \
+		m.current_build=next; fs.writeFileSync(p, JSON.stringify(m, null, 2)+'\n'); \
+		console.log('▶ Мобильная сборка: '+next)"
+	$(MAKE) apk
+	$(MAKE) desktop $(if $(V),V=$(V),)
+	@if [ -n "$$(git status --porcelain apps desktop/package.json)" ]; then \
+		git add apps desktop/package.json && \
+		git commit -m "Версии приложений: десктоп $$(node -p "require('./desktop/package.json').version"), мобильная сборка $$(node -p "require('./apps/mobile/version.json').current_build")"; fi
+	$(MAKE) deploy
+	$(MAKE) deploy-apk
+	$(MAKE) deploy-desktop
+	@printf "\033[32m✓ Релиз выкачен целиком: сервер, десктоп, мобильное приложение\033[0m\n"
 
 logs:
 	$(SSH) "cd $(SERVER_DIR)/deploy && $(COMPOSE_PROD) logs -f --tail=200 $(s)"
