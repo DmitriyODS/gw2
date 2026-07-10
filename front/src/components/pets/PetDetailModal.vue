@@ -48,6 +48,9 @@
             <span class="material-symbols-outlined">local_fire_department</span>
             {{ pet?.feed_streak ?? 0 }} дн.
           </span>
+          <span v-if="generation >= 2" class="pdm-chip gen" title="Поколение питомца">
+            🌟 {{ generation }}-е поколение
+          </span>
         </div>
 
         <div v-if="pet?.sick" class="pdm-sick-block">
@@ -69,7 +72,7 @@
 
         <div v-else class="pdm-xp">
           <div class="pdm-xp-meta">
-            <span>{{ atMaxStage ? 'Максимальная форма' : 'До эволюции' }}</span>
+            <span>{{ atMaxStage ? 'Максимальная форма — доступно перерождение' : 'До эволюции' }}</span>
             <span v-if="pet?.next_stage_xp">{{ pet.xp }} / {{ pet.next_stage_xp }} XP</span>
           </div>
           <div class="pdm-xp-bar"><div class="pdm-xp-fill" :style="{ width: xpPercent + '%' }"></div></div>
@@ -142,7 +145,25 @@
               <span>Отправить в приключение</span>
               <span class="pdm-action-cost">бесплатно</span>
             </button>
+            <!-- Перерождение — только «Легенде»: поколение +1, рост заново,
+                 богатство (кудосы/гардероб/виды/домик) остаётся. -->
+            <button
+              v-if="atMaxStage && !pet?.sick"
+              class="pdm-action-btn prestige"
+              type="button"
+              @click="confirmPrestige = true"
+            >
+              <span class="pdm-action-emoji">🌟</span>
+              <span>Переродиться — поколение {{ generation + 1 }}</span>
+              <span class="pdm-action-cost">{{ nextPrestigeSpecies ? 'новый вид' : 'бесплатно' }}</span>
+            </button>
           </template>
+
+          <button class="pdm-action-btn" type="button" @click="houseOpen = true">
+            <span class="pdm-action-emoji">🏠</span>
+            <span>Домик</span>
+            <span v-if="placedCount" class="pdm-action-cost">{{ placedCount }} предм.</span>
+          </button>
 
           <div v-if="ownedItems.length" class="pdm-closet">
             <button
@@ -189,6 +210,18 @@
     <FeedMiniGame v-if="activeGame === 'feed'" :pet="pet" @success="onFeedSuccess" @close="activeGame = null" />
     <WalkMiniGame v-if="activeGame === 'walk'" :pet="pet" @success="onWalkSuccess" @close="activeGame = null" />
     <HealMiniGame v-if="activeGame === 'heal'" @success="onHealSuccess" @close="activeGame = null" />
+
+    <PetHouseDialog v-model="houseOpen" />
+    <!-- base-z-index: конфирм должен всплыть поверх этой модалки (10700). -->
+    <ConfirmDialog
+      :visible="confirmPrestige"
+      header="Переродиться?"
+      :message="prestigeMessage"
+      confirm-label="Переродиться"
+      :base-z-index="10800"
+      @confirm="doPrestige"
+      @cancel="confirmPrestige = false"
+    />
   </Teleport>
 </template>
 
@@ -196,14 +229,16 @@
 import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import EmptyState from '@/components/common/EmptyState.vue'
+import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
 import KudosCoin from '@/components/pets/KudosCoin.vue'
 import FeedMiniGame from '@/components/pets/FeedMiniGame.vue'
 import WalkMiniGame from '@/components/pets/WalkMiniGame.vue'
 import HealMiniGame from '@/components/pets/HealMiniGame.vue'
+import PetHouseDialog from '@/components/pets/PetHouseDialog.vue'
 import { usePetsStore } from '@/stores/pets.js'
 import { useNotificationsStore } from '@/stores/notifications.js'
 import {
-  petEmoji, PET_STAGES, PET_SPECIES, PERSONALITIES,
+  petEmoji, PET_STAGES, PET_SPECIES, PERSONALITIES, PRESTIGE_SPECIES,
   shopItemEmoji, shopItemTitle, activityIcon, activityText,
 } from '@/utils/pets.js'
 
@@ -267,6 +302,34 @@ const adventureReturnTime = computed(() => {
   return new Date(until).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })
 })
 const adventureSending = ref(false)
+
+// ── Престиж и домик ─────────────────────────────────────────────
+const generation = computed(() => pet.value?.generation || 1)
+const placedCount = computed(() => pet.value?.house_placed?.length || 0)
+const houseOpen = ref(false)
+const confirmPrestige = ref(false)
+const nextPrestigeSpecies = computed(() => {
+  const key = PRESTIGE_SPECIES[generation.value + 1]
+  return key ? PET_SPECIES[key] : null
+})
+const prestigeMessage = computed(() => {
+  const base = `${pet.value?.name || 'Питомец'} начнёт рост заново яйцом ${generation.value + 1}-го поколения. ` +
+    'Кудосы, гардероб, купленные виды и домик сохранятся.'
+  return nextPrestigeSpecies.value
+    ? `${base} Откроется эксклюзивный вид «${nextPrestigeSpecies.value.title}» ${nextPrestigeSpecies.value.emoji}!`
+    : base
+})
+
+async function doPrestige() {
+  confirmPrestige.value = false
+  try {
+    const res = await pets.prestigePet()
+    pulse()
+    notify.success(`Перерождение! Поколение ${res?.generation ?? generation.value}`)
+  } catch (e) {
+    notify.warn(e?.message || 'Перерождение не удалось')
+  }
+}
 
 function close() {
   emit('close')
@@ -553,6 +616,12 @@ function gotoPets() {
   background: var(--color-surface-high); font-size: 13px; font-weight: 600;
 }
 .pdm-chip.kudos { background: color-mix(in oklch, var(--color-success) 18%, transparent); }
+.pdm-chip.gen {
+  background: linear-gradient(120deg,
+    color-mix(in oklch, var(--color-tertiary-container) 80%, transparent),
+    color-mix(in oklch, var(--color-primary-container) 80%, transparent));
+  color: var(--color-on-tertiary-container);
+}
 .pdm-chip .material-symbols-outlined { font-size: 16px; }
 .pdm-chip-emoji { font-size: 14px; }
 
@@ -618,6 +687,12 @@ function gotoPets() {
 .pdm-action-btn:hover:not(:disabled) { background: var(--color-surface-high); }
 .pdm-action-btn:active:not(:disabled) { transform: scale(0.99); }
 .pdm-action-btn:disabled { opacity: 0.45; cursor: default; }
+.pdm-action-btn.prestige {
+  border-color: color-mix(in oklch, var(--color-tertiary) 55%, transparent);
+  background: linear-gradient(120deg,
+    color-mix(in oklch, var(--color-tertiary-container) 55%, var(--color-surface)),
+    color-mix(in oklch, var(--color-primary-container) 55%, var(--color-surface)));
+}
 .pdm-action-emoji { font-size: 22px; }
 .pdm-action-btn span:nth-child(2) { flex: 1; }
 .pdm-action-cost {

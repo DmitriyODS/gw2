@@ -13,6 +13,22 @@ export const resetSpecies = () =>
   apiRequest('/pets/pet/species', { method: 'DELETE' })
 export const claimQuest = () => apiRequest('/pets/pet/quest/claim', { method: 'POST' })
 export const startAdventure = () => apiRequest('/pets/pet/adventure', { method: 'POST' })
+// Перерождение «Легенды»: поколение +1, стадия/XP в ноль, богатство остаётся.
+export const prestigePet = () => apiRequest('/pets/pet/prestige', { method: 'POST' })
+
+// ─────────────────────── сезонный трек ─────────────────────────
+
+export const getSeason = () => apiRequest('/pets/season')
+export const claimSeasonReward = (threshold) =>
+  apiRequest('/pets/season/claim', { method: 'POST', body: { threshold } })
+
+// ─────────────────────────── домик ─────────────────────────────
+
+export const getHouse = () => apiRequest('/pets/house')
+export const buyHouseDecor = (item) =>
+  apiRequest('/pets/house/buy', { method: 'POST', body: { item } })
+export const arrangeHouse = (placed) =>
+  apiRequest('/pets/house/arrange', { method: 'POST', body: { placed } })
 
 // ─────────────────────────── магазин ───────────────────────────
 

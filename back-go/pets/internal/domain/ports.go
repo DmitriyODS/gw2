@@ -43,6 +43,35 @@ type PetRepo interface {
 	AddWeeklyKudos(ctx context.Context, userID int64, isoYear, isoWeek, amount int) error
 	WeeklyKudosCounts(ctx context.Context, companyID int64, isoYear, isoWeek int) (map[int64]int, error)
 
+	// Prestige — атомарное перерождение: generation+1, стадия/XP в ноль,
+	// вид в яйцо, только если стадия максимальна, питомец здоров и не в
+	// пути (узкий UPDATE — конкурентный хук XP не потеряется и не вернёт
+	// стадию). false — условия не сошлись (гонка/повторный клик).
+	Prestige(ctx context.Context, userID int64, unlockSpecies string) (generation int, ok bool, err error)
+
+	// AddSeasonalKudos/SeasonalKudos — счётчик сезонного трека: кудосы,
+	// начисленные за календарный квартал (pet_kudos_seasonal; по образцу
+	// недельного — трата баланса сумму не уменьшает).
+	AddSeasonalKudos(ctx context.Context, userID int64, season string, amount int) error
+	SeasonalKudos(ctx context.Context, userID int64, season string) (int, error)
+	// SeasonClaims/ClaimSeasonReward — забранные пороги трека; Claim
+	// атомарен (PK season_claims): false — порог уже забран.
+	SeasonClaims(ctx context.Context, userID int64, season string) ([]int, error)
+	ClaimSeasonReward(ctx context.Context, userID int64, season string, threshold int) (bool, error)
+
+	// AppendAccessory/AppendHouseDecor — атомарное добавление в jsonb-список
+	// (награды трека, покупка декора): не перетирают конкурентные изменения
+	// и не дублируют уже имеющийся ключ (false — уже был).
+	AppendAccessory(ctx context.Context, userID int64, key string) (bool, error)
+	AppendHouseDecor(ctx context.Context, userID int64, key string) (bool, error)
+	// BuyHouseDecor — атомарная покупка декора: списывает цену и добавляет
+	// ключ в house_owned одним UPDATE (false — не хватает кудосов или уже
+	// куплен, сервис различает по прочитанному снимку).
+	BuyHouseDecor(ctx context.Context, userID int64, key string, price int) (bool, error)
+	// SaveHousePlaced — узкое сохранение расстановки домика (свободные
+	// координаты предметов в процентах сцены).
+	SaveHousePlaced(ctx context.Context, userID int64, placed []HouseItem) error
+
 	// StrokesToday/RecordStroke — дневной лимит поглаживаний чужого питомца
 	// (таблица pet_strokes: StrokesToday считает строки за день на пару
 	// «гладящий → питомец», лимит StrokeDailyMaxPerPet проверяет сервис).

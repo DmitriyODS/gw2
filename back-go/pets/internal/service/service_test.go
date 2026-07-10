@@ -85,10 +85,12 @@ func TestApplyRecovery(t *testing.T) {
 
 type fakePets struct {
 	domain.PetRepo
-	byUser      map[int64]*domain.Pet
-	company     []*domain.Pet
-	weeklyKudos map[int64]int
-	strokes     map[string]int
+	byUser        map[int64]*domain.Pet
+	company       []*domain.Pet
+	weeklyKudos   map[int64]int
+	seasonalKudos map[string]int   // user:season → amount
+	seasonClaims  map[string][]int // user:season → thresholds
+	strokes       map[string]int
 
 	saves          int // вызовы full-row SavePet
 	adjustCalls    int // вызовы атомарного AdjustBalances
@@ -228,6 +230,113 @@ func (f *fakePets) StrokesTodayByStroker(_ context.Context, strokerID int64, day
 		}
 	}
 	return out, nil
+}
+
+// ── Престиж / сезонный трек / домик — семантика реальных SQL-методов ──
+
+func (f *fakePets) Prestige(_ context.Context, userID int64, unlockSpecies string) (int, bool, error) {
+	p := f.byUser[userID]
+	if p == nil {
+		return 0, false, errNoPet
+	}
+	if p.Stage < domain.MaxStage || p.SickSince != nil || p.AdventureUntil != nil {
+		return 0, false, nil
+	}
+	p.Generation = max(1, p.Generation) + 1
+	p.Stage, p.XP, p.Species = 0, 0, "egg"
+	if unlockSpecies != "" && !slicesContains(p.UnlockedSpecies, unlockSpecies) {
+		p.UnlockedSpecies = append(p.UnlockedSpecies, unlockSpecies)
+	}
+	return p.Generation, true, nil
+}
+
+func seasonMapKey(userID int64, season string) string {
+	return strconvI64(userID) + ":" + season
+}
+
+func (f *fakePets) AddSeasonalKudos(_ context.Context, userID int64, season string, amount int) error {
+	if f.seasonalKudos == nil {
+		f.seasonalKudos = map[string]int{}
+	}
+	f.seasonalKudos[seasonMapKey(userID, season)] += amount
+	return nil
+}
+
+func (f *fakePets) SeasonalKudos(_ context.Context, userID int64, season string) (int, error) {
+	return f.seasonalKudos[seasonMapKey(userID, season)], nil
+}
+
+func (f *fakePets) SeasonClaims(_ context.Context, userID int64, season string) ([]int, error) {
+	return f.seasonClaims[seasonMapKey(userID, season)], nil
+}
+
+func (f *fakePets) ClaimSeasonReward(_ context.Context, userID int64, season string, threshold int) (bool, error) {
+	if f.seasonClaims == nil {
+		f.seasonClaims = map[string][]int{}
+	}
+	key := seasonMapKey(userID, season)
+	for _, t := range f.seasonClaims[key] {
+		if t == threshold {
+			return false, nil
+		}
+	}
+	f.seasonClaims[key] = append(f.seasonClaims[key], threshold)
+	return true, nil
+}
+
+func (f *fakePets) AppendAccessory(_ context.Context, userID int64, key string) (bool, error) {
+	p := f.byUser[userID]
+	if p == nil {
+		return false, errNoPet
+	}
+	if slicesContains(p.Accessories, key) {
+		return false, nil
+	}
+	p.Accessories = append(p.Accessories, key)
+	return true, nil
+}
+
+func (f *fakePets) AppendHouseDecor(_ context.Context, userID int64, key string) (bool, error) {
+	p := f.byUser[userID]
+	if p == nil {
+		return false, errNoPet
+	}
+	if slicesContains(p.HouseOwned, key) {
+		return false, nil
+	}
+	p.HouseOwned = append(p.HouseOwned, key)
+	return true, nil
+}
+
+func (f *fakePets) BuyHouseDecor(_ context.Context, userID int64, key string, price int) (bool, error) {
+	p := f.byUser[userID]
+	if p == nil {
+		return false, errNoPet
+	}
+	if p.Kudos < price || slicesContains(p.HouseOwned, key) {
+		return false, nil
+	}
+	p.Kudos -= price
+	p.HouseOwned = append(p.HouseOwned, key)
+	return true, nil
+}
+
+func (f *fakePets) SaveHousePlaced(_ context.Context, userID int64, placed []domain.HouseItem) error {
+	p := f.byUser[userID]
+	if p == nil {
+		return errNoPet
+	}
+	p.HousePlaced = append([]domain.HouseItem{}, placed...)
+	return nil
+}
+
+func slicesContains(s []string, v string) bool {
+	for _, x := range s {
+		if x == v {
+			return true
+		}
+	}
+	return false
 }
 
 // errNoPet — фейковая инфраструктурная ошибка «питомец не найден».

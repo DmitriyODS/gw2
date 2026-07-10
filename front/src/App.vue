@@ -65,6 +65,7 @@ import { connectSocket } from '@/socket/index.js'
 import { navProgress } from '@/composables/useNavProgress.js'
 import {
   registerNotifyServiceWorker, installNotifyUnlock, requestNotificationPermission,
+  playNotifySound,
 } from '@/utils/systemNotify.js'
 import { installAppUpdateWatcher } from '@/utils/appUpdate.js'
 import AppSidebar from '@/components/layout/AppSidebar.vue'
@@ -190,20 +191,35 @@ watch(() => authStore.companyId, (id, prev) => {
 function onCallFocusOverlay() {
   if (callStore.isMinimized) callStore.expand()
 }
+
+/* Юнит в работе → закрытие/перезагрузка вкладки не проходит молча: браузер
+   показывает нативный диалог «Покинуть сайт?» (свою модалку на beforeunload
+   показать нельзя — только preventDefault), плюс звуковой «бип» как у
+   уведомлений (сыграет, если AudioContext уже разогрет первым жестом). */
+function onBeforeUnloadGuard(e) {
+  if (!unitsStore.activeUnit) return
+  playNotifySound()
+  e.preventDefault()
+  e.returnValue = '' // без returnValue старые Chrome диалог не показывают
+}
+
 onMounted(() => {
   window.addEventListener('call:focus-overlay', onCallFocusOverlay)
+  window.addEventListener('beforeunload', onBeforeUnloadGuard)
 })
 onBeforeUnmount(() => {
   window.removeEventListener('call:focus-overlay', onCallFocusOverlay)
+  window.removeEventListener('beforeunload', onBeforeUnloadGuard)
   clearTimeout(tutorialTimer)
 })
 </script>
 
 <style>
-/* Высота плашки активного юнита на мобильном — синхронизирована с
-   ActiveUnitBanner; мобильные fixed-экраны отступают на неё сверху. */
+/* Полный резерв под остров активного юнита на мобильном (верхний отступ 8px
+   + плашка 54px) — синхронизирован с ActiveUnitBanner; мобильные fixed-экраны
+   отступают на него сверху. */
 .app-layout {
-  --unit-banner-height: 54px;
+  --unit-banner-height: 62px;
 }
 
 /* Колонка «баннер активного юнита + контент»: баннер занимает свою высоту,

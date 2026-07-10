@@ -28,6 +28,9 @@
           <span class="rating-pet">
             <span class="rating-pet-emoji">{{ petEmoji(row) }}</span>
             {{ row.pet_name }}
+            <span v-if="(row.generation || 1) >= 2" class="rating-gen" :title="`${row.generation}-е поколение`">
+              🌟{{ row.generation }}
+            </span>
             <span v-if="row.sick" title="Болеет">🤒</span>
           </span>
           <span class="rating-owner">{{ row.user?.fio || '—' }}</span>
@@ -177,6 +180,16 @@ function isMine(row) {
   text-overflow: ellipsis;
 }
 .rating-pet-emoji { font-size: 15px; }
+.rating-gen {
+  font-size: 10px;
+  font-weight: 800;
+  padding: 0 6px;
+  border-radius: var(--radius-full);
+  background: linear-gradient(120deg,
+    color-mix(in oklch, var(--color-tertiary-container) 90%, transparent),
+    color-mix(in oklch, var(--color-primary-container) 90%, transparent));
+  color: var(--color-on-tertiary-container);
+}
 .rating-owner {
   font-size: 11px;
   color: var(--color-text-dim);

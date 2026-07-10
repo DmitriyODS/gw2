@@ -25,6 +25,12 @@ uploads/
 # apps/version.json с номером сборки остаётся в git — его читает Gradle)
 apps/*.apk
 
+# Артефакты десктоп-клиента (заливаются через make deploy-desktop;
+# apps/desktop/version.json остаётся в git — версия обёртки)
+apps/desktop/*.dmg
+apps/desktop/*.exe
+apps/desktop/*.AppImage
+
 # Node
 front/node_modules/
 front/dist/

@@ -31,6 +31,27 @@
       </span>
     </a>
 
+    <!-- Внутри самого десктоп-приложения и на мобильных карточка не нужна. -->
+    <div v-if="showDesktopCard" class="about-mobile about-desktop">
+      <div class="about-mobile-icon">
+        <span class="material-symbols-outlined">desktop_windows</span>
+      </div>
+      <div class="about-mobile-text">
+        <h4>Приложение для компьютера</h4>
+        <p>Groove Work отдельным окном: иконка в трее, системные уведомления и звонки — даже когда браузер закрыт.</p>
+        <p class="about-desktop-links">
+          Все платформы:
+          <a :href="desktopFileHref('mac')" download>macOS</a> ·
+          <a :href="desktopFileHref('win')" download>Windows</a> ·
+          <a :href="desktopFileHref('linux')" download>Linux</a>
+        </p>
+      </div>
+      <a class="about-mobile-btn" :href="desktopFileHref(desktopOs)" download>
+        <span class="material-symbols-outlined">download</span>
+        Скачать для {{ DESKTOP_OS_LABELS[desktopOs] }}
+      </a>
+    </div>
+
     <div class="about-grid">
       <button class="about-card" @click="openSupport" :disabled="opening">
         <div class="about-card-icon" data-tone="primary">
@@ -75,6 +96,22 @@ const tutorial = useTutorial()
 // Версию продукта берём только с сервера (первая запись changelog), не из бандла.
 const appVersion = changelog.latestVersion
 onMounted(changelog.loadLatest)
+
+/* Десктоп-клиент: артефакты лежат в /apps/desktop/ (заливает make
+   deploy-desktop), имена фиксированные — URL стабильны, как у APK.
+   Кнопка предлагает сборку под ОС посетителя, остальные — ссылками. */
+const DESKTOP_FILES = {
+  mac: 'GrooveWork-mac.dmg',
+  win: 'GrooveWork-win.exe',
+  linux: 'GrooveWork-linux.AppImage',
+}
+const DESKTOP_OS_LABELS = { mac: 'macOS', win: 'Windows', linux: 'Linux' }
+const desktopFileHref = (os) => `/apps/desktop/${DESKTOP_FILES[os]}`
+
+const ua = navigator.userAgent
+const desktopOs = /Mac/i.test(navigator.platform || ua) ? 'mac' : /Win/i.test(navigator.platform || ua) ? 'win' : 'linux'
+// В самом Electron-клиенте и на телефонах предлагать установщик бессмысленно.
+const showDesktopCard = !/Electron/i.test(ua) && !/Android|iPhone|iPad/i.test(ua)
 
 const opening = ref(false)
 
@@ -246,9 +283,40 @@ async function openSupport() {
   font-size: 14px;
   font-weight: 600;
   flex-shrink: 0;
+  /* Кнопка десктоп-карточки — ссылка <a>: гасим подчёркивание. */
+  text-decoration: none;
 }
 
 .about-mobile-btn .material-symbols-outlined { font-size: 18px; }
+
+/* Карточка десктоп-клиента — тот же каркас, свой градиент и иконка. */
+.about-desktop {
+  background: linear-gradient(135deg,
+    var(--color-secondary-container) 0%,
+    var(--color-primary-container) 100%);
+}
+
+.about-desktop .about-mobile-icon { color: var(--color-secondary); }
+
+.about-desktop .about-mobile-text h4 { color: var(--color-on-secondary-container); }
+.about-desktop .about-mobile-text p { color: var(--color-on-secondary-container); }
+
+.about-desktop-links,
+.about-desktop-links a {
+  color: var(--color-on-secondary-container);
+}
+
+.about-mobile-text p.about-desktop-links {
+  margin-top: 6px;
+  font-size: 12px;
+  opacity: 0.75;
+}
+
+.about-desktop-links a {
+  font-weight: 600;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
 
 .about-grid {
   display: grid;

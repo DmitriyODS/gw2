@@ -98,6 +98,69 @@ const (
 // AdventurePlaces — локации-названия для фана.
 var AdventurePlaces = []string{"в лес за грибами", "на речку", "в горы", "на пляж"}
 
+// ── Престиж (перерождение поколений) ────────────────────────────────
+// Питомец максимальной стадии может «переродиться»: XP и стадия обнуляются,
+// счётчик поколений растёт НАВСЕГДА (видимая лестница после «Легенды»).
+// Кудосы, гардероб, купленные виды и домик перерождение не трогает.
+
+// PrestigeSpecies — эксклюзивные виды, разблокируемые ДОСТИЖЕНИЕМ поколения
+// (не продаются; ключи не пересекаются с магазином и природными видами).
+var PrestigeSpecies = map[int]string{
+	2: "phoenix", // первое перерождение — феникс, буквально
+	3: "alien",
+	5: "robot",
+}
+
+// ── Сезонный трек наград ────────────────────────────────────────────
+// Сезон — календарный квартал (МСК), ключ вида «2026-Q3». Кудосы,
+// заработанные за сезон (pet_kudos_seasonal, инкремент рядом с недельным
+// счётчиком), открывают пороги; награду каждого порога владелец забирает
+// сам (pet_season_claims). Новый квартал — трек с нуля (мягкий сброс).
+
+// SeasonReward — порог трека: kind — accessory (гардероб), decor (домик),
+// kudos (разовый бонус кудосами, Key пустой).
+type SeasonReward struct {
+	Threshold int
+	Kind      string // accessory | decor | kudos
+	Key       string
+	Amount    int // только для kind=kudos
+}
+
+var SeasonTrack = []SeasonReward{
+	{Threshold: 40, Kind: "decor", Key: "garland"},
+	{Threshold: 100, Kind: "accessory", Key: "star"},
+	{Threshold: 200, Kind: "kudos", Amount: 25},
+	{Threshold: 350, Kind: "decor", Key: "goldfish"},
+	{Threshold: 550, Kind: "accessory", Key: "comet"},
+	{Threshold: 800, Kind: "decor", Key: "fireplace"},
+}
+
+// ── Домик питомца ───────────────────────────────────────────────────
+// Декор за кудосы — долгий сток валюты для прокачанных питомцев (у них
+// кудосы копятся без применения). Каталог фиксированный (в отличие от
+// магазина обликов ротация тут не нужна); цена 0 — предмет не продаётся,
+// приходит только наградой сезонного трека. Расставленное видно коллегам.
+
+var HouseDecor = map[string]int{
+	"chair":     15,
+	"plant":     20,
+	"picture":   25,
+	"books":     30,
+	"bed":       35,
+	"sofa":      40,
+	"teddy":     45,
+	"console":   60,
+	"piano":     80,
+	"fountain":  100,
+	"disco":     120,
+	"garland":   0, // награды сезонного трека
+	"goldfish":  0,
+	"fireplace": 0,
+}
+
+// HousePlacedMax — сколько предметов помещается в сцену домика.
+const HousePlacedMax = 6
+
 var StreakMilestones = map[int]bool{
 	3: true, 5: true, 7: true, 10: true, 14: true,
 	21: true, 30: true, 50: true, 100: true,

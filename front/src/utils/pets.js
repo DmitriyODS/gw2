@@ -37,7 +37,15 @@ export const PET_SPECIES = {
   whale: { emoji: '🐋', title: 'Китёнок' },
   unicorn: { emoji: '🦄', title: 'Единорог' },
   dragon: { emoji: '🐲', title: 'Дракон' },
+  // Эксклюзивы престиж-поколений (≡ domain.PrestigeSpecies) — не продаются,
+  // разблокируются перерождением.
+  phoenix: { emoji: '🐦‍🔥', title: 'Феникс' },
+  alien: { emoji: '👾', title: 'Космогрувик' },
+  robot: { emoji: '🤖', title: 'Робогрувик' },
 }
+
+// Поколение → эксклюзивный вид (≡ domain.PrestigeSpecies в petsvc).
+export const PRESTIGE_SPECIES = { 2: 'phoenix', 3: 'alien', 5: 'robot' }
 
 // Природные виды (определяются эволюцией). Покупные не входят сюда —
 // они доступны на любой стадии после разблокировки в магазине.
@@ -86,6 +94,42 @@ export const SHOP_ITEMS = {
   shamrock: { emoji: '🍀', title: 'Клевер на удачу' },
   rocket: { emoji: '🚀', title: 'Космическая ракета' },
   graduation: { emoji: '🎓', title: 'Выпускной колпак' },
+  // Аксессуары-награды сезонного трека (в магазине не продаются).
+  star: { emoji: '⭐', title: 'Звезда сезона' },
+  comet: { emoji: '☄️', title: 'Комета' },
+}
+
+// Каталог отображения декора домика (эмодзи/название) — цены и владение
+// приезжают с бэка (dto.HouseDecorDTO, ≡ domain.HouseDecor).
+export const DECOR_ITEMS = {
+  chair: { emoji: '🪑', title: 'Стульчик' },
+  plant: { emoji: '🪴', title: 'Растение' },
+  picture: { emoji: '🖼️', title: 'Картина' },
+  books: { emoji: '📚', title: 'Книжная полка' },
+  bed: { emoji: '🛏️', title: 'Кроватка' },
+  sofa: { emoji: '🛋️', title: 'Диванчик' },
+  teddy: { emoji: '🧸', title: 'Плюшевый друг' },
+  console: { emoji: '🎮', title: 'Приставка' },
+  piano: { emoji: '🎹', title: 'Пианино' },
+  fountain: { emoji: '⛲', title: 'Фонтан' },
+  disco: { emoji: '🪩', title: 'Диско-шар' },
+  garland: { emoji: '🎊', title: 'Сезонная гирлянда' },
+  goldfish: { emoji: '🐠', title: 'Аквариум' },
+  fireplace: { emoji: '🔥', title: 'Камин' },
+}
+
+export function decorTitle(key) { return DECOR_ITEMS[key]?.title || key }
+export function decorEmoji(key) { return DECOR_ITEMS[key]?.emoji || '📦' }
+
+// Награда сезонного трека → человекочитаемые название/эмодзи.
+export function seasonRewardMeta(reward) {
+  if (!reward) return { emoji: '🎁', title: '' }
+  if (reward.kind === 'kudos') return { emoji: '💰', title: `+${reward.amount} кудосов` }
+  if (reward.kind === 'decor') return { emoji: decorEmoji(reward.key), title: decorTitle(reward.key) }
+  return {
+    emoji: shopItemEmoji({ kind: 'accessory', key: reward.key }),
+    title: shopItemTitle({ kind: 'accessory', key: reward.key }),
+  }
 }
 
 export function shopItemTitle(item) {
@@ -167,6 +211,19 @@ export const ACTIVITY_META = {
   adventure_returned: {
     icon: 'explore',
     text: (p) => `Вернулся из приключения: +${p?.kudos ?? 0} кудосов, +${p?.xp ?? 0} XP`,
+  },
+  prestige: {
+    icon: 'auto_awesome',
+    text: (p) => `Перерождение — поколение ${p?.generation ?? '?'}`
+      + (p?.unlocked ? `, открыт вид «${PET_SPECIES[p.unlocked]?.title || p.unlocked}»` : ''),
+  },
+  season_reward: {
+    icon: 'military_tech',
+    text: (p) => `Награда сезона за ${p?.threshold ?? '?'} кудосов: ${seasonRewardMeta(p).title}`,
+  },
+  house_bought: {
+    icon: 'chair',
+    text: (p) => `Обновка для домика: ${decorTitle(p?.key)}`,
   },
 }
 

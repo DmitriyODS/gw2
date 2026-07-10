@@ -26,6 +26,7 @@ const petCols = `p.user_id, p.company_id, p.name, p.species, p.stage, p.xp, p.ku
 	p.hat, p.accessories, p.feed_streak, p.last_fed_date, p.sick_since, p.recovery,
 	p.personality, p.unlocked_species, p.quest_date, p.quest_kind, p.quest_target,
 	p.quest_progress, p.quest_claimed, p.adventure_until, p.adventure_place,
+	p.generation, p.house_owned, p.house_placed,
 	u.id, u.fio, u.avatar_path`
 
 const petFrom = ` FROM pets p LEFT JOIN users u ON u.id = p.user_id `
@@ -43,14 +44,14 @@ func scanStrings(raw []byte) []string {
 
 func scanPet(row pgx.Row) (*domain.Pet, error) {
 	var p domain.Pet
-	var accessories, unlocked []byte
+	var accessories, unlocked, houseOwned, housePlaced []byte
 	var uid *int64
 	var fio, avatar *string
 	err := row.Scan(&p.UserID, &p.CompanyID, &p.Name, &p.Species, &p.Stage, &p.XP,
 		&p.Kudos, &p.Hat, &accessories, &p.FeedStreak, &p.LastFedDate, &p.SickSince,
 		&p.Recovery, &p.Personality, &unlocked, &p.QuestDate, &p.QuestKind,
 		&p.QuestTarget, &p.QuestProgress, &p.QuestClaimed, &p.AdventureUntil,
-		&p.AdventurePlace, &uid, &fio, &avatar)
+		&p.AdventurePlace, &p.Generation, &houseOwned, &housePlaced, &uid, &fio, &avatar)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, nil
@@ -59,8 +60,23 @@ func scanPet(row pgx.Row) (*domain.Pet, error) {
 	}
 	p.Accessories = scanStrings(accessories)
 	p.UnlockedSpecies = scanStrings(unlocked)
+	p.HouseOwned = scanStrings(houseOwned)
+	p.HousePlaced = scanHouseItems(housePlaced)
 	p.User = userRef(uid, fio, avatar)
 	return &p, nil
+}
+
+// scanHouseItems — jsonb-массив расстановки; строковую легаси-форму
+// («голый ключ» первой итерации) конвертирует UnmarshalJSON HouseItem.
+func scanHouseItems(raw []byte) []domain.HouseItem {
+	var out []domain.HouseItem
+	if len(raw) > 0 {
+		_ = json.Unmarshal(raw, &out)
+	}
+	if out == nil {
+		out = []domain.HouseItem{}
+	}
+	return out
 }
 
 func (r *PetRepo) GetPet(ctx context.Context, userID int64) (*domain.Pet, error) {
@@ -82,6 +98,10 @@ func (r *PetRepo) GetOrCreate(ctx context.Context, userID, companyID int64) (*do
 }
 
 // SavePet — полное сохранение изменяемых полей (по образу ORM-коммита Flask).
+// Поля престижа и домика (generation/house_owned/house_placed) сюда намеренно
+// НЕ входят: они меняются только своими узкими атомарными методами (Prestige/
+// BuyHouseDecor/Append*/SaveHousePlaced) — full-row запись из конкурентного
+// действия перетирала бы их устаревшим снимком.
 func (r *PetRepo) SavePet(ctx context.Context, p *domain.Pet) error {
 	accessories, err := json.Marshal(p.Accessories)
 	if err != nil {
@@ -186,6 +206,8 @@ func (r *PetRepo) DeletePet(ctx context.Context, userID int64) error {
 		`DELETE FROM pet_strokes WHERE pet_user_id = $1`,
 		`DELETE FROM pet_shop_purchases WHERE user_id = $1`,
 		`DELETE FROM pet_kudos_weekly WHERE user_id = $1`,
+		`DELETE FROM pet_kudos_seasonal WHERE user_id = $1`,
+		`DELETE FROM pet_season_claims WHERE user_id = $1`,
 		`DELETE FROM pets WHERE user_id = $1`,
 	} {
 		if _, err := tx.Exec(ctx, q, userID); err != nil {
@@ -332,6 +354,155 @@ func (r *PetRepo) StrokesTodayByStroker(ctx context.Context, strokerID int64, da
 		out[owner] = count
 	}
 	return out, rows.Err()
+}
+
+// ─────────────────── престиж (перерождение) ─────────────────────────
+
+// Prestige — атомарное перерождение: гейты (максимальная стадия, здоров,
+// не в пути) прямо в WHERE, поэтому гонка двух кликов или конкурентная
+// эволюция не дадут двойного инкремента поколения. Эксклюзивный вид
+// поколения (если положен) добавляется тем же UPDATE.
+func (r *PetRepo) Prestige(ctx context.Context, userID int64, unlockSpecies string) (int, bool, error) {
+	unlock := `unlocked_species`
+	args := []any{userID, domain.MaxStage}
+	if unlockSpecies != "" {
+		unlock = `CASE WHEN unlocked_species @> $3::jsonb THEN unlocked_species
+			ELSE unlocked_species || $3::jsonb END`
+		key, err := json.Marshal([]string{unlockSpecies})
+		if err != nil {
+			return 0, false, err
+		}
+		args = append(args, string(key))
+	}
+	var generation int
+	err := r.pool.QueryRow(ctx, `
+		UPDATE pets SET generation = generation + 1, stage = 0, xp = 0,
+			species = 'egg', unlocked_species = `+unlock+`
+		WHERE user_id = $1 AND stage >= $2
+		  AND sick_since IS NULL AND adventure_until IS NULL
+		RETURNING generation`, args...).Scan(&generation)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return 0, false, nil
+		}
+		return 0, false, err
+	}
+	return generation, true, nil
+}
+
+// ─────────────── сезонный трек (кудосы за квартал) ──────────────────
+
+func (r *PetRepo) AddSeasonalKudos(ctx context.Context, userID int64, season string, amount int) error {
+	_, err := r.pool.Exec(ctx, `
+		INSERT INTO pet_kudos_seasonal (user_id, season, amount)
+		VALUES ($1, $2, $3)
+		ON CONFLICT (user_id, season)
+		DO UPDATE SET amount = pet_kudos_seasonal.amount + EXCLUDED.amount`,
+		userID, season, amount)
+	return err
+}
+
+func (r *PetRepo) SeasonalKudos(ctx context.Context, userID int64, season string) (int, error) {
+	var amount int
+	err := r.pool.QueryRow(ctx, `
+		SELECT COALESCE(sum(amount), 0) FROM pet_kudos_seasonal
+		WHERE user_id = $1 AND season = $2`, userID, season).Scan(&amount)
+	return amount, err
+}
+
+func (r *PetRepo) SeasonClaims(ctx context.Context, userID int64, season string) ([]int, error) {
+	rows, err := r.pool.Query(ctx, `
+		SELECT threshold FROM pet_season_claims
+		WHERE user_id = $1 AND season = $2`, userID, season)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []int
+	for rows.Next() {
+		var t int
+		if err := rows.Scan(&t); err != nil {
+			return nil, err
+		}
+		out = append(out, t)
+	}
+	return out, rows.Err()
+}
+
+// ClaimSeasonReward — PK(user_id, season, threshold) гарантирует «награда
+// один раз»: конкурентный второй клик получит false.
+func (r *PetRepo) ClaimSeasonReward(ctx context.Context, userID int64, season string, threshold int) (bool, error) {
+	tag, err := r.pool.Exec(ctx, `
+		INSERT INTO pet_season_claims (user_id, season, threshold)
+		VALUES ($1, $2, $3)
+		ON CONFLICT DO NOTHING`, userID, season, threshold)
+	if err != nil {
+		return false, err
+	}
+	return tag.RowsAffected() == 1, nil
+}
+
+// ─────────────────────────── домик ──────────────────────────────────
+
+// appendJSONKey — атомарное добавление ключа в jsonb-массив колонки, если
+// его там ещё нет (false — уже был; конкурентные вызовы не дублируют).
+func (r *PetRepo) appendJSONKey(ctx context.Context, userID int64, column, key string) (bool, error) {
+	arr, err := json.Marshal([]string{key})
+	if err != nil {
+		return false, err
+	}
+	single, err := json.Marshal(key)
+	if err != nil {
+		return false, err
+	}
+	tag, err := r.pool.Exec(ctx, `
+		UPDATE pets SET `+column+` = `+column+` || $2::jsonb
+		WHERE user_id = $1 AND NOT `+column+` @> $3::jsonb`,
+		userID, string(arr), string(single))
+	if err != nil {
+		return false, err
+	}
+	return tag.RowsAffected() == 1, nil
+}
+
+func (r *PetRepo) AppendAccessory(ctx context.Context, userID int64, key string) (bool, error) {
+	return r.appendJSONKey(ctx, userID, "accessories", key)
+}
+
+func (r *PetRepo) AppendHouseDecor(ctx context.Context, userID int64, key string) (bool, error) {
+	return r.appendJSONKey(ctx, userID, "house_owned", key)
+}
+
+// BuyHouseDecor — списание цены и добавление декора одним UPDATE: guard по
+// балансу и владению в WHERE, гонка с конкурентным начислением/тратой
+// невозможна (false — не хватает кудосов либо уже куплен).
+func (r *PetRepo) BuyHouseDecor(ctx context.Context, userID int64, key string, price int) (bool, error) {
+	arr, err := json.Marshal([]string{key})
+	if err != nil {
+		return false, err
+	}
+	single, err := json.Marshal(key)
+	if err != nil {
+		return false, err
+	}
+	tag, err := r.pool.Exec(ctx, `
+		UPDATE pets SET kudos = kudos - $2, house_owned = house_owned || $3::jsonb
+		WHERE user_id = $1 AND kudos >= $2 AND NOT house_owned @> $4::jsonb`,
+		userID, price, string(arr), string(single))
+	if err != nil {
+		return false, err
+	}
+	return tag.RowsAffected() == 1, nil
+}
+
+func (r *PetRepo) SaveHousePlaced(ctx context.Context, userID int64, placed []domain.HouseItem) error {
+	arr, err := json.Marshal(placed)
+	if err != nil {
+		return err
+	}
+	_, err = r.pool.Exec(ctx, `UPDATE pets SET house_placed = $2 WHERE user_id = $1`,
+		userID, string(arr))
+	return err
 }
 
 // RecordStroke — один INSERT на поглаживание (не upsert): дневной лимит

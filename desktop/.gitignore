@@ -1,0 +1,5 @@
+node_modules/
+dist/
+# корневой .gitignore прячет любые build/ (наследие Python) — а здесь это
+# ресурсы electron-builder, они должны быть в git
+!build/

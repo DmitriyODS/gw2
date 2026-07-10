@@ -1,5 +1,5 @@
 import { defineStore } from 'pinia'
-import { ref } from 'vue'
+import { ref, watch } from 'vue'
 import { getActiveUnit, stopUnit as apiStop } from '@/api/units.js'
 import { useTasksStore } from '@/stores/tasks.js'
 import { useAuthStore } from '@/stores/auth.js'
@@ -19,6 +19,16 @@ export const useUnitsStore = defineStore('units', () => {
 
   function minimize() { minimized.value = true }
   function expand() { minimized.value = false }
+
+  // Свёрнутый юнит не даёт о себе забыть: через 5 минут после сворачивания
+  // модалка разворачивается сама. Свернёт снова — таймер пойдёт заново,
+  // так что напоминание повторяется каждые 5 минут.
+  const REMIND_MS = 5 * 60 * 1000
+  let remindTimer = null
+  watch([activeUnit, minimized], ([unit, min]) => {
+    clearTimeout(remindTimer)
+    if (unit && min) remindTimer = setTimeout(expand, REMIND_MS)
+  })
 
   // Сбрасываем сворачивание только при СМЕНЕ юнита (новый запуск): обновления
   // того же юнита (unit:updated) приходят тем же путём и не должны разворачивать

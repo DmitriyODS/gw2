@@ -50,6 +50,7 @@ func (s *Service) AwardKudos(ctx context.Context, userID, companyID int64,
 	if err := s.pets.AddWeeklyKudos(ctx, userID, isoYear, isoWeek, granted); err != nil {
 		s.log.Warn("pets.weekly_kudos_failed", "user_id", userID, "error", err)
 	}
+	s.addSeasonalKudos(ctx, userID, granted)
 	s.emitPetUpdate(ctx, pet)
 	return granted
 }
@@ -210,6 +211,7 @@ func (s *Service) maybeReturnAdventure(ctx context.Context, pet *domain.Pet) *dt
 	if err := s.pets.AddWeeklyKudos(ctx, pet.UserID, isoYear, isoWeek, kudos); err != nil {
 		s.log.Warn("pets.weekly_kudos_failed", "user_id", pet.UserID, "error", err)
 	}
+	s.addSeasonalKudos(ctx, pet.UserID, kudos)
 	if evolvedTo := s.applyEvolution(ctx, pet); evolvedTo > 0 {
 		if err := s.pets.SaveEvolution(ctx, pet); err != nil {
 			s.log.Warn("pets.evolution_save_failed", "user_id", pet.UserID, "error", err)
@@ -809,6 +811,7 @@ func (s *Service) GetRating(ctx context.Context, companyID, viewerID int64) (map
 			"hat":           p.Hat,
 			"sick":          p.SickSince != nil,
 			"kudos_week":    kudosWeek[p.UserID],
+			"generation":    max(1, p.Generation),
 			"user":          p.User,
 		}
 	}

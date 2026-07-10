@@ -2,6 +2,7 @@
 package dto
 
 import (
+	"sort"
 	"time"
 
 	"github.com/DmitriyODS/gw2/back-go/pets/internal/domain"
@@ -61,6 +62,9 @@ type PetDTO struct {
 	Quest            *QuestDTO       `json:"quest"`
 	AdventureUntil   *string         `json:"adventure_until"`
 	AdventurePlace   *string         `json:"adventure_place"`
+	Generation       int                `json:"generation"`
+	HouseOwned       []string           `json:"house_owned"`
+	HousePlaced      []domain.HouseItem `json:"house_placed"`
 
 	// Контекстные поля.
 	FeedsLeft *int    `json:"feeds_left,omitempty"`
@@ -103,6 +107,9 @@ func NewPet(p *domain.Pet) *PetDTO {
 		Personality:    p.Personality,
 		AdventureUntil: isoTimePtr(p.AdventureUntil),
 		AdventurePlace: p.AdventurePlace,
+		Generation:     max(1, p.Generation),
+		HouseOwned:     orEmpty(p.HouseOwned),
+		HousePlaced:    orEmptyItems(p.HousePlaced),
 	}
 	if p.Stage < domain.MaxStage {
 		next := domain.StageXP[p.Stage+1]
@@ -199,6 +206,105 @@ type ShopDTO struct {
 	MysteryTaken bool           `json:"mystery_taken"`
 }
 
+// ── Сезонный трек ───────────────────────────────────────────────────
+
+// SeasonRewardDTO — порог трека с состоянием для владельца.
+type SeasonRewardDTO struct {
+	Threshold int    `json:"threshold"`
+	Kind      string `json:"kind"` // accessory | decor | kudos
+	Key       string `json:"key,omitempty"`
+	Amount    int    `json:"amount,omitempty"`
+	Reached   bool   `json:"reached"`
+	Claimed   bool   `json:"claimed"`
+}
+
+// SeasonDTO — состояние сезонного трека: заработано за квартал + пороги.
+type SeasonDTO struct {
+	Season  string             `json:"season"`  // «2026-Q3»
+	EndsAt  string             `json:"ends_at"` // конец квартала (МСК)
+	Kudos   int                `json:"kudos"`
+	Rewards []*SeasonRewardDTO `json:"rewards"`
+}
+
+// NewSeason — снапшот трека: пороги по возрастанию, отметки достигнут/забран.
+func NewSeason(season string, endsAt time.Time, earned int, claimedList []int) *SeasonDTO {
+	claimed := map[int]bool{}
+	for _, t := range claimedList {
+		claimed[t] = true
+	}
+	rewards := make([]*SeasonRewardDTO, 0, len(domain.SeasonTrack))
+	for _, r := range domain.SeasonTrack {
+		rewards = append(rewards, &SeasonRewardDTO{
+			Threshold: r.Threshold,
+			Kind:      r.Kind,
+			Key:       r.Key,
+			Amount:    r.Amount,
+			Reached:   earned >= r.Threshold,
+			Claimed:   claimed[r.Threshold],
+		})
+	}
+	sort.Slice(rewards, func(i, j int) bool { return rewards[i].Threshold < rewards[j].Threshold })
+	return &SeasonDTO{
+		Season:  season,
+		EndsAt:  isoTime(endsAt),
+		Kudos:   earned,
+		Rewards: rewards,
+	}
+}
+
+// ── Домик ───────────────────────────────────────────────────────────
+
+// HouseDecorDTO — позиция каталога декора; price 0 — награда сезонного
+// трека (не продаётся).
+type HouseDecorDTO struct {
+	Key    string `json:"key"`
+	Price  int    `json:"price"`
+	Owned  bool   `json:"owned"`
+	Placed bool   `json:"placed"`
+}
+
+// HouseDTO — домик питомца: каталог с владением + текущая расстановка.
+type HouseDTO struct {
+	Catalog   []*HouseDecorDTO   `json:"catalog"`
+	Placed    []domain.HouseItem `json:"placed"`
+	PlacedMax int                `json:"placed_max"`
+	Kudos     int                `json:"kudos"`
+}
+
+// NewHouse — снапшот домика; каталог отсортирован по цене (стабильный
+// порядок витрины), сезонные награды — в конце.
+func NewHouse(p *domain.Pet) *HouseDTO {
+	placedKeys := make([]string, 0, len(p.HousePlaced))
+	for _, item := range p.HousePlaced {
+		placedKeys = append(placedKeys, item.Key)
+	}
+	catalog := make([]*HouseDecorDTO, 0, len(domain.HouseDecor))
+	for key, price := range domain.HouseDecor {
+		catalog = append(catalog, &HouseDecorDTO{
+			Key:    key,
+			Price:  price,
+			Owned:  contains(p.HouseOwned, key),
+			Placed: contains(placedKeys, key),
+		})
+	}
+	sort.Slice(catalog, func(i, j int) bool {
+		pi, pj := catalog[i].Price, catalog[j].Price
+		if (pi == 0) != (pj == 0) {
+			return pj == 0 // продаваемые раньше сезонных
+		}
+		if pi != pj {
+			return pi < pj
+		}
+		return catalog[i].Key < catalog[j].Key
+	})
+	return &HouseDTO{
+		Catalog:   catalog,
+		Placed:    orEmptyItems(p.HousePlaced),
+		PlacedMax: domain.HousePlacedMax,
+		Kudos:     p.Kudos,
+	}
+}
+
 // ActivityLogDTO — запись приватной истории активности питомца.
 type ActivityLogDTO struct {
 	Kind      string         `json:"kind"`
@@ -217,6 +323,13 @@ func NewActivityLog(e *domain.ActivityLogEntry) *ActivityLogDTO {
 func orEmpty(s []string) []string {
 	if s == nil {
 		return []string{}
+	}
+	return s
+}
+
+func orEmptyItems(s []domain.HouseItem) []domain.HouseItem {
+	if s == nil {
+		return []domain.HouseItem{}
 	}
 	return s
 }

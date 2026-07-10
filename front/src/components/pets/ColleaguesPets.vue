@@ -28,6 +28,11 @@
             <span v-if="p.hat" class="cp-hat">{{ shopItemEmoji({ kind: 'accessory', key: p.hat }) }}</span>
             <span v-if="p.sick" class="cp-sick" title="Болеет">🤒</span>
             <span v-else-if="isAway(p)" class="cp-sick" title="В приключении">🧭</span>
+            <span
+              v-if="(p.generation || 1) >= 2"
+              class="cp-gen"
+              :title="`${p.generation}-е поколение`"
+            >🌟{{ p.generation }}</span>
           </div>
           <span class="cp-name">{{ p.name }}</span>
           <span class="cp-owner">{{ firstName(p.user?.fio) }}</span>
@@ -43,6 +48,15 @@
             Погладить&nbsp;<KudosCoin class="cp-tag-coin" />&nbsp;1
           </span>
         </component>
+        <!-- Домик коллеги (просмотр) — сиблинг карточки, как и удаление. -->
+        <button
+          v-if="p.user_id !== pets.myId && p.house_placed?.length"
+          class="cp-house"
+          type="button"
+          :aria-label="`Посмотреть домик «${p.name}»`"
+          title="Посмотреть домик"
+          @click.stop="houseTarget = p"
+        >🏠</button>
         <!-- Удаление питомца сотрудника — только администратор компании;
              кнопка — сиблинг карточки (карточка сама <button>). -->
         <button
@@ -82,6 +96,13 @@
       @confirm="confirmDelete"
       @cancel="deleteTarget = null"
     />
+
+    <!-- Домик коллеги — режим просмотра (guestPet). -->
+    <PetHouseDialog
+      :model-value="!!houseTarget"
+      :guest-pet="houseTarget"
+      @update:model-value="(v) => { if (!v) houseTarget = null }"
+    />
   </section>
 </template>
 
@@ -91,6 +112,7 @@ import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
 import EmptyState from '@/components/common/EmptyState.vue'
 import KudosCoin from '@/components/pets/KudosCoin.vue'
 import StrokeMiniGame from '@/components/pets/StrokeMiniGame.vue'
+import PetHouseDialog from '@/components/pets/PetHouseDialog.vue'
 import { usePermission } from '@/composables/usePermission.js'
 import { usePetsStore } from '@/stores/pets.js'
 import { useNotificationsStore } from '@/stores/notifications.js'
@@ -107,6 +129,7 @@ const canAfford = computed(() => (pets.pet?.kudos ?? 0) >= STROKE_COST)
 // Тап по карточке открывает мини-игру «трение ладошкой» (StrokeMiniGame) —
 // она сама списывает кудосы за каждый цикл и сообщает об исчерпании лимита.
 const strokeTarget = ref(null)
+const houseTarget = ref(null)
 const pulsing = reactive({})
 const strokedOut = reactive({})
 
@@ -198,6 +221,40 @@ onMounted(() => {
   color: var(--color-text);
   cursor: default;
   text-align: center;
+}
+
+/* Кнопка домика — сиблинг карточки, слева сверху (справа — удаление). */
+.cp-house {
+  position: absolute;
+  top: 6px;
+  left: 6px;
+  width: 28px;
+  height: 28px;
+  border: none;
+  border-radius: 50%;
+  background: none;
+  font-size: 14px;
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  transition: background 0.15s, transform 0.1s;
+}
+.cp-house:hover { background: var(--color-secondary-container); transform: scale(1.1); }
+
+/* Бейдж поколения — на кружке питомца. */
+.cp-gen {
+  position: absolute;
+  top: -6px;
+  left: -8px;
+  font-size: 11px;
+  font-weight: 800;
+  padding: 1px 6px;
+  border-radius: var(--radius-full);
+  background: linear-gradient(120deg,
+    color-mix(in oklch, var(--color-tertiary-container) 90%, transparent),
+    color-mix(in oklch, var(--color-primary-container) 90%, transparent));
+  color: var(--color-on-tertiary-container);
+  box-shadow: var(--shadow-sm);
 }
 
 /* Кнопка удаления (администратор) — поверх карточки, сиблинг, не вложена. */

@@ -46,6 +46,8 @@ help:
 	@printf "  make deploy-only  То же без сборки/пуша образов (push уже сделан)\n"
 	@printf "  make apk          Собрать подписанный release-APK → apps/groovework.apk\n"
 	@printf "  make deploy-apk   Залить apps/groovework.apk и apps/version.json на сервер\n"
+	@printf "  make desktop      Собрать десктоп-клиент (dmg+exe+AppImage) → apps/desktop/ (версия: V=1.0.1)\n"
+	@printf "  make deploy-desktop  Залить десктоп-клиент из apps/desktop/ на сервер\n"
 	@printf "  make logs [s=calls]     Логи контейнера (по умолчанию gateway)\n"
 	@printf "  make status       docker compose ps на сервере\n"
 	@printf "  make restart [s=calls]  Перезапустить контейнер без пересборки\n"
@@ -281,7 +283,7 @@ dev-stack-stop:
 	@printf "\033[32m✓ Полный стек остановлен\033[0m\n"
 
 # ── Деплой ───────────────────────────────────────────────────────
-.PHONY: push push-all deploy deploy-only apk deploy-apk logs status restart shell
+.PHONY: push push-all deploy deploy-only apk deploy-apk desktop deploy-desktop logs status restart shell
 
 # Прод-стек = база + оверлей (см. шапку deploy/docker-compose.prod.yml).
 COMPOSE_PROD := docker compose -f docker-compose.yml -f docker-compose.prod.yml
@@ -349,6 +351,39 @@ deploy-apk:
 	$(SSH) "mkdir -p $(SERVER_DIR)/apps"
 	scp -i $(SSH_KEY) apps/groovework.apk apps/version.json $(SERVER_USER)@$(SERVER_HOST):$(SERVER_DIR)/apps/
 	@printf "\033[32m✓ APK и version.json выложены — проверка обновлений увидит новую сборку\033[0m\n"
+
+# Сборка десктоп-клиента (Electron, desktop/): dmg (universal) + NSIS exe +
+# AppImage. Артефакты и version.json — в apps/desktop/ (готовы к
+# make deploy-desktop). Новая версия: make desktop V=1.0.1 — пишется в
+# desktop/package.json (versionCode обёртки; сам UI приезжает с сервера).
+# Сборки НЕ подписаны: для подписи нужны Apple Developer ID / win-сертификат
+# (env CSC_LINK/CSC_KEY_PASSWORD electron-builder'а).
+DESKTOP_FILES := GrooveWork-mac.dmg GrooveWork-win.exe GrooveWork-linux.AppImage
+desktop:
+	@if [ ! -d desktop/node_modules ]; then cd desktop && npm install; fi
+	@if [ -n "$(V)" ]; then cd desktop && npm version $(V) --no-git-tag-version --allow-same-version; fi
+	@printf "\033[1m▶ Собираю десктоп-клиент (mac + win + linux)...\033[0m\n"
+	cd desktop && npx electron-builder -mwl
+	@mkdir -p apps/desktop
+	cd desktop/dist && cp $(DESKTOP_FILES) ../../apps/desktop/
+	@node -e "const v=require('./desktop/package.json').version; \
+		require('fs').writeFileSync('apps/desktop/version.json', JSON.stringify({ \
+		current_version: v, \
+		files: {mac: 'GrooveWork-mac.dmg', win: 'GrooveWork-win.exe', linux: 'GrooveWork-linux.AppImage'} \
+		}, null, 2) + '\n')"
+	@printf "\033[32m✓ apps/desktop готов (v$$(node -p "require('./desktop/package.json').version")) — выложить: make deploy-desktop\033[0m\n"
+
+# Публикация десктоп-клиента: артефакты + version.json → apps/desktop/ на
+# сервере (nginx раздаёт /apps/; оттуда обёртка проверяет обновления, а
+# карточка «О приложении» даёт скачать). Зеркало deploy-apk.
+deploy-desktop:
+	@for f in $(DESKTOP_FILES) version.json; do \
+		if [ ! -f apps/desktop/$$f ]; then \
+			printf "\033[31m✗ Нет apps/desktop/$$f — сначала make desktop\033[0m\n"; exit 2; fi; done
+	@printf "\033[1m▶ Заливаю десктоп-клиент на $(SERVER_HOST)...\033[0m\n"
+	$(SSH) "mkdir -p $(SERVER_DIR)/apps/desktop"
+	cd apps/desktop && scp -i $(SSH_KEY) $(DESKTOP_FILES) version.json $(SERVER_USER)@$(SERVER_HOST):$(SERVER_DIR)/apps/desktop/
+	@printf "\033[32m✓ Десктоп-клиент выложен — карточка в «О приложении» и автопроверка обновлений увидят новую версию\033[0m\n"
 
 logs:
 	$(SSH) "cd $(SERVER_DIR)/deploy && $(COMPOSE_PROD) logs -f --tail=200 $(s)"

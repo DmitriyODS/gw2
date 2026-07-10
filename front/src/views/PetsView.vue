@@ -63,6 +63,10 @@
         </div>
       </section>
 
+      <section class="pets-section">
+        <SeasonTrackCard />
+      </section>
+
       <section ref="colleaguesEl" class="pets-section">
         <ColleaguesPets />
       </section>
@@ -83,6 +87,7 @@ import { useRoute } from 'vue-router'
 import KudosCoin from '@/components/pets/KudosCoin.vue'
 import LiveNowBar from '@/components/pets/LiveNowBar.vue'
 import RatingCard from '@/components/pets/RatingCard.vue'
+import SeasonTrackCard from '@/components/pets/SeasonTrackCard.vue'
 import ColleaguesPets from '@/components/pets/ColleaguesPets.vue'
 import PetShopDialog from '@/components/pets/PetShopDialog.vue'
 import PetDetailModal from '@/components/pets/PetDetailModal.vue'

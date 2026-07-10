@@ -8,7 +8,10 @@
 // схему ведёт migrate (goose).
 package domain
 
-import "time"
+import (
+	"encoding/json"
+	"time"
+)
 
 // UserRef — мини-профиль владельца питомца (зоопарк, рейтинг).
 type UserRef struct {
@@ -56,7 +59,39 @@ type Pet struct {
 	QuestClaimed    bool
 	AdventureUntil  *time.Time // питомец в приключении до этого момента
 	AdventurePlace  *string    // локация приключения (для фана)
+	Generation      int         // престиж: растёт при перерождении, не сбрасывается
+	HouseOwned      []string    // купленный декор домика
+	HousePlaced     []HouseItem // расставленный декор (⊆ owned, лимит HousePlacedMax)
 	User            *UserRef
+}
+
+// HouseItem — предмет, расставленный в домике: свободные координаты в
+// процентах сцены (владелец двигает декор как хочет, не по слотам).
+type HouseItem struct {
+	Key string  `json:"key"`
+	X   float64 `json:"x"` // 0..100, % ширины сцены
+	Y   float64 `json:"y"` // 0..100, % высоты сцены
+}
+
+// UnmarshalJSON принимает и первую форму расстановки — голую строку-ключ
+// (без координат): старые данные/клиенты получают дефолтное место в нижнем
+// ряду сцены вместо ошибки валидации.
+func (h *HouseItem) UnmarshalJSON(b []byte) error {
+	if len(b) > 0 && b[0] == '"' {
+		var key string
+		if err := json.Unmarshal(b, &key); err != nil {
+			return err
+		}
+		*h = HouseItem{Key: key, X: 50, Y: 78}
+		return nil
+	}
+	type alias HouseItem // без методов — иначе рекурсия UnmarshalJSON
+	var a alias
+	if err := json.Unmarshal(b, &a); err != nil {
+		return err
+	}
+	*h = HouseItem(a)
+	return nil
 }
 
 // Away — питомец сейчас в приключении (срок ещё не истёк).

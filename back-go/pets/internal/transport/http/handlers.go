@@ -9,6 +9,7 @@ import (
 
 	"github.com/gofiber/fiber/v2"
 
+	"github.com/DmitriyODS/gw2/back-go/pets/internal/domain"
 	"github.com/DmitriyODS/gw2/back-go/pets/internal/endpoint"
 	"github.com/DmitriyODS/gw2/back-go/pkg/apierror"
 	"github.com/DmitriyODS/gw2/back-go/pkg/pasetoauth"
@@ -203,6 +204,83 @@ func (h *handlers) claimQuest(c *fiber.Ctx) error {
 
 func (h *handlers) startAdventure(c *fiber.Ctx) error {
 	resp, err := h.eps.StartAdventure(c.Context(), scope(c))
+	if err != nil {
+		return h.respondError(c, err)
+	}
+	return c.JSON(resp)
+}
+
+// ─────────────── престиж / сезонный трек / домик ────────────────────
+
+func (h *handlers) prestigePet(c *fiber.Ctx) error {
+	resp, err := h.eps.PrestigePet(c.Context(), scope(c))
+	if err != nil {
+		return h.respondError(c, err)
+	}
+	return c.JSON(resp)
+}
+
+func (h *handlers) getSeason(c *fiber.Ctx) error {
+	resp, err := h.eps.GetSeason(c.Context(), scope(c))
+	if err != nil {
+		return h.respondError(c, err)
+	}
+	return c.JSON(resp)
+}
+
+func (h *handlers) claimSeasonReward(c *fiber.Ctx) error {
+	var body struct {
+		Threshold *int `json:"threshold"`
+	}
+	parseBody(c, &body)
+	if body.Threshold == nil || *body.Threshold <= 0 {
+		return validationError(c, "threshold", "Обязательное поле")
+	}
+	resp, err := h.eps.ClaimSeasonReward(c.Context(), endpoint.SeasonClaimRequest{
+		Scope: scope(c), Threshold: *body.Threshold,
+	})
+	if err != nil {
+		return h.respondError(c, err)
+	}
+	return c.JSON(resp)
+}
+
+func (h *handlers) getHouse(c *fiber.Ctx) error {
+	resp, err := h.eps.GetHouse(c.Context(), scope(c))
+	if err != nil {
+		return h.respondError(c, err)
+	}
+	return c.JSON(resp)
+}
+
+func (h *handlers) buyHouseDecor(c *fiber.Ctx) error {
+	req, verr := itemRequest(c, "item")
+	if req == nil {
+		return verr
+	}
+	resp, err := h.eps.BuyHouseDecor(c.Context(), *req)
+	if err != nil {
+		return h.respondError(c, err)
+	}
+	return c.JSON(resp)
+}
+
+func (h *handlers) arrangeHouse(c *fiber.Ctx) error {
+	var body struct {
+		Placed []domain.HouseItem `json:"placed"`
+	}
+	parseBody(c, &body)
+	if body.Placed == nil {
+		return validationError(c, "placed", "Обязательное поле")
+	}
+	for _, item := range body.Placed {
+		if item.Key == "" || runeLen(item.Key) > 32 {
+			return validationError(c, "placed", "Неверный ключ декора")
+		}
+	}
+	resp, err := h.eps.ArrangeHouse(c.Context(), endpoint.ArrangeRequest{
+		Scope: scope(c), Placed: body.Placed,
+	})
 	if err != nil {
 		return h.respondError(c, err)
 	}

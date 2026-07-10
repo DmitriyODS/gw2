@@ -55,21 +55,39 @@ async function handleStop() {
 </script>
 
 <style scoped>
+/* Парящий акриловый остров (как сайдбар: отступ 12px, radius-xl), но яркий:
+   фирменный градиент остаётся, лишь становится полупрозрачным стеклом —
+   фон приложения просвечивает сквозь blur, а плашка всё так же выделяется. */
 .unit-banner {
+  --ub-grad-from: var(--color-primary);
+  --ub-grad-to: color-mix(in oklch, var(--color-primary) 55%, var(--color-secondary));
   flex-shrink: 0;
   position: relative;
   z-index: 2;
   display: flex;
   align-items: center;
   gap: 12px;
+  margin: 12px 12px 0;
   padding: 10px 16px;
   color: var(--color-on-primary);
   background: linear-gradient(
     100deg,
-    var(--color-primary) 0%,
-    color-mix(in oklch, var(--color-primary) 55%, var(--color-secondary)) 100%
+    color-mix(in oklch, var(--ub-grad-from) 80%, transparent) 0%,
+    color-mix(in oklch, var(--ub-grad-to) 80%, transparent) 100%
   );
+  -webkit-backdrop-filter: var(--acrylic-blur);
+  backdrop-filter: var(--acrylic-blur);
+  border: 1px solid color-mix(in oklch, var(--color-on-primary) 30%, transparent);
+  border-radius: var(--radius-xl);
   box-shadow: var(--shadow-md);
+}
+
+/* Без backdrop-filter полупрозрачный градиент теряет контраст с on-primary
+   текстом — возвращаем плотный. */
+@supports not ((-webkit-backdrop-filter: blur(1px)) or (backdrop-filter: blur(1px))) {
+  .unit-banner {
+    background: linear-gradient(100deg, var(--ub-grad-from) 0%, var(--ub-grad-to) 100%);
+  }
 }
 
 /* Кликабельная зона «развернуть» — занимает всё свободное место. */
@@ -176,12 +194,13 @@ async function handleStop() {
 /* На узких экранах прячем вторичный текст и подписи кнопок — остаётся
    таймер, точка записи и круглые иконки. */
 @media (max-width: 768px) {
-  /* Фиксированная высота — под неё отступают мобильные fixed-экраны
-     (--unit-banner-height в App.vue). */
+  /* --unit-banner-height (App.vue) — ПОЛНЫЙ резерв под остров: верхний
+     отступ 8px + сама плашка; под неё отступают мобильные fixed-экраны. */
   .unit-banner {
     gap: 8px;
+    margin: 8px 8px 0;
     padding: 0 12px;
-    height: var(--unit-banner-height, 54px);
+    height: calc(var(--unit-banner-height, 62px) - 8px);
     box-sizing: border-box;
   }
   .ub-task { display: none; }

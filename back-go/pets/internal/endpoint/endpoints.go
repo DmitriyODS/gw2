@@ -11,6 +11,7 @@ import (
 
 	"github.com/go-kit/kit/endpoint"
 
+	"github.com/DmitriyODS/gw2/back-go/pets/internal/domain"
 	"github.com/DmitriyODS/gw2/back-go/pets/internal/service"
 )
 
@@ -28,6 +29,14 @@ type Endpoints struct {
 	ResetSpecies   endpoint.Endpoint
 	ClaimQuest     endpoint.Endpoint
 	StartAdventure endpoint.Endpoint
+	PrestigePet    endpoint.Endpoint
+
+	GetSeason         endpoint.Endpoint
+	ClaimSeasonReward endpoint.Endpoint
+
+	GetHouse      endpoint.Endpoint
+	BuyHouseDecor endpoint.Endpoint
+	ArrangeHouse  endpoint.Endpoint
 
 	WalkPet   endpoint.Endpoint
 	HealPet   endpoint.Endpoint
@@ -76,6 +85,18 @@ type StrokeRequest struct {
 type ZooDeleteRequest struct {
 	Scope
 	TargetUserID int64
+}
+
+// SeasonClaimRequest — забрать награду порога сезонного трека.
+type SeasonClaimRequest struct {
+	Scope
+	Threshold int
+}
+
+// ArrangeRequest — свободная расстановка декора домика (координаты — % сцены).
+type ArrangeRequest struct {
+	Scope
+	Placed []domain.HouseItem
 }
 
 func New(svc *service.Service) Endpoints {
@@ -127,6 +148,32 @@ func New(svc *service.Service) Endpoints {
 		StartAdventure: func(ctx context.Context, request any) (any, error) {
 			r := request.(Scope)
 			return svc.StartAdventure(ctx, r.UserID, r.CompanyID)
+		},
+		PrestigePet: func(ctx context.Context, request any) (any, error) {
+			r := request.(Scope)
+			return svc.PrestigePet(ctx, r.UserID, r.CompanyID)
+		},
+
+		GetSeason: func(ctx context.Context, request any) (any, error) {
+			r := request.(Scope)
+			return svc.GetSeason(ctx, r.UserID, r.CompanyID)
+		},
+		ClaimSeasonReward: func(ctx context.Context, request any) (any, error) {
+			r := request.(SeasonClaimRequest)
+			return svc.ClaimSeasonReward(ctx, r.UserID, r.CompanyID, r.Threshold)
+		},
+
+		GetHouse: func(ctx context.Context, request any) (any, error) {
+			r := request.(Scope)
+			return svc.GetHouse(ctx, r.UserID, r.CompanyID)
+		},
+		BuyHouseDecor: func(ctx context.Context, request any) (any, error) {
+			r := request.(ItemRequest)
+			return svc.BuyHouseDecor(ctx, r.UserID, r.CompanyID, r.Item)
+		},
+		ArrangeHouse: func(ctx context.Context, request any) (any, error) {
+			r := request.(ArrangeRequest)
+			return svc.ArrangeHouse(ctx, r.UserID, r.CompanyID, r.Placed)
 		},
 
 		WalkPet: func(ctx context.Context, request any) (any, error) {

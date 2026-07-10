@@ -15,6 +15,8 @@ export const usePetsStore = defineStore('pets', () => {
   const liveLoaded = ref(false)
   const activityLog = ref([])
   const activityLoaded = ref(false)
+  const season = ref(null)
+  const house = ref(null)
 
   const myId = computed(() => useAuthStore().user?.id ?? null)
 
@@ -73,6 +75,42 @@ export const usePetsStore = defineStore('pets', () => {
 
   async function claimQuest() {
     pet.value = { ...pet.value, ...(await api.claimQuest()) }
+  }
+
+  // Перерождение: сервер отдаёт свежий снапшот (gen+1, стадия 0, яйцо).
+  async function prestigePet() {
+    const res = await api.prestigePet()
+    pet.value = { ...pet.value, ...res }
+    return res
+  }
+
+  // ─────────────────────── сезонный трек ────────────────────────
+
+  async function fetchSeason() {
+    season.value = await api.getSeason()
+  }
+
+  async function claimSeasonReward(threshold) {
+    season.value = await api.claimSeasonReward(threshold)
+    // Награда меняет гардероб/домик/баланс — питомец придёт сокетом, но
+    // обновим сразу (идемпотентно).
+    await fetchPet().catch(() => {})
+  }
+
+  // ─────────────────────────── домик ─────────────────────────────
+
+  async function fetchHouse() {
+    house.value = await api.getHouse()
+  }
+
+  async function buyHouseDecor(key) {
+    house.value = await api.buyHouseDecor(key)
+    if (pet.value) pet.value = { ...pet.value, kudos: house.value.kudos }
+  }
+
+  async function arrangeHouse(placed) {
+    house.value = await api.arrangeHouse(placed)
+    if (pet.value) pet.value = { ...pet.value, house_placed: house.value.placed }
   }
 
   // ─────────────────────────── магазин ──────────────────────────
@@ -197,12 +235,16 @@ export const usePetsStore = defineStore('pets', () => {
     liveLoaded.value = false
     activityLog.value = []
     activityLoaded.value = false
+    season.value = null
+    house.value = null
   }
 
   return {
     pet, shop, shopLoaded, zoo, rating, live, liveLoaded, activityLog, activityLoaded,
+    season, house,
     myId, myCompanyId, isMine,
     fetchPet, feedPet, renamePet, equipItem, switchSpecies, resetSpecies, claimQuest, startAdventure,
+    prestigePet, fetchSeason, claimSeasonReward, fetchHouse, buyHouseDecor, arrangeHouse,
     fetchShop, buyItem, buySpecies, claimMystery,
     walkPet, healPet, strokePet,
     fetchZoo, deleteColleaguePet, fetchRating, fetchLive, fetchActivityLog,
