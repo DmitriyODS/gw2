@@ -27,6 +27,10 @@ type PetRepo interface {
 	// только если срок истёк (WHERE … adventure_until <= now RETURNING) —
 	// true отдаётся ровно один раз, двойной GET не начислит награду дважды.
 	FinishAdventure(ctx context.Context, userID int64, now time.Time) (place string, returned bool, err error)
+	// RecallAdventure — досрочный платный возврат: атомарно снимает
+	// приключение и списывает cost (guard: в пути и хватает кудосов);
+	// false — гонка (уже вернулся) либо недостаток средств.
+	RecallAdventure(ctx context.Context, userID int64, cost int) (place string, ok bool, err error)
 	// DeletePet — удалить питомца и связанные данные (поглаживания, покупки,
 	// недельные кудосы; история — каскадом FK) одной транзакцией.
 	DeletePet(ctx context.Context, userID int64) error
@@ -71,6 +75,10 @@ type PetRepo interface {
 	// SaveHousePlaced — узкое сохранение расстановки домика (свободные
 	// координаты предметов в процентах сцены).
 	SaveHousePlaced(ctx context.Context, userID int64, placed []HouseItem) error
+	// SaveHouseTheme — узкое сохранение темы комнаты (ключ из HouseThemes).
+	SaveHouseTheme(ctx context.Context, userID int64, theme string) error
+	// SaveHousePetPos — позиция самого грувика в сцене комнаты (проценты).
+	SaveHousePetPos(ctx context.Context, userID int64, x, y float64) error
 
 	// StrokesToday/RecordStroke — дневной лимит поглаживаний чужого питомца
 	// (таблица pet_strokes: StrokesToday считает строки за день на пару
@@ -117,6 +125,39 @@ type BankRepo interface {
 	RepayLoan(ctx context.Context, userID int64, amount int) (kudos, loan int, ok bool, err error)
 	// DeleteLedger — чистка выписки при удалении питомца.
 	DeleteLedger(ctx context.Context, userID int64) error
+
+	// ── Копилки-цели ────────────────────────────────────────────────
+	ListGoals(ctx context.Context, userID int64) ([]*BankGoal, error)
+	// CreateGoal — новая копилка (ID проставляется в g).
+	CreateGoal(ctx context.Context, g *BankGoal) error
+	// GoalDeposit — кошелёк → копилка (guard: kudos >= amount, копилка своя);
+	// achievedNow — цель достигнута именно этим пополнением (ровно один раз).
+	GoalDeposit(ctx context.Context, userID, goalID int64, amount int) (goal *BankGoal, achievedNow, ok bool, err error)
+	// GoalWithdraw — копилка → кошелёк (guard: saved >= amount).
+	GoalWithdraw(ctx context.Context, userID, goalID int64, amount int) (goal *BankGoal, ok bool, err error)
+	// DeleteGoal — удаление копилки с возвратом остатка в кошелёк.
+	DeleteGoal(ctx context.Context, userID, goalID int64) (refund int, ok bool, err error)
+
+	// ── Благотворительные сборы компании ────────────────────────────
+	// ListFunds — активные сборы + последние finishedShown завершённых, с
+	// агрегатами витрины (доноры, мой вклад) для viewerID.
+	ListFunds(ctx context.Context, companyID, viewerID int64, finishedShown int) ([]*BankFund, error)
+	// CreateFund — новый сбор (ID проставляется в f).
+	CreateFund(ctx context.Context, f *BankFund) error
+	// Donate — пожертвование: кошелёк → сбор, запись донации и леджер одной
+	// транзакцией. fundOK=false — сбор не найден/не активен; ok=false — не
+	// хватает кудосов; completedNow — цель закрыта именно этим взносом.
+	Donate(ctx context.Context, userID, fundID, companyID int64, amount int) (fund *BankFund, fundOK, ok, completedNow bool, err error)
+	// CloseFund — досрочное закрытие сбора (false — не найден/не активен).
+	CloseFund(ctx context.Context, fundID, companyID int64) (bool, error)
+	// FundTopDonors — топ доноров сбора.
+	FundTopDonors(ctx context.Context, fundID int64, limit int) ([]GenerousEntry, error)
+
+	// ── Статистика ──────────────────────────────────────────────────
+	// DailyTotals — приход/расход по дням (МСК) за последние days дней.
+	DailyTotals(ctx context.Context, userID int64, days int) ([]BankDayStat, error)
+	// KindTotals — приход/расход по видам операций за последние days дней.
+	KindTotals(ctx context.Context, userID int64, days int) ([]BankKindStat, error)
 }
 
 // ShopRepo — магазин питомца: постоянные/ротационные/лимитированные/

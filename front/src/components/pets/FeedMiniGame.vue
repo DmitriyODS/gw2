@@ -17,7 +17,7 @@
             :class="{ chew: state === 'success' }"
             :style="petStyle"
           >
-            <span class="mg-pet-emoji">{{ petEmojiChar }}</span>
+            <span class="mg-pet-emoji"><EmojiGlyph :char="petEmojiChar" /></span>
           </div>
 
           <div
@@ -37,6 +37,7 @@
 
 <script setup>
 import { computed, nextTick, onBeforeUnmount, reactive, ref } from 'vue'
+import EmojiGlyph from '@/components/common/EmojiGlyph.vue'
 import { isInHitZone } from '@/utils/miniGames.js'
 import { petEmoji } from '@/utils/pets.js'
 

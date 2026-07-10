@@ -161,6 +161,10 @@ var HouseDecor = map[string]int{
 // HousePlacedMax — сколько предметов помещается в сцену домика.
 const HousePlacedMax = 6
 
+// HouseThemes — ключи градиентных тем комнаты (визуал целиком на фронте,
+// бэкенд только валидирует и хранит выбор).
+var HouseThemes = []string{"cozy", "sunset", "night", "forest", "ocean", "candy"}
+
 // ── Кудо-банк ──────────────────────────────────────────────────────
 // Переводы коллегам, выписка (pet_kudos_ledger), вклад под ежедневный
 // процент и кредит. Условия зависят от уровня клиента (BankTier) — растёт
@@ -171,6 +175,23 @@ const (
 	TransferCommentMax = 120
 	SavingsDailyMax    = 15 // кап дневного начисления процентов
 	LedgerPageSize     = 30
+
+	// Копилки-цели: личные суб-счета «коплю на мечту» (без процента —
+	// процент только у вклада).
+	GoalsMax      = 4
+	GoalTitleMax  = 40
+	GoalTargetMax = 10000
+
+	// Благотворительные сборы компании (создаёт менеджер, скидываются все).
+	FundTitleMax       = 60
+	FundDescriptionMax = 300
+	FundTargetMax      = 100000
+	FundsFinishedShown = 3 // сколько завершённых сборов показывать в сводке
+
+	BankStatsDays = 14 // окно динамики прихода/расхода в статистике
+
+	// Досрочный возврат питомца из приключения (без награды за поход).
+	AdventureRecallCost = 100
 )
 
 // BankTier — уровень клиента банка: паттерн loyalty-tiers (Бронза→Платина).
@@ -188,12 +209,14 @@ type BankTier struct {
 }
 
 // BankTiers — по возрастанию порога; первый — стартовый уровень.
+// Максимум одного перевода единый (100) — уровень растит дневной лимит,
+// ставку вклада, комиссию и потолок кредита.
 var BankTiers = []BankTier{
-	{"start", "Новичок", 0, 1, 20, 50, 30, 20},
-	{"bronze", "Бронза", 300, 2, 15, 100, 60, 40},
-	{"silver", "Серебро", 1000, 3, 12, 200, 100, 80},
-	{"gold", "Золото", 2500, 4, 10, 350, 150, 120},
-	{"platinum", "Платина", 6000, 5, 8, 600, 250, 200},
+	{"start", "Новичок", 0, 1, 20, 50, 100, 100},
+	{"bronze", "Бронза", 300, 2, 15, 100, 150, 100},
+	{"silver", "Серебро", 1000, 3, 12, 200, 250, 100},
+	{"gold", "Золото", 2500, 4, 10, 350, 400, 100},
+	{"platinum", "Платина", 6000, 5, 8, 600, 600, 100},
 }
 
 // TierFor — текущий уровень по заработанному + следующий (nil на максимуме).
@@ -212,7 +235,7 @@ func TierFor(earned int) (BankTier, *BankTier) {
 
 // LedgerEarnExcluded — виды операций, которые НЕ считаются заработком для
 // уровня банка (перекладывание своих же кудосов и входящие переводы).
-var LedgerEarnExcluded = []string{"transfer_in", "loan_taken", "bank_withdraw"}
+var LedgerEarnExcluded = []string{"transfer_in", "loan_taken", "bank_withdraw", "goal_withdraw"}
 
 var StreakMilestones = map[int]bool{
 	3: true, 5: true, 7: true, 10: true, 14: true,

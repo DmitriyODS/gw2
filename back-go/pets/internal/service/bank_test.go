@@ -15,6 +15,12 @@ type fakeBank struct {
 	pets    *fakePets
 	entries []*domain.LedgerEntry
 	nextID  int64
+
+	goals      []*domain.BankGoal
+	nextGoalID int64
+	funds      []*domain.BankFund
+	nextFundID int64
+	donations  map[int64]map[int64]int // fundID → userID → сумма
 }
 
 var _ domain.BankRepo = (*fakeBank)(nil)
@@ -170,6 +176,203 @@ func (f *fakeBank) RepayLoan(_ context.Context, userID int64, amount int) (int, 
 	p.BankLoan -= amount
 	f.add(&domain.LedgerEntry{UserID: userID, CompanyID: p.CompanyID, Delta: -amount, Kind: "loan_repaid"})
 	return p.Kudos, p.BankLoan, true, nil
+}
+
+// ── Копилки-цели ────────────────────────────────────────────────────
+
+func (f *fakeBank) ListGoals(_ context.Context, userID int64) ([]*domain.BankGoal, error) {
+	var out []*domain.BankGoal
+	for _, g := range f.goals {
+		if g.UserID == userID {
+			out = append(out, g)
+		}
+	}
+	return out, nil
+}
+
+func (f *fakeBank) CreateGoal(_ context.Context, g *domain.BankGoal) error {
+	f.nextGoalID++
+	g.ID = f.nextGoalID
+	g.CreatedAt = time.Now()
+	f.goals = append(f.goals, g)
+	return nil
+}
+
+func (f *fakeBank) findGoal(userID, goalID int64) *domain.BankGoal {
+	for _, g := range f.goals {
+		if g.ID == goalID && g.UserID == userID {
+			return g
+		}
+	}
+	return nil
+}
+
+func (f *fakeBank) GoalDeposit(_ context.Context, userID, goalID int64, amount int) (*domain.BankGoal, bool, bool, error) {
+	p := f.pets.byUser[userID]
+	g := f.findGoal(userID, goalID)
+	if p == nil || g == nil || p.Kudos < amount {
+		return nil, false, false, nil
+	}
+	p.Kudos -= amount
+	g.Saved += amount
+	achievedNow := false
+	if g.AchievedAt == nil && g.Saved >= g.Target {
+		now := time.Now()
+		g.AchievedAt = &now
+		achievedNow = true
+	}
+	f.add(&domain.LedgerEntry{UserID: userID, CompanyID: g.CompanyID, Delta: -amount, Kind: "goal_deposit"})
+	return g, achievedNow, true, nil
+}
+
+func (f *fakeBank) GoalWithdraw(_ context.Context, userID, goalID int64, amount int) (*domain.BankGoal, bool, error) {
+	p := f.pets.byUser[userID]
+	g := f.findGoal(userID, goalID)
+	if p == nil || g == nil || g.Saved < amount {
+		return nil, false, nil
+	}
+	g.Saved -= amount
+	p.Kudos += amount
+	f.add(&domain.LedgerEntry{UserID: userID, CompanyID: g.CompanyID, Delta: amount, Kind: "goal_withdraw"})
+	return g, true, nil
+}
+
+func (f *fakeBank) DeleteGoal(_ context.Context, userID, goalID int64) (int, bool, error) {
+	g := f.findGoal(userID, goalID)
+	if g == nil {
+		return 0, false, nil
+	}
+	refund := g.Saved
+	if refund > 0 {
+		f.pets.byUser[userID].Kudos += refund
+		f.add(&domain.LedgerEntry{UserID: userID, CompanyID: g.CompanyID, Delta: refund, Kind: "goal_withdraw"})
+	}
+	for i, x := range f.goals {
+		if x == g {
+			f.goals = append(f.goals[:i], f.goals[i+1:]...)
+			break
+		}
+	}
+	return refund, true, nil
+}
+
+// ── Благотворительные сборы ─────────────────────────────────────────
+
+func (f *fakeBank) ListFunds(_ context.Context, companyID, viewerID int64, _ int) ([]*domain.BankFund, error) {
+	var out []*domain.BankFund
+	for _, fd := range f.funds {
+		if fd.CompanyID == companyID {
+			fd.MyDonated = f.donations[fd.ID][viewerID]
+			out = append(out, fd)
+		}
+	}
+	return out, nil
+}
+
+func (f *fakeBank) CreateFund(_ context.Context, fd *domain.BankFund) error {
+	f.nextFundID++
+	fd.ID = f.nextFundID
+	fd.CreatedAt = time.Now()
+	f.funds = append(f.funds, fd)
+	return nil
+}
+
+func (f *fakeBank) findFund(fundID int64) *domain.BankFund {
+	for _, fd := range f.funds {
+		if fd.ID == fundID {
+			return fd
+		}
+	}
+	return nil
+}
+
+func (f *fakeBank) Donate(_ context.Context, userID, fundID, companyID int64, amount int) (*domain.BankFund, bool, bool, bool, error) {
+	fd := f.findFund(fundID)
+	if fd == nil || fd.CompanyID != companyID || fd.Status != "active" {
+		return nil, false, false, false, nil
+	}
+	p := f.pets.byUser[userID]
+	if p == nil || p.Kudos < amount {
+		return nil, true, false, false, nil
+	}
+	p.Kudos -= amount
+	fd.Collected += amount
+	completedNow := false
+	if fd.Collected >= fd.Target {
+		fd.Status = "done"
+		now := time.Now()
+		fd.FinishedAt = &now
+		completedNow = true
+	}
+	if f.donations == nil {
+		f.donations = map[int64]map[int64]int{}
+	}
+	if f.donations[fundID] == nil {
+		f.donations[fundID] = map[int64]int{}
+	}
+	f.donations[fundID][userID] += amount
+	f.add(&domain.LedgerEntry{UserID: userID, CompanyID: companyID, Delta: -amount, Kind: "charity"})
+	return fd, true, true, completedNow, nil
+}
+
+func (f *fakeBank) CloseFund(_ context.Context, fundID, companyID int64) (bool, error) {
+	fd := f.findFund(fundID)
+	if fd == nil || fd.CompanyID != companyID || fd.Status != "active" {
+		return false, nil
+	}
+	fd.Status = "closed"
+	now := time.Now()
+	fd.FinishedAt = &now
+	return true, nil
+}
+
+func (f *fakeBank) FundTopDonors(_ context.Context, fundID int64, _ int) ([]domain.GenerousEntry, error) {
+	var out []domain.GenerousEntry
+	for uid, amount := range f.donations[fundID] {
+		out = append(out, domain.GenerousEntry{User: &domain.UserRef{ID: uid}, Sent: amount})
+	}
+	return out, nil
+}
+
+// ── Статистика ──────────────────────────────────────────────────────
+
+func (f *fakeBank) DailyTotals(_ context.Context, userID int64, _ int) ([]domain.BankDayStat, error) {
+	s := domain.BankDayStat{Day: time.Now()}
+	for _, e := range f.entries {
+		if e.UserID != userID {
+			continue
+		}
+		if e.Delta > 0 {
+			s.In += e.Delta
+		} else {
+			s.Out -= e.Delta
+		}
+	}
+	return []domain.BankDayStat{s}, nil
+}
+
+func (f *fakeBank) KindTotals(_ context.Context, userID int64, _ int) ([]domain.BankKindStat, error) {
+	byKind := map[string]*domain.BankKindStat{}
+	for _, e := range f.entries {
+		if e.UserID != userID {
+			continue
+		}
+		k := byKind[e.Kind]
+		if k == nil {
+			k = &domain.BankKindStat{Kind: e.Kind}
+			byKind[e.Kind] = k
+		}
+		if e.Delta > 0 {
+			k.In += e.Delta
+		} else {
+			k.Out -= e.Delta
+		}
+	}
+	var out []domain.BankKindStat
+	for _, k := range byKind {
+		out = append(out, *k)
+	}
+	return out, nil
 }
 
 func (f *fakeBank) DeleteLedger(_ context.Context, userID int64) error {

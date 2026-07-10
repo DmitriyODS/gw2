@@ -34,9 +34,11 @@ type Endpoints struct {
 	GetSeason         endpoint.Endpoint
 	ClaimSeasonReward endpoint.Endpoint
 
-	GetHouse      endpoint.Endpoint
-	BuyHouseDecor endpoint.Endpoint
-	ArrangeHouse  endpoint.Endpoint
+	GetHouse       endpoint.Endpoint
+	BuyHouseDecor  endpoint.Endpoint
+	ArrangeHouse   endpoint.Endpoint
+	SetHouseTheme  endpoint.Endpoint
+	SetHousePetPos endpoint.Endpoint
 
 	WalkPet   endpoint.Endpoint
 	HealPet   endpoint.Endpoint
@@ -48,13 +50,25 @@ type Endpoints struct {
 	GetLive        endpoint.Endpoint
 	GetActivityLog endpoint.Endpoint
 
-	GetBank        endpoint.Endpoint
-	GetBankLedger  endpoint.Endpoint
-	TransferKudos  endpoint.Endpoint
-	BankDeposit    endpoint.Endpoint
-	BankWithdraw   endpoint.Endpoint
-	BankTakeLoan   endpoint.Endpoint
-	BankRepayLoan  endpoint.Endpoint
+	GetBank       endpoint.Endpoint
+	GetBankLedger endpoint.Endpoint
+	GetBankStats  endpoint.Endpoint
+	TransferKudos endpoint.Endpoint
+	BankDeposit   endpoint.Endpoint
+	BankWithdraw  endpoint.Endpoint
+	BankTakeLoan  endpoint.Endpoint
+	BankRepayLoan endpoint.Endpoint
+
+	CreateGoal   endpoint.Endpoint
+	GoalDeposit  endpoint.Endpoint
+	GoalWithdraw endpoint.Endpoint
+	DeleteGoal   endpoint.Endpoint
+
+	CreateFund endpoint.Endpoint
+	DonateFund endpoint.Endpoint
+	CloseFund  endpoint.Endpoint
+
+	RecallAdventure endpoint.Endpoint
 }
 
 // ── Транспорт-независимые запросы ─────────────────────────────────
@@ -107,6 +121,13 @@ type ArrangeRequest struct {
 	Placed []domain.HouseItem
 }
 
+// PetPosRequest — позиция самого грувика в сцене комнаты (проценты).
+type PetPosRequest struct {
+	Scope
+	X float64
+	Y float64
+}
+
 // TransferRequest — перевод кудосов коллеге по компании.
 type TransferRequest struct {
 	Scope
@@ -125,6 +146,49 @@ type BankAmountRequest struct {
 type LedgerRequest struct {
 	Scope
 	BeforeID int64
+}
+
+// GoalCreateRequest — новая копилка-цель.
+type GoalCreateRequest struct {
+	Scope
+	Title  string
+	Emoji  string
+	Target int
+}
+
+// GoalAmountRequest — пополнение/снятие копилки (GoalID из пути).
+type GoalAmountRequest struct {
+	Scope
+	GoalID int64
+	Amount int
+}
+
+// GoalRequest — операция над копилкой без суммы (удаление).
+type GoalRequest struct {
+	Scope
+	GoalID int64
+}
+
+// FundCreateRequest — новый благотворительный сбор компании.
+type FundCreateRequest struct {
+	Scope
+	Title       string
+	Description string
+	Emoji       string
+	Target      int
+}
+
+// FundAmountRequest — взнос в сбор (FundID из пути).
+type FundAmountRequest struct {
+	Scope
+	FundID int64
+	Amount int
+}
+
+// FundRequest — операция над сбором без суммы (закрытие).
+type FundRequest struct {
+	Scope
+	FundID int64
 }
 
 func New(svc *service.Service) Endpoints {
@@ -203,6 +267,14 @@ func New(svc *service.Service) Endpoints {
 			r := request.(ArrangeRequest)
 			return svc.ArrangeHouse(ctx, r.UserID, r.CompanyID, r.Placed)
 		},
+		SetHouseTheme: func(ctx context.Context, request any) (any, error) {
+			r := request.(ItemRequest)
+			return svc.SetHouseTheme(ctx, r.UserID, r.CompanyID, r.Item)
+		},
+		SetHousePetPos: func(ctx context.Context, request any) (any, error) {
+			r := request.(PetPosRequest)
+			return svc.SetHousePetPos(ctx, r.UserID, r.CompanyID, r.X, r.Y)
+		},
 
 		WalkPet: func(ctx context.Context, request any) (any, error) {
 			r := request.(Scope)
@@ -265,6 +337,45 @@ func New(svc *service.Service) Endpoints {
 		BankRepayLoan: func(ctx context.Context, request any) (any, error) {
 			r := request.(BankAmountRequest)
 			return svc.BankRepayLoan(ctx, r.UserID, r.CompanyID, r.Amount)
+		},
+		GetBankStats: func(ctx context.Context, request any) (any, error) {
+			r := request.(Scope)
+			return svc.GetBankStats(ctx, r.UserID)
+		},
+
+		CreateGoal: func(ctx context.Context, request any) (any, error) {
+			r := request.(GoalCreateRequest)
+			return svc.CreateGoal(ctx, r.UserID, r.CompanyID, r.Title, r.Emoji, r.Target)
+		},
+		GoalDeposit: func(ctx context.Context, request any) (any, error) {
+			r := request.(GoalAmountRequest)
+			return svc.GoalDeposit(ctx, r.UserID, r.CompanyID, r.GoalID, r.Amount)
+		},
+		GoalWithdraw: func(ctx context.Context, request any) (any, error) {
+			r := request.(GoalAmountRequest)
+			return svc.GoalWithdraw(ctx, r.UserID, r.CompanyID, r.GoalID, r.Amount)
+		},
+		DeleteGoal: func(ctx context.Context, request any) (any, error) {
+			r := request.(GoalRequest)
+			return svc.DeleteGoal(ctx, r.UserID, r.CompanyID, r.GoalID)
+		},
+
+		CreateFund: func(ctx context.Context, request any) (any, error) {
+			r := request.(FundCreateRequest)
+			return svc.CreateFund(ctx, r.UserID, r.CompanyID, r.UserLevel, r.Title, r.Description, r.Emoji, r.Target)
+		},
+		DonateFund: func(ctx context.Context, request any) (any, error) {
+			r := request.(FundAmountRequest)
+			return svc.DonateFund(ctx, r.UserID, r.CompanyID, r.FundID, r.Amount)
+		},
+		CloseFund: func(ctx context.Context, request any) (any, error) {
+			r := request.(FundRequest)
+			return svc.CloseFund(ctx, r.UserID, r.CompanyID, r.FundID, r.UserLevel)
+		},
+
+		RecallAdventure: func(ctx context.Context, request any) (any, error) {
+			r := request.(Scope)
+			return svc.RecallAdventure(ctx, r.UserID, r.CompanyID)
 		},
 	}
 }

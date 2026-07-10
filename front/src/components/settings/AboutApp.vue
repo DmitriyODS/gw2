@@ -18,7 +18,7 @@
     </div>
 
     <!-- Внутри самого мобильного приложения карточка не нужна. -->
-    <a v-if="showApkCard" class="about-mobile" href="/apps/mobile/groovework.apk" download>
+    <a v-if="showApkCard" class="about-mobile" href="/apps/mobile/groovework.apk" :download="apkDownloadName">
       <div class="about-mobile-icon">
         <span class="material-symbols-outlined">android</span>
       </div>
@@ -47,7 +47,13 @@
         </p>
         <p v-else>Оболочка Groove Work</p>
       </div>
-      <button class="about-mobile-btn about-update-btn" :disabled="updBusy" @click="onUpdateClick">
+      <button
+        class="about-mobile-btn about-update-btn"
+        :class="{ downloading: updProgress != null && updProgress >= 0 }"
+        :style="updateBtnStyle"
+        :disabled="updBusy"
+        @click="onUpdateClick"
+      >
         <span class="material-symbols-outlined">{{ updateInfo?.updateAvailable ? 'download' : 'refresh' }}</span>
         {{ updateBtnLabel }}
       </button>
@@ -121,15 +127,32 @@ const appVersion = changelog.latestVersion
 onMounted(changelog.loadLatest)
 
 /* Десктоп-клиент: артефакты лежат в /apps/desktop/ (заливает make
-   deploy-desktop), имена фиксированные — URL стабильны, как у APK.
+   deploy-desktop). Имена файлов СОДЕРЖАТ ВЕРСИЮ и приезжают картой files из
+   version.json — скачавший всегда видит, какая версия у него в загрузках
+   (безымянные имена однажды дали раздачу старого установщика из кэша).
    Кнопка предлагает сборку под ОС посетителя, остальные — ссылками. */
-const DESKTOP_FILES = {
+const desktopFiles = ref({
   mac: 'GrooveWork-mac.dmg',
   win: 'GrooveWork-win.exe',
   linux: 'GrooveWork-linux.AppImage',
-}
+})
 const DESKTOP_OS_LABELS = { mac: 'macOS', win: 'Windows', linux: 'Linux' }
-const desktopFileHref = (os) => `/apps/desktop/${DESKTOP_FILES[os]}`
+const desktopFileHref = (os) => `/apps/desktop/${desktopFiles.value[os]}`
+
+// Имя сохраняемого APK — с номером сборки (сам файл на сервере канонический
+// groovework.apk: его же качает автообновление старых обёрток).
+const apkDownloadName = ref('groovework.apk')
+
+onMounted(async () => {
+  try {
+    const meta = await (await fetch('/apps/desktop/version.json', { cache: 'no-store' })).json()
+    if (meta?.files?.mac) desktopFiles.value = meta.files
+  } catch { /* карта не приехала — останутся легаси-имена */ }
+  try {
+    const meta = await (await fetch('/apps/mobile/version.json', { cache: 'no-store' })).json()
+    if (meta?.current_build) apkDownloadName.value = `groovework-${meta.current_build}.apk`
+  } catch { /* noop */ }
+})
 
 const ua = navigator.userAgent
 const desktopOs = /Mac/i.test(navigator.platform || ua) ? 'mac' : /Win/i.test(navigator.platform || ua) ? 'win' : 'linux'
@@ -179,11 +202,18 @@ async function shellInstall(onProgress) {
 
 const updateBtnLabel = computed(() => {
   if (updBusy.value && updProgress.value != null) {
-    return updProgress.value >= 0 ? `Скачивание ${Math.round(updProgress.value * 100)}%` : 'Скачивание…'
+    return updProgress.value >= 0 ? `${Math.round(updProgress.value * 100)}%` : 'Скачивание…'
   }
   if (updBusy.value) return 'Проверяем…'
   if (updateInfo.value?.updateAvailable) return 'Обновить'
   return 'Проверить обновления'
+})
+
+// Кнопка-прогресс: пока идёт скачивание, кнопка заливается цветом слева
+// направо по проценту (--dl), поверх — сам процент.
+const updateBtnStyle = computed(() => {
+  if (updProgress.value == null || updProgress.value < 0) return {}
+  return { '--dl': `${Math.round(updProgress.value * 100)}%` }
 })
 
 async function onUpdateClick() {
@@ -394,6 +424,22 @@ async function openSupport() {
   font-family: inherit;
 }
 .about-update-btn:disabled { opacity: 0.6; cursor: progress; }
+
+/* Скачивание: кнопка становится прогресс-баром — заполняется цветом по
+   проценту (--dl), текст показывает процент. */
+.about-update-btn.downloading {
+  opacity: 1;
+  min-width: 160px;
+  justify-content: center;
+  background:
+    linear-gradient(90deg,
+      var(--color-primary) 0%,
+      var(--color-primary) var(--dl, 0%),
+      color-mix(in oklch, var(--color-primary) 25%, var(--color-surface)) var(--dl, 0%),
+      color-mix(in oklch, var(--color-primary) 25%, var(--color-surface)) 100%);
+  color: var(--color-on-primary);
+  transition: background 0.2s linear;
+}
 
 /* Карточка десктоп-клиента — тот же каркас, свой градиент и иконка. */
 .about-desktop {

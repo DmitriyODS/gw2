@@ -288,6 +288,36 @@ func (h *handlers) arrangeHouse(c *fiber.Ctx) error {
 	return c.JSON(resp)
 }
 
+func (h *handlers) setHousePetPos(c *fiber.Ctx) error {
+	var body struct {
+		X *float64 `json:"x"`
+		Y *float64 `json:"y"`
+	}
+	parseBody(c, &body)
+	if body.X == nil || body.Y == nil {
+		return validationError(c, "x", "Обязательные поля x и y")
+	}
+	resp, err := h.eps.SetHousePetPos(c.Context(), endpoint.PetPosRequest{
+		Scope: scope(c), X: *body.X, Y: *body.Y,
+	})
+	if err != nil {
+		return h.respondError(c, err)
+	}
+	return c.JSON(resp)
+}
+
+func (h *handlers) setHouseTheme(c *fiber.Ctx) error {
+	req, verr := itemRequest(c, "theme")
+	if req == nil {
+		return verr
+	}
+	resp, err := h.eps.SetHouseTheme(c.Context(), *req)
+	if err != nil {
+		return h.respondError(c, err)
+	}
+	return c.JSON(resp)
+}
+
 // ────────────────── прогулка / лечение / поглаживание ──────────────
 
 func (h *handlers) walkPet(c *fiber.Ctx) error {
@@ -441,4 +471,145 @@ func (h *handlers) bankWithdraw(c *fiber.Ctx) error { return h.bankAmount(c, h.e
 func (h *handlers) bankTakeLoan(c *fiber.Ctx) error { return h.bankAmount(c, h.eps.BankTakeLoan) }
 func (h *handlers) bankRepayLoan(c *fiber.Ctx) error {
 	return h.bankAmount(c, h.eps.BankRepayLoan)
+}
+
+func (h *handlers) getBankStats(c *fiber.Ctx) error {
+	resp, err := h.eps.GetBankStats(c.Context(), scope(c))
+	if err != nil {
+		return h.respondError(c, err)
+	}
+	return c.JSON(resp)
+}
+
+// ── копилки-цели ────────────────────────────────────────────────────
+
+func (h *handlers) createGoal(c *fiber.Ctx) error {
+	var body struct {
+		Title  *string `json:"title"`
+		Emoji  *string `json:"emoji"`
+		Target *int    `json:"target"`
+	}
+	parseBody(c, &body)
+	if body.Title == nil || strings.TrimSpace(*body.Title) == "" {
+		return validationError(c, "title", "Обязательное поле")
+	}
+	if body.Target == nil || *body.Target <= 0 {
+		return validationError(c, "target", "Цель должна быть положительной")
+	}
+	emoji := ""
+	if body.Emoji != nil {
+		emoji = *body.Emoji
+	}
+	resp, err := h.eps.CreateGoal(c.Context(), endpoint.GoalCreateRequest{
+		Scope: scope(c), Title: *body.Title, Emoji: emoji, Target: *body.Target,
+	})
+	if err != nil {
+		return h.respondError(c, err)
+	}
+	return c.JSON(resp)
+}
+
+// goalAmount — общий разбор {amount} операций над копилкой (:id из пути).
+func (h *handlers) goalAmount(c *fiber.Ctx, ep func(context.Context, any) (any, error)) error {
+	goalID, _ := c.ParamsInt("id")
+	var body struct {
+		Amount *int `json:"amount"`
+	}
+	parseBody(c, &body)
+	if body.Amount == nil || *body.Amount <= 0 {
+		return validationError(c, "amount", "Сумма должна быть положительной")
+	}
+	resp, err := ep(c.Context(), endpoint.GoalAmountRequest{
+		Scope: scope(c), GoalID: int64(goalID), Amount: *body.Amount,
+	})
+	if err != nil {
+		return h.respondError(c, err)
+	}
+	return c.JSON(resp)
+}
+
+func (h *handlers) goalDeposit(c *fiber.Ctx) error  { return h.goalAmount(c, h.eps.GoalDeposit) }
+func (h *handlers) goalWithdraw(c *fiber.Ctx) error { return h.goalAmount(c, h.eps.GoalWithdraw) }
+
+func (h *handlers) deleteGoal(c *fiber.Ctx) error {
+	goalID, _ := c.ParamsInt("id")
+	resp, err := h.eps.DeleteGoal(c.Context(), endpoint.GoalRequest{
+		Scope: scope(c), GoalID: int64(goalID),
+	})
+	if err != nil {
+		return h.respondError(c, err)
+	}
+	return c.JSON(resp)
+}
+
+// ── благотворительные сборы ─────────────────────────────────────────
+
+func (h *handlers) createFund(c *fiber.Ctx) error {
+	var body struct {
+		Title       *string `json:"title"`
+		Description *string `json:"description"`
+		Emoji       *string `json:"emoji"`
+		Target      *int    `json:"target"`
+	}
+	parseBody(c, &body)
+	if body.Title == nil || strings.TrimSpace(*body.Title) == "" {
+		return validationError(c, "title", "Обязательное поле")
+	}
+	if body.Target == nil || *body.Target <= 0 {
+		return validationError(c, "target", "Цель должна быть положительной")
+	}
+	description, emoji := "", ""
+	if body.Description != nil {
+		description = *body.Description
+	}
+	if body.Emoji != nil {
+		emoji = *body.Emoji
+	}
+	resp, err := h.eps.CreateFund(c.Context(), endpoint.FundCreateRequest{
+		Scope: scope(c), Title: *body.Title, Description: description,
+		Emoji: emoji, Target: *body.Target,
+	})
+	if err != nil {
+		return h.respondError(c, err)
+	}
+	return c.JSON(resp)
+}
+
+func (h *handlers) donateFund(c *fiber.Ctx) error {
+	fundID, _ := c.ParamsInt("id")
+	var body struct {
+		Amount *int `json:"amount"`
+	}
+	parseBody(c, &body)
+	if body.Amount == nil || *body.Amount <= 0 {
+		return validationError(c, "amount", "Сумма должна быть положительной")
+	}
+	resp, err := h.eps.DonateFund(c.Context(), endpoint.FundAmountRequest{
+		Scope: scope(c), FundID: int64(fundID), Amount: *body.Amount,
+	})
+	if err != nil {
+		return h.respondError(c, err)
+	}
+	return c.JSON(resp)
+}
+
+func (h *handlers) closeFund(c *fiber.Ctx) error {
+	fundID, _ := c.ParamsInt("id")
+	resp, err := h.eps.CloseFund(c.Context(), endpoint.FundRequest{
+		Scope: scope(c), FundID: int64(fundID),
+	})
+	if err != nil {
+		return h.respondError(c, err)
+	}
+	return c.JSON(resp)
+}
+
+// ── приключение: досрочный возврат ──────────────────────────────────
+
+func (h *handlers) recallAdventure(c *fiber.Ctx) error {
+	resp, err := h.eps.RecallAdventure(c.Context(), scope(c))
+	if err != nil {
+		return h.respondError(c, err)
+	}
+	return c.JSON(resp)
 }

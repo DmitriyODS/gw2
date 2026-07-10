@@ -20,7 +20,7 @@
         @pointerdown="onPointerDown"
         @click="onClick"
       >
-        <span class="fp-emoji" :class="{ sick: pet.sick }">{{ petEmoji(pet) }}</span>
+        <span class="fp-emoji" :class="{ sick: pet.sick }"><EmojiGlyph :char="petEmoji(pet)" /></span>
         <span v-if="pet.sick" class="fp-sick-badge" title="Питомец болеет">🤒</span>
         <span v-else-if="petAway" class="fp-adventure-badge" title="В приключении">🧭</span>
       </button>
@@ -36,6 +36,7 @@
 
 <script setup>
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import EmojiGlyph from '@/components/common/EmojiGlyph.vue'
 import { useDraggable } from '@/composables/useDraggable.js'
 import { anyModalOpen } from '@/composables/useOpenModals.js'
 import { floatingHidden, installFloatingHide } from '@/composables/useFloatingHide.js'

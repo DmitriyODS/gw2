@@ -26,7 +26,7 @@
         <img class="rating-avatar" :src="avatarUrl(row.user)" alt="" loading="lazy" />
         <div class="rating-info">
           <span class="rating-pet">
-            <span class="rating-pet-emoji">{{ petEmoji(row) }}</span>
+            <span class="rating-pet-emoji"><EmojiGlyph :char="petEmoji(row)" /></span>
             {{ row.pet_name }}
             <span v-if="(row.generation || 1) >= 2" class="rating-gen" :title="`${row.generation}-е поколение`">
               🌟{{ row.generation }}
@@ -52,6 +52,7 @@
 
 <script setup>
 import { computed } from 'vue'
+import EmojiGlyph from '@/components/common/EmojiGlyph.vue'
 import { usePetsStore } from '@/stores/pets.js'
 import { avatarUrl, petEmoji } from '@/utils/pets.js'
 import EmptyState from '@/components/common/EmptyState.vue'

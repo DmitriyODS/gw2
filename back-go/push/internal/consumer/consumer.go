@@ -15,11 +15,14 @@ import (
 // Channels — каналы, из которых берём события для пушей:
 //
 //	messenger — message:new; tasks — task:created; gateway — call:incoming
-//	(ринг-фазу звонков публикует gatewaysvc в свой канал).
+//	(ринг-фазу звонков публикует gatewaysvc в свой канал); pets —
+//	kudos:received (входящий перевод кудо-банка); portal — post:new.
 var Channels = []string{
 	"gw2:messenger:events",
 	"gw2:tasks:events",
 	"gw2:gateway:events",
+	"gw2:pets:events",
+	"gw2:portal:events",
 }
 
 const reconnectDelay = 3 * time.Second

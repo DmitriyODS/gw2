@@ -361,37 +361,44 @@ deploy-apk:
 	scp -i $(SSH_KEY) apps/groovework.apk apps/version.json $(SERVER_USER)@$(SERVER_HOST):$(SERVER_DIR)/apps/
 	@printf "\033[32m✓ APK и version.json выложены (оба канала) — проверка обновлений увидит новую сборку\033[0m\n"
 
-# Сборка десктоп-клиента (Electron, desktop/): dmg (universal) + NSIS exe +
-# AppImage. Артефакты и version.json — в apps/desktop/ (готовы к
-# make deploy-desktop). Новая версия: make desktop V=1.0.1 — пишется в
-# desktop/package.json (versionCode обёртки; сам UI приезжает с сервера).
+# Сборка десктоп-клиента (Electron, desktop/): dmg + NSIS exe + AppImage.
+# Артефакты и version.json — в apps/desktop/ (готовы к make deploy-desktop).
+# Новая версия: make desktop V=1.0.5 — пишется в desktop/package.json
+# (versionCode обёртки; сам UI приезжает с сервера).
+# ИМЕНА АРТЕФАКТОВ СОДЕРЖАТ ВЕРСИЮ (artifactName в desktop/package.json):
+# GrooveWork-<v>-mac.dmg / -win.exe / -linux.AppImage — безымянные версии
+# «GrooveWork-mac.dmg» однажды привели к раздаче старого установщика под
+# новым version.json (кэш + не перезаписанный файл). version.json несёт
+# карту files — обёртка и карточка скачивания читают имена оттуда.
 # Сборки НЕ подписаны: для подписи нужны Apple Developer ID / win-сертификат
 # (env CSC_LINK/CSC_KEY_PASSWORD electron-builder'а).
-DESKTOP_FILES := GrooveWork-mac.dmg GrooveWork-win.exe GrooveWork-linux.AppImage
 desktop:
 	@if [ ! -d desktop/node_modules ]; then cd desktop && npm install; fi
 	@if [ -n "$(V)" ]; then cd desktop && npm version $(V) --no-git-tag-version --allow-same-version; fi
 	@printf "\033[1m▶ Собираю десктоп-клиент (mac + win + linux)...\033[0m\n"
 	cd desktop && npx electron-builder -mwl
 	@mkdir -p apps/desktop
-	cd desktop/dist && cp $(DESKTOP_FILES) ../../apps/desktop/
-	@node -e "const v=require('./desktop/package.json').version; \
-		require('fs').writeFileSync('apps/desktop/version.json', JSON.stringify({ \
-		current_version: v, \
-		files: {mac: 'GrooveWork-mac.dmg', win: 'GrooveWork-win.exe', linux: 'GrooveWork-linux.AppImage'} \
-		}, null, 2) + '\n')"
-	@printf "\033[32m✓ apps/desktop готов (v$$(node -p "require('./desktop/package.json').version")) — выложить: make deploy-desktop\033[0m\n"
+	@node -e "const fs=require('fs'); \
+		const v=require('./desktop/package.json').version; \
+		const files={mac:\`GrooveWork-\$${v}-mac.dmg\`, win:\`GrooveWork-\$${v}-win.exe\`, linux:\`GrooveWork-\$${v}-linux.AppImage\`}; \
+		for (const f of fs.readdirSync('apps/desktop')) \
+			if (/^GrooveWork-.*\.(dmg|exe|AppImage)$$/.test(f)) fs.rmSync('apps/desktop/'+f); \
+		for (const name of Object.values(files)) { \
+			if (!fs.existsSync('desktop/dist/'+name)) { console.error('✗ Нет desktop/dist/'+name+' — сборка не дала артефакт'); process.exit(2); } \
+			fs.copyFileSync('desktop/dist/'+name, 'apps/desktop/'+name); } \
+		fs.writeFileSync('apps/desktop/version.json', JSON.stringify({current_version:v, files}, null, 2)+'\n'); \
+		console.log('✓ apps/desktop готов (v'+v+') — выложить: make deploy-desktop')"
 
 # Публикация десктоп-клиента: артефакты + version.json → apps/desktop/ на
 # сервере (nginx раздаёт /apps/; оттуда обёртка проверяет обновления, а
-# карточка «О приложении» даёт скачать). Зеркало deploy-apk.
+# карточка «О приложении» даёт скачать). Имена файлов — из version.json.
 deploy-desktop:
-	@for f in $(DESKTOP_FILES) version.json; do \
-		if [ ! -f apps/desktop/$$f ]; then \
-			printf "\033[31m✗ Нет apps/desktop/$$f — сначала make desktop\033[0m\n"; exit 2; fi; done
+	@node -e "const m=require('./apps/desktop/version.json'); \
+		for (const f of Object.values(m.files)) \
+			if (!require('fs').existsSync('apps/desktop/'+f)) { console.error('✗ Нет apps/desktop/'+f+' — сначала make desktop'); process.exit(2); }"
 	@printf "\033[1m▶ Заливаю десктоп-клиент на $(SERVER_HOST)...\033[0m\n"
 	$(SSH) "mkdir -p $(SERVER_DIR)/apps/desktop"
-	cd apps/desktop && scp -i $(SSH_KEY) $(DESKTOP_FILES) version.json $(SERVER_USER)@$(SERVER_HOST):$(SERVER_DIR)/apps/desktop/
+	cd apps/desktop && scp -i $(SSH_KEY) $$(node -p "Object.values(require('./version.json').files).join(' ')") version.json $(SERVER_USER)@$(SERVER_HOST):$(SERVER_DIR)/apps/desktop/
 	@printf "\033[32m✓ Десктоп-клиент выложен — карточка в «О приложении» и автопроверка обновлений увидят новую версию\033[0m\n"
 
 logs:

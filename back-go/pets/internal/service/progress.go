@@ -254,3 +254,36 @@ func (s *Service) ArrangeHouse(ctx context.Context, userID, companyID int64, pla
 func clampPct(v float64) float64 {
 	return min(100, max(0, v))
 }
+
+// SetHousePetPos — владелец двигает самого грувика по сцене комнаты.
+func (s *Service) SetHousePetPos(ctx context.Context, userID, companyID int64, x, y float64) (*dto.HouseDTO, error) {
+	pet, err := s.pets.GetOrCreate(ctx, userID, companyID)
+	if err != nil {
+		return nil, err
+	}
+	x, y = clampPct(x), clampPct(y)
+	if err := s.pets.SaveHousePetPos(ctx, userID, x, y); err != nil {
+		return nil, err
+	}
+	pet.HousePetX, pet.HousePetY = &x, &y
+	s.emitPetUpdate(ctx, pet)
+	return dto.NewHouse(pet), nil
+}
+
+// SetHouseTheme — выбор градиентной темы комнаты (бесплатно; тему видят
+// коллеги в домике и мини-игре поглаживания).
+func (s *Service) SetHouseTheme(ctx context.Context, userID, companyID int64, theme string) (*dto.HouseDTO, error) {
+	if !containsStr(domain.HouseThemes, theme) {
+		return nil, domain.NewError("NO_THEME", "Такой темы комнаты нет", 422)
+	}
+	pet, err := s.pets.GetOrCreate(ctx, userID, companyID)
+	if err != nil {
+		return nil, err
+	}
+	if err := s.pets.SaveHouseTheme(ctx, userID, theme); err != nil {
+		return nil, err
+	}
+	pet.HouseTheme = theme
+	s.emitPetUpdate(ctx, pet)
+	return dto.NewHouse(pet), nil
+}

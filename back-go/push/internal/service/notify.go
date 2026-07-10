@@ -22,7 +22,103 @@ func (s *Service) Dispatch(ctx context.Context, event string, payload json.RawMe
 		s.onTask(ctx, payload)
 	case "call:incoming":
 		s.onCall(ctx, payload, rooms)
+	case "kudos:received":
+		s.onKudos(ctx, payload, rooms)
+	case "post:new":
+		s.onPost(ctx, payload)
 	}
+}
+
+// onPost — новый пост портала: адресован всей компании (комната all), поэтому
+// получателей берём из членства компании; автору пуш не шлём.
+func (s *Service) onPost(ctx context.Context, payload json.RawMessage) {
+	var e struct {
+		ID        int64  `json:"id"`
+		CompanyID int64  `json:"company_id"`
+		AuthorID  int64  `json:"author_id"`
+		Title     string `json:"title"`
+		Body      string `json:"body"`
+	}
+	if err := json.Unmarshal(payload, &e); err != nil || e.ID == 0 || e.CompanyID == 0 {
+		return
+	}
+	members, err := s.users.MembersOf(ctx, e.CompanyID)
+	if err != nil {
+		s.log.Warn("push.post_members_failed", "company_id", e.CompanyID, "error", err)
+		return
+	}
+	recipients := excluding(members, &e.AuthorID)
+	if len(recipients) == 0 {
+		return
+	}
+	title := "Новый пост на портале"
+	author := ""
+	if names, _ := s.users.Names(ctx, []int64{e.AuthorID}); names[e.AuthorID] != "" {
+		author = names[e.AuthorID]
+	}
+	body := strings.TrimSpace(e.Title)
+	if body == "" {
+		body = postPreview(e.Body)
+	}
+	if author != "" {
+		title = author + " — новый пост"
+	}
+	s.deliver(ctx, recipients, domain.Notification{
+		Title:   title,
+		Body:    body,
+		Channel: domain.ChannelPortal,
+		Data: map[string]string{
+			"type":    "post",
+			"post_id": strconv.FormatInt(e.ID, 10),
+		},
+	})
+}
+
+// postPreview — короткий текст без Markdown-обвязки для тела уведомления.
+func postPreview(body string) string {
+	clean := strings.NewReplacer("#", "", "*", "", "`", "", ">", "", "_", "").Replace(body)
+	clean = strings.Join(strings.Fields(clean), " ")
+	r := []rune(clean)
+	if len(r) > 120 {
+		return string(r[:120]) + "…"
+	}
+	if clean == "" {
+		return "Открыть портал"
+	}
+	return clean
+}
+
+// onKudos — входящий перевод кудо-банка: адресный пуш получателю
+// (rooms = [user_{id}], онлайн-гейт общий в deliver).
+func (s *Service) onKudos(ctx context.Context, payload json.RawMessage, rooms []string) {
+	var e struct {
+		Amount  int    `json:"amount"`
+		Comment string `json:"comment"`
+		From    *struct {
+			ID  int64  `json:"id"`
+			FIO string `json:"fio"`
+		} `json:"from"`
+	}
+	if err := json.Unmarshal(payload, &e); err != nil || e.Amount <= 0 {
+		return
+	}
+	recipients := usersFromRooms(rooms)
+	if len(recipients) == 0 {
+		return
+	}
+	body := "Вам перевели кудосы"
+	if e.From != nil && e.From.FIO != "" {
+		body = "От " + e.From.FIO
+	}
+	if strings.TrimSpace(e.Comment) != "" {
+		body += " — «" + e.Comment + "»"
+	}
+	s.deliver(ctx, recipients, domain.Notification{
+		Title:   "+" + strconv.Itoa(e.Amount) + " кудосов 🎉",
+		Body:    body,
+		Channel: domain.ChannelKudos,
+		Data:    map[string]string{"type": "kudos"},
+	})
 }
 
 func (s *Service) onMessage(ctx context.Context, payload json.RawMessage, rooms []string) {

@@ -1,8 +1,8 @@
 {
-  "current_version": "1.0.2",
+  "current_version": "1.0.4",
   "files": {
-    "mac": "GrooveWork-mac.dmg",
-    "win": "GrooveWork-win.exe",
-    "linux": "GrooveWork-linux.AppImage"
+    "mac": "GrooveWork-1.0.4-mac.dmg",
+    "win": "GrooveWork-1.0.4-win.exe",
+    "linux": "GrooveWork-1.0.4-linux.AppImage"
   }
 }

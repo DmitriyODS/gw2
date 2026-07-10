@@ -175,6 +175,22 @@ func (f *fakePets) FinishAdventure(_ context.Context, userID int64, now time.Tim
 	return place, true, nil
 }
 
+// RecallAdventure — семантика реального репозитория: атомарно снимает
+// приключение и списывает cost, false — не в пути / не хватает кудосов.
+func (f *fakePets) RecallAdventure(_ context.Context, userID int64, cost int) (string, bool, error) {
+	p := f.byUser[userID]
+	if p == nil || p.AdventureUntil == nil || p.Kudos < cost {
+		return "", false, nil
+	}
+	place := ""
+	if p.AdventurePlace != nil {
+		place = *p.AdventurePlace
+	}
+	p.AdventureUntil, p.AdventurePlace = nil, nil
+	p.Kudos -= cost
+	return place, true, nil
+}
+
 func (f *fakePets) DeletePet(_ context.Context, userID int64) error {
 	delete(f.byUser, userID)
 	for i, p := range f.company {
@@ -327,6 +343,24 @@ func (f *fakePets) SaveHousePlaced(_ context.Context, userID int64, placed []dom
 		return errNoPet
 	}
 	p.HousePlaced = append([]domain.HouseItem{}, placed...)
+	return nil
+}
+
+func (f *fakePets) SaveHouseTheme(_ context.Context, userID int64, theme string) error {
+	p := f.byUser[userID]
+	if p == nil {
+		return errNoPet
+	}
+	p.HouseTheme = theme
+	return nil
+}
+
+func (f *fakePets) SaveHousePetPos(_ context.Context, userID int64, x, y float64) error {
+	p := f.byUser[userID]
+	if p == nil {
+		return errNoPet
+	}
+	p.HousePetX, p.HousePetY = &x, &y
 	return nil
 }
 

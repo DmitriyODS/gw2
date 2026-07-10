@@ -56,7 +56,22 @@ func (s *Service) GetBank(ctx context.Context, userID, companyID int64) (*dto.Ba
 	if err != nil {
 		return nil, err
 	}
+	goals, err := s.bank.ListGoals(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	funds, err := s.bank.ListFunds(ctx, companyID, userID, domain.FundsFinishedShown)
+	if err != nil {
+		return nil, err
+	}
+	for _, f := range funds {
+		if donors, err := s.bank.FundTopDonors(ctx, f.ID, 3); err == nil {
+			f.TopDonors = donors
+		}
+	}
 	d := dto.NewBank(pet, tier, next, earned, monthIn, monthOut, top)
+	d.Goals = dto.NewGoals(goals)
+	d.Funds = dto.NewFunds(funds)
 	d.TransferLeftToday = s.daily.Left(ctx, userID, bankTransferSource, tier.TransferDailyCap)
 	if interest > 0 {
 		d.InterestPaid = &interest

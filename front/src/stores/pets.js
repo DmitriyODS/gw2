@@ -4,6 +4,7 @@ import * as api from '@/api/pets.js'
 import { useAuthStore } from '@/stores/auth.js'
 import { useCompaniesStore } from '@/stores/companies.js'
 import { useNotificationsStore } from '@/stores/notifications.js'
+import { playKudosReceived } from '@/utils/kudosSound.js'
 
 export const usePetsStore = defineStore('pets', () => {
   const pet = ref(null)
@@ -48,6 +49,19 @@ export const usePetsStore = defineStore('pets', () => {
   async function startAdventure() {
     const res = await api.startAdventure()
     pet.value = { ...pet.value, ...res }
+    return res
+  }
+
+  // Досрочный возврат из приключения (платный, без награды за поход).
+  async function recallAdventure() {
+    const res = await api.recallAdventure()
+    pet.value = { ...pet.value, ...res }
+    if (res?.adventure_reward) {
+      const { kudos, xp } = res.adventure_reward
+      try {
+        useNotificationsStore().success(`Питомец уже вернулся сам: +${kudos} кудосов, +${xp} XP`)
+      } catch { /* noop */ }
+    }
     return res
   }
 
@@ -111,6 +125,18 @@ export const usePetsStore = defineStore('pets', () => {
   async function arrangeHouse(placed) {
     house.value = await api.arrangeHouse(placed)
     if (pet.value) pet.value = { ...pet.value, house_placed: house.value.placed }
+  }
+
+  async function setHouseTheme(theme) {
+    house.value = await api.setHouseTheme(theme)
+    if (pet.value) pet.value = { ...pet.value, house_theme: house.value.theme }
+  }
+
+  async function setHousePetPos(x, y) {
+    house.value = await api.setHousePetPos(x, y)
+    if (pet.value) {
+      pet.value = { ...pet.value, house_pet_x: house.value.pet_x, house_pet_y: house.value.pet_y }
+    }
   }
 
   // ─────────────────────────── магазин ──────────────────────────
@@ -205,6 +231,7 @@ export const usePetsStore = defineStore('pets', () => {
   // ─────────────────────────── кудо-банк ─────────────────────────
 
   const bank = ref(null)
+  const bankStats = ref(null)
   const ledger = ref([])
   const ledgerNextBeforeId = ref(null)
 
@@ -248,7 +275,76 @@ export const usePetsStore = defineStore('pets', () => {
   }
 
   async function bankRepayLoan(amount) {
-    applyBank(await api.bankRepayLoan(amount))
+    const res = await api.bankRepayLoan(amount)
+    applyBank(res)
+    return res
+  }
+
+  async function fetchBankStats() {
+    bankStats.value = await api.getBankStats()
+  }
+
+  // ── Копилки-цели (ответы — свежая сводка банка; разовые поля
+  //    goal_achieved/fund_completed отдаём вызывающему для конфетти). ──
+
+  async function createGoal(title, emoji, target) {
+    const res = await api.createGoal(title, emoji, target)
+    applyBank(res)
+    return res
+  }
+
+  async function goalDeposit(goalId, amount) {
+    const res = await api.goalDeposit(goalId, amount)
+    applyBank(res)
+    return res
+  }
+
+  async function goalWithdraw(goalId, amount) {
+    const res = await api.goalWithdraw(goalId, amount)
+    applyBank(res)
+    return res
+  }
+
+  async function deleteGoal(goalId) {
+    applyBank(await api.deleteGoal(goalId))
+  }
+
+  // ── Благотворительные сборы ──
+
+  async function createFund(payload) {
+    const res = await api.createFund(payload)
+    applyBank(res)
+    return res
+  }
+
+  async function donateFund(fundId, amount) {
+    const res = await api.donateFund(fundId, amount)
+    applyBank(res)
+    return res
+  }
+
+  async function closeFund(fundId) {
+    applyBank(await api.closeFund(fundId))
+  }
+
+  // Событие сбора (bank:fund в комнату all — фильтруем компанию).
+  function applyBankFund(data) {
+    if (!isMine(data.company_id) || !data.fund) return
+    if (bank.value) {
+      const funds = [...(bank.value.funds || [])]
+      const i = funds.findIndex((f) => f.id === data.fund.id)
+      if (i >= 0) funds[i] = { ...funds[i], ...data.fund }
+      else if (data.action === 'created') funds.unshift(data.fund)
+      bank.value = { ...bank.value, funds }
+    }
+    try {
+      const notify = useNotificationsStore()
+      if (data.action === 'created') {
+        notify.info(`Новый сбор: ${data.fund.emoji} «${data.fund.title}»`)
+      } else if (data.action === 'completed') {
+        notify.success(`Сбор ${data.fund.emoji} «${data.fund.title}» собран — цель достигнута! 🎉`)
+      }
+    } catch { /* noop */ }
   }
 
   // Входящий перевод (сокет kudos:received — адресно в мою комнату).
@@ -258,6 +354,7 @@ export const usePetsStore = defineStore('pets', () => {
     const note = data.comment ? ` — «${data.comment}»` : ''
     try {
       useNotificationsStore().success(`+${data.amount} кудосов${from}${note}`)
+      playKudosReceived()
     } catch { /* noop */ }
     // Баланс придёт авторитетным pet:update; сводку банка освежаем, если открыта.
     if (bank.value) fetchBank().catch(() => {})
@@ -299,20 +396,26 @@ export const usePetsStore = defineStore('pets', () => {
     season.value = null
     house.value = null
     bank.value = null
+    bankStats.value = null
     ledger.value = []
     ledgerNextBeforeId.value = null
   }
 
   return {
     pet, shop, shopLoaded, zoo, rating, live, liveLoaded, activityLog, activityLoaded,
-    season, house, bank, ledger, ledgerNextBeforeId,
+    season, house, bank, bankStats, ledger, ledgerNextBeforeId,
     myId, myCompanyId, isMine,
     fetchPet, feedPet, renamePet, equipItem, switchSpecies, resetSpecies, claimQuest, startAdventure,
+    recallAdventure,
     prestigePet, fetchSeason, claimSeasonReward, fetchHouse, buyHouseDecor, arrangeHouse,
+    setHouseTheme, setHousePetPos,
     fetchShop, buyItem, buySpecies, claimMystery,
     walkPet, healPet, strokePet,
     fetchZoo, deleteColleaguePet, fetchRating, fetchLive, fetchActivityLog,
-    fetchBank, fetchLedger, transferKudos, bankDeposit, bankWithdraw, bankTakeLoan, bankRepayLoan,
+    fetchBank, fetchBankStats, fetchLedger, transferKudos, bankDeposit, bankWithdraw,
+    bankTakeLoan, bankRepayLoan,
+    createGoal, goalDeposit, goalWithdraw, deleteGoal,
+    createFund, donateFund, closeFund, applyBankFund,
     applyPetUpdate, applyPetDeleted, applyKudosReceived,
     reset,
   }

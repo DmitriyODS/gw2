@@ -154,7 +154,7 @@ const hasHeader = computed(() =>
   !!(props.title || props.subtitle || props.showIcon || props.closable)
 )
 
-const SIZE_WIDTH = { sm: '380px', md: '520px', lg: '720px', xl: '920px' }
+// Ширины размеров — в глобальном style ниже (.dlg-size-*).
 // dvh, не vh: на мобильных vh = высота при СКРЫТОЙ панели браузера, поэтому
 // модалка получалась выше видимой области и обрезалась сверху/снизу (а
 // нижний sheet «уезжал» под адресную строку — выглядело узкой полоской).
@@ -165,14 +165,15 @@ const SIZE_MAX_H = {
   xl: 'calc(100dvh - 32px)',
 }
 
+// Ширина — классом dlg-size-* (не инлайном): на широких экранах md
+// расширяется до lg медиазапросом (инлайн-width это перебил бы).
 const rootStyle = computed(() => ({
-  width: SIZE_WIDTH[props.size],
   maxWidth: 'calc(100vw - 24px)',
   maxHeight: SIZE_MAX_H[props.size],
 }))
 
 const rootPt = computed(() => ({
-  root: { class: ['app-dialog-root', `mobile-${props.mobile}`, props.dialogClass] },
+  root: { class: ['app-dialog-root', `dlg-size-${props.size}`, `mobile-${props.mobile}`, props.dialogClass] },
   mask: { class: ['app-dialog-mask', props.maskClass] },
   content: { class: 'app-dialog-content' },
 }))
@@ -469,6 +470,16 @@ function actionClass(a) {
   overflow: hidden !important;
   display: flex !important;
   flex-direction: column !important;
+}
+
+/* Ширины размеров. На больших экранах md-диалоги растягиваются до lg —
+   520px на десктопе читается слишком узко. */
+.app-dialog-root.dlg-size-sm { width: 380px; }
+.app-dialog-root.dlg-size-md { width: 520px; }
+.app-dialog-root.dlg-size-lg { width: 720px; }
+.app-dialog-root.dlg-size-xl { width: 920px; }
+@media (min-width: 1200px) {
+  .app-dialog-root.dlg-size-md { width: 720px; }
 }
 
 /* Маска светлее и с сильным блюром: стекло модалки показывает размытый

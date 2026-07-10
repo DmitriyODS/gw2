@@ -13,6 +13,8 @@ export const resetSpecies = () =>
   apiRequest('/pets/pet/species', { method: 'DELETE' })
 export const claimQuest = () => apiRequest('/pets/pet/quest/claim', { method: 'POST' })
 export const startAdventure = () => apiRequest('/pets/pet/adventure', { method: 'POST' })
+// Досрочный возврат из приключения — платный (AdventureRecallCost), без награды.
+export const recallAdventure = () => apiRequest('/pets/pet/adventure/recall', { method: 'POST' })
 // Перерождение «Легенды»: поколение +1, стадия/XP в ноль, богатство остаётся.
 export const prestigePet = () => apiRequest('/pets/pet/prestige', { method: 'POST' })
 
@@ -29,6 +31,10 @@ export const buyHouseDecor = (item) =>
   apiRequest('/pets/house/buy', { method: 'POST', body: { item } })
 export const arrangeHouse = (placed) =>
   apiRequest('/pets/house/arrange', { method: 'POST', body: { placed } })
+export const setHouseTheme = (theme) =>
+  apiRequest('/pets/house/theme', { method: 'POST', body: { theme } })
+export const setHousePetPos = (x, y) =>
+  apiRequest('/pets/house/pet-pos', { method: 'POST', body: { x, y } })
 
 // ─────────────────────────── магазин ───────────────────────────
 
@@ -72,3 +78,22 @@ export const bankTakeLoan = (amount) =>
   apiRequest('/pets/bank/loan', { method: 'POST', body: { amount } })
 export const bankRepayLoan = (amount) =>
   apiRequest('/pets/bank/loan/repay', { method: 'POST', body: { amount } })
+export const getBankStats = () => apiRequest('/pets/bank/stats')
+
+// Копилки-цели.
+export const createGoal = (title, emoji, target) =>
+  apiRequest('/pets/bank/goals', { method: 'POST', body: { title, emoji, target } })
+export const goalDeposit = (goalId, amount) =>
+  apiRequest(`/pets/bank/goals/${goalId}/deposit`, { method: 'POST', body: { amount } })
+export const goalWithdraw = (goalId, amount) =>
+  apiRequest(`/pets/bank/goals/${goalId}/withdraw`, { method: 'POST', body: { amount } })
+export const deleteGoal = (goalId) =>
+  apiRequest(`/pets/bank/goals/${goalId}`, { method: 'DELETE' })
+
+// Благотворительные сборы компании.
+export const createFund = ({ title, description, emoji, target }) =>
+  apiRequest('/pets/bank/funds', { method: 'POST', body: { title, description, emoji, target } })
+export const donateFund = (fundId, amount) =>
+  apiRequest(`/pets/bank/funds/${fundId}/donate`, { method: 'POST', body: { amount } })
+export const closeFund = (fundId) =>
+  apiRequest(`/pets/bank/funds/${fundId}/close`, { method: 'POST' })

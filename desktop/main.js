@@ -40,6 +40,37 @@ let mainWindow = null
 let tray = null
 let quitting = false
 
+// Автозапуск при входе в ОС передаёт --hidden: приложение стартует сразу в
+// трей, не выпрыгивая окном поверх рабочего стола.
+const startHidden = process.argv.includes('--hidden') ||
+  (process.platform === 'darwin' && app.getLoginItemSettings().wasOpenedAsHidden)
+
+/* ── Настройки обёртки (переживают перезапуск) ──
+   closeToTray — крестик прячет в трей (false — закрывает приложение);
+   trayIcon — показывать значок в трее; autostart — запуск при входе в ОС. */
+const settingsFile = () => path.join(app.getPath('userData'), 'settings.json')
+const SETTINGS_DEFAULTS = { closeToTray: true, trayIcon: true, autostart: false }
+let settings = { ...SETTINGS_DEFAULTS }
+
+function loadSettings() {
+  try {
+    settings = { ...SETTINGS_DEFAULTS, ...JSON.parse(fs.readFileSync(settingsFile(), 'utf8')) }
+  } catch {}
+}
+
+function saveSettings() {
+  try { fs.writeFileSync(settingsFile(), JSON.stringify(settings, null, 2)) } catch {}
+}
+
+function applyAutostart() {
+  // openAsHidden — легаси-путь macOS; на Windows скрытый старт даёт наш --hidden.
+  app.setLoginItemSettings({
+    openAtLogin: settings.autostart,
+    openAsHidden: true,
+    args: ['--hidden'],
+  })
+}
+
 /* ── Положение/размер окна переживают перезапуск ── */
 const stateFile = () => path.join(app.getPath('userData'), 'window-state.json')
 
@@ -79,7 +110,8 @@ function createWindow(appUrl) {
   })
 
   if (state.maximized) mainWindow.maximize()
-  mainWindow.once('ready-to-show', () => mainWindow.show())
+  // Автозапуск с --hidden живёт в трее до первого клика по значку.
+  mainWindow.once('ready-to-show', () => { if (!startHidden) mainWindow.show() })
 
   let saveTimer = null
   const scheduleSave = () => { clearTimeout(saveTimer); saveTimer = setTimeout(saveWindowState, 400) }
@@ -119,11 +151,17 @@ function createWindow(appUrl) {
   })
 
   // Крестик прячет окно в трей (WS живёт — уведомления продолжают приходить);
-  // полный выход — из меню трея или Cmd/Ctrl+Q.
+  // полный выход — из меню трея или Cmd/Ctrl+Q. Настройка closeToTray=false —
+  // крестик честно закрывает приложение. Без значка трея прятать окно можно
+  // только на macOS (там остаётся док) — иначе к приложению не вернуться.
   mainWindow.on('close', (e) => {
     if (quitting) { saveWindowState(); return }
+    const canHide = settings.closeToTray && (tray || process.platform === 'darwin')
+    if (!canHide) { quitting = true; saveWindowState(); app.quit(); return }
     e.preventDefault()
     mainWindow.hide()
+    // «Жить в трее»: на macOS убираем и из дока — как у мессенджеров.
+    if (process.platform === 'darwin' && !mainWindow.isVisible()) app.dock?.hide()
   })
 
   /* ── Загрузка приложения с сервера: сплэш + автоповтор ──
@@ -189,12 +227,14 @@ function createWindow(appUrl) {
 
 function showWindow() {
   if (!mainWindow || mainWindow.isDestroyed()) return
+  if (process.platform === 'darwin') app.dock?.show()
   if (mainWindow.isMinimized()) mainWindow.restore()
   mainWindow.show()
   mainWindow.focus()
 }
 
 function createTray() {
+  if (tray) return
   // Иконку трея берём с сервера нельзя — кладём из ресурсов сборки; в деве
   // рядом лежит build/icon.png.
   const icon = nativeImage
@@ -209,6 +249,20 @@ function createTray() {
     { label: 'Выйти', click: () => app.quit() },
   ]))
   tray.on('click', showWindow)
+}
+
+function destroyTray() {
+  tray?.destroy()
+  tray = null
+}
+
+// Применить настройку немедленно (зовётся из IPC и при старте).
+function applySetting(key) {
+  if (key === 'autostart') applyAutostart()
+  if (key === 'trayIcon') {
+    if (settings.trayIcon) createTray()
+    else destroyTray()
+  }
 }
 
 /* Стандартное меню (горячие клавиши копирования/вставки/зума обязаны жить,
@@ -294,6 +348,19 @@ app.whenReady().then(() => {
 
   ipcMain.handle('gw:get-version', () => ({ version: app.getVersion() }))
 
+  /* ── Настройки обёртки (карточка «Приложение для компьютера» в веб-настройках) ── */
+  ipcMain.handle('gw:get-settings', () => ({ ...settings }))
+  ipcMain.handle('gw:set-setting', (_e, key, value) => {
+    if (!(key in SETTINGS_DEFAULTS) || typeof value !== 'boolean') return { error: 'bad setting' }
+    settings[key] = value
+    saveSettings()
+    applySetting(key)
+    return { ...settings }
+  })
+
+  // Фокус окна по клику на уведомление веб-слоя (окно может быть в трее).
+  ipcMain.on('gw:focus', showWindow)
+
   ipcMain.handle('gw:check-update', async () => {
     const meta = await fetchDesktopMeta().catch(() => null)
     if (!meta?.current_version) return { error: 'Не удалось проверить обновления — проверьте интернет' }
@@ -350,9 +417,11 @@ app.whenReady().then(() => {
     }
   }, { useSystemPicker: true })
 
+  loadSettings()
+  applyAutostart()
   buildMenu()
   createWindow(appUrl)
-  createTray()
+  if (settings.trayIcon) createTray()
 
   // Первая проверка — после того как окно загрузится и осядет.
   setTimeout(() => checkShellUpdate(appUrl), 15_000)

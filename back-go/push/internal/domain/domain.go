@@ -29,6 +29,8 @@ const (
 	ChannelMessages = "messages"
 	ChannelTasks    = "tasks"
 	ChannelCalls    = "calls"
+	ChannelKudos    = "kudos"
+	ChannelPortal   = "portal"
 )
 
 // TokenStore — хранилище токенов устройств.
@@ -43,6 +45,9 @@ type TokenStore interface {
 type UserDirectory interface {
 	// Names — ФИО по id (отсутствующие просто не попадают в map).
 	Names(ctx context.Context, ids []int64) (map[int64]string, error)
+	// MembersOf — id участников компании (company-wide события: пост портала
+	// адресован всей компании, а не комнате user_{id}).
+	MembersOf(ctx context.Context, companyID int64) ([]int64, error)
 }
 
 // Presence — кто сейчас онлайн (живой WS). Онлайн-получателям пуш не шлём:

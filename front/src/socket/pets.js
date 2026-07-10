@@ -21,6 +21,12 @@ export function registerPetsSocketHandlers(socket) {
     try { usePetsStore().applyKudosReceived(data) } catch { /* noop */ }
   })
 
+  // Благотворительный сбор компании: создан/пополнен/собран/закрыт
+  // (комната all, фильтр по компании в сторе).
+  socket.on('bank:fund', (data) => {
+    try { usePetsStore().applyBankFund(data) } catch { /* noop */ }
+  })
+
   // Опорные точки блока «Сейчас в эфире» — сокет-события юнитов tasksvc.
   const refreshLive = () => {
     try {

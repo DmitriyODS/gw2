@@ -91,12 +91,12 @@ export async function registerNotifyServiceWorker() {
     navigator.serviceWorker.addEventListener('message', (e) => {
       const t = e.data?.type
       if (t === 'open-conversation') {
-        window.focus?.()
+        focusAppWindow()
         window.dispatchEvent(new CustomEvent('messenger:open-conversation', {
           detail: { conversation_id: e.data.conversation_id },
         }))
       } else if (t === 'focus-call') {
-        window.focus?.()
+        focusAppWindow()
         window.dispatchEvent(new CustomEvent('call:focus-overlay', {
           detail: { call_id: e.data.call_id },
         }))
@@ -111,6 +111,26 @@ export function notificationsAllowed() {
   return typeof window !== 'undefined'
     && 'Notification' in window
     && Notification.permission === 'granted'
+}
+
+/* ── Мьют уведомлений о сообщениях (настройка пользователя) ──
+   Глушит тосты ОС и бип для СООБЩЕНИЙ; входящие звонки не глушатся —
+   пропущенный звонок дороже лишнего звука. */
+const MUTE_KEY = 'gw_notify_muted'
+
+export function isNotifyMuted() {
+  try { return localStorage.getItem(MUTE_KEY) === '1' } catch { return false }
+}
+
+export function setNotifyMuted(muted) {
+  try { localStorage.setItem(MUTE_KEY, muted ? '1' : '0') } catch {}
+}
+
+/* Поднять окно приложения: в браузере — фокус вкладки, в Electron окно может
+   лежать в трее — его поднимает мост GrooveDesktop. */
+export function focusAppWindow() {
+  window.focus?.()
+  try { window.GrooveDesktop?.focusWindow?.() } catch {}
 }
 
 export async function requestNotificationPermission() {
@@ -132,7 +152,7 @@ function constructNotification(title, options, onClick) {
     const n = new Notification(title, options)
     if (onClick) {
       n.onclick = () => {
-        try { window.focus?.(); onClick() } finally { n.close() }
+        try { focusAppWindow(); onClick() } finally { n.close() }
       }
     }
     return n
@@ -162,7 +182,7 @@ function deliverNotification(title, options, onClick) {
 /* Показывает OS-уведомление о сообщении. data — произвольные данные
    (передаём conversation_id, чтобы клик открыл нужный чат). */
 export function showSystemNotification(title, body, { onClick, data } = {}) {
-  if (!notificationsAllowed()) return
+  if (!notificationsAllowed() || isNotifyMuted()) return
 
   const options = {
     body,
@@ -218,6 +238,7 @@ export function closeCallNotification() {
 }
 
 export function playNotifySound() {
+  if (isNotifyMuted()) return
   try {
     playBeep()
   } catch (e) {

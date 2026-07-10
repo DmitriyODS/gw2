@@ -10,8 +10,8 @@
         <div class="pdm-scroll">
         <div class="pdm-hero">
           <div class="pdm-figure" :class="{ sick: pet?.sick, bounce: justActed }">
-            <span class="pdm-emoji">{{ petEmoji(pet) }}</span>
-            <span v-if="hatEmoji" class="pdm-hat">{{ hatEmoji }}</span>
+            <span class="pdm-emoji"><EmojiGlyph :char="petEmoji(pet)" /></span>
+            <span v-if="hatEmoji" class="pdm-hat"><EmojiGlyph :char="hatEmoji" /></span>
             <span v-if="pet?.sick" class="pdm-sick-badge" title="Питомец болеет">🤒</span>
           </div>
 
@@ -117,6 +117,16 @@
               <strong>Гуляет {{ pet.adventure_place }}</strong>
               <span>вернётся ~в {{ adventureReturnTime }}</span>
             </div>
+            <button
+              class="pdm-recall-btn"
+              type="button"
+              :disabled="recallSending || (pet?.kudos ?? 0) < RECALL_COST"
+              :title="(pet?.kudos ?? 0) < RECALL_COST ? `Нужно ${RECALL_COST} кудосов` : 'Питомец вернётся сразу, но без награды за поход'"
+              @click="recallPet"
+            >
+              Вернуть сейчас
+              <span class="pdm-recall-cost"><KudosCoin /> {{ RECALL_COST }}</span>
+            </button>
           </div>
           <template v-else>
             <button class="pdm-action-btn" type="button" :disabled="!canFeed" @click="activeGame = 'feed'">
@@ -174,7 +184,7 @@
               type="button"
               :title="shopItemTitle({ kind: 'accessory', key: item })"
               @click="toggleEquip(item)"
-            >{{ shopItemEmoji({ kind: 'accessory', key: item }) }}</button>
+            ><EmojiGlyph :char="shopItemEmoji({ kind: 'accessory', key: item })" /></button>
           </div>
         </div>
 
@@ -228,6 +238,7 @@
 
 <script setup>
 import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
+import EmojiGlyph from '@/components/common/EmojiGlyph.vue'
 import { useRouter } from 'vue-router'
 import EmptyState from '@/components/common/EmptyState.vue'
 import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
@@ -398,6 +409,24 @@ async function sendAdventure() {
     notify.warn(e?.message || 'Не получилось отправить в приключение')
   } finally {
     adventureSending.value = false
+  }
+}
+
+// Досрочный возврат: питомец дома сразу, но без награды за поход.
+const RECALL_COST = 100 // = domain.AdventureRecallCost
+const recallSending = ref(false)
+
+async function recallPet() {
+  if (recallSending.value) return
+  recallSending.value = true
+  try {
+    const res = await pets.recallAdventure()
+    pulse()
+    if (!res?.adventure_reward) notify.success('Питомец вернулся домой')
+  } catch (e) {
+    notify.warn(e?.message || 'Не получилось вернуть питомца')
+  } finally {
+    recallSending.value = false
   }
 }
 
@@ -708,9 +737,21 @@ function gotoPets() {
   background: color-mix(in oklch, var(--color-tertiary-container) 35%, transparent);
 }
 .pdm-adventure-emoji { font-size: 26px; }
-.pdm-adventure-text { display: flex; flex-direction: column; gap: 2px; }
+.pdm-adventure-text { display: flex; flex-direction: column; gap: 2px; flex: 1; min-width: 0; }
 .pdm-adventure-text strong { font-size: 13.5px; }
 .pdm-adventure-text span { font-size: 12px; color: var(--color-text-dim); }
+.pdm-recall-btn {
+  display: inline-flex; align-items: center; gap: 6px;
+  border: none; border-radius: var(--radius-full);
+  background: var(--color-secondary-container);
+  color: var(--color-on-secondary-container);
+  font: inherit; font-size: 12px; font-weight: 700;
+  padding: 8px 14px;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+.pdm-recall-btn:disabled { opacity: 0.5; cursor: default; }
+.pdm-recall-cost { display: inline-flex; align-items: center; gap: 3px; opacity: 0.85; }
 
 .pdm-closet { display: flex; gap: 6px; margin-top: 6px; flex-wrap: wrap; justify-content: center; }
 .pdm-closet-item {

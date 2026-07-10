@@ -32,7 +32,10 @@ func (f *fakeTokens) ListByUsers(_ context.Context, ids []int64) ([]domain.Devic
 	return out, nil
 }
 
-type fakeUsers struct{ names map[int64]string }
+type fakeUsers struct {
+	names   map[int64]string
+	members map[int64][]int64 // companyID → участники
+}
 
 func (f *fakeUsers) Names(_ context.Context, ids []int64) (map[int64]string, error) {
 	out := map[int64]string{}
@@ -42,6 +45,10 @@ func (f *fakeUsers) Names(_ context.Context, ids []int64) (map[int64]string, err
 		}
 	}
 	return out, nil
+}
+
+func (f *fakeUsers) MembersOf(_ context.Context, companyID int64) ([]int64, error) {
+	return f.members[companyID], nil
 }
 
 type fakePresence struct{ online map[int64]bool }
@@ -74,13 +81,33 @@ func newSvc() (*Service, *fakeTokens, *fakeSender, *fakePresence) {
 	sender := &fakeSender{}
 	pres := &fakePresence{online: map[int64]bool{}}
 	svc := New(Deps{
-		Tokens:   tokens,
-		Users:    &fakeUsers{names: map[int64]string{7: "Иван"}},
+		Tokens: tokens,
+		Users: &fakeUsers{
+			names:   map[int64]string{7: "Иван"},
+			members: map[int64][]int64{10: {5, 7, 9}},
+		},
 		Presence: pres,
 		Sender:   sender,
 		Log:      slog.New(slog.NewTextHandler(io.Discard, nil)),
 	})
 	return svc, tokens, sender, pres
+}
+
+func TestPortalPostPushToCompanyExceptAuthor(t *testing.T) {
+	svc, tokens, sender, _ := newSvc()
+	tokens.byUser[5] = []string{"tok5"}
+	tokens.byUser[7] = []string{"tok7"} // автор — пуш не должен прийти
+
+	payload := []byte(`{"id":3,"company_id":10,"author_id":7,"title":"Пицца за релиз","body":"# ура"}`)
+	svc.Dispatch(context.Background(), "post:new", payload, []string{"all"})
+
+	if len(sender.sent) != 1 || sender.sent[0].token != "tok5" {
+		t.Fatalf("ожидался 1 пуш на tok5, получено %+v", sender.sent)
+	}
+	n := sender.sent[0].n
+	if n.Channel != domain.ChannelPortal || n.Title != "Иван — новый пост" || n.Body != "Пицца за релиз" {
+		t.Fatalf("неверное уведомление: %+v", n)
+	}
 }
 
 func TestMessagePushExcludesSenderAndUsesName(t *testing.T) {
@@ -96,6 +123,25 @@ func TestMessagePushExcludesSenderAndUsesName(t *testing.T) {
 	}
 	if sender.sent[0].n.Title != "Иван" || sender.sent[0].n.Body != "привет" {
 		t.Fatalf("неверный заголовок/текст: %+v", sender.sent[0].n)
+	}
+}
+
+func TestKudosPushToRecipient(t *testing.T) {
+	svc, tokens, sender, _ := newSvc()
+	tokens.byUser[5] = []string{"tok5"}
+
+	payload := []byte(`{"amount":15,"comment":"спасибо за ревью","company_id":10,"from":{"id":7,"fio":"Иван"}}`)
+	svc.Dispatch(context.Background(), "kudos:received", payload, []string{"user_5"})
+
+	if len(sender.sent) != 1 || sender.sent[0].token != "tok5" {
+		t.Fatalf("ожидался 1 пуш на tok5, получено %+v", sender.sent)
+	}
+	n := sender.sent[0].n
+	if n.Channel != domain.ChannelKudos || n.Title != "+15 кудосов 🎉" {
+		t.Fatalf("неверное уведомление: %+v", n)
+	}
+	if n.Body != "От Иван — «спасибо за ревью»" {
+		t.Fatalf("неверный текст: %q", n.Body)
 	}
 }
 

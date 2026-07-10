@@ -24,8 +24,8 @@
           @click="stroke(p)"
         >
           <div class="cp-figure" :class="{ sick: p.sick, pulse: pulsing[p.user_id] }">
-            <span class="cp-emoji">{{ petEmoji(p) }}</span>
-            <span v-if="p.hat" class="cp-hat">{{ shopItemEmoji({ kind: 'accessory', key: p.hat }) }}</span>
+            <span class="cp-emoji"><EmojiGlyph :char="petEmoji(p)" /></span>
+            <span v-if="p.hat" class="cp-hat"><EmojiGlyph :char="shopItemEmoji({ kind: 'accessory', key: p.hat })" /></span>
             <span v-if="p.sick" class="cp-sick" title="Болеет">🤒</span>
             <span v-else-if="isAway(p)" class="cp-sick" title="В приключении">🧭</span>
             <span
@@ -108,6 +108,7 @@
 
 <script setup>
 import { computed, onMounted, reactive, ref } from 'vue'
+import EmojiGlyph from '@/components/common/EmojiGlyph.vue'
 import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
 import EmptyState from '@/components/common/EmptyState.vue'
 import KudosCoin from '@/components/pets/KudosCoin.vue'

@@ -26,7 +26,8 @@ const petCols = `p.user_id, p.company_id, p.name, p.species, p.stage, p.xp, p.ku
 	p.hat, p.accessories, p.feed_streak, p.last_fed_date, p.sick_since, p.recovery,
 	p.personality, p.unlocked_species, p.quest_date, p.quest_kind, p.quest_target,
 	p.quest_progress, p.quest_claimed, p.adventure_until, p.adventure_place,
-	p.generation, p.house_owned, p.house_placed,
+	p.generation, p.house_owned, p.house_placed, p.house_theme,
+	p.house_pet_x, p.house_pet_y,
 	p.bank_savings, p.bank_savings_accrued_at, p.bank_loan,
 	u.id, u.fio, u.avatar_path`
 
@@ -52,7 +53,8 @@ func scanPet(row pgx.Row) (*domain.Pet, error) {
 		&p.Kudos, &p.Hat, &accessories, &p.FeedStreak, &p.LastFedDate, &p.SickSince,
 		&p.Recovery, &p.Personality, &unlocked, &p.QuestDate, &p.QuestKind,
 		&p.QuestTarget, &p.QuestProgress, &p.QuestClaimed, &p.AdventureUntil,
-		&p.AdventurePlace, &p.Generation, &houseOwned, &housePlaced,
+		&p.AdventurePlace, &p.Generation, &houseOwned, &housePlaced, &p.HouseTheme,
+		&p.HousePetX, &p.HousePetY,
 		&p.BankSavings, &p.BankSavingsAccruedAt, &p.BankLoan, &uid, &fio, &avatar)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -156,6 +158,30 @@ func (r *PetRepo) FinishAdventure(ctx context.Context, userID int64, now time.Ti
 		WHERE p.user_id = $1 AND old.user_id = p.user_id
 		  AND old.adventure_until IS NOT NULL AND old.adventure_until <= $2
 		RETURNING old.adventure_place`, userID, now).Scan(&place)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return "", false, nil
+		}
+		return "", false, err
+	}
+	if place == nil {
+		return "", true, nil
+	}
+	return *place, true, nil
+}
+
+// RecallAdventure — досрочный платный возврат: одним UPDATE снимает
+// приключение и списывает стоимость (self-join отдаёт старое место, как в
+// FinishAdventure); конкурентный ленивый возврат уже занулил поля → 0 строк.
+func (r *PetRepo) RecallAdventure(ctx context.Context, userID int64, cost int) (string, bool, error) {
+	var place *string
+	err := r.pool.QueryRow(ctx, `
+		UPDATE pets p SET adventure_until = NULL, adventure_place = NULL,
+			kudos = p.kudos - $2
+		FROM pets old
+		WHERE p.user_id = $1 AND old.user_id = p.user_id
+		  AND old.adventure_until IS NOT NULL AND old.kudos >= $2
+		RETURNING old.adventure_place`, userID, cost).Scan(&place)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return "", false, nil
@@ -506,6 +532,19 @@ func (r *PetRepo) SaveHousePlaced(ctx context.Context, userID int64, placed []do
 	}
 	_, err = r.pool.Exec(ctx, `UPDATE pets SET house_placed = $2 WHERE user_id = $1`,
 		userID, string(arr))
+	return err
+}
+
+func (r *PetRepo) SaveHouseTheme(ctx context.Context, userID int64, theme string) error {
+	_, err := r.pool.Exec(ctx, `UPDATE pets SET house_theme = $2 WHERE user_id = $1`,
+		userID, theme)
+	return err
+}
+
+func (r *PetRepo) SaveHousePetPos(ctx context.Context, userID int64, x, y float64) error {
+	_, err := r.pool.Exec(ctx,
+		`UPDATE pets SET house_pet_x = $2, house_pet_y = $3 WHERE user_id = $1`,
+		userID, x, y)
 	return err
 }
 

@@ -16,15 +16,26 @@
         <div
           ref="zoneEl"
           class="mg-stroke-zone"
-          :class="{ done: finished }"
+          :class="{ done: finished, house: hasHouse }"
           :style="sceneStyle"
           @pointerdown="onDown"
           @pointermove="onMove"
           @pointerup="onUp"
           @pointercancel="onUp"
         >
+          <!-- Обставленная комната грувика: гладим прямо в его домике. -->
+          <template v-if="hasHouse">
+            <span
+              v-for="item in houseItems"
+              :key="'house-' + item.key"
+              class="mg-prop mg-prop--house"
+              :style="{ left: item.x + '%', top: item.y + '%' }"
+              :title="decorTitle(item.key)"
+              aria-hidden="true"
+            ><EmojiGlyph :char="decorEmoji(item.key)" /></span>
+          </template>
           <span
-            v-for="(pr, i) in scene.props"
+            v-for="(pr, i) in hasHouse ? [] : scene.props"
             :key="'prop-' + i"
             class="mg-prop"
             :style="{ left: pr.left + '%', top: pr.top + '%', fontSize: pr.size + 'px' }"
@@ -32,7 +43,7 @@
           >{{ pr.emoji }}</span>
 
           <template v-if="!finished">
-            <span ref="petEl" class="mg-stroke-emoji" :class="{ happy: rubbing && overPet, pulse: bigPulse }">{{ emoji }}</span>
+            <span ref="petEl" class="mg-stroke-emoji" :class="{ happy: rubbing && overPet, pulse: bigPulse }" :style="petPosStyle"><EmojiGlyph :char="emoji" /></span>
             <span class="mg-hand" :class="{ rubbing: rubbing && overPet }" :style="handStyle" aria-hidden="true">🫳</span>
             <transition-group name="mg-heart" tag="div" class="mg-hearts" aria-hidden="true">
               <span v-for="h in hearts" :key="h.id" class="mg-heart" :style="{ left: h.left + '%' }">💗</span>
@@ -41,7 +52,7 @@
 
           <!-- Финал: лимит на сегодня выбран -->
           <div v-else class="mg-final">
-            <span class="mg-final-emoji">{{ emoji }}</span>
+            <span class="mg-final-emoji"><EmojiGlyph :char="emoji" /></span>
             <p class="mg-final-text">«{{ petName }}» наглажен до завтра — мурчит и сияет 💖</p>
           </div>
         </div>
@@ -62,9 +73,11 @@
 
 <script setup>
 import { computed, onBeforeUnmount, ref } from 'vue'
+import EmojiGlyph from '@/components/common/EmojiGlyph.vue'
 import KudosCoin from '@/components/pets/KudosCoin.vue'
 import { createRubTracker, isInHitZone } from '@/utils/miniGames.js'
-import { petEmoji } from '@/utils/pets.js'
+import { decorEmoji, decorTitle, petEmoji } from '@/utils/pets.js'
+import { houseThemeBackground } from '@/utils/houseThemes.js'
 import { usePetsStore } from '@/stores/pets.js'
 import { useNotificationsStore } from '@/stores/notifications.js'
 
@@ -124,9 +137,28 @@ const SCENES = [
   },
 ]
 const scene = SCENES[Math.floor(Math.random() * SCENES.length)]
-const sceneStyle = computed(() => ({
-  background: `linear-gradient(135deg, var(--tag-${scene.from}-surface), var(--tag-${scene.to}-surface))`,
-}))
+
+// Если хозяин обставил комнату грувика — гладим в ней: сцена мини-игры
+// повторяет расстановку house_placed (координаты в % сцены, как в домике).
+const houseItems = computed(() =>
+  (props.pet?.house_placed || []).map((i, idx) =>
+    typeof i === 'string' ? { key: i, x: 16 + (idx % 5) * 17, y: 78 } : i))
+const hasHouse = computed(() => houseItems.value.length > 0)
+
+const sceneStyle = computed(() => (hasHouse.value
+  ? { background: houseThemeBackground(props.pet?.house_theme) }
+  : { background: `linear-gradient(135deg, var(--tag-${scene.from}-surface), var(--tag-${scene.to}-surface))` }))
+
+// В комнате грувик стоит там, куда его поставил хозяин.
+const petPosStyle = computed(() => {
+  if (!hasHouse.value || props.pet?.house_pet_x == null || props.pet?.house_pet_y == null) return {}
+  return {
+    position: 'absolute',
+    left: props.pet.house_pet_x + '%',
+    top: props.pet.house_pet_y + '%',
+    transform: 'translate(-50%, -50%)',
+  }
+})
 
 const zoneEl = ref(null)
 const petEl = ref(null)
@@ -314,6 +346,8 @@ onBeforeUnmount(() => clearTimeout(closeTimer))
   pointer-events: none;
   opacity: 0.85;
 }
+/* Декор комнаты — как в PetHouseDialog: тот же размер и координаты. */
+.mg-prop--house { font-size: 26px; opacity: 1; }
 .mg-stroke-zone:active { cursor: grabbing; }
 
 .mg-stroke-emoji { font-size: 60px; line-height: 1; transition: transform 0.2s; }

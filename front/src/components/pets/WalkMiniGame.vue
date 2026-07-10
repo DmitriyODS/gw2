@@ -36,7 +36,7 @@
           >{{ it.collected ? '✨' : scene.item }}</span>
 
           <div class="mg-walker" :class="{ dragging }" :style="{ left: walkerLeft + '%' }">
-            {{ petEmojiChar }}
+            <EmojiGlyph :char="petEmojiChar" />
           </div>
           <div class="mg-ground"></div>
         </div>
@@ -49,6 +49,7 @@
 
 <script setup>
 import { computed, ref } from 'vue'
+import EmojiGlyph from '@/components/common/EmojiGlyph.vue'
 import { petEmoji } from '@/utils/pets.js'
 import { storageGet, storageSet } from '@/utils/storage.js'
 

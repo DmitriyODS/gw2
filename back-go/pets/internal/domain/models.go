@@ -62,6 +62,9 @@ type Pet struct {
 	Generation      int         // престиж: растёт при перерождении, не сбрасывается
 	HouseOwned      []string    // купленный декор домика
 	HousePlaced     []HouseItem // расставленный декор (⊆ owned, лимит HousePlacedMax)
+	HouseTheme      string      // ключ градиентной темы комнаты (HouseThemes)
+	HousePetX       *float64    // позиция грувика в сцене (%; NULL — по умолчанию)
+	HousePetY       *float64
 	// Кудо-банк: вклад/долг меняются только узкими атомарными методами
 	// BankRepo (как престиж/домик) — в full-row SavePet не входят.
 	BankSavings          int
@@ -184,4 +187,55 @@ type LedgerEntry struct {
 type GenerousEntry struct {
 	User *UserRef
 	Sent int
+}
+
+// BankGoal — копилка-цель: личный суб-счёт под конкретную мечту. Кудосы
+// лежат в saved (кошелёк уменьшен), процента нет; achieved_at ставится
+// однажды при достижении target и назад не снимается.
+type BankGoal struct {
+	ID         int64
+	UserID     int64
+	CompanyID  int64
+	Title      string
+	Emoji      string
+	Target     int
+	Saved      int
+	CreatedAt  time.Time
+	AchievedAt *time.Time
+}
+
+// BankFund — благотворительный сбор компании: общая цель, куда скидываются
+// коллеги. Собранное — потрачено (возвратов нет); status: active → done
+// по достижении цели, либо closed при досрочном закрытии.
+type BankFund struct {
+	ID          int64
+	CompanyID   int64
+	CreatedBy   *int64
+	Creator     *UserRef
+	Title       string
+	Description string
+	Emoji       string
+	Target      int
+	Collected   int
+	Status      string
+	CreatedAt   time.Time
+	FinishedAt  *time.Time
+
+	DonorsCount int // агрегаты витрины
+	MyDonated   int
+	TopDonors   []GenerousEntry
+}
+
+// BankDayStat — приход/расход за один день (динамика в статистике банка).
+type BankDayStat struct {
+	Day time.Time
+	In  int
+	Out int
+}
+
+// BankKindStat — суммарный приход/расход по виду операции за окно статистики.
+type BankKindStat struct {
+	Kind string
+	In   int
+	Out  int
 }

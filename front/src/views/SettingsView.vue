@@ -99,6 +99,8 @@
         <!-- Внешний вид -->
         <div v-show="activeSection === 'theme'" class="pane-block">
           <ThemeBuilder ref="themeBuilder" />
+          <!-- Настройки десктоп-обёртки — рендерится только внутри Electron. -->
+          <DesktopAppCard />
         </div>
 
         <!-- Резервная копия -->
@@ -204,6 +206,7 @@ import BackupSectionsDialog from '@/components/settings/BackupSectionsDialog.vue
 import ThemeBuilder from '@/components/settings/ThemeBuilder.vue'
 import HelpCenter from '@/components/settings/HelpCenter.vue'
 import AboutApp from '@/components/settings/AboutApp.vue'
+import DesktopAppCard from '@/components/settings/DesktopAppCard.vue'
 import YougileUserSettings from '@/components/settings/YougileUserSettings.vue'
 import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
 import EmptyState from '@/components/common/EmptyState.vue'

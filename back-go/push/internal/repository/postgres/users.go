@@ -33,3 +33,23 @@ func (d *UserDirectory) Names(ctx context.Context, ids []int64) (map[int64]strin
 	}
 	return out, rows.Err()
 }
+
+// MembersOf — участники компании (user_companies ведёт authsvc; read-only —
+// company-wide пуши вроде поста портала адресуются всей компании).
+func (d *UserDirectory) MembersOf(ctx context.Context, companyID int64) ([]int64, error) {
+	rows, err := d.pool.Query(ctx,
+		`SELECT user_id FROM user_companies WHERE company_id = $1`, companyID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []int64
+	for rows.Next() {
+		var id int64
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		out = append(out, id)
+	}
+	return out, rows.Err()
+}

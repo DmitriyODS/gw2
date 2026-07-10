@@ -65,6 +65,9 @@ type PetDTO struct {
 	Generation       int                `json:"generation"`
 	HouseOwned       []string           `json:"house_owned"`
 	HousePlaced      []domain.HouseItem `json:"house_placed"`
+	HouseTheme       string             `json:"house_theme"`
+	HousePetX        *float64           `json:"house_pet_x,omitempty"`
+	HousePetY        *float64           `json:"house_pet_y,omitempty"`
 
 	// Контекстные поля.
 	FeedsLeft *int    `json:"feeds_left,omitempty"`
@@ -110,6 +113,9 @@ func NewPet(p *domain.Pet) *PetDTO {
 		Generation:     max(1, p.Generation),
 		HouseOwned:     orEmpty(p.HouseOwned),
 		HousePlaced:    orEmptyItems(p.HousePlaced),
+		HouseTheme:     p.HouseTheme,
+		HousePetX:      p.HousePetX,
+		HousePetY:      p.HousePetY,
 	}
 	if p.Stage < domain.MaxStage {
 		next := domain.StageXP[p.Stage+1]
@@ -271,6 +277,9 @@ type HouseDTO struct {
 	Catalog   []*HouseDecorDTO   `json:"catalog"`
 	Placed    []domain.HouseItem `json:"placed"`
 	PlacedMax int                `json:"placed_max"`
+	Theme     string             `json:"theme"`
+	PetX      *float64           `json:"pet_x,omitempty"`
+	PetY      *float64           `json:"pet_y,omitempty"`
 	Kudos     int                `json:"kudos"`
 }
 
@@ -304,6 +313,9 @@ func NewHouse(p *domain.Pet) *HouseDTO {
 		Catalog:   catalog,
 		Placed:    orEmptyItems(p.HousePlaced),
 		PlacedMax: domain.HousePlacedMax,
+		Theme:     p.HouseTheme,
+		PetX:      p.HousePetX,
+		PetY:      p.HousePetY,
 		Kudos:     p.Kudos,
 	}
 }
@@ -336,6 +348,104 @@ type GenerousDTO struct {
 	Sent int             `json:"sent"`
 }
 
+// GoalDTO — копилка-цель.
+type GoalDTO struct {
+	ID       int64  `json:"id"`
+	Title    string `json:"title"`
+	Emoji    string `json:"emoji"`
+	Target   int    `json:"target"`
+	Saved    int    `json:"saved"`
+	Achieved bool   `json:"achieved"`
+}
+
+func NewGoal(g *domain.BankGoal) *GoalDTO {
+	return &GoalDTO{ID: g.ID, Title: g.Title, Emoji: g.Emoji,
+		Target: g.Target, Saved: g.Saved, Achieved: g.AchievedAt != nil}
+}
+
+func NewGoals(goals []*domain.BankGoal) []*GoalDTO {
+	out := make([]*GoalDTO, 0, len(goals))
+	for _, g := range goals {
+		out = append(out, NewGoal(g))
+	}
+	return out
+}
+
+// FundDTO — благотворительный сбор компании.
+type FundDTO struct {
+	ID          int64           `json:"id"`
+	Title       string          `json:"title"`
+	Description string          `json:"description,omitempty"`
+	Emoji       string          `json:"emoji"`
+	Target      int             `json:"target"`
+	Collected   int             `json:"collected"`
+	Status      string          `json:"status"`
+	Creator     *domain.UserRef `json:"creator,omitempty"`
+	DonorsCount int             `json:"donors_count"`
+	MyDonated   int             `json:"my_donated"`
+	TopDonors   []*GenerousDTO  `json:"top_donors,omitempty"`
+	CreatedAt   string          `json:"created_at"`
+	FinishedAt  *string         `json:"finished_at,omitempty"`
+}
+
+func NewFund(f *domain.BankFund) *FundDTO {
+	d := &FundDTO{
+		ID: f.ID, Title: f.Title, Description: f.Description, Emoji: f.Emoji,
+		Target: f.Target, Collected: f.Collected, Status: f.Status,
+		Creator: f.Creator, DonorsCount: f.DonorsCount, MyDonated: f.MyDonated,
+		CreatedAt: isoTime(f.CreatedAt),
+	}
+	if f.FinishedAt != nil {
+		t := isoTime(*f.FinishedAt)
+		d.FinishedAt = &t
+	}
+	for _, g := range f.TopDonors {
+		d.TopDonors = append(d.TopDonors, &GenerousDTO{User: g.User, Sent: g.Sent})
+	}
+	return d
+}
+
+func NewFunds(funds []*domain.BankFund) []*FundDTO {
+	out := make([]*FundDTO, 0, len(funds))
+	for _, f := range funds {
+		out = append(out, NewFund(f))
+	}
+	return out
+}
+
+// BankDayStatDTO — приход/расход одного дня (динамика).
+type BankDayStatDTO struct {
+	Day string `json:"day"` // YYYY-MM-DD (МСК)
+	In  int    `json:"in"`
+	Out int    `json:"out"`
+}
+
+// BankKindStatDTO — приход/расход по виду операции за окно статистики.
+type BankKindStatDTO struct {
+	Kind string `json:"kind"`
+	In   int    `json:"in"`
+	Out  int    `json:"out"`
+}
+
+// BankStatsDTO — статистика банка за последние BankStatsDays дней.
+type BankStatsDTO struct {
+	Days     int                `json:"days"`
+	Daily    []*BankDayStatDTO  `json:"daily"`
+	ByKind   []*BankKindStatDTO `json:"by_kind"`
+}
+
+func NewBankStats(daily []domain.BankDayStat, kinds []domain.BankKindStat) *BankStatsDTO {
+	d := &BankStatsDTO{Days: domain.BankStatsDays,
+		Daily: make([]*BankDayStatDTO, 0, len(daily)), ByKind: make([]*BankKindStatDTO, 0, len(kinds))}
+	for _, s := range daily {
+		d.Daily = append(d.Daily, &BankDayStatDTO{Day: s.Day.Format("2006-01-02"), In: s.In, Out: s.Out})
+	}
+	for _, k := range kinds {
+		d.ByKind = append(d.ByKind, &BankKindStatDTO{Kind: k.Kind, In: k.In, Out: k.Out})
+	}
+	return d
+}
+
 // BankDTO — сводка кудо-банка владельца.
 type BankDTO struct {
 	Kudos             int           `json:"kudos"`
@@ -349,8 +459,14 @@ type BankDTO struct {
 	MonthIn           int           `json:"month_in"`
 	MonthOut          int           `json:"month_out"`
 	TopGenerous       []*GenerousDTO `json:"top_generous"`
+	Goals             []*GoalDTO    `json:"goals"`
+	GoalsMax          int           `json:"goals_max"`
+	Funds             []*FundDTO    `json:"funds"`
 	// InterestPaid — разовое: проценты, начисленные при этом обращении.
 	InterestPaid *int `json:"interest_paid,omitempty"`
+	// GoalAchieved/FundCompleted — разовые: цель закрыта именно этой операцией.
+	GoalAchieved  *GoalDTO `json:"goal_achieved,omitempty"`
+	FundCompleted *FundDTO `json:"fund_completed,omitempty"`
 }
 
 func NewBank(p *domain.Pet, tier domain.BankTier, next *domain.BankTier,
@@ -362,6 +478,7 @@ func NewBank(p *domain.Pet, tier domain.BankTier, next *domain.BankTier,
 		SavingsDailyMax: domain.SavingsDailyMax,
 		MonthIn:         monthIn, MonthOut: monthOut,
 		TopGenerous: make([]*GenerousDTO, 0, len(top)),
+		Goals:       []*GoalDTO{}, GoalsMax: domain.GoalsMax, Funds: []*FundDTO{},
 	}
 	if next != nil {
 		n := newBankTier(*next)

@@ -68,5 +68,15 @@ public class MainActivity extends BridgeActivity {
             "calls_incoming", "Входящие звонки", NotificationManager.IMPORTANCE_HIGH);
         calls.setDescription("Входящие звонки и видеозвонки");
         nm.createNotificationChannel(calls);
+
+        NotificationChannel kudos = new NotificationChannel(
+            "kudos", "Кудосы", NotificationManager.IMPORTANCE_DEFAULT);
+        kudos.setDescription("Входящие переводы кудосов от коллег");
+        nm.createNotificationChannel(kudos);
+
+        NotificationChannel portal = new NotificationChannel(
+            "portal", "Портал", NotificationManager.IMPORTANCE_DEFAULT);
+        portal.setDescription("Новые посты корпоративного портала");
+        nm.createNotificationChannel(portal);
     }
 }

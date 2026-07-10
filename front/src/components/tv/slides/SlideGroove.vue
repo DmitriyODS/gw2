@@ -20,7 +20,7 @@
           <span class="tv-groove-rank-num">{{ i + 1 }}</span>
         </span>
         <span class="tv-groove-pet">
-          <span class="tv-groove-emoji" :class="{ sick: p.sick }">{{ petEmoji(p) }}</span>
+          <span class="tv-groove-emoji" :class="{ sick: p.sick }"><EmojiGlyph :char="petEmoji(p)" /></span>
           <span v-if="p.hat" class="tv-groove-hat">{{ SHOP_ITEMS[p.hat]?.emoji || '' }}</span>
           <span v-if="p.sick" class="tv-groove-sick">🤒</span>
         </span>
@@ -41,6 +41,7 @@
 <script setup>
 // Зал славы Грувиков: топ питомцев по XP.
 import { computed } from 'vue'
+import EmojiGlyph from '@/components/common/EmojiGlyph.vue'
 import TvCount from '../TvCount.vue'
 import { num, barPercent } from '../tvFormat.js'
 import { petEmoji, PET_STAGES, SHOP_ITEMS } from '@/utils/pets.js'

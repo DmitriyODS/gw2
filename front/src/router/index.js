@@ -5,6 +5,9 @@ import { useCompanySettings } from '@/composables/useCompanySettings.js'
 import { navProgress } from '@/composables/useNavProgress.js'
 
 const routes = [
+  // Промо-лендинг платформы: публичный, без каркаса приложения.
+  { path: '/promo', component: () => import('@/views/PromoView.vue'),
+    meta: { public: true, fullscreen: true } },
   { path: '/login', component: () => import('@/views/LoginView.vue'), meta: { public: true } },
   { path: '/register', component: () => import('@/views/RegisterView.vue'), meta: { public: true } },
   // Подтверждение email (ввод кода или переход по ссылке ?token=…) — публичный.
@@ -63,6 +66,12 @@ const routes = [
     props: true,
   },
   { path: '/pets', component: () => import('@/views/PetsView.vue'),
+    meta: { requiresAuth: true, requiresCompany: true, feature: 'uses_groove' } },
+  // Кудо-банк — полноценный раздел (вход с хаба грувиков).
+  { path: '/pets/bank', component: () => import('@/views/KudosBankView.vue'),
+    meta: { requiresAuth: true, requiresCompany: true, feature: 'uses_groove' } },
+  // Магазин грувиков — полноценный раздел (вход с хаба грувиков).
+  { path: '/pets/shop', component: () => import('@/views/PetShopView.vue'),
     meta: { requiresAuth: true, requiresCompany: true, feature: 'uses_groove' } },
   // Старые закладки раздела до переименования.
   { path: '/groove', redirect: '/pets' },

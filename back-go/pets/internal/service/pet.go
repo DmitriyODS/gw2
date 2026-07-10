@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -225,6 +226,46 @@ func (s *Service) maybeReturnAdventure(ctx context.Context, pet *domain.Pet) *dt
 	s.appendLedger(ctx, pet.UserID, pet.CompanyID, kudos, "adventure", nil, place)
 	s.emitPetUpdate(ctx, pet)
 	return &dto.AdventureRewardDTO{Kudos: kudos, XP: xp, Place: place}
+}
+
+// RecallAdventure — досрочный платный возврат из приключения: питомец
+// возвращается сразу, но БЕЗ награды за поход (плата — цена нетерпения).
+func (s *Service) RecallAdventure(ctx context.Context, userID, companyID int64) (*dto.PetDTO, error) {
+	pet, err := s.pets.GetOrCreate(ctx, userID, companyID)
+	if err != nil {
+		return nil, err
+	}
+	// Истёкшее приключение возвращаем бесплатно штатным ленивым путём.
+	if reward := s.maybeReturnAdventure(ctx, pet); reward != nil {
+		data := dto.NewPet(pet)
+		data.AdventureReward = reward
+		return data, nil
+	}
+	if pet.AdventureUntil == nil {
+		return nil, domain.NewError("PET_HOME", "Питомец и так дома", 422)
+	}
+	place, ok, err := s.pets.RecallAdventure(ctx, userID, domain.AdventureRecallCost)
+	if err != nil {
+		return nil, err
+	}
+	if !ok {
+		// Гонка «уже вернулся сам» отсекается перечитыванием — остаётся баланс.
+		if fresh, err := s.pets.GetPet(ctx, userID); err == nil && fresh != nil && fresh.AdventureUntil == nil {
+			return dto.NewPet(fresh), nil
+		}
+		return nil, domain.NewError("NO_KUDOS",
+			"Досрочный возврат стоит "+strconv.Itoa(domain.AdventureRecallCost)+" кудосов — не хватает", 422)
+	}
+	// Свежий снимок после атомарного UPDATE — не мутируем локальную копию.
+	if fresh, err := s.pets.GetPet(ctx, userID); err == nil && fresh != nil {
+		pet = fresh
+	} else {
+		pet.AdventureUntil, pet.AdventurePlace = nil, nil
+	}
+	s.appendActivity(ctx, userID, "adventure_recalled", map[string]any{"place": place})
+	s.appendLedger(ctx, userID, companyID, -domain.AdventureRecallCost, "adventure_recall", nil, place)
+	s.emitPetUpdate(ctx, pet)
+	return dto.NewPet(pet), nil
 }
 
 // ensureNotAway — гейт платных действий владельца: сперва ленивый возврат

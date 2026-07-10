@@ -15,8 +15,13 @@
   >
     <div class="phd">
       <!-- Сцена: питомец + декор со свободными координатами (drag). -->
-      <div ref="sceneEl" class="phd-scene">
-        <span class="phd-scene-pet">{{ petEmoji(scenePet) }}</span>
+      <div ref="sceneEl" class="phd-scene" :style="{ background: sceneBackground }">
+        <span
+          class="phd-scene-pet"
+          :class="{ movable: !readonly, dragging: petDragging }"
+          :style="petPosStyle"
+          @pointerdown="readonly ? null : startPetDrag($event)"
+        ><EmojiGlyph :char="petEmoji(scenePet)" /></span>
         <div
           v-for="item in localPlaced"
           :key="item.key"
@@ -26,7 +31,7 @@
           :title="decorTitle(item.key)"
           @pointerdown="readonly ? null : startDrag(item, $event)"
         >
-          <span class="phd-scene-emoji">{{ decorEmoji(item.key) }}</span>
+          <span class="phd-scene-emoji"><EmojiGlyph :char="decorEmoji(item.key)" /></span>
           <button
             v-if="!readonly"
             class="phd-scene-remove"
@@ -44,8 +49,23 @@
       <!-- Обустройство и витрина — только у своего домика. -->
       <template v-if="!readonly">
         <p class="phd-slots">
-          Перетаскивайте предметы по комнате · занято {{ localPlaced.length }} / {{ house?.placed_max ?? 6 }}
+          Перетаскивайте предметы (и самого грувика!) по комнате ·
+          занято {{ localPlaced.length }} / {{ house?.placed_max ?? 6 }}
         </p>
+
+        <!-- Тема комнаты: градиентные пресеты. -->
+        <div class="phd-themes">
+          <button
+            v-for="t in HOUSE_THEMES"
+            :key="t.key"
+            class="phd-theme"
+            :class="{ active: currentTheme === t.key }"
+            type="button"
+            :title="t.title"
+            :style="{ background: t.background }"
+            @click="pickTheme(t.key)"
+          ></button>
+        </div>
 
         <div v-if="ownedIdle.length" class="phd-owned">
           <button
@@ -56,7 +76,7 @@
             :disabled="localPlaced.length >= (house?.placed_max ?? 6)"
             :title="`${decorTitle(d.key)} — поставить`"
             @click="addPlaced(d.key)"
-          >{{ decorEmoji(d.key) }}</button>
+          ><EmojiGlyph :char="decorEmoji(d.key)" /></button>
         </div>
 
         <h4 class="phd-shop-title">
@@ -65,7 +85,7 @@
         </h4>
         <div class="phd-shop">
           <div v-for="d in buyable" :key="d.key" class="phd-shop-item" :class="{ owned: d.owned }">
-            <span class="phd-shop-emoji">{{ decorEmoji(d.key) }}</span>
+            <span class="phd-shop-emoji"><EmojiGlyph :char="decorEmoji(d.key)" /></span>
             <span class="phd-shop-name">{{ decorTitle(d.key) }}</span>
             <button
               v-if="!d.owned"
@@ -79,7 +99,7 @@
         </div>
         <p v-if="seasonOnly.length" class="phd-season-hint">
           <span v-for="d in seasonOnly" :key="d.key" class="phd-season-item">
-            {{ decorEmoji(d.key) }} {{ decorTitle(d.key) }}
+            <EmojiGlyph :char="decorEmoji(d.key)" /> {{ decorTitle(d.key) }}
           </span>
           — только за награды сезонного трека
         </p>
@@ -90,11 +110,13 @@
 
 <script setup>
 import { computed, ref, watch } from 'vue'
+import EmojiGlyph from '@/components/common/EmojiGlyph.vue'
 import AppDialog from '@/components/common/AppDialog.vue'
 import KudosCoin from '@/components/pets/KudosCoin.vue'
 import { usePetsStore } from '@/stores/pets.js'
 import { useNotificationsStore } from '@/stores/notifications.js'
 import { decorEmoji, decorTitle, petEmoji } from '@/utils/pets.js'
+import { HOUSE_THEMES, houseThemeBackground } from '@/utils/houseThemes.js'
 
 const props = defineProps({
   modelValue: { type: Boolean, default: false },
@@ -111,6 +133,59 @@ const readonly = computed(() => !!props.guestPet)
 const scenePet = computed(() => (readonly.value ? props.guestPet : pets.pet))
 
 const house = computed(() => pets.house)
+
+// Тема комнаты: у гостя — из его питомца, у себя — из house (fallback pet).
+const currentTheme = computed(() => (readonly.value
+  ? props.guestPet?.house_theme
+  : (house.value?.theme || pets.pet?.house_theme)) || 'cozy')
+const sceneBackground = computed(() => houseThemeBackground(currentTheme.value))
+
+async function pickTheme(key) {
+  if (key === currentTheme.value) return
+  try {
+    await pets.setHouseTheme(key)
+  } catch (e) {
+    notify.warn(e?.message || 'Не получилось сменить тему')
+  }
+}
+
+// Позиция самого грувика (проценты сцены; NULL — место по умолчанию).
+const petDragging = ref(false)
+const localPetPos = ref(null)
+const petPosStyle = computed(() => {
+  const src = readonly.value
+    ? { x: props.guestPet?.house_pet_x, y: props.guestPet?.house_pet_y }
+    : (localPetPos.value || { x: house.value?.pet_x ?? pets.pet?.house_pet_x, y: house.value?.pet_y ?? pets.pet?.house_pet_y })
+  if (src?.x == null || src?.y == null) return {}
+  return { left: src.x + '%', top: src.y + '%', bottom: 'auto', transform: 'translate(-50%, -50%)' }
+})
+
+function startPetDrag(e) {
+  e.preventDefault()
+  petDragging.value = true
+  const move = (ev) => {
+    const rect = sceneEl.value?.getBoundingClientRect()
+    if (!rect) return
+    localPetPos.value = {
+      x: clampPct(((ev.clientX - rect.left) / rect.width) * 100),
+      y: clampPct(((ev.clientY - rect.top) / rect.height) * 100),
+    }
+  }
+  const up = async () => {
+    document.removeEventListener('pointermove', move)
+    document.removeEventListener('pointerup', up)
+    petDragging.value = false
+    if (!localPetPos.value) return
+    try {
+      await pets.setHousePetPos(localPetPos.value.x, localPetPos.value.y)
+    } catch (err) {
+      notify.warn(err?.message || 'Не получилось сохранить позицию грувика')
+      localPetPos.value = null
+    }
+  }
+  document.addEventListener('pointermove', move)
+  document.addEventListener('pointerup', up)
+}
 
 /* Локальная копия расстановки: во время drag двигаем её (плавно, без
    запросов), на pointerup сохраняем всю раскладку одним arrangeHouse. */
@@ -137,7 +212,9 @@ const buyable = computed(() => (house.value?.catalog || []).filter((d) => d.pric
 const seasonOnly = computed(() => (house.value?.catalog || []).filter((d) => d.price === 0))
 
 watch(() => props.modelValue, (open) => {
-  if (open && !readonly.value) pets.fetchHouse().catch(() => {})
+  if (!open) return
+  localPetPos.value = null
+  if (!readonly.value) pets.fetchHouse().catch(() => {})
 })
 
 // ── Drag: свободные координаты в процентах сцены ────────────────
@@ -207,18 +284,12 @@ async function buy(d) {
 <style scoped>
 .phd { display: flex; flex-direction: column; gap: 10px; }
 
-/* Сцена — «комната»: мягкий градиент-фон, питомец в центре, декор двигается
-   свободно (координаты в процентах). */
+/* Сцена — «комната»: градиент выбранной темы, питомец и декор двигаются
+   свободно (координаты в процентах). Фон приходит инлайном из houseThemes. */
 .phd-scene {
   position: relative;
   height: 210px;
   border-radius: var(--radius-lg, 16px);
-  background:
-    radial-gradient(80% 90% at 50% 110%,
-      color-mix(in oklch, var(--color-tertiary-container) 55%, transparent) 0%, transparent 70%),
-    linear-gradient(180deg,
-      color-mix(in oklch, var(--color-primary-container) 30%, var(--color-surface)),
-      color-mix(in oklch, var(--color-secondary-container) 45%, var(--color-surface)));
   border: 1px solid var(--color-outline-dim);
   overflow: hidden;
 }
@@ -229,6 +300,20 @@ async function buy(d) {
   font-size: 52px;
   line-height: 1;
 }
+.phd-scene-pet.movable { cursor: grab; touch-action: none; user-select: none; }
+.phd-scene-pet.dragging { cursor: grabbing; z-index: 2; }
+
+.phd-themes { display: flex; gap: 8px; flex-wrap: wrap; }
+.phd-theme {
+  width: 40px; height: 28px;
+  border-radius: 10px;
+  border: 2px solid var(--color-outline-dim);
+  cursor: pointer;
+  padding: 0;
+  transition: transform 0.12s, border-color 0.12s;
+}
+.phd-theme:hover { transform: translateY(-1px); }
+.phd-theme.active { border-color: var(--color-primary); box-shadow: 0 0 0 2px var(--color-primary-container); }
 .phd-scene-item {
   position: absolute;
   transform: translate(-50%, -50%);
