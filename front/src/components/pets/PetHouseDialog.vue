@@ -1,6 +1,6 @@
 <template>
-  <!-- base-z-index: открывается ПОВЕРХ PetDetailModal (его overlay 10700),
-       атрибут падает насквозь до PrimeVue Dialog. -->
+  <!-- above-pet-modal: открывается ПОВЕРХ PetDetailModal (его overlay 10700);
+       класс из z-index-лестницы main.css — base-z-index PrimeVue ненадёжен. -->
   <AppDialog
     :model-value="modelValue"
     :title="readonly ? `Домик «${guestPet?.name || ''}»` : 'Домик питомца'"
@@ -9,7 +9,8 @@
       : 'Расставляйте декор как хочется — домик видят коллеги'"
     icon="cottage"
     size="md"
-    :base-z-index="10800"
+    mask-class="above-pet-modal"
+    dialog-class="above-pet-modal"
     @update:model-value="(v) => emit('update:modelValue', v)"
   >
     <div class="phd">

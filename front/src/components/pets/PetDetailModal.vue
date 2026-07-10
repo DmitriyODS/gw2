@@ -212,13 +212,14 @@
     <HealMiniGame v-if="activeGame === 'heal'" @success="onHealSuccess" @close="activeGame = null" />
 
     <PetHouseDialog v-model="houseOpen" />
-    <!-- base-z-index: конфирм должен всплыть поверх этой модалки (10700). -->
+    <!-- above-pet-modal: конфирм должен всплыть поверх этой модалки (10700). -->
     <ConfirmDialog
       :visible="confirmPrestige"
       header="Переродиться?"
       :message="prestigeMessage"
       confirm-label="Переродиться"
-      :base-z-index="10800"
+      mask-class="above-pet-modal"
+      dialog-class="above-pet-modal"
       @confirm="doPrestige"
       @cancel="confirmPrestige = false"
     />
