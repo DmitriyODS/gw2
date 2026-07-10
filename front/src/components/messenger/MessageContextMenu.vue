@@ -79,8 +79,11 @@ const style = computed(() => ({
   zIndex: 12000,
 }))
 
+let openedAt = 0
+
 watch(() => props.visible, async (v) => {
   if (!v) return
+  openedAt = Date.now()
   pos.value = { x: props.x, y: props.y }
   await nextTick()
   // Кламп в вьюпорт, чтобы меню не выезжало за край.
@@ -107,8 +110,18 @@ function emitReact(emoji) {
   emit('close')
 }
 
-function onDocClick() { if (props.visible) emit('close') }
-function onScroll() { if (props.visible) emit('close') }
+function onDocClick(e) {
+  if (!props.visible) return
+  // Клики внутри меню не закрывают его (mousedown не гасится @click.stop).
+  if (menuEl.value?.contains(e.target)) return
+  // Тап-открытие: после touchend браузер шлёт ЭМУЛИРОВАННЫЙ mousedown в ту же
+  // точку — без грейса он закрывал меню в момент открытия.
+  if (Date.now() - openedAt < 400) return
+  emit('close')
+}
+function onScroll() {
+  if (props.visible && Date.now() - openedAt > 400) emit('close')
+}
 
 onMounted(() => {
   document.addEventListener('mousedown', onDocClick, true)
