@@ -58,23 +58,38 @@ export async function unregisterNativePush() {
 
 const nativeShell = () => window.Capacitor?.Plugins?.NativeShell
 
-// Системные панели (статус-бар и навигация) следуют теме приложения: резолвим
-// фактический цвет поверхности из токенов (--color-surface — oklch, нативный
-// код хочет hex → пробный элемент внутри .app-layout, где действуют
-// переопределения [data-dark]) и передаём вместе с признаком тёмной темы.
+// Системные панели (статус-бар и навигация) следуют теме приложения: бар
+// красится в ФАКТИЧЕСКИЙ базовый фон приложения — resolved background-color
+// самого .app-layout (последний слой его background — var(--color-bg), поверх
+// которого лежат градиентные пятна), поэтому полоса выглядит продолжением
+// страницы. ВАЖНО: вызывать после обновления DOM (watch с flush:'post') —
+// токены переопределяются селектором [data-dark] на .app-layout, и до
+// перерисовки резолвится цвет предыдущей темы.
 export function syncNativeSystemBars(isDark) {
   const shell = nativeShell()
   if (!isNativeApp() || !shell) return
   const host = document.querySelector('.app-layout') || document.body
-  const probe = document.createElement('div')
-  probe.style.cssText = 'position:fixed;visibility:hidden;pointer-events:none;background:var(--color-surface)'
-  host.appendChild(probe)
-  const rgb = getComputedStyle(probe).backgroundColor
-  probe.remove()
+  let rgb = getComputedStyle(host).backgroundColor
+  if (!isOpaque(rgb)) {
+    // Фон не задан/полупрозрачен (экран логина и т.п.) — цвет из токенов,
+    // резолвим probe-элементом внутри host (там действуют [data-dark]).
+    const probe = document.createElement('div')
+    probe.style.cssText = 'position:fixed;visibility:hidden;pointer-events:none;background:var(--color-bg, var(--color-surface))'
+    host.appendChild(probe)
+    rgb = getComputedStyle(probe).backgroundColor
+    probe.remove()
+  }
   const m = rgb.match(/\d+(\.\d+)?/g)
   if (!m || m.length < 3) return
   const hex = '#' + m.slice(0, 3).map((v) => Math.round(+v).toString(16).padStart(2, '0')).join('')
   shell.setSystemBars({ color: hex, dark: !!isDark }).catch(() => {})
+}
+
+function isOpaque(rgb) {
+  const m = rgb?.match(/rgba?\(([^)]+)\)/)
+  if (!m) return false
+  const parts = m[1].split(',').map(parseFloat)
+  return parts.length < 4 || parts[3] >= 0.99
 }
 
 // Номер установленной сборки обёртки (ГГММДДН) — для «О приложении».

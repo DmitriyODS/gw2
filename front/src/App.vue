@@ -125,9 +125,16 @@ watch(() => authStore.user, (user, prev) => {
   if (user && !prev) initNativePush(openFromPush)
 })
 
-// Мобильная обёртка: системные панели следуют теме (тёмная/светлая и
-// фактический цвет поверхности). В браузере — no-op.
-watch(() => themeStore.dark, (dark) => syncNativeSystemBars(dark), { immediate: true })
+// Мобильная обёртка: системные панели следуют теме — тёмная/светлая, смена
+// пресета/палитры и тумблер градиента меняют фактический фон приложения.
+// В браузере — no-op. flush:'post' обязателен: цвет резолвится из DOM, а
+// [data-dark] на .app-layout обновляется только при перерисовке — иначе бар
+// красится в прошлую тему (а при старте .app-layout ещё не существует вовсе).
+watch(
+  () => [themeStore.dark, themeStore.currentPreset, themeStore.bgGradient],
+  () => syncNativeSystemBars(themeStore.dark),
+  { immediate: true, flush: 'post', deep: true },
+)
 
 // useToast() требует setup-контекст — вызываем здесь, не в onMounted
 const toast = useToast()
