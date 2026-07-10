@@ -37,6 +37,7 @@ type MessengerService interface {
 	DeleteConversation(ctx context.Context, convID, userID int64, scope string) (bool, error)
 	ToggleConversationPin(ctx context.Context, convID, userID int64) (bool, error)
 	ToggleMessagePin(ctx context.Context, messageID, userID int64) (*dto.Message, bool, error)
+	ToggleMessageReaction(ctx context.Context, messageID, userID int64, emoji string) (*dto.Message, bool, error)
 	ListPinnedMessages(ctx context.Context, convID, userID int64) ([]*dto.Message, error)
 	OpenDevChat(ctx context.Context, userID int64, companyID *int64) (*dto.Conversation, error)
 	SupportInbox(ctx context.Context, userID int64) ([]*dto.ConversationListItem, error)

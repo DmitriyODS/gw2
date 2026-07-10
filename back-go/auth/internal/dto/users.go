@@ -44,6 +44,8 @@ type User struct {
 	IsActive      bool     `json:"is_active"`
 	IsSuperAdmin  bool     `json:"is_super_admin"`
 	CreatedAt     JSONTime `json:"created_at"`
+	StatusEmoji   *string  `json:"status_emoji"`
+	StatusText    *string  `json:"status_text"`
 }
 
 func roleRef(r domain.Role) *RoleRef {
@@ -68,6 +70,8 @@ func NewUser(u *domain.User) User {
 		IsActive:      u.IsActive,
 		IsSuperAdmin:  u.IsSuperAdmin,
 		CreatedAt:     JSONTime(u.CreatedAt),
+		StatusEmoji:   u.StatusEmoji,
+		StatusText:    u.StatusText,
 	}
 }
 
@@ -91,8 +95,10 @@ type DirectoryUser struct {
 	CompanyID  *int64    `json:"company_id"`
 	Phone      *string   `json:"phone"`
 	Email      *string   `json:"email"`
-	AvatarPath *string   `json:"avatar_path"`
-	LastSeenAt *JSONTime `json:"last_seen_at"`
+	AvatarPath  *string   `json:"avatar_path"`
+	LastSeenAt  *JSONTime `json:"last_seen_at"`
+	StatusEmoji *string   `json:"status_emoji"`
+	StatusText  *string   `json:"status_text"`
 }
 
 func NewDirectoryUser(u *domain.User) DirectoryUser {
@@ -103,9 +109,11 @@ func NewDirectoryUser(u *domain.User) DirectoryUser {
 		Post:       u.Post,
 		Role:       roleRef(u.Role),
 		CompanyID:  u.CompanyID,
-		Phone:      u.Phone,
-		Email:      u.Email,
-		AvatarPath: u.AvatarPath,
+		Phone:       u.Phone,
+		Email:       u.Email,
+		AvatarPath:  u.AvatarPath,
+		StatusEmoji: u.StatusEmoji,
+		StatusText:  u.StatusText,
 	}
 	if u.LastSeenAt != nil {
 		ts := JSONTime(*u.LastSeenAt)
@@ -262,6 +270,9 @@ type UpdateMeRequest struct {
 	CurrentPassword *string `json:"current_password"`
 	NewPassword     *string `json:"new_password"`
 	ConfirmPassword *string `json:"confirm_password"`
+	// Пользовательский статус (мессенджер): пустая строка — снять.
+	StatusEmoji *string `json:"status_emoji"`
+	StatusText  *string `json:"status_text"`
 }
 
 // AddMemberRequest — POST /companies/<id>/members: добавить существующего

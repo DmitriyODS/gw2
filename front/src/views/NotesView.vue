@@ -94,22 +94,20 @@
       <div v-if="isMobile" class="nt-mobile-hub">
         <NotesHubTabs full-width />
       </div>
-      <div v-if="isMobile" class="nt-groupstrip">
-        <button class="nt-groupchip" :class="{ active: store.activeGroupId === 0 && !store.showArchived }" @click="store.selectGroup(0)">Все</button>
-        <button
-          v-for="g in store.groups"
-          :key="g.id"
-          class="nt-groupchip"
-          :class="{ active: g.id === store.activeGroupId }"
-          @click="store.selectGroup(g.id)"
-        >{{ g.name }}</button>
-        <button class="nt-groupchip" :class="{ active: store.showShared }" @click="store.selectShared()">Поделились</button>
-        <button class="nt-groupchip" :class="{ active: store.showArchived }" @click="store.selectArchive()">Архив</button>
-      </div>
-
       <header class="nt-toolbar">
         <SearchField v-model="searchInput" placeholder="Поиск по заметкам…" hotkey />
         <div class="nt-actions">
+          <!-- Мобайл: группы/фильтры — в шторке, кнопка в один ряд с поиском. -->
+          <button
+            v-if="isMobile"
+            class="btn-glass nt-groups-btn"
+            title="Группы и фильтры"
+            aria-label="Группы и фильтры"
+            @click="groupsSheetOpen = true"
+          >
+            <span class="material-symbols-outlined">folder_open</span>
+            <span v-if="activeFilterName" class="nt-groups-dot" aria-hidden="true" />
+          </button>
           <button class="btn-glass" title="Импортировать заметку из .txt" @click="importInput?.click()">
             <span class="material-symbols-outlined">upload_file</span>
             <span class="nt-btn-label">Импорт</span>
@@ -121,6 +119,87 @@
           </button>
         </div>
       </header>
+
+      <AppDialog
+        v-model="groupsSheetOpen"
+        tone="primary"
+        icon="folder_open"
+        size="sm"
+        mobile="sheet"
+        title="Группы"
+      >
+        <div class="nt-groupsheet">
+          <button
+            class="nt-groupitem"
+            :class="{ active: store.activeGroupId === 0 && !store.showArchived && !store.showShared }"
+            @click="pickGroup(() => store.selectGroup(0))"
+          >
+            <span class="nt-groupitem-name">Все</span>
+            <span v-if="store.activeGroupId === 0 && !store.showArchived && !store.showShared" class="material-symbols-outlined">check</span>
+          </button>
+          <template v-for="g in store.groups" :key="g.id">
+            <form
+              v-if="sheetRenamingId === g.id"
+              class="nt-groupsheet-add"
+              @submit.prevent="submitSheetRename(g)"
+            >
+              <input
+                ref="sheetGroupInput"
+                v-model="sheetGroupName"
+                class="nt-groupsheet-input"
+                placeholder="Название группы"
+                maxlength="64"
+              />
+              <button class="nt-groupsheet-ok" type="submit" :disabled="!sheetGroupName.trim()">
+                <span class="material-symbols-outlined">check</span>
+              </button>
+            </form>
+            <button
+              v-else
+              class="nt-groupitem"
+              :class="{ active: g.id === store.activeGroupId }"
+              @click="pickGroup(() => store.selectGroup(g.id))"
+            >
+              <span class="nt-groupitem-name">{{ g.name }}</span>
+              <span
+                class="material-symbols-outlined nt-groupitem-edit"
+                role="button"
+                tabindex="0"
+                title="Переименовать"
+                @click.stop="startSheetRename(g)"
+                @keydown.enter.stop="startSheetRename(g)"
+              >edit</span>
+              <span v-if="g.id === store.activeGroupId" class="material-symbols-outlined">check</span>
+            </button>
+          </template>
+          <button class="nt-groupitem" :class="{ active: store.showShared }" @click="pickGroup(() => store.selectShared())">
+            <span class="nt-groupitem-name">Поделились</span>
+            <span v-if="store.showShared" class="material-symbols-outlined">check</span>
+          </button>
+          <button class="nt-groupitem" :class="{ active: store.showArchived }" @click="pickGroup(() => store.selectArchive())">
+            <span class="nt-groupitem-name">Архив</span>
+            <span v-if="store.showArchived" class="material-symbols-outlined">check</span>
+          </button>
+
+          <!-- Новая группа: инлайн-форма прямо в шторке. -->
+          <form v-if="sheetAddingGroup" class="nt-groupsheet-add" @submit.prevent="submitSheetGroup">
+            <input
+              ref="sheetGroupInput"
+              v-model="sheetGroupName"
+              class="nt-groupsheet-input"
+              placeholder="Название группы"
+              maxlength="64"
+            />
+            <button class="nt-groupsheet-ok" type="submit" :disabled="!sheetGroupName.trim()">
+              <span class="material-symbols-outlined">check</span>
+            </button>
+          </form>
+          <button v-else class="nt-groupitem nt-groupitem-add" @click="startSheetGroup">
+            <span class="material-symbols-outlined">create_new_folder</span>
+            <span class="nt-groupitem-name">Добавить группу</span>
+          </button>
+        </div>
+      </AppDialog>
 
       <div class="nt-body">
         <div v-if="store.loading && !store.notes.length" class="split-side-note">Загрузка…</div>
@@ -194,6 +273,13 @@
       </div>
     </section>
 
+    <AppFab
+      :visible="isMobile && fabVisible"
+      icon="add"
+      aria-label="Новая заметка"
+      @click="createAndOpen"
+    />
+
     <ConfirmDialog
       :visible="!!groupToDelete"
       header="Удалить группу?"
@@ -252,8 +338,11 @@ import { useRouter } from 'vue-router'
 import { useBreakpoint } from '@/composables/useBreakpoint.js'
 import NotesHubTabs from '@/components/notes/NotesHubTabs.vue'
 import SearchField from '@/components/common/SearchField.vue'
+import AppFab from '@/components/common/AppFab.vue'
+import { useFabOnScroll } from '@/composables/useFabOnScroll.js'
 import EmptyState from '@/components/common/EmptyState.vue'
 import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
+import AppDialog from '@/components/common/AppDialog.vue'
 import NoteContextMenu from '@/components/notes/NoteContextMenu.vue'
 import NoteGroupsDialog from '@/components/notes/NoteGroupsDialog.vue'
 import NoteShareDialog from '@/components/notes/NoteShareDialog.vue'
@@ -274,6 +363,71 @@ const auth = useAuthStore()
 const hasCompany = computed(() => !!auth.companyId)
 
 const { isMobile } = useBreakpoint()
+// Мобильный FAB «Новая заметка»: прячется/появляется по прокрутке плиток.
+const { fabVisible } = useFabOnScroll()
+
+/* Мобильная шторка групп/фильтров (заменяет ряд чипов над тулбаром). */
+const groupsSheetOpen = ref(false)
+
+const activeFilterName = computed(() => {
+  if (store.showArchived) return 'Архив'
+  if (store.showShared) return 'Поделились'
+  if (store.activeGroupId) return store.groups.find(g => g.id === store.activeGroupId)?.name || ''
+  return ''
+})
+
+function pickGroup(fn) {
+  fn()
+  groupsSheetOpen.value = false
+}
+
+/* Создание и переименование групп из мобильной шторки. */
+const sheetAddingGroup = ref(false)
+const sheetRenamingId = ref(null)
+const sheetGroupName = ref('')
+const sheetGroupInput = ref(null)
+
+function focusSheetInput() {
+  // ref в v-for может быть массивом.
+  const el = Array.isArray(sheetGroupInput.value) ? sheetGroupInput.value[0] : sheetGroupInput.value
+  el?.focus()
+}
+
+function startSheetGroup() {
+  sheetRenamingId.value = null
+  sheetAddingGroup.value = true
+  sheetGroupName.value = ''
+  nextTick(focusSheetInput)
+}
+
+function startSheetRename(g) {
+  sheetAddingGroup.value = false
+  sheetRenamingId.value = g.id
+  sheetGroupName.value = g.name
+  nextTick(focusSheetInput)
+}
+
+async function submitSheetGroup() {
+  const name = sheetGroupName.value.trim()
+  if (!name) return
+  sheetAddingGroup.value = false
+  try {
+    await store.createGroup(name)
+  } catch (e) {
+    notif.error(e?.message || 'Не удалось создать группу')
+  }
+}
+
+async function submitSheetRename(g) {
+  const name = sheetGroupName.value.trim()
+  sheetRenamingId.value = null
+  if (!name || name === g.name) return
+  try {
+    await store.renameGroup(g.id, name)
+  } catch (e) {
+    notif.error(e?.message || 'Не удалось переименовать группу')
+  }
+}
 
 onMounted(() => {
   store.fetchGroups()
@@ -742,37 +896,102 @@ function formatDate(iso) {
 
 /* ── Мобайл ── */
 .nt-mobile-hub { flex-shrink: 0; padding: 10px 12px 0; }
-.nt-groupstrip {
-  display: flex;
-  gap: 8px;
-  overflow-x: auto;
-  padding: 12px 16px 0;
-  flex-shrink: 0;
-  scrollbar-width: none;
+
+/* Кнопка групп в тулбаре: точка — активный фильтр (не «Все»). */
+.nt-groups-btn { position: relative; }
+.nt-groups-dot {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--color-primary);
 }
-.nt-groupstrip::-webkit-scrollbar { display: none; }
-.nt-groupchip {
-  flex-shrink: 0;
-  height: 32px;
-  padding: 0 14px;
-  border: 1px solid var(--acrylic-border);
-  border-radius: var(--radius-full);
+
+/* Шторка групп/фильтров. */
+.nt-groupsheet {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding-bottom: 20px;
+}
+.nt-groupitem {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 13px 14px;
+  border: 1px solid var(--color-outline-dim);
+  border-radius: var(--radius-md);
   background: var(--acrylic-card-bg);
   color: var(--color-text);
-  font-size: 13px;
+  font: inherit;
+  font-size: 14.5px;
   font-weight: 600;
+  text-align: left;
   cursor: pointer;
+}
+.nt-groupitem.active {
+  border-color: var(--color-primary);
+  background: color-mix(in oklch, var(--color-primary) 10%, var(--acrylic-card-bg));
+}
+.nt-groupitem-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
   white-space: nowrap;
 }
-.nt-groupchip.active {
-  background: var(--grad-primary);
-  border-color: transparent;
-  color: var(--color-on-primary);
+.nt-groupitem .material-symbols-outlined { color: var(--color-primary); font-size: 20px; flex-shrink: 0; }
+
+.nt-groupitem-edit {
+  color: var(--color-text-dim) !important;
+  padding: 6px;
+  margin: -6px 0;
+  border-radius: 50%;
 }
+.nt-groupitem-edit:hover { color: var(--color-text) !important; background: var(--color-surface-high); }
+
+.nt-groupitem-add { color: var(--color-primary); border-style: dashed; }
+.nt-groupitem-add .nt-groupitem-name { flex: none; }
+
+/* Инлайн-форма создания/переименования группы в шторке. */
+.nt-groupsheet-add {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.nt-groupsheet-input {
+  flex: 1;
+  min-width: 0;
+  padding: 12px 14px;
+  border: 1px solid var(--color-primary);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  color: var(--color-text);
+  font: inherit;
+  font-size: 14.5px;
+  outline: none;
+}
+.nt-groupsheet-ok {
+  flex-shrink: 0;
+  width: 44px;
+  height: 44px;
+  display: grid;
+  place-items: center;
+  border: none;
+  border-radius: var(--radius-md);
+  background: var(--color-primary);
+  color: var(--color-on-primary);
+  cursor: pointer;
+}
+.nt-groupsheet-ok:disabled { opacity: 0.5; cursor: not-allowed; }
 
 @media (max-width: 768px) {
   .nt-grid { grid-template-columns: 1fr; }
   .nt-btn-label { display: none; }
+  /* Создание заметки на мобильном — плавающий FAB, кнопка тулбара не нужна. */
+  .nt-actions .btn-grad { display: none; }
   .nt-toolbar { padding: 12px 12px 8px; }
   /* Резерв под нижнюю навигацию (64px) + 12px воздуха — контент скроллится
      под стекло, последние плитки не прячутся за навигацией. */

@@ -73,6 +73,7 @@ func NewServer(eps endpoint.Endpoints, users domain.UserReader,
 	api.Delete("/conversations/:id<int>", h.deleteConversation)
 	api.Post("/conversations/:id<int>/pin", h.toggleConversationPin)
 	api.Post("/messages/:id<int>/pin", h.toggleMessagePin)
+	api.Post("/messages/:id<int>/reactions", h.toggleMessageReaction)
 	api.Get("/conversations/:id<int>/pinned", h.listPinned)
 	api.Get("/dev-chat", h.openDevChat)
 	api.Get("/support-inbox", h.supportInbox)

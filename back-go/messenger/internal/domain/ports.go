@@ -69,6 +69,8 @@ type Repository interface {
 	SetMessagePin(ctx context.Context, id int64, pinned bool, byID *int64) error
 	// UpdateMessageText — новый текст и edited_at = now() (редактирование).
 	UpdateMessageText(ctx context.Context, id int64, text string) error
+	// ToggleReaction — поставить/снять реакцию; true — реакция теперь стоит.
+	ToggleReaction(ctx context.Context, messageID, userID int64, emoji string) (bool, error)
 	// HasHumanMessageSince — было ли сообщение НЕ бота свежее since и старше
 	// beforeID (нужен ли автоответ техподдержки).
 	HasHumanMessageSince(ctx context.Context, convID int64, since time.Time, beforeID int64) (bool, error)

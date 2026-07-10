@@ -85,6 +85,7 @@ func TestMessageJSONShape(t *testing.T) {
 			"size_bytes": 10,
 			"url": "/uploads/messages/2026/06/x.pdf"
 		}],
+		"reactions": [],
 		"reply_to": {
 			"id": 4,
 			"sender_id": 2,

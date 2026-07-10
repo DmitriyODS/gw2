@@ -95,9 +95,9 @@
 
         <!-- Панель массового выбора -->
         <div v-if="selectedIds.size" class="rg-selbar">
-          <span>Выбрано: {{ selectedIds.size }}</span>
+          <span class="rg-selbar-count">Выбрано: {{ selectedIds.size }}</span>
           <button class="rg-btn-danger" @click="confirmBulk = true">
-            <span class="material-symbols-outlined">delete</span> Удалить выбранные
+            <span class="material-symbols-outlined">delete</span> Удалить
           </button>
           <button class="rg-btn-text" @click="clearSelection">Сбросить</button>
         </div>
@@ -218,6 +218,13 @@
       />
     </section>
 
+    <AppFab
+      :visible="isMobile && !!store.selected && fabVisible"
+      icon="add"
+      aria-label="Добавить запись"
+      @click="openCreate"
+    />
+
     <RegistryRecordDialog v-model="dialogOpen" :registry="store.selected" :record="activeRecord" />
     <ConfirmDialog
       :visible="confirmBulk"
@@ -314,6 +321,8 @@ import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
 import AppDialog from '@/components/common/AppDialog.vue'
 import EmptyState from '@/components/common/EmptyState.vue'
 import SearchField from '@/components/common/SearchField.vue'
+import AppFab from '@/components/common/AppFab.vue'
+import { useFabOnScroll } from '@/composables/useFabOnScroll.js'
 import { useRegistriesStore } from '@/stores/registries.js'
 import { exportRecords, getShares, createShare, revokeShare } from '@/api/registries.js'
 import { useNotificationsStore } from '@/stores/notifications.js'
@@ -350,6 +359,9 @@ function cardTitle(rec) {
 const cardBodyFields = computed(() => shownFields.value.slice(1))
 
 const searchInput = ref('')
+
+// Мобильный FAB «Добавить запись»: прячется/появляется по прокрутке списка.
+const { fabVisible } = useFabOnScroll()
 const colsOpen = ref(false)
 const colsBtn = ref(null)
 const colsPopStyle = ref({})
@@ -648,12 +660,30 @@ onMounted(() => store.fetchRegistries())
   flex-shrink: 0;
   display: flex;
   align-items: center;
-  gap: 12px;
-  padding: 10px 16px;
-  background: var(--color-primary-container);
-  color: var(--color-on-primary-container);
+  gap: 10px;
+  padding: 8px 12px;
+  /* Матовое стекло в общем стиле, не сплошная primary-заливка. */
+  background: var(--acrylic-bg);
+  -webkit-backdrop-filter: var(--acrylic-blur);
+  backdrop-filter: var(--acrylic-blur);
+  border-bottom: 1px solid var(--color-outline-dim);
+  color: var(--color-text);
   font-size: 14px;
   font-weight: 600;
+}
+
+/* Счётчик занимает свободное место, кнопки не переносятся и не сжимаются. */
+.rg-selbar-count {
+  flex: 1;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.rg-selbar .rg-btn-danger,
+.rg-selbar .rg-btn-text {
+  flex-shrink: 0;
+  white-space: nowrap;
 }
 
 /* ── Таблица: собственный скролл, sticky-шапка ── */
@@ -776,14 +806,21 @@ onMounted(() => store.fetchRegistries())
 
 /* ── Мобильная раскладка ── */
 /* ── Мобайл: лента реестров, сортировка, карточки ── */
+/* Лента чипов выбора реестра: скроллится горизонтально, чипи не сжимаются,
+   длинные названия обрезаются. */
 .rg-regstrip {
-  flex: none; display: flex; gap: 8px; padding: 10px 12px; overflow-x: auto;
+  flex: none; display: flex; gap: 8px; padding: 10px 12px;
+  min-width: 0; max-width: 100%; overflow-x: auto;
   border-bottom: 1px solid var(--color-outline-dim); -webkit-overflow-scrolling: touch;
+  touch-action: pan-x;
+  scrollbar-width: none;
 }
+.rg-regstrip::-webkit-scrollbar { display: none; }
 .rg-regchip {
-  flex: none; padding: 8px 14px; border-radius: var(--radius-full);
+  flex: 0 0 auto; padding: 8px 14px; border-radius: var(--radius-full);
   border: 1px solid var(--color-outline-dim); background: var(--acrylic-card-bg);
   color: var(--color-text-dim); font-size: 14px; font-weight: 600; cursor: pointer; white-space: nowrap;
+  max-width: 60vw; overflow: hidden; text-overflow: ellipsis;
 }
 .rg-regchip.active { background: var(--color-primary); color: var(--color-on-primary); border-color: transparent; }
 
@@ -800,12 +837,20 @@ onMounted(() => store.fetchRegistries())
 }
 
 .rg-cards { flex: 1; min-height: 0; overflow-y: auto; padding: 12px; display: flex; flex-direction: column; gap: 10px; }
-.rg-cards-selall { display: flex; align-items: center; gap: 10px; padding: 4px 4px 0; font-size: 13px; color: var(--color-text-dim); }
+.rg-cards-selall { flex-shrink: 0; display: flex; align-items: center; gap: 10px; padding: 4px 4px 0; font-size: 13px; color: var(--color-text-dim); }
 .rg-card {
+  /* flex-shrink: 0 обязателен: без него карточки-flex-items СЖИМАЮТСЯ по
+     высоте, пытаясь уместить весь список в экран, вместо прокрутки. */
+  flex-shrink: 0;
   border: 1px solid var(--color-outline-dim); border-radius: var(--radius-lg);
   background: var(--acrylic-card-bg); overflow: hidden; cursor: pointer;
 }
-.rg-card.selected { border-color: var(--color-primary); background: var(--color-primary-container); }
+/* Выбранная карточка: рамка + лёгкая подсветка — текст остаётся читаемым
+   (сплошной primary-container на тёмной теме делал контент неразличимым). */
+.rg-card.selected {
+  border-color: var(--color-primary);
+  background: color-mix(in oklch, var(--color-primary) 10%, var(--acrylic-card-bg));
+}
 .rg-card-head { display: flex; align-items: center; gap: 10px; padding: 12px 14px; }
 .rg-card-check { flex: none; display: inline-flex; }
 .rg-card-title { flex: 1; min-width: 0; font-size: 15px; font-weight: 700; color: var(--color-text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -818,9 +863,15 @@ onMounted(() => store.fetchRegistries())
 @media (max-width: 768px) {
   /* Скрытие левой панели и разворот правой — в глобальном .split-* */
   .rg-name { display: none; }
-  .rg-toolbar { flex-wrap: wrap; gap: 8px; padding: 10px 12px; }
-  .rg-toolbar :deep(.search-field) { order: 2; flex-basis: 100%; }
-  .rg-actions { order: 1; margin-left: auto; }
+  /* Компактный верх: поиск и действия в ОДНУ строку, «Добавить» — иконка. */
+  .rg-toolbar { flex-wrap: nowrap; gap: 8px; padding: 8px 12px; }
+  .rg-toolbar :deep(.search-field) { flex: 1; min-width: 0; }
+  .rg-actions { flex-shrink: 0; gap: 6px; }
+  /* Создание записи на мобильном — плавающий FAB, кнопка тулбара не нужна. */
+  .rg-actions .btn-grad { display: none; }
+  .rg-regstrip { padding: 8px 12px 6px; gap: 6px; }
+  .rg-regchip { padding: 6px 12px; font-size: 13px; }
+  .rg-msort { padding: 6px 12px; }
   /* Футер (итого/пагинация) всегда под списком — резерв под нижнюю
      навигацию (64px) + 12px воздуха вешаем ему, иначе fixed-навигация
      его накрывает; сам список карточек упирается в футер. */

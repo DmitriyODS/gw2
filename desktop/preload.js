@@ -21,4 +21,6 @@ contextBridge.exposeInMainWorld('GrooveDesktop', {
   setSetting: (key, value) => ipcRenderer.invoke('gw:set-setting', key, value),
   // Поднять окно из трея (клик по уведомлению веб-слоя).
   focusWindow: () => ipcRenderer.send('gw:focus'),
+  // Бейдж непрочитанных на иконке приложения (док/панель задач/трей).
+  setBadge: (count) => ipcRenderer.send('gw:set-badge', count),
 })

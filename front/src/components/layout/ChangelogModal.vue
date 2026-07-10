@@ -3,7 +3,7 @@
     model-value
     tone="primary"
     icon="new_releases"
-    size="lg"
+    size="xl"
     title="Что нового"
     :subtitle="currentVersion ? `Текущая версия: ${currentVersion}` : ''"
     @update:model-value="(v) => !v && $emit('close')"
@@ -17,40 +17,103 @@
       Не удалось загрузить изменения
     </div>
 
+    <!-- Паттерн release notes: сначала — «главное» свежего релиза крупными
+         карточками, полные списки — ниже; прошлые версии свёрнуты в таймлайн
+         (клик раскрывает), чтобы окно не превращалось в бесконечную простыню. -->
     <template v-else>
-      <div v-for="ver in versions" :key="ver.version" class="cl-version">
+      <section v-if="latest" class="cl-hero">
         <div class="cl-version-top">
-          <span class="cl-badge">v{{ ver.version }}</span>
-          <span class="cl-date">{{ formatDate(ver.date) }}</span>
+          <span class="cl-badge">v{{ latest.version }}</span>
+          <span class="cl-badge-new">Свежее</span>
+          <span class="cl-date">{{ formatDate(latest.date) }}</span>
         </div>
-        <h2 class="cl-title">{{ ver.title }}</h2>
-        <p v-if="ver.description" class="cl-desc">{{ ver.description }}</p>
+        <h2 class="cl-title">{{ latest.title }}</h2>
+        <p v-if="latest.description" class="cl-desc">{{ latest.description }}</p>
+
+        <div v-if="highlights.length" class="cl-highlights">
+          <div v-for="(text, i) in highlights" :key="i" class="cl-highlight">
+            <span class="material-symbols-outlined cl-highlight-ico">{{ HIGHLIGHT_ICONS[i % HIGHLIGHT_ICONS.length] }}</span>
+            <p class="cl-highlight-text">{{ text }}</p>
+          </div>
+        </div>
 
         <div class="cl-groups">
-          <div
-            v-for="group in groupsOf(ver)"
-            :key="group.type"
-            class="cl-group"
-          >
+          <div v-for="group in latestGroups" :key="group.type" class="cl-group">
             <div class="cl-chip" :class="`cl-chip--${group.type}`">
               <span class="material-symbols-outlined cl-chip-icon">{{ groupMeta[group.type]?.icon }}</span>
               <span class="cl-chip-label">{{ groupMeta[group.type]?.label }}</span>
               <span class="cl-chip-count">{{ group.items.length }}</span>
             </div>
-
             <ul class="cl-items">
               <li
                 v-for="(text, i) in group.items"
                 :key="i"
                 class="cl-item"
                 :class="`cl-item--${group.type}`"
-              >
-                {{ text }}
-              </li>
+              >{{ text }}</li>
             </ul>
           </div>
         </div>
-      </div>
+      </section>
+
+      <section v-if="history.length" class="cl-history">
+        <h3 class="cl-history-title">
+          <span class="material-symbols-outlined">history</span>
+          Предыдущие версии
+        </h3>
+
+        <article
+          v-for="ver in history"
+          :key="ver.version"
+          class="cl-past"
+          :class="{ open: opened.has(ver.version) }"
+        >
+          <button class="cl-past-head" @click="toggle(ver.version)">
+            <span class="cl-past-info">
+              <span class="cl-past-line">
+                <span class="cl-badge ghost">v{{ ver.version }}</span>
+                <span class="cl-date">{{ formatDate(ver.date) }}</span>
+              </span>
+              <span class="cl-past-title">{{ ver.title }}</span>
+              <span class="cl-past-counts">
+                <span
+                  v-for="g in groupsOf(ver)"
+                  :key="g.type"
+                  class="cl-count"
+                  :class="`cl-count--${g.type}`"
+                >
+                  <span class="material-symbols-outlined">{{ groupMeta[g.type]?.icon }}</span>
+                  {{ g.items.length }}
+                </span>
+              </span>
+            </span>
+            <span class="material-symbols-outlined cl-past-chev">
+              {{ opened.has(ver.version) ? 'expand_less' : 'expand_more' }}
+            </span>
+          </button>
+
+          <div v-if="opened.has(ver.version)" class="cl-past-body">
+            <p v-if="ver.description" class="cl-desc">{{ ver.description }}</p>
+            <div class="cl-groups">
+              <div v-for="group in groupsOf(ver)" :key="group.type" class="cl-group">
+                <div class="cl-chip" :class="`cl-chip--${group.type}`">
+                  <span class="material-symbols-outlined cl-chip-icon">{{ groupMeta[group.type]?.icon }}</span>
+                  <span class="cl-chip-label">{{ groupMeta[group.type]?.label }}</span>
+                  <span class="cl-chip-count">{{ group.items.length }}</span>
+                </div>
+                <ul class="cl-items">
+                  <li
+                    v-for="(text, i) in group.items"
+                    :key="i"
+                    class="cl-item"
+                    :class="`cl-item--${group.type}`"
+                  >{{ text }}</li>
+                </ul>
+              </div>
+            </div>
+          </div>
+        </article>
+      </section>
     </template>
   </AppDialog>
 </template>
@@ -65,8 +128,24 @@ defineEmits(['close'])
 const loading  = ref(true)
 const error    = ref(false)
 const versions = ref([])
+const opened   = ref(new Set())
 
 const currentVersion = computed(() => versions.value[0]?.version ?? null)
+const latest  = computed(() => versions.value[0] ?? null)
+const history = computed(() => versions.value.slice(1))
+
+const HIGHLIGHTS_MAX = 3
+const HIGHLIGHT_ICONS = ['rocket_launch', 'auto_awesome', 'celebration']
+
+// Главные пункты релиза — первые «Добавили»; в общем списке не дублируются.
+const highlights = computed(() => (latest.value?.added ?? []).slice(0, HIGHLIGHTS_MAX))
+
+const latestGroups = computed(() => {
+  if (!latest.value) return []
+  return groupsOf(latest.value)
+    .map(g => g.type === 'added' ? { ...g, items: g.items.slice(HIGHLIGHTS_MAX) } : g)
+    .filter(g => g.items.length)
+})
 
 const groupMeta = {
   added:    { icon: 'add_circle', label: 'Добавили'  },
@@ -80,6 +159,13 @@ function groupsOf(ver) {
   return GROUP_ORDER
     .filter(t => Array.isArray(ver[t]) && ver[t].length)
     .map(t => ({ type: t, items: ver[t] }))
+}
+
+function toggle(version) {
+  const next = new Set(opened.value)
+  if (next.has(version)) next.delete(version)
+  else next.add(version)
+  opened.value = next
 }
 
 function formatDate(str) {
@@ -100,12 +186,6 @@ onMounted(async () => {
 </script>
 
 <style scoped>
-.cl-version + .cl-version {
-  margin-top: 32px;
-  padding-top: 28px;
-  border-top: 1px solid var(--color-outline-dim);
-}
-
 .cl-version-top {
   display: flex;
   align-items: center;
@@ -121,6 +201,23 @@ onMounted(async () => {
   padding: 3px 12px;
   border-radius: var(--radius-full);
   letter-spacing: 0.5px;
+  text-transform: uppercase;
+}
+
+.cl-badge.ghost {
+  background: var(--acrylic-card-bg);
+  border: 1px solid var(--acrylic-border);
+  color: var(--color-text);
+}
+
+.cl-badge-new {
+  background: var(--grad-primary, var(--color-primary));
+  color: var(--color-on-primary);
+  font-size: 10.5px;
+  font-weight: 800;
+  padding: 3px 10px;
+  border-radius: var(--radius-full);
+  letter-spacing: 0.6px;
   text-transform: uppercase;
 }
 
@@ -143,6 +240,36 @@ onMounted(async () => {
   color: var(--color-text-dim);
   line-height: 1.7;
   margin: 0 0 4px;
+}
+
+/* «Главное в релизе» — крупные стеклянные карточки. */
+.cl-highlights {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+  gap: 10px;
+  margin-top: 16px;
+}
+
+.cl-highlight {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px;
+  border: 1px solid var(--acrylic-border);
+  border-radius: var(--radius-lg);
+  background: var(--acrylic-card-bg);
+}
+
+.cl-highlight-ico {
+  font-size: 26px;
+  color: var(--color-primary);
+}
+
+.cl-highlight-text {
+  margin: 0;
+  font-size: 13.5px;
+  line-height: 1.55;
+  color: var(--color-text);
 }
 
 .cl-groups {
@@ -223,6 +350,85 @@ onMounted(async () => {
 .cl-item--improved::before { background: var(--color-tertiary); }
 .cl-item--fixed::before    { background: var(--color-warning);  }
 
+/* ── История: таймлайн свёрнутых версий ── */
+.cl-history {
+  margin-top: 30px;
+  padding-top: 22px;
+  border-top: 1px solid var(--color-outline-dim);
+}
+
+.cl-history-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 14px;
+  font-size: 13px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--color-text-dim);
+}
+.cl-history-title .material-symbols-outlined { font-size: 18px; }
+
+.cl-past-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 12px 14px;
+  margin-bottom: 8px;
+  border: 1px solid var(--acrylic-border);
+  border-radius: var(--radius-lg);
+  background: var(--acrylic-card-bg);
+  font: inherit;
+  color: var(--color-text);
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.cl-past-head:hover { background: var(--color-surface-low); }
+
+.cl-past-info {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.cl-past-line { display: flex; align-items: center; gap: 8px; }
+
+.cl-past-title {
+  font-size: 14.5px;
+  font-weight: 700;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cl-past-counts { display: flex; gap: 10px; }
+
+.cl-count {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 12px;
+  font-weight: 700;
+}
+.cl-count .material-symbols-outlined { font-size: 15px; }
+.cl-count--added    { color: var(--color-success);  }
+.cl-count--improved { color: var(--color-tertiary); }
+.cl-count--fixed    { color: var(--color-warning);  }
+
+.cl-past-chev {
+  flex-shrink: 0;
+  color: var(--color-text-dim);
+}
+
+.cl-past-body {
+  padding: 2px 2px 18px;
+}
+
 .cl-loading,
 .cl-error {
   display: flex;
@@ -239,5 +445,6 @@ onMounted(async () => {
 
 @media (max-width: 600px) {
   .cl-title { font-size: 20px; }
+  .cl-highlights { grid-template-columns: 1fr; }
 }
 </style>

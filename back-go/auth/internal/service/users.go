@@ -2,12 +2,22 @@ package service
 
 import (
 	"context"
+	"strings"
+	"unicode/utf8"
 
 	"github.com/DmitriyODS/gw2/back-go/auth/internal/domain"
 	"github.com/DmitriyODS/gw2/back-go/auth/internal/dto"
 )
 
 var errUserNotFound = domain.NewError("NOT_FOUND", "Пользователь не найден", 404)
+
+// nilIfEmpty — пустая строка → NULL (снятие значения nullable-колонки).
+func nilIfEmpty(s string) any {
+	if s == "" {
+		return nil
+	}
+	return s
+}
 
 // errCompanyScopeRequired — операция требует активной компании (выбирается при
 // login/switch и кладётся в токен).
@@ -252,6 +262,17 @@ func (s *Service) UpdateMe(ctx context.Context, userID int64, req dto.UpdateMeRe
 			return nil, err
 		}
 		updates["login"] = *req.Login
+	}
+
+	if req.StatusEmoji != nil {
+		updates["status_emoji"] = nilIfEmpty(strings.TrimSpace(*req.StatusEmoji))
+	}
+	if req.StatusText != nil {
+		text := strings.TrimSpace(*req.StatusText)
+		if utf8.RuneCountInString(text) > 80 {
+			return nil, domain.NewError("VALIDATION", "Статус не длиннее 80 символов", 400)
+		}
+		updates["status_text"] = nilIfEmpty(text)
 	}
 
 	if req.NewPassword != nil && *req.NewPassword != "" {

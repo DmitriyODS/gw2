@@ -39,7 +39,8 @@
           class="ilb-img"
           :class="{ grabbing: dragging }"
           :style="imgStyle"
-          @mousedown.prevent="startDrag"
+          draggable="false"
+          @pointerdown.prevent="onPointerDown"
           @click.stop
         />
         <div v-if="currentCaption || hasGallery" class="ilb-caption" @click.stop>
@@ -89,22 +90,62 @@ function zoomBy(d) { scale.value = Math.min(8, Math.max(0.2, +(scale.value + d).
 function rotate() { angle.value = (angle.value + 90) % 360 }
 function onWheel(e) { zoomBy(e.deltaY < 0 ? 0.2 : -0.2) }
 
+/* Панорама и pinch-зум на pointer-событиях: работают и мышью, и пальцами. */
+const pointers = new Map()
 let start = null
-function startDrag(e) {
-  dragging.value = true
-  start = { x: e.clientX - offset.x, y: e.clientY - offset.y }
-  window.addEventListener('mousemove', onDrag)
-  window.addEventListener('mouseup', endDrag, { once: true })
+let pinchStart = null
+
+function pinchDist() {
+  const [a, b] = [...pointers.values()]
+  return Math.hypot(a.x - b.x, a.y - b.y)
 }
-function onDrag(e) {
-  if (!start) return
-  offset.x = e.clientX - start.x
-  offset.y = e.clientY - start.y
+
+function onPointerDown(e) {
+  pointers.set(e.pointerId, { x: e.clientX, y: e.clientY })
+  if (pointers.size === 1) {
+    dragging.value = true
+    start = { x: e.clientX - offset.x, y: e.clientY - offset.y }
+    window.addEventListener('pointermove', onPointerMove)
+    window.addEventListener('pointerup', onPointerUp)
+    window.addEventListener('pointercancel', onPointerUp)
+  } else if (pointers.size === 2) {
+    dragging.value = false
+    start = null
+    pinchStart = { dist: pinchDist(), scale: scale.value }
+  }
 }
-function endDrag() {
-  dragging.value = false
-  start = null
-  window.removeEventListener('mousemove', onDrag)
+
+function onPointerMove(e) {
+  if (!pointers.has(e.pointerId)) return
+  pointers.set(e.pointerId, { x: e.clientX, y: e.clientY })
+  if (pointers.size >= 2 && pinchStart) {
+    const k = pinchDist() / pinchStart.dist
+    scale.value = Math.min(8, Math.max(0.2, +(pinchStart.scale * k).toFixed(3)))
+    return
+  }
+  if (start) {
+    offset.x = e.clientX - start.x
+    offset.y = e.clientY - start.y
+  }
+}
+
+function onPointerUp(e) {
+  pointers.delete(e.pointerId)
+  if (pointers.size < 2) pinchStart = null
+  if (pointers.size === 1) {
+    // Остался один палец — продолжаем как панораму от его позиции.
+    const p = [...pointers.values()][0]
+    start = { x: p.x - offset.x, y: p.y - offset.y }
+    dragging.value = true
+    return
+  }
+  if (pointers.size === 0) {
+    dragging.value = false
+    start = null
+    window.removeEventListener('pointermove', onPointerMove)
+    window.removeEventListener('pointerup', onPointerUp)
+    window.removeEventListener('pointercancel', onPointerUp)
+  }
 }
 
 function onKey(e) {
@@ -169,6 +210,7 @@ watch(() => props.modelValue, (v) => {
   max-width: 88vw;
   max-height: 84vh;
   user-select: none;
+  touch-action: none;
   cursor: grab;
   transition: transform 0.08s linear;
   border-radius: var(--radius-sm);

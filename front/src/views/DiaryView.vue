@@ -263,6 +263,13 @@
       </EmptyState>
     </section>
 
+    <AppFab
+      :visible="isMobile && !!store.selected && !store.readonly && fabVisible"
+      icon="add"
+      aria-label="Добавить запись"
+      @click="openCreate()"
+    />
+
     <!-- Диалог дня -->
     <AppDialog v-model="dayOpen" :title="dayTitle" icon="today" size="md" :actions="dayActions" @cancel="dayOpen = false" @confirm="openCreate(dayDate)">
       <div class="dd">
@@ -373,6 +380,8 @@ import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
 import EmptyState from '@/components/common/EmptyState.vue'
 import SegmentedTabs from '@/components/common/SegmentedTabs.vue'
 import SearchField from '@/components/common/SearchField.vue'
+import AppFab from '@/components/common/AppFab.vue'
+import { useFabOnScroll } from '@/composables/useFabOnScroll.js'
 import NotesHubTabs from '@/components/notes/NotesHubTabs.vue'
 import DiaryEntryDialog from '@/components/diary/DiaryEntryDialog.vue'
 import DiaryShareDialog from '@/components/diary/DiaryShareDialog.vue'
@@ -385,6 +394,8 @@ import { useBreakpoint } from '@/composables/useBreakpoint.js'
 const store = useDiariesStore()
 const notif = useNotificationsStore()
 const { isMobile } = useBreakpoint()
+// Мобильный FAB «Добавить запись»: прячется/появляется по прокрутке.
+const { fabVisible } = useFabOnScroll()
 
 const tabs = [
   { value: 'mine', label: 'Мои', icon: 'book' },
@@ -923,13 +934,17 @@ watch(() => store.loadingEntries, () => nextTick(measureWeekColumn))
   .dv-toolbar .dv-viewseg,
   .dv-toolbar .dv-toolbar-search,
   .dv-manage { display: none; }
+  /* Создание записи на мобильном — плавающий FAB, кнопка тулбара не нужна. */
+  .dv-actions .btn-grad { display: none; }
   .dv-mobile-controls { display: grid; }
   .dv-subtabs { order: 0; flex-basis: 100%; }
   .dv-subtabs :deep(.seg-tabs) { width: 100%; }
   .dv-subtabs :deep(.seg-tab) { flex: 1; }
-  .dv-nav { order: 1; flex: 1 1 100%; min-width: 0; }
+  /* Навигация по периоду и кнопка «Управление» — в ОДНОЙ строке (отдельная
+     строка под одну иконку съедала слишком много места сверху). */
+  .dv-nav { order: 1; flex: 1 1 auto; min-width: 0; }
   .dv-nav .dv-period { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
-  .dv-actions { order: 6; flex-basis: 100%; justify-content: flex-end; }
+  .dv-actions { order: 2; flex-basis: auto; flex-shrink: 0; justify-content: flex-end; }
 }
 
 /* Лист управления (мобайл) */

@@ -125,13 +125,13 @@
       <template v-if="!task">
         <div v-if="yougileAvailable" class="form-field">
           <label class="checkbox-label">
-            <input type="checkbox" v-model="alsoExportToYg" class="unit-checkbox" />
+            <Checkbox v-model="alsoExportToYg" binary />
             <span>Создать также карточку в YouGile</span>
           </label>
         </div>
         <div class="form-field">
           <label class="checkbox-label">
-            <input type="checkbox" v-model="createFirstUnit" class="unit-checkbox" />
+            <Checkbox v-model="createFirstUnit" binary />
             <span>Создать первый юнит</span>
           </label>
         </div>
@@ -176,6 +176,7 @@ import AppDialog from '@/components/common/AppDialog.vue'
 import InputText from 'primevue/inputtext'
 import Select from 'primevue/select'
 import DatePicker from 'primevue/datepicker'
+import Checkbox from 'primevue/checkbox'
 import { createTask, updateTask, setTaskTags } from '@/api/tasks.js'
 import { getDepartments } from '@/api/departments.js'
 import { getUnitTypes } from '@/api/unitTypes.js'
@@ -552,14 +553,6 @@ async function handleSubmit() {
   user-select: none;
 }
 
-.unit-checkbox {
-  width: 16px;
-  height: 16px;
-  accent-color: var(--gw-primary);
-  cursor: pointer;
-  flex-shrink: 0;
-}
-
 /* ── Мобильный full-screen: крупнее поля, более тач-френдли. ── */
 @media (max-width: 600px) {
   .task-form {
@@ -594,11 +587,6 @@ async function handleSubmit() {
     padding: 6px 0;
     font-size: 15px;
     min-height: 44px;
-  }
-
-  .unit-checkbox {
-    width: 20px;
-    height: 20px;
   }
 }
 </style>

@@ -175,6 +175,13 @@
       />
     </section>
 
+    <AppFab
+      :visible="isMobile && !!store.selected && fabVisible"
+      icon="add"
+      aria-label="Добавить запись"
+      @click="openCreate()"
+    />
+
     <CalendarDayDialog
       v-model="dayDialogOpen"
       :calendar="store.selected"
@@ -268,6 +275,8 @@ import CalendarDayDialog from '@/components/calendar/CalendarDayDialog.vue'
 import AppDialog from '@/components/common/AppDialog.vue'
 import EmptyState from '@/components/common/EmptyState.vue'
 import SearchField from '@/components/common/SearchField.vue'
+import AppFab from '@/components/common/AppFab.vue'
+import { useFabOnScroll } from '@/composables/useFabOnScroll.js'
 import { useCalendarsStore, dayKey } from '@/stores/calendars.js'
 import { exportEntries, getShares, createShare, revokeShare } from '@/api/calendars.js'
 import { useNotificationsStore } from '@/stores/notifications.js'
@@ -363,6 +372,9 @@ const periodLabel = computed(() => {
 
 // ── Поиск ──
 const searchInput = ref('')
+
+// Мобильный FAB «Добавить запись»: прячется/появляется по прокрутке.
+const { fabVisible } = useFabOnScroll()
 let searchTimer = null
 function onSearch() {
   clearTimeout(searchTimer)
@@ -654,10 +666,16 @@ watch(() => store.loadingEntries, () => nextTick(measureWeekColumn))
 /* ── Кнопки ── */
 .cv-btn-tonal {
   display: inline-flex; align-items: center; gap: 6px; height: 38px; padding: 0 16px;
-  border: none; border-radius: var(--radius-full);
-  background: var(--color-primary-container); color: var(--color-on-primary-container);
+  border: 1px solid var(--acrylic-border); border-radius: var(--radius-full);
+  /* Матовое стекло единого стиля вместо сплошного primary-container. */
+  background: var(--acrylic-card-bg);
+  -webkit-backdrop-filter: var(--acrylic-blur);
+  backdrop-filter: var(--acrylic-blur);
+  color: var(--color-primary);
   font-weight: 600; font-size: 14px; cursor: pointer;
+  transition: background 0.15s;
 }
+.cv-btn-tonal:hover { background: var(--color-surface-high); }
 .cv-btn-text { border: none; background: none; cursor: pointer; color: var(--color-primary); font-weight: 600; font-size: 14px; }
 .spin { animation: cvspin 1s linear infinite; font-size: 32px; color: var(--color-primary); }
 @keyframes cvspin { to { transform: rotate(360deg); } }
@@ -687,13 +705,18 @@ watch(() => store.loadingEntries, () => nextTick(measureWeekColumn))
 
 /* ── Мобайл ── */
 .cv-regstrip {
-  flex: none; display: flex; gap: 8px; padding: 10px 12px; overflow-x: auto;
+  flex: none; display: flex; gap: 8px; padding: 10px 12px;
+  min-width: 0; max-width: 100%; overflow-x: auto;
   border-bottom: 1px solid var(--color-outline-dim); -webkit-overflow-scrolling: touch;
+  touch-action: pan-x;
+  scrollbar-width: none;
 }
+.cv-regstrip::-webkit-scrollbar { display: none; }
 .cv-regchip {
-  flex: none; padding: 8px 14px; border-radius: var(--radius-full);
+  flex: 0 0 auto; padding: 8px 14px; border-radius: var(--radius-full);
   border: 1px solid var(--color-outline-dim); background: var(--acrylic-card-bg);
   color: var(--color-text-dim); font-size: 14px; font-weight: 600; cursor: pointer; white-space: nowrap;
+  max-width: 60vw; overflow: hidden; text-overflow: ellipsis;
 }
 .cv-regchip.active { background: var(--color-primary); color: var(--color-on-primary); border-color: transparent; }
 
@@ -702,9 +725,25 @@ watch(() => store.loadingEntries, () => nextTick(measureWeekColumn))
   /* Резерв под нижнюю навигацию (64px) + 12px воздуха: список по датам
      скроллится под стекло, последние записи не прячутся за навигацией. */
   .cv-body { padding-bottom: calc(76px + env(safe-area-inset-bottom, 0px)); }
-  .cv-toolbar { padding: 10px 12px; }
-  .cv-period { font-size: 15px; margin-left: 4px; }
-  .cv-toolbar :deep(.search-field) { order: 5; flex-basis: 100%; min-width: 0; }
+  /* Компактный верх в ДВЕ строки: навигация + действия («Запись» — иконка),
+     ниже — переключатель вида и поиск в одной строке. */
+  .cv-toolbar { flex-wrap: wrap; gap: 8px; padding: 8px 12px; }
+  /* flex-basis auto (не 0!): при переносе строк nav не схлопывается в ноль,
+     иначе его кнопки вылезают поверх соседних. Кнопки не сжимаются. */
+  .cv-nav { order: 1; flex: 1 1 auto; min-width: 0; gap: 6px; }
+  .cv-nav .cv-icon-btn,
+  .cv-today { flex-shrink: 0; }
+  .cv-period { flex: 1; min-width: 0; font-size: 15px; margin-left: 2px; overflow: hidden; text-overflow: ellipsis; }
+  .cv-today { height: 34px; padding: 0 10px; }
+  .cv-icon-btn { width: 36px; height: 36px; }
+  .cv-actions { order: 2; flex-shrink: 0; gap: 6px; }
+  /* Создание записи на мобильном — плавающий FAB, кнопка тулбара не нужна. */
+  .cv-actions .btn-grad { display: none; }
+  .cv-viewseg { order: 3; flex-shrink: 0; }
+  .cv-viewseg button { min-height: 32px; padding: 6px 12px; }
+  .cv-toolbar :deep(.search-field) { order: 4; flex: 1; min-width: 130px; }
+  .cv-regstrip { padding: 8px 12px 6px; gap: 6px; }
+  .cv-regchip { padding: 6px 12px; font-size: 13px; }
   /* На мобайле месяц/неделя — список по датам (cv-agenda), сетка не используется. */
 }
 </style>

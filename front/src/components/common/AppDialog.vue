@@ -237,6 +237,8 @@ function actionClass(a) {
   padding: 24px 24px 8px;
 }
 
+/* Иконка-бейдж диалога: матовое стекло единого стиля, тон задаёт только
+   цвет символа (сплошные тональные круги выбивались из акриловой системы). */
 .dlg-icon {
   width: 56px;
   height: 56px;
@@ -244,30 +246,16 @@ function actionClass(a) {
   border-radius: 50%;
   display: grid;
   place-items: center;
-  background: var(--color-primary-container);
-  color: var(--color-on-primary-container);
+  background: var(--acrylic-card-bg);
+  border: 1px solid var(--acrylic-border);
+  color: var(--color-primary);
 }
 
-.dlg-icon.tone-tertiary {
-  background: var(--color-tertiary-container);
-  color: var(--color-on-tertiary-container);
-}
-.dlg-icon.tone-success {
-  background: var(--color-success-container, var(--color-tertiary-container));
-  color: var(--color-on-success-container, var(--color-on-tertiary-container));
-}
-.dlg-icon.tone-warning {
-  background: var(--color-warning-container, var(--color-tertiary-container));
-  color: var(--color-on-warning-container, var(--color-on-tertiary-container));
-}
-.dlg-icon.tone-danger {
-  background: var(--color-error-container);
-  color: var(--color-on-error-container);
-}
-.dlg-icon.tone-neutral {
-  background: var(--color-surface-high);
-  color: var(--color-text);
-}
+.dlg-icon.tone-tertiary { color: var(--color-tertiary); }
+.dlg-icon.tone-success { color: var(--color-success, var(--color-tertiary)); }
+.dlg-icon.tone-warning { color: var(--color-warning, var(--color-tertiary)); }
+.dlg-icon.tone-danger { color: var(--color-error); }
+.dlg-icon.tone-neutral { color: var(--color-text-dim); }
 
 .dlg-icon .material-symbols-outlined {
   font-size: 28px;
@@ -358,6 +346,7 @@ function actionClass(a) {
 .dlg-btn {
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   gap: 6px;
   height: 40px;
   padding: 0 18px;
@@ -366,6 +355,7 @@ function actionClass(a) {
   font: inherit;
   font-size: 14px;
   font-weight: 600;
+  white-space: nowrap;
   cursor: pointer;
   position: relative;
   isolation: isolate;
@@ -523,6 +513,20 @@ function actionClass(a) {
     max-height: 100dvh !important;
     margin: 0 !important;
     border-radius: 0 !important;
+    /* Явная flex-колонка: контент тянется на всю высоту, футер прижат к
+       низу — без этого под кнопками остаётся пустая полоса. */
+    display: flex !important;
+    flex-direction: column !important;
+  }
+  .app-dialog-root.mobile-full .dlg-footer {
+    margin-top: auto;
+    padding-bottom: calc(14px + env(safe-area-inset-bottom, 0px));
+  }
+  /* Внутренний контейнер в full-режиме не ограничен sheet-высотой 90dvh —
+     иначе под футером остаётся пустая полоса в 10% экрана. */
+  .app-dialog-root.mobile-full .app-dialog {
+    max-height: none;
+    border-radius: 0;
   }
 }
 </style>

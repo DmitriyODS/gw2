@@ -869,6 +869,7 @@ watch(isRinging, (v) => {
   position: relative;
   width: 56px;
   height: 56px;
+  flex-shrink: 0;
   border-radius: 50%;
   border: 0;
   background: var(--color-surface-high);
@@ -932,6 +933,18 @@ watch(isRinging, (v) => {
 .callview.mini .ctrl-btn { width: 36px; height: 36px; }
 .callview.mini .ctrl-btn.hangup { width: 40px; height: 40px; }
 .callview.mini .ctrl-btn .material-symbols-outlined { font-size: 18px; }
+
+/* На узких экранах кнопки уменьшаются, но остаются круглыми (flex-shrink: 0). */
+@media (max-width: 600px) {
+  .callview:not(.mini) .callview-controls {
+    gap: 6px;
+    padding: 12px 8px calc(12px + env(safe-area-inset-bottom, 0px));
+  }
+  .callview:not(.mini) .ctrl-btn { width: 44px; height: 44px; }
+  .callview:not(.mini) .ctrl-btn.hangup { width: 52px; height: 52px; }
+  .callview:not(.mini) .ctrl-btn .material-symbols-outlined { font-size: 20px; }
+  .callview:not(.mini) .ctrl-btn.hangup .material-symbols-outlined { font-size: 22px; }
+}
 
 .callview-error {
   position: absolute;

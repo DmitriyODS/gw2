@@ -56,6 +56,9 @@ export const togglePin = (conversationId) =>
 export const togglePinMessage = (messageId) =>
   apiRequest(`/messenger/messages/${messageId}/pin`, { method: 'POST' })
 
+export const toggleReaction = (messageId, emoji) =>
+  apiRequest(`/messenger/messages/${messageId}/reactions`, { method: 'POST', body: { emoji } })
+
 export const listPinnedMessages = (conversationId) =>
   apiRequest(`/messenger/conversations/${conversationId}/pinned`)
 

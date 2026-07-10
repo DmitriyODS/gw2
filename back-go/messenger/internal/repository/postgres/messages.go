@@ -177,6 +177,9 @@ func (r *Repo) queryMessages(ctx context.Context, sql string, args ...any) ([]*d
 	if err := r.loadAttachments(ctx, out); err != nil {
 		return nil, err
 	}
+	if err := r.loadReactions(ctx, out); err != nil {
+		return nil, err
+	}
 	return out, nil
 }
 
@@ -209,6 +212,53 @@ func (r *Repo) loadAttachments(ctx context.Context, msgs []*domain.Message) erro
 		}
 	}
 	return rows.Err()
+}
+
+func (r *Repo) loadReactions(ctx context.Context, msgs []*domain.Message) error {
+	if len(msgs) == 0 {
+		return nil
+	}
+	byID := make(map[int64]*domain.Message, len(msgs))
+	ids := make([]int64, 0, len(msgs))
+	for _, m := range msgs {
+		m.Reactions = []domain.Reaction{}
+		byID[m.ID] = m
+		ids = append(ids, m.ID)
+	}
+	rows, err := r.q(ctx).Query(ctx, `
+		SELECT message_id, user_id, emoji
+		FROM message_reactions WHERE message_id = ANY($1) ORDER BY created_at, user_id`, ids)
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var re domain.Reaction
+		if err := rows.Scan(&re.MessageID, &re.UserID, &re.Emoji); err != nil {
+			return err
+		}
+		if m := byID[re.MessageID]; m != nil {
+			m.Reactions = append(m.Reactions, re)
+		}
+	}
+	return rows.Err()
+}
+
+// ToggleReaction — снятие по PK; если снимать было нечего — ставим.
+func (r *Repo) ToggleReaction(ctx context.Context, messageID, userID int64, emoji string) (bool, error) {
+	tag, err := r.q(ctx).Exec(ctx, `
+		DELETE FROM message_reactions WHERE message_id = $1 AND user_id = $2 AND emoji = $3`,
+		messageID, userID, emoji)
+	if err != nil {
+		return false, err
+	}
+	if tag.RowsAffected() > 0 {
+		return false, nil
+	}
+	_, err = r.q(ctx).Exec(ctx, `
+		INSERT INTO message_reactions (message_id, user_id, emoji) VALUES ($1, $2, $3)
+		ON CONFLICT DO NOTHING`, messageID, userID, emoji)
+	return true, err
 }
 
 func (r *Repo) GetMessage(ctx context.Context, id int64) (*domain.Message, error) {

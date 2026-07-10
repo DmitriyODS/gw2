@@ -299,6 +299,27 @@ func (h *handlers) toggleMessagePin(c *fiber.Ctx) error {
 	return c.JSON(fiber.Map{"pinned": r.Pinned, "message": r.Message})
 }
 
+func (h *handlers) toggleMessageReaction(c *fiber.Ctx) error {
+	var body struct {
+		Emoji string `json:"emoji"`
+	}
+	parseBody(c, &body)
+	if body.Emoji == "" {
+		return validationError(c, "emoji", "Missing data for required field.")
+	}
+	if utf8.RuneCountInString(body.Emoji) > 16 {
+		return validationError(c, "emoji", "Longer than maximum length 16.")
+	}
+	resp, err := h.eps.ToggleMessageReaction(c.Context(), endpoint.ReactionRequest{
+		MessageID: pathID(c), UserID: currentUserID(c), Emoji: body.Emoji,
+	})
+	if err != nil {
+		return h.respondError(c, err)
+	}
+	r := resp.(endpoint.ReactionResponse)
+	return c.JSON(fiber.Map{"added": r.Added, "message": r.Message})
+}
+
 func (h *handlers) listPinned(c *fiber.Ctx) error {
 	resp, err := h.eps.ListPinnedMessages(c.Context(), endpoint.ConvUserRequest{
 		ConversationID: pathID(c), UserID: currentUserID(c),

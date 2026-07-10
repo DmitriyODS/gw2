@@ -545,6 +545,9 @@ watch(profileOpen, (open) => {
   /* На мобильном поиск занимает всю ширину — min-width снимаем. */
   .admin-toolbar :deep(.search-field) { flex: 1 1 100%; max-width: 100%; min-width: 0; }
 
+  /* Вкладки хаба — на всю ширину строки. */
+  .emp-hub-tabs { flex: 1; min-width: 0; }
+
   /* Сетка карточек 2 колонки. */
   .emp-grid {
     grid-template-columns: repeat(2, 1fr);

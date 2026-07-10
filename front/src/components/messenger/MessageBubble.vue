@@ -121,6 +121,20 @@
         </button>
       </div>
       <MarkdownView v-if="message.text" class="msg-text" :source="message.text" />
+      <div v-if="reactionGroups.length" class="msg-reactions">
+        <button
+          v-for="g in reactionGroups"
+          :key="g.emoji"
+          class="msg-reaction"
+          :class="{ mine: g.mine }"
+          @pointerdown.stop
+          @pointerup.stop
+          @click.stop="$emit('react', g.emoji)"
+        >
+          <span class="msg-reaction-emoji">{{ g.emoji }}</span>
+          <span v-if="g.count > 1" class="msg-reaction-count">{{ g.count }}</span>
+        </button>
+      </div>
       <div class="msg-meta">
         <span v-if="senderName" class="msg-sender">{{ senderName }}</span>
         <span v-if="message.edited_at" class="msg-edited" title="Сообщение отредактировано">изменено</span>
@@ -148,9 +162,25 @@ const props = defineProps({
   showForward: { type: Boolean, default: true },
   showDelete: { type: Boolean, default: true },
   showPin: { type: Boolean, default: true },
+  meId: { type: [Number, String], default: null },
 })
 
-const emit = defineEmits(['delete', 'edit', 'reply', 'forward', 'join-call', 'pin', 'open-task', 'open-post', 'context-menu', 'quote-click'])
+const emit = defineEmits(['delete', 'edit', 'reply', 'forward', 'join-call', 'pin', 'open-task', 'open-post', 'context-menu', 'quote-click', 'react'])
+
+// Реакции сгруппированные по эмодзи; mine — подсветка своей.
+const reactionGroups = computed(() => {
+  const map = new Map()
+  for (const r of props.message.reactions || []) {
+    let g = map.get(r.emoji)
+    if (!g) {
+      g = { emoji: r.emoji, count: 0, mine: false }
+      map.set(r.emoji, g)
+    }
+    g.count++
+    if (props.meId != null && Number(r.user_id) === Number(props.meId)) g.mine = true
+  }
+  return [...map.values()]
+})
 
 const isPinned = computed(() => !!props.message.pinned_at)
 // Сообщение от техподдержки: новое серверное поле is_from_support либо старый
@@ -198,13 +228,13 @@ function onContextMenu(e) {
   emit('context-menu', { x: e.clientX, y: e.clientY, message: props.message })
 }
 
-let longPressTimer = null
-let longPressFired = false
 const swipeDx = ref(0)
 let swipeStartX = 0
 let swipeStartY = 0
 let swipeActive = false
 let pointerActiveId = null
+let pointerType = ''
+let downAt = 0
 
 const rowStyle = computed(() =>
   swipeDx.value > 0 ? { transform: `translateX(${swipeDx.value}px)` } : {})
@@ -212,19 +242,12 @@ const rowStyle = computed(() =>
 function onPointerDown(e) {
   if (e.button === 2) return  // ПКМ обрабатывается contextmenu
   pointerActiveId = e.pointerId
-  longPressFired = false
+  pointerType = e.pointerType
+  downAt = Date.now()
   swipeStartX = e.clientX
   swipeStartY = e.clientY
   swipeActive = false
   swipeDx.value = 0
-  // long-press → контекстное меню (на тач-устройствах). 500 мс.
-  longPressTimer = setTimeout(() => {
-    longPressFired = true
-    if (navigator.vibrate) {
-      try { navigator.vibrate(15) } catch {/* iOS Safari */}
-    }
-    emit('context-menu', { x: e.clientX, y: e.clientY, message: props.message })
-  }, 500)
 }
 
 function onPointerMove(e) {
@@ -233,13 +256,11 @@ function onPointerMove(e) {
   const dy = e.clientY - swipeStartY
 
   if (!swipeActive && Math.abs(dy) > 8 && Math.abs(dy) > Math.abs(dx)) {
-    // Вертикальный скролл — это не свайп. Отменяем long-press.
-    clearTimeout(longPressTimer)
+    // Вертикальный скролл — это не свайп.
     return
   }
   if (Math.abs(dx) > 6) {
     swipeActive = true
-    clearTimeout(longPressTimer)
   }
 
   if (swipeActive && dx > 0) {
@@ -252,14 +273,30 @@ function onPointerMove(e) {
 function onPointerUp(e) {
   if (pointerActiveId !== null && pointerActiveId !== e.pointerId) return
   pointerActiveId = null
-  clearTimeout(longPressTimer)
   if (swipeActive) {
     const dx = swipeDx.value
     swipeDx.value = 0
-    if (dx > 60 && !longPressFired) {
+    if (dx > 60) {
       emit('reply', props.message)
     }
+    return
   }
+  // Тап по сообщению на тач-устройстве открывает меню действий (вместо
+  // long-press: удержание остаётся браузеру под выделение текста).
+  if (pointerType === 'touch') maybeTapMenu(e)
+}
+
+function maybeTapMenu(e) {
+  if (Date.now() - downAt > 400) return
+  if (Math.abs(e.clientX - swipeStartX) > 10 || Math.abs(e.clientY - swipeStartY) > 10) return
+  const sel = window.getSelection?.()
+  if (sel && !sel.isCollapsed) return
+  // Тапы по интерактивным элементам пузыря — не повод открывать меню.
+  if (e.target.closest('a, button, .msg-quote, .msg-attachments, .call-msg.clickable')) return
+  if (navigator.vibrate) {
+    try { navigator.vibrate(10) } catch {/* iOS Safari */}
+  }
+  emit('context-menu', { x: e.clientX, y: e.clientY, message: props.message })
 }
 
 /* ── Системная плашка звонка. ── */
@@ -635,6 +672,45 @@ const joinLabel = computed(() => props.isMine ? 'Вернуться' : 'Прис
   gap: 6px;
   margin-bottom: 6px;
 }
+
+/* Чипы реакций внизу пузыря. */
+.msg-reactions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 6px;
+}
+
+.msg-reaction {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  min-height: 24px;
+  border: 1px solid var(--color-outline-dim);
+  border-radius: var(--radius-full);
+  background: var(--acrylic-card-bg);
+  font: inherit;
+  font-size: 13px;
+  line-height: 1;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s, transform 0.12s;
+}
+
+.msg-reaction:hover { transform: scale(1.08); }
+
+.msg-reaction.mine {
+  background: var(--color-primary-container);
+  border-color: var(--color-primary);
+}
+
+.msg-reaction-count {
+  font-size: 11.5px;
+  font-weight: 700;
+  color: var(--color-text-dim);
+}
+
+.msg-reaction.mine .msg-reaction-count { color: var(--color-on-primary-container); }
 
 .msg-meta {
   display: flex;

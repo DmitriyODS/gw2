@@ -40,16 +40,17 @@ defineProps({
   border-radius: var(--radius-full);
   display: grid;
   place-items: center;
-  background: var(--color-primary-container);
-  color: var(--color-on-primary-container);
+  /* Матовое стекло единого стиля — тон задаёт цвет символа. */
+  background: var(--acrylic-card-bg);
+  border: 1px solid var(--acrylic-border);
+  color: var(--color-primary);
   margin-bottom: 4px;
 }
 
 .es-icon .material-symbols-outlined { font-size: 40px; }
 
 .empty-state--error .es-icon {
-  background: var(--color-error-container);
-  color: var(--color-on-error-container);
+  color: var(--color-error);
 }
 
 /* Мягкий круг: полупрозрачная surface-подложка вместо тонального контейнера. */

@@ -2,8 +2,9 @@
   <AppDialog
     :model-value="modelValue"
     tone="primary"
-    icon="edit"
     size="lg"
+    mobile="full"
+    :show-icon="false"
     :title="isEdit ? 'Редактировать публикацию' : 'Создать публикацию'"
     :busy="saving"
     :actions="[

@@ -9,6 +9,15 @@
         role="menu"
         @click.stop
       >
+        <div v-if="showReactions" class="msg-ctx-reactions">
+          <button
+            v-for="e in QUICK_REACTIONS"
+            :key="e"
+            class="msg-ctx-react"
+            :class="{ active: myReactions.includes(e) }"
+            @click="emitReact(e)"
+          >{{ e }}</button>
+        </div>
         <button class="msg-ctx-item" @click="emitAction('reply')">
           <span class="material-symbols-outlined">reply</span>
           <span>Ответить</span>
@@ -52,9 +61,14 @@ const props = defineProps({
   showForward: { type: Boolean, default: true },
   showPin: { type: Boolean, default: true },
   showDelete: { type: Boolean, default: true },
+  showReactions: { type: Boolean, default: true },
+  // Эмодзи, уже поставленные текущим пользователем (подсветка в быстром ряду).
+  myReactions: { type: Array, default: () => [] },
 })
 
-const emit = defineEmits(['close', 'action'])
+const QUICK_REACTIONS = ['👍', '❤️', '🎉', '😂', '👏', '🔥']
+
+const emit = defineEmits(['close', 'action', 'react'])
 const menuEl = ref(null)
 const pos = ref({ x: 0, y: 0 })
 
@@ -85,6 +99,11 @@ watch(() => props.visible, async (v) => {
 
 function emitAction(action) {
   emit('action', action)
+  emit('close')
+}
+
+function emitReact(emoji) {
+  emit('react', emoji)
   emit('close')
 }
 
@@ -123,6 +142,36 @@ function onKey(e) {
   display: flex;
   flex-direction: column;
   gap: 2px;
+}
+
+.msg-ctx-reactions {
+  display: flex;
+  gap: 2px;
+  padding: 2px;
+  margin-bottom: 2px;
+}
+
+.msg-ctx-react {
+  width: 36px;
+  height: 36px;
+  display: grid;
+  place-items: center;
+  border: none;
+  background: transparent;
+  border-radius: var(--radius-full);
+  font-size: 19px;
+  line-height: 1;
+  cursor: pointer;
+  transition: background 0.15s, transform 0.12s;
+}
+
+.msg-ctx-react:hover {
+  background: var(--color-surface-low);
+  transform: scale(1.15);
+}
+
+.msg-ctx-react.active {
+  background: var(--color-primary-container);
 }
 
 .msg-ctx-item {

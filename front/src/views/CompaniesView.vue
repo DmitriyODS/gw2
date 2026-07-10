@@ -3,6 +3,7 @@
     <header class="admin-sticky">
       <!-- Тулбар в стиле «Задач»: поиск на всю ширину, статы-чипы, главное действие. -->
       <div class="admin-toolbar">
+        <h1 class="cmp-title">{{ isSuper ? 'Компании' : 'Мои компании' }}</h1>
         <SearchField v-model="search" placeholder="Поиск по названию" hotkey />
         <span class="chip-tint chip-tint--primary cmp-chip">
           <span class="material-symbols-outlined">domain</span>
@@ -200,7 +201,7 @@
       <p v-else>Компания пустая — данных не пострадает.</p>
     </AppDialog>
 
-    <AppFab icon="add" label="Создать" :collapsed="isCompact" aria-label="Новая компания" @click="openCreate" />
+    <AppFab icon="add" aria-label="Новая компания" @click="openCreate" />
   </div>
 </template>
 
@@ -220,12 +221,10 @@ import { useNotificationsStore } from '@/stores/notifications.js'
 import { useAuthStore } from '@/stores/auth.js'
 import { usePermission } from '@/composables/usePermission.js'
 import { useBreakpoint } from '@/composables/useBreakpoint.js'
-import { useScrollCollapse } from '@/composables/useScrollCollapse.js'
 import { listMyCompanies } from '@/api/companies.js'
 
 const { isMobile } = useBreakpoint()
 const bodyRef = ref(null)
-const { isCompact } = useScrollCollapse(bodyRef)
 
 const router = useRouter()
 const companies = useCompaniesStore()
@@ -360,6 +359,19 @@ async function doDelete() {
 /* Тулбар без подложки — прозрачная «плавающая» шапка как в «Задачах». */
 .admin-sticky { background: transparent; -webkit-backdrop-filter: none; backdrop-filter: none; }
 .admin-sticky::after { display: none; }
+
+.cmp-title {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 800;
+  color: var(--color-text);
+  white-space: nowrap;
+}
+
+@media (max-width: 768px) {
+  /* На мобильном заголовок — своя строка над поиском и чипами. */
+  .cmp-title { flex-basis: 100%; font-size: 18px; }
+}
 
 .cell-company {
   display: flex;

@@ -510,6 +510,14 @@ export const useMessengerStore = defineStore('messenger', () => {
     return r
   }
 
+  /* Реакция-эмодзи: сервер возвращает полный снапшот сообщения, локально
+     применяем его сразу (сокет-эхо message:updated придёт идемпотентно). */
+  async function toggleReactionAction(messageId, emoji) {
+    const r = await api.toggleReaction(messageId, emoji)
+    if (r.message) applyMessageUpdated(r.message.conversation_id, r.message)
+    return r
+  }
+
   function applyReadReceipt(conversationId, readerId) {
     const auth = useAuthStore()
     if (readerId === auth.user?.id) return
@@ -582,7 +590,7 @@ export const useMessengerStore = defineStore('messenger', () => {
     send, forwardMessage, markRead,
     applyIncomingMessage, applyReadReceipt, applyMessageUpdated,
     applyMessageDeleted, applyConversationDeleted, applyPinChange,
-    applyMessagePin, togglePinMessageAction,
+    applyMessagePin, togglePinMessageAction, toggleReactionAction,
     deleteMessage, editMessage, deleteConversationAction, togglePinAction,
     fetchPresence, applyPresence, isOnline, lastSeenOf,
     reset,

@@ -24,14 +24,14 @@ func NewUserReader(pool *pgxpool.Pool) *UserReader {
 }
 
 const userCols = `u.id, u.fio, u.login, u.avatar_path, u.phone, u.email,
-	u.is_active, u.is_super_admin, u.last_seen_at`
+	u.is_active, u.is_super_admin, u.last_seen_at, u.status_emoji, u.status_text`
 
 const userFrom = ` FROM users u `
 
 func scanUser(row pgx.Row) (*domain.User, error) {
 	var u domain.User
 	err := row.Scan(&u.ID, &u.FIO, &u.Login, &u.AvatarPath, &u.Phone, &u.Email,
-		&u.IsActive, &u.IsSuperAdmin, &u.LastSeenAt)
+		&u.IsActive, &u.IsSuperAdmin, &u.LastSeenAt, &u.StatusEmoji, &u.StatusText)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, nil

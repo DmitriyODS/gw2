@@ -256,6 +256,29 @@ function destroyTray() {
   tray = null
 }
 
+// Оверлей-бейдж для панели задач Windows: красная точка, рисуется попиксельно
+// (в main-процессе нет canvas, а createFromDataURL не понимает SVG).
+let overlayIconCache = null
+function badgeOverlay() {
+  if (overlayIconCache) return overlayIconCache
+  const size = 16
+  const cx = (size - 1) / 2
+  const r = size / 2 - 1
+  const buf = Buffer.alloc(size * size * 4)
+  for (let y = 0; y < size; y++) {
+    for (let x = 0; x < size; x++) {
+      if (Math.hypot(x - cx, y - cx) > r) continue
+      const i = (y * size + x) * 4
+      buf[i] = 54      // B
+      buf[i + 1] = 54  // G
+      buf[i + 2] = 229 // R
+      buf[i + 3] = 255 // A
+    }
+  }
+  overlayIconCache = nativeImage.createFromBitmap(buf, { width: size, height: size })
+  return overlayIconCache
+}
+
 // Применить настройку немедленно (зовётся из IPC и при старте).
 function applySetting(key) {
   if (key === 'autostart') applyAutostart()
@@ -360,6 +383,19 @@ app.whenReady().then(() => {
 
   // Фокус окна по клику на уведомление веб-слоя (окно может быть в трее).
   ipcMain.on('gw:focus', showWindow)
+
+  // Бейдж непрочитанных сообщений: док macOS / панель задач Linux — нативный
+  // счётчик; Windows — оверлей-точка на кнопке панели задач (число Windows на
+  // оверлее не рисует); трей — счётчик в тултипе, на macOS — рядом со значком.
+  ipcMain.on('gw:set-badge', (_e, count) => {
+    const n = Math.max(0, Number(count) || 0)
+    app.setBadgeCount(n)
+    if (process.platform === 'win32' && mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.setOverlayIcon(n ? badgeOverlay() : null, n ? `Непрочитанных: ${n}` : '')
+    }
+    tray?.setToolTip(n ? `Groove Work — непрочитанных: ${n}` : 'Groove Work')
+    if (process.platform === 'darwin') tray?.setTitle(n ? String(n) : '')
+  })
 
   ipcMain.handle('gw:check-update', async () => {
     const meta = await fetchDesktopMeta().catch(() => null)

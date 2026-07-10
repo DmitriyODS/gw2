@@ -110,6 +110,12 @@ watch(() => authStore.user, (user, prev) => {
   }
 })
 
+// Десктоп-обёртка: счётчик непрочитанных на иконке приложения
+// (док/панель задач/трей). В браузере GrooveDesktop нет — no-op.
+watch(() => (authStore.user ? messengerStore.totalUnread : 0), (n) => {
+  window.GrooveDesktop?.setBadge?.(n)
+}, { immediate: true })
+
 // Мобильная обёртка (Capacitor): после появления сессии регистрируем
 // FCM-токен устройства; тап по системному пушу ведёт на адресный экран.
 // В браузере/Electron initNativePush — no-op.

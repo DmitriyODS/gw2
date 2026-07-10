@@ -481,6 +481,18 @@ func (r *fakeRepo) UpdateMessageText(_ context.Context, id int64, text string) e
 	return nil
 }
 
+func (r *fakeRepo) ToggleReaction(_ context.Context, messageID, userID int64, emoji string) (bool, error) {
+	m := r.msgs[messageID]
+	for i, re := range m.Reactions {
+		if re.UserID == userID && re.Emoji == emoji {
+			m.Reactions = append(m.Reactions[:i], m.Reactions[i+1:]...)
+			return false, nil
+		}
+	}
+	m.Reactions = append(m.Reactions, domain.Reaction{MessageID: messageID, UserID: userID, Emoji: emoji})
+	return true, nil
+}
+
 func (r *fakeRepo) HasHumanMessageSince(_ context.Context, convID int64, since time.Time, beforeID int64) (bool, error) {
 	for _, m := range r.convMessages(convID) {
 		if m.ID < beforeID && !m.IsBot && !m.CreatedAt.Before(since) {
@@ -999,6 +1011,61 @@ func TestMessagePinRules(t *testing.T) {
 	_, _, err = svc.ToggleMessagePin(ctx, taskMsg.ID, 2)
 	if de := domain.AsDomainError(err); de == nil || de.Code != "BAD_PIN" {
 		t.Fatalf("pin задачи: ожидался BAD_PIN, получено %v", err)
+	}
+}
+
+// Реакции: toggle своей реакции, чужие не задеваются, события обоим.
+func TestMessageReactionToggle(t *testing.T) {
+	svc, _, _, pub := newTestEnv()
+	ctx := context.Background()
+
+	conv, _ := svc.OpenConversation(ctx, 2, 3)
+	msg, _ := svc.SendMessage(ctx, conv.ID, 2, dto.MessageCreate{Text: str("привет")})
+
+	m, added, err := svc.ToggleMessageReaction(ctx, msg.ID, 3, "👍")
+	if err != nil || !added {
+		t.Fatalf("react: added=%v err=%v", added, err)
+	}
+	if len(m.Reactions) != 1 || m.Reactions[0].UserID != 3 || m.Reactions[0].Emoji != "👍" {
+		t.Fatalf("reactions = %+v", m.Reactions)
+	}
+
+	// Вторая реакция другого пользователя тем же эмодзи — независима.
+	m, added, err = svc.ToggleMessageReaction(ctx, msg.ID, 2, "👍")
+	if err != nil || !added || len(m.Reactions) != 2 {
+		t.Fatalf("react 2: added=%v err=%v reactions=%+v", added, err, m.Reactions)
+	}
+
+	// Повторный toggle снимает только свою.
+	m, added, err = svc.ToggleMessageReaction(ctx, msg.ID, 3, "👍")
+	if err != nil || added || len(m.Reactions) != 1 || m.Reactions[0].UserID != 2 {
+		t.Fatalf("unreact: added=%v err=%v reactions=%+v", added, err, m.Reactions)
+	}
+
+	evs := pub.byName("message:updated")
+	if len(evs) != 3 || len(evs[0].Rooms) != 2 {
+		t.Fatalf("message:updated: %+v", evs)
+	}
+
+	// Не участник диалога реагировать не может.
+	if _, _, err := svc.ToggleMessageReaction(ctx, msg.ID, 4, "👍"); err == nil {
+		t.Fatal("реакция не-участника должна быть запрещена")
+	}
+
+	// Лимит: не больше 2 разных реакций от одного пользователя.
+	if _, _, err := svc.ToggleMessageReaction(ctx, msg.ID, 3, "❤️"); err != nil {
+		t.Fatalf("вторая реакция: %v", err)
+	}
+	if _, _, err := svc.ToggleMessageReaction(ctx, msg.ID, 3, "🎉"); err != nil {
+		t.Fatalf("третья при одной стоящей: %v", err)
+	}
+	_, _, err = svc.ToggleMessageReaction(ctx, msg.ID, 3, "🔥")
+	if de := domain.AsDomainError(err); de == nil || de.Code != "REACTION_LIMIT" {
+		t.Fatalf("лимит реакций: ожидался REACTION_LIMIT, получено %v", err)
+	}
+	// Снять стоящую можно и на лимите.
+	if _, added, err := svc.ToggleMessageReaction(ctx, msg.ID, 3, "🎉"); err != nil || added {
+		t.Fatalf("снятие на лимите: added=%v err=%v", added, err)
 	}
 }
 

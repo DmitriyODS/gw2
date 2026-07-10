@@ -94,8 +94,10 @@ const mainItems = computed(() => [
   // Единый раздел: заметки + ежедневник (вкладки внутри).
   { path: '/notes', icon: 'note_stack', label: 'Заметки',
     active: () => route.path.startsWith('/notes') || route.path.startsWith('/diaries') },
-  { path: '/stats', icon: 'query_stats', label: 'Статистика', tutorial: 'nav-stats',
-    active: () => route.path === '/stats' },
+  // Единый раздел: лента портала + сотрудники (вкладки внутри).
+  { path: '/portal', icon: 'campaign', label: 'Портал',
+    active: () => route.path.startsWith('/portal') || route.path === '/employees',
+    badge: () => portal.unread },
 ])
 
 const moreItems = computed(() => {
@@ -109,10 +111,8 @@ const moreItems = computed(() => {
       active: () => route.path.startsWith('/registries') },
     { path: '/calendars', icon: 'calendar_month', label: 'Календари',
       active: () => route.path.startsWith('/calendars') },
-    // Единый раздел: лента портала + сотрудники (вкладки внутри).
-    { path: '/portal', icon: 'campaign', label: 'Портал',
-      active: () => route.path.startsWith('/portal') || route.path === '/employees',
-      badge: () => portal.unread },
+    { path: '/stats', icon: 'query_stats', label: 'Статистика', tutorial: 'nav-stats',
+      active: () => route.path === '/stats' },
     { path: '/settings', icon: 'settings', label: 'Настройки',
       active: () => route.path === '/settings' },
   ]

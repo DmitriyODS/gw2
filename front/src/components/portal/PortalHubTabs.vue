@@ -1,14 +1,18 @@
 <template>
-  <SegmentedTabs :model-value="current" :tabs="tabs" dense @update:model-value="go" />
+  <SegmentedTabs :model-value="current" :tabs="tabs" dense :full-width="isMobile" @update:model-value="go" />
 </template>
 
 <script setup>
 // Единый раздел «Портал»: лента (/portal) и сотрудники (/employees) — две
 // вкладки одного хаба; переключение — навигация между существующими вьюхами.
+// На мобильном вкладки растягиваются на всю доступную ширину.
 import { computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import SegmentedTabs from '@/components/common/SegmentedTabs.vue'
 import { usePortalStore } from '@/stores/portal.js'
+import { useBreakpoint } from '@/composables/useBreakpoint.js'
+
+const { isMobile } = useBreakpoint()
 
 const route = useRoute()
 const router = useRouter()

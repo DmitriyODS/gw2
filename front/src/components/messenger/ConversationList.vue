@@ -5,6 +5,15 @@
       <div class="header-actions">
         <button
           v-if="tab !== 'support'"
+          class="new-btn new-btn--status"
+          :title="myStatusText || 'Мой статус'"
+          @click="statusOpen = true"
+        >
+          <span v-if="myStatusEmoji" class="status-btn-emoji">{{ myStatusEmoji }}</span>
+          <span v-else class="material-symbols-outlined">add_reaction</span>
+        </button>
+        <button
+          v-if="tab !== 'support'"
           class="new-btn new-btn--call"
           title="Новый звонок — комната, куда можно позвать коллег"
           @click="$emit('new-call')"
@@ -16,6 +25,8 @@
         </button>
       </div>
     </div>
+
+    <UserStatusDialog v-model="statusOpen" />
 
     <!-- Сегментированные табы «Чаты / Техподдержка». Для рут-админа во вкладке
          «Техподдержка» — inbox обращений; для всех остальных — личный dev-чат
@@ -83,6 +94,11 @@
               </template>
               <template v-else-if="c.is_dev_chat">Техподдержка</template>
               <template v-else>{{ c.other_user?.fio }}</template>
+              <span
+                v-if="!c.is_dev_chat && c.other_user?.status_emoji"
+                class="conv-status-emoji"
+                :title="c.other_user?.status_text || 'Статус'"
+              >{{ c.other_user.status_emoji }}</span>
             </span>
             <span v-if="c.last_message_at" class="conv-time">{{ formatTime(c.last_message_at) }}</span>
           </div>
@@ -128,9 +144,16 @@ import { ref, computed } from 'vue'
 import ProgressSpinner from 'primevue/progressspinner'
 import SegmentedTabs from '@/components/common/SegmentedTabs.vue'
 import EmptyState from '@/components/common/EmptyState.vue'
+import UserStatusDialog from './UserStatusDialog.vue'
 import { useMessengerStore } from '@/stores/messenger.js'
+import { useAuthStore } from '@/stores/auth.js'
 
 const messenger = useMessengerStore()
+const auth = useAuthStore()
+
+const statusOpen = ref(false)
+const myStatusEmoji = computed(() => auth.user?.status_emoji || '')
+const myStatusText = computed(() => auth.user?.status_text || '')
 
 const props = defineProps({
   conversations: { type: Array, required: true },
@@ -284,10 +307,16 @@ function formatTime(iso) {
 .header-actions { display: flex; align-items: center; gap: 4px; }
 
 /* На мобиле создание чата делает FAB — дублирующая кнопка в шапке не нужна.
-   Кнопка «Новый звонок» остаётся: у неё FAB-дубля нет. */
+   Кнопки «Новый звонок» и «Мой статус» остаются: у них FAB-дубля нет. */
 @media (max-width: 768px) {
   .new-btn { display: none; }
-  .new-btn--call { display: block; }
+  .new-btn--call, .new-btn--status { display: block; }
+}
+
+.status-btn-emoji {
+  font-size: 20px;
+  line-height: 1;
+  display: block;
 }
 
 /* Обёртка для SegmentedTabs «Чаты / Техподдержка». */
@@ -488,6 +517,11 @@ function formatTime(iso) {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+.conv-status-emoji {
+  margin-left: 4px;
+  font-size: 13px;
 }
 
 .conv-time {

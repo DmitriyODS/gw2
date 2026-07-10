@@ -153,10 +153,15 @@
             <div v-if="threadConv?.is_dev_chat" class="mini-head-avatar-wrap mini-head-avatar-wrap--dev">
               <span class="material-symbols-outlined">support_agent</span>
             </div>
-            <div v-else class="mini-head-avatar-wrap">
+            <button
+              v-else
+              class="mini-head-avatar-wrap as-btn"
+              aria-label="Открыть профиль"
+              @click="profileOpen = true"
+            >
               <img class="mini-head-avatar" :src="avatarOf(threadConv?.other_user)" :alt="threadConv?.other_user?.fio" />
               <span v-if="threadOnline" class="online-dot mini-head-dot" title="В сети"></span>
-            </div>
+            </button>
             <div class="mini-head-title">
               <span class="mini-title--name">
                 <template v-if="threadConv?.is_dev_chat">Техподдержка</template>
@@ -192,6 +197,7 @@
               :message="m"
               :is-mine="m.sender_id === authStore.user?.id"
               :show-pin="false"
+              :me-id="authStore.user?.id"
               @reply="startReply"
               @forward="startForward"
               @delete="askDeleteMessage"
@@ -200,6 +206,7 @@
               @open-task="openTask"
               @open-post="openPost"
               @quote-click="onQuoteClick"
+              @react="emoji => onReact(m, emoji)"
             />
           </div>
           <MessageInput
@@ -253,8 +260,17 @@
       :show-forward="!threadConv?.is_dev_chat"
       :show-copy="!!ctxMenu.message?.text"
       :show-delete="true"
+      :my-reactions="ctxMyReactions"
       @close="ctxMenu.visible = false"
       @action="onCtxAction"
+      @react="onCtxReact"
+    />
+
+    <EmployeeProfileDialog
+      v-if="threadConv?.other_user"
+      v-model="profileOpen"
+      :user="threadConv.other_user"
+      elevated
     />
 
     <!-- Кнопка-FAB (прячется, пока открыт любой AppDialog — на мобильном
@@ -308,6 +324,7 @@ import ForwardDialog from './ForwardDialog.vue'
 import DeleteScopeDialog from './DeleteScopeDialog.vue'
 import AttachTaskDialog from './AttachTaskDialog.vue'
 import MessageContextMenu from './MessageContextMenu.vue'
+import EmployeeProfileDialog from '@/components/common/EmployeeProfileDialog.vue'
 import SegmentedTabs from '@/components/common/SegmentedTabs.vue'
 import LinkifiedText from '@/components/common/LinkifiedText.vue'
 import MarkdownView from '@/components/common/MarkdownView.vue'
@@ -685,8 +702,9 @@ async function onDeleteConfirm({ scope }) {
   }
 }
 
-/* ── Контекстное меню (ПКМ / long-press) ───────────────────── */
+/* ── Контекстное меню (ПКМ / тап) ──────────────────────────── */
 const ctxMenu = ref({ visible: false, x: 0, y: 0, message: null })
+const profileOpen = ref(false)
 
 function openContextMenu({ x, y, message }) {
   ctxMenu.value = { visible: true, x, y, message }
@@ -699,6 +717,27 @@ function onCtxAction(action) {
   else if (action === 'forward') startForward(m)
   else if (action === 'delete') askDeleteMessage(m)
   else if (action === 'copy') copyMessageText(m)
+}
+
+// Мои реакции на сообщении контекстного меню (подсветка быстрого ряда).
+const ctxMyReactions = computed(() => {
+  const m = ctxMenu.value.message
+  if (!m) return []
+  const me = authStore.user?.id
+  return (m.reactions || []).filter(r => r.user_id === me).map(r => r.emoji)
+})
+
+async function onReact(message, emoji) {
+  try {
+    await messenger.toggleReactionAction(message.id, emoji)
+  } catch (e) {
+    notif.error(e?.message || 'Не удалось поставить реакцию')
+  }
+}
+
+function onCtxReact(emoji) {
+  const m = ctxMenu.value.message
+  if (m) onReact(m, emoji)
 }
 
 function copyMessageText(m) {
@@ -951,6 +990,13 @@ watch([open, activeTab], async ([isOpen, tab]) => {
 .mini-head-avatar-wrap {
   position: relative;
   flex-shrink: 0;
+}
+
+.mini-head-avatar-wrap.as-btn {
+  border: none;
+  background: transparent;
+  padding: 0;
+  cursor: pointer;
 }
 
 .mini-head-avatar {

@@ -30,7 +30,7 @@ const identityCols = `
 	u.id, u.fio, u.login, u.hash_password,
 	u.avatar_path, u.phone, u.email,
 	u.is_default_pass, u.is_active, u.is_super_admin, u.email_verified,
-	u.created_at, u.last_seen_at`
+	u.created_at, u.last_seen_at, u.status_emoji, u.status_text`
 
 const identityFrom = ` FROM users u`
 
@@ -40,7 +40,7 @@ func scanIdentity(row pgx.Row) (*domain.User, error) {
 		&u.ID, &u.FIO, &u.Login, &u.HashPassword,
 		&u.AvatarPath, &u.Phone, &u.Email,
 		&u.IsDefaultPass, &u.IsActive, &u.IsSuperAdmin, &u.EmailVerified,
-		&u.CreatedAt, &u.LastSeenAt,
+		&u.CreatedAt, &u.LastSeenAt, &u.StatusEmoji, &u.StatusText,
 	)
 	if err != nil {
 		return nil, err
@@ -56,7 +56,7 @@ const memberCols = `
 	uc.company_id, c.is_active,
 	u.avatar_path, u.phone, u.email,
 	u.is_default_pass, u.is_active, u.is_super_admin, u.email_verified,
-	u.created_at, u.last_seen_at`
+	u.created_at, u.last_seen_at, u.status_emoji, u.status_text`
 
 const memberFrom = `
 	FROM user_companies uc
@@ -75,7 +75,7 @@ func scanMember(row pgx.Row) (*domain.User, error) {
 		&u.CompanyID, &cActive,
 		&u.AvatarPath, &u.Phone, &u.Email,
 		&u.IsDefaultPass, &u.IsActive, &u.IsSuperAdmin, &u.EmailVerified,
-		&u.CreatedAt, &u.LastSeenAt,
+		&u.CreatedAt, &u.LastSeenAt, &u.StatusEmoji, &u.StatusText,
 	)
 	if err != nil {
 		return nil, err
@@ -162,6 +162,7 @@ var allowedUserFields = map[string]bool{
 	"fio": true, "login": true, "phone": true, "email": true,
 	"avatar_path": true, "hash_password": true,
 	"is_default_pass": true, "is_active": true, "email_verified": true,
+	"status_emoji": true, "status_text": true,
 }
 
 func (r *UserRepository) UpdateFields(ctx context.Context, id int64, fields map[string]any) error {

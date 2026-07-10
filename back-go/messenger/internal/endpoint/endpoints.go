@@ -29,6 +29,7 @@ type Endpoints struct {
 	DeleteConversation    endpoint.Endpoint
 	ToggleConversationPin endpoint.Endpoint
 	ToggleMessagePin      endpoint.Endpoint
+	ToggleMessageReaction endpoint.Endpoint
 	ListPinnedMessages    endpoint.Endpoint
 	OpenDevChat           endpoint.Endpoint
 	SupportInbox          endpoint.Endpoint
@@ -137,6 +138,17 @@ type MessagePinResponse struct {
 	Pinned  bool
 }
 
+type ReactionRequest struct {
+	MessageID int64
+	UserID    int64
+	Emoji     string
+}
+
+type ReactionResponse struct {
+	Message *dto.Message
+	Added   bool
+}
+
 // CallMessageResponse — снапшот системного сообщения + адресаты message:new.
 // Форма общая для плашек звонка (CreateCallMessage/GetCallMessage) и
 // пересланного поста (CreatePostMessage) — оба возвращают одно и то же.
@@ -199,6 +211,14 @@ func New(svc service.MessengerService) Endpoints {
 				return nil, err
 			}
 			return MessagePinResponse{Message: msg, Pinned: pinned}, nil
+		},
+		ToggleMessageReaction: func(ctx context.Context, request any) (any, error) {
+			req := request.(ReactionRequest)
+			msg, added, err := svc.ToggleMessageReaction(ctx, req.MessageID, req.UserID, req.Emoji)
+			if err != nil {
+				return nil, err
+			}
+			return ReactionResponse{Message: msg, Added: added}, nil
 		},
 		ListPinnedMessages: func(ctx context.Context, request any) (any, error) {
 			req := request.(ConvUserRequest)

@@ -688,7 +688,9 @@ function iconFor(mime) {
   bottom: calc(100% + 8px);
   left: 0;
   min-width: 210px;
-  background: var(--acrylic-card-bg);
+  background: var(--acrylic-bg);
+  -webkit-backdrop-filter: var(--acrylic-blur);
+  backdrop-filter: var(--acrylic-blur);
   border: 1px solid var(--color-outline-dim);
   border-radius: var(--radius-md);
   padding: 6px;
@@ -832,7 +834,9 @@ function iconFor(mime) {
   display: flex;
   gap: 2px;
   padding: 4px;
-  background: var(--acrylic-card-bg);
+  background: var(--acrylic-bg);
+  -webkit-backdrop-filter: var(--acrylic-blur);
+  backdrop-filter: var(--acrylic-blur);
   border: 1px solid var(--color-outline-dim);
   border-radius: var(--radius-md);
   box-shadow: var(--shadow-lg);

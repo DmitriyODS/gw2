@@ -540,6 +540,64 @@ func (s *Service) ToggleMessagePin(ctx context.Context, messageID, userID int64)
 	return payload, pinned, nil
 }
 
+// ToggleMessageReaction — поставить/снять эмодзи-реакцию на сообщение.
+// Событие — message:updated с полным снапшотом: клиенты обновляют сообщение
+// тем же обработчиком, что и правку текста.
+func (s *Service) ToggleMessageReaction(ctx context.Context, messageID, userID int64, emoji string) (*dto.Message, bool, error) {
+	msg, err := s.repo.GetMessage(ctx, messageID)
+	if err != nil {
+		return nil, false, err
+	}
+	if msg == nil {
+		return nil, false, errMsgNotFound()
+	}
+	conv, err := s.repo.GetConversation(ctx, msg.ConversationID)
+	if err != nil {
+		return nil, false, err
+	}
+	if conv == nil {
+		return nil, false, errConvNotFound()
+	}
+	if err := s.ensureMember(ctx, conv, userID); err != nil {
+		return nil, false, err
+	}
+
+	// Лимит: не больше MaxReactionsPerUser разных эмодзи от одного
+	// пользователя (снятие уже стоящей — всегда можно).
+	mine, hasThis := 0, false
+	for _, re := range msg.Reactions {
+		if re.UserID == userID {
+			mine++
+			if re.Emoji == emoji {
+				hasThis = true
+			}
+		}
+	}
+	if !hasThis && mine >= domain.MaxReactionsPerUser {
+		return nil, false, domain.NewError("REACTION_LIMIT",
+			"Не больше двух реакций на сообщение", 422)
+	}
+
+	added, err := s.repo.ToggleReaction(ctx, messageID, userID, emoji)
+	if err != nil {
+		return nil, false, err
+	}
+	updated, err := s.repo.GetMessage(ctx, messageID)
+	if err != nil {
+		return nil, false, err
+	}
+	payload := dto.NewMessage(updated)
+
+	targets := []int64{conv.UserAID}
+	if conv.UserBID != nil {
+		targets = append(targets, *conv.UserBID)
+	}
+	s.pub.Publish(ctx, "message:updated", rooms(targets...), dto.MessageNewEvent{
+		ConversationID: conv.ID, Message: payload, FromUserID: &userID,
+	})
+	return payload, added, nil
+}
+
 // EditMessage — правка текста своего сообщения. Помечается edited_at, что
 // клиенты показывают как «изменено». Редактировать можно только своё текстовое
 // сообщение (не бота, не плашку звонка/задачи).

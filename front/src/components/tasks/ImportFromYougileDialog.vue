@@ -64,7 +64,7 @@
 
       <div class="form-field">
         <label class="checkbox-label">
-          <input type="checkbox" v-model="form.pull_deadline" class="unit-checkbox" />
+          <Checkbox v-model="form.pull_deadline" binary />
           <span>Подтянуть дедлайн из YouGile, если задан</span>
         </label>
       </div>
@@ -79,6 +79,7 @@ import { reactive, ref, computed, onMounted, watch } from 'vue'
 import AppDialog from '@/components/common/AppDialog.vue'
 import InputText from 'primevue/inputtext'
 import Select from 'primevue/select'
+import Checkbox from 'primevue/checkbox'
 import { useNotificationsStore } from '@/stores/notifications.js'
 import { useAuthStore } from '@/stores/auth.js'
 import { importYougileTask } from '@/api/yougile.js'
@@ -242,14 +243,6 @@ onMounted(() => {
   user-select: none;
 }
 
-.unit-checkbox {
-  width: 16px;
-  height: 16px;
-  accent-color: var(--gw-primary);
-  cursor: pointer;
-  flex-shrink: 0;
-}
-
 @media (max-width: 600px) {
   .task-form { gap: 18px; padding: 4px 0 8px; }
   .form-label {
@@ -271,6 +264,5 @@ onMounted(() => {
     border-radius: var(--radius-md);
   }
   .checkbox-label { padding: 6px 0; font-size: 15px; min-height: 44px; }
-  .unit-checkbox { width: 20px; height: 20px; }
 }
 </style>

@@ -38,8 +38,8 @@
         <button
           v-if="active.is_dev_chat && devChatOwner"
           class="chat-avatar-wrap as-btn"
-          aria-label="Открыть фото пользователя"
-          @click="lightboxOpen = true"
+          aria-label="Открыть профиль пользователя"
+          @click="profileOpen = true"
         >
           <img class="chat-avatar" :src="avatarOf(devChatOwner)" :alt="devChatOwner.fio" />
           <span v-if="messenger.isOnline(devChatOwner.id)" class="online-dot" title="В сети"></span>
@@ -50,17 +50,25 @@
         <button
           v-else
           class="chat-avatar-wrap as-btn"
-          aria-label="Открыть фото"
-          @click="lightboxOpen = true"
+          aria-label="Открыть профиль"
+          @click="profileOpen = true"
         >
           <img class="chat-avatar" :src="avatarOf(active.other_user)" :alt="active.other_user?.fio" />
           <span v-if="otherOnline" class="online-dot" title="В сети"></span>
         </button>
-        <div class="chat-title">
+        <div
+          class="chat-title"
+          :class="{ 'as-btn': !!profileUser }"
+          :role="profileUser ? 'button' : null"
+          :tabindex="profileUser ? 0 : null"
+          @click="profileUser && (profileOpen = true)"
+          @keydown.enter="profileUser && (profileOpen = true)"
+        >
           <div class="chat-fio">
             <template v-if="active.is_dev_chat && devChatOwner">{{ devChatOwner.fio }}</template>
             <template v-else-if="active.is_dev_chat">Техподдержка</template>
             <template v-else>{{ active.other_user?.fio }}</template>
+            <span v-if="peerStatusEmoji" class="chat-fio-status" :title="peerStatusText || 'Статус'">{{ peerStatusEmoji }}</span>
           </div>
           <div class="chat-status" :class="{ online: chatOnline }">
             <template v-if="active.is_dev_chat && devChatOwner">
@@ -71,7 +79,10 @@
             <template v-else-if="active.is_dev_chat">
               Личный чат с командой разработчиков
             </template>
-            <template v-else>{{ otherOnline ? 'в сети' : lastSeenText }}</template>
+            <template v-else>
+              <span v-if="peerStatusText" class="chat-status-note">{{ peerStatusText }} · </span>
+              {{ otherOnline ? 'в сети' : lastSeenText }}
+            </template>
           </div>
         </div>
         <div class="chat-tools" data-tutorial="chat-tools" ref="toolsRef">
@@ -171,10 +182,11 @@
           <MessageBubble
             v-for="m in messenger.activeMessages"
             :key="m.id"
-            v-memo="[m.id, m.text, m.edited_at, m.read_at, m.pinned_at, m.call?.status, authStore.user?.id, active?.is_dev_chat]"
+            v-memo="[m.id, m.text, m.edited_at, m.read_at, m.pinned_at, m.reactions, m.call?.status, authStore.user?.id, active?.is_dev_chat]"
             :message="m"
             :is-mine="m.sender_id === authStore.user?.id"
             :sender-name="senderNameFor(m)"
+            :me-id="authStore.user?.id"
             @delete="askDeleteMessage"
             @reply="startReply"
             @forward="startForward"
@@ -184,6 +196,7 @@
             @open-post="openPost"
             @context-menu="openContextMenu"
             @quote-click="onQuoteClick"
+            @react="emoji => onReact(m, emoji)"
           />
         </template>
       </div>
@@ -192,6 +205,7 @@
         <button
           v-if="active && showJumpDown"
           class="jump-down-btn"
+          :style="{ bottom: jumpDownBottom }"
           aria-label="К последним сообщениям"
           @click="scrollToBottomSmooth"
         >
@@ -246,12 +260,10 @@
       @pick="onPickTask"
     />
 
-    <AvatarLightbox
-      v-if="lightboxUser"
-      v-model="lightboxOpen"
-      :src="avatarOf(lightboxUser)"
-      :alt="lightboxUser.fio"
-      :caption="lightboxUser.fio"
+    <EmployeeProfileDialog
+      v-if="profileUser"
+      v-model="profileOpen"
+      :user="profileUser"
     />
 
     <MessageContextMenu
@@ -264,8 +276,10 @@
       :show-forward="!active?.is_dev_chat"
       :show-copy="!!ctxMenu.message?.text"
       :show-delete="true"
+      :my-reactions="ctxMyReactions"
       @close="ctxMenu.visible = false"
       @action="onCtxAction"
+      @react="onCtxReact"
     />
   </div>
 </template>
@@ -292,7 +306,7 @@ import DeleteScopeDialog from '@/components/messenger/DeleteScopeDialog.vue'
 import ForwardDialog from '@/components/messenger/ForwardDialog.vue'
 import AttachTaskDialog from '@/components/messenger/AttachTaskDialog.vue'
 import MessageContextMenu from '@/components/messenger/MessageContextMenu.vue'
-import AvatarLightbox from '@/components/common/AvatarLightbox.vue'
+import EmployeeProfileDialog from '@/components/common/EmployeeProfileDialog.vue'
 import AppFab from '@/components/common/AppFab.vue'
 import EmptyState from '@/components/common/EmptyState.vue'
 import ProgressSpinner from 'primevue/progressspinner'
@@ -328,7 +342,7 @@ const { isMobile } = useBreakpoint()
 const newChatOpen = ref(false)
 const attachTaskOpen = ref(false)
 const attachedTask = ref(null)
-const lightboxOpen = ref(false)
+const profileOpen = ref(false)
 const ctxMenu = ref({ visible: false, x: 0, y: 0, message: null })
 const messagesEl = ref(null)
 const messageInputRef = ref(null)
@@ -366,6 +380,27 @@ function onCtxAction(action) {
   else if (action === 'pin') onTogglePinMessage(m)
   else if (action === 'delete') askDeleteMessage(m)
   else if (action === 'copy') copyMessageText(m)
+}
+
+// Мои реакции на сообщении контекстного меню (подсветка быстрого ряда).
+const ctxMyReactions = computed(() => {
+  const m = ctxMenu.value.message
+  if (!m) return []
+  const me = authStore.user?.id
+  return (m.reactions || []).filter(r => r.user_id === me).map(r => r.emoji)
+})
+
+async function onReact(message, emoji) {
+  try {
+    await messenger.toggleReactionAction(message.id, emoji)
+  } catch (e) {
+    useNotificationsStore().error(e?.message || 'Не удалось поставить реакцию')
+  }
+}
+
+function onCtxReact(emoji) {
+  const m = ctxMenu.value.message
+  if (m) onReact(m, emoji)
 }
 
 function startEdit(message) {
@@ -656,14 +691,18 @@ const ownerLastSeenText = computed(() => {
   return formatLastSeen(messenger.lastSeenOf(u.id, u.last_seen_at))
 })
 
-// Чьё фото открывать в лайтбоксе. У обычного диалога — собеседник. У dev-чата
-// в support-inbox — владелец чата. У своего dev-чата фото нет (там иконка).
-const lightboxUser = computed(() => {
+// Чей профиль открывать по клику на шапку. У обычного диалога — собеседник.
+// У dev-чата в support-inbox — владелец чата. У своего dev-чата — никого.
+const profileUser = computed(() => {
   const a = active.value
   if (!a) return null
   if (a.is_dev_chat) return devChatOwner.value
   return a.other_user || null
 })
+
+// Пользовательский статус собеседника (эмодзи у имени + текст в подзаголовке).
+const peerStatusEmoji = computed(() => profileUser.value?.status_emoji || '')
+const peerStatusText = computed(() => profileUser.value?.status_text || '')
 
 function avatarOf(u) {
   if (!u) return ''
@@ -724,6 +763,32 @@ const loadingOlder = ref(false)
 // Плавающая кнопка «к последним сообщениям» — видна, когда пользователь
 // ушёл вверх по истории (паттерн Telegram/WhatsApp).
 const showJumpDown = ref(false)
+
+// Кнопка позиционируется НАД полем ввода: отступ = расстояние от низа
+// chat-panel до верха инпута (учитывает reply-баннер, вложения, многострочный
+// textarea и паддинг панели под мобильную навигацию) — иначе она ложится на
+// кнопку отправки.
+const inputClearance = ref(84)
+const jumpDownBottom = computed(() => `${inputClearance.value + 12}px`)
+let inputResizeObserver = null
+
+function measureInputClearance() {
+  const el = messageInputRef.value?.$el
+  const panel = el?.parentElement
+  if (!el || !panel) return
+  inputClearance.value = Math.max(0,
+    Math.round(panel.getBoundingClientRect().bottom - el.getBoundingClientRect().top))
+}
+
+watch([() => messageInputRef.value, () => active.value?.id], async () => {
+  inputResizeObserver?.disconnect()
+  await nextTick()
+  const el = messageInputRef.value?.$el
+  if (!el || !(el instanceof HTMLElement)) return
+  inputResizeObserver = new ResizeObserver(measureInputClearance)
+  inputResizeObserver.observe(el)
+  measureInputClearance()
+}, { immediate: true })
 
 async function onScroll() {
   const el = messagesEl.value
@@ -787,6 +852,7 @@ onBeforeUnmount(() => {
   window.removeEventListener('messenger:open-conversation', handleExternalOpen)
   document.removeEventListener('mousedown', handleOutsideMenu)
   document.removeEventListener('touchstart', handleOutsideMenu)
+  inputResizeObserver?.disconnect()
   // Уходим со страницы — диалог больше не «открыт», иначе входящие в него
   // продолжали бы тихо помечаться прочитанными.
   messenger.activeConversationId = null
@@ -927,9 +993,25 @@ watch(() => route.params.conversationId, async (id) => {
 
 .chat-title { min-width: 0; flex: 1; }
 
+.chat-title.as-btn { cursor: pointer; }
+.chat-title.as-btn:hover .chat-fio { color: var(--color-primary); }
+
+.chat-fio-status {
+  margin-left: 6px;
+  font-size: 14px;
+}
+
+.chat-status-note {
+  color: var(--color-text-dim);
+  font-weight: 400;
+}
+
 .chat-status {
   font-size: 12px;
   color: var(--color-text-dim);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .chat-status.online {
@@ -977,7 +1059,9 @@ watch(() => route.params.conversationId, async (id) => {
   top: calc(100% + 6px);
   right: 0;
   min-width: 220px;
-  background: var(--acrylic-card-bg);
+  background: var(--acrylic-bg);
+  -webkit-backdrop-filter: var(--acrylic-blur);
+  backdrop-filter: var(--acrylic-blur);
   border: 1px solid var(--color-outline-dim);
   border-radius: var(--radius-md);
   padding: 6px;
@@ -1069,7 +1153,7 @@ watch(() => route.params.conversationId, async (id) => {
 .jump-down-btn {
   position: absolute;
   right: 16px;
-  bottom: 96px;
+  bottom: 96px; /* фолбэк; фактический отступ считается от высоты поля ввода */
   width: 40px;
   height: 40px;
   display: flex;

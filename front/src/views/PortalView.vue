@@ -9,6 +9,7 @@
           v-model="searchInput"
           placeholder="Поиск по постам…"
           hotkey
+          :collapsible="false"
           @update:model-value="onSearch"
           @clear="clearSearch"
         />
@@ -85,6 +86,7 @@
           <EmptyState
             v-if="!store.posts.length && !store.pinnedPosts.length"
             icon="campaign"
+            tone="soft"
             title="Пока пусто"
             subtitle="Станьте первым, кто поделится новостью в компании"
           />
@@ -112,6 +114,13 @@
       </div>
     </div>
 
+    <AppFab
+      :visible="isMobile && fabVisible"
+      icon="edit"
+      aria-label="Написать пост"
+      @click="openComposer(null)"
+    />
+
     <PostComposer v-model="composerOpen" :post="editingPost" @saved="onSaved" />
     <ForwardPostDialog v-model="forwardOpen" :post="forwardingPost" @confirm="onForwardConfirm" />
     <TopicManageDialog v-model="topicsDialogOpen" />
@@ -136,10 +145,13 @@ import ProgressSpinner from 'primevue/progressspinner'
 import { useAuthStore } from '@/stores/auth.js'
 import { usePortalStore } from '@/stores/portal.js'
 import { usePermission } from '@/composables/usePermission.js'
+import { useBreakpoint } from '@/composables/useBreakpoint.js'
+import { useFabOnScroll } from '@/composables/useFabOnScroll.js'
 import { useNotificationsStore } from '@/stores/notifications.js'
 import EmptyState from '@/components/common/EmptyState.vue'
 import SearchField from '@/components/common/SearchField.vue'
 import AppDialog from '@/components/common/AppDialog.vue'
+import AppFab from '@/components/common/AppFab.vue'
 import PortalHubTabs from '@/components/portal/PortalHubTabs.vue'
 import PostCard from '@/components/portal/PostCard.vue'
 import PostComposer from '@/components/portal/PostComposer.vue'
@@ -149,6 +161,9 @@ import TopicManageDialog from '@/components/portal/TopicManageDialog.vue'
 const store = usePortalStore()
 const { isAdmin } = usePermission()
 const route = useRoute()
+const { isMobile } = useBreakpoint()
+// Мобильный FAB «Написать пост»: прячется/появляется по прокрутке ленты.
+const { fabVisible } = useFabOnScroll()
 
 // ── Поиск (debounce, серверный ?search=) ──
 const searchInput = ref('')
@@ -375,5 +390,12 @@ watch(() => useAuthStore().companyId, (id, prev) => {
   .portal-toolbar .btn-grad { padding: 0; width: 42px; height: 42px; justify-content: center; }
   /* Поиск переносится на всю ширину под вкладками/кнопками. */
   .portal-toolbar :deep(.search-field) { min-width: 0; flex: 1 1 100%; order: 1; }
+}
+
+@media (max-width: 768px) {
+  /* Создание поста на мобильном — плавающий FAB; вкладки хаба растягиваются
+     на освободившуюся ширину (full-width включает сам PortalHubTabs). */
+  .portal-toolbar .btn-grad { display: none; }
+  .portal-hub-tabs { flex: 1; min-width: 0; }
 }
 </style>

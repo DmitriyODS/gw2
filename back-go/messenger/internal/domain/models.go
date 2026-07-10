@@ -160,6 +160,7 @@ type Message struct {
 	EditedAt            *time.Time
 
 	Attachments   []Attachment
+	Reactions     []Reaction
 	ReplyTo       *ReplyPreview
 	ForwardedFrom *UserRef
 	Call          *CallInfo
@@ -180,6 +181,18 @@ func (m *Message) IsFromSupport() bool {
 	}
 	return m.SenderID == nil || *m.SenderID != m.ConvOwnerID
 }
+
+// Reaction — эмодзи-реакция пользователя на сообщение (toggle по тройке
+// message_id+user_id+emoji). Группировку по эмодзи делает клиент.
+type Reaction struct {
+	MessageID int64
+	UserID    int64
+	Emoji     string
+}
+
+// MaxReactionsPerUser — максимум разных реакций одного пользователя на одном
+// сообщении.
+const MaxReactionsPerUser = 2
 
 // NewMessage — параметры создания сообщения (create_message во Flask).
 type NewMessage struct {
@@ -218,4 +231,6 @@ type User struct {
 	IsSuperAdmin  bool
 	CompanyActive bool
 	LastSeenAt    *time.Time
+	StatusEmoji   *string
+	StatusText    *string
 }

@@ -358,8 +358,10 @@ button.topic-row:hover .topic-edit-hint { opacity: 1; }
 }
 
 .topic-icon-pick {
+  flex: 0 0 auto;
   width: 44px;
   height: 44px;
+  aspect-ratio: 1;
   border-radius: 50%;
   border: 1.5px solid var(--color-outline-dim);
   background: var(--color-surface);
@@ -379,8 +381,13 @@ button.topic-row:hover .topic-edit-hint { opacity: 1; }
 }
 
 .topic-color-pick {
+  /* flex none + min-height: кружок остаётся кругом (глобальный мобильный
+     min-height у button растягивал их в овалы). */
+  flex: 0 0 auto;
   width: 32px;
   height: 32px;
+  min-height: 32px;
+  aspect-ratio: 1;
   border-radius: 50%;
   border: 2px solid transparent;
   cursor: pointer;

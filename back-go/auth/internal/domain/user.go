@@ -51,6 +51,8 @@ type User struct {
 	EmailVerified bool // email подтверждён (самостоятельная регистрация); гейт логина
 	CreatedAt     time.Time
 	LastSeenAt    *time.Time
+	StatusEmoji   *string // пользовательский статус (мессенджер)
+	StatusText    *string
 
 	CompanyID     *int64
 	Role          Role

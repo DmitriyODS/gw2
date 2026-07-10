@@ -45,8 +45,10 @@ type DirectoryUser struct {
 	CompanyID  *int64    `json:"company_id"`
 	Phone      *string   `json:"phone"`
 	Email      *string   `json:"email"`
-	AvatarPath *string   `json:"avatar_path"`
-	LastSeenAt *JSONTime `json:"last_seen_at"`
+	AvatarPath  *string   `json:"avatar_path"`
+	LastSeenAt  *JSONTime `json:"last_seen_at"`
+	StatusEmoji *string   `json:"status_emoji"`
+	StatusText  *string   `json:"status_text"`
 }
 
 func NewDirectoryUser(u *domain.User) *DirectoryUser {
@@ -57,14 +59,16 @@ func NewDirectoryUser(u *domain.User) *DirectoryUser {
 	// в объёме мессенджера не грузятся — поля остаются в форме для совместимости
 	// контракта фронта, но пустые.
 	return &DirectoryUser{
-		ID:         u.ID,
-		FIO:        u.FIO,
-		Login:      u.Login,
-		CompanyID:  u.CompanyID,
-		Phone:      u.Phone,
-		Email:      u.Email,
-		AvatarPath: u.AvatarPath,
-		LastSeenAt: jsonTimePtr(u.LastSeenAt),
+		ID:          u.ID,
+		FIO:         u.FIO,
+		Login:       u.Login,
+		CompanyID:   u.CompanyID,
+		Phone:       u.Phone,
+		Email:       u.Email,
+		AvatarPath:  u.AvatarPath,
+		LastSeenAt:  jsonTimePtr(u.LastSeenAt),
+		StatusEmoji: u.StatusEmoji,
+		StatusText:  u.StatusText,
 	}
 }
 
@@ -131,6 +135,12 @@ type ForwardedFrom struct {
 	FIO string `json:"fio"`
 }
 
+// Reaction — эмодзи-реакция на сообщение; группировку по эмодзи делает клиент.
+type Reaction struct {
+	UserID int64  `json:"user_id"`
+	Emoji  string `json:"emoji"`
+}
+
 type Message struct {
 	ID             int64          `json:"id"`
 	ConversationID int64          `json:"conversation_id"`
@@ -140,6 +150,7 @@ type Message struct {
 	CreatedAt      JSONTime       `json:"created_at"`
 	ReadAt         *JSONTime      `json:"read_at"`
 	Attachments    []Attachment   `json:"attachments"`
+	Reactions      []Reaction     `json:"reactions"`
 	ReplyTo        *ReplyPreview  `json:"reply_to"`
 	ForwardedFrom  *ForwardedFrom `json:"forwarded_from"`
 	Kind           string         `json:"kind"`
@@ -174,6 +185,7 @@ func NewMessage(m *domain.Message) *Message {
 		CreatedAt:      JSONTime(m.CreatedAt),
 		ReadAt:         jsonTimePtr(m.ReadAt),
 		Attachments:    make([]Attachment, 0, len(m.Attachments)),
+		Reactions:      make([]Reaction, 0, len(m.Reactions)),
 		Kind:           m.Kind,
 		PinnedAt:       jsonTimePtr(m.PinnedAt),
 		PinnedByID:     m.PinnedByID,
@@ -182,6 +194,9 @@ func NewMessage(m *domain.Message) *Message {
 	}
 	for i := range m.Attachments {
 		out.Attachments = append(out.Attachments, *NewAttachment(&m.Attachments[i]))
+	}
+	for _, re := range m.Reactions {
+		out.Reactions = append(out.Reactions, Reaction{UserID: re.UserID, Emoji: re.Emoji})
 	}
 	if r := m.ReplyTo; r != nil {
 		rp := &ReplyPreview{

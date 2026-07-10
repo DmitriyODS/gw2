@@ -159,8 +159,6 @@
     <AppFab
       :visible="canCreateTask"
       icon="add"
-      label="Создать"
-      :collapsed="isCompact"
       aria-label="Создать задачу"
       @click="showCreateTask = true"
     />

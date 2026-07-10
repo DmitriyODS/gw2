@@ -12,7 +12,7 @@
     :pt="{
       root: { class: 'emp-dialog' },
       content: { style: 'overflow-x: hidden; padding: 0; background: transparent' },
-      mask: { style: 'background: var(--color-scrim)' },
+      mask: { style: 'background: var(--color-scrim)', class: elevated ? 'emp-mask--elevated' : '' },
     }"
     @update:visible="$emit('update:modelValue', $event)"
   >
@@ -48,6 +48,16 @@
       </div>
 
       <div class="profile-list">
+        <div v-if="user.status_emoji || user.status_text" class="profile-row">
+          <span class="row-ico" data-tone="tertiary">
+            <span v-if="user.status_emoji" class="row-status-emoji">{{ user.status_emoji }}</span>
+            <span v-else class="material-symbols-outlined">mood</span>
+          </span>
+          <span class="row-text">
+            <span class="row-label">Статус</span>
+            <span class="row-value">{{ user.status_text || user.status_emoji }}</span>
+          </span>
+        </div>
         <div v-if="user.post" class="profile-row">
           <span class="row-ico" data-tone="primary">
             <span class="material-symbols-outlined">badge</span>
@@ -122,11 +132,10 @@
     </div>
   </Dialog>
 
-  <AvatarLightbox
+  <ImageLightbox
     v-if="user"
     v-model="lightboxOpen"
     :src="avatarOf(user)"
-    :alt="user.fio"
     :caption="user.fio"
   />
 </template>
@@ -140,12 +149,14 @@ import { useCompaniesStore } from '@/stores/companies.js'
 import { useMessengerStore } from '@/stores/messenger.js'
 import { useCallStore } from '@/stores/call.js'
 import { formatLastSeen } from '@/utils/presence.js'
-import AvatarLightbox from '@/components/common/AvatarLightbox.vue'
+import ImageLightbox from '@/components/common/ImageLightbox.vue'
 import RolePill from '@/components/common/RolePill.vue'
 
 const props = defineProps({
   modelValue: { type: Boolean, default: false },
   user: { type: Object, default: null },
+  // Поднять над плавающими слоями (мини-мессенджер живёт на 10050).
+  elevated: { type: Boolean, default: false },
 })
 const emit = defineEmits(['update:modelValue'])
 
@@ -359,6 +370,7 @@ async function callTo(u, media) {
   color: var(--color-on-tertiary-container);
 }
 .row-ico .material-symbols-outlined { font-size: 20px; }
+.row-status-emoji { font-size: 19px; line-height: 1; }
 
 .row-text {
   flex: 1;
@@ -483,5 +495,13 @@ async function callTo(u, media) {
   .hide-narrow { display: none; }
   .profile-list { padding: 12px; }
   .profile-actions { padding-left: 12px; padding-right: 12px; }
+}
+</style>
+
+<style>
+/* Профиль, открытый из плавающего мини-мессенджера (z-index 10050), должен
+   лечь выше его панели. */
+.p-dialog-mask.emp-mask--elevated {
+  z-index: 10060 !important;
 }
 </style>

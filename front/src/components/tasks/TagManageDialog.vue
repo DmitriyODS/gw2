@@ -172,22 +172,33 @@ const doDelete = () => {
 }
 
 .tagm-input {
-  border: 1px solid var(--color-outline-dim);
-  border-radius: var(--radius-sm);
-  background: var(--color-surface);
+  border: 1px solid var(--acrylic-border);
+  border-radius: var(--radius-md);
+  background: var(--acrylic-card-bg);
   color: var(--color-text);
   font: inherit;
-  font-size: 13.5px;
-  padding: 9px 12px;
+  font-size: 14px;
+  padding: 10px 12px;
+  outline: none;
+  transition: border-color 0.15s, box-shadow 0.15s;
 }
-.tagm-input:focus { outline: none; border-color: var(--color-primary); }
+.tagm-input:focus {
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 3px color-mix(in oklch, var(--color-primary) 16%, transparent);
+}
 
 .tagm-colors { display: flex; gap: 8px; flex-wrap: wrap; }
 .tagm-color {
+  /* flex none + min-height: глобальный мобильный min-height у button
+     растягивал кружки в овалы. */
+  flex: 0 0 auto;
   width: 24px;
   height: 24px;
+  min-height: 24px;
+  aspect-ratio: 1;
   border-radius: 50%;
   border: 2px solid transparent;
+  padding: 0;
   cursor: pointer;
   transition: transform 0.12s, border-color 0.12s;
 }
@@ -216,18 +227,37 @@ const doDelete = () => {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.tagm-input--edit { flex: 1; min-width: 0; padding: 5px 9px; }
+.tagm-input--edit {
+  flex: 1;
+  min-width: 0;
+  padding: 8px 12px;
+  border-radius: var(--radius-md);
+}
 
 .tagm-icon {
+  /* Фиксированный круг с центровкой: глобальный мобильный min-height у
+     button растягивал кнопку, и иконка прилипала к верху. */
+  flex-shrink: 0;
+  width: 34px;
+  height: 34px;
+  min-height: 34px;
   border: none;
   background: transparent;
   color: var(--color-text-dim);
   cursor: pointer;
-  display: inline-flex;
-  padding: 4px;
+  display: grid;
+  place-items: center;
+  padding: 0;
   border-radius: var(--radius-full);
+  transition: background 0.15s, color 0.15s;
 }
-.tagm-icon:hover { color: var(--color-text); }
-.tagm-icon.danger:hover { color: var(--color-error); }
-.tagm-icon .material-symbols-outlined { font-size: 17px; }
+.tagm-icon:hover {
+  color: var(--color-text);
+  background: color-mix(in oklch, var(--color-text) 10%, transparent);
+}
+.tagm-icon.danger:hover {
+  color: var(--color-error);
+  background: color-mix(in oklch, var(--color-error) 12%, transparent);
+}
+.tagm-icon .material-symbols-outlined { font-size: 18px; }
 </style>
