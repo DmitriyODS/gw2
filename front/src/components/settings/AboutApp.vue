@@ -32,6 +32,27 @@
       </span>
     </a>
 
+    <!-- Внутри обёрток (мобильная Capacitor / десктопный Electron) — обновление
+         самого приложения: принудительная проверка без ожидания автопроверки,
+         скачивание и установка нативно. -->
+    <div v-if="hasShellUpdate" class="about-mobile">
+      <div class="about-mobile-icon">
+        <span class="material-symbols-outlined">system_update</span>
+      </div>
+      <div class="about-mobile-text">
+        <h4>Обновление приложения</h4>
+        <p v-if="appBuild">
+          Установлена {{ appBuild }}<template v-if="updateInfo">
+            · {{ updateInfo.updateAvailable ? `доступна ${updateInfo.latest}` : 'это последняя версия' }}</template>
+        </p>
+        <p v-else>Оболочка Groove Work</p>
+      </div>
+      <button class="about-mobile-btn about-update-btn" :disabled="updBusy" @click="onUpdateClick">
+        <span class="material-symbols-outlined">{{ updateInfo?.updateAvailable ? 'download' : 'refresh' }}</span>
+        {{ updateBtnLabel }}
+      </button>
+    </div>
+
     <!-- Внутри самого десктоп-приложения и на мобильных карточка не нужна. -->
     <div v-if="showDesktopCard" class="about-mobile about-desktop">
       <div class="about-mobile-icon">
@@ -80,8 +101,9 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
+import { getNativeBuild, checkNativeUpdate, installNativeUpdate } from '@/utils/nativeApp.js'
 import { useMessengerStore } from '@/stores/messenger.js'
 import { useNotificationsStore } from '@/stores/notifications.js'
 import { useChangelog } from '@/composables/useChangelog.js'
@@ -117,6 +139,77 @@ const showDesktopCard = !/Electron/i.test(ua) && !/Android|iPhone|iPad/i.test(ua
 // приложение уже установлено. Признаки: инжектированный мост window.Capacitor
 // (надёжный) и метка GrooveWorkApp в UA (appendUserAgent, страховка).
 const showApkCard = !window.Capacitor?.isNativePlatform?.() && !/GrooveWorkApp/i.test(ua)
+
+/* Обновление обёртки изнутри приложения. Мобильная (Capacitor) — нативный
+   плагин NativeShell (сборки 2607104+); десктопная (Electron) — мост
+   window.GrooveDesktop из preload (версии 1.0.2+). Обвязка общая, различается
+   только транспорт. */
+const hasNativeShell = !!window.Capacitor?.Plugins?.NativeShell
+const desktopShell = window.GrooveDesktop
+const hasShellUpdate = hasNativeShell || !!desktopShell
+const appBuild = ref(null)
+const updateInfo = ref(null)
+const updBusy = ref(false)
+const updProgress = ref(null)
+
+onMounted(async () => {
+  if (hasNativeShell) {
+    appBuild.value = `сборка ${await getNativeBuild()}`
+  } else if (desktopShell) {
+    const { version } = await desktopShell.getVersion().catch(() => ({}))
+    if (version) appBuild.value = `версия ${version}`
+  }
+})
+
+// Десктопный мост сообщает об ошибках полем error — приводим к исключению,
+// как у мобильного плагина.
+async function shellCheck() {
+  if (hasNativeShell) return checkNativeUpdate()
+  const r = await desktopShell.checkUpdate()
+  if (r?.error) throw new Error(r.error)
+  return r
+}
+
+async function shellInstall(onProgress) {
+  if (hasNativeShell) return installNativeUpdate(onProgress)
+  const r = await desktopShell.downloadUpdate(onProgress)
+  if (r?.error) throw new Error(r.error)
+  return r
+}
+
+const updateBtnLabel = computed(() => {
+  if (updBusy.value && updProgress.value != null) {
+    return updProgress.value >= 0 ? `Скачивание ${Math.round(updProgress.value * 100)}%` : 'Скачивание…'
+  }
+  if (updBusy.value) return 'Проверяем…'
+  if (updateInfo.value?.updateAvailable) return 'Обновить'
+  return 'Проверить обновления'
+})
+
+async function onUpdateClick() {
+  updBusy.value = true
+  try {
+    if (updateInfo.value?.updateAvailable) {
+      updProgress.value = -1
+      const { status } = await shellInstall((p) => { updProgress.value = p })
+      if (status === 'needs_permission') {
+        notif.notify({
+          severity: 'info',
+          summary: 'Нужно разрешение',
+          detail: 'Разрешите установку из этого источника в открывшихся настройках и нажмите «Обновить» ещё раз.',
+          life: 9000,
+        })
+      }
+    } else {
+      updateInfo.value = await shellCheck()
+    }
+  } catch (e) {
+    notif.error(e?.message || 'Не удалось проверить обновления')
+  } finally {
+    updBusy.value = false
+    updProgress.value = null
+  }
+}
 
 const opening = ref(false)
 
@@ -293,6 +386,14 @@ async function openSupport() {
 }
 
 .about-mobile-btn .material-symbols-outlined { font-size: 18px; }
+
+/* Кнопка обновления обёртки — тот же вид, но это <button>. */
+.about-update-btn {
+  border: 0;
+  cursor: pointer;
+  font-family: inherit;
+}
+.about-update-btn:disabled { opacity: 0.6; cursor: progress; }
 
 /* Карточка десктоп-клиента — тот же каркас, свой градиент и иконка. */
 .about-desktop {

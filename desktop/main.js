@@ -9,7 +9,7 @@
  * URL можно переопределить: env GW_DESKTOP_URL или {"url": "..."} в
  * <userData>/config.json (для стенда/дева).
  */
-const { app, BrowserWindow, Tray, Menu, shell, dialog, session, desktopCapturer, nativeImage, net } = require('electron')
+const { app, BrowserWindow, Tray, Menu, shell, dialog, session, desktopCapturer, nativeImage, net, ipcMain } = require('electron')
 const path = require('node:path')
 const fs = require('node:fs')
 
@@ -69,9 +69,11 @@ function createWindow(appUrl) {
     autoHideMenuBar: true,
     backgroundColor: '#1a1c1e',
     webPreferences: {
-      // Удалённая страница: никакого Node в рендерере.
+      // Удалённая страница: никакого Node в рендерере; узкий мост
+      // window.GrooveDesktop (обновление обёртки) — через preload.
       contextIsolation: true,
       nodeIntegration: false,
+      preload: path.join(__dirname, 'preload.js'),
       spellcheck: true,
     },
   })
@@ -124,7 +126,42 @@ function createWindow(appUrl) {
     mainWindow.hide()
   })
 
-  mainWindow.loadURL(appUrl)
+  /* ── Загрузка приложения с сервера: сплэш + автоповтор ──
+     Раньше loadURL без обработки ошибок давал белый экран навсегда, если
+     сеть в момент старта ещё не поднялась (автозапуск после входа в ОС,
+     сон/пробуждение) — лечилось только ручными перезагрузками. Теперь окно
+     сразу показывает локальный сплэш «Подключаемся…», а неудачная загрузка
+     возвращает на сплэш с сообщением и повторяет попытку с бэкоффом. */
+  const splash = (hash) => mainWindow.loadFile(path.join(__dirname, 'loading.html'), hash ? { hash } : {})
+  let retryTimer = null
+  let retryDelay = 2000
+  const loadApp = () => {
+    if (!mainWindow || mainWindow.isDestroyed()) return
+    mainWindow.loadURL(appUrl)
+  }
+
+  mainWindow.webContents.on('did-fail-load', (e, code, desc, url, isMainFrame) => {
+    // -3 (ERR_ABORTED) — навигацию сменила другая (в т.ч. наш сплэш), не ошибка.
+    if (!isMainFrame || code === -3) return
+    splash('error')
+    clearTimeout(retryTimer)
+    retryTimer = setTimeout(loadApp, retryDelay)
+    retryDelay = Math.min(retryDelay * 2, 15_000)
+  })
+
+  // Успешная загрузка приложения — сбрасываем бэкофф на будущее.
+  mainWindow.webContents.on('did-finish-load', () => {
+    if (mainWindow.webContents.getURL().startsWith(appUrl)) retryDelay = 2000
+  })
+
+  // Упавший рендерер (OOM, краш GPU) — тоже не белый экран, а перезагрузка.
+  mainWindow.webContents.on('render-process-gone', () => {
+    splash()
+    setTimeout(loadApp, 1000)
+  })
+
+  splash()
+  loadApp()
 }
 
 function showWindow() {
@@ -220,6 +257,57 @@ app.on('activate', showWindow) // macOS: клик по доку
 app.whenReady().then(() => {
   const appUrl = process.env.GW_DESKTOP_URL || readConfigUrl() || DEFAULT_URL
   const appOrigin = new URL(appUrl).origin
+
+  /* ── IPC-мост обновления обёртки (preload.js → window.GrooveDesktop) ──
+     Принудительная проверка/установка из карточки «О приложении», без
+     ожидания фоновой автопроверки. Ошибки — полем error (не reject: throw из
+     handle доезжает до рендерера с техническим префиксом Electron). */
+  const platformKey = process.platform === 'darwin' ? 'mac' : process.platform === 'win32' ? 'win' : 'linux'
+  const fetchDesktopMeta = async () => {
+    const res = await net.fetch(`${appUrl}/apps/desktop/version.json`, { cache: 'no-store' })
+    if (!res.ok) return null
+    return res.json().catch(() => null)
+  }
+
+  ipcMain.handle('gw:get-version', () => ({ version: app.getVersion() }))
+
+  ipcMain.handle('gw:check-update', async () => {
+    const meta = await fetchDesktopMeta().catch(() => null)
+    if (!meta?.current_version) return { error: 'Не удалось проверить обновления — проверьте интернет' }
+    return {
+      current: app.getVersion(),
+      latest: meta.current_version,
+      updateAvailable: isNewer(meta.current_version, app.getVersion()) && !!meta.files?.[platformKey],
+    }
+  })
+
+  // Скачивает установщик своей платформы во временный каталог (прогресс —
+  // событиями в рендерер) и запускает его: NSIS ставится поверх сам, dmg/
+  // AppImage открываются пользователю.
+  ipcMain.handle('gw:download-update', async () => {
+    const meta = await fetchDesktopMeta().catch(() => null)
+    const file = meta?.files?.[platformKey]
+    if (!file) return { error: 'Не удалось скачать обновление' }
+    try {
+      const res = await net.fetch(`${appUrl}/apps/desktop/${file}`, { cache: 'no-store' })
+      if (!res.ok || !res.body) throw new Error(`HTTP ${res.status}`)
+      const total = Number(res.headers.get('content-length')) || 0
+      const dest = path.join(app.getPath('temp'), file)
+      const ws = fs.createWriteStream(dest)
+      let read = 0
+      for await (const chunk of res.body) {
+        ws.write(Buffer.from(chunk))
+        read += chunk.length
+        mainWindow?.webContents.send('gw:update-progress', total ? read / total : -1)
+      }
+      await new Promise((resolve) => ws.end(resolve))
+      const openErr = await shell.openPath(dest)
+      if (openErr) throw new Error(openErr)
+      return { status: 'installing' }
+    } catch {
+      return { error: 'Не удалось скачать обновление — попробуйте ещё раз' }
+    }
+  })
 
   // Разрешения — только своему origin и только нужные приложению:
   // уведомления, микрофон/камера (звонки), захват экрана, fullscreen.

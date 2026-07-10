@@ -58,6 +58,9 @@
     <!-- Пуш-уведомления (Android 13+, runtime-запрос делает веб-слой через
          Capacitor PushNotifications.requestPermissions). -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <!-- Обновление обёртки из «О приложении»: скачанный APK ставится
+         системным установщиком (AppUpdater). -->
+    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
     <!-- Звонки в WebView: getUserMedia требует разрешений приложения, их
          пробрасывает BridgeWebChromeClient. -->
     <uses-permission android:name="android.permission.CAMERA" />

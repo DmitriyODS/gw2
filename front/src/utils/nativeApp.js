@@ -53,3 +53,64 @@ export async function unregisterNativePush() {
     await unregisterPushToken(token)
   } catch {}
 }
+
+/* ── NativeShell: собственный плагин обёртки (mobile/android) ── */
+
+const nativeShell = () => window.Capacitor?.Plugins?.NativeShell
+
+// Системные панели (статус-бар и навигация) следуют теме приложения: резолвим
+// фактический цвет поверхности из токенов (--color-surface — oklch, нативный
+// код хочет hex → пробный элемент внутри .app-layout, где действуют
+// переопределения [data-dark]) и передаём вместе с признаком тёмной темы.
+export function syncNativeSystemBars(isDark) {
+  const shell = nativeShell()
+  if (!isNativeApp() || !shell) return
+  const host = document.querySelector('.app-layout') || document.body
+  const probe = document.createElement('div')
+  probe.style.cssText = 'position:fixed;visibility:hidden;pointer-events:none;background:var(--color-surface)'
+  host.appendChild(probe)
+  const rgb = getComputedStyle(probe).backgroundColor
+  probe.remove()
+  const m = rgb.match(/\d+(\.\d+)?/g)
+  if (!m || m.length < 3) return
+  const hex = '#' + m.slice(0, 3).map((v) => Math.round(+v).toString(16).padStart(2, '0')).join('')
+  shell.setSystemBars({ color: hex, dark: !!isDark }).catch(() => {})
+}
+
+// Номер установленной сборки обёртки (ГГММДДН) — для «О приложении».
+export async function getNativeBuild() {
+  const shell = nativeShell()
+  if (!isNativeApp() || !shell) return null
+  try {
+    const { build } = await shell.getInfo()
+    return build
+  } catch {
+    return null
+  }
+}
+
+// Принудительная проверка обновления обёртки (без 6-часового троттла
+// автопроверки): {current, latest, updateAvailable}.
+export async function checkNativeUpdate() {
+  const shell = nativeShell()
+  if (!isNativeApp() || !shell) throw new Error('Недоступно вне приложения')
+  return shell.checkUpdate()
+}
+
+// Скачивание и установка обновления. onProgress(0..1 | -1) — ход загрузки.
+// Ответ {status: 'installing' | 'needs_permission'} — во втором случае
+// система открыла настройки «установка из неизвестных источников»,
+// пользователю нужно разрешить и повторить.
+export async function installNativeUpdate(onProgress) {
+  const shell = nativeShell()
+  if (!isNativeApp() || !shell) throw new Error('Недоступно вне приложения')
+  let sub = null
+  if (onProgress) {
+    sub = await shell.addListener('updateProgress', ({ progress }) => onProgress(progress))
+  }
+  try {
+    return await shell.installUpdate()
+  } finally {
+    sub?.remove?.()
+  }
+}

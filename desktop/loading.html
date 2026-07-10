@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <title>Groove Work</title>
+  <style>
+    body {
+      margin: 0; min-height: 100vh; display: flex; align-items: center; justify-content: center;
+      font-family: system-ui, -apple-system, sans-serif; background: #1a1c1e; color: #e3e2e6;
+      -webkit-user-select: none; user-select: none;
+    }
+    .box { text-align: center; padding: 32px; }
+    .logo { width: 88px; height: 88px; border-radius: 22px; }
+    h1 { font-size: 18px; font-weight: 600; margin: 20px 0 6px; }
+    p { font-size: 13px; opacity: .65; margin: 0; line-height: 1.5; }
+    .spinner {
+      width: 22px; height: 22px; margin: 22px auto 0; border-radius: 50%;
+      border: 2.5px solid rgba(227, 226, 230, .25); border-top-color: #a8c8ff;
+      animation: spin .8s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+  </style>
+</head>
+<body>
+  <div class="box">
+    <img class="logo" src="build/icon.png" alt="">
+    <h1>Groove Work</h1>
+    <p id="status">Подключаемся…</p>
+    <div class="spinner"></div>
+  </div>
+  <script>
+    // Открыто повторно после неудачной загрузки (main.js: hash '#error') —
+    // сообщаем, что сеть недоступна и повтор произойдёт сам.
+    if (location.hash === '#error') {
+      document.getElementById('status').textContent =
+        'Нет соединения с сервером. Повторим подключение автоматически…'
+    }
+  </script>
+</body>
+</html>

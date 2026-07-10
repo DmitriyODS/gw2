@@ -1,6 +1,6 @@
 {
   "name": "groovework-desktop",
-  "version": "1.0.0",
+  "version": "1.0.2",
   "private": true,
   "description": "Groove Work — десктоп-клиент (тонкая обёртка над веб-версией)",
   "author": "Groove Work",
@@ -25,15 +25,31 @@
     },
     "files": [
       "main.js",
+      "preload.js",
+      "loading.html",
       "build/icon.png"
     ],
     "mac": {
       "category": "public.app-category.productivity",
-      "target": [{ "target": "dmg", "arch": ["universal"] }],
+      "target": [
+        {
+          "target": "dmg",
+          "arch": [
+            "universal"
+          ]
+        }
+      ],
       "artifactName": "GrooveWork-mac.${ext}"
     },
     "win": {
-      "target": [{ "target": "nsis", "arch": ["x64"] }],
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
       "artifactName": "GrooveWork-win.${ext}"
     },
     "nsis": {
@@ -41,7 +57,14 @@
       "deleteAppDataOnUninstall": false
     },
     "linux": {
-      "target": [{ "target": "AppImage", "arch": ["x64"] }],
+      "target": [
+        {
+          "target": "AppImage",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
       "artifactName": "GrooveWork-linux.${ext}",
       "category": "Office",
       "syncDesktopName": true

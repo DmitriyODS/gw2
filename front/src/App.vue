@@ -68,7 +68,7 @@ import {
   playNotifySound,
 } from '@/utils/systemNotify.js'
 import { installAppUpdateWatcher } from '@/utils/appUpdate.js'
-import { initNativePush } from '@/utils/nativeApp.js'
+import { initNativePush, syncNativeSystemBars } from '@/utils/nativeApp.js'
 import AppSidebar from '@/components/layout/AppSidebar.vue'
 import AppBottomNav from '@/components/layout/AppBottomNav.vue'
 import CompanyDisabledScreen from '@/components/layout/CompanyDisabledScreen.vue'
@@ -124,6 +124,10 @@ function openFromPush(data) {
 watch(() => authStore.user, (user, prev) => {
   if (user && !prev) initNativePush(openFromPush)
 })
+
+// Мобильная обёртка: системные панели следуют теме (тёмная/светлая и
+// фактический цвет поверхности). В браузере — no-op.
+watch(() => themeStore.dark, (dark) => syncNativeSystemBars(dark), { immediate: true })
 
 // useToast() требует setup-контекст — вызываем здесь, не в onMounted
 const toast = useToast()
