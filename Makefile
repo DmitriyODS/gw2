@@ -44,8 +44,7 @@ help:
 	@printf "  make push-all     Принудительно пересобрать и запушить ВСЕ образы\n"
 	@printf "  make deploy       make push → git push → на сервере: compose pull + up --no-build\n"
 	@printf "  make deploy-only  То же без сборки/пуша образов (push уже сделан)\n"
-	@printf "  make apk          Собрать мобильное приложение (Capacitor) → apps/mobile/groovework.apk\n"
-	@printf "  make apk-legacy   Переходный APK прежнего нативного приложения → apps/groovework.apk\n"
+	@printf "  make apk          Собрать мобильное приложение (Capacitor) → apps/mobile/ + зеркало apps/\n"
 	@printf "  make deploy-apk   Залить APK и version.json обоих каналов на сервер\n"
 	@printf "  make desktop      Собрать десктоп-клиент (dmg+exe+AppImage) → apps/desktop/ (версия: V=1.0.1)\n"
 	@printf "  make deploy-desktop  Залить десктоп-клиент из apps/desktop/ на сервер\n"
@@ -284,7 +283,7 @@ dev-stack-stop:
 	@printf "\033[32m✓ Полный стек остановлен\033[0m\n"
 
 # ── Деплой ───────────────────────────────────────────────────────
-.PHONY: push push-all deploy deploy-only apk apk-legacy deploy-apk desktop deploy-desktop logs status restart shell
+.PHONY: push push-all deploy deploy-only apk deploy-apk desktop deploy-desktop logs status restart shell
 
 # Прод-стек = база + оверлей (см. шапку deploy/docker-compose.prod.yml).
 COMPOSE_PROD := docker compose -f docker-compose.yml -f docker-compose.prod.yml
@@ -323,11 +322,13 @@ deploy-only:
 
 # Сборка мобильного приложения (Capacitor-обёртка mobile/, тонкая — UI приезжает
 # с прод-сервера): подписанный release-APK → apps/mobile/groovework.apk (канал
-# нового приложения, зеркало apps/desktop/). Подпись — mobile/android/
-# keystore.properties (ТОТ ЖЕ ключ groovework-release.jks, что у прежнего
-# нативного приложения — иначе APK не встанет поверх установленных). Номер
-# сборки (versionCode, ГГММДДН) Gradle читает из apps/mobile/version.json —
-# обнови current_build перед релизом.
+# приложения, зеркало apps/desktop/) + КОПИЯ в apps/groovework.apk со
+# синхронизацией apps/version.json (старый канал: установленные ранее нативные
+# приложения проверяют обновления по нему и сразу получают эту же сборку).
+# Подпись — mobile/android/keystore.properties (ТОТ ЖЕ ключ
+# groovework-release.jks, что у прежнего нативного приложения — иначе APK не
+# встанет поверх установленных). Номер сборки (versionCode, ГГММДДН) Gradle
+# читает из apps/mobile/version.json — обнови current_build перед релизом.
 ANDROID_DIR := mobile/android
 apk:
 	@if [ ! -f $(ANDROID_DIR)/keystore.properties ]; then \
@@ -338,42 +339,27 @@ apk:
 	cd $(ANDROID_DIR) && ./gradlew assembleRelease
 	@mkdir -p apps/mobile
 	cp $(ANDROID_DIR)/app/build/outputs/apk/release/app-release.apk apps/mobile/groovework.apk
+	cp apps/mobile/groovework.apk apps/groovework.apk
+	cp apps/mobile/version.json apps/version.json
 	@bash scripts/check_apk_version.sh apps/mobile/groovework.apk apps/mobile/version.json
-	@printf "\033[32m✓ Готово: apps/mobile/groovework.apk — выложить: make deploy-apk\033[0m\n"
+	@printf "\033[32m✓ Готово: apps/mobile/groovework.apk (+ зеркало apps/) — выложить: make deploy-apk\033[0m\n"
 
-# ПЕРЕХОДНЫЙ релиз прежнего нативного приложения (GrooveWorkAndroid): сборка
-# со всплывашкой «приложение устарело» → apps/groovework.apk (замороженный
-# старый канал — старые установки обновляются по нему до nag-версии, а она
-# ведёт на новый канал /apps/mobile/). Нужен один раз; после миграции
-# пользователей канал не трогаем.
-apk-legacy:
-	@if [ ! -f GrooveWorkAndroid/keystore.properties ]; then \
-		printf "\033[31m✗ Нет GrooveWorkAndroid/keystore.properties — скопируй ключ и заполни (см. keystore.properties.example)\033[0m\n"; exit 2; fi
-	@printf "\033[1m▶ Собираю переходный release-APK (нативное приложение)...\033[0m\n"
-	cd GrooveWorkAndroid && ./gradlew assembleRelease
-	@mkdir -p apps
-	cp GrooveWorkAndroid/app/build/outputs/apk/release/app-release.apk apps/groovework.apk
-	@bash scripts/check_apk_version.sh apps/groovework.apk apps/version.json
-	@printf "\033[32m✓ Готово: apps/groovework.apk (переходный) — выложить: make deploy-apk\033[0m\n"
-
-# Публикация мобильных приложений: заливаем оба канала из локального apps/ в
-# apps/ репозитория на сервере (его монтирует nginx в /apps/): новый канал
-# apps/mobile/ (Capacitor; сайт, всплывашка старого приложения и автообновление
-# обёртки смотрят сюда) и, если есть, замороженный старый apps/groovework.apk
-# (nag-версия для старых установок). version.json хранятся и в git (их читает
-# Gradle как versionCode), но scp обновляет сборку на сервере сразу.
+# Публикация мобильного приложения: заливаем оба канала из локального apps/ в
+# apps/ репозитория на сервере (его монтирует nginx в /apps/): apps/mobile/
+# (сайт и автообновление обёртки смотрят сюда) и зеркало apps/groovework.apk +
+# apps/version.json (по нему обновляются установленные ранее нативные
+# приложения — сразу до текущей сборки обёртки). version.json хранятся и в git
+# (их читает Gradle как versionCode), но scp обновляет сборку на сервере сразу.
 deploy-apk:
-	@if [ ! -f apps/mobile/groovework.apk ]; then \
-		printf "\033[31m✗ Нет apps/mobile/groovework.apk — сначала make apk\033[0m\n"; exit 2; fi
+	@if [ ! -f apps/mobile/groovework.apk ] || [ ! -f apps/groovework.apk ]; then \
+		printf "\033[31m✗ Нет APK — сначала make apk\033[0m\n"; exit 2; fi
 	@bash scripts/check_apk_version.sh apps/mobile/groovework.apk apps/mobile/version.json
-	@if [ -f apps/groovework.apk ]; then \
-		bash scripts/check_apk_version.sh apps/groovework.apk apps/version.json; fi
+	@bash scripts/check_apk_version.sh apps/groovework.apk apps/version.json
 	@printf "\033[1m▶ Заливаю мобильное приложение на $(SERVER_HOST)...\033[0m\n"
 	$(SSH) "mkdir -p $(SERVER_DIR)/apps/mobile"
 	scp -i $(SSH_KEY) apps/mobile/groovework.apk apps/mobile/version.json $(SERVER_USER)@$(SERVER_HOST):$(SERVER_DIR)/apps/mobile/
-	@if [ -f apps/groovework.apk ]; then \
-		scp -i $(SSH_KEY) apps/groovework.apk apps/version.json $(SERVER_USER)@$(SERVER_HOST):$(SERVER_DIR)/apps/; fi
-	@printf "\033[32m✓ APK и version.json выложены — проверка обновлений увидит новую сборку\033[0m\n"
+	scp -i $(SSH_KEY) apps/groovework.apk apps/version.json $(SERVER_USER)@$(SERVER_HOST):$(SERVER_DIR)/apps/
+	@printf "\033[32m✓ APK и version.json выложены (оба канала) — проверка обновлений увидит новую сборку\033[0m\n"
 
 # Сборка десктоп-клиента (Electron, desktop/): dmg (universal) + NSIS exe +
 # AppImage. Артефакты и version.json — в apps/desktop/ (готовы к

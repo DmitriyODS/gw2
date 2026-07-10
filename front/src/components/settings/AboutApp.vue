@@ -113,9 +113,10 @@ const ua = navigator.userAgent
 const desktopOs = /Mac/i.test(navigator.platform || ua) ? 'mac' : /Win/i.test(navigator.platform || ua) ? 'win' : 'linux'
 // В самом Electron-клиенте и на телефонах предлагать установщик бессмысленно.
 const showDesktopCard = !/Electron/i.test(ua) && !/Android|iPhone|iPad/i.test(ua)
-// Мобильная обёртка (Capacitor) добавляет GrooveWorkApp в UA — внутри неё
-// карточку скачивания APK не показываем.
-const showApkCard = !/GrooveWorkApp/i.test(ua)
+// Внутри мобильной обёртки (Capacitor) карточка скачивания APK не нужна —
+// приложение уже установлено. Признаки: инжектированный мост window.Capacitor
+// (надёжный) и метка GrooveWorkApp в UA (appendUserAgent, страховка).
+const showApkCard = !window.Capacitor?.isNativePlatform?.() && !/GrooveWorkApp/i.test(ua)
 
 const opening = ref(false)
 

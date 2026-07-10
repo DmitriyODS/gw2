@@ -3,10 +3,10 @@
   "appName": "Groove Work",
   "webDir": "www",
   "backgroundColor": "#1a1c1e",
+  "appendUserAgent": "GrooveWorkApp",
   "server": {
     "url": "https://gw.kodass.ru",
-    "errorPath": "error.html",
-    "appendUserAgent": "GrooveWorkApp"
+    "errorPath": "error.html"
   },
   "android": {
     "allowMixedContent": false
