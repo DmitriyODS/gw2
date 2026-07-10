@@ -1,0 +1,19 @@
+{
+  "appId": "com.kodass.groovework",
+  "appName": "Groove Work",
+  "webDir": "www",
+  "backgroundColor": "#1a1c1e",
+  "server": {
+    "url": "https://gw.kodass.ru",
+    "errorPath": "error.html",
+    "appendUserAgent": "GrooveWorkApp"
+  },
+  "android": {
+    "allowMixedContent": false
+  },
+  "plugins": {
+    "PushNotifications": {
+      "presentationOptions": []
+    }
+  }
+}

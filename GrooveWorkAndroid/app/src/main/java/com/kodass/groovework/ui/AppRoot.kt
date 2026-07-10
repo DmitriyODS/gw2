@@ -102,6 +102,13 @@ fun AppRoot(container: AppContainer) {
                 com.kodass.groovework.ui.units.UnitBanner(container = container)
             }
         }
+
+        // Обязательная модалка обновления: это приложение замещается новой
+        // версией — как только на сервере появляется сборка новее, пользователя
+        // подталкиваем обновиться (повтор каждые 10 минут после «Позже»).
+        if (authed) {
+            com.kodass.groovework.ui.update.UpdateNagDialog(updater = container.appUpdater)
+        }
     }
 }
 

@@ -46,7 +46,7 @@
 
 <script setup>
 import { ref, computed, watch, onMounted, onBeforeUnmount } from 'vue'
-import { useRoute } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { useToast } from 'primevue/usetoast'
 import { useAuthStore } from '@/stores/auth.js'
 import { useThemeStore } from '@/stores/theme.js'
@@ -68,6 +68,7 @@ import {
   playNotifySound,
 } from '@/utils/systemNotify.js'
 import { installAppUpdateWatcher } from '@/utils/appUpdate.js'
+import { initNativePush } from '@/utils/nativeApp.js'
 import AppSidebar from '@/components/layout/AppSidebar.vue'
 import AppBottomNav from '@/components/layout/AppBottomNav.vue'
 import CompanyDisabledScreen from '@/components/layout/CompanyDisabledScreen.vue'
@@ -92,6 +93,7 @@ const assistantStore = useAssistantStore()
 const callStore = useCallStore()
 const notif = useNotificationsStore()
 const route = useRoute()
+const router = useRouter()
 const { isMobile } = useBreakpoint()
 const { usesGroove } = useCompanySettings()
 
@@ -106,6 +108,21 @@ watch(() => authStore.user, (user, prev) => {
     clearTimeout(tutorialTimer)
     tutorialTimer = setTimeout(() => openTutorial(), 600)
   }
+})
+
+// Мобильная обёртка (Capacitor): после появления сессии регистрируем
+// FCM-токен устройства; тап по системному пушу ведёт на адресный экран.
+// В браузере/Electron initNativePush — no-op.
+function openFromPush(data) {
+  if (data.type === 'message' && data.conversation_id) {
+    router.push(`/messenger/${data.conversation_id}`)
+  } else if (data.type === 'task' && data.task_id) {
+    router.push(`/tasks/${data.task_id}`)
+  }
+  // type=call: приложение открылось — входящий звонок подхватит WS.
+}
+watch(() => authStore.user, (user, prev) => {
+  if (user && !prev) initNativePush(openFromPush)
 })
 
 // useToast() требует setup-контекст — вызываем здесь, не в onMounted

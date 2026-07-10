@@ -208,6 +208,13 @@ export const useAuthStore = defineStore('auth', () => {
         const { useCallStore } = await import('./call.js')
         useCallStore().hangup()
       } catch {}
+      // Мобильная обёртка: снимаем FCM-токен устройства, пока сессия жива —
+      // иначе после выхода устройство продолжит получать пуши. Импорт ленивый
+      // (nativeApp → api/push → client → auth), в браузере — no-op.
+      try {
+        const { unregisterNativePush } = await import('@/utils/nativeApp.js')
+        await unregisterNativePush()
+      } catch {}
       try { await apiLogout() } catch {}
       clearAuth()
       router.push('/login')

@@ -74,7 +74,12 @@ class AppUpdater(
     // Автопроверка при старте (после появления сессии): не чаще раза в 6 часов,
     // ошибки — молча (ручная проверка на экране «О приложении» покажет их сама).
     fun autoCheck() {
-        if (_state.value !is UpdateState.Idle) return
+        // UpToDate не блокирует будущие проверки: приложение живёт в памяти
+        // днями, а релиз новой сборки может выйти позже старта.
+        when (_state.value) {
+            is UpdateState.Idle, is UpdateState.UpToDate -> Unit
+            else -> return
+        }
         val now = System.currentTimeMillis()
         if (now - prefs.getLong(KEY_LAST_CHECK, 0L) < AUTO_CHECK_INTERVAL_MS) return
         scope.launch {
@@ -129,6 +134,21 @@ class AppUpdater(
         }
     }
 
+    // Скачивание из обязательного диалога обновления: сборку помнит вызывающий,
+    // поэтому стартует и из Available, и повторно после Failed.
+    fun downloadBuild(build: Long) {
+        when (_state.value) {
+            is UpdateState.Checking, is UpdateState.Downloading -> return
+            is UpdateState.ReadyToInstall -> {
+                launchInstall()
+                return
+            }
+            else -> Unit
+        }
+        _state.value = UpdateState.Available(build)
+        download()
+    }
+
     // Повторный запуск установки скачанного APK (после отклонённого диалога).
     fun install() {
         if (_state.value !is UpdateState.ReadyToInstall) return
@@ -166,7 +186,7 @@ class AppUpdater(
 
     private suspend fun downloadApk(onProgress: (Float) -> Unit) = withContext(Dispatchers.IO) {
         val base = normalizeServerUrl(sessionManager.serverUrl.value)
-        val response = downloadHttp.newCall(Request.Builder().url("$base/apps/groovework.apk").build()).execute()
+        val response = downloadHttp.newCall(Request.Builder().url("$base/apps/mobile/groovework.apk").build()).execute()
         response.use {
             if (!response.isSuccessful) error("HTTP ${response.code}")
             val body = response.body ?: error("Пустой ответ сервера")

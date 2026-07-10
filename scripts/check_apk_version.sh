@@ -1,14 +1,16 @@
 #!/usr/bin/env bash
-# Сверяет versionCode внутри apps/groovework.apk с current_build в
-# apps/version.json. Ловит главную причину рассинхрона версии на сервере:
-# APK собран до бампа version.json или заливается не тот бинарь (см. make
-# deploy-apk — APK едет на сервер только через scp, version.json ещё и через git).
+# Сверяет versionCode внутри APK с current_build в соответствующем version.json.
+# Ловит главную причину рассинхрона версии на сервере: APK собран до бампа
+# version.json или заливается не тот бинарь (см. make deploy-apk — APK едет на
+# сервер только через scp, version.json ещё и через git).
+# Использование: check_apk_version.sh [путь/к/app.apk] [путь/к/version.json]
+# По умолчанию — новый канал apps/mobile/ (Capacitor-обёртка).
 # aapt2 не найден → проверка тихо пропускается (не блокирует деплой).
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-APK=apps/groovework.apk
-VJSON=apps/version.json
+APK=${1:-apps/mobile/groovework.apk}
+VJSON=${2:-apps/mobile/version.json}
 
 [ -f "$APK" ] || { printf '\033[31m✗ Нет %s\033[0m\n' "$APK" >&2; exit 2; }
 [ -f "$VJSON" ] || { printf '\033[31m✗ Нет %s\033[0m\n' "$VJSON" >&2; exit 2; }
@@ -18,8 +20,13 @@ want=$(grep -oE '"current_build"[[:space:]]*:[[:space:]]*[0-9]+' "$VJSON" | grep
 
 # aapt2: из ANDROID_HOME/ANDROID_SDK_ROOT, либо sdk.dir в local.properties, либо дефолт macOS.
 sdk="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-}}"
-if [ -z "$sdk" ] && [ -f GrooveWorkAndroid/local.properties ]; then
-  sdk=$(grep -E '^sdk\.dir=' GrooveWorkAndroid/local.properties | head -1 | cut -d= -f2-)
+if [ -z "$sdk" ]; then
+  for props in mobile/android/local.properties GrooveWorkAndroid/local.properties; do
+    if [ -f "$props" ]; then
+      sdk=$(grep -E '^sdk\.dir=' "$props" | head -1 | cut -d= -f2-)
+      [ -n "$sdk" ] && break
+    fi
+  done
 fi
 [ -n "$sdk" ] || sdk="$HOME/Library/Android/sdk"
 aapt=$(ls "$sdk"/build-tools/*/aapt2 2>/dev/null | sort | tail -1 || true)
@@ -36,8 +43,8 @@ if [ -z "$got" ]; then
 fi
 
 if [ "$got" != "$want" ]; then
-  printf '\033[31m✗ Рассинхрон версии мобилки:\n    apps/version.json current_build = %s\n    apps/groovework.apk versionCode = %s\n  APK собран не из текущего version.json. Пересобери: обнови version.json → make apk → make deploy-apk.\033[0m\n' "$want" "$got" >&2
+  printf '\033[31m✗ Рассинхрон версии мобилки:\n    %s current_build = %s\n    %s versionCode = %s\n  APK собран не из текущего version.json. Пересобери: обнови version.json → make apk (или make apk-legacy) → make deploy-apk.\033[0m\n' "$VJSON" "$want" "$APK" "$got" >&2
   exit 1
 fi
 
-printf '\033[32m✓ versionCode APK совпадает с version.json (%s)\033[0m\n' "$want"
+printf '\033[32m✓ versionCode APK (%s) совпадает с %s (%s)\033[0m\n' "$APK" "$VJSON" "$want"

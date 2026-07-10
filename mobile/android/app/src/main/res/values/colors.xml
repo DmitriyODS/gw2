@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Фон запуска и WebView до загрузки UI — тёмный, как backgroundColor
+         десктоп-клиента (Electron), чтобы не мигало белым. -->
+    <color name="splashBackground">#1A1C1E</color>
+</resources>

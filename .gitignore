@@ -21,9 +21,14 @@ env/
 # Uploads (dev-файлы пользователей: аватарки, вложения)
 uploads/
 
-# APK мобильного приложения (бинарь, заливается на сервер через make deploy-apk;
-# apps/version.json с номером сборки остаётся в git — его читает Gradle)
+# APK мобильных приложений (бинари, заливаются на сервер через make deploy-apk;
+# apps/version.json и apps/mobile/version.json с номерами сборок остаются в
+# git — их читает Gradle)
 apps/*.apk
+apps/mobile/*.apk
+
+# Мобильная обёртка (Capacitor)
+mobile/node_modules/
 
 # Артефакты десктоп-клиента (заливаются через make deploy-desktop;
 # apps/desktop/version.json остаётся в git — версия обёртки)

@@ -17,7 +17,8 @@
       </div>
     </div>
 
-    <a class="about-mobile" href="/apps/groovework.apk" download>
+    <!-- Внутри самого мобильного приложения карточка не нужна. -->
+    <a v-if="showApkCard" class="about-mobile" href="/apps/mobile/groovework.apk" download>
       <div class="about-mobile-icon">
         <span class="material-symbols-outlined">android</span>
       </div>
@@ -112,6 +113,9 @@ const ua = navigator.userAgent
 const desktopOs = /Mac/i.test(navigator.platform || ua) ? 'mac' : /Win/i.test(navigator.platform || ua) ? 'win' : 'linux'
 // В самом Electron-клиенте и на телефонах предлагать установщик бессмысленно.
 const showDesktopCard = !/Electron/i.test(ua) && !/Android|iPhone|iPad/i.test(ua)
+// Мобильная обёртка (Capacitor) добавляет GrooveWorkApp в UA — внутри неё
+// карточку скачивания APK не показываем.
+const showApkCard = !/GrooveWorkApp/i.test(ua)
 
 const opening = ref(false)
 

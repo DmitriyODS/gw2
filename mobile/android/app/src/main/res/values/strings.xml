@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Groove Work</string>
+    <string name="title_activity_main">Groove Work</string>
+    <string name="package_name">com.kodass.groovework</string>
+    <string name="custom_url_scheme">com.kodass.groovework</string>
+</resources>
