@@ -38,11 +38,7 @@
           type="button"
           @click="amount = a"
         ><KudosCoin /> {{ a }}</button>
-        <input
-          v-model.number="amount"
-          type="number" min="1" :max="transferMax"
-          class="td-amount-input" placeholder="Сумма"
-        />
+        <AmountInput v-model="amount" :max="transferMax" class="td-amount" />
       </div>
       <p class="td-hint">
         За один раз — до {{ transferMax }} кудосов; сегодня осталось {{ leftToday }}.
@@ -91,6 +87,7 @@
 import { computed, ref, watch } from 'vue'
 import AppDialog from '@/components/common/AppDialog.vue'
 import KudosCoin from '@/components/pets/KudosCoin.vue'
+import AmountInput from '@/components/pets/bank/AmountInput.vue'
 import { usePetsStore } from '@/stores/pets.js'
 import { useNotificationsStore } from '@/stores/notifications.js'
 import { avatarUrl } from '@/utils/pets.js'
@@ -227,16 +224,9 @@ function firstName(fio = '') {
   background: var(--color-primary-container);
   color: var(--color-on-primary-container);
 }
-.td-amount-input {
-  width: 130px;
-  border: 1.5px solid var(--color-primary);
-  border-radius: var(--radius-md);
-  background: var(--color-surface);
-  color: var(--color-text);
-  font: inherit; font-size: 14px; font-weight: 600;
-  padding: 10px 14px;
-}
-.td-amount-input:focus { outline: none; }
+.td-amount { width: 140px; }
+/* Акцентная рамка поля суммы — как в референсе. */
+.td-amount :deep(input) { border: 1.5px solid var(--color-primary); font-size: 14px; padding-top: 10px; padding-bottom: 10px; }
 
 .td-tags { display: flex; gap: 8px; flex-wrap: wrap; }
 .td-tag {

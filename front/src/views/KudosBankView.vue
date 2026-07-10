@@ -102,14 +102,7 @@
           </p>
           <div class="kb-field">
             <label class="kb-field-label">Сумма вклада</label>
-            <div class="kb-field-input">
-              <input
-                ref="depositInput"
-                v-model.number="savingsAmount"
-                type="number" min="1" placeholder="0"
-              />
-              <KudosCoin class="kb-field-coin" />
-            </div>
+            <AmountInput ref="depositInput" v-model="savingsAmount" placeholder="0" />
           </div>
           <div class="kb-row">
             <button
@@ -145,10 +138,7 @@
             <p class="kb-card-hint">Остаток долга — {{ bank.loan }} кудосов. Погашение — с кошелька, вклад откроется после.</p>
             <div class="kb-field">
               <label class="kb-field-label">Сумма платежа</label>
-              <div class="kb-field-input">
-                <input ref="loanInput" v-model.number="loanAmount" type="number" min="1" placeholder="0" />
-                <KudosCoin class="kb-field-coin" />
-              </div>
+              <AmountInput ref="loanInput" v-model="loanAmount" placeholder="0" />
             </div>
             <div class="kb-row">
               <button class="btn-grad" :disabled="busy || !validAmount(loanAmount)" @click="repay(loanAmount)">
@@ -175,10 +165,7 @@
             </div>
             <div class="kb-field">
               <label class="kb-field-label">Сумма кредита</label>
-              <div class="kb-field-input">
-                <input ref="loanInput" v-model.number="loanAmount" type="number" min="1" :max="bank.tier.loan_max" placeholder="0" />
-                <KudosCoin class="kb-field-coin" />
-              </div>
+              <AmountInput ref="loanInput" v-model="loanAmount" :max="bank.tier.loan_max" placeholder="0" />
             </div>
             <button
               class="btn-grad kb-loan-take"
@@ -222,10 +209,7 @@
                 <span class="material-symbols-outlined kb-goal-chevron">{{ expandedGoalId === g.id ? 'expand_less' : 'expand_more' }}</span>
               </button>
               <div v-if="expandedGoalId === g.id" class="kb-goal-ops">
-                <div class="kb-field-input kb-goal-input">
-                  <input v-model.number="goalAmount" type="number" min="1" placeholder="Сумма" />
-                  <KudosCoin class="kb-field-coin" />
-                </div>
+                <AmountInput v-model="goalAmount" size="sm" class="kb-goal-input" />
                 <button class="btn-grad kb-goal-btn" :disabled="busy || !validAmount(goalAmount)" @click="goalDeposit(g)">
                   Пополнить
                 </button>
@@ -289,10 +273,8 @@
                 />
               </div>
               <div v-if="f.status === 'active'" class="kb-fund-ops">
-                <div class="kb-field-input kb-fund-input">
-                  <input v-model.number="fundAmounts[f.id]" type="number" min="1" placeholder="Сумма" />
-                  <KudosCoin class="kb-field-coin" />
-                </div>
+                <AmountInput :model-value="fundAmounts[f.id]" size="sm" class="kb-fund-input"
+                  @update:model-value="(v) => { fundAmounts[f.id] = v }" />
                 <button
                   class="btn-grad kb-fund-btn"
                   :disabled="busy || !validAmount(fundAmounts[f.id])"
@@ -452,6 +434,7 @@ import TransferDialog from '@/components/pets/bank/TransferDialog.vue'
 import GoalCreateDialog from '@/components/pets/bank/GoalCreateDialog.vue'
 import FundCreateDialog from '@/components/pets/bank/FundCreateDialog.vue'
 import ConfettiBurst from '@/components/pets/bank/ConfettiBurst.vue'
+import AmountInput from '@/components/pets/bank/AmountInput.vue'
 import { ledgerIcon, ledgerText, ledgerGroup, kindTitle } from '@/components/pets/bank/ledgerMeta.js'
 import { usePetsStore } from '@/stores/pets.js'
 import { useNotificationsStore } from '@/stores/notifications.js'
@@ -907,25 +890,9 @@ onMounted(() => {
 .kb-card-note { margin: 0; font-size: 12.5px; color: var(--color-text-dim); }
 .kb-card-note strong { color: var(--color-text); display: inline-flex; align-items: center; gap: 3px; }
 
-/* Поле суммы в стиле референса: label + крупный инпут с монетой справа. */
+/* Поле суммы в стиле референса: label + кастомный AmountInput с монетой. */
 .kb-field { display: flex; flex-direction: column; gap: 6px; }
 .kb-field-label { font-size: 12px; font-weight: 600; color: var(--color-text-dim); }
-.kb-field-input {
-  position: relative;
-  display: flex;
-  align-items: center;
-}
-.kb-field-input input {
-  width: 100%;
-  border: 1px solid var(--color-outline-dim);
-  border-radius: var(--radius-md);
-  background: var(--color-surface);
-  color: var(--color-text);
-  font: inherit; font-size: 17px; font-weight: 700;
-  padding: 11px 40px 11px 14px;
-}
-.kb-field-input input:focus { outline: none; border-color: var(--color-primary); }
-.kb-field-coin { position: absolute; right: 13px; font-size: 18px; pointer-events: none; }
 
 .kb-row { display: flex; gap: 10px; flex-wrap: wrap; }
 .kb-row .btn-grad, .kb-row .btn-glass { display: inline-flex; align-items: center; gap: 6px; }
@@ -973,7 +940,6 @@ onMounted(() => {
   padding: 0 12px 12px;
 }
 .kb-goal-input { width: 110px; }
-.kb-goal-input input { font-size: 13px; padding: 8px 32px 8px 10px; }
 .kb-goal-btn { font-size: 12.5px; padding: 8px 14px; }
 .kb-goal-delete {
   margin-left: auto;
@@ -1021,7 +987,6 @@ onMounted(() => {
 .kb-fund-donor { width: 24px; height: 24px; border-radius: 50%; object-fit: cover; border: 1.5px solid var(--color-surface); }
 .kb-fund-ops { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
 .kb-fund-input { width: 110px; }
-.kb-fund-input input { font-size: 13px; padding: 8px 32px 8px 10px; }
 .kb-fund-btn { font-size: 12.5px; padding: 8px 16px; }
 .kb-fund-close {
   margin-left: auto;

@@ -35,11 +35,7 @@
           @click="target = t"
         ><KudosCoin /> {{ t }}</button>
       </div>
-      <input
-        v-model.number="target"
-        type="number" min="1" max="10000"
-        class="gcd-input" placeholder="Цель, кудосов"
-      />
+      <AmountInput v-model="target" :max="10000" placeholder="Цель, кудосов" size="sm" class="gcd-target" />
     </div>
 
     <template #footer>
@@ -58,6 +54,7 @@
 import { computed, ref, watch } from 'vue'
 import AppDialog from '@/components/common/AppDialog.vue'
 import KudosCoin from '@/components/pets/KudosCoin.vue'
+import AmountInput from '@/components/pets/bank/AmountInput.vue'
 import { usePetsStore } from '@/stores/pets.js'
 import { useNotificationsStore } from '@/stores/notifications.js'
 
@@ -146,5 +143,6 @@ async function create() {
   color: var(--color-on-primary-container);
 }
 
+.gcd-target :deep(input) { font-size: 13px; }
 .gcd-footer { display: flex; justify-content: flex-end; width: 100%; }
 </style>

@@ -40,11 +40,7 @@
           type="button"
           @click="target = t"
         ><KudosCoin /> {{ t }}</button>
-        <input
-          v-model.number="target"
-          type="number" min="1" max="100000"
-          class="fcd-input fcd-input--target" placeholder="Цель"
-        />
+        <AmountInput v-model="target" :max="100000" placeholder="Цель" size="sm" class="fcd-target" />
       </div>
       <p class="fcd-hint">Взносы не возвращаются — это благотворительность. Сбор видят все коллеги.</p>
     </div>
@@ -65,6 +61,7 @@
 import { computed, ref, watch } from 'vue'
 import AppDialog from '@/components/common/AppDialog.vue'
 import KudosCoin from '@/components/pets/KudosCoin.vue'
+import AmountInput from '@/components/pets/bank/AmountInput.vue'
 import { usePetsStore } from '@/stores/pets.js'
 import { useNotificationsStore } from '@/stores/notifications.js'
 
@@ -142,7 +139,7 @@ async function create() {
   padding: 9px 11px;
 }
 .fcd-textarea { resize: vertical; }
-.fcd-input--target { width: 110px; }
+.fcd-target { width: 130px; }
 .fcd-input:focus { outline: none; border-color: var(--color-primary); }
 
 .fcd-targets { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
