@@ -150,6 +150,30 @@
       </Transition>
     </div>
 
+    <!-- Плавающая кнопка ассистента -->
+    <div class="tb-card">
+      <div class="tb-card-head">
+        <div class="tb-card-head-icon" data-tone="secondary">
+          <span class="material-symbols-outlined">smart_toy</span>
+        </div>
+        <div class="tb-card-head-text">
+          <h4 class="tb-card-title">Плавающая кнопка ассистента</h4>
+          <p class="tb-card-sub">
+            Кнопка ИИ-ассистента и мини-чата поверх всех разделов.
+            Её можно перетащить в удобное место, а этим тумблером — скрыть совсем.
+          </p>
+        </div>
+        <label class="gw-switch" title="Показывать плавающую кнопку ассистента">
+          <input
+            type="checkbox"
+            :checked="themeStore.hubFabEnabled"
+            @change="themeStore.setHubFabEnabled($event.target.checked)"
+          />
+          <span class="gw-switch-track"><span class="gw-switch-thumb" /></span>
+        </label>
+      </div>
+    </div>
+
     <!-- Галерея готовых тем -->
     <div class="tb-card">
       <div class="tb-card-head">

@@ -111,4 +111,9 @@ describe('MiniMessenger (хаб Ассистент/Сообщения)', () => {
     const w = factory({ state: { call: { phase: 'active', isMinimized: true } } })
     expect(w.find('.mini-fab').exists()).toBe(true)
   })
+
+  it('FAB скрыт, если кнопка выключена тумблером в настройках внешнего вида', () => {
+    const w = factory({ state: { theme: { hubFabEnabled: false } } })
+    expect(w.find('.mini-fab').exists()).toBe(false)
+  })
 })

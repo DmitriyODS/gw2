@@ -1,5 +1,5 @@
 <template>
-  <div v-if="!hidden" class="mini-mess float-fade" :class="{ 'panel-open': open, raised, 'float-hidden': floatingHidden && !open }">
+  <div v-if="!hidden" class="mini-mess float-fade" :class="{ 'panel-open': open, 'float-hidden': floatingHidden && !open }">
     <!-- Скрим под мобильным листом (на десктопе скрыт CSS'ом). -->
     <transition name="mini-fade">
       <div v-if="open" class="mini-backdrop" @click="closePanel" />
@@ -258,21 +258,30 @@
     />
 
     <!-- Кнопка-FAB (прячется, пока открыт любой AppDialog — на мобильном
-         bottom sheet живёт в той же нижней зоне экрана) -->
-    <button
+         bottom sheet живёт в той же нижней зоне экрана). Перетаскивается:
+         drag + snap к краю, позиция в localStorage; клик сразу после
+         перетаскивания игнорируется. -->
+    <div
       v-show="!anyModalOpen || open"
-      class="mini-fab float-spring"
-      :class="{ active: open }"
-      data-tutorial="mini-hub"
-      @click="toggle"
-      :title="fabTitle"
-      :aria-label="fabTitle"
+      class="mini-fab-anchor"
+      :class="{ dragging: fabDragging }"
+      :style="fabStyle"
     >
-      <span class="material-symbols-outlined">{{ fabIcon }}</span>
-      <span v-if="!open && messenger.totalUnread" class="mini-fab-badge">
-        {{ messenger.totalUnread > 99 ? '99+' : messenger.totalUnread }}
-      </span>
-    </button>
+      <button
+        class="mini-fab float-spring"
+        :class="{ active: open }"
+        data-tutorial="mini-hub"
+        :title="fabTitle"
+        :aria-label="fabTitle"
+        @pointerdown="onFabPointerDown"
+        @click="onFabClick"
+      >
+        <span class="material-symbols-outlined">{{ fabIcon }}</span>
+        <span v-if="!open && messenger.totalUnread" class="mini-fab-badge">
+          {{ messenger.totalUnread > 99 ? '99+' : messenger.totalUnread }}
+        </span>
+      </button>
+    </div>
   </div>
 </template>
 
@@ -281,6 +290,10 @@ import { ref, computed, watch, nextTick, onMounted, onBeforeUnmount } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { anyModalOpen, registerOpenModal, unregisterOpenModal } from '@/composables/useOpenModals.js'
 import { floatingHidden, installFloatingHide } from '@/composables/useFloatingHide.js'
+import { useDraggable } from '@/composables/useDraggable.js'
+import { useBreakpoint } from '@/composables/useBreakpoint.js'
+import { useThemeStore } from '@/stores/theme.js'
+import { storageGetJSON } from '@/utils/storage.js'
 import { useMessengerStore } from '@/stores/messenger.js'
 import { useAuthStore } from '@/stores/auth.js'
 import { useCallStore } from '@/stores/call.js'
@@ -307,6 +320,8 @@ const authStore = useAuthStore()
 const callStore = useCallStore()
 const assistantStore = useAssistantStore()
 const notif = useNotificationsStore()
+const themeStore = useThemeStore()
+const { isMobile } = useBreakpoint()
 
 async function onJoinCall(callInfo) {
   await callStore.joinExistingCall(callInfo)
@@ -365,18 +380,51 @@ async function onDrop(e) {
 }
 
 // Ассистенту нужен постоянный доступ (везде, включая мобильные и
-// /messenger) — хаб скрываем только на fullscreen-роутах (ТВ, звонок по
-// ссылке-приглашению) и во время активного полноэкранного звонка (сам
+// /messenger) — хаб скрываем на fullscreen-роутах (ТВ, звонок по
+// ссылке-приглашению), во время активного полноэкранного звонка (сам
 // CallView тоже перекрывает экран, z-index 11500 > 10050 — но явно прячем
-// FAB и на случай его мини-режима смены).
+// FAB и на случай его мини-режима смены) и когда кнопка выключена
+// тумблером в настройках внешнего вида.
 const hidden = computed(() => {
+  if (!themeStore.hubFabEnabled) return true
   if (route.meta?.fullscreen) return true
   return callStore.isInCall && !callStore.isMinimized
 })
 
-// В полном мессенджере поле ввода упирается в правый нижний угол — FAB в
-// стандартной позиции заслонял бы кнопку отправки, поднимаем его выше.
-const raised = computed(() => route.path.startsWith('/messenger'))
+/* ── Перетаскивание FAB (drag + snap к краю, как у FloatingPet) ── */
+const FAB_SIZE = { w: 56, h: 56 }
+const FAB_POS_KEY = 'gw_hub_fab_pos'
+const isNarrow = () => typeof window !== 'undefined' && window.innerWidth <= 768
+
+const { pos: fabPos, dragging: fabDragging, onPointerDown: onFabPointerDown, wasDragged } = useDraggable({
+  storageKey: FAB_POS_KEY,
+  size: FAB_SIZE,
+  defaultCorner: 'bottom-right',
+  margin: isNarrow() ? 12 : 20,
+  // На мобильном не пускаем ниже зоны AppBottomNav + AppFab «Создать»
+  // (прежняя фиксированная позиция — bottom:150px).
+  bottomInset: () => (isNarrow() ? 138 : 0),
+})
+
+// Пока позицию не трогали, в полном мессенджере (десктоп) FAB поднимается над
+// полем ввода — в стандартном углу он заслонял бы кнопку отправки.
+// Пользовательскую позицию не сдвигаем: она выбрана осознанно.
+const hasCustomPos = ref(!!storageGetJSON(FAB_POS_KEY, null))
+watch(fabDragging, (v, prev) => {
+  if (prev && !v && wasDragged()) hasCustomPos.value = true
+})
+const raisedOffset = computed(() =>
+  (!hasCustomPos.value && !isMobile.value && route.path.startsWith('/messenger')) ? 76 : 0)
+
+// transform вместо left/top: композит-слой, без layout на каждый кадр драга.
+const fabStyle = computed(() => ({
+  transform: `translate3d(${fabPos.value.x}px, ${fabPos.value.y - raisedOffset.value}px, 0)`,
+}))
+
+function onFabClick() {
+  if (wasDragged()) return // клик сразу после перетаскивания — игнорируем
+  toggle()
+}
 
 /* ── Вкладки хаба: «Ассистент» (дефолт) / «Сообщения» ──────── */
 const TAB_STORAGE_KEY = 'gw_assistant_hub_tab'
@@ -448,21 +496,47 @@ const ASSISTANT_SUGGESTIONS = [
   'Найди задачу про отчёт',
 ]
 
-// Мобильная панель — нижний лист почти во весь экран; при открытой клавиатуре
-// iOS перевешиваем лист к верху и поджимаем высоту под visualViewport
-// (fixed-элементы клавиатура не двигает, bottom-якорь ушёл бы под неё).
-const panelStyle = ref({})
-function updatePanelViewport() {
-  const vv = typeof window !== 'undefined' ? window.visualViewport : null
-  if (!open.value || !vv || window.innerWidth > 768) {
-    panelStyle.value = {}
-    return
+// Геометрия панели. Десктоп: поповер якорится к FAB (над ним, при нехватке
+// места — под ним) и клампится во вьюпорт — FAB теперь перетаскиваемый, панель
+// следует за ним. Мобильный: нижний лист из CSS; JS вмешивается только при
+// открытой клавиатуре iOS — перевешиваем лист к верху и поджимаем высоту под
+// visualViewport (fixed-элементы клавиатура не двигает, bottom-якорь ушёл бы
+// под неё).
+const viewportTick = ref(0)
+const bumpViewport = () => { viewportTick.value++ }
+
+const panelStyle = computed(() => {
+  viewportTick.value // зависимость: пересчёт на resize/клавиатуру
+  if (typeof window === 'undefined') return {}
+  if (window.innerWidth <= 768) {
+    const vv = window.visualViewport
+    return open.value && vv && vv.height < window.innerHeight - 60
+      ? { top: '0px', bottom: 'auto', height: `${Math.round(vv.height)}px`, borderRadius: '0px' }
+      : {}
   }
-  panelStyle.value = vv.height < window.innerHeight - 60
-    ? { top: '0px', bottom: 'auto', height: `${Math.round(vv.height)}px`, borderRadius: '0px' }
-    : {}
-}
-watch(open, () => nextTick(updatePanelViewport))
+  const vw = window.innerWidth
+  const vh = window.innerHeight
+  const margin = 16
+  const gap = 12
+  const w = Math.min(360, vw - 2 * margin)
+  const h = Math.min(560, Math.round(vh * 0.7))
+  const fx = fabPos.value.x
+  const fy = fabPos.value.y - raisedOffset.value
+  const left = Math.min(Math.max(fx + FAB_SIZE.w - w, margin), Math.max(margin, vw - w - margin))
+  const above = fy - gap - h >= margin
+  const top = above
+    ? fy - gap - h
+    : Math.min(Math.max(fy + FAB_SIZE.h + gap, margin), Math.max(margin, vh - h - margin))
+  // Панель «выпрыгивает» из кнопки — origin анимации в её точке.
+  const originX = Math.min(Math.max(fx + FAB_SIZE.w / 2 - left, 0), w)
+  return {
+    left: `${left}px`,
+    top: `${top}px`,
+    width: `${w}px`,
+    height: `${h}px`,
+    transformOrigin: `${originX}px ${above ? '100%' : '0%'}`,
+  }
+})
 
 // На мобильном открытый лист — полноэкранная модалка: регистрируем его в
 // глобальном счётчике, чтобы плавающий питомец (z-index выше) не висел поверх
@@ -480,11 +554,13 @@ watch(open, (v) => {
 })
 
 onMounted(() => {
-  window.visualViewport?.addEventListener('resize', updatePanelViewport)
+  window.visualViewport?.addEventListener('resize', bumpViewport)
+  window.addEventListener('resize', bumpViewport, { passive: true })
   installFloatingHide()
 })
 onBeforeUnmount(() => {
-  window.visualViewport?.removeEventListener('resize', updatePanelViewport)
+  window.visualViewport?.removeEventListener('resize', bumpViewport)
+  window.removeEventListener('resize', bumpViewport)
   if (hubRegistered) unregisterOpenModal()
 })
 
@@ -757,18 +833,27 @@ watch([open, activeTab], async ([isOpen, tab]) => {
 </script>
 
 <style scoped>
-/* Поверх ActiveUnitModal (z-index 9999) — чтобы можно было ответить, не
-   закрывая активный юнит. */
+/* Корень — нулевой фиксированный якорь: FAB и панель позиционируются
+   независимо (каждый сам position:fixed). Драг-transform нельзя вешать на
+   общий контейнер — он стал бы containing block для fixed мобильного
+   листа/скрима. Поверх ActiveUnitModal (z-index 9999) — чтобы можно было
+   ответить, не закрывая активный юнит. */
 .mini-mess {
   position: fixed;
-  right: 20px;
-  bottom: 20px;
+  left: 0;
+  top: 0;
   z-index: 10050;
-  display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  gap: 12px;
 }
+
+/* Якорь FAB: позиция — transform (композит-слой, без layout при драге). */
+.mini-fab-anchor {
+  position: fixed;
+  left: 0;
+  top: 0;
+  touch-action: none;
+}
+
+.mini-fab-anchor.dragging .mini-fab { cursor: grabbing; }
 
 .mini-fab {
   width: 56px;
@@ -784,12 +869,6 @@ watch([open, activeTab], async ([isOpen, tab]) => {
   box-shadow: var(--shadow-lg);
   position: relative;
   transition: background 0.15s, transform 0.12s;
-}
-
-/* Выше поля ввода мессенджера (десктоп): нижний правый угол занят кнопкой
-   отправки. На мобильном своя геометрия ниже. */
-@media (min-width: 769px) {
-  .mini-mess.raised { bottom: 96px; }
 }
 
 .mini-fab:hover { background: var(--color-primary-hover); transform: translateY(-1px); }
@@ -818,6 +897,9 @@ watch([open, activeTab], async ([isOpen, tab]) => {
 /* Плавающая панель — стекло (Expressive Glass): контент просвечивает,
    внутренние поверхности прозрачные, текст лежит на плотных пузырях. */
 .mini-panel {
+  /* Десктоп: left/top/размеры считает panelStyle (якорь к FAB + кламп во
+     вьюпорт); CSS-размеры — фолбэк. */
+  position: fixed;
   width: 360px;
   max-width: calc(100vw - 32px);
   height: 70dvh;
@@ -1070,14 +1152,6 @@ watch([open, activeTab], async ([isOpen, tab]) => {
 }
 
 @media (max-width: 768px) {
-  .mini-mess {
-    right: 12px;
-    /* Хаб теперь виден и на мобильном (в т.ч. на /tasks и /messenger, где
-       есть свой AppFab «Создать» на right:16px/bottom:~136px+safe) —
-       поднимаем выше, чтобы 56px-кружки не накладывались друг на друга. */
-    bottom: calc(150px + env(safe-area-inset-bottom, 0px));
-  }
-
   /* Пока открыт лист, FAB не нужен (закрытие — крестик в шапке или скрим),
      иначе он висит поверх листа посреди переписки. */
   .mini-mess.panel-open .mini-fab { display: none; }

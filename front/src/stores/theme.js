@@ -354,6 +354,14 @@ export const useThemeStore = defineStore('theme', () => {
     applyBgGradient()
   }
 
+  /* ── Плавающая кнопка хаба (ассистент/мини-чат) ── */
+  const hubFabEnabled = ref(storageGet('gw_hub_fab_enabled', 'true') !== 'false')
+
+  function setHubFabEnabled(v) {
+    hubFabEnabled.value = !!v
+    storageSet('gw_hub_fab_enabled', String(hubFabEnabled.value))
+  }
+
   function getVars(name) {
     if (PRESETS[name]) return PRESETS[name]
     const custom = customThemes.value.find(t => t.name === name)
@@ -426,11 +434,11 @@ export const useThemeStore = defineStore('theme', () => {
   }
 
   return {
-    currentPreset, mode, dark, customThemes, schedule, bgGradient,
+    currentPreset, mode, dark, customThemes, schedule, bgGradient, hubFabEnabled,
     presetNames: Object.keys(PRESETS),
     presetLabels: PRESET_LABELS,
     applyTheme, applyVars, setMode, setSchedule, saveCustomTheme, deleteCustomTheme,
     exportTheme, importTheme, init, getVars, randomTheme,
-    setBgGradientEnabled, regenerateBgGradient, resetBgGradient,
+    setBgGradientEnabled, regenerateBgGradient, resetBgGradient, setHubFabEnabled,
   }
 })
