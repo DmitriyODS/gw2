@@ -162,8 +162,8 @@ export const usePetsStore = defineStore('pets', () => {
     const entry = zoo.value.find((p) => p.user_id === ownerUserId)
     if (entry) Object.assign(entry, res)
     // Списание у гладящего придёт сокетом pet:update (авторитетно), но кудосы
-    // в шапке отражаем сразу (domain.StrokeCost = 1).
-    if (pet.value) pet.value = { ...pet.value, kudos: Math.max(0, (pet.value.kudos || 0) - 1) }
+    // в шапке отражаем сразу (domain.StrokeCost = 2).
+    if (pet.value) pet.value = { ...pet.value, kudos: Math.max(0, (pet.value.kudos || 0) - 2) }
     return res
   }
 
@@ -202,6 +202,67 @@ export const usePetsStore = defineStore('pets', () => {
     activityLoaded.value = true
   }
 
+  // ─────────────────────────── кудо-банк ─────────────────────────
+
+  const bank = ref(null)
+  const ledger = ref([])
+  const ledgerNextBeforeId = ref(null)
+
+  function applyBank(res) {
+    bank.value = res
+    if (pet.value) pet.value = { ...pet.value, kudos: res.kudos }
+    if (res.interest_paid) {
+      try {
+        useNotificationsStore().success(`Вклад принёс +${res.interest_paid} кудосов процентов`)
+      } catch { /* вне Pinia-контекста — не критично */ }
+    }
+  }
+
+  async function fetchBank() {
+    applyBank(await api.getBank())
+  }
+
+  // Выписка: первая страница (reset) либо продолжение keyset-курсора.
+  async function fetchLedger({ more = false } = {}) {
+    const beforeId = more ? ledgerNextBeforeId.value || 0 : 0
+    const res = await api.getBankLedger(beforeId)
+    ledger.value = more ? [...ledger.value, ...(res.items || [])] : res.items || []
+    ledgerNextBeforeId.value = res.next_before_id ?? null
+  }
+
+  async function transferKudos(toUserId, amount, comment) {
+    applyBank(await api.transferKudos(toUserId, amount, comment))
+    await fetchLedger().catch(() => {})
+  }
+
+  async function bankDeposit(amount) {
+    applyBank(await api.bankDeposit(amount))
+  }
+
+  async function bankWithdraw(amount) {
+    applyBank(await api.bankWithdraw(amount))
+  }
+
+  async function bankTakeLoan(amount) {
+    applyBank(await api.bankTakeLoan(amount))
+  }
+
+  async function bankRepayLoan(amount) {
+    applyBank(await api.bankRepayLoan(amount))
+  }
+
+  // Входящий перевод (сокет kudos:received — адресно в мою комнату).
+  function applyKudosReceived(data) {
+    if (!isMine(data.company_id)) return
+    const from = data.from?.fio ? ` от ${data.from.fio}` : ''
+    const note = data.comment ? ` — «${data.comment}»` : ''
+    try {
+      useNotificationsStore().success(`+${data.amount} кудосов${from}${note}`)
+    } catch { /* noop */ }
+    // Баланс придёт авторитетным pet:update; сводку банка освежаем, если открыта.
+    if (bank.value) fetchBank().catch(() => {})
+  }
+
   // ───────────────────────── сокет-события ───────────────────────
 
   function applyPetUpdate(data) {
@@ -237,18 +298,22 @@ export const usePetsStore = defineStore('pets', () => {
     activityLoaded.value = false
     season.value = null
     house.value = null
+    bank.value = null
+    ledger.value = []
+    ledgerNextBeforeId.value = null
   }
 
   return {
     pet, shop, shopLoaded, zoo, rating, live, liveLoaded, activityLog, activityLoaded,
-    season, house,
+    season, house, bank, ledger, ledgerNextBeforeId,
     myId, myCompanyId, isMine,
     fetchPet, feedPet, renamePet, equipItem, switchSpecies, resetSpecies, claimQuest, startAdventure,
     prestigePet, fetchSeason, claimSeasonReward, fetchHouse, buyHouseDecor, arrangeHouse,
     fetchShop, buyItem, buySpecies, claimMystery,
     walkPet, healPet, strokePet,
     fetchZoo, deleteColleaguePet, fetchRating, fetchLive, fetchActivityLog,
-    applyPetUpdate, applyPetDeleted,
+    fetchBank, fetchLedger, transferKudos, bankDeposit, bankWithdraw, bankTakeLoan, bankRepayLoan,
+    applyPetUpdate, applyPetDeleted, applyKudosReceived,
     reset,
   }
 })

@@ -197,6 +197,9 @@ type ShopItemDTO struct {
 	ActiveFrom     *string `json:"active_from,omitempty"`
 	ActiveTo       *string `json:"active_to,omitempty"`
 	Owned          bool    `json:"owned"`
+	// Скидка дня: фактическая цена и процент (нет скидки — поля отсутствуют).
+	SalePriceKudos *int `json:"sale_price_kudos,omitempty"`
+	DiscountPct    *int `json:"discount_pct,omitempty"`
 }
 
 // ShopDTO — ответ GET /shop: витрина + признак «сюрприз дня уже получен»
@@ -303,6 +306,105 @@ func NewHouse(p *domain.Pet) *HouseDTO {
 		PlacedMax: domain.HousePlacedMax,
 		Kudos:     p.Kudos,
 	}
+}
+
+// ── Кудо-банк ───────────────────────────────────────────────────────
+
+// BankTierDTO — уровень клиента банка и его условия.
+type BankTierDTO struct {
+	Key              string `json:"key"`
+	Title            string `json:"title"`
+	Threshold        int    `json:"threshold"`
+	SavingsRatePct   int    `json:"savings_rate_pct"`
+	LoanFeePct       int    `json:"loan_fee_pct"`
+	LoanMax          int    `json:"loan_max"`
+	TransferDailyCap int    `json:"transfer_daily_cap"`
+	TransferMax      int    `json:"transfer_max"`
+}
+
+func newBankTier(t domain.BankTier) BankTierDTO {
+	return BankTierDTO{
+		Key: t.Key, Title: t.Title, Threshold: t.Threshold,
+		SavingsRatePct: t.SavingsRatePct, LoanFeePct: t.LoanFeePct,
+		LoanMax: t.LoanMax, TransferDailyCap: t.TransferDailyCap, TransferMax: t.TransferMax,
+	}
+}
+
+// GenerousDTO — строка топа щедрости (подарено кудосов за 30 дней).
+type GenerousDTO struct {
+	User *domain.UserRef `json:"user"`
+	Sent int             `json:"sent"`
+}
+
+// BankDTO — сводка кудо-банка владельца.
+type BankDTO struct {
+	Kudos             int           `json:"kudos"`
+	Savings           int           `json:"savings"`
+	Loan              int           `json:"loan"`
+	Earned            int           `json:"earned"` // заработано за всё время — прогресс уровня
+	Tier              BankTierDTO   `json:"tier"`
+	NextTier          *BankTierDTO  `json:"next_tier,omitempty"`
+	SavingsDailyMax   int           `json:"savings_daily_max"`
+	TransferLeftToday int           `json:"transfer_left_today"`
+	MonthIn           int           `json:"month_in"`
+	MonthOut          int           `json:"month_out"`
+	TopGenerous       []*GenerousDTO `json:"top_generous"`
+	// InterestPaid — разовое: проценты, начисленные при этом обращении.
+	InterestPaid *int `json:"interest_paid,omitempty"`
+}
+
+func NewBank(p *domain.Pet, tier domain.BankTier, next *domain.BankTier,
+	earned, monthIn, monthOut int, top []domain.GenerousEntry) *BankDTO {
+
+	d := &BankDTO{
+		Kudos: p.Kudos, Savings: p.BankSavings, Loan: p.BankLoan,
+		Earned: earned, Tier: newBankTier(tier),
+		SavingsDailyMax: domain.SavingsDailyMax,
+		MonthIn:         monthIn, MonthOut: monthOut,
+		TopGenerous: make([]*GenerousDTO, 0, len(top)),
+	}
+	if next != nil {
+		n := newBankTier(*next)
+		d.NextTier = &n
+	}
+	for _, g := range top {
+		d.TopGenerous = append(d.TopGenerous, &GenerousDTO{User: g.User, Sent: g.Sent})
+	}
+	return d
+}
+
+// LedgerEntryDTO — операция выписки.
+type LedgerEntryDTO struct {
+	ID           int64           `json:"id"`
+	Delta        int             `json:"delta"`
+	Kind         string          `json:"kind"`
+	Comment      string          `json:"comment,omitempty"`
+	Counterparty *domain.UserRef `json:"counterparty,omitempty"`
+	CreatedAt    string          `json:"created_at"`
+}
+
+// LedgerDTO — страница выписки (keyset: next_before_id для «Показать ещё»).
+type LedgerDTO struct {
+	Items        []*LedgerEntryDTO `json:"items"`
+	NextBeforeID *int64            `json:"next_before_id,omitempty"`
+}
+
+// NewLedger — страница из pageSize записей; запрос делался на pageSize+1,
+// лишняя строка означает «есть ещё».
+func NewLedger(entries []*domain.LedgerEntry, pageSize int) *LedgerDTO {
+	d := &LedgerDTO{Items: make([]*LedgerEntryDTO, 0, min(len(entries), pageSize))}
+	for i, e := range entries {
+		if i >= pageSize {
+			last := d.Items[len(d.Items)-1].ID
+			d.NextBeforeID = &last
+			break
+		}
+		d.Items = append(d.Items, &LedgerEntryDTO{
+			ID: e.ID, Delta: e.Delta, Kind: e.Kind, Comment: e.Comment,
+			Counterparty: e.Counterparty, CreatedAt: isoTime(e.CreatedAt),
+		})
+	}
+	return d
 }
 
 // ActivityLogDTO — запись приватной истории активности питомца.

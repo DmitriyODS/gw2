@@ -54,11 +54,12 @@ func main() {
 	petRepo := postgres.NewPetRepo(pool)
 	shopRepo := postgres.NewShopRepo(pool)
 	activityRepo := postgres.NewActivityRepo(pool)
+	bankRepo := postgres.NewBankRepo(pool)
 	platform := postgres.NewPlatformRepo(pool)
 	daily := redisx.New(rdb, log)
 	pub := events.NewPublisher(rdb, log, "gw2:pets:events")
 
-	svc := service.New(petRepo, shopRepo, activityRepo, platform, platform,
+	svc := service.New(petRepo, shopRepo, activityRepo, bankRepo, platform, platform,
 		platform, daily, pub, log)
 	eps := endpoint.New(svc)
 

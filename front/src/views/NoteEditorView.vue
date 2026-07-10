@@ -118,13 +118,14 @@
       />
       <template v-else>
         <input
+          ref="titleInput"
           v-model="title"
           class="np-title"
           type="text"
           placeholder="Название заметки"
           maxlength="300"
           :readonly="readOnly"
-          @input="markDirty"
+          @input="onTitleInput"
           @blur="flush"
           @keydown.enter.prevent="focusEditor"
         />
@@ -321,9 +322,21 @@ function markDirty() {
   saveTimer = setTimeout(flush, 1500)
 }
 
+// Момент последнего ЖИВОГО ввода в тело: гейт применения чужого дока
+// (isTyping) — не «есть несохранённое», а «печатают прямо сейчас».
+let lastDocInputAt = 0
+
 function onDocChange(json) {
   pendingDoc = json
+  lastDocInputAt = Date.now()
   markDirty()
+}
+
+// Ввод названия — обычный автосейв + live-трансляция соавторам (название
+// едет в collab вместе с doc).
+function onTitleInput() {
+  markDirty()
+  collab.sendDoc()
 }
 
 async function flush() {
@@ -415,12 +428,25 @@ async function exportTxt() {
 
 // ── Совместное редактирование (присутствие, курсоры, живые правки) ──
 const namesMap = ref({}) // user_id → ФИО (владелец + адресаты) для подписей курсоров
+const titleInput = ref(null)
 
 const collab = useNoteCollab({
   noteId,
   editorRef,
   canEdit: computed(() => !readOnly.value),
-  isLocallyDirty: () => saveState.value !== 'saved',
+  // Чужой doc не применяем, только пока РЕАЛЬНО печатают в теле: фокус в
+  // редакторе + ввод за последние 1.5с. «Грязный» автосейв сам по себе не
+  // блокирует — иначе соавторы глушат правки друг друга на всё окно дебаунса.
+  isTyping: () => {
+    const ed = editorRef.value?.editor
+    return !!ed?.isFocused && Date.now() - lastDocInputAt < 1500
+  },
+  getTitle: () => title.value,
+  // Чужое название не затираем только под курсором в поле названия.
+  onRemoteTitle: (t) => {
+    if (document.activeElement === titleInput.value) return
+    if (t !== title.value) title.value = t
+  },
   fallbackNames: (id) => namesMap.value[id],
 })
 const collabOthers = collab.others

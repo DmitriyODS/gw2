@@ -81,6 +81,10 @@ func (s *Service) ListTasks(ctx context.Context, f domain.TaskListFilter) (*dto.
 	if err != nil {
 		return nil, err
 	}
+	tagsByTask, err := s.tags.TagsByTasks(ctx, taskIDs)
+	if err != nil {
+		return nil, err
+	}
 	ygEnabled := true
 	if f.CompanyID != nil {
 		ygEnabled = s.yougileEnabled(ctx, *f.CompanyID)
@@ -98,6 +102,7 @@ func (s *Service) ListTasks(ctx context.Context, f domain.TaskListFilter) (*dto.
 			HasUnits:       enrich.WithUnits[t.ID],
 			ActiveUsers:    enrich.ActiveUsers[t.ID],
 			Color:          color,
+			Tags:           tagsByTask[t.ID],
 			YougileEnabled: ygEnabled,
 		}))
 	}

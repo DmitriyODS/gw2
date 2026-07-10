@@ -17,13 +17,45 @@
       padding: 12px 28px; border: 0; border-radius: 999px; font-size: 15px; font-weight: 600;
       background: #a8c8ff; color: #0a305f; cursor: pointer;
     }
+    .hint { font-size: 12.5px; opacity: .55; margin-top: 16px; }
+    .spin {
+      display: inline-block; width: 12px; height: 12px; margin-right: 6px; vertical-align: -1px;
+      border: 2px solid currentColor; border-top-color: transparent; border-radius: 50%;
+      animation: r 0.9s linear infinite;
+    }
+    @keyframes r { to { transform: rotate(360deg); } }
   </style>
 </head>
 <body>
   <div class="box">
     <h1>Нет соединения с сервером</h1>
-    <p>Groove Work не смог загрузиться. Проверьте интернет и попробуйте ещё раз.</p>
-    <button onclick="location.replace('https://gw.kodass.ru')">Повторить</button>
+    <p>Groove Work не смог загрузиться. Проверьте интернет — приложение
+       подключится само, как только сеть появится.</p>
+    <button id="retry">Повторить</button>
+    <p class="hint"><span class="spin"></span>Повторяем подключение автоматически…</p>
   </div>
+  <script>
+    // Авто-восстановление первого запуска: холодный старт без сети/DNS раньше
+    // оставлял пользователя на этой странице навсегда (или на пустом WebView) —
+    // теперь повторяем сами с бэкоффом 2с→15с. Задержка переживает перезагрузку
+    // страницы (каждая неудача снова открывает error.html) через sessionStorage.
+    var APP_URL = 'https://gw.kodass.ru'
+    var delay = Math.min(Number(sessionStorage.getItem('gw_retry_delay')) || 2000, 15000)
+    sessionStorage.setItem('gw_retry_delay', String(Math.min(delay * 2, 15000)))
+
+    function retry() { location.replace(APP_URL) }
+
+    function schedule() {
+      setTimeout(function () {
+        // Сеть точно отсутствует — не дёргаем загрузку, ждём события online.
+        if (navigator.onLine === false) { schedule(); return }
+        retry()
+      }, delay)
+    }
+
+    document.getElementById('retry').addEventListener('click', retry)
+    window.addEventListener('online', retry)
+    schedule()
+  </script>
 </body>
 </html>

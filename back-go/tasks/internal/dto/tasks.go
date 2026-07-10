@@ -70,6 +70,33 @@ type StageRef struct {
 	Order int    `json:"order"`
 }
 
+// TagDTO — тег компании (справочник и вложенная ссылка задачи).
+type TagDTO struct {
+	Color string `json:"color"`
+	ID    int64  `json:"id"`
+	Name  string `json:"name"`
+}
+
+func NewTagRefs(tags []domain.TagRef) []TagDTO {
+	out := make([]TagDTO, 0, len(tags))
+	for _, t := range tags {
+		out = append(out, TagDTO{Color: t.Color, ID: t.ID, Name: t.Name})
+	}
+	return out
+}
+
+func NewTag(t *domain.Tag) TagDTO {
+	return TagDTO{Color: t.Color, ID: t.ID, Name: t.Name}
+}
+
+func NewTags(items []*domain.Tag) []TagDTO {
+	out := make([]TagDTO, 0, len(items))
+	for _, t := range items {
+		out = append(out, NewTag(t))
+	}
+	return out
+}
+
 // Task — форма TaskSchema + поля _enrich_task (active_users, color,
 // is_favorite, has_units).
 type Task struct {
@@ -94,6 +121,7 @@ type Task struct {
 	ResponsibleUserID *int64    `json:"responsible_user_id"`
 	Stage             *StageRef `json:"stage"`
 	StageID           *int64    `json:"stage_id"`
+	Tags              []TagDTO  `json:"tags"`
 	YougileBoardID    *string   `json:"yougile_board_id"`
 	YougileColumnID   *string   `json:"yougile_column_id"`
 	YougileIDShort    *string   `json:"yougile_id_short"`
@@ -107,6 +135,7 @@ type TaskEnrich struct {
 	HasUnits       bool
 	ActiveUsers    []domain.UserRef
 	Color          *string
+	Tags           []domain.TagRef
 	YougileEnabled bool
 }
 
@@ -130,6 +159,7 @@ func NewTask(t *domain.Task, e TaskEnrich) Task {
 		ReceivedAt:        JSONTime(t.ReceivedAt),
 		ResponsibleUserID: t.ResponsibleUserID,
 		StageID:           t.StageID,
+		Tags:              NewTagRefs(e.Tags),
 		YougileBoardID:    t.YougileBoardID,
 		YougileColumnID:   t.YougileColumnID,
 		YougileIDShort:    t.YougileIDShort,
@@ -176,6 +206,7 @@ type TaskBroadcast struct {
 	ResponsibleUserID *int64    `json:"responsible_user_id"`
 	Stage             *StageRef `json:"stage"`
 	StageID           *int64    `json:"stage_id"`
+	Tags              []TagDTO  `json:"tags"`
 	YougileBoardID    *string   `json:"yougile_board_id"`
 	YougileColumnID   *string   `json:"yougile_column_id"`
 	YougileIDShort    *string   `json:"yougile_id_short"`
@@ -192,6 +223,9 @@ func NewTaskBroadcast(t Task) TaskBroadcast {
 		IsFavorite: t.IsFavorite, LinkYougile: t.LinkYougile, Name: t.Name,
 		ReceivedAt: t.ReceivedAt, Responsible: t.Responsible,
 		ResponsibleUserID: t.ResponsibleUserID, Stage: t.Stage, StageID: t.StageID,
+		// Теги общие для компании (не личные, в отличие от color) — уходят
+		// в броадкаст как есть.
+		Tags:           t.Tags,
 		YougileBoardID: t.YougileBoardID, YougileColumnID: t.YougileColumnID,
 		YougileIDShort: t.YougileIDShort, YougileProjectID: t.YougileProjectID,
 		YougileTaskID: t.YougileTaskID,

@@ -149,6 +149,7 @@ func (s *Service) ClaimSeasonReward(ctx context.Context, userID, companyID int64
 			return nil, err
 		}
 		pet.Kudos, pet.XP = kudos, xp
+		s.appendLedger(ctx, userID, companyID, reward.Amount, "season", nil, "")
 	}
 	s.appendActivity(ctx, userID, "season_reward",
 		map[string]any{"threshold": threshold, "kind": reward.Kind, "key": reward.Key, "amount": reward.Amount})
@@ -211,6 +212,7 @@ func (s *Service) BuyHouseDecor(ctx context.Context, userID, companyID int64, ke
 		pet = fresh
 	}
 	s.appendActivity(ctx, userID, "house_bought", map[string]any{"key": key, "price": price})
+	s.appendLedger(ctx, userID, companyID, -price, "house", nil, key)
 	s.emitPetUpdate(ctx, pet)
 	return dto.NewHouse(pet), nil
 }

@@ -43,6 +43,8 @@ export const useTasksStore = defineStore('tasks', () => {
     has_units: saved.has_units ?? null,
     period_preset: saved.period_preset ?? null,
     created_by_me: saved.created_by_me ?? false,
+    tag_ids: saved.tag_ids ?? [],
+    colors: saved.colors ?? [],
     page: 1,
     per_page: 30,
   })
@@ -116,6 +118,8 @@ export const useTasksStore = defineStore('tasks', () => {
       if (filters.received_to) params.received_to = filters.received_to
       if (filters.has_units) params.has_units = filters.has_units
       if (filters.created_by_me) params.created_by_me = '1'
+      if (filters.tag_ids?.length) params.tag_ids = filters.tag_ids.join(',')
+      if (filters.colors?.length) params.colors = filters.colors.join(',')
       params.page = filters.page
       params.per_page = filters.per_page
 
@@ -159,8 +163,59 @@ export const useTasksStore = defineStore('tasks', () => {
     filters.has_units = null
     filters.period_preset = null
     filters.created_by_me = false
+    filters.tag_ids = []
+    filters.colors = []
     filters.page = 1
     fetchTasks().catch(() => {})
+  }
+
+  // Переключить цвет в мультифильтре (личный цвет карточек).
+  function toggleColorFilter(color) {
+    const cur = filters.colors || []
+    filters.colors = cur.includes(color)
+      ? cur.filter((c) => c !== color)
+      : [...cur, color]
+    filters.page = 1
+    fetchTasks().catch(() => {})
+  }
+
+  // ── Теги (справочник компании — общий для фильтров/формы/меню) ──
+  const tags = ref([])
+  let tagsLoaded = false
+
+  async function fetchTags({ force = false } = {}) {
+    if (tagsLoaded && !force) return
+    try {
+      const data = await tasksApi.getTags()
+      tags.value = Array.isArray(data) ? data : (data.items ?? [])
+      tagsLoaded = true
+    } catch { /* справочник некритичен — фильтр просто пуст */ }
+  }
+
+  // Переключить один тег У ЗАДАЧИ (ПКМ-меню, модалка) — полная замена набора.
+  async function toggleTaskTag(taskId, tagId) {
+    const task = taskById.value.get(taskId)
+    const cur = (task?.tags || []).map((t) => t.id)
+    const next = cur.includes(tagId) ? cur.filter((id) => id !== tagId) : [...cur, tagId]
+    return setTaskTags(taskId, next)
+  }
+
+  // Переключить тег в мультифильтре (чипы в панели фильтров).
+  function toggleTagFilter(tagId) {
+    const cur = filters.tag_ids || []
+    filters.tag_ids = cur.includes(tagId)
+      ? cur.filter((id) => id !== tagId)
+      : [...cur, tagId]
+    filters.page = 1
+    fetchTasks().catch(() => {})
+  }
+
+  // Назначить набор тегов задаче (полная замена) — ответ и сокет-событие
+  // несут свежие tags, patchTask применит.
+  async function setTaskTags(taskId, tagIds) {
+    const updated = await tasksApi.setTaskTags(taskId, tagIds)
+    patchTask(updated)
+    return updated
   }
 
   // === v3: ответственный, этап, контрибьюторы, комментарии ===
@@ -329,10 +384,11 @@ export const useTasksStore = defineStore('tasks', () => {
     tasks, taskById, total, loading, error, filters, activeTask,
     commentsByTask, contributorsByTask,
     myActiveCount, fetchMyActiveCount, refreshMyActiveCount,
-    fetchTasks, setFilter, setTab, resetFilters, openTask, closeTask,
+    tags, fetchTags,
+    fetchTasks, setFilter, setTab, resetFilters, toggleTagFilter, toggleColorFilter, openTask, closeTask,
     upsertTask, patchTask, addTaskFromSocket, removeTask, archiveTask, restoreTask,
     setFavorite, addActiveUser, removeActiveUser,
-    assignResponsible, setStage, dragMoveStage,
+    assignResponsible, setStage, dragMoveStage, setTaskTags, toggleTaskTag,
     loadComments, addComment, editComment, deleteComment, applyCommentSocket,
     loadContributors,
   }

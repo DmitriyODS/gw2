@@ -51,6 +51,7 @@ func (s *Service) AwardKudos(ctx context.Context, userID, companyID int64,
 		s.log.Warn("pets.weekly_kudos_failed", "user_id", userID, "error", err)
 	}
 	s.addSeasonalKudos(ctx, userID, granted)
+	s.appendLedger(ctx, userID, companyID, granted, source, nil, "")
 	s.emitPetUpdate(ctx, pet)
 	return granted
 }
@@ -221,6 +222,7 @@ func (s *Service) maybeReturnAdventure(ctx context.Context, pet *domain.Pet) *dt
 	}
 	s.appendActivity(ctx, pet.UserID, "adventure_returned",
 		map[string]any{"kudos": kudos, "xp": xp, "place": place})
+	s.appendLedger(ctx, pet.UserID, pet.CompanyID, kudos, "adventure", nil, place)
 	s.emitPetUpdate(ctx, pet)
 	return &dto.AdventureRewardDTO{Kudos: kudos, XP: xp, Place: place}
 }
@@ -492,6 +494,7 @@ func (s *Service) FeedPet(ctx context.Context, userID, companyID int64) (*dto.Pe
 			return nil, err
 		}
 		s.appendActivity(ctx, userID, "fed", map[string]any{"sick": true})
+		s.appendLedger(ctx, userID, companyID, -domain.SickFeedCost, "feed", nil, "бульон")
 		if recovered {
 			s.appendActivity(ctx, userID, "recovered", nil)
 		}
@@ -536,6 +539,7 @@ func (s *Service) FeedPet(ctx context.Context, userID, companyID int64) (*dto.Pe
 	}
 
 	s.appendActivity(ctx, userID, "fed", map[string]any{"streak": pet.FeedStreak})
+	s.appendLedger(ctx, userID, companyID, -domain.FeedCost, "feed", nil, "")
 	if evolvedTo > 0 {
 		s.celebrateEvolution(ctx, pet, evolvedTo)
 	}
@@ -604,6 +608,7 @@ func (s *Service) WalkPet(ctx context.Context, userID, companyID int64) (*dto.Pe
 		}
 	}
 	s.appendActivity(ctx, userID, "walked", nil)
+	s.appendLedger(ctx, userID, companyID, -domain.WalkCost, "walk", nil, "")
 	if recovered {
 		s.appendActivity(ctx, userID, "recovered", nil)
 	}
@@ -641,6 +646,7 @@ func (s *Service) HealPet(ctx context.Context, userID, companyID int64) (*dto.Pe
 		return nil, err
 	}
 	s.appendActivity(ctx, userID, "healed", nil)
+	s.appendLedger(ctx, userID, companyID, -domain.HealCost, "heal", nil, "")
 	if recovered {
 		s.appendActivity(ctx, userID, "recovered", nil)
 	}
@@ -711,6 +717,7 @@ func (s *Service) StrokePet(ctx context.Context, strokerID, petOwnerID, companyI
 	}
 
 	s.appendActivity(ctx, petOwnerID, "stroked_by", map[string]any{"stroker_id": strokerID})
+	s.appendLedger(ctx, strokerID, companyID, -domain.StrokeCost, "stroke", &petOwnerID, "")
 	if evolvedTo > 0 {
 		s.celebrateEvolution(ctx, pet, evolvedTo)
 	}
@@ -953,6 +960,7 @@ func (s *Service) ClaimQuest(ctx context.Context, userID, companyID int64) (*dto
 	if err := s.pets.SavePet(ctx, pet); err != nil {
 		return nil, err
 	}
+	s.appendLedger(ctx, userID, companyID, domain.QuestRewardKudos, "quest", nil, "")
 	s.emitPetUpdate(ctx, pet)
 	return dto.NewPet(pet), nil
 }

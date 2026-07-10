@@ -270,13 +270,18 @@ func (h *handlers) collab(c *fiber.Ctx) error {
 		Kind   string               `json:"kind"`
 		Cursor *domain.CollabCursor `json:"cursor"`
 		Doc    json.RawMessage      `json:"doc"`
+		Title  *string              `json:"title"`
 	}
 	parseBody(c, &body)
 	if body.Doc != nil && !json.Valid(body.Doc) {
 		return validationError(c, "Некорректный документ")
 	}
+	if body.Title != nil && len(*body.Title) > 1000 {
+		return validationError(c, "Слишком длинное название")
+	}
 	if _, err := h.eps.Collab(c.Context(), endpoint.CollabReq{
 		UserID: currentUserID(c), NoteID: pathID(c), Kind: body.Kind, Cursor: body.Cursor, Doc: body.Doc,
+		Title: body.Title,
 	}); err != nil {
 		return h.respondError(c, err)
 	}

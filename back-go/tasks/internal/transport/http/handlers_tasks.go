@@ -2,6 +2,7 @@ package http
 
 import (
 	"strconv"
+	"strings"
 
 	"github.com/gofiber/fiber/v2"
 
@@ -65,6 +66,26 @@ func (h *handlers) listTasks(c *fiber.Ctx) error {
 	}
 	if c.Query("created_by_me") == "1" {
 		f.AuthorID = &user.ID
+	}
+	// tag_ids=1,2,3 — задачи, имеющие хотя бы один из выбранных тегов.
+	if raw := c.Query("tag_ids"); raw != "" {
+		for _, part := range strings.Split(raw, ",") {
+			id, err := strconv.ParseInt(strings.TrimSpace(part), 10, 64)
+			if err != nil || id <= 0 {
+				return scopeBadRequest(c, "Неверный tag_ids")
+			}
+			f.TagIDs = append(f.TagIDs, id)
+		}
+	}
+	// colors=red,blue — задачи с моим личным цветом из выбранных.
+	if raw := c.Query("colors"); raw != "" {
+		for _, part := range strings.Split(raw, ",") {
+			color := strings.TrimSpace(part)
+			if !domain.ValidTaskColor(color) {
+				return scopeBadRequest(c, "Неверный colors")
+			}
+			f.Colors = append(f.Colors, color)
+		}
 	}
 
 	resp, err := h.eps.ListTasks(c.Context(), f)

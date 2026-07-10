@@ -248,10 +248,10 @@ const props = defineProps({
 })
 const emit = defineEmits(['close'])
 
-const FEED_COST_NORMAL = 3
-const FEED_COST_SICK = 1
-const WALK_COST = 5
-const HEAL_COST = 8
+const FEED_COST_NORMAL = 10
+const FEED_COST_SICK = 3
+const WALK_COST = 15
+const HEAL_COST = 25
 
 const pets = usePetsStore()
 const notify = useNotificationsStore()

@@ -169,6 +169,18 @@ func (r *Repo) ListTasks(ctx context.Context, f domain.TaskListFilter) ([]*domai
 		where = append(where,
 			"EXISTS (SELECT 1 FROM units u WHERE u.task_id = t.id AND u.user_id = "+arg(f.CurrentUserID)+")")
 	}
+	// Теги — «хотя бы один из выбранных» (ИЛИ); предикат совместим с
+	// семантической выдачей (t.id = ANY(ordered)) — просто сужает её.
+	if len(f.TagIDs) > 0 {
+		where = append(where,
+			"EXISTS (SELECT 1 FROM task_tags tt WHERE tt.task_id = t.id AND tt.tag_id = ANY("+arg(f.TagIDs)+"))")
+	}
+	// Личный цвет карточки текущего пользователя (ИЛИ по выбранным).
+	if len(f.Colors) > 0 {
+		where = append(where,
+			"EXISTS (SELECT 1 FROM user_task_colors utc WHERE utc.task_id = t.id AND utc.user_id = "+
+				arg(f.CurrentUserID)+" AND utc.color = ANY("+arg(f.Colors)+"))")
+	}
 
 	cond := ""
 	if len(where) > 0 {

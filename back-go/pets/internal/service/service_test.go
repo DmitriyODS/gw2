@@ -538,6 +538,7 @@ type testEnv struct {
 	pets     *fakePets
 	shop     *fakeShop
 	activity *fakeActivity
+	bank     *fakeBank
 	users    *fakeUsers
 	daily    *capDaily
 	pub      *fakePub
@@ -548,19 +549,20 @@ func newEnv() *testEnv {
 	pets := &fakePets{}
 	shop := newFakeShop()
 	activity := &fakeActivity{}
+	bank := &fakeBank{pets: pets}
 	users := &fakeUsers{}
 	daily := &capDaily{}
 	pub := &fakePub{}
-	svc := New(pets, shop, activity, users, fakeCompanies{}, &fakeWork{}, daily, pub,
+	svc := New(pets, shop, activity, bank, users, fakeCompanies{}, &fakeWork{}, daily, pub,
 		slog.New(slog.DiscardHandler))
-	return &testEnv{pets: pets, shop: shop, activity: activity, users: users, daily: daily, pub: pub, svc: svc}
+	return &testEnv{pets: pets, shop: shop, activity: activity, bank: bank, users: users, daily: daily, pub: pub, svc: svc}
 }
 
 // newTestService — окружение с fakeDaily (выдаёт бюджет целиком), как раньше
 // использовалось для тестов кормления.
 func newTestService(pets *fakePets, daily *fakeDaily, pub *fakePub, activity *fakeActivity) *Service {
-	return New(pets, newFakeShop(), activity, &fakeUsers{}, fakeCompanies{}, &fakeWork{}, daily, pub,
-		slog.New(slog.DiscardHandler))
+	return New(pets, newFakeShop(), activity, &fakeBank{pets: pets}, &fakeUsers{}, fakeCompanies{},
+		&fakeWork{}, daily, pub, slog.New(slog.DiscardHandler))
 }
 
 // ── FeedPet на фейках портов ───────────────────────────────────────

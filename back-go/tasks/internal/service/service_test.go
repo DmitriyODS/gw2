@@ -4,6 +4,7 @@ import (
 	"context"
 	"log/slog"
 	"sort"
+	"strings"
 	"testing"
 	"time"
 
@@ -23,6 +24,8 @@ type fakeStore struct {
 	comments  map[int64]*domain.Comment
 	favorites map[[2]int64]bool
 	colors    map[[2]int64]string
+	tags      map[int64]*domain.Tag
+	taskTags  map[int64][]int64 // task_id → tag_ids
 }
 
 func newFakeStore() *fakeStore {
@@ -31,10 +34,85 @@ func newFakeStore() *fakeStore {
 		unitTypes: map[int64]*domain.UnitType{}, depts: map[int64]*domain.Department{},
 		stages: map[int64]*domain.Stage{}, comments: map[int64]*domain.Comment{},
 		favorites: map[[2]int64]bool{}, colors: map[[2]int64]string{},
+		tags: map[int64]*domain.Tag{}, taskTags: map[int64][]int64{},
 	}
 }
 
 func (f *fakeStore) next() int64 { f.seq++; return f.seq }
+
+// — TagRepository —
+
+func (f *fakeStore) ListTags(_ context.Context, companyID int64) ([]*domain.Tag, error) {
+	out := []*domain.Tag{}
+	for _, t := range f.tags {
+		if t.CompanyID == companyID {
+			out = append(out, t)
+		}
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].Name < out[j].Name })
+	return out, nil
+}
+
+func (f *fakeStore) GetTag(_ context.Context, id int64) (*domain.Tag, error) {
+	return f.tags[id], nil
+}
+
+func (f *fakeStore) GetTagByName(_ context.Context, name string, companyID int64) (*domain.Tag, error) {
+	for _, t := range f.tags {
+		if t.CompanyID == companyID && strings.EqualFold(t.Name, name) {
+			return t, nil
+		}
+	}
+	return nil, nil
+}
+
+func (f *fakeStore) CreateTag(_ context.Context, t *domain.Tag) error {
+	t.ID = f.next()
+	f.tags[t.ID] = t
+	return nil
+}
+
+func (f *fakeStore) UpdateTagFields(_ context.Context, id int64, fields map[string]any) error {
+	t := f.tags[id]
+	if name, ok := fields["name"].(string); ok {
+		t.Name = name
+	}
+	if color, ok := fields["color"].(string); ok {
+		t.Color = color
+	}
+	return nil
+}
+
+func (f *fakeStore) DeleteTag(_ context.Context, id int64) error {
+	delete(f.tags, id)
+	for taskID, ids := range f.taskTags {
+		kept := ids[:0]
+		for _, tagID := range ids {
+			if tagID != id {
+				kept = append(kept, tagID)
+			}
+		}
+		f.taskTags[taskID] = kept
+	}
+	return nil
+}
+
+func (f *fakeStore) SetTaskTags(_ context.Context, taskID int64, tagIDs []int64) error {
+	f.taskTags[taskID] = append([]int64{}, tagIDs...)
+	return nil
+}
+
+func (f *fakeStore) TagsByTasks(_ context.Context, taskIDs []int64) (map[int64][]domain.TagRef, error) {
+	out := map[int64][]domain.TagRef{}
+	for _, taskID := range taskIDs {
+		for _, tagID := range f.taskTags[taskID] {
+			if t := f.tags[tagID]; t != nil {
+				out[taskID] = append(out[taskID], domain.TagRef{ID: t.ID, Name: t.Name, Color: t.Color})
+			}
+		}
+	}
+	return out, nil
+}
 
 // — TaskRepository —
 
@@ -423,8 +501,8 @@ func newTestService() (*Service, *fakeStore, *fakePets, *fakeAI, *fakeBus, *fake
 	bus := &fakeBus{}
 	users := &fakeUsers{users: map[int64]*domain.User{}}
 	svc := New(Deps{
-		Tasks: store, Units: store, UnitTypes: store, Depts: store, Stages: store,
-		Comments: store, Stats: nil, Users: users, Companies: users,
+		Tasks: store, Tags: store, Units: store, UnitTypes: store, Depts: store,
+		Stages: store, Comments: store, Stats: nil, Users: users, Companies: users,
 		Pets: pets, AI: ai, Bus: bus, Log: slog.New(slog.DiscardHandler),
 	})
 	return svc, store, pets, ai, bus, users

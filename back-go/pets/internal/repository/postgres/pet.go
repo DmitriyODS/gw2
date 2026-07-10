@@ -27,6 +27,7 @@ const petCols = `p.user_id, p.company_id, p.name, p.species, p.stage, p.xp, p.ku
 	p.personality, p.unlocked_species, p.quest_date, p.quest_kind, p.quest_target,
 	p.quest_progress, p.quest_claimed, p.adventure_until, p.adventure_place,
 	p.generation, p.house_owned, p.house_placed,
+	p.bank_savings, p.bank_savings_accrued_at, p.bank_loan,
 	u.id, u.fio, u.avatar_path`
 
 const petFrom = ` FROM pets p LEFT JOIN users u ON u.id = p.user_id `
@@ -51,7 +52,8 @@ func scanPet(row pgx.Row) (*domain.Pet, error) {
 		&p.Kudos, &p.Hat, &accessories, &p.FeedStreak, &p.LastFedDate, &p.SickSince,
 		&p.Recovery, &p.Personality, &unlocked, &p.QuestDate, &p.QuestKind,
 		&p.QuestTarget, &p.QuestProgress, &p.QuestClaimed, &p.AdventureUntil,
-		&p.AdventurePlace, &p.Generation, &houseOwned, &housePlaced, &uid, &fio, &avatar)
+		&p.AdventurePlace, &p.Generation, &houseOwned, &housePlaced,
+		&p.BankSavings, &p.BankSavingsAccruedAt, &p.BankLoan, &uid, &fio, &avatar)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, nil
@@ -98,10 +100,11 @@ func (r *PetRepo) GetOrCreate(ctx context.Context, userID, companyID int64) (*do
 }
 
 // SavePet — полное сохранение изменяемых полей (по образу ORM-коммита Flask).
-// Поля престижа и домика (generation/house_owned/house_placed) сюда намеренно
-// НЕ входят: они меняются только своими узкими атомарными методами (Prestige/
-// BuyHouseDecor/Append*/SaveHousePlaced) — full-row запись из конкурентного
-// действия перетирала бы их устаревшим снимком.
+// Поля престижа, домика и банка (generation/house_owned/house_placed/
+// bank_savings/bank_savings_accrued_at/bank_loan) сюда намеренно НЕ входят:
+// они меняются только своими узкими атомарными методами (Prestige/
+// BuyHouseDecor/Append*/SaveHousePlaced/BankRepo) — full-row запись из
+// конкурентного действия перетирала бы их устаревшим снимком.
 func (r *PetRepo) SavePet(ctx context.Context, p *domain.Pet) error {
 	accessories, err := json.Marshal(p.Accessories)
 	if err != nil {
@@ -208,6 +211,7 @@ func (r *PetRepo) DeletePet(ctx context.Context, userID int64) error {
 		`DELETE FROM pet_kudos_weekly WHERE user_id = $1`,
 		`DELETE FROM pet_kudos_seasonal WHERE user_id = $1`,
 		`DELETE FROM pet_season_claims WHERE user_id = $1`,
+		`DELETE FROM pet_kudos_ledger WHERE user_id = $1`,
 		`DELETE FROM pets WHERE user_id = $1`,
 	} {
 		if _, err := tx.Exec(ctx, q, userID); err != nil {

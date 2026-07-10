@@ -79,6 +79,13 @@ func NewServer(eps endpoint.Endpoints, users domain.UserReader,
 	scoped.Get("/rating", h.getRating)
 	scoped.Get("/live", h.getLive)
 	scoped.Get("/activity", h.getActivityLog)
+	scoped.Get("/bank", h.getBank)
+	scoped.Get("/bank/ledger", h.getBankLedger)
+	scoped.Post("/bank/transfer", h.transferKudos)
+	scoped.Post("/bank/deposit", h.bankDeposit)
+	scoped.Post("/bank/withdraw", h.bankWithdraw)
+	scoped.Post("/bank/loan", h.bankTakeLoan)
+	scoped.Post("/bank/loan/repay", h.bankRepayLoan)
 
 	return &Server{app: app}
 }

@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"hash/fnv"
 	"time"
 
 	"github.com/DmitriyODS/gw2/back-go/pets/internal/domain"
@@ -13,6 +14,44 @@ import (
 // нестатичности одновременно: постоянные товары, ротация по датам
 // (active_from/active_to), ограниченный тираж на компанию (limited_quota) и
 // достижения (unlock_kind=achievement, не продаются за кудосы).
+
+// ── Скидка дня ──────────────────────────────────────────────────────
+// «Флеш-распродажа»: детерминированно от даты (МСК) и ключа товара часть
+// витрины уценивается до конца дня — за скидками стоит следить. Без
+// состояния и фоновых процессов: формула одинаково считается в витрине и
+// при покупке, в полночь МСК набор скидок сам меняется.
+
+const (
+	saleChanceBigPct   = 7  // доля витрины с -50%
+	saleChanceSmallPct = 15 // доля витрины с -30%
+)
+
+func saleDiscountPct(key string, day time.Time) int {
+	h := fnv.New32a()
+	_, _ = h.Write([]byte(day.Format("2006-01-02") + "|" + key))
+	v := int(h.Sum32() % 100)
+	switch {
+	case v < saleChanceBigPct:
+		return 50
+	case v < saleChanceBigPct+saleChanceSmallPct:
+		return 30
+	default:
+		return 0
+	}
+}
+
+// salePrice — цена товара с учётом скидки дня (0 скидки для достижений и
+// бесплатных позиций).
+func salePrice(item *domain.ShopItem, day time.Time) (price, discountPct int) {
+	price = item.PriceKudos
+	if item.UnlockKind != "shop" || price <= 0 {
+		return price, 0
+	}
+	if pct := saleDiscountPct(item.Key, day); pct > 0 {
+		return price - price*pct/100, pct
+	}
+	return price, 0
+}
 
 // isSpeciesOwned — уже разблокирован ли вид (магазинный или природный).
 func isSpeciesOwned(pet *domain.Pet, key string) bool {
@@ -39,6 +78,9 @@ func newShopItemDTO(item *domain.ShopItem, remaining *int, owned bool) *dto.Shop
 		PriceKudos: item.PriceKudos, UnlockKind: item.UnlockKind,
 		AchievementKey: item.AchievementKey, LimitedQuota: item.LimitedQuota,
 		Remaining: remaining, Owned: owned,
+	}
+	if sale, pct := salePrice(item, todayMSK()); pct > 0 {
+		d.SalePriceKudos, d.DiscountPct = &sale, &pct
 	}
 	if item.ActiveFrom != nil {
 		s := item.ActiveFrom.UTC().Format(time.RFC3339)
@@ -85,57 +127,59 @@ func (s *Service) GetShopState(ctx context.Context, userID, companyID int64) (*d
 }
 
 // purchaseItem — общая логика покупки: проверки окна/тиража/владения/цены,
-// списание кудосов, применение эффекта (экипировка/разблокировка вида).
+// списание кудосов (по цене со скидкой дня), применение эффекта. paid —
+// фактически списанная сумма (для выписки банка).
 func (s *Service) purchaseItem(ctx context.Context, userID, companyID int64,
-	key, wantKind string) (*domain.Pet, *domain.ShopItem, error) {
+	key, wantKind string) (*domain.Pet, *domain.ShopItem, int, error) {
 
 	item, err := s.shop.GetItem(ctx, key)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, 0, err
 	}
 	if item == nil || item.Kind != wantKind {
-		return nil, nil, domain.NewError("NO_ITEM", "Такого товара нет", 404)
+		return nil, nil, 0, domain.NewError("NO_ITEM", "Такого товара нет", 404)
 	}
 	if !item.Active(time.Now()) {
-		return nil, nil, domain.NewError("OUT_OF_SEASON", "Этот товар сейчас не в продаже", 422)
+		return nil, nil, 0, domain.NewError("OUT_OF_SEASON", "Этот товар сейчас не в продаже", 422)
 	}
 	if item.UnlockKind == "achievement" {
-		return nil, nil, domain.NewError("ACHIEVEMENT_ONLY", "Этот предмет — достижение, не продаётся", 422)
+		return nil, nil, 0, domain.NewError("ACHIEVEMENT_ONLY", "Этот предмет — достижение, не продаётся", 422)
 	}
 	pet, err := s.pets.GetOrCreate(ctx, userID, companyID)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, 0, err
 	}
 	owned := containsStr(pet.Accessories, key)
 	if wantKind == "species" {
 		owned = isSpeciesOwned(pet, key)
 	}
 	if owned {
-		return nil, nil, domain.NewError("ALREADY_OWNED", "Уже куплено", 422)
+		return nil, nil, 0, domain.NewError("ALREADY_OWNED", "Уже куплено", 422)
 	}
 	if item.LimitedQuota != nil {
 		// Превентивная проверка витрины; авторитетная — атомарно в
 		// RecordPurchase (одна транзакция COUNT+INSERT под локом товара).
 		remaining, err := s.remainingQuota(ctx, item, companyID)
 		if err != nil {
-			return nil, nil, err
+			return nil, nil, 0, err
 		}
 		if remaining != nil && *remaining <= 0 {
-			return nil, nil, domain.ErrSoldOut
+			return nil, nil, 0, domain.ErrSoldOut
 		}
 	}
-	if pet.Kudos < item.PriceKudos {
-		return nil, nil, domain.NewError("NO_KUDOS", "Не хватает кудосов", 422)
+	price, _ := salePrice(item, todayMSK())
+	if pet.Kudos < price {
+		return nil, nil, 0, domain.NewError("NO_KUDOS", "Не хватает кудосов", 422)
 	}
-	pet.Kudos -= item.PriceKudos
-	return pet, item, nil
+	pet.Kudos -= price
+	return pet, item, price, nil
 }
 
 // BuyItem — купить и сразу надеть аксессуар/скин. Лимитированный тираж
 // резервируется ДО SavePet: если тираж распродан (RecordPurchase → SOLD_OUT),
 // кудосы покупателя не списываются.
 func (s *Service) BuyItem(ctx context.Context, userID, companyID int64, key string) (*dto.PetDTO, error) {
-	pet, item, err := s.buyByKinds(ctx, userID, companyID, key, "skin", "accessory")
+	pet, item, paid, err := s.buyByKinds(ctx, userID, companyID, key, "skin", "accessory")
 	if err != nil {
 		return nil, err
 	}
@@ -150,6 +194,7 @@ func (s *Service) BuyItem(ctx context.Context, userID, companyID int64, key stri
 		return nil, err
 	}
 	s.appendActivity(ctx, userID, "item_bought", map[string]any{"key": key})
+	s.appendLedger(ctx, userID, companyID, -paid, "shop", nil, key)
 	s.emitPetUpdate(ctx, pet)
 	return dto.NewPet(pet), nil
 }
@@ -157,11 +202,11 @@ func (s *Service) BuyItem(ctx context.Context, userID, companyID int64, key stri
 // buyByKinds — purchaseItem, допускающий несколько kind (skin/accessory —
 // разные ярлыки одного и того же способа ношения).
 func (s *Service) buyByKinds(ctx context.Context, userID, companyID int64,
-	key string, kinds ...string) (*domain.Pet, *domain.ShopItem, error) {
+	key string, kinds ...string) (*domain.Pet, *domain.ShopItem, int, error) {
 
 	item, err := s.shop.GetItem(ctx, key)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, 0, err
 	}
 	kindOK := false
 	for _, k := range kinds {
@@ -170,7 +215,7 @@ func (s *Service) buyByKinds(ctx context.Context, userID, companyID int64,
 		}
 	}
 	if item == nil || !kindOK {
-		return nil, nil, domain.NewError("NO_ITEM", "Такого товара нет", 404)
+		return nil, nil, 0, domain.NewError("NO_ITEM", "Такого товара нет", 404)
 	}
 	return s.purchaseItem(ctx, userID, companyID, key, item.Kind)
 }
@@ -197,7 +242,7 @@ func (s *Service) EquipItem(ctx context.Context, userID, companyID int64, item *
 // BuySpecies — разблокировать новый облик питомца и сразу его надеть.
 // Порядок тот же, что в BuyItem: резерв тиража до SavePet.
 func (s *Service) BuySpecies(ctx context.Context, userID, companyID int64, species string) (*dto.PetDTO, error) {
-	pet, item, err := s.purchaseItem(ctx, userID, companyID, species, "species")
+	pet, item, paid, err := s.purchaseItem(ctx, userID, companyID, species, "species")
 	if err != nil {
 		return nil, err
 	}
@@ -212,6 +257,7 @@ func (s *Service) BuySpecies(ctx context.Context, userID, companyID int64, speci
 		return nil, err
 	}
 	s.appendActivity(ctx, userID, "item_bought", map[string]any{"key": species})
+	s.appendLedger(ctx, userID, companyID, -paid, "shop", nil, species)
 	s.emitPetUpdate(ctx, pet)
 	return dto.NewPet(pet), nil
 }

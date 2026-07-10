@@ -24,6 +24,34 @@
             <span class="material-symbols-outlined">format_color_reset</span>
           </button>
         </div>
+        <!-- Теги задачи — мультивыбор, меню не закрывается (можно отметить
+             сразу несколько) -->
+        <template v-if="tags.length">
+          <div class="task-ctx-divider" />
+          <button class="task-ctx-item" @click.stop="tagsOpen = !tagsOpen">
+            <span class="material-symbols-outlined">sell</span>
+            <span>Теги</span>
+            <span v-if="taskTagIds.length" class="task-ctx-count">{{ taskTagIds.length }}</span>
+            <span class="material-symbols-outlined task-ctx-chevron">
+              {{ tagsOpen ? 'expand_less' : 'expand_more' }}
+            </span>
+          </button>
+          <div v-if="tagsOpen" class="task-ctx-tags">
+            <button
+              v-for="t in tags"
+              :key="t.id"
+              class="task-ctx-tag"
+              :class="{ active: taskTagIds.includes(t.id) }"
+              :style="{ background: `var(--tag-${t.color}-surface)`, color: `var(--tag-${t.color}-accent)` }"
+              @click.stop="$emit('toggle-tag', t.id)"
+            >
+              <span class="material-symbols-outlined task-ctx-tag-check">
+                {{ taskTagIds.includes(t.id) ? 'check_box' : 'check_box_outline_blank' }}
+              </span>
+              {{ t.name }}
+            </button>
+          </div>
+        </template>
         <div class="task-ctx-divider" />
         <button class="task-ctx-item" @click="emitAction('open')">
           <span class="material-symbols-outlined">open_in_new</span>
@@ -72,9 +100,14 @@ const props = defineProps({
   isRunning: { type: Boolean, default: false },
   // Текущий личный цвет задачи ('' — без цвета) — для отметки в палитре.
   color: { type: String, default: '' },
+  // Справочник тегов компании + отмеченные у задачи (мультивыбор в меню).
+  tags: { type: Array, default: () => [] },
+  taskTagIds: { type: Array, default: () => [] },
 })
 
-const emit = defineEmits(['close', 'action', 'color'])
+const emit = defineEmits(['close', 'action', 'color', 'toggle-tag'])
+
+const tagsOpen = ref(false)
 
 function pickColor(id) {
   emit('color', id)
@@ -90,30 +123,47 @@ const style = computed(() => ({
   zIndex: 12000,
 }))
 
-watch(() => props.visible, async (v) => {
-  if (!v) return
-  pos.value = { x: props.x, y: props.y }
+// Кламп в вьюпорт, чтобы меню не выезжало за край; снизу отступ больше —
+// меню у нижней кромки поджимается вверх, а не обрезается.
+async function clampToViewport() {
   await nextTick()
-  // Кламп в вьюпорт, чтобы меню не выезжало за край.
   const el = menuEl.value
   if (!el) return
   const r = el.getBoundingClientRect()
   const pad = 8
+  const padBottom = 16
   let nx = pos.value.x
   let ny = pos.value.y
   if (nx + r.width > window.innerWidth - pad) nx = window.innerWidth - r.width - pad
-  if (ny + r.height > window.innerHeight - pad) ny = window.innerHeight - r.height - pad
+  if (ny + r.height > window.innerHeight - padBottom) ny = window.innerHeight - r.height - padBottom
   if (nx < pad) nx = pad
   if (ny < pad) ny = pad
   pos.value = { x: nx, y: ny }
+}
+
+watch(() => props.visible, (v) => {
+  if (!v) {
+    tagsOpen.value = false
+    return
+  }
+  pos.value = { x: props.x, y: props.y }
+  clampToViewport()
 })
+
+// Раскрытие секции тегов меняет высоту меню — переклампливаем, иначе низ
+// уезжает за экран.
+watch(tagsOpen, (v) => { if (v) clampToViewport() })
 
 function emitAction(action) {
   emit('action', action)
   emit('close')
 }
 
-function onDocClick() { if (props.visible) emit('close') }
+// Клики ВНУТРИ меню не закрывают его — мультивыбор тегов требует серии
+// кликов (раньше спасал только зазор transition-анимации).
+function onDocClick(e) {
+  if (props.visible && !menuEl.value?.contains(e.target)) emit('close')
+}
 function onScroll() { if (props.visible) emit('close') }
 function onKey(e) { if (e.key === 'Escape' && props.visible) emit('close') }
 
@@ -177,6 +227,50 @@ onBeforeUnmount(() => {
   background: var(--color-outline-dim);
   margin: 4px 4px;
 }
+
+/* ── Теги ── */
+.task-ctx-count {
+  margin-left: auto;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: var(--radius-full);
+  background: var(--color-primary-container);
+  color: var(--color-on-primary-container);
+  font-size: 11px;
+  font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.task-ctx-chevron { margin-left: 2px; color: var(--color-text-dim); }
+.task-ctx-item .task-ctx-chevron { font-size: 18px; }
+
+.task-ctx-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  padding: 4px 10px 8px;
+  max-width: 260px;
+}
+
+.task-ctx-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-full);
+  padding: 5px 10px;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  opacity: 0.6;
+  transition: opacity 0.12s;
+}
+.task-ctx-tag.active { opacity: 1; outline: 2px solid currentColor; outline-offset: -2px; }
+.task-ctx-tag-check { font-size: 14px; }
 
 .task-ctx-colors {
   display: flex;

@@ -143,7 +143,7 @@ func TestCollabBroadcast(t *testing.T) {
 	_, _ = svc.AddMember(ctx, 1, n.ID, 2, false)
 
 	// join адресата: комнаты владельца и всех адресатов, в payload есть fio.
-	if err := svc.Collab(ctx, 2, n.ID, "join", nil, nil); err != nil {
+	if err := svc.Collab(ctx, 2, n.ID, "join", nil, nil, nil); err != nil {
 		t.Fatal(err)
 	}
 	event, rooms, payload := bus.last(t)
@@ -158,7 +158,7 @@ func TestCollabBroadcast(t *testing.T) {
 	}
 
 	// cursor — без fio (клиент кэширует ФИО по user_id из join).
-	if err := svc.Collab(ctx, 2, n.ID, "cursor", &domain.CollabCursor{From: 1, To: 5}, nil); err != nil {
+	if err := svc.Collab(ctx, 2, n.ID, "cursor", &domain.CollabCursor{From: 1, To: 5}, nil, nil); err != nil {
 		t.Fatal(err)
 	}
 	if _, _, payload := bus.last(t); payload["cursor"] == nil || payload["fio"] != nil {
@@ -166,11 +166,11 @@ func TestCollabBroadcast(t *testing.T) {
 	}
 
 	// doc view-адресату запрещён; после выдачи can_edit — разрешён.
-	if err := svc.Collab(ctx, 2, n.ID, "doc", nil, docWith("x")); !errors.Is(err, domain.ErrMemberReadOnly) {
+	if err := svc.Collab(ctx, 2, n.ID, "doc", nil, docWith("x"), nil); !errors.Is(err, domain.ErrMemberReadOnly) {
 		t.Fatalf("collab doc view-адресатом: ожидался 403, получено %v", err)
 	}
 	repo.members[n.ID][2] = true
-	if err := svc.Collab(ctx, 2, n.ID, "doc", nil, docWith("x")); err != nil {
+	if err := svc.Collab(ctx, 2, n.ID, "doc", nil, docWith("x"), nil); err != nil {
 		t.Fatal(err)
 	}
 	// Броадкаст ничего не сохраняет в БД.
@@ -178,11 +178,30 @@ func TestCollabBroadcast(t *testing.T) {
 		t.Fatalf("collab doc сохранился в БД: %q", repo.notes[n.ID].TextContent)
 	}
 
+	// Название едет в payload вместе с doc (live-обновление у соавторов)…
+	newTitle := "Живое название"
+	if err := svc.Collab(ctx, 2, n.ID, "doc", nil, docWith("x"), &newTitle); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, payload := bus.last(t); payload["title"] != "Живое название" {
+		t.Fatalf("payload doc без title: %v", payload)
+	}
+	// …но не с cursor (горячий путь без лишних полей) и не пишется в БД.
+	if err := svc.Collab(ctx, 2, n.ID, "cursor", nil, nil, &newTitle); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, payload := bus.last(t); payload["title"] != nil {
+		t.Fatalf("payload cursor несёт title: %v", payload)
+	}
+	if repo.notes[n.ID].Title != "Совместная" {
+		t.Fatalf("collab title сохранился в БД: %q", repo.notes[n.ID].Title)
+	}
+
 	// Посторонний и неизвестный kind — отказ.
-	if err := svc.Collab(ctx, 5, n.ID, "cursor", nil, nil); !errors.Is(err, domain.ErrNoteNotFound) {
+	if err := svc.Collab(ctx, 5, n.ID, "cursor", nil, nil, nil); !errors.Is(err, domain.ErrNoteNotFound) {
 		t.Fatalf("collab посторонним: ожидалась 404, получено %v", err)
 	}
-	if err := svc.Collab(ctx, 1, n.ID, "hack", nil, nil); !errors.Is(err, domain.ErrBadCollabKind) {
+	if err := svc.Collab(ctx, 1, n.ID, "hack", nil, nil, nil); !errors.Is(err, domain.ErrBadCollabKind) {
 		t.Fatalf("collab kind=hack: ожидалась валидация, получено %v", err)
 	}
 }

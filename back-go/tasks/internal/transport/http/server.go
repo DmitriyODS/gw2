@@ -86,12 +86,19 @@ func NewServer(eps endpoint.Endpoints, users domain.UserReader,
 	tasksAPI := app.Group("/api/tasks", auth.RequireAuth)
 	tasksAPI.Get("", employee, h.listTasks)
 	tasksAPI.Post("", employee, h.createTask)
+	// Справочник тегов — под /api/tasks/tags: отдельный префикс потребовал бы
+	// правок nginx/vite-роутинга; с /:id<int> не конфликтует (int-constraint).
+	tasksAPI.Get("/tags", employee, h.listTags)
+	tasksAPI.Post("/tags", manager, h.createTag)
+	tasksAPI.Patch("/tags/:id<int>", manager, h.updateTag)
+	tasksAPI.Delete("/tags/:id<int>", manager, h.deleteTag)
 	tasksAPI.Get("/:id<int>", employee, h.getTask)
 	tasksAPI.Patch("/:id<int>", employee, h.updateTask)
 	tasksAPI.Delete("/:id<int>", employee, h.deleteTask)
 	tasksAPI.Post("/:id<int>/archive", employee, h.archiveTask)
 	tasksAPI.Post("/:id<int>/restore", employee, h.restoreTask)
 	tasksAPI.Put("/:id<int>/color", employee, h.setTaskColor)
+	tasksAPI.Put("/:id<int>/tags", employee, h.setTaskTags)
 	tasksAPI.Post("/:id<int>/favorite", h.toggleFavorite) // @require_auth — без проверки уровня
 	tasksAPI.Get("/:id<int>/units", employee, h.taskUnits)
 	tasksAPI.Post("/:id<int>/units", employee, h.createUnit)

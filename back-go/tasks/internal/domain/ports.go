@@ -33,6 +33,21 @@ type TaskRepository interface {
 	Enrichment(ctx Ctx, taskIDs []int64, userID int64) (*TaskEnrichment, error)
 }
 
+// TagRepository — теги задач: справочник компании + связка many-to-many.
+type TagRepository interface {
+	ListTags(ctx Ctx, companyID int64) ([]*Tag, error)
+	GetTag(ctx Ctx, id int64) (*Tag, error)
+	GetTagByName(ctx Ctx, name string, companyID int64) (*Tag, error)
+	CreateTag(ctx Ctx, t *Tag) error
+	UpdateTagFields(ctx Ctx, id int64, fields map[string]any) error
+	DeleteTag(ctx Ctx, id int64) error
+	// SetTaskTags — полная замена набора тегов задачи (delete+insert одной
+	// транзакцией).
+	SetTaskTags(ctx Ctx, taskID int64, tagIDs []int64) error
+	// TagsByTasks — теги задач батчем (map[task_id] → по имени), без N+1.
+	TagsByTasks(ctx Ctx, taskIDs []int64) (map[int64][]TagRef, error)
+}
+
 // UnitRepository — персистентность юнитов.
 type UnitRepository interface {
 	GetUnit(ctx Ctx, id int64) (*Unit, error)

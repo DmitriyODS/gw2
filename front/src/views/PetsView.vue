@@ -3,14 +3,24 @@
     <header class="admin-sticky">
       <!-- Тулбар в стиле «Задач»: статы-чипы слева, главное действие справа. -->
       <div class="pets-toolbar">
-        <span v-if="pet" class="chip-tint chip-tint--primary">
+        <button
+          v-if="pet"
+          class="chip-tint chip-tint--primary pets-balance-chip"
+          type="button"
+          title="Открыть кудо-банк"
+          @click="showBank = true"
+        >
           <KudosCoin class="meta-emoji" />
           <strong>{{ pet.kudos }}</strong>&nbsp;кудосов
-        </span>
+        </button>
         <span v-if="pet?.feed_streak" class="chip-tint chip-tint--warning">
           <span class="material-symbols-outlined">local_fire_department</span>
           стрик&nbsp;<strong>{{ pet.feed_streak }}</strong>&nbsp;дн.
         </span>
+        <button class="btn-glass pets-bank-btn" type="button" @click="showBank = true">
+          <span class="material-symbols-outlined">account_balance</span>
+          <span class="shop-cta-label">Банк</span>
+        </button>
         <button class="btn-grad pets-shop-btn" type="button" @click="showShop = true">
           <span class="material-symbols-outlined">storefront</span>
           <span class="shop-cta-label">Магазин</span>
@@ -77,6 +87,7 @@
     </div>
 
     <PetShopDialog v-model="showShop" />
+    <KudosBankDialog v-model="showBank" />
     <PetDetailModal v-if="detailOpen" @close="detailOpen = false" />
   </div>
 </template>
@@ -90,6 +101,7 @@ import RatingCard from '@/components/pets/RatingCard.vue'
 import SeasonTrackCard from '@/components/pets/SeasonTrackCard.vue'
 import ColleaguesPets from '@/components/pets/ColleaguesPets.vue'
 import PetShopDialog from '@/components/pets/PetShopDialog.vue'
+import KudosBankDialog from '@/components/pets/KudosBankDialog.vue'
 import PetDetailModal from '@/components/pets/PetDetailModal.vue'
 import { usePetsStore } from '@/stores/pets.js'
 import { petEmoji, PET_STAGES, PET_SPECIES, shopItemEmoji } from '@/utils/pets.js'
@@ -98,17 +110,22 @@ const route = useRoute()
 const pets = usePetsStore()
 
 const showShop = ref(false)
+const showBank = ref(false)
 const detailOpen = ref(false)
 const colleaguesEl = ref(null)
 const ratingEl = ref(null)
 
 // Страница — единый скролл без вкладок; ?tab= остаётся рабочим (ссылки из
-// PetDetailModal и старые закладки): shop открывает магазин, остальные —
-// прокрутка к секции.
+// PetDetailModal и старые закладки): shop открывает магазин, bank — банк,
+// остальные — прокрутка к секции.
 function applyTabQuery(tab) {
   if (!tab) return
   if (tab === 'shop') {
     showShop.value = true
+    return
+  }
+  if (tab === 'bank') {
+    showBank.value = true
     return
   }
   const el = tab === 'colleagues' ? colleaguesEl.value : (tab === 'rating' ? ratingEl.value : null)
@@ -149,7 +166,10 @@ onMounted(async () => {
 .admin-sticky::after { display: none; }
 
 .pets-toolbar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
-.pets-shop-btn { margin-left: auto; }
+.pets-shop-btn { margin-left: 0; }
+.pets-bank-btn { margin-left: auto; display: inline-flex; align-items: center; gap: 6px; }
+/* Чип баланса — кнопка (открывает кудо-банк), но выглядит как обычный чип. */
+.pets-balance-chip { border: none; font: inherit; cursor: pointer; }
 .meta-emoji { font-size: 14px; }
 
 .pets-live { margin-bottom: 16px; }

@@ -67,6 +67,7 @@
         :style="rarityStyle(item)"
       >
         <span class="rarity-tag">{{ RARITY_TITLE[item.rarity] || item.rarity }}</span>
+        <span v-if="item.discount_pct" class="sale-tag">−{{ item.discount_pct }}% сегодня</span>
         <span v-if="item.limited_quota != null" class="limited-tag">
           {{ item.sold_out ? 'Распродано' : `Осталось: ${item.remaining}` }}
         </span>
@@ -94,7 +95,9 @@
             type="button"
             :disabled="!canAfford(item) || switching || item.sold_out"
             @click="buySpeciesItem(item)"
-          ><KudosCoin /> {{ item.price_kudos }}</button>
+          ><KudosCoin />
+            <s v-if="item.sale_price_kudos" class="shop-old-price">{{ item.price_kudos }}</s>
+            {{ effectivePrice(item) }}</button>
           <span v-else class="shop-owned-tag">
             <span class="material-symbols-outlined">check</span> сейчас надет
           </span>
@@ -106,7 +109,9 @@
             type="button"
             :disabled="!canAfford(item) || buying || item.sold_out"
             @click="buy(item)"
-          ><KudosCoin /> {{ item.price_kudos }}</button>
+          ><KudosCoin />
+            <s v-if="item.sale_price_kudos" class="shop-old-price">{{ item.price_kudos }}</s>
+            {{ effectivePrice(item) }}</button>
           <span v-else class="shop-owned-tag">
             <span class="material-symbols-outlined">check</span> куплено
           </span>
@@ -158,8 +163,14 @@ const visibleItems = computed(() => {
     })
 })
 
+// Скидка дня: фактическая цена приходит с бэка (sale_price_kudos) и по ней
+// же спишет покупка — фронт ничего не пересчитывает.
+function effectivePrice(item) {
+  return item.sale_price_kudos ?? item.price_kudos
+}
+
 function canAfford(item) {
-  return (pet.value?.kudos ?? 0) >= item.price_kudos
+  return (pet.value?.kudos ?? 0) >= effectivePrice(item)
 }
 
 function rarityStyle(item) {
@@ -405,6 +416,24 @@ async function claimMystery() {
   border-radius: var(--radius-full);
   padding: 2px 8px;
   white-space: nowrap;
+}
+/* Скидка дня: снизу карточки, чтобы не толкаться с тегами тиража/ротации. */
+.sale-tag {
+  position: absolute;
+  bottom: -9px;
+  right: 8px;
+  font-size: 9.5px;
+  font-weight: 800;
+  background: var(--color-error-container);
+  color: var(--color-on-error-container);
+  border-radius: var(--radius-full);
+  padding: 2px 8px;
+  white-space: nowrap;
+}
+.shop-old-price {
+  opacity: 0.65;
+  font-weight: 500;
+  margin-right: 2px;
 }
 .shop-emoji { font-size: 30px; line-height: 1; margin-top: 4px; }
 .shop-title { font-size: 12.5px; font-weight: 600; line-height: 1.25; }

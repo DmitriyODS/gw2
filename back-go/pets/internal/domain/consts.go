@@ -20,7 +20,7 @@ var StageTitles = []string{"Яйцо", "Малыш", "Непоседа", "Под
 var MaxStage = len(StageXP) - 1
 
 const (
-	FeedCost     = 3
+	FeedCost     = 10
 	FeedXP       = 12
 	FeedDailyMax = 6
 )
@@ -51,7 +51,7 @@ const DefaultDailyCap = 10
 // если питомец болен, ускоряет выздоровление — как и работа.
 
 const (
-	WalkCost     = 5
+	WalkCost     = 15
 	WalkDailyMax = 3
 	WalkXP       = 6
 	WalkRecovery = 1
@@ -63,7 +63,7 @@ const (
 // лимитом попыток, чтобы не обесценить лечение работой.
 
 const (
-	HealCost           = 8
+	HealCost           = 25
 	HealDailyMax       = 2
 	HealRecoveryPoints = 1
 )
@@ -73,7 +73,7 @@ const (
 // признания; дневной лимит на ОДНОГО чужого питомца, не на общее число.
 
 const (
-	StrokeCost           = 1
+	StrokeCost           = 2
 	StrokeDailyMaxPerPet = 3
 	StrokeMoodXP         = 2
 )
@@ -142,17 +142,17 @@ var SeasonTrack = []SeasonReward{
 // приходит только наградой сезонного трека. Расставленное видно коллегам.
 
 var HouseDecor = map[string]int{
-	"chair":     15,
-	"plant":     20,
-	"picture":   25,
-	"books":     30,
-	"bed":       35,
-	"sofa":      40,
-	"teddy":     45,
-	"console":   60,
-	"piano":     80,
-	"fountain":  100,
-	"disco":     120,
+	"chair":     50,
+	"plant":     65,
+	"picture":   80,
+	"books":     100,
+	"bed":       120,
+	"sofa":      140,
+	"teddy":     160,
+	"console":   220,
+	"piano":     300,
+	"fountain":  380,
+	"disco":     450,
 	"garland":   0, // награды сезонного трека
 	"goldfish":  0,
 	"fireplace": 0,
@@ -160,6 +160,59 @@ var HouseDecor = map[string]int{
 
 // HousePlacedMax — сколько предметов помещается в сцену домика.
 const HousePlacedMax = 6
+
+// ── Кудо-банк ──────────────────────────────────────────────────────
+// Переводы коллегам, выписка (pet_kudos_ledger), вклад под ежедневный
+// процент и кредит. Условия зависят от уровня клиента (BankTier) — растёт
+// от суммарно ЗАРАБОТАННЫХ кудосов за всё время (переводы входящие, кредит
+// и снятие вклада заработком не считаются).
+
+const (
+	TransferCommentMax = 120
+	SavingsDailyMax    = 15 // кап дневного начисления процентов
+	LedgerPageSize     = 30
+)
+
+// BankTier — уровень клиента банка: паттерн loyalty-tiers (Бронза→Платина).
+// Каждый уровень ощутимо лучше предыдущего: выше ставка вклада, ниже
+// комиссия кредита, больше лимиты переводов и кредита.
+type BankTier struct {
+	Key              string
+	Title            string
+	Threshold        int // заработать кудосов за всё время
+	SavingsRatePct   int // % в день на вклад (простой, не компаунд)
+	LoanFeePct       int // комиссия сверх тела кредита
+	LoanMax          int // максимальное тело кредита
+	TransferDailyCap int // сумма исходящих переводов в день
+	TransferMax      int // максимум за один перевод
+}
+
+// BankTiers — по возрастанию порога; первый — стартовый уровень.
+var BankTiers = []BankTier{
+	{"start", "Новичок", 0, 1, 20, 50, 30, 20},
+	{"bronze", "Бронза", 300, 2, 15, 100, 60, 40},
+	{"silver", "Серебро", 1000, 3, 12, 200, 100, 80},
+	{"gold", "Золото", 2500, 4, 10, 350, 150, 120},
+	{"platinum", "Платина", 6000, 5, 8, 600, 250, 200},
+}
+
+// TierFor — текущий уровень по заработанному + следующий (nil на максимуме).
+func TierFor(earned int) (BankTier, *BankTier) {
+	current := BankTiers[0]
+	for i := range BankTiers {
+		if earned >= BankTiers[i].Threshold {
+			current = BankTiers[i]
+		} else {
+			next := BankTiers[i]
+			return current, &next
+		}
+	}
+	return current, nil
+}
+
+// LedgerEarnExcluded — виды операций, которые НЕ считаются заработком для
+// уровня банка (перекладывание своих же кудосов и входящие переводы).
+var LedgerEarnExcluded = []string{"transfer_in", "loan_taken", "bank_withdraw"}
 
 var StreakMilestones = map[int]bool{
 	3: true, 5: true, 7: true, 10: true, 14: true,

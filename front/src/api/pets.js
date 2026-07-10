@@ -53,3 +53,22 @@ export const deleteColleaguePet = (userId) =>
 export const getRating = () => apiRequest('/pets/rating')
 export const getLive = () => apiRequest('/pets/live')
 export const getActivityLog = () => apiRequest('/pets/activity')
+
+// ─────────────────────────── кудо-банк ──────────────────────────
+
+export const getBank = () => apiRequest('/pets/bank')
+export const getBankLedger = (beforeId = 0) =>
+  apiRequest(`/pets/bank/ledger${beforeId ? `?before_id=${beforeId}` : ''}`)
+export const transferKudos = (toUserId, amount, comment = '') =>
+  apiRequest('/pets/bank/transfer', {
+    method: 'POST',
+    body: { to_user_id: toUserId, amount, comment },
+  })
+export const bankDeposit = (amount) =>
+  apiRequest('/pets/bank/deposit', { method: 'POST', body: { amount } })
+export const bankWithdraw = (amount) =>
+  apiRequest('/pets/bank/withdraw', { method: 'POST', body: { amount } })
+export const bankTakeLoan = (amount) =>
+  apiRequest('/pets/bank/loan', { method: 'POST', body: { amount } })
+export const bankRepayLoan = (amount) =>
+  apiRequest('/pets/bank/loan/repay', { method: 'POST', body: { amount } })

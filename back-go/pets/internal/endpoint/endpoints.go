@@ -47,6 +47,14 @@ type Endpoints struct {
 	GetRating      endpoint.Endpoint
 	GetLive        endpoint.Endpoint
 	GetActivityLog endpoint.Endpoint
+
+	GetBank        endpoint.Endpoint
+	GetBankLedger  endpoint.Endpoint
+	TransferKudos  endpoint.Endpoint
+	BankDeposit    endpoint.Endpoint
+	BankWithdraw   endpoint.Endpoint
+	BankTakeLoan   endpoint.Endpoint
+	BankRepayLoan  endpoint.Endpoint
 }
 
 // ── Транспорт-независимые запросы ─────────────────────────────────
@@ -97,6 +105,26 @@ type SeasonClaimRequest struct {
 type ArrangeRequest struct {
 	Scope
 	Placed []domain.HouseItem
+}
+
+// TransferRequest — перевод кудосов коллеге по компании.
+type TransferRequest struct {
+	Scope
+	ToUserID int64
+	Amount   int
+	Comment  string
+}
+
+// BankAmountRequest — вклад/снятие/кредит/погашение (одна сумма).
+type BankAmountRequest struct {
+	Scope
+	Amount int
+}
+
+// LedgerRequest — страница выписки (keyset вниз от BeforeID; 0 — с начала).
+type LedgerRequest struct {
+	Scope
+	BeforeID int64
 }
 
 func New(svc *service.Service) Endpoints {
@@ -208,6 +236,35 @@ func New(svc *service.Service) Endpoints {
 		GetActivityLog: func(ctx context.Context, request any) (any, error) {
 			r := request.(Scope)
 			return svc.GetActivityLog(ctx, r.UserID)
+		},
+
+		GetBank: func(ctx context.Context, request any) (any, error) {
+			r := request.(Scope)
+			return svc.GetBank(ctx, r.UserID, r.CompanyID)
+		},
+		GetBankLedger: func(ctx context.Context, request any) (any, error) {
+			r := request.(LedgerRequest)
+			return svc.GetBankLedger(ctx, r.UserID, r.BeforeID)
+		},
+		TransferKudos: func(ctx context.Context, request any) (any, error) {
+			r := request.(TransferRequest)
+			return svc.TransferKudos(ctx, r.UserID, r.ToUserID, r.CompanyID, r.Amount, r.Comment)
+		},
+		BankDeposit: func(ctx context.Context, request any) (any, error) {
+			r := request.(BankAmountRequest)
+			return svc.BankDeposit(ctx, r.UserID, r.CompanyID, r.Amount)
+		},
+		BankWithdraw: func(ctx context.Context, request any) (any, error) {
+			r := request.(BankAmountRequest)
+			return svc.BankWithdraw(ctx, r.UserID, r.CompanyID, r.Amount)
+		},
+		BankTakeLoan: func(ctx context.Context, request any) (any, error) {
+			r := request.(BankAmountRequest)
+			return svc.BankTakeLoan(ctx, r.UserID, r.CompanyID, r.Amount)
+		},
+		BankRepayLoan: func(ctx context.Context, request any) (any, error) {
+			r := request.(BankAmountRequest)
+			return svc.BankRepayLoan(ctx, r.UserID, r.CompanyID, r.Amount)
 		},
 	}
 }

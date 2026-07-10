@@ -135,23 +135,43 @@ function createWindow(appUrl) {
   const splash = (hash) => mainWindow.loadFile(path.join(__dirname, 'loading.html'), hash ? { hash } : {})
   let retryTimer = null
   let retryDelay = 2000
+  let watchdog = null
+
+  // Ошибка/зависание → сплэш с сообщением + повтор с бэкоффом.
+  const failover = () => {
+    if (!mainWindow || mainWindow.isDestroyed()) return
+    clearTimeout(watchdog)
+    splash('error')
+    clearTimeout(retryTimer)
+    retryTimer = setTimeout(loadApp, retryDelay)
+    retryDelay = Math.min(retryDelay * 2, 15_000)
+  }
+
   const loadApp = () => {
     if (!mainWindow || mainWindow.isDestroyed()) return
+    // ЗАВИСШЕЕ соединение (TCP-connect висит, DNS ещё не поднялся после
+    // старта ОС, captive portal) did-fail-load не даёт вовсе — Chromium ждёт
+    // свой таймаут ~30с, и окно всё это время пустое. Добиваем сами.
+    clearTimeout(watchdog)
+    watchdog = setTimeout(() => {
+      mainWindow?.webContents.stop() // → did-fail-load c ERR_ABORTED, он игнорится
+      failover()
+    }, 12_000)
     mainWindow.loadURL(appUrl)
   }
 
   mainWindow.webContents.on('did-fail-load', (e, code, desc, url, isMainFrame) => {
     // -3 (ERR_ABORTED) — навигацию сменила другая (в т.ч. наш сплэш), не ошибка.
     if (!isMainFrame || code === -3) return
-    splash('error')
-    clearTimeout(retryTimer)
-    retryTimer = setTimeout(loadApp, retryDelay)
-    retryDelay = Math.min(retryDelay * 2, 15_000)
+    failover()
   })
 
-  // Успешная загрузка приложения — сбрасываем бэкофф на будущее.
+  // Успешная загрузка приложения — снимаем сторожа, сбрасываем бэкофф.
   mainWindow.webContents.on('did-finish-load', () => {
-    if (mainWindow.webContents.getURL().startsWith(appUrl)) retryDelay = 2000
+    if (mainWindow.webContents.getURL().startsWith(appUrl)) {
+      clearTimeout(watchdog)
+      retryDelay = 2000
+    }
   })
 
   // Упавший рендерер (OOM, краш GPU) — тоже не белый экран, а перезагрузка.
@@ -160,8 +180,11 @@ function createWindow(appUrl) {
     setTimeout(loadApp, 1000)
   })
 
-  splash()
-  loadApp()
+  // loadApp — только ПОСЛЕ полной загрузки сплэша: немедленный loadURL
+  // абортил бы его, и первая попытка шла бы на пустом тёмном окне (Electron
+  // держит текущую страницу до коммита новой — загруженный сплэш виден всё
+  // время установки соединения).
+  splash().catch(() => {}).then(() => setTimeout(loadApp, 50))
 }
 
 function showWindow() {

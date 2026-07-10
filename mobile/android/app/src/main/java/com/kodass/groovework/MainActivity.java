@@ -2,9 +2,13 @@ package com.kodass.groovework;
 
 import android.app.NotificationChannel;
 import android.app.NotificationManager;
+import android.net.http.SslError;
 import android.os.Bundle;
+import android.webkit.SslErrorHandler;
+import android.webkit.WebView;
 
 import com.getcapacitor.BridgeActivity;
+import com.getcapacitor.BridgeWebViewClient;
 
 public class MainActivity extends BridgeActivity {
 
@@ -17,6 +21,22 @@ public class MainActivity extends BridgeActivity {
         registerPlugin(NativeShellPlugin.class);
         super.onCreate(savedInstanceState);
         createNotificationChannels();
+
+        // Capacitor ведёт onReceivedError/onReceivedHttpError на server.errorPath,
+        // но НЕ обрабатывает onReceivedSslError: TLS-сбой на холодном старте
+        // (несинхронизированные часы, captive portal) оставлял голый белый/чёрный
+        // WebView без фолбэка. Заворачиваем на ту же страницу ошибки — она сама
+        // повторяет подключение с бэкоффом.
+        this.bridge.setWebViewClient(new BridgeWebViewClient(this.bridge) {
+            @Override
+            public void onReceivedSslError(WebView view, SslErrorHandler handler, SslError error) {
+                handler.cancel();
+                String errorUrl = bridge.getErrorUrl();
+                if (errorUrl != null) {
+                    view.loadUrl(errorUrl);
+                }
+            }
+        });
     }
 
     @Override

@@ -676,10 +676,12 @@ textarea.ctl.invalid:focus {
 
 .btn-glass .material-symbols-outlined { font-size: 20px; }
 
-.btn-glass:hover {
+.btn-glass:hover:not(:disabled) {
   background: color-mix(in oklch, var(--color-primary) 8%, var(--acrylic-card-bg));
   border-color: color-mix(in oklch, var(--color-primary) 30%, var(--acrylic-border));
 }
+
+.btn-glass:disabled { opacity: 0.5; cursor: not-allowed; }
 
 /* Мягкая success-кнопка действия («В работу» и аналоги). */
 .btn-soft-success {

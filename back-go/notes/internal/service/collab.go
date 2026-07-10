@@ -18,7 +18,7 @@ var collabKinds = map[string]bool{"join": true, "leave": true, "cursor": true, "
 // Горячий путь (cursor/doc идут на каждое действие): ФИО отправителя кладётся
 // в payload ТОЛЬКО на join — клиент кэширует его по user_id; cursor/leave/doc
 // поле fio не несут, лишний запрос в users на каждое событие не делается.
-func (s *Service) Collab(ctx context.Context, userID, noteID int64, kind string, cursor *domain.CollabCursor, doc json.RawMessage) error {
+func (s *Service) Collab(ctx context.Context, userID, noteID int64, kind string, cursor *domain.CollabCursor, doc json.RawMessage, title *string) error {
 	if !collabKinds[kind] {
 		return domain.ErrBadCollabKind
 	}
@@ -40,6 +40,12 @@ func (s *Service) Collab(ctx context.Context, userID, noteID int64, kind string,
 	}
 	if doc != nil {
 		payload["doc"] = doc
+	}
+	// Название — часть live-правки (kind=doc, то же право): редактор шлёт его
+	// вместе с документом, чтобы у соавторов заголовок менялся в реальном
+	// времени, а не только после PATCH-сохранения.
+	if title != nil && kind == "doc" {
+		payload["title"] = *title
 	}
 	s.bus.Publish(ctx, "note_collab:"+kind, s.noteRooms(ctx, noteID, n.OwnerID), payload)
 	return nil

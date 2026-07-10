@@ -1,6 +1,7 @@
 package http
 
 import (
+	"context"
 	"encoding/json"
 	"log/slog"
 	"strconv"
@@ -366,4 +367,78 @@ func (h *handlers) getActivityLog(c *fiber.Ctx) error {
 		return h.respondError(c, err)
 	}
 	return c.JSON(fiber.Map{"items": resp})
+}
+
+// ─────────────────────────── кудо-банк ─────────────────────────────
+
+func (h *handlers) getBank(c *fiber.Ctx) error {
+	resp, err := h.eps.GetBank(c.Context(), scope(c))
+	if err != nil {
+		return h.respondError(c, err)
+	}
+	return c.JSON(resp)
+}
+
+func (h *handlers) getBankLedger(c *fiber.Ctx) error {
+	beforeID, _ := parseInt64(c.Query("before_id", "0"))
+	resp, err := h.eps.GetBankLedger(c.Context(), endpoint.LedgerRequest{
+		Scope: scope(c), BeforeID: beforeID,
+	})
+	if err != nil {
+		return h.respondError(c, err)
+	}
+	return c.JSON(resp)
+}
+
+func (h *handlers) transferKudos(c *fiber.Ctx) error {
+	var body struct {
+		ToUserID *int64  `json:"to_user_id"`
+		Amount   *int    `json:"amount"`
+		Comment  *string `json:"comment"`
+	}
+	parseBody(c, &body)
+	if body.ToUserID == nil || *body.ToUserID <= 0 {
+		return validationError(c, "to_user_id", "Обязательное поле")
+	}
+	if body.Amount == nil || *body.Amount <= 0 {
+		return validationError(c, "amount", "Сумма должна быть положительной")
+	}
+	comment := ""
+	if body.Comment != nil {
+		comment = strings.TrimSpace(*body.Comment)
+	}
+	if runeLen(comment) > domain.TransferCommentMax {
+		return validationError(c, "comment",
+			"Длина не должна превышать "+strconv.Itoa(domain.TransferCommentMax)+" символов")
+	}
+	resp, err := h.eps.TransferKudos(c.Context(), endpoint.TransferRequest{
+		Scope: scope(c), ToUserID: *body.ToUserID, Amount: *body.Amount, Comment: comment,
+	})
+	if err != nil {
+		return h.respondError(c, err)
+	}
+	return c.JSON(resp)
+}
+
+// bankAmount — общий разбор тела {amount} банковских операций.
+func (h *handlers) bankAmount(c *fiber.Ctx, ep func(context.Context, any) (any, error)) error {
+	var body struct {
+		Amount *int `json:"amount"`
+	}
+	parseBody(c, &body)
+	if body.Amount == nil || *body.Amount <= 0 {
+		return validationError(c, "amount", "Сумма должна быть положительной")
+	}
+	resp, err := ep(c.Context(), endpoint.BankAmountRequest{Scope: scope(c), Amount: *body.Amount})
+	if err != nil {
+		return h.respondError(c, err)
+	}
+	return c.JSON(resp)
+}
+
+func (h *handlers) bankDeposit(c *fiber.Ctx) error  { return h.bankAmount(c, h.eps.BankDeposit) }
+func (h *handlers) bankWithdraw(c *fiber.Ctx) error { return h.bankAmount(c, h.eps.BankWithdraw) }
+func (h *handlers) bankTakeLoan(c *fiber.Ctx) error { return h.bankAmount(c, h.eps.BankTakeLoan) }
+func (h *handlers) bankRepayLoan(c *fiber.Ctx) error {
+	return h.bankAmount(c, h.eps.BankRepayLoan)
 }

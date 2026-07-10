@@ -58,6 +58,16 @@
           {{ task.stage.name }}
         </span>
         <span
+          v-for="tg in task.tags || []"
+          :key="tg.id"
+          class="chip-tint stage-chip"
+          :style="tagChipStyle(tg)"
+          :title="`Тег: ${tg.name}`"
+        >
+          <span class="material-symbols-outlined tag-chip-icon">sell</span>
+          {{ tg.name }}
+        </span>
+        <span
           v-if="deadlineInfo"
           class="chip-tint"
           :class="deadlineChipClass"
@@ -151,6 +161,16 @@ const stageDotStyle = computed(() => {
   if (!color) return {}
   return { background: `var(--tag-${color}-accent)` }
 })
+
+// Чип тега — та же палитра токенов, что и этап.
+function tagChipStyle(tag) {
+  if (!tag?.color) return {}
+  return {
+    background: `var(--tag-${tag.color}-surface)`,
+    color: `var(--tag-${tag.color}-accent)`,
+    borderColor: `var(--tag-${tag.color}-border)`,
+  }
+}
 
 const isRunningHere = computed(() => unitsStore.activeUnit?.task_id === props.task.id)
 
@@ -352,6 +372,8 @@ function formatDate(d) {
 .stage-chip {
   border: 1px solid transparent;
 }
+
+.tag-chip-icon { font-size: 13px; }
 
 .stage-dot {
   width: 8px;

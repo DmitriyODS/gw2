@@ -37,10 +37,25 @@ type UserRef struct {
 	AvatarPath *string
 }
 
-// DeptRef / StageRef — вложенные ссылки задачи.
+// DeptRef / StageRef / TagRef — вложенные ссылки задачи.
 type DeptRef struct {
 	ID   int64
 	Name string
+}
+
+// TagRef — тег в дампе задачи.
+type TagRef struct {
+	ID    int64
+	Name  string
+	Color string
+}
+
+// Tag — тег компании (справочник; цвет — из палитры TaskColors).
+type Tag struct {
+	ID        int64
+	CompanyID int64
+	Name      string
+	Color     string
 }
 
 type StageRef struct {
@@ -160,8 +175,13 @@ type TaskListFilter struct {
 	ReceivedTo        *time.Time
 	HasUnits          string // "" | none | mine
 	AuthorID          *int64
-	Page              int
-	PerPage           int
+	// TagIDs — задача должна иметь ХОТЯ БЫ ОДИН из выбранных тегов (ИЛИ).
+	TagIDs []int64
+	// Colors — ЛИЧНЫЙ цвет карточки текущего пользователя (user_task_colors):
+	// хотя бы один из выбранных.
+	Colors  []string
+	Page    int
+	PerPage int
 	// OrderedIDs — семантическая выдача aisvc: id уже по релевантности.
 	// nil — обычный режим; пустой непустой указатель — пустая выдача.
 	OrderedIDs []int64

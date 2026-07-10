@@ -26,6 +26,19 @@ export const restoreTask = (taskId) => apiRequest(`/tasks/${taskId}/restore`, { 
 export const setTaskColor = (taskId, color) =>
   apiRequest(`/tasks/${taskId}/color`, { method: 'PUT', body: { color } })
 
+// ── Теги (справочник компании + назначение задаче) ──────────────
+// Роуты живут под /api/tasks/tags — общий nginx-префикс tasksvc.
+export const getTags = () => apiRequest('/tasks/tags')
+export const createTag = (name, color) =>
+  apiRequest('/tasks/tags', { method: 'POST', body: { name, color } })
+export const updateTag = (tagId, data) =>
+  apiRequest(`/tasks/tags/${tagId}`, { method: 'PATCH', body: data })
+export const deleteTag = (tagId) =>
+  apiRequest(`/tasks/tags/${tagId}`, { method: 'DELETE' })
+// Полная замена набора тегов задачи.
+export const setTaskTags = (taskId, tagIds) =>
+  apiRequest(`/tasks/${taskId}/tags`, { method: 'PUT', body: { tag_ids: tagIds } })
+
 // v3 — ответственный, этап, контрибьюторы, комментарии
 export const setTaskResponsible = (taskId, responsibleUserId) =>
   apiRequest(`/tasks/${taskId}/responsible`, {

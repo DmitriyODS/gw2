@@ -91,6 +91,7 @@ type CollabReq struct {
 	Kind   string
 	Cursor *domain.CollabCursor
 	Doc    json.RawMessage
+	Title  *string
 }
 
 type SetGroupsReq struct {
@@ -209,7 +210,7 @@ func New(s *service.Service) Endpoints {
 		},
 		Collab: func(ctx context.Context, request any) (any, error) {
 			r := request.(CollabReq)
-			return nil, s.Collab(ctx, r.UserID, r.NoteID, r.Kind, r.Cursor, r.Doc)
+			return nil, s.Collab(ctx, r.UserID, r.NoteID, r.Kind, r.Cursor, r.Doc, r.Title)
 		},
 		Upload: func(ctx context.Context, request any) (any, error) {
 			r := request.(UploadReq)

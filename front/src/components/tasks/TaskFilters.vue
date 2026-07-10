@@ -125,6 +125,61 @@
         </div>
       </section>
 
+      <!-- Теги (мультивыбор: «хотя бы один из отмеченных») -->
+      <section v-if="tags.length || canManageTags" class="rail-section">
+        <h4 class="rail-label tags-label">
+          Теги
+          <button
+            v-if="canManageTags"
+            class="tags-manage-btn"
+            type="button"
+            title="Управлять тегами"
+            aria-label="Управлять тегами"
+            @click="tagsManageOpen = true"
+          >
+            <span class="material-symbols-outlined">settings</span>
+          </button>
+        </h4>
+        <div class="chip-group">
+          <button
+            v-for="t in tags"
+            :key="t.id"
+            class="chip stage-chip-filter"
+            :class="{ active: tasksStore.filters.tag_ids?.includes(t.id) }"
+            :style="stageChipStyle(t)"
+            @click="tasksStore.toggleTagFilter(t.id)"
+          >
+            <span class="stage-chip-dot" :style="{ background: `var(--tag-${t.color}-accent)` }" />
+            {{ t.name }}
+          </button>
+          <p v-if="!tags.length" class="tags-empty">Тегов пока нет — создайте первый</p>
+        </div>
+      </section>
+
+      <!-- Мой цвет карточки (личный, мультивыбор) -->
+      <section class="rail-section">
+        <h4 class="rail-label">Мой цвет</h4>
+        <div class="color-filter-group">
+          <button
+            v-for="c in TASK_COLORS"
+            :key="c.id"
+            class="color-filter-swatch"
+            :class="{ active: tasksStore.filters.colors?.includes(c.id) }"
+            :style="{ background: `var(--tag-${c.id}-surface)`, borderColor: `var(--tag-${c.id}-border)` }"
+            :title="c.label"
+            :aria-label="c.label"
+            type="button"
+            @click="tasksStore.toggleColorFilter(c.id)"
+          >
+            <span
+              v-if="tasksStore.filters.colors?.includes(c.id)"
+              class="material-symbols-outlined color-filter-check"
+              :style="{ color: `var(--tag-${c.id}-accent)` }"
+            >check</span>
+          </button>
+        </div>
+      </section>
+
       <!-- Период поступления -->
       <section class="rail-section">
         <h4 class="rail-label">Период поступления</h4>
@@ -176,6 +231,8 @@
       </template>
     </Dialog>
 
+    <TagManageDialog v-model="tagsManageOpen" :tags="tags" @changed="reloadTags" />
+
     <div class="filters-foot">
       <button
         class="rail-reset"
@@ -203,6 +260,9 @@ import { useTasksStore } from '@/stores/tasks.js'
 import { getDepartments } from '@/api/departments.js'
 import { getStages } from '@/api/stages.js'
 import { useCompanySettings } from '@/composables/useCompanySettings.js'
+import { usePermission, ROLES } from '@/composables/usePermission.js'
+import TagManageDialog from '@/components/tasks/TagManageDialog.vue'
+import { TASK_COLORS } from '@/utils/taskColors.js'
 import { TASK_SORTS } from '@/components/tasks/taskSorts.js'
 
 const props = defineProps({
@@ -222,6 +282,12 @@ const isMobileVisible = computed(() => props.mobileVisible)
 const departments = ref([])
 const deptOptions = computed(() => departments.value)
 const stages = ref([])
+const tags = computed(() => tasksStore.tags)
+const tagsManageOpen = ref(false)
+const { isAtLeast } = usePermission()
+const canManageTags = computed(() => isAtLeast(ROLES.MANAGER))
+
+const reloadTags = () => tasksStore.fetchTags({ force: true })
 
 function stageChipStyle(s) {
   if (!s?.color) return {}
@@ -241,6 +307,8 @@ const hasActiveFilters = computed(() => {
     || f.received_from
     || f.received_to
     || f.created_by_me
+    || (f.tag_ids?.length > 0)
+    || (f.colors?.length > 0)
 })
 
 function onDeptChange(value) {
@@ -284,6 +352,7 @@ onMounted(async () => {
       stages.value = []
     }
   }
+  await tasksStore.fetchTags()
 })
 
 const showCustomDialog = ref(false)
@@ -429,6 +498,60 @@ function closeCustomDialog() {
   height: 8px;
   border-radius: 50%;
 }
+
+/* ── Теги ── */
+.tags-label {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.tags-manage-btn {
+  border: none;
+  background: transparent;
+  color: var(--color-text-dim);
+  cursor: pointer;
+  display: inline-flex;
+  padding: 2px;
+  border-radius: var(--radius-full);
+}
+
+.tags-manage-btn:hover { color: var(--color-text); }
+.tags-manage-btn .material-symbols-outlined { font-size: 16px; }
+
+.tags-empty {
+  margin: 0;
+  font-size: 12px;
+  color: var(--color-text-dim);
+}
+
+/* ── Фильтр по личному цвету ── */
+.color-filter-group {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+  padding: 0 6px;
+}
+
+.color-filter-swatch {
+  width: 26px;
+  height: 26px;
+  border-radius: var(--radius-sm);
+  border: 1px solid;
+  cursor: pointer;
+  padding: 0;
+  display: grid;
+  place-items: center;
+  transition: transform 0.12s, outline-color 0.12s;
+}
+
+.color-filter-swatch.active {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 1px;
+  transform: scale(1.06);
+}
+
+.color-filter-check { font-size: 15px; font-weight: 700; }
 
 /* PrimeVue Select под визуал панели */
 .dept-select {

@@ -17,6 +17,7 @@ type Service struct {
 	pets      domain.PetRepo
 	shop      domain.ShopRepo
 	activity  domain.ActivityRepo
+	bank      domain.BankRepo
 	users     domain.UserReader
 	companies domain.CompanyReader
 	work      domain.WorkReader
@@ -26,11 +27,12 @@ type Service struct {
 }
 
 func New(pets domain.PetRepo, shop domain.ShopRepo, activity domain.ActivityRepo,
-	users domain.UserReader, companies domain.CompanyReader, work domain.WorkReader,
-	daily domain.Daily, pub domain.EventPublisher, log *slog.Logger) *Service {
+	bank domain.BankRepo, users domain.UserReader, companies domain.CompanyReader,
+	work domain.WorkReader, daily domain.Daily, pub domain.EventPublisher,
+	log *slog.Logger) *Service {
 
 	return &Service{
-		pets: pets, shop: shop, activity: activity, users: users,
+		pets: pets, shop: shop, activity: activity, bank: bank, users: users,
 		companies: companies, work: work, daily: daily, pub: pub, log: log,
 	}
 }
@@ -117,6 +119,24 @@ func (s *Service) appendActivity(ctx context.Context, petUserID int64, kind stri
 	}
 	if err := s.activity.Append(ctx, petUserID, kind, payload); err != nil {
 		s.log.Warn("pets.activity_log_failed", "pet_user_id", petUserID, "kind", kind, "error", err)
+	}
+}
+
+// appendLedger — запись в выписку кудо-банка; журнальная (fire-and-forget),
+// как appendActivity: механика не должна падать из-за выписки. Банковские
+// операции (переводы/вклад/кредит) пишут леджер сами — транзакционно.
+func (s *Service) appendLedger(ctx context.Context, userID, companyID int64,
+	delta int, kind string, counterpartyID *int64, comment string) {
+
+	if delta == 0 {
+		return
+	}
+	err := s.bank.AppendLedger(ctx, &domain.LedgerEntry{
+		UserID: userID, CompanyID: companyID, Delta: delta, Kind: kind,
+		CounterpartyID: counterpartyID, Comment: comment,
+	})
+	if err != nil {
+		s.log.Warn("pets.ledger_append_failed", "user_id", userID, "kind", kind, "error", err)
 	}
 }
 

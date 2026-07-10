@@ -83,6 +83,42 @@ type PetRepo interface {
 	RecordStroke(ctx context.Context, petOwnerID, strokerID int64, day time.Time) error
 }
 
+// BankRepo — кудо-банк: леджер движений кудосов, переводы, вклад и кредит.
+// Все мутации балансов — атомарные UPDATE с guard'ами в WHERE (по образцу
+// BuyHouseDecor); ok=false — гейт не сошёлся (недостаток средств и т.п.),
+// вызывающий различает причину по прочитанному снимку питомца.
+type BankRepo interface {
+	// AppendLedger — запись в выписку (вне транзакций мутаций — как журнал).
+	AppendLedger(ctx context.Context, e *LedgerEntry) error
+	// ListLedger — выписка пользователя, keyset по id вниз (beforeID 0 — с начала).
+	ListLedger(ctx context.Context, userID, beforeID int64, limit int) ([]*LedgerEntry, error)
+	// Transfer — атомарный перевод: списание с guard kudos >= amount,
+	// зачисление получателю и обе записи леджера в одной транзакции.
+	Transfer(ctx context.Context, fromID, toID, companyID int64, amount int, comment string) (fromKudos int, ok bool, err error)
+	// MonthlyTotals — приход/расход по выписке за последние 30 дней.
+	MonthlyTotals(ctx context.Context, userID int64) (in, out int, err error)
+	// LifetimeEarned — суммарно заработано за всё время (без transfer_in/
+	// loan_taken/bank_withdraw) — определяет уровень клиента банка.
+	LifetimeEarned(ctx context.Context, userID int64) (int, error)
+	// TopGenerous — топ дарителей компании за 30 дней (по transfer_out).
+	TopGenerous(ctx context.Context, companyID int64, limit int) ([]GenerousEntry, error)
+	// DepositSavings — кошелёк → вклад (guard: kudos >= amount, долга нет).
+	DepositSavings(ctx context.Context, userID int64, amount int) (kudos, savings int, ok bool, err error)
+	// WithdrawSavings — вклад → кошелёк (guard: savings >= amount); вклад,
+	// сходящий в ноль, обнуляет отметку начисления процентов.
+	WithdrawSavings(ctx context.Context, userID int64, amount int) (kudos, savings int, ok bool, err error)
+	// AccrueSavings — ленивое начисление процентов за целые прошедшие сутки
+	// (одним UPDATE + запись леджера; повторный конкурентный вызов начислит 0).
+	AccrueSavings(ctx context.Context, userID, companyID int64, ratePct, dailyMax int) (interest int, err error)
+	// TakeLoan — выдача кредита: +amount на кошелёк, долг = amount + комиссия
+	// (guard: активного долга нет).
+	TakeLoan(ctx context.Context, userID int64, amount, debt int) (kudos int, ok bool, err error)
+	// RepayLoan — погашение с кошелька (guard: kudos >= amount и долг >= amount).
+	RepayLoan(ctx context.Context, userID int64, amount int) (kudos, loan int, ok bool, err error)
+	// DeleteLedger — чистка выписки при удалении питомца.
+	DeleteLedger(ctx context.Context, userID int64) error
+}
+
 // ShopRepo — магазин питомца: постоянные/ротационные/лимитированные/
 // достигаемые предметы (pet_shop_items, pet_shop_purchases).
 type ShopRepo interface {

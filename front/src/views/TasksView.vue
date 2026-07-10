@@ -211,9 +211,12 @@
       :is-archived="!!taskCtxMenu.task?.is_archived"
       :is-running="taskCtxIsRunning"
       :color="taskCtxMenu.task?.color || ''"
+      :tags="tasksStore.tags"
+      :task-tag-ids="taskCtxTagIds"
       @close="taskCtxMenu.visible = false"
       @action="onTaskCtxAction"
       @color="onTaskCtxColor"
+      @toggle-tag="onTaskCtxToggleTag"
     />
 
     <!-- Диалог отправки задачи в чат -->
@@ -446,6 +449,23 @@ const taskCtxIsRunning = computed(() => {
 
 function openTaskContextMenu({ x, y, task }) {
   taskCtxMenu.value = { visible: true, x, y, task }
+  tasksStore.fetchTags() // лениво: справочник для секции «Теги»
+}
+
+// Отмеченные теги — из АКТУАЛЬНОЙ задачи стора (patchTask обновляет её после
+// каждого toggle, снапшот в taskCtxMenu устаревает).
+const taskCtxTagIds = computed(() => {
+  const id = taskCtxMenu.value.task?.id
+  const task = id != null ? (tasksStore.taskById.get(id) || taskCtxMenu.value.task) : null
+  return (task?.tags || []).map((t) => t.id)
+})
+
+function onTaskCtxToggleTag(tagId) {
+  const task = taskCtxMenu.value.task
+  if (!task) return
+  tasksStore.toggleTaskTag(task.id, tagId).catch((e) => {
+    notif.error(e?.message || 'Не удалось изменить теги')
+  })
 }
 
 function onTaskCtxColor(colorId) {

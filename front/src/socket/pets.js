@@ -15,6 +15,12 @@ export function registerPetsSocketHandlers(socket) {
     try { usePetsStore().applyPetDeleted(data) } catch { /* noop */ }
   })
 
+  // Входящий перевод кудо-банка (адресно в комнату получателя): тост
+  // «+N кудосов от …»; баланс приедет соседним pet:update.
+  socket.on('kudos:received', (data) => {
+    try { usePetsStore().applyKudosReceived(data) } catch { /* noop */ }
+  })
+
   // Опорные точки блока «Сейчас в эфире» — сокет-события юнитов tasksvc.
   const refreshLive = () => {
     try {

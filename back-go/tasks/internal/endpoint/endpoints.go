@@ -49,6 +49,12 @@ type Endpoints struct {
 	UpdateDepartment endpoint.Endpoint
 	DeleteDepartment endpoint.Endpoint
 
+	ListTags    endpoint.Endpoint
+	CreateTag   endpoint.Endpoint
+	UpdateTag   endpoint.Endpoint
+	DeleteTag   endpoint.Endpoint
+	SetTaskTags endpoint.Endpoint
+
 	ListStages    endpoint.Endpoint
 	CreateStage   endpoint.Endpoint
 	UpdateStage   endpoint.Endpoint
@@ -134,6 +140,28 @@ type SetStageRequest struct {
 	ActorID   int64
 	CompanyID *int64
 	StageID   *int64
+}
+
+// TagCreateRequest / TagUpdateRequest — CRUD справочника тегов компании.
+type TagCreateRequest struct {
+	CompanyID int64
+	Name      string
+	Color     string
+}
+
+type TagUpdateRequest struct {
+	CompanyID int64
+	TagID     int64
+	Name      *string
+	Color     *string
+}
+
+// SetTaskTagsRequest — полная замена набора тегов задачи.
+type SetTaskTagsRequest struct {
+	TaskID    int64
+	ActorID   int64
+	CompanyID *int64
+	TagIDs    []int64
 }
 
 type CreateUnitRequest struct {
@@ -436,6 +464,26 @@ func New(svc *service.Service, yg *service.Yougile) Endpoints {
 		DeleteDepartment: func(ctx context.Context, request any) (any, error) {
 			req := request.(CompanyItemRequest)
 			return nil, svc.DeleteDepartment(ctx, req.CompanyID, req.ItemID)
+		},
+
+		ListTags: func(ctx context.Context, request any) (any, error) {
+			return svc.ListTags(ctx, request.(int64))
+		},
+		CreateTag: func(ctx context.Context, request any) (any, error) {
+			req := request.(TagCreateRequest)
+			return svc.CreateTag(ctx, req.CompanyID, req.Name, req.Color)
+		},
+		UpdateTag: func(ctx context.Context, request any) (any, error) {
+			req := request.(TagUpdateRequest)
+			return svc.UpdateTag(ctx, req.CompanyID, req.TagID, req.Name, req.Color)
+		},
+		DeleteTag: func(ctx context.Context, request any) (any, error) {
+			req := request.(CompanyItemRequest)
+			return nil, svc.DeleteTag(ctx, req.CompanyID, req.ItemID)
+		},
+		SetTaskTags: func(ctx context.Context, request any) (any, error) {
+			req := request.(SetTaskTagsRequest)
+			return svc.SetTaskTags(ctx, req.TaskID, req.ActorID, req.CompanyID, req.TagIDs)
 		},
 
 		ListStages: func(ctx context.Context, request any) (any, error) {

@@ -1,9 +1,11 @@
 // Совместное редактирование заметки: присутствие («кто сейчас в заметке»),
-// живые курсоры и трансляция правок. Транспорт — POST /api/notes/:id/collab
-// (broadcast без сохранения) + сокет-события note_collab:* через gateway.
-// Конфликты — last-write-wins: удалённый документ применяется, только когда
-// локально не печатают (несохранённых правок нет); свои позиции курсора
-// восстанавливаются после применения.
+// живые курсоры и трансляция правок (документ + название). Транспорт —
+// POST /api/notes/:id/collab (broadcast без сохранения) + сокет-события
+// note_collab:* через gateway. Конфликты — last-write-wins: удалённый
+// документ применяется всегда, КРОМЕ момента, когда локально печатают прямо
+// сейчас (isTyping — фокус в редакторе + свежий ввод); «грязный» автосейв
+// сам по себе применение не блокирует — иначе при одновременном наборе
+// участники глушили бы правки друг друга на всё окно дебаунса.
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { Plugin, PluginKey } from '@tiptap/pm/state'
 import { Decoration, DecorationSet } from '@tiptap/pm/view'
@@ -24,7 +26,7 @@ function colorFor(userId) {
   return TASK_COLORS[Math.abs(userId) % TASK_COLORS.length].id
 }
 
-export function useNoteCollab({ noteId, editorRef, canEdit, isLocallyDirty, fallbackNames }) {
+export function useNoteCollab({ noteId, editorRef, canEdit, isTyping, getTitle, onRemoteTitle, fallbackNames }) {
   const auth = useAuthStore()
   const participants = ref(new Map()) // userId → {fio, color, cursor, lastSeen}
 
@@ -83,7 +85,11 @@ export function useNoteCollab({ noteId, editorRef, canEdit, isLocallyDirty, fall
       docTimer = null
       const ed = editorRef.value?.editor
       if (!ed) return
-      send({ kind: 'doc', doc: ed.getJSON(), cursor: currentCursor() })
+      const body = { kind: 'doc', doc: ed.getJSON(), cursor: currentCursor() }
+      // Название едет вместе с документом — у соавторов оно меняется живьём.
+      const title = getTitle?.()
+      if (title != null) body.title = title
+      send(body)
     }, DOC_THROTTLE_MS)
   }
 
@@ -111,10 +117,13 @@ export function useNoteCollab({ noteId, editorRef, canEdit, isLocallyDirty, fall
   function onDoc(p) {
     if (isMine(p)) return
     touch(p.user_id, { cursor: p.cursor || null })
+    // Название применяется независимо от набора в теле — решение «не затирать,
+    // пока курсор в поле названия» принимает редактор.
+    if (p.title != null) onRemoteTitle?.(p.title)
     const ed = editorRef.value?.editor
     if (!ed || !p.doc) return
-    // Локальные несохранённые правки не затираем — победит последний PATCH.
-    if (isLocallyDirty()) return
+    // Не затираем только живой набор (фокус + свежий ввод); победит последний.
+    if (isTyping?.()) return
     const sel = ed.state.selection
     ed.commands.setContent(p.doc, false) // без emitUpdate — не наш ввод
     const size = ed.state.doc.content.size
@@ -222,5 +231,5 @@ export function useNoteCollab({ noteId, editorRef, canEdit, isLocallyDirty, fall
 
   onBeforeUnmount(stop)
 
-  return { others, start, stop }
+  return { others, start, stop, sendDoc: sendDocThrottled }
 }

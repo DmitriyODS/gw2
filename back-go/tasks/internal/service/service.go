@@ -17,6 +17,7 @@ const roomAll = "all"
 
 type Service struct {
 	tasks     domain.TaskRepository
+	tags      domain.TagRepository
 	units     domain.UnitRepository
 	unitTypes domain.UnitTypeRepository
 	depts     domain.DepartmentRepository
@@ -36,6 +37,7 @@ type Service struct {
 
 type Deps struct {
 	Tasks     domain.TaskRepository
+	Tags      domain.TagRepository
 	Units     domain.UnitRepository
 	UnitTypes domain.UnitTypeRepository
 	Depts     domain.DepartmentRepository
@@ -52,9 +54,10 @@ type Deps struct {
 
 func New(d Deps) *Service {
 	return &Service{
-		tasks: d.Tasks, units: d.Units, unitTypes: d.UnitTypes, depts: d.Depts,
-		stages: d.Stages, comments: d.Comments, stats: d.Stats, users: d.Users,
-		companies: d.Companies, pets: d.Pets, ai: d.AI, bus: d.Bus, log: d.Log,
+		tasks: d.Tasks, tags: d.Tags, units: d.Units, unitTypes: d.UnitTypes,
+		depts: d.Depts, stages: d.Stages, comments: d.Comments, stats: d.Stats,
+		users: d.Users, companies: d.Companies, pets: d.Pets, ai: d.AI,
+		bus: d.Bus, log: d.Log,
 	}
 }
 
@@ -117,11 +120,16 @@ func (s *Service) enrichTask(ctx context.Context, t *domain.Task, userID int64) 
 	if err != nil {
 		return dto.Task{}, err
 	}
+	tags, err := s.tags.TagsByTasks(ctx, []int64{t.ID})
+	if err != nil {
+		return dto.Task{}, err
+	}
 	return dto.NewTask(t, dto.TaskEnrich{
 		IsFavorite:     isFav,
 		HasUnits:       hasUnits,
 		ActiveUsers:    activeUsers,
 		Color:          color,
+		Tags:           tags[t.ID],
 		YougileEnabled: s.yougileEnabled(ctx, t.CompanyID),
 	}), nil
 }

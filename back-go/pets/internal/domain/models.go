@@ -62,7 +62,12 @@ type Pet struct {
 	Generation      int         // престиж: растёт при перерождении, не сбрасывается
 	HouseOwned      []string    // купленный декор домика
 	HousePlaced     []HouseItem // расставленный декор (⊆ owned, лимит HousePlacedMax)
-	User            *UserRef
+	// Кудо-банк: вклад/долг меняются только узкими атомарными методами
+	// BankRepo (как престиж/домик) — в full-row SavePet не входят.
+	BankSavings          int
+	BankSavingsAccruedAt *time.Time // с какого момента капает процент (NULL — вклад пуст)
+	BankLoan             int        // остаток долга (0 — кредита нет)
+	User                 *UserRef
 }
 
 // HouseItem — предмет, расставленный в домике: свободные координаты в
@@ -157,4 +162,26 @@ type ActivityLogEntry struct {
 	Kind      string
 	Payload   map[string]any
 	CreatedAt time.Time
+}
+
+// LedgerEntry — операция кудо-банка (pet_kudos_ledger): delta >0 приход,
+// <0 расход; kind — источник (unit/task_closed/feed/shop/transfer_in/…);
+// Counterparty — второй участник перевода.
+type LedgerEntry struct {
+	ID             int64
+	UserID         int64
+	CompanyID      int64
+	Delta          int
+	Kind           string
+	CounterpartyID *int64
+	Counterparty   *UserRef
+	Comment        string
+	CreatedAt      time.Time
+}
+
+// GenerousEntry — строка топа щедрости: сколько кудосов человек подарил
+// коллегам за период.
+type GenerousEntry struct {
+	User *UserRef
+	Sent int
 }

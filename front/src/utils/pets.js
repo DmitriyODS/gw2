@@ -225,6 +225,19 @@ export const ACTIVITY_META = {
     icon: 'chair',
     text: (p) => `Обновка для домика: ${decorTitle(p?.key)}`,
   },
+  kudos_sent: {
+    icon: 'send_money',
+    text: (p) => `Перевод коллеге: −${p?.amount ?? 0} кудосов`,
+  },
+  kudos_received: {
+    icon: 'redeem',
+    text: (p) => `Перевод от коллеги: +${p?.amount ?? 0} кудосов${p?.comment ? ` — «${p.comment}»` : ''}`,
+  },
+  bank_deposit: { icon: 'savings', text: (p) => `Пополнение вклада: ${p?.amount ?? 0} кудосов` },
+  bank_withdraw: { icon: 'savings', text: (p) => `Снятие с вклада: ${p?.amount ?? 0} кудосов` },
+  bank_interest: { icon: 'trending_up', text: (p) => `Проценты по вкладу: +${p?.amount ?? 0} кудосов` },
+  loan_taken: { icon: 'credit_score', text: (p) => `Кредит: +${p?.amount ?? 0} кудосов (долг ${p?.debt ?? '?'})` },
+  loan_repaid: { icon: 'credit_score', text: (p) => `Погашение кредита: −${p?.amount ?? 0} кудосов` },
 }
 
 export function activityText(entry) {

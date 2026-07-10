@@ -66,6 +66,24 @@
         />
       </div>
 
+      <div v-if="allTags.length" class="form-field">
+        <label class="form-label">Теги</label>
+        <div class="tag-pick-group">
+          <button
+            v-for="t in allTags"
+            :key="t.id"
+            type="button"
+            class="tag-pick"
+            :class="{ active: selectedTagIds.includes(t.id) }"
+            :style="tagPickStyle(t)"
+            @click="toggleTag(t.id)"
+          >
+            <span class="tag-pick-dot" :style="{ background: `var(--tag-${t.color}-accent)` }" />
+            {{ t.name }}
+          </button>
+        </div>
+      </div>
+
       <div class="form-field">
         <label class="form-label">Заказчик (отдел) <span class="required">*</span></label>
         <Select
@@ -158,13 +176,14 @@ import AppDialog from '@/components/common/AppDialog.vue'
 import InputText from 'primevue/inputtext'
 import Select from 'primevue/select'
 import DatePicker from 'primevue/datepicker'
-import { createTask, updateTask } from '@/api/tasks.js'
+import { createTask, updateTask, setTaskTags } from '@/api/tasks.js'
 import { getDepartments } from '@/api/departments.js'
 import { getUnitTypes } from '@/api/unitTypes.js'
 import { createUnit } from '@/api/units.js'
 import { getStages } from '@/api/stages.js'
 import { useNotificationsStore } from '@/stores/notifications.js'
 import { useUnitsStore } from '@/stores/units.js'
+import { useTasksStore } from '@/stores/tasks.js'
 import { useAuthStore } from '@/stores/auth.js'
 import { useCompanySettings } from '@/composables/useCompanySettings.js'
 import { getDirectory, getDirectoryUser } from '@/api/users.js'
@@ -256,6 +275,26 @@ const unitTypeId = ref(null)
 const unitTypes = ref([])
 const unitTypesLoading = ref(false)
 
+// Теги: справочник компании (общий стор) + выбранные у задачи (полная
+// замена при submit).
+const tasksStoreTags = useTasksStore()
+const allTags = computed(() => tasksStoreTags.tags)
+const selectedTagIds = ref((props.task?.tags || []).map((t) => t.id))
+
+function toggleTag(id) {
+  selectedTagIds.value = selectedTagIds.value.includes(id)
+    ? selectedTagIds.value.filter((v) => v !== id)
+    : [...selectedTagIds.value, id]
+}
+
+function tagPickStyle(t) {
+  if (!t?.color) return {}
+  return {
+    background: `var(--tag-${t.color}-surface)`,
+    color: `var(--tag-${t.color}-accent)`,
+  }
+}
+
 watch(() => form.value.name, (v) => {
   if (!unitNameEdited.value) unitName.value = v || ''
 })
@@ -289,6 +328,8 @@ onMounted(async () => {
       stages.value = []
     }
   }
+
+  tasksStoreTags.fetchTags()
 
   responsiblesLoading.value = true
   try {
@@ -348,6 +389,21 @@ function toDateStr(d) {
   return `${y}-${m}-${day}`
 }
 
+// Теги идут отдельной ручкой (PUT /tasks/:id/tags) после create/update —
+// в тела задач они не входят. Ошибка тегов задачу не роняет.
+async function syncTags(result) {
+  if (!result?.id) return result
+  const before = (props.task?.tags || []).map((t) => t.id).sort().join(',')
+  const now = [...selectedTagIds.value].sort().join(',')
+  if (before === now) return result
+  try {
+    return await setTaskTags(result.id, selectedTagIds.value)
+  } catch (e) {
+    notifications.error('Теги не сохранились: ' + (e?.message || 'ошибка'))
+    return result
+  }
+}
+
 async function handleSubmit() {
   if (!validate()) return
 
@@ -368,6 +424,7 @@ async function handleSubmit() {
     let result
     if (props.task) {
       result = await updateTask(props.task.id, payload)
+      result = await syncTags(result)
       notifications.success('Задача успешно обновлена')
     } else {
       result = await createTask(payload)
@@ -381,6 +438,7 @@ async function handleSubmit() {
             + (e?.data?.message || e?.message || 'ошибка'))
         }
       }
+      result = await syncTags(result)
       if (createFirstUnit.value && result?.id) {
         try {
           const unit = await createUnit(result.id, {
@@ -419,6 +477,40 @@ async function handleSubmit() {
   display: flex;
   flex-direction: column;
   gap: 6px;
+}
+
+/* ── Чипы выбора тегов ── */
+.tag-pick-group {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.tag-pick {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-full);
+  padding: 6px 12px;
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+  opacity: 0.55;
+  transition: opacity 0.12s, outline-color 0.12s;
+}
+
+.tag-pick.active {
+  opacity: 1;
+  outline: 2px solid currentColor;
+  outline-offset: -2px;
+}
+
+.tag-pick-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
 }
 
 .form-label {

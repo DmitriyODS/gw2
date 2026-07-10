@@ -118,7 +118,7 @@ import { usePetsStore } from '@/stores/pets.js'
 import { useNotificationsStore } from '@/stores/notifications.js'
 import { petEmoji, shopItemEmoji, PET_STAGES } from '@/utils/pets.js'
 
-const STROKE_COST = 1 // = domain.StrokeCost в petsvc
+const STROKE_COST = 2 // = domain.StrokeCost в petsvc
 
 const pets = usePetsStore()
 const notify = useNotificationsStore()

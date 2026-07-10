@@ -232,6 +232,53 @@
           </div>
         </div>
 
+        <!-- Теги (правятся прямо здесь — набор общий для компании) -->
+        <div class="field-box">
+          <div class="field-label tm-tags-label">
+            Теги
+            <button
+              class="tm-tags-edit"
+              type="button"
+              :title="tagsEditing ? 'Готово' : 'Изменить теги'"
+              :aria-label="tagsEditing ? 'Готово' : 'Изменить теги'"
+              @click="toggleTagsEditing"
+            >
+              <span class="material-symbols-outlined">{{ tagsEditing ? 'check' : 'add' }}</span>
+            </button>
+          </div>
+          <div v-if="!tagsEditing" class="field-value tm-tags-value">
+            <span
+              v-for="tg in task.tags || []"
+              :key="tg.id"
+              class="tm-tag-chip"
+              :style="{ background: `var(--tag-${tg.color}-surface)`, color: `var(--tag-${tg.color}-accent)` }"
+            >
+              <span class="material-symbols-outlined tm-tag-icon">sell</span>
+              {{ tg.name }}
+            </span>
+            <span v-if="!(task.tags || []).length" class="text-dim">Без тегов</span>
+          </div>
+          <div v-else class="tm-tags-editor">
+            <button
+              v-for="t in tasksStore.tags"
+              :key="t.id"
+              class="tm-tag-chip tm-tag-pick"
+              :class="{ active: taskTagIds.includes(t.id) }"
+              :style="{ background: `var(--tag-${t.color}-surface)`, color: `var(--tag-${t.color}-accent)` }"
+              type="button"
+              @click="onToggleTag(t.id)"
+            >
+              <span class="material-symbols-outlined tm-tag-icon">
+                {{ taskTagIds.includes(t.id) ? 'check_box' : 'check_box_outline_blank' }}
+              </span>
+              {{ t.name }}
+            </button>
+            <span v-if="!tasksStore.tags.length" class="text-dim">
+              Тегов пока нет — их создаёт менеджер в панели фильтров задач
+            </span>
+          </div>
+        </div>
+
         <!-- Дедлайн -->
         <div v-if="task.deadline" class="field-box">
           <div class="field-label">Дедлайн</div>
@@ -547,6 +594,26 @@ const currentStage = computed(() => {
   if (!sid) return null
   return stages.value.find((s) => s.id === sid) || null
 })
+
+/* ── Теги: правка прямо из модалки (мультивыбор чипами) ── */
+const tagsEditing = ref(false)
+
+const taskTagIds = computed(() => {
+  // Актуальные теги — из стора (patchTask обновляет после каждого toggle).
+  const fresh = tasksStore.taskById.get(props.task.id)
+  return ((fresh || props.task).tags || []).map((t) => t.id)
+})
+
+function toggleTagsEditing() {
+  tagsEditing.value = !tagsEditing.value
+  if (tagsEditing.value) tasksStore.fetchTags()
+}
+
+function onToggleTag(tagId) {
+  tasksStore.toggleTaskTag(props.task.id, tagId).catch(() => {
+    notifications.error('Не удалось изменить теги')
+  })
+}
 
 /* Действие в sticky-баре зависит от активной мобильной вкладки.
    - Детали: «Завершить задачу» (или «Вернуть из архива»)
@@ -993,6 +1060,50 @@ async function handleSetColor(color) {
 .field-label-icon {
   font-size: 14px;
 }
+
+/* ── Теги ── */
+.tm-tags-label { justify-content: space-between; }
+
+.tm-tags-edit {
+  border: none;
+  background: transparent;
+  color: var(--color-text-dim);
+  cursor: pointer;
+  display: inline-flex;
+  padding: 2px;
+  border-radius: var(--radius-full);
+}
+.tm-tags-edit:hover { color: var(--color-text); }
+.tm-tags-edit .material-symbols-outlined { font-size: 16px; }
+
+.tm-tags-value,
+.tm-tags-editor {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+
+.tm-tag-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-full);
+  padding: 4px 10px;
+  font-size: 12px;
+  font-weight: 600;
+}
+.tm-tag-icon { font-size: 13px; }
+
+.tm-tag-pick {
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  opacity: 0.55;
+  transition: opacity 0.12s;
+}
+.tm-tag-pick.active { opacity: 1; outline: 2px solid currentColor; outline-offset: -2px; }
 
 .field-value {
   border: 1px solid var(--gw-border);

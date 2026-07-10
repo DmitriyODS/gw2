@@ -79,8 +79,8 @@ func main() {
 	repo := postgres.NewRepo(pool)
 	users := postgres.NewUserReader(pool)
 	svc := service.New(service.Deps{
-		Tasks: repo, Units: repo, UnitTypes: repo, Depts: repo, Stages: repo,
-		Comments: repo, Stats: repo, Users: users, Companies: users,
+		Tasks: repo, Tags: repo, Units: repo, UnitTypes: repo, Depts: repo,
+		Stages: repo, Comments: repo, Stats: repo, Users: users, Companies: users,
 		Pets: pets, AI: ai,
 		Bus: events.NewPublisher(rdb, log, "gw2:tasks:events"),
 		Log: log,
