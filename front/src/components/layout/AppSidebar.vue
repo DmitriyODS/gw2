@@ -109,7 +109,7 @@ const messenger = useMessengerStore()
 const portal = usePortalStore()
 const tasksStore = useTasksStore()
 const petsStore = usePetsStore()
-const { isSuperAdmin, canManageCompanies } = usePermission()
+const { isSuperAdmin } = usePermission()
 const { usesGroove } = useCompanySettings()
 const { open: openChangelog } = useChangelog()
 
@@ -177,11 +177,12 @@ const navGroups = computed(() => {
     manage.push({ path: '/stats', icon: 'bar_chart', label: 'Статистика', tutorial: 'nav-stats',
       active: () => route.path === '/stats' })
   }
-  if (canManageCompanies()) {
-    manage.push({ path: '/companies', icon: 'business_center',
-      label: isSuperAdmin() ? 'Компании' : 'Мои компании',
-      tutorial: 'nav-companies', active: () => route.path.startsWith('/companies') })
-  }
+  // «Мои компании» — ВСЕМ: любой пользователь может создать компанию
+  // (и не одну) и стать её администратором, даже если сейчас он лишь
+  // сотрудник чужой или вовсе без компании.
+  manage.push({ path: '/companies', icon: 'business_center',
+    label: isSuperAdmin() ? 'Компании' : 'Мои компании',
+    tutorial: 'nav-companies', active: () => route.path.startsWith('/companies') })
   if (isSuperAdmin()) {
     manage.push({ path: '/users', icon: 'group', label: 'Пользователи', tutorial: 'nav-users',
       active: () => route.path === '/users' })

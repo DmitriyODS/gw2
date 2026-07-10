@@ -69,7 +69,6 @@ import { useAuthStore } from '@/stores/auth.js'
 import { useUnitsStore } from '@/stores/units.js'
 import { useMessengerStore } from '@/stores/messenger.js'
 import { usePortalStore } from '@/stores/portal.js'
-import { usePermission, ROLES } from '@/composables/usePermission.js'
 import { useCompanySettings } from '@/composables/useCompanySettings.js'
 
 const route = useRoute()
@@ -78,7 +77,6 @@ const authStore = useAuthStore()
 const unitsStore = useUnitsStore()
 const messenger = useMessengerStore()
 const portal = usePortalStore()
-const { isAtLeast } = usePermission()
 const { usesGroove } = useCompanySettings()
 
 const moreOpen = ref(false)
@@ -118,10 +116,11 @@ const moreItems = computed(() => {
     { path: '/settings', icon: 'settings', label: 'Настройки',
       active: () => route.path === '/settings' },
   ]
-  if (isAtLeast(ROLES.ADMIN)) {
-    arr.splice(2, 0, { path: '/companies', icon: 'domain', label: 'Компании',
-      active: () => route.path.startsWith('/companies') })
-  }
+  // «Компании» — всем: любой пользователь может создать свою компанию,
+  // не будучи администратором ни одной (раздел сам покажет пустой список
+  // с кнопкой «Создать»).
+  arr.splice(2, 0, { path: '/companies', icon: 'domain', label: 'Компании',
+    active: () => route.path.startsWith('/companies') })
   return arr
 })
 
