@@ -43,12 +43,19 @@
       <!-- Подвал: либо кастомный (slot=footer), либо встроенный набор кнопок. -->
       <footer v-if="$slots.footer || actions.length" class="dlg-footer">
         <slot name="footer">
-          <!-- Левые кнопки (например, «Удалить» на форме редактирования). -->
-          <div v-if="$slots['footer-start']" class="dlg-footer-start">
+          <!-- Слева — «Отмена» и кастомные кнопки слота (например, «Удалить»);
+               справа — главные действия: футер разносит их space-between. -->
+          <div class="dlg-footer-start">
             <slot name="footer-start" />
+            <template v-for="(a, i) in cancelActions" :key="`c${i}`">
+              <button :class="actionClass(a)" :disabled="a.disabled" type="button" @click="onAction(a)">
+                <span v-if="a.icon" class="material-symbols-outlined">{{ a.icon }}</span>
+                {{ a.label }}
+              </button>
+            </template>
           </div>
           <div class="dlg-footer-end">
-            <template v-for="(a, i) in actions" :key="i">
+            <template v-for="(a, i) in mainActions" :key="i">
               <button
                 :class="actionClass(a)"
                 :disabled="a.disabled || (a.kind === 'confirm' && busy)"
@@ -201,6 +208,10 @@ function onAction(a) {
   // 'neutral' — кастомное действие, родитель ловит через onClick свойство.
   if (typeof a.onClick === 'function') a.onClick()
 }
+
+// «Отмена» — к левому краю футера, главные действия — к правому.
+const cancelActions = computed(() => props.actions.filter((a) => a.kind === 'cancel'))
+const mainActions = computed(() => props.actions.filter((a) => a.kind !== 'cancel'))
 
 function actionClass(a) {
   if (a.kind === 'cancel') return 'dlg-btn dlg-btn-text'
@@ -384,37 +395,55 @@ function actionClass(a) {
 
 .dlg-btn-text {
   background: transparent;
-  color: var(--color-primary);
+  background: var(--glass-bg);
+  box-shadow: var(--glass-edge), inset 0 0 0 1px var(--acrylic-border);
+  color: var(--color-text);
   padding: 0 14px;
 }
 
+/* Второстепенная кнопка — стеклянная (как глобальная .btn-glass). */
 .dlg-btn-tonal {
   background: var(--color-secondary-container);
-  color: var(--color-on-secondary-container);
+  background: var(--glass-bg);
+  box-shadow: var(--glass-edge), inset 0 0 0 1px var(--acrylic-border);
+  color: var(--color-text);
 }
 
+/* Главные кнопки — пилюли на градиенте тона (как глобальная .btn-grad). */
 .dlg-btn-filled.tone-primary {
-  background: var(--color-primary);
+  background: var(--grad-primary);
   color: var(--color-on-primary);
 }
 .dlg-btn-filled.tone-danger {
   background: var(--color-error);
+  background: linear-gradient(90deg,
+    var(--color-error) 0%,
+    color-mix(in oklch, var(--color-error) 45%, var(--color-error-container)) 100%);
   color: var(--color-on-error);
 }
 .dlg-btn-filled.tone-warning {
   background: var(--color-warning, var(--color-tertiary));
+  background: linear-gradient(90deg,
+    var(--color-warning, var(--color-tertiary)) 0%,
+    color-mix(in oklch, var(--color-warning, var(--color-tertiary)) 45%, var(--color-warning-container, var(--color-tertiary-container))) 100%);
   color: var(--color-on-warning, var(--color-on-tertiary));
 }
 .dlg-btn-filled.tone-success {
   background: var(--color-success);
+  background: linear-gradient(90deg,
+    var(--color-success) 0%,
+    color-mix(in oklch, var(--color-success) 45%, var(--color-success-container)) 100%);
   color: var(--color-on-success);
 }
 .dlg-btn-filled.tone-tertiary {
   background: var(--color-tertiary);
+  background: linear-gradient(90deg,
+    var(--color-tertiary) 0%,
+    color-mix(in oklch, var(--color-tertiary) 45%, var(--color-tertiary-container)) 100%);
   color: var(--color-on-tertiary);
 }
 
-.dlg-btn-filled:hover { box-shadow: var(--shadow-sm); }
+.dlg-btn-filled:hover { box-shadow: var(--shadow-sm); filter: brightness(1.06); }
 
 /* Спиннер для busy-кнопки. */
 .dlg-spinner {

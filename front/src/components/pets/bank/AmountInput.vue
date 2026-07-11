@@ -66,6 +66,8 @@ function onInput(e) {
   border: 1px solid var(--color-outline-dim);
   border-radius: var(--radius-md);
   background: var(--color-surface);
+  background: var(--glass-bg);
+  box-shadow: var(--glass-edge);
   color: var(--color-text);
   font: inherit;
   font-weight: 700;

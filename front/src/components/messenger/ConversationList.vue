@@ -367,10 +367,12 @@ function formatTime(iso) {
 
 .conv-search-input {
   width: 100%;
-  padding: 8px 12px 8px 38px;
-  border: 1px solid var(--color-outline-dim);
-  border-radius: var(--radius-md);
+  padding: 9px 14px 9px 38px;
+  border: 1px solid var(--acrylic-border);
+  border-radius: var(--radius-full);
   background: var(--color-surface-low);
+  background: var(--glass-bg);
+  box-shadow: var(--glass-edge);
   color: var(--color-text);
   font-size: 14px;
   outline: none;
@@ -456,27 +458,25 @@ function formatTime(iso) {
   flex: 1;
 }
 
+/* Чаты — скруглённые стеклянные карточки; активный выделен тонировкой. */
 .conv-item {
   display: flex;
   gap: 12px;
-  padding: 12px 16px;
+  padding: 10px 12px;
+  margin: 0 8px 2px;
+  border-radius: var(--radius-lg, 16px);
   cursor: pointer;
   align-items: center;
-  border-left: 3px solid transparent;
-  transition: background 0.12s;
+  transition: background 0.15s;
   position: relative;
 }
 
-.conv-item:hover { background: var(--color-surface-low); }
+.conv-item:hover { background: var(--glass-bg); }
 
 .conv-item.active {
   background: var(--color-surface-low);
-  border-left-color: var(--color-primary);
-}
-
-/* Закреплённый — мягкий tertiary-accent на левой границе */
-.conv-item.pinned:not(.active) {
-  border-left-color: var(--color-tertiary);
+  background: var(--glass-bg), color-mix(in oklch, var(--color-primary-container) 40%, transparent);
+  box-shadow: var(--glass-edge);
 }
 
 .conv-avatar-wrap {

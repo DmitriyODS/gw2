@@ -14,10 +14,10 @@
     role="img"
     :aria-label="alt"
   >
-    <mask id="gw-logo-mask" style="mask-type:alpha" maskUnits="userSpaceOnUse" x="0" y="0" width="71" height="71">
+    <mask :id="maskId" style="mask-type:alpha" maskUnits="userSpaceOnUse" x="0" y="0" width="71" height="71">
       <circle cx="35.197" cy="35.197" r="35.197" fill="black" />
     </mask>
-    <g mask="url(#gw-logo-mask)">
+    <g :mask="`url(#${maskId})`">
       <!-- Фоновый круг — мягкий тон primary -->
       <circle cx="35.197" cy="35.197" r="35.197" class="bg" />
       <!-- Дальняя волна (самая тёмная) — основной акцент -->
@@ -39,11 +39,21 @@
   </svg>
 </template>
 
+<script>
+// Модульный счётчик: id маски уникален на экземпляр. При нескольких
+// логотипах на странице дублирующийся id ссылался на СКРЫТЫЙ первый
+// экземпляр (мобильный сайдбар), и круглая маска переставала работать —
+// эмблема становилась квадратной.
+let uid = 0
+</script>
+
 <script setup>
 defineProps({
   size: { type: [Number, String], default: 56 },
   alt: { type: String, default: 'Groove Work' },
 })
+
+const maskId = `gw-logo-mask-${++uid}`
 </script>
 
 <style scoped>

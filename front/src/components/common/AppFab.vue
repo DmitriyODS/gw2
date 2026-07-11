@@ -63,28 +63,23 @@ defineEmits(['click'])
                 opacity 0.22s ease;
   }
 
-  .fab--primary {
-    background: var(--grad-primary);
-    color: var(--color-on-primary);
-    box-shadow:
-      0 6px 16px color-mix(in oklch, var(--color-primary) 38%, transparent),
-      0 2px 6px color-mix(in oklch, var(--color-primary) 20%, transparent);
-  }
-  .fab--primary:active {
-    transform: scale(0.96);
-    filter: brightness(1.06);
-  }
-
+  /* Единый стеклянный стиль плавающих кнопок: тёмное полупрозрачное стекло
+     с блюром контента под ним, светлая рамка, монохромная иконка. Настоящий
+     backdrop-filter здесь уместен — кнопка плавает над страницей, а не
+     внутри акриловой панели. Тона primary/tertiary больше не различаются. */
+  .fab--primary,
   .fab--tertiary {
-    background: var(--color-tertiary-container);
-    color: var(--color-on-tertiary-container);
-    box-shadow:
-      0 6px 16px color-mix(in oklch, var(--color-tertiary) 38%, transparent),
-      0 2px 6px color-mix(in oklch, var(--color-tertiary) 20%, transparent);
+    background: var(--acrylic-bg);
+    -webkit-backdrop-filter: var(--acrylic-blur);
+    backdrop-filter: var(--acrylic-blur);
+    border: 1px solid var(--acrylic-border);
+    color: var(--color-text);
+    box-shadow: var(--glass-edge), var(--shadow-lg, 0 12px 32px rgba(0, 0, 0, 0.18));
   }
+  .fab--primary:active,
   .fab--tertiary:active {
     transform: scale(0.96);
-    background: color-mix(in oklch, var(--color-tertiary) 22%, var(--color-tertiary-container));
+    background: var(--acrylic-bg-strong);
   }
 
   .fab .material-symbols-outlined {

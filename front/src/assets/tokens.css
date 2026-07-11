@@ -294,6 +294,24 @@
      Blur — плавающим элементам и крупным панелям-каркасам (.rail, .split-*). */
   --acrylic-card-bg:   var(--acrylic-bg);
 
+  /* ── Матовое стекло ПОВЕРХ акрила («иней») ────────────────────
+     Настоящий backdrop-filter внутри акриловой панели бесполезен:
+     панель сама с backdrop-filter и потому — backdrop root, за
+     вложенным элементом только её ровный фон, блюрить нечего.
+     Стекло имитируется бликом: диагональная полупрозрачная дымка от
+     цвета текста (в тёмной теме — светлая, в светлой — тёмная) +
+     светлая внутренняя грань сверху. Использовать ПАРОЙ:
+       background: var(--color-surface);  ← фолбэк без color-mix
+       background: var(--glass-bg);
+       box-shadow: var(--glass-edge);
+     (обычно + border: 1px solid var(--acrylic-border)). Дёшево для
+     GPU — в сетках и лентах можно без ограничений, в отличие от blur. */
+  --glass-bg: linear-gradient(155deg,
+    color-mix(in oklch, var(--color-text) 12%, transparent),
+    color-mix(in oklch, var(--color-text) 4%, transparent) 45%,
+    color-mix(in oklch, var(--color-text) 8%, transparent));
+  --glass-edge: inset 0 1px 0 color-mix(in oklch, var(--color-text) 16%, transparent);
+
   /* ── Градиент фона приложения (опция в настройках внешнего вида) ──
      Слои --bgg-1..4 пишет theme.js из пользовательского рецепта: цвета
      внутри — color-mix от var(--color-*), т.е. градиент следует за темой.
@@ -502,6 +520,8 @@
     --acrylic-bg-strong: rgba(255, 255, 255, 0.86);
     --acrylic-border:    rgba(202, 196, 208, 0.55);
     --acrylic-card-bg:   rgba(255, 255, 255, 0.62);
+    --glass-bg:          linear-gradient(155deg, rgba(27, 27, 31, 0.12), rgba(27, 27, 31, 0.04) 45%, rgba(27, 27, 31, 0.08));
+    --glass-edge:        inset 0 1px 0 rgba(27, 27, 31, 0.16);
 
     /* Цвета-теги задач — мягкие пастельные заливки */
     --tag-red-surface: #fbeae8;    --tag-red-border: #f3c3bc;    --tag-red-accent: #d35344;
@@ -572,6 +592,8 @@
     --acrylic-bg-strong: rgba(24, 29, 36, 0.9);
     --acrylic-border:    rgba(69, 80, 93, 0.55);
     --acrylic-card-bg:   rgba(24, 29, 36, 0.74);
+    --glass-bg:          linear-gradient(155deg, rgba(227, 226, 230, 0.12), rgba(227, 226, 230, 0.04) 45%, rgba(227, 226, 230, 0.08));
+    --glass-edge:        inset 0 1px 0 rgba(227, 226, 230, 0.16);
 
     --tag-red-surface: #3a2422;    --tag-red-border: #5e3a35;    --tag-red-accent: #f0a59a;
     --tag-orange-surface: #3a2c1a; --tag-orange-border: #5e482c; --tag-orange-accent: #e8b87e;

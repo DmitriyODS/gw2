@@ -623,7 +623,9 @@ function startFullTour() {
   gap: 8px;
   padding: 0 16px;
   background: var(--acrylic-card-bg);
-  border: 1px solid var(--color-outline-dim);
+  background: var(--glass-bg);
+  box-shadow: var(--glass-edge);
+  border: 1px solid var(--acrylic-border);
   border-radius: 999px;
   transition: border-color 0.15s, background 0.15s;
 }
@@ -774,7 +776,9 @@ function startFullTour() {
   gap: 12px;
   padding: 14px;
   background: var(--acrylic-card-bg);
-  border: 1px solid var(--color-outline-dim);
+  background: var(--glass-bg);
+  box-shadow: var(--glass-edge);
+  border: 1px solid var(--acrylic-border);
   border-radius: 18px;
   cursor: pointer;
   text-align: left;

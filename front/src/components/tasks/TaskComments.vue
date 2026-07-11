@@ -281,7 +281,7 @@ onBeforeUnmount(() => {
             </div>
           </div>
           <div v-if="editingId === c.id" class="comment-edit">
-            <textarea v-model="editText" class="comment-textarea" rows="3" />
+            <textarea v-model="editText" class="comment-textarea ctl" rows="3" />
             <div class="edit-actions">
               <button class="btn-text" @click="cancelEdit">Отмена</button>
               <button class="btn-primary" @click="saveEdit">Сохранить</button>
@@ -334,7 +334,7 @@ onBeforeUnmount(() => {
     <div class="comment-input">
       <textarea
         v-model="draft"
-        class="comment-textarea"
+        class="comment-textarea ctl"
         rows="2"
         placeholder="Написать комментарий… (Markdown поддерживается, Ctrl+Enter — отправить)"
         @keydown="onKeydown"

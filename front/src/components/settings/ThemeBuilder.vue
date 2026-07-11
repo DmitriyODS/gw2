@@ -754,7 +754,9 @@ function importTheme(event) {
 .hp-card {
   padding: 10px;
   background: var(--acrylic-card-bg);
-  border: 1px solid var(--color-outline-dim);
+  background: var(--glass-bg);
+  box-shadow: var(--glass-edge);
+  border: 1px solid var(--acrylic-border);
   border-radius: 12px;
   display: flex;
   flex-direction: column;
@@ -764,7 +766,9 @@ function importTheme(event) {
 .hp-mini-card {
   padding: 10px;
   background: var(--acrylic-card-bg);
-  border: 1px solid var(--color-outline-dim);
+  background: var(--glass-bg);
+  box-shadow: var(--glass-edge);
+  border: 1px solid var(--acrylic-border);
   border-radius: 12px;
   display: flex;
   flex-direction: column;
@@ -825,7 +829,9 @@ function importTheme(event) {
 .tb-card {
   padding: 20px;
   background: var(--acrylic-card-bg);
-  border: 1px solid var(--color-outline-dim);
+  background: var(--glass-bg);
+  box-shadow: var(--glass-edge);
+  border: 1px solid var(--acrylic-border);
   border-radius: 22px;
   display: flex;
   flex-direction: column;

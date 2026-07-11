@@ -70,6 +70,13 @@
             <h2 class="dv-period">{{ periodLabel }}</h2>
           </div>
 
+          <div v-if="store.subtab === 'active'" class="dv-viewseg">
+            <button v-for="v in viewModes" :key="v.value" :class="{ active: store.view === v.value }" @click="store.setView(v.value)">{{ v.label }}</button>
+          </div>
+
+          <!-- Разрыв строки: вторая строка тулбара — поиск + «⋮» + «Запись». -->
+          <div class="dv-toolbar-break" aria-hidden="true"></div>
+
           <SearchField
             v-model="searchInput"
             class="dv-toolbar-search"
@@ -79,19 +86,29 @@
             @clear="clearSearch"
           />
 
-          <div v-if="store.subtab === 'active'" class="dv-viewseg">
-            <button v-for="v in viewModes" :key="v.value" :class="{ active: store.view === v.value }" @click="store.setView(v.value)">{{ v.label }}</button>
-          </div>
-
           <div class="dv-actions">
             <!-- Мобайл: всё управление — в отдельном листе «Управление» -->
             <button class="dv-icon-btn dv-mobile-controls" title="Управление" @click="controlsOpen = true"><span class="material-symbols-outlined">tune</span></button>
-            <template v-if="!store.readonly">
-              <button class="dv-icon-btn dv-manage" title="Переименовать" @click="openRenameDiary"><span class="material-symbols-outlined">edit</span></button>
-              <button class="dv-icon-btn dv-manage" title="Удалить ежедневник" @click="confirmDeleteDiary = true"><span class="material-symbols-outlined">delete</span></button>
-              <button class="dv-icon-btn dv-manage" title="Поделиться" @click="shareOpen = true"><span class="material-symbols-outlined">share</span></button>
-            </template>
-            <button class="dv-icon-btn dv-manage" title="Экспорт в XLSX" @click="doExport"><span class="material-symbols-outlined">download</span></button>
+            <!-- Десктоп: действия свёрнуты в меню «⋮» — тулбар остаётся в две строки. -->
+            <div ref="moreWrapRef" class="dv-more dv-manage">
+              <button class="dv-icon-btn" title="Ещё" @click="moreOpen = !moreOpen"><span class="material-symbols-outlined">more_vert</span></button>
+              <Transition name="dv-more">
+                <div v-if="moreOpen" class="dv-more-menu" @click.stop>
+                  <button v-if="!store.readonly" class="dv-more-item" @click="moreAction(openRenameDiary)">
+                    <span class="material-symbols-outlined">edit</span>Переименовать
+                  </button>
+                  <button v-if="!store.readonly" class="dv-more-item" @click="moreAction(() => (shareOpen = true))">
+                    <span class="material-symbols-outlined">share</span>Поделиться
+                  </button>
+                  <button class="dv-more-item" @click="moreAction(doExport)">
+                    <span class="material-symbols-outlined">download</span>Экспорт в XLSX
+                  </button>
+                  <button v-if="!store.readonly" class="dv-more-item danger" @click="moreAction(() => (confirmDeleteDiary = true))">
+                    <span class="material-symbols-outlined">delete</span>Удалить ежедневник
+                  </button>
+                </div>
+              </Transition>
+            </div>
             <button v-if="!store.readonly" class="btn-grad" @click="openCreate()">
               <span class="material-symbols-outlined">add</span><span class="dv-btn-label">Запись</span>
             </button>
@@ -101,10 +118,13 @@
         <div class="dv-body">
           <!-- АРХИВ — выполненные, сгруппированные по дням -->
           <div v-if="store.subtab === 'archive'" class="dv-archive">
-            <div v-if="!store.archive.length" class="dv-empty">
-              <span class="material-symbols-outlined">inventory_2</span>
-              <p>Архив пуст — выполненные записи появятся здесь</p>
-            </div>
+            <EmptyState
+              v-if="!store.archive.length"
+              icon="inventory_2"
+              title="Архив пуст"
+              subtitle="Выполненные записи появятся здесь"
+              size="sm"
+            />
             <div v-for="g in archiveGroups" :key="g.date" class="dv-arc-group">
               <div class="dv-arc-daylabel">{{ g.label }}</div>
               <button v-for="e in g.items" :key="e.id" class="dv-arow" @click="openEntry(e)">
@@ -123,10 +143,12 @@
 
           <!-- ВСЕ ЗАДАЧИ — все активные записи по всем дням единым списком -->
           <div v-else-if="store.subtab === 'all'" class="dv-all">
-            <div v-if="!store.entries.length" class="dv-empty">
-              <span class="material-symbols-outlined">checklist</span>
-              <p>Активных записей нет</p>
-            </div>
+            <EmptyState
+              v-if="!store.entries.length"
+              icon="checklist"
+              title="Активных записей нет"
+              size="sm"
+            />
             <div v-for="g in allGroups" :key="g.date" class="dv-all-group">
               <div class="dv-arc-daylabel">{{ g.label }}</div>
               <button
@@ -156,7 +178,7 @@
               </template>
               <div
                 v-for="day in gridDays" :key="dayKey(day)"
-                class="dv-day" :class="{ dim: store.view === 'month' && !inCurrentMonth(day), today: isToday(day), 'drop-target': dropDayKey === dayKey(day) }"
+                class="dv-day glass-hover" :class="{ dim: store.view === 'month' && !inCurrentMonth(day), today: isToday(day), 'drop-target': dropDayKey === dayKey(day) }"
                 @click="openDay(day)"
                 @dragover="onDayDragOver($event, day)"
                 @dragleave="dropDayKey === dayKey(day) && (dropDayKey = null)"
@@ -198,13 +220,16 @@
             </div>
 
             <div v-else class="dv-daylist">
-              <div v-if="!dayEntries(store.cursor).length && !store.dayDone.length" class="dv-empty">
-                <span class="material-symbols-outlined">event_busy</span>
-                <p>На этот день записей нет</p>
-                <button v-if="!store.readonly" class="dv-btn-tonal" @click="openCreate(store.cursor)">
+              <EmptyState
+                v-if="!dayEntries(store.cursor).length && !store.dayDone.length"
+                icon="event_busy"
+                title="На этот день записей нет"
+                size="sm"
+              >
+                <button v-if="!store.readonly" class="btn-grad" @click="openCreate(store.cursor)">
                   <span class="material-symbols-outlined">add</span> Добавить запись
                 </button>
-              </div>
+              </EmptyState>
               <template v-else>
                 <template v-if="dayEntries(store.cursor).length">
                   <div class="dv-day-section">Активные</div>
@@ -745,12 +770,27 @@ async function doExport() {
   }
 }
 
+// Меню «⋮» действий тулбара (десктоп): закрывается по пункту и клику вне.
+const moreOpen = ref(false)
+const moreWrapRef = ref(null)
+function moreAction(fn) {
+  moreOpen.value = false
+  fn()
+}
+function onMoreDocClick(e) {
+  if (moreOpen.value && !moreWrapRef.value?.contains(e.target)) moreOpen.value = false
+}
+
 onMounted(() => {
   store.fetchDiaries()
   weekRO = new ResizeObserver(() => measureWeekColumn())
   if (weekGridRef.value) weekRO.observe(weekGridRef.value)
+  document.addEventListener('mousedown', onMoreDocClick, true)
 })
-onBeforeUnmount(() => { weekRO?.disconnect(); weekRO = null })
+onBeforeUnmount(() => {
+  weekRO?.disconnect(); weekRO = null
+  document.removeEventListener('mousedown', onMoreDocClick, true)
+})
 
 // Грид появляется/исчезает при смене вида/подвкладки/устройства — переподключаем
 // observer и пересчитываем после рендера.
@@ -787,6 +827,9 @@ watch(() => store.loadingEntries, () => nextTick(measureWeekColumn))
 /* Правая панель */
 .dv-toolbar { flex-shrink: 0; display: flex; align-items: center; gap: 12px; flex-wrap: wrap; padding: 12px 16px; border-bottom: 1px solid var(--color-outline-dim); }
 .dv-subtabs { flex-shrink: 0; }
+/* Вторая строка тулбара: разрыв → поиск на всю доступную ширину + действия. */
+.dv-toolbar-break { flex-basis: 100%; height: 0; }
+.dv-toolbar-search { flex: 1 1 auto; min-width: 0; }
 .dv-nav { display: flex; align-items: center; gap: 8px; }
 .dv-period { margin: 0 0 0 6px; font-size: 16px; font-weight: 700; color: var(--color-text); text-transform: capitalize; white-space: nowrap; }
 .dv-today { height: 36px; padding: 0 14px; border: 1px solid var(--color-outline-dim); border-radius: var(--radius-full); background: var(--acrylic-card-bg); color: var(--color-text); font-weight: 600; font-size: 13px; cursor: pointer; }
@@ -805,10 +848,53 @@ watch(() => store.loadingEntries, () => nextTick(measureWeekColumn))
 .dv-search input { flex: 1; min-width: 0; border: none; background: none; outline: none; color: var(--color-text); font-size: 14px; }
 .dv-search-clear { border: none; background: none; cursor: pointer; color: var(--color-text-dim); display: grid; place-items: center; }
 .dv-actions { display: flex; align-items: center; gap: 8px; }
+
+/* Меню «⋮» тулбара — акриловый поповер (по образцу контекстных меню). */
+.dv-more { position: relative; }
+.dv-more-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 1200;
+  min-width: 220px;
+  padding: 6px;
+  background: var(--acrylic-bg);
+  -webkit-backdrop-filter: var(--acrylic-blur);
+  backdrop-filter: var(--acrylic-blur);
+  border: 1px solid var(--color-outline-dim);
+  border-radius: var(--radius-md, 12px);
+  box-shadow: var(--shadow-lg);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.dv-more-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border: none;
+  background: transparent;
+  color: var(--color-text);
+  font: inherit;
+  font-size: 14px;
+  font-weight: 500;
+  text-align: left;
+  border-radius: var(--radius-sm, 8px);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.15s, color 0.15s;
+}
+.dv-more-item:hover { background: var(--color-surface-low); }
+.dv-more-item.danger { color: var(--color-error); }
+.dv-more-item.danger:hover { background: var(--color-error-container); color: var(--color-on-error-container); }
+.dv-more-item .material-symbols-outlined { font-size: 18px; }
+
+.dv-more-enter-active, .dv-more-leave-active { transition: opacity 0.14s, transform 0.14s; transform-origin: top right; }
+.dv-more-enter-from, .dv-more-leave-to { opacity: 0; transform: scale(0.96) translateY(-4px); }
 .dv-icon-btn { width: 38px; height: 38px; display: grid; place-items: center; border: 1px solid var(--color-outline-dim); border-radius: var(--radius-full); background: var(--acrylic-card-bg); color: var(--color-text-dim); cursor: pointer; }
 .dv-icon-btn:hover { background: var(--color-surface-high); color: var(--color-text); }
 .dv-mobile-controls { display: none; } /* кнопка «Управление» — только на мобайле */
-.dv-btn-tonal { display: inline-flex; align-items: center; gap: 6px; height: 38px; padding: 0 16px; border: none; border-radius: var(--radius-full); background: var(--color-primary-container); color: var(--color-on-primary-container); font-weight: 600; font-size: 14px; cursor: pointer; }
 
 /* Тело */
 .dv-body { position: relative; flex: 1; min-height: 0; overflow: auto; }
@@ -819,7 +905,7 @@ watch(() => store.loadingEntries, () => nextTick(measureWeekColumn))
 .dv-wd { background: var(--acrylic-bg-strong); -webkit-backdrop-filter: var(--acrylic-blur); backdrop-filter: var(--acrylic-blur); padding: 8px 10px; text-align: center; font-size: 12px; font-weight: 700; color: var(--color-text-dim); text-transform: uppercase; position: sticky; top: 0; z-index: 1; }
 .dv-day { background: var(--acrylic-card-bg); min-height: 104px; padding: 6px; display: flex; flex-direction: column; gap: 4px; cursor: pointer; overflow: hidden; }
 .dv-grid.week .dv-day { min-height: 0; }
-.dv-day:hover { background: var(--color-surface-high); }
+/* Hover — глобальное «запотевание» .glass-hover (main.css), как в календаре. */
 .dv-day.drop-target { background: var(--color-primary-container); outline: 2px dashed var(--color-primary); outline-offset: -2px; }
 .dv-event[draggable='true'] { cursor: grab; }
 .dv-event.dragging, .dv-dayrow.dragging { opacity: 0.4; }
@@ -881,9 +967,6 @@ watch(() => store.loadingEntries, () => nextTick(measureWeekColumn))
 .dv-arow-act:hover { color: var(--color-primary); }
 .dv-arow-chev { flex-shrink: 0; color: var(--color-text-dim); }
 
-.dv-empty { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; padding: 48px 16px; color: var(--color-text-dim); }
-.dv-empty .material-symbols-outlined { font-size: 44px; }
-.dv-empty p { margin: 0; }
 .dv-overlay { position: absolute; inset: 0; display: grid; place-items: center; background: color-mix(in oklch, var(--color-surface) 50%, transparent); }
 .spin { animation: dvspin 1s linear infinite; font-size: 32px; color: var(--color-primary); }
 @keyframes dvspin { to { transform: rotate(360deg); } }
@@ -933,6 +1016,7 @@ watch(() => store.loadingEntries, () => nextTick(measureWeekColumn))
      экране в панели остаются только вкладки, навигация по периоду и «Запись». */
   .dv-toolbar .dv-viewseg,
   .dv-toolbar .dv-toolbar-search,
+  .dv-toolbar .dv-toolbar-break,
   .dv-manage { display: none; }
   /* Создание записи на мобильном — плавающий FAB, кнопка тулбара не нужна. */
   .dv-actions .btn-grad { display: none; }

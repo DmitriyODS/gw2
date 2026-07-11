@@ -144,8 +144,13 @@ textarea.ctl,
 input.input,
 select.input,
 textarea.input {
+  /* Первая строка — фолбэк для браузеров без color-mix; вторая — «иней»
+     (см. --glass-bg в tokens.css): поля лежат на акриловых диалогах и
+     карточках, полупрозрачная дымка вместо плотного surface сохраняет стекло. */
   background: var(--color-surface-low) !important;
+  background: var(--glass-bg) !important;
   border: 1px solid var(--color-outline-dim) !important;
+  box-shadow: var(--glass-edge);
   color: var(--color-text) !important;
   border-radius: var(--radius-md);
   transition: border-color .15s, box-shadow .15s, background .15s;
@@ -656,6 +661,108 @@ textarea.ctl.invalid:focus {
 
 .btn-grad:disabled { opacity: 0.55; cursor: not-allowed; }
 
+/* ── Единый акриловый стиль кнопок модалок ──────────────────────────
+   Главная кнопка — пилюля на градиенте (как .btn-grad), второстепенная —
+   стеклянная (как .btn-glass). Локальные scoped .btn-filled/.btn-text
+   (и их копии cd-btn-filled, cd-btn-text, cc-cancel) копипастились по диалогам —
+   глобальный слой приводит их к единому стилю; !important перекрывает
+   scoped-фоны, как у глобального фикса полей ввода выше. */
+.btn-filled,
+.cd-btn-filled {
+  background: var(--color-primary) !important;
+  background: var(--grad-primary) !important;
+  color: var(--color-on-primary) !important;
+  border: none;
+}
+.btn-filled:hover:not(:disabled),
+.cd-btn-filled:hover:not(:disabled) {
+  filter: brightness(1.06);
+}
+
+.btn-text,
+.btn-outlined,
+.cd-btn-text,
+.cc-cancel {
+  background: var(--color-surface-low) !important;
+  background: var(--glass-bg) !important;
+  box-shadow: var(--glass-edge), inset 0 0 0 1px var(--acrylic-border) !important;
+  color: var(--color-text) !important;
+}
+.btn-text:hover:not(:disabled),
+.btn-outlined:hover:not(:disabled),
+.cd-btn-text:hover:not(:disabled),
+.cc-cancel:hover:not(:disabled) {
+  box-shadow: var(--glass-edge), inset 0 0 0 1px color-mix(in oklch, var(--color-primary) 30%, var(--acrylic-border)) !important;
+}
+
+/* ── Круглые иконочные кнопки тулбаров — единое стекло ──────────────
+   Референс — кнопка «назад» кудо-банка (.btn-glass): заметное стеклянное
+   тело вместо еле видимой прозрачной обводки. Локальные классы разделов
+   (cv-/dv-/rg-/rm-/sc-/sv-/sr-icon-btn и .icon-btn настроек/компаний)
+   приводятся одним слоем; !important перекрывает scoped-фоны. */
+.icon-btn,
+.cv-icon-btn,
+.dv-icon-btn,
+.rg-icon-btn,
+.rm-icon-btn,
+.sc-icon-btn,
+.sv-icon-btn,
+.sr-icon-btn {
+  background: var(--color-surface-low) !important;
+  background: var(--glass-bg) !important;
+  border: 1px solid var(--acrylic-border) !important;
+  box-shadow: var(--glass-edge) !important;
+  color: var(--color-text) !important;
+}
+.icon-btn:hover:not(:disabled),
+.cv-icon-btn:hover:not(:disabled),
+.dv-icon-btn:hover:not(:disabled),
+.rg-icon-btn:hover:not(:disabled),
+.rm-icon-btn:hover:not(:disabled),
+.sc-icon-btn:hover:not(:disabled),
+.sv-icon-btn:hover:not(:disabled),
+.sr-icon-btn:hover:not(:disabled) {
+  border-color: color-mix(in oklch, var(--color-primary) 30%, var(--acrylic-border)) !important;
+}
+/* Опасные варианты (danger) сохраняют красный смысл цветом иконки. */
+.icon-btn.danger,
+.rm-icon-btn.danger {
+  color: var(--color-error) !important;
+}
+
+/* Hover-«запотевание» стекла — пара к --glass-bg/--glass-edge (tokens.css).
+   Вместо подъёма/transform поверх элемента плавно проявляется второй слой
+   инея (::after), кромка и грань мягко светлеют. Вешать на интерактивные
+   стеклянные карточки/плитки; элементу нужны position: relative (класс
+   задаёт сам) и скруглению — overflow: hidden. На тач-устройствах эффект
+   выключен (:active-обратную связь элемент определяет сам). */
+.glass-hover {
+  position: relative;
+  transition: box-shadow 0.3s ease, border-color 0.3s ease;
+}
+
+.glass-hover::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: var(--glass-bg);
+  opacity: 0;
+  transition: opacity 0.3s ease;
+  pointer-events: none;
+}
+
+@media (hover: hover) {
+  .glass-hover:hover::after { opacity: 1; }
+  .glass-hover:hover {
+    border-color: color-mix(in oklch, var(--color-text) 25%, var(--acrylic-border));
+    box-shadow:
+      inset 0 1px 0 color-mix(in oklch, var(--color-text) 28%, transparent),
+      0 0 24px color-mix(in oklch, var(--color-text) 6%, transparent);
+  }
+  .glass-hover:active::after { opacity: 0.6; }
+}
+
 /* Вторичная стеклянная кнопка (рядом с .btn-grad). */
 .btn-glass {
   display: inline-flex;
@@ -665,6 +772,8 @@ textarea.ctl.invalid:focus {
   border-radius: var(--radius-full);
   padding: 10px 18px;
   background: var(--acrylic-card-bg);
+  background: var(--glass-bg);
+  box-shadow: var(--glass-edge);
   color: var(--color-text);
   font: inherit;
   font-size: 14px;
@@ -677,7 +786,8 @@ textarea.ctl.invalid:focus {
 .btn-glass .material-symbols-outlined { font-size: 20px; }
 
 .btn-glass:hover:not(:disabled) {
-  background: color-mix(in oklch, var(--color-primary) 8%, var(--acrylic-card-bg));
+  /* Блик сохраняем и на hover — под ним primary-подсветка. */
+  background: var(--glass-bg), color-mix(in oklch, var(--color-primary) 12%, transparent);
   border-color: color-mix(in oklch, var(--color-primary) 30%, var(--acrylic-border));
 }
 

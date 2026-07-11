@@ -116,15 +116,15 @@
       </div>
 
       <div v-if="user.id !== auth.user?.id" class="profile-actions">
-        <button class="btn-filled" @click="writeTo(user)">
+        <button class="btn-glass" @click="writeTo(user)">
           <span class="material-symbols-outlined">chat</span>
           Написать
         </button>
-        <button class="btn-tonal" @click="callTo(user, 'video')">
+        <button class="btn-glass" @click="callTo(user, 'video')">
           <span class="material-symbols-outlined">videocam</span>
           <span class="hide-narrow">Видео</span>
         </button>
-        <button class="btn-tonal tertiary" @click="callTo(user, 'audio')">
+        <button class="btn-glass" @click="callTo(user, 'audio')">
           <span class="material-symbols-outlined">call</span>
           <span class="hide-narrow">Аудио</span>
         </button>

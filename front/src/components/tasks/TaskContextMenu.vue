@@ -73,6 +73,10 @@
           <span class="material-symbols-outlined">send</span>
           <span>Отправить</span>
         </button>
+        <button class="task-ctx-item" @click="emitAction('copy-link')">
+          <span class="material-symbols-outlined">link</span>
+          <span>Скопировать ссылку</span>
+        </button>
         <div v-if="canEdit && !isArchived" class="task-ctx-divider" />
         <button
           v-if="canEdit && !isArchived"

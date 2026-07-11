@@ -552,22 +552,28 @@ const joinLabel = computed(() => props.isMine ? 'Вернуться' : 'Прис
   opacity: 0.85;
 }
 
+/* Пузыри — матовое стекло: «иней» поверх полупрозрачного тонового слоя
+   (настоящий blur на десятках пузырей дорог, а внутри акриловой панели
+   чата и бесполезен — см. --glass-bg в tokens.css). Первые строки —
+   плотные фолбэки для браузеров без color-mix. */
 .msg-bubble {
   max-width: 70%;
   background: var(--color-surface-high);
+  background: var(--glass-bg), color-mix(in oklch, var(--color-surface-high) 55%, transparent);
+  box-shadow: var(--glass-edge);
   color: var(--color-text);
   padding: 8px 12px;
-  border-radius: var(--radius-lg);
-  border-top-left-radius: var(--radius-xs);
-  box-shadow: var(--shadow-sm);
+  border-radius: 20px;
+  border-top-left-radius: 6px;
   word-wrap: break-word;
 }
 
 .msg-row.outgoing .msg-bubble {
   background: var(--color-primary-container);
+  background: var(--glass-bg), color-mix(in oklch, var(--color-primary-container) 55%, transparent);
   color: var(--color-on-primary-container);
-  border-top-left-radius: var(--radius-lg);
-  border-top-right-radius: var(--radius-xs);
+  border-top-left-radius: 20px;
+  border-top-right-radius: 6px;
 }
 
 .msg-text {

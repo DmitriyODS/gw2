@@ -1,29 +1,18 @@
 <template>
   <article
-    class="task-card"
+    class="task-card glass-hover"
     :class="[`view-${view}`, { favorite: task.is_favorite, archived: task.is_archived, colored: !!task.color, running: isRunningHere }]"
     :style="cardStyle"
     @click.stop="$emit('click', task)"
     @contextmenu.prevent="onContextMenu"
   >
-    <!-- Цветовая полоса слева (если задан цвет-тег) -->
-    <span v-if="task.color" class="color-stripe" aria-hidden="true" />
-
     <div class="card-main">
-      <div class="card-header">
-        <span
-          v-if="task.department?.name"
-          class="chip-tint chip-tint--primary dept-badge"
-          :title="task.department.name"
-        >
-          <span class="material-symbols-outlined">domain</span>
-          <span class="dept-badge-name">{{ task.department.name }}</span>
-        </span>
-
+      <div class="card-top">
+        <h3 class="task-name">{{ task.name }}</h3>
         <div class="card-actions">
           <a
             v-if="task.yougile_task_id && task.link_yougile"
-            class="yg-badge"
+            class="card-action-btn"
             :href="task.link_yougile"
             target="_blank"
             rel="noopener"
@@ -45,60 +34,43 @@
         </div>
       </div>
 
-      <h3 class="task-name">{{ task.name }}</h3>
-
-      <div class="task-meta">
-        <span
-          v-if="task.stage"
-          class="chip-tint stage-chip"
-          :style="stageChipStyle"
-          :title="`Этап: ${task.stage.name}`"
-        >
-          <span class="stage-dot" :style="stageDotStyle" />
-          {{ task.stage.name }}
-        </span>
-        <span
-          v-for="tg in task.tags || []"
-          :key="tg.id"
-          class="chip-tint stage-chip"
-          :style="tagChipStyle(tg)"
-          :title="`Тег: ${tg.name}`"
-        >
-          <span class="material-symbols-outlined tag-chip-icon">sell</span>
-          {{ tg.name }}
+      <!-- Одна строка меты: этап + теги (2 + «+N») + срок. Монохромное стекло,
+           цвет — только точками; строка не растёт, чипы усекаются. -->
+      <div v-if="task.stage || visibleTags.length || deadlineInfo" class="task-meta">
+        <span v-if="task.stage" class="meta-chip" :title="`Этап: ${task.stage.name}`">
+          <span class="meta-dot" :style="stageDotStyle" />
+          <span class="meta-chip-name">{{ task.stage.name }}</span>
         </span>
         <span
           v-if="deadlineInfo"
-          class="chip-tint"
-          :class="deadlineChipClass"
+          class="meta-chip"
+          :class="`deadline-${deadlineInfo.level}`"
           :title="`Срок: ${formatDate(task.deadline)}`"
         >
           <span class="material-symbols-outlined">{{ deadlineInfo.icon }}</span>
           {{ deadlineInfo.label }}
         </span>
-        <span class="chip-tint meta-date" :title="`Поступила: ${formatDate(task.received_at)}`">
-          <span class="material-symbols-outlined">calendar_today</span>
-          {{ formatDate(task.received_at) }}
+        <span
+          v-for="tg in visibleTags"
+          :key="tg.id"
+          class="meta-chip"
+          :title="`Тег: ${tg.name}`"
+        >
+          <span class="meta-dot" :style="tagDotStyle(tg)" />
+          <span class="meta-chip-name">{{ tg.name }}</span>
+        </span>
+        <span v-if="hiddenTags.length" class="meta-chip meta-chip-more" :title="hiddenTagsTitle">
+          +{{ hiddenTags.length }}
         </span>
       </div>
 
-      <div class="card-footer">
-        <div class="footer-left">
-          <button
-            v-if="!task.is_archived"
-            class="btn-soft-success work-btn"
-            :class="{ 'is-running': isRunningHere }"
-            @click.stop="onWorkClick"
-            :title="isRunningHere ? 'Остановить юнит' : 'Начать юнит'"
-          >
-            <span class="material-symbols-outlined">{{ isRunningHere ? 'stop' : 'play_arrow' }}</span>
-            <span class="work-btn-label">{{ isRunningHere ? 'Стоп' : 'В работу' }}</span>
-          </button>
-          <span v-else-if="task.has_units" class="units-indicator" title="По задаче есть юниты">
-            <span class="material-symbols-outlined">timer</span>
-          </span>
-        </div>
-
+      <div v-if="task.department?.name || task.active_users?.length || (task.is_archived && task.has_units)" class="card-footer">
+        <span v-if="task.department?.name" class="card-dept" :title="`Отдел: ${task.department.name}`">
+          {{ task.department.name }}
+        </span>
+        <span v-if="task.is_archived && task.has_units" class="units-indicator" title="По задаче есть юниты">
+          <span class="material-symbols-outlined">timer</span>
+        </span>
         <div v-if="task.active_users?.length" class="active-users">
           <span
             v-for="user in task.active_users.slice(0, 4)"
@@ -136,7 +108,7 @@ const props = defineProps({
   }
 })
 
-const emit = defineEmits(['click', 'toggle-favorite', 'start-unit', 'stop-unit', 'context-menu'])
+const emit = defineEmits(['click', 'toggle-favorite', 'context-menu'])
 
 function onContextMenu(e) {
   emit('context-menu', { x: e.clientX, y: e.clientY, task: props.task })
@@ -146,30 +118,22 @@ const unitsStore = useUnitsStore()
 
 const cardStyle = computed(() => cardColorStyle(props.task.color))
 
-const stageChipStyle = computed(() => {
-  const color = props.task.stage?.color
-  if (!color) return {}
-  return {
-    background: `var(--tag-${color}-surface)`,
-    color: `var(--tag-${color}-accent)`,
-    borderColor: `var(--tag-${color}-border)`,
-  }
-})
-
 const stageDotStyle = computed(() => {
   const color = props.task.stage?.color
-  if (!color) return {}
+  if (!color) return { background: 'var(--color-text-dim)' }
   return { background: `var(--tag-${color}-accent)` }
 })
 
-// Чип тега — та же палитра токенов, что и этап.
-function tagChipStyle(tag) {
-  if (!tag?.color) return {}
-  return {
-    background: `var(--tag-${tag.color}-surface)`,
-    color: `var(--tag-${tag.color}-accent)`,
-    borderColor: `var(--tag-${tag.color}-border)`,
-  }
+// Теги на карточке не раздувают её: видимы первые 2, остальные — счётчиком,
+// цвет тега — точкой (монохромные чипы, полный список в тултипе и модалке).
+const MAX_VISIBLE_TAGS = 2
+const visibleTags = computed(() => (props.task.tags || []).slice(0, MAX_VISIBLE_TAGS))
+const hiddenTags = computed(() => (props.task.tags || []).slice(MAX_VISIBLE_TAGS))
+const hiddenTagsTitle = computed(() => hiddenTags.value.map((t) => t.name).join(', '))
+
+function tagDotStyle(tag) {
+  if (!tag?.color) return { background: 'var(--color-text-dim)' }
+  return { background: `var(--tag-${tag.color}-accent)` }
 }
 
 const isRunningHere = computed(() => unitsStore.activeUnit?.task_id === props.task.id)
@@ -189,19 +153,6 @@ const deadlineInfo = computed(() => {
   return { level: 'normal', icon: 'event', label: formatDate(props.task.deadline) }
 })
 
-// Тон чипа срока — через глобальные модификаторы .chip-tint--*.
-const deadlineChipClass = computed(() => {
-  const level = deadlineInfo.value?.level
-  if (level === 'overdue') return 'chip-tint--error'
-  if (level === 'soon') return 'chip-tint--warning'
-  return ''
-})
-
-function onWorkClick() {
-  if (isRunningHere.value) emit('stop-unit', props.task)
-  else emit('start-unit', props.task)
-}
-
 function formatDate(d) {
   if (!d) return '—'
   return new Date(d).toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric' })
@@ -209,91 +160,73 @@ function formatDate(d) {
 </script>
 
 <style scoped>
-/* Стеклянная карточка в потоке: почти без теней, лёгкий подъём на hover. */
+/* Стеклянная карточка в потоке: монохром, «иней», лёгкий подъём на hover. */
 .task-card {
   position: relative;
   background: var(--acrylic-card-bg);
+  background: var(--glass-bg);
+  box-shadow: var(--glass-edge);
   border: 1px solid var(--acrylic-border);
   border-radius: 18px;
   cursor: pointer;
   overflow: hidden;
-  transition: box-shadow 0.18s ease, transform 0.14s ease, border-color 0.18s ease;
 }
-
-.task-card:hover {
-  box-shadow: var(--shadow-sm);
-  transform: translateY(-2px);
-  border-color: color-mix(in oklch, var(--color-primary) 35%, var(--acrylic-border));
-}
-
-.task-card:active {
-  transform: translateY(-1px);
-}
+/* Hover — глобальное «запотевание» .glass-hover (main.css). */
 
 /* Запущенный юнит — мягкая подсветка рамки акцентом */
 .task-card.running {
   border-color: color-mix(in oklch, var(--color-secondary) 55%, var(--color-outline-dim));
-  box-shadow: 0 0 0 1px color-mix(in oklch, var(--color-secondary) 40%, transparent);
+  box-shadow: var(--glass-edge), 0 0 0 1px color-mix(in oklch, var(--color-secondary) 40%, transparent);
 }
 
-/* Окрашенная карточка — пастельный фон выбранного тега */
+/* Окрашенная карточка — личный цвет как стеклянная тонировка:
+   «иней» поверх полупрозрачного пастельного слоя, стекло сохраняется. */
 .task-card.colored {
   background: var(--card-tag-surface);
+  background: var(--glass-bg), color-mix(in oklch, var(--card-tag-surface) 55%, transparent);
   border-color: var(--card-tag-border);
 }
 
 .task-card.archived {
   background: var(--color-surface-high);
+  background: var(--glass-bg);
   border-color: var(--color-outline-dim);
   opacity: 0.82;
-}
-
-.color-stripe {
-  position: absolute;
-  left: 0;
-  top: 0;
-  bottom: 0;
-  width: 4px;
-  background: var(--card-tag-accent, var(--color-primary));
 }
 
 .card-main {
   display: flex;
   flex-direction: column;
-  gap: 10px;
-  padding: 16px;
-}
-
-.card-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
   gap: 8px;
+  padding: 14px 16px;
 }
 
-/* Чип отдела-заказчика — глобальный .chip-tint--primary, здесь только обрезка. */
-.dept-badge {
+.card-top {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+}
+
+.task-name {
+  flex: 1;
   min-width: 0;
-  padding-left: 8px;
-}
-
-.dept-badge .material-symbols-outlined {
-  font-size: 14px;
-}
-
-.dept-badge-name {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--color-text);
+  margin: 0;
+  line-height: 1.4;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
   overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
-/* margin-left: auto — экшены прижаты вправо и без чипа отдела. */
 .card-actions {
   display: flex;
   align-items: center;
   gap: 2px;
   flex-shrink: 0;
-  margin-left: auto;
+  margin-top: -2px;
 }
 
 .card-action-btn {
@@ -305,11 +238,11 @@ function formatDate(d) {
   border-radius: var(--radius-full);
   display: flex;
   align-items: center;
+  text-decoration: none;
   transition: color 0.15s, background 0.15s;
 }
 
-.card-action-btn:hover,
-.card-action-btn.active {
+.card-action-btn:hover {
   color: var(--color-primary);
   background: color-mix(in oklch, var(--color-primary) 12%, transparent);
 }
@@ -328,90 +261,84 @@ function formatDate(d) {
   font-variation-settings: 'FILL' 1;
 }
 
-.yg-badge {
-  display: inline-flex; align-items: center; justify-content: center;
-  width: 26px; height: 26px; border-radius: var(--radius-full);
-  background: var(--color-tertiary-container);
-  color: var(--color-on-tertiary-container);
-  text-decoration: none;
-  transition: background 0.15s;
-}
-.yg-badge:hover { background: color-mix(in oklch, var(--color-tertiary-container) 88%, black); }
-.yg-badge .material-symbols-outlined { font-size: 16px; }
-
-.task-name {
-  font-size: 15px;
-  font-weight: 700;
-  color: var(--color-text);
-  margin: 0;
-  line-height: 1.4;
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
-}
-
+/* Мета: монохромные стеклянные чипы. Чипы НЕ сжимаются и не режутся —
+   целиком переносятся; максимум две строки, лишние скрыты (полный
+   состав — в тултипах и модалке). 54px = две строки чипов 24px + gap. */
 .task-meta {
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
+  overflow: hidden;
+  min-width: 0;
+  max-height: 54px;
 }
 
-.task-meta .chip-tint .material-symbols-outlined {
+.meta-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 24px;
+  padding: 0 9px;
+  border-radius: var(--radius-full);
+  background: var(--color-surface);
+  background: var(--glass-bg);
+  box-shadow: var(--glass-edge);
+  color: var(--color-text-dim);
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+  flex-shrink: 0;
+  max-width: 100%;
+}
+
+.meta-chip .material-symbols-outlined {
   font-size: 14px;
+  flex-shrink: 0;
 }
 
-/* Дата поступления — приглушённая, без плашки. */
-.meta-date {
-  background: transparent;
-  padding-left: 2px;
-  padding-right: 2px;
-  font-weight: 500;
+.meta-chip-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
-.stage-chip {
-  border: 1px solid transparent;
+.meta-chip-more {
+  flex-shrink: 0;
+  font-weight: 700;
 }
 
-.tag-chip-icon { font-size: 13px; }
-
-.stage-dot {
+.meta-dot {
   width: 8px;
   height: 8px;
   border-radius: 50%;
-  background: currentColor;
+  flex-shrink: 0;
 }
+
+/* Срок: спокойный монохром; просрочка — единственный цветовой сигнал. */
+.deadline-overdue { color: var(--color-error); }
+.deadline-soon { color: var(--color-text); }
 
 .card-footer {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 8px;
-  margin-top: 2px;
-  min-height: 30px;
+  min-height: 24px;
 }
 
-.footer-left {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-/* «В работу» — глобальный .btn-soft-success; запущенный юнит остаётся
-   в secondary-акценте юнитов (плашка активного юнита, ринг карточки). */
-.work-btn.is-running {
-  background: var(--color-secondary);
-  color: var(--color-on-secondary);
-}
-
-.work-btn.is-running:hover {
-  background: var(--color-secondary-hover);
+/* Отдел — приглушённая подпись без плашки. */
+.card-dept {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+  color: var(--color-text-dim);
 }
 
 .units-indicator {
   display: inline-flex;
   align-items: center;
-  color: var(--color-secondary);
+  color: var(--color-text-dim);
 }
 
 .units-indicator .material-symbols-outlined {
@@ -422,6 +349,7 @@ function formatDate(d) {
   display: flex;
   align-items: center;
   flex-shrink: 0;
+  margin-left: auto;
 }
 
 .active-avatar {
@@ -433,10 +361,6 @@ function formatDate(d) {
   margin-left: -6px;
   flex-shrink: 0;
   box-shadow: 0 0 0 1px var(--color-outline-dim);
-}
-
-.task-card.colored .active-avatar {
-  border-color: var(--card-tag-surface);
 }
 
 .active-avatar:first-child {
@@ -469,53 +393,38 @@ function formatDate(d) {
   padding: 12px 16px;
 }
 
-.task-card.view-list .card-header {
-  order: 2;
-  flex-direction: row-reverse;
-  width: auto;
-  flex-shrink: 0;
-}
-
-.task-card.view-list .dept-badge {
-  display: none;
+.task-card.view-list .card-top {
+  flex: 1;
+  min-width: 0;
+  align-items: center;
+  order: 1;
 }
 
 .task-card.view-list .task-name {
-  order: 1;
-  flex: 1;
   -webkit-line-clamp: 1;
   font-size: 14px;
 }
 
-.task-card.view-list .task-meta {
-  order: 1;
-  flex-wrap: nowrap;
-  flex-shrink: 0;
+.task-card.view-list .card-actions {
+  order: 3;
+  margin-top: 0;
 }
 
-.task-card.view-list .task-meta .meta-date {
-  display: none;
+.task-card.view-list .task-meta {
+  order: 2;
+  flex-shrink: 0;
+  max-width: 320px;
 }
 
 .task-card.view-list .card-footer {
-  order: 1;
-  width: auto;
+  order: 2;
   margin-top: 0;
-  flex-shrink: 0;
   min-height: 0;
+  flex-shrink: 0;
 }
 
-.task-card.view-list .work-btn-label {
+.task-card.view-list .card-dept {
   display: none;
-}
-
-.task-card.view-list .work-btn {
-  padding: 6px;
-}
-
-.task-card.view-list:hover {
-  transform: none;
-  box-shadow: var(--shadow-sm);
 }
 
 @media (max-width: 600px) {
@@ -530,20 +439,13 @@ function formatDate(d) {
 
 /* ═══════════════ Мобильная адаптация карточки ═══════════════ */
 @media (max-width: 768px) {
-  /* Hover-эффект — лишний на тач-устройствах, на тапе у нас уже :active. */
-  .task-card:hover {
-    transform: none;
-    box-shadow: none;
-    border-color: var(--acrylic-border);
-  }
-
   .task-card:active {
     transform: scale(0.985);
-    box-shadow: var(--shadow-md);
+    box-shadow: var(--glass-edge), var(--shadow-md);
   }
 
   .card-main {
-    padding: 14px 14px 12px;
+    padding: 12px 14px;
     gap: 8px;
   }
 
@@ -565,30 +467,9 @@ function formatDate(d) {
     font-size: 22px;
   }
 
-  .dept-badge {
-    font-size: 11.5px;
-    padding: 3px 9px 3px 7px;
-  }
-
-  /* Чипы метаданных чуть компактнее — на узких экранах хорошо умещаются в ряд. */
-  .task-meta .chip-tint {
+  .meta-chip {
     font-size: 11.5px;
     padding: 3px 8px;
-  }
-
-  .task-meta .chip-tint .material-symbols-outlined {
-    font-size: 13px;
-  }
-
-  /* «В работу» — крупная тач-зона, без сжатия. */
-  .work-btn {
-    padding: 8px 14px 8px 10px;
-    font-size: 13px;
-    min-height: 36px;
-  }
-
-  .work-btn .material-symbols-outlined {
-    font-size: 20px;
   }
 
   /* Аватарки чуть крупнее — лучше различимы на маленьких экранах. */
@@ -601,22 +482,6 @@ function formatDate(d) {
 @media (max-width: 360px) {
   .card-main {
     padding: 12px 12px 10px;
-  }
-
-  .dept-badge {
-    max-width: 60%;
-  }
-
-  /* На самых узких экранах — скрываем подпись «В работу», остаётся круглая
-     кнопка-играть. Чтение названия задачи важнее. */
-  .work-btn-label {
-    display: none;
-  }
-
-  .work-btn {
-    padding: 8px;
-    border-radius: 50%;
-    min-width: 36px;
   }
 }
 </style>

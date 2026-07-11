@@ -520,15 +520,21 @@ const dialogStyle = computed(() => {
   if (isMobile.value) {
     return 'width: 100vw; max-width: 100vw; height: 100dvh; max-height: 100dvh; border-radius: 0; margin: 0'
   }
-  return 'width: 960px; max-width: 95vw; border-radius: 20px'
+  return 'width: 960px; max-width: 95vw; border-radius: var(--radius-xl, 28px)'
 })
 
 const dialogPt = computed(() => ({
+  // Акрил и маска — общие глобальные классы AppDialog: тот же стеклянный
+  // фон с блюром, рамка и скругление, что у остальных модалок; на мобильном
+  // mobile-full даёт полноэкранный режим без скруглений.
+  root: { class: ['app-dialog-root', isMobile.value ? 'mobile-full' : ''] },
+  mask: { class: 'app-dialog-mask' },
   header: { style: 'display:none' },
   content: {
+    class: 'app-dialog-content',
     style: isMobile.value
-      ? 'padding:0; overflow:hidden; border-radius:0; height:100%; display:flex; flex-direction:column'
-      : 'padding:0; overflow:hidden; border-radius:20px; display:flex; flex-direction:column'
+      ? 'overflow:hidden; border-radius:0; height:100%'
+      : 'overflow:hidden'
   }
 }))
 
@@ -1105,13 +1111,17 @@ async function handleSetColor(color) {
 }
 .tm-tag-pick.active { opacity: 1; outline: 2px solid currentColor; outline-offset: -2px; }
 
+/* Read-only плашки значений — в едином стеклянном стиле полей ввода
+   (это div'ы, глобальный слой инпутов main.css их не покрывает). */
 .field-value {
-  border: 1px solid var(--gw-border);
-  border-radius: 8px;
+  border: 1px solid var(--color-outline-dim);
+  border-radius: var(--radius-md);
   padding: 7px 10px;
   font-size: 13px;
-  color: var(--gw-text);
+  color: var(--color-text);
   background: var(--color-surface);
+  background: var(--glass-bg);
+  box-shadow: var(--glass-edge);
   min-height: 34px;
   display: flex;
   align-items: center;
@@ -1257,13 +1267,18 @@ async function handleSetColor(color) {
   border-radius: 999px;
 }
 
+/* Главные действия — пилюли на градиенте, как во всех модалках. */
 .primary-btn {
   background: var(--gw-primary);
+  background: var(--grad-primary);
   color: var(--color-on-primary);
 }
 
 .accent-btn {
   background: var(--gw-accent);
+  background: linear-gradient(90deg,
+    var(--color-secondary) 0%,
+    color-mix(in oklch, var(--color-secondary) 45%, var(--color-secondary-container)) 100%);
   color: var(--color-on-secondary);
 }
 

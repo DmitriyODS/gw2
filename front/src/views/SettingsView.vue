@@ -446,7 +446,9 @@ onMounted(() => {
   margin: 0 4px;
   padding: 0 14px;
   background: var(--color-surface-high);
-  border: 1px solid transparent;
+  background: var(--glass-bg);
+  box-shadow: var(--glass-edge);
+  border: 1px solid var(--acrylic-border);
   border-radius: 999px;
   transition: border-color 0.15s, background 0.15s;
 }
@@ -520,11 +522,13 @@ onMounted(() => {
 }
 
 .settings-nav-item:hover {
-  background: var(--acrylic-card-bg);
+  background: var(--glass-bg);
 }
 
 .settings-nav-item.active {
   background: var(--color-primary-container);
+  background: var(--glass-bg), color-mix(in oklch, var(--color-primary-container) 45%, transparent);
+  box-shadow: var(--glass-edge);
 }
 
 .settings-nav-item.active .nav-title { color: var(--color-on-primary-container); }
@@ -801,7 +805,9 @@ onMounted(() => {
   gap: 18px;
   padding: 20px 22px;
   background: var(--acrylic-card-bg);
-  border: 1px solid var(--color-outline-dim);
+  background: var(--glass-bg);
+  box-shadow: var(--glass-edge);
+  border: 1px solid var(--acrylic-border);
   border-radius: 20px;
   transition: border-color 0.15s, box-shadow 0.15s;
 }

@@ -88,7 +88,7 @@
             <div
               v-for="day in gridDays"
               :key="dayKey(day)"
-              class="cv-day"
+              class="cv-day glass-hover"
               :class="{ dim: store.view === 'month' && !inCurrentMonth(day), today: isToday(day) }"
               @click="openDay(day)"
             >
@@ -114,7 +114,7 @@
             <button
               v-for="day in agendaDays"
               :key="dayKey(day)"
-              class="cv-agenda-row"
+              class="cv-agenda-row glass-hover"
               :class="{ today: isToday(day) }"
               @click="openDay(day)"
             >
@@ -144,7 +144,7 @@
             <button
               v-for="e in dayEntries(store.cursor)"
               :key="e.id"
-              class="cv-dayrow"
+              class="cv-dayrow glass-hover"
               @click="openEntry(e)"
             >
               <span class="cv-dayrow-time">{{ hhmm(e.event_at) }}</span>
@@ -582,12 +582,15 @@ watch(() => store.loadingEntries, () => nextTick(measureWeekColumn))
   font-size: 12px; font-weight: 700; color: var(--color-text-dim); text-transform: uppercase;
   position: sticky; top: 0; z-index: 1;
 }
+/* Фон ячеек — спокойный акрил БЕЗ статичной дымки: на площади всей сетки
+   «иней» слишком яркий; стекло здесь проявляется только на hover. */
 .cv-day {
-  background: var(--acrylic-card-bg); min-height: 104px; padding: 6px;
+  background: var(--acrylic-card-bg);
+  min-height: 104px; padding: 6px;
   display: flex; flex-direction: column; gap: 4px; cursor: pointer; overflow: hidden;
 }
 .cv-grid.week .cv-day { min-height: 0; }
-.cv-day:hover { background: var(--color-surface-high); }
+/* Hover — глобальное «запотевание» .glass-hover (main.css). */
 .cv-day.dim { background: var(--color-surface-low); }
 .cv-day.dim .cv-day-num { color: var(--color-text-dim); opacity: 0.6; }
 .cv-day-head { display: flex; align-items: center; justify-content: space-between; }
@@ -620,7 +623,6 @@ watch(() => store.loadingEntries, () => nextTick(measureWeekColumn))
   padding: 12px 16px; border: none; background: none; cursor: pointer;
   border-bottom: 1px solid var(--color-outline-dim);
 }
-.cv-agenda-row:hover { background: var(--color-surface-high); }
 .cv-agenda-date {
   flex-shrink: 0; width: 44px; display: flex; flex-direction: column; align-items: center;
 }
@@ -643,7 +645,7 @@ watch(() => store.loadingEntries, () => nextTick(measureWeekColumn))
   padding: 12px 14px; border: 1px solid var(--color-outline-dim); border-radius: var(--radius-lg);
   background: var(--acrylic-card-bg); cursor: pointer;
 }
-.cv-dayrow:hover { background: var(--color-surface-high); border-color: var(--color-outline); }
+/* Hover — глобальное «запотевание» .glass-hover (main.css). */
 .cv-dayrow-time {
   flex-shrink: 0; min-width: 56px; font-size: 16px; font-weight: 700; color: var(--color-primary);
   font-variant-numeric: tabular-nums;

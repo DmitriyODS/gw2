@@ -481,7 +481,17 @@ function onTaskCtxAction(action) {
   else if (action === 'start-unit') onStartUnit(task)
   else if (action === 'stop-unit') onStopUnit()
   else if (action === 'send') startSendTask(task)
+  else if (action === 'copy-link') copyTaskLink(task)
   else if (action === 'archive') askArchiveTask(task)
+}
+
+async function copyTaskLink(task) {
+  try {
+    await navigator.clipboard.writeText(`${location.origin}/tasks/${task.id}`)
+    notif.success('Ссылка на задачу скопирована')
+  } catch {
+    notif.error('Не удалось скопировать ссылку')
+  }
 }
 
 async function startEditTask(task) {

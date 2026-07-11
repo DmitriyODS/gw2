@@ -165,7 +165,9 @@ onMounted(() => { yg.refreshStatus().catch(() => {}) })
   display: flex; align-items: flex-start; gap: 18px;
   padding: 20px 22px;
   background: var(--acrylic-card-bg);
-  border: 1px solid var(--color-outline-dim);
+  background: var(--glass-bg);
+  box-shadow: var(--glass-edge);
+  border: 1px solid var(--acrylic-border);
   border-radius: 20px;
 }
 .hero-icon {

@@ -120,6 +120,8 @@ async function create() {
   border: 1px solid var(--color-outline-dim);
   border-radius: 12px;
   background: var(--color-surface);
+  background: var(--glass-bg);
+  box-shadow: var(--glass-edge);
   font-size: 20px;
   cursor: pointer;
   display: grid; place-items: center;
@@ -134,18 +136,22 @@ async function create() {
   border: 1px solid var(--color-outline-dim);
   border-radius: var(--radius-sm);
   background: var(--color-surface);
+  background: var(--glass-bg);
+  box-shadow: var(--glass-edge);
   color: var(--color-text);
   font: inherit; font-size: 13px;
   padding: 9px 11px;
 }
 .fcd-textarea { resize: vertical; }
-.fcd-target { width: 130px; }
+.fcd-target { flex: 1 1 100%; width: 100%; }
 .fcd-input:focus { outline: none; border-color: var(--color-primary); }
 
 .fcd-targets { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
 .fcd-chip {
   border: 1px solid var(--color-outline-dim);
   background: var(--color-surface);
+  background: var(--glass-bg);
+  box-shadow: var(--glass-edge);
   color: var(--color-text);
   border-radius: var(--radius-full);
   font: inherit; font-size: 12.5px; font-weight: 600;

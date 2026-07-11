@@ -92,7 +92,9 @@ function setMuted(v) {
   flex-direction: column;
   gap: 4px;
   background: var(--acrylic-card-bg);
-  border: 1px solid var(--color-outline-dim);
+  background: var(--glass-bg);
+  box-shadow: var(--glass-edge);
+  border: 1px solid var(--acrylic-border);
   border-radius: var(--radius-lg);
   padding: 18px 20px;
   margin-top: 16px;

@@ -230,6 +230,8 @@ defineExpose({ focus: focusSearch })
   font: inherit;
   font-size: 14px;
   background: var(--acrylic-card-bg);
+  background: var(--glass-bg);
+  box-shadow: var(--glass-edge);
   color: var(--color-text);
   outline: none;
   transition: border-color 0.15s, background 0.15s, box-shadow 0.15s;

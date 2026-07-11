@@ -65,23 +65,23 @@
 
       <!-- ── Быстрые действия ──────────────────────────────────── -->
       <section class="kb-actions">
-        <button class="kb-action" type="button" @click="openTransfer()">
+        <button class="kb-action glass-hover" type="button" @click="openTransfer()">
           <span class="kb-action-icon material-symbols-outlined">send_money</span>
           <span>Перевести</span>
         </button>
-        <button class="kb-action" type="button" @click="focusDeposit">
+        <button class="kb-action glass-hover" type="button" @click="focusDeposit">
           <span class="kb-action-icon material-symbols-outlined">savings</span>
           <span>На вклад</span>
         </button>
-        <button class="kb-action" type="button" @click="goalCreateOpen = true">
+        <button class="kb-action glass-hover" type="button" @click="goalCreateOpen = true">
           <span class="kb-action-icon material-symbols-outlined">target</span>
           <span>Копилка</span>
         </button>
-        <button v-if="bank.loan > 0" class="kb-action kb-action--alert" type="button" @click="focusLoan">
+        <button v-if="bank.loan > 0" class="kb-action kb-action--alert glass-hover" type="button" @click="focusLoan">
           <span class="kb-action-icon material-symbols-outlined">credit_score</span>
           <span>Погасить долг</span>
         </button>
-        <button v-if="isManager()" class="kb-action" type="button" @click="fundCreateOpen = true">
+        <button v-if="isManager()" class="kb-action glass-hover" type="button" @click="fundCreateOpen = true">
           <span class="kb-action-icon material-symbols-outlined">volunteer_activism</span>
           <span>Объявить сбор</span>
         </button>
@@ -95,13 +95,24 @@
             <h3 class="kb-card-title">Вклад</h3>
             <span class="kb-badge kb-badge--success">{{ bank.tier.savings_rate_pct }}% в день</span>
           </header>
+          <!-- Главное — состояние счёта: сколько лежит и что накапает. -->
+          <div class="kb-stats">
+            <div class="kb-stat">
+              <span class="kb-stat-label">На вкладе</span>
+              <span class="kb-stat-value">{{ bank.savings }} <KudosCoin /></span>
+            </div>
+            <div class="kb-stat-divider"></div>
+            <div class="kb-stat">
+              <span class="kb-stat-label">Доход завтра</span>
+              <span class="kb-stat-value kb-stat-value--success">+{{ savingsTomorrow }} <KudosCoin /></span>
+            </div>
+          </div>
           <p class="kb-card-hint">
-            {{ bank.tier.savings_rate_pct }}% в день (не больше {{ bank.savings_daily_max }} кудосов/день).
-            Проценты капают за каждые полные сутки.
+            Проценты капают за каждые полные сутки — не больше {{ bank.savings_daily_max }} кудосов в день.
             <template v-if="bank.loan > 0"> Пока есть долг, вклад закрыт.</template>
           </p>
           <div class="kb-field">
-            <label class="kb-field-label">Сумма вклада</label>
+            <label class="kb-field-label">Сумма</label>
             <AmountInput ref="depositInput" v-model="savingsAmount" placeholder="0" />
           </div>
           <div class="kb-row">
@@ -110,20 +121,16 @@
               :disabled="busy || bank.loan > 0 || !validAmount(savingsAmount)"
               @click="deposit"
             >
-              <span class="material-symbols-outlined">download</span> Пополнить вклад
+              <span class="material-symbols-outlined">download</span> Пополнить
             </button>
             <button
               class="btn-glass"
               :disabled="busy || !bank.savings || !validAmount(savingsAmount)"
               @click="withdraw"
             >
-              <span class="material-symbols-outlined">upload</span> Снять средства
+              <span class="material-symbols-outlined">upload</span> Снять
             </button>
           </div>
-          <p v-if="bank.savings" class="kb-card-note">
-            На вкладе <strong><KudosCoin /> {{ bank.savings }}</strong> — до
-            +{{ Math.min(Math.floor(bank.savings * bank.tier.savings_rate_pct / 100), bank.savings_daily_max) }} завтра
-          </p>
         </section>
 
         <!-- ── Кредит ───────────────────────────────────────────── -->
@@ -152,15 +159,15 @@
 
           <template v-else>
             <p class="kb-card-hint">Один активный кредит; с долгом вклад недоступен.</p>
-            <div class="kb-loan-stats">
-              <div class="kb-loan-stat">
-                <span class="kb-loan-stat-label">Доступно к получению</span>
-                <span class="kb-loan-stat-value">до {{ bank.tier.loan_max }} <KudosCoin /></span>
+            <div class="kb-stats">
+              <div class="kb-stat">
+                <span class="kb-stat-label">Доступно к получению</span>
+                <span class="kb-stat-value">до {{ bank.tier.loan_max }} <KudosCoin /></span>
               </div>
-              <div class="kb-loan-divider"></div>
-              <div class="kb-loan-stat">
-                <span class="kb-loan-stat-label">Комиссия</span>
-                <span class="kb-loan-stat-value">{{ bank.tier.loan_fee_pct }}%</span>
+              <div class="kb-stat-divider"></div>
+              <div class="kb-stat">
+                <span class="kb-stat-label">Комиссия</span>
+                <span class="kb-stat-value">{{ bank.tier.loan_fee_pct }}%</span>
               </div>
             </div>
             <div class="kb-field">
@@ -481,6 +488,12 @@ const stats = computed(() => pets.bankStats)
 
 const goalsTotal = computed(() =>
   (bank.value?.goals || []).reduce((sum, g) => sum + g.saved, 0))
+
+const savingsTomorrow = computed(() => {
+  const b = bank.value
+  if (!b?.savings) return 0
+  return Math.min(Math.floor(b.savings * b.tier.savings_rate_pct / 100), b.savings_daily_max)
+})
 
 const tierPercent = computed(() => {
   const b = bank.value
@@ -811,15 +824,16 @@ onMounted(() => {
   display: flex; flex-direction: column; align-items: center; gap: 6px;
   border: 1px solid var(--acrylic-border);
   background: var(--acrylic-card-bg);
+  background: var(--glass-bg);
+  box-shadow: var(--glass-edge);
   border-radius: var(--radius-lg, 16px);
   padding: 12px 14px;
+  flex: 1 1 0;
   min-width: 92px;
   font: inherit; font-size: 12px; font-weight: 600;
   color: var(--color-text);
   cursor: pointer;
-  transition: transform 0.12s, border-color 0.12s;
 }
-.kb-action:hover { transform: translateY(-2px); border-color: var(--color-primary); }
 .kb-action-icon {
   width: 40px; height: 40px;
   border-radius: 14px;
@@ -887,27 +901,31 @@ onMounted(() => {
 .kb-head-action .material-symbols-outlined { font-size: 16px; }
 
 .kb-card-hint { margin: 0; font-size: 12.5px; color: var(--color-text-dim); line-height: 1.45; }
-.kb-card-note { margin: 0; font-size: 12.5px; color: var(--color-text-dim); }
-.kb-card-note strong { color: var(--color-text); display: inline-flex; align-items: center; gap: 3px; }
 
 /* Поле суммы в стиле референса: label + кастомный AmountInput с монетой. */
 .kb-field { display: flex; flex-direction: column; gap: 6px; }
 .kb-field-label { font-size: 12px; font-weight: 600; color: var(--color-text-dim); }
 
 .kb-row { display: flex; gap: 10px; flex-wrap: wrap; }
-.kb-row .btn-grad, .kb-row .btn-glass { display: inline-flex; align-items: center; gap: 6px; }
+.kb-row .btn-grad, .kb-row .btn-glass {
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+  flex: 1 1 0;
+}
 
-.kb-loan-stats {
+.kb-stats {
   display: flex; align-items: center; gap: 16px;
   background: var(--color-surface);
+  background: var(--glass-bg);
+  box-shadow: var(--glass-edge);
   border: 1px solid var(--color-outline-dim);
   border-radius: var(--radius-md);
   padding: 12px 16px;
 }
-.kb-loan-stat { display: flex; flex-direction: column; gap: 3px; flex: 1; }
-.kb-loan-stat-label { font-size: 11.5px; color: var(--color-text-dim); }
-.kb-loan-stat-value { font-size: 18px; font-weight: 800; display: inline-flex; align-items: center; gap: 4px; }
-.kb-loan-divider { width: 1px; align-self: stretch; background: var(--color-outline-dim); }
+.kb-stat { display: flex; flex-direction: column; gap: 3px; flex: 1; }
+.kb-stat-label { font-size: 11.5px; color: var(--color-text-dim); }
+.kb-stat-value { font-size: 18px; font-weight: 800; display: inline-flex; align-items: center; gap: 4px; }
+.kb-stat-value--success { color: var(--color-success); }
+.kb-stat-divider { width: 1px; align-self: stretch; background: var(--color-outline-dim); }
 .kb-loan-take { display: inline-flex; align-items: center; justify-content: center; gap: 8px; width: 100%; }
 
 /* ── Копилки ── */

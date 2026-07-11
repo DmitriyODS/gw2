@@ -936,7 +936,8 @@ watch(() => route.params.conversationId, async (id) => {
   gap: 12px;
   padding: 12px 16px;
   border-bottom: 1px solid var(--color-outline-dim);
-  background: var(--acrylic-card-bg);
+  /* Панель уже акриловая — шапка прозрачная, без второго плотного слоя. */
+  background: transparent;
   flex-shrink: 0;
 }
 

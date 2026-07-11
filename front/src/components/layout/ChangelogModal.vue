@@ -68,7 +68,7 @@
           class="cl-past"
           :class="{ open: opened.has(ver.version) }"
         >
-          <button class="cl-past-head" @click="toggle(ver.version)">
+          <button class="cl-past-head glass-hover" @click="toggle(ver.version)">
             <span class="cl-past-info">
               <span class="cl-past-line">
                 <span class="cl-badge ghost">v{{ ver.version }}</span>
@@ -195,6 +195,7 @@ onMounted(async () => {
 
 .cl-badge {
   background: var(--color-primary);
+  background: var(--grad-primary);
   color: var(--color-on-primary);
   font-size: 11px;
   font-weight: 800;
@@ -206,6 +207,8 @@ onMounted(async () => {
 
 .cl-badge.ghost {
   background: var(--acrylic-card-bg);
+  background: var(--glass-bg);
+  box-shadow: var(--glass-edge);
   border: 1px solid var(--acrylic-border);
   color: var(--color-text);
 }
@@ -258,6 +261,8 @@ onMounted(async () => {
   border: 1px solid var(--acrylic-border);
   border-radius: var(--radius-lg);
   background: var(--acrylic-card-bg);
+  background: var(--glass-bg);
+  box-shadow: var(--glass-edge);
 }
 
 .cl-highlight-ico {
@@ -315,16 +320,15 @@ onMounted(async () => {
 .cl-chip--improved { background: var(--color-tertiary-container); color: var(--color-on-tertiary-container); }
 .cl-chip--fixed    { background: var(--color-warning-container);  color: var(--color-on-warning-container);  }
 
+/* Строки изменений — стеклянные карточки; цветная кромка слева хранит
+   семантику группы (добавили/улучшили/исправили). */
 .cl-items {
   list-style: none;
   margin: 0;
   padding: 0;
   display: flex;
   flex-direction: column;
-  gap: 1px;
-  border-radius: var(--radius-md);
-  overflow: hidden;
-  background: var(--color-outline-dim);
+  gap: 4px;
 }
 
 .cl-item {
@@ -333,6 +337,10 @@ onMounted(async () => {
   line-height: 1.6;
   padding: 10px 14px 10px 16px;
   background: var(--color-surface-low);
+  background: var(--glass-bg);
+  box-shadow: var(--glass-edge);
+  border-radius: var(--radius-md);
+  overflow: hidden;
   position: relative;
 }
 
@@ -380,13 +388,14 @@ onMounted(async () => {
   border: 1px solid var(--acrylic-border);
   border-radius: var(--radius-lg);
   background: var(--acrylic-card-bg);
+  background: var(--glass-bg);
+  box-shadow: var(--glass-edge);
   font: inherit;
   color: var(--color-text);
   text-align: left;
   cursor: pointer;
-  transition: background 0.15s;
 }
-.cl-past-head:hover { background: var(--color-surface-low); }
+/* Hover — глобальное «запотевание» .glass-hover (main.css). */
 
 .cl-past-info {
   flex: 1;

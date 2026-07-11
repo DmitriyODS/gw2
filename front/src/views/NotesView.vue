@@ -238,7 +238,7 @@
           <article
             v-for="n in store.notes"
             :key="n.id"
-            class="nt-card"
+            class="nt-card glass-hover"
             :class="{ colored: n.color }"
             :style="noteColorStyle(n)"
             role="link"
@@ -568,8 +568,10 @@ function onGroupsSaved() {
 // ── Цвет плитки (палитра тегов задач) ──
 function noteColorStyle(n) {
   if (!n.color) return {}
+  // Цвет — стеклянной тонировкой: «иней» поверх полупрозрачного пастельного
+  // слоя (как у окрашенных карточек задач), стекло сохраняется.
   return {
-    background: `var(--tag-${n.color}-surface)`,
+    background: `var(--glass-bg), color-mix(in oklch, var(--tag-${n.color}-surface) 55%, transparent)`,
     borderColor: `var(--tag-${n.color}-border)`,
   }
 }
@@ -810,17 +812,18 @@ function formatDate(iso) {
   gap: 6px;
   padding: 14px 16px;
   background: var(--acrylic-card-bg);
+  background: var(--glass-bg);
+  box-shadow: var(--glass-edge);
   border: 1px solid var(--acrylic-border);
   border-radius: 18px;
   cursor: pointer;
-  transition: transform 0.15s ease, box-shadow 0.15s ease;
   /* Long-press открывает контекстное меню — гасим выделение текста и
      системный callout iOS на удержании. */
   user-select: none;
   -webkit-user-select: none;
   -webkit-touch-callout: none;
 }
-.nt-card:hover { transform: translateY(-2px); box-shadow: var(--shadow-sm); }
+/* Hover — глобальное «запотевание» .glass-hover (main.css). */
 .nt-card:focus-visible { outline: 2px solid var(--color-primary); outline-offset: 2px; }
 
 .nt-card { position: relative; }

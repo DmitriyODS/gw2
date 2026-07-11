@@ -1,6 +1,12 @@
 <template>
   <div class="about-app">
     <div class="about-hero">
+      <!-- Волна Groove — фирменный мотив логотипа в движении (как на /promo). -->
+      <div class="about-waves" aria-hidden="true">
+        <div class="about-wave about-wave--soft"><svg viewBox="0 0 2880 140" preserveAspectRatio="none"><path :d="WAVE_PATH" /></svg></div>
+        <div class="about-wave about-wave--mid"><svg viewBox="0 0 2880 140" preserveAspectRatio="none"><path :d="WAVE_PATH" /></svg></div>
+        <div class="about-wave about-wave--deep"><svg viewBox="0 0 2880 140" preserveAspectRatio="none"><path :d="WAVE_PATH" /></svg></div>
+      </div>
       <div class="about-logo">
         <Logo :size="56" />
       </div>
@@ -115,6 +121,7 @@ import { useNotificationsStore } from '@/stores/notifications.js'
 import { useChangelog } from '@/composables/useChangelog.js'
 import { useTutorial } from '@/composables/useTutorial.js'
 import Logo from '@/components/common/Logo.vue'
+import { WAVE_PATH } from '@/utils/wavePath.js'
 
 const router = useRouter()
 const messenger = useMessengerStore()
@@ -265,27 +272,73 @@ async function openSupport() {
   gap: 24px;
 }
 
+/* Матовый стеклянный hero — цвет несут только волны внизу. */
 .about-hero {
   display: flex;
   align-items: center;
   gap: 24px;
   padding: 24px;
-  background: linear-gradient(135deg,
-    var(--color-primary-container) 0%,
-    var(--color-tertiary-container) 100%);
+  background: var(--acrylic-card-bg);
+  background: var(--glass-bg);
+  box-shadow: var(--glass-edge);
+  border: 1px solid var(--acrylic-border);
   border-radius: var(--radius-xl);
+  position: relative;
+  overflow: hidden;
 }
 
+/* Контент hero — над волнами. */
+.about-hero > :not(.about-waves) { position: relative; z-index: 1; }
+
+/* Волны — нижняя треть hero, медленный бесшовный дрейф (ширина 200%,
+   сдвиг на половину), кверху растворяются маской. */
+.about-waves {
+  position: absolute;
+  inset: auto 0 0 0;
+  height: 68%;
+  pointer-events: none;
+  -webkit-mask-image: linear-gradient(180deg, transparent 0%, black 70%);
+  mask-image: linear-gradient(180deg, transparent 0%, black 70%);
+}
+.about-wave {
+  position: absolute;
+  inset: 0;
+  /* Не уже 2200px: на узком hero слой 200% давал слишком частый период —
+     волны «скукоживались» в рябь. Сдвиг на 50% слоя бесшовен при любой
+     ширине (в половину укладывается целое число периодов). */
+  width: max(200%, 2200px);
+  animation: about-wave-drift linear infinite;
+}
+.about-wave svg { width: 100%; height: 100%; display: block; }
+.about-wave--soft { animation-duration: 30s; }
+.about-wave--soft path { fill: var(--color-primary-container); opacity: 0.3; }
+.about-wave--mid { animation-duration: 20s; animation-delay: -6s; top: 14%; }
+.about-wave--mid path { fill: color-mix(in oklch, var(--color-primary) 55%, var(--color-tertiary-container)); opacity: 0.16; }
+.about-wave--deep { animation-duration: 13s; animation-delay: -3s; top: 30%; }
+.about-wave--deep path { fill: var(--color-primary); opacity: 0.18; }
+
+@keyframes about-wave-drift {
+  from { transform: translateX(0); }
+  to { transform: translateX(-50%); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .about-wave { animation: none; }
+}
+
+/* Подложка круглая, как сама эмблема — иначе на мобильной колонке hero
+   логотип читался квадратом. */
 .about-logo {
   width: 84px;
   height: 84px;
-  border-radius: var(--radius-lg);
+  border-radius: 50%;
   background: var(--acrylic-card-bg);
+  background: var(--glass-bg);
+  box-shadow: var(--glass-edge);
   display: flex;
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
-  box-shadow: var(--shadow-sm);
 }
 
 
@@ -299,14 +352,13 @@ async function openSupport() {
   font-size: 22px;
   font-weight: 800;
   letter-spacing: -0.3px;
-  color: var(--color-on-primary-container);
+  color: var(--color-text);
 }
 
 .about-tagline {
   margin: 0 0 12px;
   font-size: 14px;
-  color: var(--color-on-primary-container);
-  opacity: 0.85;
+  color: var(--color-text-dim);
 }
 
 .about-version {
@@ -335,8 +387,8 @@ async function openSupport() {
   padding: 4px 12px;
   border-radius: var(--radius-full);
   background: transparent;
-  border: 1px solid color-mix(in oklch, var(--color-on-primary-container) 30%, transparent);
-  color: var(--color-on-primary-container);
+  border: 1px solid var(--acrylic-border);
+  color: var(--color-text);
   font-size: 13px;
   font-weight: 600;
   cursor: pointer;
@@ -344,7 +396,7 @@ async function openSupport() {
 }
 
 .version-link:hover {
-  background: color-mix(in oklch, var(--color-on-primary-container) 10%, transparent);
+  background: var(--glass-bg);
 }
 
 .version-link .material-symbols-outlined {
@@ -357,16 +409,16 @@ async function openSupport() {
   gap: 16px;
   padding: 18px 20px;
   border-radius: var(--radius-lg);
-  background: linear-gradient(135deg,
-    var(--color-tertiary-container) 0%,
-    var(--color-secondary-container) 100%);
+  background: var(--acrylic-card-bg);
+  background: var(--glass-bg);
+  box-shadow: var(--glass-edge);
+  border: 1px solid var(--acrylic-border);
   text-decoration: none;
-  transition: transform 0.12s, box-shadow 0.15s;
+  transition: box-shadow 0.15s;
 }
 
 .about-mobile:hover {
-  transform: translateY(-1px);
-  box-shadow: var(--shadow-sm);
+  box-shadow: var(--glass-edge), var(--shadow-sm);
 }
 
 .about-mobile-icon {
@@ -389,15 +441,14 @@ async function openSupport() {
   margin: 0 0 2px;
   font-size: 15px;
   font-weight: 700;
-  color: var(--color-on-tertiary-container);
+  color: var(--color-text);
 }
 
 .about-mobile-text p {
   margin: 0;
   font-size: 13px;
   line-height: 1.35;
-  color: var(--color-on-tertiary-container);
-  opacity: 0.85;
+  color: var(--color-text-dim);
 }
 
 .about-mobile-btn {
@@ -406,7 +457,9 @@ async function openSupport() {
   gap: 8px;
   padding: 10px 20px;
   border-radius: var(--radius-full);
+  /* Единственный цветовой акцент карточки — кнопка на градиенте. */
   background: var(--color-primary);
+  background: var(--grad-primary);
   color: var(--color-on-primary);
   font-size: 14px;
   font-weight: 600;
@@ -441,21 +494,12 @@ async function openSupport() {
   transition: background 0.2s linear;
 }
 
-/* Карточка десктоп-клиента — тот же каркас, свой градиент и иконка. */
-.about-desktop {
-  background: linear-gradient(135deg,
-    var(--color-secondary-container) 0%,
-    var(--color-primary-container) 100%);
-}
-
+/* Карточка десктоп-клиента — тот же матовый каркас, отличается иконкой. */
 .about-desktop .about-mobile-icon { color: var(--color-secondary); }
-
-.about-desktop .about-mobile-text h4 { color: var(--color-on-secondary-container); }
-.about-desktop .about-mobile-text p { color: var(--color-on-secondary-container); }
 
 .about-desktop-links,
 .about-desktop-links a {
-  color: var(--color-on-secondary-container);
+  color: var(--color-text-dim);
 }
 
 .about-mobile-text p.about-desktop-links {
@@ -483,16 +527,17 @@ async function openSupport() {
   padding: 16px 20px;
   border-radius: var(--radius-lg);
   background: var(--acrylic-card-bg);
-  border: 1px solid var(--color-outline-dim);
+  background: var(--glass-bg);
+  box-shadow: var(--glass-edge);
+  border: 1px solid var(--acrylic-border);
   cursor: pointer;
   text-align: left;
-  transition: background 0.15s, transform 0.12s, box-shadow 0.15s;
+  transition: background 0.15s, box-shadow 0.15s;
 }
 
 .about-card:not(:disabled):hover {
   background: var(--color-surface-low);
-  transform: translateY(-1px);
-  box-shadow: var(--shadow-sm);
+  box-shadow: var(--glass-edge), var(--shadow-sm);
 }
 
 .about-card:disabled { opacity: 0.6; cursor: progress; }

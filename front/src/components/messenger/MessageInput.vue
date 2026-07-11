@@ -677,14 +677,16 @@ function iconFor(mime) {
 
 .attach-btn {
   appearance: none;
-  border: none;
-  width: 40px;
-  height: 40px;
+  border: 1px solid var(--acrylic-border);
+  width: 42px;
+  height: 42px;
   display: grid;
   place-items: center;
   cursor: pointer;
   border-radius: 50%;
   background: var(--color-surface-high);
+  background: var(--glass-bg);
+  box-shadow: var(--glass-edge);
   color: var(--color-text);
   flex-shrink: 0;
   transition: background 0.15s, color 0.15s, transform 0.12s;
@@ -787,37 +789,43 @@ function iconFor(mime) {
 
 .pending-att.pending-rec .remove-att { color: var(--color-on-error-container); }
 
+/* Поле — стеклянная пилюля (при многострочном росте радиус остаётся мягким). */
 .text-area {
   flex: 1;
   resize: none;
-  border: 1px solid var(--color-outline-dim);
-  border-radius: var(--radius-md);
-  padding: 10px 12px;
+  border: 1px solid var(--acrylic-border);
+  border-radius: 22px;
+  padding: 10px 16px;
   font: inherit;
   font-size: 14px;
   background: var(--color-surface-low);
+  background: var(--glass-bg);
+  box-shadow: var(--glass-edge);
   color: var(--color-text);
   outline: none;
   max-height: 180px;
-  min-height: 40px;
+  min-height: 42px;
   line-height: 1.4;
   overflow-y: hidden;
 }
 
 .text-area:focus { border-color: var(--color-primary); }
 
+/* Отправка — круглая пилюля на фирменном градиенте. */
 .send-btn {
-  width: 40px;
-  height: 40px;
-  border-radius: var(--radius-md);
+  width: 42px;
+  height: 42px;
+  border-radius: 50%;
   border: none;
   background: var(--color-primary);
+  background: var(--grad-primary);
   color: var(--color-on-primary);
   cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: background 0.15s, opacity 0.15s;
+  flex-shrink: 0;
+  transition: filter 0.15s, opacity 0.15s;
 }
 
 .send-btn:disabled {
@@ -826,7 +834,7 @@ function iconFor(mime) {
 }
 
 .send-btn:not(:disabled):hover {
-  background: var(--color-primary-hover);
+  filter: brightness(1.06);
 }
 
 /* Прикреплённая задача — pill с tertiary-tone, в одной гамме с
