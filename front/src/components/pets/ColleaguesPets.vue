@@ -5,7 +5,7 @@
         <span class="material-symbols-outlined">pets</span>
         Питомцы коллег
       </h3>
-      <span class="cp-hint">Тап по питомцу — погладить ладошкой (<KudosCoin class="cp-hint-coin" /> 1 за поглаживание, до 3 в день)</span>
+      <span class="cp-hint">Тап по питомцу — погладить ладошкой (<KudosCoin class="cp-hint-coin" /> 2 за поглаживание, до 3 в день на питомца)</span>
     </header>
 
     <div v-if="pets.zoo.length" class="cp-grid">
@@ -45,7 +45,7 @@
           </span>
           <span v-else class="cp-tag action">
             <span class="material-symbols-outlined">volunteer_activism</span>
-            Погладить&nbsp;<KudosCoin class="cp-tag-coin" />&nbsp;1
+            Погладить&nbsp;<KudosCoin class="cp-tag-coin" />&nbsp;2
           </span>
         </component>
         <!-- Домик коллеги (просмотр) — сиблинг карточки, как и удаление. -->

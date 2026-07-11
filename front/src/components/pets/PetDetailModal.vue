@@ -260,7 +260,7 @@ const props = defineProps({
 const emit = defineEmits(['close'])
 
 const FEED_COST_NORMAL = 10
-const FEED_COST_SICK = 3
+const FEED_COST_SICK = 1 // «бульон» больному — зеркало domain.SickFeedCost
 const WALK_COST = 15
 const HEAL_COST = 25
 

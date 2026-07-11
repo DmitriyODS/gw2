@@ -10,7 +10,7 @@
         </header>
         <p class="mg-hint">
           {{ ownerName ? `«${petName}» у ${ownerName}` : `«${petName}»` }} — водите ладошкой по питомцу,
-          каждое поглаживание <KudosCoin class="mg-hint-coin" /> 1
+          каждое поглаживание <KudosCoin class="mg-hint-coin" /> 2
         </p>
 
         <div
@@ -251,7 +251,7 @@ function onUp() {
   last = null
 }
 
-// Полный цикл трения — одно платное поглаживание (StrokePet, 1 кудос).
+// Полный цикл трения — одно платное поглаживание (StrokePet, domain.StrokeCost = 2 кудоса).
 async function performStroke() {
   if (sending || finished.value) return
   sending = true
