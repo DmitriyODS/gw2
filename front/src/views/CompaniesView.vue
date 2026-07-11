@@ -597,8 +597,8 @@ async function doDelete() {
 }
 
 .cmp-card:hover, .cmp-card:focus-visible {
-  background: var(--color-surface-high);
-  box-shadow: var(--shadow-sm);
+  background: var(--glass-hover-bg);
+  box-shadow: var(--glass-edge), var(--shadow-sm);
 }
 
 .cmp-card.off { opacity: 0.65; }
@@ -660,8 +660,10 @@ async function doDelete() {
 
 .card-act {
   appearance: none;
-  border: none;
+  border: 1px solid var(--acrylic-border);
   background: var(--color-surface-high);
+  background: var(--glass-bg);
+  box-shadow: var(--glass-edge);
   width: 40px;
   height: 40px;
   border-radius: var(--radius-full);

@@ -323,7 +323,7 @@ watch(profileOpen, (open) => {
   scroll-snap-align: start;
   transition: background .12s, color .12s, border-color .12s, box-shadow .12s;
 }
-.chip:hover { background: var(--color-surface-high); }
+.chip:hover { background: var(--glass-hover-bg); }
 .chip .material-symbols-outlined { font-size: 18px; opacity: 0.8; }
 .chip-count {
   min-width: 18px;
@@ -373,10 +373,8 @@ watch(profileOpen, (open) => {
 }
 .emp-card:hover,
 .emp-card:focus-visible {
-  border-color: transparent;
-  background: var(--color-surface-high);
-  box-shadow: var(--shadow-md);
-  transform: translateY(-2px);
+  background: var(--glass-hover-bg);
+  box-shadow: var(--glass-edge), var(--shadow-sm);
 }
 .emp-card:focus-visible {
   outline: 2px solid var(--color-primary);

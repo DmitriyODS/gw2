@@ -114,8 +114,11 @@ onBeforeUnmount(() => document.removeEventListener('mousedown', onClickOutside))
 .tp-control {
   display: inline-flex; align-items: center; gap: 8px; width: 100%; min-height: 42px;
   padding: 8px 10px 8px 12px;
-  border: 1px solid var(--color-outline-variant); border-radius: var(--radius-md, 14px);
-  background: var(--color-surface-high); color: var(--color-text);
+  border: 1px solid var(--acrylic-border); border-radius: var(--radius-md, 14px);
+  background: var(--color-surface-high);
+  background: var(--glass-bg);
+  box-shadow: var(--glass-edge);
+  color: var(--color-text);
   font: inherit; font-weight: 600; cursor: pointer; text-align: left;
   transition: border-color 0.15s, box-shadow 0.15s;
 }

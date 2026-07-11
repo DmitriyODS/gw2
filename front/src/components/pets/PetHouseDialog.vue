@@ -303,16 +303,19 @@ async function buy(d) {
 .phd-scene-pet.movable { cursor: grab; touch-action: none; user-select: none; }
 .phd-scene-pet.dragging { cursor: grabbing; z-index: 2; }
 
-.phd-themes { display: flex; gap: 8px; flex-wrap: wrap; }
+/* Свотчи тем — во всю ширину модалки, поровну; не влезли — переносятся. */
+.phd-themes { display: flex; gap: 8px; width: 100%; flex-wrap: wrap; }
 .phd-theme {
-  width: 40px; height: 28px;
+  flex: 1 1 56px;
+  min-width: 56px;
+  height: 32px;
   border-radius: 10px;
   border: 2px solid var(--color-outline-dim);
   cursor: pointer;
   padding: 0;
   transition: transform 0.12s, border-color 0.12s;
 }
-.phd-theme:hover { transform: translateY(-1px); }
+.phd-theme:hover { border-color: color-mix(in oklch, var(--color-primary) 30%, var(--acrylic-border)); }
 .phd-theme.active { border-color: var(--color-primary); box-shadow: 0 0 0 2px var(--color-primary-container); }
 .phd-scene-item {
   position: absolute;

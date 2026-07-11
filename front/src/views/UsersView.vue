@@ -454,7 +454,7 @@ async function doDelete() {
   display: flex; align-items: center; gap: 12px; padding: 12px 14px; cursor: pointer;
   background: var(--acrylic-card-bg); border: 1px solid var(--acrylic-border); border-radius: var(--radius-lg);
 }
-.user-card:hover { background: var(--color-surface-high); }
+.user-card:hover { background: var(--glass-hover-bg); }
 .user-card-main { flex: 1; min-width: 0; }
 .user-card-name { font-weight: 600; display: flex; align-items: center; gap: 8px; }
 .user-card-sub { color: var(--color-text-dim); font-size: 12.5px; }
@@ -522,7 +522,7 @@ async function doDelete() {
   text-decoration: none; color: var(--color-text); background: var(--color-surface-low); transition: background .12s;
 }
 .profile-row.link { cursor: pointer; }
-.profile-row.link:hover { background: var(--color-surface-high); }
+.profile-row.link:hover { background: var(--glass-hover-bg); }
 .row-ico { width: 40px; height: 40px; border-radius: var(--radius-md); display: grid; place-items: center; flex-shrink: 0; }
 .row-ico[data-tone="secondary"] { background: var(--color-secondary-container); color: var(--color-on-secondary-container); }
 .row-ico[data-tone="tertiary"] { background: var(--color-tertiary-container); color: var(--color-on-tertiary-container); }

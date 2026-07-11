@@ -134,13 +134,16 @@
 
           <!-- День — хронологический список записей -->
           <div v-else class="cv-daylist">
-            <div v-if="!dayEntries(store.cursor).length" class="cv-empty">
-              <span class="material-symbols-outlined">event_busy</span>
-              <p>На этот день записей нет</p>
-              <button class="cv-btn-tonal" @click="openCreate(store.cursor)">
+            <EmptyState
+              v-if="!dayEntries(store.cursor).length"
+              icon="event_busy"
+              title="На этот день записей нет"
+              size="sm"
+            >
+              <button class="btn-grad" @click="openCreate(store.cursor)">
                 <span class="material-symbols-outlined">add</span> Добавить запись
               </button>
-            </div>
+            </EmptyState>
             <button
               v-for="e in dayEntries(store.cursor)"
               :key="e.id"
@@ -529,17 +532,25 @@ watch(() => store.loadingEntries, () => nextTick(measureWeekColumn))
 .cv-nav { display: flex; align-items: center; gap: 8px; }
 .cv-period { margin: 0 0 0 6px; font-size: 17px; font-weight: 700; color: var(--color-text); text-transform: capitalize; white-space: nowrap; }
 .cv-today {
-  height: 36px; padding: 0 14px; border: 1px solid var(--color-outline-dim);
-  border-radius: var(--radius-full); background: var(--acrylic-card-bg);
+  height: 36px; padding: 0 14px; border: 1px solid var(--acrylic-border);
+  border-radius: var(--radius-full);
+  background: var(--acrylic-card-bg);
+  background: var(--glass-bg);
+  box-shadow: var(--glass-edge);
   color: var(--color-text); font-weight: 600; font-size: 13px; cursor: pointer;
+  transition: border-color 0.15s;
 }
-.cv-today:hover { background: var(--color-surface-high); }
+.cv-today:hover { border-color: color-mix(in oklch, var(--color-primary) 30%, var(--acrylic-border)); }
 
 /* Сегмент вида — как режимы периода в статистике (StatsPeriodControl):
    мягкий контейнер-пилюля, активный пункт — стеклянная пилюля с primary. */
 .cv-viewseg {
   display: inline-flex; gap: 2px; padding: 4px;
-  background: var(--color-surface-high); border-radius: var(--radius-full);
+  background: var(--color-surface-high);
+  background: var(--glass-bg);
+  box-shadow: var(--glass-edge);
+  border: 1px solid var(--acrylic-border);
+  border-radius: var(--radius-full);
 }
 .cv-viewseg button {
   min-height: 36px; padding: 8px 14px; border: none; background: transparent;
@@ -549,7 +560,7 @@ watch(() => store.loadingEntries, () => nextTick(measureWeekColumn))
 }
 .cv-viewseg button:hover:not(.active) { color: var(--color-text); }
 .cv-viewseg button.active {
-  background: var(--acrylic-card-bg); color: var(--color-primary);
+  background: var(--grad-primary); color: var(--color-on-primary);
   font-weight: 700; box-shadow: var(--shadow-sm);
 }
 
@@ -656,28 +667,9 @@ watch(() => store.loadingEntries, () => nextTick(measureWeekColumn))
 .cv-dayrow-flabel { font-weight: 600; color: var(--color-text); }
 .cv-dayrow-chev { flex-shrink: 0; color: var(--color-text-dim); }
 
-.cv-empty {
-  display: flex; flex-direction: column; align-items: center; justify-content: center;
-  gap: 10px; padding: 48px 16px; color: var(--color-text-dim);
-}
-.cv-empty .material-symbols-outlined { font-size: 44px; }
-.cv-empty p { margin: 0; }
-
 .cv-overlay { position: absolute; inset: 0; display: grid; place-items: center; background: color-mix(in oklch, var(--color-surface) 50%, transparent); }
 
 /* ── Кнопки ── */
-.cv-btn-tonal {
-  display: inline-flex; align-items: center; gap: 6px; height: 38px; padding: 0 16px;
-  border: 1px solid var(--acrylic-border); border-radius: var(--radius-full);
-  /* Матовое стекло единого стиля вместо сплошного primary-container. */
-  background: var(--acrylic-card-bg);
-  -webkit-backdrop-filter: var(--acrylic-blur);
-  backdrop-filter: var(--acrylic-blur);
-  color: var(--color-primary);
-  font-weight: 600; font-size: 14px; cursor: pointer;
-  transition: background 0.15s;
-}
-.cv-btn-tonal:hover { background: var(--color-surface-high); }
 .cv-btn-text { border: none; background: none; cursor: pointer; color: var(--color-primary); font-weight: 600; font-size: 14px; }
 .spin { animation: cvspin 1s linear infinite; font-size: 32px; color: var(--color-primary); }
 @keyframes cvspin { to { transform: rotate(360deg); } }
@@ -720,7 +712,7 @@ watch(() => store.loadingEntries, () => nextTick(measureWeekColumn))
   color: var(--color-text-dim); font-size: 14px; font-weight: 600; cursor: pointer; white-space: nowrap;
   max-width: 60vw; overflow: hidden; text-overflow: ellipsis;
 }
-.cv-regchip.active { background: var(--color-primary); color: var(--color-on-primary); border-color: transparent; }
+.cv-regchip.active { background: var(--grad-primary); color: var(--color-on-primary); border-color: transparent; }
 
 @media (max-width: 768px) {
   /* Скрытие левой панели и разворот правой — в глобальном .split-* */

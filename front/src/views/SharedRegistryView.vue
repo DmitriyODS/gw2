@@ -432,7 +432,7 @@ onMounted(load)
 .sr-th-check, .sr-td-check { width: 48px; text-align: center; }
 .sr-th-date, .sr-td-date { width: 130px; white-space: nowrap; color: var(--color-text-dim); }
 .sr-row { cursor: pointer; }
-.sr-row:hover { background: var(--color-surface-high); }
+.sr-row:hover { background: var(--glass-hover-bg); }
 .sr-row.selected { background: var(--color-primary-container); }
 .sr-table tbody td { padding: 11px 14px; border-bottom: 1px solid var(--color-outline-dim); color: var(--color-text); }
 .sr-td-check { text-align: center; }
@@ -460,9 +460,9 @@ onMounted(load)
 .sr-cols-pop { position: fixed; z-index: 10801; min-width: 220px; max-height: 60vh; overflow-y: auto; padding: 8px; background: var(--acrylic-bg); -webkit-backdrop-filter: var(--acrylic-blur); backdrop-filter: var(--acrylic-blur); border: 1px solid var(--color-outline-dim); border-radius: var(--radius-lg); box-shadow: var(--shadow-lg); }
 .sr-cols-title { padding: 6px 10px; font-size: 12px; font-weight: 700; color: var(--color-text-dim); text-transform: uppercase; }
 .sr-cols-row { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-radius: var(--radius-md); cursor: pointer; font-size: 14px; color: var(--color-text); }
-.sr-cols-row:hover { background: var(--color-surface-high); }
+.sr-cols-row:hover { background: var(--glass-hover-bg); }
 
-.sr-btn { display: inline-flex; align-items: center; gap: 6px; height: 40px; padding: 0 16px; border: none; border-radius: var(--radius-full); background: var(--color-primary); color: var(--color-on-primary); font-weight: 600; font-size: 14px; cursor: pointer; }
+.sr-btn { display: inline-flex; align-items: center; gap: 6px; height: 40px; padding: 0 16px; border: none; border-radius: var(--radius-full); background: var(--grad-primary); color: var(--color-on-primary); font-weight: 600; font-size: 14px; cursor: pointer; }
 .sr-btn-sm { height: 32px; padding: 0 12px; }
 .sr-link-btn { border: none; background: none; cursor: pointer; color: inherit; font-weight: 600; font-size: 14px; }
 
@@ -476,7 +476,7 @@ onMounted(load)
 .sr-export-bulk .sr-link-btn { color: var(--color-primary); }
 .sr-export-fields { display: flex; flex-direction: column; gap: 2px; max-height: 320px; overflow-y: auto; }
 .sr-export-row { display: flex; align-items: center; gap: 10px; padding: 9px 8px; border-radius: var(--radius-md); cursor: pointer; font-size: 14px; color: var(--color-text); }
-.sr-export-row:hover { background: var(--color-surface-high); }
+.sr-export-row:hover { background: var(--glass-hover-bg); }
 .sr-export-row .material-symbols-outlined { font-size: 20px; color: var(--color-text-dim); }
 .sr-export-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 

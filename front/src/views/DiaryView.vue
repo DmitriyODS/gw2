@@ -832,18 +832,41 @@ watch(() => store.loadingEntries, () => nextTick(measureWeekColumn))
 .dv-toolbar-search { flex: 1 1 auto; min-width: 0; }
 .dv-nav { display: flex; align-items: center; gap: 8px; }
 .dv-period { margin: 0 0 0 6px; font-size: 16px; font-weight: 700; color: var(--color-text); text-transform: capitalize; white-space: nowrap; }
-.dv-today { height: 36px; padding: 0 14px; border: 1px solid var(--color-outline-dim); border-radius: var(--radius-full); background: var(--acrylic-card-bg); color: var(--color-text); font-weight: 600; font-size: 13px; cursor: pointer; }
-.dv-today:hover { background: var(--color-surface-high); }
+.dv-today {
+  height: 36px; padding: 0 14px; border: 1px solid var(--acrylic-border);
+  border-radius: var(--radius-full);
+  background: var(--acrylic-card-bg);
+  background: var(--glass-bg);
+  box-shadow: var(--glass-edge);
+  color: var(--color-text); font-weight: 600; font-size: 13px; cursor: pointer;
+  transition: border-color 0.15s;
+}
+.dv-today:hover { border-color: color-mix(in oklch, var(--color-primary) 30%, var(--acrylic-border)); }
 /* Сегмент вида — единый стиль с периодами статистики (StatsPeriodControl). */
-.dv-viewseg { display: inline-flex; gap: 2px; padding: 4px; background: var(--color-surface-high); border-radius: var(--radius-full); }
+.dv-viewseg {
+  display: inline-flex; gap: 2px; padding: 4px;
+  background: var(--color-surface-high);
+  background: var(--glass-bg);
+  box-shadow: var(--glass-edge);
+  border: 1px solid var(--acrylic-border);
+  border-radius: var(--radius-full);
+}
 .dv-viewseg button {
   min-height: 36px; padding: 8px 14px; border: none; background: transparent;
   border-radius: var(--radius-full); color: var(--color-text-dim); cursor: pointer;
   font-weight: 600; font-size: 13px; transition: background 0.15s, color 0.15s, box-shadow 0.15s;
 }
 .dv-viewseg button:hover:not(.active) { color: var(--color-text); }
-.dv-viewseg button.active { background: var(--acrylic-card-bg); color: var(--color-primary); font-weight: 700; box-shadow: var(--shadow-sm); }
-.dv-search { flex: 1 1 auto; display: flex; align-items: center; gap: 8px; height: 38px; padding: 0 12px; min-width: 170px; background: var(--color-surface-low); border: 1px solid var(--color-outline-dim); border-radius: var(--radius-full); }
+.dv-viewseg button.active { background: var(--grad-primary); color: var(--color-on-primary); font-weight: 700; box-shadow: var(--shadow-sm); }
+.dv-search {
+  flex: 1 1 auto; display: flex; align-items: center; gap: 8px; height: 38px;
+  padding: 0 12px; min-width: 170px;
+  background: var(--color-surface-low);
+  background: var(--glass-bg);
+  box-shadow: var(--glass-edge);
+  border: 1px solid var(--acrylic-border);
+  border-radius: var(--radius-full);
+}
 .dv-search > .material-symbols-outlined { color: var(--color-text-dim); font-size: 20px; }
 .dv-search input { flex: 1; min-width: 0; border: none; background: none; outline: none; color: var(--color-text); font-size: 14px; }
 .dv-search-clear { border: none; background: none; cursor: pointer; color: var(--color-text-dim); display: grid; place-items: center; }
@@ -997,13 +1020,13 @@ watch(() => store.loadingEntries, () => nextTick(measureWeekColumn))
 .dv-arc-group + .dv-arc-group { margin-top: 6px; }
 .dv-arc-daylabel { padding: 12px 4px 6px; font-size: 13px; font-weight: 700; color: var(--color-text-dim); text-transform: capitalize; }
 
-.dv-name-input { width: 100%; padding: 12px 14px; font: inherit; color: var(--color-text); background: var(--color-surface-high); border: 1px solid var(--color-outline-variant); border-radius: var(--radius-md); outline: none; }
+.dv-name-input { width: 100%; padding: 12px 14px; font: inherit; color: var(--color-text); background: var(--color-surface-high); background: var(--glass-bg); box-shadow: var(--glass-edge); border: 1px solid var(--acrylic-border); border-radius: var(--radius-md); outline: none; }
 .dv-name-input:focus { border-color: var(--color-primary); }
 
 /* Мобайл */
 .dv-regstrip { flex: none; display: flex; gap: 8px; padding: 10px 12px; overflow-x: auto; border-bottom: 1px solid var(--color-outline-dim); }
 .dv-regchip { flex: none; padding: 8px 14px; border-radius: var(--radius-full); border: 1px solid var(--color-outline-dim); background: var(--acrylic-card-bg); color: var(--color-text-dim); font-size: 14px; font-weight: 600; cursor: pointer; white-space: nowrap; }
-.dv-regchip.active { background: var(--color-primary); color: var(--color-on-primary); border-color: transparent; }
+.dv-regchip.active { background: var(--grad-primary); color: var(--color-on-primary); border-color: transparent; }
 
 @media (max-width: 768px) {
   /* Скрытие левой панели и разворот правой — в глобальном .split-* */

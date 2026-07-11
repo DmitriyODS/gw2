@@ -179,11 +179,14 @@ function formatDate(d) {
   box-shadow: var(--glass-edge), 0 0 0 1px color-mix(in oklch, var(--color-secondary) 40%, transparent);
 }
 
-/* Окрашенная карточка — личный цвет как стеклянная тонировка:
-   «иней» поверх полупрозрачного пастельного слоя, стекло сохраняется. */
+/* Окрашенная карточка — личный цвет как стеклянный градиент из САМОГО
+   цвета тега (общий иней сверху гасил насыщенность): пастельно, но ярко. */
 .task-card.colored {
   background: var(--card-tag-surface);
-  background: var(--glass-bg), color-mix(in oklch, var(--card-tag-surface) 55%, transparent);
+  background: linear-gradient(155deg,
+    color-mix(in oklch, var(--card-tag-surface) 92%, transparent),
+    color-mix(in oklch, var(--card-tag-surface) 70%, transparent) 50%,
+    color-mix(in oklch, var(--card-tag-surface) 85%, transparent));
   border-color: var(--card-tag-border);
 }
 

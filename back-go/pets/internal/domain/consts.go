@@ -163,7 +163,7 @@ const HousePlacedMax = 6
 
 // HouseThemes — ключи градиентных тем комнаты (визуал целиком на фронте,
 // бэкенд только валидирует и хранит выбор).
-var HouseThemes = []string{"cozy", "sunset", "night", "forest", "ocean", "candy"}
+var HouseThemes = []string{"cozy", "sunset", "night", "forest", "ocean", "candy", "aurora", "lavender", "peach", "space"}
 
 // ── Кудо-банк ──────────────────────────────────────────────────────
 // Переводы коллегам, выписка (pet_kudos_ledger), вклад под ежедневный

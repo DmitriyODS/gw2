@@ -370,14 +370,14 @@ onMounted(load)
 .sc-today { height: 34px; padding: 0 12px; border: 1px solid var(--color-outline-dim); border-radius: var(--radius-full); background: var(--acrylic-card-bg); color: var(--color-text); font-weight: 600; font-size: 13px; cursor: pointer; }
 .sc-spacer { flex: 1; }
 /* Сегмент вида — единый стиль с периодами статистики (StatsPeriodControl). */
-.sc-viewseg { display: inline-flex; gap: 2px; padding: 4px; background: var(--color-surface-high); border-radius: var(--radius-full); }
+.sc-viewseg { display: inline-flex; gap: 2px; padding: 4px; background: var(--color-surface-high); background: var(--glass-bg); box-shadow: var(--glass-edge); border: 1px solid var(--acrylic-border); border-radius: var(--radius-full); }
 .sc-viewseg button {
   min-height: 34px; padding: 7px 14px; border: none; background: transparent;
   border-radius: var(--radius-full); color: var(--color-text-dim); cursor: pointer;
   font-weight: 600; font-size: 13px; transition: background 0.15s, color 0.15s, box-shadow 0.15s;
 }
 .sc-viewseg button:hover:not(.active) { color: var(--color-text); }
-.sc-viewseg button.active { background: var(--acrylic-card-bg); color: var(--color-primary); font-weight: 700; box-shadow: var(--shadow-sm); }
+.sc-viewseg button.active { background: var(--grad-primary); color: var(--color-on-primary); font-weight: 700; box-shadow: var(--shadow-sm); }
 
 .sc-icon-btn { width: 36px; height: 36px; display: grid; place-items: center; border: 1px solid var(--color-outline-dim); border-radius: var(--radius-full); background: var(--acrylic-card-bg); color: var(--color-text-dim); cursor: pointer; }
 .sc-icon-btn:hover { background: var(--color-surface-high); color: var(--color-text); }
@@ -414,7 +414,7 @@ onMounted(load)
   padding: 12px 16px; border: none; background: none; cursor: pointer;
   border-bottom: 1px solid var(--color-outline-dim);
 }
-.sc-agenda-row:hover { background: var(--color-surface-high); }
+.sc-agenda-row:hover { background: var(--glass-hover-bg); }
 .sc-agenda-date { flex-shrink: 0; width: 44px; display: flex; flex-direction: column; align-items: center; }
 .sc-agenda-dnum { font-size: 18px; font-weight: 700; color: var(--color-text); }
 .sc-agenda-row.today .sc-agenda-dnum {
@@ -430,7 +430,7 @@ onMounted(load)
 
 .sc-daylist { display: flex; flex-direction: column; gap: 8px; }
 .sc-dayrow { display: flex; align-items: center; gap: 14px; width: 100%; text-align: left; padding: 12px 14px; border: 1px solid var(--color-outline-dim); border-radius: var(--radius-lg); background: var(--acrylic-card-bg); cursor: pointer; }
-.sc-dayrow:hover { background: var(--color-surface-high); }
+.sc-dayrow:hover { background: var(--glass-hover-bg); }
 .sc-dayrow-time { flex-shrink: 0; min-width: 56px; font-size: 16px; font-weight: 700; color: var(--color-primary); font-variant-numeric: tabular-nums; }
 .sc-dayrow-body { flex: 1; min-width: 0; display: flex; flex-direction: column; }
 .sc-dayrow-title { font-size: 15px; font-weight: 600; color: var(--color-text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -449,7 +449,7 @@ onMounted(load)
 .sc-foot { flex: none; display: flex; align-items: center; justify-content: flex-end; padding: 10px 20px; border-top: 1px solid var(--color-outline-dim); background: var(--acrylic-card-bg); }
 .sc-brand { font-size: 12px; font-weight: 700; color: var(--color-text-dim); }
 
-.sc-btn { display: inline-flex; align-items: center; gap: 6px; height: 40px; padding: 0 16px; border: none; border-radius: var(--radius-full); background: var(--color-primary); color: var(--color-on-primary); font-weight: 600; font-size: 14px; cursor: pointer; }
+.sc-btn { display: inline-flex; align-items: center; gap: 6px; height: 40px; padding: 0 16px; border: none; border-radius: var(--radius-full); background: var(--grad-primary); color: var(--color-on-primary); font-weight: 600; font-size: 14px; cursor: pointer; }
 .sc-link-btn { border: none; background: none; cursor: pointer; color: var(--color-primary); font-weight: 600; font-size: 14px; }
 .sc-export { display: flex; flex-direction: column; gap: 16px; }
 .sc-export-period { margin: 0; font-size: 14px; color: var(--color-text); }
@@ -458,7 +458,7 @@ onMounted(load)
 .sc-export-bulk { display: flex; gap: 12px; }
 .sc-export-fields { display: flex; flex-direction: column; gap: 2px; max-height: 320px; overflow-y: auto; }
 .sc-export-row { display: flex; align-items: center; gap: 10px; padding: 9px 8px; border-radius: var(--radius-md); cursor: pointer; font-size: 14px; color: var(--color-text); }
-.sc-export-row:hover { background: var(--color-surface-high); }
+.sc-export-row:hover { background: var(--glass-hover-bg); }
 .sc-export-row .material-symbols-outlined { font-size: 20px; color: var(--color-text-dim); }
 .sc-export-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 

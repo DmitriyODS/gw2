@@ -56,6 +56,9 @@ function select(t) {
   display: inline-flex;
   gap: 2px;
   background: var(--color-surface-high);
+  background: var(--glass-bg);
+  box-shadow: var(--glass-edge);
+  border: 1px solid var(--acrylic-border);
   border-radius: var(--radius-full);
   padding: 4px;
   align-self: flex-start;

@@ -183,6 +183,9 @@ watch(
 .period-modes {
   display: inline-flex;
   background: var(--color-surface-high);
+  background: var(--glass-bg);
+  box-shadow: var(--glass-edge);
+  border: 1px solid var(--acrylic-border);
   border-radius: var(--radius-full);
   padding: 4px;
   gap: 2px;
@@ -206,8 +209,8 @@ watch(
 }
 
 .mode-btn.active {
-  background: var(--acrylic-card-bg);
-  color: var(--color-primary);
+  background: var(--grad-primary);
+  color: var(--color-on-primary);
   font-weight: 700;
   box-shadow: var(--shadow-sm);
 }

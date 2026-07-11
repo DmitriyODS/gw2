@@ -228,14 +228,14 @@ onMounted(async () => {
 .sv-spacer { flex: 1; }
 .sv-icon-btn { width: 36px; height: 36px; display: grid; place-items: center; border: 1px solid var(--color-outline-dim); border-radius: var(--radius-full); background: var(--acrylic-card-bg); color: var(--color-text-dim); cursor: pointer; }
 /* Сегмент вида — единый стиль с периодами статистики (StatsPeriodControl). */
-.sv-viewseg { display: inline-flex; gap: 2px; padding: 4px; background: var(--color-surface-high); border-radius: var(--radius-full); }
+.sv-viewseg { display: inline-flex; gap: 2px; padding: 4px; background: var(--color-surface-high); background: var(--glass-bg); box-shadow: var(--glass-edge); border: 1px solid var(--acrylic-border); border-radius: var(--radius-full); }
 .sv-viewseg button {
   min-height: 36px; padding: 8px 14px; border: none; background: transparent;
   border-radius: var(--radius-full); color: var(--color-text-dim); cursor: pointer;
   font-weight: 600; font-size: 13px; transition: background 0.15s, color 0.15s, box-shadow 0.15s;
 }
 .sv-viewseg button:hover:not(.active) { color: var(--color-text); }
-.sv-viewseg button.active { background: var(--acrylic-card-bg); color: var(--color-primary); font-weight: 700; box-shadow: var(--shadow-sm); }
+.sv-viewseg button.active { background: var(--grad-primary); color: var(--color-on-primary); font-weight: 700; box-shadow: var(--shadow-sm); }
 
 .sv-body { flex: 1; min-height: 0; overflow: auto; }
 .sv-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 1px; background: var(--color-outline-dim); min-height: 100%; }
@@ -244,7 +244,7 @@ onMounted(async () => {
 .sv-wd { background: var(--acrylic-card-bg); padding: 8px 10px; text-align: center; font-size: 12px; font-weight: 700; color: var(--color-text-dim); text-transform: uppercase; }
 .sv-day { background: var(--acrylic-card-bg); min-height: 100px; padding: 6px; display: flex; flex-direction: column; gap: 4px; cursor: pointer; overflow: hidden; }
 .sv-grid.week .sv-day { min-height: 0; }
-.sv-day:hover { background: var(--color-surface-high); }
+.sv-day:hover { background: var(--glass-hover-bg); }
 .sv-day.dim { background: var(--color-surface-low); }
 .sv-day-head { display: flex; align-items: center; justify-content: space-between; }
 .sv-day-num { font-size: 13px; font-weight: 700; color: var(--color-text); width: 24px; height: 24px; display: grid; place-items: center; }
@@ -258,7 +258,7 @@ onMounted(async () => {
 
 .sv-daylist, .sv-archive { display: flex; flex-direction: column; gap: 8px; padding: 16px; }
 .sv-dayrow, .sv-arow { display: flex; align-items: center; gap: 14px; width: 100%; text-align: left; padding: 12px 14px; border: 1px solid var(--color-outline-dim); border-radius: var(--radius-lg); background: var(--acrylic-card-bg); cursor: pointer; }
-.sv-dayrow:hover, .sv-arow:hover { background: var(--color-surface-high); }
+.sv-dayrow:hover, .sv-arow:hover { background: var(--glass-hover-bg); }
 .sv-dayrow-time { flex-shrink: 0; min-width: 56px; font-weight: 700; color: var(--color-primary); }
 .sv-dayrow-body, .sv-arow-body { flex: 1; min-width: 0; display: flex; flex-direction: column; }
 .sv-dayrow-title { font-weight: 600; color: var(--color-text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

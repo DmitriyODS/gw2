@@ -556,7 +556,7 @@ async function claimMystery() {
   text-align: left;
   transition: transform 0.12s;
 }
-.ps-hero-card:hover { transform: translateY(-2px); }
+.ps-hero-card:hover { background: var(--glass-hover-bg); }
 .ps-hero-card:hover .ps-hero-emoji { animation: ps-wiggle 0.5s ease-in-out; }
 .ps-hero-emoji { font-size: 42px; line-height: 1; animation: ps-float 4.5s ease-in-out infinite; }
 .ps-hero-info { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
@@ -692,7 +692,6 @@ async function claimMystery() {
   animation-delay: calc(var(--i, 0) * 35ms);
 }
 .ps-item:hover {
-  transform: translateY(-4px) scale(1.02);
   box-shadow: 0 10px 26px color-mix(in oklch, var(--rarity-accent, var(--color-text)) 22%, transparent);
 }
 .ps-item:hover .ps-item-emoji { animation: ps-wiggle 0.5s ease-in-out; }

@@ -1074,7 +1074,7 @@ watch([open, activeTab], async ([isOpen, tab]) => {
   flex-shrink: 0;
 }
 
-.mini-icon:hover { background: var(--color-surface-low); color: var(--color-text); }
+.mini-icon:hover { background: var(--glass-hover-bg); color: var(--color-text); }
 .mini-icon .material-symbols-outlined { font-size: 20px; }
 
 .mini-list {
@@ -1094,7 +1094,7 @@ watch([open, activeTab], async ([isOpen, tab]) => {
   transition: background 0.12s;
 }
 
-.mini-conv:hover { background: var(--color-surface-low); }
+.mini-conv:hover { background: var(--glass-hover-bg); }
 
 .mini-avatar-wrap {
   position: relative;
@@ -1270,9 +1270,11 @@ watch([open, activeTab], async ([isOpen, tab]) => {
   max-width: 280px;
 }
 .assistant-chip {
-  border: 1px solid var(--color-outline-dim);
+  border: 1px solid var(--acrylic-border);
   border-radius: var(--radius-full);
   background: var(--color-surface);
+  background: var(--glass-bg);
+  box-shadow: var(--glass-edge);
   color: var(--color-text);
   font: inherit;
   font-size: 13px;
@@ -1281,7 +1283,7 @@ watch([open, activeTab], async ([isOpen, tab]) => {
   text-align: left;
   transition: background 0.15s, border-color 0.15s;
 }
-.assistant-chip:hover { background: var(--color-surface-high); border-color: var(--color-primary); }
+.assistant-chip:hover { background: var(--glass-hover-bg); border-color: var(--color-primary); }
 
 .assistant-row {
   display: flex;

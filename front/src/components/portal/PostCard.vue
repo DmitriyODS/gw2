@@ -593,7 +593,7 @@ function onDelete() {
   text-decoration: none;
   font-size: 13px;
 }
-.post-file:hover { background: var(--color-surface-high); }
+.post-file:hover { background: var(--glass-hover-bg); }
 .post-file .material-symbols-outlined { color: var(--color-primary); font-size: 20px; }
 .post-file-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .post-file-size { color: var(--color-text-dim); font-size: 12px; flex-shrink: 0; }
@@ -630,7 +630,7 @@ function onDelete() {
 @media (max-width: 768px) {
   .post-reaction { min-height: 44px; padding: 4px 12px; }
 }
-.post-reaction:hover { background: var(--color-surface-high); }
+.post-reaction:hover { background: var(--glass-hover-bg); }
 .post-reaction.active {
   background: var(--color-primary-container);
   border-color: var(--color-primary);
@@ -653,7 +653,7 @@ function onDelete() {
   font-weight: 600;
   cursor: pointer;
 }
-.post-action:hover { background: var(--color-surface-high); color: var(--color-text); }
+.post-action:hover { background: var(--glass-hover-bg); color: var(--color-text); }
 .post-action .material-symbols-outlined { font-size: 18px; }
 .post-action + .post-action { margin-left: 0; }
 

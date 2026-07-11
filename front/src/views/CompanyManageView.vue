@@ -760,7 +760,11 @@ async function doDelete() {
 
 .manage-head { display: flex; align-items: center; gap: 12px; margin-bottom: 16px; flex: none; }
 .back-btn {
-  border: none; background: var(--color-surface-high); width: 40px; height: 40px;
+  border: 1px solid var(--acrylic-border);
+  background: var(--color-surface-high);
+  background: var(--glass-bg);
+  box-shadow: var(--glass-edge);
+  width: 40px; height: 40px;
   border-radius: 50%; display: grid; place-items: center; cursor: pointer; color: var(--color-text);
   flex: none;
 }
@@ -886,7 +890,7 @@ async function doDelete() {
   padding: 10px 12px; background: var(--acrylic-card-bg); border-radius: var(--radius-md, 12px);
   cursor: pointer; transition: background .12s;
 }
-.switch-row:hover { background: var(--color-surface-highest, var(--color-surface-high)); }
+.switch-row:hover { background: var(--glass-hover-bg); }
 .switch-text { display: flex; align-items: center; gap: 12px; min-width: 0; }
 .switch-text > .material-symbols-outlined {
   display: grid; place-items: center; width: 36px; height: 36px; border-radius: var(--radius-md, 12px);

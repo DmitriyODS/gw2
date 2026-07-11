@@ -11,6 +11,8 @@
         <p class="mg-hint">Питомец разыгрался — поймайте момент и дайте ему еду</p>
 
         <div ref="areaEl" class="mg-area">
+          <!-- Кормим прямо в комнате грувика, если она обставлена. -->
+          <PetRoomScene :pet="pet" />
           <div
             ref="mouthEl"
             class="mg-pet"
@@ -38,6 +40,7 @@
 <script setup>
 import { computed, nextTick, onBeforeUnmount, reactive, ref } from 'vue'
 import EmojiGlyph from '@/components/common/EmojiGlyph.vue'
+import PetRoomScene from '@/components/pets/PetRoomScene.vue'
 import { isInHitZone } from '@/utils/miniGames.js'
 import { petEmoji } from '@/utils/pets.js'
 
@@ -183,8 +186,10 @@ onBeforeUnmount(() => {
   touch-action: none;
   overflow: hidden;
 }
+/* Питомец и еда — поверх слоя комнаты (PetRoomScene). */
 .mg-pet {
   position: absolute;
+  z-index: 1;
   top: 18px;
   transform: translateX(-50%);
   width: 88px;
@@ -204,6 +209,8 @@ onBeforeUnmount(() => {
   70% { transform: translateX(-50%) scale(0.92); }
 }
 .mg-food {
+  position: relative;
+  z-index: 1;
   font-size: 40px;
   line-height: 1;
   cursor: grab;

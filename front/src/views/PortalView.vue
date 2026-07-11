@@ -374,13 +374,16 @@ watch(() => useAuthStore().companyId, (id, prev) => {
   border: 1px solid var(--acrylic-border);
   border-radius: var(--radius-full);
   background: var(--acrylic-card-bg);
+  background: var(--glass-bg);
+  box-shadow: var(--glass-edge);
   color: var(--color-text);
   font: inherit;
   font-size: 13.5px;
   font-weight: 600;
   cursor: pointer;
+  transition: border-color 0.15s;
 }
-.portal-load-more:hover { background: var(--color-surface-high); }
+.portal-load-more:hover { border-color: color-mix(in oklch, var(--color-primary) 30%, var(--acrylic-border)); }
 
 @media (max-width: 640px) {
   .portal-btn-label { display: none; }

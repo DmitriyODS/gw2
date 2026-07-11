@@ -452,7 +452,7 @@ onBeforeUnmount(() => {
   cursor: pointer;
   color: var(--color-on-surface-variant);
 }
-.tfw-tab.active { background: var(--color-primary); color: var(--color-on-primary); }
+.tfw-tab.active { background: var(--grad-primary); color: var(--color-on-primary); }
 .tfw-tab .material-symbols-outlined { font-size: 16px; }
 
 .tfw-tab-body { display: flex; flex-direction: column; min-height: 0; flex: 1; }

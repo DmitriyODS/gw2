@@ -682,7 +682,8 @@ textarea.ctl.invalid:focus {
 .btn-text,
 .btn-outlined,
 .cd-btn-text,
-.cc-cancel {
+.cc-cancel,
+.btn-tonal:not(.danger) {
   background: var(--color-surface-low) !important;
   background: var(--glass-bg) !important;
   box-shadow: var(--glass-edge), inset 0 0 0 1px var(--acrylic-border) !important;
@@ -691,7 +692,8 @@ textarea.ctl.invalid:focus {
 .btn-text:hover:not(:disabled),
 .btn-outlined:hover:not(:disabled),
 .cd-btn-text:hover:not(:disabled),
-.cc-cancel:hover:not(:disabled) {
+.cc-cancel:hover:not(:disabled),
+.btn-tonal:not(.danger):hover:not(:disabled) {
   box-shadow: var(--glass-edge), inset 0 0 0 1px color-mix(in oklch, var(--color-primary) 30%, var(--acrylic-border)) !important;
 }
 
@@ -730,6 +732,25 @@ textarea.ctl.invalid:focus {
   color: var(--color-error) !important;
 }
 
+/* Пагинация всех разделов — те же стеклянные «таблетки».
+   Активная страница (.page-num.active) и разделители (.gap) не трогаются. */
+.page-btn,
+.page-num:not(.active):not(.gap),
+.rg-page-btn,
+.sr-page-btn {
+  background: var(--color-surface-low) !important;
+  background: var(--glass-bg) !important;
+  border: 1px solid var(--acrylic-border) !important;
+  box-shadow: var(--glass-edge) !important;
+  color: var(--color-text) !important;
+}
+.page-btn:not(:disabled):hover,
+.page-num:not(.active):not(.gap):hover,
+.rg-page-btn:not(:disabled):hover,
+.sr-page-btn:not(:disabled):hover {
+  border-color: color-mix(in oklch, var(--color-primary) 30%, var(--acrylic-border)) !important;
+}
+
 /* Hover-«запотевание» стекла — пара к --glass-bg/--glass-edge (tokens.css).
    Вместо подъёма/transform поверх элемента плавно проявляется второй слой
    инея (::after), кромка и грань мягко светлеют. Вешать на интерактивные
@@ -746,7 +767,9 @@ textarea.ctl.invalid:focus {
   position: absolute;
   inset: 0;
   border-radius: inherit;
-  background: var(--glass-bg);
+  /* Отдельный токен: в эксперименте светлой темы hover затемняет,
+     а не повторяет молочный иней (см. tokens.css). */
+  background: var(--glass-hover-bg, var(--glass-bg));
   opacity: 0;
   transition: opacity 0.3s ease;
   pointer-events: none;

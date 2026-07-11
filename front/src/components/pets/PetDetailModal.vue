@@ -698,23 +698,29 @@ function gotoPets() {
 
 .pdm-tabs {
   display: flex; gap: 6px; margin-top: 16px; width: 100%;
-  background: var(--color-surface-high); border-radius: var(--radius-full); padding: 4px;
+  background: var(--color-surface-high);
+  background: var(--glass-bg);
+  box-shadow: var(--glass-edge);
+  border: 1px solid var(--acrylic-border);
+  border-radius: var(--radius-full); padding: 4px;
 }
 .pdm-tab {
   flex: 1; border: none; background: none; font-size: 13px; font-weight: 600;
   padding: 8px 12px; border-radius: var(--radius-full); cursor: pointer; color: var(--color-text-dim);
 }
-.pdm-tab.active { background: var(--color-primary); color: var(--color-on-primary); }
+.pdm-tab.active { background: var(--grad-primary); color: var(--color-on-primary); }
 
 .pdm-actions { width: 100%; display: flex; flex-direction: column; gap: 8px; margin-top: 14px; }
 .pdm-action-btn {
   display: flex; align-items: center; gap: 10px;
-  border: 1px solid var(--color-outline-dim); border-radius: 16px;
-  background: var(--color-surface); padding: 12px 14px; cursor: pointer;
+  border: 1px solid var(--acrylic-border); border-radius: 16px;
+  background: var(--color-surface);
+  background: var(--glass-bg);
+  box-shadow: var(--glass-edge); padding: 12px 14px; cursor: pointer;
   font-size: 14px; font-weight: 600; text-align: left; color: var(--color-text);
   transition: background 0.15s, transform 0.1s;
 }
-.pdm-action-btn:hover:not(:disabled) { background: var(--color-surface-high); }
+.pdm-action-btn:hover:not(:disabled) { background: var(--glass-hover-bg); }
 .pdm-action-btn:active:not(:disabled) { transform: scale(0.99); }
 .pdm-action-btn:disabled { opacity: 0.45; cursor: default; }
 .pdm-action-btn.prestige {
@@ -760,7 +766,7 @@ function gotoPets() {
   font-size: 19px; cursor: pointer; display: grid; place-items: center;
   transition: border-color 0.15s, background 0.15s;
 }
-.pdm-closet-item:hover { background: var(--color-surface-high); }
+.pdm-closet-item:hover { background: var(--glass-hover-bg); }
 .pdm-closet-item.active { border-color: var(--color-primary); background: var(--color-primary-container); }
 
 .pdm-history { width: 100%; margin-top: 14px; min-height: 80px; }

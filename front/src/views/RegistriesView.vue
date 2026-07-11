@@ -822,7 +822,7 @@ onMounted(() => store.fetchRegistries())
   color: var(--color-text-dim); font-size: 14px; font-weight: 600; cursor: pointer; white-space: nowrap;
   max-width: 60vw; overflow: hidden; text-overflow: ellipsis;
 }
-.rg-regchip.active { background: var(--color-primary); color: var(--color-on-primary); border-color: transparent; }
+.rg-regchip.active { background: var(--grad-primary); color: var(--color-on-primary); border-color: transparent; }
 
 .rg-msort {
   flex: none; display: flex; align-items: center; gap: 8px;

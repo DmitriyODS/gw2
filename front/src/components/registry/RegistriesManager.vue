@@ -427,7 +427,7 @@ onMounted(() => store.fetchRegistries())
   border-radius: var(--radius-md); color: var(--color-text-dim);
   text-align: left; font-size: 14px; font-weight: 600;
 }
-.rm-side-item:hover { background: var(--color-surface-high); color: var(--color-text); }
+.rm-side-item:hover { background: var(--glass-hover-bg); color: var(--color-text); }
 .rm-side-item.active { background: var(--color-primary-container); color: var(--color-on-primary-container); }
 .rm-side-item .material-symbols-outlined { font-size: 20px; flex-shrink: 0; }
 .rm-side-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -454,7 +454,7 @@ onMounted(() => store.fetchRegistries())
   background: var(--acrylic-card-bg);
   transition: border-color .12s, background .12s;
 }
-.rm-field-row:hover { background: var(--color-surface-high); border-color: var(--color-outline); }
+.rm-field-row:hover { background: var(--glass-hover-bg); border-color: var(--color-outline); }
 
 .rm-reorder { display: flex; flex-direction: column; gap: 2px; flex-shrink: 0; }
 .rm-reorder-btn {
@@ -532,7 +532,7 @@ onMounted(() => store.fetchRegistries())
   border-right: 1px solid var(--color-outline-dim);
 }
 .fd-seg button:last-child { border-right: none; }
-.fd-seg button.active { background: var(--color-primary); color: var(--color-on-primary); }
+.fd-seg button.active { background: var(--grad-primary); color: var(--color-on-primary); }
 
 /* ── Кнопки ── */
 .rm-icon-btn {
