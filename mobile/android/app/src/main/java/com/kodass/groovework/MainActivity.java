@@ -1,11 +1,17 @@
 package com.kodass.groovework;
 
+import android.app.DownloadManager;
 import android.app.NotificationChannel;
 import android.app.NotificationManager;
+import android.net.Uri;
 import android.net.http.SslError;
 import android.os.Bundle;
+import android.os.Environment;
+import android.webkit.CookieManager;
 import android.webkit.SslErrorHandler;
+import android.webkit.URLUtil;
 import android.webkit.WebView;
+import android.widget.Toast;
 
 import com.getcapacitor.BridgeActivity;
 import com.getcapacitor.BridgeWebViewClient;
@@ -35,6 +41,30 @@ public class MainActivity extends BridgeActivity {
                 if (errorUrl != null) {
                     view.loadUrl(errorUrl);
                 }
+            }
+        });
+
+        // WebView сам файлы не скачивает — без DownloadListener клики по
+        // ссылкам с download (кнопка «Скачать» в просмотрщике картинок,
+        // вложения, экспорты) молча игнорируются. Передаём системному
+        // DownloadManager: файл уходит в «Загрузки» с уведомлением о ходе.
+        this.bridge.getWebView().setDownloadListener((url, userAgent, contentDisposition, mimeType, contentLength) -> {
+            if (!url.startsWith("http")) return; // blob:/data: DownloadManager не умеет
+            try {
+                DownloadManager.Request req = new DownloadManager.Request(Uri.parse(url));
+                req.setMimeType(mimeType);
+                req.addRequestHeader("User-Agent", userAgent);
+                String cookies = CookieManager.getInstance().getCookie(url);
+                if (cookies != null) {
+                    req.addRequestHeader("Cookie", cookies);
+                }
+                String fileName = URLUtil.guessFileName(url, contentDisposition, mimeType);
+                req.setDestinationInExternalPublicDir(Environment.DIRECTORY_DOWNLOADS, fileName);
+                req.setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED);
+                ((DownloadManager) getSystemService(DOWNLOAD_SERVICE)).enqueue(req);
+                Toast.makeText(this, "Скачивание: " + fileName, Toast.LENGTH_SHORT).show();
+            } catch (Exception e) {
+                Toast.makeText(this, "Не удалось скачать файл", Toast.LENGTH_SHORT).show();
             }
         });
     }
