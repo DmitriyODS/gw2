@@ -57,4 +57,9 @@ export function registerMessengerSocketHandlers(socket) {
   socket.on('presence:update', (payload) => {
     useMessengerStore().applyPresence(payload)
   })
+
+  // Эфемерный «печатает…» — релей gateway, мимо БД и REST.
+  socket.on('typing', (payload) => {
+    useMessengerStore().applyTyping(payload)
+  })
 }

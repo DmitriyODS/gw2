@@ -337,6 +337,11 @@ function actionClass(a) {
 /* Когда шапки нет — тело не должно «лепиться» к верху. */
 .app-dialog:not(:has(.dlg-header)) .dlg-body { padding-top: 24px; }
 
+/* Когда футера нет — тело не должно «лепиться» к низу: его 4px рассчитаны
+   на футер. Вложенные AppDialog в :has() не попадают (PrimeVue телепортирует
+   каждый диалог в body). */
+.app-dialog:not(:has(.dlg-footer)) .dlg-body:not(.no-padding) { padding-bottom: 20px; }
+
 /* Подвал. */
 .dlg-footer {
   display: flex;
@@ -550,6 +555,11 @@ function actionClass(a) {
   .app-dialog-root.mobile-full .dlg-footer {
     margin-top: auto;
     padding-bottom: calc(14px + env(safe-area-inset-bottom, 0px));
+  }
+  /* Sheet прижат к нижней кромке экрана: телу без футера нужен ещё
+     и запас под home-индикатор. */
+  .app-dialog-root:is(.mobile-auto, .mobile-sheet) .app-dialog:not(:has(.dlg-footer)) .dlg-body:not(.no-padding) {
+    padding-bottom: calc(20px + env(safe-area-inset-bottom, 0px));
   }
   /* Внутренний контейнер в full-режиме не ограничен sheet-высотой 90dvh —
      иначе под футером остаётся пустая полоса в 10% экрана. */

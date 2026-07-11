@@ -282,9 +282,7 @@ async function buy(d) {
 </script>
 
 <style scoped>
-/* padding-bottom: тело AppDialog даёт снизу лишь 4px (в расчёте на футер),
-   а у домика футера нет — без своего отступа сцена липнет к краю модалки. */
-.phd { display: flex; flex-direction: column; gap: 10px; padding-bottom: 14px; }
+.phd { display: flex; flex-direction: column; gap: 10px; }
 
 /* Сцена — «комната»: градиент выбранной темы, питомец и декор двигаются
    свободно (координаты в процентах). Фон приходит инлайном из houseThemes. */

@@ -70,7 +70,7 @@
             <template v-else>{{ active.other_user?.fio }}</template>
             <span v-if="peerStatusEmoji" class="chat-fio-status" :title="peerStatusText || 'Статус'">{{ peerStatusEmoji }}</span>
           </div>
-          <div class="chat-status" :class="{ online: chatOnline }">
+          <div class="chat-status" :class="{ online: chatOnline || peerTyping }">
             <template v-if="active.is_dev_chat && devChatOwner">
               <span v-if="active.company_name">{{ active.company_name }} · </span>
               <template v-if="chatOnline">в сети</template>
@@ -79,6 +79,7 @@
             <template v-else-if="active.is_dev_chat">
               Личный чат с командой разработчиков
             </template>
+            <template v-else-if="peerTyping">печатает…</template>
             <template v-else>
               <span v-if="peerStatusText" class="chat-status-note">{{ peerStatusText }} · </span>
               {{ otherOnline ? 'в сети' : lastSeenText }}
@@ -225,6 +226,7 @@
         @cancel-reply="replyTo = null"
         @cancel-edit="editing = null"
         @attach-task="attachTaskOpen = true"
+        @typing="onTyping"
       />
     </section>
 
@@ -668,6 +670,19 @@ async function onChangeTab(t) {
 }
 
 const otherOnline = computed(() => messenger.isOnline(active.value?.other_user?.id))
+
+// «Печатает…» собеседника; свои сигналы шлём из поля ввода (типизацию
+// дев-чата не транслируем — у него нет единственного адресата).
+const peerTyping = computed(() =>
+  !!active.value && !active.value.is_dev_chat && messenger.isTyping(active.value.id)
+)
+
+function onTyping(isTypingNow) {
+  const id = active.value?.id
+  if (!id) return
+  if (isTypingNow) messenger.notifyTyping(id)
+  else messenger.notifyTypingStop(id)
+}
 const lastSeenText = computed(() => {
   const u = active.value?.other_user
   if (!u) return ''

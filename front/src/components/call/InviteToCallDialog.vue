@@ -147,9 +147,10 @@ function confirm() {
 .inv-input {
   width: 100%;
   padding: 10px 12px 10px 40px;
-  border: 1px solid var(--color-outline-dim);
+  border: 1px solid var(--acrylic-border);
   border-radius: var(--radius-md);
-  background: var(--color-surface-low);
+  background: var(--glass-bg);
+  box-shadow: var(--glass-edge);
   color: var(--color-text);
   font: inherit;
   font-size: 14px;
@@ -175,7 +176,7 @@ function confirm() {
   border-radius: var(--radius-md);
 }
 
-.inv-item:hover { background: var(--color-surface-low); }
+.inv-item:hover { background: var(--glass-hover-bg); }
 .inv-item.selected { background: var(--color-primary-container); }
 
 .inv-avatar {

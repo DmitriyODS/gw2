@@ -161,11 +161,18 @@ const props = defineProps({
   canAttachTask: { type: Boolean, default: true },
 })
 
-const emit = defineEmits(['send', 'save-edit', 'cancel-reply', 'cancel-edit', 'attach-task', 'update:attachedTask'])
+const emit = defineEmits(['send', 'save-edit', 'cancel-reply', 'cancel-edit', 'attach-task', 'update:attachedTask', 'typing'])
 
 const text = ref('')
 const pending = ref([])
 const textarea = ref(null)
+
+// Сигнал «печатаю» родителю (тот знает активный диалог, троттлинг — в сторе
+// мессенджера). Правку существующего сообщения не транслируем.
+watch(text, (v, old) => {
+  if (props.editingMessage || v === old) return
+  emit('typing', Boolean(v.trim()))
+})
 
 /* На смартфоне Enter экранной клавиатуры набирает новую строку, отправка —
    только кнопкой: случайные отправки с тач-клавиатуры раздражают сильнее,

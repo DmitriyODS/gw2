@@ -88,6 +88,8 @@ app.use(ToastService)
 app.use(ConfirmationService)
 
 app.mount('#app')
+// Сигнал бут-watchdog'у в index.html: приложение реально стартовало.
+window.__gwBooted = true
 
 // PWA: регистрируем service worker сразу при загрузке (а не только после
 // входа) — Chrome предлагает установку лишь при активном SW с fetch-обработчиком.

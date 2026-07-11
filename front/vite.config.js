@@ -50,6 +50,14 @@ const serveApps = () => ({
 })
 
 export default defineConfig({
+  build: {
+    // Дефолт Vite 8 — Chrome 111+ (март 2023): заводской Android System WebView
+    // на новых устройствах часто старее, бандл падает с SyntaxError до старта
+    // Vue — вечный белый экран в мобильной обёртке. Держим планку Vite 5
+    // ('modules'): esbuild дотранспилирует синтаксис, LightningCSS по этому же
+    // target'у понижает CSS.
+    target: ['es2020', 'chrome87', 'edge88', 'firefox78', 'safari14']
+  },
   plugins: [vue(), serveChangelog(), serveUploads(), serveApps()],
   resolve: {
     alias: {

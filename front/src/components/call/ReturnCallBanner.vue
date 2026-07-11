@@ -46,10 +46,13 @@ const isVideo = computed(() => (call.value?.media || 'video') === 'video')
   max-width: min(440px, calc(100vw - 24px));
   width: max-content;
   padding: 12px 14px;
-  background: var(--color-surface);
-  border: 1px solid var(--color-outline-dim);
+  /* Плавающий слой — акрил с blur, как FAB и мини-панели. */
+  background: var(--acrylic-bg);
+  -webkit-backdrop-filter: var(--acrylic-blur);
+  backdrop-filter: var(--acrylic-blur);
+  border: 1px solid var(--acrylic-border);
   border-radius: var(--radius-xl, 20px);
-  box-shadow: var(--shadow-lg);
+  box-shadow: var(--glass-edge), var(--shadow-lg);
 }
 
 .rb-icon {

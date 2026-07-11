@@ -108,7 +108,7 @@ onMounted(scrollDown)
   align-items: center;
   gap: 8px;
   padding: 14px 16px;
-  border-bottom: 1px solid var(--color-outline-dim);
+  border-bottom: 1px solid var(--acrylic-border);
   flex-shrink: 0;
 }
 
@@ -127,7 +127,7 @@ onMounted(scrollDown)
   cursor: pointer;
 }
 
-.cpanel-close:hover { background: var(--color-surface-high); }
+.cpanel-close:hover { background: var(--glass-hover-bg); }
 .cpanel-close .material-symbols-outlined { font-size: 18px; }
 
 .cpanel-body {
@@ -174,7 +174,9 @@ onMounted(scrollDown)
 .chat-bubble {
   padding: 8px 12px;
   border-radius: 14px;
-  background: var(--color-surface-high);
+  /* Матовое стекло — как пузыри мессенджера. */
+  background: var(--glass-bg);
+  box-shadow: var(--glass-edge), inset 0 0 0 1px var(--acrylic-border);
   color: var(--color-text);
   font-size: 14px;
   line-height: 1.35;
@@ -192,7 +194,7 @@ onMounted(scrollDown)
   align-items: flex-end;
   gap: 8px;
   padding: 12px 16px calc(12px + env(safe-area-inset-bottom, 0px));
-  border-top: 1px solid var(--color-outline-dim);
+  border-top: 1px solid var(--acrylic-border);
   flex-shrink: 0;
 }
 
@@ -200,9 +202,10 @@ onMounted(scrollDown)
   flex: 1;
   min-width: 0;
   padding: 9px 14px;
-  border: 1px solid var(--color-outline-dim);
+  border: 1px solid var(--acrylic-border);
   border-radius: 18px;
-  background: var(--color-surface-high);
+  background: var(--glass-bg);
+  box-shadow: var(--glass-edge);
   color: var(--color-text);
   font: inherit;
   font-size: 14px;
@@ -220,7 +223,8 @@ onMounted(scrollDown)
   height: 40px;
   border-radius: 50%;
   border: 0;
-  background: var(--color-primary);
+  /* Круглая градиентная отправка — как композер мессенджера. */
+  background: var(--grad-primary);
   color: var(--color-on-primary);
   display: grid;
   place-items: center;

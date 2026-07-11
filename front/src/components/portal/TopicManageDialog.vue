@@ -329,7 +329,7 @@ button.topic-row:hover .topic-edit-hint { opacity: 1; }
 .topic-add-btn .material-symbols-outlined { font-size: 19px; }
 
 /* ── Форма ── */
-.topic-form { display: flex; flex-direction: column; gap: 16px; padding-bottom: 10px; }
+.topic-form { display: flex; flex-direction: column; gap: 16px; }
 
 .topic-preview { display: flex; align-items: center; gap: 12px; }
 

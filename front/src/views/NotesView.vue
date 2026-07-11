@@ -917,7 +917,6 @@ function formatDate(iso) {
   display: flex;
   flex-direction: column;
   gap: 6px;
-  padding-bottom: 20px;
 }
 .nt-groupitem {
   display: flex;

@@ -136,7 +136,8 @@
                     <template v-if="c.is_dev_chat">Техподдержка</template>
                     <template v-else>{{ c.other_user?.fio }}</template>
                   </div>
-                  <div class="mini-conv-preview">{{ preview(c.last_message) }}</div>
+                  <div v-if="!c.is_dev_chat && messenger.isTyping(c.id)" class="mini-conv-preview mini-conv-typing">печатает…</div>
+                  <div v-else class="mini-conv-preview">{{ preview(c.last_message) }}</div>
                 </div>
                 <span v-if="c.unread_count" class="mini-badge">{{ c.unread_count }}</span>
               </li>
@@ -167,8 +168,9 @@
                 <template v-if="threadConv?.is_dev_chat">Техподдержка</template>
                 <template v-else>{{ threadConv?.other_user?.fio }}</template>
               </span>
-              <span class="mini-head-status" :class="{ online: threadOnline }">
+              <span class="mini-head-status" :class="{ online: threadOnline || threadTyping }">
                 <template v-if="threadConv?.is_dev_chat">Поддержка Groove Work</template>
+                <template v-else-if="threadTyping">печатает…</template>
                 <template v-else>{{ threadOnline ? 'в сети' : threadLastSeen }}</template>
               </span>
             </div>
@@ -218,6 +220,7 @@
             @send="onSend"
             @cancel-reply="replyTo = null"
             @attach-task="attachTaskOpen = true"
+            @typing="onTyping"
           />
         </template>
       </div>
@@ -487,6 +490,16 @@ const threadConv = computed(() =>
 )
 
 const threadOnline = computed(() => messenger.isOnline(threadConv.value?.other_user?.id))
+const threadTyping = computed(() =>
+  !!threadConv.value && !threadConv.value.is_dev_chat && messenger.isTyping(threadConv.value.id)
+)
+
+function onTyping(isTypingNow) {
+  const id = threadConv.value?.id
+  if (!id) return
+  if (isTypingNow) messenger.notifyTyping(id)
+  else messenger.notifyTypingStop(id)
+}
 const threadLastSeen = computed(() => {
   const u = threadConv.value?.other_user
   if (!u) return ''
@@ -1134,6 +1147,7 @@ watch([open, activeTab], async ([isOpen, tab]) => {
 }
 
 .mini-conv.unread .mini-conv-preview { color: var(--color-text); font-weight: 500; }
+.mini-conv-preview.mini-conv-typing { color: var(--color-primary); font-style: italic; }
 
 .mini-badge {
   background: var(--color-primary);

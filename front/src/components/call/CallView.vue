@@ -592,7 +592,12 @@ watch(isRinging, (v) => {
   position: fixed;
   inset: 0;
   z-index: 11500;
-  background: var(--color-bg);
+  /* Плавающий слой поверх приложения: акрил с blur — просвечивает
+     фоновый градиент темы (Expressive Glass). Дети имитируют стекло
+     через --glass-bg: этот слой — backdrop root, вложенный blur не работает. */
+  background: var(--acrylic-bg);
+  -webkit-backdrop-filter: var(--acrylic-blur);
+  backdrop-filter: var(--acrylic-blur);
   display: flex;
   flex-direction: column;
   color: var(--color-text);
@@ -605,9 +610,9 @@ watch(isRinging, (v) => {
   height: 364px;
   border-radius: 24px;
   overflow: hidden;
-  background: var(--color-surface);
-  border: 1px solid var(--color-outline-dim);
-  box-shadow: 0 12px 36px color-mix(in oklch, var(--color-scrim) 35%, transparent);
+  background: var(--acrylic-bg);
+  border: 1px solid var(--acrylic-border);
+  box-shadow: var(--glass-edge), 0 12px 36px color-mix(in oklch, var(--color-scrim) 35%, transparent);
 }
 
 /* Шапка */
@@ -617,8 +622,9 @@ watch(isRinging, (v) => {
   justify-content: space-between;
   padding: 14px 22px;
   padding-top: calc(14px + env(safe-area-inset-top, 0px));
-  background: color-mix(in oklch, var(--color-surface) 80%, transparent);
-  border-bottom: 1px solid var(--color-outline-dim);
+  background: var(--glass-bg);
+  box-shadow: var(--glass-edge);
+  border-bottom: 1px solid var(--acrylic-border);
   flex-shrink: 0;
 }
 
@@ -682,7 +688,7 @@ watch(isRinging, (v) => {
   font-family: inherit;
 }
 
-.header-btn:hover { background: var(--color-surface-high); }
+.header-btn:hover { background: var(--glass-hover-bg); }
 .header-btn .material-symbols-outlined { font-size: 20px; }
 
 .link-btn {
@@ -716,7 +722,8 @@ watch(isRinging, (v) => {
   min-height: 0;
   display: flex;
   flex-direction: column;
-  background: var(--color-surface-low);
+  /* Полупрозрачная сцена — фоновый градиент виден сквозь акрил каркаса. */
+  background: color-mix(in oklch, var(--color-surface-low) 42%, transparent);
 }
 
 /* Сетка камер: плитки 3:4, число колонок и размер подбирает useTileGrid
@@ -824,8 +831,8 @@ watch(isRinging, (v) => {
 .callview-aside {
   width: 320px;
   flex-shrink: 0;
-  border-left: 1px solid var(--color-outline-dim);
-  background: var(--color-surface);
+  border-left: 1px solid var(--acrylic-border);
+  background: var(--acrylic-card-bg);
   min-height: 0;
 }
 
@@ -855,8 +862,9 @@ watch(isRinging, (v) => {
   justify-content: center;
   gap: 14px;
   padding: 18px 16px calc(18px + env(safe-area-inset-bottom, 0px));
-  background: color-mix(in oklch, var(--color-surface) 88%, transparent);
-  border-top: 1px solid var(--color-outline-dim);
+  background: var(--glass-bg);
+  box-shadow: var(--glass-edge);
+  border-top: 1px solid var(--acrylic-border);
   flex-shrink: 0;
 }
 
@@ -872,16 +880,21 @@ watch(isRinging, (v) => {
   flex-shrink: 0;
   border-radius: 50%;
   border: 0;
-  background: var(--color-surface-high);
+  /* Нейтральные контролы — стекло (идиома .btn-glass); on/off/hangup
+     остаются тональными контейнерами. */
+  background: var(--glass-bg);
+  box-shadow: var(--glass-edge), inset 0 0 0 1px var(--acrylic-border);
   color: var(--color-text);
   display: grid;
   place-items: center;
   cursor: pointer;
-  transition: background 0.15s, transform 0.15s;
+  transition: background 0.15s;
 }
 
-.ctrl-btn:hover { transform: translateY(-2px); }
-.ctrl-btn:active { transform: translateY(0); }
+.ctrl-btn:hover:not(:disabled):not(.off):not(.on):not(.hangup) {
+  background: var(--glass-hover-bg);
+}
+.ctrl-btn.off, .ctrl-btn.on, .ctrl-btn.hangup { box-shadow: none; }
 
 .ctrl-btn:disabled {
   opacity: 0.45;

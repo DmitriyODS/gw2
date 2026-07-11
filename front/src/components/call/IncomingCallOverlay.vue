@@ -168,14 +168,16 @@ onBeforeUnmount(stopRing)
   max-width: 360px;
   width: 100%;
   padding: 32px 24px 24px;
-  background: var(--color-surface);
-  border: 1px solid var(--color-outline-dim);
+  /* Акрил без собственного blur: оверлей позади уже блюрит страницу
+     (родитель с backdrop-filter — backdrop root, вложенный blur не работает). */
+  background: var(--acrylic-card-bg);
+  border: 1px solid var(--acrylic-border);
   border-radius: 28px;
   text-align: center;
   display: flex;
   flex-direction: column;
   align-items: center;
-  box-shadow: 0 24px 72px color-mix(in oklch, var(--color-scrim) 80%, transparent);
+  box-shadow: var(--glass-edge), 0 24px 72px color-mix(in oklch, var(--color-scrim) 80%, transparent);
 }
 
 .incoming-tag {

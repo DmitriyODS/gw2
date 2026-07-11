@@ -5,6 +5,9 @@ import { useAuthStore } from './auth.js'
 // Циклический импорт (call.js ↔ messenger.js) безопасен: оба стора зовут
 // друг друга только внутри функций, к этому моменту биндинги уже живые.
 import { useCallStore } from './call.js'
+// Тот же приём с socket/index.js (он импортирует этот стор): getSocket
+// зовётся только из экшенов, когда модули уже инициализированы.
+import { getSocket } from '@/socket/index.js'
 
 /* Сортировка: закреплённые сверху (по pinned_at desc), затем по
    last_message_at desc. Чистая функция, чтобы переиспользовать после каждого
@@ -45,6 +48,12 @@ export const useMessengerStore = defineStore('messenger', () => {
   // (приходят в presence:update при выходе из сети — точнее, чем в профиле).
   const onlineIds = ref(new Set())
   const lastSeenById = ref({})
+  // «Печатает…» по диалогам. Эфемерно: приходит через WS-релей gateway
+  // (кадр typing), гаснет само по таймеру — сервер ничего не хранит.
+  const typingByConv = ref({})
+  const typingExpireTimers = new Map()
+  // Троттлинг собственных сигналов «печатаю» по диалогам.
+  const typingSentAt = new Map()
   // Support-inbox (для Администратора системы): отдельный список чатов
   // техподдержки всех пользователей. Не сливается с conversations, чтобы
   // вкладка «Чаты» не видела сообщения из «Техподдержки».
@@ -265,6 +274,7 @@ export const useMessengerStore = defineStore('messenger', () => {
 
   async function send(conversationId, { text, attachment_ids, reply_to_id, task_id }) {
     sending.value = true
+    notifyTypingStop(conversationId)
     try {
       const msg = await api.sendMessage(conversationId, {
         text: text || null,
@@ -333,6 +343,10 @@ export const useMessengerStore = defineStore('messenger', () => {
     const arr = messagesByConv.value[conversationId] || []
     if (arr.some(m => m.id === msg.id)) return
     messagesByConv.value[conversationId] = [...arr, msg]
+
+    // Сообщение дошло — собеседник дописал: гасим «печатает…» сразу,
+    // не дожидаясь таймера.
+    if (!fromMe) applyTyping({ conversation_id: conversationId, user_id: msg.sender_id, typing: false })
 
     const auth = useAuthStore()
     const inConversations = conversations.value.some(c => c.id === conversationId)
@@ -561,6 +575,52 @@ export const useMessengerStore = defineStore('messenger', () => {
     return userId != null && onlineIds.value.has(userId)
   }
 
+  /* ── «Печатает…» ──
+     Приём: событие typing от собеседника — показываем и гасим через 6с,
+     если новых сигналов не пришло (отправитель шлёт их раз в ~3с, пока
+     пользователь реально печатает). */
+  function applyTyping({ conversation_id, user_id, typing }) {
+    if (user_id === useAuthStore().user?.id) return
+    clearTimeout(typingExpireTimers.get(conversation_id))
+    typingExpireTimers.delete(conversation_id)
+    if (typing) {
+      typingByConv.value = { ...typingByConv.value, [conversation_id]: true }
+      typingExpireTimers.set(conversation_id, setTimeout(() => {
+        typingExpireTimers.delete(conversation_id)
+        typingByConv.value = { ...typingByConv.value, [conversation_id]: false }
+      }, 6000))
+    } else if (typingByConv.value[conversation_id]) {
+      typingByConv.value = { ...typingByConv.value, [conversation_id]: false }
+    }
+  }
+
+  function isTyping(conversationId) {
+    return !!typingByConv.value[conversationId]
+  }
+
+  /* Отправка: зовётся полем ввода на каждое изменение текста, наружу уходит
+     не чаще раза в 3с. Дев-чат пропускаем — у него нет единственного
+     адресата (to_user_id обязателен для релея в gateway). */
+  function notifyTyping(conversationId) {
+    const toUserId = conversationById.value.get(conversationId)?.other_user?.id
+    if (!toUserId) return
+    const now = Date.now()
+    if (now - (typingSentAt.get(conversationId) || 0) < 3000) return
+    typingSentAt.set(conversationId, now)
+    try {
+      getSocket()?.emit('typing', { conversation_id: conversationId, to_user_id: toUserId, typing: true })
+    } catch {}
+  }
+
+  function notifyTypingStop(conversationId) {
+    const toUserId = conversationById.value.get(conversationId)?.other_user?.id
+    if (!toUserId || !typingSentAt.get(conversationId)) return
+    typingSentAt.delete(conversationId)
+    try {
+      getSocket()?.emit('typing', { conversation_id: conversationId, to_user_id: toUserId, typing: false })
+    } catch {}
+  }
+
   function lastSeenOf(userId, fallback = null) {
     return lastSeenById.value[userId] || fallback
   }
@@ -575,6 +635,10 @@ export const useMessengerStore = defineStore('messenger', () => {
     supportInbox.value = []
     onlineIds.value = new Set()
     lastSeenById.value = {}
+    typingByConv.value = {}
+    typingExpireTimers.forEach(t => clearTimeout(t))
+    typingExpireTimers.clear()
+    typingSentAt.clear()
     listSeq = 0
     supportSeq = 0
     listCtrl?.abort()
@@ -602,6 +666,7 @@ export const useMessengerStore = defineStore('messenger', () => {
     applyMessagePin, togglePinMessageAction, toggleReactionAction,
     deleteMessage, editMessage, deleteConversationAction, togglePinAction,
     fetchPresence, applyPresence, isOnline, lastSeenOf,
+    typingByConv, applyTyping, isTyping, notifyTyping, notifyTypingStop,
     reset,
   }
 })

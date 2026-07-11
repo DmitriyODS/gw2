@@ -112,7 +112,7 @@ function avatarOf(p) {
   align-items: center;
   gap: 8px;
   padding: 14px 16px;
-  border-bottom: 1px solid var(--color-outline-dim);
+  border-bottom: 1px solid var(--acrylic-border);
   flex-shrink: 0;
 }
 
@@ -140,7 +140,7 @@ function avatarOf(p) {
   cursor: pointer;
 }
 
-.cpanel-close:hover { background: var(--color-surface-high); }
+.cpanel-close:hover { background: var(--glass-hover-bg); }
 .cpanel-close .material-symbols-outlined { font-size: 18px; }
 
 .cpanel-body {
@@ -206,7 +206,7 @@ function avatarOf(p) {
   display: flex;
   gap: 8px;
   padding: 12px 16px calc(12px + env(safe-area-inset-bottom, 0px));
-  border-top: 1px solid var(--color-outline-dim);
+  border-top: 1px solid var(--acrylic-border);
   flex-shrink: 0;
 }
 

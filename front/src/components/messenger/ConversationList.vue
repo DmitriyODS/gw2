@@ -103,7 +103,8 @@
             <span v-if="c.last_message_at" class="conv-time">{{ formatTime(c.last_message_at) }}</span>
           </div>
           <div class="conv-bottom">
-            <span class="conv-preview">
+            <span v-if="!c.is_dev_chat && messenger.isTyping(c.id)" class="conv-preview conv-typing">печатает…</span>
+            <span v-else class="conv-preview">
               <template v-if="tab === 'support' && c.company_name">
                 <span class="conv-company">{{ c.company_name }}</span>
                 <span class="conv-dot">·</span>
@@ -551,6 +552,11 @@ function formatTime(iso) {
 .conv-item.unread .conv-preview {
   color: var(--color-text);
   font-weight: 500;
+}
+
+.conv-preview.conv-typing {
+  color: var(--color-primary);
+  font-style: italic;
 }
 
 .conv-badge {

@@ -36,7 +36,7 @@
           <button
             v-if="authStore.user?.avatar_path"
             class="btn-sm danger"
-            @click="handleDeleteAvatar"
+            @click="confirmAvatarDelete = true"
           >
             <span class="material-symbols-outlined">delete</span>
             Удалить
@@ -286,6 +286,22 @@
       :alt="authStore.user?.fio"
       :caption="authStore.user?.fio"
     />
+
+    <AppDialog
+      v-model="confirmAvatarDelete"
+      tone="danger"
+      icon="warning"
+      size="sm"
+      title="Удалить аватарку?"
+      subtitle="Вместо неё коллеги будут видеть автоматический аватар."
+      :busy="avatarDeleting"
+      :closable="!avatarDeleting"
+      :actions="[
+        { kind: 'cancel', label: 'Отмена', disabled: avatarDeleting },
+        { kind: 'confirm', label: 'Удалить', icon: 'delete', disabled: avatarDeleting },
+      ]"
+      @confirm="handleDeleteAvatar"
+    />
   </div>
 </template>
 
@@ -333,13 +349,20 @@ async function onCropped(blob) {
   }
 }
 
+const confirmAvatarDelete = ref(false)
+const avatarDeleting = ref(false)
+
 async function handleDeleteAvatar() {
+  avatarDeleting.value = true
   try {
     await deleteAvatar()
     await authStore.loadMe()
     notif.success('Аватарка удалена')
+    confirmAvatarDelete.value = false
   } catch (e) {
     notif.error(e.message || 'Ошибка удаления аватарки')
+  } finally {
+    avatarDeleting.value = false
   }
 }
 
@@ -509,9 +532,9 @@ onMounted(() => {
 }
 
 /* ── Identity-карточка ───────────────────────────────────────── */
+/* Не sticky: прилипание держало карточку на 24px ниже кромки при прокрутке,
+   и её верх расходился с карточками правой колонки. */
 .identity-card {
-  position: sticky;
-  top: 24px;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -1031,7 +1054,6 @@ onMounted(() => {
   }
 
   .identity-card {
-    position: static;
     padding: 24px 16px;
     gap: 16px;
     overflow: visible;
