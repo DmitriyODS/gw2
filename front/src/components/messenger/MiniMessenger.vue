@@ -193,23 +193,26 @@
             <div v-if="messenger.loadingMessages && !messenger.activeMessages.length" class="mini-loading">
               <ProgressSpinner style="width:28px;height:28px" />
             </div>
-            <MessageBubble
-              v-for="m in messenger.activeMessages"
-              :key="m.id"
-              :message="m"
-              :is-mine="m.sender_id === authStore.user?.id"
-              :show-pin="false"
-              :me-id="authStore.user?.id"
-              @reply="startReply"
-              @forward="startForward"
-              @delete="askDeleteMessage"
-              @context-menu="openContextMenu"
-              @join-call="onJoinCall"
-              @open-task="openTask"
-              @open-post="openPost"
-              @quote-click="onQuoteClick"
-              @react="emoji => onReact(m, emoji)"
-            />
+            <template v-for="g in messageGroups" :key="g.key">
+              <MessageDateDivider :label="g.label" />
+              <MessageBubble
+                v-for="m in g.items"
+                :key="m.id"
+                :message="m"
+                :is-mine="m.sender_id === authStore.user?.id"
+                :show-pin="false"
+                :me-id="authStore.user?.id"
+                @reply="startReply"
+                @forward="startForward"
+                @delete="askDeleteMessage"
+                @context-menu="openContextMenu"
+                @join-call="onJoinCall"
+                @open-task="openTask"
+                @open-post="openPost"
+                @quote-click="onQuoteClick"
+                @react="emoji => onReact(m, emoji)"
+              />
+            </template>
           </div>
           <MessageInput
             ref="miniInputRef"
@@ -321,7 +324,9 @@ import { useAssistantStore } from '@/stores/assistant.js'
 import { useNotificationsStore } from '@/stores/notifications.js'
 import { useJumpToMessage } from '@/composables/useJumpToMessage.js'
 import { formatLastSeen } from '@/utils/presence.js'
+import { groupMessagesByDay } from '@/utils/chatDates.js'
 import MessageBubble from './MessageBubble.vue'
+import MessageDateDivider from './MessageDateDivider.vue'
 import MessageInput from './MessageInput.vue'
 import AssistantInput from './AssistantInput.vue'
 import ForwardDialog from './ForwardDialog.vue'
@@ -364,6 +369,7 @@ function openPost(postId) {
 }
 
 const open = ref(false)
+const messageGroups = computed(() => groupMessagesByDay(messenger.activeMessages))
 const threadId = ref(null)
 const replyTo = ref(null)
 const attachedTask = ref(null)

@@ -180,25 +180,28 @@
             <ProgressSpinner style="width:22px;height:22px" />
             <span>Загружаем историю…</span>
           </div>
-          <MessageBubble
-            v-for="m in messenger.activeMessages"
-            :key="m.id"
-            v-memo="[m.id, m.text, m.edited_at, m.read_at, m.pinned_at, m.reactions, m.call?.status, authStore.user?.id, active?.is_dev_chat]"
-            :message="m"
-            :is-mine="m.sender_id === authStore.user?.id"
-            :sender-name="senderNameFor(m)"
-            :me-id="authStore.user?.id"
-            @delete="askDeleteMessage"
-            @reply="startReply"
-            @forward="startForward"
-            @pin="onTogglePinMessage"
-            @join-call="onJoinCall"
-            @open-task="openTask"
-            @open-post="openPost"
-            @context-menu="openContextMenu"
-            @quote-click="onQuoteClick"
-            @react="emoji => onReact(m, emoji)"
-          />
+          <template v-for="g in messageGroups" :key="g.key">
+            <MessageDateDivider :label="g.label" />
+            <MessageBubble
+              v-for="m in g.items"
+              :key="m.id"
+              v-memo="[m.id, m.text, m.edited_at, m.read_at, m.pinned_at, m.reactions, m.call?.status, authStore.user?.id, active?.is_dev_chat]"
+              :message="m"
+              :is-mine="m.sender_id === authStore.user?.id"
+              :sender-name="senderNameFor(m)"
+              :me-id="authStore.user?.id"
+              @delete="askDeleteMessage"
+              @reply="startReply"
+              @forward="startForward"
+              @pin="onTogglePinMessage"
+              @join-call="onJoinCall"
+              @open-task="openTask"
+              @open-post="openPost"
+              @context-menu="openContextMenu"
+              @quote-click="onQuoteClick"
+              @react="emoji => onReact(m, emoji)"
+            />
+          </template>
         </template>
       </div>
 
@@ -300,8 +303,10 @@ import {
   requestNotificationPermission, notificationsAllowed,
 } from '@/utils/systemNotify.js'
 import { formatLastSeen } from '@/utils/presence.js'
+import { groupMessagesByDay } from '@/utils/chatDates.js'
 import ConversationList from '@/components/messenger/ConversationList.vue'
 import MessageBubble from '@/components/messenger/MessageBubble.vue'
+import MessageDateDivider from '@/components/messenger/MessageDateDivider.vue'
 import MessageInput from '@/components/messenger/MessageInput.vue'
 import NewChatDialog from '@/components/messenger/NewChatDialog.vue'
 import DeleteScopeDialog from '@/components/messenger/DeleteScopeDialog.vue'
@@ -348,6 +353,7 @@ const profileOpen = ref(false)
 const ctxMenu = ref({ visible: false, x: 0, y: 0, message: null })
 const messagesEl = ref(null)
 const messageInputRef = ref(null)
+const messageGroups = computed(() => groupMessagesByDay(messenger.activeMessages))
 const replyTo = ref(null)
 const editing = ref(null)
 
