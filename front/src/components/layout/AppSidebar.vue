@@ -316,9 +316,19 @@ watch(() => authStore.companyId, () => { tasksStore.fetchMyActiveCount() })
 /* Свёрнутый вид: логотип по центру колонки. Wordmark и тоггл не только
    прозрачные, но и не занимают места — иначе они выталкивают лого за
    пределы узкой колонки (overflow клипует именно картинку). */
-.sidebar-inner:not(.expanded) .sb-head { justify-content: center; }
-.sidebar-inner:not(.expanded) .sidebar-logo { flex: 0 0 auto; padding: 0; gap: 0; }
-.sidebar-inner:not(.expanded) .sb-wordmark { width: 0; overflow: hidden; }
+/* Боковые паддинги шапки в узкой колонке убираем и центрируем жёстко:
+   фиксированная квадратная плашка — логотип ровно по центру колонки,
+   независимо от нулевого wordmark и gap'ов. */
+.sidebar-inner:not(.expanded) .sb-head { justify-content: center; padding-left: 0; padding-right: 0; }
+.sidebar-inner:not(.expanded) .sidebar-logo {
+  flex: 0 0 auto;
+  width: 44px;
+  height: 44px;
+  justify-content: center;
+  padding: 0;
+  gap: 0;
+}
+.sidebar-inner:not(.expanded) .sb-wordmark { display: none; }
 .sidebar-inner:not(.expanded) .sb-toggle { display: none; }
 
 /* ── Разделители секций и подписи групп ── */
