@@ -404,6 +404,9 @@ watch(() => authStore.companyId, () => { tasksStore.fetchMyActiveCount() })
 
 .sidebar-inner:not(.expanded) :deep(.company-row-text),
 .sidebar-inner:not(.expanded) :deep(.company-chip-label) {
+  /* База задаёт flex: 1 — без обнуления невидимый текст растягивается
+     и выталкивает бейдж компании влево от центра колонки. */
+  flex: 0 0 0;
   width: 0;
   min-width: 0;
   opacity: 0;
