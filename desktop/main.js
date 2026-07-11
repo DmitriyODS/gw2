@@ -39,6 +39,11 @@ app.setAppUserModelId('ru.kodass.groovework')
 let mainWindow = null
 let tray = null
 let quitting = false
+let currentAppUrl = DEFAULT_URL
+// Кэш «Не беспокоить» для чекбокса в меню трея. Источник истины — localStorage
+// веб-слоя (gw_notify_muted, та же настройка, что в карточке веб-настроек);
+// кэш освежается при загрузке страницы и перед открытием меню.
+let notifyMuted = false
 
 // Автозапуск при входе в ОС передаёт --hidden: приложение стартует сразу в
 // трей, не выпрыгивая окном поверх рабочего стола.
@@ -212,6 +217,12 @@ function createWindow(appUrl) {
     if (mainWindow.webContents.getURL().startsWith(appUrl)) {
       clearTimeout(watchdog)
       retryDelay = 2000
+      // Свежий «Не беспокоить» для чекбокса трея (Linux-меню статичное).
+      getPageMuted().then((m) => {
+        if (m === null || m === notifyMuted) return
+        notifyMuted = m
+        if (process.platform === 'linux') tray?.setContextMenu(buildTrayMenu())
+      })
     }
   })
 
@@ -236,6 +247,68 @@ function showWindow() {
   mainWindow.focus()
 }
 
+/* ── «Не беспокоить» из трея ──
+   Настройка живёт в localStorage веб-слоя (systemNotify.js читает её при
+   каждом уведомлении), поэтому пишем/читаем прямо в страницу — тумблер в
+   веб-настройках и чекбокс трея управляют одним и тем же состоянием. */
+function appPageWC() {
+  const wc = mainWindow?.webContents
+  if (!wc || wc.isDestroyed() || !wc.getURL().startsWith(currentAppUrl)) return null
+  return wc
+}
+
+async function getPageMuted() {
+  const wc = appPageWC()
+  if (!wc) return null
+  try {
+    return await wc.executeJavaScript(
+      `(()=>{try{return localStorage.getItem('gw_notify_muted')==='1'}catch{return false}})()`, true)
+  } catch { return null }
+}
+
+async function toggleMuted() {
+  notifyMuted = !notifyMuted
+  const wc = appPageWC()
+  if (wc) {
+    try {
+      await wc.executeJavaScript(
+        `(()=>{try{localStorage.setItem('gw_notify_muted','${notifyMuted ? '1' : '0'}')}catch{}})()`, true)
+    } catch {}
+  }
+  // Linux-меню статичное — пересобираем, чтобы чекбокс не отстал.
+  if (process.platform === 'linux') tray?.setContextMenu(buildTrayMenu())
+}
+
+function openSettings() {
+  showWindow()
+  // Полная навигация на раздел настроек: SPA поднимется сразу на нём
+  // (мягкий pushState снаружи ненадёжен — vue-router ведёт свой history-state).
+  mainWindow?.loadURL(currentAppUrl + '/settings')
+}
+
+function showAbout() {
+  dialog.showMessageBox(mainWindow, {
+    type: 'info',
+    title: 'О приложении',
+    message: 'Groove Work',
+    detail: `Версия приложения: ${app.getVersion()}\nСервер: ${currentAppUrl}\n\n` +
+      'Интерфейс приезжает с сервера и обновляется сам. Проверка обновлений ' +
+      'самого приложения — в разделе «Настройки → О приложении».',
+  })
+}
+
+function buildTrayMenu() {
+  return Menu.buildFromTemplate([
+    { label: 'Открыть Groove Work', click: showWindow },
+    { type: 'separator' },
+    { label: 'Настройки', click: openSettings },
+    { label: 'О приложении', click: showAbout },
+    { label: 'Не беспокоить', type: 'checkbox', checked: notifyMuted, click: toggleMuted },
+    { type: 'separator' },
+    { label: 'Выйти', click: () => app.quit() },
+  ])
+}
+
 function createTray() {
   if (tray) return
   // Иконку трея берём с сервера нельзя — кладём из ресурсов сборки; в деве
@@ -246,12 +319,21 @@ function createTray() {
   icon.setTemplateImage(false)
   tray = new Tray(icon)
   tray.setToolTip('Groove Work')
-  tray.setContextMenu(Menu.buildFromTemplate([
-    { label: 'Открыть Groove Work', click: showWindow },
-    { type: 'separator' },
-    { label: 'Выйти', click: () => app.quit() },
-  ]))
-  tray.on('click', showWindow)
+  if (process.platform === 'linux') {
+    // Appindicator не отдаёт клики по значку — только статичное меню
+    // (пункт «Открыть» первым заменяет клик).
+    tray.setContextMenu(buildTrayMenu())
+  } else {
+    // ЛКМ — только показать окно; меню — на ПКМ. setContextMenu не используем:
+    // на macOS он открывал меню и по левому клику. Меню строим при каждом
+    // открытии — чекбокс «Не беспокоить» мог измениться в веб-настройках.
+    tray.on('click', showWindow)
+    tray.on('right-click', async () => {
+      const muted = await getPageMuted()
+      if (muted !== null) notifyMuted = muted
+      tray.popUpContextMenu(buildTrayMenu())
+    })
+  }
 }
 
 function destroyTray() {
@@ -367,6 +449,7 @@ app.on('activate', showWindow) // macOS: клик по доку
 
 app.whenReady().then(() => {
   const appUrl = process.env.GW_DESKTOP_URL || readConfigUrl() || DEFAULT_URL
+  currentAppUrl = appUrl
   const appOrigin = new URL(appUrl).origin
 
   /* ── IPC-мост обновления обёртки (preload.js → window.GrooveDesktop) ──
