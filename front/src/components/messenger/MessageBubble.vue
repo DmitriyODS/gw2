@@ -8,7 +8,7 @@
     @pointerdown="onPointerDown"
     @pointermove="onPointerMove"
     @pointerup="onPointerUp"
-    @pointercancel="onPointerUp"
+    @pointercancel="onPointerCancel"
   >
     <span class="swipe-reply-hint" aria-hidden="true">
       <span class="material-symbols-outlined">reply</span>
@@ -225,6 +225,11 @@ const taskPillStyle = computed(() => {
 
 /* ── Контекстное меню (только ПКМ мыши) ── */
 function onContextMenu(e) {
+  // Выделен текст — нативное меню (копирование): наше меню не открываем ни на
+  // десктопе, ни на таче (Android стреляет contextmenu и при перетаскивании
+  // хэндлов выделения).
+  const sel = window.getSelection?.()
+  if (sel && !sel.isCollapsed) return
   // Long-press на таче тоже стреляет contextmenu — но меню там открывает ТАП
   // (maybeTapMenu); удержание отдано браузеру под выделение текста, поэтому
   // ни меню, ни preventDefault. Chrome даёт pointerType прямо на событии,
@@ -277,6 +282,15 @@ function onPointerMove(e) {
     const limit = 96
     swipeDx.value = Math.min(dx, limit)
   }
+}
+
+// Браузер перехватил жест (скролл, перетаскивание хэндлов выделения) —
+// это не тап и не свайп: только сбрасываем состояние, меню не открываем.
+function onPointerCancel(e) {
+  if (pointerActiveId !== null && pointerActiveId !== e.pointerId) return
+  pointerActiveId = null
+  swipeActive = false
+  swipeDx.value = 0
 }
 
 function onPointerUp(e) {

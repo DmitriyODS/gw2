@@ -100,12 +100,22 @@ watch(() => props.visible, async (v) => {
   pos.value = { x: nx, y: ny }
 })
 
+// Тап-открытие: следом за touchend браузер шлёт ЭМУЛИРОВАННЫЙ click в ту же
+// точку. У нижнего края экрана меню клампится ВВЕРХ и накрывает точку тапа —
+// призрачный click попадал в пункт («Редактировать»/«Скопировать» у своих
+// сообщений) и срабатывал сам. Первые мгновения после открытия пункты глухие.
+function ghostClick() {
+  return Date.now() - openedAt < 400
+}
+
 function emitAction(action) {
+  if (ghostClick()) return
   emit('action', action)
   emit('close')
 }
 
 function emitReact(emoji) {
+  if (ghostClick()) return
   emit('react', emoji)
   emit('close')
 }
