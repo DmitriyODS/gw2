@@ -69,6 +69,7 @@ import { useAuthStore } from '@/stores/auth.js'
 import { useUnitsStore } from '@/stores/units.js'
 import { useMessengerStore } from '@/stores/messenger.js'
 import { usePortalStore } from '@/stores/portal.js'
+import { usePermission } from '@/composables/usePermission.js'
 import { useCompanySettings } from '@/composables/useCompanySettings.js'
 
 const route = useRoute()
@@ -77,17 +78,19 @@ const authStore = useAuthStore()
 const unitsStore = useUnitsStore()
 const messenger = useMessengerStore()
 const portal = usePortalStore()
+const { isSuperAdmin, hasActiveCompany } = usePermission()
 const { usesGroove } = useCompanySettings()
 
 const moreOpen = ref(false)
 watch(() => route.path, () => { moreOpen.value = false })
 
 // 4 главные кнопки слева — самые частые сценарии. Всё прочее (вкл. профиль)
-// уходит в «Ещё».
+// уходит в «Ещё». Компанийные разделы (задачи, портал, реестры, календари,
+// статистика, грувики) — только при активной компании, как в сайдбаре.
 const mainItems = computed(() => [
-  { path: '/tasks', icon: 'grid_view', label: 'Задачи', tutorial: 'nav-tasks',
+  ...(hasActiveCompany() ? [{ path: '/tasks', icon: 'grid_view', label: 'Задачи', tutorial: 'nav-tasks',
     active: () => route.path === '/tasks',
-    dot: () => !!unitsStore.activeUnit },
+    dot: () => !!unitsStore.activeUnit }] : []),
   { path: '/messenger', icon: 'chat', label: 'Чаты', tutorial: 'nav-messenger',
     active: () => route.path.startsWith('/messenger'),
     badge: () => messenger.totalUnread },
@@ -95,32 +98,42 @@ const mainItems = computed(() => [
   { path: '/notes', icon: 'note_stack', label: 'Заметки',
     active: () => route.path.startsWith('/notes') || route.path.startsWith('/diaries') },
   // Единый раздел: лента портала + сотрудники (вкладки внутри).
-  { path: '/portal', icon: 'campaign', label: 'Портал',
+  ...(hasActiveCompany() ? [{ path: '/portal', icon: 'campaign', label: 'Портал',
     active: () => route.path.startsWith('/portal') || route.path === '/employees',
-    badge: () => portal.unread },
+    badge: () => portal.unread }] : []),
 ])
 
 const moreItems = computed(() => {
   const arr = [
     { path: '/profile', avatar: true, icon: 'account_circle', label: 'Профиль', tutorial: 'profile-avatar',
       active: () => route.path === '/profile' },
-    // Питомцы-грувики — только если компания не выключила режим.
-    ...(usesGroove.value ? [{ path: '/pets', icon: 'pets', label: 'Грувики',
-      active: () => route.path === '/pets' }] : []),
-    { path: '/registries', icon: 'table', label: 'Реестры',
-      active: () => route.path.startsWith('/registries') },
-    { path: '/calendars', icon: 'calendar_month', label: 'Календари',
-      active: () => route.path.startsWith('/calendars') },
-    { path: '/stats', icon: 'query_stats', label: 'Статистика', tutorial: 'nav-stats',
-      active: () => route.path === '/stats' },
-    { path: '/settings', icon: 'settings', label: 'Настройки',
-      active: () => route.path === '/settings' },
   ]
+  // Питомцы-грувики — только если компания не выключила режим.
+  if (hasActiveCompany() && usesGroove.value) {
+    arr.push({ path: '/pets', icon: 'pets', label: 'Грувики',
+      active: () => route.path === '/pets' })
+  }
   // «Компании» — всем: любой пользователь может создать свою компанию,
   // не будучи администратором ни одной (раздел сам покажет пустой список
   // с кнопкой «Создать»).
-  arr.splice(2, 0, { path: '/companies', icon: 'domain', label: 'Компании',
+  arr.push({ path: '/companies', icon: 'domain', label: 'Компании',
     active: () => route.path.startsWith('/companies') })
+  if (hasActiveCompany()) {
+    arr.push(
+      { path: '/registries', icon: 'table', label: 'Реестры',
+        active: () => route.path.startsWith('/registries') },
+      { path: '/calendars', icon: 'calendar_month', label: 'Календари',
+        active: () => route.path.startsWith('/calendars') },
+      { path: '/stats', icon: 'query_stats', label: 'Статистика', tutorial: 'nav-stats',
+        active: () => route.path === '/stats' },
+    )
+  }
+  if (isSuperAdmin()) {
+    arr.push({ path: '/users', icon: 'group', label: 'Пользователи',
+      active: () => route.path === '/users' })
+  }
+  arr.push({ path: '/settings', icon: 'settings', label: 'Настройки',
+    active: () => route.path === '/settings' })
   return arr
 })
 

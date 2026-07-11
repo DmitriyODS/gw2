@@ -47,5 +47,11 @@ export function usePermission() {
     return auth.isSuperAdmin || (auth.companies || []).some((c) => c.role_level >= ROLES.ADMIN)
   }
 
-  return { isAtLeast, myLevel, isSuperAdmin, isAdmin, isManager, canManageCompanies, ROLES }
+  // Есть ли активная компания в сессии — гейт компанийных разделов навигации.
+  // У супер-админа активной компании не бывает: компанийный контент он не видит.
+  function hasActiveCompany() {
+    return !auth.isSuperAdmin && auth.roleLevel > 0
+  }
+
+  return { isAtLeast, myLevel, isSuperAdmin, isAdmin, isManager, canManageCompanies, hasActiveCompany, ROLES }
 }

@@ -109,7 +109,7 @@ const messenger = useMessengerStore()
 const portal = usePortalStore()
 const tasksStore = useTasksStore()
 const petsStore = usePetsStore()
-const { isSuperAdmin } = usePermission()
+const { isSuperAdmin, hasActiveCompany } = usePermission()
 const { usesGroove } = useCompanySettings()
 const { open: openChangelog } = useChangelog()
 
@@ -123,9 +123,6 @@ function togglePinned() {
   storageSet(PINNED_KEY, pinned.value ? '1' : '0')
 }
 
-// Активная компания есть только у обычного пользователя-члена (roleLevel>0).
-// У супер-админа активной компании нет — компанийный контент он не видит.
-const hasActiveCompany = computed(() => !isSuperAdmin() && authStore.roleLevel > 0)
 
 // Развёрнут: закреплён кнопкой ИЛИ курсор на панели ИЛИ открыта overlay-выпадашка
 // CompanySelect (она правее панели — на mouseleave панель бы свернулась).
@@ -137,7 +134,7 @@ const expanded = computed(() => pinned.value || hovered.value || companyDropdown
 //   Управление и анализ — администрирование и статистика.
 const navGroups = computed(() => {
   const workflows = []
-  if (hasActiveCompany.value) {
+  if (hasActiveCompany()) {
     workflows.push(
       { path: '/tasks', icon: 'dashboard_customize', label: 'Задачи', tutorial: 'nav-tasks',
         active: () => route.path.startsWith('/tasks'),
@@ -149,7 +146,7 @@ const navGroups = computed(() => {
   // Заметки (вкл. ежедневник) — личные, кросс-компанийные: доступны всегда.
   workflows.push({ path: '/notes', icon: 'note_stack', label: 'Заметки', tutorial: 'nav-diaries',
     active: () => route.path.startsWith('/notes') || route.path.startsWith('/diaries') })
-  if (hasActiveCompany.value) {
+  if (hasActiveCompany()) {
     workflows.push({ path: '/calendars', icon: 'calendar_month', label: 'Календари', tutorial: 'nav-calendars',
       active: () => route.path.startsWith('/calendars') })
   }
@@ -160,7 +157,7 @@ const navGroups = computed(() => {
       active: () => route.path.startsWith('/messenger'),
       badge: () => messenger.totalUnread },
   ]
-  if (hasActiveCompany.value) {
+  if (hasActiveCompany()) {
     // Единый раздел: лента портала + сотрудники (вкладки внутри).
     team.push({ path: '/portal', icon: 'brand_awareness', label: 'Портал', tutorial: 'nav-portal',
       active: () => route.path.startsWith('/portal') || route.path === '/employees',
@@ -173,7 +170,7 @@ const navGroups = computed(() => {
   }
 
   const manage = []
-  if (hasActiveCompany.value) {
+  if (hasActiveCompany()) {
     manage.push({ path: '/stats', icon: 'bar_chart', label: 'Статистика', tutorial: 'nav-stats',
       active: () => route.path === '/stats' })
   }

@@ -17,8 +17,10 @@
     />
 
     <section
+      ref="panelEl"
       class="chat-panel"
       :class="{ 'is-mobile-hidden': isMobile && !activeId }"
+      :style="isMobile && keyboardInset ? { height: `calc(100dvh - ${keyboardInset}px)` } : {}"
       @dragenter.prevent="onDragEnter"
       @dragover.prevent="onDragOver"
       @dragleave.prevent="onDragLeave"
@@ -352,6 +354,35 @@ const attachedTask = ref(null)
 const profileOpen = ref(false)
 const ctxMenu = ref({ visible: false, x: 0, y: 0, message: null })
 const messagesEl = ref(null)
+const panelEl = ref(null)
+
+// Mobile keyboard: shrink panel to keyboard top (visualViewport),
+// but keep message content anchored — as in Telegram the currently
+// visible messages scroll with the viewport instead of being clipped.
+const keyboardInset = ref(0)
+function onViewportChange() {
+  if (!window.visualViewport || !isMobile.value) return
+  const vh = window.innerHeight
+  const vv = window.visualViewport
+  const inset = Math.max(0, vh - vv.height - vv.offsetTop)
+  if (inset === keyboardInset.value) return
+
+  const el = messagesEl.value
+  const fromBottom = el ? el.scrollHeight - el.scrollTop - el.clientHeight : 0
+  keyboardInset.value = inset
+  if (el) {
+    nextTick(() => {
+      el.scrollTop = el.scrollHeight - el.clientHeight - fromBottom
+    })
+  }
+}
+
+// Mobile back gesture: intercept popstate — go back to conversation list.
+function onPopState() {
+  if (activeId.value) {
+    goBack()
+  }
+}
 const messageInputRef = ref(null)
 const messageGroups = computed(() => groupMessagesByDay(messenger.activeMessages))
 const replyTo = ref(null)
@@ -734,7 +765,7 @@ async function selectConversation(id) {
   replyTo.value = null
   editing.value = null
   await messenger.setActive(id)
-  router.replace(`/messenger/${id}`)
+  router.push(`/messenger/${id}`) // push — back gesture returns to list
   await nextTick()
   scrollToBottom()
 }
@@ -763,7 +794,7 @@ async function onSend(payload) {
 
 function goBack() {
   messenger.activeConversationId = null
-  router.replace('/messenger')
+  router.back()
 }
 
 function scrollToBottom() {
@@ -867,6 +898,9 @@ onMounted(async () => {
   window.addEventListener('messenger:open-conversation', handleExternalOpen)
   document.addEventListener('mousedown', handleOutsideMenu)
   document.addEventListener('touchstart', handleOutsideMenu, { passive: true })
+  window.visualViewport?.addEventListener('resize', onViewportChange)
+  window.visualViewport?.addEventListener('scroll', onViewportChange)
+  window.addEventListener('popstate', onPopState)
 })
 
 onBeforeUnmount(() => {
@@ -874,6 +908,9 @@ onBeforeUnmount(() => {
   document.removeEventListener('mousedown', handleOutsideMenu)
   document.removeEventListener('touchstart', handleOutsideMenu)
   inputResizeObserver?.disconnect()
+  window.visualViewport?.removeEventListener('resize', onViewportChange)
+  window.visualViewport?.removeEventListener('scroll', onViewportChange)
+  window.removeEventListener('popstate', onPopState)
   // Уходим со страницы — диалог больше не «открыт», иначе входящие в него
   // продолжали бы тихо помечаться прочитанными.
   messenger.activeConversationId = null
