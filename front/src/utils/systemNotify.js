@@ -165,13 +165,21 @@ function constructNotification(title, options, onClick) {
   }
 }
 
+/* Десктоп-обёртка (Electron): SW-уведомления там не реализованы —
+   showNotification «успешно» резолвится, но ОС ничего не показывает.
+   Конструктор new Notification в Electron работает как нативный тост. */
+function isElectronApp() {
+  return !!window.GrooveDesktop || navigator.userAgent.includes('Electron')
+}
+
 /* Единый показ OS-уведомления: сперва через service worker (персистентные
    уведомления — надёжнее, Chrome может молча ронять non-persistent у фоновых
    вкладок; на Android конструктор вообще запрещён), фолбэк — конструктор.
+   В Electron SW-путь пропускается (см. isElectronApp).
    Клики SW-уведомлений обрабатывает sw.js (postMessage по data.kind).
    Возвращает Promise<Notification|null> (для SW-пути — null). */
 function deliverNotification(title, options, onClick) {
-  if (swRegistration && typeof swRegistration.showNotification === 'function') {
+  if (!isElectronApp() && swRegistration && typeof swRegistration.showNotification === 'function') {
     return swRegistration.showNotification(title, options)
       .then(() => null)
       .catch(() => constructNotification(title, options, onClick))

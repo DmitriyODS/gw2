@@ -2,6 +2,25 @@
   <div class="ne" :class="{ readonly: !editable }">
     <!-- Sticky-панель форматирования (правило sticky-шапок: плотное стекло) -->
     <div v-if="editable" class="ne-toolbar">
+      <!-- Действия с выделенным (ИИ/создать/в чат/копировать): постоянная
+           кнопка, активна только при непустом выделении. На таче это
+           ЕДИНСТВЕННЫЙ путь к меню — contextmenu отдан браузеру под
+           нативное выделение/копирование. -->
+      <div v-if="selectionMenu" class="ne-tgroup">
+        <button
+          class="ne-tbtn ne-selbtn"
+          :disabled="!selectionHasText()"
+          title="Действия с выделенным"
+          aria-haspopup="menu"
+          @mousedown.prevent
+          @click="openSelectionActions"
+        >
+          <span class="material-symbols-outlined">auto_awesome</span>
+          <span class="material-symbols-outlined ne-selbtn-caret">arrow_drop_down</span>
+        </button>
+      </div>
+      <span v-if="selectionMenu" class="ne-tsep" />
+
       <div class="ne-tgroup">
         <button
           v-for="lvl in [1, 2, 3]"
@@ -226,17 +245,43 @@ function editLink() {
   else ed.chain().focus().extendMarkRange('link').setLink({ href: url }).run()
 }
 
+// На таче contextmenu приходит от long-press выделения — не перехватываем,
+// иначе меню вылезает поверх нативных ручек выделения (правило мессенджера:
+// выделение текста отдано браузеру). Путь к действиям там — кнопка тулбара.
+const isTouchDevice = window.matchMedia?.('(hover: none) and (pointer: coarse)').matches ?? false
+
+// Текст текущего выделения ('' — выделения нет). Зовётся из шаблона —
+// пересчитывается на каждой транзакции редактора.
+function selectionText() {
+  const ed = editor.value
+  if (!ed) return ''
+  const { from, to } = ed.state.selection
+  if (to <= from) return ''
+  return ed.state.doc.textBetween(from, to, '\n', ' ')
+}
+
+function selectionHasText() {
+  return !!selectionText().trim()
+}
+
 // ПКМ на непустом выделении → меню действий с фрагментом; пустое выделение
 // оставляет системное меню (правописание, вставка).
 function onContextMenu(e) {
-  if (!props.selectionMenu || !editor.value) return
-  const { state } = editor.value
-  const { from, to } = state.selection
-  if (to <= from) return
-  const text = state.doc.textBetween(from, to, '\n', ' ')
+  if (!props.selectionMenu || isTouchDevice || !editor.value) return
+  const text = selectionText()
   if (!text.trim()) return
   e.preventDefault()
+  const { from, to } = editor.value.state.selection
   emit('selection-menu', { x: e.clientX, y: e.clientY, text, from, to })
+}
+
+// Кнопка тулбара «Действия с выделенным» — то же меню, якорь под кнопкой.
+function openSelectionActions(e) {
+  const text = selectionText()
+  if (!text.trim() || !editor.value) return
+  const { from, to } = editor.value.state.selection
+  const r = e.currentTarget.getBoundingClientRect()
+  emit('selection-menu', { x: r.left, y: r.bottom + 6, text, from, to })
 }
 
 async function onImageFile(e) {
@@ -297,6 +342,11 @@ defineExpose({ editor })
 .ne-tbtn.active { background: color-mix(in oklch, var(--color-primary) 16%, transparent); color: var(--color-primary); }
 .ne-tbtn:disabled { opacity: 0.4; cursor: default; }
 .ne-tbtn.danger:hover { background: color-mix(in oklch, var(--color-error) 12%, transparent); color: var(--color-error); }
+
+/* Кнопка действий с выделенным: primary-акцент, чтобы отличалась от
+   форматирования; каретка намекает на выпадающее меню. */
+.ne-selbtn:not(:disabled) { color: var(--color-primary); }
+.ne-selbtn-caret { font-size: 16px !important; margin-left: -6px; }
 
 /* Палитра выделения */
 .ne-hl { position: relative; }

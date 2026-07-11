@@ -1,6 +1,7 @@
 import { useAuthStore } from '@/stores/auth.js'
 import { useMessengerStore } from '@/stores/messenger.js'
 import { showSystemNotification, playNotifySound } from '@/utils/systemNotify.js'
+import { stripMarkdown } from '@/utils/markdown.js'
 
 export function registerMessengerSocketHandlers(socket) {
   socket.on('message:new', ({ conversation_id, message, from_user_id }) => {
@@ -16,7 +17,9 @@ export function registerMessengerSocketHandlers(socket) {
     if (isActive) return
     const conv = messenger.conversations.find(c => c.id === conversation_id)
     const fio = conv?.other_user?.fio || 'Сотрудник'
-    const body = message.text || (message.attachments?.length ? 'Прислал(а) вложение' : 'Новое сообщение')
+    // Разметка в уведомлении не рендерится — показываем чистый текст.
+    const body = stripMarkdown(message.text || '')
+      || (message.attachments?.length ? 'Прислал(а) вложение' : 'Новое сообщение')
     showSystemNotification(fio, body, {
       data: { conversation_id },
       onClick: () => {

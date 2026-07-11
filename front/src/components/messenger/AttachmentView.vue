@@ -1,7 +1,14 @@
 <template>
-  <a v-if="isImage" :href="att.url" target="_blank" rel="noopener" class="att-image-wrap">
+  <!-- Картинка — в лайтбокс (зум/поворот/скачивание), а не в новую вкладку -->
+  <button v-if="isImage" type="button" class="att-image-wrap" @click="lightboxOpen = true">
     <img :src="att.url" :alt="att.file_name" class="att-image" />
-  </a>
+  </button>
+  <ImageLightbox
+    v-if="isImage"
+    v-model="lightboxOpen"
+    :src="att.url"
+    :caption="att.file_name"
+  />
   <video v-else-if="isVideo" :src="att.url" controls class="att-video" preload="metadata" />
   <audio v-else-if="isAudio" :src="att.url" controls class="att-audio" preload="metadata" />
   <a v-else :href="att.url" :download="att.file_name" target="_blank" rel="noopener" class="att-file">
@@ -15,11 +22,14 @@
 </template>
 
 <script setup>
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
+import ImageLightbox from '@/components/common/ImageLightbox.vue'
 
 const props = defineProps({
   att: { type: Object, required: true },
 })
+
+const lightboxOpen = ref(false)
 
 const isImage = computed(() => props.att.mime_type?.startsWith('image/'))
 const isVideo = computed(() => props.att.mime_type?.startsWith('video/'))
@@ -41,6 +51,10 @@ function formatSize(bytes) {
   border-radius: var(--radius-md);
   overflow: hidden;
   max-width: 280px;
+  padding: 0;
+  border: none;
+  background: none;
+  cursor: zoom-in;
 }
 
 .att-image {

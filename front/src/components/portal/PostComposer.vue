@@ -128,6 +128,15 @@
     <Teleport to="body">
       <Transition name="cfm">
         <div v-if="ctxMenu.visible" ref="ctxEl" class="cfm" :style="ctxStyle" role="menu" @click.stop>
+          <button type="button" class="cfm-item" @mousedown.prevent @click="copySelection(false)">
+            <span class="material-symbols-outlined">content_copy</span>
+            <span>Копировать</span>
+          </button>
+          <button type="button" class="cfm-item" @mousedown.prevent @click="copySelection(true)">
+            <span class="material-symbols-outlined">content_cut</span>
+            <span>Вырезать</span>
+          </button>
+          <div class="cfm-divider" />
           <div class="cfm-caption">
             <span class="material-symbols-outlined">match_case</span>
             <span>Форматирование</span>
@@ -161,6 +170,7 @@ import Select from 'primevue/select'
 import AppDialog from '@/components/common/AppDialog.vue'
 import ImageEditDialog from '@/components/common/ImageEditDialog.vue'
 import MarkdownView from '@/components/common/MarkdownView.vue'
+import { selectionViewportRect } from '@/utils/textareaSelection.js'
 import { usePortalStore } from '@/stores/portal.js'
 import { useAuthStore } from '@/stores/auth.js'
 import { useNotificationsStore } from '@/stores/notifications.js'
@@ -409,15 +419,37 @@ async function onBodyContextmenu(e) {
   // Без выделения — нативное меню (вставить, орфография и т.п.).
   if (!el || el.selectionStart === el.selectionEnd) return
   e.preventDefault()
+  // Меню — у выделенного фрагмента, а не в точке клика (кликнуть можно и в
+  // стороне от выделения): над первой строкой выделения, по X центрируется
+  // на ней; сверху не влезает — открывается под строкой (как MD-тулбар
+  // в поле ввода мессенджера).
+  const sel = selectionViewportRect(el, el.selectionStart, el.selectionEnd)
   ctxMenu.value = { visible: true, x: e.clientX, y: e.clientY }
   await nextTick()
   const r = ctxEl.value?.getBoundingClientRect()
   if (!r) return
   const pad = 8
-  let { x, y } = ctxMenu.value
-  if (x + r.width > window.innerWidth - pad) x = window.innerWidth - r.width - pad
-  if (y + r.height > window.innerHeight - pad) y = e.clientY - r.height - 6
-  ctxMenu.value = { visible: true, x: Math.max(pad, x), y: Math.max(pad, y) }
+  let x = sel.left + sel.width / 2 - r.width / 2
+  x = Math.min(Math.max(pad, x), window.innerWidth - r.width - pad)
+  let y = sel.top - r.height - 8
+  if (y < pad) y = Math.min(sel.bottom + 8, window.innerHeight - r.height - pad)
+  ctxMenu.value = { visible: true, x, y: Math.max(pad, y) }
+}
+
+// Копировать/вырезать выделенное: буфер — Clipboard API, «вырезать» убирает
+// фрагмент через applyEdit (курсор на месте выреза, undo работает).
+async function copySelection(cut) {
+  ctxMenu.value.visible = false
+  const el = bodyEl.value
+  if (!el) return
+  const { selectionStart: s, selectionEnd: e } = el
+  if (s === e) return
+  try {
+    await navigator.clipboard.writeText(body.value.slice(s, e))
+  } catch {
+    return // буфер недоступен — фрагмент не трогаем
+  }
+  if (cut) applyEdit(body.value.slice(0, s) + body.value.slice(e), s, s)
 }
 
 function runCtx(b) {
@@ -726,6 +758,13 @@ async function submit() {
   gap: 1px;
   max-height: 60dvh;
   overflow-y: auto;
+}
+
+.cfm-divider {
+  height: 1px;
+  background: var(--color-outline-dim);
+  margin: 4px 4px;
+  flex-shrink: 0;
 }
 
 .cfm-caption {

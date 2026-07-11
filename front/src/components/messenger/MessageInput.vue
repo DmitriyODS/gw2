@@ -67,6 +67,10 @@
         </button>
         <Transition name="attach-menu">
           <div v-if="attachMenuOpen" class="attach-menu" role="menu">
+            <button class="attach-menu-item" type="button" @click="pickPhoto">
+              <span class="material-symbols-outlined attach-menu-ico tone-primary">image</span>
+              <span>Фото или видео</span>
+            </button>
             <button class="attach-menu-item" type="button" @click="pickFile">
               <span class="material-symbols-outlined attach-menu-ico tone-secondary">upload_file</span>
               <span>Файл</span>
@@ -86,6 +90,16 @@
         <input
           ref="fileInput"
           type="file"
+          multiple
+          style="display:none"
+          @change="onFiles"
+        />
+        <!-- Отдельный инпут под фото/видео: на мобильных accept открывает
+             галерею вместо файлового менеджера (как в Telegram). -->
+        <input
+          ref="photoInput"
+          type="file"
+          accept="image/*,video/*"
           multiple
           style="display:none"
           @change="onFiles"
@@ -135,6 +149,7 @@
 <script setup>
 import { ref, computed, nextTick, onMounted, onBeforeUnmount, watch } from 'vue'
 import { uploadAttachment } from '@/api/messenger.js'
+import { selectionViewportRect } from '@/utils/textareaSelection.js'
 import ProgressSpinner from 'primevue/progressspinner'
 
 const props = defineProps({
@@ -170,10 +185,16 @@ function onEnterKey(e) {
 const attachMenuOpen = ref(false)
 const attachWrap = ref(null)
 const fileInput = ref(null)
+const photoInput = ref(null)
 
 function pickFile() {
   attachMenuOpen.value = false
   fileInput.value?.click()
+}
+
+function pickPhoto() {
+  attachMenuOpen.value = false
+  photoInput.value?.click()
 }
 
 function pickTask() {
@@ -225,40 +246,6 @@ const MD_TOOLS = [
 ]
 
 const mdToolbar = ref({ visible: false, range: null, style: {} })
-
-/* Экранные координаты выделенного фрагмента: сам textarea их не отдаёт,
-   поэтому меряем по зеркальному div с теми же текстовыми метриками
-   (стандартный приём textarea-caret-position). Возвращает rect первой
-   строки выделения в координатах viewport. */
-function selectionViewportRect(el, start, end) {
-  const style = getComputedStyle(el)
-  const mirror = document.createElement('div')
-  for (const p of [
-    'boxSizing', 'width', 'fontFamily', 'fontSize', 'fontWeight', 'fontStyle',
-    'letterSpacing', 'lineHeight', 'textTransform', 'textIndent',
-    'paddingTop', 'paddingRight', 'paddingBottom', 'paddingLeft',
-    'borderTopWidth', 'borderRightWidth', 'borderBottomWidth', 'borderLeftWidth',
-  ]) mirror.style[p] = style[p]
-  Object.assign(mirror.style, {
-    position: 'fixed', top: '0', left: '0', visibility: 'hidden',
-    whiteSpace: 'pre-wrap', overflowWrap: 'break-word',
-  })
-  mirror.textContent = el.value.slice(0, start)
-  const marker = document.createElement('span')
-  marker.textContent = el.value.slice(start, end) || '​'
-  mirror.appendChild(marker)
-  document.body.appendChild(mirror)
-  const line = marker.getClientRects()[0] || marker.getBoundingClientRect()
-  const mirrorRect = mirror.getBoundingClientRect()
-  mirror.remove()
-  const elRect = el.getBoundingClientRect()
-  return {
-    top: elRect.top + (line.top - mirrorRect.top) - el.scrollTop,
-    bottom: elRect.top + (line.bottom - mirrorRect.top) - el.scrollTop,
-    left: elRect.left + (line.left - mirrorRect.left),
-    width: line.width,
-  }
-}
 
 function onTextContextMenu(e) {
   const el = textarea.value
@@ -758,6 +745,7 @@ function iconFor(mime) {
 .attach-menu-item:hover { background: var(--color-surface-low); }
 
 .attach-menu-ico { font-size: 20px; }
+.attach-menu-ico.tone-primary { color: var(--color-primary); }
 .attach-menu-ico.tone-secondary { color: var(--color-secondary); }
 .attach-menu-ico.tone-tertiary { color: var(--color-tertiary); }
 .attach-menu-ico.tone-error { color: var(--color-error); }

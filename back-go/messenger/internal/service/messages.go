@@ -447,24 +447,21 @@ func (s *Service) MarkRead(ctx context.Context, convID, userID int64) (int, erro
 		payload := dto.MessageReadEvent{ConversationID: convID, ReaderID: userID}
 		switch {
 		case conv.IsDevChat:
-			// О прочтении должны знать все, кто видит переписку: владелец
-			// и все Администраторы системы (кроме самого читателя).
+			// О прочтении должны знать все, кто видит переписку: владелец и
+			// все Администраторы системы. Читатель ВКЛЮЧЁН — его другие
+			// устройства по этому событию гасят свой счётчик непрочитанных.
 			devIDs, err := s.users.DevChatUserIDs(ctx, conv.UserAID)
 			if err != nil {
 				return n, err
 			}
-			var targets []int64
-			for _, uid := range devIDs {
-				if uid != userID {
-					targets = append(targets, uid)
-				}
-			}
-			if len(targets) > 0 {
-				s.pub.Publish(ctx, "message:read", rooms(targets...), payload)
+			if len(devIDs) > 0 {
+				s.pub.Publish(ctx, "message:read", rooms(devIDs...), payload)
 			}
 		default:
+			// Собеседнику — галочки «прочитано», самому читателю — синк
+			// бейджа на остальных его устройствах.
 			otherID := conv.OtherUserID(userID)
-			s.pub.Publish(ctx, "message:read", rooms(*otherID), payload)
+			s.pub.Publish(ctx, "message:read", rooms(*otherID, userID), payload)
 		}
 	}
 	return n, nil

@@ -520,7 +520,16 @@ export const useMessengerStore = defineStore('messenger', () => {
 
   function applyReadReceipt(conversationId, readerId) {
     const auth = useAuthStore()
-    if (readerId === auth.user?.id) return
+    if (readerId === auth.userId) {
+      // Я прочитал этот чат на другом устройстве — здесь гасим счётчик,
+      // чтобы бейдж непрочитанных совпадал на всех устройствах.
+      const conv = conversationById.value.get(conversationId)
+      if (conv && conv.unread_count) {
+        conv.unread_count = 0
+        recomputeUnread()
+      }
+      return
+    }
     const arr = messagesByConv.value[conversationId]
     if (!arr) return
     const stamp = new Date().toISOString()

@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"encoding/json"
+	"regexp"
 	"strconv"
 	"strings"
 
@@ -74,10 +75,35 @@ func (s *Service) onPost(ctx context.Context, payload json.RawMessage) {
 	})
 }
 
+var (
+	mdImage   = regexp.MustCompile(`!\[([^\]]*)\]\([^)]*\)`)
+	mdLink    = regexp.MustCompile(`\[([^\]]*)\]\([^)]*\)`)
+	mdFence   = regexp.MustCompile("(?m)^[ \t]*`{3,}.*$")
+	mdRule    = regexp.MustCompile(`(?m)^[ \t]*(?:-{3,}|\*{3,}|_{3,})[ \t]*$`)
+	mdHeading = regexp.MustCompile(`(?m)^[ \t]*#{1,6}[ \t]*`)
+	mdQuote   = regexp.MustCompile(`(?m)^[ \t]*(?:>[ \t]*)+`)
+	mdBullet  = regexp.MustCompile(`(?m)^[ \t]*(?:[-*+][ \t]+\[[ xX]\][ \t]*|[-*+][ \t]+|\d+\.[ \t]+)`)
+	mdSpaces  = regexp.MustCompile(`\s+`)
+)
+
+// stripMarkdown — очистка markdown-разметки для текста уведомления (зеркало
+// stripMarkdown portalsvc/front): маркеры убираются, содержимое остаётся,
+// ссылки и картинки сводятся к тексту/alt, всё схлопывается в одну строку.
+func stripMarkdown(s string) string {
+	s = mdFence.ReplaceAllString(s, " ")
+	s = mdRule.ReplaceAllString(s, " ")
+	s = mdImage.ReplaceAllString(s, "$1")
+	s = mdLink.ReplaceAllString(s, "$1")
+	s = mdHeading.ReplaceAllString(s, "")
+	s = mdQuote.ReplaceAllString(s, "")
+	s = mdBullet.ReplaceAllString(s, "")
+	s = strings.NewReplacer("**", "", "~~", "", "*", "", "`", "", "|", " ").Replace(s)
+	return strings.TrimSpace(mdSpaces.ReplaceAllString(s, " "))
+}
+
 // postPreview — короткий текст без Markdown-обвязки для тела уведомления.
 func postPreview(body string) string {
-	clean := strings.NewReplacer("#", "", "*", "", "`", "", ">", "", "_", "").Replace(body)
-	clean = strings.Join(strings.Fields(clean), " ")
+	clean := stripMarkdown(body)
 	r := []rune(clean)
 	if len(r) > 120 {
 		return string(r[:120]) + "…"
@@ -229,8 +255,11 @@ func (s *Service) onCall(ctx context.Context, payload json.RawMessage, rooms []s
 }
 
 func messagePreview(text *string, kind string, hasTask, hasAttachment bool) string {
-	if text != nil && strings.TrimSpace(*text) != "" {
-		return *text
+	// Разметка в уведомлении не рендерится — показываем чистый текст.
+	if text != nil {
+		if clean := stripMarkdown(*text); clean != "" {
+			return clean
+		}
 	}
 	switch {
 	case kind == "call":
