@@ -30,6 +30,7 @@ const (
 	AiService_Embed_FullMethodName          = "/ai.v1.AiService/Embed"
 	AiService_SemanticSearch_FullMethodName = "/ai.v1.AiService/SemanticSearch"
 	AiService_ReindexTask_FullMethodName    = "/ai.v1.AiService/ReindexTask"
+	AiService_SupportChat_FullMethodName    = "/ai.v1.AiService/SupportChat"
 )
 
 // AiServiceClient is the client API for AiService service.
@@ -47,6 +48,12 @@ type AiServiceClient interface {
 	SemanticSearch(ctx context.Context, in *SemanticSearchRequest, opts ...grpc.CallOption) (*SemanticSearchResponse, error)
 	// Переиндексировать задачу (фоном внутри aisvc); зовётся после изменений задачи.
 	ReindexTask(ctx context.Context, in *ReindexTaskRequest, opts ...grpc.CallOption) (*ReindexTaskResponse, error)
+	// Ответ ИИ техподдержки на диалог dev-чата (зовёт msgsvc). Промпт и правила
+	// (простые вопросы — ответить, сложные — эскалация разработчикам) — внутри
+	// aisvc; ключ платформенный (env SUPPORT_AI_API_KEY), не компанийный.
+	// Ключ не задан → error AI_DISABLED (msgsvc откатывается на канированный
+	// автоответ).
+	SupportChat(ctx context.Context, in *SupportChatRequest, opts ...grpc.CallOption) (*SupportChatResponse, error)
 }
 
 type aiServiceClient struct {
@@ -107,6 +114,16 @@ func (c *aiServiceClient) ReindexTask(ctx context.Context, in *ReindexTaskReques
 	return out, nil
 }
 
+func (c *aiServiceClient) SupportChat(ctx context.Context, in *SupportChatRequest, opts ...grpc.CallOption) (*SupportChatResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(SupportChatResponse)
+	err := c.cc.Invoke(ctx, AiService_SupportChat_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // AiServiceServer is the server API for AiService service.
 // All implementations must embed UnimplementedAiServiceServer
 // for forward compatibility.
@@ -122,6 +139,12 @@ type AiServiceServer interface {
 	SemanticSearch(context.Context, *SemanticSearchRequest) (*SemanticSearchResponse, error)
 	// Переиндексировать задачу (фоном внутри aisvc); зовётся после изменений задачи.
 	ReindexTask(context.Context, *ReindexTaskRequest) (*ReindexTaskResponse, error)
+	// Ответ ИИ техподдержки на диалог dev-чата (зовёт msgsvc). Промпт и правила
+	// (простые вопросы — ответить, сложные — эскалация разработчикам) — внутри
+	// aisvc; ключ платформенный (env SUPPORT_AI_API_KEY), не компанийный.
+	// Ключ не задан → error AI_DISABLED (msgsvc откатывается на канированный
+	// автоответ).
+	SupportChat(context.Context, *SupportChatRequest) (*SupportChatResponse, error)
 	mustEmbedUnimplementedAiServiceServer()
 }
 
@@ -146,6 +169,9 @@ func (UnimplementedAiServiceServer) SemanticSearch(context.Context, *SemanticSea
 }
 func (UnimplementedAiServiceServer) ReindexTask(context.Context, *ReindexTaskRequest) (*ReindexTaskResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method ReindexTask not implemented")
+}
+func (UnimplementedAiServiceServer) SupportChat(context.Context, *SupportChatRequest) (*SupportChatResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method SupportChat not implemented")
 }
 func (UnimplementedAiServiceServer) mustEmbedUnimplementedAiServiceServer() {}
 func (UnimplementedAiServiceServer) testEmbeddedByValue()                   {}
@@ -258,6 +284,24 @@ func _AiService_ReindexTask_Handler(srv interface{}, ctx context.Context, dec fu
 	return interceptor(ctx, in, info, handler)
 }
 
+func _AiService_SupportChat_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(SupportChatRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AiServiceServer).SupportChat(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AiService_SupportChat_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AiServiceServer).SupportChat(ctx, req.(*SupportChatRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // AiService_ServiceDesc is the grpc.ServiceDesc for AiService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -284,6 +328,10 @@ var AiService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "ReindexTask",
 			Handler:    _AiService_ReindexTask_Handler,
+		},
+		{
+			MethodName: "SupportChat",
+			Handler:    _AiService_SupportChat_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

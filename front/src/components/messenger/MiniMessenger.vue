@@ -310,6 +310,7 @@ import { useDraggable } from '@/composables/useDraggable.js'
 import { useBreakpoint } from '@/composables/useBreakpoint.js'
 import { useThemeStore } from '@/stores/theme.js'
 import { storageGetJSON } from '@/utils/storage.js'
+import { stripMarkdown } from '@/utils/markdown.js'
 import { useMessengerStore } from '@/stores/messenger.js'
 import { useAuthStore } from '@/stores/auth.js'
 import { useCallStore } from '@/stores/call.js'
@@ -779,7 +780,8 @@ function preview(msg) {
   if (msg.kind === 'call') {
     return msg.call?.media === 'audio' ? '📞 Аудиозвонок' : '📹 Видеозвонок'
   }
-  if (msg.text) return msg.text
+  // Разметка в однострочном превью вычищается (жирный/списки/ссылки → текст).
+  if (msg.text) return stripMarkdown(msg.text)
   if (msg.attachments?.length) return 'Вложение'
   return ''
 }

@@ -703,6 +703,106 @@ func (x *ReindexTaskResponse) GetError() *Error {
 	return nil
 }
 
+type SupportChatRequest struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// JSON-массив реплик диалога в формате OpenAI ([{role, content}]):
+	// владелец dev-чата — user, ответы поддержки (бот и люди) — assistant.
+	// Системный промпт messages НЕ содержит — его добавляет aisvc.
+	MessagesJson  string `protobuf:"bytes,1,opt,name=messages_json,json=messagesJson,proto3" json:"messages_json,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SupportChatRequest) Reset() {
+	*x = SupportChatRequest{}
+	mi := &file_ai_v1_ai_proto_msgTypes[12]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SupportChatRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SupportChatRequest) ProtoMessage() {}
+
+func (x *SupportChatRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_ai_v1_ai_proto_msgTypes[12]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SupportChatRequest.ProtoReflect.Descriptor instead.
+func (*SupportChatRequest) Descriptor() ([]byte, []int) {
+	return file_ai_v1_ai_proto_rawDescGZIP(), []int{12}
+}
+
+func (x *SupportChatRequest) GetMessagesJson() string {
+	if x != nil {
+		return x.MessagesJson
+	}
+	return ""
+}
+
+type SupportChatResponse struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	Error *Error                 `protobuf:"bytes,1,opt,name=error,proto3" json:"error,omitempty"`
+	// Текст ответа бота (готовый: либо ответ на вопрос, либо фраза эскалации).
+	Content       string `protobuf:"bytes,2,opt,name=content,proto3" json:"content,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SupportChatResponse) Reset() {
+	*x = SupportChatResponse{}
+	mi := &file_ai_v1_ai_proto_msgTypes[13]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SupportChatResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SupportChatResponse) ProtoMessage() {}
+
+func (x *SupportChatResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_ai_v1_ai_proto_msgTypes[13]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SupportChatResponse.ProtoReflect.Descriptor instead.
+func (*SupportChatResponse) Descriptor() ([]byte, []int) {
+	return file_ai_v1_ai_proto_rawDescGZIP(), []int{13}
+}
+
+func (x *SupportChatResponse) GetError() *Error {
+	if x != nil {
+		return x.Error
+	}
+	return nil
+}
+
+func (x *SupportChatResponse) GetContent() string {
+	if x != nil {
+		return x.Content
+	}
+	return ""
+}
+
 var File_ai_v1_ai_proto protoreflect.FileDescriptor
 
 const file_ai_v1_ai_proto_rawDesc = "" +
@@ -758,13 +858,19 @@ const file_ai_v1_ai_proto_rawDesc = "" +
 	"\x12ReindexTaskRequest\x12\x17\n" +
 	"\atask_id\x18\x01 \x01(\x03R\x06taskId\"9\n" +
 	"\x13ReindexTaskResponse\x12\"\n" +
-	"\x05error\x18\x01 \x01(\v2\f.ai.v1.ErrorR\x05error2\xbc\x02\n" +
+	"\x05error\x18\x01 \x01(\v2\f.ai.v1.ErrorR\x05error\"9\n" +
+	"\x12SupportChatRequest\x12#\n" +
+	"\rmessages_json\x18\x01 \x01(\tR\fmessagesJson\"S\n" +
+	"\x13SupportChatResponse\x12\"\n" +
+	"\x05error\x18\x01 \x01(\v2\f.ai.v1.ErrorR\x05error\x12\x18\n" +
+	"\acontent\x18\x02 \x01(\tR\acontent2\x82\x03\n" +
 	"\tAiService\x125\n" +
 	"\x06Status\x12\x14.ai.v1.StatusRequest\x1a\x15.ai.v1.StatusResponse\x12/\n" +
 	"\x04Chat\x12\x12.ai.v1.ChatRequest\x1a\x13.ai.v1.ChatResponse\x122\n" +
 	"\x05Embed\x12\x13.ai.v1.EmbedRequest\x1a\x14.ai.v1.EmbedResponse\x12M\n" +
 	"\x0eSemanticSearch\x12\x1c.ai.v1.SemanticSearchRequest\x1a\x1d.ai.v1.SemanticSearchResponse\x12D\n" +
-	"\vReindexTask\x12\x19.ai.v1.ReindexTaskRequest\x1a\x1a.ai.v1.ReindexTaskResponseB5Z3github.com/DmitriyODS/gw2/back-go/pkg/gen/aipb;aipbb\x06proto3"
+	"\vReindexTask\x12\x19.ai.v1.ReindexTaskRequest\x1a\x1a.ai.v1.ReindexTaskResponse\x12D\n" +
+	"\vSupportChat\x12\x19.ai.v1.SupportChatRequest\x1a\x1a.ai.v1.SupportChatResponseB5Z3github.com/DmitriyODS/gw2/back-go/pkg/gen/aipb;aipbb\x06proto3"
 
 var (
 	file_ai_v1_ai_proto_rawDescOnce sync.Once
@@ -778,7 +884,7 @@ func file_ai_v1_ai_proto_rawDescGZIP() []byte {
 	return file_ai_v1_ai_proto_rawDescData
 }
 
-var file_ai_v1_ai_proto_msgTypes = make([]protoimpl.MessageInfo, 12)
+var file_ai_v1_ai_proto_msgTypes = make([]protoimpl.MessageInfo, 14)
 var file_ai_v1_ai_proto_goTypes = []any{
 	(*Error)(nil),                  // 0: ai.v1.Error
 	(*StatusRequest)(nil),          // 1: ai.v1.StatusRequest
@@ -792,6 +898,8 @@ var file_ai_v1_ai_proto_goTypes = []any{
 	(*SemanticSearchResponse)(nil), // 9: ai.v1.SemanticSearchResponse
 	(*ReindexTaskRequest)(nil),     // 10: ai.v1.ReindexTaskRequest
 	(*ReindexTaskResponse)(nil),    // 11: ai.v1.ReindexTaskResponse
+	(*SupportChatRequest)(nil),     // 12: ai.v1.SupportChatRequest
+	(*SupportChatResponse)(nil),    // 13: ai.v1.SupportChatResponse
 }
 var file_ai_v1_ai_proto_depIdxs = []int32{
 	0,  // 0: ai.v1.StatusResponse.error:type_name -> ai.v1.Error
@@ -800,21 +908,24 @@ var file_ai_v1_ai_proto_depIdxs = []int32{
 	0,  // 3: ai.v1.SemanticSearchResponse.error:type_name -> ai.v1.Error
 	8,  // 4: ai.v1.SemanticSearchResponse.hits:type_name -> ai.v1.SearchHit
 	0,  // 5: ai.v1.ReindexTaskResponse.error:type_name -> ai.v1.Error
-	1,  // 6: ai.v1.AiService.Status:input_type -> ai.v1.StatusRequest
-	3,  // 7: ai.v1.AiService.Chat:input_type -> ai.v1.ChatRequest
-	5,  // 8: ai.v1.AiService.Embed:input_type -> ai.v1.EmbedRequest
-	7,  // 9: ai.v1.AiService.SemanticSearch:input_type -> ai.v1.SemanticSearchRequest
-	10, // 10: ai.v1.AiService.ReindexTask:input_type -> ai.v1.ReindexTaskRequest
-	2,  // 11: ai.v1.AiService.Status:output_type -> ai.v1.StatusResponse
-	4,  // 12: ai.v1.AiService.Chat:output_type -> ai.v1.ChatResponse
-	6,  // 13: ai.v1.AiService.Embed:output_type -> ai.v1.EmbedResponse
-	9,  // 14: ai.v1.AiService.SemanticSearch:output_type -> ai.v1.SemanticSearchResponse
-	11, // 15: ai.v1.AiService.ReindexTask:output_type -> ai.v1.ReindexTaskResponse
-	11, // [11:16] is the sub-list for method output_type
-	6,  // [6:11] is the sub-list for method input_type
-	6,  // [6:6] is the sub-list for extension type_name
-	6,  // [6:6] is the sub-list for extension extendee
-	0,  // [0:6] is the sub-list for field type_name
+	0,  // 6: ai.v1.SupportChatResponse.error:type_name -> ai.v1.Error
+	1,  // 7: ai.v1.AiService.Status:input_type -> ai.v1.StatusRequest
+	3,  // 8: ai.v1.AiService.Chat:input_type -> ai.v1.ChatRequest
+	5,  // 9: ai.v1.AiService.Embed:input_type -> ai.v1.EmbedRequest
+	7,  // 10: ai.v1.AiService.SemanticSearch:input_type -> ai.v1.SemanticSearchRequest
+	10, // 11: ai.v1.AiService.ReindexTask:input_type -> ai.v1.ReindexTaskRequest
+	12, // 12: ai.v1.AiService.SupportChat:input_type -> ai.v1.SupportChatRequest
+	2,  // 13: ai.v1.AiService.Status:output_type -> ai.v1.StatusResponse
+	4,  // 14: ai.v1.AiService.Chat:output_type -> ai.v1.ChatResponse
+	6,  // 15: ai.v1.AiService.Embed:output_type -> ai.v1.EmbedResponse
+	9,  // 16: ai.v1.AiService.SemanticSearch:output_type -> ai.v1.SemanticSearchResponse
+	11, // 17: ai.v1.AiService.ReindexTask:output_type -> ai.v1.ReindexTaskResponse
+	13, // 18: ai.v1.AiService.SupportChat:output_type -> ai.v1.SupportChatResponse
+	13, // [13:19] is the sub-list for method output_type
+	7,  // [7:13] is the sub-list for method input_type
+	7,  // [7:7] is the sub-list for extension type_name
+	7,  // [7:7] is the sub-list for extension extendee
+	0,  // [0:7] is the sub-list for field type_name
 }
 
 func init() { file_ai_v1_ai_proto_init() }
@@ -828,7 +939,7 @@ func file_ai_v1_ai_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_ai_v1_ai_proto_rawDesc), len(file_ai_v1_ai_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   12,
+			NumMessages:   14,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

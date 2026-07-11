@@ -502,6 +502,15 @@ func (r *fakeRepo) HasHumanMessageSince(_ context.Context, convID int64, since t
 	return false, nil
 }
 
+func (r *fakeRepo) HasSupportHumanReplySince(_ context.Context, convID int64, since time.Time) (bool, error) {
+	for _, m := range r.convMessages(convID) {
+		if m.Kind == domain.KindDevReply && !m.IsBot && !m.CreatedAt.Before(since) {
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
 func (r *fakeRepo) ListRecent(_ context.Context, convID int64, limit int) ([]*domain.Message, error) {
 	all := r.convMessages(convID)
 	if len(all) > limit {
@@ -685,7 +694,7 @@ func newTestEnv() (*Service, *fakeRepo, *fakeFiles, *fakePub) {
 	repo := newFakeRepo(users)
 	files := newFakeFiles()
 	pub := &fakePub{}
-	svc := New(repo, users, files, pub, slog.New(slog.DiscardHandler))
+	svc := New(repo, users, files, pub, nil, slog.New(slog.DiscardHandler))
 	return svc, repo, files, pub
 }
 

@@ -21,6 +21,12 @@ service AiService {
   rpc SemanticSearch(SemanticSearchRequest) returns (SemanticSearchResponse);
   // Переиндексировать задачу (фоном внутри aisvc); зовётся после изменений задачи.
   rpc ReindexTask(ReindexTaskRequest) returns (ReindexTaskResponse);
+  // Ответ ИИ техподдержки на диалог dev-чата (зовёт msgsvc). Промпт и правила
+  // (простые вопросы — ответить, сложные — эскалация разработчикам) — внутри
+  // aisvc; ключ платформенный (env SUPPORT_AI_API_KEY), не компанийный.
+  // Ключ не задан → error AI_DISABLED (msgsvc откатывается на канированный
+  // автоответ).
+  rpc SupportChat(SupportChatRequest) returns (SupportChatResponse);
 }
 
 message Error {
@@ -91,4 +97,17 @@ message ReindexTaskRequest {
 
 message ReindexTaskResponse {
   Error error = 1;
+}
+
+message SupportChatRequest {
+  // JSON-массив реплик диалога в формате OpenAI ([{role, content}]):
+  // владелец dev-чата — user, ответы поддержки (бот и люди) — assistant.
+  // Системный промпт messages НЕ содержит — его добавляет aisvc.
+  string messages_json = 1;
+}
+
+message SupportChatResponse {
+  Error error = 1;
+  // Текст ответа бота (готовый: либо ответ на вопрос, либо фраза эскалации).
+  string content = 2;
 }

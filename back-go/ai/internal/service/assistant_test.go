@@ -222,7 +222,7 @@ func toolCallMessage(t *testing.T, id, name string, args map[string]any) string 
 func newAssistantTestService(tasks *fakeTasksClient, assistants *fakeAssistantRepo, llm domain.LLMClient) (*Service, *fakeRepo) {
 	repo := newFakeRepo()
 	repo.companies[1] = enabledCompany(1)
-	return New(repo, llm, &fakeCipher{}, newFakeFacts(), assistants, tasks, "https://gw.example", slog.New(slog.DiscardHandler)), repo
+	return New(repo, llm, &fakeCipher{}, newFakeFacts(), assistants, tasks, "https://gw.example", SupportConfig{}, slog.New(slog.DiscardHandler)), repo
 }
 
 // ── SendAssistantMessage ───────────────────────────────────────────
@@ -236,7 +236,7 @@ func TestSendAssistantMessage_EmptyTextIsValidationError(t *testing.T) {
 func TestSendAssistantMessage_AiDisabledCompany(t *testing.T) {
 	repo := newFakeRepo() // компания 1 НЕ добавлена → AI выключен
 	svc := New(repo, &sequencedLLM{}, &fakeCipher{}, newFakeFacts(),
-		newFakeAssistantRepo(), &fakeTasksClient{}, "https://gw.example", slog.New(slog.DiscardHandler))
+		newFakeAssistantRepo(), &fakeTasksClient{}, "https://gw.example", SupportConfig{}, slog.New(slog.DiscardHandler))
 
 	_, err := svc.SendAssistantMessage(context.Background(), 10, 1, "Привет")
 	wantDomainError(t, err, "AI_DISABLED", 409)

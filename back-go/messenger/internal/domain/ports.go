@@ -74,6 +74,9 @@ type Repository interface {
 	// HasHumanMessageSince — было ли сообщение НЕ бота свежее since и старше
 	// beforeID (нужен ли автоответ техподдержки).
 	HasHumanMessageSince(ctx context.Context, convID int64, since time.Time, beforeID int64) (bool, error)
+	// HasSupportHumanReplySince — отвечал ли ЧЕЛОВЕК поддержки (kind='dev_reply',
+	// не бот) свежее since: пока разработчик в диалоге, ИИ-бот молчит.
+	HasSupportHumanReplySince(ctx context.Context, convID int64, since time.Time) (bool, error)
 	// FindCallMessage — свежайшая плашка kind='call' звонка в его диалоге
 	// (фильтр по диалогу обязателен: пересланные плашки живут в чужих).
 	FindCallMessage(ctx context.Context, callID, convID int64) (*Message, error)
@@ -100,6 +103,14 @@ type UserReader interface {
 	// DevChatUserIDs — адресаты событий dev-чата: владелец + все активные
 	// супер-админы (техподдержка).
 	DevChatUserIDs(ctx context.Context, ownerID int64) ([]int64, error)
+}
+
+// SupportAI — ИИ техподдержки dev-чата (gRPC aisvc SupportChat). messagesJSON —
+// история диалога [{role, content}] (владелец — user, поддержка — assistant),
+// системный промпт добавляет aisvc. Ключ не настроен / сбой → ошибка,
+// вызывающий откатывается на канированный автоответ.
+type SupportAI interface {
+	SupportReply(ctx context.Context, messagesJSON string) (string, error)
 }
 
 // FileStore — файлы вложений в общем uploads-каталоге (наружу отдаёт nginx

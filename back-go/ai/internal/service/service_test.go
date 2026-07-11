@@ -236,7 +236,7 @@ func (c *fakeCipher) Decrypt(enc []byte) (string, bool) {
 func newTestService() (*Service, *fakeRepo, *fakeLLM) {
 	repo := newFakeRepo()
 	llm := &fakeLLM{}
-	svc := New(repo, llm, &fakeCipher{}, newFakeFacts(), nil, nil, "", slog.New(slog.DiscardHandler))
+	svc := New(repo, llm, &fakeCipher{}, newFakeFacts(), nil, nil, "", SupportConfig{}, slog.New(slog.DiscardHandler))
 	return svc, repo, llm
 }
 
@@ -487,7 +487,7 @@ func TestUpdateSettingsEmptyKeyKeepsExisting(t *testing.T) {
 func TestUpdateSettingsMisconfiguredCipher(t *testing.T) {
 	repo := newFakeRepo()
 	repo.companies[1] = enabledCompany(1)
-	svc := New(repo, &fakeLLM{}, &fakeCipher{misconfigured: true}, newFakeFacts(), nil, nil, "", slog.New(slog.DiscardHandler))
+	svc := New(repo, &fakeLLM{}, &fakeCipher{misconfigured: true}, newFakeFacts(), nil, nil, "", SupportConfig{}, slog.New(slog.DiscardHandler))
 
 	key := "sk-new"
 	_, err := svc.UpdateSettings(context.Background(), companyAdmin(1), 1, dto.AiSettingsUpdate{APIKey: &key})

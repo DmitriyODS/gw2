@@ -227,6 +227,9 @@ func runMain(m *testing.M) int {
 		"UPLOAD_FOLDER=" + uploads,
 		"GRPC_ADDR=:19092",
 		"HTTP_ADDR=:18092",
+		// aisvc в харнесе не поднимается: пустой адрес выключает ИИ поддержки —
+		// автоответ dev-чата остаётся синхронным (его ждут тесты solo-чата).
+		"AI_GRPC_ADDR=",
 	})
 	// petsvc: исходящих межсервисных вызовов нет.
 	procs.start("petsvc", filepath.Join(repoRoot, "back-go/pets"), "./cmd/petsvc", []string{

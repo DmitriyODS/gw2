@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"encoding/json"
 	"path/filepath"
 	"strings"
 	"time"
@@ -125,14 +126,21 @@ func (s *Service) SendMessage(ctx context.Context, convID, senderID int64,
 			return nil, err
 		}
 		s.pub.Publish(ctx, "message:new", rooms(devIDs...), event)
-		auto, err := s.maybeSupportAutoReply(ctx, conv, msg)
-		if err != nil {
-			return nil, err
-		}
-		if auto != nil {
-			s.pub.Publish(ctx, "message:new", rooms(devIDs...), dto.MessageNewEvent{
-				ConversationID: conv.ID, Message: dto.NewMessage(auto), FromUserID: nil,
-			})
+		if s.ai != nil && msg.Text != nil {
+			// ИИ-поддержка: LLM-вызов занимает секунды — отвечаем фоном,
+			// HTTP-ответ отправителю не ждёт. Сообщение без текста (только
+			// вложения) ИИ не понять — им занимается канированная ветка.
+			s.scheduleSupportAIReply(conv, msg, devIDs)
+		} else {
+			auto, err := s.maybeSupportAutoReply(ctx, conv, msg)
+			if err != nil {
+				return nil, err
+			}
+			if auto != nil {
+				s.pub.Publish(ctx, "message:new", rooms(devIDs...), dto.MessageNewEvent{
+					ConversationID: conv.ID, Message: dto.NewMessage(auto), FromUserID: nil,
+				})
+			}
 		}
 	default:
 		recipientID := conv.OtherUserID(senderID)
@@ -168,6 +176,113 @@ func (s *Service) maybeSupportAutoReply(ctx context.Context, conv *domain.Conver
 	}
 	s.log.Info("message.support_auto_reply", "conversation_id", conv.ID, "message_id", reply.ID)
 	return reply, nil
+}
+
+// scheduleSupportAIReply — фоновый ответ ИИ техподдержки на сообщение
+// владельца dev-чата. Ошибки ИИ не фатальны: откат на канированный автоответ
+// (те же «сутки тишины»).
+func (s *Service) scheduleSupportAIReply(conv *domain.Conversation, msg *domain.Message, devIDs []int64) {
+	if msg.SenderID == nil || *msg.SenderID != conv.UserAID {
+		return // реплики поддержки бот не комментирует
+	}
+	go func() {
+		ctx, cancel := context.WithTimeout(context.Background(), supportReplyTimeout)
+		defer cancel()
+		reply, err := s.supportAIReply(ctx, conv, msg)
+		if err != nil {
+			s.log.Warn("support.ai_reply_failed", "conversation_id", conv.ID, "error", err)
+			reply, err = s.maybeSupportAutoReply(ctx, conv, msg)
+			if err != nil {
+				s.log.Warn("support.auto_reply_failed", "conversation_id", conv.ID, "error", err)
+				return
+			}
+		}
+		if reply == nil {
+			return
+		}
+		s.pub.Publish(ctx, "message:new", rooms(devIDs...), dto.MessageNewEvent{
+			ConversationID: conv.ID, Message: dto.NewMessage(reply), FromUserID: nil,
+		})
+	}()
+}
+
+// supportAIReply — синхронное ядро ИИ-ответа поддержки: молчание (nil, nil),
+// если человек-поддержка недавно отвечал (не влезаем в живой диалог); иначе
+// история диалога → aisvc → бот-сообщение kind='system_dev_reply'.
+func (s *Service) supportAIReply(ctx context.Context, conv *domain.Conversation,
+	msg *domain.Message) (*domain.Message, error) {
+
+	busy, err := s.repo.HasSupportHumanReplySince(ctx, conv.ID,
+		time.Now().UTC().Add(-SupportHumanLullPeriod))
+	if err != nil {
+		return nil, err
+	}
+	if busy {
+		return nil, nil
+	}
+	history, err := s.repo.ListMessages(ctx, conv.ID, conv.Side(conv.UserAID),
+		nil, nil, supportHistoryLimit)
+	if err != nil {
+		return nil, err
+	}
+	messagesJSON, err := supportHistoryJSON(conv, history, msg)
+	if err != nil {
+		return nil, err
+	}
+	content, err := s.ai.SupportReply(ctx, messagesJSON)
+	if err != nil {
+		return nil, err
+	}
+	reply, err := s.repo.CreateMessage(ctx, domain.NewMessage{
+		ConversationID: conv.ID,
+		Text:           &content,
+		Kind:           domain.KindDevReply,
+		IsBot:          true,
+	})
+	if err != nil {
+		return nil, err
+	}
+	s.log.Info("message.support_ai_reply", "conversation_id", conv.ID, "message_id", reply.ID)
+	return reply, nil
+}
+
+// supportHistoryJSON — история dev-чата в формате OpenAI: владелец — user,
+// поддержка (бот и люди) — assistant; только текстовые реплики, системный
+// промпт добавляет aisvc. Свежее msg гарантированно попадает в конец (история
+// из БД в теории может его не содержать из-за гонки).
+func supportHistoryJSON(conv *domain.Conversation, history []*domain.Message,
+	msg *domain.Message) (string, error) {
+
+	type turn struct {
+		Role    string `json:"role"`
+		Content string `json:"content"`
+	}
+	turns := make([]turn, 0, len(history)+1)
+	seen := false
+	for _, m := range history {
+		if m.Text == nil || *m.Text == "" {
+			continue
+		}
+		if m.Kind != domain.KindText && m.Kind != domain.KindDevReply {
+			continue
+		}
+		role := "assistant"
+		if m.SenderID != nil && *m.SenderID == conv.UserAID {
+			role = "user"
+		}
+		if m.ID == msg.ID {
+			seen = true
+		}
+		turns = append(turns, turn{Role: role, Content: *m.Text})
+	}
+	if !seen && msg.Text != nil && *msg.Text != "" {
+		turns = append(turns, turn{Role: "user", Content: *msg.Text})
+	}
+	if len(turns) == 0 {
+		return "", domain.NewError("EMPTY_MESSAGE", "Нет текста для ИИ", 400)
+	}
+	b, err := json.Marshal(turns)
+	return string(b), err
 }
 
 // ForwardMessage — пересылка в диалоги/пользователям: текст и файлы

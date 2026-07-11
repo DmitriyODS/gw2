@@ -56,6 +56,15 @@ func main() {
 	// APP_PUBLIC_BASE_URL — тот же паттерн формирования абсолютных ссылок,
 	// что уже использует authsvc для писем (verify-email/reset-password).
 	appBaseURL := bootstrap.Env("APP_PUBLIC_BASE_URL", "http://localhost:5173")
+	// Платформенный LLM техподдержки (dev-чат мессенджера): ключ НЕ компанийный.
+	// Пустой — ИИ поддержки выключен (msgsvc откатится на канированный автоответ).
+	support := service.SupportConfig{
+		APIKey: os.Getenv("SUPPORT_AI_API_KEY"),
+		Model:  os.Getenv("SUPPORT_AI_MODEL"),
+	}
+	if support.APIKey == "" {
+		log.Warn("SUPPORT_AI_API_KEY не задан — ИИ техподдержки выключен")
+	}
 	// Публичный ключ access-токенов PASETO (v4.public): токены выпускает
 	// authsvc, мы только проверяем подпись.
 	verifier, err := pasetoauth.NewVerifier(bootstrap.MustEnv(log, "PASETO_PUBLIC_KEY"))
@@ -83,7 +92,7 @@ func main() {
 	}
 	defer tasksClient.Close()
 	svc := service.New(repo, llm.New(baseURL, log), secret.New(encKey), facts,
-		assistants, tasksClient, appBaseURL, log)
+		assistants, tasksClient, appBaseURL, support, log)
 	eps := endpoint.New(svc)
 
 	// Фоновый цикл ТВ-фактов: стартовый проход + тик раз в час.

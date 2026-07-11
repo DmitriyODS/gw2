@@ -62,6 +62,17 @@ func (s *Server) Chat(ctx context.Context, req *aipb.ChatRequest) (*aipb.ChatRes
 	}, nil
 }
 
+func (s *Server) SupportChat(ctx context.Context, req *aipb.SupportChatRequest) (*aipb.SupportChatResponse, error) {
+	resp, err := s.eps.SupportChat(ctx, req.GetMessagesJson())
+	if err != nil {
+		if de := domain.AsDomainError(err); de != nil {
+			return &aipb.SupportChatResponse{Error: pbError(de)}, nil
+		}
+		return nil, status.Error(codes.Internal, err.Error())
+	}
+	return &aipb.SupportChatResponse{Content: resp.(string)}, nil
+}
+
 func (s *Server) Embed(ctx context.Context, req *aipb.EmbedRequest) (*aipb.EmbedResponse, error) {
 	resp, err := s.eps.Embed(ctx, endpoint.EmbedRequest{
 		CompanyID: req.GetCompanyId(), Text: req.GetText(),

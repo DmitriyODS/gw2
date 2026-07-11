@@ -23,6 +23,17 @@ const SupportAutoReplyText = "Здравствуйте! Спасибо за об
 // SupportAutoReplyAfter — «сутки тишины», после которых бот отвечает снова.
 const SupportAutoReplyAfter = 24 * time.Hour
 
+// SupportHumanLullPeriod — окно «человек-поддержка в диалоге»: если
+// супер-админ отвечал в dev-чате свежее, ИИ-бот молчит и не влезает.
+const SupportHumanLullPeriod = 15 * time.Minute
+
+// supportHistoryLimit — сколько последних сообщений dev-чата уходит ИИ
+// как контекст диалога.
+const supportHistoryLimit = 16
+
+// supportReplyTimeout — потолок фонового ИИ-ответа поддержки (LLM-вызов).
+const supportReplyTimeout = 60 * time.Second
+
 // MessengerService — все use-case'ы сервиса (REST + gRPC).
 type MessengerService interface {
 	ListConversations(ctx context.Context, userID int64, companyID *int64) ([]*dto.ConversationListItem, error)
@@ -55,14 +66,17 @@ type Service struct {
 	users domain.UserReader
 	files domain.FileStore
 	pub   domain.EventPublisher
-	log   *slog.Logger
+	// ai — ИИ техподдержки dev-чата (gRPC aisvc); nil — только канированный
+	// автоответ. Любая ошибка ИИ тоже откатывается на него (fail-open).
+	ai  domain.SupportAI
+	log *slog.Logger
 }
 
 var _ MessengerService = (*Service)(nil)
 
 func New(repo domain.Repository, users domain.UserReader, files domain.FileStore,
-	pub domain.EventPublisher, log *slog.Logger) *Service {
-	return &Service{repo: repo, users: users, files: files, pub: pub, log: log}
+	pub domain.EventPublisher, ai domain.SupportAI, log *slog.Logger) *Service {
+	return &Service{repo: repo, users: users, files: files, pub: pub, ai: ai, log: log}
 }
 
 // ── Общие ошибки ─────────────────────────────────────────────────

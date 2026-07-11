@@ -31,6 +31,7 @@ type Endpoints struct {
 	Embed          endpoint.Endpoint
 	SemanticSearch endpoint.Endpoint
 	ReindexTask    endpoint.Endpoint
+	SupportChat    endpoint.Endpoint
 
 	// ИИ-ассистент (REST /api/ai/assistant/*).
 	SendAssistantMessage  endpoint.Endpoint
@@ -130,6 +131,9 @@ func New(svc service.AiService) Endpoints {
 		},
 		Chat: func(ctx context.Context, request any) (any, error) {
 			return svc.Chat(ctx, request.(service.ChatArgs))
+		},
+		SupportChat: func(ctx context.Context, request any) (any, error) {
+			return svc.SupportReply(ctx, request.(string))
 		},
 		Embed: func(ctx context.Context, request any) (any, error) {
 			req := request.(EmbedRequest)

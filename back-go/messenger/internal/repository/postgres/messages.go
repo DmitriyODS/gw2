@@ -504,6 +504,17 @@ func (r *Repo) HasHumanMessageSince(ctx context.Context, convID int64, since tim
 	return exists, err
 }
 
+func (r *Repo) HasSupportHumanReplySince(ctx context.Context, convID int64, since time.Time) (bool, error) {
+	var exists bool
+	err := r.q(ctx).QueryRow(ctx, `
+		SELECT EXISTS(
+			SELECT 1 FROM messages
+			WHERE conversation_id = $1 AND kind = 'system_dev_reply' AND is_bot = FALSE
+			  AND created_at >= $2
+		)`, convID, since).Scan(&exists)
+	return exists, err
+}
+
 func (r *Repo) FindCallMessage(ctx context.Context, callID, convID int64) (*domain.Message, error) {
 	msgs, err := r.queryMessages(ctx, `SELECT `+msgCols+msgFrom+`
 		WHERE m.call_id = $1 AND m.kind = 'call' AND m.conversation_id = $2

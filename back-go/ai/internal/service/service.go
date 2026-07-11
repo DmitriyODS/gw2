@@ -83,6 +83,9 @@ type AiService interface {
 
 	// REST /api/ai/text-tools — ИИ-инструменты текста заметок (texttools.go).
 	TransformText(ctx context.Context, companyID int64, action, style, text string) (string, error)
+
+	// gRPC SupportChat — ИИ техподдержки dev-чата (support.go, зовёт msgsvc).
+	SupportReply(ctx context.Context, messagesJSON string) (string, error)
 }
 
 type Service struct {
@@ -97,6 +100,10 @@ type Service struct {
 	assistants domain.AssistantRepository
 	tasks      domain.TasksClient
 	appBaseURL string
+
+	// Платформенный LLM техподдержки (support.go): у dev-чата нет компании,
+	// компанийные ключи не подходят. Пустой ключ — поддержка без ИИ.
+	support SupportConfig
 
 	// кэш «готовых клиентов» per-company (как _cache во Flask ai_client).
 	mu    sync.Mutex
@@ -127,7 +134,7 @@ var _ AiService = (*Service)(nil)
 
 func New(repo domain.Repository, llmClient domain.LLMClient, cipher domain.SecretCipher,
 	facts domain.FactCache, assistants domain.AssistantRepository, tasks domain.TasksClient,
-	appBaseURL string, log *slog.Logger) *Service {
+	appBaseURL string, support SupportConfig, log *slog.Logger) *Service {
 	return &Service{
 		repo:       repo,
 		llm:        llmClient,
@@ -136,6 +143,7 @@ func New(repo domain.Repository, llmClient domain.LLMClient, cipher domain.Secre
 		assistants: assistants,
 		tasks:      tasks,
 		appBaseURL: appBaseURL,
+		support:    support,
 		log:        log,
 		cache:      map[int64]cacheEntry{},
 		reindexSem: make(chan struct{}, reindexWorkers),

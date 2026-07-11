@@ -147,6 +147,7 @@ import EmptyState from '@/components/common/EmptyState.vue'
 import UserStatusDialog from './UserStatusDialog.vue'
 import { useMessengerStore } from '@/stores/messenger.js'
 import { useAuthStore } from '@/stores/auth.js'
+import { stripMarkdown } from '@/utils/markdown.js'
 
 const messenger = useMessengerStore()
 const auth = useAuthStore()
@@ -234,7 +235,8 @@ function preview(msg) {
   if (msg.kind === 'call') {
     return msg.call?.media === 'audio' ? '📞 Аудиозвонок' : '📹 Видеозвонок'
   }
-  if (msg.text) return msg.text
+  // Разметка в однострочном превью вычищается (жирный/списки/ссылки → текст).
+  if (msg.text) return stripMarkdown(msg.text)
   if (msg.attachments?.length) {
     const a = msg.attachments[0]
     if (a.mime_type?.startsWith('image/')) return '📷 Фото'

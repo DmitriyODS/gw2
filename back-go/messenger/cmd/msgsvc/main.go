@@ -16,6 +16,8 @@ import (
 
 	googrpc "google.golang.org/grpc"
 
+	"github.com/DmitriyODS/gw2/back-go/messenger/internal/clients"
+	"github.com/DmitriyODS/gw2/back-go/messenger/internal/domain"
 	"github.com/DmitriyODS/gw2/back-go/messenger/internal/endpoint"
 	"github.com/DmitriyODS/gw2/back-go/messenger/internal/files"
 	"github.com/DmitriyODS/gw2/back-go/messenger/internal/repository/postgres"
@@ -55,7 +57,25 @@ func main() {
 	users := postgres.NewUserReader(pool)
 	store := files.NewStore(storage.FromEnv(log, uploadFolder))
 	pub := events.NewPublisher(rdb, log, "gw2:messenger:events")
-	svc := service.New(repo, users, store, pub, log)
+	// ИИ техподдержки dev-чата — gRPC aisvc (SupportChat). Fail-open: aisvc
+	// недоступен / ключ не настроен → канированный автоответ. ЯВНО пустой
+	// AI_GRPC_ADDR= выключает ИИ совсем (автоответ синхронный — так работает
+	// apitest, где aisvc не поднимается); не задан вовсе — дефолтный адрес.
+	aiAddr := "localhost:9093"
+	if v, ok := os.LookupEnv("AI_GRPC_ADDR"); ok {
+		aiAddr = v
+	}
+	var supportAI domain.SupportAI
+	if aiAddr != "" {
+		client, err := clients.NewSupportAI(aiAddr, log)
+		if err != nil {
+			log.Error("ai.client_failed", "error", err)
+			os.Exit(1)
+		}
+		defer client.Close()
+		supportAI = client
+	}
+	svc := service.New(repo, users, store, pub, supportAI, log)
 	eps := endpoint.New(svc)
 
 	grpcAddr := bootstrap.Env("GRPC_ADDR", ":9092")
