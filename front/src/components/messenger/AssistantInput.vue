@@ -8,7 +8,7 @@
       class="ai-textarea"
       enterkeyhint="enter"
       :disabled="disabled"
-      @keydown.enter.exact="onEnterKey"
+      @keydown.enter="onEnterKey"
       @input="autoresize"
     />
     <button
@@ -42,7 +42,9 @@ const isTouchDevice = window.matchMedia?.('(hover: none) and (pointer: coarse)')
 const canSend = computed(() => !props.sending && !props.disabled && Boolean(text.value.trim()))
 
 function onEnterKey(e) {
-  if (isTouchDevice) return
+  if (e.shiftKey || e.altKey) return // перенос строки
+  // Cmd/Ctrl+Enter отправляет везде; голый Enter — только на десктопе.
+  if (isTouchDevice && !e.metaKey && !e.ctrlKey) return
   e.preventDefault()
   submit()
 }

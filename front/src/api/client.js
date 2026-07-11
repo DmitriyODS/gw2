@@ -29,8 +29,14 @@ function fetchWithTimeout(url, options = {}, ms = 8000) {
 }
 
 async function refreshToken() {
-  const resp = await fetchWithTimeout('/api/auth/refresh', { method: 'POST', credentials: 'include' }, 5000)
-  if (!resp.ok) throw new Error('refresh_failed')
+  let resp
+  try {
+    resp = await fetchWithTimeout('/api/auth/refresh', { method: 'POST', credentials: 'include' }, 5000)
+  } catch {
+    // Сеть/таймаут: сервер НЕ ответил — это не отказ в сессии.
+    throw { status: 0, error: 'NETWORK_ERROR' }
+  }
+  if (!resp.ok) throw { status: resp.status, error: 'refresh_failed' }
   // Тело несёт и токен, и клеймы сессии (PASETO на клиенте не декодируется).
   return resp.json()
 }
@@ -90,10 +96,16 @@ export async function apiRequest(path, options = {}) {
       })
       refreshQueue = []
       return apiRequest(path, { ...options, _retry: true })
-    } catch {
+    } catch (e) {
       isRefreshing = false
       refreshQueue.forEach(({ reject }) => reject(new Error('unauthorized')))
       refreshQueue = []
+      // Refresh не ДОШЁЛ до сервера (обрыв сети/таймаут) — сессия не истекла:
+      // не разлогиниваем, отдаём сетевую ошибку; access обновится следующим
+      // запросом, когда сеть вернётся.
+      if ((e?.status ?? 0) === 0 || e?.status >= 500) {
+        throw { status: 0, error: 'NETWORK_ERROR', message: 'Сервер недоступен' }
+      }
       auth.clearAuth()
       throw { status: 401, error: 'unauthorized', message: 'Сессия истекла' }
     }

@@ -11,6 +11,9 @@
     </div>
     <div v-if="initializing" class="app-loading">
       <ProgressSpinner />
+      <p v-if="authStore.connecting" class="app-loading-hint">
+        Нет соединения с сервером — подключимся, как только появится сеть
+      </p>
     </div>
     <CompanyDisabledScreen v-else-if="authStore.companyDisabled" />
     <template v-else-if="isFullscreenRoute">
@@ -270,11 +273,21 @@ onBeforeUnmount(() => {
 .app-loading {
   flex: 1;
   display: flex;
+  flex-direction: column;
+  gap: 16px;
   align-items: center;
   justify-content: center;
   width: 100%;
   min-height: 100dvh;
   background: var(--gw-bg);
+}
+
+.app-loading-hint {
+  margin: 0;
+  padding: 0 24px;
+  font-size: 14px;
+  color: var(--color-text-dim);
+  text-align: center;
 }
 
 .fullscreen-content {

@@ -4,7 +4,7 @@
     :class="{ outgoing: isMine, swiping: swipeDx > 0 }"
     :data-msg-id="message.id"
     :style="rowStyle"
-    @contextmenu.prevent="onContextMenu"
+    @contextmenu="onContextMenu"
     @pointerdown="onPointerDown"
     @pointermove="onPointerMove"
     @pointerup="onPointerUp"
@@ -223,8 +223,15 @@ const taskPillStyle = computed(() => {
   } : {}
 })
 
-/* ── Контекстное меню (правый клик / long-press) ── */
+/* ── Контекстное меню (только ПКМ мыши) ── */
 function onContextMenu(e) {
+  // Long-press на таче тоже стреляет contextmenu — но меню там открывает ТАП
+  // (maybeTapMenu); удержание отдано браузеру под выделение текста, поэтому
+  // ни меню, ни preventDefault. Chrome даёт pointerType прямо на событии,
+  // Safari/старые браузеры — фолбэк на тип последнего pointerdown.
+  const src = e.pointerType || pointerType
+  if (src === 'touch' || src === 'pen') return
+  e.preventDefault()
   emit('context-menu', { x: e.clientX, y: e.clientY, message: props.message })
 }
 
@@ -240,9 +247,11 @@ const rowStyle = computed(() =>
   swipeDx.value > 0 ? { transform: `translateX(${swipeDx.value}px)` } : {})
 
 function onPointerDown(e) {
+  // Тип указателя запоминаем ДО выхода по ПКМ: он — фолбэк для onContextMenu
+  // в браузерах, где contextmenu не несёт pointerType.
+  pointerType = e.pointerType
   if (e.button === 2) return  // ПКМ обрабатывается contextmenu
   pointerActiveId = e.pointerId
-  pointerType = e.pointerType
   downAt = Date.now()
   swipeStartX = e.clientX
   swipeStartY = e.clientY

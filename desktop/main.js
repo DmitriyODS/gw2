@@ -56,6 +56,9 @@ function loadSettings() {
   try {
     settings = { ...SETTINGS_DEFAULTS, ...JSON.parse(fs.readFileSync(settingsFile(), 'utf8')) }
   } catch {}
+  // Инвариант: без значка трея не сворачиваемся в трей (окно не вызвать
+  // обратно) — нормализуем и конфиги, записанные старыми версиями.
+  if (!settings.trayIcon) settings.closeToTray = false
 }
 
 function saveSettings() {
@@ -284,7 +287,15 @@ function applySetting(key) {
   if (key === 'autostart') applyAutostart()
   if (key === 'trayIcon') {
     if (settings.trayIcon) createTray()
-    else destroyTray()
+    else {
+      destroyTray()
+      // Сворачивание в трей без значка — ловушка (окно не вызвать обратно):
+      // выключение значка гасит и closeToTray.
+      if (settings.closeToTray) {
+        settings.closeToTray = false
+        saveSettings()
+      }
+    }
   }
 }
 

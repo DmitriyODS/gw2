@@ -98,7 +98,7 @@
         rows="1"
         class="text-area"
         enterkeyhint="enter"
-        @keydown.enter.exact="onEnterKey"
+        @keydown.enter="onEnterKey"
         @input="autoresize"
         @paste="onPaste"
         @contextmenu="onTextContextMenu"
@@ -158,7 +158,10 @@ const textarea = ref(null)
 const isTouchDevice = window.matchMedia?.('(hover: none) and (pointer: coarse)').matches ?? false
 
 function onEnterKey(e) {
-  if (isTouchDevice) return // default-поведение textarea — перенос строки
+  if (e.shiftKey || e.altKey) return // перенос строки
+  // Cmd/Ctrl+Enter отправляет везде (привычка из других мессенджеров);
+  // голый Enter — только на десктопе (на таче он переносит строку).
+  if (isTouchDevice && !e.metaKey && !e.ctrlKey) return
   e.preventDefault()
   submit()
 }
@@ -221,18 +224,41 @@ const MD_TOOLS = [
   { key: 'link', label: 'Ссылка', icon: 'link', linkify: true },
 ]
 
-const mdToolbar = ref({ visible: false, x: 0, y: 0, range: null })
-const mdStyle = computed(() => ({
-  position: 'fixed',
-  left: mdToolbar.value.x + 'px',
-  top: mdToolbar.value.y + 'px',
-  zIndex: 12000,
-}))
-mdToolbar.value.style = mdStyle.value
+const mdToolbar = ref({ visible: false, range: null, style: {} })
 
-watch([() => mdToolbar.value.x, () => mdToolbar.value.y], () => {
-  mdToolbar.value.style = mdStyle.value
-})
+/* Экранные координаты выделенного фрагмента: сам textarea их не отдаёт,
+   поэтому меряем по зеркальному div с теми же текстовыми метриками
+   (стандартный приём textarea-caret-position). Возвращает rect первой
+   строки выделения в координатах viewport. */
+function selectionViewportRect(el, start, end) {
+  const style = getComputedStyle(el)
+  const mirror = document.createElement('div')
+  for (const p of [
+    'boxSizing', 'width', 'fontFamily', 'fontSize', 'fontWeight', 'fontStyle',
+    'letterSpacing', 'lineHeight', 'textTransform', 'textIndent',
+    'paddingTop', 'paddingRight', 'paddingBottom', 'paddingLeft',
+    'borderTopWidth', 'borderRightWidth', 'borderBottomWidth', 'borderLeftWidth',
+  ]) mirror.style[p] = style[p]
+  Object.assign(mirror.style, {
+    position: 'fixed', top: '0', left: '0', visibility: 'hidden',
+    whiteSpace: 'pre-wrap', overflowWrap: 'break-word',
+  })
+  mirror.textContent = el.value.slice(0, start)
+  const marker = document.createElement('span')
+  marker.textContent = el.value.slice(start, end) || '​'
+  mirror.appendChild(marker)
+  document.body.appendChild(mirror)
+  const line = marker.getClientRects()[0] || marker.getBoundingClientRect()
+  const mirrorRect = mirror.getBoundingClientRect()
+  mirror.remove()
+  const elRect = el.getBoundingClientRect()
+  return {
+    top: elRect.top + (line.top - mirrorRect.top) - el.scrollTop,
+    bottom: elRect.top + (line.bottom - mirrorRect.top) - el.scrollTop,
+    left: elRect.left + (line.left - mirrorRect.left),
+    width: line.width,
+  }
+}
 
 function onTextContextMenu(e) {
   const el = textarea.value
@@ -241,12 +267,23 @@ function onTextContextMenu(e) {
   const end = el.selectionEnd
   if (start === end) return  // нет выделения — не перехватываем стандартное меню
   e.preventDefault()
+  // Меню — строго НАД выделенной строкой (не над точкой клика: кликнуть можно
+  // и ниже выделения). По X центрируется на выделении с прижимом к краям
+  // экрана; у самого верха окна (некуда открываться) — под строку.
+  const sel = selectionViewportRect(el, start, end)
+  const halfWidth = 132 // ~половина ширины тулбара (7 кнопок по 32px + отступы)
+  const x = Math.min(Math.max(sel.left + sel.width / 2, halfWidth + 8), window.innerWidth - halfWidth - 8)
+  const openUp = sel.top > 64
   mdToolbar.value = {
     visible: true,
-    x: e.clientX,
-    y: e.clientY,
     range: { start, end },
-    style: { position: 'fixed', left: e.clientX + 'px', top: e.clientY + 'px', zIndex: 12000 },
+    style: {
+      position: 'fixed',
+      left: x + 'px',
+      top: (openUp ? sel.top - 8 : sel.bottom + 8) + 'px',
+      transform: openUp ? 'translate(-50%, -100%)' : 'translate(-50%, 0)',
+      zIndex: 12000,
+    },
   }
 }
 

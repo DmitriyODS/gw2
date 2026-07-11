@@ -23,6 +23,9 @@ export const useAuthStore = defineStore('auth', () => {
   const companies = ref([])
   const forceChange = ref(false)
   const ready = ref(false)
+  // Старт без сети: сервер недоступен и статус сессии ещё неизвестен —
+  // App.vue показывает «подключаемся», а не экран входа.
+  const connecting = ref(false)
   // Идёт намеренный выход: client.js на это время глушит «Сессия истекла»
   // от хвостовых запросов, чтобы logout был тихим.
   const loggingOut = ref(false)
@@ -249,19 +252,49 @@ export const useAuthStore = defineStore('auth', () => {
     companyDisabled.value = null
   }
 
+  // Пауза перед повторной попыткой восстановления: либо браузер сообщил
+  // о появлении сети (online), либо просто прошло время (навигатор в
+  // Electron/WebView не всегда честен про offline).
+  function waitReconnect(ms = 3000) {
+    return new Promise((resolve) => {
+      const done = () => {
+        window.removeEventListener('online', done)
+        clearTimeout(timer)
+        resolve()
+      }
+      const timer = setTimeout(done, ms)
+      window.addEventListener('online', done, { once: true })
+    })
+  }
+
   async function _restore() {
     if (token.value) { ready.value = true; return }
-    try {
-      const data = await refreshToken()
-      if (!data.force_change) {
-        applySession(data)
-        await loadMe()
+    // «Сервер недоступен» ≠ «не залогинен»: refresh-cookie может быть жива, и
+    // показать экран входа было бы враньём (десктоп/мобильная обёртка часто
+    // стартуют раньше сети). Ретраим до внятного ответа сервера; на login
+    // отправляет только настоящий отказ (4xx от /auth/refresh).
+    for (;;) {
+      try {
+        const data = await refreshToken()
+        if (!data.force_change) {
+          applySession(data)
+          // Профиль — не повод крутить восстановление заново: сессия уже есть,
+          // /users/me догрузится штатными ретраями экранов.
+          await loadMe().catch(() => {})
+        }
+        break
+      } catch (e) {
+        const status = e?.status ?? 0
+        if (status === 0 || status >= 500) {
+          connecting.value = true
+          await waitReconnect()
+          continue
+        }
+        break // валидной refresh-cookie нет — остаёмся неавторизованными
       }
-    } catch {
-      // Валидной refresh-cookie нет — остаёмся неавторизованными.
-    } finally {
-      ready.value = true
     }
+    connecting.value = false
+    ready.value = true
   }
 
   function ensureReady() {
@@ -270,7 +303,7 @@ export const useAuthStore = defineStore('auth', () => {
   }
 
   return {
-    user, token, forceChange, isAuth, ready, loggingOut,
+    user, token, forceChange, isAuth, ready, connecting, loggingOut,
     userId, companyId, companyName, companySettings, isSuperAdmin, companyDisabled,
     companies, isMultiCompany, roleLevel,
     ensureReady, login, register, verifyEmail, resendVerification,

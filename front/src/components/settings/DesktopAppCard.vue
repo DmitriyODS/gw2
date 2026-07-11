@@ -18,7 +18,9 @@
       <ToggleSwitch :model-value="s.autostart" @update:model-value="set('autostart', $event)" />
     </label>
 
-    <label class="dac-row">
+<!-- Свернуть в трей при скрытом значке — ловушка (окно не вернуть),
+         поэтому без значка тумблер сворачивания недоступен. -->
+    <label v-if="s.trayIcon" class="dac-row">
       <div class="dac-row-text">
         <span class="dac-row-title">Сворачивать в трей при закрытии</span>
         <span class="dac-row-desc">Крестик прячет окно, приложение живёт в трее; выключено — закрывает совсем.</span>
@@ -70,7 +72,12 @@ async function set(key, value) {
     if (res && !res.error) Object.assign(s, res)
   } catch {
     notify.warn('Обёртка не поддерживает эту настройку — обновите приложение')
+    return
   }
+  // Выключенный значок трея гасит и «сворачивать в трей»: иначе окно,
+  // спрятанное крестиком, нечем вызвать обратно. Новая обёртка делает это
+  // сама (и уже вернула settings), для старой — добиваем отдельным вызовом.
+  if (key === 'trayIcon' && !value && s.closeToTray) await set('closeToTray', false)
 }
 
 function setMuted(v) {
