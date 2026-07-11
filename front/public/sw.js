@@ -7,8 +7,11 @@
       PWA (Chrome предлагает «Установить» только при SW с fetch-обработчиком) и
       открывалось офлайн. API/WS/uploads/livekit НЕ кэшируем — это живой трафик. */
 
-const CACHE = 'gw-shell-v2'
-const APP_SHELL = ['/', '/index.html', '/logo.svg', '/manifest.webmanifest']
+const CACHE = 'gw-shell-v3'
+// '/' в оболочке НЕ кэшируем отдельной записью: она замораживалась при
+// установке SW, офлайн-фолбэк матчил её раньше '/index.html' — и офлайн вечно
+// поднималась сборка времён установки (v3 вычищает отравленные кэши v2).
+const APP_SHELL = ['/index.html', '/logo.svg', '/manifest.webmanifest']
 
 self.addEventListener('install', (event) => {
   event.waitUntil(
@@ -52,13 +55,23 @@ self.addEventListener('fetch', (event) => {
   // index.html из HTTP-кэша браузера.
   if (req.mode === 'navigate') {
     event.respondWith((async () => {
+      const cache = await caches.open(CACHE)
       try {
         const fresh = await fetch(req, { cache: 'no-cache' })
-        const cache = await caches.open(CACHE)
-        cache.put('/index.html', fresh.clone()).catch(() => {})
+        // 5xx/404 (рестарт сервера в момент деплоя) в оболочку не кладём —
+        // закэшированная страница ошибки nginx «ослепила» бы приложение.
+        if (fresh.ok) cache.put('/index.html', fresh.clone()).catch(() => {})
         return fresh
       } catch {
-        return (await caches.match(req)) || (await caches.match('/index.html'))
+        // Офлайн: последняя УСПЕШНАЯ оболочка (ключ обновляется при каждой
+        // онлайн-навигации) — и только если её входной чанк тоже в кэше.
+        // Иначе честная сетевая ошибка: нативные обёртки покажут свой экран
+        // «нет соединения» вместо белого экрана на битых ассетах.
+        const index = await cache.match('/index.html')
+        if (!index) return Response.error()
+        const entry = (await index.clone().text()).match(/src="(\/assets\/[^"]+\.js)"/)?.[1]
+        if (entry && !(await cache.match(entry))) return Response.error()
+        return index
       }
     })())
     return

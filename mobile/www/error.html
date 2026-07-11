@@ -43,18 +43,52 @@
     var delay = Math.min(Number(sessionStorage.getItem('gw_retry_delay')) || 2000, 15000)
     sessionStorage.setItem('gw_retry_delay', String(Math.min(delay * 2, 15000)))
 
-    function retry() { location.replace(APP_URL) }
+    var btn = document.getElementById('retry')
+
+    // Навигация вслепую при мёртвой сети оставляла голый белый WebView (эту
+    // страницу уже сменила пустая ошибка навигации, отката назад нет). Поэтому
+    // сначала проверяем достижимость сервера лёгким запросом и уходим с этой
+    // страницы только когда он реально ответил.
+    function probe() {
+      return new Promise(function (resolve) {
+        var ctrl = window.AbortController ? new AbortController() : null
+        var t = setTimeout(function () {
+          if (ctrl) ctrl.abort()
+          resolve(false)
+        }, 5000)
+        fetch(APP_URL + '/api/changelog', { mode: 'no-cors', cache: 'no-store', signal: ctrl && ctrl.signal })
+          .then(function () { clearTimeout(t); resolve(true) })
+          .catch(function () { clearTimeout(t); resolve(false) })
+      })
+    }
+
+    var checking = false
+    function tryConnect(manual) {
+      if (checking) return
+      checking = true
+      if (manual) btn.textContent = 'Проверяем…'
+      probe().then(function (alive) {
+        if (alive) {
+          sessionStorage.removeItem('gw_retry_delay')
+          location.replace(APP_URL)
+          return
+        }
+        checking = false
+        if (manual) btn.textContent = 'Повторить'
+      })
+    }
 
     function schedule() {
       setTimeout(function () {
-        // Сеть точно отсутствует — не дёргаем загрузку, ждём события online.
-        if (navigator.onLine === false) { schedule(); return }
-        retry()
+        schedule()
+        // Сеть точно отсутствует — не дёргаем даже пробу, ждём события online.
+        if (navigator.onLine === false) return
+        tryConnect(false)
       }, delay)
     }
 
-    document.getElementById('retry').addEventListener('click', retry)
-    window.addEventListener('online', retry)
+    btn.addEventListener('click', function () { tryConnect(true) })
+    window.addEventListener('online', function () { tryConnect(false) })
     schedule()
   </script>
 </body>
