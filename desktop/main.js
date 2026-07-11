@@ -407,7 +407,7 @@ function buildMenu() {
    версией оболочки: apps/desktop/version.json на сервере против
    app.getVersion() (метка и артефакты выкладываются `make deploy-desktop`).
    Новее → предлагаем скачать установщик своей платформы. */
-const UPDATE_CHECK_MS = 6 * 60 * 60 * 1000
+const UPDATE_CHECK_MS = 60 * 60 * 1000 // при старте и дальше раз в час
 let updateOffered = null // версия, которую уже предлагали — не спамим диалогом
 
 function isNewer(a, b) {
@@ -553,7 +553,8 @@ app.whenReady().then(() => {
   createWindow(appUrl)
   if (settings.trayIcon) createTray()
 
-  // Первая проверка — после того как окно загрузится и осядет.
+  // Первая проверка — сразу при запуске (после того как окно загрузится и
+  // осядет), дальше — каждый час.
   setTimeout(() => checkShellUpdate(appUrl), 15_000)
   setInterval(() => checkShellUpdate(appUrl), UPDATE_CHECK_MS)
 })

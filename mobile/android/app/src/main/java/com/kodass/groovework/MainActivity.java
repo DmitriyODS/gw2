@@ -7,6 +7,8 @@ import android.net.Uri;
 import android.net.http.SslError;
 import android.os.Bundle;
 import android.os.Environment;
+import android.os.Handler;
+import android.os.Looper;
 import android.webkit.CookieManager;
 import android.webkit.SslErrorHandler;
 import android.webkit.URLUtil;
@@ -21,6 +23,17 @@ public class MainActivity extends BridgeActivity {
     // Прод-адрес платформы. UI приезжает с сервера (server.url в
     // capacitor.config.json), здесь адрес нужен каналу обновлений обёртки.
     static final String APP_URL = "https://gw.kodass.ru";
+
+    // Почасовая проверка обновлений обёртки: onResume не срабатывает, пока
+    // приложение постоянно открыто, — тикаем таймером (троттл в UpdateChecker).
+    private final Handler updateHandler = new Handler(Looper.getMainLooper());
+    private final Runnable updateTick = new Runnable() {
+        @Override
+        public void run() {
+            UpdateChecker.maybeCheck(MainActivity.this);
+            updateHandler.postDelayed(this, 60 * 60 * 1000L);
+        }
+    };
 
     @Override
     public void onCreate(Bundle savedInstanceState) {
@@ -67,6 +80,15 @@ public class MainActivity extends BridgeActivity {
                 Toast.makeText(this, "Не удалось скачать файл", Toast.LENGTH_SHORT).show();
             }
         });
+
+        // Первая проверка обновления — сразу при запуске, дальше — раз в час.
+        updateHandler.post(updateTick);
+    }
+
+    @Override
+    public void onDestroy() {
+        updateHandler.removeCallbacks(updateTick);
+        super.onDestroy();
     }
 
     @Override
