@@ -65,31 +65,48 @@ const nativeShell = () => window.Capacitor?.Plugins?.NativeShell
 // страницы. ВАЖНО: вызывать после обновления DOM (watch с flush:'post') —
 // токены переопределяются селектором [data-dark] на .app-layout, и до
 // перерисовки резолвится цвет предыдущей темы.
-export function syncNativeSystemBars(isDark) {
+export function syncNativeSystemBars() {
   const shell = nativeShell()
   if (!isNativeApp() || !shell) return
   const host = document.querySelector('.app-layout') || document.body
-  let rgb = getComputedStyle(host).backgroundColor
-  if (!isOpaque(rgb)) {
+  let rgba = cssColorToRgba(getComputedStyle(host).backgroundColor)
+  if (!rgba || rgba[3] < 250) {
     // Фон не задан/полупрозрачен (экран логина и т.п.) — цвет из токенов,
     // резолвим probe-элементом внутри host (там действуют [data-dark]).
     const probe = document.createElement('div')
     probe.style.cssText = 'position:fixed;visibility:hidden;pointer-events:none;background:var(--color-bg, var(--color-surface))'
     host.appendChild(probe)
-    rgb = getComputedStyle(probe).backgroundColor
+    rgba = cssColorToRgba(getComputedStyle(probe).backgroundColor)
     probe.remove()
   }
-  const m = rgb.match(/\d+(\.\d+)?/g)
-  if (!m || m.length < 3) return
-  const hex = '#' + m.slice(0, 3).map((v) => Math.round(+v).toString(16).padStart(2, '0')).join('')
-  shell.setSystemBars({ color: hex, dark: !!isDark }).catch(() => {})
+  if (!rgba) return
+  const [r, g, b] = rgba
+  const hex = '#' + [r, g, b].map((v) => v.toString(16).padStart(2, '0')).join('')
+  // Читаемость иконок бара — по фактической яркости фона, а не по флагу темы:
+  // «светлая» тема с тёмным кастомным фоном тоже получит светлые иконки.
+  const dark = (0.2126 * r + 0.7152 * g + 0.0722 * b) / 255 < 0.5
+  shell.setSystemBars({ color: hex, dark }).catch(() => {})
 }
 
-function isOpaque(rgb) {
-  const m = rgb?.match(/rgba?\(([^)]+)\)/)
-  if (!m) return false
-  const parts = m[1].split(',').map(parseFloat)
-  return parts.length < 4 || parts[3] >= 0.99
+/* getComputedStyle отдаёт цвет В ФОРМАТЕ ЕГО ОПИСАНИЯ: токены темы — это
+   oklch(), т.е. строка вида "oklch(0.99 0.003 260)", а не rgb(). Прежний
+   парсер выдирал из неё числа как каналы 0..255 и собирал мусорный hex —
+   нативный плагин отвергал его, и панели вовсе не следовали теме. Канва
+   конвертирует ЛЮБОЙ понятный браузеру цвет в честный sRGB-пиксель. */
+let colorCtx = null
+function cssColorToRgba(color) {
+  if (!color) return null
+  if (!colorCtx) {
+    const canvas = document.createElement('canvas')
+    canvas.width = canvas.height = 1
+    colorCtx = canvas.getContext('2d', { willReadFrequently: true })
+    if (!colorCtx) return null
+  }
+  colorCtx.clearRect(0, 0, 1, 1)
+  colorCtx.fillStyle = '#000' // сброс: невалидный color оставил бы прошлый fillStyle
+  colorCtx.fillStyle = color
+  colorCtx.fillRect(0, 0, 1, 1)
+  return Array.from(colorCtx.getImageData(0, 0, 1, 1).data)
 }
 
 // Номер установленной сборки обёртки (ГГММДДН) — для «О приложении».

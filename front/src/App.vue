@@ -141,7 +141,7 @@ watch(() => authStore.user, (user, prev) => {
 // красится в прошлую тему (а при старте .app-layout ещё не существует вовсе).
 watch(
   () => [themeStore.dark, themeStore.currentPreset, themeStore.bgGradient],
-  () => syncNativeSystemBars(themeStore.dark),
+  () => syncNativeSystemBars(),
   { immediate: true, flush: 'post', deep: true },
 )
 
