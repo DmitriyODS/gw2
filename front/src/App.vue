@@ -76,7 +76,7 @@ import {
   playNotifySound, focusAppWindow,
 } from '@/utils/systemNotify.js'
 import { installAppUpdateWatcher } from '@/utils/appUpdate.js'
-import { initNativePush, syncNativeSystemBars } from '@/utils/nativeApp.js'
+import { initNativePush, syncNativeSystemBars, getSharedPayload } from '@/utils/nativeApp.js'
 import AppSidebar from '@/components/layout/AppSidebar.vue'
 import AppBottomNav from '@/components/layout/AppBottomNav.vue'
 import CompanyDisabledScreen from '@/components/layout/CompanyDisabledScreen.vue'
@@ -154,30 +154,61 @@ function onOpenConversation(e) {
   router.push(`/messenger/${id}`)
 }
 
-/* Системное «Поделиться» текстом (Android-обёртка → MainActivity шлёт
-   gw:shared-text): открываем выбор получателя, затем чат с готовым текстом. */
+/* Системное «Поделиться» (Android-обёртка): текст И/ИЛИ любые файлы (в т.ч.
+   несколько). Pull-модель — забираем контент у нативки, когда сессия готова
+   (надёжно к холодному старту), открываем выбор получателя, затем чат с
+   вложениями и готовым текстом (как в Telegram). */
 const sharePickOpen = ref(false)
 const sharedText = ref('')
+const sharedFiles = ref([])
 
-function onSharedText(e) {
-  const t = (e?.detail?.text || '').trim()
-  if (!t || !authStore.token) return
-  sharedText.value = t
-  sharePickOpen.value = true
+function b64ToFile(f) {
+  const bin = atob(f.data)
+  const arr = new Uint8Array(bin.length)
+  for (let i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i)
+  return new File([arr], f.name || 'файл', { type: f.mimeType || 'application/octet-stream' })
+}
+
+let pullingShare = false
+async function pullShare() {
+  if (pullingShare || !authStore.token) return
+  pullingShare = true
+  try {
+    const payload = await getSharedPayload()
+    if (!payload) return
+    const text = (payload.text || '').trim()
+    const raw = Array.isArray(payload.files) ? payload.files : []
+    const tooBig = raw.filter(f => f?.tooLarge)
+    const files = raw.filter(f => f?.data).map(b64ToFile)
+    if (tooBig.length) {
+      notif.error(`Не отправить (больше 25 МБ): ${tooBig.map(f => f.name).join(', ')}`)
+    }
+    if (!text && !files.length) return
+    sharedText.value = text
+    sharedFiles.value = files
+    sharePickOpen.value = true
+  } finally {
+    pullingShare = false
+  }
 }
 
 async function onSharePickRecipient(user) {
   sharePickOpen.value = false
   try {
     const id = await messengerStore.openWith(user.id)
-    // Черновик подхватит MessengerView при активации чата.
-    messengerStore.pendingDraft = { convId: id, text: sharedText.value }
+    // Текст + файлы подхватит MessengerView при активации чата (загрузит
+    // вложения существующим механизмом, останется написать и отправить).
+    messengerStore.pendingDraft = { convId: id, text: sharedText.value, files: sharedFiles.value }
     router.push(`/messenger/${id}`)
   } catch { /* ошибка открытия чата — молча */ }
   sharedText.value = ''
+  sharedFiles.value = []
 }
 watch(() => authStore.user, (user, prev) => {
-  if (user && !prev) initNativePush(openFromPush)
+  if (user && !prev) {
+    initNativePush(openFromPush)
+    pullShare() // сессия готова — забираем контент из «Поделиться», если он ждёт
+  }
 })
 
 // Мобильная обёртка: системные панели следуют теме — тёмная/светлая, смена
@@ -290,19 +321,16 @@ onMounted(() => {
   window.addEventListener('call:focus-overlay', onCallFocusOverlay)
   window.addEventListener('beforeunload', onBeforeUnloadGuard)
   window.addEventListener('messenger:open-conversation', onOpenConversation)
-  window.addEventListener('gw:shared-text', onSharedText)
-  // Обёртка могла выставить текст до навешивания слушателя (холодный старт).
-  if (window.__gwSharedText) {
-    const shared = window.__gwSharedText
-    window.__gwSharedText = null
-    onSharedText({ detail: shared })
-  }
+  window.addEventListener('gw:share-available', pullShare)
+  // Холодный старт: нативка могла выставить флаг до навешивания слушателя —
+  // и в любом случае буфер шаринга ждёт в плагине, заберём его при готовности.
+  if (window.__gwShareAvailable) { window.__gwShareAvailable = false; pullShare() }
 })
 onBeforeUnmount(() => {
   window.removeEventListener('call:focus-overlay', onCallFocusOverlay)
   window.removeEventListener('beforeunload', onBeforeUnloadGuard)
   window.removeEventListener('messenger:open-conversation', onOpenConversation)
-  window.removeEventListener('gw:shared-text', onSharedText)
+  window.removeEventListener('gw:share-available', pullShare)
   clearTimeout(tutorialTimer)
 })
 </script>

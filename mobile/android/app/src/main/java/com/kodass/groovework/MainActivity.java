@@ -20,7 +20,7 @@ import android.widget.Toast;
 import com.getcapacitor.BridgeActivity;
 import com.getcapacitor.BridgeWebViewClient;
 
-import org.json.JSONObject;
+import java.util.ArrayList;
 
 public class MainActivity extends BridgeActivity {
 
@@ -101,40 +101,58 @@ public class MainActivity extends BridgeActivity {
         handleShareIntent(intent);
     }
 
-    // Извлекаем расшаренный текст (Intent.EXTRA_TEXT + опц. EXTRA_SUBJECT) и
-    // доставляем в JS. WebView на холодном старте ещё грузит SPA — доставляем с
-    // задержкой и повтором; фронт также читает window.__gwSharedText при mount.
+    // Приложение открыто через системное «Поделиться»: текст и/или файлы
+    // (в т.ч. несколько) складываем в буфер плагина NativeShell. Веб-слой
+    // заберёт их getSharedPayload(), когда SPA и сессия готовы — так холодный
+    // старт ничего не теряет. Здесь лишь будим фронт событием.
     private void handleShareIntent(Intent intent) {
-        if (intent == null || !Intent.ACTION_SEND.equals(intent.getAction())) return;
-        String type = intent.getType();
-        if (type == null || !type.startsWith("text/")) return; // пока только текст
-        String text = intent.getStringExtra(Intent.EXTRA_TEXT);
-        String subject = intent.getStringExtra(Intent.EXTRA_SUBJECT);
-        if (TextUtils.isEmpty(text)) text = subject;
-        else if (!TextUtils.isEmpty(subject)) text = subject + "\n" + text;
-        if (TextUtils.isEmpty(text)) return;
-        deliverShareToWeb(text, 8);
+        if (intent == null) return;
+        String action = intent.getAction();
+        boolean single = Intent.ACTION_SEND.equals(action);
+        boolean multiple = Intent.ACTION_SEND_MULTIPLE.equals(action);
+        if (!single && !multiple) return;
+
+        String text = null;
+        ArrayList<Uri> uris = new ArrayList<>();
+        if (single) {
+            Uri stream = intent.getParcelableExtra(Intent.EXTRA_STREAM);
+            if (stream != null) {
+                uris.add(stream);
+            } else {
+                // Текстовый шаринг (без файла): EXTRA_TEXT (+ опц. SUBJECT).
+                String t = intent.getStringExtra(Intent.EXTRA_TEXT);
+                String subject = intent.getStringExtra(Intent.EXTRA_SUBJECT);
+                if (TextUtils.isEmpty(t)) t = subject;
+                else if (!TextUtils.isEmpty(subject)) t = subject + "\n" + t;
+                if (!TextUtils.isEmpty(t)) text = t;
+            }
+        } else {
+            ArrayList<Uri> list = intent.getParcelableArrayListExtra(Intent.EXTRA_STREAM);
+            if (list != null) uris.addAll(list);
+        }
+        if (text == null && uris.isEmpty()) return;
+
+        synchronized (NativeShellPlugin.class) {
+            NativeShellPlugin.pendingShareText = text;
+            NativeShellPlugin.pendingShareUris.clear();
+            NativeShellPlugin.pendingShareUris.addAll(uris);
+        }
+        notifyShareAvailable(6);
     }
 
-    private void deliverShareToWeb(final String text, final int retriesLeft) {
+    // Будим веб-слой (тёплый старт). На холодном фронт сам дёрнет
+    // getSharedPayload() при загрузке — данные ждут в буфере плагина.
+    private void notifyShareAvailable(final int retriesLeft) {
         updateHandler.postDelayed(() -> {
             WebView web = bridge != null ? bridge.getWebView() : null;
             if (web == null) {
-                if (retriesLeft > 0) deliverShareToWeb(text, retriesLeft - 1);
+                if (retriesLeft > 0) notifyShareAvailable(retriesLeft - 1);
                 return;
             }
-            String payload;
-            try {
-                payload = new JSONObject().put("text", text).toString();
-            } catch (Exception e) {
-                return;
-            }
-            // Ставим глобал (фронт читает его при mount, если слушателя ещё нет)
-            // и шлём событие тем, кто уже слушает.
-            String js = "window.__gwSharedText=" + payload + ";"
-                + "window.dispatchEvent(new CustomEvent('gw:shared-text',{detail:" + payload + "}));";
-            web.evaluateJavascript(js, null);
-        }, 1200);
+            web.evaluateJavascript(
+                "window.__gwShareAvailable=true;"
+                + "window.dispatchEvent(new CustomEvent('gw:share-available'));", null);
+        }, 700);
     }
 
     @Override

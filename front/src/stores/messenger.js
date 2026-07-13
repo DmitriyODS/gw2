@@ -44,8 +44,9 @@ export const useMessengerStore = defineStore('messenger', () => {
   const loadingList = ref(false)
   const loadingMessages = ref(false)
   const sending = ref(false)
-  // Черновик, ожидающий посева в поле ввода при открытии чата (пересланный из
-  // системного «Поделиться»): { convId, text }. MessengerView забирает его один раз.
+  // Контент из системного «Поделиться», ожидающий посева при открытии чата:
+  // { convId, text, files }. MessengerView забирает его один раз (текст в поле,
+  // файлы — во вложения).
   const pendingDraft = ref(null)
   // Присутствие: множество id онлайн-пользователей и живые last_seen
   // (приходят в presence:update при выходе из сети — точнее, чем в профиле).

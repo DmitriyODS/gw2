@@ -134,8 +134,12 @@ function onDocClick(e) {
   if (Date.now() - openedAt < 400) return
   emit('close')
 }
-function onScroll() {
-  if (props.visible && Date.now() - openedAt > 400) emit('close')
+function onScroll(e) {
+  if (!props.visible || Date.now() - openedAt < 400) return
+  // Прокрутка ленты реакций ВНУТРИ меню не должна его закрывать — закрываемся
+  // только на скролл СТРАНИЦЫ/ленты чата под меню.
+  if (menuEl.value?.contains(e.target)) return
+  emit('close')
 }
 
 onMounted(() => {

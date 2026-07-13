@@ -524,14 +524,15 @@ async function activateRouteConversation() {
 // поверх шапки нового чата.
 watch(() => messenger.activeConversationId, () => { chatMenuOpen.value = false })
 
-// Черновик из системного «Поделиться» (Android): открыли выбранный чат —
-// сеем текст в поле ввода один раз.
+// Контент из системного «Поделиться» (Android): открыли выбранный чат — сеем
+// текст в поле и грузим файлы во вложения один раз (останется отправить).
 watch(() => messenger.activeConversationId, async (id) => {
   const d = messenger.pendingDraft
   if (!id || !d || d.convId !== id) return
   messenger.pendingDraft = null
   await nextTick()
-  messageInputRef.value?.setText(d.text)
+  if (d.text) messageInputRef.value?.setText(d.text)
+  if (d.files?.length) messageInputRef.value?.addFiles(d.files)
 }, { immediate: true })
 
 const forwardOpen = ref(false)

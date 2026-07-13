@@ -109,6 +109,19 @@ function cssColorToRgba(color) {
   return Array.from(colorCtx.getImageData(0, 0, 1, 1).data)
 }
 
+// Забрать контент из системного «Поделиться» (текст + файлы). Pull-модель:
+// нативка держит полезную нагрузку в буфере, пока веб-слой не заберёт её —
+// поэтому надёжно и на холодном старте. Вне обёртки — null.
+export async function getSharedPayload() {
+  const shell = nativeShell()
+  if (!isNativeApp() || !shell?.getSharedPayload) return null
+  try {
+    return await shell.getSharedPayload()
+  } catch {
+    return null
+  }
+}
+
 // Номер установленной сборки обёртки (ГГММДДН) — для «О приложении».
 export async function getNativeBuild() {
   const shell = nativeShell()

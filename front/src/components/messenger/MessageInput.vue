@@ -564,12 +564,22 @@ async function submit() {
   emit('send', payload)
 }
 
-/* Успешная отправка подтверждена родителем — очищаем поле и вложения. */
+/* Успешная отправка подтверждена родителем — очищаем поле и вложения.
+   Samsung/IME: после отправки композиция ещё активна, а Vue во время неё НЕ
+   пишет пустую строку в DOM (директива v-model пропускает обновление при
+   composing) — поле не очищалось с первого раза. Поэтому чистим сам <textarea>
+   напрямую (сразу и в nextTick) — это сбрасывает и видимый текст, и композицию. */
 function clearAfterSend() {
   text.value = ''
   pending.value = []
   emit('update:attachedTask', null)
-  nextTick(() => autoresize())
+  const el = textarea.value
+  if (el) el.value = ''
+  nextTick(() => {
+    const e2 = textarea.value
+    if (e2) e2.value = ''
+    autoresize()
+  })
 }
 
 /* Вставка эмодзи из пикера в позицию курсора (база — DOM-значение, чтобы не

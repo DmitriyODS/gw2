@@ -24,12 +24,14 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
 
-            <!-- Системное «Поделиться» текстом → открыть приложение, выбрать
-                 получателя и переслать в чат (обрабатывает MainActivity). -->
+            <!-- Системное «Поделиться» текстом ИЛИ любыми файлами (в т.ч.
+                 несколькими) → открыть приложение, выбрать получателя и
+                 отправить в чат вложением (обрабатывает MainActivity). -->
             <intent-filter>
                 <action android:name="android.intent.action.SEND" />
+                <action android:name="android.intent.action.SEND_MULTIPLE" />
                 <category android:name="android.intent.category.DEFAULT" />
-                <data android:mimeType="text/plain" />
+                <data android:mimeType="*/*" />
             </intent-filter>
 
         </activity>
