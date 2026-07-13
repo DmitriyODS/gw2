@@ -14,12 +14,12 @@ import java.util.Map;
 // FCM-сервис приложения (заменяет сервис Capacitor-плагина в манифесте,
 // наследуясь от него — регистрация токенов и JS-события работают как есть).
 //
-// Звонки и сообщения pushsvc шлёт data-only + high priority (см. buildMessage
-// в back-go/push/internal/fcm): onMessageReceived вызывается даже при убитом
-// приложении, и уведомление строим сами — звонок иначе беззвучен, а сообщения
-// нужны сгруппированными по собеседнику и с ответом прямо из шторки
-// (см. MessageNotifications). Задачи/кудосы/портал по-прежнему приходят с
-// notification-payload — их показывает трей, здесь не трогаем.
+// Звонки pushsvc шлёт data-only + high priority (см. buildMessage в
+// back-go/push/internal/fcm): onMessageReceived вызывается даже при убитом
+// приложении, и уведомление входящего звонка строим сами — иначе звонок при
+// свёрнутом приложении беззвучен. Сообщения/задачи/кудосы/портал приходят с
+// notification-payload — их показывает системный трей независимо от состояния
+// приложения (надёжно на всех вендорах), здесь не трогаем.
 public class PushMessagingService extends com.capacitorjs.plugins.pushnotifications.MessagingService {
 
     private static final int CALL_NOTIFICATION_ID = 43001;
@@ -31,16 +31,7 @@ public class PushMessagingService extends com.capacitorjs.plugins.pushnotificati
         super.onMessageReceived(message);
 
         Map<String, String> data = message.getData();
-        String type = data.get("type");
-        if ("message".equals(type)) {
-            String convId = data.get("conversation_id");
-            if (convId == null) return;
-            String senderName = data.containsKey("title") ? data.get("title") : "Новое сообщение";
-            String text = data.containsKey("body") ? data.get("body") : "";
-            MessageNotifications.incoming(this, convId, senderName, text);
-            return;
-        }
-        if (!"call".equals(type)) return;
+        if (!"call".equals(data.get("type"))) return;
 
         Intent open = new Intent(this, MainActivity.class)
             .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_SINGLE_TOP);

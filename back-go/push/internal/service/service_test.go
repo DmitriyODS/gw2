@@ -124,14 +124,15 @@ func TestMessagePushExcludesSenderAndUsesName(t *testing.T) {
 	if sender.sent[0].n.Title != "Иван" || sender.sent[0].n.Body != "привет" {
 		t.Fatalf("неверный заголовок/текст: %+v", sender.sent[0].n)
 	}
-	// Сообщения — data-only + high priority: обёртка строит уведомление сама
-	// (группировка + ответ из шторки), поэтому нужен sender_id и приоритет.
+	// Сообщения — notification-payload (НЕ high-priority): надёжная доставка
+	// трея при замороженном приложении. Тег = диалог: сообщения из одного чата
+	// схлопываются в одно уведомление.
 	n := sender.sent[0].n
-	if !n.HighPriority {
-		t.Fatalf("сообщение должно быть high-priority (data-only): %+v", n)
+	if n.HighPriority {
+		t.Fatalf("сообщение не должно быть high-priority (нужен notification-payload): %+v", n)
 	}
-	if n.Data["sender_id"] != "7" || n.Data["conversation_id"] != "3" {
-		t.Fatalf("нет sender_id/conversation_id в data: %+v", n.Data)
+	if n.Tag != "msg_3" {
+		t.Fatalf("ожидался тег msg_3 (по диалогу): %+v", n)
 	}
 }
 

@@ -117,7 +117,13 @@ func buildMessage(token string, n domain.Notification) map[string]any {
 		// Не-звонки: notification-payload, чтобы систему показала трей даже
 		// при убитом приложении (тогда onMessageReceived не вызывается).
 		msg["notification"] = map[string]any{"title": n.Title, "body": n.Body}
-		android["notification"] = map[string]any{"channel_id": n.Channel}
+		androidNotif := map[string]any{"channel_id": n.Channel}
+		// tag — новое уведомление заменяет прежнее с тем же тегом (группировка
+		// по диалогу: сообщения из одного чата схлопываются в одно).
+		if n.Tag != "" {
+			androidNotif["tag"] = n.Tag
+		}
+		android["notification"] = androidNotif
 	}
 	msg["android"] = android
 	return map[string]any{"message": msg}

@@ -22,6 +22,10 @@ type Notification struct {
 	Channel      string
 	Data         map[string]string
 	HighPriority bool
+	// Tag — при совпадении новое уведомление ЗАМЕНЯЕТ предыдущее с тем же тегом
+	// (android.notification.tag). Для сообщений тег = диалог: несколько
+	// сообщений из одного чата схлопываются в одно уведомление.
+	Tag string
 }
 
 // Каналы уведомлений — синхронизированы с Notifier на Android.
