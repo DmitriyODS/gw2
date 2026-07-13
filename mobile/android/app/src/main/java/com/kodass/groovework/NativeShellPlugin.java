@@ -59,17 +59,22 @@ public class NativeShellPlugin extends Plugin {
     // ── Звонок: foreground-сервис (жизнь при блокировке) ───────────────────
     @PluginMethod
     public void startCallService(PluginCall call) {
-        Context ctx = getContext();
-        Intent i = new Intent(ctx, CallForegroundService.class);
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) ctx.startForegroundService(i);
-        else ctx.startService(i);
+        // Старт FGS может быть запрещён (фон/прошивка One UI) — не роняем звонок.
+        try {
+            Context ctx = getContext();
+            Intent i = new Intent(ctx, CallForegroundService.class);
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) ctx.startForegroundService(i);
+            else ctx.startService(i);
+        } catch (Throwable ignored) {}
         call.resolve();
     }
 
     @PluginMethod
     public void stopCallService(PluginCall call) {
-        Context ctx = getContext();
-        ctx.stopService(new Intent(ctx, CallForegroundService.class));
+        try {
+            Context ctx = getContext();
+            ctx.stopService(new Intent(ctx, CallForegroundService.class));
+        } catch (Throwable ignored) {}
         call.resolve();
     }
 
@@ -81,6 +86,7 @@ public class NativeShellPlugin extends Plugin {
     @PluginMethod
     public void setProximityLock(PluginCall call) {
         boolean on = Boolean.TRUE.equals(call.getBoolean("on", false));
+        if (getActivity() == null) { call.resolve(); return; }
         getActivity().runOnUiThread(() -> {
             try {
                 PowerManager pm = (PowerManager) getContext().getSystemService(Context.POWER_SERVICE);
@@ -103,6 +109,7 @@ public class NativeShellPlugin extends Plugin {
     @PluginMethod
     public void setShowOverLock(PluginCall call) {
         boolean on = Boolean.TRUE.equals(call.getBoolean("on", false));
+        if (getActivity() == null) { call.resolve(); return; }
         getActivity().runOnUiThread(() -> {
             try {
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O_MR1) {
