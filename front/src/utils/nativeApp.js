@@ -109,6 +109,54 @@ function cssColorToRgba(color) {
   return Array.from(colorCtx.getImageData(0, 0, 1, 1).data)
 }
 
+/* ── Звонок: нативная поддержка (foreground-сервис жизни при блокировке,
+   удержание экрана поверх локскрина, аудио-маршрутизация) ── */
+export async function startCallService() {
+  const shell = nativeShell()
+  if (!isNativeApp() || !shell?.startCallService) return
+  try { await shell.startCallService() } catch {}
+}
+export async function stopCallService() {
+  const shell = nativeShell()
+  if (!isNativeApp() || !shell?.stopCallService) return
+  try { await shell.stopCallService() } catch {}
+}
+export async function setCallKeepAwake(on) {
+  const shell = nativeShell()
+  if (!isNativeApp() || !shell?.keepAwake) return
+  try { await shell.keepAwake({ on }) } catch {}
+}
+export async function audioStart() {
+  const shell = nativeShell()
+  if (!isNativeApp() || !shell?.audioStart) return
+  try { await shell.audioStart() } catch {}
+}
+export async function audioStop() {
+  const shell = nativeShell()
+  if (!isNativeApp() || !shell?.audioStop) return
+  try { await shell.audioStop() } catch {}
+}
+export async function audioListDevices() {
+  const shell = nativeShell()
+  if (!isNativeApp() || !shell?.audioListDevices) return []
+  try { const r = await shell.audioListDevices(); return r?.devices || [] } catch { return [] }
+}
+export async function audioSetRoute(route) {
+  const shell = nativeShell()
+  if (!isNativeApp() || !shell?.audioSetRoute) return false
+  try { const r = await shell.audioSetRoute({ route }); return !!r?.ok } catch { return false }
+}
+export async function audioGetRoute() {
+  const shell = nativeShell()
+  if (!isNativeApp() || !shell?.audioGetRoute) return null
+  try { const r = await shell.audioGetRoute(); return r?.route || null } catch { return null }
+}
+export async function onAudioDevicesChanged(cb) {
+  const shell = nativeShell()
+  if (!isNativeApp() || !shell?.addListener) return null
+  try { return await shell.addListener('audioDevicesChanged', cb) } catch { return null }
+}
+
 // Забрать контент из системного «Поделиться» (текст + файлы). Pull-модель:
 // нативка держит полезную нагрузку в буфере, пока веб-слой не заберёт её —
 // поэтому надёжно и на холодном старте. Вне обёртки — null.

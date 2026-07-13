@@ -344,12 +344,17 @@ export const useCallStore = defineStore('call', {
       }
       this.call = callPayload
       this.media = callPayload.media || 'video'
+      this._incomingAt = Date.now()
       this.phase = 'incoming'
     },
 
     /** Я принимаю входящий: сервер в ответ пришлёт call:accepted с токеном. */
     accept() {
       if (this.phase !== 'incoming') return
+      // Защита от самопроизвольного «взятия»: игнорируем accept в первые
+      // мгновения показа входящего (эмулированный клик после тача / всплытие
+      // полноэкранного экрана звонка на локскрине могли нажать «Принять» сами).
+      if (Date.now() - (this._incomingAt || 0) < 500) return
       const socket = getSocket()
       if (!socket) {
         this.error = 'Нет соединения с сервером'

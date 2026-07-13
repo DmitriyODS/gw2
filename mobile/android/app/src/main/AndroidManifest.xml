@@ -61,6 +61,13 @@
         <service
             android:name="com.capacitorjs.plugins.pushnotifications.MessagingService"
             tools:node="remove" />
+
+        <!-- Держит звонок живым при блокировке экрана/в Doze (partial wake lock);
+             тип microphone — звонок использует микрофон. -->
+        <service
+            android:name=".CallForegroundService"
+            android:foregroundServiceType="microphone"
+            android:exported="false" />
     </application>
 
     <!-- Permissions -->
@@ -69,6 +76,14 @@
     <!-- Пуш-уведомления (Android 13+, runtime-запрос делает веб-слой через
          Capacitor PushNotifications.requestPermissions). -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <!-- Звонок при заблокированном экране: foreground-сервис (тип microphone),
+         wake lock, полноэкранное уведомление входящего поверх локскрина,
+         Bluetooth-гарнитура как аудиомаршрут. -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
+    <uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT" />
+    <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
     <!-- Обновление обёртки из «О приложении»: скачанный APK ставится
          системным установщиком (AppUpdater). -->
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />

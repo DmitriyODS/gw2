@@ -33,7 +33,11 @@ public class PushMessagingService extends com.capacitorjs.plugins.pushnotificati
         Map<String, String> data = message.getData();
         if (!"call".equals(data.get("type"))) return;
 
+        // Флаг gw_call → MainActivity при холодном старте сразу показывается
+        // поверх локскрина (setShowWhenLocked/turnScreenOn), не дожидаясь,
+        // пока веб-слой поднимется и сам это включит.
         Intent open = new Intent(this, MainActivity.class)
+            .putExtra("gw_call", true)
             .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_SINGLE_TOP);
         PendingIntent tap = PendingIntent.getActivity(
             this, 0, open, PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
@@ -41,6 +45,8 @@ public class PushMessagingService extends com.capacitorjs.plugins.pushnotificati
         String title = data.containsKey("title") ? data.get("title") : "Входящий звонок";
         String body = data.containsKey("body") ? data.get("body") : "";
 
+        // setFullScreenIntent — система показывает экран звонка ПОВЕРХ
+        // заблокированного экрана и «звонит», как телефонный вызов.
         NotificationCompat.Builder builder = new NotificationCompat.Builder(this, "calls_incoming")
             .setSmallIcon(R.drawable.ic_launcher_foreground)
             .setContentTitle(title)
@@ -49,8 +55,10 @@ public class PushMessagingService extends com.capacitorjs.plugins.pushnotificati
             .setPriority(NotificationCompat.PRIORITY_MAX)
             .setSound(RingtoneManager.getDefaultUri(RingtoneManager.TYPE_RINGTONE))
             .setAutoCancel(true)
+            .setOngoing(true)
             .setTimeoutAfter(CALL_TIMEOUT_MS)
-            .setContentIntent(tap);
+            .setContentIntent(tap)
+            .setFullScreenIntent(tap, true);
 
         NotificationManager nm = getSystemService(NotificationManager.class);
         if (nm != null && nm.areNotificationsEnabled()) {

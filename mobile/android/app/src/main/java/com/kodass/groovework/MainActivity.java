@@ -1,9 +1,11 @@
 package com.kodass.groovework;
 
 import android.app.DownloadManager;
+import android.app.KeyguardManager;
 import android.app.NotificationChannel;
 import android.app.NotificationManager;
 import android.content.Intent;
+import android.os.Build;
 import android.net.Uri;
 import android.net.http.SslError;
 import android.os.Bundle;
@@ -88,17 +90,37 @@ public class MainActivity extends BridgeActivity {
         // Первая проверка обновления — сразу при запуске, дальше — раз в час.
         updateHandler.post(updateTick);
 
-        // Приложение открыто через системное «Поделиться» (ACTION_SEND) —
-        // пробрасываем текст в веб-слой, где пользователь выберет получателя.
+        // Полноэкранное уведомление входящего звонка запускает нас поверх
+        // локскрина — показываем активность сразу, до подъёма веб-слоя.
+        applyCallLaunch(getIntent());
+
+        // Приложение открыто через системное «Поделиться» (ACTION_SEND/SEND_MULTIPLE).
         handleShareIntent(getIntent());
     }
 
-    // Уже запущенное приложение получило новое «Поделиться».
+    // Уже запущенное приложение получило новый intent («Поделиться» или звонок).
     @Override
     public void onNewIntent(Intent intent) {
         super.onNewIntent(intent);
         setIntent(intent);
+        applyCallLaunch(intent);
         handleShareIntent(intent);
+    }
+
+    // Запуск полноэкранным уведомлением звонка (extra gw_call): показать
+    // активность поверх заблокированного экрана и снять keyguard.
+    private void applyCallLaunch(Intent intent) {
+        if (intent == null || !intent.getBooleanExtra("gw_call", false)) return;
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O_MR1) {
+            setShowWhenLocked(true);
+            setTurnScreenOn(true);
+        }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            KeyguardManager km = (KeyguardManager) getSystemService(KEYGUARD_SERVICE);
+            if (km != null) {
+                try { km.requestDismissKeyguard(this, null); } catch (Exception ignored) {}
+            }
+        }
     }
 
     // Приложение открыто через системное «Поделиться»: текст и/или файлы

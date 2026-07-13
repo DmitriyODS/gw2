@@ -4,11 +4,16 @@ import android.content.Context;
 import android.content.Intent;
 import android.database.Cursor;
 import android.graphics.Color;
+import android.media.AudioDeviceCallback;
+import android.media.AudioDeviceInfo;
+import android.media.AudioManager;
 import android.net.Uri;
+import android.os.Build;
 import android.provider.OpenableColumns;
 import android.provider.Settings;
 import android.util.Base64;
 import android.view.Window;
+import android.view.WindowManager;
 
 import androidx.core.view.WindowCompat;
 import androidx.core.view.WindowInsetsControllerCompat;
@@ -30,6 +35,181 @@ import java.util.ArrayList;
 // автопроверки) и окраска системных панелей под текущую тему приложения.
 @CapacitorPlugin(name = "NativeShell")
 public class NativeShellPlugin extends Plugin {
+
+    private AudioManager am() {
+        return (AudioManager) getContext().getSystemService(Context.AUDIO_SERVICE);
+    }
+
+    // Смена набора аудио-устройств (подключили/убрали гарнитуру, BT) — будим
+    // веб-слой, чтобы он перечитал доступные маршруты и показал выбор.
+    @Override
+    public void load() {
+        try {
+            am().registerAudioDeviceCallback(new AudioDeviceCallback() {
+                @Override public void onAudioDevicesAdded(AudioDeviceInfo[] a) {
+                    notifyListeners("audioDevicesChanged", new JSObject());
+                }
+                @Override public void onAudioDevicesRemoved(AudioDeviceInfo[] r) {
+                    notifyListeners("audioDevicesChanged", new JSObject());
+                }
+            }, null);
+        } catch (Exception ignored) {}
+    }
+
+    // ── Звонок: foreground-сервис (жизнь при блокировке) ───────────────────
+    @PluginMethod
+    public void startCallService(PluginCall call) {
+        Context ctx = getContext();
+        Intent i = new Intent(ctx, CallForegroundService.class);
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) ctx.startForegroundService(i);
+        else ctx.startService(i);
+        call.resolve();
+    }
+
+    @PluginMethod
+    public void stopCallService(PluginCall call) {
+        Context ctx = getContext();
+        ctx.stopService(new Intent(ctx, CallForegroundService.class));
+        call.resolve();
+    }
+
+    // Экран не гаснет и активность видна поверх локскрина, пока идёт звонок.
+    @PluginMethod
+    public void keepAwake(PluginCall call) {
+        boolean on = Boolean.TRUE.equals(call.getBoolean("on", false));
+        getActivity().runOnUiThread(() -> {
+            try {
+                Window w = getActivity().getWindow();
+                if (on) w.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+                else w.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O_MR1) {
+                    getActivity().setShowWhenLocked(on);
+                    getActivity().setTurnScreenOn(on);
+                }
+                call.resolve();
+            } catch (Exception e) {
+                call.reject("keepAwake failed");
+            }
+        });
+    }
+
+    // ── Аудио-маршрутизация звонка ─────────────────────────────────────────
+    @PluginMethod
+    public void audioStart(PluginCall call) {
+        try { am().setMode(AudioManager.MODE_IN_COMMUNICATION); } catch (Exception ignored) {}
+        call.resolve();
+    }
+
+    @PluginMethod
+    public void audioStop(PluginCall call) {
+        AudioManager m = am();
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                m.clearCommunicationDevice();
+            } else {
+                m.setSpeakerphoneOn(false);
+                if (m.isBluetoothScoOn()) { m.stopBluetoothSco(); m.setBluetoothScoOn(false); }
+            }
+            m.setMode(AudioManager.MODE_NORMAL);
+        } catch (Exception ignored) {}
+        call.resolve();
+    }
+
+    @PluginMethod
+    public void audioListDevices(PluginCall call) {
+        AudioManager m = am();
+        JSArray arr = new JSArray();
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                AudioDeviceInfo cur = m.getCommunicationDevice();
+                java.util.LinkedHashSet<String> seen = new java.util.LinkedHashSet<>();
+                for (AudioDeviceInfo d : m.getAvailableCommunicationDevices()) {
+                    String route = routeOf(d.getType());
+                    if (route == null || !seen.add(route)) continue;
+                    JSObject o = new JSObject();
+                    o.put("route", route);
+                    o.put("current", cur != null && cur.getId() == d.getId());
+                    arr.put(o);
+                }
+            } else {
+                addRoute(arr, "earpiece");
+                addRoute(arr, "speaker");
+                if (m.isWiredHeadsetOn()) addRoute(arr, "wired");
+                if (m.isBluetoothScoAvailableOffCall()) addRoute(arr, "bluetooth");
+            }
+        } catch (Exception ignored) {}
+        JSObject ret = new JSObject();
+        ret.put("devices", arr);
+        call.resolve(ret);
+    }
+
+    @PluginMethod
+    public void audioSetRoute(PluginCall call) {
+        String route = call.getString("route", "");
+        AudioManager m = am();
+        boolean ok = false;
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                for (AudioDeviceInfo d : m.getAvailableCommunicationDevices()) {
+                    if (route.equals(routeOf(d.getType()))) { ok = m.setCommunicationDevice(d); break; }
+                }
+            } else {
+                switch (route) {
+                    case "speaker":
+                        if (m.isBluetoothScoOn()) { m.stopBluetoothSco(); m.setBluetoothScoOn(false); }
+                        m.setSpeakerphoneOn(true); ok = true; break;
+                    case "bluetooth":
+                        m.setSpeakerphoneOn(false); m.startBluetoothSco(); m.setBluetoothScoOn(true); ok = true; break;
+                    default: // earpiece / wired
+                        if (m.isBluetoothScoOn()) { m.stopBluetoothSco(); m.setBluetoothScoOn(false); }
+                        m.setSpeakerphoneOn(false); ok = true;
+                }
+            }
+        } catch (Exception ignored) {}
+        JSObject ret = new JSObject();
+        ret.put("ok", ok);
+        call.resolve(ret);
+    }
+
+    @PluginMethod
+    public void audioGetRoute(PluginCall call) {
+        AudioManager m = am();
+        String route = "earpiece";
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                AudioDeviceInfo d = m.getCommunicationDevice();
+                if (d != null) { String r = routeOf(d.getType()); if (r != null) route = r; }
+            } else {
+                if (m.isBluetoothScoOn()) route = "bluetooth";
+                else if (m.isSpeakerphoneOn()) route = "speaker";
+                else if (m.isWiredHeadsetOn()) route = "wired";
+            }
+        } catch (Exception ignored) {}
+        JSObject ret = new JSObject();
+        ret.put("route", route);
+        call.resolve(ret);
+    }
+
+    private static String routeOf(int type) {
+        switch (type) {
+            case AudioDeviceInfo.TYPE_BUILTIN_EARPIECE: return "earpiece";
+            case AudioDeviceInfo.TYPE_BUILTIN_SPEAKER: return "speaker";
+            case AudioDeviceInfo.TYPE_WIRED_HEADSET:
+            case AudioDeviceInfo.TYPE_WIRED_HEADPHONES:
+            case AudioDeviceInfo.TYPE_USB_HEADSET:
+            case AudioDeviceInfo.TYPE_USB_DEVICE: return "wired";
+            case AudioDeviceInfo.TYPE_BLUETOOTH_SCO:
+            case AudioDeviceInfo.TYPE_BLE_HEADSET: return "bluetooth";
+            default: return null;
+        }
+    }
+
+    private static void addRoute(JSArray arr, String route) {
+        JSObject o = new JSObject();
+        o.put("route", route);
+        o.put("current", false);
+        arr.put(o);
+    }
 
     // ── Входящий шаринг из системного «Поделиться» (заполняет MainActivity) ──
     // Pull-модель: полезная нагрузка живёт здесь, пока веб-слой не заберёт её

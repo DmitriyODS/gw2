@@ -77,6 +77,9 @@ import {
 } from '@/utils/systemNotify.js'
 import { installAppUpdateWatcher } from '@/utils/appUpdate.js'
 import { initNativePush, syncNativeSystemBars, getSharedPayload } from '@/utils/nativeApp.js'
+import {
+  startCallService, stopCallService, setCallKeepAwake, audioStart, audioStop,
+} from '@/utils/nativeApp.js'
 import AppSidebar from '@/components/layout/AppSidebar.vue'
 import AppBottomNav from '@/components/layout/AppBottomNav.vue'
 import CompanyDisabledScreen from '@/components/layout/CompanyDisabledScreen.vue'
@@ -305,6 +308,21 @@ watch(() => authStore.companyId, (id, prev) => {
 function onCallFocusOverlay() {
   if (callStore.isMinimized) callStore.expand()
 }
+
+/* Мобильная обёртка: жизнь звонка при блокировке экрана. По фазе звонка
+   поднимаем/гасим foreground-сервис (держит WebRTC живым в фоне), режим связи
+   аудио и удержание экрана поверх локскрина. В браузере/Electron — no-op. */
+let callAudioOn = false
+watch(() => callStore.phase, (phase) => {
+  setCallKeepAwake(phase !== 'idle')
+  if (phase === 'active' || phase === 'outgoing') {
+    startCallService()
+    if (!callAudioOn) { callAudioOn = true; audioStart() }
+  } else if (phase === 'idle') {
+    if (callAudioOn) { callAudioOn = false; audioStop() }
+    stopCallService()
+  }
+})
 
 /* Юнит в работе → закрытие/перезагрузка вкладки не проходит молча: браузер
    показывает нативный диалог «Покинуть сайт?» (свою модалку на beforeunload

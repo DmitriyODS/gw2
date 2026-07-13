@@ -155,6 +155,31 @@
           >
             <span class="material-symbols-outlined">{{ callStore.audioEnabled ? 'mic' : 'mic_off' }}</span>
           </button>
+          <!-- Выбор аудио-выхода (наушники/гарнитура/динамик) — только мобильная обёртка. -->
+          <div v-if="audioSupported && audioRoutes.length > 1" class="ctrl-audio">
+            <button
+              class="ctrl-btn"
+              :class="{ on: audioMenuOpen }"
+              :title="'Звук: ' + routeMeta(audioCurrent).label"
+              @click="audioMenuOpen = !audioMenuOpen"
+            >
+              <span class="material-symbols-outlined">{{ routeMeta(audioCurrent).icon }}</span>
+            </button>
+            <Transition name="ctrl-audio-pop">
+              <div v-if="audioMenuOpen" class="ctrl-audio-menu" role="menu">
+                <button
+                  v-for="r in audioRoutes"
+                  :key="r.route"
+                  class="ctrl-audio-item"
+                  :class="{ active: r.route === audioCurrent }"
+                  @click="pickRoute(r.route)"
+                >
+                  <span class="material-symbols-outlined">{{ routeMeta(r.route).icon }}</span>
+                  <span>{{ routeMeta(r.route).label }}</span>
+                </button>
+              </div>
+            </Transition>
+          </div>
           <button
             class="ctrl-btn"
             :class="{ off: !callStore.videoEnabled }"
@@ -238,6 +263,7 @@ import { useCallStore } from '@/stores/call.js'
 import { useAuthStore } from '@/stores/auth.js'
 import { callRoom } from '@/services/livekit.js'
 import { useTileGrid } from '@/composables/useTileGrid.js'
+import { useCallAudioRoutes, AUDIO_ROUTE_META } from '@/composables/useCallAudioRoutes.js'
 import ParticipantTile from './ParticipantTile.vue'
 import InviteToCallDialog from './InviteToCallDialog.vue'
 import CallParticipantsPanel from './CallParticipantsPanel.vue'
@@ -248,6 +274,21 @@ const callStore = useCallStore()
 const authStore = useAuthStore()
 
 const inviteOpen = ref(false)
+
+/* Аудио-маршрутизация (только мобильная обёртка): выбор наушников/гарнитуры/
+   динамика/громкой связи. Обновляем список при входе в активную фазу. */
+const {
+  supported: audioSupported, routes: audioRoutes, current: audioCurrent,
+  refresh: audioRefresh, setRoute: audioApplyRoute,
+} = useCallAudioRoutes()
+const audioMenuOpen = ref(false)
+watch(() => callStore.phase, (p) => {
+  if (p === 'active' || p === 'outgoing') audioRefresh()
+  else audioMenuOpen.value = false
+})
+function routeMeta(route) { return AUDIO_ROUTE_META[route] || AUDIO_ROUTE_META.earpiece }
+function pickRoute(route) { audioApplyRoute(route); audioMenuOpen.value = false }
+
 const participantIds = computed(() =>
   callStore.participantList.map(p => p.userId).filter(Boolean))
 
@@ -872,6 +913,57 @@ watch(isRinging, (v) => {
   padding: 8px;
   gap: 8px;
 }
+
+/* Выбор аудио-выхода: кнопка в ряду контролов + всплывающее меню НАД ней. */
+.ctrl-audio {
+  position: relative;
+  display: flex;
+}
+
+.ctrl-audio-menu {
+  position: absolute;
+  bottom: calc(100% + 10px);
+  left: 50%;
+  transform: translateX(-50%);
+  min-width: 190px;
+  background: var(--acrylic-bg);
+  -webkit-backdrop-filter: var(--acrylic-blur);
+  backdrop-filter: var(--acrylic-blur);
+  border: 1px solid var(--color-outline-dim);
+  border-radius: var(--radius-md);
+  padding: 6px;
+  box-shadow: var(--shadow-lg);
+  z-index: 30;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.ctrl-audio-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border: none;
+  background: transparent;
+  color: var(--color-text);
+  font: inherit;
+  font-size: 14px;
+  font-weight: 500;
+  text-align: left;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.ctrl-audio-item:hover { background: var(--color-surface-low); }
+.ctrl-audio-item.active { background: var(--color-primary-container); color: var(--color-on-primary-container); }
+.ctrl-audio-item .material-symbols-outlined { font-size: 20px; }
+
+.ctrl-audio-pop-enter-active,
+.ctrl-audio-pop-leave-active { transition: opacity 0.15s, transform 0.15s; }
+.ctrl-audio-pop-enter-from,
+.ctrl-audio-pop-leave-to { opacity: 0; transform: translateX(-50%) translateY(6px); }
 
 .ctrl-btn {
   position: relative;
