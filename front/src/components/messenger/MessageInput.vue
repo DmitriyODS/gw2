@@ -120,6 +120,7 @@
       <button
         class="send-btn"
         :disabled="!canSend"
+        @mousedown.prevent
         @click="submit"
         :title="isTouchDevice ? 'Отправить' : 'Отправить (Enter)'"
       >
