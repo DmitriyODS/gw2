@@ -22,6 +22,10 @@ type Notification struct {
 	Channel      string
 	Data         map[string]string
 	HighPriority bool
+	// Tag — android.notification.tag: новое уведомление ЗАМЕНЯЕТ прежнее с тем
+	// же тегом (сообщения одного чата схлопываются в одно). Влияет ТОЛЬКО на
+	// группировку в трее, НЕ на доставку (в отличие от data-only, ронявшего её).
+	Tag string
 }
 
 // Каналы уведомлений — синхронизированы с Notifier на Android.

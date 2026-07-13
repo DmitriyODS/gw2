@@ -183,12 +183,13 @@ func (s *Service) onMessage(ctx context.Context, payload json.RawMessage, rooms 
 
 	// Сообщения — notification-payload (НЕ data-only): систему показывает трей
 	// даже при замороженном/убитом приложении, поэтому доставка надёжна на всех
-	// вендорах. Без tag-группировки — каждое сообщение отдельным уведомлением
-	// (как в первой рабочей версии; группировка откачена вместе с data-only).
+	// вендорах. Тег = диалог: несколько сообщений из одного чата схлопываются в
+	// одно уведомление (группировка в трее, доставку не трогает).
 	s.deliver(ctx, recipients, domain.Notification{
 		Title:   title,
 		Body:    body,
 		Channel: domain.ChannelMessages,
+		Tag:     "msg_" + strconv.FormatInt(e.ConversationID, 10),
 		Data: map[string]string{
 			"type":            "message",
 			"conversation_id": strconv.FormatInt(e.ConversationID, 10),
