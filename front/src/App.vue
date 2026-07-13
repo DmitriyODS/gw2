@@ -78,7 +78,8 @@ import {
 import { installAppUpdateWatcher } from '@/utils/appUpdate.js'
 import { initNativePush, syncNativeSystemBars, getSharedPayload } from '@/utils/nativeApp.js'
 import {
-  startCallService, stopCallService, setCallKeepAwake, audioStart, audioStop,
+  startCallService, stopCallService, setCallProximity, setCallShowOverLock,
+  audioStart, audioStop,
 } from '@/utils/nativeApp.js'
 import AppSidebar from '@/components/layout/AppSidebar.vue'
 import AppBottomNav from '@/components/layout/AppBottomNav.vue'
@@ -309,16 +310,25 @@ function onCallFocusOverlay() {
   if (callStore.isMinimized) callStore.expand()
 }
 
-/* Мобильная обёртка: жизнь звонка при блокировке экрана. По фазе звонка
-   поднимаем/гасим foreground-сервис (держит WebRTC живым в фоне), режим связи
-   аудио и удержание экрана поверх локскрина. В браузере/Electron — no-op. */
+/* Мобильная обёртка: жизнь звонка при блокировке экрана. Foreground-сервис
+   держит соединение живым, когда экран гаснет/в кармане (приложение НЕ
+   закрывается). Экран НЕ держим принудительно включённым: у уха он гаснет по
+   датчику приближения (аудио-звонок), а блокировка гасит его штатно. Показ
+   поверх локскрина — только для входящего. В браузере/Electron — no-op. */
 let callAudioOn = false
-watch(() => callStore.phase, (phase) => {
-  setCallKeepAwake(phase !== 'idle')
+watch(() => [callStore.phase, callStore.media], ([phase, media]) => {
+  if (phase === 'incoming') {
+    setCallShowOverLock(true)
+    return
+  }
   if (phase === 'active' || phase === 'outgoing') {
+    setCallShowOverLock(false)             // в разговоре блокировка гасит экран штатно
+    setCallProximity(media === 'audio')    // аудио-звонок: экран гаснет у уха
     startCallService()
     if (!callAudioOn) { callAudioOn = true; audioStart() }
-  } else if (phase === 'idle') {
+  } else { // idle
+    setCallShowOverLock(false)
+    setCallProximity(false)
     if (callAudioOn) { callAudioOn = false; audioStop() }
     stopCallService()
   }

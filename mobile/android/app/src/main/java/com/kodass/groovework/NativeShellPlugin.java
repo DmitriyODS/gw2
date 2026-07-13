@@ -9,11 +9,11 @@ import android.media.AudioDeviceInfo;
 import android.media.AudioManager;
 import android.net.Uri;
 import android.os.Build;
+import android.os.PowerManager;
 import android.provider.OpenableColumns;
 import android.provider.Settings;
 import android.util.Base64;
 import android.view.Window;
-import android.view.WindowManager;
 
 import androidx.core.view.WindowCompat;
 import androidx.core.view.WindowInsetsControllerCompat;
@@ -73,23 +73,44 @@ public class NativeShellPlugin extends Plugin {
         call.resolve();
     }
 
-    // Экран не гаснет и активность видна поверх локскрина, пока идёт звонок.
+    // Экран гаснет у уха во время АУДИО-звонка (датчик приближения). Держим
+    // proximity wake lock — он сам гасит/зажигает экран по сенсору; звонок при
+    // этом продолжается (процесс жив за счёт CallForegroundService).
+    private PowerManager.WakeLock proximityLock;
+
     @PluginMethod
-    public void keepAwake(PluginCall call) {
+    public void setProximityLock(PluginCall call) {
         boolean on = Boolean.TRUE.equals(call.getBoolean("on", false));
         getActivity().runOnUiThread(() -> {
             try {
-                Window w = getActivity().getWindow();
-                if (on) w.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
-                else w.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+                PowerManager pm = (PowerManager) getContext().getSystemService(Context.POWER_SERVICE);
+                if (proximityLock == null) {
+                    proximityLock = pm.newWakeLock(
+                        PowerManager.PROXIMITY_SCREEN_OFF_WAKE_LOCK, "gw:proximity");
+                    proximityLock.setReferenceCounted(false);
+                }
+                if (on && !proximityLock.isHeld()) proximityLock.acquire(2 * 60 * 60 * 1000L);
+                else if (!on && proximityLock.isHeld()) proximityLock.release();
+            } catch (Exception ignored) {}
+            call.resolve();
+        });
+    }
+
+    // Показ активности поверх локскрина: включаем ТОЛЬКО на входящий звонок; на
+    // активном/idle сбрасываем — тогда блокировка во время разговора ведёт себя
+    // штатно (экран гаснет, звонок живёт за счёт foreground-сервиса, приложение
+    // не закрывается).
+    @PluginMethod
+    public void setShowOverLock(PluginCall call) {
+        boolean on = Boolean.TRUE.equals(call.getBoolean("on", false));
+        getActivity().runOnUiThread(() -> {
+            try {
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O_MR1) {
                     getActivity().setShowWhenLocked(on);
                     getActivity().setTurnScreenOn(on);
                 }
-                call.resolve();
-            } catch (Exception e) {
-                call.reject("keepAwake failed");
-            }
+            } catch (Exception ignored) {}
+            call.resolve();
         });
     }
 

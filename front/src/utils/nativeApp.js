@@ -121,10 +121,19 @@ export async function stopCallService() {
   if (!isNativeApp() || !shell?.stopCallService) return
   try { await shell.stopCallService() } catch {}
 }
-export async function setCallKeepAwake(on) {
+// Аудио-звонок: экран гаснет у уха (датчик приближения). Звонок продолжается —
+// процесс держит foreground-сервис, это НЕ «экран всегда включён».
+export async function setCallProximity(on) {
   const shell = nativeShell()
-  if (!isNativeApp() || !shell?.keepAwake) return
-  try { await shell.keepAwake({ on }) } catch {}
+  if (!isNativeApp() || !shell?.setProximityLock) return
+  try { await shell.setProximityLock({ on }) } catch {}
+}
+// Показ поверх локскрина — только для входящего; на активном/idle выключаем,
+// чтобы блокировка в разговоре гасила экран штатно (звонок при этом живёт).
+export async function setCallShowOverLock(on) {
+  const shell = nativeShell()
+  if (!isNativeApp() || !shell?.setShowOverLock) return
+  try { await shell.setShowOverLock({ on }) } catch {}
 }
 export async function audioStart() {
   const shell = nativeShell()
