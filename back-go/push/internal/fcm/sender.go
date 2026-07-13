@@ -116,15 +116,11 @@ func buildMessage(token string, n domain.Notification) map[string]any {
 	if !n.HighPriority {
 		// Не-звонки: notification-payload, чтобы систему показала трей даже
 		// при убитом приложении (тогда onMessageReceived не вызывается).
-		// tag (при наличии) схлопывает несколько сообщений одного чата в одно
-		// уведомление — это ЧИСТО серверная группировка в трее, доставку не
-		// трогает (в отличие от data-only/MessagingStyle, ронявших её в фоне).
+		// БЕЗ tag: каждое сообщение — отдельное уведомление. tag ЗАМЕНЯЛ бы
+		// прежнее уведомление того же чата — и важные прошлые сообщения
+		// пропадали бы; такое поведение недопустимо.
 		msg["notification"] = map[string]any{"title": n.Title, "body": n.Body}
-		androidNotif := map[string]any{"channel_id": n.Channel}
-		if n.Tag != "" {
-			androidNotif["tag"] = n.Tag
-		}
-		android["notification"] = androidNotif
+		android["notification"] = map[string]any{"channel_id": n.Channel}
 	}
 	msg["android"] = android
 	return map[string]any{"message": msg}
