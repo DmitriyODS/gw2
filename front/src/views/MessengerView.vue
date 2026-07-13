@@ -20,7 +20,7 @@
       ref="panelEl"
       class="chat-panel"
       :class="{ 'is-mobile-hidden': isMobile && !activeId }"
-      :style="isMobile && keyboardInset ? { height: `calc(100dvh - ${keyboardInset}px)` } : {}"
+      :style="isMobile && viewportHeight ? { height: viewportHeight + 'px', top: viewportTop + 'px', bottom: 'auto' } : {}"
       @dragenter.prevent="onDragEnter"
       @dragover.prevent="onDragOver"
       @dragleave.prevent="onDragLeave"
@@ -356,22 +356,29 @@ const ctxMenu = ref({ visible: false, x: 0, y: 0, message: null })
 const messagesEl = ref(null)
 const panelEl = ref(null)
 
-// Mobile keyboard: shrink panel to keyboard top (visualViewport),
-// but keep message content anchored — as in Telegram the currently
-// visible messages scroll with the viewport instead of being clipped.
-const keyboardInset = ref(0)
+// Mobile keyboard: панель занимает ровно видимую часть экрана (visualViewport),
+// а прокрутка ленты остаётся заякоренной У НИЗА — как в Telegram: при появлении
+// клавиатуры верх сообщений обрезается, а расстояние до низа сохраняется, так
+// что сообщение, на которое смотрел пользователь, не уезжает.
+//
+// Высоту берём из visualViewport.height (детерминированно), а не из dvh: с
+// нативным adjustResize окно ужимается, здесь мы лишь синхронизируем панель и
+// возвращаем позицию прокрутки. Гейт на «инсет» убран — переанкоримся на ЛЮБОЕ
+// изменение высоты вьюпорта (в resize-режиме инсет всегда 0).
+const viewportHeight = ref(0) // px; 0 — не мобилка / ещё не измеряли
+const viewportTop = ref(0)
 function onViewportChange() {
   if (!window.visualViewport || !isMobile.value) return
-  const vh = window.innerHeight
   const vv = window.visualViewport
-  const inset = Math.max(0, vh - vv.height - vv.offsetTop)
-  if (inset === keyboardInset.value) return
+  if (vv.height === viewportHeight.value && vv.offsetTop === viewportTop.value) return
 
   const el = messagesEl.value
   const fromBottom = el ? el.scrollHeight - el.scrollTop - el.clientHeight : 0
-  keyboardInset.value = inset
+  viewportHeight.value = vv.height
+  viewportTop.value = vv.offsetTop
   if (el) {
     nextTick(() => {
+      // Чтение clientHeight форсирует reflow — новая высота уже учтена.
       el.scrollTop = el.scrollHeight - el.clientHeight - fromBottom
     })
   }
