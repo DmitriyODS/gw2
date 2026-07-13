@@ -95,6 +95,16 @@ export const useNotesStore = defineStore('notes', () => {
   // ── Мутации ──
   async function createNote(title = '') {
     const n = await api.createNote(title)
+    // Создаём при выбранной папке — заметка сразу попадает в неё (иначе ушла бы
+    // в «Все» и пропала из текущей выборки). Архив/«Поделились» обнуляют
+    // activeGroupId, поэтому здесь он истинен только для настоящей группы.
+    const groupId = activeGroupId.value
+    if (groupId) {
+      try {
+        await api.setNoteGroups(n.id, [groupId])
+        n.group_ids = [...(n.group_ids || []), groupId]
+      } catch { /* заметка уже создана — папку можно назначить вручную */ }
+    }
     upsertNote(n)
     return n
   }

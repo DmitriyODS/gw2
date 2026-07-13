@@ -66,7 +66,9 @@ const props = defineProps({
   myReactions: { type: Array, default: () => [] },
 })
 
-const QUICK_REACTIONS = ['👍', '❤️', '🎉', '😂', '👏', '🔥']
+// Расширенный набор: позитивные, нейтральные и негативные реакции (как в
+// Telegram/Slack). Переносится по строкам — по 6 в ряд (см. .msg-ctx-reactions).
+const QUICK_REACTIONS = ['👍', '👎', '❤️', '🔥', '😂', '🎉', '👏', '🙏', '😮', '🤔', '😢', '😡']
 
 const emit = defineEmits(['close', 'action', 'react'])
 const menuEl = ref(null)
@@ -169,6 +171,9 @@ function onKey(e) {
 
 .msg-ctx-reactions {
   display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  max-width: 232px;
   gap: 2px;
   padding: 2px;
   margin-bottom: 2px;

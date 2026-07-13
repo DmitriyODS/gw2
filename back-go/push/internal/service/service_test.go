@@ -124,6 +124,15 @@ func TestMessagePushExcludesSenderAndUsesName(t *testing.T) {
 	if sender.sent[0].n.Title != "Иван" || sender.sent[0].n.Body != "привет" {
 		t.Fatalf("неверный заголовок/текст: %+v", sender.sent[0].n)
 	}
+	// Сообщения — data-only + high priority: обёртка строит уведомление сама
+	// (группировка + ответ из шторки), поэтому нужен sender_id и приоритет.
+	n := sender.sent[0].n
+	if !n.HighPriority {
+		t.Fatalf("сообщение должно быть high-priority (data-only): %+v", n)
+	}
+	if n.Data["sender_id"] != "7" || n.Data["conversation_id"] != "3" {
+		t.Fatalf("нет sender_id/conversation_id в data: %+v", n.Data)
+	}
 }
 
 func TestKudosPushToRecipient(t *testing.T) {

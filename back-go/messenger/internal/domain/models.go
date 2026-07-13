@@ -80,10 +80,13 @@ type Attachment struct {
 	MessageID  *int64
 	UploaderID int64
 	FilePath   string
-	FileName   string
-	MimeType   string
-	SizeBytes  int64
-	CreatedAt  time.Time
+	// ThumbPath — уменьшенное превью картинки (nil, если не картинка или сжать
+	// не удалось). Отдаётся клиенту как облегчённая версия для ленты чата.
+	ThumbPath *string
+	FileName  string
+	MimeType  string
+	SizeBytes int64
+	CreatedAt time.Time
 }
 
 // ReplyPreview — выжимка цитируемого сообщения (без рекурсии).

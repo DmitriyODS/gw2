@@ -181,14 +181,23 @@ func (s *Service) onMessage(ctx context.Context, payload json.RawMessage, rooms 
 	}
 	body := messagePreview(e.Message.Text, e.Message.Kind, e.Message.Task != nil, len(e.Message.Attachments) > 0)
 
+	data := map[string]string{
+		"type":            "message",
+		"conversation_id": strconv.FormatInt(e.ConversationID, 10),
+	}
+	if sender != nil {
+		data["sender_id"] = strconv.FormatInt(*sender, 10)
+	}
+
+	// Сообщения — data-only + high priority (как звонки): onMessageReceived
+	// вызывается даже при убитом приложении, и обёртка строит уведомление сама
+	// (группировка по отправителю через MessagingStyle + ответ прямо из шторки).
 	s.deliver(ctx, recipients, domain.Notification{
-		Title:   title,
-		Body:    body,
-		Channel: domain.ChannelMessages,
-		Data: map[string]string{
-			"type":            "message",
-			"conversation_id": strconv.FormatInt(e.ConversationID, 10),
-		},
+		Title:        title,
+		Body:         body,
+		Channel:      domain.ChannelMessages,
+		HighPriority: true,
+		Data:         data,
 	})
 }
 

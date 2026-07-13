@@ -1,7 +1,9 @@
 <template>
   <!-- Картинка — в лайтбокс (зум/поворот/скачивание), а не в новую вкладку -->
+  <!-- В ленте — облегчённое превью (thumb_url), оригинал грузится только при
+       открытии лайтбокса; loading=lazy не тянет и превью, пока пузырь далеко. -->
   <button v-if="isImage" type="button" class="att-image-wrap" @click="lightboxOpen = true">
-    <img :src="att.url" :alt="att.file_name" class="att-image" />
+    <img :src="att.thumb_url || att.url" :alt="att.file_name" class="att-image" loading="lazy" decoding="async" />
   </button>
   <ImageLightbox
     v-if="isImage"

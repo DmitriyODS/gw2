@@ -83,7 +83,8 @@ func TestMessageJSONShape(t *testing.T) {
 			"file_name": "a.pdf",
 			"mime_type": "application/pdf",
 			"size_bytes": 10,
-			"url": "/uploads/messages/2026/06/x.pdf"
+			"url": "/uploads/messages/2026/06/x.pdf",
+			"thumb_url": null
 		}],
 		"reactions": [],
 		"reply_to": {

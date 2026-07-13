@@ -374,7 +374,7 @@ deploy-apk:
 # Сборки НЕ подписаны: для подписи нужны Apple Developer ID / win-сертификат
 # (env CSC_LINK/CSC_KEY_PASSWORD electron-builder'а).
 desktop:
-	@if [ ! -d desktop/node_modules ]; then cd desktop && npm install; fi
+	cd desktop && npm install
 	@if [ -n "$(V)" ]; then cd desktop && npm version $(V) --no-git-tag-version --allow-same-version; fi
 	@printf "\033[1m▶ Собираю десктоп-клиент (mac + win + linux)...\033[0m\n"
 	cd desktop && npx electron-builder -mwl

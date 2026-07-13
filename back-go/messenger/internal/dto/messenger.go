@@ -37,14 +37,14 @@ type RoleRef struct {
 
 // DirectoryUser — публичный профиль (без внутренних полей).
 type DirectoryUser struct {
-	ID         int64     `json:"id"`
-	FIO        string    `json:"fio"`
-	Login      string    `json:"login"`
-	Post       *string   `json:"post"`
-	Role       RoleRef   `json:"role"`
-	CompanyID  *int64    `json:"company_id"`
-	Phone      *string   `json:"phone"`
-	Email      *string   `json:"email"`
+	ID          int64     `json:"id"`
+	FIO         string    `json:"fio"`
+	Login       string    `json:"login"`
+	Post        *string   `json:"post"`
+	Role        RoleRef   `json:"role"`
+	CompanyID   *int64    `json:"company_id"`
+	Phone       *string   `json:"phone"`
+	Email       *string   `json:"email"`
 	AvatarPath  *string   `json:"avatar_path"`
 	LastSeenAt  *JSONTime `json:"last_seen_at"`
 	StatusEmoji *string   `json:"status_emoji"`
@@ -80,16 +80,24 @@ type Attachment struct {
 	MimeType  string `json:"mime_type"`
 	SizeBytes int64  `json:"size_bytes"`
 	URL       string `json:"url"`
+	// ThumbURL — облегчённое превью картинки для ленты чата (nil — превью нет,
+	// клиент показывает URL). Оригинал грузится только по клику.
+	ThumbURL *string `json:"thumb_url"`
 }
 
 func NewAttachment(a *domain.Attachment) *Attachment {
-	return &Attachment{
+	att := &Attachment{
 		ID:        a.ID,
 		FileName:  a.FileName,
 		MimeType:  a.MimeType,
 		SizeBytes: a.SizeBytes,
 		URL:       "/uploads/" + a.FilePath,
 	}
+	if a.ThumbPath != nil {
+		u := "/uploads/" + *a.ThumbPath
+		att.ThumbURL = &u
+	}
+	return att
 }
 
 type ReplyPreview struct {

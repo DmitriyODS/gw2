@@ -195,7 +195,7 @@ func (r *Repo) loadAttachments(ctx context.Context, msgs []*domain.Message) erro
 		ids = append(ids, m.ID)
 	}
 	rows, err := r.q(ctx).Query(ctx, `
-		SELECT id, message_id, uploader_id, file_path, file_name, mime_type, size_bytes, created_at
+		SELECT id, message_id, uploader_id, file_path, thumb_path, file_name, mime_type, size_bytes, created_at
 		FROM message_attachments WHERE message_id = ANY($1) ORDER BY id`, ids)
 	if err != nil {
 		return err
@@ -204,7 +204,7 @@ func (r *Repo) loadAttachments(ctx context.Context, msgs []*domain.Message) erro
 	for rows.Next() {
 		var a domain.Attachment
 		if err := rows.Scan(&a.ID, &a.MessageID, &a.UploaderID, &a.FilePath,
-			&a.FileName, &a.MimeType, &a.SizeBytes, &a.CreatedAt); err != nil {
+			&a.ThumbPath, &a.FileName, &a.MimeType, &a.SizeBytes, &a.CreatedAt); err != nil {
 			return err
 		}
 		if m := byID[*a.MessageID]; m != nil {
@@ -527,7 +527,7 @@ func (r *Repo) FindCallMessage(ctx context.Context, callID, convID int64) (*doma
 
 func (r *Repo) ListAttachmentPathsOfConversation(ctx context.Context, convID int64) ([]string, error) {
 	rows, err := r.q(ctx).Query(ctx, `
-		SELECT a.file_path
+		SELECT a.file_path, a.thumb_path
 		FROM message_attachments a
 		JOIN messages m ON m.id = a.message_id
 		WHERE m.conversation_id = $1`, convID)
@@ -538,30 +538,34 @@ func (r *Repo) ListAttachmentPathsOfConversation(ctx context.Context, convID int
 	var out []string
 	for rows.Next() {
 		var p string
-		if err := rows.Scan(&p); err != nil {
+		var thumb *string
+		if err := rows.Scan(&p, &thumb); err != nil {
 			return nil, err
 		}
 		out = append(out, p)
+		if thumb != nil {
+			out = append(out, *thumb)
+		}
 	}
 	return out, rows.Err()
 }
 
 func (r *Repo) CreateAttachment(ctx context.Context, att *domain.Attachment) error {
 	return r.q(ctx).QueryRow(ctx, `
-		INSERT INTO message_attachments (message_id, uploader_id, file_path, file_name,
+		INSERT INTO message_attachments (message_id, uploader_id, file_path, thumb_path, file_name,
 			mime_type, size_bytes, created_at)
-		VALUES (NULL, $1, $2, $3, $4, $5, now())
+		VALUES (NULL, $1, $2, $3, $4, $5, $6, now())
 		RETURNING id, created_at`,
-		att.UploaderID, att.FilePath, att.FileName, att.MimeType, att.SizeBytes,
+		att.UploaderID, att.FilePath, att.ThumbPath, att.FileName, att.MimeType, att.SizeBytes,
 	).Scan(&att.ID, &att.CreatedAt)
 }
 
 func (r *Repo) GetAttachment(ctx context.Context, id int64) (*domain.Attachment, error) {
 	var a domain.Attachment
 	err := r.q(ctx).QueryRow(ctx, `
-		SELECT id, message_id, uploader_id, file_path, file_name, mime_type, size_bytes, created_at
+		SELECT id, message_id, uploader_id, file_path, thumb_path, file_name, mime_type, size_bytes, created_at
 		FROM message_attachments WHERE id = $1`, id,
-	).Scan(&a.ID, &a.MessageID, &a.UploaderID, &a.FilePath, &a.FileName,
+	).Scan(&a.ID, &a.MessageID, &a.UploaderID, &a.FilePath, &a.ThumbPath, &a.FileName,
 		&a.MimeType, &a.SizeBytes, &a.CreatedAt)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {

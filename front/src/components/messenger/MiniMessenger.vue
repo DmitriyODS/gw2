@@ -194,7 +194,7 @@
               <ProgressSpinner style="width:28px;height:28px" />
             </div>
             <template v-for="g in messageGroups" :key="g.key">
-              <MessageDateDivider :label="g.label" />
+              <MessageDateDivider :label="g.label" @jump="jumpToDay" />
               <MessageBubble
                 v-for="m in g.items"
                 :key="m.id"
@@ -787,6 +787,17 @@ async function onSend(payload) {
 function scrollBottom() {
   const el = threadEl.value
   if (el) el.scrollTop = el.scrollHeight
+}
+
+// Клик по плашке даты — прокрутка к началу дня (первому сообщению группы).
+// Считаем по rect первого пузыря (сам разделитель sticky), ~44px сверху под
+// прилипшую пилюлю даты.
+function jumpToDay(dividerEl) {
+  const el = threadEl.value
+  const first = dividerEl?.nextElementSibling
+  if (!el || !first) return
+  const top = el.scrollTop + (first.getBoundingClientRect().top - el.getBoundingClientRect().top) - 44
+  el.scrollTo({ top: Math.max(0, top), behavior: 'smooth' })
 }
 
 function avatarOf(u) {

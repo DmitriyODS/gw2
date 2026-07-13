@@ -1,14 +1,14 @@
 {
   "name": "groovework-desktop",
-  "version": "1.0.8",
+  "version": "1.0.9",
   "private": true,
   "description": "Groove Work — десктоп-клиент (тонкая обёртка над веб-версией)",
   "author": "Groove Work",
   "desktopName": "groovework",
   "main": "main.js",
   "devDependencies": {
-    "electron": "^38.0.0",
-    "electron-builder": "^26.0.12"
+    "electron": "38.0.0",
+    "electron-builder": "26.0.12"
   },
   "build": {
     "appId": "ru.kodass.groovework",
@@ -21,13 +21,36 @@
       "build/**"
     ],
     "mac": {
-      "target": "dmg"
+      "target": {
+        "target": "dmg",
+        "arch": "arm64"
+      }
     },
     "win": {
-      "target": "nsis"
+      "target": [
+        {
+          "target": "nsis",
+          "arch": ["x64", "arm64"]
+        }
+      ]
+    },
+    "nsis": {
+      "oneClick": true,
+      "perMachine": false,
+      "deleteAppDataOnUninstall": false,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "GrooveWork",
+      "guid": "ru.kodass.groovework",
+      "include": "build/installer.nsh"
     },
     "linux": {
-      "target": "AppImage"
+      "target": [
+        {
+          "target": "AppImage",
+          "arch": ["x64"]
+        }
+      ]
     }
   }
 }

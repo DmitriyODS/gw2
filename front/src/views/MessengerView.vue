@@ -183,7 +183,7 @@
             <span>Загружаем историю…</span>
           </div>
           <template v-for="g in messageGroups" :key="g.key">
-            <MessageDateDivider :label="g.label" />
+            <MessageDateDivider :label="g.label" @jump="jumpToDay" />
             <MessageBubble
               v-for="m in g.items"
               :key="m.id"
@@ -805,6 +805,18 @@ function scrollToBottom() {
 
 function scrollToBottomSmooth() {
   messagesEl.value?.scrollTo({ top: messagesEl.value.scrollHeight, behavior: 'smooth' })
+}
+
+// Клик по прилипшей плашке даты — прокрутка к началу этого дня (первому его
+// сообщению). Считаем по rect первого пузыря группы (сам разделитель sticky,
+// его позиция «прилипла» и для расчёта непригодна); оставляем ~44px сверху,
+// чтобы пилюля даты осталась видимой над первым сообщением.
+function jumpToDay(dividerEl) {
+  const el = messagesEl.value
+  const first = dividerEl?.nextElementSibling
+  if (!el || !first) return
+  const top = el.scrollTop + (first.getBoundingClientRect().top - el.getBoundingClientRect().top) - 44
+  el.scrollTo({ top: Math.max(0, top), behavior: 'smooth' })
 }
 
 // Гард, чтобы scroll-событие не запускало вторую подгрузку, пока первая ещё

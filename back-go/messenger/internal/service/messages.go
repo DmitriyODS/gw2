@@ -420,9 +420,18 @@ func (s *Service) copyAttachment(ctx context.Context, att *domain.Attachment,
 	if err != nil {
 		return nil, domain.NewError("COPY_FAILED", "Не удалось скопировать вложение", 500)
 	}
+	// Превью тоже копируем физически (у пересланной копии свой файл-миниатюра;
+	// не удалось — не критично, отдастся оригинал).
+	var thumbPath *string
+	if att.ThumbPath != nil {
+		if tp, cerr := s.files.Copy(*att.ThumbPath); cerr == nil {
+			thumbPath = &tp
+		}
+	}
 	copied := &domain.Attachment{
 		UploaderID: uploaderID,
 		FilePath:   newPath,
+		ThumbPath:  thumbPath,
 		FileName:   att.FileName,
 		MimeType:   att.MimeType,
 		SizeBytes:  att.SizeBytes,
@@ -504,9 +513,21 @@ func (s *Service) UploadAttachment(ctx context.Context, uploaderID int64,
 	if err != nil {
 		return nil, err
 	}
+	// Для картинок делаем облегчённое превью (лента чата грузит его вместо
+	// оригинала). Сжатие/сохранение не должно валить загрузку — при ошибке
+	// просто нет превью, клиент покажет исходник.
+	var thumbPath *string
+	if strings.HasPrefix(mime, "image/") {
+		if thumb, ok := makeThumbnail(data); ok {
+			if tp, terr := s.files.Save(thumb, ".jpg"); terr == nil {
+				thumbPath = &tp
+			}
+		}
+	}
 	att := &domain.Attachment{
 		UploaderID: uploaderID,
 		FilePath:   relPath,
+		ThumbPath:  thumbPath,
 		FileName:   truncateString(original, 255),
 		MimeType:   truncateString(mime, 120),
 		SizeBytes:  int64(len(data)),
@@ -593,6 +614,9 @@ func (s *Service) destroyMessage(ctx context.Context, msg *domain.Message) error
 	paths := make([]string, 0, len(msg.Attachments))
 	for _, a := range msg.Attachments {
 		paths = append(paths, a.FilePath)
+		if a.ThumbPath != nil {
+			paths = append(paths, *a.ThumbPath)
+		}
 	}
 	if err := s.repo.DeleteMessage(ctx, msg.ID); err != nil {
 		return err
