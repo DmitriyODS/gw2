@@ -67,8 +67,11 @@ const props = defineProps({
 })
 
 // Расширенный набор: позитивные, нейтральные и негативные реакции (как в
-// Telegram/Slack). Переносится по строкам — по 6 в ряд (см. .msg-ctx-reactions).
-const QUICK_REACTIONS = ['👍', '👎', '❤️', '🔥', '😂', '🎉', '👏', '🙏', '😮', '🤔', '😢', '😡']
+// Telegram/Slack). Одна горизонтально прокручиваемая строка (см. .msg-ctx-reactions).
+const QUICK_REACTIONS = [
+  '👍', '👎', '❤️', '🔥', '😂', '🎉', '👏', '🙏', '😮', '🤔',
+  '😢', '😡', '🥰', '😍', '🤯', '💯', '🤝', '👀', '💩', '🤣',
+]
 
 const emit = defineEmits(['close', 'action', 'react'])
 const menuEl = ref(null)
@@ -169,17 +172,27 @@ function onKey(e) {
   gap: 2px;
 }
 
+/* Одна строка эмодзи, прокручиваемая по горизонтали. Скролл-бар скрыт —
+   ряд не разрастается во всё меню (как реакции в Telegram). */
 .msg-ctx-reactions {
   display: flex;
-  flex-wrap: wrap;
-  justify-content: center;
-  max-width: 232px;
+  flex-wrap: nowrap;
   gap: 2px;
   padding: 2px;
   margin-bottom: 2px;
+  max-width: 260px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: none;             /* Firefox */
+  -ms-overflow-style: none;          /* старый Edge */
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior-x: contain;
 }
 
+.msg-ctx-reactions::-webkit-scrollbar { display: none; }
+
 .msg-ctx-react {
+  flex: 0 0 auto;
   width: 36px;
   height: 36px;
   display: grid;

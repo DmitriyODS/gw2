@@ -3,12 +3,14 @@ package com.kodass.groovework;
 import android.app.DownloadManager;
 import android.app.NotificationChannel;
 import android.app.NotificationManager;
+import android.content.Intent;
 import android.net.Uri;
 import android.net.http.SslError;
 import android.os.Bundle;
 import android.os.Environment;
 import android.os.Handler;
 import android.os.Looper;
+import android.text.TextUtils;
 import android.webkit.CookieManager;
 import android.webkit.SslErrorHandler;
 import android.webkit.URLUtil;
@@ -17,6 +19,8 @@ import android.widget.Toast;
 
 import com.getcapacitor.BridgeActivity;
 import com.getcapacitor.BridgeWebViewClient;
+
+import org.json.JSONObject;
 
 public class MainActivity extends BridgeActivity {
 
@@ -83,6 +87,54 @@ public class MainActivity extends BridgeActivity {
 
         // Первая проверка обновления — сразу при запуске, дальше — раз в час.
         updateHandler.post(updateTick);
+
+        // Приложение открыто через системное «Поделиться» (ACTION_SEND) —
+        // пробрасываем текст в веб-слой, где пользователь выберет получателя.
+        handleShareIntent(getIntent());
+    }
+
+    // Уже запущенное приложение получило новое «Поделиться».
+    @Override
+    public void onNewIntent(Intent intent) {
+        super.onNewIntent(intent);
+        setIntent(intent);
+        handleShareIntent(intent);
+    }
+
+    // Извлекаем расшаренный текст (Intent.EXTRA_TEXT + опц. EXTRA_SUBJECT) и
+    // доставляем в JS. WebView на холодном старте ещё грузит SPA — доставляем с
+    // задержкой и повтором; фронт также читает window.__gwSharedText при mount.
+    private void handleShareIntent(Intent intent) {
+        if (intent == null || !Intent.ACTION_SEND.equals(intent.getAction())) return;
+        String type = intent.getType();
+        if (type == null || !type.startsWith("text/")) return; // пока только текст
+        String text = intent.getStringExtra(Intent.EXTRA_TEXT);
+        String subject = intent.getStringExtra(Intent.EXTRA_SUBJECT);
+        if (TextUtils.isEmpty(text)) text = subject;
+        else if (!TextUtils.isEmpty(subject)) text = subject + "\n" + text;
+        if (TextUtils.isEmpty(text)) return;
+        deliverShareToWeb(text, 8);
+    }
+
+    private void deliverShareToWeb(final String text, final int retriesLeft) {
+        updateHandler.postDelayed(() -> {
+            WebView web = bridge != null ? bridge.getWebView() : null;
+            if (web == null) {
+                if (retriesLeft > 0) deliverShareToWeb(text, retriesLeft - 1);
+                return;
+            }
+            String payload;
+            try {
+                payload = new JSONObject().put("text", text).toString();
+            } catch (Exception e) {
+                return;
+            }
+            // Ставим глобал (фронт читает его при mount, если слушателя ещё нет)
+            // и шлём событие тем, кто уже слушает.
+            String js = "window.__gwSharedText=" + payload + ";"
+                + "window.dispatchEvent(new CustomEvent('gw:shared-text',{detail:" + payload + "}));";
+            web.evaluateJavascript(js, null);
+        }, 1200);
     }
 
     @Override

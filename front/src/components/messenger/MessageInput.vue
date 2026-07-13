@@ -105,6 +105,7 @@
           @change="onFiles"
         />
       </div>
+      <EmojiPicker @pick="insertAtCursor" />
       <textarea
         ref="textarea"
         v-model="text"
@@ -151,6 +152,7 @@
 import { ref, computed, nextTick, onMounted, onBeforeUnmount, watch } from 'vue'
 import { uploadAttachment } from '@/api/messenger.js'
 import { selectionViewportRect } from '@/utils/textareaSelection.js'
+import EmojiPicker from '@/components/messenger/EmojiPicker.vue'
 import ProgressSpinner from 'primevue/progressspinner'
 
 const props = defineProps({
@@ -389,9 +391,18 @@ async function onFiles(e) {
 /* Drag-and-drop обрабатывает родитель (вся область чата), а не только это
    поле — чтобы файл можно было бросить куда угодно в переписку. Сюда файлы
    приходят через exposed addFiles(); focus() дёргает родитель при ответе. */
+/* Задать текст поля целиком (пересланное из системного «Поделиться»). */
+function setText(str) {
+  text.value = str || ''
+  nextTick(() => { textarea.value?.focus(); autoresize() })
+}
+
 defineExpose({
   addFiles: uploadFiles,
   focus: () => textarea.value?.focus(),
+  clearAfterSend,
+  insertAtCursor,
+  setText,
 })
 
 /* Вставка из буфера: картинки/файлы скриншотов приходят как items типа file. */
@@ -519,28 +530,63 @@ async function onScreencastStop() {
   await uploadFiles([file])
 }
 
+/* Во время IME-композиции (клавиатура Samsung и др. на Android) Vue не
+   синхронизирует v-model до compositionend, поэтому последнее «набираемое»
+   слово отсутствует в text.value. DOM-значение <textarea> его содержит —
+   берём напрямую, чтобы отправлять ровно то, что видит пользователь. */
+function currentText() {
+  return textarea.value?.value ?? text.value
+}
+
 async function submit() {
   if (!canSend.value) return
+  const full = currentText()
+  // Доносим слово из незавершённой композиции в реактивную модель — поле и
+  // возможный повтор отправки остаются консистентными.
+  if (full !== text.value) text.value = full
   // Режим редактирования: правим только текст, вложения/ответ не трогаем.
   if (props.editingMessage) {
-    emit('save-edit', text.value.trim())
+    emit('save-edit', full.trim())
     text.value = ''
     await nextTick()
     autoresize()
     return
   }
   const payload = {
-    text: text.value.trim(),
+    text: full.trim(),
     attachment_ids: pending.value.filter(p => p.id).map(p => p.id),
     reply_to_id: props.replyTo?.id || null,
     task_id: attachedTask.value?.id || null,
   }
+  // Поле НЕ очищаем здесь: очистку делает родитель через clearAfterSend()
+  // ТОЛЬКО при успешной отправке. При сбое сети текст остаётся в поле (и не
+  // дублируется — кнопка отправки заблокирована prop `sending` на время запроса).
   emit('send', payload)
+}
+
+/* Успешная отправка подтверждена родителем — очищаем поле и вложения. */
+function clearAfterSend() {
   text.value = ''
   pending.value = []
   emit('update:attachedTask', null)
-  await nextTick()
-  autoresize()
+  nextTick(() => autoresize())
+}
+
+/* Вставка эмодзи из пикера в позицию курсора (база — DOM-значение, чтобы не
+   потерять слово из незавершённой композиции). */
+function insertAtCursor(str) {
+  const el = textarea.value
+  if (!el) { text.value += str; return }
+  const base = el.value
+  const start = el.selectionStart ?? base.length
+  const end = el.selectionEnd ?? base.length
+  text.value = base.slice(0, start) + str + base.slice(end)
+  nextTick(() => {
+    el.focus()
+    const pos = start + str.length
+    try { el.setSelectionRange(pos, pos) } catch {/* поле могло потерять фокус */}
+    autoresize()
+  })
 }
 
 function iconFor(mime) {

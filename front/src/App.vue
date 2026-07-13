@@ -44,6 +44,11 @@
       </main>
     </template>
     <Toast :position="isMobile ? 'top-center' : 'top-right'" />
+    <!-- Pull-to-refresh на мобиле (обновление страницы оттяжкой вниз у верха
+         экрана). Отключён на fullscreen-роутах — там вертикальные жесты заняты. -->
+    <PullToRefresh :active="!!authStore.token && !isFullscreenRoute && callStore.phase === 'idle'" />
+    <!-- Выбор получателя для текста из системного «Поделиться» (Android). -->
+    <NewChatDialog v-if="authStore.token" v-model="sharePickOpen" @pick="onSharePickRecipient" />
   </div>
 </template>
 
@@ -68,7 +73,7 @@ import { connectSocket } from '@/socket/index.js'
 import { navProgress } from '@/composables/useNavProgress.js'
 import {
   registerNotifyServiceWorker, installNotifyUnlock, requestNotificationPermission,
-  playNotifySound,
+  playNotifySound, focusAppWindow,
 } from '@/utils/systemNotify.js'
 import { installAppUpdateWatcher } from '@/utils/appUpdate.js'
 import { initNativePush, syncNativeSystemBars } from '@/utils/nativeApp.js'
@@ -80,6 +85,8 @@ import ActiveUnitBanner from '@/components/layout/ActiveUnitBanner.vue'
 import AppTutorial from '@/components/layout/AppTutorial.vue'
 import ChangelogModal from '@/components/layout/ChangelogModal.vue'
 import MiniMessenger from '@/components/messenger/MiniMessenger.vue'
+import PullToRefresh from '@/components/common/PullToRefresh.vue'
+import NewChatDialog from '@/components/messenger/NewChatDialog.vue'
 import IncomingCallOverlay from '@/components/call/IncomingCallOverlay.vue'
 import CallView from '@/components/call/CallView.vue'
 import ReturnCallBanner from '@/components/call/ReturnCallBanner.vue'
@@ -127,8 +134,47 @@ function openFromPush(data) {
     router.push(`/messenger/${data.conversation_id}`)
   } else if (data.type === 'task' && data.task_id) {
     router.push(`/tasks/${data.task_id}`)
+  } else if (data.type === 'post' && data.post_id) {
+    router.push(`/portal/${data.post_id}`)
+  } else if (data.type === 'kudos') {
+    router.push('/pets/bank')
   }
   // type=call: приложение открылось — входящий звонок подхватит WS.
+}
+
+/* Клик по системному уведомлению (десктоп-обёртка Electron и веб через SW)
+   переносит В РАЗДЕЛ, откуда оно пришло — для сообщения открывает нужный чат
+   из ЛЮБОГО экрана. Оба пути (SW-postMessage и Electron new Notification)
+   сходятся на событии messenger:open-conversation — здесь единый глобальный
+   роутинг, не зависящий от того, смонтирован ли MessengerView. */
+function onOpenConversation(e) {
+  const id = e.detail?.conversation_id
+  if (!id) return
+  focusAppWindow()
+  router.push(`/messenger/${id}`)
+}
+
+/* Системное «Поделиться» текстом (Android-обёртка → MainActivity шлёт
+   gw:shared-text): открываем выбор получателя, затем чат с готовым текстом. */
+const sharePickOpen = ref(false)
+const sharedText = ref('')
+
+function onSharedText(e) {
+  const t = (e?.detail?.text || '').trim()
+  if (!t || !authStore.token) return
+  sharedText.value = t
+  sharePickOpen.value = true
+}
+
+async function onSharePickRecipient(user) {
+  sharePickOpen.value = false
+  try {
+    const id = await messengerStore.openWith(user.id)
+    // Черновик подхватит MessengerView при активации чата.
+    messengerStore.pendingDraft = { convId: id, text: sharedText.value }
+    router.push(`/messenger/${id}`)
+  } catch { /* ошибка открытия чата — молча */ }
+  sharedText.value = ''
 }
 watch(() => authStore.user, (user, prev) => {
   if (user && !prev) initNativePush(openFromPush)
@@ -243,10 +289,20 @@ function onBeforeUnloadGuard(e) {
 onMounted(() => {
   window.addEventListener('call:focus-overlay', onCallFocusOverlay)
   window.addEventListener('beforeunload', onBeforeUnloadGuard)
+  window.addEventListener('messenger:open-conversation', onOpenConversation)
+  window.addEventListener('gw:shared-text', onSharedText)
+  // Обёртка могла выставить текст до навешивания слушателя (холодный старт).
+  if (window.__gwSharedText) {
+    const shared = window.__gwSharedText
+    window.__gwSharedText = null
+    onSharedText({ detail: shared })
+  }
 })
 onBeforeUnmount(() => {
   window.removeEventListener('call:focus-overlay', onCallFocusOverlay)
   window.removeEventListener('beforeunload', onBeforeUnloadGuard)
+  window.removeEventListener('messenger:open-conversation', onOpenConversation)
+  window.removeEventListener('gw:shared-text', onSharedText)
   clearTimeout(tutorialTimer)
 })
 </script>

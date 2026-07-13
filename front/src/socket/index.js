@@ -119,6 +119,14 @@ function installVisibilityResync() {
   })
   // pagehide — последний надёжный момент на мобильных, чтобы пометить «ушёл».
   window.addEventListener('pagehide', () => emitVisibility(false))
+  // Сеть вернулась после обрыва: фоном перечитываем список диалогов и ПЕРВУЮ
+  // страницу активного чата по HTTP — не полагаясь на состояние сокета (после
+  // кратковременного обрыва WS может «залипнуть» и не прислать connect, из-за
+  // чего в ленте оставалось лишь последнее дошедшее сообщение).
+  window.addEventListener('online', () => {
+    resyncMessenger()
+    markActiveReadOnFocus()
+  })
 }
 
 export function connectSocket() {

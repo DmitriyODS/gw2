@@ -182,7 +182,7 @@
             <ProgressSpinner style="width:22px;height:22px" />
             <span>Загружаем историю…</span>
           </div>
-          <template v-for="g in messageGroups" :key="g.key">
+          <div v-for="g in messageGroups" :key="g.key" class="msg-day-group">
             <MessageDateDivider :label="g.label" @jump="jumpToDay" />
             <MessageBubble
               v-for="m in g.items"
@@ -203,7 +203,7 @@
               @quote-click="onQuoteClick"
               @react="emoji => onReact(m, emoji)"
             />
-          </template>
+          </div>
         </template>
       </div>
 
@@ -524,6 +524,16 @@ async function activateRouteConversation() {
 // поверх шапки нового чата.
 watch(() => messenger.activeConversationId, () => { chatMenuOpen.value = false })
 
+// Черновик из системного «Поделиться» (Android): открыли выбранный чат —
+// сеем текст в поле ввода один раз.
+watch(() => messenger.activeConversationId, async (id) => {
+  const d = messenger.pendingDraft
+  if (!id || !d || d.convId !== id) return
+  messenger.pendingDraft = null
+  await nextTick()
+  messageInputRef.value?.setText(d.text)
+}, { immediate: true })
+
 const forwardOpen = ref(false)
 const forwardSource = ref(null)
 const forwardDialogRef = ref(null)
@@ -787,10 +797,13 @@ async function startWith(user) {
 async function onSend(payload) {
   try {
     await messenger.send(activeId.value, payload)
+    // Очищаем поле ТОЛЬКО после успешной отправки — при сбое текст остаётся.
+    messageInputRef.value?.clearAfterSend()
     replyTo.value = null
     await nextTick()
     scrollToBottom()
   } catch (e) {
+    // Поле не очищаем: пользователь может повторить отправку тем же текстом.
     const code = e?.error
     const msg = code === 'TASK_WRONG_COMPANY'
       ? 'Задача относится к другой компании'

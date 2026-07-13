@@ -193,7 +193,7 @@
             <div v-if="messenger.loadingMessages && !messenger.activeMessages.length" class="mini-loading">
               <ProgressSpinner style="width:28px;height:28px" />
             </div>
-            <template v-for="g in messageGroups" :key="g.key">
+            <div v-for="g in messageGroups" :key="g.key" class="msg-day-group">
               <MessageDateDivider :label="g.label" @jump="jumpToDay" />
               <MessageBubble
                 v-for="m in g.items"
@@ -212,7 +212,7 @@
                 @quote-click="onQuoteClick"
                 @react="emoji => onReact(m, emoji)"
               />
-            </template>
+            </div>
           </div>
           <MessageInput
             ref="miniInputRef"
@@ -773,12 +773,15 @@ async function onSend(payload) {
   try {
     await messenger.send(threadId.value, payload)
   } catch (e) {
+    // Поле не очищаем — текст остаётся для повтора (clearAfterSend не вызван).
     const msg = e?.error === 'TASK_WRONG_COMPANY'
       ? 'Задача относится к другой компании'
       : (e?.message || 'Не удалось отправить сообщение')
     notif.error(msg)
     return
   }
+  // Очищаем поле только после успешной отправки.
+  miniInputRef.value?.clearAfterSend()
   replyTo.value = null
   await nextTick()
   scrollBottom()
@@ -828,21 +831,9 @@ watch(lastId, async (id, prev) => {
   scrollBottom()
 })
 
-// Открытие чата из системного уведомления — разворачиваем мини-чат на
-// вкладке «Сообщения», даже если сейчас открыт «Ассистент».
-function handleExternalOpen(e) {
-  if (hidden.value) return
-  const id = e.detail?.conversation_id
-  if (id) {
-    activeTab.value = 'messages'
-    open.value = true
-    openThread(id)
-  }
-}
-
-if (typeof window !== 'undefined') {
-  window.addEventListener('messenger:open-conversation', handleExternalOpen)
-}
+// Клик по системному уведомлению теперь переносит В РАЗДЕЛ чата (глобальный
+// роутинг в App.vue → /messenger/:id), а не разворачивает плавающий хаб —
+// поэтому здесь событие messenger:open-conversation больше не перехватываем.
 
 /* ── Вкладка «Ассистент» ────────────────────────────────────── */
 const assistantThreadEl = ref(null)
