@@ -107,6 +107,67 @@ func TestMessengerDialogLifecycle(t *testing.T) {
 	requireError(t, r, 403, "FORBIDDEN", "доступ чужого к диалогу")
 }
 
+// Регрессия: отправка сообщения в ГРУППУ (user_a_id диалога NULL) не должна
+// падать 500 при сканировании снапшота; проверяем и «кто прочитал».
+func TestMessengerGroupSendAndReadBy(t *testing.T) {
+	admin := newVerifiedUser(t)
+	companyID := admin.createCompany(t, uniq("Группа "))
+	a := newMember(t, admin, companyID, roleEmployee)
+	b := newMember(t, admin, companyID, roleEmployee)
+
+	// a создаёт группу с участником b.
+	r := messengerAPI.doJSON(t, http.MethodPost, "/api/messenger/groups", a.Token,
+		map[string]any{"title": "Команда", "member_ids": []int64{b.ID}})
+	requireStatus(t, r, 201, "создание группы")
+	groupID := int64(r.Num("id"))
+	if groupID == 0 {
+		t.Fatalf("создание группы: нет id: %s", r.Raw)
+	}
+
+	// Отправка текста в группу — раньше падало 500 (NULL user_a_id → int64).
+	m := sendMsg(t, a, groupID, map[string]any{"text": "всем привет"})
+	requireStatus(t, m, 201, "отправка сообщения в группу")
+	if m.Str("text") != "всем привет" {
+		t.Fatalf("текст группового сообщения не совпал: %s", m.Raw)
+	}
+	msgID := int64(m.Num("id"))
+
+	// b видит сообщение (плюс системная плашка создания группы).
+	msgs := listMsgs(t, b, groupID, "")
+	found := false
+	for _, mm := range msgs {
+		if s, _ := mm["text"].(string); s == "всем привет" {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("b не видит групповое сообщение: %v", msgs)
+	}
+
+	// До прочтения b — читателей нет.
+	rb := messengerAPI.doJSON(t, http.MethodGet,
+		fmt.Sprintf("/api/messenger/messages/%d/read-by", msgID), a.Token, nil)
+	requireStatus(t, rb, 200, "read-by до прочтения")
+
+	// b читает группу → у a в read-by появляется b.
+	rr := messengerAPI.doJSON(t, http.MethodPost,
+		fmt.Sprintf("/api/messenger/conversations/%d/read", groupID), b.Token, nil)
+	requireStatus(t, rr, 200, "отметка прочтения b")
+
+	rb = messengerAPI.doJSON(t, http.MethodGet,
+		fmt.Sprintf("/api/messenger/messages/%d/read-by", msgID), a.Token, nil)
+	requireStatus(t, rb, 200, "read-by после прочтения")
+	var readBy struct {
+		Readers []map[string]any `json:"readers"`
+	}
+	if err := jsonUnmarshal(rb.Raw, &readBy); err != nil {
+		t.Fatalf("разбор read-by: %v; тело: %s", err, rb.Raw)
+	}
+	if len(readBy.Readers) != 1 || int64(readBy.Readers[0]["id"].(float64)) != b.ID {
+		t.Fatalf("read-by ожидал [b], получил: %s", rb.Raw)
+	}
+}
+
 func TestMessengerPagination(t *testing.T) {
 	admin := newVerifiedUser(t)
 	companyID := admin.createCompany(t, uniq("Пагинация "))
