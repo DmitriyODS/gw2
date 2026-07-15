@@ -249,7 +249,17 @@ func (h *handlers) listComments(c *fiber.Ctx) error {
 	if err != nil {
 		return h.respondError(c, err)
 	}
-	return c.JSON(fiber.Map{"items": resp})
+	return c.JSON(resp)
+}
+
+func (h *handlers) seenComments(c *fiber.Ctx) error {
+	user := currentUser(c)
+	if _, err := h.eps.MarkCommentsSeen(c.Context(), endpoint.TaskActorRequest{
+		TaskID: pathID(c), ActorID: user.ID, CompanyID: user.CompanyID,
+	}); err != nil {
+		return h.respondError(c, err)
+	}
+	return c.SendStatus(fiber.StatusNoContent)
 }
 
 func (h *handlers) createComment(c *fiber.Ctx) error {

@@ -274,10 +274,21 @@ type Conversation struct {
 	LastMessageAt *JSONTime `json:"last_message_at"`
 	IsDevChat     bool      `json:"is_dev_chat"`
 	CompanyID     *int64    `json:"company_id"`
+
+	// Группа.
+	IsGroup     bool          `json:"is_group"`
+	Title       *string       `json:"title"`
+	AvatarPath  *string       `json:"avatar_path"`
+	CreatedBy   *int64        `json:"created_by"`
+	InviteCode  *string       `json:"invite_code"`
+	MemberCount int           `json:"member_count"`
+	MyRole      string        `json:"my_role"`
+	MyMuted     bool          `json:"my_muted"`
+	Members     []GroupMember `json:"members,omitempty"`
 }
 
 func NewConversation(c *domain.Conversation) *Conversation {
-	return &Conversation{
+	out := &Conversation{
 		ID:            c.ID,
 		UserAID:       c.UserAID,
 		UserBID:       c.UserBID,
@@ -285,6 +296,41 @@ func NewConversation(c *domain.Conversation) *Conversation {
 		LastMessageAt: jsonTimePtr(c.LastMessageAt),
 		IsDevChat:     c.IsDevChat,
 		CompanyID:     c.CompanyID,
+		IsGroup:       c.IsGroup,
+		Title:         c.Title,
+		AvatarPath:    c.AvatarPath,
+		CreatedBy:     c.CreatedBy,
+		InviteCode:    c.InviteCode,
+		MemberCount:   c.MemberCount,
+		MyRole:        c.MyRole,
+		MyMuted:       c.MyMuted,
+	}
+	for _, m := range c.Members {
+		out.Members = append(out.Members, NewGroupMember(m))
+	}
+	return out
+}
+
+// GroupMember — участник группы (форма для карточки группы).
+type GroupMember struct {
+	User              *DirectoryUser `json:"user"`
+	Role              string         `json:"role"`
+	JoinedAt          JSONTime       `json:"joined_at"`
+	LastReadMessageID *int64         `json:"last_read_message_id"`
+	CanManageMembers  bool           `json:"can_manage_members"`
+	CanEditInfo       bool           `json:"can_edit_info"`
+	CanPinMessages    bool           `json:"can_pin_messages"`
+}
+
+func NewGroupMember(m *domain.Member) GroupMember {
+	return GroupMember{
+		User:              NewDirectoryUser(m.User),
+		Role:              m.Role,
+		JoinedAt:          JSONTime(m.JoinedAt),
+		LastReadMessageID: m.LastReadMessageID,
+		CanManageMembers:  m.CanManageMembers,
+		CanEditInfo:       m.CanEditInfo,
+		CanPinMessages:    m.CanPinMessages,
 	}
 }
 
@@ -308,6 +354,14 @@ type ConversationListItem struct {
 	CompanyID     *int64         `json:"company_id"`
 	CompanyName   *string        `json:"company_name"`
 	OwnerUser     *DirectoryUser `json:"owner_user"`
+
+	// Группа.
+	IsGroup     bool    `json:"is_group"`
+	Title       *string `json:"title"`
+	AvatarPath  *string `json:"avatar_path"`
+	MemberCount int     `json:"member_count"`
+	MyRole      string  `json:"my_role"`
+	Muted       bool    `json:"muted"`
 }
 
 // ── Запросы REST ─────────────────────────────────────────────────
@@ -335,17 +389,23 @@ type ForwardResult struct {
 
 // ── Payload'ы сокет-событий (эмитятся Flask-мостом вербатим) ─────
 
-// MessageNewEvent — message:new.
+// MessageNewEvent — message:new. NotifyIDs/ConversationTitle заполняются только
+// для групп: NotifyIDs — кому слать пуш (участники минус muted минус автор, плюс
+// упомянутые), ConversationTitle — имя группы для заголовка пуша.
 type MessageNewEvent struct {
-	ConversationID int64    `json:"conversation_id"`
-	Message        *Message `json:"message"`
-	FromUserID     *int64   `json:"from_user_id"`
+	ConversationID    int64    `json:"conversation_id"`
+	Message           *Message `json:"message"`
+	FromUserID        *int64   `json:"from_user_id"`
+	NotifyIDs         []int64  `json:"notify_ids,omitempty"`
+	ConversationTitle *string  `json:"conversation_title,omitempty"`
 }
 
-// MessageReadEvent — message:read.
+// MessageReadEvent — message:read. LastReadID заполняется для групп (watermark
+// прочтения участника ReaderID) — клиенты обновляют панель «кто прочитал».
 type MessageReadEvent struct {
-	ConversationID int64 `json:"conversation_id"`
-	ReaderID       int64 `json:"reader_id"`
+	ConversationID int64  `json:"conversation_id"`
+	ReaderID       int64  `json:"reader_id"`
+	LastReadID     *int64 `json:"last_read_id,omitempty"`
 }
 
 // MessageDeletedEvent — message:deleted.
@@ -371,4 +431,10 @@ type ConversationDeletedEvent struct {
 type ConversationPinEvent struct {
 	ConversationID int64 `json:"conversation_id"`
 	IsPinned       bool  `json:"is_pinned"`
+}
+
+// GroupUpdatedEvent — group:updated (состав/инфо/роли/mute изменились —
+// клиент перечитывает группу).
+type GroupUpdatedEvent struct {
+	ConversationID int64 `json:"conversation_id"`
 }

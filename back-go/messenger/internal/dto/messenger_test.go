@@ -142,7 +142,13 @@ func TestConversationListItemJSONShape(t *testing.T) {
 		"is_dev_chat": true,
 		"company_id": 10,
 		"company_name": "ООО Ромашка",
-		"owner_user": null
+		"owner_user": null,
+		"is_group": false,
+		"title": null,
+		"avatar_path": null,
+		"member_count": 0,
+		"my_role": "",
+		"muted": false
 	}`
 	assertJSONEq(t, raw, want)
 }
@@ -166,6 +172,14 @@ func TestConversationWithOtherFlattens(t *testing.T) {
 		"last_message_at": null,
 		"is_dev_chat": false,
 		"company_id": 10,
+		"is_group": false,
+		"title": null,
+		"avatar_path": null,
+		"created_by": null,
+		"invite_code": null,
+		"member_count": 0,
+		"my_role": "",
+		"my_muted": false,
 		"other_user": null
 	}`
 	assertJSONEq(t, raw, want)

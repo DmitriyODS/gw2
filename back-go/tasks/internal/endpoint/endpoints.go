@@ -34,8 +34,9 @@ type Endpoints struct {
 	StopUnit   endpoint.Endpoint
 	DeleteUnit endpoint.Endpoint
 
-	ListComments  endpoint.Endpoint
-	CreateComment endpoint.Endpoint
+	ListComments     endpoint.Endpoint
+	MarkCommentsSeen endpoint.Endpoint
+	CreateComment    endpoint.Endpoint
 	UpdateComment endpoint.Endpoint
 	DeleteComment endpoint.Endpoint
 
@@ -419,7 +420,11 @@ func New(svc *service.Service, yg *service.Yougile) Endpoints {
 
 		ListComments: func(ctx context.Context, request any) (any, error) {
 			req := request.(TaskActorRequest)
-			return svc.ListComments(ctx, req.TaskID, req.CompanyID)
+			return svc.ListComments(ctx, req.TaskID, req.ActorID, req.CompanyID)
+		},
+		MarkCommentsSeen: func(ctx context.Context, request any) (any, error) {
+			req := request.(TaskActorRequest)
+			return nil, svc.MarkCommentsSeen(ctx, req.TaskID, req.ActorID, req.CompanyID)
 		},
 		CreateComment: func(ctx context.Context, request any) (any, error) {
 			req := request.(CommentCreateRequest)

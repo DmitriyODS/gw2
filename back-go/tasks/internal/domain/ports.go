@@ -103,6 +103,11 @@ type CommentRepository interface {
 	CreateComment(ctx Ctx, c *Comment) error
 	UpdateCommentText(ctx Ctx, id int64, text string, updatedAt time.Time) error
 	SoftDeleteComment(ctx Ctx, id int64, deletedAt time.Time) error
+	// CountNewComments — число чужих (не userID) не удалённых комментариев,
+	// созданных позже отметки прочтения пользователя (нет отметки → все чужие).
+	CountNewComments(ctx Ctx, taskID, userID int64) (int, error)
+	// MarkCommentsSeen — upsert отметки «прочитано» (last_seen_at = now()).
+	MarkCommentsSeen(ctx Ctx, taskID, userID int64) error
 }
 
 // UserReader — read-only доступ к пользователям платформы (auth-мидлварь,

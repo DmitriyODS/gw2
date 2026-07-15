@@ -106,6 +106,7 @@ func NewServer(eps endpoint.Endpoints, users domain.UserReader,
 	tasksAPI.Patch("/:id<int>/stage", employee, h.setStage)
 	tasksAPI.Get("/:id<int>/contributors", employee, h.contributors)
 	tasksAPI.Get("/:id<int>/comments", employee, h.listComments)
+	tasksAPI.Post("/:id<int>/comments/seen", employee, h.seenComments)
 	tasksAPI.Post("/:id<int>/comments", employee, h.createComment)
 	tasksAPI.Patch("/:id<int>/comments/:commentId<int>", employee, h.updateComment)
 	tasksAPI.Delete("/:id<int>/comments/:commentId<int>", employee, h.deleteComment)

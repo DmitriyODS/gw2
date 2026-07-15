@@ -20,6 +20,9 @@
         >
           <span class="material-symbols-outlined">video_call</span>
         </button>
+        <button v-if="tab !== 'support'" class="new-btn new-btn--group" @click="$emit('new-group')" title="Новая группа">
+          <span class="material-symbols-outlined">group_add</span>
+        </button>
         <button v-if="tab !== 'support'" class="new-btn" @click="$emit('new-chat')" title="Новый чат">
           <span class="material-symbols-outlined">edit_square</span>
         </button>
@@ -82,6 +85,10 @@
         <div v-else-if="c.is_dev_chat" class="conv-avatar-wrap dev">
           <span class="material-symbols-outlined">support_agent</span>
         </div>
+        <div v-else-if="c.is_group" class="conv-avatar-wrap group">
+          <img v-if="c.avatar_path" class="conv-avatar" :src="`/uploads/${c.avatar_path}`" :alt="c.title" />
+          <span v-else class="material-symbols-outlined">groups</span>
+        </div>
         <div v-else class="conv-avatar-wrap">
           <img class="conv-avatar" :src="avatarOf(c.other_user)" :alt="c.other_user?.fio" />
           <span v-if="messenger.isOnline(c.other_user?.id)" class="online-dot" title="В сети"></span>
@@ -93,6 +100,10 @@
                 {{ c.owner_user.fio }}
               </template>
               <template v-else-if="c.is_dev_chat">Техподдержка</template>
+              <template v-else-if="c.is_group">
+                <span v-if="c.muted" class="material-symbols-outlined conv-mute-mark" title="Уведомления выключены">notifications_off</span>
+                {{ c.title }}
+              </template>
               <template v-else>{{ c.other_user?.fio }}</template>
               <span
                 v-if="!c.is_dev_chat && c.other_user?.status_emoji"
@@ -218,6 +229,9 @@ const visible = computed(() => {
     if (c.is_dev_chat) {
       return 'техподдержка'.includes(q)
     }
+    if (c.is_group) {
+      return (c.title || '').toLowerCase().includes(q)
+    }
     return (
       c.other_user?.fio?.toLowerCase().includes(q) ||
       c.other_user?.login?.toLowerCase().includes(q)
@@ -309,11 +323,11 @@ function formatTime(iso) {
 
 .header-actions { display: flex; align-items: center; gap: 4px; }
 
-/* На мобиле создание чата делает FAB — дублирующая кнопка в шапке не нужна.
-   Кнопки «Новый звонок» и «Мой статус» остаются: у них FAB-дубля нет. */
+/* На мобиле создание 1:1-чата делает FAB — дублирующая кнопка в шапке не нужна.
+   Кнопки «Новая группа», «Новый звонок» и «Мой статус» остаются: у них FAB-дубля нет. */
 @media (max-width: 768px) {
   .new-btn { display: none; }
-  .new-btn--call, .new-btn--status { display: block; }
+  .new-btn--call, .new-btn--status, .new-btn--group { display: block; }
 }
 
 .status-btn-emoji {
@@ -350,6 +364,30 @@ function formatTime(iso) {
 .conv-avatar-wrap.dev .material-symbols-outlined {
   font-size: 22px;
   font-variation-settings: 'FILL' 1;
+}
+
+.conv-avatar-wrap.group {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background: var(--color-primary-container);
+  color: var(--color-on-primary-container);
+  flex-shrink: 0;
+  overflow: hidden;
+}
+.conv-avatar-wrap.group .material-symbols-outlined {
+  font-size: 24px;
+  font-variation-settings: 'FILL' 1;
+}
+.conv-avatar-wrap.group .conv-avatar { width: 100%; height: 100%; }
+
+.conv-mute-mark {
+  font-size: 15px;
+  vertical-align: -2px;
+  color: var(--color-text-dim);
+  margin-right: 2px;
 }
 
 .conv-search {

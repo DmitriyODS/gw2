@@ -41,6 +41,10 @@ export const useMessengerStore = defineStore('messenger', () => {
   const totalUnread = ref(0)
   // Закреплённые сообщения по диалогам { [convId]: Message[] } (свежее — первым).
   const pinnedByConv = ref({})
+  // Группы: участники { [convId]: GroupMember[] } и watermark прочтений
+  // { [convId]: { [userId]: lastReadMessageId } } для панели «кто прочитал».
+  const membersByConv = ref({})
+  const groupReadsByConv = ref({})
   const loadingList = ref(false)
   const loadingMessages = ref(false)
   const sending = ref(false)
@@ -204,8 +208,93 @@ export const useMessengerStore = defineStore('messenger', () => {
     return data.id
   }
 
+  /* ── Группы ─────────────────────────────────────────────────── */
+
+  // Засеять watermark прочтений участников (для «кто прочитал») из members.
+  function seedGroupReads(conversationId, members) {
+    const map = {}
+    for (const m of members) {
+      if (m.last_read_message_id != null) map[m.user?.id] = m.last_read_message_id
+    }
+    groupReadsByConv.value = { ...groupReadsByConv.value, [conversationId]: map }
+  }
+
+  async function fetchGroup(conversationId) {
+    const data = await api.getGroup(conversationId)
+    membersByConv.value = { ...membersByConv.value, [conversationId]: data.members || [] }
+    seedGroupReads(conversationId, data.members || [])
+    // Обновляем/вставляем элемент списка с групповыми полями.
+    const conv = conversationById.value.get(conversationId)
+    if (conv) {
+      Object.assign(conv, {
+        is_group: true,
+        title: data.title,
+        avatar_path: data.avatar_path,
+        member_count: data.member_count,
+        my_role: data.my_role,
+        muted: data.my_muted,
+      })
+      conversations.value = sortConversations(conversations.value)
+    } else {
+      conversations.value = sortConversations([
+        {
+          id: data.id, other_user: null, last_message: null, unread_count: 0,
+          last_message_at: data.last_message_at, is_pinned: false, pinned_at: null,
+          is_group: true, title: data.title, avatar_path: data.avatar_path,
+          member_count: data.member_count, my_role: data.my_role, muted: data.my_muted,
+        },
+        ...conversations.value,
+      ])
+    }
+    return data
+  }
+
+  async function createGroup(payload) {
+    const data = await api.createGroup(payload)
+    await fetchGroup(data.id)
+    activeConversationId.value = data.id
+    if (!messagesByConv.value[data.id]) await fetchMessages(data.id)
+    return data.id
+  }
+
+  async function joinGroupByCode(code) {
+    const data = await api.joinGroup(code)
+    await fetchGroup(data.id)
+    activeConversationId.value = data.id
+    if (!messagesByConv.value[data.id]) await fetchMessages(data.id)
+    return data.id
+  }
+
+  // Прилетело group:updated — состав/инфо/роли изменились. Если группа у нас в
+  // кэше — перечитываем её; иначе она новая для нас (добавили) — подтягиваем.
+  function applyGroupUpdated(conversationId) {
+    fetchGroup(conversationId).catch(() => {})
+  }
+
+  function groupMembers(conversationId) {
+    return membersByConv.value[conversationId] || []
+  }
+
+  // Сколько ДРУГИХ участников прочитали сообщение (watermark >= msg.id).
+  function readCountForMessage(conversationId, message) {
+    const auth = useAuthStore()
+    const reads = groupReadsByConv.value[conversationId]
+    if (!reads) return 0
+    let n = 0
+    for (const [uid, lastRead] of Object.entries(reads)) {
+      if (Number(uid) === auth.userId) continue
+      if (lastRead >= message.id) n++
+    }
+    return n
+  }
+
   async function setActive(conversationId) {
     activeConversationId.value = conversationId
+    // Для групп подтягиваем участников (нужны для шапки/«кто прочитал»/@).
+    const conv = conversationById.value.get(conversationId)
+    if (conv?.is_group && !membersByConv.value[conversationId]) {
+      fetchGroup(conversationId).catch(() => {})
+    }
     if (!messagesByConv.value[conversationId]) {
       await fetchMessages(conversationId)
     }
@@ -536,8 +625,13 @@ export const useMessengerStore = defineStore('messenger', () => {
     return r
   }
 
-  function applyReadReceipt(conversationId, readerId) {
+  function applyReadReceipt(conversationId, readerId, lastReadId = null) {
     const auth = useAuthStore()
+    // Группа: событие несёт watermark читателя — обновляем карту «кто прочитал».
+    if (lastReadId != null) {
+      const map = { ...(groupReadsByConv.value[conversationId] || {}), [readerId]: lastReadId }
+      groupReadsByConv.value = { ...groupReadsByConv.value, [conversationId]: map }
+    }
     if (readerId === auth.userId) {
       // Я прочитал этот чат на другом устройстве — здесь гасим счётчик,
       // чтобы бейдж непрочитанных совпадал на всех устройствах.
@@ -548,6 +642,7 @@ export const useMessengerStore = defineStore('messenger', () => {
       }
       return
     }
+    if (lastReadId != null) return // групповые галочки считаются из watermark
     const arr = messagesByConv.value[conversationId]
     if (!arr) return
     const stamp = new Date().toISOString()
@@ -556,6 +651,55 @@ export const useMessengerStore = defineStore('messenger', () => {
         m.read_at = stamp
       }
     })
+  }
+
+  /* ── Групповые действия-обёртки над API (+ оптимистичный refetch) ── */
+
+  async function renameGroupAction(conversationId, title) {
+    const data = await api.renameGroup(conversationId, title)
+    await applyGroupUpdated(conversationId)
+    return data
+  }
+  async function setGroupAvatarAction(conversationId, avatarAttachmentId) {
+    await api.setGroupAvatar(conversationId, avatarAttachmentId)
+    await fetchGroup(conversationId)
+  }
+  async function addGroupMembersAction(conversationId, userIds) {
+    await api.addGroupMembers(conversationId, userIds)
+    await fetchGroup(conversationId)
+  }
+  async function removeGroupMemberAction(conversationId, userId) {
+    await api.removeGroupMember(conversationId, userId)
+    await fetchGroup(conversationId)
+  }
+  async function setMemberRoleAction(conversationId, userId, role) {
+    await api.setMemberRole(conversationId, userId, role)
+    await fetchGroup(conversationId)
+  }
+  async function setMemberRightsAction(conversationId, userId, rights) {
+    await api.setMemberRights(conversationId, userId, rights)
+    await fetchGroup(conversationId)
+  }
+  async function transferOwnershipAction(conversationId, userId) {
+    await api.transferOwnership(conversationId, userId)
+    await fetchGroup(conversationId)
+  }
+  async function leaveGroupAction(conversationId) {
+    await api.leaveGroup(conversationId)
+    applyConversationDeleted(conversationId)
+  }
+  async function setGroupMuteAction(conversationId, muted) {
+    const r = await api.muteGroup(conversationId, muted)
+    const conv = conversationById.value.get(conversationId)
+    if (conv) conv.muted = r.muted
+    return r.muted
+  }
+  async function groupInviteLinkAction(conversationId) {
+    const r = await api.groupInviteLink(conversationId)
+    return r.code
+  }
+  async function revokeGroupInviteLinkAction(conversationId) {
+    await api.revokeGroupInviteLink(conversationId)
   }
 
   async function fetchPresence() {
@@ -635,6 +779,8 @@ export const useMessengerStore = defineStore('messenger', () => {
     messagesByConv.value = {}
     hasMoreHistoryByConv.value = {}
     pinnedByConv.value = {}
+    membersByConv.value = {}
+    groupReadsByConv.value = {}
     totalUnread.value = 0
     supportInbox.value = []
     onlineIds.value = new Set()
@@ -656,7 +802,7 @@ export const useMessengerStore = defineStore('messenger', () => {
 
   return {
     conversations, conversationById, activeConversationId, messagesByConv, totalUnread,
-    pinnedByConv,
+    pinnedByConv, membersByConv, groupReadsByConv,
     supportInbox, loadingSupportInbox, supportUnread,
     loadingList, loadingMessages, sending, pendingDraft,
     onlineIds, lastSeenById,
@@ -671,6 +817,12 @@ export const useMessengerStore = defineStore('messenger', () => {
     deleteMessage, editMessage, deleteConversationAction, togglePinAction,
     fetchPresence, applyPresence, isOnline, lastSeenOf,
     typingByConv, applyTyping, isTyping, notifyTyping, notifyTypingStop,
+    // Группы.
+    createGroup, joinGroupByCode, fetchGroup, applyGroupUpdated,
+    groupMembers, readCountForMessage,
+    renameGroupAction, setGroupAvatarAction, addGroupMembersAction, removeGroupMemberAction,
+    setMemberRoleAction, setMemberRightsAction, transferOwnershipAction, leaveGroupAction, setGroupMuteAction,
+    groupInviteLinkAction, revokeGroupInviteLinkAction,
     reset,
   }
 })

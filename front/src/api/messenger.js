@@ -62,6 +62,61 @@ export const toggleReaction = (messageId, emoji) =>
 export const listPinnedMessages = (conversationId) =>
   apiRequest(`/messenger/conversations/${conversationId}/pinned`)
 
+// ── Группы ──────────────────────────────────────────────────────
+
+export const createGroup = ({ title, memberIds = [], avatarAttachmentId = null } = {}) =>
+  apiRequest('/messenger/groups', {
+    method: 'POST',
+    body: { title, member_ids: memberIds, avatar_attachment_id: avatarAttachmentId },
+  })
+
+export const getGroup = (conversationId) =>
+  apiRequest(`/messenger/groups/${conversationId}`)
+
+export const renameGroup = (conversationId, title) =>
+  apiRequest(`/messenger/groups/${conversationId}`, { method: 'PATCH', body: { title } })
+
+export const setGroupAvatar = (conversationId, avatarAttachmentId) =>
+  apiRequest(`/messenger/groups/${conversationId}/avatar`, {
+    method: 'POST', body: { avatar_attachment_id: avatarAttachmentId },
+  })
+
+export const addGroupMembers = (conversationId, userIds) =>
+  apiRequest(`/messenger/groups/${conversationId}/members`, { method: 'POST', body: { user_ids: userIds } })
+
+export const removeGroupMember = (conversationId, userId) =>
+  apiRequest(`/messenger/groups/${conversationId}/members/${userId}`, { method: 'DELETE' })
+
+export const setMemberRole = (conversationId, userId, role) =>
+  apiRequest(`/messenger/groups/${conversationId}/members/${userId}`, { method: 'PATCH', body: { role } })
+
+export const setMemberRights = (conversationId, userId, rights) =>
+  apiRequest(`/messenger/groups/${conversationId}/members/${userId}`, { method: 'PATCH', body: { rights } })
+
+export const transferOwnership = (conversationId, userId) =>
+  apiRequest(`/messenger/groups/${conversationId}/members/${userId}/owner`, { method: 'POST' })
+
+export const leaveGroup = (conversationId) =>
+  apiRequest(`/messenger/groups/${conversationId}/leave`, { method: 'POST' })
+
+export const muteGroup = (conversationId, muted) =>
+  apiRequest(`/messenger/groups/${conversationId}/mute`, { method: 'POST', body: { muted } })
+
+export const groupInviteLink = (conversationId) =>
+  apiRequest(`/messenger/groups/${conversationId}/invite-link`, { method: 'POST' })
+
+export const revokeGroupInviteLink = (conversationId) =>
+  apiRequest(`/messenger/groups/${conversationId}/invite-link`, { method: 'DELETE' })
+
+export const groupInvitePreview = (code) =>
+  apiRequest(`/messenger/groups/invite/${code}`)
+
+export const joinGroup = (code) =>
+  apiRequest(`/messenger/groups/join/${code}`, { method: 'POST' })
+
+export const messageReadBy = (messageId) =>
+  apiRequest(`/messenger/messages/${messageId}/read-by`)
+
 // Личный чат с техподдержкой текущего пользователя.
 export const openDevChat = () => apiRequest('/messenger/dev-chat')
 

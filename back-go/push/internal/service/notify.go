@@ -149,9 +149,11 @@ func (s *Service) onKudos(ctx context.Context, payload json.RawMessage, rooms []
 
 func (s *Service) onMessage(ctx context.Context, payload json.RawMessage, rooms []string) {
 	var e struct {
-		ConversationID int64  `json:"conversation_id"`
-		FromUserID     *int64 `json:"from_user_id"`
-		Message        *struct {
+		ConversationID    int64   `json:"conversation_id"`
+		FromUserID        *int64  `json:"from_user_id"`
+		NotifyIDs         []int64 `json:"notify_ids"`
+		ConversationTitle *string `json:"conversation_title"`
+		Message           *struct {
 			SenderID    *int64  `json:"sender_id"`
 			Text        *string `json:"text"`
 			Kind        string  `json:"kind"`
@@ -164,11 +166,22 @@ func (s *Service) onMessage(ctx context.Context, payload json.RawMessage, rooms 
 	if err := json.Unmarshal(payload, &e); err != nil || e.Message == nil {
 		return
 	}
+	// Системные плашки группы (вошёл/вышел/переименовал) пуш не порождают.
+	if e.Message.Kind == "system" {
+		return
+	}
 	sender := e.FromUserID
 	if sender == nil {
 		sender = e.Message.SenderID
 	}
-	recipients := excluding(usersFromRooms(rooms), sender)
+	// Группа: notify_ids — уже без автора и без заглушивших (muted); иначе
+	// (личка/dev) получатели из комнат envelope минус автор.
+	var recipients []int64
+	if len(e.NotifyIDs) > 0 {
+		recipients = e.NotifyIDs
+	} else {
+		recipients = excluding(usersFromRooms(rooms), sender)
+	}
 	if len(recipients) == 0 {
 		return
 	}
@@ -178,6 +191,10 @@ func (s *Service) onMessage(ctx context.Context, payload json.RawMessage, rooms 
 		if names, _ := s.users.Names(ctx, []int64{*sender}); names[*sender] != "" {
 			title = names[*sender]
 		}
+	}
+	// В группе заголовок — «Группа: Отправитель», чтобы было видно чат.
+	if e.ConversationTitle != nil && *e.ConversationTitle != "" {
+		title = *e.ConversationTitle + ": " + title
 	}
 	body := messagePreview(e.Message.Text, e.Message.Kind, e.Message.Task != nil, len(e.Message.Attachments) > 0)
 

@@ -298,3 +298,26 @@ func (r *Repo) SoftDeleteComment(ctx context.Context, id int64, deletedAt time.T
 		`UPDATE comments SET deleted_at = $2 WHERE id = $1`, id, deletedAt)
 	return err
 }
+
+func (r *Repo) CountNewComments(ctx context.Context, taskID, userID int64) (int, error) {
+	var n int
+	err := r.pool.QueryRow(ctx, `
+		SELECT count(*)
+		FROM comments c
+		LEFT JOIN task_comment_seen s ON s.task_id = c.task_id AND s.user_id = $2
+		WHERE c.task_id = $1
+		  AND c.deleted_at IS NULL
+		  AND c.author_id <> $2
+		  AND c.created_at > COALESCE(s.last_seen_at, '-infinity'::timestamptz)`,
+		taskID, userID).Scan(&n)
+	return n, err
+}
+
+func (r *Repo) MarkCommentsSeen(ctx context.Context, taskID, userID int64) error {
+	_, err := r.pool.Exec(ctx, `
+		INSERT INTO task_comment_seen (user_id, task_id, last_seen_at)
+		VALUES ($2, $1, now())
+		ON CONFLICT (user_id, task_id) DO UPDATE SET last_seen_at = now()`,
+		taskID, userID)
+	return err
+}

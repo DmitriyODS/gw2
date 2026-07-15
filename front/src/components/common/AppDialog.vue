@@ -40,8 +40,9 @@
         <slot />
       </div>
 
-      <!-- Подвал: либо кастомный (slot=footer), либо встроенный набор кнопок. -->
-      <footer v-if="$slots.footer || actions.length" class="dlg-footer">
+      <!-- Подвал: кастомный (slot=footer), слоты footer-start/footer-end или
+           встроенный набор кнопок (actions). -->
+      <footer v-if="$slots.footer || $slots['footer-start'] || $slots['footer-end'] || actions.length" class="dlg-footer">
         <slot name="footer">
           <!-- Слева — «Отмена» и кастомные кнопки слота (например, «Удалить»);
                справа — главные действия: футер разносит их space-between. -->

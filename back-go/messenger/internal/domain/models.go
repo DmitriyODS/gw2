@@ -22,15 +22,26 @@ const (
 	KindTask     = "task"
 	KindPost     = "post"
 	KindDevReply = "system_dev_reply"
+	// KindSystem — служебная плашка группы (создан/добавлен/вышел/переименован).
+	// sender_id = инициатор, текст — готовое описание события.
+	KindSystem = "system"
 )
 
-// Conversation — диалог. Пара user_a<user_b либо соло-чат (dev, user_b NULL,
-// владелец — user_a).
+// Роли участника группы (conversation_members.role).
+const (
+	RoleOwner  = "owner"
+	RoleAdmin  = "admin"
+	RoleMember = "member"
+)
+
+// Conversation — диалог. Пара user_a<user_b, соло-чат (dev, user_b NULL,
+// владелец — user_a) либо группа (is_group, user_a/user_b NULL, участники —
+// в conversation_members).
 type Conversation struct {
 	ID            int64
 	UserAID       int64
 	UserBID       *int64
-	CompanyID     *int64  // NULL — переписка людей без общей компании
+	CompanyID     *int64  // NULL — переписка людей без общей компании / группа
 	CompanyName   *string // подгружается листингами (JOIN companies)
 	IsDevChat     bool
 	CreatedAt     time.Time
@@ -39,14 +50,29 @@ type Conversation struct {
 	HiddenForB    bool
 	PinnedAtA     *time.Time
 	PinnedAtB     *time.Time
+
+	// Группа.
+	IsGroup    bool
+	Title      *string
+	AvatarPath *string
+	CreatedBy  *int64
+	InviteCode *string
+	// Проекция «для зрителя» — заполняется листингом/открытием группы из
+	// его строки conversation_members (актуальны только для конкретного userID).
+	MemberCount    int
+	MyRole         string
+	MyMuted        bool
+	MyPinnedAt     *time.Time
+	MyLastReadID   *int64
+	Members        []*Member // гидрируется по требованию (карточка группы)
 }
 
 // IsSolo — чат без «второй стороны»: dev-чат техподдержки.
 func (c *Conversation) IsSolo() bool { return c.IsDevChat }
 
-// OtherUserID — собеседник; nil для соло-чатов.
+// OtherUserID — собеседник; nil для соло-чатов и групп.
 func (c *Conversation) OtherUserID(userID int64) *int64 {
-	if c.IsSolo() {
+	if c.IsSolo() || c.IsGroup {
 		return nil
 	}
 	if c.UserAID == userID {
@@ -56,9 +82,10 @@ func (c *Conversation) OtherUserID(userID int64) *int64 {
 	return &a
 }
 
-// Side — 'a', если userID == user_a_id, иначе 'b'. Для соло-чатов всегда 'a'.
+// Side — 'a', если userID == user_a_id, иначе 'b'. Для соло/групп — 'a'
+// (группы прочтение/скрытие ведут в conversation_members, side им не важен).
 func (c *Conversation) Side(userID int64) string {
-	if c.IsSolo() || c.UserAID == userID {
+	if c.IsSolo() || c.IsGroup || c.UserAID == userID {
 		return SideA
 	}
 	return SideB
@@ -68,10 +95,53 @@ func (c *Conversation) PinnedAtFor(userID int64) *time.Time {
 	if c.IsSolo() {
 		return nil
 	}
+	if c.IsGroup {
+		return c.MyPinnedAt
+	}
 	if c.Side(userID) == SideA {
 		return c.PinnedAtA
 	}
 	return c.PinnedAtB
+}
+
+// Member — участник группы (conversation_members).
+type Member struct {
+	ConversationID    int64
+	UserID            int64
+	Role              string
+	JoinedAt          time.Time
+	LastReadMessageID *int64
+	LastReadAt        *time.Time
+	PinnedAt          *time.Time
+	HiddenAt          *time.Time
+	Muted             bool
+	CanManageMembers  bool
+	CanEditInfo       bool
+	CanPinMessages    bool
+	User              *User // гидрируется для списка участников
+}
+
+// CanManage — может ли участник выполнять управляющее действие action.
+// owner — всё; admin — по своим флагам; member — ничего.
+func (m *Member) CanManage(action string) bool {
+	if m == nil {
+		return false
+	}
+	if m.Role == RoleOwner {
+		return true
+	}
+	if m.Role != RoleAdmin {
+		return false
+	}
+	switch action {
+	case "members":
+		return m.CanManageMembers
+	case "info":
+		return m.CanEditInfo
+	case "pin":
+		return m.CanPinMessages
+	}
+	return false
 }
 
 // Attachment — файл-вложение. message_id NULL до привязки к сообщению.

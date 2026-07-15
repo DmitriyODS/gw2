@@ -51,6 +51,9 @@ export const useTasksStore = defineStore('tasks', () => {
 
   // Карта комментариев: task_id → массив комментариев (упорядочены по created_at).
   const commentsByTask = reactive({})
+  // Число новых (непрочитанных) комментариев по задаче: task_id → count.
+  // Наполняется из ответа loadComments (new_count), гасится markCommentsSeen.
+  const newCommentsByTask = reactive({})
   // Карта контрибьюторов: task_id → массив { id, fio, avatar_path }.
   const contributorsByTask = reactive({})
   let fetchSeq = 0
@@ -246,7 +249,20 @@ export const useTasksStore = defineStore('tasks', () => {
   async function loadComments(taskId) {
     const data = await tasksApi.listTaskComments(taskId)
     commentsByTask[taskId] = data.items || []
+    newCommentsByTask[taskId] = data.new_count || 0
     return commentsByTask[taskId]
+  }
+
+  // Отметить комментарии задачи прочитанными (гасит бейдж новых). Оптимистично
+  // обнуляем локально, затем шлём на сервер (ошибку глотаем — не критично).
+  async function markCommentsSeen(taskId) {
+    if (!newCommentsByTask[taskId]) return
+    newCommentsByTask[taskId] = 0
+    try {
+      await tasksApi.markTaskCommentsSeen(taskId)
+    } catch {
+      /* не критично: отметка догонит при следующем открытии */
+    }
   }
 
   async function addComment(taskId, text) {
@@ -278,7 +294,14 @@ export const useTasksStore = defineStore('tasks', () => {
     if (!commentsByTask[taskId]) return // в кэше нет — пропускаем (загрузится при openTask)
     const list = commentsByTask[taskId]
     if (kind === 'new') {
-      if (!list.find((c) => c.id === payload.id)) list.push(payload)
+      if (!list.find((c) => c.id === payload.id)) {
+        list.push(payload)
+        // Чужой комментарий поднимает бейдж новых (свой — нет).
+        const auth = useAuthStore()
+        if (payload.author_id != null && payload.author_id !== auth.userId) {
+          newCommentsByTask[taskId] = (newCommentsByTask[taskId] || 0) + 1
+        }
+      }
     } else if (kind === 'updated') {
       const i = list.findIndex((c) => c.id === payload.id)
       if (i >= 0) list[i] = { ...list[i], ...payload }
@@ -382,14 +405,14 @@ export const useTasksStore = defineStore('tasks', () => {
 
   return {
     tasks, taskById, total, loading, error, filters, activeTask,
-    commentsByTask, contributorsByTask,
+    commentsByTask, newCommentsByTask, contributorsByTask,
     myActiveCount, fetchMyActiveCount, refreshMyActiveCount,
     tags, fetchTags,
     fetchTasks, setFilter, setTab, resetFilters, toggleTagFilter, toggleColorFilter, openTask, closeTask,
     upsertTask, patchTask, addTaskFromSocket, removeTask, archiveTask, restoreTask,
     setFavorite, addActiveUser, removeActiveUser,
     assignResponsible, setStage, dragMoveStage, setTaskTags, toggleTaskTag,
-    loadComments, addComment, editComment, deleteComment, applyCommentSocket,
+    loadComments, markCommentsSeen, addComment, editComment, deleteComment, applyCommentSocket,
     loadContributors,
   }
 })

@@ -10,6 +10,7 @@
       :support-unread="supportTabUnread"
       @select="selectConversation"
       @new-chat="newChatOpen = true"
+      @new-group="newGroupOpen = true"
       @new-call="startEmptyCall"
       @toggle-pin="onTogglePin"
       @delete="askDeleteConversation"
@@ -50,6 +51,15 @@
           <span class="material-symbols-outlined">support_agent</span>
         </div>
         <button
+          v-else-if="active.is_group"
+          class="chat-avatar-wrap group as-btn"
+          aria-label="О группе"
+          @click="groupInfoOpen = true"
+        >
+          <img v-if="active.avatar_path" class="chat-avatar" :src="`/uploads/${active.avatar_path}`" :alt="active.title" />
+          <span v-else class="material-symbols-outlined">groups</span>
+        </button>
+        <button
           v-else
           class="chat-avatar-wrap as-btn"
           aria-label="Открыть профиль"
@@ -60,15 +70,16 @@
         </button>
         <div
           class="chat-title"
-          :class="{ 'as-btn': !!profileUser }"
-          :role="profileUser ? 'button' : null"
-          :tabindex="profileUser ? 0 : null"
-          @click="profileUser && (profileOpen = true)"
-          @keydown.enter="profileUser && (profileOpen = true)"
+          :class="{ 'as-btn': !!profileUser || active.is_group }"
+          :role="(profileUser || active.is_group) ? 'button' : null"
+          :tabindex="(profileUser || active.is_group) ? 0 : null"
+          @click="onTitleClick"
+          @keydown.enter="onTitleClick"
         >
           <div class="chat-fio">
             <template v-if="active.is_dev_chat && devChatOwner">{{ devChatOwner.fio }}</template>
             <template v-else-if="active.is_dev_chat">Техподдержка</template>
+            <template v-else-if="active.is_group">{{ active.title }}</template>
             <template v-else>{{ active.other_user?.fio }}</template>
             <span v-if="peerStatusEmoji" class="chat-fio-status" :title="peerStatusText || 'Статус'">{{ peerStatusEmoji }}</span>
           </div>
@@ -80,6 +91,9 @@
             </template>
             <template v-else-if="active.is_dev_chat">
               Личный чат с командой разработчиков
+            </template>
+            <template v-else-if="active.is_group">
+              {{ active.member_count || messenger.groupMembers(active.id).length }} участник{{ groupPlural }}
             </template>
             <template v-else-if="peerTyping">печатает…</template>
             <template v-else>
@@ -102,7 +116,15 @@
           <Transition name="chat-menu">
             <div v-if="chatMenuOpen" class="chat-menu" role="menu">
               <button
-                v-if="!active.is_dev_chat"
+                v-if="active.is_group"
+                class="chat-menu-item"
+                @click="onMenuAction(() => (groupInfoOpen = true))"
+              >
+                <span class="material-symbols-outlined chat-menu-ico tone-tertiary">info</span>
+                <span>О группе</span>
+              </button>
+              <button
+                v-if="!active.is_dev_chat && !active.is_group"
                 class="chat-menu-item"
                 data-tutorial="chat-call-audio"
                 @click="onMenuAction(() => startCall('audio'))"
@@ -111,13 +133,21 @@
                 <span>Аудиозвонок</span>
               </button>
               <button
-                v-if="!active.is_dev_chat"
+                v-if="!active.is_dev_chat && !active.is_group"
                 class="chat-menu-item"
                 data-tutorial="chat-call-video"
                 @click="onMenuAction(() => startCall('video'))"
               >
                 <span class="material-symbols-outlined chat-menu-ico tone-success">videocam</span>
                 <span>Видеозвонок</span>
+              </button>
+              <button
+                v-if="active.is_group"
+                class="chat-menu-item"
+                @click="onMenuAction(() => messenger.setGroupMuteAction(active.id, !active.muted))"
+              >
+                <span class="material-symbols-outlined chat-menu-ico">{{ active.muted ? 'notifications' : 'notifications_off' }}</span>
+                <span>{{ active.muted ? 'Включить уведомления' : 'Выключить уведомления' }}</span>
               </button>
               <button
                 class="chat-menu-item"
@@ -128,7 +158,14 @@
                 </span>
                 <span>{{ active.is_pinned ? 'Открепить чат' : 'Закрепить чат' }}</span>
               </button>
-              <template v-if="!active.is_dev_chat">
+              <template v-if="active.is_group">
+                <div class="chat-menu-divider" />
+                <button class="chat-menu-item danger" @click="onMenuAction(() => (groupInfoOpen = true))">
+                  <span class="material-symbols-outlined chat-menu-ico tone-error">logout</span>
+                  <span>Выйти из группы</span>
+                </button>
+              </template>
+              <template v-else-if="!active.is_dev_chat">
                 <div class="chat-menu-divider" />
                 <button
                   class="chat-menu-item danger"
@@ -187,11 +224,13 @@
             <MessageBubble
               v-for="m in g.items"
               :key="m.id"
-              v-memo="[m.id, m.text, m.edited_at, m.read_at, m.pinned_at, m.reactions, m.call?.status, authStore.user?.id, active?.is_dev_chat]"
+              v-memo="[m.id, m.text, m.edited_at, m.read_at, m.pinned_at, m.reactions, m.call?.status, authStore.user?.id, active?.is_dev_chat, active?.is_group, groupReadCount(m)]"
               :message="m"
               :is-mine="m.sender_id === authStore.user?.id"
               :sender-name="senderNameFor(m)"
               :me-id="authStore.user?.id"
+              :is-group="!!active?.is_group"
+              :read-count="groupReadCount(m)"
               @delete="askDeleteMessage"
               @reply="startReply"
               @forward="startForward"
@@ -202,6 +241,7 @@
               @context-menu="openContextMenu"
               @quote-click="onQuoteClick"
               @react="emoji => onReact(m, emoji)"
+              @read-by="openReadBy"
             />
           </div>
         </template>
@@ -244,6 +284,14 @@
     />
 
     <NewChatDialog v-model="newChatOpen" @pick="startWith" />
+    <NewGroupDialog v-model="newGroupOpen" @created="selectConversation" />
+    <GroupInfoDialog
+      v-if="active?.is_group"
+      v-model="groupInfoOpen"
+      :conversation-id="active.id"
+      @left="onLeftGroup"
+    />
+    <MessageReadByDialog v-model="readByOpen" :message-id="readByMessageId" />
 
     <ForwardDialog
       ref="forwardDialogRef"
@@ -311,6 +359,9 @@ import MessageBubble from '@/components/messenger/MessageBubble.vue'
 import MessageDateDivider from '@/components/messenger/MessageDateDivider.vue'
 import MessageInput from '@/components/messenger/MessageInput.vue'
 import NewChatDialog from '@/components/messenger/NewChatDialog.vue'
+import NewGroupDialog from '@/components/messenger/NewGroupDialog.vue'
+import GroupInfoDialog from '@/components/messenger/GroupInfoDialog.vue'
+import MessageReadByDialog from '@/components/messenger/MessageReadByDialog.vue'
 import DeleteScopeDialog from '@/components/messenger/DeleteScopeDialog.vue'
 import ForwardDialog from '@/components/messenger/ForwardDialog.vue'
 import AttachTaskDialog from '@/components/messenger/AttachTaskDialog.vue'
@@ -349,6 +400,10 @@ const authStore = useAuthStore()
 const { isMobile } = useBreakpoint()
 
 const newChatOpen = ref(false)
+const newGroupOpen = ref(false)
+const groupInfoOpen = ref(false)
+const readByOpen = ref(false)
+const readByMessageId = ref(null)
 const attachTaskOpen = ref(false)
 const attachedTask = ref(null)
 const profileOpen = ref(false)
@@ -489,7 +544,23 @@ function senderNameFor(m) {
   // «Техподдержка» — ФИО админа намеренно скрыто (как у Telegram support-ботов).
   // В обычных p2p-диалогах подпись не нужна — там и так только один собеседник.
   if (m.is_from_support) return 'Техподдержка'
+  // В группе входящие подписываем именем автора.
+  if (active.value?.is_group && m.sender_id && m.sender_id !== authStore.user?.id) {
+    const mem = messenger.groupMembers(active.value.id).find((x) => x.user?.id === m.sender_id)
+    return mem?.user?.fio || ''
+  }
   return ''
+}
+
+// Сколько ДРУГИХ участников прочитали моё групповое сообщение.
+function groupReadCount(m) {
+  if (!active.value?.is_group || m.sender_id !== authStore.user?.id) return 0
+  return messenger.readCountForMessage(active.value.id, m)
+}
+
+function openReadBy(messageId) {
+  readByMessageId.value = messageId
+  readByOpen.value = true
 }
 
 const chatMenuOpen = ref(false)
@@ -583,6 +654,18 @@ const deleteDialog = ref({
 })
 
 function askDeleteMessage(message) {
+  // В группе удаление всегда «для всех» (личного скрытия нет).
+  if (active.value?.is_group) {
+    deleteDialog.value = {
+      title: 'Удалить сообщение?',
+      text: 'Сообщение будет удалено у всех участников группы.',
+      canForAll: false,
+      otherName: '',
+      payload: { kind: 'message', id: message.id },
+    }
+    deleteDialogOpen.value = true
+    return
+  }
   const isMine = message.sender_id === authStore.user?.id
   const other = active.value?.other_user?.fio || ''
   deleteDialog.value = {
@@ -692,6 +775,26 @@ async function unpinMessage(message) {
 
 const activeId = computed(() => messenger.activeConversationId)
 const active = computed(() => messenger.activeConversation)
+
+// Вышли из группы или распустили её — закрываем карточку и уходим из чата.
+function onLeftGroup() {
+  groupInfoOpen.value = false
+  router.replace('/messenger')
+}
+
+// Клик по шапке: у группы — карточка группы, у 1:1 — профиль собеседника.
+function onTitleClick() {
+  if (active.value?.is_group) groupInfoOpen.value = true
+  else if (profileUser.value) profileOpen.value = true
+}
+
+const groupPlural = computed(() => {
+  const n = active.value?.member_count || messenger.groupMembers(active.value?.id).length || 0
+  const d = n % 10, dd = n % 100
+  if (d === 1 && dd !== 11) return ''
+  if (d >= 2 && d <= 4 && (dd < 10 || dd >= 20)) return 'а'
+  return 'ов'
+})
 
 // Активная вкладка списка слева: 'chats' | 'support'. Вторая доступна
 // только Администратору системы (он отвечает в чужие чаты техподдержки).
@@ -1063,6 +1166,21 @@ watch(() => route.params.conversationId, async (id) => {
   color: var(--color-on-tertiary-container);
 }
 .chat-avatar-wrap.dev .material-symbols-outlined { font-size: 22px; }
+
+.chat-avatar-wrap.group {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background: var(--color-primary-container);
+  color: var(--color-on-primary-container);
+  overflow: hidden;
+  border: none;
+  cursor: pointer;
+}
+.chat-avatar-wrap.group .material-symbols-outlined { font-size: 24px; font-variation-settings: 'FILL' 1; }
+.chat-avatar-wrap.group .chat-avatar { width: 100%; height: 100%; }
 
 .chat-avatar {
   width: 40px;

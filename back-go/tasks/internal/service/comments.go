@@ -22,7 +22,7 @@ func ensureCanEditComment(c *domain.Comment, userID int64, actorLevel int) error
 	return nil
 }
 
-func (s *Service) ListComments(ctx context.Context, taskID int64, companyID *int64) ([]dto.Comment, error) {
+func (s *Service) ListComments(ctx context.Context, taskID, userID int64, companyID *int64) (*dto.CommentList, error) {
 	if _, err := s.taskInCompany(ctx, taskID, companyID); err != nil {
 		return nil, err
 	}
@@ -30,7 +30,20 @@ func (s *Service) ListComments(ctx context.Context, taskID int64, companyID *int
 	if err != nil {
 		return nil, err
 	}
-	return dto.NewComments(comments), nil
+	newCount, err := s.comments.CountNewComments(ctx, taskID, userID)
+	if err != nil {
+		return nil, err
+	}
+	return &dto.CommentList{Items: dto.NewComments(comments), NewCount: newCount}, nil
+}
+
+// MarkCommentsSeen — отметить комментарии задачи прочитанными для пользователя
+// (гасит бейдж новых). Задача должна быть в активной компании сессии.
+func (s *Service) MarkCommentsSeen(ctx context.Context, taskID, userID int64, companyID *int64) error {
+	if _, err := s.taskInCompany(ctx, taskID, companyID); err != nil {
+		return err
+	}
+	return s.comments.MarkCommentsSeen(ctx, taskID, userID)
 }
 
 func (s *Service) CreateComment(ctx context.Context, taskID, authorID int64, companyID *int64, text string) (*dto.Comment, error) {

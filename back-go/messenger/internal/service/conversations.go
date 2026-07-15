@@ -109,6 +109,14 @@ func (s *Service) ListConversations(ctx context.Context, userID int64, companyID
 		})
 	}
 
+	// Группы пользователя — свой источник (conversation_members), досыпаем
+	// в общий список (порядок клиент пересобирает сам).
+	groups, err := s.groupListItems(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	result = append(result, groups...)
+
 	// Личный dev-чат владельца исключён из ListPairConversations — досыпаем
 	// его отдельно первым, если уже создан.
 	dev, err := s.soloListItem(ctx, userID)
@@ -119,6 +127,47 @@ func (s *Service) ListConversations(ctx context.Context, userID int64, companyID
 		result = append([]*dto.ConversationListItem{dev}, result...)
 	}
 	return result, nil
+}
+
+// groupListItems — элементы списка для групп пользователя.
+func (s *Service) groupListItems(ctx context.Context, userID int64) ([]*dto.ConversationListItem, error) {
+	convs, err := s.repo.ListGroupConversations(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	if len(convs) == 0 {
+		return nil, nil
+	}
+	ids := make([]int64, 0, len(convs))
+	for _, c := range convs {
+		ids = append(ids, c.ID)
+	}
+	lastByConv, err := s.repo.LastVisibleMessages(ctx, ids, "")
+	if err != nil {
+		return nil, err
+	}
+	unreadByConv, err := s.repo.CountGroupUnread(ctx, ids, userID)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]*dto.ConversationListItem, 0, len(convs))
+	for _, c := range convs {
+		out = append(out, &dto.ConversationListItem{
+			ID:            c.ID,
+			LastMessage:   dto.NewMessage(lastByConv[c.ID]),
+			UnreadCount:   unreadByConv[c.ID],
+			LastMessageAt: dto.JSONTimePtr(c.LastMessageAt),
+			IsPinned:      c.MyPinnedAt != nil,
+			PinnedAt:      dto.JSONTimePtr(c.MyPinnedAt),
+			IsGroup:       true,
+			Title:         c.Title,
+			AvatarPath:    c.AvatarPath,
+			MemberCount:   c.MemberCount,
+			MyRole:        c.MyRole,
+			Muted:         c.MyMuted,
+		})
+	}
+	return out, nil
 }
 
 // soloListItem — элемент списка для dev-чата владельца; nil — чата нет.
@@ -265,6 +314,34 @@ func (s *Service) DeleteConversation(ctx context.Context, convID, userID int64, 
 	if conv.IsDevChat {
 		return false, domain.NewError("DEV_CHAT_UNDELETABLE", "Чат техподдержки удалить нельзя", 400)
 	}
+
+	// Группа: «у себя» — скрыть (hidden_at); «у всех» — только владелец
+	// распускает группу целиком (выход участника — отдельный LeaveGroup).
+	if conv.IsGroup {
+		if scope == "all" {
+			mem, err := s.repo.GetMember(ctx, convID, userID)
+			if err != nil {
+				return false, err
+			}
+			if mem == nil || mem.Role != domain.RoleOwner {
+				return false, errNoRights()
+			}
+			ids, _ := s.audience(ctx, conv)
+			if err := s.destroyConversation(ctx, convID); err != nil {
+				return false, err
+			}
+			s.pub.Publish(ctx, "conversation:deleted", rooms(ids...),
+				dto.ConversationDeletedEvent{ConversationID: convID})
+			return true, nil
+		}
+		if err := s.repo.HideConversationMember(ctx, convID, userID, true); err != nil {
+			return false, err
+		}
+		s.pub.Publish(ctx, "conversation:deleted", rooms(userID),
+			dto.ConversationDeletedEvent{ConversationID: convID})
+		return false, nil
+	}
+
 	otherID := conv.OtherUserID(userID)
 
 	var physical bool
@@ -323,9 +400,22 @@ func (s *Service) ToggleConversationPin(ctx context.Context, convID, userID int6
 	if err != nil {
 		return false, err
 	}
-	pinned := conv.PinnedAtFor(userID) == nil
-	if err := s.repo.SetConversationPin(ctx, convID, conv.Side(userID), pinned); err != nil {
-		return false, err
+	var pinned bool
+	if conv.IsGroup {
+		// GetConversation не заполняет проекцию зрителя — берём pin из member.
+		mem, err := s.repo.GetMember(ctx, convID, userID)
+		if err != nil {
+			return false, err
+		}
+		pinned = mem.PinnedAt == nil
+		if err := s.repo.SetMemberPin(ctx, convID, userID, pinned); err != nil {
+			return false, err
+		}
+	} else {
+		pinned = conv.PinnedAtFor(userID) == nil
+		if err := s.repo.SetConversationPin(ctx, convID, conv.Side(userID), pinned); err != nil {
+			return false, err
+		}
 	}
 	// Эхо в другие вкладки этого же пользователя.
 	s.pub.Publish(ctx, "conversation:pin", rooms(userID),
@@ -333,7 +423,15 @@ func (s *Service) ToggleConversationPin(ctx context.Context, convID, userID int6
 	return pinned, nil
 }
 
-// TotalUnread — общее число непрочитанных по всем не скрытым диалогам.
+// TotalUnread — общее число непрочитанных по всем не скрытым диалогам и группам.
 func (s *Service) TotalUnread(ctx context.Context, userID int64) (int, error) {
-	return s.repo.TotalUnread(ctx, userID)
+	pairs, err := s.repo.TotalUnread(ctx, userID)
+	if err != nil {
+		return 0, err
+	}
+	groups, err := s.repo.TotalGroupUnread(ctx, userID)
+	if err != nil {
+		return 0, err
+	}
+	return pairs + groups, nil
 }

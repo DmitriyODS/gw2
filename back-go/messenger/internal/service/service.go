@@ -54,6 +54,24 @@ type MessengerService interface {
 	SupportInbox(ctx context.Context, userID int64) ([]*dto.ConversationListItem, error)
 	TotalUnread(ctx context.Context, userID int64) (int, error)
 
+	// Группы.
+	CreateGroup(ctx context.Context, creatorID int64, title string, avatarAttID *int64, memberIDs []int64) (*dto.Conversation, error)
+	GetGroup(ctx context.Context, convID, userID int64) (*dto.Conversation, error)
+	AddGroupMembers(ctx context.Context, convID, actorID int64, userIDs []int64) error
+	RemoveGroupMember(ctx context.Context, convID, actorID, memberID int64) error
+	LeaveGroup(ctx context.Context, convID, userID int64) error
+	RenameGroup(ctx context.Context, convID, actorID int64, title string) error
+	SetGroupAvatar(ctx context.Context, convID, actorID int64, avatarAttID *int64) error
+	SetMemberRole(ctx context.Context, convID, actorID, memberID int64, role string) error
+	SetMemberRights(ctx context.Context, convID, actorID, memberID int64, manageMembers, editInfo, pinMessages bool) error
+	TransferOwnership(ctx context.Context, convID, actorID, newOwnerID int64) error
+	SetGroupMute(ctx context.Context, convID, userID int64, muted bool) (bool, error)
+	GroupInviteLink(ctx context.Context, convID, actorID int64) (string, error)
+	RevokeGroupInviteLink(ctx context.Context, convID, actorID int64) error
+	GroupInvitePreview(ctx context.Context, code string) (*dto.Conversation, error)
+	JoinGroupByCode(ctx context.Context, code string, userID int64) (*dto.Conversation, error)
+	ReadBy(ctx context.Context, messageID, userID int64) ([]*dto.DirectoryUser, error)
+
 	// gRPC (callsvc, portalsvc).
 	EnsureDialog(ctx context.Context, userAID, userBID int64) (int64, error)
 	CreateCallMessage(ctx context.Context, convID, senderID, callID int64) (*dto.Message, []int64, error)
@@ -105,9 +123,43 @@ func rooms(ids ...int64) []string {
 	return out
 }
 
+// audience — комнаты-получатели событий диалога (все, кто его видит):
+// группа — все участники, dev-чат — владелец+супер-админы, пара — обе стороны.
+func (s *Service) audience(ctx context.Context, conv *domain.Conversation) ([]int64, error) {
+	if conv.IsGroup {
+		mutes, err := s.repo.ListMemberMutes(ctx, conv.ID)
+		if err != nil {
+			return nil, err
+		}
+		ids := make([]int64, 0, len(mutes))
+		for id := range mutes {
+			ids = append(ids, id)
+		}
+		return ids, nil
+	}
+	if conv.IsDevChat {
+		return s.users.DevChatUserIDs(ctx, conv.UserAID)
+	}
+	ids := []int64{conv.UserAID}
+	if conv.UserBID != nil {
+		ids = append(ids, *conv.UserBID)
+	}
+	return ids, nil
+}
+
 // ensureMember — доступ к диалогу: p2p — только участники; dev-чат —
-// владелец (user_a) + любой супер-админ.
+// владелец (user_a) + любой супер-админ; группа — участник conversation_members.
 func (s *Service) ensureMember(ctx context.Context, conv *domain.Conversation, userID int64) error {
+	if conv.IsGroup {
+		m, err := s.repo.GetMember(ctx, conv.ID, userID)
+		if err != nil {
+			return err
+		}
+		if m == nil {
+			return errNoAccess()
+		}
+		return nil
+	}
 	if conv.IsDevChat {
 		if conv.UserAID == userID {
 			return nil // владелец

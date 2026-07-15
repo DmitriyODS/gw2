@@ -101,6 +101,7 @@
         >
           <span class="material-symbols-outlined">forum</span>
           Комментарии
+          <span v-if="newCommentsCount" class="tab-badge">{{ newCommentsCount > 99 ? '99+' : newCommentsCount }}</span>
         </button>
       </div>
 
@@ -344,6 +345,7 @@
             >
               <span class="material-symbols-outlined">forum</span>
               Комментарии
+              <span v-if="newCommentsCount" class="tab-badge">{{ newCommentsCount > 99 ? '99+' : newCommentsCount }}</span>
             </button>
           </div>
           <div class="units-header-actions">
@@ -675,6 +677,17 @@ onMounted(() => {
   loadUnits()
   if (usesStages.value) loadStages()
   subscribeUnitEvents()
+  // Подтягиваем комментарии (и число новых) при открытии карточки, чтобы бейдж
+  // над вкладкой «Комментарии» был виден сразу, ещё до перехода на неё.
+  tasksStore.loadComments(props.task.id).catch(() => {})
+})
+
+const newCommentsCount = computed(() => tasksStore.newCommentsByTask[props.task.id] || 0)
+
+// Переход на вкладку «Комментарии» = прочтение: гасим бейдж и шлём отметку.
+// Живые новые комментарии, пришедшие пока вкладка открыта, тоже сбрасываем.
+watch([rightTab, newCommentsCount], ([tab, count]) => {
+  if (tab === 'comments' && count) tasksStore.markCommentsSeen(props.task.id)
 })
 
 onBeforeUnmount(() => unsubscribeUnitEvents())
@@ -1339,6 +1352,29 @@ async function handleSetColor(color) {
   color: var(--color-on-primary);
 }
 .right-tab .material-symbols-outlined { font-size: 16px; }
+
+/* Бейдж числа новых комментариев над/у вкладки «Комментарии». */
+.tab-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: var(--radius-full, 999px);
+  background: var(--color-error);
+  color: var(--color-on-error);
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+/* На активной вкладке (заливка primary) бейдж инвертируем, чтобы читался. */
+.right-tab.active .tab-badge,
+.mobile-tab-btn.active .tab-badge {
+  background: var(--color-on-primary);
+  color: var(--color-primary);
+}
 
 .w-full { width: 100%; }
 

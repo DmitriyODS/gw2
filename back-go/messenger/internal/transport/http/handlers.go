@@ -13,6 +13,7 @@ import (
 	"github.com/DmitriyODS/gw2/back-go/messenger/internal/domain"
 	"github.com/DmitriyODS/gw2/back-go/messenger/internal/dto"
 	"github.com/DmitriyODS/gw2/back-go/messenger/internal/endpoint"
+	"github.com/DmitriyODS/gw2/back-go/messenger/internal/service"
 	"github.com/DmitriyODS/gw2/back-go/pkg/apierror"
 	"github.com/DmitriyODS/gw2/back-go/pkg/pasetoauth"
 )
@@ -25,6 +26,7 @@ const (
 
 type handlers struct {
 	eps endpoint.Endpoints
+	svc service.MessengerService // прямой доступ для групповых use-case'ов
 	log *slog.Logger
 }
 

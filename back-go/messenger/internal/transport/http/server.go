@@ -14,6 +14,7 @@ import (
 
 	"github.com/DmitriyODS/gw2/back-go/messenger/internal/domain"
 	"github.com/DmitriyODS/gw2/back-go/messenger/internal/endpoint"
+	"github.com/DmitriyODS/gw2/back-go/messenger/internal/service"
 	"github.com/DmitriyODS/gw2/back-go/pkg/httpserver"
 	"github.com/DmitriyODS/gw2/back-go/pkg/pasetoauth"
 )
@@ -49,7 +50,7 @@ func authSource(users domain.UserReader) pasetoauth.AuthSource {
 	}
 }
 
-func NewServer(eps endpoint.Endpoints, users domain.UserReader,
+func NewServer(eps endpoint.Endpoints, svc service.MessengerService, users domain.UserReader,
 	verifier *pasetoauth.Verifier, log *slog.Logger) *Server {
 
 	// Вложения ≤25МБ проверяются в сервисе; лимит тела — с запасом
@@ -58,7 +59,7 @@ func NewServer(eps endpoint.Endpoints, users domain.UserReader,
 		AppName: "gw2-msgsvc", Log: log, BodyLimit: 50 * 1024 * 1024,
 	})
 	auth := pasetoauth.NewMiddleware(verifier, authSource(users))
-	h := &handlers{eps: eps, log: log}
+	h := &handlers{eps: eps, svc: svc, log: log}
 
 	api := app.Group("/api/messenger", auth.RequireAuth)
 	api.Get("/conversations", h.listConversations)
@@ -74,10 +75,28 @@ func NewServer(eps endpoint.Endpoints, users domain.UserReader,
 	api.Post("/conversations/:id<int>/pin", h.toggleConversationPin)
 	api.Post("/messages/:id<int>/pin", h.toggleMessagePin)
 	api.Post("/messages/:id<int>/reactions", h.toggleMessageReaction)
+	api.Get("/messages/:id<int>/read-by", h.messageReadBy)
 	api.Get("/conversations/:id<int>/pinned", h.listPinned)
 	api.Get("/dev-chat", h.openDevChat)
 	api.Get("/support-inbox", h.supportInbox)
 	api.Get("/unread", h.unread)
+
+	// ── Группы ───────────────────────────────────────────────────
+	// Специфичные пути раньше :id<int>, чтобы не перехватывались (join/invite).
+	api.Post("/groups", h.createGroup)
+	api.Post("/groups/join/:code", h.joinGroup)
+	api.Get("/groups/invite/:code", h.groupInvitePreview)
+	api.Get("/groups/:id<int>", h.getGroup)
+	api.Patch("/groups/:id<int>", h.patchGroup)
+	api.Post("/groups/:id<int>/avatar", h.setGroupAvatar)
+	api.Post("/groups/:id<int>/members", h.addGroupMembers)
+	api.Delete("/groups/:id<int>/members/:userId<int>", h.removeGroupMember)
+	api.Patch("/groups/:id<int>/members/:userId<int>", h.patchGroupMember)
+	api.Post("/groups/:id<int>/members/:userId<int>/owner", h.transferOwnership)
+	api.Post("/groups/:id<int>/leave", h.leaveGroup)
+	api.Post("/groups/:id<int>/mute", h.muteGroup)
+	api.Post("/groups/:id<int>/invite-link", h.groupInviteLink)
+	api.Delete("/groups/:id<int>/invite-link", h.revokeGroupInviteLink)
 
 	return &Server{app: app}
 }

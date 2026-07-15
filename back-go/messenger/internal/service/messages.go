@@ -119,6 +119,10 @@ func (s *Service) SendMessage(ctx context.Context, convID, senderID int64,
 	event := dto.MessageNewEvent{ConversationID: conv.ID, Message: payload, FromUserID: &senderID}
 
 	switch {
+	case conv.IsGroup:
+		if err := s.broadcastGroupMessage(ctx, conv, senderID, msg, &event); err != nil {
+			return nil, err
+		}
 	case conv.IsDevChat:
 		// Спец-чат: уведомляем владельца и всех Администраторов системы.
 		devIDs, err := s.users.DevChatUserIDs(ctx, conv.UserAID)
@@ -448,6 +452,13 @@ func (s *Service) MarkRead(ctx context.Context, convID, userID int64) (int, erro
 	if err != nil {
 		return 0, err
 	}
+
+	// Группа: прочтение — watermark участника до последнего сообщения; событие
+	// message:read несёт last_read_id, чтобы клиенты обновили «кто прочитал».
+	if conv.IsGroup {
+		return s.markGroupRead(ctx, conv, userID)
+	}
+
 	n, err := s.repo.MarkRead(ctx, conv.ID, userID)
 	if err != nil {
 		return 0, err
@@ -568,6 +579,32 @@ func (s *Service) DeleteMessage(ctx context.Context, messageID, userID int64, sc
 		return false, err
 	}
 
+	// Группа: сообщение удаляется для всех — своё может автор, чужое —
+	// владелец/админ с правом «участники» (модерация). Скрытия «у себя» нет.
+	if conv.IsGroup {
+		isAuthor := msg.SenderID != nil && *msg.SenderID == userID
+		if !isAuthor {
+			mem, err := s.repo.GetMember(ctx, conv.ID, userID)
+			if err != nil {
+				return false, err
+			}
+			if !mem.CanManage("members") {
+				return false, domain.NewError("FORBIDDEN", "Нет прав удалить это сообщение", 403)
+			}
+		}
+		if err := s.destroyMessage(ctx, msg); err != nil {
+			return false, err
+		}
+		ids, err := s.audience(ctx, conv)
+		if err != nil {
+			return false, err
+		}
+		s.pub.Publish(ctx, "message:deleted", rooms(ids...),
+			dto.MessageDeletedEvent{ConversationID: conv.ID, MessageID: messageID})
+		s.log.Info("message.delete", "message_id", messageID, "user_id", userID, "group", true)
+		return true, nil
+	}
+
 	var forAll bool
 	switch scope {
 	case "all":
@@ -652,6 +689,17 @@ func (s *Service) ToggleMessagePin(ctx context.Context, messageID, userID int64)
 		return nil, false, domain.NewError("BAD_PIN", "Это сообщение нельзя закрепить", 400)
 	}
 
+	// В группе закреплять могут только владелец/админ с правом «закрепление».
+	if conv.IsGroup {
+		mem, err := s.repo.GetMember(ctx, conv.ID, userID)
+		if err != nil {
+			return nil, false, err
+		}
+		if !mem.CanManage("pin") {
+			return nil, false, domain.NewError("FORBIDDEN", "Нет прав закреплять сообщения", 403)
+		}
+	}
+
 	pinned := msg.PinnedAt == nil
 	var byID *int64
 	if pinned {
@@ -666,9 +714,9 @@ func (s *Service) ToggleMessagePin(ctx context.Context, messageID, userID int64)
 	}
 	payload := dto.NewMessage(updated)
 
-	targets := []int64{conv.UserAID}
-	if conv.UserBID != nil {
-		targets = append(targets, *conv.UserBID)
+	targets, err := s.audience(ctx, conv)
+	if err != nil {
+		return nil, false, err
 	}
 	s.pub.Publish(ctx, "message:pin", rooms(targets...), dto.MessagePinEvent{
 		ConversationID: conv.ID, MessageID: messageID, Pinned: pinned, Message: payload,
@@ -724,9 +772,9 @@ func (s *Service) ToggleMessageReaction(ctx context.Context, messageID, userID i
 	}
 	payload := dto.NewMessage(updated)
 
-	targets := []int64{conv.UserAID}
-	if conv.UserBID != nil {
-		targets = append(targets, *conv.UserBID)
+	targets, err := s.audience(ctx, conv)
+	if err != nil {
+		return nil, false, err
 	}
 	s.pub.Publish(ctx, "message:updated", rooms(targets...), dto.MessageNewEvent{
 		ConversationID: conv.ID, Message: payload, FromUserID: &userID,
@@ -771,9 +819,9 @@ func (s *Service) EditMessage(ctx context.Context, messageID, userID int64, text
 	}
 	payload := dto.NewMessage(updated)
 
-	targets := []int64{conv.UserAID}
-	if conv.UserBID != nil {
-		targets = append(targets, *conv.UserBID)
+	targets, err := s.audience(ctx, conv)
+	if err != nil {
+		return nil, err
 	}
 	s.pub.Publish(ctx, "message:updated", rooms(targets...), dto.MessageNewEvent{
 		ConversationID: conv.ID, Message: payload, FromUserID: &userID,

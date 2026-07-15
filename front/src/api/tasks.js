@@ -58,6 +58,9 @@ export const listTaskComments = (taskId) =>
 export const createTaskComment = (taskId, text) =>
   apiRequest(`/tasks/${taskId}/comments`, { method: 'POST', body: { text } })
 
+export const markTaskCommentsSeen = (taskId) =>
+  apiRequest(`/tasks/${taskId}/comments/seen`, { method: 'POST' })
+
 export const updateTaskComment = (taskId, commentId, text) =>
   apiRequest(`/tasks/${taskId}/comments/${commentId}`, { method: 'PATCH', body: { text } })
 

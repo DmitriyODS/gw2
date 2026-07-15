@@ -106,6 +106,19 @@
         />
       </div>
       <EmojiPicker @pick="insertAtCursor" />
+      <div v-if="mention.open" class="mention-pop">
+        <button
+          v-for="(m, i) in mention.items"
+          :key="m.user?.id"
+          class="mention-item"
+          :class="{ active: i === mention.index }"
+          @mousedown.prevent="pickMention(m)"
+        >
+          <img class="mention-ava" :src="mentionAvatar(m.user)" :alt="m.user?.fio" />
+          <span class="mention-name">{{ m.user?.fio }}</span>
+          <span class="mention-login">@{{ m.user?.login }}</span>
+        </button>
+      </div>
       <textarea
         ref="textarea"
         v-model="text"
@@ -114,7 +127,10 @@
         class="text-area"
         enterkeyhint="enter"
         @keydown.enter="onEnterKey"
-        @input="autoresize"
+        @keydown.down="onMentionNav($event, 1)"
+        @keydown.up="onMentionNav($event, -1)"
+        @keydown.esc="mention.open = false"
+        @input="onTextInput"
         @paste="onPaste"
         @contextmenu="onTextContextMenu"
       />
@@ -154,6 +170,9 @@ import { uploadAttachment } from '@/api/messenger.js'
 import { selectionViewportRect } from '@/utils/textareaSelection.js'
 import EmojiPicker from '@/components/messenger/EmojiPicker.vue'
 import ProgressSpinner from 'primevue/progressspinner'
+import { useMessengerStore } from '@/stores/messenger.js'
+
+const messenger = useMessengerStore()
 
 const props = defineProps({
   placeholder: { type: String, default: 'Напишите сообщение…' },
@@ -183,12 +202,70 @@ watch(text, (v, old) => {
 const isTouchDevice = window.matchMedia?.('(hover: none) and (pointer: coarse)').matches ?? false
 
 function onEnterKey(e) {
+  // Открыт список @упоминаний — Enter выбирает подсказку, а не отправляет.
+  if (mention.value.open && mention.value.items.length) {
+    e.preventDefault()
+    pickMention(mention.value.items[mention.value.index])
+    return
+  }
   if (e.shiftKey || e.altKey) return // перенос строки
   // Cmd/Ctrl+Enter отправляет везде (привычка из других мессенджеров);
   // голый Enter — только на десктопе (на таче он переносит строку).
   if (isTouchDevice && !e.metaKey && !e.ctrlKey) return
   e.preventDefault()
   submit()
+}
+
+/* ── @упоминания участников группы ── */
+const mention = ref({ open: false, query: '', items: [], index: 0, start: 0 })
+
+function onTextInput() {
+  autoresize()
+  detectMention()
+}
+
+function detectMention() {
+  const conv = messenger.activeConversation
+  const el = textarea.value
+  if (!conv?.is_group || !el) { mention.value.open = false; return }
+  const caret = el.selectionStart ?? text.value.length
+  const before = text.value.slice(0, caret)
+  const m = before.match(/(^|\s)@([\wа-яё.\-]*)$/i)
+  if (!m) { mention.value.open = false; return }
+  const query = m[2].toLowerCase()
+  const members = messenger.groupMembers(conv.id).filter((mm) => {
+    const u = mm.user
+    if (!u) return false
+    return !query || u.login?.toLowerCase().includes(query) || u.fio?.toLowerCase().includes(query)
+  }).slice(0, 6)
+  if (!members.length) { mention.value.open = false; return }
+  mention.value = { open: true, query, items: members, index: 0, start: caret - m[2].length - 1 }
+}
+
+function onMentionNav(e, dir) {
+  if (!mention.value.open) return
+  e.preventDefault()
+  const n = mention.value.items.length
+  mention.value.index = (mention.value.index + dir + n) % n
+}
+
+function pickMention(m) {
+  if (!m?.user) return
+  const el = textarea.value
+  const caret = el?.selectionStart ?? text.value.length
+  const start = mention.value.start
+  const login = m.user.login
+  text.value = text.value.slice(0, start) + '@' + login + ' ' + text.value.slice(caret)
+  mention.value.open = false
+  nextTick(() => {
+    const pos = start + login.length + 2
+    if (el) { el.focus(); el.setSelectionRange(pos, pos) }
+    autoresize()
+  })
+}
+
+function mentionAvatar(u) {
+  return u?.avatar_path ? `/uploads/${u.avatar_path}` : `/api/users/${u?.id}/identicon`
 }
 
 /* ── Меню «что прикрепить» (файл / задача / запись экрана) ── */
@@ -730,7 +807,42 @@ function iconFor(mime) {
   display: flex;
   align-items: flex-end;
   gap: 8px;
+  position: relative;
 }
+
+/* Попап автодополнения @упоминаний участников группы. */
+.mention-pop {
+  position: absolute;
+  bottom: calc(100% + 6px);
+  left: 44px;
+  right: 44px;
+  max-height: 220px;
+  overflow-y: auto;
+  background: var(--acrylic-card-bg);
+  border: 1px solid var(--color-outline-dim);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-lg);
+  padding: 4px;
+  z-index: 20;
+}
+.mention-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 8px 10px;
+  border: none;
+  background: transparent;
+  color: var(--color-text);
+  font: inherit;
+  text-align: left;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+.mention-item:hover, .mention-item.active { background: var(--color-surface-low); }
+.mention-ava { width: 28px; height: 28px; border-radius: 50%; object-fit: cover; flex-shrink: 0; }
+.mention-name { font-size: 14px; font-weight: 600; }
+.mention-login { font-size: 12px; color: var(--color-text-dim); margin-left: auto; }
 
 /* Единственная кнопка-скрепка: остальные варианты вложений — в выпадающем
    меню над ней (файл / задача / запись экрана). */

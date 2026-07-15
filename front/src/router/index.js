@@ -94,6 +94,9 @@ const routes = [
   // Вступление в компанию по ссылке-приглашению (нужна авторизация).
   { path: '/join/:code', component: () => import('@/views/JoinView.vue'),
     meta: { requiresAuth: true, fullscreen: true } },
+  // Вступление в группу мессенджера по ссылке-приглашению (нужна авторизация).
+  { path: '/group/:code', component: () => import('@/views/JoinGroupView.vue'),
+    meta: { requiresAuth: true, fullscreen: true } },
   // Подтверждение спаривания устройства (QR-вход / ТВ-киоск): открывается при
   // сканировании QR любым сканером. Нужна авторизация — гость уйдёт на /login
   // и вернётся сюда после входа.

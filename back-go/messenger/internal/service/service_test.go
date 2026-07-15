@@ -15,12 +15,13 @@ import (
 // ── Фейки портов (без БД/Redis/диска, как в callsvc/authsvc) ─────
 
 type fakeRepo struct {
-	convs map[int64]*domain.Conversation
-	msgs  map[int64]*domain.Message
-	atts  map[int64]*domain.Attachment
-	calls map[int64]*domain.CallInfo
-	tasks map[int64]*domain.TaskPreview
-	users *fakeUsers // ФИО для reply/forwarded_from
+	convs   map[int64]*domain.Conversation
+	msgs    map[int64]*domain.Message
+	atts    map[int64]*domain.Attachment
+	calls   map[int64]*domain.CallInfo
+	tasks   map[int64]*domain.TaskPreview
+	members map[int64]map[int64]*domain.Member // convID → userID → участник группы
+	users   *fakeUsers                         // ФИО для reply/forwarded_from
 
 	nextConv, nextMsg, nextAtt int64
 	now                        time.Time
@@ -31,9 +32,10 @@ func newFakeRepo(users *fakeUsers) *fakeRepo {
 		convs: map[int64]*domain.Conversation{},
 		msgs:  map[int64]*domain.Message{},
 		atts:  map[int64]*domain.Attachment{},
-		calls: map[int64]*domain.CallInfo{},
-		tasks: map[int64]*domain.TaskPreview{},
-		users: users,
+		calls:   map[int64]*domain.CallInfo{},
+		tasks:   map[int64]*domain.TaskPreview{},
+		members: map[int64]map[int64]*domain.Member{},
+		users:   users,
 		// Автоответ техподдержки сверяется с реальными часами сервиса —
 		// фейковое «сейчас» держим возле time.Now().
 		now: time.Now().UTC().Add(-time.Hour),

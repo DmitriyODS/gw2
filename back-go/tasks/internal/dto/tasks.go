@@ -370,6 +370,13 @@ func NewComments(items []*domain.Comment) []Comment {
 	return out
 }
 
+// CommentList — ответ листинга: комментарии + число новых (непрочитанных
+// открывающим) для бейджа над вкладкой «Комментарии».
+type CommentList struct {
+	Items    []Comment `json:"items"`
+	NewCount int       `json:"new_count"`
+}
+
 // ── Запросы (после schema-валидации в транспорте) ────────────────
 
 // TaskCreate — распарсенный POST /api/tasks (даты received_at/deadline —

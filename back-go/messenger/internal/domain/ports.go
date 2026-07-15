@@ -34,6 +34,42 @@ type Repository interface {
 	DeleteConversation(ctx context.Context, id int64) error
 	SetConversationPin(ctx context.Context, id int64, side string, pinned bool) error
 
+	// ── Группы ───────────────────────────────────────────────────
+	// CreateGroup — INSERT диалога is_group + участников (creatorID — owner,
+	// остальные — member). memberIDs включает создателя (дедуп внутри).
+	CreateGroup(ctx context.Context, title string, avatarPath *string, creatorID int64, memberIDs []int64) (*Conversation, error)
+	// ListGroupConversations — группы, где userID участник и не скрыл
+	// (hidden_at IS NULL), с проекцией зрителя (MyRole/MyMuted/MyPinnedAt/
+	// MyLastReadID/MemberCount) и именем компании.
+	ListGroupConversations(ctx context.Context, userID int64) ([]*Conversation, error)
+	RenameGroup(ctx context.Context, convID int64, title string) error
+	SetGroupAvatar(ctx context.Context, convID int64, avatarPath *string) error
+	SetInviteCode(ctx context.Context, convID int64, code *string) error
+	FindByInviteCode(ctx context.Context, code string) (*Conversation, error)
+
+	// ── Участники группы ─────────────────────────────────────────
+	AddMember(ctx context.Context, convID, userID int64, role string) error
+	RemoveMember(ctx context.Context, convID, userID int64) error
+	GetMember(ctx context.Context, convID, userID int64) (*Member, error)
+	ListMembers(ctx context.Context, convID int64) ([]*Member, error)
+	// ListMemberMutes — user_id → muted всех участников (для веера/пуша).
+	ListMemberMutes(ctx context.Context, convID int64) (map[int64]bool, error)
+	UpdateMemberRole(ctx context.Context, convID, userID int64, role string) error
+	UpdateMemberRights(ctx context.Context, convID, userID int64, manageMembers, editInfo, pinMessages bool) error
+	SetMemberMute(ctx context.Context, convID, userID int64, muted bool) error
+	SetMemberPin(ctx context.Context, convID, userID int64, pinned bool) error
+	HideConversationMember(ctx context.Context, convID, userID int64, hidden bool) error
+	// SetMemberRead — поднять watermark участника до lastMessageID (только вверх);
+	// true — значение изменилось (есть что рассылать).
+	SetMemberRead(ctx context.Context, convID, userID, lastMessageID int64) (bool, error)
+	// ReadersOf — участники, прочитавшие сообщение (last_read >= messageID),
+	// кроме автора; гидрированы User (для панели «кто прочитал»).
+	ReadersOf(ctx context.Context, convID, messageID, authorID int64) ([]*Member, error)
+	// CountGroupUnread — непрочитанные по группам: id > last_read И sender != userID.
+	CountGroupUnread(ctx context.Context, convIDs []int64, userID int64) (map[int64]int, error)
+	// TotalGroupUnread — суммарно по всем не скрытым группам пользователя.
+	TotalGroupUnread(ctx context.Context, userID int64) (int, error)
+
 	// ── Сообщения ────────────────────────────────────────────────
 	// GetMessage — полный снапшот (вложения, цитата, плашки call/task,
 	// контекст dev-чата); nil — нет такого.

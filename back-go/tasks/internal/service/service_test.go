@@ -431,6 +431,8 @@ func (f *fakeStore) SoftDeleteComment(_ context.Context, id int64, at time.Time)
 	f.comments[id].DeletedAt = &at
 	return nil
 }
+func (f *fakeStore) CountNewComments(_ context.Context, _, _ int64) (int, error) { return 0, nil }
+func (f *fakeStore) MarkCommentsSeen(_ context.Context, _, _ int64) error        { return nil }
 
 // — Остальные порты —
 

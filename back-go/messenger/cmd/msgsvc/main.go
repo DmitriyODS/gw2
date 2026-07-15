@@ -89,7 +89,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	httpServer := httptransport.NewServer(eps, users, verifier, log)
+	httpServer := httptransport.NewServer(eps, svc, users, verifier, log)
 
 	log.Info("listening", "grpc", grpcAddr, "http", httpAddr)
 	bootstrap.Run(ctx, log,

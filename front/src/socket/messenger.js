@@ -15,12 +15,15 @@ export function registerMessengerSocketHandlers(socket) {
       && document.hasFocus()
 
     if (isActive) return
+    // Системные плашки группы (вошёл/вышел/переименовал) не уведомляем.
+    if (message.kind === 'system') return
     const conv = messenger.conversations.find(c => c.id === conversation_id)
-    const fio = conv?.other_user?.fio || 'Сотрудник'
+    if (conv?.muted) return
+    const heading = conv?.is_group ? (conv.title || 'Группа') : (conv?.other_user?.fio || 'Сотрудник')
     // Разметка в уведомлении не рендерится — показываем чистый текст.
     const body = stripMarkdown(message.text || '')
       || (message.attachments?.length ? 'Прислал(а) вложение' : 'Новое сообщение')
-    showSystemNotification(fio, body, {
+    showSystemNotification(heading, body, {
       data: { conversation_id },
       onClick: () => {
         window.focus()
@@ -30,8 +33,12 @@ export function registerMessengerSocketHandlers(socket) {
     playNotifySound()
   })
 
-  socket.on('message:read', ({ conversation_id, reader_id }) => {
-    useMessengerStore().applyReadReceipt(conversation_id, reader_id)
+  socket.on('message:read', ({ conversation_id, reader_id, last_read_id }) => {
+    useMessengerStore().applyReadReceipt(conversation_id, reader_id, last_read_id ?? null)
+  })
+
+  socket.on('group:updated', ({ conversation_id }) => {
+    useMessengerStore().applyGroupUpdated(conversation_id)
   })
 
   socket.on('message:updated', ({ conversation_id, message }) => {

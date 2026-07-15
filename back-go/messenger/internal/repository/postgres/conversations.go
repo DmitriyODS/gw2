@@ -11,22 +11,29 @@ import (
 )
 
 // convCols — колонки диалога (+ имя компании) для scanConversation.
+// user_a_id/user_b_id у групп NULL — сканим в NULL-safe временные переменные.
 const convCols = `c.id, c.user_a_id, c.user_b_id, c.company_id, co.name,
 	c.is_dev_chat, c.created_at, c.last_message_at,
-	c.hidden_for_a, c.hidden_for_b, c.pinned_at_a, c.pinned_at_b`
+	c.hidden_for_a, c.hidden_for_b, c.pinned_at_a, c.pinned_at_b,
+	c.is_group, c.title, c.avatar_path, c.created_by, c.invite_code`
 
 const convFrom = ` FROM conversations c LEFT JOIN companies co ON co.id = c.company_id `
 
 func scanConversation(row pgx.Row) (*domain.Conversation, error) {
 	var c domain.Conversation
-	err := row.Scan(&c.ID, &c.UserAID, &c.UserBID, &c.CompanyID, &c.CompanyName,
+	var aID *int64 // у групп user_a_id NULL
+	err := row.Scan(&c.ID, &aID, &c.UserBID, &c.CompanyID, &c.CompanyName,
 		&c.IsDevChat, &c.CreatedAt, &c.LastMessageAt,
-		&c.HiddenForA, &c.HiddenForB, &c.PinnedAtA, &c.PinnedAtB)
+		&c.HiddenForA, &c.HiddenForB, &c.PinnedAtA, &c.PinnedAtB,
+		&c.IsGroup, &c.Title, &c.AvatarPath, &c.CreatedBy, &c.InviteCode)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, nil
 		}
 		return nil, err
+	}
+	if aID != nil {
+		c.UserAID = *aID
 	}
 	return &c, nil
 }

@@ -1,5 +1,9 @@
 <template>
+  <div v-if="message.kind === 'system'" class="msg-system" :data-msg-id="message.id">
+    <span>{{ message.text }}</span>
+  </div>
   <div
+    v-else
     class="msg-row"
     :class="{ outgoing: isMine, swiping: swipeDx > 0 }"
     :data-msg-id="message.id"
@@ -139,7 +143,11 @@
         <span v-if="senderName" class="msg-sender">{{ senderName }}</span>
         <span v-if="message.edited_at" class="msg-edited" title="Сообщение отредактировано">изменено</span>
         <span class="msg-time">{{ formatTime(message.created_at) }}</span>
-        <span v-if="isMine" class="msg-read">
+        <span v-if="isMine && isGroup" class="msg-read group" role="button" title="Кто прочитал" @click.stop="$emit('read-by', message.id)">
+          <span class="material-symbols-outlined" :class="{ seen: readCount > 0 }">done_all</span>
+          <span v-if="readCount > 0" class="msg-read-count">{{ readCount }}</span>
+        </span>
+        <span v-else-if="isMine" class="msg-read">
           <span class="material-symbols-outlined" :class="{ seen: message.read_at }">
             {{ message.read_at ? 'done_all' : 'done' }}
           </span>
@@ -163,9 +171,12 @@ const props = defineProps({
   showDelete: { type: Boolean, default: true },
   showPin: { type: Boolean, default: true },
   meId: { type: [Number, String], default: null },
+  // Группа: показываем счётчик прочитавших вместо галочки «прочитано».
+  isGroup: { type: Boolean, default: false },
+  readCount: { type: Number, default: 0 },
 })
 
-const emit = defineEmits(['delete', 'edit', 'reply', 'forward', 'join-call', 'pin', 'open-task', 'open-post', 'context-menu', 'quote-click', 'react'])
+const emit = defineEmits(['delete', 'edit', 'reply', 'forward', 'join-call', 'pin', 'open-task', 'open-post', 'context-menu', 'quote-click', 'react', 'read-by'])
 
 // Реакции сгруппированные по эмодзи; mine — подсветка своей.
 const reactionGroups = computed(() => {
@@ -782,6 +793,34 @@ const joinLabel = computed(() => props.isMine ? 'Вернуться' : 'Прис
 
 .msg-read .material-symbols-outlined.seen {
   color: var(--color-success);
+}
+
+.msg-read.group {
+  display: inline-flex;
+  align-items: center;
+  gap: 1px;
+  cursor: pointer;
+}
+.msg-read-count {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--color-success);
+}
+
+/* Системная плашка группы — по центру ленты. */
+.msg-system {
+  display: flex;
+  justify-content: center;
+  margin: 8px 0;
+}
+.msg-system span {
+  font-size: 12px;
+  color: var(--color-text-dim);
+  background: var(--color-surface-high);
+  border-radius: var(--radius-full, 999px);
+  padding: 4px 12px;
+  max-width: 80%;
+  text-align: center;
 }
 
 @media (max-width: 768px) {
