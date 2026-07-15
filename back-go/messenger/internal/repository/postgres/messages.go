@@ -69,11 +69,14 @@ func scanMessage(row pgx.Row) (*domain.Message, error) {
 		postTitle   *string
 		postExcerpt *string
 		postCover   *string
+
+		// user_a_id диалога: у группы NULL — сканим в nullable, иначе scan падает.
+		convOwner *int64
 	)
 	err := row.Scan(&m.ID, &m.ConversationID, &m.SenderID, &m.IsBot, &m.Text, &m.CreatedAt,
 		&m.ReadAt, &m.HiddenForA, &m.HiddenForB, &m.ReplyToID, &m.ForwardedFromUserID,
 		&m.Kind, &m.CallID, &m.TaskID, &m.PinnedAt, &m.PinnedByID, &m.EditedAt,
-		&m.ConvIsDevChat, &m.ConvOwnerID,
+		&m.ConvIsDevChat, &convOwner,
 		&replyID, &replySndID, &replyFIO, &replyText, &replyKind, &replyAtt,
 		&fwdID, &fwdFIO,
 		&callID, &callKind, &callMedia, &callStatus, &callStartedAt, &callEndedAt,
@@ -85,6 +88,9 @@ func scanMessage(row pgx.Row) (*domain.Message, error) {
 			return nil, nil
 		}
 		return nil, err
+	}
+	if convOwner != nil {
+		m.ConvOwnerID = *convOwner
 	}
 
 	if replyID != nil {
