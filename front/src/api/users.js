@@ -31,11 +31,14 @@ export const assignRole = (userId, data) => apiRequest(`/users/${userId}/role`, 
 // члены АКТИВНОЙ компании (роль/должность из связки, компания берётся из токена).
 // global: true (?all=1) — все видимые пользователи платформы (для старта чата/
 // звонка с сотрудником другой компании, контакты).
-export const getDirectory = (q = '', excludeSelf = false, { global = false } = {}) => {
+// byLogin: true (?by=login) — глобальный поиск строго по логину (мессенджер:
+// новый собеседник ищется по точному логину, а не листанием всех по ФИО).
+export const getDirectory = (q = '', excludeSelf = false, { global = false, byLogin = false } = {}) => {
   const params = new URLSearchParams()
   if (q) params.set('q', q)
   if (excludeSelf) params.set('exclude_self', 'true')
   if (global) params.set('all', '1')
+  if (byLogin) params.set('by', 'login')
   const qs = params.toString()
   return apiRequest(`/users/directory${qs ? '?' + qs : ''}`)
 }

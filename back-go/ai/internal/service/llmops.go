@@ -117,11 +117,18 @@ func (s *Service) SemanticSearch(ctx context.Context, companyID int64, query str
 	if err != nil {
 		return nil, err
 	}
+	if len(hits) == 0 {
+		return nil, nil
+	}
+	// hits уже упорядочены по убыванию score — как только упираемся в порог
+	// (абсолютный или относительный от лучшего), дальше только хуже, режем.
+	best := hits[0].Score
 	out := make([]domain.SearchHit, 0, len(hits))
 	for _, h := range hits {
-		if h.Score > minSemanticScore {
-			out = append(out, h)
+		if h.Score < minSemanticScore || best-h.Score > semanticScoreBand {
+			break
 		}
+		out = append(out, h)
 	}
 	return out, nil
 }

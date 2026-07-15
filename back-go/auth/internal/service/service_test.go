@@ -104,15 +104,23 @@ func (r *fakeRepo) ListAll(_ context.Context) ([]*domain.User, error) {
 	return out, nil
 }
 
-func (r *fakeRepo) SearchDirectory(_ context.Context, query string, excludeID int64) ([]*domain.User, error) {
+func (r *fakeRepo) SearchDirectory(_ context.Context, query string, excludeID int64, loginOnly bool) ([]*domain.User, error) {
 	var out []*domain.User
+	q := strings.ToLower(query)
 	for _, u := range r.users {
 		if !u.IsActive || u.ID == excludeID {
 			continue
 		}
-		if query != "" && !strings.Contains(strings.ToLower(u.FIO), strings.ToLower(query)) &&
-			!strings.Contains(strings.ToLower(u.Login), strings.ToLower(query)) {
-			continue
+		if query != "" {
+			byLogin := strings.Contains(strings.ToLower(u.Login), q)
+			byFio := strings.Contains(strings.ToLower(u.FIO), q)
+			if loginOnly {
+				if !byLogin {
+					continue
+				}
+			} else if !byLogin && !byFio {
+				continue
+			}
 		}
 		cp := *u
 		out = append(out, &cp)
@@ -321,6 +329,26 @@ func (t *fakeThrottle) RegisterFailure(_ context.Context, login string) int {
 	return 0
 }
 func (t *fakeThrottle) RegisterSuccess(_ context.Context, login string) { t.failures[login] = 0 }
+
+type fakeDeviceLinks struct{ m map[string]domain.DeviceLink }
+
+func newFakeDeviceLinks() *fakeDeviceLinks { return &fakeDeviceLinks{m: map[string]domain.DeviceLink{}} }
+func (f *fakeDeviceLinks) Save(_ context.Context, code string, dl domain.DeviceLink, _ time.Duration) error {
+	f.m[code] = dl
+	return nil
+}
+func (f *fakeDeviceLinks) Get(_ context.Context, code string) (*domain.DeviceLink, error) {
+	dl, ok := f.m[code]
+	if !ok {
+		return nil, nil
+	}
+	d := dl
+	return &d, nil
+}
+func (f *fakeDeviceLinks) Delete(_ context.Context, code string) error {
+	delete(f.m, code)
+	return nil
+}
 
 type fakeAvatars struct{ saved, deleted []string }
 
@@ -578,7 +606,7 @@ func newTestService(t *testing.T) (*Service, *fakeRepo, *fakeThrottle) {
 	throttle := newFakeThrottle()
 	svc := New(repo, newFakeCompanies(), fakeBackup{}, throttle, iss, &fakeAvatars{},
 		newFakeVerifications(), newFakePasswordResets(), newFakeCompanyInvites(),
-		fakeMail{}, "http://localhost:5173", slog.Default())
+		newFakeDeviceLinks(), fakeMail{}, "http://localhost:5173", slog.Default())
 	return svc, repo, throttle
 }
 

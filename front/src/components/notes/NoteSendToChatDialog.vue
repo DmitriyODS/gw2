@@ -25,12 +25,12 @@
       <input v-model="q" placeholder="Кому отправить — имя или логин" class="nsc-input" autofocus />
     </div>
 
-    <div v-if="loading" class="nsc-empty">
+    <div v-if="loading && !results.length" class="nsc-empty">
       <ProgressSpinner style="width:32px;height:32px" />
     </div>
     <div v-else-if="!results.length" class="nsc-empty">
       <span class="material-symbols-outlined">person_search</span>
-      <p>{{ q ? 'Никого не нашли' : 'Начните вводить' }}</p>
+      <p>{{ q ? 'Никого не нашли — проверьте логин' : 'Пока нет диалогов. Введите логин, чтобы найти человека.' }}</p>
     </div>
     <ul v-else class="nsc-list">
       <li
@@ -63,7 +63,7 @@
 import { computed, ref, watch } from 'vue'
 import ProgressSpinner from 'primevue/progressspinner'
 import AppDialog from '@/components/common/AppDialog.vue'
-import { getDirectory } from '@/api/users.js'
+import { useContactPicker } from '@/composables/useContactPicker.js'
 import { openConversation, sendMessage } from '@/api/messenger.js'
 import { upsertMember } from '@/api/notes.js'
 import { useNotificationsStore } from '@/stores/notifications.js'
@@ -78,12 +78,9 @@ const emit = defineEmits(['update:modelValue', 'sent'])
 
 const notif = useNotificationsStore()
 
-const q = ref('')
-const results = ref([])
-const loading = ref(false)
+const { q, results, loading, reset } = useContactPicker()
 const sending = ref(false)
 const selectedIds = ref(new Set())
-let debounceTimer = null
 
 const textPreview = computed(() =>
   props.text.length > 90 ? props.text.slice(0, 90) + '…' : props.text)
@@ -98,26 +95,11 @@ const dialogActions = computed(() => [
   },
 ])
 
-async function search() {
-  loading.value = true
-  try {
-    results.value = await getDirectory(q.value.trim(), /* excludeSelf */ true, { global: true })
-  } finally {
-    loading.value = false
-  }
-}
-
 watch(() => props.modelValue, (v) => {
   if (!v) return
-  q.value = ''
   selectedIds.value = new Set()
   sending.value = false
-  search()
-})
-
-watch(q, () => {
-  clearTimeout(debounceTimer)
-  debounceTimer = setTimeout(search, 200)
+  reset()
 })
 
 function toggle(id) {

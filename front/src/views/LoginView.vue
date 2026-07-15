@@ -50,7 +50,43 @@
       <RouterLink to="/register" class="switch-link">Зарегистрироваться</RouterLink>
     </p>
 
+    <div class="alt-login">
+      <button type="button" class="alt-login-btn" @click="showQrLogin = true">
+        <span class="material-symbols-outlined">qr_code_2</span>
+        Войти по QR-коду
+      </button>
+      <button type="button" class="alt-login-btn" @click="showTvActivate = true">
+        <span class="material-symbols-outlined">tv</span>
+        Активировать ТВ-режим
+      </button>
+    </div>
+
     <template #overlays>
+    <!-- Вход по QR: показываем код, ждём подтверждения с телефона -->
+    <AppDialog
+      v-if="showQrLogin"
+      model-value
+      icon="qr_code_2"
+      size="sm"
+      title="Вход по QR-коду"
+      subtitle="Отсканируйте код телефоном, где вы уже вошли."
+      @update:modelValue="showQrLogin = false"
+    >
+      <DeviceLinkInitiator kind="login" @session="onLoginQrSession" />
+    </AppDialog>
+
+    <!-- Активация ТВ-режима: код для подтверждения из настроек аккаунта -->
+    <AppDialog
+      v-if="showTvActivate"
+      model-value
+      icon="tv"
+      size="sm"
+      title="ТВ-режим"
+      subtitle="Подтвердите код в приложении → «Авторизовать ТВ-киоск»."
+      @update:modelValue="showTvActivate = false"
+    >
+      <DeviceLinkInitiator kind="tv" @session="onTvSession" />
+    </AppDialog>
     <!-- Неклозабельная модалка смены учётных данных -->
     <AppDialog
       v-if="showChangeModal"
@@ -156,6 +192,7 @@ import { useThemeStore } from '@/stores/theme.js'
 import { connectSocket } from '@/socket/index.js'
 import AppDialog from '@/components/common/AppDialog.vue'
 import AuthShell from '@/components/auth/AuthShell.vue'
+import DeviceLinkInitiator from '@/components/auth/DeviceLinkInitiator.vue'
 
 const router = useRouter()
 const route = useRoute()
@@ -178,6 +215,10 @@ const showCompanyPicker = ref(false)
 const pickerCompanies = ref([])
 const pickerSelectToken = ref('')
 const pickerSelected = ref(null)
+
+// Вход по QR / активация ТВ-режима.
+const showQrLogin = ref(false)
+const showTvActivate = ref(false)
 
 const changeForm = reactive({ login: '', password: '', confirmPassword: '' })
 const changeError = ref('')
@@ -285,6 +326,25 @@ async function confirmCompany() {
   } finally {
     loading.value = false
   }
+}
+
+// Вход подтверждён с телефона (QR-вход): применяем сессию как обычный login.
+function onLoginQrSession(session) {
+  const result = authStore.applyLinkSession(session)
+  showQrLogin.value = false
+  if (result.needsSelection) {
+    openCompanyPicker(result.companies, result.selectToken)
+    return
+  }
+  finishLogin(result.forceChange)
+}
+
+// ТВ-киоск авторизован (сессия уже привязана к компании) — уходим в ТВ-режим.
+function onTvSession(session) {
+  authStore.applyLinkSession(session)
+  showTvActivate.value = false
+  connectSocket()
+  router.push('/tv')
 }
 
 async function handleChangeDefault() {
@@ -576,5 +636,30 @@ async function handleChangeDefault() {
   flex-direction: column;
   gap: 16px;
 }
+
+/* Альтернативные способы входа (QR / ТВ) */
+.alt-login {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  justify-content: center;
+  margin-top: 18px;
+}
+.alt-login-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 14px;
+  border: none;
+  border-radius: var(--radius-pill, 999px);
+  background: var(--acrylic-card-bg, transparent);
+  color: var(--color-text-secondary);
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: color 0.15s, background 0.15s;
+}
+.alt-login-btn:hover { color: var(--color-primary); }
+.alt-login-btn .material-symbols-outlined { font-size: 18px; }
 
 </style>

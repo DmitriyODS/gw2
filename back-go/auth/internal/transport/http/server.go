@@ -76,6 +76,14 @@ func NewServer(eps endpoint.Endpoints, verifier *pasetoauth.Verifier,
 	authAPI.Post("/logout", auth.RequireToken, h.logout)
 	authAPI.Post("/change-default", auth.RequireToken, h.changeDefault)
 
+	// Спаривание устройств (QR-вход + ТВ-код). start/claim — публичные
+	// (инициатор без входа); approve — авторизованный (нужна активная компания
+	// для ТВ-киоска, поэтому RequireAuth, а не RequireToken).
+	authAPI.Post("/link/start", h.linkStart)
+	authAPI.Get("/link/info", h.linkInfo)
+	authAPI.Post("/link/approve", auth.RequireAuth, h.linkApprove)
+	authAPI.Post("/link/claim", h.linkClaim)
+
 	usersAPI := app.Group("/api/users")
 	// Список всех пользователей платформы — супер-админ.
 	usersAPI.Get("", auth.RequireAuth, auth.RequireSuperAdmin, h.listUsers)

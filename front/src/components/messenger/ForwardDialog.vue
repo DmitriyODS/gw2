@@ -25,12 +25,12 @@
       />
     </div>
 
-    <div v-if="loading" class="fwd-empty">
+    <div v-if="loading && !items.length" class="fwd-empty">
       <ProgressSpinner style="width:32px;height:32px" />
     </div>
     <div v-else-if="!items.length" class="fwd-empty">
       <span class="material-symbols-outlined">person_search</span>
-      <p>{{ q ? 'Никого не нашли' : 'Начните вводить' }}</p>
+      <p>{{ q ? 'Никого не нашли — проверьте логин' : 'Пока нет диалогов. Введите логин, чтобы найти человека.' }}</p>
     </div>
     <ul v-else class="fwd-list">
       <li
@@ -59,7 +59,7 @@
 import { ref, computed, watch } from 'vue'
 import ProgressSpinner from 'primevue/progressspinner'
 import AppDialog from '@/components/common/AppDialog.vue'
-import { getDirectory } from '@/api/users.js'
+import { useContactPicker } from '@/composables/useContactPicker.js'
 
 const props = defineProps({
   modelValue: { type: Boolean, default: false },
@@ -68,12 +68,9 @@ const props = defineProps({
 
 const emit = defineEmits(['update:modelValue', 'confirm'])
 
-const q = ref('')
-const results = ref([])
-const loading = ref(false)
+const { q, results, loading, reset } = useContactPicker()
 const sending = ref(false)
 const selectedIds = ref(new Set())
-let debounceTimer = null
 
 const items = computed(() => results.value)
 
@@ -98,27 +95,12 @@ const dialogActions = computed(() => [
   },
 ])
 
-async function search() {
-  loading.value = true
-  try {
-    results.value = await getDirectory(q.value.trim(), /* excludeSelf */ true, { global: true })
-  } finally {
-    loading.value = false
-  }
-}
-
 watch(() => props.modelValue, (v) => {
   if (v) {
-    q.value = ''
     selectedIds.value = new Set()
     sending.value = false
-    search()
+    reset()
   }
-})
-
-watch(q, () => {
-  clearTimeout(debounceTimer)
-  debounceTimer = setTimeout(search, 200)
 })
 
 function toggle(id) {

@@ -194,6 +194,23 @@ export const useAuthStore = defineStore('auth', () => {
     return data
   }
 
+  // Применить сессию, полученную по QR/коду (LinkClaim). Ведёт себя как login:
+  // при нескольких компаниях у пользователя — возвращает {needsSelection} для
+  // пикера, иначе применяет сессию. Для ТВ-киоска сессия уже привязана к
+  // компании — сразу входим.
+  function applyLinkSession(session) {
+    if (session?.needs_company_selection) {
+      return { needsSelection: true, companies: session.companies ?? [], selectToken: session.select_token }
+    }
+    applySession(session)
+    companyDisabled.value = null
+    if (session?.company_id != null) rememberCompany(session.company_id)
+    if (!forceChange.value) {
+      loadMe().catch(() => {})
+    }
+    return { forceChange: forceChange.value }
+  }
+
   async function loadMe() {
     const me = await getMe()
     user.value = me
@@ -308,7 +325,7 @@ export const useAuthStore = defineStore('auth', () => {
     companies, isMultiCompany, roleLevel,
     ensureReady, login, register, verifyEmail, resendVerification,
     forgotPassword, resetPassword, acceptInvite,
-    logout, loadMe, clearAuth, applySession, patchCompanySettings,
+    logout, loadMe, clearAuth, applySession, applyLinkSession, patchCompanySettings,
     selectCompany, switchCompany, joinCompany,
     changeDefaultCredentials,
   }

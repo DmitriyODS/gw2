@@ -552,20 +552,21 @@ func TestSemanticSearchFiltersScore(t *testing.T) {
 	svc, repo, llm := newTestService()
 	repo.companies[1] = enabledCompany(1)
 	repo.searchHits = []domain.SearchHit{
-		{TaskID: 1, Score: 0.9},
-		{TaskID: 2, Score: 0.0},  // отсечётся: score > 0
-		{TaskID: 3, Score: -0.2}, // отсечётся
+		{TaskID: 1, Score: 0.90}, // лучший
+		{TaskID: 2, Score: 0.82}, // в пределах band от лучшего — пройдёт
+		{TaskID: 3, Score: 0.50}, // отстал от лучшего > band — обрыв
+		{TaskID: 4, Score: 0.20}, // ниже абсолютного порога
 	}
 
 	hits, err := svc.SemanticSearch(context.Background(), 1, "котики")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(hits) != 1 || hits[0].TaskID != 1 {
-		t.Fatalf("ожидался только hit с положительным score: %+v", hits)
+	if len(hits) != 2 || hits[0].TaskID != 1 || hits[1].TaskID != 2 {
+		t.Fatalf("ожидались только близкие к лучшему хиты: %+v", hits)
 	}
-	if repo.lastSearch.model != "text-embedding-3-small" || repo.lastSearch.limit != 200 {
-		t.Fatalf("фильтр model и лимит 200 обязательны: %+v", repo.lastSearch)
+	if repo.lastSearch.model != "text-embedding-3-small" || repo.lastSearch.limit != 50 {
+		t.Fatalf("фильтр model и лимит 50 обязательны: %+v", repo.lastSearch)
 	}
 	if llm.lastEmbed.timeout != 4*time.Second {
 		t.Fatalf("таймаут эмбеддинга запроса 4с, получено %v", llm.lastEmbed.timeout)

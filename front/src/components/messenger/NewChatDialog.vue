@@ -5,24 +5,24 @@
     icon="edit_square"
     size="sm"
     title="Новый чат"
-    subtitle="Найдите коллегу по фамилии или логину."
+    subtitle="Ваши диалоги — по фамилии, новый собеседник — по логину."
     @update:model-value="$emit('update:modelValue', $event)"
   >
     <div class="newchat-search">
       <span class="material-symbols-outlined">search</span>
       <input
         v-model="q"
-        placeholder="Логин или фамилия"
+        placeholder="Фамилия (из ваших чатов) или логин"
         class="newchat-input"
         autofocus
       />
     </div>
-    <div v-if="loading" class="newchat-empty">
+    <div v-if="loading && !results.length" class="newchat-empty">
       <ProgressSpinner style="width:32px;height:32px" />
     </div>
     <div v-else-if="!results.length" class="newchat-empty">
       <span class="material-symbols-outlined">person_search</span>
-      <p>{{ q ? 'Никого не нашли' : 'Начните вводить' }}</p>
+      <p>{{ q ? 'Никого не нашли — проверьте логин' : 'Пока нет диалогов. Введите логин, чтобы начать новый.' }}</p>
     </div>
     <ul v-else class="newchat-results">
       <li
@@ -42,10 +42,10 @@
 </template>
 
 <script setup>
-import { ref, watch } from 'vue'
+import { watch } from 'vue'
 import ProgressSpinner from 'primevue/progressspinner'
 import AppDialog from '@/components/common/AppDialog.vue'
-import { getDirectory } from '@/api/users.js'
+import { useContactPicker } from '@/composables/useContactPicker.js'
 
 const props = defineProps({
   modelValue: { type: Boolean, default: false },
@@ -53,30 +53,10 @@ const props = defineProps({
 
 const emit = defineEmits(['update:modelValue', 'pick'])
 
-const q = ref('')
-const results = ref([])
-const loading = ref(false)
-let debounceTimer = null
-
-async function search() {
-  loading.value = true
-  try {
-    results.value = await getDirectory(q.value.trim(), /* excludeSelf */ true, { global: true })
-  } finally {
-    loading.value = false
-  }
-}
+const { q, results, loading, reset } = useContactPicker()
 
 watch(() => props.modelValue, (v) => {
-  if (v) {
-    q.value = ''
-    search()
-  }
-})
-
-watch(q, () => {
-  clearTimeout(debounceTimer)
-  debounceTimer = setTimeout(search, 200)
+  if (v) reset()
 })
 
 function avatarOf(u) {

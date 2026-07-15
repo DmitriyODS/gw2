@@ -14,17 +14,17 @@
         <span class="material-symbols-outlined">search</span>
         <input
           v-model="q"
-          placeholder="Кому отправить? Логин или фамилия"
+          placeholder="Фамилия (из ваших чатов) или логин"
           class="sendtask-input"
           autofocus
         />
       </div>
-      <div v-if="loading" class="sendtask-empty">
+      <div v-if="loading && !results.length" class="sendtask-empty">
         <ProgressSpinner style="width:32px;height:32px" />
       </div>
       <div v-else-if="!results.length" class="sendtask-empty">
         <span class="material-symbols-outlined">person_search</span>
-        <p>{{ q ? 'Никого не нашли' : 'Начните вводить' }}</p>
+        <p>{{ q ? 'Никого не нашли — проверьте логин' : 'Пока нет диалогов. Введите логин, чтобы найти человека.' }}</p>
       </div>
       <ul v-else class="sendtask-results">
         <li
@@ -79,7 +79,7 @@
 import { ref, watch } from 'vue'
 import ProgressSpinner from 'primevue/progressspinner'
 import AppDialog from '@/components/common/AppDialog.vue'
-import { getDirectory } from '@/api/users.js'
+import { useContactPicker } from '@/composables/useContactPicker.js'
 
 const props = defineProps({
   modelValue: { type: Boolean, default: false },
@@ -88,36 +88,18 @@ const props = defineProps({
 
 const emit = defineEmits(['update:modelValue', 'confirm'])
 
-const q = ref('')
-const results = ref([])
-const loading = ref(false)
+const { q, results, loading, reset } = useContactPicker()
 const picked = ref(null)
 const caption = ref('')
 const sending = ref(false)
-let debounceTimer = null
-
-async function search() {
-  loading.value = true
-  try {
-    results.value = await getDirectory(q.value.trim(), /* excludeSelf */ true)
-  } finally {
-    loading.value = false
-  }
-}
 
 watch(() => props.modelValue, (v) => {
   if (v) {
-    q.value = ''
     picked.value = null
     caption.value = ''
     sending.value = false
-    search()
+    reset()
   }
-})
-
-watch(q, () => {
-  clearTimeout(debounceTimer)
-  debounceTimer = setTimeout(search, 200)
 })
 
 function avatarOf(u) {

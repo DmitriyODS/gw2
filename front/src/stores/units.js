@@ -20,10 +20,10 @@ export const useUnitsStore = defineStore('units', () => {
   function minimize() { minimized.value = true }
   function expand() { minimized.value = false }
 
-  // Свёрнутый юнит не даёт о себе забыть: через 5 минут после сворачивания
+  // Свёрнутый юнит не даёт о себе забыть: через 30 минут после сворачивания
   // модалка разворачивается сама. Свернёт снова — таймер пойдёт заново,
-  // так что напоминание повторяется каждые 5 минут.
-  const REMIND_MS = 5 * 60 * 1000
+  // так что напоминание повторяется каждые 30 минут.
+  const REMIND_MS = 30 * 60 * 1000
   let remindTimer = null
   watch([activeUnit, minimized], ([unit, min]) => {
     clearTimeout(remindTimer)

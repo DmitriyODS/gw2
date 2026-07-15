@@ -65,6 +65,7 @@ func main() {
 	passwordResets := postgres.NewPasswordResetStore(pool)
 	companyInvites := postgres.NewCompanyInviteStore(pool)
 	throttle := redisx.NewLoginThrottle(rdb, log)
+	deviceLinks := redisx.NewDeviceLinkStore(rdb)
 	avatars := avatar.NewStorage(storage.FromEnv(log, uploadFolder))
 
 	mail, err := clients.NewMail(mailAddr, log)
@@ -75,7 +76,7 @@ func main() {
 	defer mail.Close()
 
 	svc := service.New(repo, companies, backup, throttle, issuer, avatars,
-		verifications, passwordResets, companyInvites, mail, appBaseURL, log)
+		verifications, passwordResets, companyInvites, deviceLinks, mail, appBaseURL, log)
 	eps := endpoint.New(svc)
 
 	httpAddr := bootstrap.Env("HTTP_ADDR", ":8091")

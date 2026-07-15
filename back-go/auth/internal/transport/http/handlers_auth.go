@@ -186,6 +186,74 @@ func (h *handlers) refresh(c *fiber.Ctx) error {
 	return c.JSON(resp.(*dto.Session))
 }
 
+// ── Спаривание устройств: QR-вход и ТВ-код ───────────────────────
+
+func (h *handlers) linkStart(c *fiber.Ctx) error {
+	var req struct {
+		Kind string `json:"kind"`
+	}
+	_ = c.BodyParser(&req) // тело опционально: пустой kind → login
+	resp, err := h.eps.LinkStart(c.Context(), req.Kind)
+	if err != nil {
+		return h.respondError(c, err)
+	}
+	return c.JSON(resp)
+}
+
+func (h *handlers) linkInfo(c *fiber.Ctx) error {
+	code := c.Query("code")
+	if code == "" {
+		return badRequest(c, "code обязателен")
+	}
+	resp, err := h.eps.LinkInfo(c.Context(), code)
+	if err != nil {
+		return h.respondError(c, err)
+	}
+	return c.JSON(resp)
+}
+
+func (h *handlers) linkApprove(c *fiber.Ctx) error {
+	var req struct {
+		Code string `json:"code"`
+	}
+	if err := c.BodyParser(&req); err != nil || req.Code == "" {
+		return badRequest(c, "code обязателен")
+	}
+	cu := currentUser(c)
+	if cu == nil {
+		return badRequest(c, "Требуется авторизация")
+	}
+	if _, err := h.eps.LinkApprove(c.Context(), endpoint.LinkApproveEpRequest{
+		Code: req.Code, UserID: cu.ID, ActiveCompanyID: cu.CompanyID,
+	}); err != nil {
+		return h.respondError(c, err)
+	}
+	return c.JSON(fiber.Map{"status": "ok"})
+}
+
+func (h *handlers) linkClaim(c *fiber.Ctx) error {
+	var req struct {
+		Code   string `json:"code"`
+		Secret string `json:"secret"`
+	}
+	if err := c.BodyParser(&req); err != nil || req.Code == "" || req.Secret == "" {
+		return badRequest(c, "code и secret обязательны")
+	}
+	resp, err := h.eps.LinkClaim(c.Context(), endpoint.LinkClaimEpRequest{
+		Code: req.Code, Secret: req.Secret,
+	})
+	if err != nil {
+		return h.respondError(c, err)
+	}
+	res := resp.(*dto.LinkClaimResult)
+	// Успешный claim — выдаём refresh-cookie инициатору (как обычный login);
+	// для login-gate (несколько компаний) refresh пуст — cookie не ставим.
+	if res.Status == "ok" && res.Session != nil && res.Session.RefreshToken != "" {
+		setRefreshCookie(c, res.Session.RefreshToken)
+	}
+	return c.JSON(res)
+}
+
 func (h *handlers) logout(c *fiber.Ctx) error {
 	clearRefreshCookie(c)
 	return c.JSON(fiber.Map{"message": "Выход выполнен"})

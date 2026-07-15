@@ -72,7 +72,7 @@ type UserRepository interface {
 	ListAll(ctx context.Context) ([]*User, error)
 	// SearchDirectory — глобальный каталог (контакты): активные, ILIKE по
 	// fio/login, опционально без excludeID; сортировка по fio.
-	SearchDirectory(ctx context.Context, query string, excludeID int64) ([]*User, error)
+	SearchDirectory(ctx context.Context, query string, excludeID int64, loginOnly bool) ([]*User, error)
 	Create(ctx context.Context, u *User) error
 	// UpdateFields — точечное обновление колонок идентичности пользователя.
 	UpdateFields(ctx context.Context, id int64, fields map[string]any) error

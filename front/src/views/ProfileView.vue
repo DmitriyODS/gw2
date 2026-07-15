@@ -169,6 +169,26 @@
           </div>
         </section>
 
+        <!-- Вход на другом устройстве: подтверждение QR-входа и ТВ-киоска -->
+        <section class="profile-card">
+          <header class="card-head">
+            <div class="head-icon" data-tone="primary">
+              <span class="material-symbols-outlined">devices</span>
+            </div>
+            <div class="head-text">
+              <h3>Вход на другом устройстве</h3>
+              <p class="head-desc">
+                Подтвердите вход по QR на новом устройстве или авторизуйте ТВ-киоск
+                под выбранной компанией.
+              </p>
+            </div>
+          </header>
+          <button type="button" class="btn-grad" @click="showAuthorizeDevice = true">
+            <span class="material-symbols-outlined">qr_code_scanner</span>
+            Сканировать или ввести код
+          </button>
+        </section>
+
         <div class="forms-row">
           <!-- Редактирование профиля -->
           <section class="profile-card">
@@ -267,6 +287,9 @@
       </div>
     </div>
 
+    <!-- Авторизация устройства (QR-вход / ТВ-киоск) -->
+    <AuthorizeDeviceDialog v-model="showAuthorizeDevice" />
+
     <!-- Диалог кроппера аватарки -->
     <AppDialog
       v-if="showCropper"
@@ -319,6 +342,7 @@ import PhoneInput from '@/components/common/PhoneInput.vue'
 import DateRangePicker from '@/components/common/DateRangePicker.vue'
 import InputText from 'primevue/inputtext'
 import AppDialog from '@/components/common/AppDialog.vue'
+import AuthorizeDeviceDialog from '@/components/devicelink/AuthorizeDeviceDialog.vue'
 import DataTable from 'primevue/datatable'
 import Column from 'primevue/column'
 import ProgressSpinner from 'primevue/progressspinner'
@@ -329,6 +353,7 @@ const { isMobile } = useBreakpoint()
 
 // ---- Avatar ----
 const showCropper = ref(false)
+const showAuthorizeDevice = ref(false)
 const lightboxOpen = ref(false)
 
 const avatarSrc = computed(() => {

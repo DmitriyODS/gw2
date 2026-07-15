@@ -27,6 +27,12 @@ type AuthService interface {
 	Refresh(ctx context.Context, refreshToken string) (*dto.Session, error)
 	ChangeDefault(ctx context.Context, req dto.ChangeDefaultRequest) (*dto.Session, error)
 
+	// Спаривание устройств: QR-вход и авторизация ТВ-киоска по коду/QR.
+	LinkStart(ctx context.Context, kind string) (*dto.LinkStartResult, error)
+	LinkInfo(ctx context.Context, code string) (*dto.LinkInfo, error)
+	LinkApprove(ctx context.Context, code string, userID int64, activeCompanyID *int64) error
+	LinkClaim(ctx context.Context, code, secret string) (*dto.LinkClaimResult, error)
+
 	ListUsers(ctx context.Context) ([]dto.User, error)
 	CreateUser(ctx context.Context, actor *domain.User, req dto.CreateUserRequest) (*dto.User, error)
 	CreatePlatformUser(ctx context.Context, req dto.CreateUserRequest) (*dto.User, error)
@@ -90,6 +96,7 @@ type Service struct {
 	verifications  domain.VerificationStore
 	passwordResets domain.PasswordResetStore
 	companyInvites domain.CompanyInviteStore
+	link           domain.DeviceLinkStore
 	mail           domain.MailClient
 	appBaseURL     string // публичный базовый URL для ссылок в письмах
 	log            *slog.Logger
@@ -99,11 +106,11 @@ func New(repo domain.UserRepository, companies domain.CompanyRepository,
 	backup domain.BackupStore, throttle domain.LoginThrottle, tokens *token.Issuer,
 	avatars domain.AvatarStorage, verifications domain.VerificationStore,
 	passwordResets domain.PasswordResetStore, companyInvites domain.CompanyInviteStore,
-	mail domain.MailClient, appBaseURL string, log *slog.Logger) *Service {
+	link domain.DeviceLinkStore, mail domain.MailClient, appBaseURL string, log *slog.Logger) *Service {
 	return &Service{repo: repo, companies: companies, backup: backup,
 		throttle: throttle, tokens: tokens, avatars: avatars,
 		verifications: verifications, passwordResets: passwordResets,
-		companyInvites: companyInvites, mail: mail, appBaseURL: appBaseURL, log: log}
+		companyInvites: companyInvites, link: link, mail: mail, appBaseURL: appBaseURL, log: log}
 }
 
 var _ AuthService = (*Service)(nil)

@@ -94,6 +94,11 @@ const routes = [
   // Вступление в компанию по ссылке-приглашению (нужна авторизация).
   { path: '/join/:code', component: () => import('@/views/JoinView.vue'),
     meta: { requiresAuth: true, fullscreen: true } },
+  // Подтверждение спаривания устройства (QR-вход / ТВ-киоск): открывается при
+  // сканировании QR любым сканером. Нужна авторизация — гость уйдёт на /login
+  // и вернётся сюда после входа.
+  { path: '/link', component: () => import('@/views/LinkApproveView.vue'),
+    meta: { requiresAuth: true, fullscreen: true } },
   { path: '/', redirect: '/tasks' },
   { path: '/:pathMatch(.*)*', redirect: '/tasks' }
 ]

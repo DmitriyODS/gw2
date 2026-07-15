@@ -26,9 +26,16 @@ const (
 	defaultMaxTokens   = 400
 	defaultTemperature = 0.7
 
-	// minSemanticScore / semanticLimit — порог и лимит семантического поиска.
-	minSemanticScore = 0.0
-	semanticLimit    = 200
+	// Семантический поиск: чтобы в выдачу не сыпалась «ерунда» (косинусное
+	// сходство у эмбеддингов почти всегда > 0), держим два фильтра —
+	//   minSemanticScore  — абсолютный порог осмысленной близости к запросу;
+	//   semanticScoreBand — относительный «обрыв»: отбрасываем хиты, сильно
+	//                       отставшие от лучшего совпадения (длинный хвост
+	//                       слабосвязанных задач), даже если они выше порога.
+	// semanticLimit — потолок кандидатов из БД (дальше их всё равно режут пороги).
+	minSemanticScore  = 0.30
+	semanticScoreBand = 0.12
+	semanticLimit     = 50
 
 	// embedBatchSize — размер пачки эмбеддингов (OpenAI принимает до 2048).
 	embedBatchSize = 64

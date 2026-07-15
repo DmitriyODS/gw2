@@ -26,6 +26,11 @@ type Endpoints struct {
 	Refresh              endpoint.Endpoint
 	ChangeDefault        endpoint.Endpoint
 
+	LinkStart   endpoint.Endpoint
+	LinkInfo    endpoint.Endpoint
+	LinkApprove endpoint.Endpoint
+	LinkClaim   endpoint.Endpoint
+
 	ListUsers              endpoint.Endpoint
 	CreateUser             endpoint.Endpoint
 	CreatePlatformUser     endpoint.Endpoint
@@ -134,6 +139,17 @@ type SelectCompanyEpRequest struct {
 type SwitchCompanyEpRequest struct {
 	UserID    int64
 	CompanyID int64
+}
+
+type LinkApproveEpRequest struct {
+	Code            string
+	UserID          int64
+	ActiveCompanyID *int64
+}
+
+type LinkClaimEpRequest struct {
+	Code   string
+	Secret string
 }
 
 type MemberEpRequest struct {
@@ -259,6 +275,20 @@ func New(svc service.AuthService) Endpoints {
 		},
 		ChangeDefault: func(ctx context.Context, request any) (any, error) {
 			return svc.ChangeDefault(ctx, request.(dto.ChangeDefaultRequest))
+		},
+		LinkStart: func(ctx context.Context, request any) (any, error) {
+			return svc.LinkStart(ctx, request.(string))
+		},
+		LinkInfo: func(ctx context.Context, request any) (any, error) {
+			return svc.LinkInfo(ctx, request.(string))
+		},
+		LinkApprove: func(ctx context.Context, request any) (any, error) {
+			req := request.(LinkApproveEpRequest)
+			return nil, svc.LinkApprove(ctx, req.Code, req.UserID, req.ActiveCompanyID)
+		},
+		LinkClaim: func(ctx context.Context, request any) (any, error) {
+			req := request.(LinkClaimEpRequest)
+			return svc.LinkClaim(ctx, req.Code, req.Secret)
 		},
 		ListUsers: func(ctx context.Context, _ any) (any, error) {
 			return svc.ListUsers(ctx)

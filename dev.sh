@@ -128,6 +128,22 @@ preflight() {
 }
 preflight
 
+# 0a. Фронт-зависимости: ставим/обновляем, если node_modules отсутствует или
+#     package-lock.json свежее установленного слепка (после git pull или
+#     добавления пакета). Используем npm ci — он ставит СТРОГО из lock и НЕ
+#     переписывает его (в отличие от npm install, который на macOS ломает lock:
+#     теряет транзитивные optional-deps wasm-пакетов и валит npm ci на сервере).
+ensure_front_deps() {
+    local lock="$FRONT/package-lock.json"
+    local stamp="$FRONT/node_modules/.package-lock.json"
+    if [ ! -d "$FRONT/node_modules" ] || [ ! -f "$stamp" ] || [ "$lock" -nt "$stamp" ]; then
+        printf "\033[1m▶ Фронт-зависимости (npm ci)...\033[0m\n"
+        ( cd "$FRONT" && npm ci )
+        printf "\033[32m  Готово\033[0m\n\n"
+    fi
+}
+ensure_front_deps
+
 # 0b. Пересборка ВСЕХ Go-модулей до запуска. Ошибка компиляции валит скрипт
 #     сразу, а не молча роняет сервис в фоне; заодно прогревается build-кеш —
 #     go run ниже стартует мгновенно. `go build ./...` из корня workspace не

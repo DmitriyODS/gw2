@@ -133,7 +133,7 @@ func (r *UserRepository) ListAll(ctx context.Context) ([]*domain.User, error) {
 
 // SearchDirectory — глобальный каталог (контакты): активные пользователи,
 // ILIKE по fio/login, без excludeID; сортировка по fio.
-func (r *UserRepository) SearchDirectory(ctx context.Context, query string, excludeID int64) ([]*domain.User, error) {
+func (r *UserRepository) SearchDirectory(ctx context.Context, query string, excludeID int64, loginOnly bool) ([]*domain.User, error) {
 	where := []string{"u.is_active"}
 	var args []any
 	if excludeID > 0 {
@@ -142,7 +142,11 @@ func (r *UserRepository) SearchDirectory(ctx context.Context, query string, excl
 	}
 	if q := strings.TrimSpace(query); q != "" {
 		args = append(args, "%"+strings.ToLower(q)+"%")
-		where = append(where, fmt.Sprintf("(lower(u.fio) LIKE $%d OR lower(u.login) LIKE $%d)", len(args), len(args)))
+		if loginOnly {
+			where = append(where, fmt.Sprintf("lower(u.login) LIKE $%d", len(args)))
+		} else {
+			where = append(where, fmt.Sprintf("(lower(u.fio) LIKE $%d OR lower(u.login) LIKE $%d)", len(args), len(args)))
+		}
 	}
 	return r.listIdentity(ctx, "WHERE "+strings.Join(where, " AND ")+" ORDER BY u.fio ASC", args...)
 }

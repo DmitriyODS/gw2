@@ -23,7 +23,7 @@ func svcWithExtras(t *testing.T) (*Service, *fakeRepo, *fakeCompanies, *fakePass
 	resets := newFakePasswordResets()
 	invites := newFakeCompanyInvites()
 	svc := New(repo, companies, fakeBackup{}, newFakeThrottle(), iss, &fakeAvatars{},
-		newFakeVerifications(), resets, invites, fakeMail{}, "http://x", slog.Default())
+		newFakeVerifications(), resets, invites, newFakeDeviceLinks(), fakeMail{}, "http://x", slog.Default())
 	return svc, repo, companies, resets, invites
 }
 

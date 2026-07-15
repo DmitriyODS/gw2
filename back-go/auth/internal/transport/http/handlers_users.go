@@ -106,6 +106,8 @@ func (h *handlers) directory(c *fiber.Ctx) error {
 	case "1", "true", "yes":
 		req.CompanyID = nil
 	}
+	// by=login — глобальный поиск строго по логину (мессенджер: новый собеседник).
+	req.LoginOnly = c.Query("by") == "login"
 
 	resp, err := h.eps.Directory(c.Context(), req)
 	if err != nil {
