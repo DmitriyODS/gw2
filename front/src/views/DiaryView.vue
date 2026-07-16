@@ -49,12 +49,14 @@
       <div v-if="isMobile" class="dv-mobile-hub">
         <NotesHubTabs full-width />
       </div>
-      <div v-if="isMobile && store.diaries.length" class="dv-regstrip">
-        <button
-          v-for="d in store.diaries" :key="d.id"
-          class="dv-regchip" :class="{ active: d.id === store.selectedId }"
-          @click="store.select(d.id)"
-        >{{ d.name }}</button>
+      <!-- Мобайл: боковая панель скрыта — выбор/создание ежедневника в шторке
+           (по образцу групп заметок). Кнопка-селектор показывает активный. -->
+      <div v-if="isMobile" class="dv-mobile-bar">
+        <button class="dv-diary-select" @click="diarySheetOpen = true">
+          <span class="material-symbols-outlined dv-diary-select-icon">{{ store.tab === 'shared' ? 'folder_shared' : 'book' }}</span>
+          <span class="dv-diary-select-name">{{ store.selected?.name || 'Выберите ежедневник' }}</span>
+          <span class="material-symbols-outlined dv-diary-select-chev">expand_more</span>
+        </button>
       </div>
 
       <template v-if="store.selected">
@@ -349,6 +351,60 @@
     />
 
     <DiaryShareDialog v-model="shareOpen" :diary-id="store.selectedId" />
+
+    <!-- Мобайл: шторка выбора/создания ежедневника (аналог групп заметок) -->
+    <AppDialog v-model="diarySheetOpen" tone="primary" icon="book" size="sm" mobile="sheet" title="Ежедневники">
+      <div class="dv-diarysheet">
+        <SegmentedTabs :model-value="store.tab" :tabs="tabs" full-width @update:model-value="store.setTab" />
+
+        <div v-if="store.loadingList" class="dv-diarysheet-note">Загрузка…</div>
+        <template v-else>
+          <template v-for="d in store.diaries" :key="d.id">
+            <form v-if="sheetRenameId === d.id" class="dv-diarysheet-add" @submit.prevent="submitSheetRename(d)">
+              <input ref="sheetInput" v-model="sheetName" class="dv-diarysheet-input" maxlength="120" placeholder="Название ежедневника" />
+              <button class="dv-diarysheet-ok" type="submit" :disabled="!sheetName.trim()"><span class="material-symbols-outlined">check</span></button>
+            </form>
+            <button
+              v-else
+              class="dv-diaryitem"
+              :class="{ active: d.id === store.selectedId }"
+              @click="pickDiary(d)"
+            >
+              <span class="material-symbols-outlined dv-diaryitem-icon">{{ store.tab === 'shared' ? 'folder_shared' : 'book' }}</span>
+              <span class="dv-diaryitem-body">
+                <span class="dv-diaryitem-name">{{ d.name }}</span>
+                <span v-if="store.tab === 'shared' && d.owner_name" class="dv-diaryitem-owner">{{ d.owner_name }}</span>
+                <span v-if="diaryTotal(d)" class="dv-diaryitem-progress">
+                  <span class="dv-diaryitem-bar"><span class="dv-diaryitem-fill" :style="{ width: diaryPct(d) + '%' }" /></span>
+                  <span class="dv-diaryitem-count">{{ d.done_count || 0 }}/{{ diaryTotal(d) }}</span>
+                </span>
+              </span>
+              <span
+                v-if="store.tab === 'mine'"
+                class="material-symbols-outlined dv-diaryitem-edit"
+                role="button" tabindex="0" title="Переименовать"
+                @click.stop="startSheetRename(d)"
+                @keydown.enter.stop="startSheetRename(d)"
+              >edit</span>
+              <span v-if="d.id === store.selectedId" class="material-symbols-outlined dv-diaryitem-check">check</span>
+            </button>
+          </template>
+
+          <p v-if="!store.diaries.length" class="dv-diarysheet-note">
+            {{ store.tab === 'shared' ? 'С вами пока не делились' : 'Ежедневников нет' }}
+          </p>
+
+          <form v-if="store.tab === 'mine' && sheetAdding" class="dv-diarysheet-add" @submit.prevent="submitSheetAdd">
+            <input ref="sheetInput" v-model="sheetName" class="dv-diarysheet-input" maxlength="120" placeholder="Название ежедневника" />
+            <button class="dv-diarysheet-ok" type="submit" :disabled="!sheetName.trim()"><span class="material-symbols-outlined">check</span></button>
+          </form>
+          <button v-else-if="store.tab === 'mine'" class="dv-diaryitem dv-diaryitem-add" @click="startSheetAdd">
+            <span class="material-symbols-outlined">add</span>
+            <span class="dv-diaryitem-name">Новый ежедневник</span>
+          </button>
+        </template>
+      </div>
+    </AppDialog>
 
     <!-- Мобайл: лист управления (вид, поиск, действия) -->
     <AppDialog v-model="controlsOpen" title="Управление" icon="tune" size="sm" mobile="sheet" :actions="[{ kind: 'cancel', label: 'Готово' }]" @cancel="controlsOpen = false">
@@ -703,6 +759,58 @@ const shareOpen = ref(false)
 // Мобильный лист управления
 const controlsOpen = ref(false)
 
+// ── Мобильная шторка выбора/создания ежедневника (по образцу групп заметок) ──
+const diarySheetOpen = ref(false)
+const sheetAdding = ref(false)
+const sheetRenameId = ref(null)
+const sheetName = ref('')
+const sheetInput = ref(null)
+
+function focusSheetInput() {
+  const el = Array.isArray(sheetInput.value) ? sheetInput.value[0] : sheetInput.value
+  el?.focus()
+}
+function pickDiary(d) {
+  store.select(d.id)
+  diarySheetOpen.value = false
+}
+function startSheetAdd() {
+  sheetRenameId.value = null
+  sheetAdding.value = true
+  sheetName.value = ''
+  nextTick(focusSheetInput)
+}
+function startSheetRename(d) {
+  sheetAdding.value = false
+  sheetRenameId.value = d.id
+  sheetName.value = d.name
+  nextTick(focusSheetInput)
+}
+async function submitSheetAdd() {
+  const name = sheetName.value.trim()
+  if (!name) return
+  sheetAdding.value = false
+  try {
+    const d = await store.createDiary(name)
+    store.select(d.id)
+    diarySheetOpen.value = false
+  } catch (e) {
+    notif.error(e?.message || 'Не удалось создать ежедневник')
+  }
+}
+async function submitSheetRename(d) {
+  const name = sheetName.value.trim()
+  sheetRenameId.value = null
+  if (!name || name === d.name) return
+  try {
+    await store.renameDiary(d.id, name)
+  } catch (e) {
+    notif.error(e?.message || 'Не удалось переименовать')
+  }
+}
+// Смена вкладки Мои/Поделились сбрасывает инлайн-формы шторки.
+watch(() => store.tab, () => { sheetAdding.value = false; sheetRenameId.value = null })
+
 // Создание/переименование ежедневника
 const nameOpen = ref(false)
 const nameMode = ref('create')
@@ -1023,10 +1131,53 @@ watch(() => store.loadingEntries, () => nextTick(measureWeekColumn))
 .dv-name-input { width: 100%; padding: 12px 14px; font: inherit; color: var(--color-text); background: var(--color-surface-high); background: var(--glass-bg); box-shadow: var(--glass-edge); border: 1px solid var(--acrylic-border); border-radius: var(--radius-md); outline: none; }
 .dv-name-input:focus { border-color: var(--color-primary); }
 
-/* Мобайл */
-.dv-regstrip { flex: none; display: flex; gap: 8px; padding: 10px 12px; overflow-x: auto; border-bottom: 1px solid var(--color-outline-dim); }
-.dv-regchip { flex: none; padding: 8px 14px; border-radius: var(--radius-full); border: 1px solid var(--color-outline-dim); background: var(--acrylic-card-bg); color: var(--color-text-dim); font-size: 14px; font-weight: 600; cursor: pointer; white-space: nowrap; }
-.dv-regchip.active { background: var(--grad-primary); color: var(--color-on-primary); border-color: transparent; }
+/* Мобайл: кнопка-селектор ежедневника (открывает шторку) */
+.dv-mobile-bar { flex: none; padding: 8px 12px 4px; }
+.dv-diary-select {
+  display: flex; align-items: center; gap: 10px; width: 100%; padding: 11px 14px;
+  border: 1px solid var(--acrylic-border); border-radius: var(--radius-full);
+  background: var(--acrylic-card-bg); background: var(--glass-bg); box-shadow: var(--glass-edge);
+  color: var(--color-text); font: inherit; font-weight: 600; font-size: 15px; cursor: pointer;
+}
+.dv-diary-select-icon { color: var(--color-primary); font-size: 20px; flex-shrink: 0; }
+.dv-diary-select-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: left; }
+.dv-diary-select-chev { color: var(--color-text-dim); flex-shrink: 0; }
+
+/* Шторка ежедневников (аналог групп заметок NotesView) */
+.dv-diarysheet { display: flex; flex-direction: column; gap: 6px; }
+.dv-diarysheet-note { padding: 14px; text-align: center; color: var(--color-text-dim); font-size: 14px; }
+.dv-diaryitem {
+  display: flex; align-items: center; gap: 10px; padding: 12px 14px;
+  border: 1px solid var(--color-outline-dim); border-radius: var(--radius-md);
+  background: var(--acrylic-card-bg); color: var(--color-text);
+  font: inherit; font-size: 14.5px; font-weight: 600; text-align: left; cursor: pointer;
+}
+.dv-diaryitem.active { border-color: var(--color-primary); background: color-mix(in oklch, var(--color-primary) 10%, var(--acrylic-card-bg)); }
+.dv-diaryitem-icon { color: var(--color-primary); font-size: 20px; flex-shrink: 0; }
+.dv-diaryitem-body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+.dv-diaryitem-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dv-diaryitem-owner { font-size: 12px; font-weight: 500; color: var(--color-text-dim); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dv-diaryitem-progress { display: flex; align-items: center; gap: 8px; }
+.dv-diaryitem-bar { flex: 1; height: 4px; border-radius: var(--radius-full); background: var(--color-surface-highest); overflow: hidden; }
+.dv-diaryitem-fill { display: block; height: 100%; border-radius: inherit; background: var(--color-success); }
+.dv-diaryitem-count { flex-shrink: 0; font-size: 11px; font-weight: 700; font-variant-numeric: tabular-nums; color: var(--color-text-dim); }
+.dv-diaryitem-edit { color: var(--color-text-dim); font-size: 20px; flex-shrink: 0; padding: 6px; margin: -6px 0; border-radius: 50%; }
+.dv-diaryitem-check { color: var(--color-primary); font-size: 20px; flex-shrink: 0; }
+.dv-diaryitem-add { color: var(--color-primary); border-style: dashed; }
+.dv-diaryitem-add .dv-diaryitem-name { flex: none; }
+.dv-diaryitem-add .material-symbols-outlined { color: var(--color-primary); font-size: 20px; }
+.dv-diarysheet-add { display: flex; align-items: center; gap: 8px; }
+.dv-diarysheet-input {
+  flex: 1; min-width: 0; padding: 12px 14px; border: 1px solid var(--color-primary);
+  border-radius: var(--radius-md); background: var(--color-surface); color: var(--color-text);
+  font: inherit; font-size: 14.5px; outline: none;
+}
+.dv-diarysheet-ok {
+  flex-shrink: 0; width: 44px; height: 44px; display: grid; place-items: center;
+  border: none; border-radius: var(--radius-md); background: var(--color-primary);
+  color: var(--color-on-primary); cursor: pointer;
+}
+.dv-diarysheet-ok:disabled { opacity: 0.5; cursor: not-allowed; }
 
 @media (max-width: 768px) {
   /* Скрытие левой панели и разворот правой — в глобальном .split-* */

@@ -18,6 +18,7 @@ type Endpoints struct {
 
 	ListPosts  endpoint.Endpoint
 	GetPost    endpoint.Endpoint
+	MarkView   endpoint.Endpoint
 	CreatePost endpoint.Endpoint
 	UpdatePost endpoint.Endpoint
 	DeletePost endpoint.Endpoint
@@ -170,6 +171,10 @@ func New(s *service.Service) Endpoints {
 		GetPost: func(ctx context.Context, request any) (any, error) {
 			r := request.(PostReq)
 			return s.GetPost(ctx, r.CompanyID, r.ID, r.ViewerID)
+		},
+		MarkView: func(ctx context.Context, request any) (any, error) {
+			r := request.(PostReq)
+			return nil, s.MarkView(ctx, r.CompanyID, r.ID, r.ViewerID)
 		},
 		CreatePost: func(ctx context.Context, request any) (any, error) {
 			r := request.(WritePostReq)

@@ -123,6 +123,16 @@ func (s *Service) GetPost(ctx context.Context, companyID, id, viewerID int64) (*
 	return s.repo.GetPostForViewer(ctx, id, viewerID)
 }
 
+// MarkView — зафиксировать просмотр поста зрителем (заход в поле зрения на
+// ленте/по ссылке). Идемпотентно; событий в шину не публикует — счётчик не
+// realtime-критичен, другим клиентам он подтягивается при следующей загрузке.
+func (s *Service) MarkView(ctx context.Context, companyID, id, viewerID int64) error {
+	if _, err := s.requirePost(ctx, companyID, id); err != nil {
+		return err
+	}
+	return s.repo.MarkView(ctx, id, viewerID)
+}
+
 // CreatePost — топик (если указан) должен принадлежать той же компании.
 func (s *Service) CreatePost(ctx context.Context, companyID, authorID int64, topicID *int64, title *string, body string) (*domain.Post, error) {
 	body = strings.TrimSpace(body)
@@ -286,5 +296,6 @@ func postPayload(p *domain.Post) map[string]any {
 		"created_at": p.CreatedAt, "updated_at": p.UpdatedAt,
 		"attachments": p.Attachments, "comment_count": p.CommentCount,
 		"reaction_counts": p.ReactionCount, "my_reactions": p.MyReactions,
+		"view_count": p.ViewCount,
 	}
 }

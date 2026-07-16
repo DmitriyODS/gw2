@@ -51,6 +51,10 @@ type PostRepository interface {
 
 	AddReaction(ctx Ctx, r *Reaction) error
 	RemoveReaction(ctx Ctx, postID, userID int64, emoji string) error
+
+	// MarkView — зафиксировать просмотр поста зрителем (идемпотентно: повторный
+	// просмотр того же поста тем же пользователем счётчик не наращивает).
+	MarkView(ctx Ctx, postID, userID int64) error
 }
 
 // SeenRepository — отметка «портал просмотрен» и счётчик непрочитанных постов

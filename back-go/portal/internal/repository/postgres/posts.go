@@ -188,6 +188,28 @@ func (r *Repo) attachDerived(ctx context.Context, posts []*domain.Post, viewerID
 		return err
 	}
 
+	viewRows, err := r.pool.Query(ctx, `
+		SELECT post_id, COUNT(*) FROM portal_post_views
+		WHERE post_id = ANY($1) GROUP BY post_id`, ids)
+	if err != nil {
+		return err
+	}
+	for viewRows.Next() {
+		var postID int64
+		var n int
+		if err := viewRows.Scan(&postID, &n); err != nil {
+			viewRows.Close()
+			return err
+		}
+		if p := byID[postID]; p != nil {
+			p.ViewCount = n
+		}
+	}
+	viewRows.Close()
+	if err := viewRows.Err(); err != nil {
+		return err
+	}
+
 	if viewerID != 0 {
 		mineRows, err := r.pool.Query(ctx, `
 			SELECT post_id, emoji FROM portal_reactions
@@ -210,8 +232,39 @@ func (r *Repo) attachDerived(ctx context.Context, posts []*domain.Post, viewerID
 		if err := mineRows.Err(); err != nil {
 			return err
 		}
+
+		seenRows, err := r.pool.Query(ctx, `
+			SELECT post_id FROM portal_post_views
+			WHERE post_id = ANY($1) AND user_id = $2`, ids, viewerID)
+		if err != nil {
+			return err
+		}
+		for seenRows.Next() {
+			var postID int64
+			if err := seenRows.Scan(&postID); err != nil {
+				seenRows.Close()
+				return err
+			}
+			if p := byID[postID]; p != nil {
+				p.Viewed = true
+			}
+		}
+		seenRows.Close()
+		if err := seenRows.Err(); err != nil {
+			return err
+		}
 	}
 	return nil
+}
+
+// MarkView — upsert строки просмотра (идемпотентно): счётчик уникальных
+// зрителей наращивается лишь при первом просмотре поста пользователем.
+func (r *Repo) MarkView(ctx context.Context, postID, userID int64) error {
+	_, err := r.pool.Exec(ctx, `
+		INSERT INTO portal_post_views (post_id, user_id)
+		VALUES ($1, $2)
+		ON CONFLICT (post_id, user_id) DO NOTHING`, postID, userID)
+	return err
 }
 
 func (r *Repo) CreatePost(ctx context.Context, p *domain.Post) error {

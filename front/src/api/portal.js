@@ -28,6 +28,9 @@ export const getPosts = ({ topicId, search, limit, cursor } = {}) => {
 
 export const getPost = (id) => apiRequest(`/portal/posts/${id}`)
 
+// Отметить просмотр поста (карточка попала в поле зрения). Идемпотентно.
+export const markView = (id) => apiRequest(`/portal/posts/${id}/view`, { method: 'POST' })
+
 export const createPost = ({ topicId = null, title = '', body }) =>
   apiRequest('/portal/posts', { method: 'POST', body: { topic_id: topicId, title, body } })
 

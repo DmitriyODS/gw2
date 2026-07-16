@@ -1,5 +1,5 @@
 <template>
-  <article class="post-card" :class="{ pinned: !!post.pinned_at }">
+  <article ref="cardEl" class="post-card" :class="{ pinned: !!post.pinned_at }">
     <header class="post-head">
       <!-- Автор кликабелен, только пока он состоит в компании (есть в
            каталоге сотрудников) — иначе профиль показать нечем. -->
@@ -125,6 +125,10 @@
           <span v-if="reactionCounts[emoji]" class="post-reaction-count">{{ reactionCounts[emoji] }}</span>
         </button>
       </div>
+      <span class="post-stat" :title="`Просмотров: ${post.view_count || 0}`">
+        <span class="material-symbols-outlined">visibility</span>
+        {{ post.view_count || 0 }}
+      </span>
       <button class="post-action" type="button" @click="commentsOpen = !commentsOpen">
         <span class="material-symbols-outlined">chat_bubble</span>
         {{ post.comment_count || 0 }}
@@ -258,6 +262,7 @@ const pinnedUntilText = computed(() => {
 const menuOpen = ref(false)
 const menuRef = ref(null)
 const commentsOpen = ref(false)
+const cardEl = ref(null)
 
 // Подменю срока сворачивается при каждом открытии меню заново.
 function toggleMenu() {
@@ -275,17 +280,37 @@ function onDocKeydown(e) {
   if (e.key === 'Escape' && menuOpen.value) menuOpen.value = false
 }
 
+// Отметка просмотра: карточка попала в поле зрения — засчитываем один раз
+// и отключаем наблюдатель (стор дедуплицирует запрос на пост в рамках сессии).
+let viewObserver = null
+function observeView() {
+  if (!('IntersectionObserver' in window) || !cardEl.value) {
+    portal.markView(props.post.id) // фолбэк без API наблюдателя
+    return
+  }
+  viewObserver = new IntersectionObserver((entries) => {
+    if (entries.some((e) => e.isIntersecting)) {
+      portal.markView(props.post.id)
+      viewObserver?.disconnect()
+      viewObserver = null
+    }
+  })
+  viewObserver.observe(cardEl.value)
+}
+
 onMounted(() => {
   document.addEventListener('mousedown', onDocPointerDown, true)
   document.addEventListener('touchstart', onDocPointerDown, { passive: true, capture: true })
   document.addEventListener('keydown', onDocKeydown)
   measureTruncated()
+  observeView()
 })
 
 onBeforeUnmount(() => {
   document.removeEventListener('mousedown', onDocPointerDown, true)
   document.removeEventListener('touchstart', onDocPointerDown, true)
   document.removeEventListener('keydown', onDocKeydown)
+  viewObserver?.disconnect()
 })
 
 async function toggleReaction(emoji) {
@@ -637,6 +662,20 @@ function onDelete() {
 }
 .post-reaction-count { font-size: 11.5px; font-weight: 700; color: var(--color-text-dim); }
 .post-reaction.active .post-reaction-count { color: var(--color-on-primary-container); }
+
+/* Просмотры — пассивный счётчик; прижат вправо, за ним идут действия. */
+.post-stat {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  margin-left: auto;
+  padding: 6px 8px;
+  color: var(--color-text-dim);
+  font-size: 13px;
+  font-weight: 600;
+}
+.post-stat .material-symbols-outlined { font-size: 18px; }
+.post-stat + .post-action { margin-left: 0; }
 
 .post-action {
   display: inline-flex;

@@ -239,6 +239,8 @@ func (f *fakeRepo) RemoveReaction(_ domain.Ctx, postID, userID int64, emoji stri
 	return nil
 }
 
+func (f *fakeRepo) MarkView(_ domain.Ctx, _, _ int64) error { return nil }
+
 func (f *fakeRepo) SeenAt(_ domain.Ctx, userID, companyID int64) (*time.Time, error) {
 	if at, ok := f.seen[[2]int64{userID, companyID}]; ok {
 		return &at, nil

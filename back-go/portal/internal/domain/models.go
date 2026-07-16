@@ -47,6 +47,10 @@ type Post struct {
 	CommentCount  int            `json:"comment_count"`
 	ReactionCount map[string]int `json:"reaction_counts"`
 	MyReactions   []string       `json:"my_reactions"`
+	// ViewCount — число уникальных зрителей поста; Viewed — просматривал ли его
+	// сам зритель (viewer): фронт по нему знает, засчитывать ли свой просмотр.
+	ViewCount int  `json:"view_count"`
+	Viewed    bool `json:"viewed"`
 }
 
 // Attachment — файл-вложение поста (общий uploads-том/S3, префикс "portal").

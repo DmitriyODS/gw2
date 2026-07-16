@@ -33,6 +33,9 @@ export const usePortalStore = defineStore('portal', () => {
   const authorMap = ref(new Map())
   const commentsByPost = reactive({})
   const loadingComments = reactive({})
+  // Посты, чей просмотр уже отмечен в этой сессии — гард от повторных запросов
+  // при каждом срабатывании IntersectionObserver карточки.
+  const markedViews = new Set()
 
   function myCompanyId() {
     return useAuthStore().companyId ?? null
@@ -293,6 +296,30 @@ export const usePortalStore = defineStore('portal', () => {
     }
   }
 
+  // ── Просмотры ──
+  // Отмечаем просмотр один раз за сессию на пост; счётчик наращиваем
+  // оптимистично, только если сам зритель поста ещё не видел (post.viewed).
+  async function markView(postId) {
+    if (markedViews.has(postId)) return
+    markedViews.add(postId)
+    const p = findPost(postId)
+    const firstView = p && !p.viewed
+    if (firstView) {
+      p.viewed = true
+      p.view_count = (p.view_count || 0) + 1
+    }
+    try {
+      await api.markView(postId)
+    } catch {
+      // Разрешаем повтор при следующем показе; откатываем оптимистичный счёт.
+      markedViews.delete(postId)
+      if (firstView && p) {
+        p.viewed = false
+        p.view_count = Math.max(0, (p.view_count || 1) - 1)
+      }
+    }
+  }
+
   // ── Комментарии (плоские) ──
   async function fetchComments(postId) {
     loadingComments[postId] = true
@@ -432,6 +459,7 @@ export const usePortalStore = defineStore('portal', () => {
     filters.topicId = null
     filters.search = ''
     authorMap.value = new Map()
+    markedViews.clear()
     for (const k of Object.keys(commentsByPost)) delete commentsByPost[k]
     for (const k of Object.keys(loadingComments)) delete loadingComments[k]
   }
@@ -444,7 +472,7 @@ export const usePortalStore = defineStore('portal', () => {
     loadAuthors, resolveAuthor,
     fetchTopics, createTopic, updateTopic, deleteTopic,
     fetchPosts, fetchMore, setTopic, setSearch, loadHighlight,
-    createPost, updatePost, deletePost, pinPost, unpinPost,
+    createPost, updatePost, deletePost, pinPost, unpinPost, markView,
     uploadAttachment, deleteAttachment, addReaction, removeReaction,
     fetchComments, createComment, deleteComment,
     forwardPost,

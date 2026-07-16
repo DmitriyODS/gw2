@@ -142,6 +142,19 @@ func (h *handlers) getPost(c *fiber.Ctx) error {
 	return c.JSON(resp)
 }
 
+func (h *handlers) markView(c *fiber.Ctx) error {
+	companyID, ok := companyScope(c)
+	if !ok {
+		return nil
+	}
+	if _, err := h.eps.MarkView(c.Context(), endpoint.PostReq{
+		CompanyID: companyID, ID: pathID(c), ViewerID: currentUser(c).ID,
+	}); err != nil {
+		return h.respondError(c, err)
+	}
+	return c.SendStatus(fiber.StatusNoContent)
+}
+
 type postBody struct {
 	TopicID *int64  `json:"topic_id"`
 	Title   *string `json:"title"`

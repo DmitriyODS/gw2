@@ -11,7 +11,7 @@
       { kind: 'cancel', label: 'Отмена' },
       { kind: 'confirm', label: isEdit ? 'Сохранить' : 'Опубликовать', icon: 'send', disabled: !body.trim() },
     ]"
-    @update:model-value="$emit('update:modelValue', $event)"
+    @update:model-value="onDialogModel"
     @confirm="submit"
   >
     <div
@@ -157,6 +157,23 @@
     </Teleport>
 
     <ImageEditDialog v-model="imageEditOpen" :file="imageEditTarget" @apply="applyEditedImage" />
+
+    <!-- Подтверждение закрытия при несохранённых изменениях -->
+    <AppDialog
+      v-model="confirmClose"
+      tone="warning"
+      icon="warning"
+      size="sm"
+      :title="isEdit ? 'Отменить изменения?' : 'Не сохранять публикацию?'"
+      :subtitle="isEdit
+        ? 'Внесённые правки не сохранятся, публикация останется прежней.'
+        : 'Написанное не сохранится и никуда не отправится.'"
+      :actions="[
+        { kind: 'cancel', label: 'Продолжить' },
+        { kind: 'confirm', label: isEdit ? 'Отменить правки' : 'Не сохранять', icon: 'delete', tone: 'danger' },
+      ]"
+      @confirm="discardClose"
+    />
   </AppDialog>
 </template>
 
@@ -198,7 +215,33 @@ const existingAttachments = ref([])   // вложения редактируем
 const removedIds = ref(new Set())     // существующие, помеченные к удалению
 const dragOver = ref(false)
 const saving = ref(false)
+const confirmClose = ref(false)
 const bodyEl = ref(null)
+
+// Несохранённые изменения: при создании — есть текст/заголовок/вложения; при
+// редактировании — что-либо отличается от исходного поста.
+const hasChanges = computed(() => {
+  if (pendingFiles.value.length || removedIds.value.size) return true
+  if (isEdit.value) {
+    return title.value !== (props.post.title ?? '')
+      || body.value !== (props.post.body ?? '')
+      || (topicId.value ?? null) !== (props.post.topic_id ?? null)
+  }
+  return !!(title.value.trim() || body.value.trim())
+})
+
+// Закрытие композера пользователем (крестик/фон/Esc/«Отмена»): при
+// несохранённых изменениях — спрашиваем подтверждение, иначе закрываем. Успешное
+// сохранение закрывает модалку своим emit в submit() — сюда не попадает.
+function onDialogModel(v) {
+  if (v) return
+  if (hasChanges.value) { confirmClose.value = true; return }
+  emit('update:modelValue', false)
+}
+function discardClose() {
+  confirmClose.value = false
+  emit('update:modelValue', false)
+}
 const photoInput = ref(null)
 const fileInput = ref(null)
 
@@ -209,6 +252,7 @@ function reset() {
   title.value = props.post?.title ?? props.preset?.title ?? ''
   body.value = props.post?.body ?? props.preset?.body ?? ''
   preview.value = false
+  confirmClose.value = false
   pendingFiles.value = []
   existingAttachments.value = props.post?.attachments ?? []
   removedIds.value = new Set()
@@ -414,7 +458,14 @@ const ctxStyle = computed(() => ({
   zIndex: 12000,
 }))
 
+// Тач-устройства: long-press отдаём браузеру под выделение текста и нативный
+// callout — кастомное меню форматирования не всплывает (форматирование на
+// мобильном доступно кнопками тулбара).
+const isTouch = typeof window !== 'undefined'
+  && window.matchMedia?.('(hover: none) and (pointer: coarse)').matches
+
 async function onBodyContextmenu(e) {
+  if (isTouch) return
   const el = bodyEl.value
   // Без выделения — нативное меню (вставить, орфография и т.п.).
   if (!el || el.selectionStart === el.selectionEnd) return
@@ -740,6 +791,14 @@ async function submit() {
 .composer-add-btn.photo { color: var(--color-success, var(--color-primary)); }
 .composer-add-btn.file { color: var(--color-tertiary); }
 .composer-add-btn .material-symbols-outlined { font-size: 21px; }
+
+/* Мобайл (полноэкранный композер): растягиваем колонку на всю высоту тела
+   диалога, чтобы блок «Добавить к публикации» прижимался к низу, а не висел
+   посередине под коротким текстом. */
+@media (max-width: 768px) {
+  .composer { min-height: 100%; }
+  .composer-add { margin-top: auto; }
+}
 </style>
 
 <!-- ПКМ-меню телепортируется в body — стили вне scoped. -->

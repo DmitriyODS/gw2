@@ -100,7 +100,7 @@
               <Column v-if="canManageMembers" header="" style="width: 110px" body-style="text-align: right">
                 <template #body="{ data }">
                   <div class="row-actions">
-                    <button class="icon-btn" title="Сбросить пароль" @click="resetPassword(data)">
+                    <button class="icon-btn" title="Сбросить пароль" @click="askResetPassword(data)">
                       <span class="material-symbols-outlined">lock_reset</span>
                     </button>
                     <button
@@ -355,6 +355,34 @@
       <p>Сотрудник потеряет доступ к компании. Его аккаунт и данные сохранятся, при необходимости его можно добавить снова.</p>
     </AppDialog>
 
+    <!-- Подтверждение сброса пароля -->
+    <AppDialog
+      v-model="confirmReset"
+      tone="primary"
+      icon="lock_reset"
+      size="sm"
+      :title="`Сбросить пароль ${resetTarget?.fio || 'сотрудника'}?`"
+      :busy="resetting"
+      :closable="!resetting"
+      :actions="[
+        { kind: 'cancel', label: 'Отмена', disabled: resetting },
+        { kind: 'confirm', label: 'Сбросить', icon: 'lock_reset', disabled: resetting },
+      ]"
+      @confirm="doResetPassword"
+    >
+      <p>Текущий пароль сотрудника перестанет действовать. Ему будет назначен временный пароль, который потребуется сменить при первом входе.</p>
+      <div class="reset-temp">
+        <span class="reset-temp-label">Временный пароль</span>
+        <div class="reset-temp-value">
+          <code>{{ tempPassword }}</code>
+          <button class="icon-btn" type="button" :title="resetCopied ? 'Скопировано' : 'Скопировать'" @click="copyTempPassword">
+            <span class="material-symbols-outlined">{{ resetCopied ? 'check' : 'content_copy' }}</span>
+          </button>
+        </div>
+        <span class="reset-temp-hint">Передайте его сотруднику — при входе он введёт этот пароль и сразу задаст свой.</span>
+      </div>
+    </AppDialog>
+
     <!-- Ссылка-приглашение -->
     <AppDialog
       v-model="inviteLinkOpen"
@@ -497,6 +525,15 @@ const inviteError = ref('')
 const confirmRemove = ref(false)
 const removeTarget = ref(null)
 const removing = ref(false)
+
+// Подтверждение сброса пароля. Временный пароль детерминирован — <логин>123
+// (совпадает с authsvc ResetPassword), показываем его администратору, чтобы
+// было что передать сотруднику.
+const confirmReset = ref(false)
+const resetTarget = ref(null)
+const resetting = ref(false)
+const resetCopied = ref(false)
+const tempPassword = computed(() => (resetTarget.value ? `${resetTarget.value.login}123` : ''))
 
 // Ссылка-приглашение (модалка).
 const inviteLinkOpen = ref(false)
@@ -676,12 +713,33 @@ async function copyInviteLink() {
   } catch { /* ignore */ }
 }
 
-async function resetPassword(m) {
+function askResetPassword(m) {
+  resetTarget.value = m
+  resetCopied.value = false
+  confirmReset.value = true
+}
+
+async function copyTempPassword() {
+  if (!tempPassword.value) return
+  try {
+    await navigator.clipboard.writeText(tempPassword.value)
+    resetCopied.value = true
+    setTimeout(() => { resetCopied.value = false }, 1500)
+  } catch { /* ignore */ }
+}
+
+async function doResetPassword() {
+  const m = resetTarget.value
+  if (!m) return
+  resetting.value = true
   try {
     await resetCompanyMemberPassword(companyId.value, m.id)
     notif.success(`Пароль ${m.fio} сброшен на временный`)
+    confirmReset.value = false
   } catch (e) {
     notif.error(e?.message || 'Не удалось сбросить пароль')
+  } finally {
+    resetting.value = false
   }
 }
 
@@ -800,6 +858,20 @@ async function doDelete() {
   padding: 12px 14px; border-radius: var(--radius-md, 12px);
   background: var(--acrylic-card-bg); color: var(--color-text-dim); font-size: 13px; line-height: 1.5;
 }
+
+/* Временный пароль в диалоге сброса. */
+.reset-temp {
+  margin-top: 14px; display: flex; flex-direction: column; gap: 6px;
+  padding: 12px 14px; border-radius: var(--radius-md, 12px);
+  background: var(--color-primary-container);
+}
+.reset-temp-label { font-size: 12px; font-weight: 600; color: var(--color-on-primary-container); opacity: 0.85; }
+.reset-temp-value { display: flex; align-items: center; gap: 8px; }
+.reset-temp-value code {
+  flex: 1; min-width: 0; font-family: var(--font-mono, monospace); font-size: 16px; font-weight: 700;
+  color: var(--color-on-primary-container); letter-spacing: 0.5px; word-break: break-all;
+}
+.reset-temp-hint { font-size: 12px; color: var(--color-on-primary-container); opacity: 0.8; line-height: 1.4; }
 
 /* ── Участники: таблица занимает всю высоту и скроллится отдельно ── */
 .pane-members { gap: 14px; }
