@@ -21,6 +21,15 @@ export function registerPetsSocketHandlers(socket) {
     try { usePetsStore().applyKudosReceived(data) } catch { /* noop */ }
   })
 
+  // Грувик заболел / сбежал (адресно владельцу; офлайн-хозяину те же события
+  // приезжают пушем через pushsvc).
+  socket.on('pet:sick', (data) => {
+    try { usePetsStore().applyPetSick(data) } catch { /* noop */ }
+  })
+  socket.on('pet:runaway', (data) => {
+    try { usePetsStore().applyPetRunaway(data) } catch { /* noop */ }
+  })
+
   // Благотворительный сбор компании: создан/пополнен/собран/закрыт
   // (комната all, фильтр по компании в сторе).
   socket.on('bank:fund', (data) => {

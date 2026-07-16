@@ -17,19 +17,21 @@ func discardLogger() *slog.Logger {
 
 // fakeRepo — in-memory реализация domain.Repository для тестов бизнес-логики.
 type fakeRepo struct {
-	topics   map[int64]*domain.Topic
-	posts    map[int64]*domain.Post
-	comments map[int64]*domain.Comment
-	atts     map[int64][]domain.Attachment
-	reacts   []domain.Reaction
-	seen     map[[2]int64]time.Time // {userID, companyID} → seen_at
-	nextID   int64
+	topics       map[int64]*domain.Topic
+	posts        map[int64]*domain.Post
+	comments     map[int64]*domain.Comment
+	commentLikes map[int64]map[int64]bool // comment_id → кто лайкнул
+	atts         map[int64][]domain.Attachment
+	reacts       []domain.Reaction
+	seen         map[[2]int64]time.Time // {userID, companyID} → seen_at
+	nextID       int64
 }
 
 func newFakeRepo() *fakeRepo {
 	return &fakeRepo{
 		topics: map[int64]*domain.Topic{}, posts: map[int64]*domain.Post{},
-		comments: map[int64]*domain.Comment{}, atts: map[int64][]domain.Attachment{},
+		comments: map[int64]*domain.Comment{}, commentLikes: map[int64]map[int64]bool{},
+		atts: map[int64][]domain.Attachment{},
 		seen: map[[2]int64]time.Time{},
 	}
 }
@@ -199,14 +201,35 @@ func (f *fakeRepo) AttachmentPaths(_ domain.Ctx, postID int64) ([]string, error)
 	return out, nil
 }
 
-func (f *fakeRepo) ListComments(_ domain.Ctx, postID int64) ([]*domain.Comment, error) {
+func (f *fakeRepo) ListComments(_ domain.Ctx, postID, viewerID int64) ([]*domain.Comment, error) {
 	out := []*domain.Comment{}
 	for _, c := range f.comments {
-		if c.PostID == postID {
-			out = append(out, c)
+		if c.PostID != postID {
+			continue
 		}
+		snap := *c
+		snap.LikeCount = len(f.commentLikes[c.ID])
+		snap.Liked = f.commentLikes[c.ID][viewerID]
+		out = append(out, &snap)
 	}
 	return out, nil
+}
+
+// ToggleCommentLike — как в SQL: своя строка есть → снять, нет → поставить.
+func (f *fakeRepo) ToggleCommentLike(_ domain.Ctx, commentID, userID int64) (bool, int, error) {
+	if f.commentLikes == nil {
+		f.commentLikes = map[int64]map[int64]bool{}
+	}
+	if f.commentLikes[commentID] == nil {
+		f.commentLikes[commentID] = map[int64]bool{}
+	}
+	liked := !f.commentLikes[commentID][userID]
+	if liked {
+		f.commentLikes[commentID][userID] = true
+	} else {
+		delete(f.commentLikes[commentID], userID)
+	}
+	return liked, len(f.commentLikes[commentID]), nil
 }
 func (f *fakeRepo) GetComment(_ domain.Ctx, id int64) (*domain.Comment, error) {
 	return f.comments[id], nil
@@ -216,7 +239,20 @@ func (f *fakeRepo) CreateComment(_ domain.Ctx, c *domain.Comment) error {
 	f.comments[c.ID] = c
 	return nil
 }
-func (f *fakeRepo) DeleteComment(_ domain.Ctx, id int64) error { delete(f.comments, id); return nil }
+// DeleteComment — как в SQL: ветка ответов уходит с родителем (каскад FK по
+// reply_to_id), лайки — тоже.
+func (f *fakeRepo) DeleteComment(ctx domain.Ctx, id int64) error {
+	delete(f.comments, id)
+	delete(f.commentLikes, id)
+	for _, c := range f.comments {
+		if c.ReplyToID != nil && *c.ReplyToID == id {
+			if err := f.DeleteComment(ctx, c.ID); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
 
 func (f *fakeRepo) AddReaction(_ domain.Ctx, r *domain.Reaction) error {
 	for _, existing := range f.reacts {
@@ -487,7 +523,7 @@ func TestRemoveAttachment_WrongCompanyNotFound(t *testing.T) {
 func TestComment_DeleteByAuthorOrAdmin(t *testing.T) {
 	svc, _, _ := newTestService()
 	p := mustCreatePost(t, svc, 1, 10)
-	c, err := svc.CreateComment(context.Background(), 1, p.ID, 30, "привет")
+	c, err := svc.CreateComment(context.Background(), 1, p.ID, 30, "привет", nil)
 	if err != nil {
 		t.Fatalf("CreateComment: %v", err)
 	}
@@ -502,7 +538,7 @@ func TestComment_DeleteByAuthorOrAdmin(t *testing.T) {
 func TestComment_RequiresText(t *testing.T) {
 	svc, _, _ := newTestService()
 	p := mustCreatePost(t, svc, 1, 10)
-	if _, err := svc.CreateComment(context.Background(), 1, p.ID, 30, "   "); err != domain.ErrCommentTextReq {
+	if _, err := svc.CreateComment(context.Background(), 1, p.ID, 30, "   ", nil); err != domain.ErrCommentTextReq {
 		t.Fatalf("ожидалась ErrCommentTextReq, получено %v", err)
 	}
 }

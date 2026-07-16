@@ -95,6 +95,13 @@ type fakePets struct {
 	saves          int // вызовы full-row SavePet
 	adjustCalls    int // вызовы атомарного AdjustBalances
 	evolutionSaves int // вызовы узкого SaveEvolution
+	needsSaves     int // вызовы узкого SaveNeeds
+}
+
+// fullNeeds — стартовое состояние потребностей (≡ DEFAULT-ы колонок в БД).
+func fullNeeds() domain.NeedValues {
+	return domain.NeedValues{Satiety: domain.NeedMax, Energy: domain.NeedMax,
+		Hygiene: domain.NeedMax, Social: domain.NeedMax}
 }
 
 func strokeKey(ownerID, strokerID int64, day time.Time) string {
@@ -108,7 +115,8 @@ func (f *fakePets) GetOrCreate(_ context.Context, userID, companyID int64) (*dom
 	if f.byUser[userID] == nil {
 		f.byUser[userID] = &domain.Pet{UserID: userID, CompanyID: companyID,
 			Name: "Питомец", Species: "egg",
-			Accessories: []string{}, UnlockedSpecies: []string{}}
+			Accessories: []string{}, UnlockedSpecies: []string{},
+			Needs: fullNeeds(), NeedsAt: time.Now().UTC()}
 	}
 	return f.byUser[userID], nil
 }
@@ -146,6 +154,43 @@ func (f *fakePets) SaveEvolution(_ context.Context, p *domain.Pet) error {
 	f.evolutionSaves++
 	return nil
 }
+func (f *fakePets) SaveNeeds(_ context.Context, p *domain.Pet) error {
+	cur := f.byUser[p.UserID]
+	if cur == nil {
+		return errNoPet
+	}
+	cur.Needs, cur.NeedsAt = p.Needs, p.NeedsAt
+	cur.SickSince, cur.Ailment, cur.Recovery = p.SickSince, p.Ailment, p.Recovery
+	f.needsSaves++
+	return nil
+}
+func (f *fakePets) AdjustNeeds(_ context.Context, userID int64, deltas map[string]int) (domain.NeedValues, error) {
+	p := f.byUser[userID]
+	if p == nil {
+		return domain.NeedValues{}, errNoPet
+	}
+	for key, delta := range deltas {
+		p.Needs.Add(key, delta)
+	}
+	return p.Needs, nil
+}
+
+// RunAway — как в SQL: гейт давности болезни, сброс прогресса, кудосы и
+// имущество остаются.
+func (f *fakePets) RunAway(_ context.Context, userID int64, sickBefore time.Time) (bool, error) {
+	p := f.byUser[userID]
+	if p == nil || p.SickSince == nil || p.SickSince.After(sickBefore) {
+		return false, nil
+	}
+	p.Stage, p.XP, p.Species, p.FeedStreak = 0, 0, "egg", 0
+	p.Personality, p.LastFedDate = nil, nil
+	p.UnlockedSpecies = []string{}
+	p.AdventureUntil, p.AdventurePlace = nil, nil
+	p.Cure()
+	p.Needs, p.NeedsAt = fullNeeds(), time.Now().UTC()
+	return true, nil
+}
+
 func (f *fakePets) StartAdventure(_ context.Context, userID int64, until time.Time, place string) (bool, error) {
 	p := f.byUser[userID]
 	if p == nil {
@@ -565,6 +610,15 @@ type fakePub struct {
 
 func (f *fakePub) Publish(_ context.Context, event string, _ []string, _ any) {
 	f.events = append(f.events, event)
+}
+
+func (f *fakePub) has(event string) bool {
+	for _, e := range f.events {
+		if e == event {
+			return true
+		}
+	}
+	return false
 }
 
 // testEnv — окружение сервиса на фейках всех портов.

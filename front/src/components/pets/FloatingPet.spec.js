@@ -56,15 +56,18 @@ describe('FloatingPet', () => {
     expect(w.findComponent(PetDetailModal).exists()).toBe(true)
   })
 
-  it('переход в болезнь показывает пузырь с подсказкой полечить', async () => {
+  // Пузырь болезни называет ЕЁ рецепт: у каждой хвори он свой, и «полечи
+  // меня» без подсказки отправляло бы хозяина лечить голод аптечкой.
+  it('переход в болезнь показывает пузырь с рецептом', async () => {
     const w = factory(mkPet({ sick: false }))
     expect(w.find('.fp-bubble').exists()).toBe(false)
     const store = w.vm.$pinia.state.value.pets
-    store.pet = mkPet({ sick: true })
+    store.pet = mkPet({ sick: true, ailment: 'grime' })
     await w.vm.$nextTick()
     await w.vm.$nextTick()
     expect(w.find('.fp-bubble').exists()).toBe(true)
-    expect(w.find('.fp-bubble').text()).toContain('заболел')
+    expect(w.find('.fp-bubble').text()).toContain('грязнуля')
+    expect(w.find('.fp-bubble').text()).toContain('купание')
   })
 
   it('тап по пузырю открывает модалку и прячет пузырь', async () => {

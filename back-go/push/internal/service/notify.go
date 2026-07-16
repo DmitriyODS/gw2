@@ -27,7 +27,45 @@ func (s *Service) Dispatch(ctx context.Context, event string, payload json.RawMe
 		s.onKudos(ctx, payload, rooms)
 	case "post:new":
 		s.onPost(ctx, payload)
+	case "pet:sick", "pet:runaway":
+		s.onPetState(ctx, event, payload, rooms)
 	}
+}
+
+// onPetState — грувик заболел или сбежал: адресный пуш владельцу. Болезнь
+// стоит поймать вовремя (запущенная кончается побегом), а побег — событие,
+// о котором хозяин обязан узнать, даже не открывая приложение.
+func (s *Service) onPetState(ctx context.Context, event string, payload json.RawMessage, rooms []string) {
+	var e struct {
+		Name    string `json:"name"`
+		Ailment string `json:"ailment"`
+		Title   string `json:"ailment_title"`
+	}
+	if err := json.Unmarshal(payload, &e); err != nil {
+		return
+	}
+	recipients := usersFromRooms(rooms)
+	if len(recipients) == 0 {
+		return
+	}
+	name := strings.TrimSpace(e.Name)
+	if name == "" {
+		name = "Грувик"
+	}
+	n := domain.Notification{Channel: domain.ChannelPets, Data: map[string]string{"type": "pet"}}
+	if event == "pet:runaway" {
+		n.Title = name + " сбежал 💔"
+		n.Body = "Слишком долго болел и ушёл. Дома осталось новое яйцо — начните заново."
+	} else {
+		n.Title = name + " заболел"
+		n.Body = strings.TrimSpace(e.Title)
+		if n.Body == "" {
+			n.Body = "Загляните к питомцу — его нужно вылечить"
+		} else {
+			n.Body += " — вылечите, пока не сбежал"
+		}
+	}
+	s.deliver(ctx, recipients, n)
 }
 
 // onPost — новый пост портала: адресован всей компании (комната all), поэтому

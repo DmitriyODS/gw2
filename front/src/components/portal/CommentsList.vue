@@ -3,41 +3,36 @@
     <div v-if="loading" class="comments-loading">
       <ProgressSpinner style="width:24px;height:24px" />
     </div>
-    <ul v-else-if="comments.length" class="comments-items">
-      <li v-for="c in comments" :key="c.id" class="comment-item">
-        <!-- Автор кликабелен, только пока он есть в каталоге сотрудников. -->
-        <button
-          v-if="isKnown(c.author_id)"
-          class="comment-avatar-btn"
-          type="button"
-          :aria-label="`Открыть профиль: ${authorOf(c.author_id).fio}`"
-          @click="$emit('open-profile', c.author_id)"
-        >
-          <img class="comment-avatar" :src="authorOf(c.author_id).avatarUrl" :alt="authorOf(c.author_id).fio" />
-        </button>
-        <img v-else class="comment-avatar" :src="authorOf(c.author_id).avatarUrl" :alt="authorOf(c.author_id).fio" />
-        <div class="comment-body">
-          <div class="comment-head">
-            <button
-              v-if="isKnown(c.author_id)"
-              class="comment-author comment-author-link"
-              type="button"
-              @click="$emit('open-profile', c.author_id)"
-            >{{ authorOf(c.author_id).fio }}</button>
-            <span v-else class="comment-author">{{ authorOf(c.author_id).fio }}</span>
-            <span class="comment-time">{{ formatTime(c.created_at) }}</span>
-          </div>
-          <MarkdownView class="comment-md" :source="c.text" />
-        </div>
-        <button v-if="canDelete(c)" class="comment-delete" title="Удалить" aria-label="Удалить комментарий" @click="remove(c.id)">
-          <span class="material-symbols-outlined">delete</span>
-        </button>
-      </li>
+    <ul v-else-if="tree.length" class="comments-items">
+      <CommentNode
+        v-for="node in tree"
+        :key="node.comment.id"
+        :node="node"
+        @open-profile="$emit('open-profile', $event)"
+        @reply="startReply"
+        @like="toggleLike"
+        @delete="remove"
+      />
     </ul>
     <div v-else class="comments-status">Комментариев пока нет</div>
 
+    <!-- Кому отвечаем: баннер над полем (как reply в мессенджере). -->
+    <div v-if="replyTo" class="comment-reply-banner">
+      <span class="material-symbols-outlined">reply</span>
+      <span class="comment-reply-text">Ответ: {{ replyAuthorName }}</span>
+      <button class="comment-reply-cancel" type="button" aria-label="Отменить ответ" @click="replyTo = null">
+        <span class="material-symbols-outlined">close</span>
+      </button>
+    </div>
+
     <form class="comment-form" @submit.prevent="submit">
-      <input v-model="text" class="comment-input" placeholder="Написать комментарий…" maxlength="2000" />
+      <InputText
+        ref="inputEl"
+        v-model="text"
+        class="comment-input"
+        :placeholder="replyTo ? 'Ваш ответ…' : 'Написать комментарий…'"
+        maxlength="2000"
+      />
       <button type="submit" class="comment-send" :disabled="!text.trim() || sending" title="Отправить">
         <span class="material-symbols-outlined">send</span>
       </button>
@@ -46,13 +41,12 @@
 </template>
 
 <script setup>
-import { computed, onMounted, ref } from 'vue'
+import { computed, nextTick, onMounted, ref } from 'vue'
 import ProgressSpinner from 'primevue/progressspinner'
+import InputText from 'primevue/inputtext'
 import { usePortalStore } from '@/stores/portal.js'
-import { useAuthStore } from '@/stores/auth.js'
-import { usePermission } from '@/composables/usePermission.js'
 import { useNotificationsStore } from '@/stores/notifications.js'
-import MarkdownView from '@/components/common/MarkdownView.vue'
+import CommentNode from '@/components/portal/CommentNode.vue'
 
 const props = defineProps({
   postId: { type: Number, required: true },
@@ -61,29 +55,37 @@ const props = defineProps({
 defineEmits(['open-profile'])
 
 const portal = usePortalStore()
-const auth = useAuthStore()
-const { isAdmin } = usePermission()
 
 const comments = computed(() => portal.commentsByPost[props.postId] || [])
 const loading = computed(() => !!portal.loadingComments[props.postId])
 const text = ref('')
 const sending = ref(false)
+const replyTo = ref(null)
+const inputEl = ref(null)
 
-function authorOf(id) {
-  return portal.resolveAuthor(id)
-}
+// Дерево обсуждения из плоского списка: сервер отдаёт хронологию с
+// reply_to_id, вложенность собираем здесь. Ответ на удалённого родителя
+// невозможен (каскад уносит ветку), но осиротевший узел на всякий случай
+// показываем корневым — потерять комментарий хуже, чем показать не там.
+const tree = computed(() => {
+  const nodes = new Map()
+  for (const c of comments.value) nodes.set(c.id, { comment: c, children: [] })
+  const roots = []
+  for (const node of nodes.values()) {
+    const parent = node.comment.reply_to_id ? nodes.get(node.comment.reply_to_id) : null
+    if (parent) parent.children.push(node)
+    else roots.push(node)
+  }
+  return roots
+})
 
-function isKnown(id) {
-  return portal.authorMap.has(id)
-}
+const replyAuthorName = computed(() => (replyTo.value
+  ? portal.resolveAuthor(replyTo.value.author_id).fio
+  : ''))
 
-function canDelete(c) {
-  return c.author_id === auth.userId || isAdmin()
-}
-
-function formatTime(iso) {
-  if (!iso) return ''
-  return new Date(iso).toLocaleString('ru', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })
+function startReply(comment) {
+  replyTo.value = comment
+  nextTick(() => inputEl.value?.$el?.focus())
 }
 
 async function submit() {
@@ -91,8 +93,9 @@ async function submit() {
   if (!t) return
   sending.value = true
   try {
-    await portal.createComment(props.postId, t)
+    await portal.createComment(props.postId, t, replyTo.value?.id ?? null)
     text.value = ''
+    replyTo.value = null
   } catch (e) {
     useNotificationsStore().error(e?.message || 'Не удалось отправить комментарий')
   } finally {
@@ -100,9 +103,18 @@ async function submit() {
   }
 }
 
-async function remove(id) {
+async function toggleLike(comment) {
   try {
-    await portal.deleteComment(props.postId, id)
+    await portal.likeComment(props.postId, comment.id)
+  } catch (e) {
+    useNotificationsStore().error(e?.message || 'Не удалось поставить «Нравится»')
+  }
+}
+
+async function remove(comment) {
+  try {
+    await portal.deleteComment(props.postId, comment.id)
+    if (replyTo.value?.id === comment.id) replyTo.value = null
   } catch (e) {
     useNotificationsStore().error(e?.message || 'Не удалось удалить комментарий')
   }
@@ -139,88 +151,25 @@ onMounted(() => portal.fetchComments(props.postId))
   gap: 10px;
 }
 
-.comment-item {
+.comment-reply-banner {
   display: flex;
-  align-items: flex-start;
-  gap: 8px;
-}
-
-.comment-avatar {
-  width: 28px;
-  height: 28px;
-  border-radius: 50%;
-  object-fit: cover;
-  flex-shrink: 0;
-}
-
-.comment-avatar-btn {
-  padding: 0;
-  border: none;
-  background: transparent;
-  border-radius: 50%;
-  line-height: 0;
-  flex-shrink: 0;
-  cursor: pointer;
-  transition: box-shadow .12s;
-}
-.comment-avatar-btn:hover,
-.comment-avatar-btn:focus-visible {
-  box-shadow: 0 0 0 3px color-mix(in oklch, var(--color-primary) 30%, transparent);
-}
-
-.comment-body {
-  min-width: 0;
-  flex: 1;
-  background: var(--color-surface-high);
+  align-items: center;
+  gap: 6px;
+  padding: 5px 10px;
   border-radius: var(--radius-md);
-  padding: 6px 10px;
-  font-size: 13.5px;
-  color: var(--color-text);
+  background: var(--color-surface-high);
+  border-left: 3px solid var(--color-primary);
+  font-size: 12px;
 }
-
-.comment-head {
-  display: flex;
-  align-items: baseline;
-  gap: 8px;
-  margin-bottom: 2px;
+.comment-reply-banner .material-symbols-outlined { font-size: 15px; color: var(--color-primary); }
+.comment-reply-text { flex: 1; min-width: 0; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.comment-reply-cancel {
+  width: 24px; height: 24px; min-height: 0; flex-shrink: 0;
+  border: none; border-radius: 50%; background: transparent;
+  color: var(--color-text-dim); cursor: pointer; display: grid; place-items: center;
 }
-
-/* Кликабельное имя автора (до .comment-author, чтобы font: inherit не перебил
-   размер/насыщенность имени). */
-.comment-author-link {
-  border: none;
-  background: transparent;
-  padding: 0;
-  font: inherit;
-  color: inherit;
-  text-align: left;
-  cursor: pointer;
-  border-radius: var(--radius-xs);
-  transition: color .12s;
-}
-.comment-author-link:hover,
-.comment-author-link:focus-visible {
-  color: var(--color-primary);
-  text-decoration: underline;
-}
-
-.comment-author { font-weight: 700; font-size: 12.5px; }
-.comment-time { font-size: 11px; color: var(--color-text-dim); }
-
-.comment-delete {
-  width: 36px;
-  height: 36px;
-  flex-shrink: 0;
-  border: none;
-  border-radius: 50%;
-  background: transparent;
-  color: var(--color-text-dim);
-  cursor: pointer;
-  display: grid;
-  place-items: center;
-}
-.comment-delete:hover { background: var(--color-surface-high); color: var(--color-error); }
-.comment-delete .material-symbols-outlined { font-size: 17px; }
+.comment-reply-cancel:hover { background: var(--color-surface); color: var(--color-text); }
+.comment-reply-cancel .material-symbols-outlined { font-size: 14px; color: inherit; }
 
 .comment-form {
   display: flex;

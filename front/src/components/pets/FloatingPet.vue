@@ -21,7 +21,9 @@
         @click="onClick"
       >
         <span class="fp-emoji" :class="{ sick: pet.sick }"><EmojiGlyph :char="petEmoji(pet)" /></span>
-        <span v-if="pet.sick" class="fp-sick-badge" title="Питомец болеет">🤒</span>
+        <span v-if="pet.sick" class="fp-sick-badge" :title="ailmentMeta(pet.ailment).title">
+          <EmojiGlyph :char="ailmentMeta(pet.ailment).emoji" />
+        </span>
         <span v-else-if="petAway" class="fp-adventure-badge" title="В приключении">🧭</span>
       </button>
     </div>
@@ -41,13 +43,14 @@ import { useDraggable } from '@/composables/useDraggable.js'
 import { anyModalOpen } from '@/composables/useOpenModals.js'
 import { floatingHidden, installFloatingHide } from '@/composables/useFloatingHide.js'
 import { usePetsStore } from '@/stores/pets.js'
-import { petEmoji } from '@/utils/pets.js'
+import { ailmentMeta, petEmoji } from '@/utils/pets.js'
 import { storageGet, storageSet } from '@/utils/storage.js'
 import PetDetailModal from '@/components/pets/PetDetailModal.vue'
 
 const WIDGET_SIZE = { w: 60, h: 60 }
 const BUBBLE_HIDE_MS = 4500
 const HUNGER_SHOWN_KEY = 'gw_pet_hunger_shown_date'
+const HUNGRY_AT = 40 // ниже этой сытости грувик напоминает о себе
 const MOBILE_BP = 768
 const isNarrow = () => typeof window !== 'undefined' && window.innerWidth <= MOBILE_BP
 
@@ -114,12 +117,16 @@ function localDateISO() {
 function checkHungry(p) {
   // В приключении кормление недоступно — «голодный» пузырь не показываем.
   if (!p || p.sick || (p.adventure_until && new Date(p.adventure_until) > new Date())) return
-  const fedToday = p.last_fed_date && String(p.last_fed_date).slice(0, 10) === localDateISO()
-  if (fedToday) return
+  // Голод определяет шкала сытости (пустая уводит в истощение), а не факт
+  // кормления: накормленный утром к вечеру снова проголодается.
+  if ((p.needs?.satiety ?? 100) > HUNGRY_AT) return
   if (storageGet(HUNGER_SHOWN_KEY, null) === todayKey()) return
   storageSet(HUNGER_SHOWN_KEY, todayKey())
   showBubble('Проголодался — покормишь?', 'feed')
 }
+
+// Рецепт болезни → действие, которое откроет модалка по тапу на пузырь.
+const AILMENT_ACTION = { hunger: 'feed', grime: 'bath', cold: 'heal', blues: 'heal' }
 
 function nearNextStage(p) {
   if (!p?.next_stage_xp) return false
@@ -134,9 +141,15 @@ watch(pet, (next, prev) => {
   if (!next) return
   if (prev) {
     if (!prev.sick && next.sick) {
-      showBubble('Кажется, я заболел — помоги мне поправиться', 'heal')
+      const meta = ailmentMeta(next.ailment)
+      showBubble(`${meta.title.toLowerCase()} — лечит: ${meta.cure.toLowerCase()}`,
+        AILMENT_ACTION[next.ailment] || 'heal')
     } else if (prev.sick && !next.sick) {
       showBubble('Ура, я снова здоров!')
+    } else if (prev.stage > 0 && next.stage === 0 && next.species === 'egg') {
+      // Прогресс обнулился при живом питомце — грувик сбежал (тост о причине
+      // покажет стор; пузырь встречает хозяина у нового яйца).
+      showBubble('Тут новое яйцо… прежний грувик ушёл. Позаботимся о новом?')
     } else if (prev.adventure_until && !next.adventure_until) {
       showBubble('Я вернулся с прогулки!')
     } else if (next.stage > prev.stage) {

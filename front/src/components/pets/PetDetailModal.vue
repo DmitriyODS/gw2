@@ -12,7 +12,9 @@
           <div class="pdm-figure" :class="{ sick: pet?.sick, bounce: justActed }">
             <span class="pdm-emoji"><EmojiGlyph :char="petEmoji(pet)" /></span>
             <span v-if="hatEmoji" class="pdm-hat"><EmojiGlyph :char="hatEmoji" /></span>
-            <span v-if="pet?.sick" class="pdm-sick-badge" title="Питомец болеет">🤒</span>
+            <span v-if="pet?.sick" class="pdm-sick-badge" :title="ailment.title">
+              <EmojiGlyph :char="ailment.emoji" />
+            </span>
           </div>
 
           <div class="pdm-name-row">
@@ -40,6 +42,10 @@
             {{ stageTitle }}<template v-if="speciesTitle"> · {{ speciesTitle }}</template>
           </p>
           <p v-if="personality" class="pdm-personality">{{ personality.emoji }} {{ personality.title }}</p>
+          <p class="pdm-mood" :title="`Настроение множит XP за работу ×${pet?.mood_factor ?? 1}`">
+            {{ moodEmoji(pet) }} {{ pet?.mood_title || moodTitle(pet?.mood ?? 100) }}
+            <span class="pdm-mood-factor">XP ×{{ pet?.mood_factor ?? 1 }}</span>
+          </p>
         </div>
 
         <div class="pdm-chips">
@@ -53,11 +59,18 @@
           </span>
         </div>
 
-        <div v-if="pet?.sick" class="pdm-sick-block">
+        <!-- Потребности: пустая шкала укладывает питомца в свою болезнь,
+             поэтому они всегда на виду — до, а не после беды. -->
+        <div class="pdm-needs">
+          <NeedBars :needs="pet?.needs" />
+        </div>
+
+        <div v-if="pet?.sick" class="pdm-sick-block" :class="{ urgent: runawaySoon }">
           <div class="pdm-sick-head">
-            <span class="material-symbols-outlined">healing</span>
-            Питомец приболел — давно не было работы
+            <span class="pdm-sick-emoji"><EmojiGlyph :char="ailment.emoji" /></span>
+            {{ pet.ailment_title || ailment.title }}
           </div>
+          <p class="pdm-sick-cause">{{ pet.ailment_hint }}</p>
           <div class="pdm-sick-progress">
             <span
               v-for="i in pet.recovery_target"
@@ -67,7 +80,12 @@
             ></span>
             <span class="pdm-sick-count">{{ pet.recovery }}/{{ pet.recovery_target }}</span>
           </div>
-          <p class="pdm-sick-hint">Лечат: работа (юнит/закрытая задача), прогулка и активное лечение</p>
+          <p class="pdm-sick-hint">Лечит: {{ ailment.cure }}</p>
+          <!-- Заброшенный питомец уходит: предупреждение — последний шанс. -->
+          <p v-if="runawaySoon" class="pdm-runaway-warn">
+            <span class="material-symbols-outlined">directions_run</span>
+            {{ runawayText }}
+          </p>
         </div>
 
         <div v-else class="pdm-xp">
@@ -138,6 +156,18 @@
               <span class="pdm-action-emoji">🚶</span>
               <span>Погулять</span>
               <span class="pdm-action-cost"><KudosCoin /> {{ WALK_COST }}</span>
+            </button>
+            <!-- Сон — единственное бесплатное действие ухода: энергия не
+                 должна упираться в кошелёк. -->
+            <button class="pdm-action-btn" type="button" :disabled="!sleepsLeft" @click="doSleep">
+              <span class="pdm-action-emoji">😴</span>
+              <span>Уложить спать</span>
+              <span class="pdm-action-cost">{{ sleepsLeft ? 'бесплатно' : 'выспался' }}</span>
+            </button>
+            <button class="pdm-action-btn" type="button" :disabled="!canBath" @click="activeGame = 'bath'">
+              <span class="pdm-action-emoji">🛁</span>
+              <span>Искупать</span>
+              <span class="pdm-action-cost"><KudosCoin /> {{ BATH_COST }}</span>
             </button>
             <button v-if="pet?.sick" class="pdm-action-btn" type="button" :disabled="!canHeal" @click="activeGame = 'heal'">
               <span class="pdm-action-emoji">💊</span>
@@ -220,6 +250,13 @@
     <FeedMiniGame v-if="activeGame === 'feed'" :pet="pet" @success="onFeedSuccess" @close="activeGame = null" />
     <WalkMiniGame v-if="activeGame === 'walk'" :pet="pet" @success="onWalkSuccess" @close="activeGame = null" />
     <HealMiniGame v-if="activeGame === 'heal'" @success="onHealSuccess" @close="activeGame = null" />
+    <BathMiniGame
+      v-if="activeGame === 'bath'"
+      :pet="pet"
+      :cost="BATH_COST"
+      @success="onBathSuccess"
+      @close="activeGame = null"
+    />
 
     <PetHouseDialog v-model="houseOpen" />
     <!-- above-pet-modal: конфирм должен всплыть поверх этой модалки (10700). -->
@@ -246,16 +283,20 @@ import KudosCoin from '@/components/pets/KudosCoin.vue'
 import FeedMiniGame from '@/components/pets/FeedMiniGame.vue'
 import WalkMiniGame from '@/components/pets/WalkMiniGame.vue'
 import HealMiniGame from '@/components/pets/HealMiniGame.vue'
+import BathMiniGame from '@/components/pets/BathMiniGame.vue'
+import NeedBars from '@/components/pets/NeedBars.vue'
 import PetHouseDialog from '@/components/pets/PetHouseDialog.vue'
 import { usePetsStore } from '@/stores/pets.js'
 import { useNotificationsStore } from '@/stores/notifications.js'
 import {
   petEmoji, PET_STAGES, PET_SPECIES, PERSONALITIES, PRESTIGE_SPECIES,
   shopItemEmoji, shopItemTitle, activityIcon, activityText,
+  ailmentMeta, moodEmoji, moodTitle,
 } from '@/utils/pets.js'
 
 const props = defineProps({
-  initialAction: { type: String, default: null }, // 'feed' | 'walk' | 'heal' | null
+  // 'feed' | 'walk' | 'heal' | 'bath' | null
+  initialAction: { type: String, default: null },
 })
 const emit = defineEmits(['close'])
 
@@ -263,6 +304,7 @@ const FEED_COST_NORMAL = 10
 const FEED_COST_SICK = 1 // «бульон» больному — зеркало domain.SickFeedCost
 const WALK_COST = 15
 const HEAL_COST = 25
+const BATH_COST = 12 // = domain.BathCost
 
 const pets = usePetsStore()
 const notify = useNotificationsStore()
@@ -303,6 +345,32 @@ const feedCost = computed(() => (pet.value?.sick ? FEED_COST_SICK : FEED_COST_NO
 const canFeed = computed(() => (pet.value?.kudos ?? 0) >= feedCost.value)
 const canWalk = computed(() => (pet.value?.kudos ?? 0) >= WALK_COST)
 const canHeal = computed(() => (pet.value?.kudos ?? 0) >= HEAL_COST)
+// Остатки дневных лимитов приходят с бэка (feeds_left/sleeps_left/baths_left):
+// кнопка гаснет до отказа, а не после него.
+const sleepsLeft = computed(() => pet.value?.sleeps_left ?? 1)
+const bathsLeft = computed(() => pet.value?.baths_left ?? 1)
+const canBath = computed(() => (pet.value?.kudos ?? 0) >= BATH_COST && bathsLeft.value > 0)
+
+// Болезнь: вид, подпись, рецепт (бэк присылает свои тексты, каталог — фолбэк
+// для зоопарка, где их нет).
+const ailment = computed(() => ailmentMeta(pet.value?.ailment))
+
+// Предупреждение о побеге: сколько дней болезни осталось до ухода питомца.
+const runawaySoon = computed(() => pet.value?.runaway_in_days != null)
+const runawayText = computed(() => {
+  const days = pet.value?.runaway_in_days ?? 0
+  if (days <= 0) return `${pet.value?.name || 'Грувик'} вот-вот сбежит — лечите немедленно!`
+  return `Если не вылечить, ${pet.value?.name || 'грувик'} сбежит через ${days} ${plural(days)}: `
+    + 'прогресс обнулится, дома останется яйцо.'
+})
+
+function plural(n) {
+  const mod10 = n % 10
+  const mod100 = n % 100
+  if (mod10 === 1 && mod100 !== 11) return 'день'
+  if (mod10 >= 2 && mod10 <= 4 && (mod100 < 12 || mod100 > 14)) return 'дня'
+  return 'дней'
+}
 
 const onAdventure = computed(() => {
   const until = pet.value?.adventure_until
@@ -354,7 +422,7 @@ function onKeydown(e) {
 onMounted(async () => {
   document.addEventListener('keydown', onKeydown)
   if (!pets.pet) await pets.fetchPet().catch(() => {})
-  if (props.initialAction === 'feed' || props.initialAction === 'walk' || props.initialAction === 'heal') {
+  if (['feed', 'walk', 'heal', 'bath'].includes(props.initialAction)) {
     activeGame.value = props.initialAction
   }
 })
@@ -395,6 +463,35 @@ async function onHealSuccess() {
     notify.success(res?.recovered ? 'Питомец полностью выздоровел!' : 'Лечение подействовало')
   } catch (e) {
     notify.warn(e?.message || 'Лечение не подействовало')
+  }
+}
+
+// Сон без мини-игры: он бесплатный и по смыслу пассивный — питомец просто
+// отсыпается (мини-игры остаются платным действиям).
+const sleeping = ref(false)
+
+async function doSleep() {
+  if (sleeping.value) return
+  sleeping.value = true
+  try {
+    const res = await pets.sleepPet()
+    pulse()
+    notify.success(res?.recovered ? 'Выспался и поправился!' : 'Питомец выспался — энергия восстановлена')
+  } catch (e) {
+    notify.warn(e?.message || 'Уложить спать не получилось')
+  } finally {
+    sleeping.value = false
+  }
+}
+
+async function onBathSuccess() {
+  activeGame.value = null
+  try {
+    const res = await pets.bathPet()
+    pulse()
+    notify.success(res?.recovered ? 'Отмыт и здоров!' : 'Питомец чист и доволен')
+  } catch (e) {
+    notify.warn(e?.message || 'Купание не получилось')
   }
 }
 
@@ -655,14 +752,52 @@ function gotoPets() {
 .pdm-chip .material-symbols-outlined { font-size: 16px; }
 .pdm-chip-emoji { font-size: 14px; }
 
+.pdm-needs {
+  width: 100%;
+  margin-top: 14px;
+  padding: 10px 12px;
+  border-radius: 14px;
+  background: var(--color-surface-low);
+}
+
+.pdm-mood {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin: 8px 0 0;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--color-text-dim);
+}
+.pdm-mood-factor {
+  padding: 2px 8px;
+  border-radius: var(--radius-full);
+  background: var(--color-surface-high);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
 .pdm-sick-block {
   width: 100%; margin-top: 14px;
   border: 1px dashed color-mix(in oklch, var(--color-error) 45%, transparent);
   border-radius: 14px; padding: 10px 12px;
   display: flex; flex-direction: column; gap: 6px;
 }
+/* Осталось несколько дней до побега — блок перестаёт быть «фоновым». */
+.pdm-sick-block.urgent {
+  border-style: solid;
+  background: color-mix(in oklch, var(--color-error) 8%, transparent);
+}
 .pdm-sick-head { display: flex; align-items: center; gap: 6px; font-size: 12.5px; font-weight: 600; color: var(--color-error); }
 .pdm-sick-head .material-symbols-outlined { font-size: 17px; }
+.pdm-sick-emoji { font-size: 15px; line-height: 1; }
+.pdm-sick-cause { margin: 0; font-size: 12px; line-height: 1.4; }
+.pdm-runaway-warn {
+  display: flex; align-items: flex-start; gap: 6px;
+  margin: 2px 0 0; font-size: 12px; font-weight: 600; line-height: 1.4;
+  color: var(--color-error);
+}
+.pdm-runaway-warn .material-symbols-outlined { font-size: 16px; flex-shrink: 0; }
 .pdm-sick-progress { display: flex; align-items: center; gap: 6px; }
 .pdm-sick-dot { width: 14px; height: 14px; border-radius: 50%; background: var(--color-surface-high); border: 1.5px solid var(--color-outline-dim); }
 .pdm-sick-dot.filled { background: var(--color-success); border-color: var(--color-success); }

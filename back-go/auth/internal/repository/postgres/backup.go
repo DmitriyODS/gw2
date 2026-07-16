@@ -110,14 +110,21 @@ func (b *BackupStore) ImportTables(ctx context.Context, tables []string, data ma
 		}
 	}
 
-	// Серийные последовательности (колонка id) — за макс. id.
-	for _, t := range ordered {
+	// Серийные последовательности (колонка id) — за макс. id. Таблицы БЕЗ
+	// колонки id (составной PK: device_tokens, task_tags, portal_seen…) сюда
+	// не попадают: pg_get_serial_sequence на них падает с 42703 и уронил бы
+	// весь импорт — он идёт одной транзакцией.
+	withID, err := b.tablesWithIDColumn(ctx, tx, ordered)
+	if err != nil {
+		return err
+	}
+	for _, t := range withID {
 		var seq *string
 		if err := tx.QueryRow(ctx, `SELECT pg_get_serial_sequence($1, 'id')`, t).Scan(&seq); err != nil {
 			return err
 		}
 		if seq == nil || *seq == "" {
-			continue
+			continue // колонка id есть, но не серийная (id задаётся вручную)
 		}
 		ident := pgx.Identifier{t}.Sanitize()
 		if _, err := tx.Exec(ctx, fmt.Sprintf(
@@ -128,6 +135,36 @@ func (b *BackupStore) ImportTables(ctx context.Context, tables []string, data ma
 	}
 
 	return tx.Commit(ctx)
+}
+
+// tablesWithIDColumn — какие из таблиц вообще имеют колонку id (только у них
+// бывает серийная последовательность). Порядок сохраняется.
+func (b *BackupStore) tablesWithIDColumn(ctx context.Context, tx pgx.Tx, tables []string) ([]string, error) {
+	rows, err := tx.Query(ctx, `
+		SELECT table_name FROM information_schema.columns
+		WHERE table_schema = 'public' AND column_name = 'id' AND table_name = ANY($1)`, tables)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	has := map[string]bool{}
+	for rows.Next() {
+		var name string
+		if err := rows.Scan(&name); err != nil {
+			return nil, err
+		}
+		has[name] = true
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	out := make([]string, 0, len(has))
+	for _, t := range tables {
+		if has[t] {
+			out = append(out, t)
+		}
+	}
+	return out, nil
 }
 
 // orderByFK — топологическая сортировка таблиц по внешним ключам (родитель

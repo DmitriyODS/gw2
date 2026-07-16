@@ -31,9 +31,7 @@
           :aria-label="canManage ? `Изменить раздел «${t.name}»` : undefined"
           @click="canManage && openForm(t)"
         >
-          <span class="topic-icon" :style="colorStyle(t.color)">
-            <span class="material-symbols-outlined">{{ t.icon || 'label' }}</span>
-          </span>
+          <TopicIcon :icon="t.icon" :color="t.color" />
           <span class="topic-name">{{ t.name }}</span>
           <template v-if="canManage">
             <span class="topic-edit-hint material-symbols-outlined" aria-hidden="true">edit</span>
@@ -58,21 +56,41 @@
     <!-- Режим «форма» (создание/редактирование) -->
     <form v-else class="topic-form" @submit.prevent="submit">
       <div class="topic-preview">
-        <span class="topic-icon lg" :style="colorStyle(color)">
-          <span class="material-symbols-outlined">{{ icon }}</span>
-        </span>
-        <input
+        <TopicIcon :icon="icon" :color="color" lg />
+        <!-- Эмодзи в НАЗВАНИИ: пикер вставляет его прямо в текст (курсор в
+             конце — поле короткое, отдельная логика позиции ни к чему). -->
+        <InputText
           ref="nameInput"
           v-model="name"
           class="topic-input"
           placeholder="Название раздела"
           maxlength="60"
         />
+        <EmojiPicker @pick="addEmojiToName" />
       </div>
 
       <div class="topic-group">
-        <span class="topic-group-label">Иконка</span>
-        <div class="topic-icons">
+        <div class="topic-group-head">
+          <span class="topic-group-label">Иконка</span>
+          <div class="topic-icon-modes">
+            <button
+              type="button"
+              class="topic-mode"
+              :class="{ active: iconMode === 'icons' }"
+              :aria-pressed="iconMode === 'icons'"
+              @click="iconMode = 'icons'"
+            >Иконки</button>
+            <button
+              type="button"
+              class="topic-mode"
+              :class="{ active: iconMode === 'emoji' }"
+              :aria-pressed="iconMode === 'emoji'"
+              @click="iconMode = 'emoji'"
+            >Эмодзи</button>
+          </div>
+        </div>
+
+        <div v-if="iconMode === 'icons'" class="topic-icons">
           <button
             v-for="ic in ICONS"
             :key="ic.key"
@@ -86,6 +104,15 @@
           >
             <span class="material-symbols-outlined">{{ ic.key }}</span>
           </button>
+        </div>
+
+        <!-- Эмодзи вместо иконки: тот же пикер, что в мессенджере. -->
+        <div v-else class="topic-emoji-row">
+          <span v-if="isEmojiIcon(icon)" class="topic-emoji-current">
+            Сейчас: <EmojiGlyph :char="icon" />
+          </span>
+          <span v-else class="topic-emoji-hint">Выберите эмодзи — он заменит иконку раздела</span>
+          <EmojiPicker @pick="(e) => (icon = e)" />
         </div>
       </div>
 
@@ -144,8 +171,13 @@
 <script setup>
 import { computed, nextTick, ref, watch } from 'vue'
 import ProgressSpinner from 'primevue/progressspinner'
+import InputText from 'primevue/inputtext'
 import AppDialog from '@/components/common/AppDialog.vue'
 import EmptyState from '@/components/common/EmptyState.vue'
+import EmojiGlyph from '@/components/common/EmojiGlyph.vue'
+import EmojiPicker from '@/components/common/EmojiPicker.vue'
+import TopicIcon from '@/components/portal/TopicIcon.vue'
+import { isEmojiIcon } from '@/utils/topicIcons.js'
 import { usePortalStore } from '@/stores/portal.js'
 import { usePermission } from '@/composables/usePermission.js'
 import { useNotificationsStore } from '@/stores/notifications.js'
@@ -162,6 +194,8 @@ const subtitleText = computed(() => (canManage.value
   ? 'Тематические разделы для постов — тап по разделу, чтобы изменить'
   : 'Тематические разделы для постов — их ведёт администратор компании'))
 
+// Иконки разделов: широкий набор под типовые темы интранета. Раздел может
+// вместо иконки носить эмодзи (icon хранит его как есть — см. isEmojiIcon).
 const ICONS = [
   { key: 'campaign', label: 'Объявления' },
   { key: 'celebration', label: 'Праздники' },
@@ -171,15 +205,54 @@ const ICONS = [
   { key: 'info', label: 'Информация' },
   { key: 'emoji_events', label: 'Достижения' },
   { key: 'volunteer_activism', label: 'Благодарности' },
+  { key: 'lightbulb', label: 'Идеи' },
+  { key: 'newspaper', label: 'Новости' },
+  { key: 'school', label: 'Обучение' },
+  { key: 'menu_book', label: 'База знаний' },
+  { key: 'rocket_launch', label: 'Запуски' },
+  { key: 'trending_up', label: 'Результаты' },
+  { key: 'handshake', label: 'Партнёры' },
+  { key: 'support_agent', label: 'Поддержка' },
+  { key: 'engineering', label: 'Разработка' },
+  { key: 'design_services', label: 'Дизайн' },
+  { key: 'science', label: 'Исследования' },
+  { key: 'gavel', label: 'Правила' },
+  { key: 'shield_person', label: 'Безопасность' },
+  { key: 'payments', label: 'Финансы' },
+  { key: 'shopping_cart', label: 'Закупки' },
+  { key: 'inventory_2', label: 'Склад' },
+  { key: 'local_shipping', label: 'Логистика' },
+  { key: 'build', label: 'Инструменты' },
+  { key: 'health_and_safety', label: 'Здоровье' },
+  { key: 'fitness_center', label: 'Спорт' },
+  { key: 'restaurant', label: 'Еда' },
+  { key: 'coffee', label: 'Перерыв' },
+  { key: 'flight_takeoff', label: 'Поездки' },
+  { key: 'home_work', label: 'Офис' },
+  { key: 'schedule', label: 'Расписание' },
+  { key: 'checklist', label: 'Задачи' },
+  { key: 'forum', label: 'Обсуждения' },
+  { key: 'diversity_3', label: 'Сообщество' },
+  { key: 'child_care', label: 'Новички' },
+  { key: 'pets', label: 'Питомцы' },
+  { key: 'music_note', label: 'Музыка' },
+  { key: 'photo_camera', label: 'Фото' },
 ]
 
 const mode = ref('list')
 const editing = ref(null)
 const name = ref('')
 const icon = ref(ICONS[0].key)
+const iconMode = ref('icons') // icons | emoji — чем помечен раздел
 const color = ref(null) // null — раздел без цвета
 const saving = ref(false)
 const nameInput = ref(null)
+
+// Эмодзи в название: дописываем в конец (поле короткое — возиться с позицией
+// курсора незачем), уважая лимит длины.
+function addEmojiToName(emoji) {
+  name.value = (name.value + emoji).slice(0, 60)
+}
 
 // Каждое открытие диалога начинается со списка, не с прошлого состояния.
 watch(() => props.modelValue, (open) => {
@@ -190,17 +263,14 @@ function onDialogToggle(v) {
   emit('update:modelValue', v)
 }
 
-function colorStyle(c) {
-  return c ? { background: `var(--tag-${c}-surface)`, color: `var(--tag-${c}-accent)` } : {}
-}
-
 function openForm(t) {
   editing.value = t
   name.value = t?.name || ''
   icon.value = t?.icon || ICONS[0].key
+  iconMode.value = isEmojiIcon(icon.value) ? 'emoji' : 'icons'
   color.value = t?.color || null
   mode.value = 'form'
-  nextTick(() => nameInput.value?.focus())
+  nextTick(() => nameInput.value?.$el?.focus())
 }
 
 function backToList() {
@@ -268,19 +338,6 @@ async function doDelete() {
 button.topic-row { cursor: pointer; }
 button.topic-row:hover { background: var(--color-surface-low); }
 button.topic-row:hover .topic-edit-hint { opacity: 1; }
-
-.topic-icon {
-  width: 36px;
-  height: 36px;
-  border-radius: 50%;
-  display: grid;
-  place-items: center;
-  background: var(--color-surface-high);
-  flex-shrink: 0;
-}
-.topic-icon .material-symbols-outlined { font-size: 19px; }
-.topic-icon.lg { width: 44px; height: 44px; }
-.topic-icon.lg .material-symbols-outlined { font-size: 22px; }
 
 .topic-name { flex: 1; min-width: 0; font-size: 14px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
@@ -350,12 +407,48 @@ button.topic-row:hover .topic-edit-hint { opacity: 1; }
 
 .topic-group { display: flex; flex-direction: column; gap: 8px; }
 .topic-group-label { font-size: 12px; font-weight: 700; color: var(--color-text-dim); text-transform: uppercase; letter-spacing: 0.03em; }
+.topic-group-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+
+.topic-icon-modes {
+  display: inline-flex;
+  gap: 2px;
+  padding: 2px;
+  border-radius: var(--radius-full);
+  background: var(--color-surface-low);
+}
+.topic-mode {
+  border: none;
+  border-radius: var(--radius-full);
+  background: transparent;
+  color: var(--color-text-dim);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  padding: 5px 12px;
+  min-height: 0;
+  cursor: pointer;
+}
+.topic-mode.active { background: var(--color-surface); color: var(--color-text); box-shadow: var(--shadow-sm, none); }
 
 .topic-icons {
   display: flex;
   gap: 8px;
   flex-wrap: wrap;
+  /* Набор иконок вырос — не даём форме разъехаться на весь экран. */
+  max-height: 168px;
+  overflow-y: auto;
+  padding-right: 2px;
 }
+
+.topic-emoji-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 44px;
+}
+.topic-emoji-current { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 600; }
+.topic-emoji-current :deep(img), .topic-emoji-current :deep(span) { font-size: 22px; }
+.topic-emoji-hint { font-size: 12.5px; color: var(--color-text-dim); }
 
 .topic-icon-pick {
   flex: 0 0 auto;

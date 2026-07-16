@@ -335,18 +335,47 @@ export const usePortalStore = defineStore('portal', () => {
   // бампается ТОЛЬКО в сокет-обработчике (см. applyCommentSocket) — так
   // счётчик меняется ровно один раз на реальное событие, будь оно своё или
   // чужое, без двойного учёта.
-  async function createComment(postId, text) {
-    const c = await api.createComment(postId, text)
+  async function createComment(postId, text, replyToId = null) {
+    const c = await api.createComment(postId, text, replyToId)
     const list = commentsByPost[postId]
     if (list && !list.some((x) => x.id === c.id)) list.push(c)
     return c
   }
 
+  // Удаление уносит и ветку ответов (каскад FK на бэке) — из списка убираем
+  // ровно то же поддерево, иначе осиротевшие ответы висели бы до перезагрузки.
   async function deleteComment(postId, commentId) {
     await api.deleteComment(commentId)
-    if (commentsByPost[postId]) {
-      commentsByPost[postId] = commentsByPost[postId].filter((x) => x.id !== commentId)
+    dropCommentSubtree(postId, commentId)
+  }
+
+  // dropCommentSubtree — убрать комментарий со всеми потомками; возвращает,
+  // сколько удалено (счётчик поста двигается ровно на это число).
+  function dropCommentSubtree(postId, commentId) {
+    const list = commentsByPost[postId]
+    if (!list) return 0
+    const doomed = new Set([commentId])
+    // Список в хронологии: родитель всегда раньше ответа, одного прохода хватает.
+    for (const c of list) {
+      if (c.reply_to_id != null && doomed.has(c.reply_to_id)) doomed.add(c.id)
     }
+    commentsByPost[postId] = list.filter((c) => !doomed.has(c.id))
+    return doomed.size
+  }
+
+  // Лайк комментария — toggle: ответ авторитетен (счётчик считает сервер),
+  // остальным прилетит comment:liked.
+  async function likeComment(postId, commentId) {
+    const res = await api.likeComment(commentId)
+    applyCommentLike(postId, commentId, { liked: res.liked, like_count: res.like_count })
+    return res
+  }
+
+  function applyCommentLike(postId, commentId, patch) {
+    const list = commentsByPost[postId]
+    if (!list) return
+    const c = list.find((x) => x.id === commentId)
+    if (c) Object.assign(c, patch)
   }
 
   function bumpCommentCount(postId, delta) {
@@ -429,10 +458,15 @@ export const usePortalStore = defineStore('portal', () => {
       const list = commentsByPost[postId]
       if (list && !list.some((c) => c.id === payload.id)) list.push(payload)
       bumpCommentCount(postId, 1)
+    } else if (kind === 'liked') {
+      // Свой лайк уже применён ответом likeComment — обновляем только счётчик
+      // (флаг «мой лайк» у каждого свой и в событие не входит).
+      applyCommentLike(postId, payload.id, { like_count: payload.like_count })
     } else {
-      const list = commentsByPost[postId]
-      if (list) commentsByPost[postId] = list.filter((c) => c.id !== payload.id)
-      bumpCommentCount(postId, -1)
+      // Удалён родитель — уходит вся ветка (каскад FK); счётчик поста двигаем
+      // на реальное число удалённых, а не на единицу.
+      const removed = dropCommentSubtree(postId, payload.id)
+      bumpCommentCount(postId, -(removed || 1))
     }
   }
 
@@ -474,7 +508,7 @@ export const usePortalStore = defineStore('portal', () => {
     fetchPosts, fetchMore, setTopic, setSearch, loadHighlight,
     createPost, updatePost, deletePost, pinPost, unpinPost, markView,
     uploadAttachment, deleteAttachment, addReaction, removeReaction,
-    fetchComments, createComment, deleteComment,
+    fetchComments, createComment, deleteComment, likeComment,
     forwardPost,
     applyTopicSocket, applyPostSocket, applyCommentSocket, applyReactionSocket,
     reset,

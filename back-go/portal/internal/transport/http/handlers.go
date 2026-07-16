@@ -307,7 +307,9 @@ func (h *handlers) listComments(c *fiber.Ctx) error {
 	if !ok {
 		return nil
 	}
-	resp, err := h.eps.ListComments(c.Context(), endpoint.ListCommentsReq{CompanyID: companyID, PostID: pathID(c)})
+	resp, err := h.eps.ListComments(c.Context(), endpoint.ListCommentsReq{
+		CompanyID: companyID, PostID: pathID(c), ViewerID: currentUser(c).ID,
+	})
 	if err != nil {
 		return h.respondError(c, err)
 	}
@@ -320,11 +322,13 @@ func (h *handlers) createComment(c *fiber.Ctx) error {
 		return nil
 	}
 	var body struct {
-		Text string `json:"text"`
+		Text      string `json:"text"`
+		ReplyToID *int64 `json:"reply_to_id"`
 	}
 	parseBody(c, &body)
 	resp, err := h.eps.CreateComment(c.Context(), endpoint.CreateCommentReq{
-		CompanyID: companyID, PostID: pathID(c), AuthorID: currentUser(c).ID, Text: body.Text,
+		CompanyID: companyID, PostID: pathID(c), AuthorID: currentUser(c).ID,
+		Text: body.Text, ReplyToID: body.ReplyToID,
 	})
 	if err != nil {
 		return h.respondError(c, err)
@@ -351,6 +355,22 @@ func (h *handlers) deleteComment(c *fiber.Ctx) error {
 		return h.respondError(c, err)
 	}
 	return c.JSON(fiber.Map{"deleted": true})
+}
+
+// likeComment — toggle лайка комментария (как реакции мессенджера: одна
+// ручка на «поставить» и «снять»).
+func (h *handlers) likeComment(c *fiber.Ctx) error {
+	companyID, ok := companyScope(c)
+	if !ok {
+		return nil
+	}
+	resp, err := h.eps.LikeComment(c.Context(), endpoint.LikeCommentReq{
+		CompanyID: companyID, CommentID: commentID(c), UserID: currentUser(c).ID,
+	})
+	if err != nil {
+		return h.respondError(c, err)
+	}
+	return c.JSON(resp)
 }
 
 // ── Реакции ──────────────────────────────────────────────────────

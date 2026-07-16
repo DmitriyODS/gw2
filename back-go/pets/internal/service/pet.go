@@ -91,18 +91,14 @@ func (s *Service) celebrateEvolution(ctx context.Context, pet *domain.Pet, evolv
 		map[string]any{"stage": evolvedTo, "species": pet.Species})
 }
 
-// fedToday — питомца сегодня хотя бы раз кормили («сытость» до конца дня).
-func fedToday(pet *domain.Pet) bool {
-	return pet.LastFedDate != nil && pet.LastFedDate.Equal(todayMSK())
-}
-
 // AwardXP — прямой XP за работу с дневным капом источника (source —
-// "xp_unit"/"xp_task"/"xp_walk"). Сытость умножает начисление на FedXPBoost;
-// больному питомцу XP заморожен. Баланс инкрементируется атомарно
-// (AdjustBalances — та же причина, что в AwardKudos); эволюция, если
-// случилась, сохраняется отдельным узким SaveEvolution — full-row SavePet из
-// хука перетирал бы конкурентные изменения балансов/квеста. Никогда не
-// возвращает ошибку наружу (зовётся из хуков).
+// "xp_unit"/"xp_task"/"xp_walk"). Настроение питомца (среднее потребностей)
+// множит начисление — ухоженный грувик растёт в полтора раза быстрее
+// запущенного; больному XP заморожен. Балансы и потребности двигаются
+// атомарно (AdjustBalances/AdjustNeeds — конкурентный хук не должен потерять
+// начисление); эволюция, если случилась, сохраняется узким SaveEvolution —
+// full-row SavePet из хука перетирал бы конкурентные изменения балансов и
+// квеста. Никогда не возвращает ошибку наружу (зовётся из хуков).
 func (s *Service) AwardXP(ctx context.Context, userID, companyID int64,
 	source string, amount, cap int) int {
 
@@ -114,16 +110,18 @@ func (s *Service) AwardXP(ctx context.Context, userID, companyID int64,
 		s.log.Warn("pets.award_xp_failed", "user_id", userID, "source", source, "error", err)
 		return 0
 	}
-	if pet.SickSince != nil {
+	s.refreshNeeds(ctx, pet) // работа идёт в актуальном состоянии, не во вчерашнем
+	if pet.Sick() {
 		return 0 // болезнь замораживает XP — и прямой тоже
 	}
 	granted := s.daily.TakeBudget(ctx, userID, source, amount, cap)
 	if granted <= 0 {
 		return 0
 	}
-	if fedToday(pet) {
-		granted = int(float64(granted) * domain.FedXPBoost)
-	}
+	granted = max(1, int(float64(granted)*domain.MoodFactor(pet.Needs.Mood())))
+	// Работа сама расходует силы питомца — потребности двигаем атомарно,
+	// параллельно действиям владельца.
+	s.adjustNeeds(ctx, pet, domain.ActionWork)
 	kudos, xp, err := s.pets.AdjustBalances(ctx, userID, 0, granted)
 	if err != nil {
 		s.log.Warn("pets.award_xp_failed", "user_id", userID, "source", source, "error", err)
@@ -285,8 +283,9 @@ func (s *Service) GetMyPet(ctx context.Context, userID, companyID int64) (*dto.P
 	if err != nil {
 		return nil, err
 	}
-	// Ленивый возврат из приключения — только на GET владельца.
-	reward := s.maybeReturnAdventure(ctx, pet)
+	// Ленивая синхронизация (возврат из похода, потребности, болезни, побег)
+	// — только на GET владельца.
+	reward, runaway := s.syncPet(ctx, pet)
 	changed := false
 	if pet.Personality == nil {
 		personality := s.detectPersonality(ctx, userID)
@@ -306,13 +305,16 @@ func (s *Service) GetMyPet(ctx context.Context, userID, companyID int64) (*dto.P
 	}
 	data := dto.NewPet(pet)
 	data.AdventureReward = reward
+	data.Runaway = runaway
 	s.fillFeedCounters(ctx, data, pet)
 	return data, nil
 }
 
+// fillFeedCounters — остатки дневных действий ухода (миски/сон/купание):
+// клиент рисует их счётчиками, а не узнаёт лимит из отказа.
 func (s *Service) fillFeedCounters(ctx context.Context, data *dto.PetDTO, pet *domain.Pet) {
 	var left, maxFeeds int
-	if pet.SickSince != nil {
+	if pet.Sick() {
 		left = s.daily.Left(ctx, pet.UserID, "sick_feeds", domain.SickFeedDailyMax)
 		maxFeeds = domain.SickFeedDailyMax
 	} else {
@@ -320,6 +322,14 @@ func (s *Service) fillFeedCounters(ctx context.Context, data *dto.PetDTO, pet *d
 		maxFeeds = domain.FeedDailyMax
 	}
 	data.FeedsLeft, data.FeedsMax = &left, &maxFeeds
+
+	sleeps := s.daily.Left(ctx, pet.UserID, "sleeps", domain.SleepDailyMax)
+	sleepsMax := domain.SleepDailyMax
+	data.SleepsLeft, data.SleepsMax = &sleeps, &sleepsMax
+
+	baths := s.daily.Left(ctx, pet.UserID, "baths", domain.BathDailyMax)
+	bathsMax := domain.BathDailyMax
+	data.BathsLeft, data.BathsMax = &baths, &bathsMax
 }
 
 // detectSpecies — вид по паттерну работы за 60 дней.
@@ -400,14 +410,22 @@ func applyRecovery(pet *domain.Pet, amount int) bool {
 	return false
 }
 
-// AddRecovery — лечение работой. Никогда не бросает (хуки).
+// AddRecovery — лечение работой: помогает от хандры (её рецепт), но не
+// заменяет еду голодному и душ грязному — им работа даёт 0 очков. Никогда не
+// бросает (хуки).
 func (s *Service) AddRecovery(ctx context.Context, userID, companyID int64, amount int) {
 	pet, err := s.pets.GetPet(ctx, userID)
-	if err != nil || pet == nil || pet.SickSince == nil {
+	if err != nil || pet == nil || !pet.Sick() {
 		return
 	}
-	recovered := applyRecovery(pet, amount)
-	if err := s.pets.SavePet(ctx, pet); err != nil {
+	cure := domain.CureFor(pet.AilmentKey(), domain.ActionWork)
+	if cure <= 0 {
+		return
+	}
+	recovered := applyRecovery(pet, amount*cure)
+	// Узкое сохранение: хук приходит параллельно действиям владельца, и
+	// full-row SavePet затирал бы их балансы устаревшим снимком.
+	if err := s.pets.SaveNeeds(ctx, pet); err != nil {
 		s.log.Warn("pets.recovery_failed", "user_id", userID, "error", err)
 		return
 	}
@@ -417,27 +435,39 @@ func (s *Service) AddRecovery(ctx context.Context, userID, companyID int64, amou
 	s.emitPetUpdate(ctx, pet)
 }
 
-// CheckSicknessForCompany — пометить больными питомцев тех, кто давно не
-// работал. Простой считается в РАБОЧИХ днях компании: выходные не приближают
-// болезнь, а в сам выходной питомец не заболевает вовсе.
+// CheckSicknessForCompany — фоновая проверка заботы: сначала запущенные
+// потребности (их болезни ловятся лениво у активных владельцев, но у тех, кто
+// не заходит, — только здесь) и побег совсем заброшенных, затем хандра от
+// простоя в работе. Простой считается в РАБОЧИХ днях компании: выходные не
+// приближают хандру, а в сам выходной питомец от неё не заболевает — в
+// отличие от голода, который выходных не признаёт.
 func (s *Service) CheckSicknessForCompany(ctx context.Context, companyID int64) (int, error) {
-	weekend := s.weekendDays(ctx, companyID)
-	today := todayMSK()
-	if isWeekend(today, weekend) {
-		return 0, nil
-	}
 	pets, err := s.pets.ListCompanyPets(ctx, companyID)
 	if err != nil {
 		return 0, err
 	}
-	var candidates []*domain.Pet
+	sickCount := 0
+	var healthy []*domain.Pet
 	for _, p := range pets {
-		if p.Stage >= 1 && p.SickSince == nil {
-			candidates = append(candidates, p)
+		if s.refreshNeeds(ctx, p) && p.Sick() {
+			sickCount++
+		}
+		if s.maybeRunAway(ctx, p) != nil {
+			continue // сбежавший начал с нуля — хандрой его не наказываем
+		}
+		if p.Stage >= 1 && !p.Sick() {
+			healthy = append(healthy, p)
 		}
 	}
+
+	weekend := s.weekendDays(ctx, companyID)
+	today := todayMSK()
+	if isWeekend(today, weekend) {
+		return sickCount, nil
+	}
+	candidates := healthy
 	if len(candidates) == 0 {
-		return 0, nil
+		return sickCount, nil
 	}
 	ids := make([]int64, len(candidates))
 	for i, p := range candidates {
@@ -445,9 +475,8 @@ func (s *Service) CheckSicknessForCompany(ctx context.Context, companyID int64) 
 	}
 	lastEnds, err := s.pets.LastUnitEndByUsers(ctx, ids)
 	if err != nil {
-		return 0, err
+		return sickCount, err
 	}
-	sickCount := 0
 	for _, pet := range candidates {
 		last, ok := lastEnds[pet.UserID]
 		// Ни одного юнита в принципе — не наказываем (свежий пользователь).
@@ -459,15 +488,13 @@ func (s *Service) CheckSicknessForCompany(ctx context.Context, companyID int64) 
 		if workingDaysBetween(lastDate, today, weekend) < domain.SickAfterDays {
 			continue
 		}
-		now := time.Now().UTC()
-		pet.SickSince = &now
-		pet.Recovery = 0
-		if err := s.pets.SavePet(ctx, pet); err != nil {
+		pet.Fall(domain.AilmentBlues, time.Now().UTC())
+		if err := s.pets.SaveNeeds(ctx, pet); err != nil {
 			s.log.Warn("pets.sick_save_failed", "user_id", pet.UserID, "error", err)
 			continue
 		}
 		sickCount++
-		s.appendActivity(ctx, pet.UserID, "sickness_started", nil)
+		s.onFellSick(ctx, pet, domain.AilmentBlues)
 		s.emitPetUpdate(ctx, pet)
 	}
 	return sickCount, nil
@@ -491,11 +518,27 @@ func (s *Service) RefreshPersonalitiesForCompany(ctx context.Context, companyID 
 	return nil
 }
 
+// Реплики больного питомца: бульон помогает не от всякой хвори — при
+// «не своей» болезни грувик честно намекает на верный рецепт.
 var sickPhrases = []string{
-	"Бульон принят. Медицинский факт: закрытые задачи лечат быстрее.",
-	"Спасибо за бульон. До выздоровления — по протоколу: работа и забота.",
-	"Болею. Бульон помогает, юнит от 15 минут — эффективнее.",
-	"Апчхи. Бульон зачтён в курс лечения, продолжаем наблюдение.",
+	"Бульон принят. Курс лечения идёт по протоколу.",
+	"Спасибо за бульон. Продолжаем наблюдение.",
+	"Апчхи. Бульон зачтён в курс лечения.",
+}
+
+var wrongCurePhrases = map[string][]string{
+	domain.AilmentBlues: {
+		"Бульон — это мило, но лечит меня работа. Юнит от 15 минут — и полегчает.",
+		"Спасибо. От хандры, впрочем, помогают закрытые задачи, а не миска.",
+	},
+	domain.AilmentCold: {
+		"Бульон тёплый, спасибо. Но выспаться бы — простуда лечится сном.",
+		"Кхе-кхе. Еда — хорошо, сон — лучше.",
+	},
+	domain.AilmentGrime: {
+		"Ем, но чешусь. Вымыть бы меня, а не кормить.",
+		"Спасибо за еду. Грязь она, к сожалению, не смывает.",
+	},
 }
 
 // Фолбэк-реплики кормления — фиксированный пул без ИИ-персонализации.
@@ -520,9 +563,13 @@ func (s *Service) FeedPet(ctx context.Context, userID, companyID int64) (*dto.Pe
 	if err := s.ensureNotAway(ctx, pet); err != nil {
 		return nil, err
 	}
+	s.refreshNeeds(ctx, pet)
 
-	// Больного кормим лечебным бульоном: дёшево, без XP, +1 к выздоровлению.
-	if pet.SickSince != nil {
+	// Больного кормим лечебным бульоном: дёшево, без XP, немного сытости и
+	// столько очков лечения, сколько положено рецептом его болезни (при
+	// истощении — почти всё лечение, при простуде — символически).
+	if pet.Sick() {
+		ailment := pet.AilmentKey()
 		if pet.Kudos < domain.SickFeedCost {
 			return nil, domain.NewError("NO_KUDOS", "Не хватает кудосов даже на бульон", 422)
 		}
@@ -530,11 +577,12 @@ func (s *Service) FeedPet(ctx context.Context, userID, companyID int64) (*dto.Pe
 			return nil, domain.NewError("FED_ENOUGH", "Бульон — не больше двух мисок в день", 429)
 		}
 		pet.Kudos -= domain.SickFeedCost
-		recovered := applyRecovery(pet, 1)
+		pet.Needs.Add(domain.NeedSatiety, domain.SickFeedSatiety)
+		recovered := applyRecovery(pet, domain.CureFor(ailment, domain.ActionFeed))
 		if err := s.pets.SavePet(ctx, pet); err != nil {
 			return nil, err
 		}
-		s.appendActivity(ctx, userID, "fed", map[string]any{"sick": true})
+		s.appendActivity(ctx, userID, "fed", map[string]any{"sick": true, "ailment": ailment})
 		s.appendLedger(ctx, userID, companyID, -domain.SickFeedCost, "feed", nil, "бульон")
 		if recovered {
 			s.appendActivity(ctx, userID, "recovered", nil)
@@ -543,10 +591,7 @@ func (s *Service) FeedPet(ctx context.Context, userID, companyID int64) (*dto.Pe
 		data := dto.NewPet(pet)
 		// Выздоровел — счётчики сразу по «здоровой» шкале кормлений.
 		s.fillFeedCounters(ctx, data, pet)
-		phrase := sickPhrases[randIntn(len(sickPhrases))]
-		if recovered {
-			phrase = "Выздоровел. Официально: лечение работой и бульоном подтверждено."
-		}
+		phrase := sickFeedPhrase(ailment, recovered)
 		evolved := false
 		data.Phrase, data.Evolved, data.Recovered = &phrase, &evolved, &recovered
 		return data, nil
@@ -561,6 +606,7 @@ func (s *Service) FeedPet(ctx context.Context, userID, companyID int64) (*dto.Pe
 
 	pet.Kudos -= domain.FeedCost
 	pet.XP += domain.FeedXP
+	pet.ApplyNeedGains(domain.ActionFeed)
 
 	today := todayMSK()
 	if pet.LastFedDate == nil || !pet.LastFedDate.Equal(today) {
@@ -598,6 +644,19 @@ func (s *Service) FeedPet(ctx context.Context, userID, companyID int64) (*dto.Pe
 	return data, nil
 }
 
+// sickFeedPhrase — реплика на бульон: помог ли он именно этой болезни.
+func sickFeedPhrase(ailment string, recovered bool) string {
+	if recovered {
+		return "Выздоровел. Спасибо — рецепт оказался верным."
+	}
+	if domain.CureFor(ailment, domain.ActionFeed) <= 0 {
+		if phrases := wrongCurePhrases[ailment]; len(phrases) > 0 {
+			return phrases[randIntn(len(phrases))]
+		}
+	}
+	return sickPhrases[randIntn(len(sickPhrases))]
+}
+
 func (s *Service) RenamePet(ctx context.Context, userID, companyID int64, name string) (*dto.PetDTO, error) {
 	pet, err := s.pets.GetOrCreate(ctx, userID, companyID)
 	if err != nil {
@@ -624,6 +683,7 @@ func (s *Service) WalkPet(ctx context.Context, userID, companyID int64) (*dto.Pe
 	if err := s.ensureNotAway(ctx, pet); err != nil {
 		return nil, err
 	}
+	s.refreshNeeds(ctx, pet)
 	if pet.Kudos < domain.WalkCost {
 		return nil, domain.NewError("NO_KUDOS", "Не хватает кудосов на прогулку", 422)
 	}
@@ -632,13 +692,15 @@ func (s *Service) WalkPet(ctx context.Context, userID, companyID int64) (*dto.Pe
 	}
 	pet.Kudos -= domain.WalkCost
 	recovered := false
-	if pet.SickSince != nil {
-		// Больному питомцу прогулка лечит, а не растит XP (тот и так заморожен).
-		recovered = applyRecovery(pet, domain.WalkRecovery)
+	if pet.Sick() {
+		// Больному питомцу прогулка лечит, а не растит XP (тот и так заморожен),
+		// и помогает ровно настолько, насколько подходит его болезни.
+		recovered = s.applyAction(pet, domain.ActionWalk)
 		if err := s.pets.SavePet(ctx, pet); err != nil {
 			return nil, err
 		}
 	} else {
+		s.applyAction(pet, domain.ActionWalk)
 		pet.XP += domain.WalkXP
 		evolvedTo := s.applyEvolution(ctx, pet)
 		if err := s.pets.SavePet(ctx, pet); err != nil {
@@ -661,9 +723,9 @@ func (s *Service) WalkPet(ctx context.Context, userID, companyID int64) (*dto.Pe
 
 // ───────────────────────────── лечение ─────────────────────────────
 
-// HealPet — активное лечение мини-игрой за кудосы: только для больного
-// питомца, с дневным лимитом попыток (не должно обесценивать лечение
-// работой — оно остаётся основным и бесплатным путём).
+// HealPet — аптечка: платная мини-игра, работающая при ЛЮБОЙ болезни (у
+// каждой хвори есть свой сильный рецепт — сон, купание, еда, работа; аптечка
+// же универсальна, но дорога, и от простуды помогает лучше прочего).
 func (s *Service) HealPet(ctx context.Context, userID, companyID int64) (*dto.PetDTO, error) {
 	pet, err := s.pets.GetOrCreate(ctx, userID, companyID)
 	if err != nil {
@@ -672,7 +734,8 @@ func (s *Service) HealPet(ctx context.Context, userID, companyID int64) (*dto.Pe
 	if err := s.ensureNotAway(ctx, pet); err != nil {
 		return nil, err
 	}
-	if pet.SickSince == nil {
+	s.refreshNeeds(ctx, pet)
+	if !pet.Sick() {
 		return nil, domain.NewError("NOT_SICK", "Питомец здоров — лечить нечего", 422)
 	}
 	if pet.Kudos < domain.HealCost {
@@ -682,7 +745,7 @@ func (s *Service) HealPet(ctx context.Context, userID, companyID int64) (*dto.Pe
 		return nil, domain.NewError("HEALED_ENOUGH", "Лечение на сегодня исчерпано", 429)
 	}
 	pet.Kudos -= domain.HealCost
-	recovered := applyRecovery(pet, domain.HealRecoveryPoints)
+	recovered := s.applyAction(pet, domain.ActionHeal)
 	if err := s.pets.SavePet(ctx, pet); err != nil {
 		return nil, err
 	}
@@ -699,9 +762,12 @@ func (s *Service) HealPet(ctx context.Context, userID, companyID int64) (*dto.Pe
 
 // ─────────────────── поглаживание чужого питомца ───────────────────
 
-// StrokePet — символическая «плата за внимание» коллеге: списывает
-// небольшую сумму кудосов у гладящего, дневной лимит на ОДНОГО чужого
-// питомца (pet_strokes), получателю — небольшой XP/настроение без кудосов.
+// StrokePet — внимание коллеге, за которое платят обе стороны и выигрывают
+// тоже обе: гладящий отдаёт StrokeCost кудосов и получает немного XP своему
+// питомцу, ВЛАДЕЛЕЦ поглаженного — StrokeRewardKudos кудосов (больше, чем
+// потрачено), XP и закрытую потребность в общении. Кудосы владельца идут в
+// счётчики признания (недельный рейтинг и сезонный трек) — поглаживание и
+// есть признание. Дневной лимит — на ОДНОГО чужого питомца (pet_strokes).
 func (s *Service) StrokePet(ctx context.Context, strokerID, petOwnerID, companyID int64) (*dto.PetDTO, error) {
 	if strokerID == petOwnerID {
 		return nil, domain.NewError("SELF_STROKE", "Своего питомца гладить незачем — он и так знает", 422)
@@ -744,24 +810,46 @@ func (s *Service) StrokePet(ctx context.Context, strokerID, petOwnerID, companyI
 		return nil, domain.ErrPetAway
 	}
 
-	stroker.Kudos -= domain.StrokeCost
-	if err := s.pets.SavePet(ctx, stroker); err != nil {
+	// Балансы обеих сторон — атомарным инкрементом: гладят и зарабатывают
+	// параллельно, full-row SavePet здесь терял бы чужие начисления.
+	strokerKudos, strokerXP, err := s.pets.AdjustBalances(ctx, strokerID,
+		-domain.StrokeCost, domain.StrokeStrokerXP)
+	if err != nil {
 		return nil, err
 	}
-	pet.XP += domain.StrokeMoodXP
-	evolvedTo := s.applyEvolution(ctx, pet)
-	if err := s.pets.SavePet(ctx, pet); err != nil {
+	stroker.Kudos, stroker.XP = strokerKudos, strokerXP
+	ownerKudos, ownerXP, err := s.pets.AdjustBalances(ctx, petOwnerID,
+		domain.StrokeRewardKudos, domain.StrokeMoodXP)
+	if err != nil {
 		return nil, err
+	}
+	pet.Kudos, pet.XP = ownerKudos, ownerXP
+	s.adjustNeeds(ctx, pet, domain.ActionStrokeIn)
+	s.adjustNeeds(ctx, stroker, domain.ActionStrokeOut)
+	if evolvedTo := s.applyEvolution(ctx, pet); evolvedTo > 0 {
+		if err := s.pets.SaveEvolution(ctx, pet); err != nil {
+			s.log.Warn("pets.evolution_save_failed", "user_id", petOwnerID, "error", err)
+		} else {
+			s.celebrateEvolution(ctx, pet, evolvedTo)
+		}
 	}
 	if err := s.pets.RecordStroke(ctx, petOwnerID, strokerID, today); err != nil {
 		return nil, err
 	}
 
-	s.appendActivity(ctx, petOwnerID, "stroked_by", map[string]any{"stroker_id": strokerID})
-	s.appendLedger(ctx, strokerID, companyID, -domain.StrokeCost, "stroke", &petOwnerID, "")
-	if evolvedTo > 0 {
-		s.celebrateEvolution(ctx, pet, evolvedTo)
+	// Признание: поглаживания двигают недельный рейтинг и сезонный трек
+	// владельца — дневные капы источников тут не нужны, лимит уже задан
+	// числом поглаживаний на пару.
+	isoYear, isoWeek := time.Now().In(domain.MSK).ISOWeek()
+	if err := s.pets.AddWeeklyKudos(ctx, petOwnerID, isoYear, isoWeek, domain.StrokeRewardKudos); err != nil {
+		s.log.Warn("pets.weekly_kudos_failed", "user_id", petOwnerID, "error", err)
 	}
+	s.addSeasonalKudos(ctx, petOwnerID, domain.StrokeRewardKudos)
+
+	s.appendActivity(ctx, petOwnerID, "stroked_by",
+		map[string]any{"stroker_id": strokerID, "kudos": domain.StrokeRewardKudos})
+	s.appendLedger(ctx, strokerID, companyID, -domain.StrokeCost, "stroke", &petOwnerID, "")
+	s.appendLedger(ctx, petOwnerID, companyID, domain.StrokeRewardKudos, "stroke_in", &strokerID, "")
 	s.emitPetUpdate(ctx, stroker)
 	s.emitPetUpdate(ctx, pet)
 	return dto.NewPet(pet), nil

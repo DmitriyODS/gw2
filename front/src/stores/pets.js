@@ -37,13 +37,24 @@ export const usePetsStore = defineStore('pets', () => {
   async function fetchPet() {
     const res = await api.getMyPet()
     pet.value = res
-    // Разовое поле ответа: этот GET зафиксировал возврат из приключения.
+    // Разовые поля ответа: этот GET зафиксировал возврат из приключения…
     if (res?.adventure_reward) {
       const { kudos, xp } = res.adventure_reward
-      try {
-        useNotificationsStore().success(`Вернулся из приключения: +${kudos} кудосов, +${xp} XP`)
-      } catch { /* вне Pinia-контекста (тесты) — уведомление не критично */ }
+      notify((n) => n.success(`Вернулся из приключения: +${kudos} кудосов, +${xp} XP`))
     }
+    // …или побег заброшенного питомца (о нём молчать нельзя — хозяин потерял
+    // прогресс и должен понять, почему у него снова яйцо).
+    if (res?.runaway) {
+      const { name, days } = res.runaway
+      notify((n) => n.error(
+        `${name} сбежал: болел ${days} дней без лечения. Дома вас ждёт новое яйцо.`))
+    }
+  }
+
+  // notify — уведомление, которое не должно ронять вызывающего (вне
+  // Pinia-контекста, например в тестах, стор уведомлений недоступен).
+  function notify(fn) {
+    try { fn(useNotificationsStore()) } catch { /* уведомление не критично */ }
   }
 
   async function startAdventure() {
@@ -169,7 +180,7 @@ export const usePetsStore = defineStore('pets', () => {
     return item
   }
 
-  // ─────────────── прогулка / лечение / поглаживание ─────────────
+  // ──── прогулка / лечение / сон / купание / поглаживание ────────
 
   async function walkPet() {
     const res = await api.walkPet()
@@ -179,6 +190,18 @@ export const usePetsStore = defineStore('pets', () => {
 
   async function healPet() {
     const res = await api.healPet()
+    pet.value = { ...pet.value, ...res }
+    return res
+  }
+
+  async function sleepPet() {
+    const res = await api.sleepPet()
+    pet.value = { ...pet.value, ...res }
+    return res
+  }
+
+  async function bathPet() {
+    const res = await api.bathPet()
     pet.value = { ...pet.value, ...res }
     return res
   }
@@ -370,6 +393,24 @@ export const usePetsStore = defineStore('pets', () => {
     if (entry) Object.assign(entry, data)
   }
 
+  // Грувик заболел (событие приходит в комнату владельца): о болезни надо
+  // узнать сразу — запущенная кончается побегом. Офлайн-хозяину то же
+  // событие приезжает пушем (pushsvc).
+  function applyPetSick(data) {
+    notify((n) => n.warn(
+      `${data.name || 'Грувик'} заболел: ${(data.ailment_title || '').toLowerCase()}. `
+      + 'Загляните к нему — болезнь сама не пройдёт.'))
+    fetchPet().catch(() => {})
+  }
+
+  // Питомец сбежал: прогресс обнулён, дома новое яйцо. Снапшот перечитываем —
+  // локально «сбросить» состояние гаданием нельзя.
+  function applyPetRunaway(data) {
+    notify((n) => n.error(
+      `${data.name || 'Грувик'} сбежал: болел ${data.days} дней без лечения.`))
+    fetchPet().catch(() => {})
+  }
+
   // Администратор удалил питомца: убираем из зоопарка; владельцу — свежий
   // питомец пересоздастся штатным GET (пересобираем сразу же).
   function applyPetDeleted(data) {
@@ -410,13 +451,13 @@ export const usePetsStore = defineStore('pets', () => {
     prestigePet, fetchSeason, claimSeasonReward, fetchHouse, buyHouseDecor, arrangeHouse,
     setHouseTheme, setHousePetPos,
     fetchShop, buyItem, buySpecies, claimMystery,
-    walkPet, healPet, strokePet,
+    walkPet, healPet, sleepPet, bathPet, strokePet,
     fetchZoo, deleteColleaguePet, fetchRating, fetchLive, fetchActivityLog,
     fetchBank, fetchBankStats, fetchLedger, transferKudos, bankDeposit, bankWithdraw,
     bankTakeLoan, bankRepayLoan,
     createGoal, goalDeposit, goalWithdraw, deleteGoal,
     createFund, donateFund, closeFund, applyBankFund,
-    applyPetUpdate, applyPetDeleted, applyKudosReceived,
+    applyPetUpdate, applyPetDeleted, applyPetSick, applyPetRunaway, applyKudosReceived,
     reset,
   }
 })

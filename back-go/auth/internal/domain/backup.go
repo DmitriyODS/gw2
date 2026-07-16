@@ -31,17 +31,33 @@ const SectionOther = "other"
 // синхронизирован с фронтом (front/src/utils/backupSections.js, только ключи и
 // подписи). Любая таблица БД не из этого списка и не из BackupExcluded попадает
 // в раздел SectionOther.
+// ВАЖНО: раздел обязан перечислять ВСЕ свои таблицы. Импорт раздела делает
+// TRUNCATE … CASCADE, и таблица-спутник, забытая здесь, будет вычищена
+// каскадом FK, но не восстановлена (её данных нет в архиве раздела). Завёл
+// новую таблицу — впиши её в свой раздел; иначе она молча уедет в «Прочее».
 var BackupSections = []BackupSection{
 	{Key: "auth", Tables: []string{"roles", "users", "user_companies", "device_tokens"}},
 	{Key: "companies", Tables: []string{"companies", "company_invites"}},
-	{Key: "tasks", Tables: []string{"departments", "stages", "unit_types", "tasks", "favorites", "units", "comments", "user_task_colors"}},
+	{Key: "tasks", Tables: []string{"departments", "stages", "unit_types", "tasks", "favorites",
+		"units", "comments", "user_task_colors", "tags", "task_tags", "task_comment_seen"}},
 	{Key: "registry", Tables: []string{"registries", "registry_fields", "registry_records", "registry_shares"}},
 	{Key: "calendar", Tables: []string{"calendars", "calendar_fields", "calendar_records", "calendar_shares"}},
 	{Key: "diary", Tables: []string{"diaries", "diary_records", "diary_shares", "diary_user_shares"}},
-	{Key: "notes", Tables: []string{"notes", "note_groups", "note_group_items", "note_shares"}},
-	{Key: "messenger", Tables: []string{"conversations", "messages", "message_attachments"}},
+	{Key: "notes", Tables: []string{"notes", "note_groups", "note_group_items", "note_shares", "note_user_shares"}},
+	{Key: "messenger", Tables: []string{"conversations", "conversation_members", "messages",
+		"message_attachments", "message_reactions"}},
 	{Key: "calls", Tables: []string{"calls", "call_participants"}},
-	{Key: "groove", Tables: []string{"feed_events", "feed_comments", "feed_reactions", "groove_raids", "pets", "pet_strokes", "user_locations"}},
+	// Питомцы-грувики целиком: сам питомец, поглаживания, магазин, счётчики
+	// признания, сезонный трек, кудо-банк и приватная история.
+	{Key: "groove", Tables: []string{"pets", "pet_strokes", "pet_activity_log",
+		"pet_shop_items", "pet_shop_purchases", "pet_kudos_weekly", "pet_kudos_seasonal",
+		"pet_season_claims", "pet_kudos_ledger", "pet_bank_goals", "pet_bank_funds",
+		"pet_bank_fund_donations"}},
+	{Key: "portal", Tables: []string{"portal_topics", "portal_posts", "portal_comments",
+		"portal_comment_likes", "portal_reactions", "portal_attachments", "portal_post_views",
+		"portal_seen"}},
+	{Key: "ai", Tables: []string{"ai_assistant_conversations", "ai_assistant_messages",
+		"ai_assistant_feedback"}},
 	{Key: "integration", Tables: []string{"user_yougile_accounts"}},
 }
 

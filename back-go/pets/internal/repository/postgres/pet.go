@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"strconv"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -23,7 +24,8 @@ func NewPetRepo(pool *pgxpool.Pool) *PetRepo {
 }
 
 const petCols = `p.user_id, p.company_id, p.name, p.species, p.stage, p.xp, p.kudos,
-	p.hat, p.accessories, p.feed_streak, p.last_fed_date, p.sick_since, p.recovery,
+	p.hat, p.accessories, p.feed_streak, p.last_fed_date, p.sick_since, p.ailment,
+	p.recovery, p.need_satiety, p.need_energy, p.need_hygiene, p.need_social, p.needs_at,
 	p.personality, p.unlocked_species, p.quest_date, p.quest_kind, p.quest_target,
 	p.quest_progress, p.quest_claimed, p.adventure_until, p.adventure_place,
 	p.generation, p.house_owned, p.house_placed, p.house_theme,
@@ -51,7 +53,9 @@ func scanPet(row pgx.Row) (*domain.Pet, error) {
 	var fio, avatar *string
 	err := row.Scan(&p.UserID, &p.CompanyID, &p.Name, &p.Species, &p.Stage, &p.XP,
 		&p.Kudos, &p.Hat, &accessories, &p.FeedStreak, &p.LastFedDate, &p.SickSince,
-		&p.Recovery, &p.Personality, &unlocked, &p.QuestDate, &p.QuestKind,
+		&p.Ailment, &p.Recovery, &p.Needs.Satiety, &p.Needs.Energy, &p.Needs.Hygiene,
+		&p.Needs.Social, &p.NeedsAt,
+		&p.Personality, &unlocked, &p.QuestDate, &p.QuestKind,
 		&p.QuestTarget, &p.QuestProgress, &p.QuestClaimed, &p.AdventureUntil,
 		&p.AdventurePlace, &p.Generation, &houseOwned, &housePlaced, &p.HouseTheme,
 		&p.HousePetX, &p.HousePetY,
@@ -119,16 +123,70 @@ func (r *PetRepo) SavePet(ctx context.Context, p *domain.Pet) error {
 	_, err = r.pool.Exec(ctx, `
 		UPDATE pets SET name = $2, species = $3, stage = $4, xp = $5, kudos = $6,
 			hat = $7, accessories = $8, feed_streak = $9, last_fed_date = $10,
-			sick_since = $11, recovery = $12, personality = $13,
-			unlocked_species = $14, quest_date = $15, quest_kind = $16,
-			quest_target = $17, quest_progress = $18, quest_claimed = $19,
-			adventure_until = $20, adventure_place = $21
+			sick_since = $11, ailment = $12, recovery = $13, personality = $14,
+			unlocked_species = $15, quest_date = $16, quest_kind = $17,
+			quest_target = $18, quest_progress = $19, quest_claimed = $20,
+			adventure_until = $21, adventure_place = $22,
+			need_satiety = $23, need_energy = $24, need_hygiene = $25,
+			need_social = $26, needs_at = $27
 		WHERE user_id = $1`,
 		p.UserID, p.Name, p.Species, p.Stage, p.XP, p.Kudos, p.Hat, accessories,
-		p.FeedStreak, p.LastFedDate, p.SickSince, p.Recovery, p.Personality,
+		p.FeedStreak, p.LastFedDate, p.SickSince, p.Ailment, p.Recovery, p.Personality,
 		unlocked, p.QuestDate, p.QuestKind, p.QuestTarget, p.QuestProgress,
-		p.QuestClaimed, p.AdventureUntil, p.AdventurePlace)
+		p.QuestClaimed, p.AdventureUntil, p.AdventurePlace,
+		p.Needs.Satiety, p.Needs.Energy, p.Needs.Hygiene, p.Needs.Social, p.NeedsAt)
 	return err
+}
+
+// ───────────────────────── потребности ──────────────────────────────
+
+// SaveNeeds — только шкалы и состояние болезни: ленивый пересчёт убывания
+// живёт на read-пути, где full-row SavePet затирал бы конкурентные начисления.
+func (r *PetRepo) SaveNeeds(ctx context.Context, p *domain.Pet) error {
+	_, err := r.pool.Exec(ctx, `
+		UPDATE pets SET need_satiety = $2, need_energy = $3, need_hygiene = $4,
+			need_social = $5, needs_at = $6, sick_since = $7, ailment = $8, recovery = $9
+		WHERE user_id = $1`,
+		p.UserID, p.Needs.Satiety, p.Needs.Energy, p.Needs.Hygiene, p.Needs.Social,
+		p.NeedsAt, p.SickSince, p.Ailment, p.Recovery)
+	return err
+}
+
+// needColumns — колонка шкалы по ключу домена (ключи приходят из кода, не от
+// клиента; неизвестный ключ игнорируется).
+var needColumns = map[string]string{
+	domain.NeedSatiety: "need_satiety",
+	domain.NeedEnergy:  "need_energy",
+	domain.NeedHygiene: "need_hygiene",
+	domain.NeedSocial:  "need_social",
+}
+
+// AdjustNeeds — атомарный сдвиг шкал с клампом прямо в SQL: хук работы и
+// действие владельца могут прийти одновременно. Возвращает шкалы после
+// применения — вызывающий кладёт их в снапшот, а не досчитывает сам.
+func (r *PetRepo) AdjustNeeds(ctx context.Context, userID int64, deltas map[string]int) (domain.NeedValues, error) {
+	sets := ""
+	args := []any{userID}
+	for key, delta := range deltas {
+		col, ok := needColumns[key]
+		if !ok || delta == 0 {
+			continue
+		}
+		args = append(args, delta)
+		if sets != "" {
+			sets += ", "
+		}
+		sets += col + ` = LEAST(` + strconv.Itoa(domain.NeedMax) +
+			`, GREATEST(0, ` + col + ` + $` + strconv.Itoa(len(args)) + `))`
+	}
+	var out domain.NeedValues
+	if sets == "" {
+		return out, nil
+	}
+	err := r.pool.QueryRow(ctx, `UPDATE pets SET `+sets+` WHERE user_id = $1
+		RETURNING need_satiety, need_energy, need_hygiene, need_social`, args...).
+		Scan(&out.Satiety, &out.Energy, &out.Hygiene, &out.Social)
+	return out, err
 }
 
 // ──────────────────────────── приключение ───────────────────────────
@@ -218,6 +276,24 @@ func (r *PetRepo) SaveEvolution(ctx context.Context, p *domain.Pet) error {
 		WHERE user_id = $1`,
 		p.UserID, p.Stage, p.Species, p.Personality, unlocked)
 	return err
+}
+
+// RunAway — побег: сброс прогресса одним UPDATE с гейтом давности болезни в
+// WHERE (ленивый GET владельца и фоновый цикл ходят сюда параллельно —
+// зафиксировать побег должен ровно один из них).
+func (r *PetRepo) RunAway(ctx context.Context, userID int64, sickBefore time.Time) (bool, error) {
+	tag, err := r.pool.Exec(ctx, `
+		UPDATE pets SET stage = 0, xp = 0, species = 'egg', feed_streak = 0,
+			personality = NULL, unlocked_species = '[]', last_fed_date = NULL,
+			sick_since = NULL, ailment = NULL, recovery = 0,
+			need_satiety = $3, need_energy = $3, need_hygiene = $3, need_social = $3,
+			needs_at = now(), adventure_until = NULL, adventure_place = NULL
+		WHERE user_id = $1 AND sick_since IS NOT NULL AND sick_since <= $2`,
+		userID, sickBefore, domain.NeedMax)
+	if err != nil {
+		return false, err
+	}
+	return tag.RowsAffected() == 1, nil
 }
 
 // DeletePet — питомец и связанные данные одной транзакцией. pet_strokes,

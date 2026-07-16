@@ -31,6 +31,9 @@ config.global.stubs = {
   AppDialog: AppDialogStub,
   DatePicker: InputStub('datepicker-stub'),
   TimePicker: InputStub('timepicker-stub'),
+  // InputText тянет базовый стек PrimeVue (BaseInput ждёт установленный
+  // плагин) — в юнит-тестах это обычное поле ввода.
+  InputText: InputStub('inputtext-stub'),
   ConfirmDialog: {
     props: ['visible', 'header', 'message', 'confirmLabel', 'dangerConfirm'],
     emits: ['confirm', 'cancel'],

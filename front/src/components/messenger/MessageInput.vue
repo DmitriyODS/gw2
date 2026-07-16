@@ -168,7 +168,7 @@
 import { ref, computed, nextTick, onMounted, onBeforeUnmount, watch } from 'vue'
 import { uploadAttachment } from '@/api/messenger.js'
 import { selectionViewportRect } from '@/utils/textareaSelection.js'
-import EmojiPicker from '@/components/messenger/EmojiPicker.vue'
+import EmojiPicker from '@/components/common/EmojiPicker.vue'
 import ProgressSpinner from 'primevue/progressspinner'
 import { useMessengerStore } from '@/stores/messenger.js'
 

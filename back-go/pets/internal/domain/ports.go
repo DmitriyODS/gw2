@@ -19,6 +19,16 @@ type PetRepo interface {
 	// SaveEvolution — сохранить ТОЛЬКО поля эволюции (stage/species/
 	// personality/unlocked_species), не трогая балансы и квест.
 	SaveEvolution(ctx context.Context, pet *Pet) error
+	// SaveNeeds — узкое сохранение потребностей и состояния болезни (шкалы,
+	// needs_at, ailment/sick_since/recovery): ленивый пересчёт убывания идёт
+	// на READ-пути, и full-row SavePet затирал бы там конкурентные начисления
+	// хуков (та же причина, что у SaveEvolution).
+	SaveNeeds(ctx context.Context, pet *Pet) error
+	// AdjustNeeds — атомарный сдвиг шкал (кламп 0..NeedMax) одним UPDATE;
+	// возвращает шкалы ПОСЛЕ применения (как AdjustBalances): вызывающий
+	// кладёт результат в свой снапшот, а не досчитывает дельту сам — иначе
+	// конкурентный сдвиг учтётся дважды.
+	AdjustNeeds(ctx context.Context, userID int64, deltas map[string]int) (NeedValues, error)
 	// StartAdventure — узкий UPDATE полей приключения (не full-row SavePet):
 	// проставляет срок/локацию, только если питомец не болен и не в пути
 	// (false — гонка/уже в пути, ошибки нет).
@@ -31,6 +41,12 @@ type PetRepo interface {
 	// приключение и списывает cost (guard: в пути и хватает кудосов);
 	// false — гонка (уже вернулся) либо недостаток средств.
 	RecallAdventure(ctx context.Context, userID int64, cost int) (place string, ok bool, err error)
+	// RunAway — побег заброшенного питомца: атомарный сброс ПРОГРЕССА
+	// (стадия/XP/вид/характер/стрик/потребности) с guard'ом «болеет дольше
+	// sickBefore» в WHERE — конкурентные вызовы (ленивый GET и фоновый цикл)
+	// зафиксируют побег ровно один раз. Кудосы, гардероб, домик, банк и
+	// поколение остаются. false — гейт не сошёлся.
+	RunAway(ctx context.Context, userID int64, sickBefore time.Time) (bool, error)
 	// DeletePet — удалить питомца и связанные данные (поглаживания, покупки,
 	// недельные кудосы; история — каскадом FK) одной транзакцией.
 	DeletePet(ctx context.Context, userID int64) error

@@ -318,7 +318,23 @@ func (h *handlers) setHouseTheme(c *fiber.Ctx) error {
 	return c.JSON(resp)
 }
 
-// ────────────────── прогулка / лечение / поглаживание ──────────────
+// ──────── прогулка / лечение / сон / купание / поглаживание ────────
+
+func (h *handlers) sleepPet(c *fiber.Ctx) error {
+	resp, err := h.eps.SleepPet(c.Context(), scope(c))
+	if err != nil {
+		return h.respondError(c, err)
+	}
+	return c.JSON(resp)
+}
+
+func (h *handlers) bathPet(c *fiber.Ctx) error {
+	resp, err := h.eps.BathPet(c.Context(), scope(c))
+	if err != nil {
+		return h.respondError(c, err)
+	}
+	return c.JSON(resp)
+}
 
 func (h *handlers) walkPet(c *fiber.Ctx) error {
 	resp, err := h.eps.WalkPet(c.Context(), scope(c))

@@ -222,5 +222,10 @@ public class MainActivity extends BridgeActivity {
             "portal", "Портал", NotificationManager.IMPORTANCE_DEFAULT);
         portal.setDescription("Новые посты корпоративного портала");
         nm.createNotificationChannel(portal);
+
+        NotificationChannel pets = new NotificationChannel(
+            "pets", "Питомцы", NotificationManager.IMPORTANCE_DEFAULT);
+        pets.setDescription("Грувик заболел или сбежал");
+        nm.createNotificationChannel(pets);
     }
 }

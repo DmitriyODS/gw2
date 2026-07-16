@@ -42,13 +42,15 @@ func TestPetsTaskClosedHookAcrossServices(t *testing.T) {
 		pr := petsAPI.doJSON(t, http.MethodGet, "/api/pets/pet", admin.Token, nil)
 		requireStatus(t, pr, 200, "pet после закрытия")
 		kudos, xp = pr.Num("kudos"), pr.Num("xp")
-		if kudos == 5 && xp == 8 {
+		if kudos == 5 && xp == 12 {
 			break
 		}
 		time.Sleep(300 * time.Millisecond)
 	}
-	if kudos != 5 || xp != 8 {
-		t.Fatalf("начисления за закрытие: kudos=%v xp=%v, ожидалось 5/8", kudos, xp)
+	// 5 кудосов и 8 XP за задачу; XP свежего (полного сил) питомца множится
+	// настроением ×1.5 → 12.
+	if kudos != 5 || xp != 12 {
+		t.Fatalf("начисления за закрытие: kudos=%v xp=%v, ожидалось 5/12", kudos, xp)
 	}
 
 	// 3. Рейтинг компании видит кудосы недели героя.
@@ -90,8 +92,9 @@ func TestPetsUnitStoppedAwardsKudosAndXP(t *testing.T) {
 		}
 		time.Sleep(300 * time.Millisecond)
 	}
-	// 30 минут → 6 кудосов (30/5), 10 XP (30/3).
-	if kudos != 6 || xp != 10 {
-		t.Fatalf("начисления за 30-минутный юнит: kudos=%v xp=%v, ожидалось 6/10", kudos, xp)
+	// 30 минут → 6 кудосов (30/5) и 10 XP (30/3), помноженные на настроение
+	// свежего питомца (×1.5) → 15.
+	if kudos != 6 || xp != 15 {
+		t.Fatalf("начисления за 30-минутный юнит: kudos=%v xp=%v, ожидалось 6/15", kudos, xp)
 	}
 }

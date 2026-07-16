@@ -57,11 +57,18 @@ export const deleteAttachment = (attachmentId) =>
 // ── Комментарии (плоские) ──
 export const getComments = (postId) => apiRequest(`/portal/posts/${postId}/comments`)
 
-export const createComment = (postId, text) =>
-  apiRequest(`/portal/posts/${postId}/comments`, { method: 'POST', body: { text } })
+// replyToId — ответ на комментарий (дерево обсуждения); null — корневой.
+export const createComment = (postId, text, replyToId = null) =>
+  apiRequest(`/portal/posts/${postId}/comments`, {
+    method: 'POST', body: { text, reply_to_id: replyToId },
+  })
 
 export const deleteComment = (commentId) =>
   apiRequest(`/portal/comments/${commentId}`, { method: 'DELETE' })
+
+// Лайк комментария — toggle одной ручкой (как реакции мессенджера).
+export const likeComment = (commentId) =>
+  apiRequest(`/portal/comments/${commentId}/like`, { method: 'POST' })
 
 // ── Реакции ──
 export const addReaction = (postId, emoji) =>

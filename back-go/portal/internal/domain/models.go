@@ -66,14 +66,19 @@ type Attachment struct {
 	URL string `json:"url"`
 }
 
-// Comment — плоский комментарий поста (без reply_to — по итогам исследования
-// стандарт для новостной ленты, не вложенное дерево).
+// Comment — комментарий поста. ReplyToID — родитель в дереве обсуждения
+// (NULL — корневой); удаление родителя уносит ветку каскадом FK.
+// LikeCount/Liked заполняются при чтении батчем (без N+1).
 type Comment struct {
 	ID        int64     `json:"id"`
 	PostID    int64     `json:"post_id"`
 	AuthorID  int64     `json:"author_id"`
+	ReplyToID *int64    `json:"reply_to_id"`
 	Text      string    `json:"text"`
 	CreatedAt time.Time `json:"created_at"`
+
+	LikeCount int  `json:"like_count"`
+	Liked     bool `json:"liked"`
 }
 
 // Reaction — реакция пользователя на пост (уникальна по post_id+user_id+emoji).

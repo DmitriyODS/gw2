@@ -12,6 +12,8 @@ export const LEDGER_META = {
   walk: { icon: 'directions_walk', group: 'spend', text: () => 'Прогулка с питомцем' },
   heal: { icon: 'healing', group: 'spend', text: () => 'Лечение питомца' },
   stroke: { icon: 'pets', group: 'spend', text: (e) => `Поглаживание питомца${e.counterparty ? ` — ${e.counterparty.fio}` : ''}` },
+  stroke_in: { icon: 'volunteer_activism', group: 'social', text: (e) => `${e.counterparty?.fio || 'Коллега'} погладил вашего питомца` },
+  bath: { icon: 'shower', group: 'spend', text: () => 'Купание питомца' },
   shop: { icon: 'shopping_bag', group: 'spend', text: () => 'Покупка в магазине' },
   house: { icon: 'chair', group: 'spend', text: () => 'Декор для домика' },
   transfer_in: { icon: 'call_received', group: 'social', text: (e) => `Перевод от ${e.counterparty?.fio || 'коллеги'}${e.comment ? ` — «${e.comment}»` : ''}` },
@@ -39,7 +41,8 @@ export const ledgerGroup = (e) => LEDGER_META[e.kind]?.group || (e.delta > 0 ? '
 export const KIND_TITLES = {
   unit: 'Юниты', task_closed: 'Задачи', quest: 'Квесты', adventure: 'Приключения',
   adventure_recall: 'Возврат из похода', season: 'Сезонный трек',
-  feed: 'Кормление', walk: 'Прогулки', heal: 'Лечение', stroke: 'Поглаживания',
+  feed: 'Кормление', walk: 'Прогулки', heal: 'Лечение', bath: 'Купание',
+  stroke: 'Поглаживания', stroke_in: 'Внимание коллег',
   shop: 'Магазин', house: 'Домик', transfer_in: 'Переводы (вход)',
   transfer_out: 'Переводы (исход)', charity: 'Благотворительность',
   bank_deposit: 'Вклад', bank_withdraw: 'Вклад (снятие)', bank_interest: 'Проценты',

@@ -49,7 +49,12 @@ type Pet struct {
 	FeedStreak      int
 	LastFedDate     *time.Time // date
 	SickSince       *time.Time
+	Ailment         *string // вид болезни (Ailments); NULL ⟺ SickSince == nil
 	Recovery        int
+	// Потребности: шкалы 0..100 и момент, до которого убывание уже применено
+	// (ленивый пересчёт — ApplyNeedsDecay).
+	Needs   NeedValues
+	NeedsAt time.Time
 	Personality     *string
 	UnlockedSpecies []string
 	QuestDate       *time.Time // date
@@ -105,6 +110,75 @@ func (h *HouseItem) UnmarshalJSON(b []byte) error {
 // Away — питомец сейчас в приключении (срок ещё не истёк).
 func (p *Pet) Away(now time.Time) bool {
 	return p.AdventureUntil != nil && now.Before(*p.AdventureUntil)
+}
+
+// Sick — питомец болен (любой болезнью).
+func (p *Pet) Sick() bool { return p.SickSince != nil }
+
+// AilmentKey — вид болезни; "" — здоров. Питомцы, заболевшие до появления
+// видов болезней, считаются хандрящими (единственная прежняя болезнь).
+func (p *Pet) AilmentKey() string {
+	if p.SickSince == nil {
+		return ""
+	}
+	if p.Ailment == nil || *p.Ailment == "" {
+		return AilmentBlues
+	}
+	return *p.Ailment
+}
+
+// Fall — уложить питомца в болезнь (без сохранения): счётчик лечения с нуля.
+func (p *Pet) Fall(ailment string, now time.Time) {
+	p.SickSince = &now
+	p.Ailment = &ailment
+	p.Recovery = 0
+}
+
+// Cure — выздороветь (без сохранения).
+func (p *Pet) Cure() {
+	p.SickSince = nil
+	p.Ailment = nil
+	p.Recovery = 0
+}
+
+// ApplyNeedsDecay — ленивое убывание потребностей к моменту now (без
+// сохранения): применяет целые тики, прошедшие с NeedsAt, и сдвигает NeedsAt
+// ровно на них — дробный хвост доживает до следующего вызова, поэтому частый
+// поллинг клиента не «съедает» убывание. Возвращает true, если состояние
+// изменилось (нужно сохранить).
+func (p *Pet) ApplyNeedsDecay(now time.Time) bool {
+	if p.NeedsAt.IsZero() {
+		p.NeedsAt = now
+		return true
+	}
+	ticks := int(now.Sub(p.NeedsAt) / NeedTick)
+	if ticks <= 0 {
+		return false
+	}
+	p.NeedsAt = p.NeedsAt.Add(time.Duration(ticks) * NeedTick)
+	for _, n := range Needs {
+		p.Needs.Add(n.Key, -n.DecayPerTick*ticks)
+	}
+	return true
+}
+
+// ApplyNeedGains — влияние действия на шкалы (без сохранения).
+func (p *Pet) ApplyNeedGains(action string) {
+	for key, delta := range NeedGains[action] {
+		p.Needs.Add(key, delta)
+	}
+}
+
+// PendingAilment — болезнь, которую заслужила запущенная потребность
+// ("" — ни одна). Здоровье проверяется вызывающим: болеть двумя болезнями
+// сразу питомец не умеет.
+func (p *Pet) PendingAilment() string {
+	for _, n := range Needs {
+		if n.Ailment != "" && p.Needs.Get(n.Key) <= 0 {
+			return n.Ailment
+		}
+	}
+	return ""
 }
 
 // ActiveUnit — активный юнит для блока «Сейчас в эфире».

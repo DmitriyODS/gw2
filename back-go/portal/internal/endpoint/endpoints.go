@@ -31,6 +31,7 @@ type Endpoints struct {
 	ListComments  endpoint.Endpoint
 	CreateComment endpoint.Endpoint
 	DeleteComment endpoint.Endpoint
+	LikeComment   endpoint.Endpoint
 
 	AddReaction    endpoint.Endpoint
 	RemoveReaction endpoint.Endpoint
@@ -110,6 +111,7 @@ type AttachmentReq struct {
 type ListCommentsReq struct {
 	CompanyID int64
 	PostID    int64
+	ViewerID  int64
 }
 
 type CreateCommentReq struct {
@@ -117,6 +119,7 @@ type CreateCommentReq struct {
 	PostID    int64
 	AuthorID  int64
 	Text      string
+	ReplyToID *int64
 }
 
 type DeleteCommentReq struct {
@@ -124,6 +127,12 @@ type DeleteCommentReq struct {
 	CommentID int64
 	UserID    int64
 	RoleLevel int
+}
+
+type LikeCommentReq struct {
+	CompanyID int64
+	CommentID int64
+	UserID    int64
 }
 
 type ReactionReq struct {
@@ -206,15 +215,19 @@ func New(s *service.Service) Endpoints {
 		},
 		ListComments: func(ctx context.Context, request any) (any, error) {
 			r := request.(ListCommentsReq)
-			return s.ListComments(ctx, r.CompanyID, r.PostID)
+			return s.ListComments(ctx, r.CompanyID, r.PostID, r.ViewerID)
 		},
 		CreateComment: func(ctx context.Context, request any) (any, error) {
 			r := request.(CreateCommentReq)
-			return s.CreateComment(ctx, r.CompanyID, r.PostID, r.AuthorID, r.Text)
+			return s.CreateComment(ctx, r.CompanyID, r.PostID, r.AuthorID, r.Text, r.ReplyToID)
 		},
 		DeleteComment: func(ctx context.Context, request any) (any, error) {
 			r := request.(DeleteCommentReq)
 			return nil, s.DeleteComment(ctx, r.CompanyID, r.CommentID, r.UserID, r.RoleLevel)
+		},
+		LikeComment: func(ctx context.Context, request any) (any, error) {
+			r := request.(LikeCommentReq)
+			return s.LikeComment(ctx, r.CompanyID, r.CommentID, r.UserID)
 		},
 		AddReaction: func(ctx context.Context, request any) (any, error) {
 			r := request.(ReactionReq)

@@ -2,6 +2,7 @@
 package dto
 
 import (
+	"math"
 	"sort"
 	"time"
 
@@ -56,6 +57,18 @@ type PetDTO struct {
 	Sick             bool            `json:"sick"`
 	Recovery         int             `json:"recovery"`
 	RecoveryTarget   int             `json:"recovery_target"`
+	// Болезнь: вид, подпись и рецепт (nil — питомец здоров).
+	Ailment      *string `json:"ailment"`
+	AilmentTitle *string `json:"ailment_title,omitempty"`
+	AilmentHint  *string `json:"ailment_hint,omitempty"`
+	// RunawayInDays — сколько дней болезни осталось до побега; заполняется
+	// только когда пора бить тревогу (RunawayWarnDays).
+	RunawayInDays *int `json:"runaway_in_days,omitempty"`
+	// Потребности и настроение (среднее шкал; множит XP за работу).
+	Needs      domain.NeedValues `json:"needs"`
+	Mood       int               `json:"mood"`
+	MoodTitle  string            `json:"mood_title"`
+	MoodFactor float64           `json:"mood_factor"`
 	Personality      *string         `json:"personality"`
 	PersonalityTitle *string         `json:"personality_title"`
 	UnlockedSpecies  []string        `json:"unlocked_species"`
@@ -70,11 +83,18 @@ type PetDTO struct {
 	HousePetY        *float64           `json:"house_pet_y,omitempty"`
 
 	// Контекстные поля.
-	FeedsLeft *int    `json:"feeds_left,omitempty"`
-	FeedsMax  *int    `json:"feeds_max,omitempty"`
-	Phrase    *string `json:"phrase,omitempty"`
-	Evolved   *bool   `json:"evolved,omitempty"`
-	Recovered *bool   `json:"recovered,omitempty"`
+	FeedsLeft  *int    `json:"feeds_left,omitempty"`
+	FeedsMax   *int    `json:"feeds_max,omitempty"`
+	SleepsLeft *int    `json:"sleeps_left,omitempty"`
+	SleepsMax  *int    `json:"sleeps_max,omitempty"`
+	BathsLeft  *int    `json:"baths_left,omitempty"`
+	BathsMax   *int    `json:"baths_max,omitempty"`
+	Phrase     *string `json:"phrase,omitempty"`
+	Evolved    *bool   `json:"evolved,omitempty"`
+	Recovered  *bool   `json:"recovered,omitempty"`
+	// Runaway — разовое: питомец сбежал именно на этом запросе (как
+	// AdventureReward — фиксируется ровно один раз).
+	Runaway *RunawayDTO `json:"runaway,omitempty"`
 	// AdventureReward — разовая награда за вернувшееся приключение
 	// (только в ответе GetMyPet, зафиксировавшем возврат — как Recovered).
 	AdventureReward *AdventureRewardDTO `json:"adventure_reward,omitempty"`
@@ -88,6 +108,14 @@ type AdventureRewardDTO struct {
 	Kudos int    `json:"kudos"`
 	XP    int    `json:"xp"`
 	Place string `json:"place"`
+}
+
+// RunawayDTO — питомец сбежал: кто ушёл, от какой болезни и после скольких
+// дней (клиент показывает прощание и новое яйцо).
+type RunawayDTO struct {
+	Name    string `json:"name"`
+	Ailment string `json:"ailment"`
+	Days    int    `json:"days"`
 }
 
 // NewPet — снапшот питомца для REST-ответов.
@@ -104,9 +132,10 @@ func NewPet(p *domain.Pet) *PetDTO {
 		FeedStreak:     p.FeedStreak,
 		LastFedDate:    isoDate(p.LastFedDate),
 		User:           p.User,
-		Sick:           p.SickSince != nil,
+		Sick:           p.Sick(),
 		Recovery:       p.Recovery,
 		RecoveryTarget: domain.RecoveryTarget,
+		Needs:          p.Needs,
 		Personality:    p.Personality,
 		AdventureUntil: isoTimePtr(p.AdventureUntil),
 		AdventurePlace: p.AdventurePlace,
@@ -120,6 +149,27 @@ func NewPet(p *domain.Pet) *PetDTO {
 	if p.Stage < domain.MaxStage {
 		next := domain.StageXP[p.Stage+1]
 		dto.NextStageXP = &next
+	}
+	dto.Mood = p.Needs.Mood()
+	dto.MoodTitle = domain.MoodTitle(dto.Mood)
+	dto.MoodFactor = domain.MoodFactor(dto.Mood)
+	if key := p.AilmentKey(); key != "" {
+		dto.Ailment = &key
+		if a, ok := domain.Ailments[key]; ok {
+			title, hint := a.Title, a.Hint
+			dto.AilmentTitle, dto.AilmentHint = &title, &hint
+		}
+		// Предупреждение о побеге — только когда до него рукой подать.
+		// Считаем ОСТАВШИЕСЯ дни вверх (питомец, которому осталось 3 дня и
+		// 20 часов, ждёт ещё 4 дня, а не 3).
+		if p.SickSince != nil {
+			until := p.SickSince.AddDate(0, 0, domain.RunawaySickDays)
+			left := int(math.Ceil(time.Until(until).Hours() / 24))
+			if left <= domain.RunawayWarnDays {
+				warn := max(0, left)
+				dto.RunawayInDays = &warn
+			}
+		}
 	}
 	if p.Personality != nil {
 		if pers, ok := domain.Personalities[*p.Personality]; ok {

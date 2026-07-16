@@ -160,6 +160,63 @@ export const RARITY_TITLE = {
   legendary: 'Легендарный',
 }
 
+// Потребности грувика (≡ domain.Needs в petsvc): шкалы 0..100 тают со
+// временем, пустая ведёт в свою болезнь (кроме общения — оно только кормит
+// настроение). Порядок массива = порядок показа шкал.
+export const NEEDS = [
+  { key: 'satiety', emoji: '🍖', title: 'Сытость', hint: 'Тает за сутки. Кормите — иначе истощение.' },
+  { key: 'energy', emoji: '⚡', title: 'Энергия', hint: 'Работа и прогулки утомляют. Восполняет сон.' },
+  { key: 'hygiene', emoji: '🫧', title: 'Чистота', hint: 'Прогулки пачкают. Восполняет купание.' },
+  { key: 'social', emoji: '💬', title: 'Общение', hint: 'Растёт, когда грувика гладят коллеги.' },
+]
+
+// Болезни (≡ domain.Ailments в petsvc): у каждой своя причина и рецепт.
+// Неверное лечение почти не помогает — cure перечисляет, что реально лечит.
+export const AILMENTS = {
+  blues: { emoji: '😔', title: 'Хандра', cure: 'Юниты, прогулка, аптечка' },
+  hunger: { emoji: '🥣', title: 'Истощение', cure: 'Еда (бульон), сон' },
+  cold: { emoji: '🤒', title: 'Простуда', cure: 'Сон, аптечка' },
+  grime: { emoji: '🧼', title: 'Грязнуля', cure: 'Купание' },
+}
+
+export function ailmentMeta(key) {
+  return AILMENTS[key] || { emoji: '🤒', title: 'Болезнь', cure: 'Забота' }
+}
+
+// Подпись настроения (≡ domain.MoodTitle) — бэк присылает mood_title, но
+// зоопарку коллег он приходит только числом.
+export function moodTitle(mood) {
+  if (mood >= 80) return 'Отличное'
+  if (mood >= 60) return 'Хорошее'
+  if (mood >= 40) return 'Обычное'
+  if (mood >= 20) return 'Так себе'
+  return 'Плохое'
+}
+
+// Эмодзи-настроение для карточек: лицо грувика в зависимости от состояния.
+export function moodEmoji(pet) {
+  if (!pet) return '🙂'
+  if (pet.sick) return ailmentMeta(pet.ailment).emoji
+  const mood = pet.mood ?? 100
+  if (mood >= 80) return '😄'
+  if (mood >= 60) return '🙂'
+  if (mood >= 40) return '😐'
+  if (mood >= 20) return '😕'
+  return '😢'
+}
+
+// Самая запущенная потребность питомца — ей и посвящена подсказка на
+// карточке коллеги («его давно не гладили»).
+export function worstNeed(pet) {
+  if (!pet?.needs) return null
+  let worst = null
+  for (const need of NEEDS) {
+    const value = pet.needs[need.key] ?? 100
+    if (!worst || value < worst.value) worst = { ...need, value }
+  }
+  return worst
+}
+
 // Характеры (≡ domain.Personalities в petsvc). Характер пересчитывается
 // по юнитам за 21 день; desc — критерий, по которому он был присвоен.
 export const PERSONALITIES = {
@@ -194,16 +251,28 @@ export const PERSONALITIES = {
 export const ACTIVITY_META = {
   fed: { icon: 'restaurant', text: (p) => `Покормили${p?.streak ? ` — стрик ${p.streak} дн.` : ''}` },
   walked: { icon: 'directions_walk', text: () => 'Прогулка' },
-  healed: { icon: 'healing', text: () => 'Лечение' },
+  healed: { icon: 'healing', text: () => 'Лечение аптечкой' },
+  slept: { icon: 'bedtime', text: () => 'Выспался' },
+  bathed: { icon: 'shower', text: () => 'Купание' },
   evolved: { icon: 'auto_awesome', text: (p) => `Эволюция: ${PET_STAGES[p?.stage] || ''}`.trim() },
-  sickness_started: { icon: 'sick', text: () => 'Заболел — давно не было юнитов' },
+  sickness_started: {
+    icon: 'sick',
+    text: (p) => `Заболел: ${ailmentMeta(p?.ailment).title.toLowerCase()}`,
+  },
   recovered: { icon: 'favorite', text: () => 'Выздоровел' },
+  ran_away: {
+    icon: 'directions_run',
+    text: (p) => `${p?.name || 'Грувик'} сбежал — болел ${p?.days ?? ''} дней без лечения`,
+  },
   item_bought: {
     icon: 'shopping_bag',
     text: (p) => `Куплено: ${shopItemTitle(p)}${p?.mystery ? ' (сюрприз дня)' : ''}`,
   },
   item_equipped: { icon: 'styler', text: (p) => `Надето: ${shopItemTitle(p)}` },
-  stroked_by: { icon: 'pets', text: () => 'Коллега погладил питомца' },
+  stroked_by: {
+    icon: 'pets',
+    text: (p) => `Коллега погладил питомца${p?.kudos ? ` — +${p.kudos} кудосов` : ''}`,
+  },
   adventure_started: {
     icon: 'explore',
     text: (p) => `Отправился в приключение${p?.place ? ` ${p.place}` : ''}`,

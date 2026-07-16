@@ -44,10 +44,16 @@ type PostRepository interface {
 	// AttachmentPaths — пути файлов поста (для чистки хранилища при удалении).
 	AttachmentPaths(ctx Ctx, postID int64) ([]string, error)
 
-	ListComments(ctx Ctx, postID int64) ([]*Comment, error)
+	// ListComments — обсуждение поста плоским списком в хронологии; дерево
+	// строит клиент по reply_to_id. Лайки (счётчик + «мой») приходят батчем
+	// для viewerID — по одному запросу на список, не на комментарий.
+	ListComments(ctx Ctx, postID, viewerID int64) ([]*Comment, error)
 	GetComment(ctx Ctx, id int64) (*Comment, error)
 	CreateComment(ctx Ctx, c *Comment) error
 	DeleteComment(ctx Ctx, id int64) error
+	// ToggleCommentLike — поставить/снять лайк одной операцией; возвращает
+	// состояние после переключения (liked) и актуальный счётчик.
+	ToggleCommentLike(ctx Ctx, commentID, userID int64) (liked bool, count int, err error)
 
 	AddReaction(ctx Ctx, r *Reaction) error
 	RemoveReaction(ctx Ctx, postID, userID int64, emoji string) error

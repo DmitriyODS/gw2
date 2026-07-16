@@ -15,6 +15,7 @@ export function registerPortalSocketHandlers(socket) {
 
   socket.on('comment:new', (p) => usePortalStore().applyCommentSocket('new', p))
   socket.on('comment:deleted', (p) => usePortalStore().applyCommentSocket('deleted', p))
+  socket.on('comment:liked', (p) => usePortalStore().applyCommentSocket('liked', p))
 
   socket.on('reaction:added', (p) => usePortalStore().applyReactionSocket('added', p))
   socket.on('reaction:removed', (p) => usePortalStore().applyReactionSocket('removed', p))

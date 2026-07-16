@@ -5,7 +5,11 @@
         <span class="material-symbols-outlined">pets</span>
         Питомцы коллег
       </h3>
-      <span class="cp-hint">Тап по питомцу — погладить ладошкой (<KudosCoin class="cp-hint-coin" /> 2 за поглаживание, до 3 в день на питомца)</span>
+      <span class="cp-hint">
+        Тап по питомцу — погладить ладошкой: вы платите <KudosCoin class="cp-hint-coin" /> {{ STROKE_COST }},
+        хозяин получает <KudosCoin class="cp-hint-coin" /> {{ STROKE_REWARD }} и закрытую потребность
+        в общении (до {{ STROKE_DAILY_MAX }} раз в день на питомца)
+      </span>
     </header>
 
     <div v-if="pets.zoo.length" class="cp-grid">
@@ -26,7 +30,9 @@
           <div class="cp-figure" :class="{ sick: p.sick, pulse: pulsing[p.user_id] }">
             <span class="cp-emoji"><EmojiGlyph :char="petEmoji(p)" /></span>
             <span v-if="p.hat" class="cp-hat"><EmojiGlyph :char="shopItemEmoji({ kind: 'accessory', key: p.hat })" /></span>
-            <span v-if="p.sick" class="cp-sick" title="Болеет">🤒</span>
+            <span v-if="p.sick" class="cp-sick" :title="ailmentMeta(p.ailment).title">
+              <EmojiGlyph :char="ailmentMeta(p.ailment).emoji" />
+            </span>
             <span v-else-if="isAway(p)" class="cp-sick" title="В приключении">🧭</span>
             <span
               v-if="(p.generation || 1) >= 2"
@@ -38,6 +44,15 @@
           <span class="cp-owner">{{ firstName(p.user?.fio) }}</span>
           <span class="cp-stage">{{ PET_STAGES[p.stage] || '' }}</span>
 
+          <!-- Настроение и запущенная потребность: видно, кому внимание
+               нужнее всего — за этим и идут гладить. -->
+          <span class="cp-mood" :title="`Настроение: ${moodTitle(p.mood ?? 100)}`">
+            {{ moodEmoji(p) }} {{ moodTitle(p.mood ?? 100) }}
+          </span>
+          <span v-if="lonely(p)" class="cp-need" title="Питомца давно никто не гладил">
+            💬 Скучает по общению
+          </span>
+
           <span v-if="p.user_id === pets.myId" class="cp-tag">Ваш питомец</span>
           <span v-else-if="isAway(p)" class="cp-tag">🧭 В приключении</span>
           <span v-else-if="isStrokedOut(p)" class="cp-tag done">
@@ -45,7 +60,7 @@
           </span>
           <span v-else class="cp-tag action">
             <span class="material-symbols-outlined">volunteer_activism</span>
-            Погладить&nbsp;<KudosCoin class="cp-tag-coin" />&nbsp;2
+            Погладить&nbsp;<KudosCoin class="cp-tag-coin" />&nbsp;{{ STROKE_COST }}
           </span>
         </component>
         <!-- Домик коллеги (просмотр) — сиблинг карточки, как и удаление. -->
@@ -117,9 +132,19 @@ import PetHouseDialog from '@/components/pets/PetHouseDialog.vue'
 import { usePermission } from '@/composables/usePermission.js'
 import { usePetsStore } from '@/stores/pets.js'
 import { useNotificationsStore } from '@/stores/notifications.js'
-import { petEmoji, shopItemEmoji, PET_STAGES } from '@/utils/pets.js'
+import {
+  petEmoji, shopItemEmoji, PET_STAGES, ailmentMeta, moodEmoji, moodTitle, worstNeed,
+} from '@/utils/pets.js'
 
-const STROKE_COST = 2 // = domain.StrokeCost в petsvc
+const STROKE_COST = 2   // = domain.StrokeCost в petsvc
+const STROKE_REWARD = 3 // = domain.StrokeRewardKudos — достаётся хозяину
+
+// Питомец, которому внимание нужнее всего: общение — единственная
+// потребность, которую хозяин сам не закроет.
+function lonely(p) {
+  const worst = worstNeed(p)
+  return worst?.key === 'social' && worst.value <= 50
+}
 
 const pets = usePetsStore()
 const notify = useNotificationsStore()
@@ -329,6 +354,25 @@ button.cp-card:disabled { cursor: default; }
   background: var(--color-tertiary-container);
   color: var(--color-on-tertiary-container);
   margin-top: 2px;
+}
+
+.cp-mood {
+  margin-top: 5px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--color-text-dim);
+}
+
+/* Общение — единственная потребность, которую хозяин не закроет сам:
+   подсказка коллегам, к кому стоит зайти. */
+.cp-need {
+  margin-top: 3px;
+  font-size: 10.5px;
+  font-weight: 700;
+  padding: 1px 8px;
+  border-radius: var(--radius-full);
+  background: color-mix(in oklch, var(--color-warning) 18%, transparent);
+  color: var(--color-text);
 }
 
 .cp-tag {

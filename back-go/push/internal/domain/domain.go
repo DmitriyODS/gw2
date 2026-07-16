@@ -31,6 +31,7 @@ const (
 	ChannelCalls    = "calls"
 	ChannelKudos    = "kudos"
 	ChannelPortal   = "portal"
+	ChannelPets     = "pets"
 )
 
 // TokenStore — хранилище токенов устройств.

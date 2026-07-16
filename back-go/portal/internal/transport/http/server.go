@@ -81,6 +81,7 @@ func NewServer(eps endpoint.Endpoints, users domain.UserReader,
 	api.Get("/posts/:id<int>/comments", employee, h.listComments)
 	api.Post("/posts/:id<int>/comments", employee, h.createComment)
 	api.Delete("/comments/:id<int>", employee, h.deleteComment)
+	api.Post("/comments/:id<int>/like", employee, h.likeComment)
 
 	api.Post("/posts/:id<int>/reactions", employee, h.addReaction)
 	api.Delete("/posts/:id<int>/reactions", employee, h.removeReaction)

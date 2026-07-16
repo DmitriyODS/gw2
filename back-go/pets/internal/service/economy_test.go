@@ -13,6 +13,13 @@ import (
 
 func intp(n int) *int { return &n }
 
+// moodXP — сколько XP получит свежий питомец за base единиц работы: прямой XP
+// множится настроением, а у только что созданного грувика все потребности
+// полны (mood = 100).
+func moodXP(base int) int {
+	return int(float64(base) * domain.MoodFactor(domain.NeedMax))
+}
+
 // ── AwardKudos: дневные капы по источникам ─────────────────────────
 
 func TestAwardKudosRespectsDailyCap(t *testing.T) {
@@ -69,8 +76,8 @@ func TestAwardXPUsesAtomicAdjustAndNarrowEvolutionSave(t *testing.T) {
 	pet.XP = domain.StageXP[1] - 1 // следующий XP эволюционирует
 	env.pets.saves = 0
 
-	if got := env.svc.AwardXP(ctx, 1, 10, "xp_task", domain.XPTaskClosed, domain.XPTaskDailyCap); got != domain.XPTaskClosed {
-		t.Fatalf("granted = %d", got)
+	if got := env.svc.AwardXP(ctx, 1, 10, "xp_task", domain.XPTaskClosed, domain.XPTaskDailyCap); got != moodXP(domain.XPTaskClosed) {
+		t.Fatalf("granted = %d, want %d", got, moodXP(domain.XPTaskClosed))
 	}
 	if env.pets.adjustCalls != 1 {
 		t.Errorf("adjustCalls = %d, want 1", env.pets.adjustCalls)
@@ -103,13 +110,13 @@ func TestAwardXPForUnitMinutes(t *testing.T) {
 	ctx := context.Background()
 	env.pets.GetOrCreate(ctx, 1, 10)
 
-	// 30 минут юнита → 10 XP (по 1 за каждые 3 минуты).
+	// 30 минут юнита → 10 XP (по 1 за каждые 3 минуты) × настроение питомца.
 	got := env.svc.AwardXP(ctx, 1, 10, "xp_unit", 30/domain.XPUnitMinutesPer, domain.XPUnitDailyCap)
-	if got != 10 {
-		t.Errorf("granted = %d, want 10", got)
+	if got != moodXP(10) {
+		t.Errorf("granted = %d, want %d", got, moodXP(10))
 	}
-	if env.pets.byUser[1].XP != 10 {
-		t.Errorf("xp = %d, want 10", env.pets.byUser[1].XP)
+	if env.pets.byUser[1].XP != moodXP(10) {
+		t.Errorf("xp = %d, want %d", env.pets.byUser[1].XP, moodXP(10))
 	}
 	if len(env.pub.events) == 0 || env.pub.events[len(env.pub.events)-1] != "pet:update" {
 		t.Errorf("события: %v", env.pub.events)
@@ -121,30 +128,39 @@ func TestAwardXPDailyCap(t *testing.T) {
 	ctx := context.Background()
 	env.pets.GetOrCreate(ctx, 1, 10)
 
+	// Кап применяется к «сырым» единицам работы, множитель настроения — уже
+	// к выданному остатку.
 	env.svc.AwardXP(ctx, 1, 10, "xp_unit", 35, domain.XPUnitDailyCap)
-	if got := env.svc.AwardXP(ctx, 1, 10, "xp_unit", 20, domain.XPUnitDailyCap); got != 5 {
-		t.Errorf("второе начисление: %d, want 5 (остаток капа)", got)
+	if got := env.svc.AwardXP(ctx, 1, 10, "xp_unit", 20, domain.XPUnitDailyCap); got != moodXP(5) {
+		t.Errorf("второе начисление: %d, want %d (остаток капа)", got, moodXP(5))
 	}
 	if got := env.svc.AwardXP(ctx, 1, 10, "xp_unit", 1, domain.XPUnitDailyCap); got != 0 {
 		t.Errorf("сверх капа: %d, want 0", got)
 	}
-	if env.pets.byUser[1].XP != domain.XPUnitDailyCap {
-		t.Errorf("xp = %d, want %d", env.pets.byUser[1].XP, domain.XPUnitDailyCap)
+	if want := moodXP(35) + moodXP(5); env.pets.byUser[1].XP != want {
+		t.Errorf("xp = %d, want %d", env.pets.byUser[1].XP, want)
+	}
+	if env.daily.used["xp_unit"] != domain.XPUnitDailyCap {
+		t.Errorf("бюджет капа = %d, want %d", env.daily.used["xp_unit"], domain.XPUnitDailyCap)
 	}
 }
 
-func TestAwardXPFedBoost(t *testing.T) {
+// Настроение (среднее потребностей) множит прямой XP: ухоженный питомец
+// растёт быстрее запущенного.
+func TestAwardXPMoodFactor(t *testing.T) {
 	env := newEnv()
 	ctx := context.Background()
 	pet, _ := env.pets.GetOrCreate(ctx, 1, 10)
-	fed := todayMSK()
-	pet.LastFedDate = &fed // сегодня кормлен → сытость ×1.5
 
 	if got := env.svc.AwardXP(ctx, 1, 10, "xp_unit", 10, domain.XPUnitDailyCap); got != 15 {
-		t.Errorf("granted = %d, want 15 (10 × 1.5)", got)
+		t.Errorf("ухоженный питомец: granted = %d, want 15 (10 × 1.5)", got)
 	}
-	if env.pets.byUser[1].XP != 15 {
-		t.Errorf("xp = %d, want 15", env.pets.byUser[1].XP)
+
+	// Запущенный: потребности на нуле → множитель 0.7. Сытость держим выше
+	// нуля — пустая шкала уложила бы питомца в болезнь, а больному XP заморожен.
+	pet.Needs = domain.NeedValues{Satiety: 8, Energy: 8, Hygiene: 8, Social: 0}
+	if got := env.svc.AwardXP(ctx, 1, 10, "xp_task", 10, domain.XPTaskDailyCap); got != 7 {
+		t.Errorf("запущенный питомец: granted = %d, want 7 (10 × 0.7)", got)
 	}
 }
 
@@ -173,8 +189,8 @@ func TestAwardXPTriggersEvolution(t *testing.T) {
 	pet, _ := env.pets.GetOrCreate(ctx, 1, 10)
 	pet.XP = domain.StageXP[1] - 5
 
-	if got := env.svc.AwardXP(ctx, 1, 10, "xp_task", domain.XPTaskClosed, domain.XPTaskDailyCap); got != domain.XPTaskClosed {
-		t.Errorf("granted = %d", got)
+	if got := env.svc.AwardXP(ctx, 1, 10, "xp_task", domain.XPTaskClosed, domain.XPTaskDailyCap); got != moodXP(domain.XPTaskClosed) {
+		t.Errorf("granted = %d, want %d", got, moodXP(domain.XPTaskClosed))
 	}
 	if env.pets.byUser[1].Stage != 1 {
 		t.Errorf("stage = %d, want 1", env.pets.byUser[1].Stage)
@@ -197,8 +213,8 @@ func TestOnUnitStoppedAwardsKudosAndXP(t *testing.T) {
 	if env.pets.byUser[1].Kudos != 30/5 {
 		t.Errorf("kudos = %d, want %d", env.pets.byUser[1].Kudos, 30/5)
 	}
-	if env.pets.byUser[1].XP != 30/domain.XPUnitMinutesPer {
-		t.Errorf("xp = %d, want %d", env.pets.byUser[1].XP, 30/domain.XPUnitMinutesPer)
+	if want := moodXP(30 / domain.XPUnitMinutesPer); env.pets.byUser[1].XP != want {
+		t.Errorf("xp = %d, want %d", env.pets.byUser[1].XP, want)
 	}
 }
 
@@ -340,9 +356,8 @@ func TestHealPetRecovers(t *testing.T) {
 	ctx := context.Background()
 	pet, _ := env.pets.GetOrCreate(ctx, 1, 10)
 	pet.Kudos = domain.HealCost * domain.RecoveryTarget
-	now := time.Now()
-	pet.SickSince = &now
-	pet.Recovery = domain.RecoveryTarget - domain.HealRecoveryPoints
+	pet.Fall(domain.AilmentBlues, time.Now())
+	pet.Recovery = domain.RecoveryTarget - domain.CureFor(domain.AilmentBlues, domain.ActionHeal)
 
 	data, err := env.svc.HealPet(ctx, 1, 10)
 	if err != nil {
@@ -361,7 +376,10 @@ func TestHealPetRecovers(t *testing.T) {
 
 // ── Поглаживание чужого питомца ──────────────────────────────────────
 
-func TestStrokePetChargesStrokerAndBoostsOwner(t *testing.T) {
+// Поглаживание кормит признание: гладящий платит, а ВЛАДЕЛЕЦ поглаженного
+// получает кудосы (больше потраченных), XP, общение и строку недельного
+// рейтинга — иначе гладить друг друга незачем.
+func TestStrokePetRewardsOwner(t *testing.T) {
 	env := newEnv()
 	ctx := context.Background()
 	env.users.members = map[int64]map[int64]bool{
@@ -371,6 +389,7 @@ func TestStrokePetChargesStrokerAndBoostsOwner(t *testing.T) {
 	stroker.Kudos = domain.StrokeCost
 	owner, _ := env.pets.GetOrCreate(ctx, 1, 10)
 	ownerXPBefore := owner.XP
+	owner.Needs.Social = 10
 
 	if _, err := env.svc.StrokePet(ctx, 2, 1, 10); err != nil {
 		t.Fatalf("StrokePet: %v", err)
@@ -378,8 +397,21 @@ func TestStrokePetChargesStrokerAndBoostsOwner(t *testing.T) {
 	if env.pets.byUser[2].Kudos != 0 {
 		t.Errorf("у гладящего должны списаться кудосы: %d", env.pets.byUser[2].Kudos)
 	}
+	if env.pets.byUser[2].XP != domain.StrokeStrokerXP {
+		t.Errorf("гладящему полагается XP своему питомцу: %d", env.pets.byUser[2].XP)
+	}
+	if env.pets.byUser[1].Kudos != domain.StrokeRewardKudos {
+		t.Errorf("владелец должен получить кудосы: %d, want %d",
+			env.pets.byUser[1].Kudos, domain.StrokeRewardKudos)
+	}
 	if env.pets.byUser[1].XP != ownerXPBefore+domain.StrokeMoodXP {
 		t.Errorf("владельцу должен начислиться XP настроения: %d", env.pets.byUser[1].XP)
+	}
+	if want := 10 + domain.NeedGains[domain.ActionStrokeIn][domain.NeedSocial]; env.pets.byUser[1].Needs.Social != want {
+		t.Errorf("общение владельца = %d, want %d", env.pets.byUser[1].Needs.Social, want)
+	}
+	if env.pets.weeklyKudos[1] != domain.StrokeRewardKudos {
+		t.Errorf("признание за неделю = %d, want %d", env.pets.weeklyKudos[1], domain.StrokeRewardKudos)
 	}
 	used, _ := env.pets.StrokesToday(ctx, 1, 2, todayMSK())
 	if used != 1 {

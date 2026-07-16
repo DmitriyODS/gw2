@@ -42,6 +42,8 @@ type Endpoints struct {
 
 	WalkPet   endpoint.Endpoint
 	HealPet   endpoint.Endpoint
+	SleepPet  endpoint.Endpoint
+	BathPet   endpoint.Endpoint
 	StrokePet endpoint.Endpoint
 
 	GetZoo         endpoint.Endpoint
@@ -283,6 +285,14 @@ func New(svc *service.Service) Endpoints {
 		HealPet: func(ctx context.Context, request any) (any, error) {
 			r := request.(Scope)
 			return svc.HealPet(ctx, r.UserID, r.CompanyID)
+		},
+		SleepPet: func(ctx context.Context, request any) (any, error) {
+			r := request.(Scope)
+			return svc.SleepPet(ctx, r.UserID, r.CompanyID)
+		},
+		BathPet: func(ctx context.Context, request any) (any, error) {
+			r := request.(Scope)
+			return svc.BathPet(ctx, r.UserID, r.CompanyID)
 		},
 		StrokePet: func(ctx context.Context, request any) (any, error) {
 			r := request.(StrokeRequest)

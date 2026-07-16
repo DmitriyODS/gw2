@@ -44,10 +44,13 @@ export const buyItem = (item) => apiRequest('/pets/shop/buy', { method: 'POST', 
 export const buySpecies = (species) =>
   apiRequest('/pets/shop/buy-species', { method: 'POST', body: { species } })
 
-// ─────────────────── прогулка / лечение / поглаживание ─────────
+// ───────── прогулка / лечение / сон / купание / поглаживание ────
 
 export const walkPet = () => apiRequest('/pets/walk', { method: 'POST' })
 export const healPet = () => apiRequest('/pets/heal', { method: 'POST' })
+// Сон — единственное бесплатное действие ухода (восполняет энергию).
+export const sleepPet = () => apiRequest('/pets/sleep', { method: 'POST' })
+export const bathPet = () => apiRequest('/pets/bath', { method: 'POST' })
 export const strokePet = (userId) => apiRequest(`/pets/stroke/${userId}`, { method: 'POST' })
 
 // ────────────────────── зоопарк / рейтинг / эфир ────────────────
