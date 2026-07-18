@@ -72,7 +72,7 @@
         class="composer-body"
         rows="5"
         maxlength="10000"
-        placeholder="О чём хотите рассказать команде?"
+        placeholder="О чём хотите рассказать команде? Добавьте #теги для поиска"
         @input="autogrow"
         @keydown="onBodyKeydown"
         @contextmenu="onBodyContextmenu"

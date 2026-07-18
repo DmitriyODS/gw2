@@ -90,6 +90,18 @@ func (f *fakeRepo) ListPosts(_ domain.Ctx, filter domain.PostListFilter, _ int64
 		if filter.Pinned != nil && pinActive(p) != *filter.Pinned {
 			continue
 		}
+		if filter.Tag != "" {
+			found := false
+			for _, t := range p.Tags {
+				if t == filter.Tag {
+					found = true
+					break
+				}
+			}
+			if !found {
+				continue
+			}
+		}
 		if filter.BeforeCreatedAt != nil {
 			// Keyset: строго старше пары (created_at, id).
 			if p.CreatedAt.After(*filter.BeforeCreatedAt) ||
@@ -132,6 +144,31 @@ func (f *fakeRepo) CreatePost(_ domain.Ctx, p *domain.Post) error {
 	return nil
 }
 func (f *fakeRepo) UpdatePost(_ domain.Ctx, p *domain.Post) error { f.posts[p.ID] = p; return nil }
+func (f *fakeRepo) PopularTags(_ domain.Ctx, companyID int64, limit int) ([]domain.TagCount, error) {
+	counts := map[string]int{}
+	for _, p := range f.posts {
+		if p.CompanyID != companyID {
+			continue
+		}
+		for _, t := range p.Tags {
+			counts[t]++
+		}
+	}
+	out := make([]domain.TagCount, 0, len(counts))
+	for tag, n := range counts {
+		out = append(out, domain.TagCount{Tag: tag, Count: n})
+	}
+	sort.Slice(out, func(i, j int) bool {
+		if out[i].Count != out[j].Count {
+			return out[i].Count > out[j].Count
+		}
+		return out[i].Tag < out[j].Tag
+	})
+	if limit > 0 && len(out) > limit {
+		out = out[:limit]
+	}
+	return out, nil
+}
 func (f *fakeRepo) DeletePost(_ domain.Ctx, id int64) error {
 	delete(f.posts, id)
 	delete(f.atts, id)

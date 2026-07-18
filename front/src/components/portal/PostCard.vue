@@ -73,11 +73,23 @@
     <h3 v-if="post.title" class="post-title">{{ post.title }}</h3>
     <div class="post-body">
       <div ref="bodyEl" class="post-body-md" :class="{ collapsed: isTruncated && !expanded }">
-        <MarkdownView :source="post.body || ''" />
+        <MarkdownView :source="post.body || ''" @tag="onTagClick" />
       </div>
       <button v-if="isTruncated" class="post-more-btn" @click="expanded = !expanded">
         {{ expanded ? 'Свернуть' : 'Показать полностью' }}
       </button>
+    </div>
+
+    <!-- Хештеги поста — кликабельные чипы (фильтр ленты), как в соцсетях. -->
+    <div v-if="post.tags && post.tags.length" class="post-tags">
+      <button
+        v-for="tag in post.tags"
+        :key="tag"
+        class="post-tag"
+        :class="{ active: activeTag === tag }"
+        type="button"
+        @click="onTagClick(tag)"
+      >#{{ tag }}</button>
     </div>
 
     <!-- Одно фото — как загружено (без обрезки, пост тянется по высоте);
@@ -199,6 +211,13 @@ const topicChipStyle = computed(() => (topic.value?.color
   : {}))
 
 const canManage = computed(() => props.post.author_id === auth.userId || isAdmin())
+
+// Активный фильтр по хештегу — подсветка совпадающего чипа на карточке.
+const activeTag = computed(() => portal.filters.tag)
+function onTagClick(tag) {
+  if (!tag) return
+  portal.setTag(portal.filters.tag === tag ? null : tag)
+}
 
 const reactionCounts = computed(() => props.post.reaction_counts || {})
 const myReactions = computed(() => new Set(props.post.my_reactions || []))
@@ -557,6 +576,31 @@ function onDelete() {
   font-weight: 600;
   cursor: pointer;
   padding: 0;
+}
+
+/* Хештеги поста — кликабельные чипы (фильтр ленты). */
+.post-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.post-tag {
+  padding: 3px 10px;
+  border-radius: var(--radius-full);
+  border: 1px solid var(--acrylic-border);
+  background: var(--color-surface-high);
+  color: var(--color-primary);
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.12s, border-color 0.12s;
+}
+.post-tag:hover { background: var(--glass-hover-bg); border-color: color-mix(in oklch, var(--color-primary) 30%, var(--acrylic-border)); }
+.post-tag.active {
+  background: var(--color-primary-container);
+  border-color: var(--color-primary);
+  color: var(--color-on-primary-container);
 }
 
 .post-images {

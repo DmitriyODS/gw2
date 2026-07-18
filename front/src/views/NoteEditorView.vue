@@ -49,16 +49,19 @@
               </button>
             </div>
             <template v-if="isOwner">
-              <button class="np-icon" title="Группы" @click="groupsOpen = true">
-                <span class="material-symbols-outlined">folder</span>
+              <button class="np-icon" title="Теги" @click="tagsOpen = true">
+                <span class="material-symbols-outlined">sell</span>
               </button>
               <button class="np-icon" title="Поделиться" @click="shareOpen = true">
                 <span class="material-symbols-outlined">share</span>
               </button>
             </template>
             <!-- Экспорт доступен и адресатам шаринга (чтение есть — выгрузка тоже) -->
-            <button class="np-icon" title="Экспорт в .txt" @click="exportTxt">
-              <span class="material-symbols-outlined">download</span>
+            <button class="np-icon" title="Скачать .txt" @click="exportFile('txt')">
+              <span class="material-symbols-outlined">description</span>
+            </button>
+            <button class="np-icon" title="Скачать .docx" @click="exportFile('docx')">
+              <span class="material-symbols-outlined">article</span>
             </button>
             <button v-if="isOwner" class="np-icon danger" title="Удалить заметку" @click="deleteOpen = true">
               <span class="material-symbols-outlined">delete</span>
@@ -83,18 +86,22 @@
                 </div>
                 <div class="np-more-divider" />
                 <template v-if="isOwner">
-                  <button class="np-more-item" @click="pickMore(() => groupsOpen = true)">
-                    <span class="material-symbols-outlined">folder</span>
-                    Группы
+                  <button class="np-more-item" @click="pickMore(() => tagsOpen = true)">
+                    <span class="material-symbols-outlined">sell</span>
+                    Теги
                   </button>
                   <button class="np-more-item" @click="pickMore(() => shareOpen = true)">
                     <span class="material-symbols-outlined">share</span>
                     Поделиться
                   </button>
                 </template>
-                <button class="np-more-item" @click="pickMore(exportTxt)">
-                  <span class="material-symbols-outlined">download</span>
-                  Экспорт в .txt
+                <button class="np-more-item" @click="pickMore(() => exportFile('txt'))">
+                  <span class="material-symbols-outlined">description</span>
+                  Скачать .txt
+                </button>
+                <button class="np-more-item" @click="pickMore(() => exportFile('docx'))">
+                  <span class="material-symbols-outlined">article</span>
+                  Скачать .docx
                 </button>
                 <template v-if="isOwner">
                   <div class="np-more-divider" />
@@ -144,8 +151,8 @@
       </template>
     </div>
 
-    <NoteGroupsDialog v-model="groupsOpen" :note-id="noteId" :group-ids="groupIds" @saved="onGroupsSaved" />
-    <NoteShareDialog v-model="shareOpen" :note-id="noteId" />
+    <NoteTagsDialog v-model="tagsOpen" :note-id="noteId" :tag-ids="tagIds" @saved="onTagsSaved" />
+    <ShareDialog v-model="shareOpen" subject-type="note" :subject-id="noteId" />
 
     <!-- ПКМ на выделенном тексте: ИИ-действия + «Создать из выделенного» -->
     <NoteSelectionMenu
@@ -207,8 +214,8 @@ import { useBreakpoint } from '@/composables/useBreakpoint.js'
 import EmptyState from '@/components/common/EmptyState.vue'
 import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
 import NoteRichEditor from '@/components/notes/NoteRichEditor.vue'
-import NoteGroupsDialog from '@/components/notes/NoteGroupsDialog.vue'
-import NoteShareDialog from '@/components/notes/NoteShareDialog.vue'
+import NoteTagsDialog from '@/components/notes/NoteTagsDialog.vue'
+import ShareDialog from '@/components/notes/ShareDialog.vue'
 import NoteSelectionMenu from '@/components/notes/NoteSelectionMenu.vue'
 import NoteAiDialog from '@/components/notes/NoteAiDialog.vue'
 import NoteToDiaryDialog from '@/components/notes/NoteToDiaryDialog.vue'
@@ -250,7 +257,7 @@ const loading = ref(true)
 const notFound = ref(false)
 const title = ref('')
 const doc = ref(null)
-const groupIds = ref([])
+const tagIds = ref([])
 const editorRef = ref(null)
 
 // Доступ: owner | edit | view (заметка может быть чужой — адресный шаринг).
@@ -281,7 +288,7 @@ onMounted(async () => {
     const n = await api.getNote(noteId.value)
     title.value = n.title
     doc.value = n.doc && Object.keys(n.doc).length ? n.doc : null
-    groupIds.value = n.group_ids ?? []
+    tagIds.value = n.tag_ids ?? []
     myAccess.value = n.my_access || 'owner'
     ownerName.value = n.owner_name || ''
     ownerAvatarUrl.value = n.owner_avatar
@@ -402,23 +409,23 @@ async function uploadImageFile(file) {
   }
 }
 
-// ── Группы ──
-function onGroupsSaved(n) {
-  groupIds.value = n.group_ids ?? []
-  store.fetchGroups({ silent: true })
+// ── Теги ──
+function onTagsSaved(n) {
+  tagIds.value = n.tag_ids ?? []
+  store.fetchTags()
   store.fetchNotes({ silent: true })
 }
 
-// ── Экспорт .txt ──
-async function exportTxt() {
+// ── Экспорт txt/docx ──
+async function exportFile(format = 'txt') {
   await flush()
   try {
-    const resp = await api.exportNote(noteId.value)
+    const resp = await api.exportNote(noteId.value, format)
     const blob = await resp.blob()
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
     a.href = url
-    a.download = `${(title.value || 'Заметка').slice(0, 100)}.txt`
+    a.download = `${(title.value || 'Заметка').slice(0, 100)}.${format}`
     a.click()
     URL.revokeObjectURL(url)
   } catch (e) {
@@ -456,7 +463,7 @@ function startCollab(n) {
   collab.start()
   // Владелец знает адресатов — подписи курсоров без ожидания их join.
   if ((n.my_access || 'owner') === 'owner') {
-    api.getMembers(noteId.value)
+    api.getNoteMembers(noteId.value)
       .then((data) => {
         for (const m of data.members ?? []) namesMap.value[m.user_id] = m.fio
       })
@@ -567,7 +574,7 @@ async function copySelection() {
 }
 
 // ── Удаление ──
-const groupsOpen = ref(false)
+const tagsOpen = ref(false)
 const shareOpen = ref(false)
 const deleteOpen = ref(false)
 

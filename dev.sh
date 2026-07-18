@@ -384,6 +384,7 @@ printf "\033[1m▶ notesvc (Go)  HTTP :8103...\033[0m\n"
   REDIS_URL="redis://localhost:6379/0" \
   PASETO_PUBLIC_KEY="$PASETO_PUBLIC_KEY_DEV" \
   UPLOAD_FOLDER="$UPLOADS" \
+  AI_GRPC_ADDR="localhost:9093" \
   HTTP_ADDR=":8103" \
   exec go run ./cmd/notesvc
 ) &

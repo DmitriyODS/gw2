@@ -12,6 +12,10 @@ const ESCAPE_MAP = {
   '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
 }
 
+// Хештег: # не в середине слова/URL/html-сущности, затем 2..50 букв/цифр/_,
+// начиная с буквы или цифры. Зеркалит серверный tagRe (portalsvc).
+const TAG_RE = /(^|[^\p{L}\p{N}_&#/])#([\p{L}\p{N}][\p{L}\p{N}_]{1,49})/gu
+
 function escapeHtml(str) {
   return String(str).replace(/[&<>"']/g, (c) => ESCAPE_MAP[c])
 }
@@ -58,6 +62,12 @@ function parseInline(text) {
 
   s = s.replace(/\[([^\]]+)\]\(([^)\s]+)\)/g, (_, label, url) =>
     stash(`<a href="${escapeAttr(safeUrl(url))}" target="_blank" rel="noopener noreferrer" class="md-link">${label}</a>`))
+
+  // Хештеги #тег (как в соцсетях) → кликабельный чип. Сташим готовый HTML,
+  // чтобы автолинк и остальные правила его не трогали. Зеркалит серверный
+  // tagRe в portalsvc: # не в середине слова/URL, 2..50 букв/цифр/_.
+  s = s.replace(TAG_RE, (_, pre, tag) =>
+    pre + stash(`<a class="md-tag" data-tag="${escapeAttr(tag.toLowerCase())}">#${tag}</a>`))
 
   s = autoLink(s)
 

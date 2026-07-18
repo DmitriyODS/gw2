@@ -263,6 +263,7 @@ dev-notes: dev-infra
 	REDIS_URL="redis://localhost:6379/0" \
 	PASETO_PUBLIC_KEY="$(PASETO_PUBLIC_KEY_DEV)" \
 	UPLOAD_FOLDER="$(PWD)/uploads" \
+	AI_GRPC_ADDR="localhost:9093" \
 	HTTP_ADDR=":8103" \
 	go run ./cmd/notesvc
 

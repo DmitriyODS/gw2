@@ -24,9 +24,14 @@ type PostRepository interface {
 	// GetPostForViewer — пост с батч-подгруженными вложениями/счётчиками для
 	// одной карточки (те же данные, что ListPosts, для единичной записи).
 	GetPostForViewer(ctx Ctx, id, viewerID int64) (*Post, error)
+	// CreatePost/UpdatePost также сохраняют хештеги поста (p.Tags) в одной
+	// транзакции с самой записью — тело поста и его теги не расходятся.
 	CreatePost(ctx Ctx, p *Post) error
 	UpdatePost(ctx Ctx, p *Post) error
 	DeletePost(ctx Ctx, id int64) error
+	// PopularTags — топ хештегов компании по числу постов (для панели
+	// «Популярные теги» ленты).
+	PopularTags(ctx Ctx, companyID int64, limit int) ([]TagCount, error)
 	// PinPost — закрепить пост (until — автоистечение, nil = бессрочно),
 	// атомарно соблюдая лимит одновременно закреплённых на компанию (проверка
 	// лимита и UPDATE — в одной транзакции под локом компании; false — лимит

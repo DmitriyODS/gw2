@@ -3,12 +3,9 @@ package service
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"io"
 	"log/slog"
-	"maps"
 	"slices"
-	"strings"
 	"testing"
 
 	"github.com/DmitriyODS/gw2/back-go/notes/internal/domain"
@@ -16,124 +13,263 @@ import (
 
 func discardLogger() *slog.Logger { return slog.New(slog.NewTextHandler(io.Discard, nil)) }
 
-// fakeRepo — in-memory реализация порта для тестов бизнес-логики.
+// ── Fakes ────────────────────────────────────────────────────────────
+
 type fakeRepo struct {
-	notes   map[int64]*domain.Note
-	groups  map[int64]*domain.Group
-	items   map[int64][]int64 // noteID → groupIDs
-	shares  map[string]*domain.Share
-	members map[int64]map[int64]bool // noteID → userID → can_edit
-	nextID  int64
+	notes       map[int64]*domain.Note
+	folders     map[int64]*domain.Folder
+	tags        map[int64]*domain.Tag
+	noteTags    map[int64][]int64
+	shares      map[string]*domain.Share
+	noteUsers   map[int64]map[int64]bool // noteID → userID → canEdit
+	noteCos     map[int64]map[int64]bool // noteID → companyID → canEdit
+	folderUsers map[int64]map[int64]bool
+	folderCos   map[int64]map[int64]bool
+	next        int64
 }
 
 func newFakeRepo() *fakeRepo {
 	return &fakeRepo{
-		notes:   map[int64]*domain.Note{},
-		groups:  map[int64]*domain.Group{},
-		items:   map[int64][]int64{},
-		shares:  map[string]*domain.Share{},
-		members: map[int64]map[int64]bool{},
+		notes: map[int64]*domain.Note{}, folders: map[int64]*domain.Folder{}, tags: map[int64]*domain.Tag{},
+		noteTags: map[int64][]int64{}, shares: map[string]*domain.Share{},
+		noteUsers: map[int64]map[int64]bool{}, noteCos: map[int64]map[int64]bool{},
+		folderUsers: map[int64]map[int64]bool{}, folderCos: map[int64]map[int64]bool{},
 	}
 }
 
+func (f *fakeRepo) id() int64 { f.next++; return f.next }
+
+// ancestors — id папки и всех её предков.
+func (f *fakeRepo) ancestors(folderID *int64) []int64 {
+	out := []int64{}
+	for folderID != nil {
+		fol := f.folders[*folderID]
+		if fol == nil {
+			break
+		}
+		out = append(out, fol.ID)
+		folderID = fol.ParentID
+	}
+	return out
+}
+
+// ── Заметки ──
 func (f *fakeRepo) ListNotes(_ domain.Ctx, fl domain.NoteListFilter) ([]*domain.Note, error) {
 	out := []*domain.Note{}
 	for _, n := range f.notes {
-		if n.OwnerID != fl.OwnerID {
-			continue
-		}
-		if fl.GroupID > 0 && !slices.Contains(f.items[n.ID], fl.GroupID) {
+		if fl.OwnerID > 0 && n.OwnerID != fl.OwnerID {
 			continue
 		}
 		if n.Archived != fl.Archived {
 			continue
 		}
+		if fl.FolderSet {
+			var fid int64
+			if n.FolderID != nil {
+				fid = *n.FolderID
+			}
+			var want int64
+			if fl.FolderID != nil {
+				want = *fl.FolderID
+			}
+			if fid != want {
+				continue
+			}
+		}
+		if len(fl.TagIDs) > 0 {
+			hit := false
+			for _, t := range f.noteTags[n.ID] {
+				if slices.Contains(fl.TagIDs, t) {
+					hit = true
+					break
+				}
+			}
+			if !hit {
+				continue
+			}
+		}
 		out = append(out, n)
 	}
-	// Как в SQL: pinned_at DESC NULLS LAST, затем id DESC.
-	slices.SortFunc(out, func(a, b *domain.Note) int {
-		switch {
-		case a.PinnedAt != nil && b.PinnedAt == nil:
-			return -1
-		case a.PinnedAt == nil && b.PinnedAt != nil:
-			return 1
-		case a.PinnedAt != nil && b.PinnedAt != nil && !a.PinnedAt.Equal(*b.PinnedAt):
-			return b.PinnedAt.Compare(*a.PinnedAt)
-		default:
-			return int(b.ID - a.ID)
-		}
-	})
+	slices.SortFunc(out, func(a, b *domain.Note) int { return int(b.ID - a.ID) })
 	return out, nil
 }
 func (f *fakeRepo) GetNote(_ domain.Ctx, id int64) (*domain.Note, error) {
 	n := f.notes[id]
 	if n != nil {
-		n.GroupIDs = f.items[id]
+		n.TagIDs = f.noteTags[id]
 	}
 	return n, nil
 }
 func (f *fakeRepo) CreateNote(_ domain.Ctx, n *domain.Note) error {
-	f.nextID++
-	n.ID = f.nextID
+	n.ID = f.id()
 	f.notes[n.ID] = n
 	return nil
 }
-func (f *fakeRepo) UpdateNote(_ domain.Ctx, n *domain.Note) error {
-	if f.notes[n.ID] == nil {
-		return errors.New("no note")
+func (f *fakeRepo) UpdateNote(_ domain.Ctx, n *domain.Note) error { f.notes[n.ID] = n; return nil }
+func (f *fakeRepo) DeleteNote(_ domain.Ctx, id int64) error       { delete(f.notes, id); return nil }
+func (f *fakeRepo) MoveNote(_ domain.Ctx, id int64, folderID *int64) error {
+	if n := f.notes[id]; n != nil {
+		n.FolderID = folderID
 	}
-	f.notes[n.ID] = n
 	return nil
 }
-func (f *fakeRepo) DeleteNote(_ domain.Ctx, id int64) error {
-	delete(f.notes, id)
-	delete(f.items, id)
-	delete(f.members, id) // каскад по FK
+func (f *fakeRepo) SetNoteTags(_ domain.Ctx, noteID int64, tagIDs []int64) error {
+	f.noteTags[noteID] = tagIDs
 	return nil
 }
-func (f *fakeRepo) SetNoteGroups(_ domain.Ctx, noteID int64, groupIDs []int64) error {
-	f.items[noteID] = groupIDs
-	return nil
+func (f *fakeRepo) SharedByMeNoteIDs(_ domain.Ctx, ids []int64) (map[int64]bool, error) {
+	res := map[int64]bool{}
+	for _, id := range ids {
+		if len(f.noteUsers[id]) > 0 || len(f.noteCos[id]) > 0 {
+			res[id] = true
+		}
+	}
+	return res, nil
 }
-func (f *fakeRepo) ListGroups(_ domain.Ctx, ownerID int64) ([]*domain.Group, error) {
-	out := []*domain.Group{}
-	for _, g := range f.groups {
-		if g.OwnerID == ownerID {
-			out = append(out, g)
+func (f *fakeRepo) ListSharedWithMe(_ domain.Ctx, userID int64, companyIDs []int64, _ string) ([]*domain.Note, error) {
+	out := []*domain.Note{}
+	for _, n := range f.notes {
+		if n.OwnerID == userID {
+			continue
+		}
+		found, _, _ := f.NoteAccess(nil, userID, companyIDs, n.ID, n.FolderID)
+		if found {
+			out = append(out, n)
 		}
 	}
 	return out, nil
 }
-func (f *fakeRepo) GetGroup(_ domain.Ctx, id int64) (*domain.Group, error) { return f.groups[id], nil }
-func (f *fakeRepo) CreateGroup(_ domain.Ctx, g *domain.Group) error {
-	f.nextID++
-	g.ID = f.nextID
-	f.groups[g.ID] = g
+
+// ── Папки ──
+func (f *fakeRepo) ListFolders(_ domain.Ctx, ownerID int64) ([]*domain.Folder, error) {
+	out := []*domain.Folder{}
+	for _, fol := range f.folders {
+		if fol.OwnerID == ownerID {
+			out = append(out, fol)
+		}
+	}
+	return out, nil
+}
+func (f *fakeRepo) ListChildFolders(_ domain.Ctx, parentID int64) ([]*domain.Folder, error) {
+	out := []*domain.Folder{}
+	for _, fol := range f.folders {
+		if fol.ParentID != nil && *fol.ParentID == parentID {
+			out = append(out, fol)
+		}
+	}
+	return out, nil
+}
+func (f *fakeRepo) ListSharedRootFolders(_ domain.Ctx, userID int64, companyIDs []int64) ([]*domain.Folder, error) {
+	out := []*domain.Folder{}
+	for _, fol := range f.folders {
+		if fol.OwnerID == userID {
+			continue
+		}
+		if f.folderUsers[fol.ID][userID] {
+			out = append(out, fol)
+			continue
+		}
+		for _, cid := range companyIDs {
+			if _, ok := f.folderCos[fol.ID][cid]; ok {
+				out = append(out, fol)
+				break
+			}
+		}
+	}
+	return out, nil
+}
+func (f *fakeRepo) GetFolder(_ domain.Ctx, id int64) (*domain.Folder, error) {
+	return f.folders[id], nil
+}
+func (f *fakeRepo) CreateFolder(_ domain.Ctx, fol *domain.Folder) error {
+	fol.ID = f.id()
+	f.folders[fol.ID] = fol
 	return nil
 }
-func (f *fakeRepo) UpdateGroup(_ domain.Ctx, id int64, name string) error {
-	if g := f.groups[id]; g != nil {
-		g.Name = name
+func (f *fakeRepo) UpdateFolder(_ domain.Ctx, id int64, name, color string) error {
+	if fol := f.folders[id]; fol != nil {
+		fol.Name, fol.Color = name, color
 	}
 	return nil
 }
-func (f *fakeRepo) DeleteGroup(_ domain.Ctx, id int64) error {
-	delete(f.groups, id)
-	for noteID, ids := range f.items {
-		f.items[noteID] = slices.DeleteFunc(ids, func(g int64) bool { return g == id })
+func (f *fakeRepo) MoveFolder(_ domain.Ctx, id int64, parentID *int64) error {
+	if fol := f.folders[id]; fol != nil {
+		fol.ParentID = parentID
 	}
 	return nil
 }
-func (f *fakeRepo) NextGroupPosition(_ domain.Ctx, _ int64) (int, error) { return 1, nil }
-func (f *fakeRepo) OwnedGroupIDs(_ domain.Ctx, ownerID int64, ids []int64) ([]int64, error) {
+func (f *fakeRepo) DeleteFolder(_ domain.Ctx, id int64) error                       { delete(f.folders, id); return nil }
+func (f *fakeRepo) NextFolderPosition(_ domain.Ctx, _ int64, _ *int64) (int, error) { return 0, nil }
+func (f *fakeRepo) IsDescendant(_ domain.Ctx, folderID, maybeAncestor int64) (bool, error) {
+	cur := &folderID
+	for cur != nil {
+		if *cur == maybeAncestor {
+			return true, nil
+		}
+		fol := f.folders[*cur]
+		if fol == nil {
+			break
+		}
+		cur = fol.ParentID
+	}
+	return false, nil
+}
+func (f *fakeRepo) ReparentChildren(_ domain.Ctx, folderID int64, newParent *int64) error {
+	for _, fol := range f.folders {
+		if fol.ParentID != nil && *fol.ParentID == folderID {
+			fol.ParentID = newParent
+		}
+	}
+	for _, n := range f.notes {
+		if n.FolderID != nil && *n.FolderID == folderID {
+			n.FolderID = newParent
+		}
+	}
+	return nil
+}
+func (f *fakeRepo) CopyFolderTree(_ domain.Ctx, ownerID, folderID int64, newParent *int64) (int64, error) {
+	src := f.folders[folderID]
+	cp := &domain.Folder{OwnerID: ownerID, ParentID: newParent, Name: src.Name, Color: src.Color}
+	cp.ID = f.id()
+	f.folders[cp.ID] = cp
+	return cp.ID, nil
+}
+
+// ── Теги ──
+func (f *fakeRepo) ListTags(_ domain.Ctx, ownerID int64) ([]*domain.Tag, error) {
+	out := []*domain.Tag{}
+	for _, t := range f.tags {
+		if t.OwnerID == ownerID {
+			out = append(out, t)
+		}
+	}
+	return out, nil
+}
+func (f *fakeRepo) GetTag(_ domain.Ctx, id int64) (*domain.Tag, error) { return f.tags[id], nil }
+func (f *fakeRepo) CreateTag(_ domain.Ctx, t *domain.Tag) error {
+	t.ID = f.id()
+	f.tags[t.ID] = t
+	return nil
+}
+func (f *fakeRepo) UpdateTag(_ domain.Ctx, id int64, name, color string) error {
+	if t := f.tags[id]; t != nil {
+		t.Name, t.Color = name, color
+	}
+	return nil
+}
+func (f *fakeRepo) DeleteTag(_ domain.Ctx, id int64) error             { delete(f.tags, id); return nil }
+func (f *fakeRepo) NextTagPosition(_ domain.Ctx, _ int64) (int, error) { return 0, nil }
+func (f *fakeRepo) OwnedTagIDs(_ domain.Ctx, ownerID int64, ids []int64) ([]int64, error) {
 	out := []int64{}
 	for _, id := range ids {
-		if g := f.groups[id]; g != nil && g.OwnerID == ownerID {
+		if t := f.tags[id]; t != nil && t.OwnerID == ownerID {
 			out = append(out, id)
 		}
 	}
 	return out, nil
 }
+
+// ── Публичные ссылки ──
 func (f *fakeRepo) ListShares(_ domain.Ctx, noteID int64) ([]*domain.Share, error) {
 	out := []*domain.Share{}
 	for _, s := range f.shares {
@@ -144,8 +280,7 @@ func (f *fakeRepo) ListShares(_ domain.Ctx, noteID int64) ([]*domain.Share, erro
 	return out, nil
 }
 func (f *fakeRepo) CreateShare(_ domain.Ctx, s *domain.Share) error {
-	f.nextID++
-	s.ID = f.nextID
+	s.ID = f.id()
 	f.shares[s.Code] = s
 	return nil
 }
@@ -153,378 +288,279 @@ func (f *fakeRepo) GetShareByCode(_ domain.Ctx, code string) (*domain.Share, err
 	return f.shares[code], nil
 }
 func (f *fakeRepo) DeleteShare(_ domain.Ctx, id, noteID int64) error {
-	for code, s := range f.shares {
+	for k, s := range f.shares {
 		if s.ID == id && s.NoteID == noteID {
-			delete(f.shares, code)
+			delete(f.shares, k)
 		}
 	}
 	return nil
 }
 
-func (f *fakeRepo) memberIDsSorted(noteID int64) []int64 {
-	return slices.Sorted(maps.Keys(f.members[noteID]))
+// ── Шаринг заметок ──
+func (f *fakeRepo) ListNoteMembers(_ domain.Ctx, _ int64) ([]*domain.Member, error) { return nil, nil }
+func (f *fakeRepo) UpsertNoteUserShare(_ domain.Ctx, noteID, userID int64, canEdit bool) error {
+	if f.noteUsers[noteID] == nil {
+		f.noteUsers[noteID] = map[int64]bool{}
+	}
+	f.noteUsers[noteID][userID] = canEdit
+	return nil
 }
-func (f *fakeRepo) ListMembers(_ domain.Ctx, noteID int64) ([]*domain.NoteMember, error) {
-	out := []*domain.NoteMember{}
-	for _, id := range f.memberIDsSorted(noteID) {
-		out = append(out, &domain.NoteMember{UserID: id, CanEdit: f.members[noteID][id]})
+func (f *fakeRepo) DeleteNoteUserShare(_ domain.Ctx, noteID, userID int64) error {
+	delete(f.noteUsers[noteID], userID)
+	return nil
+}
+func (f *fakeRepo) UpsertNoteCompanyShare(_ domain.Ctx, noteID, companyID int64, _ string, canEdit bool, _ int64) error {
+	if f.noteCos[noteID] == nil {
+		f.noteCos[noteID] = map[int64]bool{}
+	}
+	f.noteCos[noteID][companyID] = canEdit
+	return nil
+}
+func (f *fakeRepo) DeleteNoteCompanyShare(_ domain.Ctx, noteID, companyID int64) error {
+	delete(f.noteCos[noteID], companyID)
+	return nil
+}
+
+// ── Шаринг папок ──
+func (f *fakeRepo) ListFolderMembers(_ domain.Ctx, _ int64) ([]*domain.Member, error) {
+	return nil, nil
+}
+func (f *fakeRepo) UpsertFolderUserShare(_ domain.Ctx, folderID, userID int64, canEdit bool) error {
+	if f.folderUsers[folderID] == nil {
+		f.folderUsers[folderID] = map[int64]bool{}
+	}
+	f.folderUsers[folderID][userID] = canEdit
+	return nil
+}
+func (f *fakeRepo) DeleteFolderUserShare(_ domain.Ctx, folderID, userID int64) error {
+	delete(f.folderUsers[folderID], userID)
+	return nil
+}
+func (f *fakeRepo) UpsertFolderCompanyShare(_ domain.Ctx, folderID, companyID int64, _ string, canEdit bool, _ int64) error {
+	if f.folderCos[folderID] == nil {
+		f.folderCos[folderID] = map[int64]bool{}
+	}
+	f.folderCos[folderID][companyID] = canEdit
+	return nil
+}
+func (f *fakeRepo) DeleteFolderCompanyShare(_ domain.Ctx, folderID, companyID int64) error {
+	delete(f.folderCos[folderID], companyID)
+	return nil
+}
+
+// ── Аудитория / доступ ──
+func (f *fakeRepo) NoteAudienceUserIDs(_ domain.Ctx, _ int64) ([]int64, error)   { return nil, nil }
+func (f *fakeRepo) FolderAudienceUserIDs(_ domain.Ctx, _ int64) ([]int64, error) { return nil, nil }
+
+func (f *fakeRepo) NoteAccess(_ domain.Ctx, userID int64, companyIDs []int64, noteID int64, folderID *int64) (bool, bool, error) {
+	found, canEdit := false, false
+	mark := func(ok, ce bool) {
+		if ok {
+			found = true
+			canEdit = canEdit || ce
+		}
+	}
+	if ce, ok := f.noteUsers[noteID][userID]; ok {
+		mark(true, ce)
+	}
+	for _, cid := range companyIDs {
+		if ce, ok := f.noteCos[noteID][cid]; ok {
+			mark(true, ce)
+		}
+	}
+	for _, aid := range f.ancestors(folderID) {
+		if ce, ok := f.folderUsers[aid][userID]; ok {
+			mark(true, ce)
+		}
+		for _, cid := range companyIDs {
+			if ce, ok := f.folderCos[aid][cid]; ok {
+				mark(true, ce)
+			}
+		}
+	}
+	return found, canEdit, nil
+}
+func (f *fakeRepo) FolderAccess(_ domain.Ctx, userID int64, companyIDs []int64, folderID int64) (bool, bool, error) {
+	fid := folderID
+	return f.NoteAccess(nil, userID, companyIDs, 0, &fid)
+}
+
+// Эмбеддинги (ИИ-поиск) — в юнит-тестах не задействованы.
+func (f *fakeRepo) UpsertNoteEmbedding(_ domain.Ctx, _, _ int64, _ []float32, _ string) error {
+	return nil
+}
+func (f *fakeRepo) SearchNoteEmbeddings(_ domain.Ctx, _ int64, _ []float32, _ string, _ bool, _ int) ([]int64, error) {
+	return nil, nil
+}
+func (f *fakeRepo) ListNotesByIDs(_ domain.Ctx, _ int64, _ []int64, _ bool) ([]*domain.Note, error) {
+	return nil, nil
+}
+
+// UserReader
+type fakeUsers struct {
+	users   map[int64]*domain.User
+	members map[int64][]int64 // userID → companyIDs
+	compNm  map[int64]string
+}
+
+func newFakeUsers() *fakeUsers {
+	return &fakeUsers{users: map[int64]*domain.User{}, members: map[int64][]int64{}, compNm: map[int64]string{}}
+}
+func (u *fakeUsers) GetUser(_ domain.Ctx, id int64) (*domain.User, error) { return u.users[id], nil }
+func (u *fakeUsers) UserCompanies(_ domain.Ctx, userID int64) ([]*domain.Company, error) {
+	out := []*domain.Company{}
+	for _, cid := range u.members[userID] {
+		out = append(out, &domain.Company{ID: cid, Name: u.compNm[cid]})
 	}
 	return out, nil
 }
-func (f *fakeRepo) UpsertMember(_ domain.Ctx, noteID, userID int64, canEdit bool) error {
-	if f.members[noteID] == nil {
-		f.members[noteID] = map[int64]bool{}
+func (u *fakeUsers) CompanyIDs(_ domain.Ctx, userID int64) ([]int64, error) {
+	return u.members[userID], nil
+}
+func (u *fakeUsers) IsCompanyMember(_ domain.Ctx, userID, companyID int64) (bool, string, error) {
+	if slices.Contains(u.members[userID], companyID) {
+		return true, u.compNm[companyID], nil
 	}
-	f.members[noteID][userID] = canEdit
-	return nil
-}
-func (f *fakeRepo) DeleteMember(_ domain.Ctx, noteID, userID int64) error {
-	delete(f.members[noteID], userID)
-	return nil
-}
-func (f *fakeRepo) GetMember(_ domain.Ctx, noteID, userID int64) (bool, bool, error) {
-	canEdit, ok := f.members[noteID][userID]
-	return ok, canEdit, nil
-}
-func (f *fakeRepo) MemberIDs(_ domain.Ctx, noteID int64) ([]int64, error) {
-	return f.memberIDsSorted(noteID), nil
-}
-func (f *fakeRepo) ListSharedWithMe(_ domain.Ctx, userID int64, search string) ([]*domain.Note, error) {
-	out := []*domain.Note{}
-	for noteID, m := range f.members {
-		canEdit, ok := m[userID]
-		n := f.notes[noteID]
-		if !ok || n == nil {
-			continue
-		}
-		if search != "" && !strings.Contains(n.Title+" "+n.TextContent, search) {
-			continue
-		}
-		cp := *n
-		cp.MyAccess = domain.AccessView
-		if canEdit {
-			cp.MyAccess = domain.AccessEdit
-		}
-		cp.GroupIDs = []int64{}
-		out = append(out, &cp)
-	}
-	return out, nil
+	return false, "", nil
 }
 
-type fakeBus struct {
-	events   []string
-	rooms    [][]string
-	payloads []any
+type nopBus struct{}
+
+func (nopBus) Publish(_ domain.Ctx, _ string, _ []string, _ any) {}
+
+type nopFiles struct{}
+
+func (nopFiles) Save(_ string, _ []byte) (string, error) { return "notes/x", nil }
+func (nopFiles) Remove(_ []string)                       {}
+
+type allowLimiter struct{}
+
+func (allowLimiter) Allow(_ domain.Ctx, _ string) bool { return true }
+
+func newSvc(repo *fakeRepo, users *fakeUsers) *Service {
+	return New(Deps{Repo: repo, Users: users, Files: nopFiles{}, Bus: nopBus{}, Limiter: allowLimiter{}, Log: discardLogger()})
 }
 
-func (f *fakeBus) Publish(_ domain.Ctx, event string, rooms []string, payload any) {
-	f.events = append(f.events, event)
-	f.rooms = append(f.rooms, rooms)
-	f.payloads = append(f.payloads, payload)
-}
+func ctx() context.Context { return context.Background() }
 
-// last — последнее опубликованное событие (имя, комнаты, payload-карта).
-func (f *fakeBus) last(t *testing.T) (string, []string, map[string]any) {
-	t.Helper()
-	if len(f.events) == 0 {
-		t.Fatal("событий не публиковалось")
-	}
-	i := len(f.events) - 1
-	payload, _ := f.payloads[i].(map[string]any)
-	return f.events[i], f.rooms[i], payload
-}
+// ── Тесты ────────────────────────────────────────────────────────────
 
-type fakeUsers struct{ users map[int64]*domain.User }
+func TestCreateTagAndAssign(t *testing.T) {
+	repo, users := newFakeRepo(), newFakeUsers()
+	users.users[1] = &domain.User{ID: 1, IsActive: true}
+	s := newSvc(repo, users)
 
-func (f *fakeUsers) GetUser(_ domain.Ctx, id int64) (*domain.User, error) {
-	return f.users[id], nil
-}
-
-type fakeFiles struct{ removed []string }
-
-func (f *fakeFiles) Save(fileName string, _ []byte) (string, error) { return "notes/" + fileName, nil }
-func (f *fakeFiles) Remove(paths []string)                          { f.removed = append(f.removed, paths...) }
-
-type fakeLimiter struct{ deny bool }
-
-func (f *fakeLimiter) Allow(_ domain.Ctx, _ string) bool { return !f.deny }
-
-func newTestService() (*Service, *fakeRepo, *fakeBus, *fakeFiles, *fakeLimiter) {
-	repo := newFakeRepo()
-	bus := &fakeBus{}
-	files := &fakeFiles{}
-	limiter := &fakeLimiter{}
-	// Пользователи платформы: 1–2 активные, 3 — деактивирован (для адресного шаринга).
-	users := &fakeUsers{users: map[int64]*domain.User{
-		1: {ID: 1, FIO: "Владелец Тест", IsActive: true},
-		2: {ID: 2, FIO: "Адресат Тест", IsActive: true},
-		3: {ID: 3, FIO: "Уволенный Тест", IsActive: false},
-	}}
-	svc := New(Deps{Repo: repo, Users: users, Files: files, Bus: bus, Limiter: limiter, Log: discardLogger()})
-	return svc, repo, bus, files, limiter
-}
-
-func docWith(text string) json.RawMessage {
-	return json.RawMessage(`{"type":"doc","content":[{"type":"paragraph","content":[{"type":"text","text":` +
-		string(mustJSON(text)) + `}]}]}`)
-}
-
-func mustJSON(v any) []byte {
-	b, _ := json.Marshal(v)
-	return b
-}
-
-// ── Скоуп по владельцу ──
-
-func TestOwnerScope(t *testing.T) {
-	svc, _, _, _, _ := newTestService()
-	ctx := context.Background()
-
-	n, err := svc.CreateNote(ctx, 1, "Моя")
+	n, err := s.CreateNote(ctx(), 1, "hi", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
-
-	// Чужая заметка не читается, не правится и не удаляется — единая 404.
-	if _, err := svc.GetNote(ctx, 2, n.ID); !errors.Is(err, domain.ErrNoteNotFound) {
-		t.Fatalf("GetNote чужим: ожидалась 404, получено %v", err)
+	tag, err := s.CreateTag(ctx(), 1, "work", "blue")
+	if err != nil {
+		t.Fatal(err)
 	}
+	if _, err := s.SetTags(ctx(), 1, n.ID, []int64{tag.ID}); err != nil {
+		t.Fatal(err)
+	}
+	if got := repo.noteTags[n.ID]; len(got) != 1 || got[0] != tag.ID {
+		t.Fatalf("tags not set: %v", got)
+	}
+}
+
+func TestBadColorRejected(t *testing.T) {
+	repo, users := newFakeRepo(), newFakeUsers()
+	if _, err := newSvc(repo, users).CreateTag(ctx(), 1, "x", "chartreuse"); err != domain.ErrBadColor {
+		t.Fatalf("want ErrBadColor, got %v", err)
+	}
+}
+
+func TestFolderMoveCyclePrevented(t *testing.T) {
+	repo, users := newFakeRepo(), newFakeUsers()
+	s := newSvc(repo, users)
+	parent, _ := s.CreateFolder(ctx(), 1, "p", "", nil)
+	child, _ := s.CreateFolder(ctx(), 1, "c", "", &parent.ID)
+	// Переместить родителя внутрь ребёнка — цикл.
+	if _, err := s.MoveFolder(ctx(), 1, parent.ID, &child.ID); err != domain.ErrFolderCycle {
+		t.Fatalf("want ErrFolderCycle, got %v", err)
+	}
+}
+
+func TestDeleteFolderReparentsChildren(t *testing.T) {
+	repo, users := newFakeRepo(), newFakeUsers()
+	users.users[1] = &domain.User{ID: 1, IsActive: true}
+	s := newSvc(repo, users)
+	parent, _ := s.CreateFolder(ctx(), 1, "p", "", nil)
+	mid, _ := s.CreateFolder(ctx(), 1, "m", "", &parent.ID)
+	n, _ := s.CreateNote(ctx(), 1, "n", &mid.ID)
+	if err := s.DeleteFolder(ctx(), 1, mid.ID); err != nil {
+		t.Fatal(err)
+	}
+	if repo.notes[n.ID].FolderID == nil || *repo.notes[n.ID].FolderID != parent.ID {
+		t.Fatalf("note not reparented: %v", repo.notes[n.ID].FolderID)
+	}
+}
+
+func TestShareCompanyRequiresMembership(t *testing.T) {
+	repo, users := newFakeRepo(), newFakeUsers()
+	users.users[1] = &domain.User{ID: 1, IsActive: true}
+	users.members[1] = []int64{10}
+	users.compNm[10] = "Acme"
+	s := newSvc(repo, users)
+	n, _ := s.CreateNote(ctx(), 1, "n", nil)
+
+	// Не член компании 99 → отказ.
+	if _, err := s.ShareNote(ctx(), 1, n.ID, domain.TargetCompany, 99, false); err != domain.ErrNotCompanyMember {
+		t.Fatalf("want ErrNotCompanyMember, got %v", err)
+	}
+	// Член компании 10 → успех.
+	if _, err := s.ShareNote(ctx(), 1, n.ID, domain.TargetCompany, 10, true); err != nil {
+		t.Fatalf("share company failed: %v", err)
+	}
+}
+
+func TestAccessViaFolderShare(t *testing.T) {
+	repo, users := newFakeRepo(), newFakeUsers()
+	users.users[1] = &domain.User{ID: 1, IsActive: true} // владелец
+	users.users[2] = &domain.User{ID: 2, IsActive: true} // адресат
+	s := newSvc(repo, users)
+
+	root, _ := s.CreateFolder(ctx(), 1, "root", "", nil)
+	sub, _ := s.CreateFolder(ctx(), 1, "sub", "", &root.ID)
+	n, _ := s.CreateNote(ctx(), 1, "deep", &sub.ID)
+
+	// Расшарить КОРНЕВУЮ папку пользователю 2 на чтение — доступ каскадит вниз.
+	if _, err := s.ShareFolder(ctx(), 1, root.ID, domain.TargetUser, 2, false); err != nil {
+		t.Fatal(err)
+	}
+	got, err := s.GetNote(ctx(), 2, n.ID)
+	if err != nil {
+		t.Fatalf("shared read failed: %v", err)
+	}
+	if got.MyAccess != domain.AccessView {
+		t.Fatalf("want view, got %q", got.MyAccess)
+	}
+	// Без права правки — обновление отклоняется.
 	title := "hack"
-	if _, err := svc.UpdateNote(ctx, 2, n.ID, domain.NoteUpdate{Title: &title}); !errors.Is(err, domain.ErrNoteNotFound) {
-		t.Fatalf("UpdateNote чужим: ожидалась 404, получено %v", err)
-	}
-	if err := svc.DeleteNote(ctx, 2, n.ID); !errors.Is(err, domain.ErrNoteNotFound) {
-		t.Fatalf("DeleteNote чужим: ожидалась 404, получено %v", err)
-	}
-	if _, err := svc.ListShares(ctx, 2, n.ID); !errors.Is(err, domain.ErrNoteNotFound) {
-		t.Fatalf("ListShares чужим: ожидалась 404, получено %v", err)
+	if _, err := s.UpdateNote(ctx(), 2, n.ID, domain.NoteUpdate{Title: &title}); err != domain.ErrMemberReadOnly {
+		t.Fatalf("want read-only, got %v", err)
 	}
 }
 
-// ── Пересчёт text_content из doc ──
+func TestSharedListIncludesFolderSharedNotes(t *testing.T) {
+	repo, users := newFakeRepo(), newFakeUsers()
+	users.users[1] = &domain.User{ID: 1, IsActive: true}
+	users.users[2] = &domain.User{ID: 2, FIO: "B", IsActive: true}
+	s := newSvc(repo, users)
+	fol, _ := s.CreateFolder(ctx(), 1, "f", "", nil)
+	s.CreateNote(ctx(), 1, "n", &fol.ID)
+	s.ShareFolder(ctx(), 1, fol.ID, domain.TargetUser, 2, true)
 
-func TestUpdateRecomputesTextContent(t *testing.T) {
-	svc, repo, _, _, _ := newTestService()
-	ctx := context.Background()
-
-	n, _ := svc.CreateNote(ctx, 1, "")
-	if _, err := svc.UpdateNote(ctx, 1, n.ID, domain.NoteUpdate{Doc: docWith("привет мир")}); err != nil {
-		t.Fatal(err)
-	}
-	if got := repo.notes[n.ID].TextContent; got != "привет мир" {
-		t.Fatalf("text_content не пересчитан: %q", got)
-	}
-
-	// Правка только заголовка не трогает text_content.
-	title := "Заголовок"
-	if _, err := svc.UpdateNote(ctx, 1, n.ID, domain.NoteUpdate{Title: &title}); err != nil {
-		t.Fatal(err)
-	}
-	if got := repo.notes[n.ID].TextContent; got != "привет мир" {
-		t.Fatalf("text_content потерян при правке заголовка: %q", got)
-	}
-}
-
-// ── Шаринг: edit пишет, view — нет ──
-
-func TestSharedEditWritesViewDoesNot(t *testing.T) {
-	svc, _, _, _, limiter := newTestService()
-	ctx := context.Background()
-
-	n, _ := svc.CreateNote(ctx, 1, "Общая")
-	view, err := svc.CreateShare(ctx, 1, n.ID, domain.AccessView)
+	list, err := s.ListSharedNotes(ctx(), 2, "")
 	if err != nil {
 		t.Fatal(err)
 	}
-	edit, err := svc.CreateShare(ctx, 1, n.ID, domain.AccessEdit)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	title := "правка по ссылке"
-	if _, err := svc.UpdateSharedNote(ctx, view.Code, &title, nil); !errors.Is(err, domain.ErrReadOnly) {
-		t.Fatalf("view-ссылка: ожидался 403, получено %v", err)
-	}
-	got, err := svc.UpdateSharedNote(ctx, edit.Code, &title, docWith("текст по ссылке"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if got.Title != title || got.TextContent != "текст по ссылке" {
-		t.Fatalf("edit-ссылка не применила правку: %+v", got)
-	}
-
-	// Троттлинг: отказ лимитера → 429, правка не применяется.
-	limiter.deny = true
-	if _, err := svc.UpdateSharedNote(ctx, edit.Code, &title, nil); !errors.Is(err, domain.ErrRateLimited) {
-		t.Fatalf("троттлинг: ожидался 429, получено %v", err)
-	}
-
-	// Некорректный режим доступа при создании ссылки.
-	if _, err := svc.CreateShare(ctx, 1, n.ID, "admin"); !errors.Is(err, domain.ErrBadAccess) {
-		t.Fatalf("access=admin: ожидалась валидация, получено %v", err)
+	if len(list) != 1 {
+		t.Fatalf("want 1 shared note, got %d", len(list))
 	}
 }
 
-// ── Экспорт/импорт txt ──
-
-func TestExportImport(t *testing.T) {
-	svc, _, _, _, _ := newTestService()
-	ctx := context.Background()
-
-	n, _ := svc.CreateNote(ctx, 1, "Список покупок")
-	_, _ = svc.UpdateNote(ctx, 1, n.ID, domain.NoteUpdate{Doc: docWith("хлеб и молоко")})
-
-	data, name, err := svc.Export(ctx, 1, n.ID)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if name != "Список покупок" {
-		t.Fatalf("имя файла: %q", name)
-	}
-	if string(data) != "Список покупок\n\nхлеб и молоко" {
-		t.Fatalf("содержимое экспорта: %q", data)
-	}
-
-	imported, err := svc.Import(ctx, 2, "Импортированная\n\nстрока один\nстрока два")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if imported.Title != "Импортированная" {
-		t.Fatalf("title импорта: %q", imported.Title)
-	}
-	if imported.TextContent != "строка один\nстрока два" {
-		t.Fatalf("текст импорта: %q", imported.TextContent)
-	}
-	// Документ — валидные параграфы TipTap.
-	if !strings.Contains(string(imported.Doc), `"paragraph"`) {
-		t.Fatalf("doc импорта без параграфов: %s", imported.Doc)
-	}
-}
-
-// ── Группы ──
-
-func TestDeleteGroupKeepsNotes(t *testing.T) {
-	svc, repo, _, _, _ := newTestService()
-	ctx := context.Background()
-
-	g, _ := svc.CreateGroup(ctx, 1, "Работа")
-	n, _ := svc.CreateNote(ctx, 1, "В группе")
-	if _, err := svc.SetGroups(ctx, 1, n.ID, []int64{g.ID}); err != nil {
-		t.Fatal(err)
-	}
-
-	if err := svc.DeleteGroup(ctx, 1, g.ID); err != nil {
-		t.Fatal(err)
-	}
-	if repo.notes[n.ID] == nil {
-		t.Fatal("удаление группы удалило заметку")
-	}
-	got, _ := svc.GetNote(ctx, 1, n.ID)
-	if len(got.GroupIDs) != 0 {
-		t.Fatalf("связи с удалённой группой остались: %v", got.GroupIDs)
-	}
-
-	// Чужая группа не удаляется.
-	g2, _ := svc.CreateGroup(ctx, 1, "Личное")
-	if err := svc.DeleteGroup(ctx, 2, g2.ID); !errors.Is(err, domain.ErrGroupNotFound) {
-		t.Fatalf("DeleteGroup чужим: ожидалась 404, получено %v", err)
-	}
-}
-
-func TestSetGroupsDropsForeign(t *testing.T) {
-	svc, _, _, _, _ := newTestService()
-	ctx := context.Background()
-
-	mine, _ := svc.CreateGroup(ctx, 1, "Моя")
-	foreign, _ := svc.CreateGroup(ctx, 2, "Чужая")
-	n, _ := svc.CreateNote(ctx, 1, "")
-
-	got, err := svc.SetGroups(ctx, 1, n.ID, []int64{mine.ID, foreign.ID, 999})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(got.GroupIDs) != 1 || got.GroupIDs[0] != mine.ID {
-		t.Fatalf("чужие группы не отброшены: %v", got.GroupIDs)
-	}
-}
-
-// ── Удаление заметки чистит файлы ──
-
-func TestDeleteNoteRemovesFiles(t *testing.T) {
-	svc, _, _, files, _ := newTestService()
-	ctx := context.Background()
-
-	n, _ := svc.CreateNote(ctx, 1, "")
-	doc := json.RawMessage(`{"type":"doc","content":[
-		{"type":"image","attrs":{"src":"/uploads/notes/abc.png"}},
-		{"type":"paragraph","content":[{"type":"text","text":"с картинкой"}]}]}`)
-	if _, err := svc.UpdateNote(ctx, 1, n.ID, domain.NoteUpdate{Doc: doc}); err != nil {
-		t.Fatal(err)
-	}
-	if err := svc.DeleteNote(ctx, 1, n.ID); err != nil {
-		t.Fatal(err)
-	}
-	if len(files.removed) != 1 || files.removed[0] != "notes/abc.png" {
-		t.Fatalf("файлы заметки не почищены: %v", files.removed)
-	}
-}
-
-// ── Цвет плитки ──
-
-func TestNoteColor(t *testing.T) {
-	svc, repo, _, _, _ := newTestService()
-	ctx := context.Background()
-
-	n, _ := svc.CreateNote(ctx, 1, "Цветная")
-	blue := "blue"
-	if _, err := svc.UpdateNote(ctx, 1, n.ID, domain.NoteUpdate{Color: &blue}); err != nil {
-		t.Fatal(err)
-	}
-	if repo.notes[n.ID].Color != "blue" {
-		t.Fatalf("цвет не сохранён: %q", repo.notes[n.ID].Color)
-	}
-
-	// Сброс цвета пустой строкой.
-	none := ""
-	if _, err := svc.UpdateNote(ctx, 1, n.ID, domain.NoteUpdate{Color: &none}); err != nil {
-		t.Fatal(err)
-	}
-	if repo.notes[n.ID].Color != "" {
-		t.Fatalf("цвет не сброшен: %q", repo.notes[n.ID].Color)
-	}
-
-	// Неизвестный цвет — валидация.
-	bad := "magenta"
-	if _, err := svc.UpdateNote(ctx, 1, n.ID, domain.NoteUpdate{Color: &bad}); !errors.Is(err, domain.ErrBadColor) {
-		t.Fatalf("неизвестный цвет: ожидалась валидация, получено %v", err)
-	}
-}
-
-// Архив: архивная заметка уходит из основного списка в архивный и возвращается.
-func TestArchiveNote(t *testing.T) {
-	svc, _, _, _, _ := newTestService()
-	ctx := context.Background()
-	n, _ := svc.CreateNote(ctx, 1, "В архив")
-
-	on := true
-	if _, err := svc.UpdateNote(ctx, 1, n.ID, domain.NoteUpdate{Archived: &on}); err != nil {
-		t.Fatalf("archive: %v", err)
-	}
-	active, _ := svc.ListNotes(ctx, 1, 0, "", false)
-	if len(active) != 0 {
-		t.Fatalf("архивная заметка осталась в основном списке: %d", len(active))
-	}
-	archived, _ := svc.ListNotes(ctx, 1, 0, "", true)
-	if len(archived) != 1 || !archived[0].Archived {
-		t.Fatalf("заметка не попала в архивный список")
-	}
-
-	off := false
-	if _, err := svc.UpdateNote(ctx, 1, n.ID, domain.NoteUpdate{Archived: &off}); err != nil {
-		t.Fatalf("unarchive: %v", err)
-	}
-	active, _ = svc.ListNotes(ctx, 1, 0, "", false)
-	if len(active) != 1 {
-		t.Fatalf("заметка не вернулась из архива")
-	}
-}
+var _ = json.Marshal

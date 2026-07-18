@@ -30,10 +30,13 @@
         </button>
       </div>
 
+      <!-- Единая строка фильтров: разделы + популярные хештеги (тренды, как в
+           соцсетях) в одном горизонтальном скролле — на мобильных не отъедает
+           вторую строку. Разделитель отделяет теги от разделов. -->
       <div class="portal-topics">
         <button
           class="portal-topic-chip"
-          :class="{ active: store.filters.topicId == null }"
+          :class="{ active: store.filters.topicId == null && !store.filters.tag }"
           @click="store.setTopic(null)"
         >Все</button>
         <button
@@ -47,11 +50,33 @@
           <span v-if="store.filters.topicId === t.id" class="material-symbols-outlined portal-chip-check">check</span>
           {{ t.name }}
         </button>
+
+        <template v-if="store.popularTags.length && !store.filters.search">
+          <span class="portal-filter-sep" aria-hidden="true" />
+          <button
+            v-for="t in store.popularTags"
+            :key="t.tag"
+            class="portal-tag-chip"
+            :class="{ active: store.filters.tag === t.tag }"
+            @click="store.setTag(store.filters.tag === t.tag ? null : t.tag)"
+          >
+            #{{ t.tag }}
+            <span class="portal-tag-count">{{ t.count }}</span>
+          </button>
+        </template>
       </div>
     </header>
 
     <div class="admin-body">
       <div class="portal-feed">
+      <div v-if="store.filters.tag" class="portal-tag-banner">
+        <span class="material-symbols-outlined">tag</span>
+        <span class="portal-tag-banner-text">Посты с тегом <strong>#{{ store.filters.tag }}</strong></span>
+        <button class="portal-tag-clear" type="button" @click="store.setTag(null)">
+          <span class="material-symbols-outlined">close</span>
+          Сбросить
+        </button>
+      </div>
       <div v-if="store.loadingPosts" class="portal-status">
         <ProgressSpinner style="width:32px;height:32px" />
       </div>
@@ -257,7 +282,7 @@ const highlightPost = computed(() => {
 watch(() => route.params.id, (id) => store.loadHighlight(id))
 
 async function loadAll() {
-  await Promise.all([store.fetchTopics(), store.fetchPosts(), store.loadAuthors()])
+  await Promise.all([store.fetchTopics(), store.fetchPopularTags(), store.fetchPosts(), store.loadAuthors()])
   store.loadHighlight(route.params.id)
 }
 onMounted(() => {
@@ -329,6 +354,78 @@ watch(() => useAuthStore().companyId, (id, prev) => {
 }
 .portal-topic-chip { display: inline-flex; align-items: center; gap: 4px; }
 .portal-chip-check { font-size: 15px; }
+
+/* Разделитель разделов и хештегов в общей строке фильтров. */
+.portal-filter-sep {
+  flex-shrink: 0;
+  align-self: center;
+  width: 1px;
+  height: 20px;
+  margin: 0 2px;
+  background: var(--color-outline-dim);
+}
+
+/* Популярные хештеги (тренды) — чипы в той же строке, что и разделы. */
+.portal-tag-chip {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 7px 14px;
+  border-radius: var(--radius-full);
+  border: 1px solid var(--acrylic-border);
+  background: var(--acrylic-card-bg);
+  color: var(--color-primary);
+  font: inherit;
+  font-size: 13.5px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.portal-tag-chip:hover { border-color: color-mix(in oklch, var(--color-primary) 30%, var(--acrylic-border)); }
+.portal-tag-chip.active {
+  background: var(--color-primary-container);
+  border-color: var(--color-primary);
+  color: var(--color-on-primary-container);
+}
+.portal-tag-count {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--color-text-dim);
+}
+.portal-tag-chip.active .portal-tag-count { color: var(--color-on-primary-container); }
+
+/* Баннер активного фильтра по тегу над лентой. */
+.portal-tag-banner {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--acrylic-border);
+  background: var(--acrylic-card-bg);
+  font-size: 13.5px;
+  color: var(--color-text);
+}
+.portal-tag-banner > .material-symbols-outlined { color: var(--color-primary); font-size: 20px; }
+.portal-tag-banner-text { flex: 1; min-width: 0; }
+.portal-tag-banner strong { color: var(--color-primary); }
+.portal-tag-clear {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 5px 12px;
+  border: none;
+  border-radius: var(--radius-full);
+  background: var(--glass-bg);
+  box-shadow: var(--glass-edge);
+  color: var(--color-text);
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.portal-tag-clear:hover { background: var(--glass-hover-bg); }
+.portal-tag-clear .material-symbols-outlined { font-size: 16px; }
 
 /* Контент ленты — узкая читабельная колонка внутри общего каркаса. */
 .portal-feed {

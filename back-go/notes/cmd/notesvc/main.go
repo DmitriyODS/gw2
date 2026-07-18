@@ -15,7 +15,8 @@ package main
 import (
 	"os"
 
-	"github.com/DmitriyODS/gw2/back-go/notes/internal/endpoint"
+	"github.com/DmitriyODS/gw2/back-go/notes/internal/clients"
+	"github.com/DmitriyODS/gw2/back-go/notes/internal/domain"
 	"github.com/DmitriyODS/gw2/back-go/notes/internal/repository/postgres"
 	redisrepo "github.com/DmitriyODS/gw2/back-go/notes/internal/repository/redis"
 	"github.com/DmitriyODS/gw2/back-go/notes/internal/service"
@@ -56,17 +57,31 @@ func main() {
 
 	repo := postgres.NewRepo(pool)
 	users := postgres.NewUserReader(pool)
-	svc := service.New(service.Deps{
-		Repo:    repo,
-		Users:   users,
-		Files:   records.NewFileStore(storage.FromEnv(log, uploadFolder), "notes"),
-		Bus:     events.NewPublisher(rdb, log, "gw2:notes:events"),
-		Limiter: redisrepo.NewWriteLimiter(rdb, sharedWriteLimit),
-		Log:     log,
-	})
-	eps := endpoint.New(svc)
 
-	httpServer := httptransport.NewServer(eps, users, verifier, log)
+	// ИИ-поиск (опционально): AI_GRPC_ADDR пуст/не задан → семантика выключена,
+	// поиск откатывается на текстовый (как fail-open у задач).
+	var embedder domain.Embedder
+	if addr := bootstrap.Env("AI_GRPC_ADDR", ""); addr != "" {
+		emb, err := clients.NewEmbedder(addr, log)
+		if err != nil {
+			log.Warn("ai.embedder_init_failed", "error", err)
+		} else {
+			embedder = emb
+			defer emb.Close()
+			log.Info("ai.embedder_enabled", "addr", addr)
+		}
+	}
+
+	svc := service.New(service.Deps{
+		Repo:     repo,
+		Users:    users,
+		Files:    records.NewFileStore(storage.FromEnv(log, uploadFolder), "notes"),
+		Bus:      events.NewPublisher(rdb, log, "gw2:notes:events"),
+		Limiter:  redisrepo.NewWriteLimiter(rdb, sharedWriteLimit),
+		Embedder: embedder,
+		Log:      log,
+	})
+	httpServer := httptransport.NewServer(svc, users, verifier, log)
 
 	log.Info("listening", "http", httpAddr)
 	bootstrap.Run(ctx, log,

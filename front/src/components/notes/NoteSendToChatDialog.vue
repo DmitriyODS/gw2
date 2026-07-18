@@ -65,7 +65,7 @@ import ProgressSpinner from 'primevue/progressspinner'
 import AppDialog from '@/components/common/AppDialog.vue'
 import { useContactPicker } from '@/composables/useContactPicker.js'
 import { openConversation, sendMessage } from '@/api/messenger.js'
-import { upsertMember } from '@/api/notes.js'
+import { shareNoteWithUser } from '@/api/notes.js'
 import { useNotificationsStore } from '@/stores/notifications.js'
 
 const props = defineProps({
@@ -126,7 +126,7 @@ async function confirm() {
       const conv = await openConversation(userId)
       if (props.mode === 'note') {
         // Просмотр по умолчанию; право можно поднять в диалоге «Поделиться».
-        await upsertMember(props.note.id, userId, false)
+        await shareNoteWithUser(props.note.id, userId, false)
         await sendMessage(conv.id, { text: noteMessage(), attachment_ids: [] })
       } else {
         await sendMessage(conv.id, { text: props.text, attachment_ids: [] })

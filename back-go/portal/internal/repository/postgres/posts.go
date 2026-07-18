@@ -50,6 +50,11 @@ func (r *Repo) ListPosts(ctx context.Context, f domain.PostListFilter, viewerID 
 		args = append(args, "%"+s+"%")
 		where += fmt.Sprintf(" AND (coalesce(title, '') || ' ' || body) ILIKE $%d", len(args))
 	}
+	if f.Tag != "" {
+		args = append(args, f.Tag)
+		where += fmt.Sprintf(` AND EXISTS (SELECT 1 FROM portal_post_tags pt
+			WHERE pt.post_id = portal_posts.id AND pt.tag = $%d)`, len(args))
+	}
 	if f.BeforeCreatedAt != nil {
 		// Keyset: строго старше пары (created_at, id) — row comparison
 		// согласован с ORDER BY created_at DESC, id DESC.
@@ -118,8 +123,31 @@ func (r *Repo) attachDerived(ctx context.Context, posts []*domain.Post, viewerID
 		p.Attachments = []domain.Attachment{}
 		p.ReactionCount = map[string]int{}
 		p.MyReactions = []string{}
+		p.Tags = []string{}
 		byID[p.ID] = p
 		ids[i] = p.ID
+	}
+
+	tagRows, err := r.pool.Query(ctx, `
+		SELECT post_id, tag FROM portal_post_tags
+		WHERE post_id = ANY($1) ORDER BY tag`, ids)
+	if err != nil {
+		return err
+	}
+	for tagRows.Next() {
+		var postID int64
+		var tag string
+		if err := tagRows.Scan(&postID, &tag); err != nil {
+			tagRows.Close()
+			return err
+		}
+		if p := byID[postID]; p != nil {
+			p.Tags = append(p.Tags, tag)
+		}
+	}
+	tagRows.Close()
+	if err := tagRows.Err(); err != nil {
+		return err
 	}
 
 	attRows, err := r.pool.Query(ctx, `
@@ -268,21 +296,84 @@ func (r *Repo) MarkView(ctx context.Context, postID, userID int64) error {
 }
 
 func (r *Repo) CreatePost(ctx context.Context, p *domain.Post) error {
-	return r.pool.QueryRow(ctx, `
+	tx, err := r.pool.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback(ctx)
+	if err := tx.QueryRow(ctx, `
 		INSERT INTO portal_posts (company_id, topic_id, author_id, title, body)
 		VALUES ($1, $2, $3, $4, $5)
 		RETURNING id, created_at, updated_at`,
 		p.CompanyID, p.TopicID, p.AuthorID, p.Title, p.Body,
-	).Scan(&p.ID, &p.CreatedAt, &p.UpdatedAt)
+	).Scan(&p.ID, &p.CreatedAt, &p.UpdatedAt); err != nil {
+		return err
+	}
+	if err := replacePostTags(ctx, tx, p.ID, p.CompanyID, p.Tags); err != nil {
+		return err
+	}
+	return tx.Commit(ctx)
 }
 
 func (r *Repo) UpdatePost(ctx context.Context, p *domain.Post) error {
-	return r.pool.QueryRow(ctx, `
+	tx, err := r.pool.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback(ctx)
+	if err := tx.QueryRow(ctx, `
 		UPDATE portal_posts SET topic_id = $2, title = $3, body = $4, updated_at = now()
 		WHERE id = $1
 		RETURNING updated_at`,
 		p.ID, p.TopicID, p.Title, p.Body,
-	).Scan(&p.UpdatedAt)
+	).Scan(&p.UpdatedAt); err != nil {
+		return err
+	}
+	if err := replacePostTags(ctx, tx, p.ID, p.CompanyID, p.Tags); err != nil {
+		return err
+	}
+	return tx.Commit(ctx)
+}
+
+// replacePostTags — полная замена набора хештегов поста (delete + insert)
+// внутри транзакции создания/правки поста.
+func replacePostTags(ctx context.Context, tx pgx.Tx, postID, companyID int64, tags []string) error {
+	if _, err := tx.Exec(ctx, `DELETE FROM portal_post_tags WHERE post_id = $1`, postID); err != nil {
+		return err
+	}
+	for _, tag := range tags {
+		if _, err := tx.Exec(ctx, `
+			INSERT INTO portal_post_tags (post_id, company_id, tag) VALUES ($1, $2, $3)
+			ON CONFLICT DO NOTHING`, postID, companyID, tag); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// PopularTags — топ хештегов компании по числу постов (популярное сверху,
+// затем алфавит для стабильности при равенстве).
+func (r *Repo) PopularTags(ctx context.Context, companyID int64, limit int) ([]domain.TagCount, error) {
+	if limit <= 0 {
+		limit = 20
+	}
+	rows, err := r.pool.Query(ctx, `
+		SELECT tag, COUNT(*) AS n FROM portal_post_tags
+		WHERE company_id = $1
+		GROUP BY tag ORDER BY n DESC, tag ASC LIMIT $2`, companyID, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := []domain.TagCount{}
+	for rows.Next() {
+		var t domain.TagCount
+		if err := rows.Scan(&t.Tag, &t.Count); err != nil {
+			return nil, err
+		}
+		out = append(out, t)
+	}
+	return out, rows.Err()
 }
 
 func (r *Repo) DeletePost(ctx context.Context, id int64) error {

@@ -3,7 +3,8 @@
     <!-- ЛЕВАЯ ПАНЕЛЬ -->
     <aside class="split-side">
       <div class="dv-side-head">
-        <NotesHubTabs full-width />
+        <span class="material-symbols-outlined">event_note</span>
+        <span class="dv-side-title">Ежедневник</span>
       </div>
       <div class="dv-side-tabs">
         <SegmentedTabs :model-value="store.tab" :tabs="tabs" full-width dense @update:model-value="store.setTab" />
@@ -45,10 +46,6 @@
 
     <!-- ПРАВАЯ ПАНЕЛЬ -->
     <section class="split-main">
-      <!-- Мобайл: левая колонка скрыта, переключатель Заметки/Ежедневник — здесь -->
-      <div v-if="isMobile" class="dv-mobile-hub">
-        <NotesHubTabs full-width />
-      </div>
       <!-- Мобайл: боковая панель скрыта — выбор/создание ежедневника в шторке
            (по образцу групп заметок). Кнопка-селектор показывает активный. -->
       <div v-if="isMobile" class="dv-mobile-bar">
@@ -463,7 +460,6 @@ import SegmentedTabs from '@/components/common/SegmentedTabs.vue'
 import SearchField from '@/components/common/SearchField.vue'
 import AppFab from '@/components/common/AppFab.vue'
 import { useFabOnScroll } from '@/composables/useFabOnScroll.js'
-import NotesHubTabs from '@/components/notes/NotesHubTabs.vue'
 import DiaryEntryDialog from '@/components/diary/DiaryEntryDialog.vue'
 import DiaryShareDialog from '@/components/diary/DiaryShareDialog.vue'
 import TaskForm from '@/components/tasks/TaskForm.vue'
@@ -914,10 +910,10 @@ watch(() => store.loadingEntries, () => nextTick(measureWeekColumn))
 <style scoped>
 /* Каркас (стеклянные панели, список, кнопка добавления, мобильное скрытие
    левой панели) — глобальный паттерн .split-* (main.css). Здесь — только
-   специфика ежедневников: шапка с NotesHubTabs, прогресс и drop-цель пункта. */
-.dv-side-head { flex-shrink: 0; display: flex; align-items: center; gap: 8px; padding: 12px; border-bottom: 1px solid var(--color-outline-dim); }
-.dv-side-head :deep(.seg-tabs) { flex: 1; }
-.dv-mobile-hub { flex-shrink: 0; padding: 10px 12px 0; }
+   специфика ежедневников: шапка-заголовок, прогресс и drop-цель пункта. */
+.dv-side-head { flex-shrink: 0; display: flex; align-items: center; gap: 8px; padding: 14px 12px; border-bottom: 1px solid var(--color-outline-dim); }
+.dv-side-head .material-symbols-outlined { color: var(--color-primary); font-size: 22px; }
+.dv-side-title { font-size: 16px; font-weight: 800; color: var(--color-text); }
 .dv-side-tabs { padding: 10px 10px 4px; }
 .dv-side-main { flex: 1; display: flex; flex-direction: column; min-width: 0; }
 .dv-side-owner { font-size: 12px; opacity: 0.8; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

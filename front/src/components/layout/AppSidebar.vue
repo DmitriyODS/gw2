@@ -143,9 +143,11 @@ const navGroups = computed(() => {
         active: () => route.path.startsWith('/registries') },
     )
   }
-  // Заметки (вкл. ежедневник) — личные, кросс-компанийные: доступны всегда.
-  workflows.push({ path: '/notes', icon: 'note_stack', label: 'Заметки', tutorial: 'nav-diaries',
-    active: () => route.path.startsWith('/notes') || route.path.startsWith('/diaries') })
+  // Заметки и Ежедневник — отдельные личные разделы (кросс-компанийные, всегда).
+  workflows.push({ path: '/notes', icon: 'note_stack', label: 'Заметки', tutorial: 'nav-notes',
+    active: () => route.path.startsWith('/notes') })
+  workflows.push({ path: '/diaries', icon: 'event_note', label: 'Ежедневник', tutorial: 'nav-diaries',
+    active: () => route.path.startsWith('/diaries') })
   if (hasActiveCompany()) {
     workflows.push({ path: '/calendars', icon: 'calendar_month', label: 'Календари', tutorial: 'nav-calendars',
       active: () => route.path.startsWith('/calendars') })

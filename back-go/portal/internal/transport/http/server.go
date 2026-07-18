@@ -67,6 +67,7 @@ func NewServer(eps endpoint.Endpoints, users domain.UserReader,
 	api.Delete("/topics/:id<int>", admin, h.deleteTopic)
 
 	api.Get("/posts", employee, h.listPosts)
+	api.Get("/tags", employee, h.popularTags)
 	api.Post("/posts", employee, h.createPost)
 	api.Get("/posts/:id<int>", employee, h.getPost)
 	api.Post("/posts/:id<int>/view", employee, h.markView)

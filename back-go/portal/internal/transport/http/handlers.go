@@ -117,7 +117,7 @@ func (h *handlers) listPosts(c *fiber.Ctx) error {
 		CompanyID: companyID, ViewerID: currentUser(c).ID,
 		Params: service.PostListParams{
 			TopicID: topicID, Pinned: boolQuery(c, "pinned"), Search: c.Query("search"),
-			Limit: c.QueryInt("limit"), Cursor: c.Query("cursor"),
+			Tag: c.Query("tag"), Limit: c.QueryInt("limit"), Cursor: c.Query("cursor"),
 		},
 	})
 	if err != nil {
@@ -126,6 +126,21 @@ func (h *handlers) listPosts(c *fiber.Ctx) error {
 	// Форма страницы — {"pinned": [...], "posts": [...], "next_cursor": ...}
 	// (см. service.PostFeed).
 	return c.JSON(resp)
+}
+
+// popularTags — топ хештегов компании для панели «Популярные теги» ленты.
+func (h *handlers) popularTags(c *fiber.Ctx) error {
+	companyID, ok := companyScope(c)
+	if !ok {
+		return nil
+	}
+	resp, err := h.eps.PopularTags(c.Context(), endpoint.PopularTagsReq{
+		CompanyID: companyID, Limit: c.QueryInt("limit"),
+	})
+	if err != nil {
+		return h.respondError(c, err)
+	}
+	return c.JSON(fiber.Map{"tags": resp})
 }
 
 func (h *handlers) getPost(c *fiber.Ctx) error {

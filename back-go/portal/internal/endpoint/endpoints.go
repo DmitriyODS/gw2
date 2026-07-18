@@ -16,9 +16,10 @@ type Endpoints struct {
 	UpdateTopic endpoint.Endpoint
 	DeleteTopic endpoint.Endpoint
 
-	ListPosts  endpoint.Endpoint
-	GetPost    endpoint.Endpoint
-	MarkView   endpoint.Endpoint
+	ListPosts   endpoint.Endpoint
+	PopularTags endpoint.Endpoint
+	GetPost     endpoint.Endpoint
+	MarkView    endpoint.Endpoint
 	CreatePost endpoint.Endpoint
 	UpdatePost endpoint.Endpoint
 	DeletePost endpoint.Endpoint
@@ -70,6 +71,11 @@ type PostReq struct {
 	CompanyID int64
 	ID        int64
 	ViewerID  int64
+}
+
+type PopularTagsReq struct {
+	CompanyID int64
+	Limit     int
 }
 
 type WritePostReq struct {
@@ -176,6 +182,10 @@ func New(s *service.Service) Endpoints {
 		ListPosts: func(ctx context.Context, request any) (any, error) {
 			r := request.(ListPostsReq)
 			return s.ListPosts(ctx, r.CompanyID, r.ViewerID, r.Params)
+		},
+		PopularTags: func(ctx context.Context, request any) (any, error) {
+			r := request.(PopularTagsReq)
+			return s.PopularTags(ctx, r.CompanyID, r.Limit)
 		},
 		GetPost: func(ctx context.Context, request any) (any, error) {
 			r := request.(PostReq)

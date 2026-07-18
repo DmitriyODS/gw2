@@ -94,9 +94,8 @@ const mainItems = computed(() => [
   { path: '/messenger', icon: 'chat', label: 'Чаты', tutorial: 'nav-messenger',
     active: () => route.path.startsWith('/messenger'),
     badge: () => messenger.totalUnread },
-  // Единый раздел: заметки + ежедневник (вкладки внутри).
   { path: '/notes', icon: 'note_stack', label: 'Заметки',
-    active: () => route.path.startsWith('/notes') || route.path.startsWith('/diaries') },
+    active: () => route.path.startsWith('/notes') },
   // Единый раздел: лента портала + сотрудники (вкладки внутри).
   ...(hasActiveCompany() ? [{ path: '/portal', icon: 'campaign', label: 'Портал',
     active: () => route.path.startsWith('/portal') || route.path === '/employees',
@@ -107,6 +106,8 @@ const moreItems = computed(() => {
   const arr = [
     { path: '/profile', avatar: true, icon: 'account_circle', label: 'Профиль', tutorial: 'profile-avatar',
       active: () => route.path === '/profile' },
+    { path: '/diaries', icon: 'event_note', label: 'Ежедневник',
+      active: () => route.path.startsWith('/diaries') },
   ]
   // Питомцы-грувики — только если компания не выключила режим.
   if (hasActiveCompany() && usesGroove.value) {

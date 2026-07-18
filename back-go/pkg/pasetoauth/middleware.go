@@ -7,8 +7,9 @@ import (
 )
 
 const (
-	localUserID = "pasetoauth.userID"
-	localUser   = "pasetoauth.user"
+	localUserID    = "pasetoauth.userID"
+	localUser      = "pasetoauth.user"
+	localCompanyID = "pasetoauth.companyID"
 )
 
 // AuthInfo — срез пользователя для авторизационных проверок мидлвари.
@@ -93,6 +94,9 @@ func (m *Middleware) RequireAuth(c *fiber.Ctx) error {
 	}
 	c.Locals(localUserID, claims.UserID)
 	c.Locals(localUser, info)
+	if claims.CompanyID != nil {
+		c.Locals(localCompanyID, *claims.CompanyID)
+	}
 	return c.Next()
 }
 
@@ -137,6 +141,13 @@ func (m *Middleware) OptionalUserID(c *fiber.Ctx) int64 {
 // UserID — id пользователя из Locals (после RequireAuth/RequireToken).
 func UserID(c *fiber.Ctx) int64 {
 	id, _ := c.Locals(localUserID).(int64)
+	return id
+}
+
+// CompanyID — id активной компании из токена (0, если активной компании нет).
+// Заполняется в RequireAuth.
+func CompanyID(c *fiber.Ctx) int64 {
+	id, _ := c.Locals(localCompanyID).(int64)
 	return id
 }
 

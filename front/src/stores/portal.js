@@ -10,6 +10,8 @@ import { useAuthStore } from '@/stores/auth.js'
 // паттерн, что и в TvView.vue: getDirectory() → Map(id, user)).
 export const usePortalStore = defineStore('portal', () => {
   const topics = ref([])
+  // Популярные хештеги компании (панель «Популярные теги» ленты).
+  const popularTags = ref([])
   // Лента — два серверных списка: pinnedPosts (все актуально закреплённые,
   // приходят только с первой страницей) и posts (хронология БЕЗ закреплённых,
   // догружается keyset-курсором через fetchMore).
@@ -28,7 +30,7 @@ export const usePortalStore = defineStore('portal', () => {
   const unread = ref(0)
   const viewingFeed = ref(false)
 
-  const filters = reactive({ topicId: null, search: '' })
+  const filters = reactive({ topicId: null, search: '', tag: null })
 
   const authorMap = ref(new Map())
   const commentsByPost = reactive({})
@@ -115,13 +117,29 @@ export const usePortalStore = defineStore('portal', () => {
   async function fetchPosts() {
     loadingPosts.value = true
     try {
-      const data = await api.getPosts({ topicId: filters.topicId, search: filters.search })
+      const data = await api.getPosts({ topicId: filters.topicId, search: filters.search, tag: filters.tag })
       posts.value = data.posts ?? []
       pinnedPosts.value = data.pinned ?? []
       nextCursor.value = data.next_cursor ?? null
     } finally {
       loadingPosts.value = false
     }
+  }
+
+  // ── Популярные теги ──
+  async function fetchPopularTags() {
+    try {
+      const data = await api.getPopularTags(20)
+      popularTags.value = data.tags ?? []
+    } catch { /* панель тегов не критична */ }
+  }
+
+  // Фильтр ленты по хештегу (клик по чипу/тегу в теле поста); null — снять.
+  // Тег и раздел взаимоисключающи — тег снимает выбранный раздел.
+  function setTag(tag) {
+    filters.tag = tag || null
+    if (filters.tag) filters.topicId = null
+    fetchPosts()
   }
 
   // fetchMore — догрузка следующей страницы хронологии по курсору (append
@@ -131,7 +149,7 @@ export const usePortalStore = defineStore('portal', () => {
     loadingMore.value = true
     try {
       const data = await api.getPosts({
-        topicId: filters.topicId, search: filters.search, cursor: nextCursor.value,
+        topicId: filters.topicId, search: filters.search, tag: filters.tag, cursor: nextCursor.value,
       })
       const known = new Set([...posts.value, ...pinnedPosts.value].map((p) => p.id))
       posts.value.push(...(data.posts ?? []).filter((p) => !known.has(p.id)))
@@ -142,7 +160,10 @@ export const usePortalStore = defineStore('portal', () => {
   }
 
   function setTopic(id) {
+    // Раздел и хештег — взаимоисключающие «срезы» ленты (иначе пустая выдача
+    // сбивает с толку); выбор раздела снимает активный тег.
     filters.topicId = id
+    filters.tag = null
     fetchPosts()
   }
 
@@ -213,6 +234,8 @@ export const usePortalStore = defineStore('portal', () => {
     } else if (filters.topicId == null || filters.topicId === post.topic_id) {
       posts.value.unshift(post)
     }
+    // Новый пост мог принести новые хештеги — освежаем панель (фоном).
+    if (post.tags?.length) fetchPopularTags()
     return post
   }
 
@@ -483,6 +506,7 @@ export const usePortalStore = defineStore('portal', () => {
   // Смена компании / логаут — данные прежней компании не должны утекать в UI.
   function reset() {
     topics.value = []
+    popularTags.value = []
     posts.value = []
     pinnedPosts.value = []
     nextCursor.value = null
@@ -492,6 +516,7 @@ export const usePortalStore = defineStore('portal', () => {
     unread.value = 0
     filters.topicId = null
     filters.search = ''
+    filters.tag = null
     authorMap.value = new Map()
     markedViews.clear()
     for (const k of Object.keys(commentsByPost)) delete commentsByPost[k]
@@ -499,12 +524,13 @@ export const usePortalStore = defineStore('portal', () => {
   }
 
   return {
-    topics, posts, pinnedPosts, highlight, loadingTopics, loadingPosts, filters,
+    topics, popularTags, posts, pinnedPosts, highlight, loadingTopics, loadingPosts, filters,
     nextCursor, loadingMore,
     unread, viewingFeed, fetchUnread, markSeen,
     authorMap, commentsByPost, loadingComments,
     loadAuthors, resolveAuthor,
     fetchTopics, createTopic, updateTopic, deleteTopic,
+    fetchPopularTags, setTag,
     fetchPosts, fetchMore, setTopic, setSearch, loadHighlight,
     createPost, updatePost, deletePost, pinPost, unpinPost, markView,
     uploadAttachment, deleteAttachment, addReaction, removeReaction,

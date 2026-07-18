@@ -5,12 +5,23 @@ import { renderMarkdown } from '@/utils/markdown.js'
 const props = defineProps({
   source: { type: String, default: '' },
 })
+// Хештеги в теле кликабельны: делегируем клик и эмитим 'tag' — родитель
+// (лента портала) фильтрует по нему. Компоненты без слушателя событие игнорят.
+const emit = defineEmits(['tag'])
 
 const html = computed(() => renderMarkdown(props.source))
+
+function onClick(e) {
+  const tagEl = e.target.closest?.('.md-tag')
+  if (tagEl) {
+    e.preventDefault()
+    emit('tag', tagEl.dataset.tag)
+  }
+}
 </script>
 
 <template>
-  <div class="markdown-view" v-html="html" />
+  <div class="markdown-view" v-html="html" @click="onClick" />
 </template>
 
 <style scoped>
@@ -45,6 +56,16 @@ const html = computed(() => renderMarkdown(props.source))
 }
 .markdown-view :deep(.md-link:hover) {
   filter: brightness(0.92);
+}
+.markdown-view :deep(.md-tag) {
+  color: var(--color-primary);
+  font-weight: 600;
+  cursor: pointer;
+  border-radius: var(--radius-xs, 6px);
+}
+.markdown-view :deep(.md-tag:hover) {
+  text-decoration: underline;
+  text-underline-offset: 2px;
 }
 .markdown-view :deep(.md-code) {
   background: var(--color-surface-high);

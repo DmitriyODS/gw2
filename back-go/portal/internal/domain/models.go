@@ -14,6 +14,19 @@ const (
 // смысл «важного сверху» (аналог SharePoint news boost).
 const MaxPinnedPosts = 10
 
+// Хештеги постов (как в соцсетях): парсятся из тела поста. Лимиты защищают от
+// спама тегами и слишком длинных «тегов».
+const (
+	MaxPostTags = 15
+	MaxTagLen   = 50
+)
+
+// TagCount — тег и число постов компании с ним (топ популярных тегов ленты).
+type TagCount struct {
+	Tag   string `json:"tag"`
+	Count int    `json:"count"`
+}
+
 // Topic — тематический раздел портала компании. Создаёт/правит администратор.
 type Topic struct {
 	ID        int64     `json:"id"`
@@ -41,6 +54,9 @@ type Post struct {
 	PinnedUntil *time.Time `json:"pinned_until"`
 	CreatedAt   time.Time  `json:"created_at"`
 	UpdatedAt   time.Time  `json:"updated_at"`
+
+	// Tags — хештеги поста (нормализованные, lower), извлекаются из тела.
+	Tags []string `json:"tags"`
 
 	// Заполняются при чтении списка/карточки (без N+1 — батч-загрузка).
 	Attachments   []Attachment   `json:"attachments"`
@@ -98,6 +114,8 @@ type PostListFilter struct {
 	TopicID         *int64
 	Pinned          *bool
 	Search          string
+	// Tag — фильтр по хештегу (нормализованный, lower); "" — без фильтра.
+	Tag             string
 	Limit           int
 	BeforeCreatedAt *time.Time
 	BeforeID        int64

@@ -4,11 +4,38 @@ import (
 	"context"
 	"encoding/base64"
 	"fmt"
+	"regexp"
 	"strings"
 	"time"
 
 	"github.com/DmitriyODS/gw2/back-go/portal/internal/domain"
 )
+
+// tagRe — хештег в теле поста: символ #, которому не предшествует буква/цифра/_
+// (не режем середину слова и не цепляем URL-якоря вида .../#anchor или
+// html-сущности &#39;), затем 2..50 букв/цифр/подчёркиваний, начиная с буквы
+// или цифры. Юникод-классы ⇒ кириллица работает наравне с латиницей.
+var tagRe = regexp.MustCompile(`(^|[^\p{L}\p{N}_&#/])#([\p{L}\p{N}][\p{L}\p{N}_]{1,49})`)
+
+// extractTags — набор хештегов из тела поста: нормализованные (lower),
+// без дублей, в порядке появления, не более domain.MaxPostTags.
+func extractTags(body string) []string {
+	matches := tagRe.FindAllStringSubmatch(body, -1)
+	out := make([]string, 0, len(matches))
+	seen := map[string]bool{}
+	for _, m := range matches {
+		tag := strings.ToLower(m[2])
+		if len([]rune(tag)) > domain.MaxTagLen || seen[tag] {
+			continue
+		}
+		seen[tag] = true
+		out = append(out, tag)
+		if len(out) >= domain.MaxPostTags {
+			break
+		}
+	}
+	return out
+}
 
 // PostListParams — сырые параметры выборки постов (топик/закреплённые/поиск +
 // keyset-пагинация: Limit 1..50, Cursor — opaque-курсор из next_cursor
@@ -17,6 +44,7 @@ type PostListParams struct {
 	TopicID *int64
 	Pinned  *bool
 	Search  string
+	Tag     string
 	Limit   int
 	Cursor  string
 }
@@ -67,7 +95,10 @@ func (s *Service) ListPosts(ctx context.Context, companyID, viewerID int64, p Po
 	if limit > maxPageSize {
 		limit = maxPageSize
 	}
-	base := domain.PostListFilter{CompanyID: companyID, TopicID: p.TopicID, Search: strings.TrimSpace(p.Search)}
+	base := domain.PostListFilter{
+		CompanyID: companyID, TopicID: p.TopicID,
+		Search: strings.TrimSpace(p.Search), Tag: strings.ToLower(strings.TrimSpace(p.Tag)),
+	}
 	feed := &PostFeed{Pinned: []*domain.Post{}, Posts: []*domain.Post{}}
 
 	pinnedTrue := true
@@ -144,7 +175,10 @@ func (s *Service) CreatePost(ctx context.Context, companyID, authorID int64, top
 			return nil, err
 		}
 	}
-	p := &domain.Post{CompanyID: companyID, TopicID: topicID, AuthorID: authorID, Title: normTitle(title), Body: body}
+	p := &domain.Post{
+		CompanyID: companyID, TopicID: topicID, AuthorID: authorID,
+		Title: normTitle(title), Body: body, Tags: extractTags(body),
+	}
 	if err := s.repo.CreatePost(ctx, p); err != nil {
 		return nil, err
 	}
@@ -178,7 +212,7 @@ func (s *Service) UpdatePost(ctx context.Context, companyID, id, userID int64, r
 			return nil, err
 		}
 	}
-	p.TopicID, p.Title, p.Body = topicID, normTitle(title), body
+	p.TopicID, p.Title, p.Body, p.Tags = topicID, normTitle(title), body, extractTags(body)
 	if err := s.repo.UpdatePost(ctx, p); err != nil {
 		return nil, err
 	}
@@ -294,8 +328,18 @@ func postPayload(p *domain.Post) map[string]any {
 		"title": p.Title, "body": p.Body, "pinned_at": p.PinnedAt, "pinned_by": p.PinnedBy,
 		"pinned_until": p.PinnedUntil,
 		"created_at": p.CreatedAt, "updated_at": p.UpdatedAt,
+		"tags":        p.Tags,
 		"attachments": p.Attachments, "comment_count": p.CommentCount,
 		"reaction_counts": p.ReactionCount, "my_reactions": p.MyReactions,
 		"view_count": p.ViewCount,
 	}
+}
+
+// PopularTags — топ хештегов активной компании (панель «Популярные теги»
+// ленты). Пустой набор — валиден (тегов ещё нет).
+func (s *Service) PopularTags(ctx context.Context, companyID int64, limit int) ([]domain.TagCount, error) {
+	if limit <= 0 || limit > 50 {
+		limit = 20
+	}
+	return s.repo.PopularTags(ctx, companyID, limit)
 }

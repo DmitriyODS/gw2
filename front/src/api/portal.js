@@ -16,14 +16,21 @@ export const deleteTopic = (id) => apiRequest(`/portal/topics/${id}`, { method: 
 // Серверная keyset-пагинация: ответ {pinned, posts, next_cursor} — pinned
 // (все актуально закреплённые) приходит только на первой странице (без
 // cursor), дальше пустой; next_cursor null — постов больше нет.
-export const getPosts = ({ topicId, search, limit, cursor } = {}) => {
+export const getPosts = ({ topicId, search, tag, limit, cursor } = {}) => {
   const qs = new URLSearchParams()
   if (topicId != null) qs.set('topic_id', topicId)
   if (search) qs.set('search', search)
+  if (tag) qs.set('tag', tag)
   if (limit != null) qs.set('limit', limit)
   if (cursor) qs.set('cursor', cursor)
   const s = qs.toString()
   return apiRequest(`/portal/posts${s ? '?' + s : ''}`)
+}
+
+// Топ популярных хештегов компании (панель «Популярные теги» ленты).
+export const getPopularTags = (limit) => {
+  const s = limit != null ? `?limit=${limit}` : ''
+  return apiRequest(`/portal/tags${s}`)
 }
 
 export const getPost = (id) => apiRequest(`/portal/posts/${id}`)

@@ -111,7 +111,16 @@ export async function apiRequest(path, options = {}) {
     }
   }
 
-  if (options.blob) return resp
+  // Blob-загрузки (экспорт файлов): при не-OK ответе НЕ отдаём тело как файл
+  // (иначе сохранится битый/ошибочный файл) — бросаем ошибку с сообщением.
+  if (options.blob) {
+    if (!resp.ok) {
+      let err = { status: resp.status, error: 'unknown', message: 'Ошибка сервера' }
+      try { err = { ...err, ...await resp.json() } } catch { /* не JSON */ }
+      throw err
+    }
+    return resp
+  }
 
   if (!resp.ok) {
     let err = { status: resp.status, error: 'unknown', message: 'Ошибка сервера' }

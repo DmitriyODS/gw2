@@ -499,10 +499,15 @@ services:
         condition: service_healthy
       migrate:
         condition: service_completed_successfully
+      ai:
+        condition: service_started
     environment:
       DATABASE_URL: postgresql://${DB_USER}:${DB_PASSWORD}@db:5432/${DB_NAME}
       REDIS_URL: redis://redis:6379/0
       PASETO_PUBLIC_KEY: ${PASETO_PUBLIC_KEY}
+      # ИИ-поиск заметок: векторизация запросов/заметок через aisvc.Embed.
+      # Пусто/убрать → семантика выключена, поиск текстовый (fail-open).
+      AI_GRPC_ADDR: ai:9093
       UPLOAD_FOLDER: /app/uploads
       # Хранилище файлов: local (диск, dev) | s3 (Beget, prod). В prod выставить
       # STORAGE_BACKEND=s3 и S3_* в deploy/.env.
