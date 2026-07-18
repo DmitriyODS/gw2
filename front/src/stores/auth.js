@@ -8,6 +8,10 @@ import { login as apiLogin, logout as apiLogout, changeDefault as apiChangeDefau
 import { joinCompanyByCode as apiJoinCompany, acceptCompanyInvite as apiAcceptInvite } from '@/api/companies.js'
 import router from '@/router/index.js'
 import { disconnectSocket, updateSocketAuth } from '@/socket/index.js'
+// call.js статически импортирует auth.js — цикл безопасен: useCallStore
+// вызывается только внутри функций (в рантайме, после инициализации сторов),
+// а call.js и так эагерно грузится в App.vue, поэтому вес чанка не растёт.
+import { useCallStore } from './call.js'
 
 export const useAuthStore = defineStore('auth', () => {
   const user = ref(null)
@@ -222,12 +226,8 @@ export const useAuthStore = defineStore('auth', () => {
     loggingOut.value = true
     try {
       // Сначала выходим из звонка (если он идёт): иначе после разлогина медиа
-      // LiveKit продолжает жить — собеседника видно и слышно. Импорт ленивый,
-      // чтобы не закольцевать стора (call.js импортирует auth.js).
-      try {
-        const { useCallStore } = await import('./call.js')
-        useCallStore().hangup()
-      } catch {}
+      // LiveKit продолжает жить — собеседника видно и слышно.
+      try { useCallStore().hangup() } catch {}
       // Мобильная обёртка: снимаем FCM-токен устройства, пока сессия жива —
       // иначе после выхода устройство продолжит получать пуши. Импорт ленивый
       // (nativeApp → api/push → client → auth), в браузере — no-op.
@@ -257,9 +257,7 @@ export const useAuthStore = defineStore('auth', () => {
 
   function clearAuth() {
     // Сессия закончилась (logout или умерший refresh) — медиа звонка тоже.
-    import('./call.js')
-      .then(({ useCallStore }) => { try { useCallStore().reset() } catch {} })
-      .catch(() => {})
+    try { useCallStore().reset() } catch {}
     disconnectSocket()
     user.value = null
     token.value = null

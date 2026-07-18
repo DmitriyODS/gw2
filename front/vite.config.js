@@ -56,7 +56,13 @@ export default defineConfig({
     // Vue — вечный белый экран в мобильной обёртке. Держим планку Vite 5
     // ('modules'): esbuild дотранспилирует синтаксис, LightningCSS по этому же
     // target'у понижает CSS.
-    target: ['es2020', 'chrome87', 'edge88', 'firefox78', 'safari14']
+    target: ['es2020', 'chrome87', 'edge88', 'firefox78', 'safari14'],
+    // Приложение объективно крупное (LiveKit для звонков, TipTap-редактор,
+    // PrimeVue): дефолтный порог 500 КБ даёт постоянный шумный варнинг о
+    // размере чанков без реальной пользы. Дробить эти вендоры вручную рискованно
+    // (порядок загрузки чувствителен для старых WebView, см. build.target выше),
+    // поэтому поднимаем порог до реалистичного.
+    chunkSizeWarningLimit: 800
   },
   plugins: [vue(), serveChangelog(), serveUploads(), serveApps()],
   resolve: {
