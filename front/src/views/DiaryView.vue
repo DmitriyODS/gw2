@@ -2,9 +2,9 @@
   <div class="dv split-view">
     <!-- ЛЕВАЯ ПАНЕЛЬ -->
     <aside class="split-side">
-      <div class="dv-side-head">
-        <span class="material-symbols-outlined">event_note</span>
-        <span class="dv-side-title">Ежедневник</span>
+      <div class="split-side-head">
+        <span class="split-side-tile"><span class="material-symbols-outlined">event_note</span></span>
+        <span class="split-side-title">Ежедневник</span>
       </div>
       <div class="dv-side-tabs">
         <SegmentedTabs :model-value="store.tab" :tabs="tabs" full-width dense @update:model-value="store.setTab" />
@@ -910,10 +910,8 @@ watch(() => store.loadingEntries, () => nextTick(measureWeekColumn))
 <style scoped>
 /* Каркас (стеклянные панели, список, кнопка добавления, мобильное скрытие
    левой панели) — глобальный паттерн .split-* (main.css). Здесь — только
-   специфика ежедневников: шапка-заголовок, прогресс и drop-цель пункта. */
-.dv-side-head { flex-shrink: 0; display: flex; align-items: center; gap: 8px; padding: 14px 12px; border-bottom: 1px solid var(--color-outline-dim); }
-.dv-side-head .material-symbols-outlined { color: var(--color-primary); font-size: 22px; }
-.dv-side-title { font-size: 16px; font-weight: 800; color: var(--color-text); }
+   специфика ежедневников: прогресс и drop-цель пункта. Заголовок боковой
+   панели — общий .split-side-head/.split-side-tile (как у календаря). */
 .dv-side-tabs { padding: 10px 10px 4px; }
 .dv-side-main { flex: 1; display: flex; flex-direction: column; min-width: 0; }
 .dv-side-owner { font-size: 12px; opacity: 0.8; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
