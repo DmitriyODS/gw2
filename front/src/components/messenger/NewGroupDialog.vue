@@ -44,7 +44,7 @@
     </div>
 
     <div v-if="loading && !results.length" class="ng-empty">
-      <ProgressSpinner style="width:28px;height:28px" />
+      <BrandLoader :size="48" />
     </div>
     <ul v-else class="ng-results">
       <li
@@ -80,7 +80,7 @@
 
 <script setup>
 import { ref, computed, watch } from 'vue'
-import ProgressSpinner from 'primevue/progressspinner'
+import BrandLoader from '@/components/common/BrandLoader.vue'
 import AppDialog from '@/components/common/AppDialog.vue'
 import AvatarCropper from '@/components/settings/AvatarCropper.vue'
 import { useContactPicker } from '@/composables/useContactPicker.js'

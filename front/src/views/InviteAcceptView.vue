@@ -6,7 +6,7 @@
       </div>
 
       <div class="login-card">
-        <div v-if="loading" class="state"><ProgressSpinner /></div>
+        <div v-if="loading" class="state"><BrandLoader /></div>
 
         <template v-else-if="invite">
           <div class="invite-icon"><span class="material-symbols-outlined">groups</span></div>
@@ -35,7 +35,7 @@
 <script setup>
 import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
-import ProgressSpinner from 'primevue/progressspinner'
+import BrandLoader from '@/components/common/BrandLoader.vue'
 import { useAuthStore } from '@/stores/auth.js'
 import { useThemeStore } from '@/stores/theme.js'
 import { useNotificationsStore } from '@/stores/notifications.js'

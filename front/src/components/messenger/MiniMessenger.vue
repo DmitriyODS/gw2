@@ -27,7 +27,7 @@
             <template v-else>
               <div ref="assistantThreadEl" class="mini-thread assistant-thread">
                 <div v-if="assistantStore.loading && !assistantStore.messages.length" class="mini-loading">
-                  <ProgressSpinner style="width:28px;height:28px" />
+                  <BrandLoader :size="48" />
                 </div>
                 <div v-else-if="!assistantStore.messages.length" class="mini-empty">
                   <span class="material-symbols-outlined">smart_toy</span>
@@ -191,7 +191,7 @@
               <span>Отпустите файл</span>
             </div>
             <div v-if="messenger.loadingMessages && !messenger.activeMessages.length" class="mini-loading">
-              <ProgressSpinner style="width:28px;height:28px" />
+              <BrandLoader :size="48" />
             </div>
             <div v-for="g in messageGroups" :key="g.key" class="msg-day-group">
               <MessageDateDivider :label="g.label" @jump="jumpToDay" />
@@ -337,7 +337,7 @@ import EmployeeProfileDialog from '@/components/common/EmployeeProfileDialog.vue
 import SegmentedTabs from '@/components/common/SegmentedTabs.vue'
 import LinkifiedText from '@/components/common/LinkifiedText.vue'
 import MarkdownView from '@/components/common/MarkdownView.vue'
-import ProgressSpinner from 'primevue/progressspinner'
+import BrandLoader from '@/components/common/BrandLoader.vue'
 
 const route = useRoute()
 const router = useRouter()

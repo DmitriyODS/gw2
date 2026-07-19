@@ -104,7 +104,7 @@
           </header>
 
           <div v-if="statsLoading" class="loading-inline">
-            <ProgressSpinner style="width:32px;height:32px" />
+            <BrandLoader :size="64" />
           </div>
 
           <template v-else-if="profileStats">
@@ -375,7 +375,7 @@ import AppDialog from '@/components/common/AppDialog.vue'
 import AuthorizeDeviceDialog from '@/components/devicelink/AuthorizeDeviceDialog.vue'
 import DataTable from 'primevue/datatable'
 import Column from 'primevue/column'
-import ProgressSpinner from 'primevue/progressspinner'
+import BrandLoader from '@/components/common/BrandLoader.vue'
 
 const authStore = useAuthStore()
 const notif = useNotificationsStore()

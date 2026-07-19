@@ -78,7 +78,7 @@
     <div v-if="yandexAuth.enabled" class="alt-register">
       <button type="button" class="alt-register-btn" @click="goYandex">
         <span class="ya-badge">Я</span>
-        Продолжить с Яндексом
+        Использовать Яндекс
       </button>
     </div>
   </AuthShell>

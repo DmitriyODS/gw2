@@ -15,7 +15,7 @@
       </div>
     </header>
 
-    <div v-if="loading" class="state-block"><ProgressSpinner /></div>
+    <div v-if="loading" class="state-block"><BrandLoader /></div>
     <div v-else-if="loadError" class="state-block error-block">
       <span class="material-symbols-outlined">error</span>
       <p>{{ loadError }}</p>
@@ -429,7 +429,7 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
-import ProgressSpinner from 'primevue/progressspinner'
+import BrandLoader from '@/components/common/BrandLoader.vue'
 import Select from 'primevue/select'
 import Column from 'primevue/column'
 import AppDialog from '@/components/common/AppDialog.vue'

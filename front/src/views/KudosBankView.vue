@@ -17,7 +17,7 @@
     </header>
 
     <div v-if="!bank" class="admin-body kb-loading">
-      <ProgressSpinner style="width:36px;height:36px" />
+      <BrandLoader :size="64" />
     </div>
 
     <div v-else class="admin-body">
@@ -434,7 +434,7 @@
 <script setup>
 import { computed, onMounted, reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
-import ProgressSpinner from 'primevue/progressspinner'
+import BrandLoader from '@/components/common/BrandLoader.vue'
 import EmptyState from '@/components/common/EmptyState.vue'
 import KudosCoin from '@/components/pets/KudosCoin.vue'
 import TransferDialog from '@/components/pets/bank/TransferDialog.vue'

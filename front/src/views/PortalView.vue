@@ -78,7 +78,7 @@
         </button>
       </div>
       <div v-if="store.loadingPosts" class="portal-status">
-        <ProgressSpinner style="width:32px;height:32px" />
+        <BrandLoader :size="64" />
       </div>
 
       <template v-else>
@@ -167,6 +167,7 @@
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import ProgressSpinner from 'primevue/progressspinner'
+import BrandLoader from '@/components/common/BrandLoader.vue'
 import { useAuthStore } from '@/stores/auth.js'
 import { usePortalStore } from '@/stores/portal.js'
 import { usePermission } from '@/composables/usePermission.js'

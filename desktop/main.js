@@ -158,10 +158,22 @@ function createWindow(appUrl) {
         return {action: 'deny'}
     })
 
+    // OAuth Яндекса обязан пройти внутри окна: уход в системный браузер
+    // оставил бы приложение без сессии (редирект /yandex-callback доехал бы
+    // не туда). Цепочка: oauth.yandex.ru → passport.yandex.ru → обратно к нам.
+    const isYandexOAuthUrl = (url) => {
+        try {
+            const host = new URL(url).hostname
+            return host === 'yandex.ru' || host.endsWith('.yandex.ru')
+        } catch {
+            return false
+        }
+    }
+
     // Уход со своего origin в самом окне (внешние ссылки без _blank) — тоже
     // в системный браузер.
     mainWindow.webContents.on('will-navigate', (e, url) => {
-        if (!url.startsWith(appUrl)) {
+        if (!url.startsWith(appUrl) && !isYandexOAuthUrl(url)) {
             e.preventDefault()
             shell.openExternal(url)
         }

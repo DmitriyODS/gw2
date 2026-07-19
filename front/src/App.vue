@@ -10,7 +10,7 @@
       <div class="nav-progress-bar" />
     </div>
     <div v-if="initializing" class="app-loading">
-      <ProgressSpinner />
+      <BrandLoader />
       <p v-if="authStore.connecting" class="app-loading-hint">
         Нет соединения с сервером — подключимся, как только появится сеть
       </p>
@@ -95,7 +95,7 @@ import IncomingCallOverlay from '@/components/call/IncomingCallOverlay.vue'
 import CallView from '@/components/call/CallView.vue'
 import ReturnCallBanner from '@/components/call/ReturnCallBanner.vue'
 import Toast from 'primevue/toast'
-import ProgressSpinner from 'primevue/progressspinner'
+import BrandLoader from '@/components/common/BrandLoader.vue'
 
 const authStore = useAuthStore()
 const themeStore = useThemeStore()

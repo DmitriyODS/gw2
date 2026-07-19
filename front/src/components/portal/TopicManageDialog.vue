@@ -11,7 +11,7 @@
     <!-- Режим «список» -->
     <template v-if="mode === 'list'">
       <div v-if="portal.loadingTopics" class="topic-status">
-        <ProgressSpinner style="width:28px;height:28px" />
+        <BrandLoader :size="48" />
       </div>
 
       <EmptyState
@@ -170,7 +170,7 @@
 
 <script setup>
 import { computed, nextTick, ref, watch } from 'vue'
-import ProgressSpinner from 'primevue/progressspinner'
+import BrandLoader from '@/components/common/BrandLoader.vue'
 import InputText from 'primevue/inputtext'
 import AppDialog from '@/components/common/AppDialog.vue'
 import EmptyState from '@/components/common/EmptyState.vue'

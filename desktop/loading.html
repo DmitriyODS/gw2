@@ -10,23 +10,35 @@
       -webkit-user-select: none; user-select: none;
     }
     .box { text-align: center; padding: 32px; }
-    .logo { width: 88px; height: 88px; border-radius: 22px; }
     h1 { font-size: 18px; font-weight: 600; margin: 20px 0 6px; }
     p { font-size: 13px; opacity: .65; margin: 0; line-height: 1.5; }
-    .spinner {
-      width: 22px; height: 22px; margin: 22px auto 0; border-radius: 50%;
-      border: 2.5px solid rgba(227, 226, 230, .25); border-top-color: #a8c8ff;
-      animation: spin .8s linear infinite;
-    }
-    @keyframes spin { to { transform: rotate(360deg); } }
+    /* Логотип-лоадер: круг фирменного знака, внутри дрейфуют волны.
+       Каждая волна — синус с периодом 71 и хвостом на второй период:
+       сдвиг на -71px возвращает фазу, петля бесшовна. */
+    .logo-loader { width: 96px; height: 96px; }
+    .wave { animation: drift linear infinite; }
+    .wave-back  { fill: #6ab0e8; animation-duration: 5.2s; }
+    .wave-mid   { fill: #2558a9; animation-duration: 3.6s; animation-direction: reverse; }
+    .wave-front { fill: #1195ed; animation-duration: 2.6s; }
+    @keyframes drift { from { transform: translateX(0); } to { transform: translateX(-71px); } }
+    @media (prefers-reduced-motion: reduce) { .wave { animation: none; } }
   </style>
 </head>
 <body>
   <div class="box">
-    <img class="logo" src="build/icon.png" alt="">
+    <svg class="logo-loader" viewBox="0 0 71 71" aria-hidden="true">
+      <defs>
+        <clipPath id="logo-clip"><circle cx="35.5" cy="35.5" r="35.5"/></clipPath>
+      </defs>
+      <circle cx="35.5" cy="35.5" r="35.5" fill="#a5d8ff"/>
+      <g clip-path="url(#logo-clip)">
+        <path class="wave wave-back"  d="M0 30 Q17.75 22 35.5 30 T71 30 T106.5 30 T142 30 V71 H0 Z"/>
+        <path class="wave wave-mid"   d="M0 38 Q17.75 29 35.5 38 T71 38 T106.5 38 T142 38 V71 H0 Z"/>
+        <path class="wave wave-front" d="M0 46 Q17.75 38 35.5 46 T71 46 T106.5 46 T142 46 V71 H0 Z"/>
+      </g>
+    </svg>
     <h1>Groove Work</h1>
     <p id="status">Подключаемся…</p>
-    <div class="spinner"></div>
   </div>
   <script>
     // Открыто повторно после неудачной загрузки (main.js: hash '#error') —

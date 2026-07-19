@@ -140,7 +140,7 @@
       </button>
 
       <!-- Витрина -->
-      <div v-if="loading" class="ps-loading"><ProgressSpinner style="width:32px;height:32px" /></div>
+      <div v-if="loading" class="ps-loading"><BrandLoader :size="64" /></div>
       <div v-else class="ps-grid">
         <button
           v-for="(item, idx) in visibleItems"
@@ -261,7 +261,7 @@
 <script setup>
 import { computed, onMounted, onBeforeUnmount, ref } from 'vue'
 import { useRouter } from 'vue-router'
-import ProgressSpinner from 'primevue/progressspinner'
+import BrandLoader from '@/components/common/BrandLoader.vue'
 import AppDialog from '@/components/common/AppDialog.vue'
 import EmojiGlyph from '@/components/common/EmojiGlyph.vue'
 import KudosCoin from '@/components/pets/KudosCoin.vue'

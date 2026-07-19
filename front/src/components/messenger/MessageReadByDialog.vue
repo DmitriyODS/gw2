@@ -7,7 +7,7 @@
     title="Прочитали"
     @update:model-value="$emit('update:modelValue', $event)"
   >
-    <div v-if="loading" class="rb-empty"><ProgressSpinner style="width:28px;height:28px" /></div>
+    <div v-if="loading" class="rb-empty"><BrandLoader :size="48" /></div>
     <div v-else-if="!readers.length" class="rb-empty">
       <span class="material-symbols-outlined">visibility_off</span>
       <p>Пока никто не прочитал</p>
@@ -23,7 +23,7 @@
 
 <script setup>
 import { ref, watch } from 'vue'
-import ProgressSpinner from 'primevue/progressspinner'
+import BrandLoader from '@/components/common/BrandLoader.vue'
 import AppDialog from '@/components/common/AppDialog.vue'
 import { messageReadBy } from '@/api/messenger.js'
 

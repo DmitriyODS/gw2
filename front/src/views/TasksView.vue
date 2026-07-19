@@ -87,7 +87,7 @@
         :class="{ 'cards-area--board': viewMode === 'board' }"
       >
         <div v-if="tasksStore.loading" class="state-block">
-          <ProgressSpinner />
+          <BrandLoader />
         </div>
         <template v-else>
           <EmptyState
@@ -264,7 +264,7 @@ import AppFab from '@/components/common/AppFab.vue'
 import EmptyState from '@/components/common/EmptyState.vue'
 import SegmentedTabs from '@/components/common/SegmentedTabs.vue'
 import SearchField from '@/components/common/SearchField.vue'
-import ProgressSpinner from 'primevue/progressspinner'
+import BrandLoader from '@/components/common/BrandLoader.vue'
 import { useCompanySettings } from '@/composables/useCompanySettings.js'
 import { useScrollCollapse } from '@/composables/useScrollCollapse.js'
 import { useBreakpoint } from '@/composables/useBreakpoint.js'

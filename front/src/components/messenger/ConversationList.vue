@@ -53,7 +53,7 @@
     </div>
 
     <div v-if="loading" class="conv-empty">
-      <ProgressSpinner />
+      <BrandLoader :size="64" />
     </div>
     <EmptyState
       v-else-if="!visible.length"
@@ -153,7 +153,7 @@
 
 <script setup>
 import { ref, computed } from 'vue'
-import ProgressSpinner from 'primevue/progressspinner'
+import BrandLoader from '@/components/common/BrandLoader.vue'
 import SegmentedTabs from '@/components/common/SegmentedTabs.vue'
 import EmptyState from '@/components/common/EmptyState.vue'
 import UserStatusDialog from './UserStatusDialog.vue'

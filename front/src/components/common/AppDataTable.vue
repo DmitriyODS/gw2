@@ -33,7 +33,7 @@
       </template>
       <template #loading>
         <div class="app-table-loading">
-          <ProgressSpinner style="width: 36px; height: 36px" stroke-width="3" />
+          <BrandLoader :size="64" />
         </div>
       </template>
       <slot />
@@ -43,7 +43,7 @@
 
 <script setup>
 import DataTable from 'primevue/datatable'
-import ProgressSpinner from 'primevue/progressspinner'
+import BrandLoader from '@/components/common/BrandLoader.vue'
 
 const props = defineProps({
   value: { type: Array, default: () => [] },

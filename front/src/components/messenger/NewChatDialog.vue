@@ -18,7 +18,7 @@
       />
     </div>
     <div v-if="loading && !results.length" class="newchat-empty">
-      <ProgressSpinner style="width:32px;height:32px" />
+      <BrandLoader :size="48" />
     </div>
     <div v-else-if="!results.length" class="newchat-empty">
       <span class="material-symbols-outlined">person_search</span>
@@ -43,7 +43,7 @@
 
 <script setup>
 import { watch } from 'vue'
-import ProgressSpinner from 'primevue/progressspinner'
+import BrandLoader from '@/components/common/BrandLoader.vue'
 import AppDialog from '@/components/common/AppDialog.vue'
 import { useContactPicker } from '@/composables/useContactPicker.js'
 

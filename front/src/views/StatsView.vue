@@ -45,7 +45,7 @@
     />
 
     <div v-else-if="loading" class="loading-state">
-      <ProgressSpinner />
+      <BrandLoader />
     </div>
 
     <!-- Общая статистика -->
@@ -196,7 +196,7 @@
             />
           </div>
           <div v-if="userTasksLoading" class="user-tasks-loading">
-            <ProgressSpinner style="width:28px;height:28px" />
+            <BrandLoader :size="48" />
           </div>
           <template v-else-if="userTasksData">
             <ul v-if="isMobile" class="m-list">
@@ -343,7 +343,7 @@ import SegmentedTabs from '@/components/common/SegmentedTabs.vue'
 import EmptyState from '@/components/common/EmptyState.vue'
 import DataTable from 'primevue/datatable'
 import Column from 'primevue/column'
-import ProgressSpinner from 'primevue/progressspinner'
+import BrandLoader from '@/components/common/BrandLoader.vue'
 import Select from 'primevue/select'
 
 const { isAtLeast } = usePermission()

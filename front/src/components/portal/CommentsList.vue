@@ -1,7 +1,7 @@
 <template>
   <div class="comments-list">
     <div v-if="loading" class="comments-loading">
-      <ProgressSpinner style="width:24px;height:24px" />
+      <BrandLoader :size="40" />
     </div>
     <ul v-else-if="tree.length" class="comments-items">
       <CommentNode
@@ -42,7 +42,7 @@
 
 <script setup>
 import { computed, nextTick, onMounted, ref } from 'vue'
-import ProgressSpinner from 'primevue/progressspinner'
+import BrandLoader from '@/components/common/BrandLoader.vue'
 import InputText from 'primevue/inputtext'
 import { usePortalStore } from '@/stores/portal.js'
 import { useNotificationsStore } from '@/stores/notifications.js'

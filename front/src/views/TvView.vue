@@ -74,7 +74,7 @@
       <transition name="tv-stage" mode="out-in">
         <section :key="currentSlide.id" class="tv-stage">
           <div v-if="slideLoading && !commonData" class="tv-stage-loader">
-            <ProgressSpinner />
+            <BrandLoader />
           </div>
           <component
             v-else
@@ -130,7 +130,7 @@
 
 <script setup>
 import { ref, computed, watch, provide, onMounted, onBeforeUnmount } from 'vue'
-import ProgressSpinner from 'primevue/progressspinner'
+import BrandLoader from '@/components/common/BrandLoader.vue'
 import { useThemeStore } from '@/stores/theme.js'
 import { getDirectory } from '@/api/users.js'
 import { getTvFact } from '@/api/ai.js'

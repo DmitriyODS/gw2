@@ -26,7 +26,7 @@
       <span class="material-symbols-outlined">search</span>
       <input v-model="q" placeholder="По фамилии или логину" class="am-search-input" />
     </div>
-    <div v-if="loading && !results.length" class="am-empty"><ProgressSpinner style="width:28px;height:28px" /></div>
+    <div v-if="loading && !results.length" class="am-empty"><BrandLoader :size="48" /></div>
     <ul v-else class="am-results">
       <li
         v-for="u in candidates"
@@ -48,7 +48,7 @@
 
 <script setup>
 import { ref, computed, watch } from 'vue'
-import ProgressSpinner from 'primevue/progressspinner'
+import BrandLoader from '@/components/common/BrandLoader.vue'
 import AppDialog from '@/components/common/AppDialog.vue'
 import { useContactPicker } from '@/composables/useContactPicker.js'
 import { useMessengerStore } from '@/stores/messenger.js'

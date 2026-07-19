@@ -212,7 +212,7 @@
         @scroll="onScroll"
       >
         <div v-if="messenger.loadingMessages && !messenger.activeMessages.length" class="msg-loading">
-          <ProgressSpinner style="width:32px;height:32px" />
+          <BrandLoader :size="64" />
         </div>
         <template v-else>
           <div v-if="loadingOlder" class="msg-loading-older">
@@ -370,6 +370,7 @@ import EmployeeProfileDialog from '@/components/common/EmployeeProfileDialog.vue
 import AppFab from '@/components/common/AppFab.vue'
 import EmptyState from '@/components/common/EmptyState.vue'
 import ProgressSpinner from 'primevue/progressspinner'
+import BrandLoader from '@/components/common/BrandLoader.vue'
 
 const route = useRoute()
 const router = useRouter()

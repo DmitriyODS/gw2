@@ -27,7 +27,7 @@
     <div ref="bodyRef" class="admin-body">
       <div v-if="isMobile" class="cmp-cards">
         <div v-if="loading" class="state-block">
-          <ProgressSpinner />
+          <BrandLoader />
         </div>
         <EmptyState
           v-else-if="!visible.length"
@@ -209,7 +209,7 @@
 import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import Column from 'primevue/column'
-import ProgressSpinner from 'primevue/progressspinner'
+import BrandLoader from '@/components/common/BrandLoader.vue'
 import AppDialog from '@/components/common/AppDialog.vue'
 import AppDataTable from '@/components/common/AppDataTable.vue'
 import AppFab from '@/components/common/AppFab.vue'

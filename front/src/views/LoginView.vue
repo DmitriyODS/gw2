@@ -53,7 +53,7 @@
     <div class="alt-login">
       <button v-if="yandexAuth.enabled" type="button" class="alt-login-btn" @click="goYandex">
         <span class="ya-badge">Я</span>
-        Войти с Яндексом
+        Использовать Яндекс
       </button>
       <button type="button" class="alt-login-btn" @click="showQrLogin = true">
         <span class="material-symbols-outlined">qr_code_2</span>

@@ -26,7 +26,7 @@
     </div>
 
     <div v-if="loading && !results.length" class="nsc-empty">
-      <ProgressSpinner style="width:32px;height:32px" />
+      <BrandLoader :size="48" />
     </div>
     <div v-else-if="!results.length" class="nsc-empty">
       <span class="material-symbols-outlined">person_search</span>
@@ -61,7 +61,7 @@
 // рендерят MD); mode='note' — целая заметка: адресату выдаётся доступ на
 // просмотр (адресный шаринг) и приходит сообщение со ссылкой на заметку.
 import { computed, ref, watch } from 'vue'
-import ProgressSpinner from 'primevue/progressspinner'
+import BrandLoader from '@/components/common/BrandLoader.vue'
 import AppDialog from '@/components/common/AppDialog.vue'
 import { useContactPicker } from '@/composables/useContactPicker.js'
 import { openConversation, sendMessage } from '@/api/messenger.js'
