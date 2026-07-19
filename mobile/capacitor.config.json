@@ -6,8 +6,7 @@
   "appendUserAgent": "GrooveWorkApp",
   "server": {
     "url": "https://gw.kodass.ru",
-    "errorPath": "error.html",
-    "allowNavigation": ["yandex.ru", "*.yandex.ru"]
+    "errorPath": "error.html"
   },
   "android": {
     "allowMixedContent": false

@@ -14,6 +14,14 @@
     "appId": "ru.kodass.groovework",
     "productName": "GrooveWork",
     "artifactName": "GrooveWork-${version}-${os}.${ext}",
+    "protocols": [
+      {
+        "name": "Groove Work",
+        "schemes": [
+          "groovework"
+        ]
+      }
+    ],
     "files": [
       "main.js",
       "preload.js",

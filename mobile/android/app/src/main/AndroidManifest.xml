@@ -24,6 +24,16 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
 
+            <!-- Deep link возврата OAuth Яндекса: авторизация идёт в системном
+                 браузере, страница /yandex-callback зовёт
+                 groovework://yandex-callback?code=… — обрабатывает MainActivity. -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="groovework" android:host="yandex-callback" />
+            </intent-filter>
+
             <!-- Системное «Поделиться» текстом ИЛИ любыми файлами (в т.ч.
                  несколькими) → открыть приложение, выбрать получателя и
                  отправить в чат вложением (обрабатывает MainActivity). -->

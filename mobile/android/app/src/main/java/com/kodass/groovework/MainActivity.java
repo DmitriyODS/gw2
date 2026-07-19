@@ -96,15 +96,33 @@ public class MainActivity extends BridgeActivity {
 
         // Приложение открыто через системное «Поделиться» (ACTION_SEND/SEND_MULTIPLE).
         handleShareIntent(getIntent());
+
+        // Холодный старт по deep link'у groovework:// (возврат OAuth Яндекса).
+        handleDeepLink(getIntent());
     }
 
-    // Уже запущенное приложение получило новый intent («Поделиться» или звонок).
+    // Уже запущенное приложение получило новый intent («Поделиться», звонок
+    // или deep link возврата OAuth).
     @Override
     public void onNewIntent(Intent intent) {
         super.onNewIntent(intent);
         setIntent(intent);
         applyCallLaunch(intent);
         handleShareIntent(intent);
+        handleDeepLink(intent);
+    }
+
+    // Возврат OAuth Яндекса из системного браузера:
+    // groovework://yandex-callback?code=… → грузим /yandex-callback сервера в
+    // WebView — фронт сам обменяет одноразовый код на сессию приложения.
+    private void handleDeepLink(Intent intent) {
+        if (intent == null || !Intent.ACTION_VIEW.equals(intent.getAction())) return;
+        Uri data = intent.getData();
+        if (data == null || !"groovework".equals(data.getScheme())) return;
+        if (!"yandex-callback".equals(data.getHost())) return;
+        String query = data.getEncodedQuery();
+        String url = APP_URL + "/yandex-callback" + (TextUtils.isEmpty(query) ? "" : "?" + query);
+        this.bridge.getWebView().loadUrl(url);
     }
 
     // Запуск полноэкранным уведомлением звонка (extra gw_call): показать

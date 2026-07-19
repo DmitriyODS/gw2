@@ -90,6 +90,7 @@ import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth.js'
 import { useThemeStore } from '@/stores/theme.js'
 import { suggestLogin, yandexConfig, yandexAuthURL } from '@/api/auth.js'
+import { inAppShell } from '@/utils/appShell.js'
 import AuthShell from '@/components/auth/AuthShell.vue'
 
 const router = useRouter()
@@ -107,7 +108,7 @@ let suggestTimer = null
 // Регистрация через Яндекс ID: кнопка видна, только если сервер настроен.
 const yandexAuth = ref({ enabled: false, client_id: '' })
 function goYandex() {
-  window.location.href = yandexAuthURL(yandexAuth.value.client_id)
+  window.location.href = yandexAuthURL(yandexAuth.value.client_id, inAppShell() ? 'app' : '')
 }
 
 onMounted(() => {

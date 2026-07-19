@@ -13,6 +13,14 @@
         <button type="button" class="btn-grad" @click="router.push('/profile')">В профиль</button>
       </template>
 
+      <template v-else-if="state === 'return-app'">
+        <span class="material-symbols-outlined yc-icon">install_mobile</span>
+        <h2 class="yc-title">Возвращаемся в приложение</h2>
+        <p class="yc-text">Вход подтверждён. Продолжите в приложении Groove Work.</p>
+        <button type="button" class="btn-grad" @click="openInApp">Открыть приложение</button>
+        <button type="button" class="btn-glass" @click="continueInBrowser">Продолжить в браузере</button>
+      </template>
+
       <template v-else-if="state === 'select'">
         <span class="material-symbols-outlined yc-icon">apartment</span>
         <h2 class="yc-title">Выберите компанию</h2>
@@ -47,6 +55,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth.js'
 import { yandexLink } from '@/api/auth.js'
 import { connectSocket } from '@/socket/index.js'
+import { inAppShell, APP_SCHEME } from '@/utils/appShell.js'
 
 const route = useRoute()
 const router = useRouter()
@@ -58,28 +67,44 @@ const error = ref('')
 const pickerCompanies = ref([])
 const selectToken = ref('')
 
-onMounted(async () => {
-  const code = String(route.query.code ?? '')
-  if (!code) {
-    state.value = 'error'
-    error.value = 'Яндекс не передал код авторизации.'
-    return
-  }
-  // state=link — привязка Яндекса к УЖЕ авторизованному аккаунту (из профиля).
-  if (route.query.state === 'link') {
-    try {
-      await authStore.ensureReady()
-      if (!authStore.token) throw new Error('Сначала войдите в свой аккаунт Groove Work.')
-      await yandexLink(code)
-      state.value = 'linked'
-    } catch (e) {
-      state.value = 'error'
-      error.value = e?.message || 'Не удалось привязать Яндекс-аккаунт.'
-    }
-    return
-  }
+// state OAuth-редиректа: '' — вход в браузере, 'link' — привязка из профиля,
+// 'app'/'app-link' — то же, но флоу начат из обёртки (десктоп/Android): эта
+// страница открыта в СИСТЕМНОМ браузере и должна вернуть код в приложение по
+// deep link — код одноразовый, обменять его можно только в одном месте.
+const stateParam = String(route.query.state ?? '')
+const fromApp = stateParam === 'app' || stateParam === 'app-link'
+const isLink = stateParam === 'link' || stateParam === 'app-link'
+const oauthCode = ref('')
+
+function appDeepLink() {
+  return `${APP_SCHEME}://yandex-callback?code=${encodeURIComponent(oauthCode.value)}&state=${encodeURIComponent(stateParam)}`
+}
+
+function openInApp() {
+  window.location.href = appDeepLink()
+}
+
+// Ручной фолбэк, если приложение не открылось (deep link не сработал).
+function continueInBrowser() {
+  state.value = 'loading'
+  isLink ? runLink() : runLogin()
+}
+
+async function runLink() {
   try {
-    const result = await authStore.yandexLogin(code)
+    await authStore.ensureReady()
+    if (!authStore.token) throw new Error('Сначала войдите в свой аккаунт Groove Work.')
+    await yandexLink(oauthCode.value)
+    state.value = 'linked'
+  } catch (e) {
+    state.value = 'error'
+    error.value = e?.message || 'Не удалось привязать Яндекс-аккаунт.'
+  }
+}
+
+async function runLogin() {
+  try {
+    const result = await authStore.yandexLogin(oauthCode.value)
     if (result.needsSelection) {
       pickerCompanies.value = result.companies
       selectToken.value = result.selectToken
@@ -91,6 +116,21 @@ onMounted(async () => {
     state.value = 'error'
     error.value = e?.message || 'Не удалось войти через Яндекс.'
   }
+}
+
+onMounted(() => {
+  oauthCode.value = String(route.query.code ?? '')
+  if (!oauthCode.value) {
+    state.value = 'error'
+    error.value = 'Яндекс не передал код авторизации.'
+    return
+  }
+  if (fromApp && !inAppShell()) {
+    state.value = 'return-app'
+    openInApp()
+    return
+  }
+  isLink ? runLink() : runLogin()
 })
 
 async function pick(companyId) {

@@ -364,6 +364,7 @@ import { useNotificationsStore } from '@/stores/notifications.js'
 import { useBreakpoint } from '@/composables/useBreakpoint.js'
 import { updateMe, uploadAvatar, deleteAvatar } from '@/api/users.js'
 import { yandexConfig, yandexAuthURL, yandexLinkStatus, yandexUnlink } from '@/api/auth.js'
+import { inAppShell } from '@/utils/appShell.js'
 import { getStatsProfile } from '@/api/stats.js'
 import { formatHours } from '@/utils/time.js'
 import AvatarCropper from '@/components/settings/AvatarCropper.vue'
@@ -576,7 +577,7 @@ async function loadYandexLink() {
 }
 
 function linkYandex() {
-  window.location.href = yandexAuthURL(yandexAuth.value.client_id, 'link')
+  window.location.href = yandexAuthURL(yandexAuth.value.client_id, inAppShell() ? 'app-link' : 'link')
 }
 
 async function unlinkYandex() {

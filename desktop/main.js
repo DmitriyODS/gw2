@@ -40,6 +40,37 @@ function readConfigUrl() {
 // Один экземпляр: повторный запуск фокусирует существующее окно.
 if (!app.requestSingleInstanceLock()) app.quit()
 
+// Deep link groovework://yandex-callback?code=… — возврат OAuth-флоу Яндекса
+// из системного браузера в приложение. Схему на Windows регистрирует этот
+// вызов, на macOS/Linux — секция protocols electron-builder (Info.plist /
+// MimeType .desktop-файла).
+if (app.isPackaged) app.setAsDefaultProtocolClient('groovework')
+
+// Deep link может прийти раньше создания окна (холодный старт по ссылке):
+// Windows/Linux — в argv первого запуска, macOS — open-url до ready.
+let pendingDeepLink = process.argv.find((a) => a.startsWith('groovework://')) || null
+
+function handleDeepLink(url) {
+    let u
+    try {
+        u = new URL(url)
+    } catch {
+        return
+    }
+    if (u.protocol !== 'groovework:' || u.hostname !== 'yandex-callback') return
+    if (!mainWindow) {
+        pendingDeepLink = url
+        return
+    }
+    mainWindow.loadURL(`${currentAppUrl}/yandex-callback${u.search}`)
+    showWindow()
+}
+
+app.on('open-url', (e, url) => {
+    e.preventDefault()
+    handleDeepLink(url)
+})
+
 // Веб-версия «разогревает» AudioContext первым жестом из-за autoplay-политики
 // браузера; в своём приложении просто разрешаем звук сразу — бипы уведомлений
 // и предупреждений играют без предварительного клика.
@@ -158,22 +189,11 @@ function createWindow(appUrl) {
         return {action: 'deny'}
     })
 
-    // OAuth Яндекса обязан пройти внутри окна: уход в системный браузер
-    // оставил бы приложение без сессии (редирект /yandex-callback доехал бы
-    // не туда). Цепочка: oauth.yandex.ru → passport.yandex.ru → обратно к нам.
-    const isYandexOAuthUrl = (url) => {
-        try {
-            const host = new URL(url).hostname
-            return host === 'yandex.ru' || host.endsWith('.yandex.ru')
-        } catch {
-            return false
-        }
-    }
-
     // Уход со своего origin в самом окне (внешние ссылки без _blank) — тоже
-    // в системный браузер.
+    // в системный браузер. OAuth Яндекса тоже идёт там (в браузере уже есть
+    // сессия Яндекса) — обратно флоу возвращает deep link groovework://.
     mainWindow.webContents.on('will-navigate', (e, url) => {
-        if (!url.startsWith(appUrl) && !isYandexOAuthUrl(url)) {
+        if (!url.startsWith(appUrl)) {
             e.preventDefault()
             shell.openExternal(url)
         }
@@ -498,7 +518,11 @@ async function checkShellUpdate(appUrl) {
     if (response === 0) shell.openExternal(`${appUrl}/apps/desktop/${file}`)
 }
 
-app.on('second-instance', showWindow)
+app.on('second-instance', (_e, argv) => {
+    showWindow()
+    const link = argv.find((a) => a.startsWith('groovework://'))
+    if (link) handleDeepLink(link)
+})
 app.on('before-quit', () => {
     quitting = true
 })
@@ -609,6 +633,11 @@ app.whenReady().then(() => {
     buildMenu()
     createWindow(appUrl)
     if (settings.trayIcon) createTray()
+    if (pendingDeepLink) {
+        const link = pendingDeepLink
+        pendingDeepLink = null
+        handleDeepLink(link)
+    }
 
     // Первая проверка — сразу при запуске (после того как окно загрузится и
     // осядет), дальше — каждый час.

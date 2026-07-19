@@ -198,6 +198,7 @@ import AppDialog from '@/components/common/AppDialog.vue'
 import AuthShell from '@/components/auth/AuthShell.vue'
 import DeviceLinkInitiator from '@/components/auth/DeviceLinkInitiator.vue'
 import { yandexConfig, yandexAuthURL } from '@/api/auth.js'
+import { inAppShell } from '@/utils/appShell.js'
 
 const router = useRouter()
 const route = useRoute()
@@ -226,9 +227,11 @@ const showQrLogin = ref(false)
 const showTvActivate = ref(false)
 
 // Вход через Яндекс ID: кнопка видна, только если сервер настроен.
+// Из обёртки state=app: авторизация идёт в системном браузере (там уже есть
+// сессия Яндекса), а /yandex-callback вернёт флоу в приложение по deep link.
 const yandexAuth = ref({ enabled: false, client_id: '' })
 function goYandex() {
-  window.location.href = yandexAuthURL(yandexAuth.value.client_id)
+  window.location.href = yandexAuthURL(yandexAuth.value.client_id, inAppShell() ? 'app' : '')
 }
 
 const changeForm = reactive({ login: '', password: '', confirmPassword: '' })
