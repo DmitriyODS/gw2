@@ -139,7 +139,13 @@ router.beforeEach(async (to) => {
     const redirect = to.fullPath !== '/' ? { redirect: to.fullPath } : {}
     return { path: '/login', query: redirect }
   }
-  if ((to.path === '/login' || to.path === '/register') && auth.token) {
+  // Сессия с обязательной сменой пароля: держим пользователя на /login —
+  // там неклозабельная модалка смены учётных данных (все остальные API
+  // и так отвечают 403 FORCE_PASSWORD_CHANGE).
+  if (auth.token && auth.forceChange && to.path !== '/login') {
+    return '/login'
+  }
+  if ((to.path === '/login' || to.path === '/register') && auth.token && !auth.forceChange) {
     return landingFor(auth)
   }
   if (!auth.token) return

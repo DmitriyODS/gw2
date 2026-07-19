@@ -268,6 +268,13 @@ function startCooldown(seconds) {
 onMounted(() => {
   themeStore.init()
   yandexConfig().then((cfg) => { yandexAuth.value = cfg }).catch(() => {})
+  // После логина с force_change App.vue переключает layout-ветку (появляется
+  // sidebar) и ПЕРЕСОЗДАЁТ router-view — LoginView монтируется заново, и
+  // открытая модалка смены пароля теряется вместе с локальным состоянием.
+  // Восстанавливаем её по флагу сессии.
+  if (authStore.token && authStore.forceChange) {
+    showChangeModal.value = true
+  }
 })
 
 onBeforeUnmount(() => {
