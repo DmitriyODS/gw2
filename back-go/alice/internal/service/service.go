@@ -96,15 +96,23 @@ const helpText = "Вот что я умею.\n" +
 	"Ежедневник: «запиши на завтра …», «что у меня на сегодня», «отметь … выполненным», «перенеси … на пятницу», «удали запись …», «создай ежедневник …».\n" +
 	"Заметки: «создай заметку … с текстом …», «допиши в заметку … текст …», «прочитай заметку …», «удали заметку …», «создай папку …»."
 
+const linkGreeting = "Привет! Я — Groove Work: задачи, ежедневник и заметки голосом. " +
+	"Чтобы я работала с вашими данными, нужно один раз связать аккаунт — " +
+	"просто скажите любую команду, например «мои задачи», и я пришлю ссылку для входа."
+
 // Handle — обработка одного запроса вебхука; ошибки сервисов превращаются в
 // голосовые реплики, транспорту всегда отдаётся валидный ответ.
 func (s *Service) Handle(ctx context.Context, req *domain.WebhookRequest) *domain.WebhookResponse {
 	token := req.Session.User.AccessToken
-	if token == "" {
-		return &domain.WebhookResponse{StartAccountLinking: &struct{}{}, Version: protocolVersion}
-	}
 	claims := s.verifier.ParseAccess(token)
-	if claims.UserID == 0 {
+	if token == "" || claims.UserID == 0 {
+		// Новая сессия без связанного аккаунта — обычный текстовый ответ:
+		// его же ждёт валидатор Диалогов при сохранении Webhook URL
+		// (директива start_account_linking до настройки связки — «ошибка
+		// сервера» и завал модерации). Директива уходит на первую команду.
+		if req.Session.New {
+			return reply(linkGreeting)
+		}
 		return &domain.WebhookResponse{StartAccountLinking: &struct{}{}, Version: protocolVersion}
 	}
 

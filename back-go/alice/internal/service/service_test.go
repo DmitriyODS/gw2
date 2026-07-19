@@ -205,6 +205,14 @@ func TestNoTokenStartsAccountLinking(t *testing.T) {
 	if resp.StartAccountLinking == nil {
 		t.Fatalf("невалидный токен тоже должен вести на связку: %+v", resp)
 	}
+	// Новая сессия без токена (в т.ч. валидатор Диалогов) — обычный текст,
+	// не директива: иначе «Failed to validate backend url» при модерации.
+	req := h.request(t, "", "ping", nil)
+	req.Session.New = true
+	resp = h.svc.Handle(context.Background(), req)
+	if resp.Response == nil || resp.StartAccountLinking != nil {
+		t.Fatalf("новая сессия без токена должна отвечать текстом: %+v", resp)
+	}
 }
 
 func TestDiaryAddCreatesDefaultDiary(t *testing.T) {
