@@ -132,6 +132,8 @@
         @keydown.esc="mention.open = false"
         @input="onTextInput"
         @paste="onPaste"
+        @focus="onFocus"
+        @blur="onBlur"
         @contextmenu="onTextContextMenu"
       />
       <button
@@ -167,6 +169,7 @@
 <script setup>
 import { ref, computed, nextTick, onMounted, onBeforeUnmount, watch } from 'vue'
 import { uploadAttachment } from '@/api/messenger.js'
+import { registerNativeImageSink } from '@/utils/nativeApp.js'
 import { selectionViewportRect } from '@/utils/textareaSelection.js'
 import EmojiPicker from '@/components/common/EmojiPicker.vue'
 import ProgressSpinner from 'primevue/progressspinner'
@@ -481,6 +484,19 @@ defineExpose({
   insertAtCursor,
   setText,
 })
+
+/* Пока поле в фокусе — оно приёмник картинок с клавиатуры (Android-обёртка,
+   commitContent из IME → окно 'gw:native-image'; см. utils/nativeApp.js).
+   Guard'нутый unregister не даст blur одного поля сбросить приёмник другого. */
+let unregisterImageSink = null
+function onFocus() {
+  unregisterImageSink = registerNativeImageSink(uploadFiles)
+}
+function onBlur() {
+  unregisterImageSink?.()
+  unregisterImageSink = null
+}
+onBeforeUnmount(() => { unregisterImageSink?.() })
 
 /* Вставка из буфера: картинки/файлы скриншотов приходят как items типа file. */
 async function onPaste(e) {

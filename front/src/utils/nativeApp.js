@@ -179,6 +179,34 @@ export async function getSharedPayload() {
   }
 }
 
+/* ── Картинки с клавиатуры (Android): commitContent из IME ──
+   Нативный GrooveWebView принимает изображение от клавиатуры (вставка картинки/
+   GIF/стикер) и будит окно событием 'gw:native-image' с base64. Веб-браузерное
+   событие paste такой контент не приносит. Роутим картинку в поле ввода, которое
+   сейчас в фокусе: активный MessageInput регистрирует свой приёмник по focus и
+   снимает по blur (см. registerNativeImageSink). */
+let nativeImageSink = null
+
+export function registerNativeImageSink(fn) {
+  nativeImageSink = fn
+  return () => { if (nativeImageSink === fn) nativeImageSink = null }
+}
+
+if (typeof window !== 'undefined') {
+  window.addEventListener('gw:native-image', (e) => {
+    const d = e.detail || {}
+    if (!nativeImageSink || !d.data) return
+    try {
+      const bin = atob(d.data)
+      const arr = new Uint8Array(bin.length)
+      for (let i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i)
+      const type = d.mime || 'image/png'
+      const name = d.name || `image.${type.split('/')[1] || 'png'}`
+      nativeImageSink([new File([arr], name, { type })])
+    } catch { /* битый base64 — молча */ }
+  })
+}
+
 // Номер установленной сборки обёртки (ГГММДДН) — для «О приложении».
 export async function getNativeBuild() {
   const shell = nativeShell()

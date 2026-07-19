@@ -597,7 +597,10 @@ watch(() => messenger.activeConversationId, () => { chatMenuOpen.value = false }
 
 // Контент из системного «Поделиться» (Android): открыли выбранный чат — сеем
 // текст в поле и грузим файлы во вложения один раз (останется отправить).
-watch(() => messenger.activeConversationId, async (id) => {
+// Следим И за pendingDraft: openWith выставляет activeConversationId РАНЬШЕ,
+// чем App.vue кладёт draft, поэтому по одному activeConversationId черновик мог
+// не застать (файлы не прикреплялись). Реагируем на любое из двух изменений.
+watch([() => messenger.activeConversationId, () => messenger.pendingDraft], async ([id]) => {
   const d = messenger.pendingDraft
   if (!id || !d || d.convId !== id) return
   messenger.pendingDraft = null
