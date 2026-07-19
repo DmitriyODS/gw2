@@ -1,6 +1,6 @@
 {
   "name": "groovework-desktop",
-  "version": "1.0.9",
+  "version": "1.0.10",
   "private": true,
   "description": "Groove Work — десктоп-клиент (тонкая обёртка над веб-версией)",
   "author": "Groove Work",
@@ -30,7 +30,10 @@
       "target": [
         {
           "target": "nsis",
-          "arch": ["x64", "arm64"]
+          "arch": [
+            "x64",
+            "arm64"
+          ]
         }
       ]
     },
@@ -48,7 +51,9 @@
       "target": [
         {
           "target": "AppImage",
-          "arch": ["x64"]
+          "arch": [
+            "x64"
+          ]
         }
       ]
     }
