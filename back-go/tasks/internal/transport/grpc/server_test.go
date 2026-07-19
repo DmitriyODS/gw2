@@ -33,7 +33,7 @@ func TestGetStatsSummary_MapsFields(t *testing.T) {
 			InProgressCount: 2, DebtCount: 1, TotalHours: 12.5,
 		}, nil, &captured),
 	}
-	srv := NewServer(eps)
+	srv := NewServer(eps, nil)
 
 	resp, err := srv.GetStatsSummary(context.Background(), &taskspb.GetStatsSummaryRequest{
 		CompanyId: 42, Period: "this_week",
@@ -62,7 +62,7 @@ func TestGetStatsSummary_BusinessErrorInBand(t *testing.T) {
 	eps := endpoint.Endpoints{
 		AssistantStatsSummary: stubEndpoint(nil, domain.NewError("NOT_FOUND", "нет данных", 404), nil),
 	}
-	srv := NewServer(eps)
+	srv := NewServer(eps, nil)
 
 	resp, err := srv.GetStatsSummary(context.Background(), &taskspb.GetStatsSummaryRequest{CompanyId: 1})
 	if err != nil {
@@ -77,7 +77,7 @@ func TestGetStatsSummary_TransportErrorBecomesInternal(t *testing.T) {
 	eps := endpoint.Endpoints{
 		AssistantStatsSummary: stubEndpoint(nil, errors.New("boom: db down"), nil),
 	}
-	srv := NewServer(eps)
+	srv := NewServer(eps, nil)
 
 	_, err := srv.GetStatsSummary(context.Background(), &taskspb.GetStatsSummaryRequest{CompanyId: 1})
 	if err == nil {
@@ -98,7 +98,7 @@ func TestListDepartments_MapsSliceAndPeriodLabel(t *testing.T) {
 			PeriodLabel: "этот месяц",
 		}, nil, nil),
 	}
-	srv := NewServer(eps)
+	srv := NewServer(eps, nil)
 
 	resp, err := srv.ListDepartments(context.Background(), &taskspb.ListDepartmentsRequest{CompanyId: 1, Period: "this_month"})
 	if err != nil {
@@ -123,7 +123,7 @@ func TestGetTopEmployees_ForwardsCompanyPeriodLimit(t *testing.T) {
 			Items: []dto.TaskByEmployee{{FIO: "Иванов И.И.", TasksCount: 4, TotalHours: 20.5}},
 		}, nil, &captured),
 	}
-	srv := NewServer(eps)
+	srv := NewServer(eps, nil)
 
 	resp, err := srv.GetTopEmployees(context.Background(), &taskspb.GetTopEmployeesRequest{
 		CompanyId: 7, Period: "7d", Limit: 5,
@@ -147,7 +147,7 @@ func TestGetStatsByUnitTypes_MapsFields(t *testing.T) {
 			Items: []dto.UnitTypeStats{{Name: "Звонок", TotalHours: 3.5, TasksCount: 2}},
 		}, nil, nil),
 	}
-	srv := NewServer(eps)
+	srv := NewServer(eps, nil)
 
 	resp, err := srv.GetStatsByUnitTypes(context.Background(), &taskspb.GetStatsByUnitTypesRequest{CompanyId: 1})
 	if err != nil {
@@ -165,7 +165,7 @@ func TestGetStatsCalendar_MapsFields(t *testing.T) {
 			Items: []dto.CalendarDay{{Date: "2026-07-06", Received: 4, Closed: 2, TotalHours: 6}},
 		}, nil, nil),
 	}
-	srv := NewServer(eps)
+	srv := NewServer(eps, nil)
 
 	resp, err := srv.GetStatsCalendar(context.Background(), &taskspb.GetStatsCalendarRequest{CompanyId: 1})
 	if err != nil {
@@ -185,7 +185,7 @@ func TestSearchTasks_MapsIDAndName(t *testing.T) {
 			{ID: 11, Name: "Написать отчёт"},
 		}, nil, &captured),
 	}
-	srv := NewServer(eps)
+	srv := NewServer(eps, nil)
 
 	resp, err := srv.SearchTasks(context.Background(), &taskspb.SearchTasksRequest{CompanyId: 9, Query: "баг", Limit: 5})
 	if err != nil {
@@ -211,7 +211,7 @@ func TestGetTaskLink_NotFoundWhenTaskMissingOrForeignCompany(t *testing.T) {
 	eps := endpoint.Endpoints{
 		AssistantTaskLink: stubEndpoint((*domain.Task)(nil), nil, nil),
 	}
-	srv := NewServer(eps)
+	srv := NewServer(eps, nil)
 
 	resp, err := srv.GetTaskLink(context.Background(), &taskspb.GetTaskLinkRequest{CompanyId: 1, TaskId: 999})
 	if err != nil {
@@ -230,7 +230,7 @@ func TestGetTaskLink_ForwardsCompanyAndTaskID(t *testing.T) {
 			Responsible: &domain.UserRef{ID: 3, FIO: "Петров П.П."},
 		}, nil, &captured),
 	}
-	srv := NewServer(eps)
+	srv := NewServer(eps, nil)
 
 	resp, err := srv.GetTaskLink(context.Background(), &taskspb.GetTaskLinkRequest{CompanyId: 4, TaskId: 55})
 	if err != nil {
@@ -252,7 +252,7 @@ func TestGetTaskLink_NoResponsibleLeavesFioEmpty(t *testing.T) {
 	eps := endpoint.Endpoints{
 		AssistantTaskLink: stubEndpoint(&domain.Task{ID: 1, Name: "Без ответственного"}, nil, nil),
 	}
-	srv := NewServer(eps)
+	srv := NewServer(eps, nil)
 
 	resp, err := srv.GetTaskLink(context.Background(), &taskspb.GetTaskLinkRequest{CompanyId: 1, TaskId: 1})
 	if err != nil {

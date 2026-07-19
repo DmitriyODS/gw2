@@ -108,6 +108,13 @@ func (r *UserRepository) GetByEmail(ctx context.Context, email string) (*domain.
 	return r.getOne(ctx, "lower(u.email) = lower($1)", email)
 }
 
+func (r *UserRepository) GetByYandexID(ctx context.Context, yandexID string) (*domain.User, error) {
+	if yandexID == "" {
+		return nil, nil
+	}
+	return r.getOne(ctx, "u.yandex_id = $1", yandexID)
+}
+
 func (r *UserRepository) listIdentity(ctx context.Context, tail string, args ...any) ([]*domain.User, error) {
 	rows, err := r.pool.Query(ctx, "SELECT"+identityCols+identityFrom+" "+tail, args...)
 	if err != nil {
@@ -166,7 +173,7 @@ var allowedUserFields = map[string]bool{
 	"fio": true, "login": true, "phone": true, "email": true,
 	"avatar_path": true, "hash_password": true,
 	"is_default_pass": true, "is_active": true, "email_verified": true,
-	"status_emoji": true, "status_text": true,
+	"status_emoji": true, "status_text": true, "yandex_id": true,
 }
 
 func (r *UserRepository) UpdateFields(ctx context.Context, id int64, fields map[string]any) error {

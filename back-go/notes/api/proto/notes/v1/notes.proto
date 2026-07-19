@@ -1,0 +1,122 @@
+// Исходящий gRPC-контракт notesvc для голосового навыка Алисы (alicesvc):
+// операции над личными заметками от имени владельца (user_id). Голосовой
+// сценарий работает с ПЛОСКИМ текстом: создание/дописывание строят TipTap-doc
+// из текста на стороне notesvc (domain.TextToDoc), чтение отдаёт text_content.
+// Транспорт всегда OK; бизнес-ошибка — в поле error (см. Error).
+syntax = "proto3";
+
+package notes.v1;
+
+option go_package = "github.com/DmitriyODS/gw2/back-go/pkg/gen/notespb;notespb";
+
+service NotesService {
+  rpc ListFolders(ListFoldersRequest) returns (ListFoldersResponse);
+  rpc CreateFolder(CreateFolderRequest) returns (CreateFolderResponse);
+  rpc CreateNote(CreateNoteRequest) returns (CreateNoteResponse);
+  rpc FindNotes(FindNotesRequest) returns (FindNotesResponse);
+  rpc GetNote(GetNoteRequest) returns (GetNoteResponse);
+  rpc AppendNote(AppendNoteRequest) returns (AppendNoteResponse);
+  rpc DeleteNote(DeleteNoteRequest) returns (DeleteNoteResponse);
+}
+
+message Error {
+  string code = 1;
+  string message = 2;
+  int32 http_status = 3;
+}
+
+message NoteRef {
+  int64 id = 1;
+  string title = 2;
+  string snippet = 3; // начало text_content для уточнения голосом
+}
+
+message Folder {
+  int64 id = 1;
+  string name = 2;
+  int64 parent_id = 3; // 0 — корень
+}
+
+message ListFoldersRequest {
+  int64 user_id = 1;
+}
+
+message ListFoldersResponse {
+  Error error = 1;
+  repeated Folder folders = 2;
+}
+
+// parent_id == 0 — корень.
+message CreateFolderRequest {
+  int64 user_id = 1;
+  string name = 2;
+  int64 parent_id = 3;
+}
+
+message CreateFolderResponse {
+  Error error = 1;
+  Folder folder = 2;
+}
+
+// folder_id == 0 — вне папок; text — плоский текст тела (может быть пустым).
+// company_id — активная компания пользователя (для реиндекса ИИ-эмбеддингов;
+// 0 — без реиндекса).
+message CreateNoteRequest {
+  int64 user_id = 1;
+  string title = 2;
+  string text = 3;
+  int64 folder_id = 4;
+  int64 company_id = 5;
+}
+
+message CreateNoteResponse {
+  Error error = 1;
+  NoteRef note = 2;
+}
+
+// company_id — активная компания пользователя (для семантического ИИ-поиска;
+// 0 — только текстовый).
+message FindNotesRequest {
+  int64 user_id = 1;
+  int64 company_id = 2;
+  string query = 3;
+  int32 limit = 4; // 0 → дефолт 5
+}
+
+message FindNotesResponse {
+  Error error = 1;
+  repeated NoteRef notes = 2;
+}
+
+message GetNoteRequest {
+  int64 user_id = 1;
+  int64 note_id = 2;
+}
+
+message GetNoteResponse {
+  Error error = 1;
+  int64 id = 2;
+  string title = 3;
+  string text = 4; // плоский text_content
+}
+
+message AppendNoteRequest {
+  int64 user_id = 1;
+  int64 note_id = 2;
+  string text = 3;
+  int64 company_id = 4; // для реиндекса ИИ-эмбеддингов; 0 — без реиндекса
+}
+
+message AppendNoteResponse {
+  Error error = 1;
+  NoteRef note = 2;
+}
+
+message DeleteNoteRequest {
+  int64 user_id = 1;
+  int64 note_id = 2;
+}
+
+message DeleteNoteResponse {
+  Error error = 1;
+}

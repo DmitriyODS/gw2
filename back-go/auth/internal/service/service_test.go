@@ -83,6 +83,10 @@ func (r *fakeRepo) GetByLogin(_ context.Context, login string) (*domain.User, er
 	return nil, nil
 }
 
+func (r *fakeRepo) GetByYandexID(_ context.Context, _ string) (*domain.User, error) {
+	return nil, nil
+}
+
 func (r *fakeRepo) GetByEmail(_ context.Context, email string) (*domain.User, error) {
 	for _, u := range r.users {
 		if u.Email != nil && strings.EqualFold(*u.Email, email) {

@@ -85,6 +85,9 @@ func (i *Issuer) AccessToken(c Claims) (string, error) {
 
 // selectTTL — срок жизни короткого select-токена login-gate (выбор компании
 // после ввода пароля, до выдачи полноценной сессии).
+// AccessTTL — срок жизни access-токена (expires_in OAuth-провайдера).
+func (i *Issuer) AccessTTL() time.Duration { return i.accessTTL }
+
 const selectTTL = 5 * time.Minute
 
 // RefreshToken — refresh-токен несёт user_id и АКТИВНУЮ компанию сессии

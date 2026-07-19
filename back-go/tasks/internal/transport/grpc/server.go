@@ -13,15 +13,19 @@ import (
 	"github.com/DmitriyODS/gw2/back-go/tasks/internal/domain"
 	"github.com/DmitriyODS/gw2/back-go/tasks/internal/dto"
 	"github.com/DmitriyODS/gw2/back-go/tasks/internal/endpoint"
+	"github.com/DmitriyODS/gw2/back-go/tasks/internal/service"
 )
 
 type Server struct {
 	taskspb.UnimplementedTasksServiceServer
 	eps endpoint.Endpoints
+	// svc — прямой доступ для голосовых операций Алисы (alicesvc, voice.go):
+	// тонкие вызовы без endpoint-обёрток.
+	svc *service.Service
 }
 
-func NewServer(eps endpoint.Endpoints) *Server {
-	return &Server{eps: eps}
+func NewServer(eps endpoint.Endpoints, svc *service.Service) *Server {
+	return &Server{eps: eps, svc: svc}
 }
 
 func (s *Server) GetStatsSummary(ctx context.Context, req *taskspb.GetStatsSummaryRequest) (*taskspb.GetStatsSummaryResponse, error) {

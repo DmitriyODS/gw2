@@ -1,0 +1,125 @@
+// Исходящий gRPC-контракт diarysvc для голосового навыка Алисы (alicesvc):
+// операции над личными ежедневниками от имени владельца (user_id). Скоуп —
+// только владелец, как и в REST. Транспорт всегда OK; бизнес-ошибка — в поле
+// error (см. Error).
+syntax = "proto3";
+
+package diary.v1;
+
+option go_package = "github.com/DmitriyODS/gw2/back-go/pkg/gen/diarypb;diarypb";
+
+service DiaryService {
+  rpc ListDiaries(ListDiariesRequest) returns (ListDiariesResponse);
+  rpc CreateDiary(CreateDiaryRequest) returns (CreateDiaryResponse);
+  rpc ListEntries(ListEntriesRequest) returns (ListEntriesResponse);
+  rpc CreateEntry(CreateEntryRequest) returns (CreateEntryResponse);
+  rpc SetEntryDone(SetEntryDoneRequest) returns (SetEntryDoneResponse);
+  rpc MoveEntry(MoveEntryRequest) returns (MoveEntryResponse);
+  rpc DeleteEntry(DeleteEntryRequest) returns (DeleteEntryResponse);
+}
+
+message Error {
+  string code = 1;
+  string message = 2;
+  int32 http_status = 3;
+}
+
+message Diary {
+  int64 id = 1;
+  string name = 2;
+  int32 active_count = 3;
+  int32 done_count = 4;
+}
+
+// Entry.date — календарный день записи в формате YYYY-MM-DD (без времени и
+// таймзоны, как в REST-DTO).
+message Entry {
+  int64 id = 1;
+  int64 diary_id = 2;
+  string date = 3;
+  string title = 4;
+  string description = 5;
+  bool done = 6;
+}
+
+message ListDiariesRequest {
+  int64 user_id = 1;
+}
+
+message ListDiariesResponse {
+  Error error = 1;
+  repeated Diary diaries = 2;
+}
+
+message CreateDiaryRequest {
+  int64 user_id = 1;
+  string name = 2;
+}
+
+message CreateDiaryResponse {
+  Error error = 1;
+  Diary diary = 2;
+}
+
+// from/to — диапазон дней YYYY-MM-DD включительно; пустые строки — без границы.
+message ListEntriesRequest {
+  int64 user_id = 1;
+  int64 diary_id = 2;
+  string from = 3;
+  string to = 4;
+  bool archived = 5; // true — выполненные (архив), false — активные
+}
+
+message ListEntriesResponse {
+  Error error = 1;
+  repeated Entry entries = 2;
+}
+
+message CreateEntryRequest {
+  int64 user_id = 1;
+  int64 diary_id = 2;
+  string date = 3; // YYYY-MM-DD
+  string title = 4;
+  string description = 5;
+}
+
+message CreateEntryResponse {
+  Error error = 1;
+  Entry entry = 2;
+}
+
+message SetEntryDoneRequest {
+  int64 user_id = 1;
+  int64 diary_id = 2;
+  int64 entry_id = 3;
+  bool done = 4;
+}
+
+message SetEntryDoneResponse {
+  Error error = 1;
+  Entry entry = 2;
+}
+
+// target_diary_id == 0 — остаётся в том же ежедневнике (перенос по дате).
+message MoveEntryRequest {
+  int64 user_id = 1;
+  int64 diary_id = 2;
+  int64 entry_id = 3;
+  int64 target_diary_id = 4;
+  string date = 5; // YYYY-MM-DD
+}
+
+message MoveEntryResponse {
+  Error error = 1;
+  Entry entry = 2;
+}
+
+message DeleteEntryRequest {
+  int64 user_id = 1;
+  int64 diary_id = 2;
+  int64 entry_id = 3;
+}
+
+message DeleteEntryResponse {
+  Error error = 1;
+}

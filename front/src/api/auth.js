@@ -45,3 +45,22 @@ export const switchCompany = (companyId) =>
 export const logout = () => apiRequest('/auth/logout', { method: 'POST', _isLogout: true })
 
 export const refreshToken = () => apiRequest('/auth/refresh', { method: 'POST' })
+
+// OAuth-провайдер (связка аккаунтов навыка Алисы): согласие авторизованного
+// пользователя → одноразовый код и URL возврата к Яндексу.
+export const oauthAuthorize = (params) =>
+  apiRequest('/auth/oauth/authorize', { method: 'POST', body: params })
+
+// Вход через Яндекс ID: публичная конфигурация кнопки (enabled + client_id)…
+export const yandexConfig = () => apiRequest('/auth/yandex/config', { method: 'GET' })
+
+// …и обмен кода авторизации Яндекса на сессию (как login).
+export const yandexCallback = (code) =>
+  apiRequest('/auth/yandex/callback', { method: 'POST', body: { code } })
+
+// URL авторизации Яндекс ID (redirect_uri должен быть прописан в приложении
+// на oauth.yandex.ru как <origin>/yandex-callback).
+export const yandexAuthURL = (clientId) =>
+  'https://oauth.yandex.ru/authorize?response_type=code' +
+  `&client_id=${encodeURIComponent(clientId)}` +
+  `&redirect_uri=${encodeURIComponent(window.location.origin + '/yandex-callback')}`

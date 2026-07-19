@@ -97,6 +97,14 @@ const routes = [
   // Вступление в группу мессенджера по ссылке-приглашению (нужна авторизация).
   { path: '/group/:code', component: () => import('@/views/JoinGroupView.vue'),
     meta: { requiresAuth: true, fullscreen: true } },
+  // Страница согласия OAuth (связка аккаунтов навыка Алисы): сюда Яндекс ведёт
+  // пользователя с параметрами client_id/redirect_uri/state; гость сперва
+  // войдёт (redirect вернёт его сюда со всеми query-параметрами).
+  { path: '/oauth/authorize', component: () => import('@/views/OAuthAuthorizeView.vue'),
+    meta: { requiresAuth: true, fullscreen: true } },
+  // Возврат из Яндекс ID (вход/регистрация через Яндекс): публичный.
+  { path: '/yandex-callback', component: () => import('@/views/YandexCallbackView.vue'),
+    meta: { public: true, fullscreen: true } },
   // Подтверждение спаривания устройства (QR-вход / ТВ-киоск): открывается при
   // сканировании QR любым сканером. Нужна авторизация — гость уйдёт на /login
   // и вернётся сюда после входа.

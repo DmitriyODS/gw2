@@ -133,6 +133,11 @@ export default defineConfig({
         target: 'http://localhost:8103',
         changeOrigin: true
       },
+      // Навык Алисы — alicesvc (публичный вебхук Яндекс.Диалогов).
+      '/api/alice': {
+        target: 'http://localhost:8104',
+        changeOrigin: true
+      },
       // Корпоративный портал — portalsvc (посты, комментарии, реакции, разделы).
       '/api/portal': {
         target: 'http://localhost:8102',

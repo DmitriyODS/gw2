@@ -32,6 +32,14 @@ const (
 	TasksService_GetStatsCalendar_FullMethodName    = "/tasks.v1.TasksService/GetStatsCalendar"
 	TasksService_SearchTasks_FullMethodName         = "/tasks.v1.TasksService/SearchTasks"
 	TasksService_GetTaskLink_FullMethodName         = "/tasks.v1.TasksService/GetTaskLink"
+	TasksService_CreateTask_FullMethodName          = "/tasks.v1.TasksService/CreateTask"
+	TasksService_CloseTask_FullMethodName           = "/tasks.v1.TasksService/CloseTask"
+	TasksService_ListOpenTasks_FullMethodName       = "/tasks.v1.TasksService/ListOpenTasks"
+	TasksService_ListAllDepartments_FullMethodName  = "/tasks.v1.TasksService/ListAllDepartments"
+	TasksService_ListUnitTypes_FullMethodName       = "/tasks.v1.TasksService/ListUnitTypes"
+	TasksService_StartUnit_FullMethodName           = "/tasks.v1.TasksService/StartUnit"
+	TasksService_StopActiveUnit_FullMethodName      = "/tasks.v1.TasksService/StopActiveUnit"
+	TasksService_GetActiveUnit_FullMethodName       = "/tasks.v1.TasksService/GetActiveUnit"
 )
 
 // TasksServiceClient is the client API for TasksService service.
@@ -45,6 +53,16 @@ type TasksServiceClient interface {
 	GetStatsCalendar(ctx context.Context, in *GetStatsCalendarRequest, opts ...grpc.CallOption) (*GetStatsCalendarResponse, error)
 	SearchTasks(ctx context.Context, in *SearchTasksRequest, opts ...grpc.CallOption) (*SearchTasksResponse, error)
 	GetTaskLink(ctx context.Context, in *GetTaskLinkRequest, opts ...grpc.CallOption) (*GetTaskLinkResponse, error)
+	// Голосовые операции (alicesvc, навык Алисы): действия от имени конкретного
+	// пользователя (user_id) в его активной компании (company_id).
+	CreateTask(ctx context.Context, in *CreateTaskRequest, opts ...grpc.CallOption) (*CreateTaskResponse, error)
+	CloseTask(ctx context.Context, in *CloseTaskRequest, opts ...grpc.CallOption) (*CloseTaskResponse, error)
+	ListOpenTasks(ctx context.Context, in *ListOpenTasksRequest, opts ...grpc.CallOption) (*ListOpenTasksResponse, error)
+	ListAllDepartments(ctx context.Context, in *ListAllDepartmentsRequest, opts ...grpc.CallOption) (*ListAllDepartmentsResponse, error)
+	ListUnitTypes(ctx context.Context, in *ListUnitTypesRequest, opts ...grpc.CallOption) (*ListUnitTypesResponse, error)
+	StartUnit(ctx context.Context, in *StartUnitRequest, opts ...grpc.CallOption) (*StartUnitResponse, error)
+	StopActiveUnit(ctx context.Context, in *StopActiveUnitRequest, opts ...grpc.CallOption) (*StopActiveUnitResponse, error)
+	GetActiveUnit(ctx context.Context, in *GetActiveUnitRequest, opts ...grpc.CallOption) (*GetActiveUnitResponse, error)
 }
 
 type tasksServiceClient struct {
@@ -125,6 +143,86 @@ func (c *tasksServiceClient) GetTaskLink(ctx context.Context, in *GetTaskLinkReq
 	return out, nil
 }
 
+func (c *tasksServiceClient) CreateTask(ctx context.Context, in *CreateTaskRequest, opts ...grpc.CallOption) (*CreateTaskResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(CreateTaskResponse)
+	err := c.cc.Invoke(ctx, TasksService_CreateTask_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *tasksServiceClient) CloseTask(ctx context.Context, in *CloseTaskRequest, opts ...grpc.CallOption) (*CloseTaskResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(CloseTaskResponse)
+	err := c.cc.Invoke(ctx, TasksService_CloseTask_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *tasksServiceClient) ListOpenTasks(ctx context.Context, in *ListOpenTasksRequest, opts ...grpc.CallOption) (*ListOpenTasksResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ListOpenTasksResponse)
+	err := c.cc.Invoke(ctx, TasksService_ListOpenTasks_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *tasksServiceClient) ListAllDepartments(ctx context.Context, in *ListAllDepartmentsRequest, opts ...grpc.CallOption) (*ListAllDepartmentsResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ListAllDepartmentsResponse)
+	err := c.cc.Invoke(ctx, TasksService_ListAllDepartments_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *tasksServiceClient) ListUnitTypes(ctx context.Context, in *ListUnitTypesRequest, opts ...grpc.CallOption) (*ListUnitTypesResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ListUnitTypesResponse)
+	err := c.cc.Invoke(ctx, TasksService_ListUnitTypes_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *tasksServiceClient) StartUnit(ctx context.Context, in *StartUnitRequest, opts ...grpc.CallOption) (*StartUnitResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(StartUnitResponse)
+	err := c.cc.Invoke(ctx, TasksService_StartUnit_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *tasksServiceClient) StopActiveUnit(ctx context.Context, in *StopActiveUnitRequest, opts ...grpc.CallOption) (*StopActiveUnitResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(StopActiveUnitResponse)
+	err := c.cc.Invoke(ctx, TasksService_StopActiveUnit_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *tasksServiceClient) GetActiveUnit(ctx context.Context, in *GetActiveUnitRequest, opts ...grpc.CallOption) (*GetActiveUnitResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GetActiveUnitResponse)
+	err := c.cc.Invoke(ctx, TasksService_GetActiveUnit_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // TasksServiceServer is the server API for TasksService service.
 // All implementations must embed UnimplementedTasksServiceServer
 // for forward compatibility.
@@ -136,6 +234,16 @@ type TasksServiceServer interface {
 	GetStatsCalendar(context.Context, *GetStatsCalendarRequest) (*GetStatsCalendarResponse, error)
 	SearchTasks(context.Context, *SearchTasksRequest) (*SearchTasksResponse, error)
 	GetTaskLink(context.Context, *GetTaskLinkRequest) (*GetTaskLinkResponse, error)
+	// Голосовые операции (alicesvc, навык Алисы): действия от имени конкретного
+	// пользователя (user_id) в его активной компании (company_id).
+	CreateTask(context.Context, *CreateTaskRequest) (*CreateTaskResponse, error)
+	CloseTask(context.Context, *CloseTaskRequest) (*CloseTaskResponse, error)
+	ListOpenTasks(context.Context, *ListOpenTasksRequest) (*ListOpenTasksResponse, error)
+	ListAllDepartments(context.Context, *ListAllDepartmentsRequest) (*ListAllDepartmentsResponse, error)
+	ListUnitTypes(context.Context, *ListUnitTypesRequest) (*ListUnitTypesResponse, error)
+	StartUnit(context.Context, *StartUnitRequest) (*StartUnitResponse, error)
+	StopActiveUnit(context.Context, *StopActiveUnitRequest) (*StopActiveUnitResponse, error)
+	GetActiveUnit(context.Context, *GetActiveUnitRequest) (*GetActiveUnitResponse, error)
 	mustEmbedUnimplementedTasksServiceServer()
 }
 
@@ -166,6 +274,30 @@ func (UnimplementedTasksServiceServer) SearchTasks(context.Context, *SearchTasks
 }
 func (UnimplementedTasksServiceServer) GetTaskLink(context.Context, *GetTaskLinkRequest) (*GetTaskLinkResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method GetTaskLink not implemented")
+}
+func (UnimplementedTasksServiceServer) CreateTask(context.Context, *CreateTaskRequest) (*CreateTaskResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method CreateTask not implemented")
+}
+func (UnimplementedTasksServiceServer) CloseTask(context.Context, *CloseTaskRequest) (*CloseTaskResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method CloseTask not implemented")
+}
+func (UnimplementedTasksServiceServer) ListOpenTasks(context.Context, *ListOpenTasksRequest) (*ListOpenTasksResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method ListOpenTasks not implemented")
+}
+func (UnimplementedTasksServiceServer) ListAllDepartments(context.Context, *ListAllDepartmentsRequest) (*ListAllDepartmentsResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method ListAllDepartments not implemented")
+}
+func (UnimplementedTasksServiceServer) ListUnitTypes(context.Context, *ListUnitTypesRequest) (*ListUnitTypesResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method ListUnitTypes not implemented")
+}
+func (UnimplementedTasksServiceServer) StartUnit(context.Context, *StartUnitRequest) (*StartUnitResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method StartUnit not implemented")
+}
+func (UnimplementedTasksServiceServer) StopActiveUnit(context.Context, *StopActiveUnitRequest) (*StopActiveUnitResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method StopActiveUnit not implemented")
+}
+func (UnimplementedTasksServiceServer) GetActiveUnit(context.Context, *GetActiveUnitRequest) (*GetActiveUnitResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method GetActiveUnit not implemented")
 }
 func (UnimplementedTasksServiceServer) mustEmbedUnimplementedTasksServiceServer() {}
 func (UnimplementedTasksServiceServer) testEmbeddedByValue()                      {}
@@ -314,6 +446,150 @@ func _TasksService_GetTaskLink_Handler(srv interface{}, ctx context.Context, dec
 	return interceptor(ctx, in, info, handler)
 }
 
+func _TasksService_CreateTask_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(CreateTaskRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(TasksServiceServer).CreateTask(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: TasksService_CreateTask_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(TasksServiceServer).CreateTask(ctx, req.(*CreateTaskRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _TasksService_CloseTask_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(CloseTaskRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(TasksServiceServer).CloseTask(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: TasksService_CloseTask_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(TasksServiceServer).CloseTask(ctx, req.(*CloseTaskRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _TasksService_ListOpenTasks_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ListOpenTasksRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(TasksServiceServer).ListOpenTasks(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: TasksService_ListOpenTasks_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(TasksServiceServer).ListOpenTasks(ctx, req.(*ListOpenTasksRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _TasksService_ListAllDepartments_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ListAllDepartmentsRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(TasksServiceServer).ListAllDepartments(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: TasksService_ListAllDepartments_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(TasksServiceServer).ListAllDepartments(ctx, req.(*ListAllDepartmentsRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _TasksService_ListUnitTypes_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ListUnitTypesRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(TasksServiceServer).ListUnitTypes(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: TasksService_ListUnitTypes_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(TasksServiceServer).ListUnitTypes(ctx, req.(*ListUnitTypesRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _TasksService_StartUnit_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(StartUnitRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(TasksServiceServer).StartUnit(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: TasksService_StartUnit_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(TasksServiceServer).StartUnit(ctx, req.(*StartUnitRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _TasksService_StopActiveUnit_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(StopActiveUnitRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(TasksServiceServer).StopActiveUnit(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: TasksService_StopActiveUnit_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(TasksServiceServer).StopActiveUnit(ctx, req.(*StopActiveUnitRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _TasksService_GetActiveUnit_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetActiveUnitRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(TasksServiceServer).GetActiveUnit(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: TasksService_GetActiveUnit_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(TasksServiceServer).GetActiveUnit(ctx, req.(*GetActiveUnitRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // TasksService_ServiceDesc is the grpc.ServiceDesc for TasksService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -348,6 +624,38 @@ var TasksService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "GetTaskLink",
 			Handler:    _TasksService_GetTaskLink_Handler,
+		},
+		{
+			MethodName: "CreateTask",
+			Handler:    _TasksService_CreateTask_Handler,
+		},
+		{
+			MethodName: "CloseTask",
+			Handler:    _TasksService_CloseTask_Handler,
+		},
+		{
+			MethodName: "ListOpenTasks",
+			Handler:    _TasksService_ListOpenTasks_Handler,
+		},
+		{
+			MethodName: "ListAllDepartments",
+			Handler:    _TasksService_ListAllDepartments_Handler,
+		},
+		{
+			MethodName: "ListUnitTypes",
+			Handler:    _TasksService_ListUnitTypes_Handler,
+		},
+		{
+			MethodName: "StartUnit",
+			Handler:    _TasksService_StartUnit_Handler,
+		},
+		{
+			MethodName: "StopActiveUnit",
+			Handler:    _TasksService_StopActiveUnit_Handler,
+		},
+		{
+			MethodName: "GetActiveUnit",
+			Handler:    _TasksService_GetActiveUnit_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

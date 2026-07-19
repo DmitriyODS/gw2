@@ -1,0 +1,8 @@
+version: v2
+plugins:
+  - local: protoc-gen-go
+    out: ../pkg
+    opt: module=github.com/DmitriyODS/gw2/back-go/pkg
+  - local: protoc-gen-go-grpc
+    out: ../pkg
+    opt: module=github.com/DmitriyODS/gw2/back-go/pkg

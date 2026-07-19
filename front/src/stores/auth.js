@@ -4,7 +4,8 @@ import { getMe } from '@/api/users.js'
 import { login as apiLogin, logout as apiLogout, changeDefault as apiChangeDefault, refreshToken,
   register as apiRegister, selectCompany as apiSelectCompany, switchCompany as apiSwitchCompany,
   verifyEmail as apiVerifyEmail, resendVerification as apiResendVerification,
-  forgotPassword as apiForgotPassword, resetPassword as apiResetPassword } from '@/api/auth.js'
+  forgotPassword as apiForgotPassword, resetPassword as apiResetPassword,
+  yandexCallback as apiYandexCallback } from '@/api/auth.js'
 import { joinCompanyByCode as apiJoinCompany, acceptCompanyInvite as apiAcceptInvite } from '@/api/companies.js'
 import router from '@/router/index.js'
 import { disconnectSocket, updateSocketAuth } from '@/socket/index.js'
@@ -165,6 +166,21 @@ export const useAuthStore = defineStore('auth', () => {
     return data
   }
 
+  // Вход/регистрация через Яндекс ID (обмен кода авторизации на сессию).
+  // Ведёт себя как login: несколько компаний → пикер (needsSelection).
+  async function yandexLogin(code) {
+    const data = await apiYandexCallback(code)
+    if (data.needs_company_selection) {
+      return { needsSelection: true, companies: data.companies ?? [], selectToken: data.select_token }
+    }
+    applySession(data)
+    companyDisabled.value = null
+    if (!forceChange.value) {
+      loadMe().catch(() => {})
+    }
+    return { forceChange: forceChange.value }
+  }
+
   // Завершить логин выбором компании (после login с needs_company_selection).
   async function selectCompany(selectToken, companyId) {
     const data = await apiSelectCompany({ select_token: selectToken, company_id: companyId })
@@ -321,7 +337,7 @@ export const useAuthStore = defineStore('auth', () => {
     user, token, forceChange, isAuth, ready, connecting, loggingOut,
     userId, companyId, companyName, companySettings, isSuperAdmin, companyDisabled,
     companies, isMultiCompany, roleLevel,
-    ensureReady, login, register, verifyEmail, resendVerification,
+    ensureReady, login, register, verifyEmail, resendVerification, yandexLogin,
     forgotPassword, resetPassword, acceptInvite,
     logout, loadMe, clearAuth, applySession, applyLinkSession, patchCompanySettings,
     selectCompany, switchCompany, joinCompany,

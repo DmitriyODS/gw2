@@ -33,6 +33,7 @@ help:
 	@printf "  make dev-diary    Go-микросервис ежедневников (HTTP :8101)\n"
 	@printf "  make dev-portal   Go-микросервис корпоративного портала (HTTP :8102)\n"
 	@printf "  make dev-notes    Go-микросервис заметок (HTTP :8103)\n"
+	@printf "  make dev-alice    Go-микросервис навыка Алисы (HTTP :8104)\n"
 	@printf "  make dev-migrate  Применить миграции (goose)\n"
 	@printf "  make dev-front    Vite dev-сервер  :5173\n"
 	@printf "  make dev-stop     Остановить dev-контейнеры\n"
@@ -60,7 +61,7 @@ help:
 	@printf "\n\033[33mКонфигурация сервера:\033[0m cp .env.deploy.example .env.deploy\n\n"
 
 # ── Разработка ────────────────────────────────────────────────────
-.PHONY: dev-infra dev-migrate dev-front dev-calls dev-auth dev-messenger dev-ai dev-pets dev-tasks dev-gateway dev-push dev-mail dev-registry dev-calendar dev-diary dev-portal dev-notes dev-stop dev-stack dev-stack-stop gen-proto
+.PHONY: dev-infra dev-migrate dev-front dev-calls dev-auth dev-messenger dev-ai dev-pets dev-tasks dev-gateway dev-push dev-mail dev-registry dev-calendar dev-diary dev-portal dev-notes dev-alice dev-stop dev-stack dev-stack-stop gen-proto
 
 # Dev-ключи PASETO (синхронизированы с dev.sh и
 # deploy/docker-compose.override.yml): приватный — только у authsvc,
@@ -115,6 +116,8 @@ dev-auth: dev-infra
 	UPLOAD_FOLDER="$(CURDIR)/uploads" \
 	MAIL_GRPC_ADDR="localhost:9098" \
 	APP_PUBLIC_BASE_URL="http://localhost:5173" \
+	OAUTH_ALICE_CLIENT_ID="alice-dev" \
+	OAUTH_ALICE_CLIENT_SECRET="alice-dev-secret" \
 	go run ./cmd/authsvc
 
 # Go-микросервис мессенджера: REST /api/messenger/* (кроме exact presence —
@@ -266,6 +269,19 @@ dev-notes: dev-infra
 	AI_GRPC_ADDR="localhost:9093" \
 	HTTP_ADDR=":8103" \
 	go run ./cmd/notesvc
+
+# Go-микросервис навыка Алисы: публичный вебхук /api/alice/webhook.
+# env синхронизированы с dev.sh.
+dev-alice:
+	@printf "\033[1m▶ alicesvc (Go)  HTTP :8104\033[0m\n"
+	cd back-go/alice && \
+	PASETO_PUBLIC_KEY="$(PASETO_PUBLIC_KEY_DEV)" \
+	TASKS_GRPC_ADDR="localhost:9095" \
+	DIARY_GRPC_ADDR="localhost:9101" \
+	NOTES_GRPC_ADDR="localhost:9103" \
+	AI_GRPC_ADDR="localhost:9093" \
+	HTTP_ADDR=":8104" \
+	go run ./cmd/alicesvc
 
 gen-proto:
 	bash scripts/gen_proto.sh

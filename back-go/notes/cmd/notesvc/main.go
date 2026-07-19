@@ -13,16 +13,21 @@
 package main
 
 import (
+	"net"
 	"os"
+
+	googrpc "google.golang.org/grpc"
 
 	"github.com/DmitriyODS/gw2/back-go/notes/internal/clients"
 	"github.com/DmitriyODS/gw2/back-go/notes/internal/domain"
 	"github.com/DmitriyODS/gw2/back-go/notes/internal/repository/postgres"
 	redisrepo "github.com/DmitriyODS/gw2/back-go/notes/internal/repository/redis"
 	"github.com/DmitriyODS/gw2/back-go/notes/internal/service"
+	grpctransport "github.com/DmitriyODS/gw2/back-go/notes/internal/transport/grpc"
 	httptransport "github.com/DmitriyODS/gw2/back-go/notes/internal/transport/http"
 	"github.com/DmitriyODS/gw2/back-go/pkg/bootstrap"
 	"github.com/DmitriyODS/gw2/back-go/pkg/events"
+	"github.com/DmitriyODS/gw2/back-go/pkg/gen/notespb"
 	"github.com/DmitriyODS/gw2/back-go/pkg/pasetoauth"
 	"github.com/DmitriyODS/gw2/back-go/pkg/records"
 	"github.com/DmitriyODS/gw2/back-go/pkg/storage"
@@ -38,6 +43,7 @@ func main() {
 	redisURL := bootstrap.Env("REDIS_URL", "redis://localhost:6379/0")
 	uploadFolder := bootstrap.Env("UPLOAD_FOLDER", "../../uploads")
 	httpAddr := bootstrap.Env("HTTP_ADDR", ":8103")
+	grpcAddr := bootstrap.Env("GRPC_ADDR", ":9103")
 
 	// Публичный ключ access-токенов PASETO (v4.public): токены выпускает
 	// authsvc, мы только проверяем подпись.
@@ -83,7 +89,16 @@ func main() {
 	})
 	httpServer := httptransport.NewServer(svc, users, verifier, log)
 
-	log.Info("listening", "http", httpAddr)
+	// gRPC — голосовые операции навыка Алисы (зовёт alicesvc).
+	grpcServer := googrpc.NewServer()
+	notespb.RegisterNotesServiceServer(grpcServer, grpctransport.NewServer(svc))
+	listener, err := net.Listen("tcp", grpcAddr)
+	if err != nil {
+		log.Error("grpc.listen_failed", "addr", grpcAddr, "error", err)
+		os.Exit(1)
+	}
+
+	log.Info("listening", "http", httpAddr, "grpc", grpcAddr)
 	bootstrap.Run(ctx, log,
 		bootstrap.Component{
 			Name: "http",
@@ -93,6 +108,11 @@ func main() {
 					log.Warn("http.shutdown_failed", "error", err)
 				}
 			},
+		},
+		bootstrap.Component{
+			Name: "grpc",
+			Run:  func() error { return grpcServer.Serve(listener) },
+			Stop: grpcServer.GracefulStop,
 		},
 	)
 }

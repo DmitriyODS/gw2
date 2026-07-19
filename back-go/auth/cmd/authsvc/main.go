@@ -77,6 +77,17 @@ func main() {
 
 	svc := service.New(repo, companies, backup, throttle, issuer, avatars,
 		verifications, passwordResets, companyInvites, deviceLinks, mail, appBaseURL, log)
+
+	// OAuth-провайдер для связки аккаунтов навыка Алисы (пустые креды — выключен).
+	if cid, secret := bootstrap.Env("OAUTH_ALICE_CLIENT_ID", ""), bootstrap.Env("OAUTH_ALICE_CLIENT_SECRET", ""); cid != "" && secret != "" {
+		svc.WithOAuth(redisx.NewOAuthCodeStore(rdb), cid, secret)
+		log.Info("oauth.alice_enabled", "client_id", cid)
+	}
+	// Вход через Яндекс ID (пустые креды — кнопка скрыта).
+	if cid, secret := bootstrap.Env("YANDEX_OAUTH_CLIENT_ID", ""), bootstrap.Env("YANDEX_OAUTH_CLIENT_SECRET", ""); cid != "" && secret != "" {
+		svc.WithYandex(clients.NewYandex(cid, secret), cid)
+		log.Info("oauth.yandex_login_enabled", "client_id", cid)
+	}
 	eps := endpoint.New(svc)
 
 	httpAddr := bootstrap.Env("HTTP_ADDR", ":8091")

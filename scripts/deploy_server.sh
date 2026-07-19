@@ -111,6 +111,12 @@ ensure_paseto_pair() {
 ensure_paseto_pair
 ensure PASETO_REFRESH_KEY "$(gen_hex)"
 
+# OAuth-провайдер связки аккаунтов навыка Алисы: креды генерируем сами —
+# эти же значения оператор вписывает в консоль Яндекс.Диалогов (client_id/
+# client_secret навыка).
+ensure OAUTH_ALICE_CLIENT_ID "gw2-alice-$(openssl rand -hex 6)"
+ensure OAUTH_ALICE_CLIENT_SECRET "$(gen_hex)"
+
 # Устаревшие переменные: coturn (заменён LiveKit в v3.5.0), JWT-секрет
 # flask-jwt-extended (заменён PASETO-ключами в v3.6.0) и SECRET_KEY
 # Flask-сессий (Flask ликвидирован в фазе 5).
@@ -136,6 +142,10 @@ if grep -qE '^APP_TAG=' "$ENV_FILE"; then
 fi
 
 # Не генерируемое автоматически — только предупреждаем.
+# Вход через Яндекс ID — креды приложения oauth.yandex.ru (оператор).
+if ! grep -qE '^YANDEX_OAUTH_CLIENT_ID=..*' "$ENV_FILE"; then
+  warn "YANDEX_OAUTH_CLIENT_ID/SECRET пусты — кнопка «Войти с Яндексом» скрыта"
+fi
 if ! grep -qE '^YOUGILE_WEBHOOK_PUBLIC_BASE=..*' "$ENV_FILE"; then
   warn "YOUGILE_WEBHOOK_PUBLIC_BASE пуст — вебхуки YouGile не зарегистрируются"
 fi
@@ -422,6 +432,20 @@ if [ "$notes_code" = "401" ]; then
   ok "маршрут /api/notes через nginx ведёт в notesvc"
 else
   warn "маршрут /api/notes вернул $notes_code (ожидался 401) — проверьте nginx"
+fi
+
+# Микросервис навыка Алисы: healthz изнутри контейнера + маршрут /api/alice
+# через nginx (вебхук публичный: POST без тела ждём 400, не 404/502).
+if $COMPOSE exec -T alice wget -qO- --timeout=3 http://127.0.0.1:8104/healthz >/dev/null 2>&1; then
+  ok "alicesvc отвечает (healthz)"
+else
+  warn "alicesvc не отвечает — навык Алисы не работает: make logs s=alice"
+fi
+alice_code=$(curl -skL -o /dev/null -w '%{http_code}' --max-time 5 -X POST http://localhost/api/alice/webhook || true)
+if [ "$alice_code" = "400" ] || [ "$alice_code" = "200" ]; then
+  ok "маршрут /api/alice через nginx ведёт в alicesvc"
+else
+  warn "маршрут /api/alice вернул $alice_code (ожидался 400) — проверьте nginx"
 fi
 
 # Микросервис почты: healthz изнутри контейнера (наружу не торчит — gRPC-only,

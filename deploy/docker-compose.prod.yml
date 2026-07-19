@@ -84,6 +84,9 @@ services:
   notes:
     image: osipovskijdima/groove_work:${NOTES_TAG:-notes}
 
+  alice:
+    image: osipovskijdima/groove_work:${ALICE_TAG:-alice}
+
   mail:
     image: osipovskijdima/groove_work:${MAIL_TAG:-mail}
     environment:

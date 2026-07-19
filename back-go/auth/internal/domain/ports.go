@@ -68,6 +68,8 @@ type UserRepository interface {
 	GetByID(ctx context.Context, id int64) (*User, error)
 	GetByLogin(ctx context.Context, login string) (*User, error)
 	GetByEmail(ctx context.Context, email string) (*User, error)
+	// GetByYandexID — аккаунт, привязанный к Яндекс ID; nil — не привязан.
+	GetByYandexID(ctx context.Context, yandexID string) (*User, error)
 	// ListAll — все активные пользователи платформы (список супер-админа), по id.
 	ListAll(ctx context.Context) ([]*User, error)
 	// SearchDirectory — глобальный каталог (контакты): активные, ILIKE по

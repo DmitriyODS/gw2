@@ -11,7 +11,7 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 
 export PATH="$PATH:$HOME/go/bin"
 
-ALL_SERVICES=(calls messenger ai pets mail tasks)
+ALL_SERVICES=(calls messenger ai pets mail tasks diary notes)
 
 if [ "$#" -gt 0 ]; then
   SERVICES=()

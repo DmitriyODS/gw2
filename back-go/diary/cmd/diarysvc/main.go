@@ -13,14 +13,19 @@
 package main
 
 import (
+	"net"
 	"os"
+
+	googrpc "google.golang.org/grpc"
 
 	"github.com/DmitriyODS/gw2/back-go/diary/internal/endpoint"
 	"github.com/DmitriyODS/gw2/back-go/diary/internal/repository/postgres"
 	"github.com/DmitriyODS/gw2/back-go/diary/internal/service"
+	grpctransport "github.com/DmitriyODS/gw2/back-go/diary/internal/transport/grpc"
 	httptransport "github.com/DmitriyODS/gw2/back-go/diary/internal/transport/http"
 	"github.com/DmitriyODS/gw2/back-go/pkg/bootstrap"
 	"github.com/DmitriyODS/gw2/back-go/pkg/events"
+	"github.com/DmitriyODS/gw2/back-go/pkg/gen/diarypb"
 	"github.com/DmitriyODS/gw2/back-go/pkg/pasetoauth"
 )
 
@@ -30,6 +35,7 @@ func main() {
 	dbURL := bootstrap.Env("DATABASE_URL", "postgresql://grovework:grovework_local@localhost:5432/grovework")
 	redisURL := bootstrap.Env("REDIS_URL", "redis://localhost:6379/0")
 	httpAddr := bootstrap.Env("HTTP_ADDR", ":8101")
+	grpcAddr := bootstrap.Env("GRPC_ADDR", ":9101")
 
 	// Публичный ключ access-токенов PASETO (v4.public): токены выпускает
 	// authsvc, мы только проверяем подпись.
@@ -59,7 +65,16 @@ func main() {
 
 	httpServer := httptransport.NewServer(eps, users, verifier, log)
 
-	log.Info("listening", "http", httpAddr)
+	// gRPC — голосовые операции навыка Алисы (зовёт alicesvc).
+	grpcServer := googrpc.NewServer()
+	diarypb.RegisterDiaryServiceServer(grpcServer, grpctransport.NewServer(svc))
+	listener, err := net.Listen("tcp", grpcAddr)
+	if err != nil {
+		log.Error("grpc.listen_failed", "addr", grpcAddr, "error", err)
+		os.Exit(1)
+	}
+
+	log.Info("listening", "http", httpAddr, "grpc", grpcAddr)
 	bootstrap.Run(ctx, log,
 		bootstrap.Component{
 			Name: "http",
@@ -69,6 +84,11 @@ func main() {
 					log.Warn("http.shutdown_failed", "error", err)
 				}
 			},
+		},
+		bootstrap.Component{
+			Name: "grpc",
+			Run:  func() error { return grpcServer.Serve(listener) },
+			Stop: grpcServer.GracefulStop,
 		},
 	)
 }

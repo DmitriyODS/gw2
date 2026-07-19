@@ -74,6 +74,13 @@
       Уже есть аккаунт?
       <RouterLink to="/login" class="switch-link">Войти</RouterLink>
     </p>
+
+    <div v-if="yandexAuth.enabled" class="alt-register">
+      <button type="button" class="alt-register-btn" @click="goYandex">
+        <span class="ya-badge">Я</span>
+        Продолжить с Яндексом
+      </button>
+    </div>
   </AuthShell>
 </template>
 
@@ -82,7 +89,7 @@ import { reactive, ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth.js'
 import { useThemeStore } from '@/stores/theme.js'
-import { suggestLogin } from '@/api/auth.js'
+import { suggestLogin, yandexConfig, yandexAuthURL } from '@/api/auth.js'
 import AuthShell from '@/components/auth/AuthShell.vue'
 
 const router = useRouter()
@@ -97,9 +104,16 @@ const copied = ref(false)
 const loginTouched = ref(false)
 let suggestTimer = null
 
+// Регистрация через Яндекс ID: кнопка видна, только если сервер настроен.
+const yandexAuth = ref({ enabled: false, client_id: '' })
+function goYandex() {
+  window.location.href = yandexAuthURL(yandexAuth.value.client_id)
+}
+
 onMounted(() => {
   themeStore.init()
   regeneratePassword()
+  yandexConfig().then((cfg) => { yandexAuth.value = cfg }).catch(() => {})
 })
 
 // Безопасный пароль на клиенте (Web Crypto): без двусмысленных символов.
@@ -293,6 +307,42 @@ async function handleRegister() {
   opacity: 0.6;
   cursor: not-allowed;
   transform: none;
+}
+
+.alt-register {
+  display: flex;
+  justify-content: center;
+  margin-top: 10px;
+}
+.alt-register-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 14px;
+  border: none;
+  border-radius: var(--radius-pill, 999px);
+  background: var(--acrylic-card-bg, transparent);
+  color: var(--color-text-secondary);
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: color 0.15s, background 0.15s;
+}
+.alt-register-btn:hover { color: var(--color-primary); }
+/* Значок Яндекса: фирменная буква без внешних ресурсов. */
+.ya-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  max-width: 18px;
+  min-height: 18px;
+  max-height: 18px;
+  border-radius: 50%;
+  background: var(--color-error-container, var(--color-surface-variant));
+  color: var(--color-error, currentColor);
+  font-size: 12px;
+  font-weight: 800;
 }
 
 .switch-line {

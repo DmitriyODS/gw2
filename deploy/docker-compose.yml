@@ -161,6 +161,14 @@ services:
       # строится от публичного базового URL приложения.
       MAIL_GRPC_ADDR: mail:9098
       APP_PUBLIC_BASE_URL: ${APP_PUBLIC_BASE_URL:-http://localhost:8080}
+      # OAuth-провайдер связки аккаунтов навыка Алисы (эти же креды вписываются
+      # в консоль Яндекс.Диалогов). Пусто — эндпоинты /api/auth/oauth/* выключены.
+      OAUTH_ALICE_CLIENT_ID: ${OAUTH_ALICE_CLIENT_ID:-}
+      OAUTH_ALICE_CLIENT_SECRET: ${OAUTH_ALICE_CLIENT_SECRET:-}
+      # Вход через Яндекс ID (креды приложения с oauth.yandex.ru). Пусто —
+      # кнопка «Войти с Яндексом» скрыта.
+      YANDEX_OAUTH_CLIENT_ID: ${YANDEX_OAUTH_CLIENT_ID:-}
+      YANDEX_OAUTH_CLIENT_SECRET: ${YANDEX_OAUTH_CLIENT_SECRET:-}
       HTTP_ADDR: ":8091"
     volumes:
       - uploads:/app/uploads
@@ -474,8 +482,11 @@ services:
       REDIS_URL: redis://redis:6379/0
       PASETO_PUBLIC_KEY: ${PASETO_PUBLIC_KEY}
       HTTP_ADDR: ":8101"
+      # gRPC — голосовые операции навыка Алисы (зовёт alicesvc).
+      GRPC_ADDR: ":9101"
     expose:
       - "8101"
+      - "9101"
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8101/healthz"]
       interval: 15s
@@ -518,10 +529,13 @@ services:
       S3_ACCESS_KEY: ${S3_ACCESS_KEY:-}
       S3_SECRET_KEY: ${S3_SECRET_KEY:-}
       HTTP_ADDR: ":8103"
+      # gRPC — голосовые операции навыка Алисы (зовёт alicesvc).
+      GRPC_ADDR: ":9103"
     volumes:
       - uploads:/app/uploads
     expose:
       - "8103"
+      - "9103"
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8103/healthz"]
       interval: 15s
@@ -569,6 +583,43 @@ services:
       - "8102"
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8102/healthz"]
+      interval: 15s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
+
+  # Микросервис навыка Алисы (Go, back-go/alice): HTTP :8104 — публичный
+  # вебхук Яндекс.Диалогов (/api/alice/webhook). Своего состояния нет (ни БД,
+  # ни Redis): авторизация — PASETO из связки аккаунтов, мультиход диалога —
+  # в session_state Диалогов. Голосовые команды исполняются gRPC-вызовами
+  # tasksvc/diarysvc/notesvc; разбор фраз — ИИ через aisvc (фолбэк — регэкспы).
+  alice:
+    build:
+      context: ../back-go
+      dockerfile: alice/Dockerfile
+    restart: unless-stopped
+    depends_on:
+      tasks:
+        condition: service_healthy
+      diary:
+        condition: service_healthy
+      notes:
+        condition: service_healthy
+      ai:
+        condition: service_healthy
+    environment:
+      PASETO_PUBLIC_KEY: ${PASETO_PUBLIC_KEY}
+      TASKS_GRPC_ADDR: tasks:9095
+      DIARY_GRPC_ADDR: diary:9101
+      NOTES_GRPC_ADDR: notes:9103
+      # ИИ-разбор голосовых фраз ключом активной компании. Явно пусто —
+      # только классический регэксп-парсер.
+      AI_GRPC_ADDR: ai:9093
+      HTTP_ADDR: ":8104"
+    expose:
+      - "8104"
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8104/healthz"]
       interval: 15s
       timeout: 3s
       retries: 5
@@ -641,6 +692,8 @@ services:
       portal:
         condition: service_healthy
       notes:
+        condition: service_healthy
+      alice:
         condition: service_healthy
     volumes:
       - uploads:/app/uploads:ro

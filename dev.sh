@@ -44,9 +44,10 @@ CALENDAR_PID=""
 DIARY_PID=""
 PORTAL_PID=""
 NOTES_PID=""
+ALICE_PID=""
 
 # Все Go-сервисы (имя бинаря в go-build/exe — по нему ловим осиротевшие процессы).
-SVCS="callsvc authsvc msgsvc aisvc petsvc tasksvc gatewaysvc pushsvc mailsvc registrysvc calendarsvc diarysvc portalsvc notesvc"
+SVCS="callsvc authsvc msgsvc aisvc petsvc tasksvc gatewaysvc pushsvc mailsvc registrysvc calendarsvc diarysvc portalsvc notesvc alicesvc"
 
 # Dev-ключи PASETO (синхронизированы с Makefile и
 # deploy/docker-compose.override.yml): приватный — только у authsvc,
@@ -78,6 +79,7 @@ cleanup() {
     if [ -n "$DIARY_PID" ]; then kill -TERM -- "-$DIARY_PID" 2>/dev/null || true; fi
     if [ -n "$PORTAL_PID" ]; then kill -TERM -- "-$PORTAL_PID" 2>/dev/null || true; fi
     if [ -n "$NOTES_PID" ]; then kill -TERM -- "-$NOTES_PID" 2>/dev/null || true; fi
+    if [ -n "$ALICE_PID" ]; then kill -TERM -- "-$ALICE_PID" 2>/dev/null || true; fi
 
     # Даём ~1 секунду на graceful-shutdown (vite, Go-сервисы).
     sleep 1
@@ -98,6 +100,7 @@ cleanup() {
     if [ -n "$DIARY_PID" ]; then kill -KILL -- "-$DIARY_PID" 2>/dev/null || true; fi
     if [ -n "$PORTAL_PID" ]; then kill -KILL -- "-$PORTAL_PID" 2>/dev/null || true; fi
     if [ -n "$NOTES_PID" ]; then kill -KILL -- "-$NOTES_PID" 2>/dev/null || true; fi
+    if [ -n "$ALICE_PID" ]; then kill -KILL -- "-$ALICE_PID" 2>/dev/null || true; fi
 
     # Подбираем сирот по имени — защита от случая, когда субшелл уже
     # умер, а его потомки ещё живы. Узко по нашему пути, чужие процессы
@@ -149,7 +152,7 @@ ensure_front_deps
 #     go run ниже стартует мгновенно. `go build ./...` из корня workspace не
 #     работает (back-go без своего go.mod), поэтому обходим модули через -C.
 printf "\033[1m▶ Сборка Go-сервисов...\033[0m\n"
-for mod in pkg migrate calls auth messenger ai pets tasks gateway push mail registry calendar diary portal notes; do
+for mod in pkg migrate calls auth messenger ai pets tasks gateway push mail registry calendar diary portal notes alice; do
     printf "  %s" "$mod"
     go build -C "$ROOT/back-go/$mod" ./...
     printf "\033[32m ✓\033[0m\n"
@@ -199,6 +202,8 @@ printf "\033[1m▶ authsvc (Go)  HTTP :8091...\033[0m\n"
   UPLOAD_FOLDER="$UPLOADS" \
   MAIL_GRPC_ADDR="localhost:9098" \
   APP_PUBLIC_BASE_URL="http://${PRIMARY_IP}:5173" \
+  OAUTH_ALICE_CLIENT_ID="alice-dev" \
+  OAUTH_ALICE_CLIENT_SECRET="alice-dev-secret" \
   exec go run ./cmd/authsvc
 ) &
 AUTH_PID=$!
@@ -389,6 +394,22 @@ printf "\033[1m▶ notesvc (Go)  HTTP :8103...\033[0m\n"
   exec go run ./cmd/notesvc
 ) &
 NOTES_PID=$!
+
+# 12f. Go-микросервис навыка Алисы alicesvc (HTTP :8104 — публичный вебхук
+#      /api/alice/webhook). Состояния нет; голосовые команды — gRPC-вызовы
+#      tasksvc/diarysvc/notesvc, ИИ-разбор фраз — aisvc.
+printf "\033[1m▶ alicesvc (Go)  HTTP :8104...\033[0m\n"
+(
+  cd "$ROOT/back-go/alice" && \
+  PASETO_PUBLIC_KEY="$PASETO_PUBLIC_KEY_DEV" \
+  TASKS_GRPC_ADDR="localhost:9095" \
+  DIARY_GRPC_ADDR="localhost:9101" \
+  NOTES_GRPC_ADDR="localhost:9103" \
+  AI_GRPC_ADDR="localhost:9093" \
+  HTTP_ADDR=":8104" \
+  exec go run ./cmd/alicesvc
+) &
+ALICE_PID=$!
 
 # 13. Vite (--host 0.0.0.0 — слушаем все интерфейсы, чтобы фронт открывался
 #     с других устройств сети по http://<IP>:5173).

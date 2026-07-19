@@ -100,7 +100,7 @@ func main() {
 	httpServer := httptransport.NewServer(eps, users, verifier, log)
 
 	grpcServer := googrpc.NewServer()
-	taskspb.RegisterTasksServiceServer(grpcServer, grpctransport.NewServer(eps))
+	taskspb.RegisterTasksServiceServer(grpcServer, grpctransport.NewServer(eps, svc))
 	listener, err := net.Listen("tcp", grpcAddr)
 	if err != nil {
 		log.Error("grpc.listen_failed", "addr", grpcAddr, "error", err)

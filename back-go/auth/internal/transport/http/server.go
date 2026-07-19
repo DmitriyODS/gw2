@@ -84,6 +84,16 @@ func NewServer(eps endpoint.Endpoints, verifier *pasetoauth.Verifier,
 	authAPI.Post("/link/approve", auth.RequireAuth, h.linkApprove)
 	authAPI.Post("/link/claim", h.linkClaim)
 
+	// OAuth-провайдер: связка аккаунтов навыка Алисы (Яндекс.Диалоги).
+	// authorize зовёт страница согласия фронта (авторизованный пользователь),
+	// token — сервера Яндекса (публичный, креды клиента в форме/Basic).
+	authAPI.Post("/oauth/authorize", auth.RequireAuth, h.oauthAuthorize)
+	authAPI.Post("/oauth/token", h.oauthToken)
+
+	// Вход/регистрация через Яндекс ID (мы — OAuth-клиент Яндекса).
+	authAPI.Get("/yandex/config", h.yandexConfig)
+	authAPI.Post("/yandex/callback", h.yandexCallback)
+
 	usersAPI := app.Group("/api/users")
 	// Список всех пользователей платформы — супер-админ.
 	usersAPI.Get("", auth.RequireAuth, auth.RequireSuperAdmin, h.listUsers)

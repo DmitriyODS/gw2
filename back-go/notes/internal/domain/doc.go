@@ -91,6 +91,30 @@ func walkFileKeys(keys *[]string, n docNode) {
 
 // TextToDoc — документ TipTap из плоского текста (импорт .txt): каждая строка —
 // параграф, пустые строки — пустые параграфы.
+// AppendTextToDoc — дописать плоский текст абзацами в конец TipTap-документа
+// (голосовое «допиши в заметку», навык Алисы). Пустой/невалидный документ
+// заменяется новым из текста.
+func AppendTextToDoc(doc json.RawMessage, text string) json.RawMessage {
+	type docRoot struct {
+		Type    string            `json:"type"`
+		Content []json.RawMessage `json:"content"`
+	}
+	var root docRoot
+	if len(doc) == 0 || json.Unmarshal(doc, &root) != nil || root.Type != "doc" {
+		return TextToDoc(text)
+	}
+	var extra docRoot
+	if json.Unmarshal(TextToDoc(text), &extra) != nil {
+		return doc
+	}
+	root.Content = append(root.Content, extra.Content...)
+	raw, err := json.Marshal(root)
+	if err != nil {
+		return doc
+	}
+	return raw
+}
+
 func TextToDoc(text string) json.RawMessage {
 	type node map[string]any
 	lines := strings.Split(strings.ReplaceAll(text, "\r\n", "\n"), "\n")

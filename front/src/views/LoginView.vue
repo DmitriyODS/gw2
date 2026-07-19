@@ -51,6 +51,10 @@
     </p>
 
     <div class="alt-login">
+      <button v-if="yandexAuth.enabled" type="button" class="alt-login-btn" @click="goYandex">
+        <span class="ya-badge">Я</span>
+        Войти с Яндексом
+      </button>
       <button type="button" class="alt-login-btn" @click="showQrLogin = true">
         <span class="material-symbols-outlined">qr_code_2</span>
         Войти по QR-коду
@@ -193,6 +197,7 @@ import { connectSocket } from '@/socket/index.js'
 import AppDialog from '@/components/common/AppDialog.vue'
 import AuthShell from '@/components/auth/AuthShell.vue'
 import DeviceLinkInitiator from '@/components/auth/DeviceLinkInitiator.vue'
+import { yandexConfig, yandexAuthURL } from '@/api/auth.js'
 
 const router = useRouter()
 const route = useRoute()
@@ -219,6 +224,12 @@ const pickerSelected = ref(null)
 // Вход по QR / активация ТВ-режима.
 const showQrLogin = ref(false)
 const showTvActivate = ref(false)
+
+// Вход через Яндекс ID: кнопка видна, только если сервер настроен.
+const yandexAuth = ref({ enabled: false, client_id: '' })
+function goYandex() {
+  window.location.href = yandexAuthURL(yandexAuth.value.client_id)
+}
 
 const changeForm = reactive({ login: '', password: '', confirmPassword: '' })
 const changeError = ref('')
@@ -256,6 +267,7 @@ function startCooldown(seconds) {
 
 onMounted(() => {
   themeStore.init()
+  yandexConfig().then((cfg) => { yandexAuth.value = cfg }).catch(() => {})
 })
 
 onBeforeUnmount(() => {
@@ -661,5 +673,20 @@ async function handleChangeDefault() {
 }
 .alt-login-btn:hover { color: var(--color-primary); }
 .alt-login-btn .material-symbols-outlined { font-size: 18px; }
+/* Значок Яндекса: фирменная буква без внешних ресурсов. */
+.ya-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  max-width: 18px;
+  min-height: 18px;
+  max-height: 18px;
+  border-radius: 50%;
+  background: var(--color-error-container, var(--color-surface-variant));
+  color: var(--color-error, currentColor);
+  font-size: 12px;
+  font-weight: 800;
+}
 
 </style>

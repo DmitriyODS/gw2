@@ -84,6 +84,12 @@ type AuthService interface {
 
 	ExportBackup(ctx context.Context, sections []string) ([]byte, error)
 	ImportBackup(ctx context.Context, zipBytes []byte, sections []string) error
+
+	// OAuth-провайдер (связка аккаунтов навыка Алисы) и вход через Яндекс ID.
+	OAuthAuthorize(ctx context.Context, userID int64, companyID *int64, req dto.OAuthAuthorizeRequest) (string, error)
+	OAuthToken(ctx context.Context, req dto.OAuthTokenRequest) (*dto.OAuthTokens, error)
+	YandexAuthConfig() *dto.YandexAuthConfig
+	YandexLogin(ctx context.Context, code string) (*dto.Session, error)
 }
 
 type Service struct {
@@ -100,6 +106,14 @@ type Service struct {
 	mail           domain.MailClient
 	appBaseURL     string // публичный базовый URL для ссылок в письмах
 	log            *slog.Logger
+
+	// OAuth-провайдер для связки аккаунтов Алисы (WithOAuth; nil — выключен).
+	oauthCodes        domain.OAuthCodeStore
+	oauthClientID     string
+	oauthClientSecret string
+	// Вход через Яндекс ID (WithYandex; nil — выключен).
+	yandex         domain.YandexOAuthClient
+	yandexClientID string
 }
 
 func New(repo domain.UserRepository, companies domain.CompanyRepository,

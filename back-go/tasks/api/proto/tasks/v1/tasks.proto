@@ -17,6 +17,17 @@ service TasksService {
   rpc GetStatsCalendar(GetStatsCalendarRequest) returns (GetStatsCalendarResponse);
   rpc SearchTasks(SearchTasksRequest) returns (SearchTasksResponse);
   rpc GetTaskLink(GetTaskLinkRequest) returns (GetTaskLinkResponse);
+
+  // Голосовые операции (alicesvc, навык Алисы): действия от имени конкретного
+  // пользователя (user_id) в его активной компании (company_id).
+  rpc CreateTask(CreateTaskRequest) returns (CreateTaskResponse);
+  rpc CloseTask(CloseTaskRequest) returns (CloseTaskResponse);
+  rpc ListOpenTasks(ListOpenTasksRequest) returns (ListOpenTasksResponse);
+  rpc ListAllDepartments(ListAllDepartmentsRequest) returns (ListAllDepartmentsResponse);
+  rpc ListUnitTypes(ListUnitTypesRequest) returns (ListUnitTypesResponse);
+  rpc StartUnit(StartUnitRequest) returns (StartUnitResponse);
+  rpc StopActiveUnit(StopActiveUnitRequest) returns (StopActiveUnitResponse);
+  rpc GetActiveUnit(GetActiveUnitRequest) returns (GetActiveUnitResponse);
 }
 
 message Error {
@@ -136,6 +147,108 @@ message SearchTasksResponse {
 message GetTaskLinkRequest {
   int64 company_id = 1;
   int64 task_id = 2;
+}
+
+// --- Голосовые операции ---
+
+// CatalogItem — элемент справочника компании (отдел, тип юнита).
+message CatalogItem {
+  int64 id = 1;
+  string name = 2;
+}
+
+message CreateTaskRequest {
+  int64 company_id = 1;
+  int64 user_id = 2; // автор задачи
+  string name = 3;
+  int64 department_id = 4; // 0 — автовыбор: единственный отдел компании
+}
+
+message CreateTaskResponse {
+  Error error = 1; // DEPARTMENT_REQUIRED — отделов несколько, нужен явный выбор
+  int64 id = 2;
+  string name = 3;
+}
+
+message CloseTaskRequest {
+  int64 company_id = 1;
+  int64 user_id = 2; // актор (для геймификации/YouGile-пуша)
+  int64 task_id = 3;
+}
+
+message CloseTaskResponse {
+  Error error = 1;
+  string name = 2;
+}
+
+message ListOpenTasksRequest {
+  int64 company_id = 1;
+  int64 user_id = 2;
+  bool only_mine = 3; // только где пользователь ответственный
+  int32 limit = 4;    // 0 → дефолт 5
+}
+
+message ListOpenTasksResponse {
+  Error error = 1;
+  repeated TaskRef tasks = 2;
+  int32 total = 3;
+}
+
+message ListAllDepartmentsRequest {
+  int64 company_id = 1;
+}
+
+message ListAllDepartmentsResponse {
+  Error error = 1;
+  repeated CatalogItem departments = 2;
+}
+
+message ListUnitTypesRequest {
+  int64 company_id = 1;
+}
+
+message ListUnitTypesResponse {
+  Error error = 1;
+  repeated CatalogItem unit_types = 2;
+}
+
+message StartUnitRequest {
+  int64 company_id = 1;
+  int64 user_id = 2;
+  int64 task_id = 3;
+  int64 unit_type_id = 4; // 0 — автовыбор: единственный тип юнита компании
+  string name = 5;        // пусто — имя задачи
+}
+
+message StartUnitResponse {
+  Error error = 1; // UNIT_TYPE_REQUIRED — типов несколько, нужен явный выбор
+  int64 unit_id = 2;
+  string task_name = 3;
+}
+
+message StopActiveUnitRequest {
+  int64 user_id = 1;
+}
+
+message StopActiveUnitResponse {
+  Error error = 1; // NO_ACTIVE_UNIT — активного юнита нет
+  string unit_name = 2;
+  string task_name = 3;
+  int32 minutes = 4; // длительность завершённого юнита
+}
+
+message GetActiveUnitRequest {
+  int64 user_id = 1;
+}
+
+message GetActiveUnitResponse {
+  Error error = 1;
+  bool active = 2; // false — активного юнита нет (это не ошибка)
+  int64 unit_id = 3;
+  int64 task_id = 4;
+  string unit_name = 5;
+  string task_name = 6;
+  int32 minutes = 7; // сколько уже идёт
 }
 
 message GetTaskLinkResponse {

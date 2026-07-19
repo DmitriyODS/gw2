@@ -2,6 +2,7 @@ go 1.26
 
 use (
 	./ai
+	./alice
 	./apitest
 	./auth
 	./calendar

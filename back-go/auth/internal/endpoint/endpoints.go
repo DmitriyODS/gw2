@@ -31,6 +31,12 @@ type Endpoints struct {
 	LinkApprove endpoint.Endpoint
 	LinkClaim   endpoint.Endpoint
 
+	// OAuth-провайдер (связка аккаунтов навыка Алисы) и вход через Яндекс ID.
+	OAuthAuthorize endpoint.Endpoint
+	OAuthToken     endpoint.Endpoint
+	YandexConfig   endpoint.Endpoint
+	YandexLogin    endpoint.Endpoint
+
 	ListUsers              endpoint.Endpoint
 	CreateUser             endpoint.Endpoint
 	CreatePlatformUser     endpoint.Endpoint
@@ -92,6 +98,14 @@ type ActorRequest struct {
 type ImportBackupReq struct {
 	Zip      []byte
 	Sections []string
+}
+
+// OAuthAuthorizeEpRequest — согласие пользователя на связку аккаунтов:
+// кто соглашается и его активная компания (уедет в клеймы токенов Алисы).
+type OAuthAuthorizeEpRequest struct {
+	UserID    int64
+	CompanyID *int64
+	Body      dto.OAuthAuthorizeRequest
 }
 
 type CreateUserEpRequest struct {
@@ -289,6 +303,19 @@ func New(svc service.AuthService) Endpoints {
 		LinkClaim: func(ctx context.Context, request any) (any, error) {
 			req := request.(LinkClaimEpRequest)
 			return svc.LinkClaim(ctx, req.Code, req.Secret)
+		},
+		OAuthAuthorize: func(ctx context.Context, request any) (any, error) {
+			req := request.(OAuthAuthorizeEpRequest)
+			return svc.OAuthAuthorize(ctx, req.UserID, req.CompanyID, req.Body)
+		},
+		OAuthToken: func(ctx context.Context, request any) (any, error) {
+			return svc.OAuthToken(ctx, request.(dto.OAuthTokenRequest))
+		},
+		YandexConfig: func(ctx context.Context, _ any) (any, error) {
+			return svc.YandexAuthConfig(), nil
+		},
+		YandexLogin: func(ctx context.Context, request any) (any, error) {
+			return svc.YandexLogin(ctx, request.(string))
 		},
 		ListUsers: func(ctx context.Context, _ any) (any, error) {
 			return svc.ListUsers(ctx)
