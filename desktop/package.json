@@ -1,6 +1,6 @@
 {
   "name": "groovework-desktop",
-  "version": "1.0.10",
+  "version": "1.0.11",
   "private": true,
   "description": "Groove Work — десктоп-клиент (тонкая обёртка над веб-версией)",
   "author": "Groove Work",
