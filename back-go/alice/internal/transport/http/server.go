@@ -4,6 +4,7 @@
 package http
 
 import (
+	"encoding/json"
 	"log/slog"
 
 	"github.com/gofiber/fiber/v2"
@@ -21,8 +22,10 @@ func NewServer(svc *service.Service, log *slog.Logger) *Server {
 	app := httpserver.New(httpserver.Config{AppName: "gw2-alicesvc", Log: log})
 
 	app.Post("/api/alice/webhook", func(c *fiber.Ctx) error {
+		// json.Unmarshal вместо BodyParser: валидатор Диалогов шлёт запрос
+		// БЕЗ заголовка Content-Type, а BodyParser без него отказывает (400).
 		var req domain.WebhookRequest
-		if err := c.BodyParser(&req); err != nil {
+		if err := json.Unmarshal(c.Body(), &req); err != nil {
 			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
 				"error": "VALIDATION", "message": "Некорректное тело запроса",
 			})
