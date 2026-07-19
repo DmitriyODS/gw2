@@ -3,6 +3,7 @@ import { useAuthStore } from '@/stores/auth'
 import { ROLES } from '@/composables/usePermission.js'
 import { useCompanySettings } from '@/composables/useCompanySettings.js'
 import { navProgress } from '@/composables/useNavProgress.js'
+import { trackPageView } from '@/utils/metrika.js'
 
 const routes = [
   // Промо-лендинг платформы: публичный, без каркаса приложения.
@@ -168,7 +169,13 @@ router.beforeEach(async (to) => {
   }
 })
 
-router.afterEach(() => { navProgress.value = false })
+router.afterEach((to, from, failure) => {
+  navProgress.value = false
+  // Просмотр страницы в Метрику — только состоявшаяся навигация (редиректы
+  // гардов не считаем дважды). Для первого захода referer — внешний реферер.
+  if (failure) return
+  trackPageView(to.fullPath, from.matched.length ? from.fullPath : document.referrer)
+})
 router.onError(() => { navProgress.value = false })
 
 export default router
