@@ -75,6 +75,52 @@ func (s *Service) YandexLogin(ctx context.Context, code string) (*dto.Session, e
 	return s.startSession(ctx, user)
 }
 
+// YandexLinkStatus — привязан ли Яндекс ID к аккаунту (карточка профиля).
+func (s *Service) YandexLinkStatus(ctx context.Context, userID int64) (bool, error) {
+	return s.repo.YandexLinked(ctx, userID)
+}
+
+// YandexLink — привязать Яндекс ID к СУЩЕСТВУЮЩЕМУ аккаунту (из профиля,
+// state=link): дальше пользователь входит кнопкой, а не создаёт дубликат.
+func (s *Service) YandexLink(ctx context.Context, userID int64, code string) error {
+	if s.yandex == nil || s.yandexClientID == "" {
+		return errYandexDisabled
+	}
+	token, err := s.yandex.Exchange(ctx, code)
+	if err != nil {
+		return domain.NewError("YANDEX_CODE_INVALID", "Не удалось подтвердить вход через Яндекс", 401)
+	}
+	profile, err := s.yandex.Profile(ctx, token)
+	if err != nil || profile == nil || profile.ID == "" {
+		return domain.NewError("YANDEX_PROFILE_FAILED", "Яндекс не отдал профиль пользователя", 502)
+	}
+	existing, err := s.repo.GetByYandexID(ctx, profile.ID)
+	if err != nil {
+		return err
+	}
+	if existing != nil && existing.ID != userID {
+		return domain.NewError("YANDEX_TAKEN",
+			"Этот Яндекс-аккаунт уже привязан к другому пользователю", 409)
+	}
+	if existing != nil {
+		return nil // уже привязан к этому же аккаунту
+	}
+	if err := s.repo.UpdateFields(ctx, userID, map[string]any{"yandex_id": profile.ID}); err != nil {
+		return err
+	}
+	s.log.Info("auth.yandex_link", "user_id", userID)
+	return nil
+}
+
+// YandexUnlink — отвязать Яндекс ID (вход остаётся по логину/паролю).
+func (s *Service) YandexUnlink(ctx context.Context, userID int64) error {
+	if err := s.repo.UpdateFields(ctx, userID, map[string]any{"yandex_id": nil}); err != nil {
+		return err
+	}
+	s.log.Info("auth.yandex_unlink", "user_id", userID)
+	return nil
+}
+
 // registerFromYandex — автосоздание аккаунта из профиля Яндекса: логин из
 // имени (транслит), случайный пароль (вход — через Яндекс либо сброс по почте).
 func (s *Service) registerFromYandex(ctx context.Context, p *domain.YandexProfile) (*domain.User, error) {

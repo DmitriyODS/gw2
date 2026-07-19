@@ -90,6 +90,9 @@ type AuthService interface {
 	OAuthToken(ctx context.Context, req dto.OAuthTokenRequest) (*dto.OAuthTokens, error)
 	YandexAuthConfig() *dto.YandexAuthConfig
 	YandexLogin(ctx context.Context, code string) (*dto.Session, error)
+	YandexLinkStatus(ctx context.Context, userID int64) (bool, error)
+	YandexLink(ctx context.Context, userID int64, code string) error
+	YandexUnlink(ctx context.Context, userID int64) error
 }
 
 type Service struct {

@@ -87,6 +87,10 @@ func (r *fakeRepo) GetByYandexID(_ context.Context, _ string) (*domain.User, err
 	return nil, nil
 }
 
+func (r *fakeRepo) YandexLinked(_ context.Context, _ int64) (bool, error) {
+	return false, nil
+}
+
 func (r *fakeRepo) GetByEmail(_ context.Context, email string) (*domain.User, error) {
 	for _, u := range r.users {
 		if u.Email != nil && strings.EqualFold(*u.Email, email) {

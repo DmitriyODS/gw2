@@ -6,6 +6,13 @@
         <p class="yc-muted">Входим через Яндекс…</p>
       </template>
 
+      <template v-else-if="state === 'linked'">
+        <span class="material-symbols-outlined yc-icon">link</span>
+        <h2 class="yc-title">Аккаунт привязан</h2>
+        <p class="yc-text">Теперь вы можете входить в Groove Work кнопкой «Войти с Яндексом».</p>
+        <button type="button" class="btn-grad" @click="router.push('/profile')">В профиль</button>
+      </template>
+
       <template v-else-if="state === 'select'">
         <span class="material-symbols-outlined yc-icon">apartment</span>
         <h2 class="yc-title">Выберите компанию</h2>
@@ -38,13 +45,14 @@
 import { onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth.js'
+import { yandexLink } from '@/api/auth.js'
 import { connectSocket } from '@/socket/index.js'
 
 const route = useRoute()
 const router = useRouter()
 const authStore = useAuthStore()
 
-const state = ref('loading') // loading | select | error
+const state = ref('loading') // loading | linked | select | error
 const loading = ref(false)
 const error = ref('')
 const pickerCompanies = ref([])
@@ -55,6 +63,19 @@ onMounted(async () => {
   if (!code) {
     state.value = 'error'
     error.value = 'Яндекс не передал код авторизации.'
+    return
+  }
+  // state=link — привязка Яндекса к УЖЕ авторизованному аккаунту (из профиля).
+  if (route.query.state === 'link') {
+    try {
+      await authStore.ensureReady()
+      if (!authStore.token) throw new Error('Сначала войдите в свой аккаунт Groove Work.')
+      await yandexLink(code)
+      state.value = 'linked'
+    } catch (e) {
+      state.value = 'error'
+      error.value = e?.message || 'Не удалось привязать Яндекс-аккаунт.'
+    }
     return
   }
   try {

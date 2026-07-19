@@ -189,6 +189,35 @@
           </button>
         </section>
 
+        <!-- Связанные аккаунты (Яндекс ID) — только если вход через Яндекс настроен -->
+        <section v-if="yandexAuth.enabled" class="profile-card">
+          <header class="card-head">
+            <div class="head-icon" data-tone="primary">
+              <span class="material-symbols-outlined">link</span>
+            </div>
+            <div class="head-text">
+              <h3>Связанные аккаунты</h3>
+              <p class="head-desc">
+                Привяжите Яндекс — и входите в Groove Work одной кнопкой, без пароля.
+              </p>
+            </div>
+          </header>
+          <div class="yandex-link-row">
+            <template v-if="yandexLinked">
+              <span class="yandex-linked-chip">
+                <span class="material-symbols-outlined">check_circle</span>
+                Яндекс привязан
+              </span>
+              <button type="button" class="btn-glass" :disabled="yandexBusy" @click="unlinkYandex">
+                Отвязать
+              </button>
+            </template>
+            <button v-else type="button" class="btn-grad" :disabled="yandexBusy" @click="linkYandex">
+              Привязать Яндекс-аккаунт
+            </button>
+          </div>
+        </section>
+
         <div class="forms-row">
           <!-- Редактирование профиля -->
           <section class="profile-card">
@@ -334,6 +363,7 @@ import { useAuthStore } from '@/stores/auth.js'
 import { useNotificationsStore } from '@/stores/notifications.js'
 import { useBreakpoint } from '@/composables/useBreakpoint.js'
 import { updateMe, uploadAvatar, deleteAvatar } from '@/api/users.js'
+import { yandexConfig, yandexAuthURL, yandexLinkStatus, yandexUnlink } from '@/api/auth.js'
 import { getStatsProfile } from '@/api/stats.js'
 import { formatHours } from '@/utils/time.js'
 import AvatarCropper from '@/components/settings/AvatarCropper.vue'
@@ -531,10 +561,42 @@ async function loadStats(range) {
   }
 }
 
+// Привязка Яндекс-аккаунта: статус и кнопки «Привязать»/«Отвязать».
+const yandexAuth = ref({ enabled: false, client_id: '' })
+const yandexLinked = ref(false)
+const yandexBusy = ref(false)
+
+async function loadYandexLink() {
+  try {
+    yandexAuth.value = await yandexConfig()
+    if (yandexAuth.value.enabled) {
+      yandexLinked.value = (await yandexLinkStatus()).linked
+    }
+  } catch { /* карточка просто не показывается */ }
+}
+
+function linkYandex() {
+  window.location.href = yandexAuthURL(yandexAuth.value.client_id, 'link')
+}
+
+async function unlinkYandex() {
+  yandexBusy.value = true
+  try {
+    await yandexUnlink()
+    yandexLinked.value = false
+    notif.success('Яндекс-аккаунт отвязан')
+  } catch (e) {
+    notif.error(e?.message || 'Не удалось отвязать аккаунт')
+  } finally {
+    yandexBusy.value = false
+  }
+}
+
 onMounted(() => {
   syncProfileForm()
   statsPeriod.value = getDefaultPeriod()
   loadStats(statsPeriod.value)
+  loadYandexLink()
 })
 </script>
 
@@ -821,6 +883,25 @@ onMounted(() => {
   gap: 24px;
   align-items: start;
 }
+
+.yandex-link-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+.yandex-linked-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 14px;
+  border-radius: var(--radius-pill, 999px);
+  background: var(--color-success-container, var(--color-surface-variant));
+  color: var(--color-on-success-container, var(--color-text));
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+.yandex-linked-chip .material-symbols-outlined { font-size: 18px; }
 
 .profile-card {
   background: var(--acrylic-card-bg);

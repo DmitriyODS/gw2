@@ -93,6 +93,10 @@ func NewServer(eps endpoint.Endpoints, verifier *pasetoauth.Verifier,
 	// Вход/регистрация через Яндекс ID (мы — OAuth-клиент Яндекса).
 	authAPI.Get("/yandex/config", h.yandexConfig)
 	authAPI.Post("/yandex/callback", h.yandexCallback)
+	// Привязка Яндекс ID к существующему аккаунту (карточка в профиле).
+	authAPI.Get("/yandex/link", auth.RequireAuth, h.yandexLinkStatus)
+	authAPI.Post("/yandex/link", auth.RequireAuth, h.yandexLink)
+	authAPI.Delete("/yandex/link", auth.RequireAuth, h.yandexUnlink)
 
 	usersAPI := app.Group("/api/users")
 	// Список всех пользователей платформы — супер-админ.

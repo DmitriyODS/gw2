@@ -74,6 +74,39 @@ func (h *handlers) yandexConfig(c *fiber.Ctx) error {
 	return c.JSON(resp)
 }
 
+// yandexLinkStatus — привязан ли Яндекс ID к текущему аккаунту (профиль).
+func (h *handlers) yandexLinkStatus(c *fiber.Ctx) error {
+	resp, err := h.eps.YandexLinkStatus(c.Context(), tokenUserID(c))
+	if err != nil {
+		return h.respondError(c, err)
+	}
+	return c.JSON(fiber.Map{"linked": resp.(bool)})
+}
+
+// yandexLink — привязать Яндекс ID к текущему аккаунту (state=link из профиля).
+func (h *handlers) yandexLink(c *fiber.Ctx) error {
+	var req struct {
+		Code string `json:"code"`
+	}
+	if err := c.BodyParser(&req); err != nil || req.Code == "" {
+		return badRequest(c, "code обязателен")
+	}
+	if _, err := h.eps.YandexLink(c.Context(), endpoint.YandexLinkEpRequest{
+		UserID: tokenUserID(c), Code: req.Code,
+	}); err != nil {
+		return h.respondError(c, err)
+	}
+	return c.JSON(fiber.Map{"linked": true})
+}
+
+// yandexUnlink — отвязать Яндекс ID (вход остаётся по логину/паролю).
+func (h *handlers) yandexUnlink(c *fiber.Ctx) error {
+	if _, err := h.eps.YandexUnlink(c.Context(), tokenUserID(c)); err != nil {
+		return h.respondError(c, err)
+	}
+	return c.JSON(fiber.Map{"linked": false})
+}
+
 // yandexCallback — вход/регистрация по коду авторизации Яндекса (как login).
 func (h *handlers) yandexCallback(c *fiber.Ctx) error {
 	var req struct {

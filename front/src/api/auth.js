@@ -58,9 +58,17 @@ export const yandexConfig = () => apiRequest('/auth/yandex/config', { method: 'G
 export const yandexCallback = (code) =>
   apiRequest('/auth/yandex/callback', { method: 'POST', body: { code } })
 
+// Привязка Яндекс ID к текущему аккаунту (карточка в профиле).
+export const yandexLinkStatus = () => apiRequest('/auth/yandex/link', { method: 'GET' })
+export const yandexLink = (code) =>
+  apiRequest('/auth/yandex/link', { method: 'POST', body: { code } })
+export const yandexUnlink = () => apiRequest('/auth/yandex/link', { method: 'DELETE' })
+
 // URL авторизации Яндекс ID (redirect_uri должен быть прописан в приложении
-// на oauth.yandex.ru как <origin>/yandex-callback).
-export const yandexAuthURL = (clientId) =>
+// на oauth.yandex.ru как <origin>/yandex-callback). state='link' — привязка
+// к текущему аккаунту из профиля, иначе — вход/регистрация.
+export const yandexAuthURL = (clientId, state = '') =>
   'https://oauth.yandex.ru/authorize?response_type=code' +
   `&client_id=${encodeURIComponent(clientId)}` +
-  `&redirect_uri=${encodeURIComponent(window.location.origin + '/yandex-callback')}`
+  `&redirect_uri=${encodeURIComponent(window.location.origin + '/yandex-callback')}` +
+  (state ? `&state=${encodeURIComponent(state)}` : '')

@@ -115,6 +115,16 @@ func (r *UserRepository) GetByYandexID(ctx context.Context, yandexID string) (*d
 	return r.getOne(ctx, "u.yandex_id = $1", yandexID)
 }
 
+func (r *UserRepository) YandexLinked(ctx context.Context, userID int64) (bool, error) {
+	var linked bool
+	err := r.pool.QueryRow(ctx,
+		`SELECT yandex_id IS NOT NULL FROM users WHERE id = $1`, userID).Scan(&linked)
+	if err == pgx.ErrNoRows {
+		return false, nil
+	}
+	return linked, err
+}
+
 func (r *UserRepository) listIdentity(ctx context.Context, tail string, args ...any) ([]*domain.User, error) {
 	rows, err := r.pool.Query(ctx, "SELECT"+identityCols+identityFrom+" "+tail, args...)
 	if err != nil {

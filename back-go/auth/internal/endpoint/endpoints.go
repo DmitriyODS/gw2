@@ -32,10 +32,13 @@ type Endpoints struct {
 	LinkClaim   endpoint.Endpoint
 
 	// OAuth-провайдер (связка аккаунтов навыка Алисы) и вход через Яндекс ID.
-	OAuthAuthorize endpoint.Endpoint
-	OAuthToken     endpoint.Endpoint
-	YandexConfig   endpoint.Endpoint
-	YandexLogin    endpoint.Endpoint
+	OAuthAuthorize   endpoint.Endpoint
+	OAuthToken       endpoint.Endpoint
+	YandexConfig     endpoint.Endpoint
+	YandexLogin      endpoint.Endpoint
+	YandexLinkStatus endpoint.Endpoint
+	YandexLink       endpoint.Endpoint
+	YandexUnlink     endpoint.Endpoint
 
 	ListUsers              endpoint.Endpoint
 	CreateUser             endpoint.Endpoint
@@ -106,6 +109,12 @@ type OAuthAuthorizeEpRequest struct {
 	UserID    int64
 	CompanyID *int64
 	Body      dto.OAuthAuthorizeRequest
+}
+
+// YandexLinkEpRequest — привязка Яндекс ID к существующему аккаунту.
+type YandexLinkEpRequest struct {
+	UserID int64
+	Code   string
 }
 
 type CreateUserEpRequest struct {
@@ -316,6 +325,16 @@ func New(svc service.AuthService) Endpoints {
 		},
 		YandexLogin: func(ctx context.Context, request any) (any, error) {
 			return svc.YandexLogin(ctx, request.(string))
+		},
+		YandexLinkStatus: func(ctx context.Context, request any) (any, error) {
+			return svc.YandexLinkStatus(ctx, request.(int64))
+		},
+		YandexLink: func(ctx context.Context, request any) (any, error) {
+			req := request.(YandexLinkEpRequest)
+			return nil, svc.YandexLink(ctx, req.UserID, req.Code)
+		},
+		YandexUnlink: func(ctx context.Context, request any) (any, error) {
+			return nil, svc.YandexUnlink(ctx, request.(int64))
 		},
 		ListUsers: func(ctx context.Context, _ any) (any, error) {
 			return svc.ListUsers(ctx)
