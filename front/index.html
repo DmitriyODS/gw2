@@ -24,8 +24,8 @@
         ym(110869595, 'init', {ssr:true, defer:true, webvisor:true, clickmap:true, ecommerce:"dataLayer", referrer: document.referrer, url: location.href, accurateTrackBounce:true, trackLinks:true});
       }
     </script>
-    <noscript><div><img src="https://mc.yandex.ru/watch/110869595" style="position:absolute; left:-9999px;" alt="" /></div></noscript>
-    <!-- /Yandex.Metrika counter -->
+    <!-- /Yandex.Metrika counter (noscript-пиксель — в body: внутри noscript в
+         head допустимы только link/style/meta, parse5/Vite ругается) -->
 
     <link rel="icon" type="image/svg+xml" href="/logo.svg" />
     <!-- PWA: устанавливаемое приложение (Chrome предлагает «Установить»). -->
@@ -86,6 +86,8 @@
     />
   </head>
   <body>
+    <!-- Yandex.Metrika: пиксель для браузеров без JS -->
+    <noscript><div><img src="https://mc.yandex.ru/watch/110869595" style="position:absolute; left:-9999px;" alt="" /></div></noscript>
     <div id="app"></div>
     <!-- Бут-watchdog (ES5, classic script — выполнится в любом WebView):
          если бандл упал (SyntaxError на старом WebView, битый чанк) —

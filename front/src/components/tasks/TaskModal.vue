@@ -559,13 +559,17 @@ const confirmDialog = ref({
 
 const isOwnTask = computed(() => props.task.author_id === authStore.user?.id)
 
-const canEditTask = computed(() => isAtLeast(ROLES.EMPLOYEE))
+// Режим отпуска: правка задач и старт юнитов закрыты (бэкенд отдаёт ON_VACATION).
+const onVacation = computed(() => !!authStore.user?.on_vacation)
+
+const canEditTask = computed(() => isAtLeast(ROLES.EMPLOYEE) && !onVacation.value)
 
 const canDeleteTask = computed(() => isAtLeast(ROLES.EMPLOYEE))
 
 const canStartUnit = computed(() => {
   if (props.task.is_archived) return false
   if (unitsStore.activeUnit) return false
+  if (onVacation.value) return false
   return isAtLeast(ROLES.EMPLOYEE)
 })
 

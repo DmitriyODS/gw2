@@ -280,6 +280,10 @@ func (s *Service) UpdateMe(ctx context.Context, userID int64, req dto.UpdateMeRe
 		updates["status_text"] = nilIfEmpty(text)
 	}
 
+	if req.OnVacation != nil {
+		updates["on_vacation"] = *req.OnVacation
+	}
+
 	if req.NewPassword != nil && *req.NewPassword != "" {
 		if req.CurrentPassword == nil || *req.CurrentPassword == "" {
 			return nil, domain.NewError("CURRENT_PASSWORD_REQUIRED", "Введите текущий пароль", 400)
@@ -427,6 +431,9 @@ func (s *Service) applyUserUpdate(ctx context.Context, companyID, userID int64, 
 			}
 		}
 		updates["email"] = email
+	}
+	if req.OnVacation != nil {
+		updates["on_vacation"] = *req.OnVacation
 	}
 
 	if len(updates) > 0 {

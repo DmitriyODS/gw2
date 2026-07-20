@@ -129,7 +129,15 @@
         </div>
 
         <div v-if="tab === 'actions'" class="pdm-actions">
-          <div v-if="onAdventure" class="pdm-adventure">
+          <!-- Отпуск хозяина: питомец отдыхает, уход недоступен, показатели заморожены -->
+          <div v-if="pet?.on_vacation" class="pdm-adventure">
+            <span class="pdm-adventure-emoji">🏖️</span>
+            <div class="pdm-adventure-text">
+              <strong>В отпуске вместе с хозяином</strong>
+              <span>показатели заморожены и не тают — вернётесь, и всё продолжится</span>
+            </div>
+          </div>
+          <div v-else-if="onAdventure" class="pdm-adventure">
             <span class="pdm-adventure-emoji">🧭</span>
             <div class="pdm-adventure-text">
               <strong>Гуляет {{ pet.adventure_place }}</strong>

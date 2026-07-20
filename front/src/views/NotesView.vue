@@ -315,6 +315,14 @@ const hasCompany = computed(() => !!auth.companyId)
 const myId = computed(() => auth.userId)
 const isExplorer = computed(() => store.viewMode === 'explorer' || isMobile.value)
 
+// На мобильной ширине раскладка всегда проводник (isExplorer) — переводим и
+// ДАННЫЕ стора в explorer (папки-плитки, корневой фильтр), иначе при
+// сохранённой «иерархии» папки на телефоне не видны. Без записи в
+// localStorage: десктопный выбор пользователя не трогаем.
+watch(isMobile, (m) => {
+  if (m) store.setViewMode('explorer', false)
+})
+
 const isAllActive = computed(() =>
   !store.activeFolderId && !store.showShared && !store.showArchived)
 

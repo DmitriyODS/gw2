@@ -97,6 +97,19 @@
                 </template>
               </Column>
 
+              <Column header="Отпуск" style="width: 90px" body-style="text-align: center">
+                <template #body="{ data }">
+                  <ToggleSwitch
+                    v-if="canManageMembers"
+                    :model-value="!!data.on_vacation"
+                    class="vacation-toggle"
+                    :title="data.on_vacation ? 'Снять отпуск' : 'Отправить в отпуск'"
+                    @update:model-value="(v) => changeVacation(data, v)"
+                  />
+                  <span v-else-if="data.on_vacation" title="В отпуске">🏖️</span>
+                </template>
+              </Column>
+
               <Column v-if="canManageMembers" header="" style="width: 110px" body-style="text-align: right">
                 <template #body="{ data }">
                   <div class="row-actions">
@@ -431,6 +444,7 @@ import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import BrandLoader from '@/components/common/BrandLoader.vue'
 import Select from 'primevue/select'
+import ToggleSwitch from 'primevue/toggleswitch'
 import Column from 'primevue/column'
 import AppDialog from '@/components/common/AppDialog.vue'
 import AppDataTable from '@/components/common/AppDataTable.vue'
@@ -448,7 +462,7 @@ import { usePermission } from '@/composables/usePermission.js'
 import {
   getCompany, updateCompany, deleteCompany, toggleCompanyActive,
   listCompanyMembers, getCompanyCandidates, addCompanyMember, setMemberRole, removeCompanyMember,
-  createCompanyUser, resetCompanyMemberPassword, createCompanyInvite,
+  createCompanyUser, updateCompanyMember, resetCompanyMemberPassword, createCompanyInvite,
   getCompanyInvite, regenerateCompanyInvite,
 } from '@/api/companies.js'
 import { getRoles } from '@/api/roles.js'
@@ -642,6 +656,20 @@ async function createUser() {
     createUserError.value = e?.message || 'Не удалось создать сотрудника'
   } finally {
     creatingUser.value = false
+  }
+}
+
+// Отпуск сотрудника явно проставляет/снимает создатель компании (или
+// супер-админ) — тот же режим, что тумблер в личном профиле.
+async function changeVacation(m, v) {
+  if (!!m.on_vacation === v) return
+  membersError.value = ''
+  try {
+    await updateCompanyMember(companyId.value, m.id, { on_vacation: v })
+    m.on_vacation = v
+  } catch (e) {
+    membersError.value = e?.message || 'Не удалось изменить режим отпуска'
+    await loadMembers()
   }
 }
 

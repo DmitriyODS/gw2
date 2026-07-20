@@ -156,6 +156,7 @@ type User struct {
 	AvatarPath    *string
 	IsActive      bool
 	IsSuperAdmin  bool
+	OnVacation    bool // режим «в отпуске»: создание/правка задач и старт юнитов закрыты
 	RoleLevel     int
 	CompanyID     *int64
 	CompanyActive bool

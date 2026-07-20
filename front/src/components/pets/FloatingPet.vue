@@ -21,7 +21,8 @@
         @click="onClick"
       >
         <span class="fp-emoji" :class="{ sick: pet.sick }"><EmojiGlyph :char="petEmoji(pet)" /></span>
-        <span v-if="pet.sick" class="fp-sick-badge" :title="ailmentMeta(pet.ailment).title">
+        <span v-if="pet.on_vacation" class="fp-adventure-badge" title="В отпуске вместе с хозяином">🏖️</span>
+        <span v-else-if="pet.sick" class="fp-sick-badge" :title="ailmentMeta(pet.ailment).title">
           <EmojiGlyph :char="ailmentMeta(pet.ailment).emoji" />
         </span>
         <span v-else-if="petAway" class="fp-adventure-badge" title="В приключении">🧭</span>
@@ -115,8 +116,8 @@ function localDateISO() {
 }
 
 function checkHungry(p) {
-  // В приключении кормление недоступно — «голодный» пузырь не показываем.
-  if (!p || p.sick || (p.adventure_until && new Date(p.adventure_until) > new Date())) return
+  // В приключении и в отпуске кормление недоступно — «голодный» пузырь не показываем.
+  if (!p || p.sick || p.on_vacation || (p.adventure_until && new Date(p.adventure_until) > new Date())) return
   // Голод определяет шкала сытости (пустая уводит в истощение), а не факт
   // кормления: накормленный утром к вечеру снова проголодается.
   if ((p.needs?.satiety ?? 100) > HUNGRY_AT) return

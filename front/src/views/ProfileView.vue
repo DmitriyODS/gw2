@@ -24,6 +24,7 @@
             <span v-if="authStore.user?.role?.name" class="role-tag">
               {{ authStore.user.role.name }}
             </span>
+            <span v-if="authStore.user?.on_vacation" class="role-tag vacation-tag">🏖️ В отпуске</span>
             <span v-if="authStore.user?.login" class="hero-login">@{{ authStore.user.login }}</span>
           </div>
         </div>
@@ -218,6 +219,33 @@
           </div>
         </section>
 
+        <!-- Режим отпуска -->
+        <section class="profile-card">
+          <header class="card-head vacation-head">
+            <div class="head-icon" data-tone="tertiary">
+              <span class="material-symbols-outlined">beach_access</span>
+            </div>
+            <div class="head-text">
+              <h3>Режим отпуска</h3>
+              <p class="head-desc">
+                Пока включён — создание и редактирование задач и запуск юнитов
+                недоступны, а грувик тоже отдыхает: его показатели заморожены.
+              </p>
+            </div>
+            <ToggleSwitch
+              class="vacation-switch"
+              :model-value="!!authStore.user?.on_vacation"
+              :disabled="vacationBusy"
+              @update:model-value="setVacation"
+            />
+          </header>
+          <p class="vacation-state">
+            {{ authStore.user?.on_vacation
+              ? '🏖️ Вы в отпуске: задачи и юниты подождут, грувик отдыхает вместе с вами.'
+              : 'Соберётесь отдохнуть — включите, и рабочие показатели встанут на паузу.' }}
+          </p>
+        </section>
+
         <div class="forms-row">
           <!-- Редактирование профиля -->
           <section class="profile-card">
@@ -373,6 +401,7 @@ import PhoneInput from '@/components/common/PhoneInput.vue'
 import DateRangePicker from '@/components/common/DateRangePicker.vue'
 import InputText from 'primevue/inputtext'
 import AppDialog from '@/components/common/AppDialog.vue'
+import ToggleSwitch from 'primevue/toggleswitch'
 import AuthorizeDeviceDialog from '@/components/devicelink/AuthorizeDeviceDialog.vue'
 import DataTable from 'primevue/datatable'
 import Column from 'primevue/column'
@@ -459,6 +488,22 @@ async function saveProfile() {
     profileError.value = e.message || 'Ошибка сохранения'
   } finally {
     profileLoading.value = false
+  }
+}
+
+// ---- Режим отпуска ----
+const vacationBusy = ref(false)
+
+async function setVacation(v) {
+  vacationBusy.value = true
+  try {
+    await updateMe({ on_vacation: v })
+    await authStore.loadMe()
+    notif.success(v ? 'Режим отпуска включён — хорошего отдыха!' : 'С возвращением! Режим отпуска выключен')
+  } catch (e) {
+    notif.error(e.message || 'Не удалось изменить режим отпуска')
+  } finally {
+    vacationBusy.value = false
   }
 }
 
@@ -883,6 +928,21 @@ onMounted(() => {
   grid-template-columns: 1fr 1fr;
   gap: 24px;
   align-items: start;
+}
+
+/* ── Режим отпуска ───────────────────────────────────────────── */
+.vacation-head { flex-wrap: nowrap; }
+.vacation-switch { margin-left: auto; flex-shrink: 0; }
+
+.vacation-tag {
+  background: var(--color-secondary-container);
+  color: var(--color-on-secondary-container);
+}
+
+.vacation-state {
+  margin: 0;
+  font-size: 13.5px;
+  color: var(--color-text-dim);
 }
 
 .yandex-link-row {

@@ -46,6 +46,7 @@ type User struct {
 	CreatedAt     JSONTime `json:"created_at"`
 	StatusEmoji   *string  `json:"status_emoji"`
 	StatusText    *string  `json:"status_text"`
+	OnVacation    bool     `json:"on_vacation"`
 }
 
 func roleRef(r domain.Role) *RoleRef {
@@ -72,6 +73,7 @@ func NewUser(u *domain.User) User {
 		CreatedAt:     JSONTime(u.CreatedAt),
 		StatusEmoji:   u.StatusEmoji,
 		StatusText:    u.StatusText,
+		OnVacation:    u.OnVacation,
 	}
 }
 
@@ -99,6 +101,7 @@ type DirectoryUser struct {
 	LastSeenAt  *JSONTime `json:"last_seen_at"`
 	StatusEmoji *string   `json:"status_emoji"`
 	StatusText  *string   `json:"status_text"`
+	OnVacation  bool      `json:"on_vacation"`
 }
 
 func NewDirectoryUser(u *domain.User) DirectoryUser {
@@ -114,6 +117,7 @@ func NewDirectoryUser(u *domain.User) DirectoryUser {
 		AvatarPath:  u.AvatarPath,
 		StatusEmoji: u.StatusEmoji,
 		StatusText:  u.StatusText,
+		OnVacation:  u.OnVacation,
 	}
 	if u.LastSeenAt != nil {
 		ts := JSONTime(*u.LastSeenAt)
@@ -258,6 +262,9 @@ type UpdateUserRequest struct {
 	Post  *string `json:"post"`
 	Phone *string `json:"phone"`
 	Email *string `json:"email"`
+	// Режим «в отпуске» сотрудника: создатель компании может явно проставить
+	// и снять его (гарды tasksvc/petsvc — те же, что при самостоятельном).
+	OnVacation *bool `json:"on_vacation"`
 }
 
 // UpdateMeRequest — PATCH /users/me. Должность — атрибут членства в компании,
@@ -273,6 +280,8 @@ type UpdateMeRequest struct {
 	// Пользовательский статус (мессенджер): пустая строка — снять.
 	StatusEmoji *string `json:"status_emoji"`
 	StatusText  *string `json:"status_text"`
+	// Режим «в отпуске»: задачи/юниты закрыты, грувик заморожен.
+	OnVacation *bool `json:"on_vacation"`
 }
 
 // AddMemberRequest — POST /companies/<id>/members: добавить существующего

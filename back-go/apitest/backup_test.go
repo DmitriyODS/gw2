@@ -27,6 +27,7 @@ var backupExcluded = map[string]bool{
 	"email_verifications": true,
 	"password_resets":     true,
 	"task_embeddings":     true,
+	"note_embeddings":     true,
 	"goose_db_version":    true,
 }
 

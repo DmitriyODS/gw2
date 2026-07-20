@@ -58,10 +58,10 @@ func (r *UserReader) YougileEnabled(ctx context.Context, companyID int64) (bool,
 func (r *UserReader) GetUser(ctx context.Context, id int64) (*domain.User, error) {
 	var u domain.User
 	err := r.pool.QueryRow(ctx, `
-		SELECT id, fio, avatar_path, is_active, is_super_admin
+		SELECT id, fio, avatar_path, is_active, is_super_admin, on_vacation
 		  FROM users
 		 WHERE id = $1`, id).
-		Scan(&u.ID, &u.FIO, &u.AvatarPath, &u.IsActive, &u.IsSuperAdmin)
+		Scan(&u.ID, &u.FIO, &u.AvatarPath, &u.IsActive, &u.IsSuperAdmin, &u.OnVacation)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, nil

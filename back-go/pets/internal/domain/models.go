@@ -75,7 +75,10 @@ type Pet struct {
 	BankSavings          int
 	BankSavingsAccruedAt *time.Time // с какого момента капает процент (NULL — вклад пуст)
 	BankLoan             int        // остаток долга (0 — кредита нет)
-	User                 *UserRef
+	// OwnerOnVacation — хозяин в отпуске (users.on_vacation): питомец тоже
+	// отдыхает — показатели заморожены (FreezeClocks), действия недоступны.
+	OwnerOnVacation bool
+	User            *UserRef
 }
 
 // HouseItem — предмет, расставленный в домике: свободные координаты в
@@ -158,6 +161,29 @@ func (p *Pet) ApplyNeedsDecay(now time.Time) bool {
 	p.NeedsAt = p.NeedsAt.Add(time.Duration(ticks) * NeedTick)
 	for _, n := range Needs {
 		p.Needs.Add(n.Key, -n.DecayPerTick*ticks)
+	}
+	return true
+}
+
+// FreezeClocks — отпуск владельца: вместо убывания сдвигает NeedsAt вперёд
+// целыми тиками (та же кадансность записи, что у ApplyNeedsDecay — частый
+// поллинг не гоняет UPDATE) и продлевает SickSince на замороженный интервал:
+// после отпуска и убывание шкал, и таймер побега продолжаются с того же
+// места, где остановились. Возвращает true, если состояние изменилось.
+func (p *Pet) FreezeClocks(now time.Time) bool {
+	if p.NeedsAt.IsZero() {
+		p.NeedsAt = now
+		return true
+	}
+	ticks := int(now.Sub(p.NeedsAt) / NeedTick)
+	if ticks <= 0 {
+		return false
+	}
+	shift := time.Duration(ticks) * NeedTick
+	p.NeedsAt = p.NeedsAt.Add(shift)
+	if p.SickSince != nil {
+		moved := p.SickSince.Add(shift)
+		p.SickSince = &moved
 	}
 	return true
 }

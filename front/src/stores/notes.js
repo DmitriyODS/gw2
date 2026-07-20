@@ -8,7 +8,10 @@ import { useAuthStore } from '@/stores/auth.js'
 // эффективный доступ (шары, расшаренные папки-предки) считает сервер, клиент
 // лишь отражает my_access. Два режима отображения: hierarchy | explorer.
 export const useNotesStore = defineStore('notes', () => {
-  const viewMode = ref(localStorage.getItem('gw_notes_view') || 'hierarchy')
+  // На телефоне — всегда проводник: сайдбар-иерархия там скрыт, и папки видны
+  // только плитками (сохранённый десктопный режим не трогаем).
+  const mobileScreen = typeof window !== 'undefined' && window.innerWidth <= 768 // = useBreakpoint
+  const viewMode = ref(mobileScreen ? 'explorer' : (localStorage.getItem('gw_notes_view') || 'hierarchy'))
 
   const folders = ref([])        // свои папки (плоско, parent_id)
   const sharedRoots = ref([])    // расшаренные мне «корни»
@@ -256,10 +259,12 @@ export const useNotesStore = defineStore('notes', () => {
     path.value = chain
   }
 
-  function setViewMode(mode) {
+  // persist=false — вынужденное переключение (мобильная ширина), не выбор
+  // пользователя: сохранённый десктопный режим не перезаписываем.
+  function setViewMode(mode, persist = true) {
     if (viewMode.value === mode) return
     viewMode.value = mode
-    localStorage.setItem('gw_notes_view', mode)
+    if (persist) localStorage.setItem('gw_notes_view', mode)
     clearSelection()
     refresh()
   }

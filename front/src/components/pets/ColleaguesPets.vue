@@ -20,17 +20,18 @@
           :class="{
             mine: p.user_id === pets.myId,
             stroked: isStrokedOut(p),
-            disabled: p.user_id !== pets.myId && (isAway(p) || (!canAfford && !isStrokedOut(p))),
+            disabled: p.user_id !== pets.myId && (p.on_vacation || isAway(p) || (!canAfford && !isStrokedOut(p))),
           }"
           :type="p.user_id === pets.myId ? undefined : 'button'"
-          :disabled="p.user_id === pets.myId ? undefined : (isAway(p) || !canAfford || isStrokedOut(p))"
+          :disabled="p.user_id === pets.myId ? undefined : (p.on_vacation || isAway(p) || !canAfford || isStrokedOut(p))"
           :aria-label="p.user_id === pets.myId ? undefined : `Погладить питомца «${p.name}»`"
           @click="stroke(p)"
         >
           <div class="cp-figure" :class="{ sick: p.sick, pulse: pulsing[p.user_id] }">
             <span class="cp-emoji"><EmojiGlyph :char="petEmoji(p)" /></span>
             <span v-if="p.hat" class="cp-hat"><EmojiGlyph :char="shopItemEmoji({ kind: 'accessory', key: p.hat })" /></span>
-            <span v-if="p.sick" class="cp-sick" :title="ailmentMeta(p.ailment).title">
+            <span v-if="p.on_vacation" class="cp-sick" title="В отпуске вместе с хозяином">🏖️</span>
+            <span v-else-if="p.sick" class="cp-sick" :title="ailmentMeta(p.ailment).title">
               <EmojiGlyph :char="ailmentMeta(p.ailment).emoji" />
             </span>
             <span v-else-if="isAway(p)" class="cp-sick" title="В приключении">🧭</span>
@@ -53,7 +54,8 @@
             💬 Скучает по общению
           </span>
 
-          <span v-if="p.user_id === pets.myId" class="cp-tag">Ваш питомец</span>
+          <span v-if="p.on_vacation" class="cp-tag">🏖️ В отпуске</span>
+          <span v-else-if="p.user_id === pets.myId" class="cp-tag">Ваш питомец</span>
           <span v-else-if="isAway(p)" class="cp-tag">🧭 В приключении</span>
           <span v-else-if="isStrokedOut(p)" class="cp-tag done">
             <span class="material-symbols-outlined">check</span> Поглажен
@@ -178,7 +180,7 @@ function firstName(fio) {
 }
 
 function stroke(p) {
-  if (p.user_id === pets.myId || isStrokedOut(p) || isAway(p)) return
+  if (p.user_id === pets.myId || isStrokedOut(p) || isAway(p) || p.on_vacation) return
   if (!canAfford.value) return
   pulsing[p.user_id] = true
   setTimeout(() => { pulsing[p.user_id] = false }, 450)

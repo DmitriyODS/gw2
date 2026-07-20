@@ -53,6 +53,7 @@ type User struct {
 	LastSeenAt    *time.Time
 	StatusEmoji   *string // пользовательский статус (мессенджер)
 	StatusText    *string
+	OnVacation    bool // режим «в отпуске»: задачи/юниты закрыты, грувик заморожен
 
 	CompanyID     *int64
 	Role          Role

@@ -103,37 +103,38 @@ func TestNotesSharedEditFlow(t *testing.T) {
 	requireError(t, r, 404, "NOT_FOUND", "запись по отозванной ссылке")
 }
 
-// Группы: заметка в нескольких группах, фильтр списка, удаление группы не
-// удаляет заметки; импорт txt создаёт заметку с заголовком из первой строки.
+// Теги-метки (бывшие «группы», миграция 00046): заметка с несколькими тегами,
+// фильтр списка, удаление тега не удаляет заметки; импорт txt создаёт заметку
+// с заголовком из первой строки.
 func TestNotesGroupsAndImport(t *testing.T) {
 	owner := newVerifiedUser(t)
 
-	r := notesAPI.doJSON(t, http.MethodPost, "/api/notes/groups", owner.Token, map[string]any{"name": "Работа"})
-	requireStatus(t, r, 201, "группа 1")
+	r := notesAPI.doJSON(t, http.MethodPost, "/api/notes/tags", owner.Token, map[string]any{"name": "Работа"})
+	requireStatus(t, r, 201, "тег 1")
 	workID := int64(r.Num("id"))
-	r = notesAPI.doJSON(t, http.MethodPost, "/api/notes/groups", owner.Token, map[string]any{"name": "Личное"})
-	requireStatus(t, r, 201, "группа 2")
+	r = notesAPI.doJSON(t, http.MethodPost, "/api/notes/tags", owner.Token, map[string]any{"name": "Личное"})
+	requireStatus(t, r, 201, "тег 2")
 	homeID := int64(r.Num("id"))
 
-	r = notesAPI.doJSON(t, http.MethodPost, "/api/notes", owner.Token, map[string]any{"title": "В двух группах"})
+	r = notesAPI.doJSON(t, http.MethodPost, "/api/notes", owner.Token, map[string]any{"title": "В двух тегах"})
 	requireStatus(t, r, 201, "заметка")
 	noteID := int64(r.Num("id"))
-	r = notesAPI.doJSON(t, http.MethodPut, fmt.Sprintf("/api/notes/%d/groups", noteID), owner.Token,
-		map[string]any{"group_ids": []int64{workID, homeID}})
-	requireStatus(t, r, 200, "назначение групп")
+	r = notesAPI.doJSON(t, http.MethodPut, fmt.Sprintf("/api/notes/%d/tags", noteID), owner.Token,
+		map[string]any{"tag_ids": []int64{workID, homeID}})
+	requireStatus(t, r, 200, "назначение тегов")
 
-	// Фильтр по группе.
-	r = notesAPI.doJSON(t, http.MethodGet, fmt.Sprintf("/api/notes?group_id=%d", workID), owner.Token, nil)
-	requireStatus(t, r, 200, "список по группе")
+	// Фильтр по тегу.
+	r = notesAPI.doJSON(t, http.MethodGet, fmt.Sprintf("/api/notes?tag_ids=%d", workID), owner.Token, nil)
+	requireStatus(t, r, 200, "список по тегу")
 	if len(r.List("notes")) != 1 {
-		t.Fatalf("фильтр по группе: %s", r.Raw)
+		t.Fatalf("фильтр по тегу: %s", r.Raw)
 	}
 
-	// Удаление группы не трогает заметку — только связь.
-	r = notesAPI.doJSON(t, http.MethodDelete, fmt.Sprintf("/api/notes/groups/%d", workID), owner.Token, nil)
-	requireStatus(t, r, 200, "удаление группы")
+	// Удаление тега не трогает заметку — только связь.
+	r = notesAPI.doJSON(t, http.MethodDelete, fmt.Sprintf("/api/notes/tags/%d", workID), owner.Token, nil)
+	requireStatus(t, r, 200, "удаление тега")
 	r = notesAPI.doJSON(t, http.MethodGet, fmt.Sprintf("/api/notes/%d", noteID), owner.Token, nil)
-	requireStatus(t, r, 200, "заметка после удаления группы")
+	requireStatus(t, r, 200, "заметка после удаления тега")
 
 	// Импорт txt: первая строка → заголовок, остальное → текст документа.
 	r = notesAPI.doMultipart(t, "/api/notes/import", owner.Token, "list.txt",

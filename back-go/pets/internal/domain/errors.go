@@ -25,3 +25,7 @@ var ErrPetAway = NewError("PET_AWAY", "Питомец в приключении"
 
 // ErrAdventureLimit — дневной лимит стартов приключений исчерпан.
 var ErrAdventureLimit = NewError("ADVENTURE_LIMIT", "Приключений на сегодня достаточно", 429)
+
+// ErrPetOnVacation — хозяин в отпуске: питомец тоже отдыхает, действия
+// (свои и поглаживания коллег) недоступны, показатели заморожены.
+var ErrPetOnVacation = NewError("PET_ON_VACATION", "Питомец в отпуске вместе с хозяином", 422)

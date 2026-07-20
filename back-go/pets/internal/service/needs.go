@@ -19,6 +19,19 @@ import (
 // UPDATE рискует затереть конкурентное начисление хука). Никогда не бросает.
 // true — состояние изменилось (клиентам нужен свежий снапшот).
 func (s *Service) refreshNeeds(ctx context.Context, pet *domain.Pet) bool {
+	// Отпуск владельца: шкалы не тают, болезни не наступают и не прогрессируют
+	// — только сдвигаем «часы» вперёд, чтобы после отпуска убывание и таймер
+	// побега продолжились с того же места.
+	if pet.OwnerOnVacation {
+		if !pet.FreezeClocks(time.Now().UTC()) {
+			return false
+		}
+		if err := s.pets.SaveNeeds(ctx, pet); err != nil {
+			s.log.Warn("pets.needs_save_failed", "user_id", pet.UserID, "error", err)
+			return false
+		}
+		return true
+	}
 	changed := pet.ApplyNeedsDecay(time.Now().UTC())
 	fell := ""
 	if !pet.Sick() {
@@ -57,7 +70,7 @@ func (s *Service) onFellSick(ctx context.Context, pet *domain.Pet, ailment strin
 // снапшот побега, если зафиксировал именно этот вызов; pet при этом
 // перечитывается — сброс делает SQL, не локальная копия.
 func (s *Service) maybeRunAway(ctx context.Context, pet *domain.Pet) *dto.RunawayDTO {
-	if !pet.Sick() {
+	if !pet.Sick() || pet.OwnerOnVacation {
 		return nil
 	}
 	deadline := time.Now().UTC().AddDate(0, 0, -domain.RunawaySickDays)

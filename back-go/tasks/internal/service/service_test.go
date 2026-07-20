@@ -671,3 +671,37 @@ func TestSemanticSearchTakesOverList(t *testing.T) {
 		t.Fatalf("ожидалась пустая семантическая выдача, получено %d", out.Total)
 	}
 }
+
+// Отпуск (users.on_vacation): создание/правка/закрытие задач и старт юнитов
+// закрыты кодом ON_VACATION 403; личные действия (цвет) — нет.
+func TestVacationBlocksTaskAndUnitMutations(t *testing.T) {
+	svc, store, _, _, _, users := newTestService()
+	task := seedTask(store, 1)
+	store.unitTypes[10] = &domain.UnitType{ID: 10, Name: "Код", CompanyID: 1}
+	rester := employee(users, 5, 1)
+	rester.OnVacation = true
+
+	expectVacation := func(what string, err error) {
+		t.Helper()
+		de := domain.AsDomainError(err)
+		if de == nil || de.Code != "ON_VACATION" || de.HTTPStatus != 403 {
+			t.Fatalf("%s: ожидался ON_VACATION 403, получено %v", what, err)
+		}
+	}
+
+	_, err := svc.CreateTask(context.Background(), 5, 1, dto.TaskCreate{Name: "Новая", DepartmentID: 1})
+	expectVacation("create", err)
+	name := "Правка"
+	_, err = svc.UpdateTask(context.Background(), task.ID, 5, cid(1), dto.TaskUpdate{Name: &name})
+	expectVacation("update", err)
+	_, err = svc.ArchiveTask(context.Background(), task.ID, 5, cid(1))
+	expectVacation("archive", err)
+	_, err = svc.CreateUnit(context.Background(), task.ID, 5, cid(1), "юнит", 10)
+	expectVacation("unit", err)
+
+	// Отключили отпуск — всё снова работает.
+	rester.OnVacation = false
+	if _, err := svc.CreateUnit(context.Background(), task.ID, 5, cid(1), "юнит", 10); err != nil {
+		t.Fatalf("после отпуска юнит должен стартовать: %v", err)
+	}
+}

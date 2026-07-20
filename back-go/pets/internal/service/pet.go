@@ -41,6 +41,9 @@ func (s *Service) AwardKudos(ctx context.Context, userID, companyID int64,
 		s.log.Warn("pets.award_failed", "user_id", userID, "source", source, "error", err)
 		return 0
 	}
+	if pet.OwnerOnVacation {
+		return 0 // отпуск: показатели не растут (страховка от системных путей)
+	}
 	kudos, xp, err := s.pets.AdjustBalances(ctx, userID, granted, 0)
 	if err != nil {
 		s.log.Warn("pets.award_failed", "user_id", userID, "source", source, "error", err)
@@ -110,6 +113,9 @@ func (s *Service) AwardXP(ctx context.Context, userID, companyID int64,
 		s.log.Warn("pets.award_xp_failed", "user_id", userID, "source", source, "error", err)
 		return 0
 	}
+	if pet.OwnerOnVacation {
+		return 0 // отпуск: показатели не растут (страховка от системных путей)
+	}
 	s.refreshNeeds(ctx, pet) // работа идёт в актуальном состоянии, не во вчерашнем
 	if pet.Sick() {
 		return 0 // болезнь замораживает XP — и прямой тоже
@@ -152,6 +158,9 @@ func (s *Service) StartAdventure(ctx context.Context, userID, companyID int64) (
 	pet, err := s.pets.GetOrCreate(ctx, userID, companyID)
 	if err != nil {
 		return nil, err
+	}
+	if pet.OwnerOnVacation {
+		return nil, domain.ErrPetOnVacation
 	}
 	s.maybeReturnAdventure(ctx, pet) // истёкшее приключение не блокирует новое
 	if pet.AdventureUntil != nil {
@@ -266,9 +275,13 @@ func (s *Service) RecallAdventure(ctx context.Context, userID, companyID int64) 
 	return dto.NewPet(pet), nil
 }
 
-// ensureNotAway — гейт платных действий владельца: сперва ленивый возврат
-// (истёкшее приключение действие не блокирует), иначе PET_AWAY.
+// ensureNotAway — гейт платных действий владельца: отпуск хозяина закрывает
+// уход целиком (питомец тоже отдыхает), иначе сперва ленивый возврат
+// (истёкшее приключение действие не блокирует) и PET_AWAY, если он в пути.
 func (s *Service) ensureNotAway(ctx context.Context, pet *domain.Pet) error {
+	if pet.OwnerOnVacation {
+		return domain.ErrPetOnVacation
+	}
 	s.maybeReturnAdventure(ctx, pet)
 	if pet.AdventureUntil != nil {
 		return domain.ErrPetAway
@@ -415,7 +428,7 @@ func applyRecovery(pet *domain.Pet, amount int) bool {
 // бросает (хуки).
 func (s *Service) AddRecovery(ctx context.Context, userID, companyID int64, amount int) {
 	pet, err := s.pets.GetPet(ctx, userID)
-	if err != nil || pet == nil || !pet.Sick() {
+	if err != nil || pet == nil || !pet.Sick() || pet.OwnerOnVacation {
 		return
 	}
 	cure := domain.CureFor(pet.AilmentKey(), domain.ActionWork)
@@ -455,7 +468,8 @@ func (s *Service) CheckSicknessForCompany(ctx context.Context, companyID int64) 
 		if s.maybeRunAway(ctx, p) != nil {
 			continue // сбежавший начал с нуля — хандрой его не наказываем
 		}
-		if p.Stage >= 1 && !p.Sick() {
+		// Отпускники хандрой не заболевают — простой в отпуске законный.
+		if p.Stage >= 1 && !p.Sick() && !p.OwnerOnVacation {
 			healthy = append(healthy, p)
 		}
 	}
@@ -803,6 +817,11 @@ func (s *Service) StrokePet(ctx context.Context, strokerID, petOwnerID, companyI
 	pet, err := s.pets.GetOrCreate(ctx, petOwnerID, companyID)
 	if err != nil {
 		return nil, err
+	}
+	// Питомец отпускника отдыхает вместе с ним — признание подождёт возвращения
+	// (кудосы владельцу тоже заморожены: «показатели не растут»).
+	if pet.OwnerOnVacation {
+		return nil, domain.ErrPetOnVacation
 	}
 	// Чужого питомца в приключении не погладить; возврат фиксирует ТОЛЬКО
 	// владелец (свой GET) — здесь просто проверка «срок ещё не истёк».

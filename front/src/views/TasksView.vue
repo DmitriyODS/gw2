@@ -68,6 +68,16 @@
       />
     </header>
 
+    <!-- Режим отпуска: создание/редактирование задач и юниты закрыты -->
+    <div v-if="onVacation" class="vacation-banner">
+      <span class="vacation-banner-emoji">🏖️</span>
+      <span class="vacation-banner-text">Вы в отпуске — создание и редактирование задач недоступно.</span>
+      <button type="button" class="btn-glass vacation-banner-btn" @click="router.push('/profile')">
+        <span class="material-symbols-outlined">person</span>
+        Профиль
+      </button>
+    </div>
+
     <div class="tasks-body">
       <!-- Рут-админ без выбранной компании -->
       <EmptyState
@@ -335,7 +345,8 @@ const cardsAreaRef = ref(null)
 const { isCompact } = useScrollCollapse(cardsAreaRef)
 const { isMobile } = useBreakpoint()
 
-const canCreateTask = computed(() => isAtLeast(ROLES.EMPLOYEE))
+const onVacation = computed(() => !!auth.user?.on_vacation)
+const canCreateTask = computed(() => isAtLeast(ROLES.EMPLOYEE) && !onVacation.value)
 const totalPages = computed(() => Math.ceil(tasksStore.total / tasksStore.filters.per_page))
 
 const hasActiveFilters = computed(() => {
@@ -410,6 +421,10 @@ async function setColor({ task, color }) {
 }
 
 function onStartUnit(task) {
+  if (onVacation.value) {
+    notif.warn('Вы в отпуске — юниты подождут возвращения')
+    return
+  }
   startUnitTaskId.value = task.id
 }
 
@@ -679,6 +694,38 @@ watch(() => companiesStore.effectiveCompanyId, () => {
   border-radius: 50%;
   background: var(--color-primary);
   border: 2px solid var(--color-surface);
+}
+
+/* Баннер режима отпуска */
+.vacation-banner {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 8px 24px 0;
+  padding: 10px 16px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--color-outline-dim);
+  background: var(--color-secondary-container);
+  color: var(--color-on-secondary-container);
+  font-size: 13.5px;
+  flex-shrink: 0;
+}
+
+.vacation-banner-emoji { font-size: 18px; }
+
+.vacation-banner-text { flex: 1; min-width: 0; }
+
+.vacation-banner-btn {
+  flex-shrink: 0;
+  padding: 6px 14px;
+  font-size: 13px;
+}
+
+.vacation-banner-btn .material-symbols-outlined { font-size: 16px; }
+
+@media (max-width: 768px) {
+  .vacation-banner { margin: 8px 12px 0; flex-wrap: wrap; }
+  .vacation-banner-text { flex-basis: 100%; }
 }
 
 /* ─── Тело ─── */

@@ -55,6 +55,9 @@ type PetDTO struct {
 	User             *domain.UserRef `json:"user,omitempty"`
 	NextStageXP      *int            `json:"next_stage_xp"`
 	Sick             bool            `json:"sick"`
+	// OnVacation — хозяин (и питомец вместе с ним) в отпуске: показатели
+	// заморожены, действия и поглаживания недоступны.
+	OnVacation bool `json:"on_vacation"`
 	Recovery         int             `json:"recovery"`
 	RecoveryTarget   int             `json:"recovery_target"`
 	// Болезнь: вид, подпись и рецепт (nil — питомец здоров).
@@ -133,6 +136,7 @@ func NewPet(p *domain.Pet) *PetDTO {
 		LastFedDate:    isoDate(p.LastFedDate),
 		User:           p.User,
 		Sick:           p.Sick(),
+		OnVacation:     p.OwnerOnVacation,
 		Recovery:       p.Recovery,
 		RecoveryTarget: domain.RecoveryTarget,
 		Needs:          p.Needs,

@@ -321,3 +321,88 @@ func TestHealthyPetNeverRunsAway(t *testing.T) {
 		t.Errorf("здоровому не место предупреждению: %v", data.RunawayInDays)
 	}
 }
+
+// ── Отпуск владельца ────────────────────────────────────────────────
+
+// В отпуске показатели заморожены: шкалы не тают (needs_at лишь сдвигается),
+// болезнь не наступает, а её таймер продлевается — после отпуска побег
+// отсчитывается с того же места.
+func TestVacationFreezesNeedsAndSickness(t *testing.T) {
+	env := newEnv()
+	ctx := context.Background()
+	pet, _ := env.pets.GetOrCreate(ctx, 1, 10)
+	pet.OwnerOnVacation = true
+	pet.NeedsAt = hoursAgo(30) // без отпуска сытость дошла бы до 0 и истощения
+
+	data, err := env.svc.GetMyPet(ctx, 1, 10)
+	if err != nil {
+		t.Fatalf("GetMyPet: %v", err)
+	}
+	if !data.OnVacation {
+		t.Error("DTO не помечен on_vacation")
+	}
+	if data.Needs.Satiety != domain.NeedMax || data.Sick {
+		t.Fatalf("показатели не заморожены: satiety=%d sick=%v", data.Needs.Satiety, data.Sick)
+	}
+	if time.Since(pet.NeedsAt) >= domain.NeedTick {
+		t.Errorf("needs_at не сдвинут к текущему моменту: %v", pet.NeedsAt)
+	}
+}
+
+// Больной питомец отпускника не сбегает, и таймер болезни стоит на паузе.
+func TestVacationPausesRunaway(t *testing.T) {
+	env := newEnv()
+	ctx := context.Background()
+	pet, _ := env.pets.GetOrCreate(ctx, 1, 10)
+	pet.OwnerOnVacation = true
+	pet.Stage, pet.XP = 3, 500
+	sickStart := hoursAgo(24 * (domain.RunawaySickDays + 2))
+	pet.Fall(domain.AilmentBlues, sickStart)
+	pet.NeedsAt = sickStart
+
+	data, err := env.svc.GetMyPet(ctx, 1, 10)
+	if err != nil {
+		t.Fatalf("GetMyPet: %v", err)
+	}
+	if data.Runaway != nil || data.Stage != 3 {
+		t.Fatalf("в отпуске питомец сбежал: %+v", data.Runaway)
+	}
+	if !pet.SickSince.After(sickStart) {
+		t.Error("SickSince не продлён заморозкой")
+	}
+}
+
+// В отпуске уход и поглаживания закрыты, начисления хуков не растят баланс.
+func TestVacationBlocksActionsAndAwards(t *testing.T) {
+	env := newEnv()
+	ctx := context.Background()
+	pet, _ := env.pets.GetOrCreate(ctx, 1, 10)
+	pet.OwnerOnVacation = true
+	pet.Kudos = 100
+
+	if _, err := env.svc.FeedPet(ctx, 1, 10); domain.AsDomainError(err) == nil ||
+		domain.AsDomainError(err).Code != "PET_ON_VACATION" {
+		t.Fatalf("кормление в отпуске: %v", err)
+	}
+	if _, err := env.svc.StartAdventure(ctx, 1, 10); domain.AsDomainError(err) == nil ||
+		domain.AsDomainError(err).Code != "PET_ON_VACATION" {
+		t.Fatalf("приключение в отпуске: %v", err)
+	}
+	if granted := env.svc.AwardKudos(ctx, 1, 10, "unit", 5); granted != 0 {
+		t.Errorf("AwardKudos в отпуске начислил %d", granted)
+	}
+	if granted := env.svc.AwardXP(ctx, 1, 10, "xp_unit", 5, 40); granted != 0 {
+		t.Errorf("AwardXP в отпуске начислил %d", granted)
+	}
+	if pet.Kudos != 100 {
+		t.Errorf("баланс изменился: %d", pet.Kudos)
+	}
+
+	// Коллега тоже не погладит отпускника.
+	stroker, _ := env.pets.GetOrCreate(ctx, 2, 10)
+	stroker.Kudos = 10
+	if _, err := env.svc.StrokePet(ctx, 2, 1, 10); domain.AsDomainError(err) == nil ||
+		domain.AsDomainError(err).Code != "PET_ON_VACATION" {
+		t.Fatalf("поглаживание отпускника: %v", err)
+	}
+}
