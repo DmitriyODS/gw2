@@ -108,6 +108,17 @@ type CommentRepository interface {
 	CountNewComments(ctx Ctx, taskID, userID int64) (int, error)
 	// MarkCommentsSeen — upsert отметки «прочитано» (last_seen_at = now()).
 	MarkCommentsSeen(ctx Ctx, taskID, userID int64) error
+
+	// ── Упоминания (@логин) в комментариях ──
+	// ResolveMentions — по нормализованным (lower) логинам возвращает
+	// lower(login) → user_id только для членов компании.
+	ResolveMentions(ctx Ctx, companyID int64, logins []string) (map[string]int64, error)
+	// CreateMentions — записать упоминания пользователей в комментарии.
+	CreateMentions(ctx Ctx, taskID, commentID int64, userIDs []int64) error
+	// MentionCounts — батч непрочитанных упоминаний пользователя по задачам.
+	MentionCounts(ctx Ctx, taskIDs []int64, userID int64) (map[int64]int, error)
+	// MarkMentionsSeen — погасить непрочитанные упоминания пользователя в задаче.
+	MarkMentionsSeen(ctx Ctx, taskID, userID int64) error
 }
 
 // UserReader — read-only доступ к пользователям платформы (auth-мидлварь,

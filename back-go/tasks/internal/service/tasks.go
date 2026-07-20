@@ -100,6 +100,10 @@ func (s *Service) ListTasks(ctx context.Context, f domain.TaskListFilter) (*dto.
 	if err != nil {
 		return nil, err
 	}
+	mentionCounts, err := s.comments.MentionCounts(ctx, taskIDs, f.CurrentUserID)
+	if err != nil {
+		return nil, err
+	}
 	ygEnabled := true
 	if f.CompanyID != nil {
 		ygEnabled = s.yougileEnabled(ctx, *f.CompanyID)
@@ -118,6 +122,7 @@ func (s *Service) ListTasks(ctx context.Context, f domain.TaskListFilter) (*dto.
 			ActiveUsers:    enrich.ActiveUsers[t.ID],
 			Color:          color,
 			Tags:           tagsByTask[t.ID],
+			MentionCount:   mentionCounts[t.ID],
 			YougileEnabled: ygEnabled,
 		}))
 	}

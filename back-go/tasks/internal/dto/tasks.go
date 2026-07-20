@@ -115,6 +115,7 @@ type Task struct {
 	IsArchived        bool      `json:"is_archived"`
 	IsFavorite        bool      `json:"is_favorite"`
 	LinkYougile       *string   `json:"link_yougile"`
+	MentionCount      int       `json:"mention_count"`
 	Name              string    `json:"name"`
 	ReceivedAt        JSONTime  `json:"received_at"`
 	Responsible       *UserRef  `json:"responsible"`
@@ -136,6 +137,7 @@ type TaskEnrich struct {
 	ActiveUsers    []domain.UserRef
 	Color          *string
 	Tags           []domain.TagRef
+	MentionCount   int
 	YougileEnabled bool
 }
 
@@ -155,6 +157,7 @@ func NewTask(t *domain.Task, e TaskEnrich) Task {
 		IsArchived:        t.IsArchived,
 		IsFavorite:        e.IsFavorite,
 		LinkYougile:       t.LinkYougile,
+		MentionCount:      e.MentionCount,
 		Name:              t.Name,
 		ReceivedAt:        JSONTime(t.ReceivedAt),
 		ResponsibleUserID: t.ResponsibleUserID,

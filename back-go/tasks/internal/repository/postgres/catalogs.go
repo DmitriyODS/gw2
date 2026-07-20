@@ -321,3 +321,73 @@ func (r *Repo) MarkCommentsSeen(ctx context.Context, taskID, userID int64) error
 		taskID, userID)
 	return err
 }
+
+// ── Упоминания (@логин) в комментариях ──
+
+func (r *Repo) ResolveMentions(ctx context.Context, companyID int64, logins []string) (map[string]int64, error) {
+	out := map[string]int64{}
+	if len(logins) == 0 {
+		return out, nil
+	}
+	rows, err := r.pool.Query(ctx, `
+		SELECT lower(u.login), u.id
+		  FROM users u
+		  JOIN user_companies uc ON uc.user_id = u.id
+		 WHERE uc.company_id = $1 AND lower(u.login) = ANY($2)`,
+		companyID, logins)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var login string
+		var id int64
+		if err := rows.Scan(&login, &id); err != nil {
+			return nil, err
+		}
+		out[login] = id
+	}
+	return out, rows.Err()
+}
+
+func (r *Repo) CreateMentions(ctx context.Context, taskID, commentID int64, userIDs []int64) error {
+	if len(userIDs) == 0 {
+		return nil
+	}
+	_, err := r.pool.Exec(ctx, `
+		INSERT INTO task_mentions (task_id, comment_id, user_id)
+		SELECT $1, $2, uid FROM unnest($3::bigint[]) AS uid`,
+		taskID, commentID, userIDs)
+	return err
+}
+
+func (r *Repo) MentionCounts(ctx context.Context, taskIDs []int64, userID int64) (map[int64]int, error) {
+	out := map[int64]int{}
+	if len(taskIDs) == 0 {
+		return out, nil
+	}
+	rows, err := r.pool.Query(ctx, `
+		SELECT task_id, count(*) FROM task_mentions
+		 WHERE user_id = $1 AND task_id = ANY($2) AND seen_at IS NULL
+		 GROUP BY task_id`, userID, taskIDs)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var taskID int64
+		var n int
+		if err := rows.Scan(&taskID, &n); err != nil {
+			return nil, err
+		}
+		out[taskID] = n
+	}
+	return out, rows.Err()
+}
+
+func (r *Repo) MarkMentionsSeen(ctx context.Context, taskID, userID int64) error {
+	_, err := r.pool.Exec(ctx, `
+		UPDATE task_mentions SET seen_at = now()
+		 WHERE task_id = $1 AND user_id = $2 AND seen_at IS NULL`, taskID, userID)
+	return err
+}

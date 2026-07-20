@@ -1,7 +1,7 @@
 <template>
   <article
     class="task-card glass-hover"
-    :class="[`view-${view}`, { favorite: task.is_favorite, archived: task.is_archived, colored: !!task.color, running: isRunningHere }]"
+    :class="[`view-${view}`, { favorite: task.is_favorite, archived: task.is_archived, colored: !!task.color, running: isRunningHere, mentioned: task.mention_count > 0 }]"
     :style="cardStyle"
     @click.stop="$emit('click', task)"
     @contextmenu.prevent="onContextMenu"
@@ -10,6 +10,14 @@
       <div class="card-top">
         <h3 class="task-name">{{ task.name }}</h3>
         <div class="card-actions">
+          <span
+            v-if="task.mention_count > 0"
+            class="mention-badge"
+            :title="`Вас упомянули в комментариях (${task.mention_count})`"
+          >
+            <span class="material-symbols-outlined">alternate_email</span>
+            <span v-if="task.mention_count > 1" class="mention-count">{{ task.mention_count }}</span>
+          </span>
           <a
             v-if="task.yougile_task_id && task.link_yougile"
             class="card-action-btn"
@@ -197,6 +205,13 @@ function formatDate(d) {
   opacity: 0.82;
 }
 
+/* Есть непрочитанное упоминание — яркий красный акцент, чтобы карточка сразу
+   бросалась в глаза (правило ниже прочих: перебивает running/colored рамку). */
+.task-card.mentioned {
+  border-color: var(--color-error);
+  box-shadow: var(--glass-edge), 0 0 0 2px color-mix(in oklch, var(--color-error) 55%, transparent);
+}
+
 .card-main {
   display: flex;
   flex-direction: column;
@@ -263,6 +278,25 @@ function formatDate(d) {
 .favorite-btn .material-symbols-outlined.filled {
   font-variation-settings: 'FILL' 1;
 }
+
+/* Бейдж «вас упомянули в комментариях» — акцентная пилюля, чтобы бросалась
+   в глаза (гасится при прочтении комментариев). */
+.mention-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  height: 22px;
+  padding: 0 7px;
+  border-radius: var(--radius-full);
+  background: var(--color-error);
+  color: var(--color-on-error);
+  font-size: 12px;
+  font-weight: 700;
+  flex-shrink: 0;
+  box-shadow: 0 0 0 3px color-mix(in oklch, var(--color-error) 22%, transparent);
+}
+.mention-badge .material-symbols-outlined { font-size: 15px; }
+.mention-count { line-height: 1; }
 
 /* Мета: монохромные стеклянные чипы. Чипы НЕ сжимаются и не режутся —
    целиком переносятся; максимум две строки, лишние скрыты (полный

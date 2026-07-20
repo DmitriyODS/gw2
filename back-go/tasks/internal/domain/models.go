@@ -191,8 +191,9 @@ type TaskListFilter struct {
 
 // TaskEnrichment — батч-обогащение списка задач (без N+1).
 type TaskEnrichment struct {
-	ActiveUsers map[int64][]UserRef
-	UserColors  map[int64]string
-	FavoriteIDs map[int64]bool
-	WithUnits   map[int64]bool
+	ActiveUsers   map[int64][]UserRef
+	UserColors    map[int64]string
+	FavoriteIDs   map[int64]bool
+	WithUnits     map[int64]bool
+	MentionCounts map[int64]int
 }

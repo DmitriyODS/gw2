@@ -256,12 +256,45 @@ export const useTasksStore = defineStore('tasks', () => {
   // Отметить комментарии задачи прочитанными (гасит бейдж новых). Оптимистично
   // обнуляем локально, затем шлём на сервер (ошибку глотаем — не критично).
   async function markCommentsSeen(taskId) {
-    if (!newCommentsByTask[taskId]) return
+    // Прочтение комментариев гасит и бейдж упоминаний на карточке (сервер тоже).
+    const hadMention = mentionCountOf(taskId) > 0
+    if (hadMention) clearMention(taskId)
+    if (!newCommentsByTask[taskId] && !hadMention) return
     newCommentsByTask[taskId] = 0
     try {
       await tasksApi.markTaskCommentsSeen(taskId)
     } catch {
       /* не критично: отметка догонит при следующем открытии */
+    }
+  }
+
+  function mentionCountOf(taskId) {
+    const t = tasks.value.find((x) => x.id === taskId)
+    if (t) return t.mention_count || 0
+    if (activeTask.value?.id === taskId) return activeTask.value.mention_count || 0
+    return 0
+  }
+
+  // Меня упомянули в комментарии — поднять бейдж упоминаний на карточке задачи.
+  function bumpMention(taskId) {
+    const idx = tasks.value.findIndex((t) => t.id === taskId)
+    if (idx >= 0) {
+      const cur = tasks.value[idx].mention_count || 0
+      tasks.value[idx] = { ...tasks.value[idx], mention_count: cur + 1 }
+    }
+    if (activeTask.value?.id === taskId) {
+      const cur = activeTask.value.mention_count || 0
+      activeTask.value = { ...activeTask.value, mention_count: cur + 1 }
+    }
+  }
+
+  function clearMention(taskId) {
+    const idx = tasks.value.findIndex((t) => t.id === taskId)
+    if (idx >= 0 && tasks.value[idx].mention_count) {
+      tasks.value[idx] = { ...tasks.value[idx], mention_count: 0 }
+    }
+    if (activeTask.value?.id === taskId && activeTask.value.mention_count) {
+      activeTask.value = { ...activeTask.value, mention_count: 0 }
     }
   }
 
@@ -413,6 +446,7 @@ export const useTasksStore = defineStore('tasks', () => {
     setFavorite, addActiveUser, removeActiveUser,
     assignResponsible, setStage, dragMoveStage, setTaskTags, toggleTaskTag,
     loadComments, markCommentsSeen, addComment, editComment, deleteComment, applyCommentSocket,
+    bumpMention, clearMention,
     loadContributors,
   }
 })

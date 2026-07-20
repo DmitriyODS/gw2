@@ -48,6 +48,18 @@ export function registerTaskSocketHandlers(socket) {
     useTasksStore().applyCommentSocket('deleted', payload)
   })
 
+  // Меня упомянули в комментарии (событие адресовано только мне) — бейдж на
+  // карточке задачи + ненавязчивый тост.
+  socket.on('task:mention', ({ task_id }) => {
+    if (task_id == null) return
+    useTasksStore().bumpMention(task_id)
+    useNotificationsStore().notify({
+      severity: 'info',
+      summary: 'Упоминание',
+      detail: 'Вас отметили в комментарии к задаче',
+    })
+  })
+
   socket.on('unit:started', (unit) => {
     const units = useUnitsStore()
     const auth = useAuthStore()

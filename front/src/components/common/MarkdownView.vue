@@ -4,18 +4,30 @@ import { renderMarkdown } from '@/utils/markdown.js'
 
 const props = defineProps({
   source: { type: String, default: '' },
+  // Включает @упоминания (кликабельные чипы). Нужно в комментариях задач;
+  // в портале выключено, чтобы @-текст не превращался в мнимые упоминания.
+  mentions: { type: Boolean, default: false },
+  // Карта login→ФИО: в чипе показываем ФИО вместо логина (клик — по логину).
+  mentionNames: { type: Object, default: () => ({}) },
 })
-// Хештеги в теле кликабельны: делегируем клик и эмитим 'tag' — родитель
-// (лента портала) фильтрует по нему. Компоненты без слушателя событие игнорят.
-const emit = defineEmits(['tag'])
+// Хештеги/упоминания в теле кликабельны: делегируем клик и эмитим 'tag'/'mention'
+// — родитель обрабатывает. Компоненты без слушателя событие игнорят.
+const emit = defineEmits(['tag', 'mention'])
 
-const html = computed(() => renderMarkdown(props.source))
+const html = computed(() =>
+  renderMarkdown(props.source, { mentions: props.mentions, mentionNames: props.mentionNames }))
 
 function onClick(e) {
   const tagEl = e.target.closest?.('.md-tag')
   if (tagEl) {
     e.preventDefault()
     emit('tag', tagEl.dataset.tag)
+    return
+  }
+  const mentionEl = e.target.closest?.('.md-mention')
+  if (mentionEl) {
+    e.preventDefault()
+    emit('mention', mentionEl.dataset.mention)
   }
 }
 </script>
@@ -66,6 +78,17 @@ function onClick(e) {
 .markdown-view :deep(.md-tag:hover) {
   text-decoration: underline;
   text-underline-offset: 2px;
+}
+.markdown-view :deep(.md-mention) {
+  color: var(--color-primary);
+  font-weight: 700;
+  cursor: pointer;
+  padding: 0 3px;
+  border-radius: var(--radius-xs, 6px);
+  background: color-mix(in oklch, var(--color-primary) 12%, transparent);
+}
+.markdown-view :deep(.md-mention:hover) {
+  background: color-mix(in oklch, var(--color-primary) 22%, transparent);
 }
 .markdown-view :deep(.md-code) {
   background: var(--color-surface-high);

@@ -124,12 +124,17 @@ func (s *Service) enrichTask(ctx context.Context, t *domain.Task, userID int64) 
 	if err != nil {
 		return dto.Task{}, err
 	}
+	mentions, err := s.comments.MentionCounts(ctx, []int64{t.ID}, userID)
+	if err != nil {
+		return dto.Task{}, err
+	}
 	return dto.NewTask(t, dto.TaskEnrich{
 		IsFavorite:     isFav,
 		HasUnits:       hasUnits,
 		ActiveUsers:    activeUsers,
 		Color:          color,
 		Tags:           tags[t.ID],
+		MentionCount:   mentions[t.ID],
 		YougileEnabled: s.yougileEnabled(ctx, t.CompanyID),
 	}), nil
 }

@@ -16,6 +16,18 @@ const ESCAPE_MAP = {
 // начиная с буквы или цифры. Зеркалит серверный tagRe (portalsvc).
 const TAG_RE = /(^|[^\p{L}\p{N}_&#/])#([\p{L}\p{N}][\p{L}\p{N}_]{1,49})/gu
 
+// Упоминание: @логин (буквы/цифры/точка/подчёркивание, без точек по краям),
+// не в середине слова/адреса. Зеркалит серверный mentionRe (tasksvc).
+// Включается опцией renderMarkdown({ mentions:true }) — иначе @-текст не трогаем
+// (нужно только в комментариях задач, не в портале).
+const MENTION_RE = /(^|[^\p{L}\p{N}_.@])@([\p{L}\p{N}_](?:[\p{L}\p{N}_.]*[\p{L}\p{N}_])?)/gu
+
+// Флаг активности упоминаний и карта login→ФИО на время одного renderMarkdown
+// (синхронного — реентрантности нет, parseInline только внутри того же вызова).
+// В тексте хранится @login, но в чипе показываем ФИО (data-mention = login).
+let mentionsEnabled = false
+let mentionNames = {}
+
 function escapeHtml(str) {
   return String(str).replace(/[&<>"']/g, (c) => ESCAPE_MAP[c])
 }
@@ -69,6 +81,16 @@ function parseInline(text) {
   s = s.replace(TAG_RE, (_, pre, tag) =>
     pre + stash(`<a class="md-tag" data-tag="${escapeAttr(tag.toLowerCase())}">#${tag}</a>`))
 
+  // @упоминания → кликабельный чип (открывает карточку пользователя). Только
+  // при включённой опции — см. MENTION_RE.
+  if (mentionsEnabled) {
+    s = s.replace(MENTION_RE, (_, pre, login) => {
+      const key = login.toLowerCase()
+      const name = mentionNames[key] || login // нет в каталоге → показываем логин
+      return pre + stash(`<a class="md-mention" data-mention="${escapeAttr(key)}">@${escapeHtml(name)}</a>`)
+    })
+  }
+
   s = autoLink(s)
 
   return s.replace(/\x00(\d+)\x00/g, (_, idx) => slots[+idx])
@@ -94,8 +116,10 @@ function splitRow(line) {
   return cells
 }
 
-export function renderMarkdown(src) {
+export function renderMarkdown(src, opts = {}) {
   if (!src) return ''
+  mentionsEnabled = !!opts.mentions
+  mentionNames = opts.mentionNames || {}
   const text = escapeHtml(String(src))
   const lines = text.split('\n')
   const out = []

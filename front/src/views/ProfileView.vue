@@ -1,254 +1,313 @@
 <template>
   <div class="profile-view">
     <div class="profile-container">
-      <!-- Левая колонка: карточка-идентичность (sticky на десктопе) -->
-      <aside class="identity-card">
-        <div class="identity-cover" aria-hidden="true"></div>
-
-        <button
-          type="button"
-          class="avatar-wrapper"
-          title="Открыть фото"
-          @click="lightboxOpen = true"
-        >
-          <img :src="avatarSrc" class="profile-avatar" :alt="authStore.user?.fio" />
-          <span class="avatar-zoom-overlay" aria-hidden="true">
-            <span class="material-symbols-outlined">zoom_in</span>
-          </span>
-        </button>
-
-        <div class="hero-info">
-          <h1 class="hero-name">{{ authStore.user?.fio }}</h1>
-          <p class="hero-post">{{ authStore.user?.post || 'Должность не указана' }}</p>
-          <div class="hero-meta">
-            <span v-if="authStore.user?.role?.name" class="role-tag">
-              {{ authStore.user.role.name }}
-            </span>
-            <span v-if="authStore.user?.on_vacation" class="role-tag vacation-tag">🏖️ В отпуске</span>
-            <span v-if="authStore.user?.login" class="hero-login">@{{ authStore.user.login }}</span>
-          </div>
-        </div>
-
-        <div class="avatar-actions">
-          <button class="btn-sm" @click="showCropper = true">
-            <span class="material-symbols-outlined">photo_camera</span>
-            Загрузить
-          </button>
-          <button
-            v-if="authStore.user?.avatar_path"
-            class="btn-sm danger"
-            @click="confirmAvatarDelete = true"
-          >
-            <span class="material-symbols-outlined">delete</span>
-            Удалить
-          </button>
-        </div>
-
-        <!-- Контакты — только на десктопе, мобильная шапка остаётся прежней -->
-        <ul class="identity-contacts">
-          <li class="contact-row">
-            <span class="contact-ico" data-tone="primary">
-              <span class="material-symbols-outlined">mail</span>
-            </span>
-            <span class="contact-text">
-              <small>Email</small>
-              <span :class="{ 'contact-empty': !authStore.user?.email }">
-                {{ authStore.user?.email || 'Не указан' }}
-              </span>
-            </span>
-          </li>
-          <li class="contact-row">
-            <span class="contact-ico" data-tone="secondary">
-              <span class="material-symbols-outlined">call</span>
-            </span>
-            <span class="contact-text">
-              <small>Телефон</small>
-              <span :class="{ 'contact-empty': !authStore.user?.phone }">
-                {{ authStore.user?.phone || 'Не указан' }}
-              </span>
-            </span>
-          </li>
-          <li v-if="authStore.companyName" class="contact-row">
-            <span class="contact-ico" data-tone="tertiary">
-              <span class="material-symbols-outlined">domain</span>
-            </span>
-            <span class="contact-text">
-              <small>Компания</small>
-              <span>{{ authStore.companyName }}</span>
-            </span>
-          </li>
-        </ul>
-
-        <button class="btn-logout" @click="authStore.logout()">
-          <span class="material-symbols-outlined">logout</span>
-          <span class="btn-logout-label">Выйти</span>
-        </button>
-      </aside>
-
-      <!-- Правая колонка: статистика + формы -->
       <div class="profile-main">
-        <!-- Личная статистика -->
-        <section class="profile-card stats-card">
-          <header class="card-head stats-head">
-            <div class="head-icon" data-tone="primary">
-              <span class="material-symbols-outlined">insights</span>
-            </div>
-            <div class="head-text">
-              <h3>Личная статистика</h3>
-              <p class="head-desc">Часы и задачи за выбранный период</p>
-            </div>
-            <DateRangePicker
-              v-model="statsPeriod"
-              class="head-period"
-              @update:model-value="loadStats"
-            />
-          </header>
+        <div v-if="!isMobile" class="layout-toolbar">
+          <span class="layout-hint">
+            <span class="material-symbols-outlined">open_with</span>
+            Тяните за ⠿, чтобы переставить, за уголок — чтобы изменить размер
+          </span>
+          <button type="button" class="btn-glass layout-reset" @click="grid.reset()">
+            <span class="material-symbols-outlined">restart_alt</span>
+            Сбросить раскладку
+          </button>
+        </div>
 
-          <div v-if="statsLoading" class="loading-inline">
-            <BrandLoader :size="64" />
-          </div>
+        <div class="cards-grid" ref="gridEl">
+          <!-- Карточка-идентичность пользователя -->
+          <aside
+            class="identity-card grid-card"
+            :class="{ 'is-dragging': dragId === 'identity', 'is-resizing': resizeId === 'identity' }"
+            :style="cardStyleFor('identity')"
+            data-card-id="identity"
+            :ref="cardRef('identity')"
+          >
+            <GridCardChrome card-id="identity" @grip="onGripDown" @resize="onResizerDown" />
 
-          <template v-else-if="profileStats">
-            <div class="stat-tiles">
-              <div class="stat-tile" data-tone="primary">
-                <span class="tile-ico"><span class="material-symbols-outlined">schedule</span></span>
-                <span class="tile-text">
-                  <span class="tile-num">{{ roundHours(profileStats.total_hours) }}</span>
-                  <span class="tile-label">Время</span>
+            <div class="identity-cover" aria-hidden="true"></div>
+
+            <button
+              type="button"
+              class="avatar-wrapper"
+              title="Открыть фото"
+              @click="lightboxOpen = true"
+            >
+              <img :src="avatarSrc" class="profile-avatar" :alt="authStore.user?.fio" />
+              <span class="avatar-zoom-overlay" aria-hidden="true">
+                <span class="material-symbols-outlined">zoom_in</span>
+              </span>
+            </button>
+
+            <div class="hero-info">
+              <h1 class="hero-name">{{ authStore.user?.fio }}</h1>
+              <p class="hero-post">{{ authStore.user?.post || 'Должность не указана' }}</p>
+              <div class="hero-meta">
+                <span v-if="authStore.user?.role?.name" class="role-tag">
+                  {{ authStore.user.role.name }}
                 </span>
-              </div>
-              <div class="stat-tile" data-tone="secondary">
-                <span class="tile-ico"><span class="material-symbols-outlined">task_alt</span></span>
-                <span class="tile-text">
-                  <span class="tile-num">{{ profileStats.tasks_count ?? 0 }}</span>
-                  <span class="tile-label">Задач</span>
-                </span>
-              </div>
-              <div class="stat-tile stat-tile--avg" data-tone="tertiary">
-                <span class="tile-ico"><span class="material-symbols-outlined">avg_pace</span></span>
-                <span class="tile-text">
-                  <span class="tile-num">{{ roundHours(avgHoursPerDay) }}</span>
-                  <span class="tile-label">В среднем за день</span>
-                </span>
+                <span v-if="authStore.user?.on_vacation" class="role-tag vacation-tag">🏖️ В отпуске</span>
+                <span v-if="authStore.user?.login" class="hero-login">@{{ authStore.user.login }}</span>
               </div>
             </div>
 
-            <template v-if="profileStats.by_unit_types?.length">
-              <!-- Десктоп: наглядные бары по типам; мобилка — прежняя таблица -->
-              <div v-if="!isMobile" class="type-list">
-                <div v-for="t in profileStats.by_unit_types" :key="t.name" class="type-row">
-                  <div class="type-top">
-                    <span class="type-name">{{ t.name }}</span>
-                    <span class="type-meta">
-                      {{ roundHours(t.hours) }} · {{ t.tasks_count }}
-                      {{ plural(t.tasks_count, 'задача', 'задачи', 'задач') }}
-                    </span>
-                  </div>
-                  <div class="type-bar">
-                    <span :style="{ width: typeBarWidth(t) }"></span>
-                  </div>
+            <div class="avatar-actions">
+              <button class="btn-sm" @click="showCropper = true">
+                <span class="material-symbols-outlined">photo_camera</span>
+                Загрузить
+              </button>
+              <button
+                v-if="authStore.user?.avatar_path"
+                class="btn-sm danger"
+                @click="confirmAvatarDelete = true"
+              >
+                <span class="material-symbols-outlined">delete</span>
+                Удалить
+              </button>
+            </div>
+
+            <!-- Контакты — только на десктопе, мобильная шапка остаётся прежней -->
+            <ul class="identity-contacts">
+              <li class="contact-row">
+                <span class="contact-ico" data-tone="primary">
+                  <span class="material-symbols-outlined">mail</span>
+                </span>
+                <span class="contact-text">
+                  <small>Email</small>
+                  <span :class="{ 'contact-empty': !authStore.user?.email }">
+                    {{ authStore.user?.email || 'Не указан' }}
+                  </span>
+                </span>
+              </li>
+              <li class="contact-row">
+                <span class="contact-ico" data-tone="secondary">
+                  <span class="material-symbols-outlined">call</span>
+                </span>
+                <span class="contact-text">
+                  <small>Телефон</small>
+                  <span :class="{ 'contact-empty': !authStore.user?.phone }">
+                    {{ authStore.user?.phone || 'Не указан' }}
+                  </span>
+                </span>
+              </li>
+              <li v-if="authStore.companyName" class="contact-row">
+                <span class="contact-ico" data-tone="tertiary">
+                  <span class="material-symbols-outlined">domain</span>
+                </span>
+                <span class="contact-text">
+                  <small>Компания</small>
+                  <span>{{ authStore.companyName }}</span>
+                </span>
+              </li>
+            </ul>
+
+            <button class="btn-logout" @click="authStore.logout()">
+              <span class="material-symbols-outlined">logout</span>
+              <span class="btn-logout-label">Выйти</span>
+            </button>
+          </aside>
+
+          <!-- Личная статистика -->
+          <section
+            class="profile-card grid-card stats-card"
+            :class="{ 'is-dragging': dragId === 'stats', 'is-resizing': resizeId === 'stats' }"
+            :style="cardStyleFor('stats')"
+            data-card-id="stats"
+            :ref="cardRef('stats')"
+          >
+            <GridCardChrome card-id="stats" @grip="onGripDown" @resize="onResizerDown" />
+
+            <header class="card-head stats-head">
+              <div class="head-icon" data-tone="primary">
+                <span class="material-symbols-outlined">insights</span>
+              </div>
+              <div class="head-text">
+                <h3>Личная статистика</h3>
+                <p class="head-desc">Часы и задачи за выбранный период</p>
+              </div>
+              <DateRangePicker
+                v-model="statsPeriod"
+                class="head-period"
+                @update:model-value="loadStats"
+              />
+            </header>
+
+            <div v-if="statsLoading" class="loading-inline">
+              <BrandLoader :size="64" />
+            </div>
+
+            <template v-else-if="profileStats">
+              <div class="stat-tiles">
+                <div class="stat-tile" data-tone="primary">
+                  <span class="tile-ico"><span class="material-symbols-outlined">schedule</span></span>
+                  <span class="tile-text">
+                    <span class="tile-num">{{ roundHours(profileStats.total_hours) }}</span>
+                    <span class="tile-label">Время</span>
+                  </span>
+                </div>
+                <div class="stat-tile" data-tone="secondary">
+                  <span class="tile-ico"><span class="material-symbols-outlined">task_alt</span></span>
+                  <span class="tile-text">
+                    <span class="tile-num">{{ profileStats.tasks_count ?? 0 }}</span>
+                    <span class="tile-label">Задач</span>
+                  </span>
+                </div>
+                <div class="stat-tile stat-tile--avg" data-tone="tertiary">
+                  <span class="tile-ico"><span class="material-symbols-outlined">avg_pace</span></span>
+                  <span class="tile-text">
+                    <span class="tile-num">{{ roundHours(avgHoursPerDay) }}</span>
+                    <span class="tile-label">В среднем за день</span>
+                  </span>
                 </div>
               </div>
 
-              <DataTable
-                v-else
-                :value="profileStats.by_unit_types"
-                size="small"
-                class="stats-table"
-              >
-                <Column field="name" header="Тип юнита" />
-                <Column header="Время" style="width:120px">
-                  <template #body="{ data }">{{ roundHours(data.hours) }}</template>
-                </Column>
-                <Column field="tasks_count" header="Задачи" style="width:100px" />
-              </DataTable>
+              <template v-if="profileStats.by_unit_types?.length">
+                <!-- Десктоп: наглядные бары по типам; мобилка — прежняя таблица -->
+                <div v-if="!isMobile" class="type-list">
+                  <div v-for="t in profileStats.by_unit_types" :key="t.name" class="type-row">
+                    <div class="type-top">
+                      <span class="type-name">{{ t.name }}</span>
+                      <span class="type-meta">
+                        {{ roundHours(t.hours) }} · {{ t.tasks_count }}
+                        {{ plural(t.tasks_count, 'задача', 'задачи', 'задач') }}
+                      </span>
+                    </div>
+                    <div class="type-bar">
+                      <span :style="{ width: typeBarWidth(t) }"></span>
+                    </div>
+                  </div>
+                </div>
+
+                <DataTable
+                  v-else
+                  :value="profileStats.by_unit_types"
+                  size="small"
+                  class="stats-table"
+                >
+                  <Column field="name" header="Тип юнита" />
+                  <Column header="Время" style="width:120px">
+                    <template #body="{ data }">{{ roundHours(data.hours) }}</template>
+                  </Column>
+                  <Column field="tasks_count" header="Задачи" style="width:100px" />
+                </DataTable>
+              </template>
             </template>
-          </template>
 
-          <div v-else class="empty-stats">
-            Нет данных за выбранный период
-          </div>
-        </section>
+            <div v-else class="empty-stats">
+              Нет данных за выбранный период
+            </div>
+          </section>
 
-        <!-- Вход на другом устройстве: подтверждение QR-входа и ТВ-киоска -->
-        <section class="profile-card">
-          <header class="card-head">
-            <div class="head-icon" data-tone="primary">
-              <span class="material-symbols-outlined">devices</span>
-            </div>
-            <div class="head-text">
-              <h3>Вход на другом устройстве</h3>
-              <p class="head-desc">
-                Подтвердите вход по QR на новом устройстве или авторизуйте ТВ-киоск
-                под выбранной компанией.
-              </p>
-            </div>
-          </header>
-          <button type="button" class="btn-grad" @click="showAuthorizeDevice = true">
-            <span class="material-symbols-outlined">qr_code_scanner</span>
-            Сканировать или ввести код
-          </button>
-        </section>
+          <!-- Вход на другом устройстве: подтверждение QR-входа и ТВ-киоска -->
+          <section
+            class="profile-card grid-card"
+            :class="{ 'is-dragging': dragId === 'device', 'is-resizing': resizeId === 'device' }"
+            :style="cardStyleFor('device')"
+            data-card-id="device"
+            :ref="cardRef('device')"
+          >
+            <GridCardChrome card-id="device" @grip="onGripDown" @resize="onResizerDown" />
 
-        <!-- Связанные аккаунты (Яндекс ID) — только если вход через Яндекс настроен -->
-        <section v-if="yandexAuth.enabled" class="profile-card">
-          <header class="card-head">
-            <div class="head-icon" data-tone="primary">
-              <span class="material-symbols-outlined">link</span>
-            </div>
-            <div class="head-text">
-              <h3>Связанные аккаунты</h3>
-              <p class="head-desc">
-                Привяжите Яндекс — и входите в Groove Work одной кнопкой, без пароля.
-              </p>
-            </div>
-          </header>
-          <div class="yandex-link-row">
-            <template v-if="yandexLinked">
-              <span class="yandex-linked-chip">
-                <span class="material-symbols-outlined">check_circle</span>
-                Яндекс привязан
-              </span>
-              <button type="button" class="btn-glass" :disabled="yandexBusy" @click="unlinkYandex">
-                Отвязать
-              </button>
-            </template>
-            <button v-else type="button" class="btn-grad" :disabled="yandexBusy" @click="linkYandex">
-              Привязать Яндекс-аккаунт
+            <header class="card-head">
+              <div class="head-icon" data-tone="primary">
+                <span class="material-symbols-outlined">devices</span>
+              </div>
+              <div class="head-text">
+                <h3>Вход на другом устройстве</h3>
+                <p class="head-desc">
+                  Подтвердите вход по QR на новом устройстве или авторизуйте ТВ-киоск
+                  под выбранной компанией.
+                </p>
+              </div>
+            </header>
+            <button type="button" class="btn-grad" @click="showAuthorizeDevice = true">
+              <span class="material-symbols-outlined">qr_code_scanner</span>
+              Сканировать или ввести код
             </button>
-          </div>
-        </section>
+          </section>
 
-        <!-- Режим отпуска -->
-        <section class="profile-card">
-          <header class="card-head vacation-head">
-            <div class="head-icon" data-tone="tertiary">
-              <span class="material-symbols-outlined">beach_access</span>
-            </div>
-            <div class="head-text">
-              <h3>Режим отпуска</h3>
-              <p class="head-desc">
-                Пока включён — создание и редактирование задач и запуск юнитов
-                недоступны, а грувик тоже отдыхает: его показатели заморожены.
-              </p>
-            </div>
-            <ToggleSwitch
-              class="vacation-switch"
-              :model-value="!!authStore.user?.on_vacation"
-              :disabled="vacationBusy"
-              @update:model-value="setVacation"
-            />
-          </header>
-          <p class="vacation-state">
-            {{ authStore.user?.on_vacation
-              ? '🏖️ Вы в отпуске: задачи и юниты подождут, грувик отдыхает вместе с вами.'
-              : 'Соберётесь отдохнуть — включите, и рабочие показатели встанут на паузу.' }}
-          </p>
-        </section>
+          <!-- Связанные аккаунты (Яндекс ID) — только если вход через Яндекс настроен -->
+          <section
+            v-if="yandexAuth.enabled"
+            class="profile-card grid-card"
+            :class="{ 'is-dragging': dragId === 'yandex', 'is-resizing': resizeId === 'yandex' }"
+            :style="cardStyleFor('yandex')"
+            data-card-id="yandex"
+            :ref="cardRef('yandex')"
+          >
+            <GridCardChrome card-id="yandex" @grip="onGripDown" @resize="onResizerDown" />
 
-        <div class="forms-row">
+            <header class="card-head">
+              <div class="head-icon" data-tone="primary">
+                <span class="material-symbols-outlined">link</span>
+              </div>
+              <div class="head-text">
+                <h3>Связанные аккаунты</h3>
+                <p class="head-desc">
+                  Привяжите Яндекс — и входите в Groove Work одной кнопкой, без пароля.
+                </p>
+              </div>
+            </header>
+            <div class="yandex-link-row">
+              <template v-if="yandexLinked">
+                <span class="yandex-linked-chip">
+                  <span class="material-symbols-outlined">check_circle</span>
+                  Яндекс привязан
+                </span>
+                <button type="button" class="btn-glass" :disabled="yandexBusy" @click="unlinkYandex">
+                  Отвязать
+                </button>
+              </template>
+              <button v-else type="button" class="btn-grad" :disabled="yandexBusy" @click="linkYandex">
+                Привязать Яндекс-аккаунт
+              </button>
+            </div>
+          </section>
+
+          <!-- Режим отпуска -->
+          <section
+            class="profile-card grid-card"
+            :class="{ 'is-dragging': dragId === 'vacation', 'is-resizing': resizeId === 'vacation' }"
+            :style="cardStyleFor('vacation')"
+            data-card-id="vacation"
+            :ref="cardRef('vacation')"
+          >
+            <GridCardChrome card-id="vacation" @grip="onGripDown" @resize="onResizerDown" />
+
+            <header class="card-head vacation-head">
+              <div class="head-icon" data-tone="tertiary">
+                <span class="material-symbols-outlined">beach_access</span>
+              </div>
+              <div class="head-text">
+                <h3>Режим отпуска</h3>
+                <p class="head-desc">
+                  Пока включён — создание и редактирование задач и запуск юнитов
+                  недоступны, а грувик тоже отдыхает: его показатели заморожены.
+                </p>
+              </div>
+              <ToggleSwitch
+                class="vacation-switch"
+                :model-value="!!authStore.user?.on_vacation"
+                :disabled="vacationBusy"
+                @update:model-value="setVacation"
+              />
+            </header>
+            <p class="vacation-state">
+              {{ authStore.user?.on_vacation
+                ? '🏖️ Вы в отпуске: задачи и юниты подождут, грувик отдыхает вместе с вами.'
+                : 'Соберётесь отдохнуть — включите, и рабочие показатели встанут на паузу.' }}
+            </p>
+          </section>
+
           <!-- Редактирование профиля -->
-          <section class="profile-card">
+          <section
+            class="profile-card grid-card"
+            :class="{ 'is-dragging': dragId === 'profile', 'is-resizing': resizeId === 'profile' }"
+            :style="cardStyleFor('profile')"
+            data-card-id="profile"
+            :ref="cardRef('profile')"
+          >
+            <GridCardChrome card-id="profile" @grip="onGripDown" @resize="onResizerDown" />
+
             <header class="card-head">
               <div class="head-icon" data-tone="secondary">
                 <span class="material-symbols-outlined">badge</span>
@@ -262,10 +321,6 @@
               <div class="form-group">
                 <label>ФИО</label>
                 <InputText v-model="profileForm.fio" class="w-full" placeholder="Иванов Иван Иванович" />
-              </div>
-              <div class="form-group">
-                <label>Логин</label>
-                <InputText v-model="profileForm.login" class="w-full" placeholder="ivanov" />
               </div>
               <div class="form-group">
                 <label>Должность</label>
@@ -292,53 +347,54 @@
             </form>
           </section>
 
-          <!-- Смена пароля -->
-          <section class="profile-card">
+          <!-- Логин и пароль — редактирование вынесено в кнопки-диалоги -->
+          <section
+            class="profile-card grid-card"
+            :class="{ 'is-dragging': dragId === 'security', 'is-resizing': resizeId === 'security' }"
+            :style="cardStyleFor('security')"
+            data-card-id="security"
+            :ref="cardRef('security')"
+          >
+            <GridCardChrome card-id="security" @grip="onGripDown" @resize="onResizerDown" />
+
             <header class="card-head">
               <div class="head-icon" data-tone="tertiary">
-                <span class="material-symbols-outlined">lock_reset</span>
+                <span class="material-symbols-outlined">password</span>
               </div>
               <div class="head-text">
-                <h3>Смена пароля</h3>
-                <p class="head-desc">Не короче 8 символов</p>
+                <h3>Логин и пароль</h3>
+                <p class="head-desc">Данные для входа в систему</p>
               </div>
             </header>
-            <form @submit.prevent="changePassword" class="profile-form">
-              <div class="form-group">
-                <label>Текущий пароль</label>
-                <InputText
-                  v-model="passwordForm.current"
-                  type="password"
-                  class="w-full"
-                  placeholder="Введите текущий пароль"
-                  autocomplete="current-password"
-                />
-              </div>
-              <div class="form-group">
-                <label>Новый пароль</label>
-                <InputText
-                  v-model="passwordForm.password"
-                  type="password"
-                  class="w-full"
-                  placeholder="Минимум 8 символов"
-                  autocomplete="new-password"
-                />
-              </div>
-              <div class="form-group">
-                <label>Подтвердите пароль</label>
-                <InputText
-                  v-model="passwordForm.confirm"
-                  type="password"
-                  class="w-full"
-                  placeholder="Повторите пароль"
-                  autocomplete="new-password"
-                />
-              </div>
-              <p v-if="passwordError" class="error-msg">{{ passwordError }}</p>
-              <button type="submit" class="btn-primary" :disabled="passwordLoading">
-                {{ passwordLoading ? 'Изменяем...' : 'Изменить пароль' }}
-              </button>
-            </form>
+
+            <ul class="cred-list">
+              <li class="cred-row">
+                <span class="cred-ico" data-tone="primary">
+                  <span class="material-symbols-outlined">alternate_email</span>
+                </span>
+                <span class="cred-text">
+                  <small>Логин</small>
+                  <span>{{ authStore.user?.login || '—' }}</span>
+                </span>
+                <button type="button" class="btn-glass cred-btn" @click="showLoginDialog = true">
+                  <span class="material-symbols-outlined">edit</span>
+                  Изменить
+                </button>
+              </li>
+              <li class="cred-row">
+                <span class="cred-ico" data-tone="tertiary">
+                  <span class="material-symbols-outlined">lock</span>
+                </span>
+                <span class="cred-text">
+                  <small>Пароль</small>
+                  <span>••••••••</span>
+                </span>
+                <button type="button" class="btn-glass cred-btn" @click="showPasswordDialog = true">
+                  <span class="material-symbols-outlined">lock_reset</span>
+                  Изменить
+                </button>
+              </li>
+            </ul>
           </section>
         </div>
       </div>
@@ -346,6 +402,10 @@
 
     <!-- Авторизация устройства (QR-вход / ТВ-киоск) -->
     <AuthorizeDeviceDialog v-model="showAuthorizeDevice" />
+
+    <!-- Смена логина / пароля -->
+    <ChangeLoginDialog v-model="showLoginDialog" :current-login="authStore.user?.login || ''" />
+    <ChangePasswordDialog v-model="showPasswordDialog" />
 
     <!-- Диалог кроппера аватарки -->
     <AppDialog
@@ -386,10 +446,11 @@
 </template>
 
 <script setup>
-import { ref, reactive, computed, onMounted } from 'vue'
+import { ref, reactive, computed, onMounted, watch } from 'vue'
 import { useAuthStore } from '@/stores/auth.js'
 import { useNotificationsStore } from '@/stores/notifications.js'
 import { useBreakpoint } from '@/composables/useBreakpoint.js'
+import { useDashboardGrid } from '@/composables/useDashboardGrid.js'
 import { updateMe, uploadAvatar, deleteAvatar } from '@/api/users.js'
 import { yandexConfig, yandexAuthURL, yandexLinkStatus, yandexUnlink } from '@/api/auth.js'
 import { inAppShell } from '@/utils/appShell.js'
@@ -403,6 +464,9 @@ import InputText from 'primevue/inputtext'
 import AppDialog from '@/components/common/AppDialog.vue'
 import ToggleSwitch from 'primevue/toggleswitch'
 import AuthorizeDeviceDialog from '@/components/devicelink/AuthorizeDeviceDialog.vue'
+import GridCardChrome from '@/components/profile/GridCardChrome.vue'
+import ChangeLoginDialog from '@/components/profile/ChangeLoginDialog.vue'
+import ChangePasswordDialog from '@/components/profile/ChangePasswordDialog.vue'
 import DataTable from 'primevue/datatable'
 import Column from 'primevue/column'
 import BrandLoader from '@/components/common/BrandLoader.vue'
@@ -410,6 +474,34 @@ import BrandLoader from '@/components/common/BrandLoader.vue'
 const authStore = useAuthStore()
 const notif = useNotificationsStore()
 const { isMobile } = useBreakpoint()
+
+// ---- Настраиваемая раскладка плашек (десктоп) ----
+const gridEl = ref(null)
+const grid = useDashboardGrid({ storageKey: 'gw_profile_layout', cols: 4 })
+const { dragId, resizeId } = grid
+
+function cardStyleFor(id) {
+  // На мобиле — простая колонка в порядке разметки, без grid/drag.
+  return isMobile.value ? {} : grid.cardStyle(id)
+}
+function onGripDown(e, id) {
+  if (isMobile.value) return
+  grid.startDrag(e, id)
+}
+function onResizerDown(e, id, dir) {
+  if (isMobile.value) return
+  grid.startResize(e, id, gridEl.value, dir)
+}
+// Стабильный ref-колбэк на карточку (мемоизация по id): иначе инлайн-arrow
+// пересоздавался бы каждый рендер и Vue дёргал бы observeCard вхолостую.
+const cardRefFns = {}
+function cardRef(id) {
+  return (cardRefFns[id] ||= (el) => grid.observeCard(id, el))
+}
+
+// ---- Логин / пароль ----
+const showLoginDialog = ref(false)
+const showPasswordDialog = ref(false)
 
 // ---- Avatar ----
 const showCropper = ref(false)
@@ -452,7 +544,7 @@ async function handleDeleteAvatar() {
 }
 
 // ---- Profile form ----
-const profileForm = reactive({ fio: '', login: '', post: '', phone: '', email: '' })
+const profileForm = reactive({ fio: '', post: '', phone: '', email: '' })
 const profileError = ref('')
 const profileLoading = ref(false)
 
@@ -460,7 +552,6 @@ function syncProfileForm() {
   const user = authStore.user
   if (user) {
     profileForm.fio = user.fio || ''
-    profileForm.login = user.login || ''
     profileForm.post = user.post || ''
     profileForm.phone = user.phone || ''
     profileForm.email = user.email || ''
@@ -469,15 +560,14 @@ function syncProfileForm() {
 
 async function saveProfile() {
   profileError.value = ''
-  if (!profileForm.fio.trim() || !profileForm.login.trim()) {
-    profileError.value = 'ФИО и логин обязательны'
+  if (!profileForm.fio.trim()) {
+    profileError.value = 'ФИО обязательно'
     return
   }
   profileLoading.value = true
   try {
     await updateMe({
       fio: profileForm.fio.trim(),
-      login: profileForm.login.trim(),
       post: profileForm.post.trim(),
       phone: profileForm.phone.trim() || null,
       email: profileForm.email.trim() || null,
@@ -504,43 +594,6 @@ async function setVacation(v) {
     notif.error(e.message || 'Не удалось изменить режим отпуска')
   } finally {
     vacationBusy.value = false
-  }
-}
-
-// ---- Password form ----
-const passwordForm = reactive({ current: '', password: '', confirm: '' })
-const passwordError = ref('')
-const passwordLoading = ref(false)
-
-async function changePassword() {
-  passwordError.value = ''
-  if (!passwordForm.current) {
-    passwordError.value = 'Введите текущий пароль'
-    return
-  }
-  if (passwordForm.password.length < 8) {
-    passwordError.value = 'Пароль должен содержать не менее 8 символов'
-    return
-  }
-  if (passwordForm.password !== passwordForm.confirm) {
-    passwordError.value = 'Пароли не совпадают'
-    return
-  }
-  passwordLoading.value = true
-  try {
-    await updateMe({
-      current_password: passwordForm.current,
-      new_password: passwordForm.password,
-      confirm_password: passwordForm.confirm,
-    })
-    notif.success('Пароль изменён')
-    passwordForm.current = ''
-    passwordForm.password = ''
-    passwordForm.confirm = ''
-  } catch (e) {
-    passwordError.value = e.message || 'Ошибка смены пароля'
-  } finally {
-    passwordLoading.value = false
   }
 }
 
@@ -612,6 +665,25 @@ const yandexAuth = ref({ enabled: false, client_id: '' })
 const yandexLinked = ref(false)
 const yandexBusy = ref(false)
 
+// Присутствующие карточки в порядке по умолчанию (Яндекс — условно).
+// Точечный watch по флагу: getter трекает только его, поэтому чтения spans
+// внутри sync не превращаются в лишние перезапуски на каждом ресайзе.
+watch(
+  () => yandexAuth.value.enabled,
+  () => {
+    grid.sync([
+      { id: 'identity', span: 2 },
+      { id: 'stats', span: 2 },
+      { id: 'device', span: 2 },
+      ...(yandexAuth.value.enabled ? [{ id: 'yandex', span: 2 }] : []),
+      { id: 'vacation', span: 2 },
+      { id: 'profile', span: 2 },
+      { id: 'security', span: 2 },
+    ])
+  },
+  { immediate: true },
+)
+
 async function loadYandexLink() {
   try {
     yandexAuth.value = await yandexConfig()
@@ -653,21 +725,16 @@ onMounted(() => {
   overflow-y: auto;
 }
 
-/* Десктоп: identity-рейл слева + контент справа — экран используется
-   целиком, а не узкой колонкой. */
+/* Контент центрируется; ширину задаёт настраиваемая сетка ниже. */
 .profile-container {
   max-width: 1280px;
   margin: 0 auto;
-  display: grid;
-  grid-template-columns: 340px minmax(0, 1fr);
-  gap: 24px;
-  align-items: start;
 }
 
 /* ── Identity-карточка ───────────────────────────────────────── */
-/* Не sticky: прилипание держало карточку на 24px ниже кромки при прокрутке,
-   и её верх расходился с карточками правой колонки. */
+/* Полноправная плашка сетки: перетаскивается и меняет ширину, как остальные. */
 .identity-card {
+  position: relative;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -919,14 +986,48 @@ onMounted(() => {
 .profile-main {
   display: flex;
   flex-direction: column;
-  gap: 24px;
+  gap: 16px;
   min-width: 0;
 }
 
-.forms-row {
+/* Подсказка + сброс раскладки над сеткой. */
+.layout-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.layout-hint {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12.5px;
+  color: var(--color-text-dim);
+}
+.layout-hint .material-symbols-outlined { font-size: 16px; }
+
+.layout-reset {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  padding: 7px 14px;
+}
+.layout-reset .material-symbols-outlined { font-size: 17px; }
+
+/* Настраиваемая сетка плашек: 4 колонки, ширина — span 1..4. Masonry-упаковка:
+   мелкие грид-строки (grid-auto-rows) + высота карточки в строк-спанах (считает
+   useDashboardGrid по факту) ⇒ колонки пакуются независимо, без «мёртвых» зон.
+   Вертикальный зазор заложен в спан (VGAP), поэтому row-gap = 0.
+   grid-auto-rows держать синхронно с ROW_UNIT в composable. */
+.cards-grid {
   display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 24px;
+  grid-template-columns: repeat(4, 1fr);
+  column-gap: 20px;
+  row-gap: 0;
+  grid-auto-rows: 4px;
   align-items: start;
 }
 
@@ -965,6 +1066,7 @@ onMounted(() => {
 .yandex-linked-chip .material-symbols-outlined { font-size: 18px; }
 
 .profile-card {
+  position: relative;
   background: var(--acrylic-card-bg);
   -webkit-backdrop-filter: var(--acrylic-blur);
   backdrop-filter: var(--acrylic-blur);
@@ -974,11 +1076,23 @@ onMounted(() => {
   display: flex;
   flex-direction: column;
   gap: 16px;
-  transition: border-color 0.15s;
+  transition: border-color 0.15s, box-shadow 0.18s;
 }
 
 .profile-card:hover {
   border-color: color-mix(in oklch, var(--color-primary) 30%, var(--color-outline-dim));
+}
+
+/* ── Состояния карточки при drag/resize (ручки — в GridCardChrome) ── */
+.grid-card.is-dragging {
+  box-shadow: var(--shadow-lg, 0 18px 40px rgba(0, 0, 0, 0.22));
+  border-color: color-mix(in oklch, var(--color-primary) 45%, var(--color-outline-dim));
+  opacity: 0.96;
+  cursor: grabbing;
+}
+.grid-card.is-resizing {
+  border-color: color-mix(in oklch, var(--color-primary) 45%, var(--color-outline-dim));
+  box-shadow: var(--shadow-sm);
 }
 
 /* Шапка карточки: тональная иконка + заголовок + описание. */
@@ -1022,6 +1136,69 @@ onMounted(() => {
 
 .stats-head { flex-wrap: wrap; }
 .head-period { margin-left: auto; }
+
+/* ── Логин и пароль ──────────────────────────────────────────── */
+.cred-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.cred-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+
+.cred-ico {
+  flex-shrink: 0;
+  width: 40px;
+  height: 40px;
+  border-radius: 12px;
+  display: grid;
+  place-items: center;
+  background: var(--tone-bg, var(--color-primary-container));
+  color: var(--tone-fg, var(--color-on-primary-container));
+}
+.cred-ico[data-tone="primary"]  { --tone-bg: var(--color-primary-container);  --tone-fg: var(--color-on-primary-container); }
+.cred-ico[data-tone="tertiary"] { --tone-bg: var(--color-tertiary-container); --tone-fg: var(--color-on-tertiary-container); }
+.cred-ico .material-symbols-outlined { font-size: 20px; }
+
+.cred-text {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+.cred-text small {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--color-text-dim);
+}
+.cred-text > span {
+  font-size: 14px;
+  color: var(--color-text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cred-btn {
+  margin-left: auto;
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  padding: 7px 14px;
+}
+.cred-btn .material-symbols-outlined { font-size: 16px; }
 
 /* ── Формы ───────────────────────────────────────────────────── */
 .profile-form {
@@ -1193,15 +1370,13 @@ onMounted(() => {
   font-size: 14px;
 }
 
-/* ── Узкий десктоп: формы в одну колонку ─────────────────────── */
+/* ── Узкий десктоп: плитки статистики компактнее ─────────────── */
 @media (max-width: 1100px) and (min-width: 769px) {
-  .profile-container { grid-template-columns: 300px minmax(0, 1fr); }
-  .forms-row { grid-template-columns: 1fr; }
   .stat-tiles { grid-template-columns: repeat(2, 1fr); }
   .stat-tile--avg { display: none; }
 }
 
-/* ── Мобилка: воспроизводим прежний вид без изменений ────────── */
+/* ── Мобилка: простая колонка, без кастомизации раскладки ─────── */
 @media (max-width: 768px) {
   .profile-view {
     padding: 12px;
@@ -1238,9 +1413,14 @@ onMounted(() => {
 
   .profile-main { gap: 16px; }
 
-  /* Прежний порядок карточек: профиль → пароль → статистика. */
-  .forms-row { display: contents; }
-  .stats-card { order: 1; }
+  /* Сетка превращается в простую колонку; подсказка/ручки скрыты
+     (ручки прячет сам GridCardChrome). */
+  .cards-grid {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+  }
+  .layout-toolbar { display: none; }
 
   /* Шапки карточек — как раньше: просто заголовок с разделителем. */
   .head-icon,
@@ -1294,5 +1474,9 @@ onMounted(() => {
     overflow-x: auto;
     display: block;
   }
+
+  /* Кредит-строки на узких экранах переносят кнопку под подпись. */
+  .cred-row { flex-wrap: wrap; }
+  .cred-btn { margin-left: 52px; }
 }
 </style>

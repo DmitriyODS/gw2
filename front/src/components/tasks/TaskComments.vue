@@ -4,8 +4,10 @@ import { useTasksStore } from '@/stores/tasks.js'
 import { useAuthStore } from '@/stores/auth.js'
 import { useNotificationsStore } from '@/stores/notifications.js'
 import { usePermission, ROLES } from '@/composables/usePermission.js'
+import { getDirectory } from '@/api/users.js'
 import MarkdownView from '@/components/common/MarkdownView.vue'
 import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
+import EmployeeProfileDialog from '@/components/common/EmployeeProfileDialog.vue'
 
 const props = defineProps({
   taskId: { type: Number, required: true },
@@ -23,6 +25,97 @@ const editingId = ref(null)
 const editText = ref('')
 const listEl = ref(null)
 const deletingId = ref(null)
+
+// ── @-упоминания: автокомплит из сотрудников компании ──
+const mentionUsers = ref([])       // все члены активной компании (грузим 1 раз)
+const mentionOpen = ref(false)
+const mentionItems = ref([])       // отфильтрованные под текущий запрос
+const mentionIndex = ref(0)
+const mentionQuery = ref('')
+const mentionStart = ref(0)        // индекс символа '@' в draft
+const textareaRef = ref(null)
+
+// login → ФИО: в чипах комментариев показываем имя, а не логин.
+const mentionNames = computed(() => {
+  const map = {}
+  for (const u of mentionUsers.value) {
+    if (u.login) map[u.login.toLowerCase()] = u.fio || u.login
+  }
+  return map
+})
+
+function avatarUrl(u) {
+  return u?.avatar_path ? `/uploads/${u.avatar_path}` : `/api/users/${u.id}/identicon`
+}
+
+// Пересчёт состояния автокомплита по позиции каретки: активен, если перед
+// кареткой идёт @токен (в начале строки или после пробела), без пробелов внутри.
+function updateMentionState() {
+  const el = textareaRef.value
+  if (!el) return closeMention()
+  const pos = el.selectionStart ?? draft.value.length
+  const before = draft.value.slice(0, pos)
+  const m = before.match(/(?:^|\s)@([\p{L}\p{N}_.]*)$/u)
+  if (!m) return closeMention()
+  const query = m[1]
+  mentionStart.value = pos - query.length - 1
+  if (query !== mentionQuery.value) mentionIndex.value = 0
+  mentionQuery.value = query
+  const q = query.toLowerCase()
+  mentionItems.value = mentionUsers.value
+    .filter((u) => !q
+      || (u.login || '').toLowerCase().includes(q)
+      || (u.fio || '').toLowerCase().includes(q))
+    .slice(0, 8)
+  if (mentionIndex.value >= mentionItems.value.length) mentionIndex.value = 0
+  mentionOpen.value = mentionItems.value.length > 0
+}
+
+function closeMention() {
+  mentionOpen.value = false
+  mentionItems.value = []
+  mentionQuery.value = ''
+}
+
+function selectMention(u) {
+  if (!u) return
+  const el = textareaRef.value
+  const pos = el ? (el.selectionStart ?? draft.value.length) : draft.value.length
+  const start = mentionStart.value
+  const insert = '@' + (u.login || '') + ' '
+  draft.value = draft.value.slice(0, start) + insert + draft.value.slice(pos)
+  closeMention()
+  nextTick(() => {
+    if (!el) return
+    const caret = start + insert.length
+    el.focus()
+    el.setSelectionRange(caret, caret)
+  })
+}
+
+// keyup для перемещения каретки (стрелки/клик/Home/End), кроме навигации по
+// списку — её обрабатывает onKeydown с preventDefault.
+function onCaretKeyup(e) {
+  if (mentionOpen.value && ['ArrowDown', 'ArrowUp', 'Enter', 'Tab', 'Escape'].includes(e.key)) return
+  updateMentionState()
+}
+
+function onInputBlur() {
+  // Отложенно — чтобы успел отработать клик по элементу списка.
+  setTimeout(closeMention, 150)
+}
+
+// Клик по @упоминанию в тексте комментария → карточка пользователя.
+const profileOpen = ref(false)
+const profileUser = ref(null)
+
+function openMentionProfile(login) {
+  if (!login) return
+  const u = mentionUsers.value.find((x) => (x.login || '').toLowerCase() === login.toLowerCase())
+  if (!u) return
+  profileUser.value = u
+  profileOpen.value = true
+}
 
 const list = computed(() => tasks.commentsByTask[props.taskId] || [])
 
@@ -122,6 +215,29 @@ function fmtTime(d) {
 }
 
 function onKeydown(e) {
+  // Навигация по списку упоминаний перехватывает стрелки/Enter/Tab/Esc.
+  if (mentionOpen.value && mentionItems.value.length) {
+    if (e.key === 'ArrowDown') {
+      e.preventDefault()
+      mentionIndex.value = (mentionIndex.value + 1) % mentionItems.value.length
+      return
+    }
+    if (e.key === 'ArrowUp') {
+      e.preventDefault()
+      mentionIndex.value = (mentionIndex.value - 1 + mentionItems.value.length) % mentionItems.value.length
+      return
+    }
+    if (e.key === 'Enter' || e.key === 'Tab') {
+      e.preventDefault()
+      selectMention(mentionItems.value[mentionIndex.value])
+      return
+    }
+    if (e.key === 'Escape') {
+      e.preventDefault()
+      closeMention()
+      return
+    }
+  }
   // Cmd/Ctrl+Enter — отправить.
   if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
     e.preventDefault()
@@ -220,8 +336,18 @@ function onDocPointerDown(e) {
 function onDocScroll() { if (ctxMenu.value.visible) closeCtxMenu() }
 function onDocKey(e) { if (e.key === 'Escape' && ctxMenu.value.visible) closeCtxMenu() }
 
+async function loadMentionUsers() {
+  try {
+    const data = await getDirectory('', true)
+    mentionUsers.value = data.items || data || []
+  } catch {
+    mentionUsers.value = [] // без каталога автокомплит просто не появится
+  }
+}
+
 onMounted(() => {
   load()
+  loadMentionUsers()
   document.addEventListener('pointerdown', onDocPointerDown, true)
   document.addEventListener('scroll', onDocScroll, true)
   document.addEventListener('keydown', onDocKey)
@@ -287,7 +413,14 @@ onBeforeUnmount(() => {
               <button class="btn-primary" @click="saveEdit">Сохранить</button>
             </div>
           </div>
-          <MarkdownView v-else :source="c.text" class="comment-text" />
+          <MarkdownView
+            v-else
+            :source="c.text"
+            class="comment-text"
+            mentions
+            :mention-names="mentionNames"
+            @mention="openMentionProfile"
+          />
         </div>
       </div>
     </div>
@@ -301,6 +434,9 @@ onBeforeUnmount(() => {
       @confirm="confirmDelete"
       @cancel="deletingId = null"
     />
+
+    <!-- Карточка упомянутого пользователя (elevated — задача открыта в модалке). -->
+    <EmployeeProfileDialog v-model="profileOpen" :user="profileUser" elevated />
 
     <!-- Контекстное меню комментария (long-press на тач / правая кнопка мыши) -->
     <Teleport to="body">
@@ -332,13 +468,37 @@ onBeforeUnmount(() => {
     </Teleport>
 
     <div class="comment-input">
-      <textarea
-        v-model="draft"
-        class="comment-textarea ctl"
-        rows="2"
-        placeholder="Написать комментарий… (Markdown поддерживается, Ctrl+Enter — отправить)"
-        @keydown="onKeydown"
-      />
+      <div class="comment-input-field">
+        <!-- Автокомплит @упоминаний: сотрудники активной компании -->
+        <ul v-if="mentionOpen" class="mention-menu">
+          <li
+            v-for="(u, i) in mentionItems"
+            :key="u.id"
+            class="mention-item"
+            :class="{ active: i === mentionIndex }"
+            @mousedown.prevent="selectMention(u)"
+            @mouseenter="mentionIndex = i"
+          >
+            <img :src="avatarUrl(u)" class="mention-ava" :alt="u.fio || ''" />
+            <span class="mention-info">
+              <span class="mention-fio">{{ u.fio || 'Сотрудник' }}</span>
+              <span class="mention-login">@{{ u.login }}</span>
+            </span>
+          </li>
+        </ul>
+        <textarea
+          ref="textareaRef"
+          v-model="draft"
+          class="comment-textarea ctl"
+          rows="2"
+          placeholder="Написать комментарий… (@ — упомянуть, Ctrl+Enter — отправить)"
+          @keydown="onKeydown"
+          @input="updateMentionState"
+          @keyup="onCaretKeyup"
+          @click="updateMentionState"
+          @blur="onInputBlur"
+        />
+      </div>
       <button class="send-btn" :disabled="sending || !draft.trim()" @click="send">
         <span class="material-symbols-outlined">send</span>
       </button>
@@ -467,6 +627,51 @@ onBeforeUnmount(() => {
   align-items: flex-end;
   flex-shrink: 0;
 }
+.comment-input-field {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+}
+
+/* Выпадающий список упоминаний — над полем ввода. */
+.mention-menu {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: calc(100% + 6px);
+  margin: 0;
+  padding: 4px;
+  list-style: none;
+  max-height: 240px;
+  overflow-y: auto;
+  background: var(--acrylic-card-bg);
+  -webkit-backdrop-filter: var(--acrylic-blur);
+  backdrop-filter: var(--acrylic-blur);
+  border: 1px solid var(--color-outline-dim);
+  border-radius: var(--radius-md, 12px);
+  box-shadow: var(--shadow-lg);
+  z-index: 20;
+}
+.mention-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  border-radius: var(--radius-sm, 8px);
+  cursor: pointer;
+}
+.mention-item.active { background: var(--color-surface-low); }
+.mention-ava { width: 26px; height: 26px; border-radius: 50%; object-fit: cover; flex-shrink: 0; }
+.mention-info { display: flex; flex-direction: column; min-width: 0; }
+.mention-fio {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--color-on-surface);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.mention-login { font-size: 11px; color: var(--color-on-surface-variant); }
 .send-btn {
   width: 40px;
   height: 40px;

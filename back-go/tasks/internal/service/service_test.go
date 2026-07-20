@@ -433,6 +433,14 @@ func (f *fakeStore) SoftDeleteComment(_ context.Context, id int64, at time.Time)
 }
 func (f *fakeStore) CountNewComments(_ context.Context, _, _ int64) (int, error) { return 0, nil }
 func (f *fakeStore) MarkCommentsSeen(_ context.Context, _, _ int64) error        { return nil }
+func (f *fakeStore) ResolveMentions(_ context.Context, _ int64, _ []string) (map[string]int64, error) {
+	return map[string]int64{}, nil
+}
+func (f *fakeStore) CreateMentions(_ context.Context, _, _ int64, _ []int64) error { return nil }
+func (f *fakeStore) MentionCounts(_ context.Context, _ []int64, _ int64) (map[int64]int, error) {
+	return map[int64]int{}, nil
+}
+func (f *fakeStore) MarkMentionsSeen(_ context.Context, _, _ int64) error { return nil }
 
 // — Остальные порты —
 
