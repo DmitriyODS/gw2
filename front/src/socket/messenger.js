@@ -57,6 +57,10 @@ export function registerMessengerSocketHandlers(socket) {
     useMessengerStore().applyPinChange(conversation_id, is_pinned)
   })
 
+  socket.on('chat_bg:updated', (payload) => {
+    useMessengerStore().applyChatBgUpdated(payload)
+  })
+
   socket.on('message:pin', ({ conversation_id, message_id, pinned, message }) => {
     useMessengerStore().applyMessagePin(conversation_id, message_id, pinned, message)
   })

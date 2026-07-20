@@ -705,6 +705,8 @@ function iconFor(mime) {
 .msg-input {
   position: relative;
   border-top: 1px solid var(--color-outline-dim);
+  /* Матовый полупрозрачный акрил поверх обоев чата. Без собственного
+     backdrop-filter (см. шапку .chat-header) — единый матовый вид панели. */
   background: var(--acrylic-card-bg);
   /* Safe-area под полем добавляет родитель (chat-panel / mini-thread), чтобы
      отступ не складывался дважды на мобильном. Сам ввод держим компактным. */

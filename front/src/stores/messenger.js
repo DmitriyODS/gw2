@@ -8,6 +8,7 @@ import { useCallStore } from './call.js'
 // Тот же приём с socket/index.js (он импортирует этот стор): getSocket
 // зовётся только из экшенов, когда модули уже инициализированы.
 import { getSocket } from '@/socket/index.js'
+import { normalizeRecipe } from '@/utils/chatBackgrounds.js'
 
 /* Сортировка: закреплённые сверху (по pinned_at desc), затем по
    last_message_at desc. Чистая функция, чтобы переиспользовать после каждого
@@ -67,6 +68,11 @@ export const useMessengerStore = defineStore('messenger', () => {
   // вкладка «Чаты» не видела сообщения из «Техподдержки».
   const supportInbox = ref([])
   const loadingSupportInbox = ref(false)
+  // Оформление чатов (личное, синк между устройствами). chatBgDefault — общий
+  // рецепт пользователя, chatBgByConv[convId] — переопределение конкретного чата.
+  // Хранятся нормализованными (форма — utils/chatBackgrounds.js).
+  const chatBgDefault = ref(null)
+  const chatBgByConv = ref({})
   let listSeq = 0
   let supportSeq = 0
   let listCtrl = null
@@ -773,6 +779,60 @@ export const useMessengerStore = defineStore('messenger', () => {
     return lastSeenById.value[userId] || fallback
   }
 
+  // ── Оформление чатов ──────────────────────────────────────────
+  async function fetchChatBackgrounds() {
+    try {
+      const data = await api.getChatBackgrounds()
+      chatBgDefault.value = normalizeRecipe(data?.default) || null
+      const map = {}
+      for (const [id, raw] of Object.entries(data?.overrides || {})) {
+        const r = normalizeRecipe(raw)
+        if (r) map[id] = r
+      }
+      chatBgByConv.value = map
+    } catch { /* оформление не критично для работы мессенджера */ }
+  }
+
+  // Эффективный рецепт чата: переопределение → общий дефолт → null (базовый фон).
+  function resolveChatBg(convId) {
+    if (convId != null && chatBgByConv.value[convId]) return chatBgByConv.value[convId]
+    return chatBgDefault.value
+  }
+
+  // Сохранить рецепт: convId === null — общий дефолт, иначе конкретный чат.
+  // Оптимистично применяем сразу; сокет-эхо для других устройств идемпотентно.
+  async function saveChatBackground(convId, recipe) {
+    const norm = normalizeRecipe(recipe)
+    if (convId == null) chatBgDefault.value = norm
+    else chatBgByConv.value = { ...chatBgByConv.value, [convId]: norm }
+    await api.setChatBackground(convId, recipe)
+  }
+
+  // Сбросить рецепт (для чата — вернуться к общему дефолту).
+  async function resetChatBackground(convId) {
+    if (convId == null) {
+      chatBgDefault.value = null
+    } else {
+      const { [convId]: _drop, ...rest } = chatBgByConv.value
+      chatBgByConv.value = rest
+    }
+    await api.deleteChatBackground(convId == null ? null : convId)
+  }
+
+  // Синк с других устройств (chat_bg:updated).
+  function applyChatBgUpdated({ conversation_id, recipe } = {}) {
+    const norm = recipe ? normalizeRecipe(recipe) : null
+    if (conversation_id == null) {
+      chatBgDefault.value = norm
+      return
+    }
+    if (norm) chatBgByConv.value = { ...chatBgByConv.value, [conversation_id]: norm }
+    else {
+      const { [conversation_id]: _drop, ...rest } = chatBgByConv.value
+      chatBgByConv.value = rest
+    }
+  }
+
   function reset() {
     conversations.value = []
     activeConversationId.value = null
@@ -783,6 +843,8 @@ export const useMessengerStore = defineStore('messenger', () => {
     groupReadsByConv.value = {}
     totalUnread.value = 0
     supportInbox.value = []
+    chatBgDefault.value = null
+    chatBgByConv.value = {}
     onlineIds.value = new Set()
     lastSeenById.value = {}
     typingByConv.value = {}
@@ -804,6 +866,8 @@ export const useMessengerStore = defineStore('messenger', () => {
     conversations, conversationById, activeConversationId, messagesByConv, totalUnread,
     pinnedByConv, membersByConv, groupReadsByConv,
     supportInbox, loadingSupportInbox, supportUnread,
+    chatBgDefault, chatBgByConv,
+    fetchChatBackgrounds, resolveChatBg, saveChatBackground, resetChatBackground, applyChatBgUpdated,
     loadingList, loadingMessages, sending, pendingDraft,
     onlineIds, lastSeenById,
     activeConversation, activeMessages, activePinned,

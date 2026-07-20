@@ -388,7 +388,9 @@ function onDelete() {
   gap: 10px;
   padding: 16px;
   border-radius: var(--radius-lg);
-  /* Карточка в потоке ленты: полупрозрачная подложка без blur (см. tokens.css). */
+  /* Карточка в потоке ленты: полупрозрачная подложка без blur (см. tokens.css).
+     Матовое стекло с blur включается ТОЛЬКО когда задана обложка ленты — правило
+     .main-content.has-feed-bg .post-card в main.css (иначе — как раньше). */
   background: var(--acrylic-card-bg);
   border: 1px solid var(--acrylic-border);
   box-shadow: var(--shadow-sm);

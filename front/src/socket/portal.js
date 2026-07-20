@@ -19,4 +19,7 @@ export function registerPortalSocketHandlers(socket) {
 
   socket.on('reaction:added', (p) => usePortalStore().applyReactionSocket('added', p))
   socket.on('reaction:removed', (p) => usePortalStore().applyReactionSocket('removed', p))
+
+  // Оформление ленты — адресно в комнату user_{id} (синк между устройствами).
+  socket.on('portal_bg:updated', (p) => usePortalStore().applyBackgroundUpdated(p))
 }

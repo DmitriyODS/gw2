@@ -27,6 +27,7 @@
       @dragleave.prevent="onDragLeave"
       @drop.prevent="onDrop"
     >
+      <ChatBackgroundLayer v-if="active" :recipe="activeChatBg" />
       <div v-if="dragOver && active" class="chat-drop-overlay">
         <span class="material-symbols-outlined">upload_file</span>
         <span>Отпустите файл — он прикрепится к сообщению</span>
@@ -157,6 +158,13 @@
                   {{ active.is_pinned ? 'keep_off' : 'keep' }}
                 </span>
                 <span>{{ active.is_pinned ? 'Открепить чат' : 'Закрепить чат' }}</span>
+              </button>
+              <button
+                class="chat-menu-item"
+                @click="onMenuAction(() => (chatBgOpen = true))"
+              >
+                <span class="material-symbols-outlined chat-menu-ico tone-tertiary">palette</span>
+                <span>Оформление чата</span>
               </button>
               <template v-if="active.is_group">
                 <div class="chat-menu-divider" />
@@ -292,6 +300,7 @@
       @left="onLeftGroup"
     />
     <MessageReadByDialog v-model="readByOpen" :message-id="readByMessageId" />
+    <ChatBackgroundDialog v-model="chatBgOpen" :conversation="active" />
 
     <ForwardDialog
       ref="forwardDialogRef"
@@ -362,6 +371,8 @@ import NewChatDialog from '@/components/messenger/NewChatDialog.vue'
 import NewGroupDialog from '@/components/messenger/NewGroupDialog.vue'
 import GroupInfoDialog from '@/components/messenger/GroupInfoDialog.vue'
 import MessageReadByDialog from '@/components/messenger/MessageReadByDialog.vue'
+import ChatBackgroundLayer from '@/components/messenger/ChatBackgroundLayer.vue'
+import ChatBackgroundDialog from '@/components/messenger/ChatBackgroundDialog.vue'
 import DeleteScopeDialog from '@/components/messenger/DeleteScopeDialog.vue'
 import ForwardDialog from '@/components/messenger/ForwardDialog.vue'
 import AttachTaskDialog from '@/components/messenger/AttachTaskDialog.vue'
@@ -403,6 +414,7 @@ const { isMobile } = useBreakpoint()
 const newChatOpen = ref(false)
 const newGroupOpen = ref(false)
 const groupInfoOpen = ref(false)
+const chatBgOpen = ref(false)
 const readByOpen = ref(false)
 const readByMessageId = ref(null)
 const attachTaskOpen = ref(false)
@@ -779,6 +791,7 @@ async function unpinMessage(message) {
 
 const activeId = computed(() => messenger.activeConversationId)
 const active = computed(() => messenger.activeConversation)
+const activeChatBg = computed(() => messenger.resolveChatBg(activeId.value))
 
 // Вышли из группы или распустили её — закрываем карточку и уходим из чата.
 function onLeftGroup() {
@@ -1097,6 +1110,10 @@ watch(() => route.params.conversationId, async (id) => {
   min-width: 0;
   min-height: 0;
   position: relative;
+  /* Стекинг-контекст, чтобы фон чата (.chat-bg, z-index:-1) прятался за контент,
+     не поднимая сам контент z-index'ом — иначе контекстные меню/поля ввода
+     попадают в ловушку stacking-контекста и уходят под ленту. */
+  isolation: isolate;
   background: var(--acrylic-card-bg);
   -webkit-backdrop-filter: var(--acrylic-blur);
   backdrop-filter: var(--acrylic-blur);
@@ -1134,8 +1151,12 @@ watch(() => route.params.conversationId, async (id) => {
   gap: 12px;
   padding: 12px 16px;
   border-bottom: 1px solid var(--color-outline-dim);
-  /* Панель уже акриловая — шапка прозрачная, без второго плотного слоя. */
-  background: transparent;
+  /* Матовое стекло, как нижняя панель ввода: полупрозрачный акриловый слой.
+     БЕЗ собственного backdrop-filter — иначе шапка становится backdrop-root и
+     ломает акрил выпадающего меню «⋮» (его blur перестаёт доставать до ленты)
+     и порядок слоёв (меню уходит под пузыри). Матовость даёт полупрозрачность
+     поверх обоев чата. */
+  background: var(--acrylic-card-bg);
   flex-shrink: 0;
 }
 
@@ -1359,7 +1380,8 @@ watch(() => route.params.conversationId, async (id) => {
   flex: 1;
   overflow-y: auto;
   padding: 16px;
-  background: var(--color-bg);
+  /* Фон даёт слой .chat-bg (градиент/узор) под лентой; сама лента прозрачна. */
+  background: transparent;
   min-height: 0;
 }
 

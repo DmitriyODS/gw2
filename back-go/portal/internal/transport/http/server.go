@@ -14,6 +14,7 @@ import (
 	"github.com/DmitriyODS/gw2/back-go/pkg/pasetoauth"
 	"github.com/DmitriyODS/gw2/back-go/portal/internal/domain"
 	"github.com/DmitriyODS/gw2/back-go/portal/internal/endpoint"
+	"github.com/DmitriyODS/gw2/back-go/portal/internal/service"
 )
 
 const uploadMaxBytes = 25 * 1024 * 1024
@@ -47,14 +48,14 @@ func authSource(users domain.UserReader) pasetoauth.AuthSource {
 	}
 }
 
-func NewServer(eps endpoint.Endpoints, users domain.UserReader,
+func NewServer(eps endpoint.Endpoints, svc *service.Service, users domain.UserReader,
 	verifier *pasetoauth.Verifier, log *slog.Logger) *Server {
 
 	app := httpserver.New(httpserver.Config{
 		AppName: "gw2-portalsvc", Log: log, BodyLimit: uploadMaxBytes + 1024*1024,
 	})
 	auth := pasetoauth.NewMiddleware(verifier, authSource(users))
-	h := &handlers{eps: eps, log: log}
+	h := &handlers{eps: eps, svc: svc, log: log}
 
 	employee := auth.RequireRole(domain.LevelEmployee)
 	admin := auth.RequireRole(domain.LevelAdmin)
@@ -90,6 +91,12 @@ func NewServer(eps endpoint.Endpoints, users domain.UserReader,
 	api.Get("/unread", employee, h.unreadCount)
 	api.Post("/seen", employee, h.markSeen)
 
+	// Личное оформление ленты (синк между устройствами) — только авторизация,
+	// без активной компании (фон общий для пользователя).
+	api.Get("/background", h.getBackground)
+	api.Put("/background", h.putBackground)
+	api.Delete("/background", h.deleteBackground)
+
 	return &Server{app: app}
 }
 
@@ -98,6 +105,7 @@ func (s *Server) Shutdown() error          { return s.app.Shutdown() }
 
 type handlers struct {
 	eps endpoint.Endpoints
+	svc *service.Service
 	log *slog.Logger
 }
 

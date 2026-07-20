@@ -2,11 +2,20 @@ package domain
 
 import (
 	"context"
+	"encoding/json"
 	"time"
 )
 
 // Ctx — алиас, чтобы сигнатуры портов не разбухали.
 type Ctx = context.Context
+
+// BackgroundRepository — персональное оформление ленты портала (одна строка
+// на пользователя). recipe — непрозрачный JSON, форму которого владеет фронт.
+type BackgroundRepository interface {
+	GetPortalBackground(ctx Ctx, userID int64) (json.RawMessage, error)
+	UpsertPortalBackground(ctx Ctx, userID int64, recipe []byte) error
+	DeletePortalBackground(ctx Ctx, userID int64) error
+}
 
 // TopicRepository — персистентность тематических разделов.
 type TopicRepository interface {
@@ -84,6 +93,7 @@ type Repository interface {
 	TopicRepository
 	PostRepository
 	SeenRepository
+	BackgroundRepository
 }
 
 // UserReader — read-only идентичность пользователей (владелец таблицы — authsvc).

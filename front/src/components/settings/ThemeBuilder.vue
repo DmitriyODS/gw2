@@ -150,6 +150,29 @@
       </Transition>
     </div>
 
+    <!-- Оформление чатов мессенджера -->
+    <div class="tb-card">
+      <div class="tb-card-head">
+        <div class="tb-card-head-icon" data-tone="tertiary">
+          <span class="material-symbols-outlined">chat_paste_go</span>
+        </div>
+        <div class="tb-card-head-text">
+          <h4 class="tb-card-title">Оформление чатов</h4>
+          <p class="tb-card-sub">
+            Общий градиент и узор-трафарет для фона всех чатов. В отдельном чате
+            фон можно переопределить через меню «⋮ → Оформление чата».
+          </p>
+        </div>
+      </div>
+      <div class="bgg-actions">
+        <button class="btn-grad-gen" @click="chatBgOpen = true" title="Настроить фон всех чатов">
+          <span class="material-symbols-outlined">palette</span>
+          Настроить фон чатов
+        </button>
+      </div>
+    </div>
+    <ChatBackgroundDialog v-model="chatBgOpen" :conversation="null" />
+
     <!-- Плавающая кнопка ассистента -->
     <div class="tb-card">
       <div class="tb-card-head">
@@ -380,11 +403,14 @@ import { onBeforeRouteLeave } from 'vue-router'
 import InputText from 'primevue/inputtext'
 import AppDialog from '@/components/common/AppDialog.vue'
 import TimePicker from '@/components/common/TimePicker.vue'
+import ChatBackgroundDialog from '@/components/messenger/ChatBackgroundDialog.vue'
 import { useThemeStore } from '@/stores/theme.js'
 import { useNotificationsStore } from '@/stores/notifications.js'
 
 const themeStore = useThemeStore()
 const notif = useNotificationsStore()
+
+const chatBgOpen = ref(false)
 
 /* Режим оформления: светлая / системная / тёмная. «Системная» следует за
    настройкой устройства и переключается на лету. */

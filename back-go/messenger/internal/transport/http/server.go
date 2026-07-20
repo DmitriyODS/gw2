@@ -81,6 +81,11 @@ func NewServer(eps endpoint.Endpoints, svc service.MessengerService, users domai
 	api.Get("/support-inbox", h.supportInbox)
 	api.Get("/unread", h.unread)
 
+	// Оформление чатов (личное, синк между устройствами).
+	api.Get("/chat-bg", h.getChatBackgrounds)
+	api.Put("/chat-bg", h.putChatBackground)
+	api.Delete("/chat-bg", h.deleteChatBackground)
+
 	// ── Группы ───────────────────────────────────────────────────
 	// Специфичные пути раньше :id<int>, чтобы не перехватывались (join/invite).
 	api.Post("/groups", h.createGroup)

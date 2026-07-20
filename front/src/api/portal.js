@@ -94,3 +94,12 @@ export const forwardPost = (postId, { conversationIds = [], userIds = [] } = {})
     method: 'POST',
     body: { conversation_ids: conversationIds, user_ids: userIds },
   })
+
+// ── Оформление ленты (личное, синк между устройствами) ──
+export const getBackground = () => apiRequest('/portal/background')
+
+export const setBackground = (recipe) =>
+  apiRequest('/portal/background', { method: 'PUT', body: { recipe } })
+
+export const deleteBackground = () =>
+  apiRequest('/portal/background', { method: 'DELETE' })

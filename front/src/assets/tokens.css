@@ -286,6 +286,10 @@
   --acrylic-bg:        color-mix(in oklch, var(--color-surface) 62%, transparent);
   --acrylic-bg-strong: color-mix(in oklch, var(--color-surface) 86%, transparent);
   --acrylic-blur:      blur(28px) saturate(1.7);
+  /* Полегче акрилового — для пузырей чата: их десятки, а за каждым лежат
+     обои чата (.chat-bg), которые ЕСТЬ что блюрить (в отличие от прочего
+     стекла в потоке — там за элементом ровный фон, см. --glass-bg). */
+  --bubble-blur:       blur(14px) saturate(1.5);
   --acrylic-border:    color-mix(in oklch, var(--color-outline-dim) 55%, transparent);
   /* Подложка карточек В ПОТОКЕ страницы: та же матовая плотность, что у
      плавающего стекла (эталон — окно мини-мессенджера), но БЕЗ backdrop-filter —

@@ -1,6 +1,8 @@
 <template>
-  <div class="admin-page">
-    <header class="admin-sticky">
+  <div class="admin-page" :class="{ 'has-panel': !isMobile }">
+    <!-- Единая стеклянная панель-хаб (как в «Ленте»/ежедневнике). -->
+    <div class="hub-panel">
+      <header class="admin-sticky">
       <!-- Тулбар одной строкой (как в «Ленте»): вкладки хаба, поиск, статы, фильтры. -->
       <div class="admin-toolbar">
         <PortalHubTabs class="emp-hub-tabs" />
@@ -116,6 +118,7 @@
         />
       </div>
     </div>
+    </div>
 
     <!-- Профиль сотрудника — общий компонент (используется и порталом). -->
     <EmployeeProfileDialog v-model="profileOpen" :user="selected" />
@@ -132,12 +135,14 @@ import { useMessengerStore } from '@/stores/messenger.js'
 import { useCallStore } from '@/stores/call.js'
 import { useNotificationsStore } from '@/stores/notifications.js'
 import { formatLastSeen } from '@/utils/presence.js'
+import { useBreakpoint } from '@/composables/useBreakpoint.js'
 import EmployeeProfileDialog from '@/components/common/EmployeeProfileDialog.vue'
 import SearchField from '@/components/common/SearchField.vue'
 import EmptyState from '@/components/common/EmptyState.vue'
 import RolePill from '@/components/common/RolePill.vue'
 import PortalHubTabs from '@/components/portal/PortalHubTabs.vue'
 const router = useRouter()
+const { isMobile } = useBreakpoint()
 const auth = useAuthStore()
 const companies = useCompaniesStore()
 const messenger = useMessengerStore()

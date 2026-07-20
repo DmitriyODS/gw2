@@ -268,8 +268,12 @@ onMounted(async () => {
     // Список диалогов нужен сразу после входа: бейдж непрочитанных, мини-чат
     // и корректный заголовок в push-уведомлении (иначе fio неизвестно).
     await messengerStore.fetchConversations().catch(() => {})
+    // Личное оформление чатов (градиенты/узоры) — синхронно с бэкендом.
+    messengerStore.fetchChatBackgrounds()
     // Бейдж непрочитанных постов портала — только при активной компании.
     if (authStore.companyId != null) portalStore.fetchUnread()
+    // Личное оформление ленты портала (градиент/узор/картинка) — синк с бэкендом.
+    portalStore.fetchBackground()
     // Если страницу перезагрузили во время звонка — звонок ещё «жив» на
     // сервере (grace-окно). Предложим вернуться к нему.
     callStore.checkRejoin()
@@ -381,6 +385,7 @@ onBeforeUnmount(() => {
   flex-direction: column;
   overflow: hidden;
 }
+
 
 .app-loading {
   flex: 1;

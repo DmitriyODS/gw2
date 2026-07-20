@@ -4,6 +4,7 @@
 package dto
 
 import (
+	"encoding/json"
 	"time"
 
 	"github.com/DmitriyODS/gw2/back-go/messenger/internal/domain"
@@ -437,4 +438,19 @@ type ConversationPinEvent struct {
 // клиент перечитывает группу).
 type GroupUpdatedEvent struct {
 	ConversationID int64 `json:"conversation_id"`
+}
+
+// ChatBackgroundsResponse — весь набор оформления чатов пользователя:
+// общий дефолт (может быть nil) и переопределения по чатам (ключ — id чата
+// строкой). Рецепт — сырой JSON фронта.
+type ChatBackgroundsResponse struct {
+	Default   json.RawMessage            `json:"default"`
+	Overrides map[string]json.RawMessage `json:"overrides"`
+}
+
+// ChatBackgroundEvent — chat_bg:updated (синк оформления между устройствами).
+// ConversationID nil — изменился общий дефолт. Recipe nil — рецепт снят.
+type ChatBackgroundEvent struct {
+	ConversationID *int64          `json:"conversation_id"`
+	Recipe         json.RawMessage `json:"recipe"`
 }

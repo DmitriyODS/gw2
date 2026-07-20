@@ -1,8 +1,13 @@
 <template>
   <!-- Общий каркас admin-page — та же геометрия, что у вкладки «Сотрудники»:
        переключение вкладок хаба не должно сдвигать интерфейс. -->
-  <div class="admin-page portal">
-    <header class="admin-sticky">
+  <div class="admin-page portal" :class="{ 'has-panel': !isMobile, 'has-bg': feedBgOn, 'bg-mobile': feedBgOn && isMobile }">
+    <!-- Стеклянная панель-хаб (как правая панель ежедневника): тулбар + лента
+         внутри. На десктопе — панель, на мобиле обёртка растворяется. -->
+    <div class="hub-panel">
+      <!-- Обои ленты внутри панели (клипаются скруглением); только десктоп. -->
+      <ChatBackgroundLayer v-if="feedBgOn" :recipe="store.background" />
+      <header class="admin-sticky">
       <div class="portal-toolbar">
         <PortalHubTabs class="portal-hub-tabs" />
         <SearchField
@@ -14,6 +19,15 @@
           @clear="clearSearch"
         />
 
+        <button
+          class="btn-glass portal-manage-btn"
+          title="Оформление ленты"
+          aria-label="Оформление ленты"
+          @click="bgDialogOpen = true"
+        >
+          <span class="material-symbols-outlined">palette</span>
+          <span class="portal-btn-label">Оформление</span>
+        </button>
         <button
           v-if="isAdmin()"
           class="btn-glass portal-manage-btn"
@@ -138,6 +152,7 @@
       </template>
       </div>
     </div>
+    </div>
 
     <AppFab
       :visible="isMobile && fabVisible"
@@ -149,6 +164,7 @@
     <PostComposer v-model="composerOpen" :post="editingPost" @saved="onSaved" />
     <ForwardPostDialog v-model="forwardOpen" :post="forwardingPost" @confirm="onForwardConfirm" />
     <TopicManageDialog v-model="topicsDialogOpen" />
+    <PortalBackgroundDialog v-model="bgDialogOpen" />
 
     <AppDialog
       v-model="deleteConfirmOpen"
@@ -183,6 +199,9 @@ import PostCard from '@/components/portal/PostCard.vue'
 import PostComposer from '@/components/portal/PostComposer.vue'
 import ForwardPostDialog from '@/components/portal/ForwardPostDialog.vue'
 import TopicManageDialog from '@/components/portal/TopicManageDialog.vue'
+import PortalBackgroundDialog from '@/components/portal/PortalBackgroundDialog.vue'
+import ChatBackgroundLayer from '@/components/messenger/ChatBackgroundLayer.vue'
+import { isBlankRecipe } from '@/utils/chatBackgrounds.js'
 
 const store = usePortalStore()
 const { isAdmin } = usePermission()
@@ -190,6 +209,11 @@ const route = useRoute()
 const { isMobile } = useBreakpoint()
 // Мобильный FAB «Написать пост»: прячется/появляется по прокрутке ленты.
 const { fabVisible } = useFabOnScroll()
+
+// Обои ленты активны при заданном НЕпустом фоне (и на десктопе внутри панели,
+// и на мобиле full-bleed — панели там нет, а фон показываем).
+const feedBgOn = computed(() =>
+  !!store.background && !isBlankRecipe(store.background))
 
 // ── Поиск (debounce, серверный ?search=) ──
 const searchInput = ref('')
@@ -270,6 +294,7 @@ async function doDelete() {
 }
 
 const topicsDialogOpen = ref(false)
+const bgDialogOpen = ref(false)
 
 // ── Пост по прямой ссылке /portal/:id (в т.ч. клик по пересланной плашке
 // в мессенджере). Живёт в сторе (реакции/комментарии/сокеты работают как в

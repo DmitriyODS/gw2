@@ -43,6 +43,7 @@ function resyncMessenger() {
         await messenger.fetchMessages(messenger.activeConversationId)
       }
       await messenger.fetchUnreadCount()
+      messenger.fetchChatBackgrounds()
     } catch {}
   })().finally(() => {
     resyncPromise = null

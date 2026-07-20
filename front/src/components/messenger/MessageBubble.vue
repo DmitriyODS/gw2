@@ -563,14 +563,18 @@ const joinLabel = computed(() => props.isMine ? 'Вернуться' : 'Прис
   opacity: 0.85;
 }
 
-/* Пузыри — матовое стекло: «иней» поверх полупрозрачного тонового слоя
-   (настоящий blur на десятках пузырей дорог, а внутри акриловой панели
-   чата и бесполезен — см. --glass-bg в tokens.css). Первые строки —
-   плотные фолбэки для браузеров без color-mix. */
+/* Пузыри — НАСТОЯЩЕЕ матовое стекло, как модалки: полупрозрачный тон +
+   backdrop-filter, который блюрит обои чата (.chat-bg лежит за пузырями внутри
+   backdrop-root панели). -webkit-backdrop-filter ПЕРЕД стандартным — иначе
+   минификатор LightningCSS выкидывает стандартное свойство. Первая строка
+   background — плотный фолбэк для браузеров без color-mix. */
 .msg-bubble {
   max-width: 70%;
   background: var(--color-surface-high);
-  background: var(--glass-bg), color-mix(in oklch, var(--color-surface-high) 55%, transparent);
+  background: color-mix(in oklch, var(--color-surface-high) 58%, transparent);
+  -webkit-backdrop-filter: var(--bubble-blur);
+  backdrop-filter: var(--bubble-blur);
+  border: 1px solid var(--acrylic-border);
   box-shadow: var(--glass-edge);
   color: var(--color-text);
   padding: 8px 12px;
@@ -581,10 +585,17 @@ const joinLabel = computed(() => props.isMine ? 'Вернуться' : 'Прис
 
 .msg-row.outgoing .msg-bubble {
   background: var(--color-primary-container);
-  background: var(--glass-bg), color-mix(in oklch, var(--color-primary-container) 55%, transparent);
+  background: color-mix(in oklch, var(--color-primary-container) 62%, transparent);
   color: var(--color-on-primary-container);
   border-top-left-radius: 20px;
   border-top-right-radius: 6px;
+}
+
+/* Браузеры без backdrop-filter (очень старые WebView) — пузыри непрозрачны,
+   иначе за полупрозрачным тоном обои проступят неразмытыми и текст «поплывёт». */
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .msg-bubble { background: var(--color-surface-high); }
+  .msg-row.outgoing .msg-bubble { background: var(--color-primary-container); }
 }
 
 .msg-text {

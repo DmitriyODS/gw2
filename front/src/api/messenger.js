@@ -122,3 +122,18 @@ export const openDevChat = () => apiRequest('/messenger/dev-chat')
 
 // Для Администратора системы: список чатов техподдержки всех пользователей.
 export const listSupportInbox = (options = {}) => apiRequest('/messenger/support-inbox', options)
+
+// ── Оформление чатов (личное, синк между устройствами) ────────────
+export const getChatBackgrounds = () => apiRequest('/messenger/chat-bg')
+
+// conversationId === null — общий дефолт пользователя.
+export const setChatBackground = (conversationId, recipe) =>
+  apiRequest('/messenger/chat-bg', {
+    method: 'PUT',
+    body: { conversation_id: conversationId ?? null, recipe },
+  })
+
+export const deleteChatBackground = (conversationId = null) => {
+  const qs = conversationId ? `?conversation_id=${conversationId}` : ''
+  return apiRequest(`/messenger/chat-bg${qs}`, { method: 'DELETE' })
+}

@@ -71,7 +71,7 @@ func main() {
 	})
 	eps := endpoint.New(svc)
 
-	httpServer := httptransport.NewServer(eps, users, verifier, log)
+	httpServer := httptransport.NewServer(eps, svc, users, verifier, log)
 
 	log.Info("listening", "http", httpAddr)
 	bootstrap.Run(ctx, log,

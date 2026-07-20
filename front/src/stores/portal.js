@@ -3,6 +3,7 @@ import { reactive, ref } from 'vue'
 import * as api from '@/api/portal.js'
 import { getDirectory } from '@/api/users.js'
 import { useAuthStore } from '@/stores/auth.js'
+import { normalizeRecipe } from '@/utils/chatBackgrounds.js'
 
 // Корпоративный портал (posts/topics/comments/reactions). Посты/комментарии
 // несут только author_id/pinned_by (числа, без снапшота ФИО/аватара) —
@@ -31,6 +32,9 @@ export const usePortalStore = defineStore('portal', () => {
   const viewingFeed = ref(false)
 
   const filters = reactive({ topicId: null, search: '', tag: null })
+
+  // Личное оформление ленты портала (нормализованный рецепт или null).
+  const background = ref(null)
 
   const authorMap = ref(new Map())
   const commentsByPost = reactive({})
@@ -504,8 +508,32 @@ export const usePortalStore = defineStore('portal', () => {
   }
 
   // Смена компании / логаут — данные прежней компании не должны утекать в UI.
+  // ── Оформление ленты ──────────────────────────────────────────
+  async function fetchBackground() {
+    try {
+      const data = await api.getBackground()
+      background.value = normalizeRecipe(data?.recipe) || null
+    } catch { /* оформление не критично для ленты */ }
+  }
+
+  async function saveBackground(recipe) {
+    background.value = normalizeRecipe(recipe)
+    await api.setBackground(recipe)
+  }
+
+  async function resetBackground() {
+    background.value = null
+    await api.deleteBackground()
+  }
+
+  // Синк с других устройств (portal_bg:updated).
+  function applyBackgroundUpdated({ recipe } = {}) {
+    background.value = recipe ? normalizeRecipe(recipe) : null
+  }
+
   function reset() {
     topics.value = []
+    background.value = null
     popularTags.value = []
     posts.value = []
     pinnedPosts.value = []
@@ -527,6 +555,7 @@ export const usePortalStore = defineStore('portal', () => {
     topics, popularTags, posts, pinnedPosts, highlight, loadingTopics, loadingPosts, filters,
     nextCursor, loadingMore,
     unread, viewingFeed, fetchUnread, markSeen,
+    background, fetchBackground, saveBackground, resetBackground, applyBackgroundUpdated,
     authorMap, commentsByPost, loadingComments,
     loadAuthors, resolveAuthor,
     fetchTopics, createTopic, updateTopic, deleteTopic,

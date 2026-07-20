@@ -5,7 +5,18 @@
 // таблицы (users, companies, tasks, calls) читаются read-only.
 package domain
 
-import "time"
+import (
+	"encoding/json"
+	"time"
+)
+
+// ChatBackground — персональный рецепт оформления чата. ConversationID == nil —
+// общий дефолт пользователя; иначе переопределение конкретного чата. Recipe —
+// непрозрачный для бэкенда JSON, форму которого владеет фронт.
+type ChatBackground struct {
+	ConversationID *int64
+	Recipe         json.RawMessage
+}
 
 // Сторона диалога: hidden_for_*/pinned_at_* раскладываются по сторонам
 // нормализованной пары user_a_id < user_b_id. Пустая сторона ("") в выборках
@@ -59,12 +70,12 @@ type Conversation struct {
 	InviteCode *string
 	// Проекция «для зрителя» — заполняется листингом/открытием группы из
 	// его строки conversation_members (актуальны только для конкретного userID).
-	MemberCount    int
-	MyRole         string
-	MyMuted        bool
-	MyPinnedAt     *time.Time
-	MyLastReadID   *int64
-	Members        []*Member // гидрируется по требованию (карточка группы)
+	MemberCount  int
+	MyRole       string
+	MyMuted      bool
+	MyPinnedAt   *time.Time
+	MyLastReadID *int64
+	Members      []*Member // гидрируется по требованию (карточка группы)
 }
 
 // IsSolo — чат без «второй стороны»: dev-чат техподдержки.

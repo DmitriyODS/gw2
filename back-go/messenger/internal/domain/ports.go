@@ -122,6 +122,14 @@ type Repository interface {
 	CreateAttachment(ctx context.Context, att *Attachment) error
 	GetAttachment(ctx context.Context, id int64) (*Attachment, error)
 
+	// ── Оформление чатов ─────────────────────────────────────────
+	// ListChatBackgrounds — все рецепты пользователя (дефолт + по чатам).
+	ListChatBackgrounds(ctx context.Context, userID int64) ([]*ChatBackground, error)
+	// UpsertChatBackground — сохранить рецепт (convID nil — общий дефолт).
+	UpsertChatBackground(ctx context.Context, userID int64, convID *int64, recipe []byte) error
+	// DeleteChatBackground — снять рецепт (convID nil — общий дефолт).
+	DeleteChatBackground(ctx context.Context, userID int64, convID *int64) error
+
 	// ── Read-only лукапы чужих таблиц ────────────────────────────
 	GetCall(ctx context.Context, id int64) (*CallInfo, error)
 	GetTask(ctx context.Context, id int64) (*TaskPreview, error)

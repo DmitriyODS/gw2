@@ -1067,6 +1067,68 @@ textarea.ctl.invalid:focus {
   overflow-y: auto;
 }
 
+/* ── Панель-хаб (единая для «Ленты» и «Сотрудников») ───────────────
+   Прямоугольная стеклянная панель по образцу правой панели ежедневника
+   (.split-main), БЕЗ левого списка: тулбар + прокручиваемое тело ВНУТРИ панели,
+   отступы как у ежедневника (16px снаружи, 16px внутри). Внутри — слой обоев
+   ленты (.chat-bg), клипается скруглением. На мобиле обёртка растворяется
+   (display:contents) — обычный поток без «штуки» и без обоев (has-panel не
+   ставится на мобиле). */
+.hub-panel { display: contents; }
+
+.admin-page.has-panel {
+  padding: 16px;            /* как split-view ежедневника (было 0 24px) */
+  max-width: none;          /* во всю ширину, как ежедневник (без центрирования) */
+}
+
+/* Мобильная лента с фоном: панели нет (hub-panel = display:contents), но обои
+   показываем full-bleed — слой .chat-bg становится ребёнком admin-page, значит
+   admin-page должен быть стекинг/backdrop-root и позиц. контекстом. */
+.admin-page.bg-mobile {
+  position: relative;
+  isolation: isolate;
+}
+
+.admin-page.has-panel .hub-panel {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: var(--acrylic-card-bg);
+  -webkit-backdrop-filter: var(--acrylic-blur);
+  backdrop-filter: var(--acrylic-blur);
+  border: 1px solid var(--acrylic-border);
+  border-radius: var(--radius-xl);
+}
+
+/* Тулбар и тело внутри панели: тулбар статичный сверху, тело скроллится;
+   горизонтальные отступы 18px как у контента ежедневника. */
+.admin-page.has-panel .hub-panel > .admin-sticky {
+  position: static;
+  padding: 16px 18px 12px;
+  background: transparent;
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+}
+.admin-page.has-panel .hub-panel > .admin-sticky::after { display: none; }
+
+.admin-page.has-panel .hub-panel > .admin-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 4px 18px 18px;
+}
+
+/* Карточки постов морозят обои ТОЛЬКО когда задан фон ленты (.has-bg): без него
+   панель сама стеклянная (подложка), карточки — прежняя плоская подложка.
+   -webkit- перед стандартным — LightningCSS иначе выкинет стандартное. */
+.admin-page.has-bg .post-card {
+  -webkit-backdrop-filter: var(--bubble-blur);
+  backdrop-filter: var(--bubble-blur);
+}
+
 @media (max-width: 768px) {
   /* У .main-content намеренно НЕТ mobile padding-bottom: резерв под нижнюю
      навигацию живёт внутри скролл-контента каждого раздела — тогда контент

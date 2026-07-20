@@ -5,6 +5,7 @@ package service
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log/slog"
 	"time"
@@ -53,6 +54,11 @@ type MessengerService interface {
 	OpenDevChat(ctx context.Context, userID int64, companyID *int64) (*dto.Conversation, error)
 	SupportInbox(ctx context.Context, userID int64) ([]*dto.ConversationListItem, error)
 	TotalUnread(ctx context.Context, userID int64) (int, error)
+
+	// Оформление чатов (личное, синк между устройствами).
+	GetChatBackgrounds(ctx context.Context, userID int64) (*dto.ChatBackgroundsResponse, error)
+	SetChatBackground(ctx context.Context, userID int64, convID *int64, recipe json.RawMessage) error
+	DeleteChatBackground(ctx context.Context, userID int64, convID *int64) error
 
 	// Группы.
 	CreateGroup(ctx context.Context, creatorID int64, title string, avatarAttID *int64, memberIDs []int64) (*dto.Conversation, error)

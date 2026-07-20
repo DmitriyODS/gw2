@@ -147,6 +147,8 @@
 
         <!-- Режим: переписка -->
         <template v-else>
+          <div class="mini-chat-wrap">
+          <ChatBackgroundLayer :recipe="activeChatBg" />
           <header class="mini-head">
             <button class="mini-icon" title="Назад" aria-label="Назад" @click="closeThread">
               <span class="material-symbols-outlined">arrow_back</span>
@@ -225,6 +227,7 @@
             @attach-task="attachTaskOpen = true"
             @typing="onTyping"
           />
+          </div>
         </template>
       </div>
     </transition>
@@ -328,6 +331,7 @@ import { groupMessagesByDay } from '@/utils/chatDates.js'
 import MessageBubble from './MessageBubble.vue'
 import MessageDateDivider from './MessageDateDivider.vue'
 import MessageInput from './MessageInput.vue'
+import ChatBackgroundLayer from './ChatBackgroundLayer.vue'
 import AssistantInput from './AssistantInput.vue'
 import ForwardDialog from './ForwardDialog.vue'
 import DeleteScopeDialog from './DeleteScopeDialog.vue'
@@ -494,6 +498,8 @@ watch(activeTab, (tab) => {
 const threadConv = computed(() =>
   messenger.conversationById.get(threadId.value) || null
 )
+
+const activeChatBg = computed(() => messenger.resolveChatBg(threadId.value))
 
 const threadOnline = computed(() => messenger.isOnline(threadConv.value?.other_user?.id))
 const threadTyping = computed(() =>
@@ -1167,6 +1173,19 @@ watch([open, activeTab], async ([isOpen, tab]) => {
   min-width: 20px;
   text-align: center;
   flex-shrink: 0;
+}
+
+/* Обёртка режима переписки: несёт слой оформления (.chat-bg, z-index:-1)
+   под шапкой/лентой/вводом. isolation — чтобы отрицательный слой не ушёл
+   за панель (как в MessengerView). */
+.mini-chat-wrap {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
 }
 
 .mini-thread {

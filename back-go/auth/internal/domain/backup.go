@@ -48,7 +48,7 @@ var BackupSections = []BackupSection{
 		"note_shares", "note_user_shares", "note_company_shares",
 		"folder_user_shares", "folder_company_shares"}},
 	{Key: "messenger", Tables: []string{"conversations", "conversation_members", "messages",
-		"message_attachments", "message_reactions"}},
+		"message_attachments", "message_reactions", "chat_backgrounds"}},
 	{Key: "calls", Tables: []string{"calls", "call_participants"}},
 	// Питомцы-грувики целиком: сам питомец, поглаживания, магазин, счётчики
 	// признания, сезонный трек, кудо-банк и приватная история.
@@ -58,7 +58,7 @@ var BackupSections = []BackupSection{
 		"pet_bank_fund_donations"}},
 	{Key: "portal", Tables: []string{"portal_topics", "portal_posts", "portal_post_tags",
 		"portal_comments", "portal_comment_likes", "portal_reactions", "portal_attachments",
-		"portal_post_views", "portal_seen"}},
+		"portal_post_views", "portal_seen", "portal_backgrounds"}},
 	{Key: "ai", Tables: []string{"ai_assistant_conversations", "ai_assistant_messages",
 		"ai_assistant_feedback"}},
 	{Key: "integration", Tables: []string{"user_yougile_accounts"}},

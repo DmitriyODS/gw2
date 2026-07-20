@@ -568,6 +568,16 @@ func (r *fakeRepo) GetAttachment(_ context.Context, id int64) (*domain.Attachmen
 	return &cp, nil
 }
 
+func (r *fakeRepo) ListChatBackgrounds(_ context.Context, _ int64) ([]*domain.ChatBackground, error) {
+	return nil, nil
+}
+func (r *fakeRepo) UpsertChatBackground(_ context.Context, _ int64, _ *int64, _ []byte) error {
+	return nil
+}
+func (r *fakeRepo) DeleteChatBackground(_ context.Context, _ int64, _ *int64) error {
+	return nil
+}
+
 func (r *fakeRepo) GetCall(_ context.Context, id int64) (*domain.CallInfo, error) {
 	c, ok := r.calls[id]
 	if !ok {

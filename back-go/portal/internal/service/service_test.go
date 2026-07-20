@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"encoding/json"
 	"io"
 	"log/slog"
 	"sort"
@@ -336,6 +337,12 @@ func (f *fakeRepo) CountPostsAfter(_ domain.Ctx, companyID, excludeAuthorID int6
 	}
 	return n, nil
 }
+
+func (f *fakeRepo) GetPortalBackground(_ domain.Ctx, _ int64) (json.RawMessage, error) {
+	return nil, nil
+}
+func (f *fakeRepo) UpsertPortalBackground(_ domain.Ctx, _ int64, _ []byte) error { return nil }
+func (f *fakeRepo) DeletePortalBackground(_ domain.Ctx, _ int64) error           { return nil }
 
 var _ domain.Repository = (*fakeRepo)(nil)
 
