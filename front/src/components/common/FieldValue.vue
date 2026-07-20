@@ -52,8 +52,28 @@
 
     <!-- Текст / число -->
     <template v-else>
-      <span v-if="value != null && value !== ''" class="fv-text">{{ value }}</span>
+      <div v-if="value != null && value !== ''" class="fv-textline">
+        <span class="fv-text">{{ value }}</span>
+        <button v-if="qrCode" class="fv-link-btn" title="Показать QR-код" @click="qrOpen = true">
+          <span class="material-symbols-outlined">qr_code_2</span>
+        </button>
+      </div>
       <span v-else class="fv-empty">—</span>
+
+      <AppDialog
+        v-if="qrCode"
+        v-model="qrOpen"
+        :title="field.label"
+        icon="qr_code_2"
+        size="sm"
+        :actions="[{ kind: 'cancel', label: 'Закрыть' }]"
+        @cancel="qrOpen = false"
+      >
+        <div class="fv-qr">
+          <QrImage :value="qrCode" :size="240" />
+          <span class="fv-qr-value">{{ qrCode }}</span>
+        </div>
+      </AppDialog>
     </template>
   </div>
 </template>
@@ -61,7 +81,9 @@
 <script setup>
 import { computed, ref } from 'vue'
 import ImageLightbox from '@/components/common/ImageLightbox.vue'
-import { formatDateTime } from '@/utils/registryFields.js'
+import AppDialog from '@/components/common/AppDialog.vue'
+import QrImage from '@/components/common/QrImage.vue'
+import { formatDateTime, hasQr, qrValue } from '@/utils/registryFields.js'
 import { useNotificationsStore } from '@/stores/notifications.js'
 
 const props = defineProps({
@@ -70,6 +92,8 @@ const props = defineProps({
 })
 
 const lightbox = ref(false)
+const qrOpen = ref(false)
+const qrCode = computed(() => (hasQr(props.field) ? qrValue(props.value) : ''))
 const src = computed(() => (props.value?.path ? `/uploads/${props.value.path}` : ''))
 const selectChips = computed(() => {
   const v = props.value
@@ -90,6 +114,11 @@ async function copyLink() {
 .fv-value { font-size: 14px; color: var(--color-text); word-break: break-word; }
 .fv-empty { color: var(--color-text-dim); }
 .fv-text { white-space: pre-wrap; }
+.fv-textline { display: flex; align-items: flex-start; gap: 6px; }
+.fv-textline .fv-text { flex: 1; min-width: 0; }
+.fv-textline .fv-link-btn { flex-shrink: 0; }
+.fv-qr { display: flex; flex-direction: column; align-items: center; gap: 12px; }
+.fv-qr-value { font-size: 14px; font-weight: 600; color: var(--color-text); text-align: center; word-break: break-all; }
 
 .fv-image {
   border: none;

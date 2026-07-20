@@ -73,6 +73,9 @@
                 </span>
 
                 <span class="rm-field-meta">
+                  <span v-if="hasQr(f)" class="rm-badge col" title="Показывается QR-кодом">
+                    <span class="material-symbols-outlined">qr_code_2</span>
+                  </span>
                   <span class="rm-badge" :title="`Ширина ${f.col_span} · высота ${f.row_span}`">{{ f.col_span }}×{{ f.row_span }}</span>
                   <span class="rm-badge col" :class="{ off: !f.show_in_table }" :title="f.show_in_table ? 'Показывается колонкой в таблице' : 'Скрыто из таблицы'">
                     <span class="material-symbols-outlined">{{ f.show_in_table ? 'visibility' : 'visibility_off' }}</span>
@@ -150,6 +153,14 @@
           <span class="fd-hint">Если задан — значение должно совпадать с шаблоном.</span>
         </label>
 
+        <div v-if="isQrCapable(draft.type)" class="fd-field">
+          <label class="fd-check"><Checkbox v-model="draft.config.qr" binary /> Показывать QR-код значения</label>
+          <span class="fd-hint">
+            В карточке появится QR по значению поля; такие поля можно печатать листами
+            и искать записи сканером.
+          </span>
+        </div>
+
         <div v-else-if="draft.type === 'select'" class="fd-field">
           <span class="fd-label">Варианты выбора</span>
           <div class="fd-options">
@@ -223,7 +234,7 @@ import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
 import * as api from '@/api/registries.js'
 import { useRegistriesStore } from '@/stores/registries.js'
 import { useNotificationsStore } from '@/stores/notifications.js'
-import { FIELD_TYPES, defaultConfig, fieldIcon, fieldLabel } from '@/utils/registryFields.js'
+import { FIELD_TYPES, defaultConfig, fieldIcon, fieldLabel, hasQr, isQrCapable } from '@/utils/registryFields.js'
 
 const store = useRegistriesStore()
 const notif = useNotificationsStore()
@@ -322,8 +333,8 @@ function cleanConfig(f) {
   if (f.type === 'select') {
     return { options: (f.config.options || []).map((s) => s.trim()).filter(Boolean), multiple: !!f.config.multiple }
   }
-  if (f.type === 'number') return { pattern: (f.config.pattern || '').trim() }
-  if (f.type === 'text') return { multiline: !!f.config.multiline }
+  if (f.type === 'number') return { pattern: (f.config.pattern || '').trim(), qr: !!f.config.qr }
+  if (f.type === 'text') return { multiline: !!f.config.multiline, qr: !!f.config.qr }
   if (f.type === 'datetime') return { year: !!f.config.year, month_day: !!f.config.month_day, time: !!f.config.time }
   return {}
 }

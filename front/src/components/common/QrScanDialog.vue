@@ -3,8 +3,8 @@
     :model-value="modelValue"
     icon="qr_code_scanner"
     size="sm"
-    title="Сканирование QR"
-    subtitle="Наведите камеру на QR-код входа"
+    :title="title"
+    :subtitle="subtitle"
     @update:modelValue="close"
   >
     <div class="scan-body">
@@ -13,7 +13,8 @@
         <div class="scan-frame"></div>
       </div>
       <p v-if="error" class="scan-error">{{ error }}</p>
-      <p v-else class="scan-hint">Держите код в рамке — распознаётся автоматически.</p>
+      <p v-else class="scan-hint">{{ hint }}</p>
+      <slot name="footer-note" />
     </div>
   </AppDialog>
 </template>
@@ -22,10 +23,17 @@
 import { ref, watch, onBeforeUnmount } from 'vue'
 import jsQR from 'jsqr'
 import AppDialog from '@/components/common/AppDialog.vue'
-import { extractLinkCode } from '@/utils/deviceLink.js'
 
 const props = defineProps({
   modelValue: { type: Boolean, default: false },
+  title: { type: String, default: 'Сканирование QR' },
+  subtitle: { type: String, default: '' },
+  hint: { type: String, default: 'Держите код в рамке — распознаётся автоматически.' },
+  // Фильтр-преобразователь распознанного текста: вернул пусто — код не наш,
+  // сканирование продолжается. По умолчанию годится любой непустой QR.
+  decode: { type: Function, default: (raw) => raw },
+  // Закрывать диалог после успешного распознавания.
+  closeOnDecode: { type: Boolean, default: true },
 })
 const emit = defineEmits(['update:modelValue', 'decoded'])
 
@@ -40,7 +48,7 @@ let ctx = null
 async function startCamera() {
   error.value = ''
   if (!navigator.mediaDevices?.getUserMedia) {
-    error.value = 'Камера недоступна на этом устройстве. Введите код вручную.'
+    error.value = 'Камера недоступна на этом устройстве.'
     return
   }
   try {
@@ -56,7 +64,7 @@ async function startCamera() {
     ctx = canvas.getContext('2d', { willReadFrequently: true })
     scanLoop()
   } catch {
-    error.value = 'Не удалось получить доступ к камере. Разрешите доступ или введите код вручную.'
+    error.value = 'Не удалось получить доступ к камере. Разрешите доступ в настройках браузера.'
   }
 }
 
@@ -72,11 +80,10 @@ function scanLoop() {
   const img = ctx.getImageData(0, 0, canvas.width, canvas.height)
   const found = jsQR(img.data, img.width, img.height, { inversionAttempts: 'dontInvert' })
   if (found?.data) {
-    const code = extractLinkCode(found.data)
-    if (code) {
-      emit('decoded', code)
-      close()
-      return
+    const value = props.decode(found.data)
+    if (value) {
+      emit('decoded', value)
+      if (props.closeOnDecode) { close(); return }
     }
   }
   rafId = requestAnimationFrame(scanLoop)

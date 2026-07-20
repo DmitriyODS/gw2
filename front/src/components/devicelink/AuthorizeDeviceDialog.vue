@@ -52,7 +52,12 @@
       <p v-if="error" class="ad-error">{{ error }}</p>
     </div>
 
-    <QrScanDialog v-model="scannerOpen" @decoded="onScanned" />
+    <QrScanDialog
+      v-model="scannerOpen"
+      subtitle="Наведите камеру на QR-код входа"
+      :decode="extractLinkCode"
+      @decoded="onScanned"
+    />
   </AppDialog>
 </template>
 
@@ -63,7 +68,7 @@ import { useAuthStore } from '@/stores/auth.js'
 import { linkInfo, linkApprove } from '@/api/devicelink.js'
 import { extractLinkCode, normalizeLinkCode } from '@/utils/deviceLink.js'
 import AppDialog from '@/components/common/AppDialog.vue'
-import QrScanDialog from './QrScanDialog.vue'
+import QrScanDialog from '@/components/common/QrScanDialog.vue'
 
 const props = defineProps({
   modelValue: { type: Boolean, default: false },

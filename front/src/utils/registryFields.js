@@ -34,9 +34,9 @@ export function fieldIcon(type) {
 // Конфиг по умолчанию для нового поля выбранного типа.
 export function defaultConfig(type) {
   switch (type) {
-    case 'number': return { pattern: '' }
+    case 'number': return { pattern: '', qr: false }
     case 'select': return { options: [], multiple: false }
-    case 'text': return { multiline: false }
+    case 'text': return { multiline: false, qr: false }
     case 'datetime': return { year: true, month_day: true, time: true }
     default: return {}
   }
@@ -84,4 +84,18 @@ export function isSortable(type) {
 // Экспортируется в xlsx всё, кроме картинок и файлов (их нельзя свести к ячейке).
 export function isExportable(type) {
   return type !== 'image' && type !== 'file'
+}
+
+// ── QR-коды ──
+// QR несёт значение поля как есть, поэтому поддерживаются только «плоские»
+// типы — текст и число (config.qr включает показ, печать и поиск по коду).
+export function isQrCapable(type) {
+  return type === 'text' || type === 'number'
+}
+export function hasQr(field) {
+  return isQrCapable(field?.type) && !!field?.config?.qr
+}
+// Значение поля в виде строки для QR ('' — кодировать нечего).
+export function qrValue(value) {
+  return value == null ? '' : String(value).trim()
 }

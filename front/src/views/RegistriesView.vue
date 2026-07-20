@@ -66,6 +66,14 @@
                 </template>
               </teleport>
             </div>
+            <template v-if="hasQrFields">
+              <button class="rg-icon-btn" title="Найти запись по QR-коду" @click="qrFindOpen = true">
+                <span class="material-symbols-outlined">qr_code_scanner</span>
+              </button>
+              <button class="rg-icon-btn" title="Печать QR-кодов" @click="qrPrintOpen = true">
+                <span class="material-symbols-outlined">print</span>
+              </button>
+            </template>
             <button class="rg-icon-btn" title="Внешние ссылки" @click="openShares">
               <span class="material-symbols-outlined">link</span>
             </button>
@@ -226,6 +234,18 @@
     />
 
     <RegistryRecordDialog v-model="dialogOpen" :registry="store.selected" :record="activeRecord" />
+
+    <RegistryQrFindDialog
+      v-model="qrFindOpen"
+      :registry="store.selected"
+      @found="openRecord"
+    />
+    <RegistryQrPrintDialog
+      v-model="qrPrintOpen"
+      :registry="store.selected"
+      :selected-ids="selectedIds"
+      :search="store.filters.search"
+    />
     <ConfirmDialog
       :visible="confirmBulk"
       header="Удалить выбранные записи?"
@@ -317,6 +337,8 @@ import { computed, onMounted, ref, watch } from 'vue'
 import Checkbox from 'primevue/checkbox'
 import Select from 'primevue/select'
 import RegistryRecordDialog from '@/components/registry/RegistryRecordDialog.vue'
+import RegistryQrFindDialog from '@/components/registry/RegistryQrFindDialog.vue'
+import RegistryQrPrintDialog from '@/components/registry/RegistryQrPrintDialog.vue'
 import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
 import AppDialog from '@/components/common/AppDialog.vue'
 import EmptyState from '@/components/common/EmptyState.vue'
@@ -327,7 +349,7 @@ import { useRegistriesStore } from '@/stores/registries.js'
 import { exportRecords, getShares, createShare, revokeShare } from '@/api/registries.js'
 import { useNotificationsStore } from '@/stores/notifications.js'
 import { useBreakpoint } from '@/composables/useBreakpoint.js'
-import { fieldIcon, isExportable, isSortable, textValue } from '@/utils/registryFields.js'
+import { fieldIcon, hasQr, isExportable, isSortable, textValue } from '@/utils/registryFields.js'
 
 const store = useRegistriesStore()
 const notif = useNotificationsStore()
@@ -381,6 +403,12 @@ function toggleCols() {
 }
 const dialogOpen = ref(false)
 const activeRecord = ref(null)
+
+// Кнопки QR появляются, только если в реестре есть поля с включённым QR.
+const qrFindOpen = ref(false)
+const qrPrintOpen = ref(false)
+const hasQrFields = computed(() => (store.selected?.fields || []).some(hasQr))
+
 const confirmBulk = ref(false)
 const selectedIds = ref(new Set())
 
