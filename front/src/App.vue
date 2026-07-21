@@ -302,6 +302,10 @@ watch(() => authStore.companyId, (id, prev) => {
   petsStore.reset()
   portalStore.reset()
   assistantStore.reset()
+  // Активный юнит покидаемой компании завершается в switchCompany; здесь
+  // пересинхронизируем баннер с бэкендом (страховка на случай, если стоп не
+  // прошёл, и на будущее — если появятся юниты, специфичные для компании).
+  unitsStore.fetchActiveUnit().catch(() => {})
   if (id != null && usesGroove.value) petsStore.fetchPet().catch(() => {})
   if (id != null) portalStore.fetchUnread()
 })

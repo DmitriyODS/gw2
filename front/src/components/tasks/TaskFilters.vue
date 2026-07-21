@@ -252,11 +252,12 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import Select from 'primevue/select'
 import Dialog from 'primevue/dialog'
 import DatePicker from 'primevue/datepicker'
 import { useTasksStore } from '@/stores/tasks.js'
+import { useAuthStore } from '@/stores/auth.js'
 import { getDepartments } from '@/api/departments.js'
 import { getStages } from '@/api/stages.js'
 import { useCompanySettings } from '@/composables/useCompanySettings.js'
@@ -275,6 +276,7 @@ const props = defineProps({
 defineEmits(['close'])
 
 const tasksStore = useTasksStore()
+const authStore = useAuthStore()
 const { usesStages } = useCompanySettings()
 
 const isMobileVisible = computed(() => props.mobileVisible)
@@ -337,7 +339,10 @@ const periods = [
   { label: 'Задать свой', value: 'custom' },
 ]
 
-onMounted(async () => {
+// Справочники панели фильтров — company-scoped; перезагружаем при монтировании
+// и при живой смене активной компании, иначе в фильтрах видны отделы/этапы/теги
+// покинутой компании.
+async function loadCatalogs() {
   try {
     const data = await getDepartments()
     departments.value = Array.isArray(data) ? data : (data.departments ?? data.items ?? [])
@@ -351,8 +356,17 @@ onMounted(async () => {
     } catch {
       stages.value = []
     }
+  } else {
+    stages.value = []
   }
-  await tasksStore.fetchTags()
+  await tasksStore.fetchTags({ force: true })
+}
+
+onMounted(loadCatalogs)
+
+watch(() => authStore.companyId, (id, prev) => {
+  if (prev == null || id === prev) return
+  loadCatalogs()
 })
 
 const showCustomDialog = ref(false)

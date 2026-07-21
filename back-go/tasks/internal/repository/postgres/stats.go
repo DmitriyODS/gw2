@@ -82,7 +82,10 @@ func (r *Repo) TasksByHours(ctx context.Context, start, end time.Time, companyID
 
 func (r *Repo) TasksByEmployees(ctx context.Context, start, end time.Time, companyID *int64) ([]domain.EmployeeHours, error) {
 	args := []any{start, end}
-	cond := memberCond(&args, companyID, "us.id")
+	// Скоуп по компании самого юнита (u.company_id), а не по членству автора:
+	// один аккаунт работает в нескольких компаниях, но каждый юнит принадлежит
+	// ровно одной — иначе часы из другой компании протекают в эту статистику.
+	cond := companyCond(&args, companyID, "u.company_id")
 	rows, err := r.pool.Query(ctx, `
 		SELECT us.id, us.fio, COUNT(DISTINCT u.task_id), COALESCE(SUM(`+hoursExpr+`), 0)
 		  FROM users us
@@ -159,7 +162,7 @@ func (r *Repo) ByDepartments(ctx context.Context, start, end time.Time, companyI
 
 func (r *Repo) ByUnitTypesPerUser(ctx context.Context, start, end time.Time, companyID *int64) ([]domain.UserUnitTypeStats, error) {
 	args := []any{start, end}
-	cond := memberCond(&args, companyID, "us.id")
+	cond := companyCond(&args, companyID, "u.company_id")
 	rows, err := r.pool.Query(ctx, `
 		SELECT us.id, us.fio, ut.id, ut.name,
 		       COALESCE(SUM(`+hoursExpr+`), 0), COUNT(DISTINCT u.task_id)

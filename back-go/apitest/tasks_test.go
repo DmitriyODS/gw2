@@ -613,6 +613,56 @@ func TestStatsConsistencyAndExport(t *testing.T) {
 	requireError(t, r, 400, "VALIDATION_ERROR", "мусорный период")
 }
 
+// Регрессия: один аккаунт в двух компаниях — часы юнита, отработанного в
+// компании A, не должны протекать в статистику компании B (скоуп по
+// units.company_id, а не по членству автора).
+func TestStatsNoCrossCompanyLeak(t *testing.T) {
+	adminA, companyA, deptA := newTaskCompany(t)
+	employee := newMember(t, adminA, companyA, roleEmployee)
+	typeA := createUnitType(t, adminA, uniq("Аналитика A "))
+
+	// Сотрудник отрабатывает 2 часа по задаче компании A.
+	taskA := createTask(t, adminA, deptA, "Задача A", nil)
+	employee.switchCompany(t, companyA)
+	uA := startUnit(t, employee, taskA, typeA, "работа A")
+	stopUnit(t, employee, uA)
+	setUnitTimes(t, employee, uA, "2026-07-01T10:00:00", "2026-07-01T12:00:00")
+
+	// Второй компанией того же сотрудника делаем членом (юнитов в ней нет).
+	adminB, companyB, _ := newTaskCompany(t)
+	addToCompany(t, adminB, companyB, employee, roleEmployee)
+
+	period := "?from=2020-01-01&to=2030-01-01"
+
+	// Статистика компании B: сотрудник в списке часов появляться не должен —
+	// его 2 часа принадлежат компании A.
+	r := tasksAPI.doJSON(t, http.MethodGet, "/api/stats/common"+period, adminB.Token, nil)
+	requireStatus(t, r, 200, "stats common B")
+	for _, it := range r.List("tasks_by_employees") {
+		m := it.(map[string]any)
+		if int64(m["user_id"].(float64)) == employee.ID {
+			t.Fatalf("часы сотрудника из компании A протекли в компанию B: %s", r.Raw)
+		}
+	}
+
+	// А в компании A его 2 часа на месте.
+	r = tasksAPI.doJSON(t, http.MethodGet, "/api/stats/common"+period, adminA.Token, nil)
+	requireStatus(t, r, 200, "stats common A")
+	found := false
+	for _, it := range r.List("tasks_by_employees") {
+		m := it.(map[string]any)
+		if int64(m["user_id"].(float64)) == employee.ID {
+			found = true
+			if m["total_hours"].(float64) != 2 {
+				t.Fatalf("часы сотрудника в компании A: %v", m)
+			}
+		}
+	}
+	if !found {
+		t.Fatalf("сотрудник пропал из статистики своей компании A: %s", r.Raw)
+	}
+}
+
 // ── YouGile: статус и вебхук без внешних вызовов ─────────────────
 
 func TestYougileStatusAndWebhook(t *testing.T) {

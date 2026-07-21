@@ -197,6 +197,13 @@ export const useAuthStore = defineStore('auth', () => {
   // профиля). Сторы данных перезагрузятся по watch на claims.company_id.
   async function switchCompany(targetCompanyId) {
     if (targetCompanyId === claims.value.company_id) return
+    // Активный юнит один на пользователя и принадлежит покидаемой компании —
+    // завершаем его ДО перевыпуска токена (после смены scope stopUnit ушёл бы
+    // уже с company_id новой компании), иначе он «протёк» бы в новую компанию.
+    try {
+      const { useUnitsStore } = await import('@/stores/units.js')
+      await useUnitsStore().stop()
+    } catch {}
     const data = await apiSwitchCompany(targetCompanyId)
     applySession(data)
     rememberCompany(targetCompanyId)
