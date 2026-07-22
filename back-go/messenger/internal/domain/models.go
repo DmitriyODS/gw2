@@ -115,6 +115,22 @@ func (c *Conversation) PinnedAtFor(userID int64) *time.Time {
 	return c.PinnedAtB
 }
 
+// Folder — личная папка чатов пользователя (по образцу Telegram). Кросс-
+// компанийна, синхронизируется между устройствами. ConversationIDs — ручные
+// привязки (chat_folder_items); авто-фильтры (Include*) вычисляет клиент по
+// уже загруженному списку чатов.
+type Folder struct {
+	ID              int64
+	OwnerID         int64
+	Title           string
+	Emoji           *string
+	Position        int
+	IncludePersonal bool
+	IncludeGroups   bool
+	IncludeUnread   bool
+	ConversationIDs []int64
+}
+
 // Member — участник группы (conversation_members).
 type Member struct {
 	ConversationID    int64

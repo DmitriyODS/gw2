@@ -23,8 +23,11 @@ type fakeRepo struct {
 	members map[int64]map[int64]*domain.Member // convID → userID → участник группы
 	users   *fakeUsers                         // ФИО для reply/forwarded_from
 
-	nextConv, nextMsg, nextAtt int64
-	now                        time.Time
+	folders     map[int64]*domain.Folder     // folderID → папка
+	folderItems map[int64]map[int64]bool      // folderID → set(convID)
+
+	nextConv, nextMsg, nextAtt, nextFolder int64
+	now                                    time.Time
 }
 
 func newFakeRepo(users *fakeUsers) *fakeRepo {
@@ -575,6 +578,133 @@ func (r *fakeRepo) UpsertChatBackground(_ context.Context, _ int64, _ *int64, _ 
 	return nil
 }
 func (r *fakeRepo) DeleteChatBackground(_ context.Context, _ int64, _ *int64) error {
+	return nil
+}
+
+// ── Папки чатов (in-memory) ──────────────────────────────────────
+func (r *fakeRepo) initFolders() {
+	if r.folders == nil {
+		r.folders = map[int64]*domain.Folder{}
+		r.folderItems = map[int64]map[int64]bool{}
+	}
+}
+
+func (r *fakeRepo) ListFolders(_ context.Context, ownerID int64) ([]*domain.Folder, error) {
+	r.initFolders()
+	var out []*domain.Folder
+	for _, f := range r.folders {
+		if f.OwnerID != ownerID {
+			continue
+		}
+		cp := *f
+		cp.ConversationIDs = []int64{}
+		for cid := range r.folderItems[f.ID] {
+			cp.ConversationIDs = append(cp.ConversationIDs, cid)
+		}
+		sort.Slice(cp.ConversationIDs, func(i, j int) bool { return cp.ConversationIDs[i] < cp.ConversationIDs[j] })
+		out = append(out, &cp)
+	}
+	sort.Slice(out, func(i, j int) bool {
+		if out[i].Position != out[j].Position {
+			return out[i].Position < out[j].Position
+		}
+		return out[i].ID < out[j].ID
+	})
+	return out, nil
+}
+
+func (r *fakeRepo) CountFolders(_ context.Context, ownerID int64) (int, error) {
+	r.initFolders()
+	n := 0
+	for _, f := range r.folders {
+		if f.OwnerID == ownerID {
+			n++
+		}
+	}
+	return n, nil
+}
+
+func (r *fakeRepo) CreateFolder(_ context.Context, f *domain.Folder) (int64, error) {
+	r.initFolders()
+	r.nextFolder++
+	pos := 0
+	for _, ef := range r.folders {
+		if ef.OwnerID == f.OwnerID && ef.Position >= pos {
+			pos = ef.Position + 1
+		}
+	}
+	cp := *f
+	cp.ID = r.nextFolder
+	cp.Position = pos
+	r.folders[cp.ID] = &cp
+	r.folderItems[cp.ID] = map[int64]bool{}
+	return cp.ID, nil
+}
+
+func (r *fakeRepo) UpdateFolder(_ context.Context, ownerID int64, f *domain.Folder) error {
+	r.initFolders()
+	ef, ok := r.folders[f.ID]
+	if !ok || ef.OwnerID != ownerID {
+		return nil
+	}
+	ef.Title = f.Title
+	ef.Emoji = f.Emoji
+	ef.IncludePersonal = f.IncludePersonal
+	ef.IncludeGroups = f.IncludeGroups
+	ef.IncludeUnread = f.IncludeUnread
+	return nil
+}
+
+func (r *fakeRepo) DeleteFolder(_ context.Context, ownerID, folderID int64) error {
+	r.initFolders()
+	if ef, ok := r.folders[folderID]; ok && ef.OwnerID == ownerID {
+		delete(r.folders, folderID)
+		delete(r.folderItems, folderID)
+	}
+	return nil
+}
+
+func (r *fakeRepo) ReorderFolders(_ context.Context, ownerID int64, orderedIDs []int64) error {
+	r.initFolders()
+	for pos, id := range orderedIDs {
+		if ef, ok := r.folders[id]; ok && ef.OwnerID == ownerID {
+			ef.Position = pos
+		}
+	}
+	return nil
+}
+
+func (r *fakeRepo) SetFolderItems(_ context.Context, ownerID, folderID int64, convIDs []int64) error {
+	r.initFolders()
+	if ef, ok := r.folders[folderID]; !ok || ef.OwnerID != ownerID {
+		return nil
+	}
+	items := map[int64]bool{}
+	for _, cid := range convIDs {
+		items[cid] = true
+	}
+	r.folderItems[folderID] = items
+	return nil
+}
+
+func (r *fakeRepo) AddFolderItem(_ context.Context, ownerID, folderID, convID int64) error {
+	r.initFolders()
+	if ef, ok := r.folders[folderID]; !ok || ef.OwnerID != ownerID {
+		return nil
+	}
+	if r.folderItems[folderID] == nil {
+		r.folderItems[folderID] = map[int64]bool{}
+	}
+	r.folderItems[folderID][convID] = true
+	return nil
+}
+
+func (r *fakeRepo) RemoveFolderItem(_ context.Context, ownerID, folderID, convID int64) error {
+	r.initFolders()
+	if ef, ok := r.folders[folderID]; !ok || ef.OwnerID != ownerID {
+		return nil
+	}
+	delete(r.folderItems[folderID], convID)
 	return nil
 }
 

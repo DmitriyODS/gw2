@@ -50,6 +50,7 @@
 
 <script setup>
 import { computed, nextTick, ref, watch, onMounted, onBeforeUnmount } from 'vue'
+import { fitToViewport } from '@/utils/menuPlacement.js'
 
 const props = defineProps({
   visible: { type: Boolean, default: false },
@@ -76,12 +77,14 @@ const QUICK_REACTIONS = [
 const emit = defineEmits(['close', 'action', 'react'])
 const menuEl = ref(null)
 const pos = ref({ x: 0, y: 0 })
+const maxH = ref(null)
 
 const style = computed(() => ({
   position: 'fixed',
   left: pos.value.x + 'px',
   top: pos.value.y + 'px',
   zIndex: 12000,
+  ...(maxH.value ? { maxHeight: maxH.value + 'px', overflowY: 'auto' } : {}),
 }))
 
 let openedAt = 0
@@ -90,19 +93,15 @@ watch(() => props.visible, async (v) => {
   if (!v) return
   openedAt = Date.now()
   pos.value = { x: props.x, y: props.y }
+  maxH.value = null
   await nextTick()
-  // Кламп в вьюпорт, чтобы меню не выезжало за край.
+  // Размещаем так, чтобы не обрезаться краем; если выше вьюпорта — ужимаем со
+  // скроллом (общий хелпер, что и у контекстного меню чата).
   const el = menuEl.value
   if (!el) return
-  const r = el.getBoundingClientRect()
-  const pad = 8
-  let nx = pos.value.x
-  let ny = pos.value.y
-  if (nx + r.width > window.innerWidth - pad) nx = window.innerWidth - r.width - pad
-  if (ny + r.height > window.innerHeight - pad) ny = window.innerHeight - r.height - pad
-  if (nx < pad) nx = pad
-  if (ny < pad) ny = pad
-  pos.value = { x: nx, y: ny }
+  const p = fitToViewport(el, { x: props.x, y: props.y, pad: 8 })
+  pos.value = { x: p.left, y: p.top }
+  maxH.value = p.maxHeight
 })
 
 // Тап-открытие: следом за touchend браузер шлёт ЭМУЛИРОВАННЫЙ click в ту же

@@ -73,6 +73,10 @@ export const useMessengerStore = defineStore('messenger', () => {
   // Хранятся нормализованными (форма — utils/chatBackgrounds.js).
   const chatBgDefault = ref(null)
   const chatBgByConv = ref({})
+  // Папки чатов (личные, по образцу Telegram). activeFolderId === null —
+  // виртуальная папка «Все чаты». folders хранятся отсортированными по position.
+  const folders = ref([])
+  const activeFolderId = ref(null)
   let listSeq = 0
   let supportSeq = 0
   let listCtrl = null
@@ -833,8 +837,109 @@ export const useMessengerStore = defineStore('messenger', () => {
     }
   }
 
+  // ── Папки чатов ───────────────────────────────────────────────
+  function sortFolders(list) {
+    return [...list].sort((a, b) => (a.position - b.position) || (a.id - b.id))
+  }
+
+  async function fetchFolders() {
+    try {
+      folders.value = sortFolders(await api.listFolders())
+    } catch { /* папки не критичны для работы мессенджера */ }
+  }
+
+  // folders:changed с другого устройства — перечитываем.
+  function applyFoldersChanged() {
+    fetchFolders()
+  }
+
+  function setActiveFolder(folderId) {
+    activeFolderId.value = folderId
+  }
+
+  async function createFolderAction(payload) {
+    const f = await api.createFolder(payload)
+    upsertFolder(f)
+    return f
+  }
+
+  async function updateFolderAction(folderId, payload) {
+    const f = await api.updateFolder(folderId, payload)
+    upsertFolder(f)
+    return f
+  }
+
+  async function deleteFolderAction(folderId) {
+    await api.deleteFolder(folderId)
+    folders.value = folders.value.filter(f => f.id !== folderId)
+    if (activeFolderId.value === folderId) activeFolderId.value = null
+  }
+
+  async function reorderFoldersAction(orderedIds) {
+    folders.value = sortFolders(
+      folders.value.map(f => ({ ...f, position: orderedIds.indexOf(f.id) }))
+    )
+    await api.reorderFolders(orderedIds)
+  }
+
+  // Быстрое добавить/убрать чат в папку из контекстного действия списка.
+  async function addToFolder(folderId, conversationId) {
+    const f = folders.value.find(x => x.id === folderId)
+    if (f && !f.conversation_ids.includes(conversationId)) {
+      f.conversation_ids = [...f.conversation_ids, conversationId]
+    }
+    await api.addFolderItem(folderId, conversationId)
+  }
+
+  async function removeFromFolder(folderId, conversationId) {
+    const f = folders.value.find(x => x.id === folderId)
+    if (f) f.conversation_ids = f.conversation_ids.filter(id => id !== conversationId)
+    await api.removeFolderItem(folderId, conversationId)
+  }
+
+  // Идемпотентный upsert по id (оптимизм + сокет-эхо не задваивают).
+  function upsertFolder(f) {
+    const idx = folders.value.findIndex(x => x.id === f.id)
+    if (idx === -1) folders.value = sortFolders([...folders.value, f])
+    else {
+      const next = [...folders.value]
+      next[idx] = f
+      folders.value = sortFolders(next)
+    }
+  }
+
+  // Подходит ли чат под папку: ручная привязка ∪ включённые авто-фильтры.
+  function convInFolder(conv, folder) {
+    if (folder.conversation_ids?.includes(conv.id)) return true
+    if (folder.include_personal && !conv.is_group && !conv.is_dev_chat) return true
+    if (folder.include_groups && conv.is_group) return true
+    if (folder.include_unread && (conv.unread_count || 0) > 0) return true
+    return false
+  }
+
+  // Отфильтрованный список чатов для папки (null — все).
+  function conversationsInFolder(folderId) {
+    if (folderId == null) return conversations.value
+    const folder = folders.value.find(f => f.id === folderId)
+    if (!folder) return conversations.value
+    return conversations.value.filter(c => convInFolder(c, folder))
+  }
+
+  // Непрочитанные в папке (для бейджа на табе).
+  function folderUnread(folderId) {
+    if (folderId == null) {
+      return conversations.value.reduce((s, c) => s + (c.unread_count || 0), 0)
+    }
+    const folder = folders.value.find(f => f.id === folderId)
+    if (!folder) return 0
+    return conversations.value.reduce(
+      (s, c) => s + (convInFolder(c, folder) ? (c.unread_count || 0) : 0), 0)
+  }
+
   function reset() {
     conversations.value = []
+    folders.value = []
+    activeFolderId.value = null
     activeConversationId.value = null
     messagesByConv.value = {}
     hasMoreHistoryByConv.value = {}
@@ -868,6 +973,11 @@ export const useMessengerStore = defineStore('messenger', () => {
     supportInbox, loadingSupportInbox, supportUnread,
     chatBgDefault, chatBgByConv,
     fetchChatBackgrounds, resolveChatBg, saveChatBackground, resetChatBackground, applyChatBgUpdated,
+    // Папки чатов.
+    folders, activeFolderId,
+    fetchFolders, applyFoldersChanged, setActiveFolder,
+    createFolderAction, updateFolderAction, deleteFolderAction, reorderFoldersAction,
+    addToFolder, removeFromFolder, conversationsInFolder, folderUnread,
     loadingList, loadingMessages, sending, pendingDraft,
     onlineIds, lastSeenById,
     activeConversation, activeMessages, activePinned,

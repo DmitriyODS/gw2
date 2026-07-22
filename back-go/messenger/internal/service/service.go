@@ -60,6 +60,15 @@ type MessengerService interface {
 	SetChatBackground(ctx context.Context, userID int64, convID *int64, recipe json.RawMessage) error
 	DeleteChatBackground(ctx context.Context, userID int64, convID *int64) error
 
+	// Папки чатов (личная навигация, синк между устройствами).
+	ListFolders(ctx context.Context, userID int64) ([]*dto.Folder, error)
+	CreateFolder(ctx context.Context, userID int64, in dto.FolderInput) (*dto.Folder, error)
+	UpdateFolder(ctx context.Context, userID, folderID int64, in dto.FolderInput) (*dto.Folder, error)
+	DeleteFolder(ctx context.Context, userID, folderID int64) error
+	ReorderFolders(ctx context.Context, userID int64, orderedIDs []int64) error
+	AddFolderItem(ctx context.Context, userID, folderID, convID int64) error
+	RemoveFolderItem(ctx context.Context, userID, folderID, convID int64) error
+
 	// Группы.
 	CreateGroup(ctx context.Context, creatorID int64, title string, avatarAttID *int64, memberIDs []int64) (*dto.Conversation, error)
 	GetGroup(ctx context.Context, convID, userID int64) (*dto.Conversation, error)

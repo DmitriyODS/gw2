@@ -137,3 +137,24 @@ export const deleteChatBackground = (conversationId = null) => {
   const qs = conversationId ? `?conversation_id=${conversationId}` : ''
   return apiRequest(`/messenger/chat-bg${qs}`, { method: 'DELETE' })
 }
+
+// ── Папки чатов (личная навигация, синк между устройствами) ───────
+export const listFolders = () => apiRequest('/messenger/folders')
+
+export const createFolder = (payload) =>
+  apiRequest('/messenger/folders', { method: 'POST', body: payload })
+
+export const updateFolder = (folderId, payload) =>
+  apiRequest(`/messenger/folders/${folderId}`, { method: 'PATCH', body: payload })
+
+export const deleteFolder = (folderId) =>
+  apiRequest(`/messenger/folders/${folderId}`, { method: 'DELETE' })
+
+export const reorderFolders = (order) =>
+  apiRequest('/messenger/folders/reorder', { method: 'POST', body: { order } })
+
+export const addFolderItem = (folderId, conversationId) =>
+  apiRequest(`/messenger/folders/${folderId}/items`, { method: 'POST', body: { conversation_id: conversationId } })
+
+export const removeFolderItem = (folderId, conversationId) =>
+  apiRequest(`/messenger/folders/${folderId}/items/${conversationId}`, { method: 'DELETE' })

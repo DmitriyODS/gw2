@@ -1,5 +1,7 @@
 <template>
-  <aside class="conv-list" :class="{ 'is-mobile-hidden': hideOnMobile }">
+  <aside class="conv-list" :class="{ 'is-mobile-hidden': hideOnMobile, 'has-rail': showFolders && !isMobile }">
+    <ChatFolders v-if="showFolders && !isMobile" orientation="vertical" class="conv-rail" />
+    <div class="conv-main">
     <div class="conv-list-header">
       <h2>{{ headerTitle }}</h2>
       <div class="header-actions">
@@ -20,6 +22,9 @@
         >
           <span class="material-symbols-outlined">video_call</span>
         </button>
+        <button v-if="tab !== 'support'" class="new-btn new-btn--folders" @click="folderManageOpen = true" title="Папки с чатами">
+          <span class="material-symbols-outlined">folder</span>
+        </button>
         <button v-if="tab !== 'support'" class="new-btn new-btn--group" @click="$emit('new-group')" title="Новая группа">
           <span class="material-symbols-outlined">group_add</span>
         </button>
@@ -30,6 +35,7 @@
     </div>
 
     <UserStatusDialog v-model="statusOpen" />
+    <FolderManageDialog v-model="folderManageOpen" />
 
     <!-- Сегментированные табы «Чаты / Техподдержка». Для рут-админа во вкладке
          «Техподдержка» — inbox обращений; для всех остальных — личный dev-чат
@@ -42,6 +48,8 @@
         @update:model-value="onTab"
       />
     </div>
+
+    <ChatFolders v-if="showFolders && isMobile" orientation="horizontal" />
 
     <div class="conv-search">
       <span class="material-symbols-outlined">search</span>
@@ -58,11 +66,11 @@
     <EmptyState
       v-else-if="!visible.length"
       class="conv-empty--rich"
-      :icon="filter ? 'person_search' : (tab === 'support' ? 'support_agent' : 'forum')"
-      :title="filter ? 'Никого не нашли' : (tab === 'support' ? 'Обращений пока нет' : 'Тут пока тишина')"
+      :icon="emptyInFolder ? 'folder_open' : (filter ? 'person_search' : (tab === 'support' ? 'support_agent' : 'forum'))"
+      :title="emptyInFolder ? 'В этой папке пусто' : (filter ? 'Никого не нашли' : (tab === 'support' ? 'Обращений пока нет' : 'Тут пока тишина'))"
       :subtitle="emptySub"
     >
-      <button v-if="!filter && tab !== 'support'" class="btn-filled-tonal" @click="$emit('new-chat')">
+      <button v-if="!filter && tab !== 'support' && !emptyInFolder" class="btn-filled-tonal" @click="$emit('new-chat')">
         <span class="material-symbols-outlined">edit_square</span>
         Начать переписку
       </button>
@@ -73,7 +81,11 @@
         :key="c.id"
         class="conv-item"
         :class="{ active: c.id === activeId, unread: c.unread_count > 0, pinned: c.is_pinned }"
-        @click="$emit('select', c.id)"
+        @click="onItemClick(c)"
+        @contextmenu.prevent="openCtxMenu(c, $event.clientX, $event.clientY)"
+        @touchstart.passive="onTouchStart(c, $event)"
+        @touchend="onTouchEnd"
+        @touchmove.passive="onTouchMove"
       >
         <!-- Аватар. В support-inbox у админа аватар = фото владельца, не
              support_agent (иконка дублировала бы вкладку). У владельца —
@@ -128,43 +140,215 @@
             </span>
           </div>
         </div>
-        <!-- Действия pin/delete. Чат техподдержки нельзя ни закрепить, ни удалить. -->
-        <div v-if="!c.is_dev_chat" class="conv-actions" @click.stop>
-          <button
-            class="conv-action"
-            :class="{ active: c.is_pinned }"
-            :title="c.is_pinned ? 'Открепить' : 'Закрепить'"
-            @click="$emit('toggle-pin', c.id); $event.currentTarget.blur()"
-          >
-            <span class="material-symbols-outlined">{{ c.is_pinned ? 'keep_off' : 'keep' }}</span>
-          </button>
-          <button
-            class="conv-action danger"
-            title="Удалить чат"
-            @click="$emit('delete', c); $event.currentTarget.blur()"
-          >
-            <span class="material-symbols-outlined">delete</span>
-          </button>
-        </div>
       </li>
     </ul>
+    </div>
+
+    <!-- Контекстное меню чата: ПКМ (десктоп) / долгое нажатие (мобила).
+         Действия pin/delete + раскладка по папкам. Размещается так, чтобы не
+         обрезаться краем экрана, и ужимается со скроллом, если выше вьюпорта. -->
+    <Teleport to="body">
+      <div v-if="ctxMenu.visible" class="cm-mask" @click="closeCtxMenu" @contextmenu.prevent="closeCtxMenu">
+        <div
+          ref="ctxMenuEl"
+          class="cm-menu"
+          :style="ctxMenu.style"
+          @click.stop
+        >
+          <!-- Основной вид -->
+          <template v-if="ctxMenu.view === 'main'">
+            <div class="cm-title">{{ ctxTitle }}</div>
+
+            <button v-if="!ctxMenu.conv?.is_dev_chat" class="cm-item" @click="ctxTogglePin">
+              <span class="material-symbols-outlined cm-ico" :class="{ 'tone-tertiary': ctxMenu.conv?.is_pinned }">
+                {{ ctxMenu.conv?.is_pinned ? 'keep_off' : 'keep' }}
+              </span>
+              <span>{{ ctxMenu.conv?.is_pinned ? 'Открепить чат' : 'Закрепить чат' }}</span>
+            </button>
+
+            <button v-if="messenger.folders.length" class="cm-item" @click="openFoldersView">
+              <span class="material-symbols-outlined cm-ico tone-tertiary">folder</span>
+              <span>В папку</span>
+              <span class="material-symbols-outlined cm-arrow">chevron_right</span>
+            </button>
+
+            <template v-if="!ctxMenu.conv?.is_dev_chat">
+              <div class="cm-divider" />
+              <button class="cm-item danger" @click="ctxDelete">
+                <span class="material-symbols-outlined cm-ico tone-error">delete</span>
+                <span>Удалить чат</span>
+              </button>
+            </template>
+          </template>
+
+          <!-- Вложенный вид: список папок -->
+          <template v-else>
+            <button class="cm-item cm-back" @click="backToMain">
+              <span class="material-symbols-outlined cm-ico">arrow_back</span>
+              <span>В папку</span>
+            </button>
+            <div class="cm-divider" />
+            <button
+              v-for="f in messenger.folders"
+              :key="f.id"
+              class="cm-item"
+              @click="toggleFolder(f)"
+            >
+              <span class="cm-emoji">
+                <EmojiGlyph v-if="f.emoji" :char="f.emoji" class="cm-emoji-glyph" />
+                <span v-else class="material-symbols-outlined">folder</span>
+              </span>
+              <span class="cm-name">{{ f.title }}</span>
+              <span class="cm-check material-symbols-outlined">
+                {{ inFolder(f) ? 'check_box' : 'check_box_outline_blank' }}
+              </span>
+            </button>
+          </template>
+        </div>
+      </div>
+    </Teleport>
   </aside>
 </template>
 
 <script setup>
-import { ref, computed } from 'vue'
+import { ref, computed, nextTick } from 'vue'
+import { fitToViewport } from '@/utils/menuPlacement.js'
 import BrandLoader from '@/components/common/BrandLoader.vue'
 import SegmentedTabs from '@/components/common/SegmentedTabs.vue'
 import EmptyState from '@/components/common/EmptyState.vue'
+import EmojiGlyph from '@/components/common/EmojiGlyph.vue'
+import ChatFolders from './ChatFolders.vue'
+import FolderManageDialog from './FolderManageDialog.vue'
 import UserStatusDialog from './UserStatusDialog.vue'
 import { useMessengerStore } from '@/stores/messenger.js'
 import { useAuthStore } from '@/stores/auth.js'
+import { useBreakpoint } from '@/composables/useBreakpoint.js'
 import { stripMarkdown } from '@/utils/markdown.js'
 
 const messenger = useMessengerStore()
 const auth = useAuthStore()
+const { isMobile } = useBreakpoint()
+
+// Папки — только на вкладке «Чаты» (не в support-inbox) и когда они есть.
+const showFolders = computed(() => props.tab === 'chats' && messenger.folders.length > 0)
+
+// ── Контекстное меню чата (ПКМ на десктопе / long-press на мобиле) ──
+const ctxMenu = ref({ visible: false, conv: null, view: 'main', anchor: { x: 0, y: 0 }, style: {} })
+const ctxMenuEl = ref(null)
+
+const ctxTitle = computed(() => {
+  const c = ctxMenu.value.conv
+  if (!c) return ''
+  if (c.is_dev_chat) return 'Техподдержка'
+  if (c.is_group) return c.title || 'Группа'
+  return c.other_user?.fio || 'Чат'
+})
+
+async function openCtxMenu(conv, x, y) {
+  // Для dev-чата доступна только раскладка по папкам — без них меню пустое.
+  if (conv.is_dev_chat && !messenger.folders.length) return
+  ctxMenu.value = {
+    visible: true,
+    conv,
+    view: 'main',
+    anchor: { x, y },
+    // Стартовая позиция у точки вызова; уточним после измерения.
+    style: { position: 'fixed', left: x + 'px', top: y + 'px', visibility: 'hidden' },
+  }
+  await placeCtxMenu()
+}
+
+// Пересчёт позиции меню после рендера/смены вида (высота меняется).
+async function placeCtxMenu() {
+  await nextTick()
+  const el = ctxMenuEl.value
+  if (!el) return
+  const { x, y } = ctxMenu.value.anchor
+  const p = fitToViewport(el, { x, y, pad: 8 })
+  ctxMenu.value.style = {
+    position: 'fixed',
+    left: p.left + 'px',
+    top: p.top + 'px',
+    width: p.width + 'px',
+    maxHeight: p.maxHeight + 'px',
+  }
+}
+
+function openFoldersView() {
+  ctxMenu.value.view = 'folders'
+  placeCtxMenu()
+}
+function backToMain() {
+  ctxMenu.value.view = 'main'
+  placeCtxMenu()
+}
+
+function closeCtxMenu() {
+  ctxMenu.value.visible = false
+}
+
+function ctxTogglePin() {
+  emit('toggle-pin', ctxMenu.value.conv.id)
+  closeCtxMenu()
+}
+
+function ctxDelete() {
+  emit('delete', ctxMenu.value.conv)
+  closeCtxMenu()
+}
+
+function inFolder(f) {
+  return !!ctxMenu.value.conv && f.conversation_ids.includes(ctxMenu.value.conv.id)
+}
+function toggleFolder(f) {
+  const conv = ctxMenu.value.conv
+  if (!conv) return
+  if (inFolder(f)) messenger.removeFromFolder(f.id, conv.id)
+  else messenger.addToFolder(f.id, conv.id)
+  // Меню не закрываем — можно разложить чат сразу по нескольким папкам.
+}
+
+// ── Long-press на тач-устройствах ──
+let pressTimer = null
+let pressStart = null
+let suppressClick = false
+
+function onTouchStart(conv, e) {
+  const t = e.touches?.[0]
+  if (!t) return
+  pressStart = { x: t.clientX, y: t.clientY }
+  suppressClick = false
+  clearTimeout(pressTimer)
+  pressTimer = setTimeout(() => {
+    suppressClick = true
+    openCtxMenu(conv, pressStart.x, pressStart.y)
+    // Лёгкая тактильная отдача, если поддерживается.
+    try { navigator.vibrate?.(10) } catch { /* no-op */ }
+  }, 500)
+}
+function onTouchMove(e) {
+  if (!pressStart) return
+  const t = e.touches?.[0]
+  if (!t) return
+  if (Math.abs(t.clientX - pressStart.x) > 10 || Math.abs(t.clientY - pressStart.y) > 10) {
+    clearTimeout(pressTimer)
+  }
+}
+function onTouchEnd() {
+  clearTimeout(pressTimer)
+}
+
+// Клик по карточке открывает чат; но если это был long-press — гасим переход.
+function onItemClick(c) {
+  if (suppressClick) {
+    suppressClick = false
+    return
+  }
+  emit('select', c.id)
+}
 
 const statusOpen = ref(false)
+const folderManageOpen = ref(false)
 const myStatusEmoji = computed(() => auth.user?.status_emoji || '')
 const myStatusText = computed(() => auth.user?.status_text || '')
 
@@ -206,7 +390,13 @@ const headerTitle = computed(() =>
   props.tab === 'support' ? 'Техподдержка' : 'Чаты'
 )
 
+// Пустой список из-за активной папки (а не отсутствия чатов вообще).
+const emptyInFolder = computed(() =>
+  props.tab === 'chats' && messenger.activeFolderId != null && !filter.value
+)
+
 const emptySub = computed(() => {
+  if (emptyInFolder.value) return 'Добавьте сюда чаты или настройте фильтры папки.'
   if (filter.value) return 'Попробуйте другое имя или логин.'
   if (props.tab === 'support') {
     return 'Здесь появятся обращения пользователей в техподдержку. Все ответы отправятся от имени «Техподдержки» — ФИО админа скрыто.'
@@ -280,15 +470,31 @@ function formatTime(iso) {
 
 <style scoped>
 .conv-list {
-  width: 320px;
+  width: 340px;
   flex-shrink: 0;
   background: var(--acrylic-card-bg);
   border: 1px solid var(--acrylic-border);
   border-radius: var(--radius-xl);
   overflow: hidden;
   display: flex;
-  flex-direction: column;
+  flex-direction: row;
   min-height: 0;
+}
+
+/* С рейлом папок панель шире ровно на его ширину (76px) — колонка списка
+   остаётся комфортной, а без папок ширина прежняя. */
+.conv-list.has-rail { width: 416px; }
+
+/* Рейл папок — фиксированная колонка слева, ширина в самом компоненте. */
+.conv-rail { min-height: 0; }
+
+/* Основная колонка списка (шапка/табы/поиск/лента). */
+.conv-main {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
 }
 
 @media (max-width: 768px) {
@@ -327,7 +533,7 @@ function formatTime(iso) {
    Кнопки «Новая группа», «Новый звонок» и «Мой статус» остаются: у них FAB-дубля нет. */
 @media (max-width: 768px) {
   .new-btn { display: none; }
-  .new-btn--call, .new-btn--status, .new-btn--group { display: block; }
+  .new-btn--call, .new-btn--status, .new-btn--group, .new-btn--folders { display: block; }
 }
 
 .status-btn-emoji {
@@ -619,78 +825,79 @@ function formatTime(iso) {
   font-variation-settings: 'FILL' 1, 'wght' 500, 'GRAD' 0, 'opsz' 20;
 }
 
-/* Действия на карточке диалога — показываются на hover, на тач-устройствах
-   видны всегда (по media (hover: none)). */
-/* Абсолютно позиционируем, чтобы вне ховера действия не «съедали» ширину
-   карточки (раньше прозрачные кнопки оставляли пустоту справа). На ховере
-   выезжают плавающим чипом поверх правого края. */
-.conv-actions {
-  position: absolute;
-  right: 10px;
-  top: 50%;
-  transform: translateY(-50%);
-  display: flex;
-  gap: 2px;
-  padding: 2px;
-  border-radius: var(--radius-full);
-  background: var(--color-surface-high);
-  box-shadow: var(--shadow-sm);
-  opacity: 0;
-  pointer-events: none;
-  transition: opacity 0.15s;
+/* ── Контекстное меню чата (ПКМ / long-press) ── */
+.cm-mask {
+  position: fixed;
+  inset: 0;
+  z-index: 10060;
 }
-
-.conv-item:hover .conv-actions,
-.conv-item:focus-within .conv-actions {
-  opacity: 1;
-  pointer-events: auto;
+.cm-menu {
+  position: fixed;
+  min-width: 224px;
+  overflow-y: auto;
+  padding: 6px;
+  background: var(--acrylic-bg);
+  -webkit-backdrop-filter: var(--acrylic-blur);
+  backdrop-filter: var(--acrylic-blur);
+  border: 1px solid var(--color-outline-dim);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-lg);
 }
-
-.conv-action {
-  width: 32px;
-  height: 32px; min-height: 0;
-  border-radius: 50%;
-  border: none;
-  background: transparent;
+.cm-title {
+  padding: 6px 10px 8px;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--color-text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.cm-section {
+  padding: 6px 10px 4px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.3px;
+  text-transform: uppercase;
   color: var(--color-text-dim);
-  cursor: pointer;
+}
+.cm-divider {
+  height: 1px;
+  background: var(--color-outline-dim);
+  margin: 4px 4px;
+}
+.cm-item {
   display: flex;
   align-items: center;
-  justify-content: center;
-  transition: background 0.15s, color 0.15s;
-}
-
-.conv-action:hover {
-  background: var(--color-surface-high);
+  gap: 10px;
+  width: 100%;
+  padding: 10px;
+  border: none;
+  background: transparent;
   color: var(--color-text);
+  cursor: pointer;
+  border-radius: var(--radius-sm);
+  text-align: left;
+  font-size: 14px;
+  font-weight: 500;
 }
-
-.conv-action.active {
-  color: var(--color-tertiary);
+.cm-item:hover { background: var(--color-surface-low); }
+.cm-item.danger { color: var(--color-error); }
+.cm-item.danger:hover { background: var(--color-error-container); color: var(--color-on-error-container); }
+.cm-ico { font-size: 20px; color: var(--color-text-dim); flex-shrink: 0; }
+.cm-ico.tone-tertiary { color: var(--color-tertiary); }
+.cm-ico.tone-error { color: var(--color-error); }
+.cm-emoji {
+  width: 26px; height: 26px; flex-shrink: 0;
+  display: grid; place-items: center;
+  border-radius: var(--radius-sm);
+  background: var(--color-tertiary-container); color: var(--color-on-tertiary-container);
 }
-
-.conv-action.danger:hover {
-  background: var(--color-error-container);
-  color: var(--color-on-error-container);
-}
-
-.conv-action .material-symbols-outlined {
-  font-size: 18px;
-}
-
-@media (hover: none) {
-  /* На тач-устройствах кнопки видны всегда и встроены в поток (без наложения
-     на время/бейдж). */
-  .conv-actions {
-    position: static;
-    transform: none;
-    background: transparent;
-    box-shadow: none;
-    opacity: 1;
-    pointer-events: auto;
-    flex-shrink: 0;
-  }
-}
+.cm-emoji-glyph { font-size: 15px; line-height: 1; }
+.cm-emoji .material-symbols-outlined { font-size: 16px; font-variation-settings: 'FILL' 1; }
+.cm-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cm-check { font-size: 20px; color: var(--color-text-dim); flex-shrink: 0; }
+.cm-arrow { margin-left: auto; font-size: 20px; color: var(--color-text-dim); flex-shrink: 0; }
+.cm-back { font-weight: 700; }
 
 @media (max-width: 768px) {
   .conv-list {
@@ -733,12 +940,7 @@ function formatTime(iso) {
   .conv-time { font-size: 11.5px; }
   .conv-preview { font-size: 13px; }
 
-  /* На тач-экранах кнопки pin/delete должны быть всегда видны:
-     рендерим их фиксированной полосой действий при свайпе нет, но через
-     toolbar при тапе — упрощение: всегда видны как иконки справа. */
-  .conv-actions {
-    opacity: 1 !important;
-    pointer-events: auto !important;
-  }
+  /* На тач-устройствах контекстное меню и его пункты чуть крупнее для пальца. */
+  .cm-item { padding: 12px 10px; }
 }
 </style>

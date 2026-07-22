@@ -112,13 +112,14 @@
 
           <!-- Вкладка «Сообщения»: список диалогов -->
           <template v-else>
-            <div v-if="!messenger.conversations.length" class="mini-empty">
+            <ChatFolders v-if="messenger.folders.length" orientation="horizontal" class="mini-folders" />
+            <div v-if="!miniConversations.length" class="mini-empty">
               <span class="material-symbols-outlined">forum</span>
-              <p>Пока нет диалогов</p>
+              <p>{{ messenger.activeFolderId ? 'В этой папке пусто' : 'Пока нет диалогов' }}</p>
             </div>
             <ul v-else class="mini-list">
               <li
-                v-for="c in messenger.conversations"
+                v-for="c in miniConversations"
                 :key="c.id"
                 class="mini-conv"
                 :class="{ unread: c.unread_count > 0 }"
@@ -339,6 +340,7 @@ import AttachTaskDialog from './AttachTaskDialog.vue'
 import MessageContextMenu from './MessageContextMenu.vue'
 import EmployeeProfileDialog from '@/components/common/EmployeeProfileDialog.vue'
 import SegmentedTabs from '@/components/common/SegmentedTabs.vue'
+import ChatFolders from './ChatFolders.vue'
 import LinkifiedText from '@/components/common/LinkifiedText.vue'
 import MarkdownView from '@/components/common/MarkdownView.vue'
 import BrandLoader from '@/components/common/BrandLoader.vue'
@@ -346,6 +348,8 @@ import BrandLoader from '@/components/common/BrandLoader.vue'
 const route = useRoute()
 const router = useRouter()
 const messenger = useMessengerStore()
+// Список диалогов мини-хаба с учётом активной папки (null — все).
+const miniConversations = computed(() => messenger.conversationsInFolder(messenger.activeFolderId))
 const authStore = useAuthStore()
 const callStore = useCallStore()
 const assistantStore = useAssistantStore()
@@ -520,6 +524,7 @@ const threadLastSeen = computed(() => {
 
 function ensureMessagesFresh() {
   if (!messenger.conversations.length) messenger.fetchConversations()
+  if (!messenger.folders.length) messenger.fetchFolders()
   // Свежий снимок онлайн-статусов при открытии.
   messenger.fetchPresence()
   // Вернулись к открытому ранее треду — он снова «активен».
@@ -1103,6 +1108,11 @@ watch([open, activeTab], async ([isOpen, tab]) => {
 
 .mini-icon:hover { background: var(--glass-hover-bg); color: var(--color-text); }
 .mini-icon .material-symbols-outlined { font-size: 20px; }
+
+.mini-folders {
+  flex-shrink: 0;
+  border-bottom: 1px solid var(--acrylic-border);
+}
 
 .mini-list {
   list-style: none;

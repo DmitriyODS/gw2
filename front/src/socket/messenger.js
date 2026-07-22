@@ -61,6 +61,10 @@ export function registerMessengerSocketHandlers(socket) {
     useMessengerStore().applyChatBgUpdated(payload)
   })
 
+  socket.on('folders:changed', () => {
+    useMessengerStore().applyFoldersChanged()
+  })
+
   socket.on('message:pin', ({ conversation_id, message_id, pinned, message }) => {
     useMessengerStore().applyMessagePin(conversation_id, message_id, pinned, message)
   })

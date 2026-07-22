@@ -130,6 +130,23 @@ type Repository interface {
 	// DeleteChatBackground — снять рецепт (convID nil — общий дефолт).
 	DeleteChatBackground(ctx context.Context, userID int64, convID *int64) error
 
+	// ── Папки чатов ──────────────────────────────────────────────
+	// ListFolders — папки владельца (по position), с ручными привязками
+	// (ConversationIDs), без N+1.
+	ListFolders(ctx context.Context, ownerID int64) ([]*Folder, error)
+	CountFolders(ctx context.Context, ownerID int64) (int, error)
+	// CreateFolder — создаёт папку (position = в конец) и возвращает её id.
+	CreateFolder(ctx context.Context, f *Folder) (int64, error)
+	// UpdateFolder — обновляет поля папки владельца (title/emoji/флаги).
+	UpdateFolder(ctx context.Context, ownerID int64, f *Folder) error
+	DeleteFolder(ctx context.Context, ownerID, folderID int64) error
+	// ReorderFolders — проставляет position по порядку orderedIDs (только свои).
+	ReorderFolders(ctx context.Context, ownerID int64, orderedIDs []int64) error
+	// SetFolderItems — полная замена ручных привязок папки.
+	SetFolderItems(ctx context.Context, ownerID, folderID int64, convIDs []int64) error
+	AddFolderItem(ctx context.Context, ownerID, folderID, convID int64) error
+	RemoveFolderItem(ctx context.Context, ownerID, folderID, convID int64) error
+
 	// ── Read-only лукапы чужих таблиц ────────────────────────────
 	GetCall(ctx context.Context, id int64) (*CallInfo, error)
 	GetTask(ctx context.Context, id int64) (*TaskPreview, error)

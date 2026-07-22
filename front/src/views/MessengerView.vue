@@ -824,7 +824,8 @@ const visibleConversations = computed(() => {
   if (authStore.isSuperAdmin && listTab.value === 'support') {
     return messenger.supportInbox
   }
-  return messenger.conversations
+  // На вкладке «Чаты» дополнительно фильтруем по активной папке (null — все).
+  return messenger.conversationsInFolder(messenger.activeFolderId)
 })
 
 const listLoading = computed(() =>
@@ -1037,7 +1038,10 @@ onMounted(async () => {
   // Грузим оба списка параллельно: для рут-админа support-inbox нужен сразу
   // (бейдж непрочитанных, активация глубокой ссылки на support-чат), но
   // не должен задерживать первичный рендер обычных диалогов.
-  const tasks = [messenger.fetchConversations().catch(() => {})]
+  const tasks = [
+    messenger.fetchConversations().catch(() => {}),
+    messenger.fetchFolders().catch(() => {}),
+  ]
   if (authStore.isSuperAdmin) {
     tasks.push(messenger.fetchSupportInbox().catch(() => {}))
   }

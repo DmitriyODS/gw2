@@ -86,6 +86,16 @@ func NewServer(eps endpoint.Endpoints, svc service.MessengerService, users domai
 	api.Put("/chat-bg", h.putChatBackground)
 	api.Delete("/chat-bg", h.deleteChatBackground)
 
+	// Папки чатов (личная навигация, синк между устройствами). Специфичный
+	// /folders/reorder раньше :id<int>, чтобы не перехватывался.
+	api.Get("/folders", h.listFolders)
+	api.Post("/folders", h.createFolder)
+	api.Post("/folders/reorder", h.reorderFolders)
+	api.Patch("/folders/:id<int>", h.updateFolder)
+	api.Delete("/folders/:id<int>", h.deleteFolder)
+	api.Post("/folders/:id<int>/items", h.addFolderItem)
+	api.Delete("/folders/:id<int>/items/:convId<int>", h.removeFolderItem)
+
 	// ── Группы ───────────────────────────────────────────────────
 	// Специфичные пути раньше :id<int>, чтобы не перехватывались (join/invite).
 	api.Post("/groups", h.createGroup)

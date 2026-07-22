@@ -454,3 +454,52 @@ type ChatBackgroundEvent struct {
 	ConversationID *int64          `json:"conversation_id"`
 	Recipe         json.RawMessage `json:"recipe"`
 }
+
+// Folder — папка чатов (личная навигация в стиле Telegram).
+type Folder struct {
+	ID              int64   `json:"id"`
+	Title           string  `json:"title"`
+	Emoji           *string `json:"emoji"`
+	Position        int     `json:"position"`
+	IncludePersonal bool    `json:"include_personal"`
+	IncludeGroups   bool    `json:"include_groups"`
+	IncludeUnread   bool    `json:"include_unread"`
+	ConversationIDs []int64 `json:"conversation_ids"`
+}
+
+func NewFolder(f *domain.Folder) *Folder {
+	ids := f.ConversationIDs
+	if ids == nil {
+		ids = []int64{}
+	}
+	return &Folder{
+		ID:              f.ID,
+		Title:           f.Title,
+		Emoji:           f.Emoji,
+		Position:        f.Position,
+		IncludePersonal: f.IncludePersonal,
+		IncludeGroups:   f.IncludeGroups,
+		IncludeUnread:   f.IncludeUnread,
+		ConversationIDs: ids,
+	}
+}
+
+// FolderInput — тело создания/правки папки. ConversationIDs == nil — состав не
+// трогаем (правка только полей); не-nil (в т.ч. пустой) — полная замена ручных
+// привязок.
+type FolderInput struct {
+	Title           string   `json:"title"`
+	Emoji           *string  `json:"emoji"`
+	IncludePersonal bool     `json:"include_personal"`
+	IncludeGroups   bool     `json:"include_groups"`
+	IncludeUnread   bool     `json:"include_unread"`
+	ConversationIDs *[]int64 `json:"conversation_ids"`
+}
+
+func NewFolders(fs []*domain.Folder) []*Folder {
+	out := make([]*Folder, 0, len(fs))
+	for _, f := range fs {
+		out = append(out, NewFolder(f))
+	}
+	return out
+}

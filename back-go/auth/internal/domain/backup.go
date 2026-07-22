@@ -48,7 +48,8 @@ var BackupSections = []BackupSection{
 		"note_shares", "note_user_shares", "note_company_shares",
 		"folder_user_shares", "folder_company_shares"}},
 	{Key: "messenger", Tables: []string{"conversations", "conversation_members", "messages",
-		"message_attachments", "message_reactions", "chat_backgrounds"}},
+		"message_attachments", "message_reactions", "chat_backgrounds",
+		"chat_folders", "chat_folder_items"}},
 	{Key: "calls", Tables: []string{"calls", "call_participants"}},
 	// Питомцы-грувики целиком: сам питомец, поглаживания, магазин, счётчики
 	// признания, сезонный трек, кудо-банк и приватная история.
