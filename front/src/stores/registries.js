@@ -153,10 +153,24 @@ export const useRegistriesStore = defineStore('registries', () => {
     fetchRecords({ silent: true })
   }
 
+  // Смена активной компании: реестры company-scoped, поэтому список, выбор и
+  // записи прежней компании сбрасываем и грузим заново под новую.
+  async function reloadForCompany() {
+    selectedId.value = null
+    records.value = []
+    total.value = 0
+    registries.value = []
+    filters.search = ''
+    filters.sort = 'created_at'
+    filters.order = 'desc'
+    filters.page = 1
+    await fetchRegistries()
+  }
+
   return {
     registries, loadingList, selectedId, selected,
     records, total, loadingRecords, filters,
-    fetchRegistries, select,
+    fetchRegistries, select, reloadForCompany,
     fetchRecords, setSort, setSearch, setPage,
     createRecord, updateRecord, deleteRecord, bulkDelete,
     applyRegistrySocket, applyRecordSocket,

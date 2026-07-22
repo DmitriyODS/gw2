@@ -346,14 +346,23 @@ import SearchField from '@/components/common/SearchField.vue'
 import AppFab from '@/components/common/AppFab.vue'
 import { useFabOnScroll } from '@/composables/useFabOnScroll.js'
 import { useRegistriesStore } from '@/stores/registries.js'
+import { useAuthStore } from '@/stores/auth.js'
 import { exportRecords, getShares, createShare, revokeShare } from '@/api/registries.js'
 import { useNotificationsStore } from '@/stores/notifications.js'
 import { useBreakpoint } from '@/composables/useBreakpoint.js'
 import { fieldIcon, hasQr, isExportable, isSortable, textValue } from '@/utils/registryFields.js'
 
 const store = useRegistriesStore()
+const authStore = useAuthStore()
 const notif = useNotificationsStore()
 const { isMobile } = useBreakpoint()
+
+// Живая смена активной компании: реестры прежней компании не должны остаться
+// на экране — сбрасываем и грузим список новой.
+watch(() => authStore.companyId, (id, prev) => {
+  if (id === prev) return
+  store.reloadForCompany()
+})
 
 // ── Мобильная сортировка и карточки ──
 const sortOptions = computed(() => {

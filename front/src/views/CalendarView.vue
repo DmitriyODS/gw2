@@ -281,14 +281,23 @@ import SearchField from '@/components/common/SearchField.vue'
 import AppFab from '@/components/common/AppFab.vue'
 import { useFabOnScroll } from '@/composables/useFabOnScroll.js'
 import { useCalendarsStore, dayKey } from '@/stores/calendars.js'
+import { useAuthStore } from '@/stores/auth.js'
 import { exportEntries, getShares, createShare, revokeShare } from '@/api/calendars.js'
 import { useNotificationsStore } from '@/stores/notifications.js'
 import { useBreakpoint } from '@/composables/useBreakpoint.js'
 import { fieldIcon, isExportable, entryTitle, hhmm, cardFields } from '@/utils/calendarFields.js'
 
 const store = useCalendarsStore()
+const authStore = useAuthStore()
 const notif = useNotificationsStore()
 const { isMobile } = useBreakpoint()
+
+// Живая смена активной компании: календари прежней компании сбрасываем и грузим
+// список новой.
+watch(() => authStore.companyId, (id, prev) => {
+  if (id === prev) return
+  store.reloadForCompany()
+})
 
 const viewModes = [
   { value: 'month', label: 'Месяц' },

@@ -13,6 +13,9 @@ import { disconnectSocket, updateSocketAuth } from '@/socket/index.js'
 // вызывается только внутри функций (в рантайме, после инициализации сторов),
 // а call.js и так эагерно грузится в App.vue, поэтому вес чанка не растёт.
 import { useCallStore } from './call.js'
+// То же и с units.js (он статически импортирует auth.js): useUnitsStore
+// зовётся только внутри switchCompany — цикл разрешается в рантайме.
+import { useUnitsStore } from './units.js'
 
 export const useAuthStore = defineStore('auth', () => {
   const user = ref(null)
@@ -201,7 +204,6 @@ export const useAuthStore = defineStore('auth', () => {
     // завершаем его ДО перевыпуска токена (после смены scope stopUnit ушёл бы
     // уже с company_id новой компании), иначе он «протёк» бы в новую компанию.
     try {
-      const { useUnitsStore } = await import('@/stores/units.js')
       await useUnitsStore().stop()
     } catch {}
     const data = await apiSwitchCompany(targetCompanyId)

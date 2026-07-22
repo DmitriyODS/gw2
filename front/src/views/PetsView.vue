@@ -105,11 +105,13 @@ import SeasonTrackCard from '@/components/pets/SeasonTrackCard.vue'
 import ColleaguesPets from '@/components/pets/ColleaguesPets.vue'
 import PetDetailModal from '@/components/pets/PetDetailModal.vue'
 import { usePetsStore } from '@/stores/pets.js'
+import { useAuthStore } from '@/stores/auth.js'
 import { petEmoji, PET_STAGES, PET_SPECIES, shopItemEmoji } from '@/utils/pets.js'
 
 const route = useRoute()
 const router = useRouter()
 const pets = usePetsStore()
+const authStore = useAuthStore()
 
 const detailOpen = ref(false)
 const colleaguesEl = ref(null)
@@ -132,6 +134,15 @@ function applyTabQuery(tab) {
   if (el) nextTick(() => el.scrollIntoView({ behavior: 'smooth', block: 'start' }))
 }
 watch(() => route.query.tab, applyTabQuery)
+
+// Живая смена компании: у каждого сотрудника в каждой компании — свой грувик
+// со своей статистикой. App.vue сбрасывает стор и перечитывает питомца для
+// плавающего виджета; здесь дополнительно освежаем зоопарк/рейтинг/лайв —
+// они company-scoped и на странице /pets иначе остались бы от прежней компании.
+watch(() => authStore.companyId, (id, prev) => {
+  if (id == null || id === prev) return
+  Promise.allSettled([pets.fetchZoo(), pets.fetchRating(), pets.fetchLive()])
+})
 
 const pet = computed(() => pets.pet)
 const stageTitle = computed(() => PET_STAGES[pet.value?.stage] || '')

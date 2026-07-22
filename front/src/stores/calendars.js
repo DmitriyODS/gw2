@@ -186,11 +186,21 @@ export const useCalendarsStore = defineStore('calendars', () => {
     fetchEntries({ silent: true })
   }
 
+  // Смена активной компании: календари company-scoped — сбрасываем список,
+  // выбор и записи прежней компании и грузим заново под новую.
+  async function reloadForCompany() {
+    selectedId.value = null
+    entries.value = []
+    search.value = ''
+    calendars.value = []
+    await fetchCalendars()
+  }
+
   return {
     calendars, loadingList, selectedId, selected,
     entries, loadingEntries, entriesByDay,
     view, cursor, search, range,
-    fetchCalendars, select, setView, setCursor, step, today, setSearch,
+    fetchCalendars, select, setView, setCursor, step, today, setSearch, reloadForCompany,
     fetchEntries, createEntry, updateEntry, deleteEntry, bulkDelete,
     applyCalendarSocket, applyEntrySocket,
   }

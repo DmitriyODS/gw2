@@ -43,6 +43,9 @@ const text = computed(() => {
   const body = props.format === 'hours'
     ? formatHoursShort(v, num(hoursPerDay?.value) || 8)
     : String(Math.round(v))
-  return props.prefix + body
+  // Ноль знака не несёт: «+0»/«−0» не показываем (по целевому значению, а не
+  // по промежуточному кадру анимации — иначе знак мигал бы на пути к нулю).
+  const prefix = num(props.value) === 0 ? '' : props.prefix
+  return prefix + body
 })
 </script>

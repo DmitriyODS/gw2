@@ -464,13 +464,23 @@ import DiaryEntryDialog from '@/components/diary/DiaryEntryDialog.vue'
 import DiaryShareDialog from '@/components/diary/DiaryShareDialog.vue'
 import TaskForm from '@/components/tasks/TaskForm.vue'
 import { useDiariesStore, dayKey } from '@/stores/diaries.js'
+import { useAuthStore } from '@/stores/auth.js'
 import { exportEntries, getEntries } from '@/api/diaries.js'
 import { useNotificationsStore } from '@/stores/notifications.js'
 import { useBreakpoint } from '@/composables/useBreakpoint.js'
 
 const store = useDiariesStore()
+const authStore = useAuthStore()
 const notif = useNotificationsStore()
 const { isMobile } = useBreakpoint()
+
+// Ежедневники личные (кросс-компанийные), но привязанные задачи скоупятся
+// активной компанией — при её смене освежаем список и открытые записи.
+watch(() => authStore.companyId, (id, prev) => {
+  if (id === prev) return
+  store.fetchDiaries()
+  if (store.selectedId != null) store.fetchEntries({ silent: true })
+})
 // Мобильный FAB «Добавить запись»: прячется/появляется по прокрутке.
 const { fabVisible } = useFabOnScroll()
 
