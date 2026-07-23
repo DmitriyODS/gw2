@@ -160,22 +160,15 @@ func (s *Server) StartUnit(ctx context.Context, req *taskspb.StartUnitRequest) (
 }
 
 func (s *Server) StopActiveUnit(ctx context.Context, req *taskspb.StopActiveUnitRequest) (*taskspb.StopActiveUnitResponse, error) {
-	active, err := s.svc.ActiveUnit(ctx, req.GetUserId())
+	stopped, err := s.svc.StopActiveUnit(ctx, req.GetUserId())
 	if err != nil {
 		pe, ierr := voiceErr(err)
 		return &taskspb.StopActiveUnitResponse{Error: pe}, ierr
 	}
-	if active == nil {
+	if stopped == nil {
 		return &taskspb.StopActiveUnitResponse{Error: &taskspb.Error{
 			Code: "NO_ACTIVE_UNIT", Message: "Активного юнита нет", HttpStatus: 404,
 		}}, nil
-	}
-	// companyID nil: пользователь останавливает СВОЙ юнит, где бы он ни был
-	// начат (активная компания могла смениться после старта).
-	stopped, err := s.svc.StopUnit(ctx, active.ID, req.GetUserId(), domain.LevelEmployee, nil)
-	if err != nil {
-		pe, ierr := voiceErr(err)
-		return &taskspb.StopActiveUnitResponse{Error: pe}, ierr
 	}
 	resp := &taskspb.StopActiveUnitResponse{UnitName: stopped.Name}
 	if t, err := s.svc.GetTask(ctx, stopped.TaskID, req.GetUserId()); err == nil {

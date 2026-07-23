@@ -137,6 +137,21 @@ func (s *Service) UpdateUnit(ctx context.Context, unitID, actorID int64, actorLe
 	return &out, nil
 }
 
+// StopActiveUnit — остановить текущий активный юнит пользователя (голосовой
+// сценарий Алисы). Компания берётся из самого юнита: активная компания сессии
+// могла смениться после старта, а unitInCompany со скоупом nil ничего не найдёт.
+// nil, nil — активного юнита нет.
+func (s *Service) StopActiveUnit(ctx context.Context, userID int64) (*dto.Unit, error) {
+	unit, err := s.units.ActiveUnitForUser(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	if unit == nil {
+		return nil, nil
+	}
+	return s.StopUnit(ctx, unit.ID, userID, domain.LevelEmployee, &unit.CompanyID)
+}
+
 func (s *Service) StopUnit(ctx context.Context, unitID, actorID int64, actorLevel int, companyID *int64) (*dto.Unit, error) {
 	unit, err := s.unitInCompany(ctx, unitID, companyID)
 	if err != nil {
