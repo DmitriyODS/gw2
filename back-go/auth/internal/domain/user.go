@@ -54,6 +54,9 @@ type User struct {
 	StatusEmoji   *string // пользовательский статус (мессенджер)
 	StatusText    *string
 	OnVacation    bool // режим «в отпуске»: задачи/юниты закрыты, грувик заморожен
+	// Настройки ИИ в заметках (по кнопке): корректура и автодописывание.
+	NotesAIProofread    bool
+	NotesAIAutocomplete bool
 
 	CompanyID     *int64
 	Role          Role

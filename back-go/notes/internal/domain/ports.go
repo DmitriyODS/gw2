@@ -5,6 +5,15 @@ import "context"
 // Ctx — алиас, чтобы сигнатуры портов не разбухали.
 type Ctx = context.Context
 
+// RecipientScope — область выборки размещённых мной чужих заметок.
+type RecipientScope string
+
+const (
+	RecipientFolder  RecipientScope = "folder"  // в моей папке folderID
+	RecipientRoot    RecipientScope = "root"     // в моём корне
+	RecipientArchive RecipientScope = "archive"  // в моём личном архиве
+)
+
 // NoteRepository — персистентность заметок, папок, тегов и всех видов шаринга.
 type NoteRepository interface {
 	// ── Заметки ──
@@ -23,8 +32,26 @@ type NoteRepository interface {
 	// (значок на плитке): есть публичная ссылка / адресат / компания.
 	SharedByMeNoteIDs(ctx Ctx, ids []int64) (map[int64]bool, error)
 	// ListSharedWithMe — чужие заметки, доступные мне адресно или через
-	// расшаренную папку (плитки с owner и my_access).
+	// расшаренную папку (плитки с owner и my_access). Исключает те, что я уже
+	// разместил у себя/отправил в личный архив (есть строка в note_recipient_state).
 	ListSharedWithMe(ctx Ctx, userID int64, companyIDs []int64, search string) ([]*Note, error)
+
+	// ── Личный оверлей адресата шаринга (размещение чужих заметок/папок) ──
+	// SetNoteRecipientPlacement — разместить расшаренную мне заметку в моей папке
+	// (folderID nil — мой корень); снимает личный архив.
+	SetNoteRecipientPlacement(ctx Ctx, userID, noteID int64, folderID *int64) error
+	// SetNoteRecipientArchived — личный архив расшаренной мне заметки.
+	SetNoteRecipientArchived(ctx Ctx, userID, noteID int64, archived bool) error
+	// ListRecipientNotes — расшаренные мне заметки, размещённые в моём scope
+	// (folder — в папке folderID / root — в моём корне / archive — в личном
+	// архиве); folder_id/archived плиток — из оверлея, с owner и my_access.
+	ListRecipientNotes(ctx Ctx, userID int64, companyIDs []int64, scope RecipientScope, folderID *int64) ([]*Note, error)
+	// SetFolderRecipientPlacement — подшить расшаренную мне папку под мою
+	// (parentID nil — мой корень).
+	SetFolderRecipientPlacement(ctx Ctx, userID, folderID int64, parentID *int64) error
+	// ListRecipientFolders — все расшаренные мне папки, размещённые в моём дереве
+	// (parent_id — из оверлея), с owner и my_access; для инъекции в клиентское дерево.
+	ListRecipientFolders(ctx Ctx, userID int64, companyIDs []int64) ([]*Folder, error)
 
 	// ── Папки ──
 	ListFolders(ctx Ctx, ownerID int64) ([]*Folder, error)
@@ -132,6 +159,8 @@ type EventBus interface {
 type FileStore interface {
 	Save(fileName string, data []byte) (string, error)
 	Remove(paths []string)
+	// Open — прочитать байты объекта по ключу (встраивание картинок в docx).
+	Open(key string) ([]byte, error)
 }
 
 // WriteLimiter — троттлинг анонимных правок по коду публичной ссылки (защита

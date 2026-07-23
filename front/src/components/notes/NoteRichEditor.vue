@@ -131,6 +131,35 @@
         </button>
       </div>
 
+      <template v-if="aiAvailable">
+        <span class="ne-tsep" />
+        <div class="ne-tgroup ne-hl">
+          <button v-if="proofreadOn" class="ne-tbtn" :disabled="aiBusy" title="Исправить орфографию и пунктуацию (ИИ)" @click="runProofread">
+            <span class="material-symbols-outlined">spellcheck</span>
+          </button>
+          <button v-if="autocompleteOn" class="ne-tbtn" :disabled="aiBusy" title="Дописать текст (ИИ)" @click="runAutocomplete">
+            <span class="material-symbols-outlined">stylus_note</span>
+          </button>
+          <button class="ne-tbtn" :class="{ active: aiCfgOpen }" title="Настройки ИИ в заметках" @click="aiCfgOpen = !aiCfgOpen">
+            <span class="material-symbols-outlined">tune</span>
+          </button>
+          <template v-if="aiCfgOpen">
+            <div class="ne-pop-backdrop" @click="aiCfgOpen = false" />
+            <div class="ne-pop ne-pop-ai">
+              <p class="ne-ai-title">ИИ в заметках</p>
+              <button class="ne-ai-opt" :class="{ on: proofreadOn }" @click="emit('set-ai-setting', { key: 'notes_ai_proofread', value: !proofreadOn })">
+                <span class="material-symbols-outlined">{{ proofreadOn ? 'check_box' : 'check_box_outline_blank' }}</span>
+                Проверка орфографии и пунктуации
+              </button>
+              <button class="ne-ai-opt" :class="{ on: autocompleteOn }" @click="emit('set-ai-setting', { key: 'notes_ai_autocomplete', value: !autocompleteOn })">
+                <span class="material-symbols-outlined">{{ autocompleteOn ? 'check_box' : 'check_box_outline_blank' }}</span>
+                Автодописывание текста
+              </button>
+            </div>
+          </template>
+        </div>
+      </template>
+
       <span class="ne-tsep" />
 
       <div class="ne-tgroup">
@@ -159,7 +188,7 @@ import { EditorContent, useEditor } from '@tiptap/vue-3'
 import StarterKit from '@tiptap/starter-kit'
 import Underline from '@tiptap/extension-underline'
 import Link from '@tiptap/extension-link'
-import Image from '@tiptap/extension-image'
+import { ResizableImage } from './ResizableImage.js'
 import Table from '@tiptap/extension-table'
 import TableRow from '@tiptap/extension-table-row'
 import TableCell from '@tiptap/extension-table-cell'
@@ -169,6 +198,8 @@ import TaskList from '@tiptap/extension-task-list'
 import TaskItem from '@tiptap/extension-task-item'
 import Placeholder from '@tiptap/extension-placeholder'
 import { TASK_COLORS } from '@/utils/taskColors.js'
+import { proofread as apiProofread, transformText } from '@/api/ai.js'
+import { useNotificationsStore } from '@/stores/notifications.js'
 
 const props = defineProps({
   // Документ TipTap (JSON-объект). Компонент не пишет его обратно на каждый
@@ -185,12 +216,20 @@ const props = defineProps({
   // браузерного. Включает только страница заметки владельца — на публичных
   // ссылках ИИ/создание задач недоступны.
   selectionMenu: { type: Boolean, default: false },
+  // ИИ в заметках (доступен при активной компании с ИИ и правке своей заметки):
+  // aiAvailable включает группу настроек/кнопок, on-флаги — какие кнопки видны.
+  aiAvailable: { type: Boolean, default: false },
+  proofreadOn: { type: Boolean, default: false },
+  autocompleteOn: { type: Boolean, default: false },
 })
-const emit = defineEmits(['change', 'blur', 'selection-menu'])
+const emit = defineEmits(['change', 'blur', 'selection-menu', 'set-ai-setting'])
 
 const canUpload = !!props.uploadImage
 const hlOpen = ref(false)
 const imageInput = ref(null)
+const notif = useNotificationsStore()
+const aiBusy = ref(false)
+const aiCfgOpen = ref(false)
 
 const editor = useEditor({
   content: props.doc && Object.keys(props.doc).length ? props.doc : null,
@@ -199,7 +238,7 @@ const editor = useEditor({
     StarterKit.configure({ heading: { levels: [1, 2, 3] } }),
     Underline,
     Link.configure({ openOnClick: !props.editable, autolink: true }),
-    Image,
+    ResizableImage,
     Table.configure({ resizable: false }),
     TableRow,
     TableHeader,
@@ -282,6 +321,58 @@ function openSelectionActions(e) {
   const { from, to } = editor.value.state.selection
   const r = e.currentTarget.getBoundingClientRect()
   emit('selection-menu', { x: r.left, y: r.bottom + 6, text, from, to })
+}
+
+// ── ИИ: корректура орфографии/пунктуации всей заметки ──
+// Собираем текстовые узлы документа по порядку, шлём их массивом и подменяем
+// текст обратно по индексу — форматирование, картинки и таблицы не трогаются.
+function collectTextNodes(node, out) {
+  if (node.type === 'text' && typeof node.text === 'string') out.push(node)
+  if (Array.isArray(node.content)) node.content.forEach((c) => collectTextNodes(c, out))
+}
+async function runProofread() {
+  const ed = editor.value
+  if (!ed || aiBusy.value) return
+  const json = ed.getJSON()
+  const nodes = []
+  collectTextNodes(json, nodes)
+  const segments = nodes.map((n) => n.text)
+  if (!segments.some((s) => s.trim())) { notif.warn('В заметке нет текста для проверки'); return }
+  aiBusy.value = true
+  try {
+    const { segments: fixed } = await apiProofread(segments)
+    if (!Array.isArray(fixed) || fixed.length !== segments.length) throw new Error('ИИ вернул некорректный результат')
+    nodes.forEach((n, i) => { if (fixed[i]) n.text = fixed[i] }) // пустую строку не пишем (невалидный узел)
+    ed.commands.setContent(json, true)
+    notif.success('Орфография и пунктуация проверены')
+  } catch (e) {
+    notif.error(e?.message || 'Не удалось проверить орфографию')
+  } finally {
+    aiBusy.value = false
+  }
+}
+
+// ── ИИ: дописывание по написанному контексту ──
+async function runAutocomplete() {
+  const ed = editor.value
+  if (!ed || aiBusy.value) return
+  const { from } = ed.state.selection
+  const before = ed.state.doc.textBetween(0, from, '\n', ' ').slice(-4000)
+  const text = before.trim() || ed.getText().trim()
+  if (!text) { notif.warn('Сначала напишите немного текста'); return }
+  aiBusy.value = true
+  try {
+    const { text: cont } = await transformText({ action: 'continue', text })
+    const add = (cont || '').trim()
+    if (add) {
+      const sep = !before || /\s$/.test(before) ? '' : ' '
+      ed.chain().focus().insertContent(sep + add).run()
+    }
+  } catch (e) {
+    notif.error(e?.message || 'Не удалось дописать текст')
+  } finally {
+    aiBusy.value = false
+  }
 }
 
 async function onImageFile(e) {
@@ -382,6 +473,20 @@ defineExpose({ editor })
   color: var(--color-text-dim);
 }
 .ne-swatch-off .material-symbols-outlined { font-size: 16px; }
+
+/* Попап настроек ИИ (вертикальный, с подписями) */
+.ne-pop-ai { flex-direction: column; gap: 2px; min-width: 240px; right: 0; left: auto; }
+.ne-ai-title { margin: 2px 8px 6px; font-size: 12px; font-weight: 700; color: var(--color-text-dim); }
+.ne-ai-opt {
+  display: flex; align-items: center; gap: 8px;
+  padding: 8px 10px; border: none; border-radius: var(--radius-sm);
+  background: transparent; color: var(--color-text); font: inherit; text-align: left;
+  cursor: pointer; white-space: nowrap;
+}
+.ne-ai-opt:hover { background: color-mix(in oklch, var(--color-primary) 10%, transparent); }
+.ne-ai-opt .material-symbols-outlined { font-size: 20px; color: var(--color-text-dim); }
+.ne-ai-opt.on { color: var(--color-primary); }
+.ne-ai-opt.on .material-symbols-outlined { color: var(--color-primary); }
 
 /* Содержимое */
 .ne-content { flex: 1; min-height: 0; }

@@ -38,6 +38,11 @@ func noteText(n *domain.Note) string {
 	return content
 }
 
+// imageFetcher — читатель байтов картинок редактора для встраивания в docx.
+func (s *Service) imageFetcher() docx.ImageFetcher {
+	return func(key string) ([]byte, error) { return s.files.Open(key) }
+}
+
 // Export — заметка в txt или docx. Доступен и адресатам шаринга (чтение есть —
 // выгрузка тоже).
 func (s *Service) Export(ctx context.Context, userID, id int64, format string) (*ExportFile, error) {
@@ -50,7 +55,7 @@ func (s *Service) Export(ctx context.Context, userID, id int64, format string) (
 		name = "Заметка"
 	}
 	if format == FormatDOCX {
-		data, err := docx.Build(n.Title, n.TextContent)
+		data, err := docx.BuildRich(n.Title, n.Doc, s.imageFetcher())
 		if err != nil {
 			return nil, err
 		}
@@ -110,7 +115,7 @@ func (s *Service) writeNoteFile(ctx context.Context, zw *zip.Writer, noteID int6
 	fileName := uniqueName(used, sanitizeName(n.Title, "Заметка"), "."+ext)
 	var data []byte
 	if ext == "docx" {
-		if data, err = docx.Build(n.Title, n.TextContent); err != nil {
+		if data, err = docx.BuildRich(n.Title, n.Doc, s.imageFetcher()); err != nil {
 			return false, err
 		}
 	} else {

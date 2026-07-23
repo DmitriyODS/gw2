@@ -182,45 +182,53 @@ func (r *Repo) SharedByMeNoteIDs(ctx context.Context, ids []int64) (map[int64]bo
 	return res, rows.Err()
 }
 
+// noteGrantsCTE — CTE «grants(note_id, can_edit)»: заметки, доступные мне
+// адресно (пользователь/компания) или через расшаренную папку-предка. Параметры
+// $1 — user_id, $2 — company_ids. Общая для «поделились со мной» и оверлея.
+const noteGrantsCTE = `
+	WITH RECURSIVE
+	roots AS (
+		SELECT folder_id AS id, can_edit FROM folder_user_shares WHERE user_id = $1
+		UNION ALL
+		SELECT folder_id AS id, can_edit FROM folder_company_shares WHERE company_id = ANY($2::bigint[])
+	),
+	subtree AS (
+		SELECT id, can_edit FROM roots
+		UNION ALL
+		SELECT f.id, s.can_edit FROM note_folders f JOIN subtree s ON f.parent_id = s.id
+	),
+	folder_notes AS (
+		SELECT n.id AS note_id, bool_or(st.can_edit) AS can_edit
+		  FROM notes n JOIN subtree st ON n.folder_id = st.id
+		 GROUP BY n.id
+	),
+	direct AS (
+		SELECT note_id, can_edit FROM note_user_shares WHERE user_id = $1
+		UNION ALL
+		SELECT note_id, can_edit FROM note_company_shares WHERE company_id = ANY($2::bigint[])
+	),
+	grants AS (
+		SELECT note_id, bool_or(can_edit) AS can_edit FROM (
+			SELECT note_id, can_edit FROM folder_notes
+			UNION ALL
+			SELECT note_id, can_edit FROM direct
+		) g GROUP BY note_id
+	)`
+
 // ListSharedWithMe — плитки чужих заметок, доступных мне: адресно (пользователь/
-// компания) или через расшаренную папку-предка. Архивные не показываются.
+// компания) или через расшаренную папку-предка. Архивные владельца не
+// показываются; исключаются заметки, которые я уже разместил у себя/в личном
+// архиве (есть строка note_recipient_state) — они уходят в моё дерево/архив.
 func (r *Repo) ListSharedWithMe(ctx context.Context, userID int64, companyIDs []int64, search string) ([]*domain.Note, error) {
-	q := `
-		WITH RECURSIVE
-		roots AS (
-			SELECT folder_id AS id, can_edit FROM folder_user_shares WHERE user_id = $1
-			UNION ALL
-			SELECT folder_id AS id, can_edit FROM folder_company_shares WHERE company_id = ANY($2::bigint[])
-		),
-		subtree AS (
-			SELECT id, can_edit FROM roots
-			UNION ALL
-			SELECT f.id, s.can_edit FROM note_folders f JOIN subtree s ON f.parent_id = s.id
-		),
-		folder_notes AS (
-			SELECT n.id AS note_id, bool_or(st.can_edit) AS can_edit
-			  FROM notes n JOIN subtree st ON n.folder_id = st.id
-			 GROUP BY n.id
-		),
-		direct AS (
-			SELECT note_id, can_edit FROM note_user_shares WHERE user_id = $1
-			UNION ALL
-			SELECT note_id, can_edit FROM note_company_shares WHERE company_id = ANY($2::bigint[])
-		),
-		grants AS (
-			SELECT note_id, bool_or(can_edit) AS can_edit FROM (
-				SELECT note_id, can_edit FROM folder_notes
-				UNION ALL
-				SELECT note_id, can_edit FROM direct
-			) g GROUP BY note_id
-		)
+	q := noteGrantsCTE + `
 		SELECT n.id, n.owner_id, n.title, n.color, n.archived, n.folder_id,
 		       left(n.text_content, 300), n.created_at, n.updated_at,
 		       u.fio, u.avatar_path, g.can_edit
 		  FROM grants g
 		  JOIN notes n ON n.id = g.note_id
 		  JOIN users u ON u.id = n.owner_id
-		 WHERE n.owner_id <> $1 AND NOT n.archived`
+		 WHERE n.owner_id <> $1 AND NOT n.archived
+		   AND NOT EXISTS (SELECT 1 FROM note_recipient_state s WHERE s.user_id = $1 AND s.note_id = n.id)`
 	args := []any{userID, companyIDs}
 	for _, w := range searchWords(search) {
 		args = append(args, "%"+w+"%")
@@ -228,6 +236,75 @@ func (r *Repo) ListSharedWithMe(ctx context.Context, userID int64, companyIDs []
 	}
 	q += ` ORDER BY n.updated_at DESC, n.id DESC`
 
+	rows, err := r.pool.Query(ctx, q, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := []*domain.Note{}
+	for rows.Next() {
+		var (
+			n       domain.Note
+			canEdit bool
+		)
+		if err := rows.Scan(&n.ID, &n.OwnerID, &n.Title, &n.Color, &n.Archived, &n.FolderID, &n.Excerpt,
+			&n.CreatedAt, &n.UpdatedAt, &n.OwnerName, &n.OwnerAvatar, &canEdit); err != nil {
+			return nil, err
+		}
+		n.MyAccess = domain.AccessView
+		if canEdit {
+			n.MyAccess = domain.AccessEdit
+		}
+		n.TagIDs = []int64{}
+		out = append(out, &n)
+	}
+	return out, rows.Err()
+}
+
+func (r *Repo) SetNoteRecipientPlacement(ctx context.Context, userID, noteID int64, folderID *int64) error {
+	_, err := r.pool.Exec(ctx, `
+		INSERT INTO note_recipient_state (user_id, note_id, folder_id, archived)
+		VALUES ($1, $2, $3, FALSE)
+		ON CONFLICT (user_id, note_id)
+		DO UPDATE SET folder_id = EXCLUDED.folder_id, archived = FALSE, updated_at = now()`,
+		userID, noteID, folderID)
+	return err
+}
+
+func (r *Repo) SetNoteRecipientArchived(ctx context.Context, userID, noteID int64, archived bool) error {
+	_, err := r.pool.Exec(ctx, `
+		INSERT INTO note_recipient_state (user_id, note_id, archived)
+		VALUES ($1, $2, $3)
+		ON CONFLICT (user_id, note_id)
+		DO UPDATE SET archived = EXCLUDED.archived, updated_at = now()`,
+		userID, noteID, archived)
+	return err
+}
+
+// ListRecipientNotes — расшаренные мне заметки, размещённые в моём scope (папка/
+// корень/архив); folder_id и archived плиток берутся из оверлея, а не владельца.
+func (r *Repo) ListRecipientNotes(ctx context.Context, userID int64, companyIDs []int64, scope domain.RecipientScope, folderID *int64) ([]*domain.Note, error) {
+	args := []any{userID, companyIDs}
+	var cond string
+	switch scope {
+	case domain.RecipientArchive:
+		cond = `st.archived`
+	case domain.RecipientRoot:
+		cond = `st.folder_id IS NULL AND NOT st.archived`
+	default: // folder
+		args = append(args, folderID)
+		cond = `st.folder_id = $3 AND NOT st.archived`
+	}
+	q := noteGrantsCTE + `
+		SELECT n.id, n.owner_id, n.title, n.color, st.archived, st.folder_id,
+		       left(n.text_content, 300), n.created_at, n.updated_at,
+		       u.fio, u.avatar_path, g.can_edit
+		  FROM grants g
+		  JOIN notes n ON n.id = g.note_id
+		  JOIN users u ON u.id = n.owner_id
+		  JOIN note_recipient_state st ON st.user_id = $1 AND st.note_id = n.id
+		 WHERE n.owner_id <> $1 AND ` + cond + `
+		 ORDER BY n.updated_at DESC, n.id DESC`
 	rows, err := r.pool.Query(ctx, q, args...)
 	if err != nil {
 		return nil, err

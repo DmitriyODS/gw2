@@ -145,6 +145,11 @@ func NewServer(eps endpoint.Endpoints, users domain.UserReader,
 	statsAPI.Get("/employees", manager, h.statsEmployees)
 	statsAPI.Get("/responsibles", employee, h.statsResponsibles)
 	statsAPI.Get("/profile", h.statsProfile)
+	// Активность: свою — любой член компании («Моя активность»), чужую —
+	// администратор компании (тонкую проверку self/чужой делает сервис).
+	statsAPI.Get("/employee/:id<int>/activity", employee, h.employeeActivity)
+	statsAPI.Get("/employee/:id<int>/feed", employee, h.employeeActivityFeed)
+	statsAPI.Get("/employee/:id<int>/export", employee, h.employeeActivityDocx)
 
 	return &Server{app: app}
 }

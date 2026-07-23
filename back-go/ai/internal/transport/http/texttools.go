@@ -36,3 +36,27 @@ func (h *handlers) transformText(c *fiber.Ctx) error {
 	}
 	return c.JSON(fiber.Map{"text": resp.(string)})
 }
+
+// proofread — корректура орфографии/пунктуации всей заметки: массив текстовых
+// сегментов → исправленный массив той же длины (клиент подменяет узлы по индексу).
+func (h *handlers) proofread(c *fiber.Ctx) error {
+	_, companyID, err := assistantScope(c)
+	if err != nil {
+		return scopeBadRequest(c, err.Error())
+	}
+	var body struct {
+		Segments []string `json:"segments"`
+	}
+	if err := json.Unmarshal(c.Body(), &body); err != nil || len(body.Segments) == 0 {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "VALIDATION", "details": fiber.Map{"segments": []string{"Missing data for required field."}},
+		})
+	}
+	resp, err := h.eps.Proofread(c.Context(), endpoint.ProofreadRequest{
+		CompanyID: companyID, Segments: body.Segments,
+	})
+	if err != nil {
+		return h.respondError(c, err)
+	}
+	return c.JSON(fiber.Map{"segments": resp.([]string)})
+}

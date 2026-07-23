@@ -297,6 +297,12 @@ func (s *Service) UpdateMe(ctx context.Context, userID int64, req dto.UpdateMeRe
 	if req.OnVacation != nil {
 		updates["on_vacation"] = *req.OnVacation
 	}
+	if req.NotesAIProofread != nil {
+		updates["notes_ai_proofread"] = *req.NotesAIProofread
+	}
+	if req.NotesAIAutocomplete != nil {
+		updates["notes_ai_autocomplete"] = *req.NotesAIAutocomplete
+	}
 
 	if req.NewPassword != nil && *req.NewPassword != "" {
 		if req.CurrentPassword == nil || *req.CurrentPassword == "" {

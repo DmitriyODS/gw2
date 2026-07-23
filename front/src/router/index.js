@@ -33,6 +33,9 @@ const routes = [
   { path: '/profile', component: () => import('@/views/ProfileView.vue'), meta: { requiresAuth: true } },
   { path: '/employees', component: () => import('@/views/EmployeesView.vue'),
     meta: { requiresAuth: true, requiresCompany: true } },
+  // Активность сотрудника — доступ на бэке гардирован ролью Администратор компании.
+  { path: '/employees/:userId(\\d+)/activity', component: () => import('@/views/EmployeeActivityView.vue'),
+    meta: { requiresAuth: true, requiresCompany: true }, props: true },
   { path: '/registries', component: () => import('@/views/RegistriesView.vue'),
     meta: { requiresAuth: true, requiresCompany: true } },
   { path: '/calendars', component: () => import('@/views/CalendarView.vue'),

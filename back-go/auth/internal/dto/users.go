@@ -47,6 +47,9 @@ type User struct {
 	StatusEmoji   *string  `json:"status_emoji"`
 	StatusText    *string  `json:"status_text"`
 	OnVacation    bool     `json:"on_vacation"`
+	// Настройки ИИ в заметках (по кнопке).
+	NotesAIProofread    bool `json:"notes_ai_proofread"`
+	NotesAIAutocomplete bool `json:"notes_ai_autocomplete"`
 }
 
 func roleRef(r domain.Role) *RoleRef {
@@ -58,22 +61,24 @@ func roleRef(r domain.Role) *RoleRef {
 
 func NewUser(u *domain.User) User {
 	return User{
-		ID:            u.ID,
-		FIO:           u.FIO,
-		Login:         u.Login,
-		Post:          u.Post,
-		Role:          roleRef(u.Role),
-		CompanyID:     u.CompanyID,
-		Phone:         u.Phone,
-		Email:         u.Email,
-		AvatarPath:    u.AvatarPath,
-		IsDefaultPass: u.IsDefaultPass,
-		IsActive:      u.IsActive,
-		IsSuperAdmin:  u.IsSuperAdmin,
-		CreatedAt:     JSONTime(u.CreatedAt),
-		StatusEmoji:   u.StatusEmoji,
-		StatusText:    u.StatusText,
-		OnVacation:    u.OnVacation,
+		ID:                  u.ID,
+		FIO:                 u.FIO,
+		Login:               u.Login,
+		Post:                u.Post,
+		Role:                roleRef(u.Role),
+		CompanyID:           u.CompanyID,
+		Phone:               u.Phone,
+		Email:               u.Email,
+		AvatarPath:          u.AvatarPath,
+		IsDefaultPass:       u.IsDefaultPass,
+		IsActive:            u.IsActive,
+		IsSuperAdmin:        u.IsSuperAdmin,
+		CreatedAt:           JSONTime(u.CreatedAt),
+		StatusEmoji:         u.StatusEmoji,
+		StatusText:          u.StatusText,
+		OnVacation:          u.OnVacation,
+		NotesAIProofread:    u.NotesAIProofread,
+		NotesAIAutocomplete: u.NotesAIAutocomplete,
 	}
 }
 
@@ -89,14 +94,14 @@ func NewUsers(users []*domain.User) []User {
 // заполнены только в каталоге членов конкретной компании; в глобальном поиске
 // (контакты) — nil.
 type DirectoryUser struct {
-	ID         int64     `json:"id"`
-	FIO        string    `json:"fio"`
-	Login      string    `json:"login"`
-	Post       *string   `json:"post"`
-	Role       *RoleRef  `json:"role"`
-	CompanyID  *int64    `json:"company_id"`
-	Phone      *string   `json:"phone"`
-	Email      *string   `json:"email"`
+	ID          int64     `json:"id"`
+	FIO         string    `json:"fio"`
+	Login       string    `json:"login"`
+	Post        *string   `json:"post"`
+	Role        *RoleRef  `json:"role"`
+	CompanyID   *int64    `json:"company_id"`
+	Phone       *string   `json:"phone"`
+	Email       *string   `json:"email"`
 	AvatarPath  *string   `json:"avatar_path"`
 	LastSeenAt  *JSONTime `json:"last_seen_at"`
 	StatusEmoji *string   `json:"status_emoji"`
@@ -106,12 +111,12 @@ type DirectoryUser struct {
 
 func NewDirectoryUser(u *domain.User) DirectoryUser {
 	out := DirectoryUser{
-		ID:         u.ID,
-		FIO:        u.FIO,
-		Login:      u.Login,
-		Post:       u.Post,
-		Role:       roleRef(u.Role),
-		CompanyID:  u.CompanyID,
+		ID:          u.ID,
+		FIO:         u.FIO,
+		Login:       u.Login,
+		Post:        u.Post,
+		Role:        roleRef(u.Role),
+		CompanyID:   u.CompanyID,
 		Phone:       u.Phone,
 		Email:       u.Email,
 		AvatarPath:  u.AvatarPath,
@@ -282,6 +287,10 @@ type UpdateMeRequest struct {
 	StatusText  *string `json:"status_text"`
 	// Режим «в отпуске»: задачи/юниты закрыты, грувик заморожен.
 	OnVacation *bool `json:"on_vacation"`
+	// Настройки ИИ в заметках (по кнопке): корректура орфографии/пунктуации и
+	// автодописывание текста.
+	NotesAIProofread    *bool `json:"notes_ai_proofread"`
+	NotesAIAutocomplete *bool `json:"notes_ai_autocomplete"`
 }
 
 // AddMemberRequest — POST /companies/<id>/members: добавить существующего

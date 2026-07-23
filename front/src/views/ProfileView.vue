@@ -124,6 +124,14 @@
                 <h3>Личная статистика</h3>
                 <p class="head-desc">Часы и задачи за выбранный период</p>
               </div>
+              <RouterLink
+                v-if="authStore.roleLevel > 0"
+                :to="`/employees/${authStore.userId}/activity`"
+                class="btn-glass activity-link"
+              >
+                <span class="material-symbols-outlined">timeline</span>
+                <span class="activity-link-label">Моя активность</span>
+              </RouterLink>
               <DateRangePicker
                 v-model="statsPeriod"
                 class="head-period"
@@ -1135,7 +1143,17 @@ onMounted(() => {
 .head-icon .material-symbols-outlined { font-size: 22px; }
 
 .stats-head { flex-wrap: wrap; }
-.head-period { margin-left: auto; }
+/* «Моя активность» открывает правую группу шапки, дальше — пикер периода. */
+.activity-link {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+  text-decoration: none;
+}
+.activity-link .material-symbols-outlined { font-size: 18px; }
+.head-period { margin-left: 8px; }
 
 /* ── Логин и пароль ──────────────────────────────────────────── */
 .cred-list {
@@ -1427,6 +1445,8 @@ onMounted(() => {
   .head-desc { display: none; }
 
   .stats-head { flex-wrap: wrap; }
+  .activity-link { margin-left: auto; }
+  .activity-link-label { display: none; }
   .head-period { margin-left: 0; flex-basis: 100%; }
 
   /* Плитки статистики — прежние нейтральные карточки, без третьей. */

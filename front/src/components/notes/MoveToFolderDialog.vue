@@ -40,6 +40,7 @@ import { computed, ref, watch } from 'vue'
 import AppDialog from '@/components/common/AppDialog.vue'
 import TreeView from '@/components/common/TreeView.vue'
 import { useNotesStore } from '@/stores/notes.js'
+import { useAuthStore } from '@/stores/auth.js'
 import { useNotificationsStore } from '@/stores/notifications.js'
 
 const props = defineProps({
@@ -50,6 +51,7 @@ const props = defineProps({
 const emit = defineEmits(['update:modelValue', 'moved'])
 
 const store = useNotesStore()
+const auth = useAuthStore()
 const notif = useNotificationsStore()
 const target = ref(null)
 const moving = ref(false)
@@ -67,9 +69,10 @@ const excluded = computed(() => {
   return set
 })
 
+// Цель переноса — только МОИ папки (в чужие размещённые класть нельзя).
 function buildTree(parentId) {
   return store.childrenOf(parentId)
-    .filter((f) => !excluded.value.has(f.id))
+    .filter((f) => !excluded.value.has(f.id) && (f.owner_id == null || f.owner_id === auth.userId))
     .sort((a, b) => (a.position - b.position) || a.name.localeCompare(b.name))
     .map((f) => ({ ...f, owner_is_me: true, children: buildTree(f.id) }))
 }

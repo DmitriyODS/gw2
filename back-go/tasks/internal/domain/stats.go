@@ -85,6 +85,48 @@ type EmployeeRef struct {
 	FIO string
 }
 
+// ── Активность сотрудника (раздел «Активность», руководитель компании) ──
+
+// EmployeeActivitySummary — сводные метрики сотрудника за период.
+type EmployeeActivitySummary struct {
+	WorkedHours       float64 // суммарно отработано (сумма длительностей юнитов)
+	TasksCreated      int     // создано задач (author_id)
+	TasksClosed       int     // закрыто задач (ответственный, is_archived в период)
+	Comments          int     // оставлено комментариев
+	ActiveDays        int     // дней с активностью (уникальные даты юнитов)
+	UnitsCount        int     // число юнитов
+	AvgHoursPerClosed float64 // средние часы на закрытую задачу
+	AvgCycleHours     float64 // среднее время жизни закрытой задачи (создана→закрыта)
+}
+
+// WeekdayHours — часы по дню недели (Weekday 0..6, 0 — воскресенье, как pg dow).
+type WeekdayHours struct {
+	Weekday int
+	Hours   float64
+}
+
+// HourHours — часы по часу суток (0..23) старта юнитов (когда человек работает).
+type HourHours struct {
+	Hour  int
+	Hours float64
+}
+
+// WeekPoint — точка недельного тренда (ISO-неделя): часы и закрытые задачи.
+type WeekPoint struct {
+	Week   string
+	Hours  float64
+	Closed int
+}
+
+// ActivityEvent — событие ленты активности сотрудника (что и когда делал).
+type ActivityEvent struct {
+	Type     string // unit_started|unit_stopped|task_created|task_closed|comment
+	At       time.Time
+	TaskID   *int64
+	TaskName string
+	Detail   string // тип юнита / длительность / фрагмент комментария
+}
+
 // StatsRepository — выборки статистики (порт stats_repo). Статистика всегда в
 // пределах активной компании; companyID приходит из токена и непустой.
 type StatsRepository interface {
@@ -100,4 +142,12 @@ type StatsRepository interface {
 	Responsibles(ctx Ctx, companyID *int64) ([]Responsible, error)
 	// VisibleEmployees — список для селектора статистики (user_repo.get_all).
 	VisibleEmployees(ctx Ctx, companyID *int64) ([]EmployeeRef, error)
+
+	// ── Активность сотрудника (companyID непустой — активная компания) ──
+	EmployeeSummary(ctx Ctx, companyID, userID int64, start, end time.Time) (*EmployeeActivitySummary, error)
+	EmployeeByUnitTypes(ctx Ctx, companyID, userID int64, start, end time.Time) ([]UnitTypeHours, error)
+	EmployeeByWeekday(ctx Ctx, companyID, userID int64, start, end time.Time) ([]WeekdayHours, error)
+	EmployeeByHour(ctx Ctx, companyID, userID int64, start, end time.Time) ([]HourHours, error)
+	EmployeeWeeklyTrend(ctx Ctx, companyID, userID int64, start, end time.Time) ([]WeekPoint, error)
+	EmployeeFeed(ctx Ctx, companyID, userID int64, start, end time.Time, limit, offset int) ([]ActivityEvent, int, error)
 }

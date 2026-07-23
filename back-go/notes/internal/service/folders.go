@@ -19,10 +19,18 @@ func (s *Service) ListFolders(ctx context.Context, userID int64) (*FolderTree, e
 	if err != nil {
 		return nil, err
 	}
-	shared, err := s.repo.ListSharedRootFolders(ctx, userID, s.companyIDs(ctx, userID))
+	companyIDs := s.companyIDs(ctx, userID)
+	shared, err := s.repo.ListSharedRootFolders(ctx, userID, companyIDs)
 	if err != nil {
 		return nil, err
 	}
+	// Чужие папки, размещённые мной в своём дереве (parent_id — моя папка):
+	// подмешиваем к собственным, чтобы клиент вложил их как обычные подпапки.
+	placed, err := s.repo.ListRecipientFolders(ctx, userID, companyIDs)
+	if err != nil {
+		return nil, err
+	}
+	own = append(own, placed...)
 	return &FolderTree{Folders: own, Shared: shared}, nil
 }
 
@@ -95,34 +103,51 @@ func (s *Service) UpdateFolder(ctx context.Context, userID, id int64, name, colo
 	return f, nil
 }
 
-// MoveFolder — сменить родителя папки (parentID nil — в корень); только владелец.
-// Защита от цикла: новый родитель не может быть самой папкой или её потомком.
+// MoveFolder — сменить родителя папки (parentID nil — в корень). Владелец двигает
+// свою папку (с защитой от цикла); адресат шаринга — подшивает ЧУЖУЮ расшаренную
+// ему папку под СВОЮ через личный оверлей (у владельца ничего не меняется). Цель
+// — всегда моя папка.
 func (s *Service) MoveFolder(ctx context.Context, userID, id int64, parentID *int64) (*domain.Folder, error) {
-	f, err := s.requireFolderOwned(ctx, userID, id)
+	f, access, err := s.requireFolderReadable(ctx, userID, id)
 	if err != nil {
 		return nil, err
 	}
 	if parentID != nil {
-		if *parentID == id {
-			return nil, domain.ErrFolderCycle
-		}
 		if _, err := s.requireFolderOwned(ctx, userID, *parentID); err != nil {
 			return nil, err
 		}
-		descendant, err := s.repo.IsDescendant(ctx, *parentID, id)
-		if err != nil {
+	}
+	if access == domain.AccessOwner {
+		if parentID != nil {
+			if *parentID == id {
+				return nil, domain.ErrFolderCycle
+			}
+			descendant, err := s.repo.IsDescendant(ctx, *parentID, id)
+			if err != nil {
+				return nil, err
+			}
+			if descendant {
+				return nil, domain.ErrFolderCycle
+			}
+		}
+		if err := s.repo.MoveFolder(ctx, id, parentID); err != nil {
 			return nil, err
 		}
-		if descendant {
-			return nil, domain.ErrFolderCycle
-		}
+		f.ParentID = parentID
+		s.publishFolder(ctx, "note_folder:updated", f)
+		return f, nil
 	}
-	if err := s.repo.MoveFolder(ctx, id, parentID); err != nil {
+	if err := s.repo.SetFolderRecipientPlacement(ctx, userID, id, parentID); err != nil {
 		return nil, err
 	}
-	f.ParentID = parentID
-	s.publishFolder(ctx, "note_folder:updated", f)
-	return f, nil
+	resp := *f // не мутируем папку владельца — оверлей чисто мой
+	resp.ParentID = parentID
+	resp.MyAccess = access
+	if owner, err := s.users.GetUser(ctx, resp.OwnerID); err == nil && owner != nil {
+		resp.OwnerName, resp.OwnerAvatar = owner.FIO, owner.AvatarPath
+	}
+	s.bus.Publish(ctx, "note_folder:updated", []string{userRoom(userID)}, folderPayload(&resp))
+	return &resp, nil
 }
 
 // DeleteFolder — удалить папку; её прямые дети (подпапки и заметки) переезжают в

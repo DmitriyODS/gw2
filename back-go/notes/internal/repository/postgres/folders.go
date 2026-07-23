@@ -82,6 +82,7 @@ func (r *Repo) ListSharedRootFolders(ctx context.Context, userID int64, companyI
 		  JOIN note_folders f ON f.id = g.folder_id
 		  JOIN users u ON u.id = f.owner_id
 		 WHERE f.owner_id <> $1
+		   AND NOT EXISTS (SELECT 1 FROM folder_recipient_state s WHERE s.user_id = $1 AND s.folder_id = f.id)
 		 ORDER BY f.name, f.id`, userID, companyIDs)
 	if err != nil {
 		return nil, err
@@ -299,4 +300,59 @@ func (r *Repo) markSharedFolders(ctx context.Context, folders []*domain.Folder) 
 			f.SharedByMe = true
 		}
 	}
+}
+
+func (r *Repo) SetFolderRecipientPlacement(ctx context.Context, userID, folderID int64, parentID *int64) error {
+	_, err := r.pool.Exec(ctx, `
+		INSERT INTO folder_recipient_state (user_id, folder_id, parent_id, archived)
+		VALUES ($1, $2, $3, FALSE)
+		ON CONFLICT (user_id, folder_id)
+		DO UPDATE SET parent_id = EXCLUDED.parent_id, archived = FALSE, updated_at = now()`,
+		userID, folderID, parentID)
+	return err
+}
+
+// ListRecipientFolders — все расшаренные мне папки, которые я разместил в своём
+// дереве: parent_id берётся из оверлея (моя папка), с owner и my_access. Клиент
+// подмешивает их в собственное дерево как вложенные.
+func (r *Repo) ListRecipientFolders(ctx context.Context, userID int64, companyIDs []int64) ([]*domain.Folder, error) {
+	rows, err := r.pool.Query(ctx, `
+		WITH grants AS (
+			SELECT folder_id, bool_or(can_edit) AS can_edit FROM (
+				SELECT folder_id, can_edit FROM folder_user_shares WHERE user_id = $1
+				UNION ALL
+				SELECT folder_id, can_edit FROM folder_company_shares WHERE company_id = ANY($2::bigint[])
+			) g GROUP BY folder_id
+		)
+		SELECT f.id, f.owner_id, st.parent_id, f.name, f.color, f.position,
+		       f.created_at, f.updated_at,
+		       COALESCE((SELECT count(*) FROM notes n WHERE n.folder_id = f.id), 0),
+		       u.fio, u.avatar_path, g.can_edit
+		  FROM grants g
+		  JOIN note_folders f ON f.id = g.folder_id
+		  JOIN users u ON u.id = f.owner_id
+		  JOIN folder_recipient_state st ON st.user_id = $1 AND st.folder_id = f.id
+		 WHERE f.owner_id <> $1 AND NOT st.archived
+		 ORDER BY f.name, f.id`, userID, companyIDs)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := []*domain.Folder{}
+	for rows.Next() {
+		var (
+			f       domain.Folder
+			canEdit bool
+		)
+		if err := rows.Scan(&f.ID, &f.OwnerID, &f.ParentID, &f.Name, &f.Color, &f.Position,
+			&f.CreatedAt, &f.UpdatedAt, &f.NotesCount, &f.OwnerName, &f.OwnerAvatar, &canEdit); err != nil {
+			return nil, err
+		}
+		f.MyAccess = domain.AccessView
+		if canEdit {
+			f.MyAccess = domain.AccessEdit
+		}
+		out = append(out, &f)
+	}
+	return out, rows.Err()
 }

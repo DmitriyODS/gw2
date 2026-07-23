@@ -37,8 +37,8 @@ type Endpoints struct {
 	ListComments     endpoint.Endpoint
 	MarkCommentsSeen endpoint.Endpoint
 	CreateComment    endpoint.Endpoint
-	UpdateComment endpoint.Endpoint
-	DeleteComment endpoint.Endpoint
+	UpdateComment    endpoint.Endpoint
+	DeleteComment    endpoint.Endpoint
 
 	ListUnitTypes  endpoint.Endpoint
 	CreateUnitType endpoint.Endpoint
@@ -62,14 +62,17 @@ type Endpoints struct {
 	DeleteStage   endpoint.Endpoint
 	ReorderStages endpoint.Endpoint
 
-	StatsCommon        endpoint.Endpoint
-	StatsExtended      endpoint.Endpoint
-	ExportCommonXLSX   endpoint.Endpoint
-	ExportExtendedXLSX endpoint.Endpoint
-	StatsUserTasks     endpoint.Endpoint
-	StatsProfile       endpoint.Endpoint
-	StatsEmployees     endpoint.Endpoint
-	StatsResponsibles  endpoint.Endpoint
+	StatsCommon          endpoint.Endpoint
+	StatsExtended        endpoint.Endpoint
+	ExportCommonXLSX     endpoint.Endpoint
+	ExportExtendedXLSX   endpoint.Endpoint
+	StatsUserTasks       endpoint.Endpoint
+	StatsProfile         endpoint.Endpoint
+	StatsEmployees       endpoint.Endpoint
+	StatsResponsibles    endpoint.Endpoint
+	EmployeeActivity     endpoint.Endpoint
+	EmployeeActivityFeed endpoint.Endpoint
+	EmployeeActivityDocx endpoint.Endpoint
 
 	// Инструменты ИИ-ассистента (gRPC TasksService, зовёт aisvc).
 	AssistantStatsSummary endpoint.Endpoint
@@ -250,6 +253,22 @@ type ProfileRequest struct {
 	UserID int64
 	Start  time.Time
 	End    time.Time
+}
+
+type EmployeeActivityRequest struct {
+	Actor        *domain.User
+	TargetUserID int64
+	Start        time.Time
+	End          time.Time
+	// Только для ленты: страница/размер.
+	Page    int
+	PerPage int
+}
+
+// EmployeeActivityDocxResponse — имя сотрудника + байты .docx для имени файла.
+type EmployeeActivityDocxResponse struct {
+	Name string
+	Data []byte
 }
 
 // ── ИИ-ассистент (gRPC TasksService) ──────────────────────────────
@@ -540,6 +559,22 @@ func New(svc *service.Service, yg *service.Yougile) Endpoints {
 		},
 		StatsResponsibles: func(ctx context.Context, request any) (any, error) {
 			return svc.StatsResponsibles(ctx, request.(*int64))
+		},
+		EmployeeActivity: func(ctx context.Context, request any) (any, error) {
+			req := request.(EmployeeActivityRequest)
+			return svc.EmployeeActivity(ctx, req.Actor, req.TargetUserID, req.Start, req.End)
+		},
+		EmployeeActivityFeed: func(ctx context.Context, request any) (any, error) {
+			req := request.(EmployeeActivityRequest)
+			return svc.EmployeeActivityFeed(ctx, req.Actor, req.TargetUserID, req.Start, req.End, req.Page, req.PerPage)
+		},
+		EmployeeActivityDocx: func(ctx context.Context, request any) (any, error) {
+			req := request.(EmployeeActivityRequest)
+			name, data, err := svc.EmployeeActivityDocx(ctx, req.Actor, req.TargetUserID, req.Start, req.End)
+			if err != nil {
+				return nil, err
+			}
+			return EmployeeActivityDocxResponse{Name: name, Data: data}, nil
 		},
 
 		AssistantStatsSummary: func(ctx context.Context, request any) (any, error) {

@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/hex"
+	"io"
 	"mime"
 	"path/filepath"
 	"strings"
@@ -44,6 +45,17 @@ func (s *FileStore) Save(fileName string, data []byte) (string, error) {
 
 func (s *FileStore) Remove(paths []string) {
 	s.st.Remove(context.Background(), paths...)
+}
+
+// Open — прочитать содержимое объекта по ключу (для встраивания картинок в
+// экспорт). Возвращает байты целиком.
+func (s *FileStore) Open(key string) ([]byte, error) {
+	rc, err := s.st.Open(context.Background(), key)
+	if err != nil {
+		return nil, err
+	}
+	defer rc.Close()
+	return io.ReadAll(rc)
 }
 
 func contentType(ext string) string {

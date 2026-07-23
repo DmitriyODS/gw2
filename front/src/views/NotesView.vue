@@ -180,7 +180,7 @@
                 v-for="f in folderCards" :key="'f' + f.id"
                 class="na-fcard" :class="{ selected: store.selectedFolderIds.has(f.id), shared: f.owner_id !== myId, 'na-drop': dropFolderId === f.id }"
                 :style="folderCardStyle(f)"
-                :draggable="f.owner_id === myId"
+                :draggable="true"
                 @click="onFolderClick(f, $event)"
                 @contextmenu.prevent.stop="onFolderContext({ node: f, event: $event })"
                 @dragstart="onFolderDragStart(f, $event)"
@@ -205,7 +205,7 @@
                 class="na-card glass-hover"
                 :class="{ colored: n.color, selected: store.selectedNoteIds.has(n.id), shared: isShared(n), 'na-drag': true }"
                 :style="noteColorStyle(n)"
-                :draggable="!isShared(n)"
+                :draggable="true"
                 @click="onNoteClick(n, $event)"
                 @dblclick="openNote(n)"
                 @contextmenu.prevent.stop="openNoteMenu($event.clientX, $event.clientY, n)"
@@ -580,7 +580,14 @@ function noteMenuItems(n) {
     { label: 'Формат .txt', icon: 'description', action: 'export-txt' },
     { label: 'Формат .docx', icon: 'article', action: 'export-docx' },
   ] }
-  if (isShared(n)) return [{ label: 'Открыть', icon: 'edit_note', action: 'open' }, dl]
+  if (isShared(n)) return [
+    { label: 'Открыть', icon: 'edit_note', action: 'open' },
+    { label: 'Организация', icon: 'category', children: [
+      { label: 'Переместить в мою папку', icon: 'drive_file_move', action: 'move' },
+      { label: n.archived ? 'Убрать из моего архива' : 'В мой архив', icon: n.archived ? 'unarchive' : 'archive', action: 'archive' },
+    ] },
+    dl,
+  ]
   return [
     { label: 'Открыть', icon: 'edit_note', action: 'open' },
     { label: 'Организация', icon: 'category', children: [
@@ -602,7 +609,10 @@ function noteMenuItems(n) {
 
 function folderMenuItems(f) {
   if (!f) return []
-  if (f.owner_id !== myId.value) return [{ label: 'Открыть', icon: 'folder_open', action: 'open' }]
+  if (f.owner_id !== myId.value) return [
+    { label: 'Открыть', icon: 'folder_open', action: 'open' },
+    { label: 'Переместить в мою папку', icon: 'drive_file_move', action: 'move' },
+  ]
   return [
     { label: 'Открыть', icon: 'folder_open', action: 'open' },
     { label: 'Создать внутри', icon: 'add', children: [
@@ -761,18 +771,23 @@ function onCrumbDrop(index) {
 
 // ── Drag & drop заметок/папок ──
 const dropFolderId = ref(null)
+// Перетаскивать можно и чужие расшаренные заметки/папки — они лягут в МОЮ папку
+// через личный оверлей (у владельца ничего не меняется).
 function onNoteDragStart(n, e) {
-  if (isShared(n)) { e.preventDefault(); return }
   startDrag('note', n.id, n.title)
   try { e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', `note:${n.id}`) } catch { /* Safari */ }
 }
 function onFolderDragStart(f, e) {
-  if (f.owner_id !== myId.value) { if (e?.preventDefault) e.preventDefault(); return }
   startDrag('folder', f.id, f.name)
   try { e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', `folder:${f.id}`) } catch { /* Safari */ }
 }
 function dragEnd() { endDrag(); dropFolderId.value = null }
-function onFolderCardDrop(f) { dropFolderId.value = null; performDrop(f.id) }
+// Класть можно только в СВОЮ папку (в чужую размещённую — нельзя).
+function onFolderCardDrop(f) {
+  dropFolderId.value = null
+  if (f.owner_id !== myId.value) { endDrag(); return }
+  performDrop(f.id)
+}
 function onTreeDrop(node) { performDrop(node.id) }
 async function performDrop(targetFolderId) {
   const item = dragItem.value

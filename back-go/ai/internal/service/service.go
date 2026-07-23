@@ -90,6 +90,7 @@ type AiService interface {
 
 	// REST /api/ai/text-tools — ИИ-инструменты текста заметок (texttools.go).
 	TransformText(ctx context.Context, companyID int64, action, style, text string) (string, error)
+	Proofread(ctx context.Context, companyID int64, segments []string) ([]string, error)
 
 	// gRPC SupportChat — ИИ техподдержки dev-чата (support.go, зовёт msgsvc).
 	SupportReply(ctx context.Context, messagesJSON string) (string, error)

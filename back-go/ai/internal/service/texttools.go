@@ -136,3 +136,89 @@ func (s *Service) TransformText(ctx context.Context, companyID int64, action, st
 	}
 	return out, nil
 }
+
+const (
+	// proofreadMaxChars — суммарный потолок текста заметки за один прогон.
+	proofreadMaxChars  = 16000
+	proofreadMaxTokens = 6000
+)
+
+// proofreadSystemPrompt — корректура без переписывания: правим только ошибки,
+// структуру и порядок сегментов сохраняем строго (сегменты — текстовые узлы
+// TipTap-документа, форматирование восстанавливается по индексу на клиенте).
+const proofreadSystemPrompt = "Ты — корректор текста в личных заметках. На вход даётся JSON-массив строк " +
+	"(фрагменты одной заметки по порядку). Исправь в КАЖДОЙ строке орфографические, грамматические и " +
+	"пунктуационные ошибки. НЕ меняй смысл, стиль, формулировки, регистр там где он уместен, порядок и " +
+	"КОЛИЧЕСТВО строк. Не объединяй и не разбивай строки, не добавляй и не удаляй их. Сохраняй язык каждой " +
+	"строки. Ответ — СТРОГО JSON-массив строк той же длины и порядка, без пояснений и Markdown."
+
+// Proofread — корректура орфографии и пунктуации по всем текстовым сегментам
+// заметки за один вызов LLM (сохраняет структуру/картинки/таблицы: клиент лишь
+// подменяет текст узлов по индексу). Возвращает массив той же длины; при сбое
+// формата — доменная ошибка (клиент покажет тост, ничего не подменит).
+func (s *Service) Proofread(ctx context.Context, companyID int64, segments []string) ([]string, error) {
+	if len(segments) == 0 {
+		return nil, errTextToolValidation("Нет текста для проверки")
+	}
+	total := 0
+	for _, seg := range segments {
+		total += utf8.RuneCountInString(seg)
+	}
+	if total == 0 {
+		return nil, errTextToolValidation("Нет текста для проверки")
+	}
+	if total > proofreadMaxChars {
+		return nil, errTextToolValidation("Слишком большая заметка для проверки за раз")
+	}
+	client, err := s.clientFor(ctx, companyID)
+	if err != nil {
+		return nil, err
+	}
+	if client == nil {
+		return nil, errAiDisabled(409)
+	}
+
+	input, err := json.Marshal(segments)
+	if err != nil {
+		return nil, err
+	}
+	messages := []map[string]any{
+		{"role": "system", "content": proofreadSystemPrompt},
+		{"role": "user", "content": "Фрагменты заметки:\n" + string(input)},
+	}
+	raw, err := json.Marshal(messages)
+	if err != nil {
+		return nil, err
+	}
+	res, err := s.Chat(ctx, ChatArgs{
+		CompanyID:    companyID,
+		MessagesJSON: string(raw),
+		MaxTokens:    proofreadMaxTokens,
+		Temperature:  textToolTemperature,
+		TimeoutSec:   textToolTimeout.Seconds(),
+	})
+	if err != nil {
+		return nil, err
+	}
+	out, ok := parseProofread(res.Content, len(segments))
+	if !ok {
+		return nil, domain.NewError("AI_EMPTY", "ИИ вернул некорректный результат — попробуйте ещё раз", 502)
+	}
+	return out, nil
+}
+
+// parseProofread — извлечь JSON-массив строк из ответа модели (терпим к обёртке
+// в ```json fences); длина обязана совпасть с числом сегментов.
+func parseProofread(content string, want int) ([]string, bool) {
+	content = strings.TrimSpace(content)
+	if i := strings.IndexByte(content, '['); i >= 0 {
+		if j := strings.LastIndexByte(content, ']'); j > i {
+			content = content[i : j+1]
+		}
+	}
+	var out []string
+	if json.Unmarshal([]byte(content), &out) != nil || len(out) != want {
+		return nil, false
+	}
+	return out, true
+}

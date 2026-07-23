@@ -64,7 +64,37 @@ func (s *Service) ListNotes(ctx context.Context, userID, companyID int64, p List
 		return nil, err
 	}
 	s.markSharedByMe(ctx, notes)
+	if placed := s.recipientNotesFor(ctx, userID, p); placed != nil {
+		notes = append(notes, placed...)
+	}
 	return notes, nil
+}
+
+// recipientNotesFor — чужие заметки, размещённые мной в текущем scope проводника
+// (папка/корень) или в личном архиве. Только для «своих» видов без поиска/тегов
+// (теги — личная организация владельца, поиск идёт своим путём).
+func (s *Service) recipientNotesFor(ctx context.Context, userID int64, p ListNotesParams) []*domain.Note {
+	if p.Search != "" || len(p.TagIDs) > 0 {
+		return nil
+	}
+	var scope domain.RecipientScope
+	var folderID *int64
+	switch {
+	case p.Archived && !p.FolderSet:
+		scope = domain.RecipientArchive
+	case p.FolderSet && !p.Archived && p.FolderID != nil:
+		scope, folderID = domain.RecipientFolder, p.FolderID
+	case p.FolderSet && !p.Archived && p.FolderID == nil:
+		scope = domain.RecipientRoot
+	default:
+		return nil
+	}
+	placed, err := s.repo.ListRecipientNotes(ctx, userID, s.companyIDs(ctx, userID), scope, folderID)
+	if err != nil {
+		s.log.Warn("notes.recipient_notes_failed", "user", userID, "error", err)
+		return nil
+	}
+	return placed
 }
 
 // ListSharedNotes — чужие заметки, доступные мне адресно или через расшаренную
@@ -150,6 +180,16 @@ func (s *Service) UpdateNote(ctx context.Context, userID, id int64, u domain.Not
 	if err != nil {
 		return nil, err
 	}
+	// Адресату — личный архив «только у меня» (даже при доступе только на чтение):
+	// это моя организация, а не правка содержимого владельца.
+	if access != domain.AccessOwner && u.Archived != nil {
+		if err := s.repo.SetNoteRecipientArchived(ctx, userID, id, *u.Archived); err != nil {
+			return nil, err
+		}
+		resp := *n // личный архив — не трогаем заметку владельца
+		resp.Archived = *u.Archived
+		return s.publishRecipientNote(ctx, userID, &resp, access), nil
+	}
 	switch access {
 	case domain.AccessOwner:
 		if u.Color != nil {
@@ -207,21 +247,41 @@ func (s *Service) DeleteNote(ctx context.Context, userID, id int64) error {
 	return nil
 }
 
-// MoveNote — сменить папку заметки (folderID nil — в корень); только владелец.
+// MoveNote — разложить заметку по папкам (folderID nil — в корень). Владелец
+// двигает саму заметку; адресат шаринга — раскладывает ЧУЖУЮ заметку по СВОИМ
+// папкам через личный оверлей (у владельца ничего не меняется). Цель — всегда
+// моя папка (checkOwnFolder).
 func (s *Service) MoveNote(ctx context.Context, userID, id int64, folderID *int64) (*domain.Note, error) {
-	n, err := s.requireOwned(ctx, userID, id)
+	n, access, err := s.requireReadable(ctx, userID, id)
 	if err != nil {
 		return nil, err
 	}
 	if err := s.checkOwnFolder(ctx, userID, folderID); err != nil {
 		return nil, err
 	}
-	if err := s.repo.MoveNote(ctx, id, folderID); err != nil {
+	if access == domain.AccessOwner {
+		if err := s.repo.MoveNote(ctx, id, folderID); err != nil {
+			return nil, err
+		}
+		n.FolderID = folderID
+		s.publishNote(ctx, "note:updated", n)
+		return n, nil
+	}
+	if err := s.repo.SetNoteRecipientPlacement(ctx, userID, id, folderID); err != nil {
 		return nil, err
 	}
-	n.FolderID = folderID
-	s.publishNote(ctx, "note:updated", n)
-	return n, nil
+	resp := *n // не мутируем заметку владельца — оверлей чисто мой
+	resp.FolderID = folderID
+	resp.Archived = false
+	return s.publishRecipientNote(ctx, userID, &resp, access), nil
+}
+
+// publishRecipientNote — оформить чужую заметку как размещённую мной (owner-поля,
+// my_access, без личных тегов) и разослать событие только в мою комнату.
+func (s *Service) publishRecipientNote(ctx context.Context, userID int64, n *domain.Note, access string) *domain.Note {
+	s.decorateShared(ctx, []*domain.Note{n}, n.OwnerID, access)
+	s.bus.Publish(ctx, "note:updated", []string{userRoom(userID)}, notePayload(n))
+	return n
 }
 
 // CopyNote — дубликат заметки владельца (в той же папке, с тегами).

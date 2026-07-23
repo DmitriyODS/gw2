@@ -169,6 +169,64 @@ func (h *handlers) statsResponsibles(c *fiber.Ctx) error {
 	return c.JSON(resp)
 }
 
+// activityTarget — общий разбор преамбулы хендлеров активности: сотрудник из
+// :id, период, актор.
+func (h *handlers) activityTarget(c *fiber.Ctx) (endpoint.EmployeeActivityRequest, bool, error) {
+	targetID, err := strconv.ParseInt(c.Params("id"), 10, 64)
+	if err != nil {
+		return endpoint.EmployeeActivityRequest{}, false, scopeBadRequest(c, "Неверный id сотрудника")
+	}
+	start, end, ok := parsePeriod(c)
+	if !ok {
+		return endpoint.EmployeeActivityRequest{}, false, badPeriod(c)
+	}
+	return endpoint.EmployeeActivityRequest{
+		Actor: currentUser(c), TargetUserID: targetID, Start: start, End: end,
+	}, true, nil
+}
+
+func (h *handlers) employeeActivity(c *fiber.Ctx) error {
+	req, ok, err := h.activityTarget(c)
+	if !ok {
+		return err
+	}
+	resp, err := h.eps.EmployeeActivity(c.Context(), req)
+	if err != nil {
+		return h.respondError(c, err)
+	}
+	return c.JSON(resp)
+}
+
+func (h *handlers) employeeActivityFeed(c *fiber.Ctx) error {
+	req, ok, err := h.activityTarget(c)
+	if !ok {
+		return err
+	}
+	req.Page, _ = strconv.Atoi(c.Query("page"))
+	req.PerPage, _ = strconv.Atoi(c.Query("per_page"))
+	resp, err := h.eps.EmployeeActivityFeed(c.Context(), req)
+	if err != nil {
+		return h.respondError(c, err)
+	}
+	return c.JSON(resp)
+}
+
+func (h *handlers) employeeActivityDocx(c *fiber.Ctx) error {
+	req, ok, err := h.activityTarget(c)
+	if !ok {
+		return err
+	}
+	resp, err := h.eps.EmployeeActivityDocx(c.Context(), req)
+	if err != nil {
+		return h.respondError(c, err)
+	}
+	out := resp.(endpoint.EmployeeActivityDocxResponse)
+	c.Set(fiber.HeaderContentType, "application/vnd.openxmlformats-officedocument.wordprocessingml.document")
+	c.Set(fiber.HeaderContentDisposition,
+		"attachment; filename=activity_"+req.Start.UTC().Format("2006-01-02")+"_"+req.End.UTC().Format("2006-01-02")+".docx")
+	return c.Send(out.Data)
+}
+
 func (h *handlers) statsProfile(c *fiber.Ctx) error {
 	start, end, ok := parsePeriod(c)
 	if !ok {

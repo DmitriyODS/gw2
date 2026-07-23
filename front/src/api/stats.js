@@ -36,3 +36,19 @@ export const getStatsEmployees = (companyId = null) =>
 
 export const getStatsResponsibles = (companyId = null) =>
   apiRequest('/stats/responsibles' + qs({ companyId }))
+
+// ── Активность сотрудника (руководитель компании) ──
+export const getEmployeeActivity = (userId, from, to) =>
+  apiRequest(`/stats/employee/${userId}/activity` + qs({ from, to }))
+
+export const getEmployeeActivityFeed = (userId, { from, to, page = 1, perPage = 30 } = {}) => {
+  const p = new URLSearchParams()
+  if (from != null) p.set('from', from)
+  if (to != null) p.set('to', to)
+  p.set('page', page)
+  p.set('per_page', perPage)
+  return apiRequest(`/stats/employee/${userId}/feed?${p.toString()}`)
+}
+
+export const exportEmployeeActivity = (userId, from, to) =>
+  apiRequest(`/stats/employee/${userId}/export` + qs({ from, to }), { blob: true })

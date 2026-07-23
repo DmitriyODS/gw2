@@ -74,6 +74,7 @@ func NewServer(eps endpoint.Endpoints, users domain.UserReader,
 	app.Post("/api/ai/assistant/feedback", auth.RequireAuth, h.sendAssistantFeedback)
 
 	app.Post("/api/ai/text-tools", auth.RequireAuth, h.transformText)
+	app.Post("/api/ai/proofread", auth.RequireAuth, h.proofread)
 
 	return &Server{app: app}
 }

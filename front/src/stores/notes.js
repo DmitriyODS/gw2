@@ -379,7 +379,10 @@ export const useNotesStore = defineStore('notes', () => {
 
   async function moveFolder(id, parentId) {
     const f = await api.moveFolder(id, parentId)
-    upsertFolder(f)
+    // Чужую размещённую папку нужно перечитать деревом (уходит из shared-корней
+    // в мои folders с моим parent_id); свою — достаточно upsert.
+    if (f.owner_id && f.owner_id !== myId()) await fetchFolders({ silent: true })
+    else upsertFolder(f)
     if (viewMode.value === 'explorer') fetchBrowseChildren()
     return f
   }

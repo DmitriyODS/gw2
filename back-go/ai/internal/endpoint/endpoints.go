@@ -40,6 +40,8 @@ type Endpoints struct {
 
 	// ИИ-инструменты текста заметок (REST /api/ai/text-tools).
 	TransformText endpoint.Endpoint
+	// Корректура орфографии/пунктуации заметки (REST /api/ai/proofread).
+	Proofread endpoint.Endpoint
 }
 
 // ── Транспорт-независимые запросы/ответы ─────────────────────────
@@ -98,6 +100,11 @@ type TransformTextRequest struct {
 	Action    string
 	Style     string
 	Text      string
+}
+
+type ProofreadRequest struct {
+	CompanyID int64
+	Segments  []string
 }
 
 func New(svc service.AiService) Endpoints {
@@ -167,6 +174,10 @@ func New(svc service.AiService) Endpoints {
 		TransformText: func(ctx context.Context, request any) (any, error) {
 			req := request.(TransformTextRequest)
 			return svc.TransformText(ctx, req.CompanyID, req.Action, req.Style, req.Text)
+		},
+		Proofread: func(ctx context.Context, request any) (any, error) {
+			req := request.(ProofreadRequest)
+			return svc.Proofread(ctx, req.CompanyID, req.Segments)
 		},
 	}
 }

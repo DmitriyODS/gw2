@@ -144,9 +144,13 @@
           :editable="!readOnly"
           :upload-image="isOwner ? uploadImageFile : null"
           selection-menu
+          :ai-available="hasCompany && !readOnly"
+          :proofread-on="!!auth.user?.notes_ai_proofread"
+          :autocomplete-on="!!auth.user?.notes_ai_autocomplete"
           @change="onDocChange"
           @blur="flush"
           @selection-menu="onSelectionMenu"
+          @set-ai-setting="onSetAiSetting"
         />
       </template>
     </div>
@@ -227,6 +231,7 @@ import { docToMarkdown } from '@/utils/tiptapMarkdown.js'
 const PostComposer = defineAsyncComponent(() => import('@/components/portal/PostComposer.vue'))
 import * as api from '@/api/notes.js'
 import { transformText } from '@/api/ai.js'
+import { updateMe } from '@/api/users.js'
 import { useAuthStore } from '@/stores/auth.js'
 import { useNotesStore } from '@/stores/notes.js'
 import { useNotificationsStore } from '@/stores/notifications.js'
@@ -481,6 +486,16 @@ const sel = ref({ text: '', from: 0, to: 0 })
 function onSelectionMenu({ x, y, text, from, to }) {
   sel.value = { text, from, to }
   selMenu.value = { visible: true, x, y }
+}
+
+// Переключение персональной настройки ИИ в заметках (хранится в профиле).
+async function onSetAiSetting({ key, value }) {
+  try {
+    const me = await updateMe({ [key]: value })
+    auth.user = me
+  } catch (e) {
+    notif.error(e?.message || 'Не удалось сохранить настройку')
+  }
 }
 
 const ai = ref({ open: false, loading: false, action: '', style: null, label: '', result: '', error: '' })

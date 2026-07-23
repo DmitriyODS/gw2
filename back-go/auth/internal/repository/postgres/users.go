@@ -30,7 +30,8 @@ const identityCols = `
 	u.id, u.fio, u.login, u.hash_password,
 	u.avatar_path, u.phone, u.email,
 	u.is_default_pass, u.is_active, u.is_super_admin, u.email_verified,
-	u.created_at, u.last_seen_at, u.status_emoji, u.status_text, u.on_vacation`
+	u.created_at, u.last_seen_at, u.status_emoji, u.status_text, u.on_vacation,
+	u.notes_ai_proofread, u.notes_ai_autocomplete`
 
 const identityFrom = ` FROM users u`
 
@@ -41,6 +42,7 @@ func scanIdentity(row pgx.Row) (*domain.User, error) {
 		&u.AvatarPath, &u.Phone, &u.Email,
 		&u.IsDefaultPass, &u.IsActive, &u.IsSuperAdmin, &u.EmailVerified,
 		&u.CreatedAt, &u.LastSeenAt, &u.StatusEmoji, &u.StatusText, &u.OnVacation,
+		&u.NotesAIProofread, &u.NotesAIAutocomplete,
 	)
 	if err != nil {
 		return nil, err
@@ -56,7 +58,8 @@ const memberCols = `
 	uc.company_id, c.is_active,
 	u.avatar_path, u.phone, u.email,
 	u.is_default_pass, u.is_active, u.is_super_admin, u.email_verified,
-	u.created_at, u.last_seen_at, u.status_emoji, u.status_text, u.on_vacation`
+	u.created_at, u.last_seen_at, u.status_emoji, u.status_text, u.on_vacation,
+	u.notes_ai_proofread, u.notes_ai_autocomplete`
 
 const memberFrom = `
 	FROM user_companies uc
@@ -76,6 +79,7 @@ func scanMember(row pgx.Row) (*domain.User, error) {
 		&u.AvatarPath, &u.Phone, &u.Email,
 		&u.IsDefaultPass, &u.IsActive, &u.IsSuperAdmin, &u.EmailVerified,
 		&u.CreatedAt, &u.LastSeenAt, &u.StatusEmoji, &u.StatusText, &u.OnVacation,
+		&u.NotesAIProofread, &u.NotesAIAutocomplete,
 	)
 	if err != nil {
 		return nil, err
@@ -184,6 +188,7 @@ var allowedUserFields = map[string]bool{
 	"avatar_path": true, "hash_password": true,
 	"is_default_pass": true, "is_active": true, "email_verified": true,
 	"status_emoji": true, "status_text": true, "yandex_id": true, "on_vacation": true,
+	"notes_ai_proofread": true, "notes_ai_autocomplete": true,
 }
 
 func (r *UserRepository) UpdateFields(ctx context.Context, id int64, fields map[string]any) error {

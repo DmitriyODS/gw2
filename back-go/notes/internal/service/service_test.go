@@ -25,7 +25,18 @@ type fakeRepo struct {
 	noteCos     map[int64]map[int64]bool // noteID → companyID → canEdit
 	folderUsers map[int64]map[int64]bool
 	folderCos   map[int64]map[int64]bool
+	noteState   map[int64]map[int64]*recipNoteState   // userID → noteID → оверлей
+	folderState map[int64]map[int64]*recipFolderState // userID → folderID → оверлей
 	next        int64
+}
+
+type recipNoteState struct {
+	folderID *int64
+	archived bool
+}
+type recipFolderState struct {
+	parentID *int64
+	archived bool
 }
 
 func newFakeRepo() *fakeRepo {
@@ -34,6 +45,7 @@ func newFakeRepo() *fakeRepo {
 		noteTags: map[int64][]int64{}, shares: map[string]*domain.Share{},
 		noteUsers: map[int64]map[int64]bool{}, noteCos: map[int64]map[int64]bool{},
 		folderUsers: map[int64]map[int64]bool{}, folderCos: map[int64]map[int64]bool{},
+		noteState: map[int64]map[int64]*recipNoteState{}, folderState: map[int64]map[int64]*recipFolderState{},
 	}
 }
 
@@ -132,10 +144,101 @@ func (f *fakeRepo) ListSharedWithMe(_ domain.Ctx, userID int64, companyIDs []int
 		if n.OwnerID == userID {
 			continue
 		}
+		if f.noteState[userID][n.ID] != nil { // размещена мной / в личном архиве
+			continue
+		}
 		found, _, _ := f.NoteAccess(nil, userID, companyIDs, n.ID, n.FolderID)
 		if found {
 			out = append(out, n)
 		}
+	}
+	return out, nil
+}
+
+func (f *fakeRepo) SetNoteRecipientPlacement(_ domain.Ctx, userID, noteID int64, folderID *int64) error {
+	if f.noteState[userID] == nil {
+		f.noteState[userID] = map[int64]*recipNoteState{}
+	}
+	f.noteState[userID][noteID] = &recipNoteState{folderID: folderID}
+	return nil
+}
+
+func (f *fakeRepo) SetNoteRecipientArchived(_ domain.Ctx, userID, noteID int64, archived bool) error {
+	if f.noteState[userID] == nil {
+		f.noteState[userID] = map[int64]*recipNoteState{}
+	}
+	st := f.noteState[userID][noteID]
+	if st == nil {
+		st = &recipNoteState{}
+		f.noteState[userID][noteID] = st
+	}
+	st.archived = archived
+	return nil
+}
+
+func (f *fakeRepo) ListRecipientNotes(_ domain.Ctx, userID int64, companyIDs []int64, scope domain.RecipientScope, folderID *int64) ([]*domain.Note, error) {
+	out := []*domain.Note{}
+	for noteID, st := range f.noteState[userID] {
+		n := f.notes[noteID]
+		if n == nil || n.OwnerID == userID {
+			continue
+		}
+		found, canEdit, _ := f.NoteAccess(nil, userID, companyIDs, n.ID, n.FolderID)
+		if !found {
+			continue
+		}
+		match := false
+		switch scope {
+		case domain.RecipientArchive:
+			match = st.archived
+		case domain.RecipientRoot:
+			match = st.folderID == nil && !st.archived
+		default:
+			match = !st.archived && st.folderID != nil && folderID != nil && *st.folderID == *folderID
+		}
+		if !match {
+			continue
+		}
+		cp := *n
+		cp.FolderID, cp.Archived = st.folderID, st.archived
+		cp.MyAccess = domain.AccessView
+		if canEdit {
+			cp.MyAccess = domain.AccessEdit
+		}
+		out = append(out, &cp)
+	}
+	return out, nil
+}
+
+func (f *fakeRepo) SetFolderRecipientPlacement(_ domain.Ctx, userID, folderID int64, parentID *int64) error {
+	if f.folderState[userID] == nil {
+		f.folderState[userID] = map[int64]*recipFolderState{}
+	}
+	f.folderState[userID][folderID] = &recipFolderState{parentID: parentID}
+	return nil
+}
+
+func (f *fakeRepo) ListRecipientFolders(_ domain.Ctx, userID int64, companyIDs []int64) ([]*domain.Folder, error) {
+	out := []*domain.Folder{}
+	for fid, st := range f.folderState[userID] {
+		if st.archived {
+			continue
+		}
+		fol := f.folders[fid]
+		if fol == nil || fol.OwnerID == userID {
+			continue
+		}
+		found, canEdit, _ := f.FolderAccess(nil, userID, companyIDs, fid)
+		if !found {
+			continue
+		}
+		cp := *fol
+		cp.ParentID = st.parentID
+		cp.MyAccess = domain.AccessView
+		if canEdit {
+			cp.MyAccess = domain.AccessEdit
+		}
+		out = append(out, &cp)
 	}
 	return out, nil
 }
@@ -163,6 +266,9 @@ func (f *fakeRepo) ListSharedRootFolders(_ domain.Ctx, userID int64, companyIDs 
 	out := []*domain.Folder{}
 	for _, fol := range f.folders {
 		if fol.OwnerID == userID {
+			continue
+		}
+		if f.folderState[userID][fol.ID] != nil { // размещена мной в своём дереве
 			continue
 		}
 		if f.folderUsers[fol.ID][userID] {
@@ -432,6 +538,7 @@ type nopFiles struct{}
 
 func (nopFiles) Save(_ string, _ []byte) (string, error) { return "notes/x", nil }
 func (nopFiles) Remove(_ []string)                       {}
+func (nopFiles) Open(_ string) ([]byte, error)           { return nil, nil }
 
 type allowLimiter struct{}
 
@@ -560,6 +667,99 @@ func TestSharedListIncludesFolderSharedNotes(t *testing.T) {
 	}
 	if len(list) != 1 {
 		t.Fatalf("want 1 shared note, got %d", len(list))
+	}
+}
+
+// TestRecipientPlacesSharedNoteInOwnFolder — адресат раскладывает чужую заметку
+// по своей папке и в личный архив; у владельца ничего не меняется.
+func TestRecipientPlacesSharedNoteInOwnFolder(t *testing.T) {
+	repo, users := newFakeRepo(), newFakeUsers()
+	users.users[1] = &domain.User{ID: 1, FIO: "Owner", IsActive: true}
+	users.users[2] = &domain.User{ID: 2, FIO: "Recip", IsActive: true}
+	s := newSvc(repo, users)
+
+	n, _ := s.CreateNote(ctx(), 1, "shared", nil)
+	s.ShareNote(ctx(), 1, n.ID, domain.TargetUser, 2, false)
+	myFolder, _ := s.CreateFolder(ctx(), 2, "mine", "", nil)
+
+	// До размещения — в «Поделились со мной».
+	if list, _ := s.ListSharedNotes(ctx(), 2, ""); len(list) != 1 {
+		t.Fatalf("want 1 shared before placing, got %d", len(list))
+	}
+
+	// Разместить в своей папке.
+	moved, err := s.MoveNote(ctx(), 2, n.ID, &myFolder.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if moved.FolderID == nil || *moved.FolderID != myFolder.ID || moved.MyAccess != domain.AccessView {
+		t.Fatalf("bad moved note: folder=%v access=%q", moved.FolderID, moved.MyAccess)
+	}
+	// У владельца папка не изменилась.
+	if repo.notes[n.ID].FolderID != nil {
+		t.Fatal("owner note folder changed")
+	}
+	// Ушла из «Поделились», появилась в моей папке.
+	if list, _ := s.ListSharedNotes(ctx(), 2, ""); len(list) != 0 {
+		t.Fatalf("want 0 shared after placing, got %d", len(list))
+	}
+	inFolder, _ := s.ListNotes(ctx(), 2, 0, ListNotesParams{FolderID: &myFolder.ID, FolderSet: true})
+	if len(inFolder) != 1 || inFolder[0].OwnerName != "Owner" {
+		t.Fatalf("shared note not in my folder: %+v", inFolder)
+	}
+
+	// Личный архив «только у меня».
+	arch := true
+	if _, err := s.UpdateNote(ctx(), 2, n.ID, domain.NoteUpdate{Archived: &arch}); err != nil {
+		t.Fatal(err)
+	}
+	if repo.notes[n.ID].Archived {
+		t.Fatal("owner note archived — must be personal only")
+	}
+	inArchive, _ := s.ListNotes(ctx(), 2, 0, ListNotesParams{Archived: true})
+	if len(inArchive) != 1 {
+		t.Fatalf("want 1 in my archive, got %d", len(inArchive))
+	}
+	if again, _ := s.ListNotes(ctx(), 2, 0, ListNotesParams{FolderID: &myFolder.ID, FolderSet: true}); len(again) != 0 {
+		t.Fatalf("archived note still in folder: %d", len(again))
+	}
+}
+
+// TestRecipientPlacesSharedFolder — адресат подшивает чужую расшаренную папку под
+// свою; она уходит из shared-корней и попадает в мои folders с моим parent_id.
+func TestRecipientPlacesSharedFolder(t *testing.T) {
+	repo, users := newFakeRepo(), newFakeUsers()
+	users.users[1] = &domain.User{ID: 1, FIO: "Owner", IsActive: true}
+	users.users[2] = &domain.User{ID: 2, FIO: "Recip", IsActive: true}
+	s := newSvc(repo, users)
+
+	shared, _ := s.CreateFolder(ctx(), 1, "theirs", "", nil)
+	s.ShareFolder(ctx(), 1, shared.ID, domain.TargetUser, 2, true)
+	mine, _ := s.CreateFolder(ctx(), 2, "mine", "", nil)
+
+	tree, _ := s.ListFolders(ctx(), 2)
+	if len(tree.Shared) != 1 {
+		t.Fatalf("want 1 shared root before, got %d", len(tree.Shared))
+	}
+
+	if _, err := s.MoveFolder(ctx(), 2, shared.ID, &mine.ID); err != nil {
+		t.Fatal(err)
+	}
+	if repo.folders[shared.ID].ParentID != nil {
+		t.Fatal("owner folder parent changed")
+	}
+	tree, _ = s.ListFolders(ctx(), 2)
+	if len(tree.Shared) != 0 {
+		t.Fatalf("shared root still present: %d", len(tree.Shared))
+	}
+	var placed *domain.Folder
+	for _, f := range tree.Folders {
+		if f.ID == shared.ID {
+			placed = f
+		}
+	}
+	if placed == nil || placed.ParentID == nil || *placed.ParentID != mine.ID || placed.OwnerName != "Owner" {
+		t.Fatalf("shared folder not placed under mine: %+v", placed)
 	}
 }
 

@@ -115,6 +115,13 @@
         </div>
       </div>
 
+      <div v-if="canViewActivity" class="profile-lead">
+        <button class="btn-grad profile-activity" @click="openActivity">
+          <span class="material-symbols-outlined">monitoring</span>
+          Активность сотрудника
+        </button>
+      </div>
+
       <div v-if="user.id !== auth.user?.id" class="profile-actions">
         <button class="btn-glass" @click="writeTo(user)">
           <span class="material-symbols-outlined">chat</span>
@@ -141,7 +148,7 @@
 </template>
 
 <script setup>
-import { ref, watch } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import Dialog from 'primevue/dialog'
 import { useAuthStore } from '@/stores/auth.js'
@@ -167,6 +174,17 @@ const messenger = useMessengerStore()
 const callStore = useCallStore()
 
 const lightboxOpen = ref(false)
+
+// «Активность» видит только руководитель компании (роль Администратор) — над
+// другими сотрудниками. Бэкенд повторно гардирует доступ.
+const canViewActivity = computed(() =>
+  props.user && props.user.id !== auth.user?.id && auth.roleLevel >= 3)
+
+function openActivity() {
+  const id = props.user?.id
+  close()
+  if (id) router.push(`/employees/${id}/activity`)
+}
 
 watch(() => props.modelValue, (open) => {
   if (!open) lightboxOpen.value = false
@@ -399,6 +417,15 @@ async function callTo(u, media) {
   color: var(--color-text-dim);
   flex-shrink: 0;
 }
+
+.profile-lead {
+  padding: 4px 16px 12px;
+}
+.profile-activity {
+  width: 100%;
+  justify-content: center;
+}
+.profile-activity .material-symbols-outlined { font-size: 19px; }
 
 .profile-actions {
   display: flex;
