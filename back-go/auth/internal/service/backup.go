@@ -5,10 +5,16 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"io"
 	"strings"
 
 	"github.com/DmitriyODS/gw2/back-go/auth/internal/domain"
 )
+
+// filesPrefix — каталог архива, куда складываются ВСЕ загруженные файлы под их
+// storage-ключами (avatars/…, registry/…, calendar/…, notes/…, portal/…,
+// вложения мессенджера). «Выгрузка всего»: полный бэкап медиа вместе с БД.
+const filesPrefix = "files/"
 
 // Универсальный бэкап: ZIP с data.json (карта «таблица → JSON-массив строк») и
 // каталогом avatars/. Состав определяется выбранными разделами; список таблиц
@@ -102,8 +108,34 @@ func (s *Service) ExportBackup(ctx context.Context, sections []string) ([]byte, 
 		return nil, err
 	}
 
-	// Аватарки — в разделе "auth".
-	if hasSection(used, "auth") {
+	// Все загруженные файлы (медиа мессенджера, реестров/календарей/заметок/
+	// портала, аватарки) — под files/<ключ>. «Выгрузка всего»: полный медиа-
+	// архив вместе с БД. Файлы кладём как есть, независимо от разделов.
+	fileCount := 0
+	if s.files != nil {
+		keys, err := s.files.List(ctx, "")
+		if err != nil {
+			return nil, err
+		}
+		for _, key := range keys {
+			rc, err := s.files.Open(ctx, key)
+			if err != nil {
+				return nil, err
+			}
+			fw, err := zw.CreateHeader(&zip.FileHeader{Name: filesPrefix + key, Method: zip.Deflate})
+			if err != nil {
+				rc.Close() //nolint:errcheck
+				return nil, err
+			}
+			if _, err := io.Copy(fw, rc); err != nil {
+				rc.Close() //nolint:errcheck
+				return nil, err
+			}
+			rc.Close() //nolint:errcheck
+			fileCount++
+		}
+	} else if hasSection(used, "auth") {
+		// Фолбэк без корневого хранилища — как раньше, только аватарки.
 		avatars, err := s.avatars.ListFiles()
 		if err != nil {
 			return nil, err
@@ -122,8 +154,16 @@ func (s *Service) ExportBackup(ctx context.Context, sections []string) ([]byte, 
 		return nil, err
 	}
 
-	s.log.Info("backup.export", "sections", used, "tables", len(tables))
+	s.log.Info("backup.export", "sections", used, "tables", len(tables), "files", fileCount)
 	return buf.Bytes(), nil
+}
+
+// zipslipSafe — ключ не выходит за пределы хранилища (без ../ и ведущего /).
+func zipslipSafe(key string) bool {
+	if key == "" || strings.HasPrefix(key, "/") || strings.Contains(key, "..") {
+		return false
+	}
+	return true
 }
 
 // ImportBackup — ДЕСТРУКТИВНОЕ восстановление выбранных разделов из архива.
@@ -172,23 +212,44 @@ func (s *Service) ImportBackup(ctx context.Context, zipBytes []byte, sections []
 		}
 	}
 
-	// Аватарки — восстанавливаем при выбранном разделе "auth".
-	if hasSection(used, "auth") {
-		for _, f := range zr.File {
-			if f.FileInfo().IsDir() || !strings.HasPrefix(f.Name, "avatars/") || len(f.Name) <= len("avatars/") {
+	// Файлы восстанавливаем из архива: новый формат — files/<ключ> в корневое
+	// хранилище (все медиа), совместимость со старыми архивами — avatars/<имя>.
+	for _, f := range zr.File {
+		if f.FileInfo().IsDir() {
+			continue
+		}
+		switch {
+		case strings.HasPrefix(f.Name, filesPrefix) && len(f.Name) > len(filesPrefix):
+			if s.files == nil {
+				continue
+			}
+			key := f.Name[len(filesPrefix):]
+			if !zipslipSafe(key) {
 				continue
 			}
 			rc, err := f.Open()
 			if err != nil {
 				return err
 			}
-			content := new(bytes.Buffer)
-			_, err = content.ReadFrom(rc)
+			data, err := io.ReadAll(rc)
 			rc.Close() //nolint:errcheck
 			if err != nil {
 				return err
 			}
-			if err := s.avatars.WriteFile(f.Name, content.Bytes()); err != nil {
+			if err := s.files.Put(ctx, key, data, ""); err != nil {
+				return err
+			}
+		case strings.HasPrefix(f.Name, "avatars/") && len(f.Name) > len("avatars/") && hasSection(used, "auth"):
+			rc, err := f.Open()
+			if err != nil {
+				return err
+			}
+			data, err := io.ReadAll(rc)
+			rc.Close() //nolint:errcheck
+			if err != nil {
+				return err
+			}
+			if err := s.avatars.WriteFile(f.Name, data); err != nil {
 				return err
 			}
 		}

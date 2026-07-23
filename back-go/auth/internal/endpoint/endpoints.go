@@ -46,6 +46,8 @@ type Endpoints struct {
 	UpdatePlatformUser     endpoint.Endpoint
 	ResetPlatformUser      endpoint.Endpoint
 	DeactivatePlatformUser endpoint.Endpoint
+	ReactivatePlatformUser endpoint.Endpoint
+	PurgePlatformUser      endpoint.Endpoint
 	Directory              endpoint.Endpoint
 	DirectoryUser          endpoint.Endpoint
 	Me                     endpoint.Endpoint
@@ -141,6 +143,11 @@ type UpdateUserEpRequest struct {
 type UpdateMeEpRequest struct {
 	UserID int64
 	Body   dto.UpdateMeRequest
+}
+
+type MeEpRequest struct {
+	UserID    int64
+	CompanyID int64 // 0 — нет активной компании (профиль без роли/должности)
 }
 
 type AvatarEpRequest struct {
@@ -358,6 +365,14 @@ func New(svc service.AuthService) Endpoints {
 			req := request.(ActorRequest)
 			return nil, svc.DeactivatePlatformUser(ctx, req.Actor, req.UserID)
 		},
+		ReactivatePlatformUser: func(ctx context.Context, request any) (any, error) {
+			req := request.(ActorRequest)
+			return nil, svc.ReactivatePlatformUser(ctx, req.UserID)
+		},
+		PurgePlatformUser: func(ctx context.Context, request any) (any, error) {
+			req := request.(ActorRequest)
+			return nil, svc.PurgePlatformUser(ctx, req.Actor, req.UserID)
+		},
 		Directory: func(ctx context.Context, request any) (any, error) {
 			return svc.Directory(ctx, request.(dto.DirectoryRequest))
 		},
@@ -366,7 +381,8 @@ func New(svc service.AuthService) Endpoints {
 			return svc.DirectoryUser(ctx, req.Actor, req.UserID)
 		},
 		Me: func(ctx context.Context, request any) (any, error) {
-			return svc.Me(ctx, request.(int64))
+			req := request.(MeEpRequest)
+			return svc.Me(ctx, req.UserID, req.CompanyID)
 		},
 		UpdateMe: func(ctx context.Context, request any) (any, error) {
 			req := request.(UpdateMeEpRequest)

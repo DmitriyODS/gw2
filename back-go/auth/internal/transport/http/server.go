@@ -109,6 +109,8 @@ func NewServer(eps endpoint.Endpoints, verifier *pasetoauth.Verifier,
 	usersAPI.Patch("/platform/:id<int>", auth.RequireAuth, auth.RequireSuperAdmin, h.updatePlatformUser)
 	usersAPI.Post("/platform/:id<int>/reset-password", auth.RequireAuth, auth.RequireSuperAdmin, h.resetPlatformUser)
 	usersAPI.Delete("/platform/:id<int>", auth.RequireAuth, auth.RequireSuperAdmin, h.deactivatePlatformUser)
+	usersAPI.Post("/platform/:id<int>/reactivate", auth.RequireAuth, auth.RequireSuperAdmin, h.reactivatePlatformUser)
+	usersAPI.Delete("/platform/:id<int>/purge", auth.RequireAuth, auth.RequireSuperAdmin, h.purgePlatformUser)
 	usersAPI.Get("/directory", auth.RequireAuth, h.directory)
 	usersAPI.Get("/directory/:id<int>", auth.RequireAuth, h.directoryUser)
 	usersAPI.Get("/me", auth.RequireAuth, h.me)

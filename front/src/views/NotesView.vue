@@ -392,11 +392,11 @@ watch(searchInput, (v) => {
   searchTimer = setTimeout(() => store.setSearch(v.trim()), 300)
 })
 
-onMounted(() => {
-  store.fetchFolders()
+onMounted(async () => {
   store.fetchTags()
-  if (isExplorer.value) store.selectAll()
-  else store.fetchNotes()
+  // Дожидаемся папок, затем восстанавливаем последнюю открытую (localStorage).
+  await store.fetchFolders()
+  store.restoreSelection()
 })
 
 // ── Хелперы плиток ──

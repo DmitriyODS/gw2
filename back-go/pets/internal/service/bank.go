@@ -37,7 +37,7 @@ func (s *Service) GetBank(ctx context.Context, userID, companyID int64) (*dto.Ba
 	}
 	tier, next, earned := s.bankTier(ctx, userID)
 
-	interest, err := s.bank.AccrueSavings(ctx, userID, companyID, tier.SavingsRatePct, domain.SavingsDailyMax)
+	interest, err := s.bank.AccrueSavings(ctx, userID, companyID, tier.SavingsRatePct)
 	if err != nil {
 		s.log.Warn("pets.bank_accrue_failed", "user_id", userID, "error", err)
 	} else if interest > 0 {
@@ -188,7 +188,7 @@ func (s *Service) BankWithdraw(ctx context.Context, userID, companyID int64, amo
 	}
 	// Сначала капитализируем накопленное — снятие не должно «сжигать» процент.
 	tier, _, _ := s.bankTier(ctx, userID)
-	if _, err := s.bank.AccrueSavings(ctx, userID, companyID, tier.SavingsRatePct, domain.SavingsDailyMax); err != nil {
+	if _, err := s.bank.AccrueSavings(ctx, userID, companyID, tier.SavingsRatePct); err != nil {
 		s.log.Warn("pets.bank_accrue_failed", "user_id", userID, "error", err)
 	}
 	_, _, ok, err := s.bank.WithdrawSavings(ctx, userID, amount)

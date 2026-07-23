@@ -59,5 +59,14 @@ export const updatePlatformUser = (userId, data) =>
 export const resetPlatformUserPassword = (userId) =>
   apiRequest(`/users/platform/${userId}/reset-password`, { method: 'POST' })
 
+// Деактивация («мягкое удаление»): вход блокируется, данные сохраняются.
 export const deletePlatformUser = (userId) =>
   apiRequest(`/users/platform/${userId}`, { method: 'DELETE' })
+
+// Восстановление деактивированного аккаунта.
+export const reactivatePlatformUser = (userId) =>
+  apiRequest(`/users/platform/${userId}/reactivate`, { method: 'POST' })
+
+// Окончательное удаление со всеми данными (только для деактивированного).
+export const purgePlatformUser = (userId) =>
+  apiRequest(`/users/platform/${userId}/purge`, { method: 'DELETE' })

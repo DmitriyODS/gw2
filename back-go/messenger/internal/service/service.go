@@ -15,7 +15,7 @@ import (
 )
 
 // MaxAttachmentSize — лимит одного вложения (MESSENGER_ATTACHMENT_MAX).
-const MaxAttachmentSize = 25 * 1024 * 1024
+const MaxAttachmentSize = 500 * 1024 * 1024
 
 // SupportAutoReplyText — автоответ техподдержки на первое за сутки обращение.
 const SupportAutoReplyText = "Здравствуйте! Спасибо за обращение! " +

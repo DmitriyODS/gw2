@@ -53,7 +53,7 @@
       </header>
 
       <div class="admin-body">
-        <BrandLoader v-if="loading" class="ea-loader" :size="64" />
+        <div v-if="loading" class="ea-loading"><BrandLoader :size="64" /></div>
 
         <!-- ОБЗОР -->
         <template v-else-if="tab === 'overview' && data">
@@ -136,7 +136,7 @@
 
     <!-- ПОЛНАЯ АКТИВНОСТЬ -->
     <section v-else-if="tab === 'feed'" class="ea-feed">
-      <BrandLoader v-if="feedLoading" class="ea-loader" :size="48" />
+      <div v-if="feedLoading" class="ea-loading"><BrandLoader :size="48" /></div>
       <template v-else>
         <ul v-if="feed.items.length" class="ea-events">
           <li v-for="(e, i) in feed.items" :key="i" class="ea-event">
@@ -423,7 +423,7 @@ onMounted(() => { resolveName(); load() })
 .ea-tab.active { color: var(--color-primary); border-bottom-color: var(--color-primary); }
 .ea-tab .material-symbols-outlined { font-size: 19px; }
 
-.ea-loader { margin: 48px auto; }
+.ea-loading { display: flex; justify-content: center; padding: 48px; }
 
 /* KPI — число слева, иконка справа; лёгкий внутренний тайл. */
 .ea-kpis { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 12px; }

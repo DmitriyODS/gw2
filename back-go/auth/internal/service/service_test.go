@@ -104,12 +104,15 @@ func (r *fakeRepo) GetByEmail(_ context.Context, email string) (*domain.User, er
 func (r *fakeRepo) ListAll(_ context.Context) ([]*domain.User, error) {
 	var out []*domain.User
 	for _, u := range r.users {
-		if u.IsActive {
-			cp := *u
-			out = append(out, &cp)
-		}
+		cp := *u
+		out = append(out, &cp)
 	}
 	return out, nil
+}
+
+func (r *fakeRepo) HardDelete(_ context.Context, userID int64) error {
+	delete(r.users, userID)
+	return nil
 }
 
 func (r *fakeRepo) SearchDirectory(_ context.Context, query string, excludeID int64, loginOnly bool) ([]*domain.User, error) {

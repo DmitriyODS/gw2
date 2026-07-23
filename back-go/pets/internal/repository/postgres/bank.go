@@ -221,7 +221,7 @@ func (r *BankRepo) WithdrawSavings(ctx context.Context, userID int64, amount int
 // perday = min(savings·rate%, dailyMax), одним UPDATE через self-join (как
 // FinishAdventure) — конкурентный второй вызов увидит сдвинутую отметку и
 // начислит 0. Запись выписки — в той же транзакции.
-func (r *BankRepo) AccrueSavings(ctx context.Context, userID, companyID int64, ratePct, dailyMax int) (int, error) {
+func (r *BankRepo) AccrueSavings(ctx context.Context, userID, companyID int64, ratePct int) (int, error) {
 	tx, err := r.pool.Begin(ctx)
 	if err != nil {
 		return 0, err
@@ -235,14 +235,14 @@ func (r *BankRepo) AccrueSavings(ctx context.Context, userID, companyID int64, r
 			bank_savings_accrued_at = old.bank_savings_accrued_at + make_interval(days => f.days)
 		FROM pets old
 		CROSS JOIN LATERAL (
-			SELECT LEAST(old.bank_savings * $2 / 100, $3) AS perday,
+			SELECT old.bank_savings * $2 / 100 AS perday,
 			       floor(extract(epoch FROM (now() - old.bank_savings_accrued_at)) / 86400)::int AS days
 		) f
 		WHERE p.user_id = $1 AND old.user_id = p.user_id
 		  AND old.bank_savings > 0 AND old.bank_savings_accrued_at IS NOT NULL
 		  AND f.days >= 1
 		RETURNING p.bank_savings - old.bank_savings`,
-		userID, ratePct, dailyMax).Scan(&interest)
+		userID, ratePct).Scan(&interest)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return 0, nil // суток не прошло либо вклад пуст

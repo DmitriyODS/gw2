@@ -39,9 +39,11 @@ type AuthService interface {
 	UpdatePlatformUser(ctx context.Context, userID int64, req dto.UpdateUserRequest) (*dto.User, error)
 	ResetPlatformUserPassword(ctx context.Context, actor *domain.User, userID int64) error
 	DeactivatePlatformUser(ctx context.Context, actor *domain.User, userID int64) error
+	ReactivatePlatformUser(ctx context.Context, userID int64) error
+	PurgePlatformUser(ctx context.Context, actor *domain.User, userID int64) error
 	Directory(ctx context.Context, req dto.DirectoryRequest) ([]dto.DirectoryUser, error)
 	DirectoryUser(ctx context.Context, actor *domain.User, userID int64) (*dto.DirectoryUser, error)
-	Me(ctx context.Context, userID int64) (*dto.User, error)
+	Me(ctx context.Context, userID, companyID int64) (*dto.User, error)
 	UpdateMe(ctx context.Context, userID int64, req dto.UpdateMeRequest) (*dto.User, error)
 	UploadAvatar(ctx context.Context, userID int64, fileBytes []byte) (*dto.User, error)
 	DeleteAvatar(ctx context.Context, userID int64) (*dto.User, error)
@@ -102,6 +104,7 @@ type Service struct {
 	throttle       domain.LoginThrottle
 	tokens         *token.Issuer
 	avatars        domain.AvatarStorage
+	files          domain.FileArchive // корневое хранилище для полного бэкапа (nil — только БД+аватары)
 	verifications  domain.VerificationStore
 	passwordResets domain.PasswordResetStore
 	companyInvites domain.CompanyInviteStore
@@ -128,6 +131,13 @@ func New(repo domain.UserRepository, companies domain.CompanyRepository,
 		throttle: throttle, tokens: tokens, avatars: avatars,
 		verifications: verifications, passwordResets: passwordResets,
 		companyInvites: companyInvites, link: link, mail: mail, appBaseURL: appBaseURL, log: log}
+}
+
+// WithFiles — подключить корневое файловое хранилище для полной резервной копии
+// (все загруженные файлы попадают в архив и восстанавливаются из него).
+func (s *Service) WithFiles(files domain.FileArchive) *Service {
+	s.files = files
+	return s
 }
 
 var _ AuthService = (*Service)(nil)

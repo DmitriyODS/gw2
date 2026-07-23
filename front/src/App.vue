@@ -185,7 +185,7 @@ async function pullShare() {
     const tooBig = raw.filter(f => f?.tooLarge)
     const files = raw.filter(f => f?.data).map(b64ToFile)
     if (tooBig.length) {
-      notif.error(`Не отправить (больше 25 МБ): ${tooBig.map(f => f.name).join(', ')}`)
+      notif.error(`Не отправить (больше 500 МБ): ${tooBig.map(f => f.name).join(', ')}`)
     }
     if (!text && !files.length) return
     sharedText.value = text

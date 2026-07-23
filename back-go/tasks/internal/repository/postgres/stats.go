@@ -16,6 +16,13 @@ import (
 
 const hoursExpr = `EXTRACT(EPOCH FROM COALESCE(u.datetime_end, now()) - u.datetime_start) / 3600`
 
+// bizLocalStart — u.datetime_start в деловой таймзоне платформы (МСК). Все
+// «дневные» разрезы (час дня, день недели, активные дни) обязаны бакетить по
+// местному времени: сессия БД в UTC, и без конверсии пики смещаются на 3 часа,
+// а работа около полуночи попадает не в тот день. Совпадает с МСК ассистента
+// (assistant_stats.go) и питомцев.
+const bizLocalStart = `(u.datetime_start AT TIME ZONE 'Europe/Moscow')`
+
 func round2(x float64) float64 { return math.Round(x*100) / 100 }
 
 // companyCond — опциональный фильтр "AND <col> = $N".
@@ -224,9 +231,9 @@ func (r *Repo) Calendar(ctx context.Context, start, end time.Time, companyID *in
 	args := []any{start, end}
 	cond := companyCond(&args, companyID, "company_id")
 	rows, err := r.pool.Query(ctx, `
-		SELECT date(received_at)::text, COUNT(id) FROM tasks
+		SELECT (received_at AT TIME ZONE 'Europe/Moscow')::date::text, COUNT(id) FROM tasks
 		 WHERE received_at >= $1 AND received_at <= $2`+cond+`
-		 GROUP BY date(received_at)`, args...)
+		 GROUP BY 1`, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -247,9 +254,9 @@ func (r *Repo) Calendar(ctx context.Context, start, end time.Time, companyID *in
 	args = []any{start, end}
 	cond = companyCond(&args, companyID, "company_id")
 	rows, err = r.pool.Query(ctx, `
-		SELECT date(archived_at)::text, COUNT(id) FROM tasks
+		SELECT (archived_at AT TIME ZONE 'Europe/Moscow')::date::text, COUNT(id) FROM tasks
 		 WHERE is_archived = TRUE AND archived_at >= $1 AND archived_at <= $2`+cond+`
-		 GROUP BY date(archived_at)`, args...)
+		 GROUP BY 1`, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -276,10 +283,10 @@ func (r *Repo) Calendar(ctx context.Context, start, end time.Time, companyID *in
 		hoursCond = " AND t.company_id = $3"
 	}
 	rows, err = r.pool.Query(ctx, `
-		SELECT date(u.datetime_start)::text, SUM(`+hoursExpr+`)
+		SELECT `+bizLocalStart+`::date::text, SUM(`+hoursExpr+`)
 		  FROM units u`+hoursJoin+`
 		 WHERE u.datetime_start >= $1 AND u.datetime_start <= $2`+hoursCond+`
-		 GROUP BY date(u.datetime_start)`, args...)
+		 GROUP BY 1`, args...)
 	if err != nil {
 		return nil, err
 	}

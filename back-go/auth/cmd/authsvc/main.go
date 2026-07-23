@@ -66,7 +66,8 @@ func main() {
 	companyInvites := postgres.NewCompanyInviteStore(pool)
 	throttle := redisx.NewLoginThrottle(rdb, log)
 	deviceLinks := redisx.NewDeviceLinkStore(rdb)
-	avatars := avatar.NewStorage(storage.FromEnv(log, uploadFolder))
+	fileStore := storage.FromEnv(log, uploadFolder)
+	avatars := avatar.NewStorage(fileStore)
 
 	mail, err := clients.NewMail(mailAddr, log)
 	if err != nil {
@@ -77,6 +78,10 @@ func main() {
 
 	svc := service.New(repo, companies, backup, throttle, issuer, avatars,
 		verifications, passwordResets, companyInvites, deviceLinks, mail, appBaseURL, log)
+	// Полный бэкап включает все загруженные файлы (медиа мессенджера, файлы
+	// реестров/календарей/заметок/портала, аватарки) — даём доступ к корневому
+	// файловому хранилищу.
+	svc.WithFiles(fileStore)
 
 	// OAuth-провайдер для связки аккаунтов навыка Алисы (пустые креды — выключен).
 	if cid, secret := bootstrap.Env("OAUTH_ALICE_CLIENT_ID", ""), bootstrap.Env("OAUTH_ALICE_CLIENT_SECRET", ""); cid != "" && secret != "" {

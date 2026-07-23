@@ -27,12 +27,14 @@ func TestAwardKudosRespectsDailyCap(t *testing.T) {
 	ctx := context.Background()
 	env.pets.GetOrCreate(ctx, 1, 10)
 
-	// Источник «unit», кап 15: 10 + 10 → второй раз урезается до 5.
-	if got := env.svc.AwardKudos(ctx, 1, 10, "unit", 10); got != 10 {
-		t.Errorf("первое начисление: %d, want 10", got)
+	cap := domain.DailyCaps["unit"]
+	// Первое начисление на 10 меньше капа проходит целиком; второе урезается
+	// до остатка (10), дальнейшее — 0.
+	if got := env.svc.AwardKudos(ctx, 1, 10, "unit", cap-10); got != cap-10 {
+		t.Errorf("первое начисление: %d, want %d", got, cap-10)
 	}
-	if got := env.svc.AwardKudos(ctx, 1, 10, "unit", 10); got != domain.DailyCaps["unit"]-10 {
-		t.Errorf("второе начисление: %d, want %d", got, domain.DailyCaps["unit"]-10)
+	if got := env.svc.AwardKudos(ctx, 1, 10, "unit", 100); got != 10 {
+		t.Errorf("второе начисление: %d, want 10", got)
 	}
 	if got := env.svc.AwardKudos(ctx, 1, 10, "unit", 1); got != 0 {
 		t.Errorf("сверх капа: %d, want 0", got)
@@ -210,8 +212,8 @@ func TestOnUnitStoppedAwardsKudosAndXP(t *testing.T) {
 	env.svc.OnUnitStopped(ctx, UnitHook{CompanyID: 10, UserID: 1, UnitID: 7,
 		UnitName: "Юнит", Minutes: 30})
 
-	if env.pets.byUser[1].Kudos != 30/5 {
-		t.Errorf("kudos = %d, want %d", env.pets.byUser[1].Kudos, 30/5)
+	if want := domain.UnitKudos(30); env.pets.byUser[1].Kudos != want {
+		t.Errorf("kudos = %d, want %d", env.pets.byUser[1].Kudos, want)
 	}
 	if want := moodXP(30 / domain.XPUnitMinutesPer); env.pets.byUser[1].XP != want {
 		t.Errorf("xp = %d, want %d", env.pets.byUser[1].XP, want)

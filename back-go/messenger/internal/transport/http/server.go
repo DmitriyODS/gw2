@@ -53,10 +53,9 @@ func authSource(users domain.UserReader) pasetoauth.AuthSource {
 func NewServer(eps endpoint.Endpoints, svc service.MessengerService, users domain.UserReader,
 	verifier *pasetoauth.Verifier, log *slog.Logger) *Server {
 
-	// Вложения ≤25МБ проверяются в сервисе; лимит тела — с запасом
-	// (как MAX_CONTENT_LENGTH=50МБ во Flask).
+	// Вложения ≤500МБ проверяются в сервисе; лимит тела — с запасом.
 	app := httpserver.New(httpserver.Config{
-		AppName: "gw2-msgsvc", Log: log, BodyLimit: 50 * 1024 * 1024,
+		AppName: "gw2-msgsvc", Log: log, BodyLimit: 520 * 1024 * 1024,
 	})
 	auth := pasetoauth.NewMiddleware(verifier, authSource(users))
 	h := &handlers{eps: eps, svc: svc, log: log}

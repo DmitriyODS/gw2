@@ -131,7 +131,7 @@ func (f *fakeBank) WithdrawSavings(_ context.Context, userID int64, amount int) 
 	return p.Kudos, p.BankSavings, true, nil
 }
 
-func (f *fakeBank) AccrueSavings(_ context.Context, userID, _ int64, ratePct, dailyMax int) (int, error) {
+func (f *fakeBank) AccrueSavings(_ context.Context, userID, _ int64, ratePct int) (int, error) {
 	p := f.pets.byUser[userID]
 	if p == nil || p.BankSavings <= 0 || p.BankSavingsAccruedAt == nil {
 		return 0, nil
@@ -140,7 +140,7 @@ func (f *fakeBank) AccrueSavings(_ context.Context, userID, _ int64, ratePct, da
 	if days < 1 {
 		return 0, nil
 	}
-	interest := min(p.BankSavings*ratePct/100, dailyMax) * days
+	interest := p.BankSavings * ratePct / 100 * days
 	p.BankSavings += interest
 	at := p.BankSavingsAccruedAt.Add(time.Duration(days) * 24 * time.Hour)
 	p.BankSavingsAccruedAt = &at
@@ -543,16 +543,16 @@ func TestBankSavingsInterestLazyAccrual(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetBank: %v", err)
 	}
-	// Стартовый уровень: 1%/день → min(200*1/100, кап)=2 кудоса × 2 суток.
-	if bank.Savings != 204 {
+	// Стартовый уровень: 10%/день → 200*10/100=20 кудосов × 2 суток = 40.
+	if bank.Savings != 240 {
 		t.Errorf("savings после начисления = %d", bank.Savings)
 	}
-	if bank.InterestPaid == nil || *bank.InterestPaid != 4 {
+	if bank.InterestPaid == nil || *bank.InterestPaid != 40 {
 		t.Errorf("interest_paid = %v", bank.InterestPaid)
 	}
 	// Повторный вызов сразу — ничего не доначисляет.
 	bank, _ = env.svc.GetBank(ctx, 1, 10)
-	if bank.Savings != 204 || bank.InterestPaid != nil {
+	if bank.Savings != 240 || bank.InterestPaid != nil {
 		t.Errorf("повторное начисление: savings=%d paid=%v", bank.Savings, bank.InterestPaid)
 	}
 	if !slices.Contains(env.bank.kinds(1), "bank_interest") {

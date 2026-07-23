@@ -1,5 +1,5 @@
 import { defineStore } from 'pinia'
-import { computed, ref } from 'vue'
+import { computed, ref, watch } from 'vue'
 import * as api from '@/api/notes.js'
 import { useAuthStore } from '@/stores/auth.js'
 
@@ -245,6 +245,37 @@ export const useNotesStore = defineStore('notes', () => {
     if (index < 0) { selectAll(); return }
     const target = path.value[index]
     if (target) openFolder(target)
+  }
+
+  // ── Запоминание последней открытой папки (localStorage) ──
+  // Раздел не должен сбрасывать выбор при перезагрузке страницы: храним
+  // текущую выборку (папка/агрегат) и восстанавливаем её при инициализации.
+  const FOLDER_KEY = 'gw_notes_folder'
+
+  watch([activeFolderId, showShared, showArchived, showAllFlat], () => {
+    try {
+      localStorage.setItem(FOLDER_KEY, JSON.stringify({
+        folderId: activeFolderId.value,
+        shared: showShared.value,
+        archived: showArchived.value,
+        allFlat: showAllFlat.value,
+      }))
+    } catch { /* приватный режим/квота — просто не сохраняем */ }
+  })
+
+  // Восстановить выбор после загрузки папок (folderById уже наполнен). Если
+  // сохранённой папки больше нет — откат к дефолту режима.
+  function restoreSelection() {
+    let saved = null
+    try { saved = JSON.parse(localStorage.getItem(FOLDER_KEY) || 'null') } catch { /* ignore */ }
+    if (saved) {
+      if (saved.shared) { selectShared(); return }
+      if (saved.archived) { selectArchive(); return }
+      if (saved.allFlat) { selectAllFlat(); return }
+      if (saved.folderId && folderById.value.get(saved.folderId)) { selectFolder(saved.folderId); return }
+    }
+    if (viewMode.value === 'explorer') selectAll()
+    else fetchNotes()
   }
 
   // Восстановить путь до папки id по своему дереву (для крошек и подсветки).
@@ -523,6 +554,7 @@ export const useNotesStore = defineStore('notes', () => {
     // load / navigate
     fetchFolders, fetchTags, fetchNotes, fetchBrowseChildren,
     selectAll, selectAllFlat, selectFolder, selectShared, selectArchive, openFolder, navigateTo,
+    restoreSelection,
     setViewMode, setSearch, toggleTag, clearTags, clearSelection,
     toggleNoteSelect, toggleFolderSelect,
     // mutations

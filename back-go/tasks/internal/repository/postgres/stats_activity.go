@@ -16,7 +16,7 @@ func (r *Repo) EmployeeSummary(ctx context.Context, companyID, userID int64, sta
 	// Отработанные часы, число юнитов, активные дни.
 	if err := r.pool.QueryRow(ctx, `
 		SELECT COALESCE(SUM(`+hoursExpr+`), 0), COUNT(*),
-		       COUNT(DISTINCT (u.datetime_start AT TIME ZONE 'UTC')::date)
+		       COUNT(DISTINCT `+bizLocalStart+`::date)
 		  FROM units u
 		 WHERE u.user_id = $1 AND u.company_id = $2
 		   AND u.datetime_start >= $3 AND u.datetime_start <= $4`,
@@ -84,7 +84,7 @@ func (r *Repo) EmployeeByUnitTypes(ctx context.Context, companyID, userID int64,
 
 func (r *Repo) EmployeeByWeekday(ctx context.Context, companyID, userID int64, start, end time.Time) ([]domain.WeekdayHours, error) {
 	rows, err := r.pool.Query(ctx, `
-		SELECT EXTRACT(DOW FROM u.datetime_start)::int, COALESCE(SUM(`+hoursExpr+`), 0)
+		SELECT EXTRACT(DOW FROM `+bizLocalStart+`)::int, COALESCE(SUM(`+hoursExpr+`), 0)
 		  FROM units u
 		 WHERE u.user_id = $1 AND u.company_id = $2
 		   AND u.datetime_start >= $3 AND u.datetime_start <= $4
@@ -107,7 +107,7 @@ func (r *Repo) EmployeeByWeekday(ctx context.Context, companyID, userID int64, s
 
 func (r *Repo) EmployeeByHour(ctx context.Context, companyID, userID int64, start, end time.Time) ([]domain.HourHours, error) {
 	rows, err := r.pool.Query(ctx, `
-		SELECT EXTRACT(HOUR FROM u.datetime_start)::int, COALESCE(SUM(`+hoursExpr+`), 0)
+		SELECT EXTRACT(HOUR FROM `+bizLocalStart+`)::int, COALESCE(SUM(`+hoursExpr+`), 0)
 		  FROM units u
 		 WHERE u.user_id = $1 AND u.company_id = $2
 		   AND u.datetime_start >= $3 AND u.datetime_start <= $4
@@ -144,7 +144,7 @@ func (r *Repo) EmployeeWeeklyTrend(ctx context.Context, companyID, userID int64,
 	}
 
 	hoursRows, err := r.pool.Query(ctx, `
-		SELECT to_char(u.datetime_start, 'IYYY-"W"IW'), COALESCE(SUM(`+hoursExpr+`), 0)
+		SELECT to_char(`+bizLocalStart+`, 'IYYY-"W"IW'), COALESCE(SUM(`+hoursExpr+`), 0)
 		  FROM units u
 		 WHERE u.user_id = $1 AND u.company_id = $2
 		   AND u.datetime_start >= $3 AND u.datetime_start <= $4
@@ -167,7 +167,7 @@ func (r *Repo) EmployeeWeeklyTrend(ctx context.Context, companyID, userID int64,
 	}
 
 	closedRows, err := r.pool.Query(ctx, `
-		SELECT to_char(t.archived_at, 'IYYY-"W"IW'), COUNT(*)
+		SELECT to_char(t.archived_at AT TIME ZONE 'Europe/Moscow', 'IYYY-"W"IW'), COUNT(*)
 		  FROM tasks t
 		 WHERE t.responsible_user_id = $1 AND t.company_id = $2 AND t.is_archived
 		   AND t.archived_at >= $3 AND t.archived_at <= $4

@@ -133,7 +133,7 @@ type BankRepo interface {
 	WithdrawSavings(ctx context.Context, userID int64, amount int) (kudos, savings int, ok bool, err error)
 	// AccrueSavings — ленивое начисление процентов за целые прошедшие сутки
 	// (одним UPDATE + запись леджера; повторный конкурентный вызов начислит 0).
-	AccrueSavings(ctx context.Context, userID, companyID int64, ratePct, dailyMax int) (interest int, err error)
+	AccrueSavings(ctx context.Context, userID, companyID int64, ratePct int) (interest int, err error)
 	// TakeLoan — выдача кредита: +amount на кошелёк, долг = amount + комиссия
 	// (guard: активного долга нет).
 	TakeLoan(ctx context.Context, userID int64, amount, debt int) (kudos int, ok bool, err error)

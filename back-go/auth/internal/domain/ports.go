@@ -3,6 +3,7 @@ package domain
 import (
 	"context"
 	"encoding/json"
+	"io"
 	"time"
 )
 
@@ -72,8 +73,12 @@ type UserRepository interface {
 	GetByYandexID(ctx context.Context, yandexID string) (*User, error)
 	// YandexLinked — привязан ли к аккаунту Яндекс ID (для карточки профиля).
 	YandexLinked(ctx context.Context, userID int64) (bool, error)
-	// ListAll — все активные пользователи платформы (список супер-админа), по id.
+	// ListAll — все пользователи платформы (список супер-админа), включая
+	// деактивированных: активные первыми, затем по id.
 	ListAll(ctx context.Context) ([]*User, error)
+	// HardDelete — безвозвратно удалить пользователя и все его данные (каскад +
+	// ручная чистка RESTRICT-таблиц). Только для супер-админа.
+	HardDelete(ctx context.Context, userID int64) error
 	// SearchDirectory — глобальный каталог (контакты): активные, ILIKE по
 	// fio/login, опционально без excludeID; сортировка по fio.
 	SearchDirectory(ctx context.Context, query string, excludeID int64, loginOnly bool) ([]*User, error)
@@ -138,6 +143,15 @@ type AvatarStorage interface {
 	// для резервной копии (export/import ZIP).
 	ListFiles() ([]AvatarFile, error)
 	WriteFile(name string, data []byte) error
+}
+
+// FileArchive — корневое файловое хранилище (pkg/storage) для ПОЛНОГО бэкапа:
+// все загруженные файлы под их ключами (avatars/, registry/, calendar/, notes/,
+// portal/, вложения мессенджера). Реализуется тем же storage.Storage.
+type FileArchive interface {
+	List(ctx context.Context, prefix string) ([]string, error)
+	Open(ctx context.Context, key string) (io.ReadCloser, error)
+	Put(ctx context.Context, key string, data []byte, contentType string) error
 }
 
 // CompanyRepository — персистентность компаний (таблица companies; схему

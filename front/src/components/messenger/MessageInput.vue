@@ -455,7 +455,7 @@ async function uploadFiles(files) {
       pending.value = pending.value.filter(p => p._key !== key)
       console.error('upload failed', err)
       const msg = err?.status === 413
-        ? 'Файл слишком большой (максимум 25 МБ)'
+        ? 'Файл слишком большой (максимум 500 МБ)'
         : (err?.message || 'Не удалось загрузить файл')
       window.alert(msg)
     }
@@ -518,7 +518,7 @@ function removePending(key) {
 /* ── Скринкаст: запись экрана → видео-вложение ─────────────────────
    getDisplayMedia + MediaRecorder, готовый файл уходит обычным upload'ом
    (рендерится получателю штатным <video> в AttachmentView). */
-const SCREENCAST_MAX_BYTES = 24 * 1024 * 1024 // запас до серверного лимита 25 МБ
+const SCREENCAST_MAX_BYTES = 490 * 1024 * 1024 // запас до серверного лимита 500 МБ
 
 const rec = ref({ active: false, seconds: 0 })
 let recRecorder = null
@@ -618,7 +618,7 @@ async function onScreencastStop() {
   const stamp = new Date().toISOString().slice(0, 19).replace(/[T:]/g, '-')
   const file = new File(chunks, `screencast-${stamp}.${ext}`, { type })
   if (recLimitHit) {
-    window.alert('Запись достигла лимита 25 МБ и была остановлена — ролик прикреплён к сообщению')
+    window.alert('Запись достигла лимита 500 МБ и была остановлена — ролик прикреплён к сообщению')
   }
   await uploadFiles([file])
 }

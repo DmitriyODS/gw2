@@ -540,7 +540,7 @@ async function claim() {
   claiming.value = true
   try {
     await pets.claimQuest()
-    notify.success(`+${quest.value?.reward || 20} кудосов за квест`)
+    notify.success(`+${quest.value?.reward || 100} кудосов за квест`)
   } catch (e) {
     notify.warn(e?.message || 'Не удалось забрать награду')
   } finally {

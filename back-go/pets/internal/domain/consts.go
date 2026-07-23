@@ -40,11 +40,34 @@ const (
 
 // Дневные капы кудосов по источникам (неизвестный источник — кап 10).
 var DailyCaps = map[string]int{
-	"unit":        15, // завершённые юниты
-	"task_closed": 25, // закрытые задачи
+	"unit":        300, // завершённые юниты
+	"task_closed": 300, // закрытые задачи
 }
 
 const DefaultDailyCap = 10
+
+// ── Кудосы за работу ───────────────────────────────────────────────
+// Юнит даёт от KudosUnitMin до KudosUnitMax кудосов — чем дольше работа, тем
+// больше (максимум достигается на 2 часах). Закрытая задача — фиксированные
+// KudosTaskClosed кудосов.
+const (
+	KudosUnitMin       = 10
+	KudosUnitMax       = 30
+	KudosUnitMaxMinute = 120 // при этой длительности юнита достигается максимум
+	KudosTaskClosed    = 50
+)
+
+// UnitKudos — линейный рост кудосов за юнит от KudosUnitMin к KudosUnitMax.
+func UnitKudos(minutes int) int {
+	if minutes <= 0 {
+		return KudosUnitMin
+	}
+	k := KudosUnitMin + minutes*(KudosUnitMax-KudosUnitMin)/KudosUnitMaxMinute
+	if k > KudosUnitMax {
+		return KudosUnitMax
+	}
+	return k
+}
 
 // ── Прогулка ───────────────────────────────────────────────────────
 // Мини-игра «прогулка»: платная (кудосы), даёт немного XP и общения, но
@@ -176,7 +199,6 @@ var HouseThemes = []string{"cozy", "sunset", "night", "forest", "ocean", "candy"
 
 const (
 	TransferCommentMax = 120
-	SavingsDailyMax    = 15 // кап дневного начисления процентов
 	LedgerPageSize     = 30
 
 	// Копилки-цели: личные суб-счета «коплю на мечту» (без процента —
@@ -212,14 +234,14 @@ type BankTier struct {
 }
 
 // BankTiers — по возрастанию порога; первый — стартовый уровень.
-// Максимум одного перевода единый (100) — уровень растит дневной лимит,
-// ставку вклада, комиссию и потолок кредита.
+// Дневной лимит переводов и максимум одного перевода — 500 у всех уровней;
+// уровень растит ставку вклада, комиссию и потолок кредита.
 var BankTiers = []BankTier{
-	{"start", "Новичок", 0, 1, 20, 50, 100, 100},
-	{"bronze", "Бронза", 300, 2, 15, 100, 150, 100},
-	{"silver", "Серебро", 1000, 3, 12, 200, 250, 100},
-	{"gold", "Золото", 2500, 4, 10, 350, 400, 100},
-	{"platinum", "Платина", 6000, 5, 8, 600, 600, 100},
+	{"start", "Новичок", 0, 10, 20, 50, 500, 500},
+	{"bronze", "Бронза", 300, 15, 15, 100, 500, 500},
+	{"silver", "Серебро", 1000, 20, 12, 200, 500, 500},
+	{"gold", "Золото", 2500, 25, 10, 350, 500, 500},
+	{"platinum", "Платина", 6000, 30, 8, 600, 500, 500},
 }
 
 // TierFor — текущий уровень по заработанному + следующий (nil на максимуме).
@@ -247,7 +269,7 @@ var StreakMilestones = map[int]bool{
 
 // ── Ежедневный квест ───────────────────────────────────────────────
 
-const QuestRewardKudos = 20
+const QuestRewardKudos = 100
 
 type QuestTemplate struct {
 	Kind   string

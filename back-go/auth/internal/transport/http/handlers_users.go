@@ -8,6 +8,7 @@ import (
 	"github.com/DmitriyODS/gw2/back-go/auth/internal/avatar"
 	"github.com/DmitriyODS/gw2/back-go/auth/internal/dto"
 	"github.com/DmitriyODS/gw2/back-go/auth/internal/endpoint"
+	"github.com/DmitriyODS/gw2/back-go/pkg/pasetoauth"
 )
 
 const avatarMaxBytes = 2 * 1024 * 1024
@@ -88,6 +89,26 @@ func (h *handlers) deactivatePlatformUser(c *fiber.Ctx) error {
 	return c.JSON(fiber.Map{"message": "Пользователь удалён"})
 }
 
+func (h *handlers) reactivatePlatformUser(c *fiber.Ctx) error {
+	_, err := h.eps.ReactivatePlatformUser(c.Context(), endpoint.ActorRequest{
+		Actor: currentUser(c), UserID: pathID(c),
+	})
+	if err != nil {
+		return h.respondError(c, err)
+	}
+	return c.JSON(fiber.Map{"message": "Пользователь восстановлен"})
+}
+
+func (h *handlers) purgePlatformUser(c *fiber.Ctx) error {
+	_, err := h.eps.PurgePlatformUser(c.Context(), endpoint.ActorRequest{
+		Actor: currentUser(c), UserID: pathID(c),
+	})
+	if err != nil {
+		return h.respondError(c, err)
+	}
+	return c.JSON(fiber.Map{"message": "Пользователь удалён окончательно"})
+}
+
 func (h *handlers) directory(c *fiber.Ctx) error {
 	me := currentUser(c)
 	// Скоуп — активная компания актора из токена (её члены). Нет активной
@@ -127,7 +148,9 @@ func (h *handlers) directoryUser(c *fiber.Ctx) error {
 }
 
 func (h *handlers) me(c *fiber.Ctx) error {
-	resp, err := h.eps.Me(c.Context(), currentUser(c).ID)
+	resp, err := h.eps.Me(c.Context(), endpoint.MeEpRequest{
+		UserID: currentUser(c).ID, CompanyID: pasetoauth.CompanyID(c),
+	})
 	if err != nil {
 		return h.respondError(c, err)
 	}

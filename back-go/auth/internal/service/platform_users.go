@@ -168,3 +168,48 @@ func (s *Service) DeactivatePlatformUser(ctx context.Context, actor *domain.User
 	s.log.Info("platform.user_deactivate", "user_id", userID)
 	return nil
 }
+
+// ReactivatePlatformUser — вернуть деактивированный аккаунт (is_active=true):
+// вход снова доступен, данные не трогались.
+func (s *Service) ReactivatePlatformUser(ctx context.Context, userID int64) error {
+	user, err := s.repo.GetByID(ctx, userID)
+	if err != nil {
+		return err
+	}
+	if user == nil {
+		return errUserNotFound
+	}
+	if err := s.repo.UpdateFields(ctx, userID, map[string]any{"is_active": true}); err != nil {
+		return err
+	}
+	s.log.Info("platform.user_reactivate", "user_id", userID)
+	return nil
+}
+
+// PurgePlatformUser — БЕЗВОЗВРАТНОЕ удаление аккаунта со всеми его данными.
+// Разрешено только для уже деактивированного пользователя (сначала «удалить»,
+// потом — окончательно), чтобы исключить случайное уничтожение живого аккаунта.
+func (s *Service) PurgePlatformUser(ctx context.Context, actor *domain.User, userID int64) error {
+	if actor != nil && userID == actor.ID {
+		return domain.NewError("SELF_PURGE", "Нельзя удалить собственный аккаунт", 422)
+	}
+	user, err := s.repo.GetByID(ctx, userID)
+	if err != nil {
+		return err
+	}
+	if user == nil {
+		return errUserNotFound
+	}
+	if user.IsSuperAdmin {
+		return errSuperAdminProtected
+	}
+	if user.IsActive {
+		return domain.NewError("PURGE_ACTIVE",
+			"Сначала деактивируйте аккаунт, затем удаляйте окончательно", 422)
+	}
+	if err := s.repo.HardDelete(ctx, userID); err != nil {
+		return err
+	}
+	s.log.Info("platform.user_purge", "user_id", userID)
+	return nil
+}

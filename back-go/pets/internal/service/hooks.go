@@ -28,8 +28,8 @@ func (s *Service) OnUnitStopped(ctx context.Context, h UnitHook) {
 	if !s.grooveEnabled(ctx, h.CompanyID) {
 		return
 	}
-	// 1 кудос за каждые 5 минут работы; дневной кап источника «unit» = 15.
-	s.AwardKudos(ctx, h.UserID, h.CompanyID, "unit", h.Minutes/5)
+	// Кудосы за юнит: чем дольше работа, тем больше (10…30).
+	s.AwardKudos(ctx, h.UserID, h.CompanyID, "unit", domain.UnitKudos(h.Minutes))
 	// Работа растит питомца напрямую: XP за минуты юнита (кап в день,
 	// сытость после кормления даёт множитель — см. AwardXP).
 	s.AwardXP(ctx, h.UserID, h.CompanyID, "xp_unit",
@@ -52,7 +52,7 @@ func (s *Service) OnTaskClosed(ctx context.Context, companyID, heroUserID,
 	if !s.grooveEnabled(ctx, companyID) || heroUserID <= 0 {
 		return
 	}
-	s.AwardKudos(ctx, heroUserID, companyID, "task_closed", 5)
+	s.AwardKudos(ctx, heroUserID, companyID, "task_closed", domain.KudosTaskClosed)
 	s.AwardXP(ctx, heroUserID, companyID, "xp_task",
 		domain.XPTaskClosed, domain.XPTaskDailyCap)
 	s.AddRecovery(ctx, heroUserID, companyID, 1)

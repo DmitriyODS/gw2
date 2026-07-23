@@ -9,7 +9,7 @@ import (
 
 // TestPetsTaskClosedHookAcrossServices — сквозной сценарий геймификации:
 // закрытие задачи в tasksvc → gRPC-хук OnTaskClosed (fire-and-forget после
-// коммита) → petsvc начисляет герою кудосы (+5) и XP (+8) и эмитит
+// коммита) → petsvc начисляет герою кудосы (+50) и XP (+8) и эмитит
 // pet:update, которое доезжает клиентам через мост шлюза (комната
 // user_<id>).
 func TestPetsTaskClosedHookAcrossServices(t *testing.T) {
@@ -35,35 +35,35 @@ func TestPetsTaskClosedHookAcrossServices(t *testing.T) {
 		return int64(id) == admin.ID
 	}, 15*time.Second)
 
-	// 2. Начисления герою: +5 кудосов (кап task_closed) и +8 XP (xp_task).
+	// 2. Начисления герою: +50 кудосов (task_closed) и +8 XP (xp_task).
 	deadline := time.Now().Add(10 * time.Second)
 	var kudos, xp float64
 	for time.Now().Before(deadline) {
 		pr := petsAPI.doJSON(t, http.MethodGet, "/api/pets/pet", admin.Token, nil)
 		requireStatus(t, pr, 200, "pet после закрытия")
 		kudos, xp = pr.Num("kudos"), pr.Num("xp")
-		if kudos == 5 && xp == 12 {
+		if kudos == 50 && xp == 12 {
 			break
 		}
 		time.Sleep(300 * time.Millisecond)
 	}
-	// 5 кудосов и 8 XP за задачу; XP свежего (полного сил) питомца множится
+	// 50 кудосов и 8 XP за задачу; XP свежего (полного сил) питомца множится
 	// настроением ×1.5 → 12.
-	if kudos != 5 || xp != 12 {
-		t.Fatalf("начисления за закрытие: kudos=%v xp=%v, ожидалось 5/12", kudos, xp)
+	if kudos != 50 || xp != 12 {
+		t.Fatalf("начисления за закрытие: kudos=%v xp=%v, ожидалось 50/12", kudos, xp)
 	}
 
 	// 3. Рейтинг компании видит кудосы недели героя.
 	rt := petsAPI.doJSON(t, http.MethodGet, "/api/pets/rating", admin.Token, nil)
 	requireStatus(t, rt, 200, "рейтинг")
 	me, _ := rt.JSON["me"].(map[string]any)
-	if me == nil || me["kudos_week"].(float64) != 5 {
+	if me == nil || me["kudos_week"].(float64) != 50 {
 		t.Fatalf("kudos_week героя после закрытия: %v", me)
 	}
 }
 
 // TestPetsUnitStoppedAwardsKudosAndXP — завершение юнита начисляет кудосы
-// (1 за каждые 5 минут) и XP (1 за каждые 3 минуты) исполнителю. Старт
+// (10…30 по длительности) и XP (1 за каждые 3 минуты) исполнителю. Старт
 // юнита отодвигается на 30 минут назад PATCH'ем (юнит ещё активен — это
 // разрешено), чтобы длительность при остановке была детерминированной.
 func TestPetsUnitStoppedAwardsKudosAndXP(t *testing.T) {
@@ -92,9 +92,9 @@ func TestPetsUnitStoppedAwardsKudosAndXP(t *testing.T) {
 		}
 		time.Sleep(300 * time.Millisecond)
 	}
-	// 30 минут → 6 кудосов (30/5) и 10 XP (30/3), помноженные на настроение
-	// свежего питомца (×1.5) → 15.
-	if kudos != 6 || xp != 15 {
-		t.Fatalf("начисления за 30-минутный юнит: kudos=%v xp=%v, ожидалось 6/15", kudos, xp)
+	// 30 минут → 15 кудосов (UnitKudos(30)) и 10 XP (30/3), помноженные на
+	// настроение свежего питомца (×1.5) → 15.
+	if kudos != 15 || xp != 15 {
+		t.Fatalf("начисления за 30-минутный юнит: kudos=%v xp=%v, ожидалось 15/15", kudos, xp)
 	}
 }

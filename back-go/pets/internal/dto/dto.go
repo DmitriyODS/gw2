@@ -508,7 +508,6 @@ type BankDTO struct {
 	Earned            int           `json:"earned"` // заработано за всё время — прогресс уровня
 	Tier              BankTierDTO   `json:"tier"`
 	NextTier          *BankTierDTO  `json:"next_tier,omitempty"`
-	SavingsDailyMax   int           `json:"savings_daily_max"`
 	TransferLeftToday int           `json:"transfer_left_today"`
 	MonthIn           int           `json:"month_in"`
 	MonthOut          int           `json:"month_out"`
@@ -529,8 +528,7 @@ func NewBank(p *domain.Pet, tier domain.BankTier, next *domain.BankTier,
 	d := &BankDTO{
 		Kudos: p.Kudos, Savings: p.BankSavings, Loan: p.BankLoan,
 		Earned: earned, Tier: newBankTier(tier),
-		SavingsDailyMax: domain.SavingsDailyMax,
-		MonthIn:         monthIn, MonthOut: monthOut,
+		MonthIn: monthIn, MonthOut: monthOut,
 		TopGenerous: make([]*GenerousDTO, 0, len(top)),
 		Goals:       []*GoalDTO{}, GoalsMax: domain.GoalsMax, Funds: []*FundDTO{},
 	}

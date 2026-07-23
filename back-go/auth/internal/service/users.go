@@ -198,7 +198,13 @@ func (s *Service) DirectoryUser(ctx context.Context, actor *domain.User, userID 
 	return &out, nil
 }
 
-func (s *Service) Me(ctx context.Context, userID int64) (*dto.User, error) {
+// Me — профиль текущего пользователя. При активной компании подмешивает его
+// роль и должность (post) из членства — иначе профиль показывал бы «должность
+// не указана» даже когда она задана.
+func (s *Service) Me(ctx context.Context, userID, companyID int64) (*dto.User, error) {
+	if companyID > 0 {
+		return s.freshMemberUser(ctx, companyID, userID)
+	}
 	return s.freshUser(ctx, userID)
 }
 

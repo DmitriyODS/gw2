@@ -147,9 +147,11 @@ func (r *UserRepository) listIdentity(ctx context.Context, tail string, args ...
 	return out, rows.Err()
 }
 
-// ListAll — все активные пользователи платформы (список супер-админа), по id.
+// ListAll — ВСЕ пользователи платформы (список супер-админа), включая
+// деактивированных: активные первыми, затем по id. Супер-админ должен видеть
+// «удалённых» (is_active=false), чтобы восстановить их или снести окончательно.
 func (r *UserRepository) ListAll(ctx context.Context) ([]*domain.User, error) {
-	return r.listIdentity(ctx, "WHERE u.is_active ORDER BY u.id")
+	return r.listIdentity(ctx, "ORDER BY u.is_active DESC, u.id")
 }
 
 // SearchDirectory — глобальный каталог (контакты): активные пользователи,
@@ -444,4 +446,60 @@ func (r *UserRepository) VerifyPassword(ctx context.Context, password, hash stri
 		`SELECT crypt($1, $2) = $2`, password, hash,
 	).Scan(&ok)
 	return ok, err
+}
+
+// HardDelete — БЕЗВОЗВРАТНО удаляет пользователя и все его данные из общей БД.
+// Большинство таблиц ссылаются на users(id) через ON DELETE CASCADE/SET NULL —
+// их PostgreSQL разрулит сам при удалении строки users. Но часть FK — RESTRICT/
+// NO ACTION (например tasks.author_id, units.user_id, портал), и они заблокируют
+// удаление. Поэтому сначала СНОСИМ строки таких таблиц, ссылающиеся на юзера
+// (их зависимые данные уходят каскадом), затем — самого пользователя. Список
+// «жёстких» FK находим из каталога на лету: новые таблицы попадают в чистку
+// автоматически, без правок здесь (та же схемо-независимая идея, что у бэкапа).
+func (r *UserRepository) HardDelete(ctx context.Context, userID int64) error {
+	tx, err := r.pool.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback(ctx) //nolint:errcheck // после Commit — no-op
+
+	// Колонки с FK на users(id), где удаление НЕ каскадится (confdeltype:
+	// 'a' — NO ACTION, 'r' — RESTRICT). Их строки надо удалить вручную.
+	rows, err := tx.Query(ctx, `
+		SELECT c.conrelid::regclass::text, a.attname
+		  FROM pg_constraint c
+		  JOIN pg_attribute a ON a.attrelid = c.conrelid AND a.attnum = ANY(c.conkey)
+		 WHERE c.contype = 'f'
+		   AND c.confrelid = 'public.users'::regclass
+		   AND c.confdeltype IN ('a', 'r')`)
+	if err != nil {
+		return err
+	}
+	type ref struct{ table, col string }
+	var refs []ref
+	for rows.Next() {
+		var t, col string
+		if err := rows.Scan(&t, &col); err != nil {
+			rows.Close()
+			return err
+		}
+		refs = append(refs, ref{t, col})
+	}
+	rows.Close()
+	if err := rows.Err(); err != nil {
+		return err
+	}
+
+	// Каждая строка ссылается на юзера напрямую — порядок между ними не важен:
+	// зависимые записи (комментарии, юниты и т.п.) уходят каскадом.
+	for _, rf := range refs {
+		if _, err := tx.Exec(ctx,
+			fmt.Sprintf(`DELETE FROM %s WHERE %s = $1`, rf.table, rf.col), userID); err != nil {
+			return fmt.Errorf("purge %s.%s: %w", rf.table, rf.col, err)
+		}
+	}
+	if _, err := tx.Exec(ctx, `DELETE FROM users WHERE id = $1`, userID); err != nil {
+		return err
+	}
+	return tx.Commit(ctx)
 }

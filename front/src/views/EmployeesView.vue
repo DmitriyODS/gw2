@@ -165,7 +165,9 @@ async function load() {
     // Супер-админ — все пользователи платформы; член компании — каталог
     // своей активной компании (компания берётся из токена на бэке).
     if (auth.isSuperAdmin) {
-      users.value = await getUsers()
+      // Каталог сотрудников — только активные (деактивированные видны в разделе
+      // «Пользователи», где ими и управляют).
+      users.value = (await getUsers()).filter((u) => u.is_active)
     } else {
       users.value = await getDirectory()
     }

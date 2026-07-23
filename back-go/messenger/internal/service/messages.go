@@ -507,7 +507,7 @@ func (s *Service) UploadAttachment(ctx context.Context, uploaderID int64,
 	}
 	if len(data) > MaxAttachmentSize {
 		return nil, domain.NewError("FILE_TOO_LARGE",
-			"Файл превышает 25 МБ", 400)
+			"Файл превышает 500 МБ", 400)
 	}
 	// Только сам тип, без параметров ("; charset=...") — как
 	// werkzeug FileStorage.mimetype.
