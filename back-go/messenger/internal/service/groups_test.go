@@ -47,6 +47,43 @@ func TestCreateGroupAndBroadcast(t *testing.T) {
 	}
 }
 
+// Пересылка сообщения В ГРУППУ: у группы нет «второго» участника
+// (OtherUserID == nil), поэтому веер должен идти всей аудитории через
+// broadcastGroupMessage — раньше здесь был nil-разыменование и паника (500).
+func TestForwardIntoGroupFansOut(t *testing.T) {
+	svc, _, _, pub := newTestEnv()
+	ctx := context.Background()
+
+	g, _ := svc.CreateGroup(ctx, 2, "Команда", nil, []int64{3})
+	src, _ := svc.OpenConversation(ctx, 2, 4)
+	msg, err := svc.SendMessage(ctx, src.ID, 2, dto.MessageCreate{Text: str("к пересылке")})
+	if err != nil {
+		t.Fatalf("send: %v", err)
+	}
+
+	results, err := svc.ForwardMessage(ctx, 2, msg.ID, []int64{g.ID}, nil)
+	if err != nil {
+		t.Fatalf("forward в группу: %v", err)
+	}
+	if len(results) != 1 || results[0].ConversationID != g.ID {
+		t.Fatalf("цель пересылки неверна: %+v", results)
+	}
+	// Последнее message:new — веер по участникам группы (user_2, user_3)
+	// с заголовком и notify_ids (Боб=3, без автора).
+	news := pub.byName("message:new")
+	last := news[len(news)-1]
+	ev := last.Payload.(dto.MessageNewEvent)
+	if last.Rooms == nil || len(last.Rooms) != 2 {
+		t.Fatalf("веер группы по %d комнатам, ожидалось 2: %v", len(last.Rooms), last.Rooms)
+	}
+	if ev.ConversationTitle == nil || *ev.ConversationTitle != "Команда" {
+		t.Fatalf("нет заголовка группы в событии пересылки: %v", ev.ConversationTitle)
+	}
+	if len(ev.NotifyIDs) != 1 || ev.NotifyIDs[0] != 3 {
+		t.Fatalf("notify_ids пересылки = %v, ожидалось [3]", ev.NotifyIDs)
+	}
+}
+
 // Права: обычный участник не может переименовать/добавлять; владелец может;
 // повышение до админа даёт право управлять участниками.
 func TestGroupPermissions(t *testing.T) {

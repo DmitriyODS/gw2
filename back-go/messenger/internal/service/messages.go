@@ -405,10 +405,21 @@ func (s *Service) ForwardMessage(ctx context.Context, senderID, messageID int64,
 		targetIDs = append(targetIDs, r.conv.ID)
 		payload := dto.NewMessage(r.msg)
 		out = append(out, dto.ForwardResult{ConversationID: r.conv.ID, Message: payload})
-		recipientID := r.conv.OtherUserID(senderID)
-		s.pub.Publish(ctx, "message:new", rooms(*recipientID, senderID), dto.MessageNewEvent{
-			ConversationID: r.conv.ID, Message: payload, FromUserID: &senderID,
-		})
+		event := dto.MessageNewEvent{ConversationID: r.conv.ID, Message: payload, FromUserID: &senderID}
+		// Веер как в SendMessage: у группы нет «второго» участника
+		// (OtherUserID == nil), поэтому адресуем всей аудитории, а для
+		// группы — через broadcastGroupMessage (mute/mentions/notify_ids).
+		if r.conv.IsGroup {
+			if err := s.broadcastGroupMessage(ctx, r.conv, senderID, r.msg, &event); err != nil {
+				return nil, err
+			}
+			continue
+		}
+		targets, err := s.audience(ctx, r.conv)
+		if err != nil {
+			return nil, err
+		}
+		s.pub.Publish(ctx, "message:new", rooms(targets...), event)
 	}
 	s.log.Info("message.forward", "source_message_id", messageID,
 		"sender_id", senderID, "targets", targetIDs)
