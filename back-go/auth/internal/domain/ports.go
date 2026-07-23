@@ -94,6 +94,8 @@ type UserRepository interface {
 	ListMemberships(ctx context.Context, userID int64) ([]Membership, error)
 	// GetMembership — связка для конкретной компании; nil — не состоит.
 	GetMembership(ctx context.Context, userID, companyID int64) (*Membership, error)
+	// SharesCompany — есть ли у двух пользователей хотя бы одна общая компания.
+	SharesCompany(ctx context.Context, userA, userB int64) (bool, error)
 	// AddMembership — INSERT ... ON CONFLICT DO NOTHING.
 	AddMembership(ctx context.Context, userID, companyID, roleID int64) error
 	// RemoveMembership — удалить связку.

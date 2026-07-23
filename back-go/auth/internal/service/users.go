@@ -172,7 +172,7 @@ func (s *Service) Directory(ctx context.Context, req dto.DirectoryRequest) ([]dt
 	return dto.NewDirectoryUsers(users), nil
 }
 
-func (s *Service) DirectoryUser(ctx context.Context, userID int64) (*dto.DirectoryUser, error) {
+func (s *Service) DirectoryUser(ctx context.Context, actor *domain.User, userID int64) (*dto.DirectoryUser, error) {
 	user, err := s.repo.GetByID(ctx, userID)
 	if err != nil {
 		return nil, err
@@ -181,6 +181,20 @@ func (s *Service) DirectoryUser(ctx context.Context, userID int64) (*dto.Directo
 		return nil, domain.NewError("NOT_FOUND", "Пользователь не найден", 404)
 	}
 	out := dto.NewDirectoryUser(user)
+	// Телефон и email — только для себя и коллег по общей компании; иначе это
+	// PII любого пользователя платформы по числовому id.
+	if actor == nil || (actor.ID != userID) {
+		shares := false
+		if actor != nil {
+			if shares, err = s.repo.SharesCompany(ctx, actor.ID, userID); err != nil {
+				return nil, err
+			}
+		}
+		if !shares {
+			out.Phone = nil
+			out.Email = nil
+		}
+	}
 	return &out, nil
 }
 
@@ -355,12 +369,26 @@ func (s *Service) DeleteAvatar(ctx context.Context, userID int64) (*dto.User, er
 	return s.freshUser(ctx, userID)
 }
 
-func (s *Service) GetUser(ctx context.Context, userID int64) (*dto.User, error) {
+// GetUser — администратор компании смотрит карточку члена СВОЕЙ активной
+// компании. Пользователь вне этой компании недоступен (иначе — перебор
+// идентичностей всей платформы по числовому id).
+func (s *Service) GetUser(ctx context.Context, actor *domain.User, userID int64) (*dto.User, error) {
+	companyID, err := actorScope(actor)
+	if err != nil {
+		return nil, err
+	}
 	user, err := s.repo.GetByID(ctx, userID)
 	if err != nil {
 		return nil, err
 	}
 	if user == nil || !user.IsActive {
+		return nil, errUserNotFound
+	}
+	m, err := s.repo.GetMembership(ctx, userID, companyID)
+	if err != nil {
+		return nil, err
+	}
+	if m == nil {
 		return nil, errUserNotFound
 	}
 	out := dto.NewUser(user)

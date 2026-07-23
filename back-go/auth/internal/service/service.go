@@ -40,12 +40,12 @@ type AuthService interface {
 	ResetPlatformUserPassword(ctx context.Context, actor *domain.User, userID int64) error
 	DeactivatePlatformUser(ctx context.Context, actor *domain.User, userID int64) error
 	Directory(ctx context.Context, req dto.DirectoryRequest) ([]dto.DirectoryUser, error)
-	DirectoryUser(ctx context.Context, userID int64) (*dto.DirectoryUser, error)
+	DirectoryUser(ctx context.Context, actor *domain.User, userID int64) (*dto.DirectoryUser, error)
 	Me(ctx context.Context, userID int64) (*dto.User, error)
 	UpdateMe(ctx context.Context, userID int64, req dto.UpdateMeRequest) (*dto.User, error)
 	UploadAvatar(ctx context.Context, userID int64, fileBytes []byte) (*dto.User, error)
 	DeleteAvatar(ctx context.Context, userID int64) (*dto.User, error)
-	GetUser(ctx context.Context, userID int64) (*dto.User, error)
+	GetUser(ctx context.Context, actor *domain.User, userID int64) (*dto.User, error)
 	UpdateUser(ctx context.Context, actor *domain.User, userID int64, req dto.UpdateUserRequest) (*dto.User, error)
 	HideUser(ctx context.Context, actor *domain.User, userID int64) error
 	AssignRole(ctx context.Context, actor *domain.User, userID, roleID int64) (*dto.User, error)

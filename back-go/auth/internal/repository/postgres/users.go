@@ -316,6 +316,16 @@ func (r *UserRepository) GetMembership(ctx context.Context, userID, companyID in
 	return m, err
 }
 
+func (r *UserRepository) SharesCompany(ctx context.Context, userA, userB int64) (bool, error) {
+	var exists bool
+	err := r.pool.QueryRow(ctx, `
+		SELECT EXISTS(
+			SELECT 1 FROM user_companies a
+			JOIN user_companies b ON a.company_id = b.company_id
+			WHERE a.user_id = $1 AND b.user_id = $2)`, userA, userB).Scan(&exists)
+	return exists, err
+}
+
 func (r *UserRepository) AddMembership(ctx context.Context, userID, companyID, roleID int64) error {
 	_, err := r.pool.Exec(ctx, `
 		INSERT INTO user_companies (user_id, company_id, role_id)

@@ -117,7 +117,9 @@ func (h *handlers) directory(c *fiber.Ctx) error {
 }
 
 func (h *handlers) directoryUser(c *fiber.Ctx) error {
-	resp, err := h.eps.DirectoryUser(c.Context(), pathID(c))
+	resp, err := h.eps.DirectoryUser(c.Context(), endpoint.ActorRequest{
+		Actor: currentUser(c), UserID: pathID(c),
+	})
 	if err != nil {
 		return h.respondError(c, err)
 	}
@@ -191,7 +193,9 @@ func (h *handlers) deleteAvatar(c *fiber.Ctx) error {
 }
 
 func (h *handlers) getUser(c *fiber.Ctx) error {
-	resp, err := h.eps.GetUser(c.Context(), pathID(c))
+	resp, err := h.eps.GetUser(c.Context(), endpoint.ActorRequest{
+		Actor: currentUser(c), UserID: pathID(c),
+	})
 	if err != nil {
 		return h.respondError(c, err)
 	}

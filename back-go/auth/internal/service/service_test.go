@@ -232,6 +232,15 @@ func (r *fakeRepo) GetMembership(_ context.Context, userID, companyID int64) (*d
 	return nil, nil
 }
 
+func (r *fakeRepo) SharesCompany(_ context.Context, userA, userB int64) (bool, error) {
+	for companyID := range r.members[userA] {
+		if _, ok := r.members[userB][companyID]; ok {
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
 func (r *fakeRepo) AddMembership(_ context.Context, userID, companyID, roleID int64) error {
 	if r.members[userID] == nil {
 		r.members[userID] = map[int64]*domain.Membership{}
@@ -760,6 +769,44 @@ func companyAdmin(repo *fakeRepo, login string, cid int64) *domain.User {
 		Role: *repo.roles[3], CompanyID: &cid,
 	})
 	return u
+}
+
+func TestGetUserScopedToActiveCompany(t *testing.T) {
+	svc, repo, _ := newTestService(t)
+	c1, c2 := int64(1), int64(2)
+	admin := companyAdmin(repo, "adm", c1)
+	phone, email := "+70000000000", "outsider@x.io"
+	outsider := repo.add(&domain.User{FIO: "Чужой", Login: "out", CompanyID: &c2, Phone: &phone, Email: &email})
+	mate := repo.add(&domain.User{FIO: "Свой", Login: "mate", Role: *repo.roles[1], CompanyID: &c1})
+
+	// Пользователь другой компании недоступен по числовому id.
+	if _, err := svc.GetUser(context.Background(), admin, outsider.ID); err == nil {
+		t.Fatal("GetUser должен скрывать пользователя чужой компании")
+	} else {
+		wantCode(t, err, "NOT_FOUND")
+	}
+	// Член своей активной компании — доступен.
+	if _, err := svc.GetUser(context.Background(), admin, mate.ID); err != nil {
+		t.Fatalf("GetUser своего члена: %v", err)
+	}
+
+	// DirectoryUser чужого — без телефона/почты, но с базовой карточкой контакта.
+	du, err := svc.DirectoryUser(context.Background(), admin, outsider.ID)
+	if err != nil {
+		t.Fatalf("DirectoryUser чужого: %v", err)
+	}
+	if du.Phone != nil || du.Email != nil {
+		t.Fatal("DirectoryUser не должен раскрывать phone/email вне общей компании")
+	}
+	if du.FIO == "" {
+		t.Fatal("базовая карточка контакта должна остаться")
+	}
+	// DirectoryUser коллеги по общей компании — с контактами.
+	du2, err := svc.DirectoryUser(context.Background(), admin, mate.ID)
+	if err != nil {
+		t.Fatalf("DirectoryUser коллеги: %v", err)
+	}
+	_ = du2
 }
 
 func TestCreateUserRoleGuard(t *testing.T) {

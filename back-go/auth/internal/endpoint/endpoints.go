@@ -362,7 +362,8 @@ func New(svc service.AuthService) Endpoints {
 			return svc.Directory(ctx, request.(dto.DirectoryRequest))
 		},
 		DirectoryUser: func(ctx context.Context, request any) (any, error) {
-			return svc.DirectoryUser(ctx, request.(int64))
+			req := request.(ActorRequest)
+			return svc.DirectoryUser(ctx, req.Actor, req.UserID)
 		},
 		Me: func(ctx context.Context, request any) (any, error) {
 			return svc.Me(ctx, request.(int64))
@@ -379,7 +380,8 @@ func New(svc service.AuthService) Endpoints {
 			return svc.DeleteAvatar(ctx, request.(int64))
 		},
 		GetUser: func(ctx context.Context, request any) (any, error) {
-			return svc.GetUser(ctx, request.(int64))
+			req := request.(ActorRequest)
+			return svc.GetUser(ctx, req.Actor, req.UserID)
 		},
 		UpdateUser: func(ctx context.Context, request any) (any, error) {
 			req := request.(UpdateUserEpRequest)
