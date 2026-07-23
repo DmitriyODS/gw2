@@ -215,6 +215,25 @@ func TestNoTokenStartsAccountLinking(t *testing.T) {
 	}
 }
 
+func TestHelpAlwaysReturnsInstructions(t *testing.T) {
+	h := newHarness(t)
+	// «Помощь» / «Что ты умеешь» БЕЗ связки аккаунта — инструкция, не директива
+	// (требование модерации Яндекса).
+	for _, cmd := range []string{"помощь", "что ты умеешь", "что умеешь", "справка"} {
+		resp := h.svc.Handle(context.Background(), h.request(t, "", cmd, nil))
+		if resp.Response == nil || resp.StartAccountLinking != nil || len(resp.Response.Text) < 40 {
+			t.Fatalf("на «%s» без токена ожидалась инструкция: %+v", cmd, resp)
+		}
+	}
+	// Через системный интент Диалогов (текст команды может отличаться).
+	req := h.request(t, "", "подскажи", nil)
+	req.Request.NLU.Intents = map[string]json.RawMessage{"YANDEX.WHAT_CAN_YOU_DO": json.RawMessage(`{}`)}
+	resp := h.svc.Handle(context.Background(), req)
+	if resp.Response == nil || resp.StartAccountLinking != nil {
+		t.Fatalf("интент YANDEX.WHAT_CAN_YOU_DO должен дать инструкцию: %+v", resp)
+	}
+}
+
 func TestDiaryAddCreatesDefaultDiary(t *testing.T) {
 	h := newHarness(t)
 	resp := h.svc.Handle(context.Background(),

@@ -24,7 +24,7 @@ func normalize(s string) string {
 }
 
 var (
-	reHelp       = regexp.MustCompile(`^(помощь|справка|что ты умеешь|помоги|как пользоваться)$`)
+	reHelp       = regexp.MustCompile(`^(помощь|справка|хелп|help|помоги|как пользоваться|как тобой пользоваться|что ты умеешь|что умеешь|что ты можешь|что можешь|твои возможности|какие команды|что я могу сказать)$`)
 	reYes        = regexp.MustCompile(`^(да|ага|угу|конечно|давай|подтверждаю|верно|точно|подтвердить)$`)
 	reNo         = regexp.MustCompile(`^(нет|отмена|отмени|не надо|не нужно|передумал|передумала)$`)
 	reTaskCreate = regexp.MustCompile(`^(?:добавь|создай|заведи|поставь|создать|добавить|новая) (?:новую )?задач[ау] (.+)$`)
@@ -59,6 +59,12 @@ func splitBody(s string) (title, text string) {
 		}
 	}
 	return s, ""
+}
+
+// IsHelpCommand — фраза-просьба об инструкции («помощь», «что ты умеешь» и
+// варианты). Распознаётся без ИИ и до связки аккаунта.
+func IsHelpCommand(command string) bool {
+	return reHelp.MatchString(normalize(command))
 }
 
 // Parse — интент из нормализованной команды. now — «сейчас» в таймзоне

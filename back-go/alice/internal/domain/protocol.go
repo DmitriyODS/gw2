@@ -20,6 +20,12 @@ type WebhookRequest struct {
 		Type              string `json:"type"` // SimpleUtterance | ButtonPressed | …
 		Command           string `json:"command"`
 		OriginalUtterance string `json:"original_utterance"`
+		NLU               struct {
+			// Intents — распознанные Диалогами интенты, в т.ч. системные
+			// YANDEX.HELP и YANDEX.WHAT_CAN_YOU_DO (значение нам не важно —
+			// достаточно факта наличия ключа).
+			Intents map[string]json.RawMessage `json:"intents"`
+		} `json:"nlu"`
 	} `json:"request"`
 	State struct {
 		Session json.RawMessage `json:"session"`
