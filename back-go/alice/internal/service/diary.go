@@ -72,7 +72,9 @@ func (s *Service) diaryList(ctx context.Context, sess *session, date string) *do
 	}
 	var names []string
 	for _, d := range diaries {
-		entries, err := s.diary.ListEntries(ctx, sess.userID, d.ID, date, date)
+		// diarysvc фильтрует день полуинтервалом [from, to) — за один день
+		// верхняя граница = следующий день.
+		entries, err := s.diary.ListEntries(ctx, sess.userID, d.ID, date, nextDay(date))
 		if err != nil {
 			return s.errReply(err)
 		}

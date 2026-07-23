@@ -62,6 +62,17 @@ func ExtractDate(s string, now time.Time) (date, cleaned string, found bool) {
 	return "", strings.TrimSpace(s), false
 }
 
+// nextDay — следующий календарный день (YYYY-MM-DD). Нужен для запроса за один
+// день: diarysvc фильтрует записи полуинтервалом [from, to), поэтому «только
+// день D» = from=D, to=D+1.
+func nextDay(dateISO string) string {
+	d, err := time.Parse(dayLayout, dateISO)
+	if err != nil {
+		return dateISO
+	}
+	return d.AddDate(0, 0, 1).Format(dayLayout)
+}
+
 // HumanDate — дата для реплики: «сегодня», «завтра» либо «15 июля».
 func HumanDate(dateISO string, now time.Time) string {
 	d, err := time.ParseInLocation(dayLayout, dateISO, now.Location())
