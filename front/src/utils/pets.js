@@ -99,6 +99,22 @@ export const SHOP_ITEMS = {
   comet: { emoji: '☄️', title: 'Комета' },
 }
 
+// Каталог кормов (≡ domain.Foods): цена и прибавка сытости совпадают с бэком,
+// эмодзи/название — только на фронте. У каждого вида грувика свой любимый корм
+// (pet.favorite_food приходит с бэка), он даёт бонус к сытости и XP.
+export const FOODS = [
+  { key: 'berry', emoji: '🫐', title: 'Ягодка', price: 6, satiety: 20 },
+  { key: 'apple', emoji: '🍎', title: 'Яблоко', price: 8, satiety: 30 },
+  { key: 'carrot', emoji: '🥕', title: 'Морковка', price: 10, satiety: 40 },
+  { key: 'cookie', emoji: '🍪', title: 'Печенька', price: 12, satiety: 25 },
+  { key: 'salad', emoji: '🥗', title: 'Салат', price: 15, satiety: 45 },
+  { key: 'fish', emoji: '🐟', title: 'Рыбка', price: 18, satiety: 55 },
+  { key: 'cake', emoji: '🍰', title: 'Тортик', price: 25, satiety: 70 },
+  { key: 'steak', emoji: '🥩', title: 'Стейк', price: 30, satiety: 85 },
+]
+
+export const foodMeta = (key) => FOODS.find((f) => f.key === key) || FOODS[2]
+
 // Каталог отображения декора домика (эмодзи/название) — цены и владение
 // приезжают с бэка (dto.HouseDecorDTO, ≡ domain.HouseDecor).
 export const DECOR_ITEMS = {

@@ -231,6 +231,16 @@
             <span class="material-symbols-outlined">check_circle</span>
             {{ selected.kind === 'species' ? 'Облик сейчас надет' : 'Уже в вашей коллекции' }}
           </p>
+          <!-- Продажа за полцены (текущий облик продать нельзя — снимите сначала). -->
+          <button
+            v-if="canSell(selected)"
+            class="btn-glass ps-tryon-installment"
+            :disabled="selling"
+            @click="sell(selected)"
+          >
+            <span class="material-symbols-outlined">sell</span>
+            Продать за {{ Math.floor(selected.price_kudos / 2) }}
+          </button>
         </template>
         <template v-else>
           <button
@@ -247,7 +257,16 @@
             </template>
             <KudosCoin />
           </button>
-          <p v-if="!canAfford(selected) && !selected.sold_out" class="ps-tryon-note">
+          <button
+            v-if="canInstallment(selected)"
+            class="btn-glass ps-tryon-installment"
+            :disabled="buying || switching"
+            @click="buyInstallment(selected)"
+          >
+            <span class="material-symbols-outlined">splitscreen</span>
+            Оплатить частями ({{ Math.ceil(effectivePrice(selected) / 4) }} × 4)
+          </button>
+          <p v-if="!canAfford(selected) && !selected.sold_out && !canInstallment(selected)" class="ps-tryon-note">
             Кудосы приносят юниты, задачи и квесты — или загляните в копилки банка.
           </p>
         </template>
@@ -288,6 +307,7 @@ const notify = useNotificationsStore()
 const loading = ref(false)
 const buying = ref(false)
 const switching = ref(false)
+const selling = ref(false)
 const mysteryClaiming = ref(false)
 const mysteryDone = ref(false)
 const category = ref('all')
@@ -401,12 +421,14 @@ onMounted(async () => {
   }
 })
 
-async function buy(item) {
+async function buy(item, installment = false) {
   buying.value = true
   try {
-    await pets.buyItem(item.key)
+    await pets.buyItem(item.key, installment)
     celebrate(item)
-    notify.success(`«${shopItemTitle(item)}» куплен и сразу надет ${shopItemEmoji(item)}`)
+    notify.success(installment
+      ? `«${shopItemTitle(item)}» ваш — оплата долями в разделе «Банк» ${shopItemEmoji(item)}`
+      : `«${shopItemTitle(item)}» куплен и сразу надет ${shopItemEmoji(item)}`)
     selected.value = null
   } catch (e) {
     notify.warn(e?.message || 'Покупка не удалась')
@@ -415,17 +437,43 @@ async function buy(item) {
   }
 }
 
-async function buySpeciesItem(item) {
+async function buySpeciesItem(item, installment = false) {
   switching.value = true
   try {
-    await pets.buySpecies(item.key)
+    await pets.buySpecies(item.key, installment)
     celebrate(item)
-    notify.success(`Грувик перевоплотился в облик «${shopItemTitle(item)}» ${shopItemEmoji(item)}`)
+    notify.success(installment
+      ? `Облик «${shopItemTitle(item)}» разблокирован — оплата долями в разделе «Банк» ${shopItemEmoji(item)}`
+      : `Грувик перевоплотился в облик «${shopItemTitle(item)}» ${shopItemEmoji(item)}`)
     selected.value = null
   } catch (e) {
     notify.warn(e?.message || 'Не получилось разблокировать вид')
   } finally {
     switching.value = false
+  }
+}
+
+// Рассрочка доступна только на не-акционные товары (акционные — сразу/в кредит).
+const canInstallment = (item) => item && !item.sold_out && !item.discount_pct
+function buyInstallment(item) {
+  return item.kind === 'species' ? buySpeciesItem(item, true) : buy(item, true)
+}
+
+// Продать можно купленное (не достижение); текущий облик — только сняв его.
+const canSell = (item) =>
+  item && item.owned && item.unlock_kind !== 'achievement' &&
+  item.price_kudos > 0 && !(item.kind === 'species' && pet.value?.species === item.key)
+
+async function sell(item) {
+  selling.value = true
+  try {
+    await pets.sellItem(item.key)
+    notify.success(`«${shopItemTitle(item)}» продан за ${Math.floor(item.price_kudos / 2)} кудосов`)
+    selected.value = null
+  } catch (e) {
+    notify.warn(e?.message || 'Продать не удалось')
+  } finally {
+    selling.value = false
   }
 }
 
@@ -795,6 +843,11 @@ async function claimMystery() {
   font-size: 14px;
   padding: 12px 26px;
 }
+.ps-tryon-installment {
+  display: inline-flex; align-items: center; gap: 6px;
+  font-size: 13px; padding: 9px 20px; margin-top: 8px;
+}
+.ps-tryon-installment .material-symbols-outlined { font-size: 18px; }
 .ps-tryon-note {
   margin: 0;
   display: inline-flex; align-items: center; gap: 5px;

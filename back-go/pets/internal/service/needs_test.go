@@ -213,7 +213,7 @@ func TestSickFeedFollowsRecipe(t *testing.T) {
 	pet.Needs.Satiety = 0
 	pet.Fall(domain.AilmentHunger, time.Now().UTC())
 
-	data, err := env.svc.FeedPet(ctx, 1, 10)
+	data, err := env.svc.FeedPet(ctx, 1, 10, "")
 	if err != nil {
 		t.Fatalf("FeedPet: %v", err)
 	}
@@ -380,7 +380,7 @@ func TestVacationBlocksActionsAndAwards(t *testing.T) {
 	pet.OwnerOnVacation = true
 	pet.Kudos = 100
 
-	if _, err := env.svc.FeedPet(ctx, 1, 10); domain.AsDomainError(err) == nil ||
+	if _, err := env.svc.FeedPet(ctx, 1, 10, ""); domain.AsDomainError(err) == nil ||
 		domain.AsDomainError(err).Code != "PET_ON_VACATION" {
 		t.Fatalf("кормление в отпуске: %v", err)
 	}

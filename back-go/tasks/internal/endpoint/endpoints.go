@@ -250,9 +250,10 @@ type UserTasksRequest struct {
 }
 
 type ProfileRequest struct {
-	UserID int64
-	Start  time.Time
-	End    time.Time
+	UserID    int64
+	CompanyID *int64
+	Start     time.Time
+	End       time.Time
 }
 
 type EmployeeActivityRequest struct {
@@ -552,7 +553,7 @@ func New(svc *service.Service, yg *service.Yougile) Endpoints {
 		},
 		StatsProfile: func(ctx context.Context, request any) (any, error) {
 			req := request.(ProfileRequest)
-			return svc.StatsProfile(ctx, req.UserID, req.Start, req.End)
+			return svc.StatsProfile(ctx, req.UserID, req.CompanyID, req.Start, req.End)
 		},
 		StatsEmployees: func(ctx context.Context, request any) (any, error) {
 			return svc.StatsEmployees(ctx, request.(*int64))

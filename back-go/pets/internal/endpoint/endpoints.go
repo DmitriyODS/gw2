@@ -70,6 +70,11 @@ type Endpoints struct {
 	DonateFund endpoint.Endpoint
 	CloseFund  endpoint.Endpoint
 
+	GetInstallments endpoint.Endpoint
+	PayInstallment  endpoint.Endpoint
+
+	SellItem endpoint.Endpoint
+
 	RecallAdventure endpoint.Endpoint
 }
 
@@ -89,7 +94,16 @@ type NameRequest struct {
 
 type ItemRequest struct {
 	Scope
-	Item string
+	Item        string
+	Installment bool   // купить в рассрочку (оплата долями), а не сразу
+	Category    string // продажа: house — декор, иначе товар магазина
+}
+
+// InstallmentPayRequest — платёж по конкретной рассрочке.
+type InstallmentPayRequest struct {
+	Scope
+	ID     int64
+	Amount int
 }
 
 type EquipRequest struct {
@@ -200,8 +214,8 @@ func New(svc *service.Service) Endpoints {
 			return svc.GetMyPet(ctx, r.UserID, r.CompanyID)
 		},
 		FeedPet: func(ctx context.Context, request any) (any, error) {
-			r := request.(Scope)
-			return svc.FeedPet(ctx, r.UserID, r.CompanyID)
+			r := request.(ItemRequest)
+			return svc.FeedPet(ctx, r.UserID, r.CompanyID, r.Item)
 		},
 		RenamePet: func(ctx context.Context, request any) (any, error) {
 			r := request.(NameRequest)
@@ -221,11 +235,11 @@ func New(svc *service.Service) Endpoints {
 		},
 		BuyItem: func(ctx context.Context, request any) (any, error) {
 			r := request.(ItemRequest)
-			return svc.BuyItem(ctx, r.UserID, r.CompanyID, r.Item)
+			return svc.BuyItem(ctx, r.UserID, r.CompanyID, r.Item, r.Installment)
 		},
 		BuySpecies: func(ctx context.Context, request any) (any, error) {
 			r := request.(ItemRequest)
-			return svc.BuySpecies(ctx, r.UserID, r.CompanyID, r.Item)
+			return svc.BuySpecies(ctx, r.UserID, r.CompanyID, r.Item, r.Installment)
 		},
 		SwitchSpecies: func(ctx context.Context, request any) (any, error) {
 			r := request.(ItemRequest)
@@ -263,7 +277,7 @@ func New(svc *service.Service) Endpoints {
 		},
 		BuyHouseDecor: func(ctx context.Context, request any) (any, error) {
 			r := request.(ItemRequest)
-			return svc.BuyHouseDecor(ctx, r.UserID, r.CompanyID, r.Item)
+			return svc.BuyHouseDecor(ctx, r.UserID, r.CompanyID, r.Item, r.Installment)
 		},
 		ArrangeHouse: func(ctx context.Context, request any) (any, error) {
 			r := request.(ArrangeRequest)
@@ -386,6 +400,19 @@ func New(svc *service.Service) Endpoints {
 		RecallAdventure: func(ctx context.Context, request any) (any, error) {
 			r := request.(Scope)
 			return svc.RecallAdventure(ctx, r.UserID, r.CompanyID)
+		},
+
+		GetInstallments: func(ctx context.Context, request any) (any, error) {
+			r := request.(Scope)
+			return svc.GetInstallments(ctx, r.UserID, r.CompanyID)
+		},
+		PayInstallment: func(ctx context.Context, request any) (any, error) {
+			r := request.(InstallmentPayRequest)
+			return svc.PayInstallment(ctx, r.UserID, r.CompanyID, r.ID, r.Amount)
+		},
+		SellItem: func(ctx context.Context, request any) (any, error) {
+			r := request.(ItemRequest)
+			return svc.SellItem(ctx, r.UserID, r.CompanyID, r.Category, r.Item)
 		},
 	}
 }

@@ -75,6 +75,12 @@ type Pet struct {
 	BankSavings          int
 	BankSavingsAccruedAt *time.Time // с какого момента капает процент (NULL — вклад пуст)
 	BankLoan             int        // остаток долга (0 — кредита нет)
+	// Кредитный рейтинг заёмщика и параметры текущего кредита. Меняются
+	// узкими атомарными методами BankRepo (в full-row SavePet не входят).
+	CreditScore   int        // растёт за возврат кредита в срок → лучше условия
+	LoanPrincipal int        // тело текущего кредита (для кэшбэка/пени; 0 — нет)
+	LoanDueAt     *time.Time // срок возврата (грейс-период); NULL — кредита нет
+	LoanPenalized bool       // разовая пеня за просрочку уже применена
 	// OwnerOnVacation — хозяин в отпуске (users.on_vacation): питомец тоже
 	// отдыхает — показатели заморожены (FreezeClocks), действия недоступны.
 	OwnerOnVacation bool
@@ -324,6 +330,34 @@ type BankFund struct {
 	DonorsCount int // агрегаты витрины
 	MyDonated   int
 	TopDonors   []GenerousEntry
+}
+
+// Installment — покупка в рассрочку: товар выдан сразу, оплата долями. Активна,
+// пока Paid < Total; DueAt — следующий недельный чекпоинт платежа.
+type Installment struct {
+	ID        int64
+	UserID    int64
+	CompanyID int64
+	Category  string // shop | house | food | badge | app_theme | house_theme
+	ItemKey   string
+	ItemTitle string
+	Total     int
+	Paid      int
+	Parts     int
+	DueAt     time.Time
+	Penalized bool
+	CreatedAt time.Time
+}
+
+// Outstanding — непогашенный остаток рассрочки.
+func (i *Installment) Outstanding() int { return i.Total - i.Paid }
+
+// PartAmount — размер одной доли (последняя добирает остаток).
+func (i *Installment) PartAmount() int {
+	if i.Parts <= 0 {
+		return i.Total
+	}
+	return (i.Total + i.Parts - 1) / i.Parts
 }
 
 // BankDayStat — приход/расход за один день (динамика в статистике банка).

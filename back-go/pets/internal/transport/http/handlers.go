@@ -72,7 +72,11 @@ func (h *handlers) getMyPet(c *fiber.Ctx) error {
 }
 
 func (h *handlers) feedPet(c *fiber.Ctx) error {
-	resp, err := h.eps.FeedPet(c.Context(), scope(c))
+	var body struct {
+		Food string `json:"food"`
+	}
+	parseBody(c, &body)
+	resp, err := h.eps.FeedPet(c.Context(), endpoint.ItemRequest{Scope: scope(c), Item: strings.TrimSpace(body.Food)})
 	if err != nil {
 		return h.respondError(c, err)
 	}
@@ -148,7 +152,8 @@ func itemRequest(c *fiber.Ctx, field string) (*endpoint.ItemRequest, error) {
 		return nil, validationError(c, field,
 			"Длина не должна превышать "+strconv.Itoa(maxLen)+" символа")
 	}
-	return &endpoint.ItemRequest{Scope: scope(c), Item: raw}, nil
+	installment, _ := body["installment"].(bool)
+	return &endpoint.ItemRequest{Scope: scope(c), Item: raw, Installment: installment}, nil
 }
 
 func (h *handlers) buyItem(c *fiber.Ctx) error {
@@ -169,6 +174,25 @@ func (h *handlers) buySpecies(c *fiber.Ctx) error {
 		return verr
 	}
 	resp, err := h.eps.BuySpecies(c.Context(), *req)
+	if err != nil {
+		return h.respondError(c, err)
+	}
+	return c.JSON(resp)
+}
+
+func (h *handlers) sellItem(c *fiber.Ctx) error {
+	var body struct {
+		Item     string `json:"item"`
+		Category string `json:"category"`
+	}
+	parseBody(c, &body)
+	item := strings.TrimSpace(body.Item)
+	if item == "" {
+		return validationError(c, "item", "Обязательное поле")
+	}
+	resp, err := h.eps.SellItem(c.Context(), endpoint.ItemRequest{
+		Scope: scope(c), Item: item, Category: strings.TrimSpace(body.Category),
+	})
 	if err != nil {
 		return h.respondError(c, err)
 	}
@@ -551,6 +575,34 @@ func (h *handlers) deleteGoal(c *fiber.Ctx) error {
 	goalID, _ := c.ParamsInt("id")
 	resp, err := h.eps.DeleteGoal(c.Context(), endpoint.GoalRequest{
 		Scope: scope(c), GoalID: int64(goalID),
+	})
+	if err != nil {
+		return h.respondError(c, err)
+	}
+	return c.JSON(resp)
+}
+
+// ── рассрочка ───────────────────────────────────────────────────────
+
+func (h *handlers) getInstallments(c *fiber.Ctx) error {
+	resp, err := h.eps.GetInstallments(c.Context(), scope(c))
+	if err != nil {
+		return h.respondError(c, err)
+	}
+	return c.JSON(resp)
+}
+
+func (h *handlers) payInstallment(c *fiber.Ctx) error {
+	id, _ := c.ParamsInt("id")
+	var body struct {
+		Amount *int `json:"amount"`
+	}
+	parseBody(c, &body)
+	if body.Amount == nil || *body.Amount <= 0 {
+		return validationError(c, "amount", "Сумма должна быть положительной")
+	}
+	resp, err := h.eps.PayInstallment(c.Context(), endpoint.InstallmentPayRequest{
+		Scope: scope(c), ID: int64(id), Amount: *body.Amount,
 	})
 	if err != nil {
 		return h.respondError(c, err)

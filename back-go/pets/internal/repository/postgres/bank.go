@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"strconv"
+	"time"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -257,35 +258,88 @@ func (r *BankRepo) AccrueSavings(ctx context.Context, userID, companyID int64, r
 	return interest, tx.Commit(ctx)
 }
 
-func (r *BankRepo) TakeLoan(ctx context.Context, userID int64, amount, debt int) (int, bool, error) {
+func (r *BankRepo) TakeLoan(ctx context.Context, userID int64, amount, debt int, dueAt time.Time) (int, bool, error) {
 	companyID, err := r.companyOf(ctx, userID)
 	if err != nil {
 		return 0, false, err
 	}
 	var kudos int
 	ok, err := r.bankOp(ctx, `
-		UPDATE pets SET kudos = kudos + $2, bank_loan = $3
+		UPDATE pets SET kudos = kudos + $2, bank_loan = $3, loan_principal = $2,
+			loan_due_at = $4, loan_penalized = FALSE
 		WHERE user_id = $1 AND bank_loan = 0
 		RETURNING kudos`,
-		[]any{userID, amount, debt}, []any{&kudos},
+		[]any{userID, amount, debt, dueAt}, []any{&kudos},
 		&domain.LedgerEntry{UserID: userID, CompanyID: companyID, Delta: amount, Kind: "loan_taken",
 			Comment: "долг " + strconv.Itoa(debt)})
 	return kudos, ok, err
 }
 
-func (r *BankRepo) RepayLoan(ctx context.Context, userID int64, amount int) (int, int, bool, error) {
+func (r *BankRepo) RepayLoan(ctx context.Context, userID int64, amount int, nextDueAt time.Time) (int, int, bool, error) {
 	companyID, err := r.companyOf(ctx, userID)
 	if err != nil {
 		return 0, 0, false, err
 	}
 	var kudos, loan int
+	// Частичный платёж двигает недельный чекпоинт (сброс клока «плати раз в
+	// неделю»); полностью погашенный кредит закрывает FinalizeLoan.
 	ok, err := r.bankOp(ctx, `
-		UPDATE pets SET kudos = kudos - $2, bank_loan = bank_loan - $2
+		UPDATE pets SET kudos = kudos - $2, bank_loan = bank_loan - $2,
+			loan_due_at = CASE WHEN bank_loan - $2 > 0 THEN $3 ELSE loan_due_at END
 		WHERE user_id = $1 AND kudos >= $2 AND bank_loan >= $2
 		RETURNING kudos, bank_loan`,
-		[]any{userID, amount}, []any{&kudos, &loan},
+		[]any{userID, amount, nextDueAt}, []any{&kudos, &loan},
 		&domain.LedgerEntry{UserID: userID, CompanyID: companyID, Delta: -amount, Kind: "loan_repaid"})
 	return kudos, loan, ok, err
+}
+
+// FinalizeLoan — завершение полностью погашенного кредита. Идемпотентно за счёт
+// guard'а loan_principal > 0: сбрасывает параметры кредита, двигает рейтинг и
+// (при cashback > 0) начисляет кэшбэк на кошелёк одной записью леджера.
+func (r *BankRepo) FinalizeLoan(ctx context.Context, userID int64, scoreDelta, cashback int) (bool, error) {
+	companyID, err := r.companyOf(ctx, userID)
+	if err != nil {
+		return false, err
+	}
+	tx, err := r.pool.Begin(ctx)
+	if err != nil {
+		return false, err
+	}
+	defer tx.Rollback(ctx) //nolint:errcheck // после Commit — no-op
+
+	var dummy int
+	err = tx.QueryRow(ctx, `
+		UPDATE pets SET loan_principal = 0, loan_due_at = NULL, loan_penalized = FALSE,
+			credit_score = GREATEST(0, credit_score + $2), kudos = kudos + $3
+		WHERE user_id = $1 AND bank_loan = 0 AND loan_principal > 0
+		RETURNING 1`, userID, scoreDelta, cashback).Scan(&dummy)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return false, nil
+		}
+		return false, err
+	}
+	if cashback > 0 {
+		if _, err := tx.Exec(ctx, insertLedger, userID, companyID, cashback, "loan_cashback", nil, ""); err != nil {
+			return false, err
+		}
+	}
+	return true, tx.Commit(ctx)
+}
+
+// AddLoanCharge — ленивое еженедельное начисление штрафа+процентов на остаток
+// долга: +charge к долгу, чекпоинт oldDue→newDue. Оптимистичный guard
+// loan_due_at = oldDue делает начисление идемпотентным при гонке (второй
+// конкурентный вызов увидит сдвинутый чекпоинт и ничего не добавит).
+func (r *BankRepo) AddLoanCharge(ctx context.Context, userID int64, charge int, oldDue, newDue time.Time) (bool, error) {
+	tag, err := r.pool.Exec(ctx, `
+		UPDATE pets SET bank_loan = bank_loan + $2, loan_due_at = $4, loan_penalized = TRUE
+		WHERE user_id = $1 AND loan_principal > 0 AND bank_loan > 0 AND loan_due_at = $3`,
+		userID, charge, oldDue, newDue)
+	if err != nil {
+		return false, err
+	}
+	return tag.RowsAffected() > 0, nil
 }
 
 func (r *BankRepo) DeleteLedger(ctx context.Context, userID int64) error {

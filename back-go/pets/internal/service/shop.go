@@ -130,7 +130,7 @@ func (s *Service) GetShopState(ctx context.Context, userID, companyID int64) (*d
 // списание кудосов (по цене со скидкой дня), применение эффекта. paid —
 // фактически списанная сумма (для выписки банка).
 func (s *Service) purchaseItem(ctx context.Context, userID, companyID int64,
-	key, wantKind string) (*domain.Pet, *domain.ShopItem, int, error) {
+	key, wantKind string, installment bool) (*domain.Pet, *domain.ShopItem, int, error) {
 
 	item, err := s.shop.GetItem(ctx, key)
 	if err != nil {
@@ -167,7 +167,18 @@ func (s *Service) purchaseItem(ctx context.Context, userID, companyID int64,
 			return nil, nil, 0, domain.ErrSoldOut
 		}
 	}
-	price, _ := salePrice(item, todayMSK())
+	price, discountPct := salePrice(item, todayMSK())
+	if installment {
+		// Рассрочка — только не-акционные товары; акционные берут сразу или в кредит.
+		if discountPct > 0 {
+			return nil, nil, 0, domain.NewError("INSTALLMENT_SALE",
+				"Акционные товары нельзя в рассрочку — купите сразу или возьмите кредит", 422)
+		}
+		if err := s.checkInstallmentLimit(ctx, userID, price); err != nil {
+			return nil, nil, 0, err
+		}
+		return pet, item, price, nil // без списания — оплата долями
+	}
 	if pet.Kudos < price {
 		return nil, nil, 0, domain.NewError("NO_KUDOS", "Не хватает кудосов", 422)
 	}
@@ -178,8 +189,8 @@ func (s *Service) purchaseItem(ctx context.Context, userID, companyID int64,
 // BuyItem — купить и сразу надеть аксессуар/скин. Лимитированный тираж
 // резервируется ДО SavePet: если тираж распродан (RecordPurchase → SOLD_OUT),
 // кудосы покупателя не списываются.
-func (s *Service) BuyItem(ctx context.Context, userID, companyID int64, key string) (*dto.PetDTO, error) {
-	pet, item, paid, err := s.buyByKinds(ctx, userID, companyID, key, "skin", "accessory")
+func (s *Service) BuyItem(ctx context.Context, userID, companyID int64, key string, installment bool) (*dto.PetDTO, error) {
+	pet, item, paid, err := s.buyByKinds(ctx, userID, companyID, key, installment, "skin", "accessory")
 	if err != nil {
 		return nil, err
 	}
@@ -194,7 +205,13 @@ func (s *Service) BuyItem(ctx context.Context, userID, companyID int64, key stri
 		return nil, err
 	}
 	s.appendActivity(ctx, userID, "item_bought", map[string]any{"key": key})
-	s.appendLedger(ctx, userID, companyID, -paid, "shop", nil, key)
+	if installment {
+		if err := s.openInstallment(ctx, userID, companyID, "shop", key, key, paid); err != nil {
+			s.log.Warn("pets.open_installment_failed", "user_id", userID, "key", key, "error", err)
+		}
+	} else {
+		s.appendLedger(ctx, userID, companyID, -paid, "shop", nil, key)
+	}
 	s.emitPetUpdate(ctx, pet)
 	return dto.NewPet(pet), nil
 }
@@ -202,7 +219,7 @@ func (s *Service) BuyItem(ctx context.Context, userID, companyID int64, key stri
 // buyByKinds — purchaseItem, допускающий несколько kind (skin/accessory —
 // разные ярлыки одного и того же способа ношения).
 func (s *Service) buyByKinds(ctx context.Context, userID, companyID int64,
-	key string, kinds ...string) (*domain.Pet, *domain.ShopItem, int, error) {
+	key string, installment bool, kinds ...string) (*domain.Pet, *domain.ShopItem, int, error) {
 
 	item, err := s.shop.GetItem(ctx, key)
 	if err != nil {
@@ -217,7 +234,7 @@ func (s *Service) buyByKinds(ctx context.Context, userID, companyID int64,
 	if item == nil || !kindOK {
 		return nil, nil, 0, domain.NewError("NO_ITEM", "Такого товара нет", 404)
 	}
-	return s.purchaseItem(ctx, userID, companyID, key, item.Kind)
+	return s.purchaseItem(ctx, userID, companyID, key, item.Kind, installment)
 }
 
 func (s *Service) EquipItem(ctx context.Context, userID, companyID int64, item *string) (*dto.PetDTO, error) {
@@ -241,8 +258,8 @@ func (s *Service) EquipItem(ctx context.Context, userID, companyID int64, item *
 
 // BuySpecies — разблокировать новый облик питомца и сразу его надеть.
 // Порядок тот же, что в BuyItem: резерв тиража до SavePet.
-func (s *Service) BuySpecies(ctx context.Context, userID, companyID int64, species string) (*dto.PetDTO, error) {
-	pet, item, paid, err := s.purchaseItem(ctx, userID, companyID, species, "species")
+func (s *Service) BuySpecies(ctx context.Context, userID, companyID int64, species string, installment bool) (*dto.PetDTO, error) {
+	pet, item, paid, err := s.purchaseItem(ctx, userID, companyID, species, "species", installment)
 	if err != nil {
 		return nil, err
 	}
@@ -257,7 +274,13 @@ func (s *Service) BuySpecies(ctx context.Context, userID, companyID int64, speci
 		return nil, err
 	}
 	s.appendActivity(ctx, userID, "item_bought", map[string]any{"key": species})
-	s.appendLedger(ctx, userID, companyID, -paid, "shop", nil, species)
+	if installment {
+		if err := s.openInstallment(ctx, userID, companyID, "shop", species, species, paid); err != nil {
+			s.log.Warn("pets.open_installment_failed", "user_id", userID, "key", species, "error", err)
+		}
+	} else {
+		s.appendLedger(ctx, userID, companyID, -paid, "shop", nil, species)
+	}
 	s.emitPetUpdate(ctx, pet)
 	return dto.NewPet(pet), nil
 }
@@ -305,6 +328,64 @@ func (s *Service) ResetSpecies(ctx context.Context, userID, companyID int64) (*d
 		return nil, err
 	}
 	s.appendActivity(ctx, userID, "species_reset", map[string]any{"species": natural})
+	s.emitPetUpdate(ctx, pet)
+	return dto.NewPet(pet), nil
+}
+
+// SellItem — продать купленное имущество за половину цены (SellRefundPct);
+// выручка идёт на кошелёк. category: house — декор домика, иначе товар магазина
+// (скин/аксессуар/вид). Надетый предмет снимается; текущий облик продать нельзя.
+func (s *Service) SellItem(ctx context.Context, userID, companyID int64, category, key string) (*dto.PetDTO, error) {
+	pet, err := s.pets.GetOrCreate(ctx, userID, companyID)
+	if err != nil {
+		return nil, err
+	}
+	if err := s.ensureNotAway(ctx, pet); err != nil {
+		return nil, err
+	}
+
+	var refund int
+	if category == "house" {
+		price, ok := domain.HouseDecor[key]
+		if !ok || price <= 0 {
+			return nil, domain.NewError("NO_ITEM", "Такого декора нет", 404)
+		}
+		if !containsStr(pet.HouseOwned, key) {
+			return nil, domain.NewError("NOT_OWNED", "Этот декор не куплен", 422)
+		}
+		refund = price * domain.SellRefundPct / 100
+		repossessItem(pet, "house", key) // снять с владения и расстановки
+	} else {
+		item, err := s.shop.GetItem(ctx, key)
+		if err != nil {
+			return nil, err
+		}
+		if item == nil {
+			return nil, domain.NewError("NO_ITEM", "Такого товара нет", 404)
+		}
+		refund = item.PriceKudos * domain.SellRefundPct / 100
+		if item.Kind == "species" {
+			if !containsStr(pet.UnlockedSpecies, key) {
+				return nil, domain.NewError("NOT_OWNED", "Этот вид не куплен", 422)
+			}
+			if pet.Species == key {
+				return nil, domain.NewError("SPECIES_WORN", "Сначала снимите этот облик", 422)
+			}
+			pet.UnlockedSpecies = removeStr(pet.UnlockedSpecies, key)
+		} else {
+			if !containsStr(pet.Accessories, key) {
+				return nil, domain.NewError("NOT_OWNED", "Этот предмет не куплен", 422)
+			}
+			repossessItem(pet, "shop", key) // снять из гардероба и с головы
+		}
+	}
+
+	pet.Kudos += refund
+	if err := s.pets.SavePet(ctx, pet); err != nil {
+		return nil, err
+	}
+	s.appendActivity(ctx, userID, "item_sold", map[string]any{"key": key, "category": category, "refund": refund})
+	s.appendLedger(ctx, userID, companyID, refund, "sell", nil, key)
 	s.emitPetUpdate(ctx, pet)
 	return dto.NewPet(pet), nil
 }

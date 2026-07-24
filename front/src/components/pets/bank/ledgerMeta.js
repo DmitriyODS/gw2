@@ -24,6 +24,10 @@ export const LEDGER_META = {
   bank_interest: { icon: 'trending_up', group: 'bank', text: () => 'Проценты по вкладу' },
   loan_taken: { icon: 'credit_score', group: 'bank', text: (e) => `Кредит${e.comment ? ` (${e.comment})` : ''}` },
   loan_repaid: { icon: 'credit_score', group: 'bank', text: () => 'Погашение кредита' },
+  loan_cashback: { icon: 'savings', group: 'bank', text: () => 'Кэшбэк за возврат в срок' },
+  installment_pay: { icon: 'splitscreen', group: 'bank', text: () => 'Платёж по рассрочке' },
+  sell: { icon: 'sell', group: 'earn', text: (e) => `Продажа${e.comment ? `: ${e.comment}` : ''}` },
+  loan_penalty: { icon: 'error', group: 'bank', text: () => 'Пеня за просрочку кредита' },
   goal_deposit: { icon: 'target', group: 'bank', text: (e) => `В копилку${e.comment ? ` ${e.comment}` : ''}` },
   goal_withdraw: { icon: 'target', group: 'bank', text: (e) => `Из копилки${e.comment ? ` ${e.comment}` : ''}` },
 }
@@ -47,6 +51,8 @@ export const KIND_TITLES = {
   transfer_out: 'Переводы (исход)', charity: 'Благотворительность',
   bank_deposit: 'Вклад', bank_withdraw: 'Вклад (снятие)', bank_interest: 'Проценты',
   loan_taken: 'Кредит', loan_repaid: 'Кредит (погашение)',
+  loan_cashback: 'Кэшбэк по кредиту', loan_penalty: 'Пеня по кредиту',
+  installment_pay: 'Рассрочка (платёж)',
   goal_deposit: 'Копилки', goal_withdraw: 'Копилки (снятие)',
 }
 

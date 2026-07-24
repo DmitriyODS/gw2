@@ -137,8 +137,8 @@ type StatsRepository interface {
 	ByDepartments(ctx Ctx, start, end time.Time, companyID *int64) ([]DeptStats, error)
 	ByUnitTypesPerUser(ctx Ctx, start, end time.Time, companyID *int64) ([]UserUnitTypeStats, error)
 	Calendar(ctx Ctx, start, end time.Time, companyID *int64) ([]CalendarDay, error)
-	UserTasksDetail(ctx Ctx, userID int64, start, end time.Time) ([]UserTaskHours, error)
-	ProfileStats(ctx Ctx, userID int64, start, end time.Time) (*ProfileStats, error)
+	UserTasksDetail(ctx Ctx, userID int64, companyID *int64, start, end time.Time) ([]UserTaskHours, error)
+	ProfileStats(ctx Ctx, userID int64, companyID *int64, start, end time.Time) (*ProfileStats, error)
 	Responsibles(ctx Ctx, companyID *int64) ([]Responsible, error)
 	// VisibleEmployees — список для селектора статистики (user_repo.get_all).
 	VisibleEmployees(ctx Ctx, companyID *int64) ([]EmployeeRef, error)

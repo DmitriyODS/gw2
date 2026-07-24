@@ -129,6 +129,34 @@
         </div>
 
         <div v-if="tab === 'actions'" class="pdm-actions">
+          <!-- Шаг выбора корма — прямо в окне грувика, без отдельной модалки. -->
+          <div v-if="picking" class="pdm-food">
+            <button class="pdm-food-back" type="button" @click="picking = false">
+              <span class="material-symbols-outlined">arrow_back</span> Назад
+            </button>
+            <p class="pdm-food-hint">
+              Выберите угощение. Любимое
+              <EmojiGlyph :char="foodMeta(pet?.favorite_food).emoji" /> даёт бонус к сытости и опыту.
+            </p>
+            <div class="pdm-food-grid">
+              <button
+                v-for="f in FOODS"
+                :key="f.key"
+                class="pdm-food-item"
+                :class="{ favorite: f.key === (pet?.favorite_food || 'carrot'), poor: (pet?.kudos ?? 0) < f.price }"
+                type="button"
+                @click="onFoodPick(f.key)"
+              >
+                <span v-if="f.key === (pet?.favorite_food || 'carrot')" class="pdm-food-fav">❤️</span>
+                <EmojiGlyph :char="f.emoji" />
+                <span class="pdm-food-title">{{ f.title }}</span>
+                <span class="pdm-food-sat">+{{ f.satiety }} сыт.</span>
+                <span class="pdm-food-price"><KudosCoin /> {{ f.price }}</span>
+              </button>
+            </div>
+          </div>
+
+          <template v-else>
           <!-- Отпуск хозяина: питомец отдыхает, уход недоступен, показатели заморожены -->
           <div v-if="pet?.on_vacation" class="pdm-adventure">
             <span class="pdm-adventure-emoji">🏖️</span>
@@ -155,7 +183,7 @@
             </button>
           </div>
           <template v-else>
-            <button class="pdm-action-btn" type="button" :disabled="!canFeed" @click="activeGame = 'feed'">
+            <button class="pdm-action-btn" type="button" :disabled="!canFeed" @click="startFeed">
               <span class="pdm-action-emoji">{{ pet?.sick ? '🍲' : '🥕' }}</span>
               <span>{{ pet?.sick ? 'Дать бульон' : 'Покормить' }}</span>
               <span class="pdm-action-cost"><KudosCoin /> {{ feedCost }}</span>
@@ -224,6 +252,7 @@
               @click="toggleEquip(item)"
             ><EmojiGlyph :char="shopItemEmoji({ kind: 'accessory', key: item })" /></button>
           </div>
+          </template>
         </div>
 
         <div v-else class="pdm-history">
@@ -255,7 +284,7 @@
       </div>
     </div>
 
-    <FeedMiniGame v-if="activeGame === 'feed'" :pet="pet" @success="onFeedSuccess" @close="activeGame = null" />
+    <FeedMiniGame v-if="activeGame === 'feed'" :pet="pet" :food-emoji="chosenFoodEmoji" @success="onFeedSuccess" @close="activeGame = null" />
     <WalkMiniGame v-if="activeGame === 'walk'" :pet="pet" @success="onWalkSuccess" @close="activeGame = null" />
     <HealMiniGame v-if="activeGame === 'heal'" @success="onHealSuccess" @close="activeGame = null" />
     <BathMiniGame
@@ -299,7 +328,7 @@ import { useNotificationsStore } from '@/stores/notifications.js'
 import {
   petEmoji, PET_STAGES, PET_SPECIES, PERSONALITIES, PRESTIGE_SPECIES,
   shopItemEmoji, shopItemTitle, activityIcon, activityText,
-  ailmentMeta, moodEmoji, moodTitle,
+  ailmentMeta, moodEmoji, moodTitle, FOODS, foodMeta,
 } from '@/utils/pets.js'
 
 const props = defineProps({
@@ -324,6 +353,9 @@ const atMaxStage = computed(() => (pet.value?.stage ?? 0) >= maxStage)
 
 const tab = ref('actions')
 const activeGame = ref(null)
+const picking = ref(false) // шаг выбора корма внутри окна грувика
+const chosenFood = ref('')
+const chosenFoodEmoji = computed(() => foodMeta(chosenFood.value).emoji)
 const historyLoading = ref(false)
 const justActed = ref(false)
 const claiming = ref(false)
@@ -441,14 +473,33 @@ function pulse() {
   setTimeout(() => { justActed.value = false }, 650)
 }
 
+// Здоровому — сперва выбор угощения (шаг в этом же окне), больному — сразу
+// «бульон» (выбора нет).
+function startFeed() {
+  if (pet.value?.sick) {
+    chosenFood.value = ''
+    activeGame.value = 'feed'
+  } else {
+    picking.value = true
+  }
+}
+
+function onFoodPick(key) {
+  chosenFood.value = key
+  picking.value = false
+  activeGame.value = 'feed'
+}
+
 async function onFeedSuccess() {
   activeGame.value = null
   try {
-    await pets.feedPet()
+    await pets.feedPet(chosenFood.value)
     pulse()
     notify.success('Питомец покормлен')
   } catch (e) {
     notify.warn(e?.message || 'Покормить не получилось')
+  } finally {
+    chosenFood.value = ''
   }
 }
 
@@ -854,6 +905,36 @@ function gotoPets() {
 .pdm-tab.active { background: var(--grad-primary); color: var(--color-on-primary); }
 
 .pdm-actions { width: 100%; display: flex; flex-direction: column; gap: 8px; margin-top: 14px; }
+
+/* Шаг выбора корма — внутри окна грувика. */
+.pdm-food { width: 100%; margin-top: 14px; }
+.pdm-food-back {
+  display: inline-flex; align-items: center; gap: 4px;
+  border: none; background: transparent; cursor: pointer;
+  color: var(--color-primary); font-size: 13px; padding: 4px 0; margin-bottom: 6px;
+}
+.pdm-food-back .material-symbols-outlined { font-size: 18px; }
+.pdm-food-hint {
+  margin: 0 0 12px; font-size: 12.5px; color: var(--color-text-dim);
+  line-height: 1.5; display: flex; align-items: center; gap: 4px; flex-wrap: wrap;
+}
+.pdm-food-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+.pdm-food-item {
+  position: relative;
+  display: flex; flex-direction: column; align-items: center; gap: 2px;
+  padding: 10px 4px; border-radius: var(--radius-md);
+  border: 1px solid var(--acrylic-border);
+  background: color-mix(in oklch, var(--color-primary) 5%, transparent);
+  cursor: pointer; font-size: 26px; transition: transform 0.12s, border-color 0.12s;
+}
+.pdm-food-item:hover { transform: translateY(-2px); border-color: var(--color-primary); }
+.pdm-food-item.favorite { border-color: color-mix(in oklch, var(--color-error) 45%, transparent); }
+.pdm-food-item.poor { opacity: 0.5; }
+.pdm-food-fav { position: absolute; top: 3px; right: 4px; font-size: 11px; }
+.pdm-food-title { font-size: 11px; font-weight: 600; }
+.pdm-food-sat { font-size: 10px; color: var(--color-success); }
+.pdm-food-price { display: inline-flex; align-items: center; gap: 2px; font-size: 11px; font-weight: 700; }
+@media (max-width: 480px) { .pdm-food-grid { grid-template-columns: repeat(3, 1fr); } }
 .pdm-action-btn {
   display: flex; align-items: center; gap: 10px;
   border: 1px solid var(--acrylic-border); border-radius: 16px;

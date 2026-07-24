@@ -630,6 +630,7 @@ type testEnv struct {
 	users    *fakeUsers
 	daily    *capDaily
 	pub      *fakePub
+	inst     *fakeInstallments
 	svc      *Service
 }
 
@@ -641,16 +642,113 @@ func newEnv() *testEnv {
 	users := &fakeUsers{}
 	daily := &capDaily{}
 	pub := &fakePub{}
-	svc := New(pets, shop, activity, bank, users, fakeCompanies{}, &fakeWork{}, daily, pub,
+	inst := &fakeInstallments{pets: pets}
+	svc := New(pets, shop, activity, bank, inst, users, fakeCompanies{}, &fakeWork{}, daily, pub,
 		slog.New(slog.DiscardHandler))
-	return &testEnv{pets: pets, shop: shop, activity: activity, bank: bank, users: users, daily: daily, pub: pub, svc: svc}
+	return &testEnv{pets: pets, shop: shop, activity: activity, bank: bank, users: users, daily: daily, pub: pub, inst: inst, svc: svc}
 }
 
 // newTestService — окружение с fakeDaily (выдаёт бюджет целиком), как раньше
 // использовалось для тестов кормления.
 func newTestService(pets *fakePets, daily *fakeDaily, pub *fakePub, activity *fakeActivity) *Service {
-	return New(pets, newFakeShop(), activity, &fakeBank{pets: pets}, &fakeUsers{}, fakeCompanies{},
-		&fakeWork{}, daily, pub, slog.New(slog.DiscardHandler))
+	return New(pets, newFakeShop(), activity, &fakeBank{pets: pets}, &fakeInstallments{pets: pets},
+		&fakeUsers{}, fakeCompanies{}, &fakeWork{}, daily, pub, slog.New(slog.DiscardHandler))
+}
+
+// fakeInstallments — in-memory реализация domain.InstallmentRepo для тестов.
+type fakeInstallments struct {
+	pets *fakePets
+	rows []*domain.Installment
+	seq  int64
+}
+
+func (f *fakeInstallments) Create(_ context.Context, i *domain.Installment) error {
+	f.seq++
+	i.ID = f.seq
+	i.CreatedAt = time.Now()
+	cp := *i
+	f.rows = append(f.rows, &cp)
+	return nil
+}
+
+func (f *fakeInstallments) ListActive(_ context.Context, userID int64) ([]*domain.Installment, error) {
+	out := []*domain.Installment{}
+	for _, r := range f.rows {
+		if r.UserID == userID && r.Paid < r.Total {
+			cp := *r
+			out = append(out, &cp)
+		}
+	}
+	return out, nil
+}
+
+func (f *fakeInstallments) Get(_ context.Context, id, userID int64) (*domain.Installment, error) {
+	for _, r := range f.rows {
+		if r.ID == id && r.UserID == userID {
+			cp := *r
+			return &cp, nil
+		}
+	}
+	return nil, nil
+}
+
+func (f *fakeInstallments) Outstanding(_ context.Context, userID int64) (int, error) {
+	sum := 0
+	for _, r := range f.rows {
+		if r.UserID == userID && r.Paid < r.Total {
+			sum += r.Total - r.Paid
+		}
+	}
+	return sum, nil
+}
+
+func (f *fakeInstallments) Pay(_ context.Context, id, userID int64, amount int) (int, int, int, bool, error) {
+	p := f.pets.byUser[userID]
+	for _, r := range f.rows {
+		if r.ID == id && r.UserID == userID && r.Paid < r.Total && amount <= r.Total-r.Paid {
+			if p == nil || p.Kudos < amount {
+				return 0, 0, 0, false, nil
+			}
+			p.Kudos -= amount
+			r.Paid += amount
+			return r.Paid, r.Total, p.Kudos, true, nil
+		}
+	}
+	return 0, 0, 0, false, nil
+}
+
+func (f *fakeInstallments) AddCharge(_ context.Context, id int64, charge int, oldDue, newDue time.Time) (bool, error) {
+	for _, r := range f.rows {
+		if r.ID == id && r.Paid < r.Total && r.DueAt.Equal(oldDue) {
+			r.Total += charge
+			r.DueAt = newDue
+			r.Penalized = true
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
+func (f *fakeInstallments) Delete(_ context.Context, id int64) error {
+	out := f.rows[:0]
+	for _, r := range f.rows {
+		if r.ID != id {
+			out = append(out, r)
+		}
+	}
+	f.rows = out
+	return nil
+}
+
+func (f *fakeInstallments) DeleteForUser(_ context.Context, userID int64) error {
+	out := f.rows[:0]
+	for _, r := range f.rows {
+		if r.UserID != userID {
+			out = append(out, r)
+		}
+	}
+	f.rows = out
+	return nil
 }
 
 // ── FeedPet на фейках портов ───────────────────────────────────────
@@ -665,7 +763,7 @@ func TestFeedPetHappyPath(t *testing.T) {
 	pet, _ := pets.GetOrCreate(context.Background(), 1, 10)
 	pet.Kudos = 10
 
-	data, err := svc.FeedPet(context.Background(), 1, 10)
+	data, err := svc.FeedPet(context.Background(), 1, 10, "")
 	if err != nil {
 		t.Fatalf("FeedPet: %v", err)
 	}
@@ -697,7 +795,7 @@ func TestFeedPetNoKudos(t *testing.T) {
 	svc := newTestService(pets, &fakeDaily{}, &fakePub{}, &fakeActivity{})
 	pets.GetOrCreate(context.Background(), 1, 10) // kudos = 0
 
-	_, err := svc.FeedPet(context.Background(), 1, 10)
+	_, err := svc.FeedPet(context.Background(), 1, 10, "")
 	de := domain.AsDomainError(err)
 	if de == nil || de.Code != "NO_KUDOS" {
 		t.Fatalf("ожидался NO_KUDOS, got %v", err)
@@ -710,7 +808,7 @@ func TestFeedPetDailyCap(t *testing.T) {
 	pet, _ := pets.GetOrCreate(context.Background(), 1, 10)
 	pet.Kudos = 10
 
-	_, err := svc.FeedPet(context.Background(), 1, 10)
+	_, err := svc.FeedPet(context.Background(), 1, 10, "")
 	de := domain.AsDomainError(err)
 	if de == nil || de.Code != "FED_ENOUGH" || de.HTTPStatus != 429 {
 		t.Fatalf("ожидался FED_ENOUGH/429, got %v", err)
@@ -725,7 +823,7 @@ func TestFeedPetEvolves(t *testing.T) {
 	pet.Kudos = 10
 	pet.XP = domain.StageXP[1] - domain.FeedXP + 1 // эволюция после кормления
 
-	data, err := svc.FeedPet(context.Background(), 1, 10)
+	data, err := svc.FeedPet(context.Background(), 1, 10, "")
 	if err != nil {
 		t.Fatalf("FeedPet: %v", err)
 	}

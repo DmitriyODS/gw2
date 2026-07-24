@@ -569,13 +569,17 @@ var feedPhrases = []string{
 
 // ───────────────────────────── кормление ───────────────────────────
 
-func (s *Service) FeedPet(ctx context.Context, userID, companyID int64) (*dto.PetDTO, error) {
+func (s *Service) FeedPet(ctx context.Context, userID, companyID int64, foodKey string) (*dto.PetDTO, error) {
 	pet, err := s.pets.GetOrCreate(ctx, userID, companyID)
 	if err != nil {
 		return nil, err
 	}
 	if err := s.ensureNotAway(ctx, pet); err != nil {
 		return nil, err
+	}
+	food, ok := domain.FoodByKey(foodKey)
+	if !ok {
+		return nil, domain.NewError("NO_FOOD", "Такого корма нет", 404)
 	}
 	s.refreshNeeds(ctx, pet)
 
@@ -611,16 +615,25 @@ func (s *Service) FeedPet(ctx context.Context, userID, companyID int64) (*dto.Pe
 		return data, nil
 	}
 
-	if pet.Kudos < domain.FeedCost {
+	if pet.Kudos < food.Price {
 		return nil, domain.NewError("NO_KUDOS", "Не хватает кудосов", 422)
 	}
 	if s.daily.TakeBudget(ctx, userID, "feeds", 1, domain.FeedDailyMax) <= 0 {
 		return nil, domain.NewError("FED_ENOUGH", "Питомец сыт — приходите завтра", 429)
 	}
 
-	pet.Kudos -= domain.FeedCost
-	pet.XP += domain.FeedXP
-	pet.ApplyNeedGains(domain.ActionFeed)
+	// Эффекты корма; любимый корм вида даёт бонус к сытости и XP (персонализация).
+	satiety, xp := food.Satiety, food.XP
+	favorite := foodKey != "" && foodKey == domain.FoodFavorite(pet.Species)
+	if favorite {
+		satiety = satiety * (100 + domain.FavoriteFoodSatietyBonus) / 100
+		xp += domain.FavoriteFoodBonusXP
+	}
+	pet.Kudos -= food.Price
+	pet.XP += xp
+	pet.Needs.Add(domain.NeedSatiety, satiety)
+	pet.Needs.Add(domain.NeedEnergy, food.Energy)
+	pet.Needs.Add(domain.NeedHygiene, food.Hygiene)
 
 	today := todayMSK()
 	if pet.LastFedDate == nil || !pet.LastFedDate.Equal(today) {
@@ -639,8 +652,8 @@ func (s *Service) FeedPet(ctx context.Context, userID, companyID int64) (*dto.Pe
 		return nil, err
 	}
 
-	s.appendActivity(ctx, userID, "fed", map[string]any{"streak": pet.FeedStreak})
-	s.appendLedger(ctx, userID, companyID, -domain.FeedCost, "feed", nil, "")
+	s.appendActivity(ctx, userID, "fed", map[string]any{"streak": pet.FeedStreak, "food": food.Key, "favorite": favorite})
+	s.appendLedger(ctx, userID, companyID, -food.Price, "feed", nil, food.Key)
 	if evolvedTo > 0 {
 		s.celebrateEvolution(ctx, pet, evolvedTo)
 	}
@@ -918,6 +931,9 @@ func (s *Service) DeleteColleaguePet(ctx context.Context, adminLevel int, target
 	}
 	if err := s.pets.DeletePet(ctx, targetUserID); err != nil {
 		return err
+	}
+	if err := s.installments.DeleteForUser(ctx, targetUserID); err != nil {
+		s.log.Warn("pets.delete_installments_failed", "user_id", targetUserID, "error", err)
 	}
 	// Комната all: владельцу — сброс своего питомца, остальным — обновление
 	// зоопарка; клиенты чужих компаний отфильтруют по company_id.

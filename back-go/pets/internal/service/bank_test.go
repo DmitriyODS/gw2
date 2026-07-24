@@ -150,7 +150,7 @@ func (f *fakeBank) AccrueSavings(_ context.Context, userID, _ int64, ratePct int
 	return interest, nil
 }
 
-func (f *fakeBank) TakeLoan(_ context.Context, userID int64, amount, debt int) (int, bool, error) {
+func (f *fakeBank) TakeLoan(_ context.Context, userID int64, amount, debt int, dueAt time.Time) (int, bool, error) {
 	p := f.pets.byUser[userID]
 	if p == nil {
 		return 0, false, errNoPet
@@ -160,11 +160,14 @@ func (f *fakeBank) TakeLoan(_ context.Context, userID int64, amount, debt int) (
 	}
 	p.Kudos += amount
 	p.BankLoan = debt
+	p.LoanPrincipal = amount
+	p.LoanDueAt = &dueAt
+	p.LoanPenalized = false
 	f.add(&domain.LedgerEntry{UserID: userID, CompanyID: p.CompanyID, Delta: amount, Kind: "loan_taken"})
 	return p.Kudos, true, nil
 }
 
-func (f *fakeBank) RepayLoan(_ context.Context, userID int64, amount int) (int, int, bool, error) {
+func (f *fakeBank) RepayLoan(_ context.Context, userID int64, amount int, nextDueAt time.Time) (int, int, bool, error) {
 	p := f.pets.byUser[userID]
 	if p == nil {
 		return 0, 0, false, errNoPet
@@ -174,8 +177,42 @@ func (f *fakeBank) RepayLoan(_ context.Context, userID int64, amount int) (int, 
 	}
 	p.Kudos -= amount
 	p.BankLoan -= amount
+	if p.BankLoan > 0 {
+		p.LoanDueAt = &nextDueAt
+	}
 	f.add(&domain.LedgerEntry{UserID: userID, CompanyID: p.CompanyID, Delta: -amount, Kind: "loan_repaid"})
 	return p.Kudos, p.BankLoan, true, nil
+}
+
+func (f *fakeBank) FinalizeLoan(_ context.Context, userID int64, scoreDelta, cashback int) (bool, error) {
+	p := f.pets.byUser[userID]
+	if p == nil || p.BankLoan != 0 || p.LoanPrincipal <= 0 {
+		return false, nil
+	}
+	p.LoanPrincipal = 0
+	p.LoanDueAt = nil
+	p.LoanPenalized = false
+	p.CreditScore += scoreDelta
+	if p.CreditScore < 0 {
+		p.CreditScore = 0
+	}
+	if cashback > 0 {
+		p.Kudos += cashback
+		f.add(&domain.LedgerEntry{UserID: userID, CompanyID: p.CompanyID, Delta: cashback, Kind: "loan_cashback"})
+	}
+	return true, nil
+}
+
+func (f *fakeBank) AddLoanCharge(_ context.Context, userID int64, charge int, oldDue, newDue time.Time) (bool, error) {
+	p := f.pets.byUser[userID]
+	if p == nil || p.LoanPrincipal <= 0 || p.BankLoan <= 0 ||
+		p.LoanDueAt == nil || !p.LoanDueAt.Equal(oldDue) {
+		return false, nil
+	}
+	p.BankLoan += charge
+	p.LoanDueAt = &newDue
+	p.LoanPenalized = true
+	return true, nil
 }
 
 // ── Копилки-цели ────────────────────────────────────────────────────
@@ -611,6 +648,87 @@ func TestBankLoanTakeAndRepay(t *testing.T) {
 	}
 }
 
+// Возврат в срок (после мин-холда) растит кредитный рейтинг и даёт кэшбэк.
+func TestBankCreditRatingCashback(t *testing.T) {
+	env := newEnv()
+	ctx := context.Background()
+
+	pet, _ := env.pets.GetOrCreate(ctx, 1, 10)
+	pet.Kudos = 0
+
+	bank, err := env.svc.BankTakeLoan(ctx, 1, 10, 40)
+	if err != nil {
+		t.Fatalf("BankTakeLoan: %v", err)
+	}
+	if bank.Loan != 48 || bank.Credit.Tier.Key != "none" || bank.Credit.FeePct != 20 {
+		t.Fatalf("кредит: loan=%d credit=%+v", bank.Loan, bank.Credit)
+	}
+	// Срок — завтра (в срок), а взят давно (tookAt = due−7д) → мин-холд пройден.
+	due := time.Now().Add(24 * time.Hour)
+	pet.LoanDueAt = &due
+	pet.Kudos = 300
+
+	bank, err = env.svc.BankRepayLoan(ctx, 1, 10, 999)
+	if err != nil {
+		t.Fatalf("BankRepayLoan: %v", err)
+	}
+	if bank.Loan != 0 {
+		t.Fatalf("долг не закрыт: %d", bank.Loan)
+	}
+	if bank.LoanCashback == nil || *bank.LoanCashback != 2 { // 5% от тела 40
+		t.Errorf("кэшбэк: %v", bank.LoanCashback)
+	}
+	if bank.Credit.Score != 1 {
+		t.Errorf("рейтинг после возврата в срок: %d", bank.Credit.Score)
+	}
+	if !slices.Contains(env.bank.kinds(1), "loan_cashback") {
+		t.Errorf("леджер кэшбэка: %v", env.bank.kinds(1))
+	}
+}
+
+// Просрочка: ленивая пеня добавляется к долгу, рейтинг падает, кэшбэка нет.
+func TestBankCreditOverduePenalty(t *testing.T) {
+	env := newEnv()
+	ctx := context.Background()
+
+	pet, _ := env.pets.GetOrCreate(ctx, 1, 10)
+	pet.Kudos = 0
+	if _, err := env.svc.BankTakeLoan(ctx, 1, 10, 40); err != nil {
+		t.Fatalf("BankTakeLoan: %v", err)
+	}
+	// Срок прошёл вчера — на read-пути начислится разовая пеня 25% от тела.
+	due := time.Now().Add(-24 * time.Hour)
+	pet.LoanDueAt = &due
+	pet.CreditScore = 3
+	pet.Kudos = 300
+
+	bank, _ := env.svc.GetBank(ctx, 1, 10)
+	// score 3 → тир «Знакомый» (fee 15%), ставка недели 20+15=35% на остаток:
+	// 48 + ceil(48·35%)=48+17=65.
+	if bank.Loan != 65 || !bank.Credit.Overdue {
+		t.Fatalf("пеня: loan=%d overdue=%v", bank.Loan, bank.Credit.Overdue)
+	}
+	// Повторный read не начисляет пеню второй раз (чекпоинт сдвинут на неделю вперёд).
+	bank, _ = env.svc.GetBank(ctx, 1, 10)
+	if bank.Loan != 65 {
+		t.Errorf("пеня начислена дважды: loan=%d", bank.Loan)
+	}
+
+	bank, err := env.svc.BankRepayLoan(ctx, 1, 10, 999)
+	if err != nil {
+		t.Fatalf("BankRepayLoan: %v", err)
+	}
+	if bank.Loan != 0 {
+		t.Fatalf("долг не закрыт: %d", bank.Loan)
+	}
+	if bank.LoanCashback != nil {
+		t.Errorf("кэшбэка при просрочке быть не должно: %v", bank.LoanCashback)
+	}
+	if bank.Credit.Score != 2 { // 3 − 1
+		t.Errorf("рейтинг после просрочки: %d", bank.Credit.Score)
+	}
+}
+
 // ── Уровни клиента ──────────────────────────────────────────────────
 
 func TestBankTierProgress(t *testing.T) {
@@ -632,10 +750,10 @@ func TestBankTierProgress(t *testing.T) {
 	if bank.Tier.Key != "start" || bank.Earned != 250 {
 		t.Errorf("transfer_in посчитан заработком: tier=%s earned=%d", bank.Tier.Key, bank.Earned)
 	}
-	env.bank.add(&domain.LedgerEntry{UserID: 1, CompanyID: 10, Delta: 100, Kind: "task_closed"})
+	env.bank.add(&domain.LedgerEntry{UserID: 1, CompanyID: 10, Delta: 350, Kind: "task_closed"})
 	bank, _ = env.svc.GetBank(ctx, 1, 10)
 	if bank.Tier.Key != "bronze" {
-		t.Errorf("уровень после 350 заработанных: %s", bank.Tier.Key)
+		t.Errorf("уровень после 600 заработанных: %s", bank.Tier.Key)
 	}
 }
 
@@ -649,7 +767,7 @@ func TestLedgerRecordsEconomyOperations(t *testing.T) {
 	pet.Kudos = 100
 
 	env.svc.AwardKudos(ctx, 1, 10, "unit", 5)
-	if _, err := env.svc.FeedPet(ctx, 1, 10); err != nil {
+	if _, err := env.svc.FeedPet(ctx, 1, 10, ""); err != nil {
 		t.Fatalf("FeedPet: %v", err)
 	}
 	kinds := env.bank.kinds(1)

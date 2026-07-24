@@ -51,6 +51,7 @@ type PetDTO struct {
 	Hat              *string         `json:"hat"`
 	Accessories      []string        `json:"accessories"`
 	FeedStreak       int             `json:"feed_streak"`
+	FavoriteFood     string          `json:"favorite_food"`
 	LastFedDate      *string         `json:"last_fed_date"`
 	User             *domain.UserRef `json:"user,omitempty"`
 	NextStageXP      *int            `json:"next_stage_xp"`
@@ -133,6 +134,7 @@ func NewPet(p *domain.Pet) *PetDTO {
 		Hat:            p.Hat,
 		Accessories:    orEmpty(p.Accessories),
 		FeedStreak:     p.FeedStreak,
+		FavoriteFood:   domain.FoodFavorite(p.Species),
 		LastFedDate:    isoDate(p.LastFedDate),
 		User:           p.User,
 		Sick:           p.Sick(),
@@ -376,14 +378,12 @@ func NewHouse(p *domain.Pet) *HouseDTO {
 
 // ── Кудо-банк ───────────────────────────────────────────────────────
 
-// BankTierDTO — уровень клиента банка и его условия.
+// BankTierDTO — уровень клиента банка (вклад/переводы).
 type BankTierDTO struct {
 	Key              string `json:"key"`
 	Title            string `json:"title"`
 	Threshold        int    `json:"threshold"`
 	SavingsRatePct   int    `json:"savings_rate_pct"`
-	LoanFeePct       int    `json:"loan_fee_pct"`
-	LoanMax          int    `json:"loan_max"`
 	TransferDailyCap int    `json:"transfer_daily_cap"`
 	TransferMax      int    `json:"transfer_max"`
 }
@@ -391,9 +391,56 @@ type BankTierDTO struct {
 func newBankTier(t domain.BankTier) BankTierDTO {
 	return BankTierDTO{
 		Key: t.Key, Title: t.Title, Threshold: t.Threshold,
-		SavingsRatePct: t.SavingsRatePct, LoanFeePct: t.LoanFeePct,
-		LoanMax: t.LoanMax, TransferDailyCap: t.TransferDailyCap, TransferMax: t.TransferMax,
+		SavingsRatePct:   t.SavingsRatePct,
+		TransferDailyCap: t.TransferDailyCap, TransferMax: t.TransferMax,
 	}
+}
+
+// CreditTierDTO — ступень кредитного рейтинга и её условия.
+type CreditTierDTO struct {
+	Key      string `json:"key"`
+	Title    string `json:"title"`
+	MinScore int    `json:"min_score"`
+	FeePct   int    `json:"fee_pct"`
+	LoanMax  int    `json:"loan_max"`
+}
+
+func newCreditTier(t domain.CreditTier) CreditTierDTO {
+	return CreditTierDTO{Key: t.Key, Title: t.Title, MinScore: t.MinScore,
+		FeePct: t.FeePct, LoanMax: t.LoanMax}
+}
+
+// CreditDTO — кредитный рейтинг заёмщика, условия и статус текущего кредита.
+type CreditDTO struct {
+	Score       int            `json:"score"`
+	Tier        CreditTierDTO  `json:"tier"`
+	NextTier    *CreditTierDTO `json:"next_tier,omitempty"`
+	FeePct      int            `json:"fee_pct"`   // = tier.fee_pct (удобство фронта)
+	LoanMax     int            `json:"loan_max"`  // = tier.loan_max
+	CashbackPct int            `json:"cashback_pct"`
+	GraceDays   int            `json:"grace_days"`
+	LoanDueAt   *string        `json:"loan_due_at,omitempty"` // срок текущего кредита
+	Overdue     bool           `json:"overdue"`               // срок прошёл, долг не закрыт
+}
+
+func newCredit(p *domain.Pet, tier domain.CreditTier, next *domain.CreditTier) CreditDTO {
+	d := CreditDTO{
+		Score: p.CreditScore, Tier: newCreditTier(tier),
+		FeePct: tier.FeePct, LoanMax: tier.LoanMax,
+		CashbackPct: domain.LoanCashbackPct, GraceDays: domain.LoanGraceDays,
+	}
+	if next != nil {
+		n := newCreditTier(*next)
+		d.NextTier = &n
+	}
+	if p.LoanDueAt != nil {
+		due := isoTime(*p.LoanDueAt)
+		d.LoanDueAt = &due
+		// «Просрочен» — либо уже штрафовался (loan_penalized), либо снова прошёл
+		// недельный чекпоинт (пеня вот-вот начислится).
+		d.Overdue = p.BankLoan > 0 && (p.LoanPenalized || time.Now().After(*p.LoanDueAt))
+	}
+	return d
 }
 
 // GenerousDTO — строка топа щедрости (подарено кудосов за 30 дней).
@@ -500,6 +547,53 @@ func NewBankStats(daily []domain.BankDayStat, kinds []domain.BankKindStat) *Bank
 	return d
 }
 
+// InstallmentDTO — одна покупка в рассрочку.
+type InstallmentDTO struct {
+	ID          int64  `json:"id"`
+	Category    string `json:"category"`
+	ItemKey     string `json:"item_key"`
+	ItemTitle   string `json:"item_title"`
+	Total       int    `json:"total"`
+	Paid        int    `json:"paid"`
+	Outstanding int    `json:"outstanding"`
+	Parts       int    `json:"parts"`
+	PartAmount  int    `json:"part_amount"`
+	DueAt       string `json:"due_at"`
+	Overdue     bool   `json:"overdue"`
+	Penalized   bool   `json:"penalized"`
+}
+
+func NewInstallment(i *domain.Installment) *InstallmentDTO {
+	out := i.Outstanding()
+	return &InstallmentDTO{
+		ID: i.ID, Category: i.Category, ItemKey: i.ItemKey, ItemTitle: i.ItemTitle,
+		Total: i.Total, Paid: i.Paid, Outstanding: out, Parts: i.Parts,
+		PartAmount: min(i.PartAmount(), out), DueAt: isoTime(i.DueAt),
+		Overdue: i.Penalized || time.Now().After(i.DueAt), Penalized: i.Penalized,
+	}
+}
+
+// InstallmentsDTO — кредитный счёт рассрочки: активные покупки и остаток лимита.
+type InstallmentsDTO struct {
+	Items     []*InstallmentDTO `json:"items"`
+	Used      int               `json:"used"`
+	Limit     int               `json:"limit"`
+	Available int               `json:"available"`
+	Parts     int               `json:"parts"`
+}
+
+func NewInstallments(items []*domain.Installment, used int) *InstallmentsDTO {
+	d := &InstallmentsDTO{
+		Items: make([]*InstallmentDTO, 0, len(items)),
+		Used:  used, Limit: domain.InstallmentLimit,
+		Available: domain.InstallmentLimit - used, Parts: domain.InstallmentParts,
+	}
+	for _, i := range items {
+		d.Items = append(d.Items, NewInstallment(i))
+	}
+	return d
+}
+
 // BankDTO — сводка кудо-банка владельца.
 type BankDTO struct {
 	Kudos             int           `json:"kudos"`
@@ -508,6 +602,7 @@ type BankDTO struct {
 	Earned            int           `json:"earned"` // заработано за всё время — прогресс уровня
 	Tier              BankTierDTO   `json:"tier"`
 	NextTier          *BankTierDTO  `json:"next_tier,omitempty"`
+	Credit            CreditDTO     `json:"credit"` // кредитный рейтинг и условия
 	TransferLeftToday int           `json:"transfer_left_today"`
 	MonthIn           int           `json:"month_in"`
 	MonthOut          int           `json:"month_out"`
@@ -517,17 +612,20 @@ type BankDTO struct {
 	Funds             []*FundDTO    `json:"funds"`
 	// InterestPaid — разовое: проценты, начисленные при этом обращении.
 	InterestPaid *int `json:"interest_paid,omitempty"`
+	// LoanCashback — разовое: кэшбэк, начисленный за возврат кредита в срок.
+	LoanCashback *int `json:"loan_cashback,omitempty"`
 	// GoalAchieved/FundCompleted — разовые: цель закрыта именно этой операцией.
 	GoalAchieved  *GoalDTO `json:"goal_achieved,omitempty"`
 	FundCompleted *FundDTO `json:"fund_completed,omitempty"`
 }
 
 func NewBank(p *domain.Pet, tier domain.BankTier, next *domain.BankTier,
+	credit domain.CreditTier, creditNext *domain.CreditTier,
 	earned, monthIn, monthOut int, top []domain.GenerousEntry) *BankDTO {
 
 	d := &BankDTO{
 		Kudos: p.Kudos, Savings: p.BankSavings, Loan: p.BankLoan,
-		Earned: earned, Tier: newBankTier(tier),
+		Earned: earned, Tier: newBankTier(tier), Credit: newCredit(p, credit, creditNext),
 		MonthIn: monthIn, MonthOut: monthOut,
 		TopGenerous: make([]*GenerousDTO, 0, len(top)),
 		Goals:       []*GoalDTO{}, GoalsMax: domain.GoalsMax, Funds: []*FundDTO{},

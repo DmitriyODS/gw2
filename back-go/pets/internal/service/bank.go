@@ -4,6 +4,7 @@ import (
 	"context"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/DmitriyODS/gw2/back-go/pets/internal/domain"
 	"github.com/DmitriyODS/gw2/back-go/pets/internal/dto"
@@ -27,6 +28,41 @@ func (s *Service) bankTier(ctx context.Context, userID int64) (domain.BankTier, 
 	return tier, next, earned
 }
 
+// ensureLoanCharges — ленивое еженедельное начисление штрафа+процентов на
+// остаток просроченного долга: за каждую неделю без платежа на остаток капает
+// LoanWeeklyPenaltyPct% + ставка кредит-тира (компаундится). Проверяется на
+// read-пути банка и перед погашением, чтобы долг рос, даже если владелец давно
+// не заходил. Возвращает свежий снимок, если начисление применено.
+func (s *Service) ensureLoanCharges(ctx context.Context, pet *domain.Pet) *domain.Pet {
+	if pet.LoanPrincipal <= 0 || pet.BankLoan <= 0 || pet.LoanDueAt == nil ||
+		pet.OwnerOnVacation || time.Now().Before(*pet.LoanDueAt) {
+		return pet
+	}
+	week := 7 * 24 * time.Hour
+	weeks := int(time.Since(*pet.LoanDueAt)/week) + 1
+	credit, _ := domain.CreditTierFor(pet.CreditScore)
+	rate := domain.LoanWeeklyPenaltyPct + credit.FeePct // % на остаток за неделю
+	remaining := pet.BankLoan
+	for i := 0; i < weeks; i++ {
+		remaining += (remaining*rate + 99) / 100 // компаунд, вверх до целого
+	}
+	charge := remaining - pet.BankLoan
+	newDue := pet.LoanDueAt.Add(time.Duration(weeks) * week)
+	ok, err := s.bank.AddLoanCharge(ctx, pet.UserID, charge, *pet.LoanDueAt, newDue)
+	if err != nil {
+		s.log.Warn("pets.loan_charge_failed", "user_id", pet.UserID, "error", err)
+		return pet
+	}
+	if !ok {
+		return pet
+	}
+	s.appendActivity(ctx, pet.UserID, "loan_penalty", map[string]any{"amount": charge, "weeks": weeks})
+	if fresh, err := s.pets.GetPet(ctx, pet.UserID); err == nil && fresh != nil {
+		return fresh
+	}
+	return pet
+}
+
 // GetBank — сводка банка: балансы, уровень с прогрессом, месячные обороты,
 // остаток дневного лимита переводов и топ щедрости компании. Заодно лениво
 // начисляет проценты по вкладу (целые прошедшие сутки).
@@ -36,6 +72,9 @@ func (s *Service) GetBank(ctx context.Context, userID, companyID int64) (*dto.Ba
 		return nil, err
 	}
 	tier, next, earned := s.bankTier(ctx, userID)
+
+	// Просроченный кредит штрафуется лениво на read-пути — до сборки снимка.
+	pet = s.ensureLoanCharges(ctx, pet)
 
 	interest, err := s.bank.AccrueSavings(ctx, userID, companyID, tier.SavingsRatePct)
 	if err != nil {
@@ -69,7 +108,8 @@ func (s *Service) GetBank(ctx context.Context, userID, companyID int64) (*dto.Ba
 			f.TopDonors = donors
 		}
 	}
-	d := dto.NewBank(pet, tier, next, earned, monthIn, monthOut, top)
+	credit, creditNext := domain.CreditTierFor(pet.CreditScore)
+	d := dto.NewBank(pet, tier, next, credit, creditNext, earned, monthIn, monthOut, top)
 	d.Goals = dto.NewGoals(goals)
 	d.Funds = dto.NewFunds(funds)
 	d.TransferLeftToday = s.daily.Left(ctx, userID, bankTransferSource, tier.TransferDailyCap)
@@ -206,18 +246,21 @@ func (s *Service) BankWithdraw(ctx context.Context, userID, companyID int64, amo
 }
 
 // BankTakeLoan — кредит: тело сразу на кошелёк, долг = тело + комиссия
-// уровня; один активный кредит на питомца.
+// кредитного рейтинга; один активный кредит на питомца. Срок возврата —
+// LoanGraceDays от текущего момента (в срок → кэшбэк и рост рейтинга).
 func (s *Service) BankTakeLoan(ctx context.Context, userID, companyID int64, amount int) (*dto.BankDTO, error) {
-	tier, _, _ := s.bankTier(ctx, userID)
-	if amount < 1 || amount > tier.LoanMax {
-		return nil, domain.NewError("VALIDATION",
-			"Сумма кредита — от 1 до "+strconv.Itoa(tier.LoanMax)+" кудосов", 422)
-	}
-	if _, err := s.pets.GetOrCreate(ctx, userID, companyID); err != nil {
+	pet, err := s.pets.GetOrCreate(ctx, userID, companyID)
+	if err != nil {
 		return nil, err
 	}
-	debt := amount + (amount*tier.LoanFeePct+99)/100 // комиссия вверх до целого
-	_, ok, err := s.bank.TakeLoan(ctx, userID, amount, debt)
+	credit, _ := domain.CreditTierFor(pet.CreditScore)
+	if amount < 1 || amount > credit.LoanMax {
+		return nil, domain.NewError("VALIDATION",
+			"Сумма кредита — от 1 до "+strconv.Itoa(credit.LoanMax)+" кудосов", 422)
+	}
+	debt := amount + (amount*credit.FeePct+99)/100 // комиссия вверх до целого
+	dueAt := time.Now().Add(domain.LoanGraceDays * 24 * time.Hour)
+	_, ok, err := s.bank.TakeLoan(ctx, userID, amount, debt, dueAt)
 	if err != nil {
 		return nil, err
 	}
@@ -231,8 +274,9 @@ func (s *Service) BankTakeLoan(ctx context.Context, userID, companyID int64, amo
 	return s.GetBank(ctx, userID, companyID)
 }
 
-// BankRepayLoan — погашение с кошелька; сумма сверх долга клампится
-// (кнопка «Погасить всё» не требует точной цифры).
+// BankRepayLoan — погашение с кошелька; сумма сверх долга клампится (кнопка
+// «Погасить всё» не требует точной цифры). Полное погашение В СРОК растит
+// кредитный рейтинг и даёт кэшбэк (% от тела), просрочка — роняет рейтинг.
 func (s *Service) BankRepayLoan(ctx context.Context, userID, companyID int64, amount int) (*dto.BankDTO, error) {
 	if amount < 1 {
 		return nil, domain.NewError("VALIDATION", "Сумма должна быть положительной", 422)
@@ -241,11 +285,14 @@ func (s *Service) BankRepayLoan(ctx context.Context, userID, companyID int64, am
 	if err != nil {
 		return nil, err
 	}
+	// Просрочка штрафуется до погашения, чтобы пеня вошла в закрываемый долг.
+	pet = s.ensureLoanCharges(ctx, pet)
 	if pet.BankLoan <= 0 {
 		return nil, domain.NewError("NO_LOAN", "Активного кредита нет", 422)
 	}
 	pay := min(amount, pet.BankLoan)
-	_, loanLeft, ok, err := s.bank.RepayLoan(ctx, userID, pay)
+	nextDue := time.Now().Add(domain.LoanGraceDays * 24 * time.Hour)
+	_, loanLeft, ok, err := s.bank.RepayLoan(ctx, userID, pay, nextDue)
 	if err != nil {
 		return nil, err
 	}
@@ -253,8 +300,43 @@ func (s *Service) BankRepayLoan(ctx context.Context, userID, companyID int64, am
 		return nil, domain.NewError("NO_KUDOS", "Не хватает кудосов для погашения", 422)
 	}
 	s.appendActivity(ctx, userID, "loan_repaid", map[string]any{"amount": pay, "left": loanLeft})
+
+	var cashback *int
+	if loanLeft == 0 && pet.LoanPrincipal > 0 {
+		scoreDelta, cb := s.settleCredit(pet)
+		if ok, err := s.bank.FinalizeLoan(ctx, userID, scoreDelta, cb); err != nil {
+			s.log.Warn("pets.finalize_loan_failed", "user_id", userID, "error", err)
+		} else if ok && cb > 0 {
+			cashback = &cb
+			s.appendActivity(ctx, userID, "loan_cashback", map[string]any{"amount": cb})
+		}
+	}
+
 	if p, err := s.pets.GetPet(ctx, userID); err == nil && p != nil {
 		s.emitPetUpdate(ctx, p)
 	}
-	return s.GetBank(ctx, userID, companyID)
+	d, err := s.GetBank(ctx, userID, companyID)
+	if err == nil && cashback != nil {
+		d.LoanCashback = cashback
+	}
+	return d, err
+}
+
+// settleCredit — по снимку закрываемого кредита определяет движение рейтинга и
+// кэшбэк: возврат в срок (и продержан не меньше CreditMinHoldHours) → +1 к
+// рейтингу и кэшбэк LoanCashbackPct% от тела; просрочка → −1; слишком быстрый
+// возврат в срок (анти-чурн) — без награды и без штрафа.
+func (s *Service) settleCredit(pet *domain.Pet) (scoreDelta, cashback int) {
+	now := time.Now()
+	late := pet.LoanPenalized || (pet.LoanDueAt != nil && now.After(*pet.LoanDueAt))
+	if late {
+		return -1, 0
+	}
+	if pet.LoanDueAt != nil {
+		tookAt := pet.LoanDueAt.Add(-domain.LoanGraceDays * 24 * time.Hour)
+		if now.Sub(tookAt) < domain.CreditMinHoldHours*time.Hour {
+			return 0, 0 // вернул почти сразу — анти-чурн, без кэшбэка
+		}
+	}
+	return 1, pet.LoanPrincipal * domain.LoanCashbackPct / 100
 }

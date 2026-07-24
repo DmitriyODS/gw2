@@ -178,7 +178,7 @@ func (s *Service) GetHouse(ctx context.Context, userID, companyID int64) (*dto.H
 
 // BuyHouseDecor — покупка декора за кудосы (кудос-сток). Предметы с ценой 0 —
 // награды сезонного трека, не продаются.
-func (s *Service) BuyHouseDecor(ctx context.Context, userID, companyID int64, key string) (*dto.HouseDTO, error) {
+func (s *Service) BuyHouseDecor(ctx context.Context, userID, companyID int64, key string, installment bool) (*dto.HouseDTO, error) {
 	price, exists := domain.HouseDecor[key]
 	if !exists {
 		return nil, domain.NewError("NO_ITEM", "Такого декора нет", 404)
@@ -196,6 +196,25 @@ func (s *Service) BuyHouseDecor(ctx context.Context, userID, companyID int64, ke
 	if containsStr(pet.HouseOwned, key) {
 		return nil, domain.NewError("ALREADY_OWNED", "Уже куплено", 422)
 	}
+
+	if installment {
+		// Декор домика всегда не-акционный — рассрочка допустима. Товар выдаём
+		// полным сохранением (лимит проверяем до выдачи).
+		if err := s.checkInstallmentLimit(ctx, userID, price); err != nil {
+			return nil, err
+		}
+		pet.HouseOwned = append(pet.HouseOwned, key)
+		if err := s.pets.SavePet(ctx, pet); err != nil {
+			return nil, err
+		}
+		if err := s.openInstallment(ctx, userID, companyID, "house", key, key, price); err != nil {
+			s.log.Warn("pets.open_installment_failed", "user_id", userID, "key", key, "error", err)
+		}
+		s.appendActivity(ctx, userID, "house_bought", map[string]any{"key": key, "price": price})
+		s.emitPetUpdate(ctx, pet)
+		return dto.NewHouse(pet), nil
+	}
+
 	if pet.Kudos < price {
 		return nil, domain.NewError("NO_KUDOS", "Не хватает кудосов", 422)
 	}

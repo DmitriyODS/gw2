@@ -321,14 +321,19 @@ func (r *Repo) Calendar(ctx context.Context, start, end time.Time, companyID *in
 	return out, nil
 }
 
-func (r *Repo) UserTasksDetail(ctx context.Context, userID int64, start, end time.Time) ([]domain.UserTaskHours, error) {
+func (r *Repo) UserTasksDetail(ctx context.Context, userID int64, companyID *int64, start, end time.Time) ([]domain.UserTaskHours, error) {
+	// Скоуп по компании самого юнита (u.company_id), как в общей статистике —
+	// иначе часы из других компаний пользователя протекают в этот срез и
+	// расходятся с разделом «Статистика».
+	args := []any{userID, start, end}
+	cond := companyCond(&args, companyID, "u.company_id")
 	rows, err := r.pool.Query(ctx, `
 		SELECT t.id, t.name, COALESCE(SUM(`+hoursExpr+`), 0)
 		  FROM tasks t
 		  JOIN units u ON u.task_id = t.id
-		 WHERE u.user_id = $1 AND u.datetime_start >= $2 AND u.datetime_start <= $3
+		 WHERE u.user_id = $1 AND u.datetime_start >= $2 AND u.datetime_start <= $3`+cond+`
 		 GROUP BY t.id, t.name
-		 ORDER BY SUM(`+hoursExpr+`) DESC`, userID, start, end)
+		 ORDER BY SUM(`+hoursExpr+`) DESC`, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -345,24 +350,31 @@ func (r *Repo) UserTasksDetail(ctx context.Context, userID int64, start, end tim
 	return out, rows.Err()
 }
 
-func (r *Repo) ProfileStats(ctx context.Context, userID int64, start, end time.Time) (*domain.ProfileStats, error) {
+func (r *Repo) ProfileStats(ctx context.Context, userID int64, companyID *int64, start, end time.Time) (*domain.ProfileStats, error) {
+	// Скоуп по компании юнита (u.company_id) — та же логика, что в разделе
+	// «Статистика»: часы личного профиля не должны включать работу в других
+	// компаниях пользователя, иначе итоги двух разделов расходятся.
 	out := &domain.ProfileStats{ByUnitTypes: []domain.UnitTypeHours{}}
+	args := []any{userID, start, end}
+	cond := companyCond(&args, companyID, "u.company_id")
 	err := r.pool.QueryRow(ctx, `
 		SELECT COALESCE(SUM(`+hoursExpr+`), 0), COUNT(DISTINCT u.task_id)
 		  FROM units u
-		 WHERE u.user_id = $1 AND u.datetime_start >= $2 AND u.datetime_start <= $3`,
-		userID, start, end).Scan(&out.TotalHours, &out.TasksCount)
+		 WHERE u.user_id = $1 AND u.datetime_start >= $2 AND u.datetime_start <= $3`+cond,
+		args...).Scan(&out.TotalHours, &out.TasksCount)
 	if err != nil {
 		return nil, err
 	}
 	out.TotalHours = round2(out.TotalHours)
 
+	args = []any{userID, start, end}
+	cond = companyCond(&args, companyID, "u.company_id")
 	rows, err := r.pool.Query(ctx, `
 		SELECT ut.id, ut.name, COALESCE(SUM(`+hoursExpr+`), 0), COUNT(DISTINCT u.task_id)
 		  FROM unit_types ut
 		  JOIN units u ON u.unit_type_id = ut.id
-		 WHERE u.user_id = $1 AND u.datetime_start >= $2 AND u.datetime_start <= $3
-		 GROUP BY ut.id, ut.name`, userID, start, end)
+		 WHERE u.user_id = $1 AND u.datetime_start >= $2 AND u.datetime_start <= $3`+cond+`
+		 GROUP BY ut.id, ut.name`, args...)
 	if err != nil {
 		return nil, err
 	}

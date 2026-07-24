@@ -172,7 +172,7 @@ func TestBuyHouseDecorSpendsKudos(t *testing.T) {
 	pet, _ := env.pets.GetOrCreate(ctx, 1, 10)
 	pet.Kudos = 200
 
-	house, err := env.svc.BuyHouseDecor(ctx, 1, 10, "sofa")
+	house, err := env.svc.BuyHouseDecor(ctx, 1, 10, "sofa", false)
 	if err != nil {
 		t.Fatalf("BuyHouseDecor: %v", err)
 	}
@@ -189,11 +189,11 @@ func TestBuyHouseDecorSpendsKudos(t *testing.T) {
 		t.Error("sofa не отмечен купленным в каталоге")
 	}
 	// Повторная покупка и покупка без кудосов отклоняются.
-	if _, err := env.svc.BuyHouseDecor(ctx, 1, 10, "sofa"); err == nil {
+	if _, err := env.svc.BuyHouseDecor(ctx, 1, 10, "sofa", false); err == nil {
 		t.Fatal("повторная покупка должна отклоняться")
 	}
 	pet.Kudos = 0
-	if _, err := env.svc.BuyHouseDecor(ctx, 1, 10, "piano"); err == nil {
+	if _, err := env.svc.BuyHouseDecor(ctx, 1, 10, "piano", false); err == nil {
 		t.Fatal("покупка без кудосов должна отклоняться")
 	}
 }
@@ -205,10 +205,10 @@ func TestBuyHouseDecorSeasonOnlyRejected(t *testing.T) {
 	pet.Kudos = 1000
 
 	// Награды трека (цена 0) не продаются.
-	if _, err := env.svc.BuyHouseDecor(ctx, 1, 10, "fireplace"); err == nil {
+	if _, err := env.svc.BuyHouseDecor(ctx, 1, 10, "fireplace", false); err == nil {
 		t.Fatal("сезонный декор не должен продаваться")
 	}
-	if _, err := env.svc.BuyHouseDecor(ctx, 1, 10, "no_such_key"); err == nil {
+	if _, err := env.svc.BuyHouseDecor(ctx, 1, 10, "no_such_key", false); err == nil {
 		t.Fatal("неизвестный декор должен отклоняться")
 	}
 }

@@ -479,7 +479,7 @@ func TestBuyItemLimitedQuotaSoldOut(t *testing.T) {
 
 	pet, _ := env.pets.GetOrCreate(ctx, 1, 10)
 	pet.Kudos = 10
-	_, err := env.svc.BuyItem(ctx, 1, 10, "party")
+	_, err := env.svc.BuyItem(ctx, 1, 10, "party", false)
 	de := domain.AsDomainError(err)
 	if de == nil || de.Code != "SOLD_OUT" {
 		t.Fatalf("ожидался SOLD_OUT, got %v", err)
@@ -502,7 +502,7 @@ func TestBuyItemLimitedQuotaRaceSoldOut(t *testing.T) {
 	pet.Kudos = 10
 	env.pets.saves = 0
 
-	_, err := env.svc.BuyItem(ctx, 1, 10, "party")
+	_, err := env.svc.BuyItem(ctx, 1, 10, "party", false)
 	de := domain.AsDomainError(err)
 	if de == nil || de.Code != "SOLD_OUT" {
 		t.Fatalf("ожидался SOLD_OUT из атомарного RecordPurchase, got %v", err)
@@ -522,7 +522,7 @@ func TestBuyItemAchievementNotPurchasable(t *testing.T) {
 	pet, _ := env.pets.GetOrCreate(ctx, 1, 10)
 	pet.Kudos = 100
 
-	_, err := env.svc.BuyItem(ctx, 1, 10, "legend")
+	_, err := env.svc.BuyItem(ctx, 1, 10, "legend", false)
 	de := domain.AsDomainError(err)
 	if de == nil || de.Code != "ACHIEVEMENT_ONLY" {
 		t.Fatalf("ожидался ACHIEVEMENT_ONLY, got %v", err)
@@ -539,7 +539,7 @@ func TestBuyItemSuccessEquipsAndLogs(t *testing.T) {
 	pet, _ := env.pets.GetOrCreate(ctx, 1, 10)
 	pet.Kudos = 10
 
-	data, err := env.svc.BuyItem(ctx, 1, 10, "cap")
+	data, err := env.svc.BuyItem(ctx, 1, 10, "cap", false)
 	if err != nil {
 		t.Fatalf("BuyItem: %v", err)
 	}
@@ -550,7 +550,7 @@ func TestBuyItemSuccessEquipsAndLogs(t *testing.T) {
 		t.Error("нет записи истории item_bought")
 	}
 	// Повторная покупка — уже куплено.
-	if _, err := env.svc.BuyItem(ctx, 1, 10, "cap"); domain.AsDomainError(err) == nil {
+	if _, err := env.svc.BuyItem(ctx, 1, 10, "cap", false); domain.AsDomainError(err) == nil {
 		t.Fatal("ожидался ALREADY_OWNED")
 	}
 }

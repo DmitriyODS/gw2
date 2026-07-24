@@ -14,26 +14,27 @@ import (
 )
 
 type Service struct {
-	pets      domain.PetRepo
-	shop      domain.ShopRepo
-	activity  domain.ActivityRepo
-	bank      domain.BankRepo
-	users     domain.UserReader
-	companies domain.CompanyReader
-	work      domain.WorkReader
-	daily     domain.Daily
-	pub       domain.EventPublisher
-	log       *slog.Logger
+	pets         domain.PetRepo
+	shop         domain.ShopRepo
+	activity     domain.ActivityRepo
+	bank         domain.BankRepo
+	installments domain.InstallmentRepo
+	users        domain.UserReader
+	companies    domain.CompanyReader
+	work         domain.WorkReader
+	daily        domain.Daily
+	pub          domain.EventPublisher
+	log          *slog.Logger
 }
 
 func New(pets domain.PetRepo, shop domain.ShopRepo, activity domain.ActivityRepo,
-	bank domain.BankRepo, users domain.UserReader, companies domain.CompanyReader,
-	work domain.WorkReader, daily domain.Daily, pub domain.EventPublisher,
-	log *slog.Logger) *Service {
+	bank domain.BankRepo, installments domain.InstallmentRepo, users domain.UserReader,
+	companies domain.CompanyReader, work domain.WorkReader, daily domain.Daily,
+	pub domain.EventPublisher, log *slog.Logger) *Service {
 
 	return &Service{
-		pets: pets, shop: shop, activity: activity, bank: bank, users: users,
-		companies: companies, work: work, daily: daily, pub: pub, log: log,
+		pets: pets, shop: shop, activity: activity, bank: bank, installments: installments,
+		users: users, companies: companies, work: work, daily: daily, pub: pub, log: log,
 	}
 }
 

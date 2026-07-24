@@ -93,7 +93,7 @@ func (s *Service) StatsUserTasks(ctx context.Context, actor *domain.User, target
 		}
 	}
 
-	tasks, err := s.stats.UserTasksDetail(ctx, targetUserID, start, end)
+	tasks, err := s.stats.UserTasksDetail(ctx, targetUserID, actor.CompanyID, start, end)
 	if err != nil {
 		return nil, err
 	}
@@ -106,8 +106,8 @@ func (s *Service) StatsUserTasks(ctx context.Context, actor *domain.User, target
 	return out, nil
 }
 
-func (s *Service) StatsProfile(ctx context.Context, userID int64, start, end time.Time) (*dto.StatsProfile, error) {
-	stats, err := s.stats.ProfileStats(ctx, userID, start, end)
+func (s *Service) StatsProfile(ctx context.Context, userID int64, companyID *int64, start, end time.Time) (*dto.StatsProfile, error) {
+	stats, err := s.stats.ProfileStats(ctx, userID, companyID, start, end)
 	if err != nil {
 		return nil, err
 	}

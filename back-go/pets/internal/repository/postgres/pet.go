@@ -31,6 +31,7 @@ const petCols = `p.user_id, p.company_id, p.name, p.species, p.stage, p.xp, p.ku
 	p.generation, p.house_owned, p.house_placed, p.house_theme,
 	p.house_pet_x, p.house_pet_y,
 	p.bank_savings, p.bank_savings_accrued_at, p.bank_loan,
+	p.credit_score, p.loan_principal, p.loan_due_at, p.loan_penalized,
 	u.id, u.fio, u.avatar_path, u.on_vacation`
 
 const petFrom = ` FROM pets p LEFT JOIN users u ON u.id = p.user_id `
@@ -60,7 +61,9 @@ func scanPet(row pgx.Row) (*domain.Pet, error) {
 		&p.QuestTarget, &p.QuestProgress, &p.QuestClaimed, &p.AdventureUntil,
 		&p.AdventurePlace, &p.Generation, &houseOwned, &housePlaced, &p.HouseTheme,
 		&p.HousePetX, &p.HousePetY,
-		&p.BankSavings, &p.BankSavingsAccruedAt, &p.BankLoan, &uid, &fio, &avatar, &onVacation)
+		&p.BankSavings, &p.BankSavingsAccruedAt, &p.BankLoan,
+		&p.CreditScore, &p.LoanPrincipal, &p.LoanDueAt, &p.LoanPenalized,
+		&uid, &fio, &avatar, &onVacation)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, nil

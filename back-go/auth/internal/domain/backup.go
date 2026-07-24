@@ -57,7 +57,7 @@ var BackupSections = []BackupSection{
 	{Key: "groove", Tables: []string{"pets", "pet_strokes", "pet_activity_log",
 		"pet_shop_items", "pet_shop_purchases", "pet_kudos_weekly", "pet_kudos_seasonal",
 		"pet_season_claims", "pet_kudos_ledger", "pet_bank_goals", "pet_bank_funds",
-		"pet_bank_fund_donations"}},
+		"pet_bank_fund_donations", "pet_installments"}},
 	{Key: "portal", Tables: []string{"portal_topics", "portal_posts", "portal_post_tags",
 		"portal_comments", "portal_comment_likes", "portal_reactions", "portal_attachments",
 		"portal_post_views", "portal_seen", "portal_backgrounds"}},

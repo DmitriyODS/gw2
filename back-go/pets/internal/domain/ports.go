@@ -134,11 +134,21 @@ type BankRepo interface {
 	// AccrueSavings — ленивое начисление процентов за целые прошедшие сутки
 	// (одним UPDATE + запись леджера; повторный конкурентный вызов начислит 0).
 	AccrueSavings(ctx context.Context, userID, companyID int64, ratePct int) (interest int, err error)
-	// TakeLoan — выдача кредита: +amount на кошелёк, долг = amount + комиссия
-	// (guard: активного долга нет).
-	TakeLoan(ctx context.Context, userID int64, amount, debt int) (kudos int, ok bool, err error)
-	// RepayLoan — погашение с кошелька (guard: kudos >= amount и долг >= amount).
-	RepayLoan(ctx context.Context, userID int64, amount int) (kudos, loan int, ok bool, err error)
+	// TakeLoan — выдача кредита: +amount на кошелёк, долг = amount + комиссия,
+	// тело кредита и срок возврата (guard: активного долга нет).
+	TakeLoan(ctx context.Context, userID int64, amount, debt int, dueAt time.Time) (kudos int, ok bool, err error)
+	// RepayLoan — погашение с кошелька (guard: kudos >= amount и долг >= amount);
+	// частичный платёж двигает недельный чекпоинт (nextDueAt); на полном
+	// погашении параметры кредита НЕ сбрасывает — это делает FinalizeLoan.
+	RepayLoan(ctx context.Context, userID int64, amount int, nextDueAt time.Time) (kudos, loan int, ok bool, err error)
+	// FinalizeLoan — завершение полностью погашенного кредита (guard: долг = 0,
+	// тело > 0 — идемпотентно): сбрасывает параметры кредита, двигает credit_score
+	// на scoreDelta (clamp ≥ 0) и начисляет кэшбэк на кошелёк (+ запись леджера).
+	FinalizeLoan(ctx context.Context, userID int64, scoreDelta, cashback int) (ok bool, err error)
+	// AddLoanCharge — ленивое еженедельное начисление штрафа+процентов на остаток
+	// долга: +charge к долгу, чекпоинт двигается oldDue→newDue. Оптимистичный
+	// guard loan_due_at = oldDue делает начисление идемпотентным при гонке.
+	AddLoanCharge(ctx context.Context, userID int64, charge int, oldDue, newDue time.Time) (ok bool, err error)
 	// DeleteLedger — чистка выписки при удалении питомца.
 	DeleteLedger(ctx context.Context, userID int64) error
 
@@ -174,6 +184,31 @@ type BankRepo interface {
 	DailyTotals(ctx context.Context, userID int64, days int) ([]BankDayStat, error)
 	// KindTotals — приход/расход по видам операций за последние days дней.
 	KindTotals(ctx context.Context, userID int64, days int) ([]BankKindStat, error)
+}
+
+// InstallmentRepo — рассрочки (pet_installments): кредитный счёт на оплату
+// покупок долями. Активные рассрочки — с paid < total.
+type InstallmentRepo interface {
+	// Create — новая рассрочка (ID проставляется в i).
+	Create(ctx context.Context, i *Installment) error
+	// ListActive — незакрытые рассрочки пользователя (paid < total), свежие сверху.
+	ListActive(ctx context.Context, userID int64) ([]*Installment, error)
+	// Get — рассрочка по id в скоупе владельца.
+	Get(ctx context.Context, id, userID int64) (*Installment, error)
+	// Outstanding — суммарный непогашенный долг по активным рассрочкам.
+	Outstanding(ctx context.Context, userID int64) (int, error)
+	// Pay — платёж по рассрочке: kudos -= amount, paid += amount и запись
+	// леджера в одной транзакции (guard: kudos >= amount, рассрочка активна,
+	// amount ≤ остатка). Возвращает свежие paid/total и остаток кошелька.
+	Pay(ctx context.Context, id, userID int64, amount int) (paid, total, kudos int, ok bool, err error)
+	// AddCharge — ленивое еженедельное начисление на остаток рассрочки: total +=
+	// charge, чекпоинт oldDue→newDue (оптимистичный guard due_at = oldDue).
+	AddCharge(ctx context.Context, id int64, charge int, oldDue, newDue time.Time) (ok bool, err error)
+	// Delete — удаление рассрочки (изъятие предмета за просрочку — сам предмет
+	// снимает сервис).
+	Delete(ctx context.Context, id int64) error
+	// DeleteForUser — чистка рассрочек при удалении питомца.
+	DeleteForUser(ctx context.Context, userID int64) error
 }
 
 // ShopRepo — магазин питомца: постоянные/ротационные/лимитированные/

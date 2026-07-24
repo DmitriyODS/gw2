@@ -28,7 +28,7 @@
             :class="{ dragging, success: state === 'success', miss: state === 'miss' }"
             :style="foodStyle"
             @pointerdown="onPointerDown"
-          >{{ foodEmoji }}</div>
+          ><EmojiGlyph :char="foodGlyph" /></div>
         </div>
 
         <p v-if="state === 'miss'" class="mg-feedback miss">Мимо — попробуйте ещё раз</p>
@@ -46,11 +46,14 @@ import { petEmoji } from '@/utils/pets.js'
 
 const props = defineProps({
   pet: { type: Object, default: null },
+  // Эмодзи выбранного корма (пусто → морковка по умолчанию).
+  foodEmoji: { type: String, default: '' },
 })
 const emit = defineEmits(['success', 'close'])
 
 const sick = computed(() => !!props.pet?.sick)
-const foodEmoji = computed(() => (sick.value ? '🍲' : '🥕'))
+// Больному — «бульон»; здоровому — картинка выбранного угощения.
+const foodGlyph = computed(() => (sick.value ? '🍲' : props.foodEmoji || '🥕'))
 const petEmojiChar = computed(() => petEmoji(props.pet))
 
 const areaEl = ref(null)

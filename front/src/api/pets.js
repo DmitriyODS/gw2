@@ -3,7 +3,8 @@ import { apiRequest } from './client.js'
 // ─────────────────────────── питомец ───────────────────────────
 
 export const getMyPet = () => apiRequest('/pets/pet')
-export const feedPet = () => apiRequest('/pets/pet/feed', { method: 'POST' })
+export const feedPet = (food = '') =>
+  apiRequest('/pets/pet/feed', { method: 'POST', body: { food } })
 export const renamePet = (name) => apiRequest('/pets/pet/name', { method: 'POST', body: { name } })
 export const equipItem = (item) => apiRequest('/pets/pet/equip', { method: 'POST', body: { item } })
 export const switchSpecies = (species) =>
@@ -27,8 +28,8 @@ export const claimSeasonReward = (threshold) =>
 // ─────────────────────────── домик ─────────────────────────────
 
 export const getHouse = () => apiRequest('/pets/house')
-export const buyHouseDecor = (item) =>
-  apiRequest('/pets/house/buy', { method: 'POST', body: { item } })
+export const buyHouseDecor = (item, installment = false) =>
+  apiRequest('/pets/house/buy', { method: 'POST', body: { item, installment } })
 export const arrangeHouse = (placed) =>
   apiRequest('/pets/house/arrange', { method: 'POST', body: { placed } })
 export const setHouseTheme = (theme) =>
@@ -40,9 +41,19 @@ export const setHousePetPos = (x, y) =>
 
 export const getShop = () => apiRequest('/pets/shop')
 export const getMysteryItem = () => apiRequest('/pets/shop/mystery')
-export const buyItem = (item) => apiRequest('/pets/shop/buy', { method: 'POST', body: { item } })
-export const buySpecies = (species) =>
-  apiRequest('/pets/shop/buy-species', { method: 'POST', body: { species } })
+export const buyItem = (item, installment = false) =>
+  apiRequest('/pets/shop/buy', { method: 'POST', body: { item, installment } })
+export const buySpecies = (species, installment = false) =>
+  apiRequest('/pets/shop/buy-species', { method: 'POST', body: { species, installment } })
+// Продажа купленного за полцены (category: 'house' — декор, иначе товар магазина).
+export const sellItem = (item, category = '') =>
+  apiRequest('/pets/shop/sell', { method: 'POST', body: { item, category } })
+
+// ─────────────────────────── рассрочка ──────────────────────────
+
+export const getInstallments = () => apiRequest('/pets/installments')
+export const payInstallment = (id, amount) =>
+  apiRequest(`/pets/installments/${id}/pay`, { method: 'POST', body: { amount } })
 
 // ───────── прогулка / лечение / сон / купание / поглаживание ────
 

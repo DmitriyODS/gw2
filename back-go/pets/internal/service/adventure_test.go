@@ -162,7 +162,7 @@ func TestAdventureBlocksPaidActions(t *testing.T) {
 		t.Fatalf("StartAdventure: %v", err)
 	}
 
-	if _, err := env.svc.FeedPet(ctx, 1, 10); domain.AsDomainError(err) == nil ||
+	if _, err := env.svc.FeedPet(ctx, 1, 10, ""); domain.AsDomainError(err) == nil ||
 		domain.AsDomainError(err).Code != "PET_AWAY" {
 		t.Errorf("FeedPet в пути: %v", err)
 	}

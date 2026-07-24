@@ -55,8 +55,7 @@
             <div class="kb-tier-bar"><div class="kb-tier-fill" :style="{ width: tierPercent + '%' }"></div></div>
             <span class="kb-tier-hint">
               {{ bank.earned }} / {{ bank.next_tier.threshold }} заработанных до уровня
-              «{{ bank.next_tier.title }}» — ставка {{ bank.next_tier.savings_rate_pct }}%,
-              комиссия {{ bank.next_tier.loan_fee_pct }}%
+              «{{ bank.next_tier.title }}» — ставка вклада {{ bank.next_tier.savings_rate_pct }}%
             </span>
           </template>
           <span v-else class="kb-tier-hint">Максимальный уровень — лучшие условия банка ✨</span>
@@ -138,11 +137,40 @@
           <header class="kb-card-head">
             <span class="kb-card-icon kb-card-icon--violet material-symbols-outlined">credit_card</span>
             <h3 class="kb-card-title">Кредит</h3>
-            <span class="kb-badge kb-badge--violet">{{ bank.tier.loan_fee_pct }}% комиссии</span>
+            <span v-if="bank.credit" class="kb-badge kb-badge--violet">{{ RATING_EMOJI[bank.credit.tier.key] || '🏅' }} {{ bank.credit.tier.title }}</span>
           </header>
+
+          <template v-if="bank.credit">
+          <!-- Кредитный рейтинг: прогресс и условия. -->
+          <div class="kb-credit-rating">
+            <div class="kb-credit-row">
+              <span class="kb-credit-label">Кредитный рейтинг</span>
+              <span class="kb-credit-score">{{ bank.credit.score }}</span>
+            </div>
+            <div v-if="bank.credit.next_tier" class="kb-tier-bar kb-tier-bar--sm">
+              <div class="kb-tier-fill" :style="{ width: creditPercent + '%' }"></div>
+            </div>
+            <p class="kb-card-hint kb-credit-hint">
+              <template v-if="bank.credit.next_tier">
+                Ещё {{ bank.credit.next_tier.min_score - bank.credit.score }} возврат(а) в срок до «{{ bank.credit.next_tier.title }}»:
+                комиссия {{ bank.credit.next_tier.fee_pct }}%, лимит до {{ bank.credit.next_tier.loan_max }}.
+              </template>
+              <template v-else>Высший рейтинг — лучшие условия кредита ✨</template>
+            </p>
+            <p class="kb-card-hint kb-credit-perk">
+              <span class="material-symbols-outlined">savings</span>
+              Вернёте за {{ bank.credit.grace_days }} дн. без просрочек — кэшбэк {{ bank.credit.cashback_pct }}% от тела и +1 к рейтингу.
+              <template v-if="bank.credit.fee_pct === 0"> Комиссия 0% — кэшбэк идёт в плюс!</template>
+            </p>
+          </div>
 
           <template v-if="bank.loan > 0">
             <p class="kb-card-hint">Остаток долга — {{ bank.loan }} кудосов. Погашение — с кошелька, вклад откроется после.</p>
+            <div v-if="bank.credit.loan_due_at" class="kb-loan-due" :class="{ overdue: bank.credit.overdue }">
+              <span class="material-symbols-outlined">{{ bank.credit.overdue ? 'error' : 'schedule' }}</span>
+              <span v-if="bank.credit.overdue">Просрочка — на остаток капает +20%/нед. Внесите платёж, чтобы остановить рост долга.</span>
+              <span v-else>Платёж нужен минимум раз в неделю — до {{ formatDue(bank.credit.loan_due_at) }}, иначе +20%/нед на остаток.</span>
+            </div>
             <div class="kb-field">
               <label class="kb-field-label">Сумма платежа</label>
               <AmountInput ref="loanInput" v-model="loanAmount" placeholder="0" />
@@ -162,28 +190,33 @@
             <div class="kb-stats">
               <div class="kb-stat">
                 <span class="kb-stat-label">Доступно к получению</span>
-                <span class="kb-stat-value">до {{ bank.tier.loan_max }} <KudosCoin /></span>
+                <span class="kb-stat-value">до {{ bank.credit.loan_max }} <KudosCoin /></span>
               </div>
               <div class="kb-stat-divider"></div>
               <div class="kb-stat">
                 <span class="kb-stat-label">Комиссия</span>
-                <span class="kb-stat-value">{{ bank.tier.loan_fee_pct }}%</span>
+                <span class="kb-stat-value">{{ bank.credit.fee_pct }}%</span>
               </div>
             </div>
             <div class="kb-field">
               <label class="kb-field-label">Сумма кредита</label>
-              <AmountInput ref="loanInput" v-model="loanAmount" :max="bank.tier.loan_max" placeholder="0" />
+              <AmountInput ref="loanInput" v-model="loanAmount" :max="bank.credit.loan_max" placeholder="0" />
             </div>
             <button
               class="btn-grad kb-loan-take"
-              :disabled="busy || !validAmount(loanAmount) || loanAmount > bank.tier.loan_max"
+              :disabled="busy || !validAmount(loanAmount) || loanAmount > bank.credit.loan_max"
               @click="takeLoan"
             >
               <span class="material-symbols-outlined">account_balance_wallet</span>
               Взять кредит{{ validAmount(loanAmount) ? ` — вернуть ${loanDebt}` : '' }}
             </button>
           </template>
+          </template>
+          <p v-else class="kb-card-hint">Данные кредита обновляются — обновите страницу.</p>
         </section>
+
+        <!-- ── Рассрочка (оплата частями) ───────────────────────── -->
+        <InstallmentsCard />
 
         <!-- ── Копилки-цели ─────────────────────────────────────── -->
         <section class="kb-card">
@@ -442,6 +475,7 @@ import GoalCreateDialog from '@/components/pets/bank/GoalCreateDialog.vue'
 import FundCreateDialog from '@/components/pets/bank/FundCreateDialog.vue'
 import ConfettiBurst from '@/components/pets/bank/ConfettiBurst.vue'
 import AmountInput from '@/components/pets/bank/AmountInput.vue'
+import InstallmentsCard from '@/components/pets/bank/InstallmentsCard.vue'
 import { ledgerIcon, ledgerText, ledgerGroup, kindTitle } from '@/components/pets/bank/ledgerMeta.js'
 import { usePetsStore } from '@/stores/pets.js'
 import { useNotificationsStore } from '@/stores/notifications.js'
@@ -449,6 +483,7 @@ import { usePermission } from '@/composables/usePermission.js'
 import { avatarUrl } from '@/utils/pets.js'
 
 const TIER_EMOJI = { start: '🌱', bronze: '🥉', silver: '🥈', gold: '🥇', platinum: '💎' }
+const RATING_EMOJI = { none: '🆕', known: '🤝', trusted: '✅', prime: '🌟', premium: '👑' }
 const LEDGER_FILTERS = [
   { value: 'all', label: 'Все' },
   { value: 'earn', label: 'Заработок' },
@@ -505,9 +540,22 @@ const tierPercent = computed(() => {
 
 const loanDebt = computed(() => {
   const b = bank.value
-  if (!b || !validAmount(loanAmount.value)) return 0
-  return loanAmount.value + Math.ceil((loanAmount.value * b.tier.loan_fee_pct) / 100)
+  if (!b?.credit || !validAmount(loanAmount.value)) return 0
+  return loanAmount.value + Math.ceil((loanAmount.value * b.credit.fee_pct) / 100)
 })
+
+const creditPercent = computed(() => {
+  const c = bank.value?.credit
+  if (!c?.next_tier) return 100
+  const from = c.tier.min_score
+  const span = c.next_tier.min_score - from
+  return Math.min(100, Math.max(4, Math.round(((c.score - from) / Math.max(1, span)) * 100)))
+})
+
+function formatDue(iso) {
+  if (!iso) return ''
+  return new Date(iso).toLocaleDateString('ru-RU', { day: 'numeric', month: 'long' })
+}
 
 const validAmount = (v) => Number.isFinite(v) && v >= 1
 
@@ -658,7 +706,12 @@ const repay = (amount) => run(async () => {
   const res = await pets.bankRepayLoan(amount)
   loanAmount.value = null
   if (before > 0 && res?.loan === 0) confettiEl.value?.burst()
-}, 'Платёж по кредиту принят')
+  if (res?.loan_cashback) {
+    notify.success(`Кредит закрыт в срок — кэшбэк +${res.loan_cashback} и рейтинг вырос!`)
+  } else {
+    notify.success('Платёж по кредиту принят')
+  }
+})
 
 function toggleGoal(id) {
   expandedGoalId.value = expandedGoalId.value === id ? null : id
@@ -817,6 +870,39 @@ onMounted(() => {
   background: linear-gradient(90deg, var(--color-primary), var(--color-tertiary));
 }
 .kb-tier-hint { font-size: 12px; color: var(--color-text-dim); }
+.kb-tier-bar--sm { height: 6px; min-width: 0; margin: 6px 0; }
+
+/* ── Кредитный рейтинг ── */
+.kb-credit-rating {
+  margin: 4px 0 14px;
+  padding: 12px 14px;
+  border-radius: var(--radius-md);
+  background: color-mix(in oklch, var(--color-primary) 6%, transparent);
+  border: 1px solid var(--acrylic-border);
+}
+.kb-credit-row { display: flex; align-items: baseline; justify-content: space-between; }
+.kb-credit-label { font-size: 12.5px; color: var(--color-text-dim); }
+.kb-credit-score { font-size: 20px; font-weight: 800; color: var(--color-primary); }
+.kb-credit-hint { margin-top: 4px; }
+.kb-credit-perk {
+  display: flex; align-items: center; gap: 6px; margin-top: 8px;
+  color: var(--color-success);
+}
+.kb-credit-perk .material-symbols-outlined { font-size: 17px; }
+.kb-loan-due {
+  display: flex; align-items: center; gap: 8px;
+  margin: 10px 0; padding: 9px 12px;
+  border-radius: var(--radius-md);
+  font-size: 12.5px; line-height: 1.4;
+  background: color-mix(in oklch, var(--color-tertiary) 10%, transparent);
+  color: var(--color-text-dim);
+}
+.kb-loan-due .material-symbols-outlined { font-size: 18px; color: var(--color-tertiary); }
+.kb-loan-due.overdue {
+  background: color-mix(in oklch, var(--color-error) 12%, transparent);
+  color: var(--color-error);
+}
+.kb-loan-due.overdue .material-symbols-outlined { color: var(--color-error); }
 
 /* ── Быстрые действия ── */
 .kb-actions { display: flex; gap: 10px; margin-top: 16px; flex-wrap: wrap; }

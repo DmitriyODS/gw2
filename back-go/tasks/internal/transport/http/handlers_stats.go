@@ -232,8 +232,9 @@ func (h *handlers) statsProfile(c *fiber.Ctx) error {
 	if !ok {
 		return badPeriod(c)
 	}
+	user := currentUser(c)
 	resp, err := h.eps.StatsProfile(c.Context(), endpoint.ProfileRequest{
-		UserID: currentUser(c).ID, Start: start, End: end,
+		UserID: user.ID, CompanyID: user.CompanyID, Start: start, End: end,
 	})
 	if err != nil {
 		return h.respondError(c, err)

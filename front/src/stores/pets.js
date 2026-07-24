@@ -76,8 +76,8 @@ export const usePetsStore = defineStore('pets', () => {
     return res
   }
 
-  async function feedPet() {
-    const res = await api.feedPet()
+  async function feedPet(food = '') {
+    const res = await api.feedPet(food)
     pet.value = { ...pet.value, ...res }
     return res
   }
@@ -128,8 +128,8 @@ export const usePetsStore = defineStore('pets', () => {
     house.value = await api.getHouse()
   }
 
-  async function buyHouseDecor(key) {
-    house.value = await api.buyHouseDecor(key)
+  async function buyHouseDecor(key, installment = false) {
+    house.value = await api.buyHouseDecor(key, installment)
     if (pet.value) pet.value = { ...pet.value, kudos: house.value.kudos }
   }
 
@@ -158,15 +158,22 @@ export const usePetsStore = defineStore('pets', () => {
     shopLoaded.value = true
   }
 
-  async function buyItem(item) {
-    const res = await api.buyItem(item)
+  async function buyItem(item, installment = false) {
+    const res = await api.buyItem(item, installment)
     pet.value = { ...pet.value, ...res }
     await fetchShop().catch(() => {})
     return res
   }
 
-  async function buySpecies(species) {
-    const res = await api.buySpecies(species)
+  async function buySpecies(species, installment = false) {
+    const res = await api.buySpecies(species, installment)
+    pet.value = { ...pet.value, ...res }
+    await fetchShop().catch(() => {})
+    return res
+  }
+
+  async function sellItem(item, category = '') {
+    const res = await api.sellItem(item, category)
     pet.value = { ...pet.value, ...res }
     await fetchShop().catch(() => {})
     return res
@@ -257,6 +264,18 @@ export const usePetsStore = defineStore('pets', () => {
   const bankStats = ref(null)
   const ledger = ref([])
   const ledgerNextBeforeId = ref(null)
+  const installments = ref(null)
+
+  async function fetchInstallments() {
+    installments.value = await api.getInstallments()
+    return installments.value
+  }
+
+  async function payInstallment(id, amount) {
+    installments.value = await api.payInstallment(id, amount)
+    await fetchBank().catch(() => {})
+    return installments.value
+  }
 
   function applyBank(res) {
     bank.value = res
@@ -444,17 +463,17 @@ export const usePetsStore = defineStore('pets', () => {
 
   return {
     pet, shop, shopLoaded, zoo, rating, live, liveLoaded, activityLog, activityLoaded,
-    season, house, bank, bankStats, ledger, ledgerNextBeforeId,
+    season, house, bank, bankStats, ledger, ledgerNextBeforeId, installments,
     myId, myCompanyId, isMine,
     fetchPet, feedPet, renamePet, equipItem, switchSpecies, resetSpecies, claimQuest, startAdventure,
     recallAdventure,
     prestigePet, fetchSeason, claimSeasonReward, fetchHouse, buyHouseDecor, arrangeHouse,
     setHouseTheme, setHousePetPos,
-    fetchShop, buyItem, buySpecies, claimMystery,
+    fetchShop, buyItem, buySpecies, sellItem, claimMystery,
     walkPet, healPet, sleepPet, bathPet, strokePet,
     fetchZoo, deleteColleaguePet, fetchRating, fetchLive, fetchActivityLog,
     fetchBank, fetchBankStats, fetchLedger, transferKudos, bankDeposit, bankWithdraw,
-    bankTakeLoan, bankRepayLoan,
+    bankTakeLoan, bankRepayLoan, fetchInstallments, payInstallment,
     createGoal, goalDeposit, goalWithdraw, deleteGoal,
     createFund, donateFund, closeFund, applyBankFund,
     applyPetUpdate, applyPetDeleted, applyPetSick, applyPetRunaway, applyKudosReceived,
