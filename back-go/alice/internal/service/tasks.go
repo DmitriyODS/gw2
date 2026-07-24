@@ -59,6 +59,22 @@ func (s *Service) findTask(ctx context.Context, sess *session, query, kind strin
 	case 1:
 		return &tasks[0], nil
 	}
+	// Точное совпадение названия важнее широкого поиска — пользователь назвал
+	// конкретную задачу (переспрос только при 0 или нескольких точных).
+	q := normalize(query)
+	var exact *domain.TaskRef
+	for i := range tasks {
+		if normalize(tasks[i].Name) == q {
+			if exact != nil {
+				exact = nil
+				break
+			}
+			exact = &tasks[i]
+		}
+	}
+	if exact != nil {
+		return exact, nil
+	}
 	st := domain.DialogState{Pending: "choose_task", Kind: kind}
 	names := make([]string, 0, len(tasks))
 	for _, t := range tasks {

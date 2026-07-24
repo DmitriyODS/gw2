@@ -42,6 +42,14 @@ func (s *Service) findNote(ctx context.Context, sess *session, query, kind, text
 	case 1:
 		return &notes[0], nil
 	}
+	// Точное совпадение названия имеет приоритет над широким (семантическим)
+	// поиском: пользователь назвал конкретную заметку — читаем её, а не
+	// переспрашиваем. Переспрос — только если точных совпадений нет либо
+	// их несколько.
+	q := normalize(query)
+	if exact := onlyExactTitle(notes, q); exact != nil {
+		return exact, nil
+	}
 	st := domain.DialogState{Pending: "choose_note", Kind: kind, Text: text}
 	names := make([]string, 0, len(notes))
 	for _, n := range notes {
@@ -53,6 +61,21 @@ func (s *Service) findNote(ctx context.Context, sess *session, query, kind, text
 		names = append(names, name)
 	}
 	return nil, replyState("Нашла несколько заметок. Какая из них?"+enumerate(names), st)
+}
+
+// onlyExactTitle — единственная заметка, чьё название точно (после нормализации)
+// совпадает с запросом; nil, если таких нет или их несколько.
+func onlyExactTitle(notes []domain.NoteRef, q string) *domain.NoteRef {
+	var match *domain.NoteRef
+	for i := range notes {
+		if normalize(notes[i].Title) == q {
+			if match != nil {
+				return nil // несколько точных совпадений — оставляем выбор
+			}
+			match = &notes[i]
+		}
+	}
+	return match
 }
 
 func (s *Service) noteAppend(ctx context.Context, sess *session, title, text string) *domain.WebhookResponse {

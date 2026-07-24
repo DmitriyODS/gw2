@@ -115,9 +115,15 @@ type fakeNotes struct {
 	domain.NotesClient
 	notes   []domain.NoteRef
 	deleted []int64
+	// broad — имитировать семантический поиск: вернуть все заметки списком,
+	// а не только совпадения по словам (реальный notesvc так и делает).
+	broad bool
 }
 
 func (f *fakeNotes) FindNotes(_ context.Context, _, _ int64, query string, _ int) ([]domain.NoteRef, error) {
+	if f.broad {
+		return append([]domain.NoteRef(nil), f.notes...), nil
+	}
 	var out []domain.NoteRef
 	for _, n := range f.notes {
 		if wordsMatch(query, n.Title) {
@@ -125,6 +131,15 @@ func (f *fakeNotes) FindNotes(_ context.Context, _, _ int64, query string, _ int
 		}
 	}
 	return out, nil
+}
+
+func (f *fakeNotes) GetNote(_ context.Context, _, noteID int64) (*domain.Note, error) {
+	for _, n := range f.notes {
+		if n.ID == noteID {
+			return &domain.Note{ID: n.ID, Title: n.Title, Text: "тело"}, nil
+		}
+	}
+	return &domain.Note{ID: noteID}, nil
 }
 
 func (f *fakeNotes) DeleteNote(_ context.Context, _, noteID int64) error {
@@ -311,6 +326,39 @@ func TestNoteDeleteWithConfirmation(t *testing.T) {
 	h.svc.Handle(context.Background(), h.request(t, tok, "да", resp.SessionState))
 	if len(h.notes.deleted) != 1 || h.notes.deleted[0] != 3 {
 		t.Fatalf("заметка не удалена: %+v", h.notes.deleted)
+	}
+}
+
+func TestNoteReadPrefersExactTitle(t *testing.T) {
+	h := newHarness(t)
+	h.notes.broad = true // семантический поиск вернёт весь список
+	h.notes.notes = []domain.NoteRef{
+		{ID: 1, Title: "Повестка дня"},
+		{ID: 2, Title: "Улучшения для следующей версии"},
+		{ID: 3, Title: "Купить"},
+		{ID: 4, Title: "Автобусы веснушки"},
+	}
+	resp := h.svc.Handle(context.Background(),
+		h.request(t, h.token(t, 7, 0), "прочти заметку повестка дня", nil))
+	if resp.SessionState != nil {
+		t.Fatalf("не должно быть переспроса при точном совпадении: %+v", resp.SessionState)
+	}
+	if resp.Response == nil || !strings.Contains(resp.Response.Text, "Повестка дня") {
+		t.Fatalf("ожидалось чтение заметки «Повестка дня»: %+v", resp.Response)
+	}
+}
+
+func TestNoteReadAsksWhenNoExactTitle(t *testing.T) {
+	h := newHarness(t)
+	h.notes.broad = true
+	h.notes.notes = []domain.NoteRef{
+		{ID: 1, Title: "Планы на неделю"},
+		{ID: 2, Title: "Планы на месяц"},
+	}
+	resp := h.svc.Handle(context.Background(),
+		h.request(t, h.token(t, 7, 0), "прочти заметку планы", nil))
+	if resp.SessionState == nil || resp.SessionState.Pending != "choose_note" {
+		t.Fatalf("ожидался переспрос при отсутствии точного совпадения: %+v", resp)
 	}
 }
 

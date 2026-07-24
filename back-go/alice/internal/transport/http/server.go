@@ -24,11 +24,13 @@ func NewServer(svc *service.Service, log *slog.Logger) *Server {
 	app.Post("/api/alice/webhook", func(c *fiber.Ctx) error {
 		// json.Unmarshal вместо BodyParser: валидатор Диалогов шлёт запрос
 		// БЕЗ заголовка Content-Type, а BodyParser без него отказывает (400).
+		// Вебхук ОБЯЗАН всегда отвечать 200 с валидным телом Диалогов — любой
+		// не-200 (в т.ч. на пустой/битый пинг валидатора) читается модерацией
+		// как «При обращении к серверу возникает ошибка». На нераспарсиваемое
+		// тело отдаём штатное приветствие, а не ошибку.
 		var req domain.WebhookRequest
 		if err := json.Unmarshal(c.Body(), &req); err != nil {
-			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-				"error": "VALIDATION", "message": "Некорректное тело запроса",
-			})
+			return c.JSON(svc.Fallback())
 		}
 		return c.JSON(svc.Handle(c.Context(), &req))
 	})

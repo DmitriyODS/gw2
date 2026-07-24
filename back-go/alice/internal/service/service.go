@@ -115,6 +115,12 @@ func isHelpRequest(req *domain.WebhookRequest, cmd string) bool {
 	return IsHelpCommand(cmd)
 }
 
+// Fallback — валидный ответ для нераспарсиваемого тела (пинг валидатора
+// Диалогов без корректного JSON): вебхук обязан всегда отвечать 200.
+func (s *Service) Fallback() *domain.WebhookResponse {
+	return reply(linkGreeting)
+}
+
 // Handle — обработка одного запроса вебхука; ошибки сервисов превращаются в
 // голосовые реплики, транспорту всегда отдаётся валидный ответ.
 func (s *Service) Handle(ctx context.Context, req *domain.WebhookRequest) *domain.WebhookResponse {

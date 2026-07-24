@@ -95,18 +95,30 @@ func (s *Service) findEntries(ctx context.Context, sess *session, query string) 
 	if err != nil {
 		return nil, s.errReply(err)
 	}
-	var found []domain.EntryOption
+	q := normalize(query)
+	var found, exact []domain.EntryOption
 	for _, d := range diaries {
 		entries, err := s.diary.ListEntries(ctx, sess.userID, d.ID, "", "")
 		if err != nil {
 			return nil, s.errReply(err)
 		}
 		for _, e := range entries {
-			if wordsMatch(query, e.Title) {
-				name := fmt.Sprintf("%s (%s)", e.Title, HumanDate(e.Date, sess.now))
-				found = append(found, domain.EntryOption{EntryID: e.ID, DiaryID: d.ID, Name: name})
+			if !wordsMatch(query, e.Title) {
+				continue
+			}
+			name := fmt.Sprintf("%s (%s)", e.Title, HumanDate(e.Date, sess.now))
+			opt := domain.EntryOption{EntryID: e.ID, DiaryID: d.ID, Name: name}
+			found = append(found, opt)
+			if normalize(e.Title) == q {
+				exact = append(exact, opt)
 			}
 		}
+	}
+	// Точное совпадение заголовка приоритетнее широкого поиска: пользователь
+	// назвал конкретную запись. Одинаковые заголовки по разным дням остаются
+	// на уточнение — но уже без «шумных» частичных совпадений.
+	if len(exact) > 0 {
+		return exact, nil
 	}
 	return found, nil
 }
