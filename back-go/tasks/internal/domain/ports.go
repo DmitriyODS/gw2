@@ -131,6 +131,10 @@ type UserReader interface {
 	// IsCompanyMember — состоит ли пользователь в компании (многокомпанийность:
 	// членство в user_companies, а не первичная users.company_id).
 	IsCompanyMember(ctx Ctx, userID, companyID int64) (bool, error)
+	// OnVacation — отпуск пользователя В ЭТОЙ компании (user_companies.
+	// on_vacation): глобального отпуска по всем компаниям нет, в другой
+	// компании человек продолжает работать.
+	OnVacation(ctx Ctx, userID, companyID int64) (bool, error)
 }
 
 // CompanyReader — read-only настройки компании (флаг uses_yougile для

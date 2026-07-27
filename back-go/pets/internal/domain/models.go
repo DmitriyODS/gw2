@@ -81,8 +81,9 @@ type Pet struct {
 	LoanPrincipal int        // тело текущего кредита (для кэшбэка/пени; 0 — нет)
 	LoanDueAt     *time.Time // срок возврата (грейс-период); NULL — кредита нет
 	LoanPenalized bool       // разовая пеня за просрочку уже применена
-	// OwnerOnVacation — хозяин в отпуске (users.on_vacation): питомец тоже
-	// отдыхает — показатели заморожены (FreezeClocks), действия недоступны.
+	// OwnerOnVacation — хозяин в отпуске В КОМПАНИИ ПИТОМЦА (отпуск живёт в
+	// user_companies, глобального нет): питомец тоже отдыхает — показатели
+	// заморожены (FreezeClocks), действия недоступны.
 	OwnerOnVacation bool
 	User            *UserRef
 }

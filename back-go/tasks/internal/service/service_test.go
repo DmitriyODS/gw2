@@ -444,7 +444,11 @@ func (f *fakeStore) MarkMentionsSeen(_ context.Context, _, _ int64) error { retu
 
 // — Остальные порты —
 
-type fakeUsers struct{ users map[int64]*domain.User }
+type fakeUsers struct {
+	users map[int64]*domain.User
+	// vacations — отпуск по паре (пользователь, компания): он company-scoped.
+	vacations map[[2]int64]bool
+}
 
 func (f *fakeUsers) GetUser(_ context.Context, id int64) (*domain.User, error) {
 	return f.users[id], nil
@@ -455,6 +459,17 @@ func (f *fakeUsers) CompanyActive(_ context.Context, _ *int64) (bool, error) { r
 func (f *fakeUsers) IsCompanyMember(_ context.Context, userID, companyID int64) (bool, error) {
 	u := f.users[userID]
 	return u != nil && u.CompanyID != nil && *u.CompanyID == companyID, nil
+}
+
+func (f *fakeUsers) OnVacation(_ context.Context, userID, companyID int64) (bool, error) {
+	return f.vacations[[2]int64{userID, companyID}], nil
+}
+
+func (f *fakeUsers) setVacation(userID, companyID int64, on bool) {
+	if f.vacations == nil {
+		f.vacations = map[[2]int64]bool{}
+	}
+	f.vacations[[2]int64{userID, companyID}] = on
 }
 
 func (f *fakeUsers) YougileEnabled(_ context.Context, _ int64) (bool, error) { return true, nil }
@@ -680,14 +695,14 @@ func TestSemanticSearchTakesOverList(t *testing.T) {
 	}
 }
 
-// Отпуск (users.on_vacation): создание/правка/закрытие задач и старт юнитов
-// закрыты кодом ON_VACATION 403; личные действия (цвет) — нет.
+// Отпуск (user_companies.on_vacation): создание/правка/закрытие задач и старт
+// юнитов закрыты кодом ON_VACATION 403; личные действия (цвет) — нет.
 func TestVacationBlocksTaskAndUnitMutations(t *testing.T) {
 	svc, store, _, _, _, users := newTestService()
 	task := seedTask(store, 1)
 	store.unitTypes[10] = &domain.UnitType{ID: 10, Name: "Код", CompanyID: 1}
-	rester := employee(users, 5, 1)
-	rester.OnVacation = true
+	employee(users, 5, 1)
+	users.setVacation(5, 1, true)
 
 	expectVacation := func(what string, err error) {
 		t.Helper()
@@ -708,7 +723,7 @@ func TestVacationBlocksTaskAndUnitMutations(t *testing.T) {
 	expectVacation("unit", err)
 
 	// Отключили отпуск — всё снова работает.
-	rester.OnVacation = false
+	users.setVacation(5, 1, false)
 	if _, err := svc.CreateUnit(context.Background(), task.ID, 5, cid(1), "юнит", 10); err != nil {
 		t.Fatalf("после отпуска юнит должен стартовать: %v", err)
 	}

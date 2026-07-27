@@ -15,15 +15,20 @@ var reindexFields = map[string]bool{
 	"name": true, "department_id": true, "responsible_user_id": true,
 }
 
-// ensureNotOnVacation — гард режима «в отпуске» (users.on_vacation): актор в
-// отпуске не создаёт/не правит задачи и не запускает юниты. Системные пути
+// ensureNotOnVacation — гард режима «в отпуске» (user_companies.on_vacation):
+// актор в отпуске не создаёт/не правит задачи и не запускает юниты. Отпуск
+// company-scoped: в другой компании тот же человек работает как обычно,
+// поэтому без компании в запросе гард не применяется. Системные пути
 // (YouGile-вебхук) идут мимо — они работают репозиторием, не этими методами.
-func (s *Service) ensureNotOnVacation(ctx context.Context, actorID int64) error {
-	user, err := s.users.GetUser(ctx, actorID)
+func (s *Service) ensureNotOnVacation(ctx context.Context, actorID int64, companyID *int64) error {
+	if companyID == nil {
+		return nil
+	}
+	onVacation, err := s.users.OnVacation(ctx, actorID, *companyID)
 	if err != nil {
 		return err
 	}
-	if user != nil && user.OnVacation {
+	if onVacation {
 		return domain.NewError("ON_VACATION",
 			"Вы в отпуске — создание и редактирование задач недоступно", 403)
 	}
@@ -160,7 +165,7 @@ func (s *Service) GetTaskInCompany(ctx context.Context, taskID, userID int64, co
 // createTaskCore — создание задачи с бизнес-проверками, без дампа и
 // сокет-события (общая часть CreateTask и YouGile-импорта).
 func (s *Service) createTaskCore(ctx context.Context, actorID, companyID int64, req dto.TaskCreate) (*domain.Task, error) {
-	if err := s.ensureNotOnVacation(ctx, actorID); err != nil {
+	if err := s.ensureNotOnVacation(ctx, actorID, &companyID); err != nil {
 		return nil, err
 	}
 	dept, err := s.depts.GetDepartment(ctx, req.DepartmentID)
@@ -221,7 +226,7 @@ func (s *Service) CreateTask(ctx context.Context, actorID, companyID int64, req 
 }
 
 func (s *Service) UpdateTask(ctx context.Context, taskID, actorID int64, companyID *int64, req dto.TaskUpdate) (*dto.Task, error) {
-	if err := s.ensureNotOnVacation(ctx, actorID); err != nil {
+	if err := s.ensureNotOnVacation(ctx, actorID, companyID); err != nil {
 		return nil, err
 	}
 	task, err := s.taskInCompany(ctx, taskID, companyID)
@@ -304,7 +309,7 @@ func (s *Service) DeleteTask(ctx context.Context, taskID int64, companyID *int64
 }
 
 func (s *Service) ArchiveTask(ctx context.Context, taskID, actorID int64, companyID *int64) (*dto.Task, error) {
-	if err := s.ensureNotOnVacation(ctx, actorID); err != nil {
+	if err := s.ensureNotOnVacation(ctx, actorID, companyID); err != nil {
 		return nil, err
 	}
 	task, err := s.taskInCompany(ctx, taskID, companyID)
@@ -347,7 +352,7 @@ func (s *Service) ArchiveTask(ctx context.Context, taskID, actorID int64, compan
 }
 
 func (s *Service) RestoreTask(ctx context.Context, taskID, actorID int64, companyID *int64) (*dto.Task, error) {
-	if err := s.ensureNotOnVacation(ctx, actorID); err != nil {
+	if err := s.ensureNotOnVacation(ctx, actorID, companyID); err != nil {
 		return nil, err
 	}
 	task, err := s.taskInCompany(ctx, taskID, companyID)
@@ -378,7 +383,7 @@ func (s *Service) RestoreTask(ctx context.Context, taskID, actorID int64, compan
 // SetResponsible / SetStage — отдельные PATCH-роуты v3 (двигают задачу и
 // шлют общий task:updated).
 func (s *Service) SetResponsible(ctx context.Context, taskID, actorID int64, companyID *int64, responsibleUserID *int64) (*dto.Task, error) {
-	if err := s.ensureNotOnVacation(ctx, actorID); err != nil {
+	if err := s.ensureNotOnVacation(ctx, actorID, companyID); err != nil {
 		return nil, err
 	}
 	task, err := s.taskInCompany(ctx, taskID, companyID)
@@ -403,7 +408,7 @@ func (s *Service) SetResponsible(ctx context.Context, taskID, actorID int64, com
 }
 
 func (s *Service) SetStage(ctx context.Context, taskID, actorID int64, companyID *int64, stageID *int64) (*dto.Task, error) {
-	if err := s.ensureNotOnVacation(ctx, actorID); err != nil {
+	if err := s.ensureNotOnVacation(ctx, actorID, companyID); err != nil {
 		return nil, err
 	}
 	task, err := s.taskInCompany(ctx, taskID, companyID)
