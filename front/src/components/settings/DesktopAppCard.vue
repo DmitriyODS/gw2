@@ -39,7 +39,11 @@
     <label class="dac-row">
       <div class="dac-row-text">
         <span class="dac-row-title">Не беспокоить</span>
-        <span class="dac-row-desc">Без звука и уведомлений о сообщениях; входящие звонки показываются всегда.</span>
+        <span class="dac-row-desc">
+          Без звука и всплывающих уведомлений ОС — сами уведомления копятся в центре;
+          входящие звонки показываются всегда.
+          <template v-if="muted && muteUntilLabel !== 'навсегда'"> Сейчас тишина {{ muteUntilLabel }}.</template>
+        </span>
       </div>
       <ToggleSwitch :model-value="muted" @update:model-value="setMuted" />
     </label>
@@ -47,16 +51,18 @@
 </template>
 
 <script setup>
-import { onMounted, reactive, ref } from 'vue'
+import { onMounted, reactive } from 'vue'
 import ToggleSwitch from 'primevue/toggleswitch'
-import { isNotifyMuted, setNotifyMuted } from '@/utils/systemNotify.js'
 import { useNotificationsStore } from '@/stores/notifications.js'
+import { useNotifyMute } from '@/composables/useNotifyMute.js'
 
 const desktop = window.GrooveDesktop
 const notify = useNotificationsStore()
 
 const s = reactive({ autostart: false, closeToTray: true, trayIcon: true })
-const muted = ref(isNotifyMuted())
+// Состояние общее с ПКМ-меню колокольчика на панели задач — тумблер не должен
+// расходиться с ним (там тишину можно включить и на срок).
+const { muted, untilLabel: muteUntilLabel, mute, unmute } = useNotifyMute()
 
 onMounted(async () => {
   if (!desktop?.getSettings) return
@@ -81,8 +87,8 @@ async function set(key, value) {
 }
 
 function setMuted(v) {
-  muted.value = v
-  setNotifyMuted(v)
+  if (v) mute(null)
+  else unmute()
 }
 </script>
 
