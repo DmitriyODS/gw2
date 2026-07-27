@@ -11,6 +11,13 @@ export const getMe = () => apiRequest('/users/me')
 
 export const updateMe = (data) => apiRequest('/users/me', { method: 'PATCH', body: data })
 
+// Настройки рабочего стола (закреплённые разделы, размеры плиток, обои) —
+// личные и переезжают между устройствами; для сервера это непрозрачный JSON.
+export const getDesktopPrefs = () => apiRequest('/users/me/desktop')
+
+export const saveDesktopPrefs = (prefs) =>
+  apiRequest('/users/me/desktop', { method: 'PUT', body: { prefs } })
+
 export const deleteAvatar = () => apiRequest('/users/me/avatar', { method: 'DELETE' })
 
 export const uploadAvatar = (file) => {

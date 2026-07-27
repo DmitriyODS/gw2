@@ -72,3 +72,8 @@ export const yandexAuthURL = (clientId, state = '') =>
   `&client_id=${encodeURIComponent(clientId)}` +
   `&redirect_uri=${encodeURIComponent(window.location.origin + '/yandex-callback')}` +
   (state ? `&state=${encodeURIComponent(state)}` : '')
+
+// Реестр входов профиля («Авторизация и сессии»): свои активные сеансы и
+// завершение любого из них (текущий тоже — фронт следом выходит из системы).
+export const listSessions = () => apiRequest('/auth/sessions', { method: 'GET' })
+export const revokeSession = (id) => apiRequest(`/auth/sessions/${id}`, { method: 'DELETE' })

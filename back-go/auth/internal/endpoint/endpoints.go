@@ -5,6 +5,7 @@ package endpoint
 
 import (
 	"context"
+	"encoding/json"
 
 	"github.com/go-kit/kit/endpoint"
 
@@ -31,6 +32,11 @@ type Endpoints struct {
 	LinkApprove endpoint.Endpoint
 	LinkClaim   endpoint.Endpoint
 
+	// Реестр входов («Авторизация и сессии» в профиле).
+	ListSessions         endpoint.Endpoint
+	RevokeSession        endpoint.Endpoint
+	RevokeCurrentSession endpoint.Endpoint
+
 	// OAuth-провайдер (связка аккаунтов навыка Алисы) и вход через Яндекс ID.
 	OAuthAuthorize   endpoint.Endpoint
 	OAuthToken       endpoint.Endpoint
@@ -52,6 +58,8 @@ type Endpoints struct {
 	DirectoryUser          endpoint.Endpoint
 	Me                     endpoint.Endpoint
 	UpdateMe               endpoint.Endpoint
+	GetDesktopPrefs        endpoint.Endpoint
+	SaveDesktopPrefs       endpoint.Endpoint
 	UploadAvatar           endpoint.Endpoint
 	DeleteAvatar           endpoint.Endpoint
 	GetUser                endpoint.Endpoint
@@ -113,6 +121,12 @@ type OAuthAuthorizeEpRequest struct {
 	Body      dto.OAuthAuthorizeRequest
 }
 
+// RevokeSessionEpRequest — завершение сеанса (только своего).
+type RevokeSessionEpRequest struct {
+	UserID    int64
+	SessionID int64
+}
+
 // YandexLinkEpRequest — привязка Яндекс ID к существующему аккаунту.
 type YandexLinkEpRequest struct {
 	UserID int64
@@ -143,6 +157,13 @@ type UpdateUserEpRequest struct {
 type UpdateMeEpRequest struct {
 	UserID int64
 	Body   dto.UpdateMeRequest
+}
+
+// SaveDesktopPrefsEpRequest — личные настройки рабочего стола (непрозрачный
+// для сервера JSON-объект).
+type SaveDesktopPrefsEpRequest struct {
+	UserID int64
+	Prefs  json.RawMessage
 }
 
 type MeEpRequest struct {
@@ -327,6 +348,16 @@ func New(svc service.AuthService) Endpoints {
 		OAuthToken: func(ctx context.Context, request any) (any, error) {
 			return svc.OAuthToken(ctx, request.(dto.OAuthTokenRequest))
 		},
+		ListSessions: func(ctx context.Context, request any) (any, error) {
+			return svc.ListSessions(ctx, request.(int64))
+		},
+		RevokeSession: func(ctx context.Context, request any) (any, error) {
+			req := request.(RevokeSessionEpRequest)
+			return nil, svc.RevokeSession(ctx, req.UserID, req.SessionID)
+		},
+		RevokeCurrentSession: func(ctx context.Context, request any) (any, error) {
+			return nil, svc.RevokeCurrentSession(ctx, request.(int64))
+		},
 		YandexConfig: func(ctx context.Context, _ any) (any, error) {
 			return svc.YandexAuthConfig(), nil
 		},
@@ -387,6 +418,13 @@ func New(svc service.AuthService) Endpoints {
 		UpdateMe: func(ctx context.Context, request any) (any, error) {
 			req := request.(UpdateMeEpRequest)
 			return svc.UpdateMe(ctx, req.UserID, req.Body)
+		},
+		GetDesktopPrefs: func(ctx context.Context, request any) (any, error) {
+			return svc.GetDesktopPrefs(ctx, request.(int64))
+		},
+		SaveDesktopPrefs: func(ctx context.Context, request any) (any, error) {
+			req := request.(SaveDesktopPrefsEpRequest)
+			return svc.SaveDesktopPrefs(ctx, req.UserID, req.Prefs)
 		},
 		UploadAvatar: func(ctx context.Context, request any) (any, error) {
 			req := request.(AvatarEpRequest)

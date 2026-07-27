@@ -6,6 +6,7 @@ package service
 
 import (
 	"context"
+	"encoding/json"
 	"log/slog"
 
 	"github.com/DmitriyODS/gw2/back-go/auth/internal/domain"
@@ -33,6 +34,12 @@ type AuthService interface {
 	LinkApprove(ctx context.Context, code string, userID int64, activeCompanyID *int64) error
 	LinkClaim(ctx context.Context, code, secret string) (*dto.LinkClaimResult, error)
 
+	// Реестр входов («Авторизация и сессии» в профиле). Текущая сессия
+	// определяется по refresh-cookie запроса (domain.SessionMeta в контексте).
+	ListSessions(ctx context.Context, userID int64) ([]dto.SessionInfo, error)
+	RevokeSession(ctx context.Context, userID, sessionID int64) error
+	RevokeCurrentSession(ctx context.Context, userID int64) error
+
 	ListUsers(ctx context.Context) ([]dto.User, error)
 	CreateUser(ctx context.Context, actor *domain.User, req dto.CreateUserRequest) (*dto.User, error)
 	CreatePlatformUser(ctx context.Context, req dto.CreateUserRequest) (*dto.User, error)
@@ -45,6 +52,8 @@ type AuthService interface {
 	DirectoryUser(ctx context.Context, actor *domain.User, userID int64) (*dto.DirectoryUser, error)
 	Me(ctx context.Context, userID, companyID int64) (*dto.User, error)
 	UpdateMe(ctx context.Context, userID int64, req dto.UpdateMeRequest) (*dto.User, error)
+	GetDesktopPrefs(ctx context.Context, userID int64) (json.RawMessage, error)
+	SaveDesktopPrefs(ctx context.Context, userID int64, prefs json.RawMessage) (json.RawMessage, error)
 	UploadAvatar(ctx context.Context, userID int64, fileBytes []byte) (*dto.User, error)
 	DeleteAvatar(ctx context.Context, userID int64) (*dto.User, error)
 	GetUser(ctx context.Context, actor *domain.User, userID int64) (*dto.User, error)
@@ -109,6 +118,8 @@ type Service struct {
 	passwordResets domain.PasswordResetStore
 	companyInvites domain.CompanyInviteStore
 	link           domain.DeviceLinkStore
+	sessions       domain.SessionStore // реестр входов (WithSessions; nil — выключен)
+	geo            domain.GeoResolver  // город по IP для карточки сеанса (может быть nil)
 	mail           domain.MailClient
 	appBaseURL     string // публичный базовый URL для ссылок в письмах
 	log            *slog.Logger
@@ -137,6 +148,15 @@ func New(repo domain.UserRepository, companies domain.CompanyRepository,
 // (все загруженные файлы попадают в архив и восстанавливаются из него).
 func (s *Service) WithFiles(files domain.FileArchive) *Service {
 	s.files = files
+	return s
+}
+
+// WithSessions — включить реестр входов («Авторизация и сессии» в профиле):
+// каждая выданная пара токенов привязывается к устройству, вход можно
+// завершить. geo (может быть nil) определяет город по IP для карточки.
+func (s *Service) WithSessions(sessions domain.SessionStore, geo domain.GeoResolver) *Service {
+	s.sessions = sessions
+	s.geo = geo
 	return s
 }
 
@@ -204,7 +224,8 @@ func (s *Service) session(ctx context.Context, u *domain.User, activeCompanyID *
 		Companies:       dto.NewMemberships(memberships),
 	}
 	if withRefresh {
-		if sess.RefreshToken, err = s.tokens.RefreshToken(u.ID, claims.CompanyID); err != nil {
+		sid := s.ensureSessionID(ctx, u.ID)
+		if sess.RefreshToken, err = s.tokens.RefreshToken(u.ID, claims.CompanyID, sid); err != nil {
 			return nil, err
 		}
 	}

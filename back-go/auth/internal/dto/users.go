@@ -46,6 +46,7 @@ type User struct {
 	CreatedAt     JSONTime `json:"created_at"`
 	StatusEmoji   *string  `json:"status_emoji"`
 	StatusText    *string  `json:"status_text"`
+	// Отпуск в контекстной компании ответа (см. domain.User.OnVacation).
 	OnVacation    bool     `json:"on_vacation"`
 	// Настройки ИИ в заметках (по кнопке).
 	NotesAIProofread    bool `json:"notes_ai_proofread"`
@@ -267,8 +268,9 @@ type UpdateUserRequest struct {
 	Post  *string `json:"post"`
 	Phone *string `json:"phone"`
 	Email *string `json:"email"`
-	// Режим «в отпуске» сотрудника: создатель компании может явно проставить
-	// и снять его (гарды tasksvc/petsvc — те же, что при самостоятельном).
+	// Режим «в отпуске» сотрудника В ЭТОЙ компании (user_companies.on_vacation):
+	// проставляет и снимает создатель компании; в другой компании человек
+	// продолжает работать.
 	OnVacation *bool `json:"on_vacation"`
 }
 
@@ -285,8 +287,6 @@ type UpdateMeRequest struct {
 	// Пользовательский статус (мессенджер): пустая строка — снять.
 	StatusEmoji *string `json:"status_emoji"`
 	StatusText  *string `json:"status_text"`
-	// Режим «в отпуске»: задачи/юниты закрыты, грувик заморожен.
-	OnVacation *bool `json:"on_vacation"`
 	// Настройки ИИ в заметках (по кнопке): корректура орфографии/пунктуации и
 	// автодописывание текста.
 	NotesAIProofread    *bool `json:"notes_ai_proofread"`

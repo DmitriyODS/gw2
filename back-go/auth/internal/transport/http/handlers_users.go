@@ -1,6 +1,7 @@
 package http
 
 import (
+	"encoding/json"
 	"io"
 
 	"github.com/gofiber/fiber/v2"
@@ -169,6 +170,32 @@ func (h *handlers) updateMe(c *fiber.Ctx) error {
 		return h.respondError(c, err)
 	}
 	return c.JSON(resp)
+}
+
+// Настройки рабочего стола (закреплённые разделы, размеры плиток, обои) —
+// личные и синхронизируются между устройствами пользователя.
+func (h *handlers) desktopPrefs(c *fiber.Ctx) error {
+	resp, err := h.eps.GetDesktopPrefs(c.Context(), currentUser(c).ID)
+	if err != nil {
+		return h.respondError(c, err)
+	}
+	return c.JSON(fiber.Map{"prefs": resp})
+}
+
+func (h *handlers) saveDesktopPrefs(c *fiber.Ctx) error {
+	var body struct {
+		Prefs json.RawMessage `json:"prefs"`
+	}
+	if err := c.BodyParser(&body); err != nil {
+		return badRequest(c, "Неверный формат запроса")
+	}
+	resp, err := h.eps.SaveDesktopPrefs(c.Context(), endpoint.SaveDesktopPrefsEpRequest{
+		UserID: currentUser(c).ID, Prefs: body.Prefs,
+	})
+	if err != nil {
+		return h.respondError(c, err)
+	}
+	return c.JSON(fiber.Map{"prefs": resp})
 }
 
 func (h *handlers) uploadAvatar(c *fiber.Ctx) error {
@@ -438,7 +465,7 @@ func (h *handlers) getInvitePreview(c *fiber.Ctx) error {
 }
 
 func (h *handlers) acceptCompanyInvite(c *fiber.Ctx) error {
-	resp, err := h.eps.AcceptCompanyInvite(c.Context(), endpoint.AcceptInviteEpRequest{
+	resp, err := h.eps.AcceptCompanyInvite(sessionCtx(c), endpoint.AcceptInviteEpRequest{
 		UserID: tokenUserID(c), Token: c.Params("token"),
 	})
 	if err != nil {
@@ -450,7 +477,7 @@ func (h *handlers) acceptCompanyInvite(c *fiber.Ctx) error {
 }
 
 func (h *handlers) joinByInvite(c *fiber.Ctx) error {
-	resp, err := h.eps.JoinByCode(c.Context(), endpoint.JoinEpRequest{
+	resp, err := h.eps.JoinByCode(sessionCtx(c), endpoint.JoinEpRequest{
 		UserID: tokenUserID(c), Code: c.Params("code"),
 	})
 	if err != nil {

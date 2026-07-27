@@ -109,6 +109,9 @@ type UserRepository interface {
 	UpdateMembershipRole(ctx context.Context, userID, companyID, roleID int64) error
 	// SetMembershipPost — должность в конкретной компании.
 	SetMembershipPost(ctx context.Context, userID, companyID int64, post *string) error
+	// SetMembershipVacation — режим «в отпуске» в конкретной компании
+	// (глобального отпуска по всем компаниям у пользователя нет).
+	SetMembershipVacation(ctx context.Context, userID, companyID int64, onVacation bool) error
 	// CountCompanyMembersByLevel — активные члены компании с уровнем роли
 	// (защита «последнего администратора компании»).
 	CountCompanyMembersByLevel(ctx context.Context, companyID int64, level int) (int, error)

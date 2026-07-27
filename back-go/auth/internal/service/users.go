@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"encoding/json"
 	"strings"
 	"unicode/utf8"
 
@@ -238,6 +239,9 @@ func (s *Service) freshMemberUser(ctx context.Context, companyID, userID int64) 
 		user.CompanyID = &companyID
 		user.Role = m.Role
 		user.Post = m.Post
+		// Отпуск живёт в связке: в этой компании человек отдыхает, в другой —
+		// может работать.
+		user.OnVacation = m.OnVacation
 	}
 	out := dto.NewUser(user)
 	return &out, nil
@@ -300,9 +304,6 @@ func (s *Service) UpdateMe(ctx context.Context, userID int64, req dto.UpdateMeRe
 		updates["status_text"] = nilIfEmpty(text)
 	}
 
-	if req.OnVacation != nil {
-		updates["on_vacation"] = *req.OnVacation
-	}
 	if req.NotesAIProofread != nil {
 		updates["notes_ai_proofread"] = *req.NotesAIProofread
 	}
@@ -472,12 +473,15 @@ func (s *Service) applyUserUpdate(ctx context.Context, companyID, userID int64, 
 		}
 		updates["email"] = email
 	}
-	if req.OnVacation != nil {
-		updates["on_vacation"] = *req.OnVacation
-	}
 
 	if len(updates) > 0 {
 		if err := s.repo.UpdateFields(ctx, userID, updates); err != nil {
+			return nil, err
+		}
+	}
+	// Отпуск — свойство работы В ЭТОЙ компании, а не аккаунта.
+	if req.OnVacation != nil {
+		if err := s.repo.SetMembershipVacation(ctx, userID, companyID, *req.OnVacation); err != nil {
 			return nil, err
 		}
 	}
@@ -928,4 +932,43 @@ func (s *Service) ResetCompanyMemberPassword(ctx context.Context, actor *domain.
 	}
 	s.log.Info("company.user_reset_password", "user_id", userID, "company_id", companyID, "actor_id", actor.ID)
 	return nil
+}
+
+/* ── Настройки рабочего стола ──────────────────────────────────────
+   Личные настройки десктопного каркаса (закреплённые в панели задач разделы,
+   размеры плиток меню «Пуск», обои) живут на сервере, чтобы переезжать между
+   устройствами. Для сервера это непрозрачный JSON-объект: структуру ведёт
+   фронт, здесь только проверка формата и разумного размера. */
+
+const desktopPrefsMaxBytes = 16 * 1024
+
+func (s *Service) GetDesktopPrefs(ctx context.Context, userID int64) (json.RawMessage, error) {
+	user, err := s.repo.GetByID(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	if user == nil {
+		return nil, errUserNotFound
+	}
+	if len(user.DesktopPrefs) == 0 {
+		return json.RawMessage("{}"), nil
+	}
+	return json.RawMessage(user.DesktopPrefs), nil
+}
+
+func (s *Service) SaveDesktopPrefs(ctx context.Context, userID int64, prefs json.RawMessage) (json.RawMessage, error) {
+	if len(prefs) == 0 {
+		prefs = json.RawMessage("{}")
+	}
+	if len(prefs) > desktopPrefsMaxBytes {
+		return nil, domain.NewError("VALIDATION", "Настройки рабочего стола слишком большие", 400)
+	}
+	var obj map[string]any
+	if err := json.Unmarshal(prefs, &obj); err != nil {
+		return nil, domain.NewError("VALIDATION", "Настройки рабочего стола должны быть объектом", 400)
+	}
+	if err := s.repo.UpdateFields(ctx, userID, map[string]any{"desktop_prefs": prefs}); err != nil {
+		return nil, err
+	}
+	return prefs, nil
 }

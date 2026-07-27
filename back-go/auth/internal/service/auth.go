@@ -368,7 +368,7 @@ func (s *Service) SwitchCompany(ctx context.Context, userID, companyID int64) (*
 }
 
 func (s *Service) Refresh(ctx context.Context, refreshToken string) (*dto.Session, error) {
-	userID, companyID, err := s.tokens.ParseRefresh(refreshToken)
+	userID, companyID, sessionID, err := s.tokens.ParseRefresh(refreshToken)
 	if err != nil {
 		return nil, domain.NewError("INVALID_TOKEN", "Refresh token недействителен", 401)
 	}
@@ -379,8 +379,14 @@ func (s *Service) Refresh(ctx context.Context, refreshToken string) (*dto.Sessio
 	if user == nil || !user.IsActive {
 		return nil, domain.NewError("NOT_FOUND", "Пользователь не найден", 401)
 	}
+	if err := s.checkSession(ctx, sessionID, userID); err != nil {
+		return nil, err
+	}
+	// Токен, выпущенный до появления реестра входов (session_id == 0), получает
+	// свою карточку устройства прямо здесь — вместе с новым refresh-cookie.
+	upgrade := sessionID == 0 && s.sessions != nil
 	if user.IsSuperAdmin {
-		return s.session(ctx, user, nil, false)
+		return s.session(ctx, user, nil, upgrade)
 	}
 	// Активной компании могло не стать (вышел/исключён) — переходим в сессию без
 	// компании, а не роняем refresh.
@@ -393,7 +399,7 @@ func (s *Service) Refresh(ctx context.Context, refreshToken string) (*dto.Sessio
 			companyID = nil
 		}
 	}
-	return s.session(ctx, user, companyID, false)
+	return s.session(ctx, user, companyID, upgrade)
 }
 
 func (s *Service) ChangeDefault(ctx context.Context, req dto.ChangeDefaultRequest) (*dto.Session, error) {
@@ -412,21 +418,27 @@ func (s *Service) ChangeDefault(ctx context.Context, req dto.ChangeDefaultReques
 		return nil, domain.NewError("ALREADY_CHANGED", "Пароль уже был изменён", 422)
 	}
 
-	existing, err := s.repo.GetByLogin(ctx, req.NewLogin)
-	if err != nil {
-		return nil, err
-	}
-	if existing != nil && existing.ID != req.UserID {
-		return nil, domain.NewError("LOGIN_TAKEN", "Логин уже занят", 409)
+	fields := map[string]any{"is_default_pass": false}
+
+	// Логин меняем, только если его прислали: при первом входе система просит
+	// сменить лишь пароль.
+	if req.NewLogin != "" && req.NewLogin != user.Login {
+		existing, err := s.repo.GetByLogin(ctx, req.NewLogin)
+		if err != nil {
+			return nil, err
+		}
+		if existing != nil && existing.ID != req.UserID {
+			return nil, domain.NewError("LOGIN_TAKEN", "Логин уже занят", 409)
+		}
+		fields["login"] = req.NewLogin
 	}
 
 	hashed, err := s.repo.HashPassword(ctx, req.NewPassword)
 	if err != nil {
 		return nil, err
 	}
-	if err := s.repo.UpdateFields(ctx, user.ID, map[string]any{
-		"login": req.NewLogin, "hash_password": hashed, "is_default_pass": false,
-	}); err != nil {
+	fields["hash_password"] = hashed
+	if err := s.repo.UpdateFields(ctx, user.ID, fields); err != nil {
 		return nil, err
 	}
 

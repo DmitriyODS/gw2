@@ -76,6 +76,10 @@ func NewServer(eps endpoint.Endpoints, verifier *pasetoauth.Verifier,
 	authAPI.Post("/logout", auth.RequireToken, h.logout)
 	authAPI.Post("/change-default", auth.RequireToken, h.changeDefault)
 
+	// Реестр входов профиля: свои сеансы и завершение любого из них.
+	authAPI.Get("/sessions", auth.RequireAuth, h.listSessions)
+	authAPI.Delete("/sessions/:id<int>", auth.RequireAuth, h.revokeSession)
+
 	// Спаривание устройств (QR-вход + ТВ-код). start/claim — публичные
 	// (инициатор без входа); approve — авторизованный (нужна активная компания
 	// для ТВ-киоска, поэтому RequireAuth, а не RequireToken).
@@ -115,6 +119,8 @@ func NewServer(eps endpoint.Endpoints, verifier *pasetoauth.Verifier,
 	usersAPI.Get("/directory/:id<int>", auth.RequireAuth, h.directoryUser)
 	usersAPI.Get("/me", auth.RequireAuth, h.me)
 	usersAPI.Patch("/me", auth.RequireAuth, h.updateMe)
+	usersAPI.Get("/me/desktop", auth.RequireAuth, h.desktopPrefs)
+	usersAPI.Put("/me/desktop", auth.RequireAuth, h.saveDesktopPrefs)
 	usersAPI.Post("/me/avatar", auth.RequireAuth, h.uploadAvatar)
 	usersAPI.Delete("/me/avatar", auth.RequireAuth, h.deleteAvatar)
 	usersAPI.Get("/:id<int>/identicon", h.identicon) // публичный (img src)

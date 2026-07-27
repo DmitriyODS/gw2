@@ -325,6 +325,13 @@ func (r *fakeRepo) SearchNonMembers(_ context.Context, query string, companyID i
 	return out, nil
 }
 
+func (r *fakeRepo) SetMembershipVacation(_ context.Context, userID, companyID int64, on bool) error {
+	if m, ok := r.members[userID][companyID]; ok {
+		m.OnVacation = on
+	}
+	return nil
+}
+
 func (r *fakeRepo) SetMembershipPost(_ context.Context, userID, companyID int64, post *string) error {
 	if m, ok := r.members[userID][companyID]; ok {
 		m.Post = post
@@ -760,6 +767,28 @@ func TestChangeDefault(t *testing.T) {
 		UserID: u.ID, NewLogin: "hero2", NewPassword: "supersecret", ConfirmPassword: "supersecret",
 	})
 	wantCode(t, err, "ALREADY_CHANGED")
+}
+
+// Первый вход просит сменить только пароль: логин не прислан — остаётся прежним.
+func TestChangeDefaultKeepsLoginWhenOmitted(t *testing.T) {
+	svc, repo, _ := newTestService(t)
+	u := repo.add(&domain.User{
+		FIO: "Новичок", Login: "novice", HashPassword: "hash:novice123",
+		Role: *repo.roles[1], IsDefaultPass: true,
+	})
+
+	sess, err := svc.ChangeDefault(context.Background(), dto.ChangeDefaultRequest{
+		UserID: u.ID, NewPassword: "supersecret", ConfirmPassword: "supersecret",
+	})
+	if err != nil || sess.ForceChange {
+		t.Fatalf("ChangeDefault: %+v, %v", sess, err)
+	}
+	if repo.users[u.ID].Login != "novice" {
+		t.Fatalf("логин не должен меняться, стал %q", repo.users[u.ID].Login)
+	}
+	if repo.users[u.ID].IsDefaultPass || repo.users[u.ID].HashPassword == "hash:novice123" {
+		t.Fatal("пароль и флаг дефолтного пароля не обновлены")
+	}
 }
 
 // ── Users ────────────────────────────────────────────────────────

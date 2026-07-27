@@ -17,6 +17,7 @@ import (
 
 	"github.com/DmitriyODS/gw2/back-go/auth/internal/avatar"
 	"github.com/DmitriyODS/gw2/back-go/auth/internal/clients"
+	"github.com/DmitriyODS/gw2/back-go/auth/internal/domain"
 	"github.com/DmitriyODS/gw2/back-go/auth/internal/endpoint"
 	"github.com/DmitriyODS/gw2/back-go/auth/internal/repository/postgres"
 	"github.com/DmitriyODS/gw2/back-go/auth/internal/repository/redisx"
@@ -30,6 +31,10 @@ import (
 const (
 	accessTTL  = 15 * time.Minute
 	refreshTTL = 30 * 24 * time.Hour
+
+	// defaultGeoURL — бесплатный гео-сервис без ключа (ip-api.com, ~45 запросов
+	// в минуту). Свой провайдер — GEOIP_URL с подстановками {ip} и {token}.
+	defaultGeoURL = "http://ip-api.com/json/{ip}?fields=city&lang=ru"
 )
 
 func main() {
@@ -82,6 +87,23 @@ func main() {
 	// реестров/календарей/заметок/портала, аватарки) — даём доступ к корневому
 	// файловому хранилищу.
 	svc.WithFiles(fileStore)
+
+	// Реестр входов профиля («Авторизация и сессии»). Город по IP — внешний
+	// гео-сервис: шаблон URL с {ip} и {token}, ответ с полем "city" (смена
+	// провайдера — правка env, не кода); пустой GEOIP_URL выключает гео, и
+	// карточка сеанса показывает IP.
+	// Пустой GEOIP_URL — осознанное «гео не нужно», поэтому именно LookupEnv:
+	// у bootstrap.Env пустое значение равносильно отсутствию и включило бы
+	// провайдера по умолчанию.
+	geoURL, ok := os.LookupEnv("GEOIP_URL")
+	if !ok {
+		geoURL = defaultGeoURL
+	}
+	var geo domain.GeoResolver
+	if geoURL != "" {
+		geo = clients.NewGeoIP(geoURL, bootstrap.Env("GEOIP_TOKEN", ""), redisx.NewGeoCache(rdb), log)
+	}
+	svc.WithSessions(postgres.NewSessionStore(pool), geo)
 
 	// OAuth-провайдер для связки аккаунтов навыка Алисы (пустые креды — выключен).
 	if cid, secret := bootstrap.Env("OAUTH_ALICE_CLIENT_ID", ""), bootstrap.Env("OAUTH_ALICE_CLIENT_SECRET", ""); cid != "" && secret != "" {
