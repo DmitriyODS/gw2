@@ -48,6 +48,11 @@ var BackupSections = []BackupSection{
 		"note_shares", "note_user_shares", "note_company_shares",
 		"folder_user_shares", "folder_company_shares",
 		"note_recipient_state", "folder_recipient_state"}},
+	{Key: "boards", Tables: []string{"boards", "board_folders",
+		"board_shares", "board_user_shares", "board_company_shares",
+		"board_folder_user_shares", "board_folder_company_shares",
+		"board_recipient_state", "board_folder_recipient_state"}},
+	{Key: "reminders", Tables: []string{"reminders"}},
 	{Key: "messenger", Tables: []string{"conversations", "conversation_members", "messages",
 		"message_attachments", "message_reactions", "chat_backgrounds",
 		"chat_folders", "chat_folder_items"}},
@@ -67,11 +72,12 @@ var BackupSections = []BackupSection{
 }
 
 // BackupExcluded — таблицы, которые НИКОГДА не бэкапим: транзиентные (коды
-// подтверждения/сброса) и перегенерируемые (эмбеддинги), плюс служебная таблица
-// миграций goose.
+// подтверждения/сброса, реестр активных входов) и перегенерируемые
+// (эмбеддинги), плюс служебная таблица миграций goose.
 var BackupExcluded = map[string]bool{
 	"email_verifications": true,
 	"password_resets":     true,
+	"user_sessions":       true,
 	"task_embeddings":     true,
 	"note_embeddings":     true,
 	"goose_db_version":    true,

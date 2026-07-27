@@ -5,6 +5,7 @@ use (
 	./alice
 	./apitest
 	./auth
+	./board
 	./calendar
 	./calls
 	./diary
@@ -18,6 +19,7 @@ use (
 	./portal
 	./push
 	./registry
+	./reminder
 	./tasks
 )
 

@@ -23,6 +23,7 @@ var Channels = []string{
 	"gw2:gateway:events",
 	"gw2:pets:events",
 	"gw2:portal:events",
+	"gw2:reminder:events",
 }
 
 const reconnectDelay = 3 * time.Second

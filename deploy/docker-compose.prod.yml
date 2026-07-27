@@ -84,6 +84,12 @@ services:
   notes:
     image: osipovskijdima/groove_work:${NOTES_TAG:-notes}
 
+  board:
+    image: osipovskijdima/groove_work:${BOARD_TAG:-board}
+
+  reminder:
+    image: osipovskijdima/groove_work:${REMINDER_TAG:-reminder}
+
   alice:
     image: osipovskijdima/groove_work:${ALICE_TAG:-alice}
 

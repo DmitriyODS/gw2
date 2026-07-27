@@ -22,10 +22,12 @@ import (
 )
 
 // backupExcluded — таблицы, которые бэкап не берёт намеренно (≡ domain.
-// BackupExcluded authsvc): транзиентные коды и перегенерируемые эмбеддинги.
+// BackupExcluded authsvc): транзиентные коды и активные входы, перегенерируемые
+// эмбеддинги.
 var backupExcluded = map[string]bool{
 	"email_verifications": true,
 	"password_resets":     true,
+	"user_sessions":       true,
 	"task_embeddings":     true,
 	"note_embeddings":     true,
 	"goose_db_version":    true,
@@ -35,7 +37,7 @@ var backupExcluded = map[string]bool{
 // подписи — на фронте, front/src/utils/backupSections.js).
 var backupSectionKeys = []string{
 	"auth", "companies", "tasks", "registry", "calendar", "diary", "notes",
-	"messenger", "calls", "groove", "portal", "ai", "integration",
+	"boards", "reminders", "messenger", "calls", "groove", "portal", "ai", "integration",
 }
 
 // dbTables — таблицы public-схемы тестовой БД (её ведут те же миграции, что и прод).

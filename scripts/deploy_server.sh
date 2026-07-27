@@ -434,6 +434,34 @@ else
   warn "маршрут /api/notes вернул $notes_code (ожидался 401) — проверьте nginx"
 fi
 
+# Микросервис досок: healthz изнутри контейнера + маршрут /api/boards через
+# nginx (без токена ожидаем 401, не 404/502).
+if $COMPOSE exec -T board wget -qO- --timeout=3 http://127.0.0.1:8105/healthz >/dev/null 2>&1; then
+  ok "boardsvc отвечает (healthz)"
+else
+  warn "boardsvc не отвечает — доски не работают: make logs s=board"
+fi
+board_code=$(curl -skL -o /dev/null -w '%{http_code}' --max-time 5 http://localhost/api/boards || true)
+if [ "$board_code" = "401" ]; then
+  ok "маршрут /api/boards через nginx ведёт в boardsvc"
+else
+  warn "маршрут /api/boards вернул $board_code (ожидался 401) — проверьте nginx"
+fi
+
+# Микросервис напоминаний: healthz изнутри контейнера + маршрут /api/reminders
+# через nginx (без токена ожидаем 401, не 404/502).
+if $COMPOSE exec -T reminder wget -qO- --timeout=3 http://127.0.0.1:8106/healthz >/dev/null 2>&1; then
+  ok "remindersvc отвечает (healthz)"
+else
+  warn "remindersvc не отвечает — напоминания не сработают: make logs s=reminder"
+fi
+reminder_code=$(curl -skL -o /dev/null -w '%{http_code}' --max-time 5 http://localhost/api/reminders || true)
+if [ "$reminder_code" = "401" ]; then
+  ok "маршрут /api/reminders через nginx ведёт в remindersvc"
+else
+  warn "маршрут /api/reminders вернул $reminder_code (ожидался 401) — проверьте nginx"
+fi
+
 # Микросервис навыка Алисы: healthz изнутри контейнера + маршрут /api/alice
 # через nginx (вебхук публичный: POST без тела ждём 400, не 404/502).
 if $COMPOSE exec -T alice wget -qO- --timeout=3 http://127.0.0.1:8104/healthz >/dev/null 2>&1; then

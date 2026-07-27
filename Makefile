@@ -33,6 +33,8 @@ help:
 	@printf "  make dev-diary    Go-микросервис ежедневников (HTTP :8101)\n"
 	@printf "  make dev-portal   Go-микросервис корпоративного портала (HTTP :8102)\n"
 	@printf "  make dev-notes    Go-микросервис заметок (HTTP :8103)\n"
+	@printf "  make dev-board    Go-микросервис досок (HTTP :8105)\n"
+	@printf "  make dev-reminder Go-микросервис напоминаний (HTTP :8106)\n"
 	@printf "  make dev-alice    Go-микросервис навыка Алисы (HTTP :8104)\n"
 	@printf "  make dev-migrate  Применить миграции (goose)\n"
 	@printf "  make dev-front    Vite dev-сервер  :5173\n"
@@ -61,7 +63,7 @@ help:
 	@printf "\n\033[33mКонфигурация сервера:\033[0m cp .env.deploy.example .env.deploy\n\n"
 
 # ── Разработка ────────────────────────────────────────────────────
-.PHONY: dev-infra dev-migrate dev-front dev-calls dev-auth dev-messenger dev-ai dev-pets dev-tasks dev-gateway dev-push dev-mail dev-registry dev-calendar dev-diary dev-portal dev-notes dev-alice dev-stop dev-stack dev-stack-stop gen-proto
+.PHONY: dev-infra dev-migrate dev-front dev-calls dev-auth dev-messenger dev-ai dev-pets dev-tasks dev-gateway dev-push dev-mail dev-registry dev-calendar dev-diary dev-portal dev-notes dev-board dev-reminder dev-alice dev-stop dev-stack dev-stack-stop gen-proto
 
 # Dev-ключи PASETO (синхронизированы с dev.sh и
 # deploy/docker-compose.override.yml): приватный — только у authsvc,
@@ -269,6 +271,28 @@ dev-notes: dev-infra
 	AI_GRPC_ADDR="localhost:9093" \
 	HTTP_ADDR=":8103" \
 	go run ./cmd/notesvc
+
+# Go-микросервис досок: REST /api/boards/*. env синхронизированы с dev.sh.
+dev-board: dev-infra
+	@printf "\033[1m▶ boardsvc (Go)  HTTP :8105\033[0m\n"
+	cd back-go/board && \
+	DATABASE_URL="postgresql://grovework:grovework_local@localhost:5432/grovework" \
+	REDIS_URL="redis://localhost:6379/0" \
+	PASETO_PUBLIC_KEY="$(PASETO_PUBLIC_KEY_DEV)" \
+	UPLOAD_FOLDER="$(PWD)/uploads" \
+	HTTP_ADDR=":8105" \
+	go run ./cmd/boardsvc
+
+# Go-микросервис напоминаний (REST + планировщик срабатываний).
+# env синхронизированы с dev.sh.
+dev-reminder: dev-infra
+	@printf "\033[1m▶ remindersvc (Go)  HTTP :8106\033[0m\n"
+	cd back-go/reminder && \
+	DATABASE_URL="postgresql://grovework:grovework_local@localhost:5432/grovework" \
+	REDIS_URL="redis://localhost:6379/0" \
+	PASETO_PUBLIC_KEY="$(PASETO_PUBLIC_KEY_DEV)" \
+	HTTP_ADDR=":8106" \
+	go run ./cmd/remindersvc
 
 # Go-микросервис навыка Алисы: публичный вебхук /api/alice/webhook.
 # env синхронизированы с dev.sh.

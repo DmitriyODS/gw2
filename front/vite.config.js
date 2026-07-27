@@ -133,6 +133,16 @@ export default defineConfig({
         target: 'http://localhost:8103',
         changeOrigin: true
       },
+      // Доски — boardsvc (личные холсты рисования с папками и шарингом).
+      '/api/boards': {
+        target: 'http://localhost:8105',
+        changeOrigin: true
+      },
+      // Напоминания — remindersvc (сроки, повторы, планировщик срабатываний).
+      '/api/reminders': {
+        target: 'http://localhost:8106',
+        changeOrigin: true
+      },
       // Навык Алисы — alicesvc (публичный вебхук Яндекс.Диалогов).
       '/api/alice': {
         target: 'http://localhost:8104',

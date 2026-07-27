@@ -11,6 +11,8 @@ import { registerRegistrySocketHandlers } from '@/socket/registry.js'
 import { registerCalendarSocketHandlers } from '@/socket/calendar.js'
 import { registerDiarySocketHandlers } from '@/socket/diary.js'
 import { registerNotesSocketHandlers } from '@/socket/notes.js'
+import { registerBoardsSocketHandlers } from '@/socket/boards.js'
+import { registerRemindersSocketHandlers } from '@/socket/reminders.js'
 import { registerPortalSocketHandlers } from '@/socket/portal.js'
 
 let socket = null
@@ -186,6 +188,8 @@ export function connectSocket() {
   registerCalendarSocketHandlers(socket)
   registerDiarySocketHandlers(socket)
   registerNotesSocketHandlers(socket)
+  registerBoardsSocketHandlers(socket)
+  registerRemindersSocketHandlers(socket)
   registerPortalSocketHandlers(socket)
 }
 

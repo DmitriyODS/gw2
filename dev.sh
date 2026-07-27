@@ -44,10 +44,12 @@ CALENDAR_PID=""
 DIARY_PID=""
 PORTAL_PID=""
 NOTES_PID=""
+BOARD_PID=""
+REMINDER_PID=""
 ALICE_PID=""
 
 # Все Go-сервисы (имя бинаря в go-build/exe — по нему ловим осиротевшие процессы).
-SVCS="callsvc authsvc msgsvc aisvc petsvc tasksvc gatewaysvc pushsvc mailsvc registrysvc calendarsvc diarysvc portalsvc notesvc alicesvc"
+SVCS="callsvc authsvc msgsvc aisvc petsvc tasksvc gatewaysvc pushsvc mailsvc registrysvc calendarsvc diarysvc portalsvc notesvc boardsvc remindersvc alicesvc"
 
 # Dev-ключи PASETO (синхронизированы с Makefile и
 # deploy/docker-compose.override.yml): приватный — только у authsvc,
@@ -79,6 +81,8 @@ cleanup() {
     if [ -n "$DIARY_PID" ]; then kill -TERM -- "-$DIARY_PID" 2>/dev/null || true; fi
     if [ -n "$PORTAL_PID" ]; then kill -TERM -- "-$PORTAL_PID" 2>/dev/null || true; fi
     if [ -n "$NOTES_PID" ]; then kill -TERM -- "-$NOTES_PID" 2>/dev/null || true; fi
+    if [ -n "$BOARD_PID" ]; then kill -TERM -- "-$BOARD_PID" 2>/dev/null || true; fi
+    if [ -n "$REMINDER_PID" ]; then kill -TERM -- "-$REMINDER_PID" 2>/dev/null || true; fi
     if [ -n "$ALICE_PID" ]; then kill -TERM -- "-$ALICE_PID" 2>/dev/null || true; fi
 
     # Даём ~1 секунду на graceful-shutdown (vite, Go-сервисы).
@@ -100,6 +104,8 @@ cleanup() {
     if [ -n "$DIARY_PID" ]; then kill -KILL -- "-$DIARY_PID" 2>/dev/null || true; fi
     if [ -n "$PORTAL_PID" ]; then kill -KILL -- "-$PORTAL_PID" 2>/dev/null || true; fi
     if [ -n "$NOTES_PID" ]; then kill -KILL -- "-$NOTES_PID" 2>/dev/null || true; fi
+    if [ -n "$BOARD_PID" ]; then kill -KILL -- "-$BOARD_PID" 2>/dev/null || true; fi
+    if [ -n "$REMINDER_PID" ]; then kill -KILL -- "-$REMINDER_PID" 2>/dev/null || true; fi
     if [ -n "$ALICE_PID" ]; then kill -KILL -- "-$ALICE_PID" 2>/dev/null || true; fi
 
     # Подбираем сирот по имени — защита от случая, когда субшелл уже
@@ -152,7 +158,7 @@ ensure_front_deps
 #     go run ниже стартует мгновенно. `go build ./...` из корня workspace не
 #     работает (back-go без своего go.mod), поэтому обходим модули через -C.
 printf "\033[1m▶ Сборка Go-сервисов...\033[0m\n"
-for mod in pkg migrate calls auth messenger ai pets tasks gateway push mail registry calendar diary portal notes alice; do
+for mod in pkg migrate calls auth messenger ai pets tasks gateway push mail registry calendar diary portal notes board reminder alice; do
     printf "  %s" "$mod"
     go build -C "$ROOT/back-go/$mod" ./...
     printf "\033[32m ✓\033[0m\n"
@@ -395,7 +401,37 @@ printf "\033[1m▶ notesvc (Go)  HTTP :8103...\033[0m\n"
 ) &
 NOTES_PID=$!
 
-# 12f. Go-микросервис навыка Алисы alicesvc (HTTP :8104 — публичный вебхук
+# 12f. Go-микросервис досок boardsvc (HTTP :8105 — REST /api/boards/*).
+#      Личные доски рисования (сцена холста, папки, метки, шаринг, публичные
+#      ссылки); картинки холста и превью — uploads. Межсервисных вызовов нет:
+#      проверка токенов локальная (PASETO_PUBLIC_KEY).
+printf "\033[1m▶ boardsvc (Go)  HTTP :8105...\033[0m\n"
+(
+  cd "$ROOT/back-go/board" && \
+  DATABASE_URL="postgresql://grovework:grovework_local@localhost:5432/grovework" \
+  REDIS_URL="redis://localhost:6379/0" \
+  PASETO_PUBLIC_KEY="$PASETO_PUBLIC_KEY_DEV" \
+  UPLOAD_FOLDER="$UPLOADS" \
+  HTTP_ADDR=":8105" \
+  exec go run ./cmd/boardsvc
+) &
+BOARD_PID=$!
+
+# 12g. Go-микросервис напоминаний remindersvc (HTTP :8106 — REST
+#      /api/reminders/*). Внутри — планировщик: раз в полминуты забирает
+#      наступившие сроки и публикует reminder:fire в gw2:reminder:events.
+printf "\033[1m▶ remindersvc (Go)  HTTP :8106...\033[0m\n"
+(
+  cd "$ROOT/back-go/reminder" && \
+  DATABASE_URL="postgresql://grovework:grovework_local@localhost:5432/grovework" \
+  REDIS_URL="redis://localhost:6379/0" \
+  PASETO_PUBLIC_KEY="$PASETO_PUBLIC_KEY_DEV" \
+  HTTP_ADDR=":8106" \
+  exec go run ./cmd/remindersvc
+) &
+REMINDER_PID=$!
+
+# 12h. Go-микросервис навыка Алисы alicesvc (HTTP :8104 — публичный вебхук
 #      /api/alice/webhook). Состояния нет; голосовые команды — gRPC-вызовы
 #      tasksvc/diarysvc/notesvc, ИИ-разбор фраз — aisvc.
 printf "\033[1m▶ alicesvc (Go)  HTTP :8104...\033[0m\n"

@@ -169,6 +169,11 @@ services:
       # кнопка «Войти с Яндексом» скрыта.
       YANDEX_OAUTH_CLIENT_ID: ${YANDEX_OAUTH_CLIENT_ID:-}
       YANDEX_OAUTH_CLIENT_SECRET: ${YANDEX_OAUTH_CLIENT_SECRET:-}
+      # Город в карточке сеанса («Авторизация и сессии» в профиле): шаблон
+      # запроса к гео-сервису с подстановками {ip} и {token}, ответ — JSON с
+      # полем "city". Пусто — гео выключено, карточка показывает IP.
+      GEOIP_URL: ${GEOIP_URL-http://ip-api.com/json/{ip}?fields=city&lang=ru}
+      GEOIP_TOKEN: ${GEOIP_TOKEN:-}
       HTTP_ADDR: ":8091"
     volumes:
       - uploads:/app/uploads
@@ -543,6 +548,79 @@ services:
       retries: 5
       start_period: 10s
 
+  # Микросервис досок (Go, back-go/board): HTTP :8105 — личные доски рисования
+  # (сцена холста в JSONB, иерархические папки, теги-метки, публичные ссылки
+  # view/edit, адресный шаринг пользователям и компаниям), REST /api/boards.
+  # Скоуп по владельцу (не по компании); картинки холста и превью — общий
+  # uploads-том. Межсервисных вызовов нет.
+  board:
+    build:
+      context: ../back-go
+      dockerfile: board/Dockerfile
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    environment:
+      DATABASE_URL: postgresql://${DB_USER}:${DB_PASSWORD}@db:5432/${DB_NAME}
+      REDIS_URL: redis://redis:6379/0
+      PASETO_PUBLIC_KEY: ${PASETO_PUBLIC_KEY}
+      UPLOAD_FOLDER: /app/uploads
+      # Хранилище файлов: local (диск, dev) | s3 (Beget, prod). В prod выставить
+      # STORAGE_BACKEND=s3 и S3_* в deploy/.env.
+      STORAGE_BACKEND: ${STORAGE_BACKEND:-local}
+      S3_ENDPOINT: ${S3_ENDPOINT:-}
+      S3_REGION: ${S3_REGION:-ru1}
+      S3_BUCKET: ${S3_BUCKET:-}
+      S3_ACCESS_KEY: ${S3_ACCESS_KEY:-}
+      S3_SECRET_KEY: ${S3_SECRET_KEY:-}
+      HTTP_ADDR: ":8105"
+    volumes:
+      - uploads:/app/uploads
+    expose:
+      - "8105"
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8105/healthz"]
+      interval: 15s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
+
+  # Микросервис напоминаний (Go, back-go/reminder): HTTP :8106 — личные
+  # напоминания (разовые и повторяющиеся, привязки к записям ежедневника и
+  # календаря), REST /api/reminders. Внутри — планировщик: раз в полминуты
+  # забирает наступившие сроки и публикует reminder:fire в gw2:reminder:events
+  # (gatewaysvc доставляет вкладкам, pushsvc — FCM-пушем офлайн-получателям).
+  reminder:
+    build:
+      context: ../back-go
+      dockerfile: reminder/Dockerfile
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    environment:
+      DATABASE_URL: postgresql://${DB_USER}:${DB_PASSWORD}@db:5432/${DB_NAME}
+      REDIS_URL: redis://redis:6379/0
+      PASETO_PUBLIC_KEY: ${PASETO_PUBLIC_KEY}
+      HTTP_ADDR: ":8106"
+    expose:
+      - "8106"
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8106/healthz"]
+      interval: 15s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
+
   # Микросервис корпоративного портала (Go, back-go/portal): HTTP :8102 —
   # посты компании (с вложениями), плоские комментарии, реакции, закрепление
   # (лимит 10 на компанию, автоистечение pinned_until), тематические разделы.
@@ -664,7 +742,8 @@ services:
     # service_healthy, а не started: конфиг nginx резолвит upstream'ы
     # gateway:8096, calls:8090, auth:8091, messenger:8092, ai:8093,
     # pets:8094, tasks:8095, push:8097, registry:8099, calendar:8100,
-    # diary:8101, portal:8102 и notes:8103 на старте — без живых контейнеров
+    # diary:8101, portal:8102, notes:8103, board:8105 и reminder:8106 на
+    # старте — без живых контейнеров
     # он падает целиком («host not found in upstream»), включая отдачу SPA.
     depends_on:
       gateway:
@@ -692,6 +771,10 @@ services:
       portal:
         condition: service_healthy
       notes:
+        condition: service_healthy
+      board:
+        condition: service_healthy
+      reminder:
         condition: service_healthy
       alice:
         condition: service_healthy
