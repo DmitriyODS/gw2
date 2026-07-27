@@ -42,3 +42,13 @@ config.global.stubs = {
   RouterLink: RouterLinkStub,
   'router-link': RouterLinkStub,
 }
+
+// jsdom не реализует ResizeObserver, а компоненты меряют им свои размеры
+// (панель задач рабочего стола, поле ввода мессенджера) — заглушка-пустышка.
+if (typeof globalThis.ResizeObserver === 'undefined') {
+  globalThis.ResizeObserver = class {
+    observe() {}
+    unobserve() {}
+    disconnect() {}
+  }
+}

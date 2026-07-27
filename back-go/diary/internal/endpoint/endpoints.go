@@ -20,6 +20,8 @@ type Endpoints struct {
 	DeleteDiary endpoint.Endpoint
 
 	ListEntries   endpoint.Endpoint
+	SearchEntries endpoint.Endpoint
+	Agenda        endpoint.Endpoint
 	GetEntry      endpoint.Endpoint
 	CreateEntry   endpoint.Endpoint
 	UpdateEntry   endpoint.Endpoint
@@ -62,6 +64,21 @@ type UpdateDiaryReq struct {
 	UserID int64
 	ID     int64
 	Name   string
+}
+
+// SearchEntriesReq — глобальный поиск рабочего стола по записям доступных
+// пользователю ежедневников.
+type SearchEntriesReq struct {
+	UserID int64
+	Query  string
+	Limit  int
+}
+
+// AgendaReq — невыполненные дела за период для живой плитки рабочего стола.
+type AgendaReq struct {
+	UserID   int64
+	From, To time.Time
+	Limit    int
 }
 
 type ListEntriesReq struct {
@@ -177,6 +194,14 @@ func New(s *service.Service) Endpoints {
 		DeleteDiary: func(ctx context.Context, request any) (any, error) {
 			r := request.(DiaryReq)
 			return nil, s.DeleteDiary(ctx, r.UserID, r.ID)
+		},
+		SearchEntries: func(ctx context.Context, request any) (any, error) {
+			r := request.(SearchEntriesReq)
+			return s.SearchEntries(ctx, r.UserID, r.Query, r.Limit)
+		},
+		Agenda: func(ctx context.Context, request any) (any, error) {
+			r := request.(AgendaReq)
+			return s.Agenda(ctx, r.UserID, r.From, r.To, r.Limit)
 		},
 		ListEntries: func(ctx context.Context, request any) (any, error) {
 			r := request.(ListEntriesReq)

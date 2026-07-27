@@ -38,6 +38,22 @@ func validationError(c *fiber.Ctx, msg string) error {
 
 // ── Реестры ──────────────────────────────────────────────────────
 
+// searchRecords — строка поиска рабочего стола: записи всех реестров компании
+// одним запросом.
+func (h *handlers) searchRecords(c *fiber.Ctx) error {
+	companyID, ok := companyScope(c)
+	if !ok {
+		return nil
+	}
+	items, err := h.eps.SearchRecords(c.Context(), endpoint.SearchRecordsReq{
+		CompanyID: companyID, Query: c.Query("q"), Limit: c.QueryInt("limit"),
+	})
+	if err != nil {
+		return h.respondError(c, err)
+	}
+	return c.JSON(fiber.Map{"items": items})
+}
+
 func (h *handlers) listRegistries(c *fiber.Ctx) error {
 	companyID, ok := companyScope(c)
 	if !ok {

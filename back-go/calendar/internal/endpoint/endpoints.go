@@ -21,6 +21,7 @@ type Endpoints struct {
 	ReplaceFields  endpoint.Endpoint
 
 	ListEntries   endpoint.Endpoint
+	Agenda        endpoint.Endpoint
 	GetEntry      endpoint.Endpoint
 	CreateEntry   endpoint.Endpoint
 	UpdateEntry   endpoint.Endpoint
@@ -71,6 +72,13 @@ type ListEntriesReq struct {
 	CompanyID  int64
 	CalendarID int64
 	Params     service.EntryListParams
+}
+
+// AgendaReq — ближайшие события всех календарей компании (живая плитка).
+type AgendaReq struct {
+	CompanyID int64
+	From, To  time.Time
+	Limit     int
 }
 
 type EntryReq struct {
@@ -157,6 +165,10 @@ func New(s *service.Service) Endpoints {
 		ReplaceFields: func(ctx context.Context, request any) (any, error) {
 			r := request.(ReplaceFieldsReq)
 			return s.ReplaceFields(ctx, r.CompanyID, r.ID, r.Fields)
+		},
+		Agenda: func(ctx context.Context, request any) (any, error) {
+			r := request.(AgendaReq)
+			return s.Agenda(ctx, r.CompanyID, r.From, r.To, r.Limit)
 		},
 		ListEntries: func(ctx context.Context, request any) (any, error) {
 			r := request.(ListEntriesReq)

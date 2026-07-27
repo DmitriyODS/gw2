@@ -5,6 +5,7 @@ import { useAuthStore } from '@/stores/auth.js'
 import { useCompaniesStore } from '@/stores/companies.js'
 import { useNotificationsStore } from '@/stores/notifications.js'
 import { playKudosReceived } from '@/utils/kudosSound.js'
+import { pushNotification } from '@/composables/useDesktopNotifications.js'
 
 export const usePetsStore = defineStore('pets', () => {
   const pet = ref(null)
@@ -395,8 +396,18 @@ export const usePetsStore = defineStore('pets', () => {
     const from = data.from?.fio ? ` от ${data.from.fio}` : ''
     const note = data.comment ? ` — «${data.comment}»` : ''
     try {
-      useNotificationsStore().success(`+${data.amount} кудосов${from}${note}`)
+      // sound:false — у перевода своя мелодия, общий «бип» звучал бы вторым.
+      useNotificationsStore().notify({
+        severity: 'success', summary: 'Успешно', detail: `+${data.amount} кудосов${from}${note}`, sound: false,
+      })
       playKudosReceived()
+      pushNotification({
+        key: `kudos-${data.id || Date.now()}`,
+        icon: 'volunteer_activism',
+        title: `+${data.amount} кудосов${from}`,
+        text: data.comment || 'Входящий перевод',
+        path: '/pets/bank',
+      })
     } catch { /* noop */ }
     // Баланс придёт авторитетным pet:update; сводку банка освежаем, если открыта.
     if (bank.value) fetchBank().catch(() => {})
@@ -425,8 +436,11 @@ export const usePetsStore = defineStore('pets', () => {
   // Питомец сбежал: прогресс обнулён, дома новое яйцо. Снапшот перечитываем —
   // локально «сбросить» состояние гаданием нельзя.
   function applyPetRunaway(data) {
-    notify((n) => n.error(
-      `${data.name || 'Грувик'} сбежал: болел ${data.days} дней без лечения.`))
+    const text = `${data.name || 'Грувик'} сбежал: болел ${data.days} дней без лечения.`
+    notify((n) => n.error(text))
+    // Побег — разовое событие: в состоянии питомца его уже не видно, поэтому
+    // строка центра уведомлений живёт своим журналом.
+    pushNotification({ key: 'pet-runaway', icon: 'pets', tone: 'alert', title: 'Питомец сбежал', text, path: '/pets' })
     fetchPet().catch(() => {})
   }
 

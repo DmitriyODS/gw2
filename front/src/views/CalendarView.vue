@@ -272,6 +272,7 @@
 
 <script setup>
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { useRoute } from 'vue-router'
 import Checkbox from 'primevue/checkbox'
 import CalendarEntryDialog from '@/components/calendar/CalendarEntryDialog.vue'
 import CalendarDayDialog from '@/components/calendar/CalendarDayDialog.vue'
@@ -287,6 +288,7 @@ import { useNotificationsStore } from '@/stores/notifications.js'
 import { useBreakpoint } from '@/composables/useBreakpoint.js'
 import { fieldIcon, isExportable, entryTitle, hhmm, cardFields } from '@/utils/calendarFields.js'
 
+const route = useRoute()
 const store = useCalendarsStore()
 const authStore = useAuthStore()
 const notif = useNotificationsStore()
@@ -511,11 +513,20 @@ async function doExport() {
   }
 }
 
+/* Переход по ссылке `/calendars?calendar=…` (лента последних действий,
+   строка поиска) — открыть нужный календарь. */
+function applyCalendarQuery() {
+  const id = Number(route.query.calendar)
+  if (id) store.select(id)
+}
+
 onMounted(() => {
-  store.fetchCalendars()
+  store.fetchCalendars().then(applyCalendarQuery)
   weekRO = new ResizeObserver(() => measureWeekColumn())
   if (weekGridRef.value) weekRO.observe(weekGridRef.value)
 })
+
+watch(() => route.query, applyCalendarQuery)
 onBeforeUnmount(() => { weekRO?.disconnect(); weekRO = null })
 
 // Грид появляется/исчезает при смене вида и устройства — переподключаем observer

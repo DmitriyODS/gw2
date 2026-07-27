@@ -46,6 +46,9 @@ func (f *fakeRepo) ReplaceFields(_ domain.Ctx, _ int64, fields []domain.Field) (
 func (f *fakeRepo) ListRecords(_ domain.Ctx, _ domain.RecordListFilter) ([]*domain.Record, int, error) {
 	return nil, 0, nil
 }
+func (f *fakeRepo) SearchRecords(_ domain.Ctx, _ int64, _ string, _ int) ([]*domain.SearchHit, error) {
+	return nil, nil
+}
 func (f *fakeRepo) GetRecord(_ domain.Ctx, id int64) (*domain.Record, error) {
 	return f.records[id], nil
 }

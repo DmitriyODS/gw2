@@ -32,6 +32,60 @@ func (s *Service) ListEntries(ctx context.Context, companyID, calendarID int64, 
 	return s.listEntriesByCalendar(ctx, calendarID, p)
 }
 
+// Agenda — ближайшие события всех календарей компании за период (живая плитка
+// рабочего стола). Заголовок карточки считает сервер: поля календарей грузим
+// одним батчем, поэтому N+1 нет ни по записям, ни по структуре.
+func (s *Service) Agenda(ctx context.Context, companyID int64, from, to time.Time, limit int) (*domain.Agenda, error) {
+	if limit <= 0 || limit > 50 {
+		limit = 10
+	}
+	rows, total, err := s.repo.CompanyEntries(ctx, companyID, from, to, limit)
+	if err != nil {
+		return nil, err
+	}
+
+	ids := make([]int64, 0, len(rows))
+	seen := map[int64]bool{}
+	for _, r := range rows {
+		if !seen[r.CalendarID] {
+			seen[r.CalendarID] = true
+			ids = append(ids, r.CalendarID)
+		}
+	}
+	fieldsByCal, err := s.repo.FieldsByCalendars(ctx, ids)
+	if err != nil {
+		return nil, err
+	}
+
+	items := make([]domain.AgendaItem, 0, len(rows))
+	for _, r := range rows {
+		items = append(items, domain.AgendaItem{
+			CalendarID: r.CalendarID, CalendarName: r.CalendarName, EntryID: r.EntryID,
+			EventAt: r.EventAt, Title: entryTitle(fieldsByCal[r.CalendarID], r.Data),
+		})
+	}
+	return &domain.Agenda{Items: items, Total: total}, nil
+}
+
+// entryTitle — заголовок карточки события: первое поле, помеченное «в таблице»
+// (иначе просто первое). Зеркало front utils/calendarFields.js:entryTitle.
+func entryTitle(fields []domain.Field, data map[string]any) string {
+	if len(fields) == 0 {
+		return "Событие"
+	}
+	pick := fields[0]
+	for _, f := range fields {
+		if f.ShowInTable {
+			pick = f
+			break
+		}
+	}
+	if v := exportValue(pick, data[records.FieldID(pick.ID)]); v != "" {
+		return v
+	}
+	return "Событие"
+}
+
 // listEntriesByCalendar — ядро выборки (без проверки доступа; вызывающий уже
 // проверил права или resolveShare). Используется и authed, и публичным доступом.
 func (s *Service) listEntriesByCalendar(ctx context.Context, calendarID int64, p EntryListParams) (*EntryList, error) {

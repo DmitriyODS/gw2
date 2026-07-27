@@ -1,6 +1,9 @@
 package domain
 
-import "context"
+import (
+	"context"
+	"time"
+)
 
 // Ctx — алиас, чтобы сигнатуры портов не разбухали.
 type Ctx = context.Context
@@ -35,6 +38,10 @@ type CalendarRepository interface {
 	DeleteEntries(ctx Ctx, calendarID int64, ids []int64) (int64, error)
 	// AllEntries — все записи календаря (для пересчёта search_text после удаления поля).
 	AllEntries(ctx Ctx, calendarID int64) ([]*Entry, error)
+	// CompanyEntries — ближайшие записи ВСЕХ календарей компании за период
+	// (живая плитка рабочего стола): один запрос вместо обхода календарей.
+	// Возвращает срез (не длиннее limit) и общее число записей за период.
+	CompanyEntries(ctx Ctx, companyID int64, from, to time.Time, limit int) (rows []AgendaRow, total int, err error)
 	// EntriesForExport — записи для выгрузки: при непустом ids — только они,
 	// иначе все по фильтру (диапазон дат + поиск). Порядок по event_at.
 	EntriesForExport(ctx Ctx, f EntryListFilter, ids []int64) ([]*Entry, error)

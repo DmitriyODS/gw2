@@ -2,7 +2,7 @@ import { createRouter, createWebHistory } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { ROLES } from '@/composables/usePermission.js'
 import { useCompanySettings } from '@/composables/useCompanySettings.js'
-import { navProgress } from '@/composables/useNavProgress.js'
+import { startNavProgress, stopNavProgress } from '@/composables/useNavProgress.js'
 import { trackPageView } from '@/utils/metrika.js'
 
 const routes = [
@@ -55,6 +55,14 @@ const routes = [
     meta: { requiresAuth: true }, props: true },
   { path: '/diaries', component: () => import('@/views/DiaryView.vue'),
     meta: { requiresAuth: true } },
+  // Раздел «Доски» — личные холсты рисования (папки, метки, шаринг как у заметок).
+  { path: '/boards', component: () => import('@/views/BoardsView.vue'),
+    meta: { requiresAuth: true } },
+  { path: '/boards/:id(\\d+)', component: () => import('@/views/BoardEditorView.vue'),
+    meta: { requiresAuth: true }, props: true },
+  // Раздел «Напоминания» — личные, срок считает планировщик remindersvc.
+  { path: '/reminders', component: () => import('@/views/RemindersView.vue'),
+    meta: { requiresAuth: true } },
   // Раздел «Компании»: супер-админ видит все (платформа), обычный пользователь —
   // те, что создал/администрирует (доступ к данным проверяет бэкенд).
   { path: '/companies', component: () => import('@/views/CompaniesView.vue'),
@@ -79,6 +87,8 @@ const routes = [
     meta: { requiresAuth: true, requiresCompany: true, feature: 'uses_groove' } },
   // Старые закладки раздела до переименования.
   { path: '/groove', redirect: '/pets' },
+  // Магазин оформления — пока каркас: витрина наполняется отдельной итерацией.
+  { path: '/store', component: () => import('@/views/StoreView.vue'), meta: { requiresAuth: true } },
   { path: '/tv', component: () => import('@/views/TvView.vue'), meta: { requiresAuth: true, fullscreen: true } },
   // Ссылка-приглашение в звонок: доступна и внешним гостям без аккаунта.
   { path: '/call/:code', component: () => import('@/views/CallJoinView.vue'),
@@ -93,6 +103,9 @@ const routes = [
   { path: '/diary/:code', component: () => import('@/views/SharedDiaryView.vue'),
     meta: { public: true } },
   // Публичная заметка по внешней ссылке (режим view/edit решает сервер).
+  // Публичный доступ к доске по внешней ссылке (режим решает сервер: view|edit).
+  { path: '/board/:code', component: () => import('@/views/SharedBoardView.vue'),
+    meta: { public: true } },
   { path: '/note/:code', component: () => import('@/views/SharedNoteView.vue'),
     meta: { public: true } },
   // Вступление в компанию по ссылке-приглашению (нужна авторизация).
@@ -114,8 +127,11 @@ const routes = [
   // и вернётся сюда после входа.
   { path: '/link', component: () => import('@/views/LinkApproveView.vue'),
     meta: { requiresAuth: true, fullscreen: true } },
-  { path: '/', redirect: '/tasks' },
-  { path: '/:pathMatch(.*)*', redirect: '/tasks' }
+  // Корень — рабочий стол: на десктопе это пустой стол без окон (каркас рисует
+  // DesktopShell), в мобильном каркасе HomeView уводит в стартовый раздел.
+  // Редиректом делать нельзя: закрыв все окна, стол возвращает адрес на «/».
+  { path: '/', component: () => import('@/views/HomeView.vue'), meta: { requiresAuth: true } },
+  { path: '/:pathMatch(.*)*', redirect: '/' }
 ]
 
 const router = createRouter({
@@ -127,14 +143,14 @@ const router = createRouter({
 // компанийному разделу: супер-админа — на платформенный экран компаний;
 // члена компании — на задачи; пользователя без активной компании — в мессенджер
 // (доступен всегда; оттуда он создаёт/выбирает компанию).
-function landingFor(auth) {
+export function landingFor(auth) {
   if (auth.isSuperAdmin) return '/companies'
   if (auth.roleLevel > 0) return '/tasks'
   return '/messenger'
 }
 
 router.beforeEach(async (to) => {
-  navProgress.value = true
+  startNavProgress()
   const auth = useAuthStore()
   await auth.ensureReady()
   if (!to.meta.public && !auth.token) {
@@ -173,12 +189,12 @@ router.beforeEach(async (to) => {
 })
 
 router.afterEach((to, from, failure) => {
-  navProgress.value = false
+  stopNavProgress()
   // Просмотр страницы в Метрику — только состоявшаяся навигация (редиректы
   // гардов не считаем дважды). Для первого захода referer — внешний реферер.
   if (failure) return
   trackPageView(to.fullPath, from.matched.length ? from.fullPath : document.referrer)
 })
-router.onError(() => { navProgress.value = false })
+router.onError(() => { stopNavProgress() })
 
 export default router

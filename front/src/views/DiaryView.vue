@@ -453,6 +453,7 @@
 
 <script setup>
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { useRoute } from 'vue-router'
 import AppDialog from '@/components/common/AppDialog.vue'
 import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
 import EmptyState from '@/components/common/EmptyState.vue'
@@ -470,6 +471,7 @@ import { useNotificationsStore } from '@/stores/notifications.js'
 import { useBreakpoint } from '@/composables/useBreakpoint.js'
 
 const store = useDiariesStore()
+const route = useRoute()
 const authStore = useAuthStore()
 const notif = useNotificationsStore()
 const { isMobile } = useBreakpoint()
@@ -896,11 +898,21 @@ function onMoreDocClick(e) {
 }
 
 onMounted(() => {
-  store.fetchDiaries()
+  store.fetchDiaries().then(applySearchQuery)
   weekRO = new ResizeObserver(() => measureWeekColumn())
   if (weekGridRef.value) weekRO.observe(weekGridRef.value)
   document.addEventListener('mousedown', onMoreDocClick, true)
 })
+/* Переход из строки глобального поиска: открыть нужный ежедневник и
+   подставить искомый текст — запись сразу видно в списке. */
+function applySearchQuery() {
+  const { diary, q } = route.query
+  if (diary) store.select(Number(diary))
+  if (q) store.setSearch(String(q))
+}
+
+watch(() => route.query, applySearchQuery)
+
 onBeforeUnmount(() => {
   weekRO?.disconnect(); weekRO = null
   document.removeEventListener('mousedown', onMoreDocClick, true)

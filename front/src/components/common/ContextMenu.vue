@@ -14,6 +14,7 @@
         <template v-for="(item, i) in items" :key="i">
           <div v-if="item.divider" class="ctxm-divider" />
           <button
+            v-else
             class="ctxm-item"
             :class="{ danger: item.danger, 'has-sub': item.children, open: activeSub === i }"
             role="menuitem"
@@ -41,7 +42,7 @@
       >
         <template v-for="(item, i) in subItems" :key="i">
           <div v-if="item.divider" class="ctxm-divider" />
-          <button class="ctxm-item" :class="{ danger: item.danger }" role="menuitem" @click="pick(item)">
+          <button v-else class="ctxm-item" :class="{ danger: item.danger }" role="menuitem" @click="pick(item)">
             <span v-if="item.icon" class="material-symbols-outlined">{{ item.icon }}</span>
             <span class="ctxm-label">{{ item.label }}</span>
           </button>
@@ -89,7 +90,13 @@ function clamp(el, target, x, y) {
   let nx = x
   let ny = y
   if (nx + r.width > window.innerWidth - pad) nx = window.innerWidth - r.width - pad
-  if (ny + r.height > window.innerHeight - pad) ny = window.innerHeight - r.height - pad
+  /* Вниз не помещается — раскрываем ВВЕРХ от точки клика (нижним краем к
+     курсору), а не подтягиваем к низу экрана: у нижней кромки (панель задач,
+     последние строки списков) меню иначе накрывает саму кнопку и курсор
+     оказывается на случайном пункте. */
+  if (ny + r.height > window.innerHeight - pad) {
+    ny = y - r.height >= pad ? y - r.height : window.innerHeight - r.height - pad
+  }
   target.value = { x: Math.max(pad, nx), y: Math.max(pad, ny) }
 }
 
@@ -106,7 +113,10 @@ async function openSub(index, e) {
   let nx = rect.right - 4
   let ny = rect.top
   if (nx + r.width > window.innerWidth - pad) nx = rect.left - r.width + 4
-  if (ny + r.height > window.innerHeight - pad) ny = window.innerHeight - r.height - pad
+  // Как и само меню: не влезло вниз — растём вверх от пункта.
+  if (ny + r.height > window.innerHeight - pad) {
+    ny = rect.bottom - r.height >= pad ? rect.bottom - r.height : window.innerHeight - r.height - pad
+  }
   subAnchor.value = { x: Math.max(pad, nx), y: Math.max(pad, ny) }
 }
 

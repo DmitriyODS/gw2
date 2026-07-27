@@ -11,7 +11,7 @@
       @mouseleave="hovered = false"
     >
       <div class="sb-head">
-        <div class="sidebar-logo" data-tutorial="logo" @click="openChangelog" title="Что нового">
+        <div class="sidebar-logo" data-tutorial="logo" @click="openAbout" title="О приложении">
           <Logo class="sidebar-logo-img" :size="40" />
           <span class="sb-wordmark">
             <span class="sb-word-groove">Groove</span><span class="sb-word-work">Work</span>
@@ -95,7 +95,6 @@ import { useTasksStore } from '@/stores/tasks.js'
 import { usePetsStore } from '@/stores/pets.js'
 import { usePermission } from '@/composables/usePermission.js'
 import { useCompanySettings } from '@/composables/useCompanySettings.js'
-import { useChangelog } from '@/composables/useChangelog.js'
 import { storageGet, storageSet } from '@/utils/storage.js'
 import CompanySelect from '@/components/common/CompanySelect.vue'
 import Logo from '@/components/common/Logo.vue'
@@ -111,7 +110,7 @@ const tasksStore = useTasksStore()
 const petsStore = usePetsStore()
 const { isSuperAdmin, hasActiveCompany } = usePermission()
 const { usesGroove } = useCompanySettings()
-const { open: openChangelog } = useChangelog()
+const openAbout = () => router.push('/settings?section=about')
 
 const hovered = ref(false)
 const companyDropdownOpen = ref(false)

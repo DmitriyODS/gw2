@@ -317,6 +317,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { anyModalOpen, registerOpenModal, unregisterOpenModal } from '@/composables/useOpenModals.js'
 import { floatingHidden, installFloatingHide } from '@/composables/useFloatingHide.js'
 import { useDraggable } from '@/composables/useDraggable.js'
+import { floatingBottomInset } from '@/desktop/layout.js'
 import { useBreakpoint } from '@/composables/useBreakpoint.js'
 import { useThemeStore } from '@/stores/theme.js'
 import { storageGetJSON } from '@/utils/storage.js'
@@ -332,7 +333,7 @@ import { groupMessagesByDay } from '@/utils/chatDates.js'
 import MessageBubble from './MessageBubble.vue'
 import MessageDateDivider from './MessageDateDivider.vue'
 import MessageInput from './MessageInput.vue'
-import ChatBackgroundLayer from './ChatBackgroundLayer.vue'
+import ChatBackgroundLayer from '@/components/common/ChatBackgroundLayer.vue'
 import AssistantInput from './AssistantInput.vue'
 import ForwardDialog from './ForwardDialog.vue'
 import DeleteScopeDialog from './DeleteScopeDialog.vue'
@@ -437,8 +438,9 @@ const { pos: fabPos, dragging: fabDragging, onPointerDown: onFabPointerDown, was
   defaultCorner: 'bottom-right',
   margin: isNarrow() ? 12 : 20,
   // На мобильном не пускаем ниже зоны AppBottomNav + AppFab «Создать»
-  // (прежняя фиксированная позиция — bottom:150px).
-  bottomInset: () => (isNarrow() ? 138 : 0),
+  // (прежняя фиксированная позиция — bottom:150px), на десктопе — ниже
+  // панели задач рабочего стола.
+  bottomInset: () => (isNarrow() ? 138 : floatingBottomInset()),
 })
 
 // Пока позицию не трогали, в полном мессенджере (десктоп) FAB поднимается над

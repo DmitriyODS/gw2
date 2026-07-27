@@ -2,6 +2,8 @@ import { defineStore } from 'pinia'
 import { computed, ref } from 'vue'
 import * as api from '@/api/calendars.js'
 import { useAuthStore } from '@/stores/auth.js'
+import { logActivity } from '@/utils/activityLog.js'
+import { entryTitle } from '@/utils/calendarFields.js'
 
 // ── Хелперы дат (неделя начинается с понедельника) ──
 function startOfDay(d) { const x = new Date(d); x.setHours(0, 0, 0, 0); return x }
@@ -144,8 +146,13 @@ export const useCalendarsStore = defineStore('calendars', () => {
   }
 
   async function createEntry(eventAt, data) {
-    await api.createEntry(selectedId.value, eventAt, data)
+    const e = await api.createEntry(selectedId.value, eventAt, data)
     await fetchEntries({ silent: true })
+    logActivity({
+      section: 'calendars', id: e?.id, title: entryTitle(selected.value, e, 'Событие'),
+      path: `/calendars?calendar=${selectedId.value}`,
+    })
+    return e
   }
 
   async function updateEntry(entryId, eventAt, data) {

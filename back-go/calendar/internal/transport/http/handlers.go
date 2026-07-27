@@ -183,6 +183,26 @@ func (h *handlers) listEntries(c *fiber.Ctx) error {
 	return c.JSON(resp)
 }
 
+/* agenda — ближайшие события всех календарей компании (живая плитка рабочего
+   стола). Период присылает клиент: границы дня считаются в его зоне. */
+func (h *handlers) agenda(c *fiber.Ctx) error {
+	companyID, ok := companyScope(c)
+	if !ok {
+		return nil
+	}
+	from, to := parseTime(c.Query("from")), parseTime(c.Query("to"))
+	if from == nil || to == nil {
+		return validationError(c, "Укажите период (from, to)")
+	}
+	resp, err := h.eps.Agenda(c.Context(), endpoint.AgendaReq{
+		CompanyID: companyID, From: *from, To: *to, Limit: c.QueryInt("limit"),
+	})
+	if err != nil {
+		return h.respondError(c, err)
+	}
+	return c.JSON(resp)
+}
+
 func (h *handlers) getEntry(c *fiber.Ctx) error {
 	companyID, ok := companyScope(c)
 	if !ok {

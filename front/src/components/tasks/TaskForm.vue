@@ -178,6 +178,7 @@ import Select from 'primevue/select'
 import DatePicker from 'primevue/datepicker'
 import Checkbox from 'primevue/checkbox'
 import { createTask, updateTask, setTaskTags } from '@/api/tasks.js'
+import { logActivity } from '@/utils/activityLog.js'
 import { getDepartments } from '@/api/departments.js'
 import { getUnitTypes } from '@/api/unitTypes.js'
 import { createUnit } from '@/api/units.js'
@@ -454,6 +455,9 @@ async function handleSubmit() {
         }
       } else {
         notifications.success('Задача успешно создана')
+      }
+      if (result?.id) {
+        logActivity({ section: 'tasks', id: result.id, title: result.name, path: `/tasks/${result.id}` })
       }
     }
 

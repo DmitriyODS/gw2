@@ -4,6 +4,7 @@ import (
 	"context"
 	"io"
 	"log/slog"
+	"strings"
 	"testing"
 	"time"
 
@@ -109,6 +110,46 @@ func (f *fakeRepo) DeleteEntries(_ domain.Ctx, _ int64, ids []int64) (int64, err
 func (f *fakeRepo) EntriesForExport(c domain.Ctx, fl domain.EntryListFilter, _ []int64) ([]*domain.Entry, error) {
 	return f.ListEntries(c, fl)
 }
+
+// SearchEntries — фейк глобального поиска: подстрока в названии записи по всем
+// ежедневникам владельца.
+func (f *fakeRepo) SearchEntries(_ domain.Ctx, userID int64, q string, limit int) ([]*domain.SearchHit, error) {
+	out := []*domain.SearchHit{}
+	for _, e := range f.entries {
+		d := f.diaries[e.DiaryID]
+		if d == nil || d.OwnerID != userID || !strings.Contains(strings.ToLower(e.Title), strings.ToLower(q)) {
+			continue
+		}
+		out = append(out, &domain.SearchHit{
+			DiaryID: e.DiaryID, DiaryName: d.Name, EntryID: e.ID, Title: e.Title, Date: e.Date, Done: e.Done,
+		})
+		if len(out) >= limit {
+			break
+		}
+	}
+	return out, nil
+}
+
+func (f *fakeRepo) Agenda(_ domain.Ctx, userID int64, from, to time.Time, limit int) ([]*domain.SearchHit, int, error) {
+	out := []*domain.SearchHit{}
+	total := 0
+	for _, e := range f.entries {
+		d := f.diaries[e.DiaryID]
+		if d == nil || d.OwnerID != userID || e.Done || e.Date.Before(from) || e.Date.After(to) {
+			continue
+		}
+		total++
+		if len(out) >= limit {
+			continue
+		}
+		out = append(out, &domain.SearchHit{
+			DiaryID: e.DiaryID, DiaryName: d.Name, EntryID: e.ID,
+			Title: e.Title, Date: e.Date, StartMin: e.StartMin,
+		})
+	}
+	return out, total, nil
+}
+
 func (f *fakeRepo) CreateShare(_ domain.Ctx, s *domain.Share) error              { s.ID = 1; return nil }
 func (f *fakeRepo) ListShares(_ domain.Ctx, _ int64) ([]*domain.Share, error)    { return nil, nil }
 func (f *fakeRepo) GetShareByCode(_ domain.Ctx, _ string) (*domain.Share, error) { return nil, nil }

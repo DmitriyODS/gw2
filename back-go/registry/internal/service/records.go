@@ -241,3 +241,16 @@ func recordPayload(companyID int64, r *domain.Record) map[string]any {
 		"created_at": r.CreatedAt, "updated_at": r.UpdatedAt,
 	}
 }
+
+// SearchRecords — глобальный поиск по записям всех реестров компании (строка
+// поиска рабочего стола). Пустой запрос ничего не ищет.
+func (s *Service) SearchRecords(ctx context.Context, companyID int64, query string, limit int) ([]*domain.SearchHit, error) {
+	query = strings.TrimSpace(query)
+	if query == "" {
+		return []*domain.SearchHit{}, nil
+	}
+	if limit <= 0 || limit > 50 {
+		limit = 20
+	}
+	return s.repo.SearchRecords(ctx, companyID, query, limit)
+}

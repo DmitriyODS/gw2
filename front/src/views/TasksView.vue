@@ -184,7 +184,8 @@
     <TaskForm
       v-if="showCreateTask"
       :task="null"
-      @close="showCreateTask = false"
+      :preset-name="createPresetName"
+      @close="closeCreateTask"
       @saved="onTaskCreated"
     />
 
@@ -292,6 +293,9 @@ const notif = useNotificationsStore()
 const { isAtLeast } = usePermission()
 
 const showCreateTask = ref(false)
+// Название, с которым открыта форма создания (команда «создай задачу …» из
+// строки поиска рабочего стола).
+const createPresetName = ref('')
 const showImportYg = ref(false)
 
 const yougileStore = useYougileStore()
@@ -573,8 +577,13 @@ async function doArchiveTask() {
   }
 }
 
-function onTaskCreated(task) {
+function closeCreateTask() {
   showCreateTask.value = false
+  createPresetName.value = ''
+}
+
+function onTaskCreated(task) {
+  closeCreateTask()
   tasksStore.upsertTask(task)
   tasksStore.fetchTasks({ silent: true }).catch(() => {})
   openTask(task)
@@ -585,6 +594,16 @@ function onYgImported(task) {
   tasksStore.upsertTask(task)
   tasksStore.fetchTasks({ silent: true }).catch(() => {})
   openTask(task)
+}
+
+/* Форма создания с готовым названием: `/tasks?new=1&title=…` — команда
+   «создай задачу …» из строки поиска рабочего стола. */
+function consumeCreateQuery() {
+  if (!route.query.new) return
+  if (!canCreateTask.value) return
+  createPresetName.value = String(route.query.title || '')
+  showCreateTask.value = true
+  router.replace({ path: '/tasks' }).catch(() => {})
 }
 
 function consumeOpenQuery() {
@@ -608,6 +627,7 @@ onMounted(() => {
   // активный юнит и статус YouGile, иначе по deep-link карточка появляется
   // с лишней задержкой (на медленной сети — спустя десятки секунд).
   consumeOpenQuery()
+  consumeCreateQuery()
   unitsStore.fetchActiveUnit().catch(() => {})
   // Статус YouGile подгружаем фоном — нужен только для показа/скрытия кнопок.
   yougileStore.refreshStatus().catch(() => {})
@@ -618,6 +638,9 @@ onMounted(() => {
    onMounted не повторяется. Поэтому слушаем сам query.open и реагируем здесь. */
 watch(() => route.query.open, (v) => {
   if (v) consumeOpenQuery()
+})
+watch(() => route.query.new, (v) => {
+  if (v) consumeCreateQuery()
 })
 // То же и для canonical-маршрута: если перейти с `/tasks/5` на `/tasks/8`
 // уже находясь на `/tasks/:id`, компонент не пересоздаётся.

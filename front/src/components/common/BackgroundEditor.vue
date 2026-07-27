@@ -6,7 +6,7 @@
    чтобы каждый раздел грузил в своё хранилище. */
 import { ref, computed } from 'vue'
 import Slider from 'primevue/slider'
-import ChatBackgroundLayer from '@/components/messenger/ChatBackgroundLayer.vue'
+import ChatBackgroundLayer from '@/components/common/ChatBackgroundLayer.vue'
 import EmojiPicker from '@/components/common/EmojiPicker.vue'
 import { useNotificationsStore } from '@/stores/notifications.js'
 import {
@@ -19,6 +19,9 @@ const props = defineProps({
   recipe: { type: Object, required: true },
   // async (File) => { url }: загрузка картинки в хранилище раздела.
   uploadFn: { type: Function, required: true },
+  // Что рисовать поверх фона в предпросмотре: переписку (по умолчанию) или
+  // сцену рабочего стола — обои живут под окнами, а не под пузырями чата.
+  preview: { type: String, default: 'chat' }, // chat | desktop
 })
 
 const notif = useNotificationsStore()
@@ -95,9 +98,30 @@ function patternSwatchStyle(key) {
 <template>
   <div class="bg-editor">
     <!-- Живой предпросмотр -->
-    <div class="cbg-preview">
+    <div class="cbg-preview" :class="{ 'is-desktop': preview === 'desktop' }">
       <ChatBackgroundLayer :recipe="previewRecipe" />
-      <div class="cbg-bubbles">
+
+      <!-- Сцена рабочего стола: два окна и панель задач под ними. -->
+      <div v-if="preview === 'desktop'" class="cbg-desk">
+        <div class="cbg-win back">
+          <span class="cbg-win-bar"><i /><i /><i /></span>
+          <span class="cbg-win-line" />
+          <span class="cbg-win-line short" />
+        </div>
+        <div class="cbg-win front">
+          <span class="cbg-win-bar"><i /><i /><i /></span>
+          <span class="cbg-win-line" />
+          <span class="cbg-win-line short" />
+        </div>
+        <div class="cbg-taskbar">
+          <span class="cbg-tb-start" />
+          <span class="cbg-tb-btn" />
+          <span class="cbg-tb-btn" />
+          <span class="cbg-tb-clock" />
+        </div>
+      </div>
+
+      <div v-else class="cbg-bubbles">
         <div class="cbg-bubble in">Пример карточки</div>
         <div class="cbg-bubble out">А вот и фон 🎨</div>
         <div class="cbg-bubble in">Красота ✨</div>
@@ -207,6 +231,10 @@ function patternSwatchStyle(key) {
   margin-bottom: 16px;
 }
 
+/* Сцене рабочего стола нужно больше воздуха: окна и панель задач в 150px
+   выглядели полоской. */
+.cbg-preview.is-desktop { height: 180px; }
+
 .cbg-bubbles {
   position: relative;
   z-index: 1;
@@ -240,6 +268,73 @@ function patternSwatchStyle(key) {
   color: var(--color-on-primary);
   border-bottom-right-radius: 5px;
 }
+
+/* ── Сцена рабочего стола в предпросмотре ── */
+.cbg-desk {
+  position: relative;
+  z-index: 1;
+  height: 100%;
+  padding: 12px 12px 0;
+}
+
+.cbg-win {
+  position: absolute;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px;
+  border: 1px solid var(--acrylic-border);
+  border-radius: 10px;
+  background: var(--glass-bg), var(--acrylic-card-bg);
+  box-shadow: var(--shadow-md), var(--glass-edge);
+}
+
+.cbg-win.back { left: 10%; top: 16px; width: 42%; height: 74px; }
+.cbg-win.front { left: 34%; top: 40px; width: 46%; height: 82px; }
+
+.cbg-win-bar { display: flex; gap: 4px; }
+
+.cbg-win-bar i {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--color-outline-dim);
+}
+
+.cbg-win-line {
+  height: 6px;
+  border-radius: 999px;
+  background: var(--color-surface-highest);
+}
+
+.cbg-win-line.short { width: 55%; }
+
+.cbg-taskbar {
+  position: absolute;
+  left: 50%;
+  bottom: 10px;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 8px;
+  border: 1px solid var(--acrylic-border);
+  border-radius: 999px;
+  background: var(--glass-bg), var(--acrylic-card-bg);
+  box-shadow: var(--shadow-sm), var(--glass-edge);
+}
+
+.cbg-tb-start,
+.cbg-tb-btn,
+.cbg-tb-clock {
+  height: 12px;
+  border-radius: 999px;
+  background: var(--color-surface-highest);
+}
+
+.cbg-tb-start { width: 12px; border-radius: 50%; background: var(--color-primary); }
+.cbg-tb-btn { width: 22px; }
+.cbg-tb-clock { width: 26px; }
 
 .cbg-section { margin-bottom: 16px; }
 

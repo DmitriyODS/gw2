@@ -75,6 +75,34 @@ func (r *Repo) ListEntries(ctx context.Context, f domain.EntryListFilter) ([]*do
 	return r.queryEntries(ctx, where, args, f.Limit)
 }
 
+// CompanyEntries — ближайшие записи всех календарей компании за период (живая
+// плитка рабочего стола). Общее число за период считаем окном — без второго
+// SELECT ради счётчика.
+func (r *Repo) CompanyEntries(ctx context.Context, companyID int64, from, to time.Time, limit int) ([]domain.AgendaRow, int, error) {
+	rows, err := r.pool.Query(ctx, `
+		SELECT e.calendar_id, c.name, e.id, e.event_at, e.data, count(*) OVER () AS total
+		FROM calendar_records e
+		JOIN calendars c ON c.id = e.calendar_id
+		WHERE c.company_id = $1 AND e.event_at >= $2 AND e.event_at < $3
+		ORDER BY e.event_at ASC, e.id ASC
+		LIMIT $4`, companyID, from, to, limit)
+	if err != nil {
+		return nil, 0, err
+	}
+	defer rows.Close()
+
+	out := make([]domain.AgendaRow, 0, limit)
+	total := 0
+	for rows.Next() {
+		var a domain.AgendaRow
+		if err := rows.Scan(&a.CalendarID, &a.CalendarName, &a.EntryID, &a.EventAt, &a.Data, &total); err != nil {
+			return nil, 0, err
+		}
+		out = append(out, a)
+	}
+	return out, total, rows.Err()
+}
+
 func (r *Repo) GetEntry(ctx context.Context, id int64) (*domain.Entry, error) {
 	return scanEntry(r.pool.QueryRow(ctx,
 		`SELECT `+entryCols+` FROM calendar_records WHERE id = $1`, id))

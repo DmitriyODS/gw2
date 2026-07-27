@@ -114,3 +114,12 @@ type User struct {
 	CompanyID     *int64
 	CompanyActive bool
 }
+
+// SearchHit — строка глобального поиска (Spotlight): запись вместе с реестром,
+// которому она принадлежит. Snippet — начало search_text записи.
+type SearchHit struct {
+	RegistryID   int64  `json:"registry_id"`
+	RegistryName string `json:"registry_name"`
+	RecordID     int64  `json:"record_id"`
+	Snippet      string `json:"snippet"`
+}

@@ -117,3 +117,33 @@ type User struct {
 	IsActive     bool
 	IsSuperAdmin bool
 }
+
+// SearchHit — строка глобального поиска (Spotlight): запись вместе с
+// ежедневником, которому она принадлежит.
+type SearchHit struct {
+	DiaryID   int64     `json:"diary_id"`
+	DiaryName string    `json:"diary_name"`
+	EntryID   int64     `json:"entry_id"`
+	Title     string    `json:"title"`
+	Date      time.Time `json:"-"`
+	Done      bool      `json:"done"`
+	// Начало записи в минутах от полуночи — им живая плитка рабочего стола
+	// показывает ближайшее дело («в 14:30 …»). У поиска всегда nil.
+	StartMin *int `json:"start_min,omitempty"`
+}
+
+// Agenda — сводка невыполненных дел за период для живой плитки рабочего стола:
+// ближайшие записи и сколько их всего (плитка показывает «ещё N»).
+type Agenda struct {
+	Items []*SearchHit `json:"items"`
+	Total int          `json:"total"`
+}
+
+// MarshalJSON — день записи отдаётся датой YYYY-MM-DD, как и у Entry.
+func (h SearchHit) MarshalJSON() ([]byte, error) {
+	type alias SearchHit
+	return json.Marshal(struct {
+		alias
+		Date string `json:"entry_date"`
+	}{alias(h), h.Date.Format("2006-01-02")})
+}

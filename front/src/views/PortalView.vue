@@ -200,7 +200,7 @@ import PostComposer from '@/components/portal/PostComposer.vue'
 import ForwardPostDialog from '@/components/portal/ForwardPostDialog.vue'
 import TopicManageDialog from '@/components/portal/TopicManageDialog.vue'
 import PortalBackgroundDialog from '@/components/portal/PortalBackgroundDialog.vue'
-import ChatBackgroundLayer from '@/components/messenger/ChatBackgroundLayer.vue'
+import ChatBackgroundLayer from '@/components/common/ChatBackgroundLayer.vue'
 import { isBlankRecipe } from '@/utils/chatBackgrounds.js'
 
 const store = usePortalStore()

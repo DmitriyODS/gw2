@@ -27,6 +27,9 @@ type RegistryRepository interface {
 
 	// ── Записи ──
 	ListRecords(ctx Ctx, f RecordListFilter) (items []*Record, total int, err error)
+	// SearchRecords — глобальный поиск по записям всех реестров компании
+	// (строка поиска рабочего стола): один запрос, без обхода реестров.
+	SearchRecords(ctx Ctx, companyID int64, query string, limit int) ([]*SearchHit, error)
 	GetRecord(ctx Ctx, id int64) (*Record, error)
 	CreateRecord(ctx Ctx, r *Record, searchText string) error
 	UpdateRecord(ctx Ctx, id int64, data map[string]any, searchText string) error

@@ -20,6 +20,7 @@ type Endpoints struct {
 	ReplaceFields  endpoint.Endpoint
 
 	ListRecords   endpoint.Endpoint
+	SearchRecords endpoint.Endpoint
 	GetRecord     endpoint.Endpoint
 	CreateRecord  endpoint.Endpoint
 	UpdateRecord  endpoint.Endpoint
@@ -64,6 +65,13 @@ type ReplaceFieldsReq struct {
 	CompanyID int64
 	ID        int64
 	Fields    []domain.Field
+}
+
+// SearchRecordsReq — глобальный поиск рабочего стола по записям компании.
+type SearchRecordsReq struct {
+	CompanyID int64
+	Query     string
+	Limit     int
 }
 
 type ListRecordsReq struct {
@@ -155,6 +163,10 @@ func New(s *service.Service) Endpoints {
 		ReplaceFields: func(ctx context.Context, request any) (any, error) {
 			r := request.(ReplaceFieldsReq)
 			return s.ReplaceFields(ctx, r.CompanyID, r.ID, r.Fields)
+		},
+		SearchRecords: func(ctx context.Context, request any) (any, error) {
+			r := request.(SearchRecordsReq)
+			return s.SearchRecords(ctx, r.CompanyID, r.Query, r.Limit)
 		},
 		ListRecords: func(ctx context.Context, request any) (any, error) {
 			r := request.(ListRecordsReq)

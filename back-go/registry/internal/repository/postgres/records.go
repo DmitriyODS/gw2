@@ -168,3 +168,29 @@ func (r *Repo) AllRecords(ctx context.Context, registryID int64) ([]*domain.Reco
 	}
 	return out, rows.Err()
 }
+
+// SearchRecords — глобальный поиск (Spotlight) по записям всех реестров
+// компании одним запросом: search_text уже поддержан триграммным индексом.
+func (r *Repo) SearchRecords(ctx context.Context, companyID int64, query string, limit int) ([]*domain.SearchHit, error) {
+	rows, err := r.pool.Query(ctx, `
+		SELECT rec.registry_id, reg.name, rec.id, left(rec.search_text, 160)
+		FROM registry_records rec
+		JOIN registries reg ON reg.id = rec.registry_id
+		WHERE reg.company_id = $1 AND rec.search_text ILIKE '%' || $2 || '%'
+		ORDER BY rec.id DESC
+		LIMIT $3`, companyID, query, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	out := make([]*domain.SearchHit, 0, limit)
+	for rows.Next() {
+		var h domain.SearchHit
+		if err := rows.Scan(&h.RegistryID, &h.RegistryName, &h.RecordID, &h.Snippet); err != nil {
+			return nil, err
+		}
+		out = append(out, &h)
+	}
+	return out, rows.Err()
+}

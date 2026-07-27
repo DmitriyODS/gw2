@@ -2,6 +2,7 @@ import { defineStore } from 'pinia'
 import { computed, ref, watch } from 'vue'
 import * as api from '@/api/notes.js'
 import { useAuthStore } from '@/stores/auth.js'
+import { logActivity } from '@/utils/activityLog.js'
 
 // Единое окно заметок: иерархические папки (свои + расшаренные мне) слева/в
 // проводнике, теги-метки, плитки заметок. Скоуп по владельцу на сервере;
@@ -342,6 +343,7 @@ export const useNotesStore = defineStore('notes', () => {
       : (activeFolderId.value && !isSharedContext.value ? activeFolderId.value : null)
     const n = await api.createNote(title, folderId)
     upsertNote(n)
+    logActivity({ section: 'notes', id: n.id, title: n.title || 'Без названия', path: `/notes/${n.id}` })
     return n
   }
 

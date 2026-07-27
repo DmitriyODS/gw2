@@ -22,17 +22,21 @@
       </main>
     </template>
     <template v-else-if="authStore.token">
-      <AppSidebar />
-      <div class="content-col">
-        <ActiveUnitBanner v-if="unitsStore.activeUnit && unitsStore.minimized" />
-        <main class="main-content">
-          <router-view />
-        </main>
-      </div>
-      <AppBottomNav />
+      <!-- Десктоп — рабочий стол с окнами разделов; мобильный каркас (сайдбар,
+           нижняя навигация, один экран на раздел) пока остаётся прежним. -->
+      <DesktopShell v-if="desktopMode" />
+      <template v-else>
+        <AppSidebar />
+        <div class="content-col">
+          <ActiveUnitBanner v-if="unitsStore.activeUnit && unitsStore.minimized" />
+          <main class="main-content">
+            <router-view />
+          </main>
+        </div>
+        <AppBottomNav />
+      </template>
       <ActiveUnitModal v-if="unitsStore.activeUnit && !unitsStore.minimized" />
-      <AppTutorial v-if="isTutorialOpen" />
-      <ChangelogModal v-if="isChangelogOpen" @close="closeChangelog" />
+      <AppTutorial v-if="isTutorialOpen && !desktopMode" />
       <MiniMessenger />
       <IncomingCallOverlay @accept="callStore.accept()" @decline="callStore.decline()" />
       <CallView />
@@ -68,7 +72,6 @@ import { useNotificationsStore } from '@/stores/notifications.js'
 import { useBreakpoint } from '@/composables/useBreakpoint.js'
 import { useCompanySettings } from '@/composables/useCompanySettings.js'
 import { useTutorial } from '@/composables/useTutorial.js'
-import { useChangelog } from '@/composables/useChangelog.js'
 import { connectSocket } from '@/socket/index.js'
 import { navProgress } from '@/composables/useNavProgress.js'
 import {
@@ -81,13 +84,13 @@ import {
   startCallService, stopCallService, setCallProximity, setCallShowOverLock,
   audioStart, audioStop,
 } from '@/utils/nativeApp.js'
+import DesktopShell from '@/components/desktop/DesktopShell.vue'
 import AppSidebar from '@/components/layout/AppSidebar.vue'
 import AppBottomNav from '@/components/layout/AppBottomNav.vue'
 import CompanyDisabledScreen from '@/components/layout/CompanyDisabledScreen.vue'
 import ActiveUnitModal from '@/components/layout/ActiveUnitModal.vue'
 import ActiveUnitBanner from '@/components/layout/ActiveUnitBanner.vue'
 import AppTutorial from '@/components/layout/AppTutorial.vue'
-import ChangelogModal from '@/components/layout/ChangelogModal.vue'
 import MiniMessenger from '@/components/messenger/MiniMessenger.vue'
 import PullToRefresh from '@/components/common/PullToRefresh.vue'
 import NewChatDialog from '@/components/messenger/NewChatDialog.vue'
@@ -112,9 +115,10 @@ const { isMobile } = useBreakpoint()
 const { usesGroove } = useCompanySettings()
 
 const isFullscreenRoute = computed(() => !!route.meta?.fullscreen && !!authStore.user)
+// Режим рабочего стола — только широкий экран: у мобильного будет свой макет.
+const desktopMode = computed(() => !isMobile.value)
 // isOpen деструктурирован как топ-левел ref — Vue auto-unwraps в шаблоне
 const { isOpen: isTutorialOpen, open: openTutorial, shouldAutoShow } = useTutorial()
-const { isOpen: isChangelogOpen, close: closeChangelog, checkForNewVersion } = useChangelog()
 let tutorialTimer = null
 
 watch(() => authStore.user, (user, prev) => {
@@ -277,11 +281,6 @@ onMounted(async () => {
     // Если страницу перезагрузили во время звонка — звонок ещё «жив» на
     // сервере (grace-окно). Предложим вернуться к нему.
     callStore.checkRejoin()
-    // Лог версий показываем существующим пользователям; новичкам сначала тур,
-    // а лог всплывёт при следующем входе.
-    if (!shouldAutoShow()) {
-      checkForNewVersion()
-    }
   }
 })
 

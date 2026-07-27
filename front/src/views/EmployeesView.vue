@@ -127,8 +127,8 @@
 
 <script setup>
 import { ref, computed, onMounted, watch } from 'vue'
-import { useRouter } from 'vue-router'
-import { getDirectory, getUsers } from '@/api/users.js'
+import { useRoute, useRouter } from 'vue-router'
+import { getDirectory, getDirectoryUser, getUsers } from '@/api/users.js'
 import { useAuthStore } from '@/stores/auth.js'
 import { useCompaniesStore } from '@/stores/companies.js'
 import { useMessengerStore } from '@/stores/messenger.js'
@@ -142,6 +142,7 @@ import EmptyState from '@/components/common/EmptyState.vue'
 import RolePill from '@/components/common/RolePill.vue'
 import PortalHubTabs from '@/components/portal/PortalHubTabs.vue'
 const router = useRouter()
+const route = useRoute()
 const { isMobile } = useBreakpoint()
 const auth = useAuthStore()
 const companies = useCompaniesStore()
@@ -176,11 +177,28 @@ async function load() {
   }
 }
 
-onMounted(() => {
-  load()
+onMounted(async () => {
+  await load()
+  consumeUserQuery()
   messenger.fetchPresence()
   if (auth.isSuperAdmin) companies.load()
 })
+
+/* Карточка сотрудника по ссылке `/employees?user=<id>` (строка поиска рабочего
+   стола). Уже находясь в разделе, компонент не пересоздаётся — слушаем query. */
+watch(() => route.query.user, () => consumeUserQuery())
+
+async function consumeUserQuery() {
+  const id = Number(route.query.user)
+  if (!id) return
+  const found = users.value.find((u) => u.id === id)
+  if (found) openProfile(found)
+  else {
+    try { openProfile(await getDirectoryUser(id)) } catch { /* нет доступа — молча */ }
+  }
+  // URL сворачиваем обратно: повторный клик по тому же сотруднику снова откроет карточку.
+  router.replace({ path: '/employees' }).catch(() => {})
+}
 
 // Пользователь сменил активную компанию (switchCompany меняет auth.companyId) —
 // перезагружаем каталог членов новой компании.

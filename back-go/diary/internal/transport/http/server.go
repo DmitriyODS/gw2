@@ -64,6 +64,8 @@ func NewServer(eps endpoint.Endpoints, users domain.UserReader,
 	api.Get("/shared/:code/export", h.sharedExport)
 
 	// Ежедневники.
+	api.Get("/search", h.searchEntries) // глобальный поиск рабочего стола
+	api.Get("/agenda", h.agenda)        // повестка дня для живой плитки
 	api.Get("", h.listDiaries) // ?tab=mine|shared
 	api.Post("", h.createDiary)
 	api.Get("/:id<int>", h.getDiary)

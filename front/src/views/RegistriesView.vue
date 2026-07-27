@@ -334,6 +334,7 @@
 
 <script setup>
 import { computed, onMounted, ref, watch } from 'vue'
+import { useRoute } from 'vue-router'
 import Checkbox from 'primevue/checkbox'
 import Select from 'primevue/select'
 import RegistryRecordDialog from '@/components/registry/RegistryRecordDialog.vue'
@@ -353,6 +354,7 @@ import { useBreakpoint } from '@/composables/useBreakpoint.js'
 import { fieldIcon, hasQr, isExportable, isSortable, textValue } from '@/utils/registryFields.js'
 
 const store = useRegistriesStore()
+const route = useRoute()
 const authStore = useAuthStore()
 const notif = useNotificationsStore()
 const { isMobile } = useBreakpoint()
@@ -601,7 +603,16 @@ function shortDate(v) {
   return isNaN(d.getTime()) ? '' : d.toLocaleDateString('ru-RU')
 }
 
-onMounted(() => store.fetchRegistries())
+/* Переход из строки глобального поиска: открыть нужный реестр и подставить
+   искомый текст — найденная запись сразу в выборке. */
+function applySearchQuery() {
+  const { registry, q } = route.query
+  if (registry) store.select(Number(registry))
+  if (q) store.setSearch(String(q))
+}
+
+onMounted(() => store.fetchRegistries().then(applySearchQuery))
+watch(() => route.query, applySearchQuery)
 </script>
 
 <style scoped>
