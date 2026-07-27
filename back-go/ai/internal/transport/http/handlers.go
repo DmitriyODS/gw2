@@ -11,6 +11,7 @@ import (
 
 	"github.com/DmitriyODS/gw2/back-go/ai/internal/dto"
 	"github.com/DmitriyODS/gw2/back-go/ai/internal/endpoint"
+	"github.com/DmitriyODS/gw2/back-go/ai/internal/service"
 	"github.com/DmitriyODS/gw2/back-go/pkg/apierror"
 )
 
@@ -85,6 +86,23 @@ func (h *handlers) reindexTasks(c *fiber.Ctx) error {
 		return h.respondError(c, err)
 	}
 	return c.Status(fiber.StatusAccepted).JSON(resp)
+}
+
+// aiStatus — GET /api/ai/status: включён ли ИИ в активной компании. Нужен
+// карточке «Интеграции» в профиле: полные ai-настройки читает только
+// администратор компании, а знать о наличии ассистента вправе любой участник —
+// поэтому здесь отдаётся один флаг, без ключа и моделей.
+func (h *handlers) aiStatus(c *fiber.Ctx) error {
+	user := currentUser(c)
+	if user == nil || user.CompanyID == nil {
+		return c.JSON(fiber.Map{"enabled": false})
+	}
+	resp, err := h.eps.Status(c.Context(), *user.CompanyID)
+	if err != nil {
+		return h.respondError(c, err)
+	}
+	st, _ := resp.(*service.StatusResult)
+	return c.JSON(fiber.Map{"enabled": st != nil && st.Enabled})
 }
 
 // tvFact — GET /api/ai/tv-fact: текущий факт дня для ТВ-табло; AI выключен /

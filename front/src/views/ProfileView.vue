@@ -1,715 +1,278 @@
 <template>
   <div class="profile-view">
     <div class="profile-container">
-      <div class="profile-main">
-        <div v-if="!isMobile" class="layout-toolbar">
-          <span class="layout-hint">
-            <span class="material-symbols-outlined">open_with</span>
-            Тяните за ⠿, чтобы переставить, за уголок — чтобы изменить размер
-          </span>
-          <button type="button" class="btn-glass layout-reset" @click="grid.reset()">
-            <span class="material-symbols-outlined">restart_alt</span>
-            Сбросить раскладку
+      <!-- Верхний ряд: кто я + мои интеграции -->
+      <div class="top-row">
+        <section class="card id-card">
+          <button type="button" class="id-avatar" title="Открыть фото" @click="lightboxOpen = true">
+            <img :src="avatarSrc" :alt="user?.fio" />
+            <span class="id-avatar-zoom" aria-hidden="true">
+              <span class="material-symbols-outlined">zoom_in</span>
+            </span>
           </button>
-        </div>
 
-        <div class="cards-grid" ref="gridEl">
-          <!-- Карточка-идентичность пользователя -->
-          <aside
-            class="identity-card grid-card"
-            :class="{ 'is-dragging': dragId === 'identity', 'is-resizing': resizeId === 'identity' }"
-            :style="cardStyleFor('identity')"
-            data-card-id="identity"
-            :ref="cardRef('identity')"
-          >
-            <GridCardChrome card-id="identity" @grip="onGripDown" @resize="onResizerDown" />
+          <div class="id-body">
+            <h1 class="id-name">{{ user?.fio || '—' }}</h1>
+            <p v-if="user?.post" class="id-post">{{ user.post }}</p>
 
-            <div class="identity-cover" aria-hidden="true"></div>
-
-            <button
-              type="button"
-              class="avatar-wrapper"
-              title="Открыть фото"
-              @click="lightboxOpen = true"
-            >
-              <img :src="avatarSrc" class="profile-avatar" :alt="authStore.user?.fio" />
-              <span class="avatar-zoom-overlay" aria-hidden="true">
-                <span class="material-symbols-outlined">zoom_in</span>
-              </span>
-            </button>
-
-            <div class="hero-info">
-              <h1 class="hero-name">{{ authStore.user?.fio }}</h1>
-              <p class="hero-post">{{ authStore.user?.post || 'Должность не указана' }}</p>
-              <div class="hero-meta">
-                <span v-if="authStore.user?.role?.name" class="role-tag">
-                  {{ authStore.user.role.name }}
-                </span>
-                <span v-if="authStore.user?.on_vacation" class="role-tag vacation-tag">🏖️ В отпуске</span>
-                <span v-if="authStore.user?.login" class="hero-login">@{{ authStore.user.login }}</span>
-              </div>
-            </div>
-
-            <div class="avatar-actions">
-              <button class="btn-sm" @click="showCropper = true">
-                <span class="material-symbols-outlined">photo_camera</span>
-                Загрузить
-              </button>
-              <button
-                v-if="authStore.user?.avatar_path"
-                class="btn-sm danger"
-                @click="confirmAvatarDelete = true"
-              >
-                <span class="material-symbols-outlined">delete</span>
-                Удалить
-              </button>
-            </div>
-
-            <!-- Контакты — только на десктопе, мобильная шапка остаётся прежней -->
-            <ul class="identity-contacts">
-              <li class="contact-row">
-                <span class="contact-ico" data-tone="primary">
-                  <span class="material-symbols-outlined">mail</span>
-                </span>
-                <span class="contact-text">
-                  <small>Email</small>
-                  <span :class="{ 'contact-empty': !authStore.user?.email }">
-                    {{ authStore.user?.email || 'Не указан' }}
-                  </span>
-                </span>
-              </li>
-              <li class="contact-row">
-                <span class="contact-ico" data-tone="secondary">
-                  <span class="material-symbols-outlined">call</span>
-                </span>
-                <span class="contact-text">
-                  <small>Телефон</small>
-                  <span :class="{ 'contact-empty': !authStore.user?.phone }">
-                    {{ authStore.user?.phone || 'Не указан' }}
-                  </span>
-                </span>
-              </li>
-              <li v-if="authStore.companyName" class="contact-row">
-                <span class="contact-ico" data-tone="tertiary">
-                  <span class="material-symbols-outlined">domain</span>
-                </span>
-                <span class="contact-text">
-                  <small>Компания</small>
-                  <span>{{ authStore.companyName }}</span>
-                </span>
-              </li>
+            <ul class="id-contacts">
+              <li :class="{ empty: !user?.email }">{{ user?.email || 'Email не указан' }}</li>
+              <li :class="{ empty: !user?.phone }">{{ user?.phone || 'Телефон не указан' }}</li>
+              <li v-if="user?.login">@{{ user.login }}</li>
             </ul>
 
-            <button class="btn-logout" @click="authStore.logout()">
-              <span class="material-symbols-outlined">logout</span>
-              <span class="btn-logout-label">Выйти</span>
-            </button>
-          </aside>
+            <div class="id-actions">
+              <span v-if="user?.on_vacation" class="id-vacation">🏖️ В отпуске</span>
+              <button type="button" class="btn-glass id-edit" @click="editOpen = true">
+                <span class="material-symbols-outlined">edit</span>
+                Редактировать
+              </button>
+            </div>
+          </div>
+        </section>
 
-          <!-- Личная статистика -->
-          <section
-            class="profile-card grid-card stats-card"
-            :class="{ 'is-dragging': dragId === 'stats', 'is-resizing': resizeId === 'stats' }"
-            :style="cardStyleFor('stats')"
-            data-card-id="stats"
-            :ref="cardRef('stats')"
-          >
-            <GridCardChrome card-id="stats" @grip="onGripDown" @resize="onResizerDown" />
-
-            <header class="card-head stats-head">
-              <div class="head-icon" data-tone="primary">
-                <span class="material-symbols-outlined">insights</span>
-              </div>
-              <div class="head-text">
-                <h3>Личная статистика</h3>
-                <p class="head-desc">Часы и задачи за выбранный период</p>
-              </div>
-              <RouterLink
-                v-if="authStore.roleLevel > 0"
-                :to="`/employees/${authStore.userId}/activity`"
-                class="btn-glass activity-link"
+        <section class="card int-card">
+          <h2 class="card-title">Интеграции</h2>
+          <ul class="int-list">
+            <li v-for="it in integrations" :key="it.key">
+              <component
+                :is="it.action ? 'button' : 'div'"
+                class="int-row"
+                :class="{ 'is-static': !it.action }"
+                :type="it.action ? 'button' : undefined"
+                @click="it.action && it.action()"
               >
-                <span class="material-symbols-outlined">timeline</span>
-                <span class="activity-link-label">Моя активность</span>
-              </RouterLink>
-              <DateRangePicker
-                v-model="statsPeriod"
-                class="head-period"
-                @update:model-value="loadStats"
-              />
-            </header>
-
-            <div v-if="statsLoading" class="loading-inline">
-              <BrandLoader :size="64" />
-            </div>
-
-            <template v-else-if="profileStats">
-              <div class="stat-tiles">
-                <div class="stat-tile" data-tone="primary">
-                  <span class="tile-ico"><span class="material-symbols-outlined">schedule</span></span>
-                  <span class="tile-text">
-                    <span class="tile-num">{{ roundHours(profileStats.total_hours) }}</span>
-                    <span class="tile-label">Время</span>
-                  </span>
-                </div>
-                <div class="stat-tile" data-tone="secondary">
-                  <span class="tile-ico"><span class="material-symbols-outlined">task_alt</span></span>
-                  <span class="tile-text">
-                    <span class="tile-num">{{ profileStats.tasks_count ?? 0 }}</span>
-                    <span class="tile-label">Задач</span>
-                  </span>
-                </div>
-                <div class="stat-tile stat-tile--avg" data-tone="tertiary">
-                  <span class="tile-ico"><span class="material-symbols-outlined">avg_pace</span></span>
-                  <span class="tile-text">
-                    <span class="tile-num">{{ roundHours(avgHoursPerDay) }}</span>
-                    <span class="tile-label">В среднем за день</span>
-                  </span>
-                </div>
-              </div>
-
-              <template v-if="profileStats.by_unit_types?.length">
-                <!-- Десктоп: наглядные бары по типам; мобилка — прежняя таблица -->
-                <div v-if="!isMobile" class="type-list">
-                  <div v-for="t in profileStats.by_unit_types" :key="t.name" class="type-row">
-                    <div class="type-top">
-                      <span class="type-name">{{ t.name }}</span>
-                      <span class="type-meta">
-                        {{ roundHours(t.hours) }} · {{ t.tasks_count }}
-                        {{ plural(t.tasks_count, 'задача', 'задачи', 'задач') }}
-                      </span>
-                    </div>
-                    <div class="type-bar">
-                      <span :style="{ width: typeBarWidth(t) }"></span>
-                    </div>
-                  </div>
-                </div>
-
-                <DataTable
-                  v-else
-                  :value="profileStats.by_unit_types"
-                  size="small"
-                  class="stats-table"
-                >
-                  <Column field="name" header="Тип юнита" />
-                  <Column header="Время" style="width:120px">
-                    <template #body="{ data }">{{ roundHours(data.hours) }}</template>
-                  </Column>
-                  <Column field="tasks_count" header="Задачи" style="width:100px" />
-                </DataTable>
-              </template>
-            </template>
-
-            <div v-else class="empty-stats">
-              Нет данных за выбранный период
-            </div>
-          </section>
-
-          <!-- Вход на другом устройстве: подтверждение QR-входа и ТВ-киоска -->
-          <section
-            class="profile-card grid-card"
-            :class="{ 'is-dragging': dragId === 'device', 'is-resizing': resizeId === 'device' }"
-            :style="cardStyleFor('device')"
-            data-card-id="device"
-            :ref="cardRef('device')"
-          >
-            <GridCardChrome card-id="device" @grip="onGripDown" @resize="onResizerDown" />
-
-            <header class="card-head">
-              <div class="head-icon" data-tone="primary">
-                <span class="material-symbols-outlined">devices</span>
-              </div>
-              <div class="head-text">
-                <h3>Вход на другом устройстве</h3>
-                <p class="head-desc">
-                  Подтвердите вход по QR на новом устройстве или авторизуйте ТВ-киоск
-                  под выбранной компанией.
-                </p>
-              </div>
-            </header>
-            <button type="button" class="btn-grad" @click="showAuthorizeDevice = true">
-              <span class="material-symbols-outlined">qr_code_scanner</span>
-              Сканировать или ввести код
-            </button>
-          </section>
-
-          <!-- Связанные аккаунты (Яндекс ID) — только если вход через Яндекс настроен -->
-          <section
-            v-if="yandexAuth.enabled"
-            class="profile-card grid-card"
-            :class="{ 'is-dragging': dragId === 'yandex', 'is-resizing': resizeId === 'yandex' }"
-            :style="cardStyleFor('yandex')"
-            data-card-id="yandex"
-            :ref="cardRef('yandex')"
-          >
-            <GridCardChrome card-id="yandex" @grip="onGripDown" @resize="onResizerDown" />
-
-            <header class="card-head">
-              <div class="head-icon" data-tone="primary">
-                <span class="material-symbols-outlined">link</span>
-              </div>
-              <div class="head-text">
-                <h3>Связанные аккаунты</h3>
-                <p class="head-desc">
-                  Привяжите Яндекс — и входите в Groove Work одной кнопкой, без пароля.
-                </p>
-              </div>
-            </header>
-            <div class="yandex-link-row">
-              <template v-if="yandexLinked">
-                <span class="yandex-linked-chip">
-                  <span class="material-symbols-outlined">check_circle</span>
-                  Яндекс привязан
+                <span class="int-ico" :data-tone="it.tone">
+                  <span v-if="it.badge" class="int-badge">{{ it.badge }}</span>
+                  <span v-else class="material-symbols-outlined">{{ it.icon }}</span>
                 </span>
-                <button type="button" class="btn-glass" :disabled="yandexBusy" @click="unlinkYandex">
-                  Отвязать
-                </button>
-              </template>
-              <button v-else type="button" class="btn-grad" :disabled="yandexBusy" @click="linkYandex">
-                Привязать Яндекс-аккаунт
-              </button>
-            </div>
-          </section>
-
-          <!-- Режим отпуска -->
-          <section
-            class="profile-card grid-card"
-            :class="{ 'is-dragging': dragId === 'vacation', 'is-resizing': resizeId === 'vacation' }"
-            :style="cardStyleFor('vacation')"
-            data-card-id="vacation"
-            :ref="cardRef('vacation')"
-          >
-            <GridCardChrome card-id="vacation" @grip="onGripDown" @resize="onResizerDown" />
-
-            <header class="card-head vacation-head">
-              <div class="head-icon" data-tone="tertiary">
-                <span class="material-symbols-outlined">beach_access</span>
-              </div>
-              <div class="head-text">
-                <h3>Режим отпуска</h3>
-                <p class="head-desc">
-                  Пока включён — создание и редактирование задач и запуск юнитов
-                  недоступны, а грувик тоже отдыхает: его показатели заморожены.
-                </p>
-              </div>
-              <ToggleSwitch
-                class="vacation-switch"
-                :model-value="!!authStore.user?.on_vacation"
-                :disabled="vacationBusy"
-                @update:model-value="setVacation"
-              />
-            </header>
-            <p class="vacation-state">
-              {{ authStore.user?.on_vacation
-                ? '🏖️ Вы в отпуске: задачи и юниты подождут, грувик отдыхает вместе с вами.'
-                : 'Соберётесь отдохнуть — включите, и рабочие показатели встанут на паузу.' }}
-            </p>
-          </section>
-
-          <!-- Редактирование профиля -->
-          <section
-            class="profile-card grid-card"
-            :class="{ 'is-dragging': dragId === 'profile', 'is-resizing': resizeId === 'profile' }"
-            :style="cardStyleFor('profile')"
-            data-card-id="profile"
-            :ref="cardRef('profile')"
-          >
-            <GridCardChrome card-id="profile" @grip="onGripDown" @resize="onResizerDown" />
-
-            <header class="card-head">
-              <div class="head-icon" data-tone="secondary">
-                <span class="material-symbols-outlined">badge</span>
-              </div>
-              <div class="head-text">
-                <h3>Редактирование профиля</h3>
-                <p class="head-desc">Данные и контакты, видимые коллегам</p>
-              </div>
-            </header>
-            <form @submit.prevent="saveProfile" class="profile-form">
-              <div class="form-group">
-                <label>ФИО</label>
-                <InputText v-model="profileForm.fio" class="w-full" placeholder="Иванов Иван Иванович" />
-              </div>
-              <div class="form-group">
-                <label>Должность</label>
-                <InputText v-model="profileForm.post" class="w-full" placeholder="Менеджер" />
-              </div>
-              <div class="form-group">
-                <label>Телефон</label>
-                <PhoneInput v-model="profileForm.phone" />
-              </div>
-              <div class="form-group">
-                <label>Email</label>
-                <InputText
-                  v-model="profileForm.email"
-                  class="w-full"
-                  type="email"
-                  inputmode="email"
-                  placeholder="you@example.com"
-                />
-              </div>
-              <p v-if="profileError" class="error-msg">{{ profileError }}</p>
-              <button type="submit" class="btn-primary" :disabled="profileLoading">
-                {{ profileLoading ? 'Сохраняем...' : 'Сохранить' }}
-              </button>
-            </form>
-          </section>
-
-          <!-- Логин и пароль — редактирование вынесено в кнопки-диалоги -->
-          <section
-            class="profile-card grid-card"
-            :class="{ 'is-dragging': dragId === 'security', 'is-resizing': resizeId === 'security' }"
-            :style="cardStyleFor('security')"
-            data-card-id="security"
-            :ref="cardRef('security')"
-          >
-            <GridCardChrome card-id="security" @grip="onGripDown" @resize="onResizerDown" />
-
-            <header class="card-head">
-              <div class="head-icon" data-tone="tertiary">
-                <span class="material-symbols-outlined">password</span>
-              </div>
-              <div class="head-text">
-                <h3>Логин и пароль</h3>
-                <p class="head-desc">Данные для входа в систему</p>
-              </div>
-            </header>
-
-            <ul class="cred-list">
-              <li class="cred-row">
-                <span class="cred-ico" data-tone="primary">
-                  <span class="material-symbols-outlined">alternate_email</span>
+                <span class="int-text">
+                  {{ it.label }} <span class="int-state">({{ it.state }})</span>
                 </span>
-                <span class="cred-text">
-                  <small>Логин</small>
-                  <span>{{ authStore.user?.login || '—' }}</span>
-                </span>
-                <button type="button" class="btn-glass cred-btn" @click="showLoginDialog = true">
-                  <span class="material-symbols-outlined">edit</span>
-                  Изменить
-                </button>
-              </li>
-              <li class="cred-row">
-                <span class="cred-ico" data-tone="tertiary">
-                  <span class="material-symbols-outlined">lock</span>
-                </span>
-                <span class="cred-text">
-                  <small>Пароль</small>
-                  <span>••••••••</span>
-                </span>
-                <button type="button" class="btn-glass cred-btn" @click="showPasswordDialog = true">
-                  <span class="material-symbols-outlined">lock_reset</span>
-                  Изменить
-                </button>
-              </li>
-            </ul>
-          </section>
-        </div>
+                <span v-if="it.action" class="material-symbols-outlined int-go">chevron_right</span>
+              </component>
+            </li>
+          </ul>
+        </section>
       </div>
+
+      <!-- Авторизация и сессии -->
+      <section class="card sess-card">
+        <h2 class="card-title">Авторизация и сессии</h2>
+
+        <div class="sess-grid">
+          <button type="button" class="sess-tile sess-add" @click="showAuthorizeDevice = true">
+            <span class="material-symbols-outlined">devices</span>
+            <span>Авторизовать<br />новое устройство</span>
+          </button>
+
+          <div v-if="sessionsLoading" class="sess-tile sess-loading">
+            <BrandLoader :size="48" />
+          </div>
+
+          <article v-for="s in sessions" :key="s.id" class="sess-tile sess-item">
+            <header class="sess-head">
+              <span class="material-symbols-outlined sess-ico">{{ platformIcon(s.platform) }}</span>
+              <span v-if="s.city || s.ip" class="sess-place" :title="s.ip">{{ s.city || s.ip }}</span>
+            </header>
+
+            <h3 class="sess-title" :title="s.device">{{ s.title }}</h3>
+            <p class="sess-meta">Вход: {{ formatLogin(s.created_at) }}</p>
+            <p class="sess-meta">
+              Последняя активность: {{ formatSeen(s.last_seen_at) }}
+              <span v-if="s.current" class="sess-current">· это устройство</span>
+            </p>
+
+            <button type="button" class="sess-end" :disabled="revoking === s.id" @click="askRevoke(s)">
+              <span class="material-symbols-outlined">logout</span>
+              Завершить сеанс
+            </button>
+          </article>
+        </div>
+      </section>
     </div>
 
-    <!-- Авторизация устройства (QR-вход / ТВ-киоск) -->
+    <ProfileEditDialog v-model="editOpen" />
     <AuthorizeDeviceDialog v-model="showAuthorizeDevice" />
 
-    <!-- Смена логина / пароля -->
-    <ChangeLoginDialog v-model="showLoginDialog" :current-login="authStore.user?.login || ''" />
-    <ChangePasswordDialog v-model="showPasswordDialog" />
-
-    <!-- Диалог кроппера аватарки -->
-    <AppDialog
-      v-if="showCropper"
-      model-value
-      tone="primary"
-      icon="account_circle"
-      size="md"
-      title="Загрузка аватарки"
-      @update:model-value="showCropper = false"
-    >
-      <AvatarCropper @cropped="onCropped" @cancel="showCropper = false" />
-    </AppDialog>
-
-    <AvatarLightbox
-      v-model="lightboxOpen"
-      :src="avatarSrc"
-      :alt="authStore.user?.fio"
-      :caption="authStore.user?.fio"
-    />
+    <ImageLightbox v-model="lightboxOpen" :src="avatarSrc" :caption="user?.fio" />
 
     <AppDialog
-      v-model="confirmAvatarDelete"
+      :model-value="!!revokeTarget"
       tone="danger"
-      icon="warning"
+      icon="logout"
       size="sm"
-      title="Удалить аватарку?"
-      subtitle="Вместо неё коллеги будут видеть автоматический аватар."
-      :busy="avatarDeleting"
-      :closable="!avatarDeleting"
+      title="Завершить сеанс?"
+      :subtitle="revokeSubtitle"
+      :busy="!!revoking"
+      :closable="!revoking"
       :actions="[
-        { kind: 'cancel', label: 'Отмена', disabled: avatarDeleting },
-        { kind: 'confirm', label: 'Удалить', icon: 'delete', disabled: avatarDeleting },
+        { kind: 'cancel', label: 'Отмена', disabled: !!revoking },
+        { kind: 'confirm', label: 'Завершить', icon: 'logout', disabled: !!revoking },
       ]"
-      @confirm="handleDeleteAvatar"
+      @update:model-value="revokeTarget = null"
+      @confirm="confirmRevoke"
     />
   </div>
 </template>
 
 <script setup>
-import { ref, reactive, computed, onMounted, watch } from 'vue'
+import { computed, onMounted, ref } from 'vue'
+import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth.js'
 import { useNotificationsStore } from '@/stores/notifications.js'
-import { useBreakpoint } from '@/composables/useBreakpoint.js'
-import { useDashboardGrid } from '@/composables/useDashboardGrid.js'
-import { updateMe, uploadAvatar, deleteAvatar } from '@/api/users.js'
-import { yandexConfig, yandexAuthURL, yandexLinkStatus, yandexUnlink } from '@/api/auth.js'
+import { usePermission } from '@/composables/usePermission.js'
 import { inAppShell } from '@/utils/appShell.js'
-import { getStatsProfile } from '@/api/stats.js'
-import { formatHours } from '@/utils/time.js'
-import AvatarCropper from '@/components/settings/AvatarCropper.vue'
-import AvatarLightbox from '@/components/common/AvatarLightbox.vue'
-import PhoneInput from '@/components/common/PhoneInput.vue'
-import DateRangePicker from '@/components/common/DateRangePicker.vue'
-import InputText from 'primevue/inputtext'
+import { dayLabel } from '@/utils/chatDates.js'
+import {
+  listSessions,
+  revokeSession,
+  yandexConfig,
+  yandexAuthURL,
+  yandexLinkStatus,
+  yandexUnlink,
+} from '@/api/auth.js'
+import { getAiStatus } from '@/api/ai.js'
+import { getYougileStatus } from '@/api/yougile.js'
 import AppDialog from '@/components/common/AppDialog.vue'
-import ToggleSwitch from 'primevue/toggleswitch'
-import AuthorizeDeviceDialog from '@/components/devicelink/AuthorizeDeviceDialog.vue'
-import GridCardChrome from '@/components/profile/GridCardChrome.vue'
-import ChangeLoginDialog from '@/components/profile/ChangeLoginDialog.vue'
-import ChangePasswordDialog from '@/components/profile/ChangePasswordDialog.vue'
-import DataTable from 'primevue/datatable'
-import Column from 'primevue/column'
+import ImageLightbox from '@/components/common/ImageLightbox.vue'
 import BrandLoader from '@/components/common/BrandLoader.vue'
+import AuthorizeDeviceDialog from '@/components/devicelink/AuthorizeDeviceDialog.vue'
+import ProfileEditDialog from '@/components/profile/ProfileEditDialog.vue'
 
-const authStore = useAuthStore()
+const auth = useAuthStore()
 const notif = useNotificationsStore()
-const { isMobile } = useBreakpoint()
+const router = useRouter()
+const { isAdmin } = usePermission()
 
-// ---- Настраиваемая раскладка плашек (десктоп) ----
-const gridEl = ref(null)
-const grid = useDashboardGrid({ storageKey: 'gw_profile_layout', cols: 4 })
-const { dragId, resizeId } = grid
-
-function cardStyleFor(id) {
-  // На мобиле — простая колонка в порядке разметки, без grid/drag.
-  return isMobile.value ? {} : grid.cardStyle(id)
-}
-function onGripDown(e, id) {
-  if (isMobile.value) return
-  grid.startDrag(e, id)
-}
-function onResizerDown(e, id, dir) {
-  if (isMobile.value) return
-  grid.startResize(e, id, gridEl.value, dir)
-}
-// Стабильный ref-колбэк на карточку (мемоизация по id): иначе инлайн-arrow
-// пересоздавался бы каждый рендер и Vue дёргал бы observeCard вхолостую.
-const cardRefFns = {}
-function cardRef(id) {
-  return (cardRefFns[id] ||= (el) => grid.observeCard(id, el))
-}
-
-// ---- Логин / пароль ----
-const showLoginDialog = ref(false)
-const showPasswordDialog = ref(false)
-
-// ---- Avatar ----
-const showCropper = ref(false)
-const showAuthorizeDevice = ref(false)
-const lightboxOpen = ref(false)
-
+const user = computed(() => auth.user)
 const avatarSrc = computed(() => {
-  const user = authStore.user
-  if (!user) return ''
-  if (user.avatar_path) return `/uploads/${user.avatar_path}`
-  return `/api/users/${user.id}/identicon`
+  const u = auth.user
+  if (!u) return ''
+  return u.avatar_path ? `/uploads/${u.avatar_path}` : `/api/users/${u.id}/identicon`
 })
 
-async function onCropped(blob) {
-  showCropper.value = false
-  try {
-    await uploadAvatar(blob)
-    await authStore.loadMe()
-    notif.success('Аватарка обновлена')
-  } catch (e) {
-    notif.error(e.message || 'Ошибка загрузки аватарки')
-  }
-}
+const editOpen = ref(false)
+const lightboxOpen = ref(false)
+const showAuthorizeDevice = ref(false)
 
-const confirmAvatarDelete = ref(false)
-const avatarDeleting = ref(false)
+// ── Сессии ───────────────────────────────────────────────────────
+const sessions = ref([])
+const sessionsLoading = ref(true)
+const revokeTarget = ref(null)
+const revoking = ref(0)
 
-async function handleDeleteAvatar() {
-  avatarDeleting.value = true
+async function loadSessions() {
+  sessionsLoading.value = true
   try {
-    await deleteAvatar()
-    await authStore.loadMe()
-    notif.success('Аватарка удалена')
-    confirmAvatarDelete.value = false
+    const items = await listSessions()
+    // Своё устройство — первым: с него чаще всего и завершают чужие сеансы.
+    sessions.value = (items || []).sort((a, b) => Number(b.current) - Number(a.current))
   } catch (e) {
-    notif.error(e.message || 'Ошибка удаления аватарки')
+    notif.error(e.message || 'Не удалось загрузить список сеансов')
   } finally {
-    avatarDeleting.value = false
+    sessionsLoading.value = false
   }
 }
 
-// ---- Profile form ----
-const profileForm = reactive({ fio: '', post: '', phone: '', email: '' })
-const profileError = ref('')
-const profileLoading = ref(false)
-
-function syncProfileForm() {
-  const user = authStore.user
-  if (user) {
-    profileForm.fio = user.fio || ''
-    profileForm.post = user.post || ''
-    profileForm.phone = user.phone || ''
-    profileForm.email = user.email || ''
-  }
+function platformIcon(platform) {
+  if (platform === 'mobile') return 'smartphone'
+  if (platform === 'desktop') return 'desktop_windows'
+  return 'web_asset'
 }
 
-async function saveProfile() {
-  profileError.value = ''
-  if (!profileForm.fio.trim()) {
-    profileError.value = 'ФИО обязательно'
-    return
-  }
-  profileLoading.value = true
-  try {
-    await updateMe({
-      fio: profileForm.fio.trim(),
-      post: profileForm.post.trim(),
-      phone: profileForm.phone.trim() || null,
-      email: profileForm.email.trim() || null,
-    })
-    await authStore.loadMe()
-    notif.success('Профиль обновлён')
-  } catch (e) {
-    profileError.value = e.message || 'Ошибка сохранения'
-  } finally {
-    profileLoading.value = false
-  }
+function formatLogin(iso) {
+  const d = new Date(iso)
+  if (Number.isNaN(d.getTime())) return '—'
+  return d.toLocaleString('ru-RU', {
+    day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit',
+  })
 }
 
-// ---- Режим отпуска ----
-const vacationBusy = ref(false)
-
-async function setVacation(v) {
-  vacationBusy.value = true
-  try {
-    await updateMe({ on_vacation: v })
-    await authStore.loadMe()
-    notif.success(v ? 'Режим отпуска включён — хорошего отдыха!' : 'С возвращением! Режим отпуска выключен')
-  } catch (e) {
-    notif.error(e.message || 'Не удалось изменить режим отпуска')
-  } finally {
-    vacationBusy.value = false
-  }
+// «сегодня» / «вчера» / «16 мая» — в строку карточки, поэтому со строчной.
+function formatSeen(iso) {
+  const label = dayLabel(iso)
+  return label ? label.charAt(0).toLowerCase() + label.slice(1) : '—'
 }
 
-// ---- Stats ----
-const statsPeriod = ref(null)
-const profileStats = ref(null)
-const statsLoading = ref(false)
-
-function getDefaultPeriod() {
-  const today = new Date()
-  const day = today.getDay()
-  const monday = new Date(today)
-  monday.setDate(today.getDate() - (day === 0 ? 6 : day - 1))
-  monday.setHours(0, 0, 0, 0)
-  return [monday, today]
+function askRevoke(s) {
+  revokeTarget.value = s
 }
 
-function formatDate(d) {
-  if (!d) return ''
-  return d.toISOString().split('T')[0]
-}
-
-function roundHours(val) {
-  return formatHours(val)
-}
-
-function plural(n, one, few, many) {
-  const mod10 = n % 10, mod100 = n % 100
-  if (mod10 === 1 && mod100 !== 11) return one
-  if (mod10 >= 2 && mod10 <= 4 && (mod100 < 10 || mod100 >= 20)) return few
-  return many
-}
-
-const periodDays = computed(() => {
-  const r = statsPeriod.value
-  if (!r || !r[0] || !r[1]) return 0
-  return Math.max(1, Math.round((r[1] - r[0]) / 86400000) + 1)
+const revokeSubtitle = computed(() => {
+  const s = revokeTarget.value
+  if (!s) return ''
+  return s.current
+    ? 'Это текущее устройство — вы выйдете из системы.'
+    : `«${s.title}» перестанет открывать ваш аккаунт: на нём попросят войти заново.`
 })
 
-const avgHoursPerDay = computed(() => {
-  const total = profileStats.value?.total_hours || 0
-  return periodDays.value ? total / periodDays.value : 0
-})
-
-const maxTypeHours = computed(() => {
-  const types = profileStats.value?.by_unit_types || []
-  return Math.max(...types.map(t => t.hours || 0), 0.001)
-})
-
-function typeBarWidth(t) {
-  return `${Math.max(4, ((t.hours || 0) / maxTypeHours.value) * 100)}%`
-}
-
-async function loadStats(range) {
-  const r = range || statsPeriod.value
-  if (!r || !r[0] || !r[1]) return
-  statsLoading.value = true
+async function confirmRevoke() {
+  const s = revokeTarget.value
+  if (!s) return
+  revoking.value = s.id
   try {
-    profileStats.value = await getStatsProfile(formatDate(r[0]), formatDate(r[1]))
-  } catch (e) {
-    notif.error(e.message || 'Ошибка загрузки статистики')
-  } finally {
-    statsLoading.value = false
-  }
-}
-
-// Привязка Яндекс-аккаунта: статус и кнопки «Привязать»/«Отвязать».
-const yandexAuth = ref({ enabled: false, client_id: '' })
-const yandexLinked = ref(false)
-const yandexBusy = ref(false)
-
-// Присутствующие карточки в порядке по умолчанию (Яндекс — условно).
-// Точечный watch по флагу: getter трекает только его, поэтому чтения spans
-// внутри sync не превращаются в лишние перезапуски на каждом ресайзе.
-watch(
-  () => yandexAuth.value.enabled,
-  () => {
-    grid.sync([
-      { id: 'identity', span: 2 },
-      { id: 'stats', span: 2 },
-      { id: 'device', span: 2 },
-      ...(yandexAuth.value.enabled ? [{ id: 'yandex', span: 2 }] : []),
-      { id: 'vacation', span: 2 },
-      { id: 'profile', span: 2 },
-      { id: 'security', span: 2 },
-    ])
-  },
-  { immediate: true },
-)
-
-async function loadYandexLink() {
-  try {
-    yandexAuth.value = await yandexConfig()
-    if (yandexAuth.value.enabled) {
-      yandexLinked.value = (await yandexLinkStatus()).linked
+    await revokeSession(s.id)
+    if (s.current) {
+      // Свой сеанс уже недействителен — уходим на экран входа.
+      await auth.logout()
+      return
     }
-  } catch { /* карточка просто не показывается */ }
+    sessions.value = sessions.value.filter((x) => x.id !== s.id)
+    notif.success('Сеанс завершён')
+    revokeTarget.value = null
+  } catch (e) {
+    notif.error(e.message || 'Не удалось завершить сеанс')
+  } finally {
+    revoking.value = 0
+  }
 }
+
+// ── Интеграции ───────────────────────────────────────────────────
+const yandex = ref({ enabled: false, client_id: '', linked: false })
+const yandexBusy = ref(false)
+const yougile = ref({ connected: false, available: false })
+const aiEnabled = ref(false)
+
+const integrations = computed(() => [
+  {
+    key: 'yandex',
+    label: 'Яндекс аккаунт',
+    badge: 'Я',
+    tone: 'error',
+    state: !yandex.value.enabled ? 'недоступно' : yandex.value.linked ? 'подключено' : 'не настроено',
+    action: yandex.value.enabled && !yandexBusy.value
+      ? (yandex.value.linked ? unlinkYandex : linkYandex)
+      : null,
+  },
+  {
+    key: 'yougile',
+    label: 'YouGile аккаунт',
+    icon: 'sync_alt',
+    tone: 'secondary',
+    state: !yougile.value.available ? 'недоступно' : yougile.value.connected ? 'подключено' : 'не настроено',
+    action: yougile.value.available ? () => router.push('/settings?section=yougile') : null,
+  },
+  {
+    key: 'ai',
+    label: 'ИИ ассистент',
+    icon: 'smart_toy',
+    tone: 'primary',
+    state: aiEnabled.value ? 'подключено' : 'не настроено',
+    // Ключ ИИ задаёт администратор компании — остальным строка справочная.
+    action: isAdmin() && auth.companyId ? () => router.push(`/companies/${auth.companyId}`) : null,
+  },
+])
 
 function linkYandex() {
-  window.location.href = yandexAuthURL(yandexAuth.value.client_id, inAppShell() ? 'app-link' : 'link')
+  window.location.href = yandexAuthURL(yandex.value.client_id, inAppShell() ? 'app-link' : 'link')
 }
 
 async function unlinkYandex() {
   yandexBusy.value = true
   try {
     await yandexUnlink()
-    yandexLinked.value = false
+    yandex.value.linked = false
     notif.success('Яндекс-аккаунт отвязан')
   } catch (e) {
     notif.error(e?.message || 'Не удалось отвязать аккаунт')
@@ -718,445 +281,199 @@ async function unlinkYandex() {
   }
 }
 
+// Каждая интеграция грузится сама по себе: недоступная (нет компании, нет прав)
+// гасит только свою строку, а не всю карточку.
+async function loadIntegrations() {
+  yandexConfig()
+    .then(async (cfg) => {
+      yandex.value = { ...yandex.value, ...cfg }
+      if (cfg.enabled) yandex.value.linked = (await yandexLinkStatus()).linked
+    })
+    .catch(() => {})
+
+  getYougileStatus()
+    .then((st) => {
+      yougile.value = { connected: !!st.connected, available: !!st.company_enabled || !!st.connected }
+    })
+    .catch(() => {})
+
+  getAiStatus()
+    .then((st) => { aiEnabled.value = !!st.enabled })
+    .catch(() => {})
+}
+
 onMounted(() => {
-  syncProfileForm()
-  statsPeriod.value = getDefaultPeriod()
-  loadStats(statsPeriod.value)
-  loadYandexLink()
+  loadSessions()
+  loadIntegrations()
 })
 </script>
 
 <style scoped>
+/* Раздел живёт в окне рабочего стола, поэтому раскладка считается от ЕГО
+   ширины (container queries), а не от ширины экрана: media-запросы здесь
+   ничего бы не знали про размер окна и карточки сжимались бы в кашу. */
 .profile-view {
   padding: 24px;
   height: 100%;
   overflow-y: auto;
+  container-type: inline-size;
+  container-name: profile;
 }
 
-/* Контент центрируется; ширину задаёт настраиваемая сетка ниже. */
 .profile-container {
   max-width: 1280px;
   margin: 0 auto;
-}
-
-/* ── Identity-карточка ───────────────────────────────────────── */
-/* Полноправная плашка сетки: перетаскивается и меняет ширину, как остальные. */
-.identity-card {
-  position: relative;
   display: flex;
   flex-direction: column;
-  align-items: center;
-  gap: 14px;
+  gap: 20px;
+}
+
+/* Крупные акриловые панели-блоки: карточка «кто я» + интеграции, ниже сеансы. */
+.card {
   background: var(--acrylic-card-bg);
   -webkit-backdrop-filter: var(--acrylic-blur);
   backdrop-filter: var(--acrylic-blur);
   border: 1px solid var(--acrylic-border);
   border-radius: var(--radius-xl);
-  padding: 0 20px 20px;
-  box-shadow: var(--shadow-sm);
-  overflow: hidden;
-  text-align: center;
+  padding: 22px;
 }
 
-/* Экспрессивная обложка — hero-момент идентичности (M3 Expressive).
-   Пастельные тона (контейнеры, приглушённые поверхностью) + плавное
-   растворение к низу через маску — без резкой кромки. */
-.identity-cover {
-  width: calc(100% + 40px);
-  margin: 0 -20px -20px;
-  height: 128px;
-  flex-shrink: 0;
-  background:
-    radial-gradient(120% 140% at 85% 0%,
-      color-mix(in oklch, var(--color-tertiary-container) 40%, transparent) 0%,
-      transparent 60%),
-    linear-gradient(120deg,
-      color-mix(in oklch, var(--color-primary-container) 55%, var(--color-surface)),
-      color-mix(in oklch, var(--color-secondary-container) 55%, var(--color-surface)));
-  -webkit-mask-image: linear-gradient(to bottom, black 30%, transparent 100%);
-  mask-image: linear-gradient(to bottom, black 30%, transparent 100%);
+.card-title {
+  margin: 0 0 16px;
+  font-size: 19px;
+  font-weight: 800;
+  letter-spacing: -0.2px;
+  color: var(--color-text);
 }
 
-.avatar-wrapper {
-  position: relative;
-  width: 120px;
-  height: 120px;
-  margin-top: -56px;
-  border-radius: 50%;
-  overflow: hidden;
-  border: 3px solid var(--color-primary);
-  box-shadow: 0 0 0 4px var(--color-surface);
-  flex-shrink: 0;
-  padding: 0;
-  background: var(--acrylic-card-bg);
-  cursor: zoom-in;
-  transition: transform .18s, box-shadow .18s;
-}
-
-.avatar-wrapper:hover {
-  transform: scale(1.03);
-  box-shadow: 0 0 0 4px var(--color-surface), var(--shadow-md);
-}
-
-.avatar-zoom-overlay {
-  position: absolute;
-  inset: 0;
+.top-row {
   display: grid;
-  place-items: center;
-  background: color-mix(in oklch, var(--color-scrim) 70%, transparent);
-  color: var(--color-on-primary);
-  opacity: 0;
-  transition: opacity .15s;
+  grid-template-columns: minmax(0, 1.55fr) minmax(0, 1fr);
+  gap: 20px;
+  align-items: stretch;
 }
-.avatar-wrapper:hover .avatar-zoom-overlay { opacity: 1; }
-.avatar-zoom-overlay .material-symbols-outlined { font-size: 32px; }
 
-.profile-avatar {
+/* ── Кто я ───────────────────────────────────────────────────────── */
+.id-card {
+  display: flex;
+  gap: 22px;
+  align-items: flex-start;
+}
+
+.id-avatar {
+  flex-shrink: 0;
+  position: relative;
+  width: 152px;
+  height: 152px;
+  padding: 0;
+  border: 1px solid var(--color-outline-dim);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  background: var(--color-surface-low);
+  cursor: zoom-in;
+  transition: transform 0.18s, box-shadow 0.18s;
+}
+
+.id-avatar:hover {
+  transform: scale(1.02);
+  box-shadow: var(--shadow-md);
+}
+
+.id-avatar img {
   width: 100%;
   height: 100%;
   object-fit: cover;
   display: block;
 }
 
-.hero-info {
+.id-avatar-zoom {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  background: color-mix(in oklch, var(--color-scrim) 55%, transparent);
+  color: var(--color-on-primary);
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+.id-avatar:hover .id-avatar-zoom { opacity: 1; }
+.id-avatar-zoom .material-symbols-outlined { font-size: 30px; }
+
+.id-body {
   min-width: 0;
+  flex: 1;
   display: flex;
   flex-direction: column;
-  align-items: center;
+  gap: 8px;
+  align-self: stretch;
+}
+
+.id-name {
+  margin: 0;
+  font-size: 26px;
+  font-weight: 800;
+  line-height: 1.15;
+  letter-spacing: -0.4px;
+  color: var(--color-primary);
+  overflow-wrap: anywhere;
+}
+
+.id-post {
+  margin: 0;
+  font-size: 14px;
+  color: var(--color-text-dim);
+}
+
+.id-contacts {
+  list-style: none;
+  margin: 4px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
   gap: 6px;
 }
 
-.hero-name {
-  margin: 0;
-  font-size: 24px;
-  font-weight: 800;
-  letter-spacing: -0.3px;
-  color: var(--color-text);
-  line-height: 1.2;
-}
-
-.hero-post {
-  margin: 0;
+.id-contacts li {
   font-size: 15px;
-  color: var(--color-text-dim);
-}
-
-.hero-meta {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 10px;
-  flex-wrap: wrap;
-  margin-top: 4px;
-}
-
-.hero-login {
-  font-size: 13px;
-  color: var(--color-text-dim);
-}
-
-.role-tag {
-  display: inline-block;
-  background: var(--color-tertiary-container);
-  color: var(--color-on-tertiary-container);
-  border-radius: var(--radius-full);
-  padding: 4px 14px;
-  font-size: 12px;
-  font-weight: 600;
-}
-
-.avatar-actions {
-  display: flex;
-  gap: 8px;
-  flex-wrap: wrap;
-  justify-content: center;
-}
-
-.btn-sm {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  padding: 5px 12px;
-  border-radius: var(--radius-full);
-  font-size: 12px;
-  font-weight: 500;
-  cursor: pointer;
-  border: 1px solid var(--color-outline-dim);
-  background: var(--acrylic-card-bg);
-  color: var(--color-text);
-  transition: background 0.15s, color 0.15s;
-}
-
-.btn-sm:hover {
-  background: var(--color-surface-low);
-}
-
-.btn-sm.danger {
-  color: var(--color-error);
-  border-color: color-mix(in oklch, var(--color-error) 30%, var(--color-outline-dim));
-}
-
-.btn-sm.danger:hover {
-  background: var(--color-error-container);
-}
-
-.btn-sm .material-symbols-outlined {
-  font-size: 14px;
-}
-
-/* Контакты в рейле — тональные иконки в духе разделов настроек. */
-.identity-contacts {
-  list-style: none;
-  width: 100%;
-  margin: 4px 0 0;
-  padding: 14px 0 0;
-  border-top: 1px solid var(--color-outline-dim);
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-
-.contact-row {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  min-width: 0;
-  text-align: left;
-}
-
-.contact-ico {
-  flex-shrink: 0;
-  width: 36px;
-  height: 36px;
-  border-radius: 12px;
-  display: grid;
-  place-items: center;
-  background: var(--tone-bg, var(--color-primary-container));
-  color: var(--tone-fg, var(--color-on-primary-container));
-}
-.contact-ico[data-tone="primary"]   { --tone-bg: var(--color-primary-container);   --tone-fg: var(--color-on-primary-container); }
-.contact-ico[data-tone="secondary"] { --tone-bg: var(--color-secondary-container); --tone-fg: var(--color-on-secondary-container); }
-.contact-ico[data-tone="tertiary"]  { --tone-bg: var(--color-tertiary-container);  --tone-fg: var(--color-on-tertiary-container); }
-.contact-ico .material-symbols-outlined { font-size: 18px; }
-
-.contact-text {
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 1px;
-}
-
-.contact-text small {
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  color: var(--color-text-dim);
-}
-
-.contact-text > span {
-  font-size: 13px;
   color: var(--color-text);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.contact-text > span.contact-empty { color: var(--color-text-dim); }
+.id-contacts li.empty { color: var(--color-text-dim); }
 
-.btn-logout {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  width: 100%;
-  margin-top: 4px;
-  padding: 10px 18px;
-  border: 1px solid color-mix(in oklch, var(--color-error) 30%, var(--color-outline-dim));
-  border-radius: var(--radius-full);
-  background: transparent;
-  color: var(--color-error);
-  font-size: 14px;
-  font-weight: 600;
-  cursor: pointer;
-  transition: background 0.15s;
-}
-
-.btn-logout:hover {
-  background: var(--color-error-container);
-}
-
-.btn-logout .material-symbols-outlined {
-  font-size: 18px;
-}
-
-/* ── Правая колонка ──────────────────────────────────────────── */
-.profile-main {
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-  min-width: 0;
-}
-
-/* Подсказка + сброс раскладки над сеткой. */
-.layout-toolbar {
+/* Кнопка правки прижата к нижнему правому углу карточки — как в макете. */
+.id-actions {
+  margin-top: auto;
+  padding-top: 12px;
   display: flex;
   align-items: center;
-  gap: 12px;
+  justify-content: flex-end;
+  gap: 10px;
   flex-wrap: wrap;
 }
 
-.layout-hint {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 12.5px;
-  color: var(--color-text-dim);
-}
-.layout-hint .material-symbols-outlined { font-size: 16px; }
-
-.layout-reset {
-  margin-left: auto;
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 13px;
-  padding: 7px 14px;
-}
-.layout-reset .material-symbols-outlined { font-size: 17px; }
-
-/* Настраиваемая сетка плашек: 4 колонки, ширина — span 1..4. Masonry-упаковка:
-   мелкие грид-строки (grid-auto-rows) + высота карточки в строк-спанах (считает
-   useDashboardGrid по факту) ⇒ колонки пакуются независимо, без «мёртвых» зон.
-   Вертикальный зазор заложен в спан (VGAP), поэтому row-gap = 0.
-   grid-auto-rows держать синхронно с ROW_UNIT в composable. */
-.cards-grid {
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  column-gap: 20px;
-  row-gap: 0;
-  grid-auto-rows: 4px;
-  align-items: start;
-}
-
-/* ── Режим отпуска ───────────────────────────────────────────── */
-.vacation-head { flex-wrap: nowrap; }
-.vacation-switch { margin-left: auto; flex-shrink: 0; }
-
-.vacation-tag {
+.id-vacation {
+  margin-right: auto;
+  padding: 5px 12px;
+  border-radius: var(--radius-full);
   background: var(--color-secondary-container);
   color: var(--color-on-secondary-container);
-}
-
-.vacation-state {
-  margin: 0;
-  font-size: 13.5px;
-  color: var(--color-text-dim);
-}
-
-.yandex-link-row {
-  display: flex;
-  align-items: center;
-  gap: 14px;
-  flex-wrap: wrap;
-}
-.yandex-linked-chip {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 8px 14px;
-  border-radius: var(--radius-pill, 999px);
-  background: var(--color-success-container, var(--color-surface-variant));
-  color: var(--color-on-success-container, var(--color-text));
-  font-size: 0.9rem;
+  font-size: 12.5px;
   font-weight: 600;
 }
-.yandex-linked-chip .material-symbols-outlined { font-size: 18px; }
 
-.profile-card {
-  position: relative;
-  background: var(--acrylic-card-bg);
-  -webkit-backdrop-filter: var(--acrylic-blur);
-  backdrop-filter: var(--acrylic-blur);
-  border: 1px solid var(--acrylic-border);
-  border-radius: var(--radius-lg);
-  padding: 22px;
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-  transition: border-color 0.15s, box-shadow 0.18s;
-}
-
-.profile-card:hover {
-  border-color: color-mix(in oklch, var(--color-primary) 30%, var(--color-outline-dim));
-}
-
-/* ── Состояния карточки при drag/resize (ручки — в GridCardChrome) ── */
-.grid-card.is-dragging {
-  box-shadow: var(--shadow-lg, 0 18px 40px rgba(0, 0, 0, 0.22));
-  border-color: color-mix(in oklch, var(--color-primary) 45%, var(--color-outline-dim));
-  opacity: 0.96;
-  cursor: grabbing;
-}
-.grid-card.is-resizing {
-  border-color: color-mix(in oklch, var(--color-primary) 45%, var(--color-outline-dim));
-  box-shadow: var(--shadow-sm);
-}
-
-/* Шапка карточки: тональная иконка + заголовок + описание. */
-.card-head {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding-bottom: 12px;
-  border-bottom: 1px solid var(--color-outline-dim);
-}
-
-.card-head h3 {
-  margin: 0;
-  font-size: 16px;
-  font-weight: 700;
-  color: var(--color-text);
-}
-
-.head-text { min-width: 0; }
-
-.head-desc {
-  margin: 2px 0 0;
-  font-size: 12.5px;
-  color: var(--color-text-dim);
-}
-
-.head-icon {
-  flex-shrink: 0;
-  width: 40px;
-  height: 40px;
-  border-radius: 12px;
-  display: grid;
-  place-items: center;
-  background: var(--tone-bg, var(--color-primary-container));
-  color: var(--tone-fg, var(--color-on-primary-container));
-}
-.head-icon[data-tone="primary"]   { --tone-bg: var(--color-primary-container);   --tone-fg: var(--color-on-primary-container); }
-.head-icon[data-tone="secondary"] { --tone-bg: var(--color-secondary-container); --tone-fg: var(--color-on-secondary-container); }
-.head-icon[data-tone="tertiary"]  { --tone-bg: var(--color-tertiary-container);  --tone-fg: var(--color-on-tertiary-container); }
-.head-icon .material-symbols-outlined { font-size: 22px; }
-
-.stats-head { flex-wrap: wrap; }
-/* «Моя активность» открывает правую группу шапки, дальше — пикер периода. */
-.activity-link {
-  margin-left: auto;
+.id-edit {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  white-space: nowrap;
-  text-decoration: none;
+  gap: 8px;
+  padding: 9px 18px;
 }
-.activity-link .material-symbols-outlined { font-size: 18px; }
-.head-period { margin-left: 8px; }
+.id-edit .material-symbols-outlined { font-size: 18px; }
 
-/* ── Логин и пароль ──────────────────────────────────────────── */
-.cred-list {
+/* ── Интеграции ──────────────────────────────────────────────────── */
+.int-list {
   list-style: none;
   margin: 0;
   padding: 0;
@@ -1165,338 +482,260 @@ onMounted(() => {
   gap: 12px;
 }
 
-.cred-row {
+.int-row {
+  width: 100%;
   display: flex;
   align-items: center;
   gap: 12px;
-  min-width: 0;
+  padding: 12px 14px;
+  border: 1px solid var(--color-outline-dim);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface);
+  color: var(--color-text);
+  font-size: 14.5px;
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s;
 }
 
-.cred-ico {
+.int-row:hover:not(.is-static) {
+  background: var(--color-surface-low);
+  border-color: color-mix(in oklch, var(--color-primary) 35%, var(--color-outline-dim));
+}
+
+.int-row.is-static { cursor: default; }
+
+.int-ico {
   flex-shrink: 0;
-  width: 40px;
-  height: 40px;
-  border-radius: 12px;
+  width: 32px;
+  height: 32px;
+  border-radius: var(--radius-sm);
   display: grid;
   place-items: center;
   background: var(--tone-bg, var(--color-primary-container));
   color: var(--tone-fg, var(--color-on-primary-container));
 }
-.cred-ico[data-tone="primary"]  { --tone-bg: var(--color-primary-container);  --tone-fg: var(--color-on-primary-container); }
-.cred-ico[data-tone="tertiary"] { --tone-bg: var(--color-tertiary-container); --tone-fg: var(--color-on-tertiary-container); }
-.cred-ico .material-symbols-outlined { font-size: 20px; }
+.int-ico[data-tone="primary"]   { --tone-bg: var(--color-primary-container);   --tone-fg: var(--color-on-primary-container); }
+.int-ico[data-tone="secondary"] { --tone-bg: var(--color-secondary-container); --tone-fg: var(--color-on-secondary-container); }
+.int-ico[data-tone="error"]     { --tone-bg: var(--color-error-container);     --tone-fg: var(--color-error); }
+.int-ico .material-symbols-outlined { font-size: 19px; }
 
-.cred-text {
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 1px;
+.int-badge {
+  font-size: 15px;
+  font-weight: 800;
+  line-height: 1;
 }
-.cred-text small {
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
+
+.int-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.int-state { color: var(--color-text-dim); }
+
+.int-go {
+  margin-left: auto;
+  font-size: 20px;
   color: var(--color-text-dim);
 }
-.cred-text > span {
+
+/* ── Сеансы ──────────────────────────────────────────────────────── */
+.sess-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 16px;
+}
+
+.sess-tile {
+  border: 1px solid var(--color-outline-dim);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface);
+  padding: 16px;
+  min-height: 168px;
+}
+
+.sess-add {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  color: var(--color-text);
   font-size: 14px;
+  font-weight: 600;
+  text-align: center;
+  line-height: 1.35;
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s;
+}
+
+.sess-add:hover {
+  background: var(--color-surface-low);
+  border-color: color-mix(in oklch, var(--color-primary) 35%, var(--color-outline-dim));
+}
+
+.sess-add .material-symbols-outlined {
+  font-size: 30px;
+  color: var(--color-text-dim);
+}
+
+.sess-loading { display: grid; place-items: center; }
+
+.sess-item {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.sess-head {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.sess-ico {
+  font-size: 30px;
+  color: var(--color-text);
+}
+
+.sess-place {
+  margin-left: auto;
+  max-width: 60%;
+  padding: 3px 10px;
+  border-radius: var(--radius-full);
+  background: var(--color-primary-container);
+  color: var(--color-on-primary-container);
+  font-size: 11.5px;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sess-title {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 700;
   color: var(--color-text);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.cred-btn {
-  margin-left: auto;
-  flex-shrink: 0;
+.sess-meta {
+  margin: 0;
+  font-size: 12.5px;
+  color: var(--color-text-dim);
+  line-height: 1.4;
+}
+
+.sess-current {
+  color: var(--color-primary);
+  font-weight: 600;
+}
+
+.sess-end {
+  margin-top: auto;
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  font-size: 13px;
-  padding: 7px 14px;
-}
-.cred-btn .material-symbols-outlined { font-size: 16px; }
-
-/* ── Формы ───────────────────────────────────────────────────── */
-.profile-form {
-  display: flex;
-  flex-direction: column;
-  gap: 14px;
-}
-
-.form-group {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-.form-group label {
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--color-text-dim);
-}
-
-.w-full {
+  justify-content: center;
+  gap: 8px;
   width: 100%;
-}
-
-.error-msg {
-  margin: 0;
-  font-size: 13px;
-  color: var(--color-on-error-container);
-  padding: 8px 12px;
-  background: var(--color-error-container);
-  border-radius: 8px;
-  border: 1px solid color-mix(in oklch, var(--color-error) 30%, var(--color-outline-dim));
-}
-
-.btn-primary {
-  align-self: flex-start;
-  background: var(--color-primary);
-  color: var(--color-on-primary);
+  padding: 9px 12px;
   border: none;
-  border-radius: var(--radius-full);
-  padding: 10px 22px;
-  font-size: 14px;
+  border-radius: var(--radius-sm);
+  background: var(--color-error-container);
+  color: var(--color-error);
+  font-size: 13.5px;
   font-weight: 600;
   cursor: pointer;
   transition: background 0.15s;
 }
 
-.btn-primary:hover:not(:disabled) {
-  background: var(--color-primary-hover);
+.sess-end:hover:not(:disabled) {
+  background: color-mix(in oklch, var(--color-error) 22%, var(--color-error-container));
 }
 
-.btn-primary:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
+.sess-end:disabled { opacity: 0.6; cursor: not-allowed; }
+.sess-end .material-symbols-outlined { font-size: 17px; }
+
+/* ── Узкое окно: верхний ряд схлопывается в колонку ──────────────── */
+/* Двум карточкам нужно ~940px, дальше они начинают жать содержимое —
+   складываем их друг под друга, а не сжимаем. */
+@container profile (max-width: 940px) {
+  .top-row { grid-template-columns: minmax(0, 1fr); }
 }
 
-/* ── Статистика ──────────────────────────────────────────────── */
-.stat-tiles {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 14px;
+/* Ещё уже — карточка «кто я» становится вертикальной, сетка сеансов в один
+   столбец (так же выглядит раздел и на телефоне). */
+@container profile (max-width: 620px) {
+  .card { padding: 16px; border-radius: var(--radius-lg); }
+
+  .id-card {
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+    gap: 16px;
+  }
+
+  .id-avatar { width: 120px; height: 120px; }
+
+  .id-body { align-items: center; width: 100%; }
+
+  .id-contacts li { white-space: normal; }
+
+  .id-actions { justify-content: center; width: 100%; }
+
+  .id-vacation { margin-right: 0; }
+
+  .sess-tile { min-height: 0; }
 }
 
-.stat-tile {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 16px 18px;
-  border-radius: 18px;
-  background: var(--tone-bg, var(--color-primary-container));
-  color: var(--tone-fg, var(--color-on-primary-container));
-}
-.stat-tile[data-tone="primary"]   { --tone-bg: var(--color-primary-container);   --tone-fg: var(--color-on-primary-container); }
-.stat-tile[data-tone="secondary"] { --tone-bg: var(--color-secondary-container); --tone-fg: var(--color-on-secondary-container); }
-.stat-tile[data-tone="tertiary"]  { --tone-bg: var(--color-tertiary-container);  --tone-fg: var(--color-on-tertiary-container); }
-
-.tile-ico {
-  flex-shrink: 0;
-  width: 38px;
-  height: 38px;
-  border-radius: 50%;
-  display: grid;
-  place-items: center;
-  background: color-mix(in oklch, currentColor 14%, transparent);
-}
-.tile-ico .material-symbols-outlined { font-size: 20px; }
-
-.tile-text {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  min-width: 0;
+/* Сетка сеансов подстраивается сама (auto-fill), но у совсем узкого окна
+   минимальная ширина плитки была бы больше самой сетки. */
+@container profile (max-width: 420px) {
+  .sess-grid { grid-template-columns: minmax(0, 1fr); }
 }
 
-.tile-num {
-  font-size: 26px;
-  font-weight: 800;
-  line-height: 1.1;
-}
-
-.tile-label {
-  font-size: 12px;
-  opacity: 0.8;
-}
-
-/* Бары по типам юнитов (десктоп). */
-.type-list {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-
-.type-row {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-.type-top {
-  display: flex;
-  justify-content: space-between;
-  align-items: baseline;
-  gap: 12px;
-  font-size: 13px;
-}
-
-.type-name {
-  font-weight: 600;
-  color: var(--color-text);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.type-meta {
-  color: var(--color-text-dim);
-  white-space: nowrap;
-}
-
-.type-bar {
-  height: 8px;
-  border-radius: var(--radius-full);
-  background: var(--color-surface-low);
-  overflow: hidden;
-}
-
-.type-bar > span {
-  display: block;
-  height: 100%;
-  border-radius: var(--radius-full);
-  background: linear-gradient(90deg, var(--color-primary), var(--color-tertiary));
-  transition: width 0.4s cubic-bezier(0.4, 0, 0.2, 1);
-}
-
-.stats-table {
-  margin-top: 4px;
-}
-
-.loading-inline {
-  display: flex;
-  justify-content: center;
-  padding: 24px;
-}
-
-.empty-stats {
-  text-align: center;
-  padding: 24px;
-  color: var(--color-text-dim);
-  font-size: 14px;
-}
-
-/* ── Узкий десктоп: плитки статистики компактнее ─────────────── */
-@media (max-width: 1100px) and (min-width: 769px) {
-  .stat-tiles { grid-template-columns: repeat(2, 1fr); }
-  .stat-tile--avg { display: none; }
-}
-
-/* ── Мобилка: простая колонка, без кастомизации раскладки ─────── */
+/* Мобильный каркас: отступы — вопрос экрана, а не окна (контент уезжает под
+   нижнюю навигацию). Узкая раскладка здесь ПОВТОРЕНА media-запросом намеренно:
+   заводской WebView старых Android (см. build.target в vite.config.js) не знает
+   @container и без этого показал бы телефону десктопный ряд в две колонки. */
 @media (max-width: 768px) {
   .profile-view {
     padding: 12px;
-    /* Резерв под нижнюю навигацию (64px) + 12px воздуха: контент профиля
-       скроллится под стекло навигации. */
+    /* Резерв под нижнюю навигацию (64px) + воздух. */
     padding-bottom: calc(76px + env(safe-area-inset-bottom, 0px));
   }
 
-  .profile-container {
-    display: flex;
-    flex-direction: column;
-    /* Десктопный align-items: start здесь дал бы flex-колонке сжатие по
-       содержимому и прижатие влево — на мобилке карточки во всю ширину. */
-    align-items: stretch;
-    gap: 16px;
-    max-width: none;
-  }
+  .profile-container { gap: 16px; }
 
-  .identity-card {
-    padding: 24px 16px;
-    gap: 16px;
-    overflow: visible;
-  }
+  .top-row { grid-template-columns: minmax(0, 1fr); }
 
-  /* Обложка и контакты — только десктопная фишка. */
-  .identity-cover,
-  .identity-contacts { display: none; }
+  .card { padding: 16px; border-radius: var(--radius-lg); }
 
-  .avatar-wrapper { margin-top: 0; }
-
-  .hero-name { font-size: 26px; }
-
-  .btn-logout { margin-top: 0; }
-
-  .profile-main { gap: 16px; }
-
-  /* Сетка превращается в простую колонку; подсказка/ручки скрыты
-     (ручки прячет сам GridCardChrome). */
-  .cards-grid {
-    display: flex;
-    flex-direction: column;
-    gap: 16px;
-  }
-  .layout-toolbar { display: none; }
-
-  /* Шапки карточек — как раньше: просто заголовок с разделителем. */
-  .head-icon,
-  .head-desc { display: none; }
-
-  .stats-head { flex-wrap: wrap; }
-  .activity-link { margin-left: auto; }
-  .activity-link-label { display: none; }
-  .head-period { margin-left: 0; flex-basis: 100%; }
-
-  /* Плитки статистики — прежние нейтральные карточки, без третьей. */
-  .stat-tiles {
-    display: flex;
-    gap: 16px;
-    flex-wrap: wrap;
-  }
-
-  .stat-tile {
-    flex: 1;
-    min-width: 100px;
+  .id-card {
     flex-direction: column;
     align-items: center;
-    gap: 4px;
-    padding: 16px;
-    border-radius: 10px;
-    background: var(--color-surface-low);
-    border: 1px solid var(--color-outline-dim);
-    color: var(--color-text);
+    text-align: center;
+    gap: 16px;
   }
 
-  .stat-tile--avg { display: none; }
+  .id-avatar { width: 120px; height: 120px; }
 
-  .tile-ico { display: none; }
+  .id-body { align-items: center; width: 100%; }
 
-  .tile-text { align-items: center; gap: 4px; }
+  .id-contacts li { white-space: normal; }
 
-  .tile-num {
-    font-size: 28px;
-    color: var(--color-primary);
-    line-height: 1;
-  }
+  .id-actions { justify-content: center; width: 100%; }
 
-  .tile-label {
-    font-size: 12px;
-    color: var(--color-text-dim);
-    opacity: 1;
-  }
+  .id-vacation { margin-right: 0; }
 
-  .btn-primary { border-radius: 10px; padding: 9px 20px; }
+  .sess-grid { grid-template-columns: minmax(0, 1fr); }
 
-  /* Горизонтальный скролл для таблицы статистики */
-  .stats-table {
-    overflow-x: auto;
-    display: block;
-  }
-
-  /* Кредит-строки на узких экранах переносят кнопку под подпись. */
-  .cred-row { flex-wrap: wrap; }
-  .cred-btn { margin-left: 52px; }
+  .sess-tile { min-height: 0; }
 }
 </style>

@@ -67,6 +67,7 @@ func NewServer(eps endpoint.Endpoints, users domain.UserReader,
 	api.Get("/indexing", h.indexingStatus)
 	api.Post("/reindex-tasks", h.reindexTasks)
 
+	app.Get("/api/ai/status", auth.RequireAuth, h.aiStatus)
 	app.Get("/api/ai/tv-fact", auth.RequireAuth, h.tvFact)
 
 	app.Post("/api/ai/assistant/messages", auth.RequireAuth, h.sendAssistantMessage)

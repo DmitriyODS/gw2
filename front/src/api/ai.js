@@ -28,3 +28,7 @@ export const transformText = ({ action, text, style = null }) =>
 // исправленный массив той же длины (клиент подменяет узлы по индексу). { segments }.
 export const proofread = (segments) =>
   apiRequest('/ai/proofread', { method: 'POST', body: { segments } })
+
+// Включён ли ИИ в активной компании — один флаг для карточки «Интеграции»
+// (полные ai-настройки читает только администратор компании).
+export const getAiStatus = () => apiRequest('/ai/status')
