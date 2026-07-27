@@ -71,14 +71,23 @@ describe('PostCard', () => {
     expect(admin.find('.post-menu').exists()).toBe(true)
   })
 
-  it('реакции: показывает счётчик и подсвечивает свою реакцию активной', () => {
+  it('реакции: показывает только поставленные, свою — активной', () => {
     const w = factory(mkPost({ reaction_counts: { '👍': 3 }, my_reactions: ['👍'] }))
     const btn = w.findAll('.post-reaction').find((b) => b.text().includes('👍'))
     expect(btn.classes()).toContain('active')
     expect(btn.text()).toContain('3')
 
-    const other = w.findAll('.post-reaction').find((b) => b.text().includes('❤️'))
-    expect(other.classes()).not.toContain('active')
+    // Непоставленные реакции рядом не висят — их набор открывает кнопка.
+    expect(w.findAll('.post-reaction').some((b) => b.text().includes('❤️'))).toBe(false)
+    expect(w.find('.post-reaction-add').exists()).toBe(true)
+  })
+
+  it('кнопка реакции открывает панель выбора эмодзи', async () => {
+    const w = factory(mkPost())
+    expect(document.querySelector('.rpick')).toBeNull()
+
+    await w.find('.post-reaction-add').trigger('click')
+    expect(document.querySelectorAll('.rpick-item').length).toBeGreaterThan(5)
   })
 
   it('топик поста отображается чипом с его названием', () => {

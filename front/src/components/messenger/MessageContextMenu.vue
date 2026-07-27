@@ -51,6 +51,7 @@
 <script setup>
 import { computed, nextTick, ref, watch, onMounted, onBeforeUnmount } from 'vue'
 import { fitToViewport } from '@/utils/menuPlacement.js'
+import { QUICK_REACTIONS } from '@/utils/reactions.js'
 
 const props = defineProps({
   visible: { type: Boolean, default: false },
@@ -67,12 +68,8 @@ const props = defineProps({
   myReactions: { type: Array, default: () => [] },
 })
 
-// Расширенный набор: позитивные, нейтральные и негативные реакции (как в
-// Telegram/Slack). Одна горизонтально прокручиваемая строка (см. .msg-ctx-reactions).
-const QUICK_REACTIONS = [
-  '👍', '👎', '❤️', '🔥', '😂', '🎉', '👏', '🙏', '😮', '🤔',
-  '😢', '😡', '🥰', '😍', '🤯', '💯', '🤝', '👀', '💩', '🤣',
-]
+// Набор общий с реакциями портала (utils/reactions.js). Одна горизонтально
+// прокручиваемая строка (см. .msg-ctx-reactions).
 
 const emit = defineEmits(['close', 'action', 'react'])
 const menuEl = ref(null)

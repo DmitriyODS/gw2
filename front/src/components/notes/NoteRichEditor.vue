@@ -1,5 +1,5 @@
 <template>
-  <div class="ne" :class="{ readonly: !editable }">
+  <div ref="rootEl" class="ne" :class="{ readonly: !editable }">
     <!-- Sticky-панель форматирования (правило sticky-шапок: плотное стекло) -->
     <div v-if="editable" class="ne-toolbar">
       <!-- Действия с выделенным (ИИ/создать/в чат/копировать): постоянная
@@ -183,7 +183,7 @@
 // документ — TipTap JSON (не markdown: highlight-цвета и таблицы в md не
 // выражаются). Переиспользуется страницей заметки и публичной ссылкой
 // (view — editable:false без панели; edit по ссылке — без загрузки картинок).
-import { onBeforeUnmount, ref, watch } from 'vue'
+import { onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { EditorContent, useEditor } from '@tiptap/vue-3'
 import StarterKit from '@tiptap/starter-kit'
 import Underline from '@tiptap/extension-underline'
@@ -264,6 +264,28 @@ watch(() => props.doc, (doc) => {
 })
 
 onBeforeUnmount(() => editor.value?.destroy())
+
+/* «Прокрутка за конец текста» (как в Sublime Text): под последней строкой
+   остаётся пустое поле в половину видимой области — последняя строка доходит
+   до середины окна, а не упирается в его низ. Хвост считаем от высоты
+   прокручиваемой области (root), поэтому он верен и в маленьком окне. */
+const rootEl = ref(null)
+let tailObserver = null
+
+function syncTail() {
+  const el = rootEl.value
+  if (!el) return
+  const tail = Math.min(Math.max(Math.round(el.clientHeight * 0.5), 80), 600)
+  el.style.setProperty('--ne-tail', `${tail}px`)
+}
+
+onMounted(() => {
+  syncTail()
+  tailObserver = new ResizeObserver(syncTail)
+  if (rootEl.value) tailObserver.observe(rootEl.value)
+})
+
+onBeforeUnmount(() => tailObserver?.disconnect())
 
 function chain() { return editor.value?.chain().focus() }
 
@@ -493,7 +515,9 @@ defineExpose({ editor })
 .ne-content :deep(.tiptap) {
   outline: none;
   min-height: 240px;
-  padding: 20px 18px 40px;
+  /* Нижний отступ — «прокрутка за конец текста»: величину задаёт --ne-tail
+     (половина видимой области), fallback — на случай, если замер не сработал. */
+  padding: 20px 18px var(--ne-tail, 40vh);
   color: var(--color-text);
   font-size: 15px;
   line-height: 1.65;

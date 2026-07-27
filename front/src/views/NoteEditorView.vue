@@ -1,7 +1,10 @@
 <template>
   <!-- wheel с Ctrl/Cmd (и щипок трекпада — браузер шлёт его как ctrl+wheel)
        перехватываем в зум листа вместо зума страницы. -->
-  <div class="np" @wheel="onZoomWheel">
+  <!-- keydown ловим на панели, а не на window: на рабочем столе открыто
+       несколько окон разом, и Ctrl+F должен слушаться только в том, где
+       сейчас курсор. -->
+  <div class="np" @wheel="onZoomWheel" @keydown="onPanelKeydown">
     <div class="np-panel">
       <header class="np-head">
         <button class="np-back" title="К списку заметок" @click="goBack">
@@ -48,6 +51,9 @@
                 <span class="material-symbols-outlined">zoom_in</span>
               </button>
             </div>
+            <button class="np-icon" :class="{ active: findOpen }" title="Найти в заметке (Ctrl+F)" @click="toggleFind">
+              <span class="material-symbols-outlined">search</span>
+            </button>
             <template v-if="isOwner">
               <button class="np-icon" title="Теги" @click="tagsOpen = true">
                 <span class="material-symbols-outlined">sell</span>
@@ -85,6 +91,10 @@
                   </button>
                 </div>
                 <div class="np-more-divider" />
+                <button class="np-more-item" @click="pickMore(showFind)">
+                  <span class="material-symbols-outlined">search</span>
+                  Найти в заметке
+                </button>
                 <template v-if="isOwner">
                   <button class="np-more-item" @click="pickMore(() => tagsOpen = true)">
                     <span class="material-symbols-outlined">sell</span>
@@ -115,6 +125,17 @@
           </div>
         </div>
       </header>
+
+      <NoteFindBar
+        v-if="findOpen"
+        ref="findBar"
+        v-model:query="findQuery"
+        class="np-find"
+        :total="findTotal"
+        :current="findCurrent"
+        @step="stepFind"
+        @close="hideFind"
+      />
 
       <div v-if="loading" class="np-loading">Загрузка…</div>
       <EmptyState
@@ -212,7 +233,7 @@
 <script setup>
 // Страница заметки: крупный заголовок + rich-редактор. Автосохранение —
 // дебаунс 1.5с после правок, немедленно на blur/beforeunload/Cmd+S.
-import { computed, defineAsyncComponent, onBeforeUnmount, onMounted, ref } from 'vue'
+import { computed, defineAsyncComponent, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { useBreakpoint } from '@/composables/useBreakpoint.js'
 import EmptyState from '@/components/common/EmptyState.vue'
@@ -224,6 +245,7 @@ import NoteSelectionMenu from '@/components/notes/NoteSelectionMenu.vue'
 import NoteAiDialog from '@/components/notes/NoteAiDialog.vue'
 import NoteToDiaryDialog from '@/components/notes/NoteToDiaryDialog.vue'
 import NoteSendToChatDialog from '@/components/notes/NoteSendToChatDialog.vue'
+import NoteFindBar from '@/components/notes/NoteFindBar.vue'
 import TaskForm from '@/components/tasks/TaskForm.vue'
 import { docToMarkdown } from '@/utils/tiptapMarkdown.js'
 
@@ -236,6 +258,7 @@ import { useAuthStore } from '@/stores/auth.js'
 import { useNotesStore } from '@/stores/notes.js'
 import { useNotificationsStore } from '@/stores/notifications.js'
 import { useNoteCollab } from '@/composables/useNoteCollab.js'
+import { useNoteFind } from '@/composables/useNoteFind.js'
 
 const props = defineProps({ id: { type: String, required: true } })
 
@@ -264,6 +287,25 @@ const title = ref('')
 const doc = ref(null)
 const tagIds = ref([])
 const editorRef = ref(null)
+
+// ── Поиск по заметке (Ctrl+F) ──
+const findBar = ref(null)
+const {
+  open: findOpen, query: findQuery, total: findTotal, current: findCurrent,
+  show: showFind, hide: hideFind, toggle: toggleFind, step: stepFind, onKeydown: onFindKeydown,
+} = useNoteFind(editorRef)
+
+const focusFind = () => nextTick(() => findBar.value?.focus())
+
+watch(findOpen, (v) => {
+  if (v) focusFind()
+})
+
+/* Повторный Ctrl+F при открытой панели возвращает курсор в поле поиска —
+   watch этого не даст, панель уже открыта. */
+function onPanelKeydown(e) {
+  if (onFindKeydown(e) && findOpen.value) focusFind()
+}
 
 // Доступ: owner | edit | view (заметка может быть чужой — адресный шаринг).
 const myAccess = ref('owner')
@@ -732,6 +774,10 @@ async function confirmDelete() {
 .np-icon .material-symbols-outlined { font-size: 21px; }
 .np-icon:hover { background: color-mix(in oklch, var(--color-primary) 10%, transparent); color: var(--color-primary); }
 .np-icon.danger:hover { background: color-mix(in oklch, var(--color-error) 10%, transparent); color: var(--color-error); }
+.np-icon.active { background: color-mix(in oklch, var(--color-primary) 14%, transparent); color: var(--color-primary); }
+
+/* Панель поиска (NoteFindBar) — по ширине листа, как заголовок. */
+.np-find { margin: 8px 24px 0; }
 
 /* ── Мобильное меню «⋮» (стекло, как поповеры карточек) ── */
 .np-more { position: relative; }
@@ -832,6 +878,7 @@ async function confirmDelete() {
   }
   .np-back-label { display: none; }
   .np-title { margin: 2px 14px 0; font-size: 22px; }
+  .np-find { margin: 8px 14px 0; }
   .np-editor { padding: 6px 14px 0; }
   /* Резерв под нижнюю навигацию (64px) + воздух. Именно на .tiptap, а не на
      скроллер .np-editor: длинный документ переполняет flex-бокс .ne-content

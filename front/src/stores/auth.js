@@ -270,7 +270,9 @@ export const useAuthStore = defineStore('auth', () => {
     }
   }
 
-  async function changeDefaultCredentials({ login, password, confirmPassword }) {
+  // Логин при первом входе не меняем — пустое поле сервер трактует как
+  // «оставить текущий».
+  async function changeDefaultCredentials({ login = '', password, confirmPassword }) {
     const result = await apiChangeDefault({
       new_login: login,
       new_password: password,

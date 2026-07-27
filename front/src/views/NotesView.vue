@@ -603,7 +603,8 @@ function noteMenuItems(n) {
     ] },
     dl,
     { label: n.archived ? 'Вернуть из архива' : 'В архив', icon: n.archived ? 'unarchive' : 'archive', action: 'archive' },
-    { label: 'Удалить', icon: 'delete', action: 'delete', danger: true, divider: true },
+    { divider: true },
+    { label: 'Удалить', icon: 'delete', action: 'delete', danger: true },
   ]
 }
 
@@ -629,7 +630,8 @@ function folderMenuItems(f) {
       { label: 'Заметки как .txt', icon: 'description', action: 'zip-txt' },
       { label: 'Заметки как .docx', icon: 'article', action: 'zip-docx' },
     ] },
-    { label: 'Удалить', icon: 'delete', action: 'delete', danger: true, divider: true },
+    { divider: true },
+    { label: 'Удалить', icon: 'delete', action: 'delete', danger: true },
   ]
 }
 

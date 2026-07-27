@@ -98,21 +98,11 @@
       tone="warning"
       icon="lock_reset"
       size="sm"
-      title="Смена учётных данных"
-      subtitle="Пожалуйста, смените логин и пароль перед началом работы."
+      title="Смена пароля"
+      subtitle="Пожалуйста, смените пароль перед началом работы."
       :closable="false"
     >
       <form @submit.prevent="handleChangeDefault" class="change-form">
-        <div class="form-group">
-          <label>Новый логин</label>
-          <input
-            v-model="changeForm.login"
-            type="text"
-            class="pill-input"
-            autocomplete="new-username"
-            placeholder="Не короче 3 символов"
-          />
-        </div>
         <div class="form-group">
           <label>Новый пароль</label>
           <div class="input-wrap">
@@ -234,7 +224,7 @@ function goYandex() {
   window.location.href = yandexAuthURL(yandexAuth.value.client_id, inAppShell() ? 'app' : '')
 }
 
-const changeForm = reactive({ login: '', password: '', confirmPassword: '' })
+const changeForm = reactive({ password: '', confirmPassword: '' })
 const changeError = ref('')
 const changeLoading = ref(false)
 const showNewPassword = ref(false)
@@ -371,10 +361,6 @@ function onTvSession(session) {
 
 async function handleChangeDefault() {
   changeError.value = ''
-  if (changeForm.login.length < 3) {
-    changeError.value = 'Логин должен содержать не менее 3 символов'
-    return
-  }
   if (changeForm.password.length < 8) {
     changeError.value = 'Пароль должен содержать не менее 8 символов'
     return
@@ -386,7 +372,6 @@ async function handleChangeDefault() {
   changeLoading.value = true
   try {
     await authStore.changeDefaultCredentials({
-      login: changeForm.login,
       password: changeForm.password,
       confirmPassword: changeForm.confirmPassword,
     })

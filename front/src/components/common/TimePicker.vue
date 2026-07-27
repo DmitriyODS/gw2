@@ -1,8 +1,13 @@
 <script setup>
 /* Кастомный выбор времени (24ч) в стиле приложения — замена браузерному
    <input type="time">. v-model — строка 'HH:MM' (или null/'' когда не задано).
-   Две прокручиваемые колонки часов/минут, клик-снаружи закрывает. */
+   Две прокручиваемые колонки часов/минут, клик-снаружи закрывает.
+
+   Список часов/минут телепортируется в body и позиционируется fixed по рамке
+   поля: внутри диалогов (у них overflow: hidden) абсолютный поповер обрезался
+   бы и распирал макет. */
 import { ref, computed, onMounted, onBeforeUnmount, nextTick, watch } from 'vue'
+import { placeByAnchor } from '@/utils/menuPlacement.js'
 
 const props = defineProps({
   modelValue: { type: [String, null], default: null },
@@ -15,9 +20,11 @@ const props = defineProps({
 const emit = defineEmits(['update:modelValue'])
 
 const root = ref(null)
+const popEl = ref(null)
 const hoursCol = ref(null)
 const minutesCol = ref(null)
 const open = ref(false)
+const popStyle = ref({})
 
 const valid = computed(() => /^([01]\d|2[0-3]):[0-5]\d$/.test(props.modelValue || ''))
 const cur = computed(() => {
@@ -48,27 +55,63 @@ function clear() {
 async function toggle() {
   if (props.disabled) return
   open.value = !open.value
-  if (open.value) {
-    await nextTick()
-    scrollToSelected()
-  }
+  if (!open.value) return
+  // Позицию задаём сразу, ещё до появления списка: у fixed-элемента без
+  // координат нет «своего» места — он уехал бы в конец страницы.
+  const anchor = root.value?.getBoundingClientRect()
+  if (anchor) popStyle.value = { left: `${anchor.left}px`, top: `${anchor.bottom + 6}px` }
+  await nextTick()
+  place()          // уточняем по реальным размерам (может флипнуться вверх)
+  scrollToSelected()
 }
 
+// Позиция поповера считается от рамки поля: он живёт в body, поэтому
+// собственного «родителя» для absolute у него нет.
+function place() {
+  const anchor = root.value?.getBoundingClientRect()
+  if (!anchor || !popEl.value) return
+  const { left, top, maxHeight } = placeByAnchor(popEl.value, anchor, { gap: 6, align: 'left' })
+  popStyle.value = { left: `${left}px`, top: `${top}px`, maxHeight: `${maxHeight}px` }
+}
+
+// Прокрутка колонок к выбранному значению — своими руками, БЕЗ scrollIntoView:
+// он листает и внешние контейнеры (диалог, страницу), а его событие scroll
+// сразу же прилетало в обработчик ниже и захлопывало только что открытый список.
 function scrollToSelected() {
   for (const col of [hoursCol.value, minutesCol.value]) {
     const el = col?.querySelector('.tp-opt.active')
-    if (el) el.scrollIntoView({ block: 'center' })
+    if (el) col.scrollTop = el.offsetTop - col.clientHeight / 2 + el.offsetHeight / 2
   }
 }
 
 function onClickOutside(e) {
-  if (root.value && !root.value.contains(e.target)) open.value = false
+  if (!open.value) return
+  const inField = root.value?.contains(e.target)
+  const inPopup = popEl.value?.contains(e.target)
+  if (!inField && !inPopup) open.value = false
+}
+
+// Прокрутка страницы и ресайз уводят fixed-поповер от поля — пересчитываем
+// позицию. Прокрутку внутри самого списка часов/минут пропускаем.
+function onViewportChange(e) {
+  if (!open.value) return
+  if (e?.target && popEl.value?.contains(e.target)) return
+  place()
 }
 
 watch(() => props.modelValue, () => { if (open.value) nextTick(scrollToSelected) })
 
-onMounted(() => document.addEventListener('mousedown', onClickOutside))
-onBeforeUnmount(() => document.removeEventListener('mousedown', onClickOutside))
+onMounted(() => {
+  document.addEventListener('mousedown', onClickOutside)
+  window.addEventListener('scroll', onViewportChange, true)
+  window.addEventListener('resize', onViewportChange)
+})
+
+onBeforeUnmount(() => {
+  document.removeEventListener('mousedown', onClickOutside)
+  window.removeEventListener('scroll', onViewportChange, true)
+  window.removeEventListener('resize', onViewportChange)
+})
 </script>
 
 <template>
@@ -86,25 +129,27 @@ onBeforeUnmount(() => document.removeEventListener('mousedown', onClickOutside))
       <span v-else class="material-symbols-outlined tp-chevron">expand_more</span>
     </button>
 
-    <transition name="tp-pop">
-      <div v-if="open" class="tp-pop">
-        <div class="tp-col" ref="hoursCol">
-          <button
-            v-for="h in hours" :key="'h' + h" type="button"
-            class="tp-opt" :class="{ active: h === cur.h }"
-            @click="pickHour(h)"
-          >{{ pad(h) }}</button>
+    <Teleport to="body">
+      <transition name="tp-pop">
+        <div v-if="open" ref="popEl" class="tp-pop" :style="popStyle">
+          <div class="tp-col" ref="hoursCol">
+            <button
+              v-for="h in hours" :key="'h' + h" type="button"
+              class="tp-opt" :class="{ active: h === cur.h }"
+              @click="pickHour(h)"
+            >{{ pad(h) }}</button>
+          </div>
+          <div class="tp-colon">:</div>
+          <div class="tp-col" ref="minutesCol">
+            <button
+              v-for="m in minutes" :key="'m' + m" type="button"
+              class="tp-opt" :class="{ active: m === cur.m }"
+              @click="pickMinute(m)"
+            >{{ pad(m) }}</button>
+          </div>
         </div>
-        <div class="tp-colon">:</div>
-        <div class="tp-col" ref="minutesCol">
-          <button
-            v-for="m in minutes" :key="'m' + m" type="button"
-            class="tp-opt" :class="{ active: m === cur.m }"
-            @click="pickMinute(m)"
-          >{{ pad(m) }}</button>
-        </div>
-      </div>
-    </transition>
+      </transition>
+    </Teleport>
   </div>
 </template>
 
@@ -138,7 +183,7 @@ onBeforeUnmount(() => document.removeEventListener('mousedown', onClickOutside))
 .tp-clear .material-symbols-outlined { font-size: 18px; }
 
 .tp-pop {
-  position: absolute; z-index: 70; top: calc(100% + 6px); left: 0;
+  position: fixed; z-index: 11000;
   display: flex; align-items: stretch; gap: 2px; padding: 6px;
   background: var(--acrylic-bg);
   -webkit-backdrop-filter: var(--acrylic-blur);
