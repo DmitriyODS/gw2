@@ -70,9 +70,20 @@ func NewServer(eps endpoint.Endpoints, users domain.UserReader,
 	app.Get("/api/ai/status", auth.RequireAuth, h.aiStatus)
 	app.Get("/api/ai/tv-fact", auth.RequireAuth, h.tvFact)
 
+	// Личные ИИ-настройки: свои правит любой авторизованный, роль не нужна.
+	app.Get("/api/ai/my-settings", auth.RequireAuth, h.getMySettings)
+	app.Patch("/api/ai/my-settings", auth.RequireAuth, h.updateMySettings)
+	app.Post("/api/ai/my-settings/test", auth.RequireAuth, h.testMySettings)
+
 	app.Post("/api/ai/assistant/messages", auth.RequireAuth, h.sendAssistantMessage)
 	app.Get("/api/ai/assistant/history", auth.RequireAuth, h.getAssistantHistory)
 	app.Post("/api/ai/assistant/feedback", auth.RequireAuth, h.sendAssistantFeedback)
+
+	// Платформенный ИИ: глобальный ключ proxy-api и каталог моделей —
+	// только супер-админ (раздел «Аудит платформы»).
+	app.Get("/api/ai/platform", auth.RequireAuth, auth.RequireSuperAdmin, h.getPlatformSettings)
+	app.Patch("/api/ai/platform", auth.RequireAuth, auth.RequireSuperAdmin, h.updatePlatformSettings)
+	app.Post("/api/ai/platform/test", auth.RequireAuth, auth.RequireSuperAdmin, h.testPlatformSettings)
 
 	app.Post("/api/ai/text-tools", auth.RequireAuth, h.transformText)
 	app.Post("/api/ai/proofread", auth.RequireAuth, h.proofread)

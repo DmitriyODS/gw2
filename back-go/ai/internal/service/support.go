@@ -61,11 +61,17 @@ Groove Work — платформа учёта рабочего времени, �
 // user/assistant БЕЗ системного промпта, его добавляем здесь). Ключ не задан →
 // AI_DISABLED: msgsvc откатывается на канированный автоответ.
 func (s *Service) SupportReply(ctx context.Context, messagesJSON string) (string, error) {
-	if s.support.APIKey == "" {
+	// Ключ поддержки — ПЛАТФОРМЕННЫЙ: это расход самой платформы, токены
+	// пользователей он не тратит. Отдельный env-ключ остаётся запасным путём.
+	client, err := s.supportClient(ctx)
+	if err != nil {
+		return "", err
+	}
+	if client == nil && s.support.APIKey == "" {
 		return "", errAiDisabled(409)
 	}
 	var history []json.RawMessage
-	if err := json.Unmarshal([]byte(messagesJSON), &history); err != nil || len(history) == 0 {
+	if uerr := json.Unmarshal([]byte(messagesJSON), &history); uerr != nil || len(history) == 0 {
 		return "", domain.NewError("AI_BAD_REQUEST", "messages_json — невалидный JSON-массив", 400)
 	}
 	system, _ := json.Marshal(map[string]string{"role": "system", "content": supportSystemPrompt()})
@@ -73,12 +79,19 @@ func (s *Service) SupportReply(ctx context.Context, messagesJSON string) (string
 	if err != nil {
 		return "", err
 	}
-	model := s.support.Model
+	apiKey, baseURL, model := s.support.APIKey, "", s.support.Model
+	if client != nil {
+		apiKey, baseURL = client.apiKey, client.baseURL
+		if model == "" {
+			model = client.modelChat
+		}
+	}
 	if model == "" {
 		model = supportDefaultModel
 	}
 	res, err := s.llm.ChatOnce(ctx, domain.ChatParams{
-		APIKey:       s.support.APIKey,
+		APIKey:       apiKey,
+		BaseURL:      baseURL,
 		Model:        model,
 		MessagesJSON: string(messages),
 		MaxTokens:    supportMaxTokens,

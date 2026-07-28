@@ -58,7 +58,8 @@
             :title="item.label"
           >
             <span class="nav-btn-icon">
-              <span class="material-symbols-outlined">{{ item.icon }}</span>
+              <HolaIcon v-if="item.brand === 'hola'" :size="22" />
+              <span v-else class="material-symbols-outlined">{{ item.icon }}</span>
             </span>
             <span class="nav-label">{{ item.label }}</span>
             <span v-if="item.alert && item.alert()" class="nav-badge alert">!</span>
@@ -71,14 +72,14 @@
 
       <div class="sidebar-bottom">
         <div class="sb-sep" />
-        <button class="user-row" @click="router.push('/profile')" title="Профиль">
+        <button class="user-row" @click="router.push('/settings?section=account')" title="Аккаунт">
           <img
             data-tutorial="profile-avatar"
             class="user-avatar"
             :src="avatarSrc"
             :alt="authStore.user?.fio"
           />
-          <span class="nav-label user-name">{{ authStore.user?.fio || 'Профиль' }}</span>
+          <span class="nav-label user-name">{{ authStore.user?.fio || 'Аккаунт' }}</span>
         </button>
       </div>
     </div>
@@ -98,6 +99,7 @@ import { useCompanySettings } from '@/composables/useCompanySettings.js'
 import { storageGet, storageSet } from '@/utils/storage.js'
 import CompanySelect from '@/components/common/CompanySelect.vue'
 import Logo from '@/components/common/Logo.vue'
+import HolaIcon from '@/components/common/HolaIcon.vue'
 
 const PINNED_KEY = 'gw_sidebar_pinned'
 
@@ -132,7 +134,12 @@ const expanded = computed(() => pinned.value || hovered.value || companyDropdown
 //   Коммуникация с командой — общение и внутренняя жизнь;
 //   Управление и анализ — администрирование и статистика.
 const navGroups = computed(() => {
-  const workflows = []
+  // Hola — вход в поиск, быстрые команды и чат с ассистентом. На рабочем столе
+  // у него кнопка в панели задач, здесь (мобильный каркас) — обычный пункт.
+  const workflows = [
+    { path: '/hola', icon: 'blur_on', brand: 'hola', label: 'Hola', tutorial: 'nav-hola',
+      active: () => route.path === '/hola' },
+  ]
   if (hasActiveCompany()) {
     workflows.push(
       { path: '/tasks', icon: 'dashboard_customize', label: 'Задачи', tutorial: 'nav-tasks',

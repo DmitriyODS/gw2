@@ -336,6 +336,23 @@ textarea.ctl.invalid:focus {
   backdrop-filter: blur(12px) saturate(1.2);
 }
 
+/* ── Модалка раздела в окне рабочего стола ──────────────────────────
+   Разделы живут окнами, поэтому их модалки телепортируются не в body, а в
+   тело своего окна (desktop/windowHost.js): диалог «Настроек» не должен
+   гасить открытый рядом мессенджер. Позиционирование за телепортом почти не
+   тянется — маске остаётся сменить систему отсчёта: инлайновый position:
+   fixed от PrimeVue меряет экран, absolute — тело окна. Заодно клампим
+   габариты: их считают в единицах вьюпорта (vw/dvh), а экран больше окна, и
+   без клампа модалку срезала бы граница окна.
+   Заголовок окна маска не накрывает намеренно — с открытым диалогом окно
+   по-прежнему можно двигать, сворачивать и закрывать. */
+.gw-in-window-mask { position: absolute !important; }
+
+.gw-in-window-mask > .p-dialog {
+  max-width: calc(100% - 24px) !important;
+  max-height: calc(100% - 32px) !important;
+}
+
 /* Модалка профиля сотрудника — без шапки PrimeVue, контент заполняет
    весь dialog. Overflow hidden клипует градиентный hero к скруглениям. */
 .emp-dialog.p-dialog {
@@ -815,6 +832,17 @@ textarea.ctl.invalid:focus {
 }
 
 .btn-glass:disabled { opacity: 0.5; cursor: not-allowed; }
+
+/* Стеклянная кнопка опасного действия (отключить, удалить, выйти). */
+.btn-glass.danger {
+  color: var(--color-error);
+  border-color: color-mix(in oklch, var(--color-error) 30%, var(--color-outline-dim));
+}
+
+.btn-glass.danger:hover:not(:disabled) {
+  background: var(--glass-bg), color-mix(in oklch, var(--color-error) 12%, transparent);
+  border-color: color-mix(in oklch, var(--color-error) 45%, var(--acrylic-border));
+}
 
 /* Мягкая success-кнопка действия («В работу» и аналоги). */
 .btn-soft-success {

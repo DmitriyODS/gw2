@@ -5,6 +5,7 @@
   <Dialog
     :visible="modelValue"
     modal
+    :append-to="host"
     :draggable="false"
     :show-header="false"
     :dismissable-mask="true"
@@ -12,7 +13,10 @@
     :pt="{
       root: { class: 'emp-dialog' },
       content: { style: 'overflow-x: hidden; padding: 0; background: transparent' },
-      mask: { style: 'background: var(--color-scrim)', class: elevated ? 'emp-mask--elevated' : '' },
+      mask: {
+        style: 'background: var(--color-scrim)',
+        class: [elevated ? 'emp-mask--elevated' : '', { 'gw-in-window-mask': inWindow }],
+      },
     }"
     @update:visible="$emit('update:modelValue', $event)"
   >
@@ -156,6 +160,7 @@ import { useCompaniesStore } from '@/stores/companies.js'
 import { useMessengerStore } from '@/stores/messenger.js'
 import { useCallStore } from '@/stores/call.js'
 import { formatLastSeen } from '@/utils/presence.js'
+import { useModalHost } from '@/desktop/windowHost.js'
 import ImageLightbox from '@/components/common/ImageLightbox.vue'
 import RolePill from '@/components/common/RolePill.vue'
 
@@ -166,6 +171,10 @@ const props = defineProps({
   elevated: { type: Boolean, default: false },
 })
 const emit = defineEmits(['update:modelValue'])
+
+// Карточку открывают и разделы в окнах («Сотрудники», портал), и плавающие
+// слои поверх стола (мини-хаб) — хост подстраивается сам.
+const { host, inWindow } = useModalHost()
 
 const router = useRouter()
 const auth = useAuthStore()

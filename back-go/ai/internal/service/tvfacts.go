@@ -117,7 +117,7 @@ func (s *Service) GetTVFact(ctx context.Context, companyID int64) (*domain.TVFac
 // дёргает модель — кэш разруливает уровень выше (TTL + интервал цикла).
 // AI у компании выключен → затираем кэш, чтобы табло сразу упало на фолбэк.
 func (s *Service) GenerateTVFact(ctx context.Context, companyID int64) error {
-	client, err := s.clientFor(ctx, companyID)
+	client, err := s.clientForCompany(ctx, companyID, domain.FeatureTVFact)
 	if err != nil {
 		return err
 	}
@@ -152,9 +152,7 @@ func (s *Service) GenerateTVFact(ctx context.Context, companyID int64) error {
 	if err != nil {
 		return err
 	}
-	res, err := s.llm.ChatOnce(ctx, domain.ChatParams{
-		APIKey:       client.apiKey,
-		Model:        client.modelChat,
+	res, err := s.chatMetered(ctx, client, domain.FeatureTVFact, 0, domain.ChatParams{
 		MessagesJSON: string(messages),
 		MaxTokens:    tvMaxTokens,
 		Temperature:  tvTemperature,

@@ -47,6 +47,9 @@ func (s *Service) GetRegistry(ctx context.Context, companyID, id int64) (*domain
 // CreateRegistry — новый реестр (структура полей задаётся отдельно).
 func (s *Service) CreateRegistry(ctx context.Context, companyID, userID int64, name string) (*domain.Registry, error) {
 	pos, err := s.repo.NextRegistryPosition(ctx, companyID)
+	if err := s.ensureLimit(ctx, companyID); err != nil {
+		return nil, err
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -102,7 +105,7 @@ func (s *Service) ReplaceFields(ctx context.Context, companyID, id int64, fields
 		return nil, err
 	}
 	if len(removed) > 0 {
-		if err := s.stripRemovedFields(ctx, id, fields, removed); err != nil {
+		if err := s.stripRemovedFields(ctx, companyID, id, fields, removed); err != nil {
 			return nil, err
 		}
 	}
@@ -113,7 +116,7 @@ func (s *Service) ReplaceFields(ctx context.Context, companyID, id int64, fields
 
 // stripRemovedFields — удалить значения отключённых полей из всех записей и
 // пересчитать search_text по актуальному набору полей.
-func (s *Service) stripRemovedFields(ctx context.Context, registryID int64, fields []domain.Field, removed []int64) error {
+func (s *Service) stripRemovedFields(ctx context.Context, companyID, registryID int64, fields []domain.Field, removed []int64) error {
 	records, err := s.repo.AllRecords(ctx, registryID)
 	if err != nil {
 		return err
@@ -139,7 +142,7 @@ func (s *Service) stripRemovedFields(ctx context.Context, registryID int64, fiel
 		}
 	}
 	if len(orphans) > 0 {
-		s.files.Remove(orphans)
+		s.files.RemoveFor(ctx, 0, companyID, orphans)
 	}
 	return nil
 }

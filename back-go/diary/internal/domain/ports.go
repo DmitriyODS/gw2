@@ -17,6 +17,8 @@ type DiaryRepository interface {
 	// «Поделились»), с именем/аватаром владельца. Read-only.
 	ListShared(ctx Ctx, userID int64) ([]*Diary, error)
 	GetDiary(ctx Ctx, id int64) (*Diary, error)
+	// CountDiaries — сколько ежедневников уже есть (лимит тарифа).
+	CountDiaries(ctx Ctx, owner_id int64) (int, error)
 	CreateDiary(ctx Ctx, d *Diary) error
 	UpdateDiary(ctx Ctx, id int64, name string) error
 	DeleteDiary(ctx Ctx, id int64) error

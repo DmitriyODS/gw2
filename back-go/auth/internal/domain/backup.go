@@ -67,7 +67,16 @@ var BackupSections = []BackupSection{
 		"portal_comments", "portal_comment_likes", "portal_reactions", "portal_attachments",
 		"portal_post_views", "portal_seen", "portal_backgrounds"}},
 	{Key: "ai", Tables: []string{"ai_assistant_conversations", "ai_assistant_messages",
-		"ai_assistant_feedback"}},
+		"ai_assistant_feedback", "user_ai_settings", "ai_platform_settings", "ai_models"}},
+	// Подписки и магазин целиком: тарифы с ценами, подписки и докупки, заказы
+	// и платежи, промокоды с активациями, товары витрины и покупки, кошелёк
+	// автора и выплаты, баланс токенов ИИ, учёт хранилища и журнал действий.
+	{Key: "billing", Tables: []string{"billing_plans", "billing_addons",
+		"billing_subscriptions", "billing_user_addons", "billing_products",
+		"billing_promos", "billing_orders", "billing_promo_redemptions",
+		"billing_payments", "billing_product_purchases", "billing_seller_balances",
+		"billing_payouts", "billing_ai_balances", "billing_ai_usage", "billing_storage_usage",
+		"billing_settings", "platform_audit_log"}},
 	{Key: "integration", Tables: []string{"user_yougile_accounts"}},
 }
 

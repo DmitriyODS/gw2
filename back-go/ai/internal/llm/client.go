@@ -69,6 +69,12 @@ type chatResponse struct {
 			ToolCalls json.RawMessage `json:"tool_calls"`
 		} `json:"message"`
 	} `json:"choices"`
+	// usage — расход токенов; по нему считается списание с баланса тарифа.
+	Usage struct {
+		PromptTokens     int `json:"prompt_tokens"`
+		CompletionTokens int `json:"completion_tokens"`
+		TotalTokens      int `json:"total_tokens"`
+	} `json:"usage"`
 }
 
 func (c *Client) ChatOnce(ctx context.Context, p domain.ChatParams) (*domain.ChatResult, error) {
@@ -82,14 +88,17 @@ func (c *Client) ChatOnce(ctx context.Context, p domain.ChatParams) (*domain.Cha
 		req.Tools = json.RawMessage(p.ToolsJSON)
 	}
 	var resp chatResponse
-	if err := c.post(ctx, "/chat/completions", p.APIKey, req, &resp, p.Timeout); err != nil {
+	if err := c.post(ctx, p.BaseURL, "/chat/completions", p.APIKey, req, &resp, p.Timeout); err != nil {
 		return nil, err
 	}
 	if len(resp.Choices) == 0 {
 		return nil, upstreamError("пустой ответ модели: нет choices")
 	}
 	msg := resp.Choices[0].Message
-	out := &domain.ChatResult{}
+	out := &domain.ChatResult{Usage: domain.TokenUsage{
+		PromptTokens:     resp.Usage.PromptTokens,
+		CompletionTokens: resp.Usage.CompletionTokens,
+	}}
 	if msg.Content != nil {
 		out.Content = *msg.Content
 	}
@@ -110,16 +119,21 @@ type embeddingsResponse struct {
 		Index     int       `json:"index"`
 		Embedding []float32 `json:"embedding"`
 	} `json:"data"`
+	Usage struct {
+		PromptTokens int `json:"prompt_tokens"`
+		TotalTokens  int `json:"total_tokens"`
+	} `json:"usage"`
 }
 
-func (c *Client) Embed(ctx context.Context, apiKey, model string, texts []string, timeout time.Duration) ([][]float32, error) {
-	if len(texts) == 0 {
-		return nil, nil
+func (c *Client) Embed(ctx context.Context, p domain.EmbedParams) ([][]float32, int, error) {
+	if len(p.Texts) == 0 {
+		return nil, 0, nil
 	}
 	var resp embeddingsResponse
-	err := c.post(ctx, "/embeddings", apiKey, embeddingsRequest{Model: model, Input: texts}, &resp, timeout)
+	err := c.post(ctx, p.BaseURL, "/embeddings", p.APIKey,
+		embeddingsRequest{Model: p.Model, Input: p.Texts}, &resp, p.Timeout)
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 	// API возвращает items с полем index — на всякий случай сортируем.
 	sort.Slice(resp.Data, func(i, j int) bool { return resp.Data[i].Index < resp.Data[j].Index })
@@ -127,13 +141,19 @@ func (c *Client) Embed(ctx context.Context, apiKey, model string, texts []string
 	for _, d := range resp.Data {
 		out = append(out, d.Embedding)
 	}
-	if len(out) != len(texts) {
-		return nil, upstreamError(fmt.Sprintf("эмбеддингов %d вместо %d", len(out), len(texts)))
+	if len(out) != len(p.Texts) {
+		return nil, 0, upstreamError(fmt.Sprintf("эмбеддингов %d вместо %d", len(out), len(p.Texts)))
 	}
-	return out, nil
+	used := resp.Usage.TotalTokens
+	if used == 0 {
+		used = resp.Usage.PromptTokens
+	}
+	return out, used, nil
 }
 
-func (c *Client) post(ctx context.Context, path, apiKey string, body, out any, timeout time.Duration) error {
+// post — запрос к upstream. baseURL пуст — общий адрес клиента; непустой
+// используется, когда пользователь подключил СВОЙ сервер модели.
+func (c *Client) post(ctx context.Context, baseURL, path, apiKey string, body, out any, timeout time.Duration) error {
 	if timeout <= 0 {
 		timeout = DefaultTimeout
 	}
@@ -144,7 +164,11 @@ func (c *Client) post(ctx context.Context, path, apiKey string, body, out any, t
 	if err != nil {
 		return upstreamError("кодирование запроса: " + err.Error())
 	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.baseURL+path, bytes.NewReader(raw))
+	base := c.baseURL
+	if baseURL != "" {
+		base = strings.TrimRight(baseURL, "/")
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, base+path, bytes.NewReader(raw))
 	if err != nil {
 		return upstreamError(err.Error())
 	}

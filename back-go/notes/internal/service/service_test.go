@@ -536,8 +536,10 @@ func (nopBus) Publish(_ domain.Ctx, _ string, _ []string, _ any) {}
 
 type nopFiles struct{}
 
-func (nopFiles) Save(_ string, _ []byte) (string, error) { return "notes/x", nil }
-func (nopFiles) Remove(_ []string)                       {}
+func (nopFiles) SaveFor(_ context.Context, _, _ int64, _ string, _ []byte) (string, error) {
+	return "notes/x", nil
+}
+func (nopFiles) RemoveFor(_ context.Context, _, _ int64, _ []string) {}
 func (nopFiles) Open(_ string) ([]byte, error)           { return nil, nil }
 
 type allowLimiter struct{}

@@ -47,7 +47,7 @@ func (s *Service) reindexTaskOnce(ctx context.Context, taskID int64) error {
 	if task == nil || task.CompanyID == nil {
 		return nil
 	}
-	client, err := s.clientFor(ctx, *task.CompanyID)
+	client, err := s.clientForCompany(ctx, *task.CompanyID, domain.FeatureSearch)
 	if err != nil {
 		return err
 	}
@@ -58,7 +58,7 @@ func (s *Service) reindexTaskOnce(ctx context.Context, taskID int64) error {
 	if strings.TrimSpace(text) == "" {
 		return nil
 	}
-	vecs, err := s.llm.Embed(ctx, client.apiKey, client.modelEmbedding, []string{text}, requestTimeout)
+	vecs, err := s.embedMetered(ctx, client, domain.FeatureSearch, 0, []string{text}, requestTimeout)
 	if err != nil {
 		s.log.Warn("ai.embed.failed", "task_id", taskID, "err", err)
 		return nil // fail-open, как reindex_task → False
@@ -70,14 +70,14 @@ func (s *Service) reindexTaskOnce(ctx context.Context, taskID int64) error {
 // компании пачками embedBatchSize. Ошибки пачек логируются и не прерывают
 // остальные.
 func (s *Service) runBackfill(ctx context.Context, companyID int64) {
-	company, err := s.repo.GetCompanyAI(ctx, companyID)
-	if err != nil || company == nil || !company.Enabled {
+	client, err := s.clientForCompany(ctx, companyID, domain.FeatureSearch)
+	if err != nil || client == nil {
 		if err != nil {
 			s.log.Warn("ai.reindex.batch_failed", "company_id", companyID, "err", err)
 		}
 		return
 	}
-	ids, err := s.repo.FindUnindexedTaskIDs(ctx, companyID, company.EmbeddingModel())
+	ids, err := s.repo.FindUnindexedTaskIDs(ctx, companyID, client.modelEmbedding)
 	if err != nil {
 		s.log.Warn("ai.reindex.batch_failed", "company_id", companyID, "err", err)
 		return
@@ -110,7 +110,7 @@ func (s *Service) reindexBatch(ctx context.Context, taskIDs []int64) int {
 	}
 	okTotal := 0
 	for companyID, group := range byCompany {
-		client, err := s.clientFor(ctx, companyID)
+		client, err := s.clientForCompany(ctx, companyID, domain.FeatureSearch)
 		if err != nil || client == nil {
 			continue
 		}
@@ -121,7 +121,7 @@ func (s *Service) reindexBatch(ctx context.Context, taskIDs []int64) int {
 			for _, t := range chunk {
 				texts = append(texts, buildTaskText(t))
 			}
-			vecs, err := s.llm.Embed(ctx, client.apiKey, client.modelEmbedding, texts, requestTimeout)
+			vecs, err := s.embedMetered(ctx, client, domain.FeatureSearch, 0, texts, requestTimeout)
 			if err != nil {
 				s.log.Warn("ai.embed_batch.failed", "company_id", companyID, "err", err)
 				continue

@@ -114,9 +114,11 @@ type ExportResp struct {
 }
 
 type UploadReq struct {
-	FileName string
-	Mime     string
-	Data     []byte
+	CompanyID int64
+	UserID    int64
+	FileName  string
+	Mime      string
+	Data      []byte
 }
 
 type ShareReq struct {
@@ -202,7 +204,7 @@ func New(s *service.Service) Endpoints {
 		},
 		Upload: func(ctx context.Context, request any) (any, error) {
 			r := request.(UploadReq)
-			return s.SaveUpload(r.FileName, r.Mime, r.Data)
+			return s.SaveUpload(ctx, r.CompanyID, r.UserID, r.FileName, r.Mime, r.Data)
 		},
 		ListShares: func(ctx context.Context, request any) (any, error) {
 			r := request.(ShareReq)

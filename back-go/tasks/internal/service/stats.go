@@ -40,6 +40,9 @@ func (s *Service) StatsCommon(ctx context.Context, start, end time.Time, company
 }
 
 func (s *Service) StatsExtended(ctx context.Context, start, end time.Time, companyID *int64) (*dto.StatsExtended, error) {
+	if err := s.ensureAdvancedStats(ctx, companyID); err != nil {
+		return nil, err
+	}
 	byTypes, err := s.stats.ByUnitTypes(ctx, start, end, companyID)
 	if err != nil {
 		return nil, err

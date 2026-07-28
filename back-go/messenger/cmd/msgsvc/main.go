@@ -24,6 +24,7 @@ import (
 	"github.com/DmitriyODS/gw2/back-go/messenger/internal/service"
 	grpctransport "github.com/DmitriyODS/gw2/back-go/messenger/internal/transport/grpc"
 	httptransport "github.com/DmitriyODS/gw2/back-go/messenger/internal/transport/http"
+	"github.com/DmitriyODS/gw2/back-go/pkg/billingclient"
 	"github.com/DmitriyODS/gw2/back-go/pkg/bootstrap"
 	"github.com/DmitriyODS/gw2/back-go/pkg/events"
 	"github.com/DmitriyODS/gw2/back-go/pkg/gen/messengerpb"
@@ -76,6 +77,16 @@ func main() {
 		supportAI = client
 	}
 	svc := service.New(repo, users, store, pub, supportAI, log)
+
+	// Лимиты тарифа — gRPC billingsvc. Пустой адрес выключает проверки,
+	// недоступный биллинг их не блокирует (fail-open).
+	billing, err := billingclient.New(bootstrap.Env("BILLING_GRPC_ADDR", ""), log)
+	if err != nil {
+		log.Error("billing.dial_failed", "error", err)
+		os.Exit(1)
+	}
+	defer billing.Close()
+	svc.WithBilling(billing)
 	eps := endpoint.New(svc)
 
 	grpcAddr := bootstrap.Env("GRPC_ADDR", ":9092")

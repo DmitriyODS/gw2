@@ -52,7 +52,7 @@
 
     <div class="alt-login">
       <button v-if="yandexAuth.enabled" type="button" class="alt-login-btn" @click="goYandex">
-        <span class="ya-badge">Я</span>
+        <YandexLogo :size="18" />
         Использовать Яндекс
       </button>
       <button type="button" class="alt-login-btn" @click="showQrLogin = true">
@@ -186,6 +186,7 @@ import { useThemeStore } from '@/stores/theme.js'
 import { connectSocket } from '@/socket/index.js'
 import AppDialog from '@/components/common/AppDialog.vue'
 import AuthShell from '@/components/auth/AuthShell.vue'
+import YandexLogo from '@/components/common/YandexLogo.vue'
 import DeviceLinkInitiator from '@/components/auth/DeviceLinkInitiator.vue'
 import { yandexConfig, yandexAuthURL } from '@/api/auth.js'
 import { inAppShell } from '@/utils/appShell.js'
@@ -668,20 +669,5 @@ async function handleChangeDefault() {
 }
 .alt-login-btn:hover { color: var(--color-primary); }
 .alt-login-btn .material-symbols-outlined { font-size: 18px; }
-/* Значок Яндекса: фирменная буква без внешних ресурсов. */
-.ya-badge {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-width: 18px;
-  max-width: 18px;
-  min-height: 18px;
-  max-height: 18px;
-  border-radius: 50%;
-  background: var(--color-error-container, var(--color-surface-variant));
-  color: var(--color-error, currentColor);
-  font-size: 12px;
-  font-weight: 800;
-}
 
 </style>

@@ -35,6 +35,7 @@ help:
 	@printf "  make dev-notes    Go-микросервис заметок (HTTP :8103)\n"
 	@printf "  make dev-board    Go-микросервис досок (HTTP :8105)\n"
 	@printf "  make dev-reminder Go-микросервис напоминаний (HTTP :8106)\n"
+	@printf "  make dev-billing  Go-микросервис подписок и магазина (HTTP :8107)\n"
 	@printf "  make dev-alice    Go-микросервис навыка Алисы (HTTP :8104)\n"
 	@printf "  make dev-migrate  Применить миграции (goose)\n"
 	@printf "  make dev-front    Vite dev-сервер  :5173\n"
@@ -63,7 +64,7 @@ help:
 	@printf "\n\033[33mКонфигурация сервера:\033[0m cp .env.deploy.example .env.deploy\n\n"
 
 # ── Разработка ────────────────────────────────────────────────────
-.PHONY: dev-infra dev-migrate dev-front dev-calls dev-auth dev-messenger dev-ai dev-pets dev-tasks dev-gateway dev-push dev-mail dev-registry dev-calendar dev-diary dev-portal dev-notes dev-board dev-reminder dev-alice dev-stop dev-stack dev-stack-stop gen-proto
+.PHONY: dev-infra dev-migrate dev-front dev-calls dev-auth dev-messenger dev-ai dev-pets dev-tasks dev-gateway dev-push dev-mail dev-registry dev-calendar dev-diary dev-portal dev-notes dev-board dev-reminder dev-billing dev-alice dev-stop dev-stack dev-stack-stop gen-proto
 
 # Dev-ключи PASETO (синхронизированы с dev.sh и
 # deploy/docker-compose.override.yml): приватный — только у authsvc,
@@ -99,6 +100,7 @@ dev-calls: dev-infra
 	DATABASE_URL="postgresql://grovework:grovework_local@localhost:5432/grovework" \
 	REDIS_URL="redis://localhost:6379/0" \
 	PASETO_PUBLIC_KEY="$(PASETO_PUBLIC_KEY_DEV)" \
+	BILLING_GRPC_ADDR="localhost:9107" \
 	LIVEKIT_API_KEY="devkey" \
 	LIVEKIT_API_SECRET="dev_livekit_secret_min_32_chars_ok" \
 	LIVEKIT_URL="http://localhost:7880" \
@@ -117,6 +119,7 @@ dev-auth: dev-infra
 	PASETO_REFRESH_KEY="$(PASETO_REFRESH_KEY_DEV)" \
 	UPLOAD_FOLDER="$(CURDIR)/uploads" \
 	MAIL_GRPC_ADDR="localhost:9098" \
+	BILLING_GRPC_ADDR="localhost:9107" \
 	APP_PUBLIC_BASE_URL="http://localhost:5173" \
 	OAUTH_ALICE_CLIENT_ID="alice-dev" \
 	OAUTH_ALICE_CLIENT_SECRET="alice-dev-secret" \
@@ -130,6 +133,7 @@ dev-messenger: dev-infra
 	DATABASE_URL="postgresql://grovework:grovework_local@localhost:5432/grovework" \
 	REDIS_URL="redis://localhost:6379/0" \
 	PASETO_PUBLIC_KEY="$(PASETO_PUBLIC_KEY_DEV)" \
+	BILLING_GRPC_ADDR="localhost:9107" \
 	UPLOAD_FOLDER="$(CURDIR)/uploads" \
 	HTTP_ADDR=":8092" \
 	GRPC_ADDR=":9092" \
@@ -147,6 +151,7 @@ dev-ai: dev-infra
 	AI_KEY_ENCRYPTION_KEY="X3hFOVZ6XbAzlaygv2PfLbnmBIaH373CK8MqrrAhr8k=" \
 	HTTP_ADDR=":8093" \
 	GRPC_ADDR=":9093" \
+	BILLING_GRPC_ADDR="localhost:9107" \
 	go run ./cmd/aisvc
 
 # Go-микросервис питомцев-грувиков: REST /api/pets/* и gRPC-хуки доменных
@@ -160,6 +165,7 @@ dev-pets: dev-infra
 	PASETO_PUBLIC_KEY="$(PASETO_PUBLIC_KEY_DEV)" \
 	HTTP_ADDR=":8094" \
 	GRPC_ADDR=":9094" \
+	BILLING_GRPC_ADDR="localhost:9107" \
 	go run ./cmd/petsvc
 
 # Go-микросервис задач: ядро платформы — REST /api/tasks|units|unit-types|
@@ -171,6 +177,7 @@ dev-tasks: dev-infra
 	DATABASE_URL="postgresql://grovework:grovework_local@localhost:5432/grovework" \
 	REDIS_URL="redis://localhost:6379/0" \
 	PASETO_PUBLIC_KEY="$(PASETO_PUBLIC_KEY_DEV)" \
+	BILLING_GRPC_ADDR="localhost:9107" \
 	PETS_GRPC_ADDR="localhost:9094" \
 	AI_GRPC_ADDR="localhost:9093" \
 	YOUGILE_ENC_KEY="CT5VF1jg6uFFbj4W_6RW3z3416bPlfbxdMYelrEOIXc=" \
@@ -223,6 +230,7 @@ dev-registry: dev-infra
 	DATABASE_URL="postgresql://grovework:grovework_local@localhost:5432/grovework" \
 	REDIS_URL="redis://localhost:6379/0" \
 	PASETO_PUBLIC_KEY="$(PASETO_PUBLIC_KEY_DEV)" \
+	BILLING_GRPC_ADDR="localhost:9107" \
 	UPLOAD_FOLDER="$(PWD)/uploads" \
 	HTTP_ADDR=":8099" \
 	go run ./cmd/registrysvc
@@ -234,6 +242,7 @@ dev-calendar: dev-infra
 	DATABASE_URL="postgresql://grovework:grovework_local@localhost:5432/grovework" \
 	REDIS_URL="redis://localhost:6379/0" \
 	PASETO_PUBLIC_KEY="$(PASETO_PUBLIC_KEY_DEV)" \
+	BILLING_GRPC_ADDR="localhost:9107" \
 	UPLOAD_FOLDER="$(PWD)/uploads" \
 	HTTP_ADDR=":8100" \
 	go run ./cmd/calendarsvc
@@ -245,6 +254,7 @@ dev-diary: dev-infra
 	DATABASE_URL="postgresql://grovework:grovework_local@localhost:5432/grovework" \
 	REDIS_URL="redis://localhost:6379/0" \
 	PASETO_PUBLIC_KEY="$(PASETO_PUBLIC_KEY_DEV)" \
+	BILLING_GRPC_ADDR="localhost:9107" \
 	HTTP_ADDR=":8101" \
 	go run ./cmd/diarysvc
 
@@ -255,6 +265,7 @@ dev-portal: dev-infra
 	DATABASE_URL="postgresql://grovework:grovework_local@localhost:5432/grovework" \
 	REDIS_URL="redis://localhost:6379/0" \
 	PASETO_PUBLIC_KEY="$(PASETO_PUBLIC_KEY_DEV)" \
+	BILLING_GRPC_ADDR="localhost:9107" \
 	UPLOAD_FOLDER="$(PWD)/uploads" \
 	MESSENGER_GRPC_ADDR="localhost:9092" \
 	HTTP_ADDR=":8102" \
@@ -270,6 +281,7 @@ dev-notes: dev-infra
 	UPLOAD_FOLDER="$(PWD)/uploads" \
 	AI_GRPC_ADDR="localhost:9093" \
 	HTTP_ADDR=":8103" \
+	BILLING_GRPC_ADDR="localhost:9107" \
 	go run ./cmd/notesvc
 
 # Go-микросервис досок: REST /api/boards/*. env синхронизированы с dev.sh.
@@ -279,6 +291,7 @@ dev-board: dev-infra
 	DATABASE_URL="postgresql://grovework:grovework_local@localhost:5432/grovework" \
 	REDIS_URL="redis://localhost:6379/0" \
 	PASETO_PUBLIC_KEY="$(PASETO_PUBLIC_KEY_DEV)" \
+	BILLING_GRPC_ADDR="localhost:9107" \
 	UPLOAD_FOLDER="$(PWD)/uploads" \
 	HTTP_ADDR=":8105" \
 	go run ./cmd/boardsvc
@@ -293,6 +306,18 @@ dev-reminder: dev-infra
 	PASETO_PUBLIC_KEY="$(PASETO_PUBLIC_KEY_DEV)" \
 	HTTP_ADDR=":8106" \
 	go run ./cmd/remindersvc
+
+# Go-микросервис подписок и магазина (REST + gRPC лимитов + продления).
+# env синхронизированы с dev.sh.
+dev-billing: dev-infra
+	@printf "\033[1m▶ billingsvc (Go)  HTTP :8107, gRPC :9107\033[0m\n"
+	cd back-go/billing && \
+	DATABASE_URL="postgresql://grovework:grovework_local@localhost:5432/grovework" \
+	REDIS_URL="redis://localhost:6379/0" \
+	PASETO_PUBLIC_KEY="$(PASETO_PUBLIC_KEY_DEV)" \
+	HTTP_ADDR=":8107" \
+	GRPC_ADDR=":9107" \
+	go run ./cmd/billingsvc
 
 # Go-микросервис навыка Алисы: публичный вебхук /api/alice/webhook.
 # env синхронизированы с dev.sh.

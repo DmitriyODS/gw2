@@ -4,17 +4,20 @@ import (
 	"testing"
 )
 
-// Формы валидации PUT-тела — как marshmallow AiSettingsUpdateSchema.
+// Разбор PUT-тела ИИ-настроек компании. Ключа у компании больше нет — есть
+// тумблеры возможностей: они работают на платформенном ключе и тратят токены
+// создателя компании.
 func TestParseSettingsUpdate(t *testing.T) {
 	t.Run("полный валидный боди", func(t *testing.T) {
 		upd, details := parseSettingsUpdate([]byte(
-			`{"enabled": true, "api_key": "sk-1", "clear_key": false,
-			  "model_chat": "gpt-4o", "model_embedding": "text-embedding-3-small"}`))
+			`{"enabled": true, "shared": true, "feat_search": false, "feat_tv_fact": true}`))
 		if details != nil {
 			t.Fatalf("неожиданные ошибки: %v", details)
 		}
-		if upd.Enabled == nil || !*upd.Enabled || upd.APIKey == nil || *upd.APIKey != "sk-1" ||
-			upd.ClearKey || upd.ModelChat == nil || *upd.ModelChat != "gpt-4o" {
+		if upd.Enabled == nil || !*upd.Enabled ||
+			upd.Shared == nil || !*upd.Shared ||
+			upd.FeatSearch == nil || *upd.FeatSearch ||
+			upd.FeatTVFact == nil || !*upd.FeatTVFact {
 			t.Fatalf("разбор: %+v", upd)
 		}
 	})
@@ -22,26 +25,20 @@ func TestParseSettingsUpdate(t *testing.T) {
 	t.Run("пустой и невалидный JSON — как {}", func(t *testing.T) {
 		for _, body := range []string{"", "{broken"} {
 			upd, details := parseSettingsUpdate([]byte(body))
-			if details != nil || upd.Enabled != nil || upd.APIKey != nil {
+			if details != nil || upd.Enabled != nil || upd.Shared != nil {
 				t.Fatalf("%q: ожидался пустой апдейт, %+v / %v", body, upd, details)
 			}
-		}
-	})
-
-	t.Run("api_key null — не менять", func(t *testing.T) {
-		upd, details := parseSettingsUpdate([]byte(`{"api_key": null}`))
-		if details != nil || upd.APIKey != nil {
-			t.Fatalf("null api_key: %+v / %v", upd, details)
 		}
 	})
 
 	t.Run("ошибки валидации в формате marshmallow", func(t *testing.T) {
 		cases := []struct{ body, field, msg string }{
 			{`{"enabled": "kinda"}`, "enabled", "Not a valid boolean."},
-			{`{"api_key": 5}`, "api_key", "Not a valid string."},
-			{`{"model_chat": ""}`, "model_chat", "Length must be between 1 and 64."},
-			{`{"model_embedding": 7}`, "model_embedding", "Not a valid string."},
+			{`{"shared": 5}`, "shared", "Not a valid boolean."},
+			{`{"feat_search": "kinda"}`, "feat_search", "Not a valid boolean."},
 			{`{"unknown_field": 1}`, "unknown_field", "Unknown field."},
+			// Ключ компании больше не принимается — это неизвестное поле.
+			{`{"api_key": "sk-1"}`, "api_key", "Unknown field."},
 		}
 		for _, tc := range cases {
 			_, details := parseSettingsUpdate([]byte(tc.body))

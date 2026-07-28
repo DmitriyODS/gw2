@@ -11,6 +11,8 @@ type Ctx = context.Context
 // TaskRepository — персистентность задач + избранное + личные цвета.
 type TaskRepository interface {
 	GetTask(ctx Ctx, id int64) (*Task, error)
+	// CountCompanyTasks — сколько задач в компании (лимит тарифа «Задачи»).
+	CountCompanyTasks(ctx Ctx, companyID int64) (int64, error)
 	// ListTasks — фильтры/сортировки/пагинация как task_repo.get_list.
 	ListTasks(ctx Ctx, f TaskListFilter) (items []*Task, total int, err error)
 	CreateTask(ctx Ctx, t *Task) error

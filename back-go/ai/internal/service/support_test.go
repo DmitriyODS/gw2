@@ -9,8 +9,12 @@ import (
 	"github.com/DmitriyODS/gw2/back-go/ai/internal/domain"
 )
 
+// newSupportSvc — сервис поддержки БЕЗ платформенного ключа: тесты проверяют
+// запасной путь через SUPPORT_AI_* (платформенный ключ — отдельный тест).
 func newSupportSvc(llm domain.LLMClient, cfg SupportConfig) *Service {
-	return New(newFakeRepo(), llm, &fakeCipher{}, newFakeFacts(), nil, nil, "", cfg,
+	repo := newFakeRepo()
+	repo.platform = &domain.PlatformAI{}
+	return New(repo, llm, &fakeCipher{}, newFakeFacts(), nil, nil, "", cfg,
 		slog.New(slog.DiscardHandler))
 }
 
@@ -79,4 +83,24 @@ func TestSupportReply_EmptyContent(t *testing.T) {
 	svc := newSupportSvc(llm, SupportConfig{APIKey: "sk"})
 	_, err := svc.SupportReply(context.Background(), `[{"role":"user","content":"хай"}]`)
 	wantDomainError(t, err, "AI_EMPTY", 502)
+}
+
+// Платформенный ключ обслуживает и поддержку: отдельный SUPPORT_AI_KEY не
+// обязателен, а модель берётся из настроек платформы.
+func TestSupportReply_UsesPlatformKey(t *testing.T) {
+	llm := &fakeLLM{chatResult: &domain.ChatResult{Content: "ок"}}
+	repo := newFakeRepo()
+	repo.platform = &domain.PlatformAI{
+		Enabled: true, APIKeyEnc: []byte("enc:sk-platform"),
+		ModelChat: domain.PlatformModelChat, ModelSupport: "gpt-support",
+	}
+	svc := New(repo, llm, &fakeCipher{}, newFakeFacts(), nil, nil, "", SupportConfig{},
+		slog.New(slog.DiscardHandler))
+
+	if _, err := svc.SupportReply(context.Background(), `[{"role":"user","content":"хай"}]`); err != nil {
+		t.Fatalf("SupportReply: %v", err)
+	}
+	if llm.lastChat.APIKey != "sk-platform" || llm.lastChat.Model != "gpt-support" {
+		t.Fatalf("ожидались платформенные ключ и модель поддержки: %+v", llm.lastChat)
+	}
 }

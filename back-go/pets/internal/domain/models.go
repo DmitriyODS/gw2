@@ -246,6 +246,9 @@ type ShopItem struct {
 	LimitedQuota   *int
 	ActiveFrom     *time.Time
 	ActiveTo       *time.Time
+	// Premium — контент старшего тарифа: на младших он виден в витрине, но
+	// не покупается (лимит проверяет сервис через биллинг).
+	Premium bool
 }
 
 // Active — товар доступен сейчас (нет окна дат либо now попадает в него).

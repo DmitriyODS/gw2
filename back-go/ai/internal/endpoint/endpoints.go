@@ -19,6 +19,11 @@ import (
 
 // Endpoints — все use-case'ы aisvc.
 type Endpoints struct {
+	// Service — прямой доступ к сервису для ручек, которым обёртка go-kit не
+	// нужна (платформенные ИИ-настройки супер-админа: ни middleware-цепочек,
+	// ни преобразований у них нет).
+	Service service.AiService
+
 	GetSettings    endpoint.Endpoint
 	UpdateSettings endpoint.Endpoint
 	TestSettings   endpoint.Endpoint
@@ -32,6 +37,11 @@ type Endpoints struct {
 	SemanticSearch endpoint.Endpoint
 	ReindexTask    endpoint.Endpoint
 	SupportChat    endpoint.Endpoint
+
+	// Личные ИИ-настройки (REST /api/ai/my-settings).
+	GetMySettings    endpoint.Endpoint
+	UpdateMySettings endpoint.Endpoint
+	TestMySettings   endpoint.Endpoint
 
 	// ИИ-ассистент (REST /api/ai/assistant/*).
 	SendAssistantMessage  endpoint.Endpoint
@@ -72,43 +82,56 @@ type EmbedResponse struct {
 	Model  string
 }
 
+// ── Личные ИИ-настройки ────────────────────────────────────────────
+
+type MySettingsRequest struct {
+	UserID int64
+}
+
+type UpdateMySettingsRequest struct {
+	UserID int64
+	Update dto.MyAiSettingsUpdate
+}
+
 // ── ИИ-ассистент ───────────────────────────────────────────────────
 
+// CompanyID — активная компания сессии; nil (её может не быть) отключает
+// инструменты компанийной статистики, но не самого ассистента: ключ и диалог
+// у него личные.
 type SendAssistantMessageRequest struct {
 	UserID    int64
-	CompanyID int64
+	CompanyID *int64
 	Text      string
 }
 
 type GetAssistantHistoryRequest struct {
-	UserID    int64
-	CompanyID int64
-	Limit     int
-	Before    *time.Time
+	UserID int64
+	Limit  int
+	Before *time.Time
 }
 
 type SendAssistantFeedbackRequest struct {
 	UserID    int64
-	CompanyID int64
 	MessageID int64
 	Verdict   string
 	Reason    *string
 }
 
 type TransformTextRequest struct {
-	CompanyID int64
-	Action    string
-	Style     string
-	Text      string
+	UserID int64
+	Action string
+	Style  string
+	Text   string
 }
 
 type ProofreadRequest struct {
-	CompanyID int64
-	Segments  []string
+	UserID   int64
+	Segments []string
 }
 
 func New(svc service.AiService) Endpoints {
 	return Endpoints{
+		Service: svc,
 		GetSettings: func(ctx context.Context, request any) (any, error) {
 			req := request.(SettingsRequest)
 			return svc.GetSettings(ctx, req.Actor, req.CompanyID)
@@ -159,25 +182,37 @@ func New(svc service.AiService) Endpoints {
 			return nil, nil
 		},
 
+		GetMySettings: func(ctx context.Context, request any) (any, error) {
+			req := request.(MySettingsRequest)
+			return svc.GetMySettings(ctx, req.UserID)
+		},
+		UpdateMySettings: func(ctx context.Context, request any) (any, error) {
+			req := request.(UpdateMySettingsRequest)
+			return svc.UpdateMySettings(ctx, req.UserID, req.Update)
+		},
+		TestMySettings: func(ctx context.Context, request any) (any, error) {
+			req := request.(MySettingsRequest)
+			return svc.TestMySettings(ctx, req.UserID)
+		},
 		SendAssistantMessage: func(ctx context.Context, request any) (any, error) {
 			req := request.(SendAssistantMessageRequest)
 			return svc.SendAssistantMessage(ctx, req.UserID, req.CompanyID, req.Text)
 		},
 		GetAssistantHistory: func(ctx context.Context, request any) (any, error) {
 			req := request.(GetAssistantHistoryRequest)
-			return svc.GetAssistantHistory(ctx, req.UserID, req.CompanyID, req.Limit, req.Before)
+			return svc.GetAssistantHistory(ctx, req.UserID, req.Limit, req.Before)
 		},
 		SendAssistantFeedback: func(ctx context.Context, request any) (any, error) {
 			req := request.(SendAssistantFeedbackRequest)
-			return nil, svc.SendAssistantFeedback(ctx, req.UserID, req.CompanyID, req.MessageID, req.Verdict, req.Reason)
+			return nil, svc.SendAssistantFeedback(ctx, req.UserID, req.MessageID, req.Verdict, req.Reason)
 		},
 		TransformText: func(ctx context.Context, request any) (any, error) {
 			req := request.(TransformTextRequest)
-			return svc.TransformText(ctx, req.CompanyID, req.Action, req.Style, req.Text)
+			return svc.TransformText(ctx, req.UserID, req.Action, req.Style, req.Text)
 		},
 		Proofread: func(ctx context.Context, request any) (any, error) {
 			req := request.(ProofreadRequest)
-			return svc.Proofread(ctx, req.CompanyID, req.Segments)
+			return svc.Proofread(ctx, req.UserID, req.Segments)
 		},
 	}
 }

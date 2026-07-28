@@ -211,6 +211,8 @@
       :visible="showCustomDialog"
       @update:visible="closeCustomDialog"
       modal
+      :append-to="host"
+      :pt="{ mask: { class: { 'gw-in-window-mask': inWindow } } }"
       header="Свой период"
       :style="{ width: '380px', maxWidth: '95vw' }"
     >
@@ -262,9 +264,12 @@ import { getDepartments } from '@/api/departments.js'
 import { getStages } from '@/api/stages.js'
 import { useCompanySettings } from '@/composables/useCompanySettings.js'
 import { usePermission, ROLES } from '@/composables/usePermission.js'
+import { useModalHost } from '@/desktop/windowHost.js'
 import TagManageDialog from '@/components/tasks/TagManageDialog.vue'
 import { TASK_COLORS } from '@/utils/taskColors.js'
 import { TASK_SORTS } from '@/components/tasks/taskSorts.js'
+
+const { host, inWindow } = useModalHost()
 
 const props = defineProps({
   mobileVisible: {

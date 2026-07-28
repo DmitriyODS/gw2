@@ -1,4 +1,5 @@
 import { useAuthStore } from '@/stores/auth'
+import { notifyPlanLimit } from '@/utils/planLimit.js'
 
 let isRefreshing = false
 let refreshQueue = []
@@ -129,6 +130,15 @@ export async function apiRequest(path, options = {}) {
     // отключена. Поднимаем флаг в auth-store, App.vue показывает экран.
     if (err.error === 'COMPANY_DISABLED') {
       auth.companyDisabled = err.company_name || true
+    }
+    // Лимиты тарифа приходят из любого раздела и означают одно и то же:
+    // «нужно в магазин». Показываем это в одном месте, чтобы каждый экран не
+    // расписывал апсейл сам (сам запрос всё равно упал — раздел покажет свою
+    // ошибку, если ему нужно).
+    if (err.status === 402 &&
+        (err.error === 'LIMIT_REACHED' || err.error === 'PLAN_FEATURE_REQUIRED' ||
+         err.error === 'AI_NO_TOKENS')) {
+      notifyPlanLimit(err)
     }
     throw err
   }

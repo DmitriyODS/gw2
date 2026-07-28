@@ -173,7 +173,7 @@ func (s *Service) DeleteEntry(ctx context.Context, companyID, calendarID, entryI
 	if err := s.repo.DeleteEntry(ctx, entryID); err != nil {
 		return err
 	}
-	s.removeEntryFiles(e)
+	s.removeEntryFiles(ctx, companyID, e)
 	s.bus.Publish(ctx, "entry:deleted", []string{roomAll}, map[string]any{
 		"id": entryID, "calendar_id": calendarID, "company_id": companyID,
 	})
@@ -194,7 +194,7 @@ func (s *Service) DeleteEntries(ctx context.Context, companyID, calendarID int64
 	if err != nil {
 		return 0, err
 	}
-	s.removeEntryFiles(entries...)
+	s.removeEntryFiles(ctx, companyID, entries...)
 	s.bus.Publish(ctx, "entry:bulk-deleted", []string{roomAll}, map[string]any{
 		"ids": ids, "calendar_id": calendarID, "company_id": companyID,
 	})
@@ -202,7 +202,7 @@ func (s *Service) DeleteEntries(ctx context.Context, companyID, calendarID int64
 }
 
 // removeEntryFiles — удалить из хранилища файлы/картинки удаляемых записей.
-func (s *Service) removeEntryFiles(entries ...*domain.Entry) {
+func (s *Service) removeEntryFiles(ctx context.Context, companyID int64, entries ...*domain.Entry) {
 	var paths []string
 	for _, e := range entries {
 		if e == nil {
@@ -215,7 +215,7 @@ func (s *Service) removeEntryFiles(entries ...*domain.Entry) {
 		}
 	}
 	if len(paths) > 0 {
-		s.files.Remove(paths)
+		s.files.RemoveFor(ctx, 0, companyID, paths)
 	}
 }
 

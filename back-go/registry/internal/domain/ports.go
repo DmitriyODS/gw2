@@ -11,6 +11,8 @@ type RegistryRepository interface {
 	ListRegistries(ctx Ctx, companyID int64) ([]*Registry, error)
 	// GetRegistry — реестр без полей (для проверок принадлежности).
 	GetRegistry(ctx Ctx, id int64) (*Registry, error)
+	// CountRegistries — сколько реестров уже есть (лимит тарифа).
+	CountRegistries(ctx Ctx, company_id int64) (int, error)
 	CreateRegistry(ctx Ctx, r *Registry) error
 	UpdateRegistry(ctx Ctx, id int64, name string, position int) error
 	DeleteRegistry(ctx Ctx, id int64) error
@@ -57,11 +59,12 @@ type UserReader interface {
 
 // FileStore — хранение загруженных файлов/картинок (общий uploads-том или S3).
 type FileStore interface {
-	// Save — записать файл, вернуть относительный путь (ключ) хранилища.
-	Save(fileName string, data []byte) (string, error)
-	// Remove — best-effort удаление файлов по ключам (чистка при удалении
-	// записей/полей); ошибки не возвращаются.
-	Remove(paths []string)
+	// SaveFor — записать файл в квоту компании (её оплачивает создатель):
+	// сверх лимита тарифа файл не сохраняется. Возвращает ключ хранилища.
+	SaveFor(ctx context.Context, userID, companyID int64, fileName string, data []byte) (string, error)
+	// RemoveFor — best-effort удаление файлов по ключам с возвратом места в
+	// квоту (чистка при удалении записей/полей); ошибки не возвращаются.
+	RemoveFor(ctx context.Context, userID, companyID int64, paths []string)
 }
 
 // EventBus — сокет-события клиентам через Redis gw2:registry:events

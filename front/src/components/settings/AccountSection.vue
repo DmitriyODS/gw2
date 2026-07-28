@@ -1,0 +1,636 @@
+<template>
+  <div class="acc">
+    <!-- Кто я: аватар, имя, контакты-чипы и правка одной кнопкой. -->
+    <section class="gw-card acc-id">
+      <button type="button" class="acc-avatar" title="Открыть фото" @click="lightboxOpen = true">
+        <img :src="avatarSrc" :alt="user?.fio" />
+        <span class="acc-avatar-zoom" aria-hidden="true">
+          <span class="material-symbols-outlined">zoom_in</span>
+        </span>
+      </button>
+
+      <div class="acc-id-body">
+        <h3 class="acc-name">{{ user?.fio || '—' }}</h3>
+        <p v-if="user?.post" class="acc-post">{{ user.post }}</p>
+
+        <ul class="acc-facts">
+          <li v-if="user?.login">@{{ user.login }}</li>
+          <li :class="{ empty: !user?.email }">{{ user?.email || 'Email не указан' }}</li>
+          <li :class="{ empty: !user?.phone }">{{ user?.phone || 'Телефон не указан' }}</li>
+          <li v-if="user?.on_vacation" class="vacation">🏖️ В отпуске</li>
+        </ul>
+      </div>
+
+      <button type="button" class="acc-edit" title="Редактировать" @click="editOpen = true">
+        <span class="material-symbols-outlined">edit</span>
+      </button>
+    </section>
+
+    <!-- Подписка и внешние аккаунты — ряд пилюль под карточкой. -->
+    <div class="acc-links">
+      <component
+        :is="link.action ? 'button' : 'div'"
+        v-for="link in links"
+        :key="link.key"
+        class="gw-chip acc-link"
+        :class="{ 'is-static': !link.action }"
+        :type="link.action ? 'button' : undefined"
+        @click="link.action && link.action()"
+      >
+        <span class="acc-link-ico" :class="{ 'is-brand': link.logo }" :data-tone="link.tone">
+          <YandexLogo v-if="link.logo === 'yandex'" :size="24" />
+          <YougileLogo v-else-if="link.logo === 'yougile'" :size="24" />
+          <span v-else class="material-symbols-outlined">{{ link.icon }}</span>
+        </span>
+        {{ link.label }}
+        <span class="acc-link-state">{{ link.state }}</span>
+      </component>
+    </div>
+
+    <section class="gw-card acc-sessions">
+      <h3 class="gw-h">Авторизация и сессии</h3>
+
+      <div class="sess-grid">
+        <button type="button" class="sess-tile sess-add" @click="authorizeOpen = true">
+          <span class="material-symbols-outlined">devices</span>
+          <span>Авторизовать<br />новое устройство</span>
+        </button>
+
+        <div v-if="sessionsLoading" class="sess-tile sess-loading">
+          <BrandLoader :size="48" />
+        </div>
+
+        <article v-for="s in sessions" :key="s.id" class="sess-tile sess-item">
+          <header class="sess-head">
+            <span class="material-symbols-outlined sess-ico">{{ platformIcon(s.platform) }}</span>
+            <span v-if="s.city || s.ip" class="sess-place" :title="s.ip">{{ s.city || s.ip }}</span>
+          </header>
+
+          <h4 class="sess-title" :title="s.device">{{ s.title }}</h4>
+          <p class="sess-meta">Вход: {{ formatLogin(s.created_at) }}</p>
+          <p class="sess-meta">
+            Последняя активность: {{ formatSeen(s.last_seen_at) }}
+            <span v-if="s.current" class="sess-current">· это устройство</span>
+          </p>
+
+          <button type="button" class="sess-end" :disabled="revoking === s.id" @click="revokeTarget = s">
+            <span class="material-symbols-outlined">logout</span>
+            Завершить сеанс
+          </button>
+        </article>
+      </div>
+    </section>
+
+    <ProfileEditDialog v-model="editOpen" />
+    <AuthorizeDeviceDialog v-model="authorizeOpen" />
+    <ImageLightbox v-model="lightboxOpen" :src="avatarSrc" :caption="user?.fio" />
+
+    <AppDialog
+      :model-value="!!revokeTarget"
+      tone="danger"
+      icon="logout"
+      size="sm"
+      title="Завершить сеанс?"
+      :subtitle="revokeSubtitle"
+      :busy="!!revoking"
+      :closable="!revoking"
+      :actions="[
+        { kind: 'cancel', label: 'Отмена', disabled: !!revoking },
+        { kind: 'confirm', label: 'Завершить', icon: 'logout', disabled: !!revoking },
+      ]"
+      @update:model-value="revokeTarget = null"
+      @confirm="confirmRevoke"
+    />
+  </div>
+</template>
+
+<script setup>
+/* Аккаунт — раздел настроек (прежний самостоятельный «Профиль»): личные данные,
+   внешние аккаунты и реестр входов. Всё редактирование живёт в диалоге правки,
+   поэтому здесь только карточки и действия над сеансами. */
+import { computed, onMounted, ref } from 'vue'
+import { useRouter } from 'vue-router'
+import { useAuthStore } from '@/stores/auth.js'
+import { useNotificationsStore } from '@/stores/notifications.js'
+import { useBillingStore } from '@/stores/billing.js'
+import { formatUntil } from '@/utils/money.js'
+import { inAppShell } from '@/utils/appShell.js'
+import { dayLabel } from '@/utils/chatDates.js'
+import {
+  listSessions,
+  revokeSession,
+  yandexConfig,
+  yandexAuthURL,
+  yandexLinkStatus,
+  yandexUnlink,
+} from '@/api/auth.js'
+import { getYougileStatus } from '@/api/yougile.js'
+import AppDialog from '@/components/common/AppDialog.vue'
+import ImageLightbox from '@/components/common/ImageLightbox.vue'
+import BrandLoader from '@/components/common/BrandLoader.vue'
+import AuthorizeDeviceDialog from '@/components/devicelink/AuthorizeDeviceDialog.vue'
+import ProfileEditDialog from '@/components/profile/ProfileEditDialog.vue'
+import YandexLogo from '@/components/common/YandexLogo.vue'
+import YougileLogo from '@/components/common/YougileLogo.vue'
+
+const auth = useAuthStore()
+const notif = useNotificationsStore()
+const router = useRouter()
+const billing = useBillingStore()
+
+const user = computed(() => auth.user)
+const avatarSrc = computed(() => {
+  const u = auth.user
+  if (!u) return ''
+  return u.avatar_path ? `/uploads/${u.avatar_path}` : `/api/users/${u.id}/identicon`
+})
+
+const editOpen = ref(false)
+const lightboxOpen = ref(false)
+const authorizeOpen = ref(false)
+
+/* ── Сеансы ──────────────────────────────────────────────────────── */
+const sessions = ref([])
+const sessionsLoading = ref(true)
+const revokeTarget = ref(null)
+const revoking = ref(0)
+
+async function loadSessions() {
+  sessionsLoading.value = true
+  try {
+    const items = await listSessions()
+    // Своё устройство — первым: с него чаще всего и завершают чужие сеансы.
+    sessions.value = (items || []).sort((a, b) => Number(b.current) - Number(a.current))
+  } catch (e) {
+    notif.error(e.message || 'Не удалось загрузить список сеансов')
+  } finally {
+    sessionsLoading.value = false
+  }
+}
+
+function platformIcon(platform) {
+  if (platform === 'mobile') return 'smartphone'
+  if (platform === 'desktop') return 'desktop_windows'
+  return 'web_asset'
+}
+
+function formatLogin(iso) {
+  const d = new Date(iso)
+  if (Number.isNaN(d.getTime())) return '—'
+  return d.toLocaleString('ru-RU', {
+    day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit',
+  })
+}
+
+// «сегодня» / «вчера» / «16 мая» — в строку карточки, поэтому со строчной.
+function formatSeen(iso) {
+  const label = dayLabel(iso)
+  return label ? label.charAt(0).toLowerCase() + label.slice(1) : '—'
+}
+
+const revokeSubtitle = computed(() => {
+  const s = revokeTarget.value
+  if (!s) return ''
+  return s.current
+    ? 'Это текущее устройство — вы выйдете из системы.'
+    : `«${s.title}» перестанет открывать ваш аккаунт: на нём попросят войти заново.`
+})
+
+async function confirmRevoke() {
+  const s = revokeTarget.value
+  if (!s) return
+  revoking.value = s.id
+  try {
+    await revokeSession(s.id)
+    if (s.current) {
+      // Свой сеанс уже недействителен — уходим на экран входа.
+      await auth.logout()
+      return
+    }
+    sessions.value = sessions.value.filter((x) => x.id !== s.id)
+    notif.success('Сеанс завершён')
+    revokeTarget.value = null
+  } catch (e) {
+    notif.error(e.message || 'Не удалось завершить сеанс')
+  } finally {
+    revoking.value = 0
+  }
+}
+
+/* ── Подписка и внешние аккаунты ─────────────────────────────────── */
+const yandex = ref({ enabled: false, client_id: '', linked: false })
+const yandexBusy = ref(false)
+const yougile = ref({ connected: false, available: false })
+
+// Тариф берём у биллинга — тот же источник, что у магазина, иначе профиль и
+// витрина расходятся. Кнопка ведёт в магазин, где подписка и оформляется.
+const plan = computed(() => {
+  const name = billing.planName
+  if (!name) return '—'
+  return billing.expiresAt
+    ? `${name} · до ${formatUntil(billing.expiresAt)}`
+    : name
+})
+
+const links = computed(() => [
+  {
+    key: 'plan',
+    label: 'Подписка',
+    icon: 'card_membership',
+    tone: 'primary',
+    state: plan.value,
+    action: () => router.push('/store?tab=subs'),
+  },
+  {
+    key: 'yandex',
+    label: 'Яндекс аккаунт',
+    logo: 'yandex',
+    state: !yandex.value.enabled ? 'недоступно' : yandex.value.linked ? 'подключено' : 'не настроено',
+    action: yandex.value.enabled && !yandexBusy.value
+      ? (yandex.value.linked ? unlinkYandex : linkYandex)
+      : null,
+  },
+  {
+    key: 'yougile',
+    label: 'YouGile аккаунт',
+    logo: 'yougile',
+    state: !yougile.value.available ? 'недоступно' : yougile.value.connected ? 'подключено' : 'не настроено',
+    action: yougile.value.available ? () => router.push('/settings?section=general') : null,
+  },
+])
+
+function linkYandex() {
+  window.location.href = yandexAuthURL(yandex.value.client_id, inAppShell() ? 'app-link' : 'link')
+}
+
+async function unlinkYandex() {
+  yandexBusy.value = true
+  try {
+    await yandexUnlink()
+    yandex.value.linked = false
+    notif.success('Яндекс-аккаунт отвязан')
+  } catch (e) {
+    notif.error(e?.message || 'Не удалось отвязать аккаунт')
+  } finally {
+    yandexBusy.value = false
+  }
+}
+
+// Каждая интеграция грузится сама по себе: недоступная (нет компании, нет прав)
+// гасит только свою пилюлю, а не весь ряд.
+function loadLinks() {
+  yandexConfig()
+    .then(async (cfg) => {
+      yandex.value = { ...yandex.value, ...cfg }
+      if (cfg.enabled) yandex.value.linked = (await yandexLinkStatus()).linked
+    })
+    .catch(() => {})
+
+  getYougileStatus()
+    .then((st) => {
+      yougile.value = { connected: !!st.connected, available: !!st.company_enabled || !!st.connected }
+    })
+    .catch(() => {})
+}
+
+onMounted(() => {
+  loadSessions()
+  loadLinks()
+  // Тариф в карточке — тот же, что в магазине: общий стор, общий запрос.
+  billing.fetchShowcase()
+})
+</script>
+
+<style scoped>
+.acc {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+/* ── Кто я ───────────────────────────────────────────────────────── */
+.acc-id {
+  display: flex;
+  align-items: flex-start;
+  gap: 20px;
+  padding: 20px;
+}
+
+.acc-avatar {
+  position: relative;
+  flex-shrink: 0;
+  width: 116px;
+  height: 116px;
+  padding: 0;
+  border: 1px solid var(--color-outline-dim);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface-low);
+  overflow: hidden;
+  cursor: zoom-in;
+  transition: transform 0.18s, box-shadow 0.18s;
+}
+
+.acc-avatar:hover {
+  transform: scale(1.02);
+  box-shadow: var(--shadow-md);
+}
+
+.acc-avatar img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.acc-avatar-zoom {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  background: color-mix(in oklch, var(--color-scrim) 55%, transparent);
+  color: var(--color-on-primary);
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+
+.acc-avatar:hover .acc-avatar-zoom { opacity: 1; }
+.acc-avatar-zoom .material-symbols-outlined { font-size: 30px; }
+
+.acc-id-body {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-top: 4px;
+}
+
+.acc-name {
+  margin: 0;
+  font-size: 1.6rem;
+  font-weight: 800;
+  line-height: 1.15;
+  letter-spacing: -0.4px;
+  color: var(--color-primary);
+  overflow-wrap: anywhere;
+}
+
+.acc-post {
+  margin: 0;
+  font-size: 0.86rem;
+  color: var(--color-text-dim);
+}
+
+/* Контакты — пилюли-факты: их не редактируют отсюда, только читают. */
+.acc-facts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 4px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.acc-facts li {
+  padding: 7px 14px;
+  border-radius: 999px;
+  background: var(--color-surface-high);
+  color: var(--color-text);
+  font-size: 0.85rem;
+  font-weight: 500;
+}
+
+.acc-facts li.empty { color: var(--color-text-dim); }
+
+.acc-facts li.vacation {
+  background: var(--color-secondary-container);
+  color: var(--color-on-secondary-container);
+  font-weight: 600;
+}
+
+.acc-edit {
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  width: 40px;
+  min-width: 40px;
+  max-width: 40px;
+  height: 40px;
+  min-height: 40px;
+  max-height: 40px;
+  padding: 0;
+  border: 1px solid var(--acrylic-border);
+  border-radius: 50%;
+  background: var(--glass-bg), var(--acrylic-card-bg);
+  box-shadow: var(--glass-edge);
+  color: var(--color-text);
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.acc-edit:hover {
+  background: var(--glass-hover-bg, var(--glass-bg)), var(--acrylic-card-bg);
+  border-color: color-mix(in oklch, var(--color-primary) 30%, var(--acrylic-border));
+}
+
+.acc-edit .material-symbols-outlined { font-size: 20px; }
+
+/* ── Подписка и внешние аккаунты ─────────────────────────────────── */
+.acc-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.acc-link {
+  flex: 1 1 240px;
+  justify-content: flex-start;
+  padding: 8px 16px 8px 8px;
+}
+
+.acc-link.is-static { cursor: default; }
+
+.acc-link-ico {
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  background: var(--tone-bg, var(--color-primary-container));
+  color: var(--tone-fg, var(--color-on-primary-container));
+}
+
+.acc-link-ico[data-tone="primary"]   { --tone-bg: var(--color-primary-container);   --tone-fg: var(--color-on-primary-container); }
+.acc-link-ico[data-tone="secondary"] { --tone-bg: var(--color-secondary-container); --tone-fg: var(--color-on-secondary-container); }
+.acc-link-ico[data-tone="error"]     { --tone-bg: var(--color-error-container);     --tone-fg: var(--color-error); }
+.acc-link-ico .material-symbols-outlined { font-size: 18px; }
+
+/* Чужой фирменный знак показываем как есть, без нашей цветной подложки. */
+.acc-link-ico.is-brand { background: none; }
+
+.acc-link-state {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--color-text-dim);
+  font-weight: 500;
+}
+
+/* ── Сеансы ──────────────────────────────────────────────────────── */
+.acc-sessions {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.sess-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
+  gap: 14px;
+}
+
+.sess-tile {
+  padding: 16px;
+  border: 1px solid var(--color-outline-dim);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface);
+  min-height: 164px;
+}
+
+.sess-add {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  color: var(--color-text);
+  font-size: 0.87rem;
+  font-weight: 600;
+  line-height: 1.35;
+  text-align: center;
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s;
+}
+
+.sess-add:hover {
+  background: var(--color-surface-low);
+  border-color: color-mix(in oklch, var(--color-primary) 35%, var(--color-outline-dim));
+}
+
+.sess-add .material-symbols-outlined {
+  font-size: 30px;
+  color: var(--color-text-dim);
+}
+
+.sess-loading { display: grid; place-items: center; }
+
+.sess-item {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.sess-head {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.sess-ico {
+  font-size: 30px;
+  color: var(--color-text);
+}
+
+.sess-place {
+  margin-left: auto;
+  max-width: 60%;
+  padding: 3px 10px;
+  border-radius: var(--radius-full);
+  background: var(--color-primary-container);
+  color: var(--color-on-primary-container);
+  font-size: 0.72rem;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sess-title {
+  margin: 0;
+  font-size: 0.94rem;
+  font-weight: 700;
+  color: var(--color-text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sess-meta {
+  margin: 0;
+  font-size: 0.78rem;
+  line-height: 1.4;
+  color: var(--color-text-dim);
+}
+
+.sess-current {
+  color: var(--color-primary);
+  font-weight: 600;
+}
+
+.sess-end {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  margin-top: auto;
+  padding: 9px 12px;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: var(--color-error-container);
+  color: var(--color-error);
+  font-size: 0.83rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.sess-end:hover:not(:disabled) {
+  background: color-mix(in oklch, var(--color-error) 22%, var(--color-error-container));
+}
+
+.sess-end:disabled { opacity: 0.6; cursor: not-allowed; }
+.sess-end .material-symbols-outlined { font-size: 17px; }
+
+/* ── Узкая панель настроек (ширина ОКНА, а не экрана) ────────────── */
+@container (max-width: 560px) {
+  .acc-id {
+    flex-wrap: wrap;
+    gap: 14px;
+  }
+
+  .acc-avatar { width: 88px; height: 88px; }
+  .acc-name { font-size: 1.3rem; }
+  .acc-link { flex-basis: 100%; }
+  .sess-tile { min-height: 0; }
+  .sess-grid { grid-template-columns: minmax(0, 1fr); }
+}
+
+/* Заводской WebView старых Android не знает @container — на телефоне окно
+   всё равно во весь экран, поэтому дублируем правила media-запросом. */
+@media (max-width: 560px) {
+  .acc-id {
+    flex-wrap: wrap;
+    gap: 14px;
+  }
+
+  .acc-avatar { width: 88px; height: 88px; }
+  .acc-name { font-size: 1.3rem; }
+  .acc-link { flex-basis: 100%; }
+  .sess-tile { min-height: 0; }
+  .sess-grid { grid-template-columns: minmax(0, 1fr); }
+}
+</style>

@@ -37,7 +37,6 @@
       </template>
       <ActiveUnitModal v-if="unitsStore.activeUnit && !unitsStore.minimized" />
       <AppTutorial v-if="isTutorialOpen && !desktopMode" />
-      <MiniMessenger />
       <IncomingCallOverlay @accept="callStore.accept()" @decline="callStore.decline()" />
       <CallView />
       <ReturnCallBanner />
@@ -91,7 +90,6 @@ import CompanyDisabledScreen from '@/components/layout/CompanyDisabledScreen.vue
 import ActiveUnitModal from '@/components/layout/ActiveUnitModal.vue'
 import ActiveUnitBanner from '@/components/layout/ActiveUnitBanner.vue'
 import AppTutorial from '@/components/layout/AppTutorial.vue'
-import MiniMessenger from '@/components/messenger/MiniMessenger.vue'
 import PullToRefresh from '@/components/common/PullToRefresh.vue'
 import NewChatDialog from '@/components/messenger/NewChatDialog.vue'
 import IncomingCallOverlay from '@/components/call/IncomingCallOverlay.vue'

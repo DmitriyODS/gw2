@@ -39,27 +39,37 @@ describe('журнал последних действий', () => {
     expect(useActivityStore().items).toEqual([])
   })
 
-  it('помнит недавно открытые разделы без повторов', () => {
+  it('открытые разделы ложатся в общую ленту без повторов', () => {
     const s = useActivityStore()
     s.recordSection('tasks')
     s.recordSection('notes')
     s.recordSection('tasks')
 
-    expect(s.sections.map((x) => x.id)).toEqual(['tasks', 'notes'])
+    expect(s.items.map((e) => e.section)).toEqual(['tasks', 'notes'])
+    expect(s.items[0]).toMatchObject({ action: 'opened', path: '' })
   })
 
-  it('разделы и действия — разные списки, «очистить» гасит оба', () => {
+  it('разделы и действия — один поток, «очистить» гасит его целиком', () => {
     const s = useActivityStore()
     s.recordSection('tasks')
     s.record({ section: 'notes', id: 5, title: 'Идеи', path: '/notes/5' })
-    expect(s.items).toHaveLength(1)
-    expect(s.sections).toHaveLength(1)
+    expect(s.items.map((e) => e.action)).toEqual(['created', 'opened'])
 
     s.clear()
     setActivePinia(createPinia())
-    const restored = useActivityStore()
-    expect(restored.items).toEqual([])
-    expect(restored.sections).toEqual([])
+    expect(useActivityStore().items).toEqual([])
+  })
+
+  it('прежний формат хранилища (разделы отдельным списком) поднимается в ленту', () => {
+    localStorage.setItem('gw_activity', JSON.stringify({
+      items: [{ key: 'notes:5', section: 'notes', action: 'created', title: 'Идеи', path: '/notes/5', at: '2026-07-28T10:00:00.000Z' }],
+      sections: [{ id: 'tasks', at: '2026-07-28T11:00:00.000Z' }],
+    }))
+
+    setActivePinia(createPinia())
+    const s = useActivityStore()
+    expect(s.items.map((e) => e.section)).toEqual(['tasks', 'notes'])
+    expect(s.items[0].action).toBe('opened')
   })
 
   it('запись без раздела или пути игнорируется', () => {

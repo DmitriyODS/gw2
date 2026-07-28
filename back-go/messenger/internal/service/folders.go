@@ -60,6 +60,9 @@ func (s *Service) CreateFolder(ctx context.Context, userID int64, in dto.FolderI
 	if n >= maxFolders {
 		return nil, domain.NewError("FOLDER_LIMIT", "Достигнут предел числа папок", 409)
 	}
+	if err := s.ensureFolderLimit(ctx, userID, n); err != nil {
+		return nil, err
+	}
 
 	f := &domain.Folder{
 		OwnerID:         userID,

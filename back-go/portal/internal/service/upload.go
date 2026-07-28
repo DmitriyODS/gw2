@@ -16,7 +16,7 @@ func (s *Service) AddAttachment(ctx context.Context, companyID, postID, userID i
 	if !canManage(p, userID, roleLevel) {
 		return nil, domain.ErrForbidden
 	}
-	path, err := s.files.Save(fileName, data)
+	path, err := s.files.SaveFor(ctx, userID, companyID, fileName, data)
 	if err != nil {
 		return nil, err
 	}
@@ -54,7 +54,7 @@ func (s *Service) RemoveAttachment(ctx context.Context, companyID, attachmentID,
 	if err := s.repo.DeleteAttachment(ctx, attachmentID); err != nil {
 		return err
 	}
-	s.files.Remove([]string{a.FilePath})
+	s.files.RemoveFor(ctx, userID, companyID, []string{a.FilePath})
 	s.bus.Publish(ctx, "post:updated", []string{roomAll}, map[string]any{
 		"id": a.PostID, "company_id": companyID, "attachment_removed": true,
 	})

@@ -3,6 +3,7 @@
     :visible="modelValue"
     @update:visible="onVisibleChange"
     modal
+    :append-to="host"
     :draggable="false"
     :show-header="false"
     :closable="closable"
@@ -79,6 +80,7 @@
 import { computed, onBeforeUnmount, watch } from 'vue'
 import Dialog from 'primevue/dialog'
 import { registerOpenModal, unregisterOpenModal } from '@/composables/useOpenModals.js'
+import { useModalHost } from '@/desktop/windowHost.js'
 
 /* Унифицированный диалог в стиле Material You Expressive.
    Использование:
@@ -136,6 +138,11 @@ const props = defineProps({
 
 const emit = defineEmits(['update:modelValue', 'confirm', 'cancel'])
 
+/* В режиме рабочего стола диалог раздела живёт в СВОЁМ окне (см.
+   desktop/windowHost.js): маска накрывает окно, а не экран. Вне окна — прежний
+   body. */
+const { host, inWindow } = useModalHost()
+
 // Регистрируем открытие в глобальном счётчике — плавающие виджеты прячутся,
 // пока открыт хоть один диалог (см. composables/useOpenModals.js).
 watch(() => props.modelValue, (open, prev) => {
@@ -166,6 +173,8 @@ const hasHeader = computed(() =>
 // dvh, не vh: на мобильных vh = высота при СКРЫТОЙ панели браузера, поэтому
 // модалка получалась выше видимой области и обрезалась сверху/снизу (а
 // нижний sheet «уезжал» под адресную строку — выглядело узкой полоской).
+// В окне рабочего стола эти габариты клампит .gw-in-window-mask (main.css):
+// экран там больше окна, и без клампа модалку срезала бы граница окна.
 const SIZE_MAX_H = {
   sm: 'calc(100dvh - 48px)',
   md: 'calc(100dvh - 48px)',
@@ -182,7 +191,7 @@ const rootStyle = computed(() => ({
 
 const rootPt = computed(() => ({
   root: { class: ['app-dialog-root', `dlg-size-${props.size}`, `mobile-${props.mobile}`, props.dialogClass] },
-  mask: { class: ['app-dialog-mask', props.maskClass] },
+  mask: { class: ['app-dialog-mask', { 'gw-in-window-mask': inWindow.value }, props.maskClass] },
   content: { class: 'app-dialog-content' },
 }))
 

@@ -49,8 +49,8 @@
     <Transition name="np">
       <NotificationsPanel v-if="desktop.notifOpen" @close="desktop.notifOpen = false" />
     </Transition>
-    <Transition name="sp">
-      <Spotlight v-if="desktop.searchOpen" @close="desktop.searchOpen = false" />
+    <Transition name="hp">
+      <HolaPopup v-if="desktop.holaOpen" @close="desktop.holaOpen = false" />
     </Transition>
 
     <ContextMenu
@@ -86,7 +86,7 @@ import AppWindow from './AppWindow.vue'
 import Taskbar from './Taskbar.vue'
 import StartMenu from './StartMenu.vue'
 import NotificationsPanel from './NotificationsPanel.vue'
-import Spotlight from './Spotlight.vue'
+import HolaPopup from './HolaPopup.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -151,6 +151,13 @@ function syncArea() {
    URL. Обе стороны идемпотентны — совпадающий путь ничего не делает. */
 function openForPath(fullPath) {
   const resolved = router.resolve(fullPath)
+  // У Hola окна нет: адрес /hola (мобильная ссылка, закладка) открывает
+  // всплывающую панель, а стол возвращает себе адрес пустого стола.
+  if (resolved.path === '/hola') {
+    desktop.holaOpen = true
+    router.replace('/').catch(() => {})
+    return
+  }
   if (resolved.path === '/') return
   const app = appForPath(resolved.path)
   if (!app || !isAvailable(app)) return
@@ -255,10 +262,10 @@ function toggleFull() {
 }
 
 function onKeydown(e) {
-  // Ctrl/Cmd+K — строка глобального поиска, как Spotlight в системе.
+  // Ctrl/Cmd+K — всплывающая панель Hola: поиск, команды и чат с ассистентом.
   if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
     e.preventDefault()
-    desktop.searchOpen = !desktop.searchOpen
+    desktop.holaOpen = !desktop.holaOpen
     return
   }
   if (e.key !== 'Escape') return

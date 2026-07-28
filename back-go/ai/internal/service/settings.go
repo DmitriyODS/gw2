@@ -2,15 +2,18 @@ package service
 
 import (
 	"context"
-	"strings"
 	"time"
 
 	"github.com/DmitriyODS/gw2/back-go/ai/internal/domain"
 	"github.com/DmitriyODS/gw2/back-go/ai/internal/dto"
-	"github.com/DmitriyODS/gw2/back-go/ai/internal/secret"
 )
 
-// resolveCompany — компания (404) + проверка доступа: AI-настройками управляет
+// ИИ-возможности КОМПАНИИ. Своего ключа у компании нет: умный поиск задач и
+// факты ТВ-режима работают на платформенном ключе и тратят токены СОЗДАТЕЛЯ
+// компании — поэтому у него есть тумблер «разрешить» (shared), а у каждой
+// возможности свой выключатель.
+
+// resolveCompany — компания (404) + проверка доступа: ИИ-настройками управляет
 // администратор ИМЕННО этой компании (членство user_companies с ролью ≥ 3) или
 // супер-админ платформы. Доступ скоупится компанией из пути, а НЕ активной
 // компанией сессии — раздел «Компании» правит любую свою компанию независимо от
@@ -38,14 +41,27 @@ func (s *Service) resolveCompany(ctx context.Context, actor *domain.User, compan
 	return nil, errNoAccess()
 }
 
-func dumpSettings(c *domain.CompanyAI) *dto.AiSettings {
-	return &dto.AiSettings{
-		Enabled:        c.Enabled,
-		KeyHint:        c.KeyHint,
-		HasKey:         len(c.APIKeyEnc) > 0,
-		ModelChat:      c.ModelChat,
-		ModelEmbedding: c.ModelEmbedding,
+func (s *Service) dumpSettings(ctx context.Context, c *domain.CompanyAI) *dto.AiSettings {
+	out := &dto.AiSettings{
+		Enabled:         c.Enabled,
+		Shared:          c.Shared,
+		FeatSearch:      c.FeatSearch,
+		FeatTVFact:      c.FeatTVFact,
+		OwnerTokensLeft: -1,
 	}
+	if p, err := s.platformAI(ctx); err == nil {
+		out.PlatformReady = p.Ready()
+		out.ModelChat = firstNonEmpty(p.ModelChat, domain.PlatformModelChat)
+		out.ModelEmbedding = firstNonEmpty(p.ModelEmbedding, domain.PlatformModelEmbedding)
+	}
+	// Остаток токенов владельца — чтобы администратор видел, на чей счёт
+	// работает ИИ компании и не кончился ли он.
+	if s.meter != nil && c.OwnerID > 0 {
+		if _, left, ok := s.meter.Check(ctx, c.OwnerID, 0); ok {
+			out.OwnerTokensLeft = left
+		}
+	}
+	return out
 }
 
 func (s *Service) GetSettings(ctx context.Context, actor *domain.User, companyID int64) (*dto.AiSettings, error) {
@@ -53,7 +69,7 @@ func (s *Service) GetSettings(ctx context.Context, actor *domain.User, companyID
 	if err != nil {
 		return nil, err
 	}
-	return dumpSettings(company), nil
+	return s.dumpSettings(ctx, company), nil
 }
 
 func (s *Service) UpdateSettings(ctx context.Context, actor *domain.User, companyID int64, upd dto.AiSettingsUpdate) (*dto.AiSettings, error) {
@@ -64,40 +80,31 @@ func (s *Service) UpdateSettings(ctx context.Context, actor *domain.User, compan
 	if upd.Enabled != nil {
 		company.Enabled = *upd.Enabled
 	}
-	if upd.ModelChat != nil {
-		company.ModelChat = strings.TrimSpace(*upd.ModelChat)
-	}
-	if upd.ModelEmbedding != nil {
-		company.ModelEmbedding = strings.TrimSpace(*upd.ModelEmbedding)
-	}
-
-	// api_key: None / "" → не менять; clear_key=true → стереть; иначе зашифровать.
-	if upd.ClearKey {
-		company.APIKeyEnc = nil
-		company.KeyHint = nil
-	} else if upd.APIKey != nil {
-		if newKey := strings.TrimSpace(*upd.APIKey); newKey != "" {
-			enc, err := s.cipher.Encrypt(newKey)
-			if err != nil {
-				s.log.Error("ai.encrypt_failed", "err", err)
-				return nil, domain.NewError("AI_KEY_NOT_CONFIGURED",
-					"На сервере не задан AI_KEY_ENCRYPTION_KEY", 500)
-			}
-			company.APIKeyEnc = enc
-			hint := secret.MakeHint(newKey)
-			company.KeyHint = &hint
+	// Тратить свои токены на компанию разрешает только её СОЗДАТЕЛЬ: это его
+	// деньги, и решать за него не может ни другой администратор, ни супер-админ.
+	if upd.Shared != nil {
+		if actor == nil || actor.ID != company.OwnerID {
+			return nil, domain.NewError("OWNER_ONLY",
+				"Разрешить тратить токены на компанию может только её создатель", 403)
 		}
+		company.Shared = *upd.Shared
+	}
+	if upd.FeatSearch != nil {
+		company.FeatSearch = *upd.FeatSearch
+	}
+	if upd.FeatTVFact != nil {
+		company.FeatTVFact = *upd.FeatTVFact
 	}
 
 	if err := s.repo.UpdateCompanyAI(ctx, company); err != nil {
 		return nil, err
 	}
 	s.invalidateClient(company.ID)
-	return dumpSettings(company), nil
+	return s.dumpSettings(ctx, company), nil
 }
 
-// TestSettings — реальная проверка связи: один tiny-chat + один embedding.
-// Ничего не сохраняет; ошибки не роняют запрос — уходят флагами в результат.
+// TestSettings — реальная проверка связи: один tiny-chat + один embedding на
+// том доступе, которым пользуется компания. Ничего не сохраняет.
 func (s *Service) TestSettings(ctx context.Context, actor *domain.User, companyID int64) (*dto.AiTestResult, error) {
 	company, err := s.resolveCompany(ctx, actor, companyID)
 	if err != nil {
@@ -110,7 +117,12 @@ func (s *Service) TestSettings(ctx context.Context, actor *domain.User, companyI
 	if client == nil {
 		return nil, errAiDisabled(409)
 	}
+	return s.pingClient(ctx, client), nil
+}
 
+// pingClient — общая проверка связи: chat + embedding, ошибки уходят флагами
+// в результат, а не роняют запрос.
+func (s *Service) pingClient(ctx context.Context, client *aiClient) *dto.AiTestResult {
 	result := &dto.AiTestResult{}
 	setErr := func(text string) {
 		prev := ""
@@ -124,6 +136,7 @@ func (s *Service) TestSettings(ctx context.Context, actor *domain.User, companyI
 	t0 := time.Now()
 	_, chatErr := s.llm.ChatOnce(ctx, domain.ChatParams{
 		APIKey:       client.apiKey,
+		BaseURL:      client.baseURL,
 		Model:        client.modelChat,
 		MessagesJSON: `[{"role":"user","content":"ping"}]`,
 		MaxTokens:    2,
@@ -135,15 +148,19 @@ func (s *Service) TestSettings(ctx context.Context, actor *domain.User, companyI
 	} else {
 		result.Chat = true
 	}
-	_, embErr := s.llm.Embed(ctx, client.apiKey, client.modelEmbedding, []string{"ping"}, 10*time.Second)
-	if embErr != nil {
-		// Конкатенация как во Flask: (error or "") + " embedding: ..."
-		setErr(" embedding: " + embErr.Error())
-	} else {
-		result.Embedding = true
+	if client.modelEmbedding != "" {
+		_, _, embErr := s.llm.Embed(ctx, domain.EmbedParams{
+			APIKey: client.apiKey, BaseURL: client.baseURL,
+			Model: client.modelEmbedding, Texts: []string{"ping"}, Timeout: 10 * time.Second,
+		})
+		if embErr != nil {
+			setErr(" embedding: " + embErr.Error())
+		} else {
+			result.Embedding = true
+		}
 	}
 	result.LatencyMS = time.Since(t0).Milliseconds()
-	return result, nil
+	return result
 }
 
 func (s *Service) IndexingStatus(ctx context.Context, actor *domain.User, companyID int64) (*dto.IndexingStatus, error) {
@@ -155,15 +172,23 @@ func (s *Service) IndexingStatus(ctx context.Context, actor *domain.User, compan
 	if err != nil {
 		return nil, err
 	}
-	indexed, err := s.repo.CountEmbeddings(ctx, company.ID, company.ModelEmbedding)
+	model := domain.PlatformModelEmbedding
+	if p, err := s.platformAI(ctx); err == nil {
+		model = firstNonEmpty(p.ModelEmbedding, model)
+	}
+	indexed, err := s.repo.CountEmbeddings(ctx, company.ID, model)
 	if err != nil {
 		return nil, err
 	}
-	// pending: find_unindexed_task_ids смотрит только ai_enabled-компании —
-	// при выключенном AI отдаёт 0.
+	// pending считаем только при включённом ИИ компании — иначе индексировать
+	// нечего и показывать очередь незачем.
 	pending := 0
-	if company.Enabled {
-		ids, err := s.repo.FindUnindexedTaskIDs(ctx, company.ID, company.EmbeddingModel())
+	client, err := s.clientForCompany(ctx, company.ID, domain.FeatureSearch)
+	if err != nil {
+		return nil, err
+	}
+	if client != nil {
+		ids, err := s.repo.FindUnindexedTaskIDs(ctx, company.ID, model)
 		if err != nil {
 			return nil, err
 		}
@@ -173,9 +198,8 @@ func (s *Service) IndexingStatus(ctx context.Context, actor *domain.User, compan
 		TotalTasks: total,
 		Indexed:    indexed,
 		Pending:    pending,
-		Model:      company.ModelEmbedding,
-		// Как во Flask: только наличие ключа, без попытки расшифровать.
-		AiEnabled: company.Enabled && len(company.APIKeyEnc) > 0,
+		Model:      model,
+		AiEnabled:  client != nil,
 	}, nil
 }
 
@@ -187,7 +211,7 @@ func (s *Service) StartReindex(ctx context.Context, actor *domain.User, companyI
 	if err != nil {
 		return nil, err
 	}
-	client, err := s.clientFor(ctx, company.ID)
+	client, err := s.clientForCompany(ctx, company.ID, domain.FeatureSearch)
 	if err != nil {
 		return nil, err
 	}
@@ -195,7 +219,7 @@ func (s *Service) StartReindex(ctx context.Context, actor *domain.User, companyI
 		return nil, errAiDisabled(409)
 	}
 
-	ids, err := s.repo.FindUnindexedTaskIDs(ctx, company.ID, company.EmbeddingModel())
+	ids, err := s.repo.FindUnindexedTaskIDs(ctx, company.ID, client.modelEmbedding)
 	if err != nil {
 		return nil, err
 	}

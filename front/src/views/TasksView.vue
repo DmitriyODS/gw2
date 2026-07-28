@@ -72,9 +72,9 @@
     <div v-if="onVacation" class="vacation-banner">
       <span class="vacation-banner-emoji">🏖️</span>
       <span class="vacation-banner-text">Вы в отпуске — создание и редактирование задач недоступно.</span>
-      <button type="button" class="btn-glass vacation-banner-btn" @click="router.push('/profile')">
+      <button type="button" class="btn-glass vacation-banner-btn" @click="router.push('/settings?section=account')">
         <span class="material-symbols-outlined">person</span>
-        Профиль
+        Аккаунт
       </button>
     </div>
 

@@ -491,6 +491,16 @@ func (f *fakeCompanies) CompanyStats(_ context.Context, ids []int64) (map[int64]
 	return out, nil
 }
 
+func (f *fakeCompanies) CountCompaniesCreatedBy(_ context.Context, userID int64) (int, error) {
+	n := 0
+	for _, c := range f.companies {
+		if c.CreatedBy != nil && *c.CreatedBy == userID {
+			n++
+		}
+	}
+	return n, nil
+}
+
 // fakeVerifications — in-memory VerificationStore.
 type fakeVerifications struct {
 	m map[int64]*domain.Verification

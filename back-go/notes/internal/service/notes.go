@@ -241,7 +241,7 @@ func (s *Service) DeleteNote(ctx context.Context, userID, id int64) error {
 		return err
 	}
 	if len(keys) > 0 {
-		s.files.Remove(keys)
+		s.files.RemoveFor(ctx, userID, 0, keys)
 	}
 	s.bus.Publish(ctx, "note:deleted", rooms, map[string]any{"id": id, "owner_id": userID})
 	return nil
@@ -334,7 +334,7 @@ func (s *Service) Upload(ctx context.Context, userID, noteID int64, fileName str
 	if access != domain.AccessOwner && access != domain.AccessEdit {
 		return "", domain.ErrMemberReadOnly
 	}
-	key, err := s.files.Save(fileName, data)
+	key, err := s.files.SaveFor(ctx, userID, 0, fileName, data)
 	if err != nil {
 		return "", err
 	}

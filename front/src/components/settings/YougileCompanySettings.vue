@@ -3,8 +3,8 @@
 
     <!-- Шапка: статус интеграции -->
     <div class="settings-card head-card">
-      <div class="hero-icon" :data-tone="settings?.enabled ? 'primary' : 'secondary'">
-        <span class="material-symbols-outlined">{{ settings?.enabled ? 'integration_instructions' : 'extension' }}</span>
+      <div class="hero-icon is-brand">
+        <YougileLogo :size="30" />
       </div>
       <div class="card-text">
         <h3>Интеграция с YouGile</h3>
@@ -180,6 +180,7 @@
 </template>
 
 <script setup>
+import YougileLogo from '@/components/common/YougileLogo.vue'
 import { reactive, ref, computed, onMounted } from 'vue'
 import Select from 'primevue/select'
 import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
@@ -385,6 +386,9 @@ onMounted(async () => {
 .hero-icon[data-tone="tertiary"]  { --tone-bg: var(--color-tertiary-container);  --tone-fg: var(--color-on-tertiary-container); }
 .hero-icon[data-tone="error"]     { --tone-bg: var(--color-error-container);     --tone-fg: var(--color-on-error-container); }
 .hero-icon .material-symbols-outlined { font-size: 28px; }
+
+/* Чужой фирменный знак — без нашей цветной подложки. */
+.hero-icon.is-brand { background: none; }
 
 .card-text { flex: 1; min-width: 0; }
 .card-text h3 { margin: 0 0 4px; font-size: 16px; font-weight: 700; color: var(--color-text); }

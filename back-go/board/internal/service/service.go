@@ -13,6 +13,8 @@ import (
 	"strconv"
 
 	"github.com/DmitriyODS/gw2/back-go/board/internal/domain"
+
+	"github.com/DmitriyODS/gw2/back-go/pkg/billingclient"
 )
 
 // excerptRunes — длина превью текста в плитке-стикере (синхронно с left(...)
@@ -26,6 +28,8 @@ type Service struct {
 	bus     domain.EventBus
 	limiter domain.WriteLimiter
 	log     *slog.Logger
+	// billing — лимиты тарифа (WithBilling; nil — ограничений нет).
+	billing *billingclient.Client
 }
 
 type Deps struct {

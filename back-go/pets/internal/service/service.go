@@ -11,6 +11,8 @@ import (
 	"time"
 
 	"github.com/DmitriyODS/gw2/back-go/pets/internal/domain"
+
+	"github.com/DmitriyODS/gw2/back-go/pkg/billingclient"
 )
 
 type Service struct {
@@ -25,6 +27,8 @@ type Service struct {
 	daily        domain.Daily
 	pub          domain.EventPublisher
 	log          *slog.Logger
+	// billing — тариф владельца питомца (WithBilling; nil — ограничений нет).
+	billing *billingclient.Client
 }
 
 func New(pets domain.PetRepo, shop domain.ShopRepo, activity domain.ActivityRepo,

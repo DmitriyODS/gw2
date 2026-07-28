@@ -17,6 +17,15 @@ export function timeAgo(value) {
   return d.toLocaleDateString('ru-RU', { day: 'numeric', month: 'short' })
 }
 
+/** «16 мая 2026, 14:32» — полная отметка времени для подсказки. */
+export function fullTime(value) {
+  const d = new Date(value)
+  if (Number.isNaN(d.getTime())) return ''
+  return d.toLocaleString('ru-RU', {
+    day: 'numeric', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit',
+  })
+}
+
 export function formatHours(val) {
   if (val === null || val === undefined) return '0 мин'
   const totalMinutes = Math.round(val * 60)

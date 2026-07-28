@@ -30,7 +30,9 @@ const routes = [
   { path: '/stats', component: () => import('@/views/StatsView.vue'),
     meta: { requiresAuth: true, requiresCompany: true } },
   { path: '/settings', component: () => import('@/views/SettingsView.vue'), meta: { requiresAuth: true } },
-  { path: '/profile', component: () => import('@/views/ProfileView.vue'), meta: { requiresAuth: true } },
+  // Профиль переехал в настройки панелью «Аккаунт»; прежний адрес живёт
+  // редиректом — на него ведут закладки и старые ссылки в интерфейсе.
+  { path: '/profile', redirect: { path: '/settings', query: { section: 'account' } } },
   { path: '/employees', component: () => import('@/views/EmployeesView.vue'),
     meta: { requiresAuth: true, requiresCompany: true } },
   // Активность сотрудника — доступ на бэке гардирован ролью Администратор компании.
@@ -89,6 +91,9 @@ const routes = [
   { path: '/groove', redirect: '/pets' },
   // Магазин оформления — пока каркас: витрина наполняется отдельной итерацией.
   { path: '/store', component: () => import('@/views/StoreView.vue'), meta: { requiresAuth: true } },
+  // Hola — поиск, быстрые команды и чат с ИИ-ассистентом в одном окне.
+  { path: '/hola', component: () => import('@/views/HolaView.vue'), meta: { requiresAuth: true } },
+  { path: '/calculator', component: () => import('@/views/CalculatorView.vue'), meta: { requiresAuth: true } },
   { path: '/tv', component: () => import('@/views/TvView.vue'), meta: { requiresAuth: true, fullscreen: true } },
   // Ссылка-приглашение в звонок: доступна и внешним гостям без аккаунта.
   { path: '/call/:code', component: () => import('@/views/CallJoinView.vue'),

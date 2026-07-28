@@ -115,8 +115,13 @@ func (b *fakeBus) Publish(_ domain.Ctx, event string, _ []string, _ any) {
 
 type fakeFiles struct{ removed []string }
 
-func (f *fakeFiles) Save(_ string, _ []byte) (string, error) { return "calendar/x", nil }
-func (f *fakeFiles) Remove(paths []string)                   { f.removed = append(f.removed, paths...) }
+func (f *fakeFiles) SaveFor(_ context.Context, _, _ int64, _ string, _ []byte) (string, error) {
+	return "calendar/x", nil
+}
+
+func (f *fakeFiles) RemoveFor(_ context.Context, _, _ int64, paths []string) {
+	f.removed = append(f.removed, paths...)
+}
 
 func newTestService(fields []domain.Field) (*Service, *fakeRepo, *fakeBus) {
 	repo := &fakeRepo{
@@ -246,4 +251,11 @@ func TestAgenda_TitleFromTableFieldAndPeriod(t *testing.T) {
 	if err != nil || other.Total != 0 {
 		t.Fatalf("чужая компания не должна видеть события: %+v, %v", other, err)
 	}
+}
+
+func (f *fakeRepo) CountCalendars(_ domain.Ctx, _ int64) (int, error) {
+	if f.cal == nil {
+		return 0, nil
+	}
+	return 1, nil
 }

@@ -143,6 +143,11 @@ export default defineConfig({
         target: 'http://localhost:8106',
         changeOrigin: true
       },
+      // Подписки и магазин — billingsvc (тарифы, покупки, промокоды, аудит).
+      '/api/billing': {
+        target: 'http://localhost:8107',
+        changeOrigin: true
+      },
       // Навык Алисы — alicesvc (публичный вебхук Яндекс.Диалогов).
       '/api/alice': {
         target: 'http://localhost:8104',

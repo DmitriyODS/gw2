@@ -364,7 +364,7 @@ async function exportDocx() {
 
 function goBack() {
   if (window.history.length > 1) router.back()
-  else router.push(isSelf.value ? '/profile' : '/employees')
+  else router.push(isSelf.value ? '/settings?section=account' : '/employees')
 }
 
 async function resolveName() {

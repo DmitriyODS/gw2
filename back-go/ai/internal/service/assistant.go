@@ -80,17 +80,30 @@ const assistantToolSchemasJSON = `[
 // и эмодзи, только факты и цифры из инструментов; явно указывать
 // номер/название задачи и присылать прямую ссылку, когда задача найдена;
 // не выдумывать данные вне инструментов.
-func assistantSystemPrompt() string {
+//
+// withTools=false — у пользователя нет активной компании: инструменты
+// компанийной статистики недоступны, и модель обязана честно это сказать,
+// а не выдумывать цифры.
+func assistantSystemPrompt(withTools bool) string {
 	now := time.Now().In(time.FixedZone("MSK", 3*60*60))
-	return "Ты — корпоративный ИИ-ассистент платформы Groove Work. Отвечаешь на вопросы " +
+	base := "Ты — корпоративный ИИ-ассистент платформы Groove Work. Отвечаешь на вопросы " +
 		"сотрудников о задачах, статистике и загрузке команды. Тон — деловой и нейтральный: " +
-		"без юмора, восклицаний, эмодзи и уменьшительных суффиксов. Опирайся ТОЛЬКО на " +
-		"факты и цифры, полученные через инструменты (get_stats_summary, list_departments, " +
-		"get_top_employees, get_stats_by_unit_types, get_stats_calendar, find_task) — никогда " +
-		"не выдумывай цифры, названия задач или сотрудников. Если данных недостаточно — " +
-		"так и скажи, не домысливай. Когда находишь задачу через find_task — обязательно " +
-		"назови её точное название и приведи прямую ссылку из результата инструмента. " +
-		"Отвечай кратко и по делу, на русском языке. Сегодня — " + now.Format("02.01.2006") + "."
+		"без юмора, восклицаний, эмодзи и уменьшительных суффиксов. "
+	if withTools {
+		base += "Опирайся ТОЛЬКО на " +
+			"факты и цифры, полученные через инструменты (get_stats_summary, list_departments, " +
+			"get_top_employees, get_stats_by_unit_types, get_stats_calendar, find_task) — никогда " +
+			"не выдумывай цифры, названия задач или сотрудников. Если данных недостаточно — " +
+			"так и скажи, не домысливай. Когда находишь задачу через find_task — обязательно " +
+			"назови её точное название и приведи прямую ссылку из результата инструмента. "
+	} else {
+		base += "Сейчас у пользователя не выбрана активная компания, поэтому доступа к " +
+			"данным о задачах, часах и сотрудниках у тебя НЕТ. Никогда не выдумывай такие " +
+			"цифры и названия: если вопрос требует данных компании — скажи, что для этого " +
+			"нужно выбрать компанию. На общие вопросы отвечай как обычно. "
+	}
+	return base + "Отвечай кратко и по делу, на русском языке. Сегодня — " +
+		now.Format("02.01.2006") + "."
 }
 
 // AssistantReply — ответ SendAssistantMessage: сохранённое сообщение
@@ -102,15 +115,17 @@ type AssistantReply struct {
 	CreatedAt time.Time
 }
 
-// SendAssistantMessage — реплика пользователя → ответ ассистента. Диалог —
-// один на пару (userID, companyID); история — контекст tools-цикла.
-// Компания без включённого AI → AI_DISABLED (409-эквивалент из errAiDisabled).
-func (s *Service) SendAssistantMessage(ctx context.Context, userID, companyID int64, text string) (*AssistantReply, error) {
+// SendAssistantMessage — реплика пользователя → ответ ассистента. Диалог один
+// на ПОЛЬЗОВАТЕЛЯ, ключ — его личный (user_ai_settings): ассистент подключён к
+// человеку, а не к компании, и работает даже без активной компании — просто без
+// инструментов компанийной статистики. Не подключён личный ключ → AI_DISABLED
+// (409-эквивалент из errAiDisabled).
+func (s *Service) SendAssistantMessage(ctx context.Context, userID int64, companyID *int64, text string) (*AssistantReply, error) {
 	text = strings.TrimSpace(text)
 	if text == "" {
 		return nil, domain.NewError("VALIDATION", "Текст сообщения не может быть пустым", 400)
 	}
-	client, err := s.clientFor(ctx, companyID)
+	client, err := s.userClientForFeature(ctx, userID, domain.FeatureAssistant)
 	if err != nil {
 		return nil, err
 	}
@@ -118,7 +133,7 @@ func (s *Service) SendAssistantMessage(ctx context.Context, userID, companyID in
 		return nil, errAiDisabled(409)
 	}
 
-	conv, err := s.assistants.GetOrCreateConversation(ctx, userID, companyID)
+	conv, err := s.assistants.GetOrCreateConversation(ctx, userID)
 	if err != nil {
 		return nil, err
 	}
@@ -128,13 +143,13 @@ func (s *Service) SendAssistantMessage(ctx context.Context, userID, companyID in
 	}
 
 	messages := make([]map[string]any, 0, len(history)+2)
-	messages = append(messages, map[string]any{"role": "system", "content": assistantSystemPrompt()})
+	messages = append(messages, map[string]any{"role": "system", "content": assistantSystemPrompt(companyID != nil)})
 	for _, m := range history {
 		messages = append(messages, map[string]any{"role": m.Role, "content": m.Text})
 	}
 	messages = append(messages, map[string]any{"role": "user", "content": text})
 
-	reply, sources, err := s.chatWithTools(ctx, companyID, messages)
+	reply, sources, err := s.chatWithTools(ctx, client, companyID, messages)
 	if err != nil {
 		return nil, err
 	}
@@ -165,8 +180,8 @@ var assistantFeedbackReasons = map[string]struct{}{
 
 // SendAssistantFeedback — голос 👍/👎 по ответу ассистента. Идемпотентный
 // upsert: повторный голос заменяет прежний. Чужой message_id (не из диалога
-// этой пары userID+companyID) — NOT_FOUND, id не раскрываем деталями.
-func (s *Service) SendAssistantFeedback(ctx context.Context, userID, companyID, messageID int64, verdict string, reason *string) error {
+// этого пользователя) — NOT_FOUND, id не раскрываем деталями.
+func (s *Service) SendAssistantFeedback(ctx context.Context, userID, messageID int64, verdict string, reason *string) error {
 	if messageID <= 0 {
 		return domain.NewError("VALIDATION", "Некорректный message_id", 400)
 	}
@@ -180,7 +195,7 @@ func (s *Service) SendAssistantFeedback(ctx context.Context, userID, companyID, 
 			return domain.NewError("VALIDATION", "Недопустимая причина отзыва", 400)
 		}
 	}
-	ok, err := s.assistants.UpsertFeedback(ctx, messageID, userID, companyID, verdict, reason)
+	ok, err := s.assistants.UpsertFeedback(ctx, messageID, userID, verdict, reason)
 	if err != nil {
 		return err
 	}
@@ -191,11 +206,11 @@ func (s *Service) SendAssistantFeedback(ctx context.Context, userID, companyID, 
 }
 
 // GetAssistantHistory — постраничная лента (новые → старые), для REST.
-func (s *Service) GetAssistantHistory(ctx context.Context, userID, companyID int64, limit int, before *time.Time) ([]domain.AssistantMessage, error) {
+func (s *Service) GetAssistantHistory(ctx context.Context, userID int64, limit int, before *time.Time) ([]domain.AssistantMessage, error) {
 	if limit <= 0 {
 		limit = assistantHistoryLimit
 	}
-	conv, err := s.assistants.GetOrCreateConversation(ctx, userID, companyID)
+	conv, err := s.assistants.GetOrCreateConversation(ctx, userID)
 	if err != nil {
 		return nil, err
 	}
@@ -204,17 +219,29 @@ func (s *Service) GetAssistantHistory(ctx context.Context, userID, companyID int
 
 // ── Tools-цикл (перенесено из groove/internal/clients/ai.go:ChatWithTools) ─
 
-// chatWithTools — цикл function-calling поверх s.Chat (один ход за раз).
+// chatWithTools — цикл function-calling поверх одного хода chat completion.
 // В отличие от старой версии (groovesvc звал aisvc по gRPC), это теперь
 // прямой вызов метода того же сервиса — цикл живёт внутри aisvc.
 // Вторым результатом — провенанс: человекочитаемые подписи инструментов,
 // РЕАЛЬНО давших данные (упавшие/невалидные вызовы не считаются), без
 // дублей, в порядке вызовов.
-func (s *Service) chatWithTools(ctx context.Context, companyID int64, messages []map[string]any) (string, []string, error) {
+//
+// companyID == nil — активной компании нет: инструменты компанийной статистики
+// не предлагаем вовсе (иначе модель звала бы их и получала пустоту), диалог
+// сводится к одному ходу без tools.
+func (s *Service) chatWithTools(ctx context.Context, client *aiClient, companyID *int64, messages []map[string]any) (string, []string, error) {
+	if companyID == nil {
+		res, err := s.assistantChatOnce(ctx, client, messages, "")
+		if err != nil {
+			return "", nil, err
+		}
+		return res.Content, nil, nil
+	}
+
 	var sources []string
 	convo := append([]map[string]any{}, messages...)
 	for i := 0; i < assistantMaxIterations; i++ {
-		res, err := s.assistantChatOnce(ctx, companyID, convo, assistantToolSchemasJSON)
+		res, err := s.assistantChatOnce(ctx, client, convo, assistantToolSchemasJSON)
 		if err != nil {
 			return "", nil, err
 		}
@@ -233,7 +260,7 @@ func (s *Service) chatWithTools(ctx context.Context, companyID int64, messages [
 			if rawArgs, ok := fn["arguments"].(string); ok && rawArgs != "" {
 				_ = json.Unmarshal([]byte(rawArgs), &args)
 			}
-			result := s.dispatchAssistantTool(ctx, name, args, companyID)
+			result := s.dispatchAssistantTool(ctx, name, args, *companyID)
 			if label := assistantSourceLabel(name, args); label != "" && !isToolError(result) {
 				sources = appendUnique(sources, label)
 			}
@@ -250,7 +277,7 @@ func (s *Service) chatWithTools(ctx context.Context, companyID int64, messages [
 
 	// Лимит итераций исчерпан — финальный заход без tools, чтобы модель
 	// точно ответила текстом, а не очередным tool_call.
-	res, err := s.assistantChatOnce(ctx, companyID, convo, "")
+	res, err := s.assistantChatOnce(ctx, client, convo, "")
 	if err != nil {
 		return "", nil, err
 	}
@@ -326,13 +353,14 @@ func appendUnique(list []string, v string) []string {
 	return append(list, v)
 }
 
-func (s *Service) assistantChatOnce(ctx context.Context, companyID int64, messages []map[string]any, toolsJSON string) (*domain.ChatResult, error) {
+// assistantChatOnce — ход на ЛИЧНОМ клиенте владельца диалога: компанийный
+// ключ ассистенту больше не нужен, компания осталась только у инструментов.
+func (s *Service) assistantChatOnce(ctx context.Context, client *aiClient, messages []map[string]any, toolsJSON string) (*domain.ChatResult, error) {
 	raw, err := json.Marshal(messages)
 	if err != nil {
 		return nil, err
 	}
-	return s.Chat(ctx, ChatArgs{
-		CompanyID:    companyID,
+	return s.chatWith(ctx, client, ChatArgs{
 		MessagesJSON: string(raw),
 		ToolsJSON:    toolsJSON,
 		MaxTokens:    assistantMaxTokens,

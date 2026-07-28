@@ -761,7 +761,7 @@ async function onTogglePinMessage(message) {
   }
 }
 
-// Переход к сообщению с подсветкой и догрузкой истории — общий с MiniMessenger.
+// Переход к сообщению с подсветкой и догрузкой истории.
 const { jumping, jumpToMessage } = useJumpToMessage({
   container: messagesEl,
   getMessages: () => messenger.activeMessages,

@@ -462,6 +462,20 @@ else
   warn "маршрут /api/reminders вернул $reminder_code (ожидался 401) — проверьте nginx"
 fi
 
+# Микросервис подписок и магазина: healthz изнутри контейнера + маршрут
+# /api/billing через nginx (без токена ожидаем 401, не 404/502).
+if $COMPOSE exec -T billing wget -qO- --timeout=3 http://127.0.0.1:8107/healthz >/dev/null 2>&1; then
+  ok "billingsvc отвечает (healthz)"
+else
+  warn "billingsvc не отвечает — магазин и лимиты тарифов недоступны: make logs s=billing"
+fi
+billing_code=$(curl -skL -o /dev/null -w '%{http_code}' --max-time 5 http://localhost/api/billing/showcase || true)
+if [ "$billing_code" = "401" ]; then
+  ok "маршрут /api/billing через nginx ведёт в billingsvc"
+else
+  warn "маршрут /api/billing вернул $billing_code (ожидался 401) — проверьте nginx"
+fi
+
 # Микросервис навыка Алисы: healthz изнутри контейнера + маршрут /api/alice
 # через nginx (вебхук публичный: POST без тела ждём 400, не 404/502).
 if $COMPOSE exec -T alice wget -qO- --timeout=3 http://127.0.0.1:8104/healthz >/dev/null 2>&1; then

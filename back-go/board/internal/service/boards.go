@@ -147,6 +147,9 @@ func (s *Service) CreateBoard(ctx context.Context, userID int64, title string, f
 	if err := s.checkOwnFolder(ctx, userID, folderID); err != nil {
 		return nil, err
 	}
+	if err := s.ensureLimit(ctx, userID); err != nil {
+		return nil, err
+	}
 	n := &domain.Board{OwnerID: userID, Title: title, Scene: domain.EmptyScene(), FolderID: folderID}
 	if err := s.repo.CreateBoard(ctx, n); err != nil {
 		return nil, err
@@ -234,7 +237,7 @@ func (s *Service) DeleteBoard(ctx context.Context, userID, id int64) error {
 		return err
 	}
 	if len(keys) > 0 {
-		s.files.Remove(keys)
+		s.files.RemoveFor(ctx, userID, 0, keys)
 	}
 	s.bus.Publish(ctx, "board:deleted", rooms, map[string]any{"id": id, "owner_id": userID})
 	return nil
@@ -303,7 +306,7 @@ func (s *Service) Upload(ctx context.Context, userID, boardID int64, fileName st
 	if access != domain.AccessOwner && access != domain.AccessEdit {
 		return "", domain.ErrMemberReadOnly
 	}
-	key, err := s.files.Save(fileName, data)
+	key, err := s.files.SaveFor(ctx, userID, 0, fileName, data)
 	if err != nil {
 		return "", err
 	}
@@ -321,17 +324,17 @@ func (s *Service) SetPreview(ctx context.Context, userID, boardID int64, data []
 	if access != domain.AccessOwner && access != domain.AccessEdit {
 		return nil, domain.ErrMemberReadOnly
 	}
-	key, err := s.files.Save("preview.png", data)
+	key, err := s.files.SaveFor(ctx, userID, 0, "preview.png", data)
 	if err != nil {
 		return nil, err
 	}
 	old := n.PreviewPath
 	if err := s.repo.SetBoardPreview(ctx, boardID, key); err != nil {
-		s.files.Remove([]string{key})
+		s.files.RemoveFor(ctx, userID, 0, []string{key})
 		return nil, err
 	}
 	if old != "" && old != key {
-		s.files.Remove([]string{old})
+		s.files.RemoveFor(ctx, userID, 0, []string{old})
 	}
 	n.PreviewPath = key
 	n.PreviewURL = "/uploads/" + key

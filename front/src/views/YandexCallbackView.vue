@@ -10,7 +10,7 @@
         <span class="material-symbols-outlined yc-icon">link</span>
         <h2 class="yc-title">Аккаунт привязан</h2>
         <p class="yc-text">Теперь вы можете входить в Groove Work кнопкой «Войти с Яндексом».</p>
-        <button type="button" class="btn-grad" @click="router.push('/profile')">В профиль</button>
+        <button type="button" class="btn-grad" @click="router.push('/settings?section=account')">В аккаунт</button>
       </template>
 
       <template v-else-if="state === 'return-app'">

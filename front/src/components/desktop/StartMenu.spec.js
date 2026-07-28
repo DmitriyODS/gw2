@@ -114,7 +114,7 @@ describe('меню «Пуск»', () => {
     expect(notesTile().props('faces')).toEqual([])
   })
 
-  it('лента последних действий ведёт к элементу и закрывает меню', async () => {
+  it('лента «Моя активность» ведёт к элементу и закрывает меню', async () => {
     const { desktop, wrapper } = setup()
     useActivityStore().record({ section: 'notes', id: 5, title: 'Идеи', path: '/notes/5' })
     desktop.startOpen = true
@@ -129,13 +129,17 @@ describe('меню «Пуск»', () => {
     expect(desktop.startOpen).toBe(false)
   })
 
-  it('в ленте видны недавно открытые разделы', async () => {
+  it('открытые разделы идут в ленте наравне с элементами и со временем', async () => {
     const { desktop, wrapper } = setup()
+    useActivityStore().record({ section: 'notes', id: 5, title: 'Идеи', path: '/notes/5' })
     desktop.open('/tasks')
     desktop.startOpen = true
     await wrapper.vm.$nextTick()
 
-    expect(wrapper.findAll('.ap-chip-label').map((n) => n.text())).toContain('Задачи')
+    const rows = wrapper.findAll('.ap-item')
+    expect(rows.map((n) => n.find('.ap-item-title').text())).toEqual(['Задачи', 'Идеи'])
+    // Когда это было — в подстроке строки («Открыт раздел · только что»).
+    expect(rows[0].find('.ap-item-sub').text()).toContain('Открыт раздел')
   })
 
   it('размер плитки берётся из настроек', async () => {

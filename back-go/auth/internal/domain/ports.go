@@ -178,6 +178,9 @@ type CompanyRepository interface {
 	DeleteCompany(ctx context.Context, id int64) error
 	// CompanyStats — батч-счётчики сотрудников/задач без N+1.
 	CompanyStats(ctx context.Context, ids []int64) (map[int64]CompanyStats, error)
+	// CountCompaniesCreatedBy — сколько компаний создал пользователь (лимит
+	// тарифа «Компании» считается по создателю).
+	CountCompaniesCreatedBy(ctx context.Context, userID int64) (int, error)
 }
 
 // BackupStore — универсальный схемо-независимый дамп/восстановление таблиц.

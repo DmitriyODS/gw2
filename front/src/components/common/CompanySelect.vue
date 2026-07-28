@@ -1,19 +1,41 @@
 <template>
-  <!-- Селектор компании. Три варианта:
-         variant="pill"  — PrimeVue Select, компактный pill-style для шапок;
-         variant="row"   — row-trigger + плавающая панель, для сайдбара;
-         variant="form"  — триггер как .ctl + поповер, для форм (v-model).
-       pill/row без v-model управляют companies.activeCompanyId глобально.
+  <!-- Селектор компании. Четыре варианта:
+         variant="pill"   — PrimeVue Select, компактный pill-style для шапок;
+         variant="row"    — row-trigger + плавающая панель, для сайдбара;
+         variant="button" — пилюля «портфель · компания · ▾» для подвала меню «Пуск»;
+         variant="form"   — триггер как .ctl + поповер, для форм (v-model).
+       pill/row/button без v-model управляют companies.activeCompanyId глобально.
        При передаче v-model (controlled mode) компонент работает независимо. -->
   <template v-if="fixed">
-    <div class="company-chip" :title="companyLabel">
+    <!-- Выбирать не из чего (одна компания) — тот же вид, но без стрелки. -->
+    <div v-if="variant === 'button'" class="company-button is-static" :title="companyLabel">
+      <span class="material-symbols-outlined company-button-ico">business_center</span>
+      <span class="company-button-label">{{ companyLabel }}</span>
+    </div>
+    <div v-else class="company-chip" :title="companyLabel">
       <span class="material-symbols-outlined company-icon">domain</span>
       <span class="company-chip-label">{{ companyLabel }}</span>
     </div>
   </template>
 
-  <template v-else-if="variant === 'row'">
+  <template v-else-if="variant === 'row' || variant === 'button'">
     <button
+      v-if="variant === 'button'"
+      ref="triggerEl"
+      type="button"
+      class="company-button"
+      :class="{ open }"
+      @click="toggle"
+      :aria-expanded="open"
+      :title="activeLabel || placeholder"
+    >
+      <span class="material-symbols-outlined company-button-ico">business_center</span>
+      <span class="company-button-label">{{ activeLabel || placeholder }}</span>
+      <span class="material-symbols-outlined company-button-chev">expand_more</span>
+    </button>
+
+    <button
+      v-else
       ref="triggerEl"
       type="button"
       class="company-row"
@@ -370,7 +392,13 @@ function computePosition() {
   const width = Math.max(rect.width, 320)
   const maxLeft = window.innerWidth - width - 12
   const left = Math.min(Math.max(12, rect.left), Math.max(12, maxLeft))
-  const top = rect.bottom + gap
+  // Триггер может стоять у нижней кромки экрана (подвал меню «Пуск») — тогда
+  // раскрываемся вверх, а не за край.
+  const height = popoverEl.value?.offsetHeight || 0
+  const below = rect.bottom + gap
+  const top = height && below + height > window.innerHeight - 12
+    ? Math.max(12, rect.top - gap - height)
+    : below
   popoverStyle.value = {
     top: `${top}px`,
     left: `${left}px`,
@@ -532,6 +560,55 @@ watch(() => auth.companyId, (v) => {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
+/* ---------- variant='button' ----------
+   Пилюля подвала меню «Пуск»: портфель, название компании и стрелка. */
+.company-button {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  height: 52px;
+  padding: 0 14px;
+  border: 1px solid var(--acrylic-border);
+  border-radius: var(--radius-full, 999px);
+  background: var(--glass-bg);
+  box-shadow: var(--glass-edge);
+  color: var(--color-text);
+  font: inherit;
+  font-size: 15px;
+  font-weight: 500;
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.company-button.is-static { cursor: default; }
+
+.company-button:hover:not(.is-static),
+.company-button.open {
+  border-color: color-mix(in oklch, var(--color-primary) 34%, var(--acrylic-border));
+  background: color-mix(in oklch, var(--color-primary) 7%, var(--glass-bg));
+}
+
+.company-button-ico { font-size: 22px; flex-shrink: 0; }
+
+.company-button-label {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.company-button-chev {
+  flex-shrink: 0;
+  font-size: 22px;
+  color: var(--color-text-dim);
+  transition: rotate 0.2s ease;
+}
+
+.company-button.open .company-button-chev { rotate: 180deg; }
 
 /* ---------- variant='row' ---------- */
 .company-row {

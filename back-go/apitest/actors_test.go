@@ -62,7 +62,34 @@ func newVerifiedUser(t *testing.T) *actor {
 	})
 	requireStatus(t, v, 200, "verify-email "+a.Email)
 	a.applySession(t, v)
+	// Тарифные лимиты проверяет отдельный набор тестов (billing_test.go), а
+	// остальным сценариям бесплатный «Джун» только мешает: они создают по
+	// несколько компаний, досок и задач. Поэтому актору сразу выдаём старший
+	// тариф — как реальному платящему пользователю.
+	grantPlan(t, a, "senior")
 	return a
+}
+
+// grantPlan — выдать актору тариф напрямую в БД (быстрее и надёжнее, чем
+// гонять покупку через магазин ради подготовки данных).
+func grantPlan(t *testing.T, a *actor, plan string) {
+	t.Helper()
+	if _, err := db.Exec(dbCtx(t), `
+		INSERT INTO billing_subscriptions (user_id, plan_code, period, source, expires_at)
+		VALUES ($1, $2, 'month', 'grant', now() + interval '30 days')
+		ON CONFLICT (user_id) DO UPDATE SET plan_code = EXCLUDED.plan_code,
+		    expires_at = EXCLUDED.expires_at, source = EXCLUDED.source`,
+		a.ID, plan); err != nil {
+		t.Fatalf("выдача тарифа %s: %v", plan, err)
+	}
+}
+
+// dropPlan — вернуть актора на бесплатный тариф (строки нет — значит «Джун»).
+func dropPlan(t *testing.T, a *actor) {
+	t.Helper()
+	if _, err := db.Exec(dbCtx(t), `DELETE FROM billing_subscriptions WHERE user_id = $1`, a.ID); err != nil {
+		t.Fatalf("сброс тарифа: %v", err)
+	}
 }
 
 // loginResp — сырой ответ логина (для негативных проверок).

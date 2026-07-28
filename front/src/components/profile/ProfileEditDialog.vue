@@ -322,9 +322,4 @@ async function removeAvatar() {
 }
 
 .pe-row-btn { margin-left: auto; flex-shrink: 0; }
-
-.btn-glass.danger {
-  color: var(--color-error);
-  border-color: color-mix(in oklch, var(--color-error) 30%, var(--color-outline-dim));
-}
 </style>

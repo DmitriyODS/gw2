@@ -2,8 +2,8 @@
   <div class="yg-settings">
     <!-- Карточка статуса -->
     <div class="settings-card yg-card">
-      <div class="hero-icon" :data-tone="status.connected ? 'primary' : 'secondary'">
-        <span class="material-symbols-outlined">{{ status.connected ? 'check_circle' : 'link' }}</span>
+      <div class="hero-icon is-brand">
+        <YougileLogo :size="30" />
       </div>
       <div class="card-text">
         <h3>{{ status.connected ? 'YouGile подключён' : 'Подключение к YouGile' }}</h3>
@@ -66,7 +66,8 @@
 
     <!-- Диалог сброса ключа: повторно запрашиваем пароль -->
     <Dialog :visible="showRotate" @update:visible="(v) => v || (showRotate = false)"
-            modal :closable="!busy" :style="{ width: '420px', maxWidth: 'calc(100vw - 24px)' }"
+            modal :append-to="host" :pt="{ mask: { class: { 'gw-in-window-mask': inWindow } } }"
+            :closable="!busy" :style="{ width: '420px', maxWidth: 'calc(100vw - 24px)' }"
             header="Сброс ключа YouGile">
       <p class="dlg-text">
         Введите пароль вашего YouGile-аккаунта ещё раз, чтобы выпустить новый ключ.
@@ -86,13 +87,16 @@
 </template>
 
 <script setup>
+import YougileLogo from '@/components/common/YougileLogo.vue'
 import { reactive, ref, computed, onMounted } from 'vue'
 import Dialog from 'primevue/dialog'
 import { useYougileStore } from '@/stores/yougile.js'
 import { useNotificationsStore } from '@/stores/notifications.js'
+import { useModalHost } from '@/desktop/windowHost.js'
 
 const yg = useYougileStore()
 const notif = useNotificationsStore()
+const { host, inWindow } = useModalHost()
 
 const form = reactive({ login: '', password: '' })
 const showRotate = ref(false)
@@ -180,6 +184,9 @@ onMounted(() => { yg.refreshStatus().catch(() => {}) })
 .hero-icon[data-tone="secondary"] { --tone-bg: var(--color-secondary-container); --tone-fg: var(--color-on-secondary-container); }
 .hero-icon[data-tone="tertiary"]  { --tone-bg: var(--color-tertiary-container);  --tone-fg: var(--color-on-tertiary-container); }
 .hero-icon .material-symbols-outlined { font-size: 28px; }
+
+/* Чужой фирменный знак — без нашей цветной подложки. */
+.hero-icon.is-brand { background: none; }
 
 .card-text { flex: 1; min-width: 0; }
 .card-text h3 { margin: 0 0 4px; font-size: 16px; font-weight: 700; color: var(--color-text); }

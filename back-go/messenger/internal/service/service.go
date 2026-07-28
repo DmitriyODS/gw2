@@ -12,6 +12,8 @@ import (
 
 	"github.com/DmitriyODS/gw2/back-go/messenger/internal/domain"
 	"github.com/DmitriyODS/gw2/back-go/messenger/internal/dto"
+
+	"github.com/DmitriyODS/gw2/back-go/pkg/billingclient"
 )
 
 // MaxAttachmentSize — лимит одного вложения (MESSENGER_ATTACHMENT_MAX).
@@ -103,6 +105,8 @@ type Service struct {
 	// автоответ. Любая ошибка ИИ тоже откатывается на него (fail-open).
 	ai  domain.SupportAI
 	log *slog.Logger
+	// billing — лимиты тарифа (WithBilling; nil — ограничений нет).
+	billing *billingclient.Client
 }
 
 var _ MessengerService = (*Service)(nil)

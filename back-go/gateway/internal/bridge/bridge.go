@@ -37,6 +37,7 @@ var Channels = []string{
 	"gw2:notes:events",
 	"gw2:board:events",
 	"gw2:reminder:events",
+	"gw2:billing:events",
 	"gw2:gateway:events",
 }
 

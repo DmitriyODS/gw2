@@ -277,6 +277,7 @@ func (f *fakeRepo) CreateComment(_ domain.Ctx, c *domain.Comment) error {
 	f.comments[c.ID] = c
 	return nil
 }
+
 // DeleteComment — как в SQL: ветка ответов уходит с родителем (каскад FK по
 // reply_to_id), лайки — тоже.
 func (f *fakeRepo) DeleteComment(ctx domain.Ctx, id int64) error {
@@ -354,8 +355,12 @@ func (b *fakeBus) Publish(_ domain.Ctx, event string, _ []string, _ any) {
 
 type fakeFiles struct{ removed []string }
 
-func (f *fakeFiles) Save(_ string, _ []byte) (string, error) { return "portal/x", nil }
-func (f *fakeFiles) Remove(paths []string)                   { f.removed = append(f.removed, paths...) }
+func (f *fakeFiles) SaveFor(_ context.Context, _, _ int64, _ string, _ []byte) (string, error) {
+	return "portal/x", nil
+}
+func (f *fakeFiles) RemoveFor(_ context.Context, _, _ int64, paths []string) {
+	f.removed = append(f.removed, paths...)
+}
 
 type fakeMessenger struct {
 	dialogs map[int64]int64 // otherUserID → conversationID

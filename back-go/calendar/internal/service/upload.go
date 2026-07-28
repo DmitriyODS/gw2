@@ -1,11 +1,15 @@
 package service
 
-import "github.com/DmitriyODS/gw2/back-go/calendar/internal/domain"
+import (
+	"context"
+
+	"github.com/DmitriyODS/gw2/back-go/calendar/internal/domain"
+)
 
 // SaveUpload — записать загруженный файл/картинку и вернуть его метаданные
 // (их кладут в значение поля типа image/file соответствующей записи).
-func (s *Service) SaveUpload(fileName, mime string, data []byte) (*domain.UploadedFile, error) {
-	path, err := s.files.Save(fileName, data)
+func (s *Service) SaveUpload(ctx context.Context, companyID, userID int64, fileName, mime string, data []byte) (*domain.UploadedFile, error) {
+	path, err := s.files.SaveFor(ctx, userID, companyID, fileName, data)
 	if err != nil {
 		return nil, err
 	}

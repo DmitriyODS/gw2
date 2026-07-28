@@ -1,7 +1,8 @@
 <template>
-  <!-- Полноэкранный просмотр картинки: зум (колесо/кнопки), поворот, панорама
-       перетаскиванием. Teleport в body, выше всех слоёв. -->
-  <teleport to="body">
+  <!-- Просмотр картинки: зум (колесо/кнопки), поворот, панорама
+       перетаскиванием. В окне рабочего стола раскрывается на своё окно, вне
+       его (мобильный каркас, плавающие виджеты) — на весь экран. -->
+  <teleport :to="host">
     <transition name="ilb">
       <div v-if="modelValue" class="ilb" @click.self="close" @wheel.prevent="onWheel">
         <div class="ilb-toolbar" @click.stop>
@@ -53,6 +54,9 @@
 
 <script setup>
 import { computed, reactive, ref, watch } from 'vue'
+import { useModalHost } from '@/desktop/windowHost.js'
+
+const { host } = useModalHost()
 
 const props = defineProps({
   modelValue: { type: Boolean, required: true },

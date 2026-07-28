@@ -14,6 +14,7 @@ import { registerNotesSocketHandlers } from '@/socket/notes.js'
 import { registerBoardsSocketHandlers } from '@/socket/boards.js'
 import { registerRemindersSocketHandlers } from '@/socket/reminders.js'
 import { registerPortalSocketHandlers } from '@/socket/portal.js'
+import { registerBillingSocketHandlers } from '@/socket/billing.js'
 
 let socket = null
 let visibilityHookInstalled = false
@@ -191,6 +192,7 @@ export function connectSocket() {
   registerBoardsSocketHandlers(socket)
   registerRemindersSocketHandlers(socket)
   registerPortalSocketHandlers(socket)
+  registerBillingSocketHandlers(socket)
 }
 
 export function disconnectSocket() {

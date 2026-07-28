@@ -9,6 +9,7 @@ import (
 	"context"
 	"log/slog"
 
+	"github.com/DmitriyODS/gw2/back-go/pkg/billingclient"
 	"github.com/DmitriyODS/gw2/back-go/tasks/internal/domain"
 	"github.com/DmitriyODS/gw2/back-go/tasks/internal/dto"
 )
@@ -33,6 +34,8 @@ type Service struct {
 	// yg — YouGile-модуль (NewYougile привязывает себя сам); nil в тестах
 	// ядра — пуш тогда не дёргается.
 	yg *Yougile
+	// billing — лимиты тарифа (WithBilling; nil — ограничений нет).
+	billing *billingclient.Client
 }
 
 type Deps struct {

@@ -22,8 +22,12 @@ type storedEmbedding struct {
 
 type fakeRepo struct {
 	companies map[int64]*domain.CompanyAI
+	userAI    map[int64]*domain.UserAI // личные ИИ-настройки (ключ ассистента)
 	tasks     map[int64]*domain.TaskText
 	embedded  map[int64]storedEmbedding // task_id → эмбеддинг
+
+	platform *domain.PlatformAI
+	models   []*domain.AIModel
 
 	searchHits []domain.SearchHit
 	lastSearch struct {
@@ -36,9 +40,50 @@ type fakeRepo struct {
 func newFakeRepo() *fakeRepo {
 	return &fakeRepo{
 		companies: map[int64]*domain.CompanyAI{},
+		userAI:    map[int64]*domain.UserAI{},
 		tasks:     map[int64]*domain.TaskText{},
 		embedded:  map[int64]storedEmbedding{},
 	}
+}
+
+// Платформенный ИИ в тестах: ключ задан, каталог из трёх моделей — этого
+// достаточно, чтобы проверить и доступ, и тарификацию обращений.
+func (r *fakeRepo) GetPlatformAI(_ context.Context) (*domain.PlatformAI, error) {
+	if r.platform != nil {
+		return r.platform, nil
+	}
+	return &domain.PlatformAI{
+		Enabled: true, APIKeyEnc: []byte("enc:sk-platform"), BaseURL: "",
+		ModelChat: domain.PlatformModelChat, ModelEmbedding: domain.PlatformModelEmbedding,
+	}, nil
+}
+
+func (r *fakeRepo) UpdatePlatformAI(_ context.Context, p *domain.PlatformAI) error {
+	r.platform = p
+	return nil
+}
+
+func (r *fakeRepo) ListModels(_ context.Context) ([]*domain.AIModel, error) {
+	if r.models != nil {
+		return r.models, nil
+	}
+	return []*domain.AIModel{
+		{Code: domain.PlatformModelChat, Title: "GPT", Kind: "chat", PricePerMTok: 6100, Selectable: true, IsActive: true},
+		{Code: "gemini-3.1-flash-lite", Title: "GEMINI", Kind: "chat", PricePerMTok: 7600, Selectable: true, IsActive: true},
+		{Code: domain.PlatformModelEmbedding, Title: "Эмбеддинги", Kind: "embedding", PricePerMTok: 516, IsActive: true},
+	}, nil
+}
+
+func (r *fakeRepo) UpsertModel(_ context.Context, m *domain.AIModel) error {
+	r.models = append(r.models, m)
+	return nil
+}
+
+func (r *fakeRepo) CompanyOwner(_ context.Context, companyID int64) (int64, error) {
+	if c, ok := r.companies[companyID]; ok {
+		return c.OwnerID, nil
+	}
+	return 0, nil
 }
 
 func (r *fakeRepo) GetCompanyAI(_ context.Context, companyID int64) (*domain.CompanyAI, error) {
@@ -53,6 +98,21 @@ func (r *fakeRepo) GetCompanyAI(_ context.Context, companyID int64) (*domain.Com
 func (r *fakeRepo) UpdateCompanyAI(_ context.Context, c *domain.CompanyAI) error {
 	cp := *c
 	r.companies[c.ID] = &cp
+	return nil
+}
+
+func (r *fakeRepo) GetUserAI(_ context.Context, userID int64) (*domain.UserAI, error) {
+	u, ok := r.userAI[userID]
+	if !ok {
+		return nil, nil
+	}
+	cp := *u
+	return &cp, nil
+}
+
+func (r *fakeRepo) UpsertUserAI(_ context.Context, u *domain.UserAI) error {
+	cp := *u
+	r.userAI[u.UserID] = &cp
 	return nil
 }
 
@@ -177,9 +237,11 @@ type fakeLLM struct {
 		timeout time.Duration
 	}
 	embedCalls int
+	chatCalls  int
 }
 
 func (l *fakeLLM) ChatOnce(_ context.Context, p domain.ChatParams) (*domain.ChatResult, error) {
+	l.chatCalls++
 	l.lastChat = p
 	if l.chatErr != nil {
 		return nil, l.chatErr
@@ -191,20 +253,20 @@ func (l *fakeLLM) ChatOnce(_ context.Context, p domain.ChatParams) (*domain.Chat
 	return &domain.ChatResult{Content: "pong"}, nil
 }
 
-func (l *fakeLLM) Embed(_ context.Context, apiKey, model string, texts []string, timeout time.Duration) ([][]float32, error) {
+func (l *fakeLLM) Embed(_ context.Context, p domain.EmbedParams) ([][]float32, int, error) {
 	l.embedCalls++
-	l.lastEmbed.apiKey = apiKey
-	l.lastEmbed.model = model
-	l.lastEmbed.texts = texts
-	l.lastEmbed.timeout = timeout
+	l.lastEmbed.apiKey = p.APIKey
+	l.lastEmbed.model = p.Model
+	l.lastEmbed.texts = p.Texts
+	l.lastEmbed.timeout = p.Timeout
 	if l.embedErr != nil {
-		return nil, l.embedErr
+		return nil, 0, l.embedErr
 	}
-	out := make([][]float32, len(texts))
-	for i := range texts {
+	out := make([][]float32, len(p.Texts))
+	for i := range p.Texts {
 		out[i] = []float32{0.1, 0.2, 0.3}
 	}
-	return out, nil
+	return out, 10 * len(p.Texts), nil
 }
 
 // fakeCipher — «шифрование» приписыванием префикса. misconfigured имитирует
@@ -240,15 +302,30 @@ func newTestService() (*Service, *fakeRepo, *fakeLLM) {
 	return svc, repo, llm
 }
 
+// enabledCompany — компания с включёнными ИИ-возможностями. Ключа у неё нет:
+// работа идёт на платформенном, токены тратит создатель (OwnerID).
 func enabledCompany(id int64) *domain.CompanyAI {
-	hint := "sk-…1234"
 	return &domain.CompanyAI{
-		ID:             id,
-		Enabled:        true,
-		APIKeyEnc:      []byte("enc:sk-secret"),
-		KeyHint:        &hint,
-		ModelChat:      "gpt-4o-mini",
-		ModelEmbedding: "text-embedding-3-small",
+		ID:         id,
+		Enabled:    true,
+		Shared:     true,
+		FeatSearch: true,
+		FeatTVFact: true,
+		OwnerID:    id,
+	}
+}
+
+// enabledUserAI — подключённый личный ключ ИИ-ассистента.
+func enabledUserAI(userID int64) *domain.UserAI {
+	hint := "sk-…1234"
+	return &domain.UserAI{
+		UserID:        userID,
+		Enabled:       true,
+		APIKeyEnc:     []byte("enc:sk-secret"),
+		KeyHint:       &hint,
+		ModelChat:     domain.PlatformModelChat,
+		FeatAssistant: true,
+		FeatNotes:     true,
 	}
 }
 
@@ -280,7 +357,9 @@ func TestStatusEnabled(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !st.Enabled || st.ModelChat != "gpt-4o-mini" || st.ModelEmbedding != "text-embedding-3-small" {
+	// Модели теперь платформенные: своих ключей и моделей у компании нет.
+	if !st.Enabled || st.ModelChat != domain.PlatformModelChat ||
+		st.ModelEmbedding != domain.PlatformModelEmbedding {
 		t.Fatalf("неожиданный статус: %+v", st)
 	}
 }
@@ -295,10 +374,6 @@ func TestStatusDisabledWithoutError(t *testing.T) {
 	if err != nil || st.Enabled {
 		t.Fatalf("выключенный AI: enabled=false без ошибки, получено %+v, %v", st, err)
 	}
-	// Модели отдаются и при выключенном AI.
-	if st.ModelChat != "gpt-4o-mini" {
-		t.Fatalf("ожидалась модель компании, получено %+v", st)
-	}
 
 	// Компании нет — тоже enabled=false без ошибки.
 	st, err = svc.Status(context.Background(), 999)
@@ -307,11 +382,12 @@ func TestStatusDisabledWithoutError(t *testing.T) {
 	}
 }
 
+// Нерасшифровываемый ПЛАТФОРМЕННЫЙ ключ (сменили AI_KEY_ENCRYPTION_KEY) тихо
+// выключает ИИ у всех — падать при каждом обращении нельзя.
 func TestStatusKeyUndecryptable(t *testing.T) {
 	svc, repo, _ := newTestService()
-	c := enabledCompany(1)
-	c.APIKeyEnc = []byte("garbage") // не расшифруется фейковым шифром
-	repo.companies[1] = c
+	repo.companies[1] = enabledCompany(1)
+	repo.platform = &domain.PlatformAI{Enabled: true, APIKeyEnc: []byte("garbage")}
 
 	st, err := svc.Status(context.Background(), 1)
 	if err != nil || st.Enabled {
@@ -346,8 +422,8 @@ func TestChatPlainContent(t *testing.T) {
 	if res.Content != "привет" || res.ToolCallsJSON != "" {
 		t.Fatalf("ожидался стрипнутый текст, получено %+v", res)
 	}
-	// Расшифрованный ключ, модель компании и дефолты Flask.
-	if llm.lastChat.APIKey != "sk-secret" || llm.lastChat.Model != "gpt-4o-mini" {
+	// Ключ и модель — ПЛАТФОРМЕННЫЕ (у компании своих нет), дефолты прежние.
+	if llm.lastChat.APIKey != "sk-platform" || llm.lastChat.Model != domain.PlatformModelChat {
 		t.Fatalf("ключ/модель: %+v", llm.lastChat)
 	}
 	if llm.lastChat.MaxTokens != 400 || llm.lastChat.Timeout != 30*time.Second {
@@ -416,90 +492,127 @@ func TestSettingsAccess(t *testing.T) {
 
 // ── Настройки: обновление ────────────────────────────────────────
 
-func TestUpdateSettingsEncryptsKey(t *testing.T) {
+// Тумблеры ИИ-возможностей компании: их правит администратор, а разрешение
+// тратить токены (shared) — только создатель.
+func TestUpdateCompanyFeatureToggles(t *testing.T) {
 	svc, repo, _ := newTestService()
 	c := enabledCompany(1)
-	c.Enabled = false
-	c.APIKeyEnc = nil
-	c.KeyHint = nil
+	c.FeatTVFact = false
 	repo.companies[1] = c
 
-	enabled := true
-	key := "sk-proj-abcdef123456"
+	on := true
 	out, err := svc.UpdateSettings(context.Background(), companyAdmin(1), 1, dto.AiSettingsUpdate{
-		Enabled: &enabled,
-		APIKey:  &key,
+		FeatTVFact: &on,
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !out.Enabled || !out.HasKey {
-		t.Fatalf("ожидалось enabled+has_key, получено %+v", out)
+	if !out.FeatTVFact || !out.Enabled {
+		t.Fatalf("тумблер ТВ-фактов должен включиться: %+v", out)
 	}
-	if out.KeyHint == nil || *out.KeyHint != "sk-…3456" {
-		t.Fatalf("hint: %v", out.KeyHint)
-	}
-	if string(repo.companies[1].APIKeyEnc) != "enc:"+key {
-		t.Fatalf("ключ должен храниться зашифрованным, получено %q", repo.companies[1].APIKeyEnc)
-	}
-	// AI сразу работает (кэш инвалидирован при сохранении).
-	st, _ := svc.Status(context.Background(), 1)
-	if !st.Enabled {
-		t.Fatal("после сохранения ключа Status должен сразу видеть enabled")
+	if !repo.companies[1].FeatTVFact {
+		t.Fatal("значение должно сохраниться в компании")
 	}
 }
 
-func TestUpdateSettingsClearKeyAndCacheInvalidation(t *testing.T) {
+// Чужой администратор не может разрешить тратить токены создателя.
+func TestSharedTokensOwnerOnly(t *testing.T) {
 	svc, repo, _ := newTestService()
-	repo.companies[1] = enabledCompany(1)
+	c := enabledCompany(1)
+	c.OwnerID = 42 // создатель — другой человек
+	repo.companies[1] = c
 
-	// Прогреваем кэш положительным клиентом.
+	on := true
+	_, err := svc.UpdateSettings(context.Background(), companyAdmin(1), 1, dto.AiSettingsUpdate{Shared: &on})
+	if err == nil {
+		t.Fatal("ожидался отказ: разрешать трату своих токенов может только создатель")
+	}
+	if de := domain.AsDomainError(err); de == nil || de.Code != "OWNER_ONLY" {
+		t.Fatalf("ожидался OWNER_ONLY, получено %v", err)
+	}
+}
+
+// Выключенная возможность закрывает доступ, даже когда ИИ компании включён.
+func TestFeatureToggleGatesAccess(t *testing.T) {
+	svc, repo, _ := newTestService()
+	c := enabledCompany(1)
+	c.FeatSearch = false
+	repo.companies[1] = c
+
+	client, err := svc.clientForCompany(context.Background(), 1, domain.FeatureSearch)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if client != nil {
+		t.Fatal("умный поиск выключен — доступа к модели быть не должно")
+	}
+	// А ТВ-факты по-прежнему разрешены.
+	if client, _ := svc.clientForCompany(context.Background(), 1, domain.FeatureTVFact); client == nil {
+		t.Fatal("включённая возможность должна работать")
+	}
+}
+
+// Запрет тратить токены создателя выключает ИИ всей компании.
+func TestSharedDisabledStopsCompanyAI(t *testing.T) {
+	svc, repo, _ := newTestService()
+	c := enabledCompany(1)
+	c.Shared = false
+	repo.companies[1] = c
+
+	if client, _ := svc.clientForCompany(context.Background(), 1, domain.FeatureSearch); client != nil {
+		t.Fatal("создатель не разрешил тратить токены — ИИ компании недоступен")
+	}
+}
+
+// Платформенный ключ шифруется при сохранении и действует сразу.
+func TestUpdatePlatformSettingsEncryptsKey(t *testing.T) {
+	svc, repo, _ := newTestService()
+	repo.platform = &domain.PlatformAI{}
+
+	enabled := true
+	key := "sk-proj-abcdef123456"
+	out, err := svc.UpdatePlatformSettings(context.Background(), dto.PlatformAiUpdate{
+		Enabled: &enabled, APIKey: &key,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !out.Enabled || !out.HasKey || out.KeyHint != "sk-…3456" {
+		t.Fatalf("ожидался включённый ключ с маской: %+v", out)
+	}
+	if string(repo.platform.APIKeyEnc) != "enc:"+key {
+		t.Fatalf("ключ должен храниться зашифрованным, получено %q", repo.platform.APIKeyEnc)
+	}
+	repo.companies[1] = enabledCompany(1)
 	if st, _ := svc.Status(context.Background(), 1); !st.Enabled {
-		t.Fatal("прекондиция: AI включён")
-	}
-	out, err := svc.UpdateSettings(context.Background(), companyAdmin(1), 1, dto.AiSettingsUpdate{ClearKey: true})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if out.HasKey || out.KeyHint != nil {
-		t.Fatalf("clear_key должен стереть ключ и hint: %+v", out)
-	}
-	// Кэш инвалидирован — выключение видно сразу, без ожидания TTL.
-	if st, _ := svc.Status(context.Background(), 1); st.Enabled {
-		t.Fatal("после clear_key Status должен отдавать enabled=false сразу")
+		t.Fatal("после сохранения ключа ИИ должен работать сразу (кэш сброшен)")
 	}
 }
 
-func TestUpdateSettingsEmptyKeyKeepsExisting(t *testing.T) {
+// clear_key стирает платформенный ключ, и ИИ выключается без ожидания TTL.
+func TestUpdatePlatformSettingsClearKey(t *testing.T) {
 	svc, repo, _ := newTestService()
 	repo.companies[1] = enabledCompany(1)
+	if st, _ := svc.Status(context.Background(), 1); !st.Enabled {
+		t.Fatal("прекондиция: ИИ включён")
+	}
 
-	empty := "  "
-	out, err := svc.UpdateSettings(context.Background(), companyAdmin(1), 1, dto.AiSettingsUpdate{APIKey: &empty})
+	out, err := svc.UpdatePlatformSettings(context.Background(), dto.PlatformAiUpdate{ClearKey: true})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !out.HasKey {
-		t.Fatal("пустой api_key означает «не менять», ключ должен остаться")
+	if out.HasKey || out.KeyHint != "" {
+		t.Fatalf("clear_key должен стереть ключ и маску: %+v", out)
+	}
+	if st, _ := svc.Status(context.Background(), 1); st.Enabled {
+		t.Fatal("после clear_key ИИ должен выключиться сразу")
 	}
 }
-
-func TestUpdateSettingsMisconfiguredCipher(t *testing.T) {
-	repo := newFakeRepo()
-	repo.companies[1] = enabledCompany(1)
-	svc := New(repo, &fakeLLM{}, &fakeCipher{misconfigured: true}, newFakeFacts(), nil, nil, "", SupportConfig{}, slog.New(slog.DiscardHandler))
-
-	key := "sk-new"
-	_, err := svc.UpdateSettings(context.Background(), companyAdmin(1), 1, dto.AiSettingsUpdate{APIKey: &key})
-	wantDomainError(t, err, "AI_KEY_NOT_CONFIGURED", 500)
-}
-
-// ── Test-эндпоинт ────────────────────────────────────────────────
 
 func TestTestSettingsDisabled(t *testing.T) {
 	svc, repo, _ := newTestService()
 	c := enabledCompany(1)
-	c.APIKeyEnc = nil
+	c.Enabled = false // ИИ компании выключен — проверять нечего
 	repo.companies[1] = c
 
 	_, err := svc.TestSettings(context.Background(), companyAdmin(1), 1)

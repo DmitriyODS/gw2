@@ -1,5 +1,5 @@
 <template>
-  <Teleport to="body">
+  <Teleport :to="host">
     <div class="pdm-overlay" @click.self="close">
       <div class="pdm-panel">
         <div class="pdm-cover" aria-hidden="true"></div>
@@ -330,6 +330,11 @@ import {
   shopItemEmoji, shopItemTitle, activityIcon, activityText,
   ailmentMeta, moodEmoji, moodTitle, FOODS, foodMeta,
 } from '@/utils/pets.js'
+import { useModalHost } from '@/desktop/windowHost.js'
+
+// Модалка живёт в окне своего раздела, а у глобального плавающего питомца
+// окна нет — там хост прежний, body.
+const { host } = useModalHost()
 
 const props = defineProps({
   // 'feed' | 'walk' | 'heal' | 'bath' | null

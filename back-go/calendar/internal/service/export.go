@@ -81,7 +81,7 @@ func (s *Service) buildExport(ctx context.Context, cal *domain.Calendar, fieldID
 		}
 		from := mustCell(1, groupStart)
 		to := mustCell(1, endRow)
-		f.MergeCell(sheet, from, to)            //nolint:errcheck
+		f.MergeCell(sheet, from, to)               //nolint:errcheck
 		f.SetCellStyle(sheet, from, to, dateStyle) //nolint:errcheck
 	}
 	for ri, e := range entries {

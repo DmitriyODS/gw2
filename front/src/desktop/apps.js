@@ -24,6 +24,8 @@ const SETTINGS_TITLES = {
   theme: 'Темы и оформление',
   desktop: 'Рабочий стол',
   chats: 'Чаты и портал',
+  account: 'Аккаунт',
+  ai: 'ИИ возможности',
   help: 'Справка и поддержка',
   about: 'О приложении',
   backup: 'Резервная копия',
@@ -174,12 +176,12 @@ export const APPS = [
     min: [620, 460],
     available: company,
   },
+  // Компании, как и профиль, плиткой в «Пуске» не показываем — вход через
+  // «Настройки → Компании», но окно у раздела полноценное.
   {
     id: 'companies',
     title: 'Компании',
     icon: 'business_center',
-    group: 'manage',
-    tile: 'square',
     path: '/companies',
     match: (p) => p.startsWith('/companies'),
     size: [1080, 780],
@@ -216,6 +218,18 @@ export const APPS = [
     },
   },
   {
+    id: 'calculator',
+    title: 'Калькулятор',
+    icon: 'calculate',
+    group: 'work',
+    tile: 'square',
+    path: '/calculator',
+    match: (p) => p === '/calculator',
+    size: [380, 580],
+    min: [280, 420],
+    available: always,
+  },
+  {
     id: 'store',
     title: 'Магазин',
     icon: 'shopping_bag',
@@ -225,20 +239,6 @@ export const APPS = [
     match: (p) => p.startsWith('/store'),
     size: [1100, 800],
     min: [520, 460],
-    available: always,
-  },
-  // Профиль в плитках меню «Пуск» не показываем — вход в него через карточку
-  // пользователя внизу меню, но окно у него полноценное.
-  {
-    id: 'profile',
-    title: 'Профиль',
-    icon: 'account_circle',
-    path: '/profile',
-    match: (p) => p.startsWith('/profile'),
-    // Ширина под два столбца верхнего ряда (идентичность + интеграции) и
-    // сетку сеансов; уже 900px ряд схлопывается в колонку.
-    size: [1120, 780],
-    min: [460, 440],
     available: always,
   },
 ]

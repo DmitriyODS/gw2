@@ -77,7 +77,7 @@
 
     <div v-if="yandexAuth.enabled" class="alt-register">
       <button type="button" class="alt-register-btn" @click="goYandex">
-        <span class="ya-badge">Я</span>
+        <YandexLogo :size="18" />
         Использовать Яндекс
       </button>
     </div>
@@ -92,6 +92,7 @@ import { useThemeStore } from '@/stores/theme.js'
 import { suggestLogin, yandexConfig, yandexAuthURL } from '@/api/auth.js'
 import { inAppShell } from '@/utils/appShell.js'
 import AuthShell from '@/components/auth/AuthShell.vue'
+import YandexLogo from '@/components/common/YandexLogo.vue'
 
 const router = useRouter()
 const authStore = useAuthStore()
@@ -330,21 +331,6 @@ async function handleRegister() {
   transition: color 0.15s, background 0.15s;
 }
 .alt-register-btn:hover { color: var(--color-primary); }
-/* Значок Яндекса: фирменная буква без внешних ресурсов. */
-.ya-badge {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-width: 18px;
-  max-width: 18px;
-  min-height: 18px;
-  max-height: 18px;
-  border-radius: 50%;
-  background: var(--color-error-container, var(--color-surface-variant));
-  color: var(--color-error, currentColor);
-  font-size: 12px;
-  font-weight: 800;
-}
 
 .switch-line {
   margin: 20px 0 0;

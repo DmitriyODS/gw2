@@ -110,6 +110,13 @@ func (r *Repo) SetBoardPreview(ctx context.Context, boardID int64, key string) e
 	return err
 }
 
+// CountBoards — сколько досок уже есть (лимит тарифа).
+func (r *Repo) CountBoards(ctx context.Context, owner_id int64) (int, error) {
+	var n int
+	err := r.pool.QueryRow(ctx, `SELECT count(*) FROM boards WHERE owner_id = $1`, owner_id).Scan(&n)
+	return n, err
+}
+
 func (r *Repo) CreateBoard(ctx context.Context, n *domain.Board) error {
 	return r.pool.QueryRow(ctx, `
 		INSERT INTO boards (owner_id, folder_id, title, color, scene, text_content)

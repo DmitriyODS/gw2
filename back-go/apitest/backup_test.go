@@ -37,7 +37,7 @@ var backupExcluded = map[string]bool{
 // подписи — на фронте, front/src/utils/backupSections.js).
 var backupSectionKeys = []string{
 	"auth", "companies", "tasks", "registry", "calendar", "diary", "notes",
-	"boards", "reminders", "messenger", "calls", "groove", "portal", "ai", "integration",
+	"boards", "reminders", "messenger", "calls", "groove", "portal", "ai", "billing", "integration",
 }
 
 // dbTables — таблицы public-схемы тестовой БД (её ведут те же миграции, что и прод).

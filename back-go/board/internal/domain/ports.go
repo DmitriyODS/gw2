@@ -21,6 +21,8 @@ type BoardRepository interface {
 	ListBoards(ctx Ctx, f BoardListFilter) ([]*Board, error)
 	// GetBoard — полная доска (со сценой и folder_id); nil — нет такой.
 	GetBoard(ctx Ctx, id int64) (*Board, error)
+	// CountBoards — сколько досок уже есть (лимит тарифа).
+	CountBoards(ctx Ctx, owner_id int64) (int, error)
 	CreateBoard(ctx Ctx, n *Board) error
 	UpdateBoard(ctx Ctx, n *Board) error
 	DeleteBoard(ctx Ctx, id int64) error
@@ -131,8 +133,11 @@ type EventBus interface {
 // FileStore — хранилище картинок холста и превью досок (pkg/records.FileStore
 // поверх pkg/storage: local-том в dev, S3 в prod).
 type FileStore interface {
-	Save(fileName string, data []byte) (string, error)
-	Remove(paths []string)
+	// SaveFor — записать файл в квоту ВЛАДЕЛЬЦА (личный раздел): сверх лимита
+	// тарифа файл не сохраняется.
+	SaveFor(ctx context.Context, userID, companyID int64, fileName string, data []byte) (string, error)
+	// RemoveFor — удаление с возвратом места в квоту владельца.
+	RemoveFor(ctx context.Context, userID, companyID int64, paths []string)
 	// Open — прочитать байты объекта по ключу (встраивание картинок в SVG).
 	Open(key string) ([]byte, error)
 }

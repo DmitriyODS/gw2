@@ -20,6 +20,7 @@ import (
 	redisrepo "github.com/DmitriyODS/gw2/back-go/board/internal/repository/redis"
 	"github.com/DmitriyODS/gw2/back-go/board/internal/service"
 	httptransport "github.com/DmitriyODS/gw2/back-go/board/internal/transport/http"
+	"github.com/DmitriyODS/gw2/back-go/pkg/billingclient"
 	"github.com/DmitriyODS/gw2/back-go/pkg/bootstrap"
 	"github.com/DmitriyODS/gw2/back-go/pkg/events"
 	"github.com/DmitriyODS/gw2/back-go/pkg/pasetoauth"
@@ -55,14 +56,27 @@ func main() {
 	defer rdb.Close()
 
 	users := postgres.NewUserReader(pool)
+	// Лимиты тарифа и учёт занятого места — gRPC billingsvc. Пустой адрес
+	// выключает проверки, недоступный биллинг их не блокирует (fail-open).
+	billing, err := billingclient.New(bootstrap.Env("BILLING_GRPC_ADDR", ""), log)
+	if err != nil {
+		log.Error("billing.dial_failed", "error", err)
+		os.Exit(1)
+	}
+	defer billing.Close()
+	fileStore := records.NewFileStore(storage.FromEnv(log, uploadFolder), "boards").
+		WithQuota(billing, "boards")
+
 	svc := service.New(service.Deps{
 		Repo:    postgres.NewRepo(pool),
 		Users:   users,
-		Files:   records.NewFileStore(storage.FromEnv(log, uploadFolder), "boards"),
+		Files:   fileStore,
 		Bus:     events.NewPublisher(rdb, log, "gw2:board:events"),
 		Limiter: redisrepo.NewWriteLimiter(rdb, sharedWriteLimit),
 		Log:     log,
 	})
+	svc.WithBilling(billing)
+
 	httpServer := httptransport.NewServer(svc, users, verifier, log)
 
 	log.Info("listening", "http", httpAddr)

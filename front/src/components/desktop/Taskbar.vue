@@ -12,14 +12,14 @@
     </button>
 
     <button
-      class="tb-search"
+      class="tb-hola"
       type="button"
-      :class="{ active: desktop.searchOpen }"
-      title="Поиск (Ctrl+K)"
-      aria-label="Поиск"
-      @click="desktop.searchOpen = true"
+      :class="{ active: desktop.holaOpen }"
+      title="Hola ассистент — поиск, команды и чат (Ctrl+K)"
+      aria-label="Hola ассистент"
+      @click="openHola"
     >
-      <span class="material-symbols-outlined">search</span>
+      <HolaIcon :size="21" />
     </button>
 
     <span class="tb-sep" aria-hidden="true" />
@@ -108,6 +108,7 @@ import { usePermission } from '@/composables/usePermission.js'
 import { useCompanySettings } from '@/composables/useCompanySettings.js'
 import { appById, windowTitle } from '@/desktop/apps.js'
 import Logo from '@/components/common/Logo.vue'
+import HolaIcon from '@/components/common/HolaIcon.vue'
 import ContextMenu from '@/components/common/ContextMenu.vue'
 
 const desktop = useDesktopStore()
@@ -157,6 +158,12 @@ const buttons = computed(() => {
   }
   return out
 })
+
+/* Hola — постоянная кнопка рядом с «Пуском»: открывает всплывающую панель
+   поиска, команд и чата (наследницу строки Spotlight). */
+function openHola() {
+  desktop.holaOpen = !desktop.holaOpen
+}
 
 function titleOf(w) {
   return windowTitle(appById(w.appId), router.resolve(w.path))
@@ -390,36 +397,37 @@ function onMenuSelect(action) {
   pointer-events: none;
 }
 
-/* Поиск — рядом с «Пуском»: он тоже про «начать отсюда». Только значок. */
-.tb-search {
+/* Hola — рядом с «Пуском»: он тоже про «начать отсюда». Только значок. */
+.tb-hola {
   display: grid;
   place-items: center;
-  width: 40px;
-  min-width: 40px;
-  max-width: 40px;
-  height: 40px;
-  min-height: 40px;
-  max-height: 40px;
+  width: 48px;
+  min-width: 48px;
+  max-width: 48px;
+  height: 48px;
+  min-height: 48px;
+  max-height: 48px;
   flex-shrink: 0;
   padding: 0;
-  border: 1px solid var(--acrylic-border);
-  border-radius: var(--radius-md);
-  background: var(--glass-bg);
-  box-shadow: var(--glass-edge);
-  color: var(--color-text-dim);
+  border: none;
+  border-radius: var(--radius-lg);
+  /* Матовое стекло без блика, тени и обводки: панель задач сама backdrop root,
+     поэтому подложка кнопок — плотный акрил, а не второй backdrop-filter. */
+  background: var(--acrylic-card-bg);
+  /* Тот же тон, что у кнопок окон и колокольчика: приглушённый вариант в
+     тёмной теме читался как «погасшая» иконка. */
+  color: var(--color-text);
   font-size: 13.5px;
   font-weight: 500;
   cursor: pointer;
-  transition: border-color 0.15s, color 0.15s;
+  transition: background 0.15s, color 0.15s;
 }
 
-.tb-search:hover,
-.tb-search.active {
-  border-color: color-mix(in oklch, var(--color-primary) 32%, var(--acrylic-border));
+.tb-hola:hover,
+.tb-hola.active {
+  background: color-mix(in oklch, var(--color-primary) 14%, var(--acrylic-card-bg));
   color: var(--color-primary);
 }
-
-.tb-search .material-symbols-outlined { font-size: 20px; }
 
 /* Тонкие разделители зон: «Пуск» | разделы | часы с уведомлениями. */
 .tb-sep {
@@ -441,18 +449,15 @@ function onMenuSelect(action) {
   display: grid;
   place-items: center;
   padding: 0;
-  border: 1px solid transparent;
+  border: none;
   border-radius: var(--radius-full);
   background: transparent;
   cursor: pointer;
-  transition: background 0.15s, border-color 0.15s;
+  transition: background 0.15s;
 }
 
 .tb-start:hover { background: color-mix(in oklch, var(--color-primary) 12%, transparent); }
-.tb-start.active {
-  background: var(--grad-primary-soft);
-  border-color: color-mix(in oklch, var(--color-primary) 28%, transparent);
-}
+.tb-start.active { background: var(--grad-primary-soft); }
 
 /* ── Кнопки закреплённых разделов и открытых окон ──
    flex: 0 1 auto + min-width: 0 — блок не растягивает панель сверх контента,
@@ -473,26 +478,24 @@ function onMenuSelect(action) {
   display: flex;
   align-items: center;
   gap: 8px;
-  height: 40px;
+  height: 48px;
   max-width: 190px;
   flex-shrink: 0;
   padding: 0 14px;
-  border: 1px solid var(--acrylic-border);
-  border-radius: var(--radius-md);
-  background: var(--glass-bg);
-  box-shadow: var(--glass-edge);
+  border: none;
+  border-radius: var(--radius-lg);
+  background: var(--acrylic-card-bg);
   color: var(--color-text);
   font-size: 13.5px;
   font-weight: 500;
   cursor: pointer;
-  transition: background 0.15s, border-color 0.15s, color 0.15s, opacity 0.15s;
+  transition: background 0.15s, color 0.15s, opacity 0.15s;
 }
 
-.tb-win:hover { border-color: color-mix(in oklch, var(--color-primary) 32%, var(--acrylic-border)); }
+.tb-win:hover { background: color-mix(in oklch, var(--color-primary) 12%, var(--acrylic-card-bg)); }
 
 .tb-win.active {
   background: var(--grad-primary-soft);
-  border-color: color-mix(in oklch, var(--color-primary) 34%, transparent);
   color: var(--color-primary);
 }
 
@@ -503,7 +506,13 @@ function onMenuSelect(action) {
 .tb-win.dragging { opacity: 0.45; }
 
 /* Закреплённый, но не открытый раздел — только иконка (ярлык). */
-.tb-win.shortcut { padding: 0 10px; }
+.tb-win.shortcut {
+  width: 48px;
+  min-width: 48px;
+  max-width: 48px;
+  padding: 0;
+  justify-content: center;
+}
 .tb-win.shortcut .tb-win-label { display: none; }
 
 .tb-win-icon { font-size: 19px; flex-shrink: 0; }
@@ -528,9 +537,9 @@ function onMenuSelect(action) {
   display: flex;
   align-items: center;
   gap: 8px;
-  height: 44px;
+  height: 48px;
   padding: 0 16px;
-  border: 1px solid color-mix(in oklch, var(--color-tertiary) 30%, transparent);
+  border: none;
   border-radius: var(--radius-lg);
   background: color-mix(in oklch, var(--color-tertiary) 18%, transparent);
   color: var(--color-tertiary);
@@ -550,44 +559,42 @@ function onMenuSelect(action) {
   align-items: center;
   justify-content: center;
   line-height: 1.15;
-  height: 44px;
+  height: 48px;
   padding: 0 14px;
-  border: 1px solid var(--acrylic-border);
+  border: none;
   border-radius: var(--radius-lg);
-  background: var(--glass-bg);
-  box-shadow: var(--glass-edge);
+  background: var(--acrylic-card-bg);
   font-variant-numeric: tabular-nums;
   cursor: pointer;
-  transition: border-color 0.15s;
+  transition: background 0.15s;
 }
 
-.tb-clock:hover { border-color: color-mix(in oklch, var(--color-primary) 32%, var(--acrylic-border)); }
+.tb-clock:hover { background: color-mix(in oklch, var(--color-primary) 12%, var(--acrylic-card-bg)); }
 
 .tb-time { font-size: 15px; font-weight: 800; color: var(--color-text); }
 .tb-date { font-size: 11.5px; color: var(--color-text-dim); }
 
 .tb-bell {
   position: relative;
-  width: 44px;
-  min-width: 44px;
-  max-width: 44px;
-  height: 44px;
-  min-height: 44px;
-  max-height: 44px;
+  width: 48px;
+  min-width: 48px;
+  max-width: 48px;
+  height: 48px;
+  min-height: 48px;
+  max-height: 48px;
   display: grid;
   place-items: center;
-  border: 1px solid var(--acrylic-border);
+  border: none;
   border-radius: var(--radius-lg);
-  background: var(--glass-bg);
-  box-shadow: var(--glass-edge);
+  background: var(--acrylic-card-bg);
   color: var(--color-text);
   cursor: pointer;
-  transition: background 0.15s, color 0.15s, border-color 0.15s;
+  transition: background 0.15s, color 0.15s;
 }
 
 .tb-bell:hover,
 .tb-bell.active {
-  border-color: color-mix(in oklch, var(--color-primary) 32%, var(--acrylic-border));
+  background: color-mix(in oklch, var(--color-primary) 14%, var(--acrylic-card-bg));
   color: var(--color-primary);
 }
 

@@ -1,14 +1,19 @@
 <template>
   <div class="gs">
     <section class="gs-block">
-      <h3 class="gs-h">Интерфейс</h3>
-      <SwitchRow
-        :model-value="themeStore.hubFabEnabled"
-        title="Плавающая кнопка ассистента"
-        hint="Кнопка ИИ-ассистента и мини-чата поверх всех разделов; её можно перетащить в удобное место."
-        icon="smart_toy"
-        @update:model-value="themeStore.setHubFabEnabled"
-      />
+      <h3 class="gs-h">Hola ассистент</h3>
+      <!-- Выдачу поисковика Hola открывает новой вкладкой браузера; здесь
+           выбирается тот, что идёт в результатах первым. -->
+      <div class="gs-row as-static">
+        <span class="gs-row-icon">
+          <span class="material-symbols-outlined">travel_explore</span>
+        </span>
+        <span class="gs-row-text">
+          <strong>Поиск в интернете</strong>
+          <small>С какого поисковика начинать, когда ответа нет внутри приложения.</small>
+        </span>
+        <PillTabs :model-value="engine" :tabs="engineTabs" compact @update:model-value="pickEngine" />
+      </div>
 
       <button class="gs-row" type="button" @click="tutorial.open()">
         <span class="gs-row-icon">
@@ -32,17 +37,25 @@
 </template>
 
 <script setup>
-import SwitchRow from '@/components/common/SwitchRow.vue'
+import { ref } from 'vue'
+import PillTabs from '@/components/common/PillTabs.vue'
 import YougileUserSettings from '@/components/settings/YougileUserSettings.vue'
-import { useThemeStore } from '@/stores/theme.js'
 import { useTutorial } from '@/composables/useTutorial.js'
+import { SEARCH_ENGINES, getSearchEngine, setSearchEngine } from '@/utils/webSearch.js'
 
 defineProps({
   showYougile: { type: Boolean, default: false },
 })
 
-const themeStore = useThemeStore()
 const tutorial = useTutorial()
+
+const engineTabs = SEARCH_ENGINES.map((e) => ({ key: e.key, label: e.label }))
+const engine = ref(getSearchEngine())
+
+function pickEngine(key) {
+  engine.value = key
+  setSearchEngine(key)
+}
 </script>
 
 <style scoped>
@@ -81,6 +94,11 @@ const tutorial = useTutorial()
 }
 
 .gs-row:hover { border-color: var(--color-primary); }
+
+/* Строка-контейнер с собственным контролом: сама не кликается и не
+   подсвечивается — нажимают вкладки внутри неё. */
+.gs-row.as-static { cursor: default; }
+.gs-row.as-static:hover { border-color: var(--acrylic-border); }
 
 .gs-row-icon {
   display: grid;

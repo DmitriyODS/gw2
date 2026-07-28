@@ -12,6 +12,7 @@ import (
 	"github.com/DmitriyODS/gw2/back-go/auth/internal/domain"
 	"github.com/DmitriyODS/gw2/back-go/auth/internal/dto"
 	"github.com/DmitriyODS/gw2/back-go/auth/internal/token"
+	"github.com/DmitriyODS/gw2/back-go/pkg/billingclient"
 )
 
 // AuthService — все use-case'ы сервиса (auth + users).
@@ -131,6 +132,9 @@ type Service struct {
 	// Вход через Яндекс ID (WithYandex; nil — выключен).
 	yandex         domain.YandexOAuthClient
 	yandexClientID string
+
+	// Лимиты тарифа (WithBilling; nil — ограничений нет).
+	billing *billingclient.Client
 }
 
 func New(repo domain.UserRepository, companies domain.CompanyRepository,

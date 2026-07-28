@@ -132,6 +132,9 @@ func (s *Service) CreateCompany(ctx context.Context, actor *domain.User, req dto
 	if err := s.ensureCompanyNameFree(ctx, req.Name, 0); err != nil {
 		return nil, err
 	}
+	if err := s.ensureCompanyLimit(ctx, actor.ID); err != nil {
+		return nil, err
+	}
 
 	company := &domain.Company{
 		Name:        req.Name,
@@ -298,6 +301,9 @@ func (s *Service) JoinByCode(ctx context.Context, userID int64, code string) (*d
 	}
 	if role == nil {
 		return nil, domain.NewError("ROLE_NOT_FOUND", "Роль не найдена", 500)
+	}
+	if err := s.ensureMemberLimit(ctx, company.ID); err != nil {
+		return nil, err
 	}
 	if err := s.repo.AddMembership(ctx, userID, company.ID, role.ID); err != nil {
 		return nil, err

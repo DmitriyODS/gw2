@@ -104,8 +104,9 @@ const mainItems = computed(() => [
 
 const moreItems = computed(() => {
   const arr = [
-    { path: '/profile', avatar: true, icon: 'account_circle', label: 'Профиль', tutorial: 'profile-avatar',
-      active: () => route.path === '/profile' },
+    // Профиль переехал в настройки панелью «Аккаунт» — пункт ведёт прямо в неё.
+    { path: '/settings?section=account', avatar: true, icon: 'account_circle', label: 'Аккаунт', tutorial: 'profile-avatar',
+      active: () => route.path === '/settings' && route.query.section === 'account' },
     { path: '/diaries', icon: 'event_note', label: 'Ежедневник',
       active: () => route.path.startsWith('/diaries') },
   ]
@@ -134,7 +135,7 @@ const moreItems = computed(() => {
       active: () => route.path === '/users' })
   }
   arr.push({ path: '/settings', icon: 'settings', label: 'Настройки',
-    active: () => route.path === '/settings' })
+    active: () => route.path === '/settings' && route.query.section !== 'account' })
   return arr
 })
 

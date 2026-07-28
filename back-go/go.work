@@ -5,6 +5,7 @@ use (
 	./alice
 	./apitest
 	./auth
+	./billing
 	./board
 	./calendar
 	./calls

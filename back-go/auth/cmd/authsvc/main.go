@@ -24,6 +24,7 @@ import (
 	"github.com/DmitriyODS/gw2/back-go/auth/internal/service"
 	"github.com/DmitriyODS/gw2/back-go/auth/internal/token"
 	httptransport "github.com/DmitriyODS/gw2/back-go/auth/internal/transport/http"
+	"github.com/DmitriyODS/gw2/back-go/pkg/billingclient"
 	"github.com/DmitriyODS/gw2/back-go/pkg/bootstrap"
 	"github.com/DmitriyODS/gw2/back-go/pkg/storage"
 )
@@ -87,6 +88,17 @@ func main() {
 	// реестров/календарей/заметок/портала, аватарки) — даём доступ к корневому
 	// файловому хранилищу.
 	svc.WithFiles(fileStore)
+
+	// Лимиты тарифа (сколько компаний создаёт пользователь и сколько человек
+	// помещается в компанию) — gRPC billingsvc. Пустой адрес выключает
+	// проверки, недоступный биллинг их не блокирует (fail-open).
+	billing, err := billingclient.New(bootstrap.Env("BILLING_GRPC_ADDR", ""), log)
+	if err != nil {
+		log.Error("billing.dial_failed", "error", err)
+		os.Exit(1)
+	}
+	defer billing.Close()
+	svc.WithBilling(billing)
 
 	// Реестр входов профиля («Авторизация и сессии»). Город по IP — внешний
 	// гео-сервис: шаблон URL с {ip} и {token}, ответ с полем "city" (смена

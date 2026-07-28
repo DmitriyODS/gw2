@@ -47,6 +47,9 @@ func (s *Service) GetCalendar(ctx context.Context, companyID, id int64) (*domain
 // CreateCalendar — новый календарь (структура полей задаётся отдельно).
 func (s *Service) CreateCalendar(ctx context.Context, companyID, userID int64, name string) (*domain.Calendar, error) {
 	pos, err := s.repo.NextCalendarPosition(ctx, companyID)
+	if err := s.ensureLimit(ctx, companyID); err != nil {
+		return nil, err
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -102,7 +105,7 @@ func (s *Service) ReplaceFields(ctx context.Context, companyID, id int64, fields
 		return nil, err
 	}
 	if len(removed) > 0 {
-		if err := s.stripRemovedFields(ctx, id, fields, removed); err != nil {
+		if err := s.stripRemovedFields(ctx, companyID, id, fields, removed); err != nil {
 			return nil, err
 		}
 	}
@@ -113,7 +116,7 @@ func (s *Service) ReplaceFields(ctx context.Context, companyID, id int64, fields
 
 // stripRemovedFields — удалить значения отключённых полей из всех записей и
 // пересчитать search_text по актуальному набору полей.
-func (s *Service) stripRemovedFields(ctx context.Context, calendarID int64, fields []domain.Field, removed []int64) error {
+func (s *Service) stripRemovedFields(ctx context.Context, companyID, calendarID int64, fields []domain.Field, removed []int64) error {
 	entries, err := s.repo.AllEntries(ctx, calendarID)
 	if err != nil {
 		return err
@@ -139,7 +142,7 @@ func (s *Service) stripRemovedFields(ctx context.Context, calendarID int64, fiel
 		}
 	}
 	if len(orphans) > 0 {
-		s.files.Remove(orphans)
+		s.files.RemoveFor(ctx, 0, companyID, orphans)
 	}
 	return nil
 }

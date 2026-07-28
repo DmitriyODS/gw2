@@ -64,6 +64,7 @@ const (
 	petsBase      = "http://localhost:18094"
 	gatewayBase   = "http://localhost:18096"
 	pushBase      = "http://localhost:18097"
+	billingBase   = "http://localhost:18107"
 	gatewayWSURL  = "ws://localhost:18096/ws"
 
 	// Тестам выделена СВОЯ база Redis того же dev-инстанса: ключи presence
@@ -174,6 +175,7 @@ func runMain(m *testing.M) int {
 		"PASETO_REFRESH_KEY=" + pasetoRefreshKey,
 		"UPLOAD_FOLDER=" + uploads,
 		"MAIL_GRPC_ADDR=localhost:19098",
+		"BILLING_GRPC_ADDR=localhost:19107",
 		"APP_PUBLIC_BASE_URL=http://localhost:5173",
 		"HTTP_ADDR=:18091",
 	})
@@ -199,7 +201,17 @@ func runMain(m *testing.M) int {
 		"REDIS_URL=" + testRedisURL,
 		"PASETO_PUBLIC_KEY=" + pasetoPublicKey,
 		"UPLOAD_FOLDER=" + uploads,
+		"BILLING_GRPC_ADDR=localhost:19107",
 		"HTTP_ADDR=:18105",
+	})
+	// billingsvc: подписки, магазин и лимиты тарифа. Остальные сервисы ходят
+	// к нему по gRPC :19107 — так проверяется реальный энфорсмент лимитов.
+	procs.start("billingsvc", filepath.Join(repoRoot, "back-go/billing"), "./cmd/billingsvc", []string{
+		"DATABASE_URL=" + testDBURL,
+		"REDIS_URL=" + testRedisURL,
+		"PASETO_PUBLIC_KEY=" + pasetoPublicKey,
+		"HTTP_ADDR=:18107",
+		"GRPC_ADDR=:19107",
 	})
 	// remindersvc: личные напоминания + планировщик срабатываний.
 	procs.start("remindersvc", filepath.Join(repoRoot, "back-go/reminder"), "./cmd/remindersvc", []string{
@@ -558,6 +570,7 @@ var portalAPI = &svcClient{base: portalBase}
 var notesAPI = &svcClient{base: notesBase}
 var boardAPI = &svcClient{base: boardBase}
 var reminderAPI = &svcClient{base: reminderBase}
+var billingAPI = &svcClient{base: billingBase}
 
 type reqOpt func(*http.Request)
 

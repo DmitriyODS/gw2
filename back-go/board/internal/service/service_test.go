@@ -478,8 +478,10 @@ func (nopBus) Publish(_ domain.Ctx, _ string, _ []string, _ any) {}
 
 type nopFiles struct{}
 
-func (nopFiles) Save(_ string, _ []byte) (string, error) { return "boards/x", nil }
-func (nopFiles) Remove(_ []string)                       {}
+func (nopFiles) SaveFor(_ context.Context, _, _ int64, _ string, _ []byte) (string, error) {
+	return "boards/x", nil
+}
+func (nopFiles) RemoveFor(_ context.Context, _, _ int64, _ []string) {}
 func (nopFiles) Open(_ string) ([]byte, error)           { return nil, nil }
 
 type allowLimiter struct{}
@@ -691,3 +693,13 @@ func TestRecipientPlacesSharedFolder(t *testing.T) {
 }
 
 var _ = json.Marshal
+
+func (f *fakeRepo) CountBoards(_ context.Context, ownerID int64) (int, error) {
+	n := 0
+	for _, b := range f.boards {
+		if b.OwnerID == ownerID {
+			n++
+		}
+	}
+	return n, nil
+}

@@ -52,7 +52,9 @@
       </div>
     </header>
 
-    <div class="win-body main-content">
+    <!-- Тело окна — оно же хост модалок раздела: диалоги телепортируются сюда,
+         а не в body, поэтому накрывают своё окно, а не весь рабочий стол. -->
+    <div ref="bodyEl" class="win-body main-content">
       <WindowContent :win="win" />
     </div>
 
@@ -73,6 +75,7 @@ import router from '@/router/index.js'
 import { useDesktopStore } from '@/stores/desktop.js'
 import { appById, windowTitle } from '@/desktop/apps.js'
 import { snapZoneAt } from '@/desktop/geometry.js'
+import { provideWindowHost } from '@/desktop/windowHost.js'
 import WindowContent from './WindowContent.vue'
 
 const props = defineProps({
@@ -92,6 +95,9 @@ const canBack = computed(() => props.win.hi > 0)
 
 const dragging = ref(false)
 const resizing = ref(false)
+
+const bodyEl = ref(null)
+provideWindowHost(bodyEl)
 
 /* --fly-* — вектор от центра окна к центру панели задач: по нему окно
    «улетает» при сворачивании и оттуда же появляется. */

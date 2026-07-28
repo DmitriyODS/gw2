@@ -1,6 +1,5 @@
 import { defineStore } from 'pinia'
-import { ref, computed } from 'vue'
-import { useAuthStore } from './auth.js'
+import { ref } from 'vue'
 import { sendAssistantMessage, getAssistantHistory, sendAssistantFeedback } from '@/api/assistant.js'
 
 let localSeq = 0
@@ -11,7 +10,9 @@ function normalize(m) {
 }
 
 // Диалог с деловым ИИ-ассистентом (aisvc). В отличие от мессенджера — один
-// плоский тред на пользователя+компанию, без вложений/ответов/пересылки.
+// плоский тред на ПОЛЬЗОВАТЕЛЯ, без вложений/ответов/пересылки. Ассистент
+// подключён к человеку (личный ключ в «Профиль → Интеграции»), а не к
+// компании: активная компания нужна только инструментам статистики.
 export const useAssistantStore = defineStore('assistant', () => {
   // Отсортировано старые → новые (сервер отдаёт новые → старые постранично).
   const messages = ref([])
@@ -19,23 +20,15 @@ export const useAssistantStore = defineStore('assistant', () => {
   const sending = ref(false)
   const loaded = ref(false)
   const error = ref(null)
-  // Нет активной компании (супер-админ либо пользователь без компаний) —
-  // ассистент недоступен в принципе, не дёргаем API вовсе.
-  const unavailable = ref(false)
-  // ИИ выключен для компании (сервер ответил AI_DISABLED) — временная,
-  // а не структурная недоступность: показываем мягкую системную заметку.
+  // Личный ключ не подключён (сервер ответил AI_DISABLED) — не ошибка, а
+  // приглашение подключить: показываем мягкую системную заметку со ссылкой
+  // в профиль.
   const disabled = ref(false)
   // Мои голоса 👍/👎: message_id → 'up'|'down' (сервер отдаёт my_feedback в
   // history — состояние переживает перезагрузку).
   const myFeedback = ref({})
 
-  const hasActiveCompany = computed(() => useAuthStore().companyId != null)
-
   function applyErrorCode(e) {
-    if (e?.error === 'BAD_REQUEST') {
-      unavailable.value = true
-      return true
-    }
     if (e?.error === 'AI_DISABLED') {
       disabled.value = true
       return true
@@ -44,10 +37,6 @@ export const useAssistantStore = defineStore('assistant', () => {
   }
 
   async function fetchHistory() {
-    if (!hasActiveCompany.value) {
-      unavailable.value = true
-      return
-    }
     loading.value = true
     error.value = null
     try {
@@ -58,7 +47,6 @@ export const useAssistantStore = defineStore('assistant', () => {
         if (m.my_feedback) votes[m.id] = m.my_feedback
       }
       myFeedback.value = votes
-      unavailable.value = false
       disabled.value = false
       loaded.value = true
     } catch (e) {
@@ -87,7 +75,6 @@ export const useAssistantStore = defineStore('assistant', () => {
         sources: res.sources || null,
         createdAt: res.created_at || new Date().toISOString(),
       })
-      unavailable.value = false
       disabled.value = false
       loaded.value = true
     } catch (e) {
@@ -123,13 +110,12 @@ export const useAssistantStore = defineStore('assistant', () => {
     messages.value = []
     loaded.value = false
     error.value = null
-    unavailable.value = false
     disabled.value = false
     myFeedback.value = {}
   }
 
   return {
-    messages, loading, sending, loaded, error, unavailable, disabled, myFeedback,
-    hasActiveCompany, fetchHistory, send, sendFeedback, reset,
+    messages, loading, sending, loaded, error, disabled, myFeedback,
+    fetchHistory, send, sendFeedback, reset,
   }
 })

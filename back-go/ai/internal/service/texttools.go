@@ -92,7 +92,7 @@ func textToolInstruction(action, style string) (string, *domain.Error) {
 
 // TransformText — выполнить операцию action над text. Компания без
 // включённого AI → AI_DISABLED 409 (как у ассистента: UI подскажет включить).
-func (s *Service) TransformText(ctx context.Context, companyID int64, action, style, text string) (string, error) {
+func (s *Service) TransformText(ctx context.Context, userID int64, action, style, text string) (string, error) {
 	text = strings.TrimSpace(text)
 	if text == "" {
 		return "", errTextToolValidation("Текст не может быть пустым")
@@ -104,7 +104,7 @@ func (s *Service) TransformText(ctx context.Context, companyID int64, action, st
 	if derr != nil {
 		return "", derr
 	}
-	client, err := s.clientFor(ctx, companyID)
+	client, err := s.userClientForFeature(ctx, userID, domain.FeatureNotes)
 	if err != nil {
 		return "", err
 	}
@@ -120,12 +120,11 @@ func (s *Service) TransformText(ctx context.Context, companyID int64, action, st
 	if err != nil {
 		return "", err
 	}
-	res, err := s.Chat(ctx, ChatArgs{
-		CompanyID:    companyID,
+	res, err := s.chatMetered(ctx, client, domain.FeatureNotes, userID, domain.ChatParams{
 		MessagesJSON: string(raw),
 		MaxTokens:    textToolMaxTokens,
 		Temperature:  textToolTemperature,
-		TimeoutSec:   textToolTimeout.Seconds(),
+		Timeout:      textToolTimeout,
 	})
 	if err != nil {
 		return "", err
@@ -156,7 +155,7 @@ const proofreadSystemPrompt = "Ты — корректор текста в ли�
 // заметки за один вызов LLM (сохраняет структуру/картинки/таблицы: клиент лишь
 // подменяет текст узлов по индексу). Возвращает массив той же длины; при сбое
 // формата — доменная ошибка (клиент покажет тост, ничего не подменит).
-func (s *Service) Proofread(ctx context.Context, companyID int64, segments []string) ([]string, error) {
+func (s *Service) Proofread(ctx context.Context, userID int64, segments []string) ([]string, error) {
 	if len(segments) == 0 {
 		return nil, errTextToolValidation("Нет текста для проверки")
 	}
@@ -170,7 +169,7 @@ func (s *Service) Proofread(ctx context.Context, companyID int64, segments []str
 	if total > proofreadMaxChars {
 		return nil, errTextToolValidation("Слишком большая заметка для проверки за раз")
 	}
-	client, err := s.clientFor(ctx, companyID)
+	client, err := s.userClientForFeature(ctx, userID, domain.FeatureNotes)
 	if err != nil {
 		return nil, err
 	}
@@ -190,12 +189,11 @@ func (s *Service) Proofread(ctx context.Context, companyID int64, segments []str
 	if err != nil {
 		return nil, err
 	}
-	res, err := s.Chat(ctx, ChatArgs{
-		CompanyID:    companyID,
+	res, err := s.chatMetered(ctx, client, domain.FeatureNotes, userID, domain.ChatParams{
 		MessagesJSON: string(raw),
 		MaxTokens:    proofreadMaxTokens,
 		Temperature:  textToolTemperature,
-		TimeoutSec:   textToolTimeout.Seconds(),
+		Timeout:      textToolTimeout,
 	})
 	if err != nil {
 		return nil, err

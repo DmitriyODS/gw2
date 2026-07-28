@@ -23,11 +23,11 @@ func (s *Service) Status(ctx context.Context, companyID int64) (*StatusResult, e
 	if err != nil {
 		return nil, err
 	}
-	return &StatusResult{
-		Enabled:        client != nil,
-		ModelChat:      company.ChatModel(),
-		ModelEmbedding: company.EmbeddingModel(),
-	}, nil
+	res := &StatusResult{Enabled: client != nil}
+	if client != nil {
+		res.ModelChat, res.ModelEmbedding = client.modelChat, client.modelEmbedding
+	}
+	return res, nil
 }
 
 // Chat — РОВНО ОДИН ход chat completion: messages → content | tool_calls.
@@ -41,6 +41,13 @@ func (s *Service) Chat(ctx context.Context, args ChatArgs) (*domain.ChatResult, 
 	if client == nil {
 		return nil, errAiDisabled(403)
 	}
+	return s.chatWith(ctx, client, args)
+}
+
+// chatWith — один ход на ГОТОВОМ клиенте. Ключ бывает не только компанийный:
+// у ИИ-ассистента он личный (userClientFor), поэтому выбор клиента остаётся на
+// вызывающем, а здесь — только сам вызов upstream.
+func (s *Service) chatWith(ctx context.Context, client *aiClient, args ChatArgs) (*domain.ChatResult, error) {
 	if !json.Valid([]byte(args.MessagesJSON)) {
 		return nil, domain.NewError("AI_BAD_REQUEST", "messages_json — невалидный JSON", 400)
 	}
@@ -56,9 +63,11 @@ func (s *Service) Chat(ctx context.Context, args ChatArgs) (*domain.ChatResult, 
 	if args.TimeoutSec > 0 {
 		timeout = time.Duration(args.TimeoutSec * float64(time.Second))
 	}
-	res, err := s.llm.ChatOnce(ctx, domain.ChatParams{
-		APIKey:       client.apiKey,
-		Model:        client.modelChat,
+	feature := args.Feature
+	if feature == "" {
+		feature = domain.FeatureAssistant
+	}
+	res, err := s.chatMetered(ctx, client, feature, args.ActorID, domain.ChatParams{
 		MessagesJSON: args.MessagesJSON,
 		ToolsJSON:    args.ToolsJSON,
 		MaxTokens:    maxTokens,
@@ -85,7 +94,7 @@ func (s *Service) Embed(ctx context.Context, companyID int64, text string) ([]fl
 	if client == nil {
 		return nil, "", errAiDisabled(403)
 	}
-	vecs, err := s.llm.Embed(ctx, client.apiKey, client.modelEmbedding, []string{text}, requestTimeout)
+	vecs, err := s.embedMetered(ctx, client, domain.FeatureSearch, 0, []string{text}, requestTimeout)
 	if err != nil {
 		return nil, "", err
 	}
@@ -106,7 +115,7 @@ func (s *Service) SemanticSearch(ctx context.Context, companyID int64, query str
 	if client == nil {
 		return nil, nil
 	}
-	vecs, err := s.llm.Embed(ctx, client.apiKey, client.modelEmbedding, []string{query}, 4*time.Second)
+	vecs, err := s.embedMetered(ctx, client, domain.FeatureSearch, 0, []string{query}, 4*time.Second)
 	if err != nil {
 		s.log.Warn("ai.search.embed_failed", "company_id", companyID, "err", err)
 		return nil, nil

@@ -54,7 +54,11 @@ type StatusResult struct {
 
 // ChatArgs — запрос gRPC Chat (один ход; циклы tool-calling — у вызывающего).
 type ChatArgs struct {
-	CompanyID    int64
+	CompanyID int64
+	// ActorID / Feature — кто обратился и какая это возможность: нужны учёту
+	// токенов (журнал расхода в billingsvc).
+	ActorID      int64
+	Feature      string
 	MessagesJSON string
 	ToolsJSON    string
 	MaxTokens    int
@@ -83,14 +87,28 @@ type AiService interface {
 	// ScheduleReindexTask — асинхронно, ошибки только в лог (fail-open).
 	ScheduleReindexTask(taskID int64)
 
+	// REST /api/ai/my-settings — личные ИИ-настройки (ключ ассистента).
+	GetMySettings(ctx context.Context, userID int64) (*dto.MyAiSettings, error)
+	UpdateMySettings(ctx context.Context, userID int64, upd dto.MyAiSettingsUpdate) (*dto.MyAiSettings, error)
+	TestMySettings(ctx context.Context, userID int64) (*dto.AiTestResult, error)
+
 	// REST /api/ai/assistant/* — деловой ИИ-ассистент (статистика/задачи).
-	SendAssistantMessage(ctx context.Context, userID, companyID int64, text string) (*AssistantReply, error)
-	GetAssistantHistory(ctx context.Context, userID, companyID int64, limit int, before *time.Time) ([]domain.AssistantMessage, error)
-	SendAssistantFeedback(ctx context.Context, userID, companyID, messageID int64, verdict string, reason *string) error
+	// Ключ и диалог — личные; companyID (активная компания, может быть nil)
+	// нужен только инструментам компанийной статистики.
+	SendAssistantMessage(ctx context.Context, userID int64, companyID *int64, text string) (*AssistantReply, error)
+	GetAssistantHistory(ctx context.Context, userID int64, limit int, before *time.Time) ([]domain.AssistantMessage, error)
+	SendAssistantFeedback(ctx context.Context, userID, messageID int64, verdict string, reason *string) error
 
 	// REST /api/ai/text-tools — ИИ-инструменты текста заметок (texttools.go).
-	TransformText(ctx context.Context, companyID int64, action, style, text string) (string, error)
-	Proofread(ctx context.Context, companyID int64, segments []string) ([]string, error)
+	// Работают на ЛИЧНОМ доступе автора: активная компания им не нужна.
+	TransformText(ctx context.Context, userID int64, action, style, text string) (string, error)
+	Proofread(ctx context.Context, userID int64, segments []string) ([]string, error)
+
+	// REST /api/ai/platform — платформенный ключ и каталог моделей
+	// (супер-админ, раздел «Аудит платформы»).
+	GetPlatformSettings(ctx context.Context) (*dto.PlatformAiSettings, error)
+	UpdatePlatformSettings(ctx context.Context, upd dto.PlatformAiUpdate) (*dto.PlatformAiSettings, error)
+	TestPlatformSettings(ctx context.Context) (*dto.AiTestResult, error)
 
 	// gRPC SupportChat — ИИ техподдержки dev-чата (support.go, зовёт msgsvc).
 	SupportReply(ctx context.Context, messagesJSON string) (string, error)
@@ -113,9 +131,18 @@ type Service struct {
 	// компанийные ключи не подходят. Пустой ключ — поддержка без ИИ.
 	support SupportConfig
 
-	// кэш «готовых клиентов» per-company (как _cache во Flask ai_client).
-	mu    sync.Mutex
-	cache map[int64]cacheEntry
+	// meter — баланс токенов доступа (billingsvc); nil — учёт выключен.
+	meter domain.TokenMeter
+
+	// Кэши: платформенные настройки и каталог моделей читает каждый запрос к
+	// модели, а меняются они редко.
+	mu         sync.Mutex
+	cache      map[int64]cacheEntry
+	userCache  map[int64]cacheEntry
+	platform   *domain.PlatformAI
+	platformAt time.Time
+	models     *domain.ModelCatalog
+	modelsAt   time.Time
 
 	// защита от параллельных бэкфиллов одной компании.
 	backfills sync.Map // company_id → struct{}
@@ -131,11 +158,20 @@ type cacheEntry struct {
 
 // aiClient — расшифрованные настройки компании, готовые к вызовам upstream
 // (аналог AIClient во Flask).
+// aiClient — готовый доступ к моделям: чей ключ, по какому адресу, какими
+// моделями и С ЧЬЕГО баланса списывать токены доступа.
 type aiClient struct {
 	companyID      int64
 	apiKey         string
+	baseURL        string // пусто — общий адрес платформы
 	modelChat      string
 	modelEmbedding string
+	modelSupport   string
+	// payerID — чьи токены тратим (0 — учёта нет: свой ключ или поддержка).
+	payerID int64
+	// ownKey — запрос уходит на ЛИЧНЫЙ ключ пользователя: токены тарифа не
+	// тратятся, расход только фиксируется.
+	ownKey bool
 }
 
 var _ AiService = (*Service)(nil)
@@ -154,8 +190,16 @@ func New(repo domain.Repository, llmClient domain.LLMClient, cipher domain.Secre
 		support:    support,
 		log:        log,
 		cache:      map[int64]cacheEntry{},
+		userCache:  map[int64]cacheEntry{},
 		reindexSem: make(chan struct{}, reindexWorkers),
 	}
+}
+
+// WithTokenMeter — подключить учёт токенов доступа (billingsvc). Без него ИИ
+// работает без списаний (локальная разработка и тесты).
+func (s *Service) WithTokenMeter(meter domain.TokenMeter) *Service {
+	s.meter = meter
+	return s
 }
 
 // ── Ошибки ───────────────────────────────────────────────────────
@@ -180,51 +224,18 @@ func errAiDisabled(status int) *domain.Error {
 // clientFor — nil без ошибки, если AI выключен / ключа нет / ключ
 // нерасшифровываемый. Положительный результат кэшируется на cacheTTL,
 // отрицательный затирает кэш (чтобы выключение подхватилось сразу).
-func (s *Service) clientFor(ctx context.Context, companyID int64) (*aiClient, error) {
-	now := time.Now()
-	s.mu.Lock()
-	if e, ok := s.cache[companyID]; ok && e.expires.After(now) {
-		s.mu.Unlock()
-		return e.client, nil
-	}
-	s.mu.Unlock()
-
-	company, err := s.repo.GetCompanyAI(ctx, companyID)
-	if err != nil {
-		return nil, err
-	}
-	client := s.buildClient(company)
-
-	s.mu.Lock()
-	if client != nil {
-		s.cache[companyID] = cacheEntry{client: client, expires: now.Add(cacheTTL)}
-	} else {
-		delete(s.cache, companyID)
-	}
-	s.mu.Unlock()
-	return client, nil
-}
-
-func (s *Service) buildClient(company *domain.CompanyAI) *aiClient {
-	if company == nil || !company.Enabled || len(company.APIKeyEnc) == 0 {
-		return nil
-	}
-	apiKey, ok := s.cipher.Decrypt(company.APIKeyEnc)
-	if !ok {
-		s.log.Warn("ai.decrypt_failed", "company_id", company.ID)
-		return nil
-	}
-	return &aiClient{
-		companyID:      company.ID,
-		apiKey:         apiKey,
-		modelChat:      company.ChatModel(),
-		modelEmbedding: company.EmbeddingModel(),
-	}
-}
-
 // invalidateClient — вызывать сразу после изменения AI-настроек компании.
 func (s *Service) invalidateClient(companyID int64) {
 	s.mu.Lock()
 	delete(s.cache, companyID)
+	s.mu.Unlock()
+}
+
+// ── Личный клиент пользователя (ИИ-ассистент) ────────────────────
+
+// invalidateUserClient — вызывать сразу после изменения личных настроек.
+func (s *Service) invalidateUserClient(userID int64) {
+	s.mu.Lock()
+	delete(s.userCache, userID)
 	s.mu.Unlock()
 }

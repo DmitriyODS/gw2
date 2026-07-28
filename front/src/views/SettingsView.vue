@@ -27,7 +27,10 @@
           >
             <span class="material-symbols-outlined item-icon">{{ section.icon }}</span>
             <span class="item-title">{{ section.title }}</span>
-            <span v-if="narrow" class="material-symbols-outlined item-chev">chevron_right</span>
+            <!-- Пункт-ссылка уводит в самостоятельный раздел — помечаем его
+                 стрелкой «наружу», чтобы уход из настроек не был сюрпризом. -->
+            <span v-if="section.to" class="material-symbols-outlined item-chev">north_east</span>
+            <span v-else-if="narrow" class="material-symbols-outlined item-chev">chevron_right</span>
           </button>
         </template>
 
@@ -64,12 +67,19 @@
 
         <ChatsPortalSection v-else-if="activeSection === 'chats'" :has-company="hasCompany" />
 
+        <AccountSection v-else-if="activeSection === 'account'" />
+
+        <AiSection v-else-if="activeSection === 'ai'" />
+
         <div v-else-if="activeSection === 'help'" class="pane-stack">
           <HelpCenter />
           <SupportCard />
         </div>
 
         <AboutSection v-else-if="activeSection === 'about'" />
+
+        <!-- Аудит платформы — единая точка управления для супер-админа. -->
+        <AuditSection v-else-if="activeSection === 'audit'" />
 
         <!-- Резервная копия — только супер-админ платформы. -->
         <div v-else-if="activeSection === 'backup'" class="pane-stack">
@@ -155,9 +165,12 @@ import { exportBackup, importBackup } from '@/api/backup.js'
 import { settingsGroups, resolveSectionKey } from '@/utils/settingsSections.js'
 import BackupSectionsDialog from '@/components/settings/BackupSectionsDialog.vue'
 import GeneralSection from '@/components/settings/GeneralSection.vue'
+import AccountSection from '@/components/settings/AccountSection.vue'
+import AiSection from '@/components/settings/AiSection.vue'
 import ThemesSection from '@/components/settings/ThemesSection.vue'
 import ChatsPortalSection from '@/components/settings/ChatsPortalSection.vue'
 import AboutSection from '@/components/settings/AboutSection.vue'
+import AuditSection from '@/components/settings/AuditSection.vue'
 import SupportCard from '@/components/settings/SupportCard.vue'
 import HelpCenter from '@/components/settings/HelpCenter.vue'
 import DesktopAppCard from '@/components/settings/DesktopAppCard.vue'
@@ -207,7 +220,7 @@ onMounted(() => {
 
 onBeforeUnmount(() => ro?.disconnect())
 
-/* ── Каталог разделов (общий: его же ищет Spotlight) ── */
+/* ── Каталог разделов (общий: его же ищет Hola) ── */
 const allGroups = computed(() => settingsGroups({
   isMobile: isMobile.value,
   hasCompany: hasCompany.value,
@@ -238,6 +251,14 @@ const sectionByKey = computed(() => {
 const activeSectionMeta = computed(() => sectionByKey.value[activeSection.value] || null)
 
 function openSection(key) {
+  // Пункт-ссылка (компании) — самостоятельный раздел: уводим туда, а
+  // список настроек оставляем как был. На рабочем столе router окна сам решит
+  // открыть чужой раздел своим окном.
+  const target = sectionByKey.value[key]?.to
+  if (target) {
+    router.push(target)
+    return
+  }
   activeSection.value = key
   paneOpen.value = true
   if (route.query.section !== key) {
@@ -312,6 +333,11 @@ async function doImportBackup() {
 
 onMounted(() => {
   const requested = resolveSectionKey(route.query.section)
+  // ?section=companies — пункт-ссылка: уводим в его раздел, панели здесь нет.
+  if (requested && sectionByKey.value[requested]?.to) {
+    router.replace(sectionByKey.value[requested].to)
+    return
+  }
   if (requested && sectionByKey.value[requested]) {
     activeSection.value = requested
   } else {
@@ -325,6 +351,10 @@ onMounted(() => {
 // стола ведёт на /settings?section=desktop, когда настройки уже открыты.
 watch(() => route.query.section, (key) => {
   const resolved = resolveSectionKey(key)
+  if (resolved && sectionByKey.value[resolved]?.to) {
+    router.replace(sectionByKey.value[resolved].to)
+    return
+  }
   if (resolved && sectionByKey.value[resolved] && resolved !== activeSection.value) {
     activeSection.value = resolved
     paneOpen.value = true

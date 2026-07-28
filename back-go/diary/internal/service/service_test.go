@@ -401,3 +401,13 @@ func TestEntryEventsReachMembers(t *testing.T) {
 		t.Errorf("событие должно идти владельцу и адресату, комнаты %v", bus.lastRooms)
 	}
 }
+
+func (f *fakeRepo) CountDiaries(_ context.Context, ownerID int64) (int, error) {
+	n := 0
+	for _, d := range f.diaries {
+		if d.OwnerID == ownerID {
+			n++
+		}
+	}
+	return n, nil
+}

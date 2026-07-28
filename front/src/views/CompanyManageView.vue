@@ -166,7 +166,7 @@
             </div>
 
             <div v-show="settingsTab === 'lists'"><CompanyListsSettings :company-id="company.id" /></div>
-            <div v-show="settingsTab === 'ai'"><AiSettings :company-id="company.id" /></div>
+            <div v-show="settingsTab === 'ai'"><AiSettings :company-id="company.id" :owner-id="company.creator?.id ?? company.created_by ?? null" /></div>
             <div v-show="settingsTab === 'schedule'"><WeekendSettings :company-id="company.id" /></div>
             <div v-show="settingsTab === 'groove'"><GrooveSettings :company-id="company.id" /></div>
 

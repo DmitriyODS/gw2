@@ -56,6 +56,13 @@ func (r *Repo) GetRegistry(ctx context.Context, id int64) (*domain.Registry, err
 		`SELECT `+registryCols+` FROM registries WHERE id = $1`, id))
 }
 
+// CountRegistries — сколько реестров уже есть (лимит тарифа).
+func (r *Repo) CountRegistries(ctx context.Context, company_id int64) (int, error) {
+	var n int
+	err := r.pool.QueryRow(ctx, `SELECT count(*) FROM registries WHERE company_id = $1`, company_id).Scan(&n)
+	return n, err
+}
+
 func (r *Repo) CreateRegistry(ctx context.Context, reg *domain.Registry) error {
 	return r.pool.QueryRow(ctx,
 		`INSERT INTO registries (company_id, name, position, created_by)

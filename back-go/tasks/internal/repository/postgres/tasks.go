@@ -111,6 +111,13 @@ func (r *Repo) GetTask(ctx context.Context, id int64) (*domain.Task, error) {
 }
 
 // ListTasks — фильтры/сортировки/пагинация как task_repo.get_list во Flask.
+// CountCompanyTasks — сколько задач в компании (лимит тарифа «Задачи»).
+func (r *Repo) CountCompanyTasks(ctx context.Context, companyID int64) (int64, error) {
+	var n int64
+	err := r.pool.QueryRow(ctx, `SELECT count(*) FROM tasks WHERE company_id = $1`, companyID).Scan(&n)
+	return n, err
+}
+
 func (r *Repo) ListTasks(ctx context.Context, f domain.TaskListFilter) ([]*domain.Task, int, error) {
 	// Пустая семантическая выдача — сразу пустой список.
 	if f.OrderedSet && len(f.OrderedIDs) == 0 {

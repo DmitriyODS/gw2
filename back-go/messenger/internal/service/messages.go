@@ -531,6 +531,9 @@ func (s *Service) UploadAttachment(ctx context.Context, uploaderID int64,
 		original = "file"
 	}
 	ext := truncateString(strings.ToLower(filepath.Ext(original)), 16)
+	if err := s.ensureUploadSpace(ctx, uploaderID, int64(len(data))); err != nil {
+		return nil, err
+	}
 	relPath, err := s.files.Save(data, ext)
 	if err != nil {
 		return nil, err
@@ -557,6 +560,7 @@ func (s *Service) UploadAttachment(ctx context.Context, uploaderID int64,
 	if err := s.repo.CreateAttachment(ctx, att); err != nil {
 		return nil, err
 	}
+	s.trackUpload(ctx, uploaderID, att.SizeBytes)
 	return dto.NewAttachment(att), nil
 }
 
@@ -660,11 +664,15 @@ func (s *Service) DeleteMessage(ctx context.Context, messageID, userID int64, sc
 // last_message_at (вложения каскадно уходят по FK).
 func (s *Service) destroyMessage(ctx context.Context, msg *domain.Message) error {
 	paths := make([]string, 0, len(msg.Attachments))
+	// Место возвращается ТОМУ, кто файл загрузил: в пересланной копии это уже
+	// другой человек, и списывать её с автора оригинала было бы неверно.
+	freed := map[int64]int64{}
 	for _, a := range msg.Attachments {
 		paths = append(paths, a.FilePath)
 		if a.ThumbPath != nil {
 			paths = append(paths, *a.ThumbPath)
 		}
+		freed[a.UploaderID] += a.SizeBytes
 	}
 	if err := s.repo.DeleteMessage(ctx, msg.ID); err != nil {
 		return err
@@ -673,6 +681,9 @@ func (s *Service) destroyMessage(ctx context.Context, msg *domain.Message) error
 		return err
 	}
 	s.files.Remove(paths)
+	for uploaderID, size := range freed {
+		s.trackUpload(ctx, uploaderID, -size)
+	}
 	return nil
 }
 

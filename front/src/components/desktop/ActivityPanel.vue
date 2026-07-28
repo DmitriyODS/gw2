@@ -1,9 +1,9 @@
 <template>
-  <aside class="ap" aria-label="Последние действия">
+  <aside class="ap" aria-label="Моя активность">
     <header class="ap-head">
-      <span class="ap-title">Последние действия</span>
+      <h2 class="ap-title">Моя активность</h2>
       <button
-        v-if="activity.items.length || recentSections.length"
+        v-if="items.length"
         class="ap-clear"
         type="button"
         title="Очистить ленту"
@@ -13,42 +13,28 @@
       </button>
     </header>
 
-    <!-- Куда пользователь заходил последним: быстрый возврат в раздел. -->
-    <div v-if="recentSections.length" class="ap-sections">
+    <div v-if="items.length" class="ap-list">
+      <!-- Открытые разделы идут одним потоком с созданными элементами: лента
+           показывает всю работу за сеанс, а не только то, что было создано. -->
       <button
-        v-for="s in recentSections"
-        :key="s.id"
-        class="ap-chip"
-        type="button"
-        :title="`Открыть: ${s.title}`"
-        @click="emit('open', s.path)"
-      >
-        <span class="material-symbols-outlined">{{ s.icon }}</span>
-        <span class="ap-chip-label">{{ s.title }}</span>
-      </button>
-    </div>
-
-    <div class="ap-list">
-      <button
-        v-for="item in activity.items"
+        v-for="item in items"
         :key="item.key"
         class="ap-item"
         type="button"
-        :title="item.title"
+        :title="`${item.label} · ${fullTime(item.at)}`"
         @click="emit('open', item.path)"
       >
-        <span class="ap-item-icon material-symbols-outlined">{{ iconOf(item) }}</span>
+        <span class="ap-item-icon">
+          <span class="material-symbols-outlined">{{ item.icon }}</span>
+        </span>
         <span class="ap-item-text">
-          <span class="ap-item-title">{{ item.title || sectionTitle(item) }}</span>
-          <span class="ap-item-sub">{{ subtitleOf(item) }}</span>
+          <span class="ap-item-title">{{ item.label }}</span>
+          <span class="ap-item-sub">{{ item.sub }}</span>
         </span>
       </button>
-
-      <p v-if="!activity.items.length" class="ap-empty">
-        Здесь появятся ваши последние действия: созданные задачи, заметки и записи.
-        Из ленты можно вернуться к любому из них.
-      </p>
     </div>
+
+    <p v-else class="ap-empty">здесь будут отображаться ваши последние действия в сервисе</p>
   </aside>
 </template>
 
@@ -56,40 +42,46 @@
 import { computed } from 'vue'
 import { useActivityStore, ACTIONS } from '@/stores/activity.js'
 import { appById } from '@/desktop/apps.js'
-import { timeAgo } from '@/utils/time.js'
+import { timeAgo, fullTime } from '@/utils/time.js'
 
 const emit = defineEmits(['open'])
 
 const activity = useActivityStore()
 
-/* Недавно открытые разделы: id из журнала, всё остальное — из реестра
-   приложений. Раздел, которого у пользователя больше нет (сменилась компания,
-   отключилась фича), из строки просто выпадает. */
-const recentSections = computed(() => activity.sections
-  .map((s) => {
-    const app = appById(s.id)
-    return app ? { id: s.id, title: app.title, icon: app.icon, path: app.path } : null
+/* Значок, название и путь раздела берём из реестра приложений — второго списка
+   разделов на фронте быть не должно. Событие раздела, которого у пользователя
+   больше нет (сменилась компания, отключилась фича), из ленты просто выпадает. */
+const items = computed(() => activity.items
+  .map((item) => {
+    const app = appById(item.section)
+    if (!app) return null
+    const opened = item.action === 'opened'
+    return {
+      key: item.key,
+      icon: app.icon,
+      path: item.path || app.path,
+      label: opened ? app.title : (item.title || app.title),
+      sub: opened
+        ? `${ACTIONS.opened} · ${timeAgo(item.at)}`
+        : `${ACTIONS[item.action] || ACTIONS.created} · ${app.title} · ${timeAgo(item.at)}`,
+      at: item.at,
+    }
   })
   .filter(Boolean))
-
-// Значок и название раздела берём из реестра приложений — второго списка
-// разделов на фронте быть не должно.
-const iconOf = (item) => appById(item.section)?.icon || 'history'
-const sectionTitle = (item) => appById(item.section)?.title || 'Раздел'
-
-function subtitleOf(item) {
-  return `${ACTIONS[item.action] || ACTIONS.created} · ${sectionTitle(item)} · ${timeAgo(item.at)}`
-}
 </script>
 
 <style scoped>
+/* Лента — самостоятельная стеклянная панель рядом с плитками. */
 .ap {
   display: flex;
   flex-direction: column;
   min-height: 0;
-  gap: 8px;
-  padding-left: 16px;
-  border-left: 1px solid var(--acrylic-border);
+  gap: 10px;
+  padding: 16px 12px 12px;
+  border: 1px solid var(--acrylic-border);
+  border-radius: var(--radius-xl);
+  background: var(--glass-bg), var(--acrylic-card-bg);
+  box-shadow: var(--glass-edge);
 }
 
 .ap-head {
@@ -97,29 +89,29 @@ function subtitleOf(item) {
   align-items: center;
   gap: 6px;
   flex-shrink: 0;
-  height: 30px;
+  padding: 0 4px;
 }
 
 .ap-title {
   flex: 1;
   min-width: 0;
-  font-size: 12px;
+  margin: 0;
+  font-size: 16px;
   font-weight: 700;
-  letter-spacing: 0.4px;
-  text-transform: uppercase;
-  color: var(--color-text-dim);
+  letter-spacing: -0.2px;
+  color: var(--color-text);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
 .ap-clear {
-  width: 28px;
-  min-width: 28px;
-  max-width: 28px;
-  height: 28px;
-  min-height: 28px;
-  max-height: 28px;
+  width: 30px;
+  min-width: 30px;
+  max-width: 30px;
+  height: 30px;
+  min-height: 30px;
+  max-height: 30px;
   display: grid;
   place-items: center;
   border: none;
@@ -131,48 +123,7 @@ function subtitleOf(item) {
 }
 
 .ap-clear:hover { background: color-mix(in oklch, var(--color-primary) 12%, transparent); color: var(--color-primary); }
-.ap-clear .material-symbols-outlined { font-size: 18px; }
-
-/* Недавние разделы — компактные чипы, лента ниже остаётся главной. */
-.ap-sections {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px;
-  flex-shrink: 0;
-  padding-bottom: 8px;
-  border-bottom: 1px solid color-mix(in oklch, var(--acrylic-border) 70%, transparent);
-}
-
-.ap-chip {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  max-width: 100%;
-  height: 26px;
-  min-height: 26px;
-  padding: 0 9px;
-  border: 1px solid var(--acrylic-border);
-  border-radius: var(--radius-full);
-  background: var(--glass-bg);
-  color: var(--color-text-dim);
-  font-size: 11.5px;
-  cursor: pointer;
-  transition: color 0.12s, border-color 0.12s;
-}
-
-.ap-chip:hover {
-  color: var(--color-primary);
-  border-color: color-mix(in oklch, var(--color-primary) 32%, var(--acrylic-border));
-}
-
-.ap-chip .material-symbols-outlined { font-size: 15px; }
-
-.ap-chip-label {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
+.ap-clear .material-symbols-outlined { font-size: 20px; }
 
 .ap-list {
   flex: 1;
@@ -181,6 +132,9 @@ function subtitleOf(item) {
   display: flex;
   flex-direction: column;
   gap: 4px;
+  /* Полоса прокрутки — в своём жёлобе справа, а не поверх строк. */
+  scrollbar-gutter: stable;
+  padding-right: 4px;
   scrollbar-width: thin;
 }
 
@@ -200,12 +154,19 @@ function subtitleOf(item) {
 .ap-item:hover { background: color-mix(in oklch, var(--color-primary) 8%, transparent); }
 
 .ap-item-icon {
-  font-size: 20px;
+  display: grid;
+  place-items: center;
   flex-shrink: 0;
+  width: 32px;
+  height: 32px;
+  border-radius: var(--radius-md);
+  background: color-mix(in oklch, var(--color-primary) 10%, transparent);
   color: var(--color-text-dim);
+  transition: color 0.12s;
 }
 
 .ap-item:hover .ap-item-icon { color: var(--color-primary); }
+.ap-item-icon .material-symbols-outlined { font-size: 19px; }
 
 .ap-item-text {
   flex: 1;
@@ -232,9 +193,14 @@ function subtitleOf(item) {
 }
 
 .ap-empty {
-  margin: 8px 4px 0;
-  font-size: 12px;
-  line-height: 1.45;
+  flex: 1;
+  display: grid;
+  place-items: center;
+  margin: 0;
+  padding: 0 18px;
+  font-size: 13px;
+  line-height: 1.5;
+  text-align: center;
   color: var(--color-text-dim);
 }
 </style>

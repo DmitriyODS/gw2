@@ -135,6 +135,9 @@ func (s *Service) CreateUser(ctx context.Context, actor *domain.User, req dto.Cr
 		// верификации обязательная смена пароля при входе при дефолтном пароле).
 		EmailVerified: true,
 	}
+	if err := s.ensureMemberLimit(ctx, companyID); err != nil {
+		return nil, err
+	}
 	if err := s.repo.Create(ctx, user); err != nil {
 		return nil, err
 	}
@@ -293,13 +296,26 @@ func (s *Service) UpdateMe(ctx context.Context, userID int64, req dto.UpdateMeRe
 		updates["login"] = *req.Login
 	}
 
+	// Пользовательский статус — возможность платного тарифа. Снять свой статус
+	// (пустая строка) можно всегда: иначе он завис бы после окончания подписки.
 	if req.StatusEmoji != nil {
-		updates["status_emoji"] = nilIfEmpty(strings.TrimSpace(*req.StatusEmoji))
+		emoji := strings.TrimSpace(*req.StatusEmoji)
+		if emoji != "" {
+			if err := s.planAllowsStatuses(ctx, userID); err != nil {
+				return nil, err
+			}
+		}
+		updates["status_emoji"] = nilIfEmpty(emoji)
 	}
 	if req.StatusText != nil {
 		text := strings.TrimSpace(*req.StatusText)
 		if utf8.RuneCountInString(text) > 80 {
 			return nil, domain.NewError("VALIDATION", "Статус не длиннее 80 символов", 400)
+		}
+		if text != "" {
+			if err := s.planAllowsStatuses(ctx, userID); err != nil {
+				return nil, err
+			}
 		}
 		updates["status_text"] = nilIfEmpty(text)
 	}
@@ -355,6 +371,11 @@ func (s *Service) UploadAvatar(ctx context.Context, userID int64, fileBytes []by
 	if user.AvatarPath != nil {
 		s.avatars.Delete(*user.AvatarPath)
 	}
+	if s.billing != nil {
+		if err := s.billing.EnsureStorage(ctx, userID, 0, int64(len(fileBytes))); err != nil {
+			return nil, err
+		}
+	}
 	path, err := s.avatars.Save(fileBytes)
 	if err != nil {
 		return nil, err
@@ -362,6 +383,10 @@ func (s *Service) UploadAvatar(ctx context.Context, userID int64, fileBytes []by
 	if err := s.repo.UpdateFields(ctx, userID, map[string]any{"avatar_path": path}); err != nil {
 		return nil, err
 	}
+	// Учёт занятого места: прежняя аватарка удалена выше, поэтому в квоту
+	// уходит только разница — размер новой (старую биллинг не считал по
+	// размеру, аватарки мелкие и живут в одном разделе учёта).
+	s.billing.TrackStorage(ctx, userID, 0, "avatars", int64(len(fileBytes)))
 	return s.freshUser(ctx, userID)
 }
 
@@ -742,6 +767,8 @@ func (s *Service) AddCompanyMember(ctx context.Context, actor *domain.User, comp
 		if err := s.guardLastAdmin(ctx, companyID, existing.Role.Level, role.Level); err != nil {
 			return err
 		}
+	} else if err := s.ensureMemberLimit(ctx, companyID); err != nil {
+		return err
 	}
 	if err := s.repo.AddMembership(ctx, userID, companyID, roleID); err != nil {
 		return err
@@ -854,6 +881,9 @@ func (s *Service) CreateCompanyUser(ctx context.Context, actor *domain.User, com
 	user := &domain.User{
 		FIO: req.FIO, Login: req.Login, HashPassword: hashed,
 		Phone: phone, Email: email, IsDefaultPass: isDefault, EmailVerified: true,
+	}
+	if err := s.ensureMemberLimit(ctx, companyID); err != nil {
+		return nil, err
 	}
 	if err := s.repo.Create(ctx, user); err != nil {
 		return nil, err

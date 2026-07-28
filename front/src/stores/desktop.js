@@ -26,8 +26,8 @@ export const useDesktopStore = defineStore('desktop', () => {
   const focusedId = ref(null)
   const startOpen = ref(false)
   const notifOpen = ref(false)
-  // Строка глобального поиска (Spotlight) — модальное окно поверх всего.
-  const searchOpen = ref(false)
+  // Всплывающая панель Hola (поиск, команды, чат) — поверх стола, вне окон.
+  const holaOpen = ref(false)
   // Подсветка зоны прилипания во время перетаскивания окна.
   const snapPreview = ref(null)
   // Рабочая область (экран минус панель задач) — задаёт DesktopShell.
@@ -326,11 +326,15 @@ export const useDesktopStore = defineStore('desktop', () => {
     windows.value = []
     focusedId.value = null
     snapPreview.value = null
+    // Всплывающие слои чужого сеанса тоже не должны пережить смену пользователя.
+    startOpen.value = false
+    notifOpen.value = false
+    holaOpen.value = false
     persist()
   }
 
   return {
-    windows, focusedId, focused, hasWindows, startOpen, notifOpen, searchOpen, snapPreview,
+    windows, focusedId, focused, hasWindows, startOpen, notifOpen, holaOpen, snapPreview,
     area, screen, taskbarRect, bellCenter, fullscreen, taskbarPeek, zoneRect,
     byId, open, openApp, navigate, back, canGoBack,
     focus, close, minimize, restore, toggleFromTaskbar,

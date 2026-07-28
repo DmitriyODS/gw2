@@ -5,13 +5,13 @@
         <!-- Левая колонка: марка, компания, плитки и карточка пользователя —
              всё, что относится к запуску разделов, живёт только здесь. -->
         <div class="sm-main">
+        <div class="sm-panel">
         <header class="sm-head">
           <button class="sm-brand" type="button" title="О приложении" @click="openAbout">
             <span class="sm-word-groove">Groove</span>
             <span class="sm-word-work">Work</span>
             <span v-if="majorVersion" class="sm-word-work">{{ majorVersion }}</span>
           </button>
-          <CompanySelect variant="row" class="sm-company" />
         </header>
 
         <div class="sm-body">
@@ -97,12 +97,19 @@
           Новый раздел
         </button>
         </div>
+        </div>
 
+        <!-- Подвал: кто я, активная компания, настройки и выход — одной строкой. -->
         <footer class="sm-foot">
-          <button class="sm-user" type="button" title="Профиль" @click="launchPath('/profile')">
-            <img class="sm-avatar" :src="avatarSrc" :alt="auth.user?.fio" />
-            <span class="sm-user-name">{{ auth.user?.fio || 'Профиль' }}</span>
+          <button
+            class="sm-user"
+            type="button"
+            :title="auth.user?.fio || 'Аккаунт'"
+            @click="launchPath('/settings?section=account')"
+          >
+            <img class="sm-avatar" :src="avatarSrc" :alt="auth.user?.fio || 'Аккаунт'" />
           </button>
+          <CompanySelect variant="button" class="sm-company" />
           <button class="sm-icon-btn" type="button" title="Настройки" @click="launchPath('/settings')">
             <span class="material-symbols-outlined">settings</span>
           </button>
@@ -423,13 +430,13 @@ function onGroupMenuSelect(action) {
   left: 50%;
   transform: translateX(-50%);
   bottom: calc(var(--taskbar-height) + 24px);
-  /* Плитки + колонка последних действий (на узком экране колонка скрывается). */
-  width: min(812px, calc(100vw - 24px));
+  /* Плитки + колонка «Моя активность» (на узком экране колонка скрывается). */
+  width: min(900px, calc(100vw - 24px));
   max-height: min(820px, calc(100dvh - var(--taskbar-height) - 48px));
   display: flex;
   flex-direction: column;
-  padding: 22px;
-  gap: 16px;
+  padding: 12px;
+  gap: 12px;
   background: var(--acrylic-bg-strong);
   -webkit-backdrop-filter: var(--acrylic-blur);
   backdrop-filter: var(--acrylic-blur);
@@ -450,7 +457,7 @@ function onGroupMenuSelect(action) {
   scale: 0.92;
 }
 
-/* ── Шапка: марка + активная компания ── */
+/* ── Шапка: марка (выбор компании живёт в подвале) ── */
 .sm-head {
   display: flex;
   align-items: center;
@@ -482,19 +489,7 @@ function onGroupMenuSelect(action) {
 .sm-word-groove { color: var(--color-primary); }
 .sm-word-work { color: var(--color-text); }
 
-.sm-company { margin-left: auto; min-width: 0; max-width: 300px; }
-
-.sm-company :deep(.company-row) {
-  background: var(--glass-bg);
-  border: 1px solid var(--acrylic-border);
-  box-shadow: var(--glass-edge);
-  border-radius: var(--radius-lg);
-}
-
-.sm-company :deep(.company-row:hover) {
-  border-color: color-mix(in oklch, var(--color-primary) 30%, var(--acrylic-border));
-  background: var(--glass-bg);
-}
+.sm-company { flex: 1; min-width: 0; }
 
 /* ── Разделы и плитки ──
    Сетка 4 колонки: широкая плитка занимает две, квадратная — одну.
@@ -505,16 +500,30 @@ function onGroupMenuSelect(action) {
   flex: 1;
   min-height: 0;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 244px;
-  gap: 16px;
+  grid-template-columns: minmax(0, 1fr) 300px;
+  gap: 14px;
 }
 
 .sm-main {
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 14px;
   min-width: 0;
   min-height: 0;
+}
+
+/* Стеклянная подложка под марку и плитки — парная к панели «Моя активность». */
+.sm-panel {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid var(--acrylic-border);
+  border-radius: var(--radius-xl);
+  background: var(--glass-bg), var(--acrylic-card-bg);
+  box-shadow: var(--glass-edge);
 }
 
 .sm-body {
@@ -524,7 +533,10 @@ function onGroupMenuSelect(action) {
   display: flex;
   flex-direction: column;
   gap: 14px;
-  padding-right: 2px;
+  /* Жёлоб под полосу прокрутки резервируется всегда — иначе она ложится
+     поверх плиток, а при появлении дёргает всю сетку. */
+  scrollbar-gutter: stable;
+  padding-right: 10px;
   scrollbar-width: thin;
 }
 
@@ -729,47 +741,46 @@ function onGroupMenuSelect(action) {
   opacity: 0.7;
 }
 
-/* ── Подвал: пользователь, настройки, выход ── */
+/* ── Подвал: пользователь, компания, настройки, выход — на своей подложке ── */
 .sm-foot {
   display: flex;
   align-items: center;
   gap: 10px;
   flex-shrink: 0;
+  padding: 10px;
+  border: 1px solid var(--acrylic-border);
+  border-radius: var(--radius-xl);
+  background: var(--glass-bg), var(--acrylic-card-bg);
+  box-shadow: var(--glass-edge);
 }
 
+/* Аватар — круглая кнопка входа в аккаунт (имя не дублируем: оно в подсказке). */
 .sm-user {
-  flex: 1;
-  min-width: 0;
-  display: flex;
-  align-items: center;
-  gap: 12px;
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  width: 52px;
+  min-width: 52px;
+  max-width: 52px;
   height: 52px;
-  padding: 0 12px;
+  min-height: 52px;
+  max-height: 52px;
+  padding: 0;
   border: 1px solid var(--acrylic-border);
-  border-radius: var(--radius-lg);
+  border-radius: 50%;
   background: var(--glass-bg);
   box-shadow: var(--glass-edge);
+  overflow: hidden;
   cursor: pointer;
   transition: border-color 0.15s;
 }
 
-.sm-user:hover { border-color: color-mix(in oklch, var(--color-primary) 30%, var(--acrylic-border)); }
+.sm-user:hover { border-color: color-mix(in oklch, var(--color-primary) 34%, var(--acrylic-border)); }
 
 .sm-avatar {
-  width: 36px;
-  height: 36px;
-  border-radius: var(--radius-md);
+  width: 100%;
+  height: 100%;
   object-fit: cover;
-  flex-shrink: 0;
-}
-
-.sm-user-name {
-  font-size: 15px;
-  font-weight: 500;
-  color: var(--color-text);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 .sm-icon-btn {

@@ -168,6 +168,9 @@ func (s *Service) createTaskCore(ctx context.Context, actorID, companyID int64, 
 	if err := s.ensureNotOnVacation(ctx, actorID, &companyID); err != nil {
 		return nil, err
 	}
+	if err := s.ensureTaskLimit(ctx, companyID); err != nil {
+		return nil, err
+	}
 	dept, err := s.depts.GetDepartment(ctx, req.DepartmentID)
 	if err != nil {
 		return nil, err

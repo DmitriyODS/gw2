@@ -104,10 +104,12 @@ type UserReader interface {
 
 // FileStore — хранение вложений постов (общий uploads-том или S3).
 type FileStore interface {
-	// Save — записать файл, вернуть относительный путь (ключ) хранилища.
-	Save(fileName string, data []byte) (string, error)
-	// Remove — best-effort удаление файлов по ключам (чистка при удалении постов).
-	Remove(paths []string)
+	// SaveFor — записать файл в квоту компании (её оплачивает создатель):
+	// сверх лимита тарифа файл не сохраняется.
+	SaveFor(ctx context.Context, userID, companyID int64, fileName string, data []byte) (string, error)
+	// RemoveFor — best-effort удаление файлов по ключам с возвратом места в
+	// квоту (чистка при удалении постов и вложений).
+	RemoveFor(ctx context.Context, userID, companyID int64, paths []string)
 }
 
 // EventBus — сокет-события клиентам через Redis gw2:portal:events

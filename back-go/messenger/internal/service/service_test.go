@@ -23,8 +23,8 @@ type fakeRepo struct {
 	members map[int64]map[int64]*domain.Member // convID → userID → участник группы
 	users   *fakeUsers                         // ФИО для reply/forwarded_from
 
-	folders     map[int64]*domain.Folder     // folderID → папка
-	folderItems map[int64]map[int64]bool      // folderID → set(convID)
+	folders     map[int64]*domain.Folder // folderID → папка
+	folderItems map[int64]map[int64]bool // folderID → set(convID)
 
 	nextConv, nextMsg, nextAtt, nextFolder int64
 	now                                    time.Time
@@ -32,9 +32,9 @@ type fakeRepo struct {
 
 func newFakeRepo(users *fakeUsers) *fakeRepo {
 	return &fakeRepo{
-		convs: map[int64]*domain.Conversation{},
-		msgs:  map[int64]*domain.Message{},
-		atts:  map[int64]*domain.Attachment{},
+		convs:   map[int64]*domain.Conversation{},
+		msgs:    map[int64]*domain.Message{},
+		atts:    map[int64]*domain.Attachment{},
 		calls:   map[int64]*domain.CallInfo{},
 		tasks:   map[int64]*domain.TaskPreview{},
 		members: map[int64]map[int64]*domain.Member{},

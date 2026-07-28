@@ -25,6 +25,7 @@ import (
 	"github.com/DmitriyODS/gw2/back-go/notes/internal/service"
 	grpctransport "github.com/DmitriyODS/gw2/back-go/notes/internal/transport/grpc"
 	httptransport "github.com/DmitriyODS/gw2/back-go/notes/internal/transport/http"
+	"github.com/DmitriyODS/gw2/back-go/pkg/billingclient"
 	"github.com/DmitriyODS/gw2/back-go/pkg/bootstrap"
 	"github.com/DmitriyODS/gw2/back-go/pkg/events"
 	"github.com/DmitriyODS/gw2/back-go/pkg/gen/notespb"
@@ -78,10 +79,22 @@ func main() {
 		}
 	}
 
+	// Учёт занятого места — gRPC billingsvc (по количеству заметки тарифом не
+	// ограничены, но картинки редактора занимают квоту владельца). Пустой
+	// адрес выключает учёт, недоступный биллинг его не блокирует (fail-open).
+	billing, err := billingclient.New(bootstrap.Env("BILLING_GRPC_ADDR", ""), log)
+	if err != nil {
+		log.Error("billing.dial_failed", "error", err)
+		os.Exit(1)
+	}
+	defer billing.Close()
+	fileStore := records.NewFileStore(storage.FromEnv(log, uploadFolder), "notes").
+		WithQuota(billing, "notes")
+
 	svc := service.New(service.Deps{
 		Repo:     repo,
 		Users:    users,
-		Files:    records.NewFileStore(storage.FromEnv(log, uploadFolder), "notes"),
+		Files:    fileStore,
 		Bus:      events.NewPublisher(rdb, log, "gw2:notes:events"),
 		Limiter:  redisrepo.NewWriteLimiter(rdb, sharedWriteLimit),
 		Embedder: embedder,

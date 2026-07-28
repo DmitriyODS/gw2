@@ -157,8 +157,11 @@ type EventBus interface {
 // FileStore — хранилище картинок редактора (pkg/records.FileStore поверх
 // pkg/storage: local-том в dev, S3 в prod).
 type FileStore interface {
-	Save(fileName string, data []byte) (string, error)
-	Remove(paths []string)
+	// SaveFor — записать файл в квоту ВЛАДЕЛЬЦА (личный раздел): сверх лимита
+	// тарифа файл не сохраняется.
+	SaveFor(ctx context.Context, userID, companyID int64, fileName string, data []byte) (string, error)
+	// RemoveFor — удаление с возвратом места в квоту владельца.
+	RemoveFor(ctx context.Context, userID, companyID int64, paths []string)
 	// Open — прочитать байты объекта по ключу (встраивание картинок в docx).
 	Open(key string) ([]byte, error)
 }

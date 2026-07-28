@@ -320,7 +320,8 @@ func (h *handlers) exportEntries(c *fiber.Ctx) error {
 // ── Загрузка файла ───────────────────────────────────────────────
 
 func (h *handlers) upload(c *fiber.Ctx) error {
-	if _, ok := companyScope(c); !ok {
+	companyID, ok := companyScope(c)
+	if !ok {
 		return nil
 	}
 	fileHeader, err := c.FormFile("file")
@@ -343,9 +344,11 @@ func (h *handlers) upload(c *fiber.Ctx) error {
 		return validationError(c, "Файл слишком большой (макс. 25 МБ)")
 	}
 	resp, err := h.eps.Upload(c.Context(), endpoint.UploadReq{
-		FileName: fileHeader.Filename,
-		Mime:     fileHeader.Header.Get(fiber.HeaderContentType),
-		Data:     data,
+		CompanyID: companyID,
+		UserID:    currentUser(c).ID,
+		FileName:  fileHeader.Filename,
+		Mime:      fileHeader.Header.Get(fiber.HeaderContentType),
+		Data:      data,
 	})
 	if err != nil {
 		return h.respondError(c, err)

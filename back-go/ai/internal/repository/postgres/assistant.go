@@ -23,13 +23,13 @@ func NewAssistantRepo(pool *pgxpool.Pool) *AssistantRepo {
 	return &AssistantRepo{pool: pool}
 }
 
-func (r *AssistantRepo) GetOrCreateConversation(ctx context.Context, userID, companyID int64) (*domain.AssistantConversation, error) {
+func (r *AssistantRepo) GetOrCreateConversation(ctx context.Context, userID int64) (*domain.AssistantConversation, error) {
 	var c domain.AssistantConversation
 	err := r.pool.QueryRow(ctx, `
-		SELECT id, user_id, company_id, created_at
+		SELECT id, user_id, created_at
 		  FROM ai_assistant_conversations
-		 WHERE user_id = $1 AND company_id = $2`, userID, companyID).
-		Scan(&c.ID, &c.UserID, &c.CompanyID, &c.CreatedAt)
+		 WHERE user_id = $1`, userID).
+		Scan(&c.ID, &c.UserID, &c.CreatedAt)
 	if err == nil {
 		return &c, nil
 	}
@@ -38,11 +38,11 @@ func (r *AssistantRepo) GetOrCreateConversation(ctx context.Context, userID, com
 	}
 	// ON CONFLICT — на случай гонки параллельных первых сообщений.
 	err = r.pool.QueryRow(ctx, `
-		INSERT INTO ai_assistant_conversations (user_id, company_id)
-		VALUES ($1, $2)
-		ON CONFLICT (user_id, company_id) DO UPDATE SET user_id = EXCLUDED.user_id
-		RETURNING id, user_id, company_id, created_at`, userID, companyID).
-		Scan(&c.ID, &c.UserID, &c.CompanyID, &c.CreatedAt)
+		INSERT INTO ai_assistant_conversations (user_id)
+		VALUES ($1)
+		ON CONFLICT (user_id) DO UPDATE SET user_id = EXCLUDED.user_id
+		RETURNING id, user_id, created_at`, userID).
+		Scan(&c.ID, &c.UserID, &c.CreatedAt)
 	if err != nil {
 		return nil, err
 	}
@@ -120,23 +120,23 @@ func (r *AssistantRepo) AppendMessage(ctx context.Context, conversationID int64,
 }
 
 // UpsertFeedback — INSERT … SELECT с проверкой принадлежности в одном
-// запросе: сообщение должно быть ответом ассистента в диалоге именно этой
-// пары (userID, companyID) — чужой message_id не проходит фильтр SELECT и
-// возвращает false без ошибки.
-func (r *AssistantRepo) UpsertFeedback(ctx context.Context, messageID, userID, companyID int64, verdict string, reason *string) (bool, error) {
+// запросе: сообщение должно быть ответом ассистента в диалоге именно этого
+// пользователя — чужой message_id не проходит фильтр SELECT и возвращает
+// false без ошибки.
+func (r *AssistantRepo) UpsertFeedback(ctx context.Context, messageID, userID int64, verdict string, reason *string) (bool, error) {
 	// Явные касты обязательны: $2 стоит и в SELECT-списке, и в WHERE —
 	// без каста Postgres не может однозначно вывести тип параметра
 	// («inconsistent types deduced», SQLSTATE 42P08).
 	tag, err := r.pool.Exec(ctx, `
 		INSERT INTO ai_assistant_feedback (message_id, user_id, verdict, reason)
-		SELECT m.id, $2::bigint, $4::text, $5::text
+		SELECT m.id, $2::bigint, $3::text, $4::text
 		  FROM ai_assistant_messages m
 		  JOIN ai_assistant_conversations c ON c.id = m.conversation_id
 		 WHERE m.id = $1 AND m.role = 'assistant'
-		   AND c.user_id = $2::bigint AND c.company_id = $3
+		   AND c.user_id = $2::bigint
 		ON CONFLICT (message_id, user_id)
 		DO UPDATE SET verdict = EXCLUDED.verdict, reason = EXCLUDED.reason, created_at = now()`,
-		messageID, userID, companyID, verdict, reason)
+		messageID, userID, verdict, reason)
 	if err != nil {
 		return false, err
 	}

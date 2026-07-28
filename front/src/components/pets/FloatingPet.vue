@@ -70,8 +70,6 @@ const { pos, dragging, onPointerDown, wasDragged } = useDraggable({
   // Запас под AppBottomNav (64px) + safe-area на мобильном — функции
   // пересчитываются на каждый clamp, так что resize/поворот учитываются.
   bottomInset: () => (isNarrow() ? 104 : 0),
-  // Правый нижний угол занят FAB мини-хаба (56px + отступы) — туда не снапаем.
-  rightBottomReserve: () => (isNarrow() ? 76 : 90),
 })
 
 // transform вместо left/top: композит-слой, без layout на каждый кадр драга.
@@ -175,7 +173,7 @@ onBeforeUnmount(() => clearTimeout(bubbleTimer))
   position: fixed;
   left: 0;
   top: 0; /* позиция — через transform (см. rootStyle) */
-  z-index: 10055; /* выше ActiveUnitModal (9999), рядом с MiniMessenger (10050) */
+  z-index: 10055; /* выше ActiveUnitModal (9999) и диалогов PrimeVue */
   display: flex;
   flex-direction: column;
   align-items: center;

@@ -49,7 +49,7 @@ REMINDER_PID=""
 ALICE_PID=""
 
 # Все Go-сервисы (имя бинаря в go-build/exe — по нему ловим осиротевшие процессы).
-SVCS="callsvc authsvc msgsvc aisvc petsvc tasksvc gatewaysvc pushsvc mailsvc registrysvc calendarsvc diarysvc portalsvc notesvc boardsvc remindersvc alicesvc"
+SVCS="callsvc authsvc msgsvc aisvc petsvc tasksvc gatewaysvc pushsvc mailsvc registrysvc calendarsvc diarysvc portalsvc notesvc boardsvc remindersvc billingsvc alicesvc"
 
 # Dev-ключи PASETO (синхронизированы с Makefile и
 # deploy/docker-compose.override.yml): приватный — только у authsvc,
@@ -187,6 +187,7 @@ printf "\033[1m▶ callsvc (Go)  gRPC :9090  HTTP :8090...\033[0m\n"
   DATABASE_URL="postgresql://grovework:grovework_local@localhost:5432/grovework" \
   REDIS_URL="redis://localhost:6379/0" \
   PASETO_PUBLIC_KEY="$PASETO_PUBLIC_KEY_DEV" \
+  BILLING_GRPC_ADDR="localhost:9107" \
   LIVEKIT_API_KEY="devkey" \
   LIVEKIT_API_SECRET="dev_livekit_secret_min_32_chars_ok" \
   LIVEKIT_URL="http://localhost:7880" \
@@ -207,6 +208,7 @@ printf "\033[1m▶ authsvc (Go)  HTTP :8091...\033[0m\n"
   PASETO_REFRESH_KEY="$PASETO_REFRESH_KEY_DEV" \
   UPLOAD_FOLDER="$UPLOADS" \
   MAIL_GRPC_ADDR="localhost:9098" \
+  BILLING_GRPC_ADDR="localhost:9107" \
   APP_PUBLIC_BASE_URL="http://${PRIMARY_IP}:5173" \
   OAUTH_ALICE_CLIENT_ID="alice-dev" \
   OAUTH_ALICE_CLIENT_SECRET="alice-dev-secret" \
@@ -222,6 +224,7 @@ printf "\033[1m▶ msgsvc (Go)  gRPC :9092  HTTP :8092...\033[0m\n"
   DATABASE_URL="postgresql://grovework:grovework_local@localhost:5432/grovework" \
   REDIS_URL="redis://localhost:6379/0" \
   PASETO_PUBLIC_KEY="$PASETO_PUBLIC_KEY_DEV" \
+  BILLING_GRPC_ADDR="localhost:9107" \
   UPLOAD_FOLDER="$UPLOADS" \
   HTTP_ADDR=":8092" \
   GRPC_ADDR=":9092" \
@@ -238,6 +241,7 @@ printf "\033[1m▶ aisvc (Go)  gRPC :9093  HTTP :8093...\033[0m\n"
   DATABASE_URL="postgresql://grovework:grovework_local@localhost:5432/grovework" \
   REDIS_URL="redis://localhost:6379/0" \
   PASETO_PUBLIC_KEY="$PASETO_PUBLIC_KEY_DEV" \
+  BILLING_GRPC_ADDR="localhost:9107" \
   AI_KEY_ENCRYPTION_KEY="X3hFOVZ6XbAzlaygv2PfLbnmBIaH373CK8MqrrAhr8k=" \
   HTTP_ADDR=":8093" \
   GRPC_ADDR=":9093" \
@@ -253,6 +257,7 @@ printf "\033[1m▶ petsvc (Go)  gRPC :9094  HTTP :8094...\033[0m\n"
   DATABASE_URL="postgresql://grovework:grovework_local@localhost:5432/grovework" \
   REDIS_URL="redis://localhost:6379/0" \
   PASETO_PUBLIC_KEY="$PASETO_PUBLIC_KEY_DEV" \
+  BILLING_GRPC_ADDR="localhost:9107" \
   HTTP_ADDR=":8094" \
   GRPC_ADDR=":9094" \
   exec go run ./cmd/petsvc
@@ -270,6 +275,7 @@ printf "\033[1m▶ tasksvc (Go)  HTTP :8095...\033[0m\n"
   DATABASE_URL="postgresql://grovework:grovework_local@localhost:5432/grovework" \
   REDIS_URL="redis://localhost:6379/0" \
   PASETO_PUBLIC_KEY="$PASETO_PUBLIC_KEY_DEV" \
+  BILLING_GRPC_ADDR="localhost:9107" \
   PETS_GRPC_ADDR="localhost:9094" \
   AI_GRPC_ADDR="localhost:9093" \
   YOUGILE_ENC_KEY="CT5VF1jg6uFFbj4W_6RW3z3416bPlfbxdMYelrEOIXc=" \
@@ -333,6 +339,7 @@ printf "\033[1m▶ registrysvc (Go)  HTTP :8099...\033[0m\n"
   DATABASE_URL="postgresql://grovework:grovework_local@localhost:5432/grovework" \
   REDIS_URL="redis://localhost:6379/0" \
   PASETO_PUBLIC_KEY="$PASETO_PUBLIC_KEY_DEV" \
+  BILLING_GRPC_ADDR="localhost:9107" \
   UPLOAD_FOLDER="$ROOT/uploads" \
   HTTP_ADDR=":8099" \
   exec go run ./cmd/registrysvc
@@ -348,6 +355,7 @@ printf "\033[1m▶ calendarsvc (Go)  HTTP :8100...\033[0m\n"
   DATABASE_URL="postgresql://grovework:grovework_local@localhost:5432/grovework" \
   REDIS_URL="redis://localhost:6379/0" \
   PASETO_PUBLIC_KEY="$PASETO_PUBLIC_KEY_DEV" \
+  BILLING_GRPC_ADDR="localhost:9107" \
   UPLOAD_FOLDER="$ROOT/uploads" \
   HTTP_ADDR=":8100" \
   exec go run ./cmd/calendarsvc
@@ -363,6 +371,7 @@ printf "\033[1m▶ diarysvc (Go)  HTTP :8101...\033[0m\n"
   DATABASE_URL="postgresql://grovework:grovework_local@localhost:5432/grovework" \
   REDIS_URL="redis://localhost:6379/0" \
   PASETO_PUBLIC_KEY="$PASETO_PUBLIC_KEY_DEV" \
+  BILLING_GRPC_ADDR="localhost:9107" \
   HTTP_ADDR=":8101" \
   exec go run ./cmd/diarysvc
 ) &
@@ -377,6 +386,7 @@ printf "\033[1m▶ portalsvc (Go)  HTTP :8102...\033[0m\n"
   DATABASE_URL="postgresql://grovework:grovework_local@localhost:5432/grovework" \
   REDIS_URL="redis://localhost:6379/0" \
   PASETO_PUBLIC_KEY="$PASETO_PUBLIC_KEY_DEV" \
+  BILLING_GRPC_ADDR="localhost:9107" \
   UPLOAD_FOLDER="$UPLOADS" \
   MESSENGER_GRPC_ADDR="localhost:9092" \
   HTTP_ADDR=":8102" \
@@ -394,6 +404,7 @@ printf "\033[1m▶ notesvc (Go)  HTTP :8103...\033[0m\n"
   DATABASE_URL="postgresql://grovework:grovework_local@localhost:5432/grovework" \
   REDIS_URL="redis://localhost:6379/0" \
   PASETO_PUBLIC_KEY="$PASETO_PUBLIC_KEY_DEV" \
+  BILLING_GRPC_ADDR="localhost:9107" \
   UPLOAD_FOLDER="$UPLOADS" \
   AI_GRPC_ADDR="localhost:9093" \
   HTTP_ADDR=":8103" \
@@ -411,6 +422,7 @@ printf "\033[1m▶ boardsvc (Go)  HTTP :8105...\033[0m\n"
   DATABASE_URL="postgresql://grovework:grovework_local@localhost:5432/grovework" \
   REDIS_URL="redis://localhost:6379/0" \
   PASETO_PUBLIC_KEY="$PASETO_PUBLIC_KEY_DEV" \
+  BILLING_GRPC_ADDR="localhost:9107" \
   UPLOAD_FOLDER="$UPLOADS" \
   HTTP_ADDR=":8105" \
   exec go run ./cmd/boardsvc
@@ -430,6 +442,21 @@ printf "\033[1m▶ remindersvc (Go)  HTTP :8106...\033[0m\n"
   exec go run ./cmd/remindersvc
 ) &
 REMINDER_PID=$!
+
+# 12g2. Go-микросервис подписок и магазина billingsvc (HTTP :8107 — REST
+#      /api/billing/*, gRPC :9107 — лимиты тарифа для остальных сервисов).
+#      Внутри — планировщик продлений подписок и докупок.
+printf "\033[1m▶ billingsvc (Go)  HTTP :8107, gRPC :9107...\033[0m\n"
+(
+  cd "$ROOT/back-go/billing" && \
+  DATABASE_URL="postgresql://grovework:grovework_local@localhost:5432/grovework" \
+  REDIS_URL="redis://localhost:6379/0" \
+  PASETO_PUBLIC_KEY="$PASETO_PUBLIC_KEY_DEV" \
+  HTTP_ADDR=":8107" \
+  GRPC_ADDR=":9107" \
+  exec go run ./cmd/billingsvc
+) &
+BILLING_PID=$!
 
 # 12h. Go-микросервис навыка Алисы alicesvc (HTTP :8104 — публичный вебхук
 #      /api/alice/webhook). Состояния нет; голосовые команды — gRPC-вызовы

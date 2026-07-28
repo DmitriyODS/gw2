@@ -120,6 +120,16 @@ func (f *fakeStore) GetTask(_ context.Context, id int64) (*domain.Task, error) {
 	return f.tasks[id], nil
 }
 
+func (f *fakeStore) CountCompanyTasks(_ context.Context, companyID int64) (int64, error) {
+	var n int64
+	for _, t := range f.tasks {
+		if t.CompanyID == companyID {
+			n++
+		}
+	}
+	return n, nil
+}
+
 func (f *fakeStore) ListTasks(_ context.Context, fl domain.TaskListFilter) ([]*domain.Task, int, error) {
 	if fl.OrderedSet && len(fl.OrderedIDs) == 0 {
 		return []*domain.Task{}, 0, nil
