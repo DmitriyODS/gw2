@@ -1,38 +1,26 @@
 <template>
-  <div class="admin-page">
-    <header class="admin-sticky">
-      <!-- Тулбар в стиле «Задач»: статы-чипы слева, главное действие справа. -->
-      <div class="pets-toolbar">
-        <div class="pets-toolbar-stats">
-          <button
-            v-if="pet"
-            class="chip-tint chip-tint--primary pets-balance-chip"
-            type="button"
-            title="Открыть кудо-банк"
-            @click="router.push('/pets/bank')"
-          >
-            <KudosCoin class="meta-emoji" />
-            <strong>{{ pet.kudos }}</strong><span class="pets-chip-label">&nbsp;кудосов</span>
-          </button>
-          <span v-if="pet?.feed_streak" class="chip-tint chip-tint--warning pets-streak-chip">
-            <span class="material-symbols-outlined">local_fire_department</span>
-            <strong>{{ pet.feed_streak }}</strong>&nbsp;дн.
-          </span>
-        </div>
-        <div class="pets-toolbar-actions">
-          <button class="btn-glass pets-bank-btn" type="button" @click="router.push('/pets/bank')">
-            <span class="material-symbols-outlined">account_balance</span>
-            <span class="shop-cta-label">Банк</span>
-          </button>
-          <button class="btn-grad pets-shop-btn" type="button" @click="router.push('/pets/shop')">
-            <span class="material-symbols-outlined">storefront</span>
-            <span class="shop-cta-label">Магазин</span>
-          </button>
-        </div>
-      </div>
-    </header>
+  <AppPage title="Питомцы" :commands="commands" @command="onCommand">
+    <template #status>
+      <AppChip
+        v-if="pet"
+        tone="primary"
+        interactive
+        :count="pet.kudos"
+        label="кудосов"
+        title="Открыть кудо-банк"
+        @click="router.push('/pets/bank')"
+      >
+        <KudosCoin class="meta-emoji" />
+      </AppChip>
+      <AppChip
+        v-if="pet?.feed_streak"
+        tone="warning"
+        icon="local_fire_department"
+        :count="pet.feed_streak"
+        label="дн."
+      />
+    </template>
 
-    <div class="admin-body">
       <LiveNowBar class="pets-live" />
 
       <section class="pets-overview">
@@ -88,16 +76,17 @@
       <section ref="ratingEl" class="pets-section">
         <RatingCard />
       </section>
-    </div>
 
     <PetDetailModal v-if="detailOpen" @close="detailOpen = false" />
-  </div>
+  </AppPage>
 </template>
 
 <script setup>
 import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import EmojiGlyph from '@/components/common/EmojiGlyph.vue'
 import { useRoute, useRouter } from 'vue-router'
+import AppChip from '@/components/ui/AppChip.vue'
+import AppPage from '@/components/ui/AppPage.vue'
 import KudosCoin from '@/components/pets/KudosCoin.vue'
 import LiveNowBar from '@/components/pets/LiveNowBar.vue'
 import RatingCard from '@/components/pets/RatingCard.vue'
@@ -114,6 +103,15 @@ const pets = usePetsStore()
 const authStore = useAuthStore()
 
 const detailOpen = ref(false)
+
+const commands = [
+  { key: 'shop', label: 'Магазин', icon: 'storefront', variant: 'filled', primary: true },
+  { key: 'bank', label: 'Кудо-банк', icon: 'account_balance' },
+]
+
+function onCommand(key) {
+  router.push(key === 'shop' ? '/pets/shop' : '/pets/bank')
+}
 const colleaguesEl = ref(null)
 const ratingEl = ref(null)
 
@@ -175,24 +173,6 @@ onMounted(async () => {
 /* Тулбар без подложки — прозрачная «плавающая» шапка как в «Задачах». */
 .admin-sticky { background: transparent; -webkit-backdrop-filter: none; backdrop-filter: none; }
 .admin-sticky::after { display: none; }
-
-/* Одна строка без переносов: статы слева (ужимаются), действия справа. */
-.pets-toolbar { display: flex; align-items: center; gap: 10px; flex-wrap: nowrap; min-width: 0; }
-.pets-toolbar-stats {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex: 1;
-  min-width: 0;
-  overflow-x: auto;
-  scrollbar-width: none;
-}
-.pets-toolbar-stats::-webkit-scrollbar { display: none; }
-.pets-toolbar-actions { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
-.pets-bank-btn, .pets-shop-btn { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
-.pets-streak-chip { white-space: nowrap; }
-/* Чип баланса — кнопка (открывает кудо-банк), но выглядит как обычный чип. */
-.pets-balance-chip { border: none; font: inherit; cursor: pointer; white-space: nowrap; }
 .meta-emoji { font-size: 14px; }
 
 .pets-live { margin-bottom: 16px; }
