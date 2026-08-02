@@ -190,6 +190,7 @@ import Underline from '@tiptap/extension-underline'
 import Link from '@tiptap/extension-link'
 import { ResizableImage } from './ResizableImage.js'
 import { LineGutter } from './LineGutter.js'
+import { LineNumbers } from './LineNumbers.js'
 import Table from '@tiptap/extension-table'
 import TableRow from '@tiptap/extension-table-row'
 import TableCell from '@tiptap/extension-table-cell'
@@ -251,6 +252,8 @@ const editor = useEditor({
     // Поле выделения слева от строки: клик выделяет строку целиком, протяжка —
     // несколько (как в Word).
     LineGutter,
+    // Номера строк в том же поле.
+    LineNumbers,
   ],
   onUpdate: ({ editor: ed }) => emit('change', ed.getJSON()),
   onBlur: () => emit('blur'),
@@ -520,6 +523,35 @@ defineExpose({ editor })
 /* Поле выделения слева: пока указатель в нём, курсор — стрелка выбора, а
    строка под ним подсвечена (иначе о поле никто не догадается). */
 .ne-content :deep(.tiptap.ne-gutter-zone) { cursor: default; }
+
+/* Номера строк: сам номер — ::before блока, поэтому он не попадает ни в
+   выделение, ни в копирование, ни в выгрузку. Правое выравнивание держит
+   колонку ровной при переходе через десяток. */
+.ne-content :deep(.tiptap .ne-numbered) { position: relative; }
+
+.ne-content :deep(.tiptap .ne-numbered)::before {
+  content: attr(data-line);
+  position: absolute;
+  left: -30px;
+  width: 22px;
+  text-align: right;
+  color: var(--color-text-dim);
+  opacity: 0.55;
+  font-size: 11.5px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  line-height: inherit;
+  user-select: none;
+  pointer-events: none;
+}
+
+/* У заголовков строка выше — номер прижимаем к первой строке текста. */
+.ne-content :deep(.tiptap h1.ne-numbered)::before,
+.ne-content :deep(.tiptap h2.ne-numbered)::before,
+.ne-content :deep(.tiptap h3.ne-numbered)::before {
+  top: 0.35em;
+  line-height: 1.4;
+}
 
 .ne-content :deep(.ne-line-hover) {
   background: color-mix(in oklch, var(--color-primary) 12%, transparent);
