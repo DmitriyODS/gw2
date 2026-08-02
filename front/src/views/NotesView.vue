@@ -1,75 +1,18 @@
 <template>
-  <div
+  <AppListDetail
     class="na"
     :class="{ 'na-explorer': isExplorer }"
+    :open="true"
+    :collapsed="isExplorer"
+    :list-width="270"
     @dragover="onFileDragOver"
     @dragleave="onFileDragLeave"
     @drop="onFileDrop"
   >
-    <!-- ── Верхний тулбар ── -->
-    <header class="na-toolbar">
-      <div class="na-toolbar-row">
-        <SearchField v-model="searchInput" placeholder="Поиск по заметкам…" hotkey />
-        <div class="na-actions">
-          <div v-if="!isMobile" class="na-modes" role="tablist" aria-label="Режим отображения">
-            <button
-              class="na-mode" :class="{ active: store.viewMode === 'hierarchy' }"
-              role="tab" title="Иерархия" @click="store.setViewMode('hierarchy')"
-            >
-              <span class="material-symbols-outlined">account_tree</span>
-            </button>
-            <button
-              class="na-mode" :class="{ active: store.viewMode === 'explorer' }"
-              role="tab" title="Проводник" @click="store.setViewMode('explorer')"
-            >
-              <span class="material-symbols-outlined">grid_view</span>
-            </button>
-          </div>
-          <button class="btn-glass" title="Новая папка" @click="newFolder()">
-            <span class="material-symbols-outlined">create_new_folder</span>
-            <span class="na-lbl">Папка</span>
-          </button>
-          <button class="btn-glass" title="Импорт .txt / .md / .docx" @click="importInput?.click()">
-            <span class="material-symbols-outlined">upload_file</span>
-            <span class="na-lbl">Импорт</span>
-          </button>
-          <input ref="importInput" type="file" accept=".txt,.md,.markdown,.docx,text/plain,text/markdown" hidden multiple @change="onImportPick" />
-          <button class="btn-grad" :disabled="creating" @click="createAndOpen">
-            <span class="material-symbols-outlined">add</span>
-            <span class="na-lbl">Заметка</span>
-          </button>
-        </div>
-      </div>
-
-      <!-- Тулбар действий над выделением (проводник) -->
-      <div v-if="store.hasSelection" class="na-selbar">
-        <button class="na-selclose" title="Снять выделение" @click="store.clearSelection()">
-          <span class="material-symbols-outlined">close</span>
-        </button>
-        <span class="na-selcount">Выбрано: {{ store.selectionCount }}</span>
-        <div class="na-selactions">
-          <template v-if="singleNote">
-            <button class="na-selbtn" title="Редактировать" @click="openNote(singleNote)"><span class="material-symbols-outlined">edit</span></button>
-            <button class="na-selbtn" title="Поделиться" @click="shareItem('note', singleNote)"><span class="material-symbols-outlined">share</span></button>
-            <button class="na-selbtn" title="Скопировать" @click="copyNote(singleNote)"><span class="material-symbols-outlined">content_copy</span></button>
-            <button class="na-selbtn" title="Переместить" @click="moveItem('note', singleNote.id)"><span class="material-symbols-outlined">drive_file_move</span></button>
-            <button class="na-selbtn" title="Скачать .txt" @click="downloadNote(singleNote, 'txt')"><span class="material-symbols-outlined">download</span></button>
-          </template>
-          <template v-else-if="singleFolder">
-            <button class="na-selbtn" title="Переименовать" @click="renameFolderDlg(singleFolder)"><span class="material-symbols-outlined">drive_file_rename_outline</span></button>
-            <button class="na-selbtn" title="Поделиться" @click="shareItem('folder', singleFolder)"><span class="material-symbols-outlined">share</span></button>
-            <button class="na-selbtn" title="Скопировать" @click="copyFolder(singleFolder)"><span class="material-symbols-outlined">content_copy</span></button>
-            <button class="na-selbtn" title="Переместить" @click="moveItem('folder', singleFolder.id)"><span class="material-symbols-outlined">drive_file_move</span></button>
-            <button class="na-selbtn" title="Скачать .zip" @click="downloadFolder(singleFolder)"><span class="material-symbols-outlined">folder_zip</span></button>
-          </template>
-          <button class="na-selbtn danger" title="Удалить" @click="deleteSelection"><span class="material-symbols-outlined">delete</span></button>
-        </div>
-      </div>
-    </header>
-
-    <div class="na-body">
-      <!-- ── Иерархия: сайдбар ── -->
-      <aside v-if="!isExplorer && !isMobile" class="na-side">
+    <!-- Дерево папок: в режиме «проводник» панель свёрнута — там навигация идёт
+         крошками, а папки показаны плитками в основной области. -->
+    <template #list>
+      <AppPage embedded title="Заметки" show-title flush>
         <div class="na-side-scroll">
           <button class="na-nav" :class="{ active: isAllActive }" @click="store.selectAll()">
             <span class="material-symbols-outlined">notes</span><span>Все заметки</span>
@@ -83,9 +26,14 @@
 
           <div class="na-side-head">
             <span>Папки</span>
-            <button class="na-side-add" title="Новая папка" @click="newFolder()">
-              <span class="material-symbols-outlined">add</span>
-            </button>
+            <AppButton
+              variant="icon"
+              size="sm"
+              icon="add"
+              title="Новая папка"
+              aria-label="Новая папка"
+              @click="newFolder()"
+            />
           </div>
           <TreeView
             :nodes="ownTree"
@@ -108,10 +56,76 @@
             />
           </template>
         </div>
-      </aside>
+      </AppPage>
+    </template>
+
+    <template #detail>
+      <AppPage
+        embedded
+        title="Заметки"
+        :commands="commands"
+        flush
+        :scroll="false"
+        @command="onCommand"
+      >
+        <template #subhead>
+          <SearchField
+            v-model="searchInput"
+            placeholder="Поиск по заметкам…"
+            hotkey
+            :collapsible="false"
+          />
+          <AppTabs
+            v-if="!narrow"
+            :model-value="store.viewMode"
+            :tabs="viewModes"
+            variant="tint"
+            dense
+            @update:model-value="store.setViewMode"
+          />
+        </template>
+
+        <input
+          ref="importInput"
+          type="file"
+          accept=".txt,.md,.markdown,.docx,text/plain,text/markdown"
+          hidden
+          multiple
+          @change="onImportPick"
+        />
 
       <!-- ── Основная область ── -->
       <section class="na-main">
+        <!-- Действия над выделением (проводник) -->
+        <div v-if="store.hasSelection" class="na-selbar">
+          <AppButton
+            variant="icon"
+            size="sm"
+            icon="close"
+            title="Снять выделение"
+            aria-label="Снять выделение"
+            @click="store.clearSelection()"
+          />
+          <span class="na-selcount">Выбрано: {{ store.selectionCount }}</span>
+          <div class="na-selactions">
+            <template v-if="singleNote">
+              <AppButton variant="icon" size="sm" icon="edit" title="Редактировать" aria-label="Редактировать" @click="openNote(singleNote)" />
+              <AppButton variant="icon" size="sm" icon="share" title="Поделиться" aria-label="Поделиться" @click="shareItem('note', singleNote)" />
+              <AppButton variant="icon" size="sm" icon="content_copy" title="Скопировать" aria-label="Скопировать" @click="copyNote(singleNote)" />
+              <AppButton variant="icon" size="sm" icon="drive_file_move" title="Переместить" aria-label="Переместить" @click="moveItem('note', singleNote.id)" />
+              <AppButton variant="icon" size="sm" icon="download" title="Скачать .txt" aria-label="Скачать" @click="downloadNote(singleNote, 'txt')" />
+            </template>
+            <template v-else-if="singleFolder">
+              <AppButton variant="icon" size="sm" icon="drive_file_rename_outline" title="Переименовать" aria-label="Переименовать" @click="renameFolderDlg(singleFolder)" />
+              <AppButton variant="icon" size="sm" icon="share" title="Поделиться" aria-label="Поделиться" @click="shareItem('folder', singleFolder)" />
+              <AppButton variant="icon" size="sm" icon="content_copy" title="Скопировать" aria-label="Скопировать" @click="copyFolder(singleFolder)" />
+              <AppButton variant="icon" size="sm" icon="drive_file_move" title="Переместить" aria-label="Переместить" @click="moveItem('folder', singleFolder.id)" />
+              <AppButton variant="icon" size="sm" icon="folder_zip" title="Скачать .zip" aria-label="Скачать архив" @click="downloadFolder(singleFolder)" />
+            </template>
+            <AppButton variant="icon" size="sm" tone="danger" icon="delete" title="Удалить" aria-label="Удалить" @click="deleteSelection" />
+          </div>
+        </div>
+
         <!-- Крошки (проводник) -->
         <Breadcrumbs
           v-if="isExplorer"
@@ -155,9 +169,13 @@
             class="na-empty" :icon="emptyIcon" tone="soft"
             :title="emptyTitle" :subtitle="emptySubtitle"
           >
-            <button v-if="!store.showShared && !store.showArchived" class="btn-grad" type="button" @click="createAndOpen">
-              <span class="material-symbols-outlined">add</span> Создать заметку
-            </button>
+            <AppButton
+              v-if="!store.showShared && !store.showArchived"
+              variant="filled"
+              icon="add"
+              label="Создать заметку"
+              @click="createAndOpen"
+            />
           </EmptyState>
 
           <template v-else>
@@ -235,9 +253,8 @@
           </template>
         </div>
       </section>
-    </div>
-
-    <AppFab :visible="isMobile && fabVisible" icon="add" aria-label="Новая заметка" @click="createAndOpen" />
+      </AppPage>
+    </template>
 
     <!-- Оверлей перетаскивания файлов с компьютера -->
     <div v-if="importDragging" class="na-dropzone">
@@ -272,17 +289,19 @@
       confirm-label="Удалить" danger-confirm
       @confirm="confirmDelete?.run()" @cancel="confirmDelete = null"
     />
-  </div>
+  </AppListDetail>
 </template>
 
 <script setup>
 import { computed, defineAsyncComponent, nextTick, onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { useBreakpoint } from '@/composables/useBreakpoint.js'
-import { useFabOnScroll } from '@/composables/useFabOnScroll.js'
 import { useDragItem } from '@/composables/useDragItem.js'
 import SearchField from '@/components/common/SearchField.vue'
-import AppFab from '@/components/ui/AppFab.vue'
+import AppButton from '@/components/ui/AppButton.vue'
+import AppListDetail from '@/components/ui/AppListDetail.vue'
+import AppPage from '@/components/ui/AppPage.vue'
+import AppTabs from '@/components/ui/AppTabs.vue'
 import EmptyState from '@/components/common/EmptyState.vue'
 import ConfirmDialog from '@/components/ui/ConfirmDialog.vue'
 import TreeView from '@/components/common/TreeView.vue'
@@ -308,12 +327,32 @@ const store = useNotesStore()
 const notif = useNotificationsStore()
 const auth = useAuthStore()
 const { isMobile } = useBreakpoint()
-const { fabVisible } = useFabOnScroll()
 const { dragItem, start: startDrag, end: endDrag } = useDragItem()
 
 const hasCompany = computed(() => !!auth.companyId)
 const myId = computed(() => auth.userId)
 const isExplorer = computed(() => store.viewMode === 'explorer' || isMobile.value)
+
+/* Узкая раскладка = телефон: на нём дерева нет вовсе (раскладка всегда
+   «проводник»), поэтому меряем не панель, а экран. */
+const narrow = isMobile
+
+const viewModes = [
+  { value: 'hierarchy', label: '', icon: 'account_tree' },
+  { value: 'explorer', label: '', icon: 'grid_view' },
+]
+
+const commands = computed(() => [
+  { key: 'new-note', label: 'Заметка', icon: 'add', variant: 'filled', primary: true, fab: true, disabled: creating.value },
+  { key: 'new-folder', label: 'Новая папка', icon: 'create_new_folder' },
+  { key: 'import', label: 'Импорт .txt / .md / .docx', icon: 'upload_file' },
+])
+
+function onCommand(key) {
+  if (key === 'new-note') createAndOpen()
+  else if (key === 'new-folder') newFolder()
+  else if (key === 'import') importInput.value?.click()
+}
 
 // На мобильной ширине раскладка всегда проводник (isExplorer) — переводим и
 // ДАННЫЕ стора в explorer (папки-плитки, корневой фильтр), иначе при
@@ -847,40 +886,21 @@ function onFileDrop(e) {
 </script>
 
 <style scoped>
-.na { display: flex; flex-direction: column; height: 100%; min-height: 0; position: relative; }
+.na { position: relative; }
 
-/* ── Тулбар ── */
-.na-toolbar { flex-shrink: 0; padding: 12px 16px 8px; display: flex; flex-direction: column; gap: 8px; }
+/* Панель выделения и рабочая область — внутри содержимого правой колонки. */
 .na-hub { padding-bottom: 4px; }
-.na-toolbar-row { display: flex; align-items: center; gap: 12px; }
-.na-toolbar-row :deep(.search-field) { flex: 1; min-width: 0; }
-.na-actions { display: flex; align-items: center; gap: 8px; }
-.na-modes { display: inline-flex; background: var(--color-surface-high); border-radius: var(--radius-full); padding: 3px; }
-.na-mode { width: 36px; height: 32px; display: grid; place-items: center; border: none; background: transparent; color: var(--color-text-dim); border-radius: var(--radius-full); cursor: pointer; }
-.na-mode.active { background: var(--color-surface); color: var(--color-primary); box-shadow: var(--shadow-sm); }
-.na-mode .material-symbols-outlined { font-size: 20px; }
 
 /* ── Тулбар выделения ── */
-.na-selbar { display: flex; align-items: center; gap: 10px; padding: 8px 12px; background: var(--color-primary-container); border-radius: var(--radius-md); }
-.na-selclose { width: 30px; height: 30px; display: grid; place-items: center; border: none; border-radius: 50%; background: transparent; color: var(--color-on-primary-container); cursor: pointer; }
+.na-selbar { flex-shrink: 0; margin: 10px 16px 0; display: flex; align-items: center; gap: 10px; padding: 8px 12px; background: var(--color-primary-container); border-radius: var(--radius-md); }
 .na-selcount { font-size: 13.5px; font-weight: 700; color: var(--color-on-primary-container); }
 .na-selactions { margin-left: auto; display: flex; gap: 4px; }
-.na-selbtn { width: 36px; height: 36px; display: grid; place-items: center; border: none; border-radius: var(--radius-md); background: transparent; color: var(--color-on-primary-container); cursor: pointer; }
-.na-selbtn:hover { background: color-mix(in oklch, var(--color-on-primary-container) 12%, transparent); }
-.na-selbtn.danger { color: var(--color-error); }
-.na-selbtn .material-symbols-outlined { font-size: 20px; }
-
-/* ── Тело ── */
-.na-body { flex: 1; min-height: 0; display: flex; }
-.na-side { width: 268px; flex-shrink: 0; border-right: 1px solid var(--color-outline-dim); display: flex; flex-direction: column; min-height: 0; }
-.na-side-scroll { flex: 1; overflow-y: auto; padding: 8px 10px 16px; }
+.na-side-scroll { padding: 8px 10px 16px; }
 .na-nav { width: 100%; display: flex; align-items: center; gap: 10px; padding: 9px 10px; border: none; border-radius: var(--radius-md); background: transparent; color: var(--color-text); font: inherit; font-size: 14px; font-weight: 600; cursor: pointer; }
 .na-nav:hover { background: var(--color-surface-high); }
 .na-nav.active { background: color-mix(in oklch, var(--color-primary) 14%, transparent); color: var(--color-primary); }
 .na-nav .material-symbols-outlined { font-size: 20px; }
 .na-side-head { display: flex; align-items: center; justify-content: space-between; padding: 14px 8px 6px; font-size: 11.5px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; color: var(--color-text-dim); }
-.na-side-add { width: 24px; height: 24px; display: grid; place-items: center; border: none; border-radius: 50%; background: transparent; color: var(--color-text-dim); cursor: pointer; }
-.na-side-add:hover { background: var(--color-surface-high); color: var(--color-primary); }
 
 .na-main { flex: 1; min-width: 0; display: flex; flex-direction: column; min-height: 0; }
 .na-crumbs { flex-shrink: 0; padding: 10px 16px 4px; }
