@@ -31,23 +31,23 @@
             ИИ на платформе не настроен — тумблеры ниже пока ничего не включат.
           </p>
 
-          <SwitchRow
+          <AppSwitchRow
             v-model="form.enabled"
             title="ИИ включён в компании"
             hint="Общий выключатель компанийных возможностей"
           />
-          <SwitchRow
+          <AppSwitchRow
             v-model="form.shared"
             title="Тратить мои токены на компанию"
             :hint="ownerHint"
             :disabled="!isOwner"
           />
-          <SwitchRow
+          <AppSwitchRow
             v-model="form.featSearch"
             title="Умный поиск по задачам"
             hint="Выключен — поиск ищет по словам, без учёта регистра"
           />
-          <SwitchRow
+          <AppSwitchRow
             v-model="form.featTVFact"
             title="Интересные факты в ТВ-режиме"
             hint="Короткая заметка дня на табло"
@@ -96,7 +96,7 @@
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { storeToRefs } from 'pinia'
 import BrandLoader from '@/components/common/BrandLoader.vue'
-import SwitchRow from '@/components/common/SwitchRow.vue'
+import AppSwitchRow from '@/components/ui/AppSwitchRow.vue'
 import { useCompaniesStore } from '@/stores/companies.js'
 import { useAuthStore } from '@/stores/auth.js'
 import { useNotificationsStore } from '@/stores/notifications.js'

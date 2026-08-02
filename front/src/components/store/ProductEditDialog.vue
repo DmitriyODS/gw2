@@ -4,7 +4,6 @@
   <AppDialog
     :model-value="visible"
     :title="product ? 'Изменить товар' : 'Выставить товар'"
-    icon="sell"
     :actions="ACTIONS"
     @update:model-value="$emit('update:visible', $event)"
     @confirm="save"
@@ -60,7 +59,7 @@ import InputText from 'primevue/inputtext'
 import InputNumber from 'primevue/inputnumber'
 import Textarea from 'primevue/textarea'
 import Dropdown from 'primevue/dropdown'
-import AppDialog from '@/components/common/AppDialog.vue'
+import AppDialog from '@/components/ui/AppDialog.vue'
 import * as api from '@/api/billing.js'
 import { useThemeStore } from '@/stores/theme.js'
 

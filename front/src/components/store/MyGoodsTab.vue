@@ -84,7 +84,6 @@
     <AppDialog
       v-model="payoutOpen"
       title="Вывод выручки"
-      icon="payments"
       :actions="PAYOUT_ACTIONS"
       @confirm="sendPayout"
     >
@@ -107,7 +106,7 @@
 import { onMounted, ref } from 'vue'
 import InputText from 'primevue/inputtext'
 import InputNumber from 'primevue/inputnumber'
-import AppDialog from '@/components/common/AppDialog.vue'
+import AppDialog from '@/components/ui/AppDialog.vue'
 import BrandLoader from '@/components/common/BrandLoader.vue'
 import ProductEditDialog from '@/components/store/ProductEditDialog.vue'
 import * as api from '@/api/billing.js'

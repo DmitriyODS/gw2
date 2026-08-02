@@ -6,7 +6,7 @@ import { useNotificationsStore } from '@/stores/notifications.js'
 import { usePermission, ROLES } from '@/composables/usePermission.js'
 import { getDirectory } from '@/api/users.js'
 import MarkdownView from '@/components/common/MarkdownView.vue'
-import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
+import ConfirmDialog from '@/components/ui/ConfirmDialog.vue'
 import EmployeeProfileDialog from '@/components/common/EmployeeProfileDialog.vue'
 
 const props = defineProps({

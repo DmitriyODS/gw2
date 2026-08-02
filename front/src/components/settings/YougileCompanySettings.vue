@@ -173,7 +173,7 @@
 import YougileLogo from '@/components/common/YougileLogo.vue'
 import { reactive, ref, computed, onMounted } from 'vue'
 import Select from 'primevue/select'
-import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
+import ConfirmDialog from '@/components/ui/ConfirmDialog.vue'
 import { useYougileStore } from '@/stores/yougile.js'
 import { useNotificationsStore } from '@/stores/notifications.js'
 

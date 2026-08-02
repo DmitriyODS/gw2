@@ -10,7 +10,7 @@
 
     <template v-else>
       <div class="lists-toolbar">
-        <SegmentedTabs v-model="tab" :tabs="tabsForUi" />
+        <AppTabs v-model="tab" :tabs="tabsForUi" />
         <button v-if="canEdit" class="btn-filled" @click="addItem(tab)">
           <span class="material-symbols-outlined">add</span>
           <span>Добавить</span>
@@ -175,9 +175,9 @@
 <script setup>
 import { ref, computed, watch, nextTick, onMounted } from 'vue'
 import Column from 'primevue/column'
-import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
+import ConfirmDialog from '@/components/ui/ConfirmDialog.vue'
 import AppDataTable from '@/components/common/AppDataTable.vue'
-import SegmentedTabs from '@/components/common/SegmentedTabs.vue'
+import AppTabs from '@/components/ui/AppTabs.vue'
 import { useAuthStore } from '@/stores/auth.js'
 import { useNotificationsStore } from '@/stores/notifications.js'
 import { usePermission } from '@/composables/usePermission.js'

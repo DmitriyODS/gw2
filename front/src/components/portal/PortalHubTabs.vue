@@ -1,5 +1,5 @@
 <template>
-  <SegmentedTabs :model-value="current" :tabs="tabs" dense :full-width="isMobile" @update:model-value="go" />
+  <AppTabs :model-value="current" :tabs="tabs" dense :full-width="isMobile" @update:model-value="go" />
 </template>
 
 <script setup>
@@ -8,7 +8,7 @@
 // На мобильном вкладки растягиваются на всю доступную ширину.
 import { computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import SegmentedTabs from '@/components/common/SegmentedTabs.vue'
+import AppTabs from '@/components/ui/AppTabs.vue'
 import { usePortalStore } from '@/stores/portal.js'
 import { useBreakpoint } from '@/composables/useBreakpoint.js'
 

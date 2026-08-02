@@ -1,8 +1,7 @@
 <template>
   <AppDialog
     :model-value="modelValue"
-    :title="isFolder ? 'Поделиться папкой' : 'Поделиться доской'"
-    icon="share" size="md"
+    :title="isFolder ? 'Поделиться папкой' : 'Поделиться доской'" size="md"
     :actions="[{ kind: 'cancel', label: 'Закрыть' }]"
     @cancel="close" @update:model-value="(v) => !v && close()"
   >
@@ -111,7 +110,7 @@
 
 <script setup>
 import { computed, ref, watch } from 'vue'
-import AppDialog from '@/components/common/AppDialog.vue'
+import AppDialog from '@/components/ui/AppDialog.vue'
 import * as api from '@/api/boards.js'
 import { getDirectory } from '@/api/users.js'
 import { useNotificationsStore } from '@/stores/notifications.js'

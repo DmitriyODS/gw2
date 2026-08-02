@@ -1,13 +1,13 @@
 <template>
   <!-- Настройки десктоп-обёртки (Electron): видна только внутри неё.
        Тумблеры применяются мгновенно (IPC-мост GrooveDesktop). -->
-  <SettingCard
+  <AppCard
     v-if="desktop"
     class="dac"
     title="Приложение для компьютера"
     hint="Поведение окна, трея и уведомлений этой установки Groove Work."
   >
-    <SwitchRow
+    <AppSwitchRow
       :model-value="s.autostart"
       title="Автозапуск при входе в систему"
       hint="Приложение стартует свёрнутым в трей — уведомления приходят сразу."
@@ -16,7 +16,7 @@
 
     <!-- Свернуть в трей при скрытом значке — ловушка (окно не вернуть),
          поэтому без значка тумблер сворачивания недоступен. -->
-    <SwitchRow
+    <AppSwitchRow
       v-if="s.trayIcon"
       :model-value="s.closeToTray"
       title="Сворачивать в трей при закрытии"
@@ -24,28 +24,28 @@
       @update:model-value="set('closeToTray', $event)"
     />
 
-    <SwitchRow
+    <AppSwitchRow
       :model-value="s.trayIcon"
       title="Значок в трее"
       hint="Быстрый доступ к окну и выходу из меню значка."
       @update:model-value="set('trayIcon', $event)"
     />
 
-    <SwitchRow
+    <AppSwitchRow
       :model-value="muted"
       title="Не беспокоить"
       :hint="muteHint"
       @update:model-value="setMuted"
     />
-  </SettingCard>
+  </AppCard>
 </template>
 
 <script setup>
 import { computed, onMounted, reactive } from 'vue'
 import { useNotificationsStore } from '@/stores/notifications.js'
 import { useNotifyMute } from '@/composables/useNotifyMute.js'
-import SettingCard from '@/components/common/SettingCard.vue'
-import SwitchRow from '@/components/common/SwitchRow.vue'
+import AppCard from '@/components/ui/AppCard.vue'
+import AppSwitchRow from '@/components/ui/AppSwitchRow.vue'
 
 const desktop = window.GrooveDesktop
 const notify = useNotificationsStore()

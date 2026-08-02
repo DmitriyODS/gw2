@@ -54,10 +54,13 @@ const SOURCES = {
   },
 
   calendars: async () => {
-    const now = new Date()
-    const tomorrow = new Date(now)
-    tomorrow.setDate(tomorrow.getDate() + 1)
-    return getCalendarAgenda(ymd(now), ymd(tomorrow), 3)
+    /* Календарям нужен момент времени в формате RFC3339, а не дата: границы
+       периода считаются в зоне клиента (сервер её не знает). С голыми датами
+       запрос отвечал 400, и плитка молча оставалась пустой. */
+    const from = new Date()
+    const to = new Date(from)
+    to.setDate(to.getDate() + 1)
+    return getCalendarAgenda(from.toISOString(), to.toISOString(), 3)
   },
 
   notes: async () => {

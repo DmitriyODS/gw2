@@ -90,7 +90,7 @@
     </section>
 
     <!-- ── Обновление обёртки (внутри мобильного/десктопного клиента) ── -->
-    <SettingRow v-if="hasShellUpdate" title="Обновление приложения">
+    <AppRow v-if="hasShellUpdate" title="Обновление приложения">
       <template #hint>
         <template v-if="shellBuild">
           Установлена {{ shellBuild }}<template v-if="updateInfo">
@@ -110,10 +110,10 @@
         <span class="material-symbols-outlined">{{ updateInfo?.updateAvailable ? 'download' : 'refresh' }}</span>
         {{ updateBtnLabel }}
       </button>
-    </SettingRow>
+    </AppRow>
 
     <!-- ── Приложения для устройств ──────────────────────────── -->
-    <SettingRow
+    <AppRow
       v-if="showApkCard"
       title="Приложение для Android"
       hint="Задачи, юниты, чаты и звонки на смартфоне — с пуш-уведомлениями."
@@ -122,9 +122,9 @@
         <span class="material-symbols-outlined">download</span>
         Скачать APK
       </a>
-    </SettingRow>
+    </AppRow>
 
-    <SettingRow v-if="showDesktopCard" title="Приложение для компьютера">
+    <AppRow v-if="showDesktopCard" title="Приложение для компьютера">
       <template #hint>
         Отдельное окно, значок в трее, системные уведомления и звонки — даже
         когда браузер закрыт.
@@ -140,7 +140,7 @@
         <span class="material-symbols-outlined">download</span>
         Скачать для {{ DESKTOP_OS_LABELS[desktopOs] }}
       </a>
-    </SettingRow>
+    </AppRow>
   </div>
 </template>
 
@@ -151,7 +151,7 @@ import { useNotificationsStore } from '@/stores/notifications.js'
 import { useAppVersion } from '@/composables/useAppVersion.js'
 import { useAppDownloads } from '@/composables/useAppDownloads.js'
 import Logo from '@/components/common/Logo.vue'
-import SettingRow from '@/components/common/SettingRow.vue'
+import AppRow from '@/components/ui/AppRow.vue'
 import { WAVE_PATH } from '@/utils/wavePath.js'
 
 const notif = useNotificationsStore()

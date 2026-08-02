@@ -2,7 +2,6 @@
   <AppDialog
     model-value
     tone="primary"
-    :icon="task ? 'edit' : 'add_task'"
     size="md"
     mobile="sheet"
     :title="task ? 'Редактировать задачу' : 'Новая задача'"
@@ -174,7 +173,7 @@
 
 <script setup>
 import { ref, computed, watch, onMounted } from 'vue'
-import AppDialog from '@/components/common/AppDialog.vue'
+import AppDialog from '@/components/ui/AppDialog.vue'
 import InputText from 'primevue/inputtext'
 import Select from 'primevue/select'
 import DatePicker from 'primevue/datepicker'

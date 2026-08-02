@@ -169,7 +169,6 @@
     <AppDialog
       v-model="deleteConfirmOpen"
       tone="danger"
-      icon="delete"
       size="sm"
       title="Удалить пост?"
       subtitle="Комментарии и вложения будут удалены безвозвратно."
@@ -192,8 +191,8 @@ import { useFabOnScroll } from '@/composables/useFabOnScroll.js'
 import { useNotificationsStore } from '@/stores/notifications.js'
 import EmptyState from '@/components/common/EmptyState.vue'
 import SearchField from '@/components/common/SearchField.vue'
-import AppDialog from '@/components/common/AppDialog.vue'
-import AppFab from '@/components/common/AppFab.vue'
+import AppDialog from '@/components/ui/AppDialog.vue'
+import AppFab from '@/components/ui/AppFab.vue'
 import PortalHubTabs from '@/components/portal/PortalHubTabs.vue'
 import PostCard from '@/components/portal/PostCard.vue'
 import PostComposer from '@/components/portal/PostComposer.vue'

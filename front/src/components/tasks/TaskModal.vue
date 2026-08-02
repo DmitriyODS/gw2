@@ -428,7 +428,6 @@
       v-if="confirmDialog.visible"
       v-model="confirmDialog.visible"
       :tone="confirmDialog.tone || 'danger'"
-      :icon="confirmDialog.icon || 'warning'"
       size="sm"
       :title="confirmDialog.title"
       :subtitle="confirmDialog.message"
@@ -444,7 +443,7 @@
 <script setup>
 import { ref, computed, onMounted, onBeforeUnmount, watch } from 'vue'
 import Dialog from 'primevue/dialog'
-import AppDialog from '@/components/common/AppDialog.vue'
+import AppDialog from '@/components/ui/AppDialog.vue'
 import { useModalHost } from '@/desktop/windowHost.js'
 import { useBreakpoint } from '@/composables/useBreakpoint.js'
 import { getSocket } from '@/socket/index.js'

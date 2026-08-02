@@ -2,7 +2,6 @@
   <AppDialog
     :model-value="modelValue"
     tone="tertiary"
-    icon="task"
     size="md"
     title="Прикрепить задачу"
     subtitle="Задачу увидят только сотрудники её компании."
@@ -56,7 +55,7 @@
 <script setup>
 import { ref, watch } from 'vue'
 import BrandLoader from '@/components/common/BrandLoader.vue'
-import AppDialog from '@/components/common/AppDialog.vue'
+import AppDialog from '@/components/ui/AppDialog.vue'
 import { getTasks } from '@/api/tasks.js'
 import { TASK_COLOR_IDS } from '@/utils/taskColors.js'
 

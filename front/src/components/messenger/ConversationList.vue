@@ -41,7 +41,7 @@
          «Техподдержка» — inbox обращений; для всех остальных — личный dev-чат
          с командой разработки. -->
     <div v-if="showSupportTab" class="conv-tabs-wrap">
-      <SegmentedTabs
+      <AppTabs
         :model-value="tab"
         :tabs="tabItems"
         full-width
@@ -214,7 +214,7 @@
 import { ref, computed, nextTick } from 'vue'
 import { fitToViewport } from '@/utils/menuPlacement.js'
 import BrandLoader from '@/components/common/BrandLoader.vue'
-import SegmentedTabs from '@/components/common/SegmentedTabs.vue'
+import AppTabs from '@/components/ui/AppTabs.vue'
 import EmptyState from '@/components/common/EmptyState.vue'
 import EmojiGlyph from '@/components/common/EmojiGlyph.vue'
 import ChatFolders from './ChatFolders.vue'

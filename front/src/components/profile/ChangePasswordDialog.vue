@@ -2,7 +2,6 @@
   <AppDialog
     :model-value="modelValue"
     tone="tertiary"
-    icon="lock_reset"
     size="sm"
     title="Изменить пароль"
     subtitle="Новый пароль — не короче 8 символов."
@@ -53,7 +52,7 @@
 
 <script setup>
 import { reactive, ref, watch } from 'vue'
-import AppDialog from '@/components/common/AppDialog.vue'
+import AppDialog from '@/components/ui/AppDialog.vue'
 import InputText from 'primevue/inputtext'
 import { updateMe } from '@/api/users.js'
 import { useNotificationsStore } from '@/stores/notifications.js'

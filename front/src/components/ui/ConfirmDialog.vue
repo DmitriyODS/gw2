@@ -2,7 +2,6 @@
   <AppDialog
     :model-value="visible"
     :tone="dangerConfirm ? 'danger' : 'primary'"
-    :icon="dangerConfirm ? 'warning' : 'help'"
     :title="header"
     :subtitle="message"
     :actions="[
@@ -16,7 +15,7 @@
 </template>
 
 <script setup>
-import AppDialog from './AppDialog.vue'
+import AppDialog from '@/components/ui/AppDialog.vue'
 
 defineProps({
   visible: { type: Boolean, default: false },

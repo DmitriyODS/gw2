@@ -2,7 +2,6 @@
   <AppDialog
     :model-value="modelValue"
     :title="title"
-    icon="event"
     size="md"
     @update:model-value="$emit('update:modelValue', $event)"
   >
@@ -49,8 +48,8 @@
 
 <script setup>
 import { computed, ref } from 'vue'
-import AppDialog from '@/components/common/AppDialog.vue'
-import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
+import AppDialog from '@/components/ui/AppDialog.vue'
+import ConfirmDialog from '@/components/ui/ConfirmDialog.vue'
 import { useCalendarsStore } from '@/stores/calendars.js'
 import { useNotificationsStore } from '@/stores/notifications.js'
 import { cardFields, entryTitle, hhmm } from '@/utils/calendarFields.js'

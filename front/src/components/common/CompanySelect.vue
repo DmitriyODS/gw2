@@ -8,11 +8,11 @@
        При передаче v-model (controlled mode) компонент работает независимо. -->
   <template v-if="fixed">
     <!-- Выбирать не из чего (одна компания) — тот же вид, но без стрелки. -->
-    <div v-if="variant === 'button'" class="company-button is-static" :title="companyLabel">
+    <div v-if="variant === 'button'" v-bind="$attrs" class="company-button is-static" :title="companyLabel">
       <span class="material-symbols-outlined company-button-ico">business_center</span>
       <span class="company-button-label">{{ companyLabel }}</span>
     </div>
-    <div v-else class="company-chip" :title="companyLabel">
+    <div v-else v-bind="$attrs" class="company-chip" :title="companyLabel">
       <span class="material-symbols-outlined company-icon">domain</span>
       <span class="company-chip-label">{{ companyLabel }}</span>
     </div>
@@ -21,6 +21,7 @@
   <template v-else-if="variant === 'row' || variant === 'button'">
     <button
       v-if="variant === 'button'"
+      v-bind="$attrs"
       ref="triggerEl"
       type="button"
       class="company-button"
@@ -36,6 +37,7 @@
 
     <button
       v-else
+      v-bind="$attrs"
       ref="triggerEl"
       type="button"
       class="company-row"
@@ -159,6 +161,7 @@
 
   <template v-else-if="variant === 'form'">
     <button
+      v-bind="$attrs"
       ref="triggerEl"
       type="button"
       class="company-form-trigger"
@@ -258,6 +261,7 @@
 
   <template v-else>
     <Select
+      v-bind="$attrs"
       :model-value="effectiveValue"
       :options="options"
       option-label="name"
@@ -297,6 +301,8 @@ import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import Select from 'primevue/select'
 import { useAuthStore } from '@/stores/auth.js'
 import { useCompaniesStore } from '@/stores/companies.js'
+
+defineOptions({ inheritAttrs: false })
 
 const props = defineProps({
   modelValue: { default: undefined }, // если передан — controlled mode (не трогает companies.activeCompanyId)

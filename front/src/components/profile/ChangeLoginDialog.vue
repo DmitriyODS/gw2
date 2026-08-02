@@ -2,7 +2,6 @@
   <AppDialog
     :model-value="modelValue"
     tone="primary"
-    icon="alternate_email"
     size="sm"
     title="Изменить логин"
     subtitle="Под этим логином вы входите в систему."
@@ -32,7 +31,7 @@
 
 <script setup>
 import { ref, watch } from 'vue'
-import AppDialog from '@/components/common/AppDialog.vue'
+import AppDialog from '@/components/ui/AppDialog.vue'
 import InputText from 'primevue/inputtext'
 import { updateMe } from '@/api/users.js'
 import { useAuthStore } from '@/stores/auth.js'

@@ -12,8 +12,8 @@
 
         <!-- Переключатель вида: сетка / список / канбан (только десктоп) -->
         <div class="desktop-only" role="group" aria-label="Вид отображения">
-          <SegmentedTabs
-            variant="glass"
+          <AppTabs
+            variant="tint" dense
             :model-value="viewMode"
             :tabs="viewTabs"
             @update:model-value="setViewMode"
@@ -57,7 +57,7 @@
       </div>
 
       <!-- Вкладки — только мобильный: на десктопе ими управляет рейка фильтров -->
-      <SegmentedTabs
+      <AppTabs
         v-if="isMobile"
         :model-value="tasksStore.filters.tab"
         :tabs="tabs"
@@ -233,7 +233,6 @@
     <AppDialog
       :model-value="!!linkError"
       tone="warning"
-      icon="lock"
       size="sm"
       :title="linkError?.title || ''"
       @update:model-value="linkError = null"
@@ -290,11 +289,11 @@ import SortSheet from '@/components/tasks/SortSheet.vue'
 import StartUnitModal from '@/components/units/StartUnitModal.vue'
 import TaskContextMenu from '@/components/tasks/TaskContextMenu.vue'
 import SendTaskDialog from '@/components/tasks/SendTaskDialog.vue'
-import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
-import AppDialog from '@/components/common/AppDialog.vue'
-import AppFab from '@/components/common/AppFab.vue'
+import ConfirmDialog from '@/components/ui/ConfirmDialog.vue'
+import AppDialog from '@/components/ui/AppDialog.vue'
+import AppFab from '@/components/ui/AppFab.vue'
 import EmptyState from '@/components/common/EmptyState.vue'
-import SegmentedTabs from '@/components/common/SegmentedTabs.vue'
+import AppTabs from '@/components/ui/AppTabs.vue'
 import SearchField from '@/components/common/SearchField.vue'
 import BrandLoader from '@/components/common/BrandLoader.vue'
 import { useCompanySettings } from '@/composables/useCompanySettings.js'

@@ -13,7 +13,6 @@
   <AppDialog
     v-model="resultOpen"
     title="Поиск по QR-коду"
-    icon="qr_code_scanner"
     size="sm"
     :tone="notFound ? 'warning' : 'primary'"
     :actions="notFound
@@ -38,7 +37,7 @@
 
 <script setup>
 import { ref, watch } from 'vue'
-import AppDialog from '@/components/common/AppDialog.vue'
+import AppDialog from '@/components/ui/AppDialog.vue'
 import QrScanDialog from '@/components/common/QrScanDialog.vue'
 import { getRecords } from '@/api/registries.js'
 import { useNotificationsStore } from '@/stores/notifications.js'

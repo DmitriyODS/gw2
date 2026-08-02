@@ -204,7 +204,7 @@
     <!-- Внешние ссылки -->
     <AppDialog
       v-model="sharesOpen"
-      title="Внешние ссылки" icon="link" size="md"
+      title="Внешние ссылки" size="md"
       :actions="[{ kind: 'cancel', label: 'Закрыть' }]"
       @cancel="sharesOpen = false"
     >
@@ -239,7 +239,7 @@
     <!-- Экспорт в XLSX -->
     <AppDialog
       v-model="exportOpen"
-      title="Экспорт в XLSX" icon="download" size="md" :busy="exporting"
+      title="Экспорт в XLSX" size="md" :busy="exporting"
       :actions="[{ kind: 'cancel', label: 'Отмена' }, { kind: 'confirm', label: 'Экспортировать', icon: 'download' }]"
       @cancel="exportOpen = false" @confirm="doExport"
     >
@@ -276,10 +276,10 @@ import { useRoute } from 'vue-router'
 import Checkbox from 'primevue/checkbox'
 import CalendarEntryDialog from '@/components/calendar/CalendarEntryDialog.vue'
 import CalendarDayDialog from '@/components/calendar/CalendarDayDialog.vue'
-import AppDialog from '@/components/common/AppDialog.vue'
+import AppDialog from '@/components/ui/AppDialog.vue'
 import EmptyState from '@/components/common/EmptyState.vue'
 import SearchField from '@/components/common/SearchField.vue'
-import AppFab from '@/components/common/AppFab.vue'
+import AppFab from '@/components/ui/AppFab.vue'
 import { useFabOnScroll } from '@/composables/useFabOnScroll.js'
 import { useCalendarsStore, dayKey } from '@/stores/calendars.js'
 import { useAuthStore } from '@/stores/auth.js'

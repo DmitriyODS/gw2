@@ -4,7 +4,6 @@
     tone="primary"
     size="lg"
     mobile="full"
-    :show-icon="false"
     :title="isEdit ? 'Редактировать публикацию' : 'Создать публикацию'"
     :busy="saving"
     :actions="[
@@ -170,7 +169,6 @@
     <AppDialog
       v-model="confirmClose"
       tone="warning"
-      icon="warning"
       size="sm"
       :title="isEdit ? 'Отменить изменения?' : 'Не сохранять публикацию?'"
       :subtitle="isEdit
@@ -192,7 +190,7 @@
 // публикации». Текст поста — Markdown (лента рендерит его MarkdownView).
 import { computed, nextTick, ref, watch } from 'vue'
 import Select from 'primevue/select'
-import AppDialog from '@/components/common/AppDialog.vue'
+import AppDialog from '@/components/ui/AppDialog.vue'
 import ImageEditDialog from '@/components/common/ImageEditDialog.vue'
 import MarkdownView from '@/components/common/MarkdownView.vue'
 import { selectionViewportRect } from '@/utils/textareaSelection.js'

@@ -179,7 +179,6 @@
     <AppDialog
       v-model="confirmOpen"
       tone="danger"
-      icon="warning"
       size="sm"
       :title="`Удалить компанию «${deleteTarget?.name}»?`"
       :busy="deleting"
@@ -210,9 +209,9 @@ import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import Column from 'primevue/column'
 import BrandLoader from '@/components/common/BrandLoader.vue'
-import AppDialog from '@/components/common/AppDialog.vue'
+import AppDialog from '@/components/ui/AppDialog.vue'
 import AppDataTable from '@/components/common/AppDataTable.vue'
-import AppFab from '@/components/common/AppFab.vue'
+import AppFab from '@/components/ui/AppFab.vue'
 import CreateCompanyDialog from '@/components/common/CreateCompanyDialog.vue'
 import EmptyState from '@/components/common/EmptyState.vue'
 import SearchField from '@/components/common/SearchField.vue'

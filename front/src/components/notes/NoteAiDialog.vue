@@ -2,7 +2,6 @@
   <AppDialog
     :model-value="modelValue"
     :title="label || 'ИИ-обработка'"
-    icon="auto_awesome"
     size="md"
     :closable="!loading"
     :actions="[]"
@@ -46,7 +45,7 @@
 // Результат ИИ-операции над выделенным текстом заметки: превью + выбор, как
 // применить (заменить выделенное / вставить ниже / скопировать). Ничего не
 // меняет в документе само — решает пользователь.
-import AppDialog from '@/components/common/AppDialog.vue'
+import AppDialog from '@/components/ui/AppDialog.vue'
 import { useNotificationsStore } from '@/stores/notifications.js'
 
 const props = defineProps({

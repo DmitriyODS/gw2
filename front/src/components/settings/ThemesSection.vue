@@ -1,8 +1,8 @@
 <template>
   <div class="ts">
     <!-- ── Режим оформления ──────────────────────────────────── -->
-    <SettingCard>
-      <SettingRow
+    <AppCard>
+      <AppRow
         title="Режим оформления"
         hint="Светлая или тёмная тема, как в системе либо по расписанию."
         stack
@@ -22,10 +22,10 @@
             <span class="mode-label">{{ m.label }}</span>
           </button>
         </div>
-      </SettingRow>
+      </AppRow>
 
       <Transition name="ts-reveal">
-        <SettingRow
+        <AppRow
           v-if="themeStore.mode === 'schedule'"
           title="Расписание"
           hint="Когда включать и выключать тёмную тему."
@@ -49,9 +49,9 @@
               />
             </label>
           </div>
-        </SettingRow>
+        </AppRow>
       </Transition>
-    </SettingCard>
+    </AppCard>
 
     <!-- ── Встроенные темы ───────────────────────────────────── -->
     <SettingsAccordion title="Встроенные темы">
@@ -69,7 +69,7 @@
 
     <!-- ── Магазин: витрина ещё не открыта, поэтому пока только вход ── -->
     <SettingsAccordion title="Загруженные из магазина">
-      <SettingRow
+      <AppRow
         title="Темы из магазина"
         hint="Здесь появятся темы, которые вы возьмёте в магазине оформления."
       >
@@ -77,7 +77,7 @@
           <span class="material-symbols-outlined">shopping_bag</span>
           В магазин
         </button>
-      </SettingRow>
+      </AppRow>
     </SettingsAccordion>
 
     <!-- ── Свои темы ─────────────────────────────────────────── -->
@@ -132,9 +132,9 @@
 import { ref } from 'vue'
 import { useRouter } from 'vue-router'
 import TimePicker from '@/components/common/TimePicker.vue'
-import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
-import SettingCard from '@/components/common/SettingCard.vue'
-import SettingRow from '@/components/common/SettingRow.vue'
+import ConfirmDialog from '@/components/ui/ConfirmDialog.vue'
+import AppCard from '@/components/ui/AppCard.vue'
+import AppRow from '@/components/ui/AppRow.vue'
 import SettingsAccordion from '@/components/settings/SettingsAccordion.vue'
 import ThemeCard from '@/components/settings/ThemeCard.vue'
 import ThemeEditorDialog from '@/components/settings/ThemeEditorDialog.vue'

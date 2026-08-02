@@ -146,7 +146,6 @@
     <AppDialog
       v-model="formOpen"
       :title="editingId ? 'Редактирование пользователя' : 'Новый пользователь'"
-      :icon="editingId ? 'edit' : 'person_add'"
       :busy="saving"
       :actions="[
         { kind: 'cancel', label: 'Отмена', disabled: saving },
@@ -182,7 +181,6 @@
     <AppDialog
       v-model="confirmResetOpen"
       tone="warning"
-      icon="lock_reset"
       size="sm"
       :title="`Сбросить пароль ${resetTarget?.fio || ''}?`"
       subtitle="Пароль станет временным «логин123» с обязательной сменой при входе."
@@ -197,7 +195,6 @@
     <AppDialog
       v-model="confirmPurgeOpen"
       tone="danger"
-      icon="delete_forever"
       size="sm"
       :title="`Удалить окончательно ${purgeTarget?.fio || 'пользователя'}?`"
       :busy="acting"
@@ -223,8 +220,8 @@ import { ref, computed, onMounted } from 'vue'
 import Column from 'primevue/column'
 import BrandLoader from '@/components/common/BrandLoader.vue'
 import AppDataTable from '@/components/common/AppDataTable.vue'
-import AppDialog from '@/components/common/AppDialog.vue'
-import AppFab from '@/components/common/AppFab.vue'
+import AppDialog from '@/components/ui/AppDialog.vue'
+import AppFab from '@/components/ui/AppFab.vue'
 import EmptyState from '@/components/common/EmptyState.vue'
 import SearchField from '@/components/common/SearchField.vue'
 import { useBreakpoint } from '@/composables/useBreakpoint.js'

@@ -2,7 +2,6 @@
   <AppDialog
     :model-value="modelValue"
     tone="primary"
-    icon="send"
     size="sm"
     :title="mode === 'note' ? 'Отправить заметку в чат' : 'Отправить в чат'"
     :subtitle="mode === 'note' ? 'Адресат получит доступ на просмотр — заметка появится у него во вкладке «Поделились»' : ''"
@@ -62,7 +61,7 @@
 // просмотр (адресный шаринг) и приходит сообщение со ссылкой на заметку.
 import { computed, ref, watch } from 'vue'
 import BrandLoader from '@/components/common/BrandLoader.vue'
-import AppDialog from '@/components/common/AppDialog.vue'
+import AppDialog from '@/components/ui/AppDialog.vue'
 import { useContactPicker } from '@/composables/useContactPicker.js'
 import { openConversation, sendMessage } from '@/api/messenger.js'
 import { shareNoteWithUser } from '@/api/notes.js'

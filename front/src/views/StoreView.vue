@@ -3,7 +3,7 @@
        Подписки и товары продаются за рубли (оплата — СБП, см. billingsvc).
        Карточка товара — ВНУТРЕННЯЯ страница раздела, а не модалка. -->
   <div class="gw-shell store">
-    <PillTabs v-model="tab" :tabs="TABS" />
+    <AppTabs variant="tint" v-model="tab" :tabs="TABS" />
 
     <div class="gw-panel gw-panel-body store-body">
       <BrandLoader v-if="billing.loading && !billing.entitlements" :size="64" />
@@ -131,7 +131,7 @@
 import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import InputSwitch from 'primevue/inputswitch'
-import PillTabs from '@/components/common/PillTabs.vue'
+import AppTabs from '@/components/ui/AppTabs.vue'
 import BrandLoader from '@/components/common/BrandLoader.vue'
 import StoreStatCards from '@/components/store/StoreStatCards.vue'
 import OfferCard from '@/components/store/OfferCard.vue'

@@ -3,7 +3,6 @@
     :model-value="modelValue"
     title="Перевести кудосы"
     subtitle="Признание коллегам — комментарий увидит получатель"
-    icon="send_money"
     tone="primary"
     size="lg"
     @update:model-value="$emit('update:modelValue', $event)"
@@ -85,7 +84,7 @@
 
 <script setup>
 import { computed, ref, watch } from 'vue'
-import AppDialog from '@/components/common/AppDialog.vue'
+import AppDialog from '@/components/ui/AppDialog.vue'
 import KudosCoin from '@/components/pets/KudosCoin.vue'
 import AmountInput from '@/components/pets/bank/AmountInput.vue'
 import { usePetsStore } from '@/stores/pets.js'

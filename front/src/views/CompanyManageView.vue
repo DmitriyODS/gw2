@@ -22,7 +22,7 @@
     </div>
 
     <template v-else-if="company">
-      <SegmentedTabs v-model="tab" :tabs="mainTabs" class="manage-tabs" />
+      <AppTabs v-model="tab" :tabs="mainTabs" class="manage-tabs" />
 
       <div class="manage-body">
         <!-- ОБЗОР -->
@@ -135,7 +135,7 @@
 
         <!-- НАСТРОЙКИ -->
         <section v-show="tab === 'settings'" class="pane pane-settings">
-          <SegmentedTabs v-model="settingsTab" :tabs="settingsTabs" class="settings-subtabs" />
+          <AppTabs v-model="settingsTab" :tabs="settingsTabs" class="settings-subtabs" />
 
           <div class="settings-content pane-scroll">
             <div v-show="settingsTab === 'features'" class="settings-card">
@@ -219,14 +219,13 @@
     <AppDialog
       v-model="addOpen"
       title="Добавить сотрудника"
-      icon="group_add"
       tone="primary"
       size="md"
       :busy="creatingUser"
       :closable="!creatingUser"
     >
       <div class="add-body">
-        <SegmentedTabs v-model="addTab" :tabs="addTabs" full-width class="add-subtabs" />
+        <AppTabs v-model="addTab" :tabs="addTabs" full-width class="add-subtabs" />
 
         <!-- Существующий -->
         <div v-show="addTab === 'existing'" class="add-pane">
@@ -307,7 +306,6 @@
       v-model="inviteOpen"
       title="Пригласить по email"
       subtitle="Получатель перейдёт по ссылке из письма и вступит в компанию с выбранной ролью."
-      icon="mail"
       tone="primary"
       size="sm"
       :busy="inviting"
@@ -351,7 +349,6 @@
     <AppDialog
       v-model="confirmRemove"
       tone="danger"
-      icon="person_remove"
       size="sm"
       :title="`Убрать ${removeTarget?.fio || 'сотрудника'} из компании?`"
       :busy="removing"
@@ -369,7 +366,6 @@
     <AppDialog
       v-model="confirmReset"
       tone="primary"
-      icon="lock_reset"
       size="sm"
       :title="`Сбросить пароль ${resetTarget?.fio || 'сотрудника'}?`"
       :busy="resetting"
@@ -398,7 +394,6 @@
       v-model="inviteLinkOpen"
       title="Ссылка-приглашение"
       subtitle="Любой авторизованный пользователь, перешедший по ссылке, вступит в компанию как Сотрудник. Перевыпуск делает старую ссылку недействительной."
-      icon="link"
       tone="primary"
       size="md"
     >
@@ -420,7 +415,6 @@
     <AppDialog
       v-model="confirmDelete"
       tone="danger"
-      icon="warning"
       size="sm"
       :title="`Удалить компанию «${company?.name}»?`"
       :busy="deleting"
@@ -443,9 +437,9 @@ import BrandLoader from '@/components/common/BrandLoader.vue'
 import Select from 'primevue/select'
 import ToggleSwitch from 'primevue/toggleswitch'
 import Column from 'primevue/column'
-import AppDialog from '@/components/common/AppDialog.vue'
+import AppDialog from '@/components/ui/AppDialog.vue'
 import AppDataTable from '@/components/common/AppDataTable.vue'
-import SegmentedTabs from '@/components/common/SegmentedTabs.vue'
+import AppTabs from '@/components/ui/AppTabs.vue'
 import GrooveSettings from '@/components/settings/GrooveSettings.vue'
 import WeekendSettings from '@/components/settings/WeekendSettings.vue'
 import AiSettings from '@/components/settings/AiSettings.vue'

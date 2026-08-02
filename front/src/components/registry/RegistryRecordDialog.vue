@@ -2,7 +2,6 @@
   <AppDialog
     :model-value="modelValue"
     :title="title"
-    :icon="editing ? 'edit_note' : 'description'"
     size="lg"
     :busy="saving"
     @update:model-value="onClose"
@@ -47,7 +46,7 @@
 
 <script setup>
 import { reactive, ref, watch } from 'vue'
-import AppDialog from '@/components/common/AppDialog.vue'
+import AppDialog from '@/components/ui/AppDialog.vue'
 import FieldInput from '@/components/common/FieldInput.vue'
 import FieldValue from '@/components/common/FieldValue.vue'
 import { uploadFile } from '@/api/registries.js'

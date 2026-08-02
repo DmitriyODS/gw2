@@ -4,7 +4,6 @@
   <AppDialog
     :model-value="modelValue"
     size="md"
-    icon="tune"
     :title="source ? `Тема «${source.name}»` : 'Своя тема'"
     subtitle="Крутите ручки — палитра пересчитывается во всём интерфейсе мгновенно."
     :actions="actions"
@@ -69,7 +68,7 @@
 <script setup>
 import { ref, reactive, computed, watch } from 'vue'
 import InputText from 'primevue/inputtext'
-import AppDialog from '@/components/common/AppDialog.vue'
+import AppDialog from '@/components/ui/AppDialog.vue'
 import { useThemeStore } from '@/stores/theme.js'
 import { useNotificationsStore } from '@/stores/notifications.js'
 

@@ -28,7 +28,7 @@
     </div>
 
     <div class="calc-tools">
-      <PillTabs v-model="mode" :tabs="MODES" compact />
+      <AppTabs variant="tint" v-model="mode" :tabs="MODES" dense />
       <button
         class="calc-hist-toggle"
         type="button"
@@ -133,7 +133,7 @@
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { evaluate, formatResult } from '@/utils/calc.js'
 import { storageGet, storageSet, storageGetJSON, storageSetJSON } from '@/utils/storage.js'
-import PillTabs from '@/components/common/PillTabs.vue'
+import AppTabs from '@/components/ui/AppTabs.vue'
 
 const MODE_KEY = 'gw_calc_mode'
 const ANGLE_KEY = 'gw_calc_angle'
@@ -413,13 +413,13 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))
 
 /* Переключатель режима — ровно по строке инструментов: раздутая дорожка
    спорила с клавиатурой и ломала ритм окна. */
-.calc-tools :deep(.pt) {
+.calc-tools :deep(.app-tabs) {
   flex: 1;
   min-width: 0;
   padding: 3px;
 }
 
-.calc-tools :deep(.pt-tab) {
+.calc-tools :deep(.app-tab) {
   flex: 1;
   min-width: 0;
   justify-content: center;

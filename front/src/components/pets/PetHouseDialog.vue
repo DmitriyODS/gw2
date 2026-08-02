@@ -7,7 +7,6 @@
     :subtitle="readonly
       ? `Хозяин — ${guestPet?.user?.fio || 'коллега'}`
       : 'Расставляйте декор как хочется — домик видят коллеги'"
-    icon="cottage"
     size="md"
     mask-class="above-pet-modal"
     dialog-class="above-pet-modal"
@@ -111,7 +110,7 @@
 <script setup>
 import { computed, ref, watch } from 'vue'
 import EmojiGlyph from '@/components/common/EmojiGlyph.vue'
-import AppDialog from '@/components/common/AppDialog.vue'
+import AppDialog from '@/components/ui/AppDialog.vue'
 import KudosCoin from '@/components/pets/KudosCoin.vue'
 import { usePetsStore } from '@/stores/pets.js'
 import { useNotificationsStore } from '@/stores/notifications.js'

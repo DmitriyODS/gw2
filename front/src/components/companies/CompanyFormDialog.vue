@@ -2,7 +2,6 @@
   <AppDialog
     :model-value="modelValue"
     tone="primary"
-    :icon="isEdit ? 'edit' : 'add_business'"
     size="md"
     :title="isEdit ? 'Редактирование компании' : 'Новая компания'"
     :busy="saving"
@@ -154,7 +153,7 @@
 
 <script setup>
 import { ref, computed, watch } from 'vue'
-import AppDialog from '@/components/common/AppDialog.vue'
+import AppDialog from '@/components/ui/AppDialog.vue'
 import {
   listCompanyMembers, getCompanyCandidates, addCompanyMember,
   setMemberRole, removeCompanyMember, getCompanyInvite, regenerateCompanyInvite,

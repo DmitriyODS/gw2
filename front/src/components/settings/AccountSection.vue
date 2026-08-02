@@ -86,7 +86,6 @@
     <AppDialog
       :model-value="!!revokeTarget"
       tone="danger"
-      icon="logout"
       size="sm"
       title="Завершить сеанс?"
       :subtitle="revokeSubtitle"
@@ -123,7 +122,7 @@ import {
   yandexUnlink,
 } from '@/api/auth.js'
 import { getYougileStatus } from '@/api/yougile.js'
-import AppDialog from '@/components/common/AppDialog.vue'
+import AppDialog from '@/components/ui/AppDialog.vue'
 import ImageLightbox from '@/components/common/ImageLightbox.vue'
 import BrandLoader from '@/components/common/BrandLoader.vue'
 import AuthorizeDeviceDialog from '@/components/devicelink/AuthorizeDeviceDialog.vue'

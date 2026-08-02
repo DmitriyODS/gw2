@@ -93,7 +93,6 @@
       <AppDialog
         v-if="cropping"
         model-value
-        icon="account_circle"
         size="md"
         title="Фото профиля"
         subtitle="Выберите снимок и обрежьте его под аватар."
@@ -115,7 +114,7 @@ import { savePendingAvatar, clearPendingAvatar } from '@/utils/pendingAvatar.js'
 import AuthShell from '@/components/auth/AuthShell.vue'
 import AuthField from '@/components/auth/AuthField.vue'
 import AuthThemeTiles from '@/components/auth/AuthThemeTiles.vue'
-import AppDialog from '@/components/common/AppDialog.vue'
+import AppDialog from '@/components/ui/AppDialog.vue'
 import AvatarCropper from '@/components/settings/AvatarCropper.vue'
 import YandexLogo from '@/components/common/YandexLogo.vue'
 

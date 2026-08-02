@@ -2,11 +2,11 @@
   <!-- Градиентное сияние — оформление фона приложения, поэтому живёт рядом с
        обоями рабочего стола, а не в палитрах: цвета оно берёт из активной темы
        и следует за ней само. -->
-  <SettingCard
+  <AppCard
     title="Фон приложения"
     hint="Мягкие цветные пятна под разделами — как на экране входа. Цвета берутся из активной темы и меняются вместе с ней."
   >
-    <SwitchRow
+    <AppSwitchRow
       :model-value="themeStore.bgGradient.enabled"
       title="Градиентное сияние"
       hint="Выключено — под окнами останется ровный фон темы."
@@ -25,12 +25,12 @@
         </button>
       </div>
     </Transition>
-  </SettingCard>
+  </AppCard>
 </template>
 
 <script setup>
-import SettingCard from '@/components/common/SettingCard.vue'
-import SwitchRow from '@/components/common/SwitchRow.vue'
+import AppCard from '@/components/ui/AppCard.vue'
+import AppSwitchRow from '@/components/ui/AppSwitchRow.vue'
 import { useThemeStore } from '@/stores/theme.js'
 
 const themeStore = useThemeStore()

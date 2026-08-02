@@ -2,7 +2,6 @@
   <AppDialog
     :model-value="modelValue"
     tone="success"
-    icon="add_call"
     size="sm"
     title="Пригласить в звонок"
     subtitle="Выберите коллег, которым позвонить присоединиться."
@@ -55,7 +54,7 @@
 <script setup>
 import { ref, computed, watch } from 'vue'
 import BrandLoader from '@/components/common/BrandLoader.vue'
-import AppDialog from '@/components/common/AppDialog.vue'
+import AppDialog from '@/components/ui/AppDialog.vue'
 import { getDirectory } from '@/api/users.js'
 
 const props = defineProps({

@@ -2,7 +2,6 @@
   <AppDialog
     :model-value="modelValue"
     tone="primary"
-    icon="mood"
     size="md"
     title="Мой статус"
     dialog-class="status-dialog"
@@ -37,7 +36,7 @@
 
 <script setup>
 import { ref, watch, computed } from 'vue'
-import AppDialog from '@/components/common/AppDialog.vue'
+import AppDialog from '@/components/ui/AppDialog.vue'
 import InputText from 'primevue/inputtext'
 import { updateMe } from '@/api/users.js'
 import { useAuthStore } from '@/stores/auth.js'

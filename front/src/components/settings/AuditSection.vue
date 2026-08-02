@@ -4,7 +4,7 @@
        заказы и выплаты, журнал действий. Компании, пользователи и резервная
        копия открываются своими разделами — они живут отдельными маршрутами. -->
   <div class="audit">
-    <PillTabs v-model="tab" :tabs="TABS" />
+    <AppTabs variant="tint" v-model="tab" :tabs="TABS" />
 
     <AuditPlans v-if="tab === 'plans'" />
     <AuditSubscriptions v-else-if="tab === 'subs'" />
@@ -15,7 +15,7 @@
     <AuditLog v-else-if="tab === 'log'" />
 
     <div v-else-if="tab === 'data'" class="links">
-      <SettingRow
+      <AppRow
         v-for="link in DATA_LINKS"
         :key="link.to"
         :title="link.title"
@@ -30,8 +30,8 @@
 <script setup>
 import { ref } from 'vue'
 import { useRouter } from 'vue-router'
-import PillTabs from '@/components/common/PillTabs.vue'
-import SettingRow from '@/components/common/SettingRow.vue'
+import AppTabs from '@/components/ui/AppTabs.vue'
+import AppRow from '@/components/ui/AppRow.vue'
 import AuditPlans from '@/components/settings/audit/AuditPlans.vue'
 import AuditSubscriptions from '@/components/settings/audit/AuditSubscriptions.vue'
 import AuditPromos from '@/components/settings/audit/AuditPromos.vue'

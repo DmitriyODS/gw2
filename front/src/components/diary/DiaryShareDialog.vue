@@ -1,7 +1,7 @@
 <template>
   <AppDialog
     :model-value="modelValue"
-    title="Поделиться" icon="share" size="md"
+    title="Поделиться" size="md"
     :actions="[{ kind: 'cancel', label: 'Закрыть' }]"
     @cancel="close" @update:model-value="(v) => !v && close()"
   >
@@ -80,7 +80,7 @@
 
 <script setup>
 import { ref, watch } from 'vue'
-import AppDialog from '@/components/common/AppDialog.vue'
+import AppDialog from '@/components/ui/AppDialog.vue'
 import * as api from '@/api/diaries.js'
 import { getDirectory } from '@/api/users.js'
 import { useAuthStore } from '@/stores/auth.js'

@@ -1,7 +1,6 @@
 <template>
   <AppDialog
     :model-value="modelValue"
-    icon="devices"
     size="sm"
     title="Авторизовать устройство"
     subtitle="Введите код с другого устройства или отсканируйте его QR."
@@ -67,7 +66,7 @@ import InputText from 'primevue/inputtext'
 import { useAuthStore } from '@/stores/auth.js'
 import { linkInfo, linkApprove } from '@/api/devicelink.js'
 import { extractLinkCode, normalizeLinkCode } from '@/utils/deviceLink.js'
-import AppDialog from '@/components/common/AppDialog.vue'
+import AppDialog from '@/components/ui/AppDialog.vue'
 import QrScanDialog from '@/components/common/QrScanDialog.vue'
 
 const props = defineProps({

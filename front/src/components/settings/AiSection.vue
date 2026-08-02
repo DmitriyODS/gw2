@@ -23,23 +23,23 @@
           платформы или подключите свой ключ ниже.
         </p>
 
-        <SwitchRow
+        <AppSwitchRow
           v-model="form.enabled"
           title="ИИ включён"
           hint="Общий выключатель: без него не работает ни одна возможность"
         />
-        <SwitchRow
+        <AppSwitchRow
           v-model="form.featAssistant"
           title="Hola-ассистент — чат"
           hint="Ответы на вопросы по задачам и статистике во вкладке «Чат»"
         />
-        <SwitchRow
+        <AppSwitchRow
           v-model="form.featNotes"
           title="ИИ в заметках"
           hint="Правка выделенного текста, корректура и продолжение записи"
         />
 
-        <SettingRow
+        <AppRow
           title="Модель"
           hint="Модели отвечают по-разному и расходуют разное количество токенов — выберите ту, что больше нравится."
           stack
@@ -56,7 +56,7 @@
               <strong>{{ m.title }}</strong>
             </button>
           </div>
-        </SettingRow>
+        </AppRow>
 
         <div class="ai-actions">
           <button class="btn-grad" type="button" :disabled="saving" @click="save">
@@ -75,10 +75,10 @@
 
       <!-- Токены тарифа: сколько осталось и где докупить. -->
       <section class="gw-card tokens-card">
-        <SettingRow title="Токены ИИ" :hint="tokensHint">
+        <AppRow title="Токены ИИ" :hint="tokensHint">
           <strong class="tokens-left">{{ formatCount(settings.tokens_left) }}</strong>
           <button class="gw-chip" type="button" @click="goToStore">Перейти в магазин</button>
-        </SettingRow>
+        </AppRow>
         <div v-if="!ownKeyActive && usage && usage.tokens_limit > 0" class="bar">
           <span :style="{ width: usedPct }" />
         </div>
@@ -151,8 +151,8 @@ import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import InputText from 'primevue/inputtext'
 import BrandLoader from '@/components/common/BrandLoader.vue'
-import SettingRow from '@/components/common/SettingRow.vue'
-import SwitchRow from '@/components/common/SwitchRow.vue'
+import AppRow from '@/components/ui/AppRow.vue'
+import AppSwitchRow from '@/components/ui/AppSwitchRow.vue'
 import * as aiApi from '@/api/ai.js'
 import * as billingApi from '@/api/billing.js'
 import { useNotificationsStore } from '@/stores/notifications.js'

@@ -11,12 +11,10 @@
     :style="rootStyle"
     :pt="rootPt"
   >
-    <div class="app-dialog" :class="[`tone-${tone}`, `size-${size}`, { 'has-icon': showIcon }]">
-      <!-- Шапка: иконка-тон + заголовок/подзаголовок + крестик. -->
+    <div class="app-dialog" :class="[`tone-${tone}`, `size-${size}`]">
+      <!-- Шапка: заголовок с подзаголовком и крестик. Декоративной иконки-плашки
+           у диалогов нет — как и во всём остальном интерфейсе. -->
       <header v-if="hasHeader" class="dlg-header">
-        <div v-if="showIcon" class="dlg-icon" :class="`tone-${tone}`">
-          <span class="material-symbols-outlined">{{ resolvedIcon }}</span>
-        </div>
         <div class="dlg-title-wrap">
           <slot name="title">
             <h3 v-if="title" class="dlg-title">{{ title }}</h3>
@@ -49,26 +47,28 @@
                справа — главные действия: футер разносит их space-between. -->
           <div class="dlg-footer-start">
             <slot name="footer-start" />
-            <template v-for="(a, i) in cancelActions" :key="`c${i}`">
-              <button :class="actionClass(a)" :disabled="a.disabled" type="button" @click="onAction(a)">
-                <span v-if="a.icon" class="material-symbols-outlined">{{ a.icon }}</span>
-                {{ a.label }}
-              </button>
-            </template>
+            <AppButton
+              v-for="(a, i) in cancelActions"
+              :key="`c${i}`"
+              variant="glass"
+              :icon="a.icon"
+              :label="a.label"
+              :disabled="a.disabled"
+              @click="onAction(a)"
+            />
           </div>
           <div class="dlg-footer-end">
-            <template v-for="(a, i) in mainActions" :key="i">
-              <button
-                :class="actionClass(a)"
-                :disabled="a.disabled || (a.kind === 'confirm' && busy)"
-                type="button"
-                @click="onAction(a)"
-              >
-                <span v-if="a.kind === 'confirm' && busy" class="dlg-spinner" aria-hidden="true" />
-                <span v-else-if="a.icon" class="material-symbols-outlined">{{ a.icon }}</span>
-                {{ a.label }}
-              </button>
-            </template>
+            <AppButton
+              v-for="(a, i) in mainActions"
+              :key="i"
+              :variant="a.kind === 'confirm' ? 'filled' : 'glass'"
+              :tone="actionTone(a)"
+              :icon="a.icon"
+              :label="a.label"
+              :loading="a.kind === 'confirm' && busy"
+              :disabled="a.disabled"
+              @click="onAction(a)"
+            />
           </div>
         </slot>
       </footer>
@@ -79,12 +79,13 @@
 <script setup>
 import { computed, onBeforeUnmount, watch } from 'vue'
 import Dialog from 'primevue/dialog'
+import AppButton from './AppButton.vue'
 import { registerOpenModal, unregisterOpenModal } from '@/composables/useOpenModals.js'
 import { useModalHost } from '@/desktop/windowHost.js'
 
 /* Унифицированный диалог в стиле Material You Expressive.
    Использование:
-     <AppDialog v-model="open" tone="danger" icon="delete"
+     <AppDialog v-model="open" tone="danger"
        title="Удалить файл?" subtitle="Это действие нельзя отменить."
        :actions="[
          { kind: 'cancel', label: 'Отмена' },
@@ -104,7 +105,6 @@ const props = defineProps({
   modelValue: { type: Boolean, default: false },
   title: { type: String, default: '' },
   subtitle: { type: String, default: '' },
-  icon: { type: String, default: '' },         // material-symbols-outlined name
   tone: {
     type: String,
     default: 'primary',
@@ -122,7 +122,6 @@ const props = defineProps({
   },
   closable: { type: Boolean, default: true },
   showClose: { type: Boolean, default: true },
-  showIcon: { type: Boolean, default: true },
   busy: { type: Boolean, default: false },
   bodyNoPadding: { type: Boolean, default: false },
   actions: {
@@ -153,20 +152,8 @@ onBeforeUnmount(() => {
   if (props.modelValue) unregisterOpenModal()
 })
 
-// Иконка по умолчанию для каждого тона — если её не передали явно.
-const TONE_ICON_DEFAULT = {
-  primary: 'info',
-  tertiary: 'lightbulb',
-  success: 'check_circle',
-  warning: 'warning',
-  danger: 'error',
-  neutral: 'help',
-}
-
-const resolvedIcon = computed(() => props.icon || TONE_ICON_DEFAULT[props.tone])
-
 const hasHeader = computed(() =>
-  !!(props.title || props.subtitle || props.showIcon || props.closable)
+  !!(props.title || props.subtitle || props.closable)
 )
 
 // Ширины размеров — в глобальном style ниже (.dlg-size-*).
@@ -223,18 +210,15 @@ function onAction(a) {
 const cancelActions = computed(() => props.actions.filter((a) => a.kind === 'cancel'))
 const mainActions = computed(() => props.actions.filter((a) => a.kind !== 'cancel'))
 
-function actionClass(a) {
-  if (a.kind === 'cancel') return 'dlg-btn dlg-btn-text'
-  if (a.kind === 'confirm') {
-    // Тон confirm-кнопки наследуется от диалога, если не задан явно.
-    const t = a.tone || props.tone
-    if (t === 'danger') return 'dlg-btn dlg-btn-filled tone-danger'
-    if (t === 'warning') return 'dlg-btn dlg-btn-filled tone-warning'
-    if (t === 'success') return 'dlg-btn dlg-btn-filled tone-success'
-    if (t === 'tertiary') return 'dlg-btn dlg-btn-filled tone-tertiary'
-    return 'dlg-btn dlg-btn-filled tone-primary'
-  }
-  return 'dlg-btn dlg-btn-tonal'
+/* Тон главной кнопки наследуется от диалога, если не задан явно: у диалога
+   удаления кнопка «Удалить» красная без лишних указаний. AppButton знает
+   primary | danger | success | neutral — остальные тона к ним и сводим. */
+function actionTone(a) {
+  if (a.kind !== 'confirm') return 'primary'
+  const t = a.tone || props.tone
+  if (t === 'danger' || t === 'warning') return 'danger'
+  if (t === 'success') return 'success'
+  return 'primary'
 }
 </script>
 
@@ -256,31 +240,6 @@ function actionClass(a) {
   align-items: center;
   gap: 16px;
   padding: 24px 24px 8px;
-}
-
-/* Иконка-бейдж диалога: матовое стекло единого стиля, тон задаёт только
-   цвет символа (сплошные тональные круги выбивались из акриловой системы). */
-.dlg-icon {
-  width: 56px;
-  height: 56px;
-  flex-shrink: 0;
-  border-radius: 50%;
-  display: grid;
-  place-items: center;
-  background: var(--acrylic-card-bg);
-  border: 1px solid var(--acrylic-border);
-  color: var(--color-primary);
-}
-
-.dlg-icon.tone-tertiary { color: var(--color-tertiary); }
-.dlg-icon.tone-success { color: var(--color-success, var(--color-tertiary)); }
-.dlg-icon.tone-warning { color: var(--color-warning, var(--color-tertiary)); }
-.dlg-icon.tone-danger { color: var(--color-error); }
-.dlg-icon.tone-neutral { color: var(--color-text-dim); }
-
-.dlg-icon .material-symbols-outlined {
-  font-size: 28px;
-  font-variation-settings: 'FILL' 1, 'wght' 500, 'GRAD' 0, 'opsz' 32;
 }
 
 .dlg-title-wrap {
@@ -339,11 +298,6 @@ function actionClass(a) {
 
 .dlg-body.no-padding { padding: 0; }
 
-.app-dialog.has-icon .dlg-body {
-  padding-left: 24px;
-  padding-right: 24px;
-}
-
 /* Когда шапки нет — тело не должно «лепиться» к верху. */
 .app-dialog:not(:has(.dlg-header)) .dlg-body { padding-top: 24px; }
 
@@ -366,112 +320,6 @@ function actionClass(a) {
   display: flex;
   gap: 8px;
   margin-left: auto;
-}
-
-/* Кнопки. */
-.dlg-btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  height: 40px;
-  padding: 0 18px;
-  border: none;
-  border-radius: var(--radius-full);
-  font: inherit;
-  font-size: 14px;
-  font-weight: 600;
-  white-space: nowrap;
-  cursor: pointer;
-  position: relative;
-  isolation: isolate;
-  overflow: hidden;
-  transition: box-shadow 0.18s ease, transform 0.12s ease;
-}
-
-.dlg-btn::before {
-  content: '';
-  position: absolute;
-  inset: 0;
-  background: currentColor;
-  opacity: 0;
-  transition: opacity 0.18s ease;
-  z-index: -1;
-}
-
-.dlg-btn:hover::before { opacity: 0.08; }
-.dlg-btn:focus-visible::before { opacity: 0.12; }
-.dlg-btn:active::before { opacity: 0.16; }
-.dlg-btn:active { transform: scale(0.98); }
-.dlg-btn:disabled { opacity: 0.55; cursor: not-allowed; transform: none; }
-.dlg-btn:disabled::before { opacity: 0; }
-
-.dlg-btn .material-symbols-outlined { font-size: 18px; }
-
-.dlg-btn-text {
-  background: transparent;
-  background: var(--glass-bg);
-  box-shadow: var(--glass-edge), inset 0 0 0 1px var(--acrylic-border);
-  color: var(--color-text);
-  padding: 0 14px;
-}
-
-/* Второстепенная кнопка — стеклянная (как глобальная .btn-glass). */
-.dlg-btn-tonal {
-  background: var(--color-secondary-container);
-  background: var(--glass-bg);
-  box-shadow: var(--glass-edge), inset 0 0 0 1px var(--acrylic-border);
-  color: var(--color-text);
-}
-
-/* Главные кнопки — пилюли на градиенте тона (как глобальная .btn-grad). */
-.dlg-btn-filled.tone-primary {
-  background: var(--grad-primary);
-  color: var(--color-on-primary);
-}
-.dlg-btn-filled.tone-danger {
-  background: var(--color-error);
-  background: linear-gradient(90deg,
-    var(--color-error) 0%,
-    color-mix(in oklch, var(--color-error) 45%, var(--color-error-container)) 100%);
-  color: var(--color-on-error);
-}
-.dlg-btn-filled.tone-warning {
-  background: var(--color-warning, var(--color-tertiary));
-  background: linear-gradient(90deg,
-    var(--color-warning, var(--color-tertiary)) 0%,
-    color-mix(in oklch, var(--color-warning, var(--color-tertiary)) 45%, var(--color-warning-container, var(--color-tertiary-container))) 100%);
-  color: var(--color-on-warning, var(--color-on-tertiary));
-}
-.dlg-btn-filled.tone-success {
-  background: var(--color-success);
-  background: linear-gradient(90deg,
-    var(--color-success) 0%,
-    color-mix(in oklch, var(--color-success) 45%, var(--color-success-container)) 100%);
-  color: var(--color-on-success);
-}
-.dlg-btn-filled.tone-tertiary {
-  background: var(--color-tertiary);
-  background: linear-gradient(90deg,
-    var(--color-tertiary) 0%,
-    color-mix(in oklch, var(--color-tertiary) 45%, var(--color-tertiary-container)) 100%);
-  color: var(--color-on-tertiary);
-}
-
-.dlg-btn-filled:hover { box-shadow: var(--shadow-sm); filter: brightness(1.06); }
-
-/* Спиннер для busy-кнопки. */
-.dlg-spinner {
-  width: 16px;
-  height: 16px;
-  border-radius: 50%;
-  border: 2px solid currentColor;
-  border-right-color: transparent;
-  animation: dlg-spin 0.6s linear infinite;
-}
-
-@keyframes dlg-spin {
-  to { transform: rotate(360deg); }
 }
 
 /* Мобильная адаптация: на ≤768 (единый мобильный брейкпоинт приложения,

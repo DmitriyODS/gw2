@@ -2,7 +2,6 @@
   <AppDialog
     :model-value="modelValue"
     :title="title"
-    :icon="editing ? 'edit_calendar' : 'event'"
     size="lg"
     :busy="saving"
     @update:model-value="onClose"
@@ -73,8 +72,8 @@
 <script setup>
 import { computed, reactive, ref, watch } from 'vue'
 import DatePicker from 'primevue/datepicker'
-import AppDialog from '@/components/common/AppDialog.vue'
-import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
+import AppDialog from '@/components/ui/AppDialog.vue'
+import ConfirmDialog from '@/components/ui/ConfirmDialog.vue'
 import FieldInput from '@/components/common/FieldInput.vue'
 import FieldValue from '@/components/common/FieldValue.vue'
 import { uploadFile } from '@/api/calendars.js'

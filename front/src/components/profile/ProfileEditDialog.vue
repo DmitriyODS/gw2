@@ -2,7 +2,6 @@
   <AppDialog
     :model-value="modelValue"
     tone="primary"
-    icon="badge"
     size="md"
     :title="cropping ? 'Загрузка аватарки' : 'Редактирование профиля'"
     :subtitle="cropping ? 'Выберите фото и подгоните кадр.' : 'Данные и контакты, которые видят коллеги.'"
@@ -101,7 +100,7 @@
 
 <script setup>
 import { computed, reactive, ref, watch } from 'vue'
-import AppDialog from '@/components/common/AppDialog.vue'
+import AppDialog from '@/components/ui/AppDialog.vue'
 import AvatarCropper from '@/components/settings/AvatarCropper.vue'
 import ChangeLoginDialog from '@/components/profile/ChangeLoginDialog.vue'
 import ChangePasswordDialog from '@/components/profile/ChangePasswordDialog.vue'

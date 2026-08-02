@@ -1,7 +1,7 @@
 <template>
   <AppDialog
     :model-value="modelValue"
-    title="Управление тегами" icon="sell" size="md"
+    title="Управление тегами" size="md"
     :actions="[{ kind: 'cancel', label: 'Готово' }]"
     @cancel="close" @update:model-value="(v) => !v && close()"
   >
@@ -58,8 +58,8 @@
 
 <script setup>
 import { ref } from 'vue'
-import AppDialog from '@/components/common/AppDialog.vue'
-import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
+import AppDialog from '@/components/ui/AppDialog.vue'
+import ConfirmDialog from '@/components/ui/ConfirmDialog.vue'
 import ColorSwatchPicker from '@/components/common/ColorSwatchPicker.vue'
 import { useNotesStore } from '@/stores/notes.js'
 import { useNotificationsStore } from '@/stores/notifications.js'

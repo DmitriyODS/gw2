@@ -116,7 +116,6 @@
     <AppDialog
       v-model="fieldOpen"
       :title="fieldIndex === -1 ? 'Новое поле' : 'Настройка поля'"
-      :icon="draft.type ? fieldIcon(draft.type) : 'add_box'"
       size="md"
       :actions="[{ kind: 'cancel', label: 'Отмена' }, { kind: 'confirm', label: 'Готово' }]"
       @cancel="fieldOpen = false"
@@ -206,7 +205,7 @@
 
     <!-- Создание реестра -->
     <AppDialog
-      v-model="creating" title="Новый реестр" icon="add" :busy="saving"
+      v-model="creating" title="Новый реестр" :busy="saving"
       :actions="[{ kind: 'cancel', label: 'Отмена' }, { kind: 'confirm', label: 'Создать' }]"
       @cancel="creating = false" @confirm="doCreate"
     >
@@ -227,8 +226,8 @@
 import { computed, onMounted, reactive, ref } from 'vue'
 import Select from 'primevue/select'
 import Checkbox from 'primevue/checkbox'
-import AppDialog from '@/components/common/AppDialog.vue'
-import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
+import AppDialog from '@/components/ui/AppDialog.vue'
+import ConfirmDialog from '@/components/ui/ConfirmDialog.vue'
 import * as api from '@/api/registries.js'
 import { useRegistriesStore } from '@/stores/registries.js'
 import { useNotificationsStore } from '@/stores/notifications.js'

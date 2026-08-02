@@ -1,6 +1,6 @@
 <template>
   <div class="cp">
-    <SettingRow
+    <AppRow
       title="Фон переписки"
       hint="Общий градиент и узор для всех чатов. В отдельном чате фон переопределяется через меню «⋮ → Оформление чата»."
       clickable
@@ -13,9 +13,9 @@
           <span class="cp-bubble right" />
         </span>
       </template>
-    </SettingRow>
+    </AppRow>
 
-    <SettingRow
+    <AppRow
       v-if="hasCompany"
       title="Фон ленты портала"
       hint="Оформление корпоративной ленты. Личное — коллеги видят свой фон."
@@ -29,7 +29,7 @@
           <span class="cp-post short" />
         </span>
       </template>
-    </SettingRow>
+    </AppRow>
 
     <ChatBackgroundDialog v-model="chatBgOpen" :conversation="null" />
     <PortalBackgroundDialog v-if="hasCompany" v-model="portalBgOpen" />
@@ -39,7 +39,7 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue'
 import ChatBackgroundLayer from '@/components/common/ChatBackgroundLayer.vue'
-import SettingRow from '@/components/common/SettingRow.vue'
+import AppRow from '@/components/ui/AppRow.vue'
 import ChatBackgroundDialog from '@/components/messenger/ChatBackgroundDialog.vue'
 import PortalBackgroundDialog from '@/components/portal/PortalBackgroundDialog.vue'
 import { useMessengerStore } from '@/stores/messenger.js'

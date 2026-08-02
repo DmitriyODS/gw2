@@ -168,7 +168,7 @@
     <!-- Экспорт -->
     <AppDialog
       v-model="exportOpen"
-      title="Экспорт в XLSX" icon="download" size="md" :busy="exporting"
+      title="Экспорт в XLSX" size="md" :busy="exporting"
       :actions="[{ kind: 'cancel', label: 'Отмена' }, { kind: 'confirm', label: 'Экспортировать', icon: 'download' }]"
       @cancel="exportOpen = false" @confirm="doExport"
     >
@@ -201,7 +201,7 @@ import { computed, onMounted, reactive, ref } from 'vue'
 import { useRoute } from 'vue-router'
 import Checkbox from 'primevue/checkbox'
 import Select from 'primevue/select'
-import AppDialog from '@/components/common/AppDialog.vue'
+import AppDialog from '@/components/ui/AppDialog.vue'
 import RegistryRecordDialog from '@/components/registry/RegistryRecordDialog.vue'
 import { getSharedRegistry, getSharedRecords, exportSharedRecords } from '@/api/registries.js'
 import { fieldIcon, isExportable, isSortable, textValue } from '@/utils/registryFields.js'

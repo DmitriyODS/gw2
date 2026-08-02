@@ -1,7 +1,7 @@
 <template>
   <!-- Каркас рабочего стола: где висит панель задач и как открывается меню
        «Пуск». Настройка личная и синхронизируется между устройствами. -->
-  <SettingCard
+  <AppCard
     title="Панель задач и меню «Пуск»"
     hint="Панель можно прижать к любому краю экрана — окна сами подстроятся под свободное место."
   >
@@ -19,19 +19,19 @@
       </button>
     </div>
 
-    <SwitchRow
+    <AppSwitchRow
       :model-value="prefs.startFullscreen"
       title="Меню «Пуск» во весь экран"
       hint="Иначе меню открывается панелью, а развернуть его можно кнопкой в его шапке."
       @update:model-value="prefs.setStartFullscreen"
     />
-  </SettingCard>
+  </AppCard>
 </template>
 
 <script setup>
 import { useDesktopPrefsStore } from '@/stores/desktopPrefs.js'
-import SettingCard from '@/components/common/SettingCard.vue'
-import SwitchRow from '@/components/common/SwitchRow.vue'
+import AppCard from '@/components/ui/AppCard.vue'
+import AppSwitchRow from '@/components/ui/AppSwitchRow.vue'
 
 const prefs = useDesktopPrefsStore()
 

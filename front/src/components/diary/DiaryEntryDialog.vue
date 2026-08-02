@@ -2,7 +2,6 @@
   <AppDialog
     :model-value="modelValue"
     :title="title"
-    :icon="isNew ? 'note_add' : 'event_note'"
     size="md"
     :busy="saving"
     @update:model-value="onClose"
@@ -127,8 +126,7 @@
 
     <AppDialog
       v-model="moveOpen"
-      title="Перенести в другой ежедневник"
-      icon="drive_file_move" size="sm"
+      title="Перенести в другой ежедневник" size="sm"
       :busy="moving"
       :actions="[{ kind: 'cancel', label: 'Отмена' }, { kind: 'confirm', label: 'Перенести' }]"
       @cancel="moveOpen = false" @confirm="doMove"
@@ -157,8 +155,8 @@
 import { computed, nextTick, reactive, ref, watch } from 'vue'
 import DatePicker from 'primevue/datepicker'
 import Select from 'primevue/select'
-import AppDialog from '@/components/common/AppDialog.vue'
-import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
+import AppDialog from '@/components/ui/AppDialog.vue'
+import ConfirmDialog from '@/components/ui/ConfirmDialog.vue'
 import LinkifiedText from '@/components/common/LinkifiedText.vue'
 import TimePicker from '@/components/common/TimePicker.vue'
 import { useDiariesStore, dayKey } from '@/stores/diaries.js'

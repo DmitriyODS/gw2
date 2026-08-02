@@ -1,7 +1,7 @@
 <template>
   <!-- Личный dev-чат с командой разработки: бэк создаёт его при первом
        обращении, поэтому строка сразу ведёт в мессенджер. -->
-  <SettingRow
+  <AppRow
     title="Чат с техподдержкой"
     hint="Опишите проблему или предложите улучшение — ответ придёт сюда же, в мессенджер."
     clickable
@@ -15,7 +15,7 @@ import { ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { useMessengerStore } from '@/stores/messenger.js'
 import { useNotificationsStore } from '@/stores/notifications.js'
-import SettingRow from '@/components/common/SettingRow.vue'
+import AppRow from '@/components/ui/AppRow.vue'
 
 const router = useRouter()
 const messenger = useMessengerStore()

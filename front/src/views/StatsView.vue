@@ -3,7 +3,7 @@
     <!-- Прозрачный тулбар в стиле «Задач»: вкладки-режимы, период, действия. -->
     <div class="stats-sticky">
       <div class="stats-controls-row">
-        <SegmentedTabs
+        <AppTabs
           class="stats-mode-tabs"
           :model-value="mode"
           :tabs="modeTabs"
@@ -339,7 +339,7 @@ import { formatHours } from '@/utils/time.js'
 import StatsPeriodControl from '@/components/stats/StatsPeriodControl.vue'
 import StatsWidget from '@/components/stats/StatsWidget.vue'
 import CalendarGrid from '@/components/stats/CalendarGrid.vue'
-import SegmentedTabs from '@/components/common/SegmentedTabs.vue'
+import AppTabs from '@/components/ui/AppTabs.vue'
 import EmptyState from '@/components/common/EmptyState.vue'
 import DataTable from 'primevue/datatable'
 import Column from 'primevue/column'

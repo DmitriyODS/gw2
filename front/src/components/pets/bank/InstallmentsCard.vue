@@ -39,7 +39,7 @@
 
     <p v-else-if="data" class="ic-empty">Активных рассрочек нет. Выберите «Частями» при покупке в магазине или домике.</p>
 
-    <AppDialog v-model="helpOpen" title="Оплата частями" icon="splitscreen" tone="primary" size="sm">
+    <AppDialog v-model="helpOpen" title="Оплата частями" tone="primary" size="sm">
       <ul class="ic-help-list">
         <li><b>Кредитный счёт на {{ data ? data.limit : 500 }} кудосов.</b> Любой не-акционный товар можно взять сейчас и оплачивать долями.</li>
         <li>Покупка делится на <b>{{ data ? data.parts : 4 }} части</b> — вносите их когда удобно.</li>
@@ -57,7 +57,7 @@ import { usePetsStore } from '@/stores/pets'
 import { useNotificationsStore } from '@/stores/notifications'
 import KudosCoin from '@/components/pets/KudosCoin.vue'
 import EmojiGlyph from '@/components/common/EmojiGlyph.vue'
-import AppDialog from '@/components/common/AppDialog.vue'
+import AppDialog from '@/components/ui/AppDialog.vue'
 import { SHOP_ITEMS, DECOR_ITEMS } from '@/utils/pets'
 
 const pets = usePetsStore()

@@ -193,7 +193,6 @@
       :model-value="!!selected"
       :title="selected ? shopItemTitle(selected) : ''"
       :subtitle="selected ? RARITY_TITLE[selected.rarity] || '' : ''"
-      icon="storefront"
       tone="primary"
       size="sm"
       mobile="sheet"
@@ -281,7 +280,7 @@
 import { computed, onMounted, onBeforeUnmount, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import BrandLoader from '@/components/common/BrandLoader.vue'
-import AppDialog from '@/components/common/AppDialog.vue'
+import AppDialog from '@/components/ui/AppDialog.vue'
 import EmojiGlyph from '@/components/common/EmojiGlyph.vue'
 import KudosCoin from '@/components/pets/KudosCoin.vue'
 import ConfettiBurst from '@/components/pets/bank/ConfettiBurst.vue'

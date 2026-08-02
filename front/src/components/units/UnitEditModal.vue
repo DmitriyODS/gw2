@@ -2,7 +2,6 @@
   <AppDialog
     model-value
     tone="primary"
-    icon="edit"
     size="sm"
     title="Редактировать юнит"
     :busy="submitting"
@@ -90,7 +89,7 @@ import { ref, onMounted, watch } from 'vue'
 import InputText from 'primevue/inputtext'
 import Select from 'primevue/select'
 import DatePicker from 'primevue/datepicker'
-import AppDialog from '@/components/common/AppDialog.vue'
+import AppDialog from '@/components/ui/AppDialog.vue'
 import { updateUnit } from '@/api/units.js'
 import { getUnitTypes } from '@/api/unitTypes.js'
 import { useNotificationsStore } from '@/stores/notifications.js'

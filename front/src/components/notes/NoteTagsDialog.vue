@@ -1,7 +1,7 @@
 <template>
   <AppDialog
     :model-value="modelValue"
-    title="Теги заметки" icon="sell" size="sm"
+    title="Теги заметки" size="sm"
     :busy="saving"
     :actions="[
       { kind: 'cancel', label: 'Отмена' },
@@ -43,7 +43,7 @@
 
 <script setup>
 import { ref, watch } from 'vue'
-import AppDialog from '@/components/common/AppDialog.vue'
+import AppDialog from '@/components/ui/AppDialog.vue'
 import ColorSwatchPicker from '@/components/common/ColorSwatchPicker.vue'
 import { useNotesStore } from '@/stores/notes.js'
 import { useNotificationsStore } from '@/stores/notifications.js'

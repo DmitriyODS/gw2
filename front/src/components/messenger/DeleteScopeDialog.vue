@@ -2,7 +2,6 @@
   <AppDialog
     :model-value="modelValue"
     tone="danger"
-    icon="delete"
     size="sm"
     :title="title"
     :subtitle="text"
@@ -25,7 +24,7 @@
 
 <script setup>
 import { ref, watch } from 'vue'
-import AppDialog from '@/components/common/AppDialog.vue'
+import AppDialog from '@/components/ui/AppDialog.vue'
 
 const props = defineProps({
   modelValue: { type: Boolean, default: false },

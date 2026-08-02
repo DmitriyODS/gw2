@@ -1,5 +1,5 @@
 <template>
-  <SettingCard
+  <AppCard
     class="dw-card"
     title="Обои рабочего стола"
     hint="Готовый комплект, своя картинка, градиент или узор под окнами. Оформление личное и синхронизируется на всех ваших устройствах."
@@ -36,13 +36,13 @@
         Применить
       </button>
     </div>
-  </SettingCard>
+  </AppCard>
 </template>
 
 <script setup>
 import { onMounted, reactive } from 'vue'
 import BackgroundEditor from '@/components/common/BackgroundEditor.vue'
-import SettingCard from '@/components/common/SettingCard.vue'
+import AppCard from '@/components/ui/AppCard.vue'
 import { useDesktopPrefsStore } from '@/stores/desktopPrefs.js'
 import { useNotificationsStore } from '@/stores/notifications.js'
 import { uploadAttachment } from '@/api/messenger.js'

@@ -2,7 +2,6 @@
   <AppDialog
     :model-value="modelValue"
     :title="folder ? 'Переименовать папку' : 'Новая папка'"
-    :icon="folder ? 'drive_file_rename_outline' : 'create_new_folder'"
     size="sm"
     :busy="saving"
     :actions="[
@@ -30,7 +29,7 @@
 
 <script setup>
 import { nextTick, ref, watch } from 'vue'
-import AppDialog from '@/components/common/AppDialog.vue'
+import AppDialog from '@/components/ui/AppDialog.vue'
 import ColorSwatchPicker from '@/components/common/ColorSwatchPicker.vue'
 import { useBoardsStore } from '@/stores/boards.js'
 import { useNotificationsStore } from '@/stores/notifications.js'

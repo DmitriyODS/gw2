@@ -66,7 +66,6 @@
     <AppDialog
       v-model="logoutAsk"
       tone="danger"
-      icon="logout"
       size="sm"
       title="Выйти из системы?"
       subtitle="Открытые разделы закроются, для возврата понадобится войти заново."
@@ -94,7 +93,7 @@ import { menuGroups } from '@/desktop/apps.js'
 import { tileFaces } from '@/desktop/liveTiles.js'
 import BrandWordmark from '@/components/common/BrandWordmark.vue'
 import ContextMenu from '@/components/common/ContextMenu.vue'
-import AppDialog from '@/components/common/AppDialog.vue'
+import AppDialog from '@/components/ui/AppDialog.vue'
 import LiveTile from '@/components/desktop/LiveTile.vue'
 
 const auth = useAuthStore()

@@ -1,7 +1,7 @@
 <template>
   <AppDialog
     :model-value="modelValue"
-    title="Переместить" icon="drive_file_move" size="sm"
+    title="Переместить" size="sm"
     :busy="moving"
     :actions="[
       { kind: 'cancel', label: 'Отмена' },
@@ -37,7 +37,7 @@
 
 <script setup>
 import { computed, ref, watch } from 'vue'
-import AppDialog from '@/components/common/AppDialog.vue'
+import AppDialog from '@/components/ui/AppDialog.vue'
 import TreeView from '@/components/common/TreeView.vue'
 import { useBoardsStore } from '@/stores/boards.js'
 import { useAuthStore } from '@/stores/auth.js'

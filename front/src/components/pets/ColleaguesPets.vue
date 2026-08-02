@@ -126,7 +126,7 @@
 <script setup>
 import { computed, onMounted, reactive, ref } from 'vue'
 import EmojiGlyph from '@/components/common/EmojiGlyph.vue'
-import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
+import ConfirmDialog from '@/components/ui/ConfirmDialog.vue'
 import EmptyState from '@/components/common/EmptyState.vue'
 import KudosCoin from '@/components/pets/KudosCoin.vue'
 import StrokeMiniGame from '@/components/pets/StrokeMiniGame.vue'

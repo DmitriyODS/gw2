@@ -6,7 +6,7 @@ import { computed, ref, watch } from 'vue'
 import DatePicker from 'primevue/datepicker'
 import InputText from 'primevue/inputtext'
 import Textarea from 'primevue/textarea'
-import AppDialog from '@/components/common/AppDialog.vue'
+import AppDialog from '@/components/ui/AppDialog.vue'
 import TimePicker from '@/components/common/TimePicker.vue'
 import { useRemindersStore } from '@/stores/reminders.js'
 import { useNotificationsStore } from '@/stores/notifications.js'
@@ -166,7 +166,6 @@ function close() {
   <AppDialog
     :model-value="modelValue"
     :title="isEdit ? 'Напоминание' : 'Новое напоминание'"
-    icon="alarm"
     size="sm"
     :busy="saving"
     :actions="[

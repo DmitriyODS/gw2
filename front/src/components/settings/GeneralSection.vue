@@ -1,29 +1,29 @@
 <template>
   <div class="gs">
-    <SettingCard title="Hola ассистент">
+    <AppCard title="Hola ассистент">
       <!-- Выдачу поисковика Hola открывает новой вкладкой браузера; здесь
            выбирается тот, что идёт в результатах первым. -->
-      <SettingRow
+      <AppRow
         title="Поиск в интернете"
         hint="С какого поисковика начинать, когда ответа нет внутри приложения."
       >
-        <PillTabs :model-value="engine" :tabs="engineTabs" compact @update:model-value="pickEngine" />
-      </SettingRow>
-    </SettingCard>
+        <AppTabs variant="tint" :model-value="engine" :tabs="engineTabs" dense @update:model-value="pickEngine" />
+      </AppRow>
+    </AppCard>
 
     <!-- Личный ключ YouGile: только для рядовых участников компании —
          администратор подключает компанию целиком в карточке компании. -->
-    <SettingCard v-if="showYougile" title="Интеграция с YouGile">
+    <AppCard v-if="showYougile" title="Интеграция с YouGile">
       <YougileUserSettings />
-    </SettingCard>
+    </AppCard>
   </div>
 </template>
 
 <script setup>
 import { ref } from 'vue'
-import PillTabs from '@/components/common/PillTabs.vue'
-import SettingCard from '@/components/common/SettingCard.vue'
-import SettingRow from '@/components/common/SettingRow.vue'
+import AppTabs from '@/components/ui/AppTabs.vue'
+import AppCard from '@/components/ui/AppCard.vue'
+import AppRow from '@/components/ui/AppRow.vue'
 import YougileUserSettings from '@/components/settings/YougileUserSettings.vue'
 import { SEARCH_ENGINES, getSearchEngine, setSearchEngine } from '@/utils/webSearch.js'
 

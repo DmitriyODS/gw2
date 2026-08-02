@@ -153,7 +153,6 @@
     <AppDialog
       v-model="logoutAsk"
       tone="danger"
-      icon="logout"
       size="sm"
       title="Выйти из системы?"
       subtitle="Открытые окна закроются, для возврата понадобится войти заново."
@@ -182,7 +181,7 @@ import { useUnitsStore } from '@/stores/units.js'
 import BrandWordmark from '@/components/common/BrandWordmark.vue'
 import CompanySelect from '@/components/common/CompanySelect.vue'
 import ContextMenu from '@/components/common/ContextMenu.vue'
-import AppDialog from '@/components/common/AppDialog.vue'
+import AppDialog from '@/components/ui/AppDialog.vue'
 import LiveTile from './LiveTile.vue'
 import ActivityPanel from './ActivityPanel.vue'
 

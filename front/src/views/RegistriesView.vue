@@ -1,93 +1,97 @@
 <template>
-  <div class="registries split-view">
-    <!-- ЛЕВАЯ ПАНЕЛЬ: список реестров -->
-    <aside class="split-side">
-      <div class="split-side-head">
-        <span class="split-side-title">Реестры</span>
-      </div>
-      <div class="split-side-list">
-        <div v-if="store.loadingList" class="split-side-note">Загрузка…</div>
-        <div v-else-if="!store.registries.length" class="split-side-note">Реестры отсутствуют</div>
-        <button
-          v-for="r in store.registries"
-          :key="r.id"
-          class="split-side-item"
-          :class="{ active: r.id === store.selectedId }"
-          @click="store.select(r.id)"
-        >
-          <span class="split-item-tile"><span class="material-symbols-outlined">list_alt</span></span>
-          <span class="split-side-name">{{ r.name }}</span>
-        </button>
-      </div>
-    </aside>
+  <AppListDetail v-model:open="detailOpen" @narrow-change="narrow = $event">
+    <!-- Список реестров -->
+    <template #list="{ toggle }">
+      <!-- Список подписан всегда: заголовок окна относится к разделу целиком, а
+           без подписи непонятно, перечень чего в колонке. -->
+      <AppPage
+        embedded
+        title="Реестры"
+        show-title
+        :menu="!narrow"
+        menu-icon="left_panel_close"
+        menu-label="Свернуть список"
+        :loading="store.loadingList"
+        @menu="toggle"
+      >
+        <EmptyState
+          v-if="!store.registries.length"
+          size="sm"
+          icon="list_alt"
+          title="Реестров нет"
+          subtitle="Их заводит администратор компании."
+        />
+        <AppStack v-else :gap="6">
+          <AppRow
+            v-for="r in store.registries"
+            :key="r.id"
+            :title="r.name"
+            icon="list_alt"
+            dense
+            clickable
+            :selected="r.id === store.selectedId"
+            @click="selectRegistry(r.id)"
+          />
+        </AppStack>
+      </AppPage>
+    </template>
 
-    <!-- ПРАВАЯ ПАНЕЛЬ: содержимое выбранного реестра -->
-    <section class="split-main">
-      <!-- Мобайл: выбор реестра горизонтальной лентой чипов (вместо боковой панели) -->
-      <div v-if="isMobile && store.registries.length" class="rg-regstrip">
-        <button
-          v-for="r in store.registries"
-          :key="r.id"
-          class="rg-regchip"
-          :class="{ active: r.id === store.selectedId }"
-          @click="store.select(r.id)"
-        >{{ r.name }}</button>
-      </div>
-
-      <template v-if="store.selected">
-        <!-- Тулбар -->
-        <header class="rg-toolbar">
-          <h2 class="rg-name" :title="store.selected.name">{{ store.selected.name }}</h2>
-
+    <!-- Содержимое выбранного реестра -->
+    <template #detail="{ collapsed, toggle }">
+      <AppPage
+        embedded
+        :title="store.selected?.name || ''"
+        :back="narrow"
+        back-label="К реестрам"
+        :menu="!narrow && collapsed"
+        menu-icon="left_panel_open"
+        menu-label="Показать список"
+        :commands="commands"
+        flush
+        :scroll="false"
+        @back="detailOpen = false"
+        @menu="toggle"
+        @command="onCommand"
+      >
+        <template v-if="store.selected" #subhead>
+          <!-- В шапке раздела поиск развёрнут всегда, в том числе на телефоне:
+               команды теперь занимают две кнопки, и место под поле есть. -->
           <SearchField
             v-model="searchInput"
             placeholder="Поиск по записям…"
             hotkey
+            :collapsible="false"
             @update:model-value="onSearch"
             @clear="clearSearch"
           />
+        </template>
 
-          <div class="rg-actions">
-            <div v-if="!isMobile && store.selected.fields.length" class="rg-cols">
-              <button ref="colsBtn" class="rg-icon-btn" title="Колонки" @click="toggleCols">
-                <span class="material-symbols-outlined">view_column</span>
-              </button>
-              <teleport to="body">
-                <template v-if="colsOpen">
-                  <div class="rg-cols-backdrop" @click="colsOpen = false" />
-                  <div class="rg-cols-pop" :style="colsPopStyle">
-                    <div class="rg-cols-title">Колонки таблицы</div>
-                    <label v-for="f in store.selected.fields" :key="f.id" class="rg-cols-row">
-                      <Checkbox :model-value="visibleCols.includes(f.id)" binary @update:model-value="toggleCol(f.id)" />
-                      <span>{{ f.label }}</span>
-                    </label>
-                  </div>
-                </template>
-              </teleport>
-            </div>
-            <template v-if="hasQrFields">
-              <button class="rg-icon-btn" title="Найти запись по QR-коду" @click="qrFindOpen = true">
-                <span class="material-symbols-outlined">qr_code_scanner</span>
-              </button>
-              <button class="rg-icon-btn" title="Печать QR-кодов" @click="qrPrintOpen = true">
-                <span class="material-symbols-outlined">print</span>
-              </button>
-            </template>
-            <button class="rg-icon-btn" title="Внешние ссылки" @click="openShares">
-              <span class="material-symbols-outlined">link</span>
-            </button>
-            <button v-if="store.selected.fields.length" class="rg-icon-btn" title="Экспорт в XLSX" @click="openExport">
-              <span class="material-symbols-outlined">download</span>
-            </button>
-            <button class="btn-grad" @click="openCreate">
-              <span class="material-symbols-outlined">add</span>
-              <span class="rg-btn-label">Добавить</span>
-            </button>
+        <template v-if="store.selected && store.records.length" #footer>
+          <span class="rg-total">Всего записей: {{ store.total }}</span>
+          <div v-if="totalPages > 1" class="rg-pager">
+            <AppButton
+              variant="icon"
+              size="sm"
+              icon="chevron_left"
+              aria-label="Предыдущая страница"
+              :disabled="store.filters.page <= 1"
+              @click="store.setPage(store.filters.page - 1)"
+            />
+            <span class="rg-page-info">{{ store.filters.page }} / {{ totalPages }}</span>
+            <AppButton
+              variant="icon"
+              size="sm"
+              icon="chevron_right"
+              aria-label="Следующая страница"
+              :disabled="store.filters.page >= totalPages"
+              @click="store.setPage(store.filters.page + 1)"
+            />
           </div>
-        </header>
+        </template>
 
-        <!-- Мобайл: сортировка контролом (на десктопе — клик по заголовку колонки) -->
-        <div v-if="isMobile && shownFields.length" class="rg-msort">
+        <template v-if="store.selected">
+        <!-- Узкая панель: сортировка контролом (широко — клик по заголовку колонки) -->
+        <div v-if="narrow && shownFields.length" class="rg-msort">
           <span class="material-symbols-outlined">sort</span>
           <Select
             class="rg-msort-select"
@@ -95,23 +99,34 @@
             :options="sortOptions" option-label="label" option-value="value"
             @update:model-value="mobileSetSort"
           />
-          <button class="rg-msort-dir" :title="store.filters.order === 'asc' ? 'По возрастанию' : 'По убыванию'" @click="toggleOrder">
-            <span class="material-symbols-outlined">{{ store.filters.order === 'asc' ? 'arrow_upward' : 'arrow_downward' }}</span>
-          </button>
+          <AppButton
+            variant="icon"
+            size="sm"
+            :icon="store.filters.order === 'asc' ? 'arrow_upward' : 'arrow_downward'"
+            :title="store.filters.order === 'asc' ? 'По возрастанию' : 'По убыванию'"
+            aria-label="Направление сортировки"
+            @click="toggleOrder"
+          />
         </div>
 
-        <!-- Панель массового выбора -->
-        <div v-if="selectedIds.size" class="rg-selbar">
-          <span class="rg-selbar-count">Выбрано: {{ selectedIds.size }}</span>
-          <button class="rg-btn-danger" @click="confirmBulk = true">
-            <span class="material-symbols-outlined">delete</span> Удалить
-          </button>
-          <button class="rg-btn-text" @click="clearSelection">Сбросить</button>
-        </div>
+        <!-- Массовый выбор -->
+        <AppInfoBar
+          v-if="selectedIds.size"
+          class="rg-selbar"
+          tone="info"
+          icon="checklist"
+          :message="`Выбрано: ${selectedIds.size}`"
+          inline
+        >
+          <template #actions>
+            <AppButton size="sm" tone="danger" icon="delete" label="Удалить" @click="confirmBulk = true" />
+            <AppButton size="sm" variant="text" label="Сбросить" @click="clearSelection" />
+          </template>
+        </AppInfoBar>
 
-        <!-- Записи: таблица (десктоп) / карточки (мобайл) -->
+        <!-- Записи: таблица (широко) / карточки (узко) -->
         <div class="rg-tablebox">
-          <div v-if="!isMobile" class="rg-scroll">
+          <div v-if="!narrow" class="rg-scroll">
             <table class="rg-table">
               <thead>
                 <tr>
@@ -161,17 +176,18 @@
             </table>
           </div>
 
-          <!-- Мобайл: карточки записей -->
-          <div v-else class="rg-cards">
+          <!-- Узкая панель: карточки записей вместо таблицы -->
+          <AppStack v-else class="rg-cards" :gap="10">
             <label v-if="store.records.length" class="rg-cards-selall">
               <Checkbox :model-value="allSelected" binary @update:model-value="toggleAll" />
               <span>Выбрать все на странице</span>
             </label>
-            <div
+            <AppCard
               v-for="rec in store.records"
               :key="rec.id"
-              class="rg-card"
-              :class="{ selected: selectedIds.has(rec.id) }"
+              :tone="selectedIds.has(rec.id) ? 'primary' : 'neutral'"
+              clickable
+              :gap="8"
               @click="openRecord(rec)"
             >
               <div class="rg-card-head">
@@ -187,50 +203,33 @@
                   <span class="rg-card-val">{{ textValue(f, rec.data?.[String(f.id)]) || '—' }}</span>
                 </div>
               </div>
-            </div>
-          </div>
+            </AppCard>
+          </AppStack>
 
           <div v-if="store.loadingRecords" class="rg-overlay">
-            <span class="material-symbols-outlined spin">progress_activity</span>
+            <BrandLoader :size="48" />
           </div>
-          <div v-else-if="!store.records.length" class="rg-empty">
-            <span class="material-symbols-outlined">inbox</span>
-            <p>{{ searchInput ? 'Ничего не найдено' : 'Записей пока нет' }}</p>
-          </div>
+          <EmptyState
+            v-else-if="!store.records.length"
+            class="rg-empty"
+            icon="inbox"
+            tone="soft"
+            :title="searchInput ? 'Ничего не найдено' : 'Записей пока нет'"
+            :subtitle="searchInput ? 'Попробуйте другой запрос.' : 'Добавьте первую запись — она появится в таблице.'"
+          />
         </div>
+        </template>
 
-        <!-- Футер: счётчик + пагинация -->
-        <footer class="rg-foot">
-          <span class="rg-total">Всего записей: {{ store.total }}</span>
-          <div v-if="totalPages > 1" class="rg-pager">
-            <button class="rg-page-btn" :disabled="store.filters.page <= 1" @click="store.setPage(store.filters.page - 1)">
-              <span class="material-symbols-outlined">chevron_left</span>
-            </button>
-            <span class="rg-page-info">{{ store.filters.page }} / {{ totalPages }}</span>
-            <button class="rg-page-btn" :disabled="store.filters.page >= totalPages" @click="store.setPage(store.filters.page + 1)">
-              <span class="material-symbols-outlined">chevron_right</span>
-            </button>
-          </div>
-        </footer>
-      </template>
-
-      <!-- Реестр не выбран -->
-      <EmptyState
-        v-else
-        class="split-empty"
-        icon="table_view"
-        tone="soft"
-        :title="isMobile ? 'Выберите реестр сверху' : 'Выберите реестр слева'"
-        subtitle="Выберите реестр в списке, чтобы просмотреть его данные"
-      />
-    </section>
-
-    <AppFab
-      :visible="isMobile && !!store.selected && fabVisible"
-      icon="add"
-      aria-label="Добавить запись"
-      @click="openCreate"
-    />
+        <!-- Реестр не выбран (широкая раскладка) -->
+        <EmptyState
+          v-else
+          icon="table_view"
+          tone="soft"
+          title="Выберите реестр слева"
+          subtitle="Выберите реестр в списке, чтобы просмотреть его данные"
+        />
+      </AppPage>
+    </template>
 
     <RegistryRecordDialog v-model="dialogOpen" :registry="store.selected" :record="activeRecord" />
 
@@ -256,7 +255,7 @@
     <!-- Внешние ссылки -->
     <AppDialog
       v-model="sharesOpen"
-      title="Внешние ссылки" icon="link" size="md"
+      title="Внешние ссылки" size="md"
       :actions="[{ kind: 'cancel', label: 'Закрыть' }]"
       @cancel="sharesOpen = false"
     >
@@ -266,24 +265,47 @@
           этого реестра, открывать карточки и выгружать данные — но не редактировать.
           Ссылку можно отозвать в любой момент.
         </p>
-        <button class="btn-grad" :disabled="sharesBusy" @click="createShareLink">
-          <span class="material-symbols-outlined">add_link</span> Создать ссылку
-        </button>
+        <AppButton
+          variant="filled"
+          icon="add_link"
+          label="Создать ссылку"
+          :loading="sharesBusy"
+          @click="createShareLink"
+        />
 
         <div v-if="sharesLoading" class="rg-shares-empty">Загрузка…</div>
         <div v-else-if="!shares.length" class="rg-shares-empty">Ссылок пока нет</div>
         <ul v-else class="rg-shares-list">
           <li v-for="s in shares" :key="s.id" class="rg-share">
             <input class="rg-share-url" :value="shareUrl(s.code)" readonly @focus="$event.target.select()" />
-            <button class="rg-icon-btn sm" title="Копировать" @click="copyShare(s.code)">
-              <span class="material-symbols-outlined">content_copy</span>
-            </button>
-            <a class="rg-icon-btn sm" :href="shareUrl(s.code)" target="_blank" rel="noopener" title="Открыть">
-              <span class="material-symbols-outlined">open_in_new</span>
-            </a>
-            <button class="rg-icon-btn sm danger" title="Отозвать" @click="revokeShareLink(s.id)">
-              <span class="material-symbols-outlined">delete</span>
-            </button>
+            <AppButton
+              variant="icon"
+              size="sm"
+              icon="content_copy"
+              title="Копировать"
+              aria-label="Копировать"
+              @click="copyShare(s.code)"
+            />
+            <AppButton
+              tag="a"
+              variant="icon"
+              size="sm"
+              icon="open_in_new"
+              title="Открыть"
+              aria-label="Открыть"
+              :href="shareUrl(s.code)"
+              target="_blank"
+              rel="noopener"
+            />
+            <AppButton
+              variant="icon"
+              size="sm"
+              tone="danger"
+              icon="delete"
+              title="Отозвать"
+              aria-label="Отозвать"
+              @click="revokeShareLink(s.id)"
+            />
           </li>
         </ul>
       </div>
@@ -292,7 +314,7 @@
     <!-- Экспорт в XLSX -->
     <AppDialog
       v-model="exportOpen"
-      title="Экспорт в XLSX" icon="download" size="md" :busy="exporting"
+      title="Экспорт в XLSX" size="md" :busy="exporting"
       :actions="[{ kind: 'cancel', label: 'Отмена' }, { kind: 'confirm', label: 'Экспортировать', icon: 'download' }]"
       @cancel="exportOpen = false" @confirm="doExport"
     >
@@ -311,8 +333,8 @@
         <div class="rg-export-head">
           <span class="rg-export-title">Поля для выгрузки</span>
           <div class="rg-export-bulk">
-            <button class="rg-btn-text" @click="selectAllExport">Выбрать всё</button>
-            <button class="rg-btn-text" @click="clearAllExport">Снять всё</button>
+            <AppButton variant="text" size="sm" label="Выбрать всё" @click="selectAllExport" />
+            <AppButton variant="text" size="sm" label="Снять всё" @click="clearAllExport" />
           </div>
         </div>
 
@@ -328,7 +350,22 @@
         </div>
       </div>
     </AppDialog>
-  </div>
+
+    <!-- Колонки таблицы -->
+    <AppDialog
+      v-model="colsOpen"
+      title="Колонки таблицы" size="sm"
+      :actions="[{ kind: 'cancel', label: 'Готово' }]"
+      @cancel="colsOpen = false"
+    >
+      <AppStack :gap="2">
+        <label v-for="f in store.selected?.fields || []" :key="f.id" class="rg-cols-row">
+          <Checkbox :model-value="visibleCols.includes(f.id)" binary @update:model-value="toggleCol(f.id)" />
+          <span>{{ f.label }}</span>
+        </label>
+      </AppStack>
+    </AppDialog>
+  </AppListDetail>
 </template>
 
 <script setup>
@@ -339,24 +376,34 @@ import Select from 'primevue/select'
 import RegistryRecordDialog from '@/components/registry/RegistryRecordDialog.vue'
 import RegistryQrFindDialog from '@/components/registry/RegistryQrFindDialog.vue'
 import RegistryQrPrintDialog from '@/components/registry/RegistryQrPrintDialog.vue'
-import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
-import AppDialog from '@/components/common/AppDialog.vue'
+import AppButton from '@/components/ui/AppButton.vue'
+import AppCard from '@/components/ui/AppCard.vue'
+import AppInfoBar from '@/components/ui/AppInfoBar.vue'
+import AppListDetail from '@/components/ui/AppListDetail.vue'
+import AppPage from '@/components/ui/AppPage.vue'
+import AppRow from '@/components/ui/AppRow.vue'
+import AppStack from '@/components/ui/AppStack.vue'
+import BrandLoader from '@/components/common/BrandLoader.vue'
+import ConfirmDialog from '@/components/ui/ConfirmDialog.vue'
+import AppDialog from '@/components/ui/AppDialog.vue'
 import EmptyState from '@/components/common/EmptyState.vue'
 import SearchField from '@/components/common/SearchField.vue'
-import AppFab from '@/components/common/AppFab.vue'
-import { useFabOnScroll } from '@/composables/useFabOnScroll.js'
 import { useRegistriesStore } from '@/stores/registries.js'
 import { useAuthStore } from '@/stores/auth.js'
 import { exportRecords, getShares, createShare, revokeShare } from '@/api/registries.js'
 import { useNotificationsStore } from '@/stores/notifications.js'
-import { useBreakpoint } from '@/composables/useBreakpoint.js'
 import { fieldIcon, hasQr, isExportable, isSortable, textValue } from '@/utils/registryFields.js'
 
 const store = useRegistriesStore()
 const route = useRoute()
 const authStore = useAuthStore()
 const notif = useNotificationsStore()
-const { isMobile } = useBreakpoint()
+
+/* Узкая раскладка — свойство САМОГО раздела (он живёт окном рабочего стола),
+   поэтому её сообщает AppListDetail, а не медиазапрос по ширине экрана.
+   От неё зависят и вид записей (таблица ⇄ карточки), и кнопка «назад». */
+const narrow = ref(false)
+const detailOpen = ref(false)
 
 // Живая смена активной компании: реестры прежней компании не должны остаться
 // на экране — сбрасываем и грузим список новой.
@@ -365,7 +412,40 @@ watch(() => authStore.companyId, (id, prev) => {
   store.reloadForCompany()
 })
 
-// ── Мобильная сортировка и карточки ──
+function selectRegistry(id) {
+  store.select(id)
+  detailOpen.value = true
+}
+
+/* Команды шапки. Панель сама снимет подписи и уведёт хвост в меню «ещё», когда
+   места не хватит, — поэтому отдельного набора кнопок для телефона больше нет. */
+const commands = computed(() => {
+  if (!store.selected) return []
+  const has = store.selected.fields.length
+  return [
+    { key: 'add', label: 'Добавить', icon: 'add', variant: 'filled', primary: true, fab: true },
+    ...(has && !narrow.value ? [{ key: 'cols', label: 'Колонки', icon: 'view_column' }] : []),
+    ...(hasQrFields.value
+      ? [
+          { key: 'qr-find', label: 'Найти по QR-коду', icon: 'qr_code_scanner' },
+          { key: 'qr-print', label: 'Печать QR-кодов', icon: 'print' },
+        ]
+      : []),
+    { key: 'shares', label: 'Внешние ссылки', icon: 'link' },
+    ...(has ? [{ key: 'export', label: 'Экспорт в XLSX', icon: 'download' }] : []),
+  ]
+})
+
+function onCommand(key) {
+  if (key === 'add') openCreate()
+  else if (key === 'cols') colsOpen.value = true
+  else if (key === 'qr-find') qrFindOpen.value = true
+  else if (key === 'qr-print') qrPrintOpen.value = true
+  else if (key === 'shares') openShares()
+  else if (key === 'export') openExport()
+}
+
+// ── Сортировка узкой раскладки и карточки ──
 const sortOptions = computed(() => {
   const opts = [{ value: 'created_at', label: 'Дате создания' }]
   for (const f of shownFields.value) {
@@ -392,25 +472,7 @@ const cardBodyFields = computed(() => shownFields.value.slice(1))
 
 const searchInput = ref('')
 
-// Мобильный FAB «Добавить запись»: прячется/появляется по прокрутке списка.
-const { fabVisible } = useFabOnScroll()
 const colsOpen = ref(false)
-const colsBtn = ref(null)
-const colsPopStyle = ref({})
-
-// Поповер «Колонки» вынесен в body (Teleport) и позиционируется под кнопкой —
-// так его не обрезает overflow:hidden и не перекрывает таблица.
-function toggleCols() {
-  if (colsOpen.value) { colsOpen.value = false; return }
-  const r = colsBtn.value?.getBoundingClientRect?.()
-  if (r) {
-    colsPopStyle.value = {
-      top: `${r.bottom + 6}px`,
-      right: `${Math.max(8, window.innerWidth - r.right)}px`,
-    }
-  }
-  colsOpen.value = true
-}
 const dialogOpen = ref(false)
 const activeRecord = ref(null)
 
@@ -606,7 +668,7 @@ function shortDate(v) {
    искомый текст — найденная запись сразу в выборке. */
 function applySearchQuery() {
   const { registry, q } = route.query
-  if (registry) store.select(Number(registry))
+  if (registry) selectRegistry(Number(registry))
   if (q) store.setSearch(String(q))
 }
 
@@ -615,153 +677,52 @@ watch(() => route.query, applySearchQuery)
 </script>
 
 <style scoped>
-/* Каркас (стеклянные панели, раскладка, мобильное скрытие левой панели) —
-   глобальный паттерн .split-* (main.css). Здесь — только внутренности
-   правой панели. */
+/* Каркас, шапка, команды, футер и стеклянные панели — общие компоненты
+   (AppListDetail / AppPage). Здесь остаётся только рабочая область раздела:
+   таблица записей и её карточный вид в узкой раскладке. */
 
-.rg-toolbar {
-  flex-shrink: 0;
+/* ── Сортировка в узкой раскладке ── */
+.rg-msort {
+  flex: none;
   display: flex;
   align-items: center;
-  gap: 12px;
-  padding: 14px 16px;
+  gap: 8px;
+  padding: 8px 14px;
   border-bottom: 1px solid var(--color-outline-dim);
-}
-.rg-name {
-  flex-shrink: 0;
-  margin: 0;
-  font-size: 18px;
-  font-weight: 700;
-  color: var(--color-text);
-  max-width: 220px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.rg-actions { flex-shrink: 0; display: flex; align-items: center; gap: 8px; }
-
-.rg-cols { position: relative; }
-.rg-icon-btn {
-  width: 40px; height: 40px;
-  display: grid; place-items: center;
-  border: 1px solid var(--color-outline-dim);
-  border-radius: var(--radius-full);
-  background: var(--acrylic-card-bg);
   color: var(--color-text-dim);
-  cursor: pointer;
 }
-.rg-icon-btn:hover { background: var(--color-surface-high); color: var(--color-text); }
-.rg-icon-btn.sm { width: 34px; height: 34px; flex-shrink: 0; }
-.rg-icon-btn.sm .material-symbols-outlined { font-size: 18px; }
-.rg-icon-btn.danger { color: var(--color-error); }
+.rg-msort > .material-symbols-outlined { font-size: 20px; }
+.rg-msort-select { flex: 1; min-width: 0; }
 
-/* ── Модалка внешних ссылок ── */
-.rg-shares { display: flex; flex-direction: column; gap: 14px; }
-.rg-shares-note { margin: 0; font-size: 13px; color: var(--color-text-dim); line-height: 1.5; }
-.rg-shares-empty { padding: 16px; text-align: center; color: var(--color-text-dim); font-size: 14px; }
-.rg-shares-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
-.rg-share { display: flex; align-items: center; gap: 6px; }
-.rg-share-url {
-  flex: 1; min-width: 0; height: 38px; padding: 0 12px;
-  border: 1px solid var(--color-outline-dim); border-radius: var(--radius-md);
-  background: var(--color-surface-low); color: var(--color-text); font-size: 13px;
-}
-
-/* ── Модалка экспорта ── */
-.rg-export { display: flex; flex-direction: column; gap: 16px; }
-.rg-export-scope { display: flex; flex-direction: column; gap: 8px; padding: 12px; border: 1px solid var(--color-outline-dim); border-radius: var(--radius-md); background: var(--color-surface-low); }
-.rg-radio { display: flex; align-items: center; gap: 10px; font-size: 14px; color: var(--color-text); cursor: pointer; }
-.rg-radio input { width: 18px; height: 18px; accent-color: var(--color-primary); }
-.rg-export-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
-.rg-export-title { font-size: 13px; font-weight: 700; color: var(--color-text-dim); text-transform: uppercase; }
-.rg-export-bulk { display: flex; gap: 12px; }
-.rg-export-bulk .rg-btn-text { color: var(--color-primary); }
-.rg-export-fields { display: flex; flex-direction: column; gap: 2px; max-height: 320px; overflow-y: auto; }
-.rg-export-row { display: flex; align-items: center; gap: 10px; padding: 9px 8px; border-radius: var(--radius-md); cursor: pointer; font-size: 14px; color: var(--color-text); }
-.rg-export-row:hover { background: var(--color-surface-high); }
-.rg-export-row .material-symbols-outlined { font-size: 20px; color: var(--color-text-dim); }
-.rg-export-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.rg-export-empty { margin: 0; color: var(--color-text-dim); font-size: 14px; }
-
-/* Поповер вынесен в body (Teleport); позиция задаётся inline по кнопке. */
-.rg-cols-backdrop { position: fixed; inset: 0; z-index: 10800; }
-.rg-cols-pop {
-  position: fixed;
-  z-index: 10801;
-  min-width: 220px;
-  max-height: 60vh;
-  overflow-y: auto;
-  padding: 8px;
-  background: var(--acrylic-bg);
-  -webkit-backdrop-filter: var(--acrylic-blur);
-  backdrop-filter: var(--acrylic-blur);
-  border: 1px solid var(--color-outline-dim);
-  border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-lg);
-}
-.rg-cols-title { padding: 6px 10px; font-size: 12px; font-weight: 700; color: var(--color-text-dim); text-transform: uppercase; }
-.rg-cols-row { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-radius: var(--radius-md); cursor: pointer; font-size: 14px; }
-.rg-cols-row:hover { background: var(--color-surface-high); }
-
-.rg-selbar {
-  flex-shrink: 0;
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 8px 12px;
-  /* Матовое стекло в общем стиле, не сплошная primary-заливка. */
-  background: var(--acrylic-bg);
-  -webkit-backdrop-filter: var(--acrylic-blur);
-  backdrop-filter: var(--acrylic-blur);
-  border-bottom: 1px solid var(--color-outline-dim);
-  color: var(--color-text);
-  font-size: 14px;
-  font-weight: 600;
-}
-
-/* Счётчик занимает свободное место, кнопки не переносятся и не сжимаются. */
-.rg-selbar-count {
-  flex: 1;
-  min-width: 0;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.rg-selbar .rg-btn-danger,
-.rg-selbar .rg-btn-text {
-  flex-shrink: 0;
-  white-space: nowrap;
-}
+.rg-selbar { flex: none; margin: 10px 14px 0; }
 
 /* ── Таблица: собственный скролл, sticky-шапка ── */
 .rg-tablebox { position: relative; flex: 1; min-height: 0; display: flex; }
-.rg-scroll {
-  position: relative;
-  flex: 1;
-  min-height: 0;
-  overflow: auto;
-}
+.rg-scroll { position: relative; flex: 1; min-height: 0; overflow: auto; }
+
 .rg-table {
   width: 100%;
   border-collapse: collapse;
   font-size: 14px;
 }
+
+/* Строки уезжают под шапку — ей нужно плотное стекло с блюром. */
 .rg-table thead th {
-  /* Sticky-шапка таблицы: строки уезжают под неё — плотное стекло с блюром */
   position: sticky;
   top: 0;
   z-index: 1;
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--color-outline-dim);
   background: var(--acrylic-bg-strong);
   -webkit-backdrop-filter: var(--acrylic-blur);
   backdrop-filter: var(--acrylic-blur);
-  border-bottom: 1px solid var(--color-outline-dim);
-  padding: 12px 14px;
   text-align: left;
   font-weight: 700;
   color: var(--color-text);
   white-space: nowrap;
   user-select: none;
 }
+
 .rg-table thead th.sortable { cursor: pointer; }
 .rg-table thead th.sortable:hover { color: var(--color-primary); }
 .rg-th-inner { display: inline-flex; align-items: center; gap: 4px; }
@@ -772,12 +733,13 @@ watch(() => route.query, applySearchQuery)
 .rg-row { cursor: pointer; }
 .rg-row:hover { background: var(--color-surface-high); }
 .rg-row.selected { background: var(--color-primary-container); }
+
 .rg-table tbody td {
   padding: 11px 14px;
   border-bottom: 1px solid var(--color-outline-dim);
   color: var(--color-text);
 }
-.rg-td-check { text-align: center; }
+
 .rg-cell {
   display: block;
   max-width: 320px;
@@ -793,138 +755,115 @@ watch(() => route.query, applySearchQuery)
   place-items: center;
   background: color-mix(in oklch, var(--color-surface) 60%, transparent);
 }
-.rg-empty {
-  position: absolute;
-  inset: 0;
+
+.rg-empty { position: absolute; inset: 0; pointer-events: none; }
+
+/* ── Карточки записей (узкая раскладка) ── */
+.rg-cards { flex: 1; min-height: 0; overflow-y: auto; padding: 12px; }
+.rg-cards > :deep(*) { flex-shrink: 0; }
+
+.rg-cards-selall {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 4px 4px 0;
+  font-size: 13px;
+  color: var(--color-text-dim);
+}
+
+.rg-card-head { display: flex; align-items: center; gap: 10px; }
+.rg-card-check { flex: none; display: inline-flex; }
+
+.rg-card-title {
+  flex: 1;
+  min-width: 0;
+  font-size: 15px;
+  font-weight: 700;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rg-card-chev { flex: none; color: var(--color-text-dim); }
+.rg-card-body { display: flex; flex-direction: column; gap: 6px; }
+.rg-card-row { display: flex; gap: 10px; font-size: 14px; }
+
+.rg-card-label {
+  flex: none;
+  width: 40%;
+  max-width: 160px;
+  color: var(--color-text-dim);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rg-card-val { flex: 1; min-width: 0; word-break: break-word; }
+
+/* ── Футер: счётчик и пагинация ── */
+.rg-total { flex: 1; font-size: 13px; color: var(--color-text-dim); }
+.rg-pager { display: flex; align-items: center; gap: 8px; }
+.rg-page-info { min-width: 56px; text-align: center; font-size: 13px; color: var(--color-text-dim); }
+
+/* ── Диалоги раздела ── */
+.rg-shares { display: flex; flex-direction: column; gap: 14px; }
+.rg-shares-note { margin: 0; font-size: 13px; line-height: 1.5; color: var(--color-text-dim); }
+.rg-shares-empty { padding: 16px; text-align: center; font-size: 14px; color: var(--color-text-dim); }
+.rg-shares-list { display: flex; flex-direction: column; gap: 8px; margin: 0; padding: 0; list-style: none; }
+.rg-share { display: flex; align-items: center; gap: 6px; }
+
+.rg-share-url {
+  flex: 1;
+  min-width: 0;
+  height: 38px;
+  padding: 0 12px;
+  border: 1px solid var(--color-outline-dim);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-low);
+  color: var(--color-text);
+  font-size: 13px;
+}
+
+.rg-export { display: flex; flex-direction: column; gap: 16px; }
+
+.rg-export-scope {
   display: flex;
   flex-direction: column;
-  align-items: center;
-  justify-content: center;
   gap: 8px;
-  color: var(--color-text-dim);
-  pointer-events: none;
+  padding: 12px;
+  border: 1px solid var(--color-outline-dim);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-low);
 }
-.rg-empty .material-symbols-outlined { font-size: 44px; }
-.rg-empty p { margin: 0; }
 
-/* ── Футер ── */
-.rg-foot {
-  flex-shrink: 0;
+.rg-radio { display: flex; align-items: center; gap: 10px; font-size: 14px; cursor: pointer; }
+.rg-radio input { width: 18px; height: 18px; accent-color: var(--color-primary); }
+.rg-export-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+
+.rg-export-title {
+  font-size: 13px;
+  font-weight: 700;
+  text-transform: uppercase;
+  color: var(--color-text-dim);
+}
+
+.rg-export-bulk { display: flex; gap: 4px; }
+.rg-export-fields { display: flex; flex-direction: column; gap: 2px; max-height: 320px; overflow-y: auto; }
+
+.rg-export-row,
+.rg-cols-row {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 10px 16px;
-  border-top: 1px solid var(--color-outline-dim);
-}
-.rg-total { font-size: 13px; color: var(--color-text-dim); }
-.rg-pager { display: flex; align-items: center; gap: 8px; }
-.rg-page-btn {
-  width: 34px; height: 34px;
-  display: grid; place-items: center;
-  border: 1px solid var(--color-outline-dim);
-  border-radius: var(--radius-full);
-  background: var(--acrylic-card-bg);
-  color: var(--color-text);
-  cursor: pointer;
-}
-.rg-page-btn:hover:not(:disabled) { background: var(--color-surface-high); }
-.rg-page-btn:disabled { opacity: 0.4; cursor: default; }
-.rg-page-info { font-size: 13px; color: var(--color-text-dim); min-width: 56px; text-align: center; }
-
-/* ── Кнопки ── */
-.rg-btn-danger {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 8px 16px;
-  border: none;
-  border-radius: var(--radius-full);
-  background: var(--color-error);
-  color: var(--color-on-error);
-  font-weight: 600;
+  gap: 10px;
+  padding: 9px 8px;
+  border-radius: var(--radius-md);
   font-size: 14px;
   cursor: pointer;
 }
-.rg-btn-text { border: none; background: none; cursor: pointer; color: inherit; font-weight: 600; font-size: 14px; }
 
-.spin { animation: rgspin 1s linear infinite; font-size: 32px; color: var(--color-primary); }
-@keyframes rgspin { to { transform: rotate(360deg); } }
-
-/* ── Мобильная раскладка ── */
-/* ── Мобайл: лента реестров, сортировка, карточки ── */
-/* Лента чипов выбора реестра: скроллится горизонтально, чипи не сжимаются,
-   длинные названия обрезаются. */
-.rg-regstrip {
-  flex: none; display: flex; gap: 8px; padding: 10px 12px;
-  min-width: 0; max-width: 100%; overflow-x: auto;
-  border-bottom: 1px solid var(--color-outline-dim); -webkit-overflow-scrolling: touch;
-  touch-action: pan-x;
-  scrollbar-width: none;
-}
-.rg-regstrip::-webkit-scrollbar { display: none; }
-.rg-regchip {
-  flex: 0 0 auto; padding: 8px 14px; border-radius: var(--radius-full);
-  border: 1px solid var(--color-outline-dim); background: var(--acrylic-card-bg);
-  color: var(--color-text-dim); font-size: 14px; font-weight: 600; cursor: pointer; white-space: nowrap;
-  max-width: 60vw; overflow: hidden; text-overflow: ellipsis;
-}
-.rg-regchip.active { background: var(--grad-primary); color: var(--color-on-primary); border-color: transparent; }
-
-.rg-msort {
-  flex: none; display: flex; align-items: center; gap: 8px;
-  padding: 8px 16px; border-bottom: 1px solid var(--color-outline-dim); color: var(--color-text-dim);
-}
-.rg-msort > .material-symbols-outlined { font-size: 20px; }
-.rg-msort-select { flex: 1; min-width: 0; }
-.rg-msort-dir {
-  width: 38px; height: 38px; flex-shrink: 0; display: grid; place-items: center;
-  border: 1px solid var(--color-outline-dim); border-radius: var(--radius-md);
-  background: var(--acrylic-card-bg); color: var(--color-text); cursor: pointer;
-}
-
-.rg-cards { flex: 1; min-height: 0; overflow-y: auto; padding: 12px; display: flex; flex-direction: column; gap: 10px; }
-.rg-cards-selall { flex-shrink: 0; display: flex; align-items: center; gap: 10px; padding: 4px 4px 0; font-size: 13px; color: var(--color-text-dim); }
-.rg-card {
-  /* flex-shrink: 0 обязателен: без него карточки-flex-items СЖИМАЮТСЯ по
-     высоте, пытаясь уместить весь список в экран, вместо прокрутки. */
-  flex-shrink: 0;
-  border: 1px solid var(--color-outline-dim); border-radius: var(--radius-lg);
-  background: var(--acrylic-card-bg); overflow: hidden; cursor: pointer;
-}
-/* Выбранная карточка: рамка + лёгкая подсветка — текст остаётся читаемым
-   (сплошной primary-container на тёмной теме делал контент неразличимым). */
-.rg-card.selected {
-  border-color: var(--color-primary);
-  background: color-mix(in oklch, var(--color-primary) 10%, var(--acrylic-card-bg));
-}
-.rg-card-head { display: flex; align-items: center; gap: 10px; padding: 12px 14px; }
-.rg-card-check { flex: none; display: inline-flex; }
-.rg-card-title { flex: 1; min-width: 0; font-size: 15px; font-weight: 700; color: var(--color-text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.rg-card-chev { flex: none; color: var(--color-text-dim); }
-.rg-card-body { padding: 0 14px 12px; display: flex; flex-direction: column; gap: 6px; }
-.rg-card-row { display: flex; gap: 10px; font-size: 14px; }
-.rg-card-label { flex: none; width: 40%; max-width: 160px; color: var(--color-text-dim); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.rg-card-val { flex: 1; min-width: 0; color: var(--color-text); word-break: break-word; }
-
-@media (max-width: 768px) {
-  /* Скрытие левой панели и разворот правой — в глобальном .split-* */
-  .rg-name { display: none; }
-  /* Компактный верх: поиск и действия в ОДНУ строку, «Добавить» — иконка. */
-  .rg-toolbar { flex-wrap: nowrap; gap: 8px; padding: 8px 12px; }
-  .rg-toolbar :deep(.search-field) { flex: 1; min-width: 0; }
-  .rg-actions { flex-shrink: 0; gap: 6px; }
-  /* Создание записи на мобильном — плавающий FAB, кнопка тулбара не нужна. */
-  .rg-actions .btn-grad { display: none; }
-  .rg-regstrip { padding: 8px 12px 6px; gap: 6px; }
-  .rg-regchip { padding: 6px 12px; font-size: 13px; }
-  .rg-msort { padding: 6px 12px; }
-  /* Футер (итого/пагинация) всегда под списком — резерв под нижнюю
-     навигацию (64px) + 12px воздуха вешаем ему, иначе fixed-навигация
-     его накрывает; сам список карточек упирается в футер. */
-  .rg-foot {
-    padding: 10px 12px;
-    padding-bottom: calc(76px + env(safe-area-inset-bottom, 0px));
-  }
-}
+.rg-export-row:hover,
+.rg-cols-row:hover { background: var(--color-surface-high); }
+.rg-export-row .material-symbols-outlined { font-size: 20px; color: var(--color-text-dim); }
+.rg-export-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rg-export-empty { margin: 0; font-size: 14px; color: var(--color-text-dim); }
 </style>

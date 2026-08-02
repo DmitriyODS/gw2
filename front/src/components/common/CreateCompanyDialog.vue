@@ -3,7 +3,6 @@
     :model-value="modelValue"
     title="Создать компанию"
     subtitle="Вы станете её администратором. После создания мы переключим вас на новую компанию."
-    icon="add_business"
     tone="primary"
     size="sm"
     :busy="saving"
@@ -55,7 +54,7 @@
 <script setup>
 import { nextTick, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
-import AppDialog from '@/components/common/AppDialog.vue'
+import AppDialog from '@/components/ui/AppDialog.vue'
 import { useAuthStore } from '@/stores/auth.js'
 import { useCompaniesStore } from '@/stores/companies.js'
 import { useNotificationsStore } from '@/stores/notifications.js'

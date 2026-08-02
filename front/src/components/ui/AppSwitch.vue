@@ -1,50 +1,45 @@
 <template>
-  <!-- Тумблер — та же строка настройки (`SettingRow`), только управление у неё
-       компактное и остаётся справа при любой ширине. Нажимается вся строка. -->
-  <SettingRow
-    :title="title"
-    :hint="hint"
-    :disabled="disabled"
-    clickable
-    inline
+  <span
+    class="switch"
+    :class="{ on: modelValue, disabled }"
+    role="switch"
+    :aria-checked="String(modelValue)"
+    :aria-disabled="disabled ? 'true' : undefined"
     @click="toggle"
-  >
-    <span class="switch" :class="{ on: modelValue }" role="switch" :aria-checked="modelValue" />
-  </SettingRow>
+  />
 </template>
 
 <script setup>
-import SettingRow from './SettingRow.vue'
-
+/* Тумблер. Отдельно от строки: он нужен и в строке настройки (AppSwitchRow), и
+   в тулбаре, и в карточке. */
 const props = defineProps({
   modelValue: { type: Boolean, default: false },
-  title: { type: String, required: true },
-  hint: { type: String, default: '' },
   disabled: { type: Boolean, default: false },
 })
 
 const emit = defineEmits(['update:modelValue'])
 
-function toggle() {
-  if (!props.disabled) emit('update:modelValue', !props.modelValue)
+function toggle(e) {
+  if (props.disabled) return
+  e.stopPropagation()
+  emit('update:modelValue', !props.modelValue)
 }
 </script>
 
 <style scoped>
 .switch {
   position: relative;
-  width: 44px;
-  min-width: 44px;
-  max-width: 44px;
-  height: 24px;
-  min-height: 24px;
-  max-height: 24px;
   box-sizing: border-box;
+  width: 44px; min-width: 44px; max-width: 44px;
+  height: 24px; min-height: 24px; max-height: 24px;
   border: 2px solid var(--color-outline, var(--color-outline-variant));
   border-radius: var(--radius-full);
   background: var(--color-surface-highest, var(--color-surface-high));
+  cursor: pointer;
   transition: background 0.18s, border-color 0.18s;
 }
+
+.switch.disabled { opacity: 0.5; cursor: not-allowed; }
 
 .switch::after {
   content: '';
