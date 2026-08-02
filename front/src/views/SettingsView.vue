@@ -28,7 +28,6 @@
               clickable
               :selected="activeSection === section.key && (!narrow || paneOpen)"
               show-chevron
-              :chevron-icon="section.to ? 'north_east' : 'chevron_right'"
               @click="openSection(section.key)"
             />
           </template>
@@ -72,6 +71,8 @@
         <ChatsPortalSection v-else-if="activeSection === 'chats'" :has-company="hasCompany" />
 
         <AccountSection v-else-if="activeSection === 'account'" />
+
+        <CompaniesSection v-else-if="activeSection === 'companies'" />
 
         <AiSection v-else-if="activeSection === 'ai'" />
 
@@ -166,6 +167,7 @@ import SearchField from '@/components/common/SearchField.vue'
 import BackupSectionsDialog from '@/components/settings/BackupSectionsDialog.vue'
 import GeneralSection from '@/components/settings/GeneralSection.vue'
 import AccountSection from '@/components/settings/AccountSection.vue'
+import CompaniesSection from '@/components/settings/CompaniesSection.vue'
 import AiSection from '@/components/settings/AiSection.vue'
 import ThemesSection from '@/components/settings/ThemesSection.vue'
 import ChatsPortalSection from '@/components/settings/ChatsPortalSection.vue'
@@ -234,14 +236,6 @@ const sectionByKey = computed(() => {
 const activeSectionMeta = computed(() => sectionByKey.value[activeSection.value] || null)
 
 function openSection(key) {
-  // Пункт-ссылка (компании) — самостоятельный раздел: уводим туда, а
-  // список настроек оставляем как был. На рабочем столе router окна сам решит
-  // открыть чужой раздел своим окном.
-  const target = sectionByKey.value[key]?.to
-  if (target) {
-    router.push(target)
-    return
-  }
   activeSection.value = key
   paneOpen.value = true
   if (route.query.section !== key) {
@@ -316,11 +310,6 @@ async function doImportBackup() {
 
 onMounted(() => {
   const requested = resolveSectionKey(route.query.section)
-  // ?section=companies — пункт-ссылка: уводим в его раздел, панели здесь нет.
-  if (requested && sectionByKey.value[requested]?.to) {
-    router.replace(sectionByKey.value[requested].to)
-    return
-  }
   if (requested && sectionByKey.value[requested]) {
     activeSection.value = requested
   } else {
@@ -334,10 +323,6 @@ onMounted(() => {
 // стола ведёт на /settings?section=desktop, когда настройки уже открыты.
 watch(() => route.query.section, (key) => {
   const resolved = resolveSectionKey(key)
-  if (resolved && sectionByKey.value[resolved]?.to) {
-    router.replace(sectionByKey.value[resolved].to)
-    return
-  }
   if (resolved && sectionByKey.value[resolved] && resolved !== activeSection.value) {
     activeSection.value = resolved
     paneOpen.value = true

@@ -48,7 +48,6 @@ export function settingsGroups(ctx = {}) {
           desc: 'Мои компании, участники, настройки компании',
           icon: 'business_center',
           tone: 'secondary',
-          to: '/companies',
         },
         {
           key: 'ai',

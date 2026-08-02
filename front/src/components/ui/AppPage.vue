@@ -96,9 +96,11 @@
         </div>
       </header>
 
+      <!-- `narrow` отдаём содержимому: раздел живёт окном, и вид (таблица или
+           карточки) должен зависеть от ширины ПАНЕЛИ, а не экрана. -->
       <div class="page-body" :class="{ flush, 'no-scroll': !scroll }">
         <div v-if="loading" class="page-state"><BrandLoader /></div>
-        <slot v-else />
+        <slot v-else :narrow="narrowPage" />
       </div>
 
       <footer v-if="slots.footer" class="page-foot"><slot name="footer" /></footer>

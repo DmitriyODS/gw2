@@ -1,9 +1,14 @@
 <template>
   <div class="manage-page">
     <header class="manage-head">
-      <button class="back-btn" @click="goBack" title="К списку компаний">
-        <span class="material-symbols-outlined">arrow_back</span>
-      </button>
+      <AppButton
+        variant="icon"
+        size="sm"
+        icon="arrow_back"
+        title="К списку компаний"
+        aria-label="К списку компаний"
+        @click="goBack"
+      />
       <div class="head-text" v-if="company">
         <h1 class="head-title">{{ company.name }}</h1>
         <span class="role-badge" :class="{ creator: isCreator }">
@@ -432,11 +437,11 @@
 
 <script setup>
 import { ref, computed, onMounted } from 'vue'
-import { useRouter } from 'vue-router'
 import BrandLoader from '@/components/common/BrandLoader.vue'
 import Select from 'primevue/select'
 import ToggleSwitch from 'primevue/toggleswitch'
 import Column from 'primevue/column'
+import AppButton from '@/components/ui/AppButton.vue'
 import AppDialog from '@/components/ui/AppDialog.vue'
 import AppDataTable from '@/components/common/AppDataTable.vue'
 import AppTabs from '@/components/ui/AppTabs.vue'
@@ -459,8 +464,8 @@ import {
 import { getRoles } from '@/api/roles.js'
 
 const props = defineProps({ id: { type: [String, Number], required: true } })
+const emit = defineEmits(['back', 'deleted'])
 
-const router = useRouter()
 const auth = useAuthStore()
 const notif = useNotificationsStore()
 const { isSuperAdmin, ROLES } = usePermission()
@@ -592,7 +597,7 @@ function initials(fio) {
   return (fio || '').trim().split(/\s+/).slice(0, 2).map((p) => p[0]?.toUpperCase() || '').join('')
 }
 
-function goBack() { router.push('/companies') }
+function goBack() { emit('back') }
 
 // ── Добавление: существующий ──
 function openAdd() {
@@ -814,7 +819,7 @@ async function doDelete() {
   try {
     await deleteCompany(companyId.value)
     notif.success('Компания удалена')
-    router.push('/companies')
+    emit('deleted')
   } catch (e) {
     notif.error(e?.message || 'Не удалось удалить')
     deleting.value = false

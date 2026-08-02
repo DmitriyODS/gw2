@@ -89,12 +89,14 @@ const routes = [
     meta: { requiresAuth: true } },
   // Раздел «Компании»: супер-админ видит все (платформа), обычный пользователь —
   // те, что создал/администрирует (доступ к данным проверяет бэкенд).
-  { path: '/companies', component: () => import('@/views/CompaniesView.vue'),
-    meta: { requiresAuth: true } },
+  // Список компаний переехал в настройки (как и профиль) — прежний адрес
+  // остаётся рабочей ссылкой.
+  { path: '/companies', redirect: '/settings?section=companies' },
   { path: '/users', component: () => import('@/views/UsersView.vue'),
     meta: { requiresAuth: true, requiresSuperAdmin: true } },
-  { path: '/companies/:id(\\d+)', component: () => import('@/views/CompanyManageView.vue'),
-    meta: { requiresAuth: true }, props: true },
+  // Карточка компании — панель настроек: адрес остаётся ссылкой на неё.
+  { path: '/companies/:id(\\d+)',
+    redirect: (to) => ({ path: '/settings', query: { section: 'companies', company: to.params.id } }) },
   {
     path: '/messenger/:conversationId(\\d+)?',
     component: () => import('@/views/MessengerView.vue'),
@@ -177,7 +179,7 @@ const router = createRouter({
 const ENTRY_SCREENS = ['/welcome', '/login', '/register']
 
 export function landingFor(auth) {
-  if (auth.isSuperAdmin) return '/companies'
+  if (auth.isSuperAdmin) return '/settings?section=companies'
   if (auth.roleLevel > 0) return '/tasks'
   return '/messenger'
 }

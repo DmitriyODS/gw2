@@ -1,30 +1,23 @@
 <template>
-  <div class="admin-page">
-    <header class="admin-sticky">
-      <!-- Тулбар в стиле «Компаний»: заголовок, поиск, статы-чипы, действие. -->
-      <div class="admin-toolbar">
-        <h1 class="cmp-title">Пользователи</h1>
-        <SearchField v-model="search" placeholder="Поиск по ФИО, логину, email…" hotkey />
-        <span class="chip-tint chip-tint--primary cmp-chip">
-          <span class="material-symbols-outlined">people</span>
-          <strong>{{ users.length }}</strong>&nbsp;всего
-        </span>
-        <span class="chip-tint chip-tint--success cmp-chip">
-          <strong>{{ activeCount }}</strong>&nbsp;активных
-        </span>
-        <span v-if="inactiveCount" class="chip-tint chip-tint--error cmp-chip">
-          <strong>{{ inactiveCount }}</strong>&nbsp;деактивированных
-        </span>
-        <button class="btn-grad desktop-only" @click="openCreate">
-          <span class="material-symbols-outlined">person_add</span>
-          <span>Добавить</span>
-        </button>
-      </div>
-    </header>
+  <AppPage title="Пользователи" :commands="commands" @command="openCreate">
+    <template #status>
+      <AppChip tone="primary" icon="people" :count="users.length" label="всего" />
+      <AppChip tone="success" :count="activeCount" label="активных" />
+      <AppChip v-if="inactiveCount" tone="error" :count="inactiveCount" label="деактивированных" />
+    </template>
 
-    <div class="admin-body">
+    <template #subhead>
+      <SearchField
+        v-model="search"
+        placeholder="Поиск по ФИО, логину, email…"
+        hotkey
+        :collapsible="false"
+      />
+    </template>
+
+    <template #default="{ narrow }">
       <!-- Мобильный: карточки -->
-      <div v-if="isMobile" class="cmp-cards">
+      <div v-if="narrow" class="cmp-cards">
         <div v-if="loading" class="state-block"><BrandLoader /></div>
         <EmptyState
           v-else-if="!visible.length"
@@ -62,15 +55,9 @@
             </div>
 
             <div v-if="!u.is_super_admin" class="cmp-card-actions" @click.stop>
-              <button class="card-act" title="Редактировать" @click="openEdit(u)">
-                <span class="material-symbols-outlined">edit</span>
-              </button>
-              <button class="card-act" title="Сбросить пароль" @click="askReset(u)">
-                <span class="material-symbols-outlined">lock_reset</span>
-              </button>
-              <button v-if="!u.is_active" class="card-act danger" title="Удалить окончательно" @click="askPurge(u)">
-                <span class="material-symbols-outlined">delete_forever</span>
-              </button>
+              <AppButton variant="icon" size="sm" icon="edit" title="Редактировать" aria-label="Редактировать" @click="openEdit(u)" />
+              <AppButton variant="icon" size="sm" icon="lock_reset" title="Сбросить пароль" aria-label="Сбросить пароль" @click="askReset(u)" />
+              <AppButton v-if="!u.is_active" variant="icon" size="sm" tone="danger" icon="delete_forever" title="Удалить окончательно" aria-label="Удалить окончательно" @click="askPurge(u)" />
             </div>
           </article>
         </template>
@@ -127,20 +114,13 @@
         <Column header="" style="width: 150px" body-style="text-align: right">
           <template #body="{ data }">
             <div v-if="!data.is_super_admin" class="row-actions">
-              <button class="icon-btn" title="Редактировать" @click="openEdit(data)">
-                <span class="material-symbols-outlined">edit</span>
-              </button>
-              <button class="icon-btn" title="Сбросить пароль" @click="askReset(data)">
-                <span class="material-symbols-outlined">lock_reset</span>
-              </button>
-              <button v-if="!data.is_active" class="icon-btn danger" title="Удалить окончательно" @click="askPurge(data)">
-                <span class="material-symbols-outlined">delete_forever</span>
-              </button>
+              <AppButton variant="icon" size="sm" icon="edit" title="Редактировать" aria-label="Редактировать" @click="openEdit(data)" />
+              <AppButton variant="icon" size="sm" icon="lock_reset" title="Сбросить пароль" aria-label="Сбросить пароль" @click="askReset(data)" />
+              <AppButton v-if="!data.is_active" variant="icon" size="sm" tone="danger" icon="delete_forever" title="Удалить окончательно" aria-label="Удалить окончательно" @click="askPurge(data)" />
             </div>
           </template>
         </Column>
       </AppDataTable>
-    </div>
 
     <!-- Создание / редактирование -->
     <AppDialog
@@ -211,8 +191,8 @@
       </p>
     </AppDialog>
 
-    <AppFab icon="person_add" aria-label="Новый пользователь" @click="openCreate" />
-  </div>
+    </template>
+  </AppPage>
 </template>
 
 <script setup>
@@ -220,11 +200,12 @@ import { ref, computed, onMounted } from 'vue'
 import Column from 'primevue/column'
 import BrandLoader from '@/components/common/BrandLoader.vue'
 import AppDataTable from '@/components/common/AppDataTable.vue'
+import AppButton from '@/components/ui/AppButton.vue'
+import AppChip from '@/components/ui/AppChip.vue'
 import AppDialog from '@/components/ui/AppDialog.vue'
-import AppFab from '@/components/ui/AppFab.vue'
+import AppPage from '@/components/ui/AppPage.vue'
 import EmptyState from '@/components/common/EmptyState.vue'
 import SearchField from '@/components/common/SearchField.vue'
-import { useBreakpoint } from '@/composables/useBreakpoint.js'
 import { useNotificationsStore } from '@/stores/notifications.js'
 import { useAuthStore } from '@/stores/auth.js'
 import {
@@ -233,13 +214,16 @@ import {
   reactivatePlatformUser, purgePlatformUser,
 } from '@/api/users.js'
 
-const { isMobile } = useBreakpoint()
 const notif = useNotificationsStore()
 const auth = useAuthStore()
 
 const users = ref([])
 const loading = ref(false)
 const search = ref('')
+
+const commands = [
+  { key: 'add', label: 'Добавить', icon: 'person_add', variant: 'filled', primary: true, fab: true },
+]
 
 function avatarOf(u) {
   return u.avatar_path ? `/uploads/${u.avatar_path}` : `/api/users/${u.id}/identicon`
@@ -385,10 +369,6 @@ async function doPurge() {
 .admin-sticky { background: transparent; -webkit-backdrop-filter: none; backdrop-filter: none; }
 .admin-sticky::after { display: none; }
 
-.cmp-title {
-  margin: 0; font-size: 20px; font-weight: 800; color: var(--color-text); white-space: nowrap;
-}
-
 .cell-user { display: flex; align-items: center; gap: 12px; min-width: 0; }
 .user-avatar {
   width: 38px; height: 38px; border-radius: var(--radius-full); object-fit: cover;
@@ -435,17 +415,6 @@ async function doPurge() {
 .toggle-label { font-size: 12px; font-weight: 600; color: var(--color-text-dim); }
 .toggle-label.on { color: var(--color-success); }
 
-/* ── Строчные действия ── */
-.row-actions { display: inline-flex; align-items: center; justify-content: flex-end; gap: 4px; }
-.icon-btn {
-  appearance: none; border: none; background: transparent; width: 34px; height: 34px; min-height: 0;
-  display: grid; place-items: center; border-radius: 50%; color: var(--color-text-dim);
-  cursor: pointer; transition: background .14s, color .14s;
-}
-.icon-btn:hover { background: var(--color-primary-container); color: var(--color-on-primary-container); }
-.icon-btn.danger:hover { background: var(--color-error-container); color: var(--color-on-error-container); }
-.icon-btn .material-symbols-outlined { font-size: 18px; }
-
 .confirm-warn { color: var(--color-text); }
 .confirm-warn strong { color: var(--color-error); }
 
@@ -476,15 +445,6 @@ async function doPurge() {
   display: flex; justify-content: flex-end; gap: 4px;
   border-top: 1px solid var(--color-outline-dim); padding-top: 10px; margin-top: -2px;
 }
-.card-act {
-  appearance: none; border: 1px solid var(--acrylic-border); background: var(--glass-bg);
-  box-shadow: var(--glass-edge); width: 40px; height: 40px; border-radius: var(--radius-full);
-  display: grid; place-items: center; color: var(--color-text); cursor: pointer;
-  transition: background .14s, color .14s;
-}
-.card-act:hover { background: var(--color-primary-container); color: var(--color-on-primary-container); }
-.card-act.danger:hover { background: var(--color-error-container); color: var(--color-on-error-container); }
-.card-act .material-symbols-outlined { font-size: 20px; }
 
 .cmp-cards-empty { background: var(--acrylic-card-bg); border-radius: var(--radius-xl); }
 .state-block { display: grid; place-items: center; padding: 48px; }

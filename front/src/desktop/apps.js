@@ -176,19 +176,6 @@ export const APPS = [
     min: [620, 460],
     available: company,
   },
-  // Компании, как и профиль, плиткой в «Пуске» не показываем — вход через
-  // «Настройки → Компании», но окно у раздела полноценное.
-  {
-    id: 'companies',
-    title: 'Компании',
-    icon: 'business_center',
-    path: '/companies',
-    match: (p) => p.startsWith('/companies'),
-    size: [1080, 780],
-    min: [560, 440],
-    available: always,
-    titleFor: (route) => (/^\/companies\/\d+$/.test(route.path) ? 'Управление компанией' : null),
-  },
   {
     id: 'users',
     title: 'Пользователи',

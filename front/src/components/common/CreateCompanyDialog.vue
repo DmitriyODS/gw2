@@ -103,7 +103,7 @@ async function submit() {
     emit('update:modelValue', false)
     notify.success(`Компания «${company.name}» создана`)
     // На страницу управления компанией — добавить участников и настроить.
-    router.push(`/companies/${company.id}`)
+    router.push({ path: '/settings', query: { section: 'companies', company: String(company.id) } })
   } catch (e) {
     error.value = e?.message || 'Не удалось создать компанию'
   } finally {
