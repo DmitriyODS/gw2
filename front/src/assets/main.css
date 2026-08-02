@@ -1216,7 +1216,7 @@ textarea.ctl.invalid:focus {
 /* Карточки постов морозят обои ТОЛЬКО когда задан фон ленты (.has-bg): без него
    панель сама стеклянная (подложка), карточки — прежняя плоская подложка.
    -webkit- перед стандартным — LightningCSS иначе выкинет стандартное. */
-.admin-page.has-bg .post-card {
+.has-bg .post-card {
   -webkit-backdrop-filter: var(--bubble-blur);
   backdrop-filter: var(--bubble-blur);
 }

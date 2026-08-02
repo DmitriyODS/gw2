@@ -1,12 +1,16 @@
 <template>
   <AppPage
     class="portal"
-    :class="{ 'has-bg': feedBgOn }"
     title="Портал"
     :commands="commands"
     flush
     @command="onCommand"
   >
+    <!-- Свои обои ленты: слой уходит под содержимое панели раздела. -->
+    <template v-if="feedBgOn" #background>
+      <ChatBackgroundLayer :recipe="store.background" />
+    </template>
+
     <template #subhead>
       <PortalHubTabs class="portal-hub-tabs" />
       <SearchField
@@ -18,9 +22,6 @@
         @clear="clearSearch"
       />
     </template>
-
-    <!-- Обои ленты рисуются под содержимым панели. -->
-    <ChatBackgroundLayer v-if="feedBgOn" :recipe="store.background" />
 
       <!-- Единая строка фильтров: разделы + популярные хештеги (тренды, как в
            соцсетях) в одном горизонтальном скролле — на мобильных не отъедает

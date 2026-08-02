@@ -1,6 +1,12 @@
 <template>
   <div class="page" :class="{ 'no-pad': bare || embedded, embedded }">
-    <section ref="panelEl" class="page-panel" :class="{ bare }">
+    <section ref="panelEl" class="page-panel" :class="{ bare, 'has-bg': !!slots.background }">
+      <!-- Обои раздела (лента портала, переписка): слой лежит ПОД содержимым
+           панели и клипается её скруглением. Панель для этого делается
+           позиционированной и изолированной — иначе слой с z-index: -1 уехал бы
+           под фон самой панели. -->
+      <slot name="background" />
+
       <header v-if="!headless && hasHead" class="page-head">
         <!-- Название занимает свою строку целиком: рядом с кнопками длинные
              имена (реестра, заметки, компании) обрезались до многоточия почти
@@ -255,6 +261,12 @@ const hasHead = computed(() => hasTitleRow.value || hasControlsRow.value)
   -webkit-backdrop-filter: var(--acrylic-blur);
   backdrop-filter: var(--acrylic-blur);
   container-type: inline-size;
+}
+
+.page-panel.has-bg {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
 }
 
 .page-panel.bare {
