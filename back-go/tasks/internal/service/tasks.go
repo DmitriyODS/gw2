@@ -74,18 +74,19 @@ func (s *Service) validateStage(ctx context.Context, stageID *int64, companyID i
 	return nil
 }
 
-// ListTasks — список с фильтрами и батч-обогащением. Поиск: если у компании
-// включён AI — целиком семантический по проиндексированным задачам, иначе
-// LIKE по названию (никаких гибридов — см. комментарий в api/tasks.py).
+// ListTasks — список с фильтрами и батч-обогащением.
+//
+// Поиск: при включённом ИИ к текстовому поиску ДОБАВЛЯЕТСЯ семантическая
+// выдача (объединение, не замена). Раньше семантика её вытесняла, и только что
+// созданная задача не находилась, пока не посчитается эмбеддинг; теперь она
+// находится сразу по названию. Текстовый поиск не зависит от регистра и
+// понимает регулярные выражения (domain.SearchRegex).
 func (s *Service) ListTasks(ctx context.Context, f domain.TaskListFilter) (*dto.TaskList, error) {
 	search := strings.TrimSpace(f.Search)
 	if search != "" && f.CompanyID != nil && s.ai.Enabled(ctx, *f.CompanyID) {
-		hits := s.ai.SemanticSearch(ctx, *f.CompanyID, search)
-		if hits == nil {
-			hits = []int64{}
+		if hits := s.ai.SemanticSearch(ctx, *f.CompanyID, search); len(hits) > 0 {
+			f.OrderedIDs, f.OrderedSet = hits, true
 		}
-		// При включённом AI всегда отдаём семантическую выдачу — даже пустую.
-		f.OrderedIDs, f.OrderedSet = hits, true
 	}
 
 	items, total, err := s.tasks.ListTasks(ctx, f)
@@ -150,10 +151,12 @@ func (s *Service) GetTask(ctx context.Context, taskID, userID int64) (*dto.Task,
 }
 
 // GetTaskInCompany — задача по id для REST: только в активной компании актора.
+// По прямой ссылке сюда приходят и посторонние, поэтому отказ здесь — говорящий
+// (см. taskLinkAccess), а не глухой 404: человеку надо понять, чего не хватает.
 func (s *Service) GetTaskInCompany(ctx context.Context, taskID, userID int64, companyID *int64) (*dto.Task, error) {
 	task, err := s.taskInCompany(ctx, taskID, companyID)
 	if err != nil {
-		return nil, err
+		return nil, s.taskLinkAccess(ctx, taskID, userID, companyID, err)
 	}
 	out, err := s.enrichTask(ctx, task, userID)
 	if err != nil {

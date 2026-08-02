@@ -5,7 +5,7 @@
   "backgroundColor": "#1a1c1e",
   "appendUserAgent": "GrooveWorkApp",
   "server": {
-    "url": "https://gw.kodass.ru",
+    "url": "https://gw.kodass.ru/home",
     "errorPath": "error.html"
   },
   "android": {

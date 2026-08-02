@@ -13,8 +13,11 @@ import "time"
 // общение болезни не даёт — оно кормит настроение, а настроение множит XP.
 
 const (
-	NeedMax  = 100
-	NeedTick = 30 * time.Minute
+	NeedMax = 100
+	// NeedTick — шаг убывания шкал. 45 минут вместо получаса: уход должен быть
+	// ритуалом, а не тушением пожара — при прежнем темпе шкалы пустели за
+	// сутки невнимания, и хозяин только и успевал кормить.
+	NeedTick = 45 * time.Minute
 )
 
 // Ключи шкал (≡ NEEDS на фронте, front/src/utils/pets.js).
@@ -35,8 +38,8 @@ type Need struct {
 
 // Needs — порядок = порядок показа шкал у клиента.
 var Needs = []Need{
-	{NeedSatiety, "Сытость", 2, AilmentHunger}, // сутки без еды — истощение
-	{NeedEnergy, "Энергия", 1, AilmentCold},    // ~двое суток без сна — простуда
+	{NeedSatiety, "Сытость", 2, AilmentHunger}, // ~полтора суток без еды — истощение
+	{NeedEnergy, "Энергия", 1, AilmentCold},    // ~трое суток без сна — простуда
 	{NeedHygiene, "Чистота", 1, AilmentGrime},
 	{NeedSocial, "Общение", 1, ""},
 }
@@ -78,6 +81,15 @@ func (n *NeedValues) Add(key string, delta int) {
 		return
 	}
 	*p = min(NeedMax, max(0, *p+delta))
+}
+
+// Set — выставить значение шкалы (в пределах 0..NeedMax).
+func (n *NeedValues) Set(key string, value int) {
+	p := n.ptr(key)
+	if p == nil {
+		return
+	}
+	*p = min(NeedMax, max(0, value))
 }
 
 // Mood — настроение: среднее по шкалам, где самая запущенная потребность
@@ -155,7 +167,7 @@ var NeedGains = map[string]map[string]int{
 
 const (
 	SleepDailyMax = 2
-	BathCost      = 12
+	BathCost      = 18
 	BathDailyMax  = 3
 )
 
@@ -202,6 +214,23 @@ var Ailments = map[string]Ailment{
 		Hint:  "Зарос грязью и чешется. Лечится купанием — одного раза хватит.",
 		Cures: map[string]int{ActionBath: 3, ActionHeal: 1},
 	},
+}
+
+// RecoveredNeedFloor — до какого значения поднимается шкала-виновник при
+// выздоровлении. Без этого питомец «вылечивался» с нулевой шкалой и тут же
+// заболевал снова: PendingAilment срабатывал на том же нуле в ближайший
+// пересчёт. Порог небольшой — уход всё равно нужен, но передышка есть.
+const RecoveredNeedFloor = 30
+
+// NeedForAilment — шкала, из-за которой наступает болезнь ("" — болезнь не
+// связана со шкалами, как хандра от простоя в работе).
+func NeedForAilment(ailment string) string {
+	for _, n := range Needs {
+		if n.Ailment == ailment {
+			return n.Key
+		}
+	}
+	return ""
 }
 
 // CureFor — очки выздоровления, которые действие даёт при этой болезни

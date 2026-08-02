@@ -1,3 +1,5 @@
+import { wallpaperImage } from '@/utils/wallpapers.js'
+
 // Оформление чатов мессенджера: пресеты градиента (из токенов темы, как фон
 // приложения) + бесшовные SVG-узоры-трафареты. Рецепт хранится на бэкенде как
 // непрозрачный JSON; форму владеет фронт (эти утилиты). Цвета — ТОЛЬКО токены:
@@ -202,9 +204,19 @@ export function normalizeRecipe(raw) {
     size: clamp(p.size, 64, 240, 128),
   }
   const img = raw.image
-  const image = (img && typeof img.url === 'string' && img.url)
-    ? { url: img.url, blur: clamp(img.blur, 0, IMAGE_BLUR_MAX, 12) }
-    : null
+  let image = null
+  if (img && typeof img === 'object') {
+    const blur = clamp(img.blur, 0, IMAGE_BLUR_MAX, 12)
+    // Встроенные обои пересобираем из каталога: сохранён ключ, а не пути,
+    // поэтому переименование файла не оставит битую ссылку.
+    const builtin = wallpaperImage(img.key, blur)
+    if (builtin) image = builtin
+    else if (typeof img.url === 'string' && img.url) {
+      image = { url: img.url, blur }
+      // Тёмный вариант картинки (у встроенных обоев — пара к светлой).
+      if (typeof img.dark === 'string' && img.dark) image.dark = img.dark
+    }
+  }
   return { gradient: { preset, blobs }, pattern, image }
 }
 
@@ -232,8 +244,9 @@ export function recipeBlobs(recipe) {
 }
 
 /* Инлайн-стили для слоя фона: {gradient} — фон градиента, {pattern} — узор
-   (или null). Используют и превью-диалог, и боевой слой. */
-export function chatBgStyles(recipe) {
+   (или null). Используют и превью-диалог, и боевой слой. `dark` — тёмный режим
+   оформления: у встроенных обоев есть парная тёмная картинка. */
+export function chatBgStyles(recipe, dark = false) {
   const blobs = recipeBlobs(recipe)
   const gradient = { backgroundImage: gradientCss(blobs) }
 
@@ -244,7 +257,7 @@ export function chatBgStyles(recipe) {
   if (im && im.url) {
     const blur = im.blur || 0
     image = {
-      backgroundImage: `url("${im.url}")`,
+      backgroundImage: `url("${(dark && im.dark) || im.url}")`,
       backgroundSize: 'cover',
       backgroundPosition: 'center',
       filter: blur ? `blur(${blur}px)` : 'none',

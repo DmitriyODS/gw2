@@ -60,7 +60,6 @@
         </div>
         <ul v-if="companyMembers.length" class="ns-members">
           <li v-for="m in companyMembers" :key="'c' + m.company_id" class="ns-member">
-            <span class="ns-company-ic material-symbols-outlined">apartment</span>
             <span class="ns-user-fio">{{ m.company_name }}</span>
             <button class="chip-tint ns-access" :class="m.can_edit ? 'chip-tint--warning' : 'chip-tint--primary'"
               type="button" @click="toggleCompany(m)">
@@ -296,7 +295,6 @@ function close() { emit('update:modelValue', false) }
 .ns-member { display: flex; align-items: center; gap: 10px; }
 .ns-member .ns-user-fio { flex: 1; min-width: 0; }
 .ns-avatar { width: 30px; height: 30px; border-radius: 50%; object-fit: cover; flex-shrink: 0; }
-.ns-company-ic { width: 30px; height: 30px; display: grid; place-items: center; border-radius: 50%; background: var(--color-primary-container); color: var(--color-on-primary-container); font-size: 18px; flex-shrink: 0; }
 .ns-access { cursor: pointer; border: none; font: inherit; flex-shrink: 0; }
 .ns-company-add { display: flex; flex-wrap: wrap; gap: 8px; }
 .ns-company-chip { display: inline-flex; align-items: center; gap: 4px; height: 34px; padding: 0 12px; border: 1px dashed var(--color-outline); border-radius: var(--radius-full); background: transparent; color: var(--color-text); font: inherit; font-size: 13px; font-weight: 600; cursor: pointer; }

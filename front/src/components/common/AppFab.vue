@@ -1,5 +1,6 @@
 <template>
-  <Teleport to="body">
+  <!-- Хост — экран/окно своего раздела, иначе body (см. useFloatHost). -->
+  <Teleport :to="host">
     <button
       v-if="visible"
       class="fab float-fade"
@@ -7,7 +8,6 @@
         `fab--${tone}`,
         { 'fab--collapsed': collapsed, 'fab--icon-only': !label, 'float-hidden': floatingHidden },
       ]"
-      :data-tutorial="tutorial || null"
       :aria-label="ariaLabel || label || icon"
       @click="$emit('click', $event)"
     >
@@ -20,6 +20,9 @@
 <script setup>
 import { onMounted } from 'vue'
 import { floatingHidden, installFloatingHide } from '@/composables/useFloatingHide.js'
+import { useFloatHost } from '@/desktop/windowHost.js'
+
+const host = useFloatHost()
 
 onMounted(installFloatingHide)
 

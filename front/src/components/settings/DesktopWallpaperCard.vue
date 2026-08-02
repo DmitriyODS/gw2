@@ -1,17 +1,10 @@
 <template>
-  <div class="dw-card">
-    <header class="dw-head">
-      <span class="dw-icon material-symbols-outlined">wallpaper</span>
-      <div class="dw-head-text">
-        <h3>Обои рабочего стола</h3>
-        <p>
-          Своя картинка, градиент или узор под окнами. Оформление личное и
-          синхронизируется на всех ваших устройствах.
-        </p>
-      </div>
-    </header>
-
-    <BackgroundEditor :recipe="recipe" :upload-fn="uploadFn" preview="desktop" />
+  <SettingCard
+    class="dw-card"
+    title="Обои рабочего стола"
+    hint="Готовый комплект, своя картинка, градиент или узор под окнами. Оформление личное и синхронизируется на всех ваших устройствах."
+  >
+    <BackgroundEditor :recipe="recipe" :upload-fn="uploadFn" preview="desktop" :presets="WALLPAPERS" />
 
     <section v-if="prefs.wallpapers.length" class="dw-history">
       <h4 class="dw-history-title">Недавние картинки</h4>
@@ -43,28 +36,31 @@
         Применить
       </button>
     </div>
-  </div>
+  </SettingCard>
 </template>
 
 <script setup>
 import { onMounted, reactive } from 'vue'
 import BackgroundEditor from '@/components/common/BackgroundEditor.vue'
+import SettingCard from '@/components/common/SettingCard.vue'
 import { useDesktopPrefsStore } from '@/stores/desktopPrefs.js'
 import { useNotificationsStore } from '@/stores/notifications.js'
 import { uploadAttachment } from '@/api/messenger.js'
-import { DEFAULT_RECIPE, normalizeRecipe, cloneRecipe } from '@/utils/chatBackgrounds.js'
+import { normalizeRecipe, cloneRecipe } from '@/utils/chatBackgrounds.js'
+import { WALLPAPERS, defaultWallpaperRecipe } from '@/utils/wallpapers.js'
 
 const prefs = useDesktopPrefsStore()
 const notif = useNotificationsStore()
 
-const recipe = reactive(cloneRecipe(DEFAULT_RECIPE))
+const recipe = reactive(defaultWallpaperRecipe())
 
 // Картинка обоев — личный ассет пользователя; грузим через общий uploads
 // мессенджера (тот же путь, что у фонов чатов и ленты портала).
 const uploadFn = (file) => uploadAttachment(file)
 
 onMounted(() => {
-  Object.assign(recipe, cloneRecipe(normalizeRecipe(prefs.wallpaper) || DEFAULT_RECIPE))
+  const saved = normalizeRecipe(prefs.wallpaper)
+  Object.assign(recipe, saved ? cloneRecipe(saved) : defaultWallpaperRecipe())
 })
 
 // Возврат к ранее загруженной картинке: размытие оставляем текущее.
@@ -77,57 +73,18 @@ function apply() {
   notif.success('Обои рабочего стола обновлены')
 }
 
+// Сброс — к заводским обоям: своя настройка снимается, стол возвращается к
+// встроенному комплекту.
 function reset() {
   prefs.setWallpaper(null)
-  Object.assign(recipe, cloneRecipe(DEFAULT_RECIPE))
+  Object.assign(recipe, defaultWallpaperRecipe())
 }
 </script>
 
 <style scoped>
-/* Карточка живёт в панели настроек, но её стили (.settings-card и соседи)
-   scoped в SettingsView — поэтому раскладка своя, а кнопки берём глобальные. */
-.dw-card {
-  display: flex;
-  flex-direction: column;
-  gap: 18px;
-  padding: 22px;
-  background: var(--glass-bg);
-  box-shadow: var(--glass-edge);
-  border: 1px solid var(--acrylic-border);
-  border-radius: var(--radius-xl);
-}
-
-.dw-head {
-  display: flex;
-  align-items: flex-start;
-  gap: 16px;
-}
-
-.dw-icon {
-  flex-shrink: 0;
-  width: 48px;
-  height: 48px;
-  display: grid;
-  place-items: center;
-  border-radius: var(--radius-lg);
-  background: var(--color-tertiary-container, var(--color-primary-container));
-  color: var(--color-on-tertiary-container, var(--color-on-primary-container));
-  font-size: 24px;
-}
-
-.dw-head-text h3 {
-  margin: 0 0 4px;
-  font-size: 16px;
-  font-weight: 650;
-  color: var(--color-text);
-}
-
-.dw-head-text p {
-  margin: 0;
-  font-size: 13.5px;
-  line-height: 1.45;
-  color: var(--color-text-dim);
-}
+/* Общая карточка настроек, но содержимое дышит чуть свободнее: внутри —
+   редактор фона со своими превью. */
+.dw-card { gap: 18px; }
 
 /* ── История картинок ── */
 .dw-history-title {

@@ -93,7 +93,7 @@ type MessengerService interface {
 	EnsureDialog(ctx context.Context, userAID, userBID int64) (int64, error)
 	CreateCallMessage(ctx context.Context, convID, senderID, callID int64) (*dto.Message, []int64, error)
 	GetCallMessage(ctx context.Context, callID int64) (int64, *dto.Message, []int64, error)
-	CreatePostMessage(ctx context.Context, convID, senderID, postID int64, title, excerpt, coverURL string) (*dto.Message, []int64, error)
+	CreatePostMessage(ctx context.Context, convID, senderID, postID, companyID int64, title, excerpt, coverURL string) (*dto.Message, []int64, error)
 }
 
 type Service struct {
@@ -164,6 +164,32 @@ func (s *Service) audience(ctx context.Context, conv *domain.Conversation) ([]in
 		ids = append(ids, *conv.UserBID)
 	}
 	return ids, nil
+}
+
+// ensureCompanyAudience — все, кто увидит сообщение, состоят в компании
+// companyID. Гард вложений КОМПАНИЙНЫХ сущностей (задача, пост портала):
+// делиться ими можно только внутри их компании, поэтому чужой в переписке
+// запрещает вложение целиком — иначе сущность утекла бы за пределы компании.
+// code/message — чем именно делятся (текст видит пользователь).
+func (s *Service) ensureCompanyAudience(ctx context.Context, conv *domain.Conversation, companyID int64, code, message string) error {
+	deny := domain.NewError(code, message, 403)
+	// Dev-чат поддержки — вне компаний: супер-админы в user_companies не
+	// состоят, и компанийным вложениям там не место.
+	if conv.IsDevChat {
+		return deny
+	}
+	ids, err := s.audience(ctx, conv)
+	if err != nil {
+		return err
+	}
+	outsiders, err := s.users.OutsidersInCompany(ctx, companyID, ids)
+	if err != nil {
+		return err
+	}
+	if len(outsiders) > 0 {
+		return deny
+	}
+	return nil
 }
 
 // ensureMember — доступ к диалогу: p2p — только участники; dev-чат —

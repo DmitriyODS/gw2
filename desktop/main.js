@@ -267,7 +267,10 @@ function createWindow(appUrl) {
             mainWindow?.webContents.stop() // → did-fail-load c ERR_ABORTED, он игнорится
             failover()
         }, 12_000)
-        mainWindow.loadURL(appUrl)
+        // Корень сервера — промо-лендинг платформы; обёртке нужен сам рабочий
+        // стол, поэтому грузим /home явно, а не полагаемся на разворот адреса
+        // гардом фронта.
+        mainWindow.loadURL(`${appUrl}/home`)
     }
 
     mainWindow.webContents.on('did-fail-load', (e, code, desc, url, isMainFrame) => {

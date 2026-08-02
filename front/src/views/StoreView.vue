@@ -32,7 +32,6 @@
 
         <section v-if="billing.subscription" class="gw-card sub-manage">
           <div class="gw-row">
-            <span class="gw-row-icon"><span class="material-symbols-outlined">autorenew</span></span>
             <div>
               <p class="gw-h">Автопродление</p>
               <p class="gw-sub">
@@ -50,68 +49,75 @@
         </section>
 
         <h2 class="gw-title section-title">Доступные подписки</h2>
-        <div class="offer-grid">
-          <OfferCard
-            v-for="offer in subscriptionOffers"
-            :key="offer.key"
-            :title="offer.title"
-            :description="offer.description"
-            :price-month="offer.priceMonth"
-            :price-year="offer.priceYear"
-            :recurring="offer.recurring"
-            @open="openedOffer = offer"
-          />
-        </div>
+        <section class="gw-group">
+          <div class="offer-grid">
+            <OfferCard
+              v-for="offer in subscriptionOffers"
+              :key="offer.key"
+              :title="offer.title"
+              :description="offer.description"
+              :price-month="offer.priceMonth"
+              :price-year="offer.priceYear"
+              :recurring="offer.recurring"
+              @open="openedOffer = offer"
+            />
+          </div>
+        </section>
 
         <template v-if="billing.myAddons.length">
           <h2 class="gw-title section-title">Мои дополнения</h2>
-          <div class="addon-list">
-            <div v-for="a in billing.myAddons" :key="a.id" class="gw-card gw-row addon-row">
-              <span class="gw-row-icon"><span class="material-symbols-outlined">add_circle</span></span>
-              <div>
-                <p class="gw-h">{{ a.name }}</p>
-                <p class="gw-sub">
-                  {{ a.expires_at ? `действует до ${formatUntil(a.expires_at)}` : 'бессрочно' }}
-                </p>
+          <section class="gw-group">
+            <div class="addon-list">
+              <div v-for="a in billing.myAddons" :key="a.id" class="gw-card gw-row addon-row">
+                <div>
+                  <p class="gw-h">{{ a.name }}</p>
+                  <p class="gw-sub">
+                    {{ a.expires_at ? `действует до ${formatUntil(a.expires_at)}` : 'бессрочно' }}
+                  </p>
+                </div>
+                <button class="gw-chip" type="button" @click="dropAddon(a.id)">Отключить</button>
               </div>
-              <button class="gw-chip" type="button" @click="dropAddon(a.id)">Отключить</button>
             </div>
-          </div>
+          </section>
         </template>
       </template>
 
       <template v-else-if="tab === 'shop'">
-        <div class="store-cats">
-          <button
-            v-for="cat in CATEGORIES"
-            :key="cat.key"
-            class="gw-tile"
-            :class="{ 'is-active': kind === cat.key }"
-            type="button"
-            @click="selectKind(cat.key)"
-          >
-            <span class="material-symbols-outlined">{{ cat.icon }}</span>
-            <span>{{ cat.label }}</span>
-          </button>
-        </div>
+        <section class="gw-group">
+          <div class="store-cats">
+            <button
+              v-for="cat in CATEGORIES"
+              :key="cat.key"
+              class="gw-tile"
+              :class="{ 'is-active': kind === cat.key }"
+              type="button"
+              @click="selectKind(cat.key)"
+            >
+              <span class="material-symbols-outlined">{{ cat.icon }}</span>
+              <span>{{ cat.label }}</span>
+            </button>
+          </div>
+        </section>
 
         <section v-if="!products.length" class="gw-banner">
           <h2>Витрина пока пуста</h2>
           <p class="gw-sub">Товары появятся здесь — их публикуют платформа и авторы тем.</p>
         </section>
-        <div v-else class="offer-grid">
-          <OfferCard
-            v-for="p in products"
-            :key="p.id"
-            :title="p.title"
-            :description="p.description"
-            :price-month="p.price"
-            :price-year="0"
-            :recurring="false"
-            :owned="p.owned"
-            @open="openProduct(p)"
-          />
-        </div>
+        <section v-else class="gw-group">
+          <div class="offer-grid">
+            <OfferCard
+              v-for="p in products"
+              :key="p.id"
+              :title="p.title"
+              :description="p.description"
+              :price-month="p.price"
+              :price-year="0"
+              :recurring="false"
+              :owned="p.owned"
+              @open="openProduct(p)"
+            />
+          </div>
+        </section>
       </template>
 
       <MyGoodsTab v-else-if="tab === 'mine'" @open="openProduct" />

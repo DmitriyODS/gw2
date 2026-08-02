@@ -104,7 +104,7 @@ export const uploadImage = (noteId, file) => {
 }
 
 // ── Экспорт/импорт ──
-// format: 'txt' | 'docx' (заметка), папка — всегда zip.
+// format: 'txt' | 'md' | 'docx' (заметка), папка — всегда zip.
 export const exportNote = (id, format = 'txt') =>
   apiRequest(`/notes/${id}/export?${qs({ format })}`, { blob: true })
 export const exportFolder = (id, format = 'txt') =>

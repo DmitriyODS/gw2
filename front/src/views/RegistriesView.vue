@@ -3,7 +3,6 @@
     <!-- ЛЕВАЯ ПАНЕЛЬ: список реестров -->
     <aside class="split-side">
       <div class="split-side-head">
-        <span class="split-side-tile"><span class="material-symbols-outlined">table_view</span></span>
         <span class="split-side-title">Реестры</span>
       </div>
       <div class="split-side-list">

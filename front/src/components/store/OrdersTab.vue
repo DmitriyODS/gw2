@@ -7,9 +7,8 @@
       <p class="gw-sub">Здесь появятся покупки подписок, дополнений и товаров.</p>
     </section>
 
-    <div v-else class="order-list">
+    <section v-else class="gw-group order-list">
       <article v-for="o in items" :key="o.id" class="gw-card gw-row order">
-        <span class="gw-row-icon"><span class="material-symbols-outlined">{{ icon(o.kind) }}</span></span>
         <div class="order-main">
           <p class="gw-h">{{ o.title || o.item_code }}</p>
           <p class="gw-sub">
@@ -27,7 +26,7 @@
           Отменить
         </button>
       </article>
-    </div>
+    </section>
   </div>
 </template>
 
@@ -63,12 +62,6 @@ async function load() {
 async function cancel(id) {
   await api.cancelOrder(id)
   await load()
-}
-
-function icon(kind) {
-  if (kind === 'subscription') return 'card_membership'
-  if (kind === 'addon') return 'add_circle'
-  return 'redeem'
 }
 
 function periodLabel(o) {

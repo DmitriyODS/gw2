@@ -29,11 +29,11 @@
             <span class="material-symbols-outlined">create_new_folder</span>
             <span class="na-lbl">Папка</span>
           </button>
-          <button class="btn-glass" title="Импорт .txt / .docx" @click="importInput?.click()">
+          <button class="btn-glass" title="Импорт .txt / .md / .docx" @click="importInput?.click()">
             <span class="material-symbols-outlined">upload_file</span>
             <span class="na-lbl">Импорт</span>
           </button>
-          <input ref="importInput" type="file" accept=".txt,.docx,text/plain" hidden multiple @change="onImportPick" />
+          <input ref="importInput" type="file" accept=".txt,.md,.markdown,.docx,text/plain,text/markdown" hidden multiple @change="onImportPick" />
           <button class="btn-grad" :disabled="creating" @click="createAndOpen">
             <span class="material-symbols-outlined">add</span>
             <span class="na-lbl">Заметка</span>
@@ -243,7 +243,7 @@
     <div v-if="importDragging" class="na-dropzone">
       <div class="na-dropzone-inner">
         <span class="material-symbols-outlined">upload_file</span>
-        <p>Отпустите, чтобы импортировать .txt / .docx</p>
+        <p>Отпустите, чтобы импортировать .txt / .md / .docx</p>
       </div>
     </div>
 
@@ -569,6 +569,7 @@ function specialMenuItems() {
     { label: 'Открыть', icon: 'open_in_new', action: 'open' },
     { label: 'Экспорт (.zip)', icon: 'folder_zip', children: [
       { label: 'Заметки как .txt', icon: 'description', action: 'zip-txt' },
+      { label: 'Заметки как .md', icon: 'markdown', action: 'zip-md' },
       { label: 'Заметки как .docx', icon: 'article', action: 'zip-docx' },
     ] },
   ]
@@ -578,6 +579,7 @@ function noteMenuItems(n) {
   if (!n) return []
   const dl = { label: 'Скачать', icon: 'download', children: [
     { label: 'Формат .txt', icon: 'description', action: 'export-txt' },
+    { label: 'Формат .md', icon: 'markdown', action: 'export-md' },
     { label: 'Формат .docx', icon: 'article', action: 'export-docx' },
   ] }
   if (isShared(n)) return [
@@ -628,6 +630,7 @@ function folderMenuItems(f) {
     { label: 'Поделиться', icon: 'share', action: 'share' },
     { label: 'Скачать (.zip)', icon: 'folder_zip', children: [
       { label: 'Заметки как .txt', icon: 'description', action: 'zip-txt' },
+      { label: 'Заметки как .md', icon: 'markdown', action: 'zip-md' },
       { label: 'Заметки как .docx', icon: 'article', action: 'zip-docx' },
     ] },
     { divider: true },
@@ -655,6 +658,7 @@ function smAction(action) {
   const key = menuSpecial.value
   if (action === 'open') onSpecialClick(key)
   else if (action === 'zip-txt') downloadScope(key, 'txt')
+  else if (action === 'zip-md') downloadScope(key, 'md')
   else if (action === 'zip-docx') downloadScope(key, 'docx')
 }
 function downloadScope(key, format) {
@@ -674,6 +678,7 @@ function onNoteMenuAction(action) {
   else if (action === 'publish') publishToPortal(n)
   else if (action === 'pin') togglePin(n)
   else if (action === 'export-txt') downloadNote(n, 'txt')
+  else if (action === 'export-md') downloadNote(n, 'md')
   else if (action === 'export-docx') downloadNote(n, 'docx')
   else if (action === 'archive') toggleArchive(n)
   else if (action === 'delete') {
@@ -727,6 +732,7 @@ function fmAction(action) {
   else if (action === 'newsub') newFolder(f.id)
   else if (action === 'newnote') createNoteInFolder(f.id)
   else if (action === 'zip-txt') downloadFolder(f, 'txt')
+  else if (action === 'zip-md') downloadFolder(f, 'md')
   else if (action === 'zip-docx') downloadFolder(f, 'docx')
   else if (action === 'delete') {
     confirmDelete.value = {

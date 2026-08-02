@@ -267,7 +267,7 @@ onMounted(() => {
   cursor: pointer;
   transition: background 0.15s, transform 0.1s;
 }
-.cp-house:hover { background: var(--color-secondary-container); transform: scale(1.1); }
+.cp-house:hover { background: var(--color-secondary-container); }
 
 /* Бейдж поколения — на кружке питомца. */
 .cp-gen {

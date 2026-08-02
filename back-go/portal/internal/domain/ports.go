@@ -133,7 +133,9 @@ type MessengerClient interface {
 	EnsureDialog(ctx Ctx, userAID, userBID int64) (int64, error)
 	// CreatePostMessage — плашка поста kind='post' в диалоге (msgsvc сам
 	// проверяет участие отправителя и сам публикует message:new в
-	// gw2:messenger:events — тем же путём событие видит pushsvc). Возвращает
-	// готовый JSON-снапшот сообщения (форма REST msgsvc) и адресатов события.
-	CreatePostMessage(ctx Ctx, conversationID, senderID, postID int64, preview PostPreview) (messageJSON string, notifyUserIDs []int64, err error)
+	// gw2:messenger:events — тем же путём событие видит pushsvc). companyID —
+	// компания поста: msgsvc отклоняет пересылку тем, кто в ней не состоит.
+	// Возвращает готовый JSON-снапшот сообщения (форма REST msgsvc) и адресатов
+	// события.
+	CreatePostMessage(ctx Ctx, conversationID, senderID, postID, companyID int64, preview PostPreview) (messageJSON string, notifyUserIDs []int64, err error)
 }

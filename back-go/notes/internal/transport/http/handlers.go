@@ -549,8 +549,10 @@ func (h *handlers) importNote(c *fiber.Ctx) error {
 	if err != nil {
 		return h.respondError(c, err)
 	}
-	text := string(data)
-	if strings.HasSuffix(strings.ToLower(fileHeader.Filename), ".docx") {
+	name := strings.ToLower(fileHeader.Filename)
+	text, format := string(data), service.FormatTXT
+	switch {
+	case strings.HasSuffix(name, ".docx"):
 		parsed, perr := docx.Parse(data)
 		if perr != nil {
 			return validationError(c, "Не удалось прочитать .docx")
@@ -558,6 +560,13 @@ func (h *handlers) importNote(c *fiber.Ctx) error {
 		// Если у файла нет заголовка внутри — берём имя файла первой строкой.
 		title := strings.TrimSuffix(fileHeader.Filename, ".docx")
 		text = title + "\n" + parsed
+	case strings.HasSuffix(name, ".md") || strings.HasSuffix(name, ".markdown"):
+		format = service.FormatMD
+		// Файл без своего заголовка первого уровня — название берём из имени
+		// файла, иначе первая строка Markdown станет и заголовком, и текстом.
+		if !strings.HasPrefix(strings.TrimSpace(text), "# ") {
+			text = strings.TrimSuffix(strings.TrimSuffix(fileHeader.Filename, ".markdown"), ".md") + "\n" + text
+		}
 	}
 	var folderID *int64
 	if fq := c.FormValue("folder_id"); fq != "" && fq != "root" {
@@ -565,7 +574,7 @@ func (h *handlers) importNote(c *fiber.Ctx) error {
 			folderID = &id
 		}
 	}
-	resp, err := h.svc.Import(c.Context(), currentUserID(c), text, folderID)
+	resp, err := h.svc.Import(c.Context(), currentUserID(c), text, format, folderID)
 	if err != nil {
 		return h.respondError(c, err)
 	}

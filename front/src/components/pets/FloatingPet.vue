@@ -43,6 +43,7 @@ import EmojiGlyph from '@/components/common/EmojiGlyph.vue'
 import { useDraggable } from '@/composables/useDraggable.js'
 import { anyModalOpen } from '@/composables/useOpenModals.js'
 import { floatingHidden, installFloatingHide } from '@/composables/useFloatingHide.js'
+import { floatingBottomInset } from '@/desktop/layout.js'
 import { usePetsStore } from '@/stores/pets.js'
 import { ailmentMeta, petEmoji } from '@/utils/pets.js'
 import { storageGet, storageSet } from '@/utils/storage.js'
@@ -52,8 +53,6 @@ const WIDGET_SIZE = { w: 60, h: 60 }
 const BUBBLE_HIDE_MS = 4500
 const HUNGER_SHOWN_KEY = 'gw_pet_hunger_shown_date'
 const HUNGRY_AT = 40 // ниже этой сытости грувик напоминает о себе
-const MOBILE_BP = 768
-const isNarrow = () => typeof window !== 'undefined' && window.innerWidth <= MOBILE_BP
 
 const pets = usePetsStore()
 const pet = computed(() => pets.pet)
@@ -67,9 +66,9 @@ const { pos, dragging, onPointerDown, wasDragged } = useDraggable({
   size: WIDGET_SIZE,
   defaultCorner: 'bottom-left',
   margin: 16,
-  // Запас под AppBottomNav (64px) + safe-area на мобильном — функции
-  // пересчитываются на каждый clamp, так что resize/поворот учитываются.
-  bottomInset: () => (isNarrow() ? 104 : 0),
+  // Запас под панель задач каркаса (её толщину знает layout.js) — функция
+  // пересчитывается на каждый clamp, так что resize/поворот учитываются.
+  bottomInset: floatingBottomInset,
 })
 
 // transform вместо left/top: композит-слой, без layout на каждый кадр драга.

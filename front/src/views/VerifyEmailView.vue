@@ -1,44 +1,37 @@
 <template>
   <AuthShell
-    :title="verifying ? 'Подтверждаем почту…' : 'Подтвердите почту'"
-    :subtitle="verifying ? 'Секунду, проверяем ссылку.' : 'Введите код из письма или перейдите по ссылке из него.'"
+    :title="verifying ? 'подтверждаем почту' : 'подтверждение почты'"
+    :subtitle="verifying ? 'Секунду, проверяем ссылку.' : `Мы отправили код на ${email || 'указанный адрес'}.`"
+    size="sm"
+    back="/login"
   >
     <template v-if="!verifying">
-      <p class="verify-email-line">
-        Мы отправили код на <b>{{ email || 'указанный email' }}</b>
-      </p>
-
-      <form @submit.prevent="submitCode" class="login-form">
-        <div class="form-group">
-          <label>Код подтверждения</label>
-          <input
-            v-model.trim="code"
-            inputmode="numeric"
-            maxlength="6"
-            class="pill-input code-input"
-            :disabled="loading"
-            placeholder="------"
-            autocomplete="one-time-code"
-          />
-        </div>
-        <p v-if="error" class="error-msg">{{ error }}</p>
-        <button type="submit" class="btn-login" :disabled="loading || code.length < 6">
-          {{ loading ? 'Проверяем…' : 'Подтвердить' }}
+      <form class="auth-form" @submit.prevent="submitCode">
+        <AuthField
+          v-model="code"
+          label="код из письма"
+          placeholder="——————"
+          inputmode="numeric"
+          autocomplete="one-time-code"
+          :maxlength="6"
+          :disabled="loading"
+          center
+        />
+        <p v-if="error" class="auth-error">{{ error }}</p>
+        <button type="submit" class="auth-submit" :disabled="loading || code.length < 6">
+          {{ loading ? 'проверяем…' : 'подтвердить' }}
         </button>
       </form>
 
-      <p class="switch-line">
+      <p class="ve-resend">
         Не пришло письмо?
-        <button type="button" class="switch-link as-btn" :disabled="cooldown > 0 || !email" @click="resend">
-          {{ cooldown > 0 ? `Отправить ещё раз (${cooldown})` : 'Отправить ещё раз' }}
+        <button type="button" :disabled="cooldown > 0 || !email" @click="resend">
+          {{ cooldown > 0 ? `отправить ещё раз (${cooldown})` : 'отправить ещё раз' }}
         </button>
-      </p>
-      <p class="switch-line">
-        <RouterLink to="/login" class="switch-link">Вернуться ко входу</RouterLink>
       </p>
     </template>
 
-    <p v-else-if="error" class="error-msg">{{ error }}</p>
+    <p v-else-if="error" class="auth-error">{{ error }}</p>
   </AuthShell>
 </template>
 
@@ -46,14 +39,14 @@
 import { ref, onMounted, onBeforeUnmount } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth.js'
-import { useThemeStore } from '@/stores/theme.js'
 import { connectSocket } from '@/socket/index.js'
+import { flushPendingAvatar } from '@/utils/pendingAvatar.js'
 import AuthShell from '@/components/auth/AuthShell.vue'
+import AuthField from '@/components/auth/AuthField.vue'
 
 const route = useRoute()
 const router = useRouter()
 const authStore = useAuthStore()
-const themeStore = useThemeStore()
 
 // email нужен для подтверждения по коду. Берём из query (ссылка письма /
 // переход с регистрации), иначе — из localStorage (экран мог пересоздаться без
@@ -68,7 +61,6 @@ const cooldown = ref(0)
 let cooldownTimer = null
 
 onMounted(() => {
-  themeStore.init()
   if (email.value) localStorage.setItem(PENDING_EMAIL_KEY, email.value)
   if (route.query.token) {
     verifyWith({ token: route.query.token })
@@ -93,8 +85,10 @@ async function verifyWith(payload) {
   try {
     await authStore.verifyEmail(payload)
     localStorage.removeItem(PENDING_EMAIL_KEY)
+    // Фото, выбранное на регистрации, ждало появления сессии — отправляем.
+    await flushPendingAvatar()
     connectSocket()
-    router.push('/')
+    router.push('/home')
   } catch (e) {
     verifying.value = false
     error.value = e?.message || 'Не удалось подтвердить почту'
@@ -121,140 +115,25 @@ async function resend() {
 </script>
 
 <style scoped>
-/* Каркас страницы (фон, сплит-карточка, промо) — в AuthShell.vue;
-   стили формы — те же, что на экранах входа/регистрации. */
-.verify-email-line {
-  margin: -8px 0 20px;
-  font-size: 14px;
-  line-height: 1.5;
-  color: var(--color-text-dim);
-  text-align: center;
-  word-break: break-word;
-}
-
-.verify-email-line b { color: var(--color-text); }
-
-.login-form {
-  display: flex;
-  flex-direction: column;
-  gap: 20px;
-}
-
-.form-group {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.form-group label {
-  font-size: 12px;
-  font-weight: 700;
-  color: var(--color-primary);
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-}
-
-/* Pill-инпут: полупрозрачное стекло с мягкой обводкой */
-.pill-input {
-  width: 100%;
-  height: 48px;
-  border-radius: var(--radius-full);
-  border: 1.5px solid color-mix(in oklch, var(--color-outline) 55%, transparent);
-  background: color-mix(in oklch, var(--color-surface) 42%, transparent);
-  padding: 0 20px;
-  font-size: 15px;
-  color: var(--color-text);
-  outline: none;
-  transition: border-color 0.15s, box-shadow 0.15s, background 0.15s;
-  box-sizing: border-box;
-  font-family: inherit;
-}
-
-.pill-input:focus {
-  border-color: var(--color-primary);
-  background: color-mix(in oklch, var(--color-surface) 65%, transparent);
-  box-shadow: 0 0 0 3px color-mix(in oklch, var(--color-primary) 15%, transparent);
-}
-
-.pill-input:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
-.code-input {
-  text-align: center;
-  letter-spacing: 0.5em;
-  font-size: 22px;
-  font-weight: 700;
-}
-
-.error-msg {
-  margin: 0;
-  font-size: 13px;
-  color: var(--color-on-error-container);
-  padding: 8px 16px;
-  background: var(--color-error-container);
-  border-radius: 999px;
-  border: 1px solid color-mix(in oklch, var(--color-error) 30%, var(--color-outline-dim));
-  text-align: center;
-}
-
-.btn-login {
-  width: 100%;
-  height: 52px;
-  border-radius: 999px;
-  border: none;
-  background: var(--grad-primary);
-  color: var(--color-on-primary);
-  font-size: 16px;
-  font-weight: 700;
-  cursor: pointer;
-  transition: filter 0.15s, transform 0.1s;
-  margin-top: 8px;
-  letter-spacing: 0.02em;
-}
-
-.btn-login:hover:not(:disabled) {
-  filter: brightness(1.06);
-  transform: translateY(-1px);
-}
-
-.btn-login:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
-  transform: none;
-}
-
-.switch-line {
+.ve-resend {
   margin: 16px 0 0;
   text-align: center;
-  font-size: 14px;
+  font-size: 13.5px;
   color: var(--color-text-dim);
 }
 
-.switch-link {
-  color: var(--color-primary);
-  font-weight: 700;
-  text-decoration: none;
+.ve-resend button {
   margin-left: 4px;
-}
-
-.switch-link:hover {
-  text-decoration: underline;
-}
-
-.switch-link.as-btn {
-  background: none;
-  border: none;
-  cursor: pointer;
-  font-family: inherit;
-  font-size: 14px;
   padding: 0;
+  border: none;
+  background: none;
+  color: var(--color-primary);
+  font: inherit;
+  font-size: 13.5px;
+  font-weight: 600;
+  cursor: pointer;
 }
 
-.switch-link.as-btn:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-  text-decoration: none;
-}
+.ve-resend button:disabled { opacity: 0.55; cursor: not-allowed; }
+
 </style>

@@ -363,9 +363,10 @@ func (f *fakeFiles) RemoveFor(_ context.Context, _, _ int64, paths []string) {
 }
 
 type fakeMessenger struct {
-	dialogs map[int64]int64 // otherUserID → conversationID
-	fail    map[int64]bool  // conversationID → CreatePostMessage должен упасть
-	calls   []int64         // conversationID, для которых плашка создана
+	dialogs   map[int64]int64 // otherUserID → conversationID
+	fail      map[int64]bool  // conversationID → CreatePostMessage должен упасть
+	calls     []int64         // conversationID, для которых плашка создана
+	companies []int64         // компания поста, с которой позвали (гард своих)
 }
 
 func (m *fakeMessenger) EnsureDialog(_ domain.Ctx, _, userBID int64) (int64, error) {
@@ -377,11 +378,12 @@ func (m *fakeMessenger) EnsureDialog(_ domain.Ctx, _, userBID int64) (int64, err
 	}
 	return 0, domain.NewError("NO_DIALOG", "нет диалога", 404)
 }
-func (m *fakeMessenger) CreatePostMessage(_ domain.Ctx, convID, _, _ int64, _ domain.PostPreview) (string, []int64, error) {
+func (m *fakeMessenger) CreatePostMessage(_ domain.Ctx, convID, _, _, companyID int64, _ domain.PostPreview) (string, []int64, error) {
 	if m.fail[convID] {
 		return "", nil, domain.NewError("FAIL", "boom", 500)
 	}
 	m.calls = append(m.calls, convID)
+	m.companies = append(m.companies, companyID)
 	return `{"id":1}`, []int64{convID}, nil
 }
 
@@ -625,6 +627,13 @@ func TestForwardPost_ConversationAndUserIDs(t *testing.T) {
 	}
 	if len(msgr.calls) != 2 {
 		t.Fatalf("ожидалось 2 плашки, получено %d", len(msgr.calls))
+	}
+	// Компания поста уходит в мессенджер: по ней он проверяет, что все в
+	// переписке — сотрудники этой компании (пост наружу не пересылается).
+	for _, cid := range msgr.companies {
+		if cid != 1 {
+			t.Fatalf("в мессенджер ушла компания %d, ожидалась 1: %v", cid, msgr.companies)
+		}
 	}
 }
 

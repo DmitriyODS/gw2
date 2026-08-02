@@ -103,7 +103,7 @@
             </template>
           </div>
         </div>
-        <div class="chat-tools" data-tutorial="chat-tools" ref="toolsRef">
+        <div class="chat-tools" ref="toolsRef">
           <button
             class="chat-tool"
             :class="{ active: chatMenuOpen }"
@@ -127,7 +127,6 @@
               <button
                 v-if="!active.is_dev_chat && !active.is_group"
                 class="chat-menu-item"
-                data-tutorial="chat-call-audio"
                 @click="onMenuAction(() => startCall('audio'))"
               >
                 <span class="material-symbols-outlined chat-menu-ico tone-success">call</span>
@@ -136,7 +135,6 @@
               <button
                 v-if="!active.is_dev_chat && !active.is_group"
                 class="chat-menu-item"
-                data-tutorial="chat-call-video"
                 @click="onMenuAction(() => startCall('video'))"
               >
                 <span class="material-symbols-outlined chat-menu-ico tone-success">videocam</span>
@@ -1509,8 +1507,8 @@ watch(() => route.params.conversationId, async (id) => {
 
 @media (max-width: 768px) {
   /* Статичный полноэкранный макет: фиксируем к вьюпорту, чтобы экран не «ёрзал»
-     при показе/скрытии адресной строки браузера. Нижняя навигация (z-index 200)
-     остаётся поверх; снизу резервируем под неё высоту. */
+     при показе/скрытии адресной строки браузера. Панель задач каркаса
+     (z-index 900) остаётся поверх; снизу резервируем под неё высоту. */
   .messenger {
     position: fixed;
     inset: 0;
@@ -1582,18 +1580,4 @@ watch(() => route.params.conversationId, async (id) => {
 
 }
 
-</style>
-
-<!-- Вне scoped: :global() внутри scoped-блока LightningCSS компилирует в
-     битый селектор. Классы .messenger/.chat-panel на элементах сохраняются
-     и без атрибута скоупа — правило работает как есть. -->
-<style>
-@media (max-width: 768px) {
-  /* Идёт работа: плашка юнита занимает верх экрана — fixed-мессенджер
-     начинается под ней, иначе список рисуется поверх плашки. */
-  .app-layout.has-unit-banner .messenger,
-  .app-layout.has-unit-banner .messenger .chat-panel {
-    top: var(--unit-banner-height, 54px);
-  }
-}
 </style>

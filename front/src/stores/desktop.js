@@ -24,7 +24,15 @@ function minOf(app) {
 export const useDesktopStore = defineStore('desktop', () => {
   const windows = ref([])
   const focusedId = ref(null)
+  /* Предел одновременно открытых разделов (0 — без предела). Нужен мобильному
+     каркасу: там разделы тоже остаются смонтированными, а памяти у телефона
+     меньше — самый давний по последнему обращению экран закрывается сам. */
+  const limit = ref(0)
   const startOpen = ref(false)
+  // Меню «Пуск» раскрыто во весь экран: панель задач на это время прячется —
+  // экран занимает только меню, пока не выберут раздел. Флаг рантаймовый
+  // (личная настройка «всегда во весь экран» живёт в desktopPrefs).
+  const startFull = ref(false)
   const notifOpen = ref(false)
   // Всплывающая панель Hola (поиск, команды, чат) — поверх стола, вне окон.
   const holaOpen = ref(false)
@@ -117,8 +125,22 @@ export const useDesktopStore = defineStore('desktop', () => {
     const win = makeWindow(app, resolved.fullPath, cascadeRect(windows.value.length, size, area))
     windows.value.push(win)
     focus(win.id)
+    enforceLimit(win.id)
     persist()
     return win
+  }
+
+  /** Закрывает самые давние окна, пока их больше предела (см. limit). */
+  function enforceLimit(keepId = null) {
+    if (!limit.value) return
+    while (windows.value.length > limit.value) {
+      // Порядок z — очерёдность последнего обращения: наименьший и уходит.
+      const victim = [...windows.value]
+        .filter((w) => w.id !== keepId)
+        .sort((a, b) => a.z - b.z)[0]
+      if (!victim) return
+      close(victim.id)
+    }
   }
 
   function openApp(appId, opts) {
@@ -304,6 +326,12 @@ export const useDesktopStore = defineStore('desktop', () => {
    * вызывающая сторона через фильтр available.
    */
   function restoreSession(isAvailable) {
+    /* Каркас перемонтируется при смене раскладки (изменение размера окна через
+       границу мобильного каркаса) и зовёт boot() заново, а стор переживает это
+       вместе с окнами. Восстанавливаем ТОЛЬКО пустой стол — иначе каждая такая
+       смена удваивала бы открытые разделы. */
+    if (windows.value.length) return true
+
     const saved = storageGetJSON(STATE_KEY, null)
     if (!saved?.windows?.length) return false
     for (const s of saved.windows) {
@@ -319,6 +347,7 @@ export const useDesktopStore = defineStore('desktop', () => {
     }
     const target = windows.value[saved.focusedIndex] || [...windows.value].reverse().find((w) => !w.minimized)
     focusedId.value = target?.id ?? null
+    enforceLimit(focusedId.value)
     return windows.value.length > 0
   }
 
@@ -334,7 +363,7 @@ export const useDesktopStore = defineStore('desktop', () => {
   }
 
   return {
-    windows, focusedId, focused, hasWindows, startOpen, notifOpen, holaOpen, snapPreview,
+    windows, focusedId, focused, hasWindows, limit, startOpen, startFull, notifOpen, holaOpen, snapPreview,
     area, screen, taskbarRect, bellCenter, fullscreen, taskbarPeek, zoneRect,
     byId, open, openApp, navigate, back, canGoBack,
     focus, close, minimize, restore, toggleFromTaskbar,

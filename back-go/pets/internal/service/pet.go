@@ -416,8 +416,10 @@ func applyRecovery(pet *domain.Pet, amount int) bool {
 	}
 	pet.Recovery = min(domain.RecoveryTarget, pet.Recovery+amount)
 	if pet.Recovery >= domain.RecoveryTarget {
-		pet.SickSince = nil
-		pet.Recovery = 0
+		// Именно Cure(), а не сброс SickSince: он же чистит вид болезни
+		// (инвариант «ailment ⟺ sick_since») и поднимает шкалу-виновника,
+		// чтобы питомец не слёг с той же болезнью в тот же миг.
+		pet.Cure()
 		return true
 	}
 	return false

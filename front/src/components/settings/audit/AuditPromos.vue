@@ -45,7 +45,6 @@
     </section>
     <div v-else class="rows">
       <article v-for="p in items" :key="p.id" class="gw-card gw-row row">
-        <span class="gw-row-icon"><span class="material-symbols-outlined">local_activity</span></span>
         <div class="row-main">
           <p class="gw-h">{{ p.code }}</p>
           <p class="gw-sub">

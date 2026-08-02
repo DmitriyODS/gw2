@@ -1,6 +1,6 @@
 <template>
   <!-- Три карточки состояния подписки: тариф, хранилище, токены ИИ. -->
-  <section class="gw-card stat-wrap">
+  <section class="gw-group">
     <div class="stat-grid">
       <article class="stat">
         <p class="stat-label">Моя подписка</p>
@@ -10,7 +10,7 @@
           <span v-if="until" class="gw-sub">действует до {{ until }}</span>
           <span v-else-if="isFree" class="gw-sub">бесплатный тариф</span>
         </div>
-        <button class="stat-action" type="button" @click="$emit('manage', 'plan')">
+        <button class="btn-glass stat-action" type="button" @click="$emit('manage', 'plan')">
           Управление подпиской
         </button>
       </article>
@@ -24,7 +24,7 @@
           </p>
           <div class="bar"><span :style="{ width: pct(storageUsed, storageLimit) }" /></div>
         </div>
-        <button class="stat-action" type="button" @click="$emit('manage', 'storage')">
+        <button class="btn-glass stat-action" type="button" @click="$emit('manage', 'storage')">
           Управление местом
         </button>
       </article>
@@ -38,7 +38,7 @@
           </p>
           <div class="bar"><span :style="{ width: pct(tokensUsed, tokensLimit) }" /></div>
         </div>
-        <button class="stat-action" type="button" @click="$emit('manage', 'tokens')">
+        <button class="btn-glass stat-action" type="button" @click="$emit('manage', 'tokens')">
           Управление лимитами
         </button>
       </article>
@@ -70,23 +70,24 @@ function pct(used, limit) {
 </script>
 
 <style scoped>
-.stat-wrap { padding: 14px; }
-
 .stat-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 14px;
 }
 
+/* Плитка плотнее подложки группы (--acrylic-bg-strong против --acrylic-bg) —
+   иначе стекло на стекле сливается в одно пятно и карточек не видно. */
 .stat {
   display: flex;
   flex-direction: column;
   gap: 12px;
   min-height: 200px;
   padding: 18px;
+  border: 1px solid var(--acrylic-border);
   border-radius: var(--radius-lg);
-  background: var(--glass-bg), var(--acrylic-card-bg);
-  box-shadow: var(--glass-edge);
+  background: var(--glass-bg), var(--acrylic-bg-strong);
+  box-shadow: var(--glass-edge), var(--shadow-md);
 }
 
 .stat-label {
@@ -156,20 +157,12 @@ function pct(used, limit) {
   transition: width 0.3s ease;
 }
 
+/* Общая вторичная кнопка (.btn-glass) во всю ширину карточки. */
 .stat-action {
+  justify-content: center;
+  width: 100%;
   padding: 11px 16px;
-  border: none;
-  border-radius: 999px;
-  background: var(--glass-bg), var(--acrylic-card-bg);
-  box-shadow: var(--glass-edge);
-  color: var(--color-text);
-  font-size: 0.9rem;
-  font-weight: 600;
-  cursor: pointer;
-  transition: background 0.2s ease;
 }
-
-.stat-action:hover { background: var(--glass-hover-bg, var(--glass-bg)), var(--acrylic-card-bg); }
 
 /* Раскладка считается от ширины ОКНА раздела (.gw-shell — container). */
 @container (max-width: 900px) {

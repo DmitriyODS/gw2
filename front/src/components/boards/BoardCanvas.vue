@@ -470,7 +470,16 @@ function onPointerMove(e) {
     }
     case 'scale': {
       const from = gesture.origin
-      const to = { x: from.x, y: from.y, w: Math.max(8, pt.x - from.x), h: Math.max(8, pt.y - from.y) }
+      let w = Math.max(8, pt.x - from.x)
+      let h = Math.max(8, pt.y - from.y)
+      // Ctrl (⌘) — пропорционально: картинки и фигуры не «плывут» по форме.
+      // Ведём по большему сдвигу, чтобы жест ощущался как обычная тяга угла.
+      if (e.ctrlKey || e.metaKey) {
+        const k = Math.max(w / from.w, h / from.h)
+        w = Math.max(8, from.w * k)
+        h = Math.max(8, from.h * k)
+      }
+      const to = { x: from.x, y: from.y, w, h }
       const byId = new Map(gesture.snapshot.map((o) => [o.id, o]))
       commit(objects.value.map((o) => (byId.has(o.id) ? scaleObject(byId.get(o.id), from, to) : o)))
       break

@@ -685,23 +685,38 @@ func TestUpdateTaskReindexAndBroadcast(t *testing.T) {
 	}
 }
 
-func TestSemanticSearchTakesOverList(t *testing.T) {
+// Семантика ДОПОЛНЯЕТ текстовый поиск, а не заменяет его: пустая выдача ИИ не
+// должна прятать задачу, которую видно по названию (в частности — только что
+// созданную, эмбеддинг которой ещё считается).
+func TestSemanticSearchComplementsTextSearch(t *testing.T) {
 	svc, store, _, ai, _, _ := newTestService()
-	seedTask(store, 1)
+	task := seedTask(store, 1)
 	ai.enabled = true
-	ai.hits = []int64{} // пустая семантическая выдача
+	ai.hits = []int64{} // семантика ничего не нашла
 
 	companyID := int64(1)
 	out, err := svc.ListTasks(context.Background(), domain.TaskListFilter{
 		CurrentUserID: 1, CompanyID: &companyID, Tab: "active",
-		Search: "логика авторизации", Page: 1, PerPage: 30,
+		Search: task.Name, Page: 1, PerPage: 30,
 	})
 	if err != nil {
 		t.Fatalf("list: %v", err)
 	}
-	// При включённом AI пустая выдача честно отдаётся пустой (без LIKE).
-	if out.Total != 0 || len(out.Items) != 0 {
-		t.Fatalf("ожидалась пустая семантическая выдача, получено %d", out.Total)
+	if out.Total != 1 {
+		t.Fatalf("задача должна находиться по названию даже без эмбеддинга, получено %d", out.Total)
+	}
+
+	// А семантические попадания добавляются к текстовым.
+	ai.hits = []int64{task.ID}
+	out, err = svc.ListTasks(context.Background(), domain.TaskListFilter{
+		CurrentUserID: 1, CompanyID: &companyID, Tab: "active",
+		Search: "совершенно другой запрос", Page: 1, PerPage: 30,
+	})
+	if err != nil {
+		t.Fatalf("list: %v", err)
+	}
+	if out.Total != 1 {
+		t.Fatalf("семантическая выдача должна попадать в список, получено %d", out.Total)
 	}
 }
 
@@ -736,5 +751,38 @@ func TestVacationBlocksTaskAndUnitMutations(t *testing.T) {
 	users.setVacation(5, 1, false)
 	if _, err := svc.CreateUnit(context.Background(), task.ID, 5, cid(1), "юнит", 10); err != nil {
 		t.Fatalf("после отпуска юнит должен стартовать: %v", err)
+	}
+}
+
+// Прямая ссылка на задачу: посторонний получает говорящий отказ, свой с другой
+// активной компанией — предложение переключиться, несуществующая — 404.
+func TestTaskLinkAccess(t *testing.T) {
+	svc, store, _, _, _, users := newTestService()
+	task := seedTask(store, 10)
+	employee(users, 1, 10) // сотрудник компании задачи
+	employee(users, 2, 20) // посторонний
+
+	if _, err := svc.GetTaskInCompany(context.Background(), task.ID, 1, cid(10)); err != nil {
+		t.Fatalf("свой в своей компании: %v", err)
+	}
+
+	_, err := svc.GetTaskInCompany(context.Background(), task.ID, 2, cid(20))
+	de := domain.AsDomainError(err)
+	if de == nil || de.Code != "TASK_FORBIDDEN" || de.HTTPStatus != 403 {
+		t.Fatalf("посторонний: ожидался TASK_FORBIDDEN/403, получено %v", err)
+	}
+
+	_, err = svc.GetTaskInCompany(context.Background(), task.ID, 1, cid(20))
+	de = domain.AsDomainError(err)
+	if de == nil || de.Code != "TASK_OTHER_COMPANY" || de.HTTPStatus != 409 {
+		t.Fatalf("своя другая компания: ожидался TASK_OTHER_COMPANY/409, получено %v", err)
+	}
+	if de.Extra["company_id"] != int64(10) {
+		t.Errorf("в extra нет компании задачи: %v", de.Extra)
+	}
+
+	_, err = svc.GetTaskInCompany(context.Background(), task.ID+999, 1, cid(10))
+	if de = domain.AsDomainError(err); de == nil || de.HTTPStatus != 404 {
+		t.Fatalf("несуществующая задача: ожидался 404, получено %v", err)
 	}
 }

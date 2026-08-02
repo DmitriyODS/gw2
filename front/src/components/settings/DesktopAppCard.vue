@@ -1,60 +1,51 @@
 <template>
-  <!-- Настройки десктоп-обёртки (Electron): виден только внутри неё.
+  <!-- Настройки десктоп-обёртки (Electron): видна только внутри неё.
        Тумблеры применяются мгновенно (IPC-мост GrooveDesktop). -->
-  <div v-if="desktop" class="dac">
-    <header class="dac-head">
-      <span class="dac-icon material-symbols-outlined">desktop_windows</span>
-      <div class="dac-head-text">
-        <h3>Приложение для компьютера</h3>
-        <p>Поведение окна, трея и уведомлений этой установки Groove Work.</p>
-      </div>
-    </header>
+  <SettingCard
+    v-if="desktop"
+    class="dac"
+    title="Приложение для компьютера"
+    hint="Поведение окна, трея и уведомлений этой установки Groove Work."
+  >
+    <SwitchRow
+      :model-value="s.autostart"
+      title="Автозапуск при входе в систему"
+      hint="Приложение стартует свёрнутым в трей — уведомления приходят сразу."
+      @update:model-value="set('autostart', $event)"
+    />
 
-    <label class="dac-row">
-      <div class="dac-row-text">
-        <span class="dac-row-title">Автозапуск при входе в систему</span>
-        <span class="dac-row-desc">Приложение стартует свёрнутым в трей — уведомления приходят сразу.</span>
-      </div>
-      <ToggleSwitch :model-value="s.autostart" @update:model-value="set('autostart', $event)" />
-    </label>
-
-<!-- Свернуть в трей при скрытом значке — ловушка (окно не вернуть),
+    <!-- Свернуть в трей при скрытом значке — ловушка (окно не вернуть),
          поэтому без значка тумблер сворачивания недоступен. -->
-    <label v-if="s.trayIcon" class="dac-row">
-      <div class="dac-row-text">
-        <span class="dac-row-title">Сворачивать в трей при закрытии</span>
-        <span class="dac-row-desc">Крестик прячет окно, приложение живёт в трее; выключено — закрывает совсем.</span>
-      </div>
-      <ToggleSwitch :model-value="s.closeToTray" @update:model-value="set('closeToTray', $event)" />
-    </label>
+    <SwitchRow
+      v-if="s.trayIcon"
+      :model-value="s.closeToTray"
+      title="Сворачивать в трей при закрытии"
+      hint="Крестик прячет окно, приложение живёт в трее; выключено — закрывает совсем."
+      @update:model-value="set('closeToTray', $event)"
+    />
 
-    <label class="dac-row">
-      <div class="dac-row-text">
-        <span class="dac-row-title">Значок в трее</span>
-        <span class="dac-row-desc">Быстрый доступ к окну и выходу из меню значка.</span>
-      </div>
-      <ToggleSwitch :model-value="s.trayIcon" @update:model-value="set('trayIcon', $event)" />
-    </label>
+    <SwitchRow
+      :model-value="s.trayIcon"
+      title="Значок в трее"
+      hint="Быстрый доступ к окну и выходу из меню значка."
+      @update:model-value="set('trayIcon', $event)"
+    />
 
-    <label class="dac-row">
-      <div class="dac-row-text">
-        <span class="dac-row-title">Не беспокоить</span>
-        <span class="dac-row-desc">
-          Без звука и всплывающих уведомлений ОС — сами уведомления копятся в центре;
-          входящие звонки показываются всегда.
-          <template v-if="muted && muteUntilLabel !== 'навсегда'"> Сейчас тишина {{ muteUntilLabel }}.</template>
-        </span>
-      </div>
-      <ToggleSwitch :model-value="muted" @update:model-value="setMuted" />
-    </label>
-  </div>
+    <SwitchRow
+      :model-value="muted"
+      title="Не беспокоить"
+      :hint="muteHint"
+      @update:model-value="setMuted"
+    />
+  </SettingCard>
 </template>
 
 <script setup>
-import { onMounted, reactive } from 'vue'
-import ToggleSwitch from 'primevue/toggleswitch'
+import { computed, onMounted, reactive } from 'vue'
 import { useNotificationsStore } from '@/stores/notifications.js'
 import { useNotifyMute } from '@/composables/useNotifyMute.js'
+import SettingCard from '@/components/common/SettingCard.vue'
+import SwitchRow from '@/components/common/SwitchRow.vue'
 
 const desktop = window.GrooveDesktop
 const notify = useNotificationsStore()
@@ -63,6 +54,13 @@ const s = reactive({ autostart: false, closeToTray: true, trayIcon: true })
 // Состояние общее с ПКМ-меню колокольчика на панели задач — тумблер не должен
 // расходиться с ним (там тишину можно включить и на срок).
 const { muted, untilLabel: muteUntilLabel, mute, unmute } = useNotifyMute()
+
+const muteHint = computed(() => {
+  const base = 'Без звука и всплывающих уведомлений ОС — сами уведомления копятся в центре; входящие звонки показываются всегда.'
+  return muted.value && muteUntilLabel.value !== 'навсегда'
+    ? `${base} Сейчас тишина ${muteUntilLabel.value}.`
+    : base
+})
 
 onMounted(async () => {
   if (!desktop?.getSettings) return
@@ -93,40 +91,5 @@ function setMuted(v) {
 </script>
 
 <style scoped>
-.dac {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  background: var(--acrylic-card-bg);
-  background: var(--glass-bg);
-  box-shadow: var(--glass-edge);
-  border: 1px solid var(--acrylic-border);
-  border-radius: var(--radius-lg);
-  padding: 18px 20px;
-  margin-top: 16px;
-}
-.dac-head { display: flex; gap: 14px; align-items: center; margin-bottom: 8px; }
-.dac-icon {
-  width: 44px; height: 44px;
-  border-radius: var(--radius-md);
-  background: var(--color-secondary-container);
-  color: var(--color-on-secondary-container);
-  display: grid; place-items: center;
-  font-size: 24px;
-  flex-shrink: 0;
-}
-.dac-head-text h3 { margin: 0 0 2px; font-size: 15px; font-weight: 700; }
-.dac-head-text p { margin: 0; font-size: 13px; color: var(--color-text-dim); }
-
-.dac-row {
-  display: flex;
-  align-items: center;
-  gap: 16px;
-  padding: 12px 2px;
-  border-top: 1px solid var(--color-outline-dim);
-  cursor: pointer;
-}
-.dac-row-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
-.dac-row-title { font-size: 14px; font-weight: 600; }
-.dac-row-desc { font-size: 12.5px; color: var(--color-text-dim); line-height: 1.35; }
+.dac { margin-top: 16px; }
 </style>

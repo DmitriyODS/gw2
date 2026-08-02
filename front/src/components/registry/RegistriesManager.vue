@@ -65,8 +65,6 @@
                   </button>
                 </span>
 
-                <span class="rm-field-icon"><span class="material-symbols-outlined">{{ fieldIcon(f.type) }}</span></span>
-
                 <span class="rm-field-main">
                   <span class="rm-field-label">{{ f.label || 'Без названия' }}</span>
                   <span class="rm-field-type">{{ fieldLabel(f.type) }}</span>
@@ -476,12 +474,6 @@ onMounted(() => store.fetchRegistries())
 .rm-reorder-btn:disabled { opacity: 0.25; cursor: default; }
 .rm-reorder-btn:not(:disabled):hover { background: var(--color-surface-low); color: var(--color-text); }
 .rm-reorder-btn .material-symbols-outlined { font-size: 18px; }
-
-.rm-field-icon {
-  width: 36px; height: 36px; flex-shrink: 0; display: grid; place-items: center;
-  border-radius: var(--radius-md); background: var(--color-primary-container); color: var(--color-on-primary-container);
-}
-.rm-field-icon .material-symbols-outlined { font-size: 20px; }
 
 .rm-field-main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
 .rm-field-label { font-size: 14px; font-weight: 600; color: var(--color-text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

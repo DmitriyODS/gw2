@@ -13,10 +13,6 @@
           <span class="material-symbols-outlined">close</span>
         </button>
       </div>
-      <button class="btn-tonal" @click="startFullTour" title="Начать обзорный тур">
-        <span class="material-symbols-outlined">tour</span>
-        Обзорный тур
-      </button>
     </div>
 
     <!-- Текущий открытый раздел или список -->
@@ -29,9 +25,6 @@
         </button>
 
         <header class="hc-article-head">
-          <div class="hc-article-icon" :data-tone="activeArticle.tone">
-            <span class="material-symbols-outlined">{{ activeArticle.icon }}</span>
-          </div>
           <div>
             <h3 class="hc-article-title">{{ activeArticle.title }}</h3>
             <p class="hc-article-sub">{{ activeArticle.subtitle }}</p>
@@ -71,14 +64,6 @@
               <span class="material-symbols-outlined">arrow_forward</span>
               {{ activeArticle.ctaLabel || 'Перейти в раздел' }}
             </button>
-            <button
-              v-if="activeArticle.tourTarget"
-              class="btn-tonal"
-              @click="startTour(activeArticle.tourTarget)"
-            >
-              <span class="material-symbols-outlined">school</span>
-              Показать в туре
-            </button>
           </div>
         </div>
       </div>
@@ -86,9 +71,6 @@
       <!-- Каталог разделов -->
       <div v-else key="list" class="hc-list">
         <header class="hc-intro hc-intro--spaced">
-          <div class="hc-intro-icon">
-            <span class="material-symbols-outlined">help_center</span>
-          </div>
           <div>
             <h3>Справка по платформе</h3>
             <p>Карточки разделов с пояснениями. Нажмите на любой, чтобы узнать, как этим пользоваться.</p>
@@ -104,9 +86,6 @@
               class="hc-card"
               @click="activeArticle = a"
             >
-              <div class="hc-card-icon" :data-tone="a.tone">
-                <span class="material-symbols-outlined">{{ a.icon }}</span>
-              </div>
               <div class="hc-card-text">
                 <span class="hc-card-title">{{ a.title }}</span>
                 <span class="hc-card-sub">{{ a.subtitle }}</span>
@@ -131,13 +110,11 @@
 <script setup>
 import { ref, computed } from 'vue'
 import { useRouter } from 'vue-router'
-import { useTutorial } from '@/composables/useTutorial.js'
 import { usePermission, ROLES } from '@/composables/usePermission.js'
 import { useCompanySettings } from '@/composables/useCompanySettings.js'
 import EmptyState from '@/components/common/EmptyState.vue'
 
 const router = useRouter()
-const tutorial = useTutorial()
 const { isAtLeast, isSuperAdmin, canManageCompanies } = usePermission()
 const { usesGroove } = useCompanySettings()
 
@@ -150,8 +127,7 @@ const activeArticle = ref(null)
 /* ── Каталог разделов ──────────────────────────────────────────
    Группировка по логическим блокам, чтобы пользователь быстро находил
    нужное. paragraphs — основной текст; steps — пронумерованные действия;
-   tips — короткие подсказки; route — кнопка перехода, tourTarget — id
-   шага в туре, на который можно «перепрыгнуть». */
+   tips — короткие подсказки; route — кнопка перехода в раздел. */
 const GROUPS = computed(() => [
   ...(hasCompany() ? [{
     key: 'work',
@@ -161,10 +137,7 @@ const GROUPS = computed(() => [
         id: 'tasks',
         title: 'Задачи',
         subtitle: 'Главный экран с задачами команды',
-        icon: 'dashboard_customize',
-        tone: 'primary',
         route: '/tasks',
-        tourTarget: 'tasks',
         paragraphs: [
           'Доска задач — центральное место в платформе. Здесь собраны все задачи вашей команды: активные, избранные и архивные, с поиском и фильтрами.',
           'У каждой задачи свой набор юнитов — отрезков рабочего времени. Над одной задачей могут работать несколько сотрудников параллельно. У задачи есть ответственный и этап — по этапам строится канбан-режим.',
@@ -184,9 +157,6 @@ const GROUPS = computed(() => [
         id: 'units',
         title: 'Юниты — рабочее время',
         subtitle: 'Как считать часы и над чем именно работали',
-        icon: 'timer',
-        tone: 'secondary',
-        tourTarget: 'tasks',
         paragraphs: [
           'Юнит — это один логический кусочек работы над задачей: «Дизайн макета», «Монтаж», «Корректура». У каждого юнита свой таймер.',
           'Юниты нельзя ставить на паузу — только начать и завершить. Это сделано намеренно, чтобы статистика отражала реальное время «руки на клавиатуре».',
@@ -205,10 +175,7 @@ const GROUPS = computed(() => [
         id: 'registries',
         title: 'Реестры',
         subtitle: 'Настраиваемые таблицы-справочники компании',
-        icon: 'view_agenda',
-        tone: 'tertiary',
         route: '/registries',
-        tourTarget: 'registries',
         paragraphs: [
           'Реестр — таблица под любые данные компании: клиенты, оборудование, договоры. Администратор собирает структуру карточки из полей восьми типов — текст, число, список, чекбокс, дата, ссылка, файл, картинка, — а записи ведут все участники.',
           'Есть сквозной поиск по всем полям, массовое удаление и экспорт в Excel: выбранные поля, всё по фильтру или только отмеченные записи.',
@@ -227,27 +194,21 @@ const GROUPS = computed(() => [
         id: 'notes',
         title: 'Заметки',
         subtitle: 'Личные заметки с полноценным редактором',
-        icon: 'note_stack',
-        tone: 'primary',
         route: '/notes',
-        tourTarget: 'notes',
         paragraphs: [
           'Заметки — ваше личное пространство, не привязанное к компании. Полноценный редактор: заголовки, форматирование, выделение цветом, списки с чекбоксами, таблицы, картинки и код. Всё сохраняется автоматически.',
           'Заметки раскладываются по вложенным папкам и помечаются тегами для фильтрации. Раздел работает в двух режимах: «Иерархия» — дерево папок слева, заметки справа; «Проводник» — как в Google Drive, с перетаскиванием заметок и папок мышью.',
         ],
         tips: [
           'Делиться можно и заметкой, и целой папкой — конкретному человеку или сразу всей компании, на чтение или совместное редактирование. Доступ к папке распространяется на всё её содержимое, а совместные правки видны в реальном времени.',
-          'Поиск умный — по смыслу и сразу по всем папкам. Заметки скачиваются в .txt или .docx, а «Все заметки», «Архив» и целые папки — одним .zip-архивом. Импорт .txt/.docx — кнопкой или перетаскиванием файлов прямо в окно.',
+          'Поиск умный — по смыслу и сразу по всем папкам. Заметки скачиваются в .txt, .md или .docx, а «Все заметки», «Архив» и целые папки — одним .zip-архивом. Импорт .txt/.md/.docx — кнопкой или перетаскиванием файлов прямо в окно.',
         ],
       },
       {
         id: 'diaries',
         title: 'Ежедневники',
         subtitle: 'Личные задачи по дням с архивом',
-        icon: 'event_note',
-        tone: 'secondary',
         route: '/diaries',
-        tourTarget: 'notes',
         paragraphs: [
           'Ежедневник — список дел, привязанных к дням: название, описание, время начала и конца. Просмотр по дню, неделе или месяцу; выполненные записи уходят в «Архив».',
           'Записи перетаскиваются мышью на другой день или в другой ваш ежедневник. Из записи одним нажатием создаётся полноценная задача компании с юнитом.',
@@ -261,10 +222,7 @@ const GROUPS = computed(() => [
         id: 'calendars',
         title: 'Календари',
         subtitle: 'События компании по дням, неделям и месяцам',
-        icon: 'calendar_month',
-        tone: 'tertiary',
         route: '/calendars',
-        tourTarget: 'calendars',
         paragraphs: [
           'Календарь — общий список событий компании: дежурства, брони, встречи. У каждой записи обязательные дата и время, остальные поля карточки настраивает администратор — как в реестрах.',
           'Просмотр по дню, неделе или месяцу; события за период выгружаются в Excel.',
@@ -283,27 +241,21 @@ const GROUPS = computed(() => [
         id: 'notes',
         title: 'Заметки',
         subtitle: 'Личные заметки с полноценным редактором',
-        icon: 'note_stack',
-        tone: 'primary',
         route: '/notes',
-        tourTarget: 'notes',
         paragraphs: [
           'Заметки — ваше личное пространство, не привязанное к компании. Полноценный редактор: заголовки, форматирование, выделение цветом, списки с чекбоксами, таблицы, картинки и код. Всё сохраняется автоматически.',
           'Заметки раскладываются по вложенным папкам и помечаются тегами для фильтрации. Раздел работает в двух режимах: «Иерархия» — дерево папок слева, заметки справа; «Проводник» — как в Google Drive, с перетаскиванием заметок и папок мышью.',
         ],
         tips: [
           'Делиться можно и заметкой, и целой папкой — конкретному человеку или сразу всей компании, на чтение или совместное редактирование. Доступ к папке распространяется на всё её содержимое, а совместные правки видны в реальном времени.',
-          'Поиск умный — по смыслу и сразу по всем папкам. Заметки скачиваются в .txt или .docx, а «Все заметки», «Архив» и целые папки — одним .zip-архивом. Импорт .txt/.docx — кнопкой или перетаскиванием файлов прямо в окно.',
+          'Поиск умный — по смыслу и сразу по всем папкам. Заметки скачиваются в .txt, .md или .docx, а «Все заметки», «Архив» и целые папки — одним .zip-архивом. Импорт .txt/.md/.docx — кнопкой или перетаскиванием файлов прямо в окно.',
         ],
       },
       {
         id: 'diaries',
         title: 'Ежедневники',
         subtitle: 'Личные задачи по дням с архивом',
-        icon: 'event_note',
-        tone: 'secondary',
         route: '/diaries',
-        tourTarget: 'notes',
         paragraphs: [
           'Ежедневник — список дел, привязанных к дням: название, описание, время начала и конца. Просмотр по дню, неделе или месяцу; выполненные записи уходят в «Архив».',
           'Записи перетаскиваются мышью на другой день или в другой ваш ежедневник.',
@@ -323,10 +275,7 @@ const GROUPS = computed(() => [
         id: 'messenger',
         title: 'Мессенджер',
         subtitle: 'Чаты, файлы и история переписки',
-        icon: 'chat',
-        tone: 'secondary',
         route: '/messenger',
-        tourTarget: 'messenger',
         paragraphs: [
           'Встроенный чат: текст, картинки, видео, аудио, документы до 500 МБ за одно вложение, запись экрана прямо из поля ввода.',
           'Можно отвечать на конкретное сообщение с цитатой, пересылать сообщения и файлы, закреплять важные сообщения в чате и целые чаты вверху списка.',
@@ -346,9 +295,6 @@ const GROUPS = computed(() => [
         id: 'calls',
         title: 'Звонки и видеоконференции',
         subtitle: 'Голосовая и видеосвязь до 9 человек',
-        icon: 'call',
-        tone: 'tertiary',
-        tourTarget: 'messenger',
         paragraphs: [
           'Звонки 1:1 и групповые до 9 участников — прямо в платформе, без сторонних приложений. Аудио, видео, демонстрация экрана и текстовый чат внутри звонка.',
           'Звонок можно свернуть в маленькое окошко в углу и продолжать работать в других разделах. Микрофон и камеру можно включать и выключать в любой момент.',
@@ -368,10 +314,7 @@ const GROUPS = computed(() => [
           id: 'portal',
           title: 'Портал',
           subtitle: 'Лента новостей и постов компании',
-          icon: 'brand_awareness',
-          tone: 'primary',
           route: '/portal',
-          tourTarget: 'portal',
           paragraphs: [
             'Портал — внутренняя лента компании: посты с вложениями, комментарии, реакции-эмодзи и тематические разделы, по которым лента фильтруется.',
             'В тексте поста можно ставить хештеги — просто напишите слово через решётку, например #релиз или #отдых. Хештеги становятся кликабельными: нажатие показывает все посты с этим тегом. Самые популярные теги компании выведены строкой над лентой.',
@@ -392,10 +335,7 @@ const GROUPS = computed(() => [
           id: 'employees',
           title: 'Сотрудники',
           subtitle: 'Каталог коллег с онлайн-статусом',
-          icon: 'group',
-          tone: 'secondary',
           route: '/employees',
-          tourTarget: 'portal',
           paragraphs: [
             'Вкладка «Сотрудники» внутри Портала — доска со всеми коллегами: аватар, ФИО, должность. Зелёная точка означает «сейчас в сети», под именем — время последнего захода для офлайн-коллег.',
             'Карточка профиля открывается по клику — оттуда можно написать сообщение или сразу позвонить, голосом или с видео.',
@@ -409,10 +349,7 @@ const GROUPS = computed(() => [
         id: 'pets',
         title: 'Грувики',
         subtitle: 'Питомец, который растёт от вашей работы',
-        icon: 'pets',
-        tone: 'tertiary',
         route: '/pets',
-        tourTarget: 'groove',
         paragraphs: [
           'Грувик — питомец-компаньон: завершённые юниты и закрытые задачи приносят ему опыт (питомец эволюционирует) и кудосы — внутреннюю валюту.',
           'За кудосы питомца можно кормить, выгуливать и лечить — каждое действие это мини-игра. Здорового питомца можно бесплатно отправить в приключение на пару часов и получить награду.',
@@ -428,9 +365,6 @@ const GROUPS = computed(() => [
         id: 'assistant',
         title: 'Hola ассистент',
         subtitle: 'Ответы по данным компании во вкладке «Чат» окна Hola',
-        icon: 'smart_toy',
-        tone: 'primary',
-        tourTarget: 'assistant',
         paragraphs: [
           'Ассистент живёт во вкладке «Чат» окна Hola (кнопка в панели задач, Ctrl+K) и отвечает на деловые вопросы по реальным данным компании: сводка часов, отделы, топ сотрудников, календарь загрузки, поиск задач с прямыми ссылками.',
           'Под ответом видно, на какие данные он опирался. Ответ можно оценить 👍 или 👎 — это помогает делать ассистента точнее.',
@@ -450,10 +384,7 @@ const GROUPS = computed(() => [
         id: 'stats',
         title: 'Статистика',
         subtitle: 'Сколько времени потрачено и на что',
-        icon: 'query_stats',
-        tone: 'tertiary',
         route: '/stats',
-        tourTarget: 'stats',
         paragraphs: [
           'Статистика — это срез по часам команды: что закрыто, что в работе, кто сколько отработал. Доступна всем сотрудникам, экспорт в Excel — менеджерам и выше.',
           'Два режима: «Общая» — сводные таблицы и рейтинг, «Расширенная» — разбивка по типам юнитов, отделам, тепловая карта дней. Отдельная карточка — «Ответственные по задачам».',
@@ -467,10 +398,7 @@ const GROUPS = computed(() => [
         id: 'companies',
         title: 'Мои компании',
         subtitle: 'Настройки, участники и приглашения',
-        icon: 'business_center',
-        tone: 'primary',
         route: '/companies',
-        tourTarget: 'companies',
         paragraphs: [
           'Один аккаунт может состоять в нескольких компаниях с разной ролью — активная компания переключается в шапке бокового меню. Любой пользователь может создать свою компанию и стать её администратором.',
           'В карточке компании — настройки (функции платформы, выходные дни, ИИ, YouGile), список участников с ролями и приглашения: ссылкой-кодом или письмом на email с назначением роли.',
@@ -484,8 +412,6 @@ const GROUPS = computed(() => [
         id: 'lists-admin',
         title: 'Списки',
         subtitle: 'Отделы, типы юнитов и этапы',
-        icon: 'list_alt',
-        tone: 'secondary',
         route: '/companies',
         paragraphs: [
           'Справочники компании ведутся в её настройках: «Компании» → выберите компанию → вкладка «Настройки» → «Списки». Это отделы (для группировки сотрудников и фильтров статистики), типы юнитов (категории работы — дизайн, монтаж, написание кода) и этапы задач (колонки канбан-режима).',
@@ -506,8 +432,6 @@ const GROUPS = computed(() => [
         id: 'account',
         title: 'Аккаунт',
         subtitle: 'Ваши данные, пароль, входы на устройствах',
-        icon: 'account_circle',
-        tone: 'primary',
         route: '/settings?section=account',
         paragraphs: [
           'В разделе «Аккаунт» можно сменить ФИО, контакты, логин и пароль, загрузить или сменить аватар. Если аватара нет — система рисует уникальный цветной identicon по вашему ID.',
@@ -518,9 +442,6 @@ const GROUPS = computed(() => [
         id: 'theme',
         title: 'Внешний вид',
         subtitle: 'Тема, цвет и оформление',
-        icon: 'palette',
-        tone: 'secondary',
-        tourTarget: 'theme',
         paragraphs: [
           'Выберите готовую тему или соберите свою из четырёх ключевых цветов. Палитра пересчитывается мгновенно и применяется во всём интерфейсе как превью.',
           'Фон приложения — мягкий градиент из цветов темы: его можно выключить или сгенерировать другой вариант там же, в «Внешнем виде».',
@@ -532,25 +453,9 @@ const GROUPS = computed(() => [
         ],
       },
       {
-        id: 'tutorial',
-        title: 'Обучение',
-        subtitle: 'Интерактивный тур по платформе',
-        icon: 'school',
-        tone: 'tertiary',
-        paragraphs: [
-          'Обучающий тур проводит по всем разделам платформы: подсвечивает пункт меню, открывает раздел и коротко объясняет, что здесь делается. Тур ничего не создаёт и не меняет — только показывает.',
-        ],
-        tips: [
-          'Тур можно прервать в любой момент — крестиком или клавишей Esc.',
-          'Запустить тур заново можно кнопкой «Обзорный тур» выше или из «О приложении».',
-        ],
-      },
-      {
         id: 'updates',
         title: 'Обновления приложения',
         subtitle: 'Как получить свежую версию',
-        icon: 'system_update',
-        tone: 'primary',
         paragraphs: [
           'В браузере обновление приезжает само: новая версия подхватывается при обычной перезагрузке страницы — устанавливать ничего не нужно.',
           'В приложении для телефона и на компьютере оболочка сама проверяет обновления при запуске и раз в несколько часов и предлагает скачать свежую версию. Проверить вручную можно в любой момент в разделе «О приложении».',
@@ -575,8 +480,6 @@ const GROUPS = computed(() => [
         id: 'backup',
         title: 'Резервная копия',
         subtitle: 'Экспорт и восстановление',
-        icon: 'backup',
-        tone: 'error',
         paragraphs: [
           'Резервная копия — это полный архив базы данных и вложений в одном zip-файле. Доступно только суперадминистратору. При экспорте и восстановлении можно выбрать конкретные разделы данных.',
           'Восстановление полностью заменяет текущие данные содержимым архива. Мы дважды переспросим перед началом — действие необратимо.',
@@ -613,14 +516,6 @@ const filteredGroups = computed(() => {
 
 function goTo(path) {
   router.push(path)
-}
-
-function startTour(target) {
-  tutorial.open({ startAt: target })
-}
-
-function startFullTour() {
-  tutorial.open()
 }
 </script>
 
@@ -744,18 +639,6 @@ function startFullTour() {
   color: var(--color-on-primary-container);
 }
 
-.hc-intro-icon {
-  width: 52px;
-  height: 52px;
-  border-radius: 16px;
-  background: color-mix(in oklch, var(--color-on-primary-container) 10%, transparent);
-  display: grid;
-  place-items: center;
-  flex-shrink: 0;
-}
-
-.hc-intro-icon .material-symbols-outlined { font-size: 28px; }
-
 .hc-intro h3 {
   margin: 0;
   font-size: 18px;
@@ -810,26 +693,7 @@ function startFullTour() {
 .hc-card:hover {
   background: var(--color-surface-low);
   border-color: color-mix(in oklch, var(--color-primary) 30%, var(--color-outline-dim));
-  transform: translateY(-2px);
-}
-
-.hc-card-icon {
-  flex-shrink: 0;
-  width: 44px;
-  height: 44px;
-  border-radius: 14px;
-  display: grid;
-  place-items: center;
-  background: var(--tone-bg, var(--color-primary-container));
-  color: var(--tone-fg, var(--color-on-primary-container));
-}
-
-.hc-card-icon[data-tone="primary"]   { --tone-bg: var(--color-primary-container);   --tone-fg: var(--color-on-primary-container); }
-.hc-card-icon[data-tone="secondary"] { --tone-bg: var(--color-secondary-container); --tone-fg: var(--color-on-secondary-container); }
-.hc-card-icon[data-tone="tertiary"]  { --tone-bg: var(--color-tertiary-container);  --tone-fg: var(--color-on-tertiary-container); }
-.hc-card-icon[data-tone="error"]     { --tone-bg: var(--color-error-container);     --tone-fg: var(--color-on-error-container); }
-
-.hc-card-icon .material-symbols-outlined { font-size: 22px; }
+  }
 
 .hc-card-text {
   flex: 1;
@@ -892,24 +756,6 @@ function startFullTour() {
   padding-bottom: 12px;
   border-bottom: 1px solid var(--color-outline-dim);
 }
-
-.hc-article-icon {
-  width: 56px;
-  height: 56px;
-  border-radius: 18px;
-  display: grid;
-  place-items: center;
-  flex-shrink: 0;
-  background: var(--tone-bg, var(--color-primary-container));
-  color: var(--tone-fg, var(--color-on-primary-container));
-}
-
-.hc-article-icon[data-tone="primary"]   { --tone-bg: var(--color-primary-container);   --tone-fg: var(--color-on-primary-container); }
-.hc-article-icon[data-tone="secondary"] { --tone-bg: var(--color-secondary-container); --tone-fg: var(--color-on-secondary-container); }
-.hc-article-icon[data-tone="tertiary"]  { --tone-bg: var(--color-tertiary-container);  --tone-fg: var(--color-on-tertiary-container); }
-.hc-article-icon[data-tone="error"]     { --tone-bg: var(--color-error-container);     --tone-fg: var(--color-on-error-container); }
-
-.hc-article-icon .material-symbols-outlined { font-size: 30px; }
 
 .hc-article-title {
   margin: 0;
@@ -982,13 +828,9 @@ function startFullTour() {
   .hc-toolbar .btn-tonal { width: 100%; justify-content: center; }
   .hc-grid { grid-template-columns: 1fr; }
   .hc-intro { padding: 16px; gap: 12px; }
-  .hc-intro-icon { width: 44px; height: 44px; border-radius: 14px; }
-  .hc-intro-icon .material-symbols-outlined { font-size: 22px; }
   .hc-intro h3 { font-size: 16px; }
   .hc-intro p { font-size: 12px; }
   .hc-article-head { flex-direction: row; align-items: flex-start; }
   .hc-article-title { font-size: 18px; }
-  .hc-article-icon { width: 44px; height: 44px; border-radius: 14px; }
-  .hc-article-icon .material-symbols-outlined { font-size: 24px; }
 }
 </style>

@@ -145,11 +145,26 @@ func (r *Repo) ListTasks(ctx context.Context, f domain.TaskListFilter) ([]*domai
 	case "archive":
 		where = append(where, "t.is_archived = TRUE")
 	}
-	if f.Search != "" && !f.OrderedSet {
-		where = append(where, "lower(t.name) LIKE "+arg("%"+strings.ToLower(strings.TrimSpace(f.Search))+"%"))
+	// Поиск по названию. Регистр не важен всегда; если запрос похож на
+	// регулярное выражение и компилируется — ищем им (POSIX ~*), иначе
+	// подстрокой. Семантическая выдача ИИ не заменяет текстовый поиск, а
+	// дополняет его: только что созданная задача найдётся ещё до того, как
+	// посчитается её эмбеддинг.
+	textCond := ""
+	if q := strings.TrimSpace(f.Search); q != "" {
+		if pattern, ok := domain.SearchRegex(q); ok {
+			textCond = "t.name ~* " + arg(pattern)
+		} else {
+			textCond = "t.name ILIKE " + arg("%"+domain.EscapeLike(q)+"%")
+		}
 	}
-	if f.OrderedSet {
+	switch {
+	case f.OrderedSet && textCond != "":
+		where = append(where, "(t.id = ANY("+arg(f.OrderedIDs)+") OR "+textCond+")")
+	case f.OrderedSet:
 		where = append(where, "t.id = ANY("+arg(f.OrderedIDs)+")")
+	case textCond != "":
+		where = append(where, textCond)
 	}
 	if f.DeptID != nil {
 		where = append(where, "t.department_id = "+arg(*f.DeptID))

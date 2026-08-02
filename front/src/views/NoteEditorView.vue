@@ -66,6 +66,9 @@
             <button class="np-icon" title="Скачать .txt" @click="exportFile('txt')">
               <span class="material-symbols-outlined">description</span>
             </button>
+            <button class="np-icon" title="Скачать .md" @click="exportFile('md')">
+              <span class="material-symbols-outlined">markdown</span>
+            </button>
             <button class="np-icon" title="Скачать .docx" @click="exportFile('docx')">
               <span class="material-symbols-outlined">article</span>
             </button>
@@ -108,6 +111,10 @@
                 <button class="np-more-item" @click="pickMore(() => exportFile('txt'))">
                   <span class="material-symbols-outlined">description</span>
                   Скачать .txt
+                </button>
+                <button class="np-more-item" @click="pickMore(() => exportFile('md'))">
+                  <span class="material-symbols-outlined">markdown</span>
+                  Скачать .md
                 </button>
                 <button class="np-more-item" @click="pickMore(() => exportFile('docx'))">
                   <span class="material-symbols-outlined">article</span>
@@ -463,7 +470,7 @@ function onTagsSaved(n) {
   store.fetchNotes({ silent: true })
 }
 
-// ── Экспорт txt/docx ──
+// ── Экспорт txt/md/docx ──
 async function exportFile(format = 'txt') {
   await flush()
   try {

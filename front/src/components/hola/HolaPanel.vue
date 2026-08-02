@@ -505,7 +505,7 @@ defineExpose({ focus: () => inputEl.value?.focus() })
   display: flex;
   align-items: center;
   gap: 12px;
-  padding: 12px 44px 12px 16px;
+  padding: 12px 16px;
   border: 1px solid var(--acrylic-border);
   border-radius: var(--radius-lg);
   background: var(--glass-bg);
@@ -517,6 +517,12 @@ defineExpose({ focus: () => inputEl.value?.focus() })
 }
 
 .hola-hist:hover { border-color: color-mix(in oklch, var(--color-primary) 34%, var(--acrylic-border)); }
+
+/* Место под крестик держим только там, где он вообще появляется — по
+   наведению. На тач-экране крестика нет, и время стоит симметрично тексту. */
+@media (hover: hover) {
+  .hola-hist { padding-right: 44px; }
+}
 
 .hola-hist-text {
   flex: 1;

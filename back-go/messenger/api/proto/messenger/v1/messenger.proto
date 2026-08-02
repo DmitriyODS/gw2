@@ -66,6 +66,9 @@ message CreatePostMessageRequest {
   string title = 4;
   string excerpt = 5;
   string cover_url = 6;
+  // Компания поста: пост — её сущность, поэтому плашка уходит только тем, кто
+  // в этой компании состоит (msgsvc сверяет аудиторию диалога).
+  int64 company_id = 7;
 }
 
 message CreatePostMessageResponse {

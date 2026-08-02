@@ -15,20 +15,14 @@
     <AuditLog v-else-if="tab === 'log'" />
 
     <div v-else-if="tab === 'data'" class="links">
-      <button
+      <SettingRow
         v-for="link in DATA_LINKS"
         :key="link.to"
-        class="gw-card gw-row link"
-        type="button"
+        :title="link.title"
+        :hint="link.desc"
+        clickable
         @click="go(link.to)"
-      >
-        <span class="gw-row-icon"><span class="material-symbols-outlined">{{ link.icon }}</span></span>
-        <div class="link-main">
-          <p class="gw-h">{{ link.title }}</p>
-          <p class="gw-sub">{{ link.desc }}</p>
-        </div>
-        <span class="material-symbols-outlined">chevron_right</span>
-      </button>
+      />
     </div>
   </div>
 </template>
@@ -37,6 +31,7 @@
 import { ref } from 'vue'
 import { useRouter } from 'vue-router'
 import PillTabs from '@/components/common/PillTabs.vue'
+import SettingRow from '@/components/common/SettingRow.vue'
 import AuditPlans from '@/components/settings/audit/AuditPlans.vue'
 import AuditSubscriptions from '@/components/settings/audit/AuditSubscriptions.vue'
 import AuditPromos from '@/components/settings/audit/AuditPromos.vue'
@@ -59,9 +54,9 @@ const TABS = [
 ]
 
 const DATA_LINKS = [
-  { to: '/companies', icon: 'business_center', title: 'Компании платформы', desc: 'Все компании, доступ и удаление' },
-  { to: '/users', icon: 'group', title: 'Пользователи платформы', desc: 'Учётные записи, блокировка и сброс пароля' },
-  { to: '/settings?section=backup', icon: 'backup', title: 'Резервная копия', desc: 'Экспорт и восстановление базы данных' },
+  { to: '/companies', title: 'Компании платформы', desc: 'Все компании, доступ и удаление' },
+  { to: '/users', title: 'Пользователи платформы', desc: 'Учётные записи, блокировка и сброс пароля' },
+  { to: '/settings?section=backup', title: 'Резервная копия', desc: 'Экспорт и восстановление базы данных' },
 ]
 
 const tab = ref('plans')
@@ -74,6 +69,4 @@ function go(to) {
 <style scoped>
 .audit { display: flex; flex-direction: column; gap: 14px; }
 .links { display: flex; flex-direction: column; gap: 10px; }
-.link { padding: 14px; text-align: left; cursor: pointer; }
-.link-main { flex: 1; min-width: 0; }
 </style>

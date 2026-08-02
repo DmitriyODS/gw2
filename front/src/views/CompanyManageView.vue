@@ -143,21 +143,18 @@
               <div class="switch-list">
                 <label class="switch-row">
                   <span class="switch-text">
-                    <span class="material-symbols-outlined">view_kanban</span>
                     <span><strong>Этапы задач</strong><small>Канбан-режим и цветные теги этапов</small></span>
                   </span>
                   <input type="checkbox" class="switch" v-model="flags.uses_stages" @change="saveFlags" />
                 </label>
                 <label class="switch-row">
                   <span class="switch-text">
-                    <span class="material-symbols-outlined">link</span>
                     <span><strong>Интеграция с YouGile</strong><small>Импорт/экспорт карточек</small></span>
                   </span>
                   <input type="checkbox" class="switch" v-model="flags.uses_yougile" @change="saveFlags" />
                 </label>
                 <label class="switch-row">
                   <span class="switch-text">
-                    <span class="material-symbols-outlined">call</span>
                     <span><strong>Аудио/видео-звонки</strong><small>Кнопки звонка в мессенджере</small></span>
                   </span>
                   <input type="checkbox" class="switch" v-model="flags.uses_calls" @change="saveFlags" />
@@ -992,10 +989,6 @@ async function doDelete() {
 }
 .switch-row:hover { background: var(--glass-hover-bg); }
 .switch-text { display: flex; align-items: center; gap: 12px; min-width: 0; }
-.switch-text > .material-symbols-outlined {
-  display: grid; place-items: center; width: 36px; height: 36px; border-radius: var(--radius-md, 12px);
-  background: var(--color-primary-container); color: var(--color-on-primary-container); font-size: 20px; flex: none;
-}
 .switch-text strong { display: block; font-size: 14px; color: var(--color-text); }
 .switch-text small { display: block; font-size: 12px; color: var(--color-text-dim); }
 

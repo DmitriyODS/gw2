@@ -19,7 +19,7 @@
       <span class="material-symbols-outlined">search</span>
       <input
         v-model="q"
-        placeholder="Кому переслать — имя или логин"
+        placeholder="Кому переслать — сотрудник компании"
         class="fwdp-input"
         autofocus
       />
@@ -30,7 +30,7 @@
     </div>
     <div v-else-if="!items.length" class="fwdp-empty">
       <span class="material-symbols-outlined">person_search</span>
-      <p>{{ q ? 'Никого не нашли — проверьте логин' : 'Пока нет диалогов. Введите логин, чтобы найти человека.' }}</p>
+      <p>{{ q ? 'Среди сотрудников компании никого не нашли' : 'В компании пока нет других сотрудников' }}</p>
     </div>
     <ul v-else class="fwdp-list">
       <li
@@ -72,7 +72,9 @@ const props = defineProps({
 
 const emit = defineEmits(['update:modelValue', 'confirm'])
 
-const { q, results, loading, reset } = useContactPicker()
+// Пост — сущность компании: пересылаем только её сотрудникам (тот же гард
+// стоит в msgsvc — плашка постороннему не создастся).
+const { q, results, loading, reset } = useContactPicker({ companyOnly: true })
 const sending = ref(false)
 const selectedIds = ref(new Set())
 

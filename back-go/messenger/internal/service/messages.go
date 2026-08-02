@@ -72,7 +72,9 @@ func (s *Service) SendMessage(ctx context.Context, convID, senderID int64,
 		}
 	}
 
-	// Прикреплённая задача: из той же компании, что и диалог.
+	// Прикреплённая задача — сущность компании: она уходит только тем, кто в
+	// этой компании состоит. Компания диалога тут не показатель: у переписки
+	// между людьми без общей компании company_id вовсе NULL.
 	kind := domain.KindText
 	if req.TaskID != nil {
 		task, err := s.repo.GetTask(ctx, *req.TaskID)
@@ -82,8 +84,9 @@ func (s *Service) SendMessage(ctx context.Context, convID, senderID int64,
 		if task == nil {
 			return nil, domain.NewError("TASK_NOT_FOUND", "Задача не найдена", 404)
 		}
-		if conv.CompanyID != nil && task.CompanyID != *conv.CompanyID {
-			return nil, domain.NewError("TASK_WRONG_COMPANY", "Задача из другой компании", 400)
+		if err := s.ensureCompanyAudience(ctx, conv, task.CompanyID,
+			"TASK_WRONG_COMPANY", "Задачу можно отправить только сотрудникам её компании"); err != nil {
+			return nil, err
 		}
 		kind = domain.KindTask
 	}

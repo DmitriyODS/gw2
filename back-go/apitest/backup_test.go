@@ -211,6 +211,10 @@ func TestBackupExportImportRoundTrip(t *testing.T) {
 	makeSick(t, member.ID, "grime", 1)
 	r := petsAPI.doJSON(t, http.MethodPost, "/api/pets/bath", member.Token, nil)
 	requireStatus(t, r, 200, "купание (даёт запись выписки)")
+	// Купание грязнулю вылечило — а в архив должен уехать БОЛЬНОЙ грувик с
+	// приметной шкалой: иначе проверять после восстановления нечего.
+	setNeed(t, member.ID, "need_hygiene", 42)
+	makeSick(t, member.ID, "grime", 1)
 
 	postID := createPost(t, admin, "Пост для бэкапа")
 	r = portalAPI.doJSON(t, http.MethodPost, fmt.Sprintf("/api/portal/posts/%d/comments", postID),

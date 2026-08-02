@@ -70,9 +70,6 @@
 
       <ul class="pe-rows">
         <li class="pe-row">
-          <span class="pe-row-ico" data-tone="primary">
-            <span class="material-symbols-outlined">alternate_email</span>
-          </span>
           <span class="pe-row-text">
             <small>Логин</small>
             <span>{{ auth.user?.login || '—' }}</span>
@@ -80,9 +77,6 @@
           <button type="button" class="btn-glass pe-row-btn" @click="loginDialog = true">Изменить</button>
         </li>
         <li class="pe-row">
-          <span class="pe-row-ico" data-tone="tertiary">
-            <span class="material-symbols-outlined">lock</span>
-          </span>
           <span class="pe-row-text">
             <small>Пароль</small>
             <span>••••••••</span>
@@ -282,21 +276,6 @@ async function removeAvatar() {
   gap: 12px;
   min-width: 0;
 }
-
-.pe-row-ico {
-  flex-shrink: 0;
-  width: 40px;
-  height: 40px;
-  border-radius: var(--radius-sm);
-  display: grid;
-  place-items: center;
-  background: var(--tone-bg, var(--color-primary-container));
-  color: var(--tone-fg, var(--color-on-primary-container));
-}
-.pe-row-ico[data-tone="primary"]   { --tone-bg: var(--color-primary-container);   --tone-fg: var(--color-on-primary-container); }
-.pe-row-ico[data-tone="secondary"] { --tone-bg: var(--color-secondary-container); --tone-fg: var(--color-on-secondary-container); }
-.pe-row-ico[data-tone="tertiary"]  { --tone-bg: var(--color-tertiary-container);  --tone-fg: var(--color-on-tertiary-container); }
-.pe-row-ico .material-symbols-outlined { font-size: 20px; }
 
 .pe-row-text {
   min-width: 0;

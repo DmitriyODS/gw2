@@ -1,8 +1,8 @@
 <template>
-  <div class="hp-backdrop" @pointerdown.self="close">
-    <section class="hp" :style="style" role="dialog" aria-label="Hola ассистент">
+  <div class="hp-backdrop" :class="{ full }" @pointerdown.self="close">
+    <section class="hp" :class="{ full }" :style="style" role="dialog" aria-label="Hola ассистент">
       <header class="hp-bar">
-        <HolaIcon :size="20" class="hp-mark" />
+        <HolaIcon :size="full ? 26 : 20" class="hp-mark" />
         <h2 class="hp-title">Hola ассистент</h2>
       </header>
 
@@ -13,29 +13,37 @@
 
 <script setup>
 /**
- * Всплывающая панель Hola поверх рабочего стола — наследница строки Spotlight,
- * а не окно раздела: ни кнопки в панели задач, ни своего адреса, ни кнопок
+ * Всплывающая панель Hola поверх каркаса — наследница строки Spotlight, а не
+ * окно раздела: ни кнопки в панели задач, ни своего адреса, ни кнопок
  * управления окном у неё нет. Появляется всегда по центру экрана, закрывается
  * клавишей Esc, кликом мимо панели и уходом в найденный раздел.
+ *
+ * full — мобильный каркас: панель занимает весь экран между панелями каркаса
+ * (на телефоне «окно посреди экрана» смысла не имеет), и раскладку целиком
+ * держит CSS — отступы под системные вырезы известны только ему.
  */
 import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
-import { TASKBAR_RESERVE } from '@/desktop/layout.js'
+import { taskbarReserve } from '@/desktop/layout.js'
 import HolaPanel from '@/components/hola/HolaPanel.vue'
 import HolaIcon from '@/components/common/HolaIcon.vue'
 
 const SIZE = { w: 720, h: 720 }
 const MARGIN = 24
 
+const props = defineProps({
+  full: { type: Boolean, default: false },
+})
+
 const emit = defineEmits(['close'])
 
 const panelRef = ref(null)
-const rect = ref(centerRect())
+const rect = ref(panelRect())
 
 /* Центр экрана с поправкой на панель задач: на невысоком экране панель не
    должна наполовину уезжать под неё. */
-function centerRect() {
+function panelRect() {
   const vw = window.innerWidth
-  const vh = window.innerHeight - TASKBAR_RESERVE
+  const vh = window.innerHeight - taskbarReserve()
   const w = Math.min(SIZE.w, vw - MARGIN * 2)
   const h = Math.min(SIZE.h, vh - MARGIN * 2)
   return {
@@ -46,7 +54,7 @@ function centerRect() {
   }
 }
 
-const style = computed(() => ({
+const style = computed(() => (props.full ? {} : {
   transform: `translate3d(${rect.value.x}px, ${rect.value.y}px, 0)`,
   width: `${rect.value.w}px`,
   height: `${rect.value.h}px`,
@@ -64,7 +72,7 @@ function onKeydown(e) {
 }
 
 function onResize() {
-  rect.value = centerRect()
+  rect.value = panelRect()
 }
 
 onMounted(() => {
@@ -110,6 +118,28 @@ onBeforeUnmount(() => {
     scale 0.2s cubic-bezier(0.2, 0, 0, 1);
 }
 
+/* Мобильный каркас: панель во весь экран между панелями каркаса — без рамки и
+   скруглений, как самостоятельный экран, и с более сильным размытием: под ней
+   не однотонное окно, а обои и плитки стартового экрана. */
+.hp.full {
+  inset: calc(var(--statusbar-height, 0px) + env(safe-area-inset-top, 0px)) 0
+    calc(var(--taskbar-height) + env(safe-area-inset-bottom, 0px)) 0;
+  border: none;
+  border-radius: 0;
+  background: var(--acrylic-bg-strong);
+  -webkit-backdrop-filter: var(--acrylic-blur-strong);
+  backdrop-filter: var(--acrylic-blur-strong);
+  box-shadow: none;
+}
+
+/* Панель во весь экран остаётся ПОД панелью задач (900): её кнопка Hola —
+   единственный способ закрыть панель на телефоне, и она обязана быть нажимаемой
+   (по высоте панель до панели задач и не достаёт). */
+.hp-backdrop.full {
+  background: none;
+  z-index: 890;
+}
+
 .hp-bar {
   display: flex;
   align-items: center;
@@ -120,6 +150,18 @@ onBeforeUnmount(() => {
   border-bottom: 1px solid color-mix(in oklch, var(--acrylic-border) 70%, transparent);
   user-select: none;
 }
+
+/* Отступы — как у центра уведомлений: панель начинается под вырезом, поэтому
+   сверху остаётся обычное поле. */
+.hp.full .hp-bar {
+  height: auto;
+  padding: 18px 18px 4px;
+  border-bottom: none;
+}
+
+.hp.full .hp-body { padding: 14px 18px 18px; }
+
+.hp.full .hp-title { font-size: 1.15rem; }
 
 .hp-mark { color: var(--color-primary); }
 

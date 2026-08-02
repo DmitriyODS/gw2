@@ -1,6 +1,6 @@
 <template>
-  <div class="np-backdrop" @pointerdown.self="emit('close')">
-    <section class="np-panel" :style="anchorStyle" role="dialog" aria-label="Уведомления">
+  <div class="np-backdrop" :class="{ full }" @pointerdown.self="emit('close')">
+    <section class="np-panel" :class="{ full }" :style="anchorStyle" role="dialog" aria-label="Уведомления">
       <header class="np-head">
         <h3 class="np-title">Уведомления</h3>
         <button
@@ -40,11 +40,19 @@
 <script setup>
 import { computed } from 'vue'
 import { useDesktopStore } from '@/stores/desktop.js'
+import { useDesktopPrefsStore } from '@/stores/desktopPrefs.js'
 import { useDesktopNotifications } from '@/composables/useDesktopNotifications.js'
+
+/* full — мобильный каркас: центр уведомлений разворачивается во весь экран
+   между панелями статусов и задач (якориться к кнопке на телефоне некуда). */
+const props = defineProps({
+  full: { type: Boolean, default: false },
+})
 
 const emit = defineEmits(['close'])
 
 const desktop = useDesktopStore()
+const prefs = useDesktopPrefsStore()
 // Список общий с бейджем на кнопке уведомлений — см. composable.
 const { items, dismiss, clearAll } = useDesktopNotifications()
 
@@ -53,10 +61,30 @@ const { items, dismiss, clearAll } = useDesktopNotifications()
 const PANEL_W = 420
 
 const anchorStyle = computed(() => {
+  // Во весь экран якорь не нужен — раскладку целиком держит CSS.
+  if (props.full) return {}
   const width = Math.min(PANEL_W, window.innerWidth - 24)
+  const bar = desktop.taskbarRect
+  const gap = 24
+
+  // Вертикальная панель задач: центр уведомлений выезжает вбок от неё и
+  // держится по вертикали у кнопки, а не по центру экрана.
+  if (prefs.taskbarVertical) {
+    const style = { width: `${width}px`, bottom: 'auto', top: `${Math.max(12, Math.round(bar.y))}px` }
+    if (prefs.taskbarSide === 'left') style.left = `${Math.round(bar.x + bar.w + gap)}px`
+    else style.right = `${Math.round(window.innerWidth - bar.x + gap)}px`
+    return style
+  }
+
   const center = desktop.bellCenter || window.innerWidth - 60
   const left = Math.min(Math.max(12, center - width / 2), window.innerWidth - width - 12)
-  return { left: `${Math.round(left)}px`, width: `${width}px` }
+  const style = { left: `${Math.round(left)}px`, width: `${width}px` }
+  // Панель сверху — центр уведомлений раскрывается вниз.
+  if (prefs.taskbarSide === 'top') {
+    style.top = `calc(var(--taskbar-height) + ${gap}px)`
+    style.bottom = 'auto'
+  }
+  return style
 })
 
 function go(item) {
@@ -92,12 +120,38 @@ function go(item) {
     scale 0.22s cubic-bezier(0.2, 0, 0, 1);
 }
 
+/* Мобильный каркас: центр уведомлений во весь экран между панелями. Слой ниже
+   панелей каркаса (900) — иначе повторное нажатие кнопки-колокольчика попадало
+   бы в подложку, а не в саму кнопку, и панель открывалась заново. */
+.np-backdrop.full { z-index: 890; }
+
+.np-panel.full {
+  top: calc(var(--statusbar-height, 0px) + env(safe-area-inset-top, 0px));
+  bottom: calc(var(--taskbar-height) + env(safe-area-inset-bottom, 0px));
+  left: 0;
+  right: 0;
+  max-height: none;
+  border: none;
+  border-radius: 0;
+  box-shadow: none;
+  /* Та же матовая подложка, что у панели ассистента во весь экран: под ней
+     обои и плитки, поэтому стекло плотнее и размытие сильнее. */
+  background: var(--acrylic-bg-strong);
+  -webkit-backdrop-filter: var(--acrylic-blur-strong);
+  backdrop-filter: var(--acrylic-blur-strong);
+  /* Кнопка-колокольчик на телефоне сверху — панель и выезжает сверху. */
+  transform-origin: top center;
+}
+
 .np-enter-from .np-panel,
 .np-leave-to .np-panel {
   opacity: 0;
   translate: 0 22px;
   scale: 0.92;
 }
+
+.np-enter-from .np-panel.full,
+.np-leave-to .np-panel.full { translate: 0 -22px; }
 
 .np-head {
   display: flex;

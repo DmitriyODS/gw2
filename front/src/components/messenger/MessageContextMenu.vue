@@ -208,8 +208,7 @@ function onKey(e) {
 
 .msg-ctx-react:hover {
   background: var(--color-surface-low);
-  transform: scale(1.15);
-}
+  }
 
 .msg-ctx-react.active {
   background: var(--color-primary-container);

@@ -34,8 +34,17 @@ function empty() {
     wallpapers: [],
     // Живые плитки меню «Пуск» (сводки разделов) — включены по умолчанию.
     liveTiles: true,
+    // Где висит панель задач: снизу (как было), сверху, слева или справа.
+    taskbarSide: 'bottom',
+    // Меню «Пуск» всегда открывается во весь экран (иначе — обычная панель,
+    // а полный экран включается кнопкой в самом меню).
+    startFullscreen: false,
   }
 }
+
+// Допустимые стороны панели задач: значение приходит с сервера и из чужих
+// версий клиента, поэтому проверяем.
+export const TASKBAR_SIDES = ['bottom', 'top', 'left', 'right']
 
 function normalize(raw) {
   const p = raw && typeof raw === 'object' ? raw : {}
@@ -54,6 +63,8 @@ function normalize(raw) {
       ? p.wallpapers.filter((u) => typeof u === 'string').slice(0, WALLPAPER_HISTORY)
       : [],
     liveTiles: p.liveTiles !== false,
+    taskbarSide: TASKBAR_SIDES.includes(p.taskbarSide) ? p.taskbarSide : 'bottom',
+    startFullscreen: p.startFullscreen === true,
   }
 }
 
@@ -67,6 +78,11 @@ export const useDesktopPrefsStore = defineStore('desktopPrefs', () => {
   const wallpaper = computed(() => prefs.value.wallpaper)
   const wallpapers = computed(() => prefs.value.wallpapers)
   const liveTiles = computed(() => prefs.value.liveTiles)
+  const taskbarSide = computed(() => prefs.value.taskbarSide)
+  const startFullscreen = computed(() => prefs.value.startFullscreen)
+  // Вертикальная панель (слева/справа) — другая раскладка кнопок и другие
+  // якоря всплывающих панелей.
+  const taskbarVertical = computed(() => taskbarSide.value === 'left' || taskbarSide.value === 'right')
   // Раскладка меню «Пуск» одним объектом — её целиком принимает menuGroups().
   const layout = computed(() => ({
     groups: prefs.value.groups,
@@ -191,6 +207,19 @@ export const useDesktopPrefsStore = defineStore('desktopPrefs', () => {
     scheduleSave()
   }
 
+  /** Сторона панели задач: bottom | top | left | right. */
+  function setTaskbarSide(side) {
+    if (!TASKBAR_SIDES.includes(side)) return
+    prefs.value.taskbarSide = side
+    scheduleSave()
+  }
+
+  /** Открывать ли меню «Пуск» сразу во весь экран. */
+  function setStartFullscreen(on) {
+    prefs.value.startFullscreen = !!on
+    scheduleSave()
+  }
+
   function setWallpaper(recipe) {
     prefs.value.wallpaper = recipe ? { ...recipe } : null
     const url = recipe?.image?.url
@@ -215,6 +244,7 @@ export const useDesktopPrefsStore = defineStore('desktopPrefs', () => {
 
   return {
     prefs, loaded, pinned, order, wallpaper, wallpapers, liveTiles, layout, customized,
+    taskbarSide, taskbarVertical, startFullscreen, setTaskbarSide, setStartFullscreen,
     tileSize, isPinned, load, setTileSize, setGroupOrder, moveTileToGroup,
     addGroup, renameGroup, removeGroup, isCollapsed, toggleCollapsed,
     pin, unpin, togglePin, setPinnedOrder, setLiveTiles, setWallpaper, forgetWallpaper, reset,

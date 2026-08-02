@@ -286,8 +286,25 @@ export const useThemeStore = defineStore('theme', () => {
      компоненты, data-dark на <html> ставится из неё же. */
   const dark = ref(false)
 
+  /* ── Оформление экранов входа ────────────────────────────────────
+     Вход, регистрация и прочие публичные экраны встречают КЛАССИЧЕСКОЙ
+     темой в системном светлом/тёмном виде: личная тема пользователя туда
+     не протекает (на устройство приходят и гости), а режим берётся у ОС,
+     а не из личной настройки. Исключение — тема, выбранная плитками прямо
+     на регистрации: она применяется сразу и остаётся до конца экранов входа. */
+  const authPreview = ref(false)
+  const authPicked = ref(false)
+
+  function setAuthPreview(on) {
+    authPreview.value = on
+    if (!on) authPicked.value = false
+    applyVars(on && !authPicked.value ? PRESETS.classic : getVars(currentPreset.value))
+    applyDark()
+  }
+
   function applyDark() {
-    if (mode.value === 'schedule') dark.value = isDarkBySchedule()
+    if (authPreview.value) dark.value = !!systemDarkMq?.matches
+    else if (mode.value === 'schedule') dark.value = isDarkBySchedule()
     else dark.value = mode.value === 'system' ? !!systemDarkMq?.matches : mode.value === 'dark'
     document.documentElement.setAttribute('data-dark', dark.value)
     // Сообщаем браузеру фактическую схему: красит родные контролы/скроллбары
@@ -371,6 +388,8 @@ export const useThemeStore = defineStore('theme', () => {
   function applyTheme(name) {
     currentPreset.value = name
     storageSet('gw_theme', name)
+    // Выбор темы на экране регистрации отменяет классику по умолчанию.
+    if (authPreview.value) authPicked.value = true
     applyVars(getVars(name))
   }
 
@@ -414,11 +433,13 @@ export const useThemeStore = defineStore('theme', () => {
   }
 
   function init() {
-    applyVars(getVars(currentPreset.value))
+    // На экранах входа палитра уже подменена классикой — не перетираем её.
+    applyVars(authPreview.value && !authPicked.value ? PRESETS.classic : getVars(currentPreset.value))
     applyDark()
     applyBgGradient()
-    // Живое переключение вслед за системой (addListener — старый Safari).
-    const onSystemChange = () => { if (mode.value === 'system') applyDark() }
+    // Живое переключение вслед за системой (addListener — старый Safari):
+    // на экранах входа режим ВСЕГДА системный, внутри — только в режиме system.
+    const onSystemChange = () => { if (authPreview.value || mode.value === 'system') applyDark() }
     if (systemDarkMq?.addEventListener) systemDarkMq.addEventListener('change', onSystemChange)
     else systemDarkMq?.addListener?.(onSystemChange)
     // Тик расписания: проверяем наступление времени переключения раз в полминуты.
@@ -429,7 +450,7 @@ export const useThemeStore = defineStore('theme', () => {
     currentPreset, mode, dark, customThemes, schedule, bgGradient,
     presetNames: Object.keys(PRESETS),
     presetLabels: PRESET_LABELS,
-    applyTheme, applyVars, setMode, setSchedule, saveCustomTheme, deleteCustomTheme,
+    applyTheme, applyVars, setMode, setSchedule, setAuthPreview, saveCustomTheme, deleteCustomTheme,
     exportTheme, importTheme, init, getVars, randomTheme,
     setBgGradientEnabled, regenerateBgGradient, resetBgGradient,
   }

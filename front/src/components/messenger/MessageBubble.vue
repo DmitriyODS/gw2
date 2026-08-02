@@ -622,7 +622,6 @@ const joinLabel = computed(() => props.isMine ? 'Вернуться' : 'Прис
 }
 
 .task-pill:hover {
-  transform: translateY(-1px);
   box-shadow: var(--shadow-sm);
 }
 
@@ -677,7 +676,6 @@ const joinLabel = computed(() => props.isMine ? 'Вернуться' : 'Прис
 }
 
 .post-pill:hover {
-  transform: translateY(-1px);
   box-shadow: var(--shadow-sm);
 }
 
@@ -751,7 +749,7 @@ const joinLabel = computed(() => props.isMine ? 'Вернуться' : 'Прис
   transition: background 0.15s, border-color 0.15s, transform 0.12s;
 }
 
-.msg-reaction:hover { transform: scale(1.08); }
+.msg-reaction:hover { border-color: color-mix(in oklch, var(--color-primary) 45%, var(--color-outline-dim)); }
 
 .msg-reaction.mine {
   background: var(--color-primary-container);
@@ -931,7 +929,7 @@ const joinLabel = computed(() => props.isMine ? 'Вернуться' : 'Прис
   transition: background 0.15s, transform 0.12s;
 }
 
-.call-join:hover { transform: translateY(-1px); }
+.call-join:hover { filter: brightness(1.08); }
 .call-join:active { transform: translateY(0); }
 
 .call-join .material-symbols-outlined { font-size: 18px; }

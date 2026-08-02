@@ -932,7 +932,7 @@ function gotoPets() {
   background: color-mix(in oklch, var(--color-primary) 5%, transparent);
   cursor: pointer; font-size: 26px; transition: transform 0.12s, border-color 0.12s;
 }
-.pdm-food-item:hover { transform: translateY(-2px); border-color: var(--color-primary); }
+.pdm-food-item:hover { border-color: var(--color-primary); }
 .pdm-food-item.favorite { border-color: color-mix(in oklch, var(--color-error) 45%, transparent); }
 .pdm-food-item.poor { opacity: 0.5; }
 .pdm-food-fav { position: absolute; top: 3px; right: 4px; font-size: 11px; }

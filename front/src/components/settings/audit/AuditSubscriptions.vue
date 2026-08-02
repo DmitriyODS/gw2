@@ -47,7 +47,6 @@
     </section>
     <div v-else class="rows">
       <article v-for="s in items" :key="s.user_id" class="gw-card gw-row row">
-        <span class="gw-row-icon"><span class="material-symbols-outlined">card_membership</span></span>
         <div class="row-main">
           <p class="gw-h">{{ s.user_name || `#${s.user_id}` }} <span class="gw-sub">· {{ s.user_login }}</span></p>
           <p class="gw-sub">

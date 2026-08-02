@@ -5,7 +5,7 @@
     icon="send"
     size="sm"
     title="Отправить задачу"
-    :subtitle="task ? `«${task.name}»` : ''"
+    :subtitle="task ? `«${task.name}» — сотруднику этой компании` : ''"
     @update:model-value="$emit('update:modelValue', $event)"
   >
     <!-- Шаг 1: выбор получателя -->
@@ -14,7 +14,7 @@
         <span class="material-symbols-outlined">search</span>
         <input
           v-model="q"
-          placeholder="Фамилия (из ваших чатов) или логин"
+          placeholder="Фамилия или логин сотрудника"
           class="sendtask-input"
           autofocus
         />
@@ -24,7 +24,7 @@
       </div>
       <div v-else-if="!results.length" class="sendtask-empty">
         <span class="material-symbols-outlined">person_search</span>
-        <p>{{ q ? 'Никого не нашли — проверьте логин' : 'Пока нет диалогов. Введите логин, чтобы найти человека.' }}</p>
+        <p>{{ q ? 'Среди сотрудников компании никого не нашли' : 'В компании пока нет других сотрудников' }}</p>
       </div>
       <ul v-else class="sendtask-results">
         <li
@@ -88,7 +88,9 @@ const props = defineProps({
 
 const emit = defineEmits(['update:modelValue', 'confirm'])
 
-const { q, results, loading, reset } = useContactPicker()
+// Задача — сущность компании: получатели только из её штата (гард дублируется
+// на бэкенде — msgsvc отклоняет вложение задачи постороннему).
+const { q, results, loading, reset } = useContactPicker({ companyOnly: true })
 const picked = ref(null)
 const caption = ref('')
 const sending = ref(false)

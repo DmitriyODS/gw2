@@ -8,9 +8,6 @@
     <template v-else>
       <section class="gw-card ai-card">
         <header class="ai-head">
-          <span class="ai-head-ico">
-            <span class="material-symbols-outlined">smart_toy</span>
-          </span>
           <div class="ai-head-text">
             <h3 class="gw-h">ИИ возможности</h3>
             <p class="gw-sub">
@@ -28,43 +25,38 @@
 
         <SwitchRow
           v-model="form.enabled"
-          icon="smart_toy"
           title="ИИ включён"
           hint="Общий выключатель: без него не работает ни одна возможность"
         />
         <SwitchRow
           v-model="form.featAssistant"
-          icon="forum"
           title="Hola-ассистент — чат"
           hint="Ответы на вопросы по задачам и статистике во вкладке «Чат»"
         />
         <SwitchRow
           v-model="form.featNotes"
-          icon="edit_note"
           title="ИИ в заметках"
           hint="Правка выделенного текста, корректура и продолжение записи"
         />
 
-        <label class="ai-label">Модель</label>
-        <div class="model-row">
-          <button
-            v-for="m in settings.models"
-            :key="m.code"
-            class="model-btn"
-            :class="{ 'is-active': form.modelChat === m.code }"
-            type="button"
-            @click="form.modelChat = m.code"
-          >
-            <strong>{{ m.title }}</strong>
-            <span class="gw-sub">{{ m.code }}</span>
-            <span class="model-rate">×{{ m.rate.toFixed(1) }} токенов</span>
-          </button>
-        </div>
-        <p class="ai-note">
-          Коэффициент показывает, во сколько раз обращение к модели дороже
-          базового: за один и тот же ответ разные модели тратят разное число
-          токенов тарифа.
-        </p>
+        <SettingRow
+          title="Модель"
+          hint="Модели отвечают по-разному и расходуют разное количество токенов — выберите ту, что больше нравится."
+          stack
+        >
+          <div class="model-row">
+            <button
+              v-for="m in settings.models"
+              :key="m.code"
+              class="model-btn"
+              :class="{ 'is-active': form.modelChat === m.code }"
+              type="button"
+              @click="form.modelChat = m.code"
+            >
+              <strong>{{ m.title }}</strong>
+            </button>
+          </div>
+        </SettingRow>
 
         <div class="ai-actions">
           <button class="btn-grad" type="button" :disabled="saving" @click="save">
@@ -83,23 +75,10 @@
 
       <!-- Токены тарифа: сколько осталось и где докупить. -->
       <section class="gw-card tokens-card">
-        <div class="gw-row">
-          <span class="gw-row-icon"><span class="material-symbols-outlined">toll</span></span>
-          <div class="tokens-main">
-            <p class="gw-h">Токены ИИ</p>
-            <p class="gw-sub">
-              <template v-if="ownKeyActive">
-                Работает ваш ключ — токены тарифа не расходуются.
-              </template>
-              <template v-else-if="usage">
-                Использовано {{ formatCount(usage.tokens_used) }} из
-                {{ formatCount(usage.tokens_limit) }} за текущий месяц
-              </template>
-            </p>
-          </div>
+        <SettingRow title="Токены ИИ" :hint="tokensHint">
           <strong class="tokens-left">{{ formatCount(settings.tokens_left) }}</strong>
           <button class="gw-chip" type="button" @click="goToStore">Перейти в магазин</button>
-        </div>
+        </SettingRow>
         <div v-if="!ownKeyActive && usage && usage.tokens_limit > 0" class="bar">
           <span :style="{ width: usedPct }" />
         </div>
@@ -172,6 +151,7 @@ import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import InputText from 'primevue/inputtext'
 import BrandLoader from '@/components/common/BrandLoader.vue'
+import SettingRow from '@/components/common/SettingRow.vue'
 import SwitchRow from '@/components/common/SwitchRow.vue'
 import * as aiApi from '@/api/ai.js'
 import * as billingApi from '@/api/billing.js'
@@ -207,6 +187,12 @@ const form = ref({
 })
 
 const ownKeyActive = computed(() => Boolean(settings.value.has_key))
+
+const tokensHint = computed(() => {
+  if (ownKeyActive.value) return 'Работает ваш ключ — токены тарифа не расходуются.'
+  if (!usage.value) return ''
+  return `Использовано ${formatCount(usage.value.tokens_used)} из ${formatCount(usage.value.tokens_limit)} за текущий месяц`
+})
 
 const usedPct = computed(() => {
   const limit = usage.value?.tokens_limit || 0
@@ -302,17 +288,6 @@ function goToStore() {
 
 .ai-head { display: flex; align-items: flex-start; gap: 12px; }
 
-.ai-head-ico {
-  display: grid;
-  place-items: center;
-  width: 44px;
-  min-width: 44px;
-  height: 44px;
-  border-radius: var(--radius-md);
-  background: var(--color-primary-container);
-  color: var(--color-on-primary-container);
-}
-
 .ai-head-text { flex: 1; min-width: 0; }
 
 .ai-state {
@@ -340,14 +315,14 @@ function goToStore() {
 .ai-input { width: 100%; }
 .ai-note { margin: 0; font-size: 0.8rem; color: var(--color-text-dim); }
 
-.model-row { display: flex; flex-wrap: wrap; gap: 10px; }
+.model-row { display: flex; flex-wrap: wrap; gap: 10px; width: 100%; }
 
 .model-btn {
   display: flex;
-  flex-direction: column;
-  gap: 2px;
-  min-width: 150px;
-  padding: 12px 14px;
+  align-items: center;
+  justify-content: center;
+  min-width: 130px;
+  padding: 14px 18px;
   border: 1px solid var(--acrylic-border);
   border-radius: var(--radius-md);
   background: var(--color-surface-variant);
@@ -362,16 +337,13 @@ function goToStore() {
   color: var(--color-on-primary-container);
 }
 
-.model-rate { font-size: 0.75rem; opacity: 0.8; }
-
 .ai-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
 
 .ai-test { font-size: 0.82rem; color: var(--color-error); }
 .ai-test[data-ok='true'] { color: var(--color-success, var(--color-primary)); }
 
 .tokens-card { display: flex; flex-direction: column; gap: 10px; }
-.tokens-main { flex: 1; min-width: 0; }
-.tokens-left { font-size: 1.2rem; font-weight: 700; }
+.tokens-left { font-size: 1.2rem; font-weight: 700; white-space: nowrap; }
 
 .bar {
   width: 100%;

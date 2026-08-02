@@ -675,7 +675,6 @@ async function onImportPick(e) {
 }
 
 .bv-card:hover {
-  transform: translateY(-2px);
   border-color: color-mix(in oklch, var(--color-primary) 30%, var(--glass-edge));
   box-shadow: var(--shadow-2);
 }

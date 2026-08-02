@@ -212,7 +212,8 @@ func TestTasksCRUDAndValidation(t *testing.T) {
 }
 
 // TestTasksCrossCompanyIsolation — задачи и юниты по id недоступны из другой
-// компании: любой доступ отвечает 404, не раскрывая существование.
+// компании: правки отвечают 404, не раскрывая существование, а ЧТЕНИЕ задачи
+// (по ней ходят прямые ссылки) — говорящим 403 «доступ ограничен».
 func TestTasksCrossCompanyIsolation(t *testing.T) {
 	adminA, _, deptA := newTaskCompany(t)
 	typeA := createUnitType(t, adminA, uniq("Тип "))
@@ -227,7 +228,6 @@ func TestTasksCrossCompanyIsolation(t *testing.T) {
 		method, path string
 		body         map[string]any
 	}{
-		{http.MethodGet, fmt.Sprintf("/api/tasks/%d", taskA), nil},
 		{http.MethodPatch, fmt.Sprintf("/api/tasks/%d", taskA), map[string]any{"name": "hack"}},
 		{http.MethodDelete, fmt.Sprintf("/api/tasks/%d", taskA), nil},
 		{http.MethodPost, fmt.Sprintf("/api/tasks/%d/archive", taskA), nil},
@@ -255,6 +255,11 @@ func TestTasksCrossCompanyIsolation(t *testing.T) {
 				tc.method, tc.path, rr.Status, rr.Raw)
 		}
 	}
+
+	// Прямая ссылка на задачу: постороннему — «доступ ограничен» (403), а не
+	// глухой 404: человек должен понять, почему не открылось.
+	rr := tasksAPI.doJSON(t, http.MethodGet, fmt.Sprintf("/api/tasks/%d", taskA), adminB.Token, nil)
+	requireError(t, rr, 403, "TASK_FORBIDDEN", "чужая задача по ссылке")
 
 	// Список задач компании B пуст — задачи A не просачиваются.
 	r := tasksAPI.doJSON(t, http.MethodGet, "/api/tasks", adminB.Token, nil)

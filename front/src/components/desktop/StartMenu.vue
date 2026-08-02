@@ -1,6 +1,6 @@
 <template>
-  <div class="sm-backdrop" @pointerdown.self="desktop.startOpen = false">
-    <section class="start-menu" role="menu">
+  <div class="sm-backdrop" :data-taskbar="prefs.taskbarSide" @pointerdown.self="desktop.startOpen = false">
+    <section class="start-menu" :class="{ full }" role="menu">
       <div class="sm-columns">
         <!-- Левая колонка: марка, компания, плитки и карточка пользователя —
              всё, что относится к запуску разделов, живёт только здесь. -->
@@ -8,9 +8,15 @@
         <div class="sm-panel">
         <header class="sm-head">
           <button class="sm-brand" type="button" title="О приложении" @click="openAbout">
-            <span class="sm-word-groove">Groove</span>
-            <span class="sm-word-work">Work</span>
-            <span v-if="majorVersion" class="sm-word-work">{{ majorVersion }}</span>
+            <BrandWordmark />
+          </button>
+          <button
+            class="sm-full"
+            type="button"
+            :title="full ? 'Свернуть меню' : 'Развернуть на весь экран'"
+            @click="full = !full"
+          >
+            <span class="material-symbols-outlined">{{ full ? 'close_fullscreen' : 'open_in_full' }}</span>
           </button>
         </header>
 
@@ -113,7 +119,7 @@
           <button class="sm-icon-btn" type="button" title="Настройки" @click="launchPath('/settings')">
             <span class="material-symbols-outlined">settings</span>
           </button>
-          <button class="sm-icon-btn danger" type="button" title="Выйти" @click="auth.logout()">
+          <button class="sm-icon-btn danger" type="button" title="Выйти" @click="logoutAsk = true">
             <span class="material-symbols-outlined">logout</span>
           </button>
         </footer>
@@ -142,11 +148,23 @@
       @select="onGroupMenuSelect"
       @close="groupMenu.open = false"
     />
+
+    <!-- Выход — из тех действий, что делают одним промахом мыши: спрашиваем. -->
+    <AppDialog
+      v-model="logoutAsk"
+      tone="danger"
+      icon="logout"
+      size="sm"
+      title="Выйти из системы?"
+      subtitle="Открытые окна закроются, для возврата понадобится войти заново."
+      :actions="LOGOUT_ACTIONS"
+      @confirm="auth.logout()"
+    />
   </div>
 </template>
 
 <script setup>
-import { computed, nextTick, onMounted, reactive, ref } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import InputText from 'primevue/inputtext'
 import { useAuthStore } from '@/stores/auth.js'
 import { useDesktopStore } from '@/stores/desktop.js'
@@ -157,13 +175,14 @@ import { useTasksStore } from '@/stores/tasks.js'
 import { usePetsStore } from '@/stores/pets.js'
 import { usePermission } from '@/composables/usePermission.js'
 import { useCompanySettings } from '@/composables/useCompanySettings.js'
-import { useAppVersion } from '@/composables/useAppVersion.js'
 import { menuGroups } from '@/desktop/apps.js'
 import { tileFaces } from '@/desktop/liveTiles.js'
 import { useLiveTilesStore } from '@/stores/liveTiles.js'
 import { useUnitsStore } from '@/stores/units.js'
+import BrandWordmark from '@/components/common/BrandWordmark.vue'
 import CompanySelect from '@/components/common/CompanySelect.vue'
 import ContextMenu from '@/components/common/ContextMenu.vue'
+import AppDialog from '@/components/common/AppDialog.vue'
 import LiveTile from './LiveTile.vue'
 import ActivityPanel from './ActivityPanel.vue'
 
@@ -178,10 +197,8 @@ const units = useUnitsStore()
 const live = useLiveTilesStore()
 const { isSuperAdmin, hasActiveCompany } = usePermission()
 const { settings } = useCompanySettings()
-const { majorVersion, load: loadVersion } = useAppVersion()
 
 onMounted(() => {
-  loadVersion()
   /* Сводки живых плиток рабочий стол тянет заранее и обновляет по таймеру —
      здесь лишь подстраховка: свежие данные запрос не повторяют (TTL стора). */
   if (prefs.liveTiles) {
@@ -337,6 +354,23 @@ function createGroup() {
 }
 
 /* ── Контекстное меню плитки: размер и закрепление ───────────── */
+/* Полноэкранное меню: разворачивается кнопкой в шапке, а в настройках можно
+   выбрать, чтобы оно ВСЕГДА открывалось во весь экран (тогда кнопка
+   сворачивает его до обычной панели на время сеанса). */
+const full = ref(prefs.startFullscreen)
+watch(() => prefs.startFullscreen, (on) => { full.value = on })
+
+// Пока меню развёрнуто, панель задач прячется: экран занимает только меню.
+watch(full, (on) => { desktop.startFull = on }, { immediate: true })
+onBeforeUnmount(() => { desktop.startFull = false })
+
+// Подтверждение выхода: кнопка стоит рядом с настройками, промахнуться легко.
+const logoutAsk = ref(false)
+const LOGOUT_ACTIONS = [
+  { kind: 'cancel', label: 'Остаться' },
+  { kind: 'confirm', label: 'Выйти', icon: 'logout' },
+]
+
 const tileMenu = reactive({ open: false, x: 0, y: 0, appId: null })
 
 const tileMenuItems = computed(() => {
@@ -417,6 +451,64 @@ function onGroupMenuSelect(action) {
 </script>
 
 <style scoped>
+/* Во весь экран — по-настоящему: без полей, скруглений и панели задач (её
+   прячет рабочий стол по desktop.startFull). Меню держит экран, пока не
+   выберут раздел или не свернут его обратно. Правило идёт ПОСЛЕ раскладок по
+   сторонам панели и перекрывает их. */
+.sm-backdrop .start-menu.full {
+  inset: 0;
+  width: auto;
+  max-width: none;
+  max-height: none;
+  transform: none;
+  border-radius: 0;
+  border: none;
+}
+
+/* Кнопка «во весь экран» — в шапке у правого края. */
+.sm-full {
+  margin-left: auto;
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border: none;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--color-text-dim);
+  cursor: pointer;
+}
+
+.sm-full:hover { background: var(--color-surface-variant); color: var(--color-text); }
+.sm-full .material-symbols-outlined { font-size: 20px; }
+
+/* Панель задач сверху — меню выезжает вниз; по бокам — от своего края, а по
+   вертикали центрируется: тянуться от кнопки «Пуск» через весь экран незачем. */
+.sm-backdrop[data-taskbar='top'] .start-menu {
+  top: calc(var(--taskbar-height) + 24px);
+  bottom: auto;
+  transform-origin: top center;
+}
+
+.sm-backdrop[data-taskbar='left'] .start-menu,
+.sm-backdrop[data-taskbar='right'] .start-menu {
+  top: 50%;
+  bottom: auto;
+  left: auto;
+  transform: translateY(-50%);
+  max-height: min(820px, calc(100dvh - 48px));
+}
+
+.sm-backdrop[data-taskbar='left'] .start-menu {
+  left: calc(var(--taskbar-height) + 24px);
+  transform-origin: center left;
+}
+
+.sm-backdrop[data-taskbar='right'] .start-menu {
+  right: calc(var(--taskbar-height) + 24px);
+  transform-origin: center right;
+}
+
 /* Прозрачная подложка на весь экран: клик мимо меню закрывает его, как в ОС. */
 .sm-backdrop {
   position: fixed;
@@ -425,7 +517,7 @@ function onGroupMenuSelect(action) {
 }
 
 .start-menu {
-  /* Меню всегда по центру экрана над панелью задач. */
+  /* Меню по центру экрана со стороны панели задач (по умолчанию — над ней). */
   position: absolute;
   left: 50%;
   transform: translateX(-50%);
@@ -486,8 +578,6 @@ function onGroupMenuSelect(action) {
 }
 
 .sm-brand:hover { background: color-mix(in oklch, var(--color-primary) 10%, transparent); }
-.sm-word-groove { color: var(--color-primary); }
-.sm-word-work { color: var(--color-text); }
 
 .sm-company { flex: 1; min-width: 0; }
 
@@ -534,10 +624,26 @@ function onGroupMenuSelect(action) {
   flex-direction: column;
   gap: 14px;
   /* Жёлоб под полосу прокрутки резервируется всегда — иначе она ложится
-     поверх плиток, а при появлении дёргает всю сетку. */
+     поверх плиток, а при появлении дёргает всю сетку. Сама полоса — еле
+     заметная: меню и так плотное, яркая линия сбоку только мешает. */
   scrollbar-gutter: stable;
   padding-right: 10px;
   scrollbar-width: thin;
+  scrollbar-color: color-mix(in oklch, var(--color-text) 14%, transparent) transparent;
+}
+
+.sm-body::-webkit-scrollbar { width: 6px; }
+.sm-body::-webkit-scrollbar-track { background: transparent; }
+
+.sm-body::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  background: color-mix(in oklch, var(--color-text) 14%, transparent);
+}
+
+/* Под курсором чуть заметнее — чтобы можно было прицелиться. */
+.sm-body:hover { scrollbar-color: color-mix(in oklch, var(--color-text) 26%, transparent) transparent; }
+.sm-body:hover::-webkit-scrollbar-thumb {
+  background: color-mix(in oklch, var(--color-text) 26%, transparent);
 }
 
 /* Узкое окно — лента уступает место плиткам. */
@@ -637,11 +743,21 @@ function onGroupMenuSelect(action) {
 
 .sm-group-inner { overflow: hidden; }
 
+/* Обычное меню: РОВНО четыре колонки, то есть две широкие плитки в ряд.
+   Ширину колонки считает сама сетка — подбирать её в пикселях бессмысленно,
+   доступное место зависит от полосы прокрутки и колонки «Моя активность». */
 .sm-tiles {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 10px;
   min-height: 44px;
+}
+
+/* Во весь экран плитки НЕ растягиваются: ширина фиксируется той же, что в
+   обычном меню, и плитки просто перетекают на освободившееся место. */
+.start-menu.full .sm-tiles {
+  grid-template-columns: repeat(auto-fill, var(--sm-tile-w, 132px));
+  justify-content: start;
 }
 
 .sm-group-empty {

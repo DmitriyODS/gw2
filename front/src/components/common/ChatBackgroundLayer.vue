@@ -1,13 +1,15 @@
 <script setup>
 import { computed } from 'vue'
 import { chatBgStyles } from '@/utils/chatBackgrounds.js'
+import { useThemeStore } from '@/stores/theme.js'
 
 const props = defineProps({
   // Нормализованный рецепт или null (тогда — базовый фон токена).
   recipe: { type: Object, default: null },
 })
 
-const styles = computed(() => chatBgStyles(props.recipe))
+const theme = useThemeStore()
+const styles = computed(() => chatBgStyles(props.recipe, theme.dark))
 </script>
 
 <template>

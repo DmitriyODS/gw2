@@ -205,6 +205,7 @@ export const APPS = [
     id: 'settings',
     title: 'Настройки',
     icon: 'settings',
+    group: 'manage',
     tile: 'square',
     path: '/settings',
     match: (p) => p.startsWith('/settings'),

@@ -7,7 +7,6 @@
     <template v-else>
       <section class="gw-card wallet">
         <div class="gw-row">
-          <span class="gw-row-icon"><span class="material-symbols-outlined">account_balance_wallet</span></span>
           <div class="wallet-main">
             <p class="gw-h">Выручка автора</p>
             <p class="gw-sub">
@@ -34,9 +33,8 @@
         <h2>Вы ещё ничего не продаёте</h2>
         <p class="gw-sub">Выставьте свою тему или обои — после проверки они появятся на витрине.</p>
       </section>
-      <div v-else class="rows">
+      <section v-else class="gw-group rows">
         <article v-for="p in products" :key="p.id" class="gw-card gw-row row">
-          <span class="gw-row-icon"><span class="material-symbols-outlined">{{ KIND_ICONS[p.kind] || 'redeem' }}</span></span>
           <div class="row-main">
             <p class="gw-h">{{ p.title }}</p>
             <p class="gw-sub">
@@ -63,23 +61,22 @@
           </button>
           <button class="gw-chip" type="button" @click="editProduct(p)">Изменить</button>
         </article>
-      </div>
+      </section>
 
       <h2 class="gw-title section-title">Купленное</h2>
       <section v-if="!purchases.length" class="gw-banner">
         <h2>Покупок пока нет</h2>
         <p class="gw-sub">Товары с витрины появятся здесь и сразу станут доступны в оформлении.</p>
       </section>
-      <div v-else class="rows">
+      <section v-else class="gw-group rows">
         <article v-for="pu in purchases" :key="pu.id" class="gw-card gw-row row">
-          <span class="gw-row-icon"><span class="material-symbols-outlined">{{ KIND_ICONS[pu.product?.kind] || 'redeem' }}</span></span>
           <div class="row-main">
             <p class="gw-h">{{ pu.product?.title }}</p>
             <p class="gw-sub">{{ formatUntil(pu.created_at) }} · {{ formatPrice(pu.amount) }}</p>
           </div>
           <button class="gw-chip" type="button" @click="$emit('open', pu.product)">Открыть</button>
         </article>
-      </div>
+      </section>
     </template>
 
     <ProductEditDialog v-model:visible="editorOpen" :product="editing" @saved="load" />
@@ -120,15 +117,6 @@ import { formatPrice, formatUntil } from '@/utils/money.js'
 defineEmits(['open'])
 
 const notif = useNotificationsStore()
-
-const KIND_ICONS = {
-  theme: 'palette',
-  wallpaper: 'image',
-  gradient: 'gradient',
-  pet_skin: 'pets',
-  pet_decor: 'chair',
-  other: 'redeem',
-}
 
 const STATUS = {
   draft: 'Черновик',

@@ -1,45 +1,57 @@
 <template>
   <div class="ts">
     <!-- ── Режим оформления ──────────────────────────────────── -->
-    <section class="ts-block">
-      <h3 class="ts-h">Режим оформления</h3>
-      <div class="mode-seg" role="tablist">
-        <button
-          v-for="m in THEME_MODES"
-          :key="m.value"
-          class="mode-btn"
-          :class="{ active: themeStore.mode === m.value }"
-          role="tab"
-          type="button"
-          :aria-selected="themeStore.mode === m.value"
-          @click="themeStore.setMode(m.value)"
-        >
-          <span class="material-symbols-outlined">{{ m.icon }}</span>
-          <span class="mode-label">{{ m.label }}</span>
-        </button>
-      </div>
+    <SettingCard>
+      <SettingRow
+        title="Режим оформления"
+        hint="Светлая или тёмная тема, как в системе либо по расписанию."
+        stack
+      >
+        <div class="mode-seg" role="tablist">
+          <button
+            v-for="m in THEME_MODES"
+            :key="m.value"
+            class="mode-btn"
+            :class="{ active: themeStore.mode === m.value }"
+            role="tab"
+            type="button"
+            :aria-selected="themeStore.mode === m.value"
+            @click="themeStore.setMode(m.value)"
+          >
+            <span class="material-symbols-outlined">{{ m.icon }}</span>
+            <span class="mode-label">{{ m.label }}</span>
+          </button>
+        </div>
+      </SettingRow>
 
       <Transition name="ts-reveal">
-        <div v-if="themeStore.mode === 'schedule'" class="mode-times">
-          <label class="mode-time">
-            <span class="mode-time-label">Включить тёмную тему:</span>
-            <TimePicker
-              :model-value="themeStore.schedule.from"
-              icon="dark_mode"
-              @update:model-value="(v) => onSchedule('from', v)"
-            />
-          </label>
-          <label class="mode-time">
-            <span class="mode-time-label">Выключить тёмную тему:</span>
-            <TimePicker
-              :model-value="themeStore.schedule.to"
-              icon="light_mode"
-              @update:model-value="(v) => onSchedule('to', v)"
-            />
-          </label>
-        </div>
+        <SettingRow
+          v-if="themeStore.mode === 'schedule'"
+          title="Расписание"
+          hint="Когда включать и выключать тёмную тему."
+          stack
+        >
+          <div class="mode-times">
+            <label class="mode-time">
+              <span class="mode-time-label">Включить тёмную тему:</span>
+              <TimePicker
+                :model-value="themeStore.schedule.from"
+                icon="dark_mode"
+                @update:model-value="(v) => onSchedule('from', v)"
+              />
+            </label>
+            <label class="mode-time">
+              <span class="mode-time-label">Выключить тёмную тему:</span>
+              <TimePicker
+                :model-value="themeStore.schedule.to"
+                icon="light_mode"
+                @update:model-value="(v) => onSchedule('to', v)"
+              />
+            </label>
+          </div>
+        </SettingRow>
       </Transition>
-    </section>
+    </SettingCard>
 
     <!-- ── Встроенные темы ───────────────────────────────────── -->
     <SettingsAccordion title="Встроенные темы">
@@ -57,13 +69,15 @@
 
     <!-- ── Магазин: витрина ещё не открыта, поэтому пока только вход ── -->
     <SettingsAccordion title="Загруженные из магазина">
-      <p class="ts-empty">
-        Здесь появятся темы, которые вы возьмёте в магазине оформления.
-      </p>
-      <button class="ts-store-btn" type="button" @click="router.push('/store')">
-        <span class="material-symbols-outlined">shopping_bag</span>
-        Больше тем в магазине
-      </button>
+      <SettingRow
+        title="Темы из магазина"
+        hint="Здесь появятся темы, которые вы возьмёте в магазине оформления."
+      >
+        <button class="ts-store-btn" type="button" @click="router.push('/store')">
+          <span class="material-symbols-outlined">shopping_bag</span>
+          В магазин
+        </button>
+      </SettingRow>
     </SettingsAccordion>
 
     <!-- ── Свои темы ─────────────────────────────────────────── -->
@@ -119,6 +133,8 @@ import { ref } from 'vue'
 import { useRouter } from 'vue-router'
 import TimePicker from '@/components/common/TimePicker.vue'
 import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
+import SettingCard from '@/components/common/SettingCard.vue'
+import SettingRow from '@/components/common/SettingRow.vue'
 import SettingsAccordion from '@/components/settings/SettingsAccordion.vue'
 import ThemeCard from '@/components/settings/ThemeCard.vue'
 import ThemeEditorDialog from '@/components/settings/ThemeEditorDialog.vue'
@@ -187,22 +203,10 @@ async function onImport(event) {
   gap: 18px;
 }
 
-.ts-block {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-
-.ts-h {
-  margin: 0;
-  padding: 0 4px;
-  font-size: 1.05rem;
-  font-weight: 600;
-}
-
 /* ── Сегментированный переключатель режима ── */
 .mode-seg {
   display: flex;
+  width: 100%;
   gap: 4px;
   padding: 5px;
   border-radius: 999px;
@@ -241,6 +245,7 @@ async function onImport(event) {
 
 .mode-times {
   display: grid;
+  width: 100%;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 12px;
 }
@@ -261,18 +266,16 @@ async function onImport(event) {
 /* ── Сетка тем ── */
 .theme-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
-  gap: 12px;
+  grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+  gap: 10px;
 }
 
 .theme-new {
   display: flex;
-  flex-direction: column;
   align-items: center;
   justify-content: center;
   gap: 8px;
-  min-height: 132px;
-  padding: 14px;
+  padding: 12px;
   border: 1px dashed var(--color-outline-dim);
   border-radius: var(--radius-lg);
   background: none;
@@ -289,25 +292,17 @@ async function onImport(event) {
   background: var(--color-surface-low);
 }
 
-.theme-new .material-symbols-outlined { font-size: 26px; }
+.theme-new .material-symbols-outlined { font-size: 20px; }
 
-/* ── Пустой магазин и вход в него ── */
-.ts-empty {
-  margin: 0 0 12px;
-  padding: 0 4px;
-  font-size: 0.88rem;
-  color: var(--color-text-dim);
-}
-
+/* ── Вход в магазин тем ── */
 .ts-store-btn {
-  display: flex;
+  display: inline-flex;
   align-items: center;
   justify-content: center;
   gap: 10px;
-  width: 100%;
-  padding: 13px;
+  padding: 11px 18px;
   border: 1px solid var(--acrylic-border);
-  border-radius: var(--radius-lg);
+  border-radius: 999px;
   background: var(--color-primary-container);
   color: var(--color-on-primary-container);
   font-size: 0.92rem;

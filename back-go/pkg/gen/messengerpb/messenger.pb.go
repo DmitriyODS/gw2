@@ -431,8 +431,11 @@ type CreatePostMessageRequest struct {
 	Title          string                 `protobuf:"bytes,4,opt,name=title,proto3" json:"title,omitempty"`
 	Excerpt        string                 `protobuf:"bytes,5,opt,name=excerpt,proto3" json:"excerpt,omitempty"`
 	CoverUrl       string                 `protobuf:"bytes,6,opt,name=cover_url,json=coverUrl,proto3" json:"cover_url,omitempty"`
-	unknownFields  protoimpl.UnknownFields
-	sizeCache      protoimpl.SizeCache
+	// Компания поста: пост — её сущность, поэтому плашка уходит только тем, кто
+	// в этой компании состоит (msgsvc сверяет аудиторию диалога).
+	CompanyId     int64 `protobuf:"varint,7,opt,name=company_id,json=companyId,proto3" json:"company_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *CreatePostMessageRequest) Reset() {
@@ -505,6 +508,13 @@ func (x *CreatePostMessageRequest) GetCoverUrl() string {
 		return x.CoverUrl
 	}
 	return ""
+}
+
+func (x *CreatePostMessageRequest) GetCompanyId() int64 {
+	if x != nil {
+		return x.CompanyId
+	}
+	return 0
 }
 
 type CreatePostMessageResponse struct {
@@ -597,14 +607,16 @@ const file_messenger_v1_messenger_proto_rawDesc = "" +
 	"\x05error\x18\x01 \x01(\v2\x13.messenger.v1.ErrorR\x05error\x12'\n" +
 	"\x0fconversation_id\x18\x02 \x01(\x03R\x0econversationId\x12!\n" +
 	"\fmessage_json\x18\x03 \x01(\tR\vmessageJson\x12&\n" +
-	"\x0fnotify_user_ids\x18\x04 \x03(\x03R\rnotifyUserIds\"\xc6\x01\n" +
+	"\x0fnotify_user_ids\x18\x04 \x03(\x03R\rnotifyUserIds\"\xe5\x01\n" +
 	"\x18CreatePostMessageRequest\x12'\n" +
 	"\x0fconversation_id\x18\x01 \x01(\x03R\x0econversationId\x12\x1b\n" +
 	"\tsender_id\x18\x02 \x01(\x03R\bsenderId\x12\x17\n" +
 	"\apost_id\x18\x03 \x01(\x03R\x06postId\x12\x14\n" +
 	"\x05title\x18\x04 \x01(\tR\x05title\x12\x18\n" +
 	"\aexcerpt\x18\x05 \x01(\tR\aexcerpt\x12\x1b\n" +
-	"\tcover_url\x18\x06 \x01(\tR\bcoverUrl\"\x91\x01\n" +
+	"\tcover_url\x18\x06 \x01(\tR\bcoverUrl\x12\x1d\n" +
+	"\n" +
+	"company_id\x18\a \x01(\x03R\tcompanyId\"\x91\x01\n" +
 	"\x19CreatePostMessageResponse\x12)\n" +
 	"\x05error\x18\x01 \x01(\v2\x13.messenger.v1.ErrorR\x05error\x12!\n" +
 	"\fmessage_json\x18\x02 \x01(\tR\vmessageJson\x12&\n" +

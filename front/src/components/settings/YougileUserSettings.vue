@@ -2,9 +2,8 @@
   <div class="yg-settings">
     <!-- Карточка статуса -->
     <div class="settings-card yg-card">
-      <div class="hero-icon is-brand">
-        <YougileLogo :size="30" />
-      </div>
+      <!-- Чужой фирменный знак — опознание сервиса, а не наша иконка. -->
+      <YougileLogo :size="30" />
       <div class="card-text">
         <h3>{{ status.connected ? 'YouGile подключён' : 'Подключение к YouGile' }}</h3>
         <p v-if="status.connected">
@@ -45,9 +44,6 @@
     </div>
 
     <div v-if="status.connected" class="settings-card actions-card">
-      <div class="hero-icon" data-tone="tertiary">
-        <span class="material-symbols-outlined">tune</span>
-      </div>
       <div class="card-text">
         <h3>Управление подключением</h3>
         <p>Если ключ перестал работать или вы хотите выйти — сделайте это здесь.</p>
@@ -174,20 +170,6 @@ onMounted(() => { yg.refreshStatus().catch(() => {}) })
   border: 1px solid var(--acrylic-border);
   border-radius: 20px;
 }
-.hero-icon {
-  flex-shrink: 0; width: 56px; height: 56px;
-  border-radius: 16px; display: grid; place-items: center;
-  background: var(--tone-bg, var(--color-primary-container));
-  color: var(--tone-fg, var(--color-on-primary-container));
-}
-.hero-icon[data-tone="primary"]   { --tone-bg: var(--color-primary-container);   --tone-fg: var(--color-on-primary-container); }
-.hero-icon[data-tone="secondary"] { --tone-bg: var(--color-secondary-container); --tone-fg: var(--color-on-secondary-container); }
-.hero-icon[data-tone="tertiary"]  { --tone-bg: var(--color-tertiary-container);  --tone-fg: var(--color-on-tertiary-container); }
-.hero-icon .material-symbols-outlined { font-size: 28px; }
-
-/* Чужой фирменный знак — без нашей цветной подложки. */
-.hero-icon.is-brand { background: none; }
-
 .card-text { flex: 1; min-width: 0; }
 .card-text h3 { margin: 0 0 4px; font-size: 16px; font-weight: 700; color: var(--color-text); }
 .card-text p { margin: 0; font-size: 13px; line-height: 1.5; color: var(--color-text-dim); }

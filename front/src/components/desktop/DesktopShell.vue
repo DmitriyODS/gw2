@@ -1,5 +1,10 @@
 <template>
-  <div class="desktop" :style="{ '--taskbar-height': `${TASKBAR_HEIGHT}px` }" @contextmenu.self.prevent="openDeskMenu">
+  <div
+    class="desktop"
+    :data-taskbar="prefs.taskbarSide"
+    :style="{ '--taskbar-height': `${TASKBAR_HEIGHT}px` }"
+    @contextmenu.self.prevent="openDeskMenu"
+  >
     <!-- Обои: личная картинка/градиент пользователя либо мягкие волны из
          цветов темы. Тот же слой, что фон чатов и ленты портала. -->
     <ChatBackgroundLayer v-if="wallpaper" :recipe="wallpaper" class="desk-paper" />
@@ -22,10 +27,6 @@
       }"
       aria-hidden="true"
     />
-
-    <p v-if="!desktop.windows.length" class="desk-hint">
-      Нажмите «Пуск», чтобы открыть раздел
-    </p>
 
     <!-- Указатель у верхней кромки экрана — выезжает кнопка полноэкранного
          режима браузера (как автоскрывающаяся панель настольной ОС). -->
@@ -66,17 +67,10 @@
 
 <script setup>
 import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
-import { useRoute, useRouter } from 'vue-router'
-import { useAuthStore } from '@/stores/auth.js'
 import { useDesktopStore } from '@/stores/desktop.js'
 import { useDesktopPrefsStore } from '@/stores/desktopPrefs.js'
-import { usePermission } from '@/composables/usePermission.js'
-import { useCompanySettings } from '@/composables/useCompanySettings.js'
-import { useLiveTilesStore } from '@/stores/liveTiles.js'
-import { useActivityStore } from '@/stores/activity.js'
-import { clearNotificationJournal } from '@/composables/useDesktopNotifications.js'
-import { appForPath, menuGroups } from '@/desktop/apps.js'
-import { TASKBAR_HEIGHT, TASKBAR_RESERVE, shellActive } from '@/desktop/layout.js'
+import { useShellCore } from '@/desktop/shellCore.js'
+import { TASKBAR_HEIGHT, areaInsets, taskbarReserve, taskbarSide } from '@/desktop/layout.js'
 import {
   isPageFullscreen, onPageFullscreenChange, pageFullscreenSupported, togglePageFullscreen,
 } from '@/utils/pageFullscreen.js'
@@ -88,115 +82,44 @@ import StartMenu from './StartMenu.vue'
 import NotificationsPanel from './NotificationsPanel.vue'
 import HolaPopup from './HolaPopup.vue'
 
-const route = useRoute()
-const router = useRouter()
-const auth = useAuthStore()
 const desktop = useDesktopStore()
 const prefs = useDesktopPrefsStore()
-const live = useLiveTilesStore()
-const activity = useActivityStore()
-const { isSuperAdmin, hasActiveCompany } = usePermission()
-const { settings } = useCompanySettings()
 
-const wallpaper = computed(() => prefs.wallpaper)
+/* Права на разделы, обои, живые плитки и синхронизация адреса — общие с
+   мобильным каркасом (см. shellCore); здесь остаётся только раскладка. */
+const { wallpaper, boot } = useShellCore({
+  activePath: () => {
+    const win = desktop.focused
+    return win && !win.minimized ? win.path : '/home'
+  },
+  barHeight: TASKBAR_HEIGHT,
+})
 
 // Мобильная обёртка и старые браузеры без Fullscreen API кнопку не показывают.
 const fullscreenSupported = pageFullscreenSupported()
 
-function isAvailable(app) {
-  return app.available({
-    hasCompany: hasActiveCompany(),
-    isSuperAdmin: isSuperAdmin(),
-    settings: settings.value,
-  })
-}
-
-/* ── Живые плитки меню «Пуск» ───────────────────────────────
-   Сводки тянем заранее и освежаем по таймеру, поэтому «Пуск» открывается уже
-   с данными. В скрытой вкладке не опрашиваем: фоновые окна сети не жгут. */
-const LIVE_PULSE = 60_000
-let livePulse = null
-
-const liveAppIds = computed(() => menuGroups({
-  hasCompany: hasActiveCompany(),
-  isSuperAdmin: isSuperAdmin(),
-  settings: settings.value,
-}, prefs.layout).flatMap((g) => g.items.map((a) => a.id)))
-
-function pulseLiveTiles({ force = false } = {}) {
-  if (document.hidden || !auth.user || !prefs.liveTiles) return
-  live.refresh(liveAppIds.value, { force }).catch(() => {})
-}
-
-function onVisibility() {
-  if (!document.hidden) pulseLiveTiles()
-}
-
 /* ── Рабочая область: экран минус панель задач ───────────────
-   По бокам и сверху окна прилегают вплотную к краям экрана; снизу остаётся
-   ровно место под плавающую панель задач. */
+   К трём свободным краям окна прилегают вплотную; со стороны панели задач
+   остаётся ровно место под неё (сторону задаёт пользователь в настройках). */
 function syncArea() {
   desktop.setScreen({ x: 0, y: 0, w: window.innerWidth, h: window.innerHeight })
+  const inset = areaInsets(prefs.taskbarSide)
   desktop.setArea({
-    x: 0,
-    y: 0,
-    w: Math.max(320, window.innerWidth),
-    h: Math.max(240, window.innerHeight - TASKBAR_RESERVE),
+    x: inset.left,
+    y: inset.top,
+    w: Math.max(320, window.innerWidth - inset.left - inset.right),
+    h: Math.max(240, window.innerHeight - inset.top - inset.bottom),
   })
 }
-
-/* ── Синхронизация адреса и окон ───────────────────────────────
-   Адресная строка отражает АКТИВНОЕ окно: deep-link и клик по системному
-   уведомлению открывают нужный раздел окном, а переключение окон обновляет
-   URL. Обе стороны идемпотентны — совпадающий путь ничего не делает. */
-function openForPath(fullPath) {
-  const resolved = router.resolve(fullPath)
-  // У Hola окна нет: адрес /hola (мобильная ссылка, закладка) открывает
-  // всплывающую панель, а стол возвращает себе адрес пустого стола.
-  if (resolved.path === '/hola') {
-    desktop.holaOpen = true
-    router.replace('/').catch(() => {})
-    return
-  }
-  if (resolved.path === '/') return
-  const app = appForPath(resolved.path)
-  if (!app || !isAvailable(app)) return
-  desktop.open(fullPath)
-}
-
-watch(() => route.fullPath, (fullPath) => {
-  const focused = desktop.focused
-  if (focused && !focused.minimized && focused.path === fullPath) return
-  openForPath(fullPath)
-})
-
-watch(
-  () => {
-    const win = desktop.focused
-    return win && !win.minimized ? win.path : '/'
-  },
-  (path) => {
-    if (route.fullPath === path) return
-    router.replace(path).catch(() => {})
-  },
-)
 
 watch(() => desktop.fullscreen, (on) => { if (!on) desktop.taskbarPeek = false })
 
-// Выход из системы — рабочий стол чистим: окна, сводки живых плиток и журнал
-// уведомлений следующего пользователя не должны наследоваться от предыдущего.
-watch(() => auth.user, (user) => {
-  if (!user) {
-    desktop.closeAll(); prefs.reset(); live.reset(); activity.reset()
-    clearNotificationJournal()
-  }
-})
-
-// Сменилась активная компания — прежние сводки уже не про неё.
-watch(() => auth.companyId, () => { live.reset(); pulseLiveTiles({ force: true }) })
-
-// Вход в систему (и возврат по refresh) — сразу наполняем плитки.
-watch(() => auth.user, (user) => { if (user) pulseLiveTiles({ force: true }) })
+// Смена стороны панели меняет рабочую область: окна пересчитываются, а
+// плавающий питомец узнаёт о ней через общий модуль геометрии.
+watch(() => prefs.taskbarSide, (side) => {
+  taskbarSide.value = side
+  syncArea()
+}, { immediate: true })
 
 /* ── Контекстное меню пустого стола ────────────────────────── */
 const deskMenu = reactive({ open: false, x: 0, y: 0 })
@@ -232,9 +155,15 @@ function onPointerMove(e) {
 
 function trackTaskbarPeek(e) {
   if (!desktop.fullscreen) return
-  const fromBottom = window.innerHeight - e.clientY
-  if (fromBottom <= 4) desktop.taskbarPeek = true
-  else if (desktop.taskbarPeek && fromBottom > TASKBAR_RESERVE + 24) desktop.taskbarPeek = false
+  // Расстояние до того края, к которому прижата панель.
+  const dist = {
+    bottom: window.innerHeight - e.clientY,
+    top: e.clientY,
+    left: e.clientX,
+    right: window.innerWidth - e.clientX,
+  }[prefs.taskbarSide] ?? (window.innerHeight - e.clientY)
+  if (dist <= 4) desktop.taskbarPeek = true
+  else if (desktop.taskbarPeek && dist > taskbarReserve() + 24) desktop.taskbarPeek = false
 }
 
 /* Кнопка полноэкранного режима: появляется, когда указатель касается верхней
@@ -278,18 +207,8 @@ onMounted(() => {
   window.addEventListener('resize', syncArea, { passive: true })
   window.addEventListener('pointermove', onPointerMove, { passive: true })
   window.addEventListener('keydown', onKeydown)
-  shellActive.value = true
-  // Личные настройки стола (закреплённые разделы, размеры плиток, обои)
-  // приезжают с сервера — рабочий стол одинаков на всех устройствах.
-  prefs.load()
-  // Сессия рабочего стола переживает перезагрузку; поверх неё открывается
-  // раздел из адреса (deep-link важнее сохранённого состояния).
-  desktop.restoreSession(isAvailable)
-  openForPath(route.fullPath)
-
-  pulseLiveTiles()
-  livePulse = setInterval(() => pulseLiveTiles({ force: true }), LIVE_PULSE)
-  document.addEventListener('visibilitychange', onVisibility)
+  // Рабочая область готова — можно поднимать разделы прошлой сессии.
+  boot()
   // Режим меняют и мимо кнопки — клавишей F11 или Esc: следим за состоянием,
   // иначе кнопка предлагала бы уже сделанное.
   stopFullscreenWatch = onPageFullscreenChange(() => { pageFull.value = isPageFullscreen() })
@@ -299,10 +218,7 @@ onBeforeUnmount(() => {
   window.removeEventListener('resize', syncArea)
   window.removeEventListener('pointermove', onPointerMove)
   window.removeEventListener('keydown', onKeydown)
-  document.removeEventListener('visibilitychange', onVisibility)
   stopFullscreenWatch?.()
-  clearInterval(livePulse)
-  shellActive.value = false
 })
 </script>
 

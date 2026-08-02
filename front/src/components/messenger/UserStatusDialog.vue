@@ -117,7 +117,7 @@ async function save() {
   transition: background 0.15s, border-color 0.15s, transform 0.12s;
 }
 
-.status-emoji:hover { transform: scale(1.08); }
+.status-emoji:hover { border-color: color-mix(in oklch, var(--color-primary) 45%, var(--color-outline-dim)); }
 
 .status-emoji.active {
   background: var(--color-primary-container);

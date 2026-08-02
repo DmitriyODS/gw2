@@ -30,7 +30,7 @@ export function settingsGroups(ctx = {}) {
         { key: 'theme', title: 'Темы и оформление', desc: 'Светлая и тёмная тема, палитры, свои цвета', icon: 'palette', tone: 'primary' },
         // Обои и плитки настраиваются только там, где сам рабочий стол есть.
         ...(isMobile ? [] : [
-          { key: 'desktop', title: 'Рабочий стол', desc: 'Обои под окнами, живые плитки, приложение для компьютера', icon: 'desktop_windows', tone: 'tertiary' },
+          { key: 'desktop', title: 'Рабочий стол', desc: 'Панель задач и меню «Пуск», обои под окнами, живые плитки, приложение для компьютера', icon: 'desktop_windows', tone: 'tertiary' },
         ]),
         { key: 'chats', title: 'Чаты и портал', desc: 'Фон переписки и ленты корпоративного портала', icon: 'brush', tone: 'secondary' },
         {

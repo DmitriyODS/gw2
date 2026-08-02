@@ -5,7 +5,6 @@
   <div class="ai-settings">
     <div v-if="!companyId" class="gw-card">
       <div class="gw-row">
-        <span class="gw-row-icon"><span class="material-symbols-outlined">domain</span></span>
         <div>
           <p class="gw-h">Сначала выберите компанию</p>
           <p class="gw-sub">ИИ-возможности настраиваются для конкретной компании.</p>
@@ -19,7 +18,6 @@
       <template v-else>
         <section class="gw-card ai-card">
           <div class="gw-row">
-            <span class="gw-row-icon"><span class="material-symbols-outlined">smart_toy</span></span>
             <div class="head-main">
               <p class="gw-h">ИИ возможности компании</p>
               <p class="gw-sub">
@@ -35,26 +33,22 @@
 
           <SwitchRow
             v-model="form.enabled"
-            icon="power_settings_new"
             title="ИИ включён в компании"
             hint="Общий выключатель компанийных возможностей"
           />
           <SwitchRow
             v-model="form.shared"
-            icon="toll"
             title="Тратить мои токены на компанию"
             :hint="ownerHint"
             :disabled="!isOwner"
           />
           <SwitchRow
             v-model="form.featSearch"
-            icon="search"
             title="Умный поиск по задачам"
             hint="Выключен — поиск ищет по словам, без учёта регистра"
           />
           <SwitchRow
             v-model="form.featTVFact"
-            icon="tv"
             title="Интересные факты в ТВ-режиме"
             hint="Короткая заметка дня на табло"
           />
@@ -81,7 +75,6 @@
         <!-- Индексация задач нужна умному поиску: без эмбеддингов он пуст. -->
         <section v-if="indexing" class="gw-card">
           <div class="gw-row">
-            <span class="gw-row-icon"><span class="material-symbols-outlined">database</span></span>
             <div class="head-main">
               <p class="gw-h">Индексация задач</p>
               <p class="gw-sub">

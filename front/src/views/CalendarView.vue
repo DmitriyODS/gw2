@@ -3,7 +3,6 @@
     <!-- ЛЕВАЯ ПАНЕЛЬ: список календарей -->
     <aside class="split-side">
       <div class="split-side-head">
-        <span class="split-side-tile"><span class="material-symbols-outlined">calendar_month</span></span>
         <span class="split-side-title">Календари</span>
       </div>
       <div class="split-side-list">
@@ -145,11 +144,12 @@
               </button>
             </EmptyState>
             <button
-              v-for="e in dayEntries(store.cursor)"
+              v-for="(e, i) in dayEntries(store.cursor)"
               :key="e.id"
               class="cv-dayrow glass-hover"
               @click="openEntry(e)"
             >
+              <span class="cv-dayrow-num">{{ i + 1 }}</span>
               <span class="cv-dayrow-time">{{ hhmm(e.event_at) }}</span>
               <span class="cv-dayrow-body">
                 <span class="cv-dayrow-title">{{ entryTitle(store.selected, e) }}</span>
@@ -677,6 +677,10 @@ watch(() => store.loadingEntries, () => nextTick(measureWeekColumn))
   background: var(--acrylic-card-bg); cursor: pointer;
 }
 /* Hover — глобальное «запотевание» .glass-hover (main.css). */
+.cv-dayrow-num {
+  flex-shrink: 0; min-width: 20px; text-align: right; font-size: 13px; font-weight: 700;
+  color: var(--color-text-dim); font-variant-numeric: tabular-nums;
+}
 .cv-dayrow-time {
   flex-shrink: 0; min-width: 56px; font-size: 16px; font-weight: 700; color: var(--color-primary);
   font-variant-numeric: tabular-nums;

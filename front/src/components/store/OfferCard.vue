@@ -54,8 +54,7 @@ const perMonthSuffix = computed(() => (props.recurring && props.priceMonth > 0 ?
 
 .offer:hover {
   border-color: var(--color-primary);
-  transform: translateY(-2px);
-}
+  }
 
 .offer-title {
   margin: 0;

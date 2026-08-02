@@ -14,7 +14,6 @@
       type="button"
       class="seg-tab"
       :class="{ active: t.value === modelValue }"
-      :data-tutorial="t.tutorial || null"
       role="tab"
       :aria-selected="t.value === modelValue"
       @click="select(t)"

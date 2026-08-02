@@ -3,7 +3,6 @@
     <!-- ЛЕВАЯ ПАНЕЛЬ -->
     <aside class="split-side">
       <div class="split-side-head">
-        <span class="split-side-tile"><span class="material-symbols-outlined">event_note</span></span>
         <span class="split-side-title">Ежедневник</span>
       </div>
       <div class="dv-side-tabs">
@@ -233,11 +232,12 @@
                 <template v-if="dayEntries(store.cursor).length">
                   <div class="dv-day-section">Активные</div>
                   <button
-                    v-for="e in dayEntries(store.cursor)" :key="e.id" class="dv-dayrow"
+                    v-for="(e, i) in dayEntries(store.cursor)" :key="e.id" class="dv-dayrow"
                     :class="{ dragging: dragEntryId === e.id }"
                     :draggable="canDrag" @dragstart="onDragStart($event, e)" @dragend="onDragEnd"
                     @click="openEntry(e)"
                   >
+                    <span class="dv-dayrow-num">{{ i + 1 }}</span>
                     <span class="dv-dayrow-time">{{ entryTime(e) || '—' }}</span>
                     <span class="dv-dayrow-body">
                       <span class="dv-dayrow-title">{{ e.title }}</span>
@@ -251,7 +251,8 @@
                 </template>
                 <template v-if="store.dayDone.length">
                   <div class="dv-day-section">Выполнено</div>
-                  <button v-for="e in store.dayDone" :key="e.id" class="dv-dayrow" @click="openEntry(e)">
+                  <button v-for="(e, i) in store.dayDone" :key="e.id" class="dv-dayrow" @click="openEntry(e)">
+                    <span class="dv-dayrow-num">{{ i + 1 }}</span>
                     <span class="dv-dayrow-time">{{ entryTime(e) || '—' }}</span>
                     <span class="dv-dayrow-body">
                       <span class="dv-dayrow-title done">{{ e.title }}</span>
@@ -303,12 +304,15 @@
           <span class="dd-grouplabel">Активные</span>
           <ul class="dd-list">
             <li
-              v-for="e in dayOrdered" :key="e.id" class="dd-row"
+              v-for="(e, i) in dayOrdered" :key="e.id" class="dd-row"
               :class="{ dragging: ddDragId === e.id }"
               :draggable="canDrag && dayOrdered.length > 1"
               @dragstart="ddDragStart($event, e)" @dragend="ddDragEnd"
               @dragover="ddDragOver($event, e)" @drop.prevent="ddDrop"
             >
+              <!-- Номер — позиция в списке, а не свойство записи: перестановка
+                   оставляет нумерацию на месте. -->
+              <span class="dd-num">{{ i + 1 }}</span>
               <span v-if="canDrag && dayOrdered.length > 1" class="dd-grip" title="Перетащите, чтобы изменить порядок">
                 <span class="material-symbols-outlined">drag_indicator</span>
               </span>
@@ -325,7 +329,8 @@
         <div v-if="dayDone.length" class="dd-group">
           <span class="dd-grouplabel">Выполнено</span>
           <ul class="dd-list">
-            <li v-for="e in dayDone" :key="e.id" class="dd-row">
+            <li v-for="(e, i) in dayDone" :key="e.id" class="dd-row">
+              <span class="dd-num">{{ i + 1 }}</span>
               <button v-if="store.canToggle" class="dd-check done" title="Вернуть в активные" @click="dayToggle(e, false)"><span class="material-symbols-outlined">check_circle</span></button>
               <button class="dd-main" @click="openEntry(e)">
                 <span v-if="entryTime(e)" class="dd-time">{{ entryTime(e) }}</span>
@@ -933,7 +938,7 @@ watch(() => store.loadingEntries, () => nextTick(measureWeekColumn))
 /* Каркас (стеклянные панели, список, кнопка добавления, мобильное скрытие
    левой панели) — глобальный паттерн .split-* (main.css). Здесь — только
    специфика ежедневников: прогресс и drop-цель пункта. Заголовок боковой
-   панели — общий .split-side-head/.split-side-tile (как у календаря). */
+   панели — общий .split-side-head (как у календаря). */
 .dv-side-tabs { padding: 10px 10px 4px; }
 .dv-side-main { flex: 1; display: flex; flex-direction: column; min-width: 0; }
 .dv-side-owner { font-size: 12px; opacity: 0.8; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -1087,12 +1092,13 @@ watch(() => store.loadingEntries, () => nextTick(measureWeekColumn))
 .dv-daylist { display: flex; flex-direction: column; gap: 8px; padding: 16px; }
 .dv-dayrow { display: flex; align-items: center; gap: 14px; width: 100%; text-align: left; padding: 12px 14px; border: 1px solid var(--color-outline-dim); border-radius: var(--radius-lg); background: var(--acrylic-card-bg); cursor: pointer; }
 .dv-dayrow:hover { background: var(--color-surface-high); border-color: var(--color-outline); }
+.dv-dayrow-num { flex-shrink: 0; min-width: 20px; text-align: right; font-size: 13px; font-weight: 700; color: var(--color-text-dim); font-variant-numeric: tabular-nums; }
 .dv-dayrow-time { flex-shrink: 0; min-width: 56px; font-size: 15px; font-weight: 700; color: var(--color-primary); font-variant-numeric: tabular-nums; }
 .dv-dayrow-body { flex: 1; min-width: 0; display: flex; flex-direction: column; }
 .dv-dayrow-title { font-size: 15px; font-weight: 600; color: var(--color-text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .dv-dayrow-sub { font-size: 13px; color: var(--color-text-dim); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .dv-dayrow-done { flex-shrink: 0; color: var(--color-success); display: grid; place-items: center; }
-.dv-dayrow-done:hover { transform: scale(1.1); }
+.dv-dayrow-done:hover { color: color-mix(in oklch, var(--color-success) 75%, var(--color-text)); }
 .dv-dayrow-done.undo { color: var(--color-text-dim); }
 .dv-dayrow-title.done { text-decoration: line-through; color: var(--color-text-dim); }
 .dv-dayrow-chev { flex-shrink: 0; color: var(--color-text-dim); }
@@ -1123,6 +1129,7 @@ watch(() => store.loadingEntries, () => nextTick(measureWeekColumn))
 .dd-empty { margin: 8px 0; color: var(--color-text-dim); text-align: center; }
 .dd-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
 .dd-row { display: flex; align-items: stretch; gap: 6px; }
+.dd-num { flex-shrink: 0; align-self: center; min-width: 22px; text-align: right; font-size: 13px; font-weight: 700; color: var(--color-text-dim); font-variant-numeric: tabular-nums; }
 .dd-row[draggable='true'] { cursor: grab; }
 .dd-row.dragging { opacity: 0.45; }
 .dd-grip { flex-shrink: 0; display: grid; place-items: center; color: var(--color-text-dim); }

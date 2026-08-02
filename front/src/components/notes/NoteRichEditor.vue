@@ -189,6 +189,7 @@ import StarterKit from '@tiptap/starter-kit'
 import Underline from '@tiptap/extension-underline'
 import Link from '@tiptap/extension-link'
 import { ResizableImage } from './ResizableImage.js'
+import { LineGutter } from './LineGutter.js'
 import Table from '@tiptap/extension-table'
 import TableRow from '@tiptap/extension-table-row'
 import TableCell from '@tiptap/extension-table-cell'
@@ -247,6 +248,9 @@ const editor = useEditor({
     TaskList,
     TaskItem.configure({ nested: true }),
     Placeholder.configure({ placeholder: props.placeholder }),
+    // Поле выделения слева от строки: клик выделяет строку целиком, протяжка —
+    // несколько (как в Word).
+    LineGutter,
   ],
   onUpdate: ({ editor: ed }) => emit('change', ed.getJSON()),
   onBlur: () => emit('blur'),
@@ -512,12 +516,22 @@ defineExpose({ editor })
 
 /* Содержимое */
 .ne-content { flex: 1; min-height: 0; }
+
+/* Поле выделения слева: пока указатель в нём, курсор — стрелка выбора, а
+   строка под ним подсвечена (иначе о поле никто не догадается). */
+.ne-content :deep(.tiptap.ne-gutter-zone) { cursor: default; }
+
+.ne-content :deep(.ne-line-hover) {
+  background: color-mix(in oklch, var(--color-primary) 12%, transparent);
+  border-radius: 4px;
+}
 .ne-content :deep(.tiptap) {
   outline: none;
   min-height: 240px;
   /* Нижний отступ — «прокрутка за конец текста»: величину задаёт --ne-tail
      (половина видимой области), fallback — на случай, если замер не сработал. */
-  padding: 20px 18px var(--ne-tail, 40vh);
+  /* Левое поле шире правого: это зона выделения строк (LineGutter.js). */
+  padding: 20px 18px var(--ne-tail, 40vh) 34px;
   color: var(--color-text);
   font-size: 15px;
   line-height: 1.65;

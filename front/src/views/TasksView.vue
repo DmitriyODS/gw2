@@ -48,7 +48,6 @@
         <!-- Кнопка «Добавить» — десктоп -->
         <button
           v-if="canCreateTask"
-          data-tutorial="task-add-btn"
           class="btn-grad desktop-only"
           @click="showCreateTask = true"
         >
@@ -228,6 +227,27 @@
       @toggle-tag="onTaskCtxToggleTag"
     />
 
+    <!-- Ссылка на задачу, которой нет доступа: задача — сущность компании,
+         поэтому постороннему говорим прямо, а своему из другой компании
+         предлагаем переключиться. -->
+    <AppDialog
+      :model-value="!!linkError"
+      tone="warning"
+      icon="lock"
+      size="sm"
+      :title="linkError?.title || ''"
+      @update:model-value="linkError = null"
+    >
+      <p class="tasks-linkerr">{{ linkError?.message }}</p>
+      <div class="tasks-linkerr-actions">
+        <button class="btn-glass" @click="linkError = null">Закрыть</button>
+        <button v-if="linkError?.companyId" class="btn-grad" :disabled="switching" @click="switchAndOpen">
+          <span class="material-symbols-outlined">swap_horiz</span>
+          {{ switching ? 'Переключаем…' : 'Переключить компанию' }}
+        </button>
+      </div>
+    </AppDialog>
+
     <!-- Диалог отправки задачи в чат -->
     <SendTaskDialog
       ref="sendTaskDialogRef"
@@ -271,6 +291,7 @@ import StartUnitModal from '@/components/units/StartUnitModal.vue'
 import TaskContextMenu from '@/components/tasks/TaskContextMenu.vue'
 import SendTaskDialog from '@/components/tasks/SendTaskDialog.vue'
 import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
+import AppDialog from '@/components/common/AppDialog.vue'
 import AppFab from '@/components/common/AppFab.vue'
 import EmptyState from '@/components/common/EmptyState.vue'
 import SegmentedTabs from '@/components/common/SegmentedTabs.vue'
@@ -293,6 +314,9 @@ const notif = useNotificationsStore()
 const { isAtLeast } = usePermission()
 
 const showCreateTask = ref(false)
+// Отказ по ссылке на задачу: { title, message, companyId?, taskId? }.
+const linkError = ref(null)
+const switching = ref(false)
 // Название, с которым открыта форма создания (команда «создай задачу …» из
 // строки поиска рабочего стола).
 const createPresetName = ref('')
@@ -611,10 +635,50 @@ function consumeOpenQuery() {
   // Второй вариант — для утреннего брифинга Грувика/уведомлений/совместимости.
   const openId = route.params.id || route.query.open
   if (!openId) return
-  openTask({ id: Number(openId) })
+  openTaskByLink(Number(openId))
   // Сворачиваем URL обратно к /tasks, чтобы повторный клик на ту же задачу
   // (или history.back) снова открыл модалку.
   router.replace({ path: '/tasks' })
+}
+
+/* Переход по ссылке на задачу. В отличие от клика по карточке, здесь заранее
+   ничего не известно: задача может быть чужой компании — тогда вместо пустой
+   карточки показываем, чего не хватает. */
+async function openTaskByLink(id) {
+  try {
+    tasksStore.openTask(await getTask(id))
+  } catch (e) {
+    if (e?.error === 'TASK_OTHER_COMPANY') {
+      linkError.value = {
+        title: 'Задача другой компании',
+        message: 'Эта задача принадлежит другой вашей компании. Переключитесь на неё, чтобы открыть.',
+        companyId: e.company_id ?? null,
+        taskId: id,
+      }
+    } else if (e?.status === 403) {
+      linkError.value = {
+        title: 'Доступ ограничен',
+        message: 'Задача принадлежит компании, в которой вы не состоите. Попросите доступ у её администратора.',
+      }
+    } else {
+      linkError.value = { title: 'Задача не найдена', message: 'Возможно, её удалили или ссылка неверна.' }
+    }
+  }
+}
+
+async function switchAndOpen() {
+  const { companyId, taskId } = linkError.value || {}
+  if (!companyId || switching.value) return
+  switching.value = true
+  try {
+    await auth.switchCompany(companyId)
+    linkError.value = null
+    await openTaskByLink(taskId)
+  } catch (e) {
+    notif.error(e?.message || 'Не удалось переключить компанию')
+  } finally {
+    switching.value = false
+  }
 }
 
 onMounted(() => {
@@ -660,6 +724,22 @@ watch(() => companiesStore.effectiveCompanyId, () => {
   display: flex;
   flex-direction: column;
   height: 100%;
+}
+
+/* Отказ по ссылке на задачу */
+.tasks-linkerr {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--color-text-dim);
+}
+
+.tasks-linkerr-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 18px;
+  flex-wrap: wrap;
 }
 
 /* ─── Шапка ───

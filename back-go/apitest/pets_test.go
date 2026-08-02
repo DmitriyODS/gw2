@@ -46,15 +46,16 @@ func TestPetsPetLifecycle(t *testing.T) {
 	r = petsAPI.doJSON(t, http.MethodPost, "/api/pets/pet/feed", m.Token, nil)
 	requireError(t, r, 422, "NO_KUDOS", "кормление без кудосов")
 
-	// Выдаём кудосы и кормим до дневного лимита (6/день по 10 кудосов).
-	grantKudos(t, m.ID, 100)
+	// Выдаём кудосы и кормим до дневного лимита (6/день по 15 кудосов). Запас
+	// с избытком: 7-е кормление должно упереться в ЛИМИТ, а не в кошелёк.
+	grantKudos(t, m.ID, 150)
 	for i := 0; i < 6; i++ {
 		r = petsAPI.doJSON(t, http.MethodPost, "/api/pets/pet/feed", m.Token, nil)
 		requireStatus(t, r, 200, "кормление")
 	}
-	// Списание кудосов: 100 - 6*10 = 40.
-	if r.Num("kudos") != 40 {
-		t.Fatalf("после 6 кормлений ожидалось 40 кудосов, получено %v", r.Num("kudos"))
+	// Списание кудосов: 150 - 6*15 = 60.
+	if r.Num("kudos") != 60 {
+		t.Fatalf("после 6 кормлений ожидалось 60 кудосов, получено %v", r.Num("kudos"))
 	}
 	// 7-е кормление — дневной лимит исчерпан.
 	r = petsAPI.doJSON(t, http.MethodPost, "/api/pets/pet/feed", m.Token, nil)

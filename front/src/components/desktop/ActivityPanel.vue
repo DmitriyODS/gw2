@@ -132,10 +132,25 @@ const items = computed(() => activity.items
   display: flex;
   flex-direction: column;
   gap: 4px;
-  /* Полоса прокрутки — в своём жёлобе справа, а не поверх строк. */
+  /* Полоса прокрутки — в своём жёлобе справа, а не поверх строк, и еле
+     заметная: как в меню «Пуск», к которому лента примыкает. */
   scrollbar-gutter: stable;
   padding-right: 4px;
   scrollbar-width: thin;
+  scrollbar-color: color-mix(in oklch, var(--color-text) 14%, transparent) transparent;
+}
+
+.ap-list::-webkit-scrollbar { width: 6px; }
+.ap-list::-webkit-scrollbar-track { background: transparent; }
+
+.ap-list::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  background: color-mix(in oklch, var(--color-text) 14%, transparent);
+}
+
+.ap-list:hover { scrollbar-color: color-mix(in oklch, var(--color-text) 26%, transparent) transparent; }
+.ap-list:hover::-webkit-scrollbar-thumb {
+  background: color-mix(in oklch, var(--color-text) 26%, transparent);
 }
 
 .ap-item {

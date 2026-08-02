@@ -57,10 +57,11 @@ func (c *Messenger) EnsureDialog(ctx context.Context, userAID, userBID int64) (i
 // CreatePostMessage — системная плашка пересланного поста в диалоге.
 // Возвращает готовый JSON-снапшот сообщения (форма REST msgsvc) и адресатов
 // message:new.
-func (c *Messenger) CreatePostMessage(ctx context.Context, conversationID, senderID, postID int64, preview domain.PostPreview) (string, []int64, error) {
+func (c *Messenger) CreatePostMessage(ctx context.Context, conversationID, senderID, postID, companyID int64, preview domain.PostPreview) (string, []int64, error) {
 	resp, err := c.stub.CreatePostMessage(ctx, &messengerpb.CreatePostMessageRequest{
 		ConversationId: conversationID, SenderId: senderID, PostId: postID,
 		Title: preview.Title, Excerpt: preview.Excerpt, CoverUrl: preview.CoverURL,
+		CompanyId: companyID,
 	})
 	if err != nil {
 		return "", nil, err

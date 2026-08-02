@@ -26,7 +26,6 @@
           :key="t.value"
           class="rail-item"
           :class="{ active: tasksStore.filters.tab === t.value }"
-          :data-tutorial="t.tutorial"
           @click="tasksStore.setTab(t.value)"
         >
           <span class="material-symbols-outlined">{{ t.icon }}</span>

@@ -37,24 +37,24 @@ type User struct {
 // Pet — питомец-грувик. Никогда не деградирует и не умирает; болезнь лишь
 // замораживает рост (XP и стадия сохраняются).
 type Pet struct {
-	UserID          int64
-	CompanyID       int64
-	Name            string
-	Species         string
-	Stage           int
-	XP              int
-	Kudos           int
-	Hat             *string
-	Accessories     []string
-	FeedStreak      int
-	LastFedDate     *time.Time // date
-	SickSince       *time.Time
-	Ailment         *string // вид болезни (Ailments); NULL ⟺ SickSince == nil
-	Recovery        int
+	UserID      int64
+	CompanyID   int64
+	Name        string
+	Species     string
+	Stage       int
+	XP          int
+	Kudos       int
+	Hat         *string
+	Accessories []string
+	FeedStreak  int
+	LastFedDate *time.Time // date
+	SickSince   *time.Time
+	Ailment     *string // вид болезни (Ailments); NULL ⟺ SickSince == nil
+	Recovery    int
 	// Потребности: шкалы 0..100 и момент, до которого убывание уже применено
 	// (ленивый пересчёт — ApplyNeedsDecay).
-	Needs   NeedValues
-	NeedsAt time.Time
+	Needs           NeedValues
+	NeedsAt         time.Time
 	Personality     *string
 	UnlockedSpecies []string
 	QuestDate       *time.Time // date
@@ -62,8 +62,8 @@ type Pet struct {
 	QuestTarget     *int
 	QuestProgress   int
 	QuestClaimed    bool
-	AdventureUntil  *time.Time // питомец в приключении до этого момента
-	AdventurePlace  *string    // локация приключения (для фана)
+	AdventureUntil  *time.Time  // питомец в приключении до этого момента
+	AdventurePlace  *string     // локация приключения (для фана)
 	Generation      int         // престиж: растёт при перерождении, не сбрасывается
 	HouseOwned      []string    // купленный декор домика
 	HousePlaced     []HouseItem // расставленный декор (⊆ owned, лимит HousePlacedMax)
@@ -144,8 +144,16 @@ func (p *Pet) Fall(ailment string, now time.Time) {
 	p.Recovery = 0
 }
 
-// Cure — выздороветь (без сохранения).
+// Cure — выздороветь (без сохранения). Шкала, из-за которой питомец слёг,
+// поднимается до RecoveredNeedFloor: иначе выздоровевший с нулевой шкалой
+// немедленно заболевал бы снова — ближайший пересчёт потребностей увидел бы
+// тот же ноль и поставил тот же диагноз.
 func (p *Pet) Cure() {
+	if need := NeedForAilment(p.AilmentKey()); need != "" {
+		if p.Needs.Get(need) < RecoveredNeedFloor {
+			p.Needs.Set(need, RecoveredNeedFloor)
+		}
+	}
 	p.SickSince = nil
 	p.Ailment = nil
 	p.Recovery = 0

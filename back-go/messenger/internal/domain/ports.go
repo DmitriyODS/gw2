@@ -164,6 +164,10 @@ type UserReader interface {
 	// DevChatUserIDs — адресаты событий dev-чата: владелец + все активные
 	// супер-админы (техподдержка).
 	DevChatUserIDs(ctx context.Context, ownerID int64) ([]int64, error)
+	// OutsidersInCompany — кто из ids НЕ состоит в компании. Нужен вложениям
+	// компанийных сущностей: задача уходит в чат только своим (членство —
+	// user_companies, читается напрямую из общей БД, как и users).
+	OutsidersInCompany(ctx context.Context, companyID int64, ids []int64) ([]int64, error)
 }
 
 // SupportAI — ИИ техподдержки dev-чата (gRPC aisvc SupportChat). messagesJSON —

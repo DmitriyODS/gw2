@@ -177,6 +177,9 @@
   --color-surface-low:            var(--_n-96);
   --color-surface-high:           var(--_n-94);
   --color-surface-highest:        var(--_n-90);
+  /* Тинтованная подложка мелких элементов (треки прогресса, плашки цен,
+     hover-фон кнопок-иконок). Роль M3 surface-variant. */
+  --color-surface-variant:        var(--color-surface-high);
 
   /* Text */
   --color-text:                   var(--_n-10);
@@ -228,6 +231,7 @@
   --color-surface-low:            oklch(0.17 calc(0.010 * var(--ref-neutral-c)) var(--ref-neutral-h));
   --color-surface-high:           oklch(0.20 calc(0.010 * var(--ref-neutral-c)) var(--ref-neutral-h));
   --color-surface-highest:        oklch(0.25 calc(0.010 * var(--ref-neutral-c)) var(--ref-neutral-h));
+  --color-surface-variant:        var(--color-surface-high);
 
   --color-text:                   var(--_nv-90);
   --color-text-dim:               var(--_nv-60);
@@ -286,6 +290,10 @@
   --acrylic-bg:        color-mix(in oklch, var(--color-surface) 62%, transparent);
   --acrylic-bg-strong: color-mix(in oklch, var(--color-surface) 86%, transparent);
   --acrylic-blur:      blur(28px) saturate(1.7);
+  /* Сильнее обычного — для полноэкранных панелей мобильного каркаса (Hola,
+     центр уведомлений): за ними обои и плитки стартового экрана, сквозь
+     обычное стекло текст на них не читается. */
+  --acrylic-blur-strong: blur(44px) saturate(1.7);
   /* Полегче акрилового — для пузырей чата: их десятки, а за каждым лежат
      обои чата (.chat-bg), которые ЕСТЬ что блюрить (в отличие от прочего
      стекла в потоке — там за элементом ровный фон, см. --glass-bg). */
@@ -514,6 +522,7 @@
     --color-surface-low:            #eff4fa;
     --color-surface-high:           #e5edf6;
     --color-surface-highest:        #dae6f1;
+    --color-surface-variant:        #e5edf6;
 
     --color-text:                   #1a1c1f;
     --color-text-dim:               #59616d;
@@ -594,6 +603,7 @@
     --color-surface-low:            #1d232c;
     --color-surface-high:           #262e39;
     --color-surface-highest:        #303a47;
+    --color-surface-variant:        #262e39;
 
     --color-text:                   #e2e7ee;
     --color-text-dim:               #c2ccd8;

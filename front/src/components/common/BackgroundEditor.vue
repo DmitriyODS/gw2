@@ -9,6 +9,7 @@ import Slider from 'primevue/slider'
 import ChatBackgroundLayer from '@/components/common/ChatBackgroundLayer.vue'
 import EmojiPicker from '@/components/common/EmojiPicker.vue'
 import { useNotificationsStore } from '@/stores/notifications.js'
+import { useThemeStore } from '@/stores/theme.js'
 import {
   GRADIENT_PRESETS, PATTERNS, PATTERN_ROLE, IMAGE_BLUR_MAX,
   gradientCss, patternDataUri, randomGradientBlobs, normalizeRecipe,
@@ -22,9 +23,13 @@ const props = defineProps({
   // Что рисовать поверх фона в предпросмотре: переписку (по умолчанию) или
   // сцену рабочего стола — обои живут под окнами, а не под пузырями чата.
   preview: { type: String, default: 'chat' }, // chat | desktop
+  // Готовые картинки раздела: [{ key, label, light, dark }] — встроенные обои
+  // рабочего стола. Пусто — секции выбора нет.
+  presets: { type: Array, default: () => [] },
 })
 
 const notif = useNotificationsStore()
+const theme = useThemeStore()
 const uploading = ref(false)
 const fileInput = ref(null)
 
@@ -56,6 +61,12 @@ function pickEmoji(e) {
   p.key = null
   if (!p.alpha || p.alpha < 8) p.alpha = 14 // цветной эмодзи заметнее
   if (!p.size) p.size = 128
+}
+
+/* Готовые обои хранятся ключом: пути к светлой и тёмной картинке
+   пересобираются при чтении настроек, а тёмный режим сам берёт свою. */
+function pickWallpaper(w) {
+  props.recipe.image = { key: w.key, url: w.light, dark: w.dark, blur: 0 }
 }
 
 function pickImageFile() { fileInput.value?.click() }
@@ -125,6 +136,25 @@ function patternSwatchStyle(key) {
         <div class="cbg-bubble in">Пример карточки</div>
         <div class="cbg-bubble out">А вот и фон 🎨</div>
         <div class="cbg-bubble in">Красота ✨</div>
+      </div>
+    </div>
+
+    <!-- Готовые обои -->
+    <div v-if="presets.length" class="cbg-section">
+      <div class="cbg-section-title">Готовые обои</div>
+      <div class="cbg-papers">
+        <button
+          v-for="w in presets"
+          :key="w.key"
+          type="button"
+          class="cbg-paper"
+          :class="{ active: recipe.image?.key === w.key }"
+          :title="w.label"
+          @click="pickWallpaper(w)"
+        >
+          <img :src="theme.dark ? w.dark : w.light" alt="" />
+          <span class="cbg-paper-label">{{ w.label }}</span>
+        </button>
       </div>
     </div>
 
@@ -347,6 +377,46 @@ function patternSwatchStyle(key) {
   margin-bottom: 8px;
 }
 
+/* ── Готовые обои ── */
+.cbg-papers {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.cbg-paper {
+  display: flex;
+  flex-direction: column;
+  width: 132px;
+  padding: 0;
+  overflow: hidden;
+  border: 2px solid var(--color-outline-dim);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-low);
+  cursor: pointer;
+  transition: border-color 0.15s;
+}
+
+.cbg-paper:hover { border-color: color-mix(in oklch, var(--color-primary) 45%, var(--color-outline-dim)); }
+.cbg-paper.active { border-color: var(--color-primary); }
+
+.cbg-paper img {
+  width: 100%;
+  height: 72px;
+  object-fit: cover;
+  display: block;
+}
+
+.cbg-paper-label {
+  padding: 5px 8px 6px;
+  font-size: 11.5px;
+  font-weight: 650;
+  text-align: left;
+  color: var(--color-text-dim);
+}
+
+.cbg-paper.active .cbg-paper-label { color: var(--color-primary); }
+
 .cbg-image-row {
   display: flex;
   flex-wrap: wrap;
@@ -388,7 +458,7 @@ function patternSwatchStyle(key) {
   transition: border-color 0.15s, transform 0.12s;
 }
 
-.cbg-swatch:hover { transform: scale(1.06); }
+.cbg-swatch:hover { border-color: var(--color-primary); }
 
 .cbg-swatch.active {
   border-color: var(--color-primary);

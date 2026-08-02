@@ -10,13 +10,50 @@ import (
 
 	"github.com/DmitriyODS/gw2/back-go/notes/internal/docx"
 	"github.com/DmitriyODS/gw2/back-go/notes/internal/domain"
+	"github.com/DmitriyODS/gw2/back-go/notes/internal/markdown"
 )
 
 // Форматы экспорта заметки.
 const (
 	FormatTXT  = "txt"
 	FormatDOCX = "docx"
+	FormatMD   = "md"
 )
+
+// exportExt — расширение файлов выгрузки по запрошенному формату (незнакомый —
+// плоский текст).
+func exportExt(format string) string {
+	switch format {
+	case FormatDOCX:
+		return FormatDOCX
+	case FormatMD:
+		return FormatMD
+	default:
+		return FormatTXT
+	}
+}
+
+// noteMarkdown — заметка в Markdown: заголовок первым уровнем, дальше тело.
+func noteMarkdown(n *domain.Note) string {
+	body := markdown.FromDoc(n.Doc)
+	title := strings.TrimSpace(n.Title)
+	if title == "" {
+		return body
+	}
+	return "# " + title + "\n\n" + body
+}
+
+// noteFileData — содержимое файла заметки в нужном формате.
+func (s *Service) noteFileData(n *domain.Note, ext string) ([]byte, error) {
+	switch ext {
+	case FormatDOCX:
+		return docx.BuildRich(n.Title, n.Doc, s.imageFetcher())
+	case FormatMD:
+		return []byte(noteMarkdown(n)), nil
+	default:
+		return []byte(noteText(n)), nil
+	}
+}
 
 // ExportFile — выгруженный файл: содержимое + имя (без расширения) + расширение.
 type ExportFile struct {
@@ -54,14 +91,12 @@ func (s *Service) Export(ctx context.Context, userID, id int64, format string) (
 	if name == "" {
 		name = "Заметка"
 	}
-	if format == FormatDOCX {
-		data, err := docx.BuildRich(n.Title, n.Doc, s.imageFetcher())
-		if err != nil {
-			return nil, err
-		}
-		return &ExportFile{Data: data, Name: name, Ext: "docx"}, nil
+	ext := exportExt(format)
+	data, err := s.noteFileData(n, ext)
+	if err != nil {
+		return nil, err
 	}
-	return &ExportFile{Data: []byte(noteText(n)), Name: name, Ext: "txt"}, nil
+	return &ExportFile{Data: data, Name: name, Ext: ext}, nil
 }
 
 // ExportFolder — zip со всем поддеревом папки: подпапки как каталоги, заметки —
@@ -71,10 +106,7 @@ func (s *Service) ExportFolder(ctx context.Context, userID, id int64, format str
 	if err != nil {
 		return nil, err
 	}
-	ext := "txt"
-	if format == FormatDOCX {
-		ext = "docx"
-	}
+	ext := exportExt(format)
 	var buf bytes.Buffer
 	zw := zip.NewWriter(&buf)
 	count := 0
@@ -113,13 +145,9 @@ func (s *Service) writeNoteFile(ctx context.Context, zw *zip.Writer, noteID int6
 		return false, err
 	}
 	fileName := uniqueName(used, sanitizeName(n.Title, "Заметка"), "."+ext)
-	var data []byte
-	if ext == "docx" {
-		if data, err = docx.BuildRich(n.Title, n.Doc, s.imageFetcher()); err != nil {
-			return false, err
-		}
-	} else {
-		data = []byte(noteText(n))
+	data, err := s.noteFileData(n, ext)
+	if err != nil {
+		return false, err
 	}
 	w, err := zw.Create(path.Join(prefix, fileName))
 	if err != nil {
@@ -164,10 +192,7 @@ func (s *Service) zipFolder(ctx context.Context, zw *zip.Writer, userID, folderI
 // ExportScope — zip особой группировки: all (все свои заметки, с деревом папок),
 // archive (архивные, плоско), shared (расшаренные мне, плоско).
 func (s *Service) ExportScope(ctx context.Context, userID int64, scope, format string) (*ExportFile, error) {
-	ext := "txt"
-	if format == FormatDOCX {
-		ext = "docx"
-	}
+	ext := exportExt(format)
 	var buf bytes.Buffer
 	zw := zip.NewWriter(&buf)
 	used := map[string]int{}
@@ -239,20 +264,29 @@ func (s *Service) ExportScope(ctx context.Context, userID int64, scope, format s
 	return &ExportFile{Data: buf.Bytes(), Name: name, Ext: "zip"}, nil
 }
 
-// Import — заметка из .txt/.docx (текст уже извлечён транспортом): первая строка
-// → заголовок, остальное → документ из параграфов. folderID — целевая папка.
-func (s *Service) Import(ctx context.Context, userID int64, text string, folderID *int64) (*domain.Note, error) {
+// Import — заметка из .txt/.docx/.md (текст уже извлечён транспортом): первая
+// строка → заголовок, остальное → документ. format=md разбирает разметку, иначе
+// тело становится обычными абзацами. folderID — целевая папка.
+func (s *Service) Import(ctx context.Context, userID int64, text, format string, folderID *int64) (*domain.Note, error) {
 	if err := s.checkOwnFolder(ctx, userID, folderID); err != nil {
 		return nil, err
 	}
 	text = strings.ReplaceAll(text, "\r\n", "\n")
 	title, body, _ := strings.Cut(text, "\n")
 	title = strings.TrimSpace(title)
+	// В Markdown заголовок файла записан первым уровнем — решётки в название
+	// заметки не переносим.
+	if format == FormatMD {
+		title = strings.TrimSpace(strings.TrimPrefix(title, "#"))
+	}
 	if r := []rune(title); len(r) > 300 {
 		title = string(r[:300])
 	}
 	body = strings.TrimLeft(body, "\n")
 	doc := domain.TextToDoc(body)
+	if format == FormatMD {
+		doc = markdown.ToDoc(body)
+	}
 	n := &domain.Note{
 		OwnerID: userID, FolderID: folderID, Title: title, Doc: doc,
 		TextContent: domain.DocText(doc), TagIDs: []int64{},

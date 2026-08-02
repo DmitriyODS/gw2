@@ -131,6 +131,8 @@ type CreatePostMessageRequest struct {
 	Title          string
 	Excerpt        string
 	CoverURL       string
+	// Компания поста — по ней msgsvc сверяет, все ли в диалоге свои.
+	CompanyID int64
 }
 
 type MessagePinResponse struct {
@@ -257,7 +259,7 @@ func New(svc service.MessengerService) Endpoints {
 		CreatePostMessage: func(ctx context.Context, request any) (any, error) {
 			req := request.(CreatePostMessageRequest)
 			msg, notify, err := svc.CreatePostMessage(ctx, req.ConversationID, req.SenderID, req.PostID,
-				req.Title, req.Excerpt, req.CoverURL)
+				req.CompanyID, req.Title, req.Excerpt, req.CoverURL)
 			if err != nil {
 				return nil, err
 			}

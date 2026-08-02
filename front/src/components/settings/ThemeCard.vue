@@ -1,21 +1,21 @@
 <template>
-  <!-- Карточка темы: капсула-превью из трёх наложенных сегментов палитры и
-       название под ней. Цвета приходят данными темы (hex), поэтому здесь они
-       инлайном — как цвет тега; токенами задан только «корпус» карточки. -->
+  <!-- Компактная карточка темы: маленькая капсула-превью из трёх сегментов
+       палитры и название рядом. Цвета приходят данными темы (hex), поэтому
+       здесь они инлайном — как цвет тега; токенами задан только «корпус». -->
   <div class="tc" :class="{ active }">
     <button class="tc-apply" type="button" :title="`Применить тему «${name}»`" @click="$emit('apply')">
-      <!-- Капсула лежит ПОД матовым стеклом: слой .tc-frost размывает и
-           осветляет сегменты, отсюда мягкие края палитры, как в макете. -->
+      <!-- Порядок наложения: третичный снизу, основной сверху; сегменты
+           полупрозрачны — на пересечениях цвета смешиваются. -->
       <span class="tc-swatch">
-        <!-- Порядок наложения: третичный снизу, основной сверху. -->
         <span class="tc-seg c" :style="{ background: vars.tertiary }" />
         <span class="tc-seg b" :style="{ background: vars.secondary }" />
         <span class="tc-seg a" :style="{ background: vars.primary }" />
         <span class="tc-frost" />
-        <!-- Активная тема помечена обводкой левого сегмента, а не галочкой. -->
-        <span v-if="active" class="tc-ring" />
       </span>
+
       <span class="tc-name">{{ name }}</span>
+
+      <span v-if="active" class="material-symbols-outlined tc-check">check_circle</span>
     </button>
 
     <div v-if="editable" class="tc-tools">
@@ -42,33 +42,39 @@ defineEmits(['apply', 'edit', 'remove'])
 <style scoped>
 .tc {
   position: relative;
+  display: flex;
+  align-items: center;
   border: 1px solid var(--acrylic-border);
-  border-radius: var(--radius-xl);
-  /* Стекло: градиент-иней поверх акриловой подложки + блик по верхней кромке. */
+  border-radius: var(--radius-lg);
   background: var(--glass-bg), var(--acrylic-card-bg);
   box-shadow: var(--glass-edge);
+  transition: border-color 0.18s ease;
 }
 
+.tc:hover { border-color: color-mix(in oklch, var(--color-primary) 45%, var(--acrylic-border)); }
+.tc.active { border-color: var(--color-primary); }
+
 .tc-apply {
+  flex: 1;
   display: flex;
-  flex-direction: column;
-  gap: 12px;
-  width: 100%;
-  padding: 16px;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  padding: 10px 12px;
   border: none;
   background: none;
   color: var(--color-text);
+  text-align: left;
   cursor: pointer;
 }
 
-/* Капсула-превью: три сегмента внахлёст образуют одну сплошную пилюлю —
-   подложки под ними нет. */
+/* Капсула-превью: три сегмента внахлёст образуют одну пилюлю. */
 .tc-swatch {
   position: relative;
   display: block;
-  width: 100%;
-  aspect-ratio: 3.4 / 1;
-  min-height: 58px;
+  flex-shrink: 0;
+  width: 54px;
+  height: 22px;
 }
 
 .tc-seg {
@@ -78,69 +84,57 @@ defineEmits(['apply', 'edit', 'remove'])
   border-radius: 999px;
 }
 
-/* Сегменты полупрозрачны — на пересечениях цвета смешиваются, как в макете. */
 .tc-seg.a { left: 0; width: 46%; opacity: 0.92; }
 .tc-seg.b { left: 22%; width: 46%; opacity: 0.86; }
 .tc-seg.c { left: 45%; right: 0; opacity: 0.76; }
 
-/* Матовый слой поверх палитры. backdrop-filter здесь размывает именно
-   сегменты под ним (ближайший backdrop root — панель раздела), поэтому
-   капсула выглядит как под стеклом. -webkit- ПЕРЕД стандартным: иначе
-   минификатор LightningCSS выбрасывает стандартное свойство. */
+/* Матовый слой поверх палитры. -webkit- ПЕРЕД стандартным: иначе минификатор
+   LightningCSS выбрасывает стандартное свойство. */
 .tc-frost {
   position: absolute;
   inset: 0;
   border-radius: 999px;
   background: var(--glass-bg);
   box-shadow: var(--glass-edge);
-  -webkit-backdrop-filter: blur(7px) saturate(1.15);
-  backdrop-filter: blur(7px) saturate(1.15);
-  pointer-events: none;
-}
-
-.tc-ring {
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  left: 0;
-  width: 46%;
-  border: 2px solid var(--color-primary);
-  border-radius: 999px;
+  -webkit-backdrop-filter: blur(6px) saturate(1.15);
+  backdrop-filter: blur(6px) saturate(1.15);
   pointer-events: none;
 }
 
 .tc-name {
-  font-size: 0.95rem;
-  font-weight: 700;
-  text-align: center;
+  flex: 1;
+  min-width: 0;
+  font-size: 0.9rem;
+  font-weight: 600;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-/* Инструменты своей темы — появляются при наведении/фокусе внутри карточки. */
-.tc-tools {
-  position: absolute;
-  top: 10px;
-  right: 10px;
-  display: flex;
-  gap: 6px;
-  opacity: 0;
-  transition: opacity 0.18s ease;
+.tc-check {
+  flex-shrink: 0;
+  font-size: 20px;
+  color: var(--color-primary);
 }
 
-.tc:hover .tc-tools,
-.tc:focus-within .tc-tools { opacity: 1; }
+/* Инструменты своей темы стоят В ПОТОКЕ справа: на компактной карточке
+   всплывающие поверх названия кнопки и находились хуже, и перекрывали текст. */
+.tc-tools {
+  flex-shrink: 0;
+  display: flex;
+  gap: 4px;
+  padding-right: 10px;
+}
 
 .tc-tool {
   display: grid;
   place-items: center;
-  width: 28px;
-  min-width: 28px;
-  max-width: 28px;
-  height: 28px;
-  min-height: 28px;
-  max-height: 28px;
+  width: 26px;
+  min-width: 26px;
+  max-width: 26px;
+  height: 26px;
+  min-height: 26px;
+  max-height: 26px;
   padding: 0;
   border: none;
   border-radius: 50%;
@@ -150,17 +144,12 @@ defineEmits(['apply', 'edit', 'remove'])
   box-shadow: var(--shadow-sm);
 }
 
-.tc-tool .material-symbols-outlined { font-size: 17px; }
+.tc-tool .material-symbols-outlined { font-size: 16px; }
 
 .tc-tool:hover { background: var(--color-surface-high); }
 
 .tc-tool.danger:hover {
   background: var(--color-error-container);
   color: var(--color-on-error-container);
-}
-
-/* На тач-устройствах наведения нет — инструменты видны всегда. */
-@media (hover: none) {
-  .tc-tools { opacity: 1; }
 }
 </style>

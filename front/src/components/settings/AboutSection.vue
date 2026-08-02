@@ -90,18 +90,15 @@
     </section>
 
     <!-- ── Обновление обёртки (внутри мобильного/десктопного клиента) ── -->
-    <section v-if="hasShellUpdate" class="ab-card ab-row">
-      <span class="ab-row-icon">
-        <span class="material-symbols-outlined">system_update</span>
-      </span>
-      <div class="ab-row-text">
-        <strong>Обновление приложения</strong>
-        <small v-if="shellBuild">
+    <SettingRow v-if="hasShellUpdate" title="Обновление приложения">
+      <template #hint>
+        <template v-if="shellBuild">
           Установлена {{ shellBuild }}<template v-if="updateInfo">
             · {{ updateInfo.updateAvailable ? `доступна ${updateInfo.latest}` : 'это последняя версия' }}</template>
-        </small>
-        <small v-else>Оболочка Groove Work</small>
-      </div>
+        </template>
+        <template v-else>Оболочка Groove Work</template>
+      </template>
+
       <button
         class="ab-row-btn"
         :class="{ downloading: updProgress != null && updProgress >= 0 }"
@@ -113,45 +110,37 @@
         <span class="material-symbols-outlined">{{ updateInfo?.updateAvailable ? 'download' : 'refresh' }}</span>
         {{ updateBtnLabel }}
       </button>
-    </section>
+    </SettingRow>
 
     <!-- ── Приложения для устройств ──────────────────────────── -->
-    <a v-if="showApkCard" class="ab-card ab-row" :href="APK_HREF" :download="apkDownloadName">
-      <span class="ab-row-icon">
-        <span class="material-symbols-outlined">android</span>
-      </span>
-      <div class="ab-row-text">
-        <strong>Приложение для Android</strong>
-        <small>Задачи, юниты, чаты и звонки на смартфоне — с пуш-уведомлениями.</small>
-      </div>
-      <span class="ab-row-btn">
+    <SettingRow
+      v-if="showApkCard"
+      title="Приложение для Android"
+      hint="Задачи, юниты, чаты и звонки на смартфоне — с пуш-уведомлениями."
+    >
+      <a class="ab-row-btn" :href="APK_HREF" :download="apkDownloadName">
         <span class="material-symbols-outlined">download</span>
         Скачать APK
-      </span>
-    </a>
+      </a>
+    </SettingRow>
 
-    <div v-if="showDesktopCard" class="ab-card ab-row">
-      <span class="ab-row-icon">
-        <span class="material-symbols-outlined">desktop_windows</span>
-      </span>
-      <div class="ab-row-text">
-        <strong>Приложение для компьютера</strong>
-        <small>
-          Отдельное окно, значок в трее, системные уведомления и звонки — даже
-          когда браузер закрыт.
-        </small>
-        <small class="ab-os-links">
+    <SettingRow v-if="showDesktopCard" title="Приложение для компьютера">
+      <template #hint>
+        Отдельное окно, значок в трее, системные уведомления и звонки — даже
+        когда браузер закрыт.
+        <span class="ab-os-links">
           Все платформы:
           <a :href="desktopFileHref('mac')" download>macOS</a> ·
           <a :href="desktopFileHref('win')" download>Windows</a> ·
           <a :href="desktopFileHref('linux')" download>Linux</a>
-        </small>
-      </div>
+        </span>
+      </template>
+
       <a class="ab-row-btn" :href="desktopFileHref(desktopOs)" download>
         <span class="material-symbols-outlined">download</span>
         Скачать для {{ DESKTOP_OS_LABELS[desktopOs] }}
       </a>
-    </div>
+    </SettingRow>
   </div>
 </template>
 
@@ -160,7 +149,9 @@ import { ref, computed, onMounted } from 'vue'
 import { getNativeBuild, checkNativeUpdate, installNativeUpdate } from '@/utils/nativeApp.js'
 import { useNotificationsStore } from '@/stores/notifications.js'
 import { useAppVersion } from '@/composables/useAppVersion.js'
+import { useAppDownloads } from '@/composables/useAppDownloads.js'
 import Logo from '@/components/common/Logo.vue'
+import SettingRow from '@/components/common/SettingRow.vue'
 import { WAVE_PATH } from '@/utils/wavePath.js'
 
 const notif = useNotificationsStore()
@@ -191,43 +182,11 @@ const countWord = computed(() => {
 
 onMounted(loadVersion)
 
-/* ── Мобильное приложение ── */
-const APK_HREF = '/apps/mobile/groovework.apk'
-// Имя сохраняемого файла — с номером сборки (на сервере файл канонический:
-// его же качает автообновление старых обёрток).
-const apkDownloadName = ref('groovework.apk')
-
-/* ── Десктоп-клиент: артефакты в /apps/desktop/ (заливает make deploy-desktop).
-   Имена файлов СОДЕРЖАТ ВЕРСИЮ и приезжают картой files из version.json —
-   скачавший видит, какая версия у него в загрузках (безымянные имена однажды
-   дали раздачу старого установщика из кэша). */
-const desktopFiles = ref({
-  mac: 'GrooveWork-mac.dmg',
-  win: 'GrooveWork-win.exe',
-  linux: 'GrooveWork-linux.AppImage',
-})
-const DESKTOP_OS_LABELS = { mac: 'macOS', win: 'Windows', linux: 'Linux' }
-const desktopFileHref = (os) => `/apps/desktop/${desktopFiles.value[os]}`
-
-onMounted(async () => {
-  try {
-    const meta = await (await fetch('/apps/desktop/version.json', { cache: 'no-store' })).json()
-    if (meta?.files?.mac) desktopFiles.value = meta.files
-  } catch { /* карта не приехала — останутся легаси-имена */ }
-  try {
-    const meta = await (await fetch('/apps/mobile/version.json', { cache: 'no-store' })).json()
-    if (meta?.current_build) apkDownloadName.value = `groovework-${meta.current_build}.apk`
-  } catch { /* noop */ }
-})
-
-const ua = navigator.userAgent
-const desktopOs = /Mac/i.test(navigator.platform || ua) ? 'mac' : /Win/i.test(navigator.platform || ua) ? 'win' : 'linux'
-// В самом Electron-клиенте и на телефонах предлагать установщик бессмысленно.
-const showDesktopCard = !/Electron/i.test(ua) && !/Android|iPhone|iPad/i.test(ua)
-// Внутри мобильной обёртки (Capacitor) карточка скачивания APK не нужна —
-// приложение уже установлено. Признаки: инжектированный мост window.Capacitor
-// (надёжный) и метка GrooveWorkApp в UA (appendUserAgent, страховка).
-const showApkCard = !window.Capacitor?.isNativePlatform?.() && !/GrooveWorkApp/i.test(ua)
+/* ── Скачивание приложений ── */
+const {
+  APK_HREF, apkDownloadName, desktopFileHref, desktopOs, DESKTOP_OS_LABELS,
+  showApk: showApkCard, showDesktop: showDesktopCard,
+} = useAppDownloads()
 
 /* ── Обновление обёртки изнутри приложения. Мобильная (Capacitor) — нативный
    плагин NativeShell (сборки 2607104+); десктопная (Electron) — мост
@@ -596,7 +555,7 @@ async function onUpdateClick() {
   transition: transform 0.2s ease;
 }
 
-.ab-news-item:hover { transform: translateY(-2px); }
+.ab-news-item:hover { box-shadow: var(--shadow-md), var(--glass-edge); }
 
 .ab-news-num {
   font-size: 1.15rem;
@@ -624,45 +583,8 @@ async function onUpdateClick() {
   .ab-news-spark .material-symbols-outlined { animation: none; }
 }
 
-/* ── Строки-карточки устройств ── */
-.ab-row {
-  display: flex;
-  align-items: center;
-  gap: 14px;
-  text-decoration: none;
-}
-
-.ab-row-icon {
-  display: grid;
-  place-items: center;
-  width: 46px;
-  min-width: 46px;
-  max-width: 46px;
-  height: 46px;
-  min-height: 46px;
-  max-height: 46px;
-  border-radius: var(--radius-md);
-  background: var(--color-secondary-container);
-  color: var(--color-on-secondary-container);
-}
-
-.ab-row-icon .material-symbols-outlined { font-size: 24px; }
-
-.ab-row-text {
-  display: flex;
-  flex-direction: column;
-  gap: 3px;
-  flex: 1;
-  min-width: 0;
-}
-
-.ab-row-text strong { font-size: 0.95rem; font-weight: 600; }
-
-.ab-row-text small {
-  font-size: 0.82rem;
-  line-height: 1.4;
-  color: var(--color-text-dim);
-}
+/* ── Строки-карточки устройств (общий SettingRow) ── */
+.ab-os-links { display: block; margin-top: 3px; }
 
 .ab-os-links a {
   color: var(--color-primary);
@@ -705,16 +627,12 @@ async function onUpdateClick() {
    стола) — поэтому перенос считаем от контейнера; @media оставлен дублем для
    старого WebView, который @container не знает. */
 @container (max-width: 620px) {
-  .ab-row { flex-wrap: wrap; }
-  .ab-row-text { flex: 1 1 60%; }
   .ab-row-btn { width: 100%; justify-content: center; }
   .ab-news-head { flex-wrap: wrap; }
   .ab-badge { flex: 1 1 auto; }
 }
 
 @media (max-width: 620px) {
-  .ab-row { flex-wrap: wrap; }
-  .ab-row-text { flex: 1 1 60%; }
   .ab-row-btn { width: 100%; justify-content: center; }
 }
 </style>

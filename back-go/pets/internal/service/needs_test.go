@@ -20,16 +20,19 @@ func TestNeedsDecayOverTime(t *testing.T) {
 	env := newEnv()
 	ctx := context.Background()
 	pet, _ := env.pets.GetOrCreate(ctx, 1, 10)
-	pet.NeedsAt = hoursAgo(5) // 10 тиков по 30 минут
+	// Считаем в ТИКАХ, а не в зашитых числах: шаг убывания — настройка
+	// экономики и меняется (см. domain.NeedTick).
+	const ticks = 10
+	pet.NeedsAt = time.Now().UTC().Add(-ticks * domain.NeedTick)
 
 	data, err := env.svc.GetMyPet(ctx, 1, 10)
 	if err != nil {
 		t.Fatalf("GetMyPet: %v", err)
 	}
-	if want := domain.NeedMax - 10*2; data.Needs.Satiety != want {
+	if want := domain.NeedMax - ticks*needDecay(domain.NeedSatiety); data.Needs.Satiety != want {
 		t.Errorf("сытость = %d, want %d", data.Needs.Satiety, want)
 	}
-	if want := domain.NeedMax - 10; data.Needs.Energy != want {
+	if want := domain.NeedMax - ticks*needDecay(domain.NeedEnergy); data.Needs.Energy != want {
 		t.Errorf("энергия = %d, want %d", data.Needs.Energy, want)
 	}
 }
@@ -40,7 +43,7 @@ func TestNeedsDecayKeepsSubTickRemainder(t *testing.T) {
 	env := newEnv()
 	ctx := context.Background()
 	pet, _ := env.pets.GetOrCreate(ctx, 1, 10)
-	start := hoursAgo(1).Add(-20 * time.Minute) // 2 тика + 20 минут
+	start := time.Now().UTC().Add(-2*domain.NeedTick - 20*time.Minute) // 2 тика + хвост
 	pet.NeedsAt = start
 
 	if _, err := env.svc.GetMyPet(ctx, 1, 10); err != nil {
@@ -60,7 +63,9 @@ func TestEmptySatietyCausesHunger(t *testing.T) {
 	env := newEnv()
 	ctx := context.Background()
 	pet, _ := env.pets.GetOrCreate(ctx, 1, 10)
-	pet.NeedsAt = hoursAgo(30) // сытость: 100 − 60 тиков × 2 → 0
+	// Столько тиков, чтобы сытость гарантированно упала в ноль.
+	ticks := domain.NeedMax/needDecay(domain.NeedSatiety) + 1
+	pet.NeedsAt = time.Now().UTC().Add(-time.Duration(ticks) * domain.NeedTick)
 
 	data, err := env.svc.GetMyPet(ctx, 1, 10)
 	if err != nil {
@@ -405,4 +410,72 @@ func TestVacationBlocksActionsAndAwards(t *testing.T) {
 		domain.AsDomainError(err).Code != "PET_ON_VACATION" {
 		t.Fatalf("поглаживание отпускника: %v", err)
 	}
+}
+
+// Выздоровление должно давать передышку: шкала-виновник поднимается выше
+// нуля, иначе ближайший пересчёт потребностей ставит тот же диагноз снова —
+// именно так «вылеченный» питомец заболевал сразу после лечения.
+func TestRecoveryLiftsCausingNeed(t *testing.T) {
+	env := newEnv()
+	ctx := context.Background()
+	pet, _ := env.pets.GetOrCreate(ctx, 1, 10)
+	pet.Needs.Energy = 0
+	pet.Fall(domain.AilmentCold, time.Now().UTC().Add(-time.Hour))
+	pet.Recovery = domain.RecoveryTarget - domain.CureFor(domain.AilmentCold, domain.ActionSleep)
+
+	if _, err := env.svc.SleepPet(ctx, 1, 10); err != nil {
+		t.Fatalf("SleepPet: %v", err)
+	}
+	cured, _ := env.pets.GetPet(ctx, 1)
+	if cured.Sick() {
+		t.Fatal("сон должен вылечить простуду")
+	}
+	if cured.Ailment != nil {
+		t.Fatalf("вид болезни должен обнуляться вместе с ней: %v", *cured.Ailment)
+	}
+	if cured.Needs.Get(domain.NeedEnergy) < domain.RecoveredNeedFloor {
+		t.Fatalf("энергия после выздоровления = %d, должна быть не ниже %d",
+			cured.Needs.Get(domain.NeedEnergy), domain.RecoveredNeedFloor)
+	}
+
+	// Контрольная проверка: ближайший пересчёт не укладывает питомца снова.
+	env.svc.refreshNeeds(ctx, cured)
+	if cured.Sick() {
+		t.Fatal("сразу после выздоровления питомец заболевать не должен")
+	}
+}
+
+// Бульон лечит и болезнь, не связанную с сытостью (простуду), — после
+// выздоровления пустая энергия не возвращает диагноз тут же.
+func TestSickFeedCureDoesNotRelapse(t *testing.T) {
+	env := newEnv()
+	ctx := context.Background()
+	pet, _ := env.pets.GetOrCreate(ctx, 1, 10)
+	pet.Kudos = 100
+	pet.Needs.Energy = 0
+	pet.Fall(domain.AilmentCold, time.Now().UTC().Add(-time.Hour))
+	pet.Recovery = domain.RecoveryTarget - domain.CureFor(domain.AilmentCold, domain.ActionFeed)
+
+	data, err := env.svc.FeedPet(ctx, 1, 10, "")
+	if err != nil {
+		t.Fatalf("FeedPet: %v", err)
+	}
+	if data.Recovered == nil || !*data.Recovered {
+		t.Fatal("последний бульон должен вылечить")
+	}
+	cured, _ := env.pets.GetPet(ctx, 1)
+	env.svc.refreshNeeds(ctx, cured)
+	if cured.Sick() {
+		t.Fatalf("после лечения питомец снова заболел: %v", cured.AilmentKey())
+	}
+}
+
+// needDecay — скорость убывания шкалы из каталога (тесты не дублируют числа).
+func needDecay(key string) int {
+	for _, n := range domain.Needs {
+		if n.Key == key {
+			return n.DecayPerTick
+		}
+	}
+	return 0
 }

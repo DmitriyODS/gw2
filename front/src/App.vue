@@ -1,11 +1,5 @@
 <template>
-  <!-- has-unit-banner: мобильные fixed-экраны (мессенджер) сдвигаются под
-       плашку активного юнита на --unit-banner-height. -->
-  <div
-    class="app-layout"
-    :class="{ 'has-unit-banner': authStore.token && unitsStore.activeUnit && unitsStore.minimized }"
-    :data-dark="themeStore.dark"
-  >
+  <div class="app-layout" :data-dark="themeStore.dark">
     <div v-if="navProgress" class="nav-progress" aria-hidden="true">
       <div class="nav-progress-bar" />
     </div>
@@ -22,21 +16,11 @@
       </main>
     </template>
     <template v-else-if="authStore.token">
-      <!-- Десктоп — рабочий стол с окнами разделов; мобильный каркас (сайдбар,
-           нижняя навигация, один экран на раздел) пока остаётся прежним. -->
+      <!-- Каркас-«ОС»: на широком экране рабочий стол с окнами, на телефоне —
+           стартовый экран с плитками и панель задач. Разделы у них общие. -->
       <DesktopShell v-if="desktopMode" />
-      <template v-else>
-        <AppSidebar />
-        <div class="content-col">
-          <ActiveUnitBanner v-if="unitsStore.activeUnit && unitsStore.minimized" />
-          <main class="main-content">
-            <router-view />
-          </main>
-        </div>
-        <AppBottomNav />
-      </template>
+      <MobileShell v-else />
       <ActiveUnitModal v-if="unitsStore.activeUnit && !unitsStore.minimized" />
-      <AppTutorial v-if="isTutorialOpen && !desktopMode" />
       <IncomingCallOverlay @accept="callStore.accept()" @decline="callStore.decline()" />
       <CallView />
       <ReturnCallBanner />
@@ -70,7 +54,6 @@ import { useCallStore } from '@/stores/call.js'
 import { useNotificationsStore } from '@/stores/notifications.js'
 import { useBreakpoint } from '@/composables/useBreakpoint.js'
 import { useCompanySettings } from '@/composables/useCompanySettings.js'
-import { useTutorial } from '@/composables/useTutorial.js'
 import { connectSocket } from '@/socket/index.js'
 import { navProgress } from '@/composables/useNavProgress.js'
 import {
@@ -84,12 +67,9 @@ import {
   audioStart, audioStop,
 } from '@/utils/nativeApp.js'
 import DesktopShell from '@/components/desktop/DesktopShell.vue'
-import AppSidebar from '@/components/layout/AppSidebar.vue'
-import AppBottomNav from '@/components/layout/AppBottomNav.vue'
+import MobileShell from '@/components/mobile/MobileShell.vue'
 import CompanyDisabledScreen from '@/components/layout/CompanyDisabledScreen.vue'
 import ActiveUnitModal from '@/components/layout/ActiveUnitModal.vue'
-import ActiveUnitBanner from '@/components/layout/ActiveUnitBanner.vue'
-import AppTutorial from '@/components/layout/AppTutorial.vue'
 import PullToRefresh from '@/components/common/PullToRefresh.vue'
 import NewChatDialog from '@/components/messenger/NewChatDialog.vue'
 import IncomingCallOverlay from '@/components/call/IncomingCallOverlay.vue'
@@ -113,18 +93,8 @@ const { isMobile } = useBreakpoint()
 const { usesGroove } = useCompanySettings()
 
 const isFullscreenRoute = computed(() => !!route.meta?.fullscreen && !!authStore.user)
-// Режим рабочего стола — только широкий экран: у мобильного будет свой макет.
+// Каркас рабочего стола — широкий экран; на телефоне свой, мобильный.
 const desktopMode = computed(() => !isMobile.value)
-// isOpen деструктурирован как топ-левел ref — Vue auto-unwraps в шаблоне
-const { isOpen: isTutorialOpen, open: openTutorial, shouldAutoShow } = useTutorial()
-let tutorialTimer = null
-
-watch(() => authStore.user, (user, prev) => {
-  if (user && !prev && shouldAutoShow()) {
-    clearTimeout(tutorialTimer)
-    tutorialTimer = setTimeout(() => openTutorial(), 600)
-  }
-})
 
 // Десктоп-обёртка: счётчик непрочитанных на иконке приложения
 // (док/панель задач/трей). В браузере GrooveDesktop нет — no-op.
@@ -364,30 +334,10 @@ onBeforeUnmount(() => {
   window.removeEventListener('beforeunload', onBeforeUnloadGuard)
   window.removeEventListener('messenger:open-conversation', onOpenConversation)
   window.removeEventListener('gw:share-available', pullShare)
-  clearTimeout(tutorialTimer)
 })
 </script>
 
 <style>
-/* Полный резерв под остров активного юнита на мобильном (верхний отступ 8px
-   + плашка 54px) — синхронизирован с ActiveUnitBanner; мобильные fixed-экраны
-   отступают на него сверху. */
-.app-layout {
-  --unit-banner-height: 62px;
-}
-
-/* Колонка «баннер активного юнита + контент»: баннер занимает свою высоту,
-   .main-content сжимается под остаток и скроллится сам — без прокрутки шелла. */
-.content-col {
-  flex: 1;
-  min-width: 0;
-  min-height: 0;
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-}
-
-
 .app-loading {
   flex: 1;
   display: flex;

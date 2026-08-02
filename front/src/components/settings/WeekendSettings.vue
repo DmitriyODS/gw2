@@ -1,9 +1,6 @@
 <template>
   <div class="weekend-settings">
     <div v-if="!companyId" class="settings-card weekend-empty">
-      <div class="hero-icon" data-tone="secondary">
-        <span class="material-symbols-outlined">domain</span>
-      </div>
       <div class="card-text">
         <h3>Сначала выберите компанию</h3>
         <p>Используйте селектор компании в шапке, чтобы перейти к её выходным дням.</p>
@@ -13,9 +10,6 @@
     <template v-else>
       <section class="settings-card weekend-card">
         <header class="weekend-card-head">
-          <div class="hero-icon" data-tone="secondary">
-            <span class="material-symbols-outlined">weekend</span>
-          </div>
           <div class="card-text">
             <h3>Выходные дни компании</h3>
             <p>
@@ -161,19 +155,6 @@ watch(companyId, load)
   border-color: color-mix(in oklch, var(--color-primary) 30%, var(--color-outline-dim));
 }
 
-.hero-icon {
-  flex-shrink: 0;
-  width: 56px;
-  height: 56px;
-  border-radius: 16px;
-  display: grid;
-  place-items: center;
-  background: var(--tone-bg, var(--color-primary-container));
-  color: var(--tone-fg, var(--color-on-primary-container));
-}
-.hero-icon[data-tone="secondary"] { --tone-bg: var(--color-secondary-container); --tone-fg: var(--color-on-secondary-container); }
-.hero-icon .material-symbols-outlined { font-size: 28px; }
-
 .card-text { flex: 1; min-width: 0; }
 .card-text h3 {
   margin: 0 0 4px;
@@ -285,13 +266,6 @@ watch(companyId, load)
     align-items: flex-start;
     gap: 12px;
   }
-
-  .hero-icon {
-    width: 48px;
-    height: 48px;
-    border-radius: 14px;
-  }
-  .hero-icon .material-symbols-outlined { font-size: 24px; }
 
   .card-text h3 { font-size: 15px; }
   .card-text p { font-size: 12px; }

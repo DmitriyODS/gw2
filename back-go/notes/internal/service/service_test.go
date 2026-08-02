@@ -6,6 +6,7 @@ import (
 	"io"
 	"log/slog"
 	"slices"
+	"strings"
 	"testing"
 
 	"github.com/DmitriyODS/gw2/back-go/notes/internal/domain"
@@ -766,3 +767,55 @@ func TestRecipientPlacesSharedFolder(t *testing.T) {
 }
 
 var _ = json.Marshal
+
+// Импорт .md разбирает разметку (а не кладёт её текстом), а выгрузка в .md
+// возвращает ту же разметку — заметки ходят Markdown'ом туда-обратно.
+func TestImportExportMarkdown(t *testing.T) {
+	repo, users := newFakeRepo(), newFakeUsers()
+	users.users[1] = &domain.User{ID: 1, IsActive: true}
+	s := newSvc(repo, users)
+
+	src := "# Планы\n\nТекст с **жирным**\n\n- пункт\n- ещё\n"
+	n, err := s.Import(ctx(), 1, src, FormatMD, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if n.Title != "Планы" {
+		t.Fatalf("заголовок %q, ждали «Планы»", n.Title)
+	}
+	// Разметка стала документом: жирный — марка, а не звёздочки в тексте.
+	if strings.Contains(n.TextContent, "**") {
+		t.Errorf("markdown остался текстом: %q", n.TextContent)
+	}
+	if !strings.Contains(string(n.Doc), `"bulletList"`) {
+		t.Errorf("список не разобран: %s", n.Doc)
+	}
+
+	f, err := s.Export(ctx(), 1, n.ID, FormatMD)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if f.Ext != "md" {
+		t.Fatalf("расширение выгрузки %q", f.Ext)
+	}
+	for _, want := range []string{"# Планы", "**жирным**", "- пункт"} {
+		if !strings.Contains(string(f.Data), want) {
+			t.Errorf("в выгрузке нет %q:\n%s", want, f.Data)
+		}
+	}
+}
+
+// Обычный текстовый импорт разметку НЕ разбирает — звёздочки остаются как есть.
+func TestImportPlainKeepsMarkdownLiteral(t *testing.T) {
+	repo, users := newFakeRepo(), newFakeUsers()
+	users.users[1] = &domain.User{ID: 1, IsActive: true}
+	s := newSvc(repo, users)
+
+	n, err := s.Import(ctx(), 1, "Заметка\n\nтекст с **звёздочками**", FormatTXT, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(n.TextContent, "**звёздочками**") {
+		t.Errorf("текст изменён: %q", n.TextContent)
+	}
+}

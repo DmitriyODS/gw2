@@ -12,7 +12,6 @@
     </section>
     <div v-else class="rows">
       <article v-for="o in orders" :key="o.id" class="gw-card gw-row row">
-        <span class="gw-row-icon"><span class="material-symbols-outlined">receipt_long</span></span>
         <div class="row-main">
           <p class="gw-h">#{{ o.id }} · {{ o.title || o.item_code }}</p>
           <p class="gw-sub">
@@ -33,7 +32,6 @@
     </section>
     <div v-else class="rows">
       <article v-for="p in payouts" :key="p.id" class="gw-card gw-row row">
-        <span class="gw-row-icon"><span class="material-symbols-outlined">payments</span></span>
         <div class="row-main">
           <p class="gw-h">{{ p.user_name || `#${p.user_id}` }} · {{ formatPrice(p.amount) }}</p>
           <p class="gw-sub">{{ p.requisites }} · {{ formatUntil(p.created_at) }}</p>

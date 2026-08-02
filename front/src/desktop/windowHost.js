@@ -20,6 +20,7 @@
 import { computed, inject, provide } from 'vue'
 
 const WINDOW_HOST = Symbol('gw-window-host')
+const FLOAT_HOST = Symbol('gw-float-host')
 
 /**
  * Отдать поддереву тело окна как цель телепорта.
@@ -39,4 +40,24 @@ export function useModalHost() {
   const host = computed(() => el?.value || 'body')
   const inWindow = computed(() => host.value !== 'body')
   return { host, inWindow }
+}
+
+/**
+ * Отдельный хост для ПЛАВАЮЩИХ виджетов раздела (FAB).
+ *
+ * Модалку показывают по действию пользователя, а плавающая кнопка висит всё
+ * время, пока раздел открыт, — и, улетев в `body`, продолжает висеть над чужим
+ * разделом и над стартовым экраном. Поэтому мобильный каркас раздаёт экран
+ * разделу именно как float-хост (модалки у него по-прежнему уходят в `body`:
+ * на экране всё равно один раздел).
+ */
+export function provideFloatHost(el) {
+  provide(FLOAT_HOST, el)
+}
+
+/** Цель телепорта плавающего виджета: свой хост → окно → body. */
+export function useFloatHost() {
+  const float = inject(FLOAT_HOST, null)
+  const win = inject(WINDOW_HOST, null)
+  return computed(() => float?.value || win?.value || 'body')
 }

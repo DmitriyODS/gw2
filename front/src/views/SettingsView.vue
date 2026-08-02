@@ -4,7 +4,7 @@
        media-запросы про это ничего не знают. Узко → drill-down: список
        разделов ⇄ раздел с кнопкой «назад». -->
   <div ref="shellEl" class="settings-shell" :class="{ narrow, 'pane-open': paneOpen }">
-    <aside class="settings-nav" data-tutorial="settings-nav">
+    <aside class="settings-nav">
       <div class="settings-search">
         <span class="material-symbols-outlined">search</span>
         <input v-model="searchQuery" type="search" placeholder="поиск по настройкам" />
@@ -21,7 +21,6 @@
             :key="section.key"
             class="settings-item"
             :class="{ active: activeSection === section.key && (!narrow || paneOpen) }"
-            :data-tutorial="`settings-section-${section.key}`"
             type="button"
             @click="openSection(section.key)"
           >
@@ -59,6 +58,7 @@
         <ThemesSection v-else-if="activeSection === 'theme'" />
 
         <div v-else-if="activeSection === 'desktop'" class="pane-stack">
+          <DesktopShellCard />
           <DesktopWallpaperCard />
           <AppGradientCard />
           <DesktopTilesCard />
@@ -84,9 +84,6 @@
         <!-- Резервная копия — только супер-админ платформы. -->
         <div v-else-if="activeSection === 'backup'" class="pane-stack">
           <div class="backup-card">
-            <span class="backup-icon">
-              <span class="material-symbols-outlined">backup</span>
-            </span>
             <div class="backup-text">
               <strong>Создать резервную копию</strong>
               <small>
@@ -101,9 +98,6 @@
           </div>
 
           <div class="backup-card danger">
-            <span class="backup-icon danger">
-              <span class="material-symbols-outlined">restore</span>
-            </span>
             <div class="backup-text">
               <strong>Восстановление</strong>
               <small>
@@ -175,6 +169,7 @@ import SupportCard from '@/components/settings/SupportCard.vue'
 import HelpCenter from '@/components/settings/HelpCenter.vue'
 import DesktopAppCard from '@/components/settings/DesktopAppCard.vue'
 import DesktopWallpaperCard from '@/components/settings/DesktopWallpaperCard.vue'
+import DesktopShellCard from '@/components/settings/DesktopShellCard.vue'
 import DesktopTilesCard from '@/components/settings/DesktopTilesCard.vue'
 import AppGradientCard from '@/components/settings/AppGradientCard.vue'
 import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
@@ -583,27 +578,6 @@ watch(() => route.query.section, (key) => {
 
 .backup-card.danger { border-color: var(--color-error-container); }
 
-.backup-icon {
-  display: grid;
-  place-items: center;
-  width: 46px;
-  min-width: 46px;
-  max-width: 46px;
-  height: 46px;
-  min-height: 46px;
-  max-height: 46px;
-  border-radius: var(--radius-md);
-  background: var(--color-primary-container);
-  color: var(--color-on-primary-container);
-}
-
-.backup-icon.danger {
-  background: var(--color-error-container);
-  color: var(--color-on-error-container);
-}
-
-.backup-icon .material-symbols-outlined { font-size: 24px; }
-
 .backup-text {
   display: flex;
   flex-direction: column;
@@ -646,11 +620,19 @@ watch(() => route.query.section, (key) => {
 
 .backup-btn .material-symbols-outlined { font-size: 19px; }
 
-/* ── Узкая шелла: один экран ────────────────────────────────── */
+/* ── Узкая шелла: один экран ──────────────────────────────────
+   На телефоне раздел — полноэкранное «приложение» каркаса: без полей по краям,
+   а панели теряют рамку и скругления (их всё равно обрезала бы кромка). */
 .settings-shell.narrow {
   grid-template-columns: 1fr;
-  padding: 12px;
+  padding: 0;
   gap: 0;
+}
+
+.settings-shell.narrow .settings-nav,
+.settings-shell.narrow .settings-pane {
+  border: none;
+  border-radius: 0;
 }
 
 .settings-shell.narrow .settings-pane { display: none; }

@@ -37,11 +37,9 @@
         :type="link.action ? 'button' : undefined"
         @click="link.action && link.action()"
       >
-        <span class="acc-link-ico" :class="{ 'is-brand': link.logo }" :data-tone="link.tone">
-          <YandexLogo v-if="link.logo === 'yandex'" :size="24" />
-          <YougileLogo v-else-if="link.logo === 'yougile'" :size="24" />
-          <span v-else class="material-symbols-outlined">{{ link.icon }}</span>
-        </span>
+        <!-- Только чужие фирменные знаки: свои иконки в пилюлях не рисуем. -->
+        <YandexLogo v-if="link.logo === 'yandex'" :size="20" />
+        <YougileLogo v-else-if="link.logo === 'yougile'" :size="20" />
         {{ link.label }}
         <span class="acc-link-state">{{ link.state }}</span>
       </component>
@@ -236,8 +234,6 @@ const links = computed(() => [
   {
     key: 'plan',
     label: 'Подписка',
-    icon: 'card_membership',
-    tone: 'primary',
     state: plan.value,
     action: () => router.push('/store?tab=subs'),
   },
@@ -331,7 +327,6 @@ onMounted(() => {
 }
 
 .acc-avatar:hover {
-  transform: scale(1.02);
   box-shadow: var(--shadow-md);
 }
 
@@ -449,25 +444,6 @@ onMounted(() => {
 }
 
 .acc-link.is-static { cursor: default; }
-
-.acc-link-ico {
-  display: grid;
-  place-items: center;
-  flex-shrink: 0;
-  width: 30px;
-  height: 30px;
-  border-radius: 50%;
-  background: var(--tone-bg, var(--color-primary-container));
-  color: var(--tone-fg, var(--color-on-primary-container));
-}
-
-.acc-link-ico[data-tone="primary"]   { --tone-bg: var(--color-primary-container);   --tone-fg: var(--color-on-primary-container); }
-.acc-link-ico[data-tone="secondary"] { --tone-bg: var(--color-secondary-container); --tone-fg: var(--color-on-secondary-container); }
-.acc-link-ico[data-tone="error"]     { --tone-bg: var(--color-error-container);     --tone-fg: var(--color-error); }
-.acc-link-ico .material-symbols-outlined { font-size: 18px; }
-
-/* Чужой фирменный знак показываем как есть, без нашей цветной подложки. */
-.acc-link-ico.is-brand { background: none; }
 
 .acc-link-state {
   min-width: 0;

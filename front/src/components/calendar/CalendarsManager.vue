@@ -69,8 +69,6 @@
                   </button>
                 </span>
 
-                <span class="cm-field-icon"><span class="material-symbols-outlined">{{ fieldIcon(f.type) }}</span></span>
-
                 <span class="cm-field-main">
                   <span class="cm-field-label">{{ f.label || 'Без названия' }}</span>
                   <span class="cm-field-type">
@@ -541,12 +539,6 @@ onMounted(() => store.fetchCalendars())
 .cm-reorder-btn:disabled { opacity: 0.25; cursor: default; }
 .cm-reorder-btn:not(:disabled):hover { background: var(--color-surface-low); color: var(--color-text); }
 .cm-reorder-btn .material-symbols-outlined { font-size: 18px; }
-
-.cm-field-icon {
-  width: 36px; height: 36px; flex-shrink: 0; display: grid; place-items: center;
-  border-radius: var(--radius-md); background: var(--color-primary-container); color: var(--color-on-primary-container);
-}
-.cm-field-icon .material-symbols-outlined { font-size: 20px; }
 
 .cm-field-main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
 .cm-field-label { font-size: 14px; font-weight: 600; color: var(--color-text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

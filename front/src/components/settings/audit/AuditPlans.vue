@@ -4,7 +4,6 @@
   <div class="tab">
     <section class="gw-card">
       <div class="gw-row">
-        <span class="gw-row-icon"><span class="material-symbols-outlined">percent</span></span>
         <div class="row-main">
           <p class="gw-h">Комиссия платформы</p>
           <p class="gw-sub">Удерживается с продажи товара автора</p>

@@ -8,7 +8,6 @@
     <template v-else>
       <section class="gw-card form">
         <div class="gw-row">
-          <span class="gw-row-icon"><span class="material-symbols-outlined">key</span></span>
           <div class="head-main">
             <p class="gw-h">Ключ платформы</p>
             <p class="gw-sub">

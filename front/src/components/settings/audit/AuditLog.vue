@@ -9,7 +9,6 @@
 
     <div v-else class="rows">
       <article v-for="e in items" :key="e.id" class="gw-card gw-row row">
-        <span class="gw-row-icon"><span class="material-symbols-outlined">history</span></span>
         <div class="row-main">
           <p class="gw-h">{{ e.summary || e.action }}</p>
           <p class="gw-sub">

@@ -28,9 +28,15 @@ const open = ref(props.defaultOpen)
 </script>
 
 <style scoped>
+/* Тот же стеклянный лист, что у SettingCard: раскрывающийся блок настроек не
+   должен выглядеть чужим рядом с обычными карточками. */
 .sa {
   display: flex;
   flex-direction: column;
+  padding: 6px 18px;
+  border: 1px solid var(--acrylic-border);
+  border-radius: var(--radius-lg);
+  background: var(--acrylic-card-bg);
 }
 
 .sa-head {
@@ -38,7 +44,7 @@ const open = ref(props.defaultOpen)
   align-items: center;
   gap: 10px;
   width: 100%;
-  padding: 10px 4px;
+  padding: 12px 0;
   border: none;
   background: none;
   color: var(--color-text);
@@ -49,7 +55,7 @@ const open = ref(props.defaultOpen)
 .sa-title {
   flex: 1;
   min-width: 0;
-  font-size: 1.05rem;
+  font-size: 1rem;
   font-weight: 600;
 }
 
@@ -82,7 +88,11 @@ const open = ref(props.defaultOpen)
   min-height: 0;
 }
 
-.sa.open .sa-inner { padding: 4px 2px 6px; }
+.sa.open .sa-inner { padding: 2px 0 14px; }
+
+@media (max-width: 560px) {
+  .sa { padding: 4px 14px; }
+}
 
 @media (prefers-reduced-motion: reduce) {
   .sa-body, .sa-chev { transition: none; }

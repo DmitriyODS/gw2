@@ -330,7 +330,7 @@ async function buy(d) {
 .phd-scene-item.dragging .phd-scene-emoji { transform: scale(1.18); }
 .phd-scene-item.readonly { cursor: default; }
 .phd-scene-emoji { display: block; transition: transform 0.12s; pointer-events: none; }
-.phd-scene-item:not(.readonly):hover .phd-scene-emoji { transform: scale(1.12); }
+.phd-scene-item:not(.readonly):hover .phd-scene-emoji { filter: drop-shadow(0 2px 6px color-mix(in oklch, var(--color-scrim) 35%, transparent)); }
 .phd-scene-remove {
   position: absolute;
   top: -10px; right: -12px;

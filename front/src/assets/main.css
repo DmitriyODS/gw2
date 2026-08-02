@@ -678,6 +678,83 @@ textarea.ctl.invalid:focus {
 
 .btn-grad:disabled { opacity: 0.55; cursor: not-allowed; }
 
+/* ── Экраны входа: общие примитивы форм ─────────────────────────────
+   Вход, регистрация, сброс пароля, подтверждение почты и QR-вход
+   собираются из одних и тех же кирпичей — иначе кнопка «войти» и плашка
+   ошибки расходятся по экранам. Каркас — components/auth/AuthShell.vue. */
+.auth-form {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.auth-submit {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 46px;
+  border: none;
+  border-radius: var(--radius-full);
+  background: var(--grad-primary);
+  color: var(--color-on-primary);
+  font: inherit;
+  font-size: 15px;
+  font-weight: 600;
+  text-decoration: none;
+  cursor: pointer;
+  box-shadow: var(--shadow-sm);
+  transition: filter 0.15s, box-shadow 0.15s;
+}
+
+.auth-submit:hover:not(:disabled) { filter: brightness(1.06); box-shadow: var(--shadow-md); }
+.auth-submit:disabled { opacity: 0.55; cursor: not-allowed; }
+
+/* Второстепенное действие экрана входа: стеклянная пилюля (Яндекс, QR,
+   ТВ-режим, сброс пароля). */
+.auth-alt {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  padding: 9px 14px;
+  border: 1px solid var(--acrylic-border);
+  border-radius: var(--radius-full);
+  background: var(--glass-bg), color-mix(in oklch, var(--color-surface) 40%, transparent);
+  box-shadow: var(--glass-edge);
+  color: var(--color-text-dim);
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 600;
+  text-decoration: none;
+  cursor: pointer;
+  transition: color 0.15s, background 0.15s, border-color 0.15s;
+}
+
+.auth-alt:hover {
+  color: var(--color-primary);
+  background: var(--glass-bg), color-mix(in oklch, var(--color-primary) 12%, transparent);
+  border-color: color-mix(in oklch, var(--color-primary) 30%, var(--acrylic-border));
+}
+
+.auth-alt .material-symbols-outlined { font-size: 18px; }
+
+.auth-error {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  padding: 10px 14px;
+  border-radius: var(--radius-md);
+  border: 1px solid color-mix(in oklch, var(--color-error) 30%, var(--color-outline-dim));
+  background: var(--color-error-container);
+  color: var(--color-on-error-container);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.auth-error .material-symbols-outlined { font-size: 20px; flex-shrink: 0; }
+
 /* ── Единый акриловый стиль кнопок модалок ──────────────────────────
    Главная кнопка — пилюля на градиенте (как .btn-grad), второстепенная —
    стеклянная (как .btn-glass). Локальные scoped .btn-filled/.btn-text
@@ -907,19 +984,6 @@ textarea.ctl.invalid:focus {
   gap: 10px;
   padding: 14px 14px 10px;
 }
-
-.split-side-tile {
-  width: 40px;
-  height: 40px;
-  flex-shrink: 0;
-  display: grid;
-  place-items: center;
-  border-radius: var(--radius-md);
-  background: var(--color-primary-container);
-  color: var(--color-primary);
-}
-
-.split-side-tile .material-symbols-outlined { font-size: 22px; }
 
 .split-side-title {
   font-size: 17px;
@@ -1168,10 +1232,11 @@ textarea.ctl.invalid:focus {
     min-height: 36px;
   }
 
-  /* На мобильном тосты показываем сверху — снизу их прятала нижняя навигация.
-     Прижимаем под статус-бар/вырез и растягиваем по ширине экрана. */
+  /* На мобильном тосты показываем сверху — снизу их прятала панель задач.
+     Выходят под панелью статусов каркаса (её толщина — на корне документа) и
+     растянуты по ширине экрана. */
   .p-toast.p-toast-top-center {
-    top: calc(12px + env(safe-area-inset-top, 0px)) !important;
+    top: calc(var(--statusbar-height, 0px) + env(safe-area-inset-top, 0px) + 10px) !important;
     left: 50% !important;
     transform: translateX(-50%) !important;
     width: calc(100vw - 24px) !important;
@@ -1229,28 +1294,24 @@ textarea.ctl.invalid:focus {
   box-shadow: var(--glass-edge);
 }
 
+/* Подложка группы карточек: стекло под плитками, чтобы каждая карточка
+   читалась отдельным листом, а не белым пятном на теле панели. Радиус
+   крупнее карточного — вложенность скруглений идёт от внешнего к внутреннему
+   (эталон — карточки состояния подписки в «Магазине»). */
+.gw-group {
+  padding: 14px;
+  border: 1px solid var(--acrylic-border);
+  border-radius: var(--radius-xl);
+  background: var(--glass-bg), var(--acrylic-card-bg);
+  box-shadow: var(--glass-edge);
+}
+
 /* Строка-карточка: значок · текст · действие. */
 .gw-row {
   display: flex;
   align-items: center;
   gap: 14px;
 }
-
-.gw-row-icon {
-  display: grid;
-  place-items: center;
-  width: 44px;
-  min-width: 44px;
-  max-width: 44px;
-  height: 44px;
-  min-height: 44px;
-  max-height: 44px;
-  border-radius: var(--radius-md);
-  background: var(--color-primary-container);
-  color: var(--color-on-primary-container);
-}
-
-.gw-row-icon .material-symbols-outlined { font-size: 24px; }
 
 /* Плитка: значок сверху, подпись снизу (категории, ярлыки, витрины). */
 .gw-tile {
@@ -1275,7 +1336,6 @@ textarea.ctl.invalid:focus {
 .gw-tile:hover {
   border-color: var(--color-primary);
   background: var(--glass-hover-bg, var(--glass-bg)), var(--acrylic-card-bg);
-  transform: translateY(-2px);
 }
 
 .gw-tile .material-symbols-outlined { font-size: 27px; color: var(--color-text-dim); }
@@ -1348,6 +1408,10 @@ textarea.ctl.invalid:focus {
 }
 
 @media (max-width: 768px) {
-  .gw-shell { padding: 12px; gap: 12px; }
+  /* Телефон: раздел — полноэкранное «приложение» мобильного каркаса, поэтому
+     полей по краям у него нет, а панель-лист теряет рамку и скругления (они
+     обрезались бы кромкой экрана). Дышит только содержимое панели. */
+  .gw-shell { padding: 0; gap: 10px; }
+  .gw-panel { border: none; border-radius: 0; }
   .gw-panel-body { padding: 14px; }
 }

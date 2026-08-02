@@ -9,7 +9,10 @@
     <div class="cd">
       <p v-if="!entries.length" class="cd-empty">На этот день записей нет.</p>
       <ul v-else class="cd-list">
-        <li v-for="e in entries" :key="e.id" class="cd-row">
+        <li v-for="(e, i) in entries" :key="e.id" class="cd-row">
+          <!-- Номер — позиция в списке, а не свойство записи: перестановка
+               оставляет нумерацию на месте. -->
+          <span class="cd-num">{{ i + 1 }}</span>
           <button class="cd-main" @click="$emit('open-entry', e)">
             <span class="cd-time">{{ hhmm(e.event_at) }}</span>
             <span class="cd-body">
@@ -92,6 +95,11 @@ async function doDelete() {
 .cd-empty { margin: 8px 0; color: var(--color-text-dim); text-align: center; }
 .cd-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
 .cd-row { display: flex; align-items: stretch; gap: 6px; }
+.cd-num {
+  flex-shrink: 0; align-self: center; min-width: 22px;
+  font-size: 13px; font-weight: 700; color: var(--color-text-dim);
+  font-variant-numeric: tabular-nums; text-align: right;
+}
 .cd-main {
   flex: 1; min-width: 0; display: flex; align-items: center; gap: 12px; text-align: left;
   padding: 10px 12px; border: 1px solid var(--color-outline-dim); border-radius: var(--radius-md);

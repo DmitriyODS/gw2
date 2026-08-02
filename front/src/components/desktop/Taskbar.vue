@@ -1,5 +1,9 @@
 <template>
-  <footer ref="barEl" class="taskbar" :class="{ hidden: desktop.fullscreen && !desktop.taskbarPeek }">
+  <footer
+    ref="barEl"
+    class="taskbar"
+    :class="[`side-${side}`, { hidden: (desktop.fullscreen && !desktop.taskbarPeek) || desktop.startFull }]"
+  >
     <button
       class="tb-start"
       type="button"
@@ -107,12 +111,17 @@ import { useElapsed } from '@/composables/useElapsed.js'
 import { usePermission } from '@/composables/usePermission.js'
 import { useCompanySettings } from '@/composables/useCompanySettings.js'
 import { appById, windowTitle } from '@/desktop/apps.js'
+import { TASKBAR_MARGIN } from '@/desktop/layout.js'
 import Logo from '@/components/common/Logo.vue'
 import HolaIcon from '@/components/common/HolaIcon.vue'
 import ContextMenu from '@/components/common/ContextMenu.vue'
 
 const desktop = useDesktopStore()
 const prefs = useDesktopPrefsStore()
+
+// Сторона панели — личная настройка («Настройки → Рабочий стол»). От неё
+// зависят и раскладка кнопок, и якоря всплывающих панелей.
+const side = computed(() => prefs.taskbarSide)
 const units = useUnitsStore()
 const { expand } = useActiveUnit()
 // Бейдж на кнопке = сколько карточек лежит в центре уведомлений (и убранные
@@ -239,15 +248,20 @@ function syncRect() {
   const el = barEl.value
   if (!el) return
   // Размеры, а не getBoundingClientRect: спрятанная панель сдвинута transform'ом,
-  // и якоря панелей уехали бы вместе с ней.
+  // и якоря панелей уехали бы вместе с ней. Положение считаем по стороне, к
+  // которой панель прижата.
   const w = el.offsetWidth
   const h = el.offsetHeight
-  Object.assign(desktop.taskbarRect, {
-    x: Math.round((window.innerWidth - w) / 2),
-    y: window.innerHeight - h - 12,
-    w,
-    h,
-  })
+  const gap = TASKBAR_MARGIN
+  const centerX = Math.round((window.innerWidth - w) / 2)
+  const centerY = Math.round((window.innerHeight - h) / 2)
+  const pos = {
+    bottom: { x: centerX, y: window.innerHeight - h - gap },
+    top: { x: centerX, y: gap },
+    left: { x: gap, y: centerY },
+    right: { x: window.innerWidth - w - gap, y: centerY },
+  }[side.value] || { x: centerX, y: window.innerHeight - h - gap }
+  Object.assign(desktop.taskbarRect, { ...pos, w, h })
 }
 
 onMounted(() => {
@@ -389,13 +403,98 @@ function onMenuSelect(action) {
   transition: transform 0.22s cubic-bezier(0.2, 0, 0, 1), opacity 0.18s ease;
 }
 
-/* Полноэкранное окно занимает весь экран — панель уезжает вниз и возвращается
-   по подведению указателя к нижнему краю. */
+/* Панель у верхней кромки — то же самое, только сверху. */
+.taskbar.side-top {
+  top: 12px;
+  bottom: auto;
+}
+
+/* Вертикальные стороны: колонка кнопок вдоль края, ширина — та же толщина. */
+.taskbar.side-left,
+.taskbar.side-right {
+  top: 50%;
+  bottom: auto;
+  left: auto;
+  transform: translateY(-50%);
+  flex-direction: column;
+  width: var(--taskbar-height);
+  height: max-content;
+  max-width: none;
+  max-height: min(1400px, calc(100dvh - 48px));
+  padding: 10px 0;
+  /* Прокручивается только список окон внутри — иначе уезжали бы и часы. */
+  overflow: hidden;
+}
+
+.taskbar.side-left { left: 12px; }
+.taskbar.side-right { right: 12px; }
+
+/* Вертикальная раскладка: все зоны идут колонкой, разделители ложатся
+   поперёк, а подписи окон уступают место значкам — на 68 пикселях ширины
+   текст всё равно не читается. */
+.taskbar.side-left .tb-sep,
+.taskbar.side-right .tb-sep {
+  width: 28px;
+  height: 1px;
+}
+
+.taskbar.side-left .tb-windows,
+.taskbar.side-right .tb-windows {
+  flex-direction: column;
+  overflow-x: hidden;
+  overflow-y: auto;
+  padding: 0 2px;
+}
+
+.taskbar.side-left .tb-win,
+.taskbar.side-right .tb-win {
+  width: 48px;
+  max-width: 48px;
+  padding: 0;
+  justify-content: center;
+}
+
+.taskbar.side-left .tb-win-label,
+.taskbar.side-right .tb-win-label { display: none; }
+
+.taskbar.side-left .tb-right,
+.taskbar.side-right .tb-right {
+  flex-direction: column;
+  margin-left: 0;
+  margin-top: auto;
+}
+
+.taskbar.side-left .tb-unit,
+.taskbar.side-right .tb-unit,
+.taskbar.side-left .tb-clock,
+.taskbar.side-right .tb-clock {
+  width: 48px;
+  padding: 4px 0;
+  height: auto;
+}
+
+/* Часы в колонке: время и дата в две строки, шрифт мельче — иначе дата не
+   влезает в ширину панели. */
+.taskbar.side-left .tb-time,
+.taskbar.side-right .tb-time { font-size: 0.82rem; }
+
+.taskbar.side-left .tb-date,
+.taskbar.side-right .tb-date { font-size: 0.6rem; letter-spacing: -0.01em; }
+
+.taskbar.side-left .tb-unit-clock,
+.taskbar.side-right .tb-unit-clock { font-size: 0.7rem; }
+
+/* Полноэкранное окно занимает весь экран — панель уезжает за свой край и
+   возвращается по подведению указателя к нему. */
 .taskbar.hidden {
   transform: translate(-50%, calc(100% + 24px));
   opacity: 0;
   pointer-events: none;
 }
+
+.taskbar.side-top.hidden { transform: translate(-50%, calc(-100% - 24px)); }
+.taskbar.side-left.hidden { transform: translate(calc(-100% - 24px), -50%); }
+.taskbar.side-right.hidden { transform: translate(calc(100% + 24px), -50%); }
 
 /* Hola — рядом с «Пуском»: он тоже про «начать отсюда». Только значок. */
 .tb-hola {
@@ -474,6 +573,8 @@ function onMenuSelect(action) {
 }
 .tb-windows::-webkit-scrollbar { height: 0; }
 
+/* Кнопка окна лежит на такой же акриловой подложке, что и сама панель, и без
+   кромки сливалась с ней — границу задаём явно. */
 .tb-win {
   display: flex;
   align-items: center;
@@ -482,20 +583,27 @@ function onMenuSelect(action) {
   max-width: 190px;
   flex-shrink: 0;
   padding: 0 14px;
-  border: none;
+  border: 1px solid var(--acrylic-border);
   border-radius: var(--radius-lg);
   background: var(--acrylic-card-bg);
+  box-shadow: var(--glass-edge);
   color: var(--color-text);
   font-size: 13.5px;
   font-weight: 500;
   cursor: pointer;
-  transition: background 0.15s, color 0.15s, opacity 0.15s;
+  transition: background 0.15s, border-color 0.15s, color 0.15s, opacity 0.15s;
 }
 
-.tb-win:hover { background: color-mix(in oklch, var(--color-primary) 12%, var(--acrylic-card-bg)); }
+.tb-win:hover {
+  background: color-mix(in oklch, var(--color-primary) 12%, var(--acrylic-card-bg));
+  border-color: color-mix(in oklch, var(--color-primary) 35%, var(--acrylic-border));
+}
 
+/* Активное окно — заметно ярче: это единственная кнопка, у которой раздел
+   сейчас на экране. */
 .tb-win.active {
   background: var(--grad-primary-soft);
+  border-color: var(--color-primary);
   color: var(--color-primary);
 }
 
