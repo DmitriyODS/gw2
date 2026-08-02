@@ -41,21 +41,33 @@
 
     <template #footer>
       <template v-if="editing">
-        <button class="btn-text" :disabled="saving" @click="cancelEdit">Отмена</button>
-        <button class="btn-filled" :disabled="saving" @click="save">
-          <span v-if="saving" class="material-symbols-outlined spin">progress_activity</span>
-          {{ isNew ? 'Создать' : 'Сохранить' }}
-        </button>
+        <AppButton label="Отмена" :disabled="saving" @click="cancelEdit" />
+        <span class="ce-foot-spacer" />
+        <AppButton
+          variant="filled"
+          :label="isNew ? 'Создать' : 'Сохранить'"
+          :loading="saving"
+          @click="save"
+        />
       </template>
       <template v-else>
-        <button v-if="!readonly && !isNew" class="btn-text danger" @click="confirmDelete = true">
-          <span class="material-symbols-outlined">delete</span> Удалить
-        </button>
+        <AppButton
+          v-if="!readonly && !isNew"
+          variant="glass"
+          tone="danger"
+          icon="delete"
+          label="Удалить"
+          @click="confirmDelete = true"
+        />
         <span class="ce-foot-spacer" />
-        <button class="btn-text" @click="onClose(false)">Закрыть</button>
-        <button v-if="!readonly" class="btn-filled" @click="editing = true">
-          <span class="material-symbols-outlined">edit</span> Редактировать
-        </button>
+        <AppButton label="Закрыть" @click="onClose(false)" />
+        <AppButton
+          v-if="!readonly"
+          variant="filled"
+          icon="edit"
+          label="Редактировать"
+          @click="editing = true"
+        />
       </template>
     </template>
 
@@ -72,6 +84,7 @@
 <script setup>
 import { computed, reactive, ref, watch } from 'vue'
 import DatePicker from 'primevue/datepicker'
+import AppButton from '@/components/ui/AppButton.vue'
 import AppDialog from '@/components/ui/AppDialog.vue'
 import ConfirmDialog from '@/components/ui/ConfirmDialog.vue'
 import FieldInput from '@/components/common/FieldInput.vue'
@@ -214,26 +227,7 @@ async function doDelete() {
 .ce-date { width: 100%; max-width: 280px; }
 .ce-date :deep(.p-datepicker) { width: 100%; }
 .ce-date-val { font-size: 15px; font-weight: 600; color: var(--color-text); }
-
-.btn-text {
-  border: none; background: none; cursor: pointer;
-  padding: 10px 16px; border-radius: var(--radius-full);
-  color: var(--color-text-dim); font-weight: 600; font-size: 14px;
-}
-.btn-text:hover { background: var(--color-surface-high); color: var(--color-text); }
-.btn-text.danger { color: var(--color-error); }
-.btn-text.danger:hover { background: var(--color-error-container, var(--color-surface-high)); color: var(--color-error); }
 .ce-foot-spacer { flex: 1; }
-.btn-filled {
-  display: inline-flex; align-items: center; gap: 6px;
-  border: none; cursor: pointer;
-  padding: 10px 18px; border-radius: var(--radius-full);
-  background: var(--color-primary); color: var(--color-on-primary);
-  font-weight: 600; font-size: 14px;
-}
-.btn-filled:disabled { opacity: 0.6; cursor: default; }
-.spin { animation: cespin 1s linear infinite; }
-@keyframes cespin { to { transform: rotate(360deg); } }
 
 @media (max-width: 640px) {
   .ce-grid { grid-template-columns: 1fr; }

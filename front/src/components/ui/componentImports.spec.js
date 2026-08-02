@@ -58,4 +58,38 @@ describe('резолвинг компонентов в шаблонах', () => 
 
     expect(missing, `не импортированы: ${missing.join(', ')}`).toEqual([])
   })
+
+  /**
+   * Обработчик события должен ссылаться на существующую функцию.
+   *
+   * При переносе разделов на общее ядро легко вырезать из скрипта кусок вместе с
+   * нужной функцией: шаблон остаётся валидным, сборка молчит, а кнопка перестаёт
+   * что-либо делать. Проверяем только простую форму `@click="foo"` /
+   * `@click="foo(...)"` — её достаточно, чтобы поймать такую потерю.
+   */
+  it.each(files)('%s — обработчики событий объявлены', (file) => {
+    const source = readFileSync(`${root}/${file}`, 'utf8')
+    const script = scriptOf(source)
+    if (!script) return
+
+    const template = stripComments(templateOf(source))
+    const handlers = new Set(
+      [...template.matchAll(/@[\w:.-]+="\s*([a-zA-Z_][\w$]*)\s*(\(|")/g)].map((m) => m[1]),
+    )
+
+    // Имена, объявленные самим шаблоном: переменные v-for и параметры слотов.
+    const local = new Set()
+    for (const m of template.matchAll(/v-for="\(?([^)"]*?)\)?\s+(?:in|of)\s/g)) {
+      m[1].split(',').forEach((n) => local.add(n.trim()))
+    }
+    for (const m of template.matchAll(/(?:#[\w:.[\]-]+|v-slot:[\w.-]+)="\{([^}]*)\}"/g)) {
+      m[1].split(',').forEach((n) => local.add(n.split(':').pop().trim()))
+    }
+
+    const missing = [...handlers].filter(
+      (name) => !local.has(name) && !new RegExp(`\\b${name}\\b`).test(script),
+    )
+
+    expect(missing, `нет в script setup: ${missing.join(', ')}`).toEqual([])
+  })
 })

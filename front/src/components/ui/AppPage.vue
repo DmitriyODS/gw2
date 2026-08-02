@@ -31,10 +31,33 @@
           </slot>
 
           <div v-if="slots.status" class="head-status"><slot name="status" /></div>
+
+          <!-- Команды стоят при названии, а не при фильтрах: так строка ниже
+               целиком достаётся вкладкам и поиску, и ничто не наезжает. В тесной
+               панели они уходят на свою строку (см. ниже). -->
+          <AppCommandBar
+            v-if="barCommands.length && !commandsBelow"
+            class="head-commands"
+            :commands="barCommands"
+            @command="$emit('command', $event)"
+          />
+
+          <div v-else-if="slots.commands && !commandsBelow" class="head-commands">
+            <slot name="commands" />
+          </div>
         </div>
 
-        <!-- Строка управления: поиск и вкладки слева, команды справа. Когда
-             названия нет (оно уже в рамке окна), эта строка — единственная. -->
+        <!-- Тесная панель: команда занимает всю ширину — прижатая к углу кнопка
+             там читается хуже, а места для соседей всё равно нет. -->
+        <AppCommandBar
+          v-if="commandsBelow"
+          :commands="barCommands"
+          block
+          @command="$emit('command', $event)"
+        />
+
+        <!-- Строка управления: вкладки, фильтры, поиск. Когда названия нет (оно
+             уже в рамке окна), команды переезжают сюда. -->
         <div v-if="hasControlsRow" class="head-line">
           <AppButton
             v-if="menu && !hasTitleRow"
@@ -60,14 +83,16 @@
 
           <div v-if="slots.status && !hasTitleRow" class="head-status"><slot name="status" /></div>
 
-          <AppCommandBar
-            v-if="barCommands.length"
-            class="head-commands"
-            :commands="barCommands"
-            @command="$emit('command', $event)"
-          />
+          <template v-if="!hasTitleRow">
+            <AppCommandBar
+              v-if="barCommands.length"
+              class="head-commands"
+              :commands="barCommands"
+              @command="$emit('command', $event)"
+            />
 
-          <div v-else-if="slots.commands" class="head-commands"><slot name="commands" /></div>
+            <div v-else-if="slots.commands" class="head-commands"><slot name="commands" /></div>
+          </template>
         </div>
       </header>
 
@@ -190,6 +215,12 @@ const barCommands = computed(() =>
     : props.commands,
 )
 
+/* Отдельная строка нужна только главной команде: одинокое меню «ещё» на всю
+   ширину выглядело бы странно и лучше остаётся при названии. */
+const commandsBelow = computed(() =>
+  hasTitleRow.value && narrowPage.value && barCommands.value.some((c) => c.primary),
+)
+
 const hasControlsRow = computed(() =>
   !!slots.subhead || !!slots.commands || barCommands.value.length > 0 ||
   (!hasTitleRow.value && (props.back || props.menu || !!slots.status)),
@@ -240,22 +271,28 @@ const hasHead = computed(() => hasTitleRow.value || hasControlsRow.value)
   padding: 18px 20px 12px;
 }
 
-/* Строка названия: кнопок здесь нет, поэтому длинное имя занимает её целиком. */
+/* Строка названия и команд. В тесной панели команды переносятся под название и
+   встают во всю ширину — в UWP главное действие панели навигации выглядит
+   именно так, а ужатая в угол кнопка читается хуже. */
 .head-title-row {
   display: flex;
   align-items: center;
-  gap: 12px;
+  flex-wrap: wrap;
+  gap: 10px 12px;
   min-width: 0;
 }
 
-/* Строка управления — мерка для панели команд: она сворачивается, когда
-   содержимое перестаёт помещаться сюда. Обрезка нужна на время подгонки. */
+.head-title-row > .head-commands { flex: 0 0 auto; }
+
+/* Строка управления. Переносится по мере надобности: в узкой панели вкладки и
+   кнопка действия не должны налезать друг на друга — каждой достаётся своя
+   строка. */
 .head-line {
   display: flex;
   align-items: center;
-  gap: 12px;
+  flex-wrap: wrap;
+  gap: 10px 12px;
   min-width: 0;
-  overflow: hidden;
 }
 
 .page-title {
@@ -270,15 +307,21 @@ const hasHead = computed(() => hasTitleRow.value || hasControlsRow.value)
   text-overflow: ellipsis;
 }
 
-/* Поиск и вкладки делят строку с командами: забирают свободное место, но
-   уступают его командам — сжимаются первыми. */
+/* Поиск и вкладки делят строку с командами и забирают свободное место. Базис
+   задан не «auto», а конкретной шириной: сжиматься до нечитаемой полоски им
+   нельзя — при нехватке места они переезжают на свою строку целиком. */
 .head-sub {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 10px;
-  flex: 1 1 auto;
+  flex: 1 1 240px;
   min-width: 0;
 }
+
+/* Поиску нужен собственный минимум: со сжатием до нуля он превращался в
+   бесполезную пилюлю с одной лупой. Не хватило места — переезжает на свою строку. */
+.head-sub > :deep(.search-field) { flex: 1 1 200px; }
 
 .head-status {
   display: flex;

@@ -1,5 +1,5 @@
 <template>
-  <div class="cmdbar">
+  <div class="cmdbar" :class="{ block }">
     <div v-if="slots.default" class="cmd-free"><slot /></div>
 
     <AppButton
@@ -10,6 +10,7 @@
       :variant="c.variant || 'filled'"
       :tone="c.tone || 'primary'"
       :size="size"
+      :block="block"
       :disabled="c.disabled"
       :loading="c.loading"
       @click="$emit('command', c.key)"
@@ -49,6 +50,8 @@ const props = defineProps({
   /** [{ key, label, icon, primary?, fab?, variant?, tone?, disabled?, loading?, danger?, hidden? }] */
   commands: { type: Array, default: () => [] },
   size: { type: String, default: 'md' },
+  /** Растянуть главные команды на всю ширину — панель отдана им целиком. */
+  block: { type: Boolean, default: false },
 })
 
 const emit = defineEmits(['command'])
@@ -93,6 +96,9 @@ function onSelect(key) {
   flex-shrink: 0;
   gap: 8px;
 }
+
+.cmdbar.block { width: 100%; }
+.cmdbar.block > :deep(.btn:not(.v-icon)) { flex: 1; }
 
 /* Свободная зона (поиск, вкладки) — наоборот, забирает весь остаток строки. */
 .cmd-free {

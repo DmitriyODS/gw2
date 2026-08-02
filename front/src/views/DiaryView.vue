@@ -725,6 +725,73 @@ async function toggleDone(e, done) {
 
 // Шаринг
 const shareOpen = ref(false)
+// Создание/переименование ежедневника
+const nameOpen = ref(false)
+const nameMode = ref('create')
+const nameValue = ref('')
+const nameBusy = ref(false)
+const nameInput = ref(null)
+function openCreateDiary() { nameMode.value = 'create'; nameValue.value = ''; nameOpen.value = true; nextTick(() => nameInput.value?.focus()) }
+function openRenameDiary() { nameMode.value = 'rename'; nameValue.value = store.selected?.name || ''; nameOpen.value = true; nextTick(() => nameInput.value?.focus()) }
+async function saveName() {
+  const name = nameValue.value.trim()
+  if (!name) { notif.error('Укажите название'); return }
+  nameBusy.value = true
+  try {
+    if (nameMode.value === 'create') {
+      const d = await store.createDiary(name)
+      store.select(d.id)
+    } else {
+      await store.renameDiary(store.selectedId, name)
+    }
+    nameOpen.value = false
+  } catch (e) {
+    notif.error(e?.message || 'Не удалось сохранить')
+  } finally {
+    nameBusy.value = false
+  }
+}
+
+const confirmDeleteDiary = ref(false)
+async function doDeleteDiary() {
+  confirmDeleteDiary.value = false
+  try { await store.removeDiary(store.selectedId); notif.success('Ежедневник удалён') }
+  catch (e) { notif.error(e?.message || 'Не удалось удалить') }
+}
+
+// Создание задачи с юнитом из записи
+const taskFormEntry = ref(null)
+function onCreateTask(entry) { entryOpen.value = false; taskFormEntry.value = entry }
+async function onTaskSaved(task) {
+  const entry = taskFormEntry.value
+  taskFormEntry.value = null
+  if (entry && task?.id) {
+    try { await store.linkTask(entry.id, task.id); notif.success('Задача создана и привязана к записи') }
+    catch { /* задача создана; связь не критична */ }
+  }
+}
+
+// Экспорт
+async function doExport() {
+  try {
+    let params
+    if (store.subtab === 'archive') params = { archived: 1, search: store.search }
+    else if (store.subtab === 'all') params = { search: store.search }
+    else params = { from: dayKey(store.range.from), to: dayKey(store.range.to), search: store.search }
+    const resp = await exportEntries(store.selectedId, params)
+    if (!resp.ok) throw new Error('export_failed')
+    const blob = await resp.blob()
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `${store.selected?.name || 'diary'}.xlsx`
+    document.body.appendChild(a); a.click(); document.body.removeChild(a)
+    URL.revokeObjectURL(url)
+  } catch (e) {
+    notif.error(e?.message || 'Не удалось выгрузить')
+  }
+}
+
 onMounted(() => {
   store.fetchDiaries().then(applySearchQuery)
   weekRO = new ResizeObserver(() => measureWeekColumn())
