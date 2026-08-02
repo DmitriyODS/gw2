@@ -9,22 +9,16 @@
         aria-label="К списку компаний"
         @click="goBack"
       />
-      <div class="head-text" v-if="company">
-        <h1 class="head-title">{{ company.name }}</h1>
-        <span class="role-badge" :class="{ creator: isCreator }">
+      <div class="head-text">
+        <h1 class="head-title">{{ company?.name || 'Компания' }}</h1>
+        <AppChip v-if="company" :tone="isCreator ? 'primary' : 'neutral'">
           {{ isCreator ? 'Создатель' : (isSuper ? 'Супер-админ' : 'Администратор') }}
-        </span>
-      </div>
-      <div class="head-text" v-else>
-        <h1 class="head-title">Компания</h1>
+        </AppChip>
       </div>
     </header>
 
     <div v-if="loading" class="state-block"><BrandLoader /></div>
-    <div v-else-if="loadError" class="state-block error-block">
-      <span class="material-symbols-outlined">error</span>
-      <p>{{ loadError }}</p>
-    </div>
+    <AppInfoBar v-else-if="loadError" tone="error" :message="loadError" />
 
     <template v-else-if="company">
       <AppTabs v-model="tab" :tabs="mainTabs" class="manage-tabs" />
@@ -32,108 +26,125 @@
       <div class="manage-body">
         <!-- ОБЗОР -->
         <section v-show="tab === 'overview'" class="pane pane-scroll">
-          <div class="ov-stats">
-            <div class="ov-stat">
-              <span class="material-symbols-outlined">groups</span>
-              <div><strong>{{ company.employees_count }}</strong><small>сотрудников</small></div>
-            </div>
-            <div class="ov-stat">
-              <span class="material-symbols-outlined">checklist</span>
-              <div><strong>{{ company.tasks_count }}</strong><small>задач</small></div>
-            </div>
-            <div class="ov-stat">
-              <span class="material-symbols-outlined">event</span>
-              <div><strong>{{ fmtDate(company.created_at) }}</strong><small>создана</small></div>
-            </div>
-          </div>
-          <div v-if="company.description" class="ov-desc">{{ company.description }}</div>
+          <AppStack>
+            <AppGrid :min="200" :gap="12">
+              <AppCard>
+                <span class="ov-value">{{ company.employees_count }}</span>
+                <span class="ov-label">сотрудников</span>
+              </AppCard>
+              <AppCard>
+                <span class="ov-value">{{ company.tasks_count }}</span>
+                <span class="ov-label">задач</span>
+              </AppCard>
+              <AppCard>
+                <span class="ov-value">{{ fmtDate(company.created_at) }}</span>
+                <span class="ov-label">создана</span>
+              </AppCard>
+            </AppGrid>
+
+            <AppCard v-if="company.description" title="О компании">
+              <p class="ov-desc">{{ company.description }}</p>
+            </AppCard>
+          </AppStack>
         </section>
 
         <!-- УЧАСТНИКИ -->
         <section v-show="tab === 'members'" class="pane pane-members">
-          <div class="members-toolbar">
-            <h2 class="toolbar-title">Участники <span class="count">{{ members.length }}</span></h2>
-            <div v-if="canManageMembers" class="toolbar-actions">
-              <button class="btn-outlined" @click="openInviteLink">
-                <span class="material-symbols-outlined">link</span>
-                <span>Ссылка-приглашение</span>
-              </button>
-              <button class="btn-outlined" @click="openInvite">
-                <span class="material-symbols-outlined">mail</span>
-                <span>Пригласить</span>
-              </button>
-              <button class="btn-filled" @click="openAdd">
-                <span class="material-symbols-outlined">person_add</span>
-                <span>Добавить сотрудника</span>
-              </button>
-            </div>
-          </div>
+          <AppCard
+            title="Участники"
+            hint="Роль определяет права в компании: сотрудник ведёт задачи, менеджер управляет юнитами и отделами, администратор — настройками."
+          >
+            <AppStack :gap="10" row>
+              <AppChip tone="primary" icon="groups" :count="members.length" label="в компании" />
+              <AppChip v-if="vacationCount" tone="warning" icon="beach_access" :count="vacationCount" label="в отпуске" />
 
-          <div v-if="!canManageMembers" class="note">
-            Управлять участниками может только создатель компании. Вам доступен просмотр и настройки.
-          </div>
+              <template v-if="canManageMembers">
+                <AppButton
+                  class="members-add"
+                  variant="filled"
+                  size="sm"
+                  icon="person_add"
+                  label="Сотрудник"
+                  @click="openAdd"
+                />
+                <AppButton variant="glass" size="sm" icon="mail" label="Пригласить" @click="openInvite" />
+                <AppButton variant="glass" size="sm" icon="link" label="Ссылка" @click="openInviteLink" />
+              </template>
+            </AppStack>
+          </AppCard>
 
-          <div class="members-table">
-            <AppDataTable :value="members" empty-message="В компании пока нет участников">
-              <Column header="Сотрудник">
-                <template #body="{ data }">
-                  <div class="cell-member">
-                    <span class="member-ava">{{ initials(data.fio) }}</span>
-                    <div class="member-text">
-                      <span class="member-name">{{ data.fio }}</span>
-                      <span class="member-login">@{{ data.login }}<template v-if="data.post"> · {{ data.post }}</template></span>
-                    </div>
-                  </div>
-                </template>
-              </Column>
+          <AppInfoBar
+            v-if="!canManageMembers"
+            tone="info"
+            message="Управлять участниками может только создатель компании. Вам доступны просмотр и настройки."
+          />
 
-              <Column header="Роль" :style="canManageMembers ? 'width: 200px' : 'width: 160px'">
-                <template #body="{ data }">
-                  <Select
-                    v-if="canManageMembers"
-                    :model-value="data.role?.id"
-                    :options="roleOptions"
-                    option-label="name"
-                    option-value="id"
-                    class="role-select"
-                    @update:model-value="(v) => changeRole(data, v)"
-                  />
-                  <span v-else class="role-pill">{{ data.role?.name }}</span>
-                </template>
-              </Column>
+          <EmptyState
+            v-if="!members.length"
+            size="sm"
+            icon="groups"
+            title="В компании пока нет участников"
+            subtitle="Добавьте сотрудника или отправьте приглашение по почте."
+          />
 
-              <Column header="Отпуск" style="width: 90px" body-style="text-align: center">
-                <template #body="{ data }">
-                  <ToggleSwitch
-                    v-if="canManageMembers"
-                    :model-value="!!data.on_vacation"
-                    class="vacation-toggle"
-                    :title="data.on_vacation ? 'Снять отпуск' : 'Отправить в отпуск'"
-                    @update:model-value="(v) => changeVacation(data, v)"
-                  />
-                  <span v-else-if="data.on_vacation" title="В отпуске">🏖️</span>
-                </template>
-              </Column>
+          <AppStack v-else :gap="8">
+            <AppRow
+              v-for="m in members"
+              :key="m.id"
+              :title="m.fio"
+              inline
+              :tone="m.on_vacation ? 'warning' : 'neutral'"
+            >
+              <template #lead>
+                <span class="member-ava">{{ initials(m.fio) }}</span>
+              </template>
 
-              <Column v-if="canManageMembers" header="" style="width: 110px" body-style="text-align: right">
-                <template #body="{ data }">
-                  <div class="row-actions">
-                    <button class="icon-btn" title="Сбросить пароль" @click="askResetPassword(data)">
-                      <span class="material-symbols-outlined">lock_reset</span>
-                    </button>
-                    <button
-                      v-if="!isOwner(data)"
-                      class="icon-btn danger"
-                      title="Убрать из компании"
-                      @click="askRemove(data)"
-                    >
-                      <span class="material-symbols-outlined">person_remove</span>
-                    </button>
-                  </div>
-                </template>
-              </Column>
-            </AppDataTable>
-          </div>
+              <template #hint>
+                @{{ m.login }}<template v-if="m.post"> · {{ m.post }}</template>
+                <template v-if="m.on_vacation"> · в отпуске</template>
+              </template>
+
+              <Select
+                v-if="canManageMembers"
+                :model-value="m.role?.id"
+                :options="roleOptions"
+                option-label="name"
+                option-value="id"
+                class="role-select"
+                @update:model-value="(v) => changeRole(m, v)"
+              />
+              <span v-else class="role-pill">{{ m.role?.name }}</span>
+
+              <AppButton
+                v-if="canManageMembers"
+                variant="icon"
+                size="sm"
+                :icon="m.on_vacation ? 'beach_access' : 'work'"
+                :title="m.on_vacation ? 'Снять отпуск' : 'Отправить в отпуск'"
+                :aria-label="m.on_vacation ? 'Снять отпуск' : 'Отправить в отпуск'"
+                @click="changeVacation(m, !m.on_vacation)"
+              />
+              <AppButton
+                v-if="canManageMembers"
+                variant="icon"
+                size="sm"
+                icon="lock_reset"
+                title="Сбросить пароль"
+                aria-label="Сбросить пароль"
+                @click="askResetPassword(m)"
+              />
+              <AppButton
+                v-if="canManageMembers && !isOwner(m)"
+                variant="icon"
+                size="sm"
+                tone="danger"
+                icon="person_remove"
+                title="Убрать из компании"
+                aria-label="Убрать из компании"
+                @click="askRemove(m)"
+              />
+            </AppRow>
+          </AppStack>
 
           <p v-if="membersError" class="err">{{ membersError }}</p>
         </section>
@@ -143,29 +154,26 @@
           <AppTabs v-model="settingsTab" :tabs="settingsTabs" class="settings-subtabs" />
 
           <div class="settings-content pane-scroll">
-            <div v-show="settingsTab === 'features'" class="settings-card">
-              <h3 class="card-title">Возможности</h3>
-              <div class="switch-list">
-                <label class="switch-row">
-                  <span class="switch-text">
-                    <span><strong>Этапы задач</strong><small>Канбан-режим и цветные теги этапов</small></span>
-                  </span>
-                  <input type="checkbox" class="switch" v-model="flags.uses_stages" @change="saveFlags" />
-                </label>
-                <label class="switch-row">
-                  <span class="switch-text">
-                    <span><strong>Интеграция с YouGile</strong><small>Импорт/экспорт карточек</small></span>
-                  </span>
-                  <input type="checkbox" class="switch" v-model="flags.uses_yougile" @change="saveFlags" />
-                </label>
-                <label class="switch-row">
-                  <span class="switch-text">
-                    <span><strong>Аудио/видео-звонки</strong><small>Кнопки звонка в мессенджере</small></span>
-                  </span>
-                  <input type="checkbox" class="switch" v-model="flags.uses_calls" @change="saveFlags" />
-                </label>
-              </div>
-            </div>
+            <AppCard v-show="settingsTab === 'features'" title="Возможности">
+              <AppSwitchRow
+                v-model="flags.uses_stages"
+                title="Этапы задач"
+                hint="Канбан-режим и цветные теги этапов"
+                @update:model-value="saveFlags"
+              />
+              <AppSwitchRow
+                v-model="flags.uses_yougile"
+                title="Интеграция с YouGile"
+                hint="Импорт и экспорт карточек"
+                @update:model-value="saveFlags"
+              />
+              <AppSwitchRow
+                v-model="flags.uses_calls"
+                title="Аудио- и видеозвонки"
+                hint="Кнопки звонка в мессенджере"
+                @update:model-value="saveFlags"
+              />
+            </AppCard>
 
             <div v-show="settingsTab === 'lists'"><CompanyListsSettings :company-id="company.id" /></div>
             <div v-show="settingsTab === 'ai'"><AiSettings :company-id="company.id" :owner-id="company.creator?.id ?? company.created_by ?? null" /></div>
@@ -174,48 +182,57 @@
 
             <div v-show="settingsTab === 'yougile'">
               <YougileCompanySettings v-if="company.id === auth.companyId" />
-              <div v-else class="note">
-                Чтобы настроить интеграцию с YouGile, переключитесь на эту компанию в боковой панели
-                (она привязана к активной сессии).
-              </div>
+              <AppInfoBar
+                v-else
+                tone="info"
+                message="Чтобы настроить интеграцию с YouGile, переключитесь на эту компанию — настройки привязаны к активной сессии."
+              />
             </div>
 
             <div v-show="settingsTab === 'registries'" class="settings-fill">
               <RegistriesManager v-if="company.id === auth.companyId" />
-              <div v-else class="note">
-                Чтобы настроить реестры, переключитесь на эту компанию в боковой панели
-                (они привязаны к активной сессии).
-              </div>
+              <AppInfoBar
+                v-else
+                tone="info"
+                message="Чтобы настроить реестры, переключитесь на эту компанию — настройки привязаны к активной сессии."
+              />
             </div>
 
             <div v-show="settingsTab === 'calendars'" class="settings-fill">
               <CalendarsManager v-if="company.id === auth.companyId" />
-              <div v-else class="note">
-                Чтобы настроить календари, переключитесь на эту компанию в боковой панели
-                (они привязаны к активной сессии).
-              </div>
+              <AppInfoBar
+                v-else
+                tone="info"
+                message="Чтобы настроить календари, переключитесь на эту компанию — настройки привязаны к активной сессии."
+              />
             </div>
           </div>
         </section>
 
         <!-- ОПАСНАЯ ЗОНА -->
         <section v-show="tab === 'danger'" class="pane pane-scroll">
-          <div class="settings-card danger-card" v-if="isSuper">
-            <div>
-              <h3 class="card-title">{{ company.is_active ? 'Отключить компанию' : 'Включить компанию' }}</h3>
-              <p class="card-desc">Отключённая компания недоступна сотрудникам, но данные сохраняются.</p>
-            </div>
-            <button class="btn-outlined" :disabled="toggling" @click="toggleActive">
-              {{ company.is_active ? 'Отключить' : 'Включить' }}
-            </button>
-          </div>
-          <div class="settings-card danger-card">
-            <div>
-              <h3 class="card-title">Удалить компанию</h3>
-              <p class="card-desc">Все данные удалятся каскадно: задачи, юниты, чаты, звонки. Необратимо.</p>
-            </div>
-            <button class="btn-outlined danger" @click="confirmDelete = true">Удалить</button>
-          </div>
+          <AppStack>
+            <AppRow
+              v-if="isSuper"
+              tone="warning"
+              :title="company.is_active ? 'Отключить компанию' : 'Включить компанию'"
+              hint="Отключённая компания недоступна сотрудникам, но данные сохраняются."
+            >
+              <AppButton
+                :label="company.is_active ? 'Отключить' : 'Включить'"
+                :loading="toggling"
+                @click="toggleActive"
+              />
+            </AppRow>
+
+            <AppRow
+              tone="danger"
+              title="Удалить компанию"
+              hint="Все данные удалятся каскадно: задачи, юниты, чаты, звонки. Действие необратимо."
+            >
+              <AppButton tone="danger" icon="delete" label="Удалить" @click="confirmDelete = true" />
+            </AppRow>
+          </AppStack>
         </section>
       </div>
     </template>
@@ -244,16 +261,23 @@
               @input="onCandQuery"
             />
           </div>
-          <div v-if="candidates.length" class="cand-list">
-            <button v-for="c in candidates" :key="c.id" type="button" class="cand-item" @click="addExisting(c)">
-              <span class="member-ava sm">{{ initials(c.fio) }}</span>
-              <span class="cand-text">
-                <span class="member-name">{{ c.fio }}</span>
-                <span class="member-login">@{{ c.login }}</span>
-              </span>
+          <AppStack v-if="candidates.length" :gap="6">
+            <AppRow
+              v-for="c in candidates"
+              :key="c.id"
+              :title="c.fio"
+              :hint="`@${c.login}`"
+              dense
+              clickable
+              inline
+              @click="addExisting(c)"
+            >
+              <template #lead>
+                <span class="member-ava sm">{{ initials(c.fio) }}</span>
+              </template>
               <span class="material-symbols-outlined add-ic">add</span>
-            </button>
-          </div>
+            </AppRow>
+          </AppStack>
           <p v-else-if="candQuery.trim()" class="hint">Никого не нашли — попробуйте другой запрос или вкладку «Новый».</p>
           <p v-else class="hint">Начните вводить имя или логин уже зарегистрированного пользователя.</p>
         </div>
@@ -291,18 +315,16 @@
       </div>
 
       <template #footer>
-        <div class="modal-foot">
-          <button class="btn-text" type="button" :disabled="creatingUser" @click="addOpen = false">Закрыть</button>
-          <button
-            v-if="addTab === 'new'"
-            class="btn-filled"
-            type="button"
-            :disabled="creatingUser || !newUser.fio || !newUser.login"
-            @click="createUser"
-          >
-            Создать
-          </button>
-        </div>
+        <AppButton label="Закрыть" :disabled="creatingUser" @click="addOpen = false" />
+        <AppButton
+          v-if="addTab === 'new'"
+          class="foot-main"
+          variant="filled"
+          label="Создать"
+          :loading="creatingUser"
+          :disabled="!newUser.fio || !newUser.login"
+          @click="createUser"
+        />
       </template>
     </AppDialog>
 
@@ -340,13 +362,16 @@
         <p v-if="inviteError" class="err">{{ inviteError }}</p>
       </form>
       <template #footer>
-        <div class="modal-foot">
-          <button class="btn-text" type="button" :disabled="inviting" @click="inviteOpen = false">Отмена</button>
-          <button class="btn-filled" type="button" :disabled="inviting || !invite.email" @click="sendEmailInvite">
-            <span class="material-symbols-outlined">send</span>
-            <span>Отправить</span>
-          </button>
-        </div>
+        <AppButton label="Отмена" :disabled="inviting" @click="inviteOpen = false" />
+        <AppButton
+          class="foot-main"
+          variant="filled"
+          icon="send"
+          label="Отправить"
+          :loading="inviting"
+          :disabled="!invite.email"
+          @click="sendEmailInvite"
+        />
       </template>
     </AppDialog>
 
@@ -386,9 +411,14 @@
         <span class="reset-temp-label">Временный пароль</span>
         <div class="reset-temp-value">
           <code>{{ tempPassword }}</code>
-          <button class="icon-btn" type="button" :title="resetCopied ? 'Скопировано' : 'Скопировать'" @click="copyTempPassword">
-            <span class="material-symbols-outlined">{{ resetCopied ? 'check' : 'content_copy' }}</span>
-          </button>
+          <AppButton
+            variant="icon"
+            size="sm"
+            :icon="resetCopied ? 'check' : 'content_copy'"
+            :title="resetCopied ? 'Скопировано' : 'Скопировать'"
+            aria-label="Скопировать временный пароль"
+            @click="copyTempPassword"
+          />
         </div>
         <span class="reset-temp-hint">Передайте его сотруднику — при входе он введёт этот пароль и сразу задаст свой.</span>
       </div>
@@ -405,14 +435,22 @@
       <div class="invite-link-body">
         <div class="invite-link-row">
           <input class="ctl" :value="inviteUrl" readonly placeholder="Ссылка ещё не создана" />
-          <button class="icon-btn bordered" :disabled="!inviteCode" title="Скопировать" @click="copyInviteLink">
-            <span class="material-symbols-outlined">{{ inviteCopied ? 'check' : 'content_copy' }}</span>
-          </button>
+          <AppButton
+            variant="icon"
+            size="sm"
+            :icon="inviteCopied ? 'check' : 'content_copy'"
+            :disabled="!inviteCode"
+            title="Скопировать"
+            aria-label="Скопировать ссылку"
+            @click="copyInviteLink"
+          />
         </div>
-        <button class="btn-outlined" :disabled="inviteLinkBusy" @click="regenInviteLink">
-          <span class="material-symbols-outlined">{{ inviteCode ? 'autorenew' : 'add_link' }}</span>
-          <span>{{ inviteCode ? 'Перевыпустить' : 'Создать ссылку' }}</span>
-        </button>
+        <AppButton
+          :icon="inviteCode ? 'autorenew' : 'add_link'"
+          :label="inviteCode ? 'Перевыпустить' : 'Создать ссылку'"
+          :loading="inviteLinkBusy"
+          @click="regenInviteLink"
+        />
         <p v-if="inviteLinkError" class="err">{{ inviteLinkError }}</p>
       </div>
     </AppDialog>
@@ -439,11 +477,16 @@
 import { ref, computed, onMounted } from 'vue'
 import BrandLoader from '@/components/common/BrandLoader.vue'
 import Select from 'primevue/select'
-import ToggleSwitch from 'primevue/toggleswitch'
-import Column from 'primevue/column'
 import AppButton from '@/components/ui/AppButton.vue'
+import AppCard from '@/components/ui/AppCard.vue'
+import AppChip from '@/components/ui/AppChip.vue'
+import AppInfoBar from '@/components/ui/AppInfoBar.vue'
+import AppRow from '@/components/ui/AppRow.vue'
+import AppGrid from '@/components/ui/AppGrid.vue'
+import AppStack from '@/components/ui/AppStack.vue'
+import AppSwitchRow from '@/components/ui/AppSwitchRow.vue'
+import EmptyState from '@/components/common/EmptyState.vue'
 import AppDialog from '@/components/ui/AppDialog.vue'
-import AppDataTable from '@/components/common/AppDataTable.vue'
 import AppTabs from '@/components/ui/AppTabs.vue'
 import GrooveSettings from '@/components/settings/GrooveSettings.vue'
 import WeekendSettings from '@/components/settings/WeekendSettings.vue'
@@ -475,6 +518,8 @@ const companyId = computed(() => Number(props.id))
 const company = ref(null)
 const loading = ref(true)
 const loadError = ref('')
+
+const vacationCount = computed(() => members.value.filter((m) => m.on_vacation).length)
 
 const tab = ref('overview')
 const mainTabs = computed(() => {
@@ -828,36 +873,16 @@ async function doDelete() {
 </script>
 
 <style scoped>
+/* Панель внутри настроек: внешние поля и фон даёт AppPage настроек. */
 .manage-page {
-  height: 100%;
-  min-height: 0;
   display: flex;
   flex-direction: column;
-  padding: 20px;
-  max-width: 1040px;
-  width: 100%;
-  margin: 0 auto;
-  box-sizing: border-box;
+  min-height: 0;
 }
 
 .manage-head { display: flex; align-items: center; gap: 12px; margin-bottom: 16px; flex: none; }
-.back-btn {
-  border: 1px solid var(--acrylic-border);
-  background: var(--color-surface-high);
-  background: var(--glass-bg);
-  box-shadow: var(--glass-edge);
-  width: 40px; height: 40px;
-  border-radius: 50%; display: grid; place-items: center; cursor: pointer; color: var(--color-text);
-  flex: none;
-}
-.back-btn:hover { background: var(--color-primary-container); color: var(--color-on-primary-container); }
 .head-text { display: flex; align-items: center; gap: 12px; min-width: 0; flex-wrap: wrap; }
 .head-title { margin: 0; font-size: 22px; font-weight: 800; color: var(--color-text); }
-.role-badge {
-  display: inline-flex; align-items: center; padding: 3px 10px; border-radius: var(--radius-full);
-  font-size: 12px; font-weight: 600; background: var(--color-surface-high); color: var(--color-text-dim);
-}
-.role-badge.creator { background: var(--color-primary-container); color: var(--color-on-primary-container); }
 
 .manage-tabs { flex: none; margin-bottom: 16px; }
 
@@ -867,21 +892,7 @@ async function doDelete() {
    экрана и скроллиться, а не распирать панель за край (особенно на мобильном). */
 .pane { flex: 1; min-width: 0; min-height: 0; display: flex; flex-direction: column; gap: 18px; }
 .pane-scroll { overflow-y: auto; }
-
-.ov-stats { display: flex; gap: 12px; flex-wrap: wrap; }
-.ov-stat {
-  display: flex; align-items: center; gap: 12px; padding: 14px 18px; flex: 1 1 160px;
-  background: var(--acrylic-card-bg); border-radius: var(--radius-lg);
-}
-.ov-stat .material-symbols-outlined { font-size: 26px; color: var(--color-primary); }
-.ov-stat strong { display: block; font-size: 18px; font-weight: 800; color: var(--color-text); }
-.ov-stat small { font-size: 12px; color: var(--color-text-dim); }
 .ov-desc { color: var(--color-text); font-size: 14px; line-height: 1.5; }
-
-.note {
-  padding: 12px 14px; border-radius: var(--radius-md, 12px);
-  background: var(--acrylic-card-bg); color: var(--color-text-dim); font-size: 13px; line-height: 1.5;
-}
 
 /* Временный пароль в диалоге сброса. */
 .reset-temp {
@@ -899,16 +910,6 @@ async function doDelete() {
 
 /* ── Участники: таблица занимает всю высоту и скроллится отдельно ── */
 .pane-members { gap: 14px; }
-.members-toolbar {
-  flex: none; display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap;
-}
-.toolbar-title { margin: 0; font-size: 17px; font-weight: 700; color: var(--color-text); }
-.toolbar-title .count { color: var(--color-text-dim); font-weight: 600; margin-left: 4px; }
-.toolbar-actions { display: flex; gap: 10px; flex-wrap: wrap; }
-
-.members-table { flex: 1; min-height: 0; }
-
-.cell-member { display: flex; align-items: center; gap: 12px; min-width: 0; }
 .member-ava {
   width: 36px; height: 36px; flex: none; border-radius: 50%; display: grid; place-items: center;
   font-size: 13px; font-weight: 700; background: var(--color-primary-container); color: var(--color-on-primary-container);
@@ -923,15 +924,6 @@ async function doDelete() {
 }
 .role-select { min-width: 160px; }
 
-.row-actions { display: inline-flex; gap: 4px; justify-content: flex-end; }
-.icon-btn {
-  width: 36px; height: 36px; border: none; border-radius: 50%; background: transparent;
-  color: var(--color-text-dim); cursor: pointer; display: grid; place-items: center;
-}
-.icon-btn:hover { background: var(--color-surface-high); color: var(--color-text); }
-.icon-btn.danger:hover { background: var(--color-error-container); color: var(--color-on-error-container); }
-.icon-btn .material-symbols-outlined { font-size: 20px; }
-
 .err { margin: 0; font-size: 13px; color: var(--color-error); flex: none; }
 
 /* ── Настройки с под-вкладками ── */
@@ -941,68 +933,6 @@ async function doDelete() {
 /* Вкладка реестров сама держит высоту и внутреннюю прокрутку — растягиваем её
    обёртку на всю область настроек, чтобы конструктор не растягивал .settings-content. */
 .settings-fill { flex: 1; min-height: 0; display: flex; }
-
-.settings-card {
-  background: var(--acrylic-card-bg); border-radius: var(--radius-lg); padding: 18px;
-  display: flex; flex-direction: column; gap: 12px;
-}
-.card-title { margin: 0; font-size: 16px; font-weight: 700; color: var(--color-text); }
-.card-desc { margin: 0; font-size: 13px; color: var(--color-text-dim); line-height: 1.5; }
-
-.danger-card { flex-direction: row; align-items: center; justify-content: space-between; gap: 16px; }
-
-/* ── Кнопки ── */
-.btn-filled {
-  appearance: none; border: none; cursor: pointer; border-radius: var(--radius-full); padding: 9px 16px;
-  font: inherit; font-weight: 600; display: inline-flex; align-items: center; gap: 6px;
-  background: var(--color-primary); color: var(--color-on-primary);
-}
-.btn-filled:hover:not(:disabled) { background: var(--color-primary-hover); }
-.btn-filled:disabled { opacity: .5; cursor: not-allowed; }
-.btn-filled .material-symbols-outlined { font-size: 18px; }
-
-.btn-outlined {
-  appearance: none; cursor: pointer; border-radius: var(--radius-full); padding: 9px 16px; font: inherit;
-  font-weight: 600; background: transparent; border: 1.5px solid var(--color-outline);
-  color: var(--color-text); display: inline-flex; align-items: center; gap: 6px;
-}
-.btn-outlined:hover:not(:disabled) { border-color: var(--color-primary); color: var(--color-primary); }
-.btn-outlined.danger { border-color: color-mix(in oklch, var(--color-error) 50%, var(--color-outline)); color: var(--color-error); }
-.btn-outlined.danger:hover { background: var(--color-error-container); color: var(--color-on-error-container); border-color: var(--color-error); }
-.btn-outlined:disabled { opacity: .5; cursor: not-allowed; }
-.btn-outlined .material-symbols-outlined { font-size: 18px; }
-
-.btn-text {
-  appearance: none; border: none; background: none; color: var(--color-primary); font: inherit;
-  font-weight: 600; padding: 9px 16px; border-radius: var(--radius-full); cursor: pointer;
-}
-.btn-text:hover:not(:disabled) { background: var(--color-surface-high); }
-.btn-text:disabled { opacity: .5; cursor: not-allowed; }
-
-/* ── Переключатель (switch-row, 1:1 с CompanyFormDialog) ── */
-.switch-list { display: flex; flex-direction: column; gap: 6px; }
-.switch-row {
-  display: flex; align-items: center; justify-content: space-between; gap: 12px;
-  padding: 10px 12px; background: var(--acrylic-card-bg); border-radius: var(--radius-md, 12px);
-  cursor: pointer; transition: background .12s;
-}
-.switch-row:hover { background: var(--glass-hover-bg); }
-.switch-text { display: flex; align-items: center; gap: 12px; min-width: 0; }
-.switch-text strong { display: block; font-size: 14px; color: var(--color-text); }
-.switch-text small { display: block; font-size: 12px; color: var(--color-text-dim); }
-
-.switch {
-  appearance: none; width: 44px; height: 24px; border-radius: 999px; flex: none;
-  background: var(--color-surface-highest, var(--color-surface-high)); border: 2px solid var(--color-outline);
-  box-sizing: border-box; position: relative; cursor: pointer; transition: background .18s, border-color .18s;
-}
-.switch::after {
-  content: ''; position: absolute; top: 50%; left: 4px; width: 12px; height: 12px; border-radius: 50%;
-  background: var(--color-outline); transform: translateY(-50%);
-  transition: transform .2s, background .2s, width .2s, height .2s, left .2s;
-}
-.switch:checked { background: var(--color-primary); border-color: var(--color-primary); }
-.switch:checked::after { width: 16px; height: 16px; left: 24px; background: var(--color-on-primary); }
 
 /* ── Модалки добавления/приглашения ── */
 .add-body { display: flex; flex-direction: column; gap: 16px; }
@@ -1027,37 +957,19 @@ async function doDelete() {
 .search-field > .material-symbols-outlined { position: absolute; left: 10px; font-size: 18px; color: var(--color-text-dim); pointer-events: none; }
 .search-field .ctl { padding-left: 36px; }
 
-.cand-list { display: flex; flex-direction: column; gap: 6px; max-height: 280px; overflow-y: auto; }
-.cand-item {
-  display: flex; align-items: center; gap: 10px; padding: 8px 10px; text-align: left;
-  border: 1px solid var(--color-outline-dim); border-radius: var(--radius-md, 12px);
-  background: var(--acrylic-card-bg); color: var(--color-text); cursor: pointer;
-}
-.cand-item:hover { border-color: var(--color-primary); }
-.cand-text { display: flex; flex-direction: column; min-width: 0; flex: 1; }
-.cand-item .add-ic { font-size: 20px; color: var(--color-primary); }
-
 .hint { margin: 0; font-size: 13px; color: var(--color-text-dim); line-height: 1.5; }
-
-.modal-foot { display: flex; justify-content: flex-end; gap: 10px; width: 100%; }
 
 .invite-link-body { display: flex; flex-direction: column; gap: 14px; align-items: flex-start; }
 .invite-link-row { display: flex; gap: 8px; align-items: center; width: 100%; }
 .invite-link-row .ctl { flex: 1; font-size: 13px; }
-.icon-btn.bordered {
-  flex: none; width: 44px; height: 44px; border-radius: var(--radius-md, 12px);
-  border: 1px solid var(--color-outline-dim); color: var(--color-text);
-}
-.icon-btn.bordered:hover:not(:disabled) { border-color: var(--color-primary); color: var(--color-primary); background: transparent; }
-.icon-btn.bordered:disabled { opacity: .5; cursor: not-allowed; }
 
 .w-full { width: 100%; }
 
 .state-block { flex: 1; display: grid; place-items: center; padding: 64px; gap: 10px; color: var(--color-text-dim); }
-.error-block .material-symbols-outlined { font-size: 40px; color: var(--color-error); }
 
 @media (max-width: 768px) {
-  .manage-page { padding: 12px; }
+  /* Панель внутри настроек: внешние поля и фон даёт AppPage настроек. */
+.manage-page { padding: 12px; }
   /* Резерв под нижнюю навигацию (64px) + 12px воздуха: вкладки со своим
      скроллом (.pane-scroll) уводят контент под стекло; карточка-таблица
      участников скроллится внутри себя — резерв вешаем на саму вкладку,
@@ -1085,4 +997,11 @@ async function doDelete() {
 
   .modal-foot { flex-wrap: wrap; }
 }
+
+.ov-value { font-size: 22px; font-weight: 800; letter-spacing: -0.01em; }
+.ov-label { font-size: 13px; color: var(--color-text-dim); }
+.ov-desc { margin: 0; font-size: 14px; line-height: 1.55; }
+
+/* Главное действие подвала прижимаем вправо (слева — «Отмена»/«Закрыть»). */
+.foot-main { margin-left: auto; }
 </style>
