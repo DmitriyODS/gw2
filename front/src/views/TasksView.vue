@@ -1,81 +1,54 @@
 <template>
-  <div class="tasks-view">
-    <header class="tasks-header" :class="{ 'is-compact': isCompact }">
-      <!-- Панель инструментов -->
-      <div class="tasks-toolbar">
-        <SearchField
-          :model-value="searchQuery"
-          placeholder="Поиск по названию задачи…"
-          hotkey
-          @update:model-value="onSearchInput"
-        />
+  <AppPage title="Задачи" :commands="commands" flush :scroll="false" @command="onCommand">
+    <template #subhead="{ narrow }">
+      <SearchField
+        :model-value="searchQuery"
+        placeholder="Поиск по названию задачи…"
+        hotkey
+        :collapsible="false"
+        @update:model-value="onSearchInput"
+      />
 
-        <!-- Переключатель вида: сетка / список / канбан (только десктоп) -->
-        <div class="desktop-only" role="group" aria-label="Вид отображения">
-          <AppTabs
-            variant="tint" dense
-            :model-value="viewMode"
-            :tabs="viewTabs"
-            @update:model-value="setViewMode"
-          />
-        </div>
-
-        <!-- Мобильные иконки сортировки/фильтров -->
-        <button class="btn-icon mobile-only" @click="showSortSheet = true" title="Сортировка" aria-label="Сортировка">
-          <span class="material-symbols-outlined">sort</span>
-        </button>
-        <button
-          class="btn-icon mobile-only"
-          :class="{ 'has-dot': hasActiveFilters }"
-          @click="showMobileFilters = true"
-          title="Фильтры"
-          aria-label="Фильтры"
-        >
-          <span class="material-symbols-outlined">tune</span>
-        </button>
-
-        <!-- Кнопка «Из YouGile» — десктоп, видна только если интеграция доступна -->
-        <button
-          v-if="canCreateTask && yougileAvailable"
-          class="btn-glass desktop-only"
-          @click="showImportYg = true"
-          title="Импортировать карточку из YouGile"
-        >
-          <span class="material-symbols-outlined">sync_alt</span>
-          Из YouGile
-        </button>
-
-        <!-- Кнопка «Добавить» — десктоп -->
-        <button
-          v-if="canCreateTask"
-          class="btn-grad desktop-only"
-          @click="showCreateTask = true"
-        >
-          <span class="material-symbols-outlined">add</span>
-          Добавить
-        </button>
-      </div>
-
-      <!-- Вкладки — только мобильный: на десктопе ими управляет рейка фильтров -->
+      <!-- Вид (сетка/список/канбан) — только когда панель широкая: в узкой
+           канбан всё равно нечитаем, а место нужно поиску. -->
       <AppTabs
-        v-if="isMobile"
+        v-if="!narrow"
+        variant="tint"
+        dense
+        :model-value="viewMode"
+        :tabs="viewTabs"
+        @update:model-value="setViewMode"
+      />
+
+      <!-- Узкая панель: фильтры и сортировка живут в шторках, а не в рейке. -->
+      <AppTabs
+        v-if="narrow"
         :model-value="tasksStore.filters.tab"
         :tabs="tabs"
-        :full-width="isMobile"
-        :dense="isCompact"
+        full-width
+        dense
         @update:model-value="tasksStore.setTab($event)"
       />
-    </header>
+    </template>
 
+    <template #default="{ narrow }">
     <!-- Режим отпуска: создание/редактирование задач и юниты закрыты -->
-    <div v-if="onVacation" class="vacation-banner">
-      <span class="vacation-banner-emoji">🏖️</span>
-      <span class="vacation-banner-text">Вы в отпуске — создание и редактирование задач недоступно.</span>
-      <button type="button" class="btn-glass vacation-banner-btn" @click="router.push('/settings?section=account')">
-        <span class="material-symbols-outlined">person</span>
-        Аккаунт
-      </button>
-    </div>
+    <AppInfoBar
+      v-if="onVacation"
+      class="vacation-banner"
+      tone="warning"
+      icon="beach_access"
+      message="Вы в отпуске — создание и редактирование задач недоступно."
+    >
+      <template #actions>
+        <AppButton
+          size="sm"
+          icon="person"
+          label="Аккаунт"
+          @click="router.push('/settings?section=account')"
+        />
+      </template>
+    </AppInfoBar>
 
     <div class="tasks-body">
       <!-- Рут-админ без выбранной компании -->
@@ -106,7 +79,7 @@
             tone="error"
             :subtitle="tasksStore.error"
           >
-            <button class="btn-retry" @click="tasksStore.fetchTasks()">Повторить</button>
+            <AppButton label="Повторить" @click="tasksStore.fetchTasks()" />
           </EmptyState>
           <EmptyState
             v-else-if="tasksStore.tasks.length === 0"
@@ -115,10 +88,13 @@
             :title="emptyTitle"
             :subtitle="emptySub"
           >
-            <button v-if="canCreateTask && tasksStore.filters.tab === 'active'" class="btn-grad" @click="showCreateTask = true">
-              <span class="material-symbols-outlined">add</span>
-              Создать задачу
-            </button>
+            <AppButton
+              v-if="canCreateTask && tasksStore.filters.tab === 'active'"
+              variant="filled"
+              icon="add"
+              label="Создать задачу"
+              @click="showCreateTask = true"
+            />
           </EmptyState>
           <TaskKanban
             v-else-if="viewMode === 'board'"
@@ -144,33 +120,28 @@
           </div>
 
           <div v-if="viewMode !== 'board' && tasksStore.total > tasksStore.filters.per_page" class="pagination">
-            <button
-              class="page-btn"
+            <AppButton
+              variant="icon"
+              size="sm"
+              icon="chevron_left"
+              aria-label="Предыдущая страница"
               :disabled="tasksStore.filters.page === 1"
               @click="tasksStore.setFilter('page', tasksStore.filters.page - 1)"
-            >
-              <span class="material-symbols-outlined">chevron_left</span>
-            </button>
+            />
             <span class="page-info">{{ tasksStore.filters.page }} / {{ totalPages }}</span>
-            <button
-              class="page-btn"
+            <AppButton
+              variant="icon"
+              size="sm"
+              icon="chevron_right"
+              aria-label="Следующая страница"
               :disabled="tasksStore.tasks.length < tasksStore.filters.per_page"
               @click="tasksStore.setFilter('page', tasksStore.filters.page + 1)"
-            >
-              <span class="material-symbols-outlined">chevron_right</span>
-            </button>
+            />
           </div>
         </template>
       </main>
       </template>
     </div>
-
-    <AppFab
-      :visible="canCreateTask"
-      icon="add"
-      aria-label="Создать задачу"
-      @click="showCreateTask = true"
-    />
 
     <SortSheet :visible="showSortSheet" @close="showSortSheet = false" />
 
@@ -264,7 +235,8 @@
       @confirm="doArchiveTask"
       @cancel="archiveConfirm.visible = false"
     />
-  </div>
+    </template>
+  </AppPage>
 </template>
 
 <script setup>
@@ -291,8 +263,10 @@ import TaskContextMenu from '@/components/tasks/TaskContextMenu.vue'
 import SendTaskDialog from '@/components/tasks/SendTaskDialog.vue'
 import ConfirmDialog from '@/components/ui/ConfirmDialog.vue'
 import AppDialog from '@/components/ui/AppDialog.vue'
-import AppFab from '@/components/ui/AppFab.vue'
 import EmptyState from '@/components/common/EmptyState.vue'
+import AppButton from '@/components/ui/AppButton.vue'
+import AppInfoBar from '@/components/ui/AppInfoBar.vue'
+import AppPage from '@/components/ui/AppPage.vue'
 import AppTabs from '@/components/ui/AppTabs.vue'
 import SearchField from '@/components/common/SearchField.vue'
 import BrandLoader from '@/components/common/BrandLoader.vue'
@@ -326,6 +300,26 @@ const yougileAvailable = computed(() => yougileStore.isAvailable)
 const searchQuery = ref(tasksStore.filters.search)
 const showMobileFilters = ref(false)
 const showSortSheet = ref(false)
+
+/* Команды раздела. Сортировка и фильтры нужны только узкой панели: широкой
+   служит рейка фильтров слева, где они и живут. */
+const commands = computed(() => [
+  ...(canCreateTask.value
+    ? [{ key: 'create', label: 'Добавить', icon: 'add', variant: 'filled', primary: true, fab: true }]
+    : []),
+  { key: 'sort', label: 'Сортировка', icon: 'sort', hidden: !isMobile.value },
+  { key: 'filters', label: 'Фильтры', icon: 'tune', hidden: !isMobile.value },
+  ...(canCreateTask.value && yougileAvailable.value
+    ? [{ key: 'yougile', label: 'Импорт из YouGile', icon: 'sync_alt' }]
+    : []),
+])
+
+function onCommand(key) {
+  if (key === 'create') showCreateTask.value = true
+  else if (key === 'sort') showSortSheet.value = true
+  else if (key === 'filters') showMobileFilters.value = true
+  else if (key === 'yougile') showImportYg.value = true
+}
 const startUnitTaskId = ref(null)
 
 const { usesStages } = useCompanySettings()
@@ -719,12 +713,6 @@ watch(() => companiesStore.effectiveCompanyId, () => {
 </script>
 
 <style scoped>
-.tasks-view {
-  display: flex;
-  flex-direction: column;
-  height: 100%;
-}
-
 /* Отказ по ссылке на задачу */
 .tasks-linkerr {
   margin: 0;
@@ -741,94 +729,8 @@ watch(() => companiesStore.effectiveCompanyId, () => {
   flex-wrap: wrap;
 }
 
-/* ─── Шапка ───
-   На десктопе — прозрачный тулбар поверх «сияния» страницы: поле поиска,
-   переключатель вида и кнопки — самостоятельные стеклянные элементы. */
-.tasks-header {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  padding: 20px 24px 4px;
-  flex-shrink: 0;
-  transition: padding 0.22s cubic-bezier(0.4, 0, 0.2, 1),
-              gap 0.22s cubic-bezier(0.4, 0, 0.2, 1);
-}
-
-.tasks-toolbar {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-
-/* Кнопки-иконки (мобильные) */
-.btn-icon {
-  position: relative;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 42px;
-  height: 42px;
-  border-radius: var(--radius-md);
-  border: 1px solid var(--color-outline-dim);
-  background: var(--color-surface-low);
-  color: var(--color-text);
-  cursor: pointer;
-  flex-shrink: 0;
-  transition: background 0.15s, color 0.15s;
-}
-
-.btn-icon:active {
-  background: var(--color-primary-container);
-  color: var(--color-on-primary-container);
-}
-
-.btn-icon .material-symbols-outlined {
-  font-size: 22px;
-}
-
-.btn-icon.has-dot::after {
-  content: '';
-  position: absolute;
-  top: 8px;
-  right: 8px;
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: var(--color-primary);
-  border: 2px solid var(--color-surface);
-}
-
-/* Баннер режима отпуска */
-.vacation-banner {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  margin: 8px 24px 0;
-  padding: 10px 16px;
-  border-radius: var(--radius-md);
-  border: 1px solid var(--color-outline-dim);
-  background: var(--color-secondary-container);
-  color: var(--color-on-secondary-container);
-  font-size: 13.5px;
-  flex-shrink: 0;
-}
-
-.vacation-banner-emoji { font-size: 18px; }
-
-.vacation-banner-text { flex: 1; min-width: 0; }
-
-.vacation-banner-btn {
-  flex-shrink: 0;
-  padding: 6px 14px;
-  font-size: 13px;
-}
-
-.vacation-banner-btn .material-symbols-outlined { font-size: 16px; }
-
-@media (max-width: 768px) {
-  .vacation-banner { margin: 8px 12px 0; flex-wrap: wrap; }
-  .vacation-banner-text { flex-basis: 100%; }
-}
+/* Полоса режима отпуска: вид у неё общий, здесь — только место в раскладке. */
+.vacation-banner { flex-shrink: 0; margin: 8px 16px 0; }
 
 /* ─── Тело ─── */
 .tasks-body {
@@ -883,25 +785,6 @@ watch(() => companiesStore.effectiveCompanyId, () => {
   margin: auto;
 }
 
-.btn-retry {
-  margin-top: 4px;
-  padding: 9px 22px;
-  border: 1px solid var(--color-outline-dim);
-  border-radius: var(--radius-full);
-  background: var(--acrylic-card-bg);
-  color: var(--color-text);
-  font-size: 14px;
-  font-weight: 600;
-  cursor: pointer;
-  transition: background 0.15s;
-}
-
-.btn-retry:hover {
-  background: var(--color-primary);
-  border-color: var(--color-primary);
-  color: var(--color-on-primary);
-}
-
 /* Пагинация */
 .pagination {
   display: flex;
@@ -911,46 +794,12 @@ watch(() => companiesStore.effectiveCompanyId, () => {
   padding: 8px 0 4px;
 }
 
-.page-btn {
-  width: 40px;
-  height: 40px;
-  border: 1px solid var(--color-outline-dim);
-  border-radius: var(--radius-full);
-  background: var(--acrylic-card-bg);
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: var(--color-text);
-  transition: background 0.15s, border-color 0.15s;
-}
-
-.page-btn:disabled {
-  opacity: 0.4;
-  cursor: not-allowed;
-}
-
-.page-btn:not(:disabled):hover {
-  background: var(--color-primary);
-  border-color: var(--color-primary);
-  color: var(--color-on-primary);
-}
-
-.page-btn .material-symbols-outlined {
-  font-size: 22px;
-}
-
 .page-info {
   min-width: 48px;
   text-align: center;
   font-size: 14px;
   font-weight: 650;
   color: var(--color-text);
-}
-
-/* Видимость по платформе */
-.mobile-only {
-  display: none;
 }
 
 /* ─── Мобильная адаптивность ─── */

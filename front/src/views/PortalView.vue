@@ -1,48 +1,26 @@
 <template>
-  <!-- Общий каркас admin-page — та же геометрия, что у вкладки «Сотрудники»:
-       переключение вкладок хаба не должно сдвигать интерфейс. -->
-  <div class="admin-page portal" :class="{ 'has-panel': !isMobile, 'has-bg': feedBgOn, 'bg-mobile': feedBgOn && isMobile }">
-    <!-- Стеклянная панель-хаб (как правая панель ежедневника): тулбар + лента
-         внутри. На десктопе — панель, на мобиле обёртка растворяется. -->
-    <div class="hub-panel">
-      <!-- Обои ленты внутри панели (клипаются скруглением); только десктоп. -->
-      <ChatBackgroundLayer v-if="feedBgOn" :recipe="store.background" />
-      <header class="admin-sticky">
-      <div class="portal-toolbar">
-        <PortalHubTabs class="portal-hub-tabs" />
-        <SearchField
-          v-model="searchInput"
-          placeholder="Поиск по постам…"
-          hotkey
-          :collapsible="false"
-          @update:model-value="onSearch"
-          @clear="clearSearch"
-        />
+  <AppPage
+    class="portal"
+    :class="{ 'has-bg': feedBgOn }"
+    title="Портал"
+    :commands="commands"
+    flush
+    @command="onCommand"
+  >
+    <template #subhead>
+      <PortalHubTabs class="portal-hub-tabs" />
+      <SearchField
+        v-model="searchInput"
+        placeholder="Поиск по постам…"
+        hotkey
+        :collapsible="false"
+        @update:model-value="onSearch"
+        @clear="clearSearch"
+      />
+    </template>
 
-        <button
-          class="btn-glass portal-manage-btn"
-          title="Оформление ленты"
-          aria-label="Оформление ленты"
-          @click="bgDialogOpen = true"
-        >
-          <span class="material-symbols-outlined">palette</span>
-          <span class="portal-btn-label">Оформление</span>
-        </button>
-        <button
-          v-if="isAdmin()"
-          class="btn-glass portal-manage-btn"
-          title="Управление разделами"
-          aria-label="Управление разделами"
-          @click="topicsDialogOpen = true"
-        >
-          <span class="material-symbols-outlined">tune</span>
-          <span class="portal-btn-label">Разделы</span>
-        </button>
-        <button class="btn-grad" @click="openComposer(null)">
-          <span class="material-symbols-outlined">edit</span>
-          <span class="portal-btn-label">Написать пост</span>
-        </button>
-      </div>
+    <!-- Обои ленты рисуются под содержимым панели. -->
+    <ChatBackgroundLayer v-if="feedBgOn" :recipe="store.background" />
 
       <!-- Единая строка фильтров: разделы + популярные хештеги (тренды, как в
            соцсетях) в одном горизонтальном скролле — на мобильных не отъедает
@@ -79,18 +57,19 @@
           </button>
         </template>
       </div>
-    </header>
 
-    <div class="admin-body">
       <div class="portal-feed">
-      <div v-if="store.filters.tag" class="portal-tag-banner">
-        <span class="material-symbols-outlined">tag</span>
-        <span class="portal-tag-banner-text">Посты с тегом <strong>#{{ store.filters.tag }}</strong></span>
-        <button class="portal-tag-clear" type="button" @click="store.setTag(null)">
-          <span class="material-symbols-outlined">close</span>
-          Сбросить
-        </button>
-      </div>
+      <AppInfoBar
+        v-if="store.filters.tag"
+        class="portal-tag-banner"
+        tone="info"
+        icon="tag"
+      >
+        Посты с тегом <strong>#{{ store.filters.tag }}</strong>
+        <template #actions>
+          <AppButton size="sm" icon="close" label="Сбросить" @click="store.setTag(null)" />
+        </template>
+      </AppInfoBar>
       <div v-if="store.loadingPosts" class="portal-status">
         <BrandLoader :size="64" />
       </div>
@@ -139,27 +118,16 @@
               @forward="openForward"
             />
           </div>
-          <button
+          <AppButton
             v-if="store.nextCursor"
             class="portal-load-more"
-            :disabled="store.loadingMore"
+            label="Показать ещё"
+            :loading="store.loadingMore"
             @click="store.fetchMore()"
-          >
-            <ProgressSpinner v-if="store.loadingMore" style="width:16px;height:16px" />
-            <template v-else>Показать ещё</template>
-          </button>
+          />
         </section>
       </template>
       </div>
-    </div>
-    </div>
-
-    <AppFab
-      :visible="isMobile && fabVisible"
-      icon="edit"
-      aria-label="Написать пост"
-      @click="openComposer(null)"
-    />
 
     <PostComposer v-model="composerOpen" :post="editingPost" @saved="onSaved" />
     <ForwardPostDialog v-model="forwardOpen" :post="forwardingPost" @confirm="onForwardConfirm" />
@@ -175,7 +143,7 @@
       :actions="[{ kind: 'cancel', label: 'Отмена' }, { kind: 'confirm', label: 'Удалить', icon: 'delete' }]"
       @confirm="doDelete"
     />
-  </div>
+  </AppPage>
 </template>
 
 <script setup>
@@ -186,13 +154,13 @@ import BrandLoader from '@/components/common/BrandLoader.vue'
 import { useAuthStore } from '@/stores/auth.js'
 import { usePortalStore } from '@/stores/portal.js'
 import { usePermission } from '@/composables/usePermission.js'
-import { useBreakpoint } from '@/composables/useBreakpoint.js'
-import { useFabOnScroll } from '@/composables/useFabOnScroll.js'
 import { useNotificationsStore } from '@/stores/notifications.js'
 import EmptyState from '@/components/common/EmptyState.vue'
+import AppButton from '@/components/ui/AppButton.vue'
+import AppInfoBar from '@/components/ui/AppInfoBar.vue'
+import AppPage from '@/components/ui/AppPage.vue'
 import SearchField from '@/components/common/SearchField.vue'
 import AppDialog from '@/components/ui/AppDialog.vue'
-import AppFab from '@/components/ui/AppFab.vue'
 import PortalHubTabs from '@/components/portal/PortalHubTabs.vue'
 import PostCard from '@/components/portal/PostCard.vue'
 import PostComposer from '@/components/portal/PostComposer.vue'
@@ -205,12 +173,8 @@ import { isBlankRecipe } from '@/utils/chatBackgrounds.js'
 const store = usePortalStore()
 const { isAdmin } = usePermission()
 const route = useRoute()
-const { isMobile } = useBreakpoint()
-// Мобильный FAB «Написать пост»: прячется/появляется по прокрутке ленты.
-const { fabVisible } = useFabOnScroll()
-
-// Обои ленты активны при заданном НЕпустом фоне (и на десктопе внутри панели,
-// и на мобиле full-bleed — панели там нет, а фон показываем).
+// Обои ленты активны при заданном НЕпустом фоне: слой рисуется внутри панели
+// раздела и клипается её скруглением.
 const feedBgOn = computed(() =>
   !!store.background && !isBlankRecipe(store.background))
 
@@ -295,6 +259,18 @@ async function doDelete() {
 const topicsDialogOpen = ref(false)
 const bgDialogOpen = ref(false)
 
+const commands = computed(() => [
+  { key: 'post', label: 'Написать пост', icon: 'edit', variant: 'filled', primary: true, fab: true },
+  { key: 'background', label: 'Оформление ленты', icon: 'palette' },
+  ...(isAdmin() ? [{ key: 'topics', label: 'Управление разделами', icon: 'tune' }] : []),
+])
+
+function onCommand(key) {
+  if (key === 'post') openComposer(null)
+  else if (key === 'background') bgDialogOpen.value = true
+  else if (key === 'topics') topicsDialogOpen.value = true
+}
+
 // ── Пост по прямой ссылке /portal/:id (в т.ч. клик по пересланной плашке
 // в мессенджере). Живёт в сторе (реакции/комментарии/сокеты работают как в
 // ленте); если пост уже виден в общей ленте — отдельной секцией не дублируем. ──
@@ -333,22 +309,12 @@ watch(() => useAuthStore().companyId, (id, prev) => {
 .admin-sticky::after { display: none; }
 
 .portal-hub-tabs { flex-shrink: 0; }
-/* Поиск не сжимается меньше комфортной ширины — при нехватке места первыми
-   переносятся кнопки/вкладки, а не поле ввода. */
-.portal-toolbar :deep(.search-field) { min-width: 240px; }
 
 @keyframes portal-fade {
   from { opacity: 0; transform: translateY(4px); }
   to { opacity: 1; transform: translateY(0); }
 }
 @media (prefers-reduced-motion: reduce) { .portal-feed { animation: none; } }
-
-.portal-toolbar {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  flex-wrap: wrap;
-}
 
 .portal-topics {
   display: flex;
@@ -432,25 +398,7 @@ watch(() => useAuthStore().companyId, (id, prev) => {
   color: var(--color-text);
 }
 .portal-tag-banner > .material-symbols-outlined { color: var(--color-primary); font-size: 20px; }
-.portal-tag-banner-text { flex: 1; min-width: 0; }
 .portal-tag-banner strong { color: var(--color-primary); }
-.portal-tag-clear {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  padding: 5px 12px;
-  border: none;
-  border-radius: var(--radius-full);
-  background: var(--glass-bg);
-  box-shadow: var(--glass-edge);
-  color: var(--color-text);
-  font: inherit;
-  font-size: 12.5px;
-  font-weight: 600;
-  cursor: pointer;
-}
-.portal-tag-clear:hover { background: var(--glass-hover-bg); }
-.portal-tag-clear .material-symbols-outlined { font-size: 16px; }
 
 /* Контент ленты — узкая читабельная колонка внутри общего каркаса. */
 .portal-feed {
@@ -488,24 +436,6 @@ watch(() => useAuthStore().companyId, (id, prev) => {
   flex-direction: column;
   gap: 14px;
 }
-
-.portal-load-more {
-  align-self: center;
-  margin-top: 4px;
-  padding: 9px 20px;
-  border: 1px solid var(--acrylic-border);
-  border-radius: var(--radius-full);
-  background: var(--acrylic-card-bg);
-  background: var(--glass-bg);
-  box-shadow: var(--glass-edge);
-  color: var(--color-text);
-  font: inherit;
-  font-size: 13.5px;
-  font-weight: 600;
-  cursor: pointer;
-  transition: border-color 0.15s;
-}
-.portal-load-more:hover { border-color: color-mix(in oklch, var(--color-primary) 30%, var(--acrylic-border)); }
 
 @media (max-width: 640px) {
   .portal-btn-label { display: none; }

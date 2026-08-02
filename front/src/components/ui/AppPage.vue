@@ -30,7 +30,7 @@
             <h1 v-if="showsTitle" class="page-title">{{ title }}</h1>
           </slot>
 
-          <div v-if="slots.status" class="head-status"><slot name="status" /></div>
+          <div v-if="slots.status" class="head-status"><slot name="status" :narrow="narrowPage" /></div>
 
           <!-- Команды стоят при названии, а не при фильтрах: так строка ниже
                целиком достаётся вкладкам и поиску, и ничто не наезжает. В тесной
@@ -79,7 +79,7 @@
             @click="$emit('back')"
           />
 
-          <div v-if="slots.subhead" class="head-sub"><slot name="subhead" /></div>
+          <div v-if="slots.subhead" class="head-sub"><slot name="subhead" :narrow="narrowPage" /></div>
 
           <div v-if="slots.status && !hasTitleRow" class="head-status"><slot name="status" /></div>
 
