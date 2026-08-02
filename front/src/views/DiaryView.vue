@@ -1,118 +1,119 @@
 <template>
-  <div class="dv split-view">
-    <!-- ЛЕВАЯ ПАНЕЛЬ -->
-    <aside class="split-side">
-      <div class="split-side-head">
-        <span class="split-side-title">Ежедневник</span>
-      </div>
-      <div class="dv-side-tabs">
-        <AppTabs :model-value="store.tab" :tabs="tabs" full-width dense @update:model-value="store.setTab" />
-      </div>
-      <div class="split-side-list">
-        <div v-if="store.loadingList" class="split-side-note">Загрузка…</div>
-        <template v-else>
-          <button
+  <AppListDetail v-model:open="detailOpen" @narrow-change="narrow = $event">
+    <!-- Список ежедневников -->
+    <template #list="{ toggle }">
+      <AppPage
+        embedded
+        title="Ежедневники"
+        show-title
+        :menu="!narrow"
+        menu-icon="left_panel_close"
+        menu-label="Свернуть список"
+        :commands="listCommands"
+        :loading="store.loadingList"
+        @menu="toggle"
+        @command="openCreateDiary"
+      >
+        <template #subhead>
+          <AppTabs :model-value="store.tab" :tabs="tabs" full-width dense @update:model-value="store.setTab" />
+        </template>
+
+        <EmptyState
+          v-if="!store.diaries.length"
+          size="sm"
+          icon="book"
+          :title="store.tab === 'shared' ? 'С вами пока не делились' : 'Ежедневников нет'"
+          :subtitle="store.tab === 'shared' ? 'Здесь появятся ежедневники, которыми с вами поделились.' : 'Создайте первый — он появится в этом списке.'"
+        />
+        <AppStack v-else :gap="6">
+          <AppRow
             v-for="d in store.diaries"
             :key="d.id"
-            class="split-side-item"
-            :class="{ active: d.id === store.selectedId, 'drop-target': dropDiaryId === d.id }"
-            @click="store.select(d.id)"
+            :title="d.name"
+            :icon="store.tab === 'shared' ? 'folder_shared' : 'book'"
+            dense
+            clickable
+            :selected="d.id === store.selectedId"
+            :tone="dropDiaryId === d.id ? 'primary' : 'neutral'"
+            @click="selectDiary(d.id)"
             @dragover="onDiaryDragOver($event, d)"
             @dragleave="dropDiaryId === d.id && (dropDiaryId = null)"
             @drop="onDiaryDrop($event, d)"
           >
-            <span class="split-item-tile">
-              <span class="material-symbols-outlined">{{ store.tab === 'shared' ? 'folder_shared' : 'book' }}</span>
-            </span>
-            <span class="dv-side-main">
-              <span class="split-side-name">{{ d.name }}</span>
-              <span v-if="store.tab === 'shared'" class="dv-side-owner">{{ d.owner_name }}</span>
+            <template v-if="store.tab === 'shared' || diaryTotal(d)" #hint>
+              <span v-if="store.tab === 'shared'">{{ d.owner_name }}</span>
               <span v-if="diaryTotal(d)" class="dv-side-progress">
                 <span class="dv-side-bar"><span class="dv-side-fill" :style="{ width: diaryPct(d) + '%' }" /></span>
                 <span class="dv-side-count">{{ d.done_count || 0 }}/{{ diaryTotal(d) }}</span>
               </span>
-            </span>
-          </button>
-          <p v-if="!store.diaries.length" class="split-side-note">
-            {{ store.tab === 'shared' ? 'С вами пока не делились' : 'Ежедневников нет' }}
-          </p>
-        </template>
-      </div>
-      <button v-if="store.tab === 'mine'" class="split-side-add" @click="openCreateDiary">
-        <span class="material-symbols-outlined">add</span> Новый ежедневник
-      </button>
-    </aside>
+            </template>
+          </AppRow>
+        </AppStack>
+      </AppPage>
+    </template>
 
-    <!-- ПРАВАЯ ПАНЕЛЬ -->
-    <section class="split-main">
-      <!-- Мобайл: боковая панель скрыта — выбор/создание ежедневника в шторке
-           (по образцу групп заметок). Кнопка-селектор показывает активный. -->
-      <div v-if="isMobile" class="dv-mobile-bar">
-        <button class="dv-diary-select" @click="diarySheetOpen = true">
-          <span class="material-symbols-outlined dv-diary-select-icon">{{ store.tab === 'shared' ? 'folder_shared' : 'book' }}</span>
-          <span class="dv-diary-select-name">{{ store.selected?.name || 'Выберите ежедневник' }}</span>
-          <span class="material-symbols-outlined dv-diary-select-chev">expand_more</span>
-        </button>
-      </div>
+    <!-- Выбранный ежедневник -->
+    <template #detail="{ collapsed, toggle }">
+      <AppPage
+        embedded
+        :title="store.selected?.name || ''"
+        :back="narrow"
+        back-label="К ежедневникам"
+        :menu="!narrow && collapsed"
+        menu-icon="left_panel_open"
+        menu-label="Показать список"
+        :commands="commands"
+        flush
+        :scroll="false"
+        @back="detailOpen = false"
+        @menu="toggle"
+        @command="onCommand"
+      >
+        <template v-if="store.selected" #subhead>
+          <AppTabs :model-value="store.subtab" :tabs="subtabs" dense @update:model-value="store.setSubtab" />
 
-      <template v-if="store.selected">
-        <header class="dv-toolbar">
-          <div class="dv-subtabs">
-            <AppTabs :model-value="store.subtab" :tabs="subtabs" dense full-width @update:model-value="store.setSubtab" />
-          </div>
+          <template v-if="store.subtab === 'active'">
+            <div class="dv-nav">
+              <AppButton
+                variant="icon"
+                size="sm"
+                icon="chevron_left"
+                title="Назад"
+                aria-label="Предыдущий период"
+                @click="store.step(-1)"
+              />
+              <AppButton size="sm" label="Сегодня" @click="store.today()" />
+              <AppButton
+                variant="icon"
+                size="sm"
+                icon="chevron_right"
+                title="Вперёд"
+                aria-label="Следующий период"
+                @click="store.step(1)"
+              />
+              <h2 class="dv-period">{{ periodLabel }}</h2>
+            </div>
 
-          <div v-if="store.subtab === 'active'" class="dv-nav">
-            <button class="dv-icon-btn" title="Назад" @click="store.step(-1)"><span class="material-symbols-outlined">chevron_left</span></button>
-            <button class="dv-today" @click="store.today()">Сегодня</button>
-            <button class="dv-icon-btn" title="Вперёд" @click="store.step(1)"><span class="material-symbols-outlined">chevron_right</span></button>
-            <h2 class="dv-period">{{ periodLabel }}</h2>
-          </div>
-
-          <div v-if="store.subtab === 'active'" class="dv-viewseg">
-            <button v-for="v in viewModes" :key="v.value" :class="{ active: store.view === v.value }" @click="store.setView(v.value)">{{ v.label }}</button>
-          </div>
-
-          <!-- Разрыв строки: вторая строка тулбара — поиск + «⋮» + «Запись». -->
-          <div class="dv-toolbar-break" aria-hidden="true"></div>
+            <AppTabs
+              :model-value="store.view"
+              :tabs="viewModes"
+              variant="tint"
+              dense
+              @update:model-value="store.setView"
+            />
+          </template>
 
           <SearchField
             v-model="searchInput"
-            class="dv-toolbar-search"
             placeholder="Поиск по записям…"
             hotkey
+            :collapsible="false"
             @update:model-value="onSearch"
             @clear="clearSearch"
           />
+        </template>
 
-          <div class="dv-actions">
-            <!-- Мобайл: всё управление — в отдельном листе «Управление» -->
-            <button class="dv-icon-btn dv-mobile-controls" title="Управление" @click="controlsOpen = true"><span class="material-symbols-outlined">tune</span></button>
-            <!-- Десктоп: действия свёрнуты в меню «⋮» — тулбар остаётся в две строки. -->
-            <div ref="moreWrapRef" class="dv-more dv-manage">
-              <button class="dv-icon-btn" title="Ещё" @click="moreOpen = !moreOpen"><span class="material-symbols-outlined">more_vert</span></button>
-              <Transition name="dv-more">
-                <div v-if="moreOpen" class="dv-more-menu" @click.stop>
-                  <button v-if="!store.readonly" class="dv-more-item" @click="moreAction(openRenameDiary)">
-                    <span class="material-symbols-outlined">edit</span>Переименовать
-                  </button>
-                  <button v-if="!store.readonly" class="dv-more-item" @click="moreAction(() => (shareOpen = true))">
-                    <span class="material-symbols-outlined">share</span>Поделиться
-                  </button>
-                  <button class="dv-more-item" @click="moreAction(doExport)">
-                    <span class="material-symbols-outlined">download</span>Экспорт в XLSX
-                  </button>
-                  <button v-if="!store.readonly" class="dv-more-item danger" @click="moreAction(() => (confirmDeleteDiary = true))">
-                    <span class="material-symbols-outlined">delete</span>Удалить ежедневник
-                  </button>
-                </div>
-              </Transition>
-            </div>
-            <button v-if="!store.readonly" class="btn-grad" @click="openCreate()">
-              <span class="material-symbols-outlined">add</span><span class="dv-btn-label">Запись</span>
-            </button>
-          </div>
-        </header>
-
+        <template v-if="store.selected">
         <div class="dv-body">
           <!-- АРХИВ — выполненные, сгруппированные по дням -->
           <div v-if="store.subtab === 'archive'" class="dv-archive">
@@ -170,7 +171,7 @@
 
           <!-- АКТИВНЫЕ — календарные виды -->
           <template v-else>
-            <div v-if="!isMobile && store.view !== 'day'" ref="weekGridRef" class="dv-grid" :class="store.view">
+            <div v-if="!narrow && store.view !== 'day'" ref="weekGridRef" class="dv-grid" :class="store.view">
               <template v-if="store.view === 'month'">
                 <div v-for="(wd, i) in weekdays" :key="'h' + i" class="dv-wd">{{ wd }}</div>
               </template>
@@ -201,7 +202,7 @@
               </div>
             </div>
 
-            <div v-else-if="isMobile && store.view !== 'day'" class="dv-agenda">
+            <div v-else-if="narrow && store.view !== 'day'" class="dv-agenda">
               <button v-for="day in agendaDays" :key="dayKey(day)" class="dv-agenda-row" :class="{ today: isToday(day) }" @click="openDay(day)">
                 <div class="dv-agenda-date">
                   <span class="dv-agenda-dnum">{{ day.getDate() }}</span>
@@ -268,32 +269,30 @@
             </div>
           </template>
 
-          <div v-if="store.loadingEntries" class="dv-overlay"><span class="material-symbols-outlined spin">progress_activity</span></div>
+          <div v-if="store.loadingEntries" class="dv-overlay"><BrandLoader :size="48" /></div>
         </div>
-      </template>
+        </template>
 
-      <EmptyState
-        v-else
-        class="split-empty"
-        icon="event_note"
-        tone="soft"
-        :title="store.diaries.length ? (isMobile ? 'Выберите ежедневник сверху' : 'Выберите ежедневник слева') : 'Создайте свой первый ежедневник'"
-        :subtitle="store.diaries.length
-          ? 'Выберите ежедневник в списке, чтобы посмотреть записи'
-          : 'Планируйте дела по дням и отмечайте выполненное'"
-      >
-        <button v-if="store.tab === 'mine' && !store.diaries.length" class="btn-grad" @click="openCreateDiary">
-          <span class="material-symbols-outlined">add</span> Новый ежедневник
-        </button>
-      </EmptyState>
-    </section>
-
-    <AppFab
-      :visible="isMobile && !!store.selected && !store.readonly && fabVisible"
-      icon="add"
-      aria-label="Добавить запись"
-      @click="openCreate()"
-    />
+        <!-- Ежедневник не выбран (широкая раскладка) -->
+        <EmptyState
+          v-else
+          icon="event_note"
+          tone="soft"
+          :title="store.diaries.length ? 'Выберите ежедневник слева' : 'Создайте свой первый ежедневник'"
+          :subtitle="store.diaries.length
+            ? 'Выберите ежедневник в списке, чтобы посмотреть записи'
+            : 'Планируйте дела по дням и отмечайте выполненное'"
+        >
+          <AppButton
+            v-if="store.tab === 'mine' && !store.diaries.length"
+            variant="filled"
+            icon="add"
+            label="Новый ежедневник"
+            @click="openCreateDiary"
+          />
+        </EmptyState>
+      </AppPage>
+    </template>
 
     <!-- Диалог дня -->
     <AppDialog v-model="dayOpen" :title="dayTitle" size="md" :actions="dayActions" @cancel="dayOpen = false" @confirm="openCreate(dayDate)">
@@ -354,84 +353,6 @@
 
     <DiaryShareDialog v-model="shareOpen" :diary-id="store.selectedId" />
 
-    <!-- Мобайл: шторка выбора/создания ежедневника (аналог групп заметок) -->
-    <AppDialog v-model="diarySheetOpen" tone="primary" size="sm" mobile="sheet" title="Ежедневники">
-      <div class="dv-diarysheet">
-        <AppTabs :model-value="store.tab" :tabs="tabs" full-width @update:model-value="store.setTab" />
-
-        <div v-if="store.loadingList" class="dv-diarysheet-note">Загрузка…</div>
-        <template v-else>
-          <template v-for="d in store.diaries" :key="d.id">
-            <form v-if="sheetRenameId === d.id" class="dv-diarysheet-add" @submit.prevent="submitSheetRename(d)">
-              <input ref="sheetInput" v-model="sheetName" class="dv-diarysheet-input" maxlength="120" placeholder="Название ежедневника" />
-              <button class="dv-diarysheet-ok" type="submit" :disabled="!sheetName.trim()"><span class="material-symbols-outlined">check</span></button>
-            </form>
-            <button
-              v-else
-              class="dv-diaryitem"
-              :class="{ active: d.id === store.selectedId }"
-              @click="pickDiary(d)"
-            >
-              <span class="material-symbols-outlined dv-diaryitem-icon">{{ store.tab === 'shared' ? 'folder_shared' : 'book' }}</span>
-              <span class="dv-diaryitem-body">
-                <span class="dv-diaryitem-name">{{ d.name }}</span>
-                <span v-if="store.tab === 'shared' && d.owner_name" class="dv-diaryitem-owner">{{ d.owner_name }}</span>
-                <span v-if="diaryTotal(d)" class="dv-diaryitem-progress">
-                  <span class="dv-diaryitem-bar"><span class="dv-diaryitem-fill" :style="{ width: diaryPct(d) + '%' }" /></span>
-                  <span class="dv-diaryitem-count">{{ d.done_count || 0 }}/{{ diaryTotal(d) }}</span>
-                </span>
-              </span>
-              <span
-                v-if="store.tab === 'mine'"
-                class="material-symbols-outlined dv-diaryitem-edit"
-                role="button" tabindex="0" title="Переименовать"
-                @click.stop="startSheetRename(d)"
-                @keydown.enter.stop="startSheetRename(d)"
-              >edit</span>
-              <span v-if="d.id === store.selectedId" class="material-symbols-outlined dv-diaryitem-check">check</span>
-            </button>
-          </template>
-
-          <p v-if="!store.diaries.length" class="dv-diarysheet-note">
-            {{ store.tab === 'shared' ? 'С вами пока не делились' : 'Ежедневников нет' }}
-          </p>
-
-          <form v-if="store.tab === 'mine' && sheetAdding" class="dv-diarysheet-add" @submit.prevent="submitSheetAdd">
-            <input ref="sheetInput" v-model="sheetName" class="dv-diarysheet-input" maxlength="120" placeholder="Название ежедневника" />
-            <button class="dv-diarysheet-ok" type="submit" :disabled="!sheetName.trim()"><span class="material-symbols-outlined">check</span></button>
-          </form>
-          <button v-else-if="store.tab === 'mine'" class="dv-diaryitem dv-diaryitem-add" @click="startSheetAdd">
-            <span class="material-symbols-outlined">add</span>
-            <span class="dv-diaryitem-name">Новый ежедневник</span>
-          </button>
-        </template>
-      </div>
-    </AppDialog>
-
-    <!-- Мобайл: лист управления (вид, поиск, действия) -->
-    <AppDialog v-model="controlsOpen" title="Управление" size="sm" mobile="sheet" :actions="[{ kind: 'cancel', label: 'Готово' }]" @cancel="controlsOpen = false">
-      <div class="dv-controls">
-        <div v-if="store.subtab === 'active'" class="dv-ctl-block">
-          <span class="dv-ctl-label">Вид</span>
-          <AppTabs :model-value="store.view" :tabs="viewModes" full-width @update:model-value="store.setView" />
-        </div>
-        <div class="dv-ctl-block">
-          <span class="dv-ctl-label">Поиск</span>
-          <div class="dv-search dv-ctl-search">
-            <span class="material-symbols-outlined">search</span>
-            <input v-model="searchInput" type="text" placeholder="Поиск…" @input="onSearch" />
-            <button v-if="searchInput" class="dv-search-clear" @click="clearSearch"><span class="material-symbols-outlined">close</span></button>
-          </div>
-        </div>
-        <div class="dv-ctl-actions">
-          <button v-if="!store.readonly" class="dv-ctl-btn" @click="controlsOpen = false; openRenameDiary()"><span class="material-symbols-outlined">edit</span> Переименовать</button>
-          <button v-if="!store.readonly" class="dv-ctl-btn" @click="controlsOpen = false; shareOpen = true"><span class="material-symbols-outlined">share</span> Поделиться</button>
-          <button class="dv-ctl-btn" @click="controlsOpen = false; doExport()"><span class="material-symbols-outlined">download</span> Экспорт в XLSX</button>
-          <button v-if="!store.readonly" class="dv-ctl-btn danger" @click="controlsOpen = false; confirmDeleteDiary = true"><span class="material-symbols-outlined">delete</span> Удалить ежедневник</button>
-        </div>
-      </div>
-    </AppDialog>
-
     <!-- Создание/переименование ежедневника -->
     <AppDialog
       v-model="nameOpen"
@@ -452,7 +373,7 @@
 
     <!-- Создание задачи с юнитом из записи -->
     <TaskForm v-if="taskFormEntry" :preset-name="taskFormEntry.title" @close="taskFormEntry = null" @saved="onTaskSaved" />
-  </div>
+  </AppListDetail>
 </template>
 
 <script setup>
@@ -461,10 +382,14 @@ import { useRoute } from 'vue-router'
 import AppDialog from '@/components/ui/AppDialog.vue'
 import ConfirmDialog from '@/components/ui/ConfirmDialog.vue'
 import EmptyState from '@/components/common/EmptyState.vue'
+import AppButton from '@/components/ui/AppButton.vue'
+import AppListDetail from '@/components/ui/AppListDetail.vue'
+import AppPage from '@/components/ui/AppPage.vue'
+import AppRow from '@/components/ui/AppRow.vue'
+import AppStack from '@/components/ui/AppStack.vue'
 import AppTabs from '@/components/ui/AppTabs.vue'
+import BrandLoader from '@/components/common/BrandLoader.vue'
 import SearchField from '@/components/common/SearchField.vue'
-import AppFab from '@/components/ui/AppFab.vue'
-import { useFabOnScroll } from '@/composables/useFabOnScroll.js'
 import DiaryEntryDialog from '@/components/diary/DiaryEntryDialog.vue'
 import DiaryShareDialog from '@/components/diary/DiaryShareDialog.vue'
 import TaskForm from '@/components/tasks/TaskForm.vue'
@@ -472,13 +397,46 @@ import { useDiariesStore, dayKey } from '@/stores/diaries.js'
 import { useAuthStore } from '@/stores/auth.js'
 import { exportEntries, getEntries } from '@/api/diaries.js'
 import { useNotificationsStore } from '@/stores/notifications.js'
-import { useBreakpoint } from '@/composables/useBreakpoint.js'
 
 const store = useDiariesStore()
 const route = useRoute()
 const authStore = useAuthStore()
 const notif = useNotificationsStore()
-const { isMobile } = useBreakpoint()
+/* Узкая раскладка — свойство самой панели (раздел живёт окном рабочего стола),
+   поэтому её сообщает AppListDetail, а не медиазапрос по ширине экрана. */
+const narrow = ref(false)
+const detailOpen = ref(false)
+
+function selectDiary(id) {
+  store.select(id)
+  detailOpen.value = true
+}
+
+const listCommands = computed(() => (store.tab === 'mine'
+  ? [{ key: 'new-diary', label: 'Ежедневник', icon: 'add', variant: 'filled', primary: true }]
+  : []))
+
+/* Команды шапки: создание записи — главное действие (в тесной панели уезжает на
+   плавающую кнопку), управление ежедневником — в меню «ещё». */
+const commands = computed(() => {
+  if (!store.selected) return []
+  const own = !store.readonly
+  return [
+    ...(own ? [{ key: 'add', label: 'Запись', icon: 'add', variant: 'filled', primary: true, fab: true }] : []),
+    ...(own ? [{ key: 'rename', label: 'Переименовать', icon: 'edit' }] : []),
+    ...(own ? [{ key: 'share', label: 'Поделиться', icon: 'share' }] : []),
+    { key: 'export', label: 'Экспорт в XLSX', icon: 'download' },
+    ...(own ? [{ key: 'delete', label: 'Удалить ежедневник', icon: 'delete', tone: 'danger' }] : []),
+  ]
+})
+
+function onCommand(key) {
+  if (key === 'add') openCreate()
+  else if (key === 'rename') openRenameDiary()
+  else if (key === 'share') shareOpen.value = true
+  else if (key === 'export') doExport()
+  else if (key === 'delete') confirmDeleteDiary.value = true
+}
 
 // Ежедневники личные (кросс-компанийные), но привязанные задачи скоупятся
 // активной компанией — при её смене освежаем список и открытые записи.
@@ -488,7 +446,6 @@ watch(() => authStore.companyId, (id, prev) => {
   if (store.selectedId != null) store.fetchEntries({ silent: true })
 })
 // Мобильный FAB «Добавить запись»: прячется/появляется по прокрутке.
-const { fabVisible } = useFabOnScroll()
 
 const tabs = [
   { value: 'mine', label: 'Мои', icon: 'book' },
@@ -768,144 +725,10 @@ async function toggleDone(e, done) {
 
 // Шаринг
 const shareOpen = ref(false)
-// Мобильный лист управления
-const controlsOpen = ref(false)
-
-// ── Мобильная шторка выбора/создания ежедневника (по образцу групп заметок) ──
-const diarySheetOpen = ref(false)
-const sheetAdding = ref(false)
-const sheetRenameId = ref(null)
-const sheetName = ref('')
-const sheetInput = ref(null)
-
-function focusSheetInput() {
-  const el = Array.isArray(sheetInput.value) ? sheetInput.value[0] : sheetInput.value
-  el?.focus()
-}
-function pickDiary(d) {
-  store.select(d.id)
-  diarySheetOpen.value = false
-}
-function startSheetAdd() {
-  sheetRenameId.value = null
-  sheetAdding.value = true
-  sheetName.value = ''
-  nextTick(focusSheetInput)
-}
-function startSheetRename(d) {
-  sheetAdding.value = false
-  sheetRenameId.value = d.id
-  sheetName.value = d.name
-  nextTick(focusSheetInput)
-}
-async function submitSheetAdd() {
-  const name = sheetName.value.trim()
-  if (!name) return
-  sheetAdding.value = false
-  try {
-    const d = await store.createDiary(name)
-    store.select(d.id)
-    diarySheetOpen.value = false
-  } catch (e) {
-    notif.error(e?.message || 'Не удалось создать ежедневник')
-  }
-}
-async function submitSheetRename(d) {
-  const name = sheetName.value.trim()
-  sheetRenameId.value = null
-  if (!name || name === d.name) return
-  try {
-    await store.renameDiary(d.id, name)
-  } catch (e) {
-    notif.error(e?.message || 'Не удалось переименовать')
-  }
-}
-// Смена вкладки Мои/Поделились сбрасывает инлайн-формы шторки.
-watch(() => store.tab, () => { sheetAdding.value = false; sheetRenameId.value = null })
-
-// Создание/переименование ежедневника
-const nameOpen = ref(false)
-const nameMode = ref('create')
-const nameValue = ref('')
-const nameBusy = ref(false)
-const nameInput = ref(null)
-function openCreateDiary() { nameMode.value = 'create'; nameValue.value = ''; nameOpen.value = true; nextTick(() => nameInput.value?.focus()) }
-function openRenameDiary() { nameMode.value = 'rename'; nameValue.value = store.selected?.name || ''; nameOpen.value = true; nextTick(() => nameInput.value?.focus()) }
-async function saveName() {
-  const name = nameValue.value.trim()
-  if (!name) { notif.error('Укажите название'); return }
-  nameBusy.value = true
-  try {
-    if (nameMode.value === 'create') {
-      const d = await store.createDiary(name)
-      store.select(d.id)
-    } else {
-      await store.renameDiary(store.selectedId, name)
-    }
-    nameOpen.value = false
-  } catch (e) {
-    notif.error(e?.message || 'Не удалось сохранить')
-  } finally {
-    nameBusy.value = false
-  }
-}
-
-const confirmDeleteDiary = ref(false)
-async function doDeleteDiary() {
-  confirmDeleteDiary.value = false
-  try { await store.removeDiary(store.selectedId); notif.success('Ежедневник удалён') }
-  catch (e) { notif.error(e?.message || 'Не удалось удалить') }
-}
-
-// Создание задачи с юнитом из записи
-const taskFormEntry = ref(null)
-function onCreateTask(entry) { entryOpen.value = false; taskFormEntry.value = entry }
-async function onTaskSaved(task) {
-  const entry = taskFormEntry.value
-  taskFormEntry.value = null
-  if (entry && task?.id) {
-    try { await store.linkTask(entry.id, task.id); notif.success('Задача создана и привязана к записи') }
-    catch { /* задача создана; связь не критична */ }
-  }
-}
-
-// Экспорт
-async function doExport() {
-  try {
-    let params
-    if (store.subtab === 'archive') params = { archived: 1, search: store.search }
-    else if (store.subtab === 'all') params = { search: store.search }
-    else params = { from: dayKey(store.range.from), to: dayKey(store.range.to), search: store.search }
-    const resp = await exportEntries(store.selectedId, params)
-    if (!resp.ok) throw new Error('export_failed')
-    const blob = await resp.blob()
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url
-    a.download = `${store.selected?.name || 'diary'}.xlsx`
-    document.body.appendChild(a); a.click(); document.body.removeChild(a)
-    URL.revokeObjectURL(url)
-  } catch (e) {
-    notif.error(e?.message || 'Не удалось выгрузить')
-  }
-}
-
-// Меню «⋮» действий тулбара (десктоп): закрывается по пункту и клику вне.
-const moreOpen = ref(false)
-const moreWrapRef = ref(null)
-function moreAction(fn) {
-  moreOpen.value = false
-  fn()
-}
-function onMoreDocClick(e) {
-  if (moreOpen.value && !moreWrapRef.value?.contains(e.target)) moreOpen.value = false
-}
-
 onMounted(() => {
   store.fetchDiaries().then(applySearchQuery)
   weekRO = new ResizeObserver(() => measureWeekColumn())
   if (weekGridRef.value) weekRO.observe(weekGridRef.value)
-  document.addEventListener('mousedown', onMoreDocClick, true)
 })
 /* Переход из строки глобального поиска: открыть нужный ежедневник и
    подставить искомый текст — запись сразу видно в списке. */
@@ -919,12 +742,11 @@ watch(() => route.query, applySearchQuery)
 
 onBeforeUnmount(() => {
   weekRO?.disconnect(); weekRO = null
-  document.removeEventListener('mousedown', onMoreDocClick, true)
 })
 
 // Грид появляется/исчезает при смене вида/подвкладки/устройства — переподключаем
 // observer и пересчитываем после рендера.
-watch([() => store.view, () => store.subtab, isMobile, () => store.selectedId], () => {
+watch([() => store.view, () => store.subtab, narrow, () => store.selectedId], () => {
   nextTick(() => {
     if (weekRO && weekGridRef.value) { weekRO.disconnect(); weekRO.observe(weekGridRef.value) }
     measureWeekColumn()
@@ -934,118 +756,13 @@ watch(() => store.loadingEntries, () => nextTick(measureWeekColumn))
 </script>
 
 <style scoped>
-/* Каркас (стеклянные панели, список, кнопка добавления, мобильное скрытие
-   левой панели) — глобальный паттерн .split-* (main.css). Здесь — только
-   специфика ежедневников: прогресс и drop-цель пункта. Заголовок боковой
-   панели — общий .split-side-head (как у календаря). */
-.dv-side-tabs { padding: 10px 10px 4px; }
-.dv-side-main { flex: 1; display: flex; flex-direction: column; min-width: 0; }
 .dv-side-owner { font-size: 12px; opacity: 0.8; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .dv-side-progress { display: flex; align-items: center; gap: 8px; margin-top: 4px; }
 .dv-side-bar { flex: 1; height: 4px; border-radius: var(--radius-full); background: var(--color-surface-highest); overflow: hidden; }
-.split-side-item.active .dv-side-bar { background: color-mix(in oklch, var(--color-primary) 20%, transparent); }
 .dv-side-fill { display: block; height: 100%; border-radius: inherit; background: var(--color-success); transition: width 0.25s; }
 .dv-side-count { flex-shrink: 0; font-size: 11px; font-weight: 600; font-variant-numeric: tabular-nums; opacity: 0.85; }
-.split-side-item.drop-target {
-  outline: 2px dashed var(--color-primary);
-  outline-offset: -2px;
-  background: color-mix(in oklch, var(--color-primary) 8%, transparent);
-}
-
-/* Правая панель */
-.dv-toolbar { flex-shrink: 0; display: flex; align-items: center; gap: 12px; flex-wrap: wrap; padding: 12px 16px; border-bottom: 1px solid var(--color-outline-dim); }
-.dv-subtabs { flex-shrink: 0; }
-/* Вторая строка тулбара: разрыв → поиск на всю доступную ширину + действия. */
-.dv-toolbar-break { flex-basis: 100%; height: 0; }
-.dv-toolbar-search { flex: 1 1 auto; min-width: 0; }
 .dv-nav { display: flex; align-items: center; gap: 8px; }
-.dv-period { margin: 0 0 0 6px; font-size: 16px; font-weight: 700; color: var(--color-text); text-transform: capitalize; white-space: nowrap; }
-.dv-today {
-  height: 36px; padding: 0 14px; border: 1px solid var(--acrylic-border);
-  border-radius: var(--radius-full);
-  background: var(--acrylic-card-bg);
-  background: var(--glass-bg);
-  box-shadow: var(--glass-edge);
-  color: var(--color-text); font-weight: 600; font-size: 13px; cursor: pointer;
-  transition: border-color 0.15s;
-}
-.dv-today:hover { border-color: color-mix(in oklch, var(--color-primary) 30%, var(--acrylic-border)); }
-/* Сегмент вида — единый стиль с периодами статистики (StatsPeriodControl). */
-.dv-viewseg {
-  display: inline-flex; gap: 2px; padding: 4px;
-  background: var(--color-surface-high);
-  background: var(--glass-bg);
-  box-shadow: var(--glass-edge);
-  border: 1px solid var(--acrylic-border);
-  border-radius: var(--radius-full);
-}
-.dv-viewseg button {
-  min-height: 36px; padding: 8px 14px; border: none; background: transparent;
-  border-radius: var(--radius-full); color: var(--color-text-dim); cursor: pointer;
-  font-weight: 600; font-size: 13px; transition: background 0.15s, color 0.15s, box-shadow 0.15s;
-}
-.dv-viewseg button:hover:not(.active) { color: var(--color-text); }
-.dv-viewseg button.active { background: var(--grad-primary); color: var(--color-on-primary); font-weight: 700; box-shadow: var(--shadow-sm); }
-.dv-search {
-  flex: 1 1 auto; display: flex; align-items: center; gap: 8px; height: 38px;
-  padding: 0 12px; min-width: 170px;
-  background: var(--color-surface-low);
-  background: var(--glass-bg);
-  box-shadow: var(--glass-edge);
-  border: 1px solid var(--acrylic-border);
-  border-radius: var(--radius-full);
-}
-.dv-search > .material-symbols-outlined { color: var(--color-text-dim); font-size: 20px; }
-.dv-search input { flex: 1; min-width: 0; border: none; background: none; outline: none; color: var(--color-text); font-size: 14px; }
-.dv-search-clear { border: none; background: none; cursor: pointer; color: var(--color-text-dim); display: grid; place-items: center; }
-.dv-actions { display: flex; align-items: center; gap: 8px; }
-
-/* Меню «⋮» тулбара — акриловый поповер (по образцу контекстных меню). */
-.dv-more { position: relative; }
-.dv-more-menu {
-  position: absolute;
-  top: calc(100% + 6px);
-  right: 0;
-  z-index: 1200;
-  min-width: 220px;
-  padding: 6px;
-  background: var(--acrylic-bg);
-  -webkit-backdrop-filter: var(--acrylic-blur);
-  backdrop-filter: var(--acrylic-blur);
-  border: 1px solid var(--color-outline-dim);
-  border-radius: var(--radius-md, 12px);
-  box-shadow: var(--shadow-lg);
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-.dv-more-item {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 10px 12px;
-  border: none;
-  background: transparent;
-  color: var(--color-text);
-  font: inherit;
-  font-size: 14px;
-  font-weight: 500;
-  text-align: left;
-  border-radius: var(--radius-sm, 8px);
-  cursor: pointer;
-  white-space: nowrap;
-  transition: background 0.15s, color 0.15s;
-}
-.dv-more-item:hover { background: var(--color-surface-low); }
-.dv-more-item.danger { color: var(--color-error); }
-.dv-more-item.danger:hover { background: var(--color-error-container); color: var(--color-on-error-container); }
-.dv-more-item .material-symbols-outlined { font-size: 18px; }
-
-.dv-more-enter-active, .dv-more-leave-active { transition: opacity 0.14s, transform 0.14s; transform-origin: top right; }
-.dv-more-enter-from, .dv-more-leave-to { opacity: 0; transform: scale(0.96) translateY(-4px); }
-.dv-icon-btn { width: 38px; height: 38px; display: grid; place-items: center; border: 1px solid var(--color-outline-dim); border-radius: var(--radius-full); background: var(--acrylic-card-bg); color: var(--color-text-dim); cursor: pointer; }
-.dv-icon-btn:hover { background: var(--color-surface-high); color: var(--color-text); }
-.dv-mobile-controls { display: none; } /* кнопка «Управление» — только на мобайле */
+.dv-period { margin: 0 0 0 6px; font-size: 16px; font-weight: 700; color: var(--color-text); text-transform: capitalize; white-space: nowrap; } /* кнопка «Управление» — только на мобайле */
 
 /* Тело */
 .dv-body { position: relative; flex: 1; min-height: 0; overflow: auto; }
@@ -1120,8 +837,6 @@ watch(() => store.loadingEntries, () => nextTick(measureWeekColumn))
 .dv-arow-chev { flex-shrink: 0; color: var(--color-text-dim); }
 
 .dv-overlay { position: absolute; inset: 0; display: grid; place-items: center; background: color-mix(in oklch, var(--color-surface) 50%, transparent); }
-.spin { animation: dvspin 1s linear infinite; font-size: 32px; color: var(--color-primary); }
-@keyframes dvspin { to { transform: rotate(360deg); } }
 
 /* Диалог дня */
 .dd { display: flex; flex-direction: column; gap: 8px; }
@@ -1165,79 +880,9 @@ watch(() => store.loadingEntries, () => nextTick(measureWeekColumn))
 .dv-diary-select-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: left; }
 .dv-diary-select-chev { color: var(--color-text-dim); flex-shrink: 0; }
 
-/* Шторка ежедневников (аналог групп заметок NotesView) */
-.dv-diarysheet { display: flex; flex-direction: column; gap: 6px; }
-.dv-diarysheet-note { padding: 14px; text-align: center; color: var(--color-text-dim); font-size: 14px; }
-.dv-diaryitem {
-  display: flex; align-items: center; gap: 10px; padding: 12px 14px;
-  border: 1px solid var(--color-outline-dim); border-radius: var(--radius-md);
-  background: var(--acrylic-card-bg); color: var(--color-text);
-  font: inherit; font-size: 14.5px; font-weight: 600; text-align: left; cursor: pointer;
-}
-.dv-diaryitem.active { border-color: var(--color-primary); background: color-mix(in oklch, var(--color-primary) 10%, var(--acrylic-card-bg)); }
-.dv-diaryitem-icon { color: var(--color-primary); font-size: 20px; flex-shrink: 0; }
-.dv-diaryitem-body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
-.dv-diaryitem-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.dv-diaryitem-owner { font-size: 12px; font-weight: 500; color: var(--color-text-dim); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.dv-diaryitem-progress { display: flex; align-items: center; gap: 8px; }
-.dv-diaryitem-bar { flex: 1; height: 4px; border-radius: var(--radius-full); background: var(--color-surface-highest); overflow: hidden; }
-.dv-diaryitem-fill { display: block; height: 100%; border-radius: inherit; background: var(--color-success); }
-.dv-diaryitem-count { flex-shrink: 0; font-size: 11px; font-weight: 700; font-variant-numeric: tabular-nums; color: var(--color-text-dim); }
-.dv-diaryitem-edit { color: var(--color-text-dim); font-size: 20px; flex-shrink: 0; padding: 6px; margin: -6px 0; border-radius: 50%; }
-.dv-diaryitem-check { color: var(--color-primary); font-size: 20px; flex-shrink: 0; }
-.dv-diaryitem-add { color: var(--color-primary); border-style: dashed; }
-.dv-diaryitem-add .dv-diaryitem-name { flex: none; }
-.dv-diaryitem-add .material-symbols-outlined { color: var(--color-primary); font-size: 20px; }
-.dv-diarysheet-add { display: flex; align-items: center; gap: 8px; }
-.dv-diarysheet-input {
-  flex: 1; min-width: 0; padding: 12px 14px; border: 1px solid var(--color-primary);
-  border-radius: var(--radius-md); background: var(--color-surface); color: var(--color-text);
-  font: inherit; font-size: 14.5px; outline: none;
-}
-.dv-diarysheet-ok {
-  flex-shrink: 0; width: 44px; height: 44px; display: grid; place-items: center;
-  border: none; border-radius: var(--radius-md); background: var(--color-primary);
-  color: var(--color-on-primary); cursor: pointer;
-}
-.dv-diarysheet-ok:disabled { opacity: 0.5; cursor: not-allowed; }
-
+/* Телефон: тело скроллится под панель задач каркаса — оставляем ей воздух. */
 @media (max-width: 768px) {
-  /* Скрытие левой панели и разворот правой — в глобальном .split-* */
-  /* Резерв под нижнюю навигацию (64px) + 12px воздуха: сетка/списки
-     скроллятся под стекло, последние записи не прячутся за навигацией. */
   .dv-body { padding-bottom: calc(76px + env(safe-area-inset-bottom, 0px)); }
-  .dv-toolbar { padding: 10px 12px; gap: 8px; }
-  .dv-period { font-size: 14px; }
-  /* Вид, поиск и управляющие иконки уезжают в лист «Управление» — на узком
-     экране в панели остаются только вкладки, навигация по периоду и «Запись». */
-  .dv-toolbar .dv-viewseg,
-  .dv-toolbar .dv-toolbar-search,
-  .dv-toolbar .dv-toolbar-break,
-  .dv-manage { display: none; }
-  /* Создание записи на мобильном — плавающий FAB, кнопка тулбара не нужна. */
-  .dv-actions .btn-grad { display: none; }
-  .dv-mobile-controls { display: grid; }
-  .dv-subtabs { order: 0; flex-basis: 100%; }
-  /* Навигация по периоду и кнопка «Управление» — в ОДНОЙ строке (отдельная
-     строка под одну иконку съедала слишком много места сверху). */
-  .dv-nav { order: 1; flex: 1 1 auto; min-width: 0; }
-  .dv-nav .dv-period { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
-  .dv-actions { order: 2; flex-basis: auto; flex-shrink: 0; justify-content: flex-end; }
+  .dv-period { font-size: 15px; }
 }
-
-/* Лист управления (мобайл) */
-.dv-controls { display: flex; flex-direction: column; gap: 18px; }
-.dv-ctl-block { display: flex; flex-direction: column; gap: 8px; }
-.dv-ctl-label { font-size: 13px; font-weight: 600; color: var(--color-text-dim); }
-.dv-ctl-search { flex: 0 0 auto; width: 100%; height: 44px; }
-.dv-ctl-actions { display: flex; flex-direction: column; gap: 4px; }
-.dv-ctl-btn {
-  display: flex; align-items: center; gap: 12px; width: 100%; padding: 12px 10px;
-  border: none; background: none; cursor: pointer; border-radius: var(--radius-md);
-  color: var(--color-text); font: inherit; font-weight: 600; font-size: 15px; text-align: left;
-}
-.dv-ctl-btn:hover { background: var(--color-surface-high); }
-.dv-ctl-btn .material-symbols-outlined { color: var(--color-text-dim); }
-.dv-ctl-btn.danger { color: var(--color-error); }
-.dv-ctl-btn.danger .material-symbols-outlined { color: var(--color-error); }
 </style>

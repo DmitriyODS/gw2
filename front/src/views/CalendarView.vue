@@ -573,15 +573,34 @@ watch(() => store.loadingEntries, () => nextTick(measureWeekColumn))
 </script>
 
 <style scoped>
-/* Каркас, шапка, команды и список календарей — общие компоненты
-   (AppListDetail / AppPage). Здесь — только рабочая область: сетка месяца,
-   лента дней и список записей дня. */
 .cv-nav { display: flex; align-items: center; gap: 8px; }
 .cv-period { margin: 0 0 0 6px; font-size: 17px; font-weight: 700; color: var(--color-text); text-transform: capitalize; white-space: nowrap; }
 
-/* Сегмент вида — как режимы периода в статистике (StatsPeriodControl):
-   мягкий контейнер-пилюля, активный пункт — стеклянная пилюля с primary. */
+/* ── Тело ── */
+.cv-body { position: relative; flex: 1; min-height: 0; overflow: auto; }
 
+/* Сетка месяца/недели */
+.cv-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 1px; background: var(--color-outline-dim); min-height: 100%; }
+/* Месяц: шапка дней недели по высоте контента, 6 недель делят остаток поровну.
+   Неделя: один ряд плиток на всю высоту (шапка не дублируется — день подписан в плитке). */
+.cv-grid.month { grid-template-rows: auto repeat(6, 1fr); }
+.cv-grid.week { grid-template-rows: 1fr; }
+.cv-wd {
+  /* Sticky-шапка: записи прокручиваются под ней — полный акрил */
+  background: var(--acrylic-bg-strong);
+  -webkit-backdrop-filter: var(--acrylic-blur);
+  backdrop-filter: var(--acrylic-blur);
+  padding: 8px 10px; text-align: center;
+  font-size: 12px; font-weight: 700; color: var(--color-text-dim); text-transform: uppercase;
+  position: sticky; top: 0; z-index: 1;
+}
+/* Фон ячеек — спокойный акрил БЕЗ статичной дымки: на площади всей сетки
+   «иней» слишком яркий; стекло здесь проявляется только на hover. */
+.cv-day {
+  background: var(--acrylic-card-bg);
+  min-height: 104px; padding: 6px;
+  display: flex; flex-direction: column; gap: 4px; cursor: pointer; overflow: hidden;
+}
 .cv-grid.week .cv-day { min-height: 0; }
 /* Hover — глобальное «запотевание» .glass-hover (main.css). */
 .cv-day.dim { background: var(--color-surface-low); }
