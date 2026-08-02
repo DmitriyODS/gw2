@@ -5,9 +5,11 @@
    содержимое: вместо текста рисунок. */
 import { computed, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import InputText from 'primevue/inputtext'
-import BrandLoader from '@/components/common/BrandLoader.vue'
+import AppButton from '@/components/ui/AppButton.vue'
+import AppListDetail from '@/components/ui/AppListDetail.vue'
+import AppPage from '@/components/ui/AppPage.vue'
 import Breadcrumbs from '@/components/common/Breadcrumbs.vue'
+import SearchField from '@/components/common/SearchField.vue'
 import ConfirmDialog from '@/components/ui/ConfirmDialog.vue'
 import ContextMenu from '@/components/common/ContextMenu.vue'
 import EmptyState from '@/components/common/EmptyState.vue'
@@ -92,6 +94,24 @@ const childFolders = computed(() => {
 })
 
 const isEmpty = computed(() => !store.boards.length && !childFolders.value.length)
+
+const listCommands = [
+  { key: 'new-folder', label: 'Папка', icon: 'create_new_folder', variant: 'glass', primary: true },
+]
+
+const commands = [
+  { key: 'new-board', label: 'Новая доска', icon: 'add', variant: 'filled', primary: true, fab: true },
+  { key: 'import', label: 'Импорт доски', icon: 'upload_file' },
+]
+
+function onListCommand(key) {
+  if (key === 'new-folder') newFolder()
+}
+
+function onCommand(key) {
+  if (key === 'new-board') createAndOpen()
+  else if (key === 'import') importInput.value?.click()
+}
 
 onMounted(async () => {
   await store.fetchFolders()
@@ -335,107 +355,118 @@ async function onImportPick(e) {
 </script>
 
 <template>
-  <div class="bv">
-    <aside class="bv-side">
-      <div class="bv-side-actions">
-        <button type="button" class="btn-grad bv-new" @click="createAndOpen">
-          <span class="material-symbols-outlined">add</span> Новая доска
-        </button>
-        <button type="button" class="btn-glass bv-new" @click="newFolder">
-          <span class="material-symbols-outlined">create_new_folder</span> Папка
-        </button>
-      </div>
+  <AppListDetail class="bv" :open="true" :list-width="280">
+    <!-- Разделы и дерево папок -->
+    <template #list="{ toggle }">
+      <AppPage
+        embedded
+        title="Доски"
+        show-title
+        :menu="!isMobile"
+        menu-icon="left_panel_close"
+        menu-label="Свернуть панель"
+        :commands="listCommands"
+        @menu="toggle"
+        @command="onListCommand"
+      >
+        <nav class="bv-scopes">
+          <button
+            type="button"
+            class="bv-scope"
+            :class="{ 'is-active': !store.showShared && !store.showArchived && !store.activeFolderId }"
+            @click="store.openFolder(null)"
+          >
+            <span class="material-symbols-outlined">gesture</span> Мои доски
+          </button>
+          <button
+            type="button"
+            class="bv-scope"
+            :class="{ 'is-active': store.showShared }"
+            @click="store.openShared()"
+          >
+            <span class="material-symbols-outlined">group</span> Поделились со мной
+          </button>
+          <button
+            type="button"
+            class="bv-scope"
+            :class="{ 'is-active': store.showArchived }"
+            @click="store.openArchive()"
+          >
+            <span class="material-symbols-outlined">inventory_2</span> Архив
+          </button>
+        </nav>
 
-      <nav class="bv-scopes">
-        <button
-          type="button"
-          class="bv-scope"
-          :class="{ 'is-active': !store.showShared && !store.showArchived && !store.activeFolderId }"
-          @click="store.openFolder(null)"
-        >
-          <span class="material-symbols-outlined">gesture</span> Мои доски
-        </button>
-        <button
-          type="button"
-          class="bv-scope"
-          :class="{ 'is-active': store.showShared }"
-          @click="store.openShared()"
-        >
-          <span class="material-symbols-outlined">group</span> Поделились со мной
-        </button>
-        <button
-          type="button"
-          class="bv-scope"
-          :class="{ 'is-active': store.showArchived }"
-          @click="store.openArchive()"
-        >
-          <span class="material-symbols-outlined">inventory_2</span> Архив
-        </button>
-      </nav>
-
-      <div class="bv-tree">
-        <TreeView
-          :nodes="store.folderTree"
-          :selected-id="store.activeFolderId"
-          :expanded="expanded"
-          @select="onTreeSelect"
-          @toggle="onTreeToggle"
-          @context="onFolderContext"
-        />
-        <template v-if="store.sharedRoots.length">
-          <div class="bv-side-title"><span>Расшаренные мне</span></div>
+        <div class="bv-tree">
           <TreeView
-            :nodes="store.sharedRoots"
+            :nodes="store.folderTree"
             :selected-id="store.activeFolderId"
             :expanded="expanded"
             @select="onTreeSelect"
+            @toggle="onTreeToggle"
             @context="onFolderContext"
           />
-        </template>
-      </div>
+          <template v-if="store.sharedRoots.length">
+            <div class="bv-side-title"><span>Расшаренные мне</span></div>
+            <TreeView
+              :nodes="store.sharedRoots"
+              :selected-id="store.activeFolderId"
+              :expanded="expanded"
+              @select="onTreeSelect"
+              @context="onFolderContext"
+            />
+          </template>
+        </div>
+      </AppPage>
+    </template>
 
-    </aside>
-
-    <section class="bv-main" @contextmenu.self.prevent="openEmptyMenu">
-      <div class="bv-sticky">
-      <header class="bv-head">
-        <Breadcrumbs
-          :items="store.path"
-          :root-label="crumbRootLabel"
-          root-icon="gesture"
-          class="bv-crumbs"
-          @navigate="onCrumb"
-        />
-        <div class="bv-search">
-          <span class="material-symbols-outlined">search</span>
-          <InputText
+    <template #detail="{ collapsed, toggle }">
+      <AppPage
+        embedded
+        :title="title"
+        :menu="!isMobile && collapsed"
+        menu-icon="left_panel_open"
+        menu-label="Показать панель"
+        :commands="commands"
+        :loading="store.loading"
+        flush
+        :scroll="false"
+        @menu="toggle"
+        @command="onCommand"
+      >
+        <template #subhead>
+          <Breadcrumbs
+            :items="store.path"
+            :root-label="crumbRootLabel"
+            root-icon="gesture"
+            class="bv-crumbs"
+            @navigate="onCrumb"
+          />
+          <SearchField
             v-model="searchDraft"
             placeholder="Поиск по названиям и надписям"
-            @input="onSearchInput"
+            :collapsible="false"
+            @update:model-value="onSearchInput"
           />
-        </div>
-        <button type="button" class="bv-icon" title="Импорт доски" @click="importInput?.click()">
-          <span class="material-symbols-outlined">upload_file</span>
-        </button>
+        </template>
+
         <input ref="importInput" type="file" accept=".json,.txt" hidden multiple @change="onImportPick" />
-      </header>
 
-      <h2 class="bv-title">{{ title }}</h2>
-      </div>
-
-      <BrandLoader v-if="store.loading" :size="64" class="bv-loader" />
-
+    <section class="bv-main" @contextmenu.self.prevent="openEmptyMenu">
       <EmptyState
-        v-else-if="isEmpty"
+        v-if="isEmpty"
         class="bv-empty"
         icon="gesture"
         tone="soft"
         title="Здесь пока пусто"
         subtitle="Доска — бесконечный холст: схемы, наброски, стикеры. Рисуйте сами или откройте доступ коллегам."
       >
-        <button v-if="!store.showShared && !store.showArchived" type="button" class="btn-grad" @click="createAndOpen">
-          <span class="material-symbols-outlined">add</span> Создать доску
-        </button>
+        <AppButton
+          v-if="!store.showShared && !store.showArchived"
+          variant="filled"
+          icon="add"
+          label="Создать доску"
+          @click="createAndOpen"
+        />
       </EmptyState>
 
       <div v-else class="bv-grid" @contextmenu.self.prevent="openEmptyMenu">
@@ -491,6 +522,8 @@ async function onImportPick(e) {
 
       </div>
     </section>
+      </AppPage>
+    </template>
 
     <ContextMenu
       :visible="menu.visible"
@@ -526,33 +559,10 @@ async function onImportPick(e) {
       @confirm="confirmDelete"
       @cancel="confirmTarget = null"
     />
-  </div>
+  </AppListDetail>
 </template>
 
 <style scoped>
-.bv {
-  display: grid;
-  grid-template-columns: 260px 1fr;
-  gap: 12px;
-  height: 100%;
-  min-height: 0;
-  padding: 12px;
-}
-
-.bv-side {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  min-height: 0;
-  overflow-y: auto;
-  padding: 12px;
-  border: 1px solid var(--glass-edge);
-  border-radius: var(--radius-lg);
-  background: var(--acrylic-card-bg);
-}
-
-.bv-side-actions { display: flex; flex-direction: column; gap: 6px; }
-.bv-new { justify-content: center; gap: 6px; }
 .bv-scopes { display: flex; flex-direction: column; gap: 2px; }
 
 .bv-scope {
@@ -585,71 +595,7 @@ async function onImportPick(e) {
 }
 
 .bv-tree { min-height: 0; }
-
-.bv-main {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  min-height: 0;
-  overflow-y: auto;
-}
-
-/* Крошки, поиск и заголовок остаются на месте: прокручиваются только плитки. */
-.bv-sticky {
-  position: sticky;
-  top: 0;
-  z-index: 2;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  padding-bottom: 8px;
-  /* Полупрозрачная плашка со стеклом: под ней проезжают плитки, а фон
-     приложения (градиент) остаётся виден. */
-  background: var(--acrylic-bg);
-  -webkit-backdrop-filter: var(--acrylic-blur);
-  backdrop-filter: var(--acrylic-blur);
-}
-
-.bv-head { display: flex; align-items: center; gap: 8px; }
 .bv-crumbs { min-width: 0; }
-
-.bv-search {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  flex: 1;
-  min-width: 0;
-  padding: 0 10px;
-  border: 1px solid var(--glass-edge);
-  border-radius: 999px;
-  background: var(--glass-bg);
-}
-
-.bv-search :deep(input) {
-  flex: 1;
-  min-width: 0;
-  border: none;
-  background: transparent;
-  box-shadow: none;
-}
-
-.bv-icon {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-width: 34px;
-  max-width: 34px;
-  min-height: 34px;
-  max-height: 34px;
-  border: none;
-  border-radius: var(--radius-sm);
-  background: transparent;
-  color: var(--color-text);
-  cursor: pointer;
-}
-
-.bv-icon:hover { background: var(--color-surface-variant); }
-.bv-title { margin: 0; font-size: 1.1rem; font-weight: 600; }
 
 .bv-grid {
   display: grid;
@@ -719,7 +665,6 @@ async function onImportPick(e) {
 .bv-owner { overflow: hidden; text-overflow: ellipsis; }
 .bv-chip { padding: 1px 8px; border-radius: 999px; background: var(--color-surface-variant); }
 .bv-badge { font-size: 14px; color: var(--color-text-muted); }
-.bv-loader { margin: auto; }
 .bv-empty { margin: auto; }
 
 @media (max-width: 900px) {
