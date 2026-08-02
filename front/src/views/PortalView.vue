@@ -321,7 +321,7 @@ watch(() => useAuthStore().companyId, (id, prev) => {
   display: flex;
   gap: 8px;
   overflow-x: auto;
-  padding-bottom: 2px;
+  padding: 2px 18px 6px;
   scrollbar-width: none;
 }
 .portal-topics::-webkit-scrollbar { display: none; }
@@ -408,7 +408,9 @@ watch(() => useAuthStore().companyId, (id, prev) => {
   gap: 20px;
   max-width: 760px;
   margin: 0 auto;
+  padding: 0 18px 18px;
   width: 100%;
+  box-sizing: border-box;
   animation: portal-fade 0.2s ease;
 }
 
@@ -453,5 +455,10 @@ watch(() => useAuthStore().companyId, (id, prev) => {
      на освободившуюся ширину (full-width включает сам PortalHubTabs). */
   .portal-toolbar .btn-grad { display: none; }
   .portal-hub-tabs { flex: 1; min-width: 0; }
+}
+
+@media (max-width: 768px) {
+  .portal-topics { padding: 2px 12px 6px; }
+  .portal-feed { padding: 0 12px 18px; }
 }
 </style>
