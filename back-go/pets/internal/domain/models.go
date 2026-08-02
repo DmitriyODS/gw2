@@ -143,8 +143,16 @@ func (p *Pet) Fall(ailment string, now time.Time) {
 	p.Recovery = 0
 }
 
-// Cure — выздороветь (без сохранения).
+// Cure — выздороветь (без сохранения). Шкала, из-за которой питомец слёг,
+// поднимается до RecoveredNeedFloor: иначе выздоровевший с нулевой шкалой
+// немедленно заболевал бы снова — ближайший пересчёт потребностей увидел бы
+// тот же ноль и поставил тот же диагноз.
 func (p *Pet) Cure() {
+	if need := NeedForAilment(p.AilmentKey()); need != "" {
+		if p.Needs.Get(need) < RecoveredNeedFloor {
+			p.Needs.Set(need, RecoveredNeedFloor)
+		}
+	}
 	p.SickSince = nil
 	p.Ailment = nil
 	p.Recovery = 0
