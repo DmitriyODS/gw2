@@ -302,7 +302,21 @@ dev-stack-stop:
 	@printf "\033[32m✓ Полный стек остановлен\033[0m\n"
 
 # ── Деплой ───────────────────────────────────────────────────────
-.PHONY: push push-all deploy deploy-only apk deploy-apk desktop deploy-desktop release logs status restart shell
+.PHONY: push push-all deploy deploy-only apk deploy-apk desktop deploy-desktop release logs status restart shell release-branch
+
+# Релизная ветка: с неё и только с неё собираются образы и артефакты.
+# Образы (и APK/десктоп) собираются ИЗ РАБОЧЕГО ДЕРЕВА и уезжают в подвижные
+# теги, которые прод тянет при ближайшем up, — поэтому один `make push`,
+# сделанный по привычке из develop, протащил бы недоделанную версию в прод в
+# обход веток. Осознанное исключение: make push ALLOW_ANY_BRANCH=1.
+RELEASE_BRANCH ?= main
+release-branch:
+	@branch="$$(git rev-parse --abbrev-ref HEAD)"; \
+	if [ "$$branch" != "$(RELEASE_BRANCH)" ] && [ -z "$(ALLOW_ANY_BRANCH)" ]; then \
+		printf "\033[31m✗ Сборка релиза идёт с ветки '%s', а можно только с '%s'.\033[0m\n" "$$branch" "$(RELEASE_BRANCH)"; \
+		printf "  Фикс прода: ветка от %s → слить в %s → собирать оттуда.\n" "$(RELEASE_BRANCH)" "$(RELEASE_BRANCH)"; \
+		printf "  Если это осознанно: повторить с ALLOW_ANY_BRANCH=1\n"; \
+		exit 2; fi
 
 # Прод-стек = база + оверлей (см. шапку deploy/docker-compose.prod.yml).
 COMPOSE_PROD := docker compose -f docker-compose.yml -f docker-compose.prod.yml
@@ -316,12 +330,12 @@ s ?= gateway
 # (git diff origin/main..рабочее дерево; back-go/pkg/* → все Go-сервисы).
 # Выборочно:    make push only="gateway front"
 # Принудительно всё (игнорируя git-дифф): make push-all
-push:
+push: release-branch
 	bash scripts/build_push.sh $(if $(strip $(only)),$(only),--changed)
 
 # Принудительная пересборка и push ВСЕХ образов, без оглядки на git-дифф.
 # Без аргументов build_push.sh берёт весь ALL_SERVICES (единый список в скрипте).
-push-all:
+push-all: release-branch
 	bash scripts/build_push.sh
 
 deploy: push deploy-only
@@ -349,7 +363,7 @@ deploy-only:
 # встанет поверх установленных). Номер сборки (versionCode, ГГММДДН) Gradle
 # читает из apps/mobile/version.json — обнови current_build перед релизом.
 ANDROID_DIR := mobile/android
-apk:
+apk: release-branch
 	@if [ ! -f $(ANDROID_DIR)/keystore.properties ]; then \
 		printf "\033[31m✗ Нет $(ANDROID_DIR)/keystore.properties — скопируй ключ и заполни (см. keystore.properties.example)\033[0m\n"; exit 2; fi
 	@if [ ! -d mobile/node_modules ]; then cd mobile && npm install; fi
@@ -369,7 +383,7 @@ apk:
 # apps/version.json (по нему обновляются установленные ранее нативные
 # приложения — сразу до текущей сборки обёртки). version.json хранятся и в git
 # (их читает Gradle как versionCode), но scp обновляет сборку на сервере сразу.
-deploy-apk:
+deploy-apk: release-branch
 	@if [ ! -f apps/mobile/groovework.apk ] || [ ! -f apps/groovework.apk ]; then \
 		printf "\033[31m✗ Нет APK — сначала make apk\033[0m\n"; exit 2; fi
 	@bash scripts/check_apk_version.sh apps/mobile/groovework.apk apps/mobile/version.json
@@ -391,7 +405,7 @@ deploy-apk:
 # карту files — обёртка и карточка скачивания читают имена оттуда.
 # Сборки НЕ подписаны: для подписи нужны Apple Developer ID / win-сертификат
 # (env CSC_LINK/CSC_KEY_PASSWORD electron-builder'а).
-desktop:
+desktop: release-branch
 	cd desktop && npm install
 	@if [ -n "$(V)" ]; then cd desktop && npm version $(V) --no-git-tag-version --allow-same-version; fi
 	@printf "\033[1m▶ Собираю десктоп-клиент (mac + win + linux)...\033[0m\n"
@@ -411,7 +425,7 @@ desktop:
 # Публикация десктоп-клиента: артефакты + version.json → apps/desktop/ на
 # сервере (nginx раздаёт /apps/; оттуда обёртка проверяет обновления, а
 # карточка «О приложении» даёт скачать). Имена файлов — из version.json.
-deploy-desktop:
+deploy-desktop: release-branch
 	@node -e "const m=require('./apps/desktop/version.json'); \
 		for (const f of Object.values(m.files)) \
 			if (!require('fs').existsSync('apps/desktop/'+f)) { console.error('✗ Нет apps/desktop/'+f+' — сначала make desktop'); process.exit(2); }"
@@ -430,7 +444,7 @@ deploy-desktop:
 #   4) докоммичивает обновлённые version.json;
 #   5) make deploy (образы → Docker Hub, git push, выкат сервера) и
 #      заливает артефакты обоих приложений (deploy-apk + deploy-desktop).
-release:
+release: release-branch
 	@if [ -n "$$(git status --porcelain)" ] && [ -z "$(MSG)" ]; then \
 		printf "\033[31m✗ Есть незакоммиченные изменения — передай MSG=\"текст коммита\"\033[0m\n"; exit 2; fi
 	@if [ -n "$(MSG)" ] && [ -n "$$(git status --porcelain)" ]; then \
