@@ -19,16 +19,6 @@
         :tabs="viewTabs"
         @update:model-value="setViewMode"
       />
-
-      <!-- Узкая панель: фильтры и сортировка живут в шторках, а не в рейке. -->
-      <AppTabs
-        v-if="narrow"
-        :model-value="tasksStore.filters.tab"
-        :tabs="tabs"
-        full-width
-        dense
-        @update:model-value="tasksStore.setTab($event)"
-      />
     </template>
 
     <template #default="{ narrow }">
@@ -380,12 +370,6 @@ const hasActiveFilters = computed(() => {
     || f.received_to
     || f.created_by_me
 })
-
-const tabs = [
-  { value: 'active', label: 'Активные', icon: 'checklist', tutorial: 'tab-active' },
-  { value: 'favorites', label: 'Избранное', icon: 'star', tutorial: 'tab-favorites' },
-  { value: 'archive', label: 'Архив', icon: 'inventory_2', tutorial: 'tab-archive' },
-]
 
 const emptyMeta = {
   active: { icon: 'task_alt', title: 'Активных задач нет', sub: 'Создайте новую задачу или измените фильтры.' },

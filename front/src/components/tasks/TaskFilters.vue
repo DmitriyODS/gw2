@@ -19,7 +19,9 @@
     </div>
 
     <div class="rail-scroll filters-scroll">
-      <!-- Вкладки (на мобильном — SegmentedTabs в шапке экрана) -->
+      <!-- Активные / Избранные / Архив — такой же фильтр, как остальные,
+           поэтому в узкой раскладке они живут здесь, а не отдельной строкой
+           вкладок над лентой: шапка там нужнее поиску. -->
       <section class="rail-section tabs-section">
         <button
           v-for="t in tabs"
@@ -798,11 +800,8 @@ function closeCustomDialog() {
     font-size: 14px;
   }
 
-  /* Вкладки — в SegmentedTabs шапки экрана, сортировки — в шторке SortSheet. */
-  .tabs-section,
-  .sort-section {
-    display: none;
-  }
+  /* Сортировки — в отдельной шторке SortSheet; вкладки остаются здесь. */
+  .sort-section { display: none; }
 
   .filters-foot {
     display: flex;
