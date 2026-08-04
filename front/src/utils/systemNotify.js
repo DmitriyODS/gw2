@@ -89,11 +89,16 @@ function playBeep(kind) {
 
 let swRegistration = null
 
-/* Регистрируем service worker — нужен для OS-уведомлений на мобильных
-   (Android Chrome запрещает new Notification(), только showNotification
-   через регистрацию SW). Вызывается один раз при старте приложения. */
+/* ЕДИНСТВЕННАЯ точка регистрации service worker: другой работы, кроме показа
+   OS-уведомлений, у него нет (кэш и офлайн-оболочка убраны, см. sw.js). Нужен он
+   мобильному вебу — Android Chrome запрещает new Notification() и показывает
+   уведомления только через showNotification. Вызывается один раз после входа. */
 export async function registerNotifyServiceWorker() {
   if (typeof navigator === 'undefined' || !('serviceWorker' in navigator)) return
+  // На dev-сервере SW не поднимаем: прежде он кэшировал модули Vite и ронял
+  // разделы (см. main.js). Уведомления при этом остаются — ниже есть путь через
+  // конструктор Notification, которого десктопным браузерам достаточно.
+  if (import.meta.env.DEV) return
   try {
     await navigator.serviceWorker.register('/sw.js')
     swRegistration = await navigator.serviceWorker.ready

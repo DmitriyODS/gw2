@@ -60,6 +60,15 @@ const GroovePreset = definePreset(Aura, {
 
 const app = createApp(App)
 
+/* Ошибки компонентов иначе теряются: Vue снимает поддерево, экран белеет, а в
+   консоли — только сам факт. Пишем, ЧТО и ГДЕ упало, чтобы жалобу «раздел не
+   открылся» можно было разобрать по тексту. Само окно раздела показывает эту
+   ошибку пользователю (см. WindowContent.vue). */
+app.config.errorHandler = (err, instance, info) => {
+  const where = instance?.$options?.__name || instance?.$?.type?.__name || 'неизвестный компонент'
+  console.error(`[gw] ошибка Vue в «${where}» (${info}):`, err)
+}
+
 app.use(createPinia())
 app.use(router)
 app.use(PrimeVue, {
@@ -91,11 +100,21 @@ app.mount('#app')
 // Сигнал бут-watchdog'у в index.html: приложение реально стартовало.
 window.__gwBooted = true
 
-// PWA: регистрируем service worker сразу при загрузке (а не только после
-// входа) — Chrome предлагает установку лишь при активном SW с fetch-обработчиком.
-// Регистрация идемпотентна: registerNotifyServiceWorker позже переиспользует её.
-if ('serviceWorker' in navigator) {
-  window.addEventListener('load', () => {
-    navigator.serviceWorker.register('/sw.js').catch(() => {})
-  })
+/* Регистрации service worker здесь больше нет: он остался только ради показа
+   OS-уведомлений и поднимается там, где нужен, — registerNotifyServiceWorker()
+   после входа (см. utils/systemNotify.js). Раньше его будили сразу при загрузке,
+   чтобы Chrome предлагал установку PWA, но кэша с офлайн-оболочкой у нас больше
+   нет, а вместе с ним ушёл и смысл ранней регистрации.
+
+   Что здесь осталось — уборка на dev-сервере: SW кэшировал модули Vite и отдавал
+   их вперемешку со свежими, отчего разделы падали на ровном месте (см. sw.js).
+   Установленный ранее SW продолжал бы вредить, поэтому снимаем его и его кэши. */
+if (import.meta.env.DEV && 'serviceWorker' in navigator) {
+  navigator.serviceWorker.getRegistrations()
+    .then((regs) => regs.forEach((r) => r.unregister()))
+    .catch(() => {})
+  // window.caches нет в небезопасном контексте (заход по IP с телефона).
+  if (window.caches) {
+    caches.keys().then((keys) => keys.forEach((k) => caches.delete(k))).catch(() => {})
+  }
 }

@@ -627,8 +627,11 @@ defineExpose({ editor })
 .ne-content :deep(.tiptap ul[data-type='taskList'] input) { accent-color: var(--color-primary); margin-top: 5px; }
 .ne-content :deep(.tiptap ul[data-type='taskList'] li > div) { flex: 1; min-width: 0; }
 
-/* Плейсхолдер пустого документа */
-.ne-content :deep(.tiptap p.is-editor-empty:first-child::before) {
+/* Плейсхолдер пустого документа. Рисуется через ::after, потому что ::before у
+   абзаца занят номером строки: два правила на одном псевдоэлементе оставляли
+   плейсхолдеру геометрию номера (absolute, width: 22px) — подсказка вставала
+   колонкой в один слог, а сам номер пропадал. */
+.ne-content :deep(.tiptap p.is-editor-empty:first-child::after) {
   content: attr(data-placeholder);
   float: left;
   height: 0;

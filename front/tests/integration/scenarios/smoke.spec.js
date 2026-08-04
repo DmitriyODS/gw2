@@ -131,11 +131,11 @@ describeIntegration('smoke: главный GET каждого api-модуля',
     expect(!!s.connected).toBe(false)
   })
 
-  it('backup.exportBackup для не-супер-админа → 403 (blob Response)', async () => {
+  it('backup.exportBackup для не-супер-админа → 403', async () => {
     admin.session.use()
-    const resp = await exportBackup()
-    // blob:true — client.js возвращает сам Response; обычному пользователю 403.
-    expect(resp.status).toBe(403)
+    // blob:true отдаёт сам Response только при успехе; на не-OK client.js бросает
+    // ошибку, иначе вместо архива сохранился бы файл с телом ошибки.
+    await expect(exportBackup()).rejects.toMatchObject({ status: 403 })
   })
 
   // ── Модули, требующие неподнятых сервисов ──
