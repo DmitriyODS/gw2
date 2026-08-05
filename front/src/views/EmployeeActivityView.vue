@@ -1,62 +1,51 @@
 <template>
-  <!-- Тот же каркас admin-page, что у Портала/Сотрудников: полная ширина,
-       единая стеклянная панель со статичной шапкой и внутренним скроллом
-       (у .admin-body есть мобильный отступ под нижнюю навигацию). -->
-  <div class="admin-page ea" :class="{ 'has-panel': !isMobile }">
-    <div class="hub-panel">
-      <header class="admin-sticky ea-sticky">
-        <!-- Шапка -->
-        <div class="ea-head">
-          <button class="ea-back btn-glass" @click="goBack" aria-label="Назад">
-            <span class="material-symbols-outlined">arrow_back</span>
-          </button>
-          <div class="ea-who">
-            <img class="ea-avatar" :src="avatarUrl" :alt="employeeName" />
-            <div class="ea-who-text">
-              <span class="ea-eyebrow">{{ isSelf ? 'Моя активность' : 'Активность сотрудника' }}</span>
-              <h1 class="ea-name">{{ employeeName }}</h1>
-            </div>
-          </div>
-          <button class="ea-export btn-grad" :disabled="exporting || loading" @click="exportDocx">
-            <span class="material-symbols-outlined">{{ exporting ? 'hourglass_top' : 'download' }}</span>
-            <span class="hide-narrow">Скачать .docx</span>
-          </button>
+  <AppPage
+    class="ea"
+    :title="employeeName"
+    back
+    :commands="commands"
+    :loading="loading"
+    @back="goBack"
+    @command="onCommand"
+  >
+    <template #title>
+      <div class="ea-who">
+        <img class="ea-avatar" :src="avatarUrl" :alt="employeeName" />
+        <div class="ea-who-text">
+          <span class="ea-eyebrow">{{ isSelf ? 'Моя активность' : 'Активность сотрудника' }}</span>
+          <h1 class="ea-name">{{ employeeName }}</h1>
         </div>
+      </div>
+    </template>
 
-        <!-- Период -->
-        <div class="ea-periods">
-          <button
-            v-for="p in periods" :key="p.key"
-            class="ea-chip" :class="{ active: activePeriod === p.key }"
-            @click="setPeriod(p.key)"
-          >{{ p.label }}</button>
-          <button
-            class="ea-chip" :class="{ active: activePeriod === 'custom' }"
-            @click="setPeriod('custom')"
-          >Произвольный</button>
-          <DateRangePicker
-            v-if="activePeriod === 'custom'"
-            v-model="customRange"
-            class="ea-range"
-          />
-        </div>
+    <template #subhead>
+      <AppTabs v-model="tab" :tabs="TABS" variant="tint" dense />
+      <div class="ea-periods">
+        <AppChip
+          v-for="p in periods"
+          :key="p.key"
+          interactive
+          :selected="activePeriod === p.key"
+          :label="p.label"
+          @click="setPeriod(p.key)"
+        />
+        <AppChip
+          interactive
+          :selected="activePeriod === 'custom'"
+          label="Произвольный"
+          @click="setPeriod('custom')"
+        />
+        <DateRangePicker
+          v-if="activePeriod === 'custom'"
+          v-model="customRange"
+          class="ea-range"
+        />
+      </div>
+    </template>
 
-        <!-- Подвкладки -->
-        <div class="ea-tabs">
-          <button class="ea-tab" :class="{ active: tab === 'overview' }" @click="tab = 'overview'">
-            <span class="material-symbols-outlined">insights</span> Обзор
-          </button>
-          <button class="ea-tab" :class="{ active: tab === 'feed' }" @click="tab = 'feed'">
-            <span class="material-symbols-outlined">history</span> Полная активность
-          </button>
-        </div>
-      </header>
-
-      <div class="admin-body">
-        <div v-if="loading" class="ea-loading"><BrandLoader :size="64" /></div>
 
         <!-- ОБЗОР -->
-        <template v-else-if="tab === 'overview' && data">
+    <template v-if="tab === 'overview' && data">
           <section class="ea-kpis">
         <article v-for="k in kpis" :key="k.label" class="ea-kpi">
           <div class="ea-kpi-text">
@@ -163,10 +152,8 @@
           </button>
         </div>
       </template>
-        </section>
-      </div>
-    </div>
-  </div>
+    </section>
+  </AppPage>
 </template>
 
 <script setup>
@@ -176,7 +163,9 @@ import * as statsApi from '@/api/stats.js'
 import { getStatsEmployees } from '@/api/stats.js'
 import { useNotificationsStore } from '@/stores/notifications.js'
 import { useAuthStore } from '@/stores/auth.js'
-import { useBreakpoint } from '@/composables/useBreakpoint.js'
+import AppChip from '@/components/ui/AppChip.vue'
+import AppPage from '@/components/ui/AppPage.vue'
+import AppTabs from '@/components/ui/AppTabs.vue'
 import BrandLoader from '@/components/common/BrandLoader.vue'
 import DateRangePicker from '@/components/common/DateRangePicker.vue'
 
@@ -185,7 +174,6 @@ const props = defineProps({ userId: { type: [String, Number], required: true } }
 const router = useRouter()
 const notif = useNotificationsStore()
 const authStore = useAuthStore()
-const { isMobile } = useBreakpoint()
 
 const uid = computed(() => Number(props.userId))
 // Своя активность («Моя активность») vs чужая (доступна руководителю компании).
@@ -203,6 +191,25 @@ const customRange = ref(null)
 const loading = ref(true)
 const exporting = ref(false)
 const data = ref(null)
+
+const TABS = [
+  { value: 'overview', label: 'Обзор', icon: 'insights' },
+  { value: 'feed', label: 'Полная активность', icon: 'history' },
+]
+
+// Выгрузка — единственное действие раздела, поэтому команда одна.
+const commands = computed(() => [{
+  key: 'export',
+  label: exporting.value ? 'Готовим…' : 'Скачать .docx',
+  icon: 'download',
+  primary: true,
+  disabled: exporting.value || loading.value,
+  loading: exporting.value,
+}])
+
+function onCommand(key) {
+  if (key === 'export') exportDocx()
+}
 
 const periods = [
   { key: 'week', label: 'Неделя', days: 7 },
@@ -384,44 +391,15 @@ onMounted(() => { resolveName(); load() })
 </script>
 
 <style scoped>
-/* Каркас — admin-page + hub-panel (как Портал/Сотрудники): полная ширина,
-   стеклянная панель, статичная шапка, внутренний скролл .admin-body. */
-/* Шапка без своей акриловой подложки (на мобиле она давала обрезанную плашку):
-   контент раздела прокручивается в .admin-body ниже, фон шапке не нужен. */
-.ea-sticky { gap: 14px; background: transparent; -webkit-backdrop-filter: none; backdrop-filter: none; }
-.ea-sticky::after { display: none; }
-
-/* Шапка — лёгкая строка внутри панели. */
-.ea-head { display: flex; align-items: center; gap: 12px; }
-.ea-back { width: 38px; height: 38px; padding: 0; display: grid; place-items: center; border-radius: var(--radius-full); flex-shrink: 0; }
+/* Кто на экране — вместо обычного заголовка раздела: аватар и надзаголовок
+   «Моя активность / Активность сотрудника». */
 .ea-who { display: flex; align-items: center; gap: 12px; flex: 1; min-width: 0; }
 .ea-avatar { width: 42px; height: 42px; border-radius: 50%; object-fit: cover; flex-shrink: 0; }
 .ea-who-text { display: flex; flex-direction: column; min-width: 0; }
 .ea-eyebrow { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: var(--color-text-dim); }
 .ea-name { margin: 0; font-size: 19px; font-weight: 800; color: var(--color-text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.ea-export { display: inline-flex; align-items: center; gap: 8px; flex-shrink: 0; }
-.ea-export .material-symbols-outlined { font-size: 19px; }
-
 .ea-periods { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
 .ea-range { margin-left: 4px; }
-.ea-chip {
-  padding: 8px 16px; border-radius: var(--radius-full); border: 1px solid var(--color-outline-dim);
-  background: var(--color-surface); color: var(--color-text-dim); font: inherit; font-weight: 600; cursor: pointer;
-  transition: all .12s;
-}
-.ea-chip.active { background: var(--color-primary); border-color: var(--color-primary); color: var(--color-on-primary); }
-/* Активное/выбранное состояние показано цветом — гасим залипающую фокус-рамку
-   (её низ обрезал overflow панели). Для клавиатуры — inset-ринг, он не режется. */
-.ea-chip:focus, .ea-tab:focus { outline: none; }
-.ea-chip:focus-visible, .ea-tab:focus-visible { outline: 2px solid var(--color-primary); outline-offset: -2px; }
-
-.ea-tabs { display: flex; gap: 6px; border-bottom: 1px solid var(--color-outline-dim); }
-.ea-tab {
-  display: inline-flex; align-items: center; gap: 6px; padding: 10px 14px; border: none; background: transparent;
-  color: var(--color-text-dim); font: inherit; font-weight: 700; cursor: pointer; border-bottom: 2px solid transparent; margin-bottom: -1px;
-}
-.ea-tab.active { color: var(--color-primary); border-bottom-color: var(--color-primary); }
-.ea-tab .material-symbols-outlined { font-size: 19px; }
 
 .ea-loading { display: flex; justify-content: center; padding: 48px; }
 
@@ -498,7 +476,5 @@ onMounted(() => { resolveName(); load() })
   .ea-kpis { grid-template-columns: 1fr 1fr; }
   .ea-hour-cell { height: 40px; }
   .ea-hours-tick { font-size: 9px; }
-  .hide-narrow { display: none; }
-  .ea-export { width: 40px; height: 40px; padding: 0; justify-content: center; }
 }
 </style>

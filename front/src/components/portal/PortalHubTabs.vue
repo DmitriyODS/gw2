@@ -33,3 +33,12 @@ function go(value) {
   router.push(value === 'employees' ? '/employees' : '/portal')
 }
 </script>
+
+<style scoped>
+/* На телефоне вкладки занимают строку ЦЕЛИКОМ: рядом с полем поиска они
+   сжимались, и подписи обрезались до «Лент…». Строка подшапки переносящаяся,
+   поэтому поиск просто уезжает на свою строку. */
+@media (max-width: 768px) {
+  .app-tabs { flex: 1 1 100%; min-width: 0; }
+}
+</style>

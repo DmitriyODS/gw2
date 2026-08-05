@@ -454,7 +454,6 @@ watch(() => useAuthStore().companyId, (id, prev) => {
   /* Создание поста на мобильном — плавающий FAB; вкладки хаба растягиваются
      на освободившуюся ширину (full-width включает сам PortalHubTabs). */
   .portal-toolbar .btn-grad { display: none; }
-  .portal-hub-tabs { flex: 1; min-width: 0; }
 }
 
 @media (max-width: 768px) {

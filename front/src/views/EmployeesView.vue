@@ -1,42 +1,35 @@
 <template>
-  <div class="admin-page" :class="{ 'has-panel': !isMobile }">
-    <!-- Единая стеклянная панель-хаб (как в «Ленте»/ежедневнике). -->
-    <div class="hub-panel">
-      <header class="admin-sticky">
-      <!-- Тулбар одной строкой (как в «Ленте»): вкладки хаба, поиск, статы, фильтры. -->
-      <div class="admin-toolbar">
-        <PortalHubTabs class="emp-hub-tabs" />
-        <SearchField v-model="search" placeholder="Поиск по ФИО, логину, должности" hotkey />
+  <AppPage class="emp" title="Сотрудники">
+    <template #subhead>
+      <PortalHubTabs class="emp-hub-tabs" />
+      <SearchField v-model="search" placeholder="Поиск по ФИО, логину, должности" hotkey />
+    </template>
 
-        <span class="chip-tint chip-tint--primary emp-stat">
-          <span class="material-symbols-outlined">groups</span>
-          <strong>{{ scopedUsers.length }}</strong>&nbsp;{{ pluralPeople(scopedUsers.length) }}
-        </span>
-        <span class="chip-tint chip-tint--success emp-stat">
-          <span class="presence-pulse" />
-          <strong>{{ onlineCount }}</strong>&nbsp;в сети
-        </span>
+    <template #status>
+      <AppChip tone="primary" icon="groups" :count="scopedUsers.length" :label="pluralPeople(scopedUsers.length)" />
+      <AppChip tone="success" :count="onlineCount" label="в сети">
+        <span class="presence-pulse" />
+      </AppChip>
+    </template>
 
-        <div v-if="roleFilters.length > 1" class="emp-chips" role="tablist">
-          <button
-            v-for="f in roleFilters"
-            :key="f.key"
-            :class="['chip', { active: roleFilter === f.key }]"
-            @click="roleFilter = f.key"
-            role="tab"
-            :aria-selected="roleFilter === f.key"
-          >
-            <span v-if="f.icon" class="material-symbols-outlined">{{ f.icon }}</span>
-            {{ f.label }}
-            <span class="chip-count">{{ f.count }}</span>
-          </button>
-        </div>
-      </div>
-    </header>
+    <!-- Роли — фильтр выдачи; показываем, только когда ролей больше одной. -->
+    <div v-if="roleFilters.length > 1" class="emp-chips" role="tablist">
+      <AppChip
+        v-for="f in roleFilters"
+        :key="f.key"
+        interactive
+        :selected="roleFilter === f.key"
+        :icon="f.icon"
+        :label="f.label"
+        :count="f.count"
+        role="tab"
+        :aria-selected="roleFilter === f.key"
+        @click="roleFilter = f.key"
+      />
+    </div>
 
-    <div class="admin-body">
-      <!-- Карточки -->
-      <div class="emp-grid">
+    <!-- Карточки -->
+    <div class="emp-grid">
         <article
           v-for="u in filtered"
           :key="u.id"
@@ -109,20 +102,18 @@
           </div>
         </article>
 
-        <EmptyState
-          v-if="!filtered.length"
-          class="emp-grid-empty"
-          :icon="search ? 'search_off' : 'person_off'"
-          :title="search ? 'Никого не нашли' : 'Сотрудников пока нет'"
-          :subtitle="search ? 'Попробуйте уточнить запрос или сбросить фильтры.' : ''"
-        />
-      </div>
-    </div>
+      <EmptyState
+        v-if="!filtered.length"
+        class="emp-grid-empty"
+        :icon="search ? 'search_off' : 'person_off'"
+        :title="search ? 'Никого не нашли' : 'Сотрудников пока нет'"
+        :subtitle="search ? 'Попробуйте уточнить запрос или сбросить фильтры.' : ''"
+      />
     </div>
 
     <!-- Профиль сотрудника — общий компонент (используется и порталом). -->
     <EmployeeProfileDialog v-model="profileOpen" :user="selected" />
-  </div>
+  </AppPage>
 </template>
 
 <script setup>
@@ -135,7 +126,8 @@ import { useMessengerStore } from '@/stores/messenger.js'
 import { useCallStore } from '@/stores/call.js'
 import { useNotificationsStore } from '@/stores/notifications.js'
 import { formatLastSeen } from '@/utils/presence.js'
-import { useBreakpoint } from '@/composables/useBreakpoint.js'
+import AppChip from '@/components/ui/AppChip.vue'
+import AppPage from '@/components/ui/AppPage.vue'
 import EmployeeProfileDialog from '@/components/common/EmployeeProfileDialog.vue'
 import SearchField from '@/components/common/SearchField.vue'
 import EmptyState from '@/components/common/EmptyState.vue'
@@ -143,7 +135,6 @@ import RolePill from '@/components/common/RolePill.vue'
 import PortalHubTabs from '@/components/portal/PortalHubTabs.vue'
 const router = useRouter()
 const route = useRoute()
-const { isMobile } = useBreakpoint()
 const auth = useAuthStore()
 const companies = useCompaniesStore()
 const messenger = useMessengerStore()
@@ -295,22 +286,16 @@ watch(profileOpen, (open) => {
 <style scoped>
 /* Тулбар без подложки — прозрачная «плавающая» шапка как в «Задачах»
    (и как во второй вкладке хаба — «Ленте»). */
-.admin-sticky { background: transparent; -webkit-backdrop-filter: none; backdrop-filter: none; }
-.admin-sticky::after { display: none; }
-
-/* Вкладки хаба и статы — самостоятельные элементы одной строки тулбара. */
+/* Вкладки хаба не сжимаются: на телефоне они забирают строку целиком — это
+   решает сам PortalHubTabs. */
 .emp-hub-tabs { flex-shrink: 0; }
-.emp-stat { flex-shrink: 0; white-space: nowrap; }
-/* Поиск не сжимается меньше комфортной ширины — при нехватке места первыми
-   переносятся статы/фильтры, а не поле ввода. */
-.admin-toolbar :deep(.search-field) { min-width: 240px; }
 
-.admin-body { animation: emp-fade 0.2s ease; }
+.emp-grid { animation: emp-fade 0.2s ease; }
 @keyframes emp-fade {
   from { opacity: 0; transform: translateY(4px); }
   to { opacity: 1; transform: translateY(0); }
 }
-@media (prefers-reduced-motion: reduce) { .admin-body { animation: none; } }
+@media (prefers-reduced-motion: reduce) { .emp-grid { animation: none; } }
 
 
 .emp-chips {
@@ -328,50 +313,6 @@ watch(profileOpen, (open) => {
 }
 .emp-chips::-webkit-scrollbar { height: 4px; }
 .emp-chips::-webkit-scrollbar-thumb { background: var(--color-outline-dim); border-radius: 999px; }
-
-.chip {
-  appearance: none;
-  border: 1px solid var(--color-outline-dim);
-  background: transparent;
-  color: var(--color-text);
-  padding: 8px 14px;
-  height: 36px;
-  border-radius: var(--radius-full);
-  font: inherit;
-  font-size: 13px;
-  font-weight: 600;
-  cursor: pointer;
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  white-space: nowrap;
-  scroll-snap-align: start;
-  transition: background .12s, color .12s, border-color .12s, box-shadow .12s;
-}
-.chip:hover { background: var(--glass-hover-bg); }
-.chip .material-symbols-outlined { font-size: 18px; opacity: 0.8; }
-.chip-count {
-  min-width: 18px;
-  padding: 0 6px;
-  height: 18px;
-  border-radius: var(--radius-full);
-  background: var(--color-surface-high);
-  color: var(--color-text-dim);
-  font-size: 11px;
-  font-weight: 700;
-  display: inline-grid;
-  place-items: center;
-}
-.chip.active {
-  background: var(--color-secondary-container);
-  color: var(--color-on-secondary-container);
-  border-color: transparent;
-  box-shadow: var(--shadow-sm);
-}
-.chip.active .chip-count {
-  background: color-mix(in oklch, var(--color-on-secondary-container) 18%, transparent);
-  color: var(--color-on-secondary-container);
-}
 
 /* ============ Сетка карточек ============ */
 .emp-grid {
@@ -566,8 +507,7 @@ watch(profileOpen, (open) => {
 }
 @media (max-width: 768px) {
   /* На мобильном поиск занимает всю ширину — min-width снимаем. */
-  .admin-toolbar :deep(.search-field) { flex: 1 1 100%; max-width: 100%; min-width: 0; }
-
+  
   /* Вкладки хаба — на всю ширину строки. */
   .emp-hub-tabs { flex: 1; min-width: 0; }
 
