@@ -93,8 +93,8 @@ func (r *Repo) UpdateProduct(ctx context.Context, p *domain.Product) error {
 func (r *Repo) SetProductStatus(ctx context.Context, id int64, status, reason string) error {
 	_, err := r.pool.Exec(ctx, `
 		UPDATE billing_products
-		   SET status = $2, reject_reason = $3, updated_at = now(),
-		       published_at = CASE WHEN $2 = 'published' THEN COALESCE(published_at, now()) ELSE published_at END
+		   SET status = $2::text, reject_reason = $3, updated_at = now(),
+		       published_at = CASE WHEN $2::text = 'published' THEN COALESCE(published_at, now()) ELSE published_at END
 		 WHERE id = $1`, id, status, reason)
 	return err
 }

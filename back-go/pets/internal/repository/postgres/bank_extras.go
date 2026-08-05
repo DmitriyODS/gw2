@@ -234,7 +234,7 @@ func (r *BankRepo) Donate(ctx context.Context, userID, fundID, companyID int64, 
 			status = CASE WHEN f.collected + $3 >= f.target THEN 'done' ELSE f.status END,
 			finished_at = CASE WHEN f.collected + $3 >= f.target THEN now() ELSE f.finished_at END
 		WHERE f.id = $1 AND f.company_id = $2 AND f.status = 'active'
-		RETURNING `+fundColumns), f)
+		RETURNING `+fundColumns, fundID, companyID, amount), f)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, false, false, false, nil // сбор не найден / не активен
