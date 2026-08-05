@@ -1,26 +1,37 @@
 <template>
-  <div class="messenger" :class="{ 'mobile-chat-open': isMobile && activeId }">
-    <ConversationList
-      :conversations="visibleConversations"
-      :active-id="activeId"
-      :loading="listLoading"
-      :hide-on-mobile="isMobile && !!activeId"
-      :show-support-tab="authStore.isSuperAdmin"
-      :tab="listTab"
-      :support-unread="supportTabUnread"
-      @select="selectConversation"
-      @new-chat="newChatOpen = true"
-      @new-group="newGroupOpen = true"
-      @new-call="startEmptyCall"
-      @toggle-pin="onTogglePin"
-      @delete="askDeleteConversation"
-      @change-tab="onChangeTab"
-    />
+  <!-- Ширину колонки списка задаёт сам ConversationList (340px, с рейлом папок
+       416px), поэтому колонка идёт `auto`: иначе про рейл пришлось бы знать и
+       здесь. Узкую раскладку — «список ⇄ чат с возвратом» — ведёт AppListDetail
+       по ширине ПАНЕЛИ, а не экрана: раздел живёт окном рабочего стола. -->
+  <AppListDetail
+    class="messenger"
+    list-width="auto"
+    :narrow-at="768"
+    :open="!!activeId"
+    @update:open="onDetailOpen"
+  >
+    <template #list>
+      <ConversationList
+        :conversations="visibleConversations"
+        :active-id="activeId"
+        :loading="listLoading"
+        :show-support-tab="authStore.isSuperAdmin"
+        :tab="listTab"
+        :support-unread="supportTabUnread"
+        @select="selectConversation"
+        @new-chat="newChatOpen = true"
+        @new-group="newGroupOpen = true"
+        @new-call="startEmptyCall"
+        @toggle-pin="onTogglePin"
+        @delete="askDeleteConversation"
+        @change-tab="onChangeTab"
+      />
+    </template>
 
+    <template #detail="{ narrow }">
     <section
       ref="panelEl"
       class="chat-panel"
-      :class="{ 'is-mobile-hidden': isMobile && !activeId }"
       :style="isMobile && viewportHeight ? { height: viewportHeight + 'px', top: viewportTop + 'px', bottom: 'auto' } : {}"
       @dragenter.prevent="onDragEnter"
       @dragover.prevent="onDragOver"
@@ -280,6 +291,7 @@
         @typing="onTyping"
       />
     </section>
+    </template>
 
     <AppFab
       :visible="isMobile && !activeId && listTab === 'chats'"
@@ -343,7 +355,7 @@
       @action="onCtxAction"
       @react="onCtxReact"
     />
-  </div>
+  </AppListDetail>
 </template>
 
 <script setup>
@@ -377,6 +389,7 @@ import AttachTaskDialog from '@/components/messenger/AttachTaskDialog.vue'
 import MessageContextMenu from '@/components/messenger/MessageContextMenu.vue'
 import EmployeeProfileDialog from '@/components/common/EmployeeProfileDialog.vue'
 import AppFab from '@/components/ui/AppFab.vue'
+import AppListDetail from '@/components/ui/AppListDetail.vue'
 import EmptyState from '@/components/common/EmptyState.vue'
 import ProgressSpinner from 'primevue/progressspinner'
 import BrandLoader from '@/components/common/BrandLoader.vue'
@@ -932,6 +945,12 @@ async function onSend(payload) {
   }
 }
 
+/* Узкая раскладка закрыла чат («назад» каркаса или переход к списку) —
+   снимаем активный диалог, чтобы список снова стал главным экраном. */
+function onDetailOpen(open) {
+  if (!open) goBack()
+}
+
 function goBack() {
   messenger.activeConversationId = null
   router.back()
@@ -1095,18 +1114,11 @@ watch(() => route.params.conversationId, async (id) => {
 </script>
 
 <style scoped>
-/* Каркас как у мастер-детейл разделов (Заметки/Реестры): страница на «сиянии»
-   .app-layout, две стеклянные панели с зазором. */
-.messenger {
-  display: flex;
-  gap: 16px;
-  padding: 16px;
-  height: 100%;
-  min-height: 0;
-}
-
+/* Каркас — AppListDetail (как у Заметок и Реестров): две колонки с зазором,
+   узкая раскладка «список ⇄ чат». Панели-стёкла рисуют сами колонки:
+   ConversationList — свою, .chat-panel — свою. */
 .chat-panel {
-  flex: 1;
+  height: 100%;
   display: flex;
   flex-direction: column;
   min-width: 0;
@@ -1503,8 +1515,6 @@ watch(() => route.params.conversationId, async (id) => {
   color: var(--color-text-dim);
 }
 
-.is-mobile-hidden { display: none; }
-
 @media (max-width: 768px) {
   /* Статичный полноэкранный макет: фиксируем к вьюпорту, чтобы экран не «ёрзал»
      при показе/скрытии адресной строки браузера. Панель задач каркаса
@@ -1514,8 +1524,6 @@ watch(() => route.params.conversationId, async (id) => {
     inset: 0;
     height: auto;
     z-index: 100;
-    padding: 0;
-    gap: 0;
   }
 
   .chat-panel {
@@ -1527,10 +1535,6 @@ watch(() => route.params.conversationId, async (id) => {
     border-radius: 0;
     padding-bottom: calc(64px + env(safe-area-inset-bottom, 0px));
   }
-  .messenger.mobile-chat-open .chat-panel {
-    display: flex;
-  }
-
   /* ===== Шапка активного чата ===== */
   .chat-header {
     padding: 8px 12px !important;

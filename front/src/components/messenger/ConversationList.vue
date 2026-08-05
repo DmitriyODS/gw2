@@ -1,5 +1,5 @@
 <template>
-  <aside class="conv-list" :class="{ 'is-mobile-hidden': hideOnMobile, 'has-rail': showFolders && !isMobile }">
+  <aside class="conv-list" :class="{ 'has-rail': showFolders && !isMobile }">
     <ChatFolders v-if="showFolders && !isMobile" orientation="vertical" class="conv-rail" />
     <div class="conv-main">
     <div class="conv-list-header">
@@ -356,7 +356,6 @@ const props = defineProps({
   conversations: { type: Array, required: true },
   activeId: { type: Number, default: null },
   loading: { type: Boolean, default: false },
-  hideOnMobile: { type: Boolean, default: false },
   // Включает вкладку «Техподдержка» (для Администратора системы).
   showSupportTab: { type: Boolean, default: false },
   // Активная вкладка ('chats' | 'support'). Управляется родителем, потому что
@@ -905,7 +904,6 @@ function formatTime(iso) {
     height: 100%;
     border-right: none;
   }
-  .conv-list.is-mobile-hidden { display: none; }
 
   .conv-list-header {
     padding: 14px 12px 6px;
