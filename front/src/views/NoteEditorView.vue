@@ -38,53 +38,28 @@
           >{{ initials(p.fio) }}</span>
         </div>
 
+        <!-- В шапке остаётся только масштаб: остальные действия ряд иконок не
+             держал — при сужении окна они обрезались. Всё прочее — в меню «⋮».
+             На телефоне туда же уходит и масштаб: там на ряд места нет. -->
         <div class="np-actions">
-          <!-- Десктоп: масштаб и действия отдельными кнопками -->
-          <template v-if="!isMobile">
-            <!-- Масштаб листа: −/процент (клик — сброс)/+ -->
-            <div class="np-zoom">
-              <button class="np-icon np-zoom-btn" title="Уменьшить масштаб" :disabled="zoom <= ZOOM_MIN" @click="stepZoom(-1)">
-                <span class="material-symbols-outlined">zoom_out</span>
-              </button>
-              <button class="np-zoom-value" title="Сбросить масштаб" @click="resetZoom">{{ Math.round(zoom * 100) }}%</button>
-              <button class="np-icon np-zoom-btn" title="Увеличить масштаб" :disabled="zoom >= ZOOM_MAX" @click="stepZoom(1)">
-                <span class="material-symbols-outlined">zoom_in</span>
-              </button>
-            </div>
-            <button class="np-icon" :class="{ active: findOpen }" title="Найти в заметке (Ctrl+F)" @click="toggleFind">
-              <span class="material-symbols-outlined">search</span>
+          <!-- Масштаб листа: −/процент (клик — сброс)/+ -->
+          <div v-if="!isMobile" class="np-zoom">
+            <button class="np-icon np-zoom-btn" title="Уменьшить масштаб" :disabled="zoom <= ZOOM_MIN" @click="stepZoom(-1)">
+              <span class="material-symbols-outlined">zoom_out</span>
             </button>
-            <template v-if="isOwner">
-              <button class="np-icon" title="Теги" @click="tagsOpen = true">
-                <span class="material-symbols-outlined">sell</span>
-              </button>
-              <button class="np-icon" title="Поделиться" @click="shareOpen = true">
-                <span class="material-symbols-outlined">share</span>
-              </button>
-            </template>
-            <!-- Экспорт доступен и адресатам шаринга (чтение есть — выгрузка тоже) -->
-            <button class="np-icon" title="Скачать .txt" @click="exportFile('txt')">
-              <span class="material-symbols-outlined">description</span>
+            <button class="np-zoom-value" title="Сбросить масштаб" @click="resetZoom">{{ Math.round(zoom * 100) }}%</button>
+            <button class="np-icon np-zoom-btn" title="Увеличить масштаб" :disabled="zoom >= ZOOM_MAX" @click="stepZoom(1)">
+              <span class="material-symbols-outlined">zoom_in</span>
             </button>
-            <button class="np-icon" title="Скачать .md" @click="exportFile('md')">
-              <span class="material-symbols-outlined">markdown</span>
-            </button>
-            <button class="np-icon" title="Скачать .docx" @click="exportFile('docx')">
-              <span class="material-symbols-outlined">article</span>
-            </button>
-            <button v-if="isOwner" class="np-icon danger" title="Удалить заметку" @click="deleteOpen = true">
-              <span class="material-symbols-outlined">delete</span>
-            </button>
-          </template>
+          </div>
 
-          <!-- Мобайл: в узкой шапке ряд иконок не помещается — всё в меню «⋮» -->
-          <div v-else ref="moreRef" class="np-more">
+          <div ref="moreRef" class="np-more">
             <button class="np-icon" title="Ещё" aria-label="Действия с заметкой" @click="moreOpen = !moreOpen">
               <span class="material-symbols-outlined">more_vert</span>
             </button>
             <Transition name="np-more">
               <div v-if="moreOpen" class="np-more-pop">
-                <div class="np-more-zoom">
+                <div v-if="isMobile" class="np-more-zoom">
                   <button class="np-icon np-zoom-btn" title="Уменьшить масштаб" :disabled="zoom <= ZOOM_MIN" @click="stepZoom(-1)">
                     <span class="material-symbols-outlined">zoom_out</span>
                   </button>
@@ -93,7 +68,7 @@
                     <span class="material-symbols-outlined">zoom_in</span>
                   </button>
                 </div>
-                <div class="np-more-divider" />
+                <div v-if="isMobile" class="np-more-divider" />
                 <button class="np-more-item" @click="pickMore(showFind)">
                   <span class="material-symbols-outlined">search</span>
                   Найти в заметке
@@ -878,10 +853,12 @@ async function confirmDelete() {
 @media (max-width: 768px) {
   /* Во всю страницу: без рамки-«карточки». */
   .np { padding: 0; }
+  /* Экран отдан заметке целиком — фон под ней сплошной: просвечивающие обои
+     под текстом мешают читать, а полей, которые бы их показывали, здесь нет. */
   .np-panel {
     border: none;
     border-radius: 0;
-    background: transparent;
+    background: var(--color-surface);
   }
   .np-back-label { display: none; }
   .np-title { margin: 2px 14px 0; font-size: 22px; }

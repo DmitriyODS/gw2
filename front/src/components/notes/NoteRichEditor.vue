@@ -198,7 +198,6 @@ import TableHeader from '@tiptap/extension-table-header'
 import Highlight from '@tiptap/extension-highlight'
 import TaskList from '@tiptap/extension-task-list'
 import TaskItem from '@tiptap/extension-task-item'
-import Placeholder from '@tiptap/extension-placeholder'
 import { TASK_COLORS } from '@/utils/taskColors.js'
 import { proofread as apiProofread, transformText } from '@/api/ai.js'
 import { useNotificationsStore } from '@/stores/notifications.js'
@@ -208,7 +207,6 @@ const props = defineProps({
   // ввод — наружу уходит событие change, родитель сам решает, когда сохранять.
   doc: { type: Object, default: null },
   editable: { type: Boolean, default: true },
-  placeholder: { type: String, default: 'Начните писать…' },
   // async (file) => url — загрузка картинки; null скрывает кнопку (публичная
   // edit-ссылка: аплоад доступен только владельцу).
   uploadImage: { type: Function, default: null },
@@ -248,7 +246,6 @@ const editor = useEditor({
     Highlight.configure({ multicolor: true }),
     TaskList,
     TaskItem.configure({ nested: true }),
-    Placeholder.configure({ placeholder: props.placeholder }),
     // Поле выделения слева от строки: клик выделяет строку целиком, протяжка —
     // несколько (как в Word).
     LineGutter,
@@ -529,15 +526,17 @@ defineExpose({ editor })
    колонку ровной при переходе через десяток. */
 .ne-content :deep(.tiptap .ne-numbered) { position: relative; }
 
+/* Номер прижат к левому краю текста (right: 100%), а не поставлен в колонку
+   фиксированной ширины: так он сам растёт влево на сотых строках и не диктует
+   ширину поля — поле осталось узким, что особенно заметно на телефоне. */
 .ne-content :deep(.tiptap .ne-numbered)::before {
   content: attr(data-line);
   position: absolute;
-  left: -30px;
-  width: 22px;
-  text-align: right;
+  right: 100%;
+  margin-right: 7px;
   color: var(--color-text-dim);
-  opacity: 0.55;
-  font-size: 11.5px;
+  opacity: 0.6;
+  font-size: 13px;
   font-weight: 600;
   font-variant-numeric: tabular-nums;
   line-height: inherit;
@@ -562,8 +561,10 @@ defineExpose({ editor })
   min-height: 240px;
   /* Нижний отступ — «прокрутка за конец текста»: величину задаёт --ne-tail
      (половина видимой области), fallback — на случай, если замер не сработал. */
-  /* Левое поле шире правого: это зона выделения строк (LineGutter.js). */
-  padding: 20px 18px var(--ne-tail, 40vh) 34px;
+  /* Левое поле шире правого: это зона выделения строк (LineGutter.js) и место
+     под номера. Её ширину плагин читает из padding-left, поэтому менять её
+     достаточно здесь. */
+  padding: 20px 18px var(--ne-tail, 40vh) var(--ne-gutter, 26px);
   color: var(--color-text);
   font-size: 15px;
   line-height: 1.65;
@@ -627,22 +628,14 @@ defineExpose({ editor })
 .ne-content :deep(.tiptap ul[data-type='taskList'] input) { accent-color: var(--color-primary); margin-top: 5px; }
 .ne-content :deep(.tiptap ul[data-type='taskList'] li > div) { flex: 1; min-width: 0; }
 
-/* Плейсхолдер пустого документа. Рисуется через ::after, потому что ::before у
-   абзаца занят номером строки: два правила на одном псевдоэлементе оставляли
-   плейсхолдеру геометрию номера (absolute, width: 22px) — подсказка вставала
-   колонкой в один слог, а сам номер пропадал. */
-.ne-content :deep(.tiptap p.is-editor-empty:first-child::after) {
-  content: attr(data-placeholder);
-  float: left;
-  height: 0;
-  pointer-events: none;
-  color: var(--color-text-dim);
-  opacity: 0.7;
-}
-
 @media (max-width: 768px) {
   /* Панель — одна строка с горизонтальным скроллом. */
   .ne-toolbar { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; }
   .ne-toolbar::-webkit-scrollbar { display: none; }
+
+  /* Экран узкий — поле под номера ужимаем до самих цифр: каждый пиксель
+     ширины здесь идёт тексту. */
+  .ne-content :deep(.tiptap) { --ne-gutter: 20px; padding-right: 12px; }
+  .ne-content :deep(.tiptap .ne-numbered)::before { margin-right: 5px; }
 }
 </style>

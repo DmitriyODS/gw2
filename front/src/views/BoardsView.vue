@@ -13,7 +13,6 @@ import SearchField from '@/components/common/SearchField.vue'
 import ConfirmDialog from '@/components/ui/ConfirmDialog.vue'
 import ContextMenu from '@/components/common/ContextMenu.vue'
 import EmptyState from '@/components/common/EmptyState.vue'
-import TreeView from '@/components/common/TreeView.vue'
 import FolderEditDialog from '@/components/boards/FolderEditDialog.vue'
 import MoveToFolderDialog from '@/components/boards/MoveToFolderDialog.vue'
 import ShareDialog from '@/components/boards/ShareDialog.vue'
@@ -30,7 +29,6 @@ const route = useRoute()
 const router = useRouter()
 
 const importInput = ref(null)
-const expanded = ref(new Set())
 const searchDraft = ref('')
 let searchTimer = null
 
@@ -151,18 +149,7 @@ function newFolder() {
   folderDlgOpen.value = true
 }
 
-// ── Дерево и крошки ──────────────────────────────────────────────
-
-function onTreeSelect(node) {
-  store.openFolder(node.id)
-}
-
-function onTreeToggle(id) {
-  const next = new Set(expanded.value)
-  if (next.has(id)) next.delete(id)
-  else next.add(id)
-  expanded.value = next
-}
+// ── Крошки ───────────────────────────────────────────────────────
 
 function onCrumb(index) {
   store.openFolder(index < 0 ? null : store.path[index]?.id ?? null)
@@ -356,7 +343,7 @@ async function onImportPick(e) {
 
 <template>
   <AppListDetail class="bv" :open="true" :list-width="280">
-    <!-- Разделы и дерево папок -->
+    <!-- Разделы: по папкам ходят плитками в теле, дерева слева нет -->
     <template #list="{ toggle }">
       <AppPage
         embedded
@@ -396,26 +383,6 @@ async function onImportPick(e) {
           </button>
         </nav>
 
-        <div class="bv-tree">
-          <TreeView
-            :nodes="store.folderTree"
-            :selected-id="store.activeFolderId"
-            :expanded="expanded"
-            @select="onTreeSelect"
-            @toggle="onTreeToggle"
-            @context="onFolderContext"
-          />
-          <template v-if="store.sharedRoots.length">
-            <div class="bv-side-title"><span>Расшаренные мне</span></div>
-            <TreeView
-              :nodes="store.sharedRoots"
-              :selected-id="store.activeFolderId"
-              :expanded="expanded"
-              @select="onTreeSelect"
-              @context="onFolderContext"
-            />
-          </template>
-        </div>
       </AppPage>
     </template>
 
@@ -488,6 +455,8 @@ async function onImportPick(e) {
           <div class="bv-card-body">
             <h3 class="bv-card-title">{{ f.name }}</h3>
             <div class="bv-card-meta">
+              <span class="bv-kind">Папка</span>
+              <span class="bv-dot">·</span>
               <span :title="editedAtFull(f)">{{ editedAt(f) }}</span>
               <span v-if="f.shared_by_me" class="material-symbols-outlined bv-badge" title="Есть доступ у других">group</span>
             </div>
@@ -582,26 +551,25 @@ async function onImportPick(e) {
 .bv-scope:hover { background: var(--color-surface-variant); }
 .bv-scope.is-active { background: var(--color-primary-container); color: var(--color-on-primary-container); }
 
-.bv-side-title {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 6px;
-  font-size: 12px;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  color: var(--color-text-muted);
-}
-
-.bv-tree { min-height: 0; }
 .bv-crumbs { min-width: 0; }
 
+/* Тело раздела прокручивается САМО: у AppPage здесь scroll=false (обои крошек
+   должны стоять на месте), а его тело — overflow: hidden. Без этих трёх строк
+   плитки, не влезшие в окно, были недостижимы — особенно в узком окне. */
+.bv-main {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+/* Тело раздела идёт flush (обои крошек тянутся во всю ширину), поэтому поля
+   задаёт сама сетка — без них плитки упирались в кромку окна. Отступ сверху
+   отделяет их от строки разделов и хлебных крошек. */
 .bv-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
   gap: 12px;
-  padding-bottom: 24px;
+  padding: 16px 20px 24px;
 }
 
 .bv-card {
@@ -650,6 +618,9 @@ async function onImportPick(e) {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
+.bv-kind { font-weight: 600; color: var(--color-text-dim); }
+.bv-dot { opacity: 0.6; }
 
 .bv-card-meta {
   display: flex;
