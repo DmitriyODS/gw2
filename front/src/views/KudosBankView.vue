@@ -1,26 +1,19 @@
 <template>
-  <div class="admin-page">
-    <header class="admin-sticky">
-      <div class="kb-toolbar">
-        <button class="btn-glass kb-back" type="button" title="К грувикам" @click="router.push('/pets')">
-          <span class="material-symbols-outlined">arrow_back</span>
-        </button>
-        <h1 class="kb-title">Кудо-банк</h1>
-        <span v-if="bank" class="chip-tint chip-tint--primary kb-tier-chip">
-          {{ TIER_EMOJI[bank.tier.key] || '⭐' }} {{ bank.tier.title }}
-        </span>
-        <button class="btn-grad kb-transfer-btn" type="button" @click="openTransfer()">
-          <span class="material-symbols-outlined">send_money</span>
-          <span class="kb-btn-label">Перевести</span>
-        </button>
-      </div>
-    </header>
+  <AppPage
+    class="kb"
+    title="Кудо-банк"
+    back
+    back-label="К грувикам"
+    :commands="commands"
+    :loading="!bank"
+    @back="router.push('/pets')"
+    @command="onCommand"
+  >
+    <template v-if="bank" #status>
+      <AppChip tone="primary" :label="`${TIER_EMOJI[bank.tier.key] || '⭐'} ${bank.tier.title}`" />
+    </template>
 
-    <div v-if="!bank" class="admin-body kb-loading">
-      <BrandLoader :size="64" />
-    </div>
-
-    <div v-else class="admin-body">
+    <template v-if="bank">
       <!-- ── Карта клиента ─────────────────────────────────────── -->
       <section class="kb-hero">
         <span class="kb-hero-watermark" aria-hidden="true">{{ TIER_EMOJI[bank.tier.key] || '⭐' }}</span>
@@ -455,18 +448,20 @@
           >Показать ещё</button>
         </section>
       </div>
-    </div>
+    </template>
 
     <TransferDialog v-model="transferOpen" :preset-user-id="transferPreset" />
     <GoalCreateDialog v-model="goalCreateOpen" />
     <FundCreateDialog v-model="fundCreateOpen" />
     <ConfettiBurst ref="confettiEl" />
-  </div>
+  </AppPage>
 </template>
 
 <script setup>
 import { computed, onMounted, reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
+import AppChip from '@/components/ui/AppChip.vue'
+import AppPage from '@/components/ui/AppPage.vue'
 import BrandLoader from '@/components/common/BrandLoader.vue'
 import EmptyState from '@/components/common/EmptyState.vue'
 import KudosCoin from '@/components/pets/KudosCoin.vue'
@@ -756,6 +751,15 @@ async function closeFund(f) {
 
 const loadMore = () => run(() => pets.fetchLedger({ more: true }))
 
+// Перевод — главное действие банка: в тесной панели уходит на плавающую кнопку.
+const commands = [
+  { key: 'transfer', label: 'Перевести', icon: 'send_money', variant: 'filled', primary: true, fab: true },
+]
+
+function onCommand(key) {
+  if (key === 'transfer') openTransfer()
+}
+
 function openTransfer(presetUserId = null) {
   transferPreset.value = presetUserId
   transferOpen.value = true
@@ -781,16 +785,8 @@ onMounted(() => {
 
 <style scoped>
 /* Прозрачная плавающая шапка — как у хаба грувиков. */
-.admin-sticky { background: transparent; -webkit-backdrop-filter: none; backdrop-filter: none; }
-.admin-sticky::after { display: none; }
 
-.kb-toolbar { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
-.kb-back { display: inline-flex; align-items: center; padding: 8px 10px; }
-.kb-title { margin: 0; font-size: 20px; font-weight: 800; }
-.kb-tier-chip { font-weight: 700; }
-.kb-transfer-btn { margin-left: auto; display: inline-flex; align-items: center; gap: 6px; }
 
-.kb-loading { display: flex; justify-content: center; padding: 60px 0; }
 
 /* ── Карта клиента: градиентная обложка по паттерну pdm-cover ── */
 .kb-hero {
@@ -1199,7 +1195,6 @@ onMounted(() => {
   .kb-kinds { grid-template-columns: 1fr; }
 }
 @media (max-width: 560px) {
-  .kb-btn-label { display: none; }
   .kb-hero-balance { font-size: 32px; }
   .kb-actions { display: grid; grid-template-columns: repeat(3, 1fr); }
   .kb-action { min-width: 0; }

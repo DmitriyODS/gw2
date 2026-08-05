@@ -1,27 +1,22 @@
 <template>
-  <div class="admin-page">
-    <header class="admin-sticky">
-      <div class="ps-toolbar">
-        <button class="btn-glass ps-back" type="button" title="К грувикам" @click="router.push('/pets')">
-          <span class="material-symbols-outlined">arrow_back</span>
-        </button>
-        <h1 class="ps-title">Магазин</h1>
-        <button
-          class="chip-tint chip-tint--success ps-balance"
-          type="button"
-          title="Открыть кудо-банк"
-          @click="router.push('/pets/bank')"
-        >
-          <KudosCoin /> <strong>{{ pet?.kudos ?? 0 }}</strong>
-        </button>
-        <span class="chip-tint ps-refresh" title="Скидка дня и витрина меняются в полночь по Москве">
-          <span class="material-symbols-outlined">schedule</span>
-          обновится через {{ midnightLeft }}
-        </span>
-      </div>
-    </header>
+  <AppPage class="ps" title="Магазин" back back-label="К грувикам" @back="router.push('/pets')">
+    <template #status>
+      <AppChip
+        tone="success"
+        interactive
+        :count="pet?.kudos ?? 0"
+        title="Открыть кудо-банк"
+        @click="router.push('/pets/bank')"
+      >
+        <KudosCoin />
+      </AppChip>
+      <AppChip
+        icon="schedule"
+        :label="`обновится через ${midnightLeft}`"
+        title="Скидка дня и витрина меняются в полночь по Москве"
+      />
+    </template>
 
-    <div class="admin-body">
       <!-- Сюрприз дня -->
       <button
         class="ps-mystery"
@@ -186,7 +181,6 @@
         <span class="material-symbols-outlined">collections_bookmark</span>
         Коллекция: собрано {{ ownedCount }} из {{ totalCount }}
       </p>
-    </div>
 
     <!-- Карточка товара: примерка на своём грувике + покупка -->
     <AppDialog
@@ -273,7 +267,7 @@
     </AppDialog>
 
     <ConfettiBurst ref="confettiEl" />
-  </div>
+  </AppPage>
 </template>
 
 <script setup>
@@ -282,6 +276,8 @@ import { useRouter } from 'vue-router'
 import BrandLoader from '@/components/common/BrandLoader.vue'
 import AppDialog from '@/components/ui/AppDialog.vue'
 import EmojiGlyph from '@/components/common/EmojiGlyph.vue'
+import AppChip from '@/components/ui/AppChip.vue'
+import AppPage from '@/components/ui/AppPage.vue'
 import KudosCoin from '@/components/pets/KudosCoin.vue'
 import ConfettiBurst from '@/components/pets/bank/ConfettiBurst.vue'
 import { getShop } from '@/api/pets.js'
@@ -523,15 +519,7 @@ async function claimMystery() {
 </script>
 
 <style scoped>
-.admin-sticky { background: transparent; -webkit-backdrop-filter: none; backdrop-filter: none; }
-.admin-sticky::after { display: none; }
 
-.ps-toolbar { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
-.ps-back { display: inline-flex; align-items: center; padding: 8px 10px; }
-.ps-title { margin: 0; font-size: 20px; font-weight: 800; }
-.ps-balance { border: none; font: inherit; cursor: pointer; display: inline-flex; align-items: center; gap: 5px; }
-.ps-refresh { margin-left: auto; display: inline-flex; align-items: center; gap: 5px; font-size: 12px; }
-.ps-refresh .material-symbols-outlined { font-size: 15px; }
 
 .ps-section-title {
   margin: 0 0 10px;
@@ -857,7 +845,6 @@ async function claimMystery() {
 
 @media (max-width: 560px) {
   .ps-grid { grid-template-columns: repeat(2, 1fr); }
-  .ps-refresh { margin-left: 0; }
   .ps-featured-grid { grid-template-columns: 1fr; }
   /* На узком экране подпись ряда — над чипами, не сбоку. */
   .ps-filter-row { flex-direction: column; align-items: flex-start; gap: 8px; }
