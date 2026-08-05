@@ -22,6 +22,7 @@ var (
 	ErrBadAccess      = NewError("VALIDATION", "Режим доступа: view или edit", 400)
 	ErrBadColor       = NewError("VALIDATION", "Неизвестный цвет", 400)
 	ErrBadScene       = NewError("VALIDATION", "Некорректная сцена доски", 400)
+	ErrBadFormat      = NewError("VALIDATION", "Формат выгрузки: svg или json", 400)
 	ErrNameRequired   = NewError("VALIDATION", "Укажите название", 400)
 	ErrFolderCycle    = NewError("VALIDATION", "Нельзя переместить папку внутрь самой себя", 400)
 

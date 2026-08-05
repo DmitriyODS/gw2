@@ -236,6 +236,31 @@ export default async function setup() {
     UPLOAD_FOLDER: fs.mkdtempSync(path.join(process.env.TMPDIR || '/tmp', 'gw2-front-msg-')),
     GRPC_ADDR: `:${GRPC.messenger}`, HTTP_ADDR: `:${HTTP.messenger}`,
   })
+  startSvc('portalsvc', repoRoot, 'back-go/portal', './cmd/portalsvc', {
+    ...baseEnv,
+    UPLOAD_FOLDER: fs.mkdtempSync(path.join(process.env.TMPDIR || '/tmp', 'gw2-front-portal-')),
+    MESSENGER_GRPC_ADDR: `localhost:${GRPC.messenger}`,
+    HTTP_ADDR: `:${HTTP.portal}`,
+  })
+  // notesvc: AI_GRPC_ADDR не задаём — семантический поиск fail-open на текстовый.
+  startSvc('notesvc', repoRoot, 'back-go/notes', './cmd/notesvc', {
+    ...baseEnv,
+    UPLOAD_FOLDER: fs.mkdtempSync(path.join(process.env.TMPDIR || '/tmp', 'gw2-front-notes-')),
+    GRPC_ADDR: `:${GRPC.notes}`, HTTP_ADDR: `:${HTTP.notes}`,
+  })
+  startSvc('boardsvc', repoRoot, 'back-go/board', './cmd/boardsvc', {
+    ...baseEnv,
+    UPLOAD_FOLDER: fs.mkdtempSync(path.join(process.env.TMPDIR || '/tmp', 'gw2-front-board-')),
+    HTTP_ADDR: `:${HTTP.board}`,
+  })
+  startSvc('remindersvc', repoRoot, 'back-go/reminder', './cmd/remindersvc', {
+    ...baseEnv, HTTP_ADDR: `:${HTTP.reminder}`,
+  })
+  startSvc('billingsvc', repoRoot, 'back-go/billing', './cmd/billingsvc', {
+    ...baseEnv,
+    GRPC_ADDR: `:${GRPC.billing}`, HTTP_ADDR: `:${HTTP.billing}`,
+  })
+
   // petsvc — чистая гейм-механика (без ленты/AI/pet-чата), поэтому не нуждается
   // в AI_GRPC_ADDR/MESSENGER_GRPC_ADDR.
   startSvc('petsvc', repoRoot, 'back-go/pets', './cmd/petsvc', {
@@ -248,6 +273,8 @@ export default async function setup() {
       waitHealthz(HTTP.mail), waitHealthz(HTTP.auth), waitHealthz(HTTP.diary),
       waitHealthz(HTTP.tasks), waitHealthz(HTTP.registry), waitHealthz(HTTP.calendar),
       waitHealthz(HTTP.messenger), waitHealthz(HTTP.pets),
+      waitHealthz(HTTP.portal), waitHealthz(HTTP.notes), waitHealthz(HTTP.board),
+      waitHealthz(HTTP.reminder), waitHealthz(HTTP.billing),
     ])
   } catch (e) {
     console.error('[integration] сервис не поднялся:', e.message)
@@ -258,7 +285,7 @@ export default async function setup() {
   }
 
   writeStatus({ ready: true, dbURL: PG.dbURL, pgContainer: PG.container })
-  console.log('[integration] бэкенд готов (auth/diary/tasks/registry/calendar/messenger/pets)')
+  console.log('[integration] бэкенд готов (auth/diary/tasks/registry/calendar/messenger/pets/portal/notes/board/reminder/billing)')
 
   return async () => {
     stopAll()

@@ -20,16 +20,20 @@ const (
 	FormatMD   = "md"
 )
 
-// exportExt — расширение файлов выгрузки по запрошенному формату (незнакомый —
-// плоский текст).
-func exportExt(format string) string {
+// exportExt — расширение файлов выгрузки по запрошенному формату. Пустой
+// формат — это «по умолчанию» (txt), а вот явно неизвестный это ошибка
+// клиента: молча отдавать txt вместо запрошенного формата нельзя — тот, кто
+// просил docx с опечаткой, получил бы «успешный» файл не того типа.
+func exportExt(format string) (string, error) {
 	switch format {
+	case "", FormatTXT:
+		return FormatTXT, nil
 	case FormatDOCX:
-		return FormatDOCX
+		return FormatDOCX, nil
 	case FormatMD:
-		return FormatMD
+		return FormatMD, nil
 	default:
-		return FormatTXT
+		return "", domain.ErrBadFormat
 	}
 }
 
@@ -91,7 +95,10 @@ func (s *Service) Export(ctx context.Context, userID, id int64, format string) (
 	if name == "" {
 		name = "Заметка"
 	}
-	ext := exportExt(format)
+	ext, err := exportExt(format)
+	if err != nil {
+		return nil, err
+	}
 	data, err := s.noteFileData(n, ext)
 	if err != nil {
 		return nil, err
@@ -106,7 +113,10 @@ func (s *Service) ExportFolder(ctx context.Context, userID, id int64, format str
 	if err != nil {
 		return nil, err
 	}
-	ext := exportExt(format)
+	ext, err := exportExt(format)
+	if err != nil {
+		return nil, err
+	}
 	var buf bytes.Buffer
 	zw := zip.NewWriter(&buf)
 	count := 0
@@ -192,7 +202,10 @@ func (s *Service) zipFolder(ctx context.Context, zw *zip.Writer, userID, folderI
 // ExportScope — zip особой группировки: all (все свои заметки, с деревом папок),
 // archive (архивные, плоско), shared (расшаренные мне, плоско).
 func (s *Service) ExportScope(ctx context.Context, userID int64, scope, format string) (*ExportFile, error) {
-	ext := exportExt(format)
+	ext, err := exportExt(format)
+	if err != nil {
+		return nil, err
+	}
 	var buf bytes.Buffer
 	zw := zip.NewWriter(&buf)
 	used := map[string]int{}

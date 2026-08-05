@@ -52,12 +52,19 @@ func mimeByKey(key string) string {
 	}
 }
 
-// boardFile — содержимое выгрузки одной доски в выбранном формате.
-func (s *Service) boardFile(b *domain.Board, format string) ([]byte, string) {
-	if format == FormatJSON {
-		return []byte(b.Scene), FormatJSON
+/* boardFile — содержимое выгрузки одной доски в выбранном формате. Пустой
+   формат — «по умолчанию» (svg), явно неизвестный — ошибка клиента: молча
+   отдать svg тому, кто просил json с опечаткой, значит выдать «успешный» файл
+   не того типа. */
+func (s *Service) boardFile(b *domain.Board, format string) ([]byte, string, error) {
+	switch format {
+	case FormatJSON:
+		return []byte(b.Scene), FormatJSON, nil
+	case "", FormatSVG:
+		return domain.SceneSVG(b.Scene, s.imageResolver()), FormatSVG, nil
+	default:
+		return nil, "", domain.ErrBadFormat
 	}
-	return domain.SceneSVG(b.Scene, s.imageResolver()), FormatSVG
 }
 
 // Export — доска в svg или json. Доступен и адресатам шаринга (чтение есть —
@@ -71,7 +78,10 @@ func (s *Service) Export(ctx context.Context, userID, id int64, format string) (
 	if name == "" {
 		name = "Доска"
 	}
-	data, ext := s.boardFile(b, format)
+	data, ext, err := s.boardFile(b, format)
+	if err != nil {
+		return nil, err
+	}
 	return &ExportFile{Data: data, Name: name, Ext: ext}, nil
 }
 
@@ -119,7 +129,10 @@ func (s *Service) writeBoardFile(ctx context.Context, zw *zip.Writer, boardID in
 	if err != nil || b == nil {
 		return false, err
 	}
-	data, ext := s.boardFile(b, format)
+	data, ext, err := s.boardFile(b, format)
+	if err != nil {
+		return false, err
+	}
 	fileName := uniqueName(used, sanitizeName(b.Title, "Доска"), "."+ext)
 	w, err := zw.Create(path.Join(prefix, fileName))
 	if err != nil {

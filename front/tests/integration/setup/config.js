@@ -43,6 +43,11 @@ export const HTTP = {
   registry: 18199,
   calendar: 18200,
   diary: 18201,
+  portal: 18202,
+  notes: 18203,
+  board: 18205,
+  reminder: 18206,
+  billing: 18207,
 }
 
 // gRPC-порты (+10100).
@@ -50,6 +55,8 @@ export const GRPC = {
   messenger: 19192,
   pets: 19194,
   mail: 19198,
+  notes: 19203,
+  billing: 19207,
 }
 
 // Файл со статусом стенда: globalSetup пишет его, шим/сценарии читают
@@ -89,6 +96,11 @@ export function routeBase(path) {
     ['/api/registries', HTTP.registry],
     ['/api/calendars', HTTP.calendar],
     ['/api/diaries', HTTP.diary],
+    ['/api/portal', HTTP.portal],
+    ['/api/notes', HTTP.notes],
+    ['/api/boards', HTTP.board],
+    ['/api/reminders', HTTP.reminder],
+    ['/api/billing', HTTP.billing],
     ['/api/changelog', null], // статика nginx, не сервис
   ]
   // exact-совпадение presence проверяем отдельно (без query).

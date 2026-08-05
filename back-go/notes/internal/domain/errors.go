@@ -22,6 +22,7 @@ var (
 	ErrRateLimited    = NewError("RATE_LIMITED", "Слишком много правок, попробуйте чуть позже", 429)
 	ErrBadAccess      = NewError("VALIDATION", "Режим доступа: view или edit", 400)
 	ErrBadColor       = NewError("VALIDATION", "Неизвестный цвет", 400)
+	ErrBadFormat      = NewError("VALIDATION", "Формат выгрузки: txt, md или docx", 400)
 	ErrNameRequired   = NewError("VALIDATION", "Укажите название", 400)
 	ErrFolderCycle    = NewError("VALIDATION", "Нельзя переместить папку внутрь самой себя", 400)
 
