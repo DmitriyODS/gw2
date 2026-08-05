@@ -1,11 +1,13 @@
 <template>
   <div class="sr">
     <!-- Ошибка доступа -->
-    <div v-if="error" class="sr-error">
-      <span class="material-symbols-outlined">link_off</span>
-      <h2>Ссылка недоступна</h2>
-      <p>{{ error }}</p>
-    </div>
+    <EmptyState
+      v-if="error"
+      class="sr-error"
+      icon="link_off"
+      title="Ссылка недоступна"
+      :subtitle="error"
+    />
 
     <template v-else>
       <header class="sr-head">
@@ -201,6 +203,7 @@ import { computed, onMounted, reactive, ref } from 'vue'
 import { useRoute } from 'vue-router'
 import Checkbox from 'primevue/checkbox'
 import Select from 'primevue/select'
+import EmptyState from '@/components/common/EmptyState.vue'
 import AppDialog from '@/components/ui/AppDialog.vue'
 import RegistryRecordDialog from '@/components/registry/RegistryRecordDialog.vue'
 import { getSharedRegistry, getSharedRecords, exportSharedRecords } from '@/api/registries.js'
@@ -381,14 +384,7 @@ onMounted(load)
   background: var(--color-bg);
 }
 
-.sr-error {
-  flex: 1; min-height: 100dvh;
-  display: flex; flex-direction: column; align-items: center; justify-content: center;
-  gap: 8px; color: var(--color-text-dim); text-align: center; padding: 24px;
-}
-.sr-error .material-symbols-outlined { font-size: 56px; }
-.sr-error h2 { margin: 8px 0 0; color: var(--color-text); }
-.sr-error p { margin: 0; }
+.sr-error { flex: 1; min-height: 100dvh; align-content: center; }
 
 .sr-head {
   flex: none;

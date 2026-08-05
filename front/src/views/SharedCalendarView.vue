@@ -1,11 +1,13 @@
 <template>
   <div class="sc">
     <!-- Ошибка доступа -->
-    <div v-if="error" class="sc-error">
-      <span class="material-symbols-outlined">link_off</span>
-      <h2>Ссылка недоступна</h2>
-      <p>{{ error }}</p>
-    </div>
+    <EmptyState
+      v-if="error"
+      class="sc-error"
+      icon="link_off"
+      title="Ссылка недоступна"
+      :subtitle="error"
+    />
 
     <template v-else>
       <header class="sc-head">
@@ -162,6 +164,7 @@
 import { computed, onMounted, ref } from 'vue'
 import { useRoute } from 'vue-router'
 import Checkbox from 'primevue/checkbox'
+import EmptyState from '@/components/common/EmptyState.vue'
 import AppDialog from '@/components/ui/AppDialog.vue'
 import CalendarEntryDialog from '@/components/calendar/CalendarEntryDialog.vue'
 import CalendarDayDialog from '@/components/calendar/CalendarDayDialog.vue'
@@ -335,13 +338,7 @@ onMounted(load)
 <style scoped>
 .sc { height: 100%; min-height: 100dvh; display: flex; flex-direction: column; background: var(--color-bg); }
 
-.sc-error {
-  flex: 1; min-height: 100dvh; display: flex; flex-direction: column; align-items: center; justify-content: center;
-  gap: 8px; color: var(--color-text-dim); text-align: center; padding: 24px;
-}
-.sc-error .material-symbols-outlined { font-size: 56px; }
-.sc-error h2 { margin: 8px 0 0; color: var(--color-text); }
-.sc-error p { margin: 0; }
+.sc-error { flex: 1; min-height: 100dvh; align-content: center; }
 
 .sc-head {
   flex: none; display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap;
