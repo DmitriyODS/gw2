@@ -344,12 +344,12 @@ async function onImportPick(e) {
 <template>
   <AppListDetail class="bv" :open="true" :list-width="280">
     <!-- Разделы: по папкам ходят плитками в теле, дерева слева нет -->
-    <template #list="{ toggle }">
+    <template #list="{ narrow, toggle }">
       <AppPage
         embedded
         title="Доски"
         show-title
-        :menu="!isMobile"
+        :menu="!narrow"
         menu-icon="left_panel_close"
         menu-label="Свернуть панель"
         :commands="listCommands"
@@ -386,11 +386,11 @@ async function onImportPick(e) {
       </AppPage>
     </template>
 
-    <template #detail="{ collapsed, toggle }">
+    <template #detail="{ narrow, collapsed, toggle }">
       <AppPage
         embedded
         :title="title"
-        :menu="!isMobile && collapsed"
+        :menu="!narrow && collapsed"
         menu-icon="left_panel_open"
         menu-label="Показать панель"
         :commands="commands"
