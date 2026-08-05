@@ -1,53 +1,46 @@
 <template>
   <!-- Три карточки состояния подписки: тариф, хранилище, токены ИИ. -->
-  <section class="gw-group">
-    <div class="stat-grid">
-      <article class="stat">
-        <p class="stat-label">Моя подписка</p>
-        <div class="stat-body stat-body--plan">
-          <span class="plan-tag">тариф</span>
-          <strong class="plan-name">{{ planName }}</strong>
-          <span v-if="until" class="gw-sub">действует до {{ until }}</span>
-          <span v-else-if="isFree" class="gw-sub">бесплатный тариф</span>
-        </div>
-        <button class="btn-glass stat-action" type="button" @click="$emit('manage', 'plan')">
-          Управление подпиской
-        </button>
-      </article>
+  <!-- Карточек ровно три и они делят ширину поровну, поэтому сетка своя:
+       auto-fill AppGrid оставил бы хвост ряда пустым. -->
+  <div class="stat-grid">
+    <AppCard title="Моя подписка" class="stat">
+      <div class="stat-body stat-body--plan">
+        <span class="plan-tag">тариф</span>
+        <strong class="plan-name">{{ planName }}</strong>
+        <span v-if="until" class="stat-note">действует до {{ until }}</span>
+        <span v-else-if="isFree" class="stat-note">бесплатный тариф</span>
+      </div>
+      <AppButton label="Управление подпиской" block @click="$emit('manage', 'plan')" />
+    </AppCard>
 
-      <article class="stat">
-        <p class="stat-label">Хранилище</p>
-        <div class="stat-body stat-body--metric">
-          <span class="metric-cap">занято</span>
-          <p class="metric">
-            {{ formatBytes(storageUsed) }} из <b>{{ storageLimit < 0 ? '∞' : formatBytes(storageLimit) }}</b>
-          </p>
-          <div class="bar"><span :style="{ width: pct(storageUsed, storageLimit) }" /></div>
-        </div>
-        <button class="btn-glass stat-action" type="button" @click="$emit('manage', 'storage')">
-          Управление местом
-        </button>
-      </article>
+    <AppCard title="Хранилище" class="stat">
+      <div class="stat-body stat-body--metric">
+        <span class="metric-cap">занято</span>
+        <p class="metric">
+          {{ formatBytes(storageUsed) }} из <b>{{ storageLimit < 0 ? '∞' : formatBytes(storageLimit) }}</b>
+        </p>
+        <div class="bar"><span :style="{ width: pct(storageUsed, storageLimit) }" /></div>
+      </div>
+      <AppButton label="Управление местом" block @click="$emit('manage', 'storage')" />
+    </AppCard>
 
-      <article class="stat">
-        <p class="stat-label">ИИ возможности</p>
-        <div class="stat-body stat-body--metric">
-          <span class="metric-cap">использовано</span>
-          <p class="metric">
-            {{ formatCount(tokensUsed) }} из <b>{{ formatCount(tokensLimit) }} токенов</b>
-          </p>
-          <div class="bar"><span :style="{ width: pct(tokensUsed, tokensLimit) }" /></div>
-        </div>
-        <button class="btn-glass stat-action" type="button" @click="$emit('manage', 'tokens')">
-          Управление лимитами
-        </button>
-      </article>
-    </div>
-  </section>
+    <AppCard title="ИИ возможности" class="stat">
+      <div class="stat-body stat-body--metric">
+        <span class="metric-cap">использовано</span>
+        <p class="metric">
+          {{ formatCount(tokensUsed) }} из <b>{{ formatCount(tokensLimit) }} токенов</b>
+        </p>
+        <div class="bar"><span :style="{ width: pct(tokensUsed, tokensLimit) }" /></div>
+      </div>
+      <AppButton label="Управление лимитами" block @click="$emit('manage', 'tokens')" />
+    </AppCard>
+  </div>
 </template>
 
 <script setup>
 import { computed } from 'vue'
+import AppButton from '@/components/ui/AppButton.vue'
+import AppCard from '@/components/ui/AppCard.vue'
 import { formatBytes, formatCount, formatUntil, usageRatio } from '@/utils/money.js'
 
 const props = defineProps({
@@ -76,26 +69,10 @@ function pct(used, limit) {
   gap: 14px;
 }
 
-/* Плитка плотнее подложки группы (--acrylic-bg-strong против --acrylic-bg) —
-   иначе стекло на стекле сливается в одно пятно и карточек не видно. */
-.stat {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  min-height: 200px;
-  padding: 18px;
-  border: 1px solid var(--acrylic-border);
-  border-radius: var(--radius-lg);
-  background: var(--glass-bg), var(--acrylic-bg-strong);
-  box-shadow: var(--glass-edge), var(--shadow-md);
-}
+/* Табло — высокая карточка: цифра посередине, кнопка прижата к низу. */
+.stat { min-height: 200px; }
 
-.stat-label {
-  margin: 0;
-  font-size: 0.95rem;
-  font-weight: 600;
-  color: var(--color-text-dim);
-}
+.stat-note { font-size: 0.85rem; color: var(--color-text-dim); }
 
 .stat-body {
   display: flex;
@@ -157,14 +134,7 @@ function pct(used, limit) {
   transition: width 0.3s ease;
 }
 
-/* Общая вторичная кнопка (.btn-glass) во всю ширину карточки. */
-.stat-action {
-  justify-content: center;
-  width: 100%;
-  padding: 11px 16px;
-}
-
-/* Раскладка считается от ширины ОКНА раздела (.gw-shell — container). */
+/* Раскладка считается от ширины ОКНА раздела (панель AppPage — container). */
 @container (max-width: 900px) {
   .stat-grid { grid-template-columns: 1fr; }
   .stat { min-height: 0; }

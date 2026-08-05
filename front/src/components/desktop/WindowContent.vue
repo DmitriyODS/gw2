@@ -5,8 +5,8 @@
     <p class="win-error-text">Раздел не открылся</p>
     <p class="win-error-hint">{{ failure }}</p>
     <div class="win-error-actions">
-      <button class="gw-chip" type="button" @click="retry()">Повторить</button>
-      <button class="gw-chip" type="button" @click="reloadPage()">Перезагрузить страницу</button>
+      <AppButton label="Повторить" size="sm" @click="retry()" />
+      <AppButton label="Перезагрузить страницу" size="sm" tone="neutral" @click="reloadPage()" />
     </div>
   </div>
   <component :is="comp" v-else-if="comp" :key="reloadKey" v-bind="viewProps" />
@@ -17,6 +17,7 @@
 import { computed, defineAsyncComponent, h, markRaw, onErrorCaptured, ref, watch } from 'vue'
 import { useDesktopStore } from '@/stores/desktop.js'
 import { provideWindowRoute } from '@/desktop/windowRoute.js'
+import AppButton from '@/components/ui/AppButton.vue'
 import BrandLoader from '@/components/common/BrandLoader.vue'
 
 const props = defineProps({
@@ -82,16 +83,13 @@ function windowError(loader) {
       h('p', { class: 'win-error-hint' },
         'Проверьте соединение. Если приложение обновлялось, поможет перезагрузка страницы.'),
       h('div', { class: 'win-error-actions' }, [
-        h('button', {
-          class: 'gw-chip',
-          type: 'button',
-          onClick: () => retry(loader),
-        }, 'Повторить'),
-        h('button', {
-          class: 'gw-chip',
-          type: 'button',
+        h(AppButton, { label: 'Повторить', size: 'sm', onClick: () => retry(loader) }),
+        h(AppButton, {
+          label: 'Перезагрузить страницу',
+          size: 'sm',
+          tone: 'neutral',
           onClick: reloadPage,
-        }, 'Перезагрузить страницу'),
+        }),
       ]),
     ]),
   })

@@ -2,7 +2,7 @@
   <!-- Экран-адрес /hola: в обоих каркасах ссылку перехватывает сам каркас и
        показывает панель Hola поверх всего (HolaPopup), поэтому сюда попадают
        только контексты без каркаса. -->
-  <div class="gw-shell hola-screen">
+  <div class="hola-screen">
     <HolaPanel :start-tab="startTab" />
   </div>
 </template>
@@ -16,10 +16,12 @@ const startTab = String(route.query.tab || 'search')
 </script>
 
 <style scoped>
+/* Каркаса вокруг нет — экран сам занимает всё место и раздаёт его панели. */
 .hola-screen {
   display: flex;
   flex-direction: column;
   min-height: 0;
   height: 100%;
+  padding: 12px;
 }
 </style>

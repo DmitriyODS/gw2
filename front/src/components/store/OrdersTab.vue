@@ -1,38 +1,41 @@
 <template>
   <!-- Заказы: покупки подписок, докупок и товаров с их статусом оплаты. -->
-  <div class="orders">
-    <BrandLoader v-if="loading" :size="48" />
-    <section v-else-if="!items.length" class="gw-banner">
-      <h2>Заказов пока нет</h2>
-      <p class="gw-sub">Здесь появятся покупки подписок, дополнений и товаров.</p>
-    </section>
+  <BrandLoader v-if="loading" :size="48" />
 
-    <section v-else class="gw-group order-list">
-      <article v-for="o in items" :key="o.id" class="gw-card gw-row order">
-        <div class="order-main">
-          <p class="gw-h">{{ o.title || o.item_code }}</p>
-          <p class="gw-sub">
-            {{ formatUntil(o.created_at) }} · {{ periodLabel(o) }} · {{ formatPrice(o.amount) }}
-            <template v-if="o.discount > 0"> · скидка {{ formatPrice(o.discount) }}</template>
-          </p>
-        </div>
-        <span class="chip-tint" :class="statusTone(o.status)">{{ STATUS[o.status] || o.status }}</span>
-        <button
-          v-if="o.status === 'pending'"
-          class="gw-chip"
-          type="button"
-          @click="cancel(o.id)"
-        >
-          Отменить
-        </button>
-      </article>
-    </section>
-  </div>
+  <EmptyState
+    v-else-if="!items.length"
+    icon="receipt_long"
+    title="Заказов пока нет"
+    subtitle="Здесь появятся покупки подписок, дополнений и товаров."
+  />
+
+  <AppStack v-else :gap="10">
+    <AppRow v-for="o in items" :key="o.id" :title="o.title || o.item_code">
+      <template #hint>
+        {{ formatUntil(o.created_at) }} · {{ periodLabel(o) }} · {{ formatPrice(o.amount) }}
+        <template v-if="o.discount > 0"> · скидка {{ formatPrice(o.discount) }}</template>
+      </template>
+
+      <AppChip :tone="statusTone(o.status)" size="sm" :label="STATUS[o.status] || o.status" />
+      <AppButton
+        v-if="o.status === 'pending'"
+        label="Отменить"
+        size="sm"
+        tone="neutral"
+        @click="cancel(o.id)"
+      />
+    </AppRow>
+  </AppStack>
 </template>
 
 <script setup>
 import { onMounted, ref } from 'vue'
+import AppButton from '@/components/ui/AppButton.vue'
+import AppChip from '@/components/ui/AppChip.vue'
+import AppRow from '@/components/ui/AppRow.vue'
+import AppStack from '@/components/ui/AppStack.vue'
 import BrandLoader from '@/components/common/BrandLoader.vue'
+import EmptyState from '@/components/common/EmptyState.vue'
 import * as api from '@/api/billing.js'
 import { formatPrice, formatUntil } from '@/utils/money.js'
 
@@ -70,16 +73,9 @@ function periodLabel(o) {
 }
 
 function statusTone(status) {
-  if (status === 'paid') return 'chip-tint--success'
-  if (status === 'pending') return 'chip-tint--warning'
-  if (status === 'canceled' || status === 'failed') return 'chip-tint--error'
-  return 'chip-tint--primary'
+  if (status === 'paid') return 'success'
+  if (status === 'pending') return 'warning'
+  if (status === 'canceled' || status === 'failed') return 'error'
+  return 'primary'
 }
 </script>
-
-<style scoped>
-.orders { display: flex; flex-direction: column; gap: 12px; }
-.order-list { display: flex; flex-direction: column; gap: 10px; }
-.order { padding: 14px; }
-.order-main { flex: 1; min-width: 0; }
-</style>

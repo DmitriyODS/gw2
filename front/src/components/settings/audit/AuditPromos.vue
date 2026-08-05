@@ -1,62 +1,56 @@
 <template>
   <!-- Промокоды: скидки к покупке (процент/сумма) и подарки (дни тарифа,
        пачка токенов). Подарочные активируются в магазине отдельной кнопкой. -->
-  <div class="tab">
-    <section class="gw-card form">
-      <p class="gw-h">Новый промокод</p>
+  <AppStack :gap="14">
+    <AppCard title="Новый промокод">
       <div class="form-row">
         <label class="field">
-          <span class="gw-sub">Код</span>
+          <span class="field-label">Код</span>
           <InputText v-model="form.code" placeholder="SUMMER" />
         </label>
         <label class="field">
-          <span class="gw-sub">Что даёт</span>
+          <span class="field-label">Что даёт</span>
           <Dropdown v-model="form.kind" :options="KINDS" option-label="label" option-value="value" />
         </label>
         <label class="field">
-          <span class="gw-sub">{{ valueLabel }}</span>
+          <span class="field-label">{{ valueLabel }}</span>
           <InputNumber v-model="form.value" :min="0" />
         </label>
         <label v-if="form.kind === 'days'" class="field">
-          <span class="gw-sub">Тариф</span>
+          <span class="field-label">Тариф</span>
           <Dropdown v-model="form.plan_code" :options="PLANS" option-label="label" option-value="value" />
         </label>
       </div>
       <div class="form-row">
         <label class="field">
-          <span class="gw-sub">Всего активаций (0 — без предела)</span>
+          <span class="field-label">Всего активаций (0 — без предела)</span>
           <InputNumber v-model="form.max_uses" :min="0" />
         </label>
         <label class="field">
-          <span class="gw-sub">На одного пользователя</span>
+          <span class="field-label">На одного пользователя</span>
           <InputNumber v-model="form.per_user_limit" :min="1" />
         </label>
         <label class="field">
-          <span class="gw-sub">Действует до</span>
+          <span class="field-label">Действует до</span>
           <InputText v-model="form.expires_at" type="date" />
         </label>
-        <button class="btn-grad" type="button" @click="create">Создать</button>
+        <AppButton label="Создать" icon="add" variant="filled" @click="create" />
       </div>
       <p v-if="error" class="form-error">{{ error }}</p>
-    </section>
+    </AppCard>
 
-    <section v-if="!items.length" class="gw-banner">
-      <h2>Промокодов пока нет</h2>
-    </section>
-    <div v-else class="rows">
-      <article v-for="p in items" :key="p.id" class="gw-card gw-row row">
-        <div class="row-main">
-          <p class="gw-h">{{ p.code }}</p>
-          <p class="gw-sub">
-            {{ describe(p) }} · активаций {{ p.used_count }}<template v-if="p.max_uses"> из {{ p.max_uses }}</template>
-            <template v-if="p.expires_at"> · до {{ formatUntil(p.expires_at) }}</template>
-          </p>
-        </div>
+    <EmptyState v-if="!items.length" icon="confirmation_number" size="sm" title="Промокодов пока нет" />
+    <AppStack v-else :gap="10">
+      <AppRow v-for="p in items" :key="p.id" :title="p.code">
+        <template #hint>
+          {{ describe(p) }} · активаций {{ p.used_count }}<template v-if="p.max_uses"> из {{ p.max_uses }}</template>
+          <template v-if="p.expires_at"> · до {{ formatUntil(p.expires_at) }}</template>
+        </template>
         <InputSwitch :model-value="p.is_active" @update:model-value="toggle(p, $event)" />
-        <button class="gw-chip" type="button" @click="remove(p.id)">Удалить</button>
-      </article>
-    </div>
-  </div>
+        <AppButton label="Удалить" size="sm" tone="danger" @click="remove(p.id)" />
+      </AppRow>
+    </AppStack>
+  </AppStack>
 </template>
 
 <script setup>
@@ -65,6 +59,11 @@ import InputText from 'primevue/inputtext'
 import InputNumber from 'primevue/inputnumber'
 import InputSwitch from 'primevue/inputswitch'
 import Dropdown from 'primevue/dropdown'
+import AppButton from '@/components/ui/AppButton.vue'
+import AppCard from '@/components/ui/AppCard.vue'
+import AppRow from '@/components/ui/AppRow.vue'
+import AppStack from '@/components/ui/AppStack.vue'
+import EmptyState from '@/components/common/EmptyState.vue'
 import * as api from '@/api/billing.js'
 import { formatPrice, formatUntil } from '@/utils/money.js'
 
@@ -133,12 +132,8 @@ async function remove(id) {
 </script>
 
 <style scoped>
-.tab { display: flex; flex-direction: column; gap: 14px; }
-.form { display: flex; flex-direction: column; gap: 12px; }
 .form-row { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 12px; }
 .field { display: flex; flex-direction: column; gap: 6px; }
+.field-label { font-size: 0.85rem; color: var(--color-text-dim); }
 .form-error { margin: 0; font-size: 0.85rem; color: var(--color-error); }
-.rows { display: flex; flex-direction: column; gap: 10px; }
-.row { padding: 14px; }
-.row-main { flex: 1; min-width: 0; }
 </style>

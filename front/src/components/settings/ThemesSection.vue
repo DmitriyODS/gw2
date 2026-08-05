@@ -67,16 +67,13 @@
       </div>
     </SettingsAccordion>
 
-    <!-- ── Магазин: витрина ещё не открыта, поэтому пока только вход ── -->
-    <SettingsAccordion title="Загруженные из магазина">
+    <!-- ── Магазин: витрина откроется вместе с оплатой (utils/release.js) ── -->
+    <SettingsAccordion v-if="SUBSCRIPTIONS_VISIBLE" title="Загруженные из магазина">
       <AppRow
         title="Темы из магазина"
         hint="Здесь появятся темы, которые вы возьмёте в магазине оформления."
       >
-        <button class="ts-store-btn" type="button" @click="router.push('/store')">
-          <span class="material-symbols-outlined">shopping_bag</span>
-          В магазин
-        </button>
+        <AppButton label="В магазин" icon="shopping_bag" @click="router.push('/store')" />
       </AppRow>
     </SettingsAccordion>
 
@@ -133,6 +130,7 @@ import { ref } from 'vue'
 import { useRouter } from 'vue-router'
 import TimePicker from '@/components/common/TimePicker.vue'
 import ConfirmDialog from '@/components/ui/ConfirmDialog.vue'
+import AppButton from '@/components/ui/AppButton.vue'
 import AppCard from '@/components/ui/AppCard.vue'
 import AppRow from '@/components/ui/AppRow.vue'
 import SettingsAccordion from '@/components/settings/SettingsAccordion.vue'
@@ -140,6 +138,7 @@ import ThemeCard from '@/components/settings/ThemeCard.vue'
 import ThemeEditorDialog from '@/components/settings/ThemeEditorDialog.vue'
 import { useThemeStore } from '@/stores/theme.js'
 import { useNotificationsStore } from '@/stores/notifications.js'
+import { SUBSCRIPTIONS_VISIBLE } from '@/utils/release.js'
 
 const themeStore = useThemeStore()
 const notif = useNotificationsStore()
@@ -295,23 +294,6 @@ async function onImport(event) {
 .theme-new .material-symbols-outlined { font-size: 20px; }
 
 /* ── Вход в магазин тем ── */
-.ts-store-btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 10px;
-  padding: 11px 18px;
-  border: 1px solid var(--acrylic-border);
-  border-radius: 999px;
-  background: var(--color-primary-container);
-  color: var(--color-on-primary-container);
-  font-size: 0.92rem;
-  font-weight: 600;
-  cursor: pointer;
-  transition: filter 0.2s ease;
-}
-
-.ts-store-btn:hover { filter: brightness(1.04); }
 
 /* ── Импорт/экспорт и кнопки-действия секций ── */
 .ts-io {

@@ -3,11 +3,8 @@
        описание, справа панель оформления с выбором периода и промокодом. -->
   <div class="card-page">
     <header class="card-head">
-      <button class="gw-chip" type="button" @click="$emit('back')">
-        <span class="material-symbols-outlined">arrow_back</span>
-        Назад
-      </button>
-      <h2 class="gw-h">Карточка товара</h2>
+      <AppButton icon="arrow_back" label="Назад" size="sm" @click="$emit('back')" />
+      <h2 class="card-head-title">Карточка товара</h2>
     </header>
 
     <div class="card-body">
@@ -24,21 +21,8 @@
         </ul>
       </section>
 
-      <aside class="card-side gw-card">
-        <p class="side-label">оформление</p>
-
-        <div v-if="hasYear" class="period-switch">
-          <button
-            v-for="opt in PERIODS"
-            :key="opt.key"
-            class="period-btn"
-            :class="{ 'is-active': period === opt.key }"
-            type="button"
-            @click="period = opt.key"
-          >
-            {{ opt.label }}
-          </button>
-        </div>
+      <AppCard tag="aside" class="card-side" title="Оформление">
+        <AppTabs v-if="hasYear" v-model="period" :tabs="PERIODS" variant="tint" dense full-width />
 
         <div class="side-price">
           <span class="side-cap">цена</span>
@@ -50,22 +34,25 @@
 
         <div class="promo-row">
           <InputText v-model="promo" placeholder="Промокод" class="promo-input" />
-          <button class="gw-chip" type="button" :disabled="!promo || checking" @click="applyPromo">
-            Применить
-          </button>
+          <AppButton label="Применить" size="sm" :disabled="!promo || checking" @click="applyPromo" />
         </div>
         <p v-if="promoError" class="promo-error">{{ promoError }}</p>
 
-        <button class="btn-grad buy-btn" type="button" :disabled="busy || owned" @click="submit">
-          <span class="material-symbols-outlined">shopping_bag</span>
-          {{ owned ? 'Уже куплено' : 'Оформить' }}
-        </button>
+        <AppButton
+          :label="owned ? 'Уже куплено' : 'Оформить'"
+          icon="shopping_bag"
+          variant="filled"
+          block
+          :disabled="busy || owned"
+          :loading="busy"
+          @click="submit"
+        />
 
-        <p v-if="!paymentEnabled" class="gw-sub pay-note">
+        <p v-if="!paymentEnabled" class="pay-note">
           Оплата по СБП скоро подключится. Заказ появится в разделе «Заказы» —
           его подтвердит администратор платформы.
         </p>
-      </aside>
+      </AppCard>
     </div>
   </div>
 </template>
@@ -73,6 +60,9 @@
 <script setup>
 import { computed, ref, watch } from 'vue'
 import InputText from 'primevue/inputtext'
+import AppButton from '@/components/ui/AppButton.vue'
+import AppCard from '@/components/ui/AppCard.vue'
+import AppTabs from '@/components/ui/AppTabs.vue'
 import * as api from '@/api/billing.js'
 import { formatBytes, formatCount, formatPrice } from '@/utils/money.js'
 
@@ -236,43 +226,11 @@ function submit() {
 .feature-list b { margin-left: auto; font-weight: 700; }
 .feature-list .material-symbols-outlined { font-size: 18px; color: var(--color-primary); }
 
+/* Панель оформления идёт за прокруткой описания. */
 .card-side {
-  display: flex;
-  flex-direction: column;
-  gap: 14px;
   position: sticky;
   top: 0;
-}
-
-.side-label {
-  margin: 0;
-  font-size: 1.1rem;
-  font-weight: 600;
-}
-
-.period-switch {
-  display: flex;
-  gap: 4px;
-  padding: 4px;
-  border-radius: 999px;
-  background: var(--color-surface-variant);
-}
-
-.period-btn {
-  flex: 1;
-  padding: 8px 10px;
-  border: none;
-  border-radius: 999px;
-  background: transparent;
-  color: var(--color-text-dim);
-  font-size: 0.78rem;
-  font-weight: 600;
-  cursor: pointer;
-}
-
-.period-btn.is-active {
-  background: var(--color-primary-container);
-  color: var(--color-on-primary-container);
+  align-self: start;
 }
 
 .side-price { display: flex; flex-direction: column; gap: 2px; }
@@ -299,9 +257,9 @@ function submit() {
   color: var(--color-error);
 }
 
-.buy-btn { justify-content: center; width: 100%; }
+.card-head-title { margin: 0; font-size: 1.05rem; font-weight: 600; }
 
-.pay-note { margin: 0; }
+.pay-note { margin: 0; font-size: 0.85rem; color: var(--color-text-dim); }
 
 @container (max-width: 820px) {
   .card-body { grid-template-columns: 1fr; }

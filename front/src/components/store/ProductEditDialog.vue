@@ -10,27 +10,27 @@
   >
     <div class="form">
       <label class="field">
-        <span class="gw-sub">Что продаём</span>
+        <span class="field-label">Что продаём</span>
         <Dropdown v-model="form.kind" :options="KINDS" option-label="label" option-value="value" />
       </label>
 
       <label class="field">
-        <span class="gw-sub">Название</span>
+        <span class="field-label">Название</span>
         <InputText v-model="form.title" maxlength="120" placeholder="Например: «Тёплый графит»" />
       </label>
 
       <label class="field">
-        <span class="gw-sub">Описание</span>
+        <span class="field-label">Описание</span>
         <Textarea v-model="form.description" rows="3" auto-resize />
       </label>
 
       <label class="field">
-        <span class="gw-sub">Цена, руб.</span>
+        <span class="field-label">Цена, руб.</span>
         <InputNumber v-model="form.priceRub" :min="0" :max="100000" />
       </label>
 
       <label v-if="form.kind === 'theme'" class="field">
-        <span class="gw-sub">Тема из конструктора</span>
+        <span class="field-label">Тема из конструктора</span>
         <Dropdown
           v-model="form.themeName"
           :options="themeOptions"
@@ -38,14 +38,14 @@
           option-value="value"
           placeholder="Выберите свою тему"
         />
-        <span class="gw-sub">
+        <span class="field-label">
           Покупатель получит эту палитру целиком. Свои темы создаются в
           «Настройки → Темы и оформление».
         </span>
       </label>
 
       <p v-if="error" class="form-error">{{ error }}</p>
-      <p class="gw-sub">
+      <p class="field-label">
         После сохранения отправьте товар на проверку — на витрину он попадёт
         после одобрения администратором платформы.
       </p>
@@ -142,5 +142,6 @@ async function save() {
 <style scoped>
 .form { display: flex; flex-direction: column; gap: 12px; }
 .field { display: flex; flex-direction: column; gap: 6px; }
+.field-label { font-size: 0.85rem; color: var(--color-text-dim); }
 .form-error { margin: 0; font-size: 0.85rem; color: var(--color-error); }
 </style>

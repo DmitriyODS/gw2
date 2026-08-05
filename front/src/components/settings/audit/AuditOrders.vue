@@ -1,54 +1,57 @@
 <template>
   <!-- Заказы и выплаты. Пока платёжный шлюз — заглушка, оплата подтверждается
        здесь вручную: подтверждение выдаёт покупку ровно один раз. -->
-  <div class="tab">
-    <div class="filters">
+  <AppStack :gap="14">
+    <AppStack row :gap="10">
       <Dropdown v-model="status" :options="STATUSES" option-label="label" option-value="value" @change="load" />
-      <button class="gw-chip" type="button" @click="load">Обновить</button>
-    </div>
+      <AppButton label="Обновить" icon="refresh" size="sm" @click="load" />
+    </AppStack>
 
-    <section v-if="!orders.length" class="gw-banner">
-      <h2>Заказов нет</h2>
-    </section>
-    <div v-else class="rows">
-      <article v-for="o in orders" :key="o.id" class="gw-card gw-row row">
-        <div class="row-main">
-          <p class="gw-h">#{{ o.id }} · {{ o.title || o.item_code }}</p>
-          <p class="gw-sub">
-            пользователь {{ o.user_id }} · {{ formatPrice(o.amount) }} ·
-            {{ formatUntil(o.created_at) }}
-          </p>
-        </div>
-        <span class="chip-tint" :class="tone(o.status)">{{ STATUS_LABELS[o.status] || o.status }}</span>
-        <button v-if="o.status === 'pending'" class="gw-chip" type="button" @click="confirm(o.id)">
-          Подтвердить оплату
-        </button>
-      </article>
-    </div>
-
-    <h3 class="gw-h">Выплаты авторам</h3>
-    <section v-if="!payouts.length" class="gw-banner">
-      <h2>Заявок нет</h2>
-    </section>
-    <div v-else class="rows">
-      <article v-for="p in payouts" :key="p.id" class="gw-card gw-row row">
-        <div class="row-main">
-          <p class="gw-h">{{ p.user_name || `#${p.user_id}` }} · {{ formatPrice(p.amount) }}</p>
-          <p class="gw-sub">{{ p.requisites }} · {{ formatUntil(p.created_at) }}</p>
-        </div>
-        <span class="chip-tint" :class="payoutTone(p.status)">{{ PAYOUT_LABELS[p.status] || p.status }}</span>
-        <template v-if="p.status === 'requested'">
-          <button class="gw-chip" type="button" @click="process(p.id, 'paid')">Выплачено</button>
-          <button class="gw-chip" type="button" @click="process(p.id, 'rejected')">Отказать</button>
+    <EmptyState v-if="!orders.length" icon="receipt_long" size="sm" title="Заказов нет" />
+    <AppStack v-else :gap="10">
+      <AppRow v-for="o in orders" :key="o.id" :title="`#${o.id} · ${o.title || o.item_code}`">
+        <template #hint>
+          пользователь {{ o.user_id }} · {{ formatPrice(o.amount) }} ·
+          {{ formatUntil(o.created_at) }}
         </template>
-      </article>
-    </div>
-  </div>
+        <AppChip :tone="tone(o.status)" size="sm" :label="STATUS_LABELS[o.status] || o.status" />
+        <AppButton
+          v-if="o.status === 'pending'"
+          label="Подтвердить оплату"
+          size="sm"
+          @click="confirm(o.id)"
+        />
+      </AppRow>
+    </AppStack>
+
+    <AppCard title="Выплаты авторам" :gap="10">
+      <EmptyState v-if="!payouts.length" icon="payments" size="sm" title="Заявок нет" />
+      <AppRow
+        v-for="p in payouts"
+        v-else
+        :key="p.id"
+        :title="`${p.user_name || `#${p.user_id}`} · ${formatPrice(p.amount)}`"
+        :hint="`${p.requisites} · ${formatUntil(p.created_at)}`"
+      >
+        <AppChip :tone="payoutTone(p.status)" size="sm" :label="PAYOUT_LABELS[p.status] || p.status" />
+        <template v-if="p.status === 'requested'">
+          <AppButton label="Выплачено" size="sm" @click="process(p.id, 'paid')" />
+          <AppButton label="Отказать" size="sm" tone="danger" @click="process(p.id, 'rejected')" />
+        </template>
+      </AppRow>
+    </AppCard>
+  </AppStack>
 </template>
 
 <script setup>
 import { onMounted, ref } from 'vue'
 import Dropdown from 'primevue/dropdown'
+import AppButton from '@/components/ui/AppButton.vue'
+import AppCard from '@/components/ui/AppCard.vue'
+import AppChip from '@/components/ui/AppChip.vue'
+import AppRow from '@/components/ui/AppRow.vue'
+import AppStack from '@/components/ui/AppStack.vue'
+import EmptyState from '@/components/common/EmptyState.vue'
 import * as api from '@/api/billing.js'
 import { useNotificationsStore } from '@/stores/notifications.js'
 import { formatPrice, formatUntil } from '@/utils/money.js'
@@ -98,23 +101,16 @@ async function process(id, decision) {
 }
 
 function tone(s) {
-  if (s === 'paid') return 'chip-tint--success'
-  if (s === 'pending') return 'chip-tint--warning'
-  if (s === 'canceled' || s === 'failed') return 'chip-tint--error'
-  return 'chip-tint--primary'
+  if (s === 'paid') return 'success'
+  if (s === 'pending') return 'warning'
+  if (s === 'canceled' || s === 'failed') return 'error'
+  return 'primary'
 }
 
 function payoutTone(s) {
-  if (s === 'paid') return 'chip-tint--success'
-  if (s === 'requested') return 'chip-tint--warning'
-  return 'chip-tint--error'
+  if (s === 'paid') return 'success'
+  if (s === 'requested') return 'warning'
+  return 'error'
 }
 </script>
 
-<style scoped>
-.tab { display: flex; flex-direction: column; gap: 14px; }
-.filters { display: flex; flex-wrap: wrap; gap: 10px; }
-.rows { display: flex; flex-direction: column; gap: 10px; }
-.row { padding: 14px; }
-.row-main { flex: 1; min-width: 0; }
-</style>

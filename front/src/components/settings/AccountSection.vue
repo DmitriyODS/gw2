@@ -1,7 +1,7 @@
 <template>
   <div class="acc">
     <!-- Кто я: аватар, имя, контакты-чипы и правка одной кнопкой. -->
-    <section class="gw-card acc-id">
+    <AppCard class="acc-id" :gap="20">
       <button type="button" class="acc-avatar" title="Открыть фото" @click="lightboxOpen = true">
         <img :src="avatarSrc" :alt="user?.fio" />
         <span class="acc-avatar-zoom" aria-hidden="true">
@@ -24,7 +24,7 @@
       <button type="button" class="acc-edit" title="Редактировать" @click="editOpen = true">
         <span class="material-symbols-outlined">edit</span>
       </button>
-    </section>
+    </AppCard>
 
     <!-- Подписка и внешние аккаунты — ряд пилюль под карточкой. -->
     <div class="acc-links">
@@ -32,7 +32,7 @@
         :is="link.action ? 'button' : 'div'"
         v-for="link in links"
         :key="link.key"
-        class="gw-chip acc-link"
+        class="acc-link"
         :class="{ 'is-static': !link.action }"
         :type="link.action ? 'button' : undefined"
         @click="link.action && link.action()"
@@ -45,9 +45,7 @@
       </component>
     </div>
 
-    <section class="gw-card acc-sessions">
-      <h3 class="gw-h">Авторизация и сессии</h3>
-
+    <AppCard class="acc-sessions" title="Авторизация и сессии">
       <div class="sess-grid">
         <button type="button" class="sess-tile sess-add" @click="authorizeOpen = true">
           <span class="material-symbols-outlined">devices</span>
@@ -77,7 +75,7 @@
           </button>
         </article>
       </div>
-    </section>
+    </AppCard>
 
     <ProfileEditDialog v-model="editOpen" />
     <AuthorizeDeviceDialog v-model="authorizeOpen" />
@@ -111,6 +109,7 @@ import { useAuthStore } from '@/stores/auth.js'
 import { useNotificationsStore } from '@/stores/notifications.js'
 import { useBillingStore } from '@/stores/billing.js'
 import { formatUntil } from '@/utils/money.js'
+import { SUBSCRIPTIONS_VISIBLE } from '@/utils/release.js'
 import { inAppShell } from '@/utils/appShell.js'
 import { dayLabel } from '@/utils/chatDates.js'
 import {
@@ -122,6 +121,7 @@ import {
   yandexUnlink,
 } from '@/api/auth.js'
 import { getYougileStatus } from '@/api/yougile.js'
+import AppCard from '@/components/ui/AppCard.vue'
 import AppDialog from '@/components/ui/AppDialog.vue'
 import ImageLightbox from '@/components/common/ImageLightbox.vue'
 import BrandLoader from '@/components/common/BrandLoader.vue'
@@ -230,12 +230,14 @@ const plan = computed(() => {
 })
 
 const links = computed(() => [
-  {
+  // Подписка скрыта, пока не подключена оплата (см. utils/release.js): вести
+  // человека в витрину, где нечего оформить, некуда.
+  ...(SUBSCRIPTIONS_VISIBLE ? [{
     key: 'plan',
     label: 'Подписка',
     state: plan.value,
     action: () => router.push('/store?tab=subs'),
-  },
+  }] : []),
   {
     key: 'yandex',
     label: 'Яндекс аккаунт',
@@ -292,7 +294,8 @@ onMounted(() => {
   loadSessions()
   loadLinks()
   // Тариф в карточке — тот же, что в магазине: общий стор, общий запрос.
-  billing.fetchShowcase()
+  // Пока подписка скрыта, показывать нечего — и запрашивать тоже.
+  if (SUBSCRIPTIONS_VISIBLE) billing.fetchShowcase()
 })
 </script>
 
@@ -304,11 +307,12 @@ onMounted(() => {
 }
 
 /* ── Кто я ───────────────────────────────────────────────────────── */
+/* Строка, а не столбец: AppCard по умолчанию ставит содержимое в колонку,
+   а здесь аватар, данные и кнопка правки стоят в ряд. Промежуток задаёт сама
+   карточка (:gap) — её класс специфичнее, и отсюда его было не перебить. */
 .acc-id {
-  display: flex;
+  flex-direction: row;
   align-items: flex-start;
-  gap: 20px;
-  padding: 20px;
 }
 
 .acc-avatar {
@@ -436,10 +440,28 @@ onMounted(() => {
   gap: 12px;
 }
 
+/* Пилюля внешнего аккаунта: тот же стеклянный чип, что и всюду, но во всю
+   ширину колонки — справа у неё состояние подключения. */
 .acc-link {
   flex: 1 1 240px;
+  display: inline-flex;
+  align-items: center;
   justify-content: flex-start;
+  gap: 8px;
   padding: 8px 16px 8px 8px;
+  border: 1px solid var(--acrylic-border);
+  border-radius: 999px;
+  background: var(--glass-bg), var(--acrylic-card-bg);
+  box-shadow: var(--glass-edge);
+  color: var(--color-text);
+  font-size: 0.86rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.2s ease;
+}
+
+.acc-link:hover:not(.is-static) {
+  background: var(--glass-hover-bg, var(--glass-bg)), var(--acrylic-card-bg);
 }
 
 .acc-link.is-static { cursor: default; }

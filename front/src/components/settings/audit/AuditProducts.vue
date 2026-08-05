@@ -1,51 +1,54 @@
 <template>
   <!-- Товары магазина: очередь модерации авторских товаров и позиции самой
        платформы. Опубликованное сразу попадает на витрину. -->
-  <div class="tab">
-    <section class="gw-card form">
-      <p class="gw-h">Позиция платформы</p>
+  <AppStack :gap="14">
+    <AppCard title="Позиция платформы">
       <div class="form-row">
         <label class="field">
-          <span class="gw-sub">Вид</span>
+          <span class="field-label">Вид</span>
           <Dropdown v-model="form.kind" :options="KINDS" option-label="label" option-value="value" />
         </label>
         <label class="field grow">
-          <span class="gw-sub">Название</span>
+          <span class="field-label">Название</span>
           <InputText v-model="form.title" />
         </label>
         <label class="field">
-          <span class="gw-sub">Цена, руб.</span>
+          <span class="field-label">Цена, руб.</span>
           <InputNumber v-model="form.priceRub" :min="0" />
         </label>
-        <button class="btn-grad" type="button" @click="create">Добавить</button>
+        <AppButton label="Добавить" icon="add" variant="filled" @click="create" />
       </div>
       <Textarea v-model="form.description" rows="2" auto-resize placeholder="Описание для витрины" />
-    </section>
+    </AppCard>
 
-    <section v-if="!items.length" class="gw-banner">
-      <h2>Товаров нет</h2>
-      <p class="gw-sub">Здесь появятся товары авторов, отправленные на проверку.</p>
-    </section>
-    <div v-else class="rows">
-      <article v-for="p in items" :key="p.id" class="gw-card gw-row row">
-        <div class="row-main">
-          <p class="gw-h">{{ p.title }}</p>
-          <p class="gw-sub">
-            {{ p.author_name || 'платформа' }} · {{ formatPrice(p.price) }} · продаж {{ p.sales_count }}
-            <template v-if="p.reject_reason"> · {{ p.reject_reason }}</template>
-          </p>
-        </div>
-        <span class="chip-tint" :class="tone(p.status)">{{ STATUS[p.status] || p.status }}</span>
-        <template v-if="p.status === 'review'">
-          <button class="gw-chip" type="button" @click="review(p, true)">Опубликовать</button>
-          <button class="gw-chip" type="button" @click="reject(p)">Отклонить</button>
+    <EmptyState
+      v-if="!items.length"
+      icon="sell"
+      size="sm"
+      title="Товаров нет"
+      subtitle="Здесь появятся товары авторов, отправленные на проверку."
+    />
+    <AppStack v-else :gap="10">
+      <AppRow v-for="p in items" :key="p.id" :title="p.title">
+        <template #hint>
+          {{ p.author_name || 'платформа' }} · {{ formatPrice(p.price) }} · продаж {{ p.sales_count }}
+          <template v-if="p.reject_reason"> · {{ p.reject_reason }}</template>
         </template>
-        <button v-else-if="p.status === 'published'" class="gw-chip" type="button" @click="remove(p.id)">
-          Снять
-        </button>
-      </article>
-    </div>
-  </div>
+        <AppChip :tone="tone(p.status)" size="sm" :label="STATUS[p.status] || p.status" />
+        <template v-if="p.status === 'review'">
+          <AppButton label="Опубликовать" size="sm" @click="review(p, true)" />
+          <AppButton label="Отклонить" size="sm" tone="danger" @click="reject(p)" />
+        </template>
+        <AppButton
+          v-else-if="p.status === 'published'"
+          label="Снять"
+          size="sm"
+          tone="neutral"
+          @click="remove(p.id)"
+        />
+      </AppRow>
+    </AppStack>
+  </AppStack>
 </template>
 
 <script setup>
@@ -54,6 +57,12 @@ import InputText from 'primevue/inputtext'
 import InputNumber from 'primevue/inputnumber'
 import Textarea from 'primevue/textarea'
 import Dropdown from 'primevue/dropdown'
+import AppButton from '@/components/ui/AppButton.vue'
+import AppCard from '@/components/ui/AppCard.vue'
+import AppChip from '@/components/ui/AppChip.vue'
+import AppRow from '@/components/ui/AppRow.vue'
+import AppStack from '@/components/ui/AppStack.vue'
+import EmptyState from '@/components/common/EmptyState.vue'
 import * as api from '@/api/billing.js'
 import { useNotificationsStore } from '@/stores/notifications.js'
 import { formatPrice } from '@/utils/money.js'
@@ -115,20 +124,16 @@ async function remove(id) {
 }
 
 function tone(status) {
-  if (status === 'published') return 'chip-tint--success'
-  if (status === 'review') return 'chip-tint--warning'
-  if (status === 'rejected') return 'chip-tint--error'
-  return 'chip-tint--primary'
+  if (status === 'published') return 'success'
+  if (status === 'review') return 'warning'
+  if (status === 'rejected') return 'error'
+  return 'primary'
 }
 </script>
 
 <style scoped>
-.tab { display: flex; flex-direction: column; gap: 14px; }
-.form { display: flex; flex-direction: column; gap: 12px; }
 .form-row { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 12px; }
 .field { display: flex; flex-direction: column; gap: 6px; }
+.field-label { font-size: 0.85rem; color: var(--color-text-dim); }
 .grow { flex: 1; min-width: 180px; }
-.rows { display: flex; flex-direction: column; gap: 10px; }
-.row { padding: 14px; }
-.row-main { flex: 1; min-width: 0; }
 </style>

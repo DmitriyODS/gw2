@@ -3,33 +3,27 @@
        факты ТВ-режима работают на ключе платформы и тратят токены СОЗДАТЕЛЯ
        компании — поэтому разрешение на трату даёт только он. -->
   <div class="ai-settings">
-    <div v-if="!companyId" class="gw-card">
-      <div class="gw-row">
-        <div>
-          <p class="gw-h">Сначала выберите компанию</p>
-          <p class="gw-sub">ИИ-возможности настраиваются для конкретной компании.</p>
-        </div>
-      </div>
-    </div>
+    <AppCard v-if="!companyId">
+      <AppRow
+        title="Сначала выберите компанию"
+        hint="ИИ-возможности настраиваются для конкретной компании."
+      />
+    </AppCard>
 
     <template v-else>
       <BrandLoader v-if="loading" :size="48" />
 
       <template v-else>
-        <section class="gw-card ai-card">
-          <div class="gw-row">
-            <div class="head-main">
-              <p class="gw-h">ИИ возможности компании</p>
-              <p class="gw-sub">
-                Работают на ключе платформы. Токены списываются с баланса
-                создателя компании — участникам свои ключи не нужны.
-              </p>
-            </div>
-          </div>
-
-          <p v-if="!settings.platform_ready" class="ai-warn">
-            ИИ на платформе не настроен — тумблеры ниже пока ничего не включат.
-          </p>
+        <AppCard
+          title="ИИ возможности компании"
+          hint="Работают на ключе платформы. Токены списываются с баланса
+            создателя компании — участникам свои ключи не нужны."
+        >
+          <AppInfoBar
+            v-if="!settings.platform_ready"
+            tone="warning"
+            message="ИИ на платформе не настроен — тумблеры ниже пока ничего не включат."
+          />
 
           <AppSwitchRow
             v-model="form.enabled"
@@ -53,40 +47,45 @@
             hint="Короткая заметка дня на табло"
           />
 
-          <p v-if="settings.owner_tokens_left >= 0" class="gw-sub">
+          <p v-if="settings.owner_tokens_left >= 0" class="ai-note">
             У создателя компании осталось {{ formatCount(settings.owner_tokens_left) }} токенов.
           </p>
 
-          <div class="ai-actions">
-            <button class="btn-grad" type="button" :disabled="saving" @click="save">
-              <span class="material-symbols-outlined">check</span>
-              {{ saving ? 'Сохраняем…' : 'Сохранить' }}
-            </button>
-            <button class="btn-glass" type="button" :disabled="testing" @click="test">
-              <span class="material-symbols-outlined">wifi_tethering</span>
-              {{ testing ? 'Проверяем…' : 'Проверить связь' }}
-            </button>
+          <AppStack row :gap="10">
+            <AppButton
+              :label="saving ? 'Сохраняем…' : 'Сохранить'"
+              icon="check"
+              variant="filled"
+              :loading="saving"
+              @click="save"
+            />
+            <AppButton
+              :label="testing ? 'Проверяем…' : 'Проверить связь'"
+              icon="wifi_tethering"
+              :loading="testing"
+              @click="test"
+            />
             <span v-if="testResult" class="ai-test" :data-ok="testResult.chat">
               {{ testResult.chat ? `Связь есть · ${testResult.latency_ms} мс` : (testResult.error || 'Не отвечает') }}
             </span>
-          </div>
-        </section>
+          </AppStack>
+        </AppCard>
 
         <!-- Индексация задач нужна умному поиску: без эмбеддингов он пуст. -->
-        <section v-if="indexing" class="gw-card">
-          <div class="gw-row">
-            <div class="head-main">
-              <p class="gw-h">Индексация задач</p>
-              <p class="gw-sub">
-                Проиндексировано {{ indexing.indexed }} из {{ indexing.total_tasks }}
-                <template v-if="indexing.pending > 0"> · осталось {{ indexing.pending }}</template>
-              </p>
-            </div>
-            <button class="gw-chip" type="button" :disabled="reindexing" @click="reindex">
-              {{ reindexing ? 'Запускаем…' : 'Переиндексировать' }}
-            </button>
-          </div>
-        </section>
+        <AppCard v-if="indexing">
+          <AppRow title="Индексация задач">
+            <template #hint>
+              Проиндексировано {{ indexing.indexed }} из {{ indexing.total_tasks }}
+              <template v-if="indexing.pending > 0"> · осталось {{ indexing.pending }}</template>
+            </template>
+            <AppButton
+              :label="reindexing ? 'Запускаем…' : 'Переиндексировать'"
+              size="sm"
+              :loading="reindexing"
+              @click="reindex"
+            />
+          </AppRow>
+        </AppCard>
       </template>
     </template>
   </div>
@@ -96,6 +95,11 @@
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { storeToRefs } from 'pinia'
 import BrandLoader from '@/components/common/BrandLoader.vue'
+import AppButton from '@/components/ui/AppButton.vue'
+import AppCard from '@/components/ui/AppCard.vue'
+import AppInfoBar from '@/components/ui/AppInfoBar.vue'
+import AppRow from '@/components/ui/AppRow.vue'
+import AppStack from '@/components/ui/AppStack.vue'
 import AppSwitchRow from '@/components/ui/AppSwitchRow.vue'
 import { useCompaniesStore } from '@/stores/companies.js'
 import { useAuthStore } from '@/stores/auth.js'
@@ -231,18 +235,7 @@ async function reindex() {
 
 <style scoped>
 .ai-settings { display: flex; flex-direction: column; gap: 14px; }
-.ai-card { display: flex; flex-direction: column; gap: 12px; }
-.head-main { flex: 1; min-width: 0; }
-
-.ai-warn {
-  margin: 0;
-  padding: 10px 12px;
-  border-radius: var(--radius-md);
-  background: var(--color-warning-container, var(--color-surface-variant));
-  font-size: 0.85rem;
-}
-
-.ai-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+.ai-note { margin: 0; font-size: 0.85rem; color: var(--color-text-dim); }
 .ai-test { font-size: 0.82rem; color: var(--color-error); }
 .ai-test[data-ok='true'] { color: var(--color-success, var(--color-primary)); }
 </style>

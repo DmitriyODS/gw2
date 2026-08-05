@@ -1,113 +1,113 @@
 <template>
   <!-- «Мои товары»: купленное на витрине и СВОИ товары на продажу. Автор
        назначает цену, отправляет товар на модерацию и выводит выручку. -->
-  <div class="mine">
-    <BrandLoader v-if="loading" :size="48" />
+  <BrandLoader v-if="loading" :size="48" />
 
-    <template v-else>
-      <section class="gw-card wallet">
-        <div class="gw-row">
-          <div class="wallet-main">
-            <p class="gw-h">Выручка автора</p>
-            <p class="gw-sub">
-              Платформа удерживает {{ commission }}% с каждой продажи.
-              Всего заработано: {{ formatPrice(balance.total_earned, { free: '0 руб.' }) }}
-            </p>
-          </div>
-          <strong class="wallet-sum">{{ formatPrice(balance.balance, { free: '0 руб.' }) }}</strong>
-          <button class="gw-chip" type="button" :disabled="!balance.balance" @click="payoutOpen = true">
-            Вывести
-          </button>
-        </div>
-      </section>
-
-      <div class="mine-head">
-        <h2 class="gw-title section-title">Мои товары</h2>
-        <button class="btn-grad" type="button" @click="createProduct">
-          <span class="material-symbols-outlined">add</span>
-          Выставить товар
-        </button>
-      </div>
-
-      <section v-if="!products.length" class="gw-banner">
-        <h2>Вы ещё ничего не продаёте</h2>
-        <p class="gw-sub">Выставьте свою тему или обои — после проверки они появятся на витрине.</p>
-      </section>
-      <section v-else class="gw-group rows">
-        <article v-for="p in products" :key="p.id" class="gw-card gw-row row">
-          <div class="row-main">
-            <p class="gw-h">{{ p.title }}</p>
-            <p class="gw-sub">
-              {{ formatPrice(p.price) }} · продаж: {{ p.sales_count }}
-              <template v-if="p.status === 'rejected' && p.reject_reason"> · {{ p.reject_reason }}</template>
-            </p>
-          </div>
-          <span class="chip-tint" :class="statusTone(p.status)">{{ STATUS[p.status] }}</span>
-          <button
-            v-if="p.status === 'draft' || p.status === 'rejected'"
-            class="gw-chip"
-            type="button"
-            @click="submit(p.id)"
-          >
-            На проверку
-          </button>
-          <button
-            v-else-if="p.status === 'published'"
-            class="gw-chip"
-            type="button"
-            @click="withdraw(p.id)"
-          >
-            Снять
-          </button>
-          <button class="gw-chip" type="button" @click="editProduct(p)">Изменить</button>
-        </article>
-      </section>
-
-      <h2 class="gw-title section-title">Купленное</h2>
-      <section v-if="!purchases.length" class="gw-banner">
-        <h2>Покупок пока нет</h2>
-        <p class="gw-sub">Товары с витрины появятся здесь и сразу станут доступны в оформлении.</p>
-      </section>
-      <section v-else class="gw-group rows">
-        <article v-for="pu in purchases" :key="pu.id" class="gw-card gw-row row">
-          <div class="row-main">
-            <p class="gw-h">{{ pu.product?.title }}</p>
-            <p class="gw-sub">{{ formatUntil(pu.created_at) }} · {{ formatPrice(pu.amount) }}</p>
-          </div>
-          <button class="gw-chip" type="button" @click="$emit('open', pu.product)">Открыть</button>
-        </article>
-      </section>
-    </template>
-
-    <ProductEditDialog v-model:visible="editorOpen" :product="editing" @saved="load" />
-
-    <AppDialog
-      v-model="payoutOpen"
-      title="Вывод выручки"
-      :actions="PAYOUT_ACTIONS"
-      @confirm="sendPayout"
+  <AppStack v-else :gap="16">
+    <AppRow
+      title="Выручка автора"
+      :hint="`Платформа удерживает ${commission}% с каждой продажи.
+        Всего заработано: ${formatPrice(balance.total_earned, { free: '0 руб.' })}`"
     >
-      <div class="payout-form">
-        <label class="field">
-          <span class="gw-sub">Сумма, руб.</span>
-          <InputNumber v-model="payoutRub" :min="1" :max="Math.floor(balance.balance / 100)" />
-        </label>
-        <label class="field">
-          <span class="gw-sub">Реквизиты для перевода</span>
-          <InputText v-model="payoutRequisites" placeholder="Телефон СБП или счёт" />
-        </label>
-        <p class="gw-sub">Заявку рассматривает администратор платформы.</p>
-      </div>
-    </AppDialog>
-  </div>
+      <strong class="wallet-sum">{{ formatPrice(balance.balance, { free: '0 руб.' }) }}</strong>
+      <AppButton
+        label="Вывести"
+        size="sm"
+        :disabled="!balance.balance"
+        @click="payoutOpen = true"
+      />
+    </AppRow>
+
+    <AppCard title="Мои товары" :gap="10">
+      <template #head>
+        <AppButton label="Выставить товар" icon="add" variant="filled" size="sm" @click="createProduct" />
+      </template>
+
+      <EmptyState
+        v-if="!products.length"
+        icon="sell"
+        size="sm"
+        title="Вы ещё ничего не продаёте"
+        subtitle="Выставьте свою тему или обои — после проверки они появятся на витрине."
+      />
+      <AppRow v-for="p in products" v-else :key="p.id" :title="p.title">
+        <template #hint>
+          {{ formatPrice(p.price) }} · продаж: {{ p.sales_count }}
+          <template v-if="p.status === 'rejected' && p.reject_reason"> · {{ p.reject_reason }}</template>
+        </template>
+
+        <AppChip :tone="statusTone(p.status)" size="sm" :label="STATUS[p.status]" />
+        <AppButton
+          v-if="p.status === 'draft' || p.status === 'rejected'"
+          label="На проверку"
+          size="sm"
+          @click="submit(p.id)"
+        />
+        <AppButton
+          v-else-if="p.status === 'published'"
+          label="Снять"
+          size="sm"
+          tone="neutral"
+          @click="withdraw(p.id)"
+        />
+        <AppButton label="Изменить" size="sm" tone="neutral" @click="editProduct(p)" />
+      </AppRow>
+    </AppCard>
+
+    <AppCard title="Купленное" :gap="10">
+      <EmptyState
+        v-if="!purchases.length"
+        icon="shopping_bag"
+        size="sm"
+        title="Покупок пока нет"
+        subtitle="Товары с витрины появятся здесь и сразу станут доступны в оформлении."
+      />
+      <AppRow
+        v-for="pu in purchases"
+        v-else
+        :key="pu.id"
+        :title="pu.product?.title"
+        :hint="`${formatUntil(pu.created_at)} · ${formatPrice(pu.amount)}`"
+      >
+        <AppButton label="Открыть" size="sm" @click="$emit('open', pu.product)" />
+      </AppRow>
+    </AppCard>
+  </AppStack>
+
+  <ProductEditDialog v-model:visible="editorOpen" :product="editing" @saved="load" />
+
+  <AppDialog
+    v-model="payoutOpen"
+    title="Вывод выручки"
+    :actions="PAYOUT_ACTIONS"
+    @confirm="sendPayout"
+  >
+    <div class="payout-form">
+      <label class="field">
+        <span class="field-label">Сумма, руб.</span>
+        <InputNumber v-model="payoutRub" :min="1" :max="Math.floor(balance.balance / 100)" />
+      </label>
+      <label class="field">
+        <span class="field-label">Реквизиты для перевода</span>
+        <InputText v-model="payoutRequisites" placeholder="Телефон СБП или счёт" />
+      </label>
+      <p class="field-label">Заявку рассматривает администратор платформы.</p>
+    </div>
+  </AppDialog>
 </template>
 
 <script setup>
 import { onMounted, ref } from 'vue'
 import InputText from 'primevue/inputtext'
 import InputNumber from 'primevue/inputnumber'
+import AppButton from '@/components/ui/AppButton.vue'
+import AppCard from '@/components/ui/AppCard.vue'
+import AppChip from '@/components/ui/AppChip.vue'
 import AppDialog from '@/components/ui/AppDialog.vue'
+import AppRow from '@/components/ui/AppRow.vue'
+import AppStack from '@/components/ui/AppStack.vue'
 import BrandLoader from '@/components/common/BrandLoader.vue'
+import EmptyState from '@/components/common/EmptyState.vue'
 import ProductEditDialog from '@/components/store/ProductEditDialog.vue'
 import * as api from '@/api/billing.js'
 import { useNotificationsStore } from '@/stores/notifications.js'
@@ -198,23 +198,16 @@ async function sendPayout() {
 }
 
 function statusTone(status) {
-  if (status === 'published') return 'chip-tint--success'
-  if (status === 'review') return 'chip-tint--warning'
-  if (status === 'rejected') return 'chip-tint--error'
-  return 'chip-tint--primary'
+  if (status === 'published') return 'success'
+  if (status === 'review') return 'warning'
+  if (status === 'rejected') return 'error'
+  return 'primary'
 }
 </script>
 
 <style scoped>
-.mine { display: flex; flex-direction: column; gap: 14px; }
-.section-title { font-size: 1.35rem; }
-.mine-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
-.rows { display: flex; flex-direction: column; gap: 10px; }
-.row { padding: 14px; }
-.row-main { flex: 1; min-width: 0; }
-.wallet { padding: 14px; }
-.wallet-main { flex: 1; min-width: 0; }
 .wallet-sum { font-size: 1.15rem; font-weight: 700; }
 .payout-form { display: flex; flex-direction: column; gap: 12px; }
 .field { display: flex; flex-direction: column; gap: 6px; }
+.field-label { font-size: 0.85rem; color: var(--color-text-dim); }
 </style>

@@ -1,64 +1,62 @@
 <template>
   <!-- Подписки пользователей: выдать тариф, снять его, начислить или обнулить
        токены ИИ. Всё это пишется в журнал действий. -->
-  <div class="tab">
-    <section class="gw-card grant">
-      <p class="gw-h">Выдать тариф</p>
+  <AppStack :gap="14">
+    <AppCard title="Выдать тариф">
       <div class="grant-row">
         <div class="field user-field">
-          <span class="gw-sub">Пользователь</span>
+          <span class="field-label">Пользователь</span>
           <InputText v-model="query" placeholder="Имя или логин" @input="searchUsers" />
           <ul v-if="found.length" class="suggest">
             <li v-for="u in found" :key="u.id">
               <button type="button" @click="pick(u)">{{ u.fio }} · {{ u.login }}</button>
             </li>
           </ul>
-          <p v-if="picked" class="gw-sub">Выбран: {{ picked.fio }}</p>
+          <p v-if="picked" class="field-label">Выбран: {{ picked.fio }}</p>
         </div>
         <label class="field">
-          <span class="gw-sub">Тариф</span>
+          <span class="field-label">Тариф</span>
           <Dropdown v-model="grantPlan" :options="PLANS" option-label="label" option-value="value" />
         </label>
         <label class="field">
-          <span class="gw-sub">Дней</span>
+          <span class="field-label">Дней</span>
           <InputNumber v-model="grantDays" :min="1" :max="3650" />
         </label>
-        <button class="btn-grad" type="button" :disabled="!picked" @click="grant">Выдать</button>
+        <AppButton label="Выдать" variant="filled" :disabled="!picked" @click="grant" />
       </div>
 
       <div class="grant-row">
         <label class="field">
-          <span class="gw-sub">Токены ИИ (можно отрицательные)</span>
+          <span class="field-label">Токены ИИ (можно отрицательные)</span>
           <InputNumber v-model="tokens" :min="-1000000" :max="1000000" />
         </label>
-        <button class="gw-chip" type="button" :disabled="!picked" @click="grantTokens">Начислить</button>
-        <button class="gw-chip" type="button" :disabled="!picked" @click="resetTokens">Обнулить токены</button>
+        <AppButton label="Начислить" size="sm" :disabled="!picked" @click="grantTokens" />
+        <AppButton label="Обнулить токены" size="sm" tone="danger" :disabled="!picked" @click="resetTokens" />
       </div>
-    </section>
+    </AppCard>
 
-    <div class="filters">
+    <AppStack row :gap="10">
       <InputText v-model="search" placeholder="Поиск по подпискам" @keyup.enter="load" />
       <Dropdown v-model="planFilter" :options="FILTERS" option-label="label" option-value="value" @change="load" />
-      <button class="gw-chip" type="button" @click="load">Обновить</button>
-    </div>
+      <AppButton label="Обновить" icon="refresh" size="sm" @click="load" />
+    </AppStack>
 
-    <section v-if="!items.length" class="gw-banner">
-      <h2>Платных подписок пока нет</h2>
-    </section>
-    <div v-else class="rows">
-      <article v-for="s in items" :key="s.user_id" class="gw-card gw-row row">
-        <div class="row-main">
-          <p class="gw-h">{{ s.user_name || `#${s.user_id}` }} <span class="gw-sub">· {{ s.user_login }}</span></p>
-          <p class="gw-sub">
-            {{ s.plan_code }} · {{ SOURCES[s.source] || s.source }} ·
-            {{ s.expires_at ? `до ${formatUntil(s.expires_at)}` : 'бессрочно' }} ·
-            место {{ formatBytes(s.storage_used) }}
-          </p>
-        </div>
-        <button class="gw-chip" type="button" @click="revoke(s.user_id)">Снять</button>
-      </article>
-    </div>
-  </div>
+    <EmptyState v-if="!items.length" icon="card_membership" size="sm" title="Платных подписок пока нет" />
+    <AppStack v-else :gap="10">
+      <AppRow
+        v-for="s in items"
+        :key="s.user_id"
+        :title="`${s.user_name || `#${s.user_id}`} · ${s.user_login}`"
+      >
+        <template #hint>
+          {{ s.plan_code }} · {{ SOURCES[s.source] || s.source }} ·
+          {{ s.expires_at ? `до ${formatUntil(s.expires_at)}` : 'бессрочно' }} ·
+          место {{ formatBytes(s.storage_used) }}
+        </template>
+        <AppButton label="Снять" size="sm" tone="danger" @click="revoke(s.user_id)" />
+      </AppRow>
+    </AppStack>
+  </AppStack>
 </template>
 
 <script setup>
@@ -66,6 +64,11 @@ import { onMounted, ref } from 'vue'
 import InputText from 'primevue/inputtext'
 import InputNumber from 'primevue/inputnumber'
 import Dropdown from 'primevue/dropdown'
+import AppButton from '@/components/ui/AppButton.vue'
+import AppCard from '@/components/ui/AppCard.vue'
+import AppRow from '@/components/ui/AppRow.vue'
+import AppStack from '@/components/ui/AppStack.vue'
+import EmptyState from '@/components/common/EmptyState.vue'
 import * as api from '@/api/billing.js'
 import { useNotificationsStore } from '@/stores/notifications.js'
 import { formatBytes, formatUntil } from '@/utils/money.js'
@@ -153,15 +156,10 @@ async function resetTokens() {
 </script>
 
 <style scoped>
-.tab { display: flex; flex-direction: column; gap: 14px; }
-.grant { display: flex; flex-direction: column; gap: 12px; }
 .grant-row { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 12px; }
 .field { display: flex; flex-direction: column; gap: 6px; }
+.field-label { font-size: 0.85rem; color: var(--color-text-dim); }
 .user-field { position: relative; flex: 1; min-width: 220px; }
-.filters { display: flex; flex-wrap: wrap; gap: 10px; }
-.rows { display: flex; flex-direction: column; gap: 10px; }
-.row { padding: 14px; }
-.row-main { flex: 1; min-width: 0; }
 
 .suggest {
   position: absolute;

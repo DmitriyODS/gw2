@@ -1,16 +1,15 @@
 <template>
   <!-- Тарифы и докупки: супер-админ правит ЦЕНЫ и подводки. Лимиты тарифа
        конечны и заданы в коде сервиса — здесь они только показаны. -->
-  <div class="tab">
-    <section class="gw-card">
-      <div class="gw-row">
-        <div class="row-main">
-          <p class="gw-h">Комиссия платформы</p>
-          <p class="gw-sub">Удерживается с продажи товара автора</p>
-        </div>
+  <AppStack :gap="14">
+    <AppCard>
+      <AppRow
+        title="Комиссия платформы"
+        hint="Удерживается с продажи товара автора"
+      >
         <InputNumber v-model="settings.commission_pct" :min="0" :max="100" suffix=" %" class="num" />
-      </div>
-      <div class="gw-row toggles">
+      </AppRow>
+      <div class="toggles">
         <label class="toggle">
           <InputSwitch v-model="settings.store_enabled" />
           <span>Магазин открыт</span>
@@ -19,65 +18,65 @@
           <InputSwitch v-model="settings.payment_enabled" />
           <span>Приём оплаты включён</span>
         </label>
-        <button class="gw-chip" type="button" @click="saveSettings">Сохранить</button>
+        <AppButton label="Сохранить" icon="check" size="sm" @click="saveSettings" />
       </div>
-      <p class="gw-sub">
+      <p class="note">
         Платёжный шлюз: {{ settings.payment_provider || 'manual' }}. Пока это
         заглушка — заказы подтверждаются вручную во вкладке «Заказы».
       </p>
-    </section>
+    </AppCard>
 
-    <h3 class="gw-h">Тарифы</h3>
-    <section v-for="plan in plans" :key="plan.code" class="gw-card plan">
+    <h3 class="group-title">Тарифы</h3>
+    <AppCard v-for="plan in plans" :key="plan.code" class="plan" :gap="10">
       <div class="plan-head">
         <InputText v-model="plan.name" class="plan-name" />
         <label class="toggle">
           <InputSwitch v-model="plan.is_active" />
           <span>Продаётся</span>
         </label>
-        <button class="gw-chip" type="button" @click="savePlan(plan)">Сохранить</button>
+        <AppButton label="Сохранить" icon="check" size="sm" @click="savePlan(plan)" />
       </div>
       <Textarea v-model="plan.tagline" rows="2" auto-resize class="plan-tagline" />
       <div class="price-row">
         <label class="field">
-          <span class="gw-sub">Цена за месяц, руб.</span>
+          <span class="field-label">Цена за месяц, руб.</span>
           <InputNumber :model-value="plan.price_month / 100" :min="0" @update:model-value="v => plan.price_month = Math.round((v || 0) * 100)" />
         </label>
         <label class="field">
-          <span class="gw-sub">Цена за год, руб.</span>
+          <span class="field-label">Цена за год, руб.</span>
           <InputNumber :model-value="plan.price_year / 100" :min="0" @update:model-value="v => plan.price_year = Math.round((v || 0) * 100)" />
         </label>
       </div>
-      <p class="gw-sub limits">{{ limitsSummary(plan.code) }}</p>
-    </section>
+      <p class="note limits">{{ limitsSummary(plan.code) }}</p>
+    </AppCard>
 
-    <h3 class="gw-h">Дополнения</h3>
-    <section v-for="addon in addons" :key="addon.code" class="gw-card plan">
+    <h3 class="group-title">Дополнения</h3>
+    <AppCard v-for="addon in addons" :key="addon.code" class="plan" :gap="10">
       <div class="plan-head">
         <InputText v-model="addon.name" class="plan-name" />
         <label class="toggle">
           <InputSwitch v-model="addon.is_active" />
           <span>Продаётся</span>
         </label>
-        <button class="gw-chip" type="button" @click="saveAddon(addon)">Сохранить</button>
+        <AppButton label="Сохранить" icon="check" size="sm" @click="saveAddon(addon)" />
       </div>
       <Textarea v-model="addon.description" rows="2" auto-resize class="plan-tagline" />
       <div class="price-row">
         <label class="field">
-          <span class="gw-sub">Цена за месяц, руб.</span>
+          <span class="field-label">Цена за месяц, руб.</span>
           <InputNumber :model-value="addon.price_month / 100" :min="0" @update:model-value="v => addon.price_month = Math.round((v || 0) * 100)" />
         </label>
         <label class="field">
-          <span class="gw-sub">Цена за год, руб.</span>
+          <span class="field-label">Цена за год, руб.</span>
           <InputNumber :model-value="addon.price_year / 100" :min="0" @update:model-value="v => addon.price_year = Math.round((v || 0) * 100)" />
         </label>
         <label class="field">
-          <span class="gw-sub">{{ amountLabel(addon.kind) }}</span>
+          <span class="field-label">{{ amountLabel(addon.kind) }}</span>
           <InputNumber :model-value="amountValue(addon)" :min="1" @update:model-value="v => setAmount(addon, v)" />
         </label>
       </div>
-    </section>
-  </div>
+    </AppCard>
+  </AppStack>
 </template>
 
 <script setup>
@@ -86,6 +85,10 @@ import InputText from 'primevue/inputtext'
 import InputNumber from 'primevue/inputnumber'
 import InputSwitch from 'primevue/inputswitch'
 import Textarea from 'primevue/textarea'
+import AppButton from '@/components/ui/AppButton.vue'
+import AppCard from '@/components/ui/AppCard.vue'
+import AppRow from '@/components/ui/AppRow.vue'
+import AppStack from '@/components/ui/AppStack.vue'
 import * as api from '@/api/billing.js'
 import { useNotificationsStore } from '@/stores/notifications.js'
 import { formatBytes, formatCount } from '@/utils/money.js'
@@ -169,12 +172,12 @@ async function saveSettings() {
 </script>
 
 <style scoped>
-.tab { display: flex; flex-direction: column; gap: 14px; }
-.row-main { flex: 1; min-width: 0; }
 .num { max-width: 130px; }
-.toggles { flex-wrap: wrap; gap: 16px; margin-top: 12px; }
+.group-title { margin: 4px 0 0; font-size: 1.1rem; font-weight: 700; }
+.note { margin: 0; font-size: 0.85rem; color: var(--color-text-dim); }
+.field-label { font-size: 0.85rem; color: var(--color-text-dim); }
+.toggles { display: flex; flex-wrap: wrap; align-items: center; gap: 16px; }
 .toggle { display: flex; align-items: center; gap: 8px; font-size: 0.88rem; }
-.plan { display: flex; flex-direction: column; gap: 10px; }
 .plan-head { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; }
 .plan-name { flex: 1; min-width: 160px; font-weight: 600; }
 .plan-tagline { width: 100%; }

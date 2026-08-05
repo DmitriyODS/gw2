@@ -1,5 +1,5 @@
 <template>
-  <div class="gw-shell calc">
+  <div class="calc">
     <!-- Табло: набранное выражение и живой результат под ним. -->
     <div class="calc-screen">
       <div class="calc-flags">

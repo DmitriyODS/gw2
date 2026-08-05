@@ -2,137 +2,124 @@
   <!-- Магазин: витрина товаров, свои товары на продажу, заказы и подписки.
        Подписки и товары продаются за рубли (оплата — СБП, см. billingsvc).
        Карточка товара — ВНУТРЕННЯЯ страница раздела, а не модалка. -->
-  <div class="gw-shell store">
-    <AppTabs variant="tint" v-model="tab" :tabs="TABS" />
+  <AppPage title="Магазин" :loading="billing.loading && !billing.entitlements">
+    <template #subhead>
+      <AppTabs v-model="tab" :tabs="TABS" variant="tint" />
+    </template>
 
-    <div class="gw-panel gw-panel-body store-body">
-      <BrandLoader v-if="billing.loading && !billing.entitlements" :size="64" />
+    <!-- Карточка товара перекрывает вкладку целиком (как «назад» в проводнике). -->
+    <OfferPage
+      v-if="openedOffer"
+      :offer="openedOffer"
+      :payment-enabled="paymentEnabled"
+      :busy="buying"
+      @back="openedOffer = null"
+      @buy="buy"
+    />
 
-      <!-- Карточка товара перекрывает вкладку целиком (как «назад» в проводнике). -->
-      <OfferPage
-        v-else-if="openedOffer"
-        :offer="openedOffer"
-        :payment-enabled="paymentEnabled"
-        :busy="buying"
-        @back="openedOffer = null"
-        @buy="buy"
+    <AppStack v-else-if="tab === 'subs'" :gap="16">
+      <StoreStatCards
+        :plan-name="billing.planName"
+        :is-free="billing.isFree"
+        :expires-at="billing.expiresAt"
+        :storage-used="billing.storageUsed"
+        :storage-limit="billing.storageLimit"
+        :tokens-used="billing.tokensUsed"
+        :tokens-limit="billing.tokensLimit"
+        @manage="manage"
       />
 
-      <template v-else-if="tab === 'subs'">
-        <StoreStatCards
-          :plan-name="billing.planName"
-          :is-free="billing.isFree"
-          :expires-at="billing.expiresAt"
-          :storage-used="billing.storageUsed"
-          :storage-limit="billing.storageLimit"
-          :tokens-used="billing.tokensUsed"
-          :tokens-limit="billing.tokensLimit"
-          @manage="manage"
+      <AppSwitchRow
+        v-if="billing.subscription"
+        title="Автопродление"
+        :hint="billing.subscription.auto_renew
+          ? 'Тариф продлится автоматически в конце периода'
+          : 'Тариф закончится в конце оплаченного периода'"
+        :model-value="billing.subscription.auto_renew"
+        @update:model-value="toggleAutoRenew"
+      />
+
+      <AppCard title="Доступные подписки">
+        <AppGrid :min="240">
+          <OfferCard
+            v-for="offer in subscriptionOffers"
+            :key="offer.key"
+            :title="offer.title"
+            :description="offer.description"
+            :price-month="offer.priceMonth"
+            :price-year="offer.priceYear"
+            :recurring="offer.recurring"
+            @open="openedOffer = offer"
+          />
+        </AppGrid>
+      </AppCard>
+
+      <AppCard v-if="billing.myAddons.length" title="Мои дополнения" :gap="10">
+        <AppRow
+          v-for="a in billing.myAddons"
+          :key="a.id"
+          :title="a.name"
+          :hint="a.expires_at ? `действует до ${formatUntil(a.expires_at)}` : 'бессрочно'"
+        >
+          <AppButton label="Отключить" size="sm" tone="neutral" @click="dropAddon(a.id)" />
+        </AppRow>
+      </AppCard>
+    </AppStack>
+
+    <AppStack v-else-if="tab === 'shop'" :gap="16">
+      <!-- Категорий ровно четыре и они делят ширину поровну, поэтому сетка своя:
+           auto-fill оставил бы половину ряда пустой. -->
+      <div class="store-cats">
+        <AppTile
+          v-for="cat in CATEGORIES"
+          :key="cat.key"
+          :icon="cat.icon"
+          :label="cat.label"
+          :selected="kind === cat.key"
+          @click="selectKind(cat.key)"
         />
+      </div>
 
-        <section v-if="billing.subscription" class="gw-card sub-manage">
-          <div class="gw-row">
-            <div>
-              <p class="gw-h">Автопродление</p>
-              <p class="gw-sub">
-                {{ billing.subscription.auto_renew
-                  ? 'Тариф продлится автоматически в конце периода'
-                  : 'Тариф закончится в конце оплаченного периода' }}
-              </p>
-            </div>
-            <InputSwitch
-              :model-value="billing.subscription.auto_renew"
-              class="sub-switch"
-              @update:model-value="toggleAutoRenew"
-            />
-          </div>
-        </section>
+      <EmptyState
+        v-if="!products.length"
+        icon="storefront"
+        title="Витрина пока пуста"
+        subtitle="Товары появятся здесь — их публикуют платформа и авторы тем."
+      />
+      <AppGrid v-else :min="240">
+        <OfferCard
+          v-for="p in products"
+          :key="p.id"
+          :title="p.title"
+          :description="p.description"
+          :price-month="p.price"
+          :price-year="0"
+          :recurring="false"
+          :owned="p.owned"
+          @open="openProduct(p)"
+        />
+      </AppGrid>
+    </AppStack>
 
-        <h2 class="gw-title section-title">Доступные подписки</h2>
-        <section class="gw-group">
-          <div class="offer-grid">
-            <OfferCard
-              v-for="offer in subscriptionOffers"
-              :key="offer.key"
-              :title="offer.title"
-              :description="offer.description"
-              :price-month="offer.priceMonth"
-              :price-year="offer.priceYear"
-              :recurring="offer.recurring"
-              @open="openedOffer = offer"
-            />
-          </div>
-        </section>
+    <MyGoodsTab v-else-if="tab === 'mine'" @open="openProduct" />
 
-        <template v-if="billing.myAddons.length">
-          <h2 class="gw-title section-title">Мои дополнения</h2>
-          <section class="gw-group">
-            <div class="addon-list">
-              <div v-for="a in billing.myAddons" :key="a.id" class="gw-card gw-row addon-row">
-                <div>
-                  <p class="gw-h">{{ a.name }}</p>
-                  <p class="gw-sub">
-                    {{ a.expires_at ? `действует до ${formatUntil(a.expires_at)}` : 'бессрочно' }}
-                  </p>
-                </div>
-                <button class="gw-chip" type="button" @click="dropAddon(a.id)">Отключить</button>
-              </div>
-            </div>
-          </section>
-        </template>
-      </template>
-
-      <template v-else-if="tab === 'shop'">
-        <section class="gw-group">
-          <div class="store-cats">
-            <button
-              v-for="cat in CATEGORIES"
-              :key="cat.key"
-              class="gw-tile"
-              :class="{ 'is-active': kind === cat.key }"
-              type="button"
-              @click="selectKind(cat.key)"
-            >
-              <span class="material-symbols-outlined">{{ cat.icon }}</span>
-              <span>{{ cat.label }}</span>
-            </button>
-          </div>
-        </section>
-
-        <section v-if="!products.length" class="gw-banner">
-          <h2>Витрина пока пуста</h2>
-          <p class="gw-sub">Товары появятся здесь — их публикуют платформа и авторы тем.</p>
-        </section>
-        <section v-else class="gw-group">
-          <div class="offer-grid">
-            <OfferCard
-              v-for="p in products"
-              :key="p.id"
-              :title="p.title"
-              :description="p.description"
-              :price-month="p.price"
-              :price-year="0"
-              :recurring="false"
-              :owned="p.owned"
-              @open="openProduct(p)"
-            />
-          </div>
-        </section>
-      </template>
-
-      <MyGoodsTab v-else-if="tab === 'mine'" @open="openProduct" />
-
-      <OrdersTab v-else-if="tab === 'orders'" />
-    </div>
-  </div>
+    <OrdersTab v-else-if="tab === 'orders'" />
+  </AppPage>
 </template>
 
 <script setup>
 import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import InputSwitch from 'primevue/inputswitch'
+import AppButton from '@/components/ui/AppButton.vue'
+import AppCard from '@/components/ui/AppCard.vue'
+import AppGrid from '@/components/ui/AppGrid.vue'
+import AppPage from '@/components/ui/AppPage.vue'
+import AppRow from '@/components/ui/AppRow.vue'
+import AppStack from '@/components/ui/AppStack.vue'
+import AppSwitchRow from '@/components/ui/AppSwitchRow.vue'
 import AppTabs from '@/components/ui/AppTabs.vue'
-import BrandLoader from '@/components/common/BrandLoader.vue'
+import AppTile from '@/components/ui/AppTile.vue'
+import EmptyState from '@/components/common/EmptyState.vue'
 import StoreStatCards from '@/components/store/StoreStatCards.vue'
 import OfferCard from '@/components/store/OfferCard.vue'
 import OfferPage from '@/components/store/OfferPage.vue'
@@ -301,35 +288,13 @@ function manage(what) {
 </script>
 
 <style scoped>
-.store-body {
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-}
-
-.section-title { font-size: 1.35rem; }
-
-.offer-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
-  gap: 14px;
-}
-
 .store-cats {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 12px;
 }
 
-.store-cats .is-active { border-color: var(--color-primary); }
-
-.addon-list { display: flex; flex-direction: column; gap: 10px; }
-.addon-row { padding: 14px; }
-.addon-row > div { flex: 1; min-width: 0; }
-.sub-manage { padding: 14px; }
-.sub-switch { margin-left: auto; }
-
-/* Раскладка считается от ширины ОКНА раздела (.gw-shell — container). */
+/* Раскладка считается от ширины ОКНА раздела (панель AppPage — container). */
 @container (max-width: 720px) {
   .store-cats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
