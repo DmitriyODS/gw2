@@ -4,8 +4,18 @@
   <!-- keydown ловим на панели, а не на window: на рабочем столе открыто
        несколько окон разом, и Ctrl+F должен слушаться только в том, где
        сейчас курсор. -->
-  <div class="np" @wheel="onZoomWheel" @keydown="onPanelKeydown">
-    <div class="np-panel">
+  <!-- headless: панель, тело и прокрутку даёт каркас, а шапку редактор рисует
+       сам — в ней статус сохранения, соавторы, масштаб и поиск, которых
+       обычная шапка раздела не знает. scroll=false: прокручивается сам лист,
+       иначе заголовок заметки уезжал бы вместе с текстом. -->
+  <AppPage
+    class="np"
+    headless
+    flush
+    :scroll="false"
+    @wheel="onZoomWheel"
+    @keydown="onPanelKeydown"
+  >
       <header class="np-head">
         <button class="np-back" title="К списку заметок" @click="goBack">
           <span class="material-symbols-outlined">arrow_back</span>
@@ -156,7 +166,6 @@
           @set-ai-setting="onSetAiSetting"
         />
       </template>
-    </div>
 
     <NoteTagsDialog v-model="tagsOpen" :note-id="noteId" :tag-ids="tagIds" @saved="onTagsSaved" />
     <ShareDialog v-model="shareOpen" subject-type="note" :subject-id="noteId" />
@@ -209,7 +218,7 @@
       @confirm="confirmDelete"
       @cancel="deleteOpen = false"
     />
-  </div>
+  </AppPage>
 </template>
 
 <script setup>
@@ -219,6 +228,7 @@ import { computed, defineAsyncComponent, nextTick, onBeforeUnmount, onMounted, r
 import { useRouter } from 'vue-router'
 import { useBreakpoint } from '@/composables/useBreakpoint.js'
 import EmptyState from '@/components/common/EmptyState.vue'
+import AppPage from '@/components/ui/AppPage.vue'
 import ConfirmDialog from '@/components/ui/ConfirmDialog.vue'
 import NoteRichEditor from '@/components/notes/NoteRichEditor.vue'
 import NoteTagsDialog from '@/components/notes/NoteTagsDialog.vue'
@@ -631,24 +641,8 @@ async function confirmDelete() {
 </script>
 
 <style scoped>
-.np {
-  height: 100%;
-  min-height: 0;
-  width: 100%;
-  padding: 16px;
-  display: flex;
-}
-.np-panel {
-  flex: 1;
-  min-width: 0;
-  min-height: 0;
-  display: flex;
-  flex-direction: column;
-  background: var(--acrylic-card-bg);
-  border: 1px solid var(--acrylic-border);
-  border-radius: var(--radius-xl);
-  overflow: hidden;
-}
+/* Панель, поля и прокрутку даёт AppPage (headless): здесь только внутреннее
+   устройство листа — шапка, заголовок и сам редактор. */
 
 .np-head {
   display: flex;
@@ -851,11 +845,10 @@ async function confirmDelete() {
 }
 
 @media (max-width: 768px) {
-  /* Во всю страницу: без рамки-«карточки». */
-  .np { padding: 0; }
   /* Экран отдан заметке целиком — фон под ней сплошной: просвечивающие обои
-     под текстом мешают читать, а полей, которые бы их показывали, здесь нет. */
-  .np-panel {
+     под текстом мешают читать, а полей, которые бы их показывали, здесь нет.
+     Панель раздела рисует AppPage, поэтому правим её. */
+  .np :deep(.page-panel) {
     border: none;
     border-radius: 0;
     background: var(--color-surface);

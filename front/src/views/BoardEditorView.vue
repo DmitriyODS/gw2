@@ -5,6 +5,7 @@
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import InputText from 'primevue/inputtext'
+import AppPage from '@/components/ui/AppPage.vue'
 import BrandLoader from '@/components/common/BrandLoader.vue'
 import ContextMenu from '@/components/common/ContextMenu.vue'
 import BoardCanvas from '@/components/boards/BoardCanvas.vue'
@@ -326,7 +327,10 @@ watch(title, () => {
 </script>
 
 <template>
-  <div class="be">
+  <!-- bare: доска сама себе фон — панель раздела под холстом не нужна.
+       headless: шапку с названием, соавторами и инструментами рисует редактор.
+       scroll=false: холст занимает всё тело и прокрутки не имеет. -->
+  <AppPage class="be" bare headless flush :scroll="false">
     <header class="be-head">
       <button type="button" class="be-back" title="К доскам" aria-label="К доскам" @click="router.push('/boards')">
         <span class="material-symbols-outlined">arrow_back</span>
@@ -473,15 +477,15 @@ watch(title, () => {
     />
 
     <ShareDialog v-if="board" v-model="shareOpen" subject-type="board" :subject-id="board.id" />
-  </div>
+  </AppPage>
 </template>
 
 <style scoped>
-.be {
+/* Каркас — AppPage bare: панели под холстом нет, поля и зазор задаёт сам
+   редактор (холсту нужны свои, а не общие поля раздела). */
+.be :deep(.page-body) {
   display: flex;
   flex-direction: column;
-  height: 100%;
-  min-height: 0;
   gap: 8px;
   padding: 8px;
 }
@@ -586,7 +590,7 @@ watch(title, () => {
 .be-loader { margin: auto; }
 
 @media (max-width: 768px) {
-  .be { padding: 4px; gap: 4px; }
+  .be :deep(.page-body) { padding: 4px; gap: 4px; }
   .be-actions { flex-wrap: wrap; justify-content: flex-end; }
 }
 </style>
