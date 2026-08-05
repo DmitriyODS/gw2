@@ -16,6 +16,10 @@ import (
 // вложения мессенджера). «Выгрузка всего»: полный бэкап медиа вместе с БД.
 const filesPrefix = "files/"
 
+func errUnknownSection(key string) error {
+	return domain.NewError("VALIDATION_ERROR", "Неизвестный раздел резервной копии: "+key, 400)
+}
+
 // Универсальный бэкап: ZIP с data.json (карта «таблица → JSON-массив строк») и
 // каталогом avatars/. Состав определяется выбранными разделами; список таблиц
 // раздела обнаруживается из БД, поэтому новые таблицы не теряются.
@@ -58,6 +62,11 @@ func (s *Service) resolveSections(ctx context.Context, sections []string) (table
 
 	seen := map[string]bool{}
 	for _, key := range sections {
+		// Незнакомый ключ молча дал бы пустую выборку: «успешную» выгрузку без
+		// данных и «успешное» восстановление, которое ничего не восстановило.
+		if _, ok := sec2tables[key]; !ok {
+			return nil, nil, errUnknownSection(key)
+		}
 		for _, t := range sec2tables[key] {
 			if allSet[t] && !seen[t] {
 				seen[t] = true

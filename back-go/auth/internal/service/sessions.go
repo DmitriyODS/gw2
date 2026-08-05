@@ -17,6 +17,8 @@ import (
 // geoTimeout — фон на определение города; вход его не ждёт.
 const geoTimeout = 5 * time.Second
 
+var errSessionNotFound = domain.NewError("NOT_FOUND", "Сеанс не найден", 404)
+
 // ensureSessionID — id сессии для новой пары токенов: продолжаем текущую (если
 // запрос пришёл с живым refresh того же пользователя — смена компании, смена
 // пароля) либо заводим новую карточку устройства.
@@ -119,11 +121,19 @@ func (s *Service) ListSessions(ctx context.Context, userID int64) ([]dto.Session
 	return out, nil
 }
 
-// RevokeSession — завершить сеанс. Свой (id из чужого аккаунта не найдётся —
-// user_id в условии UPDATE); отзыв текущего равнозначен выходу из системы.
+// RevokeSession — завершить сеанс. Только свой: чужой id не найдётся. Ответ об
+// успехе тут обязан быть правдивым — «сеанс завершён» на чужой карточке значило
+// бы, что человек считает устройство отключённым, а оно продолжает работать.
 func (s *Service) RevokeSession(ctx context.Context, userID, sessionID int64) error {
 	if s.sessions == nil {
 		return nil
+	}
+	sess, err := s.sessions.Get(ctx, sessionID)
+	if err != nil {
+		return err
+	}
+	if sess == nil || sess.UserID != userID {
+		return errSessionNotFound
 	}
 	return s.sessions.Revoke(ctx, sessionID, userID)
 }

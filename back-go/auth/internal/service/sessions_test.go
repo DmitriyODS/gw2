@@ -209,7 +209,9 @@ func TestRevokedSessionBlocksRefresh(t *testing.T) {
 	}
 }
 
-// Чужой сеанс завершить нельзя: id из другого аккаунта просто не находится.
+// Чужой сеанс завершить нельзя: id из другого аккаунта не находится, и сеанс
+// жертвы продолжает работать. Ответ при этом — отказ, а не «ок»: мнимый успех
+// в списке устройств означал бы, что человек считает чужой вход отключённым.
 func TestRevokeForeignSessionDoesNothing(t *testing.T) {
 	svc, repo, _ := withSessions(t)
 	cid := int64(1)
@@ -220,9 +222,9 @@ func TestRevokeForeignSessionDoesNothing(t *testing.T) {
 	victimCtx := reqCtx(chromeUA, "8.8.8.8", victim.RefreshToken)
 	items, _ := svc.ListSessions(victimCtx, ivanov.ID)
 
-	if err := svc.RevokeSession(context.Background(), petrov.ID, items[0].ID); err != nil {
-		t.Fatalf("RevokeSession: %v", err)
-	}
+	err := svc.RevokeSession(context.Background(), petrov.ID, items[0].ID)
+	wantCode(t, err, "NOT_FOUND")
+
 	if _, err := svc.Refresh(victimCtx, victim.RefreshToken); err != nil {
 		t.Fatalf("чужой отзыв убил сеанс: %v", err)
 	}

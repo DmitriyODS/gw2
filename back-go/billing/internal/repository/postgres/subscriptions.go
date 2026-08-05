@@ -189,10 +189,18 @@ func (r *Repo) AddAddon(ctx context.Context, a *domain.UserAddon) error {
 }
 
 func (r *Repo) CancelAddon(ctx context.Context, id, userID int64) error {
-	_, err := r.pool.Exec(ctx, `
+	tag, err := r.pool.Exec(ctx, `
 		UPDATE billing_user_addons SET cancelled_at = now(), auto_renew = false
 		 WHERE id = $1 AND user_id = $2 AND cancelled_at IS NULL`, id, userID)
-	return err
+	if err != nil {
+		return err
+	}
+	// Чужая (или уже отменённая) докупка не найдётся. Отвечать «ок» здесь
+	// нельзя: человек решит, что списания прекратились, а они продолжатся.
+	if tag.RowsAffected() == 0 {
+		return domain.ErrNotFound
+	}
+	return nil
 }
 
 func (r *Repo) DueAddonRenewals(ctx context.Context, now time.Time, limit int) ([]*domain.UserAddon, error) {
