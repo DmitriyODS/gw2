@@ -6,25 +6,22 @@
       <template v-else-if="state === 'confirm'">
         <p v-if="error" class="la-error">{{ error }}</p>
         <div class="la-actions">
-          <button type="button" class="btn-glass" @click="goHome">отмена</button>
-          <button
-            type="button"
-            class="btn-grad"
+          <AppButton label="отмена" @click="goHome" />
+          <AppButton
+            variant="filled"
             :disabled="loading || (isTv && authStore.companyId == null)"
             @click="approve"
-          >
-            {{ loading ? 'подтверждаем…' : 'подтвердить' }}
-          </button>
+          >{{ loading ? 'подтверждаем…' : 'подтвердить' }}</AppButton>
         </div>
       </template>
 
       <template v-else-if="state === 'done'">
-        <button type="button" class="btn-grad la-wide" @click="goHome">на главную</button>
+        <AppButton variant="filled" label="на главную" class="la-wide" @click="goHome" />
       </template>
 
       <template v-else>
         <p class="la-error">{{ error }}</p>
-        <button type="button" class="btn-grad la-wide" @click="goHome">на главную</button>
+        <AppButton variant="filled" label="на главную" class="la-wide" @click="goHome" />
       </template>
     </div>
   </AuthShell>
@@ -32,6 +29,7 @@
 
 <script setup>
 import { ref, computed, onMounted } from 'vue'
+import AppButton from '@/components/ui/AppButton.vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth.js'
 import { linkInfo, linkApprove } from '@/api/devicelink.js'

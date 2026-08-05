@@ -31,7 +31,13 @@
           <InputNumber v-model="tokens" :min="-1000000" :max="1000000" />
         </label>
         <AppButton label="Начислить" size="sm" :disabled="!picked" @click="grantTokens" />
-        <AppButton label="Обнулить токены" size="sm" tone="danger" :disabled="!picked" @click="resetTokens" />
+        <AppButton
+          label="Обнулить токены"
+          size="sm"
+          tone="danger"
+          :disabled="!picked"
+          @click="resetTokens"
+        />
       </div>
     </AppCard>
 

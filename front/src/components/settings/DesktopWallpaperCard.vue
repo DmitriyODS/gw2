@@ -27,20 +27,15 @@
     </section>
 
     <div class="dw-actions">
-      <button class="btn-glass" type="button" :disabled="!prefs.wallpaper" @click="reset">
-        <span class="material-symbols-outlined">restart_alt</span>
-        Сбросить
-      </button>
-      <button class="btn-grad" type="button" @click="apply">
-        <span class="material-symbols-outlined">check</span>
-        Применить
-      </button>
+      <AppButton icon="restart_alt" label="Сбросить" :disabled="!prefs.wallpaper" @click="reset" />
+      <AppButton variant="filled" icon="check" label="Применить" @click="apply" />
     </div>
   </AppCard>
 </template>
 
 <script setup>
 import { onMounted, reactive } from 'vue'
+import AppButton from '@/components/ui/AppButton.vue'
 import BackgroundEditor from '@/components/common/BackgroundEditor.vue'
 import AppCard from '@/components/ui/AppCard.vue'
 import { useDesktopPrefsStore } from '@/stores/desktopPrefs.js'

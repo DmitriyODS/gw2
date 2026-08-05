@@ -225,9 +225,13 @@
                 title="На этот день записей нет"
                 size="sm"
               >
-                <button v-if="!store.readonly" class="btn-grad" @click="openCreate(store.cursor)">
-                  <span class="material-symbols-outlined">add</span> Добавить запись
-                </button>
+                <AppButton
+                  v-if="!store.readonly"
+                  variant="filled"
+                  icon="add"
+                  label="Добавить запись"
+                  @click="openCreate(store.cursor)"
+                />
               </EmptyState>
               <template v-else>
                 <template v-if="dayEntries(store.cursor).length">

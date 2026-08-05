@@ -141,7 +141,13 @@
             не тратятся. Ключ шифруется на сервере и наружу не отдаётся.
           </p>
           <AppStack row :gap="10">
-            <AppButton label="Сохранить ключ" icon="check" variant="filled" :loading="saving" @click="save" />
+            <AppButton
+              label="Сохранить ключ"
+              icon="check"
+              variant="filled"
+              :loading="saving"
+              @click="save"
+            />
             <AppButton
               v-if="settings.has_key"
               label="Отключить ключ"

@@ -5,14 +5,12 @@
 
       <template v-else-if="invite">
         <p v-if="error" class="ia-error">{{ error }}</p>
-        <button type="button" class="btn-grad ia-wide" :disabled="accepting" @click="accept">
-          {{ accepting ? 'входим в команду…' : 'принять приглашение' }}
-        </button>
+        <AppButton variant="filled" class="ia-wide" :disabled="accepting" @click="accept">{{ accepting ? 'входим в команду…' : 'принять приглашение' }}</AppButton>
         <RouterLink to="/home" class="ia-later">позже</RouterLink>
       </template>
 
       <template v-else>
-        <RouterLink to="/home" class="btn-grad ia-wide">на главную</RouterLink>
+        <AppButton tag="router-link" to="/home" variant="filled" label="на главную" class="ia-wide" />
       </template>
     </div>
   </AuthShell>
@@ -20,6 +18,7 @@
 
 <script setup>
 import { ref, computed, onMounted } from 'vue'
+import AppButton from '@/components/ui/AppButton.vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth.js'
 import { useNotificationsStore } from '@/stores/notifications.js'

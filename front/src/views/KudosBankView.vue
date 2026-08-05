@@ -108,20 +108,19 @@
             <AmountInput ref="depositInput" v-model="savingsAmount" placeholder="0" />
           </div>
           <div class="kb-row">
-            <button
-              class="btn-grad"
+            <AppButton
+              variant="filled"
+              icon="download"
+              label="Пополнить"
               :disabled="busy || bank.loan > 0 || !validAmount(savingsAmount)"
               @click="deposit"
-            >
-              <span class="material-symbols-outlined">download</span> Пополнить
-            </button>
-            <button
-              class="btn-glass"
+            />
+            <AppButton
+              icon="upload"
+              label="Снять"
               :disabled="busy || !bank.savings || !validAmount(savingsAmount)"
               @click="withdraw"
-            >
-              <span class="material-symbols-outlined">upload</span> Снять
-            </button>
+            />
           </div>
         </section>
 
@@ -169,12 +168,13 @@
               <AmountInput ref="loanInput" v-model="loanAmount" placeholder="0" />
             </div>
             <div class="kb-row">
-              <button class="btn-grad" :disabled="busy || !validAmount(loanAmount)" @click="repay(loanAmount)">
-                Погасить
-              </button>
-              <button class="btn-glass" :disabled="busy || bank.kudos < bank.loan" @click="repay(bank.loan)">
-                Погасить всё ({{ bank.loan }})
-              </button>
+              <AppButton
+                variant="filled"
+                label="Погасить"
+                :disabled="busy || !validAmount(loanAmount)"
+                @click="repay(loanAmount)"
+              />
+              <AppButton :disabled="busy || bank.kudos < bank.loan" @click="repay(bank.loan)">Погасить всё ({{ bank.loan }})</AppButton>
             </div>
           </template>
 
@@ -195,14 +195,14 @@
               <label class="kb-field-label">Сумма кредита</label>
               <AmountInput ref="loanInput" v-model="loanAmount" :max="bank.credit.loan_max" placeholder="0" />
             </div>
-            <button
-              class="btn-grad kb-loan-take"
-              :disabled="busy || !validAmount(loanAmount) || loanAmount > bank.credit.loan_max"
+            <AppButton
+              variant="filled"
+              class="kb-loan-take"
+              :disabled="busy || !validAmount(loanAmount) || loanAmount>bank.credit.loan_max"
               @click="takeLoan"
             >
               <span class="material-symbols-outlined">account_balance_wallet</span>
-              Взять кредит{{ validAmount(loanAmount) ? ` — вернуть ${loanDebt}` : '' }}
-            </button>
+              Взять кредит{{ validAmount(loanAmount) ? ` — вернуть ${loanDebt}` : '' }}</AppButton>
           </template>
           </template>
           <p v-else class="kb-card-hint">Данные кредита обновляются — обновите страницу.</p>
@@ -243,12 +243,19 @@
               </button>
               <div v-if="expandedGoalId === g.id" class="kb-goal-ops">
                 <AmountInput v-model="goalAmount" size="sm" class="kb-goal-input" />
-                <button class="btn-grad kb-goal-btn" :disabled="busy || !validAmount(goalAmount)" @click="goalDeposit(g)">
-                  Пополнить
-                </button>
-                <button class="btn-glass kb-goal-btn" :disabled="busy || !g.saved || !validAmount(goalAmount)" @click="goalWithdraw(g)">
-                  Снять
-                </button>
+                <AppButton
+                  variant="filled"
+                  label="Пополнить"
+                  class="kb-goal-btn"
+                  :disabled="busy || !validAmount(goalAmount)"
+                  @click="goalDeposit(g)"
+                />
+                <AppButton
+                  label="Снять"
+                  class="kb-goal-btn"
+                  :disabled="busy || !g.saved || !validAmount(goalAmount)"
+                  @click="goalWithdraw(g)"
+                />
                 <button
                   class="kb-goal-delete"
                   type="button"
@@ -308,11 +315,13 @@
               <div v-if="f.status === 'active'" class="kb-fund-ops">
                 <AmountInput :model-value="fundAmounts[f.id]" size="sm" class="kb-fund-input"
                   @update:model-value="(v) => { fundAmounts[f.id] = v }" />
-                <button
-                  class="btn-grad kb-fund-btn"
+                <AppButton
+                  variant="filled"
+                  label="Поддержать"
+                  class="kb-fund-btn"
                   :disabled="busy || !validAmount(fundAmounts[f.id])"
                   @click="donate(f)"
-                >Поддержать</button>
+                />
                 <button
                   v-if="canCloseFund(f)"
                   class="kb-fund-close"
@@ -440,12 +449,13 @@
               </ul>
             </div>
           </div>
-          <button
+          <AppButton
             v-if="pets.ledgerNextBeforeId"
-            class="btn-glass kb-more"
+            label="Показать ещё"
+            class="kb-more"
             :disabled="busy"
             @click="loadMore"
-          >Показать ещё</button>
+          />
         </section>
       </div>
     </template>
@@ -459,6 +469,7 @@
 
 <script setup>
 import { computed, onMounted, reactive, ref } from 'vue'
+import AppButton from '@/components/ui/AppButton.vue'
 import { useRouter } from 'vue-router'
 import AppChip from '@/components/ui/AppChip.vue'
 import AppPage from '@/components/ui/AppPage.vue'
@@ -989,7 +1000,7 @@ onMounted(() => {
 .kb-field-label { font-size: 12px; font-weight: 600; color: var(--color-text-dim); }
 
 .kb-row { display: flex; gap: 10px; flex-wrap: wrap; }
-.kb-row .btn-grad, .kb-row .btn-glass {
+.kb-row :deep(.btn) {
   display: inline-flex; align-items: center; justify-content: center; gap: 6px;
   flex: 1 1 0;
 }

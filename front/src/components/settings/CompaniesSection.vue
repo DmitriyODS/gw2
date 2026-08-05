@@ -22,7 +22,14 @@
           <AppChip tone="success" :count="activeCount" label="активных" />
           <AppChip v-if="disabledCount" tone="error" :count="disabledCount" label="отключённых" />
         </template>
-        <AppButton class="cs-create" variant="filled" size="sm" icon="add" label="Компания" @click="openCreate" />
+        <AppButton
+          class="cs-create"
+          variant="filled"
+          size="sm"
+          icon="add"
+          label="Компания"
+          @click="openCreate"
+        />
       </AppStack>
 
       <SearchField
@@ -42,7 +49,13 @@
       :title="search ? 'Ничего не нашли' : 'Компаний пока нет'"
       :subtitle="search ? 'Попробуйте уточнить запрос.' : 'Создайте компанию — вы станете её администратором.'"
     >
-      <AppButton v-if="!search" variant="filled" icon="add" label="Создать компанию" @click="openCreate" />
+      <AppButton
+        v-if="!search"
+        variant="filled"
+        icon="add"
+        label="Создать компанию"
+        @click="openCreate"
+      />
     </EmptyState>
 
     <AppStack v-else :gap="8">

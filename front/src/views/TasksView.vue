@@ -200,11 +200,14 @@
     >
       <p class="tasks-linkerr">{{ linkError?.message }}</p>
       <div class="tasks-linkerr-actions">
-        <button class="btn-glass" @click="linkError = null">Закрыть</button>
-        <button v-if="linkError?.companyId" class="btn-grad" :disabled="switching" @click="switchAndOpen">
-          <span class="material-symbols-outlined">swap_horiz</span>
-          {{ switching ? 'Переключаем…' : 'Переключить компанию' }}
-        </button>
+        <AppButton label="Закрыть" @click="linkError = null" />
+        <AppButton
+          v-if="linkError?.companyId"
+          variant="filled"
+          icon="swap_horiz"
+          :disabled="switching"
+          @click="switchAndOpen"
+        >{{ switching ? 'Переключаем…' : 'Переключить компанию' }}</AppButton>
       </div>
     </AppDialog>
 

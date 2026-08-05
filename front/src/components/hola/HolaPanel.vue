@@ -121,10 +121,13 @@
             <HolaIcon :size="40" />
             <p class="hola-locked-title">Ассистент не подключён</p>
             <p class="hola-locked-sub">{{ chatBlockedReason }}</p>
-            <button class="btn-grad hola-locked-btn" type="button" @click="openAiSettings">
-              <span class="material-symbols-outlined">key</span>
-              Подключить ключ
-            </button>
+            <AppButton
+              variant="filled"
+              icon="key"
+              label="Подключить ключ"
+              class="hola-locked-btn"
+              @click="openAiSettings"
+            />
           </div>
           <HolaChat v-else @suggest="ask" />
         </template>
@@ -147,6 +150,7 @@
  * и ведёт в профиль, а не молчит ошибкой.
  */
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import AppButton from '@/components/ui/AppButton.vue'
 import { useRouter } from 'vue-router'
 import { useHolaSearch } from '@/composables/useHolaSearch.js'
 import { useAssistantStore } from '@/stores/assistant.js'

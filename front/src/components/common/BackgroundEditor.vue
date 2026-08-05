@@ -5,6 +5,7 @@
    родитель, он же применяет/сбрасывает). Загрузку картинки делегирует `uploadFn`,
    чтобы каждый раздел грузил в своё хранилище. */
 import { ref, computed } from 'vue'
+import AppButton from '@/components/ui/AppButton.vue'
 import Slider from 'primevue/slider'
 import ChatBackgroundLayer from '@/components/common/ChatBackgroundLayer.vue'
 import EmojiPicker from '@/components/common/EmojiPicker.vue'
@@ -162,14 +163,20 @@ function patternSwatchStyle(key) {
     <div class="cbg-section">
       <div class="cbg-section-title">Своя картинка</div>
       <div class="cbg-image-row">
-        <button type="button" class="btn-glass cbg-image-btn" :disabled="uploading" @click="pickImageFile">
-          <span class="material-symbols-outlined">{{ uploading ? 'hourglass_top' : 'add_photo_alternate' }}</span>
-          {{ uploading ? 'Загружаем…' : (recipe.image ? 'Заменить картинку' : 'Загрузить картинку') }}
-        </button>
-        <button v-if="recipe.image" type="button" class="btn-glass cbg-image-remove" @click="removeImage">
-          <span class="material-symbols-outlined">delete</span>
-          Убрать
-        </button>
+        <AppButton
+          class="cbg-image-btn"
+          :icon="uploading ? 'hourglass_top' : 'add_photo_alternate'"
+          :label="uploading ? 'Загружаем…' : (recipe.image ? 'Заменить картинку' : 'Загрузить картинку')"
+          :disabled="uploading"
+          @click="pickImageFile"
+        />
+        <AppButton
+          v-if="recipe.image"
+          icon="delete"
+          label="Убрать"
+          class="cbg-image-remove"
+          @click="removeImage"
+        />
         <input ref="fileInput" type="file" accept="image/*" hidden @change="onImagePicked" />
       </div>
       <div v-if="recipe.image" class="cbg-slider">

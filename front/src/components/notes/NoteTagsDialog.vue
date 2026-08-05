@@ -32,9 +32,7 @@
         <ColorSwatchPicker v-model="newColor" aria-label="Цвет тега" />
         <div class="nt-create-row">
           <input v-model="newName" class="nt-input" maxlength="60" placeholder="Новый тег" />
-          <button class="btn-glass" type="submit" :disabled="!newName.trim() || creating">
-            <span class="material-symbols-outlined">add</span>
-          </button>
+          <AppButton icon="add" type="submit" :disabled="!newName.trim() || creating" />
         </div>
       </form>
     </div>
@@ -43,6 +41,7 @@
 
 <script setup>
 import { ref, watch } from 'vue'
+import AppButton from '@/components/ui/AppButton.vue'
 import AppDialog from '@/components/ui/AppDialog.vue'
 import ColorSwatchPicker from '@/components/common/ColorSwatchPicker.vue'
 import { useNotesStore } from '@/stores/notes.js'
@@ -139,5 +138,5 @@ function close() { emit('update:modelValue', false) }
 .nt-create-row { display: flex; gap: 8px; }
 .nt-input { flex: 1; min-width: 0; height: 40px; padding: 0 12px; border: 1px solid var(--color-outline-dim); border-radius: var(--radius-md); background: var(--color-surface); color: var(--color-text); font: inherit; outline: none; }
 .nt-input:focus { border-color: var(--color-primary); }
-.nt-create-row .btn-glass { width: 44px; padding: 0; display: grid; place-items: center; }
+.nt-create-row :deep(.btn) { width: 44px; padding: 0; justify-content: center; }
 </style>

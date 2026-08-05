@@ -119,7 +119,13 @@
           inline
         >
           <template #actions>
-            <AppButton size="sm" tone="danger" icon="delete" label="Удалить" @click="confirmBulk = true" />
+            <AppButton
+              size="sm"
+              tone="danger"
+              icon="delete"
+              label="Удалить"
+              @click="confirmBulk = true"
+            />
             <AppButton size="sm" variant="text" label="Сбросить" @click="clearSelection" />
           </template>
         </AppInfoBar>

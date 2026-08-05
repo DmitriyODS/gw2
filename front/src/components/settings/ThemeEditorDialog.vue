@@ -57,16 +57,14 @@
     </div>
 
     <template #footer-start>
-      <button class="btn-glass" type="button" @click="lucky">
-        <span class="material-symbols-outlined">auto_awesome</span>
-        Мне повезёт
-      </button>
+      <AppButton icon="auto_awesome" label="Мне повезёт" @click="lucky" />
     </template>
   </AppDialog>
 </template>
 
 <script setup>
 import { ref, reactive, computed, watch } from 'vue'
+import AppButton from '@/components/ui/AppButton.vue'
 import InputText from 'primevue/inputtext'
 import AppDialog from '@/components/ui/AppDialog.vue'
 import { useThemeStore } from '@/stores/theme.js'

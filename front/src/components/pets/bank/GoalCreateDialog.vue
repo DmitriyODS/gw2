@@ -39,11 +39,12 @@
 
     <template #footer>
       <div class="gcd-footer">
-        <button
-          class="btn-grad"
+        <AppButton
+          variant="filled"
+          label="Создать копилку"
           :disabled="busy || !title.trim() || !validTarget"
           @click="create"
-        >Создать копилку</button>
+        />
       </div>
     </template>
   </AppDialog>
@@ -51,6 +52,7 @@
 
 <script setup>
 import { computed, ref, watch } from 'vue'
+import AppButton from '@/components/ui/AppButton.vue'
 import AppDialog from '@/components/ui/AppDialog.vue'
 import KudosCoin from '@/components/pets/KudosCoin.vue'
 import AmountInput from '@/components/pets/bank/AmountInput.vue'

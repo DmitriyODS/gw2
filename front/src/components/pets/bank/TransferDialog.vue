@@ -68,15 +68,15 @@
 
     <template #footer>
       <div class="td-footer">
-        <button
-          class="btn-grad td-send"
-          :disabled="busy || !recipientId || !validAmount || amount > transferMax"
+        <AppButton
+          variant="filled"
+          class="td-send"
+          :disabled="busy || !recipientId || !validAmount || amount>transferMax"
           @click="send"
         >
           <span class="material-symbols-outlined">send</span>
           Перевести
-          <KudosCoin />
-        </button>
+          <KudosCoin /></AppButton>
       </div>
     </template>
   </AppDialog>
@@ -84,6 +84,7 @@
 
 <script setup>
 import { computed, ref, watch } from 'vue'
+import AppButton from '@/components/ui/AppButton.vue'
 import AppDialog from '@/components/ui/AppDialog.vue'
 import KudosCoin from '@/components/pets/KudosCoin.vue'
 import AmountInput from '@/components/pets/bank/AmountInput.vue'

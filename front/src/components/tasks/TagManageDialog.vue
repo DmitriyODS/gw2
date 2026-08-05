@@ -30,10 +30,13 @@
           @click="newColor = c.id"
         />
       </div>
-      <button class="btn-glass tagm-add" :disabled="busy || !newName.trim()" @click="create">
-        <span class="material-symbols-outlined">add</span>
-        Создать
-      </button>
+      <AppButton
+        icon="add"
+        label="Создать"
+        class="tagm-add"
+        :disabled="busy || !newName.trim()"
+        @click="create"
+      />
     </div>
 
     <!-- Список -->
@@ -85,6 +88,7 @@
 
 <script setup>
 import { ref } from 'vue'
+import AppButton from '@/components/ui/AppButton.vue'
 import AppDialog from '@/components/ui/AppDialog.vue'
 import EmptyState from '@/components/common/EmptyState.vue'
 import ConfirmDialog from '@/components/ui/ConfirmDialog.vue'

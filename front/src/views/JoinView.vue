@@ -6,13 +6,21 @@
   >
     <div class="jn">
       <BrandLoader v-if="loading" :size="64" />
-      <RouterLink v-else to="/home" class="btn-grad jn-wide">на главную</RouterLink>
+      <AppButton
+        v-else
+        tag="router-link"
+        to="/home"
+        variant="filled"
+        label="на главную"
+        class="jn-wide"
+      />
     </div>
   </AuthShell>
 </template>
 
 <script setup>
 import { ref, onMounted } from 'vue'
+import AppButton from '@/components/ui/AppButton.vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth.js'
 import AuthShell from '@/components/auth/AuthShell.vue'

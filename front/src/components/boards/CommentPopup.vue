@@ -3,6 +3,7 @@
    «решено». Живёт в самой сцене — отдельного хранилища у комментариев нет,
    поэтому они едут вместе с доской (в том числе соавторам и по ссылке). */
 import { computed, nextTick, ref, watch } from 'vue'
+import AppButton from '@/components/ui/AppButton.vue'
 import Textarea from 'primevue/textarea'
 
 const props = defineProps({
@@ -99,7 +100,7 @@ function toggleResolved() {
           placeholder="Что обсудим?"
           @keydown.enter.exact.prevent="saveText"
         />
-        <button type="button" class="btn-grad cp-send" @click="saveText">Добавить</button>
+        <AppButton variant="filled" label="Добавить" class="cp-send" @click="saveText" />
       </template>
 
       <template v-else>

@@ -8,14 +8,18 @@
           <img v-if="preview.avatar_path" :src="`/uploads/${preview.avatar_path}`" alt="" />
           <span v-else class="material-symbols-outlined">groups</span>
         </div>
-        <button type="button" class="btn-grad jg-wide" :disabled="joining" @click="join">
-          {{ joining ? 'вступаем…' : 'вступить в группу' }}
-        </button>
+        <AppButton variant="filled" class="jg-wide" :disabled="joining" @click="join">{{ joining ? 'вступаем…' : 'вступить в группу' }}</AppButton>
         <RouterLink to="/messenger" class="jg-later">не сейчас</RouterLink>
       </template>
 
       <template v-else>
-        <RouterLink to="/messenger" class="btn-grad jg-wide">к сообщениям</RouterLink>
+        <AppButton
+          tag="router-link"
+          to="/messenger"
+          variant="filled"
+          label="к сообщениям"
+          class="jg-wide"
+        />
       </template>
     </div>
   </AuthShell>
@@ -23,6 +27,7 @@
 
 <script setup>
 import { ref, computed, onMounted } from 'vue'
+import AppButton from '@/components/ui/AppButton.vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useMessengerStore } from '@/stores/messenger.js'
 import { groupInvitePreview } from '@/api/messenger.js'

@@ -109,20 +109,98 @@
           <span class="na-selcount">Выбрано: {{ store.selectionCount }}</span>
           <div class="na-selactions">
             <template v-if="singleNote">
-              <AppButton variant="icon" size="sm" icon="edit" title="Редактировать" aria-label="Редактировать" @click="openNote(singleNote)" />
-              <AppButton variant="icon" size="sm" icon="share" title="Поделиться" aria-label="Поделиться" @click="shareItem('note', singleNote)" />
-              <AppButton variant="icon" size="sm" icon="content_copy" title="Скопировать" aria-label="Скопировать" @click="copyNote(singleNote)" />
-              <AppButton variant="icon" size="sm" icon="drive_file_move" title="Переместить" aria-label="Переместить" @click="moveItem('note', singleNote.id)" />
-              <AppButton variant="icon" size="sm" icon="download" title="Скачать .txt" aria-label="Скачать" @click="downloadNote(singleNote, 'txt')" />
+              <AppButton
+                variant="icon"
+                size="sm"
+                icon="edit"
+                title="Редактировать"
+                aria-label="Редактировать"
+                @click="openNote(singleNote)"
+              />
+              <AppButton
+                variant="icon"
+                size="sm"
+                icon="share"
+                title="Поделиться"
+                aria-label="Поделиться"
+                @click="shareItem('note', singleNote)"
+              />
+              <AppButton
+                variant="icon"
+                size="sm"
+                icon="content_copy"
+                title="Скопировать"
+                aria-label="Скопировать"
+                @click="copyNote(singleNote)"
+              />
+              <AppButton
+                variant="icon"
+                size="sm"
+                icon="drive_file_move"
+                title="Переместить"
+                aria-label="Переместить"
+                @click="moveItem('note', singleNote.id)"
+              />
+              <AppButton
+                variant="icon"
+                size="sm"
+                icon="download"
+                title="Скачать .txt"
+                aria-label="Скачать"
+                @click="downloadNote(singleNote, 'txt')"
+              />
             </template>
             <template v-else-if="singleFolder">
-              <AppButton variant="icon" size="sm" icon="drive_file_rename_outline" title="Переименовать" aria-label="Переименовать" @click="renameFolderDlg(singleFolder)" />
-              <AppButton variant="icon" size="sm" icon="share" title="Поделиться" aria-label="Поделиться" @click="shareItem('folder', singleFolder)" />
-              <AppButton variant="icon" size="sm" icon="content_copy" title="Скопировать" aria-label="Скопировать" @click="copyFolder(singleFolder)" />
-              <AppButton variant="icon" size="sm" icon="drive_file_move" title="Переместить" aria-label="Переместить" @click="moveItem('folder', singleFolder.id)" />
-              <AppButton variant="icon" size="sm" icon="folder_zip" title="Скачать .zip" aria-label="Скачать архив" @click="downloadFolder(singleFolder)" />
+              <AppButton
+                variant="icon"
+                size="sm"
+                icon="drive_file_rename_outline"
+                title="Переименовать"
+                aria-label="Переименовать"
+                @click="renameFolderDlg(singleFolder)"
+              />
+              <AppButton
+                variant="icon"
+                size="sm"
+                icon="share"
+                title="Поделиться"
+                aria-label="Поделиться"
+                @click="shareItem('folder', singleFolder)"
+              />
+              <AppButton
+                variant="icon"
+                size="sm"
+                icon="content_copy"
+                title="Скопировать"
+                aria-label="Скопировать"
+                @click="copyFolder(singleFolder)"
+              />
+              <AppButton
+                variant="icon"
+                size="sm"
+                icon="drive_file_move"
+                title="Переместить"
+                aria-label="Переместить"
+                @click="moveItem('folder', singleFolder.id)"
+              />
+              <AppButton
+                variant="icon"
+                size="sm"
+                icon="folder_zip"
+                title="Скачать .zip"
+                aria-label="Скачать архив"
+                @click="downloadFolder(singleFolder)"
+              />
             </template>
-            <AppButton variant="icon" size="sm" tone="danger" icon="delete" title="Удалить" aria-label="Удалить" @click="deleteSelection" />
+            <AppButton
+              variant="icon"
+              size="sm"
+              tone="danger"
+              icon="delete"
+              title="Удалить"
+              aria-label="Удалить"
+              @click="deleteSelection"
+            />
           </div>
         </div>
 
@@ -976,7 +1054,7 @@ function onFileDrop(e) {
 @media (max-width: 768px) {
   .na-toolbar { padding: 10px 12px 6px; }
   .na-lbl { display: none; }
-  .na-actions .btn-grad { display: none; }
+  .na-actions :deep(.btn.v-filled) { display: none; }
   /* Мобайл: папки и заметки — единым одноколоночным списком (не ломает вёрстку). */
   .na-grid { grid-template-columns: 1fr; }
   .na-folders { grid-template-columns: 1fr; gap: 12px; margin-bottom: 12px; }

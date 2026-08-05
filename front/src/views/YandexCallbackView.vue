@@ -6,33 +6,33 @@
       </template>
 
       <template v-else-if="state === 'linked'">
-        <button type="button" class="btn-grad yc-wide" @click="router.push('/settings?section=account')">
-          в аккаунт
-        </button>
+        <AppButton
+          variant="filled"
+          label="в аккаунт"
+          class="yc-wide"
+          @click="router.push('/settings?section=account')"
+        />
       </template>
 
       <template v-else-if="state === 'return-app'">
-        <button type="button" class="btn-grad yc-wide" @click="openInApp">открыть приложение</button>
-        <button type="button" class="btn-glass yc-wide" @click="continueInBrowser">продолжить в браузере</button>
+        <AppButton variant="filled" label="открыть приложение" class="yc-wide" @click="openInApp" />
+        <AppButton label="продолжить в браузере" class="yc-wide" @click="continueInBrowser" />
       </template>
 
       <template v-else-if="state === 'select'">
         <p v-if="error" class="yc-error">{{ error }}</p>
-        <button
+        <AppButton
+          class="yc-wide"
           v-for="c in pickerCompanies"
           :key="c.company_id"
-          type="button"
-          class="btn-glass yc-wide"
           :disabled="loading || c.is_active === false"
           @click="pick(c.company_id)"
-        >
-          {{ c.company_name }}
-        </button>
+        >{{ c.company_name }}</AppButton>
       </template>
 
       <template v-else>
         <p class="yc-error">{{ error }}</p>
-        <button type="button" class="btn-grad yc-wide" @click="router.push('/login')">ко входу</button>
+        <AppButton variant="filled" label="ко входу" class="yc-wide" @click="router.push('/login')" />
       </template>
     </div>
   </AuthShell>
@@ -40,6 +40,7 @@
 
 <script setup>
 import { computed, onMounted, ref } from 'vue'
+import AppButton from '@/components/ui/AppButton.vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth.js'
 import { yandexLink } from '@/api/auth.js'

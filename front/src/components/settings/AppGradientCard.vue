@@ -15,14 +15,12 @@
 
     <Transition name="ag-reveal">
       <div v-if="themeStore.bgGradient.enabled" class="ag-actions">
-        <button class="btn-glass" type="button" @click="themeStore.regenerateBgGradient()">
-          <span class="material-symbols-outlined">shuffle</span>
-          Другая композиция
-        </button>
-        <button class="btn-glass" type="button" @click="themeStore.resetBgGradient()">
-          <span class="material-symbols-outlined">restart_alt</span>
-          Стандартная
-        </button>
+        <AppButton
+          icon="shuffle"
+          label="Другая композиция"
+          @click="themeStore.regenerateBgGradient()"
+        />
+        <AppButton icon="restart_alt" label="Стандартная" @click="themeStore.resetBgGradient()" />
       </div>
     </Transition>
   </AppCard>
@@ -30,6 +28,7 @@
 
 <script setup>
 import AppCard from '@/components/ui/AppCard.vue'
+import AppButton from '@/components/ui/AppButton.vue'
 import AppSwitchRow from '@/components/ui/AppSwitchRow.vue'
 import { useThemeStore } from '@/stores/theme.js'
 

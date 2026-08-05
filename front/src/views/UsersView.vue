@@ -55,9 +55,32 @@
             </div>
 
             <div v-if="!u.is_super_admin" class="cmp-card-actions" @click.stop>
-              <AppButton variant="icon" size="sm" icon="edit" title="Редактировать" aria-label="Редактировать" @click="openEdit(u)" />
-              <AppButton variant="icon" size="sm" icon="lock_reset" title="Сбросить пароль" aria-label="Сбросить пароль" @click="askReset(u)" />
-              <AppButton v-if="!u.is_active" variant="icon" size="sm" tone="danger" icon="delete_forever" title="Удалить окончательно" aria-label="Удалить окончательно" @click="askPurge(u)" />
+              <AppButton
+                variant="icon"
+                size="sm"
+                icon="edit"
+                title="Редактировать"
+                aria-label="Редактировать"
+                @click="openEdit(u)"
+              />
+              <AppButton
+                variant="icon"
+                size="sm"
+                icon="lock_reset"
+                title="Сбросить пароль"
+                aria-label="Сбросить пароль"
+                @click="askReset(u)"
+              />
+              <AppButton
+                v-if="!u.is_active"
+                variant="icon"
+                size="sm"
+                tone="danger"
+                icon="delete_forever"
+                title="Удалить окончательно"
+                aria-label="Удалить окончательно"
+                @click="askPurge(u)"
+              />
             </div>
           </article>
         </template>
@@ -114,9 +137,32 @@
         <Column header="" style="width: 150px" body-style="text-align: right">
           <template #body="{ data }">
             <div v-if="!data.is_super_admin" class="row-actions">
-              <AppButton variant="icon" size="sm" icon="edit" title="Редактировать" aria-label="Редактировать" @click="openEdit(data)" />
-              <AppButton variant="icon" size="sm" icon="lock_reset" title="Сбросить пароль" aria-label="Сбросить пароль" @click="askReset(data)" />
-              <AppButton v-if="!data.is_active" variant="icon" size="sm" tone="danger" icon="delete_forever" title="Удалить окончательно" aria-label="Удалить окончательно" @click="askPurge(data)" />
+              <AppButton
+                variant="icon"
+                size="sm"
+                icon="edit"
+                title="Редактировать"
+                aria-label="Редактировать"
+                @click="openEdit(data)"
+              />
+              <AppButton
+                variant="icon"
+                size="sm"
+                icon="lock_reset"
+                title="Сбросить пароль"
+                aria-label="Сбросить пароль"
+                @click="askReset(data)"
+              />
+              <AppButton
+                v-if="!data.is_active"
+                variant="icon"
+                size="sm"
+                tone="danger"
+                icon="delete_forever"
+                title="Удалить окончательно"
+                aria-label="Удалить окончательно"
+                @click="askPurge(data)"
+              />
             </div>
           </template>
         </Column>

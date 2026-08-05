@@ -123,16 +123,14 @@
         </div>
       </div>
 
-      <button
+      <AppButton
         v-if="category === 'species' && boughtSpeciesOn"
-        class="btn-glass ps-reset"
-        type="button"
+        icon="restart_alt"
+        label="Вернуть природный облик"
+        class="ps-reset"
         :disabled="switching"
         @click="resetSpeciesToNatural"
-      >
-        <span class="material-symbols-outlined">restart_alt</span>
-        Вернуть природный облик
-      </button>
+      />
 
       <!-- Витрина -->
       <div v-if="loading" class="ps-loading"><BrandLoader :size="64" /></div>
@@ -214,51 +212,48 @@
           <p class="ps-tryon-note">Не продаётся — выдаётся за достижение.</p>
         </template>
         <template v-else-if="selected.owned">
-          <button
+          <AppButton
             v-if="selected.kind === 'species' && pet?.species !== selected.key"
-            class="btn-grad ps-tryon-buy"
+            variant="filled"
+            label="Надеть облик"
+            class="ps-tryon-buy"
             :disabled="switching"
             @click="pickSpecies(selected)"
-          >Надеть облик</button>
+          />
           <p v-else class="ps-tryon-note">
             <span class="material-symbols-outlined">check_circle</span>
             {{ selected.kind === 'species' ? 'Облик сейчас надет' : 'Уже в вашей коллекции' }}
           </p>
           <!-- Продажа за полцены (текущий облик продать нельзя — снимите сначала). -->
-          <button
+          <AppButton
             v-if="canSell(selected)"
-            class="btn-glass ps-tryon-installment"
+            icon="sell"
+            class="ps-tryon-installment"
             :disabled="selling"
             @click="sell(selected)"
-          >
-            <span class="material-symbols-outlined">sell</span>
-            Продать за {{ Math.floor(selected.price_kudos / 2) }}
-          </button>
+          >Продать за {{ Math.floor(selected.price_kudos / 2) }}</AppButton>
         </template>
         <template v-else>
-          <button
-            class="btn-grad ps-tryon-buy"
+          <AppButton
+            variant="filled"
+            class="ps-tryon-buy"
             :disabled="buying || switching || selected.sold_out || !canAfford(selected)"
             @click="selected.kind === 'species' ? buySpeciesItem(selected) : buy(selected)"
-          >
-            <template v-if="selected.sold_out">Распродано</template>
+          ><template v-if="selected.sold_out">Распродано</template>
             <template v-else-if="!canAfford(selected)">Не хватает {{ effectivePrice(selected) - (pet?.kudos ?? 0) }}</template>
             <template v-else>
               Купить за
               <s v-if="selected.sale_price_kudos" class="ps-old-price">{{ selected.price_kudos }}</s>
               {{ effectivePrice(selected) }}
             </template>
-            <KudosCoin />
-          </button>
-          <button
+            <KudosCoin /></AppButton>
+          <AppButton
             v-if="canInstallment(selected)"
-            class="btn-glass ps-tryon-installment"
+            icon="splitscreen"
+            class="ps-tryon-installment"
             :disabled="buying || switching"
             @click="buyInstallment(selected)"
-          >
-            <span class="material-symbols-outlined">splitscreen</span>
-            Оплатить частями ({{ Math.ceil(effectivePrice(selected) / 4) }} × 4)
-          </button>
+          >Оплатить частями ({{ Math.ceil(effectivePrice(selected) / 4) }} × 4)</AppButton>
           <p v-if="!canAfford(selected) && !selected.sold_out && !canInstallment(selected)" class="ps-tryon-note">
             Кудосы приносят юниты, задачи и квесты — или загляните в копилки банка.
           </p>
@@ -272,6 +267,7 @@
 
 <script setup>
 import { computed, onMounted, onBeforeUnmount, ref } from 'vue'
+import AppButton from '@/components/ui/AppButton.vue'
 import { useRouter } from 'vue-router'
 import BrandLoader from '@/components/common/BrandLoader.vue'
 import AppDialog from '@/components/ui/AppDialog.vue'

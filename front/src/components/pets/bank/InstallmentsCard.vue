@@ -27,12 +27,17 @@
           <span class="ic-item-progress">{{ i.paid }} / {{ i.total }}</span>
         </div>
         <div class="ic-item-actions">
-          <button class="btn-glass ic-btn" :disabled="busy || walletShort(i.part_amount)" @click="pay(i, i.part_amount)">
-            Доля {{ i.part_amount }}
-          </button>
-          <button class="btn-grad ic-btn" :disabled="busy || walletShort(i.outstanding)" @click="pay(i, i.outstanding)">
-            Погасить {{ i.outstanding }}
-          </button>
+          <AppButton
+            class="ic-btn"
+            :disabled="busy || walletShort(i.part_amount)"
+            @click="pay(i, i.part_amount)"
+          >Доля {{ i.part_amount }}</AppButton>
+          <AppButton
+            variant="filled"
+            class="ic-btn"
+            :disabled="busy || walletShort(i.outstanding)"
+            @click="pay(i, i.outstanding)"
+          >Погасить {{ i.outstanding }}</AppButton>
         </div>
       </div>
     </div>
@@ -53,6 +58,7 @@
 
 <script setup>
 import { computed, onMounted, ref } from 'vue'
+import AppButton from '@/components/ui/AppButton.vue'
 import { usePetsStore } from '@/stores/pets'
 import { useNotificationsStore } from '@/stores/notifications'
 import KudosCoin from '@/components/pets/KudosCoin.vue'

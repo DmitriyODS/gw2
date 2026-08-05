@@ -143,13 +143,9 @@
         <p v-else class="ea-empty">Событий за период нет</p>
 
         <div v-if="feedPages > 1" class="ea-pager">
-          <button class="btn-glass" :disabled="feedPage <= 1" @click="loadFeed(feedPage - 1)">
-            <span class="material-symbols-outlined">chevron_left</span>
-          </button>
+          <AppButton icon="chevron_left" :disabled="feedPage <= 1" @click="loadFeed(feedPage - 1)" />
           <span class="ea-pager-info">{{ feedPage }} / {{ feedPages }}</span>
-          <button class="btn-glass" :disabled="feedPage >= feedPages" @click="loadFeed(feedPage + 1)">
-            <span class="material-symbols-outlined">chevron_right</span>
-          </button>
+          <AppButton icon="chevron_right" :disabled="feedPage >= feedPages" @click="loadFeed(feedPage + 1)" />
         </div>
       </template>
     </section>
@@ -158,6 +154,7 @@
 
 <script setup>
 import { computed, onMounted, ref, watch } from 'vue'
+import AppButton from '@/components/ui/AppButton.vue'
 import { useRouter } from 'vue-router'
 import * as statsApi from '@/api/stats.js'
 import { getStatsEmployees } from '@/api/stats.js'
@@ -468,7 +465,7 @@ onMounted(() => { resolveName(); load() })
 .ea-event-time { font-size: 12px; color: var(--color-text-dim); white-space: nowrap; flex-shrink: 0; }
 
 .ea-pager { display: flex; align-items: center; justify-content: center; gap: 14px; padding: 14px; }
-.ea-pager .btn-glass { width: 40px; height: 40px; padding: 0; display: grid; place-items: center; border-radius: var(--radius-full); }
+.ea-pager :deep(.btn) { width: 40px; height: 40px; padding: 0; justify-content: center; border-radius: var(--radius-full); }
 .ea-pager-info { font-weight: 700; color: var(--color-text-dim); }
 
 @media (max-width: 720px) {

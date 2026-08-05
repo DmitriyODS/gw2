@@ -67,8 +67,20 @@
                   label="Сотрудник"
                   @click="openAdd"
                 />
-                <AppButton variant="glass" size="sm" icon="mail" label="Пригласить" @click="openInvite" />
-                <AppButton variant="glass" size="sm" icon="link" label="Ссылка" @click="openInviteLink" />
+                <AppButton
+                  variant="glass"
+                  size="sm"
+                  icon="mail"
+                  label="Пригласить"
+                  @click="openInvite"
+                />
+                <AppButton
+                  variant="glass"
+                  size="sm"
+                  icon="link"
+                  label="Ссылка"
+                  @click="openInviteLink"
+                />
               </template>
             </AppStack>
           </AppCard>

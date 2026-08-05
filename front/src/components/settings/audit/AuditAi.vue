@@ -57,12 +57,7 @@
             :loading="testing"
             @click="test"
           />
-          <AppButton
-            v-if="settings.has_key"
-            label="Удалить ключ"
-            tone="danger"
-            @click="clearKey"
-          />
+          <AppButton v-if="settings.has_key" label="Удалить ключ" tone="danger" @click="clearKey" />
           <span v-if="testResult" class="test" :data-ok="testResult.chat">
             {{ testResult.chat ? `Связь есть · ${testResult.latency_ms} мс` : (testResult.error || 'Не отвечает') }}
           </span>

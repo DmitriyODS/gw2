@@ -441,15 +441,14 @@ watch(() => useAuthStore().companyId, (id, prev) => {
   .portal-btn-label { display: none; }
   /* Без подписи кнопки тулбара сжимаются в квадратные иконки — язык .btn-icon
      из «Задач», а не растянутая пилюля. */
-  .portal-toolbar .btn-glass,
-  .portal-toolbar .btn-grad { padding: 0; width: 42px; height: 42px; justify-content: center; }
+  .portal-toolbar :deep(.btn) { padding: 0; width: 42px; height: 42px; justify-content: center; }
   /* Поиск переносится на всю ширину под вкладками/кнопками. */
   .portal-toolbar :deep(.search-field) { min-width: 0; flex: 1 1 100%; order: 1; }
 }
 
 @media (max-width: 768px) {
   /* Создание поста на мобильном — плавающий FAB. */
-  .portal-toolbar .btn-grad { display: none; }
+  .portal-toolbar :deep(.btn.v-filled) { display: none; }
 }
 
 @media (max-width: 768px) {

@@ -972,7 +972,7 @@ watch(isRinging, (v) => {
   flex-shrink: 0;
   border-radius: 50%;
   border: 0;
-  /* Нейтральные контролы — стекло (идиома .btn-glass); on/off/hangup
+  /* Нейтральные контролы — стекло (идиома AppButton glass); on/off/hangup
      остаются тональными контейнерами. */
   background: var(--glass-bg);
   box-shadow: var(--glass-edge), inset 0 0 0 1px var(--acrylic-border);

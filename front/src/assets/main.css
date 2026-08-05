@@ -556,34 +556,6 @@ textarea.ctl.invalid:focus {
   color: var(--color-on-success-container);
 }
 
-/* Главная кнопка экрана: пилюля на фирменном градиенте. */
-.btn-grad {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  border: none;
-  border-radius: var(--radius-full);
-  padding: 10px 20px;
-  background: var(--grad-primary);
-  color: var(--color-on-primary);
-  font: inherit;
-  font-size: 14px;
-  font-weight: 650;
-  cursor: pointer;
-  white-space: nowrap;
-  box-shadow: var(--shadow-sm);
-  transition: filter 0.15s, box-shadow 0.15s;
-}
-
-.btn-grad .material-symbols-outlined { font-size: 20px; }
-
-.btn-grad:hover:not(:disabled) {
-  filter: brightness(1.06);
-  box-shadow: var(--shadow-md);
-}
-
-.btn-grad:disabled { opacity: 0.55; cursor: not-allowed; }
-
 /* ── Экраны входа: общие примитивы форм ─────────────────────────────
    Вход, регистрация, сброс пароля, подтверждение почты и QR-вход
    собираются из одних и тех же кирпичей — иначе кнопка «войти» и плашка
@@ -662,8 +634,8 @@ textarea.ctl.invalid:focus {
 .auth-error .material-symbols-outlined { font-size: 20px; flex-shrink: 0; }
 
 /* ── Единый акриловый стиль кнопок модалок ──────────────────────────
-   Главная кнопка — пилюля на градиенте (как .btn-grad), второстепенная —
-   стеклянная (как .btn-glass). Локальные scoped .btn-filled/.btn-text
+   Главная кнопка — пилюля на градиенте (вариант `filled` у AppButton),
+   второстепенная — стеклянная. Локальные scoped .btn-filled/.btn-text
    (и их копии cd-btn-filled, cd-btn-text, cc-cancel) копипастились по диалогам —
    глобальный слой приводит их к единому стилю; !important перекрывает
    scoped-фоны, как у глобального фикса полей ввода выше. */
@@ -698,7 +670,7 @@ textarea.ctl.invalid:focus {
 }
 
 /* ── Круглые иконочные кнопки тулбаров — единое стекло ──────────────
-   Референс — кнопка «назад» кудо-банка (.btn-glass): заметное стеклянное
+   Референс — стеклянный вариант AppButton: заметное стеклянное
    тело вместо еле видимой прозрачной обводки. Локальные классы разделов
    (cv-/dv-/rg-/rm-/sc-/sv-/sr-icon-btn и .icon-btn настроек/компаний)
    приводятся одним слоем; !important перекрывает scoped-фоны. */
@@ -784,47 +756,6 @@ textarea.ctl.invalid:focus {
       0 0 24px color-mix(in oklch, var(--color-text) 6%, transparent);
   }
   .glass-hover:active::after { opacity: 0.6; }
-}
-
-/* Вторичная стеклянная кнопка (рядом с .btn-grad). */
-.btn-glass {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  border: 1px solid var(--acrylic-border);
-  border-radius: var(--radius-full);
-  padding: 10px 18px;
-  background: var(--acrylic-card-bg);
-  background: var(--glass-bg);
-  box-shadow: var(--glass-edge);
-  color: var(--color-text);
-  font: inherit;
-  font-size: 14px;
-  font-weight: 600;
-  cursor: pointer;
-  white-space: nowrap;
-  transition: background 0.15s, border-color 0.15s;
-}
-
-.btn-glass .material-symbols-outlined { font-size: 20px; }
-
-.btn-glass:hover:not(:disabled) {
-  /* Блик сохраняем и на hover — под ним primary-подсветка. */
-  background: var(--glass-bg), color-mix(in oklch, var(--color-primary) 12%, transparent);
-  border-color: color-mix(in oklch, var(--color-primary) 30%, var(--acrylic-border));
-}
-
-.btn-glass:disabled { opacity: 0.5; cursor: not-allowed; }
-
-/* Стеклянная кнопка опасного действия (отключить, удалить, выйти). */
-.btn-glass.danger {
-  color: var(--color-error);
-  border-color: color-mix(in oklch, var(--color-error) 30%, var(--color-outline-dim));
-}
-
-.btn-glass.danger:hover:not(:disabled) {
-  background: var(--glass-bg), color-mix(in oklch, var(--color-error) 12%, transparent);
-  border-color: color-mix(in oklch, var(--color-error) 45%, var(--acrylic-border));
 }
 
 /* Мягкая success-кнопка действия («В работу» и аналоги). */

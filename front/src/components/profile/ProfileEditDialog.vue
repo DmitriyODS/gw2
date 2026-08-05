@@ -24,20 +24,15 @@
       <div class="pe-avatar-row">
         <img :src="avatarSrc" class="pe-avatar" :alt="auth.user?.fio" />
         <div class="pe-avatar-actions">
-          <button type="button" class="btn-glass" @click="cropping = true">
-            <span class="material-symbols-outlined">photo_camera</span>
-            Загрузить фото
-          </button>
-          <button
+          <AppButton icon="photo_camera" label="Загрузить фото" @click="cropping = true" />
+          <AppButton
             v-if="auth.user?.avatar_path"
-            type="button"
-            class="btn-glass danger"
+            tone="danger"
+            icon="delete"
+            label="Удалить"
             :disabled="avatarBusy"
             @click="removeAvatar"
-          >
-            <span class="material-symbols-outlined">delete</span>
-            Удалить
-          </button>
+          />
         </div>
       </div>
 
@@ -73,24 +68,27 @@
             <small>Логин</small>
             <span>{{ auth.user?.login || '—' }}</span>
           </span>
-          <button type="button" class="btn-glass pe-row-btn" @click="loginDialog = true">Изменить</button>
+          <AppButton label="Изменить" class="pe-row-btn" @click="loginDialog = true" />
         </li>
         <li class="pe-row">
           <span class="pe-row-text">
             <small>Пароль</small>
             <span>••••••••</span>
           </span>
-          <button type="button" class="btn-glass pe-row-btn" @click="passwordDialog = true">Изменить</button>
+          <AppButton label="Изменить" class="pe-row-btn" @click="passwordDialog = true" />
         </li>
       </ul>
     </div>
 
     <template #footer-start>
       <!-- Мобильная оболочка не имеет меню «Пуск» с выходом — держим его здесь. -->
-      <button v-if="isMobile && !cropping" type="button" class="btn-glass danger" @click="auth.logout()">
-        <span class="material-symbols-outlined">logout</span>
-        Выйти
-      </button>
+      <AppButton
+        v-if="isMobile && !cropping"
+        tone="danger"
+        icon="logout"
+        label="Выйти"
+        @click="auth.logout()"
+      />
     </template>
   </AppDialog>
 
@@ -100,6 +98,7 @@
 
 <script setup>
 import { computed, reactive, ref, watch } from 'vue'
+import AppButton from '@/components/ui/AppButton.vue'
 import AppDialog from '@/components/ui/AppDialog.vue'
 import AvatarCropper from '@/components/settings/AvatarCropper.vue'
 import ChangeLoginDialog from '@/components/profile/ChangeLoginDialog.vue'

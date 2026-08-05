@@ -155,7 +155,12 @@
               title="На этот день записей нет"
               size="sm"
             >
-              <AppButton variant="filled" icon="add" label="Добавить запись" @click="openCreate(store.cursor)" />
+              <AppButton
+                variant="filled"
+                icon="add"
+                label="Добавить запись"
+                @click="openCreate(store.cursor)"
+              />
             </EmptyState>
             <button
               v-for="(e, i) in dayEntries(store.cursor)"
@@ -233,9 +238,34 @@
         <ul v-else class="cv-shares-list">
           <li v-for="s in shares" :key="s.id" class="cv-share">
             <input class="cv-share-url" :value="shareUrl(s.code)" readonly @focus="$event.target.select()" />
-            <AppButton variant="icon" size="sm" icon="content_copy" title="Копировать" aria-label="Копировать" @click="copyShare(s.code)" />
-            <AppButton tag="a" variant="icon" size="sm" icon="open_in_new" title="Открыть" aria-label="Открыть" :href="shareUrl(s.code)" target="_blank" rel="noopener" />
-            <AppButton variant="icon" size="sm" tone="danger" icon="delete" title="Отозвать" aria-label="Отозвать" @click="revokeShareLink(s.id)" />
+            <AppButton
+              variant="icon"
+              size="sm"
+              icon="content_copy"
+              title="Копировать"
+              aria-label="Копировать"
+              @click="copyShare(s.code)"
+            />
+            <AppButton
+              tag="a"
+              variant="icon"
+              size="sm"
+              icon="open_in_new"
+              title="Открыть"
+              aria-label="Открыть"
+              :href="shareUrl(s.code)"
+              target="_blank"
+              rel="noopener"
+            />
+            <AppButton
+              variant="icon"
+              size="sm"
+              tone="danger"
+              icon="delete"
+              title="Отозвать"
+              aria-label="Отозвать"
+              @click="revokeShareLink(s.id)"
+            />
           </li>
         </ul>
       </div>

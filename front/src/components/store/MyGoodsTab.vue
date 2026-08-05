@@ -10,17 +10,18 @@
         Всего заработано: ${formatPrice(balance.total_earned, { free: '0 руб.' })}`"
     >
       <strong class="wallet-sum">{{ formatPrice(balance.balance, { free: '0 руб.' }) }}</strong>
-      <AppButton
-        label="Вывести"
-        size="sm"
-        :disabled="!balance.balance"
-        @click="payoutOpen = true"
-      />
+      <AppButton label="Вывести" size="sm" :disabled="!balance.balance" @click="payoutOpen = true" />
     </AppRow>
 
     <AppCard title="Мои товары" :gap="10">
       <template #head>
-        <AppButton label="Выставить товар" icon="add" variant="filled" size="sm" @click="createProduct" />
+        <AppButton
+          label="Выставить товар"
+          icon="add"
+          variant="filled"
+          size="sm"
+          @click="createProduct"
+        />
       </template>
 
       <EmptyState

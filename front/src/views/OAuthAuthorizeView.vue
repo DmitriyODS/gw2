@@ -12,16 +12,15 @@
     <p v-else-if="error" class="oa-error">{{ error }}</p>
 
     <template #actions>
-      <button type="button" class="btn-glass" :disabled="loading" @click="deny">отклонить</button>
-      <button type="button" class="btn-grad" :disabled="loading || !valid" @click="allow">
-        {{ loading ? 'секунду…' : 'разрешить' }}
-      </button>
+      <AppButton label="отклонить" :disabled="loading" @click="deny" />
+      <AppButton variant="filled" :disabled="loading || !valid" @click="allow">{{ loading ? 'секунду…' : 'разрешить' }}</AppButton>
     </template>
   </AuthShell>
 </template>
 
 <script setup>
 import { computed, ref } from 'vue'
+import AppButton from '@/components/ui/AppButton.vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth.js'
 import { oauthAuthorize } from '@/api/auth.js'

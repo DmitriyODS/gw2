@@ -120,25 +120,19 @@
       </div>
 
       <div v-if="canViewActivity" class="profile-lead">
-        <button class="btn-grad profile-activity" @click="openActivity">
-          <span class="material-symbols-outlined">monitoring</span>
-          Активность сотрудника
-        </button>
+        <AppButton
+          variant="filled"
+          icon="monitoring"
+          label="Активность сотрудника"
+          class="profile-activity"
+          @click="openActivity"
+        />
       </div>
 
       <div v-if="user.id !== auth.user?.id" class="profile-actions">
-        <button class="btn-glass" @click="writeTo(user)">
-          <span class="material-symbols-outlined">chat</span>
-          Написать
-        </button>
-        <button class="btn-glass" @click="callTo(user, 'video')">
-          <span class="material-symbols-outlined">videocam</span>
-          <span class="hide-narrow">Видео</span>
-        </button>
-        <button class="btn-glass" @click="callTo(user, 'audio')">
-          <span class="material-symbols-outlined">call</span>
-          <span class="hide-narrow">Аудио</span>
-        </button>
+        <AppButton icon="chat" label="Написать" @click="writeTo(user)" />
+        <AppButton icon="videocam" @click="callTo(user, 'video')"><span class="hide-narrow">Видео</span></AppButton>
+        <AppButton icon="call" @click="callTo(user, 'audio')"><span class="hide-narrow">Аудио</span></AppButton>
       </div>
     </div>
   </Dialog>
@@ -153,6 +147,7 @@
 
 <script setup>
 import { computed, ref, watch } from 'vue'
+import AppButton from '@/components/ui/AppButton.vue'
 import { useRouter } from 'vue-router'
 import Dialog from 'primevue/dialog'
 import { useAuthStore } from '@/stores/auth.js'
