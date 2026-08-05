@@ -12,7 +12,6 @@
     </template>
 
     <template #subhead>
-      <PortalHubTabs class="portal-hub-tabs" />
       <SearchField
         v-model="searchInput"
         placeholder="Поиск по постам…"
@@ -162,7 +161,6 @@ import AppInfoBar from '@/components/ui/AppInfoBar.vue'
 import AppPage from '@/components/ui/AppPage.vue'
 import SearchField from '@/components/common/SearchField.vue'
 import AppDialog from '@/components/ui/AppDialog.vue'
-import PortalHubTabs from '@/components/portal/PortalHubTabs.vue'
 import PostCard from '@/components/portal/PostCard.vue'
 import PostComposer from '@/components/portal/PostComposer.vue'
 import ForwardPostDialog from '@/components/portal/ForwardPostDialog.vue'
@@ -309,7 +307,6 @@ watch(() => useAuthStore().companyId, (id, prev) => {
 .admin-sticky { background: transparent; -webkit-backdrop-filter: none; backdrop-filter: none; }
 .admin-sticky::after { display: none; }
 
-.portal-hub-tabs { flex-shrink: 0; }
 
 @keyframes portal-fade {
   from { opacity: 0; transform: translateY(4px); }
@@ -451,8 +448,7 @@ watch(() => useAuthStore().companyId, (id, prev) => {
 }
 
 @media (max-width: 768px) {
-  /* Создание поста на мобильном — плавающий FAB; вкладки хаба растягиваются
-     на освободившуюся ширину (full-width включает сам PortalHubTabs). */
+  /* Создание поста на мобильном — плавающий FAB. */
   .portal-toolbar .btn-grad { display: none; }
 }
 

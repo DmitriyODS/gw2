@@ -140,13 +140,26 @@ export const APPS = [
     icon: 'web_stories',
     group: 'team',
     tile: 'square',
-    // Единый раздел-хаб: лента портала + сотрудники (вкладки внутри).
     path: '/portal',
-    match: (p) => p.startsWith('/portal') || p.startsWith('/employees'),
+    match: (p) => p.startsWith('/portal'),
     size: [1080, 840],
     min: [520, 440],
     available: company,
-    titleFor: (route) => (route.path.startsWith('/employees') ? 'Сотрудники' : null),
+  },
+  {
+    // Сотрудники — самостоятельный раздел, а не вкладка портала: ходят сюда
+    // редко и по своему поводу, а вкладки отнимали строку у поиска.
+    id: 'employees',
+    title: 'Сотрудники',
+    icon: 'groups',
+    group: 'team',
+    tile: 'square',
+    path: '/employees',
+    match: (p) => p.startsWith('/employees'),
+    size: [1080, 820],
+    min: [520, 440],
+    available: company,
+    titleFor: (route) => (/^\/employees\/\d+\/activity$/.test(route.path) ? 'Активность' : null),
   },
   {
     id: 'pets',

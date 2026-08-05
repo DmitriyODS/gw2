@@ -9,10 +9,10 @@
     :draggable="false"
     :show-header="false"
     :dismissable-mask="true"
-    :style="{ width: '460px', maxWidth: 'calc(100vw - 24px)' }"
+    :style="{ width: '460px', maxWidth: 'calc(100vw - 24px)', maxHeight: 'calc(100dvh - 48px)' }"
     :pt="{
       root: { class: 'emp-dialog' },
-      content: { style: 'overflow-x: hidden; padding: 0; background: transparent' },
+      content: { style: 'padding: 0; background: transparent' },
       mask: {
         style: 'background: var(--color-scrim)',
         class: [elevated ? 'emp-mask--elevated' : '', { 'gw-in-window-mask': inWindow }],

@@ -364,10 +364,16 @@ textarea.ctl.invalid:focus {
   box-shadow: var(--shadow-lg) !important;
   padding: 0 !important;
 }
+/* Содержимое прокручивается САМО: клип скруглений живёт на корне модалки
+   (overflow: hidden выше), и без этих строк длинная карточка — со статусом,
+   контактами и действиями — просто обрезалась, особенно в окне рабочего
+   стола, где высоту клампит .gw-in-window-mask. */
 .emp-dialog .p-dialog-content {
   padding: 0 !important;
   background: transparent !important;
-  overflow: visible !important;
+  min-height: 0 !important;
+  overflow-y: auto !important;
+  overflow-x: hidden !important;
 }
 
 /* ── Единый shell для админ-разделов ────────────────────────────────

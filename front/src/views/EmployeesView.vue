@@ -1,8 +1,12 @@
 <template>
   <AppPage class="emp" title="Сотрудники">
     <template #subhead>
-      <PortalHubTabs class="emp-hub-tabs" />
-      <SearchField v-model="search" placeholder="Поиск по ФИО, логину, должности" hotkey />
+      <SearchField
+        v-model="search"
+        placeholder="Поиск по ФИО, логину, должности"
+        hotkey
+        :collapsible="false"
+      />
     </template>
 
     <template #status>
@@ -132,7 +136,6 @@ import EmployeeProfileDialog from '@/components/common/EmployeeProfileDialog.vue
 import SearchField from '@/components/common/SearchField.vue'
 import EmptyState from '@/components/common/EmptyState.vue'
 import RolePill from '@/components/common/RolePill.vue'
-import PortalHubTabs from '@/components/portal/PortalHubTabs.vue'
 const router = useRouter()
 const route = useRoute()
 const auth = useAuthStore()
@@ -286,10 +289,6 @@ watch(profileOpen, (open) => {
 <style scoped>
 /* Тулбар без подложки — прозрачная «плавающая» шапка как в «Задачах»
    (и как во второй вкладке хаба — «Ленте»). */
-/* Вкладки хаба не сжимаются: на телефоне они забирают строку целиком — это
-   решает сам PortalHubTabs. */
-.emp-hub-tabs { flex-shrink: 0; }
-
 .emp-grid { animation: emp-fade 0.2s ease; }
 @keyframes emp-fade {
   from { opacity: 0; transform: translateY(4px); }
@@ -509,7 +508,6 @@ watch(profileOpen, (open) => {
   /* На мобильном поиск занимает всю ширину — min-width снимаем. */
   
   /* Вкладки хаба — на всю ширину строки. */
-  .emp-hub-tabs { flex: 1; min-width: 0; }
 
   /* Сетка карточек 2 колонки. */
   .emp-grid {
