@@ -19,7 +19,7 @@ import { getAgenda as getCalendarAgenda } from '@/api/calendars.js'
 import { getPosts } from '@/api/portal.js'
 import { getStatsProfile } from '@/api/stats.js'
 import { listMyCompanies, listCompanies } from '@/api/companies.js'
-import { getUsers } from '@/api/users.js'
+import { getDirectory, getUsers } from '@/api/users.js'
 import { useAuthStore } from '@/stores/auth.js'
 
 const TTL = 60_000
@@ -114,6 +114,18 @@ const SOURCES = {
   users: async () => {
     const items = (await getUsers()) ?? []
     return { total: items.length, active: items.filter((u) => u.is_active).length }
+  },
+
+  /* Сотрудники активной компании. Отдаём и id — «сколько в сети» плитка
+     считает сама, пересекая их с presence мессенджера: отдельного счётчика
+     онлайна по компании на сервере нет, а общий онлайн платформы для этой
+     плитки соврал бы. */
+  employees: async () => {
+    const auth = useAuthStore()
+    const items = auth.isSuperAdmin
+      ? ((await getUsers()) ?? []).filter((u) => u.is_active)
+      : ((await getDirectory()) ?? [])
+    return { total: items.length, ids: items.map((u) => u.id) }
   },
 }
 

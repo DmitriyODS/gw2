@@ -160,6 +160,17 @@ const FACES = {
     return out
   },
 
+  employees: ({ data, messenger }) => {
+    const e = data.employees
+    if (!e?.total) return []
+    const out = [face('total', e.total, plural(e.total, 'сотрудник', 'сотрудника', 'сотрудников'))]
+
+    // Онлайн считаем по своей компании, а не по всей платформе.
+    const online = (e.ids || []).filter((id) => messenger?.onlineIds?.has(id)).length
+    if (online) out.push(face('online', online, plural(online, 'в сети', 'в сети', 'в сети')))
+    return out
+  },
+
   users: ({ data }) => {
     const u = data.users
     if (!u) return []

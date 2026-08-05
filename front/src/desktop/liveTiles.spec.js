@@ -39,6 +39,26 @@ describe('грани живых плиток', () => {
     expect(faces.at(-1)).toMatchObject({ value: '42', label: 'кудоса' })
   })
 
+  it('сотрудники: сколько людей и сколько из НИХ в сети', () => {
+    const faces = tileFaces('employees', ctx({
+      data: { employees: { total: 7, ids: [1, 2, 3] } },
+      // В presence есть посторонний id 99 — он из другой компании и считаться
+      // не должен: иначе плитка показала бы онлайн всей платформы.
+      messenger: { onlineIds: new Set([2, 3, 99]) },
+    }))
+    expect(faces[0]).toMatchObject({ value: '7', label: 'сотрудников' })
+    expect(faces[1]).toMatchObject({ value: '2', label: 'в сети' })
+  })
+
+  it('сотрудники: никого в сети — грань онлайна не показываем', () => {
+    const faces = tileFaces('employees', ctx({
+      data: { employees: { total: 4, ids: [1, 2] } },
+      messenger: { onlineIds: new Set() },
+    }))
+    expect(faces).toHaveLength(1)
+    expect(faces[0]).toMatchObject({ value: '4', label: 'сотрудника' })
+  })
+
   it('без данных раздела граней нет — плитка остаётся обычной', () => {
     expect(tileFaces('notes', ctx())).toEqual([])
     expect(tileFaces('settings', ctx())).toEqual([])
