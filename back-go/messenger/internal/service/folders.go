@@ -13,9 +13,7 @@ const (
 	maxFolderTitleRunes = 64
 )
 
-func errFolderNotFound() *domain.Error {
-	return domain.NewError("FOLDER_NOT_FOUND", "Папка не найдена", 404)
-}
+func errFolderNotFound() *domain.Error { return domain.ErrFolderNotFound }
 
 // normalizeFolderInput валидирует и чистит поля папки.
 func normalizeFolderInput(in dto.FolderInput) (dto.FolderInput, error) {

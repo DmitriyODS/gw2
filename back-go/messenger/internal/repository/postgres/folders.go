@@ -57,20 +57,36 @@ func (r *Repo) CreateFolder(ctx context.Context, f *domain.Folder) (int64, error
 }
 
 // UpdateFolder — правка полей папки владельца (состав правится отдельно).
+// UpdateFolder — правка своей папки. Чужая не найдётся (owner_id в WHERE), и
+// это ОТДЕЛЬНО проверяется по числу затронутых строк: без проверки запрос к
+// чужой папке отвечал «успешно», хотя ничего не менял, — клиент считал бы,
+// что переименование прошло.
 func (r *Repo) UpdateFolder(ctx context.Context, ownerID int64, f *domain.Folder) error {
-	_, err := r.q(ctx).Exec(ctx,
+	tag, err := r.q(ctx).Exec(ctx,
 		`UPDATE chat_folders
 		    SET title = $3, emoji = $4,
 		        include_personal = $5, include_groups = $6, include_unread = $7
 		  WHERE id = $1 AND owner_id = $2`,
 		f.ID, ownerID, f.Title, f.Emoji, f.IncludePersonal, f.IncludeGroups, f.IncludeUnread)
-	return err
+	if err != nil {
+		return err
+	}
+	if tag.RowsAffected() == 0 {
+		return domain.ErrFolderNotFound
+	}
+	return nil
 }
 
 func (r *Repo) DeleteFolder(ctx context.Context, ownerID, folderID int64) error {
-	_, err := r.q(ctx).Exec(ctx,
+	tag, err := r.q(ctx).Exec(ctx,
 		`DELETE FROM chat_folders WHERE id = $1 AND owner_id = $2`, folderID, ownerID)
-	return err
+	if err != nil {
+		return err
+	}
+	if tag.RowsAffected() == 0 {
+		return domain.ErrFolderNotFound
+	}
+	return nil
 }
 
 // ReorderFolders — position = индекс в orderedIDs (только папки владельца).

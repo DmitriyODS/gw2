@@ -13,3 +13,7 @@ func NewError(code, message string, httpStatus int) *Error {
 
 // AsDomainError — достать *Error из цепочки; nil, если это не бизнес-ошибка.
 func AsDomainError(err error) *Error { return apierror.As(err) }
+
+// ErrFolderNotFound — папки чатов нет или она чужая. Существование чужой не
+// раскрываем: снаружи оба случая неотличимы.
+var ErrFolderNotFound = NewError("FOLDER_NOT_FOUND", "Папка не найдена", 404)
