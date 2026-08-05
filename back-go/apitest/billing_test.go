@@ -7,6 +7,14 @@ import (
 	"time"
 )
 
+// unlimited — «без ограничения» в ответах биллинга (domain.Unlimited).
+const unlimited = -1
+
+// subscriptionsHidden — в выпуске 7.0 подписки скрыты от пользователя, и тариф
+// не ограничивает счётные лимиты. Режим определяем ПО ОТВЕТУ сервера, а не по
+// константе сервиса: харнес ходит снаружи и внутренние пакеты ему недоступны.
+func subscriptionsHidden(boards int) bool { return boards == unlimited }
+
 // Сквозные сценарии подписок: витрина, покупка тарифа через подтверждение
 // оплаты супер-админом и реальный энфорсмент лимитов в других сервисах.
 
@@ -42,7 +50,14 @@ func TestBillingShowcase(t *testing.T) {
 	if out.Entitlements.Plan != "junior" {
 		t.Fatalf("новый пользователь должен быть на бесплатном тарифе, получено %q", out.Entitlements.Plan)
 	}
-	if out.Entitlements.Limits.Companies != 1 || out.Entitlements.Limits.Boards != 1 {
+	// Пока подписки скрыты, тариф не ограничивает счётные лимиты: покупать их
+	// негде, значит и упираться человек не должен. Промежуточных состояний быть
+	// не может — либо сняты все, либо действуют лимиты «Джуна».
+	if subscriptionsHidden(out.Entitlements.Limits.Boards) {
+		if out.Entitlements.Limits.Companies != unlimited {
+			t.Fatalf("при скрытых подписках лимиты обязаны быть сняты все: %+v", out.Entitlements.Limits)
+		}
+	} else if out.Entitlements.Limits.Companies != 1 || out.Entitlements.Limits.Boards != 1 {
 		t.Fatalf("лимиты «Джуна» не совпали: %+v", out.Entitlements.Limits)
 	}
 	if len(out.Plans) != 3 || len(out.Addons) == 0 {
@@ -57,6 +72,20 @@ func TestBoardLimitEnforcedByPlan(t *testing.T) {
 	user := newVerifiedUser(t)
 	dropPlan(t, user) // лимит досок проверяем на «Джуне»
 	admin := newSuperAdmin(t)
+
+	ent := billingAPI.doJSON(t, http.MethodGet, "/api/billing/entitlements", user.Token, nil)
+	requireStatus(t, ent, http.StatusOK, "запрос биллинга")
+	var limits struct {
+		Limits struct {
+			Boards int `json:"boards"`
+		} `json:"limits"`
+	}
+	if err := jsonUnmarshal(ent.Raw, &limits); err != nil {
+		t.Fatalf("разбор ответа: %v", err)
+	}
+	if subscriptionsHidden(limits.Limits.Boards) {
+		t.Skip("подписки скрыты в этом выпуске — лимиты тарифа не применяются")
+	}
 
 	r := boardAPI.doJSON(t, http.MethodPost, "/api/boards", user.Token,
 		map[string]any{"title": "Первая"})
