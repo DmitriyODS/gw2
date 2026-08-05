@@ -296,6 +296,7 @@
 
 <script setup>
 import { ref, computed, onMounted, watch } from 'vue'
+import { useRouter } from 'vue-router'
 import { usePermission, ROLES } from '@/composables/usePermission.js'
 import { useAuthStore } from '@/stores/auth.js'
 import { useNotificationsStore } from '@/stores/notifications.js'
@@ -326,6 +327,7 @@ const { isAtLeast } = usePermission()
 const authStore = useAuthStore()
 const notif = useNotificationsStore()
 const { isMobile } = useBreakpoint()
+const router = useRouter()
 const { reset: resetLayout } = useStatsLayout()
 
 const mode = ref('common')
@@ -349,8 +351,16 @@ const commands = [
 
 function onCommand(key) {
   if (key === 'reset') resetLayout()
-  // ТВ-режим — отдельный полноэкранный вид (обычно на втором мониторе).
-  else if (key === 'tv') window.open('/tv', '_blank', 'noopener')
+  else if (key === 'tv') openTv()
+}
+
+/* ТВ-режим — табло, которое обычно вешают на отдельный экран, поэтому сперва
+   пробуем открыть его вкладкой. Не вышло (блокировщик всплывающих окон, мобильная
+   обёртка) — уходим туда навигацией: маршрут полноэкранный, так что табло всё
+   равно займёт весь экран, просто в этом же окне. */
+function openTv() {
+  const opened = window.open('/tv', '_blank', 'noopener')
+  if (!opened) router.push('/tv')
 }
 
 const modeTabs = [

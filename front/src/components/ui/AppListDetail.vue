@@ -113,6 +113,10 @@ defineExpose({ narrow })
 .ld {
   display: grid;
   grid-template-columns: var(--ld-list-width) minmax(0, 1fr);
+  /* Ряд ровно в высоту каркаса: без него колонка тянется по содержимому, и
+     раздел со своим скроллером внутри (лента чатов, список записей) не
+     ограничен по высоте — прокрутка просто не появляется. */
+  grid-template-rows: minmax(0, 100%);
   gap: 16px;
   height: 100%;
   min-height: 0;
@@ -121,7 +125,8 @@ defineExpose({ narrow })
   transition: grid-template-columns 0.22s cubic-bezier(0.2, 0, 0, 1);
 }
 
-.ld-col { min-width: 0; min-height: 0; }
+/* Колонка отдаёт свою высоту содержимому целиком — оно и решает, где скролл. */
+.ld-col { min-width: 0; min-height: 0; height: 100%; }
 
 /* Свёрнутый список: колонка схлопывается до нуля, содержимое отдаёт всё место
    правой панели. Список остаётся в DOM — его прокрутка и выделение переживают

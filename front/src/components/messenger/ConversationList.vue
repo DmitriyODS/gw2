@@ -468,9 +468,12 @@ function formatTime(iso) {
 </script>
 
 <style scoped>
+/* Ширину колонки задаёт каркас раздела (AppListDetail), панель её заполняет:
+   иначе в узкой раскладке список оставался 340-пиксельным, а справа зияла
+   пустота. */
 .conv-list {
-  width: 340px;
-  flex-shrink: 0;
+  width: 100%;
+  height: 100%;
   background: var(--acrylic-card-bg);
   border: 1px solid var(--acrylic-border);
   border-radius: var(--radius-xl);
@@ -479,10 +482,6 @@ function formatTime(iso) {
   flex-direction: row;
   min-height: 0;
 }
-
-/* С рейлом папок панель шире ровно на его ширину (76px) — колонка списка
-   остаётся комфортной, а без папок ширина прежняя. */
-.conv-list.has-rail { width: 416px; }
 
 /* Рейл папок — фиксированная колонка слева, ширина в самом компоненте. */
 .conv-rail { min-height: 0; }
@@ -905,10 +904,9 @@ function formatTime(iso) {
     border-right: none;
   }
 
-  .conv-list-header {
-    padding: 14px 12px 6px;
-    padding-top: calc(14px + env(safe-area-inset-top, 0px));
-  }
+  /* Вырез и панель задач отбирает каркас раздела — свои компенсации сняты,
+     иначе отступ шёл бы дважды. */
+  .conv-list-header { padding: 14px 12px 6px; }
   .conv-list-header h2 { font-size: 20px; font-weight: 800; }
 
   .conv-tabs-wrap { padding: 0 12px 8px; }
@@ -926,7 +924,8 @@ function formatTime(iso) {
 
   .conv-items {
     padding: 0 4px;
-    padding-bottom: calc(60px + 96px + env(safe-area-inset-bottom, 0px));
+    /* Запас снизу — под плавающую кнопку нового чата, а не под панель. */
+    padding-bottom: 96px;
   }
   .conv-item {
     border-radius: var(--radius-lg);

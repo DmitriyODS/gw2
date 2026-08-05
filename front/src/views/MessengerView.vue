@@ -1,14 +1,13 @@
 <template>
-  <!-- Ширину колонки списка задаёт сам ConversationList (340px, с рейлом папок
-       416px), поэтому колонка идёт `auto`: иначе про рейл пришлось бы знать и
-       здесь. Узкую раскладку — «список ⇄ чат с возвратом» — ведёт AppListDetail
-       по ширине ПАНЕЛИ, а не экрана: раздел живёт окном рабочего стола. -->
+  <!-- Узкую раскладку — «список ⇄ чат с возвратом» — ведёт AppListDetail по
+       ширине ПАНЕЛИ, а не экрана: раздел живёт окном рабочего стола. -->
   <AppListDetail
     class="messenger"
-    list-width="auto"
+    :list-width="listWidth"
     :narrow-at="768"
     :open="!!activeId"
     @update:open="onDetailOpen"
+    @narrow-change="isNarrow = $event"
   >
     <template #list>
       <ConversationList
@@ -32,7 +31,6 @@
     <section
       ref="panelEl"
       class="chat-panel"
-      :style="isMobile && viewportHeight ? { height: viewportHeight + 'px', top: viewportTop + 'px', bottom: 'auto' } : {}"
       @dragenter.prevent="onDragEnter"
       @dragover.prevent="onDragOver"
       @dragleave.prevent="onDragLeave"
@@ -44,7 +42,7 @@
         <span>Отпустите файл — он прикрепится к сообщению</span>
       </div>
       <header v-if="active" class="chat-header">
-        <button v-if="isMobile" class="back-btn" @click="goBack" title="Назад">
+        <button v-if="isNarrow" class="back-btn" @click="goBack" title="Назад">
           <span class="material-symbols-outlined">arrow_back</span>
         </button>
         <!-- 3 варианта шапки: обычный диалог (фото собеседника), dev-чат
@@ -294,7 +292,7 @@
     </template>
 
     <AppFab
-      :visible="isMobile && !activeId && listTab === 'chats'"
+      :visible="isNarrow && !activeId && listTab === 'chats'"
       icon="edit_square"
       tone="tertiary"
       aria-label="Новый чат"
@@ -422,6 +420,13 @@ async function startEmptyCall() {
 const authStore = useAuthStore()
 const { isMobile } = useBreakpoint()
 
+/* Узкая раскладка = колонки показываются по одной. Считает её AppListDetail по
+   ширине ПАНЕЛИ: раздел живёт окном рабочего стола, и в узком окне список с
+   чатом рядом не помещаются так же, как на телефоне. isMobile тут не годится —
+   он про ширину экрана (её проверяют только вещи про мобильную клавиатуру). */
+const isNarrow = ref(false)
+
+
 const newChatOpen = ref(false)
 const newGroupOpen = ref(false)
 const groupInfoOpen = ref(false)
@@ -435,15 +440,14 @@ const ctxMenu = ref({ visible: false, x: 0, y: 0, message: null })
 const messagesEl = ref(null)
 const panelEl = ref(null)
 
-// Mobile keyboard: панель занимает ровно видимую часть экрана (visualViewport),
-// а прокрутка ленты остаётся заякоренной У НИЗА — как в Telegram: при появлении
-// клавиатуры верх сообщений обрезается, а расстояние до низа сохраняется, так
-// что сообщение, на которое смотрел пользователь, не уезжает.
-//
-// Высоту берём из visualViewport.height (детерминированно), а не из dvh: с
-// нативным adjustResize окно ужимается, здесь мы лишь синхронизируем панель и
-// возвращаем позицию прокрутки. Гейт на «инсет» убран — переанкоримся на ЛЮБОЕ
-// изменение высоты вьюпорта (в resize-режиме инсет всегда 0).
+/* Mobile keyboard: прокрутка ленты остаётся заякоренной У НИЗА — как в
+   Telegram: при появлении клавиатуры верх сообщений обрезается, а расстояние до
+   низа сохраняется, так что сообщение, на которое смотрел пользователь, не
+   уезжает.
+
+   Саму высоту панели подгонять больше не нужно: раздел живёт в области, которую
+   отвёл мобильный каркас, и при adjustResize она ужимается вместе с окном.
+   Значения вьюпорта храним только чтобы отличать реальное изменение от шума. */
 const viewportHeight = ref(0) // px; 0 — не мобилка / ещё не измеряли
 const viewportTop = ref(0)
 function onViewportChange() {
@@ -827,6 +831,12 @@ const groupPlural = computed(() => {
 // Активная вкладка списка слева: 'chats' | 'support'. Вторая доступна
 // только Администратору системы (он отвечает в чужие чаты техподдержки).
 const listTab = ref('chats')
+/* Ширина колонки списка. С рейлом папок панель шире ровно на него — условие то
+   же, что внутри ConversationList (вкладка «Чаты» и папки заведены): ширину
+   колонки задаёт каркас, поэтому знать о рейле приходится здесь. */
+const listWidth = computed(() =>
+  listTab.value === 'chats' && messenger.folders.length ? 416 : 340,
+)
 
 /* Для рут-админа техподдержка — отдельный inbox (входящие из чужих компаний),
    отображается на собственной вкладке. У обычных пользователей dev-чат с
@@ -1516,31 +1526,24 @@ watch(() => route.params.conversationId, async (id) => {
 }
 
 @media (max-width: 768px) {
-  /* Статичный полноэкранный макет: фиксируем к вьюпорту, чтобы экран не «ёрзал»
-     при показе/скрытии адресной строки браузера. Панель задач каркаса
-     (z-index 900) остаётся поверх; снизу резервируем под неё высоту. */
-  .messenger {
-    position: fixed;
-    inset: 0;
-    height: auto;
-    z-index: 100;
-  }
-
+  /* Раздел НЕ вырывается из потока: место между панелью статусов и панелью
+     задач ему уже отвёл мобильный каркас (AppScreen). Прежний
+     `position: fixed; inset: 0` — наследие времён до каркаса-«ОС»: он лез под
+     панель статусов (шапка чата обрезалась) и резервировал место под нижнюю
+     навигацию, которой давно нет. Остаётся только полноэкранный вид панели —
+     без рамки и скруглений, как у остальных разделов на телефоне. */
   .chat-panel {
-    position: fixed;
-    inset: 0;
-    z-index: 150;
     background: var(--color-bg);
     border: none;
     border-radius: 0;
-    padding-bottom: calc(64px + env(safe-area-inset-bottom, 0px));
   }
   /* ===== Шапка активного чата ===== */
+  /* Системный вырез отбирает сам каркас (AppScreen) — компенсировать его тут
+     значило бы отступать дважды. */
   .chat-header {
     padding: 8px 12px !important;
     gap: 10px !important;
     min-height: 56px;
-    padding-top: calc(8px + env(safe-area-inset-top, 0px)) !important;
   }
   .back-btn {
     width: 40px;
