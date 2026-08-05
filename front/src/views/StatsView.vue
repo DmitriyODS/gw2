@@ -1,52 +1,28 @@
 <template>
-  <div class="stats-view">
-    <!-- Прозрачный тулбар в стиле «Задач»: вкладки-режимы, период, действия. -->
-    <div class="stats-sticky">
-      <div class="stats-controls-row">
-        <AppTabs
-          class="stats-mode-tabs"
-          :model-value="mode"
-          :tabs="modeTabs"
-          :full-width="isMobile"
-          @update:model-value="switchMode($event)"
-        />
-        <StatsPeriodControl class="stats-period" @change="onPeriodChange" />
-        <div class="stats-actions">
-          <button
-            class="btn-glass"
-            title="Сбросить раскладку виджетов"
-            aria-label="Сбросить раскладку"
-            @click="resetLayout"
-          >
-            <span class="material-symbols-outlined">restart_alt</span>
-            <span class="stats-btn-label">Сбросить вид</span>
-          </button>
-          <a
-            href="/tv"
-            target="_blank"
-            rel="noopener"
-            class="btn-glass"
-            :title="isMobile ? 'ТВ-режим' : 'Открыть ТВ-режим в новой вкладке'"
-            :aria-label="'ТВ-режим'"
-          >
-            <span class="material-symbols-outlined">tv</span>
-            <span class="stats-btn-label">ТВ-режим</span>
-          </a>
-        </div>
-      </div>
-    </div>
+  <AppPage
+    class="stats"
+    title="Статистика"
+    :commands="commands"
+    :loading="hasCompany && loading"
+    @command="onCommand"
+  >
+    <template #subhead>
+      <AppTabs
+        class="stats-mode-tabs"
+        :model-value="mode"
+        :tabs="modeTabs"
+        :full-width="isMobile"
+        @update:model-value="switchMode($event)"
+      />
+      <StatsPeriodControl class="stats-period" @change="onPeriodChange" />
+    </template>
 
-    <div class="stats-scroll">
     <!-- Нет активной компании (например, супер-админ): статистика — контент компании. -->
     <EmptyState
       v-if="!hasCompany"
       icon="domain_disabled"
       subtitle="Статистика доступна в контексте компании. Выберите или создайте компанию."
     />
-
-    <div v-else-if="loading" class="loading-state">
-      <BrandLoader />
-    </div>
 
     <!-- Общая статистика -->
     <template v-else-if="mode === 'common' && commonData">
@@ -315,8 +291,7 @@
 
     <!-- Пустое состояние -->
     <EmptyState v-else-if="!loading" icon="bar_chart" subtitle="Нет данных за выбранный период" />
-    </div>
-  </div>
+  </AppPage>
 </template>
 
 <script setup>
@@ -339,6 +314,7 @@ import { formatHours } from '@/utils/time.js'
 import StatsPeriodControl from '@/components/stats/StatsPeriodControl.vue'
 import StatsWidget from '@/components/stats/StatsWidget.vue'
 import CalendarGrid from '@/components/stats/CalendarGrid.vue'
+import AppPage from '@/components/ui/AppPage.vue'
 import AppTabs from '@/components/ui/AppTabs.vue'
 import EmptyState from '@/components/common/EmptyState.vue'
 import DataTable from 'primevue/datatable'
@@ -363,6 +339,19 @@ const currentTo = ref('')
 const canExport = computed(() => isAtLeast(ROLES.MANAGER))
 const canExportUsers = computed(() => isAtLeast(ROLES.MANAGER))
 const canSelectEmployee = computed(() => isAtLeast(ROLES.MANAGER))
+
+/* Действия раздела. Обе второстепенные — уезжают в меню «ещё» и не спорят с
+   вкладками режимов и переключателем периода за место в строке. */
+const commands = [
+  { key: 'reset', label: 'Сбросить вид', icon: 'restart_alt' },
+  { key: 'tv', label: 'ТВ-режим', icon: 'tv' },
+]
+
+function onCommand(key) {
+  if (key === 'reset') resetLayout()
+  // ТВ-режим — отдельный полноэкранный вид (обычно на втором мониторе).
+  else if (key === 'tv') window.open('/tv', '_blank', 'noopener')
+}
 
 const modeTabs = [
   { value: 'common', label: 'Общая', icon: 'dashboard', tutorial: 'stats-tab-common' },
@@ -485,55 +474,6 @@ onMounted(() => {
 </script>
 
 <style scoped>
-.stats-view {
-  display: flex;
-  flex-direction: column;
-  height: 100%;
-  min-height: 0;
-  overflow: hidden;
-}
-
-.stats-sticky {
-  flex-shrink: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  padding: 16px 24px 10px;
-  z-index: 2;
-}
-
-.stats-scroll {
-  flex: 1;
-  min-height: 0;
-  overflow-y: auto;
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-  padding: 20px 24px;
-}
-
-.stats-controls-row {
-  display: flex;
-  align-items: center;
-  gap: 12px 16px;
-  flex-wrap: wrap;
-  padding: 2px 0;
-}
-
-.stats-actions {
-  margin-left: auto;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-
-.loading-state {
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  padding: 80px;
-}
 
 .resp-cell {
   display: flex;
@@ -839,47 +779,10 @@ onMounted(() => {
 }
 
 @media (max-width: 768px) {
-  .stats-sticky {
-    padding: 10px 14px 6px;
-    gap: 6px;
-  }
-
-  /* Компактная шапка: вкладки + действия в одной строке, период — под ними.
-     Иначе управление съедает пол-экрана, а контенту остаётся узкая полоска. */
-  .stats-controls-row {
-    display: grid;
-    grid-template-areas:
-      'tabs actions'
-      'period period';
-    grid-template-columns: 1fr auto;
-    align-items: center;
-    gap: 6px 8px;
-    padding: 0;
-  }
-
-  .stats-mode-tabs { grid-area: tabs; min-width: 0; }
-  .stats-period { grid-area: period; }
-
-  .stats-actions {
-    grid-area: actions;
-    margin-left: 0;
-    gap: 6px;
-  }
-
-  /* Кнопки действий — только иконки, 38px. */
-  .stats-btn-label { display: none; }
-  .stats-actions .btn-glass {
-    width: 38px;
-    height: 38px;
-    padding: 0;
-    justify-content: center;
-  }
-
-  .stats-scroll {
-    padding: 10px 14px;
-    padding-bottom: calc(64px + 12px + env(safe-area-inset-bottom, 0px));
-    gap: 12px;
-  }
+  /* Вкладки режимов берут строку целиком, период встаёт под ними: рядом они
+     сжимали друг друга, а действия ушли в меню «ещё» шапки. */
+  .stats-mode-tabs { flex: 1 1 100%; min-width: 0; }
+  .stats-period { flex: 1 1 100%; }
 
   .stats-grid {
     grid-template-columns: 1fr;
@@ -902,15 +805,6 @@ onMounted(() => {
 }
 
 @media (max-width: 480px) {
-  .stats-sticky {
-    padding: 8px 12px 6px;
-  }
-
-  .stats-scroll {
-    padding: 10px 12px;
-    padding-bottom: calc(64px + 12px + env(safe-area-inset-bottom, 0px));
-  }
-
   .task-tile {
     padding: 12px;
     min-height: 88px;
