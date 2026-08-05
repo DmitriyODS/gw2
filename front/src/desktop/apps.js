@@ -10,6 +10,7 @@
  */
 
 import { resolveSectionKey } from '@/utils/settingsSections.js'
+import { SUBSCRIPTIONS_VISIBLE } from '@/utils/release.js'
 
 export const APP_GROUPS = [
   { key: 'work', label: 'Рабочие процессы' },
@@ -227,7 +228,10 @@ export const APPS = [
     match: (p) => p.startsWith('/store'),
     size: [1100, 800],
     min: [520, 460],
-    available: always,
+    // Витрина ждёт оплату — раздел скрыт целиком (см. utils/release.js).
+    // Правило `available` заодно закрывает и прямую ссылку: каркас не откроет
+    // окно раздела, которого пользователю не положено.
+    available: () => SUBSCRIPTIONS_VISIBLE,
   },
 ]
 

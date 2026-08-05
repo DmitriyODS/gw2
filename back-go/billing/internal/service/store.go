@@ -175,7 +175,8 @@ func (s *Service) grantPlan(ctx domain.Ctx, userID int64, plan string, days int,
 	if err := s.Subs.SaveSubscription(ctx, next); err != nil {
 		return nil, err
 	}
-	if _, err := s.AI.EnsureBalance(ctx, userID, max(domain.LimitsFor(plan).AITokens, 0), now); err != nil {
+	quota, periodEnd := domain.AIQuota(domain.LimitsFor(plan), now)
+	if _, err := s.AI.EnsureBalance(ctx, userID, quota, now, periodEnd); err != nil {
 		s.Log.Warn("billing.ai_balance_refresh_failed", "user_id", userID, "error", err)
 	}
 	s.publish(ctx, "billing:subscription", userID, map[string]any{"plan": plan, "expires_at": until})

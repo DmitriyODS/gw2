@@ -328,6 +328,9 @@ type Entitlements struct {
 	Limits    Limits     `json:"limits"`
 
 	StorageUsed int64 `json:"storage_used"`
+	// TokensLimit — квота ТЕКУЩЕГО периода. Не равна Limits.AITokens, пока
+	// подписки скрыты: тогда всем выдаётся одинаковая суточная норма (AIQuota).
+	TokensLimit int64 `json:"tokens_limit"`
 	TokensUsed  int64 `json:"tokens_used"`
 	TokensLeft  int64 `json:"tokens_left"`
 

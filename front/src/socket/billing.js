@@ -1,6 +1,7 @@
 import { useBillingStore } from '@/stores/billing.js'
 import { useNotificationsStore } from '@/stores/notifications.js'
 import { pushNotification } from '@/composables/useDesktopNotifications.js'
+import { SUBSCRIPTIONS_VISIBLE } from '@/utils/release.js'
 
 /* События биллинга приходят только в комнату владельца: покупка, продление,
    начисление токенов, продажа своего товара и решение модерации. Любое из них
@@ -9,9 +10,15 @@ import { pushNotification } from '@/composables/useDesktopNotifications.js'
 export function registerBillingSocketHandlers(socket) {
   const refresh = () => useBillingStore().applyEvent()
 
+  socket.on('billing:tokens', refresh)
+
+  /* Пока подписки скрыты (см. utils/release.js), от биллинга остаются только
+     токены ИИ: покупок нет, счетов нет, витрины нет — и уведомлять человека о
+     тарифе, которого он не видит, незачем. */
+  if (!SUBSCRIPTIONS_VISIBLE) return
+
   socket.on('billing:subscription', refresh)
   socket.on('billing:addon', refresh)
-  socket.on('billing:tokens', refresh)
   socket.on('billing:product', refresh)
 
   // Счёт на автопродление больше нигде не всплывает — кладём его в центр

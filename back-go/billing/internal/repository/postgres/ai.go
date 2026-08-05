@@ -23,15 +23,15 @@ func (r *Repo) GetBalance(ctx context.Context, userID int64) (*domain.AIBalance,
 	return &b, nil
 }
 
-// EnsureBalance — баланс с ленивым ролловером периода: если месяц кончился,
-// расход обнуляется, квота выставляется по текущему тарифу, а докупленные
-// токены остаются. Отдельного шедулера для этого не нужно — баланс всё равно
-// читается перед каждым обращением к модели.
-func (r *Repo) EnsureBalance(ctx context.Context, userID int64, planTokens int64, now time.Time) (*domain.AIBalance, error) {
+// EnsureBalance — баланс с ленивым ролловером периода: если период кончился,
+// расход обнуляется, квота выставляется заново, а докупленные токены остаются.
+// Отдельного шедулера для этого не нужно — баланс всё равно читается перед
+// каждым обращением к модели. Границу периода считает домен (AIQuota).
+func (r *Repo) EnsureBalance(ctx context.Context, userID int64, planTokens int64, now, periodEnd time.Time) (*domain.AIBalance, error) {
 	var b domain.AIBalance
 	err := r.pool.QueryRow(ctx, `
 		INSERT INTO billing_ai_balances (user_id, plan_tokens, period_start, period_end)
-		VALUES ($1, $2, $3, $3 + interval '1 month')
+		VALUES ($1, $2, $3, $4)
 		ON CONFLICT (user_id) DO UPDATE
 		   SET plan_tokens = CASE WHEN billing_ai_balances.period_end <= $3 THEN EXCLUDED.plan_tokens
 		                          ELSE $2 END,
@@ -39,11 +39,11 @@ func (r *Repo) EnsureBalance(ctx context.Context, userID int64, planTokens int64
 		                          ELSE billing_ai_balances.used_tokens END,
 		       period_start = CASE WHEN billing_ai_balances.period_end <= $3 THEN $3
 		                           ELSE billing_ai_balances.period_start END,
-		       period_end = CASE WHEN billing_ai_balances.period_end <= $3 THEN $3 + interval '1 month'
+		       period_end = CASE WHEN billing_ai_balances.period_end <= $3 THEN $4
 		                         ELSE billing_ai_balances.period_end END,
 		       updated_at = now()
 		RETURNING user_id, plan_tokens, used_tokens, extra_tokens, period_start, period_end`,
-		userID, planTokens, now).
+		userID, planTokens, now, periodEnd).
 		Scan(&b.UserID, &b.PlanTokens, &b.UsedTokens, &b.ExtraTokens, &b.PeriodStart, &b.PeriodEnd)
 	if err != nil {
 		return nil, err

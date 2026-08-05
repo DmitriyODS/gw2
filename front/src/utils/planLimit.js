@@ -6,6 +6,8 @@
    Стор уведомлений импортируется лениво: utils не должен тянуть pinia в
    момент загрузки модуля (иначе ломается порядок инициализации приложения). */
 
+import { SUBSCRIPTIONS_VISIBLE } from '@/utils/release.js'
+
 // Одно и то же ограничение за пару секунд показываем один раз: сохранение
 // формы часто дёргает несколько запросов подряд.
 const shown = new Map()
@@ -21,7 +23,7 @@ export async function notifyPlanLimit(err) {
   useNotificationsStore().notify({
     severity: 'warn',
     summary: summaryFor(err),
-    detail: err?.message || 'Оформите подписку в магазине, чтобы продолжить.',
+    detail: err?.message || detailFor(err),
     life: 8000,
   })
 }
@@ -30,4 +32,15 @@ function summaryFor(err) {
   if (err?.error === 'AI_NO_TOKENS') return 'Закончились токены ИИ'
   if (err?.error === 'PLAN_FEATURE_REQUIRED') return 'Возможность платного тарифа'
   return 'Достигнут предел тарифа'
+}
+
+/* Пока подписки скрыты, звать в магазин некуда (см. utils/release.js) —
+   а из ограничений остаётся только дневная норма токенов ИИ. */
+function detailFor(err) {
+  if (!SUBSCRIPTIONS_VISIBLE) {
+    return err?.error === 'AI_NO_TOKENS'
+      ? 'Дневная норма израсходована — она обновится завтра.'
+      : 'Попробуйте позже.'
+  }
+  return 'Оформите подписку в магазине, чтобы продолжить.'
 }

@@ -1,5 +1,7 @@
 package domain
 
+import "time"
+
 // Линейка тарифов. ЛИМИТЫ конечны и живут здесь (менять их — правка кода и
 // выката), а ЦЕНЫ, названия и подводки правит супер-админ в разделе «Аудит
 // платформы» — они в таблице billing_plans.
@@ -12,6 +14,80 @@ package domain
 
 // Unlimited — «без ограничения».
 const Unlimited = -1
+
+/* Подписки и оплата не успели к выпуску 7.0 и СКРЫТЫ от пользователя: витрины,
+   тарифов и счетов он не видит. Механика ниже остаётся целой и вернётся вместе
+   с оплатой, но пока платить не за что — токены ИИ выдаются всем одинаково и не
+   зависят от тарифа: DailyAITokens в сутки, период тоже сутки (по МСК, как и
+   остальная статистика платформы).
+
+   Вернуть тарифную квоту = снять SubscriptionsHidden: AIQuota снова начнёт
+   отдавать Limits.AITokens и месячный период. */
+
+const (
+	// SubscriptionsHidden — подписки скрыты от пользователя (см. выше).
+	SubscriptionsHidden = true
+	// DailyAITokens — сколько токенов доступа получает КАЖДЫЙ пользователь в сутки.
+	DailyAITokens int64 = 1000
+)
+
+// MoscowOffset — смещение МСК: сутки квоты кончаются в московскую полночь.
+const MoscowOffset = 3 * time.Hour
+
+/* EffectiveLimits — лимиты, которые реально применяются к пользователю.
+
+   Пока подписки скрыты, тариф ограничивать НЕ ДОЛЖЕН: заплатить всё равно
+   нельзя, а бесплатный «Джун» разрешает одну доску, один календарь и трёх
+   человек в компании — упёршемуся некуда идти. Поэтому счётные лимиты
+   становятся безграничными, а платные возможности — доступными. Единственное
+   ограничение, которое остаётся, — токены ИИ: они стоят живых денег, и их
+   выдаёт AIQuota.
+
+   Тарифная линейка при этом цела: PlanLimits не тронут, и снятие
+   SubscriptionsHidden возвращает всё как было. */
+func EffectiveLimits(l Limits) Limits {
+	if !SubscriptionsHidden {
+		return l
+	}
+	return Limits{
+		Tasks:            Unlimited,
+		Companies:        Unlimited,
+		Members:          Unlimited,
+		StorageBytes:     Unlimited,
+		AITokens:         l.AITokens, // не участвует: квоту считает AIQuota
+		Calendars:        Unlimited,
+		Diaries:          Unlimited,
+		Boards:           Unlimited,
+		Registries:       Unlimited,
+		ChatFolders:      Unlimited,
+		CallParticipants: Unlimited,
+
+		DataTransfer:    true,
+		AdvancedStats:   true,
+		Portal:          true,
+		UserStatuses:    true,
+		PremiumThemes:   true,
+		PremiumPetSkins: true,
+		PremiumPetHouse: true,
+		PremiumPetGoods: true,
+	}
+}
+
+// AIQuota — сколько токенов выдано пользователю и когда период закончится.
+// Пока подписки скрыты, тариф на это не влияет.
+func AIQuota(limits Limits, now time.Time) (tokens int64, periodEnd time.Time) {
+	if SubscriptionsHidden {
+		return DailyAITokens, nextMoscowMidnight(now)
+	}
+	return max(limits.AITokens, 0), now.AddDate(0, 1, 0)
+}
+
+// nextMoscowMidnight — ближайшая полночь по Москве после now.
+func nextMoscowMidnight(now time.Time) time.Time {
+	msk := now.UTC().Add(MoscowOffset)
+	midnight := time.Date(msk.Year(), msk.Month(), msk.Day(), 0, 0, 0, 0, time.UTC).AddDate(0, 0, 1)
+	return midnight.Add(-MoscowOffset)
+}
 
 // Коды тарифов.
 const (

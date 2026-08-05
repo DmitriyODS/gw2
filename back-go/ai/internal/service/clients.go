@@ -165,9 +165,12 @@ func (s *Service) userClientForFeature(ctx context.Context, userID int64, featur
 	}
 	c := *client
 	c.payerID = userID
-	// Модель выбирает пользователь — но только из включённого каталога.
-	if cat, err := s.catalog(ctx); err == nil && cat.Allowed(settings.ChatModel()) {
-		c.modelChat = settings.ChatModel()
+	// Модель выбирает пользователь — но только из включённого каталога. Пока
+	// выбор закрыт (ModelChoiceLocked), все остаются на модели платформы.
+	if !domain.ModelChoiceLocked {
+		if cat, err := s.catalog(ctx); err == nil && cat.Allowed(settings.ChatModel()) {
+			c.modelChat = settings.ChatModel()
+		}
 	}
 	return &c, nil
 }

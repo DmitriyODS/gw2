@@ -34,9 +34,16 @@ func (s *Service) dumpMySettings(ctx context.Context, u *domain.UserAI) *dto.MyA
 		TokensLimit:   -1,
 		TokensLeft:    -1,
 		Models:        []*dto.AIModel{},
+		// На своём ключе человек волен брать любую модель — платит он сам.
+		ModelLocked: domain.ModelChoiceLocked && !u.OwnKey(),
 	}
 	if p, err := s.platformAI(ctx); err == nil {
 		out.PlatformReady = p.Ready()
+		// Пока выбор закрыт, отвечает модель платформы — её и показываем,
+		// иначе карточка настроек называла бы модель, которой не пользуются.
+		if out.ModelLocked {
+			out.ModelChat = firstNonEmpty(p.ModelChat, domain.PlatformModelChat)
+		}
 	}
 	if cat, err := s.catalog(ctx); err == nil {
 		for _, m := range cat.Selectable() {

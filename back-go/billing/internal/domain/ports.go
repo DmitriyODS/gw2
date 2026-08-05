@@ -97,9 +97,10 @@ type AIRepository interface {
 	// entitlements). Ролловер периода здесь только вычисляется, не пишется —
 	// частый поллинг клиента не должен гонять read-modify-write.
 	GetBalance(ctx Ctx, userID int64) (*AIBalance, error)
-	// EnsureBalance — баланс пользователя с ленивым ролловером периода:
-	// начало нового месяца обнуляет расход и ставит квоту тарифа.
-	EnsureBalance(ctx Ctx, userID int64, planTokens int64, now time.Time) (*AIBalance, error)
+	// EnsureBalance — баланс пользователя с ленивым ролловером периода: конец
+	// периода обнуляет расход и ставит новую квоту до periodEnd. Длину периода
+	// (сутки или месяц) решает домен — см. AIQuota.
+	EnsureBalance(ctx Ctx, userID int64, planTokens int64, now, periodEnd time.Time) (*AIBalance, error)
 	// Consume — атомарно списать токены; false, если не хватило.
 	Consume(ctx Ctx, userID int64, tokens int64) (bool, *AIBalance, error)
 	AddExtraTokens(ctx Ctx, userID int64, tokens int64) error

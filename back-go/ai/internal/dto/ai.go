@@ -46,6 +46,10 @@ type MyAiSettings struct {
 	TokensLimit   int64      `json:"tokens_limit"`
 	TokensLeft    int64      `json:"tokens_left"`
 	Models        []*AIModel `json:"models"`
+	// ModelLocked — выбор модели закрыт, все работают на модели платформы.
+	// Каталог при этом всё равно приходит: он нужен, чтобы показать, на чём
+	// сейчас отвечает ИИ.
+	ModelLocked bool `json:"model_locked"`
 }
 
 // AIModel — модель из каталога платформы глазами пользователя.

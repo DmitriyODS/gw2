@@ -149,3 +149,25 @@ func TestTestMySettings_PingsChatOnly(t *testing.T) {
 		t.Fatalf("личный ключ эмбеддинги не обслуживает: %+v", got)
 	}
 }
+
+/* Выбор модели закрыт (domain.ModelChoiceLocked): что бы пользователь ни выбрал
+   раньше, на платформенном ключе отвечает модель платформы — и настройки
+   сообщают об этом честно, а не показывают неиспользуемый выбор. */
+func TestMySettings_ModelLockedShowsPlatformModel(t *testing.T) {
+	if !domain.ModelChoiceLocked {
+		t.Skip("выбор модели снова открыт")
+	}
+	svc, repo := newUserSettingsService()
+	repo.userAI[10] = &domain.UserAI{UserID: 10, Enabled: true, ModelChat: "gemini-pro"}
+
+	got, err := svc.GetMySettings(context.Background(), 10)
+	if err != nil {
+		t.Fatalf("GetMySettings: %v", err)
+	}
+	if !got.ModelLocked {
+		t.Fatal("ожидался закрытый выбор модели")
+	}
+	if got.ModelChat != domain.PlatformModelChat {
+		t.Fatalf("модель %q, ждали платформенную %q", got.ModelChat, domain.PlatformModelChat)
+	}
+}

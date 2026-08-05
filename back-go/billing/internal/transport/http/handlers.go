@@ -40,7 +40,7 @@ func (h *handlers) aiState(c *fiber.Ctx) error {
 		return h.fail(c, err)
 	}
 	return c.JSON(fiber.Map{
-		"tokens_limit": ent.Limits.AITokens,
+		"tokens_limit": ent.TokensLimit,
 		"tokens_used":  ent.TokensUsed,
 		"tokens_left":  ent.TokensLeft,
 		"plan":         ent.Plan,

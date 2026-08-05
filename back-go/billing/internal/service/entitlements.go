@@ -52,6 +52,9 @@ func (s *Service) Entitlements(ctx domain.Ctx, userID, companyID int64) (*domain
 		return nil, err
 	}
 	applyAddons(&ent.Limits, addons, companyID)
+	// Последним словом идёт состояние выпуска: пока подписки скрыты, тариф
+	// никого не ограничивает (см. EffectiveLimits).
+	ent.Limits = domain.EffectiveLimits(ent.Limits)
 
 	used, err := s.Storage.Total(ctx, ownerID)
 	if err != nil {
@@ -63,7 +66,8 @@ func (s *Service) Entitlements(ctx domain.Ctx, userID, companyID int64) (*domain
 	if err != nil {
 		return nil, err
 	}
-	ent.TokensUsed, ent.TokensLeft = tokenState(balance, ent.Limits.AITokens, now)
+	ent.TokensLimit, _ = domain.AIQuota(ent.Limits, now)
+	ent.TokensUsed, ent.TokensLeft = tokenState(balance, ent.TokensLimit, now)
 	return ent, nil
 }
 
@@ -157,11 +161,24 @@ func (s *Service) AIState(ctx domain.Ctx, userID int64) (*domain.Entitlements, m
 	if err != nil {
 		return nil, nil, err
 	}
-	usage, err := s.AI.UsageByFeature(ctx, userID, s.now().AddDate(0, -1, 0))
+	// Расход показываем за ТОТ ЖЕ период, что и квота: иначе «использовано»
+	// не сходится с «осталось» — за месяц набегает больше, чем даёт сутки.
+	now := s.now()
+	_, periodEnd := domain.AIQuota(ent.Limits, now)
+	usage, err := s.AI.UsageByFeature(ctx, userID, periodStart(now, periodEnd))
 	if err != nil {
 		return nil, nil, err
 	}
 	return ent, usage, nil
+}
+
+// periodStart — начало текущего периода квоты: столько же назад, сколько до его
+// конца вперёд (сутки для суточной квоты, месяц для месячной).
+func periodStart(now, periodEnd time.Time) time.Time {
+	if domain.SubscriptionsHidden {
+		return periodEnd.AddDate(0, 0, -1)
+	}
+	return now.AddDate(0, -1, 0)
 }
 
 // CheckAI — можно ли обратиться к модели: возвращает плательщика (для
@@ -189,7 +206,9 @@ func (s *Service) ConsumeAI(ctx domain.Ctx, rec domain.AIUsageRecord) (ok bool, 
 	if err != nil {
 		return false, 0, err
 	}
-	if _, err := s.AI.EnsureBalance(ctx, payerID, max(ent.Limits.AITokens, 0), s.now()); err != nil {
+	now := s.now()
+	quota, periodEnd := domain.AIQuota(ent.Limits, now)
+	if _, err := s.AI.EnsureBalance(ctx, payerID, quota, now, periodEnd); err != nil {
 		return false, 0, err
 	}
 	ok, balance, err := s.AI.Consume(ctx, payerID, rec.BilledTokens)

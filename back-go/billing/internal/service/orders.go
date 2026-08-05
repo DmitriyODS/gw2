@@ -313,7 +313,8 @@ func (s *Service) applySubscription(ctx domain.Ctx, order *domain.Order) error {
 	}
 	// Квота токенов подтягивается под новый тариф сразу, а не со следующего
 	// обращения к модели.
-	if _, err := s.AI.EnsureBalance(ctx, order.UserID, max(domain.LimitsFor(next.PlanCode).AITokens, 0), now); err != nil {
+	quota, periodEnd := domain.AIQuota(domain.LimitsFor(next.PlanCode), now)
+	if _, err := s.AI.EnsureBalance(ctx, order.UserID, quota, now, periodEnd); err != nil {
 		s.Log.Warn("billing.ai_balance_refresh_failed", "user_id", order.UserID, "error", err)
 	}
 	s.publish(ctx, "billing:subscription", order.UserID, map[string]any{

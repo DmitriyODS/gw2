@@ -265,15 +265,15 @@ func (r *fakeRepo) ProcessPayout(context.Context, int64, string, string) error {
 func (r *fakeRepo) GetBalance(_ context.Context, userID int64) (*domain.AIBalance, error) {
 	return r.balance[userID], nil
 }
-func (r *fakeRepo) EnsureBalance(_ context.Context, userID int64, planTokens int64, now time.Time) (*domain.AIBalance, error) {
+func (r *fakeRepo) EnsureBalance(_ context.Context, userID int64, planTokens int64, now, periodEnd time.Time) (*domain.AIBalance, error) {
 	b := r.balance[userID]
 	if b == nil {
-		b = &domain.AIBalance{UserID: userID, PeriodStart: now, PeriodEnd: now.AddDate(0, 1, 0)}
+		b = &domain.AIBalance{UserID: userID, PeriodStart: now, PeriodEnd: periodEnd}
 		r.balance[userID] = b
 	}
 	if !b.PeriodEnd.After(now) {
 		b.UsedTokens = 0
-		b.PeriodStart, b.PeriodEnd = now, now.AddDate(0, 1, 0)
+		b.PeriodStart, b.PeriodEnd = now, periodEnd
 	}
 	b.PlanTokens = planTokens
 	return b, nil
@@ -388,6 +388,9 @@ func newService(t *testing.T) (*Service, *fakeRepo, *fakeIdentity) {
 
 // Без подписки действует бесплатный тариф со своими лимитами.
 func TestEntitlementsDefaultsToFreePlan(t *testing.T) {
+	if domain.SubscriptionsHidden {
+		t.Skip("подписки скрыты: тариф никого не ограничивает (см. EffectiveLimits)")
+	}
 	svc, _, _ := newService(t)
 	ent, err := svc.Entitlements(context.Background(), 1, 0)
 	if err != nil {
@@ -406,6 +409,9 @@ func TestEntitlementsDefaultsToFreePlan(t *testing.T) {
 
 // Компания наследует тариф своего СОЗДАТЕЛЯ, а не того, кто спрашивает.
 func TestCompanyInheritsOwnerPlan(t *testing.T) {
+	if domain.SubscriptionsHidden {
+		t.Skip("подписки скрыты: тариф никого не ограничивает (см. EffectiveLimits)")
+	}
 	svc, repo, identity := newService(t)
 	until := time.Now().AddDate(0, 1, 0)
 	repo.subs[7] = &domain.Subscription{UserID: 7, PlanCode: domain.PlanSenior, ExpiresAt: &until}
@@ -437,6 +443,9 @@ func TestExpiredSubscriptionIsIgnored(t *testing.T) {
 
 // Докупленное место складывается с лимитом тарифа.
 func TestStorageAddonExtendsLimit(t *testing.T) {
+	if domain.SubscriptionsHidden {
+		t.Skip("подписки скрыты: тариф никого не ограничивает (см. EffectiveLimits)")
+	}
 	svc, repo, _ := newService(t)
 	repo.uaddons[1] = []*domain.UserAddon{{
 		ID: 1, UserID: 1, AddonCode: "storage_10", Kind: domain.AddonStorage,
@@ -451,6 +460,9 @@ func TestStorageAddonExtendsLimit(t *testing.T) {
 
 // Место сотрудника действует только в той компании, куда его купили.
 func TestMemberAddonIsCompanyScoped(t *testing.T) {
+	if domain.SubscriptionsHidden {
+		t.Skip("подписки скрыты: тариф никого не ограничивает (см. EffectiveLimits)")
+	}
 	svc, repo, identity := newService(t)
 	identity.owners[10] = 1
 	identity.owners[20] = 1
@@ -567,7 +579,7 @@ func TestConsumeAIUsesQuotaThenExtra(t *testing.T) {
 	ctx := context.Background()
 	until := time.Now().AddDate(0, 1, 0)
 	repo.subs[5] = &domain.Subscription{UserID: 5, PlanCode: domain.PlanMiddle, ExpiresAt: &until}
-	if _, err := repo.EnsureBalance(ctx, 5, 1000, time.Now()); err != nil {
+	if _, err := repo.EnsureBalance(ctx, 5, 1000, time.Now(), time.Now().AddDate(0, 0, 1)); err != nil {
 		t.Fatalf("EnsureBalance: %v", err)
 	}
 	repo.balance[5].ExtraTokens = 200
@@ -590,7 +602,7 @@ func TestConsumeAIUsesQuotaThenExtra(t *testing.T) {
 func TestConsumeAIOwnKeyDoesNotSpend(t *testing.T) {
 	svc, repo, _ := newService(t)
 	ctx := context.Background()
-	if _, err := repo.EnsureBalance(ctx, 6, 1000, time.Now()); err != nil {
+	if _, err := repo.EnsureBalance(ctx, 6, 1000, time.Now(), time.Now().AddDate(0, 0, 1)); err != nil {
 		t.Fatalf("EnsureBalance: %v", err)
 	}
 	ok, _, err := svc.ConsumeAI(ctx, domain.AIUsageRecord{
@@ -606,6 +618,9 @@ func TestConsumeAIOwnKeyDoesNotSpend(t *testing.T) {
 
 // Проверка места: файл больше остатка не проходит.
 func TestCheckStorage(t *testing.T) {
+	if domain.SubscriptionsHidden {
+		t.Skip("подписки скрыты: место не ограничено (см. EffectiveLimits)")
+	}
 	svc, repo, _ := newService(t)
 	ctx := context.Background()
 	repo.storage[1] = 5*domain.GiB - 1024 // «Джун» — 5 Гб
