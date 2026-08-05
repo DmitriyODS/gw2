@@ -17,6 +17,7 @@ import * as api from '@/api/boards.js'
 import { emptyScene, normalizeScene } from '@/utils/boardScene.js'
 import { saveBlob, sceneToJpeg, sceneToPdf, sceneToPng } from '@/utils/boardExport.js'
 import { useBoardCollab } from '@/composables/useBoardCollab.js'
+import { useBreakpoint } from '@/composables/useBreakpoint.js'
 import { useAuthStore } from '@/stores/auth.js'
 import { useBoardsStore } from '@/stores/boards.js'
 import { useNotificationsStore } from '@/stores/notifications.js'
@@ -51,6 +52,8 @@ const layersOpen = ref(false)
 const activeComment = ref(null)
 const commentAnchor = ref({ x: 0, y: 0 })
 const exportMenu = ref({ visible: false, x: 0, y: 0 })
+const boardMenu = ref({ visible: false, x: 0, y: 0 })
+const { isMobile } = useBreakpoint()
 
 // История: снимки сцены до правки. Хранится здесь, а не в сторе — она нужна
 // только открытому редактору и не переживает выход из доски.
@@ -253,6 +256,45 @@ async function onImagePicked(e) {
 
 // ── Выгрузка ─────────────────────────────────────────────────────
 
+/* Те же действия, что в ряду кнопок на широком экране. Фон — подменю: три
+   варианта отдельными пунктами заняли бы половину списка. */
+const boardMenuItems = computed(() => [
+  { label: 'Отменить', icon: 'undo', action: 'undo', disabled: !undoStack.value.length },
+  { label: 'Повторить', icon: 'redo', action: 'redo', disabled: !redoStack.value.length },
+  { divider: true },
+  {
+    label: 'Фон',
+    icon: 'grid_4x4',
+    children: [
+      { label: 'Сетка', icon: 'grid_4x4', action: 'bg:grid' },
+      { label: 'Точки', icon: 'blur_on', action: 'bg:dots' },
+      { label: 'Чистый', icon: 'crop_portrait', action: 'bg:plain' },
+    ],
+  },
+  { label: layersOpen.value ? 'Скрыть слои' : 'Слои', icon: 'layers', action: 'layers' },
+  { divider: true },
+  { label: 'Скачать', icon: 'download', action: 'export' },
+  ...(canEdit.value ? [{ label: 'Поделиться', icon: 'share', action: 'share' }] : []),
+])
+
+function openBoardMenu(e) {
+  const r = e.currentTarget.getBoundingClientRect()
+  boardMenu.value = { visible: true, x: r.right, y: r.bottom + 4 }
+}
+
+function onBoardMenu(action) {
+  boardMenu.value.visible = false
+  if (action === 'undo') undo()
+  else if (action === 'redo') redo()
+  else if (action.startsWith('bg:')) setBackground(action.slice(3))
+  else if (action === 'layers') layersOpen.value = !layersOpen.value
+  else if (action === 'share') shareOpen.value = true
+  // Экспорт — своё меню; открываем его там же, где стояло это.
+  else if (action === 'export') {
+    exportMenu.value = { visible: true, x: boardMenu.value.x, y: boardMenu.value.y }
+  }
+}
+
 const EXPORT_ITEMS = [
   { label: 'Картинка PNG', icon: 'image', action: 'png' },
   { label: 'Картинка JPG', icon: 'photo', action: 'jpg' },
@@ -358,7 +400,21 @@ watch(title, () => {
       <span v-if="saving" class="be-state">Сохраняем…</span>
       <span v-else-if="!canEdit" class="be-state">Только просмотр</span>
 
-      <div class="be-actions">
+      <!-- На телефоне ряд из семи кнопок не помещается: он переносился второй
+           строкой, а поле названия схлопывалось в кружок. Поэтому всё, кроме
+           отмены/повтора, уходит в меню. -->
+      <button
+        v-if="isMobile"
+        type="button"
+        class="be-btn"
+        title="Действия с доской"
+        aria-label="Действия с доской"
+        @click="openBoardMenu"
+      >
+        <span class="material-symbols-outlined">more_vert</span>
+      </button>
+
+      <div v-else class="be-actions">
         <button type="button" class="be-btn" title="Отменить" aria-label="Отменить" :disabled="!undoStack.length" @click="undo">
           <span class="material-symbols-outlined">undo</span>
         </button>
@@ -466,6 +522,15 @@ watch(title, () => {
     </div>
 
     <input ref="fileInput" type="file" accept="image/*" hidden @change="onImagePicked" />
+
+    <ContextMenu
+      :visible="boardMenu.visible"
+      :x="boardMenu.x"
+      :y="boardMenu.y"
+      :items="boardMenuItems"
+      @select="onBoardMenu"
+      @close="boardMenu.visible = false"
+    />
 
     <ContextMenu
       :visible="exportMenu.visible"
@@ -591,6 +656,11 @@ watch(title, () => {
 
 @media (max-width: 768px) {
   .be :deep(.page-body) { padding: 4px; gap: 4px; }
-  .be-actions { flex-wrap: wrap; justify-content: flex-end; }
+  /* Шапка — одна строка: назад, название и меню. Ряд кнопок сюда не помещался
+     и переносился второй строкой, отбирая место у названия. */
+  .be-head { flex-wrap: nowrap; }
+  .be-title { min-width: 80px; }
+  /* Соавторов и статус в узкой шапке не показываем — они есть в самой доске. */
+  .be-peers, .be-state { display: none; }
 }
 </style>

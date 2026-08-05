@@ -18,6 +18,7 @@
             class="ctxm-item"
             :class="{ danger: item.danger, 'has-sub': item.children, open: activeSub === i }"
             role="menuitem"
+            :disabled="item.disabled"
             @mouseenter="onEnter(item, i, $event)"
             @click="onItemClick(item, i, $event)"
           >
@@ -59,7 +60,7 @@ const props = defineProps({
   visible: { type: Boolean, default: false },
   x: { type: Number, default: 0 },
   y: { type: Number, default: 0 },
-  // Пункты: { label, icon?, action?, danger?, divider?, children?: [...] }.
+  // Пункты: { label, icon?, action?, danger?, disabled?, divider?, children?: [...] }.
   items: { type: Array, default: () => [] },
 })
 const emit = defineEmits(['select', 'close'])
@@ -125,6 +126,7 @@ function onEnter(item, i, e) {
   else activeSub.value = null
 }
 function onItemClick(item, i, e) {
+  if (item.disabled) return
   if (item.children) { openSub(i, e); return } // тач: клик раскрывает подменю
   pick(item)
 }
@@ -192,7 +194,13 @@ onBeforeUnmount(() => {
   border-radius: var(--radius-sm, 8px);
   cursor: pointer;
 }
-.ctxm-item:hover, .ctxm-item.open { background: var(--color-surface-low); }
+.ctxm-item:disabled {
+  opacity: 0.45;
+  cursor: default;
+  background: none;
+}
+
+.ctxm-item:not(:disabled):hover, .ctxm-item.open { background: var(--color-surface-low); }
 .ctxm-item.danger { color: var(--color-error); }
 .ctxm-item.danger:hover { background: var(--color-error-container); color: var(--color-on-error-container); }
 .ctxm-item .material-symbols-outlined { font-size: 18px; }
