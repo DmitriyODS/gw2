@@ -38,6 +38,13 @@
 
           <div v-if="slots.status" class="head-status"><slot name="status" :narrow="narrowPage" /></div>
 
+          <!-- Поиск раздела: в тесной панели он свёрнут в лупу и встаёт ПРЯМО
+               в строку названия — иначе отдельная строка ради одной кнопки
+               съедала бы у содержимого полсотни пикселей. -->
+          <div v-if="slots.search && narrowPage" class="head-search compact">
+            <slot name="search" :narrow="true" />
+          </div>
+
           <!-- Команды стоят при названии, а не при фильтрах: так строка ниже
                целиком достаётся вкладкам и поиску, и ничто не наезжает. В тесной
                панели они уходят на свою строку (см. ниже). -->
@@ -84,6 +91,8 @@
             :title="backLabel"
             @click="$emit('back')"
           />
+
+          <div v-if="slots.search && !narrowPage" class="head-search"><slot name="search" :narrow="false" /></div>
 
           <div v-if="slots.subhead" class="head-sub"><slot name="subhead" :narrow="narrowPage" /></div>
 
@@ -229,9 +238,15 @@ const commandsBelow = computed(() =>
   hasTitleRow.value && narrowPage.value && barCommands.value.some((c) => c.primary),
 )
 
+/* Команды считаются за строку управления, ТОЛЬКО когда рисуются в ней: при
+   заголовке они стоят в его строке, и раньше шапка добавляла ниже пустую
+   строку — лишний отступ на пустом месте (заметно на телефоне). */
 const hasControlsRow = computed(() =>
-  !!slots.subhead || !!slots.commands || barCommands.value.length > 0 ||
-  (!hasTitleRow.value && (props.back || props.menu || !!slots.status)),
+  !!slots.subhead ||
+  (!!slots.search && !narrowPage.value) ||
+  (!hasTitleRow.value && (
+    !!slots.commands || barCommands.value.length > 0 || props.back || props.menu || !!slots.status
+  )),
 )
 
 const hasHead = computed(() => hasTitleRow.value || hasControlsRow.value)
@@ -309,8 +324,11 @@ const hasHead = computed(() => hasTitleRow.value || hasControlsRow.value)
   min-width: 0;
 }
 
+/* Базис 0, а не auto: с «auto» гипотетический размер названия равен его тексту
+   целиком, и длинное имя (реестра, календаря) выталкивало кнопку возврата и
+   команды каждую на свою строку — шапка вырастала втрое. */
 .page-title {
-  flex: 1 1 auto;
+  flex: 1 1 0;
   min-width: 0;
   margin: 0;
   font-size: 1.65rem;
@@ -336,6 +354,11 @@ const hasHead = computed(() => hasTitleRow.value || hasControlsRow.value)
 /* Поиску нужен собственный минимум: со сжатием до нуля он превращался в
    бесполезную пилюлю с одной лупой. Не хватило места — переезжает на свою строку. */
 .head-sub > :deep(.search-field) { flex: 1 1 200px; }
+
+/* Поиск раздела: широко — тянется вместе с фильтрами, тесно — кнопка-лупа
+   при названии. */
+.head-search { display: flex; align-items: center; flex: 1 1 200px; min-width: 0; }
+.head-search.compact { flex: 0 0 auto; }
 
 .head-status {
   display: flex;
@@ -386,16 +409,22 @@ const hasHead = computed(() => hasTitleRow.value || hasControlsRow.value)
   border-top: 1px solid var(--acrylic-border);
 }
 
-/* Узкая панель: заголовок мельче, статус-чипы уходят под строку заголовка. */
+/* Тесная панель: шапка отдаёт содержимому всё, что может, — заголовок мельче,
+   поля и промежутки между строками управления сжаты. На телефоне шапка раздела
+   легко съедала треть экрана, а под запись оставалась пара строк. */
 @container (max-width: 620px) {
-  .page-title { font-size: 1.3rem; }
+  .page-head { gap: 8px; padding: 12px 14px 8px; }
+  .page-title { font-size: 1.22rem; }
+  .head-title-row { gap: 8px; }
+  .head-line { gap: 8px; }
 }
 
 @media (max-width: 768px) {
   .page { padding: 0; }
   .page-panel { border: none; border-radius: 0; }
-  .page-head { padding: 14px 14px 10px; }
-  .page-title { font-size: 1.3rem; }
+  .page-head { gap: 8px; padding: 12px 14px 8px; }
+  .page-title { font-size: 1.22rem; }
+  .head-title-row, .head-line { gap: 8px; }
   .page-body { padding: 4px 14px 16px; }
   .page-body.flush { padding: 0; }
   .page-foot { padding: 10px 14px; }

@@ -401,7 +401,7 @@ onMounted(() => { resolveName(); load() })
 .ea-loading { display: flex; justify-content: center; padding: 48px; }
 
 /* KPI — число слева, иконка справа; лёгкий внутренний тайл. */
-.ea-kpis { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 12px; }
+.ea-kpis { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(160px, 100%), 1fr)); gap: 12px; }
 .ea-kpi {
   display: flex; flex-direction: row; align-items: center; justify-content: space-between; gap: 12px; padding: 16px;
   background: var(--color-surface); border: 1px solid var(--color-outline-dim); border-radius: var(--radius-lg);

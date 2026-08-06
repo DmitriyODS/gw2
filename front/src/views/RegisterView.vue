@@ -105,9 +105,10 @@
 </template>
 
 <script setup>
-import { reactive, ref, onMounted } from 'vue'
+import { reactive, ref, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth.js'
+import { useThemeStore } from '@/stores/theme.js'
 import { suggestLogin, yandexConfig, yandexAuthURL } from '@/api/auth.js'
 import { inAppShell } from '@/utils/appShell.js'
 import { savePendingAvatar, clearPendingAvatar } from '@/utils/pendingAvatar.js'
@@ -120,6 +121,7 @@ import YandexLogo from '@/components/common/YandexLogo.vue'
 
 const router = useRouter()
 const authStore = useAuthStore()
+const theme = useThemeStore()
 
 const form = reactive({ fio: '', email: '', login: '', password: '' })
 const error = ref('')
@@ -144,8 +146,14 @@ function goYandex() {
 onMounted(() => {
   regeneratePassword()
   clearPendingAvatar()
+  theme.startThemeTrial()
   yandexConfig().then((cfg) => { yandexAuth.value = cfg }).catch(() => {})
 })
+
+// Выбранное здесь оформление закрепляет только созданный аккаунт: уход с
+// экрана любым способом (назад, «уже есть аккаунт», перезагрузка) откатывает
+// примерку — на устройстве может сидеть другой человек со своей темой.
+onUnmounted(() => { theme.cancelThemeTrial() })
 
 // Безопасный пароль на клиенте (Web Crypto): без двусмысленных символов.
 function generatePassword(len = 12) {
@@ -224,6 +232,7 @@ async function handleRegister() {
     const { email } = await authStore.register({
       fio: form.fio, email: form.email, login: form.login, password: form.password,
     })
+    theme.commitThemeTrial()
     router.push({ path: '/verify-email', query: { email: email || form.email } })
   } catch (e) {
     error.value = e?.message || 'Не удалось зарегистрироваться'

@@ -129,7 +129,7 @@
         @close="hideFind"
       />
 
-      <div v-if="loading" class="np-loading">Загрузка…</div>
+      <div v-if="loading" class="np-loading"><BrandLoader :size="64" /></div>
       <EmptyState
         v-else-if="notFound"
         class="np-loading" icon="scan_delete" tone="soft"
@@ -228,6 +228,7 @@ import { computed, defineAsyncComponent, nextTick, onBeforeUnmount, onMounted, r
 import { useRouter } from 'vue-router'
 import { useBreakpoint } from '@/composables/useBreakpoint.js'
 import EmptyState from '@/components/common/EmptyState.vue'
+import BrandLoader from '@/components/common/BrandLoader.vue'
 import AppPage from '@/components/ui/AppPage.vue'
 import ConfirmDialog from '@/components/ui/ConfirmDialog.vue'
 import NoteRichEditor from '@/components/notes/NoteRichEditor.vue'

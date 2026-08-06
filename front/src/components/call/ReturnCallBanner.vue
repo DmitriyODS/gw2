@@ -1,6 +1,7 @@
 <template>
   <Teleport to="body">
-    <Transition name="return-banner">
+    <!-- appear: монтируется вместе с предложением вернуться (ленивый чанк). -->
+    <Transition name="return-banner" appear>
       <div v-if="call" class="return-banner" role="alertdialog" aria-label="Незавершённый звонок">
         <div class="rb-body">
           <div class="rb-title">Незавершённый {{ isVideo ? 'видеозвонок' : 'звонок' }}</div>

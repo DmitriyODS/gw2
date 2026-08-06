@@ -1,26 +1,18 @@
 <template>
-  <!-- Селектор компании. Четыре варианта:
-         variant="pill"   — PrimeVue Select, компактный pill-style для шапок;
-         variant="row"    — row-trigger + плавающая панель, для сайдбара;
-         variant="button" — пилюля «портфель · компания · ▾» для подвала меню «Пуск»;
-         variant="form"   — триггер как .ctl + поповер, для форм (v-model).
-       pill/row/button без v-model управляют companies.activeCompanyId глобально.
-       При передаче v-model (controlled mode) компонент работает независимо. -->
+  <!-- Селектор активной компании: пилюля «портфель · компания · ▾» и поповер
+       со списком (панель задач телефона, подвал меню «Пуск»). Без v-model
+       переключает активную компанию глобально, с v-model — работает
+       независимо (controlled mode). -->
   <template v-if="fixed">
     <!-- Выбирать не из чего (одна компания) — тот же вид, но без стрелки. -->
-    <div v-if="variant === 'button'" v-bind="$attrs" class="company-button is-static" :title="companyLabel">
+    <div v-bind="$attrs" class="company-button is-static" :title="companyLabel">
       <span class="material-symbols-outlined company-button-ico">business_center</span>
       <span class="company-button-label">{{ companyLabel }}</span>
     </div>
-    <div v-else v-bind="$attrs" class="company-chip" :title="companyLabel">
-      <span class="material-symbols-outlined company-icon">domain</span>
-      <span class="company-chip-label">{{ companyLabel }}</span>
-    </div>
   </template>
 
-  <template v-else-if="variant === 'row' || variant === 'button'">
+  <template v-else>
     <button
-      v-if="variant === 'button'"
       v-bind="$attrs"
       ref="triggerEl"
       type="button"
@@ -33,30 +25,6 @@
       <span class="material-symbols-outlined company-button-ico">business_center</span>
       <span class="company-button-label">{{ activeLabel || placeholder }}</span>
       <span class="material-symbols-outlined company-button-chev">expand_more</span>
-    </button>
-
-    <button
-      v-else
-      v-bind="$attrs"
-      ref="triggerEl"
-      type="button"
-      class="company-row"
-      :class="{ open }"
-      @click="toggle"
-      :aria-expanded="open"
-      :title="activeLabel || placeholder"
-    >
-      <span class="company-row-badge" aria-hidden="true">
-        <span v-if="activeInitial">{{ activeInitial }}</span>
-        <span v-else class="material-symbols-outlined">domain</span>
-      </span>
-      <span class="company-row-text">
-        <span class="company-row-label">{{ activeLabel || placeholder }}</span>
-        <span class="company-row-sub">Активная компания</span>
-      </span>
-      <span class="material-symbols-outlined company-row-chev">
-        unfold_more
-      </span>
     </button>
 
     <Teleport to="body">
@@ -159,146 +127,10 @@
     </Teleport>
   </template>
 
-  <template v-else-if="variant === 'form'">
-    <button
-      v-bind="$attrs"
-      ref="triggerEl"
-      type="button"
-      class="company-form-trigger"
-      :class="{ open }"
-      @click="toggle"
-      :aria-expanded="open"
-    >
-      <span class="company-form-label" :class="{ 'is-placeholder': effectiveValue == null }">
-        {{ effectiveValue != null ? labelOf(effectiveValue) : placeholder }}
-      </span>
-      <span class="material-symbols-outlined company-form-chev">expand_more</span>
-    </button>
-
-    <Teleport to="body">
-      <transition name="company-pop">
-        <div
-          v-if="open"
-          ref="popoverEl"
-          class="company-popover"
-          :style="popoverStyle"
-          role="listbox"
-          @mousedown.stop
-        >
-          <div v-if="companies.items.length > 6" class="company-popover-search">
-            <span class="material-symbols-outlined">search</span>
-            <input
-              ref="searchEl"
-              v-model="query"
-              type="text"
-              placeholder="Поиск компании…"
-              autocomplete="off"
-            />
-            <button
-              v-if="query"
-              class="company-popover-search-clear"
-              type="button"
-              @click="query = ''"
-              aria-label="Очистить"
-            >
-              <span class="material-symbols-outlined">close</span>
-            </button>
-          </div>
-
-          <div class="company-popover-body">
-            <button
-              type="button"
-              class="company-popover-item"
-              :class="{ active: effectiveValue == null }"
-              @click="onPick(null)"
-            >
-              <span class="company-popover-badge" aria-hidden="true">
-                <span class="material-symbols-outlined">do_not_disturb_on</span>
-              </span>
-              <span class="company-popover-text">
-                <span class="company-popover-name">{{ placeholder }}</span>
-              </span>
-              <span
-                v-if="effectiveValue == null"
-                class="material-symbols-outlined company-popover-check"
-              >check</span>
-            </button>
-
-            <div v-if="filteredCompanies.length" class="company-popover-sep" />
-
-            <div v-if="!filteredCompanies.length && query" class="company-popover-empty">
-              <span class="material-symbols-outlined">search_off</span>
-              <span>Ничего не найдено</span>
-            </div>
-
-            <button
-              v-for="c in filteredCompanies"
-              :key="c.id"
-              type="button"
-              class="company-popover-item"
-              :class="{ active: c.id === effectiveValue }"
-              @click="onPick(c.id)"
-            >
-              <span class="company-popover-badge" aria-hidden="true">
-                {{ initialOf(c.name) }}
-              </span>
-              <span class="company-popover-text">
-                <span class="company-popover-name">{{ c.name }}</span>
-                <span v-if="c.users_count != null" class="company-popover-meta">
-                  {{ c.users_count }} {{ pluralUsers(c.users_count) }}
-                </span>
-              </span>
-              <span
-                v-if="c.id === effectiveValue"
-                class="material-symbols-outlined company-popover-check"
-              >check</span>
-            </button>
-          </div>
-        </div>
-      </transition>
-    </Teleport>
-  </template>
-
-  <template v-else>
-    <Select
-      v-bind="$attrs"
-      :model-value="effectiveValue"
-      :options="options"
-      option-label="name"
-      option-value="id"
-      :placeholder="placeholder"
-      :class="['company-select', { compact }]"
-      show-clear
-      :filter="companies.items.length > 6"
-      filter-placeholder="Поиск компании…"
-      scroll-height="320px"
-      empty-message="Компании не загружены"
-      empty-filter-message="Ничего не найдено"
-      @update:model-value="onChange"
-      @show="emit('show')"
-      @hide="emit('hide')"
-    >
-      <template #value="slotProps">
-        <span class="company-value">
-          <span class="material-symbols-outlined company-icon">domain</span>
-          <span class="company-value-label">
-            {{ labelOf(slotProps.value) || placeholder }}
-          </span>
-        </span>
-      </template>
-      <template #option="slotProps">
-        <span class="company-option">
-          <span class="material-symbols-outlined company-icon">domain</span>
-          <span class="company-option-label">{{ slotProps.option.name }}</span>
-        </span>
-      </template>
-    </Select>
-  </template>
 </template>
 
 <script setup>
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
-import Select from 'primevue/select'
 import { useAuthStore } from '@/stores/auth.js'
 import { useCompaniesStore } from '@/stores/companies.js'
 
@@ -306,12 +138,10 @@ defineOptions({ inheritAttrs: false })
 
 const props = defineProps({
   modelValue: { default: undefined }, // если передан — controlled mode (не трогает companies.activeCompanyId)
-  compact: { type: Boolean, default: false },
   placeholder: { type: String, default: 'Все компании' },
-  variant: { type: String, default: 'pill' }, // 'pill' | 'row'
 })
 
-const emit = defineEmits(['show', 'hide', 'update:modelValue'])
+const emit = defineEmits(['update:modelValue'])
 
 const auth = useAuthStore()
 const companies = useCompaniesStore()
@@ -325,9 +155,8 @@ const isSuper = computed(() => auth.isSuperAdmin)
 // Неизменяемый чип — у обычного пользователя ровно с одной активной компанией.
 const fixed = computed(() => !isSuper.value && auth.companyId != null && !isMulti.value)
 const companyLabel = computed(() => auth.companyName || 'Без компании')
-const options = computed(() => companies.items)
 
-// Список для row-поповера: у многокомпанийного — его членства, у супер-админа —
+// Список для поповера: у многокомпанийного — его членства, у супер-админа —
 // все компании (с опцией «Все компании»).
 const rowList = computed(() => {
   if (isMulti.value) {
@@ -353,8 +182,6 @@ const activeLabel = computed(() => {
   return companies.activeCompany?.name ?? null
 })
 
-const activeInitial = computed(() => initialOf(activeLabel.value))
-
 function initialOf(name) {
   if (!name) return ''
   const t = name.trim()
@@ -370,13 +197,7 @@ function pluralUsers(n) {
   return 'сотрудников'
 }
 
-function labelOf(id) {
-  if (id == null) return null
-  const c = companies.items.find((x) => x.id === id)
-  return c?.name ?? null
-}
-
-/* ---------- variant='row' state & popover ---------- */
+/* ---------- поповер выбора ---------- */
 const open = ref(false)
 const query = ref('')
 const triggerEl = ref(null)
@@ -419,7 +240,6 @@ function toggle() {
 
 async function openPopover() {
   open.value = true
-  emit('show')
   await nextTick()
   computePosition()
   if (searchEl.value) {
@@ -435,7 +255,6 @@ function close() {
   if (!open.value) return
   open.value = false
   query.value = ''
-  emit('hide')
   window.removeEventListener('resize', computePosition)
   window.removeEventListener('scroll', computePosition, true)
   document.removeEventListener('mousedown', onDocMouseDown, true)
@@ -480,14 +299,6 @@ onBeforeUnmount(() => {
   if (open.value) close()
 })
 
-function onChange(value) {
-  if (isControlled.value) {
-    emit('update:modelValue', value ?? null)
-  } else {
-    companies.setActive(value ?? null)
-  }
-}
-
 // При уходе на другой раздел/изменении layout схлопываем поповер.
 watch(() => auth.companyId, (v) => {
   if (v != null) close()
@@ -495,80 +306,7 @@ watch(() => auth.companyId, (v) => {
 </script>
 
 <style scoped>
-.company-value,
-.company-option {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  min-width: 0;
-}
-
-.company-icon {
-  font-size: 18px;
-  opacity: 0.75;
-  flex-shrink: 0;
-}
-
-.company-value-label,
-.company-option-label {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-:deep(.company-select.p-select) {
-  font-size: 13px;
-  border-radius: var(--radius-full);
-  background: var(--color-surface-high);
-  border-color: transparent;
-  min-width: 200px;
-  max-width: 280px;
-  font-weight: 600;
-}
-
-:deep(.company-select.p-select:hover) {
-  background: var(--color-primary-container);
-  color: var(--color-on-primary-container);
-}
-
-:deep(.company-select .p-select-label) {
-  padding: 8px 12px;
-  display: flex;
-  align-items: center;
-}
-
-:deep(.company-select.compact.p-select) {
-  font-size: 12px;
-  min-width: 180px;
-  max-width: 240px;
-}
-
-:deep(.company-select.compact .p-select-label) {
-  padding: 6px 10px;
-}
-
-.company-chip {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  height: 36px;
-  padding: 0 14px;
-  border-radius: var(--radius-full, 999px);
-  background: var(--color-primary-container);
-  color: var(--color-on-primary-container);
-  font-weight: 600;
-  font-size: 13px;
-  max-width: 240px;
-}
-
-.company-chip-label {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-/* ---------- variant='button' ----------
-   Пилюля подвала меню «Пуск»: портфель, название компании и стрелка. */
+/* Пилюля-триггер: портфель, название компании и стрелка. */
 .company-button {
   display: flex;
   align-items: center;
@@ -616,147 +354,6 @@ watch(() => auth.companyId, (v) => {
 
 .company-button.open .company-button-chev { rotate: 180deg; }
 
-/* ---------- variant='row' ---------- */
-.company-row {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  width: 100%;
-  padding: 8px 10px;
-  border: 1px solid transparent;
-  border-radius: var(--radius-lg, 14px);
-  background: var(--color-surface-high);
-  color: var(--color-text);
-  cursor: pointer;
-  text-align: left;
-  font: inherit;
-  transition: background 0.15s, border-color 0.15s, box-shadow 0.15s;
-}
-
-.company-row:hover {
-  background: var(--color-primary-container);
-  color: var(--color-on-primary-container);
-}
-
-.company-row.open {
-  background: var(--color-primary-container);
-  color: var(--color-on-primary-container);
-  border-color: color-mix(in oklch, var(--color-primary) 30%, transparent);
-  box-shadow: var(--shadow-sm);
-}
-
-.company-row-badge {
-  width: 32px;
-  height: 32px;
-  flex-shrink: 0;
-  border-radius: var(--radius-md, 10px);
-  display: grid;
-  place-items: center;
-  background: var(--color-primary);
-  color: var(--color-on-primary);
-  font-weight: 700;
-  font-size: 14px;
-  letter-spacing: 0.2px;
-}
-
-.company-row-badge .material-symbols-outlined {
-  font-size: 18px;
-}
-
-.company-row-text {
-  flex: 1;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 1px;
-}
-
-.company-row-label {
-  font-size: 13.5px;
-  font-weight: 700;
-  line-height: 1.2;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.company-row-sub {
-  font-size: 11px;
-  font-weight: 500;
-  line-height: 1.2;
-  opacity: 0.7;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.company-row-chev {
-  font-size: 20px;
-  opacity: 0.6;
-  flex-shrink: 0;
-  transition: transform 0.18s;
-}
-
-.company-row.open .company-row-chev {
-  transform: rotate(180deg);
-}
-
-/* ---------- variant='form' ---------- */
-.company-form-trigger {
-  appearance: none;
-  width: 100%;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  border: 1px solid var(--color-outline-dim);
-  background: var(--color-surface-high);
-  color: var(--color-on-surface);
-  padding: 10px 12px;
-  border-radius: var(--radius-md, 12px);
-  font: inherit;
-  cursor: pointer;
-  text-align: left;
-  transition: border-color 0.15s, box-shadow 0.15s;
-}
-
-.company-form-trigger:hover {
-  border-color: var(--color-outline);
-}
-
-.company-form-trigger.open,
-.company-form-trigger:focus-visible {
-  outline: none;
-  border-color: var(--color-primary);
-  box-shadow: 0 0 0 3px color-mix(in oklab, var(--color-primary) 18%, transparent);
-}
-
-.company-form-label {
-  flex: 1;
-  min-width: 0;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.company-form-label.is-placeholder {
-  color: var(--color-on-surface-variant);
-  opacity: 0.6;
-}
-
-.company-form-chev {
-  font-size: 20px;
-  color: var(--color-on-surface-variant);
-  flex-shrink: 0;
-  transition: transform 0.18s;
-}
-
-.company-form-trigger.open .company-form-chev {
-  transform: rotate(180deg);
-}
-</style>
-
-<style>
-/* Поповер живёт в body (Teleport), поэтому стили — глобальные. */
 .company-popover {
   position: fixed;
   z-index: 2000;

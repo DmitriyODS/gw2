@@ -206,7 +206,7 @@ function submit() {
 
 .feature-list {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(min(230px, 100%), 1fr));
   gap: 8px;
   margin: 0;
   padding: 0;

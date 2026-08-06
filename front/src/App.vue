@@ -21,9 +21,14 @@
       <DesktopShell v-if="desktopMode" />
       <MobileShell v-else />
       <ActiveUnitModal v-if="unitsStore.activeUnit && !unitsStore.minimized" />
-      <IncomingCallOverlay @accept="callStore.accept()" @decline="callStore.decline()" />
-      <CallView />
-      <ReturnCallBanner />
+      <!-- UI звонка монтируется только когда звонок есть: он тянет за собой
+           LiveKit-обёртку и плитки участников — на «пустом» сеансе это лишний
+           вес первого кадра. -->
+      <template v-if="callPresent">
+        <IncomingCallOverlay @accept="callStore.accept()" @decline="callStore.decline()" />
+        <CallView />
+        <ReturnCallBanner />
+      </template>
     </template>
     <template v-else>
       <main class="main-content">
@@ -35,12 +40,12 @@
          экрана). Отключён на fullscreen-роутах — там вертикальные жесты заняты. -->
     <PullToRefresh :active="!!authStore.token && !isFullscreenRoute && callStore.phase === 'idle'" />
     <!-- Выбор получателя для текста из системного «Поделиться» (Android). -->
-    <NewChatDialog v-if="authStore.token" v-model="sharePickOpen" @pick="onSharePickRecipient" />
+    <NewChatDialog v-if="sharePickOpen" v-model="sharePickOpen" @pick="onSharePickRecipient" />
   </div>
 </template>
 
 <script setup>
-import { ref, computed, watch, onMounted, onBeforeUnmount } from 'vue'
+import { ref, computed, watch, onMounted, onBeforeUnmount, defineAsyncComponent } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useToast } from 'primevue/usetoast'
 import { useAuthStore } from '@/stores/auth.js'
@@ -69,14 +74,18 @@ import {
 import DesktopShell from '@/components/desktop/DesktopShell.vue'
 import MobileShell from '@/components/mobile/MobileShell.vue'
 import CompanyDisabledScreen from '@/components/layout/CompanyDisabledScreen.vue'
-import ActiveUnitModal from '@/components/layout/ActiveUnitModal.vue'
 import PullToRefresh from '@/components/common/PullToRefresh.vue'
-import NewChatDialog from '@/components/messenger/NewChatDialog.vue'
-import IncomingCallOverlay from '@/components/call/IncomingCallOverlay.vue'
-import CallView from '@/components/call/CallView.vue'
-import ReturnCallBanner from '@/components/call/ReturnCallBanner.vue'
 import Toast from 'primevue/toast'
 import BrandLoader from '@/components/common/BrandLoader.vue'
+
+/* Глобальные оверлеи — ленивыми чанками: каждый рендерится по условию и до
+   него не нужен, а статические импорты тащили в первый кадр UI звонка,
+   плавающее окно задачи с комментариями и диалог выбора получателя. */
+const ActiveUnitModal = defineAsyncComponent(() => import('@/components/layout/ActiveUnitModal.vue'))
+const NewChatDialog = defineAsyncComponent(() => import('@/components/messenger/NewChatDialog.vue'))
+const IncomingCallOverlay = defineAsyncComponent(() => import('@/components/call/IncomingCallOverlay.vue'))
+const CallView = defineAsyncComponent(() => import('@/components/call/CallView.vue'))
+const ReturnCallBanner = defineAsyncComponent(() => import('@/components/call/ReturnCallBanner.vue'))
 
 const authStore = useAuthStore()
 const themeStore = useThemeStore()
@@ -93,6 +102,8 @@ const { isMobile } = useBreakpoint()
 const { usesGroove } = useCompanySettings()
 
 const isFullscreenRoute = computed(() => !!route.meta?.fullscreen && !!authStore.user)
+// Есть ли что показывать про звонок: ринг, активный звонок или предложение вернуться.
+const callPresent = computed(() => callStore.phase !== 'idle' || !!callStore.rejoinCall)
 // Каркас рабочего стола — широкий экран; на телефоне свой, мобильный.
 const desktopMode = computed(() => !isMobile.value)
 
@@ -193,7 +204,7 @@ watch(() => authStore.user, (user, prev) => {
 // [data-dark] на .app-layout обновляется только при перерисовке — иначе бар
 // красится в прошлую тему (а при старте .app-layout ещё не существует вовсе).
 watch(
-  () => [themeStore.dark, themeStore.currentPreset, themeStore.bgGradient],
+  () => [themeStore.dark, themeStore.activePreset, themeStore.bgGradient],
   () => syncNativeSystemBars(),
   { immediate: true, flush: 'post', deep: true },
 )

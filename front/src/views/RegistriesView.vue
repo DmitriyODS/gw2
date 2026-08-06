@@ -1,5 +1,9 @@
 <template>
-  <AppListDetail v-model:open="detailOpen" @narrow-change="narrow = $event">
+  <AppListDetail
+    v-model:open="detailOpen"
+    :loading="store.loadingList && !store.registries.length"
+    @narrow-change="narrow = $event"
+  >
     <!-- Список реестров -->
     <template #list="{ toggle }">
       <!-- Список подписан всегда: заголовок окна относится к разделу целиком, а
@@ -11,7 +15,6 @@
         :menu="!narrow"
         menu-icon="left_panel_close"
         menu-label="Свернуть список"
-        :loading="store.loadingList"
         @menu="toggle"
       >
         <EmptyState
@@ -53,14 +56,14 @@
         @menu="toggle"
         @command="onCommand"
       >
-        <template v-if="store.selected" #subhead>
-          <!-- В шапке раздела поиск развёрнут всегда, в том числе на телефоне:
-               команды теперь занимают две кнопки, и место под поле есть. -->
+        <!-- Поиск идёт слотом шапки: в тесной панели он сам сворачивается в
+             лупу при названии и не отнимает у таблицы целую строку. -->
+        <template v-if="store.selected" #search="{ narrow: tight }">
           <SearchField
             v-model="searchInput"
             placeholder="Поиск по записям…"
             hotkey
-            :collapsible="false"
+            :collapsed="tight"
             @update:model-value="onSearch"
             @clear="clearSearch"
           />

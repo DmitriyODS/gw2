@@ -567,7 +567,7 @@ async function claimMystery() {
 .ps-featured { margin-bottom: 20px; }
 .ps-featured-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(min(250px, 100%), 1fr));
   gap: 12px;
 }
 .ps-hero-card {
@@ -700,7 +700,7 @@ async function claimMystery() {
 .ps-loading { display: flex; justify-content: center; padding: 40px 0; }
 .ps-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(min(150px, 100%), 1fr));
   gap: 12px;
 }
 .ps-item {

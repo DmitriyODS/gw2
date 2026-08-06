@@ -9,8 +9,10 @@
     @update:open="onDetailOpen"
     @narrow-change="isNarrow = $event"
   >
-    <template #list>
+    <template #list="{ narrow, toggle }">
       <ConversationList
+        :narrow="narrow"
+        @toggle-list="toggle"
         :conversations="visibleConversations"
         :active-id="activeId"
         :loading="listLoading"
@@ -27,24 +29,42 @@
       />
     </template>
 
-    <template #detail="{ narrow }">
-    <section
-      ref="panelEl"
-      class="chat-panel"
+    <template #detail="{ narrow, collapsed, toggle }">
+    <!-- Переписка — панель ядра (headless: шапку чата рисуем сами, общая
+         слишком высока для переписки), обои — слотом `background`. -->
+    <AppPage
+      embedded
+      flush
+      :scroll="false"
+      headless
       @dragenter.prevent="onDragEnter"
       @dragover.prevent="onDragOver"
       @dragleave.prevent="onDragLeave"
       @drop.prevent="onDrop"
     >
-      <ChatBackgroundLayer v-if="active" :recipe="activeChatBg" />
-      <div v-if="dragOver && active" class="chat-drop-overlay">
-        <span class="material-symbols-outlined">upload_file</span>
-        <span>Отпустите файл — он прикрепится к сообщению</span>
-      </div>
-      <header v-if="active" class="chat-header">
-        <button v-if="isNarrow" class="back-btn" @click="goBack" title="Назад">
-          <span class="material-symbols-outlined">arrow_back</span>
-        </button>
+      <template #background>
+        <ChatBackgroundLayer v-if="active" :recipe="activeChatBg" />
+      </template>
+
+      <header v-if="active" class="chat-head">
+        <AppButton
+          v-if="isNarrow"
+          variant="icon"
+          size="sm"
+          icon="arrow_back"
+          aria-label="К списку чатов"
+          title="К списку чатов"
+          @click="goBack"
+        />
+        <AppButton
+          v-else-if="collapsed"
+          variant="icon"
+          size="sm"
+          icon="left_panel_open"
+          aria-label="Показать список чатов"
+          title="Показать список чатов"
+          @click="toggle"
+        />
         <!-- 3 варианта шапки: обычный диалог (фото собеседника), dev-чат
              у владельца (иконка support_agent), dev-чат у админа в support-inbox
              (фото пользователя, который написал в поддержку). -->
@@ -112,113 +132,46 @@
             </template>
           </div>
         </div>
-        <div class="chat-tools" ref="toolsRef">
-          <button
-            class="chat-tool"
-            :class="{ active: chatMenuOpen }"
-            title="Действия"
-            aria-haspopup="menu"
-            :aria-expanded="chatMenuOpen"
-            @click="chatMenuOpen = !chatMenuOpen"
-          >
-            <span class="material-symbols-outlined">more_vert</span>
-          </button>
-          <Transition name="chat-menu">
-            <div v-if="chatMenuOpen" class="chat-menu" role="menu">
-              <button
-                v-if="active.is_group"
-                class="chat-menu-item"
-                @click="onMenuAction(() => (groupInfoOpen = true))"
-              >
-                <span class="material-symbols-outlined chat-menu-ico tone-tertiary">info</span>
-                <span>О группе</span>
-              </button>
-              <button
-                v-if="!active.is_dev_chat && !active.is_group"
-                class="chat-menu-item"
-                @click="onMenuAction(() => startCall('audio'))"
-              >
-                <span class="material-symbols-outlined chat-menu-ico tone-success">call</span>
-                <span>Аудиозвонок</span>
-              </button>
-              <button
-                v-if="!active.is_dev_chat && !active.is_group"
-                class="chat-menu-item"
-                @click="onMenuAction(() => startCall('video'))"
-              >
-                <span class="material-symbols-outlined chat-menu-ico tone-success">videocam</span>
-                <span>Видеозвонок</span>
-              </button>
-              <button
-                v-if="active.is_group"
-                class="chat-menu-item"
-                @click="onMenuAction(() => messenger.setGroupMuteAction(active.id, !active.muted))"
-              >
-                <span class="material-symbols-outlined chat-menu-ico">{{ active.muted ? 'notifications' : 'notifications_off' }}</span>
-                <span>{{ active.muted ? 'Включить уведомления' : 'Выключить уведомления' }}</span>
-              </button>
-              <button
-                class="chat-menu-item"
-                @click="onMenuAction(() => onTogglePin(active.id))"
-              >
-                <span class="material-symbols-outlined chat-menu-ico" :class="{ 'tone-tertiary': active.is_pinned }">
-                  {{ active.is_pinned ? 'keep_off' : 'keep' }}
-                </span>
-                <span>{{ active.is_pinned ? 'Открепить чат' : 'Закрепить чат' }}</span>
-              </button>
-              <button
-                class="chat-menu-item"
-                @click="onMenuAction(() => (chatBgOpen = true))"
-              >
-                <span class="material-symbols-outlined chat-menu-ico tone-tertiary">palette</span>
-                <span>Оформление чата</span>
-              </button>
-              <template v-if="active.is_group">
-                <div class="chat-menu-divider" />
-                <button class="chat-menu-item danger" @click="onMenuAction(() => (groupInfoOpen = true))">
-                  <span class="material-symbols-outlined chat-menu-ico tone-error">logout</span>
-                  <span>Выйти из группы</span>
-                </button>
-              </template>
-              <template v-else-if="!active.is_dev_chat">
-                <div class="chat-menu-divider" />
-                <button
-                  class="chat-menu-item danger"
-                  @click="onMenuAction(() => askDeleteConversation(active))"
-                >
-                  <span class="material-symbols-outlined chat-menu-ico tone-error">delete</span>
-                  <span>Удалить чат</span>
-                </button>
-              </template>
-            </div>
-          </Transition>
-        </div>
+        <AppCommandBar
+          class="chat-head-commands"
+          size="sm"
+          :commands="chatCommands"
+          @command="onChatCommand"
+        />
       </header>
+      <div v-if="dragOver && active" class="chat-drop-overlay">
+        <span class="material-symbols-outlined">upload_file</span>
+        <span>Отпустите файл — он прикрепится к сообщению</span>
+      </div>
+
       <EmptyState
-        v-else
+        v-if="!active"
         class="chat-empty"
         icon="chat"
         title="Выберите чат"
         subtitle="Откройте беседу слева — или начните новую из списка."
       />
 
-      <!-- Баннер закреплённых сообщений. Клик по тексту прокручивает к
-           сообщению и листает закреплённые; кнопка справа — открепить. -->
-      <div v-if="active && pinnedMessages.length" class="pinned-bar" @click="cyclePinned">
-        <span class="material-symbols-outlined pinned-bar-icon">keep</span>
-        <div class="pinned-bar-body">
-          <div class="pinned-bar-title">
-            Закреплённое
-            <span v-if="pinnedMessages.length > 1" class="pinned-bar-count">
-              {{ pinnedIndex + 1 }}/{{ pinnedMessages.length }}
-            </span>
-          </div>
-          <div class="pinned-bar-text">{{ pinnedPreview }}</div>
-        </div>
-        <button class="pinned-bar-unpin" title="Открепить" @click.stop="unpinMessage(currentPinned)">
-          <span class="material-symbols-outlined">close</span>
-        </button>
-      </div>
+      <!-- Клик по полосе прокручивает к сообщению и листает закреплённые. -->
+      <AppInfoBar
+        v-if="active && pinnedMessages.length"
+        class="pinned-bar"
+        icon="keep"
+        :title="pinnedMessages.length > 1 ? `Закреплённое ${pinnedIndex + 1}/${pinnedMessages.length}` : 'Закреплённое'"
+        :message="pinnedPreview"
+        @click="cyclePinned"
+      >
+        <template #actions>
+          <AppButton
+            variant="icon"
+            size="sm"
+            icon="close"
+            aria-label="Открепить"
+            title="Открепить"
+            @click.stop="unpinMessage(currentPinned)"
+          />
+        </template>
+      </AppInfoBar>
 
       <div
         v-if="active"
@@ -263,15 +216,15 @@
       </div>
 
       <Transition name="jump-down">
-        <button
+        <AppButton
           v-if="active && showJumpDown"
           class="jump-down-btn"
+          variant="icon"
+          icon="keyboard_arrow_down"
           :style="{ bottom: jumpDownBottom }"
           aria-label="К последним сообщениям"
           @click="scrollToBottomSmooth"
-        >
-          <span class="material-symbols-outlined">keyboard_arrow_down</span>
-        </button>
+        />
       </Transition>
 
       <MessageInput
@@ -288,7 +241,7 @@
         @attach-task="attachTaskOpen = true"
         @typing="onTyping"
       />
-    </section>
+    </AppPage>
     </template>
 
     <AppFab
@@ -387,7 +340,11 @@ import AttachTaskDialog from '@/components/messenger/AttachTaskDialog.vue'
 import MessageContextMenu from '@/components/messenger/MessageContextMenu.vue'
 import EmployeeProfileDialog from '@/components/common/EmployeeProfileDialog.vue'
 import AppFab from '@/components/ui/AppFab.vue'
+import AppButton from '@/components/ui/AppButton.vue'
+import AppCommandBar from '@/components/ui/AppCommandBar.vue'
+import AppInfoBar from '@/components/ui/AppInfoBar.vue'
 import AppListDetail from '@/components/ui/AppListDetail.vue'
+import AppPage from '@/components/ui/AppPage.vue'
 import EmptyState from '@/components/common/EmptyState.vue'
 import ProgressSpinner from 'primevue/progressspinner'
 import BrandLoader from '@/components/common/BrandLoader.vue'
@@ -438,7 +395,6 @@ const attachedTask = ref(null)
 const profileOpen = ref(false)
 const ctxMenu = ref({ visible: false, x: 0, y: 0, message: null })
 const messagesEl = ref(null)
-const panelEl = ref(null)
 
 /* Mobile keyboard: прокрутка ленты остаётся заякоренной У НИЗА — как в
    Telegram: при появлении клавиатуры верх сообщений обрезается, а расстояние до
@@ -467,12 +423,6 @@ function onViewportChange() {
   }
 }
 
-// Mobile back gesture: intercept popstate — go back to conversation list.
-function onPopState() {
-  if (activeId.value) {
-    goBack()
-  }
-}
 const messageInputRef = ref(null)
 const messageGroups = computed(() => groupMessagesByDay(messenger.activeMessages))
 const replyTo = ref(null)
@@ -591,18 +541,40 @@ function openReadBy(messageId) {
   readByOpen.value = true
 }
 
-const chatMenuOpen = ref(false)
-const toolsRef = ref(null)
+/* Команды переписки. Звонки — кнопками (в мессенджере это главное действие),
+   остальное AppCommandBar убирает в меню «ещё»; своё выпадающее меню чата
+   вместе с обработчиком клика «вне» больше не нужно. */
+const chatCommands = computed(() => {
+  const c = active.value
+  if (!c) return []
+  const dialog = !c.is_dev_chat && !c.is_group
+  return [
+    { key: 'audio', label: 'Аудиозвонок', icon: 'call', variant: 'icon', primary: true, hidden: !dialog },
+    { key: 'video', label: 'Видеозвонок', icon: 'videocam', variant: 'icon', primary: true, hidden: !dialog },
+    { key: 'group-info', label: 'О группе', icon: 'info', hidden: !c.is_group },
+    {
+      key: 'mute',
+      label: c.muted ? 'Включить уведомления' : 'Выключить уведомления',
+      icon: c.muted ? 'notifications' : 'notifications_off',
+      hidden: !c.is_group,
+    },
+    { key: 'pin', label: c.is_pinned ? 'Открепить чат' : 'Закрепить чат', icon: c.is_pinned ? 'keep_off' : 'keep' },
+    { key: 'background', label: 'Оформление чата', icon: 'palette' },
+    { key: 'leave', label: 'Выйти из группы', icon: 'logout', danger: true, hidden: !c.is_group },
+    { key: 'delete', label: 'Удалить чат', icon: 'delete', danger: true, hidden: c.is_dev_chat || c.is_group },
+  ]
+})
 
-function onMenuAction(fn) {
-  chatMenuOpen.value = false
-  fn()
-}
-
-function handleOutsideMenu(e) {
-  if (!chatMenuOpen.value) return
-  const root = toolsRef.value
-  if (root && !root.contains(e.target)) chatMenuOpen.value = false
+function onChatCommand(key) {
+  const c = active.value
+  if (!c) return
+  if (key === 'audio') startCall('audio')
+  else if (key === 'video') startCall('video')
+  else if (key === 'group-info' || key === 'leave') groupInfoOpen.value = true
+  else if (key === 'mute') messenger.setGroupMuteAction(c.id, !c.muted)
+  else if (key === 'pin') onTogglePin(c.id)
+  else if (key === 'background') chatBgOpen.value = true
+  else if (key === 'delete') askDeleteConversation(c)
 }
 
 async function activateRouteConversation() {
@@ -621,8 +593,6 @@ async function activateRouteConversation() {
 
 // При переключении диалога закрываем меню действий — иначе оно остаётся открытым
 // поверх шапки нового чата.
-watch(() => messenger.activeConversationId, () => { chatMenuOpen.value = false })
-
 // Контент из системного «Поделиться» (Android): открыли выбранный чат — сеем
 // текст в поле и грузим файлы во вложения один раз (останется отправить).
 // Следим И за pendingDraft: openWith выставляет activeConversationId РАНЬШЕ,
@@ -925,7 +895,12 @@ async function selectConversation(id) {
   replyTo.value = null
   editing.value = null
   await messenger.setActive(id)
-  router.push(`/messenger/${id}`) // push — back gesture returns to list
+  /* replace, а не push: список и переписка — два состояния ОДНОГО раздела, и
+     возврат к списку уже нарисован стрелкой в шапке чата. С push окно копило
+     свою историю и рисовало ВТОРУЮ стрелку «назад» в рамке — две кнопки об
+     одном и том же. Историю браузера (системный жест «назад» на телефоне)
+     ведёт каркас по адресу активного раздела — она от этого не страдает. */
+  router.replace(`/messenger/${id}`)
   await nextTick()
   scrollToBottom()
 }
@@ -961,9 +936,12 @@ function onDetailOpen(open) {
   if (!open) goBack()
 }
 
+/* Возврат к списку — обычный переход на адрес раздела; активную переписку
+   снимает watch по адресу (единственный источник правды), поэтому «назад»
+   работает одинаково откуда бы ни пришло: стрелка чата, рамка окна, системный
+   жест. */
 function goBack() {
-  messenger.activeConversationId = null
-  router.back()
+  router.replace('/messenger')
 }
 
 function scrollToBottom() {
@@ -1080,21 +1058,15 @@ onMounted(async () => {
   await nextTick()
   scrollToBottom()
   window.addEventListener('messenger:open-conversation', handleExternalOpen)
-  document.addEventListener('mousedown', handleOutsideMenu)
-  document.addEventListener('touchstart', handleOutsideMenu, { passive: true })
   window.visualViewport?.addEventListener('resize', onViewportChange)
   window.visualViewport?.addEventListener('scroll', onViewportChange)
-  window.addEventListener('popstate', onPopState)
 })
 
 onBeforeUnmount(() => {
   window.removeEventListener('messenger:open-conversation', handleExternalOpen)
-  document.removeEventListener('mousedown', handleOutsideMenu)
-  document.removeEventListener('touchstart', handleOutsideMenu)
   inputResizeObserver?.disconnect()
   window.visualViewport?.removeEventListener('resize', onViewportChange)
   window.visualViewport?.removeEventListener('scroll', onViewportChange)
-  window.removeEventListener('popstate', onPopState)
   // Уходим со страницы — диалог больше не «открыт», иначе входящие в него
   // продолжали бы тихо помечаться прочитанными.
   messenger.activeConversationId = null
@@ -1117,8 +1089,14 @@ watch(lastMessageId, async (id, prevId) => {
   if (nearBottom) scrollToBottom()
 })
 
+/* Адрес — источник правды об открытой переписке: ушёл id (стрелка чата, «назад»
+   в рамке окна, системный жест) — закрываем чат и показываем список. Раньше
+   пустой id молча игнорировался, и стрелка окна выглядела нерабочей. */
 watch(() => route.params.conversationId, async (id) => {
-  if (!id) return
+  if (!id) {
+    messenger.activeConversationId = null
+    return
+  }
   await activateRouteConversation()
 })
 </script>
@@ -1127,25 +1105,6 @@ watch(() => route.params.conversationId, async (id) => {
 /* Каркас — AppListDetail (как у Заметок и Реестров): две колонки с зазором,
    узкая раскладка «список ⇄ чат». Панели-стёкла рисуют сами колонки:
    ConversationList — свою, .chat-panel — свою. */
-.chat-panel {
-  height: 100%;
-  display: flex;
-  flex-direction: column;
-  min-width: 0;
-  min-height: 0;
-  position: relative;
-  /* Стекинг-контекст, чтобы фон чата (.chat-bg, z-index:-1) прятался за контент,
-     не поднимая сам контент z-index'ом — иначе контекстные меню/поля ввода
-     попадают в ловушку stacking-контекста и уходят под ленту. */
-  isolation: isolate;
-  background: var(--acrylic-card-bg);
-  -webkit-backdrop-filter: var(--acrylic-blur);
-  backdrop-filter: var(--acrylic-blur);
-  border: 1px solid var(--acrylic-border);
-  border-radius: var(--radius-xl);
-  overflow: hidden;
-}
-
 /* Зона сброса файлов — на всю область чата, а не только на поле ввода. */
 .chat-drop-overlay {
   position: absolute;
@@ -1169,29 +1128,24 @@ watch(() => route.params.conversationId, async (id) => {
 
 .chat-drop-overlay .material-symbols-outlined { font-size: 44px; }
 
-.chat-header {
+/* Шапка переписки — своя (режим headless): плотная строка, а не заголовок
+   раздела. Матовость даёт полупрозрачность поверх обоев чата; собственного
+   backdrop-filter НЕТ — иначе шапка станет backdrop-root и погасит акрил
+   выпадающих меню под ней. */
+.chat-head {
   display: flex;
   align-items: center;
-  gap: 12px;
-  padding: 12px 16px;
-  border-bottom: 1px solid var(--color-outline-dim);
-  /* Матовое стекло, как нижняя панель ввода: полупрозрачный акриловый слой.
-     БЕЗ собственного backdrop-filter — иначе шапка становится backdrop-root и
-     ломает акрил выпадающего меню «⋮» (его blur перестаёт доставать до ленты)
-     и порядок слоёв (меню уходит под пузыри). Матовость даёт полупрозрачность
-     поверх обоев чата. */
-  background: var(--acrylic-card-bg);
+  gap: 10px;
   flex-shrink: 0;
+  min-width: 0;
+  padding: 7px 10px;
+  border-bottom: 1px solid var(--color-outline-dim);
+  background: var(--acrylic-card-bg);
 }
+.chat-head-commands { margin-left: auto; }
 
-.back-btn {
-  background: none;
-  border: none;
-  cursor: pointer;
-  color: var(--color-text);
-  display: flex;
-  align-items: center;
-}
+/* Полоса закреплённого кликается целиком (листает закреплённые). */
+.pinned-bar { cursor: pointer; margin: 0 12px 8px; }
 
 .chat-avatar-wrap {
   position: relative;
@@ -1206,8 +1160,8 @@ watch(() => route.params.conversationId, async (id) => {
 }
 
 .chat-avatar-wrap.dev {
-  width: 40px;
-  height: 40px;
+  width: 36px;
+  height: 36px;
   border-radius: 50%;
   display: grid;
   place-items: center;
@@ -1217,8 +1171,8 @@ watch(() => route.params.conversationId, async (id) => {
 .chat-avatar-wrap.dev .material-symbols-outlined { font-size: 22px; }
 
 .chat-avatar-wrap.group {
-  width: 40px;
-  height: 40px;
+  width: 36px;
+  height: 36px;
   border-radius: 50%;
   display: grid;
   place-items: center;
@@ -1232,8 +1186,8 @@ watch(() => route.params.conversationId, async (id) => {
 .chat-avatar-wrap.group .chat-avatar { width: 100%; height: 100%; }
 
 .chat-avatar {
-  width: 40px;
-  height: 40px;
+  width: 36px;
+  height: 36px;
   border-radius: 50%;
   object-fit: cover;
   display: block;
@@ -1272,6 +1226,18 @@ watch(() => route.params.conversationId, async (id) => {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
+.chat-status.online {
+  color: var(--color-success);
+  font-weight: 600;
+}
+
+
+.chat-status-note {
+  color: var(--color-text-dim);
+  font-weight: 400;
+}
+
 
 .chat-status.online {
   color: var(--color-success);
@@ -1400,6 +1366,33 @@ watch(() => route.params.conversationId, async (id) => {
   flex: 1;
 }
 
+.messages-area {
+  flex: 1;
+  overflow-y: auto;
+  padding: 16px;
+  /* Фон даёт слой .chat-bg (градиент/узор) под лентой; сама лента прозрачна. */
+  background: transparent;
+  min-height: 0;
+}
+
+/* Плавающая кнопка «к последним сообщениям». */
+/* Кнопка «к последним сообщениям» — обычная иконочная кнопка ядра, здесь
+   только её место над полем ввода (фактический отступ считает jumpDownBottom). */
+.jump-down-btn {
+  position: absolute;
+  right: 16px;
+  bottom: 96px;
+  z-index: 5;
+  box-shadow: var(--shadow-md);
+}
+
+.jump-down-enter-active,
+.jump-down-leave-active { transition: opacity 0.15s, transform 0.15s; }
+
+.jump-down-enter-from,
+.jump-down-leave-to { opacity: 0; transform: translateY(8px); }
+
+/* Баннер закреплённых сообщений — между шапкой и лентой. */
 .messages-area {
   flex: 1;
   overflow-y: auto;

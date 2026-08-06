@@ -20,7 +20,8 @@ const {
     desktopCapturer,
     nativeImage,
     net,
-    ipcMain
+    ipcMain,
+    clipboard
 } = require('electron')
 const path = require('node:path')
 const fs = require('node:fs')
@@ -199,6 +200,8 @@ function createWindow(appUrl) {
         }
     })
 
+    installContextMenu(mainWindow.webContents, appUrl)
+
     // beforeunload-гард веб-версии (идёт юнит) в Electron не показывает
     // нативный диалог сам — рисуем свою модалку здесь.
     mainWindow.webContents.on('will-prevent-unload', (e) => {
@@ -231,9 +234,8 @@ function createWindow(appUrl) {
             return
         }
         e.preventDefault()
-        mainWindow.hide()
-        // «Жить в трее»: на macOS убираем и из дока — как у мессенджеров.
-        if (process.platform === 'darwin' && !mainWindow.isVisible()) app.dock?.hide()
+        // «Жить в трее»: на macOS уходим и из дока — как у мессенджеров.
+        hideWindow()
     })
 
     /* ── Загрузка приложения с сервера: сплэш + автоповтор ──
@@ -307,12 +309,103 @@ function createWindow(appUrl) {
     }).then(() => setTimeout(loadApp, 50))
 }
 
+/* ── Контекстное меню страницы ──
+   Веб-версия обходится меню браузера, а в своём окне его нет вовсе: без этого
+   правый клик в приложении не давал ни «Копировать», ни «Вставить», ни
+   подсказок проверки орфографии. Состав — как в системных приложениях: пункты
+   зависят от того, ПО ЧЕМУ щёлкнули (поле ввода, выделение, ссылка, картинка),
+   и ничего лишнего для остальных случаев. */
+function installContextMenu(wc, appUrl) {
+    wc.on('context-menu', (_e, p) => {
+        const items = []
+        const add = (item) => items.push(item)
+        const sep = () => {
+            if (items.length && items[items.length - 1].type !== 'separator') add({type: 'separator'})
+        }
+
+        // Подсказки орфографии идут ПЕРВЫМИ — так их ставят все системы.
+        if (p.isEditable && p.misspelledWord) {
+            for (const s of p.dictionarySuggestions.slice(0, 5)) {
+                add({label: s, click: () => wc.replaceMisspelling(s)})
+            }
+            if (!p.dictionarySuggestions.length) add({label: 'Нет вариантов', enabled: false})
+            add({
+                label: 'Добавить в словарь',
+                click: () => wc.session.addWordToSpellCheckerDictionary(p.misspelledWord),
+            })
+            sep()
+        }
+
+        if (p.isEditable) {
+            add({role: 'undo', label: 'Отменить'})
+            add({role: 'redo', label: 'Повторить'})
+            sep()
+            add({role: 'cut', label: 'Вырезать'})
+            add({role: 'copy', label: 'Копировать'})
+            add({role: 'paste', label: 'Вставить'})
+            add({role: 'pasteAndMatchStyle', label: 'Вставить без форматирования'})
+            add({role: 'selectAll', label: 'Выделить всё'})
+        } else if (p.selectionText) {
+            add({role: 'copy', label: 'Копировать'})
+            add({role: 'selectAll', label: 'Выделить всё'})
+        }
+
+        if (p.linkURL) {
+            sep()
+            add({
+                label: p.linkURL.startsWith(appUrl) ? 'Открыть в новом окне' : 'Открыть в браузере',
+                click: () => shell.openExternal(p.linkURL),
+            })
+            add({label: 'Копировать ссылку', click: () => clipboard.writeText(p.linkURL)})
+        }
+
+        if (p.mediaType === 'image' && p.srcURL) {
+            sep()
+            add({label: 'Копировать картинку', click: () => wc.copyImageAt(p.x, p.y)})
+            add({label: 'Открыть картинку в браузере', click: () => shell.openExternal(p.srcURL)})
+            add({
+                label: 'Сохранить картинку…',
+                click: () => wc.downloadURL(p.srcURL),
+            })
+        }
+
+        // Общие действия страницы — в самом низу, как в браузерах.
+        sep()
+        add({label: 'Обновить', click: () => wc.reload()})
+        if (!app.isPackaged) {
+            add({label: 'Инспектировать', click: () => wc.inspectElement(p.x, p.y)})
+        }
+
+        const menu = Menu.buildFromTemplate(items)
+        menu.popup({window: BrowserWindow.fromWebContents(wc) || mainWindow})
+    })
+}
+
 function showWindow() {
     if (!mainWindow || mainWindow.isDestroyed()) return
     if (process.platform === 'darwin') app.dock?.show()
     if (mainWindow.isMinimized()) mainWindow.restore()
     mainWindow.show()
     mainWindow.focus()
+    // Linux-меню трея статичное — пересобираем, чтобы первый пункт («Открыть»
+    // ⇄ «Свернуть») соответствовал состоянию окна.
+    if (process.platform === 'linux') tray?.setContextMenu(buildTrayMenu())
+}
+
+function hideWindow() {
+    if (!mainWindow || mainWindow.isDestroyed()) return
+    mainWindow.hide()
+    if (process.platform === 'darwin') app.dock?.hide()
+    if (process.platform === 'linux') tray?.setContextMenu(buildTrayMenu())
+}
+
+/* Клик по значку трея — переключатель окна: показать, если спрятано, и убрать,
+   если оно уже на переднем плане. Так ведут себя мессенджеры на Windows/Linux;
+   на macOS клик по значку в строке меню принято сразу открывать меню, поэтому
+   там переключатель не используется (см. createTray). */
+function toggleWindow() {
+    if (mainWindow && !mainWindow.isDestroyed() && mainWindow.isVisible() && mainWindow.isFocused()) hideWindow()
+    else showWindow()
 }
 
 /* ── «Не беспокоить» из трея ──
@@ -357,6 +450,11 @@ function openSettings() {
     mainWindow?.loadURL(currentAppUrl + '/settings')
 }
 
+function openHelp() {
+    showWindow()
+    mainWindow?.loadURL(currentAppUrl + '/settings?section=help')
+}
+
 function showAbout() {
     dialog.showMessageBox(mainWindow, {
         type: 'info',
@@ -368,13 +466,21 @@ function showAbout() {
     })
 }
 
+/* Меню трея. Порядок — как в системных приложениях: первым пункт-действие по
+   умолчанию (жирным на Windows), затем состояние и настройки, «Выйти» — всегда
+   последним, отдельной группой. */
 function buildTrayMenu() {
+    const hidden = !mainWindow || mainWindow.isDestroyed() || !mainWindow.isVisible()
     return Menu.buildFromTemplate([
-        {label: 'Открыть Groove Work', click: showWindow},
+        // default: true — Windows рисует пункт жирным как действие по умолчанию.
+        {label: hidden ? 'Открыть Groove Work' : 'Свернуть в трей', click: hidden ? showWindow : hideWindow, default: true},
+        {type: 'separator'},
+        {label: 'Не беспокоить', type: 'checkbox', checked: notifyMuted, click: toggleMuted},
         {type: 'separator'},
         {label: 'Настройки', click: openSettings},
+        {label: 'Справка и поддержка', click: openHelp},
+        {label: 'Проверить обновления', click: () => checkShellUpdate(currentAppUrl)},
         {label: 'О приложении', click: showAbout},
-        {label: 'Не беспокоить', type: 'checkbox', checked: notifyMuted, click: toggleMuted},
         {type: 'separator'},
         {label: 'Выйти', click: () => app.quit()},
     ])
@@ -382,26 +488,52 @@ function buildTrayMenu() {
 
 function createTray() {
     if (tray) return
-    // Иконку трея берём с сервера нельзя — кладём из ресурсов сборки; в деве
-    // рядом лежит build/icon.png.
+    /* Иконку кладём из ресурсов сборки (в деве рядом — build/icon.png).
+       Размер зависит от системы: строка меню macOS ждёт 18pt, область
+       уведомлений Windows — 16px, панели Linux — 22px. Крупная картинка,
+       ужатая до чужого размера, выглядит мыльной. */
+    const size = process.platform === 'darwin' ? 18 : process.platform === 'win32' ? 16 : 22
     const icon = nativeImage
         .createFromPath(path.join(__dirname, 'build', 'icon.png'))
-        .resize({width: 18, height: 18})
+        .resize({width: size, height: size})
+    // Значок фирменный и цветной, поэтому НЕ template: template-режим macOS
+    // перекрашивает картинку в монохром по цвету строки меню.
     icon.setTemplateImage(false)
     tray = new Tray(icon)
     tray.setToolTip('Groove Work')
+
+    // Свежий чекбокс «Не беспокоить»: состояние живёт в веб-слое и могло
+    // измениться там.
+    const syncMuted = async () => {
+        const muted = await getPageMuted()
+        if (muted !== null) notifyMuted = muted
+    }
+
     if (process.platform === 'linux') {
-        // Appindicator не отдаёт клики по значку — только статичное меню
+        // AppIndicator не отдаёт клики по значку — только статичное меню
         // (пункт «Открыть» первым заменяет клик).
         tray.setContextMenu(buildTrayMenu())
-    } else {
-        // ЛКМ — только показать окно; меню — на ПКМ. setContextMenu не используем:
-        // на macOS он открывал меню и по левому клику. Меню строим при каждом
-        // открытии — чекбокс «Не беспокоить» мог измениться в веб-настройках.
-        tray.on('click', showWindow)
+    } else if (process.platform === 'darwin') {
+        /* macOS: клик по значку в строке меню принято открывать меню, а не
+           окно — прятать окно щелчком там некуда. Двойные клики системе не
+           нужны, иначе первый клик «залипает». */
+        tray.setIgnoreDoubleClickEvents(true)
+        tray.on('click', async () => {
+            await syncMuted()
+            tray.popUpContextMenu(buildTrayMenu())
+        })
         tray.on('right-click', async () => {
-            const muted = await getPageMuted()
-            if (muted !== null) notifyMuted = muted
+            await syncMuted()
+            tray.popUpContextMenu(buildTrayMenu())
+        })
+    } else {
+        // Windows: ЛКМ — переключатель окна, двойной клик — гарантированно
+        // показать, ПКМ — меню. setContextMenu не используем: меню собирается
+        // при каждом открытии (состояние окна и «Не беспокоить» меняются).
+        tray.on('click', toggleWindow)
+        tray.on('double-click', showWindow)
+        tray.on('right-click', async () => {
+            await syncMuted()
             tray.popUpContextMenu(buildTrayMenu())
         })
     }
@@ -470,6 +602,15 @@ function buildMenu() {
             ],
         },
         {role: 'windowMenu'},
+        {
+            role: 'help',
+            label: 'Справка',
+            submenu: [
+                {label: 'Справка и поддержка', click: openHelp},
+                {label: 'Проверить обновления', click: () => checkShellUpdate(currentAppUrl)},
+                ...(process.platform === 'darwin' ? [] : [{label: 'О приложении', click: showAbout}]),
+            ],
+        },
     ]
     Menu.setApplicationMenu(Menu.buildFromTemplate(template))
 }
@@ -612,6 +753,17 @@ app.whenReady().then(() => {
             return {error: 'Не удалось скачать обновление — попробуйте ещё раз'}
         }
     })
+
+    /* Проверка орфографии в полях ввода — русский и английский (подсказки
+       показывает контекстное меню). На macOS словари даёт система, и вызов
+       не нужен: там он ничего не меняет. */
+    if (process.platform !== 'darwin') {
+        try {
+            session.defaultSession.setSpellCheckerLanguages(['ru', 'en-US'])
+        } catch {
+            // Сборка без словарей — проверка просто не работает, не падаем.
+        }
+    }
 
     // Разрешения — только своему origin и только нужные приложению:
     // уведомления, микрофон/камера (звонки), захват экрана, fullscreen.

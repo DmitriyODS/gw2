@@ -65,12 +65,15 @@ const menuOpen = ref(false)
 const menuX = ref(0)
 const menuY = ref(0)
 
+/* `children` — подменю: так в тесной панели прячутся переключатели раздела
+   (вид периода, набор записей), которым иначе нужна отдельная строка вкладок. */
 const menuItems = computed(() =>
   menuCommands.value.map((c) => ({
     label: c.label,
     icon: c.icon,
     danger: c.danger || c.tone === 'danger',
     action: c.key,
+    children: c.children?.map((s) => ({ label: s.label, icon: s.icon, action: s.key })),
   })),
 )
 

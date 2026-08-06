@@ -316,7 +316,7 @@ watch(profileOpen, (open) => {
 /* ============ Сетка карточек ============ */
 .emp-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(212px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(min(212px, 100%), 1fr));
   gap: 16px;
 }
 .emp-card {

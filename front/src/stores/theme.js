@@ -1,5 +1,5 @@
 import { defineStore } from 'pinia'
-import { ref, reactive } from 'vue'
+import { ref, reactive, computed } from 'vue'
 import {
   storageGet, storageGetJSON, storageSet, storageSetJSON,
 } from '@/utils/storage.js'
@@ -290,20 +290,58 @@ export const useThemeStore = defineStore('theme', () => {
      Вход, регистрация и прочие публичные экраны встречают КЛАССИЧЕСКОЙ
      темой в системном светлом/тёмном виде: личная тема пользователя туда
      не протекает (на устройство приходят и гости), а режим берётся у ОС,
-     а не из личной настройки. Исключение — тема, выбранная плитками прямо
-     на регистрации: она применяется сразу и остаётся до конца экранов входа. */
+     а не из личной настройки. Исключение — оформление, выбранное прямо на
+     регистрации: оно применяется сразу и остаётся до конца экранов входа. */
   const authPreview = ref(false)
   const authPicked = ref(false)
+  const authModePicked = ref(false)
+
+  /* Тема, которая ФАКТИЧЕСКИ на экране: на экранах входа до выбора плитками
+     это классическая, а не личная тема из localStorage. Её показывают плитки
+     регистрации — иначе они подписывали бы классическую палитру чужим именем. */
+  const activePreset = computed(() => (
+    authPreview.value && !authPicked.value ? 'classic' : currentPreset.value
+  ))
+
+  /* ── Примерка оформления на регистрации ──────────────────────────
+     Цвет и светлый/тёмный вид применяются сразу, но остаются ЧЕРНОВИКОМ:
+     в localStorage не пишутся. Закрепляет их только созданный аккаунт
+     (commitThemeTrial); уход с регистрации любым способом откатывает
+     оформление — иначе выбор гостя оставался бы на устройстве хозяина. */
+  const trial = ref(null)
+
+  function startThemeTrial() {
+    if (!trial.value) trial.value = { preset: currentPreset.value, mode: mode.value }
+  }
+
+  function commitThemeTrial() {
+    if (!trial.value) return
+    trial.value = null
+    storageSet('gw_theme', currentPreset.value)
+    storageSet('gw_theme_mode', mode.value)
+  }
+
+  function cancelThemeTrial() {
+    if (!trial.value) return
+    const { preset, mode: prevMode } = trial.value
+    trial.value = null
+    authPicked.value = false
+    authModePicked.value = false
+    currentPreset.value = preset
+    mode.value = prevMode
+    applyVars(authPreview.value ? PRESETS.classic : getVars(preset))
+    applyDark()
+  }
 
   function setAuthPreview(on) {
     authPreview.value = on
-    if (!on) authPicked.value = false
+    if (!on) { authPicked.value = false; authModePicked.value = false }
     applyVars(on && !authPicked.value ? PRESETS.classic : getVars(currentPreset.value))
     applyDark()
   }
 
   function applyDark() {
-    if (authPreview.value) dark.value = !!systemDarkMq?.matches
+    if (authPreview.value && !authModePicked.value) dark.value = !!systemDarkMq?.matches
     else if (mode.value === 'schedule') dark.value = isDarkBySchedule()
     else dark.value = mode.value === 'system' ? !!systemDarkMq?.matches : mode.value === 'dark'
     document.documentElement.setAttribute('data-dark', dark.value)
@@ -315,7 +353,9 @@ export const useThemeStore = defineStore('theme', () => {
 
   function setMode(m) {
     mode.value = m
-    storageSet('gw_theme_mode', m)
+    if (!trial.value) storageSet('gw_theme_mode', m)
+    // Выбор светлого/тёмного на регистрации отменяет системный вид по умолчанию.
+    if (authPreview.value) authModePicked.value = true
     applyDark()
   }
 
@@ -387,7 +427,7 @@ export const useThemeStore = defineStore('theme', () => {
 
   function applyTheme(name) {
     currentPreset.value = name
-    storageSet('gw_theme', name)
+    if (!trial.value) storageSet('gw_theme', name)
     // Выбор темы на экране регистрации отменяет классику по умолчанию.
     if (authPreview.value) authPicked.value = true
     applyVars(getVars(name))
@@ -447,9 +487,10 @@ export const useThemeStore = defineStore('theme', () => {
   }
 
   return {
-    currentPreset, mode, dark, customThemes, schedule, bgGradient,
+    currentPreset, activePreset, mode, dark, customThemes, schedule, bgGradient,
     presetNames: Object.keys(PRESETS),
     presetLabels: PRESET_LABELS,
+    startThemeTrial, commitThemeTrial, cancelThemeTrial,
     applyTheme, applyVars, setMode, setSchedule, setAuthPreview, saveCustomTheme, deleteCustomTheme,
     exportTheme, importTheme, init, getVars, randomTheme,
     setBgGradientEnabled, regenerateBgGradient, resetBgGradient,

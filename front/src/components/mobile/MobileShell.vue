@@ -1,9 +1,8 @@
 <template>
   <div class="mshell">
     <!-- Обои — те же, что на рабочем столе (личная настройка переезжает между
-         устройствами), либо мягкие волны из цветов темы. -->
+         устройствами). Сняты все слои — фон остаётся чистым. -->
     <ChatBackgroundLayer v-if="wallpaper" :recipe="wallpaper" class="ms-paper" />
-    <div v-else class="ms-wallpaper" aria-hidden="true" />
 
     <!-- Панель статусов видна всегда: компания, идущий юнит и уведомления
          нужны и внутри раздела. -->
@@ -43,13 +42,16 @@
  * адрес пишется через push, поэтому системная кнопка «назад» ходит по
  * разделам сама, без перехвата жестов.
  */
-import { computed, onBeforeUnmount, onMounted, watch } from 'vue'
+import { computed, defineAsyncComponent, onBeforeUnmount, onMounted, watch } from 'vue'
 import { useDesktopStore } from '@/stores/desktop.js'
 import { useShellCore } from '@/desktop/shellCore.js'
 import { MOBILE_STATUSBAR_HEIGHT, MOBILE_TASKBAR_HEIGHT, areaInsets, taskbarSide } from '@/desktop/layout.js'
 import ChatBackgroundLayer from '@/components/common/ChatBackgroundLayer.vue'
-import NotificationsPanel from '@/components/desktop/NotificationsPanel.vue'
-import HolaPopup from '@/components/desktop/HolaPopup.vue'
+
+/* Панели поверх каркаса открываются по кнопке — ленивыми чанками (Hola тянет
+   за собой поиск по всем разделам и чат ассистента). */
+const NotificationsPanel = defineAsyncComponent(() => import('@/components/desktop/NotificationsPanel.vue'))
+const HolaPopup = defineAsyncComponent(() => import('@/components/desktop/HolaPopup.vue'))
 import MobileStatusBar from './MobileStatusBar.vue'
 import MobileStart from './MobileStart.vue'
 import MobileTaskbar from './MobileTaskbar.vue'
@@ -135,16 +137,6 @@ onBeforeUnmount(() => {
 .ms-paper {
   position: absolute;
   inset: 0;
-}
-
-.ms-wallpaper {
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-  background:
-    radial-gradient(120vmax 60vmax at 18% 120%, color-mix(in oklch, var(--color-primary) 16%, transparent), transparent 58%),
-    radial-gradient(90vmax 50vmax at 92% 8%, color-mix(in oklch, var(--color-tertiary) 12%, transparent), transparent 60%),
-    linear-gradient(122deg, transparent 38%, color-mix(in oklch, var(--color-primary) 9%, transparent) 52%, transparent 66%);
 }
 
 .ms-screens {

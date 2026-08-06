@@ -35,9 +35,13 @@ const tabs = computed(() => [
   { value: 'done', label: 'Сработавшие' },
 ])
 
-const commands = [
-  { key: 'new', label: 'Напоминание', icon: 'add_alert', variant: 'filled', primary: true, fab: true },
-]
+/* В архиве сработавших создавать нечего — кнопка там только закрывала бы список
+   собой. */
+const commands = computed(() => (
+  tab.value === 'done'
+    ? []
+    : [{ key: 'new', label: 'Напоминание', icon: 'add_alert', variant: 'filled', primary: true, fab: true }]
+))
 
 const REPEAT_LABELS = {
   none: '', daily: 'каждый день', weekdays: 'по рабочим дням',

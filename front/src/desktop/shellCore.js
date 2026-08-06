@@ -79,11 +79,15 @@ export function useShellCore({
   /* ── Живые плитки ───────────────────────────────────────────
      Сводки тянем заранее и освежаем по таймеру, поэтому стартовый экран
      открывается уже с данными. В скрытой вкладке не опрашиваем. */
+  /* Опрашиваем только те плитки, которые реально показывают сводку: выключенная
+     поимённо живая плитка не должна стоить ни одного запроса. */
   const liveAppIds = computed(() => menuGroups({
     hasCompany: hasActiveCompany(),
     isSuperAdmin: isSuperAdmin(),
     settings: settings.value,
-  }, prefs.layout).flatMap((g) => g.items.map((a) => a.id)))
+  }, prefs.layout)
+    .flatMap((g) => g.items.map((a) => a.id))
+    .filter((id) => prefs.isTileLive(id)))
 
   function pulseLiveTiles({ force = false } = {}) {
     if (document.hidden || !auth.user || !prefs.liveTiles) return

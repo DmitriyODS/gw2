@@ -187,6 +187,9 @@ async function handleExport() {
   display: flex;
   flex-direction: column;
   gap: 14px;
+  /* Карточка — ячейка сетки: без min-width её распирает собственное
+     содержимое (таблица, длинное имя), и раздел уезжает вбок. */
+  min-width: 0;
   max-height: var(--widget-max-height, 400px);
   transition: box-shadow 0.18s ease, border-color 0.18s ease, opacity 0.18s ease;
 }
@@ -303,25 +306,48 @@ async function handleExport() {
   font-variation-settings: 'FILL' 1;
 }
 
+/* Прокрутка обеих осей: таблица шире карточки должна ездить ВНУТРИ неё, а не
+   вылезать за края раздела (см. правило про горизонтальную прокрутку). */
 .widget-body {
   flex: 1;
   min-height: 0;
-  overflow-y: auto;
+  overflow: auto;
 }
 
-@media (max-width: 768px) {
+/* Тесная панель: карточки в одну колонку, поля меньше — от ширины ПАНЕЛИ, а не
+   экрана (в узком окне рабочего стола медиазапрос не срабатывал). */
+@container (max-width: 700px) {
   .stats-widget {
     padding: 16px;
     gap: 12px;
     border-radius: var(--radius-lg, 16px);
   }
-  /* На мобильном всё в один столбец — размер ширины не применяем. */
   .stats-widget.size-small,
   .stats-widget.size-medium,
   .stats-widget.size-large {
     grid-column: 1 / -1;
     --widget-max-height: 460px;
   }
+  .widget-header h3 { font-size: 15px; }
+}
+
+@media (max-width: 768px) {
+  .stats-widget {
+    padding: 14px;
+    gap: 10px;
+    border-radius: var(--radius-lg, 16px);
+  }
+  /* На мобильном всё в один столбец — размер ширины не применяем. Высоту НЕ
+     ограничиваем: вложенная прокрутка внутри прокручиваемой страницы на таче
+     ловит жест и мешает листать раздел — пусть карточка растёт, а страница
+     скроллится целиком. */
+  .stats-widget.size-small,
+  .stats-widget.size-medium,
+  .stats-widget.size-large {
+    grid-column: 1 / -1;
+    --widget-max-height: none;
+  }
+  .widget-body { overflow: visible; }
   .widget-header h3 {
     font-size: 15px;
   }

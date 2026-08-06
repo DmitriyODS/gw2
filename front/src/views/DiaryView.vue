@@ -1,5 +1,9 @@
 <template>
-  <AppListDetail v-model:open="detailOpen" @narrow-change="narrow = $event">
+  <AppListDetail
+    v-model:open="detailOpen"
+    :loading="store.loadingList && !store.diaries.length"
+    @narrow-change="narrow = $event"
+  >
     <!-- Список ежедневников -->
     <template #list="{ toggle }">
       <AppPage
@@ -10,7 +14,6 @@
         menu-icon="left_panel_close"
         menu-label="Свернуть список"
         :commands="listCommands"
-        :loading="store.loadingList"
         @menu="toggle"
         @command="openCreateDiary"
       >
@@ -69,47 +72,41 @@
         @menu="toggle"
         @command="onCommand"
       >
-        <template v-if="store.selected" #subhead>
-          <AppTabs :model-value="store.subtab" :tabs="subtabs" dense @update:model-value="store.setSubtab" />
-
-          <template v-if="store.subtab === 'active'">
-            <div class="dv-nav">
-              <AppButton
-                variant="icon"
-                size="sm"
-                icon="chevron_left"
-                title="Назад"
-                aria-label="Предыдущий период"
-                @click="store.step(-1)"
-              />
-              <AppButton size="sm" label="Сегодня" @click="store.today()" />
-              <AppButton
-                variant="icon"
-                size="sm"
-                icon="chevron_right"
-                title="Вперёд"
-                aria-label="Следующий период"
-                @click="store.step(1)"
-              />
-              <h2 class="dv-period">{{ periodLabel }}</h2>
-            </div>
-
-            <AppTabs
-              :model-value="store.view"
-              :tabs="viewModes"
-              variant="tint"
-              dense
-              @update:model-value="store.setView"
-            />
-          </template>
-
+        <!-- Поиск — в строку названия: в тесной панели он сворачивается в лупу
+             и не отнимает у списка дел целую строку. -->
+        <template v-if="store.selected" #search="{ narrow: tight }">
           <SearchField
             v-model="searchInput"
             placeholder="Поиск по записям…"
             hotkey
-            :collapsible="false"
+            :collapsed="tight"
             @update:model-value="onSearch"
             @clear="clearSearch"
+          />
+        </template>
+
+        <!-- В тесной панели строка управления остаётся только под навигацию по
+             дням: набор записей и вид ушли в меню «ещё». -->
+        <template
+          v-if="store.selected && (!narrow || store.subtab === 'active')"
+          #subhead="{ narrow: tight }"
+        >
+          <AppTabs
+            v-if="!tight"
+            :model-value="store.subtab"
+            :tabs="subtabs"
+            dense
+            @update:model-value="store.setSubtab"
+          />
+
+          <PeriodNav
+            v-if="store.subtab === 'active'"
+            :label="periodLabel"
+            :view="store.view"
+            :tight="tight"
+            @step="store.step($event)"
+            @today="store.today()"
+            @update:view="store.setView($event)"
           />
         </template>
 
@@ -393,6 +390,8 @@ import AppRow from '@/components/ui/AppRow.vue'
 import AppStack from '@/components/ui/AppStack.vue'
 import AppTabs from '@/components/ui/AppTabs.vue'
 import BrandLoader from '@/components/common/BrandLoader.vue'
+import PeriodNav from '@/components/common/PeriodNav.vue'
+import { periodViewCommand, parseViewCommand } from '@/utils/periodViews.js'
 import SearchField from '@/components/common/SearchField.vue'
 import DiaryEntryDialog from '@/components/diary/DiaryEntryDialog.vue'
 import DiaryShareDialog from '@/components/diary/DiaryShareDialog.vue'
@@ -427,6 +426,10 @@ const commands = computed(() => {
   const own = !store.readonly
   return [
     ...(own ? [{ key: 'add', label: 'Запись', icon: 'add', variant: 'filled', primary: true, fab: true }] : []),
+    /* Тесная панель: набор записей и вид периода уезжают в меню — две строки
+       вкладок стоили дороже, чем сам список дел. */
+    ...(narrow.value ? [subtabCommand.value] : []),
+    ...(narrow.value && store.subtab === 'active' ? [periodViewCommand(store.view)] : []),
     ...(own ? [{ key: 'rename', label: 'Переименовать', icon: 'edit' }] : []),
     ...(own ? [{ key: 'share', label: 'Поделиться', icon: 'share' }] : []),
     { key: 'export', label: 'Экспорт в XLSX', icon: 'download' },
@@ -435,6 +438,9 @@ const commands = computed(() => {
 })
 
 function onCommand(key) {
+  const view = parseViewCommand(key)
+  if (view) return store.setView(view)
+  if (key.startsWith('subtab:')) return store.setSubtab(key.slice(7))
   if (key === 'add') openCreate()
   else if (key === 'rename') openRenameDiary()
   else if (key === 'share') shareOpen.value = true
@@ -460,11 +466,21 @@ const subtabs = [
   { value: 'all', label: 'Все задачи', icon: 'list' },
   { value: 'archive', label: 'Архив', icon: 'inventory_2' },
 ]
-const viewModes = [
-  { value: 'month', label: 'Месяц' },
-  { value: 'week', label: 'Неделя' },
-  { value: 'day', label: 'День' },
-]
+
+// То же самое пунктом меню — для тесной панели (см. commands).
+const subtabCommand = computed(() => {
+  const active = subtabs.find((t) => t.value === store.subtab) || subtabs[0]
+  return {
+    key: 'subtab',
+    label: `Записи: ${active.label.toLowerCase()}`,
+    icon: active.icon,
+    children: subtabs.map((t) => ({
+      key: `subtab:${t.value}`,
+      label: t.label,
+      icon: t.value === store.subtab ? 'check' : t.icon,
+    })),
+  }
+})
 const weekdays = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс']
 
 function addDays(d, n) { const x = new Date(d); x.setHours(0, 0, 0, 0); x.setDate(x.getDate() + n); return x }
@@ -832,8 +848,7 @@ watch(() => store.loadingEntries, () => nextTick(measureWeekColumn))
 .dv-side-bar { flex: 1; height: 4px; border-radius: var(--radius-full); background: var(--color-surface-highest); overflow: hidden; }
 .dv-side-fill { display: block; height: 100%; border-radius: inherit; background: var(--color-success); transition: width 0.25s; }
 .dv-side-count { flex-shrink: 0; font-size: 11px; font-weight: 600; font-variant-numeric: tabular-nums; opacity: 0.85; }
-.dv-nav { display: flex; align-items: center; gap: 8px; }
-.dv-period { margin: 0 0 0 6px; font-size: 16px; font-weight: 700; color: var(--color-text); text-transform: capitalize; white-space: nowrap; } /* кнопка «Управление» — только на мобайле */
+/* кнопка «Управление» — только на мобайле */
 
 /* Тело */
 .dv-body { position: relative; flex: 1; min-height: 0; overflow: auto; }
@@ -954,6 +969,5 @@ watch(() => store.loadingEntries, () => nextTick(measureWeekColumn))
 /* Телефон: тело скроллится под панель задач каркаса — оставляем ей воздух. */
 @media (max-width: 768px) {
   .dv-body { padding-bottom: calc(76px + env(safe-area-inset-bottom, 0px)); }
-  .dv-period { font-size: 15px; }
 }
 </style>

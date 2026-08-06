@@ -64,6 +64,7 @@
     />
 
     <AppDialog
+      v-if="logoutAsk"
       v-model="logoutAsk"
       tone="danger"
       size="sm"
@@ -76,7 +77,7 @@
 </template>
 
 <script setup>
-import { computed, reactive, ref } from 'vue'
+import { computed, defineAsyncComponent, reactive, ref } from 'vue'
 import { useAuthStore } from '@/stores/auth.js'
 import { useDesktopStore } from '@/stores/desktop.js'
 import { useDesktopPrefsStore } from '@/stores/desktopPrefs.js'
@@ -93,8 +94,10 @@ import { menuGroups } from '@/desktop/apps.js'
 import { tileFaces } from '@/desktop/liveTiles.js'
 import BrandWordmark from '@/components/common/BrandWordmark.vue'
 import ContextMenu from '@/components/common/ContextMenu.vue'
-import AppDialog from '@/components/ui/AppDialog.vue'
 import LiveTile from '@/components/desktop/LiveTile.vue'
+
+// Спрашиваем про выход редко — диалог (а с ним PrimeVue Dialog) грузим лениво.
+const AppDialog = defineAsyncComponent(() => import('@/components/ui/AppDialog.vue'))
 
 const auth = useAuthStore()
 const desktop = useDesktopStore()
@@ -130,7 +133,8 @@ const sizeOf = (app) => prefs.tileSize(app.id, app.tile || 'square')
 const liveCtx = computed(() => ({ data: live.data, messenger, portal, pets, units, auth }))
 
 function facesOf(app) {
-  return prefs.liveTiles ? tileFaces(app.id, liveCtx.value) : []
+  // Сводки выключены — общим тумблером или у этой плитки: обычный значок.
+  return prefs.isTileLive(app.id) ? tileFaces(app.id, liveCtx.value) : []
 }
 
 function badgeOf(app) {
@@ -161,6 +165,7 @@ const menuItems = computed(() => {
   if (!id) {
     return [
       { label: 'Персонализация', icon: 'wallpaper', action: 'personalize' },
+      { label: 'Справка и поддержка', icon: 'help', action: 'help' },
       { divider: true },
       { label: 'Выйти', icon: 'logout', action: 'logout', danger: true },
     ]
@@ -171,6 +176,10 @@ const menuItems = computed(() => {
     { divider: true },
     { label: 'Широкая плитка', icon: size === 'wide' ? 'check' : 'width_wide', action: 'wide' },
     { label: 'Квадратная плитка', icon: size === 'square' ? 'check' : 'crop_square', action: 'square' },
+    { divider: true },
+    prefs.liveTiles
+      ? { label: 'Живая плитка', icon: prefs.isTileLive(id) ? 'check' : 'dashboard', action: 'live' }
+      : { label: 'Живые плитки выключены', icon: 'toggle_off', disabled: true },
     { divider: true },
     prefs.isPinned(id)
       ? { label: 'Открепить от панели задач', icon: 'keep_off', action: 'unpin' }
@@ -200,11 +209,18 @@ const LOGOUT_ACTIONS = [
 
 function onMenuSelect(action) {
   if (action === 'personalize') return open('/settings?section=desktop')
+  if (action === 'help') return open('/settings?section=help')
   if (action === 'logout') { logoutAsk.value = true; return }
   const id = menu.appId
   if (!id) return
   if (action === 'open') return open(appById.value.get(id).path)
   if (action === 'wide' || action === 'square') return prefs.setTileSize(id, action)
+  if (action === 'live') {
+    prefs.toggleTileLive(id)
+    // Вернули сводки — их надо подтянуть: выключенную плитку не опрашивали.
+    if (prefs.isTileLive(id)) live.refresh([id]).catch(() => {})
+    return
+  }
   if (action === 'pin') return prefs.pin(id)
   if (action === 'unpin') return prefs.unpin(id)
 }

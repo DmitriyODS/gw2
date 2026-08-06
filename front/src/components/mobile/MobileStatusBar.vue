@@ -4,7 +4,7 @@
        открытого раздела. -->
   <header class="msbar">
     <div class="msb-company">
-      <CompanySelect variant="button" />
+      <CompanySelect />
     </div>
 
     <button v-if="unit" class="msb-unit" type="button" title="Идёт работа — открыть юнит" @click="expand">

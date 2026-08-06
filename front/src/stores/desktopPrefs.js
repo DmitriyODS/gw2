@@ -34,6 +34,9 @@ function empty() {
     wallpapers: [],
     // Живые плитки меню «Пуск» (сводки разделов) — включены по умолчанию.
     liveTiles: true,
+    // Плитки, у которых сводки выключены поимённо ({ [appId]: false }).
+    // Храним только исключения: по умолчанию живая плитка включена.
+    tileLive: {},
     // Где висит панель задач: снизу (как было), сверху, слева или справа.
     taskbarSide: 'bottom',
     // Меню «Пуск» всегда открывается во весь экран (иначе — обычная панель,
@@ -63,6 +66,7 @@ function normalize(raw) {
       ? p.wallpapers.filter((u) => typeof u === 'string').slice(0, WALLPAPER_HISTORY)
       : [],
     liveTiles: p.liveTiles !== false,
+    tileLive: p.tileLive && typeof p.tileLive === 'object' ? { ...p.tileLive } : {},
     taskbarSide: TASKBAR_SIDES.includes(p.taskbarSide) ? p.taskbarSide : 'bottom',
     startFullscreen: p.startFullscreen === true,
   }
@@ -207,6 +211,25 @@ export const useDesktopPrefsStore = defineStore('desktopPrefs', () => {
     scheduleSave()
   }
 
+  /** Живая ли плитка КОНКРЕТНОГО раздела (общий тумблер важнее личного). */
+  function isTileLive(appId) {
+    return prefs.value.liveTiles && prefs.value.tileLive[appId] !== false
+  }
+
+  /* Сводки одной плитки. Выключенная не только показывает обычный значок, но и
+     не попадает в опрос источников — лишних запросов не будет. */
+  function setTileLive(appId, on) {
+    const next = { ...prefs.value.tileLive }
+    if (on) delete next[appId]
+    else next[appId] = false
+    prefs.value.tileLive = next
+    scheduleSave()
+  }
+
+  function toggleTileLive(appId) {
+    setTileLive(appId, prefs.value.tileLive[appId] === false)
+  }
+
   /** Сторона панели задач: bottom | top | left | right. */
   function setTaskbarSide(side) {
     if (!TASKBAR_SIDES.includes(side)) return
@@ -247,6 +270,7 @@ export const useDesktopPrefsStore = defineStore('desktopPrefs', () => {
     taskbarSide, taskbarVertical, startFullscreen, setTaskbarSide, setStartFullscreen,
     tileSize, isPinned, load, setTileSize, setGroupOrder, moveTileToGroup,
     addGroup, renameGroup, removeGroup, isCollapsed, toggleCollapsed,
-    pin, unpin, togglePin, setPinnedOrder, setLiveTiles, setWallpaper, forgetWallpaper, reset,
+    pin, unpin, togglePin, setPinnedOrder, setLiveTiles, isTileLive, setTileLive, toggleTileLive,
+    setWallpaper, forgetWallpaper, reset,
   }
 })

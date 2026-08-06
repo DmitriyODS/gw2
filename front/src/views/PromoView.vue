@@ -756,7 +756,7 @@ onBeforeUnmount(() => {
   margin: 0 auto;
   padding: clamp(40px, 6vw, 76px) clamp(16px, 5vw, 40px) 0;
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(240px, 100%), 1fr));
   gap: clamp(16px, 2.4vw, 28px);
 }
 
@@ -772,7 +772,7 @@ onBeforeUnmount(() => {
 .pr-grid {
   margin-top: clamp(28px, 4vw, 48px);
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(280px, 100%), 1fr));
   gap: clamp(14px, 1.8vw, 20px);
 }
 
@@ -917,7 +917,7 @@ onBeforeUnmount(() => {
 .pr-devices {
   margin-top: clamp(28px, 4vw, 44px);
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(220px, 100%), 1fr));
   gap: clamp(16px, 2.4vw, 28px);
   text-align: center;
 }

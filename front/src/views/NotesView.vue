@@ -68,15 +68,21 @@
         :scroll="false"
         @command="onCommand"
       >
-        <template #subhead>
+        <!-- Поиск — слотом шапки: в тесной панели сворачивается в лупу при
+             названии, а не занимает свою строку. -->
+        <template #search="{ narrow: tight }">
           <SearchField
             v-model="searchInput"
             placeholder="Поиск по заметкам…"
             hotkey
-            :collapsible="false"
+            :collapsed="tight"
           />
+        </template>
+
+        <!-- Строки управления в тесной панели нет вовсе: список/плитки на
+             телефоне не переключают, а пустая строка съедала бы место. -->
+        <template v-if="!narrow" #subhead>
           <AppTabs
-            v-if="!narrow"
             :model-value="store.viewMode"
             :tabs="viewModes"
             variant="tint"
@@ -240,7 +246,7 @@
         </div>
 
         <div class="na-scroll" @contextmenu.prevent="openEmptyMenu($event)">
-          <div v-if="store.loading && !store.notes.length" class="na-note">Загрузка…</div>
+          <div v-if="store.loading && !store.notes.length" class="na-loading"><BrandLoader :size="64" /></div>
 
           <EmptyState
             v-else-if="isEmpty"
@@ -381,6 +387,7 @@ import AppListDetail from '@/components/ui/AppListDetail.vue'
 import AppPage from '@/components/ui/AppPage.vue'
 import AppTabs from '@/components/ui/AppTabs.vue'
 import EmptyState from '@/components/common/EmptyState.vue'
+import BrandLoader from '@/components/common/BrandLoader.vue'
 import ConfirmDialog from '@/components/ui/ConfirmDialog.vue'
 import TreeView from '@/components/common/TreeView.vue'
 import Breadcrumbs from '@/components/common/Breadcrumbs.vue'
@@ -981,7 +988,7 @@ function onFileDrop(e) {
 .na-side-head { display: flex; align-items: center; justify-content: space-between; padding: 14px 8px 6px; font-size: 11.5px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; color: var(--color-text-dim); }
 
 .na-main { flex: 1; min-width: 0; display: flex; flex-direction: column; min-height: 0; }
-.na-crumbs { flex-shrink: 0; padding: 10px 16px 4px; }
+.na-crumbs { flex-shrink: 0; padding: 6px 16px 2px; }
 /* Одна строка: подпись слева и кнопки справа зафиксированы, чипы прокручиваются
    горизонтально между ними (паттерн chip-carousel, как в Google Maps). */
 .na-tags { flex-shrink: 0; display: flex; flex-wrap: nowrap; align-items: center; gap: 6px; padding: 8px 16px; min-width: 0; }
@@ -1001,10 +1008,11 @@ function onFileDrop(e) {
 
 .na-scroll { flex: 1; min-height: 0; overflow-y: auto; padding: 6px 16px 16px; }
 .na-note { padding: 12px; color: var(--color-text-dim); }
+.na-loading { display: grid; place-items: center; padding: 56px 12px; }
 .na-empty { margin-top: 24px; }
 
 /* ── Папки-плитки ── */
-.na-folders { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 10px; margin-bottom: 14px; }
+.na-folders { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(180px, 100%), 1fr)); gap: 10px; margin-bottom: 14px; }
 .na-fcard { display: flex; align-items: center; gap: 10px; padding: 12px 14px; border: 1px solid var(--acrylic-border); border-radius: 14px; background: var(--acrylic-card-bg); cursor: pointer; user-select: none; position: relative; }
 .na-fcard:hover { background: var(--color-surface-high); }
 .na-fcard.selected { box-shadow: 0 0 0 2px var(--color-primary); }
@@ -1023,7 +1031,7 @@ function onFileDrop(e) {
 .na-special .na-fcard-ic { color: var(--color-primary); }
 
 /* ── Плитки заметок ── */
-.na-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 12px; align-content: start; }
+.na-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(230px, 100%), 1fr)); gap: 12px; align-content: start; }
 .na-card { display: flex; flex-direction: column; gap: 6px; padding: 14px 16px; background: var(--glass-bg); box-shadow: var(--glass-edge); border: 1px solid var(--acrylic-border); border-radius: 18px; cursor: pointer; user-select: none; position: relative; }
 .na-card.selected { box-shadow: 0 0 0 2px var(--color-primary); }
 .na-card.shared { border-style: dashed; }
@@ -1053,6 +1061,10 @@ function onFileDrop(e) {
 
 @media (max-width: 768px) {
   .na-toolbar { padding: 10px 12px 6px; }
+  /* Крошки и фильтр тегов прижаты к шапке: на телефоне каждый лишний отступ
+     отнимается у списка заметок. */
+  .na-crumbs { padding: 2px 12px 0; }
+  .na-tags { padding: 4px 12px; }
   .na-lbl { display: none; }
   .na-actions :deep(.btn.v-filled) { display: none; }
   /* Мобайл: папки и заметки — единым одноколоночным списком (не ломает вёрстку). */

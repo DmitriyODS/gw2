@@ -230,7 +230,7 @@ onMounted(() => {
 
 .cp-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(min(140px, 100%), 1fr));
   gap: 14px;
 }
 .cp-cell { position: relative; display: flex; }

@@ -180,7 +180,9 @@ const countWord = computed(() => {
   return 'нововведений'
 })
 
-onMounted(loadVersion)
+// Здесь версию показывают целиком («что нового», дата) — читаем с сервера,
+// минуя кэш марки: раздел открывают именно чтобы узнать актуальный выпуск.
+onMounted(() => loadVersion({ force: true }))
 
 /* ── Скачивание приложений ── */
 const {
@@ -528,7 +530,7 @@ async function onUpdateClick() {
 
 .ab-news-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(230px, 100%), 1fr));
   gap: 12px;
   margin: 18px 0 0;
   padding: 0;
@@ -632,7 +634,29 @@ async function onUpdateClick() {
   .ab-badge { flex: 1 1 auto; }
 }
 
+/* Тесная панель: марка перестаёт ломаться на две строки (значок мельче, кегль
+   тянется за шириной), карточка теряет лишние поля, описание — короче строкой.
+   Без этого «Groove Work 7» занимал на телефоне пол-экрана. */
+@container (max-width: 520px) {
+  .ab-card { padding: 16px; }
+  .ab-brand { gap: 12px; }
+  .ab-brand-name { font-size: clamp(1.35rem, 7.5vw, 2.1rem); flex-wrap: nowrap; }
+  .ab-brand :deep(svg), .ab-brand :deep(img) { width: 44px; height: 44px; }
+  .ab-about { margin-top: 12px; font-size: 0.88rem; line-height: 1.5; }
+  .ab-badges { margin-top: 14px; gap: 8px; }
+  .ab-badge { padding: 7px 12px 7px 10px; }
+}
+
 @media (max-width: 620px) {
   .ab-row-btn { width: 100%; justify-content: center; }
+}
+
+@media (max-width: 520px) {
+  .ab-card { padding: 16px; }
+  .ab-brand { gap: 12px; }
+  .ab-brand-name { font-size: clamp(1.35rem, 7.5vw, 2.1rem); flex-wrap: nowrap; }
+  .ab-brand :deep(svg), .ab-brand :deep(img) { width: 44px; height: 44px; }
+  .ab-about { margin-top: 12px; font-size: 0.88rem; line-height: 1.5; }
+  .ab-badges { margin-top: 14px; gap: 8px; }
 }
 </style>

@@ -62,7 +62,12 @@ export default defineConfig({
     // размере чанков без реальной пользы. Дробить эти вендоры вручную рискованно
     // (порядок загрузки чувствителен для старых WebView, см. build.target выше),
     // поэтому поднимаем порог до реалистичного.
-    chunkSizeWarningLimit: 800
+    chunkSizeWarningLimit: 800,
+    // Twemoji грувиков (utils/emoji.js берёт весь каталог через import.meta.glob)
+    // — 80 файлов по 1–4 КБ. По умолчанию они инлайнились в JS как data-URI:
+    // чанк на 130 КБ, где нужен один-два глифа. Оставляем их обычными файлами —
+    // браузер качает только показанные и кэширует по хешу в имени.
+    assetsInlineLimit: (filePath) => (filePath.includes('/twemoji/') ? false : undefined),
   },
   plugins: [vue(), serveChangelog(), serveUploads(), serveApps()],
   resolve: {

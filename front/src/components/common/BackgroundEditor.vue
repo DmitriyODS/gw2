@@ -12,8 +12,8 @@ import EmojiPicker from '@/components/common/EmojiPicker.vue'
 import { useNotificationsStore } from '@/stores/notifications.js'
 import { useThemeStore } from '@/stores/theme.js'
 import {
-  GRADIENT_PRESETS, PATTERNS, PATTERN_ROLE, IMAGE_BLUR_MAX,
-  gradientCss, patternDataUri, randomGradientBlobs, normalizeRecipe,
+  GRADIENT_PRESETS, PATTERNS, PATTERN_ROLE, IMAGE_BLUR_MAX, SOLID_ROLES,
+  gradientCss, patternDataUri, randomGradientBlobs, normalizeRecipe, solidCss,
 } from '@/utils/chatBackgrounds.js'
 
 const props = defineProps({
@@ -92,6 +92,19 @@ async function onImagePicked(e) {
 }
 
 function removeImage() { props.recipe.image = null }
+
+/* Однотонная заливка: цвет — роль токена, поэтому следует теме. Выбор заливки
+   гасит градиент — вместе они дают не «ровный цвет», а грязь; вернуть пятна
+   можно тут же, кнопкой градиента. */
+function pickSolid(role) {
+  if (!role) {
+    props.recipe.solid = null
+    return
+  }
+  props.recipe.solid = { role, amount: props.recipe.solid?.amount ?? 40 }
+  props.recipe.gradient.preset = 'plain'
+  props.recipe.gradient.blobs = null
+}
 
 // IMAGE_BLUR_MAX используется в шаблоне (импорт доступен из script setup).
 
@@ -212,6 +225,38 @@ function patternSwatchStyle(key) {
         >
           <span class="material-symbols-outlined cbg-swatch-ico">casino</span>
         </button>
+      </div>
+    </div>
+
+    <!-- Однотонная заливка -->
+    <div class="cbg-section">
+      <div class="cbg-section-title">Однотонный цвет</div>
+      <div class="cbg-swatches">
+        <button
+          type="button"
+          class="cbg-swatch"
+          :class="{ active: !recipe.solid }"
+          title="Без заливки"
+          @click="pickSolid(null)"
+        >
+          <span class="material-symbols-outlined cbg-swatch-ico">block</span>
+        </button>
+        <button
+          v-for="r in SOLID_ROLES"
+          :key="r.key"
+          type="button"
+          class="cbg-swatch"
+          :class="{ active: recipe.solid?.role === r.key }"
+          :title="r.label"
+          :style="{ backgroundColor: solidCss({ role: r.key, amount: recipe.solid?.amount ?? 40 }) }"
+          @click="pickSolid(r.key)"
+        />
+      </div>
+
+      <div v-if="recipe.solid" class="cbg-slider">
+        <label>Насыщённость</label>
+        <Slider v-model="recipe.solid.amount" :min="0" :max="100" class="cbg-slider-ctl" />
+        <span class="cbg-slider-val">{{ recipe.solid.amount }}</span>
       </div>
     </div>
 

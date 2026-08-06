@@ -1,5 +1,9 @@
 <template>
-  <AppListDetail v-model:open="detailOpen" @narrow-change="narrow = $event">
+  <AppListDetail
+    v-model:open="detailOpen"
+    :loading="store.loadingList && !store.calendars.length"
+    @narrow-change="narrow = $event"
+  >
     <!-- Список календарей -->
     <template #list="{ toggle }">
       <AppPage
@@ -9,7 +13,6 @@
         :menu="!narrow"
         menu-icon="left_panel_close"
         menu-label="Свернуть список"
-        :loading="store.loadingList"
         @menu="toggle"
       >
         <EmptyState
@@ -51,43 +54,27 @@
         @menu="toggle"
         @command="onCommand"
       >
-        <template v-if="store.selected" #subhead>
-          <div class="cv-nav">
-            <AppButton
-              variant="icon"
-              size="sm"
-              icon="chevron_left"
-              title="Назад"
-              aria-label="Предыдущий период"
-              @click="store.step(-1)"
-            />
-            <AppButton size="sm" label="Сегодня" @click="store.today()" />
-            <AppButton
-              variant="icon"
-              size="sm"
-              icon="chevron_right"
-              title="Вперёд"
-              aria-label="Следующий период"
-              @click="store.step(1)"
-            />
-            <h2 class="cv-period">{{ periodLabel }}</h2>
-          </div>
-
-          <AppTabs
-            :model-value="store.view"
-            :tabs="viewModes"
-            variant="tint"
-            dense
-            @update:model-value="store.setView"
-          />
-
+        <!-- Поиск — в строку названия: в тесной панели он сворачивается в лупу
+             и не отнимает у сетки дней целую строку. -->
+        <template v-if="store.selected" #search="{ narrow: tight }">
           <SearchField
             v-model="searchInput"
             placeholder="Поиск по записям…"
             hotkey
-            :collapsible="false"
+            :collapsed="tight"
             @update:model-value="onSearch"
             @clear="clearSearch"
+          />
+        </template>
+
+        <template v-if="store.selected" #subhead="{ narrow: tight }">
+          <PeriodNav
+            :label="periodLabel"
+            :view="store.view"
+            :tight="tight"
+            @step="store.step($event)"
+            @today="store.today()"
+            @update:view="store.setView($event)"
           />
         </template>
 
@@ -317,15 +304,16 @@ import AppListDetail from '@/components/ui/AppListDetail.vue'
 import AppPage from '@/components/ui/AppPage.vue'
 import AppRow from '@/components/ui/AppRow.vue'
 import AppStack from '@/components/ui/AppStack.vue'
-import AppTabs from '@/components/ui/AppTabs.vue'
 import BrandLoader from '@/components/common/BrandLoader.vue'
 import EmptyState from '@/components/common/EmptyState.vue'
+import PeriodNav from '@/components/common/PeriodNav.vue'
 import SearchField from '@/components/common/SearchField.vue'
 import { useCalendarsStore, dayKey } from '@/stores/calendars.js'
 import { useAuthStore } from '@/stores/auth.js'
 import { exportEntries, getShares, createShare, revokeShare } from '@/api/calendars.js'
 import { useNotificationsStore } from '@/stores/notifications.js'
 import { fieldIcon, isExportable, entryTitle, hhmm, cardFields } from '@/utils/calendarFields.js'
+import { periodViewCommand, parseViewCommand } from '@/utils/periodViews.js'
 
 const route = useRoute()
 const store = useCalendarsStore()
@@ -344,14 +332,22 @@ function selectCalendar(id) {
 
 /* Команды шапки: создание записи — главное действие (в тесной панели уезжает на
    плавающую кнопку), остальное живёт в меню «ещё». */
-const commands = computed(() => (store.selected ? [
-  { key: 'add', label: 'Запись', icon: 'add', variant: 'filled', primary: true, fab: true },
-  { key: 'shares', label: 'Внешние ссылки', icon: 'link' },
-  { key: 'export', label: 'Экспорт в XLSX', icon: 'download' },
-] : []))
+const commands = computed(() => {
+  if (!store.selected) return []
+  return [
+    { key: 'add', label: 'Запись', icon: 'add', variant: 'filled', primary: true, fab: true },
+    // Тесная панель: вид периода уезжает в меню — строка вкладок там дороже
+    // самой сетки дней.
+    ...(narrow.value ? [periodViewCommand(store.view)] : []),
+    { key: 'shares', label: 'Внешние ссылки', icon: 'link' },
+    { key: 'export', label: 'Экспорт в XLSX', icon: 'download' },
+  ]
+})
 
 function onCommand(key) {
-  if (key === 'add') openCreate()
+  const view = parseViewCommand(key)
+  if (view) store.setView(view)
+  else if (key === 'add') openCreate()
   else if (key === 'shares') openShares()
   else if (key === 'export') openExport()
 }
@@ -363,11 +359,6 @@ watch(() => authStore.companyId, (id, prev) => {
   store.reloadForCompany()
 })
 
-const viewModes = [
-  { value: 'month', label: 'Месяц' },
-  { value: 'week', label: 'Неделя' },
-  { value: 'day', label: 'День' },
-]
 const weekdays = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс']
 
 function addDays(d, n) { const x = new Date(d); x.setHours(0, 0, 0, 0); x.setDate(x.getDate() + n); return x }
@@ -603,8 +594,6 @@ watch(() => store.loadingEntries, () => nextTick(measureWeekColumn))
 </script>
 
 <style scoped>
-.cv-nav { display: flex; align-items: center; gap: 8px; }
-.cv-period { margin: 0 0 0 6px; font-size: 17px; font-weight: 700; color: var(--color-text); text-transform: capitalize; white-space: nowrap; }
 
 /* ── Тело ── */
 .cv-body { position: relative; flex: 1; min-height: 0; overflow: auto; }
@@ -731,6 +720,5 @@ watch(() => store.loadingEntries, () => nextTick(measureWeekColumn))
    воздух, иначе последние записи прячутся за ней. */
 @media (max-width: 768px) {
   .cv-body { padding-bottom: calc(76px + env(safe-area-inset-bottom, 0px)); }
-  .cv-period { font-size: 15px; }
 }
 </style>

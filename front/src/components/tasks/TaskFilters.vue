@@ -324,9 +324,9 @@ function onDeptChange(value) {
 }
 
 const tabs = [
-  { value: 'active', label: 'Активные', icon: 'checklist', tutorial: 'tab-active' },
-  { value: 'favorites', label: 'Избранное', icon: 'star', tutorial: 'tab-favorites' },
-  { value: 'archive', label: 'Архив', icon: 'inventory_2', tutorial: 'tab-archive' },
+  { value: 'active', label: 'Активные', icon: 'checklist' },
+  { value: 'favorites', label: 'Избранное', icon: 'star' },
+  { value: 'archive', label: 'Архив', icon: 'inventory_2' },
 ]
 
 const sorts = TASK_SORTS

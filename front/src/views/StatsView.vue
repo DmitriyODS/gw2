@@ -6,15 +6,17 @@
     :loading="hasCompany && loading"
     @command="onCommand"
   >
-    <template #subhead>
+    <!-- В тесной панели строка управления оставляет только период: режим
+         («Общая»/«Расширенная») уходит в меню «ещё» — см. commands. -->
+    <template #subhead="{ narrow: tight }">
       <AppTabs
+        v-if="!tight"
         class="stats-mode-tabs"
         :model-value="mode"
         :tabs="modeTabs"
-        :full-width="isMobile"
         @update:model-value="switchMode($event)"
       />
-      <StatsPeriodControl class="stats-period" @change="onPeriodChange" />
+      <StatsPeriodControl class="stats-period" :compact="tight" @change="onPeriodChange" />
     </template>
 
     <!-- Нет активной компании (например, супер-админ): статистика — контент компании. -->
@@ -58,20 +60,15 @@
           :export-fn="canExportUsers ? handleExportCommon : null"
         >
           <!-- Мобильный card-list -->
-          <ul v-if="isMobile" class="m-list">
-            <li
-              v-for="(row, i) in commonData.tasks_by_employees || []"
-              :key="i"
-              class="m-row"
-            >
+          <MobileStatList v-if="isMobile" :items="commonData.tasks_by_employees || []">
+            <template #default="{ row }">
               <div class="m-row-main">
                 <span class="m-row-title">{{ row.fio }}</span>
                 <span class="m-row-sub">{{ row.tasks_count }} задач</span>
               </div>
               <span class="m-chip chip-tertiary">{{ roundHours(row.total_hours) }}</span>
-            </li>
-            <li v-if="!(commonData.tasks_by_employees || []).length" class="m-empty">Нет данных</li>
-          </ul>
+            </template>
+          </MobileStatList>
           <!-- Десктоп таблица -->
           <div v-else class="table-scroll">
             <DataTable :value="commonData.tasks_by_employees || []" size="small" :show-gridlines="false">
@@ -87,19 +84,14 @@
         </StatsWidget>
 
         <StatsWidget widget-id="by-hours" title="Задачи по часам">
-          <ul v-if="isMobile" class="m-list">
-            <li
-              v-for="(row, i) in commonData.tasks_by_hours || []"
-              :key="i"
-              class="m-row"
-            >
+          <MobileStatList v-if="isMobile" :items="commonData.tasks_by_hours || []">
+            <template #default="{ row }">
               <div class="m-row-main">
                 <span class="m-row-title">{{ row.name }}</span>
               </div>
               <span class="m-chip chip-tertiary">{{ roundHours(row.total_hours) }}</span>
-            </li>
-            <li v-if="!(commonData.tasks_by_hours || []).length" class="m-empty">Нет данных</li>
-          </ul>
+            </template>
+          </MobileStatList>
           <div v-else class="table-scroll">
             <DataTable :value="commonData.tasks_by_hours || []" size="small" :show-gridlines="false">
               <Column field="name" header="Задача" />
@@ -113,8 +105,8 @@
         </StatsWidget>
 
         <StatsWidget widget-id="responsibles" title="Ответственные по задачам">
-          <ul v-if="isMobile && responsiblesData.length" class="m-list">
-            <li v-for="r in responsiblesData" :key="r.user_id || r.id" class="m-row">
+          <MobileStatList v-if="isMobile && responsiblesData.length" :items="responsiblesData">
+            <template #default="{ row: r }">
               <div class="m-row-main">
                 <img class="m-avatar" :src="avatarOf(r)" :alt="r.fio" />
                 <div class="m-row-text">
@@ -123,11 +115,11 @@
                 </div>
               </div>
               <div class="m-row-tail">
-                <span class="m-chip chip-primary" :title="'Открытые'">{{ r.open_count }}</span>
-                <span class="m-chip chip-success" :title="'Закрытые'">{{ r.closed_count }}</span>
+                <span class="m-chip chip-primary" title="Открытые">{{ r.open_count }}</span>
+                <span class="m-chip chip-success" title="Закрытые">{{ r.closed_count }}</span>
               </div>
-            </li>
-          </ul>
+            </template>
+          </MobileStatList>
           <div v-else-if="responsiblesData.length" class="table-scroll">
             <DataTable :value="responsiblesData" size="small" :show-gridlines="false">
               <Column field="fio" header="Сотрудник">
@@ -175,19 +167,14 @@
             <BrandLoader :size="48" />
           </div>
           <template v-else-if="userTasksData">
-            <ul v-if="isMobile" class="m-list">
-              <li
-                v-for="(row, i) in userTasksData.tasks || []"
-                :key="i"
-                class="m-row"
-              >
+            <MobileStatList v-if="isMobile" :items="userTasksData.tasks || []">
+              <template #default="{ row }">
                 <div class="m-row-main">
                   <span class="m-row-title">{{ row.task_name }}</span>
                 </div>
                 <span class="m-chip chip-tertiary">{{ roundHours(row.total_hours) }}</span>
-              </li>
-              <li v-if="!(userTasksData.tasks || []).length" class="m-empty">Нет данных</li>
-            </ul>
+              </template>
+            </MobileStatList>
             <div v-else class="table-scroll">
               <DataTable :value="userTasksData.tasks || []" size="small" :show-gridlines="false">
                 <Column field="task_name" header="Задача" />
@@ -209,20 +196,15 @@
     <template v-else-if="mode === 'extended' && extendedData">
       <div class="stats-grid">
         <StatsWidget widget-id="unit-types" title="По типам юнитов">
-          <ul v-if="isMobile" class="m-list">
-            <li
-              v-for="(row, i) in extendedData.by_unit_types || []"
-              :key="i"
-              class="m-row"
-            >
+          <MobileStatList v-if="isMobile" :items="extendedData.by_unit_types || []">
+            <template #default="{ row }">
               <div class="m-row-main">
                 <span class="m-row-title">{{ row.name }}</span>
                 <span class="m-row-sub">{{ row.tasks_count }} задач</span>
               </div>
               <span class="m-chip chip-tertiary">{{ roundHours(row.total_hours) }}</span>
-            </li>
-            <li v-if="!(extendedData.by_unit_types || []).length" class="m-empty">Нет данных</li>
-          </ul>
+            </template>
+          </MobileStatList>
           <div v-else class="table-scroll">
             <DataTable :value="extendedData.by_unit_types || []" size="small" :show-gridlines="false">
               <Column field="name" header="Тип" />
@@ -235,19 +217,14 @@
         </StatsWidget>
 
         <StatsWidget widget-id="departments" title="По отделам">
-          <ul v-if="isMobile" class="m-list">
-            <li
-              v-for="(row, i) in extendedData.by_departments || []"
-              :key="i"
-              class="m-row"
-            >
+          <MobileStatList v-if="isMobile" :items="extendedData.by_departments || []">
+            <template #default="{ row }">
               <div class="m-row-main">
                 <span class="m-row-title">{{ row.name }}</span>
               </div>
               <span class="m-chip chip-primary">{{ row.tasks_count }}</span>
-            </li>
-            <li v-if="!(extendedData.by_departments || []).length" class="m-empty">Нет данных</li>
-          </ul>
+            </template>
+          </MobileStatList>
           <div v-else class="table-scroll">
             <DataTable :value="extendedData.by_departments || []" size="small" :show-gridlines="false">
               <Column field="name" header="Отдел" />
@@ -257,20 +234,15 @@
         </StatsWidget>
 
         <StatsWidget widget-id="unit-types-per-user" title="По типам юнитов для пользователей">
-          <ul v-if="isMobile" class="m-list">
-            <li
-              v-for="(row, i) in flatUserTypes"
-              :key="i"
-              class="m-row"
-            >
+          <MobileStatList v-if="isMobile" :items="flatUserTypes">
+            <template #default="{ row }">
               <div class="m-row-main">
                 <span class="m-row-title">{{ row.fio }}</span>
                 <span class="m-row-sub">{{ row.type_name }} • {{ row.tasks_count }} задач</span>
               </div>
               <span class="m-chip chip-tertiary">{{ roundHours(row.hours) }}</span>
-            </li>
-            <li v-if="!flatUserTypes.length" class="m-empty">Нет данных</li>
-          </ul>
+            </template>
+          </MobileStatList>
           <div v-else class="table-scroll">
             <DataTable :value="flatUserTypes" size="small" :show-gridlines="false">
               <Column field="fio" header="Пользователь" />
@@ -314,6 +286,7 @@ import {
 import { formatHours } from '@/utils/time.js'
 import StatsPeriodControl from '@/components/stats/StatsPeriodControl.vue'
 import StatsWidget from '@/components/stats/StatsWidget.vue'
+import MobileStatList from '@/components/stats/MobileStatList.vue'
 import CalendarGrid from '@/components/stats/CalendarGrid.vue'
 import AppPage from '@/components/ui/AppPage.vue'
 import AppTabs from '@/components/ui/AppTabs.vue'
@@ -342,15 +315,27 @@ const canExport = computed(() => isAtLeast(ROLES.MANAGER))
 const canExportUsers = computed(() => isAtLeast(ROLES.MANAGER))
 const canSelectEmployee = computed(() => isAtLeast(ROLES.MANAGER))
 
-/* Действия раздела. Обе второстепенные — уезжают в меню «ещё» и не спорят с
-   вкладками режимов и переключателем периода за место в строке. */
-const commands = [
+/* Действия раздела. Все второстепенные — уезжают в меню «ещё» и не спорят с
+   переключателем периода за место в строке; на телефоне туда же уходит выбор
+   режима статистики. */
+const commands = computed(() => [
+  ...(isMobile.value ? [{
+    key: 'mode',
+    label: `Статистика: ${(modeTabs.find((t) => t.value === mode.value)?.label || '').toLowerCase()}`,
+    icon: modeTabs.find((t) => t.value === mode.value)?.icon,
+    children: modeTabs.map((t) => ({
+      key: `mode:${t.value}`,
+      label: t.label,
+      icon: t.value === mode.value ? 'check' : t.icon,
+    })),
+  }] : []),
   { key: 'reset', label: 'Сбросить вид', icon: 'restart_alt' },
   { key: 'tv', label: 'ТВ-режим', icon: 'tv' },
-]
+])
 
 function onCommand(key) {
-  if (key === 'reset') resetLayout()
+  if (key.startsWith('mode:')) switchMode(key.slice(5))
+  else if (key === 'reset') resetLayout()
   else if (key === 'tv') openTv()
 }
 
@@ -364,8 +349,8 @@ function openTv() {
 }
 
 const modeTabs = [
-  { value: 'common', label: 'Общая', icon: 'dashboard', tutorial: 'stats-tab-common' },
-  { value: 'extended', label: 'Расширенная', icon: 'analytics', tutorial: 'stats-tab-extended' },
+  { value: 'common', label: 'Общая', icon: 'dashboard' },
+  { value: 'extended', label: 'Расширенная', icon: 'analytics' },
 ]
 
 const userTasksData = ref(null)
@@ -540,6 +525,23 @@ onMounted(() => {
   align-items: start;
 }
 
+/* Колонок столько, сколько влезает в ПАНЕЛЬ: раздел живёт окном, и ширина
+   экрана про него ничего не знает — в узком окне сетка оставалась четырёхколоночной
+   и карточки вылезали за края. Дубль @media — для старого WebView без @container. */
+@container (max-width: 1280px) {
+  .stats-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+@container (max-width: 960px) {
+  .stats-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+/* Одна колонка — ОБЯЗАТЕЛЬНО minmax(0, 1fr): голый `1fr` не уже своего
+   min-content, поэтому широкое содержимое карточки (таблица, длинное имя)
+   растягивало колонку, и весь раздел уезжал вбок вместе с карточками. */
+@container (max-width: 700px) {
+  .stats-grid { grid-template-columns: minmax(0, 1fr); gap: 12px; }
+  .task-tiles { grid-template-columns: 1fr 1fr; gap: 8px; }
+}
+
 @media (max-width: 1280px) {
   .stats-grid {
     grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -555,7 +557,7 @@ onMounted(() => {
 /* === Задачи за период — M3 Expressive tiles === */
 .task-tiles {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(120px, 100%), 1fr));
   gap: 12px;
   padding: 4px 0;
 }
@@ -618,25 +620,8 @@ onMounted(() => {
 }
 
 /* === Мобильные list-row карточки === */
-.m-list {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.m-row {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 12px 14px;
-  min-height: 56px;
-  background: var(--color-surface-high);
-  border-radius: var(--radius-lg, 16px);
-}
-
+/* Каркас списка (сама строка, пустое состояние, «показать ещё») живёт в
+   MobileStatList; здесь — только содержимое строки, оно приходит слотом. */
 .m-row-main {
   flex: 1;
   min-width: 0;
@@ -706,13 +691,6 @@ onMounted(() => {
 .m-chip.chip-tertiary {
   background: var(--color-tertiary-container);
   color: var(--color-on-tertiary-container);
-}
-
-.m-empty {
-  padding: 24px 12px;
-  text-align: center;
-  color: var(--color-text-dim);
-  font-size: 13px;
 }
 
 /* Горизонтальный скролл для таблиц */
@@ -792,55 +770,36 @@ onMounted(() => {
   /* Вкладки режимов берут строку целиком, период встаёт под ними: рядом они
      сжимали друг друга, а действия ушли в меню «ещё» шапки. */
   .stats-mode-tabs { flex: 1 1 100%; min-width: 0; }
-  .stats-period { flex: 1 1 100%; }
+  .stats-period { flex: 1 1 100%; min-width: 0; }
 
   .stats-grid {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
     gap: 12px;
   }
 
+  /* Плитки-цифры на телефоне: две в ряд и мельче — четыре ключевых числа
+     должны читаться одним взглядом, не занимая экран целиком. */
   .task-tiles {
     grid-template-columns: 1fr 1fr;
-    gap: 10px;
+    gap: 8px;
   }
 
   .task-tile {
-    padding: 14px;
-    min-height: 92px;
-  }
-
-  .task-tile .tile-num {
-    font-size: 28px;
-  }
-}
-
-@media (max-width: 480px) {
-  .task-tile {
+    gap: 2px;
     padding: 12px;
-    min-height: 88px;
+    min-height: 0;
   }
 
-  .task-tile .tile-num {
-    font-size: 26px;
-  }
-
-  .task-tile .tile-label {
-    font-size: 11px;
-  }
-
-  .m-row {
-    padding: 10px 12px;
-  }
+  .task-tile .tile-icon { font-size: 18px; }
+  .task-tile .tile-num { font-size: 24px; }
+  .task-tile .tile-label { font-size: 10.5px; letter-spacing: 0.03em; }
 
   .m-avatar {
     width: 32px;
     height: 32px;
   }
-}
 
-@media (max-width: 360px) {
-  .task-tiles {
-    grid-template-columns: 1fr;
-  }
+  .employee-select { width: 100%; }
+  .employee-selector { margin-bottom: 8px; }
 }
 </style>

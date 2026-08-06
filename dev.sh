@@ -46,10 +46,18 @@ PORTAL_PID=""
 NOTES_PID=""
 BOARD_PID=""
 REMINDER_PID=""
+BILLING_PID=""
 ALICE_PID=""
 
-# Все Go-сервисы (имя бинаря в go-build/exe — по нему ловим осиротевшие процессы).
+# Все Go-сервисы — по имени ловим осиротевшие процессы прошлого запуска.
 SVCS="callsvc authsvc msgsvc aisvc petsvc tasksvc gatewaysvc pushsvc mailsvc registrysvc calendarsvc diarysvc portalsvc notesvc boardsvc remindersvc billingsvc alicesvc"
+
+# Порты, которые занимает dev-стек (HTTP и gRPC сервисов + Vite). По ним и
+# освобождаем окружение при старте: имя бинаря в кеше `go build` зависит от его
+# раскладки (шаблон `exe/<svc>` её уже не ловил), и осиротевший сервис прошлого
+# запуска продолжал держать порт — свежий не мог подняться, а на запросы
+# отвечал СТАРЫЙ код. Порт — признак надёжнее любого шаблона имени.
+DEV_PORTS="8090 8091 8092 8093 8094 8095 8096 8097 8098 8099 8100 8101 8102 8103 8104 8105 8106 8107 9090 9092 9093 9094 9095 9098 9101 9103 9107 5173"
 
 # Dev-ключи PASETO (синхронизированы с Makefile и
 # deploy/docker-compose.override.yml): приватный — только у authsvc,
@@ -57,6 +65,22 @@ SVCS="callsvc authsvc msgsvc aisvc petsvc tasksvc gatewaysvc pushsvc mailsvc reg
 PASETO_PRIVATE_KEY_DEV="68eb779b2f672beb8fcd58d72a81ce1565a1417aed3788d1362bf4faaa3f62ac15ef439747fcad6ca627310942ba14b48f164fcbb5f65c10f61ca2aeb4b53fe1"
 PASETO_PUBLIC_KEY_DEV="15ef439747fcad6ca627310942ba14b48f164fcbb5f65c10f61ca2aeb4b53fe1"
 PASETO_REFRESH_KEY_DEV="d525374c4ec7b5e1c5b140fb9c1f4cffd9c3dbf052bb18f2f32bf9f92d9fa05c"
+
+# Освобождает dev-порты: всё, что на них СЛУШАЕТ, — процесс прошлого запуска
+# (свои порты в dev держим только мы). Без lsof молча пропускаем — шаблоны имён
+# ниже остаются страховкой.
+free_dev_ports() {
+    command -v lsof >/dev/null 2>&1 || return 0
+    local ports pids
+    ports="$(printf '%s' "$DEV_PORTS" | tr ' ' ',')"
+    pids="$(lsof -ti "tcp:$ports" -sTCP:LISTEN 2>/dev/null || true)"
+    [ -z "$pids" ] && return 0
+    printf '%s\n' "$pids" | xargs kill -TERM 2>/dev/null || true
+    sleep 1
+    pids="$(lsof -ti "tcp:$ports" -sTCP:LISTEN 2>/dev/null || true)"
+    [ -n "$pids" ] && printf '%s\n' "$pids" | xargs kill -KILL 2>/dev/null || true
+    return 0
+}
 
 # Глушим INT/TERM на время самой cleanup, чтобы повторный Ctrl+C не
 # прерывал её в середине.
@@ -83,6 +107,7 @@ cleanup() {
     if [ -n "$NOTES_PID" ]; then kill -TERM -- "-$NOTES_PID" 2>/dev/null || true; fi
     if [ -n "$BOARD_PID" ]; then kill -TERM -- "-$BOARD_PID" 2>/dev/null || true; fi
     if [ -n "$REMINDER_PID" ]; then kill -TERM -- "-$REMINDER_PID" 2>/dev/null || true; fi
+    if [ -n "$BILLING_PID" ]; then kill -TERM -- "-$BILLING_PID" 2>/dev/null || true; fi
     if [ -n "$ALICE_PID" ]; then kill -TERM -- "-$ALICE_PID" 2>/dev/null || true; fi
 
     # Даём ~1 секунду на graceful-shutdown (vite, Go-сервисы).
@@ -106,13 +131,15 @@ cleanup() {
     if [ -n "$NOTES_PID" ]; then kill -KILL -- "-$NOTES_PID" 2>/dev/null || true; fi
     if [ -n "$BOARD_PID" ]; then kill -KILL -- "-$BOARD_PID" 2>/dev/null || true; fi
     if [ -n "$REMINDER_PID" ]; then kill -KILL -- "-$REMINDER_PID" 2>/dev/null || true; fi
+    if [ -n "$BILLING_PID" ]; then kill -KILL -- "-$BILLING_PID" 2>/dev/null || true; fi
     if [ -n "$ALICE_PID" ]; then kill -KILL -- "-$ALICE_PID" 2>/dev/null || true; fi
 
     # Подбираем сирот по имени — защита от случая, когда субшелл уже
     # умер, а его потомки ещё живы. Узко по нашему пути, чужие процессы
     # не трогаем. go run собирает бинарь во временный каталог — ловим по имени.
     pkill -f "$FRONT/.*vite" 2>/dev/null || true
-    for svc in $SVCS; do pkill -f "exe/$svc" 2>/dev/null || true; done
+    for svc in $SVCS; do pkill -f "/$svc\$" 2>/dev/null || true; done
+    free_dev_ports
 
     (cd "$DEPLOY" && docker compose stop 2>/dev/null) || true
     printf "\033[32mВсё остановлено.\033[0m\n"
@@ -127,13 +154,19 @@ trap cleanup INT TERM
 preflight() {
     local found=""
     if pkill -f "$FRONT/.*vite" 2>/dev/null; then found=1; fi
+    # `go run ./cmd/<svc>` и собранный им бинарь в кеше — оба заканчиваются на
+    # «/<svc>», как бы кеш ни был разложен.
     for svc in $SVCS; do
-        if pkill -f "exe/$svc" 2>/dev/null; then found=1; fi
+        if pkill -f "/$svc\$" 2>/dev/null; then found=1; fi
     done
     if [ -n "$found" ]; then
         printf "\033[33m▶ Останавливаю процессы прошлого запуска...\033[0m\n"
         sleep 2  # даём портам освободиться до старта свежих сервисов
     fi
+    # Контрольная проверка портов: сервис мог остаться от запуска другим
+    # способом (make dev-<svc>, отладчик IDE) — тогда свежий не поднимется и
+    # отвечать продолжит СТАРЫЙ код.
+    free_dev_ports
 }
 preflight
 
@@ -158,7 +191,7 @@ ensure_front_deps
 #     go run ниже стартует мгновенно. `go build ./...` из корня workspace не
 #     работает (back-go без своего go.mod), поэтому обходим модули через -C.
 printf "\033[1m▶ Сборка Go-сервисов...\033[0m\n"
-for mod in pkg migrate calls auth messenger ai pets tasks gateway push mail registry calendar diary portal notes board reminder alice; do
+for mod in pkg migrate calls auth messenger ai pets tasks gateway push mail registry calendar diary portal notes board reminder billing alice; do
     printf "  %s" "$mod"
     go build -C "$ROOT/back-go/$mod" ./...
     printf "\033[32m ✓\033[0m\n"
@@ -502,6 +535,7 @@ printf "  Реестры: \033[4mhttp://localhost:8099/api/registries\033[0m\n"
 printf "  Календари: \033[4mhttp://localhost:8100/api/calendars\033[0m\n"
 printf "  Ежедневники: \033[4mhttp://localhost:8101/api/diaries\033[0m\n"
 printf "  Портал:  \033[4mhttp://localhost:8102/api/portal\033[0m\n"
+printf "  Биллинг: \033[4mhttp://localhost:8107/api/billing\033[0m (gRPC :9107)\n"
 printf "  Почта:   \033[4mhttp://localhost:8025\033[0m (mailpit; gRPC :9098)\n\n"
 
 wait

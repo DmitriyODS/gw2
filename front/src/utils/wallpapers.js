@@ -7,9 +7,23 @@
 // пересобираются при чтении настроек, так что переименование файла не оставит
 // пользователя с битой ссылкой.
 
+/* КАК ДОБАВИТЬ ОБОИ В КОМПЛЕКТ (без правок сборки и сервера):
+   1) положить пару WebP в `front/public/bg/` с именами `<ключ>-light.webp` и
+      `<ключ>-dark.webp` — каталог `public` уезжает в сборку как есть и
+      раздаётся nginx по тем же путям `/bg/...`;
+   2) добавить сюда одну строку `wp('<ключ>', 'Название')`.
+   Файлы с другими именами тоже можно — тогда пути передаются третьим
+   аргументом (так живут исторические обои ниже). */
+const wp = (key, label, files) => ({
+  key,
+  label,
+  light: files?.light || `/bg/${key}-light.webp`,
+  dark: files?.dark || `/bg/${key}-dark.webp`,
+})
+
 export const WALLPAPERS = [
-  { key: 'wave', label: 'Волна', light: '/bg/gw_light_1.webp', dark: '/bg/gw_black_1.webp' },
-  { key: 'bloom', label: 'Цветение', light: '/bg/gw_white.webp', dark: '/bg/gw_night.webp' },
+  wp('wave', 'Волна', { light: '/bg/gw_light_1.webp', dark: '/bg/gw_black_1.webp' }),
+  wp('bloom', 'Цветение', { light: '/bg/gw_white.webp', dark: '/bg/gw_night.webp' }),
 ]
 
 // Обои «из коробки»: их видит каждый, кто своих не выбирал.

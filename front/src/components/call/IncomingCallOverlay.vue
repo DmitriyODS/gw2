@@ -1,6 +1,8 @@
 <template>
   <Teleport to="body">
-    <Transition name="incoming">
+    <!-- appear: компонент монтируется вместе с появлением звонка (ленивый
+         чанк), поэтому первый рендер обязан анимироваться. -->
+    <Transition name="incoming" appear>
       <div v-if="show" class="incoming-overlay" @click.self="$emit('decline')">
         <div class="incoming-card" :class="{ pulse: callStore.isIncoming }">
           <div class="incoming-tag">

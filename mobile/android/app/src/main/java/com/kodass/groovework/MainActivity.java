@@ -245,5 +245,13 @@ public class MainActivity extends BridgeActivity {
             "pets", "Питомцы", NotificationManager.IMPORTANCE_DEFAULT);
         pets.setDescription("Грувик заболел или сбежал");
         nm.createNotificationChannel(pets);
+
+        // Канал обязан совпадать с channel_id сервера (pushsvc, domain.Channel*):
+        // незнакомый идентификатор Android заменяет служебным «Прочее», и
+        // сработавшее напоминание приходит тихо, мимо своей важности.
+        NotificationChannel reminders = new NotificationChannel(
+            "reminders", "Напоминания", NotificationManager.IMPORTANCE_HIGH);
+        reminders.setDescription("Сработавшие напоминания");
+        nm.createNotificationChannel(reminders);
     }
 }

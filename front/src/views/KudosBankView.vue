@@ -56,37 +56,31 @@
       </section>
 
       <!-- ── Быстрые действия ──────────────────────────────────── -->
-      <section class="kb-actions">
-        <button class="kb-action glass-hover" type="button" @click="openTransfer()">
-          <span class="kb-action-icon material-symbols-outlined">send_money</span>
-          <span>Перевести</span>
-        </button>
-        <button class="kb-action glass-hover" type="button" @click="focusDeposit">
-          <span class="kb-action-icon material-symbols-outlined">savings</span>
-          <span>На вклад</span>
-        </button>
-        <button class="kb-action glass-hover" type="button" @click="goalCreateOpen = true">
-          <span class="kb-action-icon material-symbols-outlined">target</span>
-          <span>Копилка</span>
-        </button>
-        <button v-if="bank.loan > 0" class="kb-action kb-action--alert glass-hover" type="button" @click="focusLoan">
-          <span class="kb-action-icon material-symbols-outlined">credit_score</span>
-          <span>Погасить долг</span>
-        </button>
-        <button v-if="isManager()" class="kb-action glass-hover" type="button" @click="fundCreateOpen = true">
-          <span class="kb-action-icon material-symbols-outlined">volunteer_activism</span>
-          <span>Объявить сбор</span>
-        </button>
-      </section>
+      <AppGrid class="kb-actions" :min="120" :gap="10">
+        <AppTile icon="send_money" label="Перевести" @click="openTransfer()" />
+        <AppTile icon="savings" label="На вклад" @click="focusDeposit" />
+        <AppTile icon="target" label="Копилка" @click="goalCreateOpen = true" />
+        <AppTile
+          v-if="bank.loan > 0"
+          class="kb-tile--alert"
+          icon="credit_score"
+          label="Погасить долг"
+          @click="focusLoan"
+        />
+        <AppTile
+          v-if="isManager()"
+          icon="volunteer_activism"
+          label="Объявить сбор"
+          @click="fundCreateOpen = true"
+        />
+      </AppGrid>
 
-      <div class="kb-grid">
+      <AppGrid class="kb-grid" :min="330" :gap="16">
         <!-- ── Вклад ────────────────────────────────────────────── -->
-        <section ref="depositCard" class="kb-card">
-          <header class="kb-card-head">
-            <span class="kb-card-icon kb-card-icon--pink material-symbols-outlined">savings</span>
-            <h3 class="kb-card-title">Вклад</h3>
-            <span class="kb-badge kb-badge--success">{{ bank.tier.savings_rate_pct }}% в день</span>
-          </header>
+        <AppCard ref="depositCard" title="Вклад" :gap="12">
+          <template #head>
+            <AppChip tone="success" size="sm" :label="`${bank.tier.savings_rate_pct}% в день`" />
+          </template>
           <!-- Главное — состояние счёта: сколько лежит и что накапает. -->
           <div class="kb-stats">
             <div class="kb-stat">
@@ -107,7 +101,7 @@
             <label class="kb-field-label">Сумма</label>
             <AmountInput ref="depositInput" v-model="savingsAmount" placeholder="0" />
           </div>
-          <div class="kb-row">
+          <AppStack row :gap="10" class="kb-row">
             <AppButton
               variant="filled"
               icon="download"
@@ -121,16 +115,18 @@
               :disabled="busy || !bank.savings || !validAmount(savingsAmount)"
               @click="withdraw"
             />
-          </div>
-        </section>
+          </AppStack>
+        </AppCard>
 
         <!-- ── Кредит ───────────────────────────────────────────── -->
-        <section ref="loanCard" class="kb-card">
-          <header class="kb-card-head">
-            <span class="kb-card-icon kb-card-icon--violet material-symbols-outlined">credit_card</span>
-            <h3 class="kb-card-title">Кредит</h3>
-            <span v-if="bank.credit" class="kb-badge kb-badge--violet">{{ RATING_EMOJI[bank.credit.tier.key] || '🏅' }} {{ bank.credit.tier.title }}</span>
-          </header>
+        <AppCard ref="loanCard" title="Кредит" :gap="12">
+          <template v-if="bank.credit" #head>
+            <AppChip
+              tone="primary"
+              size="sm"
+              :label="`${RATING_EMOJI[bank.credit.tier.key] || '🏅'} ${bank.credit.tier.title}`"
+            />
+          </template>
 
           <template v-if="bank.credit">
           <!-- Кредитный рейтинг: прогресс и условия. -->
@@ -167,7 +163,7 @@
               <label class="kb-field-label">Сумма платежа</label>
               <AmountInput ref="loanInput" v-model="loanAmount" placeholder="0" />
             </div>
-            <div class="kb-row">
+            <AppStack row :gap="10" class="kb-row">
               <AppButton
                 variant="filled"
                 label="Погасить"
@@ -175,7 +171,7 @@
                 @click="repay(loanAmount)"
               />
               <AppButton :disabled="busy || bank.kudos < bank.loan" @click="repay(bank.loan)">Погасить всё ({{ bank.loan }})</AppButton>
-            </div>
+            </AppStack>
           </template>
 
           <template v-else>
@@ -206,23 +202,23 @@
           </template>
           </template>
           <p v-else class="kb-card-hint">Данные кредита обновляются — обновите страницу.</p>
-        </section>
+        </AppCard>
 
         <!-- ── Рассрочка (оплата частями) ───────────────────────── -->
         <InstallmentsCard />
 
         <!-- ── Копилки-цели ─────────────────────────────────────── -->
-        <section class="kb-card">
-          <header class="kb-card-head">
-            <span class="kb-card-icon kb-card-icon--amber material-symbols-outlined">target</span>
-            <h3 class="kb-card-title">Копилки</h3>
-            <button
+        <AppCard title="Копилки" :gap="12">
+          <template #head>
+            <AppButton
               v-if="(bank.goals?.length || 0) < (bank.goals_max || 4)"
-              class="kb-head-action"
-              type="button"
+              variant="text"
+              size="sm"
+              icon="add"
+              label="Новая"
               @click="goalCreateOpen = true"
-            ><span class="material-symbols-outlined">add</span> Новая</button>
-          </header>
+            />
+          </template>
 
           <p v-if="!bank.goals?.length" class="kb-card-hint">
             Копите на мечту отдельно от кошелька: облик, декор, щедрый подарок коллеге.
@@ -265,20 +261,20 @@
               </div>
             </li>
           </ul>
-        </section>
+        </AppCard>
 
         <!-- ── Сборы (благотворительность) ──────────────────────── -->
-        <section class="kb-card">
-          <header class="kb-card-head">
-            <span class="kb-card-icon kb-card-icon--teal material-symbols-outlined">volunteer_activism</span>
-            <h3 class="kb-card-title">Сборы компании</h3>
-            <button
+        <AppCard title="Сборы компании" :gap="12">
+          <template #head>
+            <AppButton
               v-if="isManager()"
-              class="kb-head-action"
-              type="button"
+              variant="text"
+              size="sm"
+              icon="add"
+              label="Объявить"
               @click="fundCreateOpen = true"
-            ><span class="material-symbols-outlined">add</span> Объявить</button>
-          </header>
+            />
+          </template>
 
           <p v-if="!bank.funds?.length" class="kb-card-hint">
             Здесь появляются общие цели: скинуться на подарок, пиццу за релиз или доброе дело.
@@ -291,8 +287,8 @@
                   <span class="kb-fund-title">{{ f.title }}</span>
                   <span v-if="f.description" class="kb-fund-desc">{{ f.description }}</span>
                 </div>
-                <span v-if="f.status === 'done'" class="kb-badge kb-badge--success">Собран 🎉</span>
-                <span v-else-if="f.status === 'closed'" class="kb-badge">Закрыт</span>
+                <AppChip v-if="f.status === 'done'" tone="success" size="sm" label="Собран 🎉" />
+                <AppChip v-else-if="f.status === 'closed'" size="sm" label="Закрыт" />
               </div>
               <div class="kb-fund-bar">
                 <div class="kb-fund-fill" :style="{ width: fundPercent(f) + '%' }"></div>
@@ -332,15 +328,13 @@
               </div>
             </li>
           </ul>
-        </section>
+        </AppCard>
 
         <!-- ── Динамика и структура ─────────────────────────────── -->
-        <section class="kb-card">
-          <header class="kb-card-head">
-            <span class="kb-card-icon kb-card-icon--blue material-symbols-outlined">monitoring</span>
-            <h3 class="kb-card-title">Динамика</h3>
-            <span class="kb-badge">{{ stats?.days || 14 }} дней</span>
-          </header>
+        <AppCard title="Динамика" :gap="12">
+          <template #head>
+            <AppChip size="sm" :label="`${stats?.days || 14} дней`" />
+          </template>
           <template v-if="stats">
             <div class="kb-chart" role="img" :aria-label="`Приход и расход за ${stats.days} дней`">
               <div v-for="d in chartDays" :key="d.day" class="kb-chart-day" :title="`${d.title}: +${d.in} / −${d.out}`">
@@ -375,14 +369,10 @@
             </div>
           </template>
           <p v-else class="kb-card-hint">Считаем…</p>
-        </section>
+        </AppCard>
 
         <!-- ── Топ щедрости ─────────────────────────────────────── -->
-        <section class="kb-card">
-          <header class="kb-card-head">
-            <span class="kb-card-icon kb-card-icon--pink material-symbols-outlined">favorite</span>
-            <h3 class="kb-card-title">Самые щедрые за месяц</h3>
-          </header>
+        <AppCard title="Самые щедрые за месяц" :gap="12">
           <p v-if="!bank.top_generous?.length" class="kb-card-hint">
             Пока никто не переводил кудосы — станьте первым, кого здесь увидят.
           </p>
@@ -401,24 +391,21 @@
               ><span class="material-symbols-outlined">send_money</span></button>
             </li>
           </ul>
-        </section>
+        </AppCard>
 
         <!-- ── История ──────────────────────────────────────────── -->
-        <section class="kb-card kb-card--wide">
-          <header class="kb-card-head">
-            <span class="kb-card-icon kb-card-icon--blue material-symbols-outlined">receipt_long</span>
-            <h3 class="kb-card-title">История операций</h3>
-          </header>
-          <div class="kb-filters">
-            <button
+        <AppCard class="kb-card--wide" title="История операций" :gap="12">
+          <AppStack row :gap="6">
+            <AppChip
               v-for="f in LEDGER_FILTERS"
               :key="f.value"
-              class="kb-filter"
-              :class="{ active: ledgerFilter === f.value }"
-              type="button"
+              interactive
+              size="sm"
+              :selected="ledgerFilter === f.value"
+              :label="f.label"
               @click="ledgerFilter = f.value"
-            >{{ f.label }}</button>
-          </div>
+            />
+          </AppStack>
 
           <EmptyState
             v-if="!filteredDays.length"
@@ -456,8 +443,8 @@
             :disabled="busy"
             @click="loadMore"
           />
-        </section>
-      </div>
+        </AppCard>
+      </AppGrid>
     </template>
 
     <TransferDialog v-model="transferOpen" :preset-user-id="transferPreset" />
@@ -471,7 +458,11 @@
 import { computed, onMounted, reactive, ref } from 'vue'
 import AppButton from '@/components/ui/AppButton.vue'
 import { useRouter } from 'vue-router'
+import AppCard from '@/components/ui/AppCard.vue'
 import AppChip from '@/components/ui/AppChip.vue'
+import AppGrid from '@/components/ui/AppGrid.vue'
+import AppStack from '@/components/ui/AppStack.vue'
+import AppTile from '@/components/ui/AppTile.vue'
 import AppPage from '@/components/ui/AppPage.vue'
 import BrandLoader from '@/components/common/BrandLoader.vue'
 import EmptyState from '@/components/common/EmptyState.vue'
@@ -807,7 +798,7 @@ onMounted(() => {
   padding: 22px 24px;
   overflow: hidden;
   display: grid;
-  grid-template-columns: 1fr auto;
+  grid-template-columns: minmax(0, 1fr) auto;
   grid-template-areas: 'main side' 'tier tier';
   gap: 16px 24px;
   background:
@@ -911,87 +902,13 @@ onMounted(() => {
 }
 .kb-loan-due.overdue .material-symbols-outlined { color: var(--color-error); }
 
-/* ── Быстрые действия ── */
-.kb-actions { display: flex; gap: 10px; margin-top: 16px; flex-wrap: wrap; }
-.kb-action {
-  display: flex; flex-direction: column; align-items: center; gap: 6px;
-  border: 1px solid var(--acrylic-border);
-  background: var(--acrylic-card-bg);
-  background: var(--glass-bg);
-  box-shadow: var(--glass-edge);
-  border-radius: var(--radius-lg, 16px);
-  padding: 12px 14px;
-  flex: 1 1 0;
-  min-width: 92px;
-  font: inherit; font-size: 12px; font-weight: 600;
-  color: var(--color-text);
-  cursor: pointer;
-}
-.kb-action-icon {
-  width: 40px; height: 40px;
-  border-radius: 14px;
-  background: var(--color-primary-container);
-  color: var(--color-on-primary-container);
-  display: grid; place-items: center;
-  font-size: 22px;
-}
-.kb-action--alert .kb-action-icon { background: var(--color-error-container); color: var(--color-on-error-container); }
-
-/* ── Сетка карточек ── */
-.kb-grid {
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 16px;
-  margin-top: 16px;
-}
-.kb-card {
-  background: var(--acrylic-card-bg);
-  border: 1px solid var(--acrylic-border);
-  border-radius: var(--radius-lg, 20px);
-  padding: 18px 20px;
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  min-width: 0;
-}
+/* Быстрые действия и карточки — плитки и листы ядра (AppTile/AppCard/AppGrid);
+   здесь остаётся только специфика банка. */
+.kb-actions { margin-top: 16px; }
+.kb-tile--alert { border-color: color-mix(in oklch, var(--color-error) 45%, var(--acrylic-border)); }
+.kb-tile--alert :deep(.tile-icon) { color: var(--color-error); }
+.kb-grid { margin-top: 16px; }
 .kb-card--wide { grid-column: 1 / -1; }
-
-.kb-card-head { display: flex; align-items: center; gap: 10px; }
-.kb-card-icon {
-  width: 42px; height: 42px;
-  border-radius: 14px;
-  display: grid; place-items: center;
-  font-size: 22px;
-  flex-shrink: 0;
-}
-.kb-card-icon--pink { background: color-mix(in oklch, var(--color-error-container) 70%, var(--color-surface)); color: var(--color-error); }
-.kb-card-icon--violet { background: var(--color-primary-container); color: var(--color-primary); }
-.kb-card-icon--amber { background: color-mix(in oklch, var(--color-warning, var(--color-tertiary)) 22%, transparent); color: var(--color-warning, var(--color-tertiary)); }
-.kb-card-icon--teal { background: var(--color-tertiary-container); color: var(--color-tertiary); }
-.kb-card-icon--blue { background: var(--color-secondary-container); color: var(--color-secondary); }
-.kb-card-title { margin: 0; font-size: 16px; font-weight: 800; flex: 1; min-width: 0; }
-
-.kb-badge {
-  font-size: 12px; font-weight: 700;
-  border-radius: var(--radius-full);
-  padding: 4px 11px;
-  background: color-mix(in oklch, var(--color-text) 7%, transparent);
-  color: var(--color-text-dim);
-  white-space: nowrap;
-}
-.kb-badge--success { background: color-mix(in oklch, var(--color-success) 16%, transparent); color: var(--color-success); }
-.kb-badge--violet { background: var(--color-primary-container); color: var(--color-on-primary-container); }
-
-.kb-head-action {
-  display: inline-flex; align-items: center; gap: 3px;
-  border: none; background: none;
-  color: var(--color-primary);
-  font: inherit; font-size: 12.5px; font-weight: 700;
-  cursor: pointer; padding: 4px 6px;
-  border-radius: var(--radius-sm);
-}
-.kb-head-action:hover { background: var(--color-primary-container); }
-.kb-head-action .material-symbols-outlined { font-size: 16px; }
 
 .kb-card-hint { margin: 0; font-size: 12.5px; color: var(--color-text-dim); line-height: 1.45; }
 
@@ -999,11 +916,8 @@ onMounted(() => {
 .kb-field { display: flex; flex-direction: column; gap: 6px; }
 .kb-field-label { font-size: 12px; font-weight: 600; color: var(--color-text-dim); }
 
-.kb-row { display: flex; gap: 10px; flex-wrap: wrap; }
-.kb-row :deep(.btn) {
-  display: inline-flex; align-items: center; justify-content: center; gap: 6px;
-  flex: 1 1 0;
-}
+/* Кнопки ряда делят ширину поровну — иначе «Пополнить» и «Снять» разной длины. */
+.kb-row :deep(.btn) { flex: 1 1 0; min-width: 0; }
 
 .kb-stats {
   display: flex; align-items: center; gap: 16px;
@@ -1014,7 +928,7 @@ onMounted(() => {
   border-radius: var(--radius-md);
   padding: 12px 16px;
 }
-.kb-stat { display: flex; flex-direction: column; gap: 3px; flex: 1; }
+.kb-stat { display: flex; flex-direction: column; gap: 3px; flex: 1; min-width: 0; }
 .kb-stat-label { font-size: 11.5px; color: var(--color-text-dim); }
 .kb-stat-value { font-size: 18px; font-weight: 800; display: inline-flex; align-items: center; gap: 4px; }
 .kb-stat-value--success { color: var(--color-success); }
@@ -1076,8 +990,8 @@ onMounted(() => {
 .kb-fund-head { display: flex; align-items: flex-start; gap: 10px; }
 .kb-fund-emoji { font-size: 24px; flex-shrink: 0; }
 .kb-fund-info { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
-.kb-fund-title { font-size: 14px; font-weight: 700; }
-.kb-fund-desc { font-size: 12px; color: var(--color-text-dim); line-height: 1.4; }
+.kb-fund-title { font-size: 14px; font-weight: 700; overflow-wrap: anywhere; }
+.kb-fund-desc { font-size: 12px; color: var(--color-text-dim); line-height: 1.4; overflow-wrap: anywhere; }
 .kb-fund-bar {
   height: 10px;
   border-radius: var(--radius-full);
@@ -1123,13 +1037,13 @@ onMounted(() => {
 .kb-chart-bar.in { background: var(--color-success); }
 .kb-chart-bar.out { background: color-mix(in oklch, var(--color-text) 26%, transparent); }
 .kb-chart-label { font-size: 9.5px; color: var(--color-text-dim); }
-.kb-legend { display: flex; gap: 14px; }
+.kb-legend { display: flex; gap: 14px; flex-wrap: wrap; }
 .kb-legend-item { display: inline-flex; align-items: center; gap: 5px; font-size: 11.5px; color: var(--color-text-dim); }
 .kb-legend-dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
 .kb-legend-dot.in { background: var(--color-success); }
 .kb-legend-dot.out { background: color-mix(in oklch, var(--color-text) 26%, transparent); }
 
-.kb-kinds { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+.kb-kinds { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
 .kb-kinds-title { margin: 0 0 8px; font-size: 12px; font-weight: 700; color: var(--color-text-dim); }
 .kb-kind { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
 .kb-kind-name { font-size: 12px; width: 40%; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -1157,22 +1071,6 @@ onMounted(() => {
 .kb-generous-thank .material-symbols-outlined { font-size: 17px; }
 
 /* ── История ── */
-.kb-filters { display: flex; gap: 6px; flex-wrap: wrap; }
-.kb-filter {
-  border: 1px solid var(--color-outline-dim);
-  background: none;
-  color: var(--color-text-dim);
-  border-radius: var(--radius-full);
-  font: inherit; font-size: 12px; font-weight: 600;
-  padding: 5px 13px;
-  cursor: pointer;
-}
-.kb-filter.active {
-  border-color: var(--color-primary);
-  background: var(--color-primary-container);
-  color: var(--color-on-primary-container);
-}
-
 .kb-days { display: flex; flex-direction: column; gap: 4px; }
 .kb-day-head {
   display: flex; align-items: center; justify-content: space-between;
@@ -1200,14 +1098,25 @@ onMounted(() => {
 
 .kb-more { align-self: center; }
 
+/* Раскладка считается от ширины ПАНЕЛИ: раздел живёт окном рабочего стола, и
+   media-запросы про его размер ничего не знают — в узком окне сетка из двух
+   колонок раньше не сжималась и давала горизонтальную прокрутку.
+   Дубль @media — для заводского WebView старых Android без @container. */
+@container (max-width: 900px) {
+  .kb-grid { grid-template-columns: minmax(0, 1fr); }
+  .kb-hero { grid-template-columns: minmax(0, 1fr); grid-template-areas: 'main' 'side' 'tier'; }
+  .kb-kinds { grid-template-columns: minmax(0, 1fr); }
+}
+@container (max-width: 560px) {
+  .kb-hero-balance { font-size: 32px; }
+}
+
 @media (max-width: 900px) {
-  .kb-grid { grid-template-columns: 1fr; }
-  .kb-hero { grid-template-columns: 1fr; grid-template-areas: 'main' 'side' 'tier'; }
-  .kb-kinds { grid-template-columns: 1fr; }
+  .kb-grid { grid-template-columns: minmax(0, 1fr); }
+  .kb-hero { grid-template-columns: minmax(0, 1fr); grid-template-areas: 'main' 'side' 'tier'; }
+  .kb-kinds { grid-template-columns: minmax(0, 1fr); }
 }
 @media (max-width: 560px) {
   .kb-hero-balance { font-size: 32px; }
-  .kb-actions { display: grid; grid-template-columns: repeat(3, 1fr); }
-  .kb-action { min-width: 0; }
 }
 </style>

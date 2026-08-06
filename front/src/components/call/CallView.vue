@@ -1,6 +1,7 @@
 <template>
   <Teleport to="body">
-    <Transition name="callview">
+    <!-- appear: монтируется вместе с началом звонка (ленивый чанк). -->
+    <Transition name="callview" appear>
       <div
         v-if="visible"
         class="callview"
@@ -406,7 +407,7 @@ const { cols, tilePx } = useTileGrid(
 )
 const gridStyle = computed(() => tilePx.value > 0
   ? { gridTemplateColumns: `repeat(${cols.value}, ${tilePx.value}px)` }
-  : { gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))' })
+  : { gridTemplateColumns: 'repeat(auto-fit, minmax(min(150px, 100%), 1fr))' })
 
 /* Началась демонстрация — авто-фокус на неё; закончилась (и фокус был на ней) —
    назад к сетке. Ручной выбор пользователя при этом не перетираем. */

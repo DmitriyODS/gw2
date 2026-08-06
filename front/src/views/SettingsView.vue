@@ -150,7 +150,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, watch } from 'vue'
+import { ref, computed, defineAsyncComponent, onMounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { usePermission, ROLES } from '@/composables/usePermission.js'
 import { useNotificationsStore } from '@/stores/notifications.js'
@@ -166,20 +166,24 @@ import AppStack from '@/components/ui/AppStack.vue'
 import SearchField from '@/components/common/SearchField.vue'
 import BackupSectionsDialog from '@/components/settings/BackupSectionsDialog.vue'
 import GeneralSection from '@/components/settings/GeneralSection.vue'
-import AccountSection from '@/components/settings/AccountSection.vue'
-import CompaniesSection from '@/components/settings/CompaniesSection.vue'
-import AiSection from '@/components/settings/AiSection.vue'
-import ThemesSection from '@/components/settings/ThemesSection.vue'
-import ChatsPortalSection from '@/components/settings/ChatsPortalSection.vue'
-import AboutSection from '@/components/settings/AboutSection.vue'
-import AuditSection from '@/components/settings/AuditSection.vue'
-import SupportCard from '@/components/settings/SupportCard.vue'
-import HelpCenter from '@/components/settings/HelpCenter.vue'
-import DesktopAppCard from '@/components/settings/DesktopAppCard.vue'
-import DesktopWallpaperCard from '@/components/settings/DesktopWallpaperCard.vue'
-import DesktopShellCard from '@/components/settings/DesktopShellCard.vue'
-import DesktopTilesCard from '@/components/settings/DesktopTilesCard.vue'
-import AppGradientCard from '@/components/settings/AppGradientCard.vue'
+
+/* Панель показывается ровно одна, поэтому все, кроме открытой по умолчанию
+   «Общих», — ленивые чанки: раздел «Настройки» вместе с ними весил как
+   четверть приложения (управление компанией, справка, реестры, аудит). */
+const AccountSection = defineAsyncComponent(() => import('@/components/settings/AccountSection.vue'))
+const CompaniesSection = defineAsyncComponent(() => import('@/components/settings/CompaniesSection.vue'))
+const AiSection = defineAsyncComponent(() => import('@/components/settings/AiSection.vue'))
+const ThemesSection = defineAsyncComponent(() => import('@/components/settings/ThemesSection.vue'))
+const ChatsPortalSection = defineAsyncComponent(() => import('@/components/settings/ChatsPortalSection.vue'))
+const AboutSection = defineAsyncComponent(() => import('@/components/settings/AboutSection.vue'))
+const AuditSection = defineAsyncComponent(() => import('@/components/settings/AuditSection.vue'))
+const SupportCard = defineAsyncComponent(() => import('@/components/settings/SupportCard.vue'))
+const HelpCenter = defineAsyncComponent(() => import('@/components/settings/HelpCenter.vue'))
+const DesktopAppCard = defineAsyncComponent(() => import('@/components/settings/DesktopAppCard.vue'))
+const DesktopWallpaperCard = defineAsyncComponent(() => import('@/components/settings/DesktopWallpaperCard.vue'))
+const DesktopShellCard = defineAsyncComponent(() => import('@/components/settings/DesktopShellCard.vue'))
+const DesktopTilesCard = defineAsyncComponent(() => import('@/components/settings/DesktopTilesCard.vue'))
+const AppGradientCard = defineAsyncComponent(() => import('@/components/settings/AppGradientCard.vue'))
 import ConfirmDialog from '@/components/ui/ConfirmDialog.vue'
 import EmptyState from '@/components/common/EmptyState.vue'
 

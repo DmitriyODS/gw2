@@ -1,5 +1,6 @@
 import { ref, computed } from 'vue'
 import { changelogApi } from '@/api/changelog.js'
+import { storageGetJSON, storageSetJSON } from '@/utils/storage.js'
 
 /**
  * Сведения о выпуске: версия, сборка, дата и краткое «что нового».
@@ -12,21 +13,35 @@ import { changelogApi } from '@/api/changelog.js'
 
 // Module-level singleton: выпуск один на всё приложение, любой компонент
 // может его прочитать, запрос выполняется однократно.
-const release = ref(null)
+//
+// Марка «Groove Work N» стоит на КАЖДОМ экране входа и в меню «Пуск», поэтому
+// без кэша ради одной цифры мажорной версии запрос уходил на каждом заходе.
+// Выпуск меняется только с деплоем: первый кадр рисуем из localStorage, сеть
+// трогаем лишь когда кэш пуст или устарел (в «О приложении» — принудительно,
+// там пользователь как раз проверяет версию).
+const CACHE_KEY = 'gw_release'
+const CACHE_TTL = 6 * 60 * 60 * 1000
+
+const cached = storageGetJSON(CACHE_KEY, null)
+const release = ref(cached?.data || null)
+let fetchedAt = Number(cached?.at) || 0
 let loadPromise = null
 
-async function load() {
-  if (release.value) return release.value
+async function load({ force = false } = {}) {
+  if (!force && release.value && Date.now() - fetchedAt < CACHE_TTL) return release.value
   if (!loadPromise) {
     loadPromise = changelogApi
       .get()
       .then((data) => {
         release.value = data || null
+        fetchedAt = Date.now()
+        loadPromise = null
+        if (release.value) storageSetJSON(CACHE_KEY, { at: fetchedAt, data: release.value })
         return release.value
       })
       .catch(() => {
         loadPromise = null // дать повторить попытку позже
-        return null
+        return release.value
       })
   }
   return loadPromise

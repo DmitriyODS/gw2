@@ -11,6 +11,28 @@ import { wallpaperImage } from '@/utils/wallpapers.js'
    Пресеты — именованные композиции; 'custom' — сгенерированная случайно. */
 export const GRADIENT_ROLES = ['primary', 'secondary', 'tertiary']
 
+/* ── Однотонная заливка ───────────────────────────────────────────
+   Ровный цвет вместо градиента и картинки. Хранится РОЛЬЮ токена и силой
+   подмеса к фону приложения (`color-mix`), а не значением: заливка обязана
+   следовать теме и тёмному режиму, как и всё остальное оформление. */
+export const SOLID_ROLES = [
+  { key: 'surface', label: 'Нейтральный', token: 'surface-high' },
+  { key: 'primary', label: 'Основной', token: 'primary' },
+  { key: 'secondary', label: 'Вторичный', token: 'secondary' },
+  { key: 'tertiary', label: 'Третичный', token: 'tertiary' },
+]
+
+export function solidToken(role) {
+  return (SOLID_ROLES.find((r) => r.key === role) || SOLID_ROLES[0]).token
+}
+
+/** CSS-цвет однотонной заливки: подмес выбранного токена к фону приложения. */
+export function solidCss(solid) {
+  if (!solid || !solid.role) return null
+  const amount = clamp(solid.amount, 0, 100, 40)
+  return `color-mix(in oklch, var(--color-${solidToken(solid.role)}) ${amount}%, var(--color-bg))`
+}
+
 export const GRADIENT_PRESETS = [
   {
     key: 'plain', label: 'Без градиента',
@@ -177,6 +199,7 @@ export function cloneRecipe(r) {
     },
     pattern: { ...r.pattern },
     image: r.image ? { ...r.image } : null,
+    solid: r.solid ? { ...r.solid } : null,
   }
 }
 
@@ -203,6 +226,10 @@ export function normalizeRecipe(raw) {
     alpha: clamp(p.alpha, 0, 30, 6),
     size: clamp(p.size, 64, 240, 128),
   }
+  const s = raw.solid
+  const solid = s && SOLID_ROLES.some((r) => r.key === s.role)
+    ? { role: s.role, amount: clamp(s.amount, 0, 100, 40) }
+    : null
   const img = raw.image
   let image = null
   if (img && typeof img === 'object') {
@@ -217,7 +244,7 @@ export function normalizeRecipe(raw) {
       if (typeof img.dark === 'string' && img.dark) image.dark = img.dark
     }
   }
-  return { gradient: { preset, blobs }, pattern, image }
+  return { gradient: { preset, blobs }, pattern, image, solid }
 }
 
 /* Пустой рецепт — нечего показывать: нет картинки, градиент «Без градиента»
@@ -231,7 +258,8 @@ export function isBlankRecipe(recipe) {
   const p = recipe.pattern || {}
   const hasPattern = (p.key || p.emoji) && p.alpha > 0
   const hasImage = !!(recipe.image && recipe.image.url)
-  return !hasGradient && !hasPattern && !hasImage
+  const hasSolid = !!(recipe.solid && recipe.solid.role)
+  return !hasGradient && !hasPattern && !hasImage && !hasSolid
 }
 
 /* Пятна для рендера: у именованного пресета — из каталога, у 'custom' — свои. */
@@ -248,7 +276,11 @@ export function recipeBlobs(recipe) {
    оформления: у встроенных обоев есть парная тёмная картинка. */
 export function chatBgStyles(recipe, dark = false) {
   const blobs = recipeBlobs(recipe)
+  /* Однотонная заливка — это ЦВЕТ подложки, поэтому она не спорит с градиентом:
+     пятна (если их оставили) лягут поверх неё. */
   const gradient = { backgroundImage: gradientCss(blobs) }
+  const fill = solidCss(recipe?.solid)
+  if (fill) gradient.backgroundColor = fill
 
   // Картинка-фон (поверх градиента, под узором). Лёгкий upscale прячет
   // прозрачные края, которые даёт размытие.

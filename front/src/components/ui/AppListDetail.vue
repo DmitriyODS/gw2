@@ -5,6 +5,11 @@
     :class="{ narrow, 'detail-open': narrow && open, collapsed: listCollapsed }"
     :style="{ '--ld-list-width': listWidthPx }"
   >
+    <!-- Раздел ещё поднимается: лоадер по центру ВСЕЙ раскладки. На колонке
+         списка он оказывался в её узкой полосе — у левого края раздела. -->
+    <div v-if="loading" class="ld-loading"><BrandLoader /></div>
+
+    <template v-else>
     <div class="ld-col ld-list">
       <slot
         name="list"
@@ -24,6 +29,7 @@
         :toggle="toggleList"
       />
     </div>
+    </template>
 
     <!-- Оверлеи раздела (диалоги, лайтбоксы): они не принадлежат ни списку, ни
          содержимому, поэтому лежат обычным содержимым компонента. -->
@@ -46,10 +52,13 @@
    отдать всё место содержимому (кнопку рисует AppPage по `menu`). */
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useBreakpoint } from '@/composables/useBreakpoint.js'
+import BrandLoader from '@/components/common/BrandLoader.vue'
 
 const props = defineProps({
   /** Открыта ли деталь — значимо только в узком режиме. */
   open: { type: Boolean, default: false },
+  /** Первичная загрузка раздела: вместо колонок — лоадер по центру. */
+  loading: { type: Boolean, default: false },
   /** Свёрнут ли список (широкая раскладка). Работает и без v-model. */
   collapsed: { type: Boolean, default: null },
   listWidth: { type: [Number, String], default: 300 },
@@ -127,6 +136,15 @@ defineExpose({ narrow })
 
 /* Колонка отдаёт свою высоту содержимому целиком — оно и решает, где скролл. */
 .ld-col { min-width: 0; min-height: 0; height: 100%; }
+
+/* Лоадер занимает обе колонки сетки — иначе он центрировался бы в первой. */
+.ld-loading {
+  grid-column: 1 / -1;
+  display: grid;
+  place-items: center;
+  min-height: 0;
+  height: 100%;
+}
 
 /* Свёрнутый список: колонка схлопывается до нуля, содержимое отдаёт всё место
    правой панели. Список остаётся в DOM — его прокрутка и выделение переживают

@@ -5,10 +5,11 @@
     :style="{ '--taskbar-height': `${TASKBAR_HEIGHT}px` }"
     @contextmenu.self.prevent="openDeskMenu"
   >
-    <!-- Обои: личная картинка/градиент пользователя либо мягкие волны из
-         цветов темы. Тот же слой, что фон чатов и ленты портала. -->
+    <!-- Обои: личная картинка, градиент или узор пользователя. Тот же слой,
+         что фон чатов и ленты портала. Снял всё — стол остаётся чистым: своей
+         декоративной подложки у него нет, иначе выключенные обои всё равно
+         показывали бы «какой-то градиент». -->
     <ChatBackgroundLayer v-if="wallpaper" :recipe="wallpaper" class="desk-paper" />
-    <div v-else class="desk-wallpaper" aria-hidden="true" />
 
     <!-- Слой окон. Порядок в массиве не меняется — перекрытие задаёт z-index,
          иначе перефокусировка перемонтировала бы содержимое разделов. -->
@@ -66,7 +67,7 @@
 </template>
 
 <script setup>
-import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
+import { computed, defineAsyncComponent, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { useDesktopStore } from '@/stores/desktop.js'
 import { useDesktopPrefsStore } from '@/stores/desktopPrefs.js'
 import { useShellCore } from '@/desktop/shellCore.js'
@@ -78,9 +79,13 @@ import ContextMenu from '@/components/common/ContextMenu.vue'
 import ChatBackgroundLayer from '@/components/common/ChatBackgroundLayer.vue'
 import AppWindow from './AppWindow.vue'
 import Taskbar from './Taskbar.vue'
-import StartMenu from './StartMenu.vue'
-import NotificationsPanel from './NotificationsPanel.vue'
-import HolaPopup from './HolaPopup.vue'
+
+/* Всплывающие панели стола — ленивыми чанками: до первого открытия они не
+   нужны, а статически тянули в первый кадр «Пуск», поиск Hola и выпадашку
+   компаний со всей её начинкой. */
+const StartMenu = defineAsyncComponent(() => import('./StartMenu.vue'))
+const NotificationsPanel = defineAsyncComponent(() => import('./NotificationsPanel.vue'))
+const HolaPopup = defineAsyncComponent(() => import('./HolaPopup.vue'))
 
 const desktop = useDesktopStore()
 const prefs = useDesktopPrefsStore()
@@ -239,16 +244,6 @@ onBeforeUnmount(() => {
 .desk-paper {
   position: absolute;
   inset: 0;
-}
-
-.desk-wallpaper {
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-  background:
-    radial-gradient(120vmax 60vmax at 18% 120%, color-mix(in oklch, var(--color-primary) 16%, transparent), transparent 58%),
-    radial-gradient(90vmax 50vmax at 92% 8%, color-mix(in oklch, var(--color-tertiary) 12%, transparent), transparent 60%),
-    linear-gradient(122deg, transparent 38%, color-mix(in oklch, var(--color-primary) 9%, transparent) 52%, transparent 66%);
 }
 
 /* Слой окон растянут на весь стол, но сам указатель не ловит — иначе правый

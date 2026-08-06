@@ -567,7 +567,7 @@ async function onImportPick(e) {
    отделяет их от строки разделов и хлебных крошек. */
 .bv-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(min(170px, 100%), 1fr));
   gap: 12px;
   padding: 16px 20px 24px;
 }
@@ -641,6 +641,6 @@ async function onImportPick(e) {
 @media (max-width: 900px) {
   .bv { grid-template-columns: 1fr; padding: 8px; }
   .bv-side { display: none; }
-  .bv-grid { grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); }
+  .bv-grid { grid-template-columns: repeat(auto-fill, minmax(min(140px, 100%), 1fr)); }
 }
 </style>

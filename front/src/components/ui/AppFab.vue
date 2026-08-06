@@ -32,7 +32,6 @@ defineProps({
   collapsed: { type: Boolean, default: false },
   visible: { type: Boolean, default: true },
   ariaLabel: { type: String, default: '' },
-  tutorial: { type: String, default: '' },
   /* primary | tertiary */
   tone: { type: String, default: 'primary' },
 })

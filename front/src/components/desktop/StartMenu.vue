@@ -115,7 +115,17 @@
           >
             <img class="sm-avatar" :src="avatarSrc" :alt="auth.user?.fio || 'Аккаунт'" />
           </button>
-          <CompanySelect variant="button" class="sm-company" />
+          <CompanySelect class="sm-company" />
+          <!-- Справка стоит рядом с настройками: искать её внутри настроек
+               догадается не каждый, а нужна она как раз тем, кто ищет. -->
+          <button
+            class="sm-icon-btn"
+            type="button"
+            title="Справка и поддержка"
+            @click="launchPath('/settings?section=help')"
+          >
+            <span class="material-symbols-outlined">help</span>
+          </button>
           <button class="sm-icon-btn" type="button" title="Настройки" @click="launchPath('/settings')">
             <span class="material-symbols-outlined">settings</span>
           </button>
@@ -201,7 +211,10 @@ onMounted(() => {
   /* Сводки живых плиток рабочий стол тянет заранее и обновляет по таймеру —
      здесь лишь подстраховка: свежие данные запрос не повторяют (TTL стора). */
   if (prefs.liveTiles) {
-    live.refresh(groups.value.flatMap((g) => g.items.map((a) => a.id))).catch(() => {})
+    const ids = groups.value
+      .flatMap((g) => g.items.map((a) => a.id))
+      .filter((id) => prefs.isTileLive(id))
+    live.refresh(ids).catch(() => {})
   }
 })
 
@@ -249,8 +262,8 @@ const liveCtx = computed(() => ({
 }))
 
 function facesOf(app) {
-  // Живые плитки выключены в настройках — оставляем обычные значки.
-  return prefs.liveTiles ? tileFaces(app.id, liveCtx.value) : []
+  // Живые плитки выключены — общим тумблером или у этой плитки — обычный значок.
+  return prefs.isTileLive(app.id) ? tileFaces(app.id, liveCtx.value) : []
 }
 
 function badgeOf(app) {
@@ -380,6 +393,16 @@ const tileMenuItems = computed(() => {
     { label: 'Широкая плитка', icon: size === 'wide' ? 'check' : 'width_wide', action: 'wide' },
     { label: 'Квадратная плитка', icon: size === 'square' ? 'check' : 'crop_square', action: 'square' },
     { divider: true },
+    /* Сводки поимённо: общий тумблер живых плиток главнее — при выключенном
+       пункт объясняет, почему плитка «мёртвая», а не молчит. */
+    prefs.liveTiles
+      ? {
+          label: 'Живая плитка',
+          icon: prefs.isTileLive(id) ? 'check' : 'dashboard',
+          action: 'live',
+        }
+      : { label: 'Живые плитки выключены', icon: 'toggle_off', disabled: true },
+    { divider: true },
     prefs.isPinned(id)
       ? { label: 'Открепить от панели задач', icon: 'keep_off', action: 'unpin' }
       : { label: 'Закрепить на панели задач', icon: 'keep', action: 'pin' },
@@ -398,6 +421,11 @@ function onTileMenuSelect(action) {
   const id = tileMenu.appId
   if (!id) return
   if (action === 'wide' || action === 'square') prefs.setTileSize(id, action)
+  else if (action === 'live') {
+    prefs.toggleTileLive(id)
+    // Включили обратно — сводку этой плитки надо подтянуть: её не опрашивали.
+    if (prefs.isTileLive(id)) live.refresh([id]).catch(() => {})
+  }
   else if (action === 'pin') prefs.pin(id)
   else if (action === 'unpin') prefs.unpin(id)
   else if (action === 'new') {
