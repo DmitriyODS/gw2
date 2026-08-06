@@ -51,6 +51,9 @@ const emit = defineEmits(['update:modelValue', 'found'])
 
 const notif = useNotificationsStore()
 
+const PAGE_SIZE = 200 // потолок страницы записей на сервере
+const MAX_PAGES = 10  // 2000 записей — дальше поиск по коду смысла не имеет
+
 const scanOpen = ref(false)
 const resultOpen = ref(false)
 const searching = ref(false)
@@ -114,11 +117,20 @@ async function onDecoded(raw) {
 async function findRecord(value) {
   const qrFields = (props.registry?.fields || []).filter(hasQr)
   if (!qrFields.length || !value) return null
-  const data = await getRecords(props.registry.id, { search: value, per_page: 100, page: 1 })
   const needle = value.toLowerCase()
-  return (data.items ?? []).find((rec) => qrFields.some(
+  const match = (rec) => qrFields.some(
     (f) => qrValue(rec.data?.[String(f.id)]).toLowerCase() === needle,
-  )) || null
+  )
+  // Код-подстрока может встретиться в сотнях записей (и в чужих полях), поэтому
+  // сужение по search_text перебираем страницами, а не смотрим только первую.
+  for (let page = 1; page <= MAX_PAGES; page += 1) {
+    const data = await getRecords(props.registry.id, { search: value, per_page: PAGE_SIZE, page })
+    const items = data.items ?? []
+    const found = items.find(match)
+    if (found) return found
+    if (items.length < PAGE_SIZE || page * PAGE_SIZE >= (data.total ?? 0)) break
+  }
+  return null
 }
 </script>
 

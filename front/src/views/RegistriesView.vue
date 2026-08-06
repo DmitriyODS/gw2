@@ -252,6 +252,8 @@
       :registry="store.selected"
       :selected-ids="selectedIds"
       :search="store.filters.search"
+      :sort="store.filters.sort"
+      :order="store.filters.order"
     />
     <ConfirmDialog
       :visible="confirmBulk"

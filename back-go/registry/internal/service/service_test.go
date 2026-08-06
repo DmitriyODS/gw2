@@ -19,6 +19,7 @@ type fakeRepo struct {
 	fields     []domain.Field
 	records    map[int64]*domain.Record
 	lastSearch string
+	lastFilter domain.RecordListFilter
 	nextID     int64
 }
 
@@ -43,7 +44,8 @@ func (f *fakeRepo) ReplaceFields(_ domain.Ctx, _ int64, fields []domain.Field) (
 	f.fields = fields
 	return []int64{99}, nil // имитируем удаление поля 99
 }
-func (f *fakeRepo) ListRecords(_ domain.Ctx, _ domain.RecordListFilter) ([]*domain.Record, int, error) {
+func (f *fakeRepo) ListRecords(_ domain.Ctx, filter domain.RecordListFilter) ([]*domain.Record, int, error) {
+	f.lastFilter = filter
 	return nil, 0, nil
 }
 func (f *fakeRepo) SearchRecords(_ domain.Ctx, _ int64, _ string, _ int) ([]*domain.SearchHit, error) {
@@ -188,6 +190,31 @@ func TestReplaceFields_StripsRemovedFieldData(t *testing.T) {
 	}
 	if repo.records[5].Data["10"] != "Аня" {
 		t.Error("данные оставшегося поля должны сохраниться")
+	}
+}
+
+// Клиенту, которому нужны все записи (печать QR-кодов), большая страница
+// ЗАЖИМАЕТСЯ до потолка, а не сбрасывается в дефолт: иначе он молча получал 30
+// первых записей и не находил остальные.
+func TestListRecords_PerPageClampedNotReset(t *testing.T) {
+	svc, repo, _ := newTestService(nil)
+	cases := []struct {
+		asked, want int
+	}{
+		{asked: 500, want: maxPerPage},
+		{asked: maxPerPage, want: maxPerPage},
+		{asked: 50, want: 50},
+		{asked: 0, want: 30},
+		{asked: -5, want: 30},
+	}
+	for _, c := range cases {
+		if _, err := svc.ListRecords(context.Background(), 7, 1, RecordListParams{PerPage: c.asked}); err != nil {
+			t.Fatalf("ListRecords(per_page=%d): %v", c.asked, err)
+		}
+		if repo.lastFilter.PerPage != c.want {
+			t.Errorf("per_page=%d → в репозиторий ушло %d, ожидалось %d",
+				c.asked, repo.lastFilter.PerPage, c.want)
+		}
 	}
 }
 

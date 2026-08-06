@@ -9,6 +9,10 @@ import (
 	"github.com/DmitriyODS/gw2/back-go/registry/internal/domain"
 )
 
+// maxPerPage — потолок размера страницы записей (защита от выгрузки реестра
+// целиком одним запросом); клиенты, которым нужны все записи, идут страницами.
+const maxPerPage = 200
+
 // RecordList — страница записей реестра.
 type RecordList struct {
 	Items   []*domain.Record `json:"items"`
@@ -62,8 +66,14 @@ func (s *Service) listRecordsByRegistry(ctx context.Context, registryID int64, p
 	if f.Page < 1 {
 		f.Page = 1
 	}
-	if f.PerPage <= 0 || f.PerPage > 200 {
+	// Просьбу о слишком большой странице ЗАЖИМАЕМ до максимума, а не сбрасываем
+	// в дефолт: иначе клиент, которому нужны все записи, молча получал 30 первых
+	// и считал, что остальных не существует.
+	if f.PerPage <= 0 {
 		f.PerPage = 30
+	}
+	if f.PerPage > maxPerPage {
+		f.PerPage = maxPerPage
 	}
 
 	items, total, err := s.repo.ListRecords(ctx, f)

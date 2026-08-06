@@ -65,6 +65,9 @@ const props = defineProps({
   selectedIds: { type: Object, default: () => new Set() },
   // Текущая строка поиска — печать «всех» уважает фильтр списка.
   search: { type: String, default: '' },
+  // Сортировка списка — коды печатаются в том же порядке, что видит человек.
+  sort: { type: String, default: 'created_at' },
+  order: { type: String, default: 'desc' },
 })
 const emit = defineEmits(['update:modelValue'])
 
@@ -88,19 +91,32 @@ function close(v) {
 }
 
 const MAX_RECORDS = 500
+// Потолок страницы на сервере: просить больше бессмысленно — вернётся 200.
+const PAGE_SIZE = 200
 
-// В списке видна лишь текущая страница, поэтому записи для печати всегда
-// догружаем одним запросом по текущему фильтру — и, если печатаем выбранные,
-// оставляем от него только отмеченные.
+// В списке видна лишь текущая страница, поэтому записи для печати догружаем
+// САМИ и СТРАНИЦАМИ: одним запросом реестр не забрать (сервер зажимает размер
+// страницы), а выбранная запись может лежать хоть в конце реестра.
+// Отмеченные записи ищем по всему реестру, без строки поиска: галочки могли
+// быть проставлены до того, как список отфильтровали.
 async function collectRecords() {
-  const data = await getRecords(props.registry.id, {
-    search: props.search, per_page: MAX_RECORDS, page: 1,
-  })
-  const items = data.items ?? []
-  if (scope.value === 'selected' && props.selectedIds.size) {
-    return items.filter((r) => props.selectedIds.has(r.id))
+  const onlySelected = scope.value === 'selected' && props.selectedIds.size > 0
+  const params = {
+    search: onlySelected ? '' : props.search,
+    sort: props.sort, order: props.order,
+    per_page: PAGE_SIZE,
   }
-  return items
+  const out = []
+  for (let page = 1; ; page += 1) {
+    const data = await getRecords(props.registry.id, { ...params, page })
+    const items = data.items ?? []
+    out.push(...(onlySelected ? items.filter((r) => props.selectedIds.has(r.id)) : items))
+    const enough = onlySelected
+      ? out.length >= props.selectedIds.size
+      : out.length >= MAX_RECORDS
+    if (enough || items.length < PAGE_SIZE || page * PAGE_SIZE >= (data.total ?? 0)) break
+  }
+  return out.slice(0, MAX_RECORDS)
 }
 
 async function doPrint() {
@@ -116,6 +132,9 @@ async function doPrint() {
     if (!values.length) {
       notif.error('Нет записей с заполненным значением этого поля')
       return
+    }
+    if (records.length >= MAX_RECORDS) {
+      notif.warn(`За раз печатается не больше ${MAX_RECORDS} кодов — остальные записи отфильтруйте и напечатайте отдельно.`)
     }
     const cells = await Promise.all(values.map(async (v) => ({
       value: v,
