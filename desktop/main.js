@@ -479,7 +479,7 @@ function buildTrayMenu() {
         {type: 'separator'},
         {label: 'Настройки', click: openSettings},
         {label: 'Справка и поддержка', click: openHelp},
-        {label: 'Проверить обновления', click: () => checkShellUpdate(currentAppUrl)},
+        {label: 'Проверить обновления', click: () => checkShellUpdate(currentAppUrl, true)},
         {label: 'О приложении', click: showAbout},
         {type: 'separator'},
         {label: 'Выйти', click: () => app.quit()},
@@ -607,7 +607,7 @@ function buildMenu() {
             label: 'Справка',
             submenu: [
                 {label: 'Справка и поддержка', click: openHelp},
-                {label: 'Проверить обновления', click: () => checkShellUpdate(currentAppUrl)},
+                {label: 'Проверить обновления', click: () => checkShellUpdate(currentAppUrl, true)},
                 ...(process.platform === 'darwin' ? [] : [{label: 'О приложении', click: showAbout}]),
             ],
         },
@@ -636,19 +636,42 @@ function isNewer(a, b) {
     return false
 }
 
-async function checkShellUpdate(appUrl) {
+// manual — вызов из меню/трея по клику: в отличие от фонового автотика,
+// обязан показать хоть что-то в ЛЮБОМ исходе (нет сети, версия уже
+// предлагалась, обновлений нет) — иначе клик выглядит так, будто ничего не
+// произошло. Автотик молчит специально: не спамить одним и тем же диалогом
+// каждые несколько часов.
+async function checkShellUpdate(appUrl, manual = false) {
     let meta = null
     try {
         const res = await net.fetch(`${appUrl}/apps/desktop/version.json`, {cache: 'no-store'})
-        if (!res.ok) return
+        if (!res.ok) throw new Error(`HTTP ${res.status}`)
         meta = await res.json()
     } catch {
+        if (manual) {
+            dialog.showMessageBox(mainWindow, {
+                type: 'error', title: 'Обновление приложения',
+                message: 'Не удалось проверить обновления', detail: 'Проверьте подключение к интернету.',
+            })
+        }
         return
-    } // сети нет — проверим в следующий раз
+    } // фоновая проверка: сети нет — тихо попробуем в следующий раз
     const latest = meta?.current_version
     const key = process.platform === 'darwin' ? 'mac' : process.platform === 'win32' ? 'win' : 'linux'
     const file = meta?.files?.[key]
-    if (!latest || !file || !isNewer(latest, app.getVersion()) || updateOffered === latest) return
+    const hasUpdate = latest && file && isNewer(latest, app.getVersion())
+    if (!hasUpdate) {
+        if (manual) {
+            dialog.showMessageBox(mainWindow, {
+                type: 'info', title: 'Обновление приложения',
+                message: 'У вас последняя версия', detail: `Установлена версия ${app.getVersion()}.`,
+            })
+        }
+        return
+    }
+    // Автотик не переспрашивает уже отклонённую версию; ручная проверка —
+    // это осознанное намерение пользователя, дедуп её не касается.
+    if (!manual && updateOffered === latest) return
     updateOffered = latest
     const {response} = await dialog.showMessageBox(mainWindow, {
         type: 'info',

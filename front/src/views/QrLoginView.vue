@@ -5,7 +5,11 @@
     size="sm"
     back="/login"
   >
-    <DeviceLinkInitiator kind="login" @session="onSession" />
+    <!-- Как только вход подтверждён с телефона, дальше либо сразу уходим в
+         приложение (finish), либо нужен выбор компании — в обоих случаях
+         код уже отработал и висеть на экране не должен: иначе выглядит так,
+         будто вход всё ещё ждёт сканирования. -->
+    <DeviceLinkInitiator v-if="!companies.length" kind="login" @session="onSession" />
 
     <!-- Выбор компании, если пользователь состоит в нескольких. -->
     <div v-if="companies.length" class="ql-companies">
