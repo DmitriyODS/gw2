@@ -130,6 +130,25 @@ const appById = computed(() => {
   return map
 })
 
+// Раздел, индекс и общее число плиток в нём — для меню «переместить выше/ниже».
+function tilePosition(appId) {
+  for (const g of groups.value) {
+    const index = g.items.findIndex((a) => a.id === appId)
+    if (index !== -1) return { group: g, index, total: g.items.length }
+  }
+  return null
+}
+
+function moveTile(appId, delta) {
+  const pos = tilePosition(appId)
+  if (!pos) return
+  const to = pos.index + delta
+  if (to < 0 || to >= pos.total) return
+  const ids = pos.group.items.map((a) => a.id)
+  ;[ids[pos.index], ids[to]] = [ids[to], ids[pos.index]]
+  prefs.moveTileToGroup(appId, pos.group.key, ids)
+}
+
 const sizeOf = (app) => prefs.tileSize(app.id, app.tile || 'square')
 
 const liveCtx = computed(() => ({ data: live.data, messenger, portal, pets, units, auth }))
@@ -176,8 +195,15 @@ const menuItems = computed(() => {
     ]
   }
   const size = sizeOf(appById.value.get(id) || { id })
+  const pos = tilePosition(id)
   return [
     { label: 'Открыть', icon: 'open_in_new', action: 'open' },
+    { divider: true },
+    // Перетаскивания на тач нет (нативный HTML5 DnD, как на столе, тач не
+    // понимает) — переставляем по шагу, как на клавиатуре: то же
+    // moveTileToGroup, что и drag на рабочем столе.
+    { label: 'Переместить выше', icon: 'arrow_upward', action: 'moveUp', disabled: !pos || pos.index === 0 },
+    { label: 'Переместить ниже', icon: 'arrow_downward', action: 'moveDown', disabled: !pos || pos.index === pos.total - 1 },
     { divider: true },
     { label: 'Широкая плитка', icon: size === 'wide' ? 'check' : 'width_wide', action: 'wide' },
     { label: 'Квадратная плитка', icon: size === 'square' ? 'check' : 'crop_square', action: 'square' },
@@ -220,6 +246,8 @@ function onMenuSelect(action) {
   const id = menu.appId
   if (!id) return
   if (action === 'open') return open(appById.value.get(id).path)
+  if (action === 'moveUp') return moveTile(id, -1)
+  if (action === 'moveDown') return moveTile(id, 1)
   if (action === 'wide' || action === 'square') return prefs.setTileSize(id, action)
   if (action === 'live') {
     prefs.toggleTileLive(id)
