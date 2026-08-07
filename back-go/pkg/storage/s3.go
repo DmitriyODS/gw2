@@ -71,6 +71,20 @@ func (s *s3Store) Open(ctx context.Context, key string) (io.ReadCloser, error) {
 	return out.Body, nil
 }
 
+// Size — размер объекта (HeadObject: тело не качаем).
+func (s *s3Store) Size(ctx context.Context, key string) (int64, error) {
+	out, err := s.client.HeadObject(ctx, &s3.HeadObjectInput{
+		Bucket: aws.String(s.bucket), Key: aws.String(key),
+	})
+	if err != nil {
+		return 0, err
+	}
+	if out.ContentLength == nil {
+		return 0, nil
+	}
+	return *out.ContentLength, nil
+}
+
 func (s *s3Store) Copy(ctx context.Context, srcKey, dstKey string) error {
 	_, err := s.client.CopyObject(ctx, &s3.CopyObjectInput{
 		Bucket:     aws.String(s.bucket),

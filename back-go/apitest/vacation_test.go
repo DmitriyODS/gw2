@@ -1,9 +1,11 @@
 package apitest
 
-// API-тесты режима «в отпуске» (users.on_vacation): тумблер в профиле
-// (PATCH /users/me), гарды tasksvc на создание/правку/закрытие задач и старт
-// юнитов (остановка активного юнита разрешена) и «отпуск грувика» в petsvc —
-// заморозка потребностей/болезней и запрет ухода/поглаживаний.
+// API-тесты режима «в отпуске» (user_companies.on_vacation): отпуск ставит
+// создатель компании в карточке сотрудника — он company-scoped, глобального
+// отпуска «сразу везде» у пользователя нет. Проверяются гарды tasksvc на
+// создание/правку/закрытие задач и старт юнитов (остановка активного юнита
+// разрешена) и «отпуск грувика» в petsvc — заморозка потребностей/болезней и
+// запрет ухода/поглаживаний.
 
 import (
 	"fmt"
@@ -11,11 +13,14 @@ import (
 	"testing"
 )
 
-// setVacation — переключить режим отпуска актора через реальный PATCH /users/me.
-func setVacation(t *testing.T, a *actor, on bool) {
+// setVacation — отправить сотрудника в отпуск В КОНКРЕТНОЙ компании (это
+// делает её создатель; своего глобального тумблера у пользователя нет).
+func setVacation(t *testing.T, creator *actor, companyID int64, target *actor, on bool) {
 	t.Helper()
-	r := authAPI.doJSON(t, http.MethodPatch, "/api/users/me", a.Token, map[string]any{"on_vacation": on})
-	requireStatus(t, r, 200, fmt.Sprintf("PATCH /users/me on_vacation=%v", on))
+	r := authAPI.doJSON(t, http.MethodPatch,
+		fmt.Sprintf("/api/companies/%d/users/%d", companyID, target.ID), creator.Token,
+		map[string]any{"on_vacation": on})
+	requireStatus(t, r, 200, fmt.Sprintf("PATCH member on_vacation=%v", on))
 	if r.Bool("on_vacation") != on {
 		t.Fatalf("on_vacation не переключился: %s", r.Raw)
 	}
@@ -25,12 +30,12 @@ func setVacation(t *testing.T, a *actor, on bool) {
 // и read-действия работают, остановить активный юнит можно, выключение
 // отпуска возвращает всё как было.
 func TestVacationBlocksTasksAndUnits(t *testing.T) {
-	admin, _, deptID := newTaskCompany(t)
+	admin, companyID, deptID := newTaskCompany(t)
 	typeID := createUnitType(t, admin, uniq("Тип "))
 	taskID := createTask(t, admin, deptID, "До отпуска", nil)
 	unitID := startUnit(t, admin, taskID, typeID, "юнит до отпуска")
 
-	setVacation(t, admin, true)
+	setVacation(t, admin, companyID, admin, true)
 
 	// Создание/правка/ответственный/этап/архив — 403 ON_VACATION.
 	r := tasksAPI.doJSON(t, http.MethodPost, "/api/tasks", admin.Token,
@@ -54,7 +59,7 @@ func TestVacationBlocksTasksAndUnits(t *testing.T) {
 	requireError(t, r, 403, "ON_VACATION", "старт юнита в отпуске")
 
 	// Вернулся из отпуска — всё снова работает.
-	setVacation(t, admin, false)
+	setVacation(t, admin, companyID, admin, false)
 	createTask(t, admin, deptID, "После отпуска", nil)
 	unitID = startUnit(t, admin, taskID, typeID, "юнит после отпуска")
 	stopUnit(t, admin, unitID)
@@ -118,7 +123,7 @@ func TestVacationSetByCompanyCreator(t *testing.T) {
 // владельца и поглаживания коллег отвечают PET_ON_VACATION, а DTO явно несёт
 // метку on_vacation (её рисует фронт).
 func TestVacationFreezesPet(t *testing.T) {
-	admin, m, _ := petsCompany(t)
+	admin, m, companyID := petsCompany(t)
 
 	r := petsAPI.doJSON(t, http.MethodGet, "/api/pets/pet", m.Token, nil)
 	requireStatus(t, r, 200, "GET /pet")
@@ -126,7 +131,7 @@ func TestVacationFreezesPet(t *testing.T) {
 		t.Fatalf("новый питомец не в отпуске: %s", r.Raw)
 	}
 
-	setVacation(t, m, true)
+	setVacation(t, admin, companyID, m, true)
 
 	// Сутки с лишним без ухода — без отпуска сытость была бы в нуле и питомец
 	// болел бы истощением; в отпуске шкалы стоят на месте.
@@ -158,8 +163,45 @@ func TestVacationFreezesPet(t *testing.T) {
 		fmt.Sprintf("/api/pets/stroke/%d", m.ID), admin.Token, nil)
 	requireError(t, r, 422, "PET_ON_VACATION", "поглаживание отпускника")
 
-	setVacation(t, m, false)
+	setVacation(t, admin, companyID, m, false)
 	// После отпуска питомец жив-здоров и снова кормится.
 	r = petsAPI.doJSON(t, http.MethodPost, "/api/pets/pet/feed", m.Token, nil)
 	requireStatus(t, r, 200, "кормление после отпуска")
+}
+
+// Отпуск в одной компании не мешает работать в другой: у пользователя нет
+// глобального отпуска — он живёт в связке user_companies.
+func TestVacationIsPerCompany(t *testing.T) {
+	first, firstCompany, firstDept := newTaskCompany(t)
+	worker := newMember(t, first, firstCompany, roleEmployee)
+
+	// Тот же человек — сотрудник второй компании со своим отделом.
+	second := newVerifiedUser(t)
+	secondCompany := second.createCompany(t, uniq("Вторая "))
+	secondDept := createDept(t, second, uniq("Отдел "))
+	addToCompany(t, second, secondCompany, worker, roleEmployee)
+
+	setVacation(t, first, firstCompany, worker, true)
+
+	// Во второй компании (активной после addToCompany) работа идёт как обычно.
+	createTask(t, worker, secondDept, "Во второй компании", nil)
+
+	// А в первой — отпуск.
+	worker.switchCompany(t, firstCompany)
+	r := tasksAPI.doJSON(t, http.MethodPost, "/api/tasks", worker.Token,
+		map[string]any{"name": "В первой компании", "department_id": firstDept})
+	requireError(t, r, 403, "ON_VACATION", "задача в компании, где сотрудник в отпуске")
+
+	// Профиль отражает отпуск АКТИВНОЙ компании, а не аккаунта целиком.
+	r = authAPI.doJSON(t, http.MethodGet, "/api/users/me", worker.Token, nil)
+	requireStatus(t, r, 200, "GET /users/me в первой компании")
+	if !r.Bool("on_vacation") {
+		t.Fatalf("в первой компании профиль должен быть в отпуске: %s", r.Raw)
+	}
+	worker.switchCompany(t, secondCompany)
+	r = authAPI.doJSON(t, http.MethodGet, "/api/users/me", worker.Token, nil)
+	requireStatus(t, r, 200, "GET /users/me во второй компании")
+	if r.Bool("on_vacation") {
+		t.Fatalf("во второй компании отпуска нет: %s", r.Raw)
+	}
 }

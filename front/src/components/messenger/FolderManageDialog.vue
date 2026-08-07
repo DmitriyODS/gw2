@@ -3,7 +3,6 @@
     :model-value="modelValue"
     title="Папки с чатами"
     subtitle="Раскладывайте чаты по папкам — как в Telegram"
-    icon="folder_open"
     tone="tertiary"
     size="md"
     @update:model-value="$emit('update:modelValue', $event)"
@@ -45,10 +44,7 @@
         subtitle="Создайте первую — и группируйте чаты так, как удобно."
       />
 
-      <button class="fm-new btn-glass" @click="create">
-        <span class="material-symbols-outlined">add</span>
-        Новая папка
-      </button>
+      <AppButton icon="add" label="Новая папка" class="fm-new" @click="create" />
     </div>
   </AppDialog>
 
@@ -57,7 +53,6 @@
   <AppDialog
     v-model="deleteOpen"
     tone="danger"
-    icon="delete"
     title="Удалить папку?"
     :subtitle="deleting ? `Папка «${deleting.title}» будет удалена. Чаты и переписка останутся на месте.` : ''"
     size="sm"
@@ -71,7 +66,8 @@
 
 <script setup>
 import { ref, computed } from 'vue'
-import AppDialog from '@/components/common/AppDialog.vue'
+import AppButton from '@/components/ui/AppButton.vue'
+import AppDialog from '@/components/ui/AppDialog.vue'
 import EmptyState from '@/components/common/EmptyState.vue'
 import EmojiGlyph from '@/components/common/EmojiGlyph.vue'
 import FolderEditDialog from './FolderEditDialog.vue'

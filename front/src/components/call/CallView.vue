@@ -1,6 +1,7 @@
 <template>
   <Teleport to="body">
-    <Transition name="callview">
+    <!-- appear: монтируется вместе с началом звонка (ленивый чанк). -->
+    <Transition name="callview" appear>
       <div
         v-if="visible"
         class="callview"
@@ -406,7 +407,7 @@ const { cols, tilePx } = useTileGrid(
 )
 const gridStyle = computed(() => tilePx.value > 0
   ? { gridTemplateColumns: `repeat(${cols.value}, ${tilePx.value}px)` }
-  : { gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))' })
+  : { gridTemplateColumns: 'repeat(auto-fit, minmax(min(150px, 100%), 1fr))' })
 
 /* Началась демонстрация — авто-фокус на неё; закончилась (и фокус был на ней) —
    назад к сетке. Ручной выбор пользователя при этом не перетираем. */
@@ -972,7 +973,7 @@ watch(isRinging, (v) => {
   flex-shrink: 0;
   border-radius: 50%;
   border: 0;
-  /* Нейтральные контролы — стекло (идиома .btn-glass); on/off/hangup
+  /* Нейтральные контролы — стекло (идиома AppButton glass); on/off/hangup
      остаются тональными контейнерами. */
   background: var(--glass-bg);
   box-shadow: var(--glass-edge), inset 0 0 0 1px var(--acrylic-border);

@@ -1,65 +1,41 @@
 <template>
-  <div class="link-approve">
-    <div class="la-card">
-      <template v-if="state === 'loading'">
-        <span class="dl-spinner"></span>
-        <p class="la-muted">Проверяем код…</p>
-      </template>
+  <AuthShell :title="title" :subtitle="subtitle" size="sm">
+    <div class="la">
+      <BrandLoader v-if="state === 'loading'" :size="64" />
 
       <template v-else-if="state === 'confirm'">
-        <span class="material-symbols-outlined la-icon">{{ isTv ? 'tv' : 'login' }}</span>
-        <h2 class="la-title">{{ isTv ? 'Активировать ТВ-киоск?' : 'Подтвердить вход?' }}</h2>
-        <p class="la-text">
-          <template v-if="isTv">
-            <template v-if="authStore.companyId != null">
-              ТВ-киоск войдёт в систему под компанией «{{ authStore.companyName }}».
-            </template>
-            <template v-else>
-              Чтобы авторизовать ТВ-киоск, сначала выберите компанию в своём аккаунте.
-            </template>
-          </template>
-          <template v-else>
-            Другое устройство войдёт под вашим аккаунтом. Подтверждайте, только если
-            это ваш вход.
-          </template>
-        </p>
         <p v-if="error" class="la-error">{{ error }}</p>
         <div class="la-actions">
-          <button type="button" class="btn-glass" @click="goHome">Отмена</button>
-          <button
-            type="button"
-            class="btn-grad"
+          <AppButton label="отмена" @click="goHome" />
+          <AppButton
+            variant="filled"
             :disabled="loading || (isTv && authStore.companyId == null)"
             @click="approve"
-          >
-            {{ loading ? 'Подтверждаем…' : 'Подтвердить' }}
-          </button>
+          >{{ loading ? 'подтверждаем…' : 'подтвердить' }}</AppButton>
         </div>
       </template>
 
       <template v-else-if="state === 'done'">
-        <span class="material-symbols-outlined la-icon success">check_circle</span>
-        <h2 class="la-title">Готово!</h2>
-        <p class="la-text">Устройство входит в систему. Можно закрыть эту страницу.</p>
-        <button type="button" class="btn-grad" @click="goHome">На главную</button>
+        <AppButton variant="filled" label="на главную" class="la-wide" @click="goHome" />
       </template>
 
       <template v-else>
-        <span class="material-symbols-outlined la-icon">error</span>
-        <h2 class="la-title">Не получилось</h2>
-        <p class="la-text">{{ error }}</p>
-        <button type="button" class="btn-grad" @click="goHome">На главную</button>
+        <p class="la-error">{{ error }}</p>
+        <AppButton variant="filled" label="на главную" class="la-wide" @click="goHome" />
       </template>
     </div>
-  </div>
+  </AuthShell>
 </template>
 
 <script setup>
 import { ref, computed, onMounted } from 'vue'
+import AppButton from '@/components/ui/AppButton.vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth.js'
 import { linkInfo, linkApprove } from '@/api/devicelink.js'
 import { normalizeLinkCode } from '@/utils/deviceLink.js'
+import AuthShell from '@/components/auth/AuthShell.vue'
+import BrandLoader from '@/components/common/BrandLoader.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -72,6 +48,25 @@ const error = ref('')
 
 const code = computed(() => normalizeLinkCode(route.query.code))
 const isTv = computed(() => info.value?.kind === 'tv')
+
+const title = computed(() => {
+  if (state.value === 'loading') return 'проверяем код'
+  if (state.value === 'done') return 'готово'
+  if (state.value === 'error') return 'не получилось'
+  return isTv.value ? 'активировать ТВ-киоск?' : 'подтвердить вход?'
+})
+
+const subtitle = computed(() => {
+  if (state.value === 'loading') return ''
+  if (state.value === 'done') return 'Устройство входит в систему. Эту страницу можно закрыть.'
+  if (state.value === 'error') return ''
+  if (isTv.value) {
+    return authStore.companyId != null
+      ? `ТВ-киоск войдёт в систему под компанией «${authStore.companyName}».`
+      : 'Чтобы авторизовать ТВ-киоск, сначала выберите компанию в своём аккаунте.'
+  }
+  return 'Другое устройство войдёт под вашим аккаунтом. Подтверждайте, только если это ваш вход.'
+})
 
 onMounted(async () => {
   if (!/^[A-Z2-9]{6}$/.test(code.value)) {
@@ -116,46 +111,31 @@ function errText(e) {
 }
 
 function goHome() {
-  router.push('/')
+  router.push('/home')
 }
 </script>
 
 <style scoped>
-.link-approve {
-  min-height: 100dvh;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 24px;
-}
-.la-card {
-  width: 100%;
-  max-width: 420px;
-  padding: 32px 28px;
-  border-radius: var(--radius-xl, 24px);
-  background: var(--acrylic-card-bg);
-  border: 1px solid var(--acrylic-border);
-  box-shadow: var(--shadow-lg);
+.la {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 14px;
+  gap: 12px;
+}
+
+.la-actions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+.la-wide { width: 100%; justify-content: center; height: 44px; }
+
+.la-error {
+  margin: 0;
+  font-size: 13px;
+  color: var(--color-error);
   text-align: center;
 }
-.la-icon { font-size: 52px; color: var(--color-primary); }
-.la-icon.success { color: var(--color-success, var(--color-primary)); }
-.la-title { font-size: 1.35rem; font-weight: 700; color: var(--color-text); }
-.la-text { color: var(--color-text-secondary); font-size: 0.92rem; max-width: 340px; }
-.la-muted { color: var(--color-text-secondary); }
-.la-error { color: var(--color-error); font-size: 0.85rem; }
-.la-actions { display: flex; gap: 12px; margin-top: 4px; }
-.dl-spinner {
-  width: 28px;
-  height: 28px;
-  border-radius: 50%;
-  border: 3px solid var(--color-primary);
-  border-top-color: transparent;
-  animation: la-spin 0.8s linear infinite;
-}
-@keyframes la-spin { to { transform: rotate(360deg); } }
 </style>

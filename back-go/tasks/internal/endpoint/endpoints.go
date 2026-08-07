@@ -86,6 +86,8 @@ type Endpoints struct {
 	YougileStatus          endpoint.Endpoint
 	YougileConnect         endpoint.Endpoint
 	YougileDisconnect      endpoint.Endpoint
+	YougileAccounts        endpoint.Endpoint
+	YougileSwitchAccount   endpoint.Endpoint
 	YougileRotate          endpoint.Endpoint
 	YougileLookupCompanies endpoint.Endpoint
 	YougileProjects        endpoint.Endpoint
@@ -313,6 +315,13 @@ type YougileConnectRequest struct {
 	Login    string
 	Password string
 	Explicit *string // yg_company_id из payload (учитывается для DIRECTOR+)
+}
+
+// YougileAccountRequest — операция над КОНКРЕТНЫМ подключением; AccountID = 0
+// означает активное.
+type YougileAccountRequest struct {
+	UserID    int64
+	AccountID int64
 }
 
 type YougileRotateRequest struct {
@@ -631,7 +640,15 @@ func New(svc *service.Service, yg *service.Yougile) Endpoints {
 			return yg.Connect(ctx, req.User, req.Login, req.Password, req.Explicit)
 		},
 		YougileDisconnect: func(ctx context.Context, request any) (any, error) {
-			return nil, yg.Disconnect(ctx, request.(int64))
+			req := request.(YougileAccountRequest)
+			return nil, yg.Disconnect(ctx, req.UserID, req.AccountID)
+		},
+		YougileAccounts: func(ctx context.Context, request any) (any, error) {
+			return yg.Accounts(ctx, request.(int64))
+		},
+		YougileSwitchAccount: func(ctx context.Context, request any) (any, error) {
+			req := request.(YougileAccountRequest)
+			return nil, yg.SwitchAccount(ctx, req.UserID, req.AccountID)
 		},
 		YougileRotate: func(ctx context.Context, request any) (any, error) {
 			req := request.(YougileRotateRequest)

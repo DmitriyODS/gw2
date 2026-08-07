@@ -27,6 +27,7 @@ import (
 	"github.com/DmitriyODS/gw2/back-go/calls/internal/service"
 	grpctransport "github.com/DmitriyODS/gw2/back-go/calls/internal/transport/grpc"
 	httptransport "github.com/DmitriyODS/gw2/back-go/calls/internal/transport/http"
+	"github.com/DmitriyODS/gw2/back-go/pkg/billingclient"
 	"github.com/DmitriyODS/gw2/back-go/pkg/bootstrap"
 	pkgevents "github.com/DmitriyODS/gw2/back-go/pkg/events"
 	"github.com/DmitriyODS/gw2/back-go/pkg/gen/callspb"
@@ -81,6 +82,17 @@ func main() {
 	pub := events.NewPublisher(pkgevents.NewPublisher(rdb, log, events.Channel), msgr, log)
 	svc := service.New(repo, users, ring, lk, pub, msgr, log)
 	eps := endpoint.New(svc)
+
+	// Лимиты тарифа: сколько человек помещается в групповой звонок инициатора.
+	// Пустой адрес — прежний жёсткий потолок; недоступный биллинг не блокирует
+	// звонки (fail-open).
+	billing, err := billingclient.New(bootstrap.Env("BILLING_GRPC_ADDR", ""), log)
+	if err != nil {
+		log.Error("billing.dial_failed", "error", err)
+		os.Exit(1)
+	}
+	defer billing.Close()
+	svc.WithBilling(billing)
 
 	// Зависшие с прошлого запуска звонки: живые комнаты восстанавливаем,
 	// мёртвые финализируем. Ошибка не фатальна (БД могла ещё не мигрировать

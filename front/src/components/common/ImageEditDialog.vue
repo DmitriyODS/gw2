@@ -2,7 +2,6 @@
   <AppDialog
     :model-value="modelValue"
     tone="primary"
-    icon="crop_rotate"
     size="lg"
     title="Редактировать изображение"
     :actions="[
@@ -58,7 +57,7 @@
 // угловыми ручками), повороты на 90°, отражение. Повороты/отражения
 // «запекаются» в offscreen-канву сразу, обрезка применяется на «Применить».
 import { computed, nextTick, ref, watch } from 'vue'
-import AppDialog from '@/components/common/AppDialog.vue'
+import AppDialog from '@/components/ui/AppDialog.vue'
 
 const props = defineProps({
   modelValue: { type: Boolean, default: false },

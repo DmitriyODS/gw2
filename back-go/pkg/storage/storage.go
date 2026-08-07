@@ -24,6 +24,9 @@ type Storage interface {
 	Put(ctx context.Context, key string, data []byte, contentType string) error
 	// Open — открыть объект на чтение (бэкап/копирование). Закрыть вызывающему.
 	Open(ctx context.Context, key string) (io.ReadCloser, error)
+	// Size — размер объекта в байтах (учёт занятого места при удалении файла:
+	// сервис знает только ключ). Ошибка — объекта нет или бэкенд недоступен.
+	Size(ctx context.Context, key string) (int64, error)
 	// Copy — серверная копия объекта (пересылка вложений без скачивания).
 	Copy(ctx context.Context, srcKey, dstKey string) error
 	// Remove — best-effort удаление; ошибки — только warn-лог.

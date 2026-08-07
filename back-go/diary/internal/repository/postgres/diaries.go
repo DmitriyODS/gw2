@@ -96,6 +96,13 @@ func (r *Repo) GetDiary(ctx context.Context, id int64) (*domain.Diary, error) {
 	return scanDiary(r.pool.QueryRow(ctx, `SELECT `+diaryCols+` FROM diaries WHERE id = $1`, id))
 }
 
+// CountDiaries — сколько ежедневников уже есть (лимит тарифа).
+func (r *Repo) CountDiaries(ctx context.Context, owner_id int64) (int, error) {
+	var n int
+	err := r.pool.QueryRow(ctx, `SELECT count(*) FROM diaries WHERE owner_id = $1`, owner_id).Scan(&n)
+	return n, err
+}
+
 func (r *Repo) CreateDiary(ctx context.Context, d *domain.Diary) error {
 	return r.pool.QueryRow(ctx,
 		`INSERT INTO diaries (owner_id, name, position) VALUES ($1, $2, $3)

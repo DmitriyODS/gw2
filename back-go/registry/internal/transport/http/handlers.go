@@ -38,6 +38,22 @@ func validationError(c *fiber.Ctx, msg string) error {
 
 // ── Реестры ──────────────────────────────────────────────────────
 
+// searchRecords — строка поиска рабочего стола: записи всех реестров компании
+// одним запросом.
+func (h *handlers) searchRecords(c *fiber.Ctx) error {
+	companyID, ok := companyScope(c)
+	if !ok {
+		return nil
+	}
+	items, err := h.eps.SearchRecords(c.Context(), endpoint.SearchRecordsReq{
+		CompanyID: companyID, Query: c.Query("q"), Limit: c.QueryInt("limit"),
+	})
+	if err != nil {
+		return h.respondError(c, err)
+	}
+	return c.JSON(fiber.Map{"items": items})
+}
+
 func (h *handlers) listRegistries(c *fiber.Ctx) error {
 	companyID, ok := companyScope(c)
 	if !ok {
@@ -282,7 +298,8 @@ func (h *handlers) bulkDeleteRecords(c *fiber.Ctx) error {
 // ── Загрузка файла ───────────────────────────────────────────────
 
 func (h *handlers) upload(c *fiber.Ctx) error {
-	if _, ok := companyScope(c); !ok {
+	companyID, ok := companyScope(c)
+	if !ok {
 		return nil
 	}
 	fileHeader, err := c.FormFile("file")
@@ -305,9 +322,11 @@ func (h *handlers) upload(c *fiber.Ctx) error {
 		return validationError(c, "Файл слишком большой (макс. 25 МБ)")
 	}
 	resp, err := h.eps.Upload(c.Context(), endpoint.UploadReq{
-		FileName: fileHeader.Filename,
-		Mime:     fileHeader.Header.Get(fiber.HeaderContentType),
-		Data:     data,
+		CompanyID: companyID,
+		UserID:    currentUser(c).ID,
+		FileName:  fileHeader.Filename,
+		Mime:      fileHeader.Header.Get(fiber.HeaderContentType),
+		Data:      data,
 	})
 	if err != nil {
 		return h.respondError(c, err)

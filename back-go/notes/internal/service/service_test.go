@@ -6,6 +6,8 @@ import (
 	"io"
 	"log/slog"
 	"slices"
+	"sort"
+	"strings"
 	"testing"
 
 	"github.com/DmitriyODS/gw2/back-go/notes/internal/domain"
@@ -125,6 +127,27 @@ func (f *fakeRepo) MoveNote(_ domain.Ctx, id int64, folderID *int64) error {
 	}
 	return nil
 }
+
+// Раздел «Хранилище»: картинки живут внутри документов, поэтому и список, и
+// вырезание идут по ним.
+func (f *fakeRepo) NoteDocsOf(_ domain.Ctx, ownerID int64) ([]*domain.Note, error) {
+	out := []*domain.Note{}
+	for _, n := range f.notes {
+		if n.OwnerID == ownerID {
+			out = append(out, n)
+		}
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].ID < out[j].ID })
+	return out, nil
+}
+
+func (f *fakeRepo) UpdateNoteDoc(_ domain.Ctx, id int64, doc json.RawMessage, text string) error {
+	if n := f.notes[id]; n != nil {
+		n.Doc, n.TextContent = doc, text
+	}
+	return nil
+}
+
 func (f *fakeRepo) SetNoteTags(_ domain.Ctx, noteID int64, tagIDs []int64) error {
 	f.noteTags[noteID] = tagIDs
 	return nil
@@ -536,9 +559,12 @@ func (nopBus) Publish(_ domain.Ctx, _ string, _ []string, _ any) {}
 
 type nopFiles struct{}
 
-func (nopFiles) Save(_ string, _ []byte) (string, error) { return "notes/x", nil }
-func (nopFiles) Remove(_ []string)                       {}
-func (nopFiles) Open(_ string) ([]byte, error)           { return nil, nil }
+func (nopFiles) SaveFor(_ context.Context, _, _ int64, _ string, _ []byte) (string, error) {
+	return "notes/x", nil
+}
+func (nopFiles) RemoveFor(_ context.Context, _, _ int64, _ []string) {}
+func (nopFiles) Remove(_ []string)                                   {}
+func (nopFiles) Open(_ string) ([]byte, error)                       { return nil, nil }
 
 type allowLimiter struct{}
 
@@ -764,3 +790,55 @@ func TestRecipientPlacesSharedFolder(t *testing.T) {
 }
 
 var _ = json.Marshal
+
+// Импорт .md разбирает разметку (а не кладёт её текстом), а выгрузка в .md
+// возвращает ту же разметку — заметки ходят Markdown'ом туда-обратно.
+func TestImportExportMarkdown(t *testing.T) {
+	repo, users := newFakeRepo(), newFakeUsers()
+	users.users[1] = &domain.User{ID: 1, IsActive: true}
+	s := newSvc(repo, users)
+
+	src := "# Планы\n\nТекст с **жирным**\n\n- пункт\n- ещё\n"
+	n, err := s.Import(ctx(), 1, src, FormatMD, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if n.Title != "Планы" {
+		t.Fatalf("заголовок %q, ждали «Планы»", n.Title)
+	}
+	// Разметка стала документом: жирный — марка, а не звёздочки в тексте.
+	if strings.Contains(n.TextContent, "**") {
+		t.Errorf("markdown остался текстом: %q", n.TextContent)
+	}
+	if !strings.Contains(string(n.Doc), `"bulletList"`) {
+		t.Errorf("список не разобран: %s", n.Doc)
+	}
+
+	f, err := s.Export(ctx(), 1, n.ID, FormatMD)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if f.Ext != "md" {
+		t.Fatalf("расширение выгрузки %q", f.Ext)
+	}
+	for _, want := range []string{"# Планы", "**жирным**", "- пункт"} {
+		if !strings.Contains(string(f.Data), want) {
+			t.Errorf("в выгрузке нет %q:\n%s", want, f.Data)
+		}
+	}
+}
+
+// Обычный текстовый импорт разметку НЕ разбирает — звёздочки остаются как есть.
+func TestImportPlainKeepsMarkdownLiteral(t *testing.T) {
+	repo, users := newFakeRepo(), newFakeUsers()
+	users.users[1] = &domain.User{ID: 1, IsActive: true}
+	s := newSvc(repo, users)
+
+	n, err := s.Import(ctx(), 1, "Заметка\n\nтекст с **звёздочками**", FormatTXT, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(n.TextContent, "**звёздочками**") {
+		t.Errorf("текст изменён: %q", n.TextContent)
+	}
+}

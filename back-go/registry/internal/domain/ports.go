@@ -11,6 +11,8 @@ type RegistryRepository interface {
 	ListRegistries(ctx Ctx, companyID int64) ([]*Registry, error)
 	// GetRegistry — реестр без полей (для проверок принадлежности).
 	GetRegistry(ctx Ctx, id int64) (*Registry, error)
+	// CountRegistries — сколько реестров уже есть (лимит тарифа).
+	CountRegistries(ctx Ctx, company_id int64) (int, error)
 	CreateRegistry(ctx Ctx, r *Registry) error
 	UpdateRegistry(ctx Ctx, id int64, name string, position int) error
 	DeleteRegistry(ctx Ctx, id int64) error
@@ -27,6 +29,9 @@ type RegistryRepository interface {
 
 	// ── Записи ──
 	ListRecords(ctx Ctx, f RecordListFilter) (items []*Record, total int, err error)
+	// SearchRecords — глобальный поиск по записям всех реестров компании
+	// (строка поиска рабочего стола): один запрос, без обхода реестров.
+	SearchRecords(ctx Ctx, companyID int64, query string, limit int) ([]*SearchHit, error)
 	GetRecord(ctx Ctx, id int64) (*Record, error)
 	CreateRecord(ctx Ctx, r *Record, searchText string) error
 	UpdateRecord(ctx Ctx, id int64, data map[string]any, searchText string) error
@@ -38,6 +43,10 @@ type RegistryRepository interface {
 	// RecordsForExport — записи для выгрузки: при непустом ids — только они,
 	// иначе все по фильтру search. Без пагинации, порядок по created_at DESC.
 	RecordsForExport(ctx Ctx, registryID int64, search string, ids []int64) ([]*Record, error)
+	// RecordsOfCompanies — записи вместе с их реестром: раздел «Настройки →
+	// Хранилище» показывает, в каком реестре лежит файл. Скоуп — компании,
+	// чью квоту оплачивает спрашивающий (их присылает биллинг).
+	RecordsOfCompanies(ctx Ctx, companyIDs []int64) ([]*RecordScope, error)
 
 	// ── Публичные ссылки ──
 	CreateShare(ctx Ctx, s *Share) error
@@ -54,10 +63,14 @@ type UserReader interface {
 
 // FileStore — хранение загруженных файлов/картинок (общий uploads-том или S3).
 type FileStore interface {
-	// Save — записать файл, вернуть относительный путь (ключ) хранилища.
-	Save(fileName string, data []byte) (string, error)
-	// Remove — best-effort удаление файлов по ключам (чистка при удалении
-	// записей/полей); ошибки не возвращаются.
+	// SaveFor — записать файл в квоту компании (её оплачивает создатель):
+	// сверх лимита тарифа файл не сохраняется. Возвращает ключ хранилища.
+	SaveFor(ctx context.Context, userID, companyID int64, fileName string, data []byte) (string, error)
+	// RemoveFor — best-effort удаление файлов по ключам с возвратом места в
+	// квоту (чистка при удалении записей/полей); ошибки не возвращаются.
+	RemoveFor(ctx context.Context, userID, companyID int64, paths []string)
+	// Remove — удаление БЕЗ учёта: так чистит раздел «Хранилище», где место
+	// пересчитывает сам биллинг (он же инициатор и знает размеры).
 	Remove(paths []string)
 }
 

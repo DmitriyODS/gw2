@@ -321,8 +321,9 @@ func (y *Yougile) ResetIntegration(ctx context.Context, actor *domain.User, comp
 		return nil, err
 	}
 
-	// 3. Личный аккаунт руководителя.
-	if err := y.Disconnect(ctx, actor.ID); err != nil {
+	// 3. Личные подключения руководителя — все: сброс интеграции компании
+	// отвязывает его от YouGile целиком.
+	if err := y.Disconnect(ctx, actor.ID, 0); err != nil {
 		y.log.Warn("yougile.reset_account_disconnect_failed",
 			"company_id", companyID, "actor_id", actor.ID, "error", err)
 	}

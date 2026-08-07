@@ -126,7 +126,7 @@
 <script setup>
 import { computed, onMounted, reactive, ref } from 'vue'
 import EmojiGlyph from '@/components/common/EmojiGlyph.vue'
-import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
+import ConfirmDialog from '@/components/ui/ConfirmDialog.vue'
 import EmptyState from '@/components/common/EmptyState.vue'
 import KudosCoin from '@/components/pets/KudosCoin.vue'
 import StrokeMiniGame from '@/components/pets/StrokeMiniGame.vue'
@@ -230,7 +230,7 @@ onMounted(() => {
 
 .cp-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(min(140px, 100%), 1fr));
   gap: 14px;
 }
 .cp-cell { position: relative; display: flex; }
@@ -267,7 +267,7 @@ onMounted(() => {
   cursor: pointer;
   transition: background 0.15s, transform 0.1s;
 }
-.cp-house:hover { background: var(--color-secondary-container); transform: scale(1.1); }
+.cp-house:hover { background: var(--color-secondary-container); }
 
 /* Бейдж поколения — на кружке питомца. */
 .cp-gen {

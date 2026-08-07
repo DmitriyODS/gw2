@@ -17,6 +17,8 @@ type DiaryRepository interface {
 	// «Поделились»), с именем/аватаром владельца. Read-only.
 	ListShared(ctx Ctx, userID int64) ([]*Diary, error)
 	GetDiary(ctx Ctx, id int64) (*Diary, error)
+	// CountDiaries — сколько ежедневников уже есть (лимит тарифа).
+	CountDiaries(ctx Ctx, owner_id int64) (int, error)
 	CreateDiary(ctx Ctx, d *Diary) error
 	UpdateDiary(ctx Ctx, id int64, name string) error
 	DeleteDiary(ctx Ctx, id int64) error
@@ -38,6 +40,13 @@ type DiaryRepository interface {
 	DeleteEntry(ctx Ctx, id int64) error
 	DeleteEntries(ctx Ctx, diaryID int64, ids []int64) (int64, error)
 	EntriesForExport(ctx Ctx, f EntryListFilter, ids []int64) ([]*Entry, error)
+	// SearchEntries — глобальный поиск по записям всех доступных пользователю
+	// ежедневников (свои + расшаренные адресно): один запрос, без N+1.
+	SearchEntries(ctx Ctx, userID int64, query string, limit int) ([]*SearchHit, error)
+	// Agenda — невыполненные записи всех доступных ежедневников за период
+	// (живая плитка «Ежедневники» на рабочем столе): один запрос, без N+1.
+	// Возвращает записи по возрастанию дня и времени начала и общее их число.
+	Agenda(ctx Ctx, userID int64, from, to time.Time, limit int) (items []*SearchHit, total int, err error)
 
 	// ── Публичные ссылки ──
 	CreateShare(ctx Ctx, s *Share) error

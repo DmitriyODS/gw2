@@ -3,6 +3,8 @@ package domain
 import (
 	"context"
 	"time"
+
+	"github.com/DmitriyODS/gw2/back-go/pkg/storagefiles"
 )
 
 // Repository — персистентность мессенджера (PostgreSQL, общая БД платформы)
@@ -121,6 +123,10 @@ type Repository interface {
 	// ── Вложения ─────────────────────────────────────────────────
 	CreateAttachment(ctx context.Context, att *Attachment) error
 	GetAttachment(ctx context.Context, id int64) (*Attachment, error)
+	// Раздел «Настройки → Хранилище» (биллинг спрашивает по gRPC): чем занято
+	// место и удаление выбранного. Отбор по загрузившему — он и платит.
+	ListStorageFiles(ctx context.Context, userID int64) ([]storagefiles.File, error)
+	DeleteStorageFiles(ctx context.Context, userID int64, keys []string) ([]string, error)
 
 	// ── Оформление чатов ─────────────────────────────────────────
 	// ListChatBackgrounds — все рецепты пользователя (дефолт + по чатам).
@@ -164,6 +170,10 @@ type UserReader interface {
 	// DevChatUserIDs — адресаты событий dev-чата: владелец + все активные
 	// супер-админы (техподдержка).
 	DevChatUserIDs(ctx context.Context, ownerID int64) ([]int64, error)
+	// OutsidersInCompany — кто из ids НЕ состоит в компании. Нужен вложениям
+	// компанийных сущностей: задача уходит в чат только своим (членство —
+	// user_companies, читается напрямую из общей БД, как и users).
+	OutsidersInCompany(ctx context.Context, companyID int64, ids []int64) ([]int64, error)
 }
 
 // SupportAI — ИИ техподдержки dev-чата (gRPC aisvc SupportChat). messagesJSON —

@@ -73,6 +73,12 @@ func (s *Service) UpdatePlatformUser(ctx context.Context, userID int64, req dto.
 	if user == nil {
 		return nil, errUserNotFound
 	}
+	// Супер-админ неприкосновенен и здесь — как при сбросе пароля, деактивации
+	// и удалении: иначе через смену логина у него отбирают вход. Свой профиль
+	// он правит в «Аккаунте» (/users/me).
+	if user.IsSuperAdmin {
+		return nil, errSuperAdminProtected
+	}
 
 	updates := map[string]any{}
 	if req.FIO != nil {

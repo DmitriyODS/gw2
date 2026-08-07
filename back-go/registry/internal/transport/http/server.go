@@ -79,6 +79,7 @@ func NewServer(eps endpoint.Endpoints, users domain.UserReader,
 	// с "/:id<int>" — параметр матчит только числа.
 	api.Post("/uploads", employee, h.upload)
 
+	api.Get("/search", employee, h.searchRecords) // глобальный поиск рабочего стола
 	api.Get("", employee, h.listRegistries)
 	api.Post("", admin, h.createRegistry)
 	api.Get("/:id<int>", employee, h.getRegistry)

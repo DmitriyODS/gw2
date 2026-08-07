@@ -1,0 +1,354 @@
+<template>
+  <AppDialog
+    :model-value="modelValue"
+    tone="primary"
+    size="md"
+    :title="cropping ? 'Загрузка аватарки' : 'Редактирование профиля'"
+    :subtitle="cropping ? 'Выберите фото и подгоните кадр.' : 'Данные и контакты, которые видят коллеги.'"
+    :busy="saving"
+    :closable="!saving"
+    :actions="cropping ? [
+      { kind: 'neutral', label: 'Назад', icon: 'arrow_back', onClick: () => (cropping = false) },
+    ] : [
+      { kind: 'cancel', label: 'Отмена', disabled: saving },
+      { kind: 'confirm', label: 'Сохранить', icon: 'check', disabled: saving },
+    ]"
+    @update:model-value="close"
+    @confirm="save"
+  >
+    <!-- Кроппер живёт в этом же окне (сменой режима), а не вложенным диалогом:
+         так не громоздим маски друг на друга. -->
+    <AvatarCropper v-if="cropping" @cropped="onCropped" @cancel="cropping = false" />
+
+    <div v-else class="pe-body">
+      <div class="pe-avatar-row">
+        <!-- Примерка: пока значок в черновике, показываем его самого, а не
+             сохранённый аватар — иначе выбор было бы не видно до сохранения. -->
+        <span v-if="form.avatarEmoji" class="pe-avatar pe-avatar-emoji">{{ form.avatarEmoji }}</span>
+        <img v-else :src="avatarSrc" class="pe-avatar" :alt="auth.user?.fio" />
+        <div class="pe-avatar-actions">
+          <AppButton icon="photo_camera" label="Загрузить фото" @click="cropping = true" />
+          <!-- Значок вместо фотографии: выбор эмодзи снимает загруженный файл —
+               иначе человек выбрал бы значок и не понял, почему ничего не
+               изменилось (файл важнее по приоритету показа). -->
+          <EmojiPicker @pick="pickEmoji" />
+          <AppButton
+            v-if="form.avatarEmoji"
+            icon="close"
+            label="Снять значок"
+            @click="clearEmoji"
+          />
+          <AppButton
+            v-else-if="auth.user?.avatar_path || auth.user?.avatar_emoji"
+            tone="danger"
+            icon="delete"
+            label="Убрать"
+            :disabled="avatarBusy"
+            @click="removeAvatar"
+          />
+        </div>
+      </div>
+
+      <form class="pe-form" @submit.prevent="save">
+        <div class="form-group">
+          <label>ФИО</label>
+          <InputText v-model="form.fio" class="w-full" placeholder="Иванов Иван Иванович" />
+        </div>
+        <div class="form-group">
+          <label>Должность</label>
+          <InputText v-model="form.post" class="w-full" placeholder="Менеджер" />
+        </div>
+        <div class="form-group">
+          <label>Телефон</label>
+          <PhoneInput v-model="form.phone" />
+        </div>
+        <div class="form-group">
+          <label>Email</label>
+          <InputText
+            v-model="form.email"
+            class="w-full"
+            type="email"
+            inputmode="email"
+            placeholder="you@example.com"
+          />
+        </div>
+        <p v-if="error" class="error-msg">{{ error }}</p>
+      </form>
+
+      <ul class="pe-rows">
+        <li class="pe-row">
+          <span class="pe-row-text">
+            <small>Логин</small>
+            <span>{{ auth.user?.login || '—' }}</span>
+          </span>
+          <AppButton label="Изменить" class="pe-row-btn" @click="loginDialog = true" />
+        </li>
+        <li class="pe-row">
+          <span class="pe-row-text">
+            <small>Пароль</small>
+            <span>••••••••</span>
+          </span>
+          <AppButton label="Изменить" class="pe-row-btn" @click="passwordDialog = true" />
+        </li>
+      </ul>
+    </div>
+
+    <template #footer-start>
+      <!-- Мобильная оболочка не имеет меню «Пуск» с выходом — держим его здесь. -->
+      <AppButton
+        v-if="isMobile && !cropping"
+        tone="danger"
+        icon="logout"
+        label="Выйти"
+        @click="auth.logout()"
+      />
+    </template>
+  </AppDialog>
+
+  <ChangeLoginDialog v-model="loginDialog" :current-login="auth.user?.login || ''" />
+  <ChangePasswordDialog v-model="passwordDialog" />
+</template>
+
+<script setup>
+import { computed, reactive, ref, watch } from 'vue'
+import AppButton from '@/components/ui/AppButton.vue'
+import AppDialog from '@/components/ui/AppDialog.vue'
+import AvatarCropper from '@/components/settings/AvatarCropper.vue'
+import ChangeLoginDialog from '@/components/profile/ChangeLoginDialog.vue'
+import ChangePasswordDialog from '@/components/profile/ChangePasswordDialog.vue'
+import PhoneInput from '@/components/common/PhoneInput.vue'
+import EmojiPicker from '@/components/common/EmojiPicker.vue'
+import InputText from 'primevue/inputtext'
+import { avatarUrl } from '@/utils/pets.js'
+import { useAuthStore } from '@/stores/auth.js'
+import { useNotificationsStore } from '@/stores/notifications.js'
+import { useBreakpoint } from '@/composables/useBreakpoint.js'
+import { updateMe, uploadAvatar, deleteAvatar } from '@/api/users.js'
+
+const props = defineProps({ modelValue: { type: Boolean, default: false } })
+const emit = defineEmits(['update:modelValue'])
+
+const auth = useAuthStore()
+const notif = useNotificationsStore()
+const { isMobile } = useBreakpoint()
+
+const form = reactive({ fio: '', post: '', phone: '', email: '', avatarEmoji: '' })
+const error = ref('')
+const saving = ref(false)
+const cropping = ref(false)
+const avatarBusy = ref(false)
+const loginDialog = ref(false)
+const passwordDialog = ref(false)
+
+/* Адрес аватара. Значок и автоматический аватар отдаёт одна ручка, поэтому
+   ссылка одна и та же — но после смены значка её надо перезапросить, иначе
+   браузер покажет прежнюю картинку из кэша. */
+const avatarStamp = ref(0)
+const avatarSrc = computed(() => {
+  const u = auth.user
+  if (!u) return ''
+  if (u.avatar_path && !form.avatarEmoji) return `/uploads/${u.avatar_path}`
+  return `${avatarUrl(u)}${avatarStamp.value ? `${avatarUrl(u).includes('?') ? '&' : '?'}t=${avatarStamp.value}` : ''}`
+})
+
+/* Значок сначала ПРИМЕРЯЕТСЯ: выбор кладёт его в черновик формы и сразу виден
+   в кружке аватара, а применяется общей кнопкой «Сохранить» — как и остальные
+   поля профиля. */
+function pickEmoji(emoji) {
+  form.avatarEmoji = emoji
+}
+
+function clearEmoji() {
+  form.avatarEmoji = ''
+}
+
+watch(
+  () => props.modelValue,
+  (open) => {
+    if (!open) return
+    const u = auth.user || {}
+    form.fio = u.fio || ''
+    form.post = u.post || ''
+    form.phone = u.phone || ''
+    form.email = u.email || ''
+    form.avatarEmoji = u.avatar_emoji || ''
+    error.value = ''
+    cropping.value = false
+  },
+  { immediate: true },
+)
+
+function close() {
+  if (saving.value) return
+  emit('update:modelValue', false)
+}
+
+async function save() {
+  error.value = ''
+  if (!form.fio.trim()) {
+    error.value = 'ФИО обязательно'
+    return
+  }
+  saving.value = true
+  try {
+    await updateMe({
+      fio: form.fio.trim(),
+      post: form.post.trim(),
+      phone: form.phone.trim() || null,
+      email: form.email.trim() || null,
+      // Значок меняем, только если его трогали: иначе правка ФИО снимала бы
+      // выбранный ранее.
+      ...(form.avatarEmoji !== (auth.user?.avatar_emoji || '')
+        ? { avatar_emoji: form.avatarEmoji }
+        : {}),
+    })
+    await auth.loadMe()
+    avatarStamp.value = Date.now()
+    notif.success('Профиль обновлён')
+    emit('update:modelValue', false)
+  } catch (e) {
+    error.value = e.message || 'Ошибка сохранения'
+  } finally {
+    saving.value = false
+  }
+}
+
+async function onCropped(blob) {
+  cropping.value = false
+  try {
+    await uploadAvatar(blob)
+    await auth.loadMe()
+    notif.success('Аватарка обновлена')
+  } catch (e) {
+    notif.error(e.message || 'Ошибка загрузки аватарки')
+  }
+}
+
+// Убираем и фото, и значок: кнопка одна, и человек ждёт возврата к обычному
+// автоматическому аватару.
+async function removeAvatar() {
+  avatarBusy.value = true
+  try {
+    if (auth.user?.avatar_path) await deleteAvatar()
+    if (auth.user?.avatar_emoji) await updateMe({ avatar_emoji: '' })
+    await auth.loadMe()
+    avatarStamp.value = Date.now()
+    notif.success('Аватарка удалена')
+  } catch (e) {
+    notif.error(e.message || 'Ошибка удаления аватарки')
+  } finally {
+    avatarBusy.value = false
+  }
+}
+
+</script>
+
+<style scoped>
+.pe-body {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.pe-avatar-row {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.pe-avatar-emoji {
+  display: grid;
+  place-items: center;
+  font-size: 40px;
+  background: var(--color-primary-container);
+  /* Значок — «примерка», поэтому кружок подсвечен кромкой: видно, что
+     изменение ещё не сохранено. */
+  box-shadow: inset 0 0 0 2px var(--color-primary);
+}
+
+.pe-avatar {
+  width: 84px;
+  height: 84px;
+  border-radius: var(--radius-lg);
+  object-fit: cover;
+  border: 1px solid var(--color-outline-dim);
+  background: var(--color-surface-low);
+}
+
+.pe-avatar-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.pe-form {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.form-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.form-group label {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--color-text-dim);
+}
+
+.w-full { width: 100%; }
+
+.error-msg {
+  margin: 0;
+  font-size: 13px;
+  color: var(--color-on-error-container);
+  padding: 8px 12px;
+  background: var(--color-error-container);
+  border-radius: var(--radius-sm);
+}
+
+.pe-rows {
+  list-style: none;
+  margin: 0;
+  padding: 16px 0 0;
+  border-top: 1px solid var(--color-outline-dim);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.pe-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+
+.pe-row-text {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.pe-row-text small {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--color-text-dim);
+}
+
+.pe-row-text > span {
+  font-size: 13.5px;
+  color: var(--color-text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pe-row-btn { margin-left: auto; flex-shrink: 0; }
+</style>

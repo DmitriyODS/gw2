@@ -10,7 +10,7 @@ import (
 
 func TestTransformTextSendsInstructionAndReturnsResult(t *testing.T) {
 	svc, repo, llm := newTestService()
-	repo.companies[1] = enabledCompany(1)
+	repo.userAI[1] = enabledUserAI(1)
 	llm.chatResult = &domain.ChatResult{Content: "  Исправленный текст  "}
 
 	out, err := svc.TransformText(context.Background(), 1, "fix", "", "текст с ошибкай")
@@ -33,7 +33,7 @@ func TestTransformTextSendsInstructionAndReturnsResult(t *testing.T) {
 
 func TestTransformTextToneAndTranslateRequireKnownStyle(t *testing.T) {
 	svc, repo, llm := newTestService()
-	repo.companies[1] = enabledCompany(1)
+	repo.userAI[1] = enabledUserAI(1)
 	llm.chatResult = &domain.ChatResult{Content: "ok"}
 
 	_, err := svc.TransformText(context.Background(), 1, "tone", "sarcastic", "текст")
@@ -51,7 +51,7 @@ func TestTransformTextToneAndTranslateRequireKnownStyle(t *testing.T) {
 
 func TestTransformTextValidation(t *testing.T) {
 	svc, repo, _ := newTestService()
-	repo.companies[1] = enabledCompany(1)
+	repo.userAI[1] = enabledUserAI(1)
 
 	_, err := svc.TransformText(context.Background(), 1, "fix", "", "   ")
 	wantDomainError(t, err, "VALIDATION", 400)
@@ -71,7 +71,7 @@ func TestTransformTextAiDisabled(t *testing.T) {
 
 func TestTransformTextEmptyLLMAnswer(t *testing.T) {
 	svc, repo, llm := newTestService()
-	repo.companies[1] = enabledCompany(1)
+	repo.userAI[1] = enabledUserAI(1)
 	llm.chatResult = &domain.ChatResult{Content: "   "}
 
 	_, err := svc.TransformText(context.Background(), 1, "fix", "", "текст")

@@ -5,14 +5,18 @@
   <Dialog
     :visible="modelValue"
     modal
+    :append-to="host"
     :draggable="false"
     :show-header="false"
     :dismissable-mask="true"
-    :style="{ width: '460px', maxWidth: 'calc(100vw - 24px)' }"
+    :style="{ width: '460px', maxWidth: 'calc(100vw - 24px)', maxHeight: 'calc(100dvh - 48px)' }"
     :pt="{
       root: { class: 'emp-dialog' },
-      content: { style: 'overflow-x: hidden; padding: 0; background: transparent' },
-      mask: { style: 'background: var(--color-scrim)', class: elevated ? 'emp-mask--elevated' : '' },
+      content: { style: 'padding: 0; background: transparent' },
+      mask: {
+        style: 'background: var(--color-scrim)',
+        class: [elevated ? 'emp-mask--elevated' : '', { 'gw-in-window-mask': inWindow }],
+      },
     }"
     @update:visible="$emit('update:modelValue', $event)"
   >
@@ -116,25 +120,19 @@
       </div>
 
       <div v-if="canViewActivity" class="profile-lead">
-        <button class="btn-grad profile-activity" @click="openActivity">
-          <span class="material-symbols-outlined">monitoring</span>
-          Активность сотрудника
-        </button>
+        <AppButton
+          variant="filled"
+          icon="monitoring"
+          label="Активность сотрудника"
+          class="profile-activity"
+          @click="openActivity"
+        />
       </div>
 
       <div v-if="user.id !== auth.user?.id" class="profile-actions">
-        <button class="btn-glass" @click="writeTo(user)">
-          <span class="material-symbols-outlined">chat</span>
-          Написать
-        </button>
-        <button class="btn-glass" @click="callTo(user, 'video')">
-          <span class="material-symbols-outlined">videocam</span>
-          <span class="hide-narrow">Видео</span>
-        </button>
-        <button class="btn-glass" @click="callTo(user, 'audio')">
-          <span class="material-symbols-outlined">call</span>
-          <span class="hide-narrow">Аудио</span>
-        </button>
+        <AppButton icon="chat" label="Написать" @click="writeTo(user)" />
+        <AppButton icon="videocam" @click="callTo(user, 'video')"><span class="hide-narrow">Видео</span></AppButton>
+        <AppButton icon="call" @click="callTo(user, 'audio')"><span class="hide-narrow">Аудио</span></AppButton>
       </div>
     </div>
   </Dialog>
@@ -149,6 +147,7 @@
 
 <script setup>
 import { computed, ref, watch } from 'vue'
+import AppButton from '@/components/ui/AppButton.vue'
 import { useRouter } from 'vue-router'
 import Dialog from 'primevue/dialog'
 import { useAuthStore } from '@/stores/auth.js'
@@ -156,6 +155,7 @@ import { useCompaniesStore } from '@/stores/companies.js'
 import { useMessengerStore } from '@/stores/messenger.js'
 import { useCallStore } from '@/stores/call.js'
 import { formatLastSeen } from '@/utils/presence.js'
+import { useModalHost } from '@/desktop/windowHost.js'
 import ImageLightbox from '@/components/common/ImageLightbox.vue'
 import RolePill from '@/components/common/RolePill.vue'
 
@@ -166,6 +166,10 @@ const props = defineProps({
   elevated: { type: Boolean, default: false },
 })
 const emit = defineEmits(['update:modelValue'])
+
+// Карточку открывают и разделы в окнах («Сотрудники», портал), и плавающие
+// слои поверх стола (мини-хаб) — хост подстраивается сам.
+const { host, inWindow } = useModalHost()
 
 const router = useRouter()
 const auth = useAuthStore()

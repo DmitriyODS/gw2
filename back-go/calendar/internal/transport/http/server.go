@@ -79,6 +79,9 @@ func NewServer(eps endpoint.Endpoints, users domain.UserReader,
 	// с "/:id<int>" — параметр матчит только числа.
 	api.Post("/uploads", employee, h.upload)
 
+	// Повестка дня для живой плитки: "/agenda" не конфликтует с "/:id<int>".
+	api.Get("/agenda", employee, h.agenda)
+
 	api.Get("", employee, h.listCalendars)
 	api.Post("", admin, h.createCalendar)
 	api.Get("/:id<int>", employee, h.getCalendar)

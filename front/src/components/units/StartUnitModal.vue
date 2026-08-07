@@ -2,7 +2,6 @@
   <AppDialog
     model-value
     tone="primary"
-    icon="play_circle"
     size="sm"
     title="Начать юнит"
     subtitle="Зафиксируйте время работы над задачей."
@@ -52,7 +51,7 @@
 import { ref, onMounted } from 'vue'
 import InputText from 'primevue/inputtext'
 import Select from 'primevue/select'
-import AppDialog from '@/components/common/AppDialog.vue'
+import AppDialog from '@/components/ui/AppDialog.vue'
 import { createUnit } from '@/api/units.js'
 import { getUnitTypes } from '@/api/unitTypes.js'
 import { useUnitsStore } from '@/stores/units.js'

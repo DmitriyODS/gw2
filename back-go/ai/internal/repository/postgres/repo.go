@@ -30,18 +30,61 @@ func NewRepo(pool *pgxpool.Pool) *Repo {
 
 func (r *Repo) GetCompanyAI(ctx context.Context, companyID int64) (*domain.CompanyAI, error) {
 	var c domain.CompanyAI
+	var owner *int64
 	err := r.pool.QueryRow(ctx, `
-		SELECT id, ai_enabled, ai_api_key_enc, ai_key_hint, ai_model_chat, ai_model_embedding
+		SELECT id, ai_enabled, ai_shared, ai_feat_search, ai_feat_tv_fact, created_by
 		  FROM companies
 		 WHERE id = $1`, companyID).
-		Scan(&c.ID, &c.Enabled, &c.APIKeyEnc, &c.KeyHint, &c.ModelChat, &c.ModelEmbedding)
+		Scan(&c.ID, &c.Enabled, &c.Shared, &c.FeatSearch, &c.FeatTVFact, &owner)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, nil
 		}
 		return nil, err
 	}
+	if owner != nil {
+		c.OwnerID = *owner
+	}
 	return &c, nil
+}
+
+// GetUserAI — личные ИИ-настройки; nil без ошибки, если человек ещё не
+// подключал свой ключ (строки в user_ai_settings просто нет).
+func (r *Repo) GetUserAI(ctx context.Context, userID int64) (*domain.UserAI, error) {
+	var u domain.UserAI
+	err := r.pool.QueryRow(ctx, `
+		SELECT user_id, enabled, api_key_enc, key_hint, model_chat,
+		       api_base_url, feat_assistant, feat_notes
+		  FROM user_ai_settings
+		 WHERE user_id = $1`, userID).
+		Scan(&u.UserID, &u.Enabled, &u.APIKeyEnc, &u.KeyHint, &u.ModelChat,
+			&u.APIBaseURL, &u.FeatAssistant, &u.FeatNotes)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	return &u, nil
+}
+
+func (r *Repo) UpsertUserAI(ctx context.Context, u *domain.UserAI) error {
+	_, err := r.pool.Exec(ctx, `
+		INSERT INTO user_ai_settings
+		    (user_id, enabled, api_key_enc, key_hint, model_chat, api_base_url, feat_assistant, feat_notes)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+		ON CONFLICT (user_id) DO UPDATE
+		   SET enabled = EXCLUDED.enabled,
+		       api_key_enc = EXCLUDED.api_key_enc,
+		       key_hint = EXCLUDED.key_hint,
+		       model_chat = EXCLUDED.model_chat,
+		       api_base_url = EXCLUDED.api_base_url,
+		       feat_assistant = EXCLUDED.feat_assistant,
+		       feat_notes = EXCLUDED.feat_notes,
+		       updated_at = now()`,
+		u.UserID, u.Enabled, u.APIKeyEnc, u.KeyHint, u.ModelChat,
+		u.APIBaseURL, u.FeatAssistant, u.FeatNotes)
+	return err
 }
 
 // MembershipLevel — уровень роли пользователя в компании; 0 — не член.
@@ -65,12 +108,11 @@ func (r *Repo) UpdateCompanyAI(ctx context.Context, c *domain.CompanyAI) error {
 	_, err := r.pool.Exec(ctx, `
 		UPDATE companies
 		   SET ai_enabled = $2,
-		       ai_api_key_enc = $3,
-		       ai_key_hint = $4,
-		       ai_model_chat = $5,
-		       ai_model_embedding = $6
+		       ai_shared = $3,
+		       ai_feat_search = $4,
+		       ai_feat_tv_fact = $5
 		 WHERE id = $1`,
-		c.ID, c.Enabled, c.APIKeyEnc, c.KeyHint, c.ModelChat, c.ModelEmbedding)
+		c.ID, c.Enabled, c.Shared, c.FeatSearch, c.FeatTVFact)
 	return err
 }
 
@@ -221,4 +263,91 @@ func (r *Repo) SearchEmbeddings(ctx context.Context, companyID int64, vector []f
 		out = append(out, h)
 	}
 	return out, rows.Err()
+}
+
+// ── Платформенный ИИ (ai_platform_settings + ai_models) ──────────
+
+// GetPlatformAI — единственная строка настроек; её заводит миграция, поэтому
+// «нет строки» трактуем как выключенный ИИ, а не как ошибку.
+func (r *Repo) GetPlatformAI(ctx context.Context) (*domain.PlatformAI, error) {
+	var p domain.PlatformAI
+	err := r.pool.QueryRow(ctx, `
+		SELECT enabled, api_key_enc, key_hint, base_url, model_chat, model_embedding, model_support
+		  FROM ai_platform_settings WHERE id = 1`).
+		Scan(&p.Enabled, &p.APIKeyEnc, &p.KeyHint, &p.BaseURL, &p.ModelChat, &p.ModelEmbedding, &p.ModelSupport)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return &domain.PlatformAI{}, nil
+		}
+		return nil, err
+	}
+	return &p, nil
+}
+
+func (r *Repo) UpdatePlatformAI(ctx context.Context, p *domain.PlatformAI) error {
+	_, err := r.pool.Exec(ctx, `
+		INSERT INTO ai_platform_settings
+		    (id, enabled, api_key_enc, key_hint, base_url, model_chat, model_embedding, model_support, updated_at)
+		VALUES (1, $1, $2, $3, $4, $5, $6, $7, now())
+		ON CONFLICT (id) DO UPDATE
+		   SET enabled = EXCLUDED.enabled,
+		       api_key_enc = EXCLUDED.api_key_enc,
+		       key_hint = EXCLUDED.key_hint,
+		       base_url = EXCLUDED.base_url,
+		       model_chat = EXCLUDED.model_chat,
+		       model_embedding = EXCLUDED.model_embedding,
+		       model_support = EXCLUDED.model_support,
+		       updated_at = now()`,
+		p.Enabled, p.APIKeyEnc, p.KeyHint, p.BaseURL, p.ModelChat, p.ModelEmbedding, p.ModelSupport)
+	return err
+}
+
+func (r *Repo) ListModels(ctx context.Context) ([]*domain.AIModel, error) {
+	rows, err := r.pool.Query(ctx, `
+		SELECT code, title, kind, price_per_mtok, selectable, is_active, sort
+		  FROM ai_models ORDER BY sort, code`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := []*domain.AIModel{}
+	for rows.Next() {
+		var m domain.AIModel
+		if err := rows.Scan(&m.Code, &m.Title, &m.Kind, &m.PricePerMTok,
+			&m.Selectable, &m.IsActive, &m.Sort); err != nil {
+			return nil, err
+		}
+		out = append(out, &m)
+	}
+	return out, rows.Err()
+}
+
+// UpsertModel — правка каталога супер-админом (цена задаёт стоимость
+// обращения в токенах доступа).
+func (r *Repo) UpsertModel(ctx context.Context, m *domain.AIModel) error {
+	_, err := r.pool.Exec(ctx, `
+		INSERT INTO ai_models (code, title, kind, price_per_mtok, selectable, is_active, sort, updated_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, now())
+		ON CONFLICT (code) DO UPDATE
+		   SET title = EXCLUDED.title, kind = EXCLUDED.kind,
+		       price_per_mtok = EXCLUDED.price_per_mtok, selectable = EXCLUDED.selectable,
+		       is_active = EXCLUDED.is_active, sort = EXCLUDED.sort, updated_at = now()`,
+		m.Code, m.Title, m.Kind, m.PricePerMTok, m.Selectable, m.IsActive, m.Sort)
+	return err
+}
+
+// CompanyOwner — создатель компании: его токены тратят ИИ-возможности компании.
+func (r *Repo) CompanyOwner(ctx context.Context, companyID int64) (int64, error) {
+	var owner *int64
+	if err := r.pool.QueryRow(ctx, `SELECT created_by FROM companies WHERE id = $1`, companyID).
+		Scan(&owner); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return 0, nil
+		}
+		return 0, err
+	}
+	if owner == nil {
+		return 0, nil
+	}
+	return *owner, nil
 }

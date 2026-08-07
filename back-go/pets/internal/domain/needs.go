@@ -167,7 +167,7 @@ var NeedGains = map[string]map[string]int{
 
 const (
 	SleepDailyMax = 2
-	BathCost      = 12
+	BathCost      = 18
 	BathDailyMax  = 3
 )
 

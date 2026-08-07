@@ -1,6 +1,7 @@
 package http
 
 import (
+	"encoding/json"
 	"io"
 
 	"github.com/gofiber/fiber/v2"
@@ -171,6 +172,32 @@ func (h *handlers) updateMe(c *fiber.Ctx) error {
 	return c.JSON(resp)
 }
 
+// Настройки рабочего стола (закреплённые разделы, размеры плиток, обои) —
+// личные и синхронизируются между устройствами пользователя.
+func (h *handlers) desktopPrefs(c *fiber.Ctx) error {
+	resp, err := h.eps.GetDesktopPrefs(c.Context(), currentUser(c).ID)
+	if err != nil {
+		return h.respondError(c, err)
+	}
+	return c.JSON(fiber.Map{"prefs": resp})
+}
+
+func (h *handlers) saveDesktopPrefs(c *fiber.Ctx) error {
+	var body struct {
+		Prefs json.RawMessage `json:"prefs"`
+	}
+	if err := c.BodyParser(&body); err != nil {
+		return badRequest(c, "Неверный формат запроса")
+	}
+	resp, err := h.eps.SaveDesktopPrefs(c.Context(), endpoint.SaveDesktopPrefsEpRequest{
+		UserID: currentUser(c).ID, Prefs: body.Prefs,
+	})
+	if err != nil {
+		return h.respondError(c, err)
+	}
+	return c.JSON(fiber.Map{"prefs": resp})
+}
+
 func (h *handlers) uploadAvatar(c *fiber.Ctx) error {
 	fileHeader, err := c.FormFile("file")
 	if err != nil {
@@ -278,9 +305,35 @@ func (h *handlers) resetPassword(c *fiber.Ctx) error {
 	return c.JSON(fiber.Map{"message": "Пароль сброшен"})
 }
 
+/* Аватар без загруженного файла: выбранный значок либо автоматический
+   identicon. Одна ручка на оба случая — её адрес уже стоит во всех местах
+   интерфейса, где показывается аватар, и менять их ради значка незачем.
+
+   Значок отдаём SVG: цветные эмодзи рисует шрифт системы, серверу свой
+   эмодзи-шрифт не нужен. */
 func (h *handlers) identicon(c *fiber.Ctx) error {
+	userID := pathID(c)
+	/* Кэшировать нельзя: адрес аватара один и тот же, а картинка за ним
+	   меняется вместе с выбранным значком — с кэшем человек сохранял бы
+	   значок и продолжал видеть прежний. no-cache не запрещает хранение,
+	   только требует проверки, поэтому лишнего трафика почти нет. */
+	c.Set(fiber.HeaderCacheControl, "no-cache")
+	if emoji := h.userEmoji(c, userID); emoji != "" {
+		c.Set(fiber.HeaderContentType, "image/svg+xml")
+		return c.Send(avatar.EmojiAvatar(userID, emoji))
+	}
 	c.Set(fiber.HeaderContentType, "image/png")
-	return c.Send(avatar.Identicon(pathID(c)))
+	return c.Send(avatar.Identicon(userID))
+}
+
+// userEmoji — выбранный значок; пусто, если его нет или пользователь не найден
+// (тогда рисуется обычный identicon — ручка публичная и падать ей нечем).
+func (h *handlers) userEmoji(c *fiber.Ctx, userID int64) string {
+	user, err := h.users.GetByID(c.Context(), userID)
+	if err != nil || user == nil || user.AvatarEmoji == nil {
+		return ""
+	}
+	return *user.AvatarEmoji
 }
 
 // ── Участники компании (multi-company; Администратор системы) ──
@@ -438,7 +491,7 @@ func (h *handlers) getInvitePreview(c *fiber.Ctx) error {
 }
 
 func (h *handlers) acceptCompanyInvite(c *fiber.Ctx) error {
-	resp, err := h.eps.AcceptCompanyInvite(c.Context(), endpoint.AcceptInviteEpRequest{
+	resp, err := h.eps.AcceptCompanyInvite(sessionCtx(c), endpoint.AcceptInviteEpRequest{
 		UserID: tokenUserID(c), Token: c.Params("token"),
 	})
 	if err != nil {
@@ -450,7 +503,7 @@ func (h *handlers) acceptCompanyInvite(c *fiber.Ctx) error {
 }
 
 func (h *handlers) joinByInvite(c *fiber.Ctx) error {
-	resp, err := h.eps.JoinByCode(c.Context(), endpoint.JoinEpRequest{
+	resp, err := h.eps.JoinByCode(sessionCtx(c), endpoint.JoinEpRequest{
 		UserID: tokenUserID(c), Code: c.Params("code"),
 	})
 	if err != nil {

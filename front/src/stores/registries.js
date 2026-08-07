@@ -2,6 +2,8 @@ import { defineStore } from 'pinia'
 import { computed, reactive, ref } from 'vue'
 import * as api from '@/api/registries.js'
 import { useAuthStore } from '@/stores/auth.js'
+import { logActivity } from '@/utils/activityLog.js'
+import { textValue } from '@/utils/registryFields.js'
 
 export const useRegistriesStore = defineStore('registries', () => {
   const registries = ref([])          // [{id, name, fields:[...]}]
@@ -108,8 +110,24 @@ export const useRegistriesStore = defineStore('registries', () => {
   }
 
   async function createRecord(data) {
-    await api.createRecord(selectedId.value, data)
+    const rec = await api.createRecord(selectedId.value, data)
     await fetchRecords({ silent: true })
+    logActivity({
+      section: 'registries', id: rec?.id, title: recordTitle(rec),
+      path: `/registries?registry=${selectedId.value}`,
+    })
+    return rec
+  }
+
+  // Заголовок записи для ленты действий: первое непустое текстовое значение
+  // (структура карточки у каждого реестра своя).
+  function recordTitle(rec) {
+    const fields = selected.value?.fields || []
+    for (const f of fields) {
+      const v = textValue(f, rec?.data?.[String(f.id)])
+      if (v) return v
+    }
+    return selected.value?.name || 'Запись'
   }
 
   async function updateRecord(recordId, data) {

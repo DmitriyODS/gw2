@@ -81,13 +81,16 @@ func TestPetsUnitStoppedAwardsKudosAndXP(t *testing.T) {
 	requireStatus(t, pr, 200, "отодвинуть старт юнита")
 	stopUnit(t, member, unitID)
 
+	// Хук асинхронный и начисляет ДВУМЯ шагами (кудосы, затем XP), поэтому
+	// ждём обе величины: иначе тест поймает промежуточное состояние и упадёт
+	// на числах, которые через миг стали бы верными.
 	deadline := time.Now().Add(10 * time.Second)
 	var kudos, xp float64
 	for time.Now().Before(deadline) {
 		gr := petsAPI.doJSON(t, http.MethodGet, "/api/pets/pet", member.Token, nil)
 		requireStatus(t, gr, 200, "pet после юнита")
 		kudos, xp = gr.Num("kudos"), gr.Num("xp")
-		if kudos > 0 {
+		if kudos >= 15 && xp >= 15 {
 			break
 		}
 		time.Sleep(300 * time.Millisecond)

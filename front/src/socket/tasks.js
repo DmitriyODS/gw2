@@ -2,6 +2,7 @@ import { useAuthStore } from '@/stores/auth.js'
 import { useTasksStore } from '@/stores/tasks.js'
 import { useUnitsStore } from '@/stores/units.js'
 import { useNotificationsStore } from '@/stores/notifications.js'
+import { pushNotification } from '@/composables/useDesktopNotifications.js'
 
 export function registerTaskSocketHandlers(socket) {
   // refreshMyActiveCount — бейдж «моих» активных задач в навигации: любое
@@ -57,6 +58,13 @@ export function registerTaskSocketHandlers(socket) {
       severity: 'info',
       summary: 'Упоминание',
       detail: 'Вас отметили в комментарии к задаче',
+    })
+    pushNotification({
+      key: `mention-${task_id}`,
+      icon: 'alternate_email',
+      title: 'Упоминание',
+      text: 'Вас отметили в комментарии к задаче',
+      path: `/tasks/${task_id}`,
     })
   })
 

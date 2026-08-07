@@ -1,27 +1,22 @@
 <template>
-  <div class="admin-page">
-    <header class="admin-sticky">
-      <div class="ps-toolbar">
-        <button class="btn-glass ps-back" type="button" title="К грувикам" @click="router.push('/pets')">
-          <span class="material-symbols-outlined">arrow_back</span>
-        </button>
-        <h1 class="ps-title">Магазин</h1>
-        <button
-          class="chip-tint chip-tint--success ps-balance"
-          type="button"
-          title="Открыть кудо-банк"
-          @click="router.push('/pets/bank')"
-        >
-          <KudosCoin /> <strong>{{ pet?.kudos ?? 0 }}</strong>
-        </button>
-        <span class="chip-tint ps-refresh" title="Скидка дня и витрина меняются в полночь по Москве">
-          <span class="material-symbols-outlined">schedule</span>
-          обновится через {{ midnightLeft }}
-        </span>
-      </div>
-    </header>
+  <AppPage class="ps" title="Магазин" back back-label="К грувикам" @back="router.push('/pets')">
+    <template #status>
+      <AppChip
+        tone="success"
+        interactive
+        :count="pet?.kudos ?? 0"
+        title="Открыть кудо-банк"
+        @click="router.push('/pets/bank')"
+      >
+        <KudosCoin />
+      </AppChip>
+      <AppChip
+        icon="schedule"
+        :label="`обновится через ${midnightLeft}`"
+        title="Скидка дня и витрина меняются в полночь по Москве"
+      />
+    </template>
 
-    <div class="admin-body">
       <!-- Сюрприз дня -->
       <button
         class="ps-mystery"
@@ -128,16 +123,14 @@
         </div>
       </div>
 
-      <button
+      <AppButton
         v-if="category === 'species' && boughtSpeciesOn"
-        class="btn-glass ps-reset"
-        type="button"
+        icon="restart_alt"
+        label="Вернуть природный облик"
+        class="ps-reset"
         :disabled="switching"
         @click="resetSpeciesToNatural"
-      >
-        <span class="material-symbols-outlined">restart_alt</span>
-        Вернуть природный облик
-      </button>
+      />
 
       <!-- Витрина -->
       <div v-if="loading" class="ps-loading"><BrandLoader :size="64" /></div>
@@ -186,14 +179,12 @@
         <span class="material-symbols-outlined">collections_bookmark</span>
         Коллекция: собрано {{ ownedCount }} из {{ totalCount }}
       </p>
-    </div>
 
     <!-- Карточка товара: примерка на своём грувике + покупка -->
     <AppDialog
       :model-value="!!selected"
       :title="selected ? shopItemTitle(selected) : ''"
       :subtitle="selected ? RARITY_TITLE[selected.rarity] || '' : ''"
-      icon="storefront"
       tone="primary"
       size="sm"
       mobile="sheet"
@@ -221,51 +212,48 @@
           <p class="ps-tryon-note">Не продаётся — выдаётся за достижение.</p>
         </template>
         <template v-else-if="selected.owned">
-          <button
+          <AppButton
             v-if="selected.kind === 'species' && pet?.species !== selected.key"
-            class="btn-grad ps-tryon-buy"
+            variant="filled"
+            label="Надеть облик"
+            class="ps-tryon-buy"
             :disabled="switching"
             @click="pickSpecies(selected)"
-          >Надеть облик</button>
+          />
           <p v-else class="ps-tryon-note">
             <span class="material-symbols-outlined">check_circle</span>
             {{ selected.kind === 'species' ? 'Облик сейчас надет' : 'Уже в вашей коллекции' }}
           </p>
           <!-- Продажа за полцены (текущий облик продать нельзя — снимите сначала). -->
-          <button
+          <AppButton
             v-if="canSell(selected)"
-            class="btn-glass ps-tryon-installment"
+            icon="sell"
+            class="ps-tryon-installment"
             :disabled="selling"
             @click="sell(selected)"
-          >
-            <span class="material-symbols-outlined">sell</span>
-            Продать за {{ Math.floor(selected.price_kudos / 2) }}
-          </button>
+          >Продать за {{ Math.floor(selected.price_kudos / 2) }}</AppButton>
         </template>
         <template v-else>
-          <button
-            class="btn-grad ps-tryon-buy"
+          <AppButton
+            variant="filled"
+            class="ps-tryon-buy"
             :disabled="buying || switching || selected.sold_out || !canAfford(selected)"
             @click="selected.kind === 'species' ? buySpeciesItem(selected) : buy(selected)"
-          >
-            <template v-if="selected.sold_out">Распродано</template>
+          ><template v-if="selected.sold_out">Распродано</template>
             <template v-else-if="!canAfford(selected)">Не хватает {{ effectivePrice(selected) - (pet?.kudos ?? 0) }}</template>
             <template v-else>
               Купить за
               <s v-if="selected.sale_price_kudos" class="ps-old-price">{{ selected.price_kudos }}</s>
               {{ effectivePrice(selected) }}
             </template>
-            <KudosCoin />
-          </button>
-          <button
+            <KudosCoin /></AppButton>
+          <AppButton
             v-if="canInstallment(selected)"
-            class="btn-glass ps-tryon-installment"
+            icon="splitscreen"
+            class="ps-tryon-installment"
             :disabled="buying || switching"
             @click="buyInstallment(selected)"
-          >
-            <span class="material-symbols-outlined">splitscreen</span>
-            Оплатить частями ({{ Math.ceil(effectivePrice(selected) / 4) }} × 4)
-          </button>
+          >Оплатить частями ({{ Math.ceil(effectivePrice(selected) / 4) }} × 4)</AppButton>
           <p v-if="!canAfford(selected) && !selected.sold_out && !canInstallment(selected)" class="ps-tryon-note">
             Кудосы приносят юниты, задачи и квесты — или загляните в копилки банка.
           </p>
@@ -274,15 +262,18 @@
     </AppDialog>
 
     <ConfettiBurst ref="confettiEl" />
-  </div>
+  </AppPage>
 </template>
 
 <script setup>
 import { computed, onMounted, onBeforeUnmount, ref } from 'vue'
+import AppButton from '@/components/ui/AppButton.vue'
 import { useRouter } from 'vue-router'
 import BrandLoader from '@/components/common/BrandLoader.vue'
-import AppDialog from '@/components/common/AppDialog.vue'
+import AppDialog from '@/components/ui/AppDialog.vue'
 import EmojiGlyph from '@/components/common/EmojiGlyph.vue'
+import AppChip from '@/components/ui/AppChip.vue'
+import AppPage from '@/components/ui/AppPage.vue'
 import KudosCoin from '@/components/pets/KudosCoin.vue'
 import ConfettiBurst from '@/components/pets/bank/ConfettiBurst.vue'
 import { getShop } from '@/api/pets.js'
@@ -524,15 +515,7 @@ async function claimMystery() {
 </script>
 
 <style scoped>
-.admin-sticky { background: transparent; -webkit-backdrop-filter: none; backdrop-filter: none; }
-.admin-sticky::after { display: none; }
 
-.ps-toolbar { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
-.ps-back { display: inline-flex; align-items: center; padding: 8px 10px; }
-.ps-title { margin: 0; font-size: 20px; font-weight: 800; }
-.ps-balance { border: none; font: inherit; cursor: pointer; display: inline-flex; align-items: center; gap: 5px; }
-.ps-refresh { margin-left: auto; display: inline-flex; align-items: center; gap: 5px; font-size: 12px; }
-.ps-refresh .material-symbols-outlined { font-size: 15px; }
 
 .ps-section-title {
   margin: 0 0 10px;
@@ -584,7 +567,7 @@ async function claimMystery() {
 .ps-featured { margin-bottom: 20px; }
 .ps-featured-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(min(250px, 100%), 1fr));
   gap: 12px;
 }
 .ps-hero-card {
@@ -717,7 +700,7 @@ async function claimMystery() {
 .ps-loading { display: flex; justify-content: center; padding: 40px 0; }
 .ps-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(min(150px, 100%), 1fr));
   gap: 12px;
 }
 .ps-item {
@@ -858,7 +841,6 @@ async function claimMystery() {
 
 @media (max-width: 560px) {
   .ps-grid { grid-template-columns: repeat(2, 1fr); }
-  .ps-refresh { margin-left: 0; }
   .ps-featured-grid { grid-template-columns: 1fr; }
   /* На узком экране подпись ряда — над чипами, не сбоку. */
   .ps-filter-row { flex-direction: column; align-items: flex-start; gap: 8px; }

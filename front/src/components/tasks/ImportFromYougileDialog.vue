@@ -2,7 +2,6 @@
   <AppDialog
     :model-value="visible"
     tone="primary"
-    icon="download"
     size="md"
     mobile="sheet"
     title="Импорт из YouGile"
@@ -76,7 +75,7 @@
 
 <script setup>
 import { reactive, ref, computed, onMounted, watch } from 'vue'
-import AppDialog from '@/components/common/AppDialog.vue'
+import AppDialog from '@/components/ui/AppDialog.vue'
 import InputText from 'primevue/inputtext'
 import Select from 'primevue/select'
 import Checkbox from 'primevue/checkbox'

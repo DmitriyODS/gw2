@@ -71,6 +71,9 @@ func NewServer(eps endpoint.Endpoints, users domain.UserReader,
 	ygAPI.Post("/account", h.yougileConnect)
 	ygAPI.Delete("/account", h.yougileDisconnect)
 	ygAPI.Post("/account/rotate", h.yougileRotate)
+	// Несколько подключений YouGile: список и переключение активного.
+	ygAPI.Get("/accounts", h.yougileAccounts)
+	ygAPI.Post("/accounts/:id<int>/activate", h.yougileSwitchAccount)
 	ygAPI.Post("/companies/lookup", admin, h.yougileLookupCompanies)
 	ygAPI.Get("/projects", admin, h.yougileProjects)
 	ygAPI.Get("/boards", admin, h.yougileBoards)

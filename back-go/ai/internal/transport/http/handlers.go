@@ -5,12 +5,12 @@ import (
 	"log/slog"
 	"strconv"
 	"strings"
-	"unicode/utf8"
 
 	"github.com/gofiber/fiber/v2"
 
 	"github.com/DmitriyODS/gw2/back-go/ai/internal/dto"
 	"github.com/DmitriyODS/gw2/back-go/ai/internal/endpoint"
+	"github.com/DmitriyODS/gw2/back-go/ai/internal/service"
 	"github.com/DmitriyODS/gw2/back-go/pkg/apierror"
 )
 
@@ -87,6 +87,23 @@ func (h *handlers) reindexTasks(c *fiber.Ctx) error {
 	return c.Status(fiber.StatusAccepted).JSON(resp)
 }
 
+// aiStatus — GET /api/ai/status: включён ли ИИ в активной компании. Нужен
+// карточке «Интеграции» в профиле: полные ai-настройки читает только
+// администратор компании, а знать о наличии ассистента вправе любой участник —
+// поэтому здесь отдаётся один флаг, без ключа и моделей.
+func (h *handlers) aiStatus(c *fiber.Ctx) error {
+	user := currentUser(c)
+	if user == nil || user.CompanyID == nil {
+		return c.JSON(fiber.Map{"enabled": false})
+	}
+	resp, err := h.eps.Status(c.Context(), *user.CompanyID)
+	if err != nil {
+		return h.respondError(c, err)
+	}
+	st, _ := resp.(*service.StatusResult)
+	return c.JSON(fiber.Map{"enabled": st != nil && st.Enabled})
+}
+
 // tvFact — GET /api/ai/tv-fact: текущий факт дня для ТВ-табло; AI выключен /
 // факт не сгенерён → null с 200 OK (фронт молча падает на фолбэк-слайд).
 // Company-scope как @require_company_scope во Flask: обычный пользователь —
@@ -133,46 +150,25 @@ func parseSettingsUpdate(body []byte) (dto.AiSettingsUpdate, map[string][]string
 	var raw map[string]json.RawMessage
 	_ = json.Unmarshal(body, &raw)
 
+	// Ключа у компании больше нет: тумблеры включают ИИ-возможности, которые
+	// работают на платформенном ключе и тратят токены создателя компании.
+	boolField := func(field string, value json.RawMessage, dst **bool) {
+		if b, ok := asBool(value); ok {
+			*dst = &b
+		} else {
+			details[field] = append(details[field], "Not a valid boolean.")
+		}
+	}
 	for field, value := range raw {
 		switch field {
 		case "enabled":
-			if b, ok := asBool(value); ok {
-				upd.Enabled = &b
-			} else {
-				details[field] = append(details[field], "Not a valid boolean.")
-			}
-		case "clear_key":
-			if b, ok := asBool(value); ok {
-				upd.ClearKey = b
-			} else {
-				details[field] = append(details[field], "Not a valid boolean.")
-			}
-		case "api_key":
-			// allow_none: null = «не менять».
-			if string(value) == "null" {
-				continue
-			}
-			s, ok := asString(value)
-			switch {
-			case !ok:
-				details[field] = append(details[field], "Not a valid string.")
-			case utf8.RuneCountInString(s) > 512:
-				details[field] = append(details[field], "Longer than maximum length 512.")
-			default:
-				upd.APIKey = &s
-			}
-		case "model_chat", "model_embedding":
-			s, ok := asString(value)
-			switch {
-			case !ok:
-				details[field] = append(details[field], "Not a valid string.")
-			case utf8.RuneCountInString(s) < 1 || utf8.RuneCountInString(s) > 64:
-				details[field] = append(details[field], "Length must be between 1 and 64.")
-			case field == "model_chat":
-				upd.ModelChat = &s
-			default:
-				upd.ModelEmbedding = &s
-			}
+			boolField(field, value, &upd.Enabled)
+		case "shared":
+			boolField(field, value, &upd.Shared)
+		case "feat_search":
+			boolField(field, value, &upd.FeatSearch)
+		case "feat_tv_fact":
+			boolField(field, value, &upd.FeatTVFact)
 		default:
 			// marshmallow по умолчанию RAISE на неизвестных полях.
 			details[field] = append(details[field], "Unknown field.")

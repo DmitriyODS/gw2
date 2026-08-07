@@ -1,190 +1,118 @@
 <template>
-  <AuthShell title="С возвращением!" subtitle="Войдите, чтобы продолжить работу.">
-    <form @submit.prevent="handleLogin" class="login-form">
-          <div class="form-group">
-            <label>Логин</label>
-            <input
-              v-model="loginForm.login"
-              type="text"
-              class="pill-input"
-              :disabled="isLoginDisabled"
-              autocomplete="username"
-              placeholder="Введите логин"
-            />
-          </div>
-          <div class="form-group">
-            <label>Пароль</label>
-            <div class="input-wrap">
-              <input
-                v-model="loginForm.password"
-                :type="showLoginPassword ? 'text' : 'password'"
-                class="pill-input"
-                :disabled="isLoginDisabled"
-                autocomplete="current-password"
-                placeholder="Введите пароль"
-              />
-              <button type="button" class="eye-btn" @click="showLoginPassword = !showLoginPassword" tabindex="-1">
-                <svg v-if="!showLoginPassword" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
-                <svg v-else viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17.94 17.94A10.07 10.07 0 0112 20c-7 0-11-8-11-8a18.45 18.45 0 015.06-5.94"/><path d="M9.9 4.24A9.12 9.12 0 0112 4c7 0 11 8 11 8a18.5 18.5 0 01-2.16 3.19"/><line x1="1" y1="1" x2="23" y2="23"/></svg>
-              </button>
-            </div>
-          </div>
-          <div class="forgot-row">
-            <RouterLink to="/forgot-password" class="forgot-link">Забыли пароль?</RouterLink>
-          </div>
-          <div v-if="cooldownSec > 0" class="cooldown-box" role="status" aria-live="polite">
-            <span class="material-symbols-outlined">lock_clock</span>
-            <div class="cooldown-text">
-              <div class="cooldown-title">Слишком много неудачных попыток</div>
-              <div class="cooldown-sub">Попробуйте снова через {{ formattedCooldown }}</div>
-            </div>
-          </div>
-          <p v-else-if="loginError" class="error-msg">{{ loginError }}</p>
-          <button type="submit" class="btn-login" :disabled="isLoginDisabled">
-            {{ loginButtonLabel }}
-          </button>
+  <!-- Экран входа ведёт три шага в ОДНОЙ карточке: учётные данные, выбор
+       компании и обязательная смена пароля. Отдельных модалок больше нет —
+       так шаги живут в общем языке экранов входа. -->
+  <AuthShell
+    :title="stepTitle"
+    :subtitle="stepSubtitle"
+    size="md"
+    :back="step === 'credentials' ? '/welcome' : ''"
+  >
+    <!-- ── Шаг 1: логин и пароль ─────────────────────────────── -->
+    <form v-if="step === 'credentials'" class="auth-form" @submit.prevent="handleLogin">
+      <AuthField
+        v-model="loginForm.login"
+        label="логин"
+        placeholder="логин"
+        autocomplete="username"
+        :disabled="isLoginDisabled"
+      />
+      <AuthField
+        v-model="loginForm.password"
+        label="пароль"
+        type="password"
+        placeholder="пароль"
+        autocomplete="current-password"
+        :disabled="isLoginDisabled"
+      />
+
+      <div v-if="cooldownSec > 0" class="auth-error" role="status" aria-live="polite">
+        <span class="material-symbols-outlined">lock_clock</span>
+        <span>
+          Слишком много неудачных попыток — попробуйте через {{ formattedCooldown }}
+        </span>
+      </div>
+      <p v-else-if="loginError" class="auth-error">{{ loginError }}</p>
+
+      <button type="submit" class="auth-submit" :disabled="isLoginDisabled">
+        {{ loginButtonLabel }}
+      </button>
+
+      <div class="lg-alts">
+        <button type="button" class="auth-alt" @click="goYandex">
+          <YandexLogo :size="16" />
+          Войти через Яндекс
+        </button>
+        <RouterLink to="/qr-login" class="auth-alt">
+          <span class="material-symbols-outlined">qr_code_2</span>
+          Войти по QR-коду
+        </RouterLink>
+        <RouterLink to="/tv-activate" class="auth-alt">
+          <span class="material-symbols-outlined">tv</span>
+          ТВ-режим
+        </RouterLink>
+        <RouterLink to="/forgot-password" class="auth-alt">
+          <span class="material-symbols-outlined">lock_reset</span>
+          Сбросить пароль
+        </RouterLink>
+      </div>
+
+      <p class="lg-switch">
+        Нет аккаунта?
+        <RouterLink to="/register">создать</RouterLink>
+      </p>
     </form>
 
-    <p class="switch-line">
-      Нет аккаунта?
-      <RouterLink to="/register" class="switch-link">Зарегистрироваться</RouterLink>
-    </p>
-
-    <div class="alt-login">
-      <button v-if="yandexAuth.enabled" type="button" class="alt-login-btn" @click="goYandex">
-        <span class="ya-badge">Я</span>
-        Использовать Яндекс
-      </button>
-      <button type="button" class="alt-login-btn" @click="showQrLogin = true">
-        <span class="material-symbols-outlined">qr_code_2</span>
-        Войти по QR-коду
-      </button>
-      <button type="button" class="alt-login-btn" @click="showTvActivate = true">
-        <span class="material-symbols-outlined">tv</span>
-        Активировать ТВ-режим
-      </button>
-    </div>
-
-    <template #overlays>
-    <!-- Вход по QR: показываем код, ждём подтверждения с телефона -->
-    <AppDialog
-      v-if="showQrLogin"
-      model-value
-      icon="qr_code_2"
-      size="sm"
-      title="Вход по QR-коду"
-      subtitle="Отсканируйте код телефоном, где вы уже вошли."
-      @update:modelValue="showQrLogin = false"
-    >
-      <DeviceLinkInitiator kind="login" @session="onLoginQrSession" />
-    </AppDialog>
-
-    <!-- Активация ТВ-режима: код для подтверждения из настроек аккаунта -->
-    <AppDialog
-      v-if="showTvActivate"
-      model-value
-      icon="tv"
-      size="sm"
-      title="ТВ-режим"
-      subtitle="Подтвердите код в приложении → «Авторизовать ТВ-киоск»."
-      @update:modelValue="showTvActivate = false"
-    >
-      <DeviceLinkInitiator kind="tv" @session="onTvSession" />
-    </AppDialog>
-    <!-- Неклозабельная модалка смены учётных данных -->
-    <AppDialog
-      v-if="showChangeModal"
-      model-value
-      tone="warning"
-      icon="lock_reset"
-      size="sm"
-      title="Смена учётных данных"
-      subtitle="Пожалуйста, смените логин и пароль перед началом работы."
-      :closable="false"
-    >
-      <form @submit.prevent="handleChangeDefault" class="change-form">
-        <div class="form-group">
-          <label>Новый логин</label>
-          <input
-            v-model="changeForm.login"
-            type="text"
-            class="pill-input"
-            autocomplete="new-username"
-            placeholder="Не короче 3 символов"
-          />
-        </div>
-        <div class="form-group">
-          <label>Новый пароль</label>
-          <div class="input-wrap">
-            <input
-              v-model="changeForm.password"
-              :type="showNewPassword ? 'text' : 'password'"
-              class="pill-input"
-              autocomplete="new-password"
-              placeholder="Не короче 8 символов"
-            />
-            <button type="button" class="eye-btn" @click="showNewPassword = !showNewPassword" tabindex="-1">
-              <svg v-if="!showNewPassword" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
-              <svg v-else viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17.94 17.94A10.07 10.07 0 0112 20c-7 0-11-8-11-8a18.45 18.45 0 015.06-5.94"/><path d="M9.9 4.24A9.12 9.12 0 0112 4c7 0 11 8 11 8a18.5 18.5 0 01-2.16 3.19"/><line x1="1" y1="1" x2="23" y2="23"/></svg>
-            </button>
-          </div>
-        </div>
-        <div class="form-group">
-          <label>Подтвердите пароль</label>
-          <div class="input-wrap">
-            <input
-              v-model="changeForm.confirmPassword"
-              :type="showConfirmPassword ? 'text' : 'password'"
-              class="pill-input"
-              autocomplete="new-password"
-              placeholder="Повторите новый пароль"
-            />
-            <button type="button" class="eye-btn" @click="showConfirmPassword = !showConfirmPassword" tabindex="-1">
-              <svg v-if="!showConfirmPassword" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
-              <svg v-else viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17.94 17.94A10.07 10.07 0 0112 20c-7 0-11-8-11-8a18.45 18.45 0 015.06-5.94"/><path d="M9.9 4.24A9.12 9.12 0 0112 4c7 0 11 8 11 8a18.5 18.5 0 01-2.16 3.19"/><line x1="1" y1="1" x2="23" y2="23"/></svg>
-            </button>
-          </div>
-        </div>
-        <p v-if="changeError" class="error-msg">{{ changeError }}</p>
-        <button type="submit" class="btn-login" :disabled="changeLoading">
-          {{ changeLoading ? 'Сохраняем...' : 'Сохранить и войти' }}
-        </button>
-      </form>
-    </AppDialog>
-
-    <!-- Выбор компании при логине (несколько компаний у пользователя) -->
-    <AppDialog
-      v-if="showCompanyPicker"
-      model-value
-      icon="apartment"
-      size="sm"
-      title="Выберите компанию"
-      subtitle="Вы состоите в нескольких компаниях. В какую войти?"
-      :closable="false"
-    >
-      <div class="company-picker">
+    <!-- ── Шаг 2: выбор компании ─────────────────────────────── -->
+    <div v-else-if="step === 'company'" class="auth-form">
+      <div class="lg-companies">
         <button
           v-for="c in pickerCompanies"
           :key="c.company_id"
           type="button"
-          class="company-option"
-          :class="{ active: pickerSelected === c.company_id, disabled: !c.is_active }"
+          class="lg-company"
+          :class="{ active: pickerSelected === c.company_id }"
           :disabled="!c.is_active"
           @click="pickerSelected = c.company_id"
         >
-          <span class="company-option-main">
-            <span class="company-option-name">{{ c.company_name }}</span>
-            <span class="company-option-role">{{ c.role_name }}<template v-if="!c.is_active"> · отключена</template></span>
+          <span class="lg-company-main">
+            <span class="lg-company-name">{{ c.company_name }}</span>
+            <span class="lg-company-role">
+              {{ c.role_name }}<template v-if="!c.is_active"> · отключена</template>
+            </span>
           </span>
           <span v-if="pickerSelected === c.company_id" class="material-symbols-outlined">check_circle</span>
         </button>
       </div>
-      <p v-if="loginError" class="error-msg">{{ loginError }}</p>
-      <button type="button" class="btn-login" :disabled="loading || !pickerSelected" @click="confirmCompany">
-        {{ loading ? 'Входим...' : 'Войти' }}
+      <p v-if="loginError" class="auth-error">{{ loginError }}</p>
+      <button type="button" class="auth-submit" :disabled="loading || !pickerSelected" @click="confirmCompany">
+        {{ loading ? 'входим…' : 'войти' }}
       </button>
-    </AppDialog>
-    </template>
+    </div>
+
+    <!-- ── Шаг 3: обязательная смена пароля ──────────────────── -->
+    <form v-else class="auth-form" @submit.prevent="handleChangeDefault">
+      <AuthField
+        v-model="changeForm.password"
+        label="новый пароль"
+        type="password"
+        placeholder="не короче 8 символов"
+        autocomplete="new-password"
+        :disabled="changeLoading"
+      />
+      <AuthField
+        v-model="changeForm.confirmPassword"
+        label="повторите пароль"
+        type="password"
+        placeholder="ещё раз"
+        autocomplete="new-password"
+        :disabled="changeLoading"
+      />
+      <p v-if="changeError" class="auth-error">{{ changeError }}</p>
+      <button type="submit" class="auth-submit" :disabled="changeLoading">
+        {{ changeLoading ? 'сохраняем…' : 'сохранить и войти' }}
+      </button>
+    </form>
   </AuthShell>
 </template>
 
@@ -192,24 +120,23 @@
 import { ref, reactive, computed, onMounted, onBeforeUnmount } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useAuthStore } from '@/stores/auth.js'
-import { useThemeStore } from '@/stores/theme.js'
 import { connectSocket } from '@/socket/index.js'
-import AppDialog from '@/components/common/AppDialog.vue'
 import AuthShell from '@/components/auth/AuthShell.vue'
-import DeviceLinkInitiator from '@/components/auth/DeviceLinkInitiator.vue'
+import AuthField from '@/components/auth/AuthField.vue'
+import YandexLogo from '@/components/common/YandexLogo.vue'
 import { yandexConfig, yandexAuthURL } from '@/api/auth.js'
 import { inAppShell } from '@/utils/appShell.js'
 
 const router = useRouter()
 const route = useRoute()
 const authStore = useAuthStore()
-const themeStore = useThemeStore()
+
+// credentials → company → change-password: шаги одной карточки.
+const step = ref('credentials')
 
 const loginForm = reactive({ login: '', password: '' })
 const loginError = ref('')
 const loading = ref(false)
-const showChangeModal = ref(false)
-const showLoginPassword = ref(false)
 
 // Брутфорс-блокировка: бэк отвечает 429 + retry_after_sec, локально
 // тикаем секунды и блокируем форму до конца таймера.
@@ -217,30 +144,40 @@ const cooldownSec = ref(0)
 let cooldownTimer = null
 
 // Выбор компании при логине (если их несколько).
-const showCompanyPicker = ref(false)
 const pickerCompanies = ref([])
 const pickerSelectToken = ref('')
 const pickerSelected = ref(null)
 
-// Вход по QR / активация ТВ-режима.
-const showQrLogin = ref(false)
-const showTvActivate = ref(false)
-
-// Вход через Яндекс ID: кнопка видна, только если сервер настроен.
-// Из обёртки state=app: авторизация идёт в системном браузере (там уже есть
+// Вход через Яндекс ID. Из обёртки state=app: авторизация идёт в системном браузере (там уже есть
 // сессия Яндекса), а /yandex-callback вернёт флоу в приложение по deep link.
 const yandexAuth = ref({ enabled: false, client_id: '' })
 function goYandex() {
+  // Кнопка на экране есть всегда; о ненастроенном входе честно сообщаем по
+  // клику, а не прячем способ входа втихую.
+  if (!yandexAuth.value.enabled) {
+    loginError.value = 'Вход через Яндекс на этом сервере не настроен'
+    return
+  }
   window.location.href = yandexAuthURL(yandexAuth.value.client_id, inAppShell() ? 'app' : '')
 }
 
-const changeForm = reactive({ login: '', password: '', confirmPassword: '' })
+const changeForm = reactive({ password: '', confirmPassword: '' })
 const changeError = ref('')
 const changeLoading = ref(false)
-const showNewPassword = ref(false)
-const showConfirmPassword = ref(false)
 
 const isLoginDisabled = computed(() => loading.value || cooldownSec.value > 0)
+
+const stepTitle = computed(() => {
+  if (step.value === 'company') return 'выбор компании'
+  if (step.value === 'change-password') return 'смена пароля'
+  return 'вход в аккаунт'
+})
+
+const stepSubtitle = computed(() => {
+  if (step.value === 'company') return 'Вы состоите в нескольких компаниях — в какую войти?'
+  if (step.value === 'change-password') return 'Пароль по умолчанию нужно сменить перед началом работы.'
+  return ''
+})
 
 const formattedCooldown = computed(() => {
   const s = cooldownSec.value
@@ -251,8 +188,8 @@ const formattedCooldown = computed(() => {
 })
 
 const loginButtonLabel = computed(() => {
-  if (cooldownSec.value > 0) return `Подождите ${formattedCooldown.value}`
-  return loading.value ? 'Входим...' : 'Войти'
+  if (cooldownSec.value > 0) return `подождите ${formattedCooldown.value}`
+  return loading.value ? 'входим…' : 'войти'
 })
 
 function startCooldown(seconds) {
@@ -269,15 +206,11 @@ function startCooldown(seconds) {
 }
 
 onMounted(() => {
-  themeStore.init()
   yandexConfig().then((cfg) => { yandexAuth.value = cfg }).catch(() => {})
-  // После логина с force_change App.vue переключает layout-ветку (появляется
-  // sidebar) и ПЕРЕСОЗДАЁТ router-view — LoginView монтируется заново, и
-  // открытая модалка смены пароля теряется вместе с локальным состоянием.
-  // Восстанавливаем её по флагу сессии.
-  if (authStore.token && authStore.forceChange) {
-    showChangeModal.value = true
-  }
+  // После логина с force_change App.vue переключает layout-ветку и ПЕРЕСОЗДАЁТ
+  // router-view — экран монтируется заново и теряет локальный шаг.
+  // Восстанавливаем его по флагу сессии.
+  if (authStore.token && authStore.forceChange) step.value = 'change-password'
 })
 
 onBeforeUnmount(() => {
@@ -301,7 +234,7 @@ async function handleLogin() {
     finishLogin(result.forceChange)
   } catch (e) {
     if (e?.error === 'EMAIL_NOT_VERIFIED') {
-      // Email не подтверждён — ведём на экран ввода кода (с возможностью переотправки).
+      // Email не подтверждён — ведём на экран ввода кода (с переотправкой).
       router.push({ path: '/verify-email', query: { email: e?.email || loginForm.login } })
     } else if (e?.status === 429 && e?.retry_after_sec) {
       startCooldown(e.retry_after_sec)
@@ -315,12 +248,12 @@ async function handleLogin() {
 
 function finishLogin(forceChange) {
   if (forceChange) {
-    showChangeModal.value = true
-  } else {
-    connectSocket()
-    const redirect = typeof route.query.redirect === 'string' ? route.query.redirect : '/tasks'
-    router.push(redirect)
+    step.value = 'change-password'
+    return
   }
+  connectSocket()
+  const redirect = typeof route.query.redirect === 'string' ? route.query.redirect : '/home'
+  router.push(redirect)
 }
 
 function openCompanyPicker(list, selectToken) {
@@ -331,7 +264,7 @@ function openCompanyPicker(list, selectToken) {
   const remembered = pickerCompanies.value.find((c) => c.company_id === last && c.is_active)
   const firstActive = pickerCompanies.value.find((c) => c.is_active)
   pickerSelected.value = (remembered || firstActive || pickerCompanies.value[0])?.company_id ?? null
-  showCompanyPicker.value = true
+  step.value = 'company'
 }
 
 async function confirmCompany() {
@@ -340,41 +273,17 @@ async function confirmCompany() {
   loginError.value = ''
   try {
     const result = await authStore.selectCompany(pickerSelectToken.value, pickerSelected.value)
-    showCompanyPicker.value = false
     finishLogin(result.forceChange)
   } catch (e) {
-    showCompanyPicker.value = false
+    step.value = 'credentials'
     loginError.value = e?.message || 'Не удалось войти в выбранную компанию'
   } finally {
     loading.value = false
   }
 }
 
-// Вход подтверждён с телефона (QR-вход): применяем сессию как обычный login.
-function onLoginQrSession(session) {
-  const result = authStore.applyLinkSession(session)
-  showQrLogin.value = false
-  if (result.needsSelection) {
-    openCompanyPicker(result.companies, result.selectToken)
-    return
-  }
-  finishLogin(result.forceChange)
-}
-
-// ТВ-киоск авторизован (сессия уже привязана к компании) — уходим в ТВ-режим.
-function onTvSession(session) {
-  authStore.applyLinkSession(session)
-  showTvActivate.value = false
-  connectSocket()
-  router.push('/tv')
-}
-
 async function handleChangeDefault() {
   changeError.value = ''
-  if (changeForm.login.length < 3) {
-    changeError.value = 'Логин должен содержать не менее 3 символов'
-    return
-  }
   if (changeForm.password.length < 8) {
     changeError.value = 'Пароль должен содержать не менее 8 символов'
     return
@@ -386,13 +295,11 @@ async function handleChangeDefault() {
   changeLoading.value = true
   try {
     await authStore.changeDefaultCredentials({
-      login: changeForm.login,
       password: changeForm.password,
       confirmPassword: changeForm.confirmPassword,
     })
-    showChangeModal.value = false
     connectSocket()
-    router.push('/tasks')
+    router.push('/home')
   } catch (e) {
     changeError.value = e.message || 'Ошибка смены данных'
   } finally {
@@ -402,301 +309,70 @@ async function handleChangeDefault() {
 </script>
 
 <style scoped>
-/* Каркас страницы (фон, сплит-карточка, промо) — в AuthShell.vue;
-   здесь только форма входа и содержимое диалогов. */
-.login-form {
-  display: flex;
-  flex-direction: column;
-  gap: 20px;
+/* Форма, кнопки и плашка ошибки — общие классы экранов входа (main.css);
+   здесь только специфика: сетка альтернативных способов и выбор компании. */
+.lg-alts {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
 }
 
-.form-group {
+.lg-switch {
+  margin: 0;
+  text-align: center;
+  font-size: 13.5px;
+  color: var(--color-text-dim);
+}
+
+.lg-switch a {
+  color: var(--color-primary);
+  font-weight: 600;
+  text-decoration: none;
+  margin-left: 4px;
+}
+
+.lg-switch a:hover { text-decoration: underline; }
+
+/* Выбор компании */
+.lg-companies {
   display: flex;
   flex-direction: column;
   gap: 8px;
 }
 
-.form-group label {
-  font-size: 12px;
-  font-weight: 700;
-  color: var(--color-primary);
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-}
-
-/* Pill-инпут: полупрозрачное стекло с мягкой обводкой */
-.pill-input {
-  width: 100%;
-  height: 48px;
-  border-radius: var(--radius-full);
-  border: 1.5px solid color-mix(in oklch, var(--color-outline) 55%, transparent);
-  background: color-mix(in oklch, var(--color-surface) 42%, transparent);
-  padding: 0 20px;
-  font-size: 15px;
-  color: var(--color-text);
-  outline: none;
-  transition: border-color 0.15s, box-shadow 0.15s, background 0.15s;
-  box-sizing: border-box;
-  font-family: inherit;
-}
-
-.pill-input:focus {
-  border-color: var(--color-primary);
-  background: color-mix(in oklch, var(--color-surface) 65%, transparent);
-  box-shadow: 0 0 0 3px color-mix(in oklch, var(--color-primary) 15%, transparent);
-}
-
-.pill-input:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
-.input-wrap {
-  position: relative;
-  display: flex;
-  align-items: center;
-}
-
-.input-wrap .pill-input {
-  padding-right: 48px;
-}
-
-.eye-btn {
-  position: absolute;
-  right: 14px;
-  background: none;
-  border: none;
-  padding: 0;
-  cursor: pointer;
-  color: var(--color-outline);
-  display: flex;
-  align-items: center;
-  line-height: 0;
-}
-
-.eye-btn:hover {
-  color: var(--color-primary);
-}
-
-.eye-btn svg {
-  width: 18px;
-  height: 18px;
-}
-
-.error-msg {
-  margin: 0;
-  font-size: 13px;
-  color: var(--color-on-error-container);
-  padding: 8px 16px;
-  background: var(--color-error-container);
-  border-radius: 999px;
-  border: 1px solid color-mix(in oklch, var(--color-error) 30%, var(--color-outline-dim));
-  text-align: center;
-}
-
-.cooldown-box {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 12px 16px;
-  border-radius: var(--radius-lg);
-  background: var(--color-error-container);
-  color: var(--color-on-error-container);
-  border: 1px solid color-mix(in oklch, var(--color-error) 30%, var(--color-outline-dim));
-}
-
-.cooldown-box .material-symbols-outlined {
-  font-size: 26px;
-  flex-shrink: 0;
-}
-
-.cooldown-text {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  min-width: 0;
-}
-
-.cooldown-title {
-  font-size: 13px;
-  font-weight: 700;
-  line-height: 1.3;
-}
-
-.cooldown-sub {
-  font-size: 13px;
-  font-variant-numeric: tabular-nums;
-  opacity: 0.9;
-}
-
-.btn-login {
-  width: 100%;
-  height: 52px;
-  border-radius: 999px;
-  border: none;
-  background: var(--grad-primary);
-  color: var(--color-on-primary);
-  font-size: 16px;
-  font-weight: 700;
-  cursor: pointer;
-  transition: filter 0.15s, transform 0.1s;
-  margin-top: 8px;
-  letter-spacing: 0.02em;
-}
-
-.btn-login:hover:not(:disabled) {
-  filter: brightness(1.06);
-  transform: translateY(-1px);
-}
-
-.btn-login:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
-  transform: none;
-}
-
-.switch-line {
-  margin: 20px 0 0;
-  text-align: center;
-  font-size: 14px;
-  color: var(--color-text-dim);
-}
-
-.switch-link {
-  color: var(--color-primary);
-  font-weight: 700;
-  text-decoration: none;
-  margin-left: 4px;
-}
-
-.switch-link:hover {
-  text-decoration: underline;
-}
-
-.forgot-row {
-  display: flex;
-  justify-content: flex-end;
-  margin-top: -8px;
-}
-.forgot-link {
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--color-text-dim);
-  text-decoration: none;
-}
-.forgot-link:hover { color: var(--color-primary); text-decoration: underline; }
-
-/* Company picker dialog */
-.company-picker {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  margin-bottom: 16px;
-}
-
-.company-option {
+.lg-company {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  padding: 14px 16px;
-  border-radius: var(--radius-lg);
-  border: 1.5px solid var(--color-outline-dim);
-  background: var(--color-surface);
+  padding: 13px 16px;
+  border: 1px solid var(--acrylic-border);
+  border-radius: var(--radius-md);
+  background: color-mix(in oklch, var(--color-surface) 60%, transparent);
   color: var(--color-text);
-  cursor: pointer;
+  font: inherit;
   text-align: left;
+  cursor: pointer;
   transition: border-color 0.15s, background 0.15s;
 }
 
-.company-option:hover:not(.disabled) {
+.lg-company:hover:not(:disabled) {
+  border-color: color-mix(in oklch, var(--color-primary) 35%, var(--acrylic-border));
+}
+
+.lg-company.active {
   border-color: var(--color-primary);
+  background: color-mix(in oklch, var(--color-primary) 14%, var(--color-surface));
 }
 
-.company-option.active {
-  border-color: var(--color-primary);
-  background: var(--color-primary-container);
-  color: var(--color-on-primary-container);
-}
+.lg-company:disabled { opacity: 0.5; cursor: not-allowed; }
 
-.company-option.disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
+.lg-company-main { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.lg-company-name { font-size: 15px; font-weight: 600; }
+.lg-company-role { font-size: 12px; color: var(--color-text-dim); }
+.lg-company .material-symbols-outlined { color: var(--color-primary); }
 
-.company-option-main {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  min-width: 0;
+@media (max-width: 560px) {
+  .lg-alts { grid-template-columns: 1fr; }
 }
-
-.company-option-name {
-  font-size: 15px;
-  font-weight: 600;
-}
-
-.company-option-role {
-  font-size: 12px;
-  color: var(--color-text-dim);
-}
-
-.company-option .material-symbols-outlined {
-  color: var(--color-primary);
-}
-
-/* Change credentials dialog */
-.change-hint {
-  margin: 0 0 20px;
-  font-size: 14px;
-  color: var(--gw-text-secondary);
-  line-height: 1.5;
-}
-
-.change-form {
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-}
-
-/* Альтернативные способы входа (QR / ТВ) */
-.alt-login {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 10px;
-  justify-content: center;
-  margin-top: 18px;
-}
-.alt-login-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 8px 14px;
-  border: none;
-  border-radius: var(--radius-pill, 999px);
-  background: var(--acrylic-card-bg, transparent);
-  color: var(--color-text-secondary);
-  font-size: 0.85rem;
-  font-weight: 600;
-  cursor: pointer;
-  transition: color 0.15s, background 0.15s;
-}
-.alt-login-btn:hover { color: var(--color-primary); }
-.alt-login-btn .material-symbols-outlined { font-size: 18px; }
-/* Значок Яндекса: фирменная буква без внешних ресурсов. */
-.ya-badge {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-width: 18px;
-  max-width: 18px;
-  min-height: 18px;
-  max-height: 18px;
-  border-radius: 50%;
-  background: var(--color-error-container, var(--color-surface-variant));
-  color: var(--color-error, currentColor);
-  font-size: 12px;
-  font-weight: 800;
-}
-
 </style>

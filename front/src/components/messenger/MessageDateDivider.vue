@@ -46,8 +46,7 @@ const rootEl = ref(null)
 
 .msg-date-pill:hover {
   color: var(--color-text);
-  transform: translateY(-1px);
-}
+  }
 
 .msg-date-pill:active {
   transform: translateY(0);

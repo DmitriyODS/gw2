@@ -54,6 +54,8 @@ const (
 	authBase      = "http://localhost:18091"
 	diaryBase     = "http://localhost:18101"
 	notesBase     = "http://localhost:18103"
+	boardBase     = "http://localhost:18105"
+	reminderBase  = "http://localhost:18106"
 	portalBase    = "http://localhost:18102"
 	tasksBase     = "http://localhost:18095"
 	registryBase  = "http://localhost:18099"
@@ -62,6 +64,7 @@ const (
 	petsBase      = "http://localhost:18094"
 	gatewayBase   = "http://localhost:18096"
 	pushBase      = "http://localhost:18097"
+	billingBase   = "http://localhost:18107"
 	gatewayWSURL  = "ws://localhost:18096/ws"
 
 	// Тестам выделена СВОЯ база Redis того же dev-инстанса: ключи presence
@@ -172,6 +175,7 @@ func runMain(m *testing.M) int {
 		"PASETO_REFRESH_KEY=" + pasetoRefreshKey,
 		"UPLOAD_FOLDER=" + uploads,
 		"MAIL_GRPC_ADDR=localhost:19098",
+		"BILLING_GRPC_ADDR=localhost:19107",
 		"APP_PUBLIC_BASE_URL=http://localhost:5173",
 		"HTTP_ADDR=:18091",
 	})
@@ -180,6 +184,7 @@ func runMain(m *testing.M) int {
 		"REDIS_URL=" + testRedisURL,
 		"PASETO_PUBLIC_KEY=" + pasetoPublicKey,
 		"HTTP_ADDR=:18101",
+		"GRPC_ADDR=:19101",
 	})
 	// notesvc: личные заметки; межсервисных вызовов нет.
 	procs.start("notesvc", filepath.Join(repoRoot, "back-go/notes"), "./cmd/notesvc", []string{
@@ -188,6 +193,32 @@ func runMain(m *testing.M) int {
 		"PASETO_PUBLIC_KEY=" + pasetoPublicKey,
 		"UPLOAD_FOLDER=" + uploads,
 		"HTTP_ADDR=:18103",
+		"GRPC_ADDR=:19103",
+	})
+	// boardsvc: личные доски рисования; межсервисных вызовов нет.
+	procs.start("boardsvc", filepath.Join(repoRoot, "back-go/board"), "./cmd/boardsvc", []string{
+		"DATABASE_URL=" + testDBURL,
+		"REDIS_URL=" + testRedisURL,
+		"PASETO_PUBLIC_KEY=" + pasetoPublicKey,
+		"UPLOAD_FOLDER=" + uploads,
+		"BILLING_GRPC_ADDR=localhost:19107",
+		"HTTP_ADDR=:18105",
+	})
+	// billingsvc: подписки, магазин и лимиты тарифа. Остальные сервисы ходят
+	// к нему по gRPC :19107 — так проверяется реальный энфорсмент лимитов.
+	procs.start("billingsvc", filepath.Join(repoRoot, "back-go/billing"), "./cmd/billingsvc", []string{
+		"DATABASE_URL=" + testDBURL,
+		"REDIS_URL=" + testRedisURL,
+		"PASETO_PUBLIC_KEY=" + pasetoPublicKey,
+		"HTTP_ADDR=:18107",
+		"GRPC_ADDR=:19107",
+	})
+	// remindersvc: личные напоминания + планировщик срабатываний.
+	procs.start("remindersvc", filepath.Join(repoRoot, "back-go/reminder"), "./cmd/remindersvc", []string{
+		"DATABASE_URL=" + testDBURL,
+		"REDIS_URL=" + testRedisURL,
+		"PASETO_PUBLIC_KEY=" + pasetoPublicKey,
+		"HTTP_ADDR=:18106",
 	})
 	// tasksvc: petsvc/aisvc НЕ поднимаем нарочно — хуки геймификации
 	// fire-and-forget, а AI fail-open (поиск падает в LIKE); сервис обязан
@@ -278,6 +309,7 @@ func runMain(m *testing.M) int {
 		tasksBase + "/healthz", registryBase + "/healthz", calendarBase + "/healthz",
 		messengerBase + "/healthz", petsBase + "/healthz", pushBase + "/healthz",
 		gatewayBase + "/healthz", portalBase + "/healthz", notesBase + "/healthz",
+		boardBase + "/healthz", reminderBase + "/healthz",
 	} {
 		if err := waitHealthz(hc, 30*time.Second); err != nil {
 			fmt.Println("apitest:", err)
@@ -536,6 +568,9 @@ var petsAPI = &svcClient{base: petsBase}
 var pushAPI = &svcClient{base: pushBase}
 var portalAPI = &svcClient{base: portalBase}
 var notesAPI = &svcClient{base: notesBase}
+var boardAPI = &svcClient{base: boardBase}
+var reminderAPI = &svcClient{base: reminderBase}
+var billingAPI = &svcClient{base: billingBase}
 
 type reqOpt func(*http.Request)
 

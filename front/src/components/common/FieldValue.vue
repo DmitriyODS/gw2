@@ -64,7 +64,6 @@
         v-if="qrCode"
         v-model="qrOpen"
         :title="field.label"
-        icon="qr_code_2"
         size="sm"
         :actions="[{ kind: 'cancel', label: 'Закрыть' }]"
         @cancel="qrOpen = false"
@@ -81,7 +80,7 @@
 <script setup>
 import { computed, ref } from 'vue'
 import ImageLightbox from '@/components/common/ImageLightbox.vue'
-import AppDialog from '@/components/common/AppDialog.vue'
+import AppDialog from '@/components/ui/AppDialog.vue'
 import QrImage from '@/components/common/QrImage.vue'
 import { formatDateTime, hasQr, qrValue } from '@/utils/registryFields.js'
 import { useNotificationsStore } from '@/stores/notifications.js'

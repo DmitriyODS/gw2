@@ -37,24 +37,24 @@ type User struct {
 // Pet — питомец-грувик. Никогда не деградирует и не умирает; болезнь лишь
 // замораживает рост (XP и стадия сохраняются).
 type Pet struct {
-	UserID          int64
-	CompanyID       int64
-	Name            string
-	Species         string
-	Stage           int
-	XP              int
-	Kudos           int
-	Hat             *string
-	Accessories     []string
-	FeedStreak      int
-	LastFedDate     *time.Time // date
-	SickSince       *time.Time
-	Ailment         *string // вид болезни (Ailments); NULL ⟺ SickSince == nil
-	Recovery        int
+	UserID      int64
+	CompanyID   int64
+	Name        string
+	Species     string
+	Stage       int
+	XP          int
+	Kudos       int
+	Hat         *string
+	Accessories []string
+	FeedStreak  int
+	LastFedDate *time.Time // date
+	SickSince   *time.Time
+	Ailment     *string // вид болезни (Ailments); NULL ⟺ SickSince == nil
+	Recovery    int
 	// Потребности: шкалы 0..100 и момент, до которого убывание уже применено
 	// (ленивый пересчёт — ApplyNeedsDecay).
-	Needs   NeedValues
-	NeedsAt time.Time
+	Needs           NeedValues
+	NeedsAt         time.Time
 	Personality     *string
 	UnlockedSpecies []string
 	QuestDate       *time.Time // date
@@ -62,8 +62,8 @@ type Pet struct {
 	QuestTarget     *int
 	QuestProgress   int
 	QuestClaimed    bool
-	AdventureUntil  *time.Time // питомец в приключении до этого момента
-	AdventurePlace  *string    // локация приключения (для фана)
+	AdventureUntil  *time.Time  // питомец в приключении до этого момента
+	AdventurePlace  *string     // локация приключения (для фана)
 	Generation      int         // престиж: растёт при перерождении, не сбрасывается
 	HouseOwned      []string    // купленный декор домика
 	HousePlaced     []HouseItem // расставленный декор (⊆ owned, лимит HousePlacedMax)
@@ -81,8 +81,9 @@ type Pet struct {
 	LoanPrincipal int        // тело текущего кредита (для кэшбэка/пени; 0 — нет)
 	LoanDueAt     *time.Time // срок возврата (грейс-период); NULL — кредита нет
 	LoanPenalized bool       // разовая пеня за просрочку уже применена
-	// OwnerOnVacation — хозяин в отпуске (users.on_vacation): питомец тоже
-	// отдыхает — показатели заморожены (FreezeClocks), действия недоступны.
+	// OwnerOnVacation — хозяин в отпуске В КОМПАНИИ ПИТОМЦА (отпуск живёт в
+	// user_companies, глобального нет): питомец тоже отдыхает — показатели
+	// заморожены (FreezeClocks), действия недоступны.
 	OwnerOnVacation bool
 	User            *UserRef
 }
@@ -253,6 +254,9 @@ type ShopItem struct {
 	LimitedQuota   *int
 	ActiveFrom     *time.Time
 	ActiveTo       *time.Time
+	// Premium — контент старшего тарифа: на младших он виден в витрине, но
+	// не покупается (лимит проверяет сервис через биллинг).
+	Premium bool
 }
 
 // Active — товар доступен сейчас (нет окна дат либо now попадает в него).

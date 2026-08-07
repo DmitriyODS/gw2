@@ -139,7 +139,7 @@ onMounted(() => {
 
 .stc-rewards {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(104px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(104px, 100%), 1fr));
   gap: 10px;
   margin-top: 14px;
 }

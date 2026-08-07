@@ -1,6 +1,9 @@
 package domain
 
-import "context"
+import (
+	"context"
+	"time"
+)
 
 // Ctx — алиас, чтобы сигнатуры портов не разбухали.
 type Ctx = context.Context
@@ -11,6 +14,8 @@ type CalendarRepository interface {
 	ListCalendars(ctx Ctx, companyID int64) ([]*Calendar, error)
 	// GetCalendar — календарь без полей (для проверок принадлежности).
 	GetCalendar(ctx Ctx, id int64) (*Calendar, error)
+	// CountCalendars — сколько календарей уже есть (лимит тарифа).
+	CountCalendars(ctx Ctx, company_id int64) (int, error)
 	CreateCalendar(ctx Ctx, c *Calendar) error
 	UpdateCalendar(ctx Ctx, id int64, name string, position int) error
 	DeleteCalendar(ctx Ctx, id int64) error
@@ -35,9 +40,17 @@ type CalendarRepository interface {
 	DeleteEntries(ctx Ctx, calendarID int64, ids []int64) (int64, error)
 	// AllEntries — все записи календаря (для пересчёта search_text после удаления поля).
 	AllEntries(ctx Ctx, calendarID int64) ([]*Entry, error)
+	// CompanyEntries — ближайшие записи ВСЕХ календарей компании за период
+	// (живая плитка рабочего стола): один запрос вместо обхода календарей.
+	// Возвращает срез (не длиннее limit) и общее число записей за период.
+	CompanyEntries(ctx Ctx, companyID int64, from, to time.Time, limit int) (rows []AgendaRow, total int, err error)
 	// EntriesForExport — записи для выгрузки: при непустом ids — только они,
 	// иначе все по фильтру (диапазон дат + поиск). Порядок по event_at.
 	EntriesForExport(ctx Ctx, f EntryListFilter, ids []int64) ([]*Entry, error)
+	// EntriesOfCompanies — записи вместе с их календарём: раздел «Настройки →
+	// Хранилище» показывает, в каком календаре лежит файл. Скоуп — компании,
+	// чью квоту оплачивает спрашивающий (их присылает биллинг).
+	EntriesOfCompanies(ctx Ctx, companyIDs []int64) ([]*EntryScope, error)
 
 	// ── Публичные ссылки ──
 	CreateShare(ctx Ctx, s *Share) error
@@ -54,10 +67,14 @@ type UserReader interface {
 
 // FileStore — хранение загруженных файлов/картинок (общий uploads-том или S3).
 type FileStore interface {
-	// Save — записать файл, вернуть относительный путь (ключ) хранилища.
-	Save(fileName string, data []byte) (string, error)
-	// Remove — best-effort удаление файлов по ключам (чистка при удалении
-	// записей/полей); ошибки не возвращаются.
+	// SaveFor — записать файл в квоту компании (её оплачивает создатель):
+	// сверх лимита тарифа файл не сохраняется. Возвращает ключ хранилища.
+	SaveFor(ctx context.Context, userID, companyID int64, fileName string, data []byte) (string, error)
+	// RemoveFor — best-effort удаление файлов по ключам с возвратом места в
+	// квоту (чистка при удалении записей/полей); ошибки не возвращаются.
+	RemoveFor(ctx context.Context, userID, companyID int64, paths []string)
+	// Remove — удаление БЕЗ учёта: так чистит раздел «Хранилище», где место
+	// пересчитывает сам биллинг (он же инициатор и знает размеры).
 	Remove(paths []string)
 }
 

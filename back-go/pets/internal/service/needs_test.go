@@ -474,6 +474,31 @@ func TestFeedCureDoesNotRelapse(t *testing.T) {
 	}
 }
 
+// Бульон лечит и болезнь, не связанную с сытостью (простуду), — после
+// выздоровления пустая энергия не возвращает диагноз тут же.
+func TestSickFeedCureDoesNotRelapse(t *testing.T) {
+	env := newEnv()
+	ctx := context.Background()
+	pet, _ := env.pets.GetOrCreate(ctx, 1, 10)
+	pet.Kudos = 100
+	pet.Needs.Energy = 0
+	pet.Fall(domain.AilmentCold, time.Now().UTC().Add(-time.Hour))
+	pet.Recovery = domain.RecoveryTarget - domain.CureFor(domain.AilmentCold, domain.ActionFeed)
+
+	data, err := env.svc.FeedPet(ctx, 1, 10, "")
+	if err != nil {
+		t.Fatalf("FeedPet: %v", err)
+	}
+	if data.Recovered == nil || !*data.Recovered {
+		t.Fatal("последний бульон должен вылечить")
+	}
+	cured, _ := env.pets.GetPet(ctx, 1)
+	env.svc.refreshNeeds(ctx, cured)
+	if cured.Sick() {
+		t.Fatalf("после лечения питомец снова заболел: %v", cured.AilmentKey())
+	}
+}
+
 // needDecay — скорость убывания шкалы из каталога (тесты не дублируют числа).
 func needDecay(key string) int {
 	for _, n := range domain.Needs {

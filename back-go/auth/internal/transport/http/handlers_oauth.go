@@ -45,7 +45,7 @@ func (h *handlers) oauthToken(c *fiber.Ctx) error {
 	if id, secret, ok := parseBasicAuth(c.Get(fiber.HeaderAuthorization)); ok {
 		req.ClientID, req.ClientSecret = id, secret
 	}
-	resp, err := h.eps.OAuthToken(c.Context(), req)
+	resp, err := h.eps.OAuthToken(sessionCtx(c), req)
 	if err != nil {
 		return h.respondError(c, err)
 	}
@@ -115,7 +115,7 @@ func (h *handlers) yandexCallback(c *fiber.Ctx) error {
 	if err := c.BodyParser(&req); err != nil || req.Code == "" {
 		return badRequest(c, "code обязателен")
 	}
-	resp, err := h.eps.YandexLogin(c.Context(), req.Code)
+	resp, err := h.eps.YandexLogin(sessionCtx(c), req.Code)
 	if err != nil {
 		return h.respondError(c, err)
 	}

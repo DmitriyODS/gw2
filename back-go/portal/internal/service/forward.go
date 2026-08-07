@@ -56,7 +56,7 @@ func (s *Service) ForwardPost(ctx context.Context, companyID, postID, senderID i
 	}
 
 	for _, convID := range convIDs {
-		if _, _, err := s.messenger.CreatePostMessage(ctx, convID, senderID, postID, preview); err != nil {
+		if _, _, err := s.messenger.CreatePostMessage(ctx, convID, senderID, postID, companyID, preview); err != nil {
 			s.log.Warn("portal.forward_failed", "post_id", postID, "conversation_id", convID, "error", err)
 			res.Failed++
 			continue

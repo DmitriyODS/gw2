@@ -23,6 +23,14 @@ export const REDIS = {
   db: '8',
 }
 
+// Почта: приглашение в компанию отправляется fail-closed (без письма получатель
+// не узнает токен), поэтому стенду нужен настоящий SMTP-приёмник.
+export const MAIL = {
+  container: 'gw2-apitest-mailpit',
+  smtpPort: '1025',
+  webPort: '8025',
+}
+
 // Dev-ключи PASETO (синхронно с dev.sh и Go-харнесом).
 export const PASETO = {
   privateKey: '68eb779b2f672beb8fcd58d72a81ce1565a1417aed3788d1362bf4faaa3f62ac15ef439747fcad6ca627310942ba14b48f164fcbb5f65c10f61ca2aeb4b53fe1',
@@ -30,26 +38,48 @@ export const PASETO = {
   refreshKey: 'd525374c4ec7b5e1c5b140fb9c1f4cffd9c3dbf052bb18f2f32bf9f92d9fa05c',
 }
 
+// Fernet-ключ шифрования личных AI-ключей (стендовый; в проде — секрет).
+export const AI_ENC_KEY = 'Z3cyLWludGVncmF0aW9uLXN0YW5kLWZlcm5ldC1rZXk='
+
 // HTTP-порты сервисов (для healthz и роутинга шима).
 export const HTTP = {
+  calls: 18190,
   auth: 18191,
   messenger: 18192,
-  // ai: 18193 — НЕ поднимается (AI fail-open), пути /api/ai и ai-settings → skip
+  ai: 18193,
   pets: 18194,
   tasks: 18195,
   // gateway: 18196 — НЕ поднимается (не нужен сценариям), presence → skip
-  // push: 18197 — НЕ поднимается, /api/push → skip
+  push: 18197,
   mail: 18198,
   registry: 18199,
   calendar: 18200,
   diary: 18201,
+  portal: 18202,
+  notes: 18203,
+  board: 18205,
+  drive: 18208,
+  reminder: 18206,
+  billing: 18207,
 }
 
 // gRPC-порты (+10100).
 export const GRPC = {
+  calls: 19190,
+  auth: 19191,
   messenger: 19192,
+  ai: 19193,
   pets: 19194,
+  tasks: 19195,
   mail: 19198,
+  registry: 19199,
+  calendar: 19200,
+  diary: 19201,
+  portal: 19202,
+  notes: 19203,
+  board: 19205,
+  drive: 19208,
+  billing: 19207,
 }
 
 // Файл со статусом стенда: globalSetup пишет его, шим/сценарии читают
@@ -66,15 +96,15 @@ export function routeBase(path) {
   // path приходит без /api-префикса шиму передаётся полный '/api/...'.
   const p = path
   // ai-settings компании — regex, выигрывает у /api/companies.
-  if (/^\/api\/companies\/\d+\/ai-settings/.test(p)) return null // aisvc не поднят
+  if (/^\/api\/companies\/\d+\/ai-settings/.test(p)) return `http://localhost:${HTTP.ai}`
   const table = [
-    ['/api/calls', null], // callsvc не поднят
+    ['/api/calls', HTTP.calls],
     ['/api/auth', HTTP.auth],
     ['/api/users', HTTP.auth],
     ['/api/roles', HTTP.auth],
     ['/api/backup', HTTP.auth],
     ['/api/companies', HTTP.auth],
-    ['/api/ai', null], // aisvc не поднят
+    ['/api/ai', HTTP.ai],
     ['/api/messenger/presence', null], // gateway не поднят (exact)
     ['/api/messenger', HTTP.messenger],
     ['/api/pets', HTTP.pets],
@@ -85,10 +115,16 @@ export function routeBase(path) {
     ['/api/stages', HTTP.tasks],
     ['/api/stats', HTTP.tasks],
     ['/api/yougile', HTTP.tasks],
-    ['/api/push', null], // pushsvc не поднят
+    ['/api/push', HTTP.push],
     ['/api/registries', HTTP.registry],
     ['/api/calendars', HTTP.calendar],
     ['/api/diaries', HTTP.diary],
+    ['/api/portal', HTTP.portal],
+    ['/api/notes', HTTP.notes],
+    ['/api/boards', HTTP.board],
+    ['/api/drive', HTTP.drive],
+    ['/api/reminders', HTTP.reminder],
+    ['/api/billing', HTTP.billing],
     ['/api/changelog', null], // статика nginx, не сервис
   ]
   // exact-совпадение presence проверяем отдельно (без query).

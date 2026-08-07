@@ -2,7 +2,6 @@
   <AppDialog
     :model-value="modelValue"
     tone="primary"
-    icon="person_add"
     size="sm"
     title="Добавить участников"
     :actions="[
@@ -49,7 +48,7 @@
 <script setup>
 import { ref, computed, watch } from 'vue'
 import BrandLoader from '@/components/common/BrandLoader.vue'
-import AppDialog from '@/components/common/AppDialog.vue'
+import AppDialog from '@/components/ui/AppDialog.vue'
 import { useContactPicker } from '@/composables/useContactPicker.js'
 import { useMessengerStore } from '@/stores/messenger.js'
 import { useNotificationsStore } from '@/stores/notifications.js'

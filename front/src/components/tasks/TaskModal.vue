@@ -3,6 +3,7 @@
     :visible="true"
     @update:visible="$emit('close')"
     modal
+    :append-to="host"
     :closable="false"
     :style="dialogStyle"
     :pt="dialogPt"
@@ -427,7 +428,6 @@
       v-if="confirmDialog.visible"
       v-model="confirmDialog.visible"
       :tone="confirmDialog.tone || 'danger'"
-      :icon="confirmDialog.icon || 'warning'"
       size="sm"
       :title="confirmDialog.title"
       :subtitle="confirmDialog.message"
@@ -443,7 +443,8 @@
 <script setup>
 import { ref, computed, onMounted, onBeforeUnmount, watch } from 'vue'
 import Dialog from 'primevue/dialog'
-import AppDialog from '@/components/common/AppDialog.vue'
+import AppDialog from '@/components/ui/AppDialog.vue'
+import { useModalHost } from '@/desktop/windowHost.js'
 import { useBreakpoint } from '@/composables/useBreakpoint.js'
 import { getSocket } from '@/socket/index.js'
 import UnitListItem from '@/components/tasks/UnitListItem.vue'
@@ -481,6 +482,7 @@ const notifications = useNotificationsStore()
 const authStore = useAuthStore()
 const { isAtLeast } = usePermission()
 const { isMobile } = useBreakpoint()
+const { host, inWindow } = useModalHost()
 
 const mobileTab = ref('details')
 const rightTab = ref('units')
@@ -530,7 +532,7 @@ const dialogPt = computed(() => ({
   // фон с блюром, рамка и скругление, что у остальных модалок; на мобильном
   // mobile-full даёт полноэкранный режим без скруглений.
   root: { class: ['app-dialog-root', isMobile.value ? 'mobile-full' : ''] },
-  mask: { class: 'app-dialog-mask' },
+  mask: { class: ['app-dialog-mask', { 'gw-in-window-mask': inWindow.value }] },
   header: { style: 'display:none' },
   content: {
     class: 'app-dialog-content',

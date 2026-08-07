@@ -145,6 +145,11 @@ func (s *Service) purchaseItem(ctx context.Context, userID, companyID int64,
 	if item.UnlockKind == "achievement" {
 		return nil, nil, 0, domain.NewError("ACHIEVEMENT_ONLY", "Этот предмет — достижение, не продаётся", 422)
 	}
+	// Премиум-контент проверяем ДО списания кудосов: отказ после оплаты
+	// оставил бы человека без покупки и без денег.
+	if err := s.ensurePremium(ctx, userID, item.Premium, item.Kind); err != nil {
+		return nil, nil, 0, err
+	}
 	pet, err := s.pets.GetOrCreate(ctx, userID, companyID)
 	if err != nil {
 		return nil, nil, 0, err

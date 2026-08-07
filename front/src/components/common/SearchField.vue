@@ -74,7 +74,7 @@
 </template>
 
 <script setup>
-import { ref, computed, nextTick, onMounted, onUnmounted } from 'vue'
+import { ref, computed, nextTick, onMounted, onUnmounted, watch } from 'vue'
 
 const props = defineProps({
   modelValue: { type: String, default: '' },
@@ -87,6 +87,10 @@ const props = defineProps({
      плавающее поле поверх шапки. Отключается для мест, где поиск
      должен быть виден всегда. */
   collapsible: { type: Boolean, default: true },
+  /* Явное состояние вместо правила «узкий экран»: раздел живёт окном, и решать
+     должна ширина ПАНЕЛИ. Передаётся, например, шапкой AppPage (слот #search).
+     null — режим определяется сам по ширине экрана. */
+  collapsed: { type: Boolean, default: null },
 })
 
 const emit = defineEmits(['update:modelValue', 'clear'])
@@ -101,7 +105,13 @@ const expanded = ref(false)
 const floatStyle = ref({})
 let mq = null
 
-const collapsedMode = computed(() => props.collapsible && isMobileView.value)
+const collapsedMode = computed(() => (
+  props.collapsed === null ? props.collapsible && isMobileView.value : props.collapsed
+))
+
+// Поле развернулось (панель стала шире, поиск открыли постоянным) — плавающая
+// копия больше не нужна: иначе она осталась бы висеть поверх шапки.
+watch(collapsedMode, (v) => { if (!v) collapse() })
 
 function onMqChange(e) {
   isMobileView.value = e.matches

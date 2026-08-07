@@ -2,7 +2,6 @@
   <AppDialog
     :model-value="modelValue"
     tone="primary"
-    icon="group_add"
     size="sm"
     title="Новая группа"
     subtitle="Название, участники — и можно общаться."
@@ -67,7 +66,6 @@
       v-if="cropperOpen"
       model-value
       tone="primary"
-      icon="account_circle"
       size="md"
       title="Аватар группы"
       mask-class="ng-cropper-mask"
@@ -81,7 +79,7 @@
 <script setup>
 import { ref, computed, watch } from 'vue'
 import BrandLoader from '@/components/common/BrandLoader.vue'
-import AppDialog from '@/components/common/AppDialog.vue'
+import AppDialog from '@/components/ui/AppDialog.vue'
 import AvatarCropper from '@/components/settings/AvatarCropper.vue'
 import { useContactPicker } from '@/composables/useContactPicker.js'
 import { useMessengerStore } from '@/stores/messenger.js'

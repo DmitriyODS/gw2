@@ -98,9 +98,11 @@ func (s *Service) AcceptCompanyInvite(ctx context.Context, userID int64, token s
 	}
 	// Принятие инвайта существующим участником апсертит роль — это смена роли,
 	// поэтому гард «последнего администратора» действует и на этом пути.
-	if existing, err := s.repo.GetMembership(ctx, userID, inv.CompanyID); err != nil {
+	existing, err := s.repo.GetMembership(ctx, userID, inv.CompanyID)
+	if err != nil {
 		return nil, err
-	} else if existing != nil {
+	}
+	if existing != nil {
 		role, err := s.repo.GetRole(ctx, inv.RoleID)
 		if err != nil {
 			return nil, err
@@ -111,6 +113,9 @@ func (s *Service) AcceptCompanyInvite(ctx context.Context, userID int64, token s
 		if err := s.guardLastAdmin(ctx, inv.CompanyID, existing.Role.Level, role.Level); err != nil {
 			return nil, err
 		}
+	} else if err := s.ensureMemberLimit(ctx, inv.CompanyID); err != nil {
+		// Новый участник — проверяем, влезает ли он в лимит тарифа компании.
+		return nil, err
 	}
 	if err := s.repo.AddMembership(ctx, userID, inv.CompanyID, inv.RoleID); err != nil {
 		return nil, err

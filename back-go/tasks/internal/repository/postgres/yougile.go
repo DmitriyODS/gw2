@@ -11,14 +11,15 @@ import (
 
 var _ domain.YougileRepository = (*Repo)(nil)
 
-func (r *Repo) GetYougileAccount(ctx context.Context, userID int64) (*domain.YougileAccount, error) {
+// ygAccountCols — поля привязки; is_active выбирает, чьим ключом работает
+// интеграция сейчас (аккаунтов у человека бывает несколько).
+const ygAccountCols = `id, user_id, company_id, yg_company_id, yg_user_id, yg_login,
+	key_ciphertext, key_fingerprint, last_validated_at, is_active`
+
+func scanYgAccount(row pgx.Row) (*domain.YougileAccount, error) {
 	var a domain.YougileAccount
-	err := r.pool.QueryRow(ctx, `
-		SELECT id, user_id, company_id, yg_company_id, yg_user_id, yg_login,
-		       key_ciphertext, key_fingerprint, last_validated_at
-		  FROM user_yougile_accounts WHERE user_id = $1`, userID).
-		Scan(&a.ID, &a.UserID, &a.CompanyID, &a.YgCompanyID, &a.YgUserID, &a.YgLogin,
-			&a.KeyCiphertext, &a.KeyFingerprint, &a.LastValidatedAt)
+	err := row.Scan(&a.ID, &a.UserID, &a.CompanyID, &a.YgCompanyID, &a.YgUserID, &a.YgLogin,
+		&a.KeyCiphertext, &a.KeyFingerprint, &a.LastValidatedAt, &a.IsActive)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, nil
 	}
@@ -28,6 +29,62 @@ func (r *Repo) GetYougileAccount(ctx context.Context, userID int64) (*domain.You
 	return &a, nil
 }
 
+// GetYougileAccount — АКТИВНАЯ привязка пользователя: ею работают импорт и
+// экспорт карточек. Остальные подключения ждут переключения.
+func (r *Repo) GetYougileAccount(ctx context.Context, userID int64) (*domain.YougileAccount, error) {
+	return scanYgAccount(r.pool.QueryRow(ctx,
+		`SELECT `+ygAccountCols+` FROM user_yougile_accounts
+		  WHERE user_id = $1 AND is_active`, userID))
+}
+
+// ListYougileAccounts — все подключения пользователя (карточка «Аккаунт»).
+func (r *Repo) ListYougileAccounts(ctx context.Context, userID int64) ([]*domain.YougileAccount, error) {
+	rows, err := r.pool.Query(ctx,
+		`SELECT `+ygAccountCols+` FROM user_yougile_accounts
+		  WHERE user_id = $1 ORDER BY is_active DESC, yg_login`, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := []*domain.YougileAccount{}
+	for rows.Next() {
+		a, err := scanYgAccount(rows)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, a)
+	}
+	return out, rows.Err()
+}
+
+/* SetActiveYougileAccount — переключиться на другое подключение. Двумя
+   UPDATE в транзакции: частичный уникальный индекс не даст двум строкам быть
+   активными одновременно, поэтому сначала снимаем флаг со всех. Чужой id не
+   найдётся — user_id стоит в условии. */
+func (r *Repo) SetActiveYougileAccount(ctx context.Context, userID, accountID int64) error {
+	tx, err := r.pool.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback(ctx)
+
+	if _, err := tx.Exec(ctx,
+		`UPDATE user_yougile_accounts SET is_active = FALSE, updated_at = now()
+		  WHERE user_id = $1 AND is_active`, userID); err != nil {
+		return err
+	}
+	tag, err := tx.Exec(ctx,
+		`UPDATE user_yougile_accounts SET is_active = TRUE, updated_at = now()
+		  WHERE user_id = $1 AND id = $2`, userID, accountID)
+	if err != nil {
+		return err
+	}
+	if tag.RowsAffected() == 0 {
+		return domain.NewError("USER_NOT_CONNECTED", "Такое подключение YouGile не найдено", 404)
+	}
+	return tx.Commit(ctx)
+}
+
 func (r *Repo) UpsertYougileAccount(ctx context.Context, acc *domain.YougileAccount) error {
 	return r.pool.QueryRow(ctx, `
 		INSERT INTO user_yougile_accounts
@@ -35,7 +92,7 @@ func (r *Repo) UpsertYougileAccount(ctx context.Context, acc *domain.YougileAcco
 		        key_ciphertext, key_fingerprint, last_validated_at,
 		        created_at, updated_at)
 		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, now(), now())
-		ON CONFLICT (user_id) DO UPDATE SET
+		ON CONFLICT (user_id, yg_company_id) DO UPDATE SET
 		       yg_company_id = EXCLUDED.yg_company_id,
 		       yg_user_id = EXCLUDED.yg_user_id,
 		       yg_login = EXCLUDED.yg_login,
@@ -49,10 +106,35 @@ func (r *Repo) UpsertYougileAccount(ctx context.Context, acc *domain.YougileAcco
 	).Scan(&acc.ID)
 }
 
-func (r *Repo) DeleteYougileAccount(ctx context.Context, userID int64) error {
-	_, err := r.pool.Exec(ctx,
-		`DELETE FROM user_yougile_accounts WHERE user_id = $1`, userID)
-	return err
+// DeleteYougileAccount — отключить конкретную привязку (0 — все привязки
+// пользователя). Если ушла активная, активной становится любая оставшаяся:
+// иначе интеграция молча перестала бы работать при живых подключениях.
+func (r *Repo) DeleteYougileAccount(ctx context.Context, userID, accountID int64) error {
+	if accountID == 0 {
+		_, err := r.pool.Exec(ctx,
+			`DELETE FROM user_yougile_accounts WHERE user_id = $1`, userID)
+		return err
+	}
+	tx, err := r.pool.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback(ctx)
+
+	if _, err := tx.Exec(ctx,
+		`DELETE FROM user_yougile_accounts WHERE user_id = $1 AND id = $2`,
+		userID, accountID); err != nil {
+		return err
+	}
+	if _, err := tx.Exec(ctx, `
+		UPDATE user_yougile_accounts SET is_active = TRUE, updated_at = now()
+		 WHERE id = (SELECT id FROM user_yougile_accounts
+		              WHERE user_id = $1 ORDER BY updated_at DESC LIMIT 1)
+		   AND NOT EXISTS (SELECT 1 FROM user_yougile_accounts
+		                    WHERE user_id = $1 AND is_active)`, userID); err != nil {
+		return err
+	}
+	return tx.Commit(ctx)
 }
 
 func (r *Repo) GetYougileCompany(ctx context.Context, companyID int64) (*domain.YougileCompany, error) {

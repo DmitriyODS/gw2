@@ -11,6 +11,8 @@ type Ctx = context.Context
 // TaskRepository — персистентность задач + избранное + личные цвета.
 type TaskRepository interface {
 	GetTask(ctx Ctx, id int64) (*Task, error)
+	// CountCompanyTasks — сколько задач в компании (лимит тарифа «Задачи»).
+	CountCompanyTasks(ctx Ctx, companyID int64) (int64, error)
 	// ListTasks — фильтры/сортировки/пагинация как task_repo.get_list.
 	ListTasks(ctx Ctx, f TaskListFilter) (items []*Task, total int, err error)
 	CreateTask(ctx Ctx, t *Task) error
@@ -131,6 +133,10 @@ type UserReader interface {
 	// IsCompanyMember — состоит ли пользователь в компании (многокомпанийность:
 	// членство в user_companies, а не первичная users.company_id).
 	IsCompanyMember(ctx Ctx, userID, companyID int64) (bool, error)
+	// OnVacation — отпуск пользователя В ЭТОЙ компании (user_companies.
+	// on_vacation): глобального отпуска по всем компаниям нет, в другой
+	// компании человек продолжает работать.
+	OnVacation(ctx Ctx, userID, companyID int64) (bool, error)
 }
 
 // CompanyReader — read-only настройки компании (флаг uses_yougile для

@@ -2,7 +2,6 @@
   <AppDialog
     :model-value="modelValue"
     tone="primary"
-    icon="groups"
     size="md"
     title="О группе"
     @update:model-value="$emit('update:modelValue', $event)"
@@ -98,7 +97,6 @@
       v-if="cropperOpen"
       model-value
       tone="primary"
-      icon="account_circle"
       size="md"
       title="Аватар группы"
       @update:model-value="cropperOpen = false"
@@ -168,8 +166,8 @@
 
 <script setup>
 import { ref, computed, watch } from 'vue'
-import AppDialog from '@/components/common/AppDialog.vue'
-import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
+import AppDialog from '@/components/ui/AppDialog.vue'
+import ConfirmDialog from '@/components/ui/ConfirmDialog.vue'
 import AddMembersDialog from './AddMembersDialog.vue'
 import AdminRightsDialog from './AdminRightsDialog.vue'
 import AvatarCropper from '@/components/settings/AvatarCropper.vue'

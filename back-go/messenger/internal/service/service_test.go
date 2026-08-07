@@ -5,11 +5,13 @@ import (
 	"fmt"
 	"log/slog"
 	"sort"
+	"strconv"
 	"testing"
 	"time"
 
 	"github.com/DmitriyODS/gw2/back-go/messenger/internal/domain"
 	"github.com/DmitriyODS/gw2/back-go/messenger/internal/dto"
+	"github.com/DmitriyODS/gw2/back-go/pkg/storagefiles"
 )
 
 // ── Фейки портов (без БД/Redis/диска, как в callsvc/authsvc) ─────
@@ -23,8 +25,8 @@ type fakeRepo struct {
 	members map[int64]map[int64]*domain.Member // convID → userID → участник группы
 	users   *fakeUsers                         // ФИО для reply/forwarded_from
 
-	folders     map[int64]*domain.Folder     // folderID → папка
-	folderItems map[int64]map[int64]bool      // folderID → set(convID)
+	folders     map[int64]*domain.Folder // folderID → папка
+	folderItems map[int64]map[int64]bool // folderID → set(convID)
 
 	nextConv, nextMsg, nextAtt, nextFolder int64
 	now                                    time.Time
@@ -32,9 +34,9 @@ type fakeRepo struct {
 
 func newFakeRepo(users *fakeUsers) *fakeRepo {
 	return &fakeRepo{
-		convs: map[int64]*domain.Conversation{},
-		msgs:  map[int64]*domain.Message{},
-		atts:  map[int64]*domain.Attachment{},
+		convs:   map[int64]*domain.Conversation{},
+		msgs:    map[int64]*domain.Message{},
+		atts:    map[int64]*domain.Attachment{},
 		calls:   map[int64]*domain.CallInfo{},
 		tasks:   map[int64]*domain.TaskPreview{},
 		members: map[int64]map[int64]*domain.Member{},
@@ -571,6 +573,39 @@ func (r *fakeRepo) GetAttachment(_ context.Context, id int64) (*domain.Attachmen
 	return &cp, nil
 }
 
+// Раздел «Хранилище»: список ведём по загрузившему, удаление снимает вложение
+// с сообщения (само сообщение остаётся).
+func (r *fakeRepo) ListStorageFiles(_ context.Context, userID int64) ([]storagefiles.File, error) {
+	out := []storagefiles.File{}
+	for id, a := range r.atts {
+		if a.UploaderID != userID {
+			continue
+		}
+		out = append(out, storagefiles.File{
+			Key: a.FilePath, Name: a.FileName, Kind: "attachment",
+			ID: strconv.FormatInt(id, 10),
+		})
+	}
+	return out, nil
+}
+
+func (r *fakeRepo) DeleteStorageFiles(_ context.Context, userID int64, keys []string) ([]string, error) {
+	deleted := []string{}
+	for id, a := range r.atts {
+		if a.UploaderID != userID {
+			continue
+		}
+		for _, k := range keys {
+			if a.FilePath == k {
+				deleted = append(deleted, a.FilePath)
+				delete(r.atts, id)
+				break
+			}
+		}
+	}
+	return deleted, nil
+}
+
 func (r *fakeRepo) ListChatBackgrounds(_ context.Context, _ int64) ([]*domain.ChatBackground, error) {
 	return nil, nil
 }
@@ -747,6 +782,18 @@ func (f *fakeUsers) ListUsers(_ context.Context, ids []int64) ([]*domain.User, e
 		if u, ok := f.users[id]; ok {
 			cp := *u
 			out = append(out, &cp)
+		}
+	}
+	return out, nil
+}
+
+// Членство в фейке — по компании пользователя (в тестах у каждого она одна).
+func (f *fakeUsers) OutsidersInCompany(_ context.Context, companyID int64, ids []int64) ([]int64, error) {
+	var out []int64
+	for _, id := range ids {
+		u, ok := f.users[id]
+		if !ok || u.CompanyID == nil || *u.CompanyID != companyID {
+			out = append(out, id)
 		}
 	}
 	return out, nil
@@ -1350,6 +1397,72 @@ func svcRepoTask(t *testing.T, svc *Service, ctx context.Context, convID int64) 
 	_, err := svc.SendMessage(ctx, convID, 2, dto.MessageCreate{TaskID: i64(8)})
 	if de := domain.AsDomainError(err); de == nil || de.Code != "TASK_WRONG_COMPANY" {
 		t.Fatalf("чужая задача: ожидался TASK_WRONG_COMPANY, получено %v", err)
+	}
+}
+
+// Задача — сущность компании: в переписку с человеком не из этой компании она
+// не уходит, даже когда у самого диалога компании нет (кросс-компанийная пара).
+func TestTaskAttachOnlyToCompanyMembers(t *testing.T) {
+	svc, repo, _, _ := newTestEnv()
+	ctx := context.Background()
+
+	// Алиса (компания 10) и Кэрол (компания 20) — общей компании нет.
+	conv, err := svc.OpenConversation(ctx, 2, 4)
+	if err != nil {
+		t.Fatalf("open: %v", err)
+	}
+	// company_id пары берётся у одного из участников, поэтому «компания
+	// диалога» == 10 — по ней одной проверять доступ нельзя.
+	if conv.CompanyID == nil || *conv.CompanyID != 10 {
+		t.Fatalf("компания пары: %v", conv.CompanyID)
+	}
+	repo.tasks[9] = &domain.TaskPreview{ID: 9, Name: "Внутренняя", CompanyID: 10}
+	_, err = svc.SendMessage(ctx, conv.ID, 2, dto.MessageCreate{TaskID: i64(9)})
+	if de := domain.AsDomainError(err); de == nil || de.Code != "TASK_WRONG_COMPANY" {
+		t.Fatalf("задача постороннему: ожидался TASK_WRONG_COMPANY, получено %v", err)
+	}
+
+	// Тому же коллеге по компании 10 — уходит.
+	own, err := svc.OpenConversation(ctx, 2, 3)
+	if err != nil {
+		t.Fatalf("open свои: %v", err)
+	}
+	msg, err := svc.SendMessage(ctx, own.ID, 2, dto.MessageCreate{TaskID: i64(9)})
+	if err != nil {
+		t.Fatalf("задача коллеге: %v", err)
+	}
+	if msg.Kind != domain.KindTask {
+		t.Fatalf("kind = %s, ожидался task", msg.Kind)
+	}
+}
+
+// Пост портала — тоже сущность компании: плашка не уходит в переписку с
+// человеком не из этой компании (гард общий с задачами).
+func TestPostForwardOnlyToCompanyMembers(t *testing.T) {
+	svc, _, _, _ := newTestEnv()
+	ctx := context.Background()
+
+	// Алиса (компания 10) и Кэрол (компания 20).
+	outside, err := svc.OpenConversation(ctx, 2, 4)
+	if err != nil {
+		t.Fatalf("open: %v", err)
+	}
+	_, _, err = svc.CreatePostMessage(ctx, outside.ID, 2, 77, 10, "Пост", "текст", "")
+	if de := domain.AsDomainError(err); de == nil || de.Code != "POST_WRONG_COMPANY" {
+		t.Fatalf("пост постороннему: ожидался POST_WRONG_COMPANY, получено %v", err)
+	}
+
+	// Коллеге по компании 10 — уходит.
+	own, err := svc.OpenConversation(ctx, 2, 3)
+	if err != nil {
+		t.Fatalf("open свои: %v", err)
+	}
+	msg, _, err := svc.CreatePostMessage(ctx, own.ID, 2, 77, 10, "Пост", "текст", "")
+	if err != nil {
+		t.Fatalf("пост коллеге: %v", err)
+	}
+	if msg.Kind != domain.KindPost {
+		t.Fatalf("kind = %s, ожидался post", msg.Kind)
 	}
 }
 

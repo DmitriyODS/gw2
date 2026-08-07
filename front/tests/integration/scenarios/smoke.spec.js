@@ -1,6 +1,6 @@
 // Дымовые вызовы главного GET каждого фронтового api-модуля (front/src/api/*.js)
 // против живого бэкенда — ловим дрейф пути/метода/парсинга ответа. Модули,
-// требующие неподнятых сервисов (calls/ai/push/gateway-presence/changelog),
+// требующие неподнятых сервисов (calls/gateway-presence/changelog),
 // помечены skip с причиной.
 import { it, expect, beforeAll } from 'vitest'
 import { describeIntegration, uniq } from '../setup/harness.js'
@@ -131,17 +131,16 @@ describeIntegration('smoke: главный GET каждого api-модуля',
     expect(!!s.connected).toBe(false)
   })
 
-  it('backup.exportBackup для не-супер-админа → 403 (blob Response)', async () => {
+  it('backup.exportBackup для не-супер-админа → 403', async () => {
     admin.session.use()
-    const resp = await exportBackup()
-    // blob:true — client.js возвращает сам Response; обычному пользователю 403.
-    expect(resp.status).toBe(403)
+    // blob:true отдаёт сам Response только при успехе; на не-OK client.js бросает
+    // ошибку, иначе вместо архива сохранился бы файл с телом ошибки.
+    await expect(exportBackup()).rejects.toMatchObject({ status: 403 })
   })
 
   // ── Модули, требующие неподнятых сервисов ──
-  it.skip('ai.getAiSettings — aisvc не поднят (AI обязан быть fail-open)', () => {})
-  it.skip('ai.getTvFact — aisvc не поднят', () => {})
-  it.skip('calls.getActiveCall — callsvc не поднят', () => {})
+  // ai и push подняты: их ручки проверяет ai_push.spec.js.
+  it.skip('calls.getActiveCall — callsvc не поднят (нужен LiveKit)', () => {})
   it.skip('messenger.getPresence — presence живёт в gatewaysvc (не поднят)', () => {})
   it.skip('changelog.get — /api/changelog отдаёт статика nginx, не сервис', () => {})
   // client.js — инфраструктурный модуль (fetch/refresh), покрыт всеми сценариями.

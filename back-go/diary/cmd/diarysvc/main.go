@@ -23,6 +23,7 @@ import (
 	"github.com/DmitriyODS/gw2/back-go/diary/internal/service"
 	grpctransport "github.com/DmitriyODS/gw2/back-go/diary/internal/transport/grpc"
 	httptransport "github.com/DmitriyODS/gw2/back-go/diary/internal/transport/http"
+	"github.com/DmitriyODS/gw2/back-go/pkg/billingclient"
 	"github.com/DmitriyODS/gw2/back-go/pkg/bootstrap"
 	"github.com/DmitriyODS/gw2/back-go/pkg/events"
 	"github.com/DmitriyODS/gw2/back-go/pkg/gen/diarypb"
@@ -61,6 +62,16 @@ func main() {
 		Bus:   events.NewPublisher(rdb, log, "gw2:diary:events"),
 		Log:   log,
 	})
+
+	// Лимиты тарифа (сколько ежедневников доступно) — gRPC billingsvc. Пустой адрес
+	// выключает проверки, недоступный биллинг их не блокирует (fail-open).
+	billing, err := billingclient.New(bootstrap.Env("BILLING_GRPC_ADDR", ""), log)
+	if err != nil {
+		log.Error("billing.dial_failed", "error", err)
+		os.Exit(1)
+	}
+	defer billing.Close()
+	svc.WithBilling(billing)
 	eps := endpoint.New(svc)
 
 	httpServer := httptransport.NewServer(eps, users, verifier, log)

@@ -4,6 +4,8 @@ import (
 	"context"
 	"io"
 	"log/slog"
+	"slices"
+	"sort"
 	"testing"
 	"time"
 
@@ -86,6 +88,27 @@ func (f *fakeRepo) AllEntries(_ domain.Ctx, _ int64) ([]*domain.Entry, error) {
 	return out, nil
 }
 
+func (f *fakeRepo) CompanyEntries(_ domain.Ctx, companyID int64, from, to time.Time, limit int) ([]domain.AgendaRow, int, error) {
+	out := []domain.AgendaRow{}
+	total := 0
+	cal := f.cal
+	for _, e := range f.entries {
+		if cal == nil || cal.ID != e.CalendarID || cal.CompanyID != companyID ||
+			e.EventAt.Before(from) || !e.EventAt.Before(to) {
+			continue
+		}
+		total++
+		if len(out) >= limit {
+			continue
+		}
+		out = append(out, domain.AgendaRow{
+			CalendarID: e.CalendarID, CalendarName: cal.Name, EntryID: e.ID,
+			EventAt: e.EventAt, Data: e.Data,
+		})
+	}
+	return out, total, nil
+}
+
 type fakeBus struct{ events []string }
 
 func (b *fakeBus) Publish(_ domain.Ctx, event string, _ []string, _ any) {
@@ -94,8 +117,32 @@ func (b *fakeBus) Publish(_ domain.Ctx, event string, _ []string, _ any) {
 
 type fakeFiles struct{ removed []string }
 
-func (f *fakeFiles) Save(_ string, _ []byte) (string, error) { return "calendar/x", nil }
-func (f *fakeFiles) Remove(paths []string)                   { f.removed = append(f.removed, paths...) }
+func (f *fakeFiles) SaveFor(_ context.Context, _, _ int64, _ string, _ []byte) (string, error) {
+	return "calendar/x", nil
+}
+
+func (f *fakeFiles) RemoveFor(_ context.Context, _, _ int64, paths []string) {
+	f.removed = append(f.removed, paths...)
+}
+
+func (f *fakeFiles) Remove(paths []string) {
+	f.removed = append(f.removed, paths...)
+}
+
+// Раздел «Хранилище»: записи отбираются по компании их календаря.
+func (f *fakeRepo) EntriesOfCompanies(_ domain.Ctx, companyIDs []int64) ([]*domain.EntryScope, error) {
+	out := []*domain.EntryScope{}
+	if f.cal == nil || !slices.Contains(companyIDs, f.cal.CompanyID) {
+		return out, nil
+	}
+	for _, e := range f.entries {
+		out = append(out, &domain.EntryScope{
+			Entry: e, CalendarID: f.cal.ID, CalendarName: f.cal.Name, CompanyID: f.cal.CompanyID,
+		})
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].Entry.ID < out[j].Entry.ID })
+	return out, nil
+}
 
 func newTestService(fields []domain.Field) (*Service, *fakeRepo, *fakeBus) {
 	repo := &fakeRepo{
@@ -191,4 +238,45 @@ func TestCalendarScopedToCompany(t *testing.T) {
 	if _, err := svc.GetCalendar(context.Background(), 99, 1); err != domain.ErrCalendarNotFound {
 		t.Errorf("ожидалась ErrCalendarNotFound для чужой компании, получено %v", err)
 	}
+}
+
+// Повестка дня для живой плитки: заголовок события считает сервер по первому
+// полю «в таблице», за пределы периода записи не попадают.
+func TestAgenda_TitleFromTableFieldAndPeriod(t *testing.T) {
+	fields := []domain.Field{
+		{ID: 10, Label: "Заметка", Type: domain.FieldText},
+		{ID: 11, Label: "Тема", Type: domain.FieldText, ShowInTable: true},
+	}
+	svc, repo, _ := newTestService(fields)
+	repo.entries = map[int64]*domain.Entry{
+		1: {ID: 1, CalendarID: 1, EventAt: time.Date(2026, 7, 27, 9, 0, 0, 0, time.UTC),
+			Data: map[string]any{"10": "не заголовок", "11": "Планёрка"}},
+		2: {ID: 2, CalendarID: 1, EventAt: time.Date(2026, 8, 1, 9, 0, 0, 0, time.UTC),
+			Data: map[string]any{"11": "Следующий месяц"}},
+	}
+
+	from := time.Date(2026, 7, 27, 0, 0, 0, 0, time.UTC)
+	res, err := svc.Agenda(context.Background(), 7, from, from.AddDate(0, 0, 1), 10)
+	if err != nil {
+		t.Fatalf("Agenda: %v", err)
+	}
+	if res.Total != 1 || len(res.Items) != 1 {
+		t.Fatalf("ожидалось одно событие за день, получено total=%d items=%d", res.Total, len(res.Items))
+	}
+	if res.Items[0].Title != "Планёрка" || res.Items[0].CalendarName != "Тест" {
+		t.Fatalf("неожиданный элемент повестки: %+v", res.Items[0])
+	}
+
+	// Чужая компания повестку не получает.
+	other, err := svc.Agenda(context.Background(), 99, from, from.AddDate(0, 0, 1), 10)
+	if err != nil || other.Total != 0 {
+		t.Fatalf("чужая компания не должна видеть события: %+v, %v", other, err)
+	}
+}
+
+func (f *fakeRepo) CountCalendars(_ domain.Ctx, _ int64) (int, error) {
+	if f.cal == nil {
+		return 0, nil
+	}
+	return 1, nil
 }

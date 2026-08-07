@@ -82,7 +82,7 @@ function pick(id) { emit('update:modelValue', id) }
   padding: 0;
   transition: transform 0.1s ease;
 }
-.csp-swatch:hover { transform: scale(1.08); }
+.csp-swatch:hover { box-shadow: inset 0 0 0 2px color-mix(in oklch, white 60%, transparent); }
 /* Рамка выделения — ВНУТРЬ (inset): скролл-контейнер не срежет её, в отличие
    от внешней тени. */
 .csp-swatch.active { box-shadow: inset 0 0 0 2px var(--color-primary); border-color: var(--color-primary); }

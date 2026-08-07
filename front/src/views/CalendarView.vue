@@ -1,86 +1,88 @@
 <template>
-  <div class="cv split-view">
-    <!-- ЛЕВАЯ ПАНЕЛЬ: список календарей -->
-    <aside class="split-side">
-      <div class="split-side-head">
-        <span class="split-side-tile"><span class="material-symbols-outlined">calendar_month</span></span>
-        <span class="split-side-title">Календари</span>
-      </div>
-      <div class="split-side-list">
-        <div v-if="store.loadingList" class="split-side-note">Загрузка…</div>
-        <div v-else-if="!store.calendars.length" class="split-side-note">Календари отсутствуют</div>
-        <button
-          v-for="c in store.calendars"
-          :key="c.id"
-          class="split-side-item"
-          :class="{ active: c.id === store.selectedId }"
-          @click="store.select(c.id)"
-        >
-          <span class="split-item-tile"><span class="material-symbols-outlined">event_note</span></span>
-          <span class="split-side-name">{{ c.name }}</span>
-        </button>
-      </div>
-    </aside>
+  <AppListDetail
+    v-model:open="detailOpen"
+    :loading="store.loadingList && !store.calendars.length"
+    @narrow-change="narrow = $event"
+  >
+    <!-- Список календарей -->
+    <template #list="{ toggle }">
+      <AppPage
+        embedded
+        title="Календари"
+        show-title
+        :menu="!narrow"
+        menu-icon="left_panel_close"
+        menu-label="Свернуть список"
+        @menu="toggle"
+      >
+        <EmptyState
+          v-if="!store.calendars.length"
+          size="sm"
+          icon="event_note"
+          title="Календарей нет"
+          subtitle="Их заводит администратор компании."
+        />
+        <AppStack v-else :gap="6">
+          <AppRow
+            v-for="c in store.calendars"
+            :key="c.id"
+            :title="c.name"
+            icon="event_note"
+            dense
+            clickable
+            :selected="c.id === store.selectedId"
+            @click="selectCalendar(c.id)"
+          />
+        </AppStack>
+      </AppPage>
+    </template>
 
-    <!-- ПРАВАЯ ПАНЕЛЬ -->
-    <section class="split-main">
-      <!-- Мобайл: выбор календаря лентой чипов -->
-      <div v-if="isMobile && store.calendars.length" class="cv-regstrip">
-        <button
-          v-for="c in store.calendars"
-          :key="c.id"
-          class="cv-regchip"
-          :class="{ active: c.id === store.selectedId }"
-          @click="store.select(c.id)"
-        >{{ c.name }}</button>
-      </div>
-
-      <template v-if="store.selected">
-        <!-- Тулбар -->
-        <header class="cv-toolbar">
-          <div class="cv-nav">
-            <button class="cv-icon-btn" title="Назад" @click="store.step(-1)">
-              <span class="material-symbols-outlined">chevron_left</span>
-            </button>
-            <button class="cv-today" @click="store.today()">Сегодня</button>
-            <button class="cv-icon-btn" title="Вперёд" @click="store.step(1)">
-              <span class="material-symbols-outlined">chevron_right</span>
-            </button>
-            <h2 class="cv-period">{{ periodLabel }}</h2>
-          </div>
-
+    <!-- Выбранный календарь -->
+    <template #detail="{ collapsed, toggle }">
+      <AppPage
+        embedded
+        :title="store.selected?.name || ''"
+        :back="narrow"
+        back-label="К календарям"
+        :menu="!narrow && collapsed"
+        menu-icon="left_panel_open"
+        menu-label="Показать список"
+        :commands="commands"
+        flush
+        :scroll="false"
+        @back="detailOpen = false"
+        @menu="toggle"
+        @command="onCommand"
+      >
+        <!-- Поиск — в строку названия: в тесной панели он сворачивается в лупу
+             и не отнимает у сетки дней целую строку. -->
+        <template v-if="store.selected" #search="{ narrow: tight }">
           <SearchField
             v-model="searchInput"
             placeholder="Поиск по записям…"
             hotkey
+            :collapsed="tight"
             @update:model-value="onSearch"
             @clear="clearSearch"
           />
+        </template>
 
-          <div class="cv-viewseg">
-            <button v-for="v in viewModes" :key="v.value" :class="{ active: store.view === v.value }" @click="store.setView(v.value)">
-              {{ v.label }}
-            </button>
-          </div>
+        <template v-if="store.selected" #subhead="{ narrow: tight }">
+          <PeriodNav
+            :label="periodLabel"
+            :view="store.view"
+            :tight="tight"
+            @step="store.step($event)"
+            @today="store.today()"
+            @update:view="store.setView($event)"
+          />
+        </template>
 
-          <div class="cv-actions">
-            <button class="cv-icon-btn" title="Внешние ссылки" @click="openShares">
-              <span class="material-symbols-outlined">link</span>
-            </button>
-            <button class="cv-icon-btn" title="Экспорт в XLSX" @click="openExport">
-              <span class="material-symbols-outlined">download</span>
-            </button>
-            <button class="btn-grad" @click="openCreate()">
-              <span class="material-symbols-outlined">add</span>
-              <span class="cv-btn-label">Запись</span>
-            </button>
-          </div>
-        </header>
-
+        <template v-if="store.selected">
         <!-- Тело: месяц / неделя / день -->
         <div class="cv-body">
           <!-- Десктоп: месяц / неделя — сетка плиток дней -->
-          <div v-if="!isMobile && store.view !== 'day'" ref="weekGridRef" class="cv-grid" :class="store.view">
+          <div v-if="!narrow && store.view !== 'day'" ref="weekGridRef" class="cv-grid" :class="store.view">
             <!-- Шапка дней недели — только в месяце; в неделе день уже подписан в плитке. -->
             <template v-if="store.view === 'month'">
               <div v-for="(wd, i) in weekdays" :key="'h' + i" class="cv-wd">{{ wd }}</div>
@@ -110,7 +112,7 @@
           </div>
 
           <!-- Мобайл: месяц / неделя — список по датам с количеством записей -->
-          <div v-else-if="isMobile && store.view !== 'day'" class="cv-agenda">
+          <div v-else-if="narrow && store.view !== 'day'" class="cv-agenda">
             <button
               v-for="day in agendaDays"
               :key="dayKey(day)"
@@ -140,16 +142,20 @@
               title="На этот день записей нет"
               size="sm"
             >
-              <button class="btn-grad" @click="openCreate(store.cursor)">
-                <span class="material-symbols-outlined">add</span> Добавить запись
-              </button>
+              <AppButton
+                variant="filled"
+                icon="add"
+                label="Добавить запись"
+                @click="openCreate(store.cursor)"
+              />
             </EmptyState>
             <button
-              v-for="e in dayEntries(store.cursor)"
+              v-for="(e, i) in dayEntries(store.cursor)"
               :key="e.id"
               class="cv-dayrow glass-hover"
               @click="openEntry(e)"
             >
+              <span class="cv-dayrow-num">{{ i + 1 }}</span>
               <span class="cv-dayrow-time">{{ hhmm(e.event_at) }}</span>
               <span class="cv-dayrow-body">
                 <span class="cv-dayrow-title">{{ entryTitle(store.selected, e) }}</span>
@@ -162,28 +168,21 @@
           </div>
 
           <div v-if="store.loadingEntries" class="cv-overlay">
-            <span class="material-symbols-outlined spin">progress_activity</span>
+            <BrandLoader :size="48" />
           </div>
         </div>
-      </template>
+        </template>
 
-      <!-- Календарь не выбран -->
-      <EmptyState
-        v-else
-        class="split-empty"
-        icon="calendar_month"
-        tone="soft"
-        :title="isMobile ? 'Выберите календарь сверху' : 'Выберите календарь слева'"
-        subtitle="Выберите календарь в списке, чтобы просмотреть его записи"
-      />
-    </section>
-
-    <AppFab
-      :visible="isMobile && !!store.selected && fabVisible"
-      icon="add"
-      aria-label="Добавить запись"
-      @click="openCreate()"
-    />
+        <!-- Календарь не выбран (широкая раскладка) -->
+        <EmptyState
+          v-else
+          icon="calendar_month"
+          tone="soft"
+          title="Выберите календарь слева"
+          subtitle="Выберите календарь в списке, чтобы просмотреть его записи"
+        />
+      </AppPage>
+    </template>
 
     <CalendarDayDialog
       v-model="dayDialogOpen"
@@ -204,7 +203,7 @@
     <!-- Внешние ссылки -->
     <AppDialog
       v-model="sharesOpen"
-      title="Внешние ссылки" icon="link" size="md"
+      title="Внешние ссылки" size="md"
       :actions="[{ kind: 'cancel', label: 'Закрыть' }]"
       @cancel="sharesOpen = false"
     >
@@ -214,23 +213,46 @@
           этот календарь, открывать карточки записей и выгружать данные — но не редактировать.
           Ссылку можно отозвать в любой момент.
         </p>
-        <button class="btn-grad" :disabled="sharesBusy" @click="createShareLink">
-          <span class="material-symbols-outlined">add_link</span> Создать ссылку
-        </button>
+        <AppButton
+          variant="filled"
+          icon="add_link"
+          label="Создать ссылку"
+          :loading="sharesBusy"
+          @click="createShareLink"
+        />
         <div v-if="sharesLoading" class="cv-shares-empty">Загрузка…</div>
         <div v-else-if="!shares.length" class="cv-shares-empty">Ссылок пока нет</div>
         <ul v-else class="cv-shares-list">
           <li v-for="s in shares" :key="s.id" class="cv-share">
             <input class="cv-share-url" :value="shareUrl(s.code)" readonly @focus="$event.target.select()" />
-            <button class="cv-icon-btn sm" title="Копировать" @click="copyShare(s.code)">
-              <span class="material-symbols-outlined">content_copy</span>
-            </button>
-            <a class="cv-icon-btn sm" :href="shareUrl(s.code)" target="_blank" rel="noopener" title="Открыть">
-              <span class="material-symbols-outlined">open_in_new</span>
-            </a>
-            <button class="cv-icon-btn sm danger" title="Отозвать" @click="revokeShareLink(s.id)">
-              <span class="material-symbols-outlined">delete</span>
-            </button>
+            <AppButton
+              variant="icon"
+              size="sm"
+              icon="content_copy"
+              title="Копировать"
+              aria-label="Копировать"
+              @click="copyShare(s.code)"
+            />
+            <AppButton
+              tag="a"
+              variant="icon"
+              size="sm"
+              icon="open_in_new"
+              title="Открыть"
+              aria-label="Открыть"
+              :href="shareUrl(s.code)"
+              target="_blank"
+              rel="noopener"
+            />
+            <AppButton
+              variant="icon"
+              size="sm"
+              tone="danger"
+              icon="delete"
+              title="Отозвать"
+              aria-label="Отозвать"
+              @click="revokeShareLink(s.id)"
+            />
           </li>
         </ul>
       </div>
@@ -239,7 +261,7 @@
     <!-- Экспорт в XLSX -->
     <AppDialog
       v-model="exportOpen"
-      title="Экспорт в XLSX" icon="download" size="md" :busy="exporting"
+      title="Экспорт в XLSX" size="md" :busy="exporting"
       :actions="[{ kind: 'cancel', label: 'Отмена' }, { kind: 'confirm', label: 'Экспортировать', icon: 'download' }]"
       @cancel="exportOpen = false" @confirm="doExport"
     >
@@ -251,8 +273,8 @@
         <div class="cv-export-head">
           <span class="cv-export-title">Дополнительные поля</span>
           <div class="cv-export-bulk">
-            <button class="cv-btn-text" @click="selectAllExport">Выбрать всё</button>
-            <button class="cv-btn-text" @click="clearAllExport">Снять всё</button>
+            <AppButton variant="text" size="sm" label="Выбрать всё" @click="selectAllExport" />
+            <AppButton variant="text" size="sm" label="Снять всё" @click="clearAllExport" />
           </div>
         </div>
         <div class="cv-export-fields">
@@ -267,30 +289,68 @@
         </div>
       </div>
     </AppDialog>
-  </div>
+  </AppListDetail>
 </template>
 
 <script setup>
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { useRoute } from 'vue-router'
 import Checkbox from 'primevue/checkbox'
 import CalendarEntryDialog from '@/components/calendar/CalendarEntryDialog.vue'
 import CalendarDayDialog from '@/components/calendar/CalendarDayDialog.vue'
-import AppDialog from '@/components/common/AppDialog.vue'
+import AppButton from '@/components/ui/AppButton.vue'
+import AppDialog from '@/components/ui/AppDialog.vue'
+import AppListDetail from '@/components/ui/AppListDetail.vue'
+import AppPage from '@/components/ui/AppPage.vue'
+import AppRow from '@/components/ui/AppRow.vue'
+import AppStack from '@/components/ui/AppStack.vue'
+import BrandLoader from '@/components/common/BrandLoader.vue'
 import EmptyState from '@/components/common/EmptyState.vue'
+import PeriodNav from '@/components/common/PeriodNav.vue'
 import SearchField from '@/components/common/SearchField.vue'
-import AppFab from '@/components/common/AppFab.vue'
-import { useFabOnScroll } from '@/composables/useFabOnScroll.js'
 import { useCalendarsStore, dayKey } from '@/stores/calendars.js'
 import { useAuthStore } from '@/stores/auth.js'
 import { exportEntries, getShares, createShare, revokeShare } from '@/api/calendars.js'
 import { useNotificationsStore } from '@/stores/notifications.js'
-import { useBreakpoint } from '@/composables/useBreakpoint.js'
 import { fieldIcon, isExportable, entryTitle, hhmm, cardFields } from '@/utils/calendarFields.js'
+import { periodViewCommand, parseViewCommand } from '@/utils/periodViews.js'
 
+const route = useRoute()
 const store = useCalendarsStore()
 const authStore = useAuthStore()
 const notif = useNotificationsStore()
-const { isMobile } = useBreakpoint()
+
+/* Узкая раскладка — свойство самой панели (раздел живёт окном рабочего стола),
+   поэтому её сообщает AppListDetail, а не медиазапрос по ширине экрана. */
+const narrow = ref(false)
+const detailOpen = ref(false)
+
+function selectCalendar(id) {
+  store.select(id)
+  detailOpen.value = true
+}
+
+/* Команды шапки: создание записи — главное действие (в тесной панели уезжает на
+   плавающую кнопку), остальное живёт в меню «ещё». */
+const commands = computed(() => {
+  if (!store.selected) return []
+  return [
+    { key: 'add', label: 'Запись', icon: 'add', variant: 'filled', primary: true, fab: true },
+    // Тесная панель: вид периода уезжает в меню — строка вкладок там дороже
+    // самой сетки дней.
+    ...(narrow.value ? [periodViewCommand(store.view)] : []),
+    { key: 'shares', label: 'Внешние ссылки', icon: 'link' },
+    { key: 'export', label: 'Экспорт в XLSX', icon: 'download' },
+  ]
+})
+
+function onCommand(key) {
+  const view = parseViewCommand(key)
+  if (view) store.setView(view)
+  else if (key === 'add') openCreate()
+  else if (key === 'shares') openShares()
+  else if (key === 'export') openExport()
+}
 
 // Живая смена активной компании: календари прежней компании сбрасываем и грузим
 // список новой.
@@ -299,11 +359,6 @@ watch(() => authStore.companyId, (id, prev) => {
   store.reloadForCompany()
 })
 
-const viewModes = [
-  { value: 'month', label: 'Месяц' },
-  { value: 'week', label: 'Неделя' },
-  { value: 'day', label: 'День' },
-]
 const weekdays = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс']
 
 function addDays(d, n) { const x = new Date(d); x.setHours(0, 0, 0, 0); x.setDate(x.getDate() + n); return x }
@@ -386,7 +441,6 @@ const periodLabel = computed(() => {
 const searchInput = ref('')
 
 // Мобильный FAB «Добавить запись»: прячется/появляется по прокрутке.
-const { fabVisible } = useFabOnScroll()
 let searchTimer = null
 function onSearch() {
   clearTimeout(searchTimer)
@@ -511,16 +565,25 @@ async function doExport() {
   }
 }
 
+/* Переход по ссылке `/calendars?calendar=…` (лента последних действий,
+   строка поиска) — открыть нужный календарь. */
+function applyCalendarQuery() {
+  const id = Number(route.query.calendar)
+  if (id) selectCalendar(id)
+}
+
 onMounted(() => {
-  store.fetchCalendars()
+  store.fetchCalendars().then(applyCalendarQuery)
   weekRO = new ResizeObserver(() => measureWeekColumn())
   if (weekGridRef.value) weekRO.observe(weekGridRef.value)
 })
+
+watch(() => route.query, applyCalendarQuery)
 onBeforeUnmount(() => { weekRO?.disconnect(); weekRO = null })
 
 // Грид появляется/исчезает при смене вида и устройства — переподключаем observer
 // и пересчитываем после рендера.
-watch([() => store.view, isMobile, () => store.selectedId], () => {
+watch([() => store.view, narrow, () => store.selectedId], () => {
   nextTick(() => {
     if (weekRO && weekGridRef.value) { weekRO.disconnect(); weekRO.observe(weekGridRef.value) }
     measureWeekColumn()
@@ -531,58 +594,6 @@ watch(() => store.loadingEntries, () => nextTick(measureWeekColumn))
 </script>
 
 <style scoped>
-/* Каркас (стеклянные панели, раскладка, мобильное скрытие левой панели) —
-   глобальный паттерн .split-* (main.css). Здесь — только внутренности
-   правой панели. */
-.cv-toolbar {
-  flex-shrink: 0; display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
-  padding: 12px 16px; border-bottom: 1px solid var(--color-outline-dim);
-}
-.cv-nav { display: flex; align-items: center; gap: 8px; }
-.cv-period { margin: 0 0 0 6px; font-size: 17px; font-weight: 700; color: var(--color-text); text-transform: capitalize; white-space: nowrap; }
-.cv-today {
-  height: 36px; padding: 0 14px; border: 1px solid var(--acrylic-border);
-  border-radius: var(--radius-full);
-  background: var(--acrylic-card-bg);
-  background: var(--glass-bg);
-  box-shadow: var(--glass-edge);
-  color: var(--color-text); font-weight: 600; font-size: 13px; cursor: pointer;
-  transition: border-color 0.15s;
-}
-.cv-today:hover { border-color: color-mix(in oklch, var(--color-primary) 30%, var(--acrylic-border)); }
-
-/* Сегмент вида — как режимы периода в статистике (StatsPeriodControl):
-   мягкий контейнер-пилюля, активный пункт — стеклянная пилюля с primary. */
-.cv-viewseg {
-  display: inline-flex; gap: 2px; padding: 4px;
-  background: var(--color-surface-high);
-  background: var(--glass-bg);
-  box-shadow: var(--glass-edge);
-  border: 1px solid var(--acrylic-border);
-  border-radius: var(--radius-full);
-}
-.cv-viewseg button {
-  min-height: 36px; padding: 8px 14px; border: none; background: transparent;
-  border-radius: var(--radius-full); color: var(--color-text-dim); cursor: pointer;
-  font-weight: 600; font-size: 13px;
-  transition: background 0.15s, color 0.15s, box-shadow 0.15s;
-}
-.cv-viewseg button:hover:not(.active) { color: var(--color-text); }
-.cv-viewseg button.active {
-  background: var(--grad-primary); color: var(--color-on-primary);
-  font-weight: 700; box-shadow: var(--shadow-sm);
-}
-
-.cv-actions { display: flex; align-items: center; gap: 8px; }
-.cv-icon-btn {
-  width: 38px; height: 38px; display: grid; place-items: center;
-  border: 1px solid var(--color-outline-dim); border-radius: var(--radius-full);
-  background: var(--acrylic-card-bg); color: var(--color-text-dim); cursor: pointer;
-}
-.cv-icon-btn:hover { background: var(--color-surface-high); color: var(--color-text); }
-.cv-icon-btn.sm { width: 34px; height: 34px; flex-shrink: 0; }
-.cv-icon-btn.sm .material-symbols-outlined { font-size: 18px; }
-.cv-icon-btn.danger { color: var(--color-error); }
 
 /* ── Тело ── */
 .cv-body { position: relative; flex: 1; min-height: 0; overflow: auto; }
@@ -666,6 +677,10 @@ watch(() => store.loadingEntries, () => nextTick(measureWeekColumn))
   background: var(--acrylic-card-bg); cursor: pointer;
 }
 /* Hover — глобальное «запотевание» .glass-hover (main.css). */
+.cv-dayrow-num {
+  flex-shrink: 0; min-width: 20px; text-align: right; font-size: 13px; font-weight: 700;
+  color: var(--color-text-dim); font-variant-numeric: tabular-nums;
+}
 .cv-dayrow-time {
   flex-shrink: 0; min-width: 56px; font-size: 16px; font-weight: 700; color: var(--color-primary);
   font-variant-numeric: tabular-nums;
@@ -677,11 +692,6 @@ watch(() => store.loadingEntries, () => nextTick(measureWeekColumn))
 .cv-dayrow-chev { flex-shrink: 0; color: var(--color-text-dim); }
 
 .cv-overlay { position: absolute; inset: 0; display: grid; place-items: center; background: color-mix(in oklch, var(--color-surface) 50%, transparent); }
-
-/* ── Кнопки ── */
-.cv-btn-text { border: none; background: none; cursor: pointer; color: var(--color-primary); font-weight: 600; font-size: 14px; }
-.spin { animation: cvspin 1s linear infinite; font-size: 32px; color: var(--color-primary); }
-@keyframes cvspin { to { transform: rotate(360deg); } }
 
 /* ── Внешние ссылки / экспорт ── */
 .cv-shares { display: flex; flex-direction: column; gap: 14px; }
@@ -706,47 +716,9 @@ watch(() => store.loadingEntries, () => nextTick(measureWeekColumn))
 .cv-export-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .cv-export-empty { margin: 0; color: var(--color-text-dim); font-size: 14px; }
 
-/* ── Мобайл ── */
-.cv-regstrip {
-  flex: none; display: flex; gap: 8px; padding: 10px 12px;
-  min-width: 0; max-width: 100%; overflow-x: auto;
-  border-bottom: 1px solid var(--color-outline-dim); -webkit-overflow-scrolling: touch;
-  touch-action: pan-x;
-  scrollbar-width: none;
-}
-.cv-regstrip::-webkit-scrollbar { display: none; }
-.cv-regchip {
-  flex: 0 0 auto; padding: 8px 14px; border-radius: var(--radius-full);
-  border: 1px solid var(--color-outline-dim); background: var(--acrylic-card-bg);
-  color: var(--color-text-dim); font-size: 14px; font-weight: 600; cursor: pointer; white-space: nowrap;
-  max-width: 60vw; overflow: hidden; text-overflow: ellipsis;
-}
-.cv-regchip.active { background: var(--grad-primary); color: var(--color-on-primary); border-color: transparent; }
-
+/* Телефон: список дней скроллится под панель задач каркаса — оставляем ему
+   воздух, иначе последние записи прячутся за ней. */
 @media (max-width: 768px) {
-  /* Скрытие левой панели и разворот правой — в глобальном .split-* */
-  /* Резерв под нижнюю навигацию (64px) + 12px воздуха: список по датам
-     скроллится под стекло, последние записи не прячутся за навигацией. */
   .cv-body { padding-bottom: calc(76px + env(safe-area-inset-bottom, 0px)); }
-  /* Компактный верх в ДВЕ строки: навигация + действия («Запись» — иконка),
-     ниже — переключатель вида и поиск в одной строке. */
-  .cv-toolbar { flex-wrap: wrap; gap: 8px; padding: 8px 12px; }
-  /* flex-basis auto (не 0!): при переносе строк nav не схлопывается в ноль,
-     иначе его кнопки вылезают поверх соседних. Кнопки не сжимаются. */
-  .cv-nav { order: 1; flex: 1 1 auto; min-width: 0; gap: 6px; }
-  .cv-nav .cv-icon-btn,
-  .cv-today { flex-shrink: 0; }
-  .cv-period { flex: 1; min-width: 0; font-size: 15px; margin-left: 2px; overflow: hidden; text-overflow: ellipsis; }
-  .cv-today { height: 34px; padding: 0 10px; }
-  .cv-icon-btn { width: 36px; height: 36px; }
-  .cv-actions { order: 2; flex-shrink: 0; gap: 6px; }
-  /* Создание записи на мобильном — плавающий FAB, кнопка тулбара не нужна. */
-  .cv-actions .btn-grad { display: none; }
-  .cv-viewseg { order: 3; flex-shrink: 0; }
-  .cv-viewseg button { min-height: 32px; padding: 6px 12px; }
-  .cv-toolbar :deep(.search-field) { order: 4; flex: 1; min-width: 130px; }
-  .cv-regstrip { padding: 8px 12px 6px; gap: 6px; }
-  .cv-regchip { padding: 6px 12px; font-size: 13px; }
-  /* На мобайле месяц/неделя — список по датам (cv-agenda), сетка не используется. */
 }
 </style>

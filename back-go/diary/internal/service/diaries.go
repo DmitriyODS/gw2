@@ -32,6 +32,9 @@ func (s *Service) GetDiary(ctx context.Context, userID, id int64) (*domain.Diary
 
 func (s *Service) CreateDiary(ctx context.Context, userID int64, name string) (*domain.Diary, error) {
 	pos, err := s.repo.NextPosition(ctx, userID)
+	if err := s.ensureLimit(ctx, userID); err != nil {
+		return nil, err
+	}
 	if err != nil {
 		return nil, err
 	}

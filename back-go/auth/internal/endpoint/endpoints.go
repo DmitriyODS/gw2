@@ -5,6 +5,7 @@ package endpoint
 
 import (
 	"context"
+	"encoding/json"
 
 	"github.com/go-kit/kit/endpoint"
 
@@ -31,6 +32,16 @@ type Endpoints struct {
 	LinkApprove endpoint.Endpoint
 	LinkClaim   endpoint.Endpoint
 
+	// Реестр входов («Авторизация и сессии» в профиле).
+	ListSessions         endpoint.Endpoint
+	RevokeSession        endpoint.Endpoint
+	RevokeOtherSessions  endpoint.Endpoint
+	ScreenLockState      endpoint.Endpoint
+	SetScreenLock        endpoint.Endpoint
+	DisableScreenLock    endpoint.Endpoint
+	UnlockScreen         endpoint.Endpoint
+	RevokeCurrentSession endpoint.Endpoint
+
 	// OAuth-провайдер (связка аккаунтов навыка Алисы) и вход через Яндекс ID.
 	OAuthAuthorize   endpoint.Endpoint
 	OAuthToken       endpoint.Endpoint
@@ -52,6 +63,8 @@ type Endpoints struct {
 	DirectoryUser          endpoint.Endpoint
 	Me                     endpoint.Endpoint
 	UpdateMe               endpoint.Endpoint
+	GetDesktopPrefs        endpoint.Endpoint
+	SaveDesktopPrefs       endpoint.Endpoint
 	UploadAvatar           endpoint.Endpoint
 	DeleteAvatar           endpoint.Endpoint
 	GetUser                endpoint.Endpoint
@@ -83,6 +96,8 @@ type Endpoints struct {
 	UpdateCompany         endpoint.Endpoint
 	ToggleCompanyActive   endpoint.Endpoint
 	DeleteCompany         endpoint.Endpoint
+	ExportCompany         endpoint.Endpoint
+	ImportCompany         endpoint.Endpoint
 	GetWeekendSettings    endpoint.Endpoint
 	UpdateWeekendSettings endpoint.Endpoint
 	GetGrooveSettings     endpoint.Endpoint
@@ -111,6 +126,24 @@ type OAuthAuthorizeEpRequest struct {
 	UserID    int64
 	CompanyID *int64
 	Body      dto.OAuthAuthorizeRequest
+}
+
+// ScreenLockEpRequest — включение блокировки или смена задержки.
+type ScreenLockEpRequest struct {
+	UserID int64
+	Body   dto.ScreenLockRequest
+}
+
+// UnlockEpRequest — снятие экрана или отключение блокировки: пин либо пароль.
+type UnlockEpRequest struct {
+	UserID int64
+	Secret string
+}
+
+// RevokeSessionEpRequest — завершение сеанса (только своего).
+type RevokeSessionEpRequest struct {
+	UserID    int64
+	SessionID int64
 }
 
 // YandexLinkEpRequest — привязка Яндекс ID к существующему аккаунту.
@@ -143,6 +176,13 @@ type UpdateUserEpRequest struct {
 type UpdateMeEpRequest struct {
 	UserID int64
 	Body   dto.UpdateMeRequest
+}
+
+// SaveDesktopPrefsEpRequest — личные настройки рабочего стола (непрозрачный
+// для сервера JSON-объект).
+type SaveDesktopPrefsEpRequest struct {
+	UserID int64
+	Prefs  json.RawMessage
 }
 
 type MeEpRequest struct {
@@ -198,6 +238,19 @@ type CandidatesEpRequest struct {
 type CompanyActorEpRequest struct {
 	Actor     *domain.User
 	CompanyID int64
+}
+
+// ImportCompanyEpRequest — архив переноса и своё имя новой компании.
+type ImportCompanyEpRequest struct {
+	Actor   *domain.User
+	Archive []byte
+	Name    string
+}
+
+// ExportCompanyEpResponse — тело архива и имя файла для заголовка отдачи.
+type ExportCompanyEpResponse struct {
+	Data     []byte
+	FileName string
 }
 
 type JoinEpRequest struct {
@@ -327,6 +380,34 @@ func New(svc service.AuthService) Endpoints {
 		OAuthToken: func(ctx context.Context, request any) (any, error) {
 			return svc.OAuthToken(ctx, request.(dto.OAuthTokenRequest))
 		},
+		ListSessions: func(ctx context.Context, request any) (any, error) {
+			return svc.ListSessions(ctx, request.(int64))
+		},
+		RevokeSession: func(ctx context.Context, request any) (any, error) {
+			req := request.(RevokeSessionEpRequest)
+			return nil, svc.RevokeSession(ctx, req.UserID, req.SessionID)
+		},
+		ScreenLockState: func(ctx context.Context, request any) (any, error) {
+			return svc.ScreenLockState(ctx, request.(int64))
+		},
+		SetScreenLock: func(ctx context.Context, request any) (any, error) {
+			req := request.(ScreenLockEpRequest)
+			return svc.SetScreenLock(ctx, req.UserID, req.Body)
+		},
+		DisableScreenLock: func(ctx context.Context, request any) (any, error) {
+			req := request.(UnlockEpRequest)
+			return nil, svc.DisableScreenLock(ctx, req.UserID, req.Secret)
+		},
+		UnlockScreen: func(ctx context.Context, request any) (any, error) {
+			req := request.(UnlockEpRequest)
+			return nil, svc.UnlockScreen(ctx, req.UserID, req.Secret)
+		},
+		RevokeOtherSessions: func(ctx context.Context, request any) (any, error) {
+			return svc.RevokeOtherSessions(ctx, request.(int64))
+		},
+		RevokeCurrentSession: func(ctx context.Context, request any) (any, error) {
+			return nil, svc.RevokeCurrentSession(ctx, request.(int64))
+		},
 		YandexConfig: func(ctx context.Context, _ any) (any, error) {
 			return svc.YandexAuthConfig(), nil
 		},
@@ -387,6 +468,13 @@ func New(svc service.AuthService) Endpoints {
 		UpdateMe: func(ctx context.Context, request any) (any, error) {
 			req := request.(UpdateMeEpRequest)
 			return svc.UpdateMe(ctx, req.UserID, req.Body)
+		},
+		GetDesktopPrefs: func(ctx context.Context, request any) (any, error) {
+			return svc.GetDesktopPrefs(ctx, request.(int64))
+		},
+		SaveDesktopPrefs: func(ctx context.Context, request any) (any, error) {
+			req := request.(SaveDesktopPrefsEpRequest)
+			return svc.SaveDesktopPrefs(ctx, req.UserID, req.Prefs)
 		},
 		UploadAvatar: func(ctx context.Context, request any) (any, error) {
 			req := request.(AvatarEpRequest)
@@ -500,6 +588,18 @@ func New(svc service.AuthService) Endpoints {
 		DeleteCompany: func(ctx context.Context, request any) (any, error) {
 			req := request.(CompanyActorEpRequest)
 			return nil, svc.DeleteCompany(ctx, req.Actor, req.CompanyID)
+		},
+		ExportCompany: func(ctx context.Context, request any) (any, error) {
+			req := request.(CompanyActorEpRequest)
+			data, name, err := svc.ExportCompany(ctx, req.Actor, req.CompanyID)
+			if err != nil {
+				return nil, err
+			}
+			return ExportCompanyEpResponse{Data: data, FileName: name}, nil
+		},
+		ImportCompany: func(ctx context.Context, request any) (any, error) {
+			req := request.(ImportCompanyEpRequest)
+			return svc.ImportCompany(ctx, req.Actor, req.Archive, req.Name)
 		},
 		GetWeekendSettings: func(ctx context.Context, request any) (any, error) {
 			req := request.(CompanyScopeEpRequest)

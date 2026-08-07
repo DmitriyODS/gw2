@@ -3,7 +3,6 @@
     :model-value="modelValue"
     title="Новый сбор"
     subtitle="Общая цель компании — коллеги скидываются кудосами"
-    icon="volunteer_activism"
     tone="primary"
     size="sm"
     @update:model-value="$emit('update:modelValue', $event)"
@@ -47,11 +46,12 @@
 
     <template #footer>
       <div class="fcd-footer">
-        <button
-          class="btn-grad"
+        <AppButton
+          variant="filled"
+          label="Объявить сбор"
           :disabled="busy || !title.trim() || !validTarget"
           @click="create"
-        >Объявить сбор</button>
+        />
       </div>
     </template>
   </AppDialog>
@@ -59,7 +59,8 @@
 
 <script setup>
 import { computed, ref, watch } from 'vue'
-import AppDialog from '@/components/common/AppDialog.vue'
+import AppButton from '@/components/ui/AppButton.vue'
+import AppDialog from '@/components/ui/AppDialog.vue'
 import KudosCoin from '@/components/pets/KudosCoin.vue'
 import AmountInput from '@/components/pets/bank/AmountInput.vue'
 import { usePetsStore } from '@/stores/pets.js'

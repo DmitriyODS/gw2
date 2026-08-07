@@ -1,69 +1,82 @@
 <template>
   <div class="auth-page">
-    <!-- Декоративный фон: крупные размытые градиентные пятна из цветов темы -->
-    <div class="auth-bg" aria-hidden="true">
-      <span class="blob blob-a" />
-      <span class="blob blob-b" />
-      <span class="blob blob-c" />
+    <AuthWave />
+
+    <div v-if="$slots.hero" class="auth-hero">
+      <slot name="hero" />
     </div>
 
-    <!-- Сплит-карточка: слева промо-панель бренда, справа форма -->
-    <div class="auth-card">
-      <aside class="auth-promo">
-        <div class="promo-brand">
-          <Logo class="promo-logo" :size="48" />
-          <span class="promo-wordmark">Groove<span class="wm-accent">Work</span></span>
+    <div class="auth-card" :class="`is-${size}`">
+      <header class="auth-brand">
+        <Logo :size="22" class="auth-brand-logo" />
+        <span class="auth-brand-name">
+          <span class="wm-groove">Groove</span>
+          <span class="wm-work">Work</span>
+          <span v-if="majorVersion" class="wm-work">{{ majorVersion }}</span>
+        </span>
+        <slot name="brand-extra" />
+      </header>
+
+      <section class="auth-body">
+        <h1 v-if="title" class="auth-title">{{ title }}</h1>
+        <p v-if="subtitle" class="auth-sub">{{ subtitle }}</p>
+        <div class="auth-content" :class="{ spaced: !!title }">
+          <slot />
         </div>
-
-        <div class="promo-main">
-          <h1 class="promo-title">
-            Работайте в едином ритме —
-            <b>вся команда в одном месте</b>.
-          </h1>
-          <div class="promo-divider" />
-          <p class="promo-desc">
-            Задачи и учёт времени, мессенджер и звонки, календари, заметки
-            и корпоративный портал — одна платформа для всей команды.
-          </p>
-        </div>
-
-        <ul class="promo-feats">
-          <li v-for="f in FEATURES" :key="f.icon" class="promo-feat">
-            <span class="feat-icon">
-              <span class="material-symbols-outlined">{{ f.icon }}</span>
-            </span>
-            {{ f.text }}
-          </li>
-        </ul>
-      </aside>
-
-      <section class="auth-form-col">
-        <header class="auth-form-head">
-          <h2 class="auth-form-title">{{ title }}</h2>
-          <p v-if="subtitle" class="auth-form-sub">{{ subtitle }}</p>
-        </header>
-        <slot />
       </section>
+
+      <footer v-if="showBack || $slots.actions" class="auth-foot">
+        <button v-if="showBack" type="button" class="auth-back" @click="goBack">
+          <span class="material-symbols-outlined">arrow_back</span>
+          {{ backLabel }}
+        </button>
+        <span class="auth-foot-gap" />
+        <slot name="actions" />
+      </footer>
     </div>
 
-    <!-- Диалоги экранов (смена учётных данных, выбор компании) -->
     <slot name="overlays" />
   </div>
 </template>
 
 <script setup>
+import { computed, onMounted, useAttrs } from 'vue'
+import { useRouter } from 'vue-router'
 import Logo from '@/components/common/Logo.vue'
+import AuthWave from '@/components/auth/AuthWave.vue'
+import { useAppVersion } from '@/composables/useAppVersion.js'
 
-defineProps({
-  title: { type: String, required: true },
+const props = defineProps({
+  title: { type: String, default: '' },
   subtitle: { type: String, default: '' },
+  // Ширина карточки: sm — короткие экраны (код, QR), md — форма входа,
+  // lg — регистрация (две колонки полей + выбор темы).
+  size: { type: String, default: 'md' },
+  // Путь кнопки «назад»; пустая строка — кнопки нет. Экран с внутренними
+  // шагами вместо пути вешает @back и решает сам, куда возвращаться.
+  back: { type: String, default: '' },
+  backLabel: { type: String, default: 'назад' },
 })
 
-const FEATURES = [
-  { icon: 'timer',  text: 'Учёт времени и живая статистика' },
-  { icon: 'forum',  text: 'Мессенджер, звонки и корпоративный портал' },
-  { icon: 'pets',   text: 'Грувики — питомцы вашей команды' },
-]
+const emit = defineEmits(['back'])
+
+const router = useRouter()
+const attrs = useAttrs()
+const { majorVersion, load: loadVersion } = useAppVersion()
+
+// Марка показывает мажорную версию выпуска — сведения тянутся с сервера
+// (в бандл версия не зашивается).
+onMounted(loadVersion)
+
+const showBack = computed(() => !!props.back || !!attrs.onBack)
+
+function goBack() {
+  if (attrs.onBack) {
+    emit('back')
+    return
+  }
+  router.push(props.back)
+}
 </script>
 
 <style scoped>
@@ -72,251 +85,152 @@ const FEATURES = [
   min-height: 100vh;
   min-height: 100dvh;
   display: flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
-  background: var(--color-bg);
+  gap: 28px;
   padding: 24px;
-  overflow-y: auto;
   overflow-x: hidden;
+  overflow-y: auto;
 }
 
-/* ── Фон: размытые градиентные пятна из цветов темы ──
-   Лежат под акриловой карточкой — её blur «собирает» из них мягкое
-   свечение. Медленный дрейф, без движения при reduced-motion. */
-.auth-bg {
-  position: fixed;
-  inset: 0;
-  pointer-events: none;
+/* Приветственный заголовок над карточкой (экран выбора «вход/регистрация»). */
+.auth-hero {
+  position: relative;
+  z-index: 1;
+  width: 100%;
+  max-width: 940px;
+  animation: auth-rise 0.5s cubic-bezier(0.2, 0.8, 0.3, 1) both;
 }
 
-.blob {
-  position: absolute;
-  border-radius: 50%;
-  filter: blur(90px);
-  opacity: 0.55;
-  animation: blob-drift 24s ease-in-out infinite alternate;
-}
-
-.blob-a {
-  width: 55vmin;
-  height: 55vmin;
-  top: -12vmin;
-  left: -10vmin;
-  background: linear-gradient(135deg,
-    color-mix(in oklch, var(--color-primary) 55%, transparent),
-    color-mix(in oklch, var(--color-tertiary) 40%, transparent));
-}
-
-.blob-b {
-  width: 48vmin;
-  height: 48vmin;
-  right: -14vmin;
-  top: 18vmin;
-  background: linear-gradient(200deg,
-    color-mix(in oklch, var(--color-tertiary) 45%, transparent),
-    color-mix(in oklch, var(--color-secondary) 35%, transparent));
-  animation-delay: -8s;
-}
-
-.blob-c {
-  width: 60vmin;
-  height: 60vmin;
-  bottom: -22vmin;
-  left: 22vmin;
-  background: linear-gradient(320deg,
-    color-mix(in oklch, var(--color-secondary) 40%, transparent),
-    color-mix(in oklch, var(--color-primary) 40%, transparent));
-  animation-delay: -16s;
-}
-
-@keyframes blob-drift {
-  from { transform: translate3d(0, 0, 0) scale(1); }
-  to { transform: translate3d(6vmin, -4vmin, 0) scale(1.12); }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .blob { animation: none; }
-}
-
-/* ── Сплит-карточка ───────────────────────────────────────────── */
+/* ── Внешняя стеклянная карточка ──────────────────────────────────
+   Лежит на гребне волны: полупрозрачное стекло собирает её цвет. */
 .auth-card {
   position: relative;
   z-index: 1;
   width: 100%;
-  max-width: 1020px;
-  display: grid;
-  grid-template-columns: minmax(0, 0.95fr) minmax(0, 1.05fr);
-  background: var(--acrylic-bg);
+  margin: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 16px;
+  border-radius: 32px;
+  border: 1px solid var(--acrylic-border);
+  background: var(--glass-bg), var(--acrylic-bg);
   -webkit-backdrop-filter: var(--acrylic-blur);
   backdrop-filter: var(--acrylic-blur);
-  border: 1px solid var(--acrylic-border);
-  border-radius: 28px;
-  overflow: hidden;
-  margin: auto;
+  box-shadow: var(--shadow-xl), var(--glass-edge);
+  animation: auth-rise 0.42s cubic-bezier(0.2, 0.8, 0.3, 1) both;
 }
 
-/* ── Промо-панель: тинтованный градиент из цветов темы ────────── */
-.auth-promo {
-  display: flex;
-  flex-direction: column;
-  gap: 32px;
-  padding: 36px 40px;
-  background:
-    radial-gradient(60% 50% at 0% 0%, color-mix(in oklch, var(--color-primary) 16%, transparent), transparent 70%),
-    radial-gradient(70% 60% at 100% 100%, color-mix(in oklch, var(--color-tertiary) 12%, transparent), transparent 70%),
-    linear-gradient(160deg,
-      color-mix(in oklch, var(--color-primary-container) 55%, transparent),
-      color-mix(in oklch, var(--color-secondary-container) 20%, transparent) 60%,
-      transparent);
-  border-right: 1px solid var(--acrylic-border);
+.auth-card.is-sm { max-width: 460px; }
+.auth-card.is-md { max-width: 620px; }
+.auth-card.is-lg { max-width: 940px; }
+
+/* Карточка выезжает следом за приветствием, а не одновременно с ним. */
+.auth-hero + .auth-card { animation-delay: 0.14s; }
+
+@keyframes auth-rise {
+  from { opacity: 0; transform: translateY(18px) scale(0.985); }
+  to { opacity: 1; transform: none; }
 }
 
-.promo-brand {
-  display: flex;
-  align-items: center;
-  gap: 12px;
+@media (prefers-reduced-motion: reduce) {
+  .auth-card { animation: none; }
 }
 
-.promo-logo {
-  width: 44px;
-  height: 44px;
-  border-radius: 50%;
-  display: block;
-}
-
-.promo-wordmark {
-  font-size: 21px;
-  font-weight: 800;
-  letter-spacing: -0.02em;
-  color: var(--color-primary);
-}
-
-.wm-accent {
-  color: color-mix(in oklch, var(--color-primary) 40%, var(--color-primary-container));
-}
-
-.promo-main {
-  margin: auto 0;
-  display: flex;
-  flex-direction: column;
-  gap: 18px;
-}
-
-.promo-title {
-  margin: 0;
-  font-size: clamp(24px, 2.6vw, 30px);
-  font-weight: 600;
-  line-height: 1.25;
-  letter-spacing: -0.02em;
-  color: var(--color-text);
-}
-
-.promo-title b {
-  font-weight: 800;
-}
-
-.promo-divider {
-  height: 1px;
-  background: color-mix(in oklch, var(--color-outline-dim) 70%, transparent);
-}
-
-.promo-desc {
-  margin: 0;
-  font-size: 14.5px;
-  line-height: 1.55;
-  color: var(--color-text-dim);
-  max-width: 360px;
-}
-
-.promo-feats {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-
-.promo-feat {
+/* ── Марка ─────────────────────────────────────────────────────── */
+.auth-brand {
   display: flex;
   align-items: center;
-  gap: 10px;
-  font-size: 13.5px;
-  font-weight: 600;
-  color: var(--color-text);
+  gap: 8px;
+  padding: 2px 8px 0;
 }
 
-.feat-icon {
-  width: 30px;
-  height: 30px;
-  flex-shrink: 0;
-  display: grid;
-  place-items: center;
-  border-radius: 10px;
+.auth-brand-logo { display: block; flex-shrink: 0; }
+
+/* Марка — то же начертание, что и в меню «Пуск»: ExtraBlack вариативного
+   Roboto Flex, «Groove» фирменным цветом, «Work N» — цветом текста. */
+.auth-brand-name {
+  display: flex;
+  align-items: baseline;
+  gap: 5px;
+  font-family: 'Roboto Flex', 'Roboto', sans-serif;
+  font-size: 15px;
+  font-weight: 1000;
+  font-variation-settings: 'wght' 1000;
+  letter-spacing: 0.2px;
+}
+
+.wm-groove { color: var(--color-primary); }
+.wm-work { color: var(--color-text); }
+
+/* ── Внутренняя панель с содержимым ────────────────────────────── */
+.auth-body {
   background: var(--acrylic-bg-strong);
-  border: 1px solid var(--acrylic-border);
-  color: var(--color-primary);
-}
-
-.feat-icon .material-symbols-outlined { font-size: 18px; }
-
-/* ── Колонка формы ────────────────────────────────────────────── */
-.auth-form-col {
+  border: 1px solid color-mix(in oklch, var(--acrylic-border) 60%, transparent);
+  border-radius: 24px;
+  padding: 28px 32px 32px;
   display: flex;
   flex-direction: column;
-  justify-content: center;
-  padding: 40px 48px;
   min-width: 0;
 }
 
-.auth-form-head {
-  margin-bottom: 24px;
-  text-align: center;
-}
-
-.auth-form-title {
-  margin: 0 0 6px;
-  font-size: 23px;
-  font-weight: 800;
-  letter-spacing: -0.01em;
+.auth-title {
+  margin: 0;
+  font-size: clamp(24px, 3vw, 32px);
+  font-weight: 500;
+  line-height: 1.15;
+  letter-spacing: -0.02em;
   color: var(--color-text);
 }
 
-.auth-form-sub {
-  margin: 0;
+.auth-sub {
+  margin: 8px 0 0;
   font-size: 14px;
   line-height: 1.5;
   color: var(--color-text-dim);
 }
 
-/* ── Адаптив ──────────────────────────────────────────────────── */
-@media (max-width: 900px) {
-  .auth-card {
-    grid-template-columns: 1fr;
-    max-width: 460px;
-  }
+.auth-content.spaced { margin-top: 22px; }
 
-  /* Промо сжимается до бренд-шапки с заголовком; фичи — на десктопе */
-  .auth-promo {
-    gap: 16px;
-    padding: 24px 28px 20px;
-    border-right: none;
-    border-bottom: 1px solid var(--acrylic-border);
-  }
-
-  .promo-main { margin: 0; gap: 0; }
-  .promo-title { font-size: 18px; }
-  .promo-divider,
-  .promo-desc,
-  .promo-feats { display: none; }
-
-  .auth-form-col { padding: 28px; }
+/* ── Подвал: «назад» слева, действия справа ────────────────────── */
+.auth-foot {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 2px 8px 4px;
 }
 
-@media (max-width: 480px) {
+.auth-foot-gap { flex: 1 1 auto; }
+
+.auth-back {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 16px 8px 12px;
+  border: 1px solid var(--acrylic-border);
+  border-radius: var(--radius-full);
+  background: var(--glass-bg), var(--acrylic-bg-strong);
+  box-shadow: var(--glass-edge);
+  color: var(--color-text);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.auth-back:hover {
+  background: var(--glass-bg), color-mix(in oklch, var(--color-primary) 12%, var(--acrylic-bg-strong));
+  border-color: color-mix(in oklch, var(--color-primary) 30%, var(--acrylic-border));
+}
+
+.auth-back .material-symbols-outlined { font-size: 18px; }
+
+@media (max-width: 560px) {
   .auth-page { padding: 12px; }
-  .auth-form-col { padding: 24px 20px; }
-  .auth-promo { padding: 20px; }
-  .promo-title { display: none; }
+  .auth-card { padding: 12px; border-radius: 26px; gap: 10px; }
+  .auth-body { padding: 22px 20px 24px; border-radius: 20px; }
 }
 </style>

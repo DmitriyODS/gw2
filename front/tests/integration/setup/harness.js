@@ -52,6 +52,48 @@ function storeSetCookie(jar, raw) {
 const realFetch = globalThis.fetch
 if (!realFetch) throw new Error('нет глобального fetch (Node < 18?)')
 
+// jsdom-овские FormData/File node-fetch не понимает (это чужие для undici
+// объекты) — тело уходит пустым, и сервер отвечает «файл не передан». Поэтому
+// multipart собираем сами: так работают все файловые ручки (аватар, вложения,
+// импорт заметок, восстановление из архива).
+async function multipart(form) {
+  const boundary = '----gwIntegration' + Math.random().toString(36).slice(2)
+  const chunks = []
+  const push = (s) => chunks.push(Buffer.from(s, 'utf8'))
+  for (const [name, value] of form.entries()) {
+    push(`--${boundary}\r\n`)
+    if (value && typeof value.arrayBuffer === 'function') {
+      const filename = value.name || 'file'
+      const type = value.type || 'application/octet-stream'
+      // Имя файла с кириллицей передаём по RFC 5987: иначе сервер видит
+      // испорченное имя и не узнаёт расширение (импорт .txt/.json).
+      const ascii = /^[\x20-\x7e]*$/.test(filename)
+      const disp = ascii
+        ? `filename="${filename}"`
+        : `filename="file"; filename*=UTF-8''${encodeURIComponent(filename)}`
+      push(`Content-Disposition: form-data; name="${name}"; ${disp}\r\n`)
+      push(`Content-Type: ${type}\r\n\r\n`)
+      chunks.push(Buffer.from(await value.arrayBuffer()))
+      push('\r\n')
+    } else {
+      push(`Content-Disposition: form-data; name="${name}"\r\n\r\n${value}\r\n`)
+    }
+  }
+  push(`--${boundary}--\r\n`)
+  return { body: Buffer.concat(chunks), contentType: `multipart/form-data; boundary=${boundary}` }
+}
+
+// Blob по утиному признаку: инстанс jsdom не пройдёт instanceof node-класса.
+function isBlob(body) {
+  return !!body && typeof body === 'object' && typeof body.arrayBuffer === 'function'
+    && typeof body.size === 'number'
+}
+
+function isFormData(body) {
+  return !!body && typeof body === 'object' && typeof body.entries === 'function'
+    && body[Symbol.toStringTag] === 'FormData'
+}
+
 globalThis.fetch = async function shimFetch(input, init = {}) {
   const url = typeof input === 'string' ? input : (input?.url ?? String(input))
   if (!url.startsWith('/api')) return realFetch(input, init)
@@ -72,7 +114,18 @@ globalThis.fetch = async function shimFetch(input, init = {}) {
   const cookie = jarHeader(currentJar)
   if (cookie) headers.set('Cookie', cookie)
 
-  const resp = await realFetch(base + url, { ...init, headers, redirect: 'manual' })
+  let body = init.body
+  if (isFormData(body)) {
+    const part = await multipart(body)
+    body = part.body
+    headers.set('Content-Type', part.contentType)
+  } else if (isBlob(body)) {
+    // Blob у jsdom и у node-fetch — РАЗНЫЕ классы: чужой node приводит к
+    // строке «[object Blob]». Отдаём буфером, как и multipart выше.
+    body = Buffer.from(await body.arrayBuffer())
+  }
+
+  const resp = await realFetch(base + url, { ...init, body, headers, redirect: 'manual' })
 
   const setCookies = typeof resp.headers.getSetCookie === 'function' ? resp.headers.getSetCookie() : []
   for (const c of setCookies) storeSetCookie(currentJar, c)

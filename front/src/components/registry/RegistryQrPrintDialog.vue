@@ -2,7 +2,6 @@
   <AppDialog
     :model-value="modelValue"
     title="Печать QR-кодов"
-    icon="print"
     size="md"
     :busy="busy"
     :actions="[
@@ -54,7 +53,7 @@
 import { computed, ref, watch } from 'vue'
 import Select from 'primevue/select'
 import QRCode from 'qrcode'
-import AppDialog from '@/components/common/AppDialog.vue'
+import AppDialog from '@/components/ui/AppDialog.vue'
 import { getRecords } from '@/api/registries.js'
 import { useNotificationsStore } from '@/stores/notifications.js'
 import { hasQr, qrValue } from '@/utils/registryFields.js'

@@ -66,19 +66,21 @@ func TestPetsNeedsDecayCausesHunger(t *testing.T) {
 		t.Fatalf("новый питомец не может быть больным: %s", r.Raw)
 	}
 
-	// 5 часов без ухода: сытость −20 (2 за каждые полчаса), энергия −10.
+	// Шаг шкал — 45 минут: за 5¼ часа это 7 тиков, сытость −14 (2 за тик),
+	// энергия −7 (1 за тик).
 	agePetNeeds(t, m.ID, 5*60+15)
 	r = petsAPI.doJSON(t, http.MethodGet, "/api/pets/pet", m.Token, nil)
 	needs = r.JSON["needs"].(map[string]any)
-	if needs["satiety"] != float64(80) || needs["energy"] != float64(90) {
+	if needs["satiety"] != float64(86) || needs["energy"] != float64(93) {
 		t.Fatalf("потребности не убывают со временем: %s", r.Raw)
 	}
 	if r.Bool("sick") {
 		t.Fatalf("5 часов — ещё не болезнь: %s", r.Raw)
 	}
 
-	// Сутки с лишним без еды — истощение (шкала сытости в нуле).
-	agePetNeeds(t, m.ID, 30*60)
+	// Полтора суток без еды — истощение (шкала сытости в нуле): 50 тиков по
+	// 45 минут опустошают её полностью.
+	agePetNeeds(t, m.ID, 40*60)
 	r = petsAPI.doJSON(t, http.MethodGet, "/api/pets/pet", m.Token, nil)
 	needs = r.JSON["needs"].(map[string]any)
 	if needs["satiety"] != float64(0) {
@@ -191,8 +193,8 @@ func TestPetsBathCuresGrime(t *testing.T) {
 	grantKudos(t, m.ID, 100)
 	r = petsAPI.doJSON(t, http.MethodPost, "/api/pets/bath", m.Token, nil)
 	requireStatus(t, r, 200, "купание")
-	if r.Num("kudos") != 88 {
-		t.Fatalf("цена купания — 12 кудосов: %s", r.Raw)
+	if r.Num("kudos") != 82 {
+		t.Fatalf("цена купания — 18 кудосов: %s", r.Raw)
 	}
 	if r.Bool("sick") {
 		t.Fatalf("купание должно вылечить грязнулю: %s", r.Raw)
@@ -315,10 +317,10 @@ func TestPetsStrokeRewardsOwner(t *testing.T) {
 		t.Fatalf("поглаживание должно закрывать потребность в общении: %s", r.Raw)
 	}
 
-	// У гладящего списалось 2 кудоса, его питомцу — 1 XP за компанию.
+	// У гладящего списалось 3 кудоса, его питомцу — 1 XP за компанию.
 	r = petsAPI.doJSON(t, http.MethodGet, "/api/pets/pet", a.Token, nil)
-	if r.Num("kudos") != 98 || r.Num("xp") != 1 {
-		t.Fatalf("гладящий: ожидалось 98 кудосов и 1 XP, получено %s", r.Raw)
+	if r.Num("kudos") != 97 || r.Num("xp") != 1 {
+		t.Fatalf("гладящий: ожидалось 97 кудосов и 1 XP, получено %s", r.Raw)
 	}
 
 	// Признание идёт в недельный рейтинг владельца.

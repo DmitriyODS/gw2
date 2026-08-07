@@ -4,6 +4,8 @@ import (
 	"context"
 	"io"
 	"log/slog"
+	"slices"
+	"sort"
 	"testing"
 
 	"github.com/DmitriyODS/gw2/back-go/registry/internal/domain"
@@ -48,6 +50,9 @@ func (f *fakeRepo) ListRecords(_ domain.Ctx, filter domain.RecordListFilter) ([]
 	f.lastFilter = filter
 	return nil, 0, nil
 }
+func (f *fakeRepo) SearchRecords(_ domain.Ctx, _ int64, _ string, _ int) ([]*domain.SearchHit, error) {
+	return nil, nil
+}
 func (f *fakeRepo) GetRecord(_ domain.Ctx, id int64) (*domain.Record, error) {
 	return f.records[id], nil
 }
@@ -87,6 +92,21 @@ func (f *fakeRepo) AllRecords(_ domain.Ctx, _ int64) ([]*domain.Record, error) {
 	return out, nil
 }
 
+// Раздел «Хранилище»: записи отбираются по компании их реестра.
+func (f *fakeRepo) RecordsOfCompanies(_ domain.Ctx, companyIDs []int64) ([]*domain.RecordScope, error) {
+	out := []*domain.RecordScope{}
+	if f.reg == nil || !slices.Contains(companyIDs, f.reg.CompanyID) {
+		return out, nil
+	}
+	for _, r := range f.records {
+		out = append(out, &domain.RecordScope{
+			Record: r, RegistryID: f.reg.ID, RegistryName: f.reg.Name, CompanyID: f.reg.CompanyID,
+		})
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].Record.ID < out[j].Record.ID })
+	return out, nil
+}
+
 type fakeBus struct{ events []string }
 
 func (b *fakeBus) Publish(_ domain.Ctx, event string, _ []string, _ any) {
@@ -95,8 +115,17 @@ func (b *fakeBus) Publish(_ domain.Ctx, event string, _ []string, _ any) {
 
 type fakeFiles struct{ removed []string }
 
-func (f *fakeFiles) Save(_ string, _ []byte) (string, error) { return "registry/x", nil }
-func (f *fakeFiles) Remove(paths []string)                   { f.removed = append(f.removed, paths...) }
+func (f *fakeFiles) SaveFor(_ context.Context, _, _ int64, _ string, _ []byte) (string, error) {
+	return "registry/x", nil
+}
+
+func (f *fakeFiles) RemoveFor(_ context.Context, _, _ int64, paths []string) {
+	f.removed = append(f.removed, paths...)
+}
+
+func (f *fakeFiles) Remove(paths []string) {
+	f.removed = append(f.removed, paths...)
+}
 
 func newTestService(fields []domain.Field) (*Service, *fakeRepo, *fakeBus) {
 	repo := &fakeRepo{
@@ -216,4 +245,11 @@ func TestRegistryScopedToCompany(t *testing.T) {
 	if _, err := svc.GetRegistry(context.Background(), 99, 1); err != domain.ErrRegistryNotFound {
 		t.Errorf("ожидалась ErrRegistryNotFound для чужой компании, получено %v", err)
 	}
+}
+
+func (f *fakeRepo) CountRegistries(_ domain.Ctx, _ int64) (int, error) {
+	if f.reg == nil {
+		return 0, nil
+	}
+	return 1, nil
 }

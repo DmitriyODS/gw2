@@ -23,12 +23,13 @@ func NewShopRepo(pool *pgxpool.Pool) *ShopRepo {
 }
 
 const shopItemCols = `id, key, kind, rarity, price_kudos, unlock_kind,
-	achievement_key, limited_quota, active_from, active_to`
+	achievement_key, limited_quota, active_from, active_to, premium`
 
 func scanShopItem(row pgx.Row) (*domain.ShopItem, error) {
 	var it domain.ShopItem
 	err := row.Scan(&it.ID, &it.Key, &it.Kind, &it.Rarity, &it.PriceKudos,
-		&it.UnlockKind, &it.AchievementKey, &it.LimitedQuota, &it.ActiveFrom, &it.ActiveTo)
+		&it.UnlockKind, &it.AchievementKey, &it.LimitedQuota, &it.ActiveFrom, &it.ActiveTo,
+		&it.Premium)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, nil

@@ -1,8 +1,10 @@
 import { apiRequest } from './client.js'
 
-// Деловой ИИ-ассистент (aisvc, /api/ai/assistant/*). Требует активную
-// компанию в токене — иначе сервер отвечает 400 BAD_REQUEST (обрабатывает
-// stores/assistant.js). Диалог один на пару (пользователь, компания).
+// Деловой ИИ-ассистент (aisvc, /api/ai/assistant/*). Диалог один на
+// ПОЛЬЗОВАТЕЛЯ и работает на его личном ключе (api/ai.js — my-settings),
+// поэтому активная компания не обязательна: без неё недоступны только
+// инструменты компанийной статистики. Нет личного ключа — сервер отвечает
+// 409 AI_DISABLED (обрабатывает stores/assistant.js).
 export const sendAssistantMessage = (text) =>
   apiRequest('/ai/assistant/messages', { method: 'POST', body: { text } })
 

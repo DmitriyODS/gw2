@@ -2,7 +2,6 @@
   <AppDialog
     :model-value="modelValue"
     tone="primary"
-    icon="admin_panel_settings"
     size="sm"
     :title="`Права: ${member?.user?.fio || ''}`"
     subtitle="Что может делать администратор в этой группе."
@@ -31,7 +30,7 @@
 
 <script setup>
 import { ref, watch } from 'vue'
-import AppDialog from '@/components/common/AppDialog.vue'
+import AppDialog from '@/components/ui/AppDialog.vue'
 import { useMessengerStore } from '@/stores/messenger.js'
 import { useNotificationsStore } from '@/stores/notifications.js'
 

@@ -13,17 +13,23 @@
 package main
 
 import (
+	"net"
 	"os"
+
+	googrpc "google.golang.org/grpc"
 
 	"github.com/DmitriyODS/gw2/back-go/calendar/internal/endpoint"
 	"github.com/DmitriyODS/gw2/back-go/calendar/internal/repository/postgres"
 	"github.com/DmitriyODS/gw2/back-go/calendar/internal/service"
 	httptransport "github.com/DmitriyODS/gw2/back-go/calendar/internal/transport/http"
+	"github.com/DmitriyODS/gw2/back-go/pkg/billingclient"
 	"github.com/DmitriyODS/gw2/back-go/pkg/bootstrap"
+	"github.com/DmitriyODS/gw2/back-go/pkg/companydata"
 	"github.com/DmitriyODS/gw2/back-go/pkg/events"
 	"github.com/DmitriyODS/gw2/back-go/pkg/pasetoauth"
 	"github.com/DmitriyODS/gw2/back-go/pkg/records"
 	"github.com/DmitriyODS/gw2/back-go/pkg/storage"
+	"github.com/DmitriyODS/gw2/back-go/pkg/storagefiles"
 )
 
 func main() {
@@ -52,17 +58,43 @@ func main() {
 
 	repo := postgres.NewRepo(pool)
 	users := postgres.NewUserReader(pool)
+	// Лимиты тарифа и учёт занятого места — gRPC billingsvc. Пустой адрес
+	// выключает проверки, недоступный биллинг их не блокирует (fail-open).
+	billing, err := billingclient.New(bootstrap.Env("BILLING_GRPC_ADDR", ""), log)
+	if err != nil {
+		log.Error("billing.dial_failed", "error", err)
+		os.Exit(1)
+	}
+	defer billing.Close()
+	fileStore := records.NewFileStore(storage.FromEnv(log, uploadFolder), "calendar").
+		WithQuota(billing, "calendar")
+
 	svc := service.New(service.Deps{
 		Repo:  repo,
-		Files: records.NewFileStore(storage.FromEnv(log, uploadFolder), "calendar"),
+		Files: fileStore,
 		Bus:   events.NewPublisher(rdb, log, "gw2:calendar:events"),
 		Log:   log,
 	})
+	svc.WithBilling(billing)
+
 	eps := endpoint.New(svc)
 
 	httpServer := httptransport.NewServer(eps, users, verifier, log)
 
-	log.Info("listening", "http", httpAddr)
+	// gRPC — единственный: биллинг спрашивает про файлы для раздела
+	// «Настройки → Хранилище» (файлы записей).
+	grpcAddr := bootstrap.Env("GRPC_ADDR", ":9100")
+	grpcServer := googrpc.NewServer(googrpc.MaxRecvMsgSize(companydata.MaxMessageBytes))
+	storagefiles.Register(grpcServer, svc)
+	// Перенос компании: архив собирает authsvc, раздел отдаёт свою часть.
+	companydata.Register(grpcServer, repo)
+	listener, err := net.Listen("tcp", grpcAddr)
+	if err != nil {
+		log.Error("grpc.listen_failed", "addr", grpcAddr, "error", err)
+		os.Exit(1)
+	}
+
+	log.Info("listening", "http", httpAddr, "grpc", grpcAddr)
 	bootstrap.Run(ctx, log,
 		bootstrap.Component{
 			Name: "http",
@@ -72,6 +104,11 @@ func main() {
 					log.Warn("http.shutdown_failed", "error", err)
 				}
 			},
+		},
+		bootstrap.Component{
+			Name: "grpc",
+			Run:  func() error { return grpcServer.Serve(listener) },
+			Stop: grpcServer.GracefulStop,
 		},
 	)
 }

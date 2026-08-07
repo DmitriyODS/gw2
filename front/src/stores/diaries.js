@@ -2,6 +2,7 @@ import { defineStore } from 'pinia'
 import { computed, ref } from 'vue'
 import * as api from '@/api/diaries.js'
 import { useAuthStore } from '@/stores/auth.js'
+import { logActivity } from '@/utils/activityLog.js'
 
 // ── Хелперы дат (неделя начинается с понедельника) ──
 function startOfDay(d) { const x = new Date(d); x.setHours(0, 0, 0, 0); return x }
@@ -185,6 +186,10 @@ export const useDiariesStore = defineStore('diaries', () => {
   async function createEntry(body) {
     const e = await api.createEntry(selectedId.value, body)
     if (subtab.value === 'active' || subtab.value === 'all') await fetchEntries({ silent: true })
+    logActivity({
+      section: 'diaries', id: e.id, title: e.title || 'Запись',
+      path: `/diaries?diary=${e.diary_id ?? selectedId.value}&q=${encodeURIComponent(e.title || '')}`,
+    })
     return e
   }
   async function updateEntry(entryId, body) {

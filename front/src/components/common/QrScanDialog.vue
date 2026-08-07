@@ -1,7 +1,6 @@
 <template>
   <AppDialog
     :model-value="modelValue"
-    icon="qr_code_scanner"
     size="sm"
     :title="title"
     :subtitle="subtitle"
@@ -22,7 +21,7 @@
 <script setup>
 import { ref, watch, onBeforeUnmount } from 'vue'
 import jsQR from 'jsqr'
-import AppDialog from '@/components/common/AppDialog.vue'
+import AppDialog from '@/components/ui/AppDialog.vue'
 
 const props = defineProps({
   modelValue: { type: Boolean, default: false },

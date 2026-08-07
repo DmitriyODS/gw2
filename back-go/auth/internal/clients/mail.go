@@ -6,6 +6,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"time"
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
@@ -13,6 +14,12 @@ import (
 	"github.com/DmitriyODS/gw2/back-go/auth/internal/domain"
 	"github.com/DmitriyODS/gw2/back-go/pkg/gen/mailpb"
 )
+
+// mailTimeout — register/forgot-password ждут этот вызов синхронно (нет
+// сессии до подтверждения письма): без потолка зависшая почта/SMTP вешала бы
+// HTTP-запрос пользователя навсегда — у Fiber-серверов платформы нет
+// server-side read/write timeout, дедлайн можно поставить только тут.
+const mailTimeout = 10 * time.Second
 
 // Mail — клиент mailsvc: отправка брендированных писем (подтверждение email).
 type Mail struct {
@@ -34,6 +41,8 @@ func NewMail(addr string, log *slog.Logger) (*Mail, error) {
 func (c *Mail) Close() { _ = c.conn.Close() }
 
 func (c *Mail) send(ctx context.Context, to, toName, template string, params map[string]string) error {
+	ctx, cancel := context.WithTimeout(ctx, mailTimeout)
+	defer cancel()
 	resp, err := c.stub.Send(ctx, &mailpb.SendRequest{
 		To: to, ToName: toName, Template: template, Params: params,
 	})

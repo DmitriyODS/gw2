@@ -1,6 +1,7 @@
 package http
 
 import (
+	"strconv"
 	"strings"
 
 	"github.com/gofiber/fiber/v2"
@@ -48,11 +49,37 @@ func (h *handlers) yougileConnect(c *fiber.Ctx) error {
 	return c.JSON(resp)
 }
 
+// yougileDisconnect — отключить подключение: конкретное (?id=) либо активное.
 func (h *handlers) yougileDisconnect(c *fiber.Ctx) error {
-	if _, err := h.eps.YougileDisconnect(c.Context(), currentUser(c).ID); err != nil {
+	req := endpoint.YougileAccountRequest{
+		UserID: currentUser(c).ID, AccountID: int64(c.QueryInt("id", 0)),
+	}
+	if _, err := h.eps.YougileDisconnect(c.Context(), req); err != nil {
 		return h.respondError(c, err)
 	}
 	return c.JSON(fiber.Map{"connected": false})
+}
+
+// yougileAccounts — все подключения пользователя: их бывает несколько, а
+// работает интеграция ключом активного.
+func (h *handlers) yougileAccounts(c *fiber.Ctx) error {
+	items, err := h.eps.YougileAccounts(c.Context(), currentUser(c).ID)
+	if err != nil {
+		return h.respondError(c, err)
+	}
+	return c.JSON(fiber.Map{"items": items})
+}
+
+func (h *handlers) yougileSwitchAccount(c *fiber.Ctx) error {
+	id, err := strconv.ParseInt(c.Params("id"), 10, 64)
+	if err != nil {
+		return h.respondError(c, domain.NewError("VALIDATION", "Неверный id подключения", 400))
+	}
+	req := endpoint.YougileAccountRequest{UserID: currentUser(c).ID, AccountID: id}
+	if _, err := h.eps.YougileSwitchAccount(c.Context(), req); err != nil {
+		return h.respondError(c, err)
+	}
+	return c.JSON(fiber.Map{"status": "ok"})
 }
 
 func (h *handlers) yougileRotate(c *fiber.Ctx) error {

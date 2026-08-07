@@ -21,6 +21,7 @@ type Endpoints struct {
 	ReplaceFields  endpoint.Endpoint
 
 	ListEntries   endpoint.Endpoint
+	Agenda        endpoint.Endpoint
 	GetEntry      endpoint.Endpoint
 	CreateEntry   endpoint.Endpoint
 	UpdateEntry   endpoint.Endpoint
@@ -73,6 +74,13 @@ type ListEntriesReq struct {
 	Params     service.EntryListParams
 }
 
+// AgendaReq — ближайшие события всех календарей компании (живая плитка).
+type AgendaReq struct {
+	CompanyID int64
+	From, To  time.Time
+	Limit     int
+}
+
 type EntryReq struct {
 	CompanyID  int64
 	CalendarID int64
@@ -108,9 +116,11 @@ type ExportResp struct {
 }
 
 type UploadReq struct {
-	FileName string
-	Mime     string
-	Data     []byte
+	CompanyID int64
+	UserID    int64
+	FileName  string
+	Mime      string
+	Data      []byte
 }
 
 type ShareReq struct {
@@ -158,6 +168,10 @@ func New(s *service.Service) Endpoints {
 			r := request.(ReplaceFieldsReq)
 			return s.ReplaceFields(ctx, r.CompanyID, r.ID, r.Fields)
 		},
+		Agenda: func(ctx context.Context, request any) (any, error) {
+			r := request.(AgendaReq)
+			return s.Agenda(ctx, r.CompanyID, r.From, r.To, r.Limit)
+		},
 		ListEntries: func(ctx context.Context, request any) (any, error) {
 			r := request.(ListEntriesReq)
 			return s.ListEntries(ctx, r.CompanyID, r.CalendarID, r.Params)
@@ -192,7 +206,7 @@ func New(s *service.Service) Endpoints {
 		},
 		Upload: func(ctx context.Context, request any) (any, error) {
 			r := request.(UploadReq)
-			return s.SaveUpload(r.FileName, r.Mime, r.Data)
+			return s.SaveUpload(ctx, r.CompanyID, r.UserID, r.FileName, r.Mime, r.Data)
 		},
 		ListShares: func(ctx context.Context, request any) (any, error) {
 			r := request.(ShareReq)

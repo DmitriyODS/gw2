@@ -1,7 +1,7 @@
 <template>
   <AppDialog
     :model-value="modelValue"
-    title="Управление тегами" icon="sell" size="md"
+    title="Управление тегами" size="md"
     :actions="[{ kind: 'cancel', label: 'Готово' }]"
     @cancel="close" @update:model-value="(v) => !v && close()"
   >
@@ -37,9 +37,12 @@
         <ColorSwatchPicker v-model="newColor" aria-label="Цвет нового тега" />
         <div class="tm-create-row">
           <input v-model="newName" class="tm-name" maxlength="60" placeholder="Новый тег" />
-          <button class="btn-grad" type="submit" :disabled="!newName.trim() || creating">
-            <span class="material-symbols-outlined">add</span>
-          </button>
+          <AppButton
+            variant="filled"
+            icon="add"
+            type="submit"
+            :disabled="!newName.trim() || creating"
+          />
         </div>
       </form>
     </div>
@@ -58,8 +61,9 @@
 
 <script setup>
 import { ref } from 'vue'
-import AppDialog from '@/components/common/AppDialog.vue'
-import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
+import AppButton from '@/components/ui/AppButton.vue'
+import AppDialog from '@/components/ui/AppDialog.vue'
+import ConfirmDialog from '@/components/ui/ConfirmDialog.vue'
 import ColorSwatchPicker from '@/components/common/ColorSwatchPicker.vue'
 import { useNotesStore } from '@/stores/notes.js'
 import { useNotificationsStore } from '@/stores/notifications.js'
@@ -135,5 +139,5 @@ function close() { emit('update:modelValue', false) }
 .tm-empty { margin: 0; font-size: 13px; color: var(--color-text-dim); }
 .tm-create { flex-shrink: 0; display: flex; flex-direction: column; gap: 10px; margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--color-outline-dim); }
 .tm-create-row { display: flex; gap: 8px; }
-.tm-create-row .btn-grad { width: 44px; padding: 0; display: grid; place-items: center; }
+.tm-create-row :deep(.btn) { width: 44px; padding: 0; justify-content: center; }
 </style>

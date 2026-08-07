@@ -42,25 +42,25 @@ type QuestDTO struct {
 // PetDTO — снапшот питомца. Контекстные поля (feeds_left, phrase, evolved…)
 // добавляются по месту использования.
 type PetDTO struct {
-	UserID           int64           `json:"user_id"`
-	Name             string          `json:"name"`
-	Species          string          `json:"species"`
-	Stage            int             `json:"stage"`
-	XP               int             `json:"xp"`
-	Kudos            int             `json:"kudos"`
-	Hat              *string         `json:"hat"`
-	Accessories      []string        `json:"accessories"`
-	FeedStreak       int             `json:"feed_streak"`
-	FavoriteFood     string          `json:"favorite_food"`
-	LastFedDate      *string         `json:"last_fed_date"`
-	User             *domain.UserRef `json:"user,omitempty"`
-	NextStageXP      *int            `json:"next_stage_xp"`
-	Sick             bool            `json:"sick"`
+	UserID       int64           `json:"user_id"`
+	Name         string          `json:"name"`
+	Species      string          `json:"species"`
+	Stage        int             `json:"stage"`
+	XP           int             `json:"xp"`
+	Kudos        int             `json:"kudos"`
+	Hat          *string         `json:"hat"`
+	Accessories  []string        `json:"accessories"`
+	FeedStreak   int             `json:"feed_streak"`
+	FavoriteFood string          `json:"favorite_food"`
+	LastFedDate  *string         `json:"last_fed_date"`
+	User         *domain.UserRef `json:"user,omitempty"`
+	NextStageXP  *int            `json:"next_stage_xp"`
+	Sick         bool            `json:"sick"`
 	// OnVacation — хозяин (и питомец вместе с ним) в отпуске: показатели
 	// заморожены, действия и поглаживания недоступны.
-	OnVacation bool `json:"on_vacation"`
-	Recovery         int             `json:"recovery"`
-	RecoveryTarget   int             `json:"recovery_target"`
+	OnVacation     bool `json:"on_vacation"`
+	Recovery       int  `json:"recovery"`
+	RecoveryTarget int  `json:"recovery_target"`
 	// Болезнь: вид, подпись и рецепт (nil — питомец здоров).
 	Ailment      *string `json:"ailment"`
 	AilmentTitle *string `json:"ailment_title,omitempty"`
@@ -69,16 +69,16 @@ type PetDTO struct {
 	// только когда пора бить тревогу (RunawayWarnDays).
 	RunawayInDays *int `json:"runaway_in_days,omitempty"`
 	// Потребности и настроение (среднее шкал; множит XP за работу).
-	Needs      domain.NeedValues `json:"needs"`
-	Mood       int               `json:"mood"`
-	MoodTitle  string            `json:"mood_title"`
-	MoodFactor float64           `json:"mood_factor"`
-	Personality      *string         `json:"personality"`
-	PersonalityTitle *string         `json:"personality_title"`
-	UnlockedSpecies  []string        `json:"unlocked_species"`
-	Quest            *QuestDTO       `json:"quest"`
-	AdventureUntil   *string         `json:"adventure_until"`
-	AdventurePlace   *string         `json:"adventure_place"`
+	Needs            domain.NeedValues  `json:"needs"`
+	Mood             int                `json:"mood"`
+	MoodTitle        string             `json:"mood_title"`
+	MoodFactor       float64            `json:"mood_factor"`
+	Personality      *string            `json:"personality"`
+	PersonalityTitle *string            `json:"personality_title"`
+	UnlockedSpecies  []string           `json:"unlocked_species"`
+	Quest            *QuestDTO          `json:"quest"`
+	AdventureUntil   *string            `json:"adventure_until"`
+	AdventurePlace   *string            `json:"adventure_place"`
 	Generation       int                `json:"generation"`
 	HouseOwned       []string           `json:"house_owned"`
 	HousePlaced      []domain.HouseItem `json:"house_placed"`
@@ -415,8 +415,8 @@ type CreditDTO struct {
 	Score       int            `json:"score"`
 	Tier        CreditTierDTO  `json:"tier"`
 	NextTier    *CreditTierDTO `json:"next_tier,omitempty"`
-	FeePct      int            `json:"fee_pct"`   // = tier.fee_pct (удобство фронта)
-	LoanMax     int            `json:"loan_max"`  // = tier.loan_max
+	FeePct      int            `json:"fee_pct"`  // = tier.fee_pct (удобство фронта)
+	LoanMax     int            `json:"loan_max"` // = tier.loan_max
 	CashbackPct int            `json:"cashback_pct"`
 	GraceDays   int            `json:"grace_days"`
 	LoanDueAt   *string        `json:"loan_due_at,omitempty"` // срок текущего кредита
@@ -530,9 +530,9 @@ type BankKindStatDTO struct {
 
 // BankStatsDTO — статистика банка за последние BankStatsDays дней.
 type BankStatsDTO struct {
-	Days     int                `json:"days"`
-	Daily    []*BankDayStatDTO  `json:"daily"`
-	ByKind   []*BankKindStatDTO `json:"by_kind"`
+	Days   int                `json:"days"`
+	Daily  []*BankDayStatDTO  `json:"daily"`
+	ByKind []*BankKindStatDTO `json:"by_kind"`
 }
 
 func NewBankStats(daily []domain.BankDayStat, kinds []domain.BankKindStat) *BankStatsDTO {
@@ -596,20 +596,20 @@ func NewInstallments(items []*domain.Installment, used int) *InstallmentsDTO {
 
 // BankDTO — сводка кудо-банка владельца.
 type BankDTO struct {
-	Kudos             int           `json:"kudos"`
-	Savings           int           `json:"savings"`
-	Loan              int           `json:"loan"`
-	Earned            int           `json:"earned"` // заработано за всё время — прогресс уровня
-	Tier              BankTierDTO   `json:"tier"`
-	NextTier          *BankTierDTO  `json:"next_tier,omitempty"`
-	Credit            CreditDTO     `json:"credit"` // кредитный рейтинг и условия
-	TransferLeftToday int           `json:"transfer_left_today"`
-	MonthIn           int           `json:"month_in"`
-	MonthOut          int           `json:"month_out"`
+	Kudos             int            `json:"kudos"`
+	Savings           int            `json:"savings"`
+	Loan              int            `json:"loan"`
+	Earned            int            `json:"earned"` // заработано за всё время — прогресс уровня
+	Tier              BankTierDTO    `json:"tier"`
+	NextTier          *BankTierDTO   `json:"next_tier,omitempty"`
+	Credit            CreditDTO      `json:"credit"` // кредитный рейтинг и условия
+	TransferLeftToday int            `json:"transfer_left_today"`
+	MonthIn           int            `json:"month_in"`
+	MonthOut          int            `json:"month_out"`
 	TopGenerous       []*GenerousDTO `json:"top_generous"`
-	Goals             []*GoalDTO    `json:"goals"`
-	GoalsMax          int           `json:"goals_max"`
-	Funds             []*FundDTO    `json:"funds"`
+	Goals             []*GoalDTO     `json:"goals"`
+	GoalsMax          int            `json:"goals_max"`
+	Funds             []*FundDTO     `json:"funds"`
 	// InterestPaid — разовое: проценты, начисленные при этом обращении.
 	InterestPaid *int `json:"interest_paid,omitempty"`
 	// LoanCashback — разовое: кэшбэк, начисленный за возврат кредита в срок.

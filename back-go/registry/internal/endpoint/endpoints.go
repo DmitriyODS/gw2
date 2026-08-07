@@ -20,6 +20,7 @@ type Endpoints struct {
 	ReplaceFields  endpoint.Endpoint
 
 	ListRecords   endpoint.Endpoint
+	SearchRecords endpoint.Endpoint
 	GetRecord     endpoint.Endpoint
 	CreateRecord  endpoint.Endpoint
 	UpdateRecord  endpoint.Endpoint
@@ -66,6 +67,13 @@ type ReplaceFieldsReq struct {
 	Fields    []domain.Field
 }
 
+// SearchRecordsReq — глобальный поиск рабочего стола по записям компании.
+type SearchRecordsReq struct {
+	CompanyID int64
+	Query     string
+	Limit     int
+}
+
 type ListRecordsReq struct {
 	CompanyID  int64
 	RegistryID int64
@@ -106,9 +114,11 @@ type ExportResp struct {
 }
 
 type UploadReq struct {
-	FileName string
-	Mime     string
-	Data     []byte
+	CompanyID int64
+	UserID    int64
+	FileName  string
+	Mime      string
+	Data      []byte
 }
 
 type ShareReq struct {
@@ -156,6 +166,10 @@ func New(s *service.Service) Endpoints {
 			r := request.(ReplaceFieldsReq)
 			return s.ReplaceFields(ctx, r.CompanyID, r.ID, r.Fields)
 		},
+		SearchRecords: func(ctx context.Context, request any) (any, error) {
+			r := request.(SearchRecordsReq)
+			return s.SearchRecords(ctx, r.CompanyID, r.Query, r.Limit)
+		},
 		ListRecords: func(ctx context.Context, request any) (any, error) {
 			r := request.(ListRecordsReq)
 			return s.ListRecords(ctx, r.CompanyID, r.RegistryID, r.Params)
@@ -190,7 +204,7 @@ func New(s *service.Service) Endpoints {
 		},
 		Upload: func(ctx context.Context, request any) (any, error) {
 			r := request.(UploadReq)
-			return s.SaveUpload(r.FileName, r.Mime, r.Data)
+			return s.SaveUpload(ctx, r.CompanyID, r.UserID, r.FileName, r.Mime, r.Data)
 		},
 		ListShares: func(ctx context.Context, request any) (any, error) {
 			r := request.(ShareReq)

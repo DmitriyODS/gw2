@@ -1,9 +1,6 @@
 <template>
   <div class="cd-screen">
     <div class="cd-card">
-      <div class="cd-icon">
-        <span class="material-symbols-outlined">domain_disabled</span>
-      </div>
       <h1 class="cd-title">Компания отключена</h1>
       <p class="cd-desc">
         <template v-if="companyName && typeof companyName === 'string'">
@@ -65,19 +62,6 @@ function onContactSupport() {
   text-align: center;
   box-shadow: var(--shadow-lg);
 }
-
-.cd-icon {
-  width: 96px;
-  height: 96px;
-  margin: 0 auto 20px;
-  border-radius: 50%;
-  display: grid;
-  place-items: center;
-  background: var(--color-error-container);
-  color: var(--color-on-error-container);
-}
-
-.cd-icon .material-symbols-outlined { font-size: 48px; }
 
 .cd-title {
   font-size: 24px;

@@ -2,7 +2,6 @@
   <AppDialog
     model-value
     tone="primary"
-    :icon="task ? 'edit' : 'add_task'"
     size="md"
     mobile="sheet"
     :title="task ? 'Редактировать задачу' : 'Новая задача'"
@@ -88,9 +87,11 @@
         <label class="form-label">Заказчик (отдел) <span class="required">*</span></label>
         <Select
           v-model="form.department_id"
-          :options="departments"
+          :options="departmentGroups"
           option-label="name"
           option-value="id"
+          option-group-label="label"
+          option-group-children="items"
           placeholder="Выберите отдел"
           class="w-full"
           :invalid="!!errors.department_id"
@@ -172,13 +173,15 @@
 
 <script setup>
 import { ref, computed, watch, onMounted } from 'vue'
-import AppDialog from '@/components/common/AppDialog.vue'
+import AppDialog from '@/components/ui/AppDialog.vue'
 import InputText from 'primevue/inputtext'
 import Select from 'primevue/select'
 import DatePicker from 'primevue/datepicker'
 import Checkbox from 'primevue/checkbox'
 import { createTask, updateTask, setTaskTags } from '@/api/tasks.js'
+import { logActivity } from '@/utils/activityLog.js'
 import { getDepartments } from '@/api/departments.js'
+import { rememberPick, splitByFrequency } from '@/utils/recentPicks.js'
 import { getUnitTypes } from '@/api/unitTypes.js'
 import { createUnit } from '@/api/units.js'
 import { getStages } from '@/api/stages.js'
@@ -218,6 +221,19 @@ const yougileAvailable = computed(() => yougileStore.isAvailable)
 const alsoExportToYg = ref(false)
 
 const departments = ref([])
+
+/* Заказчики (отделы): те, кого выбирают чаще, поднимаются наверх — алфавит
+   в длинном справочнике заставляет каждый раз искать одни и те же два-три
+   значения. Частота считается локально по фактическим сохранениям задач. */
+const departmentGroups = computed(() => {
+  const { frequent, rest } = splitByFrequency(departments.value, {
+    kind: 'department', scope: auth.companyId,
+  })
+  const groups = []
+  if (frequent.length) groups.push({ label: 'Часто выбираете', items: frequent })
+  groups.push({ label: frequent.length ? 'Все отделы' : 'Отделы', items: rest })
+  return groups
+})
 const depsLoading = ref(false)
 const submitting = ref(false)
 const serverError = ref('')
@@ -422,6 +438,9 @@ async function handleSubmit() {
       stage_id: usesStages.value ? (form.value.stage_id ?? null) : null,
     }
 
+    // Запоминаем заказчика: следующий раз он будет наверху списка.
+    rememberPick('department', auth.companyId, form.value.department_id)
+
     let result
     if (props.task) {
       result = await updateTask(props.task.id, payload)
@@ -454,6 +473,9 @@ async function handleSubmit() {
         }
       } else {
         notifications.success('Задача успешно создана')
+      }
+      if (result?.id) {
+        logActivity({ section: 'tasks', id: result.id, title: result.name, path: `/tasks/${result.id}` })
       }
     }
 

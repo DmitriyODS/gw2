@@ -3,7 +3,6 @@
     :model-value="modelValue"
     title="Настройки табло"
     subtitle="Применяются сразу и запоминаются на этом устройстве"
-    icon="tune"
     tone="primary"
     size="md"
     :actions="[{ kind: 'cancel', label: 'Готово' }]"
@@ -63,7 +62,7 @@
 // дня. Хранятся в localStorage (пишет TvView), применяются без перезагрузки.
 import Checkbox from 'primevue/checkbox'
 import Slider from 'primevue/slider'
-import AppDialog from '@/components/common/AppDialog.vue'
+import AppDialog from '@/components/ui/AppDialog.vue'
 
 const props = defineProps({
   modelValue: { type: Boolean, default: false },

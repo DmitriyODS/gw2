@@ -1,10 +1,8 @@
 <template>
   <Teleport to="body">
-    <Transition name="return-banner">
+    <!-- appear: монтируется вместе с предложением вернуться (ленивый чанк). -->
+    <Transition name="return-banner" appear>
       <div v-if="call" class="return-banner" role="alertdialog" aria-label="Незавершённый звонок">
-        <div class="rb-icon">
-          <span class="material-symbols-outlined">{{ isVideo ? 'videocam' : 'call' }}</span>
-        </div>
         <div class="rb-body">
           <div class="rb-title">Незавершённый {{ isVideo ? 'видеозвонок' : 'звонок' }}</div>
           <div class="rb-sub">Вы всё ещё в звонке — можно вернуться</div>
@@ -55,20 +53,6 @@ const isVideo = computed(() => (call.value?.media || 'video') === 'video')
   box-shadow: var(--glass-edge), var(--shadow-lg);
 }
 
-.rb-icon {
-  width: 42px;
-  height: 42px;
-  flex-shrink: 0;
-  border-radius: 50%;
-  display: grid;
-  place-items: center;
-  background: var(--color-primary-container);
-  color: var(--color-on-primary-container);
-  animation: rbPulse 1.8s ease-in-out infinite;
-}
-
-.rb-icon .material-symbols-outlined { font-size: 22px; }
-
 @keyframes rbPulse {
   0%, 100% { box-shadow: 0 0 0 0 color-mix(in oklch, var(--color-primary) 45%, transparent); }
   50%      { box-shadow: 0 0 0 8px color-mix(in oklch, var(--color-primary) 0%, transparent); }
@@ -114,7 +98,7 @@ const isVideo = computed(() => (call.value?.media || 'video') === 'video')
   transition: transform 0.12s, filter 0.15s;
 }
 
-.rb-btn:hover { transform: translateY(-1px); }
+.rb-btn:hover { filter: brightness(1.08); }
 .rb-btn:active { transform: translateY(0); }
 .rb-btn .material-symbols-outlined { font-size: 18px; }
 

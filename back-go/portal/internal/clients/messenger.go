@@ -6,6 +6,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"time"
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
@@ -13,6 +14,10 @@ import (
 	"github.com/DmitriyODS/gw2/back-go/pkg/gen/messengerpb"
 	"github.com/DmitriyODS/gw2/back-go/portal/internal/domain"
 )
+
+// messengerTimeout — пользователь ждёт пересылку поста синхронно: без потолка
+// зависший msgsvc вешал бы этот запрос навсегда.
+const messengerTimeout = 5 * time.Second
 
 // Messenger — клиент msgsvc: пересылка поста как плашки kind='post' в
 // диалоге. Бизнес-ошибка приходит полем error в ответе (транспорт всегда OK).
@@ -42,6 +47,8 @@ func bizErr(code, message string) error {
 // EnsureDialog — найти/создать парный диалог (пересылка по user_ids, когда
 // диалога ещё нет).
 func (c *Messenger) EnsureDialog(ctx context.Context, userAID, userBID int64) (int64, error) {
+	ctx, cancel := context.WithTimeout(ctx, messengerTimeout)
+	defer cancel()
 	resp, err := c.stub.EnsureDialog(ctx, &messengerpb.EnsureDialogRequest{
 		UserAId: userAID, UserBId: userBID,
 	})
@@ -57,10 +64,13 @@ func (c *Messenger) EnsureDialog(ctx context.Context, userAID, userBID int64) (i
 // CreatePostMessage — системная плашка пересланного поста в диалоге.
 // Возвращает готовый JSON-снапшот сообщения (форма REST msgsvc) и адресатов
 // message:new.
-func (c *Messenger) CreatePostMessage(ctx context.Context, conversationID, senderID, postID int64, preview domain.PostPreview) (string, []int64, error) {
+func (c *Messenger) CreatePostMessage(ctx context.Context, conversationID, senderID, postID, companyID int64, preview domain.PostPreview) (string, []int64, error) {
+	ctx, cancel := context.WithTimeout(ctx, messengerTimeout)
+	defer cancel()
 	resp, err := c.stub.CreatePostMessage(ctx, &messengerpb.CreatePostMessageRequest{
 		ConversationId: conversationID, SenderId: senderID, PostId: postID,
 		Title: preview.Title, Excerpt: preview.Excerpt, CoverUrl: preview.CoverURL,
+		CompanyId: companyID,
 	})
 	if err != nil {
 		return "", nil, err

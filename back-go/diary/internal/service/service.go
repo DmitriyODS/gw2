@@ -10,6 +10,8 @@ import (
 	"strconv"
 
 	"github.com/DmitriyODS/gw2/back-go/diary/internal/domain"
+
+	"github.com/DmitriyODS/gw2/back-go/pkg/billingclient"
 )
 
 type Service struct {
@@ -17,6 +19,8 @@ type Service struct {
 	users domain.UserReader
 	bus   domain.EventBus
 	log   *slog.Logger
+	// billing — лимиты тарифа (WithBilling; nil — ограничений нет).
+	billing *billingclient.Client
 }
 
 type Deps struct {

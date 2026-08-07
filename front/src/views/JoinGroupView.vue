@@ -1,39 +1,38 @@
 <template>
-  <div class="jg-page">
-    <div class="jg-card">
-      <Logo :size="56" class="jg-logo" />
-      <template v-if="loading">
-        <div class="jg-spinner" />
-        <p class="jg-text">Загружаем группу…</p>
-      </template>
+  <AuthShell :title="title" :subtitle="subtitle" size="sm">
+    <div class="jg">
+      <BrandLoader v-if="loading" :size="64" />
+
       <template v-else-if="preview">
         <div class="jg-avatar">
           <img v-if="preview.avatar_path" :src="`/uploads/${preview.avatar_path}`" alt="" />
           <span v-else class="material-symbols-outlined">groups</span>
         </div>
-        <h1 class="jg-title">{{ preview.title }}</h1>
-        <p class="jg-sub">{{ preview.member_count }} участник{{ plural(preview.member_count) }}</p>
-        <button class="jg-btn" :disabled="joining" @click="join">
-          <span class="material-symbols-outlined">login</span>
-          {{ joining ? 'Вступаем…' : 'Вступить в группу' }}
-        </button>
-        <router-link to="/messenger" class="jg-link">Не сейчас</router-link>
+        <AppButton variant="filled" class="jg-wide" :disabled="joining" @click="join">{{ joining ? 'вступаем…' : 'вступить в группу' }}</AppButton>
+        <RouterLink to="/messenger" class="jg-later">не сейчас</RouterLink>
       </template>
+
       <template v-else>
-        <span class="material-symbols-outlined jg-icon">error</span>
-        <p class="jg-text">{{ error }}</p>
-        <router-link to="/messenger" class="jg-btn">К сообщениям</router-link>
+        <AppButton
+          tag="router-link"
+          to="/messenger"
+          variant="filled"
+          label="к сообщениям"
+          class="jg-wide"
+        />
       </template>
     </div>
-  </div>
+  </AuthShell>
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
+import AppButton from '@/components/ui/AppButton.vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useMessengerStore } from '@/stores/messenger.js'
 import { groupInvitePreview } from '@/api/messenger.js'
-import Logo from '@/components/common/Logo.vue'
+import AuthShell from '@/components/auth/AuthShell.vue'
+import BrandLoader from '@/components/common/BrandLoader.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -50,6 +49,17 @@ function plural(n) {
   if (d >= 2 && d <= 4 && (dd < 10 || dd >= 20)) return 'а'
   return 'ов'
 }
+
+const title = computed(() => {
+  if (loading.value) return 'загружаем группу'
+  return preview.value ? preview.value.title : 'ссылка не работает'
+})
+
+const subtitle = computed(() => {
+  if (loading.value) return ''
+  if (!preview.value) return error.value || 'Ссылка недействительна или отозвана'
+  return `${preview.value.member_count} участник${plural(preview.value.member_count)}`
+})
 
 onMounted(async () => {
   try {
@@ -76,31 +86,40 @@ async function join() {
 </script>
 
 <style scoped>
-.jg-page { position: fixed; inset: 0; display: grid; place-items: center; background: var(--color-surface-low, var(--color-surface)); padding: 24px; }
-.jg-card {
-  display: flex; flex-direction: column; align-items: center; gap: 14px; padding: 40px 32px;
-  border-radius: var(--radius-xl, 20px); background: var(--acrylic-card-bg);
-  -webkit-backdrop-filter: var(--acrylic-blur); backdrop-filter: var(--acrylic-blur);
-  border: 1px solid var(--acrylic-border); box-shadow: var(--shadow-lg); max-width: 360px; text-align: center;
+.jg {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
 }
-.jg-logo { opacity: 0.9; }
+
 .jg-avatar {
-  width: 80px; height: 80px; border-radius: 50%; overflow: hidden; display: grid; place-items: center;
-  background: var(--color-primary-container); color: var(--color-on-primary-container);
+  width: 80px;
+  height: 80px;
+  border-radius: 50%;
+  overflow: hidden;
+  display: grid;
+  place-items: center;
+  background: var(--color-primary-container);
+  color: var(--color-on-primary-container);
 }
+
 .jg-avatar img { width: 100%; height: 100%; object-fit: cover; }
 .jg-avatar .material-symbols-outlined { font-size: 40px; font-variation-settings: 'FILL' 1; }
-.jg-title { margin: 0; font-size: 20px; font-weight: 700; color: var(--color-text); }
-.jg-sub { margin: 0; font-size: 14px; color: var(--color-text-dim); }
-.jg-text { margin: 0; font-size: 15px; color: var(--color-text); }
-.jg-icon { font-size: 48px; color: var(--color-error); }
-.jg-spinner { width: 36px; height: 36px; border-radius: 50%; border: 3px solid var(--color-outline-dim); border-top-color: var(--color-primary); animation: jg-spin 0.8s linear infinite; }
-@keyframes jg-spin { to { transform: rotate(360deg); } }
-.jg-btn {
-  display: inline-flex; align-items: center; gap: 8px; padding: 12px 22px; border: none; border-radius: 999px;
-  background: var(--color-primary); color: var(--color-on-primary); text-decoration: none; font-weight: 600; font-size: 15px; cursor: pointer;
+
+.jg-wide {
+  width: 100%;
+  justify-content: center;
+  height: 44px;
+  text-decoration: none;
 }
-.jg-btn:disabled { opacity: 0.6; cursor: default; }
-.jg-btn .material-symbols-outlined { font-size: 20px; }
-.jg-link { color: var(--color-text-dim); text-decoration: none; font-size: 14px; }
+
+.jg-later {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--color-text-dim);
+  text-decoration: none;
+}
+
+.jg-later:hover { color: var(--color-primary); }
 </style>

@@ -201,10 +201,11 @@ func (y *Yougile) Connect(ctx context.Context, user *domain.User, login, passwor
 	}, nil
 }
 
-// Disconnect — отозвать ключ в YG и удалить локальную привязку. Отзыв
-// best-effort: пользователь должен отвязаться, даже если YG недоступен.
-func (y *Yougile) Disconnect(ctx context.Context, userID int64) error {
-	acc, err := y.repo.GetYougileAccount(ctx, userID)
+/* Disconnect — отозвать ключ в YG и удалить привязку. accountID = 0 означает
+   активную: у человека бывает несколько подключений, и отключать надо именно
+   выбранное. Отзыв ключа best-effort: отвязаться нужно даже при недоступном YG. */
+func (y *Yougile) Disconnect(ctx context.Context, userID, accountID int64) error {
+	acc, err := y.accountOf(ctx, userID, accountID)
 	if err != nil {
 		return err
 	}
@@ -220,11 +221,54 @@ func (y *Yougile) Disconnect(ctx context.Context, userID int64) error {
 			y.log.Warn("yougile.revoke_failed", "user_id", userID, "error", err)
 		}
 	}
-	if err := y.repo.DeleteYougileAccount(ctx, userID); err != nil {
+	if err := y.repo.DeleteYougileAccount(ctx, userID, acc.ID); err != nil {
 		return err
 	}
-	y.log.Info("yougile.disconnected", "user_id", userID)
+	y.log.Info("yougile.disconnected", "user_id", userID, "account_id", acc.ID)
 	return nil
+}
+
+// accountOf — подключение по id либо активное (accountID = 0).
+func (y *Yougile) accountOf(ctx context.Context, userID, accountID int64) (*domain.YougileAccount, error) {
+	if accountID == 0 {
+		return y.repo.GetYougileAccount(ctx, userID)
+	}
+	list, err := y.repo.ListYougileAccounts(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	for _, a := range list {
+		if a.ID == accountID {
+			return a, nil
+		}
+	}
+	return nil, nil
+}
+
+// Accounts — все подключения пользователя (карточка «Аккаунт»).
+func (y *Yougile) Accounts(ctx context.Context, userID int64) ([]dto.YougileAccountItem, error) {
+	list, err := y.repo.ListYougileAccounts(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]dto.YougileAccountItem, 0, len(list))
+	for _, a := range list {
+		item := dto.YougileAccountItem{
+			ID: a.ID, YgCompanyID: a.YgCompanyID, YgLogin: a.YgLogin,
+			KeyFingerprint: a.KeyFingerprint, IsActive: a.IsActive,
+		}
+		if a.LastValidatedAt != nil {
+			t := dto.JSONTime(*a.LastValidatedAt)
+			item.LastValidatedAt = &t
+		}
+		out = append(out, item)
+	}
+	return out, nil
+}
+
+// SwitchAccount — работать ключом другого подключения.
+func (y *Yougile) SwitchAccount(ctx context.Context, userID, accountID int64) error {
+	return y.repo.SetActiveYougileAccount(ctx, userID, accountID)
 }
 
 // Rotate — перевыпустить ключ. Принципиально требуем пароль повторно.

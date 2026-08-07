@@ -23,11 +23,16 @@ describe('assistant store', () => {
     assistant = useAssistantStore()
   })
 
-  it('без активной компании fetchHistory не дёргает API и ставит unavailable', async () => {
+  // Ассистент подключён к пользователю, а не к компании: без активной компании
+  // он полноценно работает — история грузится, как обычно.
+  it('без активной компании fetchHistory всё равно грузит историю', async () => {
+    api.getAssistantHistory.mockResolvedValue([
+      { id: 1, role: 'user', text: 'привет', created_at: '2026-07-07T10:00:00Z' },
+    ])
     await assistant.fetchHistory()
-    expect(api.getAssistantHistory).not.toHaveBeenCalled()
-    expect(assistant.unavailable).toBe(true)
-    expect(assistant.messages).toEqual([])
+    expect(api.getAssistantHistory).toHaveBeenCalled()
+    expect(assistant.messages.map(m => m.id)).toEqual([1])
+    expect(assistant.disabled).toBe(false)
   })
 
   it('fetchHistory разворачивает историю (новые→старые) в старые→новые', async () => {
@@ -40,7 +45,7 @@ describe('assistant store', () => {
     await assistant.fetchHistory()
     expect(assistant.messages.map(m => m.id)).toEqual([1, 2, 3])
     expect(assistant.loaded).toBe(true)
-    expect(assistant.unavailable).toBe(false)
+    expect(assistant.disabled).toBe(false)
   })
 
   it('fetchHistory нормализует sources и наполняет myFeedback из my_feedback', async () => {
@@ -125,7 +130,6 @@ describe('assistant store', () => {
     expect(assistant.messages).toEqual([])
     expect(assistant.error).toBe('Сервер недоступен')
     expect(assistant.disabled).toBe(false)
-    expect(assistant.unavailable).toBe(false)
   })
 
   it('send игнорирует пустой текст и параллельные отправки', async () => {

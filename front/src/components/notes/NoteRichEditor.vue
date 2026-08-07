@@ -1,5 +1,5 @@
 <template>
-  <div class="ne" :class="{ readonly: !editable }">
+  <div ref="rootEl" class="ne" :class="{ readonly: !editable }">
     <!-- Sticky-панель форматирования (правило sticky-шапок: плотное стекло) -->
     <div v-if="editable" class="ne-toolbar">
       <!-- Действия с выделенным (ИИ/создать/в чат/копировать): постоянная
@@ -183,12 +183,15 @@
 // документ — TipTap JSON (не markdown: highlight-цвета и таблицы в md не
 // выражаются). Переиспользуется страницей заметки и публичной ссылкой
 // (view — editable:false без панели; edit по ссылке — без загрузки картинок).
-import { onBeforeUnmount, ref, watch } from 'vue'
+import { onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { EditorContent, useEditor } from '@tiptap/vue-3'
 import StarterKit from '@tiptap/starter-kit'
 import Underline from '@tiptap/extension-underline'
 import Link from '@tiptap/extension-link'
+import { clipboardLink } from '@/utils/pasteLink.js'
 import { ResizableImage } from './ResizableImage.js'
+import { LineGutter } from './LineGutter.js'
+import { LineNumbers } from './LineNumbers.js'
 import Table from '@tiptap/extension-table'
 import TableRow from '@tiptap/extension-table-row'
 import TableCell from '@tiptap/extension-table-cell'
@@ -196,7 +199,6 @@ import TableHeader from '@tiptap/extension-table-header'
 import Highlight from '@tiptap/extension-highlight'
 import TaskList from '@tiptap/extension-task-list'
 import TaskItem from '@tiptap/extension-task-item'
-import Placeholder from '@tiptap/extension-placeholder'
 import { TASK_COLORS } from '@/utils/taskColors.js'
 import { proofread as apiProofread, transformText } from '@/api/ai.js'
 import { useNotificationsStore } from '@/stores/notifications.js'
@@ -206,7 +208,6 @@ const props = defineProps({
   // ввод — наружу уходит событие change, родитель сам решает, когда сохранять.
   doc: { type: Object, default: null },
   editable: { type: Boolean, default: true },
-  placeholder: { type: String, default: 'Начните писать…' },
   // async (file) => url — загрузка картинки; null скрывает кнопку (публичная
   // edit-ссылка: аплоад доступен только владельцу).
   uploadImage: { type: Function, default: null },
@@ -246,10 +247,25 @@ const editor = useEditor({
     Highlight.configure({ multicolor: true }),
     TaskList,
     TaskItem.configure({ nested: true }),
-    Placeholder.configure({ placeholder: props.placeholder }),
+    // Поле выделения слева от строки: клик выделяет строку целиком, протяжка —
+    // несколько (как в Word).
+    LineGutter,
+    // Номера строк в том же поле.
+    LineNumbers,
   ],
   onUpdate: ({ editor: ed }) => emit('change', ed.getJSON()),
   onBlur: () => emit('blur'),
+  editorProps: {
+    /* Адрес из буфера поверх выделенного текста делает его ссылкой, а не
+       заменяет: привычка из редакторов. Пустое выделение и обычный текст
+       вставляются как всегда — возвращаем false, дальше работает TipTap. */
+    handlePaste: (view, event) => {
+      const href = clipboardLink(event.clipboardData?.getData('text/plain'))
+      if (!href || view.state.selection.empty) return false
+      editor.value?.chain().focus().extendMarkRange('link').setLink({ href }).run()
+      return true
+    },
+  },
 })
 
 // Смена editable (публичная ссылка узнаёт режим после загрузки).
@@ -264,6 +280,28 @@ watch(() => props.doc, (doc) => {
 })
 
 onBeforeUnmount(() => editor.value?.destroy())
+
+/* «Прокрутка за конец текста» (как в Sublime Text): под последней строкой
+   остаётся пустое поле в половину видимой области — последняя строка доходит
+   до середины окна, а не упирается в его низ. Хвост считаем от высоты
+   прокручиваемой области (root), поэтому он верен и в маленьком окне. */
+const rootEl = ref(null)
+let tailObserver = null
+
+function syncTail() {
+  const el = rootEl.value
+  if (!el) return
+  const tail = Math.min(Math.max(Math.round(el.clientHeight * 0.5), 80), 600)
+  el.style.setProperty('--ne-tail', `${tail}px`)
+}
+
+onMounted(() => {
+  syncTail()
+  tailObserver = new ResizeObserver(syncTail)
+  if (rootEl.value) tailObserver.observe(rootEl.value)
+})
+
+onBeforeUnmount(() => tailObserver?.disconnect())
 
 function chain() { return editor.value?.chain().focus() }
 
@@ -490,10 +528,55 @@ defineExpose({ editor })
 
 /* Содержимое */
 .ne-content { flex: 1; min-height: 0; }
+
+/* Поле выделения слева: пока указатель в нём, курсор — стрелка выбора, а
+   строка под ним подсвечена (иначе о поле никто не догадается). */
+.ne-content :deep(.tiptap.ne-gutter-zone) { cursor: default; }
+
+/* Номера строк: сам номер — ::before блока, поэтому он не попадает ни в
+   выделение, ни в копирование, ни в выгрузку. Правое выравнивание держит
+   колонку ровной при переходе через десяток. */
+.ne-content :deep(.tiptap .ne-numbered) { position: relative; }
+
+/* Номер прижат к левому краю текста (right: 100%), а не поставлен в колонку
+   фиксированной ширины: так он сам растёт влево на сотых строках и не диктует
+   ширину поля — поле осталось узким, что особенно заметно на телефоне. */
+.ne-content :deep(.tiptap .ne-numbered)::before {
+  content: attr(data-line);
+  position: absolute;
+  right: 100%;
+  margin-right: 7px;
+  color: var(--color-text-dim);
+  opacity: 0.6;
+  font-size: 13px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  line-height: inherit;
+  user-select: none;
+  pointer-events: none;
+}
+
+/* У заголовков строка выше — номер прижимаем к первой строке текста. */
+.ne-content :deep(.tiptap h1.ne-numbered)::before,
+.ne-content :deep(.tiptap h2.ne-numbered)::before,
+.ne-content :deep(.tiptap h3.ne-numbered)::before {
+  top: 0.35em;
+  line-height: 1.4;
+}
+
+.ne-content :deep(.ne-line-hover) {
+  background: color-mix(in oklch, var(--color-primary) 12%, transparent);
+  border-radius: 4px;
+}
 .ne-content :deep(.tiptap) {
   outline: none;
   min-height: 240px;
-  padding: 20px 18px 40px;
+  /* Нижний отступ — «прокрутка за конец текста»: величину задаёт --ne-tail
+     (половина видимой области), fallback — на случай, если замер не сработал. */
+  /* Левое поле шире правого: это зона выделения строк (LineGutter.js) и место
+     под номера. Её ширину плагин читает из padding-left, поэтому менять её
+     достаточно здесь. */
+  padding: 20px 18px var(--ne-tail, 40vh) var(--ne-gutter, 26px);
   color: var(--color-text);
   font-size: 15px;
   line-height: 1.65;
@@ -557,19 +640,14 @@ defineExpose({ editor })
 .ne-content :deep(.tiptap ul[data-type='taskList'] input) { accent-color: var(--color-primary); margin-top: 5px; }
 .ne-content :deep(.tiptap ul[data-type='taskList'] li > div) { flex: 1; min-width: 0; }
 
-/* Плейсхолдер пустого документа */
-.ne-content :deep(.tiptap p.is-editor-empty:first-child::before) {
-  content: attr(data-placeholder);
-  float: left;
-  height: 0;
-  pointer-events: none;
-  color: var(--color-text-dim);
-  opacity: 0.7;
-}
-
 @media (max-width: 768px) {
   /* Панель — одна строка с горизонтальным скроллом. */
   .ne-toolbar { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; }
   .ne-toolbar::-webkit-scrollbar { display: none; }
+
+  /* Экран узкий — поле под номера ужимаем до самих цифр: каждый пиксель
+     ширины здесь идёт тексту. */
+  .ne-content :deep(.tiptap) { --ne-gutter: 20px; padding-right: 12px; }
+  .ne-content :deep(.tiptap .ne-numbered)::before { margin-right: 5px; }
 }
 </style>

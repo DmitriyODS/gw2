@@ -2,6 +2,7 @@ package domain
 
 import (
 	"encoding/json"
+	"strings"
 	"testing"
 )
 
@@ -45,6 +46,38 @@ func TestDocFileKeys(t *testing.T) {
 	keys := DocFileKeys(doc)
 	if len(keys) != 2 || keys[0] != "notes/a.png" || keys[1] != "notes/b.jpg" {
 		t.Fatalf("DocFileKeys: %v", keys)
+	}
+}
+
+/* Удаление картинки из раздела «Настройки → Хранилище» вырезает узел из
+   документа: иначе на её месте осталась бы битая картинка. Остальное дерево
+   обязано уцелеть вместе с полями, которых проекция docNode не знает. */
+func TestDocWithoutFiles(t *testing.T) {
+	doc := json.RawMessage(`{"type":"doc","content":[
+		{"type":"image","attrs":{"src":"/uploads/notes/a.png"}},
+		{"type":"paragraph","content":[
+			{"type":"text","text":"текст","marks":[{"type":"bold"}]},
+			{"type":"image","attrs":{"src":"/uploads/notes/b.jpg"}}
+		]}
+	]}`)
+
+	out, changed := DocWithoutFiles(doc, []string{"notes/a.png"})
+	if !changed {
+		t.Fatal("документ должен был измениться")
+	}
+	if keys := DocFileKeys(out); len(keys) != 1 || keys[0] != "notes/b.jpg" {
+		t.Fatalf("осталось не то: %v", keys)
+	}
+	if DocText(out) != "текст" {
+		t.Fatalf("текст потерян: %q", DocText(out))
+	}
+	// Незнакомые проекции поля (marks) обязаны пережить пересборку.
+	if !strings.Contains(string(out), `"bold"`) {
+		t.Fatalf("оформление потеряно: %s", out)
+	}
+
+	if _, changed := DocWithoutFiles(doc, []string{"notes/нет-такого.png"}); changed {
+		t.Fatal("чужой ключ не должен трогать документ")
 	}
 }
 

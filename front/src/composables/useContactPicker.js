@@ -9,11 +9,17 @@ import { useMessengerStore } from '@/stores/messenger.js'
 //   • по умолчанию и при поиске по ФИО — только те, с кем УЖЕ есть диалог;
 //   • нового человека можно найти только глобальным поиском по ЛОГИНУ.
 // Так список не превращается в каталог всех пользователей платформы.
-export function useContactPicker() {
+//
+// companyOnly — режим для КОМПАНИЙНЫХ сущностей (задача): получатели берутся из
+// каталога активной компании, а глобальный поиск по логину выключен — делиться
+// такими вещами можно только внутри их компании (тот же гард стоит на бэкенде).
+export function useContactPicker({ companyOnly = false } = {}) {
   const messenger = useMessengerStore()
   const q = ref('')
   const results = ref([])
   const loading = ref(false)
+  // Каталог компании: тянем один раз на открытие модалки, фильтруем локально.
+  let companyList = []
   let debounceTimer = null
   let seq = 0
 
@@ -41,6 +47,12 @@ export function useContactPicker() {
 
   async function run() {
     const query = q.value.trim()
+    // Каталог компании уже в памяти — фильтруем без запросов.
+    if (companyOnly) {
+      results.value = query ? localFilter(companyList, query) : companyList
+      loading.value = false
+      return
+    }
     const mySeq = ++seq
     const base = baseContacts()
     if (!query) {
@@ -72,6 +84,13 @@ export function useContactPicker() {
     q.value = ''
     seq++
     loading.value = false
+    if (companyOnly) {
+      loading.value = true
+      try { companyList = (await getDirectory('', true)) || [] } catch { companyList = [] }
+      results.value = companyList
+      loading.value = false
+      return
+    }
     if (!messenger.conversations.length) {
       try { await messenger.fetchConversations() } catch { /* ignore */ }
     }

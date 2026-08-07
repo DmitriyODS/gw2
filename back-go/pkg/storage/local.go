@@ -38,6 +38,15 @@ func (s *localStore) Open(_ context.Context, key string) (io.ReadCloser, error) 
 	return os.Open(s.abs(key))
 }
 
+// Size — размер файла на диске.
+func (s *localStore) Size(_ context.Context, key string) (int64, error) {
+	info, err := os.Stat(s.abs(key))
+	if err != nil {
+		return 0, err
+	}
+	return info.Size(), nil
+}
+
 func (s *localStore) Copy(_ context.Context, srcKey, dstKey string) error {
 	src, err := os.Open(s.abs(srcKey))
 	if err != nil {

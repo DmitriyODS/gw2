@@ -13,9 +13,7 @@ const (
 	maxFolderTitleRunes = 64
 )
 
-func errFolderNotFound() *domain.Error {
-	return domain.NewError("FOLDER_NOT_FOUND", "Папка не найдена", 404)
-}
+func errFolderNotFound() *domain.Error { return domain.ErrFolderNotFound }
 
 // normalizeFolderInput валидирует и чистит поля папки.
 func normalizeFolderInput(in dto.FolderInput) (dto.FolderInput, error) {
@@ -59,6 +57,9 @@ func (s *Service) CreateFolder(ctx context.Context, userID int64, in dto.FolderI
 	}
 	if n >= maxFolders {
 		return nil, domain.NewError("FOLDER_LIMIT", "Достигнут предел числа папок", 409)
+	}
+	if err := s.ensureFolderLimit(ctx, userID, n); err != nil {
+		return nil, err
 	}
 
 	f := &domain.Folder{

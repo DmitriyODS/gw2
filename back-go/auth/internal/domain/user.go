@@ -43,6 +43,12 @@ type User struct {
 	Login         string
 	HashPassword  string
 	AvatarPath    *string
+	// AvatarEmoji — значок вместо фотографии; показывается, когда файла нет.
+	AvatarEmoji *string
+	// Экран блокировки: хеш пин-кода и задержка бездействия (nil — запирать
+	// только вручную). Пустой хеш означает, что блокировка выключена.
+	LockPinHash  *string
+	LockAfterMin *int
 	Phone         *string
 	Email         *string
 	IsDefaultPass bool
@@ -53,10 +59,17 @@ type User struct {
 	LastSeenAt    *time.Time
 	StatusEmoji   *string // пользовательский статус (мессенджер)
 	StatusText    *string
-	OnVacation    bool // режим «в отпуске»: задачи/юниты закрыты, грувик заморожен
+	// OnVacation — отпуск В КОНТЕКСТНОЙ компании (user_companies.on_vacation):
+	// задачи/юниты закрыты, грувик заморожен. Заполняется только там, где
+	// компания известна (Me с активной компанией, каталог членов); при чтении
+	// одной идентичности всегда false — глобального отпуска не существует.
+	OnVacation    bool
 	// Настройки ИИ в заметках (по кнопке): корректура и автодописывание.
 	NotesAIProofread    bool
 	NotesAIAutocomplete bool
+	// Личные настройки рабочего стола (закреплённые разделы, размеры плиток,
+	// обои) — непрозрачный для сервера JSON, структуру ведёт фронт.
+	DesktopPrefs []byte
 
 	CompanyID     *int64
 	Role          Role
@@ -69,11 +82,12 @@ type User struct {
 // с разными ролями. Активная компания сессии выбирается при login/switch и
 // кладётся в токен.
 type Membership struct {
-	CompanyID int64
-	Company   *CompanyRef
-	Role      Role
-	Post      *string
-	CreatedAt time.Time
+	CompanyID  int64
+	Company    *CompanyRef
+	Role       Role
+	Post       *string
+	CreatedAt  time.Time
+	OnVacation bool // отпуск в ЭТОЙ компании (в другой человек может работать)
 }
 
 // Verification — активный код/ссылка подтверждения email (таблица

@@ -1,5 +1,5 @@
 <template>
-  <div class="period-control">
+  <div class="period-control" :class="{ 'is-compact': compact }">
     <!-- Дата + стрелки сдвига — одной группой (стрелки двигают именно даты). -->
     <div class="period-main">
       <div ref="displayRef" class="period-display" @click="openPicker">
@@ -28,7 +28,24 @@
       </div>
     </Teleport>
 
-    <div class="period-buttons">
+    <!-- Тесная панель: набор периодов прячется под кнопку — иначе он занимает
+         ещё одну-две строки шапки, а раздел про содержимое, а не про фильтры. -->
+    <template v-if="compact">
+      <button class="period-preset" type="button" @click="openModes">
+        <span class="period-preset-label">{{ activeModeLabel }}</span>
+        <span class="material-symbols-outlined">expand_more</span>
+      </button>
+      <ContextMenu
+        :visible="modesOpen"
+        :x="modesPos.x"
+        :y="modesPos.y"
+        :items="modeItems"
+        @select="pickMode"
+        @close="modesOpen = false"
+      />
+    </template>
+
+    <div v-else class="period-buttons">
       <div class="period-modes">
         <button
           v-for="m in modes"
@@ -57,7 +74,13 @@
 <script setup>
 import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
 import DatePicker from 'primevue/datepicker'
+import ContextMenu from '@/components/common/ContextMenu.vue'
 import { useStatsPeriod } from '@/composables/useStatsPeriod.js'
+
+const props = defineProps({
+  /** Тесная панель: набор периодов уходит под кнопку. */
+  compact: { type: Boolean, default: false },
+})
 
 const emit = defineEmits(['change'])
 
@@ -103,6 +126,32 @@ const modes = [
 // Сдвиг имеет смысл только для регулярных периодов (не «весь срок»/«произвольный»).
 const canShift = computed(() => ['day', 'week', 'month', 'year'].includes(period.mode.value))
 
+/* ── Набор периодов под кнопкой (тесная панель) ── */
+const modesOpen = ref(false)
+const modesPos = ref({ x: 0, y: 0 })
+
+const allModes = computed(() => [...modes, { value: 'all', label: 'Весь срок' }])
+const activeModeLabel = computed(() => (
+  allModes.value.find((m) => m.value === period.mode.value)?.label || 'Период'
+))
+const modeItems = computed(() => allModes.value.map((m) => ({
+  label: m.label,
+  icon: m.value === period.mode.value ? 'check' : (m.value === 'all' ? 'all_inclusive' : 'calendar_month'),
+  action: m.value,
+})))
+
+function openModes(e) {
+  const r = e.currentTarget.getBoundingClientRect()
+  modesPos.value = { x: r.left, y: r.bottom + 6 }
+  modesOpen.value = true
+}
+
+function pickMode(value) {
+  modesOpen.value = false
+  if (value === 'all') period.setAllTime()
+  else period.selectMode(value)
+}
+
 function onCustomRange(val) {
   if (Array.isArray(val) && val[0] && val[1]) {
     period.setCustom(val[0], val[1])
@@ -135,6 +184,18 @@ watch(
   gap: 8px;
 }
 
+/* Компактно — всё в одну строку: дата сжимается, кнопки держат размер. */
+.period-control.is-compact { gap: 8px; padding: 0; flex-wrap: nowrap; }
+.period-control.is-compact .period-main { flex: 1 1 auto; min-width: 0; }
+.period-control.is-compact .period-display {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  padding: 8px 12px;
+  min-height: 40px;
+  font-size: 13px;
+}
+
 .period-display {
   display: flex;
   align-items: center;
@@ -162,6 +223,28 @@ watch(
   font-size: 18px;
   color: var(--color-primary);
 }
+
+/* Кнопка набора периодов (тесная панель) — та же пилюля, что и дата. */
+.period-preset {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 8px 12px;
+  min-height: 40px;
+  border: 1px solid var(--acrylic-border);
+  border-radius: var(--radius-full);
+  background: var(--glass-bg), var(--acrylic-card-bg);
+  box-shadow: var(--glass-edge);
+  color: var(--color-text);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.period-preset .material-symbols-outlined { font-size: 18px; color: var(--color-text-dim); }
+.period-preset-label { overflow: hidden; text-overflow: ellipsis; }
 
 .period-picker {
   position: fixed;

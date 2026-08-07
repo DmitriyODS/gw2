@@ -1,8 +1,21 @@
 <template>
   <!-- wheel с Ctrl/Cmd (и щипок трекпада — браузер шлёт его как ctrl+wheel)
        перехватываем в зум листа вместо зума страницы. -->
-  <div class="np" @wheel="onZoomWheel">
-    <div class="np-panel">
+  <!-- keydown ловим на панели, а не на window: на рабочем столе открыто
+       несколько окон разом, и Ctrl+F должен слушаться только в том, где
+       сейчас курсор. -->
+  <!-- headless: панель, тело и прокрутку даёт каркас, а шапку редактор рисует
+       сам — в ней статус сохранения, соавторы, масштаб и поиск, которых
+       обычная шапка раздела не знает. scroll=false: прокручивается сам лист,
+       иначе заголовок заметки уезжал бы вместе с текстом. -->
+  <AppPage
+    class="np"
+    headless
+    flush
+    :scroll="false"
+    @wheel="onZoomWheel"
+    @keydown="onPanelKeydown"
+  >
       <header class="np-head">
         <button class="np-back" title="К списку заметок" @click="goBack">
           <span class="material-symbols-outlined">arrow_back</span>
@@ -35,47 +48,28 @@
           >{{ initials(p.fio) }}</span>
         </div>
 
+        <!-- В шапке остаётся только масштаб: остальные действия ряд иконок не
+             держал — при сужении окна они обрезались. Всё прочее — в меню «⋮».
+             На телефоне туда же уходит и масштаб: там на ряд места нет. -->
         <div class="np-actions">
-          <!-- Десктоп: масштаб и действия отдельными кнопками -->
-          <template v-if="!isMobile">
-            <!-- Масштаб листа: −/процент (клик — сброс)/+ -->
-            <div class="np-zoom">
-              <button class="np-icon np-zoom-btn" title="Уменьшить масштаб" :disabled="zoom <= ZOOM_MIN" @click="stepZoom(-1)">
-                <span class="material-symbols-outlined">zoom_out</span>
-              </button>
-              <button class="np-zoom-value" title="Сбросить масштаб" @click="resetZoom">{{ Math.round(zoom * 100) }}%</button>
-              <button class="np-icon np-zoom-btn" title="Увеличить масштаб" :disabled="zoom >= ZOOM_MAX" @click="stepZoom(1)">
-                <span class="material-symbols-outlined">zoom_in</span>
-              </button>
-            </div>
-            <template v-if="isOwner">
-              <button class="np-icon" title="Теги" @click="tagsOpen = true">
-                <span class="material-symbols-outlined">sell</span>
-              </button>
-              <button class="np-icon" title="Поделиться" @click="shareOpen = true">
-                <span class="material-symbols-outlined">share</span>
-              </button>
-            </template>
-            <!-- Экспорт доступен и адресатам шаринга (чтение есть — выгрузка тоже) -->
-            <button class="np-icon" title="Скачать .txt" @click="exportFile('txt')">
-              <span class="material-symbols-outlined">description</span>
+          <!-- Масштаб листа: −/процент (клик — сброс)/+ -->
+          <div v-if="!isMobile" class="np-zoom">
+            <button class="np-icon np-zoom-btn" title="Уменьшить масштаб" :disabled="zoom <= ZOOM_MIN" @click="stepZoom(-1)">
+              <span class="material-symbols-outlined">zoom_out</span>
             </button>
-            <button class="np-icon" title="Скачать .docx" @click="exportFile('docx')">
-              <span class="material-symbols-outlined">article</span>
+            <button class="np-zoom-value" title="Сбросить масштаб" @click="resetZoom">{{ Math.round(zoom * 100) }}%</button>
+            <button class="np-icon np-zoom-btn" title="Увеличить масштаб" :disabled="zoom >= ZOOM_MAX" @click="stepZoom(1)">
+              <span class="material-symbols-outlined">zoom_in</span>
             </button>
-            <button v-if="isOwner" class="np-icon danger" title="Удалить заметку" @click="deleteOpen = true">
-              <span class="material-symbols-outlined">delete</span>
-            </button>
-          </template>
+          </div>
 
-          <!-- Мобайл: в узкой шапке ряд иконок не помещается — всё в меню «⋮» -->
-          <div v-else ref="moreRef" class="np-more">
+          <div ref="moreRef" class="np-more">
             <button class="np-icon" title="Ещё" aria-label="Действия с заметкой" @click="moreOpen = !moreOpen">
               <span class="material-symbols-outlined">more_vert</span>
             </button>
             <Transition name="np-more">
               <div v-if="moreOpen" class="np-more-pop">
-                <div class="np-more-zoom">
+                <div v-if="isMobile" class="np-more-zoom">
                   <button class="np-icon np-zoom-btn" title="Уменьшить масштаб" :disabled="zoom <= ZOOM_MIN" @click="stepZoom(-1)">
                     <span class="material-symbols-outlined">zoom_out</span>
                   </button>
@@ -84,7 +78,11 @@
                     <span class="material-symbols-outlined">zoom_in</span>
                   </button>
                 </div>
-                <div class="np-more-divider" />
+                <div v-if="isMobile" class="np-more-divider" />
+                <button class="np-more-item" @click="pickMore(showFind)">
+                  <span class="material-symbols-outlined">search</span>
+                  Найти в заметке
+                </button>
                 <template v-if="isOwner">
                   <button class="np-more-item" @click="pickMore(() => tagsOpen = true)">
                     <span class="material-symbols-outlined">sell</span>
@@ -98,6 +96,10 @@
                 <button class="np-more-item" @click="pickMore(() => exportFile('txt'))">
                   <span class="material-symbols-outlined">description</span>
                   Скачать .txt
+                </button>
+                <button class="np-more-item" @click="pickMore(() => exportFile('md'))">
+                  <span class="material-symbols-outlined">markdown</span>
+                  Скачать .md
                 </button>
                 <button class="np-more-item" @click="pickMore(() => exportFile('docx'))">
                   <span class="material-symbols-outlined">article</span>
@@ -116,7 +118,18 @@
         </div>
       </header>
 
-      <div v-if="loading" class="np-loading">Загрузка…</div>
+      <NoteFindBar
+        v-if="findOpen"
+        ref="findBar"
+        v-model:query="findQuery"
+        class="np-find"
+        :total="findTotal"
+        :current="findCurrent"
+        @step="stepFind"
+        @close="hideFind"
+      />
+
+      <div v-if="loading" class="np-loading"><BrandLoader :size="64" /></div>
       <EmptyState
         v-else-if="notFound"
         class="np-loading" icon="scan_delete" tone="soft"
@@ -153,7 +166,6 @@
           @set-ai-setting="onSetAiSetting"
         />
       </template>
-    </div>
 
     <NoteTagsDialog v-model="tagsOpen" :note-id="noteId" :tag-ids="tagIds" @saved="onTagsSaved" />
     <ShareDialog v-model="shareOpen" subject-type="note" :subject-id="noteId" />
@@ -206,17 +218,19 @@
       @confirm="confirmDelete"
       @cancel="deleteOpen = false"
     />
-  </div>
+  </AppPage>
 </template>
 
 <script setup>
 // Страница заметки: крупный заголовок + rich-редактор. Автосохранение —
 // дебаунс 1.5с после правок, немедленно на blur/beforeunload/Cmd+S.
-import { computed, defineAsyncComponent, onBeforeUnmount, onMounted, ref } from 'vue'
+import { computed, defineAsyncComponent, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { useBreakpoint } from '@/composables/useBreakpoint.js'
 import EmptyState from '@/components/common/EmptyState.vue'
-import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
+import BrandLoader from '@/components/common/BrandLoader.vue'
+import AppPage from '@/components/ui/AppPage.vue'
+import ConfirmDialog from '@/components/ui/ConfirmDialog.vue'
 import NoteRichEditor from '@/components/notes/NoteRichEditor.vue'
 import NoteTagsDialog from '@/components/notes/NoteTagsDialog.vue'
 import ShareDialog from '@/components/notes/ShareDialog.vue'
@@ -224,6 +238,7 @@ import NoteSelectionMenu from '@/components/notes/NoteSelectionMenu.vue'
 import NoteAiDialog from '@/components/notes/NoteAiDialog.vue'
 import NoteToDiaryDialog from '@/components/notes/NoteToDiaryDialog.vue'
 import NoteSendToChatDialog from '@/components/notes/NoteSendToChatDialog.vue'
+import NoteFindBar from '@/components/notes/NoteFindBar.vue'
 import TaskForm from '@/components/tasks/TaskForm.vue'
 import { docToMarkdown } from '@/utils/tiptapMarkdown.js'
 
@@ -236,6 +251,7 @@ import { useAuthStore } from '@/stores/auth.js'
 import { useNotesStore } from '@/stores/notes.js'
 import { useNotificationsStore } from '@/stores/notifications.js'
 import { useNoteCollab } from '@/composables/useNoteCollab.js'
+import { useNoteFind } from '@/composables/useNoteFind.js'
 
 const props = defineProps({ id: { type: String, required: true } })
 
@@ -264,6 +280,25 @@ const title = ref('')
 const doc = ref(null)
 const tagIds = ref([])
 const editorRef = ref(null)
+
+// ── Поиск по заметке (Ctrl+F) ──
+const findBar = ref(null)
+const {
+  open: findOpen, query: findQuery, total: findTotal, current: findCurrent,
+  show: showFind, hide: hideFind, toggle: toggleFind, step: stepFind, onKeydown: onFindKeydown,
+} = useNoteFind(editorRef)
+
+const focusFind = () => nextTick(() => findBar.value?.focus())
+
+watch(findOpen, (v) => {
+  if (v) focusFind()
+})
+
+/* Повторный Ctrl+F при открытой панели возвращает курсор в поле поиска —
+   watch этого не даст, панель уже открыта. */
+function onPanelKeydown(e) {
+  if (onFindKeydown(e) && findOpen.value) focusFind()
+}
 
 // Доступ: owner | edit | view (заметка может быть чужой — адресный шаринг).
 const myAccess = ref('owner')
@@ -421,7 +456,7 @@ function onTagsSaved(n) {
   store.fetchNotes({ silent: true })
 }
 
-// ── Экспорт txt/docx ──
+// ── Экспорт txt/md/docx ──
 async function exportFile(format = 'txt') {
   await flush()
   try {
@@ -607,24 +642,8 @@ async function confirmDelete() {
 </script>
 
 <style scoped>
-.np {
-  height: 100%;
-  min-height: 0;
-  width: 100%;
-  padding: 16px;
-  display: flex;
-}
-.np-panel {
-  flex: 1;
-  min-width: 0;
-  min-height: 0;
-  display: flex;
-  flex-direction: column;
-  background: var(--acrylic-card-bg);
-  border: 1px solid var(--acrylic-border);
-  border-radius: var(--radius-xl);
-  overflow: hidden;
-}
+/* Панель, поля и прокрутку даёт AppPage (headless): здесь только внутреннее
+   устройство листа — шапка, заголовок и сам редактор. */
 
 .np-head {
   display: flex;
@@ -732,6 +751,10 @@ async function confirmDelete() {
 .np-icon .material-symbols-outlined { font-size: 21px; }
 .np-icon:hover { background: color-mix(in oklch, var(--color-primary) 10%, transparent); color: var(--color-primary); }
 .np-icon.danger:hover { background: color-mix(in oklch, var(--color-error) 10%, transparent); color: var(--color-error); }
+.np-icon.active { background: color-mix(in oklch, var(--color-primary) 14%, transparent); color: var(--color-primary); }
+
+/* Панель поиска (NoteFindBar) — по ширине листа, как заголовок. */
+.np-find { margin: 8px 24px 0; }
 
 /* ── Мобильное меню «⋮» (стекло, как поповеры карточек) ── */
 .np-more { position: relative; }
@@ -823,15 +846,17 @@ async function confirmDelete() {
 }
 
 @media (max-width: 768px) {
-  /* Во всю страницу: без рамки-«карточки». */
-  .np { padding: 0; }
-  .np-panel {
+  /* Экран отдан заметке целиком — фон под ней сплошной: просвечивающие обои
+     под текстом мешают читать, а полей, которые бы их показывали, здесь нет.
+     Панель раздела рисует AppPage, поэтому правим её. */
+  .np :deep(.page-panel) {
     border: none;
     border-radius: 0;
-    background: transparent;
+    background: var(--color-surface);
   }
   .np-back-label { display: none; }
   .np-title { margin: 2px 14px 0; font-size: 22px; }
+  .np-find { margin: 8px 14px 0; }
   .np-editor { padding: 6px 14px 0; }
   /* Резерв под нижнюю навигацию (64px) + воздух. Именно на .tiptap, а не на
      скроллер .np-editor: длинный документ переполняет flex-бокс .ne-content

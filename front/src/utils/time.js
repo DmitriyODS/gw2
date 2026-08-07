@@ -1,3 +1,31 @@
+/**
+ * «только что» / «12 мин назад» / «3 ч назад» / «вчера» / дата — короткая
+ * подпись давности для лент (последние действия рабочего стола).
+ */
+export function timeAgo(value) {
+  const d = new Date(value)
+  if (Number.isNaN(d.getTime())) return ''
+  const sec = Math.round((Date.now() - d.getTime()) / 1000)
+  if (sec < 60) return 'только что'
+  const min = Math.floor(sec / 60)
+  if (min < 60) return `${min} мин назад`
+  const hours = Math.floor(min / 60)
+  if (hours < 24) return `${hours} ч назад`
+  const days = Math.floor(hours / 24)
+  if (days === 1) return 'вчера'
+  if (days < 7) return `${days} дн. назад`
+  return d.toLocaleDateString('ru-RU', { day: 'numeric', month: 'short' })
+}
+
+/** «16 мая 2026, 14:32» — полная отметка времени для подсказки. */
+export function fullTime(value) {
+  const d = new Date(value)
+  if (Number.isNaN(d.getTime())) return ''
+  return d.toLocaleString('ru-RU', {
+    day: 'numeric', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit',
+  })
+}
+
 export function formatHours(val) {
   if (val === null || val === undefined) return '0 мин'
   const totalMinutes = Math.round(val * 60)

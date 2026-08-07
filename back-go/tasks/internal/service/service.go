@@ -9,6 +9,8 @@ import (
 	"context"
 	"log/slog"
 
+	"github.com/DmitriyODS/gw2/back-go/pkg/apierror"
+	"github.com/DmitriyODS/gw2/back-go/pkg/billingclient"
 	"github.com/DmitriyODS/gw2/back-go/tasks/internal/domain"
 	"github.com/DmitriyODS/gw2/back-go/tasks/internal/dto"
 )
@@ -33,6 +35,8 @@ type Service struct {
 	// yg — YouGile-модуль (NewYougile привязывает себя сам); nil в тестах
 	// ядра — пуш тогда не дёргается.
 	yg *Yougile
+	// billing — лимиты тарифа (WithBilling; nil — ограничений нет).
+	billing *billingclient.Client
 }
 
 type Deps struct {
@@ -75,6 +79,35 @@ func (s *Service) taskInCompany(ctx context.Context, taskID int64, companyID *in
 		return nil, errTaskNotFound
 	}
 	return task, nil
+}
+
+// taskLinkAccess — расшифровка отказа для ПРЯМОЙ ССЫЛКИ на задачу: задача —
+// сущность компании, и посторонний по ссылке пройти не должен, но и молчать в
+// ответ незачем. Сотруднику той компании, у которого активна другая, говорим
+// про переключение (в extra — id и название компании), постороннему — что
+// доступ ограничен. Несуществующая задача остаётся 404.
+func (s *Service) taskLinkAccess(ctx context.Context, taskID, userID int64, companyID *int64, base error) error {
+	task, err := s.tasks.GetTask(ctx, taskID)
+	if err != nil {
+		return err
+	}
+	if task == nil {
+		return base
+	}
+	member, err := s.users.IsCompanyMember(ctx, userID, task.CompanyID)
+	if err != nil {
+		return err
+	}
+	if !member {
+		return domain.NewError("TASK_FORBIDDEN",
+			"Доступ ограничен: задача принадлежит другой компании", 403)
+	}
+	if companyID != nil && *companyID == task.CompanyID {
+		return base // компания та же — отказ не про доступ
+	}
+	return apierror.NewExtra("TASK_OTHER_COMPANY",
+		"Задача другой вашей компании — переключитесь на неё", 409,
+		map[string]any{"company_id": task.CompanyID})
 }
 
 // unitInCompany — юнит по id в скоупе активной компании актора (та же

@@ -83,6 +83,33 @@ func (r *UserReader) ListUsers(ctx context.Context, ids []int64) ([]*domain.User
 	return out, rows.Err()
 }
 
+// OutsidersInCompany — те из ids, кого нет в user_companies этой компании.
+// Супер-админ к компанийному контенту доступа не имеет и поблажки не получает.
+func (r *UserReader) OutsidersInCompany(ctx context.Context, companyID int64, ids []int64) ([]int64, error) {
+	if len(ids) == 0 {
+		return nil, nil
+	}
+	rows, err := r.pool.Query(ctx, `
+		SELECT x.id FROM unnest($1::bigint[]) AS x(id)
+		WHERE NOT EXISTS (
+			SELECT 1 FROM user_companies uc
+			WHERE uc.user_id = x.id AND uc.company_id = $2)`, ids, companyID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var out []int64
+	for rows.Next() {
+		var id int64
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		out = append(out, id)
+	}
+	return out, rows.Err()
+}
+
 // DevChatUserIDs — адресаты событий dev-чата: владелец + все активные
 // супер-админы (техподдержка).
 func (r *UserReader) DevChatUserIDs(ctx context.Context, ownerID int64) ([]int64, error) {

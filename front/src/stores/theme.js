@@ -1,5 +1,5 @@
 import { defineStore } from 'pinia'
-import { ref, reactive } from 'vue'
+import { ref, reactive, computed } from 'vue'
 import {
   storageGet, storageGetJSON, storageSet, storageSetJSON,
 } from '@/utils/storage.js'
@@ -286,8 +286,63 @@ export const useThemeStore = defineStore('theme', () => {
      компоненты, data-dark на <html> ставится из неё же. */
   const dark = ref(false)
 
+  /* ── Оформление экранов входа ────────────────────────────────────
+     Вход, регистрация и прочие публичные экраны встречают КЛАССИЧЕСКОЙ
+     темой в системном светлом/тёмном виде: личная тема пользователя туда
+     не протекает (на устройство приходят и гости), а режим берётся у ОС,
+     а не из личной настройки. Исключение — оформление, выбранное прямо на
+     регистрации: оно применяется сразу и остаётся до конца экранов входа. */
+  const authPreview = ref(false)
+  const authPicked = ref(false)
+  const authModePicked = ref(false)
+
+  /* Тема, которая ФАКТИЧЕСКИ на экране: на экранах входа до выбора плитками
+     это классическая, а не личная тема из localStorage. Её показывают плитки
+     регистрации — иначе они подписывали бы классическую палитру чужим именем. */
+  const activePreset = computed(() => (
+    authPreview.value && !authPicked.value ? 'classic' : currentPreset.value
+  ))
+
+  /* ── Примерка оформления на регистрации ──────────────────────────
+     Цвет и светлый/тёмный вид применяются сразу, но остаются ЧЕРНОВИКОМ:
+     в localStorage не пишутся. Закрепляет их только созданный аккаунт
+     (commitThemeTrial); уход с регистрации любым способом откатывает
+     оформление — иначе выбор гостя оставался бы на устройстве хозяина. */
+  const trial = ref(null)
+
+  function startThemeTrial() {
+    if (!trial.value) trial.value = { preset: currentPreset.value, mode: mode.value }
+  }
+
+  function commitThemeTrial() {
+    if (!trial.value) return
+    trial.value = null
+    storageSet('gw_theme', currentPreset.value)
+    storageSet('gw_theme_mode', mode.value)
+  }
+
+  function cancelThemeTrial() {
+    if (!trial.value) return
+    const { preset, mode: prevMode } = trial.value
+    trial.value = null
+    authPicked.value = false
+    authModePicked.value = false
+    currentPreset.value = preset
+    mode.value = prevMode
+    applyVars(authPreview.value ? PRESETS.classic : getVars(preset))
+    applyDark()
+  }
+
+  function setAuthPreview(on) {
+    authPreview.value = on
+    if (!on) { authPicked.value = false; authModePicked.value = false }
+    applyVars(on && !authPicked.value ? PRESETS.classic : getVars(currentPreset.value))
+    applyDark()
+  }
+
   function applyDark() {
-    if (mode.value === 'schedule') dark.value = isDarkBySchedule()
+    if (authPreview.value && !authModePicked.value) dark.value = !!systemDarkMq?.matches
+    else if (mode.value === 'schedule') dark.value = isDarkBySchedule()
     else dark.value = mode.value === 'system' ? !!systemDarkMq?.matches : mode.value === 'dark'
     document.documentElement.setAttribute('data-dark', dark.value)
     // Сообщаем браузеру фактическую схему: красит родные контролы/скроллбары
@@ -298,7 +353,9 @@ export const useThemeStore = defineStore('theme', () => {
 
   function setMode(m) {
     mode.value = m
-    storageSet('gw_theme_mode', m)
+    if (!trial.value) storageSet('gw_theme_mode', m)
+    // Выбор светлого/тёмного на регистрации отменяет системный вид по умолчанию.
+    if (authPreview.value) authModePicked.value = true
     applyDark()
   }
 
@@ -354,14 +411,6 @@ export const useThemeStore = defineStore('theme', () => {
     applyBgGradient()
   }
 
-  /* ── Плавающая кнопка хаба (ассистент/мини-чат) ── */
-  const hubFabEnabled = ref(storageGet('gw_hub_fab_enabled', 'true') !== 'false')
-
-  function setHubFabEnabled(v) {
-    hubFabEnabled.value = !!v
-    storageSet('gw_hub_fab_enabled', String(hubFabEnabled.value))
-  }
-
   function getVars(name) {
     if (PRESETS[name]) return PRESETS[name]
     const custom = customThemes.value.find(t => t.name === name)
@@ -378,7 +427,9 @@ export const useThemeStore = defineStore('theme', () => {
 
   function applyTheme(name) {
     currentPreset.value = name
-    storageSet('gw_theme', name)
+    if (!trial.value) storageSet('gw_theme', name)
+    // Выбор темы на экране регистрации отменяет классику по умолчанию.
+    if (authPreview.value) authPicked.value = true
     applyVars(getVars(name))
   }
 
@@ -422,11 +473,13 @@ export const useThemeStore = defineStore('theme', () => {
   }
 
   function init() {
-    applyVars(getVars(currentPreset.value))
+    // На экранах входа палитра уже подменена классикой — не перетираем её.
+    applyVars(authPreview.value && !authPicked.value ? PRESETS.classic : getVars(currentPreset.value))
     applyDark()
     applyBgGradient()
-    // Живое переключение вслед за системой (addListener — старый Safari).
-    const onSystemChange = () => { if (mode.value === 'system') applyDark() }
+    // Живое переключение вслед за системой (addListener — старый Safari):
+    // на экранах входа режим ВСЕГДА системный, внутри — только в режиме system.
+    const onSystemChange = () => { if (authPreview.value || mode.value === 'system') applyDark() }
     if (systemDarkMq?.addEventListener) systemDarkMq.addEventListener('change', onSystemChange)
     else systemDarkMq?.addListener?.(onSystemChange)
     // Тик расписания: проверяем наступление времени переключения раз в полминуты.
@@ -434,11 +487,12 @@ export const useThemeStore = defineStore('theme', () => {
   }
 
   return {
-    currentPreset, mode, dark, customThemes, schedule, bgGradient, hubFabEnabled,
+    currentPreset, activePreset, mode, dark, customThemes, schedule, bgGradient,
     presetNames: Object.keys(PRESETS),
     presetLabels: PRESET_LABELS,
-    applyTheme, applyVars, setMode, setSchedule, saveCustomTheme, deleteCustomTheme,
+    startThemeTrial, commitThemeTrial, cancelThemeTrial,
+    applyTheme, applyVars, setMode, setSchedule, setAuthPreview, saveCustomTheme, deleteCustomTheme,
     exportTheme, importTheme, init, getVars, randomTheme,
-    setBgGradientEnabled, regenerateBgGradient, resetBgGradient, setHubFabEnabled,
+    setBgGradientEnabled, regenerateBgGradient, resetBgGradient,
   }
 })

@@ -58,10 +58,10 @@ func (r *UserReader) YougileEnabled(ctx context.Context, companyID int64) (bool,
 func (r *UserReader) GetUser(ctx context.Context, id int64) (*domain.User, error) {
 	var u domain.User
 	err := r.pool.QueryRow(ctx, `
-		SELECT id, fio, avatar_path, is_active, is_super_admin, on_vacation
+		SELECT id, fio, avatar_path, is_active, is_super_admin
 		  FROM users
 		 WHERE id = $1`, id).
-		Scan(&u.ID, &u.FIO, &u.AvatarPath, &u.IsActive, &u.IsSuperAdmin, &u.OnVacation)
+		Scan(&u.ID, &u.FIO, &u.AvatarPath, &u.IsActive, &u.IsSuperAdmin)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, nil
@@ -69,6 +69,19 @@ func (r *UserReader) GetUser(ctx context.Context, id int64) (*domain.User, error
 		return nil, err
 	}
 	return &u, nil
+}
+
+// OnVacation — отпуск пользователя в КОНКРЕТНОЙ компании; не состоит в ней —
+// false (гард просто не срабатывает, доступ решают другие проверки).
+func (r *UserReader) OnVacation(ctx context.Context, userID, companyID int64) (bool, error) {
+	var on bool
+	err := r.pool.QueryRow(ctx, `
+		SELECT on_vacation FROM user_companies
+		 WHERE user_id = $1 AND company_id = $2`, userID, companyID).Scan(&on)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return false, nil
+	}
+	return on, err
 }
 
 // IsCompanyMember — состоит ли пользователь в компании по user_companies

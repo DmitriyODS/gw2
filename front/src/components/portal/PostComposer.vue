@@ -4,7 +4,6 @@
     tone="primary"
     size="lg"
     mobile="full"
-    :show-icon="false"
     :title="isEdit ? 'Редактировать публикацию' : 'Создать публикацию'"
     :busy="saving"
     :actions="[
@@ -16,10 +15,18 @@
   >
     <div
       class="composer"
-      @dragover.prevent="dragOver = true"
-      @dragleave.prevent="dragOver = false"
+      @dragenter="onDragEnter"
+      @dragover.prevent
+      @dragleave="onDragLeave"
       @drop.prevent="onDrop"
+      @paste="onPaste"
     >
+      <!-- Перетаскивание файлов в окно композера: подсказка поверх формы -->
+      <div v-if="dragOver" class="composer-dropzone">
+        <span class="material-symbols-outlined">add_photo_alternate</span>
+        <p>Отпустите — прикрепим к публикации</p>
+      </div>
+
       <!-- Шапка как в композерах соцсетей: автор + выбор раздела -->
       <div class="composer-author">
         <img class="composer-avatar" :src="me.avatarUrl" :alt="me.fio" />
@@ -162,7 +169,6 @@
     <AppDialog
       v-model="confirmClose"
       tone="warning"
-      icon="warning"
       size="sm"
       :title="isEdit ? 'Отменить изменения?' : 'Не сохранять публикацию?'"
       :subtitle="isEdit
@@ -184,10 +190,11 @@
 // публикации». Текст поста — Markdown (лента рендерит его MarkdownView).
 import { computed, nextTick, ref, watch } from 'vue'
 import Select from 'primevue/select'
-import AppDialog from '@/components/common/AppDialog.vue'
+import AppDialog from '@/components/ui/AppDialog.vue'
 import ImageEditDialog from '@/components/common/ImageEditDialog.vue'
 import MarkdownView from '@/components/common/MarkdownView.vue'
 import { selectionViewportRect } from '@/utils/textareaSelection.js'
+import { linkifySelection } from '@/utils/pasteLink.js'
 import { usePortalStore } from '@/stores/portal.js'
 import { useAuthStore } from '@/stores/auth.js'
 import { useNotificationsStore } from '@/stores/notifications.js'
@@ -312,9 +319,54 @@ function onPick(e) {
   e.target.value = ''
 }
 
+/* Перетаскивание файлов с компьютера. Счётчик входов гасит мигание: dragleave
+   прилетает и при переходе между вложенными элементами формы. */
+let dragDepth = 0
+
+function hasFiles(dt) {
+  return Array.from(dt?.types || []).includes('Files')
+}
+
+function onDragEnter(e) {
+  if (!hasFiles(e.dataTransfer)) return
+  dragDepth++
+  dragOver.value = true
+}
+
+function onDragLeave() {
+  if (dragDepth > 0) dragDepth--
+  if (!dragDepth) dragOver.value = false
+}
+
 function onDrop(e) {
+  dragDepth = 0
   dragOver.value = false
   pendingFiles.value.push(...Array.from(e.dataTransfer?.files || []))
+}
+
+/* Вставка из буфера (Ctrl+V): скриншот и скопированная картинка приходят
+   файлом без имени — даём своё, иначе вложение будет безымянным. Текст в
+   буфере не трогаем: его вставляет сам textarea. */
+function onPaste(e) {
+  const files = Array.from(e.clipboardData?.files || [])
+  if (!files.length) {
+    // Адрес поверх выделенного текста делает его ссылкой — как в редакторах.
+    const linked = linkifySelection(bodyEl.value, e.clipboardData?.getData('text/plain'))
+    if (linked) {
+      e.preventDefault()
+      body.value = linked.value
+      nextTick(() => bodyEl.value?.setSelectionRange(linked.caret, linked.caret))
+    }
+    return
+  }
+  e.preventDefault()
+  const stamp = Date.now()
+  files.forEach((f, i) => {
+    const named = f.name
+      ? f
+      : new File([f], `Вставка-${stamp}${i ? `-${i + 1}` : ''}.${(f.type.split('/')[1] || 'png')}`, { type: f.type })
+    pendingFiles.value.push(named)
+  })
 }
 
 // ── Редактирование картинки (обрезка/поворот) до загрузки ──
@@ -556,10 +608,34 @@ async function submit() {
 
 <style scoped>
 .composer {
+  position: relative;
   display: flex;
   flex-direction: column;
   gap: 10px;
 }
+
+/* Подсказка перетаскивания — поверх формы, но не перехватывает события:
+   иначе первый же dragenter по ней сбросил бы счётчик входов. */
+.composer-dropzone {
+  position: absolute;
+  inset: -6px;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  pointer-events: none;
+  border: 2px dashed color-mix(in oklch, var(--color-primary) 55%, transparent);
+  border-radius: var(--radius-lg);
+  background: color-mix(in oklch, var(--color-surface) 78%, transparent);
+  -webkit-backdrop-filter: blur(2px);
+  backdrop-filter: blur(2px);
+  color: var(--color-primary);
+}
+
+.composer-dropzone .material-symbols-outlined { font-size: 40px; }
+.composer-dropzone p { margin: 0; font-size: 14px; font-weight: 600; }
 
 .composer-author {
   display: flex;

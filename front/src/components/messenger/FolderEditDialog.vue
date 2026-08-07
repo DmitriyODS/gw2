@@ -2,7 +2,6 @@
   <AppDialog
     :model-value="modelValue"
     :title="folder ? 'Изменить папку' : 'Новая папка'"
-    icon="folder"
     tone="tertiary"
     size="md"
     :busy="saving"
@@ -99,7 +98,7 @@
 
 <script setup>
 import { ref, reactive, computed, watch } from 'vue'
-import AppDialog from '@/components/common/AppDialog.vue'
+import AppDialog from '@/components/ui/AppDialog.vue'
 import EmptyState from '@/components/common/EmptyState.vue'
 import EmojiPicker from '@/components/common/EmojiPicker.vue'
 import EmojiGlyph from '@/components/common/EmojiGlyph.vue'

@@ -32,9 +32,13 @@ const petCols = `p.user_id, p.company_id, p.name, p.species, p.stage, p.xp, p.ku
 	p.house_pet_x, p.house_pet_y,
 	p.bank_savings, p.bank_savings_accrued_at, p.bank_loan,
 	p.credit_score, p.loan_principal, p.loan_due_at, p.loan_penalized,
-	u.id, u.fio, u.avatar_path, u.on_vacation`
+	u.id, u.fio, u.avatar_path, uc.on_vacation`
 
-const petFrom = ` FROM pets p LEFT JOIN users u ON u.id = p.user_id `
+// Отпуск — свойство работы в КОМПАНИИ питомца (user_companies.on_vacation), а
+// не аккаунта: в другой компании хозяин работает, и тамошний грувик не спит.
+const petFrom = ` FROM pets p
+	LEFT JOIN users u ON u.id = p.user_id
+	LEFT JOIN user_companies uc ON uc.user_id = p.user_id AND uc.company_id = p.company_id `
 
 func scanStrings(raw []byte) []string {
 	var out []string
@@ -332,6 +336,7 @@ func (r *PetRepo) ListCompanyPets(ctx context.Context, companyID int64) ([]*doma
 	rows, err := r.pool.Query(ctx, `
 		SELECT `+petCols+`
 		FROM pets p JOIN users u ON u.id = p.user_id
+		LEFT JOIN user_companies uc ON uc.user_id = p.user_id AND uc.company_id = p.company_id
 		WHERE p.company_id = $1 AND u.is_active
 		ORDER BY p.stage DESC, p.xp DESC`, companyID)
 	if err != nil {

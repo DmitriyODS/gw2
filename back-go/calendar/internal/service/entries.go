@@ -32,6 +32,60 @@ func (s *Service) ListEntries(ctx context.Context, companyID, calendarID int64, 
 	return s.listEntriesByCalendar(ctx, calendarID, p)
 }
 
+// Agenda — ближайшие события всех календарей компании за период (живая плитка
+// рабочего стола). Заголовок карточки считает сервер: поля календарей грузим
+// одним батчем, поэтому N+1 нет ни по записям, ни по структуре.
+func (s *Service) Agenda(ctx context.Context, companyID int64, from, to time.Time, limit int) (*domain.Agenda, error) {
+	if limit <= 0 || limit > 50 {
+		limit = 10
+	}
+	rows, total, err := s.repo.CompanyEntries(ctx, companyID, from, to, limit)
+	if err != nil {
+		return nil, err
+	}
+
+	ids := make([]int64, 0, len(rows))
+	seen := map[int64]bool{}
+	for _, r := range rows {
+		if !seen[r.CalendarID] {
+			seen[r.CalendarID] = true
+			ids = append(ids, r.CalendarID)
+		}
+	}
+	fieldsByCal, err := s.repo.FieldsByCalendars(ctx, ids)
+	if err != nil {
+		return nil, err
+	}
+
+	items := make([]domain.AgendaItem, 0, len(rows))
+	for _, r := range rows {
+		items = append(items, domain.AgendaItem{
+			CalendarID: r.CalendarID, CalendarName: r.CalendarName, EntryID: r.EntryID,
+			EventAt: r.EventAt, Title: entryTitle(fieldsByCal[r.CalendarID], r.Data),
+		})
+	}
+	return &domain.Agenda{Items: items, Total: total}, nil
+}
+
+// entryTitle — заголовок карточки события: первое поле, помеченное «в таблице»
+// (иначе просто первое). Зеркало front utils/calendarFields.js:entryTitle.
+func entryTitle(fields []domain.Field, data map[string]any) string {
+	if len(fields) == 0 {
+		return "Событие"
+	}
+	pick := fields[0]
+	for _, f := range fields {
+		if f.ShowInTable {
+			pick = f
+			break
+		}
+	}
+	if v := exportValue(pick, data[records.FieldID(pick.ID)]); v != "" {
+		return v
+	}
+	return "Событие"
+}
+
 // listEntriesByCalendar — ядро выборки (без проверки доступа; вызывающий уже
 // проверил права или resolveShare). Используется и authed, и публичным доступом.
 func (s *Service) listEntriesByCalendar(ctx context.Context, calendarID int64, p EntryListParams) (*EntryList, error) {
@@ -119,7 +173,7 @@ func (s *Service) DeleteEntry(ctx context.Context, companyID, calendarID, entryI
 	if err := s.repo.DeleteEntry(ctx, entryID); err != nil {
 		return err
 	}
-	s.removeEntryFiles(e)
+	s.removeEntryFiles(ctx, companyID, e)
 	s.bus.Publish(ctx, "entry:deleted", []string{roomAll}, map[string]any{
 		"id": entryID, "calendar_id": calendarID, "company_id": companyID,
 	})
@@ -140,7 +194,7 @@ func (s *Service) DeleteEntries(ctx context.Context, companyID, calendarID int64
 	if err != nil {
 		return 0, err
 	}
-	s.removeEntryFiles(entries...)
+	s.removeEntryFiles(ctx, companyID, entries...)
 	s.bus.Publish(ctx, "entry:bulk-deleted", []string{roomAll}, map[string]any{
 		"ids": ids, "calendar_id": calendarID, "company_id": companyID,
 	})
@@ -148,7 +202,7 @@ func (s *Service) DeleteEntries(ctx context.Context, companyID, calendarID int64
 }
 
 // removeEntryFiles — удалить из хранилища файлы/картинки удаляемых записей.
-func (s *Service) removeEntryFiles(entries ...*domain.Entry) {
+func (s *Service) removeEntryFiles(ctx context.Context, companyID int64, entries ...*domain.Entry) {
 	var paths []string
 	for _, e := range entries {
 		if e == nil {
@@ -161,7 +215,7 @@ func (s *Service) removeEntryFiles(entries ...*domain.Entry) {
 		}
 	}
 	if len(paths) > 0 {
-		s.files.Remove(paths)
+		s.files.RemoveFor(ctx, 0, companyID, paths)
 	}
 }
 

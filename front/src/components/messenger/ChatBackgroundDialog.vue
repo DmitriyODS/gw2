@@ -2,7 +2,6 @@
   <AppDialog
     :model-value="modelValue"
     tone="tertiary"
-    icon="palette"
     size="lg"
     title="Оформление чата"
     dialog-class="chatbg-dialog"
@@ -34,7 +33,7 @@
 
 <script setup>
 import { ref, reactive, computed, watch } from 'vue'
-import AppDialog from '@/components/common/AppDialog.vue'
+import AppDialog from '@/components/ui/AppDialog.vue'
 import BackgroundEditor from '@/components/common/BackgroundEditor.vue'
 import { useMessengerStore } from '@/stores/messenger.js'
 import { useNotificationsStore } from '@/stores/notifications.js'

@@ -35,7 +35,7 @@ func (s *Service) ActiveUnit(ctx context.Context, userID int64) (*dto.Unit, erro
 }
 
 func (s *Service) CreateUnit(ctx context.Context, taskID, userID int64, companyID *int64, name string, unitTypeID int64) (*dto.Unit, error) {
-	if err := s.ensureNotOnVacation(ctx, userID); err != nil {
+	if err := s.ensureNotOnVacation(ctx, userID, companyID); err != nil {
 		return nil, err
 	}
 	task, err := s.taskInCompany(ctx, taskID, companyID)

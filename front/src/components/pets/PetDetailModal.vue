@@ -1,5 +1,5 @@
 <template>
-  <Teleport to="body">
+  <Teleport :to="host">
     <div class="pdm-overlay" @click.self="close">
       <div class="pdm-panel">
         <div class="pdm-cover" aria-hidden="true"></div>
@@ -315,7 +315,7 @@ import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
 import EmojiGlyph from '@/components/common/EmojiGlyph.vue'
 import { useRouter } from 'vue-router'
 import EmptyState from '@/components/common/EmptyState.vue'
-import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
+import ConfirmDialog from '@/components/ui/ConfirmDialog.vue'
 import KudosCoin from '@/components/pets/KudosCoin.vue'
 import FeedMiniGame from '@/components/pets/FeedMiniGame.vue'
 import WalkMiniGame from '@/components/pets/WalkMiniGame.vue'
@@ -330,6 +330,11 @@ import {
   shopItemEmoji, shopItemTitle, activityIcon, activityText,
   ailmentMeta, moodEmoji, moodTitle, FOODS, foodMeta,
 } from '@/utils/pets.js'
+import { useModalHost } from '@/desktop/windowHost.js'
+
+// Модалка живёт в окне своего раздела, а у глобального плавающего питомца
+// окна нет — там хост прежний, body.
+const { host } = useModalHost()
 
 const props = defineProps({
   // 'feed' | 'walk' | 'heal' | 'bath' | null
@@ -927,7 +932,7 @@ function gotoPets() {
   background: color-mix(in oklch, var(--color-primary) 5%, transparent);
   cursor: pointer; font-size: 26px; transition: transform 0.12s, border-color 0.12s;
 }
-.pdm-food-item:hover { transform: translateY(-2px); border-color: var(--color-primary); }
+.pdm-food-item:hover { border-color: var(--color-primary); }
 .pdm-food-item.favorite { border-color: color-mix(in oklch, var(--color-error) 45%, transparent); }
 .pdm-food-item.poor { opacity: 0.5; }
 .pdm-food-fav { position: absolute; top: 3px; right: 4px; font-size: 11px; }

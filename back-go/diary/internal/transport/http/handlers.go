@@ -62,6 +62,35 @@ func listParams(c *fiber.Ctx) service.ListParams {
 
 // ── Ежедневники ──────────────────────────────────────────────────
 
+// searchEntries — строка поиска рабочего стола: записи всех доступных
+// пользователю ежедневников одним запросом.
+func (h *handlers) searchEntries(c *fiber.Ctx) error {
+	items, err := h.eps.SearchEntries(c.Context(), endpoint.SearchEntriesReq{
+		UserID: currentUserID(c), Query: c.Query("q"), Limit: c.QueryInt("limit"),
+	})
+	if err != nil {
+		return h.respondError(c, err)
+	}
+	return c.JSON(fiber.Map{"items": items})
+}
+
+/* agenda — невыполненные дела за период по всем доступным ежедневникам
+   (живая плитка рабочего стола). Период приходит от клиента: день считается в
+   его зоне, сервер её не знает. */
+func (h *handlers) agenda(c *fiber.Ctx) error {
+	from, to := parseTime(c.Query("from")), parseTime(c.Query("to"))
+	if from == nil || to == nil {
+		return validationError(c, "Укажите период (from, to)")
+	}
+	resp, err := h.eps.Agenda(c.Context(), endpoint.AgendaReq{
+		UserID: currentUserID(c), From: *from, To: *to, Limit: c.QueryInt("limit"),
+	})
+	if err != nil {
+		return h.respondError(c, err)
+	}
+	return c.JSON(resp)
+}
+
 func (h *handlers) listDiaries(c *fiber.Ctx) error {
 	uid := currentUserID(c)
 	var resp any

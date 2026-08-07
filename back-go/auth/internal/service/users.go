@@ -2,11 +2,15 @@ package service
 
 import (
 	"context"
+	"encoding/json"
+	"strconv"
 	"strings"
 	"unicode/utf8"
 
+	"github.com/DmitriyODS/gw2/back-go/auth/internal/avatar"
 	"github.com/DmitriyODS/gw2/back-go/auth/internal/domain"
 	"github.com/DmitriyODS/gw2/back-go/auth/internal/dto"
+	"github.com/DmitriyODS/gw2/back-go/pkg/billingclient"
 )
 
 var errUserNotFound = domain.NewError("NOT_FOUND", "Пользователь не найден", 404)
@@ -50,10 +54,19 @@ func (s *Service) ensureEmailFree(ctx context.Context, email string, selfID int6
 	if err != nil {
 		return err
 	}
-	if existing != nil && existing.ID != selfID {
-		return domain.NewError("EMAIL_TAKEN", "Email уже используется", 409)
+	if existing == nil || existing.ID == selfID {
+		return nil
 	}
-	return nil
+	if !existing.EmailVerified {
+		// Неподтверждённая регистрация не бронирует email навсегда: письмо
+		// подтверждения в любом случае уходит настоящему владельцу ящика (без
+		// доступа к нему завершить чужую регистрацию нельзя), а до первого
+		// входа за пользователем нет никаких данных — освобождаем адрес.
+		// Иначе одной регистрации чужим email хватило бы, чтобы навсегда
+		// запереть жертву вне платформы по её собственному адресу.
+		return s.repo.HardDelete(ctx, existing.ID)
+	}
+	return domain.NewError("EMAIL_TAKEN", "Email уже используется", 409)
 }
 
 // actorScope — активная компания актора (из токена); ошибка, если её нет.
@@ -133,6 +146,9 @@ func (s *Service) CreateUser(ctx context.Context, actor *domain.User, req dto.Cr
 		// Сотрудник заведён администратором — email не подтверждает (вместо
 		// верификации обязательная смена пароля при входе при дефолтном пароле).
 		EmailVerified: true,
+	}
+	if err := s.ensureMemberLimit(ctx, companyID); err != nil {
+		return nil, err
 	}
 	if err := s.repo.Create(ctx, user); err != nil {
 		return nil, err
@@ -238,6 +254,9 @@ func (s *Service) freshMemberUser(ctx context.Context, companyID, userID int64) 
 		user.CompanyID = &companyID
 		user.Role = m.Role
 		user.Post = m.Post
+		// Отпуск живёт в связке: в этой компании человек отдыхает, в другой —
+		// может работать.
+		user.OnVacation = m.OnVacation
 	}
 	out := dto.NewUser(user)
 	return &out, nil
@@ -253,6 +272,7 @@ func (s *Service) UpdateMe(ctx context.Context, userID int64, req dto.UpdateMeRe
 	}
 
 	updates := map[string]any{}
+	passwordChanged := false
 
 	if req.FIO != nil {
 		if err := validateFIO(*req.FIO); err != nil {
@@ -289,20 +309,48 @@ func (s *Service) UpdateMe(ctx context.Context, userID int64, req dto.UpdateMeRe
 		updates["login"] = *req.Login
 	}
 
+	/* Аватар-значок. Файл важнее: пока он есть, значок не показывается —
+	   поэтому выбор эмодзи снимает загруженную фотографию, иначе человек
+	   выбрал бы значок и не понял, почему ничего не изменилось. */
+	if req.AvatarEmoji != nil {
+		emoji, ok := avatar.NormalizeEmoji(*req.AvatarEmoji)
+		if !ok {
+			return nil, domain.NewError("VALIDATION", "Выберите значок-эмодзи", 400)
+		}
+		updates["avatar_emoji"] = nilIfEmpty(emoji)
+		if emoji != "" && user.AvatarPath != nil {
+			s.avatars.Delete(*user.AvatarPath)
+			updates["avatar_path"] = nil
+			s.billing.TrackStorage(ctx, userID, 0, billingclient.StorageChange{
+				Service: "avatars", Removed: []string{*user.AvatarPath},
+			})
+		}
+	}
+
+	// Пользовательский статус — возможность платного тарифа. Снять свой статус
+	// (пустая строка) можно всегда: иначе он завис бы после окончания подписки.
 	if req.StatusEmoji != nil {
-		updates["status_emoji"] = nilIfEmpty(strings.TrimSpace(*req.StatusEmoji))
+		emoji := strings.TrimSpace(*req.StatusEmoji)
+		if emoji != "" {
+			if err := s.planAllowsStatuses(ctx, userID); err != nil {
+				return nil, err
+			}
+		}
+		updates["status_emoji"] = nilIfEmpty(emoji)
 	}
 	if req.StatusText != nil {
 		text := strings.TrimSpace(*req.StatusText)
 		if utf8.RuneCountInString(text) > 80 {
 			return nil, domain.NewError("VALIDATION", "Статус не длиннее 80 символов", 400)
 		}
+		if text != "" {
+			if err := s.planAllowsStatuses(ctx, userID); err != nil {
+				return nil, err
+			}
+		}
 		updates["status_text"] = nilIfEmpty(text)
 	}
 
-	if req.OnVacation != nil {
-		updates["on_vacation"] = *req.OnVacation
-	}
 	if req.NotesAIProofread != nil {
 		updates["notes_ai_proofread"] = *req.NotesAIProofread
 	}
@@ -332,11 +380,22 @@ func (s *Service) UpdateMe(ctx context.Context, userID int64, req dto.UpdateMeRe
 			return nil, err
 		}
 		updates["hash_password"] = hashed
+		passwordChanged = true
 	}
 
 	if len(updates) > 0 {
 		if err := s.repo.UpdateFields(ctx, userID, updates); err != nil {
 			return nil, err
+		}
+	}
+
+	/* Пароль сменился — обрываем прочие входы. Иначе устройство, с которого
+	   пароль и утёк, продолжало бы обновлять токен ещё месяц: смена пароля для
+	   человека и означает «выгнать всех остальных». Текущий сеанс остаётся —
+	   выкидывать самого себя из настроек незачем. */
+	if passwordChanged {
+		if _, err := s.RevokeOtherSessions(ctx, userID); err != nil {
+			s.log.Warn("sessions.revoke_after_password_failed", "user_id", userID, "error", err)
 		}
 	}
 	return s.freshUser(ctx, userID)
@@ -351,8 +410,15 @@ func (s *Service) UploadAvatar(ctx context.Context, userID int64, fileBytes []by
 		return nil, errUserNotFound
 	}
 
+	var replaced []string
 	if user.AvatarPath != nil {
 		s.avatars.Delete(*user.AvatarPath)
+		replaced = []string{*user.AvatarPath}
+	}
+	if s.billing != nil {
+		if err := s.billing.EnsureStorage(ctx, userID, 0, int64(len(fileBytes))); err != nil {
+			return nil, err
+		}
 	}
 	path, err := s.avatars.Save(fileBytes)
 	if err != nil {
@@ -361,6 +427,16 @@ func (s *Service) UploadAvatar(ctx context.Context, userID int64, fileBytes []by
 	if err := s.repo.UpdateFields(ctx, userID, map[string]any{"avatar_path": path}); err != nil {
 		return nil, err
 	}
+	// Прежняя аватарка удалена выше — её место возвращается вместе с учётом
+	// новой: размер снятой биллинг знает из своего журнала.
+	s.billing.TrackStorage(ctx, userID, 0, billingclient.StorageChange{
+		Service: "avatars",
+		Added: []billingclient.StoredFile{{
+			Key: path, Name: "Фото профиля", Size: int64(len(fileBytes)),
+			Kind: "avatar", ID: strconv.FormatInt(userID, 10), Title: "Фото профиля",
+		}},
+		Removed: replaced,
+	})
 	return s.freshUser(ctx, userID)
 }
 
@@ -377,6 +453,9 @@ func (s *Service) DeleteAvatar(ctx context.Context, userID int64) (*dto.User, er
 		if err := s.repo.UpdateFields(ctx, userID, map[string]any{"avatar_path": nil}); err != nil {
 			return nil, err
 		}
+		s.billing.TrackStorage(ctx, userID, 0, billingclient.StorageChange{
+			Service: "avatars", Removed: []string{*user.AvatarPath},
+		})
 	}
 	return s.freshUser(ctx, userID)
 }
@@ -472,12 +551,15 @@ func (s *Service) applyUserUpdate(ctx context.Context, companyID, userID int64, 
 		}
 		updates["email"] = email
 	}
-	if req.OnVacation != nil {
-		updates["on_vacation"] = *req.OnVacation
-	}
 
 	if len(updates) > 0 {
 		if err := s.repo.UpdateFields(ctx, userID, updates); err != nil {
+			return nil, err
+		}
+	}
+	// Отпуск — свойство работы В ЭТОЙ компании, а не аккаунта.
+	if req.OnVacation != nil {
+		if err := s.repo.SetMembershipVacation(ctx, userID, companyID, *req.OnVacation); err != nil {
 			return nil, err
 		}
 	}
@@ -738,6 +820,8 @@ func (s *Service) AddCompanyMember(ctx context.Context, actor *domain.User, comp
 		if err := s.guardLastAdmin(ctx, companyID, existing.Role.Level, role.Level); err != nil {
 			return err
 		}
+	} else if err := s.ensureMemberLimit(ctx, companyID); err != nil {
+		return err
 	}
 	if err := s.repo.AddMembership(ctx, userID, companyID, roleID); err != nil {
 		return err
@@ -851,6 +935,9 @@ func (s *Service) CreateCompanyUser(ctx context.Context, actor *domain.User, com
 		FIO: req.FIO, Login: req.Login, HashPassword: hashed,
 		Phone: phone, Email: email, IsDefaultPass: isDefault, EmailVerified: true,
 	}
+	if err := s.ensureMemberLimit(ctx, companyID); err != nil {
+		return nil, err
+	}
 	if err := s.repo.Create(ctx, user); err != nil {
 		return nil, err
 	}
@@ -928,4 +1015,43 @@ func (s *Service) ResetCompanyMemberPassword(ctx context.Context, actor *domain.
 	}
 	s.log.Info("company.user_reset_password", "user_id", userID, "company_id", companyID, "actor_id", actor.ID)
 	return nil
+}
+
+/* ── Настройки рабочего стола ──────────────────────────────────────
+   Личные настройки десктопного каркаса (закреплённые в панели задач разделы,
+   размеры плиток меню «Пуск», обои) живут на сервере, чтобы переезжать между
+   устройствами. Для сервера это непрозрачный JSON-объект: структуру ведёт
+   фронт, здесь только проверка формата и разумного размера. */
+
+const desktopPrefsMaxBytes = 16 * 1024
+
+func (s *Service) GetDesktopPrefs(ctx context.Context, userID int64) (json.RawMessage, error) {
+	user, err := s.repo.GetByID(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	if user == nil {
+		return nil, errUserNotFound
+	}
+	if len(user.DesktopPrefs) == 0 {
+		return json.RawMessage("{}"), nil
+	}
+	return json.RawMessage(user.DesktopPrefs), nil
+}
+
+func (s *Service) SaveDesktopPrefs(ctx context.Context, userID int64, prefs json.RawMessage) (json.RawMessage, error) {
+	if len(prefs) == 0 {
+		prefs = json.RawMessage("{}")
+	}
+	if len(prefs) > desktopPrefsMaxBytes {
+		return nil, domain.NewError("VALIDATION", "Настройки рабочего стола слишком большие", 400)
+	}
+	var obj map[string]any
+	if err := json.Unmarshal(prefs, &obj); err != nil {
+		return nil, domain.NewError("VALIDATION", "Настройки рабочего стола должны быть объектом", 400)
+	}
+	if err := s.repo.UpdateFields(ctx, userID, map[string]any{"desktop_prefs": prefs}); err != nil {
+		return nil, err
+	}
+	return prefs, nil
 }

@@ -235,7 +235,7 @@ defineExpose({ close })
   cursor: pointer;
   transition: background 0.12s, transform 0.1s;
 }
-.emoji-pop .emoji-cell:hover { background: var(--color-surface-low); transform: scale(1.12); }
+.emoji-pop .emoji-cell:hover { background: var(--color-surface-low); }
 .emoji-pop .emoji-cell:active { transform: scale(0.95); }
 
 .emoji-pop-enter-active,

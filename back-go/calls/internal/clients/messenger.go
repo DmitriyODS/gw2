@@ -6,6 +6,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"time"
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
@@ -13,6 +14,10 @@ import (
 	"github.com/DmitriyODS/gw2/back-go/calls/internal/domain"
 	"github.com/DmitriyODS/gw2/back-go/pkg/gen/messengerpb"
 )
+
+// messengerTimeout — плашка звонка вторична (fire-and-forget, см. выше), но
+// без потолка зависший msgsvc копил бы горутины на каждый звонок.
+const messengerTimeout = 5 * time.Second
 
 // Messenger — клиент msgsvc: парный диалог (синхронно, до создания звонка)
 // и плашка звонка kind='call' (для events-паблишера). Бизнес-ошибка приходит
@@ -43,6 +48,8 @@ func bizErr(code, message string) error {
 }
 
 func (c *Messenger) EnsureDialog(ctx context.Context, userAID, userBID int64) (int64, error) {
+	ctx, cancel := context.WithTimeout(ctx, messengerTimeout)
+	defer cancel()
 	resp, err := c.stub.EnsureDialog(ctx, &messengerpb.EnsureDialogRequest{
 		UserAId: userAID, UserBId: userBID,
 	})
@@ -58,6 +65,8 @@ func (c *Messenger) EnsureDialog(ctx context.Context, userAID, userBID int64) (i
 // CreateCallMessage — системная плашка звонка. Возвращает готовый JSON-снапшот
 // сообщения (форма REST msgsvc) и адресатов message:new.
 func (c *Messenger) CreateCallMessage(ctx context.Context, conversationID, senderID, callID int64) (string, []int64, error) {
+	ctx, cancel := context.WithTimeout(ctx, messengerTimeout)
+	defer cancel()
 	resp, err := c.stub.CreateCallMessage(ctx, &messengerpb.CreateCallMessageRequest{
 		ConversationId: conversationID, SenderId: senderID, CallId: callID,
 	})
@@ -73,6 +82,8 @@ func (c *Messenger) CreateCallMessage(ctx context.Context, conversationID, sende
 // GetCallMessage — актуальный снапшот плашки (для message:updated).
 // Пустой message_json без ошибки — плашки нет (group-звонок).
 func (c *Messenger) GetCallMessage(ctx context.Context, callID int64) (int64, string, []int64, error) {
+	ctx, cancel := context.WithTimeout(ctx, messengerTimeout)
+	defer cancel()
 	resp, err := c.stub.GetCallMessage(ctx, &messengerpb.GetCallMessageRequest{CallId: callID})
 	if err != nil {
 		return 0, "", nil, err

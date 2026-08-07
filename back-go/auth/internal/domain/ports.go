@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"io"
 	"time"
+
+	"github.com/DmitriyODS/gw2/back-go/pkg/companydata"
 )
 
 // VerificationStore — коды/ссылки подтверждения email (таблица
@@ -109,6 +111,9 @@ type UserRepository interface {
 	UpdateMembershipRole(ctx context.Context, userID, companyID, roleID int64) error
 	// SetMembershipPost — должность в конкретной компании.
 	SetMembershipPost(ctx context.Context, userID, companyID int64, post *string) error
+	// SetMembershipVacation — режим «в отпуске» в конкретной компании
+	// (глобального отпуска по всем компаниям у пользователя нет).
+	SetMembershipVacation(ctx context.Context, userID, companyID int64, onVacation bool) error
 	// CountCompanyMembersByLevel — активные члены компании с уровнем роли
 	// (защита «последнего администратора компании»).
 	CountCompanyMembersByLevel(ctx context.Context, companyID int64, level int) (int, error)
@@ -131,6 +136,18 @@ type LoginThrottle interface {
 	// на столько секунд.
 	RegisterFailure(ctx context.Context, login string) int
 	RegisterSuccess(ctx context.Context, login string)
+}
+
+// RateLimiter — общий лимит «не больше N обращений за окно» по произвольному
+// ключу (Redis, фиксированное окно, ключи gw2:rl:*; недоступность Redis —
+// fail-open, как у LoginThrottle). Регистрация по IP, резенды писем
+// подтверждения/сброса по пользователю — без него подбор кода подтверждения
+// email (5 попыток на код) не имел верхнего предела: код можно перевыпускать
+// раз в 60с сколько угодно раз в сутки.
+type RateLimiter interface {
+	// Allow — true, если запрос укладывается в лимит; иначе false и сколько
+	// секунд осталось до сброса окна.
+	Allow(ctx context.Context, key string, limit int, window time.Duration) (ok bool, retryAfterSec int)
 }
 
 // AvatarStorage — файлы аватарок в общем uploads-каталоге (отдаёт nginx).
@@ -175,6 +192,20 @@ type CompanyRepository interface {
 	DeleteCompany(ctx context.Context, id int64) error
 	// CompanyStats — батч-счётчики сотрудников/задач без N+1.
 	CompanyStats(ctx context.Context, ids []int64) (map[int64]CompanyStats, error)
+	// CountCompaniesCreatedBy — сколько компаний создал пользователь (лимит
+	// тарифа «Компании» считается по создателю).
+	CountCompaniesCreatedBy(ctx context.Context, userID int64) (int, error)
+}
+
+// CompanyDataClient — владельцы контента компании (задачи, реестры, календари,
+// портал) со стороны authsvc: он собирает из их кусков архив переноса и
+// раздаёт обратно, не зная, что у них внутри.
+type CompanyDataClient interface {
+	// Has — настроен ли раздел. Ненастроенный молча пропускается: стенд
+	// поднимает не все сервисы, и архив собирается из того, что есть.
+	Has(section string) bool
+	Export(ctx context.Context, section string, companyID int64) (companydata.Export, error)
+	Import(ctx context.Context, section string, in companydata.Import) (int, error)
 }
 
 // BackupStore — универсальный схемо-независимый дамп/восстановление таблиц.

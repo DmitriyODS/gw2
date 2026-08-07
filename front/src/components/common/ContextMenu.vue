@@ -14,9 +14,11 @@
         <template v-for="(item, i) in items" :key="i">
           <div v-if="item.divider" class="ctxm-divider" />
           <button
+            v-else
             class="ctxm-item"
             :class="{ danger: item.danger, 'has-sub': item.children, open: activeSub === i }"
             role="menuitem"
+            :disabled="item.disabled"
             @mouseenter="onEnter(item, i, $event)"
             @click="onItemClick(item, i, $event)"
           >
@@ -41,7 +43,7 @@
       >
         <template v-for="(item, i) in subItems" :key="i">
           <div v-if="item.divider" class="ctxm-divider" />
-          <button class="ctxm-item" :class="{ danger: item.danger }" role="menuitem" @click="pick(item)">
+          <button v-else class="ctxm-item" :class="{ danger: item.danger }" role="menuitem" @click="pick(item)">
             <span v-if="item.icon" class="material-symbols-outlined">{{ item.icon }}</span>
             <span class="ctxm-label">{{ item.label }}</span>
           </button>
@@ -58,7 +60,7 @@ const props = defineProps({
   visible: { type: Boolean, default: false },
   x: { type: Number, default: 0 },
   y: { type: Number, default: 0 },
-  // Пункты: { label, icon?, action?, danger?, divider?, children?: [...] }.
+  // Пункты: { label, icon?, action?, danger?, disabled?, divider?, children?: [...] }.
   items: { type: Array, default: () => [] },
 })
 const emit = defineEmits(['select', 'close'])
@@ -89,7 +91,13 @@ function clamp(el, target, x, y) {
   let nx = x
   let ny = y
   if (nx + r.width > window.innerWidth - pad) nx = window.innerWidth - r.width - pad
-  if (ny + r.height > window.innerHeight - pad) ny = window.innerHeight - r.height - pad
+  /* Вниз не помещается — раскрываем ВВЕРХ от точки клика (нижним краем к
+     курсору), а не подтягиваем к низу экрана: у нижней кромки (панель задач,
+     последние строки списков) меню иначе накрывает саму кнопку и курсор
+     оказывается на случайном пункте. */
+  if (ny + r.height > window.innerHeight - pad) {
+    ny = y - r.height >= pad ? y - r.height : window.innerHeight - r.height - pad
+  }
   target.value = { x: Math.max(pad, nx), y: Math.max(pad, ny) }
 }
 
@@ -106,7 +114,10 @@ async function openSub(index, e) {
   let nx = rect.right - 4
   let ny = rect.top
   if (nx + r.width > window.innerWidth - pad) nx = rect.left - r.width + 4
-  if (ny + r.height > window.innerHeight - pad) ny = window.innerHeight - r.height - pad
+  // Как и само меню: не влезло вниз — растём вверх от пункта.
+  if (ny + r.height > window.innerHeight - pad) {
+    ny = rect.bottom - r.height >= pad ? rect.bottom - r.height : window.innerHeight - r.height - pad
+  }
   subAnchor.value = { x: Math.max(pad, nx), y: Math.max(pad, ny) }
 }
 
@@ -115,6 +126,7 @@ function onEnter(item, i, e) {
   else activeSub.value = null
 }
 function onItemClick(item, i, e) {
+  if (item.disabled) return
   if (item.children) { openSub(i, e); return } // тач: клик раскрывает подменю
   pick(item)
 }
@@ -182,7 +194,13 @@ onBeforeUnmount(() => {
   border-radius: var(--radius-sm, 8px);
   cursor: pointer;
 }
-.ctxm-item:hover, .ctxm-item.open { background: var(--color-surface-low); }
+.ctxm-item:disabled {
+  opacity: 0.45;
+  cursor: default;
+  background: none;
+}
+
+.ctxm-item:not(:disabled):hover, .ctxm-item.open { background: var(--color-surface-low); }
 .ctxm-item.danger { color: var(--color-error); }
 .ctxm-item.danger:hover { background: var(--color-error-container); color: var(--color-on-error-container); }
 .ctxm-item .material-symbols-outlined { font-size: 18px; }

@@ -11,7 +11,7 @@
       >
         <div v-if="showReactions" class="msg-ctx-reactions">
           <button
-            v-for="e in QUICK_REACTIONS"
+            v-for="e in suggestedReactions"
             :key="e"
             class="msg-ctx-react"
             :class="{ active: myReactions.includes(e) }"
@@ -51,6 +51,7 @@
 <script setup>
 import { computed, nextTick, ref, watch, onMounted, onBeforeUnmount } from 'vue'
 import { fitToViewport } from '@/utils/menuPlacement.js'
+import { suggestedReactions } from '@/utils/reactions.js'
 
 const props = defineProps({
   visible: { type: Boolean, default: false },
@@ -67,12 +68,9 @@ const props = defineProps({
   myReactions: { type: Array, default: () => [] },
 })
 
-// Расширенный набор: позитивные, нейтральные и негативные реакции (как в
-// Telegram/Slack). Одна горизонтально прокручиваемая строка (см. .msg-ctx-reactions).
-const QUICK_REACTIONS = [
-  '👍', '👎', '❤️', '🔥', '😂', '🎉', '👏', '🙏', '😮', '🤔',
-  '😢', '😡', '🥰', '😍', '🤯', '💯', '🤝', '👀', '💩', '🤣',
-]
+// Набор общий с реакциями портала (utils/reactions.js), часто используемые
+// стоят первыми. Одна горизонтально прокручиваемая строка — их видно сразу,
+// без прокрутки (см. .msg-ctx-reactions).
 
 const emit = defineEmits(['close', 'action', 'react'])
 const menuEl = ref(null)
@@ -211,8 +209,7 @@ function onKey(e) {
 
 .msg-ctx-react:hover {
   background: var(--color-surface-low);
-  transform: scale(1.15);
-}
+  }
 
 .msg-ctx-react.active {
   background: var(--color-primary-container);

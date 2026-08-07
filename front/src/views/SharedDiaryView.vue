@@ -17,7 +17,7 @@
     <div v-else-if="diary" class="sv-shell">
       <div class="sv-toolbar">
         <div class="sv-subtabs">
-          <SegmentedTabs :model-value="subtab" :tabs="subtabs" dense @update:model-value="setSubtab" />
+          <AppTabs :model-value="subtab" :tabs="subtabs" dense @update:model-value="setSubtab" />
         </div>
         <template v-if="subtab === 'active'">
           <div class="sv-nav">
@@ -76,7 +76,7 @@
     <div v-else class="sv-state"><span class="material-symbols-outlined spin">progress_activity</span></div>
 
     <!-- Просмотр записи -->
-    <AppDialog v-model="entryOpen" :title="activeEntry?.title || 'Запись'" icon="event_note" size="md" :actions="[{ kind: 'cancel', label: 'Закрыть' }]" @cancel="entryOpen = false">
+    <AppDialog v-model="entryOpen" :title="activeEntry?.title || 'Запись'" size="md" :actions="[{ kind: 'cancel', label: 'Закрыть' }]" @cancel="entryOpen = false">
       <div v-if="activeEntry" class="sv-detail">
         <div class="sv-drow"><span class="material-symbols-outlined">calendar_today</span><span>{{ detailDate }}<template v-if="entryTime(activeEntry)"> · {{ entryTime(activeEntry) }}</template></span></div>
         <p v-if="activeEntry.description" class="sv-ddesc"><LinkifiedText :text="activeEntry.description" /></p>
@@ -85,7 +85,7 @@
     </AppDialog>
 
     <!-- День -->
-    <AppDialog v-model="dayOpen" :title="dayTitle" icon="today" size="md" :actions="[{ kind: 'cancel', label: 'Закрыть' }]" @cancel="dayOpen = false">
+    <AppDialog v-model="dayOpen" :title="dayTitle" size="md" :actions="[{ kind: 'cancel', label: 'Закрыть' }]" @cancel="dayOpen = false">
       <ul v-if="dayDialogEntries.length" class="sv-ddlist">
         <li v-for="e in dayDialogEntries" :key="e.id"><button class="sv-ddmain" @click="openEntry(e)"><span v-if="entryTime(e)" class="sv-ddtime">{{ entryTime(e) }}</span><span class="sv-ddtitle">{{ e.title }}</span><span class="material-symbols-outlined">chevron_right</span></button></li>
       </ul>
@@ -97,9 +97,9 @@
 <script setup>
 import { computed, onMounted, ref } from 'vue'
 import { useRoute } from 'vue-router'
-import AppDialog from '@/components/common/AppDialog.vue'
+import AppDialog from '@/components/ui/AppDialog.vue'
 import LinkifiedText from '@/components/common/LinkifiedText.vue'
-import SegmentedTabs from '@/components/common/SegmentedTabs.vue'
+import AppTabs from '@/components/ui/AppTabs.vue'
 import { getSharedDiary, getSharedEntries } from '@/api/diaries.js'
 
 const route = useRoute()

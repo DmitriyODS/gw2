@@ -1,5 +1,5 @@
 <template>
-  <Teleport to="body">
+  <Teleport :to="host">
     <div class="mg-overlay" @click.self="$emit('close')">
       <div class="mg-panel">
         <header class="mg-head">
@@ -32,6 +32,11 @@
 <script setup>
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { isInGreenZone, pingPongPercent } from '@/utils/miniGames.js'
+import { useModalHost } from '@/desktop/windowHost.js'
+
+// Мини-игра живёт в окне своего раздела, а у глобального плавающего питомца
+// окна нет — там хост прежний, body.
+const { host } = useModalHost()
 
 const emit = defineEmits(['success', 'close'])
 

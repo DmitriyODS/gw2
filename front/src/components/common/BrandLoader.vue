@@ -5,21 +5,36 @@ let uid = 0
 </script>
 
 <script setup>
-defineProps({
+import { computed } from 'vue'
+
+const props = defineProps({
   size: { type: Number, default: 88 },
+  /* block — лоадер занимает всю ширину и встаёт по центру области загрузки.
+     Сам по себе он inline-block и прижимается к левому верхнему углу, а ждать
+     раздел приходится глядя именно на него: в разделах, панелях и диалогах
+     нужен этот режим, а не обёртка-«центровка» в каждом файле. */
+  block: { type: Boolean, default: false },
+  /** Высота области ожидания в режиме block (0 — по содержимому). */
+  minHeight: { type: Number, default: 240 },
 })
 
 const clipId = `bl-clip-${++uid}`
+
+// В блочном режиме размер держит сам svg, а контейнер растягивается и центрирует.
+const rootStyle = computed(() => (props.block
+  ? { minHeight: props.minHeight ? `${props.minHeight}px` : undefined }
+  : { width: `${props.size}px`, height: `${props.size}px` }))
 </script>
 
 <template>
   <div
     class="brand-loader"
-    :style="{ width: size + 'px', height: size + 'px' }"
+    :class="{ 'is-block': block }"
+    :style="rootStyle"
     role="status"
     aria-label="Загрузка"
   >
-    <svg viewBox="0 0 71 71" width="100%" height="100%">
+    <svg viewBox="0 0 71 71" :width="size" :height="size">
       <defs>
         <clipPath :id="clipId">
           <circle cx="35.5" cy="35.5" r="35.5" />
@@ -50,6 +65,15 @@ const clipId = `bl-clip-${++uid}`
 .brand-loader {
   display: inline-block;
   flex: none;
+}
+
+/* Блочный режим: ждать раздел приходится глядя на лоадер — он должен быть в
+   центре области, а не в её углу. */
+.brand-loader.is-block {
+  display: grid;
+  place-items: center;
+  width: 100%;
+  flex: 1;
 }
 
 .bl-bg {

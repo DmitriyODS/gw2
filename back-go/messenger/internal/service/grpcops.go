@@ -75,7 +75,7 @@ func (s *Service) GetCallMessage(ctx context.Context, callID int64) (int64, *dto
 // ForwardMessage), в соло-чат (техподдержку) пересылка не имеет смысла.
 // message:new публикует сам msgsvc (gw2:messenger:events) — тем же путём
 // идут и пуши pushsvc. Возвращает снапшот сообщения и адресатов события.
-func (s *Service) CreatePostMessage(ctx context.Context, convID, senderID, postID int64, title, excerpt, coverURL string) (*dto.Message, []int64, error) {
+func (s *Service) CreatePostMessage(ctx context.Context, convID, senderID, postID, companyID int64, title, excerpt, coverURL string) (*dto.Message, []int64, error) {
 	conv, err := s.conversationForUser(ctx, convID, senderID)
 	if err != nil {
 		return nil, nil, err
@@ -83,6 +83,13 @@ func (s *Service) CreatePostMessage(ctx context.Context, convID, senderID, postI
 	if conv.IsSolo() {
 		return nil, nil, domain.NewError("BAD_CONVERSATION",
 			"В этот чат нельзя переслать пост", 400)
+	}
+	// Пост — сущность компании, как и задача: пересылаем только своим.
+	if companyID > 0 {
+		if err := s.ensureCompanyAudience(ctx, conv, companyID,
+			"POST_WRONG_COMPANY", "Публикацию можно переслать только сотрудникам её компании"); err != nil {
+			return nil, nil, err
+		}
 	}
 	msg, err := s.repo.CreateMessage(ctx, domain.NewMessage{
 		ConversationID: conv.ID,

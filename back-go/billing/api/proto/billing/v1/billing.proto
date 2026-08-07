@@ -1,0 +1,149 @@
+// Контракт биллинга для остальных микросервисов: какие лимиты действуют,
+// влезает ли файл в хранилище и есть ли токены на обращение к ИИ.
+//
+// Подписка принадлежит пользователю, компания наследует тариф своего создателя,
+// поэтому почти каждый запрос — это пара (user_id, company_id): company_id > 0
+// означает «лимиты этой компании».
+syntax = "proto3";
+
+package billing.v1;
+
+option go_package = "github.com/DmitriyODS/gw2/back-go/pkg/gen/billingpb;billingpb";
+
+service BillingService {
+  rpc GetEntitlements(GetEntitlementsRequest) returns (GetEntitlementsResponse);
+  rpc CheckStorage(CheckStorageRequest) returns (CheckStorageResponse);
+  rpc TrackStorage(TrackStorageRequest) returns (TrackStorageResponse);
+  rpc CheckAI(CheckAIRequest) returns (CheckAIResponse);
+  rpc ConsumeAI(ConsumeAIRequest) returns (ConsumeAIResponse);
+  rpc LogAction(LogActionRequest) returns (LogActionResponse);
+}
+
+// Limits — лимиты тарифа с учётом докупок. Отрицательное значение числового
+// поля означает «без ограничения».
+message Limits {
+  int64 tasks = 1;
+  int32 companies = 2;
+  int32 members = 3;
+  int64 storage_bytes = 4;
+  int64 ai_tokens = 5;
+  int32 calendars = 6;
+  int32 diaries = 7;
+  int32 boards = 8;
+  int32 registries = 9;
+  int32 chat_folders = 10;
+  int32 call_participants = 11;
+
+  bool data_transfer = 12;
+  bool advanced_stats = 13;
+  bool portal = 14;
+  bool user_statuses = 15;
+  bool premium_themes = 16;
+  bool premium_pet_skins = 17;
+  bool premium_pet_house = 18;
+  bool premium_pet_goods = 19;
+}
+
+message GetEntitlementsRequest {
+  int64 user_id = 1;
+  int64 company_id = 2;
+}
+
+message GetEntitlementsResponse {
+  string plan = 1;
+  string plan_name = 2;
+  Limits limits = 3;
+  int64 storage_used = 4;
+  int64 tokens_used = 5;
+  int64 tokens_left = 6;
+  // owner_id — чей тариф применён (для компании это её создатель).
+  int64 owner_id = 7;
+  int64 expires_at = 8; // unix-секунды; 0 — бессрочно
+}
+
+message CheckStorageRequest {
+  int64 user_id = 1;
+  int64 company_id = 2;
+  int64 bytes = 3;
+}
+
+message CheckStorageResponse {
+  bool allowed = 1;
+  int64 free_bytes = 2;
+  int64 limit_bytes = 3;
+  string plan = 4;
+  int64 owner_id = 5;
+}
+
+// TrackStorage сообщает, ЧТО произошло с файлами, а занятое место биллинг
+// пересчитывает сам: размеры добавленных приходят здесь, размеры удалённых он
+// знает из журнала. Поэтому сервису-владельцу не нужно мерить объекты в
+// хранилище перед удалением (в S3 это запрос на каждый файл).
+message TrackStorageRequest {
+  // user_id — кто заливает файл; company_id > 0 означает файл компании, и
+  // квоту тогда тратит её СОЗДАТЕЛЬ (владельца находит сам биллинг).
+  int64 user_id = 1;
+  string service = 2;
+  int64 company_id = 3;
+  repeated StoredFile added = 4;
+  repeated string removed_keys = 5;
+}
+
+// StoredFile — запись журнала: файл, который сервис только что положил в
+// хранилище. Пустые ref_* допустимы (файл грузится раньше своей сущности) —
+// их проставит ближайший обход ListFiles.
+message StoredFile {
+  string key = 1;
+  string name = 2;
+  int64 size = 3;
+  string ref_kind = 4;
+  string ref_id = 5;
+  string title = 6;
+}
+
+message TrackStorageResponse {
+  int64 total_bytes = 1;
+}
+
+message CheckAIRequest {
+  int64 user_id = 1;
+  int64 company_id = 2;
+}
+
+message CheckAIResponse {
+  bool allowed = 1;
+  // payer_id — с чьего баланса спишутся токены.
+  int64 payer_id = 2;
+  int64 tokens_left = 3;
+}
+
+message ConsumeAIRequest {
+  int64 payer_id = 1;
+  int64 actor_id = 2;
+  int64 company_id = 3;
+  string feature = 4;
+  string model = 5;
+  int32 prompt_tokens = 6;
+  int32 completion_tokens = 7;
+  int64 billed_tokens = 8;
+  // own_key — запрос ушёл на личный ключ пользователя: токены не списываются,
+  // расход только фиксируется.
+  bool own_key = 9;
+}
+
+message ConsumeAIResponse {
+  bool ok = 1;
+  int64 tokens_left = 2;
+}
+
+message LogActionRequest {
+  int64 actor_id = 1;
+  string action = 2;
+  string target_kind = 3;
+  string target_id = 4;
+  string summary = 5;
+}
+
+message LogActionResponse {
+  bool ok = 1;
+}

@@ -183,8 +183,7 @@ function formatTime(d) {
 
 .show-task-btn:hover {
   opacity: 0.88;
-  transform: translateY(-1px);
-}
+  }
 
 .show-task-btn .material-symbols-outlined {
   font-size: 20px;
@@ -207,8 +206,7 @@ function formatTime(d) {
 
 .stop-btn:hover:not(:disabled) {
   opacity: 0.88;
-  transform: translateY(-1px);
-}
+  }
 
 .stop-btn:disabled {
   opacity: 0.5;

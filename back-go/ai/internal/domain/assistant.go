@@ -5,13 +5,14 @@ import (
 	"time"
 )
 
-// AssistantConversation — один диалог пользователя с ИИ-ассистентом в
-// компании (уникален по паре user_id+company_id — ассистент не ведёт
-// историю по чатам, как мессенджер, а держит один непрерывный тред).
+// AssistantConversation — диалог пользователя с ИИ-ассистентом. Ассистент
+// подключён к ЧЕЛОВЕКУ, а не к компании: тред один на пользователя (UNIQUE
+// user_id), поэтому переключение компании не подменяет историю, а сам
+// ассистент доступен и без активной компании. Историю по чатам, как
+// мессенджер, ассистент не ведёт — тред один и непрерывный.
 type AssistantConversation struct {
 	ID        int64
 	UserID    int64
-	CompanyID int64
 	CreatedAt time.Time
 }
 
@@ -39,9 +40,8 @@ const (
 
 // AssistantRepository — персистентность диалога ассистента.
 type AssistantRepository interface {
-	// GetOrCreateConversation — единственный диалог пользователя в компании
-	// (UNIQUE user_id+company_id).
-	GetOrCreateConversation(ctx context.Context, userID, companyID int64) (*AssistantConversation, error)
+	// GetOrCreateConversation — единственный диалог пользователя (UNIQUE user_id).
+	GetOrCreateConversation(ctx context.Context, userID int64) (*AssistantConversation, error)
 	// RecentMessages — последние N сообщений диалога в ХРОНОЛОГИЧЕСКОМ
 	// порядке (старые → новые) — как контекст для tools-цикла.
 	RecentMessages(ctx context.Context, conversationID int64, limit int) ([]AssistantMessage, error)
@@ -54,8 +54,8 @@ type AssistantRepository interface {
 	AppendMessage(ctx context.Context, conversationID int64, role, text string, sources *string) (*AssistantMessage, error)
 	// UpsertFeedback — голос 👍/👎 по ответу ассистента; повторный голос той
 	// же пары (message, user) заменяет прежний. false без ошибки — сообщения
-	// нет, оно не в диалоге (userID, companyID) или это не ответ ассистента.
-	UpsertFeedback(ctx context.Context, messageID, userID, companyID int64, verdict string, reason *string) (bool, error)
+	// нет, оно не в диалоге этого пользователя или это не ответ ассистента.
+	UpsertFeedback(ctx context.Context, messageID, userID int64, verdict string, reason *string) (bool, error)
 }
 
 // ── Инструменты ИИ-ассистента: gRPC-клиент tasksvc ────────────────

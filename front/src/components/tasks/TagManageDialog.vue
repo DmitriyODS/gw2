@@ -3,7 +3,6 @@
     :model-value="modelValue"
     title="Теги задач"
     subtitle="Общий справочник компании — теги видят все сотрудники"
-    icon="sell"
     tone="primary"
     size="sm"
     @update:model-value="$emit('update:modelValue', $event)"
@@ -31,10 +30,13 @@
           @click="newColor = c.id"
         />
       </div>
-      <button class="btn-glass tagm-add" :disabled="busy || !newName.trim()" @click="create">
-        <span class="material-symbols-outlined">add</span>
-        Создать
-      </button>
+      <AppButton
+        icon="add"
+        label="Создать"
+        class="tagm-add"
+        :disabled="busy || !newName.trim()"
+        @click="create"
+      />
     </div>
 
     <!-- Список -->
@@ -86,9 +88,10 @@
 
 <script setup>
 import { ref } from 'vue'
-import AppDialog from '@/components/common/AppDialog.vue'
+import AppButton from '@/components/ui/AppButton.vue'
+import AppDialog from '@/components/ui/AppDialog.vue'
 import EmptyState from '@/components/common/EmptyState.vue'
-import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
+import ConfirmDialog from '@/components/ui/ConfirmDialog.vue'
 import { createTag, updateTag, deleteTag } from '@/api/tasks.js'
 import { useNotificationsStore } from '@/stores/notifications.js'
 import { TASK_COLORS } from '@/utils/taskColors.js'

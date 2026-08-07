@@ -10,7 +10,7 @@
 
     <template v-else>
       <div class="lists-toolbar">
-        <SegmentedTabs v-model="tab" :tabs="tabsForUi" />
+        <AppTabs v-model="tab" :tabs="tabsForUi" />
         <button v-if="canEdit" class="btn-filled" @click="addItem(tab)">
           <span class="material-symbols-outlined">add</span>
           <span>Добавить</span>
@@ -24,11 +24,6 @@
 
       <!-- Отделы -->
       <AppDataTable v-if="tab === 'departments'" :value="displayDepartments" empty-message="Отделов пока нет">
-        <Column header="" style="width: 56px">
-          <template #body>
-            <span class="row-ico"><span class="material-symbols-outlined">apartment</span></span>
-          </template>
-        </Column>
         <Column header="Название">
           <template #body="{ data }">
             <input
@@ -65,11 +60,6 @@
 
       <!-- Типы юнитов -->
       <AppDataTable v-else-if="tab === 'unit-types'" :value="displayUnitTypes" empty-message="Типов юнитов пока нет">
-        <Column header="" style="width: 56px">
-          <template #body>
-            <span class="row-ico"><span class="material-symbols-outlined">category</span></span>
-          </template>
-        </Column>
         <Column header="Название">
           <template #body="{ data }">
             <input
@@ -185,9 +175,9 @@
 <script setup>
 import { ref, computed, watch, nextTick, onMounted } from 'vue'
 import Column from 'primevue/column'
-import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
+import ConfirmDialog from '@/components/ui/ConfirmDialog.vue'
 import AppDataTable from '@/components/common/AppDataTable.vue'
-import SegmentedTabs from '@/components/common/SegmentedTabs.vue'
+import AppTabs from '@/components/ui/AppTabs.vue'
 import { useAuthStore } from '@/stores/auth.js'
 import { useNotificationsStore } from '@/stores/notifications.js'
 import { usePermission } from '@/composables/usePermission.js'
@@ -391,12 +381,6 @@ async function onStageReorder(e) {
 }
 .pane-hint .material-symbols-outlined { font-size: 16px; opacity: 0.8; }
 
-.row-ico {
-  width: 36px; height: 36px; border-radius: var(--radius-md); display: grid; place-items: center; flex-shrink: 0;
-  background: var(--color-primary-container); color: var(--color-on-primary-container);
-}
-.row-ico .material-symbols-outlined { font-size: 20px; }
-
 .row-name { font-weight: 600; color: var(--color-text); font-size: 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .row-input {
   border: none; outline: none; background: var(--acrylic-card-bg); font: inherit; font-weight: 600; font-size: 14px;
@@ -468,7 +452,7 @@ async function onStageReorder(e) {
   appearance: none; border: 2.5px solid var(--tag-accent, var(--tag-border)); background: var(--tag-surface);
   width: 22px; height: 22px; min-height: 0; border-radius: 50%; cursor: pointer; transition: transform .12s, box-shadow .12s; padding: 0;
 }
-.color-dot:hover { transform: scale(1.12); }
+.color-dot:hover { box-shadow: inset 0 0 0 2px color-mix(in oklch, white 60%, transparent); }
 .color-dot.selected { box-shadow: 0 0 0 2px var(--color-surface), 0 0 0 4px var(--color-primary); transform: scale(1.12); }
 .color-dot.tag-red { --tag-surface: var(--tag-red-surface); --tag-border: var(--tag-red-border); --tag-accent: var(--tag-red-accent); }
 .color-dot.tag-orange { --tag-surface: var(--tag-orange-surface); --tag-border: var(--tag-orange-border); --tag-accent: var(--tag-orange-accent); }

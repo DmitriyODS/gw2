@@ -2,7 +2,6 @@
   <AppDialog
     :model-value="modelValue"
     tone="primary"
-    icon="mood"
     size="md"
     title="Мой статус"
     dialog-class="status-dialog"
@@ -37,7 +36,7 @@
 
 <script setup>
 import { ref, watch, computed } from 'vue'
-import AppDialog from '@/components/common/AppDialog.vue'
+import AppDialog from '@/components/ui/AppDialog.vue'
 import InputText from 'primevue/inputtext'
 import { updateMe } from '@/api/users.js'
 import { useAuthStore } from '@/stores/auth.js'
@@ -117,7 +116,7 @@ async function save() {
   transition: background 0.15s, border-color 0.15s, transform 0.12s;
 }
 
-.status-emoji:hover { transform: scale(1.08); }
+.status-emoji:hover { border-color: color-mix(in oklch, var(--color-primary) 45%, var(--color-outline-dim)); }
 
 .status-emoji.active {
   background: var(--color-primary-container);

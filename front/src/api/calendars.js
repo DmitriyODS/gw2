@@ -6,6 +6,14 @@ export const getCalendars = (options = {}) => apiRequest('/calendars', options)
 
 export const getCalendar = (id) => apiRequest(`/calendars/${id}`)
 
+// Повестка дня для живой плитки рабочего стола: ближайшие события всех
+// календарей компании одним запросом (заголовок карточки считает сервер).
+// → { items, total }.
+export const getAgenda = (from, to, limit = 5, options = {}) => {
+  const qs = new URLSearchParams({ from, to, limit })
+  return apiRequest(`/calendars/agenda?${qs}`, options)
+}
+
 export const createCalendar = (name) =>
   apiRequest('/calendars', { method: 'POST', body: { name } })
 

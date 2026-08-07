@@ -19,7 +19,7 @@ type fakeFeedbackRow struct {
 }
 
 type fakeAssistantRepo struct {
-	conv       map[[2]int64]*domain.AssistantConversation
+	conv       map[int64]*domain.AssistantConversation
 	messages   map[int64][]domain.AssistantMessage
 	feedback   map[int64]fakeFeedbackRow // message_id → голос (пишет только владелец)
 	nextConvID int64
@@ -28,20 +28,19 @@ type fakeAssistantRepo struct {
 
 func newFakeAssistantRepo() *fakeAssistantRepo {
 	return &fakeAssistantRepo{
-		conv:     map[[2]int64]*domain.AssistantConversation{},
+		conv:     map[int64]*domain.AssistantConversation{},
 		messages: map[int64][]domain.AssistantMessage{},
 		feedback: map[int64]fakeFeedbackRow{},
 	}
 }
 
-func (r *fakeAssistantRepo) GetOrCreateConversation(_ context.Context, userID, companyID int64) (*domain.AssistantConversation, error) {
-	key := [2]int64{userID, companyID}
-	if c, ok := r.conv[key]; ok {
+func (r *fakeAssistantRepo) GetOrCreateConversation(_ context.Context, userID int64) (*domain.AssistantConversation, error) {
+	if c, ok := r.conv[userID]; ok {
 		return c, nil
 	}
 	r.nextConvID++
-	c := &domain.AssistantConversation{ID: r.nextConvID, UserID: userID, CompanyID: companyID, CreatedAt: time.Now()}
-	r.conv[key] = c
+	c := &domain.AssistantConversation{ID: r.nextConvID, UserID: userID, CreatedAt: time.Now()}
+	r.conv[userID] = c
 	return c, nil
 }
 
@@ -83,10 +82,10 @@ func (r *fakeAssistantRepo) AppendMessage(_ context.Context, conversationID int6
 }
 
 // UpsertFeedback — та же семантика, что у SQL-репозитория: голос проходит,
-// только если сообщение — ответ ассистента в диалоге именно (userID, companyID).
-func (r *fakeAssistantRepo) UpsertFeedback(_ context.Context, messageID, userID, companyID int64, verdict string, reason *string) (bool, error) {
+// только если сообщение — ответ ассистента в диалоге именно этого пользователя.
+func (r *fakeAssistantRepo) UpsertFeedback(_ context.Context, messageID, userID int64, verdict string, reason *string) (bool, error) {
 	for _, c := range r.conv {
-		if c.UserID != userID || c.CompanyID != companyID {
+		if c.UserID != userID {
 			continue
 		}
 		for _, m := range r.messages[c.ID] {
@@ -188,12 +187,12 @@ func (l *sequencedLLM) ChatOnce(_ context.Context, p domain.ChatParams) (*domain
 	return &domain.ChatResult{Content: "done"}, nil
 }
 
-func (l *sequencedLLM) Embed(_ context.Context, _, _ string, texts []string, _ time.Duration) ([][]float32, error) {
-	out := make([][]float32, len(texts))
-	for i := range texts {
+func (l *sequencedLLM) Embed(_ context.Context, p domain.EmbedParams) ([][]float32, int, error) {
+	out := make([][]float32, len(p.Texts))
+	for i := range p.Texts {
 		out[i] = []float32{0.1, 0.2, 0.3}
 	}
-	return out, nil
+	return out, 10 * len(p.Texts), nil
 }
 
 // toolCallMessage — JSON, который parseAssistantToolCalls ожидает найти в
@@ -219,9 +218,18 @@ func toolCallMessage(t *testing.T, id, name string, args map[string]any) string 
 	return string(raw)
 }
 
+// assistantUserID — владелец диалога во всех тестах ассистента: у него
+// подключён личный ключ (ассистент работает на нём, а не на ключе компании).
+const assistantUserID int64 = 10
+
+// assistantCompanyID — активная компания сессии; инструменты статистики
+// скоупятся ей, сам ассистент от неё не зависит.
+var assistantCompanyID = int64(1)
+
 func newAssistantTestService(tasks *fakeTasksClient, assistants *fakeAssistantRepo, llm domain.LLMClient) (*Service, *fakeRepo) {
 	repo := newFakeRepo()
 	repo.companies[1] = enabledCompany(1)
+	repo.userAI[assistantUserID] = enabledUserAI(assistantUserID)
 	return New(repo, llm, &fakeCipher{}, newFakeFacts(), assistants, tasks, "https://gw.example", SupportConfig{}, slog.New(slog.DiscardHandler)), repo
 }
 
@@ -229,17 +237,77 @@ func newAssistantTestService(tasks *fakeTasksClient, assistants *fakeAssistantRe
 
 func TestSendAssistantMessage_EmptyTextIsValidationError(t *testing.T) {
 	svc, _ := newAssistantTestService(&fakeTasksClient{}, newFakeAssistantRepo(), &sequencedLLM{})
-	_, err := svc.SendAssistantMessage(context.Background(), 10, 1, "   ")
+	_, err := svc.SendAssistantMessage(context.Background(), assistantUserID, &assistantCompanyID, "   ")
 	wantDomainError(t, err, "VALIDATION", 400)
 }
 
-func TestSendAssistantMessage_AiDisabledCompany(t *testing.T) {
-	repo := newFakeRepo() // компания 1 НЕ добавлена → AI выключен
+// TestSendAssistantMessage_NoPersonalKey — ассистент живёт на ЛИЧНОМ ключе:
+// компанийный ключ его не включает, нужен свой.
+func TestSendAssistantMessage_NoPersonalKey(t *testing.T) {
+	repo := newFakeRepo()
+	repo.companies[1] = enabledCompany(1) // у компании AI есть, а личного ключа нет
 	svc := New(repo, &sequencedLLM{}, &fakeCipher{}, newFakeFacts(),
 		newFakeAssistantRepo(), &fakeTasksClient{}, "https://gw.example", SupportConfig{}, slog.New(slog.DiscardHandler))
 
-	_, err := svc.SendAssistantMessage(context.Background(), 10, 1, "Привет")
+	_, err := svc.SendAssistantMessage(context.Background(), assistantUserID, &assistantCompanyID, "Привет")
 	wantDomainError(t, err, "AI_DISABLED", 409)
+}
+
+// TestSendAssistantMessage_WithoutActiveCompany — без активной компании
+// ассистент отвечает (ключ-то личный), но инструменты статистики не
+// предлагаются вовсе: звать их не по чему, компании нет.
+func TestSendAssistantMessage_WithoutActiveCompany(t *testing.T) {
+	tasks := &fakeTasksClient{summary: &domain.StatsSummary{NewCount: 5}}
+	assistants := newFakeAssistantRepo()
+	llm := &sequencedLLM{results: []*domain.ChatResult{{Content: "Готов помочь."}}}
+	svc, _ := newAssistantTestService(tasks, assistants, llm)
+
+	reply, err := svc.SendAssistantMessage(context.Background(), assistantUserID, nil, "Привет")
+	if err != nil {
+		t.Fatalf("SendAssistantMessage: %v", err)
+	}
+	if reply.Text != "Готов помочь." {
+		t.Fatalf("неожиданный ответ: %q", reply.Text)
+	}
+	if len(llm.toolsJSONs) != 1 || llm.toolsJSONs[0] != "" {
+		t.Fatalf("без компании инструменты не предлагаем, получено: %+v", llm.toolsJSONs)
+	}
+	if len(tasks.calls) != 0 {
+		t.Fatalf("tasksvc дёргать нечем: %v", tasks.calls)
+	}
+	if reply.Sources != nil {
+		t.Fatalf("провенансу взяться неоткуда: %v", *reply.Sources)
+	}
+}
+
+// TestAssistantConversationSurvivesCompanySwitch — диалог один на человека:
+// смена активной компании не подменяет историю.
+func TestAssistantConversationSurvivesCompanySwitch(t *testing.T) {
+	assistants := newFakeAssistantRepo()
+	llm := &sequencedLLM{results: []*domain.ChatResult{
+		{Content: "Первый ответ"}, {Content: "Второй ответ"},
+	}}
+	svc, _ := newAssistantTestService(&fakeTasksClient{}, assistants, llm)
+	ctx := context.Background()
+
+	if _, err := svc.SendAssistantMessage(ctx, assistantUserID, &assistantCompanyID, "Вопрос из первой компании"); err != nil {
+		t.Fatalf("первое сообщение: %v", err)
+	}
+	other := int64(2)
+	if _, err := svc.SendAssistantMessage(ctx, assistantUserID, &other, "Вопрос из второй компании"); err != nil {
+		t.Fatalf("второе сообщение: %v", err)
+	}
+
+	if len(assistants.conv) != 1 {
+		t.Fatalf("ожидался ОДИН диалог на пользователя, стало: %d", len(assistants.conv))
+	}
+	history, err := svc.GetAssistantHistory(ctx, assistantUserID, 10, nil)
+	if err != nil {
+		t.Fatalf("GetAssistantHistory: %v", err)
+	}
+	if len(history) != 4 {
+		t.Fatalf("обе пары реплик должны лежать в одном треде, получено: %d", len(history))
+	}
 }
 
 // TestSendAssistantMessage_StatsToolRoundTrip — модель просит статистику
@@ -258,7 +326,7 @@ func TestSendAssistantMessage_StatsToolRoundTrip(t *testing.T) {
 	}}
 	svc, _ := newAssistantTestService(tasks, assistants, llm)
 
-	reply, err := svc.SendAssistantMessage(context.Background(), 10, 1, "Сколько задач на этой неделе?")
+	reply, err := svc.SendAssistantMessage(context.Background(), assistantUserID, &assistantCompanyID, "Сколько задач на этой неделе?")
 	if err != nil {
 		t.Fatalf("SendAssistantMessage: %v", err)
 	}
@@ -272,7 +340,7 @@ func TestSendAssistantMessage_StatsToolRoundTrip(t *testing.T) {
 		t.Fatalf("период не форвардится верно: %q", tasks.lastPeriod)
 	}
 
-	conv, _ := assistants.GetOrCreateConversation(context.Background(), 10, 1)
+	conv, _ := assistants.GetOrCreateConversation(context.Background(), assistantUserID)
 	saved := assistants.messages[conv.ID]
 	if len(saved) != 2 {
 		t.Fatalf("ожидалось 2 сохранённых сообщения (user+assistant), получено %d", len(saved))
@@ -305,7 +373,7 @@ func TestSendAssistantMessage_NoToolCallsSkipsTasksClient(t *testing.T) {
 	llm := &sequencedLLM{results: []*domain.ChatResult{{Content: "Здравствуйте, чем могу помочь?"}}}
 	svc, _ := newAssistantTestService(tasks, newFakeAssistantRepo(), llm)
 
-	reply, err := svc.SendAssistantMessage(context.Background(), 10, 1, "Привет")
+	reply, err := svc.SendAssistantMessage(context.Background(), assistantUserID, &assistantCompanyID, "Привет")
 	if err != nil {
 		t.Fatalf("SendAssistantMessage: %v", err)
 	}
@@ -337,7 +405,7 @@ func TestSendAssistantMessage_SourcesMultiToolDedup(t *testing.T) {
 	svc, repo := newAssistantTestService(tasks, assistants, llm)
 	repo.searchHits = []domain.SearchHit{{TaskID: 77, Score: 0.9}}
 
-	reply, err := svc.SendAssistantMessage(context.Background(), 10, 1, "Кто лидер и где отчёт?")
+	reply, err := svc.SendAssistantMessage(context.Background(), assistantUserID, &assistantCompanyID, "Кто лидер и где отчёт?")
 	if err != nil {
 		t.Fatalf("SendAssistantMessage: %v", err)
 	}
@@ -357,7 +425,7 @@ func TestSendAssistantMessage_FailedToolNotInSources(t *testing.T) {
 	}}
 	svc, _ := newAssistantTestService(tasks, newFakeAssistantRepo(), llm)
 
-	reply, err := svc.SendAssistantMessage(context.Background(), 10, 1, "Как дела сегодня?")
+	reply, err := svc.SendAssistantMessage(context.Background(), assistantUserID, &assistantCompanyID, "Как дела сегодня?")
 	if err != nil {
 		t.Fatalf("SendAssistantMessage: %v", err)
 	}
@@ -500,7 +568,7 @@ func TestGetAssistantHistory_ReturnsNewestFirst(t *testing.T) {
 	assistants := newFakeAssistantRepo()
 	svc, _ := newAssistantTestService(&fakeTasksClient{}, assistants, &sequencedLLM{})
 
-	conv, err := assistants.GetOrCreateConversation(context.Background(), 10, 1)
+	conv, err := assistants.GetOrCreateConversation(context.Background(), assistantUserID)
 	if err != nil {
 		t.Fatalf("GetOrCreateConversation: %v", err)
 	}
@@ -510,7 +578,7 @@ func TestGetAssistantHistory_ReturnsNewestFirst(t *testing.T) {
 		}
 	}
 
-	history, err := svc.GetAssistantHistory(context.Background(), 10, 1, 2, nil)
+	history, err := svc.GetAssistantHistory(context.Background(), assistantUserID, 2, nil)
 	if err != nil {
 		t.Fatalf("GetAssistantHistory: %v", err)
 	}
@@ -521,11 +589,11 @@ func TestGetAssistantHistory_ReturnsNewestFirst(t *testing.T) {
 
 // ── SendAssistantFeedback ──────────────────────────────────────────
 
-// seedAssistantAnswer — диалог (userID, companyID) с одним ответом ассистента;
+// seedAssistantAnswer — диалог пользователя с одним ответом ассистента;
 // возвращает id сообщения.
-func seedAssistantAnswer(t *testing.T, assistants *fakeAssistantRepo, userID, companyID int64) int64 {
+func seedAssistantAnswer(t *testing.T, assistants *fakeAssistantRepo, userID int64) int64 {
 	t.Helper()
-	conv, err := assistants.GetOrCreateConversation(context.Background(), userID, companyID)
+	conv, err := assistants.GetOrCreateConversation(context.Background(), userID)
 	if err != nil {
 		t.Fatalf("GetOrCreateConversation: %v", err)
 	}
@@ -542,11 +610,11 @@ func seedAssistantAnswer(t *testing.T, assistants *fakeAssistantRepo, userID, co
 func TestSendAssistantFeedback_UpsertReplacesVote(t *testing.T) {
 	assistants := newFakeAssistantRepo()
 	svc, _ := newAssistantTestService(&fakeTasksClient{}, assistants, &sequencedLLM{})
-	msgID := seedAssistantAnswer(t, assistants, 10, 1)
+	msgID := seedAssistantAnswer(t, assistants, assistantUserID)
 	ctx := context.Background()
 
 	reason := "inaccurate"
-	if err := svc.SendAssistantFeedback(ctx, 10, 1, msgID, "down", &reason); err != nil {
+	if err := svc.SendAssistantFeedback(ctx, assistantUserID, msgID, "down", &reason); err != nil {
 		t.Fatalf("down: %v", err)
 	}
 	fb := assistants.feedback[msgID]
@@ -555,7 +623,7 @@ func TestSendAssistantFeedback_UpsertReplacesVote(t *testing.T) {
 	}
 
 	staleReason := "irrelevant"
-	if err := svc.SendAssistantFeedback(ctx, 10, 1, msgID, "up", &staleReason); err != nil {
+	if err := svc.SendAssistantFeedback(ctx, assistantUserID, msgID, "up", &staleReason); err != nil {
 		t.Fatalf("up: %v", err)
 	}
 	fb = assistants.feedback[msgID]
@@ -563,7 +631,7 @@ func TestSendAssistantFeedback_UpsertReplacesVote(t *testing.T) {
 		t.Fatalf("повторный 👍 должен заменить голос и сбросить причину: %+v", fb)
 	}
 
-	history, err := svc.GetAssistantHistory(ctx, 10, 1, 10, nil)
+	history, err := svc.GetAssistantHistory(ctx, assistantUserID, 10, nil)
 	if err != nil {
 		t.Fatalf("GetAssistantHistory: %v", err)
 	}
@@ -573,21 +641,23 @@ func TestSendAssistantFeedback_UpsertReplacesVote(t *testing.T) {
 }
 
 // TestSendAssistantFeedback_ForeignMessageRejected — сообщение из диалога
-// другого пользователя (или другой компании) — NOT_FOUND, голос не пишется.
+// другого пользователя — NOT_FOUND, голос не пишется.
 func TestSendAssistantFeedback_ForeignMessageRejected(t *testing.T) {
 	assistants := newFakeAssistantRepo()
 	svc, _ := newAssistantTestService(&fakeTasksClient{}, assistants, &sequencedLLM{})
-	foreignMsgID := seedAssistantAnswer(t, assistants, 20, 1) // диалог пользователя 20
+	foreignMsgID := seedAssistantAnswer(t, assistants, 20) // диалог пользователя 20
 
-	err := svc.SendAssistantFeedback(context.Background(), 10, 1, foreignMsgID, "up", nil)
+	err := svc.SendAssistantFeedback(context.Background(), assistantUserID, foreignMsgID, "up", nil)
 	wantDomainError(t, err, "NOT_FOUND", 404)
 	if _, voted := assistants.feedback[foreignMsgID]; voted {
 		t.Fatalf("чужой голос не должен сохраняться")
 	}
 
-	// Та же пара user+message, но другая активная компания — тоже мимо.
-	err = svc.SendAssistantFeedback(context.Background(), 20, 2, foreignMsgID, "up", nil)
-	wantDomainError(t, err, "NOT_FOUND", 404)
+	// А владелец до своего сообщения дотягивается — активная компания в
+	// скоуп больше не входит.
+	if err := svc.SendAssistantFeedback(context.Background(), 20, foreignMsgID, "up", nil); err != nil {
+		t.Fatalf("владелец должен голосовать за своё сообщение: %v", err)
+	}
 }
 
 // TestSendAssistantFeedback_UserMessageRejected — голосовать можно только за
@@ -595,21 +665,21 @@ func TestSendAssistantFeedback_ForeignMessageRejected(t *testing.T) {
 func TestSendAssistantFeedback_UserMessageRejected(t *testing.T) {
 	assistants := newFakeAssistantRepo()
 	svc, _ := newAssistantTestService(&fakeTasksClient{}, assistants, &sequencedLLM{})
-	conv, _ := assistants.GetOrCreateConversation(context.Background(), 10, 1)
+	conv, _ := assistants.GetOrCreateConversation(context.Background(), assistantUserID)
 	m, _ := assistants.AppendMessage(context.Background(), conv.ID, domain.AssistantRoleUser, "Вопрос", nil)
 
-	err := svc.SendAssistantFeedback(context.Background(), 10, 1, m.ID, "up", nil)
+	err := svc.SendAssistantFeedback(context.Background(), assistantUserID, m.ID, "up", nil)
 	wantDomainError(t, err, "NOT_FOUND", 404)
 }
 
 func TestSendAssistantFeedback_Validation(t *testing.T) {
 	assistants := newFakeAssistantRepo()
 	svc, _ := newAssistantTestService(&fakeTasksClient{}, assistants, &sequencedLLM{})
-	msgID := seedAssistantAnswer(t, assistants, 10, 1)
+	msgID := seedAssistantAnswer(t, assistants, assistantUserID)
 	ctx := context.Background()
 
-	wantDomainError(t, svc.SendAssistantFeedback(ctx, 10, 1, msgID, "meh", nil), "VALIDATION", 400)
+	wantDomainError(t, svc.SendAssistantFeedback(ctx, assistantUserID, msgID, "meh", nil), "VALIDATION", 400)
 	badReason := "boring"
-	wantDomainError(t, svc.SendAssistantFeedback(ctx, 10, 1, msgID, "down", &badReason), "VALIDATION", 400)
-	wantDomainError(t, svc.SendAssistantFeedback(ctx, 10, 1, 0, "up", nil), "VALIDATION", 400)
+	wantDomainError(t, svc.SendAssistantFeedback(ctx, assistantUserID, msgID, "down", &badReason), "VALIDATION", 400)
+	wantDomainError(t, svc.SendAssistantFeedback(ctx, assistantUserID, 0, "up", nil), "VALIDATION", 400)
 }

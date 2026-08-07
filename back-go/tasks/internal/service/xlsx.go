@@ -12,6 +12,9 @@ import (
 // заголовки и порядок колонок, что в stats_service.export_*_xlsx.
 
 func (s *Service) ExportCommonXLSX(ctx context.Context, start, end time.Time, companyID *int64) ([]byte, error) {
+	if err := s.ensureDataTransfer(ctx, companyID); err != nil {
+		return nil, err
+	}
 	data, err := s.StatsCommon(ctx, start, end, companyID)
 	if err != nil {
 		return nil, err
@@ -63,6 +66,9 @@ func (s *Service) ExportCommonXLSX(ctx context.Context, start, end time.Time, co
 }
 
 func (s *Service) ExportExtendedXLSX(ctx context.Context, start, end time.Time, companyID *int64) ([]byte, error) {
+	if err := s.ensureDataTransfer(ctx, companyID); err != nil {
+		return nil, err
+	}
 	data, err := s.StatsExtended(ctx, start, end, companyID)
 	if err != nil {
 		return nil, err

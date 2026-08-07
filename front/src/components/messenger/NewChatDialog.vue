@@ -2,7 +2,6 @@
   <AppDialog
     :model-value="modelValue"
     tone="primary"
-    icon="edit_square"
     size="sm"
     title="Новый чат"
     subtitle="Ваши диалоги — по фамилии, новый собеседник — по логину."
@@ -44,7 +43,7 @@
 <script setup>
 import { watch } from 'vue'
 import BrandLoader from '@/components/common/BrandLoader.vue'
-import AppDialog from '@/components/common/AppDialog.vue'
+import AppDialog from '@/components/ui/AppDialog.vue'
 import { useContactPicker } from '@/composables/useContactPicker.js'
 
 const props = defineProps({

@@ -2,37 +2,51 @@
   <AppDialog
     :model-value="modelValue"
     :title="title"
-    icon="event"
+    :subtitle="entries.length ? `Записей: ${entries.length}` : ''"
     size="md"
+    :actions="actions"
     @update:model-value="$emit('update:modelValue', $event)"
+    @confirm="$emit('add')"
   >
-    <div class="cd">
-      <p v-if="!entries.length" class="cd-empty">На этот день записей нет.</p>
-      <ul v-else class="cd-list">
-        <li v-for="e in entries" :key="e.id" class="cd-row">
-          <button class="cd-main" @click="$emit('open-entry', e)">
-            <span class="cd-time">{{ hhmm(e.event_at) }}</span>
-            <span class="cd-body">
-              <span class="cd-title">{{ entryTitle(calendar, e) }}</span>
-              <span v-for="cf in cardFields(calendar, e)" :key="cf.field.id" class="cd-sub">
-                <span class="cd-field-label">{{ cf.field.label }}:</span> {{ cf.value }}
-              </span>
-            </span>
-            <span class="material-symbols-outlined cd-chev">chevron_right</span>
-          </button>
-          <button v-if="!readonly" class="cd-del" title="Удалить" @click="askDelete(e)">
-            <span class="material-symbols-outlined">delete</span>
-          </button>
-        </li>
-      </ul>
-    </div>
+    <EmptyState
+      v-if="!entries.length"
+      size="sm"
+      icon="event_busy"
+      title="На этот день записей нет"
+      :subtitle="readonly ? '' : 'Добавьте первую — она появится здесь.'"
+    />
 
-    <template #footer>
-      <button class="cd-btn-text" @click="$emit('update:modelValue', false)">Закрыть</button>
-      <button v-if="!readonly" class="cd-btn-filled" @click="$emit('add')">
-        <span class="material-symbols-outlined">add</span> Добавить запись
-      </button>
-    </template>
+    <AppStack v-else :gap="8">
+      <AppRow
+        v-for="e in entries"
+        :key="e.id"
+        :title="entryTitle(calendar, e)"
+        clickable
+        inline
+        @click="$emit('open-entry', e)"
+      >
+        <template #lead>
+          <span class="cd-time">{{ hhmm(e.event_at) }}</span>
+        </template>
+
+        <template v-if="cardFields(calendar, e).length" #hint>
+          <span v-for="cf in cardFields(calendar, e)" :key="cf.field.id" class="cd-sub">
+            <span class="cd-field-label">{{ cf.field.label }}:</span> {{ cf.value }}
+          </span>
+        </template>
+
+        <AppButton
+          v-if="!readonly"
+          variant="icon"
+          size="sm"
+          tone="danger"
+          icon="delete"
+          title="Удалить"
+          aria-label="Удалить запись"
+          @click.stop="askDelete(e)"
+        />
+      </AppRow>
+    </AppStack>
 
     <ConfirmDialog
       :visible="confirm != null"
@@ -46,8 +60,12 @@
 
 <script setup>
 import { computed, ref } from 'vue'
-import AppDialog from '@/components/common/AppDialog.vue'
-import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
+import AppButton from '@/components/ui/AppButton.vue'
+import AppDialog from '@/components/ui/AppDialog.vue'
+import AppRow from '@/components/ui/AppRow.vue'
+import AppStack from '@/components/ui/AppStack.vue'
+import ConfirmDialog from '@/components/ui/ConfirmDialog.vue'
+import EmptyState from '@/components/common/EmptyState.vue'
 import { useCalendarsStore } from '@/stores/calendars.js'
 import { useNotificationsStore } from '@/stores/notifications.js'
 import { cardFields, entryTitle, hhmm } from '@/utils/calendarFields.js'
@@ -72,6 +90,11 @@ const title = computed(() => {
   return s.charAt(0).toUpperCase() + s.slice(1)
 })
 
+const actions = computed(() => [
+  { kind: 'cancel', label: 'Закрыть' },
+  ...(props.readonly ? [] : [{ kind: 'confirm', label: 'Добавить запись', icon: 'add' }]),
+])
+
 const confirm = ref(null)
 function askDelete(e) { confirm.value = e }
 async function doDelete() {
@@ -88,43 +111,21 @@ async function doDelete() {
 </script>
 
 <style scoped>
-.cd { display: flex; flex-direction: column; gap: 8px; }
-.cd-empty { margin: 8px 0; color: var(--color-text-dim); text-align: center; }
-.cd-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
-.cd-row { display: flex; align-items: stretch; gap: 6px; }
-.cd-main {
-  flex: 1; min-width: 0; display: flex; align-items: center; gap: 12px; text-align: left;
-  padding: 10px 12px; border: 1px solid var(--color-outline-dim); border-radius: var(--radius-md);
-  background: var(--color-surface); cursor: pointer;
-}
-.cd-main:hover { background: var(--color-surface-high); border-color: var(--color-outline); }
+/* Время — «якорь» строки: моноширинные цифры, чтобы столбик не плясал. */
 .cd-time {
-  flex-shrink: 0; min-width: 48px; font-size: 15px; font-weight: 700; color: var(--color-primary);
+  min-width: 46px;
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--color-primary);
   font-variant-numeric: tabular-nums;
 }
-.cd-body { flex: 1; min-width: 0; display: flex; flex-direction: column; }
-.cd-title { font-size: 14px; font-weight: 600; color: var(--color-text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.cd-sub { font-size: 12px; color: var(--color-text-dim); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.cd-field-label { font-weight: 600; color: var(--color-text); }
-.cd-chev { flex-shrink: 0; color: var(--color-text-dim); }
-.cd-del {
-  flex-shrink: 0; width: 42px; display: grid; place-items: center;
-  border: 1px solid var(--color-outline-dim); border-radius: var(--radius-md);
-  background: var(--color-surface); color: var(--color-error); cursor: pointer;
-}
-.cd-del:hover { background: var(--color-error-container, var(--color-surface-high)); }
 
-.cd-btn-text {
-  border: none; background: none; cursor: pointer;
-  padding: 10px 16px; border-radius: var(--radius-full);
-  color: var(--color-text-dim); font-weight: 600; font-size: 14px;
+.cd-sub {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
-.cd-btn-text:hover { background: var(--color-surface-high); color: var(--color-text); }
-.cd-btn-filled {
-  display: inline-flex; align-items: center; gap: 6px;
-  border: none; cursor: pointer;
-  padding: 10px 18px; border-radius: var(--radius-full);
-  background: var(--color-primary); color: var(--color-on-primary);
-  font-weight: 600; font-size: 14px;
-}
+
+.cd-field-label { font-weight: 600; color: var(--color-text); }
 </style>

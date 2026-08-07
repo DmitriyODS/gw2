@@ -72,3 +72,29 @@ export const yandexAuthURL = (clientId, state = '') =>
   `&client_id=${encodeURIComponent(clientId)}` +
   `&redirect_uri=${encodeURIComponent(window.location.origin + '/yandex-callback')}` +
   (state ? `&state=${encodeURIComponent(state)}` : '')
+
+// Реестр входов профиля («Авторизация и сессии»): свои активные сеансы и
+// завершение любого из них (текущий тоже — фронт следом выходит из системы).
+export const listSessions = () => apiRequest('/auth/sessions', { method: 'GET' })
+export const revokeSession = (id) => apiRequest(`/auth/sessions/${id}`, { method: 'DELETE' })
+
+// ── Экран блокировки ─────────────────────────────────────────────────────────
+// Пин закрывает приложение, но сессию не рвёт: открытые окна и черновики
+// остаются на месте. Проверяет пин сервер — в браузере его сняли бы правкой
+// localStorage.
+export const getScreenLock = () => apiRequest('/auth/lock')
+
+export const setScreenLock = (body) =>
+  apiRequest('/auth/lock', { method: 'PUT', body })
+
+export const disableScreenLock = (secret) =>
+  apiRequest('/auth/lock/disable', { method: 'POST', body: { secret } })
+
+// secret — пин-код либо пароль от аккаунта (запасной путь, если пин забыт).
+export const unlockScreen = (secret) =>
+  apiRequest('/auth/lock/unlock', { method: 'POST', body: { secret } })
+
+// Выйти на всех устройствах, КРОМЕ текущего. Тем же путём сеансы обрываются
+// при смене пароля — на сервере это одна операция.
+export const revokeOtherSessions = () =>
+  apiRequest('/auth/sessions/revoke-others', { method: 'POST' })

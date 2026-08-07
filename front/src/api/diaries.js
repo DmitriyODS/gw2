@@ -14,6 +14,16 @@ export const getDiaries = (tab = 'mine', options = {}) =>
 
 export const getDiary = (id) => apiRequest(`/diaries/${id}`)
 
+// Глобальный поиск записей по всем доступным ежедневникам (строка поиска
+// рабочего стола) — один запрос на сервере, без обхода ежедневников.
+export const searchEntries = (q, limit = 5, options = {}) =>
+  apiRequest(`/diaries/search?q=${encodeURIComponent(q)}&limit=${limit}`, options)
+
+// Повестка дня для живой плитки рабочего стола: невыполненные записи всех
+// доступных ежедневников за период одним запросом. → { items, total }.
+export const getAgenda = (from, to, limit = 5, options = {}) =>
+  apiRequest(`/diaries/agenda?${qs({ from, to, limit })}`, options)
+
 export const createDiary = (name) =>
   apiRequest('/diaries', { method: 'POST', body: { name } })
 

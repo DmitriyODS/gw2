@@ -100,11 +100,16 @@ func (s *Service) OAuthToken(ctx context.Context, req dto.OAuthTokenRequest) (*d
 		}
 		userID, companyID = oc.UserID, oc.CompanyID
 	case "refresh_token":
-		uid, cid, err := s.tokens.ParseRefresh(req.RefreshToken)
+		uid, cid, _, err := s.tokens.ParseRefresh(req.RefreshToken)
 		if err != nil {
 			return nil, errOAuthGrant
 		}
 		userID, companyID = uid, cid
+		// Обновление гранта остаётся в СВОЕЙ сессии: иначе Яндекс плодил бы
+		// карточку устройства на каждый обмен refresh-токена.
+		meta := domain.SessionMetaFrom(ctx)
+		meta.Refresh = req.RefreshToken
+		ctx = domain.WithSessionMeta(ctx, meta)
 	default:
 		return nil, errOAuthGrantType
 	}

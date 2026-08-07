@@ -88,6 +88,9 @@ func decodeCursor(s string) (time.Time, int64, error) {
 // сохранён для совместимости: pinned=true отдаёт закреплённые в Posts одной
 // страницей (их ≤ MaxPinnedPosts, пагинация не нужна).
 func (s *Service) ListPosts(ctx context.Context, companyID, viewerID int64, p PostListParams) (*PostFeed, error) {
+	if err := s.ensurePortal(ctx, companyID); err != nil {
+		return nil, err
+	}
 	limit := p.Limit
 	if limit <= 0 {
 		limit = defaultPageSize
@@ -166,6 +169,9 @@ func (s *Service) MarkView(ctx context.Context, companyID, id, viewerID int64) e
 
 // CreatePost — топик (если указан) должен принадлежать той же компании.
 func (s *Service) CreatePost(ctx context.Context, companyID, authorID int64, topicID *int64, title *string, body string) (*domain.Post, error) {
+	if err := s.ensurePortal(ctx, companyID); err != nil {
+		return nil, err
+	}
 	body = strings.TrimSpace(body)
 	if body == "" {
 		return nil, domain.ErrPostBodyReq
@@ -240,7 +246,7 @@ func (s *Service) DeletePost(ctx context.Context, companyID, id, userID int64, r
 		return err
 	}
 	if len(paths) > 0 {
-		s.files.Remove(paths)
+		s.files.RemoveFor(ctx, userID, companyID, paths)
 	}
 	s.bus.Publish(ctx, "post:deleted", []string{roomAll}, map[string]any{
 		"id": id, "company_id": companyID,
@@ -327,7 +333,7 @@ func postPayload(p *domain.Post) map[string]any {
 		"id": p.ID, "company_id": p.CompanyID, "topic_id": p.TopicID, "author_id": p.AuthorID,
 		"title": p.Title, "body": p.Body, "pinned_at": p.PinnedAt, "pinned_by": p.PinnedBy,
 		"pinned_until": p.PinnedUntil,
-		"created_at": p.CreatedAt, "updated_at": p.UpdatedAt,
+		"created_at":   p.CreatedAt, "updated_at": p.UpdatedAt,
 		"tags":        p.Tags,
 		"attachments": p.Attachments, "comment_count": p.CommentCount,
 		"reaction_counts": p.ReactionCount, "my_reactions": p.MyReactions,

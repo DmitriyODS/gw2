@@ -10,6 +10,8 @@ import (
 	"log/slog"
 
 	"github.com/DmitriyODS/gw2/back-go/portal/internal/domain"
+
+	"github.com/DmitriyODS/gw2/back-go/pkg/billingclient"
 )
 
 const roomAll = "all"
@@ -20,6 +22,8 @@ type Service struct {
 	bus       domain.EventBus
 	messenger domain.MessengerClient
 	log       *slog.Logger
+	// billing — лимиты тарифа (WithBilling; nil — ограничений нет).
+	billing *billingclient.Client
 }
 
 type Deps struct {

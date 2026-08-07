@@ -84,6 +84,41 @@ type Entry struct {
 	UpdatedAt  time.Time      `json:"updated_at"`
 }
 
+// EntryScope — запись вместе с календарём, которому она принадлежит: разделу
+// «Настройки → Хранилище» нужно показать, где лежит файл.
+type EntryScope struct {
+	Entry        *Entry
+	CalendarID   int64
+	CalendarName string
+	CompanyID    int64
+}
+
+// AgendaRow — запись вместе с названием своего календаря: выборка ближайших
+// событий компании сразу по всем календарям (живая плитка рабочего стола).
+type AgendaRow struct {
+	CalendarID   int64
+	CalendarName string
+	EntryID      int64
+	EventAt      time.Time
+	Data         map[string]any
+}
+
+// AgendaItem — событие для плитки: заголовок карточки считает сервер (клиент
+// плитки полей календаря не знает).
+type AgendaItem struct {
+	CalendarID   int64     `json:"calendar_id"`
+	CalendarName string    `json:"calendar_name"`
+	EntryID      int64     `json:"entry_id"`
+	EventAt      time.Time `json:"event_at"`
+	Title        string    `json:"title"`
+}
+
+// Agenda — ближайшие события за период и сколько их всего.
+type Agenda struct {
+	Items []AgendaItem `json:"items"`
+	Total int          `json:"total"`
+}
+
 // EntryListFilter — фильтры выборки записей: диапазон дат (для просмотра
 // дня/недели/месяца), сквозной поиск по тексту полей.
 type EntryListFilter struct {

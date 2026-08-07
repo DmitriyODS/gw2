@@ -1,34 +1,30 @@
 <template>
-  <div class="oauth-authorize">
-    <div class="oa-card">
-      <span class="material-symbols-outlined oa-icon">graphic_eq</span>
-      <h2 class="oa-title">Доступ для Яндекс Алисы</h2>
-      <p class="oa-text">
-        Навык «Groove Work» получит доступ к вашим задачам, ежедневнику и
-        заметкам от имени аккаунта
-        <b>{{ authStore.user?.fio || 'вашего аккаунта' }}</b>
-        <template v-if="authStore.companyName">
-          (компания «{{ authStore.companyName }}»)</template>.
-      </p>
-      <p v-if="!valid" class="oa-error">
-        Некорректная ссылка авторизации: не хватает параметров запроса.
-      </p>
-      <p v-else-if="error" class="oa-error">{{ error }}</p>
-      <div class="oa-actions">
-        <button type="button" class="btn-glass" :disabled="loading" @click="deny">Отклонить</button>
-        <button type="button" class="btn-grad" :disabled="loading || !valid" @click="allow">
-          {{ loading ? 'Секунду…' : 'Разрешить' }}
-        </button>
-      </div>
-    </div>
-  </div>
+  <AuthShell title="доступ для Яндекс Алисы" size="sm">
+    <p class="oa-text">
+      Навык «Groove Work» получит доступ к вашим задачам, ежедневнику и заметкам
+      от имени аккаунта <b>{{ authStore.user?.fio || 'вашего аккаунта' }}</b>
+      <template v-if="authStore.companyName"> (компания «{{ authStore.companyName }}»)</template>.
+    </p>
+
+    <p v-if="!valid" class="oa-error">
+      Некорректная ссылка авторизации: не хватает параметров запроса.
+    </p>
+    <p v-else-if="error" class="oa-error">{{ error }}</p>
+
+    <template #actions>
+      <AppButton label="отклонить" :disabled="loading" @click="deny" />
+      <AppButton variant="filled" :disabled="loading || !valid" @click="allow">{{ loading ? 'секунду…' : 'разрешить' }}</AppButton>
+    </template>
+  </AuthShell>
 </template>
 
 <script setup>
 import { computed, ref } from 'vue'
+import AppButton from '@/components/ui/AppButton.vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth.js'
 import { oauthAuthorize } from '@/api/auth.js'
+import AuthShell from '@/components/auth/AuthShell.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -66,35 +62,23 @@ function deny() {
     window.location.href = params.value.redirect_uri + sep + q.toString()
     return
   }
-  router.push('/')
+  router.push('/home')
 }
 </script>
 
 <style scoped>
-.oauth-authorize {
-  min-height: 100dvh;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 24px;
+.oa-text {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.55;
+  color: var(--color-text-dim);
 }
-.oa-card {
-  width: 100%;
-  max-width: 440px;
-  padding: 32px 28px;
-  border-radius: var(--radius-xl, 24px);
-  background: var(--acrylic-card-bg);
-  border: 1px solid var(--acrylic-border);
-  box-shadow: var(--shadow-lg);
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 14px;
-  text-align: center;
+
+.oa-text b { color: var(--color-text); }
+
+.oa-error {
+  margin: 14px 0 0;
+  font-size: 13px;
+  color: var(--color-error);
 }
-.oa-icon { font-size: 52px; color: var(--color-primary); }
-.oa-title { font-size: 1.35rem; font-weight: 700; color: var(--color-text); }
-.oa-text { color: var(--color-text-secondary); font-size: 0.92rem; max-width: 360px; }
-.oa-error { color: var(--color-error); font-size: 0.85rem; }
-.oa-actions { display: flex; gap: 12px; margin-top: 4px; }
 </style>

@@ -91,7 +91,10 @@ func (h *handlers) renamePet(c *fiber.Ctx) error {
 	if body.Name == nil {
 		return validationError(c, "name", "Обязательное поле")
 	}
-	if n := runeLen(*body.Name); n < 1 || n > 50 {
+	// Длину меряем по обрезанному имени: сервис всё равно сохранит TrimSpace,
+	// поэтому строка из пробелов иначе прошла бы проверку и оставила питомца
+	// безымянным.
+	if n := runeLen(strings.TrimSpace(*body.Name)); n < 1 || n > 50 {
 		return validationError(c, "name", "Длина должна быть от 1 до 50 символов")
 	}
 	resp, err := h.eps.RenamePet(c.Context(), endpoint.NameRequest{

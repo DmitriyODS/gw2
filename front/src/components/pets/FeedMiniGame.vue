@@ -1,5 +1,5 @@
 <template>
-  <Teleport to="body">
+  <Teleport :to="host">
     <div class="mg-overlay" @click.self="$emit('close')">
       <div class="mg-panel">
         <header class="mg-head">
@@ -43,6 +43,11 @@ import EmojiGlyph from '@/components/common/EmojiGlyph.vue'
 import PetRoomScene from '@/components/pets/PetRoomScene.vue'
 import { isInHitZone } from '@/utils/miniGames.js'
 import { petEmoji } from '@/utils/pets.js'
+import { useModalHost } from '@/desktop/windowHost.js'
+
+// Мини-игра живёт в окне своего раздела, а у глобального плавающего питомца
+// окна нет — там хост прежний, body.
+const { host } = useModalHost()
 
 const props = defineProps({
   pet: { type: Object, default: null },

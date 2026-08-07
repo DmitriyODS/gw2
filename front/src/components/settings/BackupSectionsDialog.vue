@@ -2,7 +2,6 @@
   <AppDialog
     :model-value="modelValue"
     :title="mode === 'export' ? 'Что включить в копию' : 'Что восстановить'"
-    :icon="mode === 'export' ? 'download' : 'restore'"
     :tone="mode === 'import' ? 'danger' : 'primary'"
     size="md"
     :busy="busy"
@@ -37,7 +36,7 @@
 <script setup>
 import { ref, watch } from 'vue'
 import Checkbox from 'primevue/checkbox'
-import AppDialog from '@/components/common/AppDialog.vue'
+import AppDialog from '@/components/ui/AppDialog.vue'
 import { BACKUP_SECTIONS, ALL_SECTION_KEYS } from '@/utils/backupSections.js'
 
 const props = defineProps({

@@ -108,7 +108,7 @@ func (s *Service) ensureInstallmentCharges(ctx context.Context, i *domain.Instal
 	remaining := i.Outstanding()
 	charge := 0
 	for k := 0; k < weeks; k++ {
-		add := ((remaining + charge) * domain.LoanWeeklyPenaltyPct + 99) / 100
+		add := ((remaining+charge)*domain.LoanWeeklyPenaltyPct + 99) / 100
 		charge += add
 	}
 	newDue := i.DueAt.Add(time.Duration(weeks) * week)

@@ -11,7 +11,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { promisify } from 'node:util'
-import { PG, REDIS, PASETO, HTTP, GRPC, STATUS_FILE } from './config.js'
+import { PG, REDIS, MAIL, PASETO, AI_ENC_KEY, HTTP, GRPC, STATUS_FILE } from './config.js'
 
 const execFileP = promisify(execFile)
 const here = path.dirname(fileURLToPath(import.meta.url))
@@ -73,6 +73,23 @@ async function ensureRedis() {
     await sleep(300)
   }
   throw new Error('redis не поднялся за 30с')
+}
+
+async function ensureMailpit() {
+  if (await tcpAlive('localhost', Number(MAIL.smtpPort))) return // dev-mailpit уже поднят
+  try {
+    execFileSync('docker', ['start', MAIL.container], { stdio: 'ignore' })
+  } catch {
+    execFileSync('docker', ['run', '-d', '--name', MAIL.container,
+      '-p', `127.0.0.1:${MAIL.smtpPort}:1025`,
+      '-p', `127.0.0.1:${MAIL.webPort}:8025`, 'axllent/mailpit:latest'], { stdio: 'ignore' })
+  }
+  const deadline = Date.now() + 30_000
+  while (Date.now() < deadline) {
+    if (await tcpAlive('localhost', Number(MAIL.smtpPort))) return
+    await sleep(300)
+  }
+  throw new Error('mailpit не поднялся за 30с')
 }
 
 // Пересоздать тестовую БД через psql внутри контейнера (без node-pg зависимости).
@@ -177,6 +194,7 @@ export default async function setup() {
   try {
     await ensurePostgres()
     await ensureRedis()
+    await ensureMailpit()
   } catch (e) {
     console.warn('[integration] SKIP: инфраструктура не поднялась:', e.message)
     writeStatus({ ready: false, reason: 'инфраструктура: ' + e.message })
@@ -195,9 +213,10 @@ export default async function setup() {
 
   const baseEnv = { DATABASE_URL: PG.dbURL, REDIS_URL: REDIS.url, PASETO_PUBLIC_KEY: PASETO.publicKey }
 
-  // mailsvc — gRPC-транспорт для authsvc (письма best-effort; SMTP на 1025,
-  // если mailpit нет — Send падает быстро connection refused, регистрация всё
-  // равно проходит: код подтверждения пишется в БД до отправки).
+  // mailsvc — gRPC-транспорт для authsvc. Приглашение в компанию отправляется
+  // fail-closed (без письма получатель не узнает токен), поэтому SMTP-приёмник
+  // поднимает сам стенд (ensureMailpit). Регистрация к письму нетребовательна:
+  // код подтверждения пишется в БД до отправки.
   startSvc('mailsvc', repoRoot, 'back-go/mail', './cmd/mailsvc', {
     SMTP_HOST: 'localhost', SMTP_PORT: '1025', SMTP_TLS: 'none',
     SMTP_FROM: 'noreply@apitest.local',
@@ -208,34 +227,109 @@ export default async function setup() {
     PASETO_PRIVATE_KEY: PASETO.privateKey, PASETO_REFRESH_KEY: PASETO.refreshKey,
     UPLOAD_FOLDER: fs.mkdtempSync(path.join(process.env.TMPDIR || '/tmp', 'gw2-front-uploads-')),
     MAIL_GRPC_ADDR: `localhost:${GRPC.mail}`,
+    // Перенос компании: authsvc собирает архив из кусков владельцев контента.
+    COMPANY_DATA_ADDRS: [
+      `tasks=localhost:${GRPC.tasks}`,
+      `registry=localhost:${GRPC.registry}`,
+      `calendar=localhost:${GRPC.calendar}`,
+      `portal=localhost:${GRPC.portal}`,
+    ].join(','),
     APP_PUBLIC_BASE_URL: 'http://localhost:5173',
-    HTTP_ADDR: `:${HTTP.auth}`,
+    GRPC_ADDR: `:${GRPC.auth}`, HTTP_ADDR: `:${HTTP.auth}`,
   })
   startSvc('diarysvc', repoRoot, 'back-go/diary', './cmd/diarysvc', {
-    ...baseEnv, HTTP_ADDR: `:${HTTP.diary}`,
+    ...baseEnv, GRPC_ADDR: `:${GRPC.diary}`, HTTP_ADDR: `:${HTTP.diary}`,
   })
   startSvc('tasksvc', repoRoot, 'back-go/tasks', './cmd/tasksvc', {
     ...baseEnv,
     PETS_GRPC_ADDR: `localhost:${GRPC.pets}`,
-    AI_GRPC_ADDR: 'localhost:19193', // aisvc не поднят — поиск fail-open в LIKE
+    // aisvc поднят, но без ключа платформы: семантический поиск отвечает
+    // «выключено», и tasksvc падает на текстовый — этот путь и проверяем.
+    AI_GRPC_ADDR: `localhost:${GRPC.ai}`,
     YOUGILE_ENC_KEY: 'CT5VF1jg6uFFbj4W_6RW3z3416bPlfbxdMYelrEOIXc=',
-    HTTP_ADDR: `:${HTTP.tasks}`,
+    GRPC_ADDR: `:${GRPC.tasks}`, HTTP_ADDR: `:${HTTP.tasks}`,
   })
   startSvc('registrysvc', repoRoot, 'back-go/registry', './cmd/registrysvc', {
     ...baseEnv,
     UPLOAD_FOLDER: fs.mkdtempSync(path.join(process.env.TMPDIR || '/tmp', 'gw2-front-reg-')),
-    HTTP_ADDR: `:${HTTP.registry}`,
+    GRPC_ADDR: `:${GRPC.registry}`, HTTP_ADDR: `:${HTTP.registry}`,
   })
   startSvc('calendarsvc', repoRoot, 'back-go/calendar', './cmd/calendarsvc', {
     ...baseEnv,
     UPLOAD_FOLDER: fs.mkdtempSync(path.join(process.env.TMPDIR || '/tmp', 'gw2-front-cal-')),
-    HTTP_ADDR: `:${HTTP.calendar}`,
+    GRPC_ADDR: `:${GRPC.calendar}`, HTTP_ADDR: `:${HTTP.calendar}`,
   })
   startSvc('msgsvc', repoRoot, 'back-go/messenger', './cmd/msgsvc', {
     ...baseEnv,
     UPLOAD_FOLDER: fs.mkdtempSync(path.join(process.env.TMPDIR || '/tmp', 'gw2-front-msg-')),
     GRPC_ADDR: `:${GRPC.messenger}`, HTTP_ADDR: `:${HTTP.messenger}`,
   })
+  startSvc('portalsvc', repoRoot, 'back-go/portal', './cmd/portalsvc', {
+    ...baseEnv,
+    UPLOAD_FOLDER: fs.mkdtempSync(path.join(process.env.TMPDIR || '/tmp', 'gw2-front-portal-')),
+    MESSENGER_GRPC_ADDR: `localhost:${GRPC.messenger}`,
+    GRPC_ADDR: `:${GRPC.portal}`, HTTP_ADDR: `:${HTTP.portal}`,
+  })
+  // drivesvc: личные файлы с папками, корзиной и шарингом.
+  startSvc('drivesvc', repoRoot, 'back-go/drive', './cmd/drivesvc', {
+    ...baseEnv,
+    UPLOAD_FOLDER: fs.mkdtempSync(path.join(process.env.TMPDIR || '/tmp', 'gw2-front-drive-')),
+    GRPC_ADDR: `:${GRPC.drive}`, HTTP_ADDR: `:${HTTP.drive}`,
+  })
+
+  // notesvc: AI_GRPC_ADDR не задаём — семантический поиск fail-open на текстовый.
+  startSvc('notesvc', repoRoot, 'back-go/notes', './cmd/notesvc', {
+    ...baseEnv,
+    UPLOAD_FOLDER: fs.mkdtempSync(path.join(process.env.TMPDIR || '/tmp', 'gw2-front-notes-')),
+    GRPC_ADDR: `:${GRPC.notes}`, HTTP_ADDR: `:${HTTP.notes}`,
+  })
+  startSvc('boardsvc', repoRoot, 'back-go/board', './cmd/boardsvc', {
+    ...baseEnv,
+    UPLOAD_FOLDER: fs.mkdtempSync(path.join(process.env.TMPDIR || '/tmp', 'gw2-front-board-')),
+    GRPC_ADDR: `:${GRPC.board}`, HTTP_ADDR: `:${HTTP.board}`,
+  })
+  startSvc('remindersvc', repoRoot, 'back-go/reminder', './cmd/remindersvc', {
+    ...baseEnv, HTTP_ADDR: `:${HTTP.reminder}`,
+  })
+  startSvc('billingsvc', repoRoot, 'back-go/billing', './cmd/billingsvc', {
+    ...baseEnv,
+    GRPC_ADDR: `:${GRPC.billing}`, HTTP_ADDR: `:${HTTP.billing}`,
+    // Раздел «Настройки → Хранилище»: у кого биллинг спрашивает про файлы.
+    // Здесь подняты не все владельцы — недостающих он просто пропускает.
+    FILE_OWNER_ADDRS: [
+      `messenger=localhost:${GRPC.messenger}`,
+      `notes=localhost:${GRPC.notes}`,
+      `drive=localhost:${GRPC.drive}`,
+    ].join(','),
+    UPLOAD_FOLDER: fs.mkdtempSync(path.join(process.env.TMPDIR || '/tmp', 'gw2-front-billing-')),
+  })
+
+  // callsvc — LiveKit в стенде нет: медиа-часть недоступна, зато проверяются
+  // REST-пути (активный звонок, ссылки-приглашения) и их отказы.
+  startSvc('callsvc', repoRoot, 'back-go/calls', './cmd/callsvc', {
+    ...baseEnv,
+    MESSENGER_GRPC_ADDR: `localhost:${GRPC.messenger}`,
+    GRPC_ADDR: `:${GRPC.calls}`, HTTP_ADDR: `:${HTTP.calls}`,
+  })
+
+  // pushsvc — без FIREBASE_CREDENTIALS_JSON отправка выключена, но реестр
+  // токенов устройств (REST) работает и проверяется.
+  startSvc('pushsvc', repoRoot, 'back-go/push', './cmd/pushsvc', {
+    ...baseEnv, HTTP_ADDR: `:${HTTP.push}`,
+  })
+
+  // aisvc — БЕЗ ключа платформы: настоящий LLM в стенде недоступен, поэтому
+  // проверяется поведение «ИИ не настроен» (понятный отказ вместо 500) и права
+  // на платформенные настройки. Ключ шифрования задан — личные настройки
+  // должны сохраняться.
+  startSvc('aisvc', repoRoot, 'back-go/ai', './cmd/aisvc', {
+    ...baseEnv,
+    AI_KEY_ENCRYPTION_KEY: AI_ENC_KEY,
+    TASKS_GRPC_ADDR: `localhost:${GRPC.tasks}`,
+    BILLING_GRPC_ADDR: `localhost:${GRPC.billing}`,
+    GRPC_ADDR: `:${GRPC.ai}`, HTTP_ADDR: `:${HTTP.ai}`,
+  })
+
   // petsvc — чистая гейм-механика (без ленты/AI/pet-чата), поэтому не нуждается
   // в AI_GRPC_ADDR/MESSENGER_GRPC_ADDR.
   startSvc('petsvc', repoRoot, 'back-go/pets', './cmd/petsvc', {
@@ -248,6 +342,9 @@ export default async function setup() {
       waitHealthz(HTTP.mail), waitHealthz(HTTP.auth), waitHealthz(HTTP.diary),
       waitHealthz(HTTP.tasks), waitHealthz(HTTP.registry), waitHealthz(HTTP.calendar),
       waitHealthz(HTTP.messenger), waitHealthz(HTTP.pets),
+      waitHealthz(HTTP.portal), waitHealthz(HTTP.notes), waitHealthz(HTTP.board), waitHealthz(HTTP.drive),
+      waitHealthz(HTTP.reminder), waitHealthz(HTTP.billing),
+      waitHealthz(HTTP.push), waitHealthz(HTTP.ai), waitHealthz(HTTP.calls),
     ])
   } catch (e) {
     console.error('[integration] сервис не поднялся:', e.message)
@@ -258,9 +355,10 @@ export default async function setup() {
   }
 
   writeStatus({ ready: true, dbURL: PG.dbURL, pgContainer: PG.container })
-  console.log('[integration] бэкенд готов (auth/diary/tasks/registry/calendar/messenger/pets)')
+  console.log('[integration] бэкенд готов (auth/diary/tasks/registry/calendar/messenger/pets/portal/notes/board/drive/reminder/billing/push/ai/calls)')
 
   return async () => {
+    if (process.env.GW_DUMP_LOGS) dumpLogs()
     stopAll()
     await sleep(500)
     for (const p of procs) { try { process.kill(-p.child.pid, 'SIGKILL') } catch {} }

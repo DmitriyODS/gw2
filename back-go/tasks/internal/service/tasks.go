@@ -15,15 +15,24 @@ var reindexFields = map[string]bool{
 	"name": true, "department_id": true, "responsible_user_id": true,
 }
 
-// ensureNotOnVacation — гард режима «в отпуске» (users.on_vacation): актор в
-// отпуске не создаёт/не правит задачи и не запускает юниты. Системные пути
+// maxTaskPerPage — потолок размера страницы списка задач (защита от выгрузки
+// всей компании одним запросом — как maxPerPage в registrysvc).
+const maxTaskPerPage = 200
+
+// ensureNotOnVacation — гард режима «в отпуске» (user_companies.on_vacation):
+// актор в отпуске не создаёт/не правит задачи и не запускает юниты. Отпуск
+// company-scoped: в другой компании тот же человек работает как обычно,
+// поэтому без компании в запросе гард не применяется. Системные пути
 // (YouGile-вебхук) идут мимо — они работают репозиторием, не этими методами.
-func (s *Service) ensureNotOnVacation(ctx context.Context, actorID int64) error {
-	user, err := s.users.GetUser(ctx, actorID)
+func (s *Service) ensureNotOnVacation(ctx context.Context, actorID int64, companyID *int64) error {
+	if companyID == nil {
+		return nil
+	}
+	onVacation, err := s.users.OnVacation(ctx, actorID, *companyID)
 	if err != nil {
 		return err
 	}
-	if user != nil && user.OnVacation {
+	if onVacation {
 		return domain.NewError("ON_VACATION",
 			"Вы в отпуске — создание и редактирование задач недоступно", 403)
 	}
@@ -69,18 +78,29 @@ func (s *Service) validateStage(ctx context.Context, stageID *int64, companyID i
 	return nil
 }
 
-// ListTasks — список с фильтрами и батч-обогащением. Поиск: если у компании
-// включён AI — целиком семантический по проиндексированным задачам, иначе
-// LIKE по названию (никаких гибридов — см. комментарий в api/tasks.py).
+// ListTasks — список с фильтрами и батч-обогащением.
+//
+// Поиск: при включённом ИИ к текстовому поиску ДОБАВЛЯЕТСЯ семантическая
+// выдача (объединение, не замена). Раньше семантика её вытесняла, и только что
+// созданная задача не находилась, пока не посчитается эмбеддинг; теперь она
+// находится сразу по названию. Текстовый поиск не зависит от регистра и
+// понимает регулярные выражения (domain.SearchRegex).
 func (s *Service) ListTasks(ctx context.Context, f domain.TaskListFilter) (*dto.TaskList, error) {
+	if f.Page < 1 {
+		f.Page = 1
+	}
+	if f.PerPage <= 0 {
+		f.PerPage = 30
+	}
+	if f.PerPage > maxTaskPerPage {
+		f.PerPage = maxTaskPerPage
+	}
+
 	search := strings.TrimSpace(f.Search)
 	if search != "" && f.CompanyID != nil && s.ai.Enabled(ctx, *f.CompanyID) {
-		hits := s.ai.SemanticSearch(ctx, *f.CompanyID, search)
-		if hits == nil {
-			hits = []int64{}
+		if hits := s.ai.SemanticSearch(ctx, *f.CompanyID, search); len(hits) > 0 {
+			f.OrderedIDs, f.OrderedSet = hits, true
 		}
-		// При включённом AI всегда отдаём семантическую выдачу — даже пустую.
-		f.OrderedIDs, f.OrderedSet = hits, true
 	}
 
 	items, total, err := s.tasks.ListTasks(ctx, f)
@@ -145,10 +165,12 @@ func (s *Service) GetTask(ctx context.Context, taskID, userID int64) (*dto.Task,
 }
 
 // GetTaskInCompany — задача по id для REST: только в активной компании актора.
+// По прямой ссылке сюда приходят и посторонние, поэтому отказ здесь — говорящий
+// (см. taskLinkAccess), а не глухой 404: человеку надо понять, чего не хватает.
 func (s *Service) GetTaskInCompany(ctx context.Context, taskID, userID int64, companyID *int64) (*dto.Task, error) {
 	task, err := s.taskInCompany(ctx, taskID, companyID)
 	if err != nil {
-		return nil, err
+		return nil, s.taskLinkAccess(ctx, taskID, userID, companyID, err)
 	}
 	out, err := s.enrichTask(ctx, task, userID)
 	if err != nil {
@@ -160,7 +182,10 @@ func (s *Service) GetTaskInCompany(ctx context.Context, taskID, userID int64, co
 // createTaskCore — создание задачи с бизнес-проверками, без дампа и
 // сокет-события (общая часть CreateTask и YouGile-импорта).
 func (s *Service) createTaskCore(ctx context.Context, actorID, companyID int64, req dto.TaskCreate) (*domain.Task, error) {
-	if err := s.ensureNotOnVacation(ctx, actorID); err != nil {
+	if err := s.ensureNotOnVacation(ctx, actorID, &companyID); err != nil {
+		return nil, err
+	}
+	if err := s.ensureTaskLimit(ctx, companyID); err != nil {
 		return nil, err
 	}
 	dept, err := s.depts.GetDepartment(ctx, req.DepartmentID)
@@ -221,7 +246,7 @@ func (s *Service) CreateTask(ctx context.Context, actorID, companyID int64, req 
 }
 
 func (s *Service) UpdateTask(ctx context.Context, taskID, actorID int64, companyID *int64, req dto.TaskUpdate) (*dto.Task, error) {
-	if err := s.ensureNotOnVacation(ctx, actorID); err != nil {
+	if err := s.ensureNotOnVacation(ctx, actorID, companyID); err != nil {
 		return nil, err
 	}
 	task, err := s.taskInCompany(ctx, taskID, companyID)
@@ -304,7 +329,7 @@ func (s *Service) DeleteTask(ctx context.Context, taskID int64, companyID *int64
 }
 
 func (s *Service) ArchiveTask(ctx context.Context, taskID, actorID int64, companyID *int64) (*dto.Task, error) {
-	if err := s.ensureNotOnVacation(ctx, actorID); err != nil {
+	if err := s.ensureNotOnVacation(ctx, actorID, companyID); err != nil {
 		return nil, err
 	}
 	task, err := s.taskInCompany(ctx, taskID, companyID)
@@ -347,7 +372,7 @@ func (s *Service) ArchiveTask(ctx context.Context, taskID, actorID int64, compan
 }
 
 func (s *Service) RestoreTask(ctx context.Context, taskID, actorID int64, companyID *int64) (*dto.Task, error) {
-	if err := s.ensureNotOnVacation(ctx, actorID); err != nil {
+	if err := s.ensureNotOnVacation(ctx, actorID, companyID); err != nil {
 		return nil, err
 	}
 	task, err := s.taskInCompany(ctx, taskID, companyID)
@@ -378,7 +403,7 @@ func (s *Service) RestoreTask(ctx context.Context, taskID, actorID int64, compan
 // SetResponsible / SetStage — отдельные PATCH-роуты v3 (двигают задачу и
 // шлют общий task:updated).
 func (s *Service) SetResponsible(ctx context.Context, taskID, actorID int64, companyID *int64, responsibleUserID *int64) (*dto.Task, error) {
-	if err := s.ensureNotOnVacation(ctx, actorID); err != nil {
+	if err := s.ensureNotOnVacation(ctx, actorID, companyID); err != nil {
 		return nil, err
 	}
 	task, err := s.taskInCompany(ctx, taskID, companyID)
@@ -403,7 +428,7 @@ func (s *Service) SetResponsible(ctx context.Context, taskID, actorID int64, com
 }
 
 func (s *Service) SetStage(ctx context.Context, taskID, actorID int64, companyID *int64, stageID *int64) (*dto.Task, error) {
-	if err := s.ensureNotOnVacation(ctx, actorID); err != nil {
+	if err := s.ensureNotOnVacation(ctx, actorID, companyID); err != nil {
 		return nil, err
 	}
 	task, err := s.taskInCompany(ctx, taskID, companyID)

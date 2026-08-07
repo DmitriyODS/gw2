@@ -6,11 +6,13 @@ package service
 
 import (
 	"context"
+	"encoding/json"
 	"log/slog"
 
 	"github.com/DmitriyODS/gw2/back-go/auth/internal/domain"
 	"github.com/DmitriyODS/gw2/back-go/auth/internal/dto"
 	"github.com/DmitriyODS/gw2/back-go/auth/internal/token"
+	"github.com/DmitriyODS/gw2/back-go/pkg/billingclient"
 )
 
 // AuthService — все use-case'ы сервиса (auth + users).
@@ -33,6 +35,20 @@ type AuthService interface {
 	LinkApprove(ctx context.Context, code string, userID int64, activeCompanyID *int64) error
 	LinkClaim(ctx context.Context, code, secret string) (*dto.LinkClaimResult, error)
 
+	// Реестр входов («Авторизация и сессии» в профиле). Текущая сессия
+	// определяется по refresh-cookie запроса (domain.SessionMeta в контексте).
+	ListSessions(ctx context.Context, userID int64) ([]dto.SessionInfo, error)
+	RevokeSession(ctx context.Context, userID, sessionID int64) error
+	RevokeCurrentSession(ctx context.Context, userID int64) error
+	// RevokeOtherSessions — выйти на всех устройствах, кроме текущего.
+	RevokeOtherSessions(ctx context.Context, userID int64) (int, error)
+
+	// Экран блокировки: пин закрывает приложение, сессия остаётся живой.
+	ScreenLockState(ctx context.Context, userID int64) (*dto.ScreenLock, error)
+	SetScreenLock(ctx context.Context, userID int64, req dto.ScreenLockRequest) (*dto.ScreenLock, error)
+	DisableScreenLock(ctx context.Context, userID int64, secret string) error
+	UnlockScreen(ctx context.Context, userID int64, secret string) error
+
 	ListUsers(ctx context.Context) ([]dto.User, error)
 	CreateUser(ctx context.Context, actor *domain.User, req dto.CreateUserRequest) (*dto.User, error)
 	CreatePlatformUser(ctx context.Context, req dto.CreateUserRequest) (*dto.User, error)
@@ -45,6 +61,8 @@ type AuthService interface {
 	DirectoryUser(ctx context.Context, actor *domain.User, userID int64) (*dto.DirectoryUser, error)
 	Me(ctx context.Context, userID, companyID int64) (*dto.User, error)
 	UpdateMe(ctx context.Context, userID int64, req dto.UpdateMeRequest) (*dto.User, error)
+	GetDesktopPrefs(ctx context.Context, userID int64) (json.RawMessage, error)
+	SaveDesktopPrefs(ctx context.Context, userID int64, prefs json.RawMessage) (json.RawMessage, error)
 	UploadAvatar(ctx context.Context, userID int64, fileBytes []byte) (*dto.User, error)
 	DeleteAvatar(ctx context.Context, userID int64) (*dto.User, error)
 	GetUser(ctx context.Context, actor *domain.User, userID int64) (*dto.User, error)
@@ -79,6 +97,9 @@ type AuthService interface {
 	UpdateCompany(ctx context.Context, actor *domain.User, companyID int64, req dto.CompanyUpdate) (*dto.Company, error)
 	ToggleCompanyActive(ctx context.Context, companyID int64, isActive bool) (*dto.Company, error)
 	DeleteCompany(ctx context.Context, actor *domain.User, companyID int64) error
+	// Перенос компании: выгрузка архивом и подъём из архива новой компанией.
+	ExportCompany(ctx context.Context, actor *domain.User, companyID int64) ([]byte, string, error)
+	ImportCompany(ctx context.Context, actor *domain.User, archive []byte, name string) (*TransferResult, error)
 	GetWeekendSettings(ctx context.Context, actor *domain.User, companyID int64) (*dto.WeekendSettings, error)
 	UpdateWeekendSettings(ctx context.Context, actor *domain.User, companyID int64, days []int) (*dto.WeekendSettings, error)
 	GetGrooveSettings(ctx context.Context, actor *domain.User, companyID int64) (*dto.GrooveSettings, error)
@@ -109,6 +130,8 @@ type Service struct {
 	passwordResets domain.PasswordResetStore
 	companyInvites domain.CompanyInviteStore
 	link           domain.DeviceLinkStore
+	sessions       domain.SessionStore // реестр входов (WithSessions; nil — выключен)
+	geo            domain.GeoResolver  // город по IP для карточки сеанса (может быть nil)
 	mail           domain.MailClient
 	appBaseURL     string // публичный базовый URL для ссылок в письмах
 	log            *slog.Logger
@@ -120,6 +143,26 @@ type Service struct {
 	// Вход через Яндекс ID (WithYandex; nil — выключен).
 	yandex         domain.YandexOAuthClient
 	yandexClientID string
+
+	// Лимиты тарифа (WithBilling; nil — ограничений нет).
+	billing *billingclient.Client
+	// Владельцы контента компании для переноса (WithTransfer; nil — выключен).
+	transfer domain.CompanyDataClient
+	// Лимит регистраций по IP и резендов писем (WithRateLimiter; nil — без лимита).
+	limiter domain.RateLimiter
+}
+
+// WithRateLimiter — подключить лимит регистраций по IP и резендов писем
+// подтверждения/сброса пароля.
+func (s *Service) WithRateLimiter(limiter domain.RateLimiter) *Service {
+	s.limiter = limiter
+	return s
+}
+
+// WithTransfer — подключить перенос компаний (архив собирается из разделов).
+func (s *Service) WithTransfer(client domain.CompanyDataClient) *Service {
+	s.transfer = client
+	return s
 }
 
 func New(repo domain.UserRepository, companies domain.CompanyRepository,
@@ -137,6 +180,15 @@ func New(repo domain.UserRepository, companies domain.CompanyRepository,
 // (все загруженные файлы попадают в архив и восстанавливаются из него).
 func (s *Service) WithFiles(files domain.FileArchive) *Service {
 	s.files = files
+	return s
+}
+
+// WithSessions — включить реестр входов («Авторизация и сессии» в профиле):
+// каждая выданная пара токенов привязывается к устройству, вход можно
+// завершить. geo (может быть nil) определяет город по IP для карточки.
+func (s *Service) WithSessions(sessions domain.SessionStore, geo domain.GeoResolver) *Service {
+	s.sessions = sessions
+	s.geo = geo
 	return s
 }
 
@@ -204,7 +256,8 @@ func (s *Service) session(ctx context.Context, u *domain.User, activeCompanyID *
 		Companies:       dto.NewMemberships(memberships),
 	}
 	if withRefresh {
-		if sess.RefreshToken, err = s.tokens.RefreshToken(u.ID, claims.CompanyID); err != nil {
+		sid := s.ensureSessionID(ctx, u.ID)
+		if sess.RefreshToken, err = s.tokens.RefreshToken(u.ID, claims.CompanyID, sid); err != nil {
 			return nil, err
 		}
 	}
@@ -221,6 +274,16 @@ func (s *Service) startSession(ctx context.Context, u *domain.User) (*dto.Sessio
 	memberships, err := s.repo.ListMemberships(ctx, u.ID)
 	if err != nil {
 		return nil, err
+	}
+	/* Ни одной компании — заводим личную и входим сразу в неё: к компании
+	   привязана вся работа (задачи, юниты, статистика), и без неё человек
+	   попадал бы в приложение, где половина разделов просит «выберите
+	   компанию». Не получилось завести — входим как раньше, без активной. */
+	if len(memberships) == 0 {
+		s.EnsurePersonalCompany(ctx, u)
+		if memberships, err = s.repo.ListMemberships(ctx, u.ID); err != nil {
+			return nil, err
+		}
 	}
 	switch len(memberships) {
 	case 0:

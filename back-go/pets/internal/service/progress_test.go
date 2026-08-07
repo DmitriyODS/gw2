@@ -170,13 +170,13 @@ func TestBuyHouseDecorSpendsKudos(t *testing.T) {
 	env := newEnv()
 	ctx := context.Background()
 	pet, _ := env.pets.GetOrCreate(ctx, 1, 10)
-	pet.Kudos = 200
+	pet.Kudos = domain.HouseDecor["sofa"] + 50
 
 	house, err := env.svc.BuyHouseDecor(ctx, 1, 10, "sofa", false)
 	if err != nil {
 		t.Fatalf("BuyHouseDecor: %v", err)
 	}
-	if pet.Kudos != 200-domain.HouseDecor["sofa"] {
+	if pet.Kudos != 50 {
 		t.Errorf("kudos = %d", pet.Kudos)
 	}
 	var sofa bool

@@ -20,7 +20,7 @@ var StageTitles = []string{"Яйцо", "Малыш", "Непоседа", "Под
 var MaxStage = len(StageXP) - 1
 
 const (
-	FeedCost     = 10 // базовая еда (морковка) — дефолт, если корм не выбран
+	FeedCost     = 15 // базовая еда (морковка) — дефолт, если корм не выбран
 	FeedXP       = 12
 	FeedDailyMax = 6
 )
@@ -41,14 +41,14 @@ type Food struct {
 
 // Foods — каталог кормов (ключ ≡ FOODS во front/src/utils/pets.js).
 var Foods = map[string]Food{
-	"carrot": {"carrot", 10, 40, 12, 0, -5},   // базовая морковка (как раньше)
-	"apple":  {"apple", 8, 30, 10, 0, 0},       // дешёвое и чистое
-	"berry":  {"berry", 6, 20, 8, 4, 0},        // ягодка-перекус, чуть бодрит
-	"salad":  {"salad", 15, 45, 12, 0, 4},      // полезно, освежает
-	"fish":   {"fish", 18, 55, 16, 6, -5},      // сытно и бодро
-	"cookie": {"cookie", 12, 25, 14, 12, -10},  // сладкое: бодрит, но пачкает
-	"cake":   {"cake", 25, 70, 20, 8, -12},     // праздничный тортик
-	"steak":  {"steak", 30, 85, 24, -6, -6},    // премиум-сытость, но в сон клонит
+	"carrot": {"carrot", 15, 40, 12, 0, -5},   // базовая морковка
+	"apple":  {"apple", 12, 30, 10, 0, 0},     // дешёвое и чистое
+	"berry":  {"berry", 9, 20, 8, 4, 0},       // ягодка-перекус, чуть бодрит
+	"salad":  {"salad", 22, 45, 12, 0, 4},     // полезно, освежает
+	"fish":   {"fish", 27, 55, 16, 6, -5},     // сытно и бодро
+	"cookie": {"cookie", 18, 25, 14, 12, -10}, // сладкое: бодрит, но пачкает
+	"cake":   {"cake", 38, 70, 20, 8, -12},    // праздничный тортик
+	"steak":  {"steak", 45, 85, 24, -6, -6},   // премиум-сытость, но в сон клонит
 }
 
 // FavoriteFoodBonusXP — доп. XP за любимый корм; FavoriteFoodBonusSatiety —
@@ -137,7 +137,7 @@ func UnitKudos(minutes int) int {
 // насколько подходит его болезни (Ailments — рецепты).
 
 const (
-	WalkCost     = 15
+	WalkCost     = 22
 	WalkDailyMax = 3
 	WalkXP       = 6
 )
@@ -147,7 +147,7 @@ const (
 // «свой» рецепт (еда, сон, купание, работа) всегда эффективнее и дешевле.
 
 const (
-	HealCost     = 25
+	HealCost     = 38
 	HealDailyMax = 2
 )
 
@@ -159,7 +159,7 @@ const (
 // Дневной лимит — на ОДНОГО чужого питомца, не на общее число.
 
 const (
-	StrokeCost           = 2
+	StrokeCost           = 3
 	StrokeDailyMaxPerPet = 3
 	StrokeRewardKudos    = 3 // владельцу поглаженного питомца
 	StrokeMoodXP         = 2 // ему же
@@ -230,17 +230,17 @@ var SeasonTrack = []SeasonReward{
 // приходит только наградой сезонного трека. Расставленное видно коллегам.
 
 var HouseDecor = map[string]int{
-	"chair":     50,
-	"plant":     65,
-	"picture":   80,
-	"books":     100,
-	"bed":       120,
-	"sofa":      140,
-	"teddy":     160,
-	"console":   220,
-	"piano":     300,
-	"fountain":  380,
-	"disco":     450,
+	"chair":     75,
+	"plant":     100,
+	"picture":   120,
+	"books":     150,
+	"bed":       180,
+	"sofa":      210,
+	"teddy":     240,
+	"console":   330,
+	"piano":     450,
+	"fountain":  570,
+	"disco":     675,
 	"garland":   0, // награды сезонного трека
 	"goldfish":  0,
 	"fireplace": 0,
@@ -278,7 +278,7 @@ const (
 	BankStatsDays = 14 // окно динамики прихода/расхода в статистике
 
 	// Досрочный возврат питомца из приключения (без награды за поход).
-	AdventureRecallCost = 100
+	AdventureRecallCost = 150
 )
 
 // BankTier — уровень клиента банка: паттерн loyalty-tiers (Новичок→Платина).
@@ -426,7 +426,7 @@ var QuestTemplates = []QuestTemplate{
 const (
 	SickAfterDays          = 5
 	RecoveryTarget         = 3
-	SickFeedCost           = 1
+	SickFeedCost           = 2
 	SickFeedDailyMax       = 2
 	SickFeedSatiety        = 20 // бульон питает слабее обычной порции
 	RecoveryMinUnitMinutes = 15

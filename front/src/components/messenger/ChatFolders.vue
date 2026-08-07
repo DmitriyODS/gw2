@@ -1,9 +1,17 @@
 <template>
-  <nav class="chat-folders" :class="orientation" role="tablist" aria-label="Папки чатов">
+  <nav
+    ref="listEl"
+    class="chat-folders"
+    :class="[orientation, { 'can-left': canLeft, 'can-right': canRight }]"
+    role="tablist"
+    aria-label="Папки чатов"
+    @scroll.passive="updateEdges"
+  >
     <button
       v-for="tab in tabs"
       :key="tab.token"
       class="cf-item"
+      :ref="el => tab.id === messenger.activeFolderId && (activeEl = el)"
       :class="{
         active: tab.id === messenger.activeFolderId,
         dragging: dragToken != null && dragToken === tab.token,
@@ -29,11 +37,11 @@
 </template>
 
 <script setup>
-import { computed, ref } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import EmojiGlyph from '@/components/common/EmojiGlyph.vue'
 import { useMessengerStore } from '@/stores/messenger.js'
 
-defineProps({
+const props = defineProps({
   orientation: { type: String, default: 'vertical' }, // 'vertical' | 'horizontal'
 })
 
@@ -71,6 +79,40 @@ const tabs = computed(() => {
     unread: messenger.folderUnread(null),
   })
   return list
+})
+
+/* ── Подсказка прокрутки (горизонтальная лента на телефоне) ──
+   Папки не влезали в строку, а признака этого не было: лента обрывалась ровно
+   по кромке панели и читалась как полный список. Затенение у края показывает,
+   что справа/слева есть ещё, — и оно честное: считается по фактической
+   прокрутке, а не рисуется всегда. */
+const listEl = ref(null)
+const activeEl = ref(null)
+const canLeft = ref(false)
+const canRight = ref(false)
+
+function updateEdges() {
+  const el = listEl.value
+  if (!el || props.orientation !== 'horizontal') return
+  canLeft.value = el.scrollLeft > 4
+  canRight.value = el.scrollWidth - el.clientWidth - el.scrollLeft > 4
+}
+
+let ro = null
+onMounted(() => {
+  updateEdges()
+  if (typeof ResizeObserver === 'undefined' || !listEl.value) return
+  ro = new ResizeObserver(updateEdges)
+  ro.observe(listEl.value)
+})
+onBeforeUnmount(() => ro?.disconnect())
+
+// Активная папка всегда на виду: выбор из меню или переход по ссылке могли
+// оставить её за краем ленты.
+watch(() => [messenger.activeFolderId, tabs.value.length], async () => {
+  await nextTick()
+  activeEl.value?.scrollIntoView?.({ block: 'nearest', inline: 'nearest' })
+  updateEdges()
 })
 
 // ── Перетаскивание вкладок для смены порядка (вкл. «Все чаты») ──
@@ -128,10 +170,25 @@ function onDragEnd() {
 .chat-folders.horizontal {
   flex-direction: row;
   overflow-x: auto;
-  padding: 4px 8px 8px;
+  padding: 2px 6px 4px;
   scrollbar-width: none;
 }
 .chat-folders.horizontal::-webkit-scrollbar { display: none; }
+
+/* Затенение у края = «лента продолжается». Маска работает по альфе, цвет в ней
+   не виден — поэтому здесь чёрный, а не токен темы. */
+.chat-folders.horizontal.can-right {
+  -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 32px), transparent);
+  mask-image: linear-gradient(to right, #000 calc(100% - 32px), transparent);
+}
+.chat-folders.horizontal.can-left {
+  -webkit-mask-image: linear-gradient(to right, transparent, #000 32px);
+  mask-image: linear-gradient(to right, transparent, #000 32px);
+}
+.chat-folders.horizontal.can-left.can-right {
+  -webkit-mask-image: linear-gradient(to right, transparent, #000 32px, #000 calc(100% - 32px), transparent);
+  mask-image: linear-gradient(to right, transparent, #000 32px, #000 calc(100% - 32px), transparent);
+}
 
 .cf-item {
   display: flex;

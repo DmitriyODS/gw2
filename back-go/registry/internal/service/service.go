@@ -8,6 +8,8 @@ import (
 	"log/slog"
 
 	"github.com/DmitriyODS/gw2/back-go/registry/internal/domain"
+
+	"github.com/DmitriyODS/gw2/back-go/pkg/billingclient"
 )
 
 const roomAll = "all"
@@ -17,6 +19,8 @@ type Service struct {
 	files domain.FileStore
 	bus   domain.EventBus
 	log   *slog.Logger
+	// billing — лимиты тарифа (WithBilling; nil — ограничений нет).
+	billing *billingclient.Client
 }
 
 type Deps struct {

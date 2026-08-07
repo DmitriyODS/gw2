@@ -3,9 +3,8 @@
 
     <!-- Шапка: статус интеграции -->
     <div class="settings-card head-card">
-      <div class="hero-icon" :data-tone="settings?.enabled ? 'primary' : 'secondary'">
-        <span class="material-symbols-outlined">{{ settings?.enabled ? 'integration_instructions' : 'extension' }}</span>
-      </div>
+      <!-- Чужой фирменный знак — опознание сервиса, а не наша иконка. -->
+      <YougileLogo :size="30" />
       <div class="card-text">
         <h3>Интеграция с YouGile</h3>
         <p v-if="settings?.enabled">
@@ -27,9 +26,6 @@
     <!-- Шаг 1: подключение админа к YouGile -->
     <div v-if="!yg.status.connected" class="settings-card form-card">
       <div class="row-head">
-        <div class="hero-icon" data-tone="tertiary">
-          <span class="material-symbols-outlined">key</span>
-        </div>
         <div class="card-text">
           <h3>Шаг 1. Войдите в свой YouGile</h3>
           <p>Нужно, чтобы Groove Work мог читать ваши проекты и доски. Пароль не сохраняется.</p>
@@ -71,9 +67,6 @@
     <!-- Шаг 2: выбор проекта/доски/колонки выполнено -->
     <div v-if="yg.status.connected" class="settings-card form-card">
       <div class="row-head">
-        <div class="hero-icon" data-tone="primary">
-          <span class="material-symbols-outlined">view_kanban</span>
-        </div>
         <div class="card-text">
           <h3>Шаг 2. Где жить карточкам</h3>
           <p>Все новые задачи из Groove Work будут попадать в первую колонку выбранной доски.</p>
@@ -148,9 +141,6 @@
 
     <!-- Сброс интеграции «начать заново» -->
     <div v-if="yg.status.connected || settings?.yg_company_id" class="settings-card danger-card">
-      <div class="hero-icon" data-tone="error">
-        <span class="material-symbols-outlined">logout</span>
-      </div>
       <div class="card-text">
         <h3>Выйти из аккаунта и сбросить</h3>
         <p>
@@ -180,9 +170,10 @@
 </template>
 
 <script setup>
+import YougileLogo from '@/components/common/YougileLogo.vue'
 import { reactive, ref, computed, onMounted } from 'vue'
 import Select from 'primevue/select'
-import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
+import ConfirmDialog from '@/components/ui/ConfirmDialog.vue'
 import { useYougileStore } from '@/stores/yougile.js'
 import { useNotificationsStore } from '@/stores/notifications.js'
 
@@ -374,17 +365,7 @@ onMounted(async () => {
 .form-card { flex-direction: column; }
 .row-head { display: flex; gap: 18px; align-items: flex-start; }
 
-.hero-icon {
-  flex-shrink: 0; width: 56px; height: 56px;
-  border-radius: 16px; display: grid; place-items: center;
-  background: var(--tone-bg, var(--color-primary-container));
-  color: var(--tone-fg, var(--color-on-primary-container));
-}
-.hero-icon[data-tone="primary"]   { --tone-bg: var(--color-primary-container);   --tone-fg: var(--color-on-primary-container); }
-.hero-icon[data-tone="secondary"] { --tone-bg: var(--color-secondary-container); --tone-fg: var(--color-on-secondary-container); }
-.hero-icon[data-tone="tertiary"]  { --tone-bg: var(--color-tertiary-container);  --tone-fg: var(--color-on-tertiary-container); }
-.hero-icon[data-tone="error"]     { --tone-bg: var(--color-error-container);     --tone-fg: var(--color-on-error-container); }
-.hero-icon .material-symbols-outlined { font-size: 28px; }
+/* Чужой фирменный знак — без нашей цветной подложки. */
 
 .card-text { flex: 1; min-width: 0; }
 .card-text h3 { margin: 0 0 4px; font-size: 16px; font-weight: 700; color: var(--color-text); }

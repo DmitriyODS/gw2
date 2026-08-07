@@ -19,14 +19,15 @@
     </div>
 
     <div class="rail-scroll filters-scroll">
-      <!-- Вкладки (на мобильном — SegmentedTabs в шапке экрана) -->
+      <!-- Активные / Избранные / Архив — такой же фильтр, как остальные,
+           поэтому в узкой раскладке они живут здесь, а не отдельной строкой
+           вкладок над лентой: шапка там нужнее поиску. -->
       <section class="rail-section tabs-section">
         <button
           v-for="t in tabs"
           :key="t.value"
           class="rail-item"
           :class="{ active: tasksStore.filters.tab === t.value }"
-          :data-tutorial="t.tutorial"
           @click="tasksStore.setTab(t.value)"
         >
           <span class="material-symbols-outlined">{{ t.icon }}</span>
@@ -211,6 +212,8 @@
       :visible="showCustomDialog"
       @update:visible="closeCustomDialog"
       modal
+      :append-to="host"
+      :pt="{ mask: { class: { 'gw-in-window-mask': inWindow } } }"
       header="Свой период"
       :style="{ width: '380px', maxWidth: '95vw' }"
     >
@@ -262,9 +265,12 @@ import { getDepartments } from '@/api/departments.js'
 import { getStages } from '@/api/stages.js'
 import { useCompanySettings } from '@/composables/useCompanySettings.js'
 import { usePermission, ROLES } from '@/composables/usePermission.js'
+import { useModalHost } from '@/desktop/windowHost.js'
 import TagManageDialog from '@/components/tasks/TagManageDialog.vue'
 import { TASK_COLORS } from '@/utils/taskColors.js'
 import { TASK_SORTS } from '@/components/tasks/taskSorts.js'
+
+const { host, inWindow } = useModalHost()
 
 const props = defineProps({
   mobileVisible: {
@@ -318,9 +324,9 @@ function onDeptChange(value) {
 }
 
 const tabs = [
-  { value: 'active', label: 'Активные', icon: 'checklist', tutorial: 'tab-active' },
-  { value: 'favorites', label: 'Избранное', icon: 'star', tutorial: 'tab-favorites' },
-  { value: 'archive', label: 'Архив', icon: 'inventory_2', tutorial: 'tab-archive' },
+  { value: 'active', label: 'Активные', icon: 'checklist' },
+  { value: 'favorites', label: 'Избранное', icon: 'star' },
+  { value: 'archive', label: 'Архив', icon: 'inventory_2' },
 ]
 
 const sorts = TASK_SORTS
@@ -794,11 +800,8 @@ function closeCustomDialog() {
     font-size: 14px;
   }
 
-  /* Вкладки — в SegmentedTabs шапки экрана, сортировки — в шторке SortSheet. */
-  .tabs-section,
-  .sort-section {
-    display: none;
-  }
+  /* Сортировки — в отдельной шторке SortSheet; вкладки остаются здесь. */
+  .sort-section { display: none; }
 
   .filters-foot {
     display: flex;

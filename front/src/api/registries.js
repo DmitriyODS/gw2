@@ -6,6 +6,11 @@ export const getRegistries = (options = {}) => apiRequest('/registries', options
 
 export const getRegistry = (id) => apiRequest(`/registries/${id}`)
 
+// Глобальный поиск записей по всем реестрам компании (строка поиска
+// рабочего стола) — один запрос, без обхода реестров.
+export const searchRecords = (q, limit = 5, options = {}) =>
+  apiRequest(`/registries/search?q=${encodeURIComponent(q)}&limit=${limit}`, options)
+
 export const createRegistry = (name) =>
   apiRequest('/registries', { method: 'POST', body: { name } })
 

@@ -761,13 +761,13 @@ func TestFeedPetHappyPath(t *testing.T) {
 	svc := newTestService(pets, daily, pub, activity)
 
 	pet, _ := pets.GetOrCreate(context.Background(), 1, 10)
-	pet.Kudos = 10
+	pet.Kudos = domain.FeedCost
 
 	data, err := svc.FeedPet(context.Background(), 1, 10, "")
 	if err != nil {
 		t.Fatalf("FeedPet: %v", err)
 	}
-	if data.Kudos != 10-domain.FeedCost {
+	if data.Kudos != 0 {
 		t.Errorf("kudos = %d", data.Kudos)
 	}
 	if data.XP != domain.FeedXP {
@@ -806,7 +806,7 @@ func TestFeedPetDailyCap(t *testing.T) {
 	pets := &fakePets{}
 	svc := newTestService(pets, &fakeDaily{denyBudget: true}, &fakePub{}, &fakeActivity{})
 	pet, _ := pets.GetOrCreate(context.Background(), 1, 10)
-	pet.Kudos = 10
+	pet.Kudos = domain.FeedCost * (domain.FeedDailyMax + 1)
 
 	_, err := svc.FeedPet(context.Background(), 1, 10, "")
 	de := domain.AsDomainError(err)
@@ -820,7 +820,7 @@ func TestFeedPetEvolves(t *testing.T) {
 	activity := &fakeActivity{}
 	svc := newTestService(pets, &fakeDaily{}, &fakePub{}, activity)
 	pet, _ := pets.GetOrCreate(context.Background(), 1, 10)
-	pet.Kudos = 10
+	pet.Kudos = domain.FeedCost * (domain.FeedDailyMax + 1)
 	pet.XP = domain.StageXP[1] - domain.FeedXP + 1 // эволюция после кормления
 
 	data, err := svc.FeedPet(context.Background(), 1, 10, "")

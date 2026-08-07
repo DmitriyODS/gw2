@@ -44,10 +44,20 @@ CALENDAR_PID=""
 DIARY_PID=""
 PORTAL_PID=""
 NOTES_PID=""
+BOARD_PID=""
+REMINDER_PID=""
+BILLING_PID=""
 ALICE_PID=""
 
-# Все Go-сервисы (имя бинаря в go-build/exe — по нему ловим осиротевшие процессы).
-SVCS="callsvc authsvc msgsvc aisvc petsvc tasksvc gatewaysvc pushsvc mailsvc registrysvc calendarsvc diarysvc portalsvc notesvc alicesvc"
+# Все Go-сервисы — по имени ловим осиротевшие процессы прошлого запуска.
+SVCS="callsvc authsvc msgsvc aisvc petsvc tasksvc gatewaysvc pushsvc mailsvc registrysvc calendarsvc diarysvc portalsvc notesvc boardsvc drivesvc remindersvc billingsvc alicesvc"
+
+# Порты, которые занимает dev-стек (HTTP и gRPC сервисов + Vite). По ним и
+# освобождаем окружение при старте: имя бинаря в кеше `go build` зависит от его
+# раскладки (шаблон `exe/<svc>` её уже не ловил), и осиротевший сервис прошлого
+# запуска продолжал держать порт — свежий не мог подняться, а на запросы
+# отвечал СТАРЫЙ код. Порт — признак надёжнее любого шаблона имени.
+DEV_PORTS="8090 8091 8092 8093 8094 8095 8096 8097 8098 8099 8100 8101 8102 8103 8104 8105 8106 8107 9090 9092 9093 9094 9095 9098 9101 9103 9107 5173"
 
 # Dev-ключи PASETO (синхронизированы с Makefile и
 # deploy/docker-compose.override.yml): приватный — только у authsvc,
@@ -55,6 +65,22 @@ SVCS="callsvc authsvc msgsvc aisvc petsvc tasksvc gatewaysvc pushsvc mailsvc reg
 PASETO_PRIVATE_KEY_DEV="68eb779b2f672beb8fcd58d72a81ce1565a1417aed3788d1362bf4faaa3f62ac15ef439747fcad6ca627310942ba14b48f164fcbb5f65c10f61ca2aeb4b53fe1"
 PASETO_PUBLIC_KEY_DEV="15ef439747fcad6ca627310942ba14b48f164fcbb5f65c10f61ca2aeb4b53fe1"
 PASETO_REFRESH_KEY_DEV="d525374c4ec7b5e1c5b140fb9c1f4cffd9c3dbf052bb18f2f32bf9f92d9fa05c"
+
+# Освобождает dev-порты: всё, что на них СЛУШАЕТ, — процесс прошлого запуска
+# (свои порты в dev держим только мы). Без lsof молча пропускаем — шаблоны имён
+# ниже остаются страховкой.
+free_dev_ports() {
+    command -v lsof >/dev/null 2>&1 || return 0
+    local ports pids
+    ports="$(printf '%s' "$DEV_PORTS" | tr ' ' ',')"
+    pids="$(lsof -ti "tcp:$ports" -sTCP:LISTEN 2>/dev/null || true)"
+    [ -z "$pids" ] && return 0
+    printf '%s\n' "$pids" | xargs kill -TERM 2>/dev/null || true
+    sleep 1
+    pids="$(lsof -ti "tcp:$ports" -sTCP:LISTEN 2>/dev/null || true)"
+    [ -n "$pids" ] && printf '%s\n' "$pids" | xargs kill -KILL 2>/dev/null || true
+    return 0
+}
 
 # Глушим INT/TERM на время самой cleanup, чтобы повторный Ctrl+C не
 # прерывал её в середине.
@@ -79,6 +105,9 @@ cleanup() {
     if [ -n "$DIARY_PID" ]; then kill -TERM -- "-$DIARY_PID" 2>/dev/null || true; fi
     if [ -n "$PORTAL_PID" ]; then kill -TERM -- "-$PORTAL_PID" 2>/dev/null || true; fi
     if [ -n "$NOTES_PID" ]; then kill -TERM -- "-$NOTES_PID" 2>/dev/null || true; fi
+    if [ -n "$BOARD_PID" ]; then kill -TERM -- "-$BOARD_PID" 2>/dev/null || true; fi
+    if [ -n "$REMINDER_PID" ]; then kill -TERM -- "-$REMINDER_PID" 2>/dev/null || true; fi
+    if [ -n "$BILLING_PID" ]; then kill -TERM -- "-$BILLING_PID" 2>/dev/null || true; fi
     if [ -n "$ALICE_PID" ]; then kill -TERM -- "-$ALICE_PID" 2>/dev/null || true; fi
 
     # Даём ~1 секунду на graceful-shutdown (vite, Go-сервисы).
@@ -100,13 +129,17 @@ cleanup() {
     if [ -n "$DIARY_PID" ]; then kill -KILL -- "-$DIARY_PID" 2>/dev/null || true; fi
     if [ -n "$PORTAL_PID" ]; then kill -KILL -- "-$PORTAL_PID" 2>/dev/null || true; fi
     if [ -n "$NOTES_PID" ]; then kill -KILL -- "-$NOTES_PID" 2>/dev/null || true; fi
+    if [ -n "$BOARD_PID" ]; then kill -KILL -- "-$BOARD_PID" 2>/dev/null || true; fi
+    if [ -n "$REMINDER_PID" ]; then kill -KILL -- "-$REMINDER_PID" 2>/dev/null || true; fi
+    if [ -n "$BILLING_PID" ]; then kill -KILL -- "-$BILLING_PID" 2>/dev/null || true; fi
     if [ -n "$ALICE_PID" ]; then kill -KILL -- "-$ALICE_PID" 2>/dev/null || true; fi
 
     # Подбираем сирот по имени — защита от случая, когда субшелл уже
     # умер, а его потомки ещё живы. Узко по нашему пути, чужие процессы
     # не трогаем. go run собирает бинарь во временный каталог — ловим по имени.
     pkill -f "$FRONT/.*vite" 2>/dev/null || true
-    for svc in $SVCS; do pkill -f "exe/$svc" 2>/dev/null || true; done
+    for svc in $SVCS; do pkill -f "/$svc\$" 2>/dev/null || true; done
+    free_dev_ports
 
     (cd "$DEPLOY" && docker compose stop 2>/dev/null) || true
     printf "\033[32mВсё остановлено.\033[0m\n"
@@ -121,13 +154,19 @@ trap cleanup INT TERM
 preflight() {
     local found=""
     if pkill -f "$FRONT/.*vite" 2>/dev/null; then found=1; fi
+    # `go run ./cmd/<svc>` и собранный им бинарь в кеше — оба заканчиваются на
+    # «/<svc>», как бы кеш ни был разложен.
     for svc in $SVCS; do
-        if pkill -f "exe/$svc" 2>/dev/null; then found=1; fi
+        if pkill -f "/$svc\$" 2>/dev/null; then found=1; fi
     done
     if [ -n "$found" ]; then
         printf "\033[33m▶ Останавливаю процессы прошлого запуска...\033[0m\n"
         sleep 2  # даём портам освободиться до старта свежих сервисов
     fi
+    # Контрольная проверка портов: сервис мог остаться от запуска другим
+    # способом (make dev-<svc>, отладчик IDE) — тогда свежий не поднимется и
+    # отвечать продолжит СТАРЫЙ код.
+    free_dev_ports
 }
 preflight
 
@@ -152,7 +191,7 @@ ensure_front_deps
 #     go run ниже стартует мгновенно. `go build ./...` из корня workspace не
 #     работает (back-go без своего go.mod), поэтому обходим модули через -C.
 printf "\033[1m▶ Сборка Go-сервисов...\033[0m\n"
-for mod in pkg migrate calls auth messenger ai pets tasks gateway push mail registry calendar diary portal notes alice; do
+for mod in pkg migrate calls auth messenger ai pets tasks gateway push mail registry calendar diary portal notes board drive reminder billing alice; do
     printf "  %s" "$mod"
     go build -C "$ROOT/back-go/$mod" ./...
     printf "\033[32m ✓\033[0m\n"
@@ -181,6 +220,7 @@ printf "\033[1m▶ callsvc (Go)  gRPC :9090  HTTP :8090...\033[0m\n"
   DATABASE_URL="postgresql://grovework:grovework_local@localhost:5432/grovework" \
   REDIS_URL="redis://localhost:6379/0" \
   PASETO_PUBLIC_KEY="$PASETO_PUBLIC_KEY_DEV" \
+  BILLING_GRPC_ADDR="localhost:9107" \
   LIVEKIT_API_KEY="devkey" \
   LIVEKIT_API_SECRET="dev_livekit_secret_min_32_chars_ok" \
   LIVEKIT_URL="http://localhost:7880" \
@@ -201,9 +241,12 @@ printf "\033[1m▶ authsvc (Go)  HTTP :8091...\033[0m\n"
   PASETO_REFRESH_KEY="$PASETO_REFRESH_KEY_DEV" \
   UPLOAD_FOLDER="$UPLOADS" \
   MAIL_GRPC_ADDR="localhost:9098" \
+  BILLING_GRPC_ADDR="localhost:9107" \
+  COMPANY_DATA_ADDRS="tasks=localhost:9095,registry=localhost:9099,calendar=localhost:9100,portal=localhost:9102" \
   APP_PUBLIC_BASE_URL="http://${PRIMARY_IP}:5173" \
   OAUTH_ALICE_CLIENT_ID="alice-dev" \
   OAUTH_ALICE_CLIENT_SECRET="alice-dev-secret" \
+  GRPC_ADDR=":9091" \
   exec go run ./cmd/authsvc
 ) &
 AUTH_PID=$!
@@ -216,6 +259,7 @@ printf "\033[1m▶ msgsvc (Go)  gRPC :9092  HTTP :8092...\033[0m\n"
   DATABASE_URL="postgresql://grovework:grovework_local@localhost:5432/grovework" \
   REDIS_URL="redis://localhost:6379/0" \
   PASETO_PUBLIC_KEY="$PASETO_PUBLIC_KEY_DEV" \
+  BILLING_GRPC_ADDR="localhost:9107" \
   UPLOAD_FOLDER="$UPLOADS" \
   HTTP_ADDR=":8092" \
   GRPC_ADDR=":9092" \
@@ -232,6 +276,7 @@ printf "\033[1m▶ aisvc (Go)  gRPC :9093  HTTP :8093...\033[0m\n"
   DATABASE_URL="postgresql://grovework:grovework_local@localhost:5432/grovework" \
   REDIS_URL="redis://localhost:6379/0" \
   PASETO_PUBLIC_KEY="$PASETO_PUBLIC_KEY_DEV" \
+  BILLING_GRPC_ADDR="localhost:9107" \
   AI_KEY_ENCRYPTION_KEY="X3hFOVZ6XbAzlaygv2PfLbnmBIaH373CK8MqrrAhr8k=" \
   HTTP_ADDR=":8093" \
   GRPC_ADDR=":9093" \
@@ -247,6 +292,7 @@ printf "\033[1m▶ petsvc (Go)  gRPC :9094  HTTP :8094...\033[0m\n"
   DATABASE_URL="postgresql://grovework:grovework_local@localhost:5432/grovework" \
   REDIS_URL="redis://localhost:6379/0" \
   PASETO_PUBLIC_KEY="$PASETO_PUBLIC_KEY_DEV" \
+  BILLING_GRPC_ADDR="localhost:9107" \
   HTTP_ADDR=":8094" \
   GRPC_ADDR=":9094" \
   exec go run ./cmd/petsvc
@@ -264,6 +310,7 @@ printf "\033[1m▶ tasksvc (Go)  HTTP :8095...\033[0m\n"
   DATABASE_URL="postgresql://grovework:grovework_local@localhost:5432/grovework" \
   REDIS_URL="redis://localhost:6379/0" \
   PASETO_PUBLIC_KEY="$PASETO_PUBLIC_KEY_DEV" \
+  BILLING_GRPC_ADDR="localhost:9107" \
   PETS_GRPC_ADDR="localhost:9094" \
   AI_GRPC_ADDR="localhost:9093" \
   YOUGILE_ENC_KEY="CT5VF1jg6uFFbj4W_6RW3z3416bPlfbxdMYelrEOIXc=" \
@@ -327,8 +374,10 @@ printf "\033[1m▶ registrysvc (Go)  HTTP :8099...\033[0m\n"
   DATABASE_URL="postgresql://grovework:grovework_local@localhost:5432/grovework" \
   REDIS_URL="redis://localhost:6379/0" \
   PASETO_PUBLIC_KEY="$PASETO_PUBLIC_KEY_DEV" \
+  BILLING_GRPC_ADDR="localhost:9107" \
   UPLOAD_FOLDER="$ROOT/uploads" \
   HTTP_ADDR=":8099" \
+  GRPC_ADDR=":9099" \
   exec go run ./cmd/registrysvc
 ) &
 REGISTRY_PID=$!
@@ -342,8 +391,10 @@ printf "\033[1m▶ calendarsvc (Go)  HTTP :8100...\033[0m\n"
   DATABASE_URL="postgresql://grovework:grovework_local@localhost:5432/grovework" \
   REDIS_URL="redis://localhost:6379/0" \
   PASETO_PUBLIC_KEY="$PASETO_PUBLIC_KEY_DEV" \
+  BILLING_GRPC_ADDR="localhost:9107" \
   UPLOAD_FOLDER="$ROOT/uploads" \
   HTTP_ADDR=":8100" \
+  GRPC_ADDR=":9100" \
   exec go run ./cmd/calendarsvc
 ) &
 CALENDAR_PID=$!
@@ -357,6 +408,7 @@ printf "\033[1m▶ diarysvc (Go)  HTTP :8101...\033[0m\n"
   DATABASE_URL="postgresql://grovework:grovework_local@localhost:5432/grovework" \
   REDIS_URL="redis://localhost:6379/0" \
   PASETO_PUBLIC_KEY="$PASETO_PUBLIC_KEY_DEV" \
+  BILLING_GRPC_ADDR="localhost:9107" \
   HTTP_ADDR=":8101" \
   exec go run ./cmd/diarysvc
 ) &
@@ -371,9 +423,11 @@ printf "\033[1m▶ portalsvc (Go)  HTTP :8102...\033[0m\n"
   DATABASE_URL="postgresql://grovework:grovework_local@localhost:5432/grovework" \
   REDIS_URL="redis://localhost:6379/0" \
   PASETO_PUBLIC_KEY="$PASETO_PUBLIC_KEY_DEV" \
+  BILLING_GRPC_ADDR="localhost:9107" \
   UPLOAD_FOLDER="$UPLOADS" \
   MESSENGER_GRPC_ADDR="localhost:9092" \
   HTTP_ADDR=":8102" \
+  GRPC_ADDR=":9102" \
   exec go run ./cmd/portalsvc
 ) &
 PORTAL_PID=$!
@@ -388,6 +442,7 @@ printf "\033[1m▶ notesvc (Go)  HTTP :8103...\033[0m\n"
   DATABASE_URL="postgresql://grovework:grovework_local@localhost:5432/grovework" \
   REDIS_URL="redis://localhost:6379/0" \
   PASETO_PUBLIC_KEY="$PASETO_PUBLIC_KEY_DEV" \
+  BILLING_GRPC_ADDR="localhost:9107" \
   UPLOAD_FOLDER="$UPLOADS" \
   AI_GRPC_ADDR="localhost:9093" \
   HTTP_ADDR=":8103" \
@@ -395,7 +450,73 @@ printf "\033[1m▶ notesvc (Go)  HTTP :8103...\033[0m\n"
 ) &
 NOTES_PID=$!
 
-# 12f. Go-микросервис навыка Алисы alicesvc (HTTP :8104 — публичный вебхук
+# 12f. Go-микросервис досок boardsvc (HTTP :8105 — REST /api/boards/*).
+#      Личные доски рисования (сцена холста, папки, метки, шаринг, публичные
+#      ссылки); картинки холста и превью — uploads. Межсервисных вызовов нет:
+#      проверка токенов локальная (PASETO_PUBLIC_KEY).
+printf "\033[1m▶ boardsvc (Go)  HTTP :8105...\033[0m\n"
+(
+  cd "$ROOT/back-go/board" && \
+  DATABASE_URL="postgresql://grovework:grovework_local@localhost:5432/grovework" \
+  REDIS_URL="redis://localhost:6379/0" \
+  PASETO_PUBLIC_KEY="$PASETO_PUBLIC_KEY_DEV" \
+  BILLING_GRPC_ADDR="localhost:9107" \
+  UPLOAD_FOLDER="$UPLOADS" \
+  HTTP_ADDR=":8105" \
+  GRPC_ADDR=":9105" \
+  exec go run ./cmd/boardsvc
+) &
+BOARD_PID=$!
+
+# 12g. Go-микросервис напоминаний remindersvc (HTTP :8106 — REST
+#      /api/reminders/*). Внутри — планировщик: раз в полминуты забирает
+#      наступившие сроки и публикует reminder:fire в gw2:reminder:events.
+printf "\033[1m▶ remindersvc (Go)  HTTP :8106...\033[0m\n"
+(
+  cd "$ROOT/back-go/reminder" && \
+  DATABASE_URL="postgresql://grovework:grovework_local@localhost:5432/grovework" \
+  REDIS_URL="redis://localhost:6379/0" \
+  PASETO_PUBLIC_KEY="$PASETO_PUBLIC_KEY_DEV" \
+  HTTP_ADDR=":8106" \
+  exec go run ./cmd/remindersvc
+) &
+REMINDER_PID=$!
+
+# 12g3. Go-микросервис «Диск» drivesvc (HTTP :8108 — REST /api/drive/*,
+#      gRPC :9108 — контракт владельца файлов для раздела «Хранилище»).
+#      Файлы пишутся в общий uploads-том и считаются в квоте владельца.
+printf "\033[1m▶ drivesvc (Go)  HTTP :8108, gRPC :9108...\033[0m\n"
+(
+  cd "$ROOT/back-go/drive" && \
+  DATABASE_URL="postgresql://grovework:grovework_local@localhost:5432/grovework" \
+  REDIS_URL="redis://localhost:6379/0" \
+  PASETO_PUBLIC_KEY="$PASETO_PUBLIC_KEY_DEV" \
+  BILLING_GRPC_ADDR="localhost:9107" \
+  UPLOAD_FOLDER="$UPLOADS" \
+  HTTP_ADDR=":8108" \
+  GRPC_ADDR=":9108" \
+  exec go run ./cmd/drivesvc
+) &
+DRIVE_PID=$!
+
+# 12g2. Go-микросервис подписок и магазина billingsvc (HTTP :8107 — REST
+#      /api/billing/*, gRPC :9107 — лимиты тарифа для остальных сервисов).
+#      Внутри — планировщик продлений подписок и докупок.
+printf "\033[1m▶ billingsvc (Go)  HTTP :8107, gRPC :9107...\033[0m\n"
+(
+  cd "$ROOT/back-go/billing" && \
+  DATABASE_URL="postgresql://grovework:grovework_local@localhost:5432/grovework" \
+  REDIS_URL="redis://localhost:6379/0" \
+  PASETO_PUBLIC_KEY="$PASETO_PUBLIC_KEY_DEV" \
+  HTTP_ADDR=":8107" \
+  GRPC_ADDR=":9107" \
+  UPLOAD_FOLDER="$UPLOADS" \
+  FILE_OWNER_ADDRS="messenger=localhost:9092,notes=localhost:9103,boards=localhost:9105,registry=localhost:9099,calendar=localhost:9100,portal=localhost:9102,avatars=localhost:9091,drive=localhost:9108" \
+  exec go run ./cmd/billingsvc
+) &
+BILLING_PID=$!
+
+# 12h. Go-микросервис навыка Алисы alicesvc (HTTP :8104 — публичный вебхук
 #      /api/alice/webhook). Состояния нет; голосовые команды — gRPC-вызовы
 #      tasksvc/diarysvc/notesvc, ИИ-разбор фраз — aisvc.
 printf "\033[1m▶ alicesvc (Go)  HTTP :8104...\033[0m\n"
@@ -439,6 +560,7 @@ printf "  Реестры: \033[4mhttp://localhost:8099/api/registries\033[0m\n"
 printf "  Календари: \033[4mhttp://localhost:8100/api/calendars\033[0m\n"
 printf "  Ежедневники: \033[4mhttp://localhost:8101/api/diaries\033[0m\n"
 printf "  Портал:  \033[4mhttp://localhost:8102/api/portal\033[0m\n"
+printf "  Биллинг: \033[4mhttp://localhost:8107/api/billing\033[0m (gRPC :9107)\n"
 printf "  Почта:   \033[4mhttp://localhost:8025\033[0m (mailpit; gRPC :9098)\n\n"
 
 wait

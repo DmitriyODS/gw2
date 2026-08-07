@@ -13,6 +13,17 @@ type YougileStatus struct {
 	YgLogin         *string   `json:"yg_login"`
 }
 
+// YougileAccountItem — строка списка подключений (их бывает несколько, а
+// работает интеграция ключом активного).
+type YougileAccountItem struct {
+	ID              int64     `json:"id"`
+	YgCompanyID     string    `json:"yg_company_id"`
+	YgLogin         string    `json:"yg_login"`
+	KeyFingerprint  string    `json:"key_fingerprint"`
+	IsActive        bool      `json:"is_active"`
+	LastValidatedAt *JSONTime `json:"last_validated_at"`
+}
+
 // YougileConnectResult — POST /api/yougile/account.
 type YougileConnectResult struct {
 	Connected      bool   `json:"connected"`

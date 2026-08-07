@@ -1,4 +1,5 @@
 import { useAuthStore } from '@/stores/auth'
+import { notifyPlanLimit } from '@/utils/planLimit.js'
 
 let isRefreshing = false
 let refreshQueue = []
@@ -41,11 +42,19 @@ async function refreshToken() {
   return resp.json()
 }
 
+// Тела, которые нельзя сериализовать в JSON: форма, кусок файла, буфер.
+function isRawBody(body) {
+  return body instanceof FormData || body instanceof Blob || body instanceof ArrayBuffer
+    || ArrayBuffer.isView(body)
+}
+
 export async function apiRequest(path, options = {}) {
   const auth = useAuthStore()
 
   const headers = { ...options.headers }
-  if (!(options.body instanceof FormData)) {
+  // Сырое тело (кусок файла) уходит как есть: тип задаёт вызывающий, а
+  // JSON-сериализация превратила бы Blob в «{}».
+  if (!isRawBody(options.body)) {
     headers['Content-Type'] = 'application/json'
   }
   if (auth.token) {
@@ -62,7 +71,7 @@ export async function apiRequest(path, options = {}) {
       ...options,
       credentials: 'include',
       headers,
-      body: options.body instanceof FormData ? options.body :
+      body: isRawBody(options.body) ? options.body :
             options.body ? JSON.stringify(options.body) : undefined,
     }, options.timeout ?? 8000)
   } catch (e) {
@@ -129,6 +138,15 @@ export async function apiRequest(path, options = {}) {
     // отключена. Поднимаем флаг в auth-store, App.vue показывает экран.
     if (err.error === 'COMPANY_DISABLED') {
       auth.companyDisabled = err.company_name || true
+    }
+    // Лимиты тарифа приходят из любого раздела и означают одно и то же:
+    // «нужно в магазин». Показываем это в одном месте, чтобы каждый экран не
+    // расписывал апсейл сам (сам запрос всё равно упал — раздел покажет свою
+    // ошибку, если ему нужно).
+    if (err.status === 402 &&
+        (err.error === 'LIMIT_REACHED' || err.error === 'PLAN_FEATURE_REQUIRED' ||
+         err.error === 'AI_NO_TOKENS')) {
+      notifyPlanLimit(err)
     }
     throw err
   }

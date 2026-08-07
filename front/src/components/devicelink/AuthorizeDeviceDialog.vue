@@ -1,7 +1,6 @@
 <template>
   <AppDialog
     :model-value="modelValue"
-    icon="devices"
     size="sm"
     title="Авторизовать устройство"
     subtitle="Введите код с другого устройства или отсканируйте его QR."
@@ -28,10 +27,12 @@
         />
       </div>
 
-      <button type="button" class="btn-glass ad-scan-btn" @click="openScanner">
-        <span class="material-symbols-outlined">qr_code_scanner</span>
-        Сканировать QR
-      </button>
+      <AppButton
+        icon="qr_code_scanner"
+        label="Сканировать QR"
+        class="ad-scan-btn"
+        @click="openScanner"
+      />
 
       <div v-if="info" class="ad-preview" :class="{ warn: needsCompanyWarn }">
         <template v-if="info.kind === 'tv'">
@@ -63,11 +64,12 @@
 
 <script setup>
 import { ref, computed, watch } from 'vue'
+import AppButton from '@/components/ui/AppButton.vue'
 import InputText from 'primevue/inputtext'
 import { useAuthStore } from '@/stores/auth.js'
 import { linkInfo, linkApprove } from '@/api/devicelink.js'
 import { extractLinkCode, normalizeLinkCode } from '@/utils/deviceLink.js'
-import AppDialog from '@/components/common/AppDialog.vue'
+import AppDialog from '@/components/ui/AppDialog.vue'
 import QrScanDialog from '@/components/common/QrScanDialog.vue'
 
 const props = defineProps({

@@ -30,17 +30,6 @@ export function cornerPosition(corner, w, h, margin, vw, vh, bottomInset = 0) {
   return { x, y }
 }
 
-// У правого края нижняя зона может быть занята другим плавающим элементом
-// (FAB мини-хаба) — прижатый вправо виджет поднимаем выше этой зоны, чтобы
-// они не перекрывали и не блокировали друг друга.
-export function avoidRightBottom(pos, w, h, margin, vw, vh, bottomInset, reserve) {
-  if (!reserve) return pos
-  const rightEdge = Math.max(margin, vw - w - margin)
-  if (pos.x < rightEdge - 1) return pos
-  const maxY = vh - h - margin - bottomInset - reserve
-  return pos.y > maxY ? { ...pos, y: Math.max(margin, maxY) } : pos
-}
-
 const DRAG_THRESHOLD = 4
 
 /**
@@ -51,25 +40,19 @@ const DRAG_THRESHOLD = 4
  * @param {number} [opts.margin=16] — отступ от краёв экрана.
  * @param {number|Function} [opts.bottomInset=0] — доп. запас снизу (px или
  *   функция — пересчитывается на каждый clamp, переживает resize/поворот).
- * @param {number|Function} [opts.rightBottomReserve=0] — высота «запретной»
- *   зоны в правом нижнем углу (напр., под FAB мини-хаба).
  */
 export function useDraggable({
-  storageKey, size, defaultCorner = 'bottom-left', margin = 16,
-  bottomInset = 0, rightBottomReserve = 0,
+  storageKey, size, defaultCorner = 'bottom-left', margin = 16, bottomInset = 0,
 }) {
   const viewportSize = () => ({
     vw: typeof window !== 'undefined' ? window.innerWidth : 1024,
     vh: typeof window !== 'undefined' ? window.innerHeight : 768,
   })
   const resolvedBottomInset = () => (typeof bottomInset === 'function' ? bottomInset() : bottomInset)
-  const resolvedReserve = () => (typeof rightBottomReserve === 'function' ? rightBottomReserve() : rightBottomReserve)
-
   function constrain(x, y) {
     const { vw, vh } = viewportSize()
     const bi = resolvedBottomInset()
-    const p = clampToViewport(x, y, size.w, size.h, margin, vw, vh, bi)
-    return avoidRightBottom(p, size.w, size.h, margin, vw, vh, bi, resolvedReserve())
+    return clampToViewport(x, y, size.w, size.h, margin, vw, vh, bi)
   }
 
   function loadInitial() {

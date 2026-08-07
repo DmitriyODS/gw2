@@ -89,6 +89,7 @@ func (s *Server) CreatePostMessage(ctx context.Context, req *messengerpb.CreateP
 		Title:          req.GetTitle(),
 		Excerpt:        req.GetExcerpt(),
 		CoverURL:       req.GetCoverUrl(),
+		CompanyID:      req.GetCompanyId(),
 	})
 	if err != nil {
 		if de := domain.AsDomainError(err); de != nil {

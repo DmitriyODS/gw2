@@ -4,6 +4,7 @@ package clients
 import (
 	"context"
 	"log/slog"
+	"time"
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
@@ -11,6 +12,11 @@ import (
 	"github.com/DmitriyODS/gw2/back-go/notes/internal/domain"
 	"github.com/DmitriyODS/gw2/back-go/pkg/gen/aipb"
 )
+
+// embedTimeout — вызывается и синхронно на поиске (пользователь ждёт), и в
+// фоне на реиндексе заметки: без потолка завис бы либо запрос поиска, либо
+// горутина реиндекса.
+const embedTimeout = 10 * time.Second
 
 // Embedder — клиент aisvc.Embed (векторизация текста для ИИ-поиска заметок).
 // Fail-open на стороне вызывающего: любая ошибка (сервис недоступен, у компании
@@ -36,6 +42,8 @@ func (c *Embedder) Close() { _ = c.conn.Close() }
 func (c *Embedder) Enabled() bool { return c != nil }
 
 func (c *Embedder) Embed(ctx context.Context, companyID int64, text string) ([]float32, string, error) {
+	ctx, cancel := context.WithTimeout(ctx, embedTimeout)
+	defer cancel()
 	resp, err := c.stub.Embed(ctx, &aipb.EmbedRequest{CompanyId: companyID, Text: text})
 	if err != nil {
 		return nil, "", err

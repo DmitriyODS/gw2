@@ -1,11 +1,5 @@
 <template>
-  <!-- has-unit-banner: мобильные fixed-экраны (мессенджер) сдвигаются под
-       плашку активного юнита на --unit-banner-height. -->
-  <div
-    class="app-layout"
-    :class="{ 'has-unit-banner': authStore.token && unitsStore.activeUnit && unitsStore.minimized }"
-    :data-dark="themeStore.dark"
-  >
+  <div class="app-layout" :data-dark="themeStore.dark">
     <div v-if="navProgress" class="nav-progress" aria-hidden="true">
       <div class="nav-progress-bar" />
     </div>
@@ -22,38 +16,41 @@
       </main>
     </template>
     <template v-else-if="authStore.token">
-      <AppSidebar />
-      <div class="content-col">
-        <ActiveUnitBanner v-if="unitsStore.activeUnit && unitsStore.minimized" />
-        <main class="main-content">
-          <router-view />
-        </main>
-      </div>
-      <AppBottomNav />
+      <!-- Каркас-«ОС»: на широком экране рабочий стол с окнами, на телефоне —
+           стартовый экран с плитками и панель задач. Разделы у них общие. -->
+      <DesktopShell v-if="desktopMode" />
+      <MobileShell v-else />
       <ActiveUnitModal v-if="unitsStore.activeUnit && !unitsStore.minimized" />
-      <AppTutorial v-if="isTutorialOpen" />
-      <ChangelogModal v-if="isChangelogOpen" @close="closeChangelog" />
-      <MiniMessenger />
-      <IncomingCallOverlay @accept="callStore.accept()" @decline="callStore.decline()" />
-      <CallView />
-      <ReturnCallBanner />
+      <!-- UI звонка монтируется только когда звонок есть: он тянет за собой
+           LiveKit-обёртку и плитки участников — на «пустом» сеансе это лишний
+           вес первого кадра. -->
+      <template v-if="callPresent">
+        <IncomingCallOverlay @accept="callStore.accept()" @decline="callStore.decline()" />
+        <CallView />
+        <ReturnCallBanner />
+      </template>
     </template>
     <template v-else>
       <main class="main-content">
         <router-view />
       </main>
     </template>
+    <!-- Запертый экран поверх всего: сессия жива, но приложение закрыто до
+         ввода пин-кода. Компонент ленивый — код блокировки не нужен тем, кто
+         ею не пользуется. -->
+    <ScreenLockOverlay v-if="screenLock.locked.value" />
+
     <Toast :position="isMobile ? 'top-center' : 'top-right'" />
     <!-- Pull-to-refresh на мобиле (обновление страницы оттяжкой вниз у верха
          экрана). Отключён на fullscreen-роутах — там вертикальные жесты заняты. -->
     <PullToRefresh :active="!!authStore.token && !isFullscreenRoute && callStore.phase === 'idle'" />
     <!-- Выбор получателя для текста из системного «Поделиться» (Android). -->
-    <NewChatDialog v-if="authStore.token" v-model="sharePickOpen" @pick="onSharePickRecipient" />
+    <NewChatDialog v-if="sharePickOpen" v-model="sharePickOpen" @pick="onSharePickRecipient" />
   </div>
 </template>
 
 <script setup>
-import { ref, computed, watch, onMounted, onBeforeUnmount } from 'vue'
+import { ref, computed, watch, onMounted, onBeforeUnmount, defineAsyncComponent } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useToast } from 'primevue/usetoast'
 import { useAuthStore } from '@/stores/auth.js'
@@ -65,10 +62,9 @@ import { usePortalStore } from '@/stores/portal.js'
 import { useAssistantStore } from '@/stores/assistant.js'
 import { useCallStore } from '@/stores/call.js'
 import { useNotificationsStore } from '@/stores/notifications.js'
+import { useScreenLock } from '@/composables/useScreenLock.js'
 import { useBreakpoint } from '@/composables/useBreakpoint.js'
 import { useCompanySettings } from '@/composables/useCompanySettings.js'
-import { useTutorial } from '@/composables/useTutorial.js'
-import { useChangelog } from '@/composables/useChangelog.js'
 import { connectSocket } from '@/socket/index.js'
 import { navProgress } from '@/composables/useNavProgress.js'
 import {
@@ -81,21 +77,22 @@ import {
   startCallService, stopCallService, setCallProximity, setCallShowOverLock,
   audioStart, audioStop,
 } from '@/utils/nativeApp.js'
-import AppSidebar from '@/components/layout/AppSidebar.vue'
-import AppBottomNav from '@/components/layout/AppBottomNav.vue'
+import DesktopShell from '@/components/desktop/DesktopShell.vue'
+import MobileShell from '@/components/mobile/MobileShell.vue'
 import CompanyDisabledScreen from '@/components/layout/CompanyDisabledScreen.vue'
-import ActiveUnitModal from '@/components/layout/ActiveUnitModal.vue'
-import ActiveUnitBanner from '@/components/layout/ActiveUnitBanner.vue'
-import AppTutorial from '@/components/layout/AppTutorial.vue'
-import ChangelogModal from '@/components/layout/ChangelogModal.vue'
-import MiniMessenger from '@/components/messenger/MiniMessenger.vue'
 import PullToRefresh from '@/components/common/PullToRefresh.vue'
-import NewChatDialog from '@/components/messenger/NewChatDialog.vue'
-import IncomingCallOverlay from '@/components/call/IncomingCallOverlay.vue'
-import CallView from '@/components/call/CallView.vue'
-import ReturnCallBanner from '@/components/call/ReturnCallBanner.vue'
 import Toast from 'primevue/toast'
 import BrandLoader from '@/components/common/BrandLoader.vue'
+
+/* Глобальные оверлеи — ленивыми чанками: каждый рендерится по условию и до
+   него не нужен, а статические импорты тащили в первый кадр UI звонка,
+   плавающее окно задачи с комментариями и диалог выбора получателя. */
+const ActiveUnitModal = defineAsyncComponent(() => import('@/components/layout/ActiveUnitModal.vue'))
+const NewChatDialog = defineAsyncComponent(() => import('@/components/messenger/NewChatDialog.vue'))
+const IncomingCallOverlay = defineAsyncComponent(() => import('@/components/call/IncomingCallOverlay.vue'))
+const CallView = defineAsyncComponent(() => import('@/components/call/CallView.vue'))
+const ReturnCallBanner = defineAsyncComponent(() => import('@/components/call/ReturnCallBanner.vue'))
+const ScreenLockOverlay = defineAsyncComponent(() => import('@/components/common/ScreenLockOverlay.vue'))
 
 const authStore = useAuthStore()
 const themeStore = useThemeStore()
@@ -112,17 +109,10 @@ const { isMobile } = useBreakpoint()
 const { usesGroove } = useCompanySettings()
 
 const isFullscreenRoute = computed(() => !!route.meta?.fullscreen && !!authStore.user)
-// isOpen деструктурирован как топ-левел ref — Vue auto-unwraps в шаблоне
-const { isOpen: isTutorialOpen, open: openTutorial, shouldAutoShow } = useTutorial()
-const { isOpen: isChangelogOpen, close: closeChangelog, checkForNewVersion } = useChangelog()
-let tutorialTimer = null
-
-watch(() => authStore.user, (user, prev) => {
-  if (user && !prev && shouldAutoShow()) {
-    clearTimeout(tutorialTimer)
-    tutorialTimer = setTimeout(() => openTutorial(), 600)
-  }
-})
+// Есть ли что показывать про звонок: ринг, активный звонок или предложение вернуться.
+const callPresent = computed(() => callStore.phase !== 'idle' || !!callStore.rejoinCall)
+// Каркас рабочего стола — широкий экран; на телефоне свой, мобильный.
+const desktopMode = computed(() => !isMobile.value)
 
 // Десктоп-обёртка: счётчик непрочитанных на иконке приложения
 // (док/панель задач/трей). В браузере GrooveDesktop нет — no-op.
@@ -221,7 +211,7 @@ watch(() => authStore.user, (user, prev) => {
 // [data-dark] на .app-layout обновляется только при перерисовке — иначе бар
 // красится в прошлую тему (а при старте .app-layout ещё не существует вовсе).
 watch(
-  () => [themeStore.dark, themeStore.currentPreset, themeStore.bgGradient],
+  () => [themeStore.dark, themeStore.activePreset, themeStore.bgGradient],
   () => syncNativeSystemBars(),
   { immediate: true, flush: 'post', deep: true },
 )
@@ -235,10 +225,33 @@ themeStore.init()
 
 const initializing = ref(true)
 
+/* Экран блокировки: сдвигаем отсчёт бездействия на любое действие человека.
+   Слушатели пассивные и на документе — прокрутка и жесты не должны
+   притормаживать из-за них. */
+const screenLock = useScreenLock()
+const ACTIVITY_EVENTS = ['pointerdown', 'keydown', 'wheel', 'touchstart']
+
+function onUserActivity() {
+  screenLock.touch()
+}
+
+/* Ctrl/Cmd + L — запереть экран вручную, как Win+L в системе. Русская «д» на
+   той же клавише: раскладка не должна отменять сочетание. */
+function onLockHotkey(e) {
+  if (!(e.ctrlKey || e.metaKey) || e.altKey || e.shiftKey) return
+  if (!'lLдД'.includes(e.key)) return
+  if (!screenLock.enabled.value || screenLock.locked.value) return
+  e.preventDefault()
+  screenLock.lock()
+}
+
 onMounted(async () => {
   // Восстановление сессии централизовано в auth-store и уже инициируется
   // router guard'ом — здесь лишь дожидаемся его и поднимаем сокет/юнит.
   await authStore.ensureReady()
+  // Блокировка экрана: состояние держит сервер, здесь только заводим таймер
+  // бездействия и слушаем активность.
+  if (authStore.token) screenLock.load()
   // Снимаем загрузочный экран сразу, как только известен статус авторизации.
   // Остальная инициализация (сокет, активный юнит, диалоги, уведомления) идёт
   // фоном и НЕ должна держать первый рендер: иначе по deep-link (/tasks/:id)
@@ -277,11 +290,6 @@ onMounted(async () => {
     // Если страницу перезагрузили во время звонка — звонок ещё «жив» на
     // сервере (grace-окно). Предложим вернуться к нему.
     callStore.checkRejoin()
-    // Лог версий показываем существующим пользователям; новичкам сначала тур,
-    // а лог всплывёт при следующем входе.
-    if (!shouldAutoShow()) {
-      checkForNewVersion()
-    }
   }
 })
 
@@ -358,6 +366,8 @@ onMounted(() => {
   window.addEventListener('beforeunload', onBeforeUnloadGuard)
   window.addEventListener('messenger:open-conversation', onOpenConversation)
   window.addEventListener('gw:share-available', pullShare)
+  ACTIVITY_EVENTS.forEach((e) => document.addEventListener(e, onUserActivity, { passive: true }))
+  window.addEventListener('keydown', onLockHotkey)
   // Холодный старт: нативка могла выставить флаг до навешивания слушателя —
   // и в любом случае буфер шаринга ждёт в плагине, заберём его при готовности.
   if (window.__gwShareAvailable) { window.__gwShareAvailable = false; pullShare() }
@@ -367,30 +377,12 @@ onBeforeUnmount(() => {
   window.removeEventListener('beforeunload', onBeforeUnloadGuard)
   window.removeEventListener('messenger:open-conversation', onOpenConversation)
   window.removeEventListener('gw:share-available', pullShare)
-  clearTimeout(tutorialTimer)
+  ACTIVITY_EVENTS.forEach((e) => document.removeEventListener(e, onUserActivity))
+  window.removeEventListener('keydown', onLockHotkey)
 })
 </script>
 
 <style>
-/* Полный резерв под остров активного юнита на мобильном (верхний отступ 8px
-   + плашка 54px) — синхронизирован с ActiveUnitBanner; мобильные fixed-экраны
-   отступают на него сверху. */
-.app-layout {
-  --unit-banner-height: 62px;
-}
-
-/* Колонка «баннер активного юнита + контент»: баннер занимает свою высоту,
-   .main-content сжимается под остаток и скроллится сам — без прокрутки шелла. */
-.content-col {
-  flex: 1;
-  min-width: 0;
-  min-height: 0;
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-}
-
-
 .app-loading {
   flex: 1;
   display: flex;

@@ -1,10 +1,12 @@
 // Package http — REST /api/ai/text-tools: ИИ-инструменты текста заметок.
-// Скоуп тот же, что у ассистента: любой авторизованный с активной компанией
-// (ключ/модель — компании); компания без AI → 409 AI_DISABLED из сервиса.
+// Работают на ключе КОМПАНИИ (в отличие от ассистента, у которого ключ личный),
+// поэтому активная компания обязательна; компания без AI → 409 AI_DISABLED
+// из сервиса.
 package http
 
 import (
 	"encoding/json"
+	"github.com/DmitriyODS/gw2/back-go/pkg/pasetoauth"
 	"strings"
 
 	"github.com/gofiber/fiber/v2"
@@ -12,11 +14,17 @@ import (
 	"github.com/DmitriyODS/gw2/back-go/ai/internal/endpoint"
 )
 
-func (h *handlers) transformText(c *fiber.Ctx) error {
-	_, companyID, err := assistantScope(c)
-	if err != nil {
-		return scopeBadRequest(c, err.Error())
+// textToolsScope — активная компания сессии; ok=false → 400 (без компании
+// компанийного ключа взять неоткуда).
+func textToolsScope(c *fiber.Ctx) (int64, bool) {
+	user := currentUser(c)
+	if user == nil || user.CompanyID == nil {
+		return 0, false
 	}
+	return *user.CompanyID, true
+}
+
+func (h *handlers) transformText(c *fiber.Ctx) error {
 	var body struct {
 		Action string `json:"action"`
 		Style  string `json:"style"`
@@ -29,7 +37,7 @@ func (h *handlers) transformText(c *fiber.Ctx) error {
 		})
 	}
 	resp, err := h.eps.TransformText(c.Context(), endpoint.TransformTextRequest{
-		CompanyID: companyID, Action: body.Action, Style: body.Style, Text: body.Text,
+		UserID: pasetoauth.UserID(c), Action: body.Action, Style: body.Style, Text: body.Text,
 	})
 	if err != nil {
 		return h.respondError(c, err)
@@ -40,10 +48,6 @@ func (h *handlers) transformText(c *fiber.Ctx) error {
 // proofread — корректура орфографии/пунктуации всей заметки: массив текстовых
 // сегментов → исправленный массив той же длины (клиент подменяет узлы по индексу).
 func (h *handlers) proofread(c *fiber.Ctx) error {
-	_, companyID, err := assistantScope(c)
-	if err != nil {
-		return scopeBadRequest(c, err.Error())
-	}
 	var body struct {
 		Segments []string `json:"segments"`
 	}
@@ -53,7 +57,7 @@ func (h *handlers) proofread(c *fiber.Ctx) error {
 		})
 	}
 	resp, err := h.eps.Proofread(c.Context(), endpoint.ProofreadRequest{
-		CompanyID: companyID, Segments: body.Segments,
+		UserID: pasetoauth.UserID(c), Segments: body.Segments,
 	})
 	if err != nil {
 		return h.respondError(c, err)

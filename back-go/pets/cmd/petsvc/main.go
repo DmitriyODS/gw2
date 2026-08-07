@@ -24,6 +24,7 @@ import (
 	"github.com/DmitriyODS/gw2/back-go/pets/internal/service"
 	grpctransport "github.com/DmitriyODS/gw2/back-go/pets/internal/transport/grpc"
 	httptransport "github.com/DmitriyODS/gw2/back-go/pets/internal/transport/http"
+	"github.com/DmitriyODS/gw2/back-go/pkg/billingclient"
 	"github.com/DmitriyODS/gw2/back-go/pkg/bootstrap"
 	"github.com/DmitriyODS/gw2/back-go/pkg/events"
 	"github.com/DmitriyODS/gw2/back-go/pkg/gen/petspb"
@@ -62,6 +63,16 @@ func main() {
 
 	svc := service.New(petRepo, shopRepo, activityRepo, bankRepo, installmentRepo,
 		platform, platform, platform, daily, pub, log)
+
+	// Тариф владельца питомца: премиум-скины и товары доступны на старшем.
+	// Пустой адрес выключает проверку, недоступный биллинг её не блокирует.
+	billing, err := billingclient.New(bootstrap.Env("BILLING_GRPC_ADDR", ""), log)
+	if err != nil {
+		log.Error("billing.dial_failed", "error", err)
+		os.Exit(1)
+	}
+	defer billing.Close()
+	svc.WithBilling(billing)
 	eps := endpoint.New(svc)
 
 	// Фоновый цикл заботы: болезни + дневной пересчёт характеров.

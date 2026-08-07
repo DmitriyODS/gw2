@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"time"
+
+	"github.com/DmitriyODS/gw2/back-go/pkg/storagefiles"
 )
 
 // Ctx — алиас, чтобы сигнатуры портов не разбухали.
@@ -57,6 +59,10 @@ type PostRepository interface {
 	ListAttachments(ctx Ctx, postID int64) ([]Attachment, error)
 	// AttachmentPaths — пути файлов поста (для чистки хранилища при удалении).
 	AttachmentPaths(ctx Ctx, postID int64) ([]string, error)
+	// Раздел «Настройки → Хранилище» (биллинг спрашивает по gRPC). Файлы
+	// портала принадлежат компании, платит её создатель — отсюда companyIDs.
+	ListStorageFiles(ctx Ctx, companyIDs []int64) ([]storagefiles.File, error)
+	DeleteStorageFiles(ctx Ctx, companyIDs []int64, keys []string) ([]string, error)
 
 	// ListComments — обсуждение поста плоским списком в хронологии; дерево
 	// строит клиент по reply_to_id. Лайки (счётчик + «мой») приходят батчем
@@ -104,9 +110,14 @@ type UserReader interface {
 
 // FileStore — хранение вложений постов (общий uploads-том или S3).
 type FileStore interface {
-	// Save — записать файл, вернуть относительный путь (ключ) хранилища.
-	Save(fileName string, data []byte) (string, error)
-	// Remove — best-effort удаление файлов по ключам (чистка при удалении постов).
+	// SaveFor — записать файл в квоту компании (её оплачивает создатель):
+	// сверх лимита тарифа файл не сохраняется.
+	SaveFor(ctx context.Context, userID, companyID int64, fileName string, data []byte) (string, error)
+	// RemoveFor — best-effort удаление файлов по ключам с возвратом места в
+	// квоту (чистка при удалении постов и вложений).
+	RemoveFor(ctx context.Context, userID, companyID int64, paths []string)
+	// Remove — удаление БЕЗ учёта: так чистит раздел «Хранилище», где место
+	// пересчитывает сам биллинг (он же инициатор и знает размеры).
 	Remove(paths []string)
 }
 
@@ -131,7 +142,9 @@ type MessengerClient interface {
 	EnsureDialog(ctx Ctx, userAID, userBID int64) (int64, error)
 	// CreatePostMessage — плашка поста kind='post' в диалоге (msgsvc сам
 	// проверяет участие отправителя и сам публикует message:new в
-	// gw2:messenger:events — тем же путём событие видит pushsvc). Возвращает
-	// готовый JSON-снапшот сообщения (форма REST msgsvc) и адресатов события.
-	CreatePostMessage(ctx Ctx, conversationID, senderID, postID int64, preview PostPreview) (messageJSON string, notifyUserIDs []int64, err error)
+	// gw2:messenger:events — тем же путём событие видит pushsvc). companyID —
+	// компания поста: msgsvc отклоняет пересылку тем, кто в ней не состоит.
+	// Возвращает готовый JSON-снапшот сообщения (форма REST msgsvc) и адресатов
+	// события.
+	CreatePostMessage(ctx Ctx, conversationID, senderID, postID, companyID int64, preview PostPreview) (messageJSON string, notifyUserIDs []int64, err error)
 }

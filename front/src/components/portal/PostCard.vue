@@ -122,19 +122,29 @@
     </div>
 
     <footer class="post-footer">
+      <!-- Реакции: поставленные — чипами, набор для выбора — по кнопке
+           (как на сообщениях в чате). -->
       <div class="post-reactions">
         <button
-          v-for="emoji in REACTIONS"
-          :key="emoji"
-          class="post-reaction"
-          :class="{ active: myReactions.has(emoji) }"
+          class="post-reaction post-reaction-add"
           type="button"
-          :aria-label="`Реакция ${emoji}`"
-          :aria-pressed="myReactions.has(emoji)"
-          @click="toggleReaction(emoji)"
+          aria-label="Поставить реакцию"
+          @click="openReactionPicker"
         >
-          <span aria-hidden="true">{{ emoji }}</span>
-          <span v-if="reactionCounts[emoji]" class="post-reaction-count">{{ reactionCounts[emoji] }}</span>
+          <span class="material-symbols-outlined">add_reaction</span>
+        </button>
+        <button
+          v-for="r in placedReactions"
+          :key="r.emoji"
+          class="post-reaction"
+          :class="{ active: myReactions.has(r.emoji) }"
+          type="button"
+          :aria-label="`Реакция ${r.emoji}`"
+          :aria-pressed="myReactions.has(r.emoji)"
+          @click="toggleReaction(r.emoji)"
+        >
+          <span aria-hidden="true">{{ r.emoji }}</span>
+          <span class="post-reaction-count">{{ r.count }}</span>
         </button>
       </div>
       <span class="post-stat" :title="`Просмотров: ${post.view_count || 0}`">
@@ -161,17 +171,27 @@
     <!-- Профиль автора: монтируем лениво после первого клика — на ленте
          десятки карточек, пустые диалоги в каждой не нужны. -->
     <EmployeeProfileDialog v-if="profileUser" v-model="profileOpen" :user="profileUser" />
+
+    <ReactionPicker
+      :visible="reactionPicker.open"
+      :x="reactionPicker.x"
+      :y="reactionPicker.y"
+      :mine="post.my_reactions || []"
+      @pick="pickReaction"
+      @close="reactionPicker.open = false"
+    />
   </article>
 </template>
 
 <script setup>
-import { computed, defineAsyncComponent, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, defineAsyncComponent, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { usePortalStore } from '@/stores/portal.js'
 import { useAuthStore } from '@/stores/auth.js'
 import { usePermission } from '@/composables/usePermission.js'
 import { useNotificationsStore } from '@/stores/notifications.js'
 import ImageLightbox from '@/components/common/ImageLightbox.vue'
 import MarkdownView from '@/components/common/MarkdownView.vue'
+import ReactionPicker from '@/components/common/ReactionPicker.vue'
 import CommentsList from './CommentsList.vue'
 
 // Async: диалог профиля тянет тяжёлые сторы (звонки) — грузим по первому клику.
@@ -187,7 +207,6 @@ const portal = usePortalStore()
 const auth = useAuthStore()
 const { isAdmin } = usePermission()
 
-const REACTIONS = ['👍', '❤️', '🎉', '😂', '👏']
 // Порог сворачивания тела поста, px (синхронизирован с max-height .collapsed).
 const BODY_MAX_PX = 260
 
@@ -221,6 +240,28 @@ function onTagClick(tag) {
 
 const reactionCounts = computed(() => props.post.reaction_counts || {})
 const myReactions = computed(() => new Set(props.post.my_reactions || []))
+
+/* Показываем только реально поставленные реакции — сначала популярные.
+   Свои держим в списке даже с нулём: иначе снятая реакция исчезнет вместе с
+   возможностью вернуть её одним кликом. */
+const placedReactions = computed(() => Object.entries(reactionCounts.value)
+  .map(([emoji, count]) => ({ emoji, count: count || 0 }))
+  .filter((r) => r.count > 0 || myReactions.value.has(r.emoji))
+  .sort((a, b) => b.count - a.count || a.emoji.localeCompare(b.emoji)))
+
+const reactionPicker = reactive({ open: false, x: 0, y: 0 })
+
+function openReactionPicker(e) {
+  const r = e.currentTarget.getBoundingClientRect()
+  reactionPicker.x = r.left + r.width / 2
+  reactionPicker.y = r.top
+  reactionPicker.open = true
+}
+
+function pickReaction(emoji) {
+  reactionPicker.open = false
+  toggleReaction(emoji)
+}
 
 // Сворачивание длинного поста — по фактической высоте отрендеренного
 // markdown (срез по символам ломал бы разметку: списки, фенсы, таблицы).
@@ -708,6 +749,33 @@ function onDelete() {
 }
 .post-reaction-count { font-size: 11.5px; font-weight: 700; color: var(--color-text-dim); }
 .post-reaction.active .post-reaction-count { color: var(--color-on-primary-container); }
+
+/* Кнопка выбора реакции — круглая: ширину и высоту задаём парой min/max,
+   иначе мобильный min-height кнопок растягивает её в овал. */
+.post-reaction-add {
+  width: 36px;
+  min-width: 36px;
+  max-width: 36px;
+  height: 36px;
+  min-height: 36px;
+  max-height: 36px;
+  padding: 0;
+  color: var(--color-text-dim);
+}
+
+.post-reaction-add:hover { color: var(--color-primary); }
+.post-reaction-add .material-symbols-outlined { font-size: 20px; }
+
+@media (max-width: 768px) {
+  .post-reaction-add {
+    width: 44px;
+    min-width: 44px;
+    max-width: 44px;
+    height: 44px;
+    min-height: 44px;
+    max-height: 44px;
+  }
+}
 
 /* Просмотры — пассивный счётчик; прижат вправо, за ним идут действия. */
 .post-stat {

@@ -7,12 +7,24 @@
  * CustomEvent'ы, которые слушает стор. Плитки участников берут треки напрямую
  * через getTrack()/getLocalTrack() и сами вызывают track.attach(el).
  */
-import {
-  Room,
-  RoomEvent,
-  Track,
-  DisconnectReason,
-} from 'livekit-client'
+/* Пакет livekit-client — самая тяжёлая зависимость фронта (~0,5 МБ после
+   минификации). Стор звонков нужен App.vue всегда (ринг-фаза приходит по
+   сокету), поэтому при статическом импорте пакет оказывался в инициальном
+   чанке и качался на КАЖДОМ заходе — включая лендинг и экран входа. Грузим
+   его при первом подключении к комнате; к этому моменту всё равно идёт сеть.
+
+   Модуль кладём в `lk`: синхронные методы (mediaState/getTrack) обращаются к
+   Track.Source, но вызывают их только при живой комнате — то есть уже после
+   загрузки. */
+let lk = null
+let lkLoading = null
+
+function loadLivekit() {
+  if (lk) return Promise.resolve(lk)
+  // Single-flight: параллельные connect не должны тянуть чанк дважды.
+  if (!lkLoading) lkLoading = import('livekit-client').then((m) => { lk = m; return m })
+  return lkLoading
+}
 
 /** Топик data-канала для чата звонка. */
 const CHAT_TOPIC = 'chat'
@@ -59,6 +71,8 @@ export class CallRoomManager extends EventTarget {
    */
   async connect({ url, token, audio = true, video = true }) {
     await this.disconnect()
+
+    const { Room, RoomEvent, DisconnectReason } = await loadLivekit()
 
     const room = new Room({
       // SFU сам подбирает слои simulcast под размер плитки у получателя.
@@ -168,6 +182,7 @@ export class CallRoomManager extends EventTarget {
   mediaState(identity) {
     const p = this._participant(identity)
     if (!p) return { audio: false, video: false, screen: false }
+    const { Track } = lk
     const mic = p.getTrackPublication(Track.Source.Microphone)
     const cam = p.getTrackPublication(Track.Source.Camera)
     const screen = p.getTrackPublication(Track.Source.ScreenShare)
@@ -182,6 +197,7 @@ export class CallRoomManager extends EventTarget {
   getTrack(identity, source) {
     const p = this._participant(identity)
     if (!p) return null
+    const { Track } = lk
     const src = source === 'screen' ? Track.Source.ScreenShare
       : source === 'audio' ? Track.Source.Microphone
         : Track.Source.Camera

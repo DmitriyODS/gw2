@@ -2,7 +2,6 @@
   <AppDialog
     :model-value="modelValue"
     tone="primary"
-    :icon="mode === 'form' ? (editing ? 'edit' : 'add_circle') : 'tune'"
     size="md"
     :title="mode === 'form' ? (editing ? 'Изменить раздел' : 'Новый раздел') : 'Разделы портала'"
     :subtitle="mode === 'form' ? '' : subtitleText"
@@ -158,7 +157,6 @@
     <AppDialog
       v-model="deleteOpen"
       tone="danger"
-      icon="delete"
       size="sm"
       title="Удалить раздел?"
       subtitle="Посты раздела останутся, но потеряют привязку к нему."
@@ -172,7 +170,7 @@
 import { computed, nextTick, ref, watch } from 'vue'
 import BrandLoader from '@/components/common/BrandLoader.vue'
 import InputText from 'primevue/inputtext'
-import AppDialog from '@/components/common/AppDialog.vue'
+import AppDialog from '@/components/ui/AppDialog.vue'
 import EmptyState from '@/components/common/EmptyState.vue'
 import EmojiGlyph from '@/components/common/EmojiGlyph.vue'
 import EmojiPicker from '@/components/common/EmojiPicker.vue'

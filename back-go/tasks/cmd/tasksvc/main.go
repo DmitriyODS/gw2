@@ -23,7 +23,9 @@ import (
 
 	googrpc "google.golang.org/grpc"
 
+	"github.com/DmitriyODS/gw2/back-go/pkg/billingclient"
 	"github.com/DmitriyODS/gw2/back-go/pkg/bootstrap"
+	"github.com/DmitriyODS/gw2/back-go/pkg/companydata"
 	"github.com/DmitriyODS/gw2/back-go/pkg/events"
 	"github.com/DmitriyODS/gw2/back-go/pkg/gen/taskspb"
 	"github.com/DmitriyODS/gw2/back-go/pkg/pasetoauth"
@@ -85,6 +87,17 @@ func main() {
 		Bus: events.NewPublisher(rdb, log, "gw2:tasks:events"),
 		Log: log,
 	})
+	// Лимиты тарифа: сколько задач помещается в компанию, доступны ли
+	// расширенная статистика и выгрузка xlsx. Пустой адрес — проверки
+	// выключены, недоступный биллинг их не блокирует (fail-open).
+	billing, err := billingclient.New(bootstrap.Env("BILLING_GRPC_ADDR", ""), log)
+	if err != nil {
+		log.Error("billing.dial_failed", "error", err)
+		os.Exit(1)
+	}
+	defer billing.Close()
+	svc.WithBilling(billing)
+
 	yg := service.NewYougile(service.YougileDeps{
 		Service: svc,
 		Repo:    repo,
@@ -99,8 +112,10 @@ func main() {
 
 	httpServer := httptransport.NewServer(eps, users, verifier, log)
 
-	grpcServer := googrpc.NewServer()
+	grpcServer := googrpc.NewServer(googrpc.MaxRecvMsgSize(companydata.MaxMessageBytes))
 	taskspb.RegisterTasksServiceServer(grpcServer, grpctransport.NewServer(eps, svc))
+	// Перенос компании: архив собирает authsvc, задачи отдают свою часть.
+	companydata.Register(grpcServer, repo)
 	listener, err := net.Listen("tcp", grpcAddr)
 	if err != nil {
 		log.Error("grpc.listen_failed", "addr", grpcAddr, "error", err)

@@ -32,6 +32,7 @@ import (
 	"github.com/DmitriyODS/gw2/back-go/ai/internal/service"
 	grpctransport "github.com/DmitriyODS/gw2/back-go/ai/internal/transport/grpc"
 	httptransport "github.com/DmitriyODS/gw2/back-go/ai/internal/transport/http"
+	"github.com/DmitriyODS/gw2/back-go/pkg/billingclient"
 	"github.com/DmitriyODS/gw2/back-go/pkg/bootstrap"
 	"github.com/DmitriyODS/gw2/back-go/pkg/gen/aipb"
 	"github.com/DmitriyODS/gw2/back-go/pkg/pasetoauth"
@@ -93,6 +94,19 @@ func main() {
 	defer tasksClient.Close()
 	svc := service.New(repo, llm.New(baseURL, log), secret.New(encKey), facts,
 		assistants, tasksClient, appBaseURL, support, log)
+
+	// Учёт токенов доступа к ИИ (billingsvc): тариф пользователя решает,
+	// сколько обращений к моделям ему доступно. Пустой адрес — учёт выключен,
+	// недоступный биллинг не блокирует ИИ (fail-open).
+	billing, err := billingclient.New(bootstrap.Env("BILLING_GRPC_ADDR", ""), log)
+	if err != nil {
+		log.Error("billing.dial_failed", "error", err)
+		os.Exit(1)
+	}
+	defer billing.Close()
+	if billing != nil {
+		svc.WithTokenMeter(clients.NewTokenMeter(billing))
+	}
 	eps := endpoint.New(svc)
 
 	// Фоновый цикл ТВ-фактов: стартовый проход + тик раз в час.

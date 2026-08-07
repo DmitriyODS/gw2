@@ -29,7 +29,43 @@ func (s *Service) Dispatch(ctx context.Context, event string, payload json.RawMe
 		s.onPost(ctx, payload)
 	case "pet:sick", "pet:runaway":
 		s.onPetState(ctx, event, payload, rooms)
+	case "reminder:fire":
+		s.onReminder(ctx, payload, rooms)
 	}
+}
+
+// onReminder — сработало напоминание: адресный пуш владельцу. Он же получает
+// событие по WS в открытой вкладке — офлайн-гейт общий, в deliver.
+func (s *Service) onReminder(ctx context.Context, payload json.RawMessage, rooms []string) {
+	var e struct {
+		ID    int64  `json:"id"`
+		Title string `json:"title"`
+		Note  string `json:"note"`
+	}
+	if err := json.Unmarshal(payload, &e); err != nil || e.ID == 0 {
+		return
+	}
+	recipients := usersFromRooms(rooms)
+	if len(recipients) == 0 {
+		return
+	}
+	body := strings.TrimSpace(e.Note)
+	if body == "" {
+		body = "Пора!"
+	}
+	title := strings.TrimSpace(e.Title)
+	if title == "" {
+		title = "Напоминание"
+	}
+	s.deliver(ctx, recipients, domain.Notification{
+		Title:   "⏰ " + title,
+		Body:    body,
+		Channel: domain.ChannelReminders,
+		Data: map[string]string{
+			"type":        "reminder",
+			"reminder_id": strconv.FormatInt(e.ID, 10),
+		},
+	})
 }
 
 // onPetState — грувик заболел или сбежал: адресный пуш владельцу. Болезнь

@@ -47,7 +47,7 @@ function formatCellDate(dateStr) {
 <style scoped>
 .calendar-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(min(140px, 100%), 1fr));
   gap: 8px;
 }
 
@@ -119,7 +119,7 @@ function formatCellDate(dateStr) {
 
 @media (max-width: 768px) {
   .calendar-grid {
-    grid-template-columns: repeat(auto-fill, minmax(132px, 1fr));
+    grid-template-columns: repeat(auto-fill, minmax(min(132px, 100%), 1fr));
     gap: 8px;
   }
 }

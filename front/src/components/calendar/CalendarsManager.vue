@@ -69,8 +69,6 @@
                   </button>
                 </span>
 
-                <span class="cm-field-icon"><span class="material-symbols-outlined">{{ fieldIcon(f.type) }}</span></span>
-
                 <span class="cm-field-main">
                   <span class="cm-field-label">{{ f.label || 'Без названия' }}</span>
                   <span class="cm-field-type">
@@ -125,7 +123,6 @@
     <AppDialog
       v-model="fieldOpen"
       :title="fieldIndex === -1 ? 'Новое поле' : 'Настройка поля'"
-      :icon="draft.type ? fieldIcon(draft.type) : 'add_box'"
       size="md"
       :actions="[{ kind: 'cancel', label: 'Отмена' }, { kind: 'confirm', label: 'Готово' }]"
       @cancel="fieldOpen = false"
@@ -233,7 +230,7 @@
 
     <!-- Создание календаря -->
     <AppDialog
-      v-model="creating" title="Новый календарь" icon="add" :busy="saving"
+      v-model="creating" title="Новый календарь" :busy="saving"
       :actions="[{ kind: 'cancel', label: 'Отмена' }, { kind: 'confirm', label: 'Создать' }]"
       @cancel="creating = false" @confirm="doCreate"
     >
@@ -254,8 +251,8 @@
 import { computed, onMounted, reactive, ref } from 'vue'
 import Select from 'primevue/select'
 import Checkbox from 'primevue/checkbox'
-import AppDialog from '@/components/common/AppDialog.vue'
-import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
+import AppDialog from '@/components/ui/AppDialog.vue'
+import ConfirmDialog from '@/components/ui/ConfirmDialog.vue'
 import * as api from '@/api/calendars.js'
 import { useCalendarsStore } from '@/stores/calendars.js'
 import { useNotificationsStore } from '@/stores/notifications.js'
@@ -541,12 +538,6 @@ onMounted(() => store.fetchCalendars())
 .cm-reorder-btn:disabled { opacity: 0.25; cursor: default; }
 .cm-reorder-btn:not(:disabled):hover { background: var(--color-surface-low); color: var(--color-text); }
 .cm-reorder-btn .material-symbols-outlined { font-size: 18px; }
-
-.cm-field-icon {
-  width: 36px; height: 36px; flex-shrink: 0; display: grid; place-items: center;
-  border-radius: var(--radius-md); background: var(--color-primary-container); color: var(--color-on-primary-container);
-}
-.cm-field-icon .material-symbols-outlined { font-size: 20px; }
 
 .cm-field-main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
 .cm-field-label { font-size: 14px; font-weight: 600; color: var(--color-text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

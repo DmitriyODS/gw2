@@ -103,14 +103,14 @@ export const SHOP_ITEMS = {
 // эмодзи/название — только на фронте. У каждого вида грувика свой любимый корм
 // (pet.favorite_food приходит с бэка), он даёт бонус к сытости и XP.
 export const FOODS = [
-  { key: 'berry', emoji: '🫐', title: 'Ягодка', price: 6, satiety: 20 },
-  { key: 'apple', emoji: '🍎', title: 'Яблоко', price: 8, satiety: 30 },
-  { key: 'carrot', emoji: '🥕', title: 'Морковка', price: 10, satiety: 40 },
-  { key: 'cookie', emoji: '🍪', title: 'Печенька', price: 12, satiety: 25 },
-  { key: 'salad', emoji: '🥗', title: 'Салат', price: 15, satiety: 45 },
-  { key: 'fish', emoji: '🐟', title: 'Рыбка', price: 18, satiety: 55 },
-  { key: 'cake', emoji: '🍰', title: 'Тортик', price: 25, satiety: 70 },
-  { key: 'steak', emoji: '🥩', title: 'Стейк', price: 30, satiety: 85 },
+  { key: 'berry', emoji: '🫐', title: 'Ягодка', price: 9, satiety: 20 },
+  { key: 'apple', emoji: '🍎', title: 'Яблоко', price: 12, satiety: 30 },
+  { key: 'carrot', emoji: '🥕', title: 'Морковка', price: 15, satiety: 40 },
+  { key: 'cookie', emoji: '🍪', title: 'Печенька', price: 18, satiety: 25 },
+  { key: 'salad', emoji: '🥗', title: 'Салат', price: 22, satiety: 45 },
+  { key: 'fish', emoji: '🐟', title: 'Рыбка', price: 27, satiety: 55 },
+  { key: 'cake', emoji: '🍰', title: 'Тортик', price: 38, satiety: 70 },
+  { key: 'steak', emoji: '🥩', title: 'Стейк', price: 45, satiety: 85 },
 ]
 
 export const foodMeta = (key) => FOODS.find((f) => f.key === key) || FOODS[2]
@@ -335,9 +335,15 @@ export function activityIcon(entry) {
   return ACTIVITY_META[entry?.kind]?.icon || 'info'
 }
 
+/* Адрес аватара. Автоматический аватар и выбранный значок отдаёт ОДНА ручка,
+   поэтому при смене значка адрес не меняется — и браузер продолжал бы
+   показывать прежнюю картинку. Добавляем к нему отпечаток выбора: он меняется
+   вместе со значком и заставляет перезапросить. */
 export function avatarUrl(user) {
   if (!user) return null
-  return user.avatar_path ? `/uploads/${user.avatar_path}` : `/api/users/${user.id}/identicon`
+  if (user.avatar_path) return `/uploads/${user.avatar_path}`
+  const stamp = user.avatar_emoji ? `?v=${encodeURIComponent(user.avatar_emoji)}` : ''
+  return `/api/users/${user.id}/identicon${stamp}`
 }
 
 export function formatMinutes(min) {

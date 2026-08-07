@@ -12,25 +12,16 @@
       </template>
 
       <template v-else-if="ended">
-        <div class="join-icon done">
-          <span class="material-symbols-outlined">call_end</span>
-        </div>
         <h1 class="join-title">Звонок завершён</h1>
         <p class="join-sub">Спасибо за участие! Окно можно закрыть.</p>
       </template>
 
       <template v-else-if="fatalError">
-        <div class="join-icon error">
-          <span class="material-symbols-outlined">link_off</span>
-        </div>
         <h1 class="join-title">{{ fatalError }}</h1>
         <p class="join-sub">Проверьте ссылку или попросите организатора прислать новую.</p>
       </template>
 
       <template v-else-if="info">
-        <div class="join-icon">
-          <span class="material-symbols-outlined">{{ info.media === 'audio' ? 'call' : 'videocam' }}</span>
-        </div>
         <h1 class="join-title">
           {{ info.initiator_fio || 'Коллега' }} приглашает в {{ info.media === 'audio' ? 'аудиозвонок' : 'видеозвонок' }}
         </h1>
@@ -175,28 +166,6 @@ watch(() => callStore.phase, (phase, prev) => {
 }
 
 .join-logo { height: 36px; margin-bottom: 6px; }
-
-.join-icon {
-  width: 72px;
-  height: 72px;
-  border-radius: 50%;
-  background: var(--color-primary-container);
-  color: var(--color-on-primary-container);
-  display: grid;
-  place-items: center;
-}
-
-.join-icon .material-symbols-outlined { font-size: 36px; }
-
-.join-icon.error {
-  background: var(--color-error-container);
-  color: var(--color-on-error-container);
-}
-
-.join-icon.done {
-  background: var(--color-surface-high);
-  color: var(--color-text-dim);
-}
 
 .join-title {
   margin: 0;

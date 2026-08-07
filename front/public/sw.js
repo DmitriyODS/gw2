@@ -1,92 +1,30 @@
-/* Service worker Groove Work.
-   1) ServiceWorkerRegistration.showNotification — на Android Chrome конструктор
-      new Notification() запрещён, OS-уведомления показываются только через SW.
-      Push здесь нет (нет сервера рассылки): уведомления показываются, пока жива
-      вкладка, из основного потока через registration.showNotification.
-   2) Кэш оболочки приложения (app shell) — чтобы приложение было устанавливаемым
-      PWA (Chrome предлагает «Установить» только при SW с fetch-обработчиком) и
-      открывалось офлайн. API/WS/uploads/livekit НЕ кэшируем — это живой трафик. */
+/* Service worker Groove Work — ТОЛЬКО OS-уведомления.
 
-const CACHE = 'gw-shell-v3'
-// '/' в оболочке НЕ кэшируем отдельной записью: она замораживалась при
-// установке SW, офлайн-фолбэк матчил её раньше '/index.html' — и офлайн вечно
-// поднималась сборка времён установки (v3 вычищает отравленные кэши v2).
-const APP_SHELL = ['/index.html', '/logo.svg', '/manifest.webmanifest']
+   Зачем он вообще нужен: на Android Chrome конструктор new Notification()
+   запрещён, и показать уведомление из живой вкладки можно единственным способом —
+   registration.showNotification. Мобильный веб у нас рабочий сценарий, поэтому
+   регистрация остаётся. Нативным клиентам он не нужен: Android-обёртка получает
+   FCM-пуши, Electron показывает тосты конструктором.
 
-self.addEventListener('install', (event) => {
-  event.waitUntil(
-    // cache: 'reload' — мимо HTTP-кэша браузера: иначе в оболочку попадает
-    // залежавшийся index.html и клиент остаётся на старой сборке.
-    caches.open(CACHE)
-      .then((c) => c.addAll(APP_SHELL.map((u) => new Request(u, { cache: 'reload' }))))
-      .catch(() => {})
-  )
-  self.skipWaiting()
-})
+   Push-канала здесь нет: уведомления показываются, пока жива вкладка.
+
+   Кэша здесь тоже НЕТ, и это намеренно. Прежняя офлайн-оболочка кэшировала всё,
+   что не живой трафик, — на dev-сервере под это попадали модули Vite, которые
+   потом отдавались cache-first и разъезжались со свежим графом: разделы падали
+   на ровном месте. Офлайн-старт клиентов от неё не зависел и не зависит — у
+   Electron свой сплэш с автоповтором (desktop/main.js), у Capacitor-обёртки свой
+   error.html. Ценой отказа от fetch-обработчика Chrome перестаёт предлагать
+   «Установить» — установка PWA и так нигде не предлагалась. */
+
+self.addEventListener('install', () => self.skipWaiting())
 
 self.addEventListener('activate', (event) => {
   event.waitUntil((async () => {
-    // Удаляем кэши прежних версий оболочки.
+    // Разовая уборка за прежними версиями: кэшей оболочки мы больше не ведём,
+    // а у клиентов они остались с предыдущих сборок.
     const keys = await caches.keys()
-    await Promise.all(keys.filter((k) => k !== CACHE).map((k) => caches.delete(k)))
+    await Promise.all(keys.filter((k) => k.startsWith('gw-shell')).map((k) => caches.delete(k)))
     await self.clients.claim()
-  })())
-})
-
-// Пути живого трафика — мимо кэша, всегда в сеть.
-function isLiveTraffic(url) {
-  return url.pathname.startsWith('/api/')
-    || url.pathname.startsWith('/ws')
-    || url.pathname.startsWith('/uploads/')
-    || url.pathname.startsWith('/livekit/')
-    || url.pathname.startsWith('/apps/')
-}
-
-self.addEventListener('fetch', (event) => {
-  const req = event.request
-  if (req.method !== 'GET') return
-  const url = new URL(req.url)
-  if (url.origin !== self.location.origin) return // шрифты и пр. — браузеру
-  if (isLiveTraffic(url)) return
-
-  // Навигация (открытие страницы) — network-first с откатом на кэш оболочки,
-  // чтобы офлайн SPA всё равно загрузилась (роутинг разрулит Vue Router).
-  // cache: 'no-cache' — ревалидация у сервера (дешёвый 304), а не залежавшийся
-  // index.html из HTTP-кэша браузера.
-  if (req.mode === 'navigate') {
-    event.respondWith((async () => {
-      const cache = await caches.open(CACHE)
-      try {
-        const fresh = await fetch(req, { cache: 'no-cache' })
-        // 5xx/404 (рестарт сервера в момент деплоя) в оболочку не кладём —
-        // закэшированная страница ошибки nginx «ослепила» бы приложение.
-        if (fresh.ok) cache.put('/index.html', fresh.clone()).catch(() => {})
-        return fresh
-      } catch {
-        // Офлайн: последняя УСПЕШНАЯ оболочка (ключ обновляется при каждой
-        // онлайн-навигации) — и только если её входной чанк тоже в кэше.
-        // Иначе честная сетевая ошибка: нативные обёртки покажут свой экран
-        // «нет соединения» вместо белого экрана на битых ассетах.
-        const index = await cache.match('/index.html')
-        if (!index) return Response.error()
-        const entry = (await index.clone().text()).match(/src="(\/assets\/[^"]+\.js)"/)?.[1]
-        if (entry && !(await cache.match(entry))) return Response.error()
-        return index
-      }
-    })())
-    return
-  }
-
-  // Статика сборки (хешированные /assets/*, иконки, лого) — stale-while-revalidate:
-  // мгновенно из кэша, фоном обновляем. Имена с хешем — переписать не страшно.
-  event.respondWith((async () => {
-    const cache = await caches.open(CACHE)
-    const cached = await cache.match(req)
-    const network = fetch(req).then((res) => {
-      if (res && res.ok) cache.put(req, res.clone()).catch(() => {})
-      return res
-    }).catch(() => null)
-    return cached || (await network) || fetch(req)
   })())
 })
 

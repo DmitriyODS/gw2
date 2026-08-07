@@ -90,10 +90,13 @@ func (i *Issuer) AccessTTL() time.Duration { return i.accessTTL }
 
 const selectTTL = 5 * time.Minute
 
-// RefreshToken — refresh-токен несёт user_id и АКТИВНУЮ компанию сессии
+// RefreshToken — refresh-токен несёт user_id, АКТИВНУЮ компанию сессии
 // (companyID, nil — активной компании нет): на refresh выбранная компания
-// восстанавливается без обращения к localStorage.
-func (i *Issuer) RefreshToken(userID int64, companyID *int64) (string, error) {
+// восстанавливается без обращения к localStorage; и session_id — строку
+// реестра user_sessions, по которой вход можно завершить («Авторизация и
+// сессии» в профиле). session_id == 0 — токен, выпущенный до появления
+// реестра: такой refresh продолжает работать и обновляется на сессионный.
+func (i *Issuer) RefreshToken(userID int64, companyID *int64, sessionID int64) (string, error) {
 	t := paseto.NewToken()
 	now := time.Now()
 	t.SetIssuedAt(now)
@@ -104,19 +107,25 @@ func (i *Issuer) RefreshToken(userID int64, companyID *int64) (string, error) {
 	if err := t.Set("company_id", companyID); err != nil {
 		return "", err
 	}
+	if err := t.Set("session_id", sessionID); err != nil {
+		return "", err
+	}
 	return t.V4Encrypt(i.refreshKey, nil), nil
 }
 
-// ParseRefresh — проверить refresh-токен и вернуть user_id и активную компанию
-// (nil — без компании); ошибка на любом дефекте (подпись, срок, не тот тип).
-func (i *Issuer) ParseRefresh(raw string) (int64, *int64, error) {
+// ParseRefresh — проверить refresh-токен и вернуть user_id, активную компанию
+// (nil — без компании) и id сессии (0 — легаси-токен без реестра); ошибка на
+// любом дефекте (подпись, срок, не тот тип).
+func (i *Issuer) ParseRefresh(raw string) (int64, *int64, int64, error) {
 	id, t, err := i.parseLocal(raw, "refresh")
 	if err != nil {
-		return 0, nil, err
+		return 0, nil, 0, err
 	}
 	var cid *int64
 	_ = t.Get("company_id", &cid)
-	return id, cid, nil
+	var sid int64
+	_ = t.Get("session_id", &sid)
+	return id, cid, sid, nil
 }
 
 // SelectToken — короткий токен этапа выбора компании при логине (>1 компании).

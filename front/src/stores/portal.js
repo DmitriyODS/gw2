@@ -4,6 +4,8 @@ import * as api from '@/api/portal.js'
 import { getDirectory } from '@/api/users.js'
 import { useAuthStore } from '@/stores/auth.js'
 import { normalizeRecipe } from '@/utils/chatBackgrounds.js'
+import { logActivity } from '@/utils/activityLog.js'
+import { rememberReaction } from '@/utils/reactions.js'
 
 // Корпоративный портал (posts/topics/comments/reactions). Посты/комментарии
 // несут только author_id/pinned_by (числа, без снапшота ФИО/аватара) —
@@ -240,6 +242,10 @@ export const usePortalStore = defineStore('portal', () => {
     }
     // Новый пост мог принести новые хештеги — освежаем панель (фоном).
     if (post.tags?.length) fetchPopularTags()
+    logActivity({
+      section: 'portal', action: 'published', id: post.id,
+      title: post.title || 'Публикация', path: `/portal/${post.id}`,
+    })
     return post
   }
 
@@ -296,6 +302,7 @@ export const usePortalStore = defineStore('portal', () => {
     }
     try {
       await api.addReaction(postId, emoji)
+      rememberReaction(emoji)
     } catch (e) {
       if (p) {
         p.reaction_counts = { ...(p.reaction_counts || {}), [emoji]: Math.max(0, (p.reaction_counts?.[emoji] || 1) - 1) }

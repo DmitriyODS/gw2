@@ -20,8 +20,15 @@ export const connectYougile = ({ login, password, yg_company_id = null }) =>
     body: { login, password, yg_company_id },
   })
 
-export const disconnectYougile = () =>
-  ygReq('/yougile/account', { method: 'DELETE' })
+// id не передан — отключаем активное подключение.
+export const disconnectYougile = (id = null) =>
+  ygReq(`/yougile/account${id ? `?id=${id}` : ''}`, { method: 'DELETE' })
+
+// Подключений бывает несколько: список и переключение активного.
+export const getYougileAccounts = () => ygReq('/yougile/accounts')
+
+export const activateYougileAccount = (id) =>
+  ygReq(`/yougile/accounts/${id}/activate`, { method: 'POST' })
 
 export const rotateYougile = ({ password }) =>
   ygReq('/yougile/account/rotate', { method: 'POST', body: { password } })

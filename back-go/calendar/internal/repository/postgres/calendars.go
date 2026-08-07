@@ -56,6 +56,13 @@ func (r *Repo) GetCalendar(ctx context.Context, id int64) (*domain.Calendar, err
 		`SELECT `+calendarCols+` FROM calendars WHERE id = $1`, id))
 }
 
+// CountCalendars — сколько календарей уже есть (лимит тарифа).
+func (r *Repo) CountCalendars(ctx context.Context, company_id int64) (int, error) {
+	var n int
+	err := r.pool.QueryRow(ctx, `SELECT count(*) FROM calendars WHERE company_id = $1`, company_id).Scan(&n)
+	return n, err
+}
+
 func (r *Repo) CreateCalendar(ctx context.Context, cal *domain.Calendar) error {
 	return r.pool.QueryRow(ctx,
 		`INSERT INTO calendars (company_id, name, position, created_by)

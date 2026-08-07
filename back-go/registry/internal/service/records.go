@@ -146,7 +146,7 @@ func (s *Service) DeleteRecord(ctx context.Context, companyID, registryID, recor
 	if err := s.repo.DeleteRecord(ctx, recordID); err != nil {
 		return err
 	}
-	s.removeRecordFiles(rec)
+	s.removeRecordFiles(ctx, companyID, rec)
 	s.bus.Publish(ctx, "record:deleted", []string{roomAll}, map[string]any{
 		"id": recordID, "registry_id": registryID, "company_id": companyID,
 	})
@@ -167,7 +167,7 @@ func (s *Service) DeleteRecords(ctx context.Context, companyID, registryID int64
 	if err != nil {
 		return 0, err
 	}
-	s.removeRecordFiles(recs...)
+	s.removeRecordFiles(ctx, companyID, recs...)
 	s.bus.Publish(ctx, "record:bulk-deleted", []string{roomAll}, map[string]any{
 		"ids": ids, "registry_id": registryID, "company_id": companyID,
 	})
@@ -177,7 +177,7 @@ func (s *Service) DeleteRecords(ctx context.Context, companyID, registryID int64
 // ── Хелперы ──────────────────────────────────────────────────────
 
 // removeRecordFiles — удалить из хранилища файлы/картинки удаляемых записей.
-func (s *Service) removeRecordFiles(recs ...*domain.Record) {
+func (s *Service) removeRecordFiles(ctx context.Context, companyID int64, recs ...*domain.Record) {
 	var paths []string
 	for _, rec := range recs {
 		if rec == nil {
@@ -190,7 +190,7 @@ func (s *Service) removeRecordFiles(recs ...*domain.Record) {
 		}
 	}
 	if len(paths) > 0 {
-		s.files.Remove(paths)
+		s.files.RemoveFor(ctx, 0, companyID, paths)
 	}
 }
 
@@ -250,4 +250,17 @@ func recordPayload(companyID int64, r *domain.Record) map[string]any {
 		"data": r.Data, "created_by": r.CreatedBy,
 		"created_at": r.CreatedAt, "updated_at": r.UpdatedAt,
 	}
+}
+
+// SearchRecords — глобальный поиск по записям всех реестров компании (строка
+// поиска рабочего стола). Пустой запрос ничего не ищет.
+func (s *Service) SearchRecords(ctx context.Context, companyID int64, query string, limit int) ([]*domain.SearchHit, error) {
+	query = strings.TrimSpace(query)
+	if query == "" {
+		return []*domain.SearchHit{}, nil
+	}
+	if limit <= 0 || limit > 50 {
+		limit = 20
+	}
+	return s.repo.SearchRecords(ctx, companyID, query, limit)
 }

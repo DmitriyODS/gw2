@@ -89,6 +89,81 @@ func walkFileKeys(keys *[]string, n docNode) {
 	}
 }
 
+/* DocWithoutFiles — документ без узлов, ссылающихся на перечисленные ключи
+   (человек убирает картинку из раздела «Настройки → Хранилище»). Второе
+   значение — менялось ли что-нибудь.
+
+   Работаем по сырому дереву map[string]any, а не по docNode: та — проекция
+   только нужных полей, и обратная сборка из неё потеряла бы всё остальное
+   (marks, выравнивания, атрибуты таблиц). */
+func DocWithoutFiles(doc json.RawMessage, keys []string) (json.RawMessage, bool) {
+	if len(doc) == 0 || len(keys) == 0 {
+		return doc, false
+	}
+	var root any
+	if json.Unmarshal(doc, &root) != nil {
+		return doc, false
+	}
+	drop := make(map[string]bool, len(keys))
+	for _, k := range keys {
+		drop[k] = true
+	}
+	cleaned, changed := pruneFileNodes(root, drop)
+	if !changed {
+		return doc, false
+	}
+	out, err := json.Marshal(cleaned)
+	if err != nil {
+		return doc, false
+	}
+	return out, true
+}
+
+// pruneFileNodes — вырезать из content узлы с картинкой из drop.
+func pruneFileNodes(node any, drop map[string]bool) (any, bool) {
+	obj, ok := node.(map[string]any)
+	if !ok {
+		return node, false
+	}
+	content, ok := obj["content"].([]any)
+	if !ok {
+		return obj, false
+	}
+	changed := false
+	kept := make([]any, 0, len(content))
+	for _, child := range content {
+		if nodeUsesFile(child, drop) {
+			changed = true
+			continue
+		}
+		cleaned, childChanged := pruneFileNodes(child, drop)
+		changed = changed || childChanged
+		kept = append(kept, cleaned)
+	}
+	if !changed {
+		return obj, false
+	}
+	obj["content"] = kept
+	return obj, true
+}
+
+func nodeUsesFile(node any, drop map[string]bool) bool {
+	obj, ok := node.(map[string]any)
+	if !ok {
+		return false
+	}
+	attrs, ok := obj["attrs"].(map[string]any)
+	if !ok {
+		return false
+	}
+	for _, v := range attrs {
+		if s, ok := v.(string); ok && drop[strings.TrimPrefix(s, "/uploads/")] {
+			return true
+		}
+	}
+	return false
+}
+
 // TextToDoc — документ TipTap из плоского текста (импорт .txt): каждая строка —
 // параграф, пустые строки — пустые параграфы.
 // AppendTextToDoc — дописать плоский текст абзацами в конец TipTap-документа

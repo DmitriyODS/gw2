@@ -52,16 +52,26 @@ export function installNotifyUnlock() {
   window.addEventListener('keydown', handler, { passive: true })
 }
 
-function playBeep() {
+/* Голоса уведомлений — короткие последовательности синусоид (mp3 в репозиторий
+   не тащим). Тревожное звучит иначе удачного: по звуку слышно, стоит ли
+   отрываться от работы. Ключ — severity тоста, плюс свои `message`/`alarm`. */
+const TONES = {
+  message: [{ freq: 880, start: 0, dur: 0.12 }, { freq: 660, start: 0.13, dur: 0.18 }],
+  info:    [{ freq: 740, start: 0, dur: 0.14 }],
+  success: [{ freq: 660, start: 0, dur: 0.1 }, { freq: 990, start: 0.11, dur: 0.16 }],
+  warn:    [{ freq: 540, start: 0, dur: 0.12 }, { freq: 540, start: 0.17, dur: 0.14 }],
+  error:   [{ freq: 420, start: 0, dur: 0.14 }, { freq: 300, start: 0.16, dur: 0.24 }],
+  alarm:   [{ freq: 780, start: 0, dur: 0.11 }, { freq: 980, start: 0.13, dur: 0.11 },
+            { freq: 1180, start: 0.26, dur: 0.2 }],
+}
+
+function playBeep(kind) {
   const ctx = getCtx()
   if (!ctx) return
   try {
     if (ctx.state === 'suspended') ctx.resume()
     const now = ctx.currentTime
-    const tones = [
-      { freq: 880, start: 0,    dur: 0.12 },
-      { freq: 660, start: 0.13, dur: 0.18 },
-    ]
+    const tones = TONES[kind] || TONES.message
     tones.forEach(({ freq, start, dur }) => {
       const osc = ctx.createOscillator()
       const gain = ctx.createGain()
@@ -79,11 +89,16 @@ function playBeep() {
 
 let swRegistration = null
 
-/* Регистрируем service worker — нужен для OS-уведомлений на мобильных
-   (Android Chrome запрещает new Notification(), только showNotification
-   через регистрацию SW). Вызывается один раз при старте приложения. */
+/* ЕДИНСТВЕННАЯ точка регистрации service worker: другой работы, кроме показа
+   OS-уведомлений, у него нет (кэш и офлайн-оболочка убраны, см. sw.js). Нужен он
+   мобильному вебу — Android Chrome запрещает new Notification() и показывает
+   уведомления только через showNotification. Вызывается один раз после входа. */
 export async function registerNotifyServiceWorker() {
   if (typeof navigator === 'undefined' || !('serviceWorker' in navigator)) return
+  // На dev-сервере SW не поднимаем: прежде он кэшировал модули Vite и ронял
+  // разделы (см. main.js). Уведомления при этом остаются — ниже есть путь через
+  // конструктор Notification, которого десктопным браузерам достаточно.
+  if (import.meta.env.DEV) return
   try {
     await navigator.serviceWorker.register('/sw.js')
     swRegistration = await navigator.serviceWorker.ready
@@ -113,17 +128,63 @@ export function notificationsAllowed() {
     && Notification.permission === 'granted'
 }
 
-/* ── Мьют уведомлений о сообщениях (настройка пользователя) ──
-   Глушит тосты ОС и бип для СООБЩЕНИЙ; входящие звонки не глушатся —
-   пропущенный звонок дороже лишнего звука. */
+/* ── «Не беспокоить» ──
+   Глушит звук и уведомления ОС; тосты в приложении и центр уведомлений
+   продолжают наполняться (события не теряются — их просто не слышно), а
+   входящие звонки не глушатся вовсе: пропущенный звонок дороже лишнего звука.
+
+   В хранилище либо `'1'` (навсегда), либо epoch-миллисекунды «до какого
+   момента» — тишина на срок сама заканчивается, даже если вкладку не
+   перезагружали. */
 const MUTE_KEY = 'gw_notify_muted'
 
+/** Момент окончания тишины: null — не заглушено, Infinity — навсегда. */
+export function notifyMutedUntil() {
+  try {
+    const raw = localStorage.getItem(MUTE_KEY)
+    if (raw === '1') return Infinity
+    const until = Number(raw)
+    return Number.isFinite(until) && until > Date.now() ? until : null
+  } catch {
+    return null
+  }
+}
+
 export function isNotifyMuted() {
-  try { return localStorage.getItem(MUTE_KEY) === '1' } catch { return false }
+  return notifyMutedUntil() !== null
+}
+
+/** minutes: число — на срок, null/0 — навсегда. */
+export function muteNotifications(minutes = null) {
+  const value = minutes ? String(Date.now() + minutes * 60_000) : '1'
+  try { localStorage.setItem(MUTE_KEY, value) } catch {}
+}
+
+export function unmuteNotifications() {
+  try { localStorage.setItem(MUTE_KEY, '0') } catch {}
+}
+
+/* ── Звук уведомлений ──
+   Отдельный от «не беспокоить» выключатель: тишина глушит ещё и всплывашки
+   ОС, а тут человек просит только «без звука» — карточки и тосты пусть
+   приходят. По умолчанию звук включён: молчащее приложение выглядит сломанным. */
+const SOUND_KEY = 'gw_notify_sound'
+
+export function isNotifySoundOn() {
+  try {
+    return localStorage.getItem(SOUND_KEY) !== '0'
+  } catch {
+    return true
+  }
+}
+
+export function setNotifySound(on) {
+  try { localStorage.setItem(SOUND_KEY, on ? '1' : '0') } catch {}
 }
 
 export function setNotifyMuted(muted) {
-  try { localStorage.setItem(MUTE_KEY, muted ? '1' : '0') } catch {}
+  if (muted) muteNotifications(null)
+  else unmuteNotifications()
 }
 
 /* Поднять окно приложения: в браузере — фокус вкладки, в Electron окно может
@@ -245,10 +306,19 @@ export function closeCallNotification() {
   }
 }
 
-export function playNotifySound() {
-  if (isNotifyMuted()) return
+/* Звучит ЛЮБОЕ уведомление; kind — голос из TONES (обычно severity тоста).
+   Пачку уведомлений подряд (например, ошибки нескольких запросов) сводим к
+   одному звуку: какофония хуже тишины. */
+let lastSoundAt = 0
+const SOUND_GAP_MS = 250
+
+export function playNotifySound(kind = 'message') {
+  if (isNotifyMuted() || !isNotifySoundOn()) return
+  const now = Date.now()
+  if (now - lastSoundAt < SOUND_GAP_MS) return
+  lastSoundAt = now
   try {
-    playBeep()
+    playBeep(kind)
   } catch (e) {
     if (!warned) { console.warn('notify sound failed', e); warned = true }
   }

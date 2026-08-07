@@ -2,10 +2,9 @@
   <AppDialog
     :model-value="modelValue"
     tone="tertiary"
-    icon="task"
     size="md"
     title="Прикрепить задачу"
-    subtitle="Можно прикрепить только задачу из той же компании, что и диалог."
+    subtitle="Задачу увидят только сотрудники её компании."
     @update:model-value="$emit('update:modelValue', $event)"
   >
     <div class="attach-task">
@@ -56,14 +55,15 @@
 <script setup>
 import { ref, watch } from 'vue'
 import BrandLoader from '@/components/common/BrandLoader.vue'
-import AppDialog from '@/components/common/AppDialog.vue'
+import AppDialog from '@/components/ui/AppDialog.vue'
 import { getTasks } from '@/api/tasks.js'
 import { TASK_COLOR_IDS } from '@/utils/taskColors.js'
 
 const props = defineProps({
   modelValue: { type: Boolean, default: false },
-  // company_id диалога — задачу можно прикрепить только из той же компании,
-  // что и сам диалог (бизнес-правило бэка). Для Администратора системы
+  // company_id диалога — из какой компании показывать задачи. Само право
+  // прикрепить проверяет msgsvc по СОБЕСЕДНИКАМ: задача уходит только тем, кто
+  // состоит в её компании (403 TASK_WRONG_COMPANY). Для Администратора системы
   // явный company_id перебивает выбранную в селекторе компанию.
   companyId: { type: Number, default: null },
 })
@@ -192,7 +192,6 @@ function pick(t) {
 }
 
 .attach-task-item:hover {
-  transform: translateY(-1px);
   box-shadow: var(--shadow-sm);
 }
 

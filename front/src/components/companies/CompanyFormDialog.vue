@@ -2,7 +2,6 @@
   <AppDialog
     :model-value="modelValue"
     tone="primary"
-    :icon="isEdit ? 'edit' : 'add_business'"
     size="md"
     :title="isEdit ? 'Редактирование компании' : 'Новая компания'"
     :busy="saving"
@@ -42,7 +41,6 @@
         <div class="switch-list">
           <label class="switch-row">
             <span class="switch-text">
-              <span class="material-symbols-outlined">view_kanban</span>
               <span>
                 <strong>Этапы задач</strong>
                 <small>Канбан-режим, цветные теги этапов в карточках</small>
@@ -52,7 +50,6 @@
           </label>
           <label class="switch-row">
             <span class="switch-text">
-              <span class="material-symbols-outlined">link</span>
               <span>
                 <strong>Интеграция с YouGile</strong>
                 <small>Импорт/экспорт карточек, бейдж и кнопки в задачах. Если выключено — остаётся обычное поле «Ссылка на YouGile»</small>
@@ -62,7 +59,6 @@
           </label>
           <label class="switch-row">
             <span class="switch-text">
-              <span class="material-symbols-outlined">call</span>
               <span>
                 <strong>Аудио/видео-звонки</strong>
                 <small>Кнопки звонка в мессенджере и профилях</small>
@@ -72,7 +68,6 @@
           </label>
           <label class="switch-row">
             <span class="switch-text">
-              <span class="material-symbols-outlined">celebration</span>
               <span>
                 <strong>Мой Groove</strong>
                 <small>Геймификация: питомцы-Грувики, лента активности, кудосы и рейды</small>
@@ -158,7 +153,7 @@
 
 <script setup>
 import { ref, computed, watch } from 'vue'
-import AppDialog from '@/components/common/AppDialog.vue'
+import AppDialog from '@/components/ui/AppDialog.vue'
 import {
   listCompanyMembers, getCompanyCandidates, addCompanyMember,
   setMemberRole, removeCompanyMember, getCompanyInvite, regenerateCompanyInvite,
@@ -421,17 +416,7 @@ select.ctl {
   gap: 12px;
   min-width: 0;
 }
-.switch-text .material-symbols-outlined {
-  display: grid;
-  place-items: center;
-  width: 36px;
-  height: 36px;
-  border-radius: var(--radius-md, 12px);
-  background: var(--color-primary-container);
-  color: var(--color-on-primary-container);
-  font-size: 20px;
-  flex: none;
-}
+
 .switch-text strong { display: block; font-size: 14px; color: var(--color-on-surface); }
 .switch-text small { display: block; font-size: 12px; color: var(--color-on-surface-variant); }
 

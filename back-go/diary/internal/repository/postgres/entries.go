@@ -159,3 +159,66 @@ func (r *Repo) EntriesForExport(ctx context.Context, f domain.EntryListFilter, i
 	where, args := buildWhere(f)
 	return r.queryEntries(ctx, where, orderBy(f.Archived), args, f.Limit)
 }
+
+// Agenda — невыполненные записи доступных пользователю ежедневников за период
+// (живая плитка рабочего стола). Один запрос: total считаем окном, чтобы не
+// делать второй SELECT ради счётчика.
+func (r *Repo) Agenda(ctx context.Context, userID int64, from, to time.Time, limit int) ([]*domain.SearchHit, int, error) {
+	rows, err := r.pool.Query(ctx, `
+		SELECT e.diary_id, d.name, e.id, e.title, e.entry_date, e.start_min,
+		       count(*) OVER () AS total
+		FROM diary_records e
+		JOIN diaries d ON d.id = e.diary_id
+		WHERE (d.owner_id = $1
+		       OR EXISTS (SELECT 1 FROM diary_user_shares s
+		                  WHERE s.diary_id = d.id AND s.user_id = $1))
+		  AND e.done = FALSE
+		  AND e.entry_date >= $2 AND e.entry_date <= $3
+		ORDER BY e.entry_date, e.start_min NULLS LAST, e.position, e.id
+		LIMIT $4`, userID, from, to, limit)
+	if err != nil {
+		return nil, 0, err
+	}
+	defer rows.Close()
+
+	out := make([]*domain.SearchHit, 0, limit)
+	total := 0
+	for rows.Next() {
+		var h domain.SearchHit
+		if err := rows.Scan(&h.DiaryID, &h.DiaryName, &h.EntryID, &h.Title, &h.Date, &h.StartMin, &total); err != nil {
+			return nil, 0, err
+		}
+		out = append(out, &h)
+	}
+	return out, total, rows.Err()
+}
+
+// SearchEntries — глобальный поиск (Spotlight) по записям ежедневников, к
+// которым у пользователя есть доступ: свои и открытые ему адресно. Один
+// запрос с JOIN — списки ежедневников не перебираем.
+func (r *Repo) SearchEntries(ctx context.Context, userID int64, query string, limit int) ([]*domain.SearchHit, error) {
+	rows, err := r.pool.Query(ctx, `
+		SELECT e.diary_id, d.name, e.id, e.title, e.entry_date, e.done
+		FROM diary_records e
+		JOIN diaries d ON d.id = e.diary_id
+		WHERE (d.owner_id = $1
+		       OR EXISTS (SELECT 1 FROM diary_user_shares s
+		                  WHERE s.diary_id = d.id AND s.user_id = $1))
+		  AND e.search_text ILIKE '%' || $2 || '%'
+		ORDER BY e.done ASC, e.entry_date DESC, e.id DESC
+		LIMIT $3`, userID, query, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	out := make([]*domain.SearchHit, 0, limit)
+	for rows.Next() {
+		var h domain.SearchHit
+		if err := rows.Scan(&h.DiaryID, &h.DiaryName, &h.EntryID, &h.Title, &h.Date, &h.Done); err != nil {
+			return nil, err
+		}
+		out = append(out, &h)
+	}
+	return out, rows.Err()
+}

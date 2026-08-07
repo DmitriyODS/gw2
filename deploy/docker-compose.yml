@@ -14,6 +14,10 @@ services:
     # с volume от postgres:16-alpine — формат данных одинаковый.
     image: pgvector/pgvector:pg16
     restart: unless-stopped
+    # max_connections: дефолт 100 тесен для двадцати сервисов (пул каждого —
+    # DB_POOL_MAX_CONNS=10, см. pkg/bootstrap) плюс migrate/backup/psql —
+    # запас на пиковую одновременную нагрузку всех сервисов сразу.
+    command: ["postgres", "-c", "max_connections=250"]
     environment:
       POSTGRES_DB: ${DB_NAME}
       POSTGRES_USER: ${DB_USER}
@@ -106,6 +110,9 @@ services:
       DATABASE_URL: postgresql://${DB_USER}:${DB_PASSWORD}@db:5432/${DB_NAME}
       REDIS_URL: redis://redis:6379/0
       PASETO_PUBLIC_KEY: ${PASETO_PUBLIC_KEY}
+      # Лимиты тарифа (billingsvc). Пустое значение выключает проверки;
+      # недоступный биллинг их не блокирует (fail-open).
+      BILLING_GRPC_ADDR: billing:9107
       # Парный диалог и плашка звонка в чате — gRPC msgsvc.
       MESSENGER_GRPC_ADDR: messenger:9092
       LIVEKIT_API_KEY: ${LIVEKIT_API_KEY:-devkey}
@@ -148,6 +155,14 @@ services:
       REDIS_URL: redis://redis:6379/0
       PASETO_PRIVATE_KEY: ${PASETO_PRIVATE_KEY}
       PASETO_REFRESH_KEY: ${PASETO_REFRESH_KEY}
+      # Лимиты тарифа (billingsvc): сколько компаний создаёт пользователь и
+      # сколько человек помещается в компанию. Пустое значение выключает
+      # проверки; недоступный биллинг их не блокирует (fail-open).
+      BILLING_GRPC_ADDR: billing:9107
+      # Перенос компании (выгрузка/подъём архивом): владельцы её контента.
+      # Пусто — перенос выключен; не поднявшийся раздел выпадает из архива.
+      COMPANY_DATA_ADDRS: >-
+        tasks=tasks:9095,registry=registry:9099,calendar=calendar:9100,portal=portal:9102
       UPLOAD_FOLDER: /app/uploads
       # Хранилище файлов: local (диск, dev) | s3 (Beget, prod). В prod выставить
       # STORAGE_BACKEND=s3 и S3_* в deploy/.env.
@@ -169,11 +184,18 @@ services:
       # кнопка «Войти с Яндексом» скрыта.
       YANDEX_OAUTH_CLIENT_ID: ${YANDEX_OAUTH_CLIENT_ID:-}
       YANDEX_OAUTH_CLIENT_SECRET: ${YANDEX_OAUTH_CLIENT_SECRET:-}
+      # Город в карточке сеанса («Авторизация и сессии» в профиле): шаблон
+      # запроса к гео-сервису с подстановками {ip} и {token}, ответ — JSON с
+      # полем "city". Пусто — гео выключено, карточка показывает IP.
+      GEOIP_URL: ${GEOIP_URL-http://ip-api.com/json/{ip}?fields=city&lang=ru}
+      GEOIP_TOKEN: ${GEOIP_TOKEN:-}
       HTTP_ADDR: ":8091"
+      GRPC_ADDR: ":9091"
     volumes:
       - uploads:/app/uploads
     expose:
       - "8091"
+      - "9091"
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8091/healthz"]
       interval: 15s
@@ -203,6 +225,9 @@ services:
       DATABASE_URL: postgresql://${DB_USER}:${DB_PASSWORD}@db:5432/${DB_NAME}
       REDIS_URL: redis://redis:6379/0
       PASETO_PUBLIC_KEY: ${PASETO_PUBLIC_KEY}
+      # Лимиты тарифа (billingsvc). Пустое значение выключает проверки;
+      # недоступный биллинг их не блокирует (fail-open).
+      BILLING_GRPC_ADDR: billing:9107
       UPLOAD_FOLDER: /app/uploads
       # Хранилище файлов: local (диск, dev) | s3 (Beget, prod). В prod выставить
       # STORAGE_BACKEND=s3 и S3_* в deploy/.env.
@@ -251,6 +276,9 @@ services:
       DATABASE_URL: postgresql://${DB_USER}:${DB_PASSWORD}@db:5432/${DB_NAME}
       REDIS_URL: redis://redis:6379/0
       PASETO_PUBLIC_KEY: ${PASETO_PUBLIC_KEY}
+      # Тариф и учёт (billingsvc): пустое значение выключает проверки,
+      # недоступный биллинг их не блокирует (fail-open).
+      BILLING_GRPC_ADDR: billing:9107
       # Fernet-ключ шифрования API-ключей компаний — теперь только у aisvc.
       AI_KEY_ENCRYPTION_KEY: ${AI_KEY_ENCRYPTION_KEY:-}
       HTTP_ADDR: ":8093"
@@ -297,6 +325,9 @@ services:
       DATABASE_URL: postgresql://${DB_USER}:${DB_PASSWORD}@db:5432/${DB_NAME}
       REDIS_URL: redis://redis:6379/0
       PASETO_PUBLIC_KEY: ${PASETO_PUBLIC_KEY}
+      # Тариф и учёт (billingsvc): пустое значение выключает проверки,
+      # недоступный биллинг их не блокирует (fail-open).
+      BILLING_GRPC_ADDR: billing:9107
       HTTP_ADDR: ":8094"
       GRPC_ADDR: ":9094"
     expose:
@@ -337,6 +368,9 @@ services:
       DATABASE_URL: postgresql://${DB_USER}:${DB_PASSWORD}@db:5432/${DB_NAME}
       REDIS_URL: redis://redis:6379/0
       PASETO_PUBLIC_KEY: ${PASETO_PUBLIC_KEY}
+      # Лимиты тарифа (billingsvc). Пустое значение выключает проверки;
+      # недоступный биллинг их не блокирует (fail-open).
+      BILLING_GRPC_ADDR: billing:9107
       PETS_GRPC_ADDR: pets:9094
       AI_GRPC_ADDR: ai:9093
       HTTP_ADDR: ":8095"
@@ -399,6 +433,9 @@ services:
       DATABASE_URL: postgresql://${DB_USER}:${DB_PASSWORD}@db:5432/${DB_NAME}
       REDIS_URL: redis://redis:6379/0
       PASETO_PUBLIC_KEY: ${PASETO_PUBLIC_KEY}
+      # Лимиты тарифа (billingsvc). Пустое значение выключает проверки;
+      # недоступный биллинг их не блокирует (fail-open).
+      BILLING_GRPC_ADDR: billing:9107
       UPLOAD_FOLDER: /app/uploads
       # Хранилище файлов: local (диск, dev) | s3 (Beget, prod). В prod выставить
       # STORAGE_BACKEND=s3 и S3_* в deploy/.env.
@@ -409,10 +446,12 @@ services:
       S3_ACCESS_KEY: ${S3_ACCESS_KEY:-}
       S3_SECRET_KEY: ${S3_SECRET_KEY:-}
       HTTP_ADDR: ":8099"
+      GRPC_ADDR: ":9099"
     volumes:
       - uploads:/app/uploads
     expose:
       - "8099"
+      - "9099"
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8099/healthz"]
       interval: 15s
@@ -440,6 +479,9 @@ services:
       DATABASE_URL: postgresql://${DB_USER}:${DB_PASSWORD}@db:5432/${DB_NAME}
       REDIS_URL: redis://redis:6379/0
       PASETO_PUBLIC_KEY: ${PASETO_PUBLIC_KEY}
+      # Лимиты тарифа (billingsvc). Пустое значение выключает проверки;
+      # недоступный биллинг их не блокирует (fail-open).
+      BILLING_GRPC_ADDR: billing:9107
       UPLOAD_FOLDER: /app/uploads
       # Хранилище файлов: local (диск, dev) | s3 (Beget, prod). В prod выставить
       # STORAGE_BACKEND=s3 и S3_* в deploy/.env.
@@ -450,10 +492,12 @@ services:
       S3_ACCESS_KEY: ${S3_ACCESS_KEY:-}
       S3_SECRET_KEY: ${S3_SECRET_KEY:-}
       HTTP_ADDR: ":8100"
+      GRPC_ADDR: ":9100"
     volumes:
       - uploads:/app/uploads
     expose:
       - "8100"
+      - "9100"
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8100/healthz"]
       interval: 15s
@@ -481,6 +525,9 @@ services:
       DATABASE_URL: postgresql://${DB_USER}:${DB_PASSWORD}@db:5432/${DB_NAME}
       REDIS_URL: redis://redis:6379/0
       PASETO_PUBLIC_KEY: ${PASETO_PUBLIC_KEY}
+      # Лимиты тарифа (billingsvc). Пустое значение выключает проверки;
+      # недоступный биллинг их не блокирует (fail-open).
+      BILLING_GRPC_ADDR: billing:9107
       HTTP_ADDR: ":8101"
       # gRPC — голосовые операции навыка Алисы (зовёт alicesvc).
       GRPC_ADDR: ":9101"
@@ -498,6 +545,52 @@ services:
   # пользователей (rich-текст TipTap, группы, публичные ссылки view/edit,
   # экспорт/импорт txt), REST /api/notes. Скоуп по владельцу (не по компании);
   # картинки редактора — общий uploads-том. Межсервисных вызовов нет.
+  # Микросервис «Диск» (Go, back-go/drive): HTTP :8108 — личные файлы с
+  # папками, корзиной, избранным и шарингом (ссылка + адресный доступ);
+  # gRPC :9108 — контракт владельца файлов для раздела «Настройки → Хранилище».
+  # Сами файлы лежат в общем uploads-томе (в prod — S3) и считаются в квоте
+  # владельца.
+  drive:
+    build:
+      context: ../back-go
+      dockerfile: drive/Dockerfile
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    environment:
+      DATABASE_URL: postgresql://${DB_USER}:${DB_PASSWORD}@db:5432/${DB_NAME}
+      REDIS_URL: redis://redis:6379/0
+      PASETO_PUBLIC_KEY: ${PASETO_PUBLIC_KEY}
+      # Квота хранилища (billingsvc): файл сверх лимита не сохраняется.
+      # Пустое значение выключает учёт, недоступный биллинг не блокирует
+      # загрузку (fail-open).
+      BILLING_GRPC_ADDR: billing:9107
+      UPLOAD_FOLDER: /app/uploads
+      STORAGE_BACKEND: ${STORAGE_BACKEND:-local}
+      S3_ENDPOINT: ${S3_ENDPOINT:-}
+      S3_REGION: ${S3_REGION:-ru1}
+      S3_BUCKET: ${S3_BUCKET:-}
+      S3_ACCESS_KEY: ${S3_ACCESS_KEY:-}
+      S3_SECRET_KEY: ${S3_SECRET_KEY:-}
+      HTTP_ADDR: ":8108"
+      GRPC_ADDR: ":9108"
+    volumes:
+      - uploads:/app/uploads
+    expose:
+      - "8108"
+      - "9108"
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8108/healthz"]
+      interval: 15s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
+
   notes:
     build:
       context: ../back-go
@@ -516,6 +609,9 @@ services:
       DATABASE_URL: postgresql://${DB_USER}:${DB_PASSWORD}@db:5432/${DB_NAME}
       REDIS_URL: redis://redis:6379/0
       PASETO_PUBLIC_KEY: ${PASETO_PUBLIC_KEY}
+      # Тариф и учёт (billingsvc): пустое значение выключает проверки,
+      # недоступный биллинг их не блокирует (fail-open).
+      BILLING_GRPC_ADDR: billing:9107
       # ИИ-поиск заметок: векторизация запросов/заметок через aisvc.Embed.
       # Пусто/убрать → семантика выключена, поиск текстовый (fail-open).
       AI_GRPC_ADDR: ai:9093
@@ -538,6 +634,138 @@ services:
       - "9103"
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8103/healthz"]
+      interval: 15s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
+
+  # Микросервис досок (Go, back-go/board): HTTP :8105 — личные доски рисования
+  # (сцена холста в JSONB, иерархические папки, теги-метки, публичные ссылки
+  # view/edit, адресный шаринг пользователям и компаниям), REST /api/boards.
+  # Скоуп по владельцу (не по компании); картинки холста и превью — общий
+  # uploads-том. Межсервисных вызовов нет.
+  board:
+    build:
+      context: ../back-go
+      dockerfile: board/Dockerfile
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    environment:
+      DATABASE_URL: postgresql://${DB_USER}:${DB_PASSWORD}@db:5432/${DB_NAME}
+      REDIS_URL: redis://redis:6379/0
+      PASETO_PUBLIC_KEY: ${PASETO_PUBLIC_KEY}
+      # Лимиты тарифа (billingsvc). Пустое значение выключает проверки;
+      # недоступный биллинг их не блокирует (fail-open).
+      BILLING_GRPC_ADDR: billing:9107
+      UPLOAD_FOLDER: /app/uploads
+      # Хранилище файлов: local (диск, dev) | s3 (Beget, prod). В prod выставить
+      # STORAGE_BACKEND=s3 и S3_* в deploy/.env.
+      STORAGE_BACKEND: ${STORAGE_BACKEND:-local}
+      S3_ENDPOINT: ${S3_ENDPOINT:-}
+      S3_REGION: ${S3_REGION:-ru1}
+      S3_BUCKET: ${S3_BUCKET:-}
+      S3_ACCESS_KEY: ${S3_ACCESS_KEY:-}
+      S3_SECRET_KEY: ${S3_SECRET_KEY:-}
+      HTTP_ADDR: ":8105"
+      GRPC_ADDR: ":9105"
+    volumes:
+      - uploads:/app/uploads
+    expose:
+      - "8105"
+      - "9105"
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8105/healthz"]
+      interval: 15s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
+
+  # Микросервис напоминаний (Go, back-go/reminder): HTTP :8106 — личные
+  # напоминания (разовые и повторяющиеся, привязки к записям ежедневника и
+  # календаря), REST /api/reminders. Внутри — планировщик: раз в полминуты
+  # забирает наступившие сроки и публикует reminder:fire в gw2:reminder:events
+  # (gatewaysvc доставляет вкладкам, pushsvc — FCM-пушем офлайн-получателям).
+  reminder:
+    build:
+      context: ../back-go
+      dockerfile: reminder/Dockerfile
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    environment:
+      DATABASE_URL: postgresql://${DB_USER}:${DB_PASSWORD}@db:5432/${DB_NAME}
+      REDIS_URL: redis://redis:6379/0
+      PASETO_PUBLIC_KEY: ${PASETO_PUBLIC_KEY}
+      HTTP_ADDR: ":8106"
+    expose:
+      - "8106"
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8106/healthz"]
+      interval: 15s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
+
+  # Микросервис подписок и магазина (Go, back-go/billing): HTTP :8107 — REST
+  # /api/billing (витрина тарифов и товаров, покупки, заказы, промокоды, раздел
+  # «Аудит платформы») и публичный вебхук платёжного шлюза; gRPC :9107 —
+  # лимиты тарифа, проверка хранилища и токены доступа к ИИ для остальных
+  # сервисов. Внутри — планировщик продлений подписок и докупок.
+  billing:
+    build:
+      context: ../back-go
+      dockerfile: billing/Dockerfile
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    environment:
+      DATABASE_URL: postgresql://${DB_USER}:${DB_PASSWORD}@db:5432/${DB_NAME}
+      REDIS_URL: redis://redis:6379/0
+      PASETO_PUBLIC_KEY: ${PASETO_PUBLIC_KEY}
+      HTTP_ADDR: ":8107"
+      GRPC_ADDR: ":9107"
+      # Платёжный шлюз: manual — счёт подтверждает супер-админ (СБП банка
+      # подключается сменой значения и перезапуском сервиса).
+      PAYMENT_PROVIDER: ${PAYMENT_PROVIDER:-manual}
+      # Раздел «Настройки → Хранилище»: у кого спрашивать про файлы. Коды
+      # ОБЯЗАНЫ совпадать с теми, под которыми файлы попадают в журнал
+      # (billing_storage_files.service) — по ним строка журнала связывается со
+      # своим владельцем. Пустая строка оставляет только счётчик места.
+      FILE_OWNER_ADDRS: >-
+        messenger=messenger:9092,notes=notes:9103,boards=board:9105,
+        registry=registry:9099,calendar=calendar:9100,portal=portal:9102,
+        avatars=auth:9091,drive=drive:9108
+      # Само хранилище: биллинг меряет незнакомые журналу файлы и удаляет сирот.
+      UPLOAD_FOLDER: /app/uploads
+      STORAGE_BACKEND: ${STORAGE_BACKEND:-local}
+      S3_ENDPOINT: ${S3_ENDPOINT:-}
+      S3_REGION: ${S3_REGION:-ru1}
+      S3_BUCKET: ${S3_BUCKET:-}
+      S3_ACCESS_KEY: ${S3_ACCESS_KEY:-}
+      S3_SECRET_KEY: ${S3_SECRET_KEY:-}
+    volumes:
+      - uploads:/app/uploads
+    expose:
+      - "8107"
+      - "9107"
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8107/healthz"]
       interval: 15s
       timeout: 3s
       retries: 5
@@ -566,6 +794,9 @@ services:
       DATABASE_URL: postgresql://${DB_USER}:${DB_PASSWORD}@db:5432/${DB_NAME}
       REDIS_URL: redis://redis:6379/0
       PASETO_PUBLIC_KEY: ${PASETO_PUBLIC_KEY}
+      # Лимиты тарифа (billingsvc). Пустое значение выключает проверки;
+      # недоступный биллинг их не блокирует (fail-open).
+      BILLING_GRPC_ADDR: billing:9107
       UPLOAD_FOLDER: /app/uploads
       # Хранилище файлов: local (диск, dev) | s3 (Beget, prod). В prod выставить
       # STORAGE_BACKEND=s3 и S3_* в deploy/.env.
@@ -577,10 +808,12 @@ services:
       S3_SECRET_KEY: ${S3_SECRET_KEY:-}
       MESSENGER_GRPC_ADDR: messenger:9092
       HTTP_ADDR: ":8102"
+      GRPC_ADDR: ":9102"
     volumes:
       - uploads:/app/uploads
     expose:
       - "8102"
+      - "9102"
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8102/healthz"]
       interval: 15s
@@ -664,7 +897,9 @@ services:
     # service_healthy, а не started: конфиг nginx резолвит upstream'ы
     # gateway:8096, calls:8090, auth:8091, messenger:8092, ai:8093,
     # pets:8094, tasks:8095, push:8097, registry:8099, calendar:8100,
-    # diary:8101, portal:8102 и notes:8103 на старте — без живых контейнеров
+    # diary:8101, portal:8102, notes:8103, board:8105, reminder:8106 и
+    # billing:8107 на
+    # старте — без живых контейнеров
     # он падает целиком («host not found in upstream»), включая отдачу SPA.
     depends_on:
       gateway:
@@ -692,6 +927,12 @@ services:
       portal:
         condition: service_healthy
       notes:
+        condition: service_healthy
+      board:
+        condition: service_healthy
+      reminder:
+        condition: service_healthy
+      billing:
         condition: service_healthy
       alice:
         condition: service_healthy

@@ -1,21 +1,43 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
+import { useThemeStore } from '@/stores/theme.js'
+import { useNotificationsStore } from '@/stores/notifications.js'
 import { ROLES } from '@/composables/usePermission.js'
 import { useCompanySettings } from '@/composables/useCompanySettings.js'
-import { navProgress } from '@/composables/useNavProgress.js'
+import { startNavProgress, stopNavProgress } from '@/composables/useNavProgress.js'
 import { trackPageView } from '@/utils/metrika.js'
+import { inAppShell } from '@/utils/appShell.js'
 
 const routes = [
-  // Промо-лендинг платформы: публичный, без каркаса приложения.
-  { path: '/promo', component: () => import('@/views/PromoView.vue'),
-    meta: { public: true, fullscreen: true } },
-  { path: '/login', component: () => import('@/views/LoginView.vue'), meta: { public: true } },
-  { path: '/register', component: () => import('@/views/RegisterView.vue'), meta: { public: true } },
+  // Корень — промо-лендинг платформы: публичный, без каркаса приложения.
+  // Само приложение живёт под /home и своими разделами. authScreen — витрина
+  // тоже оформляется классической темой в системном светлом/тёмном виде:
+  // до входа личной темы у посетителя нет.
+  { path: '/', component: () => import('@/views/PromoView.vue'),
+    meta: { public: true, fullscreen: true, authScreen: true } },
+  // Прежний адрес лендинга — на его нынешнее место (живут внешние ссылки).
+  { path: '/promo', redirect: '/' },
+  // Экраны входа (meta.authScreen) оформляются классической темой в системном
+  // светлом/тёмном виде — личная тема пользователя туда не протекает.
+  { path: '/welcome', component: () => import('@/views/WelcomeView.vue'),
+    meta: { public: true, authScreen: true } },
+  { path: '/login', component: () => import('@/views/LoginView.vue'),
+    meta: { public: true, authScreen: true } },
+  { path: '/register', component: () => import('@/views/RegisterView.vue'),
+    meta: { public: true, authScreen: true } },
+  // Вход по QR-коду и активация ТВ-киоска — отдельные экраны, а не модалки входа.
+  { path: '/qr-login', component: () => import('@/views/QrLoginView.vue'),
+    meta: { public: true, authScreen: true } },
+  { path: '/tv-activate', component: () => import('@/views/TvActivateView.vue'),
+    meta: { public: true, authScreen: true } },
   // Подтверждение email (ввод кода или переход по ссылке ?token=…) — публичный.
-  { path: '/verify-email', component: () => import('@/views/VerifyEmailView.vue'), meta: { public: true } },
+  { path: '/verify-email', component: () => import('@/views/VerifyEmailView.vue'),
+    meta: { public: true, authScreen: true } },
   // Восстановление пароля — публичные экраны.
-  { path: '/forgot-password', component: () => import('@/views/ForgotPasswordView.vue'), meta: { public: true } },
-  { path: '/reset-password', component: () => import('@/views/ResetPasswordView.vue'), meta: { public: true } },
+  { path: '/forgot-password', component: () => import('@/views/ForgotPasswordView.vue'),
+    meta: { public: true, authScreen: true } },
+  { path: '/reset-password', component: () => import('@/views/ResetPasswordView.vue'),
+    meta: { public: true, authScreen: true } },
   // Принятие email-приглашения в компанию (нужна авторизация; гость сперва войдёт).
   { path: '/invite/:token', component: () => import('@/views/InviteAcceptView.vue'),
     meta: { requiresAuth: true, fullscreen: true }, props: true },
@@ -30,7 +52,9 @@ const routes = [
   { path: '/stats', component: () => import('@/views/StatsView.vue'),
     meta: { requiresAuth: true, requiresCompany: true } },
   { path: '/settings', component: () => import('@/views/SettingsView.vue'), meta: { requiresAuth: true } },
-  { path: '/profile', component: () => import('@/views/ProfileView.vue'), meta: { requiresAuth: true } },
+  // Профиль переехал в настройки панелью «Аккаунт»; прежний адрес живёт
+  // редиректом — на него ведут закладки и старые ссылки в интерфейсе.
+  { path: '/profile', redirect: { path: '/settings', query: { section: 'account' } } },
   { path: '/employees', component: () => import('@/views/EmployeesView.vue'),
     meta: { requiresAuth: true, requiresCompany: true } },
   // Активность сотрудника — доступ на бэке гардирован ролью Администратор компании.
@@ -55,14 +79,27 @@ const routes = [
     meta: { requiresAuth: true }, props: true },
   { path: '/diaries', component: () => import('@/views/DiaryView.vue'),
     meta: { requiresAuth: true } },
+  // Раздел «Доски» — личные холсты рисования (папки, метки, шаринг как у заметок).
+  { path: '/boards', component: () => import('@/views/BoardsView.vue'),
+    meta: { requiresAuth: true } },
+  { path: '/boards/:id(\\d+)', component: () => import('@/views/BoardEditorView.vue'),
+    meta: { requiresAuth: true }, props: true },
+  // Раздел «Диск» — личные файлы: папки, корзина, шаринг (как заметки и доски).
+  { path: '/drive', component: () => import('@/views/DriveView.vue'),
+    meta: { requiresAuth: true } },
+  // Раздел «Напоминания» — личные, срок считает планировщик remindersvc.
+  { path: '/reminders', component: () => import('@/views/RemindersView.vue'),
+    meta: { requiresAuth: true } },
   // Раздел «Компании»: супер-админ видит все (платформа), обычный пользователь —
   // те, что создал/администрирует (доступ к данным проверяет бэкенд).
-  { path: '/companies', component: () => import('@/views/CompaniesView.vue'),
-    meta: { requiresAuth: true } },
+  // Список компаний переехал в настройки (как и профиль) — прежний адрес
+  // остаётся рабочей ссылкой.
+  { path: '/companies', redirect: '/settings?section=companies' },
   { path: '/users', component: () => import('@/views/UsersView.vue'),
     meta: { requiresAuth: true, requiresSuperAdmin: true } },
-  { path: '/companies/:id(\\d+)', component: () => import('@/views/CompanyManageView.vue'),
-    meta: { requiresAuth: true }, props: true },
+  // Карточка компании — панель настроек: адрес остаётся ссылкой на неё.
+  { path: '/companies/:id(\\d+)',
+    redirect: (to) => ({ path: '/settings', query: { section: 'companies', company: to.params.id } }) },
   {
     path: '/messenger/:conversationId(\\d+)?',
     component: () => import('@/views/MessengerView.vue'),
@@ -79,6 +116,11 @@ const routes = [
     meta: { requiresAuth: true, requiresCompany: true, feature: 'uses_groove' } },
   // Старые закладки раздела до переименования.
   { path: '/groove', redirect: '/pets' },
+  // Магазин оформления — пока каркас: витрина наполняется отдельной итерацией.
+  { path: '/store', component: () => import('@/views/StoreView.vue'), meta: { requiresAuth: true } },
+  // Hola — поиск, быстрые команды и чат с ИИ-ассистентом в одном окне.
+  { path: '/hola', component: () => import('@/views/HolaView.vue'), meta: { requiresAuth: true } },
+  { path: '/calculator', component: () => import('@/views/CalculatorView.vue'), meta: { requiresAuth: true } },
   { path: '/tv', component: () => import('@/views/TvView.vue'), meta: { requiresAuth: true, fullscreen: true } },
   // Ссылка-приглашение в звонок: доступна и внешним гостям без аккаунта.
   { path: '/call/:code', component: () => import('@/views/CallJoinView.vue'),
@@ -93,7 +135,13 @@ const routes = [
   { path: '/diary/:code', component: () => import('@/views/SharedDiaryView.vue'),
     meta: { public: true } },
   // Публичная заметка по внешней ссылке (режим view/edit решает сервер).
+  // Публичный доступ к доске по внешней ссылке (режим решает сервер: view|edit).
+  { path: '/board/:code', component: () => import('@/views/SharedBoardView.vue'),
+    meta: { public: true } },
   { path: '/note/:code', component: () => import('@/views/SharedNoteView.vue'),
+    meta: { public: true } },
+  // Файл или папка диска по публичной ссылке — код в адресе и есть доступ.
+  { path: '/drive/s/:code', component: () => import('@/views/SharedDriveView.vue'),
     meta: { public: true } },
   // Вступление в компанию по ссылке-приглашению (нужна авторизация).
   { path: '/join/:code', component: () => import('@/views/JoinView.vue'),
@@ -114,8 +162,14 @@ const routes = [
   // и вернётся сюда после входа.
   { path: '/link', component: () => import('@/views/LinkApproveView.vue'),
     meta: { requiresAuth: true, fullscreen: true } },
-  { path: '/', redirect: '/tasks' },
-  { path: '/:pathMatch(.*)*', redirect: '/tasks' }
+  // Дом приложения — рабочий стол: на десктопе это пустой стол без окон (каркас
+  // рисует DesktopShell), в мобильном каркасе HomeView уводит в стартовый
+  // раздел. Редиректом делать нельзя: закрыв все окна, стол возвращает адрес
+  // на «/home».
+  { path: '/home', component: () => import('@/views/HomeView.vue'), meta: { requiresAuth: true } },
+  // Незнакомый адрес ведём на рабочий стол; гостя гард развернёт на приветствие
+  // (в редиректе стор ещё не готов — сессия поднимается в beforeEach).
+  { path: '/:pathMatch(.*)*', redirect: '/home' },
 ]
 
 const router = createRouter({
@@ -127,29 +181,41 @@ const router = createRouter({
 // компанийному разделу: супер-админа — на платформенный экран компаний;
 // члена компании — на задачи; пользователя без активной компании — в мессенджер
 // (доступен всегда; оттуда он создаёт/выбирает компанию).
-function landingFor(auth) {
-  if (auth.isSuperAdmin) return '/companies'
+// Формы входа в аккаунт: вошедшему пользователю показывать их незачем.
+const ENTRY_SCREENS = ['/welcome', '/login', '/register']
+
+export function landingFor(auth) {
+  if (auth.isSuperAdmin) return '/settings?section=companies'
   if (auth.roleLevel > 0) return '/tasks'
   return '/messenger'
 }
 
 router.beforeEach(async (to) => {
-  navProgress.value = true
+  startNavProgress()
   const auth = useAuthStore()
   await auth.ensureReady()
+  // Экраны входа встречают классической темой в системном светлом/тёмном
+  // оформлении; личная тема возвращается при входе в приложение.
+  useThemeStore().setAuthPreview(!!to.meta.authScreen)
+  // Обёртки (десктоп/Android) открывают прод-адрес без пути: там ждут
+  // приложение, а не лендинг платформы.
+  if (to.path === '/' && inAppShell()) return '/home'
   if (!to.meta.public && !auth.token) {
     // Сохраняем цель (например, ссылку-приглашение /join/...), чтобы вернуться
-    // на неё после входа.
-    const redirect = to.fullPath !== '/' ? { redirect: to.fullPath } : {}
-    return { path: '/login', query: redirect }
+    // на неё после входа. Рабочий стол — цель по умолчанию, его не запоминаем.
+    const redirect = to.fullPath !== '/home' ? { redirect: to.fullPath } : {}
+    return { path: '/welcome', query: redirect }
   }
   // Сессия с обязательной сменой пароля: держим пользователя на /login —
-  // там неклозабельная модалка смены учётных данных (все остальные API
-  // и так отвечают 403 FORCE_PASSWORD_CHANGE).
+  // там шаг смены пароля вместо формы входа (все остальные API и так
+  // отвечают 403 FORCE_PASSWORD_CHANGE).
   if (auth.token && auth.forceChange && to.path !== '/login') {
     return '/login'
   }
-  if ((to.path === '/login' || to.path === '/register') && auth.token && !auth.forceChange) {
+  // Вошедшему формы входа не нужны — уводим в его стартовый раздел. Прочие
+  // экраны входа (подтверждение почты, QR, ТВ-режим) остаются доступными: на
+  // них приходят по ссылке письма и с уже живой сессией.
+  if (ENTRY_SCREENS.includes(to.path) && auth.token && !auth.forceChange) {
     return landingFor(auth)
   }
   if (!auth.token) return
@@ -157,8 +223,11 @@ router.beforeEach(async (to) => {
   if (to.meta.requiresSuperAdmin && !auth.isSuperAdmin) {
     return landingFor(auth)
   }
-  // Компанийный контент — нужна активная компания и НЕ супер-админ.
+  // Компанийный контент — нужна активная компания и НЕ супер-админ. По прямой
+  // ссылке (задача, публикация портала) сюда приходят и посторонние: молча
+  // увести — значит оставить человека в недоумении, поэтому говорим прямо.
   if (to.meta.requiresCompany && (auth.isSuperAdmin || auth.roleLevel <= 0)) {
+    useNotificationsStore().warn('Доступ ограничен: раздел доступен только сотрудникам компании')
     return landingFor(auth)
   }
   // Проверка минимальной роли — по роли в АКТИВНОЙ компании (claims), а не из /me.
@@ -173,12 +242,12 @@ router.beforeEach(async (to) => {
 })
 
 router.afterEach((to, from, failure) => {
-  navProgress.value = false
+  stopNavProgress()
   // Просмотр страницы в Метрику — только состоявшаяся навигация (редиректы
   // гардов не считаем дважды). Для первого захода referer — внешний реферер.
   if (failure) return
   trackPageView(to.fullPath, from.matched.length ? from.fullPath : document.referrer)
 })
-router.onError(() => { navProgress.value = false })
+router.onError(() => { stopNavProgress() })
 
 export default router

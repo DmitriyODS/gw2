@@ -1,10 +1,14 @@
 package http
 
 import (
+	"context"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/gofiber/fiber/v2"
 
+	"github.com/DmitriyODS/gw2/back-go/auth/internal/domain"
 	"github.com/DmitriyODS/gw2/back-go/auth/internal/dto"
 	"github.com/DmitriyODS/gw2/back-go/auth/internal/endpoint"
 )
@@ -26,6 +30,41 @@ func setRefreshCookie(c *fiber.Ctx, refreshToken string) {
 	})
 }
 
+// sessionCtx — примесь запроса для реестра входов: устройство (User-Agent),
+// адрес и текущий refresh-cookie. По cookie сервис понимает, что перевыпуск
+// пары токенов (смена компании, смена пароля) продолжает ТУ ЖЕ сессию, а не
+// заводит новую карточку устройства.
+func sessionCtx(c *fiber.Ctx) context.Context {
+	return domain.WithSessionMeta(c.Context(), domain.SessionMeta{
+		UserAgent: c.Get(fiber.HeaderUserAgent),
+		IP:        clientIP(c),
+		Refresh:   c.Cookies(refreshCookie),
+	})
+}
+
+// clientIP — адрес клиента за nginx: заголовки прокси, иначе peer соединения
+// (в dev фронт ходит в сервис напрямую).
+//
+// X-Real-IP — ПЕРВЫЙ источник: nginx пишет туда $remote_addr на каждой
+// location'е, клиент это значение переписать не может. X-Forwarded-For —
+// только запасной вариант: nginx формирует его через $proxy_add_x_forwarded_for
+// (ДОБАВЛЯЕТ пришедшее значение, а не заменяет), поэтому левый край строки —
+// это то, что подставил САМ клиент. Слепое доверие первому элементу раньше
+// позволяло подделать IP в карточке сеанса (гео/адрес входа) заголовком
+// запроса — независимо от лимита неудачных попыток входа (он ключуется по
+// логину, а не по IP, поэтому на брутфорс это не влияло).
+func clientIP(c *fiber.Ctx) string {
+	if real := c.Get("X-Real-IP"); real != "" {
+		return real
+	}
+	if xff := c.Get(fiber.HeaderXForwardedFor); xff != "" {
+		if first, _, _ := strings.Cut(xff, ","); strings.TrimSpace(first) != "" {
+			return strings.TrimSpace(first)
+		}
+	}
+	return c.IP()
+}
+
 func clearRefreshCookie(c *fiber.Ctx) {
 	c.Cookie(&fiber.Cookie{
 		Name:     refreshCookie,
@@ -44,7 +83,7 @@ func (h *handlers) login(c *fiber.Ctx) error {
 		return badRequest(c, "Логин и пароль обязательны")
 	}
 
-	resp, err := h.eps.Login(c.Context(), req)
+	resp, err := h.eps.Login(sessionCtx(c), req)
 	if err != nil {
 		return h.respondError(c, err)
 	}
@@ -59,7 +98,8 @@ func (h *handlers) register(c *fiber.Ctx) error {
 		return badRequest(c, "Имя, email и пароль обязательны")
 	}
 	// Логин может прийти пустым — сервис сгенерирует из ФИО (транслит).
-	resp, err := h.eps.Register(c.Context(), req)
+	// sessionCtx — сервису нужен IP для лимита регистраций (WithRateLimiter).
+	resp, err := h.eps.Register(sessionCtx(c), req)
 	if err != nil {
 		return h.respondError(c, err)
 	}
@@ -87,7 +127,7 @@ func (h *handlers) verifyEmail(c *fiber.Ctx) error {
 	if req.Token == "" && (req.Email == "" || req.Code == "") {
 		return badRequest(c, "Передайте token или email и code")
 	}
-	resp, err := h.eps.VerifyEmail(c.Context(), req)
+	resp, err := h.eps.VerifyEmail(sessionCtx(c), req)
 	if err != nil {
 		return h.respondError(c, err)
 	}
@@ -143,7 +183,7 @@ func (h *handlers) selectCompany(c *fiber.Ctx) error {
 	if err := c.BodyParser(&req); err != nil || req.SelectToken == "" || req.CompanyID == 0 {
 		return badRequest(c, "select_token и company_id обязательны")
 	}
-	resp, err := h.eps.SelectCompany(c.Context(), endpoint.SelectCompanyEpRequest{
+	resp, err := h.eps.SelectCompany(sessionCtx(c), endpoint.SelectCompanyEpRequest{
 		SelectToken: req.SelectToken, CompanyID: req.CompanyID,
 	})
 	if err != nil {
@@ -161,7 +201,7 @@ func (h *handlers) switchCompany(c *fiber.Ctx) error {
 	if err := c.BodyParser(&req); err != nil || req.CompanyID == 0 {
 		return badRequest(c, "company_id обязателен")
 	}
-	resp, err := h.eps.SwitchCompany(c.Context(), endpoint.SwitchCompanyEpRequest{
+	resp, err := h.eps.SwitchCompany(sessionCtx(c), endpoint.SwitchCompanyEpRequest{
 		UserID: tokenUserID(c), CompanyID: req.CompanyID,
 	})
 	if err != nil {
@@ -179,11 +219,104 @@ func (h *handlers) refresh(c *fiber.Ctx) error {
 			"error": "INVALID_TOKEN", "message": "Refresh token недействителен",
 		})
 	}
-	resp, err := h.eps.Refresh(c.Context(), raw)
+	resp, err := h.eps.Refresh(sessionCtx(c), raw)
 	if err != nil {
 		return h.respondError(c, err)
 	}
-	return c.JSON(resp.(*dto.Session))
+	sess := resp.(*dto.Session)
+	// Обычный refresh cookie не трогает; непустой токен здесь — разовое
+	// перевыпускание сессионного refresh взамен старого, выданного до реестра
+	// входов (иначе у такого входа никогда не появится карточка устройства).
+	if sess.RefreshToken != "" {
+		setRefreshCookie(c, sess.RefreshToken)
+	}
+	return c.JSON(sess)
+}
+
+// ── Реестр входов: «Авторизация и сессии» в профиле ──────────────
+
+func (h *handlers) listSessions(c *fiber.Ctx) error {
+	resp, err := h.eps.ListSessions(sessionCtx(c), tokenUserID(c))
+	if err != nil {
+		return h.respondError(c, err)
+	}
+	return c.JSON(resp)
+}
+
+// revokeSession — завершить сеанс. Текущий тоже можно: фронт следом выходит из
+// системы. Чужой id ничего не найдёт — user_id стоит в условии UPDATE.
+func (h *handlers) revokeSession(c *fiber.Ctx) error {
+	id, err := strconv.ParseInt(c.Params("id"), 10, 64)
+	if err != nil {
+		return badRequest(c, "Неверный id сеанса")
+	}
+	if _, err := h.eps.RevokeSession(sessionCtx(c), endpoint.RevokeSessionEpRequest{
+		UserID: tokenUserID(c), SessionID: id,
+	}); err != nil {
+		return h.respondError(c, err)
+	}
+	return c.JSON(fiber.Map{"status": "ok"})
+}
+
+// revokeOtherSessions — выйти на всех устройствах, кроме текущего. Тем же
+// путём авторизация обрывается при смене пароля.
+func (h *handlers) revokeOtherSessions(c *fiber.Ctx) error {
+	revoked, err := h.eps.RevokeOtherSessions(sessionCtx(c), tokenUserID(c))
+	if err != nil {
+		return h.respondError(c, err)
+	}
+	return c.JSON(fiber.Map{"revoked": revoked})
+}
+
+// ── Экран блокировки ─────────────────────────────────────────────
+
+func (h *handlers) screenLock(c *fiber.Ctx) error {
+	state, err := h.eps.ScreenLockState(c.Context(), tokenUserID(c))
+	if err != nil {
+		return h.respondError(c, err)
+	}
+	return c.JSON(state)
+}
+
+func (h *handlers) setScreenLock(c *fiber.Ctx) error {
+	var body dto.ScreenLockRequest
+	if err := c.BodyParser(&body); err != nil {
+		return badRequest(c, "Неверный формат запроса")
+	}
+	state, err := h.eps.SetScreenLock(c.Context(), endpoint.ScreenLockEpRequest{
+		UserID: tokenUserID(c), Body: body,
+	})
+	if err != nil {
+		return h.respondError(c, err)
+	}
+	return c.JSON(state)
+}
+
+func (h *handlers) disableScreenLock(c *fiber.Ctx) error {
+	var body dto.UnlockRequest
+	if err := c.BodyParser(&body); err != nil {
+		return badRequest(c, "Неверный формат запроса")
+	}
+	if _, err := h.eps.DisableScreenLock(c.Context(), endpoint.UnlockEpRequest{
+		UserID: tokenUserID(c), Secret: body.Secret,
+	}); err != nil {
+		return h.respondError(c, err)
+	}
+	return c.JSON(fiber.Map{"enabled": false})
+}
+
+// unlockScreen — снятие запертого экрана: пин-код или пароль аккаунта.
+func (h *handlers) unlockScreen(c *fiber.Ctx) error {
+	var body dto.UnlockRequest
+	if err := c.BodyParser(&body); err != nil {
+		return badRequest(c, "Неверный формат запроса")
+	}
+	if _, err := h.eps.UnlockScreen(c.Context(), endpoint.UnlockEpRequest{
+		UserID: tokenUserID(c), Secret: body.Secret,
+	}); err != nil {
+		return h.respondError(c, err)
+	}
+	return c.JSON(fiber.Map{"status": "ok"})
 }
 
 // ── Спаривание устройств: QR-вход и ТВ-код ───────────────────────
@@ -239,7 +372,7 @@ func (h *handlers) linkClaim(c *fiber.Ctx) error {
 	if err := c.BodyParser(&req); err != nil || req.Code == "" || req.Secret == "" {
 		return badRequest(c, "code и secret обязательны")
 	}
-	resp, err := h.eps.LinkClaim(c.Context(), endpoint.LinkClaimEpRequest{
+	resp, err := h.eps.LinkClaim(sessionCtx(c), endpoint.LinkClaimEpRequest{
 		Code: req.Code, Secret: req.Secret,
 	})
 	if err != nil {
@@ -255,6 +388,11 @@ func (h *handlers) linkClaim(c *fiber.Ctx) error {
 }
 
 func (h *handlers) logout(c *fiber.Ctx) error {
+	// Карточка этого устройства уходит из списка сеансов, а его refresh
+	// перестаёт работать сразу — не дожидаясь конца своих 30 дней.
+	if _, err := h.eps.RevokeCurrentSession(sessionCtx(c), tokenUserID(c)); err != nil {
+		h.log.Warn("session.revoke_on_logout_failed", "error", err)
+	}
 	clearRefreshCookie(c)
 	return c.JSON(fiber.Map{"message": "Выход выполнен"})
 }
@@ -264,7 +402,10 @@ func (h *handlers) changeDefault(c *fiber.Ctx) error {
 	if err := c.BodyParser(&req); err != nil {
 		return badRequest(c, "Неверный формат запроса")
 	}
-	if len([]rune(req.NewLogin)) < 3 {
+	// Логин менять не обязательно: при первом входе просим только пароль.
+	// Пустое поле — оставить текущий логин.
+	req.NewLogin = strings.TrimSpace(req.NewLogin)
+	if req.NewLogin != "" && len([]rune(req.NewLogin)) < 3 {
 		return badRequest(c, "Логин должен содержать не менее 3 символов")
 	}
 	if len([]rune(req.NewPassword)) < 8 {
@@ -272,7 +413,7 @@ func (h *handlers) changeDefault(c *fiber.Ctx) error {
 	}
 	req.UserID = tokenUserID(c)
 
-	resp, err := h.eps.ChangeDefault(c.Context(), req)
+	resp, err := h.eps.ChangeDefault(sessionCtx(c), req)
 	if err != nil {
 		return h.respondError(c, err)
 	}

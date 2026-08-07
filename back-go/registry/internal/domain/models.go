@@ -71,6 +71,15 @@ type Record struct {
 	UpdatedAt  time.Time      `json:"updated_at"`
 }
 
+// RecordScope — запись вместе с реестром, которому она принадлежит: разделу
+// «Настройки → Хранилище» нужно показать, где лежит файл.
+type RecordScope struct {
+	Record       *Record
+	RegistryID   int64
+	RegistryName string
+	CompanyID    int64
+}
+
 // RecordListFilter — фильтры списка записей: поиск (по search_text), сортировка
 // по полю или дате создания, пагинация.
 type RecordListFilter struct {
@@ -113,4 +122,13 @@ type User struct {
 	RoleLevel     int
 	CompanyID     *int64
 	CompanyActive bool
+}
+
+// SearchHit — строка глобального поиска (Spotlight): запись вместе с реестром,
+// которому она принадлежит. Snippet — начало search_text записи.
+type SearchHit struct {
+	RegistryID   int64  `json:"registry_id"`
+	RegistryName string `json:"registry_name"`
+	RecordID     int64  `json:"record_id"`
+	Snippet      string `json:"snippet"`
 }

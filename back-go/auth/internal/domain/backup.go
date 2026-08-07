@@ -48,6 +48,14 @@ var BackupSections = []BackupSection{
 		"note_shares", "note_user_shares", "note_company_shares",
 		"folder_user_shares", "folder_company_shares",
 		"note_recipient_state", "folder_recipient_state"}},
+	{Key: "boards", Tables: []string{"boards", "board_folders",
+		"board_shares", "board_user_shares", "board_company_shares",
+		"board_folder_user_shares", "board_folder_company_shares",
+		"board_recipient_state", "board_folder_recipient_state"}},
+	// «Диск»: файлы вместе с папками, корзиной и обоими видами доступа.
+	{Key: "drive", Tables: []string{"drive_files", "drive_folders",
+		"drive_shares", "drive_user_shares"}},
+	{Key: "reminders", Tables: []string{"reminders"}},
 	{Key: "messenger", Tables: []string{"conversations", "conversation_members", "messages",
 		"message_attachments", "message_reactions", "chat_backgrounds",
 		"chat_folders", "chat_folder_items"}},
@@ -62,16 +70,26 @@ var BackupSections = []BackupSection{
 		"portal_comments", "portal_comment_likes", "portal_reactions", "portal_attachments",
 		"portal_post_views", "portal_seen", "portal_backgrounds"}},
 	{Key: "ai", Tables: []string{"ai_assistant_conversations", "ai_assistant_messages",
-		"ai_assistant_feedback"}},
+		"ai_assistant_feedback", "user_ai_settings", "ai_platform_settings", "ai_models"}},
+	// Подписки и магазин целиком: тарифы с ценами, подписки и докупки, заказы
+	// и платежи, промокоды с активациями, товары витрины и покупки, кошелёк
+	// автора и выплаты, баланс токенов ИИ, учёт хранилища и журнал действий.
+	{Key: "billing", Tables: []string{"billing_plans", "billing_addons",
+		"billing_subscriptions", "billing_user_addons", "billing_products",
+		"billing_promos", "billing_orders", "billing_promo_redemptions",
+		"billing_payments", "billing_product_purchases", "billing_seller_balances",
+		"billing_payouts", "billing_ai_balances", "billing_ai_usage", "billing_storage_usage",
+		"billing_storage_files", "billing_settings", "platform_audit_log"}},
 	{Key: "integration", Tables: []string{"user_yougile_accounts"}},
 }
 
 // BackupExcluded — таблицы, которые НИКОГДА не бэкапим: транзиентные (коды
-// подтверждения/сброса) и перегенерируемые (эмбеддинги), плюс служебная таблица
-// миграций goose.
+// подтверждения/сброса, реестр активных входов) и перегенерируемые
+// (эмбеддинги), плюс служебная таблица миграций goose.
 var BackupExcluded = map[string]bool{
 	"email_verifications": true,
 	"password_resets":     true,
+	"user_sessions":       true,
 	"task_embeddings":     true,
 	"note_embeddings":     true,
 	"goose_db_version":    true,

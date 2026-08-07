@@ -262,7 +262,8 @@ export const useAuthStore = defineStore('auth', () => {
       } catch {}
       try { await apiLogout() } catch {}
       clearAuth()
-      router.push('/login')
+      // После выхода — экран приветствия: оттуда и вход, и регистрация.
+      router.push('/welcome')
     } finally {
       // Хвостовые запросы, стартовавшие с токеном до clearAuth, и так глушатся
       // веткой !auth.token в client.js — флаг можно снимать сразу.
@@ -270,7 +271,9 @@ export const useAuthStore = defineStore('auth', () => {
     }
   }
 
-  async function changeDefaultCredentials({ login, password, confirmPassword }) {
+  // Логин при первом входе не меняем — пустое поле сервер трактует как
+  // «оставить текущий».
+  async function changeDefaultCredentials({ login = '', password, confirmPassword }) {
     const result = await apiChangeDefault({
       new_login: login,
       new_password: password,

@@ -293,3 +293,29 @@ func entryPayload(ownerID int64, e *domain.Entry) map[string]any {
 		"created_at": e.CreatedAt, "updated_at": e.UpdatedAt,
 	}
 }
+
+// SearchEntries — глобальный поиск по записям доступных ежедневников
+// (строка поиска рабочего стола). Пустой запрос ничего не ищет.
+func (s *Service) SearchEntries(ctx context.Context, userID int64, query string, limit int) ([]*domain.SearchHit, error) {
+	query = strings.TrimSpace(query)
+	if query == "" {
+		return []*domain.SearchHit{}, nil
+	}
+	if limit <= 0 || limit > 50 {
+		limit = 20
+	}
+	return s.repo.SearchEntries(ctx, userID, query, limit)
+}
+
+// Agenda — невыполненные дела доступных ежедневников за период (живая плитка
+// рабочего стола): что осталось сегодня и какое дело ближайшее.
+func (s *Service) Agenda(ctx context.Context, userID int64, from, to time.Time, limit int) (*domain.Agenda, error) {
+	if limit <= 0 || limit > 50 {
+		limit = 10
+	}
+	items, total, err := s.repo.Agenda(ctx, userID, day(from), day(to), limit)
+	if err != nil {
+		return nil, err
+	}
+	return &domain.Agenda{Items: items, Total: total}, nil
+}

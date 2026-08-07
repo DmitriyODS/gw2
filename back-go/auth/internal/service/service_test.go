@@ -144,6 +144,17 @@ func (r *fakeRepo) Create(_ context.Context, u *domain.User) error {
 	return nil
 }
 
+// strPtr — значение nullable-строки из map обновления (nil — снять).
+func strPtr(v any) *string {
+	if v == nil {
+		return nil
+	}
+	if s, ok := v.(string); ok {
+		return &s
+	}
+	return nil
+}
+
 func (r *fakeRepo) UpdateFields(_ context.Context, id int64, fields map[string]any) error {
 	u := r.users[id]
 	for k, v := range fields {
@@ -169,6 +180,16 @@ func (r *fakeRepo) UpdateFields(_ context.Context, id int64, fields map[string]a
 			u.Email, _ = v.(*string)
 		case "phone":
 			u.Phone, _ = v.(*string)
+		case "avatar_emoji":
+			u.AvatarEmoji = strPtr(v)
+		case "lock_pin_hash":
+			u.LockPinHash = strPtr(v)
+		case "lock_after_min":
+			if v == nil {
+				u.LockAfterMin = nil
+			} else if n, ok := v.(int); ok {
+				u.LockAfterMin = &n
+			}
 		}
 	}
 	return nil
@@ -323,6 +344,13 @@ func (r *fakeRepo) SearchNonMembers(_ context.Context, query string, companyID i
 		out = append(out, &cp)
 	}
 	return out, nil
+}
+
+func (r *fakeRepo) SetMembershipVacation(_ context.Context, userID, companyID int64, on bool) error {
+	if m, ok := r.members[userID][companyID]; ok {
+		m.OnVacation = on
+	}
+	return nil
 }
 
 func (r *fakeRepo) SetMembershipPost(_ context.Context, userID, companyID int64, post *string) error {
@@ -482,6 +510,16 @@ func (f *fakeCompanies) CompanyStats(_ context.Context, ids []int64) (map[int64]
 		out[id] = domain.CompanyStats{}
 	}
 	return out, nil
+}
+
+func (f *fakeCompanies) CountCompaniesCreatedBy(_ context.Context, userID int64) (int, error) {
+	n := 0
+	for _, c := range f.companies {
+		if c.CreatedBy != nil && *c.CreatedBy == userID {
+			n++
+		}
+	}
+	return n, nil
 }
 
 // fakeVerifications — in-memory VerificationStore.
@@ -760,6 +798,28 @@ func TestChangeDefault(t *testing.T) {
 		UserID: u.ID, NewLogin: "hero2", NewPassword: "supersecret", ConfirmPassword: "supersecret",
 	})
 	wantCode(t, err, "ALREADY_CHANGED")
+}
+
+// Первый вход просит сменить только пароль: логин не прислан — остаётся прежним.
+func TestChangeDefaultKeepsLoginWhenOmitted(t *testing.T) {
+	svc, repo, _ := newTestService(t)
+	u := repo.add(&domain.User{
+		FIO: "Новичок", Login: "novice", HashPassword: "hash:novice123",
+		Role: *repo.roles[1], IsDefaultPass: true,
+	})
+
+	sess, err := svc.ChangeDefault(context.Background(), dto.ChangeDefaultRequest{
+		UserID: u.ID, NewPassword: "supersecret", ConfirmPassword: "supersecret",
+	})
+	if err != nil || sess.ForceChange {
+		t.Fatalf("ChangeDefault: %+v, %v", sess, err)
+	}
+	if repo.users[u.ID].Login != "novice" {
+		t.Fatalf("логин не должен меняться, стал %q", repo.users[u.ID].Login)
+	}
+	if repo.users[u.ID].IsDefaultPass || repo.users[u.ID].HashPassword == "hash:novice123" {
+		t.Fatal("пароль и флаг дефолтного пароля не обновлены")
+	}
 }
 
 // ── Users ────────────────────────────────────────────────────────

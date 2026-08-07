@@ -1,5 +1,5 @@
 <template>
-  <div class="sn-page">
+  <div class="sn-page" @keydown="onPanelKeydown">
     <header class="sn-top">
       <div class="sn-brand"><span class="material-symbols-outlined">note_stack</span> Заметка</div>
       <h1 v-if="note" class="sn-name">{{ note.title || 'Без названия' }}</h1>
@@ -9,6 +9,9 @@
         <span class="sn-savestate" :class="saveState">{{ saveLabel }}</span>
       </span>
       <span v-else-if="note" class="sn-mode">Только просмотр</span>
+      <button v-if="note" class="sn-find-btn" :class="{ active: findOpen }" title="Найти в заметке (Ctrl+F)" @click="toggleFind">
+        <span class="material-symbols-outlined">search</span>
+      </button>
     </header>
 
     <div v-if="notFound" class="sn-state">
@@ -17,6 +20,16 @@
     </div>
 
     <div v-else-if="note" class="sn-shell">
+      <NoteFindBar
+        v-if="findOpen"
+        ref="findBar"
+        v-model:query="findQuery"
+        class="sn-find"
+        :total="findTotal"
+        :current="findCurrent"
+        @step="stepFind"
+        @close="hideFind"
+      />
       <input
         v-if="access === 'edit'"
         v-model="title"
@@ -28,6 +41,7 @@
         @blur="flush"
       />
       <NoteRichEditor
+        ref="editorRef"
         class="sn-editor"
         :doc="doc"
         :editable="access === 'edit'"
@@ -42,13 +56,31 @@
 // Публичная заметка по коду-capability: view — чтение (editable:false), edit —
 // тот же редактор с автосохранением PUT по коду; без «Поделиться»/«Удалить» и
 // без загрузки картинок (аплоад только у владельца).
-import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import NoteRichEditor from '@/components/notes/NoteRichEditor.vue'
+import NoteFindBar from '@/components/notes/NoteFindBar.vue'
+import { useNoteFind } from '@/composables/useNoteFind.js'
 import { getSharedNote, updateSharedNote } from '@/api/notes.js'
 
 const route = useRoute()
 const code = route.params.code
+
+// Поиск по заметке — тот же, что на своей странице заметки (Ctrl+F).
+const editorRef = ref(null)
+const findBar = ref(null)
+const {
+  open: findOpen, query: findQuery, total: findTotal, current: findCurrent,
+  hide: hideFind, toggle: toggleFind, step: stepFind, onKeydown: onFindKeydown,
+} = useNoteFind(editorRef)
+
+const focusFind = () => nextTick(() => findBar.value?.focus())
+
+watch(findOpen, (v) => { if (v) focusFind() })
+
+function onPanelKeydown(e) {
+  if (onFindKeydown(e) && findOpen.value) focusFind()
+}
 
 const note = ref(null)
 const access = ref('view')
@@ -163,6 +195,26 @@ async function flush() {
 .sn-mode .material-symbols-outlined { font-size: 16px; }
 .sn-savestate { font-weight: 500; opacity: 0.85; }
 .sn-savestate.error { color: var(--color-error); }
+
+.sn-find-btn {
+  width: 36px;
+  min-width: 36px;
+  max-width: 36px;
+  height: 36px;
+  min-height: 36px;
+  max-height: 36px;
+  display: grid;
+  place-items: center;
+  border: none;
+  border-radius: var(--radius-full);
+  background: none;
+  color: var(--color-text-dim);
+  cursor: pointer;
+}
+.sn-find-btn:hover { background: color-mix(in oklch, var(--color-primary) 10%, transparent); color: var(--color-primary); }
+.sn-find-btn.active { background: color-mix(in oklch, var(--color-primary) 14%, transparent); color: var(--color-primary); }
+
+.sn-find { margin-bottom: 10px; }
 
 .sn-state {
   flex: 1;

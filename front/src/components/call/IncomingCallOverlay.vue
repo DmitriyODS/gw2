@@ -1,6 +1,8 @@
 <template>
   <Teleport to="body">
-    <Transition name="incoming">
+    <!-- appear: компонент монтируется вместе с появлением звонка (ленивый
+         чанк), поэтому первый рендер обязан анимироваться. -->
+    <Transition name="incoming" appear>
       <div v-if="show" class="incoming-overlay" @click.self="$emit('decline')">
         <div class="incoming-card" :class="{ pulse: callStore.isIncoming }">
           <div class="incoming-tag">
@@ -271,12 +273,12 @@ onBeforeUnmount(stopRing)
   place-items: center;
   cursor: pointer;
   color: var(--color-on-primary);
-  transition: transform 0.15s, box-shadow 0.15s;
+  transition: filter 0.15s, box-shadow 0.15s;
   box-shadow: 0 8px 24px color-mix(in oklch, var(--color-scrim) 32%, transparent);
 }
 
-.round-btn:hover { transform: translateY(-2px); box-shadow: 0 12px 30px color-mix(in oklch, var(--color-scrim) 42%, transparent); }
-.round-btn:active { transform: translateY(0); }
+/* Выделение — подсветка и тень, кнопка не смещается. */
+.round-btn:hover { filter: brightness(1.08); box-shadow: 0 12px 30px color-mix(in oklch, var(--color-scrim) 42%, transparent); }
 
 .round-btn.accept {
   background: var(--color-success);
@@ -290,7 +292,6 @@ onBeforeUnmount(stopRing)
   transform: rotate(135deg);
 }
 
-.round-btn.decline:hover { transform: rotate(135deg) translateY(-2px); }
 
 .round-btn .material-symbols-outlined { font-size: 28px; }
 

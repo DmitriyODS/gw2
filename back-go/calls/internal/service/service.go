@@ -24,6 +24,7 @@ import (
 
 	"github.com/DmitriyODS/gw2/back-go/calls/internal/domain"
 	"github.com/DmitriyODS/gw2/back-go/calls/internal/dto"
+	"github.com/DmitriyODS/gw2/back-go/pkg/billingclient"
 )
 
 // CallService — публичный контракт сервисного слоя (его оборачивают
@@ -62,6 +63,9 @@ type Service struct {
 	leftGrace time.Duration
 	sweepMu   sync.Mutex
 	sweepSet  map[int64]struct{}
+
+	// billing — лимиты тарифа (WithBilling; nil — прежний жёсткий потолок).
+	billing *billingclient.Client
 }
 
 var _ CallService = (*Service)(nil)
@@ -169,9 +173,10 @@ func (s *Service) resolveCompany(ctx context.Context, initiator *domain.User, in
 // инициатором, людей зовут позже (invite из звонка или ссылка-приглашение).
 func (s *Service) StartCall(ctx context.Context, req dto.StartCallRequest) (*dto.StartCallResponse, error) {
 	inviteeIDs := dedupe(req.InviteeIDs, req.InitiatorID)
-	if len(inviteeIDs) > domain.MaxParticipants-1 {
+	maxSeats := s.maxParticipants(ctx, req.InitiatorID)
+	if len(inviteeIDs) > maxSeats-1 {
 		return nil, domain.NewError("TOO_MANY_INVITEES",
-			fmt.Sprintf("Максимум %d участников в одном звонке", domain.MaxParticipants-1), 400)
+			fmt.Sprintf("Максимум %d участников в одном звонке", maxSeats-1), 400)
 	}
 
 	if s.ring.IsUserBusy(req.InitiatorID) {
@@ -321,7 +326,7 @@ func (s *Service) InviteToCall(ctx context.Context, req dto.InviteRequest) (*dto
 		return &dto.InviteResponse{Call: snap, NewInviteeIDs: []int64{}, NotifyUserIDs: ring.Joined}, nil
 	}
 
-	if len(ring.Invited)+len(ring.Guests)+len(newIDs) > domain.MaxParticipants {
+	if len(ring.Invited)+len(ring.Guests)+len(newIDs) > s.maxParticipants(ctx, call.InitiatorID) {
 		return nil, domain.NewError("TOO_MANY_INVITEES", "В звонке слишком много участников", 400)
 	}
 	for _, uid := range newIDs {
@@ -703,7 +708,7 @@ func (s *Service) JoinInfo(ctx context.Context, code string) (*dto.JoinInfoRespo
 		Kind:            call.Kind,
 		StartedAt:       &started,
 		Occupants:       s.occupants(ctx, call),
-		MaxParticipants: domain.MaxParticipants,
+		MaxParticipants: s.maxParticipants(ctx, call.InitiatorID),
 		Live:            call.Status == domain.StatusRinging || call.Status == domain.StatusActive,
 	}
 	if initiator, err := s.users.GetUser(ctx, call.InitiatorID); err == nil && initiator != nil {
@@ -733,7 +738,7 @@ func (s *Service) JoinByCode(ctx context.Context, req dto.JoinByCodeRequest) (*d
 	if call == nil || call.Finished() {
 		return nil, domain.NewError("CALL_NOT_FOUND", "Звонок не найден или уже завершён", 404)
 	}
-	if s.occupants(ctx, call) >= domain.MaxParticipants {
+	if s.occupants(ctx, call) >= s.maxParticipants(ctx, call.InitiatorID) {
 		return nil, domain.NewError("CALL_FULL", "В звонке нет свободных мест", 409)
 	}
 

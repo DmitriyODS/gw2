@@ -4,11 +4,13 @@ import (
 	"context"
 	"encoding/json"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
 	"github.com/DmitriyODS/gw2/back-go/messenger/internal/domain"
 	"github.com/DmitriyODS/gw2/back-go/messenger/internal/dto"
+	"github.com/DmitriyODS/gw2/back-go/pkg/billingclient"
 )
 
 // Разрешённые MIME-категории вложений (как в messenger_service).
@@ -72,7 +74,9 @@ func (s *Service) SendMessage(ctx context.Context, convID, senderID int64,
 		}
 	}
 
-	// Прикреплённая задача: из той же компании, что и диалог.
+	// Прикреплённая задача — сущность компании: она уходит только тем, кто в
+	// этой компании состоит. Компания диалога тут не показатель: у переписки
+	// между людьми без общей компании company_id вовсе NULL.
 	kind := domain.KindText
 	if req.TaskID != nil {
 		task, err := s.repo.GetTask(ctx, *req.TaskID)
@@ -82,8 +86,9 @@ func (s *Service) SendMessage(ctx context.Context, convID, senderID int64,
 		if task == nil {
 			return nil, domain.NewError("TASK_NOT_FOUND", "Задача не найдена", 404)
 		}
-		if conv.CompanyID != nil && task.CompanyID != *conv.CompanyID {
-			return nil, domain.NewError("TASK_WRONG_COMPANY", "Задача из другой компании", 400)
+		if err := s.ensureCompanyAudience(ctx, conv, task.CompanyID,
+			"TASK_WRONG_COMPANY", "Задачу можно отправить только сотрудникам её компании"); err != nil {
+			return nil, err
 		}
 		kind = domain.KindTask
 	}
@@ -454,6 +459,15 @@ func (s *Service) copyAttachment(ctx context.Context, att *domain.Attachment,
 	if err := s.repo.CreateAttachment(ctx, copied); err != nil {
 		return nil, err
 	}
+	// Копия занимает место наравне с оригиналом, и платит за неё тот, кто
+	// переслал. Превью в журнал не заносим — его размер здесь неизвестен
+	// (Copy его не меряет), и подхватит его ближайшая сверка с биллингом.
+	s.trackUpload(ctx, uploaderID, billingclient.StorageChange{
+		Added: []billingclient.StoredFile{{
+			Key: newPath, Name: copied.FileName, Size: copied.SizeBytes,
+			Kind: "attachment", ID: strconv.FormatInt(copied.ID, 10),
+		}},
+	})
 	return copied, nil
 }
 
@@ -531,6 +545,9 @@ func (s *Service) UploadAttachment(ctx context.Context, uploaderID int64,
 		original = "file"
 	}
 	ext := truncateString(strings.ToLower(filepath.Ext(original)), 16)
+	if err := s.ensureUploadSpace(ctx, uploaderID, int64(len(data))); err != nil {
+		return nil, err
+	}
 	relPath, err := s.files.Save(data, ext)
 	if err != nil {
 		return nil, err
@@ -539,10 +556,11 @@ func (s *Service) UploadAttachment(ctx context.Context, uploaderID int64,
 	// оригинала). Сжатие/сохранение не должно валить загрузку — при ошибке
 	// просто нет превью, клиент покажет исходник.
 	var thumbPath *string
+	var thumbSize int64
 	if strings.HasPrefix(mime, "image/") {
 		if thumb, ok := makeThumbnail(data); ok {
 			if tp, terr := s.files.Save(thumb, ".jpg"); terr == nil {
-				thumbPath = &tp
+				thumbPath, thumbSize = &tp, int64(len(thumb))
 			}
 		}
 	}
@@ -557,6 +575,19 @@ func (s *Service) UploadAttachment(ctx context.Context, uploaderID int64,
 	if err := s.repo.CreateAttachment(ctx, att); err != nil {
 		return nil, err
 	}
+	// Место занимает и превью, поэтому в журнал идут оба объекта, а не один
+	// SizeBytes (его показывают пользователю как размер вложения).
+	files := []billingclient.StoredFile{{
+		Key: relPath, Name: att.FileName, Size: att.SizeBytes,
+		Kind: "attachment", ID: strconv.FormatInt(att.ID, 10),
+	}}
+	if thumbPath != nil {
+		files = append(files, billingclient.StoredFile{
+			Key: *thumbPath, Name: "Превью: " + att.FileName, Size: thumbSize,
+			Kind: "attachment", ID: strconv.FormatInt(att.ID, 10),
+		})
+	}
+	s.trackUpload(ctx, uploaderID, billingclient.StorageChange{Added: files})
 	return dto.NewAttachment(att), nil
 }
 
@@ -660,10 +691,15 @@ func (s *Service) DeleteMessage(ctx context.Context, messageID, userID int64, sc
 // last_message_at (вложения каскадно уходят по FK).
 func (s *Service) destroyMessage(ctx context.Context, msg *domain.Message) error {
 	paths := make([]string, 0, len(msg.Attachments))
+	// Место возвращается ТОМУ, кто файл загрузил: в пересланной копии это уже
+	// другой человек, и списывать её с автора оригинала было бы неверно.
+	freed := map[int64][]string{}
 	for _, a := range msg.Attachments {
 		paths = append(paths, a.FilePath)
+		freed[a.UploaderID] = append(freed[a.UploaderID], a.FilePath)
 		if a.ThumbPath != nil {
 			paths = append(paths, *a.ThumbPath)
+			freed[a.UploaderID] = append(freed[a.UploaderID], *a.ThumbPath)
 		}
 	}
 	if err := s.repo.DeleteMessage(ctx, msg.ID); err != nil {
@@ -673,6 +709,9 @@ func (s *Service) destroyMessage(ctx context.Context, msg *domain.Message) error
 		return err
 	}
 	s.files.Remove(paths)
+	for uploaderID, keys := range freed {
+		s.trackUpload(ctx, uploaderID, billingclient.StorageChange{Removed: keys})
+	}
 	return nil
 }
 

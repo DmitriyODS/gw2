@@ -1,5 +1,6 @@
 import { defineStore } from 'pinia'
 import { useAuthStore } from './auth.js'
+import { playNotifySound } from '@/utils/systemNotify.js'
 
 export const useNotificationsStore = defineStore('notifications', () => {
   let _toast = null
@@ -8,7 +9,9 @@ export const useNotificationsStore = defineStore('notifications', () => {
     _toast = toastInstance
   }
 
-  function notify({ severity = 'info', summary = '', detail = '', life = 4000 }) {
+  /* sound — голос уведомления (по умолчанию по severity); `false` для событий
+     со своей мелодией (перевод кудосов), иначе прозвучали бы оба. */
+  function notify({ severity = 'info', summary = '', detail = '', life = 4000, sound }) {
     // При выходе/без активной сессии хвостовые запросы авторизованных экранов
     // отваливаются по 401 — это ожидаемо, поэтому не сыпем тостами ошибок
     // («Ошибка загрузки статистики» и т.п.). Сигнал надёжен: после clearAuth
@@ -20,6 +23,7 @@ export const useNotificationsStore = defineStore('notifications', () => {
       if (auth.loggingOut || !auth.token) return
     }
     _toast?.add({ severity, summary, detail, life })
+    if (sound !== false) playNotifySound(sound || severity)
   }
 
   function success(detail, summary = 'Успешно') {

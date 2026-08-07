@@ -24,11 +24,13 @@ import (
 	"github.com/DmitriyODS/gw2/back-go/messenger/internal/service"
 	grpctransport "github.com/DmitriyODS/gw2/back-go/messenger/internal/transport/grpc"
 	httptransport "github.com/DmitriyODS/gw2/back-go/messenger/internal/transport/http"
+	"github.com/DmitriyODS/gw2/back-go/pkg/billingclient"
 	"github.com/DmitriyODS/gw2/back-go/pkg/bootstrap"
 	"github.com/DmitriyODS/gw2/back-go/pkg/events"
 	"github.com/DmitriyODS/gw2/back-go/pkg/gen/messengerpb"
 	"github.com/DmitriyODS/gw2/back-go/pkg/pasetoauth"
 	"github.com/DmitriyODS/gw2/back-go/pkg/storage"
+	"github.com/DmitriyODS/gw2/back-go/pkg/storagefiles"
 )
 
 func main() {
@@ -76,6 +78,16 @@ func main() {
 		supportAI = client
 	}
 	svc := service.New(repo, users, store, pub, supportAI, log)
+
+	// Лимиты тарифа — gRPC billingsvc. Пустой адрес выключает проверки,
+	// недоступный биллинг их не блокирует (fail-open).
+	billing, err := billingclient.New(bootstrap.Env("BILLING_GRPC_ADDR", ""), log)
+	if err != nil {
+		log.Error("billing.dial_failed", "error", err)
+		os.Exit(1)
+	}
+	defer billing.Close()
+	svc.WithBilling(billing)
 	eps := endpoint.New(svc)
 
 	grpcAddr := bootstrap.Env("GRPC_ADDR", ":9092")
@@ -83,6 +95,8 @@ func main() {
 
 	grpcServer := googrpc.NewServer()
 	messengerpb.RegisterMessengerServiceServer(grpcServer, grpctransport.NewServer(eps))
+	// Раздел «Настройки → Хранилище»: биллинг спрашивает про вложения.
+	storagefiles.Register(grpcServer, svc)
 	listener, err := net.Listen("tcp", grpcAddr)
 	if err != nil {
 		log.Error("grpc.listen_failed", "addr", grpcAddr, "error", err)

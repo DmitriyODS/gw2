@@ -70,7 +70,8 @@
       probe().then(function (alive) {
         if (alive) {
           sessionStorage.removeItem('gw_retry_delay')
-          location.replace(APP_URL)
+          // Корень сервера — промо-лендинг; обёртке нужен рабочий стол.
+          location.replace(APP_URL + '/home')
           return
         }
         checking = false

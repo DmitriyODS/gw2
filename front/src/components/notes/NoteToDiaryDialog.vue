@@ -2,7 +2,6 @@
   <AppDialog
     :model-value="modelValue"
     title="Пункт в ежедневник"
-    icon="book"
     size="sm"
     :busy="saving"
     :actions="diaries.length
@@ -39,7 +38,7 @@
 // название, весь фрагмент (если он длиннее) — описание. Ежедневники — только
 // свои (tab=mine, они кросс-компанийные — активная компания не нужна).
 import { ref, watch } from 'vue'
-import AppDialog from '@/components/common/AppDialog.vue'
+import AppDialog from '@/components/ui/AppDialog.vue'
 import { createEntry, getDiaries } from '@/api/diaries.js'
 import { dayKey } from '@/stores/diaries.js'
 import { useNotificationsStore } from '@/stores/notifications.js'
