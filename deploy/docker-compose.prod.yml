@@ -87,6 +87,9 @@ services:
   board:
     image: osipovskijdima/groove_work:${BOARD_TAG:-board}
 
+  drive:
+    image: osipovskijdima/groove_work:${DRIVE_TAG:-drive}
+
   reminder:
     image: osipovskijdima/groove_work:${REMINDER_TAG:-reminder}
 
