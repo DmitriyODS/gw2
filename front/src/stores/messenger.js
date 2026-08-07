@@ -9,6 +9,7 @@ import { useCallStore } from './call.js'
 // зовётся только из экшенов, когда модули уже инициализированы.
 import { getSocket } from '@/socket/index.js'
 import { normalizeRecipe } from '@/utils/chatBackgrounds.js'
+import { rememberReaction } from '@/utils/reactions.js'
 
 /* Сортировка: закреплённые сверху (по pinned_at desc), затем по
    last_message_at desc. Чистая функция, чтобы переиспользовать после каждого
