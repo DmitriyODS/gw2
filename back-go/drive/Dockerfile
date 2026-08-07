@@ -1,16 +1,16 @@
-# Микросервис заметок (drivesvc): HTTP/Fiber :8108 — личные заметки
-# пользователей (rich-текст TipTap, группы, публичные ссылки view/edit,
-# экспорт/импорт txt). Контекст сборки — back-go/ (общий модуль pkg
-# подключается через replace ../pkg в go.mod). Стадия сборки бежит на
-# платформе билдера ($BUILDPLATFORM): при сборке amd64-образа на Apple Silicon
-# компилятор Go работает нативно (кросс через GOOS/GOARCH), а не под эмуляцией.
+# Микросервис «Диска» (drivesvc): HTTP/Fiber :8108, gRPC :9108 — личное
+# файловое хранилище (папки, корзина, публичные и адресные ссылки). Контекст
+# сборки — back-go/ (общий модуль pkg подключается через replace ../pkg в
+# go.mod). Стадия сборки бежит на платформе билдера ($BUILDPLATFORM): при
+# сборке amd64-образа на Apple Silicon компилятор Go работает нативно (кросс
+# через GOOS/GOARCH), а не под эмуляцией.
 FROM --platform=$BUILDPLATFORM golang:1.26-alpine AS build
 ARG TARGETOS
 ARG TARGETARCH
 WORKDIR /src
 COPY pkg/go.mod pkg/go.sum pkg/
 COPY drive/go.mod drive/go.sum drive/
-WORKDIR /src/notes
+WORKDIR /src/drive
 RUN go mod download
 COPY pkg/ /src/pkg/
 COPY drive/ /src/drive/
