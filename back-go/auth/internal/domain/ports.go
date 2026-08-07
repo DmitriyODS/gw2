@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"io"
 	"time"
+
+	"github.com/DmitriyODS/gw2/back-go/pkg/companydata"
 )
 
 // VerificationStore — коды/ссылки подтверждения email (таблица
@@ -136,6 +138,18 @@ type LoginThrottle interface {
 	RegisterSuccess(ctx context.Context, login string)
 }
 
+// RateLimiter — общий лимит «не больше N обращений за окно» по произвольному
+// ключу (Redis, фиксированное окно, ключи gw2:rl:*; недоступность Redis —
+// fail-open, как у LoginThrottle). Регистрация по IP, резенды писем
+// подтверждения/сброса по пользователю — без него подбор кода подтверждения
+// email (5 попыток на код) не имел верхнего предела: код можно перевыпускать
+// раз в 60с сколько угодно раз в сутки.
+type RateLimiter interface {
+	// Allow — true, если запрос укладывается в лимит; иначе false и сколько
+	// секунд осталось до сброса окна.
+	Allow(ctx context.Context, key string, limit int, window time.Duration) (ok bool, retryAfterSec int)
+}
+
 // AvatarStorage — файлы аватарок в общем uploads-каталоге (отдаёт nginx).
 type AvatarStorage interface {
 	// Save валидирует JPEG/PNG по содержимому и возвращает относительный
@@ -181,6 +195,17 @@ type CompanyRepository interface {
 	// CountCompaniesCreatedBy — сколько компаний создал пользователь (лимит
 	// тарифа «Компании» считается по создателю).
 	CountCompaniesCreatedBy(ctx context.Context, userID int64) (int, error)
+}
+
+// CompanyDataClient — владельцы контента компании (задачи, реестры, календари,
+// портал) со стороны authsvc: он собирает из их кусков архив переноса и
+// раздаёт обратно, не зная, что у них внутри.
+type CompanyDataClient interface {
+	// Has — настроен ли раздел. Ненастроенный молча пропускается: стенд
+	// поднимает не все сервисы, и архив собирается из того, что есть.
+	Has(section string) bool
+	Export(ctx context.Context, section string, companyID int64) (companydata.Export, error)
+	Import(ctx context.Context, section string, in companydata.Import) (int, error)
 }
 
 // BackupStore — универсальный схемо-независимый дамп/восстановление таблиц.

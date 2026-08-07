@@ -6,6 +6,7 @@ import (
 	"io"
 	"log/slog"
 	"slices"
+	"sort"
 	"strings"
 	"testing"
 
@@ -126,6 +127,27 @@ func (f *fakeRepo) MoveNote(_ domain.Ctx, id int64, folderID *int64) error {
 	}
 	return nil
 }
+
+// Раздел «Хранилище»: картинки живут внутри документов, поэтому и список, и
+// вырезание идут по ним.
+func (f *fakeRepo) NoteDocsOf(_ domain.Ctx, ownerID int64) ([]*domain.Note, error) {
+	out := []*domain.Note{}
+	for _, n := range f.notes {
+		if n.OwnerID == ownerID {
+			out = append(out, n)
+		}
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].ID < out[j].ID })
+	return out, nil
+}
+
+func (f *fakeRepo) UpdateNoteDoc(_ domain.Ctx, id int64, doc json.RawMessage, text string) error {
+	if n := f.notes[id]; n != nil {
+		n.Doc, n.TextContent = doc, text
+	}
+	return nil
+}
+
 func (f *fakeRepo) SetNoteTags(_ domain.Ctx, noteID int64, tagIDs []int64) error {
 	f.noteTags[noteID] = tagIDs
 	return nil
@@ -541,7 +563,8 @@ func (nopFiles) SaveFor(_ context.Context, _, _ int64, _ string, _ []byte) (stri
 	return "notes/x", nil
 }
 func (nopFiles) RemoveFor(_ context.Context, _, _ int64, _ []string) {}
-func (nopFiles) Open(_ string) ([]byte, error)           { return nil, nil }
+func (nopFiles) Remove(_ []string)                                   {}
+func (nopFiles) Open(_ string) ([]byte, error)                       { return nil, nil }
 
 type allowLimiter struct{}
 

@@ -11,7 +11,7 @@
       >
         <div v-if="showReactions" class="msg-ctx-reactions">
           <button
-            v-for="e in QUICK_REACTIONS"
+            v-for="e in suggestedReactions"
             :key="e"
             class="msg-ctx-react"
             :class="{ active: myReactions.includes(e) }"
@@ -51,7 +51,7 @@
 <script setup>
 import { computed, nextTick, ref, watch, onMounted, onBeforeUnmount } from 'vue'
 import { fitToViewport } from '@/utils/menuPlacement.js'
-import { QUICK_REACTIONS } from '@/utils/reactions.js'
+import { suggestedReactions } from '@/utils/reactions.js'
 
 const props = defineProps({
   visible: { type: Boolean, default: false },
@@ -68,8 +68,9 @@ const props = defineProps({
   myReactions: { type: Array, default: () => [] },
 })
 
-// Набор общий с реакциями портала (utils/reactions.js). Одна горизонтально
-// прокручиваемая строка (см. .msg-ctx-reactions).
+// Набор общий с реакциями портала (utils/reactions.js), часто используемые
+// стоят первыми. Одна горизонтально прокручиваемая строка — их видно сразу,
+// без прокрутки (см. .msg-ctx-reactions).
 
 const emit = defineEmits(['close', 'action', 'react'])
 const menuEl = ref(null)

@@ -98,6 +98,19 @@ export const APPS = [
     titleFor: (route) => (/^\/notes\/\d+$/.test(route.path) ? 'Заметка' : null),
   },
   {
+    id: 'drive',
+    title: 'Диск',
+    icon: 'cloud',
+    group: 'work',
+    tile: 'square',
+    path: '/drive',
+    // Публичная ссылка /drive/s/<code> — самостоятельная страница, а не окно.
+    match: (p) => p === '/drive',
+    size: [1180, 800],
+    min: [520, 420],
+    available: always,
+  },
+  {
     id: 'boards',
     title: 'Доски',
     icon: 'gesture',

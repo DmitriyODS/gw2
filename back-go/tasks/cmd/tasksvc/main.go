@@ -25,6 +25,7 @@ import (
 
 	"github.com/DmitriyODS/gw2/back-go/pkg/billingclient"
 	"github.com/DmitriyODS/gw2/back-go/pkg/bootstrap"
+	"github.com/DmitriyODS/gw2/back-go/pkg/companydata"
 	"github.com/DmitriyODS/gw2/back-go/pkg/events"
 	"github.com/DmitriyODS/gw2/back-go/pkg/gen/taskspb"
 	"github.com/DmitriyODS/gw2/back-go/pkg/pasetoauth"
@@ -111,8 +112,10 @@ func main() {
 
 	httpServer := httptransport.NewServer(eps, users, verifier, log)
 
-	grpcServer := googrpc.NewServer()
+	grpcServer := googrpc.NewServer(googrpc.MaxRecvMsgSize(companydata.MaxMessageBytes))
 	taskspb.RegisterTasksServiceServer(grpcServer, grpctransport.NewServer(eps, svc))
+	// Перенос компании: архив собирает authsvc, задачи отдают свою часть.
+	companydata.Register(grpcServer, repo)
 	listener, err := net.Listen("tcp", grpcAddr)
 	if err != nil {
 		log.Error("grpc.listen_failed", "addr", grpcAddr, "error", err)

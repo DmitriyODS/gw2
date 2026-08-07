@@ -45,6 +45,7 @@
 </template>
 
 <script setup>
+import { avatarUrl } from '@/utils/pets.js'
 import { computed, reactive } from 'vue'
 import { useAuthStore } from '@/stores/auth.js'
 import { useDesktopStore } from '@/stores/desktop.js'
@@ -70,7 +71,7 @@ const { clock } = useElapsed(() => unit.value?.datetime_start)
 const avatarSrc = computed(() => {
   const user = auth.user
   if (!user) return ''
-  return user.avatar_path ? `/uploads/${user.avatar_path}` : `/api/users/${user.id}/identicon`
+  return avatarUrl(user)
 })
 
 /* ── «Не беспокоить» ──────────────────────────────────────────

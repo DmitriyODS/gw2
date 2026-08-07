@@ -44,8 +44,24 @@ func (f *fakeYGRepo) UpsertYougileAccount(_ context.Context, acc *domain.Yougile
 	return nil
 }
 
-func (f *fakeYGRepo) DeleteYougileAccount(_ context.Context, userID int64) error {
+func (f *fakeYGRepo) DeleteYougileAccount(_ context.Context, userID, _ int64) error {
 	delete(f.accounts, userID)
+	return nil
+}
+
+// Подключений в фейке по одному на человека — этого хватает: несколько
+// аккаунтов и переключение проверяются на живой БД (apitest).
+func (f *fakeYGRepo) ListYougileAccounts(_ context.Context, userID int64) ([]*domain.YougileAccount, error) {
+	if a := f.accounts[userID]; a != nil {
+		return []*domain.YougileAccount{a}, nil
+	}
+	return nil, nil
+}
+
+func (f *fakeYGRepo) SetActiveYougileAccount(_ context.Context, userID, _ int64) error {
+	if f.accounts[userID] == nil {
+		return domain.NewError("USER_NOT_CONNECTED", "Подключение не найдено", 404)
+	}
 	return nil
 }
 

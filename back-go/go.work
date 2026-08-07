@@ -10,6 +10,7 @@ use (
 	./calendar
 	./calls
 	./diary
+	./drive
 	./gateway
 	./mail
 	./messenger

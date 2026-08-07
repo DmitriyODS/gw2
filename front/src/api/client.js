@@ -42,11 +42,19 @@ async function refreshToken() {
   return resp.json()
 }
 
+// Тела, которые нельзя сериализовать в JSON: форма, кусок файла, буфер.
+function isRawBody(body) {
+  return body instanceof FormData || body instanceof Blob || body instanceof ArrayBuffer
+    || ArrayBuffer.isView(body)
+}
+
 export async function apiRequest(path, options = {}) {
   const auth = useAuthStore()
 
   const headers = { ...options.headers }
-  if (!(options.body instanceof FormData)) {
+  // Сырое тело (кусок файла) уходит как есть: тип задаёт вызывающий, а
+  // JSON-сериализация превратила бы Blob в «{}».
+  if (!isRawBody(options.body)) {
     headers['Content-Type'] = 'application/json'
   }
   if (auth.token) {
@@ -63,7 +71,7 @@ export async function apiRequest(path, options = {}) {
       ...options,
       credentials: 'include',
       headers,
-      body: options.body instanceof FormData ? options.body :
+      body: isRawBody(options.body) ? options.body :
             options.body ? JSON.stringify(options.body) : undefined,
     }, options.timeout ?? 8000)
   } catch (e) {

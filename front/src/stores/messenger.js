@@ -632,6 +632,11 @@ export const useMessengerStore = defineStore('messenger', () => {
   async function toggleReactionAction(messageId, emoji) {
     const r = await api.toggleReaction(messageId, emoji)
     if (r.message) applyMessageUpdated(r.message.conversation_id, r.message)
+    // Частоту двигает только ПОСТАНОВКА — снятие о предпочтении не говорит.
+    const myId = useAuthStore().user?.id
+    if ((r.message?.reactions || []).some((x) => x.emoji === emoji && Number(x.user_id) === Number(myId))) {
+      rememberReaction(emoji)
+    }
     return r
   }
 

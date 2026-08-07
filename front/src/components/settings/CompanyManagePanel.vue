@@ -221,6 +221,15 @@
           </div>
         </section>
 
+        <!-- ПЕРЕНОС -->
+        <section v-show="tab === 'transfer'" class="pane pane-scroll">
+          <CompanyTransferCard
+            :company-id="company.id"
+            :company-name="company.name"
+            @imported="onCompanyImported"
+          />
+        </section>
+
         <!-- ОПАСНАЯ ЗОНА -->
         <section v-show="tab === 'danger'" class="pane pane-scroll">
           <AppStack>
@@ -298,11 +307,23 @@
         <form v-show="addTab === 'new'" class="add-pane add-form" @submit.prevent="createUser">
           <div class="field">
             <label class="lbl">ФИО <span class="req">*</span></label>
-            <input v-model.trim="newUser.fio" class="ctl" placeholder="Фамилия Имя Отчество" :disabled="creatingUser" />
+            <input
+              v-model.trim="newUser.fio"
+              class="ctl"
+              placeholder="Фамилия Имя Отчество"
+              :disabled="creatingUser"
+              @input="onNewUserFio"
+            />
           </div>
           <div class="field">
             <label class="lbl">Логин <span class="req">*</span></label>
-            <input v-model.trim="newUser.login" class="ctl" placeholder="Не короче 3 символов" :disabled="creatingUser" />
+            <input
+              v-model.trim="newUser.login"
+              class="ctl"
+              placeholder="Подставится из ФИО"
+              :disabled="creatingUser"
+              @input="loginTouched = true"
+            />
           </div>
           <div class="field">
             <label class="lbl">Email <span class="opt">— необязательно</span></label>
@@ -322,6 +343,17 @@
               class="w-full"
             />
           </div>
+          <!-- Пароль не выдумывается: он детерминирован (<логин>123), и
+               человек должен видеть его ДО создания — иначе непонятно, что
+               передавать сотруднику. -->
+          <div class="new-pass">
+            <span class="new-pass-label">Пароль для первого входа</span>
+            <code class="new-pass-value">{{ newUserPassword || '—' }}</code>
+            <span class="new-pass-hint">
+              Сотрудник войдёт с ним и сразу задаст свой — сменить пароль потребуется при первом входе.
+            </span>
+          </div>
+
           <p v-if="createUserError" class="err">{{ createUserError }}</p>
         </form>
       </div>
@@ -500,6 +532,7 @@ import AppSwitchRow from '@/components/ui/AppSwitchRow.vue'
 import EmptyState from '@/components/common/EmptyState.vue'
 import AppDialog from '@/components/ui/AppDialog.vue'
 import AppTabs from '@/components/ui/AppTabs.vue'
+import CompanyTransferCard from '@/components/settings/CompanyTransferCard.vue'
 import GrooveSettings from '@/components/settings/GrooveSettings.vue'
 import WeekendSettings from '@/components/settings/WeekendSettings.vue'
 import AiSettings from '@/components/settings/AiSettings.vue'
@@ -517,9 +550,10 @@ import {
   getCompanyInvite, regenerateCompanyInvite,
 } from '@/api/companies.js'
 import { getRoles } from '@/api/roles.js'
+import { suggestLogin } from '@/api/auth.js'
 
 const props = defineProps({ id: { type: [String, Number], required: true } })
-const emit = defineEmits(['back', 'deleted'])
+const emit = defineEmits(['back', 'deleted', 'imported'])
 
 const auth = useAuthStore()
 const notif = useNotificationsStore()
@@ -540,7 +574,10 @@ const mainTabs = computed(() => {
     { value: 'members', label: 'Участники', icon: 'groups' },
     { value: 'settings', label: 'Настройки', icon: 'tune' },
   ]
-  if (canManageMembers.value) list.push({ value: 'danger', label: 'Опасная зона', icon: 'warning' })
+  if (canManageMembers.value) {
+    list.push({ value: 'transfer', label: 'Перенос', icon: 'swap_horiz' })
+    list.push({ value: 'danger', label: 'Опасная зона', icon: 'warning' })
+  }
   return list
 })
 
@@ -582,6 +619,27 @@ let candTimer = null
 const creatingUser = ref(false)
 const createUserError = ref('')
 const newUser = ref({ fio: '', login: '', email: '', post: '', roleId: ROLES.EMPLOYEE })
+
+/* Логин подставляется из ФИО теми же правилами, что и при регистрации
+   (транслит на сервере), пока его не начали править руками. Пароль отсюда же:
+   он детерминирован — <логин>123. */
+const loginTouched = ref(false)
+let suggestTimer = null
+
+const newUserPassword = computed(() => (newUser.value.login ? `${newUser.value.login}123` : ''))
+
+function onNewUserFio() {
+  if (loginTouched.value) return
+  clearTimeout(suggestTimer)
+  const fio = newUser.value.fio
+  suggestTimer = setTimeout(async () => {
+    if (loginTouched.value || !fio.trim()) return
+    try {
+      const { login } = await suggestLogin(fio)
+      if (!loginTouched.value && login) newUser.value.login = login
+    } catch { /* подсказка необязательна: логин можно ввести руками */ }
+  }, 400)
+}
 
 const inviteOpen = ref(false)
 const invite = ref({ email: '', roleId: ROLES.EMPLOYEE })
@@ -655,6 +713,9 @@ function initials(fio) {
 }
 
 function goBack() { emit('back') }
+
+// Архив поднят новой компанией — список компаний должен её показать.
+function onCompanyImported(result) { emit('imported', result) }
 
 // ── Добавление: существующий ──
 function openAdd() {
@@ -912,6 +973,24 @@ async function doDelete() {
   padding: 12px 14px; border-radius: var(--radius-md, 12px);
   background: var(--color-primary-container);
 }
+.new-pass {
+  display: grid;
+  gap: 4px;
+  padding: 10px 12px;
+  border-radius: var(--radius-sm);
+  background: var(--color-surface-variant);
+}
+
+.new-pass-label { font-size: 0.82rem; color: var(--color-text-dim); }
+
+.new-pass-value {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.95rem;
+  overflow-wrap: anywhere;
+}
+
+.new-pass-hint { font-size: 0.8rem; color: var(--color-text-dim); }
+
 .reset-temp-label { font-size: 12px; font-weight: 600; color: var(--color-on-primary-container); opacity: 0.85; }
 .reset-temp-value { display: flex; align-items: center; gap: 8px; }
 .reset-temp-value code {

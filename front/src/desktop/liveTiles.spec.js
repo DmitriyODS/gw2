@@ -25,6 +25,19 @@ describe('грани живых плиток', () => {
     expect(faces[1]).toMatchObject({ value: 'в 09:30', label: 'Позвонить в банк' })
   })
 
+  it('диск: сколько файлов недавно и какой последний', () => {
+    const faces = tileFaces('drive', ctx({
+      data: { drive: { total: 4, latest: { name: 'смета.xlsx' } } },
+    }))
+    expect(faces[0]).toMatchObject({ value: '4', label: 'недавних файла' })
+    expect(faces[1]).toMatchObject({ value: 'Последний', label: 'смета.xlsx' })
+  })
+
+  it('пустой диск зовёт загрузить файлы', () => {
+    expect(tileFaces('drive', ctx({ data: { drive: { total: 0 } } })))
+      .toEqual([{ key: 'empty', value: 'Диск пуст', label: 'Перетащите сюда файлы', tone: null }])
+  })
+
   it('пустой день показывает, что дел не осталось', () => {
     expect(tileFaces('diaries', ctx({ data: { diaries: { total: 0, items: [] } } })))
       .toEqual([{ key: 'empty', value: 'Всё сделано', label: 'На сегодня дел не осталось', tone: null }])

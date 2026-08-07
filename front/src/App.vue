@@ -35,6 +35,11 @@
         <router-view />
       </main>
     </template>
+    <!-- Запертый экран поверх всего: сессия жива, но приложение закрыто до
+         ввода пин-кода. Компонент ленивый — код блокировки не нужен тем, кто
+         ею не пользуется. -->
+    <ScreenLockOverlay v-if="screenLock.locked.value" />
+
     <Toast :position="isMobile ? 'top-center' : 'top-right'" />
     <!-- Pull-to-refresh на мобиле (обновление страницы оттяжкой вниз у верха
          экрана). Отключён на fullscreen-роутах — там вертикальные жесты заняты. -->
@@ -57,6 +62,7 @@ import { usePortalStore } from '@/stores/portal.js'
 import { useAssistantStore } from '@/stores/assistant.js'
 import { useCallStore } from '@/stores/call.js'
 import { useNotificationsStore } from '@/stores/notifications.js'
+import { useScreenLock } from '@/composables/useScreenLock.js'
 import { useBreakpoint } from '@/composables/useBreakpoint.js'
 import { useCompanySettings } from '@/composables/useCompanySettings.js'
 import { connectSocket } from '@/socket/index.js'
@@ -86,6 +92,7 @@ const NewChatDialog = defineAsyncComponent(() => import('@/components/messenger/
 const IncomingCallOverlay = defineAsyncComponent(() => import('@/components/call/IncomingCallOverlay.vue'))
 const CallView = defineAsyncComponent(() => import('@/components/call/CallView.vue'))
 const ReturnCallBanner = defineAsyncComponent(() => import('@/components/call/ReturnCallBanner.vue'))
+const ScreenLockOverlay = defineAsyncComponent(() => import('@/components/common/ScreenLockOverlay.vue'))
 
 const authStore = useAuthStore()
 const themeStore = useThemeStore()
@@ -218,10 +225,33 @@ themeStore.init()
 
 const initializing = ref(true)
 
+/* Экран блокировки: сдвигаем отсчёт бездействия на любое действие человека.
+   Слушатели пассивные и на документе — прокрутка и жесты не должны
+   притормаживать из-за них. */
+const screenLock = useScreenLock()
+const ACTIVITY_EVENTS = ['pointerdown', 'keydown', 'wheel', 'touchstart']
+
+function onUserActivity() {
+  screenLock.touch()
+}
+
+/* Ctrl/Cmd + L — запереть экран вручную, как Win+L в системе. Русская «д» на
+   той же клавише: раскладка не должна отменять сочетание. */
+function onLockHotkey(e) {
+  if (!(e.ctrlKey || e.metaKey) || e.altKey || e.shiftKey) return
+  if (!'lLдД'.includes(e.key)) return
+  if (!screenLock.enabled.value || screenLock.locked.value) return
+  e.preventDefault()
+  screenLock.lock()
+}
+
 onMounted(async () => {
   // Восстановление сессии централизовано в auth-store и уже инициируется
   // router guard'ом — здесь лишь дожидаемся его и поднимаем сокет/юнит.
   await authStore.ensureReady()
+  // Блокировка экрана: состояние держит сервер, здесь только заводим таймер
+  // бездействия и слушаем активность.
+  if (authStore.token) screenLock.load()
   // Снимаем загрузочный экран сразу, как только известен статус авторизации.
   // Остальная инициализация (сокет, активный юнит, диалоги, уведомления) идёт
   // фоном и НЕ должна держать первый рендер: иначе по deep-link (/tasks/:id)
@@ -336,6 +366,8 @@ onMounted(() => {
   window.addEventListener('beforeunload', onBeforeUnloadGuard)
   window.addEventListener('messenger:open-conversation', onOpenConversation)
   window.addEventListener('gw:share-available', pullShare)
+  ACTIVITY_EVENTS.forEach((e) => document.addEventListener(e, onUserActivity, { passive: true }))
+  window.addEventListener('keydown', onLockHotkey)
   // Холодный старт: нативка могла выставить флаг до навешивания слушателя —
   // и в любом случае буфер шаринга ждёт в плагине, заберём его при готовности.
   if (window.__gwShareAvailable) { window.__gwShareAvailable = false; pullShare() }
@@ -345,6 +377,8 @@ onBeforeUnmount(() => {
   window.removeEventListener('beforeunload', onBeforeUnloadGuard)
   window.removeEventListener('messenger:open-conversation', onOpenConversation)
   window.removeEventListener('gw:share-available', pullShare)
+  ACTIVITY_EVENTS.forEach((e) => document.removeEventListener(e, onUserActivity))
+  window.removeEventListener('keydown', onLockHotkey)
 })
 </script>
 

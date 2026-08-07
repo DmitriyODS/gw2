@@ -20,6 +20,7 @@ import (
 
 	googrpc "google.golang.org/grpc"
 
+	"github.com/DmitriyODS/gw2/back-go/billing/internal/clients"
 	"github.com/DmitriyODS/gw2/back-go/billing/internal/payments"
 	"github.com/DmitriyODS/gw2/back-go/billing/internal/repository/postgres"
 	"github.com/DmitriyODS/gw2/back-go/billing/internal/service"
@@ -29,6 +30,7 @@ import (
 	"github.com/DmitriyODS/gw2/back-go/pkg/events"
 	"github.com/DmitriyODS/gw2/back-go/pkg/gen/billingpb"
 	"github.com/DmitriyODS/gw2/back-go/pkg/pasetoauth"
+	"github.com/DmitriyODS/gw2/back-go/pkg/storage"
 )
 
 func main() {
@@ -38,6 +40,7 @@ func main() {
 	redisURL := bootstrap.Env("REDIS_URL", "redis://localhost:6379/0")
 	httpAddr := bootstrap.Env("HTTP_ADDR", ":8107")
 	grpcAddr := bootstrap.Env("GRPC_ADDR", ":9107")
+	uploadFolder := bootstrap.Env("UPLOAD_FOLDER", "../../uploads")
 
 	verifier, err := pasetoauth.NewVerifier(bootstrap.MustEnv(log, "PASETO_PUBLIC_KEY"))
 	if err != nil {
@@ -60,11 +63,23 @@ func main() {
 	// реализации делается на старте — смена провайдера это перезапуск сервиса.
 	provider := payments.New(bootstrap.Env("PAYMENT_PROVIDER", "manual"))
 
+	// Раздел «Настройки → Хранилище»: у кого спрашивать про файлы и где они
+	// лежат. Пустой FILE_OWNER_ADDRS оставляет только счётчик занятого места —
+	// разбор и чистка отвечают STORAGE_UNAVAILABLE.
+	owners, err := clients.NewFileOwners(bootstrap.Env("FILE_OWNER_ADDRS", ""), log)
+	if err != nil {
+		log.Error("fileowners.dial_failed", "error", err)
+		os.Exit(1)
+	}
+	defer owners.Close()
+
 	svc := service.New(service.Deps{
 		Catalog: repo, Subs: repo, Orders: repo, Promos: repo, Products: repo,
 		AI: repo, Storage: repo, Settings: repo, Audit: repo,
 		Identity: identity,
 		Provider: provider,
+		Owners:   owners,
+		Objects:  storage.FromEnv(log, uploadFolder),
 		Bus:      events.NewPublisher(rdb, log, "gw2:billing:events"),
 		Log:      log,
 	})

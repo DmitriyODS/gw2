@@ -1,7 +1,7 @@
 <template>
   <!-- «Мои товары»: купленное на витрине и СВОИ товары на продажу. Автор
        назначает цену, отправляет товар на модерацию и выводит выручку. -->
-  <BrandLoader v-if="loading" :size="48" />
+  <BrandLoader v-if="loading" block :size="64" />
 
   <AppStack v-else :gap="16">
     <AppRow

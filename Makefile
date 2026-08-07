@@ -34,6 +34,7 @@ help:
 	@printf "  make dev-portal   Go-микросервис корпоративного портала (HTTP :8102)\n"
 	@printf "  make dev-notes    Go-микросервис заметок (HTTP :8103)\n"
 	@printf "  make dev-board    Go-микросервис досок (HTTP :8105)\n"
+	@printf "  make dev-drive    Go-микросервис «Диск» (gRPC :9108, HTTP :8108)\n"
 	@printf "  make dev-reminder Go-микросервис напоминаний (HTTP :8106)\n"
 	@printf "  make dev-billing  Go-микросервис подписок и магазина (HTTP :8107)\n"
 	@printf "  make dev-alice    Go-микросервис навыка Алисы (HTTP :8104)\n"
@@ -64,7 +65,7 @@ help:
 	@printf "\n\033[33mКонфигурация сервера:\033[0m cp .env.deploy.example .env.deploy\n\n"
 
 # ── Разработка ────────────────────────────────────────────────────
-.PHONY: dev-infra dev-migrate dev-front dev-calls dev-auth dev-messenger dev-ai dev-pets dev-tasks dev-gateway dev-push dev-mail dev-registry dev-calendar dev-diary dev-portal dev-notes dev-board dev-reminder dev-billing dev-alice dev-stop dev-stack dev-stack-stop gen-proto
+.PHONY: dev-infra dev-migrate dev-front dev-calls dev-auth dev-messenger dev-ai dev-pets dev-tasks dev-gateway dev-push dev-mail dev-registry dev-calendar dev-diary dev-portal dev-notes dev-board dev-drive dev-reminder dev-billing dev-alice dev-stop dev-stack dev-stack-stop gen-proto
 
 # Dev-ключи PASETO (синхронизированы с dev.sh и
 # deploy/docker-compose.override.yml): приватный — только у authsvc,
@@ -120,9 +121,11 @@ dev-auth: dev-infra
 	UPLOAD_FOLDER="$(CURDIR)/uploads" \
 	MAIL_GRPC_ADDR="localhost:9098" \
 	BILLING_GRPC_ADDR="localhost:9107" \
+	COMPANY_DATA_ADDRS="tasks=localhost:9095,registry=localhost:9099,calendar=localhost:9100,portal=localhost:9102" \
 	APP_PUBLIC_BASE_URL="http://localhost:5173" \
 	OAUTH_ALICE_CLIENT_ID="alice-dev" \
 	OAUTH_ALICE_CLIENT_SECRET="alice-dev-secret" \
+	GRPC_ADDR=":9091" \
 	go run ./cmd/authsvc
 
 # Go-микросервис мессенджера: REST /api/messenger/* (кроме exact presence —
@@ -233,6 +236,7 @@ dev-registry: dev-infra
 	BILLING_GRPC_ADDR="localhost:9107" \
 	UPLOAD_FOLDER="$(PWD)/uploads" \
 	HTTP_ADDR=":8099" \
+	GRPC_ADDR=":9099" \
 	go run ./cmd/registrysvc
 
 # Go-микросервис календарей: REST /api/calendars/*. env синхронизированы с dev.sh.
@@ -245,6 +249,7 @@ dev-calendar: dev-infra
 	BILLING_GRPC_ADDR="localhost:9107" \
 	UPLOAD_FOLDER="$(PWD)/uploads" \
 	HTTP_ADDR=":8100" \
+	GRPC_ADDR=":9100" \
 	go run ./cmd/calendarsvc
 
 # Go-микросервис ежедневников: REST /api/diaries/*. env синхронизированы с dev.sh.
@@ -269,6 +274,7 @@ dev-portal: dev-infra
 	UPLOAD_FOLDER="$(PWD)/uploads" \
 	MESSENGER_GRPC_ADDR="localhost:9092" \
 	HTTP_ADDR=":8102" \
+	GRPC_ADDR=":9102" \
 	go run ./cmd/portalsvc
 
 # Go-микросервис заметок: REST /api/notes/*. env синхронизированы с dev.sh.
@@ -294,7 +300,22 @@ dev-board: dev-infra
 	BILLING_GRPC_ADDR="localhost:9107" \
 	UPLOAD_FOLDER="$(PWD)/uploads" \
 	HTTP_ADDR=":8105" \
+	GRPC_ADDR=":9105" \
 	go run ./cmd/boardsvc
+
+# Go-микросервис «Диск»: REST /api/drive/* + gRPC владельца файлов.
+# env синхронизированы с dev.sh.
+dev-drive: dev-infra
+	@printf "\033[1m▶ drivesvc (Go)  HTTP :8108, gRPC :9108\033[0m\n"
+	cd back-go/drive && \
+	DATABASE_URL="postgresql://grovework:grovework_local@localhost:5432/grovework" \
+	REDIS_URL="redis://localhost:6379/0" \
+	PASETO_PUBLIC_KEY="$(PASETO_PUBLIC_KEY_DEV)" \
+	BILLING_GRPC_ADDR="localhost:9107" \
+	UPLOAD_FOLDER="$(PWD)/uploads" \
+	HTTP_ADDR=":8108" \
+	GRPC_ADDR=":9108" \
+	go run ./cmd/drivesvc
 
 # Go-микросервис напоминаний (REST + планировщик срабатываний).
 # env синхронизированы с dev.sh.
@@ -317,6 +338,8 @@ dev-billing: dev-infra
 	PASETO_PUBLIC_KEY="$(PASETO_PUBLIC_KEY_DEV)" \
 	HTTP_ADDR=":8107" \
 	GRPC_ADDR=":9107" \
+	UPLOAD_FOLDER="$(PWD)/uploads" \
+	FILE_OWNER_ADDRS="messenger=localhost:9092,notes=localhost:9103,boards=localhost:9105,registry=localhost:9099,calendar=localhost:9100,portal=localhost:9102,avatars=localhost:9091,drive=localhost:9108" \
 	go run ./cmd/billingsvc
 
 # Go-микросервис навыка Алисы: публичный вебхук /api/alice/webhook.

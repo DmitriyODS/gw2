@@ -31,19 +31,12 @@
       @update:model-value="set('trayIcon', $event)"
     />
 
-    <AppSwitchRow
-      :model-value="muted"
-      title="Не беспокоить"
-      :hint="muteHint"
-      @update:model-value="setMuted"
-    />
   </AppCard>
 </template>
 
 <script setup>
-import { computed, onMounted, reactive } from 'vue'
+import { onMounted, reactive } from 'vue'
 import { useNotificationsStore } from '@/stores/notifications.js'
-import { useNotifyMute } from '@/composables/useNotifyMute.js'
 import AppCard from '@/components/ui/AppCard.vue'
 import AppSwitchRow from '@/components/ui/AppSwitchRow.vue'
 
@@ -51,16 +44,8 @@ const desktop = window.GrooveDesktop
 const notify = useNotificationsStore()
 
 const s = reactive({ autostart: false, closeToTray: true, trayIcon: true })
-// Состояние общее с ПКМ-меню колокольчика на панели задач — тумблер не должен
-// расходиться с ним (там тишину можно включить и на срок).
-const { muted, untilLabel: muteUntilLabel, mute, unmute } = useNotifyMute()
-
-const muteHint = computed(() => {
-  const base = 'Без звука и всплывающих уведомлений ОС — сами уведомления копятся в центре; входящие звонки показываются всегда.'
-  return muted.value && muteUntilLabel.value !== 'навсегда'
-    ? `${base} Сейчас тишина ${muteUntilLabel.value}.`
-    : base
-})
+// Тишина и звук уведомлений живут в «Настройки → Общие»: они одинаковы на
+// всех платформах, а здесь — только про саму десктоп-обёртку.
 
 onMounted(async () => {
   if (!desktop?.getSettings) return
@@ -82,11 +67,6 @@ async function set(key, value) {
   // спрятанное крестиком, нечем вызвать обратно. Новая обёртка делает это
   // сама (и уже вернула settings), для старой — добиваем отдельным вызовом.
   if (key === 'trayIcon' && !value && s.closeToTray) await set('closeToTray', false)
-}
-
-function setMuted(v) {
-  if (v) mute(null)
-  else unmute()
 }
 </script>
 

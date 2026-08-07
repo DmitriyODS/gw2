@@ -12,6 +12,7 @@ import { registerCalendarSocketHandlers } from '@/socket/calendar.js'
 import { registerDiarySocketHandlers } from '@/socket/diary.js'
 import { registerNotesSocketHandlers } from '@/socket/notes.js'
 import { registerBoardsSocketHandlers } from '@/socket/boards.js'
+import { registerDriveSocketHandlers } from '@/socket/drive.js'
 import { registerRemindersSocketHandlers } from '@/socket/reminders.js'
 import { registerPortalSocketHandlers } from '@/socket/portal.js'
 import { registerBillingSocketHandlers } from '@/socket/billing.js'
@@ -190,6 +191,7 @@ export function connectSocket() {
   registerDiarySocketHandlers(socket)
   registerNotesSocketHandlers(socket)
   registerBoardsSocketHandlers(socket)
+  registerDriveSocketHandlers(socket)
   registerRemindersSocketHandlers(socket)
   registerPortalSocketHandlers(socket)
   registerBillingSocketHandlers(socket)

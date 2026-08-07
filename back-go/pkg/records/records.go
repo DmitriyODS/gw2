@@ -214,6 +214,58 @@ func selectValues(v any) []string {
 	return nil
 }
 
+// StoredValue — файл, лежащий в значении поля записи (типы image и file).
+// Значение хранится объектом {path, name, mime, size}.
+type StoredValue struct {
+	Path string
+	Name string
+}
+
+// FileValue — файл из значения поля; ok=false для всех прочих типов.
+func FileValue(v any) (StoredValue, bool) {
+	m, ok := v.(map[string]any)
+	if !ok {
+		return StoredValue{}, false
+	}
+	path, ok := m["path"].(string)
+	if !ok || path == "" {
+		return StoredValue{}, false
+	}
+	name, _ := m["name"].(string)
+	return StoredValue{Path: path, Name: name}, true
+}
+
+// DataFiles — все файлы записи (раздел «Настройки → Хранилище» и чистка
+// хранилища при удалении записи).
+func DataFiles(data map[string]any) []StoredValue {
+	out := []StoredValue{}
+	for _, v := range data {
+		if f, ok := FileValue(v); ok {
+			out = append(out, f)
+		}
+	}
+	return out
+}
+
+// DataWithoutFiles — значения записи без файлов с перечисленными путями:
+// поле остаётся, но становится пустым. Второе значение — менялось ли
+// что-нибудь, третье — какие пути ушли.
+func DataWithoutFiles(data map[string]any, drop map[string]bool) (map[string]any, bool, []string) {
+	removed := []string{}
+	out := make(map[string]any, len(data))
+	for key, v := range data {
+		if f, ok := FileValue(v); ok && drop[f.Path] {
+			removed = append(removed, f.Path)
+			continue
+		}
+		out[key] = v
+	}
+	if len(removed) == 0 {
+		return data, false, nil
+	}
+	return out, true, removed
+}
+
 // NewShareCode — код-capability публичной ссылки (hex 32 символа).
 func NewShareCode() (string, error) {
 	b := make([]byte, 16)

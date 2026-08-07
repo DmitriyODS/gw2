@@ -93,6 +93,19 @@ func (r *SessionStore) Revoke(ctx context.Context, id, userID int64) error {
 	return err
 }
 
+// RevokeOthers — оборвать все входы пользователя, кроме keepID (0 — вообще
+// все). Одним UPDATE: сколько бы устройств ни было, отзыв должен быть
+// мгновенным и целиком.
+func (r *SessionStore) RevokeOthers(ctx context.Context, userID, keepID int64) (int, error) {
+	tag, err := r.pool.Exec(ctx, `
+		UPDATE user_sessions SET revoked_at = now()
+		 WHERE user_id = $1 AND revoked_at IS NULL AND id <> $2`, userID, keepID)
+	if err != nil {
+		return 0, err
+	}
+	return int(tag.RowsAffected()), nil
+}
+
 func (r *SessionStore) SetCity(ctx context.Context, id int64, city string) error {
 	_, err := r.pool.Exec(ctx, `UPDATE user_sessions SET city = $2 WHERE id = $1`, id, city)
 	return err

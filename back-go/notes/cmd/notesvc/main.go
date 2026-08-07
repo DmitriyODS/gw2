@@ -32,6 +32,7 @@ import (
 	"github.com/DmitriyODS/gw2/back-go/pkg/pasetoauth"
 	"github.com/DmitriyODS/gw2/back-go/pkg/records"
 	"github.com/DmitriyODS/gw2/back-go/pkg/storage"
+	"github.com/DmitriyODS/gw2/back-go/pkg/storagefiles"
 )
 
 // sharedWriteLimit — троттлинг анонимных правок по коду edit-ссылки (в минуту).
@@ -102,9 +103,11 @@ func main() {
 	})
 	httpServer := httptransport.NewServer(svc, users, verifier, log)
 
-	// gRPC — голосовые операции навыка Алисы (зовёт alicesvc).
+	// gRPC — голосовые операции навыка Алисы (зовёт alicesvc) и контракт
+	// владельца файлов для раздела «Настройки → Хранилище» (зовёт биллинг).
 	grpcServer := googrpc.NewServer()
 	notespb.RegisterNotesServiceServer(grpcServer, grpctransport.NewServer(svc))
+	storagefiles.Register(grpcServer, svc)
 	listener, err := net.Listen("tcp", grpcAddr)
 	if err != nil {
 		log.Error("grpc.listen_failed", "addr", grpcAddr, "error", err)

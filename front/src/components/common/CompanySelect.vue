@@ -312,6 +312,10 @@ watch(() => auth.companyId, (v) => {
   align-items: center;
   gap: 10px;
   width: 100%;
+  /* Длинное название обрезается многоточием и не распирает соседей: пилюля
+     стоит в тесных строках (подвал «Пуска», панель статусов). */
+  min-width: 0;
+  max-width: 100%;
   height: 52px;
   padding: 0 14px;
   border: 1px solid var(--acrylic-border);

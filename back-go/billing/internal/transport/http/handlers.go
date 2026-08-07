@@ -26,12 +26,46 @@ func (h *handlers) entitlements(c *fiber.Ctx) error {
 	return c.JSON(ent)
 }
 
+/* Раздел «Настройки → Хранилище». items оставлен ради прежних клиентов
+   (карточка подписки читает только разбивку), остальное — детализация:
+   лимит, расход и самые крупные файлы. */
 func (h *handlers) storage(c *fiber.Ctx) error {
-	items, err := h.svc.StorageUsage(c.Context(), currentUserID(c))
+	details, err := h.svc.StorageDetails(c.Context(), currentUserID(c))
 	if err != nil {
 		return h.fail(c, err)
 	}
-	return c.JSON(fiber.Map{"items": items})
+	return c.JSON(fiber.Map{
+		"items":       details.Services,
+		"services":    details.Services,
+		"files":       details.Files,
+		"used_bytes":  details.UsedBytes,
+		"limit_bytes": details.LimitBytes,
+	})
+}
+
+// deleteStorageFiles — удалить выбранные файлы руками их владельцев.
+func (h *handlers) deleteStorageFiles(c *fiber.Ctx) error {
+	var body struct {
+		Keys []string `json:"keys"`
+	}
+	if err := c.BodyParser(&body); err != nil {
+		return h.fail(c, domain.ErrValidation)
+	}
+	out, err := h.svc.DeleteStorageFiles(c.Context(), currentUserID(c), body.Keys)
+	if err != nil {
+		return h.fail(c, err)
+	}
+	return c.JSON(out)
+}
+
+// sweepStorage — сверка с владельцами: убрать сирот, доучесть незнакомое,
+// пересчитать занятое место.
+func (h *handlers) sweepStorage(c *fiber.Ctx) error {
+	out, err := h.svc.SweepStorage(c.Context(), currentUserID(c))
+	if err != nil {
+		return h.fail(c, err)
+	}
+	return c.JSON(out)
 }
 
 func (h *handlers) aiState(c *fiber.Ctx) error {

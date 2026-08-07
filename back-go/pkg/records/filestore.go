@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/DmitriyODS/gw2/back-go/pkg/billingclient"
 	"github.com/DmitriyODS/gw2/back-go/pkg/storage"
 )
 
@@ -19,8 +20,8 @@ type QuotaTracker interface {
 	// EnsureStorage — влезает ли файл в квоту владельца (companyID > 0 —
 	// квота создателя компании).
 	EnsureStorage(ctx context.Context, userID, companyID, bytes int64) error
-	// TrackStorage — сдвинуть занятое место на дельту (удаление — минус).
-	TrackStorage(ctx context.Context, userID, companyID int64, service string, delta int64)
+	// TrackStorage — сдвинуть занятое место и пополнить журнал файлов.
+	TrackStorage(ctx context.Context, userID, companyID int64, ch billingclient.StorageChange)
 }
 
 // FileStore — запись загруженных файлов/картинок записей в хранилище
@@ -74,6 +75,10 @@ func (s *FileStore) Save(fileName string, data []byte) (string, error) {
 // SaveFor — то же, что Save, но с учётом квоты владельца: файл сверх лимита
 // не записывается вовсе, записанный увеличивает занятое место. companyID > 0 —
 // файл компании: место тратится из квоты её создателя.
+//
+// Заодно файл попадает в журнал хранилища. Сущность-носитель здесь неизвестна
+// (файл нередко грузится раньше неё) — ссылку проставит ближайшая сверка
+// биллинга с владельцем, а имя и размер известны уже сейчас.
 func (s *FileStore) SaveFor(ctx context.Context, userID, companyID int64, fileName string, data []byte) (string, error) {
 	if s.quota != nil {
 		if err := s.quota.EnsureStorage(ctx, userID, companyID, int64(len(data))); err != nil {
@@ -85,7 +90,12 @@ func (s *FileStore) SaveFor(ctx context.Context, userID, companyID int64, fileNa
 		return "", err
 	}
 	if s.quota != nil {
-		s.quota.TrackStorage(ctx, userID, companyID, s.service, int64(len(data)))
+		s.quota.TrackStorage(ctx, userID, companyID, billingclient.StorageChange{
+			Service: s.service,
+			Added: []billingclient.StoredFile{{
+				Key: key, Name: fileName, Size: int64(len(data)),
+			}},
+		})
 	}
 	return key, nil
 }
@@ -94,24 +104,19 @@ func (s *FileStore) Remove(paths []string) {
 	s.st.Remove(context.Background(), paths...)
 }
 
-// RemoveFor — удаление с возвратом места в квоту: размеры снимаются ДО
-// удаления (после него объекта уже нет). Недоступный объект просто не
-// уменьшает счётчик — учёт не должен мешать чистке файлов.
+// RemoveFor — удаление с возвратом места в квоту. Размеры мерить не нужно: их
+// знает журнал биллинга, поэтому здесь уходят только ключи (иначе на каждое
+// удаление приходился бы запрос в S3 на объект).
 func (s *FileStore) RemoveFor(ctx context.Context, userID, companyID int64, paths []string) {
 	if len(paths) == 0 {
 		return
 	}
-	var freed int64
-	if s.quota != nil {
-		for _, key := range paths {
-			if size, err := s.st.Size(ctx, key); err == nil {
-				freed += size
-			}
-		}
-	}
 	s.st.Remove(ctx, paths...)
-	if s.quota != nil && freed > 0 {
-		s.quota.TrackStorage(ctx, userID, companyID, s.service, -freed)
+	if s.quota != nil {
+		s.quota.TrackStorage(ctx, userID, companyID, billingclient.StorageChange{
+			Service: s.service,
+			Removed: paths,
+		})
 	}
 }
 

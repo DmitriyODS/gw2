@@ -84,6 +84,15 @@ type Entry struct {
 	UpdatedAt  time.Time      `json:"updated_at"`
 }
 
+// EntryScope — запись вместе с календарём, которому она принадлежит: разделу
+// «Настройки → Хранилище» нужно показать, где лежит файл.
+type EntryScope struct {
+	Entry        *Entry
+	CalendarID   int64
+	CalendarName string
+	CompanyID    int64
+}
+
 // AgendaRow — запись вместе с названием своего календаря: выборка ближайших
 // событий компании сразу по всем календарям (живая плитка рабочего стола).
 type AgendaRow struct {

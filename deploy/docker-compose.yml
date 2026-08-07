@@ -14,6 +14,10 @@ services:
     # с volume от postgres:16-alpine — формат данных одинаковый.
     image: pgvector/pgvector:pg16
     restart: unless-stopped
+    # max_connections: дефолт 100 тесен для двадцати сервисов (пул каждого —
+    # DB_POOL_MAX_CONNS=10, см. pkg/bootstrap) плюс migrate/backup/psql —
+    # запас на пиковую одновременную нагрузку всех сервисов сразу.
+    command: ["postgres", "-c", "max_connections=250"]
     environment:
       POSTGRES_DB: ${DB_NAME}
       POSTGRES_USER: ${DB_USER}
@@ -155,6 +159,10 @@ services:
       # сколько человек помещается в компанию. Пустое значение выключает
       # проверки; недоступный биллинг их не блокирует (fail-open).
       BILLING_GRPC_ADDR: billing:9107
+      # Перенос компании (выгрузка/подъём архивом): владельцы её контента.
+      # Пусто — перенос выключен; не поднявшийся раздел выпадает из архива.
+      COMPANY_DATA_ADDRS: >-
+        tasks=tasks:9095,registry=registry:9099,calendar=calendar:9100,portal=portal:9102
       UPLOAD_FOLDER: /app/uploads
       # Хранилище файлов: local (диск, dev) | s3 (Beget, prod). В prod выставить
       # STORAGE_BACKEND=s3 и S3_* в deploy/.env.
@@ -182,10 +190,12 @@ services:
       GEOIP_URL: ${GEOIP_URL-http://ip-api.com/json/{ip}?fields=city&lang=ru}
       GEOIP_TOKEN: ${GEOIP_TOKEN:-}
       HTTP_ADDR: ":8091"
+      GRPC_ADDR: ":9091"
     volumes:
       - uploads:/app/uploads
     expose:
       - "8091"
+      - "9091"
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8091/healthz"]
       interval: 15s
@@ -436,10 +446,12 @@ services:
       S3_ACCESS_KEY: ${S3_ACCESS_KEY:-}
       S3_SECRET_KEY: ${S3_SECRET_KEY:-}
       HTTP_ADDR: ":8099"
+      GRPC_ADDR: ":9099"
     volumes:
       - uploads:/app/uploads
     expose:
       - "8099"
+      - "9099"
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8099/healthz"]
       interval: 15s
@@ -480,10 +492,12 @@ services:
       S3_ACCESS_KEY: ${S3_ACCESS_KEY:-}
       S3_SECRET_KEY: ${S3_SECRET_KEY:-}
       HTTP_ADDR: ":8100"
+      GRPC_ADDR: ":9100"
     volumes:
       - uploads:/app/uploads
     expose:
       - "8100"
+      - "9100"
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8100/healthz"]
       interval: 15s
@@ -531,6 +545,52 @@ services:
   # пользователей (rich-текст TipTap, группы, публичные ссылки view/edit,
   # экспорт/импорт txt), REST /api/notes. Скоуп по владельцу (не по компании);
   # картинки редактора — общий uploads-том. Межсервисных вызовов нет.
+  # Микросервис «Диск» (Go, back-go/drive): HTTP :8108 — личные файлы с
+  # папками, корзиной, избранным и шарингом (ссылка + адресный доступ);
+  # gRPC :9108 — контракт владельца файлов для раздела «Настройки → Хранилище».
+  # Сами файлы лежат в общем uploads-томе (в prod — S3) и считаются в квоте
+  # владельца.
+  drive:
+    build:
+      context: ../back-go
+      dockerfile: drive/Dockerfile
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    environment:
+      DATABASE_URL: postgresql://${DB_USER}:${DB_PASSWORD}@db:5432/${DB_NAME}
+      REDIS_URL: redis://redis:6379/0
+      PASETO_PUBLIC_KEY: ${PASETO_PUBLIC_KEY}
+      # Квота хранилища (billingsvc): файл сверх лимита не сохраняется.
+      # Пустое значение выключает учёт, недоступный биллинг не блокирует
+      # загрузку (fail-open).
+      BILLING_GRPC_ADDR: billing:9107
+      UPLOAD_FOLDER: /app/uploads
+      STORAGE_BACKEND: ${STORAGE_BACKEND:-local}
+      S3_ENDPOINT: ${S3_ENDPOINT:-}
+      S3_REGION: ${S3_REGION:-ru1}
+      S3_BUCKET: ${S3_BUCKET:-}
+      S3_ACCESS_KEY: ${S3_ACCESS_KEY:-}
+      S3_SECRET_KEY: ${S3_SECRET_KEY:-}
+      HTTP_ADDR: ":8108"
+      GRPC_ADDR: ":9108"
+    volumes:
+      - uploads:/app/uploads
+    expose:
+      - "8108"
+      - "9108"
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8108/healthz"]
+      interval: 15s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
+
   notes:
     build:
       context: ../back-go
@@ -613,10 +673,12 @@ services:
       S3_ACCESS_KEY: ${S3_ACCESS_KEY:-}
       S3_SECRET_KEY: ${S3_SECRET_KEY:-}
       HTTP_ADDR: ":8105"
+      GRPC_ADDR: ":9105"
     volumes:
       - uploads:/app/uploads
     expose:
       - "8105"
+      - "9105"
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8105/healthz"]
       interval: 15s
@@ -681,6 +743,24 @@ services:
       # Платёжный шлюз: manual — счёт подтверждает супер-админ (СБП банка
       # подключается сменой значения и перезапуском сервиса).
       PAYMENT_PROVIDER: ${PAYMENT_PROVIDER:-manual}
+      # Раздел «Настройки → Хранилище»: у кого спрашивать про файлы. Коды
+      # ОБЯЗАНЫ совпадать с теми, под которыми файлы попадают в журнал
+      # (billing_storage_files.service) — по ним строка журнала связывается со
+      # своим владельцем. Пустая строка оставляет только счётчик места.
+      FILE_OWNER_ADDRS: >-
+        messenger=messenger:9092,notes=notes:9103,boards=board:9105,
+        registry=registry:9099,calendar=calendar:9100,portal=portal:9102,
+        avatars=auth:9091,drive=drive:9108
+      # Само хранилище: биллинг меряет незнакомые журналу файлы и удаляет сирот.
+      UPLOAD_FOLDER: /app/uploads
+      STORAGE_BACKEND: ${STORAGE_BACKEND:-local}
+      S3_ENDPOINT: ${S3_ENDPOINT:-}
+      S3_REGION: ${S3_REGION:-ru1}
+      S3_BUCKET: ${S3_BUCKET:-}
+      S3_ACCESS_KEY: ${S3_ACCESS_KEY:-}
+      S3_SECRET_KEY: ${S3_SECRET_KEY:-}
+    volumes:
+      - uploads:/app/uploads
     expose:
       - "8107"
       - "9107"
@@ -728,10 +808,12 @@ services:
       S3_SECRET_KEY: ${S3_SECRET_KEY:-}
       MESSENGER_GRPC_ADDR: messenger:9092
       HTTP_ADDR: ":8102"
+      GRPC_ADDR: ":9102"
     volumes:
       - uploads:/app/uploads
     expose:
       - "8102"
+      - "9102"
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8102/healthz"]
       interval: 15s

@@ -15,6 +15,10 @@ var reindexFields = map[string]bool{
 	"name": true, "department_id": true, "responsible_user_id": true,
 }
 
+// maxTaskPerPage — потолок размера страницы списка задач (защита от выгрузки
+// всей компании одним запросом — как maxPerPage в registrysvc).
+const maxTaskPerPage = 200
+
 // ensureNotOnVacation — гард режима «в отпуске» (user_companies.on_vacation):
 // актор в отпуске не создаёт/не правит задачи и не запускает юниты. Отпуск
 // company-scoped: в другой компании тот же человек работает как обычно,
@@ -82,6 +86,16 @@ func (s *Service) validateStage(ctx context.Context, stageID *int64, companyID i
 // находится сразу по названию. Текстовый поиск не зависит от регистра и
 // понимает регулярные выражения (domain.SearchRegex).
 func (s *Service) ListTasks(ctx context.Context, f domain.TaskListFilter) (*dto.TaskList, error) {
+	if f.Page < 1 {
+		f.Page = 1
+	}
+	if f.PerPage <= 0 {
+		f.PerPage = 30
+	}
+	if f.PerPage > maxTaskPerPage {
+		f.PerPage = maxTaskPerPage
+	}
+
 	search := strings.TrimSpace(f.Search)
 	if search != "" && f.CompanyID != nil && s.ai.Enabled(ctx, *f.CompanyID) {
 		if hits := s.ai.SemanticSearch(ctx, *f.CompanyID, search); len(hits) > 0 {

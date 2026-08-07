@@ -194,6 +194,7 @@ import AppDialog from '@/components/ui/AppDialog.vue'
 import ImageEditDialog from '@/components/common/ImageEditDialog.vue'
 import MarkdownView from '@/components/common/MarkdownView.vue'
 import { selectionViewportRect } from '@/utils/textareaSelection.js'
+import { linkifySelection } from '@/utils/pasteLink.js'
 import { usePortalStore } from '@/stores/portal.js'
 import { useAuthStore } from '@/stores/auth.js'
 import { useNotificationsStore } from '@/stores/notifications.js'
@@ -348,7 +349,16 @@ function onDrop(e) {
    буфере не трогаем: его вставляет сам textarea. */
 function onPaste(e) {
   const files = Array.from(e.clipboardData?.files || [])
-  if (!files.length) return
+  if (!files.length) {
+    // Адрес поверх выделенного текста делает его ссылкой — как в редакторах.
+    const linked = linkifySelection(bodyEl.value, e.clipboardData?.getData('text/plain'))
+    if (linked) {
+      e.preventDefault()
+      body.value = linked.value
+      nextTick(() => bodyEl.value?.setSelectionRange(linked.caret, linked.caret))
+    }
+    return
+  }
   e.preventDefault()
   const stamp = Date.now()
   files.forEach((f, i) => {

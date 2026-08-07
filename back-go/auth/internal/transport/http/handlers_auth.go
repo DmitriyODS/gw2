@@ -44,14 +44,23 @@ func sessionCtx(c *fiber.Ctx) context.Context {
 
 // clientIP — адрес клиента за nginx: заголовки прокси, иначе peer соединения
 // (в dev фронт ходит в сервис напрямую).
+//
+// X-Real-IP — ПЕРВЫЙ источник: nginx пишет туда $remote_addr на каждой
+// location'е, клиент это значение переписать не может. X-Forwarded-For —
+// только запасной вариант: nginx формирует его через $proxy_add_x_forwarded_for
+// (ДОБАВЛЯЕТ пришедшее значение, а не заменяет), поэтому левый край строки —
+// это то, что подставил САМ клиент. Слепое доверие первому элементу раньше
+// позволяло подделать IP в карточке сеанса (гео/адрес входа) заголовком
+// запроса — независимо от лимита неудачных попыток входа (он ключуется по
+// логину, а не по IP, поэтому на брутфорс это не влияло).
 func clientIP(c *fiber.Ctx) string {
+	if real := c.Get("X-Real-IP"); real != "" {
+		return real
+	}
 	if xff := c.Get(fiber.HeaderXForwardedFor); xff != "" {
 		if first, _, _ := strings.Cut(xff, ","); strings.TrimSpace(first) != "" {
 			return strings.TrimSpace(first)
 		}
-	}
-	if real := c.Get("X-Real-IP"); real != "" {
-		return real
 	}
 	return c.IP()
 }
@@ -89,7 +98,8 @@ func (h *handlers) register(c *fiber.Ctx) error {
 		return badRequest(c, "Имя, email и пароль обязательны")
 	}
 	// Логин может прийти пустым — сервис сгенерирует из ФИО (транслит).
-	resp, err := h.eps.Register(c.Context(), req)
+	// sessionCtx — сервису нужен IP для лимита регистраций (WithRateLimiter).
+	resp, err := h.eps.Register(sessionCtx(c), req)
 	if err != nil {
 		return h.respondError(c, err)
 	}
@@ -242,6 +252,67 @@ func (h *handlers) revokeSession(c *fiber.Ctx) error {
 	}
 	if _, err := h.eps.RevokeSession(sessionCtx(c), endpoint.RevokeSessionEpRequest{
 		UserID: tokenUserID(c), SessionID: id,
+	}); err != nil {
+		return h.respondError(c, err)
+	}
+	return c.JSON(fiber.Map{"status": "ok"})
+}
+
+// revokeOtherSessions — выйти на всех устройствах, кроме текущего. Тем же
+// путём авторизация обрывается при смене пароля.
+func (h *handlers) revokeOtherSessions(c *fiber.Ctx) error {
+	revoked, err := h.eps.RevokeOtherSessions(sessionCtx(c), tokenUserID(c))
+	if err != nil {
+		return h.respondError(c, err)
+	}
+	return c.JSON(fiber.Map{"revoked": revoked})
+}
+
+// ── Экран блокировки ─────────────────────────────────────────────
+
+func (h *handlers) screenLock(c *fiber.Ctx) error {
+	state, err := h.eps.ScreenLockState(c.Context(), tokenUserID(c))
+	if err != nil {
+		return h.respondError(c, err)
+	}
+	return c.JSON(state)
+}
+
+func (h *handlers) setScreenLock(c *fiber.Ctx) error {
+	var body dto.ScreenLockRequest
+	if err := c.BodyParser(&body); err != nil {
+		return badRequest(c, "Неверный формат запроса")
+	}
+	state, err := h.eps.SetScreenLock(c.Context(), endpoint.ScreenLockEpRequest{
+		UserID: tokenUserID(c), Body: body,
+	})
+	if err != nil {
+		return h.respondError(c, err)
+	}
+	return c.JSON(state)
+}
+
+func (h *handlers) disableScreenLock(c *fiber.Ctx) error {
+	var body dto.UnlockRequest
+	if err := c.BodyParser(&body); err != nil {
+		return badRequest(c, "Неверный формат запроса")
+	}
+	if _, err := h.eps.DisableScreenLock(c.Context(), endpoint.UnlockEpRequest{
+		UserID: tokenUserID(c), Secret: body.Secret,
+	}); err != nil {
+		return h.respondError(c, err)
+	}
+	return c.JSON(fiber.Map{"enabled": false})
+}
+
+// unlockScreen — снятие запертого экрана: пин-код или пароль аккаунта.
+func (h *handlers) unlockScreen(c *fiber.Ctx) error {
+	var body dto.UnlockRequest
+	if err := c.BodyParser(&body); err != nil {
+		return badRequest(c, "Неверный формат запроса")
+	}
+	if _, err := h.eps.UnlockScreen(c.Context(), endpoint.UnlockEpRequest{
+		UserID: tokenUserID(c), Secret: body.Secret,
 	}); err != nil {
 		return h.respondError(c, err)
 	}

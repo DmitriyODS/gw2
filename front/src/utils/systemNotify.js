@@ -164,6 +164,24 @@ export function unmuteNotifications() {
   try { localStorage.setItem(MUTE_KEY, '0') } catch {}
 }
 
+/* ── Звук уведомлений ──
+   Отдельный от «не беспокоить» выключатель: тишина глушит ещё и всплывашки
+   ОС, а тут человек просит только «без звука» — карточки и тосты пусть
+   приходят. По умолчанию звук включён: молчащее приложение выглядит сломанным. */
+const SOUND_KEY = 'gw_notify_sound'
+
+export function isNotifySoundOn() {
+  try {
+    return localStorage.getItem(SOUND_KEY) !== '0'
+  } catch {
+    return true
+  }
+}
+
+export function setNotifySound(on) {
+  try { localStorage.setItem(SOUND_KEY, on ? '1' : '0') } catch {}
+}
+
 export function setNotifyMuted(muted) {
   if (muted) muteNotifications(null)
   else unmuteNotifications()
@@ -295,7 +313,7 @@ let lastSoundAt = 0
 const SOUND_GAP_MS = 250
 
 export function playNotifySound(kind = 'message') {
-  if (isNotifyMuted()) return
+  if (isNotifyMuted() || !isNotifySoundOn()) return
   const now = Date.now()
   if (now - lastSoundAt < SOUND_GAP_MS) return
   lastSoundAt = now

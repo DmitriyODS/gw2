@@ -1,6 +1,9 @@
 package domain
 
-import "context"
+import (
+	"context"
+	"encoding/json"
+)
 
 // Ctx — алиас, чтобы сигнатуры портов не разбухали.
 type Ctx = context.Context
@@ -28,6 +31,11 @@ type BoardRepository interface {
 	DeleteBoard(ctx Ctx, id int64) error
 	// MoveBoard — сменить папку доски (folderID nil — в корень).
 	MoveBoard(ctx Ctx, id int64, folderID *int64) error
+	// BoardScenesOf / UpdateBoardScene — раздел «Настройки → Хранилище»:
+	// картинки живут внутри сцены, поэтому и перечисление, и вырезание идут по
+	// ней (списочный ListBoards отдаёт плитки без сцены).
+	BoardScenesOf(ctx Ctx, ownerID int64) ([]*Board, error)
+	UpdateBoardScene(ctx Ctx, id int64, scene json.RawMessage, textContent string) error
 	// SetBoardPreview — ключ миниатюры холста (плитка списка).
 	SetBoardPreview(ctx Ctx, boardID int64, key string) error
 	// SharedByMeBoardIDs — из ids оставить те, что расшарены владельцем
@@ -138,6 +146,9 @@ type FileStore interface {
 	SaveFor(ctx context.Context, userID, companyID int64, fileName string, data []byte) (string, error)
 	// RemoveFor — удаление с возвратом места в квоту владельца.
 	RemoveFor(ctx context.Context, userID, companyID int64, paths []string)
+	// Remove — удаление БЕЗ учёта: так чистит раздел «Хранилище», где место
+	// пересчитывает сам биллинг (он же инициатор и знает размеры).
+	Remove(paths []string)
 	// Open — прочитать байты объекта по ключу (встраивание картинок в SVG).
 	Open(key string) ([]byte, error)
 }

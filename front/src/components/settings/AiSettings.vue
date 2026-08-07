@@ -11,7 +11,7 @@
     </AppCard>
 
     <template v-else>
-      <BrandLoader v-if="loading" :size="48" />
+      <BrandLoader v-if="loading" block :size="64" />
 
       <template v-else>
         <AppCard

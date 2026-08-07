@@ -15,6 +15,8 @@ async function expectStatus(promise, status) {
 }
 
 const DAILY_AI_TOKENS = 1000
+// domain.FreeStorageBytes — место, доступное каждому, пока подписки скрыты.
+const FREE_STORAGE_BYTES = 5 * 1024 ** 3
 
 describeIntegration('billing API: витрина и лимиты', () => {
   it('витрина отдаёт тарифы, докупки и текущее состояние', async () => {
@@ -35,11 +37,15 @@ describeIntegration('billing API: витрина и лимиты', () => {
 
     // -1 значит «без ограничения»: без этого человек упирался бы в бесплатный
     // тариф, не имея возможности что-либо купить.
-    for (const key of ['tasks', 'boards', 'diaries', 'calendars', 'registries', 'storage_bytes']) {
+    for (const key of ['tasks', 'boards', 'diaries', 'calendars', 'registries']) {
       expect(limits[key]).toBe(-1)
     }
     expect(limits.portal).toBe(true)
     expect(limits.advanced_stats).toBe(true)
+
+    // Место — исключение: оно упирается в диск, а не в тариф, и остаётся
+    // ограниченным даже при скрытых подписках (одинаково у всех).
+    expect(limits.storage_bytes).toBe(FREE_STORAGE_BYTES)
   })
 
   it('токены ИИ выдаются всем поровну — суточная норма', async () => {

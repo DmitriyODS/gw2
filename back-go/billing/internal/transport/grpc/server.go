@@ -81,7 +81,18 @@ func (s *Server) CheckStorage(ctx context.Context, in *billingpb.CheckStorageReq
 }
 
 func (s *Server) TrackStorage(ctx context.Context, in *billingpb.TrackStorageRequest) (*billingpb.TrackStorageResponse, error) {
-	total, err := s.svc.TrackStorage(ctx, in.GetUserId(), in.GetCompanyId(), in.GetService(), in.GetDeltaBytes())
+	added := make([]*domain.StoredFile, 0, len(in.GetAdded()))
+	for _, f := range in.GetAdded() {
+		if f.GetKey() == "" {
+			continue
+		}
+		added = append(added, &domain.StoredFile{
+			Key: f.GetKey(), Name: f.GetName(), Size: f.GetSize(),
+			RefKind: f.GetRefKind(), RefID: f.GetRefId(), RefTitle: f.GetTitle(),
+		})
+	}
+	total, err := s.svc.TrackStorage(ctx, in.GetUserId(), in.GetCompanyId(), in.GetService(),
+		added, in.GetRemovedKeys())
 	if err != nil {
 		return nil, status.Error(codes.Internal, err.Error())
 	}

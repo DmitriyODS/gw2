@@ -47,6 +47,10 @@ type CalendarRepository interface {
 	// EntriesForExport — записи для выгрузки: при непустом ids — только они,
 	// иначе все по фильтру (диапазон дат + поиск). Порядок по event_at.
 	EntriesForExport(ctx Ctx, f EntryListFilter, ids []int64) ([]*Entry, error)
+	// EntriesOfCompanies — записи вместе с их календарём: раздел «Настройки →
+	// Хранилище» показывает, в каком календаре лежит файл. Скоуп — компании,
+	// чью квоту оплачивает спрашивающий (их присылает биллинг).
+	EntriesOfCompanies(ctx Ctx, companyIDs []int64) ([]*EntryScope, error)
 
 	// ── Публичные ссылки ──
 	CreateShare(ctx Ctx, s *Share) error
@@ -69,6 +73,9 @@ type FileStore interface {
 	// RemoveFor — best-effort удаление файлов по ключам с возвратом места в
 	// квоту (чистка при удалении записей/полей); ошибки не возвращаются.
 	RemoveFor(ctx context.Context, userID, companyID int64, paths []string)
+	// Remove — удаление БЕЗ учёта: так чистит раздел «Хранилище», где место
+	// пересчитывает сам биллинг (он же инициатор и знает размеры).
+	Remove(paths []string)
 }
 
 // EventBus — сокет-события клиентам через Redis gw2:calendar:events

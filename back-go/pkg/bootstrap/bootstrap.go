@@ -11,6 +11,7 @@ import (
 	"log/slog"
 	"os"
 	"os/signal"
+	"strconv"
 	"syscall"
 
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -23,6 +24,15 @@ func Env(key, fallback string) string {
 		return v
 	}
 	return fallback
+}
+
+// EnvInt — целочисленная переменная окружения или fallback (пусто/не число).
+func EnvInt(key string, fallback int) int {
+	v, err := strconv.Atoi(os.Getenv(key))
+	if err != nil {
+		return fallback
+	}
+	return v
 }
 
 // MustEnv — обязательная переменная окружения; пустая — фатал.
@@ -48,8 +58,20 @@ func SignalContext() (context.Context, context.CancelFunc) {
 }
 
 // MustPostgres — пул pgx к общей PostgreSQL платформы (схему ведёт Alembic).
+//
+// MaxConns — фиксированный потолок (DB_POOL_MAX_CONNS, по умолчанию 10), а не
+// дефолт pgxpool "runtime.NumCPU()": тот зависит от числа ядер ХОСТА, а не от
+// реальной нагрузки сервиса — на многоядерной машине двадцать сервисов с
+// таким дефолтом суммарно легко превышают max_connections одной общей
+// Postgres, и все сервисы разом ловят "sorry, too many clients already".
 func MustPostgres(ctx context.Context, log *slog.Logger, url string) *pgxpool.Pool {
-	pool, err := pgxpool.New(ctx, url)
+	cfg, err := pgxpool.ParseConfig(url)
+	if err != nil {
+		log.Error("postgres.bad_url", "error", err)
+		os.Exit(1)
+	}
+	cfg.MaxConns = int32(EnvInt("DB_POOL_MAX_CONNS", 10))
+	pool, err := pgxpool.NewWithConfig(ctx, cfg)
 	if err != nil {
 		log.Error("postgres.connect_failed", "error", err)
 		os.Exit(1)

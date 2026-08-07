@@ -1,0 +1,63 @@
+// Контракт СЕРВИСА-ВЛАДЕЛЬЦА файлов: его реализует каждый, кто кладёт
+// пользовательский контент в хранилище (мессенджер, заметки, доски, реестры,
+// календари, портал, аватарки), а зовёт — биллинг.
+//
+// Направление обратное billing.v1.BillingService: там владельцы спрашивают
+// биллинг про квоту, здесь биллинг спрашивает владельцев про сами файлы.
+// Иначе раздел «Хранилище» пришлось бы собирать в биллинге по чужим таблицам,
+// а он про их устройство знать не должен.
+//
+// Файл компании оплачивает её СОЗДАТЕЛЬ, поэтому запрос несёт и список
+// компаний: владелец не обязан знать, кто их создавал.
+syntax = "proto3";
+
+package billing.v1;
+
+option go_package = "github.com/DmitriyODS/gw2/back-go/pkg/gen/billingpb;billingpb";
+
+service FileOwnerService {
+  // ListFiles — файлы, на которые ЕЩЁ ссылается хоть одна живая сущность.
+  // По ним биллинг находит сирот в журнале и доучитывает то, что попало в
+  // хранилище до появления журнала.
+  rpc ListFiles(ListFilesRequest) returns (ListFilesResponse);
+  // DeleteFiles — снять файлы с их сущностей и удалить объекты из хранилища.
+  // Удаляет только своё: чужой ключ молча пропускается.
+  rpc DeleteFiles(DeleteFilesRequest) returns (DeleteFilesResponse);
+}
+
+// OwnedFile — файл глазами владельца. Размер сюда не входит: его знает журнал
+// (а для незнакомых ключей биллинг померит сам) — снимать размеры на каждый
+// обход значило бы дёргать S3 по объекту на файл.
+message OwnedFile {
+  string key = 1; // ключ в хранилище, он же хвост адреса /uploads/<key>
+  string name = 2; // исходное имя файла, если владелец его хранит
+  // ref_kind/ref_id — где файл лежит: вид сущности («message», «note», …) и её
+  // идентификатор. Раздел «Хранилище» строит по ним переход к источнику.
+  string ref_kind = 3;
+  string ref_id = 4;
+  // title — человекочитаемое «где именно» («Заметка «Планы»», «Чат с Ивановым»).
+  string title = 5;
+  int64 company_id = 6; // > 0 — файл компании
+  int64 created_at = 7; // unix-секунды; 0 — владелец даты не хранит
+}
+
+message ListFilesRequest {
+  int64 user_id = 1;
+  // company_ids — компании, чью квоту тратит этот пользователь (он их создал).
+  repeated int64 company_ids = 2;
+}
+
+message ListFilesResponse {
+  repeated OwnedFile files = 1;
+}
+
+message DeleteFilesRequest {
+  int64 user_id = 1;
+  repeated int64 company_ids = 2;
+  repeated string keys = 3;
+}
+
+message DeleteFilesResponse {
+  // deleted_keys — что реально удалено (размеры биллинг возьмёт из журнала).
+  repeated string deleted_keys = 1;
+}

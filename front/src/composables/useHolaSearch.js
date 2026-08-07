@@ -29,6 +29,8 @@ import { enginesInOrder, getSearchEngine, openUrl, openWebSearch, parseUrl } fro
 import { getTasks } from '@/api/tasks.js'
 import { getNotes } from '@/api/notes.js'
 import { getBoards } from '@/api/boards.js'
+import { browse as browseDrive } from '@/api/drive.js'
+import { fileIcon } from '@/utils/fileTypes.js'
 import { searchEntries } from '@/api/diaries.js'
 import { searchRecords } from '@/api/registries.js'
 import { getPosts } from '@/api/portal.js'
@@ -44,7 +46,7 @@ const REPEAT_LABELS = {
 }
 
 function emptyHits() {
-  return { tasks: [], notes: [], boards: [], diaries: [], registries: [], portal: [], people: [], messages: [] }
+  return { tasks: [], notes: [], boards: [], drive: [], diaries: [], registries: [], portal: [], people: [], messages: [] }
 }
 
 export function useHolaSearch() {
@@ -408,6 +410,7 @@ export function useHolaSearch() {
     { key: 'tasks', label: 'Задачи', items: hits.value.tasks },
     { key: 'notes', label: 'Заметки', items: hits.value.notes },
     { key: 'boards', label: 'Доски', items: hits.value.boards },
+    { key: 'drive', label: 'Диск', items: hits.value.drive },
     { key: 'diaries', label: 'Ежедневники', items: hits.value.diaries },
     { key: 'registries', label: 'Реестры', items: hits.value.registries },
     { key: 'portal', label: 'Портал', items: hits.value.portal },
@@ -452,10 +455,11 @@ export function useHolaSearch() {
     const stem = cmd?.kind === 'message' ? searchStem(cmd.rest) : ''
     const dirQuery = stem || q
 
-    const [tasks, noteHits, boardHits, diaries, registries, portal, people] = await Promise.allSettled([
+    const [tasks, noteHits, boardHits, driveHits, diaries, registries, portal, people] = await Promise.allSettled([
       withCompany ? getTasks({ search: q, per_page: LIMIT }, opt) : Promise.resolve(null),
       getNotes({ search: q }, opt),
       getBoards({ search: q }, opt),
+      browseDrive({ search: q }, opt),
       searchEntries(q, LIMIT, opt),
       withCompany ? searchRecords(q, LIMIT, opt) : Promise.resolve(null),
       withCompany ? getPosts({ search: q, limit: LIMIT }, opt) : Promise.resolve(null),
@@ -486,6 +490,24 @@ export function useHolaSearch() {
         subtitle: (b.excerpt || '').slice(0, 90) || 'Доска',
         path: `/boards/${b.id}`,
       })),
+      /* «Диск»: и папки, и файлы. Поиск там глобальный, поэтому текущая
+         папка выдачу не сужает; папка открывается сразу собой. */
+      drive: [
+        ...(value(driveHits)?.folders ?? []).slice(0, LIMIT).map((f) => ({
+          key: `drive-folder-${f.id}`,
+          icon: 'folder',
+          title: f.name || 'Папка',
+          subtitle: 'Папка на диске',
+          path: `/drive?folder=${f.id}`,
+        })),
+        ...(value(driveHits)?.files ?? []).slice(0, LIMIT).map((f) => ({
+          key: `drive-${f.id}`,
+          icon: fileIcon(f.mime, f.name),
+          title: f.name || 'Файл',
+          subtitle: 'Файл на диске',
+          path: '/drive',
+        })),
+      ].slice(0, LIMIT),
       diaries: (value(diaries)?.items ?? []).map((e) => ({
         key: `diary-${e.entry_id}`,
         icon: 'event_list',

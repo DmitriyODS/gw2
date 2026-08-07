@@ -40,6 +40,7 @@ type User struct {
 	Phone         *string  `json:"phone"`
 	Email         *string  `json:"email"`
 	AvatarPath    *string  `json:"avatar_path"`
+	AvatarEmoji   *string  `json:"avatar_emoji"`
 	IsDefaultPass bool     `json:"is_default_pass"`
 	IsActive      bool     `json:"is_active"`
 	IsSuperAdmin  bool     `json:"is_super_admin"`
@@ -71,6 +72,7 @@ func NewUser(u *domain.User) User {
 		Phone:               u.Phone,
 		Email:               u.Email,
 		AvatarPath:          u.AvatarPath,
+		AvatarEmoji:         u.AvatarEmoji,
 		IsDefaultPass:       u.IsDefaultPass,
 		IsActive:            u.IsActive,
 		IsSuperAdmin:        u.IsSuperAdmin,
@@ -274,6 +276,25 @@ type UpdateUserRequest struct {
 	OnVacation *bool `json:"on_vacation"`
 }
 
+// ScreenLock — состояние экрана блокировки для настроек.
+type ScreenLock struct {
+	Enabled bool `json:"enabled"`
+	// AfterMin — через сколько минут бездействия запирать; null — вручную.
+	AfterMin *int `json:"after_min"`
+}
+
+// ScreenLockRequest — включение блокировки или смена задержки. Пустой Pin при
+// уже включённой блокировке меняет только задержку.
+type ScreenLockRequest struct {
+	Pin      string `json:"pin"`
+	AfterMin *int   `json:"after_min"`
+}
+
+// UnlockRequest — снятие экрана: пин-код либо пароль аккаунта.
+type UnlockRequest struct {
+	Secret string `json:"secret"`
+}
+
 // UpdateMeRequest — PATCH /users/me. Должность — атрибут членства в компании,
 // её задаёт администратор компании, не сам пользователь.
 type UpdateMeRequest struct {
@@ -284,6 +305,8 @@ type UpdateMeRequest struct {
 	CurrentPassword *string `json:"current_password"`
 	NewPassword     *string `json:"new_password"`
 	ConfirmPassword *string `json:"confirm_password"`
+	// Аватар-значок: пустая строка — снять (вернётся автоматический аватар).
+	AvatarEmoji *string `json:"avatar_emoji"`
 	// Пользовательский статус (мессенджер): пустая строка — снять.
 	StatusEmoji *string `json:"status_emoji"`
 	StatusText  *string `json:"status_text"`

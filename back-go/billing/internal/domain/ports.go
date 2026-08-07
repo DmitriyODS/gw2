@@ -111,13 +111,47 @@ type AIRepository interface {
 	TotalUsage(ctx Ctx, from time.Time) (map[string]int64, error)
 }
 
-// StorageRepository — учёт занятого места (дельтами от сервисов-владельцев).
+// StorageRepository — учёт занятого места (дельтами от сервисов-владельцев)
+// и журнал самих файлов — расшифровка счётчика для раздела «Хранилище».
 type StorageRepository interface {
 	Usage(ctx Ctx, userID int64) ([]*StorageEntry, error)
 	Total(ctx Ctx, userID int64) (int64, error)
 	TotalsFor(ctx Ctx, userIDs []int64) (map[int64]int64, error)
 	Track(ctx Ctx, userID int64, service string, delta int64) (int64, error)
 	Set(ctx Ctx, userID int64, service string, bytes int64) error
+
+	// AddFiles — записать залитые файлы (upsert по ключу: повторная заливка
+	// того же ключа и уточнение ссылки при сверке идут одним путём).
+	AddFiles(ctx Ctx, userID int64, files []*StoredFile) error
+	// RemoveFiles — снять записи по ключам, вернув сумму их размеров.
+	RemoveFiles(ctx Ctx, userID int64, keys []string) (int64, error)
+	// TopFiles — самые крупные файлы пользователя (service пустой — все).
+	TopFiles(ctx Ctx, userID int64, service string, limit int) ([]*StoredFile, error)
+	// AllFiles — весь журнал пользователя: сверка с владельцами и пересчёт.
+	AllFiles(ctx Ctx, userID int64) ([]*StoredFile, error)
+	// UsageFromFiles — занятое место по журналу (эталон для пересчёта счётчика).
+	UsageFromFiles(ctx Ctx, userID int64) (map[string]int64, error)
+}
+
+/* FileOwners — сервисы, хранящие пользовательские файлы (gRPC
+   billing.v1.FileOwnerService). Направление обратное обычному: не они
+   спрашивают биллинг про квоту, а он их — про сами файлы.
+
+   Так раздел «Настройки → Хранилище» узнаёт, что ещё живо (всё, чего нет в
+   ответе, а в журнале есть, — сирота), и удаляет выбранное руками владельца:
+   он один умеет снять файл со своей сущности. */
+type FileOwners interface {
+	// Services — коды подключённых владельцев (messenger, notes, …).
+	Services() []string
+	ListFiles(ctx Ctx, service string, userID int64, companyIDs []int64) ([]*OwnedFile, error)
+	DeleteFiles(ctx Ctx, service string, userID int64, companyIDs []int64, keys []string) ([]string, error)
+}
+
+// ObjectStore — само хранилище: размер незнакомого журналу объекта и удаление
+// сирот, за которыми уже не стоит ничья сущность.
+type ObjectStore interface {
+	Size(ctx Ctx, key string) (int64, error)
+	Remove(ctx Ctx, keys ...string)
 }
 
 // SettingsRepository — платформенные настройки биллинга.

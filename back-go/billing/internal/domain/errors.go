@@ -12,6 +12,10 @@ var (
 	ErrForbidden     = apierror.New("FORBIDDEN", "Недостаточно прав", http.StatusForbidden)
 	ErrValidation    = apierror.New("VALIDATION", "Проверьте заполненные поля", http.StatusUnprocessableEntity)
 	ErrStoreDisabled = apierror.New("STORE_DISABLED", "Магазин временно недоступен", http.StatusServiceUnavailable)
+	// Владельцы файлов не подключены (пустой FILE_OWNER_ADDRS): счётчик места
+	// работает, а разбор и чистка — нет.
+	ErrStorageUnavailable = apierror.New("STORAGE_UNAVAILABLE",
+		"Управление хранилищем сейчас недоступно", http.StatusServiceUnavailable)
 
 	ErrPlanUnknown    = apierror.New("PLAN_UNKNOWN", "Такого тарифа нет", http.StatusUnprocessableEntity)
 	ErrAddonUnknown   = apierror.New("ADDON_UNKNOWN", "Такого дополнения нет", http.StatusUnprocessableEntity)

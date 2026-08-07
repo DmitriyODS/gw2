@@ -144,6 +144,17 @@ func (r *fakeRepo) Create(_ context.Context, u *domain.User) error {
 	return nil
 }
 
+// strPtr — значение nullable-строки из map обновления (nil — снять).
+func strPtr(v any) *string {
+	if v == nil {
+		return nil
+	}
+	if s, ok := v.(string); ok {
+		return &s
+	}
+	return nil
+}
+
 func (r *fakeRepo) UpdateFields(_ context.Context, id int64, fields map[string]any) error {
 	u := r.users[id]
 	for k, v := range fields {
@@ -169,6 +180,16 @@ func (r *fakeRepo) UpdateFields(_ context.Context, id int64, fields map[string]a
 			u.Email, _ = v.(*string)
 		case "phone":
 			u.Phone, _ = v.(*string)
+		case "avatar_emoji":
+			u.AvatarEmoji = strPtr(v)
+		case "lock_pin_hash":
+			u.LockPinHash = strPtr(v)
+		case "lock_after_min":
+			if v == nil {
+				u.LockAfterMin = nil
+			} else if n, ok := v.(int); ok {
+				u.LockAfterMin = &n
+			}
 		}
 	}
 	return nil

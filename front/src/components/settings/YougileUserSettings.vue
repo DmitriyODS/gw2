@@ -21,8 +21,33 @@
       </div>
     </div>
 
-    <!-- Форма подключения / отключения -->
-    <div v-if="!status.connected && status.company_enabled" class="settings-card form-card">
+    <!-- Подключений бывает несколько: люди работают в разных пространствах
+         YouGile. Ключом активного идут импорт и экспорт карточек. -->
+    <div v-if="accounts.length > 1" class="settings-card yg-accounts">
+      <div class="card-text">
+        <h3>Подключения</h3>
+        <p>Работает то, что отмечено активным.</p>
+      </div>
+      <ul class="yg-list">
+        <li v-for="a in accounts" :key="a.id" :class="{ active: a.is_active }">
+          <span class="yg-list-main">
+            <b>{{ a.yg_login }}</b>
+            <span class="yg-list-key">ключ …{{ a.key_fingerprint || '????' }}</span>
+          </span>
+          <button v-if="!a.is_active" class="btn-outlined" :disabled="busy" @click="onActivate(a.id)">
+            Сделать активным
+          </button>
+          <span v-else class="yg-list-badge">Активно</span>
+          <button class="btn-outlined danger" :disabled="busy" @click="onDisconnect(a.id)">
+            <span class="material-symbols-outlined">link_off</span>
+          </button>
+        </li>
+      </ul>
+    </div>
+
+    <!-- Форма подключения: доступна и при уже подключённом аккаунте — так
+         добавляется второе пространство YouGile. -->
+    <div v-if="status.company_enabled" class="settings-card form-card">
       <form class="yg-form" @submit.prevent="onConnect">
         <div class="field">
           <label class="lbl" for="yg-login">Логин YouGile (email)</label>
@@ -86,6 +111,7 @@
 import YougileLogo from '@/components/common/YougileLogo.vue'
 import { reactive, ref, computed, onMounted } from 'vue'
 import Dialog from 'primevue/dialog'
+import { getYougileAccounts, activateYougileAccount } from '@/api/yougile.js'
 import { useYougileStore } from '@/stores/yougile.js'
 import { useNotificationsStore } from '@/stores/notifications.js'
 import { useModalHost } from '@/desktop/windowHost.js'
@@ -100,6 +126,31 @@ const rotatePassword = ref('')
 const busy = ref(false)
 
 const status = computed(() => yg.status)
+
+/* Подключений бывает несколько (разные пространства YouGile). Список держим
+   здесь: он нужен только этой карточке, а активное подключение и так приходит
+   в статусе. */
+const accounts = ref([])
+
+async function loadAccounts() {
+  try {
+    const res = await getYougileAccounts()
+    accounts.value = res.items || []
+  } catch { /* список не критичен: подключение видно и по статусу */ }
+}
+
+async function onActivate(id) {
+  busy.value = true
+  try {
+    await activateYougileAccount(id)
+    await Promise.all([yg.refreshStatus(), loadAccounts()])
+    notif.success('Подключение переключено')
+  } catch (e) {
+    notif.error(e?.data?.message || 'Не удалось переключить подключение')
+  } finally {
+    busy.value = false
+  }
+}
 const canSubmit = computed(() => form.login.trim() && form.password)
 
 async function onConnect() {
@@ -115,10 +166,11 @@ async function onConnect() {
   }
 }
 
-async function onDisconnect() {
+async function onDisconnect(id = null) {
   busy.value = true
   try {
-    await yg.disconnect()
+    await yg.disconnect(id)
+    await loadAccounts()
     notif.success('YouGile отвязан')
   } catch (e) {
     notif.error(e?.data?.message || 'Не удалось отвязать')
@@ -155,7 +207,10 @@ function formatLast(iso) {
   } catch { return 'недавно' }
 }
 
-onMounted(() => { yg.refreshStatus().catch(() => {}) })
+onMounted(() => {
+  yg.refreshStatus().catch(() => {})
+  loadAccounts()
+})
 </script>
 
 <style scoped>

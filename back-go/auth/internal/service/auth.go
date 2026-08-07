@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"net/url"
+	"strconv"
 	"strings"
 	"time"
 
@@ -18,6 +19,9 @@ const (
 	verificationTTL   = 30 * time.Minute
 	resendCooldown    = 60 * time.Second
 	maxVerifyAttempts = 5
+	// resendDailyLimit — сколько раз в сутки можно перевыпустить письмо
+	// (подтверждение email, сброс пароля) на один аккаунт поверх resendCooldown.
+	resendDailyLimit = 8
 )
 
 var (
@@ -88,7 +92,22 @@ func (s *Service) Login(ctx context.Context, req dto.LoginRequest) (*dto.Session
 // компании. Логин генерируется из ФИО (фронт подставляет, пользователь может
 // поправить); пустой — генерируем сами. Пароль виден пользователю на фронте
 // (без принудительной смены). Сессия НЕ выдаётся — сначала подтверждение email.
+// registerIPLimit/registerIPWindow — сколько регистраций пропускаем с одного
+// адреса за окно: щит от автоматической штамповки аккаунтов, не от обычного
+// офиса/NAT за одним IP.
+const (
+	registerIPLimit  = 8
+	registerIPWindow = time.Hour
+)
+
 func (s *Service) Register(ctx context.Context, req dto.RegisterRequest) (*dto.RegisterResult, error) {
+	if s.limiter != nil {
+		if ip := domain.SessionMetaFrom(ctx).IP; ip != "" {
+			if ok, retry := s.limiter.Allow(ctx, "register:"+ip, registerIPLimit, registerIPWindow); !ok {
+				return nil, errLocked(retry)
+			}
+		}
+	}
 	if err := validateFIO(req.FIO); err != nil {
 		return nil, err
 	}
@@ -258,6 +277,17 @@ func (s *Service) ResendVerification(ctx context.Context, email string) error {
 			return nil
 		}
 	}
+	// Суточный кап поверх 60-секундного окна между письмами: без него код
+	// подтверждения (5 попыток на код, см. maxVerifyAttempts) можно было
+	// перевыпускать раз в минуту неограниченно, копя попытки подбора на один
+	// и тот же аккаунт. Тихий отказ — как и остальной ответ хендлера, наличие
+	// аккаунта лимит не выдаёт.
+	if s.limiter != nil {
+		key := "verify-resend:" + strconv.FormatInt(user.ID, 10)
+		if ok, _ := s.limiter.Allow(ctx, key, resendDailyLimit, 24*time.Hour); !ok {
+			return nil
+		}
+	}
 	return s.sendVerification(ctx, user)
 }
 
@@ -282,6 +312,14 @@ func (s *Service) RequestPasswordReset(ctx context.Context, email string) error 
 	}
 	if r, err := s.passwordResets.GetByUserID(ctx, user.ID); err == nil && r != nil {
 		if time.Since(r.LastSentAt) < resendCooldown {
+			return nil
+		}
+	}
+	// Тот же суточный кап, что и у резенда подтверждения email — иначе письмо
+	// сброса пароля можно почтовой бомбой заваливать раз в минуту без предела.
+	if s.limiter != nil {
+		key := "reset-resend:" + strconv.FormatInt(user.ID, 10)
+		if ok, _ := s.limiter.Allow(ctx, key, resendDailyLimit, 24*time.Hour); !ok {
 			return nil
 		}
 	}

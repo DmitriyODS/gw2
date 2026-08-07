@@ -1,6 +1,9 @@
 package domain
 
-import "context"
+import (
+	"context"
+	"encoding/json"
+)
 
 // Ctx — алиас, чтобы сигнатуры портов не разбухали.
 type Ctx = context.Context
@@ -26,6 +29,11 @@ type NoteRepository interface {
 	DeleteNote(ctx Ctx, id int64) error
 	// MoveNote — сменить папку заметки (folderID nil — в корень).
 	MoveNote(ctx Ctx, id int64, folderID *int64) error
+	// NoteDocsOf / UpdateNoteDoc — раздел «Настройки → Хранилище»: картинки
+	// живут ссылками внутри документов, поэтому и перечисление, и вырезание
+	// идут по ним (списочный ListNotes отдаёт плитки без doc).
+	NoteDocsOf(ctx Ctx, ownerID int64) ([]*Note, error)
+	UpdateNoteDoc(ctx Ctx, id int64, doc json.RawMessage, textContent string) error
 	// SetNoteTags — полная замена связей заметки с тегами.
 	SetNoteTags(ctx Ctx, noteID int64, tagIDs []int64) error
 	// SharedByMeNoteIDs — из ids оставить те, что расшарены владельцем
@@ -162,6 +170,9 @@ type FileStore interface {
 	SaveFor(ctx context.Context, userID, companyID int64, fileName string, data []byte) (string, error)
 	// RemoveFor — удаление с возвратом места в квоту владельца.
 	RemoveFor(ctx context.Context, userID, companyID int64, paths []string)
+	// Remove — удаление БЕЗ учёта: так чистит раздел «Хранилище», где место
+	// пересчитывает сам биллинг (он же инициатор и знает размеры).
+	Remove(paths []string)
 	// Open — прочитать байты объекта по ключу (встраивание картинок в docx).
 	Open(key string) ([]byte, error)
 }

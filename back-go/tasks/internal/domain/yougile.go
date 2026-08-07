@@ -19,6 +19,9 @@ type YougileAccount struct {
 	KeyCiphertext   []byte
 	KeyFingerprint  string
 	LastValidatedAt *time.Time
+	// IsActive — этим подключением работает интеграция сейчас. Активное всегда
+	// ровно одно (частичный уникальный индекс в БД).
+	IsActive bool
 }
 
 // YougileCompany — YouGile-срез компании: конфигурация интеграции
@@ -69,11 +72,17 @@ type YougileCipher interface {
 // YougileRepository — персистентность интеграции: личные аккаунты
 // (user_yougile_accounts) + YouGile-поля компаний + поиск привязанной задачи.
 type YougileRepository interface {
-	// GetYougileAccount — nil, если пользователь не подключён.
+	// GetYougileAccount — АКТИВНОЕ подключение; nil, если их нет вовсе.
 	GetYougileAccount(ctx Ctx, userID int64) (*YougileAccount, error)
-	// UpsertYougileAccount — создаёт или обновляет запись по user_id.
+	// ListYougileAccounts — все подключения пользователя.
+	ListYougileAccounts(ctx Ctx, userID int64) ([]*YougileAccount, error)
+	// UpsertYougileAccount — создаёт или обновляет привязку к пространству
+	// YouGile (повторное подключение того же пространства меняет ключ).
 	UpsertYougileAccount(ctx Ctx, acc *YougileAccount) error
-	DeleteYougileAccount(ctx Ctx, userID int64) error
+	// SetActiveYougileAccount — переключиться на другое подключение.
+	SetActiveYougileAccount(ctx Ctx, userID, accountID int64) error
+	// DeleteYougileAccount — отключить одно подключение (0 — все).
+	DeleteYougileAccount(ctx Ctx, userID, accountID int64) error
 
 	// GetYougileCompany — nil, если компании нет.
 	GetYougileCompany(ctx Ctx, companyID int64) (*YougileCompany, error)

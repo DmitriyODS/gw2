@@ -27,7 +27,11 @@ type Deps struct {
 	Identity domain.IdentityReader
 	Provider domain.PaymentProvider
 	Bus      domain.EventBus
-	Log      *slog.Logger
+	// Owners/Objects — раздел «Настройки → Хранилище»: сервисы-владельцы
+	// файлов и само хранилище. Без них раздел показывает только счётчик.
+	Owners  domain.FileOwners
+	Objects domain.ObjectStore
+	Log     *slog.Logger
 	// Now — источник времени (тесты подменяют).
 	Now func() time.Time
 }

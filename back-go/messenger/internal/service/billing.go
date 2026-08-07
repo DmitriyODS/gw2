@@ -25,12 +25,14 @@ func (s *Service) ensureUploadSpace(ctx context.Context, userID int64, size int6
 	return s.billing.EnsureStorage(ctx, userID, 0, size)
 }
 
-// trackUpload — учесть занятое (delta > 0) или освобождённое (delta < 0) место.
-func (s *Service) trackUpload(ctx context.Context, userID, delta int64) {
-	if s.billing == nil || userID <= 0 || delta == 0 {
+// trackUpload — учесть занятое (Delta > 0) или освобождённое (Delta < 0) место
+// и пополнить журнал файлов раздела «Настройки → Хранилище».
+func (s *Service) trackUpload(ctx context.Context, userID int64, ch billingclient.StorageChange) {
+	if s.billing == nil || userID <= 0 {
 		return
 	}
-	s.billing.TrackStorage(ctx, userID, 0, "messenger", delta)
+	ch.Service = "messenger"
+	s.billing.TrackStorage(ctx, userID, 0, ch)
 }
 
 // ensureFolderLimit — влезает ли ещё одна папка чатов в тариф пользователя.

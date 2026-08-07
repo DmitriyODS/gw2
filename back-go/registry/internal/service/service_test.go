@@ -4,6 +4,8 @@ import (
 	"context"
 	"io"
 	"log/slog"
+	"slices"
+	"sort"
 	"testing"
 
 	"github.com/DmitriyODS/gw2/back-go/registry/internal/domain"
@@ -90,6 +92,21 @@ func (f *fakeRepo) AllRecords(_ domain.Ctx, _ int64) ([]*domain.Record, error) {
 	return out, nil
 }
 
+// Раздел «Хранилище»: записи отбираются по компании их реестра.
+func (f *fakeRepo) RecordsOfCompanies(_ domain.Ctx, companyIDs []int64) ([]*domain.RecordScope, error) {
+	out := []*domain.RecordScope{}
+	if f.reg == nil || !slices.Contains(companyIDs, f.reg.CompanyID) {
+		return out, nil
+	}
+	for _, r := range f.records {
+		out = append(out, &domain.RecordScope{
+			Record: r, RegistryID: f.reg.ID, RegistryName: f.reg.Name, CompanyID: f.reg.CompanyID,
+		})
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].Record.ID < out[j].Record.ID })
+	return out, nil
+}
+
 type fakeBus struct{ events []string }
 
 func (b *fakeBus) Publish(_ domain.Ctx, event string, _ []string, _ any) {
@@ -103,6 +120,10 @@ func (f *fakeFiles) SaveFor(_ context.Context, _, _ int64, _ string, _ []byte) (
 }
 
 func (f *fakeFiles) RemoveFor(_ context.Context, _, _ int64, paths []string) {
+	f.removed = append(f.removed, paths...)
+}
+
+func (f *fakeFiles) Remove(paths []string) {
 	f.removed = append(f.removed, paths...)
 }
 

@@ -84,6 +84,9 @@ const routes = [
     meta: { requiresAuth: true } },
   { path: '/boards/:id(\\d+)', component: () => import('@/views/BoardEditorView.vue'),
     meta: { requiresAuth: true }, props: true },
+  // Раздел «Диск» — личные файлы: папки, корзина, шаринг (как заметки и доски).
+  { path: '/drive', component: () => import('@/views/DriveView.vue'),
+    meta: { requiresAuth: true } },
   // Раздел «Напоминания» — личные, срок считает планировщик remindersvc.
   { path: '/reminders', component: () => import('@/views/RemindersView.vue'),
     meta: { requiresAuth: true } },
@@ -136,6 +139,9 @@ const routes = [
   { path: '/board/:code', component: () => import('@/views/SharedBoardView.vue'),
     meta: { public: true } },
   { path: '/note/:code', component: () => import('@/views/SharedNoteView.vue'),
+    meta: { public: true } },
+  // Файл или папка диска по публичной ссылке — код в адресе и есть доступ.
+  { path: '/drive/s/:code', component: () => import('@/views/SharedDriveView.vue'),
     meta: { public: true } },
   // Вступление в компанию по ссылке-приглашению (нужна авторизация).
   { path: '/join/:code', component: () => import('@/views/JoinView.vue'),

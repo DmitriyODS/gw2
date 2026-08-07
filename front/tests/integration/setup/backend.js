@@ -227,11 +227,18 @@ export default async function setup() {
     PASETO_PRIVATE_KEY: PASETO.privateKey, PASETO_REFRESH_KEY: PASETO.refreshKey,
     UPLOAD_FOLDER: fs.mkdtempSync(path.join(process.env.TMPDIR || '/tmp', 'gw2-front-uploads-')),
     MAIL_GRPC_ADDR: `localhost:${GRPC.mail}`,
+    // Перенос компании: authsvc собирает архив из кусков владельцев контента.
+    COMPANY_DATA_ADDRS: [
+      `tasks=localhost:${GRPC.tasks}`,
+      `registry=localhost:${GRPC.registry}`,
+      `calendar=localhost:${GRPC.calendar}`,
+      `portal=localhost:${GRPC.portal}`,
+    ].join(','),
     APP_PUBLIC_BASE_URL: 'http://localhost:5173',
-    HTTP_ADDR: `:${HTTP.auth}`,
+    GRPC_ADDR: `:${GRPC.auth}`, HTTP_ADDR: `:${HTTP.auth}`,
   })
   startSvc('diarysvc', repoRoot, 'back-go/diary', './cmd/diarysvc', {
-    ...baseEnv, HTTP_ADDR: `:${HTTP.diary}`,
+    ...baseEnv, GRPC_ADDR: `:${GRPC.diary}`, HTTP_ADDR: `:${HTTP.diary}`,
   })
   startSvc('tasksvc', repoRoot, 'back-go/tasks', './cmd/tasksvc', {
     ...baseEnv,
@@ -245,12 +252,12 @@ export default async function setup() {
   startSvc('registrysvc', repoRoot, 'back-go/registry', './cmd/registrysvc', {
     ...baseEnv,
     UPLOAD_FOLDER: fs.mkdtempSync(path.join(process.env.TMPDIR || '/tmp', 'gw2-front-reg-')),
-    HTTP_ADDR: `:${HTTP.registry}`,
+    GRPC_ADDR: `:${GRPC.registry}`, HTTP_ADDR: `:${HTTP.registry}`,
   })
   startSvc('calendarsvc', repoRoot, 'back-go/calendar', './cmd/calendarsvc', {
     ...baseEnv,
     UPLOAD_FOLDER: fs.mkdtempSync(path.join(process.env.TMPDIR || '/tmp', 'gw2-front-cal-')),
-    HTTP_ADDR: `:${HTTP.calendar}`,
+    GRPC_ADDR: `:${GRPC.calendar}`, HTTP_ADDR: `:${HTTP.calendar}`,
   })
   startSvc('msgsvc', repoRoot, 'back-go/messenger', './cmd/msgsvc', {
     ...baseEnv,
@@ -261,8 +268,15 @@ export default async function setup() {
     ...baseEnv,
     UPLOAD_FOLDER: fs.mkdtempSync(path.join(process.env.TMPDIR || '/tmp', 'gw2-front-portal-')),
     MESSENGER_GRPC_ADDR: `localhost:${GRPC.messenger}`,
-    HTTP_ADDR: `:${HTTP.portal}`,
+    GRPC_ADDR: `:${GRPC.portal}`, HTTP_ADDR: `:${HTTP.portal}`,
   })
+  // drivesvc: личные файлы с папками, корзиной и шарингом.
+  startSvc('drivesvc', repoRoot, 'back-go/drive', './cmd/drivesvc', {
+    ...baseEnv,
+    UPLOAD_FOLDER: fs.mkdtempSync(path.join(process.env.TMPDIR || '/tmp', 'gw2-front-drive-')),
+    GRPC_ADDR: `:${GRPC.drive}`, HTTP_ADDR: `:${HTTP.drive}`,
+  })
+
   // notesvc: AI_GRPC_ADDR не задаём — семантический поиск fail-open на текстовый.
   startSvc('notesvc', repoRoot, 'back-go/notes', './cmd/notesvc', {
     ...baseEnv,
@@ -272,7 +286,7 @@ export default async function setup() {
   startSvc('boardsvc', repoRoot, 'back-go/board', './cmd/boardsvc', {
     ...baseEnv,
     UPLOAD_FOLDER: fs.mkdtempSync(path.join(process.env.TMPDIR || '/tmp', 'gw2-front-board-')),
-    HTTP_ADDR: `:${HTTP.board}`,
+    GRPC_ADDR: `:${GRPC.board}`, HTTP_ADDR: `:${HTTP.board}`,
   })
   startSvc('remindersvc', repoRoot, 'back-go/reminder', './cmd/remindersvc', {
     ...baseEnv, HTTP_ADDR: `:${HTTP.reminder}`,
@@ -280,6 +294,14 @@ export default async function setup() {
   startSvc('billingsvc', repoRoot, 'back-go/billing', './cmd/billingsvc', {
     ...baseEnv,
     GRPC_ADDR: `:${GRPC.billing}`, HTTP_ADDR: `:${HTTP.billing}`,
+    // Раздел «Настройки → Хранилище»: у кого биллинг спрашивает про файлы.
+    // Здесь подняты не все владельцы — недостающих он просто пропускает.
+    FILE_OWNER_ADDRS: [
+      `messenger=localhost:${GRPC.messenger}`,
+      `notes=localhost:${GRPC.notes}`,
+      `drive=localhost:${GRPC.drive}`,
+    ].join(','),
+    UPLOAD_FOLDER: fs.mkdtempSync(path.join(process.env.TMPDIR || '/tmp', 'gw2-front-billing-')),
   })
 
   // callsvc — LiveKit в стенде нет: медиа-часть недоступна, зато проверяются
@@ -320,7 +342,7 @@ export default async function setup() {
       waitHealthz(HTTP.mail), waitHealthz(HTTP.auth), waitHealthz(HTTP.diary),
       waitHealthz(HTTP.tasks), waitHealthz(HTTP.registry), waitHealthz(HTTP.calendar),
       waitHealthz(HTTP.messenger), waitHealthz(HTTP.pets),
-      waitHealthz(HTTP.portal), waitHealthz(HTTP.notes), waitHealthz(HTTP.board),
+      waitHealthz(HTTP.portal), waitHealthz(HTTP.notes), waitHealthz(HTTP.board), waitHealthz(HTTP.drive),
       waitHealthz(HTTP.reminder), waitHealthz(HTTP.billing),
       waitHealthz(HTTP.push), waitHealthz(HTTP.ai), waitHealthz(HTTP.calls),
     ])
@@ -333,7 +355,7 @@ export default async function setup() {
   }
 
   writeStatus({ ready: true, dbURL: PG.dbURL, pgContainer: PG.container })
-  console.log('[integration] бэкенд готов (auth/diary/tasks/registry/calendar/messenger/pets/portal/notes/board/reminder/billing/push/ai/calls)')
+  console.log('[integration] бэкенд готов (auth/diary/tasks/registry/calendar/messenger/pets/portal/notes/board/drive/reminder/billing/push/ai/calls)')
 
   return async () => {
     if (process.env.GW_DUMP_LOGS) dumpLogs()

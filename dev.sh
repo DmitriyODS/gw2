@@ -50,7 +50,7 @@ BILLING_PID=""
 ALICE_PID=""
 
 # Все Go-сервисы — по имени ловим осиротевшие процессы прошлого запуска.
-SVCS="callsvc authsvc msgsvc aisvc petsvc tasksvc gatewaysvc pushsvc mailsvc registrysvc calendarsvc diarysvc portalsvc notesvc boardsvc remindersvc billingsvc alicesvc"
+SVCS="callsvc authsvc msgsvc aisvc petsvc tasksvc gatewaysvc pushsvc mailsvc registrysvc calendarsvc diarysvc portalsvc notesvc boardsvc drivesvc remindersvc billingsvc alicesvc"
 
 # Порты, которые занимает dev-стек (HTTP и gRPC сервисов + Vite). По ним и
 # освобождаем окружение при старте: имя бинаря в кеше `go build` зависит от его
@@ -191,7 +191,7 @@ ensure_front_deps
 #     go run ниже стартует мгновенно. `go build ./...` из корня workspace не
 #     работает (back-go без своего go.mod), поэтому обходим модули через -C.
 printf "\033[1m▶ Сборка Go-сервисов...\033[0m\n"
-for mod in pkg migrate calls auth messenger ai pets tasks gateway push mail registry calendar diary portal notes board reminder billing alice; do
+for mod in pkg migrate calls auth messenger ai pets tasks gateway push mail registry calendar diary portal notes board drive reminder billing alice; do
     printf "  %s" "$mod"
     go build -C "$ROOT/back-go/$mod" ./...
     printf "\033[32m ✓\033[0m\n"
@@ -242,9 +242,11 @@ printf "\033[1m▶ authsvc (Go)  HTTP :8091...\033[0m\n"
   UPLOAD_FOLDER="$UPLOADS" \
   MAIL_GRPC_ADDR="localhost:9098" \
   BILLING_GRPC_ADDR="localhost:9107" \
+  COMPANY_DATA_ADDRS="tasks=localhost:9095,registry=localhost:9099,calendar=localhost:9100,portal=localhost:9102" \
   APP_PUBLIC_BASE_URL="http://${PRIMARY_IP}:5173" \
   OAUTH_ALICE_CLIENT_ID="alice-dev" \
   OAUTH_ALICE_CLIENT_SECRET="alice-dev-secret" \
+  GRPC_ADDR=":9091" \
   exec go run ./cmd/authsvc
 ) &
 AUTH_PID=$!
@@ -375,6 +377,7 @@ printf "\033[1m▶ registrysvc (Go)  HTTP :8099...\033[0m\n"
   BILLING_GRPC_ADDR="localhost:9107" \
   UPLOAD_FOLDER="$ROOT/uploads" \
   HTTP_ADDR=":8099" \
+  GRPC_ADDR=":9099" \
   exec go run ./cmd/registrysvc
 ) &
 REGISTRY_PID=$!
@@ -391,6 +394,7 @@ printf "\033[1m▶ calendarsvc (Go)  HTTP :8100...\033[0m\n"
   BILLING_GRPC_ADDR="localhost:9107" \
   UPLOAD_FOLDER="$ROOT/uploads" \
   HTTP_ADDR=":8100" \
+  GRPC_ADDR=":9100" \
   exec go run ./cmd/calendarsvc
 ) &
 CALENDAR_PID=$!
@@ -423,6 +427,7 @@ printf "\033[1m▶ portalsvc (Go)  HTTP :8102...\033[0m\n"
   UPLOAD_FOLDER="$UPLOADS" \
   MESSENGER_GRPC_ADDR="localhost:9092" \
   HTTP_ADDR=":8102" \
+  GRPC_ADDR=":9102" \
   exec go run ./cmd/portalsvc
 ) &
 PORTAL_PID=$!
@@ -458,6 +463,7 @@ printf "\033[1m▶ boardsvc (Go)  HTTP :8105...\033[0m\n"
   BILLING_GRPC_ADDR="localhost:9107" \
   UPLOAD_FOLDER="$UPLOADS" \
   HTTP_ADDR=":8105" \
+  GRPC_ADDR=":9105" \
   exec go run ./cmd/boardsvc
 ) &
 BOARD_PID=$!
@@ -476,6 +482,23 @@ printf "\033[1m▶ remindersvc (Go)  HTTP :8106...\033[0m\n"
 ) &
 REMINDER_PID=$!
 
+# 12g3. Go-микросервис «Диск» drivesvc (HTTP :8108 — REST /api/drive/*,
+#      gRPC :9108 — контракт владельца файлов для раздела «Хранилище»).
+#      Файлы пишутся в общий uploads-том и считаются в квоте владельца.
+printf "\033[1m▶ drivesvc (Go)  HTTP :8108, gRPC :9108...\033[0m\n"
+(
+  cd "$ROOT/back-go/drive" && \
+  DATABASE_URL="postgresql://grovework:grovework_local@localhost:5432/grovework" \
+  REDIS_URL="redis://localhost:6379/0" \
+  PASETO_PUBLIC_KEY="$PASETO_PUBLIC_KEY_DEV" \
+  BILLING_GRPC_ADDR="localhost:9107" \
+  UPLOAD_FOLDER="$UPLOADS" \
+  HTTP_ADDR=":8108" \
+  GRPC_ADDR=":9108" \
+  exec go run ./cmd/drivesvc
+) &
+DRIVE_PID=$!
+
 # 12g2. Go-микросервис подписок и магазина billingsvc (HTTP :8107 — REST
 #      /api/billing/*, gRPC :9107 — лимиты тарифа для остальных сервисов).
 #      Внутри — планировщик продлений подписок и докупок.
@@ -487,6 +510,8 @@ printf "\033[1m▶ billingsvc (Go)  HTTP :8107, gRPC :9107...\033[0m\n"
   PASETO_PUBLIC_KEY="$PASETO_PUBLIC_KEY_DEV" \
   HTTP_ADDR=":8107" \
   GRPC_ADDR=":9107" \
+  UPLOAD_FOLDER="$UPLOADS" \
+  FILE_OWNER_ADDRS="messenger=localhost:9092,notes=localhost:9103,boards=localhost:9105,registry=localhost:9099,calendar=localhost:9100,portal=localhost:9102,avatars=localhost:9091,drive=localhost:9108" \
   exec go run ./cmd/billingsvc
 ) &
 BILLING_PID=$!

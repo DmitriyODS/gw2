@@ -79,6 +79,7 @@
 <script setup>
 import { computed, defineAsyncComponent, reactive, ref } from 'vue'
 import { useAuthStore } from '@/stores/auth.js'
+import { useScreenLock } from '@/composables/useScreenLock.js'
 import { useDesktopStore } from '@/stores/desktop.js'
 import { useDesktopPrefsStore } from '@/stores/desktopPrefs.js'
 import { useMessengerStore } from '@/stores/messenger.js'
@@ -100,6 +101,7 @@ import LiveTile from '@/components/desktop/LiveTile.vue'
 const AppDialog = defineAsyncComponent(() => import('@/components/ui/AppDialog.vue'))
 
 const auth = useAuthStore()
+const screenLock = useScreenLock()
 const desktop = useDesktopStore()
 const prefs = useDesktopPrefsStore()
 const messenger = useMessengerStore()
@@ -166,6 +168,9 @@ const menuItems = computed(() => {
     return [
       { label: 'Персонализация', icon: 'wallpaper', action: 'personalize' },
       { label: 'Справка и поддержка', icon: 'help', action: 'help' },
+      ...(screenLock.enabled.value
+        ? [{ divider: true }, { label: 'Заблокировать', icon: 'lock', action: 'lock' }]
+        : []),
       { divider: true },
       { label: 'Выйти', icon: 'logout', action: 'logout', danger: true },
     ]
@@ -211,6 +216,7 @@ function onMenuSelect(action) {
   if (action === 'personalize') return open('/settings?section=desktop')
   if (action === 'help') return open('/settings?section=help')
   if (action === 'logout') { logoutAsk.value = true; return }
+  if (action === 'lock') { screenLock.lock(); return }
   const id = menu.appId
   if (!id) return
   if (action === 'open') return open(appById.value.get(id).path)

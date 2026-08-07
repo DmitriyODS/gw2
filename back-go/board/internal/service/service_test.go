@@ -6,6 +6,7 @@ import (
 	"io"
 	"log/slog"
 	"slices"
+	"sort"
 	"testing"
 
 	"github.com/DmitriyODS/gw2/back-go/board/internal/domain"
@@ -127,6 +128,27 @@ func (f *fakeRepo) CreateBoard(_ domain.Ctx, n *domain.Board) error {
 	return nil
 }
 func (f *fakeRepo) UpdateBoard(_ domain.Ctx, n *domain.Board) error { f.boards[n.ID] = n; return nil }
+
+// Раздел «Хранилище»: картинки живут внутри сцены, поэтому и список, и
+// вырезание идут по ней.
+func (f *fakeRepo) BoardScenesOf(_ domain.Ctx, ownerID int64) ([]*domain.Board, error) {
+	out := []*domain.Board{}
+	for _, b := range f.boards {
+		if b.OwnerID == ownerID {
+			out = append(out, b)
+		}
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].ID < out[j].ID })
+	return out, nil
+}
+
+func (f *fakeRepo) UpdateBoardScene(_ domain.Ctx, id int64, scene json.RawMessage, text string) error {
+	if b := f.boards[id]; b != nil {
+		b.Scene, b.TextContent = scene, text
+	}
+	return nil
+}
+
 func (f *fakeRepo) DeleteBoard(_ domain.Ctx, id int64) error        { delete(f.boards, id); return nil }
 func (f *fakeRepo) MoveBoard(_ domain.Ctx, id int64, folderID *int64) error {
 	if n := f.boards[id]; n != nil {
@@ -482,7 +504,8 @@ func (nopFiles) SaveFor(_ context.Context, _, _ int64, _ string, _ []byte) (stri
 	return "boards/x", nil
 }
 func (nopFiles) RemoveFor(_ context.Context, _, _ int64, _ []string) {}
-func (nopFiles) Open(_ string) ([]byte, error)           { return nil, nil }
+func (nopFiles) Remove(_ []string)                                   {}
+func (nopFiles) Open(_ string) ([]byte, error)                       { return nil, nil }
 
 type allowLimiter struct{}
 

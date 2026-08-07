@@ -5,6 +5,7 @@
     :id="manageId"
     @back="closeManage"
     @deleted="onDeleted"
+    @imported="onImported"
   />
 
   <AppStack v-else>
@@ -40,7 +41,7 @@
       />
     </AppCard>
 
-    <div v-if="loading" class="cs-state"><BrandLoader :size="64" /></div>
+    <BrandLoader v-if="loading" block :size="64" />
 
     <EmptyState
       v-else-if="!visible.length"
@@ -242,6 +243,14 @@ function onDeleted() {
   loadData()
 }
 
+// Поднятая из архива компания — новая строка списка: возвращаемся к нему,
+// иначе человек остаётся в карточке прежней компании и решает, что ничего
+// не произошло.
+function onImported() {
+  manageId.value = null
+  loadData()
+}
+
 function openCreate() {
   createOpen.value = true
 }
@@ -299,5 +308,4 @@ async function doDelete() {
 .cs-meta { display: inline-flex; flex-wrap: wrap; gap: 4px; }
 .cs-off { color: var(--color-error); }
 .cs-chev { color: var(--color-text-dim); }
-.cs-state { display: grid; place-items: center; padding: 32px; }
 </style>

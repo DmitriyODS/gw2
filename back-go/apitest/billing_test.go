@@ -10,6 +10,10 @@ import (
 // unlimited — «без ограничения» в ответах биллинга (domain.Unlimited).
 const unlimited = -1
 
+// freeStorageBytes ≡ domain.FreeStorageBytes: место, доступное каждому, пока
+// подписки скрыты. Единственный счётный лимит, который при этом остаётся.
+const freeStorageBytes int64 = 5 << 30
+
 // subscriptionsHidden — в выпуске 7.0 подписки скрыты от пользователя, и тариф
 // не ограничивает счётные лимиты. Режим определяем ПО ОТВЕТУ сервера, а не по
 // константе сервиса: харнес ходит снаружи и внутренние пакеты ему недоступны.
@@ -56,6 +60,11 @@ func TestBillingShowcase(t *testing.T) {
 	if subscriptionsHidden(out.Entitlements.Limits.Boards) {
 		if out.Entitlements.Limits.Companies != unlimited {
 			t.Fatalf("при скрытых подписках лимиты обязаны быть сняты все: %+v", out.Entitlements.Limits)
+		}
+		// Кроме места: оно упирается в диск, а не в тариф, и остаётся конечным.
+		if out.Entitlements.Limits.Storage != freeStorageBytes {
+			t.Fatalf("место при скрытых подписках = %d, ждали %d",
+				out.Entitlements.Limits.Storage, freeStorageBytes)
 		}
 	} else if out.Entitlements.Limits.Companies != 1 || out.Entitlements.Limits.Boards != 1 {
 		t.Fatalf("лимиты «Джуна» не совпали: %+v", out.Entitlements.Limits)

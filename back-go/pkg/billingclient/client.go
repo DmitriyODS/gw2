@@ -152,18 +152,49 @@ func (c *Client) Invalidate(userID int64) {
 	}
 }
 
-// TrackStorage — сообщить биллингу об изменении занятого места (дельта в
-// байтах; удаление файла — отрицательная). companyID > 0 — файл компании:
-// владельца квоты (её создателя) находит сам биллинг. Ошибки только
-// логируются: учёт места не должен ронять загрузку файла.
-func (c *Client) TrackStorage(ctx context.Context, userID, companyID int64, service string, delta int64) {
-	if c == nil || delta == 0 || (userID <= 0 && companyID <= 0) {
+// StoredFile — файл, попавший в хранилище: строка журнала раздела
+// «Настройки → Хранилище». Ref* описывают, ГДЕ файл лежит (сущность-носитель);
+// их можно не заполнять — файл нередко грузится раньше своей сущности.
+type StoredFile struct {
+	Key   string
+	Name  string
+	Size  int64
+	Kind  string // вид сущности: message, note, board, record, post, avatar
+	ID    string // её идентификатор
+	Title string // человекочитаемое «где именно»
+}
+
+// StorageChange — что случилось с файлами владельца. Занятое место биллинг
+// пересчитает сам: размеры добавленных он получит здесь, размеры удалённых
+// возьмёт из журнала — мерить объекты в хранилище перед удалением не нужно.
+type StorageChange struct {
+	Service string
+	Added   []StoredFile
+	Removed []string // ключи удалённых
+}
+
+// TrackStorage — сообщить биллингу о появившихся и удалённых файлах.
+// companyID > 0 — файлы компании: владельца квоты (её создателя) находит сам
+// биллинг. Ошибки только логируются: учёт места не должен ронять загрузку.
+func (c *Client) TrackStorage(ctx context.Context, userID, companyID int64, ch StorageChange) {
+	if c == nil || (userID <= 0 && companyID <= 0) {
 		return
+	}
+	if len(ch.Added) == 0 && len(ch.Removed) == 0 {
+		return
+	}
+	added := make([]*billingpb.StoredFile, 0, len(ch.Added))
+	for _, f := range ch.Added {
+		added = append(added, &billingpb.StoredFile{
+			Key: f.Key, Name: f.Name, Size: f.Size,
+			RefKind: f.Kind, RefId: f.ID, Title: f.Title,
+		})
 	}
 	rctx, cancel := context.WithTimeout(ctx, callTimeout)
 	defer cancel()
 	if _, err := c.api.TrackStorage(rctx, &billingpb.TrackStorageRequest{
-		UserId: userID, CompanyId: companyID, Service: service, DeltaBytes: delta,
+		UserId: userID, CompanyId: companyID, Service: ch.Service,
+		Added: added, RemovedKeys: ch.Removed,
 	}); err != nil {
 		c.log.Warn("billing.track_storage_failed", "user_id", userID, "error", err)
 		return
@@ -262,6 +293,11 @@ func LimitError(kind string, limit, current int64, planName string) *apierror.Er
 	msg := "Достигнут предел тарифа: " + label + ". Оформите подписку в магазине, чтобы продолжить."
 	if planName != "" {
 		msg = "Тариф «" + planName + "» исчерпан по разделу «" + label + "». Оформите подписку в магазине, чтобы продолжить."
+	}
+	// Место — не про тариф: докупить его нельзя, пока подписки скрыты, зато
+	// всегда можно освободить. Ведём туда, где видно, чем оно занято.
+	if kind == "storage" {
+		msg = "Место в хранилище закончилось. Освободите его в разделе «Настройки → Хранилище»."
 	}
 	return apierror.NewExtra("LIMIT_REACHED", msg, http.StatusPaymentRequired, map[string]any{
 		"limit_kind": kind, "limit": limit, "current": current, "plan": planName,

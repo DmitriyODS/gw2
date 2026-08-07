@@ -58,6 +58,7 @@ export const HTTP = {
   portal: 18202,
   notes: 18203,
   board: 18205,
+  drive: 18208,
   reminder: 18206,
   billing: 18207,
 }
@@ -65,12 +66,19 @@ export const HTTP = {
 // gRPC-порты (+10100).
 export const GRPC = {
   calls: 19190,
+  auth: 19191,
   messenger: 19192,
   ai: 19193,
   pets: 19194,
   tasks: 19195,
   mail: 19198,
+  registry: 19199,
+  calendar: 19200,
+  diary: 19201,
+  portal: 19202,
   notes: 19203,
+  board: 19205,
+  drive: 19208,
   billing: 19207,
 }
 
@@ -114,6 +122,7 @@ export function routeBase(path) {
     ['/api/portal', HTTP.portal],
     ['/api/notes', HTTP.notes],
     ['/api/boards', HTTP.board],
+    ['/api/drive', HTTP.drive],
     ['/api/reminders', HTTP.reminder],
     ['/api/billing', HTTP.billing],
     ['/api/changelog', null], // статика nginx, не сервис

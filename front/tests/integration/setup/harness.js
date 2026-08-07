@@ -83,6 +83,12 @@ async function multipart(form) {
   return { body: Buffer.concat(chunks), contentType: `multipart/form-data; boundary=${boundary}` }
 }
 
+// Blob по утиному признаку: инстанс jsdom не пройдёт instanceof node-класса.
+function isBlob(body) {
+  return !!body && typeof body === 'object' && typeof body.arrayBuffer === 'function'
+    && typeof body.size === 'number'
+}
+
 function isFormData(body) {
   return !!body && typeof body === 'object' && typeof body.entries === 'function'
     && body[Symbol.toStringTag] === 'FormData'
@@ -113,6 +119,10 @@ globalThis.fetch = async function shimFetch(input, init = {}) {
     const part = await multipart(body)
     body = part.body
     headers.set('Content-Type', part.contentType)
+  } else if (isBlob(body)) {
+    // Blob у jsdom и у node-fetch — РАЗНЫЕ классы: чужой node приводит к
+    // строке «[object Blob]». Отдаём буфером, как и multipart выше.
+    body = Buffer.from(await body.arrayBuffer())
   }
 
   const resp = await realFetch(base + url, { ...init, body, headers, redirect: 'manual' })

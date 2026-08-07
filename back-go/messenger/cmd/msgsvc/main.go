@@ -30,6 +30,7 @@ import (
 	"github.com/DmitriyODS/gw2/back-go/pkg/gen/messengerpb"
 	"github.com/DmitriyODS/gw2/back-go/pkg/pasetoauth"
 	"github.com/DmitriyODS/gw2/back-go/pkg/storage"
+	"github.com/DmitriyODS/gw2/back-go/pkg/storagefiles"
 )
 
 func main() {
@@ -94,6 +95,8 @@ func main() {
 
 	grpcServer := googrpc.NewServer()
 	messengerpb.RegisterMessengerServiceServer(grpcServer, grpctransport.NewServer(eps))
+	// Раздел «Настройки → Хранилище»: биллинг спрашивает про вложения.
+	storagefiles.Register(grpcServer, svc)
 	listener, err := net.Listen("tcp", grpcAddr)
 	if err != nil {
 		log.Error("grpc.listen_failed", "addr", grpcAddr, "error", err)

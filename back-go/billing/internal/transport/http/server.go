@@ -54,6 +54,8 @@ func NewServer(svc *service.Service, identity domain.IdentityReader,
 	api.Get("/showcase", h.showcase)
 	api.Get("/entitlements", h.entitlements)
 	api.Get("/storage", h.storage)
+	api.Delete("/storage/files", h.deleteStorageFiles)
+	api.Post("/storage/sweep", h.sweepStorage)
 	api.Get("/ai", h.aiState)
 	api.Post("/quote", h.quote)
 	api.Post("/purchase", h.purchase)

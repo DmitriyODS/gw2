@@ -3,7 +3,7 @@
        моделей. Цена модели задаёт стоимость обращения в токенах доступа —
        правка каталога сразу меняет тарификацию для всех пользователей. -->
   <div class="tab">
-    <BrandLoader v-if="loading" :size="48" />
+    <BrandLoader v-if="loading" block :size="64" />
 
     <AppStack v-else :gap="14">
       <AppCard>

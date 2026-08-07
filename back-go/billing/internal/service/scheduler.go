@@ -94,7 +94,10 @@ func (s *Service) renewalOrder(ctx context.Context, sub *domain.Subscription) (*
 	if err := s.Orders.CreateOrder(ctx, order); err != nil {
 		return nil, err
 	}
-	secret := randomSecret()
+	secret, err := randomSecret()
+	if err != nil {
+		return order, nil // счёт есть, оплатить его можно из «Заказов»
+	}
 	pp, err := s.Provider.Create(ctx, order, secret)
 	if err != nil {
 		return order, nil // счёт есть, оплатить его можно из «Заказов»

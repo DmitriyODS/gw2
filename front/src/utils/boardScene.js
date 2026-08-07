@@ -263,7 +263,7 @@ export function drawBackground(ctx, { width, height, camera, background }) {
     if (step > 6) {
       const offsetX = ((-camera.x * camera.scale) % step + step) % step
       const offsetY = ((-camera.y * camera.scale) % step + step) % step
-      ctx.strokeStyle = resolveColor('__grid', '--color-outline-variant')
+      ctx.strokeStyle = resolveColor('__grid', '--color-outline-dim')
       ctx.fillStyle = ctx.strokeStyle
       ctx.globalAlpha = 0.5
       ctx.lineWidth = 1

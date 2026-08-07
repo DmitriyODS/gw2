@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"log/slog"
+	"sort"
 	"testing"
 	"time"
 
@@ -24,6 +25,7 @@ type fakeRepo struct {
 	promos  map[string]*domain.Promo
 	balance map[int64]*domain.AIBalance
 	storage map[int64]int64
+	files   map[int64]map[string]*domain.StoredFile
 	audit   []*domain.AuditEntry
 	seq     int64
 }
@@ -46,6 +48,7 @@ func newRepo() *fakeRepo {
 		promos:  map[string]*domain.Promo{},
 		balance: map[int64]*domain.AIBalance{},
 		storage: map[int64]int64{},
+		files:   map[int64]map[string]*domain.StoredFile{},
 	}
 }
 
@@ -337,6 +340,53 @@ func (r *fakeRepo) Track(_ context.Context, userID int64, _ string, delta int64)
 func (r *fakeRepo) Set(_ context.Context, userID int64, _ string, bytes int64) error {
 	r.storage[userID] = bytes
 	return nil
+}
+func (r *fakeRepo) AddFiles(_ context.Context, userID int64, files []*domain.StoredFile) error {
+	if r.files[userID] == nil {
+		r.files[userID] = map[string]*domain.StoredFile{}
+	}
+	for _, f := range files {
+		cp := *f
+		r.files[userID][f.Key] = &cp
+	}
+	return nil
+}
+func (r *fakeRepo) RemoveFiles(_ context.Context, userID int64, keys []string) (int64, error) {
+	var freed int64
+	for _, k := range keys {
+		if f, ok := r.files[userID][k]; ok {
+			freed += f.Size
+			delete(r.files[userID], k)
+		}
+	}
+	return freed, nil
+}
+func (r *fakeRepo) TopFiles(_ context.Context, userID int64, service string, limit int) ([]*domain.StoredFile, error) {
+	out := []*domain.StoredFile{}
+	for _, f := range r.files[userID] {
+		if service == "" || f.Service == service {
+			out = append(out, f)
+		}
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].Size > out[j].Size })
+	if len(out) > limit {
+		out = out[:limit]
+	}
+	return out, nil
+}
+func (r *fakeRepo) AllFiles(_ context.Context, userID int64) ([]*domain.StoredFile, error) {
+	out := []*domain.StoredFile{}
+	for _, f := range r.files[userID] {
+		out = append(out, f)
+	}
+	return out, nil
+}
+func (r *fakeRepo) UsageFromFiles(_ context.Context, userID int64) (map[string]int64, error) {
+	out := map[string]int64{}
+	for _, f := range r.files[userID] {
+		out[f.Service] += f.Size
+	}
+	return out, nil
 }
 
 // ---- Settings/Audit ----

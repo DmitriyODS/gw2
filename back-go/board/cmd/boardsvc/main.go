@@ -6,15 +6,20 @@
 // принадлежит одному пользователю и не зависит от компании (кросс-компанийная,
 // как заметка). Схему таблиц ведёт migrate-контейнер (goose).
 //
-// Транспорт: HTTP/Fiber (HTTP_ADDR) — REST /api/boards/* (за nginx).
+// Транспорт: HTTP/Fiber (HTTP_ADDR) — REST /api/boards/* (за nginx) и узкий
+// gRPC (GRPC_ADDR) — только контракт владельца файлов для раздела
+// «Настройки → Хранилище» (его зовёт биллинг).
 // Сокет-события клиентам — Redis-канал gw2:board:events (доставляет
 // gatewaysvc). Картинки холста и превью досок — pkg/storage (local-том в dev,
-// S3 в prod), отдаются по /uploads/. Межсервисных вызовов нет: авторизация
-// локальная (PASETO).
+// S3 в prod), отдаются по /uploads/. Исходящих межсервисных вызовов нет:
+// авторизация локальная (PASETO).
 package main
 
 import (
+	"net"
 	"os"
+
+	googrpc "google.golang.org/grpc"
 
 	"github.com/DmitriyODS/gw2/back-go/board/internal/repository/postgres"
 	redisrepo "github.com/DmitriyODS/gw2/back-go/board/internal/repository/redis"
@@ -26,6 +31,7 @@ import (
 	"github.com/DmitriyODS/gw2/back-go/pkg/pasetoauth"
 	"github.com/DmitriyODS/gw2/back-go/pkg/records"
 	"github.com/DmitriyODS/gw2/back-go/pkg/storage"
+	"github.com/DmitriyODS/gw2/back-go/pkg/storagefiles"
 )
 
 // sharedWriteLimit — троттлинг анонимных правок по коду edit-ссылки (в минуту).
@@ -79,7 +85,18 @@ func main() {
 
 	httpServer := httptransport.NewServer(svc, users, verifier, log)
 
-	log.Info("listening", "http", httpAddr)
+	// gRPC — единственный: биллинг спрашивает про файлы для раздела
+	// «Настройки → Хранилище» (картинки холста).
+	grpcAddr := bootstrap.Env("GRPC_ADDR", ":9105")
+	grpcServer := googrpc.NewServer()
+	storagefiles.Register(grpcServer, svc)
+	listener, err := net.Listen("tcp", grpcAddr)
+	if err != nil {
+		log.Error("grpc.listen_failed", "addr", grpcAddr, "error", err)
+		os.Exit(1)
+	}
+
+	log.Info("listening", "http", httpAddr, "grpc", grpcAddr)
 	bootstrap.Run(ctx, log,
 		bootstrap.Component{
 			Name: "http",
@@ -89,6 +106,11 @@ func main() {
 					log.Warn("http.shutdown_failed", "error", err)
 				}
 			},
+		},
+		bootstrap.Component{
+			Name: "grpc",
+			Run:  func() error { return grpcServer.Serve(listener) },
+			Stop: grpcServer.GracefulStop,
 		},
 	)
 }

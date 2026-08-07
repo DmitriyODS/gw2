@@ -5,10 +5,13 @@ import (
 	"encoding/json"
 	"io"
 	"log/slog"
+	"slices"
 	"sort"
+	"strconv"
 	"testing"
 	"time"
 
+	"github.com/DmitriyODS/gw2/back-go/pkg/storagefiles"
 	"github.com/DmitriyODS/gw2/back-go/portal/internal/domain"
 )
 
@@ -239,6 +242,44 @@ func (f *fakeRepo) AttachmentPaths(_ domain.Ctx, postID int64) ([]string, error)
 	return out, nil
 }
 
+// Раздел «Хранилище»: файлы отбираются по компании поста — платит её создатель.
+func (f *fakeRepo) ListStorageFiles(_ domain.Ctx, companyIDs []int64) ([]storagefiles.File, error) {
+	out := []storagefiles.File{}
+	for postID, atts := range f.atts {
+		post := f.posts[postID]
+		if post == nil || !slices.Contains(companyIDs, post.CompanyID) {
+			continue
+		}
+		for _, a := range atts {
+			out = append(out, storagefiles.File{
+				Key: a.FilePath, Name: a.Name, Kind: "post",
+				ID: strconv.FormatInt(postID, 10), CompanyID: post.CompanyID,
+			})
+		}
+	}
+	return out, nil
+}
+
+func (f *fakeRepo) DeleteStorageFiles(_ domain.Ctx, companyIDs []int64, keys []string) ([]string, error) {
+	deleted := []string{}
+	for postID, atts := range f.atts {
+		post := f.posts[postID]
+		if post == nil || !slices.Contains(companyIDs, post.CompanyID) {
+			continue
+		}
+		kept := atts[:0]
+		for _, a := range atts {
+			if slices.Contains(keys, a.FilePath) {
+				deleted = append(deleted, a.FilePath)
+				continue
+			}
+			kept = append(kept, a)
+		}
+		f.atts[postID] = kept
+	}
+	return deleted, nil
+}
+
 func (f *fakeRepo) ListComments(_ domain.Ctx, postID, viewerID int64) ([]*domain.Comment, error) {
 	out := []*domain.Comment{}
 	for _, c := range f.comments {
@@ -359,6 +400,9 @@ func (f *fakeFiles) SaveFor(_ context.Context, _, _ int64, _ string, _ []byte) (
 	return "portal/x", nil
 }
 func (f *fakeFiles) RemoveFor(_ context.Context, _, _ int64, paths []string) {
+	f.removed = append(f.removed, paths...)
+}
+func (f *fakeFiles) Remove(paths []string) {
 	f.removed = append(f.removed, paths...)
 }
 

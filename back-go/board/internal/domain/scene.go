@@ -231,6 +231,49 @@ func SceneImageKeys(raw json.RawMessage) []string {
 	return out
 }
 
+/* SceneWithoutImages — сцена без картинок с перечисленными ключами (человек
+   убирает файл в разделе «Настройки → Хранилище»). Второе значение — менялось
+   ли что-нибудь.
+
+   Правим сырое дерево, а не разобранную Scene: та знает лишь те поля, что
+   нужны серверу, и пересборка из неё потеряла бы всё, что кладёт клиент. */
+func SceneWithoutImages(raw json.RawMessage, keys []string) (json.RawMessage, bool) {
+	if len(raw) == 0 || len(keys) == 0 {
+		return raw, false
+	}
+	var root map[string]any
+	if json.Unmarshal(raw, &root) != nil {
+		return raw, false
+	}
+	objects, ok := root["objects"].([]any)
+	if !ok {
+		return raw, false
+	}
+	drop := make(map[string]bool, len(keys))
+	for _, k := range keys {
+		drop[k] = true
+	}
+	kept := make([]any, 0, len(objects))
+	for _, item := range objects {
+		obj, ok := item.(map[string]any)
+		if ok {
+			if src, _ := obj["src"].(string); src != "" && drop[StorageKey(src)] {
+				continue
+			}
+		}
+		kept = append(kept, item)
+	}
+	if len(kept) == len(objects) {
+		return raw, false
+	}
+	root["objects"] = kept
+	out, err := json.Marshal(root)
+	if err != nil {
+		return raw, false
+	}
+	return out, true
+}
+
 // TextToScene — сцена из плоского текста (импорт .txt): по надписи на строку.
 func TextToScene(text string) json.RawMessage {
 	objs := []SceneObject{}

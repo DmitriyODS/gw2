@@ -4,7 +4,7 @@
       <div v-if="visible" class="rpick-backdrop" @pointerdown.self="emit('close')" @contextmenu.prevent>
         <div ref="panelEl" class="rpick" :style="style" role="menu" aria-label="Выбор реакции">
           <button
-            v-for="e in QUICK_REACTIONS"
+            v-for="e in suggestedReactions"
             :key="e"
             class="rpick-item"
             :class="{ active: mine.includes(e) }"
@@ -20,7 +20,7 @@
 
 <script setup>
 import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue'
-import { QUICK_REACTIONS } from '@/utils/reactions.js'
+import { suggestedReactions } from '@/utils/reactions.js'
 
 const props = defineProps({
   visible: { type: Boolean, default: false },

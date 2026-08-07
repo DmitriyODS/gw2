@@ -48,8 +48,9 @@ export const useYougileStore = defineStore('yougile', () => {
     return res
   }
 
-  async function disconnect() {
-    await api.disconnectYougile()
+  // id не передан — отключаем активное подключение (их бывает несколько).
+  async function disconnect(id = null) {
+    await api.disconnectYougile(id)
     await refreshStatus()
   }
 

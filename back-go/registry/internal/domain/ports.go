@@ -43,6 +43,10 @@ type RegistryRepository interface {
 	// RecordsForExport — записи для выгрузки: при непустом ids — только они,
 	// иначе все по фильтру search. Без пагинации, порядок по created_at DESC.
 	RecordsForExport(ctx Ctx, registryID int64, search string, ids []int64) ([]*Record, error)
+	// RecordsOfCompanies — записи вместе с их реестром: раздел «Настройки →
+	// Хранилище» показывает, в каком реестре лежит файл. Скоуп — компании,
+	// чью квоту оплачивает спрашивающий (их присылает биллинг).
+	RecordsOfCompanies(ctx Ctx, companyIDs []int64) ([]*RecordScope, error)
 
 	// ── Публичные ссылки ──
 	CreateShare(ctx Ctx, s *Share) error
@@ -65,6 +69,9 @@ type FileStore interface {
 	// RemoveFor — best-effort удаление файлов по ключам с возвратом места в
 	// квоту (чистка при удалении записей/полей); ошибки не возвращаются.
 	RemoveFor(ctx context.Context, userID, companyID int64, paths []string)
+	// Remove — удаление БЕЗ учёта: так чистит раздел «Хранилище», где место
+	// пересчитывает сам биллинг (он же инициатор и знает размеры).
+	Remove(paths []string)
 }
 
 // EventBus — сокет-события клиентам через Redis gw2:registry:events

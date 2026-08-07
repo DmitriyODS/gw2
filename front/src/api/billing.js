@@ -16,7 +16,16 @@ export const getShowcase = () => apiRequest('/billing/showcase')
 export const getEntitlements = (companyId) =>
   apiRequest(`/billing/entitlements?${qs({ company_id: companyId })}`)
 
+// Раздел «Настройки → Хранилище»: лимит, расход по разделам и крупнейшие файлы.
 export const getStorage = () => apiRequest('/billing/storage')
+
+// Удалить выбранные файлы — каждый снимает его сервис-владелец.
+export const deleteStorageFiles = (keys) =>
+  apiRequest('/billing/storage/files', { method: 'DELETE', body: { keys } })
+
+// Сверка с владельцами: убрать потерявшие хозяина файлы, доучесть незнакомые
+// и пересчитать занятое место.
+export const sweepStorage = () => apiRequest('/billing/storage/sweep', { method: 'POST' })
 
 export const getAiUsage = () => apiRequest('/billing/ai')
 

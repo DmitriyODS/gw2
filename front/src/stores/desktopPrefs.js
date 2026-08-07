@@ -30,6 +30,9 @@ function empty() {
     appGroup: {},
     collapsed: {},
     wallpaper: null,
+    // Обои экрана блокировки — свой рецепт: запертый экран человек видит
+    // чаще, чем рабочий стол, и оформляет его отдельно.
+    lockWallpaper: null,
     // Последние загруженные картинки обоев — чтобы вернуться к прошлым.
     wallpapers: [],
     // Живые плитки меню «Пуск» (сводки разделов) — включены по умолчанию.
@@ -62,6 +65,7 @@ function normalize(raw) {
     appGroup: p.appGroup && typeof p.appGroup === 'object' ? { ...p.appGroup } : {},
     collapsed: p.collapsed && typeof p.collapsed === 'object' ? { ...p.collapsed } : {},
     wallpaper: p.wallpaper && typeof p.wallpaper === 'object' ? p.wallpaper : null,
+    lockWallpaper: p.lockWallpaper && typeof p.lockWallpaper === 'object' ? p.lockWallpaper : null,
     wallpapers: Array.isArray(p.wallpapers)
       ? p.wallpapers.filter((u) => typeof u === 'string').slice(0, WALLPAPER_HISTORY)
       : [],
@@ -80,6 +84,7 @@ export const useDesktopPrefsStore = defineStore('desktopPrefs', () => {
   const pinned = computed(() => prefs.value.pinned)
   const order = computed(() => prefs.value.order)
   const wallpaper = computed(() => prefs.value.wallpaper)
+  const lockWallpaper = computed(() => prefs.value.lockWallpaper)
   const wallpapers = computed(() => prefs.value.wallpapers)
   const liveTiles = computed(() => prefs.value.liveTiles)
   const taskbarSide = computed(() => prefs.value.taskbarSide)
@@ -253,6 +258,18 @@ export const useDesktopPrefsStore = defineStore('desktopPrefs', () => {
     scheduleSave()
   }
 
+  // Обои запертого экрана. История картинок общая с рабочим столом: человек
+  // выбирает из одного набора, а показываются они в разных местах.
+  function setLockWallpaper(recipe) {
+    prefs.value.lockWallpaper = recipe ? { ...recipe } : null
+    const url = recipe?.image?.url
+    if (url) {
+      prefs.value.wallpapers = [url, ...prefs.value.wallpapers.filter((u) => u !== url)]
+        .slice(0, WALLPAPER_HISTORY)
+    }
+    scheduleSave()
+  }
+
   function forgetWallpaper(url) {
     prefs.value.wallpapers = prefs.value.wallpapers.filter((u) => u !== url)
     scheduleSave()
@@ -271,6 +288,6 @@ export const useDesktopPrefsStore = defineStore('desktopPrefs', () => {
     tileSize, isPinned, load, setTileSize, setGroupOrder, moveTileToGroup,
     addGroup, renameGroup, removeGroup, isCollapsed, toggleCollapsed,
     pin, unpin, togglePin, setPinnedOrder, setLiveTiles, isTileLive, setTileLive, toggleTileLive,
-    setWallpaper, forgetWallpaper, reset,
+    setWallpaper, setLockWallpaper, lockWallpaper, forgetWallpaper, reset,
   }
 })

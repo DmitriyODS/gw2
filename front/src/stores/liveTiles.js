@@ -12,6 +12,7 @@ import { ref } from 'vue'
 import { getTasks } from '@/api/tasks.js'
 import { getNotes } from '@/api/notes.js'
 import { getBoards } from '@/api/boards.js'
+import { browse as browseDrive } from '@/api/drive.js'
 import { getUpcoming as getUpcomingReminders } from '@/api/reminders.js'
 import { getRegistries } from '@/api/registries.js'
 import { getAgenda as getDiaryAgenda } from '@/api/diaries.js'
@@ -73,6 +74,13 @@ const SOURCES = {
     const data = await getBoards({})
     const boards = data.boards ?? []
     return { total: boards.length, latest: boards[0] || null }
+  },
+
+  drive: async () => {
+    // «Недавние» — уже готовая выборка сервиса: свежие файлы сверху.
+    const data = await browseDrive({ view: 'recent' })
+    const files = data.files ?? []
+    return { total: files.length, latest: files[0] || null }
   },
 
   reminders: async () => {

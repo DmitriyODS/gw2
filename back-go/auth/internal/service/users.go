@@ -3,11 +3,14 @@ package service
 import (
 	"context"
 	"encoding/json"
+	"strconv"
 	"strings"
 	"unicode/utf8"
 
+	"github.com/DmitriyODS/gw2/back-go/auth/internal/avatar"
 	"github.com/DmitriyODS/gw2/back-go/auth/internal/domain"
 	"github.com/DmitriyODS/gw2/back-go/auth/internal/dto"
+	"github.com/DmitriyODS/gw2/back-go/pkg/billingclient"
 )
 
 var errUserNotFound = domain.NewError("NOT_FOUND", "Пользователь не найден", 404)
@@ -51,10 +54,19 @@ func (s *Service) ensureEmailFree(ctx context.Context, email string, selfID int6
 	if err != nil {
 		return err
 	}
-	if existing != nil && existing.ID != selfID {
-		return domain.NewError("EMAIL_TAKEN", "Email уже используется", 409)
+	if existing == nil || existing.ID == selfID {
+		return nil
 	}
-	return nil
+	if !existing.EmailVerified {
+		// Неподтверждённая регистрация не бронирует email навсегда: письмо
+		// подтверждения в любом случае уходит настоящему владельцу ящика (без
+		// доступа к нему завершить чужую регистрацию нельзя), а до первого
+		// входа за пользователем нет никаких данных — освобождаем адрес.
+		// Иначе одной регистрации чужим email хватило бы, чтобы навсегда
+		// запереть жертву вне платформы по её собственному адресу.
+		return s.repo.HardDelete(ctx, existing.ID)
+	}
+	return domain.NewError("EMAIL_TAKEN", "Email уже используется", 409)
 }
 
 // actorScope — активная компания актора (из токена); ошибка, если её нет.
@@ -260,6 +272,7 @@ func (s *Service) UpdateMe(ctx context.Context, userID int64, req dto.UpdateMeRe
 	}
 
 	updates := map[string]any{}
+	passwordChanged := false
 
 	if req.FIO != nil {
 		if err := validateFIO(*req.FIO); err != nil {
@@ -294,6 +307,24 @@ func (s *Service) UpdateMe(ctx context.Context, userID int64, req dto.UpdateMeRe
 			return nil, err
 		}
 		updates["login"] = *req.Login
+	}
+
+	/* Аватар-значок. Файл важнее: пока он есть, значок не показывается —
+	   поэтому выбор эмодзи снимает загруженную фотографию, иначе человек
+	   выбрал бы значок и не понял, почему ничего не изменилось. */
+	if req.AvatarEmoji != nil {
+		emoji, ok := avatar.NormalizeEmoji(*req.AvatarEmoji)
+		if !ok {
+			return nil, domain.NewError("VALIDATION", "Выберите значок-эмодзи", 400)
+		}
+		updates["avatar_emoji"] = nilIfEmpty(emoji)
+		if emoji != "" && user.AvatarPath != nil {
+			s.avatars.Delete(*user.AvatarPath)
+			updates["avatar_path"] = nil
+			s.billing.TrackStorage(ctx, userID, 0, billingclient.StorageChange{
+				Service: "avatars", Removed: []string{*user.AvatarPath},
+			})
+		}
 	}
 
 	// Пользовательский статус — возможность платного тарифа. Снять свой статус
@@ -349,11 +380,22 @@ func (s *Service) UpdateMe(ctx context.Context, userID int64, req dto.UpdateMeRe
 			return nil, err
 		}
 		updates["hash_password"] = hashed
+		passwordChanged = true
 	}
 
 	if len(updates) > 0 {
 		if err := s.repo.UpdateFields(ctx, userID, updates); err != nil {
 			return nil, err
+		}
+	}
+
+	/* Пароль сменился — обрываем прочие входы. Иначе устройство, с которого
+	   пароль и утёк, продолжало бы обновлять токен ещё месяц: смена пароля для
+	   человека и означает «выгнать всех остальных». Текущий сеанс остаётся —
+	   выкидывать самого себя из настроек незачем. */
+	if passwordChanged {
+		if _, err := s.RevokeOtherSessions(ctx, userID); err != nil {
+			s.log.Warn("sessions.revoke_after_password_failed", "user_id", userID, "error", err)
 		}
 	}
 	return s.freshUser(ctx, userID)
@@ -368,8 +410,10 @@ func (s *Service) UploadAvatar(ctx context.Context, userID int64, fileBytes []by
 		return nil, errUserNotFound
 	}
 
+	var replaced []string
 	if user.AvatarPath != nil {
 		s.avatars.Delete(*user.AvatarPath)
+		replaced = []string{*user.AvatarPath}
 	}
 	if s.billing != nil {
 		if err := s.billing.EnsureStorage(ctx, userID, 0, int64(len(fileBytes))); err != nil {
@@ -383,10 +427,16 @@ func (s *Service) UploadAvatar(ctx context.Context, userID int64, fileBytes []by
 	if err := s.repo.UpdateFields(ctx, userID, map[string]any{"avatar_path": path}); err != nil {
 		return nil, err
 	}
-	// Учёт занятого места: прежняя аватарка удалена выше, поэтому в квоту
-	// уходит только разница — размер новой (старую биллинг не считал по
-	// размеру, аватарки мелкие и живут в одном разделе учёта).
-	s.billing.TrackStorage(ctx, userID, 0, "avatars", int64(len(fileBytes)))
+	// Прежняя аватарка удалена выше — её место возвращается вместе с учётом
+	// новой: размер снятой биллинг знает из своего журнала.
+	s.billing.TrackStorage(ctx, userID, 0, billingclient.StorageChange{
+		Service: "avatars",
+		Added: []billingclient.StoredFile{{
+			Key: path, Name: "Фото профиля", Size: int64(len(fileBytes)),
+			Kind: "avatar", ID: strconv.FormatInt(userID, 10), Title: "Фото профиля",
+		}},
+		Removed: replaced,
+	})
 	return s.freshUser(ctx, userID)
 }
 
@@ -403,6 +453,9 @@ func (s *Service) DeleteAvatar(ctx context.Context, userID int64) (*dto.User, er
 		if err := s.repo.UpdateFields(ctx, userID, map[string]any{"avatar_path": nil}); err != nil {
 			return nil, err
 		}
+		s.billing.TrackStorage(ctx, userID, 0, billingclient.StorageChange{
+			Service: "avatars", Removed: []string{*user.AvatarPath},
+		})
 	}
 	return s.freshUser(ctx, userID)
 }

@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"time"
+
+	"github.com/DmitriyODS/gw2/back-go/pkg/storagefiles"
 )
 
 // Ctx — алиас, чтобы сигнатуры портов не разбухали.
@@ -57,6 +59,10 @@ type PostRepository interface {
 	ListAttachments(ctx Ctx, postID int64) ([]Attachment, error)
 	// AttachmentPaths — пути файлов поста (для чистки хранилища при удалении).
 	AttachmentPaths(ctx Ctx, postID int64) ([]string, error)
+	// Раздел «Настройки → Хранилище» (биллинг спрашивает по gRPC). Файлы
+	// портала принадлежат компании, платит её создатель — отсюда companyIDs.
+	ListStorageFiles(ctx Ctx, companyIDs []int64) ([]storagefiles.File, error)
+	DeleteStorageFiles(ctx Ctx, companyIDs []int64, keys []string) ([]string, error)
 
 	// ListComments — обсуждение поста плоским списком в хронологии; дерево
 	// строит клиент по reply_to_id. Лайки (счётчик + «мой») приходят батчем
@@ -110,6 +116,9 @@ type FileStore interface {
 	// RemoveFor — best-effort удаление файлов по ключам с возвратом места в
 	// квоту (чистка при удалении постов и вложений).
 	RemoveFor(ctx context.Context, userID, companyID int64, paths []string)
+	// Remove — удаление БЕЗ учёта: так чистит раздел «Хранилище», где место
+	// пересчитывает сам биллинг (он же инициатор и знает размеры).
+	Remove(paths []string)
 }
 
 // EventBus — сокет-события клиентам через Redis gw2:portal:events

@@ -133,6 +133,11 @@ export default defineConfig({
         target: 'http://localhost:8101',
         changeOrigin: true
       },
+      // Диск — drivesvc (личные файлы: папки, корзина, шаринг).
+      '/api/drive': {
+        target: 'http://localhost:8108',
+        changeOrigin: true
+      },
       // Заметки — notesvc (личные rich-заметки с группами и шарингом).
       '/api/notes': {
         target: 'http://localhost:8103',

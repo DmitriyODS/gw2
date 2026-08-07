@@ -28,10 +28,11 @@ var _ domain.UserRepository = (*UserRepository)(nil)
 // с компаниями, роль/должность живут в связке user_companies.
 const identityCols = `
 	u.id, u.fio, u.login, u.hash_password,
-	u.avatar_path, u.phone, u.email,
+	u.avatar_path, u.avatar_emoji, u.phone, u.email,
 	u.is_default_pass, u.is_active, u.is_super_admin, u.email_verified,
 	u.created_at, u.last_seen_at, u.status_emoji, u.status_text,
-	u.notes_ai_proofread, u.notes_ai_autocomplete, u.desktop_prefs`
+	u.notes_ai_proofread, u.notes_ai_autocomplete, u.desktop_prefs,
+	u.lock_pin_hash, u.lock_after_min`
 
 const identityFrom = ` FROM users u`
 
@@ -39,10 +40,11 @@ func scanIdentity(row pgx.Row) (*domain.User, error) {
 	var u domain.User
 	err := row.Scan(
 		&u.ID, &u.FIO, &u.Login, &u.HashPassword,
-		&u.AvatarPath, &u.Phone, &u.Email,
+		&u.AvatarPath, &u.AvatarEmoji, &u.Phone, &u.Email,
 		&u.IsDefaultPass, &u.IsActive, &u.IsSuperAdmin, &u.EmailVerified,
 		&u.CreatedAt, &u.LastSeenAt, &u.StatusEmoji, &u.StatusText,
 		&u.NotesAIProofread, &u.NotesAIAutocomplete, &u.DesktopPrefs,
+		&u.LockPinHash, &u.LockAfterMin,
 	)
 	if err != nil {
 		return nil, err
@@ -56,10 +58,11 @@ const memberCols = `
 	u.id, u.fio, u.login, u.hash_password,
 	r.id, r.name, r.level, uc.post,
 	uc.company_id, c.is_active,
-	u.avatar_path, u.phone, u.email,
+	u.avatar_path, u.avatar_emoji, u.phone, u.email,
 	u.is_default_pass, u.is_active, u.is_super_admin, u.email_verified,
 	u.created_at, u.last_seen_at, u.status_emoji, u.status_text, uc.on_vacation,
-	u.notes_ai_proofread, u.notes_ai_autocomplete, u.desktop_prefs`
+	u.notes_ai_proofread, u.notes_ai_autocomplete, u.desktop_prefs,
+	u.lock_pin_hash, u.lock_after_min`
 
 const memberFrom = `
 	FROM user_companies uc
@@ -76,10 +79,11 @@ func scanMember(row pgx.Row) (*domain.User, error) {
 		&u.ID, &u.FIO, &u.Login, &u.HashPassword,
 		&u.Role.ID, &u.Role.Name, &u.Role.Level, &u.Post,
 		&u.CompanyID, &cActive,
-		&u.AvatarPath, &u.Phone, &u.Email,
+		&u.AvatarPath, &u.AvatarEmoji, &u.Phone, &u.Email,
 		&u.IsDefaultPass, &u.IsActive, &u.IsSuperAdmin, &u.EmailVerified,
 		&u.CreatedAt, &u.LastSeenAt, &u.StatusEmoji, &u.StatusText, &u.OnVacation,
 		&u.NotesAIProofread, &u.NotesAIAutocomplete, &u.DesktopPrefs,
+		&u.LockPinHash, &u.LockAfterMin,
 	)
 	if err != nil {
 		return nil, err
@@ -187,7 +191,8 @@ func (r *UserRepository) Create(ctx context.Context, u *domain.User) error {
 // allowedUserFields — колонки идентичности, которые сервис меняет точечно.
 var allowedUserFields = map[string]bool{
 	"fio": true, "login": true, "phone": true, "email": true,
-	"avatar_path": true, "hash_password": true,
+	"avatar_path": true, "avatar_emoji": true, "hash_password": true,
+	"lock_pin_hash": true, "lock_after_min": true,
 	"is_default_pass": true, "is_active": true, "email_verified": true,
 	"status_emoji": true, "status_text": true, "yandex_id": true,
 	"notes_ai_proofread": true, "notes_ai_autocomplete": true, "desktop_prefs": true,

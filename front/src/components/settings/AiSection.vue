@@ -3,7 +3,7 @@
        сколько токенов осталось и — отдельно, для тех, у кого свой доступ —
        собственный ключ со своим адресом API. -->
   <div class="ai-sec">
-    <BrandLoader v-if="loading" :size="48" />
+    <BrandLoader v-if="loading" block :size="64" />
 
     <AppStack v-else :gap="16">
       <AppCard

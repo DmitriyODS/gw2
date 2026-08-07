@@ -68,6 +68,20 @@ func (f *fakeSessions) Revoke(_ context.Context, id, userID int64) error {
 	return nil
 }
 
+func (f *fakeSessions) RevokeOthers(_ context.Context, userID, keepID int64) (int, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	n := 0
+	for id, s := range f.items {
+		if s.UserID != userID || id == keepID || f.revoked[id] {
+			continue
+		}
+		f.revoked[id] = true
+		n++
+	}
+	return n, nil
+}
+
 func (f *fakeSessions) SetCity(_ context.Context, id int64, city string) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
@@ -227,6 +241,37 @@ func TestRevokeForeignSessionDoesNothing(t *testing.T) {
 
 	if _, err := svc.Refresh(victimCtx, victim.RefreshToken); err != nil {
 		t.Fatalf("чужой отзыв убил сеанс: %v", err)
+	}
+}
+
+/* Смена пароля обрывает ПРОЧИЕ входы: человек, меняющий пароль, рассчитывает,
+   что чужие устройства перестали работать. Текущее — остаётся: выкидывать
+   самого себя из настроек незачем. */
+func TestPasswordChangeRevokesOtherSessions(t *testing.T) {
+	svc, repo, _ := withSessions(t)
+	cid := int64(1)
+	u := employee(repo, "ivanov", &cid)
+
+	phone := loginAs(t, svc, reqCtx(chromeUA, "8.8.8.8", ""), "ivanov")
+	laptop := loginAs(t, svc, reqCtx(chromeUA, "9.9.9.9", ""), "ivanov")
+	laptopCtx := reqCtx(chromeUA, "9.9.9.9", laptop.RefreshToken)
+
+	newPass := "new-secret-123"
+	confirm := newPass
+	current := "secret123"
+	if _, err := svc.UpdateMe(laptopCtx, u.ID, dto.UpdateMeRequest{
+		CurrentPassword: &current, NewPassword: &newPass, ConfirmPassword: &confirm,
+	}); err != nil {
+		t.Fatalf("UpdateMe: %v", err)
+	}
+
+	// Чужое устройство больше не обновит токен...
+	if _, err := svc.Refresh(reqCtx(chromeUA, "8.8.8.8", phone.RefreshToken), phone.RefreshToken); err == nil {
+		t.Fatal("после смены пароля прежний вход обязан перестать работать")
+	}
+	// ...а то, с которого меняли, продолжает работать.
+	if _, err := svc.Refresh(laptopCtx, laptop.RefreshToken); err != nil {
+		t.Fatalf("текущий сеанс не должен обрываться: %v", err)
 	}
 }
 

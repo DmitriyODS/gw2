@@ -294,6 +294,37 @@ type StorageEntry struct {
 	Bytes   int64  `json:"bytes"`
 }
 
+// OwnedFile — файл глазами сервиса-владельца (ответ ListFiles). Размера здесь
+// нет: его знает журнал, а для незнакомых ключей биллинг меряет объект сам.
+type OwnedFile struct {
+	Key       string
+	Name      string
+	RefKind   string
+	RefID     string
+	RefTitle  string
+	CompanyID int64
+	CreatedAt time.Time
+}
+
+// StoredFile — запись журнала файлов: чем именно занято место. Ведётся в
+// момент заливки (там размер и имя известны даром) и выверяется обходом
+// сервисов-владельцев.
+type StoredFile struct {
+	Key     string `json:"key"`
+	Service string `json:"service"`
+	// CompanyID > 0 — файл компании: место тратится из квоты её создателя,
+	// он же UserID записи.
+	CompanyID int64  `json:"company_id,omitempty"`
+	Name      string `json:"name"`
+	Size      int64  `json:"size"`
+	// RefKind/RefID/RefTitle — где файл лежит: раздел «Хранилище» строит по ним
+	// переход к источнику. Пустые — файл ещё не привязан к сущности.
+	RefKind   string    `json:"ref_kind,omitempty"`
+	RefID     string    `json:"ref_id,omitempty"`
+	RefTitle  string    `json:"ref_title,omitempty"`
+	CreatedAt time.Time `json:"created_at"`
+}
+
 // Settings — платформенные настройки биллинга.
 type Settings struct {
 	CommissionPct   int    `json:"commission_pct"`

@@ -4,6 +4,8 @@ import (
 	"context"
 	"io"
 	"log/slog"
+	"slices"
+	"sort"
 	"testing"
 	"time"
 
@@ -121,6 +123,25 @@ func (f *fakeFiles) SaveFor(_ context.Context, _, _ int64, _ string, _ []byte) (
 
 func (f *fakeFiles) RemoveFor(_ context.Context, _, _ int64, paths []string) {
 	f.removed = append(f.removed, paths...)
+}
+
+func (f *fakeFiles) Remove(paths []string) {
+	f.removed = append(f.removed, paths...)
+}
+
+// Раздел «Хранилище»: записи отбираются по компании их календаря.
+func (f *fakeRepo) EntriesOfCompanies(_ domain.Ctx, companyIDs []int64) ([]*domain.EntryScope, error) {
+	out := []*domain.EntryScope{}
+	if f.cal == nil || !slices.Contains(companyIDs, f.cal.CompanyID) {
+		return out, nil
+	}
+	for _, e := range f.entries {
+		out = append(out, &domain.EntryScope{
+			Entry: e, CalendarID: f.cal.ID, CalendarName: f.cal.Name, CompanyID: f.cal.CompanyID,
+		})
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].Entry.ID < out[j].Entry.ID })
+	return out, nil
 }
 
 func newTestService(fields []domain.Field) (*Service, *fakeRepo, *fakeBus) {

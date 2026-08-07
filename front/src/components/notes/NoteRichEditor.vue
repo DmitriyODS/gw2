@@ -188,6 +188,7 @@ import { EditorContent, useEditor } from '@tiptap/vue-3'
 import StarterKit from '@tiptap/starter-kit'
 import Underline from '@tiptap/extension-underline'
 import Link from '@tiptap/extension-link'
+import { clipboardLink } from '@/utils/pasteLink.js'
 import { ResizableImage } from './ResizableImage.js'
 import { LineGutter } from './LineGutter.js'
 import { LineNumbers } from './LineNumbers.js'
@@ -254,6 +255,17 @@ const editor = useEditor({
   ],
   onUpdate: ({ editor: ed }) => emit('change', ed.getJSON()),
   onBlur: () => emit('blur'),
+  editorProps: {
+    /* Адрес из буфера поверх выделенного текста делает его ссылкой, а не
+       заменяет: привычка из редакторов. Пустое выделение и обычный текст
+       вставляются как всегда — возвращаем false, дальше работает TipTap. */
+    handlePaste: (view, event) => {
+      const href = clipboardLink(event.clipboardData?.getData('text/plain'))
+      if (!href || view.state.selection.empty) return false
+      editor.value?.chain().focus().extendMarkRange('link').setLink({ href }).run()
+      return true
+    },
+  },
 })
 
 // Смена editable (публичная ссылка узнаёт режим после загрузки).

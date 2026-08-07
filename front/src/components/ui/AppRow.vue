@@ -115,6 +115,13 @@ function onClick(e) {
   background: var(--glass-hover-bg, var(--glass-bg)), var(--acrylic-card-bg);
 }
 
+/* Список без рамок (навигация): наведение подсвечивает фоном, но рамку не
+   возвращает — иначе строки «прыгали» бы под курсором. */
+.row.plain.clickable:hover:not(.disabled):not(.selected) {
+  border-color: transparent;
+  background: color-mix(in oklch, var(--color-primary) 8%, transparent);
+}
+
 .row.selected {
   border-color: color-mix(in oklch, var(--color-primary) 30%, var(--acrylic-border));
   background: var(--glass-bg), var(--color-primary-container);

@@ -2,6 +2,7 @@ package http
 
 import (
 	"encoding/json"
+	"io"
 	"strconv"
 	"strings"
 	"unicode/utf8"
@@ -101,6 +102,48 @@ func (h *handlers) deleteCompany(c *fiber.Ctx) error {
 		return h.respondError(c, err)
 	}
 	return c.JSON(fiber.Map{"message": "Компания удалена"})
+}
+
+/* Перенос компании: выгрузка архивом (создатель или супер-админ) и подъём
+   архива НОВОЙ компанией — вливания в существующую нет намеренно. */
+
+func (h *handlers) exportCompany(c *fiber.Ctx) error {
+	resp, err := h.eps.ExportCompany(c.Context(), endpoint.CompanyActorEpRequest{
+		Actor: currentUser(c), CompanyID: pathID(c),
+	})
+	if err != nil {
+		return h.respondError(c, err)
+	}
+	out := resp.(endpoint.ExportCompanyEpResponse)
+	c.Set(fiber.HeaderContentType, "application/zip")
+	c.Set(fiber.HeaderContentDisposition, `attachment; filename="`+out.FileName+`"`)
+	return c.Send(out.Data)
+}
+
+func (h *handlers) importCompany(c *fiber.Ctx) error {
+	fileHeader, err := c.FormFile("file")
+	if err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "NO_FILE", "message": "Файл выгрузки не передан",
+		})
+	}
+	f, err := fileHeader.Open()
+	if err != nil {
+		return h.respondError(c, err)
+	}
+	defer f.Close() //nolint:errcheck
+	archive, err := io.ReadAll(f)
+	if err != nil {
+		return h.respondError(c, err)
+	}
+
+	resp, err := h.eps.ImportCompany(c.Context(), endpoint.ImportCompanyEpRequest{
+		Actor: currentUser(c), Archive: archive, Name: c.FormValue("name"),
+	})
+	if err != nil {
+		return h.respondError(c, err)
+	}
+	return c.Status(fiber.StatusCreated).JSON(resp)
 }
 
 func (h *handlers) getWeekendSettings(c *fiber.Ctx) error {

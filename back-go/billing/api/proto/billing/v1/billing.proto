@@ -75,13 +75,30 @@ message CheckStorageResponse {
   int64 owner_id = 5;
 }
 
+// TrackStorage сообщает, ЧТО произошло с файлами, а занятое место биллинг
+// пересчитывает сам: размеры добавленных приходят здесь, размеры удалённых он
+// знает из журнала. Поэтому сервису-владельцу не нужно мерить объекты в
+// хранилище перед удалением (в S3 это запрос на каждый файл).
 message TrackStorageRequest {
   // user_id — кто заливает файл; company_id > 0 означает файл компании, и
   // квоту тогда тратит её СОЗДАТЕЛЬ (владельца находит сам биллинг).
   int64 user_id = 1;
   string service = 2;
-  int64 delta_bytes = 3;
-  int64 company_id = 4;
+  int64 company_id = 3;
+  repeated StoredFile added = 4;
+  repeated string removed_keys = 5;
+}
+
+// StoredFile — запись журнала: файл, который сервис только что положил в
+// хранилище. Пустые ref_* допустимы (файл грузится раньше своей сущности) —
+// их проставит ближайший обход ListFiles.
+message StoredFile {
+  string key = 1;
+  string name = 2;
+  int64 size = 3;
+  string ref_kind = 4;
+  string ref_id = 5;
+  string title = 6;
 }
 
 message TrackStorageResponse {

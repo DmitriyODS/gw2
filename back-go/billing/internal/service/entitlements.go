@@ -51,10 +51,12 @@ func (s *Service) Entitlements(ctx domain.Ctx, userID, companyID int64) (*domain
 	if err != nil {
 		return nil, err
 	}
-	applyAddons(&ent.Limits, addons, companyID)
-	// Последним словом идёт состояние выпуска: пока подписки скрыты, тариф
-	// никого не ограничивает (см. EffectiveLimits).
+	// Сначала состояние выпуска (пока подписки скрыты, тариф почти никого не
+	// ограничивает — см. EffectiveLimits), и только потом докупки: место,
+	// купленное до сокрытия витрины, обязано складываться с бесплатным, а не
+	// подменяться им.
 	ent.Limits = domain.EffectiveLimits(ent.Limits)
+	applyAddons(&ent.Limits, addons, companyID)
 
 	used, err := s.Storage.Total(ctx, ownerID)
 	if err != nil {
@@ -110,15 +112,12 @@ func tokenState(b *domain.AIBalance, quota int64, now time.Time) (used, left int
 	return used, left
 }
 
-// StorageUsage — разбивка занятого места по разделам (карточка «Хранилище»).
-func (s *Service) StorageUsage(ctx domain.Ctx, userID int64) ([]*domain.StorageEntry, error) {
-	return s.Storage.Usage(ctx, userID)
-}
+// TrackStorage — учесть появившиеся и удалённые файлы. Зовут сервисы-владельцы
+// после заливки и удаления. companyID > 0 — файл компании: место тратится из
+// квоты её СОЗДАТЕЛЯ (кто платит, у того и считается).
+func (s *Service) TrackStorage(ctx domain.Ctx, userID, companyID int64, service string,
+	added []*domain.StoredFile, removedKeys []string) (int64, error) {
 
-// TrackStorage — сдвинуть занятое место на дельту. Зовут сервисы-владельцы
-// файлов после заливки и удаления. companyID > 0 — файл компании: место
-// тратится из квоты её СОЗДАТЕЛЯ (кто платит, у того и считается).
-func (s *Service) TrackStorage(ctx domain.Ctx, userID, companyID int64, service string, delta int64) (int64, error) {
 	if service == "" {
 		return 0, domain.ErrValidation
 	}
@@ -134,6 +133,29 @@ func (s *Service) TrackStorage(ctx domain.Ctx, userID, companyID int64, service 
 	}
 	if ownerID <= 0 {
 		return 0, domain.ErrValidation
+	}
+
+	// Сначала снимаем удалённое — журнал знает их размеры, поэтому сервису
+	// не нужно мерить объекты в хранилище. Затем добавляем новые.
+	var delta int64
+	if len(removedKeys) > 0 {
+		freed, err := s.Storage.RemoveFiles(ctx, ownerID, removedKeys)
+		if err != nil {
+			return 0, err
+		}
+		delta -= freed
+	}
+	if len(added) > 0 {
+		for _, f := range added {
+			f.Service, f.CompanyID = service, companyID
+			delta += f.Size
+		}
+		if err := s.Storage.AddFiles(ctx, ownerID, added); err != nil {
+			return 0, err
+		}
+	}
+	if delta == 0 {
+		return s.Storage.Total(ctx, ownerID)
 	}
 	return s.Storage.Track(ctx, ownerID, service, delta)
 }

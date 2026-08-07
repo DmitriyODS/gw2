@@ -11,28 +11,55 @@
       </AppRow>
     </AppCard>
 
-    <!-- Личный ключ YouGile: только для рядовых участников компании —
-         администратор подключает компанию целиком в карточке компании. -->
-    <AppCard v-if="showYougile" title="Интеграция с YouGile">
-      <YougileUserSettings />
+    <!-- Уведомления: работает на всех платформах, а не только в
+         десктоп-обёртке. Звук и «не беспокоить» — РАЗНЫЕ вещи: первое глушит
+         только сигнал, второе ещё и всплывашки системы. -->
+    <AppCard title="Уведомления">
+      <AppSwitchRow
+        :model-value="soundOn"
+        title="Звук уведомлений"
+        hint="Короткий сигнал на новое сообщение, напоминание и другие события."
+        @update:model-value="toggleSound"
+      />
+      <AppSwitchRow
+        :model-value="muted"
+        title="Не беспокоить"
+        :hint="muteHint"
+        @update:model-value="toggleMute"
+      />
     </AppCard>
   </div>
 </template>
 
 <script setup>
-import { ref } from 'vue'
+import { computed, ref } from 'vue'
 import AppTabs from '@/components/ui/AppTabs.vue'
 import AppCard from '@/components/ui/AppCard.vue'
 import AppRow from '@/components/ui/AppRow.vue'
-import YougileUserSettings from '@/components/settings/YougileUserSettings.vue'
+import AppSwitchRow from '@/components/ui/AppSwitchRow.vue'
 import { SEARCH_ENGINES, getSearchEngine, setSearchEngine } from '@/utils/webSearch.js'
-
-defineProps({
-  showYougile: { type: Boolean, default: false },
-})
+import { isNotifySoundOn, setNotifySound } from '@/utils/systemNotify.js'
+import { useNotifyMute } from '@/composables/useNotifyMute.js'
 
 const engineTabs = SEARCH_ENGINES.map((e) => ({ key: e.key, label: e.label }))
 const engine = ref(getSearchEngine())
+
+const { muted, untilLabel, mute, unmute } = useNotifyMute()
+const soundOn = ref(isNotifySoundOn())
+
+const muteHint = computed(() => (muted.value
+  ? `Сигналы и всплывающие уведомления выключены ${untilLabel.value}. Звонки продолжают звонить.`
+  : 'Выключает и сигналы, и всплывающие уведомления системы. Звонки не глушатся.'))
+
+function toggleSound(on) {
+  soundOn.value = on
+  setNotifySound(on)
+}
+
+function toggleMute(on) {
+  if (on) mute()
+  else unmute()
+}
 
 function pickEngine(key) {
   engine.value = key

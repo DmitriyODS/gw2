@@ -1,0 +1,59 @@
+// Контракт СЕРВИСА-ВЛАДЕЛЬЦА данных компании: его реализует каждый, кто
+// хранит компанийный контент (задачи, реестры, календари, портал), а зовёт —
+// authsvc, когда администратор выгружает или переносит свою компанию.
+//
+// Направление то же, что у billing.v1.FileOwnerService: оркестратор спрашивает
+// владельцев, а не лезет в чужие таблицы. Поэтому payload здесь — НЕПРОЗРАЧНЫЙ
+// для authsvc JSON: устройство своих данных знает только владелец, и добавление
+// таблицы в разделе не требует правок в authsvc.
+//
+// Люди и геймификация в перенос не входят: аккаунты остаются на месте, а
+// ссылки на них восстанавливаются по карте user_map — сопоставлением людей
+// занимается оркестратор, владельцу приходит уже готовое соответствие.
+syntax = "proto3";
+
+package auth.v1;
+
+option go_package = "github.com/DmitriyODS/gw2/back-go/pkg/gen/authpb;authpb";
+
+service CompanyDataService {
+  // ExportCompany — весь контент компании одним JSON плюс ключи файлов, на
+  // которые он ссылается. Сами объекты забирает оркестратор: хранилище общее,
+  // и гонять файлы через gRPC ни к чему.
+  rpc ExportCompany(ExportCompanyRequest) returns (ExportCompanyResponse);
+  // ImportCompany — влить содержимое в ПУСТУЮ компанию, созданную под импорт.
+  // Слияние с существующим контентом не поддерживается намеренно: разрешать
+  // конфликты имён и ссылок пришлось бы вслепую.
+  rpc ImportCompany(ImportCompanyRequest) returns (ImportCompanyResponse);
+}
+
+message ExportCompanyRequest {
+  int64 company_id = 1;
+}
+
+message ExportCompanyResponse {
+  // payload — JSON владельца; authsvc его не разбирает, только кладёт в архив.
+  bytes payload = 1;
+  // file_keys — ключи хранилища, встречающиеся в payload.
+  repeated string file_keys = 2;
+  // count — сколько записей внутри: показываем в отчёте о переносе.
+  int32 count = 3;
+}
+
+message ImportCompanyRequest {
+  int64 company_id = 1; // куда вливаем (свежесозданная компания)
+  // actor_id — кто импортирует. Им подменяются авторы, которых не удалось
+  // сопоставить: запись без автора выглядела бы битой.
+  int64 actor_id = 2;
+  bytes payload = 3;
+  // user_map — исходный user_id (строкой) → id в этой системе. Кого не нашли,
+  // в карте нет: владелец подставляет actor_id.
+  map<string, int64> user_map = 4;
+  // file_map — исходный ключ хранилища → новый. Файлы уже скопированы
+  // оркестратором: владельцу остаётся переписать ссылки.
+  map<string, string> file_map = 5;
+}
+
+message ImportCompanyResponse {
+  int32 count = 1;
+}

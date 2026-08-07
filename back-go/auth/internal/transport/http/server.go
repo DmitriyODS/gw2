@@ -60,7 +60,7 @@ func NewServer(eps endpoint.Endpoints, verifier *pasetoauth.Verifier,
 		AppName: "gw2-authsvc", Log: log, BodyLimit: 64 * 1024 * 1024,
 	})
 	auth := pasetoauth.NewMiddleware(verifier, authSource(users))
-	h := &handlers{eps: eps, log: log}
+	h := &handlers{eps: eps, users: users, log: log}
 
 	authAPI := app.Group("/api/auth")
 	authAPI.Post("/login", h.login)
@@ -79,6 +79,15 @@ func NewServer(eps endpoint.Endpoints, verifier *pasetoauth.Verifier,
 	// Реестр входов профиля: свои сеансы и завершение любого из них.
 	authAPI.Get("/sessions", auth.RequireAuth, h.listSessions)
 	authAPI.Delete("/sessions/:id<int>", auth.RequireAuth, h.revokeSession)
+	authAPI.Post("/sessions/revoke-others", auth.RequireAuth, h.revokeOtherSessions)
+
+	/* Экран блокировки. RequireToken, а не RequireAuth: запертый экран
+	   снимают до того, как приложение снова станет доступным, и требовать
+	   активную компанию тут незачем. */
+	authAPI.Get("/lock", auth.RequireToken, h.screenLock)
+	authAPI.Put("/lock", auth.RequireToken, h.setScreenLock)
+	authAPI.Post("/lock/disable", auth.RequireToken, h.disableScreenLock)
+	authAPI.Post("/lock/unlock", auth.RequireToken, h.unlockScreen)
 
 	// Спаривание устройств (QR-вход + ТВ-код). start/claim — публичные
 	// (инициатор без входа); approve — авторизованный (нужна активная компания
@@ -146,6 +155,10 @@ func NewServer(eps endpoint.Endpoints, verifier *pasetoauth.Verifier,
 	companiesAPI.Patch("/:id<int>", h.updateCompany)
 	companiesAPI.Delete("/:id<int>", h.deleteCompany)
 	companiesAPI.Patch("/:id<int>/toggle-active", auth.RequireSuperAdmin, h.toggleCompanyActive)
+	// Перенос компании: выгрузка — её создателю, импорт — любому (получится
+	// его собственная компания, как при обычном создании).
+	companiesAPI.Get("/:id<int>/export", h.exportCompany)
+	companiesAPI.Post("/import", h.importCompany)
 	companiesAPI.Get("/:id<int>/weekend-settings", h.getWeekendSettings)
 	companiesAPI.Put("/:id<int>/weekend-settings", h.updateWeekendSettings)
 	companiesAPI.Get("/:id<int>/groove-settings", h.getGrooveSettings)
@@ -181,7 +194,10 @@ func (s *Server) Shutdown() error          { return s.app.Shutdown() }
 
 type handlers struct {
 	eps endpoint.Endpoints
-	log *slog.Logger
+	// users — публичная ручка аватара смотрит, выбран ли значок; идти за этим
+	// через endpoint-слой незачем, читается одна колонка.
+	users domain.UserRepository
+	log   *slog.Logger
 }
 
 // respondError — бизнес-ошибка в форме {"error": code, "message": ...}

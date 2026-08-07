@@ -52,6 +52,9 @@ var BackupSections = []BackupSection{
 		"board_shares", "board_user_shares", "board_company_shares",
 		"board_folder_user_shares", "board_folder_company_shares",
 		"board_recipient_state", "board_folder_recipient_state"}},
+	// «Диск»: файлы вместе с папками, корзиной и обоими видами доступа.
+	{Key: "drive", Tables: []string{"drive_files", "drive_folders",
+		"drive_shares", "drive_user_shares"}},
 	{Key: "reminders", Tables: []string{"reminders"}},
 	{Key: "messenger", Tables: []string{"conversations", "conversation_members", "messages",
 		"message_attachments", "message_reactions", "chat_backgrounds",
@@ -76,7 +79,7 @@ var BackupSections = []BackupSection{
 		"billing_promos", "billing_orders", "billing_promo_redemptions",
 		"billing_payments", "billing_product_purchases", "billing_seller_balances",
 		"billing_payouts", "billing_ai_balances", "billing_ai_usage", "billing_storage_usage",
-		"billing_settings", "platform_audit_log"}},
+		"billing_storage_files", "billing_settings", "platform_audit_log"}},
 	{Key: "integration", Tables: []string{"user_yougile_accounts"}},
 }
 

@@ -2,6 +2,7 @@ package service
 
 import (
 	"crypto/rand"
+	"crypto/subtle"
 	"encoding/hex"
 	"strings"
 	"time"
@@ -221,7 +222,11 @@ func (s *Service) Purchase(ctx domain.Ctx, userID int64, req PurchaseRequest) (*
 		return s.Orders.GetOrder(ctx, order.ID)
 	}
 
-	secret := randomSecret()
+	secret, err := randomSecret()
+	if err != nil {
+		s.Log.Error("billing.secret_generate_failed", "order_id", order.ID, "error", err)
+		return nil, domain.ErrPaymentFailed
+	}
 	pp, err := s.Provider.Create(ctx, order, secret)
 	if err != nil {
 		s.Log.Error("billing.payment_create_failed", "order_id", order.ID, "error", err)
@@ -244,12 +249,15 @@ func (s *Service) Purchase(ctx domain.Ctx, userID int64, req PurchaseRequest) (*
 	return order, nil
 }
 
-func randomSecret() string {
+// randomSecret — секрет вебхука платежа. Ошибку генерации отдаём наверх, а не
+// глушим в пустую строку: ConfirmPayment трактует пустой сохранённый секрет
+// как «нечего сверять» — тихий сбой рандома снял бы проверку с вебхука.
+func randomSecret() (string, error) {
 	var b [16]byte
 	if _, err := rand.Read(b[:]); err != nil {
-		return ""
+		return "", err
 	}
-	return hex.EncodeToString(b[:])
+	return hex.EncodeToString(b[:]), nil
 }
 
 // markPaid — заказ оплачен: фиксируем статус и применяем ровно один раз.
@@ -416,7 +424,12 @@ func (s *Service) ConfirmPayment(ctx domain.Ctx, body []byte, headers map[string
 	if payment == nil {
 		return domain.ErrNotFound
 	}
-	if payment.WebhookSecret != "" && payment.WebhookSecret != ev.Secret {
+	// payment.WebhookSecret пустым быть не должно (randomSecret отдаёт ошибку
+	// наверх, а не пустую строку) — но проверяем явно: ConstantTimeCompare
+	// двух пустых слайсов считает их РАВНЫМИ, а пустой сохранённый секрет
+	// обязан отклонять вебхук, а не молча его пропускать.
+	if payment.WebhookSecret == "" ||
+		subtle.ConstantTimeCompare([]byte(payment.WebhookSecret), []byte(ev.Secret)) != 1 {
 		return domain.ErrForbidden
 	}
 	order, err := s.Orders.GetOrder(ctx, payment.OrderID)

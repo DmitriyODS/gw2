@@ -16,18 +16,23 @@
           <SearchField v-model="searchQuery" placeholder="поиск по настройкам" :collapsible="false" />
         </template>
 
-        <AppStack :gap="6">
+        <AppStack :gap="2">
           <template v-for="group in visibleGroups" :key="group.key">
             <div v-if="showGroupLabels" class="group-label">{{ group.label }}</div>
+            <!-- Список навигации, а не набор карточек: рамка у каждого пункта
+                 забивала перечень, поэтому строки plain, а выделен только
+                 открытый раздел. Шеврон остаётся лишь в узкой раскладке —
+                 там он и правда ведёт на отдельный экран. -->
             <AppRow
               v-for="section in group.sections"
               :key="section.key"
               :title="section.title"
               :icon="section.icon"
               dense
+              plain
               clickable
               :selected="activeSection === section.key && (!narrow || paneOpen)"
-              show-chevron
+              :show-chevron="narrow"
               @click="openSection(section.key)"
             />
           </template>
@@ -56,7 +61,7 @@
         @back="paneOpen = false"
         @menu="toggle"
       >
-        <GeneralSection v-if="activeSection === 'general'" :show-yougile="showYougile" />
+        <GeneralSection v-if="activeSection === 'general'" />
 
         <ThemesSection v-else-if="activeSection === 'theme'" />
 
@@ -70,9 +75,11 @@
 
         <ChatsPortalSection v-else-if="activeSection === 'chats'" :has-company="hasCompany" />
 
-        <AccountSection v-else-if="activeSection === 'account'" />
+        <AccountSection v-else-if="activeSection === 'account'" :show-yougile="showYougile" />
 
         <CompaniesSection v-else-if="activeSection === 'companies'" />
+
+        <StorageSection v-else-if="activeSection === 'storage'" />
 
         <AiSection v-else-if="activeSection === 'ai'" />
 
@@ -173,6 +180,7 @@ import GeneralSection from '@/components/settings/GeneralSection.vue'
 const AccountSection = defineAsyncComponent(() => import('@/components/settings/AccountSection.vue'))
 const CompaniesSection = defineAsyncComponent(() => import('@/components/settings/CompaniesSection.vue'))
 const AiSection = defineAsyncComponent(() => import('@/components/settings/AiSection.vue'))
+const StorageSection = defineAsyncComponent(() => import('@/components/settings/StorageSection.vue'))
 const ThemesSection = defineAsyncComponent(() => import('@/components/settings/ThemesSection.vue'))
 const ChatsPortalSection = defineAsyncComponent(() => import('@/components/settings/ChatsPortalSection.vue'))
 const AboutSection = defineAsyncComponent(() => import('@/components/settings/AboutSection.vue'))

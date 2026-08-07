@@ -10,8 +10,9 @@
 import { computed, onBeforeUnmount, onMounted, ref, shallowRef, watch } from 'vue'
 import Textarea from 'primevue/textarea'
 import ContextMenu from '@/components/common/ContextMenu.vue'
+import { useThemeStore } from '@/stores/theme.js'
 import {
-  COMMENT_PIN, OBJ, drawObject, editableLayerIds, hitTest, moveObject, newId,
+  COMMENT_PIN, OBJ, drawObject, editableLayerIds, hitTest, invalidateColors, moveObject, newId,
   normalizeScene, objectBounds, orderedObjects, renderScene, resolveColor, scaleObject,
 } from '@/utils/boardScene.js'
 
@@ -833,11 +834,23 @@ onMounted(() => {
   resizeObs = new ResizeObserver(resize)
   resizeObs.observe(host.value)
   window.addEventListener('keydown', onKeyDown)
+  // Окно рабочего стола позиционируется transform'ом с CSS-переходом (сессия
+  // восстанавливается на перезагрузке асинхронно, геометрия окна доезжает до
+  // места уже ПОСЛЕ первого mount) — ResizeObserver реагирует только на смену
+  // логического размера host, а не на смену transform/devicePixelRatio по
+  // ходу переезда. Пока размер не пришёл в норму, координаты клика (toScene)
+  // и буфер канваса (dpr) считаются по ещё не устоявшемуся rect — отсюда
+  // смещение штриха относительно курсора, которое снимает только следующий
+  // ResizeObserver (например, реальный ресайз при разворачивании в полный
+  // экран). Досчитываем сами через короткий таймаут после монтирования.
+  window.addEventListener('resize', resize)
+  setTimeout(resize, 250)
 })
 
 onBeforeUnmount(() => {
   resizeObs?.disconnect()
   window.removeEventListener('keydown', onKeyDown)
+  window.removeEventListener('resize', resize)
   if (frame) cancelAnimationFrame(frame)
 })
 
@@ -845,6 +858,14 @@ watch(() => props.scene, () => {
   syncImages()
   requestDraw()
 }, { deep: true })
+
+// Смена темы не трогает props.scene — без отдельного watcher'а холст держал
+// цвета предыдущей темы (в т.ч. фон-сетку/точки) до первой правки сцены.
+const theme = useThemeStore()
+watch(() => theme.dark, () => {
+  invalidateColors()
+  requestDraw()
+})
 
 watch(() => props.peers, requestDraw, { deep: true })
 watch(() => props.tool, () => {

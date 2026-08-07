@@ -150,6 +150,17 @@ func (s *Service) RevokeCurrentSession(ctx context.Context, userID int64) error 
 	return nil
 }
 
+/* RevokeOtherSessions — выйти на всех устройствах, кроме текущего. Зовётся и
+   по кнопке в аккаунте, и автоматически при смене пароля: сменивший пароль
+   рассчитывает, что прежние входы перестали работать — иначе украденный
+   пароль остаётся рабочим до истечения чужого refresh (тридцать дней). */
+func (s *Service) RevokeOtherSessions(ctx context.Context, userID int64) (int, error) {
+	if s.sessions == nil {
+		return 0, nil
+	}
+	return s.sessions.RevokeOthers(ctx, userID, s.currentSessionID(ctx, userID))
+}
+
 // currentSessionID — сессия, из которой пришёл запрос (по refresh-cookie);
 // 0 — cookie нет, она чужая или легаси-токен без реестра.
 func (s *Service) currentSessionID(ctx context.Context, userID int64) int64 {

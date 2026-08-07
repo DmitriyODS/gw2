@@ -12,9 +12,26 @@ import (
 )
 
 // filesPrefix — каталог архива, куда складываются ВСЕ загруженные файлы под их
-// storage-ключами (avatars/…, registry/…, calendar/…, notes/…, portal/…,
+// storage-ключами (avatars/…, registry/…, calendar/…, notes/…, портал/…,
 // вложения мессенджера). «Выгрузка всего»: полный бэкап медиа вместе с БД.
 const filesPrefix = "files/"
+
+// backupMaxEntryBytes — потолок распакованного размера ОДНОЙ записи архива
+// (data.json или файл под files/avatars). Импорт доступен только супер-админу,
+// но без потолка испорченный/злонамеренный ZIP (маленький на диске, огромный
+// после распаковки) валит authsvc по памяти — а от него зависит вход всей
+// платформы. io.LimitReader — не полагаемся на заявленный в заголовке ZIP
+// размер, он не обязан быть честным.
+const backupMaxEntryBytes = 5 << 30 // 5 ГиБ
+
+func readBackupEntry(f *zip.File) ([]byte, error) {
+	rc, err := f.Open()
+	if err != nil {
+		return nil, err
+	}
+	defer rc.Close() //nolint:errcheck
+	return io.ReadAll(io.LimitReader(rc, backupMaxEntryBytes))
+}
 
 func errUnknownSection(key string) error {
 	return domain.NewError("VALIDATION_ERROR", "Неизвестный раздел резервной копии: "+key, 400)
@@ -187,17 +204,11 @@ func (s *Service) ImportBackup(ctx context.Context, zipBytes []byte, sections []
 		if f.Name != "data.json" {
 			continue
 		}
-		rc, err := f.Open()
+		data, err := readBackupEntry(f)
 		if err != nil {
 			return err
 		}
-		buf := new(bytes.Buffer)
-		_, err = buf.ReadFrom(rc)
-		rc.Close() //nolint:errcheck
-		if err != nil {
-			return err
-		}
-		rawData = buf.Bytes()
+		rawData = data
 		break
 	}
 	if rawData == nil {
@@ -236,12 +247,7 @@ func (s *Service) ImportBackup(ctx context.Context, zipBytes []byte, sections []
 			if !zipslipSafe(key) {
 				continue
 			}
-			rc, err := f.Open()
-			if err != nil {
-				return err
-			}
-			data, err := io.ReadAll(rc)
-			rc.Close() //nolint:errcheck
+			data, err := readBackupEntry(f)
 			if err != nil {
 				return err
 			}
@@ -249,12 +255,7 @@ func (s *Service) ImportBackup(ctx context.Context, zipBytes []byte, sections []
 				return err
 			}
 		case strings.HasPrefix(f.Name, "avatars/") && len(f.Name) > len("avatars/") && hasSection(used, "auth"):
-			rc, err := f.Open()
-			if err != nil {
-				return err
-			}
-			data, err := io.ReadAll(rc)
-			rc.Close() //nolint:errcheck
+			data, err := readBackupEntry(f)
 			if err != nil {
 				return err
 			}

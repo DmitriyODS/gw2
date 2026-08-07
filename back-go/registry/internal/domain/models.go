@@ -71,6 +71,15 @@ type Record struct {
 	UpdatedAt  time.Time      `json:"updated_at"`
 }
 
+// RecordScope — запись вместе с реестром, которому она принадлежит: разделу
+// «Настройки → Хранилище» нужно показать, где лежит файл.
+type RecordScope struct {
+	Record       *Record
+	RegistryID   int64
+	RegistryName string
+	CompanyID    int64
+}
+
 // RecordListFilter — фильтры списка записей: поиск (по search_text), сортировка
 // по полю или дате создания, пагинация.
 type RecordListFilter struct {

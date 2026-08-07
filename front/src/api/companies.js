@@ -17,6 +17,19 @@ export const toggleCompanyActive = (id, isActive) =>
   apiRequest(`/companies/${id}/toggle-active`, { method: 'PATCH', body: { is_active: isActive } })
 export const deleteCompany = (id) => apiRequest(`/companies/${id}`, { method: 'DELETE' })
 
+/* Перенос компании. Выгрузка — архив со всей работой, справочниками, контентом
+   и файлами; люди и питомцы в него не входят (аккаунты остаются на месте).
+   Импорт всегда создаёт НОВУЮ компанию: импортирующий становится её
+   создателем, а авторы записей сопоставляются по логину. */
+export const exportCompany = (id) => apiRequest(`/companies/${id}/export`, { blob: true })
+
+export const importCompany = (file, name = '') => {
+  const form = new FormData()
+  form.append('file', file)
+  if (name) form.append('name', name)
+  return apiRequest('/companies/import', { method: 'POST', body: form })
+}
+
 // Выходные дни компании (0=Пн … 6=Вс) — Администратор компании.
 export const getWeekendSettings = (companyId) =>
   apiRequest(`/companies/${companyId}/weekend-settings`)

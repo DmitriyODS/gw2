@@ -58,7 +58,7 @@ func TestAIQuotaPeriodEndsAtMoscowMidnight(t *testing.T) {
 
 /* Пока подписки скрыты, тариф не должен ограничивать: заплатить нельзя, а
    бесплатный «Джун» разрешает одну доску и трёх человек — упёршемуся некуда
-   идти. Единственное живое ограничение — токены ИИ (AIQuota). */
+   идти. Живых ограничений два: токены ИИ (AIQuota) и место в хранилище. */
 func TestEffectiveLimitsLiftPlanCapsWhileSubscriptionsHidden(t *testing.T) {
 	if !SubscriptionsHidden {
 		t.Skip("подписки снова видны — действуют лимиты тарифа")
@@ -66,15 +66,14 @@ func TestEffectiveLimitsLiftPlanCapsWhileSubscriptionsHidden(t *testing.T) {
 	got := EffectiveLimits(LimitsFor(PlanJunior))
 
 	counters := map[string]int64{
-		"Tasks":        got.Tasks,
-		"StorageBytes": got.StorageBytes,
-		"Companies":    int64(got.Companies),
-		"Members":      int64(got.Members),
-		"Calendars":    int64(got.Calendars),
-		"Diaries":      int64(got.Diaries),
-		"Boards":       int64(got.Boards),
-		"Registries":   int64(got.Registries),
-		"ChatFolders":  int64(got.ChatFolders),
+		"Tasks":       got.Tasks,
+		"Companies":   int64(got.Companies),
+		"Members":     int64(got.Members),
+		"Calendars":   int64(got.Calendars),
+		"Diaries":     int64(got.Diaries),
+		"Boards":      int64(got.Boards),
+		"Registries":  int64(got.Registries),
+		"ChatFolders": int64(got.ChatFolders),
 	}
 	for name, v := range counters {
 		if v != Unlimited {
@@ -88,5 +87,18 @@ func TestEffectiveLimitsLiftPlanCapsWhileSubscriptionsHidden(t *testing.T) {
 	// Сама линейка тарифов не тронута — она вернётся вместе с оплатой.
 	if LimitsFor(PlanJunior).Boards != 1 {
 		t.Error("PlanLimits изменены: тарифная линейка должна остаться как есть")
+	}
+}
+
+// Место — единственный счётный лимит, который остаётся при скрытых подписках:
+// оно упирается в диск, а не в тариф, и одинаково у всех.
+func TestEffectiveLimitsKeepStorageCapWhileSubscriptionsHidden(t *testing.T) {
+	if !SubscriptionsHidden {
+		t.Skip("подписки снова видны — действуют лимиты тарифа")
+	}
+	for _, plan := range PlanCodes {
+		if got := EffectiveLimits(LimitsFor(plan)).StorageBytes; got != FreeStorageBytes {
+			t.Errorf("%s: место = %d, ждали %d", plan, got, FreeStorageBytes)
+		}
 	}
 }

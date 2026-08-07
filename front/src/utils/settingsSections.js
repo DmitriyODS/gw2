@@ -21,9 +21,7 @@ export function settingsGroups(ctx = {}) {
           title: 'Общие',
           // desc в списке разделов не показывается (там только значок и
           // название) — это подсказка для поиска Hola и подзаголовок.
-          desc: (hasCompany && !isAdmin)
-            ? 'Поиск в интернете, интеграция с YouGile, тур по интерфейсу'
-            : 'Поиск в интернете и тур по интерфейсу',
+          desc: 'Поиск в интернете, звук уведомлений и режим «не беспокоить»',
           icon: 'home',
           tone: 'primary',
         },
@@ -36,7 +34,7 @@ export function settingsGroups(ctx = {}) {
         {
           key: 'account',
           title: 'Аккаунт',
-          desc: 'Личные данные, подписка, внешние аккаунты, вход и сеансы устройств',
+          desc: 'Личные данные, подписка, Яндекс ID и YouGile, вход и сеансы устройств',
           icon: 'account_circle',
           tone: 'primary',
         },
@@ -48,6 +46,13 @@ export function settingsGroups(ctx = {}) {
           desc: 'Мои компании, участники, настройки компании',
           icon: 'business_center',
           tone: 'secondary',
+        },
+        {
+          key: 'storage',
+          title: 'Хранилище',
+          desc: 'Сколько места занято, чем именно и как его освободить',
+          icon: 'database',
+          tone: 'tertiary',
         },
         {
           key: 'ai',
@@ -89,7 +94,7 @@ export function settingsGroups(ctx = {}) {
  * пользовательских закладках. Личный YouGile переехал внутрь «Общих», прежний
  * самостоятельный раздел «Профиль» стал панелью «Аккаунт».
  */
-const SECTION_ALIASES = { yougile: 'general', profile: 'account' }
+const SECTION_ALIASES = { yougile: 'account', profile: 'account' }
 
 export function resolveSectionKey(key) {
   return SECTION_ALIASES[key] || key

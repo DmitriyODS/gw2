@@ -5,11 +5,13 @@ import (
 	"fmt"
 	"log/slog"
 	"sort"
+	"strconv"
 	"testing"
 	"time"
 
 	"github.com/DmitriyODS/gw2/back-go/messenger/internal/domain"
 	"github.com/DmitriyODS/gw2/back-go/messenger/internal/dto"
+	"github.com/DmitriyODS/gw2/back-go/pkg/storagefiles"
 )
 
 // ── Фейки портов (без БД/Redis/диска, как в callsvc/authsvc) ─────
@@ -569,6 +571,39 @@ func (r *fakeRepo) GetAttachment(_ context.Context, id int64) (*domain.Attachmen
 	}
 	cp := *a
 	return &cp, nil
+}
+
+// Раздел «Хранилище»: список ведём по загрузившему, удаление снимает вложение
+// с сообщения (само сообщение остаётся).
+func (r *fakeRepo) ListStorageFiles(_ context.Context, userID int64) ([]storagefiles.File, error) {
+	out := []storagefiles.File{}
+	for id, a := range r.atts {
+		if a.UploaderID != userID {
+			continue
+		}
+		out = append(out, storagefiles.File{
+			Key: a.FilePath, Name: a.FileName, Kind: "attachment",
+			ID: strconv.FormatInt(id, 10),
+		})
+	}
+	return out, nil
+}
+
+func (r *fakeRepo) DeleteStorageFiles(_ context.Context, userID int64, keys []string) ([]string, error) {
+	deleted := []string{}
+	for id, a := range r.atts {
+		if a.UploaderID != userID {
+			continue
+		}
+		for _, k := range keys {
+			if a.FilePath == k {
+				deleted = append(deleted, a.FilePath)
+				delete(r.atts, id)
+				break
+			}
+		}
+	}
+	return deleted, nil
 }
 
 func (r *fakeRepo) ListChatBackgrounds(_ context.Context, _ int64) ([]*domain.ChatBackground, error) {

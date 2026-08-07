@@ -98,13 +98,18 @@ const slots = useSlots()
 .tone-success { border-color: color-mix(in oklch, var(--color-success) 35%, var(--acrylic-border)); }
 .tone-warning { border-color: color-mix(in oklch, var(--color-warning) 35%, var(--acrylic-border)); }
 
+/* Команды шапки переносятся ПОД заголовок, когда рядом с ним уже не помещаются
+   (узкая панель, окно на телефоне): иначе кнопка держала свою ширину и рвала
+   заголовок на строчки по одному слову. Перенос делает сам flex — базис
+   заголовка задаёт порог, поэтому контейнерные запросы здесь не нужны. */
 .card-head {
   display: flex;
   align-items: flex-start;
+  flex-wrap: wrap;
   gap: 12px;
 }
 
-.card-head-text { flex: 1; min-width: 0; }
+.card-head-text { flex: 1 1 220px; min-width: 0; }
 
 .card-title {
   margin: 0;

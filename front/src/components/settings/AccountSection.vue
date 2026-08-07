@@ -45,7 +45,29 @@
       </component>
     </div>
 
+    <!-- Экран блокировки — про безопасность аккаунта, поэтому рядом с
+         сеансами устройств. -->
+    <ScreenLockCard />
+
+    <!-- Подключения YouGile: это внешний АККАУНТ человека, а не настройка
+         приложения — поэтому живёт здесь, рядом с Яндекс ID. Подключений
+         может быть несколько, работает активное. -->
+    <AppCard v-if="showYougile" title="Интеграция с YouGile">
+      <YougileUserSettings />
+    </AppCard>
+
     <AppCard class="acc-sessions" title="Авторизация и сессии">
+      <template #head>
+        <AppButton
+          v-if="otherSessions"
+          label="Выйти на всех устройствах"
+          icon="logout"
+          tone="danger"
+          :loading="revokingAll"
+          @click="revokeAllOpen = true"
+        />
+      </template>
+
       <div class="sess-grid">
         <button type="button" class="sess-tile sess-add" @click="authorizeOpen = true">
           <span class="material-symbols-outlined">devices</span>
@@ -96,6 +118,24 @@
       @update:model-value="revokeTarget = null"
       @confirm="confirmRevoke"
     />
+
+    <!-- Выход на всех устройствах: текущее остаётся, чтобы человек не выкинул
+         сам себя из настроек. -->
+    <AppDialog
+      :model-value="revokeAllOpen"
+      tone="danger"
+      size="sm"
+      title="Выйти на всех устройствах?"
+      :subtitle="`Сеансов будет завершено: ${otherSessions}. Это устройство останется в системе.`"
+      :busy="revokingAll"
+      :closable="!revokingAll"
+      :actions="[
+        { kind: 'cancel', label: 'Отмена', disabled: revokingAll },
+        { kind: 'confirm', label: 'Выйти везде', icon: 'logout', disabled: revokingAll },
+      ]"
+      @update:model-value="revokeAllOpen = false"
+      @confirm="confirmRevokeAll"
+    />
   </div>
 </template>
 
@@ -105,6 +145,7 @@
    поэтому здесь только карточки и действия над сеансами. */
 import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
+import { avatarUrl } from '@/utils/pets.js'
 import { useAuthStore } from '@/stores/auth.js'
 import { useNotificationsStore } from '@/stores/notifications.js'
 import { useBillingStore } from '@/stores/billing.js'
@@ -115,12 +156,14 @@ import { dayLabel } from '@/utils/chatDates.js'
 import {
   listSessions,
   revokeSession,
+  revokeOtherSessions,
   yandexConfig,
   yandexAuthURL,
   yandexLinkStatus,
   yandexUnlink,
 } from '@/api/auth.js'
 import { getYougileStatus } from '@/api/yougile.js'
+import AppButton from '@/components/ui/AppButton.vue'
 import AppCard from '@/components/ui/AppCard.vue'
 import AppDialog from '@/components/ui/AppDialog.vue'
 import ImageLightbox from '@/components/common/ImageLightbox.vue'
@@ -129,6 +172,14 @@ import AuthorizeDeviceDialog from '@/components/devicelink/AuthorizeDeviceDialog
 import ProfileEditDialog from '@/components/profile/ProfileEditDialog.vue'
 import YandexLogo from '@/components/common/YandexLogo.vue'
 import YougileLogo from '@/components/common/YougileLogo.vue'
+import YougileUserSettings from '@/components/settings/YougileUserSettings.vue'
+import ScreenLockCard from '@/components/settings/ScreenLockCard.vue'
+
+defineProps({
+  // Личное подключение YouGile показывается рядовому участнику компании:
+  // администратор подключает компанию целиком в её карточке.
+  showYougile: { type: Boolean, default: false },
+})
 
 const auth = useAuthStore()
 const notif = useNotificationsStore()
@@ -139,7 +190,7 @@ const user = computed(() => auth.user)
 const avatarSrc = computed(() => {
   const u = auth.user
   if (!u) return ''
-  return u.avatar_path ? `/uploads/${u.avatar_path}` : `/api/users/${u.id}/identicon`
+  return u.avatar_path ? `/uploads/${u.avatar_path}` : avatarUrl(u)
 })
 
 const editOpen = ref(false)
@@ -151,6 +202,28 @@ const sessions = ref([])
 const sessionsLoading = ref(true)
 const revokeTarget = ref(null)
 const revoking = ref(0)
+const revokeAllOpen = ref(false)
+const revokingAll = ref(false)
+
+// Кнопка «выйти на всех устройствах» нужна, только когда таких устройств
+// больше одного: гнать самого себя неоткуда.
+const otherSessions = computed(() => sessions.value.filter((s) => !s.current).length)
+
+async function confirmRevokeAll() {
+  revokingAll.value = true
+  try {
+    const res = await revokeOtherSessions()
+    sessions.value = sessions.value.filter((s) => s.current)
+    notif.success(res.revoked
+      ? `Завершено сеансов: ${res.revoked}`
+      : 'Других сеансов не было')
+    revokeAllOpen.value = false
+  } catch (e) {
+    notif.error(e.message || 'Не удалось завершить сеансы')
+  } finally {
+    revokingAll.value = false
+  }
+}
 
 async function loadSessions() {
   sessionsLoading.value = true

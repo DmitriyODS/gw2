@@ -115,19 +115,22 @@
           >
             <img class="sm-avatar" :src="avatarSrc" :alt="auth.user?.fio || 'Аккаунт'" />
           </button>
-          <CompanySelect class="sm-company" />
-          <!-- Справка стоит рядом с настройками: искать её внутри настроек
-               догадается не каждый, а нужна она как раз тем, кто ищет. -->
-          <button
-            class="sm-icon-btn"
-            type="button"
-            title="Справка и поддержка"
-            @click="launchPath('/settings?section=help')"
-          >
-            <span class="material-symbols-outlined">help</span>
-          </button>
+          <div class="sm-company">
+            <CompanySelect />
+          </div>
           <button class="sm-icon-btn" type="button" title="Настройки" @click="launchPath('/settings')">
             <span class="material-symbols-outlined">settings</span>
+          </button>
+          <!-- Запереть экран: сессия остаётся живой, приложение закрывается
+               пин-кодом. Кнопка видна, только когда блокировка включена. -->
+          <button
+            v-if="screenLock.enabled.value"
+            class="sm-icon-btn"
+            type="button"
+            title="Заблокировать (Ctrl+L)"
+            @click="lockScreen"
+          >
+            <span class="material-symbols-outlined">lock</span>
           </button>
           <button class="sm-icon-btn danger" type="button" title="Выйти" @click="logoutAsk = true">
             <span class="material-symbols-outlined">logout</span>
@@ -173,6 +176,8 @@
 </template>
 
 <script setup>
+import { avatarUrl } from '@/utils/pets.js'
+import { useScreenLock } from '@/composables/useScreenLock.js'
 import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import InputText from 'primevue/inputtext'
 import { useAuthStore } from '@/stores/auth.js'
@@ -237,7 +242,7 @@ const visibleGroups = computed(() =>
 const avatarSrc = computed(() => {
   const user = auth.user
   if (!user) return ''
-  return user.avatar_path ? `/uploads/${user.avatar_path}` : `/api/users/${user.id}/identicon`
+  return avatarUrl(user)
 })
 
 const appById = computed(() => {
@@ -378,6 +383,13 @@ onBeforeUnmount(() => { desktop.startFull = false })
 
 // Подтверждение выхода: кнопка стоит рядом с настройками, промахнуться легко.
 const logoutAsk = ref(false)
+
+const screenLock = useScreenLock()
+
+function lockScreen() {
+  screenLock.lock()
+  desktop.startOpen = false
+}
 const LOGOUT_ACTIONS = [
   { kind: 'cancel', label: 'Остаться' },
   { kind: 'confirm', label: 'Выйти', icon: 'logout' },
@@ -606,7 +618,11 @@ function onGroupMenuSelect(action) {
 
 .sm-brand:hover { background: color-mix(in oklch, var(--color-primary) 10%, transparent); }
 
-.sm-company { flex: 1; min-width: 0; }
+.sm-company {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+}
 
 /* ── Разделы и плитки ──
    Сетка 4 колонки: широкая плитка занимает две, квадратная — одну.

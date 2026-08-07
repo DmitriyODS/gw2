@@ -22,14 +22,27 @@
 
     <div v-else class="pe-body">
       <div class="pe-avatar-row">
-        <img :src="avatarSrc" class="pe-avatar" :alt="auth.user?.fio" />
+        <!-- Примерка: пока значок в черновике, показываем его самого, а не
+             сохранённый аватар — иначе выбор было бы не видно до сохранения. -->
+        <span v-if="form.avatarEmoji" class="pe-avatar pe-avatar-emoji">{{ form.avatarEmoji }}</span>
+        <img v-else :src="avatarSrc" class="pe-avatar" :alt="auth.user?.fio" />
         <div class="pe-avatar-actions">
           <AppButton icon="photo_camera" label="Загрузить фото" @click="cropping = true" />
+          <!-- Значок вместо фотографии: выбор эмодзи снимает загруженный файл —
+               иначе человек выбрал бы значок и не понял, почему ничего не
+               изменилось (файл важнее по приоритету показа). -->
+          <EmojiPicker @pick="pickEmoji" />
           <AppButton
-            v-if="auth.user?.avatar_path"
+            v-if="form.avatarEmoji"
+            icon="close"
+            label="Снять значок"
+            @click="clearEmoji"
+          />
+          <AppButton
+            v-else-if="auth.user?.avatar_path || auth.user?.avatar_emoji"
             tone="danger"
             icon="delete"
-            label="Удалить"
+            label="Убрать"
             :disabled="avatarBusy"
             @click="removeAvatar"
           />
@@ -104,7 +117,9 @@ import AvatarCropper from '@/components/settings/AvatarCropper.vue'
 import ChangeLoginDialog from '@/components/profile/ChangeLoginDialog.vue'
 import ChangePasswordDialog from '@/components/profile/ChangePasswordDialog.vue'
 import PhoneInput from '@/components/common/PhoneInput.vue'
+import EmojiPicker from '@/components/common/EmojiPicker.vue'
 import InputText from 'primevue/inputtext'
+import { avatarUrl } from '@/utils/pets.js'
 import { useAuthStore } from '@/stores/auth.js'
 import { useNotificationsStore } from '@/stores/notifications.js'
 import { useBreakpoint } from '@/composables/useBreakpoint.js'
@@ -117,7 +132,7 @@ const auth = useAuthStore()
 const notif = useNotificationsStore()
 const { isMobile } = useBreakpoint()
 
-const form = reactive({ fio: '', post: '', phone: '', email: '' })
+const form = reactive({ fio: '', post: '', phone: '', email: '', avatarEmoji: '' })
 const error = ref('')
 const saving = ref(false)
 const cropping = ref(false)
@@ -125,11 +140,27 @@ const avatarBusy = ref(false)
 const loginDialog = ref(false)
 const passwordDialog = ref(false)
 
+/* Адрес аватара. Значок и автоматический аватар отдаёт одна ручка, поэтому
+   ссылка одна и та же — но после смены значка её надо перезапросить, иначе
+   браузер покажет прежнюю картинку из кэша. */
+const avatarStamp = ref(0)
 const avatarSrc = computed(() => {
   const u = auth.user
   if (!u) return ''
-  return u.avatar_path ? `/uploads/${u.avatar_path}` : `/api/users/${u.id}/identicon`
+  if (u.avatar_path && !form.avatarEmoji) return `/uploads/${u.avatar_path}`
+  return `${avatarUrl(u)}${avatarStamp.value ? `${avatarUrl(u).includes('?') ? '&' : '?'}t=${avatarStamp.value}` : ''}`
 })
+
+/* Значок сначала ПРИМЕРЯЕТСЯ: выбор кладёт его в черновик формы и сразу виден
+   в кружке аватара, а применяется общей кнопкой «Сохранить» — как и остальные
+   поля профиля. */
+function pickEmoji(emoji) {
+  form.avatarEmoji = emoji
+}
+
+function clearEmoji() {
+  form.avatarEmoji = ''
+}
 
 watch(
   () => props.modelValue,
@@ -140,6 +171,7 @@ watch(
     form.post = u.post || ''
     form.phone = u.phone || ''
     form.email = u.email || ''
+    form.avatarEmoji = u.avatar_emoji || ''
     error.value = ''
     cropping.value = false
   },
@@ -164,8 +196,14 @@ async function save() {
       post: form.post.trim(),
       phone: form.phone.trim() || null,
       email: form.email.trim() || null,
+      // Значок меняем, только если его трогали: иначе правка ФИО снимала бы
+      // выбранный ранее.
+      ...(form.avatarEmoji !== (auth.user?.avatar_emoji || '')
+        ? { avatar_emoji: form.avatarEmoji }
+        : {}),
     })
     await auth.loadMe()
+    avatarStamp.value = Date.now()
     notif.success('Профиль обновлён')
     emit('update:modelValue', false)
   } catch (e) {
@@ -186,11 +224,15 @@ async function onCropped(blob) {
   }
 }
 
+// Убираем и фото, и значок: кнопка одна, и человек ждёт возврата к обычному
+// автоматическому аватару.
 async function removeAvatar() {
   avatarBusy.value = true
   try {
-    await deleteAvatar()
+    if (auth.user?.avatar_path) await deleteAvatar()
+    if (auth.user?.avatar_emoji) await updateMe({ avatar_emoji: '' })
     await auth.loadMe()
+    avatarStamp.value = Date.now()
     notif.success('Аватарка удалена')
   } catch (e) {
     notif.error(e.message || 'Ошибка удаления аватарки')
@@ -212,6 +254,16 @@ async function removeAvatar() {
   display: flex;
   align-items: center;
   gap: 16px;
+}
+
+.pe-avatar-emoji {
+  display: grid;
+  place-items: center;
+  font-size: 40px;
+  background: var(--color-primary-container);
+  /* Значок — «примерка», поэтому кружок подсвечен кромкой: видно, что
+     изменение ещё не сохранено. */
+  box-shadow: inset 0 0 0 2px var(--color-primary);
 }
 
 .pe-avatar {

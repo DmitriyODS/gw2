@@ -4,6 +4,7 @@ package clients
 import (
 	"context"
 	"log/slog"
+	"time"
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
@@ -11,6 +12,10 @@ import (
 	"github.com/DmitriyODS/gw2/back-go/messenger/internal/domain"
 	"github.com/DmitriyODS/gw2/back-go/pkg/gen/aipb"
 )
+
+// supportTimeout — фоновый ответ техподдержки (см. пакет service): без
+// потолка зависший LLM-провайдер держал бы горутину открытой бесконечно.
+const supportTimeout = 40 * time.Second
 
 // SupportAI — клиент aisvc.SupportChat (ИИ техподдержки dev-чата). Fail-open
 // на стороне вызывающего: любая ошибка (сервис недоступен, ключ не настроен)
@@ -35,6 +40,8 @@ func NewSupportAI(addr string, log *slog.Logger) (*SupportAI, error) {
 func (c *SupportAI) Close() { _ = c.conn.Close() }
 
 func (c *SupportAI) SupportReply(ctx context.Context, messagesJSON string) (string, error) {
+	ctx, cancel := context.WithTimeout(ctx, supportTimeout)
+	defer cancel()
 	resp, err := c.stub.SupportChat(ctx, &aipb.SupportChatRequest{MessagesJson: messagesJSON})
 	if err != nil {
 		return "", err

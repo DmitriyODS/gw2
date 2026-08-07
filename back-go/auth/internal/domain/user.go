@@ -43,6 +43,12 @@ type User struct {
 	Login         string
 	HashPassword  string
 	AvatarPath    *string
+	// AvatarEmoji — значок вместо фотографии; показывается, когда файла нет.
+	AvatarEmoji *string
+	// Экран блокировки: хеш пин-кода и задержка бездействия (nil — запирать
+	// только вручную). Пустой хеш означает, что блокировка выключена.
+	LockPinHash  *string
+	LockAfterMin *int
 	Phone         *string
 	Email         *string
 	IsDefaultPass bool

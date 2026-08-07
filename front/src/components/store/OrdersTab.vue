@@ -1,6 +1,6 @@
 <template>
   <!-- Заказы: покупки подписок, докупок и товаров с их статусом оплаты. -->
-  <BrandLoader v-if="loading" :size="48" />
+  <BrandLoader v-if="loading" block :size="64" />
 
   <EmptyState
     v-else-if="!items.length"

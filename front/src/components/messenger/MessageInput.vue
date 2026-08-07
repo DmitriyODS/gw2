@@ -171,6 +171,7 @@ import { ref, computed, nextTick, onMounted, onBeforeUnmount, watch } from 'vue'
 import { uploadAttachment } from '@/api/messenger.js'
 import { registerNativeImageSink } from '@/utils/nativeApp.js'
 import { selectionViewportRect } from '@/utils/textareaSelection.js'
+import { linkifySelection } from '@/utils/pasteLink.js'
 import EmojiPicker from '@/components/common/EmojiPicker.vue'
 import ProgressSpinner from 'primevue/progressspinner'
 import { useMessengerStore } from '@/stores/messenger.js'
@@ -498,7 +499,9 @@ function onBlur() {
 }
 onBeforeUnmount(() => { unregisterImageSink?.() })
 
-/* Вставка из буфера: картинки/файлы скриншотов приходят как items типа file. */
+/* Вставка из буфера: картинки/файлы скриншотов приходят как items типа file.
+   Адрес поверх выделенного текста превращает его в ссылку — привычка из
+   редакторов, тут она попадает в разметку сообщения. */
 async function onPaste(e) {
   const items = Array.from(e.clipboardData?.items || [])
   const files = items
@@ -508,6 +511,15 @@ async function onPaste(e) {
   if (files.length) {
     e.preventDefault()
     await uploadFiles(files)
+    return
+  }
+
+  const linked = linkifySelection(textarea.value, e.clipboardData?.getData('text/plain'))
+  if (linked) {
+    e.preventDefault()
+    text.value = linked.value
+    // Курсор — за вставленной ссылкой; ждём отрисовки нового значения.
+    nextTick(() => textarea.value?.setSelectionRange(linked.caret, linked.caret))
   }
 }
 

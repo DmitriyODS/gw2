@@ -46,6 +46,11 @@ type SessionStore interface {
 	ListActive(ctx context.Context, userID int64) ([]*Session, error)
 	// Revoke — завершить сеанс (только свой: userID в условии).
 	Revoke(ctx context.Context, id, userID int64) error
+	// RevokeOthers — завершить ВСЕ сеансы пользователя, кроме указанного
+	// (keepID = 0 — вообще все). Возвращает число отозванных. Так работают
+	// «выйти на всех устройствах» и смена пароля: старые входы обязаны
+	// перестать действовать сразу, иначе украденный пароль остаётся рабочим.
+	RevokeOthers(ctx context.Context, userID, keepID int64) (int, error)
 	// SetCity — дозаполнить город после асинхронного гео-резолва.
 	SetCity(ctx context.Context, id int64, city string) error
 }

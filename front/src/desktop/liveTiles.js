@@ -121,6 +121,16 @@ const FACES = {
     return out
   },
 
+  drive: ({ data }) => {
+    const d = data.drive
+    if (!d) return []
+    if (!d.total) return [face('empty', 'Диск пуст', 'Перетащите сюда файлы')]
+
+    const out = [face('count', d.total, plural(d.total, 'недавний файл', 'недавних файла', 'недавних файлов'))]
+    if (d.latest) out.push(face('latest', 'Последний', d.latest.name || 'Без названия'))
+    return out
+  },
+
   reminders: ({ data }) => {
     const r = data.reminders
     if (!r) return []
