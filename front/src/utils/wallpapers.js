@@ -28,7 +28,7 @@ export const WALLPAPERS = [
 ]
 
 // Обои «из коробки»: их видит каждый, кто своих не выбирал.
-export const DEFAULT_WALLPAPER_KEY = 'wave'
+export const DEFAULT_WALLPAPER_KEY = 'gw7'
 
 export function wallpaperByKey(key) {
   return WALLPAPERS.find((w) => w.key === key) || null
