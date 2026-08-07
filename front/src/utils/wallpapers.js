@@ -22,8 +22,9 @@ const wp = (key, label, files) => ({
 })
 
 export const WALLPAPERS = [
-  wp('wave', 'Волна', { light: '/bg/gw_light_1.webp', dark: '/bg/gw_black_1.webp' }),
-  wp('bloom', 'Цветение', { light: '/bg/gw_white.webp', dark: '/bg/gw_night.webp' }),
+  wp('wave', 'Волна'),
+  wp('star', 'Звезда'),
+  wp('gw7', 'Groove Work 7'),
 ]
 
 // Обои «из коробки»: их видит каждый, кто своих не выбирал.
