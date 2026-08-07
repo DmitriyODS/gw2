@@ -480,11 +480,15 @@ function onDelete() {
 }
 
 /* Кликабельное имя автора (до .post-author, чтобы font: inherit не перебил
-   размер/насыщенность имени). */
+   размер/насыщенность имени). min-height — иначе мобильный
+   @media(max-width:768px) button{min-height:36px} раздувает кнопку выше
+   строки текста и визуально отодвигает дату вниз (см. main.css). */
 .post-author-link {
   border: none;
   background: transparent;
   padding: 0;
+  min-height: 0;
+  line-height: 1.3;
   font: inherit;
   text-align: left;
   cursor: pointer;
