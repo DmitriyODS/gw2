@@ -52,7 +52,7 @@
     <!-- Подключения YouGile: это внешний АККАУНТ человека, а не настройка
          приложения — поэтому живёт здесь, рядом с Яндекс ID. Подключений
          может быть несколько, работает активное. -->
-    <AppCard v-if="showYougile" title="Интеграция с YouGile">
+    <AppCard v-if="showYougile" id="acc-yougile-card" title="Интеграция с YouGile">
       <YougileUserSettings />
     </AppCard>
 
@@ -136,6 +136,22 @@
       @update:model-value="revokeAllOpen = false"
       @confirm="confirmRevokeAll"
     />
+
+    <AppDialog
+      :model-value="yandexUnlinkAsk"
+      tone="danger"
+      size="sm"
+      title="Отвязать Яндекс-аккаунт?"
+      subtitle="Входить кнопкой «Войти через Яндекс» станет нельзя — только по логину и паролю."
+      :busy="yandexBusy"
+      :closable="!yandexBusy"
+      :actions="[
+        { kind: 'cancel', label: 'Отмена', disabled: yandexBusy },
+        { kind: 'confirm', label: 'Отвязать', icon: 'link_off', disabled: yandexBusy },
+      ]"
+      @update:model-value="yandexUnlinkAsk = false"
+      @confirm="unlinkYandex"
+    />
   </div>
 </template>
 
@@ -175,7 +191,7 @@ import YougileLogo from '@/components/common/YougileLogo.vue'
 import YougileUserSettings from '@/components/settings/YougileUserSettings.vue'
 import ScreenLockCard from '@/components/settings/ScreenLockCard.vue'
 
-defineProps({
+const props = defineProps({
   // Личное подключение YouGile показывается рядовому участнику компании:
   // администратор подключает компанию целиком в её карточке.
   showYougile: { type: Boolean, default: false },
@@ -290,6 +306,7 @@ async function confirmRevoke() {
 /* ── Подписка и внешние аккаунты ─────────────────────────────────── */
 const yandex = ref({ enabled: false, client_id: '', linked: false })
 const yandexBusy = ref(false)
+const yandexUnlinkAsk = ref(false)
 const yougile = ref({ connected: false, available: false })
 
 // Тариф берём у биллинга — тот же источник, что у магазина, иначе профиль и
@@ -317,7 +334,7 @@ const links = computed(() => [
     logo: 'yandex',
     state: !yandex.value.enabled ? 'недоступно' : yandex.value.linked ? 'подключено' : 'не настроено',
     action: yandex.value.enabled && !yandexBusy.value
-      ? (yandex.value.linked ? unlinkYandex : linkYandex)
+      ? (yandex.value.linked ? () => { yandexUnlinkAsk.value = true } : linkYandex)
       : null,
   },
   {
@@ -325,9 +342,21 @@ const links = computed(() => [
     label: 'YouGile аккаунт',
     logo: 'yougile',
     state: !yougile.value.available ? 'недоступно' : yougile.value.connected ? 'подключено' : 'не настроено',
-    action: yougile.value.available ? () => router.push('/settings?section=general') : null,
+    action: yougile.value.available ? goToYougile : null,
   },
 ])
+
+// Пилюля вела на /settings?section=general — панели, вообще не знающей про
+// YouGile. Личное подключение (карточка ниже на этой же странице) — просто
+// долистать до неё; компанийное настраивает только администратор в карточке
+// компании, туда и ведём.
+function goToYougile() {
+  if (props.showYougile) {
+    document.getElementById('acc-yougile-card')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    return
+  }
+  router.push(auth.companyId ? `/companies/${auth.companyId}?tab=settings&settingsTab=yougile` : '/companies')
+}
 
 function linkYandex() {
   window.location.href = yandexAuthURL(yandex.value.client_id, inAppShell() ? 'app-link' : 'link')
@@ -338,6 +367,7 @@ async function unlinkYandex() {
   try {
     await yandexUnlink()
     yandex.value.linked = false
+    yandexUnlinkAsk.value = false
     notif.success('Яндекс-аккаунт отвязан')
   } catch (e) {
     notif.error(e?.message || 'Не удалось отвязать аккаунт')

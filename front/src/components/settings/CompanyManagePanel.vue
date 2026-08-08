@@ -519,6 +519,7 @@
 
 <script setup>
 import { ref, computed, onMounted } from 'vue'
+import { useRoute } from 'vue-router'
 import BrandLoader from '@/components/common/BrandLoader.vue'
 import Select from 'primevue/select'
 import AppButton from '@/components/ui/AppButton.vue'
@@ -555,6 +556,11 @@ import { suggestLogin } from '@/api/auth.js'
 const props = defineProps({ id: { type: [String, Number], required: true } })
 const emit = defineEmits(['back', 'deleted', 'imported'])
 
+// Открыть сразу на нужной вкладке по ссылке (например, пилюля YouGile в
+// «Аккаунте» ведёт прямо в ?tab=settings&settingsTab=yougile, а не на общую
+// страницу компании, которую потом надо разгадывать самому).
+const route = useRoute()
+
 const auth = useAuthStore()
 const notif = useNotificationsStore()
 const { isSuperAdmin, ROLES } = usePermission()
@@ -567,7 +573,8 @@ const loadError = ref('')
 
 const vacationCount = computed(() => members.value.filter((m) => m.on_vacation).length)
 
-const tab = ref('overview')
+const MAIN_TAB_KEYS = ['overview', 'members', 'settings', 'transfer', 'danger']
+const tab = ref(MAIN_TAB_KEYS.includes(route.query.tab) ? route.query.tab : 'overview')
 const mainTabs = computed(() => {
   const list = [
     { value: 'overview', label: 'Обзор', icon: 'info' },
@@ -581,7 +588,8 @@ const mainTabs = computed(() => {
   return list
 })
 
-const settingsTab = ref('features')
+const SETTINGS_TAB_KEYS = ['features', 'lists', 'ai', 'schedule', 'groove', 'registries', 'calendars', 'yougile']
+const settingsTab = ref(SETTINGS_TAB_KEYS.includes(route.query.settingsTab) ? route.query.settingsTab : 'features')
 const settingsTabs = [
   { value: 'features', label: 'Возможности', icon: 'tune' },
   { value: 'lists', label: 'Списки', icon: 'format_list_bulleted' },

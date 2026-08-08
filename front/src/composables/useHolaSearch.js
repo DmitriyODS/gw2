@@ -25,6 +25,7 @@ import { humanWhen } from '@/utils/naturalDate.js'
 import { resolveRecipients, searchStem } from '@/utils/recipients.js'
 import { stripMarkdown } from '@/utils/markdown.js'
 import { settingsSections } from '@/utils/settingsSections.js'
+import { flatHelpArticles } from '@/utils/helpArticles.js'
 import { enginesInOrder, getSearchEngine, openUrl, openWebSearch, parseUrl } from '@/utils/webSearch.js'
 import { getTasks } from '@/api/tasks.js'
 import { getNotes } from '@/api/notes.js'
@@ -58,8 +59,8 @@ export function useHolaSearch() {
   const notes = useNotesStore()
   const boards = useBoardsStore()
   const reminders = useRemindersStore()
-  const { isSuperAdmin, hasActiveCompany, isAtLeast } = usePermission()
-  const { settings } = useCompanySettings()
+  const { isSuperAdmin, hasActiveCompany, isAtLeast, canManageCompanies } = usePermission()
+  const { settings, usesGroove } = useCompanySettings()
   const { isMobile } = useBreakpoint()
 
   const query = ref('')
@@ -127,6 +128,62 @@ export function useHolaSearch() {
         path: s.to || `/settings?section=${s.key}`,
       }))
   })
+
+  /* ── Справка и поддержка ──
+     Тот же каталог статей, что у панели «Справка и поддержка» (utils/helpArticles.js):
+     совпадение в тексте/советах поднимается подзаголовком как быстрый ответ,
+     клик открывает статью напрямую (?article=), а не список. Если ничего не
+     нашли — карточка «спросить в поддержке» с текстом запроса наготове. */
+  const helpArticleHits = computed(() => {
+    const q = needle.value
+    if (!q) return []
+    const ctx = {
+      hasCompany: hasActiveCompany(),
+      isSuperAdmin: isSuperAdmin(),
+      canManageCompanies: canManageCompanies(),
+      isManager: isAtLeast(ROLES.MANAGER),
+      usesGroove: usesGroove.value,
+    }
+    return flatHelpArticles(ctx)
+      .map((a) => ({ a, snippet: helpSnippet(a, q) }))
+      .filter((x) => x.snippet)
+      .slice(0, LIMIT)
+      .map(({ a, snippet }) => ({
+        key: `help-${a.id}`,
+        icon: a.icon,
+        title: a.title,
+        subtitle: snippet,
+        path: `/settings?section=help&article=${a.id}`,
+      }))
+  })
+
+  /* Быстрый ответ: если запрос совпал внутри текста или совета — именно эта
+     фраза и есть ответ, показываем её вместо общего подзаголовка статьи. */
+  function helpSnippet(a, q) {
+    const hit = [...(a.text || []), ...(a.tips || [])].find((s) => s.toLowerCase().includes(q))
+    if (hit) return hit.length > 110 ? `${hit.slice(0, 110)}…` : hit
+    if (a.title.toLowerCase().includes(q) || a.subtitle.toLowerCase().includes(q)) return a.subtitle
+    return ''
+  }
+
+  const supportHits = computed(() => {
+    const q = query.value.trim()
+    if (q.length < 3 || helpArticleHits.value.length) return []
+    return [{
+      key: 'help-ask-support',
+      icon: 'support_agent',
+      title: `Спросить в поддержке: «${q}»`,
+      subtitle: 'Ничего похожего в справке не нашли — сообщение уйдёт команде разработки',
+      run: () => askSupport(q),
+    }]
+  })
+
+  async function askSupport(text) {
+    const id = await messenger.openDevChat()
+    await messenger.send(id, { text })
+    notif.success('Отправлено в поддержку')
+    openPath(`/messenger/${id}`)
+  }
 
   const chatHits = computed(() => {
     const q = needle.value
@@ -417,6 +474,7 @@ export function useHolaSearch() {
     { key: 'chats', label: 'Переписки', items: chatHits.value },
     { key: 'people', label: 'Сотрудники', items: hits.value.people },
     { key: 'settings', label: 'Настройки', items: settingHits.value },
+    { key: 'help', label: 'Справка', items: [...helpArticleHits.value, ...supportHits.value] },
     { key: 'web', label: 'Интернет', items: webHits.value },
     ].filter((s) => s.items.length)
 

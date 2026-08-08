@@ -5,15 +5,6 @@
         <BrandLoader :size="64" />
       </template>
 
-      <template v-else-if="state === 'linked'">
-        <AppButton
-          variant="filled"
-          label="в аккаунт"
-          class="yc-wide"
-          @click="router.push('/settings?section=account')"
-        />
-      </template>
-
       <template v-else-if="state === 'return-app'">
         <AppButton variant="filled" label="открыть приложение" class="yc-wide" @click="openInApp" />
         <AppButton label="продолжить в браузере" class="yc-wide" @click="continueInBrowser" />
@@ -43,6 +34,7 @@ import { computed, onMounted, ref } from 'vue'
 import AppButton from '@/components/ui/AppButton.vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth.js'
+import { useNotificationsStore } from '@/stores/notifications.js'
 import { yandexLink } from '@/api/auth.js'
 import { connectSocket } from '@/socket/index.js'
 import { inAppShell, APP_SCHEME } from '@/utils/appShell.js'
@@ -53,7 +45,7 @@ const route = useRoute()
 const router = useRouter()
 const authStore = useAuthStore()
 
-const state = ref('loading') // loading | linked | return-app | select | error
+const state = ref('loading') // loading | return-app | select | error
 const loading = ref(false)
 const error = ref('')
 const pickerCompanies = ref([])
@@ -61,7 +53,6 @@ const selectToken = ref('')
 
 const TITLES = {
   loading: 'входим через Яндекс',
-  linked: 'аккаунт привязан',
   'return-app': 'возврат в приложение',
   select: 'выбор компании',
   error: 'не получилось',
@@ -69,7 +60,6 @@ const TITLES = {
 
 const SUBTITLES = {
   loading: 'Секунду, проверяем данные.',
-  linked: 'Теперь можно входить кнопкой «Войти через Яндекс».',
   'return-app': 'Вход подтверждён. Продолжите в приложении Groove Work.',
   select: 'Вы состоите в нескольких компаниях — в какую войти?',
   error: '',
@@ -106,7 +96,12 @@ async function runLink() {
     await authStore.ensureReady()
     if (!authStore.token) throw new Error('Сначала войдите в свой аккаунт Groove Work.')
     await yandexLink(oauthCode.value)
-    state.value = 'linked'
+    // Раньше здесь просто вставал статичный экран «аккаунт привязан» с
+    // кнопкой «в аккаунт» — кто её не заметил, решал, что ничего не
+    // произошло. Возвращаем сразу, как при входе (finish), с тостом-
+    // подтверждением вместо отдельного экрана.
+    useNotificationsStore().success('Яндекс-аккаунт подключён')
+    router.push('/settings?section=account')
   } catch (e) {
     state.value = 'error'
     error.value = e?.message || 'Не удалось привязать Яндекс-аккаунт.'
