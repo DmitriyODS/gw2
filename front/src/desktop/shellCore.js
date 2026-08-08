@@ -41,6 +41,8 @@ const LIVE_PULSE = 60_000
  *   разделам сама, без перехвата жестов и popstate.
  * @param {() => void} [opts.onHome] — адрес стал «/home» (браузерное «назад»
  *   до стартового экрана).
+ * @param {'desktop'|'mobile'} [opts.platform] — чья раскладка «Пуска» у этого
+ *   каркаса (desktopPrefs хранит стол и мобилу раздельно).
  */
 export function useShellCore({
   activePath,
@@ -49,6 +51,7 @@ export function useShellCore({
   limit = 0,
   navigate = 'replace',
   onHome = null,
+  platform = 'desktop',
 }) {
   const route = useRoute()
   const auth = useAuthStore()
@@ -85,7 +88,7 @@ export function useShellCore({
     hasCompany: hasActiveCompany(),
     isSuperAdmin: isSuperAdmin(),
     settings: settings.value,
-  }, prefs.layout)
+  }, prefs.layout(platform))
     .flatMap((g) => g.items.map((a) => a.id))
     .filter((id) => prefs.isTileLive(id)))
 

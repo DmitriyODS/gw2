@@ -23,55 +23,70 @@ describe('настройки рабочего стола', () => {
 
   it('закрепление и открепление раздела', () => {
     const prefs = freshStore()
-    expect(prefs.isPinned('tasks')).toBe(false)
-    prefs.pin('tasks')
-    prefs.pin('tasks') // повторное закрепление не дублирует
-    expect(prefs.pinned).toEqual(['tasks'])
-    prefs.togglePin('tasks')
-    expect(prefs.pinned).toEqual([])
+    expect(prefs.isPinned('desktop', 'tasks')).toBe(false)
+    prefs.pin('desktop', 'tasks')
+    prefs.pin('desktop', 'tasks') // повторное закрепление не дублирует
+    expect(prefs.pinnedList('desktop')).toEqual(['tasks'])
+    prefs.togglePin('desktop', 'tasks')
+    expect(prefs.pinnedList('desktop')).toEqual([])
+  })
+
+  it('раскладка стола и мобилы независимы', () => {
+    const prefs = freshStore()
+    prefs.pin('desktop', 'tasks')
+    prefs.setTileSize('desktop', 'notes', 'wide')
+    prefs.pin('mobile', 'portal')
+    prefs.setTileSize('mobile', 'notes', 'square')
+
+    expect(prefs.pinnedList('desktop')).toEqual(['tasks'])
+    expect(prefs.pinnedList('mobile')).toEqual(['portal'])
+    expect(prefs.tileSize('desktop', 'notes')).toBe('wide')
+    expect(prefs.tileSize('mobile', 'notes')).toBe('square')
   })
 
   it('размер плитки берётся из настроек, иначе — размер по умолчанию', () => {
     const prefs = freshStore()
-    expect(prefs.tileSize('notes', 'square')).toBe('square')
-    prefs.setTileSize('notes', 'wide')
-    expect(prefs.tileSize('notes', 'square')).toBe('wide')
+    expect(prefs.tileSize('desktop', 'notes', 'square')).toBe('square')
+    prefs.setTileSize('desktop', 'notes', 'wide')
+    expect(prefs.tileSize('desktop', 'notes', 'square')).toBe('wide')
   })
 
   it('изменения уходят на сервер одной отложенной записью', () => {
     const prefs = freshStore()
-    prefs.pin('tasks')
-    prefs.setTileSize('notes', 'wide')
+    prefs.pin('desktop', 'tasks')
+    prefs.setTileSize('desktop', 'notes', 'wide')
     prefs.setWallpaper({ gradient: { preset: 'aurora' } })
     expect(api.saveDesktopPrefs).not.toHaveBeenCalled()
 
     vi.runAllTimers()
     expect(api.saveDesktopPrefs).toHaveBeenCalledTimes(1)
     expect(api.saveDesktopPrefs.mock.calls[0][0]).toMatchObject({
-      pinned: ['tasks'],
-      tiles: { notes: 'wide' },
+      layouts: { desktop: { pinned: ['tasks'], tiles: { notes: 'wide' } } },
     })
   })
 
   it('настройки переживают перезагрузку и обновляются с сервера', async () => {
     const first = freshStore()
-    first.pin('portal')
+    first.pin('desktop', 'portal')
     vi.runAllTimers()
 
     // Новая сессия видит кэш мгновенно, затем подтягивает серверную версию.
     const second = freshStore()
-    expect(second.pinned).toEqual(['portal'])
+    expect(second.pinnedList('desktop')).toEqual(['portal'])
     await second.load()
-    expect(second.pinned).toEqual(['tasks'])
-    expect(second.tileSize('notes')).toBe('wide')
+    // Старый плоский формат с сервера трактуется как раскладка стола —
+    // мобильная остаётся пустой, человек расставляет её сам.
+    expect(second.pinnedList('desktop')).toEqual(['tasks'])
+    expect(second.pinnedList('mobile')).toEqual([])
+    expect(second.tileSize('desktop', 'notes')).toBe('wide')
   })
 
   it('выход из системы очищает настройки', () => {
     const prefs = freshStore()
-    prefs.pin('tasks')
+    prefs.pin('desktop', 'tasks')
     prefs.setWallpaper({ gradient: { preset: 'aurora' } })
     prefs.reset()
-    expect(prefs.pinned).toEqual([])
+    expect(prefs.pinnedList('desktop')).toEqual([])
     expect(prefs.wallpaper).toBeNull()
   })
 })

@@ -3,6 +3,11 @@
  * разделы меню «Пуск» (свои группы, переименования, состав, порядок, свёрнутость),
  * размер плиток и обои.
  *
+ * Раскладка «Пуска» (пункты layouts.*) хранится ОТДЕЛЬНО для стола и мобилы —
+ * это разные экраны с разной геометрией, и человек расставляет плитки на них
+ * независимо: широкая на телефоне не обязана быть широкой на столе. Обои,
+ * живые плитки и панель задач — общие, это не про раскладку.
+ *
  * Живут на сервере (`/api/users/me/desktop`), поэтому переезжают между
  * устройствами; localStorage — только кэш для мгновенного первого кадра,
  * сервер всегда главнее. Запись отложенная: щелчки по размеру плиток не
@@ -18,7 +23,9 @@ const SAVE_DELAY = 700
 // Сколько последних картинок обоев помним для быстрого возврата.
 const WALLPAPER_HISTORY = 10
 
-function empty() {
+export const PLATFORMS = ['desktop', 'mobile']
+
+function emptyLayout() {
   return {
     pinned: [],
     tiles: {},
@@ -29,6 +36,12 @@ function empty() {
     labels: {},
     appGroup: {},
     collapsed: {},
+  }
+}
+
+function empty() {
+  return {
+    layouts: { desktop: emptyLayout(), mobile: emptyLayout() },
     wallpaper: null,
     // Обои экрана блокировки — свой рецепт: запертый экран человек видит
     // чаще, чем рабочий стол, и оформляет его отдельно.
@@ -41,9 +54,10 @@ function empty() {
     // Храним только исключения: по умолчанию живая плитка включена.
     tileLive: {},
     // Где висит панель задач: снизу (как было), сверху, слева или справа.
+    // Только про стол — на телефоне панель всегда снизу, своей настройки нет.
     taskbarSide: 'bottom',
     // Меню «Пуск» всегда открывается во весь экран (иначе — обычная панель,
-    // а полный экран включается кнопкой в самом меню).
+    // а полный экран включается кнопкой в самом меню). Тоже только про стол.
     startFullscreen: false,
   }
 }
@@ -52,7 +66,7 @@ function empty() {
 // версий клиента, поэтому проверяем.
 export const TASKBAR_SIDES = ['bottom', 'top', 'left', 'right']
 
-function normalize(raw) {
+function normalizeLayout(raw) {
   const p = raw && typeof raw === 'object' ? raw : {}
   return {
     pinned: Array.isArray(p.pinned) ? p.pinned.filter((id) => typeof id === 'string') : [],
@@ -64,6 +78,21 @@ function normalize(raw) {
     labels: p.labels && typeof p.labels === 'object' ? { ...p.labels } : {},
     appGroup: p.appGroup && typeof p.appGroup === 'object' ? { ...p.appGroup } : {},
     collapsed: p.collapsed && typeof p.collapsed === 'object' ? { ...p.collapsed } : {},
+  }
+}
+
+function normalize(raw) {
+  const p = raw && typeof raw === 'object' ? raw : {}
+  // До разделения раскладка хранилась одним плоским объектом на оба каркаса.
+  // Если своих layouts ещё нет — прежние данные были рабочим столом (там жила
+  // основная настройка), мобильный «Пуск» начинает с чистого листа и человек
+  // расставляет его отдельно.
+  const legacy = p.layouts && typeof p.layouts === 'object' ? null : p
+  return {
+    layouts: {
+      desktop: normalizeLayout(legacy || p.layouts.desktop),
+      mobile: normalizeLayout(legacy ? null : p.layouts.mobile),
+    },
     wallpaper: p.wallpaper && typeof p.wallpaper === 'object' ? p.wallpaper : null,
     lockWallpaper: p.lockWallpaper && typeof p.lockWallpaper === 'object' ? p.lockWallpaper : null,
     wallpapers: Array.isArray(p.wallpapers)
@@ -81,8 +110,6 @@ export const useDesktopPrefsStore = defineStore('desktopPrefs', () => {
   const loaded = ref(false)
   let timer = null
 
-  const pinned = computed(() => prefs.value.pinned)
-  const order = computed(() => prefs.value.order)
   const wallpaper = computed(() => prefs.value.wallpaper)
   const lockWallpaper = computed(() => prefs.value.lockWallpaper)
   const wallpapers = computed(() => prefs.value.wallpapers)
@@ -92,22 +119,32 @@ export const useDesktopPrefsStore = defineStore('desktopPrefs', () => {
   // Вертикальная панель (слева/справа) — другая раскладка кнопок и другие
   // якоря всплывающих панелей.
   const taskbarVertical = computed(() => taskbarSide.value === 'left' || taskbarSide.value === 'right')
-  // Раскладка меню «Пуск» одним объектом — её целиком принимает menuGroups().
-  const layout = computed(() => ({
-    groups: prefs.value.groups,
-    labels: prefs.value.labels,
-    appGroup: prefs.value.appGroup,
-    order: prefs.value.order,
-  }))
-  const customized = computed(() =>
-    prefs.value.groups.length > 0 || Object.keys(prefs.value.appGroup).length > 0)
 
-  function tileSize(appId, fallback = 'square') {
-    return prefs.value.tiles[appId] || fallback
+  function layoutState(platform) {
+    return prefs.value.layouts[platform] || prefs.value.layouts.desktop
   }
 
-  function isPinned(appId) {
-    return prefs.value.pinned.includes(appId)
+  // Раскладка меню «Пуск» одним объектом — её целиком принимает menuGroups().
+  function layout(platform) {
+    const l = layoutState(platform)
+    return { groups: l.groups, labels: l.labels, appGroup: l.appGroup, order: l.order }
+  }
+
+  function customized(platform) {
+    const l = layoutState(platform)
+    return l.groups.length > 0 || Object.keys(l.appGroup).length > 0
+  }
+
+  function tileSize(platform, appId, fallback = 'square') {
+    return layoutState(platform).tiles[appId] || fallback
+  }
+
+  function isPinned(platform, appId) {
+    return layoutState(platform).pinned.includes(appId)
+  }
+
+  function pinnedList(platform) {
+    return layoutState(platform).pinned
   }
 
   async function load() {
@@ -130,87 +167,98 @@ export const useDesktopPrefsStore = defineStore('desktopPrefs', () => {
     }, SAVE_DELAY)
   }
 
-  function setTileSize(appId, size) {
-    prefs.value.tiles = { ...prefs.value.tiles, [appId]: size }
+  function setTileSize(platform, appId, size) {
+    const l = layoutState(platform)
+    l.tiles = { ...l.tiles, [appId]: size }
     scheduleSave()
   }
 
   /** Порядок плиток внутри раздела меню «Пуск» (перетаскивание). */
-  function setGroupOrder(groupKey, ids) {
-    prefs.value.order = { ...prefs.value.order, [groupKey]: [...ids] }
+  function setGroupOrder(platform, groupKey, ids) {
+    const l = layoutState(platform)
+    l.order = { ...l.order, [groupKey]: [...ids] }
     scheduleSave()
   }
 
   /** Перенос плитки в другой раздел вместе с новым порядком этого раздела. */
-  function moveTileToGroup(appId, groupKey, ids) {
-    prefs.value.appGroup = { ...prefs.value.appGroup, [appId]: groupKey }
-    prefs.value.order = { ...prefs.value.order, [groupKey]: [...ids] }
+  function moveTileToGroup(platform, appId, groupKey, ids) {
+    const l = layoutState(platform)
+    l.appGroup = { ...l.appGroup, [appId]: groupKey }
+    l.order = { ...l.order, [groupKey]: [...ids] }
     scheduleSave()
   }
 
-  function addGroup(label) {
+  function addGroup(platform, label) {
+    const l = layoutState(platform)
     const key = `g${Date.now().toString(36)}`
-    prefs.value.groups = [...prefs.value.groups, { key, label: label || 'Новый раздел' }]
+    l.groups = [...l.groups, { key, label: label || 'Новый раздел' }]
     scheduleSave()
     return key
   }
 
-  function renameGroup(groupKey, label) {
-    const own = prefs.value.groups.find((g) => g.key === groupKey)
-    if (own) prefs.value.groups = prefs.value.groups.map((g) => (g.key === groupKey ? { ...g, label } : g))
-    else prefs.value.labels = { ...prefs.value.labels, [groupKey]: label }
+  function renameGroup(platform, groupKey, label) {
+    const l = layoutState(platform)
+    const own = l.groups.find((g) => g.key === groupKey)
+    if (own) l.groups = l.groups.map((g) => (g.key === groupKey ? { ...g, label } : g))
+    else l.labels = { ...l.labels, [groupKey]: label }
     scheduleSave()
   }
 
   /* Удаляем только свой раздел: его плитки возвращаются в родные разделы —
      снимаем переносы, а не прячем сами разделы. */
-  function removeGroup(groupKey) {
-    if (!prefs.value.groups.some((g) => g.key === groupKey)) return
-    prefs.value.groups = prefs.value.groups.filter((g) => g.key !== groupKey)
-    const appGroup = { ...prefs.value.appGroup }
+  function removeGroup(platform, groupKey) {
+    const l = layoutState(platform)
+    if (!l.groups.some((g) => g.key === groupKey)) return
+    l.groups = l.groups.filter((g) => g.key !== groupKey)
+    const appGroup = { ...l.appGroup }
     for (const [appId, key] of Object.entries(appGroup)) if (key === groupKey) delete appGroup[appId]
-    prefs.value.appGroup = appGroup
-    const order = { ...prefs.value.order }
+    l.appGroup = appGroup
+    const order = { ...l.order }
     delete order[groupKey]
-    prefs.value.order = order
-    const collapsed = { ...prefs.value.collapsed }
+    l.order = order
+    const collapsed = { ...l.collapsed }
     delete collapsed[groupKey]
-    prefs.value.collapsed = collapsed
+    l.collapsed = collapsed
     scheduleSave()
   }
 
-  function isCollapsed(groupKey) {
-    return !!prefs.value.collapsed[groupKey]
+  function isCollapsed(platform, groupKey) {
+    return !!layoutState(platform).collapsed[groupKey]
   }
 
-  function toggleCollapsed(groupKey) {
-    prefs.value.collapsed = { ...prefs.value.collapsed, [groupKey]: !prefs.value.collapsed[groupKey] }
+  function toggleCollapsed(platform, groupKey) {
+    const l = layoutState(platform)
+    l.collapsed = { ...l.collapsed, [groupKey]: !l.collapsed[groupKey] }
     scheduleSave()
   }
 
-  function pin(appId) {
-    if (isPinned(appId)) return
-    prefs.value.pinned = [...prefs.value.pinned, appId]
+  function pin(platform, appId) {
+    if (isPinned(platform, appId)) return
+    const l = layoutState(platform)
+    l.pinned = [...l.pinned, appId]
     scheduleSave()
   }
 
-  function unpin(appId) {
-    prefs.value.pinned = prefs.value.pinned.filter((id) => id !== appId)
+  function unpin(platform, appId) {
+    const l = layoutState(platform)
+    l.pinned = l.pinned.filter((id) => id !== appId)
     scheduleSave()
   }
 
-  function togglePin(appId) {
-    isPinned(appId) ? unpin(appId) : pin(appId)
+  function togglePin(platform, appId) {
+    isPinned(platform, appId) ? unpin(platform, appId) : pin(platform, appId)
   }
 
   /** Порядок закреплённых разделов на панели задач (перетаскивание кнопок). */
-  function setPinnedOrder(ids) {
-    prefs.value.pinned = ids.filter((id) => isPinned(id))
+  function setPinnedOrder(platform, ids) {
+    const l = layoutState(platform)
+    l.pinned = ids.filter((id) => isPinned(platform, id))
     scheduleSave()
   }
 
   /** Живые плитки «Пуска»: выключенные показывают обычные иконки, а сводки
-      разделов вообще не запрашиваются. */
+      разделов вообще не запрашиваются. Общий тумблер — раскладка своя, а
+      какие данные показывать, человек решает одинаково на всех устройствах. */
   function setLiveTiles(on) {
     prefs.value.liveTiles = !!on
     scheduleSave()
@@ -235,14 +283,14 @@ export const useDesktopPrefsStore = defineStore('desktopPrefs', () => {
     setTileLive(appId, prefs.value.tileLive[appId] === false)
   }
 
-  /** Сторона панели задач: bottom | top | left | right. */
+  /** Сторона панели задач: bottom | top | left | right. Только рабочий стол. */
   function setTaskbarSide(side) {
     if (!TASKBAR_SIDES.includes(side)) return
     prefs.value.taskbarSide = side
     scheduleSave()
   }
 
-  /** Открывать ли меню «Пуск» сразу во весь экран. */
+  /** Открывать ли меню «Пуск» сразу во весь экран. Только рабочий стол. */
   function setStartFullscreen(on) {
     prefs.value.startFullscreen = !!on
     scheduleSave()
@@ -283,9 +331,9 @@ export const useDesktopPrefsStore = defineStore('desktopPrefs', () => {
   }
 
   return {
-    prefs, loaded, pinned, order, wallpaper, wallpapers, liveTiles, layout, customized,
+    prefs, loaded, wallpaper, wallpapers, liveTiles, customized,
     taskbarSide, taskbarVertical, startFullscreen, setTaskbarSide, setStartFullscreen,
-    tileSize, isPinned, load, setTileSize, setGroupOrder, moveTileToGroup,
+    layout, tileSize, isPinned, pinnedList, load, setTileSize, setGroupOrder, moveTileToGroup,
     addGroup, renameGroup, removeGroup, isCollapsed, toggleCollapsed,
     pin, unpin, togglePin, setPinnedOrder, setLiveTiles, isTileLive, setTileLive, toggleTileLive,
     setWallpaper, setLockWallpaper, lockWallpaper, forgetWallpaper, reset,

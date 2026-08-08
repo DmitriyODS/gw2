@@ -65,7 +65,7 @@ describe('панель задач', () => {
 
   it('закреплённый раздел показывается ярлыком и открывается по клику', async () => {
     const { desktop, wrapper } = setup()
-    useDesktopPrefsStore().pin('tasks')
+    useDesktopPrefsStore().pin('desktop', 'tasks')
     await wrapper.vm.$nextTick()
 
     const shortcut = wrapper.find('.tb-win.shortcut')
@@ -82,14 +82,14 @@ describe('панель задач', () => {
   it('перетаскивание меняет порядок закреплённых разделов', async () => {
     const { wrapper } = setup()
     const prefs = useDesktopPrefsStore()
-    prefs.pin('tasks')
-    prefs.pin('notes')
+    prefs.pin('desktop', 'tasks')
+    prefs.pin('desktop', 'notes')
     await wrapper.vm.$nextTick()
 
     const [first, second] = wrapper.findAll('.tb-win')
     await first.trigger('dragstart', { dataTransfer: { setData() {} } })
     await second.trigger('dragover')
-    expect(prefs.pinned).toEqual(['notes', 'tasks'])
+    expect(prefs.pinnedList('desktop')).toEqual(['notes', 'tasks'])
 
     await first.trigger('dragend')
     expect(wrapper.find('.tb-win.dragging').exists()).toBe(false)

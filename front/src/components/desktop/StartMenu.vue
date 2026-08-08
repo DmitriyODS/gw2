@@ -26,12 +26,12 @@
             <button
               class="sm-group-toggle"
               type="button"
-              :title="prefs.isCollapsed(group.key) ? 'Развернуть раздел' : 'Свернуть раздел'"
-              @click="prefs.toggleCollapsed(group.key)"
+              :title="prefs.isCollapsed(PLATFORM, group.key) ? 'Развернуть раздел' : 'Свернуть раздел'"
+              @click="prefs.toggleCollapsed(PLATFORM, group.key)"
             >
               <span
                 class="material-symbols-outlined sm-group-chev"
-                :class="{ collapsed: prefs.isCollapsed(group.key) }"
+                :class="{ collapsed: prefs.isCollapsed(PLATFORM, group.key) }"
               >expand_more</span>
               <InputText
                 v-if="editing === group.key"
@@ -57,14 +57,14 @@
           </div>
 
           <!-- Свёрнутый раздел схлопывается по высоте (grid-template-rows). -->
-          <div class="sm-group-body" :class="{ collapsed: prefs.isCollapsed(group.key) }">
+          <div class="sm-group-body" :class="{ collapsed: prefs.isCollapsed(PLATFORM, group.key) }">
             <div class="sm-group-inner">
               <div class="sm-tiles" @dragover.prevent="onDragOverGroup(group)" @drop.prevent="onDragEnd">
                 <button
                   v-for="(app, i) in group.items"
                   :key="app.id"
                   class="sm-tile"
-                  :class="[`is-${sizeOf(app)}`, { pinned: prefs.isPinned(app.id), dragging: drag.appId === app.id }]"
+                  :class="[`is-${sizeOf(app)}`, { pinned: prefs.isPinned(PLATFORM, app.id), dragging: drag.appId === app.id }]"
                   type="button"
                   draggable="true"
                   :title="app.title"
@@ -89,7 +89,7 @@
                   <span v-if="badgeOf(app)" class="sm-tile-badge" :class="{ alert: badgeOf(app) === '!' }">
                     {{ badgeOf(app) }}
                   </span>
-                  <span v-if="prefs.isPinned(app.id)" class="sm-tile-pin material-symbols-outlined">keep</span>
+                  <span v-if="prefs.isPinned(PLATFORM, app.id)" class="sm-tile-pin material-symbols-outlined">keep</span>
                 </button>
 
                 <p v-if="!group.items.length" class="sm-group-empty">Перетащите сюда плитку</p>
@@ -200,6 +200,10 @@ import AppDialog from '@/components/ui/AppDialog.vue'
 import LiveTile from './LiveTile.vue'
 import ActivityPanel from './ActivityPanel.vue'
 
+// Раскладка «Пуска» стола хранится отдельно от мобилы — desktopPrefs держит
+// обе, здесь работаем только со своей.
+const PLATFORM = 'desktop'
+
 const auth = useAuthStore()
 const desktop = useDesktopStore()
 const prefs = useDesktopPrefsStore()
@@ -232,12 +236,12 @@ const groups = computed(() => menuGroups({
   hasCompany: hasActiveCompany(),
   isSuperAdmin: isSuperAdmin(),
   settings: settings.value,
-}, prefs.layout))
+}, prefs.layout(PLATFORM)))
 
 /* Пустой раздел показываем, только когда пользователь перекладывал плитки или
    завёл свои разделы: иначе в меню висели бы «мёртвые» заголовки. */
 const visibleGroups = computed(() =>
-  groups.value.filter((g) => g.items.length || g.custom || prefs.customized))
+  groups.value.filter((g) => g.items.length || g.custom || prefs.customized(PLATFORM)))
 
 const avatarSrc = computed(() => {
   const user = auth.user
@@ -251,7 +255,7 @@ const appById = computed(() => {
   return map
 })
 
-const sizeOf = (app) => prefs.tileSize(app.id, app.tile || 'square')
+const sizeOf = (app) => prefs.tileSize(PLATFORM, app.id, app.tile || 'square')
 
 /* Грани живой плитки: сводки стора + то, что уже есть в памяти приложения.
    Плитка, которую тащат или под курсором, замирает — см. prop paused. */
@@ -313,13 +317,13 @@ function onDragOver(group, app) {
     const to = ids.indexOf(app.id)
     if (from < 0 || to < 0) return
     ids.splice(to, 0, ...ids.splice(from, 1))
-    prefs.setGroupOrder(group.key, ids)
+    prefs.setGroupOrder(PLATFORM, group.key, ids)
     return
   }
 
   const to = ids.indexOf(app.id)
   ids.splice(to < 0 ? ids.length : to, 0, drag.appId)
-  prefs.moveTileToGroup(drag.appId, group.key, ids)
+  prefs.moveTileToGroup(PLATFORM, drag.appId, group.key, ids)
   drag.groupKey = group.key
 }
 
@@ -327,7 +331,7 @@ function onDragOver(group, app) {
 function onDragOverGroup(group) {
   if (!drag.appId || group.key === drag.groupKey) return
   const ids = [...group.items.map((a) => a.id), drag.appId]
-  prefs.moveTileToGroup(drag.appId, group.key, ids)
+  prefs.moveTileToGroup(PLATFORM, drag.appId, group.key, ids)
   drag.groupKey = group.key
 }
 
@@ -359,12 +363,12 @@ function startRename(group) {
 function commitRename(group) {
   if (editing.value !== group.key) return
   const label = editLabel.value.trim()
-  if (label && label !== group.label) prefs.renameGroup(group.key, label)
+  if (label && label !== group.label) prefs.renameGroup(PLATFORM, group.key, label)
   editing.value = null
 }
 
 function createGroup() {
-  const key = prefs.addGroup('Новый раздел')
+  const key = prefs.addGroup(PLATFORM, 'Новый раздел')
   editing.value = key
   editLabel.value = 'Новый раздел'
   focusEditor()
@@ -400,7 +404,7 @@ const tileMenu = reactive({ open: false, x: 0, y: 0, appId: null })
 const tileMenuItems = computed(() => {
   const id = tileMenu.appId
   if (!id) return []
-  const size = prefs.tileSize(id, appById.value.get(id)?.tile || 'square')
+  const size = prefs.tileSize(PLATFORM, id, appById.value.get(id)?.tile || 'square')
   return [
     { label: 'Широкая плитка', icon: size === 'wide' ? 'check' : 'width_wide', action: 'wide' },
     { label: 'Квадратная плитка', icon: size === 'square' ? 'check' : 'crop_square', action: 'square' },
@@ -415,7 +419,7 @@ const tileMenuItems = computed(() => {
         }
       : { label: 'Живые плитки выключены', icon: 'toggle_off', disabled: true },
     { divider: true },
-    prefs.isPinned(id)
+    prefs.isPinned(PLATFORM, id)
       ? { label: 'Открепить от панели задач', icon: 'keep_off', action: 'unpin' }
       : { label: 'Закрепить на панели задач', icon: 'keep', action: 'pin' },
     { label: 'Открыть ещё одно окно', icon: 'add', action: 'new' },
@@ -432,14 +436,14 @@ function openTileMenu(app, e) {
 function onTileMenuSelect(action) {
   const id = tileMenu.appId
   if (!id) return
-  if (action === 'wide' || action === 'square') prefs.setTileSize(id, action)
+  if (action === 'wide' || action === 'square') prefs.setTileSize(PLATFORM, id, action)
   else if (action === 'live') {
     prefs.toggleTileLive(id)
     // Включили обратно — сводку этой плитки надо подтянуть: её не опрашивали.
     if (prefs.isTileLive(id)) live.refresh([id]).catch(() => {})
   }
-  else if (action === 'pin') prefs.pin(id)
-  else if (action === 'unpin') prefs.unpin(id)
+  else if (action === 'pin') prefs.pin(PLATFORM, id)
+  else if (action === 'unpin') prefs.unpin(PLATFORM, id)
   else if (action === 'new') {
     const app = appById.value.get(id)
     if (app) { desktop.open(app.path, { newWindow: true }); desktop.startOpen = false }
@@ -457,8 +461,8 @@ const groupMenuItems = computed(() => {
   const items = [
     { label: 'Переименовать', icon: 'edit', action: 'rename' },
     {
-      label: prefs.isCollapsed(group.key) ? 'Развернуть' : 'Свернуть',
-      icon: prefs.isCollapsed(group.key) ? 'expand_more' : 'expand_less',
+      label: prefs.isCollapsed(PLATFORM, group.key) ? 'Развернуть' : 'Свернуть',
+      icon: prefs.isCollapsed(PLATFORM, group.key) ? 'expand_more' : 'expand_less',
       action: 'collapse',
     },
     { divider: true },
@@ -482,10 +486,10 @@ function onGroupMenuSelect(action) {
   const group = currentGroup.value
   if (!group) return
   if (action === 'rename') startRename(group)
-  else if (action === 'collapse') prefs.toggleCollapsed(group.key)
+  else if (action === 'collapse') prefs.toggleCollapsed(PLATFORM, group.key)
   else if (action === 'create') createGroup()
   // Плитки удалённого раздела возвращаются в свои родные разделы.
-  else if (action === 'remove') prefs.removeGroup(group.key)
+  else if (action === 'remove') prefs.removeGroup(PLATFORM, group.key)
 }
 </script>
 

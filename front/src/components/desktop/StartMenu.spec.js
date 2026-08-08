@@ -50,7 +50,7 @@ describe('меню «Пуск»', () => {
     await tiles[2].trigger('dragover') // отпускаем над «Календарями»
     await tiles[0].trigger('dragend')
 
-    expect(prefs.order.work.slice(0, 3)).toEqual(['registries', 'calendars', 'tasks'])
+    expect(prefs.prefs.layouts.desktop.order.work.slice(0, 3)).toEqual(['registries', 'calendars', 'tasks'])
     expect(labels(wrapper).slice(0, 3)).toEqual(['Реестры', 'Календари', 'Задачи'])
   })
 
@@ -63,8 +63,8 @@ describe('меню «Пуск»', () => {
     await messengerTile.trigger('dragover') // цель — раздел «Коммуникация»
     await tiles[0].trigger('dragend')
 
-    expect(prefs.prefs.appGroup.tasks).toBe('team')
-    expect(prefs.order.team[0]).toBe('tasks')
+    expect(prefs.prefs.layouts.desktop.appGroup.tasks).toBe('team')
+    expect(prefs.prefs.layouts.desktop.order.team[0]).toBe('tasks')
     expect(labels(wrapper).slice(0, 2)).toEqual(['Реестры', 'Календари'])
   })
 
@@ -72,29 +72,29 @@ describe('меню «Пуск»', () => {
     const { prefs, wrapper } = setup()
     await wrapper.find('.sm-add-group').trigger('click')
 
-    const key = prefs.prefs.groups[0].key
+    const key = prefs.prefs.layouts.desktop.groups[0].key
     expect(key).toBeTruthy()
 
     // Новый раздел сразу открыт на переименование — вводим имя и жмём Enter.
     const input = wrapper.find('.sm-group-input')
     await input.setValue('Мои дела')
     await input.trigger('keyup.enter')
-    expect(prefs.prefs.groups[0].label).toBe('Мои дела')
+    expect(prefs.prefs.layouts.desktop.groups[0].label).toBe('Мои дела')
     await wrapper.vm.$nextTick()
     expect(wrapper.findAll('.sm-group-label').map((n) => n.text())).toContain('Мои дела')
 
     // Плитка, перенесённая в свой раздел, возвращается в родной при удалении.
-    prefs.moveTileToGroup('notes', key, ['notes'])
-    expect(prefs.prefs.appGroup.notes).toBe(key)
-    prefs.removeGroup(key)
-    expect(prefs.prefs.groups).toHaveLength(0)
-    expect(prefs.prefs.appGroup.notes).toBeUndefined()
+    prefs.moveTileToGroup('desktop', 'notes', key, ['notes'])
+    expect(prefs.prefs.layouts.desktop.appGroup.notes).toBe(key)
+    prefs.removeGroup('desktop', key)
+    expect(prefs.prefs.layouts.desktop.groups).toHaveLength(0)
+    expect(prefs.prefs.layouts.desktop.appGroup.notes).toBeUndefined()
   })
 
   it('раздел сворачивается кликом по заголовку', async () => {
     const { prefs, wrapper } = setup()
     await wrapper.find('.sm-group-toggle').trigger('click')
-    expect(prefs.isCollapsed('work')).toBe(true)
+    expect(prefs.isCollapsed('desktop', 'work')).toBe(true)
     await wrapper.vm.$nextTick()
     expect(wrapper.find('.sm-group-body').classes()).toContain('collapsed')
   })
@@ -145,7 +145,7 @@ describe('меню «Пуск»', () => {
   it('размер плитки берётся из настроек', async () => {
     const { prefs, wrapper } = setup()
     expect(wrapper.find('.sm-tile').classes()).toContain('is-wide')
-    prefs.setTileSize('tasks', 'square')
+    prefs.setTileSize('desktop', 'tasks', 'square')
     await wrapper.vm.$nextTick()
     expect(wrapper.find('.sm-tile').classes()).toContain('is-square')
   })

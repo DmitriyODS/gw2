@@ -76,6 +76,7 @@ const { wallpaper, boot } = useShellCore({
   // Каждый раздел — своя запись в истории браузера, поэтому системное «назад»
   // возвращает к предыдущему разделу, а из первого — на стартовый экран.
   navigate: 'push',
+  platform: 'mobile',
   onHome: () => { desktop.startOpen = true },
 })
 

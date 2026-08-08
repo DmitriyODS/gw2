@@ -41,7 +41,7 @@
           dragging: drag.appId === item.appId,
         }"
         :title="item.title"
-        :draggable="prefs.isPinned(item.appId)"
+        :draggable="prefs.isPinned(PLATFORM, item.appId)"
         @click="onButtonClick(item)"
         @contextmenu.prevent="openMenu(item, $event)"
         @dragstart="onDragStart(item, $event)"
@@ -116,6 +116,10 @@ import Logo from '@/components/common/Logo.vue'
 import HolaIcon from '@/components/common/HolaIcon.vue'
 import ContextMenu from '@/components/common/ContextMenu.vue'
 
+// Раскладка «Пуска»/панели стола хранится отдельно от мобилы — desktopPrefs
+// держит обе, здесь работаем только со своей.
+const PLATFORM = 'desktop'
+
 const desktop = useDesktopStore()
 const prefs = useDesktopPrefsStore()
 
@@ -149,7 +153,7 @@ const buttons = computed(() => {
   const out = []
   const shown = new Set()
 
-  for (const id of prefs.pinned) {
+  for (const id of prefs.pinnedList(PLATFORM)) {
     const app = appById(id)
     if (!isAvailable(app)) continue
     shown.add(id)
@@ -190,7 +194,7 @@ function onButtonClick(item) {
 const drag = reactive({ appId: null })
 
 function onDragStart(item, e) {
-  if (!prefs.isPinned(item.appId)) return
+  if (!prefs.isPinned(PLATFORM, item.appId)) return
   drag.appId = item.appId
   e.dataTransfer.effectAllowed = 'move'
   // Firefox не начинает перетаскивание без данных в буфере.
@@ -198,13 +202,13 @@ function onDragStart(item, e) {
 }
 
 function onDragOver(item) {
-  if (!drag.appId || item.appId === drag.appId || !prefs.isPinned(item.appId)) return
-  const ids = [...prefs.pinned]
+  if (!drag.appId || item.appId === drag.appId || !prefs.isPinned(PLATFORM, item.appId)) return
+  const ids = [...prefs.pinnedList(PLATFORM)]
   const from = ids.indexOf(drag.appId)
   const to = ids.indexOf(item.appId)
   if (from < 0 || to < 0) return
   ids.splice(to, 0, ...ids.splice(from, 1))
-  prefs.setPinnedOrder(ids)
+  prefs.setPinnedOrder(PLATFORM, ids)
 }
 
 function onDragEnd() {
@@ -311,7 +315,7 @@ const menuItems = computed(() => {
   if (menu.kind === 'bell') return bellMenuItems.value
   const item = current.value
   if (!item) return []
-  const pinItem = prefs.isPinned(item.appId)
+  const pinItem = prefs.isPinned(PLATFORM, item.appId)
     ? { label: 'Открепить от панели задач', icon: 'keep_off', action: 'unpin' }
     : { label: 'Закрепить на панели задач', icon: 'keep', action: 'pin' }
 
@@ -365,8 +369,8 @@ function onMenuSelect(action) {
   }
   const item = current.value
   if (!item) return
-  if (action === 'pin') return prefs.pin(item.appId)
-  if (action === 'unpin') return prefs.unpin(item.appId)
+  if (action === 'pin') return prefs.pin(PLATFORM, item.appId)
+  if (action === 'unpin') return prefs.unpin(PLATFORM, item.appId)
   if (action === 'open') return void desktop.open(appById(item.appId).path)
   const win = item.win
   if (!win) return

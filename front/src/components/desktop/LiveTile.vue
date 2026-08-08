@@ -171,15 +171,16 @@ onBeforeUnmount(stop)
 }
 
 /* Плотный вариант (мобильный «Пуск»): плитка мельче стола, весь набор
-   кеглей уменьшаем пропорционально, а не только подпись. */
-.lt.dense { gap: 2px; }
-.lt.dense .lt-icon { font-size: 22px; }
-.lt.dense .lt-value { font-size: 14px; }
-.lt.dense.wide .lt-value { font-size: 15.5px; }
-.lt.dense .lt-label { font-size: 9px; -webkit-line-clamp: 2; }
-.lt.dense.wide .lt-label { font-size: 9.5px; }
-.lt.dense .lt-face-data { padding-right: 18px; gap: 1px; }
-.lt.dense .lt-title { font-size: 11px; }
+   кеглей уменьшаем пропорционально, а не только подпись. Не «мельче в разы» —
+   плитка остаётся читаемой, просто своего, а не настольного размера. */
+.lt.dense { gap: 3px; }
+.lt.dense .lt-icon { font-size: 26px; }
+.lt.dense .lt-value { font-size: 15.5px; }
+.lt.dense.wide .lt-value { font-size: 17px; }
+.lt.dense .lt-label { font-size: 9.5px; -webkit-line-clamp: 2; }
+.lt.dense.wide .lt-label { font-size: 10px; }
+.lt.dense .lt-face-data { padding-right: 20px; gap: 2px; }
+.lt.dense .lt-title { font-size: 11.5px; }
 
 /* Переворот: новая грань приезжает снизу, прежняя уходит вверх. */
 .lt-flip-enter-active,

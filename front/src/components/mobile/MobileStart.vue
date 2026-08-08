@@ -11,22 +11,22 @@
       </button>
 
       <section v-for="group in visibleGroups" :key="group.key" class="mst-group">
-        <button class="mst-group-head" type="button" @click="prefs.toggleCollapsed(group.key)">
+        <button class="mst-group-head" type="button" @click="prefs.toggleCollapsed(PLATFORM, group.key)">
           <span class="mst-group-label">{{ group.label }}</span>
           <span
             class="material-symbols-outlined mst-group-chev"
-            :class="{ collapsed: prefs.isCollapsed(group.key) }"
+            :class="{ collapsed: prefs.isCollapsed(PLATFORM, group.key) }"
           >expand_more</span>
         </button>
 
-        <div class="mst-group-body" :class="{ collapsed: prefs.isCollapsed(group.key) }">
+        <div class="mst-group-body" :class="{ collapsed: prefs.isCollapsed(PLATFORM, group.key) }">
           <div class="mst-group-inner">
             <div class="mst-tiles">
               <button
                 v-for="(app, i) in group.items"
                 :key="app.id"
                 class="mst-tile"
-                :class="[`is-${sizeOf(app)}`, { pinned: prefs.isPinned(app.id) }]"
+                :class="[`is-${sizeOf(app)}`, { pinned: prefs.isPinned(PLATFORM, app.id) }]"
                 type="button"
                 :title="app.title"
                 @click="launch(app)"
@@ -47,7 +47,7 @@
                 <span v-if="badgeOf(app)" class="mst-badge" :class="{ alert: badgeOf(app) === '!' }">
                   {{ badgeOf(app) }}
                 </span>
-                <span v-if="prefs.isPinned(app.id)" class="mst-pin material-symbols-outlined">keep</span>
+                <span v-if="prefs.isPinned(PLATFORM, app.id)" class="mst-pin material-symbols-outlined">keep</span>
               </button>
             </div>
           </div>
@@ -101,6 +101,10 @@ import LiveTile from '@/components/desktop/LiveTile.vue'
 // Спрашиваем про выход редко — диалог (а с ним PrimeVue Dialog) грузим лениво.
 const AppDialog = defineAsyncComponent(() => import('@/components/ui/AppDialog.vue'))
 
+// Раскладка «Пуска» мобилы хранится отдельно от стола — desktopPrefs держит
+// обе, здесь работаем только со своей.
+const PLATFORM = 'mobile'
+
 const auth = useAuthStore()
 const screenLock = useScreenLock()
 const desktop = useDesktopStore()
@@ -118,12 +122,12 @@ const groups = computed(() => menuGroups({
   hasCompany: hasActiveCompany(),
   isSuperAdmin: isSuperAdmin(),
   settings: settings.value,
-}, prefs.layout))
+}, prefs.layout(PLATFORM)))
 
 /* Пустой раздел показываем, только когда пользователь перекладывал плитки или
    завёл свои разделы: иначе на экране висели бы «мёртвые» заголовки. */
 const visibleGroups = computed(() =>
-  groups.value.filter((g) => g.items.length || g.custom || prefs.customized))
+  groups.value.filter((g) => g.items.length || g.custom || prefs.customized(PLATFORM)))
 
 const appById = computed(() => {
   const map = new Map()
@@ -147,10 +151,10 @@ function moveTile(appId, delta) {
   if (to < 0 || to >= pos.total) return
   const ids = pos.group.items.map((a) => a.id)
   ;[ids[pos.index], ids[to]] = [ids[to], ids[pos.index]]
-  prefs.moveTileToGroup(appId, pos.group.key, ids)
+  prefs.moveTileToGroup(PLATFORM, appId, pos.group.key, ids)
 }
 
-const sizeOf = (app) => prefs.tileSize(app.id, app.tile || 'square')
+const sizeOf = (app) => prefs.tileSize(PLATFORM, app.id, app.tile || 'square')
 
 const liveCtx = computed(() => ({ data: live.data, messenger, portal, pets, units, auth }))
 
@@ -213,7 +217,7 @@ const menuItems = computed(() => {
       ? { label: 'Живая плитка', icon: prefs.isTileLive(id) ? 'check' : 'dashboard', action: 'live' }
       : { label: 'Живые плитки выключены', icon: 'toggle_off', disabled: true },
     { divider: true },
-    prefs.isPinned(id)
+    prefs.isPinned(PLATFORM, id)
       ? { label: 'Открепить от панели задач', icon: 'keep_off', action: 'unpin' }
       : { label: 'Закрепить на панели задач', icon: 'keep', action: 'pin' },
   ]
@@ -249,15 +253,15 @@ function onMenuSelect(action) {
   if (action === 'open') return open(appById.value.get(id).path)
   if (action === 'moveUp') return moveTile(id, -1)
   if (action === 'moveDown') return moveTile(id, 1)
-  if (action === 'wide' || action === 'square') return prefs.setTileSize(id, action)
+  if (action === 'wide' || action === 'square') return prefs.setTileSize(PLATFORM, id, action)
   if (action === 'live') {
     prefs.toggleTileLive(id)
     // Вернули сводки — их надо подтянуть: выключенную плитку не опрашивали.
     if (prefs.isTileLive(id)) live.refresh([id]).catch(() => {})
     return
   }
-  if (action === 'pin') return prefs.pin(id)
-  if (action === 'unpin') return prefs.unpin(id)
+  if (action === 'pin') return prefs.pin(PLATFORM, id)
+  if (action === 'unpin') return prefs.unpin(PLATFORM, id)
 }
 </script>
 
@@ -266,11 +270,11 @@ function onMenuSelect(action) {
   position: absolute;
   inset: 0;
   /* Плитки мельче и плотнее, чем на столе (там — фиксированные 4 колонки по
-     112px): на телефоне это даёт свои 3+ колонки вместо уменьшенной копии
+     112px): на телефоне это даёт свои 3 колонки вместо уменьшенной копии
      настольной сетки — раскладка, а не масштаб. Размер задаёт и ширину
      широкой (две колонки с зазором), и высоту ряда. */
-  --mst-tile: 92px;
-  --mst-tile-h: 82px;
+  --mst-tile: 100px;
+  --mst-tile-h: 90px;
   overflow: hidden;
 }
 
@@ -347,14 +351,14 @@ function onMenuSelect(action) {
 .mst-tiles {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(var(--mst-tile), 1fr));
-  gap: 8px;
+  gap: 9px;
 }
 
 .mst-tile {
   position: relative;
   height: var(--mst-tile-h);
   min-height: var(--mst-tile-h);
-  padding: 8px;
+  padding: 9px;
   border: 1px solid var(--acrylic-border);
   border-radius: var(--radius-lg);
   background: var(--acrylic-card-bg);
