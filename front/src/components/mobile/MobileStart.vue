@@ -42,6 +42,7 @@
                   :faces="facesOf(app)"
                   :wide="sizeOf(app) === 'wide'"
                   :order="i"
+                  dense
                 />
                 <span v-if="badgeOf(app)" class="mst-badge" :class="{ alert: badgeOf(app) === '!' }">
                   {{ badgeOf(app) }}
@@ -264,10 +265,12 @@ function onMenuSelect(action) {
 .mstart {
   position: absolute;
   inset: 0;
-  /* Размер плитки фиксирован — от него считается и ширина широкой (две
-     колонки с зазором), и высота ряда. */
-  --mst-tile: 108px;
-  --mst-tile-h: 96px;
+  /* Плитки мельче и плотнее, чем на столе (там — фиксированные 4 колонки по
+     112px): на телефоне это даёт свои 3+ колонки вместо уменьшенной копии
+     настольной сетки — раскладка, а не масштаб. Размер задаёт и ширину
+     широкой (две колонки с зазором), и высоту ряда. */
+  --mst-tile: 92px;
+  --mst-tile-h: 82px;
   overflow: hidden;
 }
 
@@ -344,14 +347,14 @@ function onMenuSelect(action) {
 .mst-tiles {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(var(--mst-tile), 1fr));
-  gap: 10px;
+  gap: 8px;
 }
 
 .mst-tile {
   position: relative;
   height: var(--mst-tile-h);
   min-height: var(--mst-tile-h);
-  padding: 10px;
+  padding: 8px;
   border: 1px solid var(--acrylic-border);
   border-radius: var(--radius-lg);
   background: var(--acrylic-card-bg);

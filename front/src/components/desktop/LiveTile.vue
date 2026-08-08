@@ -1,5 +1,5 @@
 <template>
-  <span class="lt" :class="{ wide }">
+  <span class="lt" :class="{ wide, dense }">
     <!-- Стопка граней: видна одна, смена — вертикальным «переворотом», как у
          живых плиток Metro. -->
     <span class="lt-stack">
@@ -27,6 +27,9 @@ const props = defineProps({
   // Грани из desktop/liveTiles.js: [{ key, value, label, tone }].
   faces: { type: Array, default: () => [] },
   wide: { type: Boolean, default: false },
+  // Плотный вариант — мобильный «Пуск»: плитки там мельче стола, и без своего
+  // масштаба содержимое (иконка/цифры) вылезало бы за плитку тем же кеглем.
+  dense: { type: Boolean, default: false },
   // Порядковый номер плитки — задаёт задержку старта: плитки переворачиваются
   // вразнобой, а не строем.
   order: { type: Number, default: 0 },
@@ -166,6 +169,17 @@ onBeforeUnmount(stop)
   overflow: hidden;
   text-overflow: ellipsis;
 }
+
+/* Плотный вариант (мобильный «Пуск»): плитка мельче стола, весь набор
+   кеглей уменьшаем пропорционально, а не только подпись. */
+.lt.dense { gap: 2px; }
+.lt.dense .lt-icon { font-size: 22px; }
+.lt.dense .lt-value { font-size: 14px; }
+.lt.dense.wide .lt-value { font-size: 15.5px; }
+.lt.dense .lt-label { font-size: 9px; -webkit-line-clamp: 2; }
+.lt.dense.wide .lt-label { font-size: 9.5px; }
+.lt.dense .lt-face-data { padding-right: 18px; gap: 1px; }
+.lt.dense .lt-title { font-size: 11px; }
 
 /* Переворот: новая грань приезжает снизу, прежняя уходит вверх. */
 .lt-flip-enter-active,
