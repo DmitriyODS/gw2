@@ -415,8 +415,9 @@ function onMenuSelect(action) {
    Селектор с родителем — чтобы перебить собственные стили ActivityPanel по
    специфичности, а не порядком подключения. */
 .mst-rail > .mst-activity {
-  flex: 1;
-  min-height: 0;
+  /* Не ниже этого: сжатая до нуля лента исчезала бесследно. */
+  flex: 1 1 auto;
+  min-height: 220px;
   border: none;
   border-top: 1px solid var(--acrylic-border);
   border-radius: 0;
@@ -434,10 +435,15 @@ function onMenuSelect(action) {
   flex-direction: column;
   gap: 10px;
   min-height: 0;
-  /* Прокручивается лента внутри, а не колонка целиком: аккаунт, компания и
-     кнопки должны оставаться на месте. */
-  overflow: hidden;
+  /* На высоком экране прокручивается только лента внутри — аккаунт, компания и
+     кнопки стоят на месте. На низком места не хватает даже им, поэтому
+     прокручивается вся колонка: иначе лента сжималась до нуля и добраться до
+     неё было нечем. */
+  overflow-y: auto;
+  scrollbar-width: none;
 }
+
+.mst-rail::-webkit-scrollbar { display: none; }
 
 .mst-rail-head { display: flex; align-items: center; flex-shrink: 0; padding: 0 4px; }
 
