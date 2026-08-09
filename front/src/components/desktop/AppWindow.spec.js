@@ -58,6 +58,17 @@ describe('AppWindow', () => {
     expect(win.mode).toBe('normal')
   })
 
+  it('раздел лежит в своём контейнере, а не прямо в теле окна', () => {
+    // Тело окна — цель телепорта модалок, а Teleport оставляет там пустые
+    // текстовые узлы даже у закрытой модалки. Соседствуй с ними корень раздела
+    // — при смене раздела Vue брал бы якорь вставки из них и падал на
+    // insertBefore, унося всё окно. Контейнер эту соседство исключает.
+    const { wrapper } = setup()
+    const view = wrapper.find('.win-body > .win-view')
+    expect(view.exists()).toBe(true)
+    expect(view.find('window-content-stub').exists()).toBe(true)
+  })
+
   it('кнопка «назад» появляется только при истории окна', async () => {
     const { desktop, win, wrapper } = setup('/notes')
     expect(wrapper.find('.win-nav').exists()).toBe(false)

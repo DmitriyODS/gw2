@@ -38,7 +38,7 @@
         <RouterLink to="/welcome" class="pr-btn">Попробовать уже сейчас</RouterLink>
         <RouterLink to="/login" class="pr-btn pr-btn--ghost">Войти</RouterLink>
       </div>
-      <p class="pr-hint reveal">Бесплатно · регистрация за минуту · без карты</p>
+      <p class="pr-hint reveal">бесплатно · регистрация за минуту · без карты</p>
 
       <!-- Витрина продукта: схематичный рабочий стол с окнами разделов -->
       <div class="pr-shot reveal" aria-hidden="true">

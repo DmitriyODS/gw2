@@ -50,8 +50,8 @@
    слоты получают `narrow` (нужна ли кнопка «назад»), `close`, а также
    `collapsed`/`toggle`: в широкой раскладке список убирается с глаз, чтобы
    отдать всё место содержимому (кнопку рисует AppPage по `menu`). */
-import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
-import { useBreakpoint } from '@/composables/useBreakpoint.js'
+import { computed, ref, watch } from 'vue'
+import { useNarrowWidth } from '@/composables/useNarrowWidth.js'
 import BrandLoader from '@/components/common/BrandLoader.vue'
 
 const props = defineProps({
@@ -67,9 +67,8 @@ const props = defineProps({
 
 const emit = defineEmits(['update:open', 'update:collapsed', 'narrow-change'])
 
-const { isMobile } = useBreakpoint()
 const rootEl = ref(null)
-const narrow = ref(false)
+const narrow = useNarrowWidth(rootEl, () => props.narrowAt)
 
 const listWidthPx = computed(() =>
   typeof props.listWidth === 'number' ? `${props.listWidth}px` : props.listWidth,
@@ -93,27 +92,11 @@ function toggleList() {
   emit('update:collapsed', next)
 }
 
-let ro = null
-
-onMounted(() => {
-  if (typeof ResizeObserver === 'undefined') {
-    narrow.value = isMobile.value
-    emit('narrow-change', narrow.value)
-    return
-  }
-  ro = new ResizeObserver(([entry]) => {
-    const next = entry.contentRect.width < props.narrowAt
-    if (next === narrow.value) return
-    narrow.value = next
-    emit('narrow-change', next)
-  })
-  ro.observe(rootEl.value)
+watch(narrow, (v) => {
+  emit('narrow-change', v)
+  // Разъехались до двух колонок — деталь снова видна всегда, и «назад» ей не нужен.
+  if (!v) emit('update:open', true)
 })
-
-onBeforeUnmount(() => ro?.disconnect())
-
-// Разъехались до двух колонок — деталь снова видна всегда, и «назад» ей не нужен.
-watch(narrow, (v) => { if (!v) emit('update:open', true) })
 
 defineExpose({ narrow })
 </script>
@@ -164,11 +147,13 @@ defineExpose({ narrow })
   .ld { transition: none; }
 }
 
-/* Узко — один экран: видна ровно одна колонка, вторая снята с потока. */
+/* Узко — один экран: видна ровно одна колонка, вторая снята с потока. Поля
+   остаются: раздел в узком ОКНЕ — всё ещё панель внутри окна, и без них
+   скруглённая карточка липла к его кромкам. Убирает их только телефон
+   (медиазапрос ниже), где кромка экрана и есть край раздела. */
 .ld.narrow {
-  grid-template-columns: 1fr;
+  grid-template-columns: minmax(0, 1fr);
   gap: 0;
-  padding: 0;
 }
 
 .ld.narrow .ld-detail { display: none; }

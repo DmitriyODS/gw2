@@ -142,7 +142,7 @@
    поэтому панель объявляет `container-type` — вложенные блоки меряют её ширину,
    а не ширину экрана. На телефоне полей по краям нет, а рамка и скругления
    снимаются: их всё равно обрезала бы кромка экрана. */
-import { computed, onBeforeUnmount, onMounted, ref, useSlots } from 'vue'
+import { computed, ref, useSlots } from 'vue'
 import { useRoute } from 'vue-router'
 import AppButton from './AppButton.vue'
 import AppCommandBar from './AppCommandBar.vue'
@@ -150,6 +150,7 @@ import AppFab from '@/components/ui/AppFab.vue'
 import BrandLoader from '@/components/common/BrandLoader.vue'
 import { appForPath } from '@/desktop/apps.js'
 import { useModalHost } from '@/desktop/windowHost.js'
+import { useNarrowWidth } from '@/composables/useNarrowWidth.js'
 
 const props = defineProps({
   title: { type: String, default: '' },
@@ -209,20 +210,7 @@ const hasTitleRow = computed(() => showsTitle.value || !!slots.title)
    плавающую кнопку: в узкой строке оно всё равно осталось бы одной иконкой без
    подписи и делило бы место с второстепенными командами. */
 const panelEl = ref(null)
-const narrowPage = ref(false)
-const NARROW_AT = 640
-
-let ro = null
-
-onMounted(() => {
-  if (typeof ResizeObserver === 'undefined' || !panelEl.value) return
-  ro = new ResizeObserver(([entry]) => {
-    narrowPage.value = entry.contentRect.width < NARROW_AT
-  })
-  ro.observe(panelEl.value)
-})
-
-onBeforeUnmount(() => ro?.disconnect())
+const narrowPage = useNarrowWidth(panelEl, 640)
 
 const fabCommand = computed(() => props.commands.find((c) => c.fab && !c.hidden) || null)
 
