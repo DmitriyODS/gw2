@@ -1,5 +1,5 @@
 <template>
-  <div ref="rootEl" class="hola" :class="{ short }">
+  <div ref="rootEl" class="hola" :class="{ short, roomy }">
     <div class="hola-inner">
       <!-- Одно поле на все вкладки: ищет, разбирает команды и отправляет
            сообщения ассистенту — в зависимости от выбранного режима. -->
@@ -198,6 +198,9 @@ const TABS = [
 const props = defineProps({
   // С какой вкладки открыть панель (deep-link или прошлый выбор оболочки).
   startTab: { type: String, default: 'search' },
+  /* Панель во весь большой экран (планшет): поля и промежутки крупнее —
+     телефонные там выглядят как забытая вёрстка. */
+  roomy: { type: Boolean, default: false },
 })
 
 const emit = defineEmits(['navigate'])
@@ -675,6 +678,18 @@ defineExpose({ focus: () => inputEl.value?.focus() })
 }
 
 .hola-locked-btn .material-symbols-outlined { font-size: 18px; }
+
+/* Просторная раскладка: панель занимает большой экран целиком. Поле запроса
+   отбито от вкладок и выдачи заметным промежутком — вплотную они читались как
+   один слипшийся блок. Компактная раскладка (клавиатура) сильнее и идёт
+   ниже — она перебивает эти правила. */
+.hola.roomy { padding: 24px; }
+.hola.roomy .hola-inner { gap: 24px; }
+.hola.roomy .hola-field { height: 62px; padding: 0 20px; }
+.hola.roomy .hola-input { font-size: 17px; }
+.hola.roomy .hola-tabs { gap: 14px; }
+.hola.roomy .hola-tab { padding: 16px 10px; font-size: 14px; }
+.hola.roomy .hola-body { gap: 16px; }
 
 /* ── Компактная раскладка: панель «сидит на клавиатуре» ──
    Ряд вкладок свёрнут в кнопку при поле, поля и промежутки урезаны — всё

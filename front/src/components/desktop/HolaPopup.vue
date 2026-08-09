@@ -6,7 +6,7 @@
         <h2 class="hp-title">Hola ассистент</h2>
       </header>
 
-      <HolaPanel ref="panelRef" class="hp-body" @navigate="close" />
+      <HolaPanel ref="panelRef" class="hp-body" :roomy="full && wide" @navigate="close" />
     </section>
   </div>
 </template>
@@ -38,6 +38,12 @@ const emit = defineEmits(['close'])
 
 const panelRef = ref(null)
 const rect = ref(panelRect())
+
+/* Во весь экран панель занимает его целиком, и на планшете 16px полей вокруг
+   выглядят как ошибка вёрстки: место есть, а всё жмётся к кромкам. Меряем
+   экран, а не панель, — в этом режиме это одно и то же. */
+const WIDE_AT = 900
+const wide = ref(typeof window !== 'undefined' && window.innerWidth >= WIDE_AT)
 
 /* Центр экрана с поправкой на панель задач: на невысоком экране панель не
    должна наполовину уезжать под неё. */
@@ -73,6 +79,7 @@ function onKeydown(e) {
 
 function onResize() {
   rect.value = panelRect()
+  wide.value = window.innerWidth >= WIDE_AT
 }
 
 onMounted(() => {
@@ -160,6 +167,13 @@ onBeforeUnmount(() => {
 }
 
 .hp.full .hp-body { padding: 14px 18px 18px; }
+
+/* Просторный полноэкранный вид (планшет): шапке и телу — поля по размеру
+   экрана, а не по размеру телефона. */
+@media (min-width: 900px) {
+  .hp.full .hp-bar { padding: 22px 28px 6px; }
+  .hp.full .hp-body { padding: 16px 28px 28px; }
+}
 
 .hp.full .hp-title { font-size: 1.15rem; }
 

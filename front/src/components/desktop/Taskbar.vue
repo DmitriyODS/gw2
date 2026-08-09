@@ -864,6 +864,13 @@ function onMenuSelect(action) {
 
 .taskbar.compact .tb-win-label { display: none; }
 .taskbar.compact .tb-sep { height: 22px; }
+
+/* Настольная панель центрирована и шириной по содержимому, поэтому правая
+   зона там сама оказывается у края. Компактная растянута во всю ширину —
+   свободное место надо отдать явно, иначе часы с уведомлениями и разделитель
+   перед ними жмутся к разделам где-то посередине. */
+.taskbar.compact .tb-windows + .tb-sep,
+.taskbar.compact .tb-right { margin-left: auto; }
 .taskbar.compact .tb-clock { padding: 0 8px; }
 .taskbar.compact .tb-date { display: none; }
 .taskbar.compact .tb-right { gap: 6px; }
