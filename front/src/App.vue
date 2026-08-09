@@ -42,9 +42,13 @@
     <ScreenLockOverlay v-if="screenLock.locked.value" />
 
     <Toast :position="isMobile ? 'top-center' : 'top-right'" />
-    <!-- Pull-to-refresh на мобиле (обновление страницы оттяжкой вниз у верха
-         экрана). Отключён на fullscreen-роутах — там вертикальные жесты заняты. -->
-    <PullToRefresh :active="!!authStore.token && !isFullscreenRoute && callStore.phase === 'idle'" />
+    <!-- Pull-to-refresh сенсорных каркасов — телефона и планшета (обновление
+         страницы оттяжкой вниз у верха экрана). Отключён на fullscreen-роутах
+         (там вертикальные жесты заняты) и в оконном каркасе, где обновление
+         закрыло бы разложенные окна. -->
+    <PullToRefresh
+      :active="!!authStore.token && !isFullscreenRoute && callStore.phase === 'idle' && shell !== 'windows'"
+    />
     <!-- Выбор получателя для текста из системного «Поделиться» (Android). -->
     <NewChatDialog v-if="sharePickOpen" v-model="sharePickOpen" @pick="onSharePickRecipient" />
   </div>

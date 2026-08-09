@@ -17,11 +17,14 @@
 <script setup>
 import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
 
-/* Pull-to-refresh для мобильной версии: оттяжка вниз у верха активного
-   скролл-контейнера обновляет страницу (location.reload). Работает на всех
-   экранах — цепляется на touch-события документа и сам находит контейнер
-   прокрутки под пальцем. Гейт `active` (обычно !fullscreen-роут) отключает
-   жест в звонке/лайтбоксе, где вертикальные жесты заняты. */
+/* Pull-to-refresh сенсорных каркасов (телефон и планшет): оттяжка вниз у верха
+   активного скролл-контейнера обновляет страницу (location.reload). Цепляется
+   на touch-события документа и сам находит контейнер прокрутки под пальцем.
+   Где жест уместен, решает `active`: он выключает его в звонке и лайтбоксе, где
+   вертикальные жесты заняты, и в оконном каркасе, где обновление страницы
+   закрыло бы разложенные окна. Своей проверки «тач ли это» здесь нет — события
+   touch* приходят только с сенсорного экрана, а медиазапрос про указатель на
+   планшетах-трансформерах врёт. */
 const props = defineProps({
   active: { type: Boolean, default: true },
 })
@@ -29,10 +32,6 @@ const props = defineProps({
 const THRESHOLD = 72        // px оттяжки для срабатывания
 const MAX_PULL = 120        // потолок визуальной оттяжки
 const RESISTANCE = 0.5      // «резина»: палец проходит вдвое больше индикатора
-
-// Жест доступен только на тач-устройствах (мобильная версия/обёртка).
-const isTouch = typeof window !== 'undefined'
-  && window.matchMedia?.('(hover: none) and (pointer: coarse)').matches
 
 const pull = ref(0)
 const refreshing = ref(false)
@@ -112,7 +111,6 @@ function onTouchEnd() {
 }
 
 onMounted(() => {
-  if (!isTouch) return
   document.addEventListener('touchstart', onTouchStart, { passive: true })
   // Non-passive: внутри preventDefault'им оттяжку, чтобы не сработал нативный overscroll.
   document.addEventListener('touchmove', onTouchMove, { passive: false })
