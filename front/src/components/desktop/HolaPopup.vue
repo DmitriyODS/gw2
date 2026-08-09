@@ -199,9 +199,11 @@ onBeforeUnmount(() => {
    её системная клавиатура (WebView перерисовывает вьюпорт). Компактную выдачу
    внутри решает уже сама панель — по своему размеру. */
 @media (max-height: 560px) {
-  .hp-bar { height: 34px; padding: 0 12px; }
-  .hp.full .hp-bar { padding: 8px 12px 0; }
+  .hp-bar { height: 34px; padding: 0 20px; }
+  .hp.full .hp-bar { padding: 10px 20px 0; }
   .hp.full .hp-title { font-size: 1rem; }
+  /* Поля по бокам оставляет себе панель (см. .hola.short) — иначе они
+     сложились бы вдвое; шапка выровнена по ним же. */
   .hp.full .hp-body { padding: 0; }
 }
 

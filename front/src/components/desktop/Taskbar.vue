@@ -61,7 +61,7 @@
       </button>
     </div>
 
-    <span v-if="buttons.length" class="tb-sep" aria-hidden="true" />
+    <span v-if="buttons.length" class="tb-sep tb-sep-right" aria-hidden="true" />
 
     <div class="tb-right">
       <button v-if="unit" class="tb-unit" type="button" title="Идёт работа — открыть юнит" @click="expand">
@@ -868,9 +868,14 @@ function onMenuSelect(action) {
 /* Настольная панель центрирована и шириной по содержимому, поэтому правая
    зона там сама оказывается у края. Компактная растянута во всю ширину —
    свободное место надо отдать явно, иначе часы с уведомлениями и разделитель
-   перед ними жмутся к разделам где-то посередине. */
-.taskbar.compact .tb-windows + .tb-sep,
+   перед ними жмутся к разделам где-то посередине.
+
+   Забирает место РОВНО ОДИН элемент: два `margin-left: auto` поделили бы
+   свободную ширину поровну и увели разделитель на середину. Разделителя может
+   не быть вовсе (разделы не открыты) — тогда место забирает правая зона. */
+.taskbar.compact .tb-sep-right { margin-left: auto; }
 .taskbar.compact .tb-right { margin-left: auto; }
+.taskbar.compact .tb-sep-right ~ .tb-right { margin-left: 0; }
 .taskbar.compact .tb-clock { padding: 0 8px; }
 .taskbar.compact .tb-date { display: none; }
 .taskbar.compact .tb-right { gap: 6px; }
