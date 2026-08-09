@@ -29,7 +29,7 @@
     <div
       v-if="splitOn"
       class="ms-split"
-      :class="{ dragging }"
+      :class="[{ dragging }, collapsing ? `collapse-${collapsing}` : '']"
       :style="{ left: `${desktop.splitRatio}%` }"
       role="separator"
       aria-label="Граница зон — потяните, чтобы изменить"
@@ -168,20 +168,46 @@ function onResize() {
   fitSplit()
 }
 
+/* Уведённый к самому краю разделитель схлопывает зону: так возвращаются к
+   одному разделу во весь экран — жест обратный тому, которым зону открывали.
+   Влево — уходит главная (её место занимает вторая), вправо — уходит вторая. */
+const COLLAPSE_AT = 12
+
 const dragging = ref(false)
+const collapsing = ref(null)
+
+function ratioAt(clientX) {
+  return (clientX / window.innerWidth) * 100
+}
 
 function onSplitDown(e) {
   if (e.button !== undefined && e.button !== 0) return
   e.currentTarget.setPointerCapture?.(e.pointerId)
   dragging.value = true
 
-  const onMove = (ev) => desktop.setSplitRatio((ev.clientX / window.innerWidth) * 100)
+  const onMove = (ev) => {
+    const pct = ratioAt(ev.clientX)
+    // Подсвечиваем намерение заранее: у края видно, какая зона сейчас уйдёт.
+    collapsing.value = pct <= COLLAPSE_AT ? 'main' : (pct >= 100 - COLLAPSE_AT ? 'side' : null)
+    desktop.setSplitRatio(pct)
+  }
+
   const onUp = (ev) => {
     window.removeEventListener('pointermove', onMove)
     window.removeEventListener('pointerup', onUp)
     window.removeEventListener('pointercancel', onUp)
     dragging.value = false
-    desktop.setSplitRatio((ev.clientX / window.innerWidth) * 100, { snap: true })
+    const zone = collapsing.value
+    collapsing.value = null
+    if (zone) {
+      // Схлопываем и возвращаем ровное соотношение — следующее деление
+      // начнётся пополам, а не с края.
+      if (zone === 'main') desktop.swapSides()
+      desktop.closeSide()
+      desktop.setSplitRatio(50, { snap: true })
+      return
+    }
+    desktop.setSplitRatio(ratioAt(ev.clientX), { snap: true })
   }
 
   window.addEventListener('pointermove', onMove)
@@ -246,14 +272,15 @@ onBeforeUnmount(() => {
 .ms-screens.hidden { visibility: hidden; }
 
 /* ── Разделитель зон ──
-   Полоса шире, чем выглядит: попасть пальцем в двухпиксельную линию нельзя.
-   Живёт между панелями каркаса — те остаются доступны при любом соотношении. */
+   Зона хватания шире, чем видимая линия: попасть пальцем в пару пикселей
+   нельзя. Живёт между панелями каркаса — те остаются доступны при любом
+   соотношении. */
 .ms-split {
   position: absolute;
   top: calc(var(--statusbar-height) + env(safe-area-inset-top, 0px));
   bottom: calc(var(--taskbar-height) + env(safe-area-inset-bottom, 0px));
-  width: 28px;
-  margin-left: -14px;
+  width: 30px;
+  margin-left: -15px;
   z-index: 5;
   display: grid;
   place-items: center;
@@ -261,17 +288,45 @@ onBeforeUnmount(() => {
   touch-action: none;
 }
 
+/* Сама граница — видимая линия во всю высоту: без неё два раздела встык
+   сливались в один экран, и было непонятно, где кончается первый. */
+.ms-split::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 50%;
+  width: 2px;
+  margin-left: -1px;
+  background: color-mix(in oklch, var(--color-text) 22%, transparent);
+  transition: background 0.15s;
+}
+
+.ms-split:hover::before,
+.ms-split.dragging::before { background: var(--color-primary); }
+
+/* У края линия наливается и толстеет — видно, что отпускание схлопнет зону. */
+.ms-split.collapse-main::before,
+.ms-split.collapse-side::before {
+  width: 6px;
+  margin-left: -3px;
+  background: var(--color-primary);
+}
+
+/* Ручка поверх линии — подсказка «это можно тянуть». */
 .ms-split-grip {
-  width: 4px;
-  height: 46px;
+  position: relative;
+  width: 6px;
+  height: 56px;
   border-radius: var(--radius-full);
-  background: color-mix(in oklch, var(--color-text) 28%, transparent);
+  background: color-mix(in oklch, var(--color-text) 42%, var(--color-surface));
+  box-shadow: 0 1px 4px color-mix(in oklch, var(--color-text) 22%, transparent);
   transition: background 0.15s, height 0.15s;
 }
 
 .ms-split:hover .ms-split-grip,
 .ms-split.dragging .ms-split-grip {
   background: var(--color-primary);
-  height: 72px;
+  height: 84px;
 }
 </style>

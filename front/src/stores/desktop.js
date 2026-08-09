@@ -286,9 +286,11 @@ export const useDesktopStore = defineStore('desktop', () => {
     persist()
   }
 
-  /** Доля первой зоны: тянем свободно, отпускаем — прилипает к ступени. */
+  /* Доля первой зоны: тянем свободно, отпускаем — прилипает к ступени.
+     Пределы шире ступеней: у самых краёв зона схлопывается совсем (решает
+     каркас), и до края надо суметь дотянуть. */
   function setSplitRatio(pct, { snap = false } = {}) {
-    const v = Math.min(80, Math.max(20, Math.round(pct)))
+    const v = Math.min(94, Math.max(6, Math.round(pct)))
     splitRatio.value = snap
       ? SPLIT_STEPS.reduce((best, s) => (Math.abs(s - v) < Math.abs(best - v) ? s : best), SPLIT_STEPS[0])
       : v
