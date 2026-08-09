@@ -2,7 +2,10 @@
   <footer
     ref="barEl"
     class="taskbar"
-    :class="[`side-${side}`, { hidden: (desktop.fullscreen && !desktop.taskbarPeek) || desktop.startFull }]"
+    :class="[
+      `side-${side}`,
+      { compact: touch, hidden: !touch && ((desktop.fullscreen && !desktop.taskbarPeek) || desktop.startFull) },
+    ]"
   >
     <button
       class="tb-start"
@@ -35,15 +38,19 @@
         class="tb-win"
         type="button"
         :class="{
-          active: item.win && desktop.focusedId === item.win.id && !item.win.minimized,
-          minimized: item.win?.minimized,
+          active: isOnScreen(item),
+          minimized: !touch && item.win?.minimized,
           shortcut: !item.win,
           dragging: drag.appId === item.appId,
         }"
         :title="item.title"
-        :draggable="prefs.isPinned(PLATFORM, item.appId)"
+        :draggable="!touch && prefs.isPinned(platform, item.appId)"
         @click="onButtonClick(item)"
         @contextmenu.prevent="openMenu(item, $event)"
+        @pointerdown="onDown(item, $event)"
+        @pointermove="longPress.move($event)"
+        @pointerup="onUp(item, $event)"
+        @pointercancel="longPress.cancel()"
         @dragstart="onDragStart(item, $event)"
         @dragover.prevent="onDragOver(item)"
         @drop.prevent="onDragEnd"
@@ -108,6 +115,7 @@ import { useActiveUnit } from '@/composables/useActiveUnit.js'
 import { useDesktopNotifications } from '@/composables/useDesktopNotifications.js'
 import { useNotifyMute } from '@/composables/useNotifyMute.js'
 import { useElapsed } from '@/composables/useElapsed.js'
+import { useLongPress } from '@/composables/useLongPress.js'
 import { usePermission } from '@/composables/usePermission.js'
 import { useCompanySettings } from '@/composables/useCompanySettings.js'
 import { appById, windowTitle } from '@/desktop/apps.js'
@@ -116,16 +124,24 @@ import Logo from '@/components/common/Logo.vue'
 import HolaIcon from '@/components/common/HolaIcon.vue'
 import ContextMenu from '@/components/common/ContextMenu.vue'
 
-// Раскладка «Пуска»/панели стола хранится отдельно от мобилы — desktopPrefs
-// держит обе, здесь работаем только со своей.
-const PLATFORM = 'desktop'
+const props = defineProps({
+  /* Чья раскладка панели (desktopPrefs держит стол, планшет и мобилу
+     раздельно). В шаблоне пропс доступен по имени, в скрипте — через props. */
+  platform: { type: String, default: 'desktop' },
+  /* Сенсорный режим (планшет): меню открывает долгое нажатие, перетаскивания
+     кнопок нет (тач его не понимает), панель компактнее и всегда снизу,
+     а тап переключает раздел, а не сворачивает окно. */
+  touch: { type: Boolean, default: false },
+})
 
 const desktop = useDesktopStore()
 const prefs = useDesktopPrefsStore()
 
-// Сторона панели — личная настройка («Настройки → Рабочий стол»). От неё
-// зависят и раскладка кнопок, и якоря всплывающих панелей.
-const side = computed(() => prefs.taskbarSide)
+/* Сторона панели — личная настройка («Настройки → Рабочий стол»). От неё
+   зависят и раскладка кнопок, и якоря всплывающих панелей. На планшете панель
+   всегда снизу: вертикальная колонка значков пальцу неудобна, а места по бокам
+   и так мало. */
+const side = computed(() => (props.touch ? 'bottom' : prefs.taskbarSide))
 const units = useUnitsStore()
 const { expand } = useActiveUnit()
 // Бейдж на кнопке = сколько карточек лежит в центре уведомлений (и убранные
@@ -153,7 +169,7 @@ const buttons = computed(() => {
   const out = []
   const shown = new Set()
 
-  for (const id of prefs.pinnedList(PLATFORM)) {
+  for (const id of prefs.pinnedList(props.platform)) {
     const app = appById(id)
     if (!isAvailable(app)) continue
     shown.add(id)
@@ -182,9 +198,53 @@ function titleOf(w) {
   return windowTitle(appById(w.appId), router.resolve(w.path))
 }
 
+/* Подсвечен ровно ОДИН раздел — тот, что в фокусе. Вторая зона планшета видна
+   одновременно с главной, но активная среди них всё равно одна: подсветка
+   отвечает на вопрос «куда я сейчас печатаю», а не «что видно». */
+function isOnScreen(item) {
+  if (!item.win || desktop.focusedId !== item.win.id) return false
+  return props.touch ? !desktop.startOpen : !item.win.minimized
+}
+
 function onButtonClick(item) {
-  if (item.win) desktop.toggleFromTaskbar(item.win.id)
-  else desktop.open(appById(item.appId).path)
+  if (dragged) { dragged = false; return }
+  if (longPress.consumed()) return
+  if (!item.win) return void desktop.open(appById(item.appId).path)
+  /* Сенсорный каркас: окна не сворачиваются — повторный тап по разделу, который
+     уже на экране, уводит на стартовый экран (так же ведёт себя «Пуск»). */
+  if (!props.touch) return desktop.toggleFromTaskbar(item.win.id)
+  const onScreen = !desktop.startOpen
+    && (desktop.focusedId === item.win.id || desktop.sideId === item.win.id)
+  if (onScreen) desktop.startOpen = true
+  else desktop.focus(item.win.id)
+}
+
+/* ── Сенсорные жесты кнопки ───────────────────────────────────
+   Пальцем правой кнопки нет: меню открывает долгое нажатие. Потянуть кнопку
+   вверх и отпустить в правой половине — поставить раздел второй зоной (левая
+   половина просто открывает его). Порог отсекает обычный тап. */
+const DRAG_UP = 48
+const longPress = useLongPress((item, e) => openMenu(item, e))
+let dragFrom = null
+let dragged = false
+
+function onDown(item, e) {
+  if (!props.touch) return
+  longPress.start(item, e)
+  dragFrom = { x: e.clientX, y: e.clientY }
+}
+
+function onUp(item, e) {
+  if (!props.touch) return
+  longPress.cancel()
+  const from = dragFrom
+  dragFrom = null
+  if (!from || from.y - e.clientY < DRAG_UP) return
+  dragged = true
+  const path = appById(item.appId)?.path
+  if (e.clientX > window.innerWidth / 2) desktop.openSide(item.win?.id || path)
+  else if (item.win) desktop.focus(item.win.id)
+  else if (path) desktop.open(path)
 }
 
 /* ── Перетаскивание закреплённых кнопок ───────────────────────
@@ -194,7 +254,7 @@ function onButtonClick(item) {
 const drag = reactive({ appId: null })
 
 function onDragStart(item, e) {
-  if (!prefs.isPinned(PLATFORM, item.appId)) return
+  if (!prefs.isPinned(props.platform, item.appId)) return
   drag.appId = item.appId
   e.dataTransfer.effectAllowed = 'move'
   // Firefox не начинает перетаскивание без данных в буфере.
@@ -202,13 +262,13 @@ function onDragStart(item, e) {
 }
 
 function onDragOver(item) {
-  if (!drag.appId || item.appId === drag.appId || !prefs.isPinned(PLATFORM, item.appId)) return
-  const ids = [...prefs.pinnedList(PLATFORM)]
+  if (!drag.appId || item.appId === drag.appId || !prefs.isPinned(props.platform, item.appId)) return
+  const ids = [...prefs.pinnedList(props.platform)]
   const from = ids.indexOf(drag.appId)
   const to = ids.indexOf(item.appId)
   if (from < 0 || to < 0) return
   ids.splice(to, 0, ...ids.splice(from, 1))
-  prefs.setPinnedOrder(PLATFORM, ids)
+  prefs.setPinnedOrder(props.platform, ids)
 }
 
 function onDragEnd() {
@@ -315,9 +375,32 @@ const menuItems = computed(() => {
   if (menu.kind === 'bell') return bellMenuItems.value
   const item = current.value
   if (!item) return []
-  const pinItem = prefs.isPinned(PLATFORM, item.appId)
+  const pinItem = prefs.isPinned(props.platform, item.appId)
     ? { label: 'Открепить от панели задач', icon: 'keep_off', action: 'unpin' }
     : { label: 'Закрепить на панели задач', icon: 'keep', action: 'pin' }
+
+  /* Сенсорный каркас: окон нет — есть две зоны, поэтому вместо «свернуть /
+     развернуть / ещё одно окно» предлагаем поставить раздел рядом. */
+  if (props.touch) {
+    const sideRow = item.win && desktop.sideId === item.win.id
+      ? { label: 'Убрать вторую зону', icon: 'close_fullscreen', action: 'unside' }
+      : { label: 'Открыть рядом', icon: 'splitscreen_right', action: 'side' }
+    if (!item.win) {
+      return [
+        { label: 'Открыть', icon: 'open_in_new', action: 'open' },
+        sideRow,
+        { divider: true },
+        pinItem,
+      ]
+    }
+    return [
+      { label: 'Перейти', icon: 'open_in_new', action: 'focus' },
+      sideRow,
+      pinItem,
+      { divider: true },
+      { label: 'Закрыть раздел', icon: 'close', action: 'close', danger: true },
+    ]
+  }
 
   if (!item.win) {
     return [
@@ -369,12 +452,15 @@ function onMenuSelect(action) {
   }
   const item = current.value
   if (!item) return
-  if (action === 'pin') return prefs.pin(PLATFORM, item.appId)
-  if (action === 'unpin') return prefs.unpin(PLATFORM, item.appId)
+  if (action === 'pin') return prefs.pin(props.platform, item.appId)
+  if (action === 'unpin') return prefs.unpin(props.platform, item.appId)
   if (action === 'open') return void desktop.open(appById(item.appId).path)
+  if (action === 'side') return void desktop.openSide(item.win?.id || appById(item.appId).path)
+  if (action === 'unside') return desktop.closeSide()
   const win = item.win
   if (!win) return
-  if (action === 'new') desktop.open(win.path, { newWindow: true })
+  if (action === 'focus') desktop.focus(win.id)
+  else if (action === 'new') desktop.open(win.path, { newWindow: true })
   else if (action === 'minimize') desktop.minimize(win.id)
   else if (action === 'restore') { desktop.restore(win.id); desktop.focus(win.id) }
   else if (action === 'max') desktop.toggleMaximize(win.id)
@@ -731,4 +817,54 @@ function onMenuSelect(action) {
 }
 
 .tb-bell.muted .tb-bell-dot { background: var(--color-text-dim); }
+
+/* ── Компактный сенсорный вид (планшет) ──
+   Та же панель, что на столе, только ниже и без подписей у кнопок разделов:
+   на планшете её видно всё время, и каждый лишний пиксель высоты — минус
+   разделу. Цели остаются пальцевыми (не меньше 40px), панель прижата к нижней
+   кромке во всю ширину — свободные поля по бокам ей ни к чему. */
+.taskbar.compact {
+  left: 0;
+  right: 0;
+  bottom: 0;
+  width: auto;
+  max-width: none;
+  transform: none;
+  height: calc(var(--taskbar-height) + env(safe-area-inset-bottom, 0px));
+  padding: 0 10px env(safe-area-inset-bottom, 0px);
+  gap: 8px;
+  border: none;
+  border-radius: 0;
+  border-top: 1px solid var(--acrylic-border);
+}
+
+.taskbar.compact .tb-start,
+.taskbar.compact .tb-hola,
+.taskbar.compact .tb-bell {
+  width: 40px;
+  min-width: 40px;
+  max-width: 40px;
+  height: 40px;
+  min-height: 40px;
+  max-height: 40px;
+}
+
+.taskbar.compact .tb-start :deep(svg) { width: 34px; height: 34px; }
+
+/* Кнопки разделов — только значки: подпись съедала бы место, а разделов на
+   планшете открыто больше. */
+.taskbar.compact .tb-win {
+  width: 44px;
+  min-width: 44px;
+  max-width: 44px;
+  height: 40px;
+  padding: 0;
+  justify-content: center;
+}
+
+.taskbar.compact .tb-win-label { display: none; }
+.taskbar.compact .tb-sep { height: 22px; }
+.taskbar.compact .tb-clock { padding: 0 8px; }
+.taskbar.compact .tb-date { display: none; }
+.taskbar.compact .tb-right { gap: 6px; }
 </style>

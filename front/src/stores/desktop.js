@@ -49,6 +49,20 @@ export const useDesktopStore = defineStore('desktop', () => {
   // Центр кнопки уведомлений по горизонтали — центр панели уведомлений.
   const bellCenter = ref(0)
 
+  /* ── Две зоны планшетного каркаса ──────────────────────────────
+     На планшете раздел занимает экран целиком, а рядом можно поставить второй
+     (как в Windows 8): `sideId` — окно во ВТОРОЙ зоне, `splitRatio` — доля
+     ПЕРВОЙ в процентах. Настольный каркас про эти поля не знает: у него своя
+     геометрия у каждого окна. */
+  const sideId = ref(null)
+  const splitRatio = ref(50)
+  // Ступени разделителя: палец не должен ловить пиксели, а раскладка из трети
+  // и двух третей выглядит опрятнее произвольной.
+  const SPLIT_STEPS = [33, 50, 67]
+
+  const side = computed(() => windows.value.find((w) => w.id === sideId.value) || null)
+  const split = computed(() => !!side.value && side.value.id !== focusedId.value)
+
   let seq = 1
   let zTop = 10
 
@@ -75,6 +89,8 @@ export const useDesktopStore = defineStore('desktop', () => {
         mode: w.mode, snap: w.snap, minimized: w.minimized,
       })),
       focusedIndex: windows.value.findIndex((w) => w.id === focusedId.value),
+      sideIndex: windows.value.findIndex((w) => w.id === sideId.value),
+      splitRatio: splitRatio.value,
     })
   }
 
@@ -101,7 +117,7 @@ export const useDesktopStore = defineStore('desktop', () => {
    * Открывает раздел по пути. По умолчанию переиспользует уже открытое окно
    * этого раздела (как док настольной ОС); newWindow — всегда новое окно.
    */
-  function open(path, { newWindow = false } = {}) {
+  function open(path, { newWindow = false, focus: doFocus = true } = {}) {
     const resolved = router.resolve(path)
     const app = appForPath(resolved.path)
     if (!app) return null
@@ -116,7 +132,7 @@ export const useDesktopStore = defineStore('desktop', () => {
       if (existing) {
         navigate(existing.id, resolved.fullPath)
         restore(existing.id)
-        focus(existing.id)
+        if (doFocus) focus(existing.id)
         return existing
       }
     }
@@ -124,7 +140,7 @@ export const useDesktopStore = defineStore('desktop', () => {
     const size = { w: app.size?.[0] ?? 1000, h: app.size?.[1] ?? 700 }
     const win = makeWindow(app, resolved.fullPath, cascadeRect(windows.value.length, size, area))
     windows.value.push(win)
-    focus(win.id)
+    if (doFocus) focus(win.id)
     enforceLimit(win.id)
     persist()
     return win
@@ -135,8 +151,10 @@ export const useDesktopStore = defineStore('desktop', () => {
     if (!limit.value) return
     while (windows.value.length > limit.value) {
       // Порядок z — очерёдность последнего обращения: наименьший и уходит.
+      // Видимые зоны неприкосновенны: закрыть раздел, на который человек прямо
+      // сейчас смотрит, — худшее, что может сделать предел.
       const victim = [...windows.value]
-        .filter((w) => w.id !== keepId)
+        .filter((w) => w.id !== keepId && w.id !== focusedId.value && w.id !== sideId.value)
         .sort((a, b) => a.z - b.z)[0]
       if (!victim) return
       close(victim.id)
@@ -199,9 +217,12 @@ export const useDesktopStore = defineStore('desktop', () => {
     const win = byId(id)
     if (!win) return
     if (focusedId.value !== id || win.z < zTop) win.z = ++zTop
-    focusedId.value = id
     startOpen.value = false
     notifOpen.value = false
+    /* Раздел уже видно во ВТОРОЙ зоне — «перейти» к нему нечего: перенос его в
+       главную только что закрыл бы вторую и убрал бы с глаз соседа. Обновляем
+       лишь свежесть (z) — по ней считается предел открытых разделов. */
+    if (sideId.value !== id || focusedId.value === id) focusedId.value = id
     if (zTop > 800) normalizeZ()
   }
 
@@ -209,11 +230,69 @@ export const useDesktopStore = defineStore('desktop', () => {
     const i = windows.value.findIndex((w) => w.id === id)
     if (i < 0) return
     windows.value.splice(i, 1)
+    if (sideId.value === id) sideId.value = null
     if (focusedId.value === id) {
       const top = [...windows.value].filter((w) => !w.minimized).sort((a, b) => b.z - a.z)[0]
       focusedId.value = top?.id ?? null
     }
     persist()
+  }
+
+  /* ── Вторая зона ────────────────────────────────────────────── */
+
+  /**
+   * Поставить раздел во вторую зону (открыв его, если ещё не открыт).
+   * @param {string} pathOrId — путь раздела либо id уже открытого окна.
+   */
+  function openSide(pathOrId) {
+    /* Делить нечего: главной зоны ещё нет — открываем обычным разделом, иначе
+       он ушёл бы во вторую зону при пустой первой и не показался бы вовсе. */
+    if (!focusedId.value) {
+      return byId(pathOrId) ? (focus(pathOrId), byId(pathOrId)) : open(pathOrId)
+    }
+
+    const win = byId(pathOrId) || open(pathOrId, { focus: false })
+    if (!win) return null
+
+    /* Раздел уже занимает главную зону — значит человек хочет видеть его
+       СПРАВА: главной становится бывшая вторая зона, иначе следующий по
+       свежести раздел. Не нашлось ни того ни другого — делить нечего. */
+    if (focusedId.value === win.id) {
+      const fallback = (sideId.value !== win.id && sideId.value)
+        || [...windows.value].filter((w) => w.id !== win.id).sort((a, b) => b.z - a.z)[0]?.id
+      if (!fallback) return null
+      focusedId.value = fallback
+    }
+
+    sideId.value = win.id
+    win.minimized = false
+    startOpen.value = false
+    persist()
+    return win
+  }
+
+  function closeSide() {
+    sideId.value = null
+    persist()
+  }
+
+  /** Поменять зоны местами — вторая становится главной и наоборот. */
+  function swapSides() {
+    const other = sideId.value
+    if (!other || !focusedId.value) return
+    const main = focusedId.value
+    sideId.value = main
+    focusedId.value = other
+    persist()
+  }
+
+  /** Доля первой зоны: тянем свободно, отпускаем — прилипает к ступени. */
+  function setSplitRatio(pct, { snap = false } = {}) {
+    const v = Math.min(80, Math.max(20, Math.round(pct)))
+    splitRatio.value = snap
+      ? SPLIT_STEPS.reduce((best, s) => (Math.abs(s - v) < Math.abs(best - v) ? s : best), SPLIT_STEPS[0])
+      : v
+    if (snap) persist()
   }
 
   function minimize(id) {
@@ -347,6 +426,11 @@ export const useDesktopStore = defineStore('desktop', () => {
     }
     const target = windows.value[saved.focusedIndex] || [...windows.value].reverse().find((w) => !w.minimized)
     focusedId.value = target?.id ?? null
+    // Вторая зона планшета переживает перезагрузку вместе с окнами; в оконном
+    // каркасе поле просто не читается.
+    const sideWin = windows.value[saved.sideIndex]
+    sideId.value = sideWin && sideWin.id !== focusedId.value ? sideWin.id : null
+    if (Number.isFinite(saved.splitRatio)) setSplitRatio(saved.splitRatio)
     enforceLimit(focusedId.value)
     return windows.value.length > 0
   }
@@ -354,6 +438,7 @@ export const useDesktopStore = defineStore('desktop', () => {
   function closeAll() {
     windows.value = []
     focusedId.value = null
+    sideId.value = null
     snapPreview.value = null
     // Всплывающие слои чужого сеанса тоже не должны пережить смену пользователя.
     startOpen.value = false
@@ -365,6 +450,7 @@ export const useDesktopStore = defineStore('desktop', () => {
   return {
     windows, focusedId, focused, hasWindows, limit, startOpen, startFull, notifOpen, holaOpen, snapPreview,
     area, screen, taskbarRect, bellCenter, fullscreen, taskbarPeek, zoneRect,
+    sideId, side, split, splitRatio, openSide, closeSide, swapSides, setSplitRatio,
     byId, open, openApp, navigate, back, canGoBack,
     focus, close, minimize, restore, toggleFromTaskbar,
     maximize, unmaximize, toggleMaximize, snapTo, setRect, setPosition,

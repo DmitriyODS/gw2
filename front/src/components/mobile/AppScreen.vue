@@ -17,7 +17,7 @@
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import router from '@/router/index.js'
 import { appById, windowTitle } from '@/desktop/apps.js'
-import { provideFloatHost } from '@/desktop/windowHost.js'
+import { provideFloatHost, provideFlushShell } from '@/desktop/windowHost.js'
 import WindowContent from '@/components/desktop/WindowContent.vue'
 import AppSplash from './AppSplash.vue'
 
@@ -33,6 +33,10 @@ const props = defineProps({
    продолжали бы висеть и над стартовым экраном, и над соседним разделом. */
 const rootEl = ref(null)
 provideFloatHost(rootEl)
+
+/* Рамки у экрана нет — раздел примыкает к его кромкам вплотную. На планшете
+   это ещё важнее: две зоны рядом иначе разделены двойным полем. */
+provideFlushShell()
 
 const app = computed(() => appById(props.win.appId))
 const title = computed(() => windowTitle(app.value, router.resolve(props.win.path)))

@@ -61,3 +61,24 @@ export function useFloatHost() {
   const win = inject(WINDOW_HOST, null)
   return computed(() => float?.value || win?.value || 'body')
 }
+
+/**
+ * Раздел примыкает к кромкам своего экрана — сенсорный каркас (телефон и
+ * планшет).
+ *
+ * У окна рабочего стола есть рамка и тень, поэтому раздел внутри отбивается
+ * полями. У экрана каркаса рамки нет: поля превращаются в пустую полосу вдоль
+ * кромки, а на планшете, где рядом стоят ДВЕ зоны, — ещё и в двойной зазор
+ * посередине. Каркас говорит об этом один раз, разделы читают через AppPage и
+ * AppListDetail и сами ничего про каркас не знают.
+ */
+const FLUSH_SHELL = Symbol('gw-flush-shell')
+
+export function provideFlushShell() {
+  provide(FLUSH_SHELL, true)
+}
+
+/** @returns {boolean} */
+export function useFlushShell() {
+  return inject(FLUSH_SHELL, false)
+}

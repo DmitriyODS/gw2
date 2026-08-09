@@ -1,5 +1,5 @@
 <template>
-  <div class="page" :class="{ 'no-pad': bare || embedded, embedded }">
+  <div class="page" :class="{ 'no-pad': bare || embedded, embedded, edge: flushShell }">
     <section ref="panelEl" class="page-panel" :class="{ bare, 'has-bg': !!slots.background }">
       <!-- Обои раздела (лента портала, переписка): слой лежит ПОД содержимым
            панели и клипается её скруглением. Панель для этого делается
@@ -149,7 +149,7 @@ import AppCommandBar from './AppCommandBar.vue'
 import AppFab from '@/components/ui/AppFab.vue'
 import BrandLoader from '@/components/common/BrandLoader.vue'
 import { appForPath } from '@/desktop/apps.js'
-import { useModalHost } from '@/desktop/windowHost.js'
+import { useFlushShell, useModalHost } from '@/desktop/windowHost.js'
 import { useNarrowWidth } from '@/composables/useNarrowWidth.js'
 
 const props = defineProps({
@@ -188,6 +188,9 @@ const slots = useSlots()
    рамке окна не написано, и без него панель осталась бы безымянной. В мобильном
    каркасе и на самостоятельных страницах окна нет — заголовок остаётся. */
 const { inWindow } = useModalHost()
+/* Сенсорный каркас: у экрана нет рамки, поэтому поля вокруг панели — пустая
+   полоса вдоль кромки (а на планшете между двумя зонами — двойной зазор). */
+const flushShell = useFlushShell()
 const route = useRoute()
 
 const windowTitle = computed(() => {
@@ -406,6 +409,11 @@ const hasHead = computed(() => hasTitleRow.value || hasControlsRow.value)
   .head-title-row { gap: 8px; }
   .head-line { gap: 8px; }
 }
+
+/* Каркас без рамки (телефон и планшет): панель занимает экран или зону
+   целиком — кромка экрана и есть край раздела. */
+.page.edge { padding: 0; }
+.page.edge > .page-panel { border: none; border-radius: 0; }
 
 @media (max-width: 768px) {
   .page { padding: 0; }

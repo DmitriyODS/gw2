@@ -1,5 +1,5 @@
 <template>
-  <div class="hr">
+  <div class="hr" :class="{ compact }">
     <section v-for="section in sections" :key="section.key" class="hr-section">
       <h3 v-if="section.label" class="hr-title">{{ section.label }}</h3>
       <button
@@ -30,6 +30,8 @@ defineProps({
   /* [{ key, label?, items: [{ key, icon, avatar?, title, subtitle?, command?, web? }] }] */
   sections: { type: Array, required: true },
   activeKey: { type: String, default: null },
+  /** Строка в одну линию: панель зажата клавиатурой — важнее число видимых. */
+  compact: { type: Boolean, default: false },
 })
 
 defineEmits(['pick', 'hover'])
@@ -114,4 +116,32 @@ function goIcon(item) {
 .hr-go { font-size: 18px; color: var(--color-text-dim); opacity: 0; }
 .hr-item:hover .hr-go,
 .hr-item.active .hr-go { opacity: 1; }
+
+/* ── Компактная выдача ──
+   Панель зажата клавиатурой: строка складывается в одну линию (подпись уходит
+   за названием), поля урезаны, стрелка перехода убрана — на тач-экране она и
+   так появлялась только по наведению. Строка с ~54px до ~34px: в тех же
+   двухстах пикселях видно шесть результатов вместо трёх. */
+.hr.compact { gap: 8px; }
+.hr.compact .hr-section { gap: 3px; }
+.hr.compact .hr-title { font-size: 10.5px; letter-spacing: 0.3px; }
+
+.hr.compact .hr-item {
+  gap: 8px;
+  padding: 7px 10px;
+  border-radius: var(--radius-md);
+}
+
+.hr.compact .hr-icon { font-size: 18px; }
+.hr.compact .hr-avatar { width: 20px; height: 20px; }
+.hr.compact .hr-go { display: none; }
+
+.hr.compact .hr-text {
+  flex-direction: row;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.hr.compact .hr-item-title { flex: 0 1 auto; font-size: 13.5px; }
+.hr.compact .hr-item-sub { flex: 1 1 auto; min-width: 0; font-size: 11.5px; }
 </style>

@@ -16,10 +16,11 @@
       </main>
     </template>
     <template v-else-if="authStore.token">
-      <!-- Каркас-«ОС»: на широком экране рабочий стол с окнами, на телефоне —
-           стартовый экран с плитками и панель задач. Разделы у них общие. -->
-      <DesktopShell v-if="desktopMode" />
-      <MobileShell v-else />
+      <!-- Каркас-«ОС»: мышью — рабочий стол с окнами, пальцем — стартовый экран
+           с плитками и панель задач (на планшете к ним добавляется вторая
+           зона). Разделы у всех трёх общие, см. composables/useShellMode.js. -->
+      <DesktopShell v-if="shell === 'windows'" />
+      <MobileShell v-else :platform="shell === 'tablet' ? 'tablet' : 'mobile'" />
       <ActiveUnitModal v-if="unitsStore.activeUnit && !unitsStore.minimized" />
       <!-- UI звонка монтируется только когда звонок есть: он тянет за собой
            LiveKit-обёртку и плитки участников — на «пустом» сеансе это лишний
@@ -64,6 +65,7 @@ import { useCallStore } from '@/stores/call.js'
 import { useNotificationsStore } from '@/stores/notifications.js'
 import { useScreenLock } from '@/composables/useScreenLock.js'
 import { useBreakpoint } from '@/composables/useBreakpoint.js'
+import { useShellMode } from '@/composables/useShellMode.js'
 import { useCompanySettings } from '@/composables/useCompanySettings.js'
 import { connectSocket } from '@/socket/index.js'
 import { navProgress } from '@/composables/useNavProgress.js'
@@ -111,8 +113,8 @@ const { usesGroove } = useCompanySettings()
 const isFullscreenRoute = computed(() => !!route.meta?.fullscreen && !!authStore.user)
 // Есть ли что показывать про звонок: ринг, активный звонок или предложение вернуться.
 const callPresent = computed(() => callStore.phase !== 'idle' || !!callStore.rejoinCall)
-// Каркас рабочего стола — широкий экран; на телефоне свой, мобильный.
-const desktopMode = computed(() => !isMobile.value)
+// Какой каркас показывать: окна, планшет или телефон (см. useShellMode).
+const { shell } = useShellMode()
 
 // Десктоп-обёртка: счётчик непрочитанных на иконке приложения
 // (док/панель задач/трей). В браузере GrooveDesktop нет — no-op.

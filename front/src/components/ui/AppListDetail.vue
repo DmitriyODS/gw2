@@ -2,7 +2,7 @@
   <div
     ref="rootEl"
     class="ld"
-    :class="{ narrow, 'detail-open': narrow && open, collapsed: listCollapsed }"
+    :class="{ narrow, 'detail-open': narrow && open, collapsed: listCollapsed, edge: flushShell }"
     :style="{ '--ld-list-width': listWidthPx }"
   >
     <!-- Раздел ещё поднимается: лоадер по центру ВСЕЙ раскладки. На колонке
@@ -52,6 +52,7 @@
    отдать всё место содержимому (кнопку рисует AppPage по `menu`). */
 import { computed, ref, watch } from 'vue'
 import { useNarrowWidth } from '@/composables/useNarrowWidth.js'
+import { useFlushShell } from '@/desktop/windowHost.js'
 import BrandLoader from '@/components/common/BrandLoader.vue'
 
 const props = defineProps({
@@ -69,6 +70,10 @@ const emit = defineEmits(['update:open', 'update:collapsed', 'narrow-change'])
 
 const rootEl = ref(null)
 const narrow = useNarrowWidth(rootEl, () => props.narrowAt)
+
+/* Сенсорный каркас: рамки у экрана нет — колонки примыкают к его кромкам, а на
+   планшете между двумя зонами иначе получался двойной зазор. */
+const flushShell = useFlushShell()
 
 const listWidthPx = computed(() =>
   typeof props.listWidth === 'number' ? `${props.listWidth}px` : props.listWidth,
@@ -159,6 +164,9 @@ defineExpose({ narrow })
 .ld.narrow .ld-detail { display: none; }
 .ld.narrow.detail-open .ld-list { display: none; }
 .ld.narrow.detail-open .ld-detail { display: block; }
+
+/* Каркас без рамки (телефон и планшет): колонки во весь экран или зону. */
+.ld.edge { padding: 0; gap: 0; }
 
 @media (max-width: 768px) {
   .ld { padding: 0; gap: 0; }

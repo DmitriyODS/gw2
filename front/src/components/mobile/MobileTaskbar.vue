@@ -69,9 +69,12 @@ import Logo from '@/components/common/Logo.vue'
 import HolaIcon from '@/components/common/HolaIcon.vue'
 import ContextMenu from '@/components/common/ContextMenu.vue'
 
-// Раскладка панели мобилы хранится отдельно от стола — desktopPrefs держит
-// обе, здесь работаем только со своей.
-const PLATFORM = 'mobile'
+const props = defineProps({
+  /* Раскладка панели у телефона и планшета своя (desktopPrefs держит обе
+     отдельно от стола) — какая именно, знает каркас. В шаблоне пропс доступен
+     по имени, в скрипте — через props. */
+  platform: { type: String, default: 'mobile' },
+})
 
 const desktop = useDesktopStore()
 const prefs = useDesktopPrefsStore()
@@ -96,7 +99,7 @@ const buttons = computed(() => {
   const out = []
   const shown = new Set()
 
-  for (const id of prefs.pinnedList(PLATFORM)) {
+  for (const id of prefs.pinnedList(props.platform)) {
     const app = appById(id)
     if (!isAvailable(app)) continue
     shown.add(id)
@@ -145,7 +148,7 @@ const current = computed(() => buttons.value.find((b) => b.key === menu.key) || 
 const menuItems = computed(() => {
   const item = current.value
   if (!item) return []
-  const pinItem = prefs.isPinned(PLATFORM, item.appId)
+  const pinItem = prefs.isPinned(props.platform, item.appId)
     ? { label: 'Открепить от панели', icon: 'keep_off', action: 'unpin' }
     : { label: 'Закрепить на панели', icon: 'keep', action: 'pin' }
   if (!item.win) return [{ label: 'Открыть', icon: 'open_in_new', action: 'open' }, { divider: true }, pinItem]
@@ -167,8 +170,8 @@ function openMenu(item, e) {
 function onMenuSelect(action) {
   const item = current.value
   if (!item) return
-  if (action === 'pin') return prefs.pin(PLATFORM, item.appId)
-  if (action === 'unpin') return prefs.unpin(PLATFORM, item.appId)
+  if (action === 'pin') return prefs.pin(props.platform, item.appId)
+  if (action === 'unpin') return prefs.unpin(props.platform, item.appId)
   if (action === 'open') return void desktop.open(appById(item.appId).path)
   if (!item.win) return
   if (action === 'focus') desktop.focus(item.win.id)

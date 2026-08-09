@@ -1,9 +1,57 @@
 <template>
-  <!-- Стартовый экран мобильного каркаса — то же меню «Пуск», что и на рабочем
+  <!-- Стартовый экран сенсорного каркаса — то же меню «Пуск», что и на рабочем
        столе (те же разделы, марка над плитками, порядок и размеры плиток из
-       личных настроек), но во весь экран и в две колонки. Компания, аккаунт,
-       юнит и уведомления — в общей панели статусов (MobileStatusBar). -->
-  <div class="mstart" @contextmenu.self.prevent="openDeskMenu">
+       личных настроек), но во весь экран.
+
+       Телефон: одна колонка плиток, а компания, юнит и уведомления живут в
+       общей панели статусов. Планшет: места хватает на всё меню целиком —
+       слева колонка аккаунта (то, что на столе ютилось в подвале одной
+       строкой) вместе с лентой активности, справа плитки. -->
+  <div class="mstart" :class="{ tablet }" @contextmenu.self.prevent="openDeskMenu">
+    <!-- ── Колонка аккаунта (планшет) ──
+         На столе это подвал меню: аватар, компания и четыре значка в ряд. На
+         большом сенсорном экране ряд мелких значков — плохая цель для пальца,
+         поэтому здесь то же самое стоит колонкой с подписями. -->
+    <aside v-if="tablet" class="mst-rail">
+      <header class="mst-rail-head">
+        <h2 class="mst-rail-title">Аккаунт</h2>
+      </header>
+
+      <button class="mst-rail-user" type="button" @click="open('/settings?section=account')">
+        <img class="mst-rail-avatar" :src="avatarSrc" :alt="auth.user?.fio || 'Аккаунт'" />
+        <span class="mst-rail-who">
+          <span class="mst-rail-name">{{ shortFio(auth.user?.fio) || 'Аккаунт' }}</span>
+          <span v-if="auth.user?.post" class="mst-rail-post">{{ auth.user.post }}</span>
+        </span>
+      </button>
+
+      <div class="mst-rail-company"><CompanySelect /></div>
+
+      <nav class="mst-rail-actions">
+        <button class="mst-rail-btn" type="button" @click="open('/settings')">
+          <span class="material-symbols-outlined">settings</span>
+          <span>Настройки</span>
+        </button>
+        <button
+          v-if="screenLock.enabled.value"
+          class="mst-rail-btn"
+          type="button"
+          @click="lock"
+        >
+          <span class="material-symbols-outlined">lock</span>
+          <span>Заблокировать</span>
+        </button>
+        <button class="mst-rail-btn danger" type="button" @click="logoutAsk = true">
+          <span class="material-symbols-outlined">logout</span>
+          <span>Выйти</span>
+        </button>
+      </nav>
+
+      <!-- Лента последних действий — здесь же, под кнопками: своей колонки она
+           не заслуживает, а колонка аккаунта без неё полупустая. -->
+      <ActivityPanel class="mst-activity" @open="open" />
+    </aside>
+
     <div class="mstart-body" @contextmenu.self.prevent="openDeskMenu">
       <!-- Марка — там же, где в меню «Пуск» рабочего стола: над плитками. -->
       <button class="mst-brand" type="button" title="О приложении" @click="open('/settings?section=about')">
@@ -11,22 +59,22 @@
       </button>
 
       <section v-for="group in visibleGroups" :key="group.key" class="mst-group">
-        <button class="mst-group-head" type="button" @click="prefs.toggleCollapsed(PLATFORM, group.key)">
+        <button class="mst-group-head" type="button" @click="prefs.toggleCollapsed(platform, group.key)">
           <span class="mst-group-label">{{ group.label }}</span>
           <span
             class="material-symbols-outlined mst-group-chev"
-            :class="{ collapsed: prefs.isCollapsed(PLATFORM, group.key) }"
+            :class="{ collapsed: prefs.isCollapsed(platform, group.key) }"
           >expand_more</span>
         </button>
 
-        <div class="mst-group-body" :class="{ collapsed: prefs.isCollapsed(PLATFORM, group.key) }">
+        <div class="mst-group-body" :class="{ collapsed: prefs.isCollapsed(platform, group.key) }">
           <div class="mst-group-inner">
             <div class="mst-tiles">
               <button
                 v-for="(app, i) in group.items"
                 :key="app.id"
                 class="mst-tile"
-                :class="[`is-${sizeOf(app)}`, { pinned: prefs.isPinned(PLATFORM, app.id) }]"
+                :class="[`is-${sizeOf(app)}`, { pinned: prefs.isPinned(platform, app.id) }]"
                 type="button"
                 :title="app.title"
                 @click="launch(app)"
@@ -47,7 +95,7 @@
                 <span v-if="badgeOf(app)" class="mst-badge" :class="{ alert: badgeOf(app) === '!' }">
                   {{ badgeOf(app) }}
                 </span>
-                <span v-if="prefs.isPinned(PLATFORM, app.id)" class="mst-pin material-symbols-outlined">keep</span>
+                <span v-if="prefs.isPinned(platform, app.id)" class="mst-pin material-symbols-outlined">keep</span>
               </button>
             </div>
           </div>
@@ -94,16 +142,27 @@ import { useCompanySettings } from '@/composables/useCompanySettings.js'
 import { useLongPress } from '@/composables/useLongPress.js'
 import { menuGroups } from '@/desktop/apps.js'
 import { tileFaces } from '@/desktop/liveTiles.js'
+import { avatarUrl } from '@/utils/pets.js'
+import { shortFio } from '@/utils/people.js'
 import BrandWordmark from '@/components/common/BrandWordmark.vue'
 import ContextMenu from '@/components/common/ContextMenu.vue'
+import CompanySelect from '@/components/common/CompanySelect.vue'
 import LiveTile from '@/components/desktop/LiveTile.vue'
+import ActivityPanel from '@/components/desktop/ActivityPanel.vue'
 
 // Спрашиваем про выход редко — диалог (а с ним PrimeVue Dialog) грузим лениво.
 const AppDialog = defineAsyncComponent(() => import('@/components/ui/AppDialog.vue'))
 
-// Раскладка «Пуска» мобилы хранится отдельно от стола — desktopPrefs держит
-// обе, здесь работаем только со своей.
-const PLATFORM = 'mobile'
+const props = defineProps({
+  /* Раскладка «Пуска» у телефона и планшета своя (desktopPrefs держит обе
+     отдельно от стола) — какая именно, знает каркас. В шаблоне пропс доступен
+     по имени, в скрипте — через props. */
+  platform: { type: String, default: 'mobile' },
+  /* Планшет: плитку можно открыть во ВТОРУЮ зону — в меню появляется пункт. */
+  split: { type: Boolean, default: false },
+})
+
+const tablet = computed(() => props.platform === 'tablet')
 
 const auth = useAuthStore()
 const screenLock = useScreenLock()
@@ -122,12 +181,12 @@ const groups = computed(() => menuGroups({
   hasCompany: hasActiveCompany(),
   isSuperAdmin: isSuperAdmin(),
   settings: settings.value,
-}, prefs.layout(PLATFORM)))
+}, prefs.layout(props.platform)))
 
 /* Пустой раздел показываем, только когда пользователь перекладывал плитки или
    завёл свои разделы: иначе на экране висели бы «мёртвые» заголовки. */
 const visibleGroups = computed(() =>
-  groups.value.filter((g) => g.items.length || g.custom || prefs.customized(PLATFORM)))
+  groups.value.filter((g) => g.items.length || g.custom || prefs.customized(props.platform)))
 
 const appById = computed(() => {
   const map = new Map()
@@ -151,10 +210,10 @@ function moveTile(appId, delta) {
   if (to < 0 || to >= pos.total) return
   const ids = pos.group.items.map((a) => a.id)
   ;[ids[pos.index], ids[to]] = [ids[to], ids[pos.index]]
-  prefs.moveTileToGroup(PLATFORM, appId, pos.group.key, ids)
+  prefs.moveTileToGroup(props.platform, appId, pos.group.key, ids)
 }
 
-const sizeOf = (app) => prefs.tileSize(PLATFORM, app.id, app.tile || 'square')
+const sizeOf = (app) => prefs.tileSize(props.platform, app.id, app.tile || 'square')
 
 const liveCtx = computed(() => ({ data: live.data, messenger, portal, pets, units, auth }))
 
@@ -173,6 +232,12 @@ function badgeOf(app) {
 
 function open(path) {
   desktop.open(path)
+}
+
+const avatarSrc = computed(() => (auth.user ? avatarUrl(auth.user) : ''))
+
+function lock() {
+  screenLock.lock()
 }
 
 function launch(app) {
@@ -203,6 +268,8 @@ const menuItems = computed(() => {
   const pos = tilePosition(id)
   return [
     { label: 'Открыть', icon: 'open_in_new', action: 'open' },
+    // Планшет: раздел можно сразу поставить рядом с текущим — второй зоной.
+    ...(props.split ? [{ label: 'Открыть рядом', icon: 'splitscreen_right', action: 'side' }] : []),
     { divider: true },
     // Перетаскивания на тач нет (нативный HTML5 DnD, как на столе, тач не
     // понимает) — переставляем по шагу, как на клавиатуре: то же
@@ -217,7 +284,7 @@ const menuItems = computed(() => {
       ? { label: 'Живая плитка', icon: prefs.isTileLive(id) ? 'check' : 'dashboard', action: 'live' }
       : { label: 'Живые плитки выключены', icon: 'toggle_off', disabled: true },
     { divider: true },
-    prefs.isPinned(PLATFORM, id)
+    prefs.isPinned(props.platform, id)
       ? { label: 'Открепить от панели задач', icon: 'keep_off', action: 'unpin' }
       : { label: 'Закрепить на панели задач', icon: 'keep', action: 'pin' },
   ]
@@ -251,17 +318,18 @@ function onMenuSelect(action) {
   const id = menu.appId
   if (!id) return
   if (action === 'open') return open(appById.value.get(id).path)
+  if (action === 'side') return void desktop.openSide(appById.value.get(id).path)
   if (action === 'moveUp') return moveTile(id, -1)
   if (action === 'moveDown') return moveTile(id, 1)
-  if (action === 'wide' || action === 'square') return prefs.setTileSize(PLATFORM, id, action)
+  if (action === 'wide' || action === 'square') return prefs.setTileSize(props.platform, id, action)
   if (action === 'live') {
     prefs.toggleTileLive(id)
     // Вернули сводки — их надо подтянуть: выключенную плитку не опрашивали.
     if (prefs.isTileLive(id)) live.refresh([id]).catch(() => {})
     return
   }
-  if (action === 'pin') return prefs.pin(PLATFORM, id)
-  if (action === 'unpin') return prefs.unpin(PLATFORM, id)
+  if (action === 'pin') return prefs.pin(props.platform, id)
+  if (action === 'unpin') return prefs.unpin(props.platform, id)
 }
 </script>
 
@@ -269,6 +337,8 @@ function onMenuSelect(action) {
 .mstart {
   position: absolute;
   inset: 0;
+  /* Ширина боковой колонки — вместе с её полями (box-sizing: border-box). */
+  --mst-rail: 300px;
   /* Плитки мельче и плотнее, чем на столе (там — фиксированные 4 колонки по
      112px): на телефоне это даёт свои 3 колонки вместо уменьшенной копии
      настольной сетки — раскладка, а не масштаб. Размер задаёт и ширину
@@ -295,6 +365,151 @@ function onMenuSelect(action) {
 }
 
 .mstart-body::-webkit-scrollbar { display: none; }
+
+/* ── Планшет: меню «Пуск» во весь экран в три колонки ──
+   Слева аккаунт и выход (на столе это подвал одной строкой), по центру плитки,
+   справа лента активности — та же, что в правой колонке «Пуска» на столе.
+   Верхней панели на планшете нет, поэтому резерв сверху обычный. */
+.mstart.tablet {
+  display: grid;
+  grid-template-columns: var(--mst-rail) minmax(0, 1fr);
+  /* Ряд ровно в высоту экрана: без него он тянется по самой длинной колонке
+     (плитки), обе панели уезжают под панель задач и обрезаются по-разному —
+     а прокручиваться должна каждая колонка внутри себя. */
+  grid-template-rows: minmax(0, 100%);
+  align-items: stretch;
+  /* Зазор между колонками дают их собственные поля — по обе стороны от тонкой
+     линии-разделителя. Так у всех трёх колонок один и тот же отступ от кромки
+     экрана, чего не выходило у отдельных панелей с их рамками и тенями. */
+  --mst-pad: 22px;
+  gap: 0;
+  padding: var(--mst-pad) 0 0;
+  padding-bottom: calc(var(--taskbar-height, 52px) + env(safe-area-inset-bottom, 0px) + var(--mst-pad));
+  /* Плитки крупнее телефонных: до них дотягиваются пальцем с расстояния вытянутой
+     руки, и колонок на большом экране всё равно помещается много. */
+  --mst-tile: 124px;
+  --mst-tile-h: 112px;
+}
+
+.mstart.tablet > .mst-rail,
+.mstart.tablet > .mstart-body { min-height: 0; height: 100%; }
+
+.mstart.tablet > .mstart-body {
+  padding: 0 var(--mst-pad);
+  gap: 20px;
+}
+
+/* Колонка — не панель, а часть одного экрана: ни рамки, ни фона, ни тени.
+   Границу обозначает волосяная линия, отбитая полями с обеих сторон. */
+.mstart.tablet > .mst-rail {
+  border: none;
+  border-radius: 0;
+  background: none;
+  box-shadow: none;
+  padding: 0 var(--mst-pad);
+  border-right: 1px solid var(--acrylic-border);
+}
+
+/* Лента внутри колонки — тоже без своей панели, отбита от кнопок такой же
+   линией: колонка читается как один список, а не как две вложенные карточки.
+   Селектор с родителем — чтобы перебить собственные стили ActivityPanel по
+   специфичности, а не порядком подключения. */
+.mst-rail > .mst-activity {
+  flex: 1;
+  min-height: 0;
+  border: none;
+  border-top: 1px solid var(--acrylic-border);
+  border-radius: 0;
+  background: none;
+  box-shadow: none;
+  padding: 12px 0 0;
+  margin-top: 4px;
+}
+
+/* ── Колонка аккаунта ──
+   Строки те же, что в ленте активности справа: две боковые колонки должны
+   читаться как пара, а не как два разных решения. */
+.mst-rail {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-height: 0;
+  /* Прокручивается лента внутри, а не колонка целиком: аккаунт, компания и
+     кнопки должны оставаться на месте. */
+  overflow: hidden;
+}
+
+.mst-rail-head { display: flex; align-items: center; flex-shrink: 0; padding: 0 4px; }
+
+.mst-rail-title {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+  font-size: 16px;
+  font-weight: 700;
+  letter-spacing: -0.2px;
+  color: var(--color-text);
+}
+
+.mst-rail-user {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border: none;
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--color-text);
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.12s;
+}
+
+.mst-rail-user:hover { background: color-mix(in oklch, var(--color-primary) 8%, transparent); }
+
+.mst-rail-avatar {
+  width: 40px;
+  height: 40px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  object-fit: cover;
+}
+
+.mst-rail-who { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.mst-rail-name { font-size: 14px; font-weight: 700; overflow-wrap: anywhere; }
+.mst-rail-post { font-size: 12px; color: var(--color-text-dim); overflow-wrap: anywhere; }
+
+/* Выбор компании занимает всю ширину колонки — это главный переключатель. */
+.mst-rail-company :deep(.company-select),
+.mst-rail-company :deep(button) { width: 100%; }
+
+.mst-rail-actions { display: flex; flex-direction: column; gap: 4px; }
+
+.mst-rail-btn {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border: none;
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--color-text);
+  font: inherit;
+  font-size: 13.5px;
+  font-weight: 600;
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.12s, color 0.12s;
+}
+
+.mst-rail-btn .material-symbols-outlined { font-size: 20px; color: var(--color-text-dim); }
+.mst-rail-btn:hover { background: color-mix(in oklch, var(--color-primary) 8%, transparent); }
+.mst-rail-btn:hover .material-symbols-outlined { color: var(--color-primary); }
+
+.mst-rail-btn.danger { color: var(--color-error); }
+.mst-rail-btn.danger .material-symbols-outlined { color: var(--color-error); }
+.mst-rail-btn.danger:hover { background: var(--color-error-container); color: var(--color-on-error-container); }
+.mst-rail-btn.danger:hover .material-symbols-outlined { color: inherit; }
 
 /* Марка прокручивается вместе с плитками: панель статусов остаётся компактной,
    а надпись стоит там же, где в меню «Пуск» на рабочем столе. */

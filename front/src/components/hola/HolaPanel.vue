@@ -1,9 +1,25 @@
 <template>
-  <div class="hola">
+  <div ref="rootEl" class="hola" :class="{ short }">
     <div class="hola-inner">
       <!-- Одно поле на все вкладки: ищет, разбирает команды и отправляет
            сообщения ассистенту — в зависимости от выбранного режима. -->
       <div class="hola-field">
+        <!-- Экранная клавиатура срезает панели половину высоты, и ряд плиток
+             «Поиск / Команды / Чат» съедает то немногое, что осталось выдаче.
+             В такой раскладке он сворачивается в одну кнопку при поле: она же
+             показывает текущий режим. -->
+        <button
+          v-if="short"
+          class="hola-mode"
+          type="button"
+          :title="`Режим: ${activeTab.label}`"
+          :aria-label="`Режим: ${activeTab.label}. Сменить`"
+          @click="openModeMenu"
+        >
+          <span class="material-symbols-outlined">{{ activeTab.icon }}</span>
+          <span class="material-symbols-outlined hola-mode-caret">more_vert</span>
+        </button>
+
         <input
           ref="inputEl"
           v-model="text"
@@ -31,7 +47,7 @@
         </button>
       </div>
 
-      <nav class="hola-tabs" role="tablist">
+      <nav v-if="!short" class="hola-tabs" role="tablist">
         <button
           v-for="t in TABS"
           :key="t.value"
@@ -60,6 +76,7 @@
             v-if="sections.length"
             :sections="sections"
             :active-key="activeKey"
+            :compact="short"
             @pick="go"
             @hover="onHover"
           />
@@ -109,6 +126,7 @@
             v-if="commandSections.length"
             :sections="commandSections"
             :active-key="activeKey"
+            :compact="short"
             @pick="go"
             @hover="onHover"
           />
@@ -129,10 +147,19 @@
               @click="openAiSettings"
             />
           </div>
-          <HolaChat v-else @suggest="ask" />
+          <HolaChat v-else :compact="short" @suggest="ask" />
         </template>
       </div>
     </div>
+
+    <ContextMenu
+      :visible="modeMenu.open"
+      :x="modeMenu.x"
+      :y="modeMenu.y"
+      :items="modeItems"
+      @select="tab = $event"
+      @close="modeMenu.open = false"
+    />
   </div>
 </template>
 
@@ -149,10 +176,12 @@
  * на его личном ключе: пока ключа нет, вкладка честно говорит, чего не хватает,
  * и ведёт в профиль, а не молчит ошибкой.
  */
-import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import AppButton from '@/components/ui/AppButton.vue'
 import { useRouter } from 'vue-router'
+import ContextMenu from '@/components/common/ContextMenu.vue'
 import { useHolaSearch } from '@/composables/useHolaSearch.js'
+import { useShortHeight } from '@/composables/useNarrowWidth.js'
 import { useAssistantStore } from '@/stores/assistant.js'
 import { getMyAiSettings } from '@/api/ai.js'
 import { loadHistory, pushHistory, removeHistory, clearHistory, historyTime } from '@/utils/holaHistory.js'
@@ -180,6 +209,15 @@ const {
 } = useHolaSearch()
 const assistant = useAssistantStore()
 const router = useRouter()
+
+/* Панель ниже этого — «сидит на клавиатуре»: под выдачу остаётся столько же,
+   сколько занимает шапка, и раскладка переключается на компактную. Порог
+   заведомо ниже полного экрана телефона (там ~700) и выше того, что остаётся
+   от него с открытой клавиатурой (~250–400). */
+const SHORT_AT = 520
+
+const rootEl = ref(null)
+const short = useShortHeight(rootEl, SHORT_AT)
 
 const tab = ref(TABS.some((t) => t.value === props.startTab) ? props.startTab : 'search')
 const text = ref('')
@@ -231,6 +269,25 @@ watch(tab, async (t) => {
   await nextTick()
   inputEl.value?.focus()
 })
+
+/* ── Переключатель режимов в компактной раскладке ── */
+const activeTab = computed(() => TABS.find((t) => t.value === tab.value) || TABS[0])
+const modeMenu = reactive({ open: false, x: 0, y: 0 })
+
+// Галочка вместо значка — единственный способ пометить текущий пункт: у общего
+// меню состояния «выбрано» нет, а заводить его ради трёх строк незачем.
+const modeItems = computed(() => TABS.map((t) => ({
+  label: t.label,
+  icon: t.value === tab.value ? 'check' : t.icon,
+  action: t.value,
+})))
+
+function openModeMenu(e) {
+  const r = e.currentTarget.getBoundingClientRect()
+  modeMenu.open = true
+  modeMenu.x = r.left
+  modeMenu.y = r.bottom + 6
+}
 
 const commandSections = computed(() =>
   (commandCatalog.value.length ? [{ key: 'commands', label: 'Быстрые команды', items: commandCatalog.value }] : []))
@@ -618,6 +675,44 @@ defineExpose({ focus: () => inputEl.value?.focus() })
 }
 
 .hola-locked-btn .material-symbols-outlined { font-size: 18px; }
+
+/* ── Компактная раскладка: панель «сидит на клавиатуре» ──
+   Ряд вкладок свёрнут в кнопку при поле, поля и промежутки урезаны — всё
+   освободившееся достаётся выдаче. Считаем по СВОЕЙ высоте (см. useShortHeight):
+   размер экрана тут ни при чём — панель может быть и окном на десктопе. */
+.hola.short { padding: 8px; }
+.hola.short .hola-inner { gap: 8px; }
+.hola.short .hola-field { height: 44px; padding: 0 6px 0 4px; }
+.hola.short .hola-input { font-size: 15px; text-align: left; padding-left: 6px; }
+.hola.short .hola-body { gap: 8px; }
+.hola.short .hola-hint { padding: 12px 16px; font-size: 12.5px; }
+.hola.short .hola-calc { padding: 8px 12px; }
+.hola.short .hola-calc-value { font-size: 17px; }
+.hola.short .hola-history { gap: 4px; }
+.hola.short .hola-hist { padding: 7px 12px; border-radius: var(--radius-md); }
+.hola.short .hola-hist-text { font-size: 13px; }
+.hola.short .hola-locked { gap: 4px; padding: 10px; }
+.hola.short .hola-locked-sub { font-size: 12px; }
+
+/* Кнопка режима: значок текущей вкладки + три точки — «здесь можно сменить». */
+.hola-mode {
+  display: flex;
+  align-items: center;
+  gap: 0;
+  flex-shrink: 0;
+  height: 34px;
+  min-height: 34px;
+  padding: 0 2px 0 8px;
+  border: none;
+  border-radius: var(--radius-full);
+  background: color-mix(in oklch, var(--color-primary) 12%, transparent);
+  color: var(--color-primary);
+  cursor: pointer;
+}
+
+.hola-mode:hover { background: color-mix(in oklch, var(--color-primary) 20%, transparent); }
+.hola-mode .material-symbols-outlined { font-size: 20px; }
+.hola-mode-caret { font-size: 16px !important; opacity: 0.7; margin-left: -2px; }
 
 /* Узкое окно (и мобильный экран): подписи вкладок ужимаются, поля становятся
    компактнее. Дублируем media-запросом — заводской WebView старых Android

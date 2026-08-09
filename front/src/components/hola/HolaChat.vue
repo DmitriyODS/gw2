@@ -1,13 +1,13 @@
 <template>
-  <div ref="threadEl" class="hc">
+  <div ref="threadEl" class="hc" :class="{ compact }">
     <div v-if="assistant.loading && !assistant.messages.length" class="hc-center">
       <BrandLoader :size="48" />
     </div>
 
     <div v-else-if="!assistant.messages.length" class="hc-center hc-empty">
-      <HolaIcon :size="40" />
+      <HolaIcon v-if="!compact" :size="40" />
       <p class="hc-empty-title">Спросите Hola о работе компании</p>
-      <p class="hc-empty-sub">Отвечаю по реальным данным: часы, отделы, загрузка, поиск задач со ссылками.</p>
+      <p v-if="!compact" class="hc-empty-sub">Отвечаю по реальным данным: часы, отделы, загрузка, поиск задач со ссылками.</p>
       <div class="hc-chips">
         <button
           v-for="s in SUGGESTIONS"
@@ -91,6 +91,11 @@ import HolaIcon from '@/components/common/HolaIcon.vue'
 import MarkdownView from '@/components/common/MarkdownView.vue'
 import LinkifiedText from '@/components/common/LinkifiedText.vue'
 import BrandLoader from '@/components/common/BrandLoader.vue'
+
+defineProps({
+  /** Панель зажата клавиатурой: лента и подсказки пустого чата ужимаются. */
+  compact: { type: Boolean, default: false },
+})
 
 defineEmits(['suggest'])
 
@@ -313,4 +318,15 @@ defineExpose({ scrollDown })
   color: var(--color-error);
   font-size: 13px;
 }
+
+/* Компактная лента: панель зажата клавиатурой — оставляем сами реплики и
+   подсказки пустого чата, всё остальное урезано. */
+.hc.compact { gap: 6px; padding: 2px 2px 4px; }
+.hc.compact .hc-center { gap: 6px; padding: 8px 10px; }
+.hc.compact .hc-empty-title { font-size: 13.5px; }
+.hc.compact .hc-chips { gap: 6px; margin-top: 2px; }
+.hc.compact .hc-chip { padding: 6px 11px; font-size: 12px; }
+.hc.compact .hc-msg { max-width: min(88%, 560px); }
+.hc.compact .hc-bubble { padding: 8px 11px 18px; font-size: 13.5px; }
+.hc.compact .hc-day { margin: 2px 0 0; }
 </style>

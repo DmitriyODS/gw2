@@ -65,13 +65,7 @@
 
         <ThemesSection v-else-if="activeSection === 'theme'" />
 
-        <AppStack v-else-if="activeSection === 'desktop'">
-          <DesktopShellCard />
-          <DesktopWallpaperCard />
-          <AppGradientCard />
-          <DesktopTilesCard />
-          <DesktopAppCard />
-        </AppStack>
+        <DesktopSection v-else-if="activeSection === 'desktop'" />
 
         <ChatsPortalSection v-else-if="activeSection === 'chats'" :has-company="hasCompany" />
 
@@ -187,11 +181,7 @@ const AboutSection = defineAsyncComponent(() => import('@/components/settings/Ab
 const AuditSection = defineAsyncComponent(() => import('@/components/settings/AuditSection.vue'))
 const SupportCard = defineAsyncComponent(() => import('@/components/settings/SupportCard.vue'))
 const HelpCenter = defineAsyncComponent(() => import('@/components/settings/HelpCenter.vue'))
-const DesktopAppCard = defineAsyncComponent(() => import('@/components/settings/DesktopAppCard.vue'))
-const DesktopWallpaperCard = defineAsyncComponent(() => import('@/components/settings/DesktopWallpaperCard.vue'))
-const DesktopShellCard = defineAsyncComponent(() => import('@/components/settings/DesktopShellCard.vue'))
-const DesktopTilesCard = defineAsyncComponent(() => import('@/components/settings/DesktopTilesCard.vue'))
-const AppGradientCard = defineAsyncComponent(() => import('@/components/settings/AppGradientCard.vue'))
+const DesktopSection = defineAsyncComponent(() => import('@/components/settings/DesktopSection.vue'))
 import ConfirmDialog from '@/components/ui/ConfirmDialog.vue'
 import EmptyState from '@/components/common/EmptyState.vue'
 

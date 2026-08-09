@@ -3,10 +3,12 @@
  * разделы меню «Пуск» (свои группы, переименования, состав, порядок, свёрнутость),
  * размер плиток и обои.
  *
- * Раскладка «Пуска» (пункты layouts.*) хранится ОТДЕЛЬНО для стола и мобилы —
- * это разные экраны с разной геометрией, и человек расставляет плитки на них
- * независимо: широкая на телефоне не обязана быть широкой на столе. Обои,
- * живые плитки и панель задач — общие, это не про раскладку.
+ * Раскладка «Пуска» (пункты layouts.*) хранится ОТДЕЛЬНО для стола, мобилы и
+ * планшета — это разные экраны с разной геометрией, и человек расставляет
+ * плитки на них независимо: широкая на телефоне не обязана быть широкой на
+ * столе. Обои, живые плитки и панель задач — общие, это не про раскладку.
+ * САМ выбор каркаса сюда не относится: он про устройство, а не про человека,
+ * и живёт локально (см. composables/useShellMode.js).
  *
  * Живут на сервере (`/api/users/me/desktop`), поэтому переезжают между
  * устройствами; localStorage — только кэш для мгновенного первого кадра,
@@ -23,7 +25,7 @@ const SAVE_DELAY = 700
 // Сколько последних картинок обоев помним для быстрого возврата.
 const WALLPAPER_HISTORY = 10
 
-export const PLATFORMS = ['desktop', 'mobile']
+export const PLATFORMS = ['desktop', 'mobile', 'tablet']
 
 function emptyLayout() {
   return {
@@ -41,7 +43,7 @@ function emptyLayout() {
 
 function empty() {
   return {
-    layouts: { desktop: emptyLayout(), mobile: emptyLayout() },
+    layouts: { desktop: emptyLayout(), mobile: emptyLayout(), tablet: emptyLayout() },
     wallpaper: null,
     // Обои экрана блокировки — свой рецепт: запертый экран человек видит
     // чаще, чем рабочий стол, и оформляет его отдельно.
@@ -92,6 +94,7 @@ function normalize(raw) {
     layouts: {
       desktop: normalizeLayout(legacy || p.layouts.desktop),
       mobile: normalizeLayout(legacy ? null : p.layouts.mobile),
+      tablet: normalizeLayout(legacy ? null : p.layouts.tablet),
     },
     wallpaper: p.wallpaper && typeof p.wallpaper === 'object' ? p.wallpaper : null,
     lockWallpaper: p.lockWallpaper && typeof p.lockWallpaper === 'object' ? p.lockWallpaper : null,

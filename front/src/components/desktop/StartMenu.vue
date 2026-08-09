@@ -110,7 +110,7 @@
           <button
             class="sm-user"
             type="button"
-            :title="auth.user?.fio || 'Аккаунт'"
+            :title="shortFio(auth.user?.fio) || 'Аккаунт'"
             @click="launchPath('/settings?section=account')"
           >
             <img class="sm-avatar" :src="avatarSrc" :alt="auth.user?.fio || 'Аккаунт'" />
@@ -177,6 +177,7 @@
 
 <script setup>
 import { avatarUrl } from '@/utils/pets.js'
+import { shortFio } from '@/utils/people.js'
 import { useScreenLock } from '@/composables/useScreenLock.js'
 import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import InputText from 'primevue/inputtext'

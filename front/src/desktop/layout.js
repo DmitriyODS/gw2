@@ -11,6 +11,9 @@ import { ref } from 'vue'
 
 export const TASKBAR_HEIGHT = 68
 export const MOBILE_TASKBAR_HEIGHT = 52
+// Планшет: настольная панель в компактном виде — крупнее телефонной (цель для
+// пальца), но заметно ниже настольной.
+export const TABLET_TASKBAR_HEIGHT = 56
 export const MOBILE_STATUSBAR_HEIGHT = 44
 export const TASKBAR_MARGIN = 12
 
