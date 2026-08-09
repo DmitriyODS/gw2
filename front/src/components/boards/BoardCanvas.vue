@@ -875,7 +875,11 @@ watch(() => props.tool, () => {
 </script>
 
 <template>
-  <div ref="host" class="board-canvas" :class="{ 'is-readonly': readOnly }">
+  <!-- data-no-ptr: вертикальный жест здесь — это штрих, а не «обновить
+       страницу». Без него оттяжка сверху вниз при рисовании поднимала индикатор
+       обновления сенсорных каркасов и могла перезагрузить доску (см.
+       components/common/PullToRefresh.vue). -->
+  <div ref="host" class="board-canvas" :class="{ 'is-readonly': readOnly }" data-no-ptr>
     <canvas
       ref="canvas"
       class="board-canvas__surface"

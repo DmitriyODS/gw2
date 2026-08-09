@@ -697,7 +697,7 @@ defineExpose({ focus: () => inputEl.value?.focus() })
    размер экрана тут ни при чём — панель может быть и окном на десктопе. */
 /* Урезаем только ВЫСОТУ: не хватает её, а не ширины — по бокам поля остаются
    обычными, иначе поле запроса липнет к кромкам окна. */
-.hola.short { padding: 8px 20px 14px; }
+.hola.short { padding: 14px 20px 14px; }
 .hola.short .hola-inner { gap: 10px; }
 .hola.short .hola-field { height: 44px; padding: 0 6px 0 4px; }
 .hola.short .hola-input { font-size: 15px; text-align: left; padding-left: 6px; }
