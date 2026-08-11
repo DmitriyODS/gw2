@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia'
 import { ref, computed, watch } from 'vue'
-import { getMe } from '@/api/users.js'
+import { getMe, setMyVacation as apiSetMyVacation } from '@/api/users.js'
 import { login as apiLogin, logout as apiLogout, changeDefault as apiChangeDefault, refreshToken,
   register as apiRegister, selectCompany as apiSelectCompany, switchCompany as apiSwitchCompany,
   verifyEmail as apiVerifyEmail, resendVerification as apiResendVerification,
@@ -245,6 +245,14 @@ export const useAuthStore = defineStore('auth', () => {
     user.value = me
   }
 
+  // Свой отпуск в АКТИВНОЙ компании (в других членствах он свой). Ответ —
+  // готовый профиль с контекстом членства, поэтому кладём его целиком: метку
+  // в аккаунте и гарды разделов задач читают из auth.user.on_vacation.
+  async function setVacation(on) {
+    user.value = await apiSetMyVacation(on)
+    return user.value
+  }
+
   async function logout() {
     // Глушим «Сессия истекла» от запросов, стартовавших до выхода: до сброса
     // флага хвостовые 401 уходят тихо (см. client.js).
@@ -351,7 +359,7 @@ export const useAuthStore = defineStore('auth', () => {
     companies, isMultiCompany, roleLevel,
     ensureReady, login, register, verifyEmail, resendVerification, yandexLogin,
     forgotPassword, resetPassword, acceptInvite,
-    logout, loadMe, clearAuth, applySession, applyLinkSession, patchCompanySettings,
+    logout, loadMe, setVacation, clearAuth, applySession, applyLinkSession, patchCompanySettings,
     selectCompany, switchCompany, joinCompany,
     changeDefaultCredentials,
   }

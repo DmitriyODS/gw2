@@ -128,6 +128,9 @@ func NewServer(eps endpoint.Endpoints, verifier *pasetoauth.Verifier,
 	usersAPI.Get("/directory/:id<int>", auth.RequireAuth, h.directoryUser)
 	usersAPI.Get("/me", auth.RequireAuth, h.me)
 	usersAPI.Patch("/me", auth.RequireAuth, h.updateMe)
+	// Свой отпуск в активной компании — без роли: уйти отдыхать и вернуться
+	// человек вправе сам, создатель компании тем же полем правит из карточки.
+	usersAPI.Patch("/me/vacation", auth.RequireAuth, h.setMyVacation)
 	usersAPI.Get("/me/desktop", auth.RequireAuth, h.desktopPrefs)
 	usersAPI.Put("/me/desktop", auth.RequireAuth, h.saveDesktopPrefs)
 	usersAPI.Post("/me/avatar", auth.RequireAuth, h.uploadAvatar)

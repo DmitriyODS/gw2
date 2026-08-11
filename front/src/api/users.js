@@ -11,6 +11,11 @@ export const getMe = () => apiRequest('/users/me')
 
 export const updateMe = (data) => apiRequest('/users/me', { method: 'PATCH', body: data })
 
+// Свой отпуск: уйти и вернуться человек вправе сам. Компания не передаётся —
+// отпуск ставится в АКТИВНОЙ (из токена), в других членствах он свой.
+export const setMyVacation = (onVacation) =>
+  apiRequest('/users/me/vacation', { method: 'PATCH', body: { on_vacation: onVacation } })
+
 // Настройки рабочего стола (закреплённые разделы, размеры плиток, обои) —
 // личные и переезжают между устройствами; для сервера это непрозрачный JSON.
 export const getDesktopPrefs = () => apiRequest('/users/me/desktop')

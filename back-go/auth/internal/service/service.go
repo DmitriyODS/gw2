@@ -61,6 +61,7 @@ type AuthService interface {
 	DirectoryUser(ctx context.Context, actor *domain.User, userID int64) (*dto.DirectoryUser, error)
 	Me(ctx context.Context, userID, companyID int64) (*dto.User, error)
 	UpdateMe(ctx context.Context, userID int64, req dto.UpdateMeRequest) (*dto.User, error)
+	SetMyVacation(ctx context.Context, userID, companyID int64, on bool) (*dto.User, error)
 	GetDesktopPrefs(ctx context.Context, userID int64) (json.RawMessage, error)
 	SaveDesktopPrefs(ctx context.Context, userID int64, prefs json.RawMessage) (json.RawMessage, error)
 	UploadAvatar(ctx context.Context, userID int64, fileBytes []byte) (*dto.User, error)

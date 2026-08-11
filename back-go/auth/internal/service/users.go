@@ -401,6 +401,30 @@ func (s *Service) UpdateMe(ctx context.Context, userID int64, req dto.UpdateMeRe
 	return s.freshUser(ctx, userID)
 }
 
+// SetMyVacation — «уйти в отпуск» / «вернуться» самому, в АКТИВНОЙ компании.
+// Отпуск — свойство членства (user_companies.on_vacation), а не аккаунта:
+// ставить его вне компании некуда, а в другой компании человек продолжает
+// работать. Создатель компании тем же полем распоряжается из карточки
+// сотрудника (UpdateCompanyMember) — операции независимы и не мешают друг другу.
+func (s *Service) SetMyVacation(ctx context.Context, userID, companyID int64, on bool) (*dto.User, error) {
+	if companyID <= 0 {
+		return nil, errCompanyScopeRequired
+	}
+	m, err := s.repo.GetMembership(ctx, userID, companyID)
+	if err != nil {
+		return nil, err
+	}
+	if m == nil {
+		return nil, errCompanyScopeRequired
+	}
+	if m.OnVacation != on {
+		if err := s.repo.SetMembershipVacation(ctx, userID, companyID, on); err != nil {
+			return nil, err
+		}
+	}
+	return s.freshMemberUser(ctx, companyID, userID)
+}
+
 func (s *Service) UploadAvatar(ctx context.Context, userID int64, fileBytes []byte) (*dto.User, error) {
 	user, err := s.repo.GetByID(ctx, userID)
 	if err != nil {

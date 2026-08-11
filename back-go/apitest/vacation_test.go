@@ -1,11 +1,11 @@
 package apitest
 
-// API-тесты режима «в отпуске» (user_companies.on_vacation): отпуск ставит
-// создатель компании в карточке сотрудника — он company-scoped, глобального
-// отпуска «сразу везде» у пользователя нет. Проверяются гарды tasksvc на
-// создание/правку/закрытие задач и старт юнитов (остановка активного юнита
-// разрешена) и «отпуск грувика» в petsvc — заморозка потребностей/болезней и
-// запрет ухода/поглаживаний.
+// API-тесты режима «в отпуске» (user_companies.on_vacation): отпуск ставит себе
+// сам человек (тумблер в «Аккаунте») либо создатель компании в карточке
+// сотрудника — он company-scoped, глобального отпуска «сразу везде» у
+// пользователя нет. Проверяются гарды tasksvc на создание/правку/закрытие задач
+// и старт юнитов (остановка активного юнита разрешена) и «отпуск грувика» в
+// petsvc — заморозка потребностей/болезней и запрет ухода/поглаживаний.
 
 import (
 	"fmt"
@@ -13,8 +13,8 @@ import (
 	"testing"
 )
 
-// setVacation — отправить сотрудника в отпуск В КОНКРЕТНОЙ компании (это
-// делает её создатель; своего глобального тумблера у пользователя нет).
+// setVacation — отправить сотрудника в отпуск В КОНКРЕТНОЙ компании руками её
+// создателя (сам себе человек ставит отпуск через /users/me/vacation).
 func setVacation(t *testing.T, creator *actor, companyID int64, target *actor, on bool) {
 	t.Helper()
 	r := authAPI.doJSON(t, http.MethodPatch,
@@ -63,6 +63,55 @@ func TestVacationBlocksTasksAndUnits(t *testing.T) {
 	createTask(t, admin, deptID, "После отпуска", nil)
 	unitID = startUnit(t, admin, taskID, typeID, "юнит после отпуска")
 	stopUnit(t, admin, unitID)
+}
+
+// Сотрудник уходит в отпуск и возвращается САМ (PATCH /users/me/vacation):
+// роли для этого не нужно, скоуп — активная компания из токена, метка та же,
+// что ставит создатель. Без активной компании ставить отпуск некуда.
+func TestVacationSelfService(t *testing.T) {
+	admin, companyID, deptID := newTaskCompany(t)
+	member := newMember(t, admin, companyID, roleEmployee)
+
+	r := authAPI.doJSON(t, http.MethodPatch, "/api/users/me/vacation", member.Token,
+		map[string]any{"on_vacation": true})
+	requireStatus(t, r, 200, "сотрудник сам уходит в отпуск")
+	if !r.Bool("on_vacation") {
+		t.Fatalf("профиль не помечен отпуском: %s", r.Raw)
+	}
+
+	// Отпуск настоящий: задачи закрыты гардом tasksvc.
+	r = tasksAPI.doJSON(t, http.MethodPost, "/api/tasks", member.Token,
+		map[string]any{"name": "В своём отпуске", "department_id": deptID})
+	requireError(t, r, 403, "ON_VACATION", "задача в самостоятельном отпуске")
+
+	// И виден создателю компании — поле одно и то же.
+	r = authAPI.doJSON(t, http.MethodGet,
+		fmt.Sprintf("/api/companies/%d/members", companyID), admin.Token, nil)
+	requireStatus(t, r, 200, "список участников")
+	var membersList []map[string]any
+	if err := jsonUnmarshal(r.Raw, &membersList); err != nil {
+		t.Fatalf("список участников: ответ не массив: %s", r.Raw)
+	}
+	for _, m := range membersList {
+		if id, _ := m["id"].(float64); int64(id) == member.ID && m["on_vacation"] != true {
+			t.Fatalf("создатель не видит отпуск сотрудника: %v", m)
+		}
+	}
+
+	// Возвращается тоже сам.
+	r = authAPI.doJSON(t, http.MethodPatch, "/api/users/me/vacation", member.Token,
+		map[string]any{"on_vacation": false})
+	requireStatus(t, r, 200, "сотрудник сам возвращается из отпуска")
+	if r.Bool("on_vacation") {
+		t.Fatalf("отпуск не снялся: %s", r.Raw)
+	}
+	createTask(t, member, deptID, "После своего отпуска", nil)
+
+	// Супер-админ в компаниях не состоит — отпускать ему нечего.
+	root := newSuperAdmin(t)
+	r = authAPI.doJSON(t, http.MethodPatch, "/api/users/me/vacation", root.Token,
+		map[string]any{"on_vacation": true})
+	requireError(t, r, 400, "COMPANY_SCOPE_REQUIRED", "отпуск без активной компании")
 }
 
 // Создатель компании явно проставляет и снимает отпуск сотруднику

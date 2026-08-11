@@ -172,6 +172,24 @@ func (h *handlers) updateMe(c *fiber.Ctx) error {
 	return c.JSON(resp)
 }
 
+// Свой отпуск: человек уходит и возвращается сам. Компания берётся из токена —
+// отпуск живёт в членстве, а не в аккаунте.
+func (h *handlers) setMyVacation(c *fiber.Ctx) error {
+	var body dto.VacationRequest
+	if err := c.BodyParser(&body); err != nil {
+		return badRequest(c, "Неверный формат запроса")
+	}
+	resp, err := h.eps.SetMyVacation(c.Context(), endpoint.VacationEpRequest{
+		UserID:     currentUser(c).ID,
+		CompanyID:  pasetoauth.CompanyID(c),
+		OnVacation: body.OnVacation,
+	})
+	if err != nil {
+		return h.respondError(c, err)
+	}
+	return c.JSON(resp)
+}
+
 // Настройки рабочего стола (закреплённые разделы, размеры плиток, обои) —
 // личные и синхронизируются между устройствами пользователя.
 func (h *handlers) desktopPrefs(c *fiber.Ctx) error {

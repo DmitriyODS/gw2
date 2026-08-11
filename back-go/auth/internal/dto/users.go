@@ -316,6 +316,13 @@ type UpdateMeRequest struct {
 	NotesAIAutocomplete *bool `json:"notes_ai_autocomplete"`
 }
 
+// VacationRequest — PATCH /users/me/vacation: человек сам уходит в отпуск и
+// сам возвращается. Компания не передаётся — отпуск ставится в АКТИВНОЙ
+// (из токена), в других членствах он свой.
+type VacationRequest struct {
+	OnVacation bool `json:"on_vacation"`
+}
+
 // AddMemberRequest — POST /companies/<id>/members: добавить существующего
 // пользователя в компанию с ролью.
 type AddMemberRequest struct {

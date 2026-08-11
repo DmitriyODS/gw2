@@ -45,6 +45,18 @@
       </component>
     </div>
 
+    <!-- Отпуск: человек уходит и возвращается сам. Он привязан к КОМПАНИИ, а не
+         к аккаунту, поэтому строки нет, пока активной компании не выбрано. -->
+    <AppSwitchRow
+      v-if="auth.companyId"
+      :model-value="onVacation"
+      title="Я в отпуске"
+      icon="beach_access"
+      :hint="vacationHint"
+      :disabled="vacationBusy"
+      @update:model-value="toggleVacation"
+    />
+
     <!-- Экран блокировки — про безопасность аккаунта, поэтому рядом с
          сеансами устройств. -->
     <ScreenLockCard />
@@ -165,6 +177,7 @@ import { avatarUrl } from '@/utils/pets.js'
 import { useAuthStore } from '@/stores/auth.js'
 import { useNotificationsStore } from '@/stores/notifications.js'
 import { useBillingStore } from '@/stores/billing.js'
+import { usePetsStore } from '@/stores/pets.js'
 import { formatUntil } from '@/utils/money.js'
 import { SUBSCRIPTIONS_VISIBLE } from '@/utils/release.js'
 import { inAppShell } from '@/utils/appShell.js'
@@ -182,6 +195,7 @@ import { getYougileStatus } from '@/api/yougile.js'
 import AppButton from '@/components/ui/AppButton.vue'
 import AppCard from '@/components/ui/AppCard.vue'
 import AppDialog from '@/components/ui/AppDialog.vue'
+import AppSwitchRow from '@/components/ui/AppSwitchRow.vue'
 import ImageLightbox from '@/components/common/ImageLightbox.vue'
 import BrandLoader from '@/components/common/BrandLoader.vue'
 import AuthorizeDeviceDialog from '@/components/devicelink/AuthorizeDeviceDialog.vue'
@@ -201,6 +215,7 @@ const auth = useAuthStore()
 const notif = useNotificationsStore()
 const router = useRouter()
 const billing = useBillingStore()
+const pets = usePetsStore()
 
 const user = computed(() => auth.user)
 const avatarSrc = computed(() => {
@@ -212,6 +227,42 @@ const avatarSrc = computed(() => {
 const editOpen = ref(false)
 const lightboxOpen = ref(false)
 const authorizeOpen = ref(false)
+
+/* ── Отпуск ──────────────────────────────────────────────────────── */
+// Отпуск живёт в членстве (user_companies.on_vacation): в этой компании человек
+// отдыхает, в другой продолжает работать — поэтому подпись всегда её называет.
+const vacationBusy = ref(false)
+// Пока запрос в пути, тумблер показывает ЖЕЛАЕМОЕ положение: иначе он отскакивал
+// бы назад до ответа сервера.
+const vacationPending = ref(null)
+const onVacation = computed(() => vacationPending.value ?? !!user.value?.on_vacation)
+
+const vacationHint = computed(() => {
+  const where = auth.companyName ? `в компании «${auth.companyName}»` : 'в активной компании'
+  return onVacation.value
+    ? `Вы отдыхаете ${where}: задачи и юниты закрыты, грувик на паузе`
+    : `Задачи, юниты и уход за грувиком ${where} закроются до возвращения`
+})
+
+async function toggleVacation(on) {
+  if (vacationBusy.value) return
+  vacationBusy.value = true
+  vacationPending.value = on
+  try {
+    await auth.setVacation(on)
+    // Плавающий грувик уходит в отпуск вместе с хозяином — обновляем его метку
+    // сразу. Только загруженного: GET создал бы питомца тому, кто их не заводил.
+    if (pets.pet) pets.fetchPet().catch(() => {})
+    notif.success(on
+      ? 'Хорошего отдыха! Задачи подождут'
+      : 'С возвращением — работа снова доступна')
+  } catch (e) {
+    notif.error(e?.message || 'Не удалось изменить режим отпуска')
+  } finally {
+    vacationPending.value = null
+    vacationBusy.value = false
+  }
+}
 
 /* ── Сеансы ──────────────────────────────────────────────────────── */
 const sessions = ref([])

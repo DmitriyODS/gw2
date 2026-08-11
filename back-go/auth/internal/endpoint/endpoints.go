@@ -63,6 +63,7 @@ type Endpoints struct {
 	DirectoryUser          endpoint.Endpoint
 	Me                     endpoint.Endpoint
 	UpdateMe               endpoint.Endpoint
+	SetMyVacation          endpoint.Endpoint
 	GetDesktopPrefs        endpoint.Endpoint
 	SaveDesktopPrefs       endpoint.Endpoint
 	UploadAvatar           endpoint.Endpoint
@@ -176,6 +177,13 @@ type UpdateUserEpRequest struct {
 type UpdateMeEpRequest struct {
 	UserID int64
 	Body   dto.UpdateMeRequest
+}
+
+// VacationEpRequest — свой отпуск в активной компании (0 — активной нет).
+type VacationEpRequest struct {
+	UserID     int64
+	CompanyID  int64
+	OnVacation bool
 }
 
 // SaveDesktopPrefsEpRequest — личные настройки рабочего стола (непрозрачный
@@ -468,6 +476,10 @@ func New(svc service.AuthService) Endpoints {
 		UpdateMe: func(ctx context.Context, request any) (any, error) {
 			req := request.(UpdateMeEpRequest)
 			return svc.UpdateMe(ctx, req.UserID, req.Body)
+		},
+		SetMyVacation: func(ctx context.Context, request any) (any, error) {
+			req := request.(VacationEpRequest)
+			return svc.SetMyVacation(ctx, req.UserID, req.CompanyID, req.OnVacation)
 		},
 		GetDesktopPrefs: func(ctx context.Context, request any) (any, error) {
 			return svc.GetDesktopPrefs(ctx, request.(int64))
