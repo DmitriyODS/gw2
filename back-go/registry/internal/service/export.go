@@ -8,6 +8,7 @@ import (
 
 	"github.com/xuri/excelize/v2"
 
+	"github.com/DmitriyODS/gw2/back-go/pkg/records"
 	"github.com/DmitriyODS/gw2/back-go/registry/internal/domain"
 )
 
@@ -99,6 +100,8 @@ func exportValue(field domain.Field, v any) string {
 		return ""
 	case domain.FieldDatetime:
 		return formatDateTime(v, field.Config)
+	case domain.FieldStock:
+		return records.StockText(v)
 	default:
 		return fmt.Sprintf("%v", v)
 	}

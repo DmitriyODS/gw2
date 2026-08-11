@@ -24,6 +24,7 @@ const (
 	FieldSelect   = records.FieldSelect
 	FieldLink     = records.FieldLink
 	FieldDatetime = records.FieldDatetime
+	FieldStock    = records.FieldStock
 )
 
 // FieldTypes — допустимые типы (для валидации структуры реестра).

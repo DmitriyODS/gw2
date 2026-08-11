@@ -18,6 +18,14 @@
       <span v-else class="fv-empty">—</span>
     </template>
 
+    <!-- Наличие: на месте — спокойный зелёный, забрали — предупреждение с датой -->
+    <template v-else-if="field.type === 'stock'">
+      <span class="fv-stock" :class="{ taken: !!value?.taken }">
+        <span class="material-symbols-outlined">{{ value?.taken ? 'schedule' : 'inventory_2' }}</span>
+        {{ stockText(value) }}
+      </span>
+    </template>
+
     <!-- Галочка -->
     <template v-else-if="field.type === 'checkbox'">
       <span class="fv-check" :class="{ on: !!value }">
@@ -82,7 +90,7 @@ import { computed, ref } from 'vue'
 import ImageLightbox from '@/components/common/ImageLightbox.vue'
 import AppDialog from '@/components/ui/AppDialog.vue'
 import QrImage from '@/components/common/QrImage.vue'
-import { formatDateTime, hasQr, qrValue } from '@/utils/registryFields.js'
+import { formatDateTime, hasQr, qrValue, stockText } from '@/utils/registryFields.js'
 import { useNotificationsStore } from '@/stores/notifications.js'
 
 const props = defineProps({
@@ -147,6 +155,20 @@ async function copyLink() {
 .fv-file-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 .fv-check { display: inline-flex; align-items: center; gap: 6px; color: var(--color-text-dim); }
+
+.fv-stock {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 10px;
+  border-radius: var(--radius-full);
+  background: var(--color-success-container);
+  color: var(--color-on-success-container);
+  font-weight: 600;
+}
+
+.fv-stock.taken { background: var(--color-warning-container); color: var(--color-on-warning-container); }
+.fv-stock .material-symbols-outlined { font-size: 18px; }
 .fv-check.on { color: var(--color-success); }
 
 .fv-chips { display: flex; flex-wrap: wrap; gap: 6px; }

@@ -3,6 +3,7 @@ package storage
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"io"
 	"log/slog"
 
@@ -46,18 +47,35 @@ func NewS3(cfg S3Config, log *slog.Logger) (Storage, error) {
 // Put — объект помечается public-read: ключ хранилища Beget не имеет прав на
 // политику бакета, поэтому анонимная отдача (nginx /uploads/) обеспечивается
 // ACL на уровне объекта (рекомендованный Beget способ).
+//
+// Запись ПРОВЕРЯЕТСЯ сразу же: у хранилища бывает «успешный» ответ, после
+// которого объекта в бакете нет, — и тогда карточка записи навсегда ссылается
+// на пустоту, а человек узнаёт об этом через неделю, открыв её. Лучше честно
+// отказать в загрузке: файл ещё у человека в руках, повторить ничего не стоит.
 func (s *s3Store) Put(ctx context.Context, key string, data []byte, contentType string) error {
 	if contentType == "" {
 		contentType = "application/octet-stream"
 	}
-	_, err := s.client.PutObject(ctx, &s3.PutObjectInput{
+	if _, err := s.client.PutObject(ctx, &s3.PutObjectInput{
 		Bucket:      aws.String(s.bucket),
 		Key:         aws.String(key),
 		Body:        bytes.NewReader(data),
 		ContentType: aws.String(contentType),
 		ACL:         types.ObjectCannedACLPublicRead,
-	})
-	return err
+	}); err != nil {
+		return err
+	}
+
+	size, err := s.Size(ctx, key)
+	if err != nil {
+		s.log.Error("storage.put_unverified", "key", key, "error", err)
+		return fmt.Errorf("объект %s не подтверждён хранилищем: %w", key, err)
+	}
+	if size != int64(len(data)) {
+		s.log.Error("storage.put_size_mismatch", "key", key, "want", len(data), "got", size)
+		return fmt.Errorf("объект %s записан не полностью (%d из %d байт)", key, size, len(data))
+	}
+	return nil
 }
 
 func (s *s3Store) Open(ctx context.Context, key string) (io.ReadCloser, error) {

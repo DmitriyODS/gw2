@@ -90,6 +90,11 @@
                     decoding="async"
                   />
                 </button>
+                <span
+                  v-else-if="f.type === 'stock'"
+                  class="rr-stock"
+                  :class="{ taken: !!rec.data?.[String(f.id)]?.taken }"
+                >{{ textValue(f, rec.data?.[String(f.id)]) }}</span>
                 <span v-else class="rr-cell">{{ textValue(f, rec.data?.[String(f.id)]) }}</span>
               </td>
               <td class="rr-td-date">{{ shortDate(rec.created_at) }}</td>
@@ -145,6 +150,11 @@
                   decoding="async"
                 />
               </button>
+              <span
+                v-else-if="f.type === 'stock'"
+                class="rr-stock"
+                :class="{ taken: !!rec.data?.[String(f.id)]?.taken }"
+              >{{ textValue(f, rec.data?.[String(f.id)]) }}</span>
               <span v-else class="rr-card-val">{{ textValue(f, rec.data?.[String(f.id)]) || '—' }}</span>
             </div>
           </div>
@@ -339,6 +349,20 @@ function openImage(field, rec) {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
+/* Наличие: состояние строки видно, не читая текст. */
+.rr-stock {
+  display: inline-block;
+  padding: 2px 10px;
+  border-radius: var(--radius-full);
+  background: var(--color-success-container);
+  color: var(--color-on-success-container);
+  font-size: 13px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.rr-stock.taken { background: var(--color-warning-container); color: var(--color-on-warning-container); }
 
 /* Превью картинки. Размер задан всеми тремя свойствами: глобальный мобильный
    `button { min-height: 36px }` иначе растянул бы плитку. */

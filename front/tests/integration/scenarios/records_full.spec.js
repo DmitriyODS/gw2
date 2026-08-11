@@ -219,6 +219,38 @@ describeIntegration('registries API: записи, выгрузка, досту�
     expect(desc.items.length).toBe(1)
   })
 
+  it('поле «Наличие»: по умолчанию на месте, забрали — с датой возврата', async () => {
+    const admin = await newCompanyAdmin()
+    admin.session.use()
+    const r = await reg.createRegistry(uniq('Выдача '))
+    const put = await reg.replaceFields(r.id, [
+      { label: 'Наличие', type: 'stock', show_in_table: true },
+    ])
+    const stock = fieldId(put.fields, 'Наличие')
+
+    // Новая запись ничего про наличие не хранит — это и означает «на месте».
+    const fresh = await reg.createRecord(r.id, {})
+    expect(fresh.data[stock]).toBeUndefined()
+
+    const taken = await reg.updateRecord(r.id, fresh.id, {
+      [stock]: { taken: true, until: '2026-09-01' },
+    })
+    expect(taken.data[stock]).toEqual({ taken: true, until: '2026-09-01' })
+
+    // Забранную позицию находит сквозной поиск, «в наличии» индекс не засоряет.
+    const found = await reg.getRecords(r.id, { search: 'забрали' })
+    expect(found.items.some((x) => x.id === fresh.id)).toBe(true)
+
+    // Мусор вместо даты не принимаем.
+    await expectClientError(reg.updateRecord(r.id, fresh.id, {
+      [stock]: { taken: true, until: 'на следующей неделе' },
+    }))
+
+    // Вернули — значение снимается целиком, следа выдачи не остаётся.
+    const back = await reg.updateRecord(r.id, fresh.id, { [stock]: null })
+    expect(back.data[stock]).toBeUndefined()
+  })
+
   it('по чужому коду ничего не открывается', async () => {
     const guest = new Session('guest')
     guest.use()

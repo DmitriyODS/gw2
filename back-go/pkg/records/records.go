@@ -12,6 +12,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/DmitriyODS/gw2/back-go/pkg/apierror"
 )
@@ -27,12 +28,17 @@ const (
 	FieldSelect   = "select"   // выбор из вариантов (config.options, config.multiple)
 	FieldLink     = "link"     // ссылка на сайт
 	FieldDatetime = "datetime" // дата/время (config.year/month_day/time — части)
+	// FieldStock — «Наличие»: позиция на месте, пока её не забрали. Значение —
+	// {taken: bool, until: "YYYY-MM-DD"}; пусто (и taken=false) означает «в
+	// наличии», поэтому у новых записей поле молчит и ничего не весит.
+	FieldStock = "stock"
 )
 
 // FieldTypes — допустимые типы (для валидации структуры).
 var FieldTypes = map[string]bool{
 	FieldImage: true, FieldFile: true, FieldText: true, FieldNumber: true,
 	FieldCheckbox: true, FieldSelect: true, FieldLink: true, FieldDatetime: true,
+	FieldStock: true,
 }
 
 // FieldInfo — минимум сведений о поле для валидации значений и search_text
@@ -129,6 +135,43 @@ func NumberBound(config map[string]any, key string) (float64, bool) {
 	return 0, false
 }
 
+// Stock — значение поля «Наличие». Пустое значение = позиция на месте, поэтому
+// «в наличии» ничего в записи не занимает.
+type Stock struct {
+	Taken bool   `json:"taken"`
+	Until string `json:"until,omitempty"` // «забрали до» — YYYY-MM-DD, необязательна
+}
+
+// stockDateRe — дата в формате YYYY-MM-DD; время здесь лишнее: позицию забирают
+// на дни, а не на минуты.
+var stockDateRe = regexp.MustCompile(`^\d{4}-\d{2}-\d{2}$`)
+
+// StockValue — разбор значения поля «Наличие» из JSONB (или из формы).
+func StockValue(v any) Stock {
+	m, ok := v.(map[string]any)
+	if !ok {
+		return Stock{}
+	}
+	taken, _ := m["taken"].(bool)
+	until, _ := m["until"].(string)
+	return Stock{Taken: taken, Until: strings.TrimSpace(until)}
+}
+
+// StockText — человеческая надпись значения: её видят и таблица, и выгрузка.
+func StockText(v any) string {
+	st := StockValue(v)
+	if !st.Taken {
+		return "В наличии"
+	}
+	if st.Until == "" {
+		return "Забрали"
+	}
+	if t, err := time.Parse("2006-01-02", st.Until); err == nil {
+		return "Забрали до " + t.Format("02.01.2006")
+	}
+	return "Забрали до " + st.Until
+}
+
 // Exportable — можно ли выгружать поле в xlsx. Картинки и файлы — нет
 // (они не сводятся к текстовой ячейке), остальные типы экспортируются.
 func Exportable(fieldType string) bool {
@@ -145,6 +188,14 @@ func SearchContribution(fieldType string, value any) string {
 	switch fieldType {
 	case FieldText, FieldNumber, FieldLink, FieldDatetime:
 		return fmt.Sprintf("%v", value)
+	case FieldStock:
+		// В поиск попадает только «забрали»: пометка «в наличии» стоит у
+		// большинства записей и в общей строке поиска ничего не различает.
+		st := StockValue(value)
+		if !st.Taken {
+			return ""
+		}
+		return strings.TrimSpace("забрали " + st.Until)
 	case FieldSelect:
 		switch v := value.(type) {
 		case string:
@@ -223,6 +274,17 @@ func ValidateValue(f FieldInfo, v any) error {
 				return apierror.New("VALIDATION",
 					"Значение поля «"+f.Label+"» не соответствует шаблону", 400)
 			}
+		}
+	case FieldStock:
+		m, ok := v.(map[string]any)
+		if !ok {
+			return apierror.New("VALIDATION",
+				"Поле «"+f.Label+"»: непонятное значение наличия", 400)
+		}
+		until, _ := m["until"].(string)
+		if until = strings.TrimSpace(until); until != "" && !stockDateRe.MatchString(until) {
+			return apierror.New("VALIDATION",
+				"Поле «"+f.Label+"»: дата возврата в формате ГГГГ-ММ-ДД", 400)
 		}
 	case FieldSelect:
 		opts := Options(f.Config)

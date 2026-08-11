@@ -10,6 +10,7 @@ export const FIELD_TYPES = [
   { type: 'link',     label: 'Ссылка',          icon: 'link' },
   { type: 'image',    label: 'Картинка',        icon: 'image' },
   { type: 'file',     label: 'Файл',            icon: 'attach_file' },
+  { type: 'stock',    label: 'Наличие',         icon: 'inventory_2' },
 ]
 
 // Внутренний идентификатор типа даты в домене — 'datetime' (отображаем как «Дата и время»).
@@ -39,6 +40,8 @@ export function defaultConfig(type) {
     case 'select': return { options: [], multiple: false }
     case 'text': return { multiline: false, qr: false }
     case 'datetime': return { year: true, month_day: true, time: true }
+    // «Наличие» настроек не требует: по умолчанию позиция на месте.
+    case 'stock': return {}
     default: return {}
   }
 }
@@ -62,8 +65,19 @@ export function formatDateTime(value, config = {}) {
   return parts.join(' ')
 }
 
+// stockText — надпись поля «Наличие»: пусто и снятая галочка означают «на
+// месте», поэтому у новой записи поле молчит и ничего не занимает.
+// Зеркало pkg/records.StockText — держать в паре.
+export function stockText(value) {
+  if (!value?.taken) return 'В наличии'
+  if (!value.until) return 'Забрали'
+  const [y, m, d] = String(value.until).split('-')
+  return d ? `Забрали до ${d}.${m}.${y}` : `Забрали до ${value.until}`
+}
+
 // textValue — компактное текстовое представление значения (таблица/поиск).
 export function textValue(field, value) {
+  if (field.type === 'stock') return stockText(value)
   if (value == null || value === '') return ''
   switch (field.type) {
     case 'checkbox': return value ? 'Да' : 'Нет'
@@ -97,6 +111,7 @@ export function isSearchable(type) {
 export function isSortable(type) {
   return ['text', 'number', 'datetime', 'link'].includes(type)
 }
+// «Наличие» — объект {taken, until}: как строку его сортировать бессмысленно.
 // Экспортируется в xlsx всё, кроме картинок и файлов (их нельзя свести к ячейке).
 export function isExportable(type) {
   return type !== 'image' && type !== 'file'

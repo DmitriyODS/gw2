@@ -24,6 +24,25 @@
       <span v-if="numberError" class="fi-error">{{ numberError }}</span>
     </template>
 
+    <!-- Наличие: пока галочка снята — позиция на месте. Отметили «забрали» —
+         рядом появляется дата, до которой её не будет. -->
+    <div v-else-if="field.type === 'stock'" class="fi-stock">
+      <label class="fi-check">
+        <Checkbox :model-value="!!modelValue?.taken" binary @update:model-value="setTaken" />
+        <span>Забрали</span>
+      </label>
+      <label v-if="modelValue?.taken" class="fi-stock-until">
+        <span class="fi-stock-label">До какой даты</span>
+        <input
+          class="ctl"
+          type="date"
+          :value="modelValue?.until || ''"
+          @input="setUntil($event.target.value)"
+        />
+      </label>
+      <span v-else class="fi-stock-hint">Позиция в наличии.</span>
+    </div>
+
     <!-- Галочка -->
     <label v-else-if="field.type === 'checkbox'" class="fi-check">
       <Checkbox :model-value="!!modelValue" binary @update:model-value="emit('update:modelValue', $event)" />
@@ -144,6 +163,16 @@ function onNumberBlur() {
   else numberError.value = ''
 }
 
+/* ── Наличие ──
+   Вернули позицию — значение снимаем целиком: «в наличии» не хранится, поэтому
+   в записи не остаётся ни забытой даты, ни следа прошлой выдачи. */
+function setTaken(on) {
+  emit('update:modelValue', on ? { taken: true, until: props.modelValue?.until || '' } : null)
+}
+function setUntil(date) {
+  emit('update:modelValue', { taken: true, until: date || '' })
+}
+
 // ── Дата ──
 const isTimeOnly = computed(() => !!cfg.value.time && !cfg.value.month_day && !cfg.value.year)
 const dateView = computed(() => (cfg.value.year && !cfg.value.month_day ? 'year' : 'date'))
@@ -187,6 +216,11 @@ async function onFile(e) {
 
 .fi-check { display: inline-flex; align-items: center; gap: 8px; cursor: pointer; }
 .fi-error { display: block; margin-top: 4px; font-size: 12px; color: var(--color-error); }
+
+.fi-stock { display: flex; flex-direction: column; gap: 8px; align-items: flex-start; }
+.fi-stock-until { display: flex; flex-direction: column; gap: 4px; width: 100%; }
+.fi-stock-label { font-size: 12px; color: var(--color-text-dim); }
+.fi-stock-hint { font-size: 12px; color: var(--color-text-dim); }
 
 .fi-file { display: flex; flex-direction: column; gap: 8px; align-items: flex-start; max-width: 100%; }
 .fi-file-cur { display: flex; align-items: flex-start; gap: 8px; max-width: 100%; min-width: 0; }
