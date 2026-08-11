@@ -4,6 +4,13 @@
 
 const MB = 1024 * 1024
 
+/* Форматы, которые умеет уменьшать СЕРВЕР (стандартная библиотека Go). Всё
+   остальное — webp, avif, heic — он декодировать не может, миниатюра для
+   таблицы не строится, и в списке вместо превью тянется оригинал на сотни
+   килобайт. Такие картинки перекодируем в JPEG прямо здесь: браузер их читает
+   без посторонней помощи, а дальше по системе едет обычный jpeg. */
+const SERVER_READABLE = ['image/jpeg', 'image/png', 'image/gif']
+
 export async function compressImage(file, { maxBytes = 4 * MB, maxDim = 1920, mime = 'image/jpeg' } = {}) {
   if (!file || !file.type?.startsWith('image/')) return file
   // Векторы и анимации canvas испортит — не трогаем.
@@ -19,8 +26,10 @@ export async function compressImage(file, { maxBytes = 4 * MB, maxDim = 1920, mi
   const { width, height } = bitmap
   const scale = Math.min(1, maxDim / Math.max(width, height))
 
-  // Уже в пределах размеров и лимита по весу — отдаём оригинал без перекодирования.
-  if (scale === 1 && file.size <= maxBytes) {
+  // Уже в пределах размеров и лимита по весу — отдаём оригинал без
+  // перекодирования. Формат, незнакомый серверу, отдавать как есть нельзя:
+  // он останется без миниатюры.
+  if (scale === 1 && file.size <= maxBytes && SERVER_READABLE.includes(file.type)) {
     bitmap.close?.()
     return file
   }
