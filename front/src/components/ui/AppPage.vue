@@ -38,10 +38,10 @@
 
           <div v-if="slots.status" class="head-status"><slot name="status" :narrow="narrowPage" /></div>
 
-          <!-- Поиск раздела: в тесной панели он свёрнут в лупу и встаёт ПРЯМО
-               в строку названия — иначе отдельная строка ради одной кнопки
-               съедала бы у содержимого полсотни пикселей. -->
-          <div v-if="slots.search && narrowPage" class="head-search compact">
+          <!-- Поиск раздела: НА ТЕЛЕФОНЕ он свёрнут в лупу и встаёт ПРЯМО в
+               строку названия — там отдельная строка ради одного поля съедала
+               бы у содержимого полсотни пикселей. -->
+          <div v-if="slots.search && compactSearch" class="head-search compact">
             <slot name="search" :narrow="true" />
           </div>
 
@@ -92,7 +92,7 @@
             @click="$emit('back')"
           />
 
-          <div v-if="slots.search && !narrowPage" class="head-search"><slot name="search" :narrow="false" /></div>
+          <div v-if="slots.search && !compactSearch" class="head-search"><slot name="search" :narrow="false" /></div>
 
           <div v-if="slots.subhead" class="head-sub"><slot name="subhead" :narrow="narrowPage" /></div>
 
@@ -150,6 +150,7 @@ import AppFab from '@/components/ui/AppFab.vue'
 import BrandLoader from '@/components/common/BrandLoader.vue'
 import { appForPath } from '@/desktop/apps.js'
 import { useFlushShell, useModalHost } from '@/desktop/windowHost.js'
+import { useBreakpoint } from '@/composables/useBreakpoint.js'
 import { useNarrowWidth } from '@/composables/useNarrowWidth.js'
 
 const props = defineProps({
@@ -177,6 +178,15 @@ const props = defineProps({
   embedded: { type: Boolean, default: false },
   /** Заставить показать/скрыть заголовок вопреки правилу «в окне он лишний». */
   showTitle: { type: Boolean, default: null },
+  /** Когда поиск сворачивается в лупу при названии: 'phone' — только на
+   *  телефоне (на столе он всегда полноценная строка), 'narrow' — в любой
+   *  тесной панели (колонка списка чатов узка ПО ЗАМЫСЛУ, и строка поиска
+   *  стоила бы списку целой строки). */
+  searchCompact: {
+    type: String,
+    default: 'phone',
+    validator: (v) => ['phone', 'narrow'].includes(v),
+  },
 })
 
 const emit = defineEmits(['back', 'command', 'menu', 'narrow-change'])
@@ -215,6 +225,17 @@ const hasTitleRow = computed(() => showsTitle.value || !!slots.title)
 const panelEl = ref(null)
 const narrowPage = useNarrowWidth(panelEl, 640)
 
+/* Свёрнутый в лупу поиск — приём ТЕЛЕФОНА, а не узкой панели: на столе окно
+   бывает уже 640px сколько угодно, но вертикали там вдоволь, и поиск обязан
+   оставаться полноценной строкой — искать по таблице приходится постоянно.
+   Отсюда единственное место, где каркас смотрит на устройство, а не на себя
+   (разделы со своей узкой колонкой просят прежнее правило `search-compact`). */
+const { isMobile } = useBreakpoint()
+
+const compactSearch = computed(() =>
+  narrowPage.value && (props.searchCompact === 'narrow' || isMobile.value),
+)
+
 /* Тесноту панели знает не только шапка: от неё зависят и состав команд, и вид
    содержимого — а слот-проп доступен лишь внутри тела (см. AppListDetail). */
 watch(narrowPage, (v) => emit('narrow-change', v))
@@ -238,7 +259,7 @@ const commandsBelow = computed(() =>
    строку — лишний отступ на пустом месте (заметно на телефоне). */
 const hasControlsRow = computed(() =>
   !!slots.subhead ||
-  (!!slots.search && !narrowPage.value) ||
+  (!!slots.search && !compactSearch.value) ||
   (!hasTitleRow.value && (
     !!slots.commands || barCommands.value.length > 0 || props.back || props.menu || !!slots.status
   )),
@@ -409,9 +430,22 @@ const hasHead = computed(() => hasTitleRow.value || hasControlsRow.value)
    легко съедала треть экрана, а под запись оставалась пара строк. */
 @container (max-width: 620px) {
   .page-head { gap: 8px; padding: 12px 14px 8px; }
-  .page-title { font-size: 1.22rem; }
   .head-title-row { gap: 8px; }
   .head-line { gap: 8px; }
+
+  /* Тесная шапка: название (реестра, заметки, календаря) пишем ЦЕЛИКОМ, с
+     переносом — многоточие съедало половину имени, а именно по нему человек и
+     понимает, где он. Строка остаётся за названием: значок статуса переезжает
+     под него, рядом остаются только кнопки-иконки. */
+  .page-title {
+    font-size: 1.22rem;
+    white-space: normal;
+    overflow: visible;
+    text-overflow: clip;
+    overflow-wrap: anywhere;
+  }
+
+  .head-title-row > .head-status { flex-basis: 100%; }
 }
 
 /* Каркас без рамки (телефон и планшет): панель занимает экран или зону
@@ -423,10 +457,21 @@ const hasHead = computed(() => hasTitleRow.value || hasControlsRow.value)
   .page { padding: 0; }
   .page-panel { border: none; border-radius: 0; }
   .page-head { gap: 8px; padding: 12px 14px 8px; }
-  .page-title { font-size: 1.22rem; }
   .head-title-row, .head-line { gap: 8px; }
   .page-body { padding: 4px 14px 16px; }
   .page-body.flush { padding: 0; }
   .page-foot { padding: 10px 14px; }
+
+  /* Дубль правил выше для заводского WebView старых Android (@container он не
+     знает): название целиком, статус — под ним. */
+  .page-title {
+    font-size: 1.22rem;
+    white-space: normal;
+    overflow: visible;
+    text-overflow: clip;
+    overflow-wrap: anywhere;
+  }
+
+  .head-title-row > .head-status { flex-basis: 100%; }
 }
 </style>
