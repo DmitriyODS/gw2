@@ -7,7 +7,7 @@
    только чтение и гаснет при отзыве, а адресный доступ к ежедневнику позволяет
    отмечать выполненное, но не переписывать чужие дела. */
 import { it, expect } from 'vitest'
-import { describeIntegration, uniq, Session } from '../setup/harness.js'
+import { describeIntegration, uniq, Session, dbQuery } from '../setup/harness.js'
 import { registerVerified, newCompanyAdmin, newMember } from '../setup/factory.js'
 import * as reg from '@/api/registries.js'
 import * as cal from '@/api/calendars.js'
@@ -191,6 +191,32 @@ describeIntegration('registries API: записи, выгрузка, досту�
     admin.session.use()
     const own = await reg.getRecords(id)
     expect(own.items.some((r) => r.data[field] === 'Правка гостя')).toBe(true)
+  })
+
+  it('числовое поле принимает только числа, а мусор в базе не роняет сортировку', async () => {
+    const admin = await newCompanyAdmin()
+    admin.session.use()
+    const r = await reg.createRegistry(uniq('Склад '))
+    const put = await reg.replaceFields(r.id, [
+      { label: 'Количество', type: 'number', config: { min: 0 }, show_in_table: true },
+    ])
+    const qty = fieldId(put.fields, 'Количество')
+
+    // Буквы и отрицательное значение в числовое поле не проходят.
+    await expectClientError(reg.createRecord(r.id, { [qty]: 'Возможен заказ в типографии' }))
+    await expectClientError(reg.createRecord(r.id, { [qty]: '-1' }))
+    const ok = await reg.createRecord(r.id, { [qty]: '7' })
+    expect(ok.data[qty]).toBe('7')
+
+    /* Записи, заведённые ДО этой проверки, могут хранить в числовом поле что
+       угодно — сортировка обязана их пережить: раньше Postgres не мог привести
+       «уточнить» к numeric и весь список отвечал 500. */
+    dbQuery(`UPDATE registry_records SET data = jsonb_set(data, ARRAY['${qty}'], '"уточнить"')
+             WHERE id = ${ok.id}`)
+    const sorted = await reg.getRecords(r.id, { sort: qty, order: 'asc' })
+    expect(sorted.items.length).toBe(1)
+    const desc = await reg.getRecords(r.id, { sort: qty, order: 'desc' })
+    expect(desc.items.length).toBe(1)
   })
 
   it('по чужому коду ничего не открывается', async () => {

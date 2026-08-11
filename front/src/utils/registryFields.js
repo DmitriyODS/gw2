@@ -34,7 +34,8 @@ export function fieldIcon(type) {
 // Конфиг по умолчанию для нового поля выбранного типа.
 export function defaultConfig(type) {
   switch (type) {
-    case 'number': return { pattern: '', qr: false }
+    // min/max — необязательные границы числа ('' = предела нет).
+    case 'number': return { pattern: '', qr: false, min: '', max: '' }
     case 'select': return { options: [], multiple: false }
     case 'text': return { multiline: false, qr: false }
     case 'datetime': return { year: true, month_day: true, time: true }

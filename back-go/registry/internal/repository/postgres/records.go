@@ -27,6 +27,13 @@ func scanRecord(row pgx.Row) (*domain.Record, error) {
 	return &r, nil
 }
 
+// numericLiteral — что Postgres гарантированно приведёт к numeric. Сортировка
+// числового поля обязана пережить мусор в данных: значения записей — JSON, и
+// в поле «Количество» человек однажды напишет «уточнить у поставщика». Без
+// этого сторожа весь список отвечал 500 (invalid input syntax for type numeric),
+// то есть одна кривая ячейка роняла раздел целиком.
+const numericLiteral = `^[+-]?([0-9]+([.][0-9]*)?|[.][0-9]+)$`
+
 // orderBy — выражение сортировки. Поле по data->>'<id>' с приведением типа;
 // id поля — int64 (проверен на уровне домена), поэтому безопасно встраивается.
 func orderBy(f domain.RecordListFilter) string {
@@ -40,7 +47,10 @@ func orderBy(f domain.RecordListFilter) string {
 	key := fmt.Sprintf("data->>'%d'", f.SortFieldID)
 	switch f.SortKind {
 	case "number":
-		return fmt.Sprintf("NULLIF(%s,'')::numeric %s NULLS LAST, id ASC", key, dir)
+		// Нечисловое значение — NULL: уезжает в конец списка, а не роняет запрос.
+		return fmt.Sprintf(
+			"CASE WHEN btrim(%s) ~ '%s' THEN btrim(%s)::numeric END %s NULLS LAST, id ASC",
+			key, numericLiteral, key, dir)
 	case "date":
 		return fmt.Sprintf("%s %s NULLS LAST, id ASC", key, dir)
 	default:

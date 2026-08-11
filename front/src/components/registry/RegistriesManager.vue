@@ -144,11 +144,31 @@
           <Checkbox v-model="draft.config.multiline" binary /> Многострочное поле
         </label>
 
-        <label v-else-if="draft.type === 'number'" class="fd-field">
-          <span class="fd-label">Шаблон номера (regex, необязательно)</span>
-          <input v-model="draft.config.pattern" class="ctl" placeholder="напр. ^\d{3}-\d{4}$" />
-          <span class="fd-hint">Если задан — значение должно совпадать с шаблоном.</span>
-        </label>
+        <template v-else-if="draft.type === 'number'">
+          <div class="fd-grid">
+            <label class="fd-field">
+              <span class="fd-label">Минимум (необязательно)</span>
+              <input v-model="draft.config.min" class="ctl" inputmode="decimal" placeholder="напр. 0" />
+            </label>
+            <label class="fd-field">
+              <span class="fd-label">Максимум (необязательно)</span>
+              <input v-model="draft.config.max" class="ctl" inputmode="decimal" placeholder="без предела" />
+            </label>
+          </div>
+          <span class="fd-hint">
+            Поле и без того принимает только числа. Границы нужны, когда отрицательное
+            или слишком большое значение бессмысленно, — например, «Количество» от 0.
+          </span>
+
+          <label class="fd-field">
+            <span class="fd-label">Шаблон номера (regex, необязательно)</span>
+            <input v-model="draft.config.pattern" class="ctl" placeholder="напр. ^\d{3}-\d{4}$" />
+            <span class="fd-hint">
+              Если задан — значение должно совпадать с шаблоном. Для номеров с буквами
+              («Пр-1», «ДОД25-1») нужен тип «Текст»: число такое значение не примет.
+            </span>
+          </label>
+        </template>
 
         <div v-if="isQrCapable(draft.type)" class="fd-field">
           <label class="fd-check"><Checkbox v-model="draft.config.qr" binary /> Показывать QR-код значения</label>
@@ -302,6 +322,12 @@ function openField(i) {
   })
   fieldOpen.value = true
 }
+// numberBound — граница числового поля в конфиге: число либо '' («не задана»).
+function numberBound(v) {
+  const s = String(v ?? '').trim().replace(',', '.')
+  return s !== '' && Number.isFinite(Number(s)) ? Number(s) : ''
+}
+
 function deepConfig(type, config) {
   const base = { ...defaultConfig(type), ...(config || {}) }
   if (Array.isArray(base.options)) base.options = [...base.options]
@@ -330,7 +356,16 @@ function cleanConfig(f) {
   if (f.type === 'select') {
     return { options: (f.config.options || []).map((s) => s.trim()).filter(Boolean), multiple: !!f.config.multiple }
   }
-  if (f.type === 'number') return { pattern: (f.config.pattern || '').trim(), qr: !!f.config.qr }
+  if (f.type === 'number') {
+    return {
+      pattern: (f.config.pattern || '').trim(),
+      qr: !!f.config.qr,
+      // Пустая граница — «предела нет»: в конфиг уходит пустая строка, сервер
+      // читает её как «не задано».
+      min: numberBound(f.config.min),
+      max: numberBound(f.config.max),
+    }
+  }
   if (f.type === 'text') return { multiline: !!f.config.multiline, qr: !!f.config.qr }
   if (f.type === 'datetime') return { year: !!f.config.year, month_day: !!f.config.month_day, time: !!f.config.time }
   return {}

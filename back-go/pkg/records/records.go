@@ -91,6 +91,44 @@ func NumberPattern(config map[string]any) string {
 	return s
 }
 
+// numberRe — что вообще принимается в числовое поле. Держать в паре с
+// регэкспом сортировки (registry/internal/repository/postgres/records.go):
+// в базе обязано лежать ровно то, что Postgres приведёт к numeric, иначе
+// сортировка по такому полю падает на первой же кривой ячейке.
+var numberRe = regexp.MustCompile(`^[+-]?([0-9]+([.][0-9]*)?|[.][0-9]+)$`)
+
+// ParseNumber — значение числового поля как число; ok=false — это не число.
+func ParseNumber(s string) (float64, bool) {
+	s = strings.TrimSpace(s)
+	if !numberRe.MatchString(s) {
+		return 0, false
+	}
+	f, err := strconv.ParseFloat(s, 64)
+	return f, err == nil
+}
+
+// trimNum — граница в сообщении об ошибке без хвоста «.000000»: «не меньше 0».
+func trimNum(f float64) string {
+	return strconv.FormatFloat(f, 'f', -1, 64)
+}
+
+// NumberBound — граница числового поля из config (min/max); ok=false, если
+// граница не задана. Значение приезжает из JSONB, поэтому принимаем и число,
+// и строку.
+func NumberBound(config map[string]any, key string) (float64, bool) {
+	switch v := config[key].(type) {
+	case float64:
+		return v, true
+	case int:
+		return float64(v), true
+	case int64:
+		return float64(v), true
+	case string:
+		return ParseNumber(v)
+	}
+	return 0, false
+}
+
 // Exportable — можно ли выгружать поле в xlsx. Картинки и файлы — нет
 // (они не сводятся к текстовой ячейке), остальные типы экспортируются.
 func Exportable(fieldType string) bool {
@@ -160,8 +198,26 @@ func CoerceData(fields []FieldInfo, data map[string]any) (map[string]any, error)
 func ValidateValue(f FieldInfo, v any) error {
 	switch f.Type {
 	case FieldNumber:
-		s := valueString(v)
-		if pat := NumberPattern(f.Config); pat != "" && s != "" {
+		s := strings.TrimSpace(valueString(v))
+		if s == "" {
+			return nil // пустое значение — «не заполнено», это законно
+		}
+		// Числовое поле обязано хранить ЧИСЛО: буквы в нём роняли сортировку
+		// всего списка (Postgres не умеет приводить «уточнить» к numeric).
+		num, ok := ParseNumber(s)
+		if !ok {
+			return apierror.New("VALIDATION",
+				"Поле «"+f.Label+"» принимает только число", 400)
+		}
+		if min, has := NumberBound(f.Config, "min"); has && num < min {
+			return apierror.New("VALIDATION",
+				fmt.Sprintf("Поле «%s»: не меньше %s", f.Label, trimNum(min)), 400)
+		}
+		if max, has := NumberBound(f.Config, "max"); has && num > max {
+			return apierror.New("VALIDATION",
+				fmt.Sprintf("Поле «%s»: не больше %s", f.Label, trimNum(max)), 400)
+		}
+		if pat := NumberPattern(f.Config); pat != "" {
 			re, err := regexp.Compile(pat)
 			if err == nil && !re.MatchString(s) {
 				return apierror.New("VALIDATION",

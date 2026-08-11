@@ -12,13 +12,16 @@
       @input="emit('update:modelValue', $event.target.value)"
     />
 
-    <!-- Число -->
+    <!-- Число: буквы не набираются вовсе (иначе они доезжали до базы и роняли
+         сортировку по этому полю), границы и подсказка — из настроек поля. -->
     <template v-else-if="field.type === 'number'">
       <input
         class="ctl" type="text" inputmode="decimal" :value="modelValue ?? ''"
-        :placeholder="field.config?.pattern ? `Шаблон: ${field.config.pattern}` : ''"
-        @input="emit('update:modelValue', $event.target.value)"
+        :placeholder="numberHint"
+        @input="onNumberInput"
+        @blur="onNumberBlur"
       />
+      <span v-if="numberError" class="fi-error">{{ numberError }}</span>
     </template>
 
     <!-- Галочка -->
@@ -98,8 +101,50 @@ const emit = defineEmits(['update:modelValue'])
 
 const options = computed(() => props.field.config?.options || [])
 
-// ── Дата ──
 const cfg = computed(() => props.field.config || {})
+
+/* ── Число ──
+   Поле принимает ТОЛЬКО число: буквы, попавшие сюда, доезжали до базы и потом
+   роняли сортировку по этой колонке (Postgres не приводит «уточнить» к numeric).
+   Поэтому нечисловой ввод не набирается вовсе, а границы min/max проверяются
+   при потере фокуса — сервер их всё равно перепроверит. */
+const NUMBER_CHARS = /^[+-]?[0-9]*[.,]?[0-9]*$/
+const numberError = ref('')
+
+const numberHint = computed(() => {
+  if (cfg.value.pattern) return `Шаблон: ${cfg.value.pattern}`
+  const { min, max } = cfg.value
+  const has = (v) => v !== '' && v != null
+  if (has(min) && has(max)) return `от ${min} до ${max}`
+  if (has(min)) return `от ${min}`
+  if (has(max)) return `до ${max}`
+  return ''
+})
+
+function onNumberInput(e) {
+  const raw = e.target.value.replace(',', '.')
+  // Недопустимый символ откатываем, вернув в поле прежнее значение.
+  if (!NUMBER_CHARS.test(raw)) {
+    e.target.value = props.modelValue ?? ''
+    numberError.value = 'Только число'
+    return
+  }
+  numberError.value = ''
+  emit('update:modelValue', raw)
+}
+
+function onNumberBlur() {
+  const s = String(props.modelValue ?? '').trim()
+  if (s === '') { numberError.value = ''; return }
+  const n = Number(s)
+  const { min, max } = cfg.value
+  if (!Number.isFinite(n)) numberError.value = 'Только число'
+  else if (min !== '' && min != null && n < Number(min)) numberError.value = `Не меньше ${min}`
+  else if (max !== '' && max != null && n > Number(max)) numberError.value = `Не больше ${max}`
+  else numberError.value = ''
+}
+
+// ── Дата ──
 const isTimeOnly = computed(() => !!cfg.value.time && !cfg.value.month_day && !cfg.value.year)
 const dateView = computed(() => (cfg.value.year && !cfg.value.month_day ? 'year' : 'date'))
 const dateFormat = computed(() => (cfg.value.year && !cfg.value.month_day ? 'yy' : 'dd.mm.yy'))
@@ -141,6 +186,7 @@ async function onFile(e) {
 .fi :deep(.p-datepicker) { width: 100%; }
 
 .fi-check { display: inline-flex; align-items: center; gap: 8px; cursor: pointer; }
+.fi-error { display: block; margin-top: 4px; font-size: 12px; color: var(--color-error); }
 
 .fi-file { display: flex; flex-direction: column; gap: 8px; align-items: flex-start; max-width: 100%; }
 .fi-file-cur { display: flex; align-items: flex-start; gap: 8px; max-width: 100%; min-width: 0; }
