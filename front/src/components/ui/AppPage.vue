@@ -7,11 +7,11 @@
            под фон самой панели. -->
       <slot name="background" />
 
-      <header v-if="!headless && hasHead" class="page-head">
+      <header v-if="!headless && hasHead()" class="page-head">
         <!-- Название занимает свою строку целиком: рядом с кнопками длинные
              имена (реестра, заметки, компании) обрезались до многоточия почти
              сразу. Кнопка возврата остаётся при названии — она о нём и есть. -->
-        <div v-if="hasTitleRow" class="head-title-row">
+        <div v-if="hasTitleRow()" class="head-title-row">
           <AppButton
             v-if="menu"
             variant="icon"
@@ -49,13 +49,13 @@
                целиком достаётся вкладкам и поиску, и ничто не наезжает. В тесной
                панели они уходят на свою строку (см. ниже). -->
           <AppCommandBar
-            v-if="barCommands.length && !commandsBelow"
+            v-if="barCommands.length && !commandsBelow()"
             class="head-commands"
             :commands="barCommands"
             @command="$emit('command', $event)"
           />
 
-          <div v-else-if="slots.commands && !commandsBelow" class="head-commands">
+          <div v-else-if="slots.commands && !commandsBelow()" class="head-commands">
             <slot name="commands" />
           </div>
         </div>
@@ -63,7 +63,7 @@
         <!-- Тесная панель: команда занимает всю ширину — прижатая к углу кнопка
              там читается хуже, а места для соседей всё равно нет. -->
         <AppCommandBar
-          v-if="commandsBelow"
+          v-if="commandsBelow()"
           :commands="barCommands"
           block
           @command="$emit('command', $event)"
@@ -71,9 +71,9 @@
 
         <!-- Строка управления: вкладки, фильтры, поиск. Когда названия нет (оно
              уже в рамке окна), команды переезжают сюда. -->
-        <div v-if="hasControlsRow" class="head-line">
+        <div v-if="hasControlsRow()" class="head-line">
           <AppButton
-            v-if="menu && !hasTitleRow"
+            v-if="menu && !hasTitleRow()"
             variant="icon"
             :icon="menuIcon"
             size="sm"
@@ -83,7 +83,7 @@
           />
 
           <AppButton
-            v-if="back && !hasTitleRow"
+            v-if="back && !hasTitleRow()"
             variant="icon"
             icon="arrow_back"
             size="sm"
@@ -96,9 +96,9 @@
 
           <div v-if="slots.subhead" class="head-sub"><slot name="subhead" :narrow="narrowPage" /></div>
 
-          <div v-if="slots.status && !hasTitleRow" class="head-status"><slot name="status" /></div>
+          <div v-if="slots.status && !hasTitleRow()" class="head-status"><slot name="status" /></div>
 
-          <template v-if="!hasTitleRow">
+          <template v-if="!hasTitleRow()">
             <AppCommandBar
               v-if="barCommands.length"
               class="head-commands"
@@ -217,7 +217,15 @@ const showsTitle = computed(() => {
   return !inWindow.value || props.title !== windowTitle.value
 })
 
-const hasTitleRow = computed(() => showsTitle.value || !!slots.title)
+/* Наличие слотов проверяем ФУНКЦИЯМИ, а не computed: объект слотов не
+   реактивен, и вычисляемое значение поверх него кэшируется навсегда. Раздел,
+   объявляющий слот условно (`<template v-if="registry" #search>`), из-за этого
+   оставался без строки поиска: на первом кадре слота ещё не было, а пересчёта
+   потом уже не случалось. Функция зовётся из шаблона и считается на каждой
+   отрисовке — а её каркас получает вместе с новыми слотами. */
+function hasTitleRow() {
+  return showsTitle.value || !!slots.title
+}
 
 /* Главное действие раздела (`fab: true`) в тесной панели уезжает из шапки на
    плавающую кнопку: в узкой строке оно всё равно осталось бы одной иконкой без
@@ -250,22 +258,24 @@ const barCommands = computed(() =>
 
 /* Отдельная строка нужна только главной команде: одинокое меню «ещё» на всю
    ширину выглядело бы странно и лучше остаётся при названии. */
-const commandsBelow = computed(() =>
-  hasTitleRow.value && narrowPage.value && barCommands.value.some((c) => c.primary),
-)
+function commandsBelow() {
+  return hasTitleRow() && narrowPage.value && barCommands.value.some((c) => c.primary)
+}
 
 /* Команды считаются за строку управления, ТОЛЬКО когда рисуются в ней: при
    заголовке они стоят в его строке, и раньше шапка добавляла ниже пустую
    строку — лишний отступ на пустом месте (заметно на телефоне). */
-const hasControlsRow = computed(() =>
-  !!slots.subhead ||
-  (!!slots.search && !compactSearch.value) ||
-  (!hasTitleRow.value && (
-    !!slots.commands || barCommands.value.length > 0 || props.back || props.menu || !!slots.status
-  )),
-)
+function hasControlsRow() {
+  return !!slots.subhead ||
+    (!!slots.search && !compactSearch.value) ||
+    (!hasTitleRow() && (
+      !!slots.commands || barCommands.value.length > 0 || props.back || props.menu || !!slots.status
+    ))
+}
 
-const hasHead = computed(() => hasTitleRow.value || hasControlsRow.value)
+function hasHead() {
+  return hasTitleRow() || hasControlsRow()
+}
 </script>
 
 <style scoped>
