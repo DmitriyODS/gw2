@@ -94,12 +94,28 @@ type RecordListFilter struct {
 	PerPage  int
 }
 
-// Share — публичная ссылка на реестр (read-only, без авторизации). Code в URL —
-// capability.
+// Уровни доступа внешней ссылки. Свойство САМОЙ ссылки: владелец раздаёт
+// разным людям разные коды и отзывает их по отдельности.
+const (
+	ShareView = "view" // только просмотр (и выгрузка)
+	ShareEdit = "edit" // + добавление и правка записей
+)
+
+// NormalizeShareAccess — привести уровень к допустимому; незнакомое значение
+// трактуем как просмотр: ошибиться в сторону меньших прав безопаснее.
+func NormalizeShareAccess(access string) string {
+	if access == ShareEdit {
+		return ShareEdit
+	}
+	return ShareView
+}
+
+// Share — публичная ссылка на реестр (без авторизации). Code в URL — capability.
 type Share struct {
 	ID         int64     `json:"id"`
 	RegistryID int64     `json:"registry_id"`
 	Code       string    `json:"code"`
+	Access     string    `json:"access"` // view | edit
 	CreatedBy  *int64    `json:"created_by"`
 	CreatedAt  time.Time `json:"created_at"`
 }
@@ -110,6 +126,9 @@ type UploadedFile struct {
 	Name string `json:"name"` // оригинальное имя файла
 	Mime string `json:"mime"`
 	Size int64  `json:"size"`
+	// Thumb — уменьшенная копия картинки для таблицы записей; пусто, если
+	// оригинал и так мал либо формат не декодируется (тогда показывается он сам).
+	Thumb string `json:"thumb,omitempty"`
 }
 
 // User — идентичность пользователя для авторизации (компания/роль из токена).

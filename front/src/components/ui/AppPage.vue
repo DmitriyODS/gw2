@@ -142,7 +142,7 @@
    поэтому панель объявляет `container-type` — вложенные блоки меряют её ширину,
    а не ширину экрана. На телефоне полей по краям нет, а рамка и скругления
    снимаются: их всё равно обрезала бы кромка экрана. */
-import { computed, ref, useSlots } from 'vue'
+import { computed, ref, useSlots, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import AppButton from './AppButton.vue'
 import AppCommandBar from './AppCommandBar.vue'
@@ -179,7 +179,7 @@ const props = defineProps({
   showTitle: { type: Boolean, default: null },
 })
 
-defineEmits(['back', 'command', 'menu'])
+const emit = defineEmits(['back', 'command', 'menu', 'narrow-change'])
 const slots = useSlots()
 
 /* Раздел, открытый окном рабочего стола, уже подписан заголовком самого окна —
@@ -214,6 +214,10 @@ const hasTitleRow = computed(() => showsTitle.value || !!slots.title)
    подписи и делило бы место с второстепенными командами. */
 const panelEl = ref(null)
 const narrowPage = useNarrowWidth(panelEl, 640)
+
+/* Тесноту панели знает не только шапка: от неё зависят и состав команд, и вид
+   содержимого — а слот-проп доступен лишь внутри тела (см. AppListDetail). */
+watch(narrowPage, (v) => emit('narrow-change', v))
 
 const fabCommand = computed(() => props.commands.find((c) => c.fab && !c.hidden) || null)
 

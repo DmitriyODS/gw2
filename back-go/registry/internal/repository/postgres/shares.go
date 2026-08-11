@@ -9,11 +9,11 @@ import (
 	"github.com/DmitriyODS/gw2/back-go/registry/internal/domain"
 )
 
-const shareCols = `id, registry_id, code, created_by, created_at`
+const shareCols = `id, registry_id, code, access, created_by, created_at`
 
 func scanShare(row pgx.Row) (*domain.Share, error) {
 	var s domain.Share
-	err := row.Scan(&s.ID, &s.RegistryID, &s.Code, &s.CreatedBy, &s.CreatedAt)
+	err := row.Scan(&s.ID, &s.RegistryID, &s.Code, &s.Access, &s.CreatedBy, &s.CreatedAt)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, nil
 	}
@@ -25,9 +25,9 @@ func scanShare(row pgx.Row) (*domain.Share, error) {
 
 func (r *Repo) CreateShare(ctx context.Context, s *domain.Share) error {
 	return r.pool.QueryRow(ctx,
-		`INSERT INTO registry_shares (registry_id, code, created_by)
-		 VALUES ($1, $2, $3) RETURNING id, created_at`,
-		s.RegistryID, s.Code, s.CreatedBy).Scan(&s.ID, &s.CreatedAt)
+		`INSERT INTO registry_shares (registry_id, code, access, created_by)
+		 VALUES ($1, $2, $3, $4) RETURNING id, created_at`,
+		s.RegistryID, s.Code, s.Access, s.CreatedBy).Scan(&s.ID, &s.CreatedAt)
 }
 
 func (r *Repo) ListShares(ctx context.Context, registryID int64) ([]*domain.Share, error) {

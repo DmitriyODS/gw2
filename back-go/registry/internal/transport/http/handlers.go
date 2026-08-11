@@ -297,35 +297,50 @@ func (h *handlers) bulkDeleteRecords(c *fiber.Ctx) error {
 
 // ── Загрузка файла ───────────────────────────────────────────────
 
+// uploadPayload — прочитать файл формы с проверкой размера. ok=false — ответ
+// клиенту уже записан.
+func (h *handlers) uploadPayload(c *fiber.Ctx) (string, string, []byte, bool) {
+	fileHeader, err := c.FormFile("file")
+	if err != nil {
+		c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "NO_FILE", "message": "Файл не передан"})
+		return "", "", nil, false
+	}
+	if fileHeader.Size > uploadMaxBytes {
+		validationError(c, "Файл слишком большой (макс. 25 МБ)")
+		return "", "", nil, false
+	}
+	f, err := fileHeader.Open()
+	if err != nil {
+		h.respondError(c, err)
+		return "", "", nil, false
+	}
+	defer f.Close()
+	data, err := io.ReadAll(io.LimitReader(f, uploadMaxBytes+1))
+	if err != nil {
+		h.respondError(c, err)
+		return "", "", nil, false
+	}
+	if int64(len(data)) > uploadMaxBytes {
+		validationError(c, "Файл слишком большой (макс. 25 МБ)")
+		return "", "", nil, false
+	}
+	return fileHeader.Filename, fileHeader.Header.Get(fiber.HeaderContentType), data, true
+}
+
 func (h *handlers) upload(c *fiber.Ctx) error {
 	companyID, ok := companyScope(c)
 	if !ok {
 		return nil
 	}
-	fileHeader, err := c.FormFile("file")
-	if err != nil {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "NO_FILE", "message": "Файл не передан"})
-	}
-	if fileHeader.Size > uploadMaxBytes {
-		return validationError(c, "Файл слишком большой (макс. 25 МБ)")
-	}
-	f, err := fileHeader.Open()
-	if err != nil {
-		return h.respondError(c, err)
-	}
-	defer f.Close()
-	data, err := io.ReadAll(io.LimitReader(f, uploadMaxBytes+1))
-	if err != nil {
-		return h.respondError(c, err)
-	}
-	if int64(len(data)) > uploadMaxBytes {
-		return validationError(c, "Файл слишком большой (макс. 25 МБ)")
+	name, mime, data, ok := h.uploadPayload(c)
+	if !ok {
+		return nil
 	}
 	resp, err := h.eps.Upload(c.Context(), endpoint.UploadReq{
 		CompanyID: companyID,
 		UserID:    currentUser(c).ID,
-		FileName:  fileHeader.Filename,
-		Mime:      fileHeader.Header.Get(fiber.HeaderContentType),
+		FileName:  name,
+		Mime:      mime,
 		Data:      data,
 	})
 	if err != nil {
@@ -353,8 +368,12 @@ func (h *handlers) createShare(c *fiber.Ctx) error {
 	if !ok {
 		return nil
 	}
+	var body struct {
+		Access string `json:"access"`
+	}
+	parseBody(c, &body)
 	resp, err := h.eps.CreateShare(c.Context(), endpoint.ShareReq{
-		CompanyID: companyID, RegistryID: pathID(c), UserID: currentUser(c).ID,
+		CompanyID: companyID, RegistryID: pathID(c), UserID: currentUser(c).ID, Access: body.Access,
 	})
 	if err != nil {
 		return h.respondError(c, err)
@@ -418,6 +437,56 @@ func (h *handlers) sharedExport(c *fiber.Ctx) error {
 	c.Set(fiber.HeaderContentDisposition,
 		`attachment; filename="registry.xlsx"; filename*=UTF-8''`+url.PathEscape(out.Name)+`.xlsx`)
 	return c.Send(out.Data)
+}
+
+// ── Правка по ссылке уровня edit (тоже без авторизации) ──────────
+
+func (h *handlers) sharedCreateRecord(c *fiber.Ctx) error {
+	var body struct {
+		Data map[string]any `json:"data"`
+	}
+	parseBody(c, &body)
+	if body.Data == nil {
+		body.Data = map[string]any{}
+	}
+	resp, err := h.eps.SharedCreateRecord(c.Context(), endpoint.SharedWriteReq{
+		Code: c.Params("code"), Data: body.Data,
+	})
+	if err != nil {
+		return h.respondError(c, err)
+	}
+	return c.Status(fiber.StatusCreated).JSON(resp)
+}
+
+func (h *handlers) sharedUpdateRecord(c *fiber.Ctx) error {
+	var body struct {
+		Data map[string]any `json:"data"`
+	}
+	parseBody(c, &body)
+	if body.Data == nil {
+		body.Data = map[string]any{}
+	}
+	resp, err := h.eps.SharedUpdateRecord(c.Context(), endpoint.SharedWriteReq{
+		Code: c.Params("code"), RecordID: recordID(c), Data: body.Data,
+	})
+	if err != nil {
+		return h.respondError(c, err)
+	}
+	return c.JSON(resp)
+}
+
+func (h *handlers) sharedUpload(c *fiber.Ctx) error {
+	name, mime, data, ok := h.uploadPayload(c)
+	if !ok {
+		return nil
+	}
+	resp, err := h.eps.SharedUpload(c.Context(), endpoint.SharedUploadReq{
+		Code: c.Params("code"), FileName: name, Mime: mime, Data: data,
+	})
+	if err != nil {
+		return h.respondError(c, err)
+	}
+	return c.Status(fiber.StatusCreated).JSON(resp)
 }
 
 // ── Парсинг и валидация полей реестра ────────────────────────────

@@ -177,6 +177,9 @@ func runMain(m *testing.M) int {
 		"MAIL_GRPC_ADDR=localhost:19098",
 		"BILLING_GRPC_ADDR=localhost:19107",
 		"APP_PUBLIC_BASE_URL=http://localhost:5173",
+		// Сценарии заводят десятки аккаунтов с одного адреса — прод-щит от
+		// штамповки регистраций здесь только мешает.
+		"REGISTER_IP_LIMIT=100000",
 		"HTTP_ADDR=:18091",
 	})
 	procs.start("diarysvc", filepath.Join(repoRoot, "back-go/diary"), "./cmd/diarysvc", []string{

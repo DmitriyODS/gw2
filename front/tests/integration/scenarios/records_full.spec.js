@@ -163,6 +163,36 @@ describeIntegration('registries API: записи, выгрузка, досту�
     await expectClientError(reg.getSharedRegistry(share.code))
   })
 
+  it('ссылка на правку пускает гостя писать, ссылка на просмотр — нет', async () => {
+    const admin = await newCompanyAdmin()
+    const { id, field } = await registryWithField(admin)
+    const view = await reg.createShare(id)
+    const edit = await reg.createShare(id, 'edit')
+    expect(view.access).toBe('view')
+    expect(edit.access).toBe('edit')
+
+    const guest = new Session('guest')
+    guest.use()
+    // Уровень приезжает вместе с реестром — по нему страница решает, показывать
+    // ли правку.
+    expect((await reg.getSharedRegistry(view.code)).access).toBe('view')
+    expect((await reg.getSharedRegistry(edit.code)).access).toBe('edit')
+    await expectClientError(reg.createSharedRecord(view.code, { [field]: 'Мимо' }))
+
+    const created = await reg.createSharedRecord(edit.code, { [field]: 'Из формы' })
+    expect(created.id).toBeGreaterThan(0)
+    await reg.updateSharedRecord(edit.code, created.id, { [field]: 'Правка гостя' })
+    const seen = await reg.getSharedRecords(edit.code)
+    expect(seen.items.some((r) => r.data[field] === 'Правка гостя')).toBe(true)
+    // Ссылка на просмотр правку чужой записи тоже не даёт.
+    await expectClientError(reg.updateSharedRecord(view.code, created.id, { [field]: 'Мимо' }))
+
+    // Запись гостя принадлежит компании и видна в самом разделе.
+    admin.session.use()
+    const own = await reg.getRecords(id)
+    expect(own.items.some((r) => r.data[field] === 'Правка гостя')).toBe(true)
+  })
+
   it('по чужому коду ничего не открывается', async () => {
     const guest = new Session('guest')
     guest.use()

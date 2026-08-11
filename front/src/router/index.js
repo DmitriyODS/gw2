@@ -125,9 +125,12 @@ const routes = [
   // Ссылка-приглашение в звонок: доступна и внешним гостям без аккаунта.
   { path: '/call/:code', component: () => import('@/views/CallJoinView.vue'),
     meta: { public: true, fullscreen: true } },
-  // Публичный просмотр реестра по внешней ссылке (read-only, без авторизации).
+  // Реестр по внешней ссылке (без авторизации; уровень доступа — у самой
+  // ссылки). Страница самостоятельная: fullscreen нужен, чтобы она открывалась
+  // и у вошедшего — каркас-«ОС» показывает только СВОИ разделы, и по ссылке
+  // сотрудник видел пустой рабочий стол.
   { path: '/registry/:code', component: () => import('@/views/SharedRegistryView.vue'),
-    meta: { public: true } },
+    meta: { public: true, fullscreen: true } },
   // Публичный просмотр календаря по внешней ссылке (read-only, без авторизации).
   { path: '/calendar/:code', component: () => import('@/views/SharedCalendarView.vue'),
     meta: { public: true } },

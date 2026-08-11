@@ -151,12 +151,17 @@ type Service struct {
 	transfer domain.CompanyDataClient
 	// Лимит регистраций по IP и резендов писем (WithRateLimiter; nil — без лимита).
 	limiter domain.RateLimiter
+	// Сколько регистраций пропускать с одного адреса за час (0 — значение по
+	// умолчанию registerIPLimit).
+	registerIPLimit int
 }
 
 // WithRateLimiter — подключить лимит регистраций по IP и резендов писем
-// подтверждения/сброса пароля.
-func (s *Service) WithRateLimiter(limiter domain.RateLimiter) *Service {
+// подтверждения/сброса пароля. perIP ≤ 0 — умолчание сервиса; поднимают его
+// только испытательные стенды: там сотни аккаунтов заводятся с одного адреса.
+func (s *Service) WithRateLimiter(limiter domain.RateLimiter, perIP int) *Service {
 	s.limiter = limiter
+	s.registerIPLimit = perIP
 	return s
 }
 

@@ -103,7 +103,11 @@ const (
 func (s *Service) Register(ctx context.Context, req dto.RegisterRequest) (*dto.RegisterResult, error) {
 	if s.limiter != nil {
 		if ip := domain.SessionMetaFrom(ctx).IP; ip != "" {
-			if ok, retry := s.limiter.Allow(ctx, "register:"+ip, registerIPLimit, registerIPWindow); !ok {
+			limit := registerIPLimit
+			if s.registerIPLimit > 0 {
+				limit = s.registerIPLimit
+			}
+			if ok, retry := s.limiter.Allow(ctx, "register:"+ip, limit, registerIPWindow); !ok {
 				return nil, errLocked(retry)
 			}
 		}

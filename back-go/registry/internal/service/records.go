@@ -98,31 +98,26 @@ func (s *Service) GetRecord(ctx context.Context, companyID, registryID, recordID
 }
 
 func (s *Service) CreateRecord(ctx context.Context, companyID, registryID, userID int64, data map[string]any) (*domain.Record, error) {
-	if _, err := s.requireRegistry(ctx, companyID, registryID); err != nil {
-		return nil, err
-	}
-	fields, err := s.repo.ListFields(ctx, registryID)
+	reg, err := s.requireRegistry(ctx, companyID, registryID)
 	if err != nil {
 		return nil, err
 	}
-	clean, err := coerceData(fields, data)
-	if err != nil {
-		return nil, err
-	}
-	rec := &domain.Record{RegistryID: registryID, Data: clean, CreatedBy: &userID}
-	if err := s.repo.CreateRecord(ctx, rec, buildSearchText(fields, clean)); err != nil {
-		return nil, err
-	}
-	s.bus.Publish(ctx, "record:created", []string{roomAll}, recordPayload(companyID, rec))
-	return rec, nil
+	return s.createRecordIn(ctx, reg, &userID, data)
 }
 
 func (s *Service) UpdateRecord(ctx context.Context, companyID, registryID, recordID int64, data map[string]any) (*domain.Record, error) {
-	rec, err := s.GetRecord(ctx, companyID, registryID, recordID)
+	reg, err := s.requireRegistry(ctx, companyID, registryID)
 	if err != nil {
 		return nil, err
 	}
-	fields, err := s.repo.ListFields(ctx, registryID)
+	return s.updateRecordIn(ctx, reg, recordID, data)
+}
+
+// createRecordIn / updateRecordIn — ядро записи БЕЗ проверки доступа: его уже
+// сделал вызывающий (участник компании либо ссылка уровня edit). Компания для
+// событий берётся у самого реестра — по коду ссылки её взять больше неоткуда.
+func (s *Service) createRecordIn(ctx context.Context, reg *domain.Registry, createdBy *int64, data map[string]any) (*domain.Record, error) {
+	fields, err := s.repo.ListFields(ctx, reg.ID)
 	if err != nil {
 		return nil, err
 	}
@@ -130,11 +125,40 @@ func (s *Service) UpdateRecord(ctx context.Context, companyID, registryID, recor
 	if err != nil {
 		return nil, err
 	}
+	rec := &domain.Record{RegistryID: reg.ID, Data: clean, CreatedBy: createdBy}
+	if err := s.repo.CreateRecord(ctx, rec, buildSearchText(fields, clean)); err != nil {
+		return nil, err
+	}
+	s.bus.Publish(ctx, "record:created", []string{roomAll}, recordPayload(reg.CompanyID, rec))
+	return rec, nil
+}
+
+func (s *Service) updateRecordIn(ctx context.Context, reg *domain.Registry, recordID int64, data map[string]any) (*domain.Record, error) {
+	rec, err := s.repo.GetRecord(ctx, recordID)
+	if err != nil {
+		return nil, err
+	}
+	if rec == nil || rec.RegistryID != reg.ID {
+		return nil, domain.ErrRecordNotFound
+	}
+	fields, err := s.repo.ListFields(ctx, reg.ID)
+	if err != nil {
+		return nil, err
+	}
+	clean, err := coerceData(fields, data)
+	if err != nil {
+		return nil, err
+	}
+	// Прежние значения запоминаем ДО записи: репозиторий волен обновить снимок.
+	old := rec.Data
 	if err := s.repo.UpdateRecord(ctx, recordID, clean, buildSearchText(fields, clean)); err != nil {
 		return nil, err
 	}
+	// Файлы и картинки, оставшиеся не у дел после правки, из хранилища убираем:
+	// иначе замена фотографии тихо копила бы мусор в квоте компании.
+	s.removeOrphanFiles(ctx, reg.CompanyID, old, clean)
 	rec.Data = clean
-	s.bus.Publish(ctx, "record:updated", []string{roomAll}, recordPayload(companyID, rec))
+	s.bus.Publish(ctx, "record:updated", []string{roomAll}, recordPayload(reg.CompanyID, rec))
 	return rec, nil
 }
 
@@ -184,9 +208,7 @@ func (s *Service) removeRecordFiles(ctx context.Context, companyID int64, recs .
 			continue
 		}
 		for _, v := range rec.Data {
-			if p := fileValuePath(v); p != "" {
-				paths = append(paths, p)
-			}
+			paths = append(paths, filePaths(v)...)
 		}
 	}
 	if len(paths) > 0 {
@@ -194,15 +216,44 @@ func (s *Service) removeRecordFiles(ctx context.Context, companyID int64, recs .
 	}
 }
 
-// fileValuePath — путь файла/картинки из значения поля. UploadedFile хранится
-// как объект с ключом "path"; для прочих типов — пусто.
-func fileValuePath(v any) string {
-	if m, ok := v.(map[string]any); ok {
-		if p, ok := m["path"].(string); ok {
-			return p
+// removeOrphanFiles — файлы прежних значений, которых нет в новых: замена
+// картинки в записи иначе оставляла бы оригинал висеть в квоте компании.
+func (s *Service) removeOrphanFiles(ctx context.Context, companyID int64, old, next map[string]any) {
+	kept := map[string]bool{}
+	for _, v := range next {
+		for _, p := range filePaths(v) {
+			kept[p] = true
 		}
 	}
-	return ""
+	var gone []string
+	for _, v := range old {
+		for _, p := range filePaths(v) {
+			if !kept[p] {
+				gone = append(gone, p)
+			}
+		}
+	}
+	if len(gone) > 0 {
+		s.files.RemoveFor(ctx, 0, companyID, gone)
+	}
+}
+
+// filePaths — ключи хранилища из значения поля: сам файл и (у картинок) его
+// миниатюра. UploadedFile хранится объектом с ключами "path"/"thumb"; для
+// прочих типов — пусто.
+func filePaths(v any) []string {
+	m, ok := v.(map[string]any)
+	if !ok {
+		return nil
+	}
+	var out []string
+	if p, ok := m["path"].(string); ok && p != "" {
+		out = append(out, p)
+	}
+	if t, ok := m["thumb"].(string); ok && t != "" {
+		out = append(out, t)
+	}
+	return out
 }
 
 func findField(fields []domain.Field, id int64) *domain.Field {

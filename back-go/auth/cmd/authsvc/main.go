@@ -90,7 +90,9 @@ func main() {
 
 	svc := service.New(repo, companies, backup, throttle, issuer, avatars,
 		verifications, passwordResets, companyInvites, deviceLinks, mail, appBaseURL, log)
-	svc.WithRateLimiter(limiter)
+	// REGISTER_IP_LIMIT поднимают испытательные стенды: сотни аккаунтов с
+	// одного адреса — их обычный режим, а не злоупотребление.
+	svc.WithRateLimiter(limiter, bootstrap.EnvInt("REGISTER_IP_LIMIT", 0))
 	// Полный бэкап включает все загруженные файлы (медиа мессенджера, файлы
 	// реестров/календарей/заметок/портала, аватарки) — даём доступ к корневому
 	// файловому хранилищу.

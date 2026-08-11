@@ -70,10 +70,14 @@ func NewServer(eps endpoint.Endpoints, users domain.UserReader,
 		return auth.RequireAuth(c)
 	})
 
-	// Публичный read-only доступ по коду ссылки (без авторизации).
+	// Публичный доступ по коду ссылки (без авторизации). Правку пускает только
+	// ссылка уровня edit — проверяет сервис, у транспорта прав нет.
 	api.Get("/shared/:code", h.sharedRegistry)
 	api.Get("/shared/:code/records", h.sharedRecords)
 	api.Get("/shared/:code/export", h.sharedExport)
+	api.Post("/shared/:code/records", h.sharedCreateRecord)
+	api.Patch("/shared/:code/records/:rid<int>", h.sharedUpdateRecord)
+	api.Post("/shared/:code/uploads", h.sharedUpload)
 
 	// Загрузка файла/картинки записи (любой участник). "/uploads" не конфликтует
 	// с "/:id<int>" — параметр матчит только числа.

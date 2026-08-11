@@ -74,6 +74,21 @@ export function textValue(field, value) {
   }
 }
 
+// ── Файлы и картинки ──
+// Значение поля image/file — объект {path, name, mime, size, thumb?}; наружу
+// хранилище раздаётся по /uploads/<ключ>.
+export function fileUrl(value) {
+  return value?.path ? `/uploads/${value.path}` : ''
+}
+
+// thumbUrl — превью для таблицы: уменьшенную копию делает сервер при загрузке.
+// Её нет у мелких картинок и у записей, созданных до появления превью, — тогда
+// показываем оригинал (браузер сожмёт его сам, а грузит только видимые строки).
+export function thumbUrl(value) {
+  if (!value?.path) return ''
+  return value.thumb ? `/uploads/${value.thumb}` : fileUrl(value)
+}
+
 // Участвует ли тип в сквозном поиске / сортировке таблицы.
 export function isSearchable(type) {
   return ['text', 'number', 'link', 'datetime', 'select'].includes(type)

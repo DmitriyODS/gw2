@@ -18,6 +18,7 @@ func discardLogger() *slog.Logger {
 // fakeRepo — in-memory реализация порта для тестов бизнес-логики.
 type fakeRepo struct {
 	reg        *domain.Registry
+	share      *domain.Share
 	fields     []domain.Field
 	records    map[int64]*domain.Record
 	lastSearch string
@@ -80,10 +81,19 @@ func (f *fakeRepo) DeleteRecords(_ domain.Ctx, _ int64, ids []int64) (int64, err
 func (f *fakeRepo) RecordsForExport(_ domain.Ctx, _ int64, _ string, _ []int64) ([]*domain.Record, error) {
 	return f.AllRecords(nil, 0)
 }
-func (f *fakeRepo) CreateShare(_ domain.Ctx, s *domain.Share) error              { s.ID = 1; return nil }
-func (f *fakeRepo) ListShares(_ domain.Ctx, _ int64) ([]*domain.Share, error)    { return nil, nil }
-func (f *fakeRepo) GetShareByCode(_ domain.Ctx, _ string) (*domain.Share, error) { return nil, nil }
-func (f *fakeRepo) DeleteShare(_ domain.Ctx, _, _ int64) error                   { return nil }
+func (f *fakeRepo) CreateShare(_ domain.Ctx, s *domain.Share) error {
+	s.ID = 1
+	f.share = s
+	return nil
+}
+func (f *fakeRepo) ListShares(_ domain.Ctx, _ int64) ([]*domain.Share, error) { return nil, nil }
+func (f *fakeRepo) GetShareByCode(_ domain.Ctx, code string) (*domain.Share, error) {
+	if f.share != nil && f.share.Code == code {
+		return f.share, nil
+	}
+	return nil, nil
+}
+func (f *fakeRepo) DeleteShare(_ domain.Ctx, _, _ int64) error { return nil }
 func (f *fakeRepo) AllRecords(_ domain.Ctx, _ int64) ([]*domain.Record, error) {
 	out := []*domain.Record{}
 	for _, r := range f.records {

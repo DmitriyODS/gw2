@@ -56,7 +56,8 @@ export const exportRecords = (registryId, { fields = [], search = '', ids = [] }
   return apiRequest(`/registries/${registryId}/export?${qs}`, { blob: true })
 }
 
-// Загрузка файла/картинки записи (multipart) → { path, name, mime, size }.
+// Загрузка файла/картинки записи (multipart) → { path, name, mime, size, thumb? }.
+// thumb — уменьшенная копия картинки, её показывает таблица записей.
 export const uploadFile = (file) => {
   const form = new FormData()
   form.append('file', file)
@@ -65,8 +66,9 @@ export const uploadFile = (file) => {
 
 // ── Публичные ссылки (управление, требует прав участника) ──
 export const getShares = (registryId) => apiRequest(`/registries/${registryId}/shares`)
-export const createShare = (registryId) =>
-  apiRequest(`/registries/${registryId}/shares`, { method: 'POST' })
+// access: 'view' (только просмотр) | 'edit' (+ добавление и правка записей).
+export const createShare = (registryId, access = 'view') =>
+  apiRequest(`/registries/${registryId}/shares`, { method: 'POST', body: { access } })
 export const revokeShare = (registryId, shareId) =>
   apiRequest(`/registries/${registryId}/shares/${shareId}`, { method: 'DELETE' })
 
@@ -83,4 +85,15 @@ export const exportSharedRecords = (code, { fields = [], search = '', ids = [] }
   if (search) qs.set('search', search)
   if (ids.length) qs.set('ids', ids.join(','))
   return apiRequest(`/registries/shared/${code}/export?${qs}`, { blob: true })
+}
+
+// Правка по ссылке уровня edit (сервер сам откажет ссылке на просмотр).
+export const createSharedRecord = (code, data) =>
+  apiRequest(`/registries/shared/${code}/records`, { method: 'POST', body: { data } })
+export const updateSharedRecord = (code, recordId, data) =>
+  apiRequest(`/registries/shared/${code}/records/${recordId}`, { method: 'PATCH', body: { data } })
+export const uploadSharedFile = (code, file) => {
+  const form = new FormData()
+  form.append('file', file)
+  return apiRequest(`/registries/shared/${code}/uploads`, { method: 'POST', body: form })
 }

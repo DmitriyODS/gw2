@@ -87,13 +87,11 @@ export const useRegistriesStore = defineStore('registries', () => {
     }
   }
 
-  function setSort(fieldKey) {
-    if (filters.sort === fieldKey) {
-      filters.order = filters.order === 'asc' ? 'desc' : 'asc'
-    } else {
-      filters.sort = fieldKey
-      filters.order = 'asc'
-    }
+  // Порядок сортировки решает вид записей (RegistryRecords) — здесь только
+  // применяем готовую пару и возвращаемся на первую страницу.
+  function applySort({ sort, order }) {
+    filters.sort = sort
+    filters.order = order
     filters.page = 1
     fetchRecords()
   }
@@ -189,7 +187,7 @@ export const useRegistriesStore = defineStore('registries', () => {
     registries, loadingList, selectedId, selected,
     records, total, loadingRecords, filters,
     fetchRegistries, select, reloadForCompany,
-    fetchRecords, setSort, setSearch, setPage,
+    fetchRecords, applySort, setSearch, setPage,
     createRecord, updateRecord, deleteRecord, bulkDelete,
     applyRegistrySocket, applyRecordSocket,
   }

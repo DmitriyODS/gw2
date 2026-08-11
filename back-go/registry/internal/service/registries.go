@@ -127,9 +127,7 @@ func (s *Service) stripRemovedFields(ctx context.Context, companyID, registryID 
 		for _, fid := range removed {
 			key := domain.FieldID(fid)
 			if v, ok := rec.Data[key]; ok {
-				if p := fileValuePath(v); p != "" {
-					orphans = append(orphans, p)
-				}
+				orphans = append(orphans, filePaths(v)...)
 				delete(rec.Data, key)
 				changed = true
 			}

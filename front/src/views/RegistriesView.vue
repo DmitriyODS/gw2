@@ -92,142 +92,47 @@
           </div>
         </template>
 
-        <template v-if="store.selected">
-        <!-- Узкая панель: сортировка контролом (широко — клик по заголовку колонки) -->
-        <div v-if="narrow && shownFields.length" class="rg-msort">
-          <span class="material-symbols-outlined">sort</span>
-          <Select
-            class="rg-msort-select"
-            :model-value="store.filters.sort"
-            :options="sortOptions" option-label="label" option-value="value"
-            @update:model-value="mobileSetSort"
-          />
-          <AppButton
-            variant="icon"
-            size="sm"
-            :icon="store.filters.order === 'asc' ? 'arrow_upward' : 'arrow_downward'"
-            :title="store.filters.order === 'asc' ? 'По возрастанию' : 'По убыванию'"
-            aria-label="Направление сортировки"
-            @click="toggleOrder"
-          />
-        </div>
-
-        <!-- Массовый выбор -->
-        <AppInfoBar
-          v-if="selectedIds.size"
-          class="rg-selbar"
-          tone="info"
-          icon="checklist"
-          :message="`Выбрано: ${selectedIds.size}`"
-          inline
+        <!-- Записи: таблица (широко) / карточки (узко) — тот же компонент, что
+             и на публичной странице внешней ссылки. -->
+        <RegistryRecords
+          v-if="store.selected"
+          :fields="shownFields"
+          :records="store.records"
+          :loading="store.loadingRecords"
+          :sort="store.filters.sort"
+          :order="store.filters.order"
+          :selected="selectedIds"
+          :all-selected="allSelected"
+          :narrow="narrow"
+          :search="store.filters.search"
+          empty-hint="Добавьте первую запись — она появится в таблице."
+          @update:sort="store.applySort"
+          @open="openRecord"
+          @toggle="toggleRow"
+          @toggle-all="toggleAll"
         >
-          <template #actions>
-            <AppButton
-              size="sm"
-              tone="danger"
-              icon="delete"
-              label="Удалить"
-              @click="confirmBulk = true"
-            />
-            <AppButton size="sm" variant="text" label="Сбросить" @click="clearSelection" />
-          </template>
-        </AppInfoBar>
-
-        <!-- Записи: таблица (широко) / карточки (узко) -->
-        <div class="rg-tablebox">
-          <div v-if="!narrow" class="rg-scroll">
-            <table class="rg-table">
-              <thead>
-                <tr>
-                  <th class="rg-th-check">
-                    <Checkbox :model-value="allSelected" binary :disabled="!store.records.length" @update:model-value="toggleAll" />
-                  </th>
-                  <th
-                    v-for="f in shownFields"
-                    :key="f.id"
-                    :class="{ sortable: isSortable(f.type) }"
-                    @click="isSortable(f.type) && store.setSort(String(f.id))"
-                  >
-                    <span class="rg-th-inner">
-                      {{ f.label }}
-                      <span v-if="store.filters.sort === String(f.id)" class="material-symbols-outlined rg-sort">
-                        {{ store.filters.order === 'asc' ? 'arrow_upward' : 'arrow_downward' }}
-                      </span>
-                    </span>
-                  </th>
-                  <th class="rg-th-date sortable" @click="store.setSort('created_at')">
-                    <span class="rg-th-inner">
-                      Создано
-                      <span v-if="store.filters.sort === 'created_at'" class="material-symbols-outlined rg-sort">
-                        {{ store.filters.order === 'asc' ? 'arrow_upward' : 'arrow_downward' }}
-                      </span>
-                    </span>
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr
-                  v-for="rec in store.records"
-                  :key="rec.id"
-                  class="rg-row"
-                  :class="{ selected: selectedIds.has(rec.id) }"
-                  @click="openRecord(rec)"
-                >
-                  <td class="rg-td-check" @click.stop>
-                    <Checkbox :model-value="selectedIds.has(rec.id)" binary @update:model-value="toggleRow(rec.id)" />
-                  </td>
-                  <td v-for="f in shownFields" :key="f.id">
-                    <span class="rg-cell">{{ textValue(f, rec.data?.[String(f.id)]) }}</span>
-                  </td>
-                  <td class="rg-td-date">{{ shortDate(rec.created_at) }}</td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-
-          <!-- Узкая панель: карточки записей вместо таблицы -->
-          <AppStack v-else class="rg-cards" :gap="10">
-            <label v-if="store.records.length" class="rg-cards-selall">
-              <Checkbox :model-value="allSelected" binary @update:model-value="toggleAll" />
-              <span>Выбрать все на странице</span>
-            </label>
-            <AppCard
-              v-for="rec in store.records"
-              :key="rec.id"
-              :tone="selectedIds.has(rec.id) ? 'primary' : 'neutral'"
-              clickable
-              :gap="8"
-              @click="openRecord(rec)"
+          <template #selection>
+            <AppInfoBar
+              v-if="selectedIds.size"
+              class="rg-selbar"
+              tone="info"
+              icon="checklist"
+              :message="`Выбрано: ${selectedIds.size}`"
+              inline
             >
-              <div class="rg-card-head">
-                <span class="rg-card-check" @click.stop>
-                  <Checkbox :model-value="selectedIds.has(rec.id)" binary @update:model-value="toggleRow(rec.id)" />
-                </span>
-                <span class="rg-card-title">{{ cardTitle(rec) }}</span>
-                <span class="material-symbols-outlined rg-card-chev">chevron_right</span>
-              </div>
-              <div v-if="cardBodyFields.length" class="rg-card-body">
-                <div v-for="f in cardBodyFields" :key="f.id" class="rg-card-row">
-                  <span class="rg-card-label">{{ f.label }}</span>
-                  <span class="rg-card-val">{{ textValue(f, rec.data?.[String(f.id)]) || '—' }}</span>
-                </div>
-              </div>
-            </AppCard>
-          </AppStack>
-
-          <div v-if="store.loadingRecords" class="rg-overlay">
-            <BrandLoader :size="48" />
-          </div>
-          <EmptyState
-            v-else-if="!store.records.length"
-            class="rg-empty"
-            icon="inbox"
-            tone="soft"
-            :title="searchInput ? 'Ничего не найдено' : 'Записей пока нет'"
-            :subtitle="searchInput ? 'Попробуйте другой запрос.' : 'Добавьте первую запись — она появится в таблице.'"
-          />
-        </div>
-        </template>
+              <template #actions>
+                <AppButton
+                  size="sm"
+                  tone="danger"
+                  icon="delete"
+                  label="Удалить"
+                  @click="confirmBulk = true"
+                />
+                <AppButton size="sm" variant="text" label="Сбросить" @click="clearSelection" />
+              </template>
+            </AppInfoBar>
+          </template>
+        </RegistryRecords>
 
         <!-- Реестр не выбран (широкая раскладка) -->
         <EmptyState
@@ -240,7 +145,12 @@
       </AppPage>
     </template>
 
-    <RegistryRecordDialog v-model="dialogOpen" :registry="store.selected" :record="activeRecord" />
+    <RegistryRecordDialog
+      v-model="dialogOpen"
+      :registry="store.selected"
+      :record="activeRecord"
+      :save="saveRecord"
+    />
 
     <RegistryQrFindDialog
       v-model="qrFindOpen"
@@ -272,22 +182,39 @@
     >
       <div class="rg-shares">
         <p class="rg-shares-note">
-          По внешней ссылке любой человек (без входа в систему) сможет просматривать таблицу
-          этого реестра, открывать карточки и выгружать данные — но не редактировать.
-          Ссылку можно отозвать в любой момент.
+          По внешней ссылке человек без входа в систему открывает реестр в браузере.
+          Ссылка на просмотр позволяет смотреть таблицу, открывать карточки и выгружать
+          данные; ссылка на правку — ещё и добавлять записи и менять существующие.
+          Любую ссылку можно отозвать в любой момент.
         </p>
-        <AppButton
-          variant="filled"
-          icon="add_link"
-          label="Создать ссылку"
-          :loading="sharesBusy"
-          @click="createShareLink"
-        />
+        <AppStack row :gap="8">
+          <AppButton
+            variant="filled"
+            icon="link"
+            label="Ссылка на просмотр"
+            :loading="sharesBusy === 'view'"
+            :disabled="!!sharesBusy"
+            @click="createShareLink('view')"
+          />
+          <AppButton
+            variant="glass"
+            icon="edit"
+            label="Ссылка на правку"
+            :loading="sharesBusy === 'edit'"
+            :disabled="!!sharesBusy"
+            @click="createShareLink('edit')"
+          />
+        </AppStack>
 
         <div v-if="sharesLoading" class="rg-shares-empty">Загрузка…</div>
         <div v-else-if="!shares.length" class="rg-shares-empty">Ссылок пока нет</div>
         <ul v-else class="rg-shares-list">
           <li v-for="s in shares" :key="s.id" class="rg-share">
+            <AppChip
+              :icon="s.access === 'edit' ? 'edit' : 'visibility'"
+              :tone="s.access === 'edit' ? 'primary' : 'neutral'"
+              :label="s.access === 'edit' ? 'правка' : 'просмотр'"
+            />
             <input class="rg-share-url" :value="shareUrl(s.code)" readonly @focus="$event.target.select()" />
             <AppButton
               variant="icon"
@@ -322,88 +249,52 @@
       </div>
     </AppDialog>
 
-    <!-- Экспорт в XLSX -->
-    <AppDialog
+    <RegistryExportDialog
       v-model="exportOpen"
-      title="Экспорт в XLSX" size="md" :busy="exporting"
-      :actions="[{ kind: 'cancel', label: 'Отмена' }, { kind: 'confirm', label: 'Экспортировать', icon: 'download' }]"
-      @cancel="exportOpen = false" @confirm="doExport"
-    >
-      <div class="rg-export">
-        <div v-if="selectedIds.size" class="rg-export-scope">
-          <label class="rg-radio">
-            <input type="radio" value="all" v-model="exportScope" />
-            <span>Все записи<template v-if="store.filters.search"> (по фильтру поиска)</template></span>
-          </label>
-          <label class="rg-radio">
-            <input type="radio" value="selected" v-model="exportScope" />
-            <span>Только выбранные ({{ selectedIds.size }})</span>
-          </label>
-        </div>
+      :fields="exportableFields"
+      :selected-ids="[...selectedIds]"
+      :search="store.filters.search"
+      :filename="store.selected?.name || 'registry'"
+      :request="exportRequest"
+      @error="notif.error($event)"
+    />
 
-        <div class="rg-export-head">
-          <span class="rg-export-title">Поля для выгрузки</span>
-          <div class="rg-export-bulk">
-            <AppButton variant="text" size="sm" label="Выбрать всё" @click="selectAllExport" />
-            <AppButton variant="text" size="sm" label="Снять всё" @click="clearAllExport" />
-          </div>
-        </div>
-
-        <div class="rg-export-fields">
-          <label v-for="f in exportableFields" :key="f.id" class="rg-export-row">
-            <Checkbox :model-value="exportFields.has(f.id)" binary @update:model-value="toggleExportField(f.id)" />
-            <span class="material-symbols-outlined">{{ fieldIcon(f.type) }}</span>
-            <span class="rg-export-name">{{ f.label }}</span>
-          </label>
-          <p v-if="!exportableFields.length" class="rg-export-empty">
-            В этом реестре нет полей, доступных для экспорта (картинки и файлы не выгружаются).
-          </p>
-        </div>
-      </div>
-    </AppDialog>
-
-    <!-- Колонки таблицы -->
-    <AppDialog
+    <RegistryColumnsDialog
       v-model="colsOpen"
-      title="Колонки таблицы" size="sm"
-      :actions="[{ kind: 'cancel', label: 'Готово' }]"
-      @cancel="colsOpen = false"
-    >
-      <AppStack :gap="2">
-        <label v-for="f in store.selected?.fields || []" :key="f.id" class="rg-cols-row">
-          <Checkbox :model-value="visibleCols.includes(f.id)" binary @update:model-value="toggleCol(f.id)" />
-          <span>{{ f.label }}</span>
-        </label>
-      </AppStack>
-    </AppDialog>
+      :fields="store.selected?.fields || []"
+      :visible="visibleCols"
+      @toggle="toggleCol"
+    />
   </AppListDetail>
 </template>
 
 <script setup>
 import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
-import Checkbox from 'primevue/checkbox'
-import Select from 'primevue/select'
+import RegistryColumnsDialog from '@/components/registry/RegistryColumnsDialog.vue'
+import RegistryExportDialog from '@/components/registry/RegistryExportDialog.vue'
 import RegistryRecordDialog from '@/components/registry/RegistryRecordDialog.vue'
+import RegistryRecords from '@/components/registry/RegistryRecords.vue'
 import RegistryQrFindDialog from '@/components/registry/RegistryQrFindDialog.vue'
 import RegistryQrPrintDialog from '@/components/registry/RegistryQrPrintDialog.vue'
 import AppButton from '@/components/ui/AppButton.vue'
-import AppCard from '@/components/ui/AppCard.vue'
+import AppChip from '@/components/ui/AppChip.vue'
 import AppInfoBar from '@/components/ui/AppInfoBar.vue'
 import AppListDetail from '@/components/ui/AppListDetail.vue'
 import AppPage from '@/components/ui/AppPage.vue'
 import AppRow from '@/components/ui/AppRow.vue'
 import AppStack from '@/components/ui/AppStack.vue'
-import BrandLoader from '@/components/common/BrandLoader.vue'
 import ConfirmDialog from '@/components/ui/ConfirmDialog.vue'
 import AppDialog from '@/components/ui/AppDialog.vue'
 import EmptyState from '@/components/common/EmptyState.vue'
 import SearchField from '@/components/common/SearchField.vue'
+import { useRegistryColumns } from '@/composables/useRegistryColumns.js'
+import { useRowSelection } from '@/composables/useRowSelection.js'
 import { useRegistriesStore } from '@/stores/registries.js'
 import { useAuthStore } from '@/stores/auth.js'
 import { exportRecords, getShares, createShare, revokeShare } from '@/api/registries.js'
 import { useNotificationsStore } from '@/stores/notifications.js'
-import { fieldIcon, hasQr, isExportable, isSortable, textValue } from '@/utils/registryFields.js'
+import { hasQr, isExportable } from '@/utils/registryFields.js'
 
 const store = useRegistriesStore()
 const route = useRoute()
@@ -453,33 +344,8 @@ function onCommand(key) {
   else if (key === 'qr-find') qrFindOpen.value = true
   else if (key === 'qr-print') qrPrintOpen.value = true
   else if (key === 'shares') openShares()
-  else if (key === 'export') openExport()
+  else if (key === 'export') exportOpen.value = true
 }
-
-// ── Сортировка узкой раскладки и карточки ──
-const sortOptions = computed(() => {
-  const opts = [{ value: 'created_at', label: 'Дате создания' }]
-  for (const f of shownFields.value) {
-    if (isSortable(f.type)) opts.push({ value: String(f.id), label: f.label })
-  }
-  return opts
-})
-function mobileSetSort(value) {
-  store.filters.sort = value
-  store.filters.page = 1
-  store.fetchRecords()
-}
-function toggleOrder() {
-  store.filters.order = store.filters.order === 'asc' ? 'desc' : 'asc'
-  store.fetchRecords()
-}
-// На карточке первое видимое поле — заголовок, остальные — тело.
-function cardTitle(rec) {
-  const f = shownFields.value[0]
-  const v = f ? textValue(f, rec.data?.[String(f.id)]) : ''
-  return v || `Запись #${rec.id}`
-}
-const cardBodyFields = computed(() => shownFields.value.slice(1))
 
 const searchInput = ref('')
 
@@ -493,65 +359,24 @@ const qrPrintOpen = ref(false)
 const hasQrFields = computed(() => (store.selected?.fields || []).some(hasQr))
 
 const confirmBulk = ref(false)
-const selectedIds = ref(new Set())
 
 const totalPages = computed(() => Math.max(1, Math.ceil(store.total / store.filters.per_page)))
 
-// ── Видимые колонки (per-реестр, localStorage; дефолт — поля с show_in_table) ──
-const visibleCols = ref([])
-const colsKey = (id) => `gw_registry_cols_${id}`
-function loadCols(reg) {
-  if (!reg) { visibleCols.value = []; return }
-  const fields = reg.fields || []
-  try {
-    const raw = localStorage.getItem(colsKey(reg.id))
-    if (raw) {
-      visibleCols.value = JSON.parse(raw).filter((id) => fields.some((f) => f.id === id))
-      return
-    }
-  } catch { /* ignore */ }
-  visibleCols.value = fields.filter((f) => f.show_in_table).map((f) => f.id)
-}
-function saveCols() {
-  if (store.selected) {
-    try { localStorage.setItem(colsKey(store.selected.id), JSON.stringify(visibleCols.value)) } catch { /* ignore */ }
-  }
-}
-function toggleCol(id) {
-  const i = visibleCols.value.indexOf(id)
-  if (i === -1) visibleCols.value.push(id)
-  else visibleCols.value.splice(i, 1)
-  saveCols()
-}
-const shownFields = computed(() => (store.selected?.fields || []).filter((f) => visibleCols.value.includes(f.id)))
+// Видимые колонки — per-реестр, в localStorage (тот же механизм, что и на
+// публичной странице внешней ссылки).
+const { visible: visibleCols, shown: shownFields, toggle: toggleCol } = useRegistryColumns(
+  () => store.selected?.fields || [],
+  () => (store.selectedId == null ? null : `gw_registry_cols_${store.selectedId}`),
+)
+
+const {
+  selected: selectedIds, allSelected, toggle: toggleRow, toggleAll, clear: clearSelection,
+} = useRowSelection(() => store.records)
 
 watch(() => store.selectedId, () => {
   searchInput.value = ''
   clearSelection()
   colsOpen.value = false
-  loadCols(store.selected)
-})
-watch(() => store.selected?.fields, () => loadCols(store.selected))
-
-// ── Выбор записей ──
-const allSelected = computed(() =>
-  store.records.length > 0 && store.records.every((r) => selectedIds.value.has(r.id)),
-)
-function toggleRow(id) {
-  const s = new Set(selectedIds.value)
-  s.has(id) ? s.delete(id) : s.add(id)
-  selectedIds.value = s
-}
-function toggleAll() {
-  selectedIds.value = allSelected.value ? new Set() : new Set(store.records.map((r) => r.id))
-}
-function clearSelection() { selectedIds.value = new Set() }
-
-// Выбор не должен пережить смену страницы/обновление списка.
-watch(() => store.records, () => {
-  const ids = new Set(store.records.map((r) => r.id))
-  const next = new Set([...selectedIds.value].filter((id) => ids.has(id)))
-  if (next.size !== selectedIds.value.size) selectedIds.value = next
 })
 
 // ── Поиск / пагинация ──
@@ -565,6 +390,9 @@ function clearSearch() { clearTimeout(searchTimer); searchInput.value = ''; stor
 // ── Диалог записи ──
 function openRecord(rec) { activeRecord.value = rec; dialogOpen.value = true }
 function openCreate() { activeRecord.value = null; dialogOpen.value = true }
+const saveRecord = (data, record) => (
+  record ? store.updateRecord(record.id, data) : store.createRecord(data)
+)
 
 async function doBulkDelete() {
   confirmBulk.value = false
@@ -577,7 +405,7 @@ async function doBulkDelete() {
 const sharesOpen = ref(false)
 const shares = ref([])
 const sharesLoading = ref(false)
-const sharesBusy = ref(false)
+const sharesBusy = ref('') // какой вид ссылки сейчас создаётся ('' — ни один)
 
 function shareUrl(code) { return `${location.origin}/registry/${code}` }
 
@@ -593,15 +421,15 @@ async function openShares() {
     sharesLoading.value = false
   }
 }
-async function createShareLink() {
-  sharesBusy.value = true
+async function createShareLink(access) {
+  sharesBusy.value = access
   try {
-    const s = await createShare(store.selectedId)
+    const s = await createShare(store.selectedId, access)
     shares.value.unshift(s)
   } catch (e) {
     notif.error(e?.message || 'Не удалось создать ссылку')
   } finally {
-    sharesBusy.value = false
+    sharesBusy.value = ''
   }
 }
 async function revokeShareLink(id) {
@@ -621,59 +449,8 @@ async function copyShare(code) {
 
 // ── Экспорт в XLSX ──
 const exportOpen = ref(false)
-const exporting = ref(false)
-const exportScope = ref('all') // 'all' (по фильтру) | 'selected'
-const exportFields = ref(new Set())
 const exportableFields = computed(() => (store.selected?.fields || []).filter((f) => isExportable(f.type)))
-
-function openExport() {
-  exportScope.value = selectedIds.value.size ? 'selected' : 'all'
-  exportFields.value = new Set(exportableFields.value.map((f) => f.id))
-  exportOpen.value = true
-}
-function toggleExportField(id) {
-  const s = new Set(exportFields.value)
-  s.has(id) ? s.delete(id) : s.add(id)
-  exportFields.value = s
-}
-function selectAllExport() { exportFields.value = new Set(exportableFields.value.map((f) => f.id)) }
-function clearAllExport() { exportFields.value = new Set() }
-
-async function doExport() {
-  if (!exportFields.value.size) { notif.error('Выберите хотя бы одно поле'); return }
-  exporting.value = true
-  try {
-    const params = { fields: [...exportFields.value] }
-    if (exportScope.value === 'selected' && selectedIds.value.size) params.ids = [...selectedIds.value]
-    else params.search = store.filters.search
-    const resp = await exportRecords(store.selectedId, params)
-    if (!resp.ok) {
-      let msg = 'Не удалось выгрузить'
-      try { msg = (await resp.json()).message || msg } catch { /* ignore */ }
-      throw new Error(msg)
-    }
-    const blob = await resp.blob()
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url
-    a.download = `${store.selected?.name || 'registry'}.xlsx`
-    document.body.appendChild(a)
-    a.click()
-    document.body.removeChild(a)
-    URL.revokeObjectURL(url)
-    exportOpen.value = false
-  } catch (e) {
-    notif.error(e?.message || 'Не удалось выгрузить')
-  } finally {
-    exporting.value = false
-  }
-}
-
-function shortDate(v) {
-  if (!v) return ''
-  const d = new Date(v)
-  return isNaN(d.getTime()) ? '' : d.toLocaleDateString('ru-RU')
-}
+const exportRequest = (params) => exportRecords(store.selectedId, params)
 
 /* Переход из строки глобального поиска: открыть нужный реестр и подставить
    искомый текст — найденная запись сразу в выборке. */
@@ -689,134 +466,17 @@ watch(() => route.query, applySearchQuery)
 
 <style scoped>
 /* Каркас, шапка, команды, футер и стеклянные панели — общие компоненты
-   (AppListDetail / AppPage). Здесь остаётся только рабочая область раздела:
-   таблица записей и её карточный вид в узкой раскладке. */
-
-/* ── Сортировка в узкой раскладке ── */
-.rg-msort {
-  flex: none;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 8px 14px;
-  border-bottom: 1px solid var(--color-outline-dim);
-  color: var(--color-text-dim);
-}
-.rg-msort > .material-symbols-outlined { font-size: 20px; }
-.rg-msort-select { flex: 1; min-width: 0; }
+   (AppListDetail / AppPage), записи и диалоги — components/registry/*.
+   Здесь остаётся только то, что принадлежит самому разделу. */
 
 .rg-selbar { flex: none; margin: 10px 14px 0; }
-
-/* ── Таблица: собственный скролл, sticky-шапка ── */
-.rg-tablebox { position: relative; flex: 1; min-height: 0; display: flex; }
-.rg-scroll { position: relative; flex: 1; min-height: 0; overflow: auto; }
-
-.rg-table {
-  width: 100%;
-  border-collapse: collapse;
-  font-size: 14px;
-}
-
-/* Строки уезжают под шапку — ей нужно плотное стекло с блюром. */
-.rg-table thead th {
-  position: sticky;
-  top: 0;
-  z-index: 1;
-  padding: 12px 14px;
-  border-bottom: 1px solid var(--color-outline-dim);
-  background: var(--acrylic-bg-strong);
-  -webkit-backdrop-filter: var(--acrylic-blur);
-  backdrop-filter: var(--acrylic-blur);
-  text-align: left;
-  font-weight: 700;
-  color: var(--color-text);
-  white-space: nowrap;
-  user-select: none;
-}
-
-.rg-table thead th.sortable { cursor: pointer; }
-.rg-table thead th.sortable:hover { color: var(--color-primary); }
-.rg-th-inner { display: inline-flex; align-items: center; gap: 4px; }
-.rg-sort { font-size: 16px; }
-.rg-th-check, .rg-td-check { width: 48px; text-align: center; padding-left: 16px; padding-right: 0; }
-.rg-th-date, .rg-td-date { width: 130px; white-space: nowrap; color: var(--color-text-dim); }
-
-.rg-row { cursor: pointer; }
-.rg-row:hover { background: var(--color-surface-high); }
-.rg-row.selected { background: var(--color-primary-container); }
-
-.rg-table tbody td {
-  padding: 11px 14px;
-  border-bottom: 1px solid var(--color-outline-dim);
-  color: var(--color-text);
-}
-
-.rg-cell {
-  display: block;
-  max-width: 320px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.rg-overlay {
-  position: absolute;
-  inset: 0;
-  display: grid;
-  place-items: center;
-  background: color-mix(in oklch, var(--color-surface) 60%, transparent);
-}
-
-.rg-empty { position: absolute; inset: 0; pointer-events: none; }
-
-/* ── Карточки записей (узкая раскладка) ── */
-.rg-cards { flex: 1; min-height: 0; overflow-y: auto; padding: 12px; }
-.rg-cards > :deep(*) { flex-shrink: 0; }
-
-.rg-cards-selall {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 4px 4px 0;
-  font-size: 13px;
-  color: var(--color-text-dim);
-}
-
-.rg-card-head { display: flex; align-items: center; gap: 10px; }
-.rg-card-check { flex: none; display: inline-flex; }
-
-.rg-card-title {
-  flex: 1;
-  min-width: 0;
-  font-size: 15px;
-  font-weight: 700;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.rg-card-chev { flex: none; color: var(--color-text-dim); }
-.rg-card-body { display: flex; flex-direction: column; gap: 6px; }
-.rg-card-row { display: flex; gap: 10px; font-size: 14px; }
-
-.rg-card-label {
-  flex: none;
-  width: 40%;
-  max-width: 160px;
-  color: var(--color-text-dim);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.rg-card-val { flex: 1; min-width: 0; word-break: break-word; }
 
 /* ── Футер: счётчик и пагинация ── */
 .rg-total { flex: 1; font-size: 13px; color: var(--color-text-dim); }
 .rg-pager { display: flex; align-items: center; gap: 8px; }
 .rg-page-info { min-width: 56px; text-align: center; font-size: 13px; color: var(--color-text-dim); }
 
-/* ── Диалоги раздела ── */
+/* ── Диалог внешних ссылок ── */
 .rg-shares { display: flex; flex-direction: column; gap: 14px; }
 .rg-shares-note { margin: 0; font-size: 13px; line-height: 1.5; color: var(--color-text-dim); }
 .rg-shares-empty { padding: 16px; text-align: center; font-size: 14px; color: var(--color-text-dim); }
@@ -834,47 +494,4 @@ watch(() => route.query, applySearchQuery)
   color: var(--color-text);
   font-size: 13px;
 }
-
-.rg-export { display: flex; flex-direction: column; gap: 16px; }
-
-.rg-export-scope {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  padding: 12px;
-  border: 1px solid var(--color-outline-dim);
-  border-radius: var(--radius-md);
-  background: var(--color-surface-low);
-}
-
-.rg-radio { display: flex; align-items: center; gap: 10px; font-size: 14px; cursor: pointer; }
-.rg-radio input { width: 18px; height: 18px; accent-color: var(--color-primary); }
-.rg-export-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
-
-.rg-export-title {
-  font-size: 13px;
-  font-weight: 700;
-  text-transform: uppercase;
-  color: var(--color-text-dim);
-}
-
-.rg-export-bulk { display: flex; gap: 4px; }
-.rg-export-fields { display: flex; flex-direction: column; gap: 2px; max-height: 320px; overflow-y: auto; }
-
-.rg-export-row,
-.rg-cols-row {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 9px 8px;
-  border-radius: var(--radius-md);
-  font-size: 14px;
-  cursor: pointer;
-}
-
-.rg-export-row:hover,
-.rg-cols-row:hover { background: var(--color-surface-high); }
-.rg-export-row .material-symbols-outlined { font-size: 20px; color: var(--color-text-dim); }
-.rg-export-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.rg-export-empty { margin: 0; font-size: 14px; color: var(--color-text-dim); }
 </style>

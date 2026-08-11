@@ -18,7 +18,7 @@
           v-if="editing"
           :field="f"
           :model-value="form[String(f.id)] ?? null"
-          :upload="uploadFile"
+          :upload="upload"
           @update:model-value="form[String(f.id)] = $event"
         />
         <FieldValue v-else :field="f" :value="record?.data?.[String(f.id)] ?? null" />
@@ -28,40 +28,53 @@
 
     <template #footer>
       <template v-if="editing">
-        <button class="btn-text" :disabled="saving" @click="cancelEdit">Отмена</button>
-        <button class="btn-filled" :disabled="saving" @click="save">
-          <span v-if="saving" class="material-symbols-outlined spin">progress_activity</span>
-          {{ isNew ? 'Создать' : 'Сохранить' }}
-        </button>
+        <AppButton variant="text" label="Отмена" :disabled="saving" @click="cancelEdit" />
+        <AppButton
+          variant="filled"
+          :label="isNew ? 'Создать' : 'Сохранить'"
+          :loading="saving"
+          @click="submit"
+        />
       </template>
       <template v-else>
-        <button class="btn-text" @click="onClose(false)">Закрыть</button>
-        <button v-if="!readonly" class="btn-filled" @click="editing = true">
-          <span class="material-symbols-outlined">edit</span> Редактировать
-        </button>
+        <AppButton variant="text" label="Закрыть" @click="onClose(false)" />
+        <AppButton
+          v-if="!readonly"
+          variant="filled"
+          icon="edit"
+          label="Редактировать"
+          @click="editing = true"
+        />
       </template>
     </template>
   </AppDialog>
 </template>
 
 <script setup>
+/* Карточка записи: просмотр и правка. Сохранение и загрузку файлов делает
+   вызывающий (`save`/`upload`) — раздел ходит своими ручками, публичная
+   страница по ссылке своими, а сама карточка про это ничего не знает и потому
+   годится обеим. */
 import { reactive, ref, watch } from 'vue'
+import AppButton from '@/components/ui/AppButton.vue'
 import AppDialog from '@/components/ui/AppDialog.vue'
 import FieldInput from '@/components/common/FieldInput.vue'
 import FieldValue from '@/components/common/FieldValue.vue'
 import { uploadFile } from '@/api/registries.js'
-import { useRegistriesStore } from '@/stores/registries.js'
 import { useNotificationsStore } from '@/stores/notifications.js'
 
 const props = defineProps({
   modelValue: { type: Boolean, default: false },
   registry: { type: Object, default: null },
   record: { type: Object, default: null }, // null → создание новой записи
-  readonly: { type: Boolean, default: false }, // публичный просмотр по ссылке
+  readonly: { type: Boolean, default: false }, // просмотр по ссылке уровня view
+  /** (data, record|null) => Promise — сохранение; record === null → создание. */
+  save: { type: Function, default: null },
+  /** (file) => Promise<{path,name,mime,size,thumb?}> — загрузка файла поля. */
+  upload: { type: Function, default: uploadFile },
 })
 const emit = defineEmits(['update:modelValue', 'saved'])
 
-const store = useRegistriesStore()
 const notif = useNotificationsStore()
 
 const editing = ref(false)
@@ -99,17 +112,12 @@ function cancelEdit() {
   editing.value = false
 }
 
-async function save() {
+async function submit() {
+  if (!props.save) return
   saving.value = true
   try {
-    const data = { ...form }
-    if (isNew.value) {
-      await store.createRecord(data)
-      notif.success('Запись добавлена')
-    } else {
-      await store.updateRecord(props.record.id, data)
-      notif.success('Запись сохранена')
-    }
+    await props.save({ ...form }, isNew.value ? null : props.record)
+    notif.success(isNew.value ? 'Запись добавлена' : 'Запись сохранена')
     emit('saved')
     emit('update:modelValue', false)
   } catch (e) {
@@ -135,20 +143,4 @@ async function save() {
   .rec-cell { grid-column: span 1 !important; }
 }
 
-.btn-text {
-  border: none; background: none; cursor: pointer;
-  padding: 10px 16px; border-radius: var(--radius-full);
-  color: var(--color-text-dim); font-weight: 600; font-size: 14px;
-}
-.btn-text:hover { background: var(--color-surface-high); color: var(--color-text); }
-.btn-filled {
-  display: inline-flex; align-items: center; gap: 6px;
-  border: none; cursor: pointer;
-  padding: 10px 18px; border-radius: var(--radius-full);
-  background: var(--color-primary); color: var(--color-on-primary);
-  font-weight: 600; font-size: 14px;
-}
-.btn-filled:disabled { opacity: 0.6; cursor: default; }
-.spin { animation: rspin 1s linear infinite; }
-@keyframes rspin { to { transform: rotate(360deg); } }
 </style>

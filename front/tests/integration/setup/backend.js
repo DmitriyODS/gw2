@@ -227,6 +227,9 @@ export default async function setup() {
     PASETO_PRIVATE_KEY: PASETO.privateKey, PASETO_REFRESH_KEY: PASETO.refreshKey,
     UPLOAD_FOLDER: fs.mkdtempSync(path.join(process.env.TMPDIR || '/tmp', 'gw2-front-uploads-')),
     MAIL_GRPC_ADDR: `localhost:${GRPC.mail}`,
+    // Сценарии заводят десятки аккаунтов с одного адреса — прод-щит от
+    // штамповки регистраций (8 в час на IP) остановил бы стенд на восьмом.
+    REGISTER_IP_LIMIT: '100000',
     // Перенос компании: authsvc собирает архив из кусков владельцев контента.
     COMPANY_DATA_ADDRS: [
       `tasks=localhost:${GRPC.tasks}`,

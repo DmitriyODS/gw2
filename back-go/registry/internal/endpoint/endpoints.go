@@ -38,6 +38,11 @@ type Endpoints struct {
 	SharedRegistry endpoint.Endpoint
 	SharedRecords  endpoint.Endpoint
 	SharedExport   endpoint.Endpoint
+
+	// Ссылка уровня edit: правка записей без авторизации.
+	SharedCreateRecord endpoint.Endpoint
+	SharedUpdateRecord endpoint.Endpoint
+	SharedUpload       endpoint.Endpoint
 }
 
 // ── Request-типы ──
@@ -126,6 +131,7 @@ type ShareReq struct {
 	RegistryID int64
 	UserID     int64
 	ShareID    int64
+	Access     string // view | edit (только при создании)
 }
 
 type SharedRecordsReq struct {
@@ -138,6 +144,19 @@ type SharedExportReq struct {
 	FieldIDs []int64
 	Search   string
 	IDs      []int64
+}
+
+type SharedWriteReq struct {
+	Code     string
+	RecordID int64
+	Data     map[string]any
+}
+
+type SharedUploadReq struct {
+	Code     string
+	FileName string
+	Mime     string
+	Data     []byte
 }
 
 func New(s *service.Service) Endpoints {
@@ -212,7 +231,7 @@ func New(s *service.Service) Endpoints {
 		},
 		CreateShare: func(ctx context.Context, request any) (any, error) {
 			r := request.(ShareReq)
-			return s.CreateShare(ctx, r.CompanyID, r.RegistryID, r.UserID)
+			return s.CreateShare(ctx, r.CompanyID, r.RegistryID, r.UserID, r.Access)
 		},
 		RevokeShare: func(ctx context.Context, request any) (any, error) {
 			r := request.(ShareReq)
@@ -232,6 +251,18 @@ func New(s *service.Service) Endpoints {
 				return nil, err
 			}
 			return ExportResp{Data: data, Name: name}, nil
+		},
+		SharedCreateRecord: func(ctx context.Context, request any) (any, error) {
+			r := request.(SharedWriteReq)
+			return s.SharedCreateRecord(ctx, r.Code, r.Data)
+		},
+		SharedUpdateRecord: func(ctx context.Context, request any) (any, error) {
+			r := request.(SharedWriteReq)
+			return s.SharedUpdateRecord(ctx, r.Code, r.RecordID, r.Data)
+		},
+		SharedUpload: func(ctx context.Context, request any) (any, error) {
+			r := request.(SharedUploadReq)
+			return s.SharedUpload(ctx, r.Code, r.FileName, r.Mime, r.Data)
 		},
 	}
 }
