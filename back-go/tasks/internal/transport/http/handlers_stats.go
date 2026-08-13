@@ -9,12 +9,19 @@ import (
 	"github.com/DmitriyODS/gw2/back-go/tasks/internal/endpoint"
 )
 
-// parsePeriod — как _parse_period во Flask: дефолт — текущий год целиком
-// (UTC); date-only `to` расширяется до конца дня.
+// bizZone — деловая таймзона платформы, та же, по которой SQL статистики режет
+// сутки (`AT TIME ZONE 'Europe/Moscow'`). Фиксированное смещение, а не
+// LoadLocation: tzdata в alpine-образе нет (как в assistant_stats.go и petsvc).
+var bizZone = time.FixedZone("MSK", 3*60*60)
+
+// parsePeriod — период отчёта; дефолт — текущий год целиком. Дата без времени —
+// ДЕЛОВОЙ ДЕНЬ ЦЕЛИКОМ в МСК: дни в срезах бакетятся по МСК, и граница в UTC
+// срезала бы у крайних дней первые три часа — «сегодня» теряло утренние
+// поступления и закрытия. Значение со временем берётся как есть.
 func parsePeriod(c *fiber.Ctx) (time.Time, time.Time, bool) {
-	year := time.Now().UTC().Year()
-	start := time.Date(year, 1, 1, 0, 0, 0, 0, time.UTC)
-	end := time.Date(year, 12, 31, 23, 59, 59, 0, time.UTC)
+	year := time.Now().In(bizZone).Year()
+	start := time.Date(year, 1, 1, 0, 0, 0, 0, bizZone)
+	end := time.Date(year, 12, 31, 23, 59, 59, 999999000, bizZone)
 
 	fromStr, toStr := c.Query("from"), c.Query("to")
 	if fromStr != "" {
@@ -23,6 +30,9 @@ func parsePeriod(c *fiber.Ctx) (time.Time, time.Time, bool) {
 			return start, end, false
 		}
 		start = t
+		if isDateOnly(fromStr) {
+			start = time.Date(t.Year(), t.Month(), t.Day(), 0, 0, 0, 0, bizZone)
+		}
 	}
 	if toStr != "" {
 		t, ok := parseISODateTime(toStr)
@@ -30,21 +40,17 @@ func parsePeriod(c *fiber.Ctx) (time.Time, time.Time, bool) {
 			return start, end, false
 		}
 		end = t
-		if !containsT(toStr) {
-			end = time.Date(end.Year(), end.Month(), end.Day(),
-				23, 59, 59, 999999000, end.Location())
+		if isDateOnly(toStr) {
+			end = time.Date(t.Year(), t.Month(), t.Day(),
+				23, 59, 59, 999999000, bizZone)
 		}
 	}
 	return start, end, true
 }
 
-func containsT(s string) bool {
-	for _, r := range s {
-		if r == 'T' {
-			return true
-		}
-	}
-	return false
+func isDateOnly(s string) bool {
+	_, err := time.Parse("2006-01-02", s)
+	return err == nil
 }
 
 func badPeriod(c *fiber.Ctx) error {

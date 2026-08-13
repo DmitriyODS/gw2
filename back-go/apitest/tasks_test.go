@@ -668,6 +668,56 @@ func TestStatsNoCrossCompanyLeak(t *testing.T) {
 	}
 }
 
+// Регрессия: плитка «Задачи за период» — состояния на ГРАНИЦАХ периода, а не
+// «как сейчас». Долг — открытые к началу, остаток — открытые к концу; обе
+// метрики брались от текущего состояния, поэтому за прошлый период «Осталось»
+// показывало сегодняшний остаток компании. Плюс граница дня — МСК, а не UTC.
+func TestStatsPeriodBoundaries(t *testing.T) {
+	admin, _, deptID := newTaskCompany(t)
+
+	// Даты задаём напрямую: REST выставляет received_at/archived_at «сейчас».
+	setDates := func(id int64, received string, archived any) {
+		t.Helper()
+		if _, err := db.Exec(dbCtx(t), `
+			UPDATE tasks
+			   SET received_at = $2::timestamptz,
+			       archived_at = $3::timestamptz,
+			       is_archived = ($3::timestamptz IS NOT NULL)
+			 WHERE id = $1`, id, received, archived); err != nil {
+			t.Fatalf("подготовка дат задачи %d: %v", id, err)
+		}
+	}
+
+	// Период — март 2024. Задачи расставлены по всем сочетаниям границ.
+	before := createTask(t, admin, deptID, uniq("До периода, закрыта в нём "), nil)
+	setDates(before, "2024-01-10T12:00:00+03", "2024-03-05T12:00:00+03")
+	carry := createTask(t, admin, deptID, uniq("До периода, ещё открыта "), nil)
+	setDates(carry, "2024-01-15T12:00:00+03", nil)
+	inOut := createTask(t, admin, deptID, uniq("В периоде, закрыта в нём "), nil)
+	setDates(inOut, "2024-03-10T12:00:00+03", "2024-03-20T12:00:00+03")
+	inOpen := createTask(t, admin, deptID, uniq("В периоде, открыта "), nil)
+	setDates(inOpen, "2024-03-12T12:00:00+03", nil)
+	after := createTask(t, admin, deptID, uniq("После периода "), nil)
+	setDates(after, "2024-05-01T12:00:00+03", nil)
+	// Закрыта 1 марта в 01:00 МСК — по UTC это ещё февраль: в периоде она
+	// окажется, только если граница дня считается по деловой зоне.
+	msk := createTask(t, admin, deptID, uniq("Закрыта ночью 1 марта "), nil)
+	setDates(msk, "2024-01-20T12:00:00+03", "2024-03-01T01:00:00+03")
+
+	r := tasksAPI.doJSON(t, http.MethodGet,
+		"/api/stats/common?from=2024-03-01&to=2024-03-31", admin.Token, nil)
+	requireStatus(t, r, 200, "stats common за март")
+	m, _ := r.JSON["tasks"].(map[string]any)
+	debt, received := m["debt"].(float64), m["received"].(float64)
+	closed, remaining := m["closed"].(float64), m["remaining"].(float64)
+	if debt != 3 || received != 2 || closed != 3 || remaining != 2 {
+		t.Fatalf("метрики марта (ждём долг 3, поступило 2, закрыто 3, осталось 2): %s", r.Raw)
+	}
+	if remaining != debt+received-closed {
+		t.Fatalf("баланс плитки не сходится: %s", r.Raw)
+	}
+}
+
 // ── YouGile: статус и вебхук без внешних вызовов ─────────────────
 
 func TestYougileStatusAndWebhook(t *testing.T) {

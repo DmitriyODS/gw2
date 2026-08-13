@@ -45,16 +45,27 @@ func memberCond(args *[]any, companyID *int64, userIDCol string) string {
 	return " AND " + userIDCol + " IN (SELECT user_id FROM user_companies WHERE company_id = $" + strconv.Itoa(len(*args)) + ")"
 }
 
+// CommonMetrics — поток задач ЗА ПЕРИОД: долг на его начало, поступило,
+// закрыто, осталось на его конец. Все четыре — состояния на ГРАНИЦАХ периода, а
+// не «как сейчас»: иначе за прошлый месяц «Осталось» показывало сегодняшний
+// остаток компании, а «Долг» терял задачи, закрытые внутри периода. Отсюда
+// инвариант плитки: debt + received − closed = remaining (закрытие сдвигает
+// задачу ровно из одного слагаемого).
+//
+// Архивная запись без archived_at (наследие импорта) считается закрытой до
+// периода — она не попадает ни в долг, ни в остаток, и баланс сходится.
 func (r *Repo) CommonMetrics(ctx context.Context, start, end time.Time, companyID *int64) (*domain.CommonMetrics, error) {
 	args := []any{start, end}
 	cond := companyCond(&args, companyID, "company_id")
 	var m domain.CommonMetrics
 	err := r.pool.QueryRow(ctx, `
-		SELECT COUNT(id) FILTER (WHERE is_archived = FALSE AND received_at < $1),
+		SELECT COUNT(id) FILTER (WHERE received_at < $1
+		                           AND (is_archived = FALSE OR archived_at >= $1)),
 		       COUNT(id) FILTER (WHERE received_at >= $1 AND received_at <= $2),
 		       COUNT(id) FILTER (WHERE is_archived = TRUE
 		                           AND archived_at >= $1 AND archived_at <= $2),
-		       COUNT(id) FILTER (WHERE is_archived = FALSE)
+		       COUNT(id) FILTER (WHERE received_at <= $2
+		                           AND (is_archived = FALSE OR archived_at > $2))
 		  FROM tasks
 		 WHERE TRUE`+cond, args...).
 		Scan(&m.Debt, &m.Received, &m.Closed, &m.Remaining)
