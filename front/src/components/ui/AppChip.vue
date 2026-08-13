@@ -49,23 +49,27 @@ defineEmits(['click', 'remove'])
 </script>
 
 <style scoped>
+/* Размеры — общие с остальным управлением (кнопка size-sm, вкладка): пилюля
+   ростом ниже соседей читалась как чужой элемент. */
 .chip {
   display: inline-flex;
   align-items: center;
-  gap: 5px;
-  padding: 4px 11px;
+  gap: 6px;
+  min-height: 32px;
+  padding: 6px 14px;
   border: 1px solid transparent;
   border-radius: var(--radius-full);
   background: var(--color-surface-high);
   color: var(--color-text-dim);
   font: inherit;
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 600;
   white-space: nowrap;
 }
 
-.chip-sm { padding: 2px 8px; font-size: 11px; }
-.chip .material-symbols-outlined { font-size: 16px; flex-shrink: 0; }
+.chip-sm { min-height: 26px; padding: 3px 10px; font-size: 12px; gap: 4px; }
+.chip .material-symbols-outlined { font-size: 18px; flex-shrink: 0; }
+.chip-sm .material-symbols-outlined { font-size: 16px; }
 .chip-count { font-weight: 700; }
 
 .tone-primary { background: var(--color-primary-container); color: var(--color-on-primary-container); }
@@ -73,11 +77,14 @@ defineEmits(['click', 'remove'])
 .tone-warning { background: var(--color-warning-container); color: var(--color-on-warning-container); }
 .tone-error { background: var(--color-error-container); color: var(--color-on-error-container); }
 
-/* Пилюля-фильтр: невыбранная — приглушённое стекло, выбранная — тинт своего тона. */
+/* Пилюля-фильтр: невыбранная — приглушённое стекло, выбранная — тинт своего
+   тона с лёгкой тенью, как у активной вкладки. */
 .chip.interactive {
   cursor: pointer;
-  transition: background 0.15s, border-color 0.15s, color 0.15s;
+  transition: background 0.15s, border-color 0.15s, color 0.15s, box-shadow 0.15s;
 }
+
+.chip.interactive.selected { box-shadow: var(--shadow-sm, none); }
 
 .chip.interactive:not(.selected) {
   border-color: var(--acrylic-border);
@@ -95,8 +102,8 @@ defineEmits(['click', 'remove'])
 .chip-x {
   display: grid;
   place-items: center;
-  width: 18px; min-width: 18px; max-width: 18px;
-  height: 18px; min-height: 18px; max-height: 18px;
+  width: 20px; min-width: 20px; max-width: 20px;
+  height: 20px; min-height: 20px; max-height: 20px;
   margin-right: -4px;
   padding: 0;
   border: none;
@@ -106,5 +113,10 @@ defineEmits(['click', 'remove'])
   cursor: pointer;
 }
 
-.chip-x .material-symbols-outlined { font-size: 13px; }
+.chip-x .material-symbols-outlined { font-size: 14px; }
+.chip-sm .chip-x {
+  width: 16px; min-width: 16px; max-width: 16px;
+  height: 16px; min-height: 16px; max-height: 16px;
+}
+.chip-sm .chip-x .material-symbols-outlined { font-size: 12px; }
 </style>

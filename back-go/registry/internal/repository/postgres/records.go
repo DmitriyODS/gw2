@@ -62,8 +62,16 @@ func (r *Repo) ListRecords(ctx context.Context, f domain.RecordListFilter) ([]*d
 	where := `WHERE registry_id = $1`
 	args := []any{f.RegistryID}
 	if f.Search != "" {
-		where += ` AND search_text ILIKE '%' || $2 || '%'`
 		args = append(args, f.Search)
+		where += fmt.Sprintf(` AND search_text ILIKE '%%' || $%d || '%%'`, len(args))
+	}
+	// Фильтр тегом. Одно containment-условие покрывает оба вида спискового
+	// поля: у одиночного значение — строка ("А" @> "А"), у множественного —
+	// массив (["А","Б"] @> "А"). id поля — int64 из домена, встраивается
+	// безопасно.
+	if f.TagFieldID > 0 && f.TagValue != "" {
+		args = append(args, f.TagValue)
+		where += fmt.Sprintf(` AND data->'%d' @> to_jsonb($%d::text)`, f.TagFieldID, len(args))
 	}
 
 	var total int
@@ -125,25 +133,52 @@ func (r *Repo) DeleteRecord(ctx context.Context, id int64) error {
 	return err
 }
 
-func (r *Repo) DeleteRecords(ctx context.Context, registryID int64, ids []int64) (int64, error) {
-	tag, err := r.pool.Exec(ctx,
-		`DELETE FROM registry_records WHERE registry_id = $1 AND id = ANY($2)`, registryID, ids)
-	if err != nil {
-		return 0, err
+// selectionWhere — условие набора записей под массовую операцию. Явный список
+// id бьёт фильтр: человек уже указал, что именно нужно.
+func selectionWhere(f domain.ExportFilter, args *[]any) string {
+	where := `WHERE registry_id = $1`
+	if len(f.IDs) > 0 {
+		*args = append(*args, f.IDs)
+		return where + fmt.Sprintf(` AND id = ANY($%d)`, len(*args))
 	}
-	return tag.RowsAffected(), nil
+	if f.Search != "" {
+		*args = append(*args, f.Search)
+		where += fmt.Sprintf(` AND search_text ILIKE '%%' || $%d || '%%'`, len(*args))
+	}
+	if f.TagFieldID > 0 && f.TagValue != "" {
+		*args = append(*args, f.TagValue)
+		where += fmt.Sprintf(` AND data->'%d' @> to_jsonb($%d::text)`, f.TagFieldID, len(*args))
+	}
+	if len(f.Exclude) > 0 {
+		*args = append(*args, f.Exclude)
+		where += fmt.Sprintf(` AND NOT (id = ANY($%d))`, len(*args))
+	}
+	return where
 }
 
-func (r *Repo) RecordsForExport(ctx context.Context, registryID int64, search string, ids []int64) ([]*domain.Record, error) {
-	where := `WHERE registry_id = $1`
-	args := []any{registryID}
-	if len(ids) > 0 {
-		where += ` AND id = ANY($2)`
-		args = append(args, ids)
-	} else if search != "" {
-		where += ` AND search_text ILIKE '%' || $2 || '%'`
-		args = append(args, search)
+func (r *Repo) DeleteRecords(ctx context.Context, f domain.ExportFilter) ([]*domain.Record, error) {
+	args := []any{f.RegistryID}
+	where := selectionWhere(f, &args)
+	rows, err := r.pool.Query(ctx,
+		`DELETE FROM registry_records `+where+` RETURNING `+recordCols, args...)
+	if err != nil {
+		return nil, err
 	}
+	defer rows.Close()
+	out := []*domain.Record{}
+	for rows.Next() {
+		rec, err := scanRecord(rows)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, rec)
+	}
+	return out, rows.Err()
+}
+
+func (r *Repo) RecordsForExport(ctx context.Context, f domain.ExportFilter) ([]*domain.Record, error) {
+	args := []any{f.RegistryID}
+	where := selectionWhere(f, &args)
 	rows, err := r.pool.Query(ctx,
 		`SELECT `+recordCols+` FROM registry_records `+where+` ORDER BY created_at DESC, id DESC`, args...)
 	if err != nil {

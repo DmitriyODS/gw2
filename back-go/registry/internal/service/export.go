@@ -15,17 +15,27 @@ import (
 // ExportRecords — xlsx с выбранными полями. ids != nil → только эти записи,
 // иначе все записи реестра по фильтру search. Экспортируются только текстовые
 // типы полей (картинки/файлы исключаются). Возвращает байты файла и имя реестра.
-func (s *Service) ExportRecords(ctx context.Context, companyID, registryID int64, fieldIDs []int64, search string, ids []int64) ([]byte, string, error) {
+// ExportParams — что выгружаем: колонки плюс фильтр экрана (или явно
+// выбранные записи).
+type ExportParams struct {
+	FieldIDs []int64
+	Search   string
+	IDs      []int64
+	Exclude  []int64
+	Tag      string
+}
+
+func (s *Service) ExportRecords(ctx context.Context, companyID, registryID int64, p ExportParams) ([]byte, string, error) {
 	reg, err := s.requireRegistry(ctx, companyID, registryID)
 	if err != nil {
 		return nil, "", err
 	}
-	return s.buildExport(ctx, reg, fieldIDs, search, ids)
+	return s.buildExport(ctx, reg, p)
 }
 
 // buildExport — формирование xlsx по уже проверенному реестру (authed или
 // публичный доступ по ссылке).
-func (s *Service) buildExport(ctx context.Context, reg *domain.Registry, fieldIDs []int64, search string, ids []int64) ([]byte, string, error) {
+func (s *Service) buildExport(ctx context.Context, reg *domain.Registry, p ExportParams) ([]byte, string, error) {
 	allFields, err := s.repo.ListFields(ctx, reg.ID)
 	if err != nil {
 		return nil, "", err
@@ -33,7 +43,7 @@ func (s *Service) buildExport(ctx context.Context, reg *domain.Registry, fieldID
 
 	// Колонки — в порядке реестра, пересечение «экспортируемых» с запрошенными.
 	want := map[int64]bool{}
-	for _, id := range fieldIDs {
+	for _, id := range p.FieldIDs {
 		want[id] = true
 	}
 	cols := make([]domain.Field, 0, len(allFields))
@@ -46,7 +56,12 @@ func (s *Service) buildExport(ctx context.Context, reg *domain.Registry, fieldID
 		return nil, "", domain.NewError("VALIDATION", "Выберите хотя бы одно поле для экспорта", 400)
 	}
 
-	records, err := s.repo.RecordsForExport(ctx, reg.ID, search, ids)
+	// Фильтр — тот же, что и на экране: выгружаем видимое (или явно выбранное).
+	filter := domain.ExportFilter{
+		RegistryID: reg.ID, Search: p.Search, IDs: p.IDs, Exclude: p.Exclude,
+	}
+	s.applyTagFilter(ctx, reg, p.Tag, &filter)
+	records, err := s.repo.RecordsForExport(ctx, filter)
 	if err != nil {
 		return nil, "", err
 	}

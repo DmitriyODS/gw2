@@ -23,9 +23,11 @@ type RecordList struct {
 
 // RecordListParams — сырые параметры запроса списка (из query-строки).
 type RecordListParams struct {
-	Search  string
-	Sort    string // "" | "created_at" | "<field_id>"
-	Order   string // "asc" | "desc"
+	Search string
+	Sort   string // "" | "created_at" | "<field_id>"
+	Order  string // "asc" | "desc"
+	// Tag — значение поля-тега реестра (чип над таблицей); пусто — «все».
+	Tag     string
 	Page    int
 	PerPage int
 }
@@ -33,23 +35,24 @@ type RecordListParams struct {
 // ListRecords — поиск/сортировка/пагинация записей. Сортировка по полю требует
 // его типа (для приведения в SQL) — берём из определения реестра.
 func (s *Service) ListRecords(ctx context.Context, companyID, registryID int64, p RecordListParams) (*RecordList, error) {
-	if _, err := s.requireRegistry(ctx, companyID, registryID); err != nil {
+	reg, err := s.requireRegistry(ctx, companyID, registryID)
+	if err != nil {
 		return nil, err
 	}
-	return s.listRecordsByRegistry(ctx, registryID, p)
+	return s.listRecordsByRegistry(ctx, reg, p)
 }
 
 // listRecordsByRegistry — ядро выборки страницы записей (без проверки доступа;
 // вызывающий уже проверил права или resolveShare). Используется и authed, и
 // публичным доступом по ссылке.
-func (s *Service) listRecordsByRegistry(ctx context.Context, registryID int64, p RecordListParams) (*RecordList, error) {
-	fields, err := s.repo.ListFields(ctx, registryID)
+func (s *Service) listRecordsByRegistry(ctx context.Context, reg *domain.Registry, p RecordListParams) (*RecordList, error) {
+	fields, err := s.repo.ListFields(ctx, reg.ID)
 	if err != nil {
 		return nil, err
 	}
 
 	f := domain.RecordListFilter{
-		RegistryID: registryID,
+		RegistryID: reg.ID,
 		Search:     strings.TrimSpace(p.Search),
 		Desc:       strings.EqualFold(p.Order, "desc"),
 		Page:       p.Page,
@@ -61,6 +64,14 @@ func (s *Service) listRecordsByRegistry(ctx context.Context, registryID int64, p
 				f.SortFieldID = fid
 				f.SortKind = sortKind(field.Type)
 			}
+		}
+	}
+	// Тег фильтрует только по полю, назначенному тегами администратором: чужой
+	// или отключённый источник фильтром не становится.
+	if tag := strings.TrimSpace(p.Tag); tag != "" && reg.TagFieldID != nil {
+		if field := findField(fields, *reg.TagFieldID); field != nil && field.Type == domain.FieldSelect {
+			f.TagFieldID = field.ID
+			f.TagValue = tag
 		}
 	}
 	if f.Page < 1 {
@@ -177,25 +188,67 @@ func (s *Service) DeleteRecord(ctx context.Context, companyID, registryID, recor
 	return nil
 }
 
+// BulkParams — что удаляем: перечисленные записи либо ВЕСЬ текущий фильтр
+// экрана за вычетом снятых галочек (выбор «отметить всё» живёт между
+// страницами, поэтому приходит фильтром, а не списком id).
+type BulkParams struct {
+	IDs     []int64
+	All     bool
+	Search  string
+	Tag     string
+	Exclude []int64
+}
+
 // DeleteRecords — массовое удаление выбранных записей.
-func (s *Service) DeleteRecords(ctx context.Context, companyID, registryID int64, ids []int64) (int64, error) {
-	if _, err := s.requireRegistry(ctx, companyID, registryID); err != nil {
-		return 0, err
-	}
-	if len(ids) == 0 {
-		return 0, nil
-	}
-	// Снимаем файлы записей до удаления — после DELETE данные уже недоступны.
-	recs, _ := s.repo.RecordsForExport(ctx, registryID, "", ids)
-	n, err := s.repo.DeleteRecords(ctx, registryID, ids)
+func (s *Service) DeleteRecords(ctx context.Context, companyID, registryID int64, p BulkParams) (int64, error) {
+	reg, err := s.requireRegistry(ctx, companyID, registryID)
 	if err != nil {
 		return 0, err
+	}
+	if !p.All && len(p.IDs) == 0 {
+		return 0, nil
+	}
+	filter := domain.ExportFilter{RegistryID: registryID}
+	if p.All {
+		filter.Search, filter.Exclude = strings.TrimSpace(p.Search), p.Exclude
+		s.applyTagFilter(ctx, reg, p.Tag, &filter)
+	} else {
+		filter.IDs = p.IDs
+	}
+	// Удаление возвращает сами записи: id — событию, data — чистке файлов.
+	recs, err := s.repo.DeleteRecords(ctx, filter)
+	if err != nil {
+		return 0, err
+	}
+	if len(recs) == 0 {
+		return 0, nil
+	}
+	ids := make([]int64, 0, len(recs))
+	for _, rec := range recs {
+		ids = append(ids, rec.ID)
 	}
 	s.removeRecordFiles(ctx, companyID, recs...)
 	s.bus.Publish(ctx, "record:bulk-deleted", []string{roomAll}, map[string]any{
 		"ids": ids, "registry_id": registryID, "company_id": companyID,
 	})
-	return n, nil
+	return int64(len(recs)), nil
+}
+
+// applyTagFilter — перевести чип-тег в условие по полю-источнику тегов реестра
+// (чужое или отключённое поле фильтром не становится). Общий для списка,
+// выгрузки и массового удаления — правило одно на всех.
+func (s *Service) applyTagFilter(ctx context.Context, reg *domain.Registry, tag string, out *domain.ExportFilter) {
+	tag = strings.TrimSpace(tag)
+	if tag == "" || reg.TagFieldID == nil {
+		return
+	}
+	fields, err := s.repo.ListFields(ctx, reg.ID)
+	if err != nil {
+		return
+	}
+	if f := findField(fields, *reg.TagFieldID); f != nil && f.Type == domain.FieldSelect {
+		out.TagFieldID, out.TagValue = f.ID, tag
+	}
 }
 
 // ── Хелперы ──────────────────────────────────────────────────────

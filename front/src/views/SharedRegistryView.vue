@@ -73,30 +73,26 @@
         :loading="loading"
         :sort="filters.sort"
         :order="filters.order"
-        :selected="selected"
+        :is-selected="isSelected"
         :all-selected="allSelected"
+        :selection-count="selectionCount"
+        :selection-all="selectionMode === 'all'"
+        :total="total"
         :narrow="tight"
         :search="filters.search"
+        :tags="tags"
+        :tag="filters.tag"
         empty-hint="Владелец ссылки пока не добавил ни одной записи."
         @update:sort="applySort"
+        @update:tag="setTag"
         @open="openRecord"
         @toggle="toggleRow"
         @toggle-all="toggleAll"
+        @select-all-matching="selectAllMatching"
+        @clear-selection="clearSelection"
       >
-        <template #selection>
-          <AppInfoBar
-            v-if="selected.size"
-            class="sr-selbar"
-            tone="info"
-            icon="checklist"
-            :message="`Выбрано: ${selected.size}`"
-            inline
-          >
-            <template #actions>
-              <AppButton size="sm" icon="download" label="Выгрузить" @click="exportOpen = true" />
-              <AppButton size="sm" variant="text" label="Сбросить" @click="clearSelection" />
-            </template>
-          </AppInfoBar>
+        <template #selection-actions>
+          <AppButton size="sm" icon="download" label="Выгрузить" @click="exportOpen = true" />
         </template>
       </RegistryRecords>
     </template>
@@ -122,8 +118,9 @@
   <RegistryExportDialog
     v-model="exportOpen"
     :fields="exportableFields"
-    :selected-ids="[...selected]"
+    :selected-ids="pickedIds"
     :search="filters.search"
+    :tag="filters.tag"
     :filename="registry?.name || 'registry'"
     :request="exportRequest"
   />
@@ -134,7 +131,6 @@ import { computed, onMounted, reactive, ref } from 'vue'
 import { useRoute } from 'vue-router'
 import AppButton from '@/components/ui/AppButton.vue'
 import AppChip from '@/components/ui/AppChip.vue'
-import AppInfoBar from '@/components/ui/AppInfoBar.vue'
 import AppPage from '@/components/ui/AppPage.vue'
 import BrandWordmark from '@/components/common/BrandWordmark.vue'
 import EmptyState from '@/components/common/EmptyState.vue'
@@ -149,7 +145,7 @@ import {
   createSharedRecord, exportSharedRecords, getSharedRecords, getSharedRegistry,
   updateSharedRecord, uploadSharedFile,
 } from '@/api/registries.js'
-import { isExportable } from '@/utils/registryFields.js'
+import { isExportable, tagOptions } from '@/utils/registryFields.js'
 
 const route = useRoute()
 const code = route.params.code
@@ -162,7 +158,15 @@ const loading = ref(false)
 const booting = ref(true)
 const narrow = ref(false)
 
-const filters = reactive({ search: '', sort: 'created_at', order: 'desc', page: 1, per_page: 30 })
+const filters = reactive({ search: '', sort: 'created_at', order: 'desc', tag: '', page: 1, per_page: 30 })
+
+// Теги — те же, что в разделе: варианты поля, назначенного владельцем реестра.
+const tags = computed(() => tagOptions(registry.value))
+function setTag(value) {
+  filters.tag = filters.tag === value ? '' : (value || '')
+  filters.page = 1
+  fetchRecords()
+}
 
 const totalPages = computed(() => Math.max(1, Math.ceil(total.value / filters.per_page)))
 const exportableFields = computed(() => (registry.value?.fields || []).filter((f) => isExportable(f.type)))
@@ -174,8 +178,18 @@ const { visible: visibleCols, shown: shownFields, toggle: toggleCol } = useRegis
   () => `gw_shared_cols_${code}`,
 )
 
-const { selected, allSelected, toggle: toggleRow, toggleAll, clear: clearSelection } =
-  useRowSelection(() => records.value)
+/* Выбор переживает страницы; смена поиска или тега — уже другая выборка,
+   поэтому она его сбрасывает. */
+const {
+  mode: selectionMode, picked, count: selectionCount, isSelected, allSelected,
+  toggle: toggleRow, toggleAll, selectAllMatching, clear: clearSelection,
+} = useRowSelection(() => records.value, {
+  total: () => total.value,
+  scope: () => `${filters.search}|${filters.tag}`,
+})
+
+// Выгрузке нужны отмеченные id; режим «все» уходит фильтром (search + tag).
+const pickedIds = computed(() => (selectionMode.value === 'all' ? [] : [...picked.value]))
 
 /* Ссылка бывает двух видов: только просмотр и просмотр с правкой записей.
    Уровень решает сервер — здесь по нему лишь показываем или прячем правку. */
@@ -188,7 +202,11 @@ const commands = computed(() => {
   const hasFields = registry.value.fields.length
   return [
     ...(canEdit.value && hasFields
-      ? [{ key: 'add', label: 'Добавить', icon: 'add', variant: 'filled', primary: true, fab: true }]
+      // Пока что-то выбрано, плавающая «Добавить» уступает место плашке выбора.
+      ? [{
+        key: 'add', label: 'Добавить', icon: 'add', variant: 'filled',
+        primary: true, fab: true, hidden: selectionCount.value > 0,
+      }]
       : []),
     ...(exportableFields.value.length
       ? [{
@@ -299,7 +317,6 @@ onMounted(load)
 /* Каркас, шапка, записи и диалоги — общие компоненты. Здесь остаётся только
    подвал публичной страницы: счётчик, пагинация и марка. */
 .sr-error { flex: 1; }
-.sr-selbar { flex: none; margin: 10px 14px 0; }
 
 .sr-total { flex: 1; font-size: 13px; color: var(--color-text-dim); }
 .sr-pager { display: flex; align-items: center; gap: 8px; }

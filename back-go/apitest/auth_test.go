@@ -28,24 +28,33 @@ func TestAuthSuggestLogin(t *testing.T) {
 }
 
 func TestAuthRegistrationFlow(t *testing.T) {
-	login := uniq("reg_")
-	email := login + "@apitest.local"
+	first := uniq("reg_")
+	email := first + "@apitest.local"
 	pass := "long-password-1"
 
 	// Регистрация: сессия не выдаётся, только verification_required.
 	r := authAPI.doJSON(t, http.MethodPost, "/api/auth/register", "", map[string]any{
-		"fio": "Регистрационный Тест", "login": login, "email": email, "password": pass,
+		"fio": "Регистрационный Тест", "login": first, "email": email, "password": pass,
 	})
 	requireStatus(t, r, 201, "register")
 	if r.Str("status") != "verification_required" || r.Str("access_token") != "" {
 		t.Fatalf("register: ожидался verification_required без сессии: %s", r.Raw)
 	}
 
-	// Повторная регистрация на тот же email → 409.
+	// Антисквоттинг: НЕподтверждённая регистрация адрес не бронирует — иначе
+	// одной заявки чужим email хватало бы, чтобы запереть жертву вне платформы.
+	// Повторная регистрация проходит и вытесняет прежнюю заявку.
+	login := uniq("reg2_")
 	r = authAPI.doJSON(t, http.MethodPost, "/api/auth/register", "", map[string]any{
-		"fio": "Дубль", "login": uniq("dup_"), "email": email, "password": pass,
+		"fio": "Настоящий Владелец", "login": login, "email": email, "password": pass,
 	})
-	requireError(t, r, 409, "EMAIL_TAKEN", "повторный register на занятый email")
+	requireStatus(t, r, 201, "повторный register на неподтверждённый email")
+
+	// Вытесненной заявки больше нет — её логин не существует (не 403, а 401).
+	r = authAPI.doJSON(t, http.MethodPost, "/api/auth/login", "", map[string]any{
+		"login": first, "password": pass,
+	})
+	requireError(t, r, 401, "INVALID_CREDENTIALS", "login вытесненной заявки")
 
 	// Логин до подтверждения → 403 EMAIL_NOT_VERIFIED.
 	r = authAPI.doJSON(t, http.MethodPost, "/api/auth/login", "", map[string]any{
@@ -92,6 +101,12 @@ func TestAuthRegistrationFlow(t *testing.T) {
 		"login": login, "password": pass,
 	})
 	requireStatus(t, r, 200, "login после верификации")
+
+	// А ПОДТВЕРЖДЁННЫЙ адрес занят навсегда: за ним уже стоит живой аккаунт.
+	r = authAPI.doJSON(t, http.MethodPost, "/api/auth/register", "", map[string]any{
+		"fio": "Дубль", "login": uniq("dup_"), "email": email, "password": pass,
+	})
+	requireError(t, r, 409, "EMAIL_TAKEN", "register на подтверждённый email")
 }
 
 func TestAuthVerifyEmailByTokenLink(t *testing.T) {
@@ -353,11 +368,14 @@ func TestAuthRefreshAfterMembershipLoss(t *testing.T) {
 		creator.Token, map[string]any{"user_id": worker.ID, "role_id": roleEmployee})
 	requireStatus(t, r, 201, "добавление работника")
 
-	// Логин работника: единственная компания автоактивна.
-	r = worker.mustLogin(t)
-	if int64(r.Num("company_id")) != companyID {
-		t.Fatalf("ожидалась автоактивная компания %d: %s", companyID, r.Raw)
+	// Компаний у работника две — его личная и эта, поэтому логин упирается в
+	// выбор компании (личную заводит первый вход, «ноль компаний» не бывает).
+	r = worker.loginResp(t)
+	requireStatus(t, r, 200, "login работника")
+	if r.JSON["needs_company_selection"] != true || r.Str("select_token") == "" {
+		t.Fatalf("ожидался выбор компании при двух членствах: %s", r.Raw)
 	}
+	worker.switchCompany(t, companyID)
 
 	// Исключение из компании: refresh не падает, а даёт сессию без компании.
 	r = authAPI.doJSON(t, http.MethodDelete,
@@ -502,9 +520,10 @@ func TestAuthForgotResetPassword(t *testing.T) {
 func TestCompanyCreateAndLoginGate(t *testing.T) {
 	u := newVerifiedUser(t)
 
-	// Сессия без компаний: company_id null, роль 0.
-	if r := u.mustLogin(t); r.JSON["company_id"] != nil || r.Num("role_level") != 0 {
-		t.Fatalf("login без компаний: ожидалась сессия без company_id: %s", r.Raw)
+	// «Ноль компаний» пользователь не видит: первый вход завёл ему личную —
+	// она единственная, поэтому автоактивна, и в ней он администратор.
+	if r := u.mustLogin(t); r.JSON["company_id"] == nil || r.Num("role_level") != roleAdmin {
+		t.Fatalf("login: ожидалась автоактивная личная компания: %s", r.Raw)
 	}
 
 	// Создание компании: создатель становится администратором.
@@ -520,14 +539,14 @@ func TestCompanyCreateAndLoginGate(t *testing.T) {
 	r = authAPI.doJSON(t, http.MethodPost, "/api/companies", u.Token, map[string]any{"name": name2})
 	requireError(t, r, 409, "DUPLICATE", "компания с дублем имени")
 
-	// Одна компания — автоактивна; две — login-gate.
+	// Компаний больше одной — login упирается в их выбор (личная + две своих).
 	r = u.loginResp(t)
-	requireStatus(t, r, 200, "login с двумя компаниями")
+	requireStatus(t, r, 200, "login с несколькими компаниями")
 	if !r.Bool("needs_company_selection") || r.Str("select_token") == "" {
 		t.Fatalf("ожидался login-gate: %s", r.Raw)
 	}
-	if len(r.List("companies")) != 2 {
-		t.Fatalf("login-gate: ожидались 2 компании: %s", r.Raw)
+	if len(r.List("companies")) != 3 {
+		t.Fatalf("login-gate: ожидались личная и две созданные компании: %s", r.Raw)
 	}
 	selectToken := r.Str("select_token")
 

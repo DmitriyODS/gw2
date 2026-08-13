@@ -20,7 +20,8 @@ func NewRepo(pool *pgxpool.Pool) *Repo { return &Repo{pool: pool} }
 
 func scanRegistry(row pgx.Row) (*domain.Registry, error) {
 	var r domain.Registry
-	err := row.Scan(&r.ID, &r.CompanyID, &r.Name, &r.Position, &r.CreatedBy, &r.CreatedAt, &r.UpdatedAt)
+	err := row.Scan(&r.ID, &r.CompanyID, &r.Name, &r.Position, &r.TagFieldID,
+		&r.CreatedBy, &r.CreatedAt, &r.UpdatedAt)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, nil
 	}
@@ -30,7 +31,7 @@ func scanRegistry(row pgx.Row) (*domain.Registry, error) {
 	return &r, nil
 }
 
-const registryCols = `id, company_id, name, position, created_by, created_at, updated_at`
+const registryCols = `id, company_id, name, position, tag_field_id, created_by, created_at, updated_at`
 
 func (r *Repo) ListRegistries(ctx context.Context, companyID int64) ([]*domain.Registry, error) {
 	rows, err := r.pool.Query(ctx,
@@ -71,10 +72,11 @@ func (r *Repo) CreateRegistry(ctx context.Context, reg *domain.Registry) error {
 		Scan(&reg.ID, &reg.CreatedAt, &reg.UpdatedAt)
 }
 
-func (r *Repo) UpdateRegistry(ctx context.Context, id int64, name string, position int) error {
+func (r *Repo) UpdateRegistry(ctx context.Context, id int64, name string, position int, tagFieldID *int64) error {
 	_, err := r.pool.Exec(ctx,
-		`UPDATE registries SET name = $2, position = $3, updated_at = now() WHERE id = $1`,
-		id, name, position)
+		`UPDATE registries SET name = $2, position = $3, tag_field_id = $4, updated_at = now()
+		  WHERE id = $1`,
+		id, name, position, tagFieldID)
 	return err
 }
 

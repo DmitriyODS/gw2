@@ -14,8 +14,10 @@ export const searchRecords = (q, limit = 5, options = {}) =>
 export const createRegistry = (name) =>
   apiRequest('/registries', { method: 'POST', body: { name } })
 
-export const updateRegistry = (id, name) =>
-  apiRequest(`/registries/${id}`, { method: 'PATCH', body: { name } })
+/* patch: { name, tag_field_id? }. Ключ tag_field_id шлём, ТОЛЬКО когда его
+   меняют: сервер отличает «не трогать» от null («выключить теги»). */
+export const updateRegistry = (id, patch) =>
+  apiRequest(`/registries/${id}`, { method: 'PATCH', body: patch })
 
 export const deleteRegistry = (id) =>
   apiRequest(`/registries/${id}`, { method: 'DELETE' })
@@ -43,15 +45,24 @@ export const updateRecord = (registryId, recordId, data) =>
 export const deleteRecord = (registryId, recordId) =>
   apiRequest(`/registries/${registryId}/records/${recordId}`, { method: 'DELETE' })
 
-export const bulkDeleteRecords = (registryId, ids) =>
-  apiRequest(`/registries/${registryId}/records/bulk-delete`, { method: 'POST', body: { ids } })
+/* selection: { ids } либо { all: true, exclude } — второе пришло из выбора,
+   переживающего страницы: набор описывается фильтром экрана, а не списком id.
+   filter — тот же поиск и тег, что нарисовали таблицу. */
+export const bulkDeleteRecords = (registryId, selection, filter = {}) =>
+  apiRequest(`/registries/${registryId}/records/bulk-delete`, {
+    method: 'POST',
+    body: selection.all
+      ? { all: true, exclude: selection.exclude || [], search: filter.search || '', tag: filter.tag || '' }
+      : { ids: selection.ids || [] },
+  })
 
-// Экспорт записей в xlsx. params: { fields: [ids], search?, ids?: [recordIds] }.
+// Экспорт записей в xlsx. params: { fields: [ids], search?, tag?, ids?: [recordIds] }.
 // Возвращает Response (blob:true) для скачивания файла.
-export const exportRecords = (registryId, { fields = [], search = '', ids = [] } = {}) => {
+export const exportRecords = (registryId, { fields = [], search = '', tag = '', ids = [] } = {}) => {
   const qs = new URLSearchParams()
   if (fields.length) qs.set('fields', fields.join(','))
   if (search) qs.set('search', search)
+  if (tag) qs.set('tag', tag)
   if (ids.length) qs.set('ids', ids.join(','))
   return apiRequest(`/registries/${registryId}/export?${qs}`, { blob: true })
 }
@@ -79,10 +90,11 @@ export const getSharedRecords = (code, params = {}, options = {}) => {
   Object.entries(params).forEach(([k, v]) => { if (v != null && v !== '') qs.set(k, v) })
   return apiRequest(`/registries/shared/${code}/records?${qs}`, options)
 }
-export const exportSharedRecords = (code, { fields = [], search = '', ids = [] } = {}) => {
+export const exportSharedRecords = (code, { fields = [], search = '', tag = '', ids = [] } = {}) => {
   const qs = new URLSearchParams()
   if (fields.length) qs.set('fields', fields.join(','))
   if (search) qs.set('search', search)
+  if (tag) qs.set('tag', tag)
   if (ids.length) qs.set('ids', ids.join(','))
   return apiRequest(`/registries/shared/${code}/export?${qs}`, { blob: true })
 }

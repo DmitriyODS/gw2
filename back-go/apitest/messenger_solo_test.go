@@ -11,10 +11,11 @@ import (
 func TestMessengerDevChatAndSupportInbox(t *testing.T) {
 	root := newSuperAdmin(t)
 
-	// Без активной компании dev-чата нет.
-	solo := newVerifiedUser(t)
-	r := messengerAPI.doJSON(t, http.MethodGet, "/api/messenger/dev-chat", solo.Token, nil)
-	requireError(t, r, 400, "NO_ACTIVE_COMPANY", "dev-чат без компании")
+	// Dev-чат требует активную компанию. У обычного пользователя она есть
+	// всегда (личная), а вот супер-админ вне компаний — и обращаться ему не к
+	// кому: он сам адресат поддержки.
+	r := messengerAPI.doJSON(t, http.MethodGet, "/api/messenger/dev-chat", root.Token, nil)
+	requireError(t, r, 400, "NO_ACTIVE_COMPANY", "dev-чат без активной компании")
 
 	owner := newVerifiedUser(t)
 	owner.createCompany(t, uniq("Поддержка "))

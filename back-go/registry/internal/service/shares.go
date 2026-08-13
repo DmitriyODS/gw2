@@ -108,15 +108,15 @@ func (s *Service) SharedRecords(ctx context.Context, code string, p RecordListPa
 	if err != nil {
 		return nil, err
 	}
-	return s.listRecordsByRegistry(ctx, reg.ID, p)
+	return s.listRecordsByRegistry(ctx, reg, p)
 }
 
-func (s *Service) SharedExport(ctx context.Context, code string, fieldIDs []int64, search string, ids []int64) ([]byte, string, error) {
+func (s *Service) SharedExport(ctx context.Context, code string, p ExportParams) ([]byte, string, error) {
 	reg, _, err := s.resolveShare(ctx, code)
 	if err != nil {
 		return nil, "", err
 	}
-	return s.buildExport(ctx, reg, fieldIDs, search, ids)
+	return s.buildExport(ctx, reg, p)
 }
 
 // ── Правка по ссылке уровня edit ──

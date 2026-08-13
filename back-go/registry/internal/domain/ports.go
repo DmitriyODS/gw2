@@ -14,7 +14,7 @@ type RegistryRepository interface {
 	// CountRegistries — сколько реестров уже есть (лимит тарифа).
 	CountRegistries(ctx Ctx, company_id int64) (int, error)
 	CreateRegistry(ctx Ctx, r *Registry) error
-	UpdateRegistry(ctx Ctx, id int64, name string, position int) error
+	UpdateRegistry(ctx Ctx, id int64, name string, position int, tagFieldID *int64) error
 	DeleteRegistry(ctx Ctx, id int64) error
 	NextRegistryPosition(ctx Ctx, companyID int64) (int, error)
 
@@ -36,13 +36,16 @@ type RegistryRepository interface {
 	CreateRecord(ctx Ctx, r *Record, searchText string) error
 	UpdateRecord(ctx Ctx, id int64, data map[string]any, searchText string) error
 	DeleteRecord(ctx Ctx, id int64) error
-	// DeleteRecords — массовое удаление; возвращает число удалённых.
-	DeleteRecords(ctx Ctx, registryID int64, ids []int64) (int64, error)
+	// DeleteRecords — массовое удаление по фильтру (перечисленные записи либо
+	// всё по поиску/тегу за вычетом Exclude). Возвращает УДАЛЁННЫЕ записи: их
+	// id нужны событию, а data — чистке файлов, и оба приходят одним запросом
+	// (RETURNING), без предварительной выборки.
+	DeleteRecords(ctx Ctx, f ExportFilter) ([]*Record, error)
 	// AllRecords — все записи реестра (для пересчёта search_text после удаления поля).
 	AllRecords(ctx Ctx, registryID int64) ([]*Record, error)
 	// RecordsForExport — записи для выгрузки: при непустом ids — только они,
 	// иначе все по фильтру search. Без пагинации, порядок по created_at DESC.
-	RecordsForExport(ctx Ctx, registryID int64, search string, ids []int64) ([]*Record, error)
+	RecordsForExport(ctx Ctx, f ExportFilter) ([]*Record, error)
 	// RecordsOfCompanies — записи вместе с их реестром: раздел «Настройки →
 	// Хранилище» показывает, в каком реестре лежит файл. Скоуп — компании,
 	// чью квоту оплачивает спрашивающий (их присылает биллинг).

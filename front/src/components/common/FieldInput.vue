@@ -31,15 +31,16 @@
         <Checkbox :model-value="!!modelValue?.taken" binary @update:model-value="setTaken" />
         <span>Забрали</span>
       </label>
-      <label v-if="modelValue?.taken" class="fi-stock-until">
+      <div v-if="modelValue?.taken" class="fi-stock-until">
         <span class="fi-stock-label">До какой даты</span>
-        <input
-          class="ctl"
-          type="date"
-          :value="modelValue?.until || ''"
-          @input="setUntil($event.target.value)"
+        <DatePicker
+          :model-value="stockUntil"
+          date-format="dd.mm.yy"
+          show-button-bar
+          placeholder="Выберите"
+          @update:model-value="setUntil"
         />
-      </label>
+      </div>
       <span v-else class="fi-stock-hint">Позиция в наличии.</span>
     </div>
 
@@ -109,6 +110,7 @@ import DatePicker from 'primevue/datepicker'
 import FieldValue from './FieldValue.vue'
 import { useNotificationsStore } from '@/stores/notifications.js'
 import { compressImage } from '@/utils/imageCompress.js'
+import { dayString, parseDay } from '@/utils/dates.js'
 
 const props = defineProps({
   field: { type: Object, required: true },
@@ -169,8 +171,11 @@ function onNumberBlur() {
 function setTaken(on) {
   emit('update:modelValue', on ? { taken: true, until: props.modelValue?.until || '' } : null)
 }
+
+// Дата возврата хранится строкой YYYY-MM-DD — её же ждёт сервер.
+const stockUntil = computed(() => parseDay(props.modelValue?.until))
 function setUntil(date) {
-  emit('update:modelValue', { taken: true, until: date || '' })
+  emit('update:modelValue', { taken: true, until: dayString(date) })
 }
 
 // ── Дата ──

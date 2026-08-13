@@ -1,5 +1,16 @@
 <template>
   <div class="rr">
+    <!-- Теги: варианты спискового поля, назначенного администратором. Клик
+         фильтрует записи, повторный клик по активному — снимает фильтр. -->
+    <div v-if="tags.length" class="rr-tags">
+      <AppChipBar
+        :options="tags"
+        :model-value="tag"
+        aria-label="Теги реестра"
+        @update:model-value="$emit('update:tag', $event)"
+      />
+    </div>
+
     <!-- Узкая панель: сортировка контролом — заголовков колонок там нет. -->
     <div v-if="narrow && fields.length" class="rr-sortbar">
       <span class="material-symbols-outlined">sort</span>
@@ -20,9 +31,6 @@
         @click="flipOrder"
       />
     </div>
-
-    <!-- Массовые действия над выбранным: у раздела своё, у публичной ссылки своё. -->
-    <slot name="selection" />
 
     <div class="rr-box">
       <div v-if="!narrow" class="rr-scroll">
@@ -65,12 +73,12 @@
               v-for="rec in records"
               :key="rec.id"
               class="rr-row"
-              :class="{ selected: selected.has(rec.id) }"
+              :class="{ selected: isSelected(rec.id) }"
               @click="$emit('open', rec)"
             >
               <td class="rr-td-check" @click.stop>
                 <Checkbox
-                  :model-value="selected.has(rec.id)"
+                  :model-value="isSelected(rec.id)"
                   binary
                   @update:model-value="$emit('toggle', rec.id)"
                 />
@@ -112,7 +120,7 @@
         <AppCard
           v-for="rec in records"
           :key="rec.id"
-          :tone="selected.has(rec.id) ? 'primary' : 'neutral'"
+          :tone="isSelected(rec.id) ? 'primary' : 'neutral'"
           clickable
           :gap="8"
           @click="$emit('open', rec)"
@@ -120,7 +128,7 @@
           <div class="rr-card-head">
             <span class="rr-card-check" @click.stop>
               <Checkbox
-                :model-value="selected.has(rec.id)"
+                :model-value="isSelected(rec.id)"
                 binary
                 @update:model-value="$emit('toggle', rec.id)"
               />
@@ -172,6 +180,18 @@
         :title="search ? 'Ничего не найдено' : 'Записей пока нет'"
         :subtitle="search ? 'Попробуйте другой запрос.' : emptyHint"
       />
+
+      <!-- Выбор переживает страницы, поэтому плашка висит над списком, а не
+           встроена в шапку: действия над выбранным приходят слотом. -->
+      <AppSelectionBar
+        :count="selectionCount"
+        :total="total"
+        :all-selected="selectionAll"
+        @select-all="$emit('select-all-matching')"
+        @clear="$emit('clear-selection')"
+      >
+        <slot name="selection-actions" />
+      </AppSelectionBar>
     </div>
 
     <!-- Клик по превью открывает картинку целиком, не трогая карточку записи. -->
@@ -193,6 +213,8 @@ import Checkbox from 'primevue/checkbox'
 import Select from 'primevue/select'
 import AppButton from '@/components/ui/AppButton.vue'
 import AppCard from '@/components/ui/AppCard.vue'
+import AppChipBar from '@/components/ui/AppChipBar.vue'
+import AppSelectionBar from '@/components/ui/AppSelectionBar.vue'
 import AppStack from '@/components/ui/AppStack.vue'
 import BrandLoader from '@/components/common/BrandLoader.vue'
 import EmptyState from '@/components/common/EmptyState.vue'
@@ -207,17 +229,30 @@ const props = defineProps({
   /** Ключ сортировки: 'created_at' либо строковый id поля. */
   sort: { type: String, default: 'created_at' },
   order: { type: String, default: 'desc' },
-  /** Выбранные записи — множество id (см. useRowSelection). */
-  selected: { type: Set, default: () => new Set() },
+  /** Отмечена ли запись — предикат из useRowSelection (выбор живёт между
+      страницами, поэтому множеством id он не описывается). */
+  isSelected: { type: Function, default: () => false },
+  /** Вся текущая страница отмечена — состояние галочки в шапке. */
   allSelected: { type: Boolean, default: false },
+  /** Сколько записей отмечено всего и сколько их по фильтру — для плашки. */
+  selectionCount: { type: Number, default: 0 },
+  total: { type: Number, default: 0 },
+  /** Выбрано всё по фильтру — предлагать «выбрать все» больше нечего. */
+  selectionAll: { type: Boolean, default: false },
   /** Тесная панель: карточки вместо таблицы. */
   narrow: { type: Boolean, default: false },
   /** Активный поисковый запрос — от него зависит текст пустого состояния. */
   search: { type: String, default: '' },
+  /** Значения поля-тега (чипы над таблицей) и выбранное из них. */
+  tags: { type: Array, default: () => [] },
+  tag: { type: String, default: '' },
   emptyHint: { type: String, default: '' },
 })
 
-const emit = defineEmits(['update:sort', 'open', 'toggle', 'toggle-all'])
+const emit = defineEmits([
+  'update:sort', 'update:tag', 'open', 'toggle', 'toggle-all',
+  'select-all-matching', 'clear-selection',
+])
 
 /* Сортировку решаем здесь целиком: клик по заголовку той же колонки
    переворачивает порядок, выбор в узком контроле его сохраняет. Наружу уходит
@@ -284,6 +319,17 @@ function openImage(field, rec) {
   min-height: 0;
 }
 
+/* ── Теги над таблицей ── */
+.rr-tags {
+  flex: none;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--color-outline-dim);
+}
+
 /* ── Сортировка в узкой раскладке ── */
 .rr-sortbar {
   flex: none;
@@ -308,16 +354,18 @@ function openImage(field, rec) {
   font-size: 14px;
 }
 
-/* Строки уезжают под шапку — ей нужно плотное стекло с блюром. */
+/* Строки уезжают под шапку, поэтому фон ей нужен ПЛОТНЫЙ и без backdrop-filter:
+   панель раздела сама backdrop root — размывать за шапкой всё равно нечего,
+   зато blur выносил её в отдельный composited-слой, и после прокрутки клик по
+   галочке в шапке проваливался в строку под ней. Матовость даёт «иней». */
 .rr-table thead th {
   position: sticky;
   top: 0;
-  z-index: 1;
+  z-index: 3;
   padding: 12px 14px;
   border-bottom: 1px solid var(--color-outline-dim);
-  background: var(--acrylic-bg-strong);
-  -webkit-backdrop-filter: var(--acrylic-blur);
-  backdrop-filter: var(--acrylic-blur);
+  background: var(--color-surface);
+  background: var(--glass-bg), var(--color-surface);
   text-align: left;
   font-weight: 700;
   color: var(--color-text);

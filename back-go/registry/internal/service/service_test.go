@@ -23,6 +23,8 @@ type fakeRepo struct {
 	records    map[int64]*domain.Record
 	lastSearch string
 	lastFilter domain.RecordListFilter
+	lastExport domain.ExportFilter
+	lastDelete domain.ExportFilter
 	nextID     int64
 }
 
@@ -35,11 +37,14 @@ func (f *fakeRepo) GetRegistry(_ domain.Ctx, id int64) (*domain.Registry, error)
 	}
 	return nil, nil
 }
-func (f *fakeRepo) CreateRegistry(_ domain.Ctx, r *domain.Registry) error       { r.ID = 1; return nil }
-func (f *fakeRepo) UpdateRegistry(_ domain.Ctx, _ int64, _ string, _ int) error { return nil }
-func (f *fakeRepo) DeleteRegistry(_ domain.Ctx, _ int64) error                  { return nil }
-func (f *fakeRepo) NextRegistryPosition(_ domain.Ctx, _ int64) (int, error)     { return 1, nil }
-func (f *fakeRepo) ListFields(_ domain.Ctx, _ int64) ([]domain.Field, error)    { return f.fields, nil }
+func (f *fakeRepo) CreateRegistry(_ domain.Ctx, r *domain.Registry) error { r.ID = 1; return nil }
+func (f *fakeRepo) UpdateRegistry(_ domain.Ctx, _ int64, _ string, _ int, tagFieldID *int64) error {
+	f.reg.TagFieldID = tagFieldID
+	return nil
+}
+func (f *fakeRepo) DeleteRegistry(_ domain.Ctx, _ int64) error               { return nil }
+func (f *fakeRepo) NextRegistryPosition(_ domain.Ctx, _ int64) (int, error)  { return 1, nil }
+func (f *fakeRepo) ListFields(_ domain.Ctx, _ int64) ([]domain.Field, error) { return f.fields, nil }
 func (f *fakeRepo) FieldsByRegistries(_ domain.Ctx, _ []int64) (map[int64][]domain.Field, error) {
 	return map[int64][]domain.Field{f.reg.ID: f.fields}, nil
 }
@@ -75,10 +80,31 @@ func (f *fakeRepo) UpdateRecord(_ domain.Ctx, id int64, data map[string]any, sea
 	return nil
 }
 func (f *fakeRepo) DeleteRecord(_ domain.Ctx, _ int64) error { return nil }
-func (f *fakeRepo) DeleteRecords(_ domain.Ctx, _ int64, ids []int64) (int64, error) {
-	return int64(len(ids)), nil
+func (f *fakeRepo) DeleteRecords(_ domain.Ctx, filter domain.ExportFilter) ([]*domain.Record, error) {
+	f.lastDelete = filter
+	out := []*domain.Record{}
+	if len(filter.IDs) > 0 {
+		for _, id := range filter.IDs {
+			if r := f.records[id]; r != nil {
+				out = append(out, r)
+			}
+		}
+		return out, nil
+	}
+	excluded := map[int64]bool{}
+	for _, id := range filter.Exclude {
+		excluded[id] = true
+	}
+	all, _ := f.AllRecords(nil, 0)
+	for _, r := range all {
+		if !excluded[r.ID] {
+			out = append(out, r)
+		}
+	}
+	return out, nil
 }
-func (f *fakeRepo) RecordsForExport(_ domain.Ctx, _ int64, _ string, _ []int64) ([]*domain.Record, error) {
+func (f *fakeRepo) RecordsForExport(_ domain.Ctx, filter domain.ExportFilter) ([]*domain.Record, error) {
+	f.lastExport = filter
 	return f.AllRecords(nil, 0)
 }
 func (f *fakeRepo) CreateShare(_ domain.Ctx, s *domain.Share) error {
@@ -246,6 +272,67 @@ func TestListRecords_PerPageClampedNotReset(t *testing.T) {
 			t.Errorf("per_page=%d → в репозиторий ушло %d, ожидалось %d",
 				c.asked, repo.lastFilter.PerPage, c.want)
 		}
+	}
+}
+
+func TestTagFieldOnlySelect(t *testing.T) {
+	fields := []domain.Field{
+		{ID: 10, Label: "Имя", Type: domain.FieldText},
+		{ID: 12, Label: "Тип изделия", Type: domain.FieldSelect, Config: map[string]any{"options": []any{"A", "B"}}},
+	}
+	svc, repo, _ := newTestService(fields)
+	ctx := context.Background()
+	id := func(v int64) *int64 { return &v }
+
+	// Тегами становится только списковое поле своего реестра.
+	for _, bad := range []*int64{id(10), id(777)} {
+		if _, err := svc.UpdateRegistry(ctx, 7, 1, RegistryPatch{
+			Name: "Тест", TagFieldID: bad, TagFieldSet: true,
+		}); err != domain.ErrTagFieldInvalid {
+			t.Fatalf("поле %d тегами быть не должно, получено %v", *bad, err)
+		}
+	}
+
+	reg, err := svc.UpdateRegistry(ctx, 7, 1, RegistryPatch{
+		Name: "Тест", TagFieldID: id(12), TagFieldSet: true,
+	})
+	if err != nil || reg.TagFieldID == nil || *reg.TagFieldID != 12 {
+		t.Fatalf("списковое поле должно стать источником тегов: %v %+v", err, reg)
+	}
+
+	// Переименование без ключа tag_field_id настройку не сбрасывает.
+	reg, err = svc.UpdateRegistry(ctx, 7, 1, RegistryPatch{Name: "Другое имя"})
+	if err != nil || reg.TagFieldID == nil || *reg.TagFieldID != 12 {
+		t.Fatalf("переименование сбросило теги: %v %+v", err, reg)
+	}
+
+	// Фильтр чипом уходит в репозиторий как условие по этому полю.
+	if _, err := svc.ListRecords(ctx, 7, 1, RecordListParams{Tag: "A"}); err != nil {
+		t.Fatalf("ListRecords с тегом: %v", err)
+	}
+	if repo.lastFilter.TagFieldID != 12 || repo.lastFilter.TagValue != "A" {
+		t.Errorf("фильтр тега не доехал: %+v", repo.lastFilter)
+	}
+
+	// Выгрузка идёт тем же фильтром — файл не должен расходиться с экраном.
+	if _, _, err := svc.ExportRecords(ctx, 7, 1, ExportParams{
+		FieldIDs: []int64{12}, Tag: "A",
+	}); err != nil {
+		t.Fatalf("выгрузка с тегом: %v", err)
+	}
+	if repo.lastExport.TagFieldID != 12 || repo.lastExport.TagValue != "A" {
+		t.Errorf("тег не доехал до выгрузки: %+v", repo.lastExport)
+	}
+
+	// Теги выключили — чип больше не фильтрует.
+	if _, err := svc.UpdateRegistry(ctx, 7, 1, RegistryPatch{Name: "Тест", TagFieldSet: true}); err != nil {
+		t.Fatalf("выключение тегов: %v", err)
+	}
+	if _, err := svc.ListRecords(ctx, 7, 1, RecordListParams{Tag: "A"}); err != nil {
+		t.Fatalf("ListRecords без тегов: %v", err)
+	}
+	if repo.lastFilter.TagFieldID != 0 {
+		t.Errorf("после выключения тегов фильтр остался: %+v", repo.lastFilter)
 	}
 }
 

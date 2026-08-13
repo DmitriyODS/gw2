@@ -32,6 +32,17 @@ func csvInts(s string) []int64 {
 
 func parseBody(c *fiber.Ctx, out any) { _ = json.Unmarshal(c.Body(), out) }
 
+// exportParams — общий разбор query выгрузки (раздел и публичная ссылка).
+func exportParams(c *fiber.Ctx) service.ExportParams {
+	return service.ExportParams{
+		FieldIDs: csvInts(c.Query("fields")),
+		Search:   c.Query("search"),
+		IDs:      csvInts(c.Query("ids")),
+		Exclude:  csvInts(c.Query("exclude")),
+		Tag:      c.Query("tag"),
+	}
+}
+
 func validationError(c *fiber.Ctx, msg string) error {
 	return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "VALIDATION", "message": msg})
 }
@@ -110,6 +121,9 @@ func (h *handlers) updateRegistry(c *fiber.Ctx) error {
 	}
 	var body struct {
 		Name string `json:"name"`
+		// Указатель на указатель различает «ключа нет» (теги не трогаем) и
+		// явный null (выключить их) — иначе переименование сбрасывало бы теги.
+		TagFieldID **int64 `json:"tag_field_id"`
 	}
 	parseBody(c, &body)
 	name := strings.TrimSpace(body.Name)
@@ -119,9 +133,11 @@ func (h *handlers) updateRegistry(c *fiber.Ctx) error {
 	if len([]rune(name)) > 120 {
 		return validationError(c, "Название слишком длинное (макс. 120)")
 	}
-	resp, err := h.eps.UpdateRegistry(c.Context(), endpoint.UpdateRegistryReq{
-		CompanyID: companyID, ID: pathID(c), Name: name,
-	})
+	req := endpoint.UpdateRegistryReq{CompanyID: companyID, ID: pathID(c), Name: name}
+	if body.TagFieldID != nil {
+		req.TagFieldID, req.TagFieldSet = *body.TagFieldID, true
+	}
+	resp, err := h.eps.UpdateRegistry(c.Context(), req)
 	if err != nil {
 		return h.respondError(c, err)
 	}
@@ -175,6 +191,7 @@ func (h *handlers) listRecords(c *fiber.Ctx) error {
 			Search:  c.Query("search"),
 			Sort:    c.Query("sort"),
 			Order:   c.Query("order"),
+			Tag:     c.Query("tag"),
 			Page:    c.QueryInt("page", 1),
 			PerPage: c.QueryInt("per_page", 30),
 		},
@@ -262,9 +279,7 @@ func (h *handlers) exportRecords(c *fiber.Ctx) error {
 	resp, err := h.eps.ExportRecords(c.Context(), endpoint.ExportReq{
 		CompanyID:  companyID,
 		RegistryID: pathID(c),
-		FieldIDs:   csvInts(c.Query("fields")),
-		Search:     c.Query("search"),
-		IDs:        csvInts(c.Query("ids")),
+		Params:     exportParams(c),
 	})
 	if err != nil {
 		return h.respondError(c, err)
@@ -282,12 +297,22 @@ func (h *handlers) bulkDeleteRecords(c *fiber.Ctx) error {
 	if !ok {
 		return nil
 	}
+	// all=true — «выбрано всё по текущему фильтру»: список id тогда не нужен,
+	// приходят только снятые галочки (exclude).
 	var body struct {
-		IDs []int64 `json:"ids"`
+		IDs     []int64 `json:"ids"`
+		All     bool    `json:"all"`
+		Search  string  `json:"search"`
+		Tag     string  `json:"tag"`
+		Exclude []int64 `json:"exclude"`
 	}
 	parseBody(c, &body)
 	resp, err := h.eps.DeleteRecords(c.Context(), endpoint.DeleteRecordsReq{
-		CompanyID: companyID, RegistryID: pathID(c), IDs: body.IDs,
+		CompanyID: companyID, RegistryID: pathID(c),
+		Params: service.BulkParams{
+			IDs: body.IDs, All: body.All, Search: body.Search,
+			Tag: body.Tag, Exclude: body.Exclude,
+		},
 	})
 	if err != nil {
 		return h.respondError(c, err)
@@ -412,6 +437,7 @@ func (h *handlers) sharedRecords(c *fiber.Ctx) error {
 			Search:  c.Query("search"),
 			Sort:    c.Query("sort"),
 			Order:   c.Query("order"),
+			Tag:     c.Query("tag"),
 			Page:    c.QueryInt("page", 1),
 			PerPage: c.QueryInt("per_page", 30),
 		},
@@ -424,10 +450,8 @@ func (h *handlers) sharedRecords(c *fiber.Ctx) error {
 
 func (h *handlers) sharedExport(c *fiber.Ctx) error {
 	resp, err := h.eps.SharedExport(c.Context(), endpoint.SharedExportReq{
-		Code:     c.Params("code"),
-		FieldIDs: csvInts(c.Query("fields")),
-		Search:   c.Query("search"),
-		IDs:      csvInts(c.Query("ids")),
+		Code:   c.Params("code"),
+		Params: exportParams(c),
 	})
 	if err != nil {
 		return h.respondError(c, err)

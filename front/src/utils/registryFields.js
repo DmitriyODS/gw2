@@ -46,6 +46,21 @@ export function defaultConfig(type) {
   }
 }
 
+/* Теги реестра: администратор назначает источником ОДНО списковое поле, и его
+   варианты становятся чипами-фильтрами над таблицей. Здесь — единственное место,
+   где это правило читается (раздел и публичная страница ссылки берут отсюда). */
+export function tagField(registry) {
+  const id = registry?.tag_field_id
+  if (!id) return null
+  const field = (registry.fields || []).find((f) => f.id === id)
+  return field && field.type === 'select' ? field : null
+}
+
+export function tagOptions(registry) {
+  const field = tagField(registry)
+  return field ? (field.config?.options || []).filter(Boolean) : []
+}
+
 // formatDateTime — строка по включённым частям (config.year/month_day/time).
 // Значение хранится как ISO-строка.
 export function formatDateTime(value, config = {}) {

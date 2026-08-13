@@ -22,7 +22,7 @@
       </select>
 
       <label class="ntd-label">День</label>
-      <input v-model="date" type="date" class="ntd-input" />
+      <DatePicker v-model="day" date-format="dd.mm.yy" show-button-bar class="ntd-date" />
 
       <label class="ntd-label">Название</label>
       <input v-model="title" type="text" class="ntd-input" maxlength="300" placeholder="Название записи" />
@@ -38,6 +38,7 @@
 // название, весь фрагмент (если он длиннее) — описание. Ежедневники — только
 // свои (tab=mine, они кросс-компанийные — активная компания не нужна).
 import { ref, watch } from 'vue'
+import DatePicker from 'primevue/datepicker'
 import AppDialog from '@/components/ui/AppDialog.vue'
 import { createEntry, getDiaries } from '@/api/diaries.js'
 import { dayKey } from '@/stores/diaries.js'
@@ -55,7 +56,9 @@ const loading = ref(false)
 const saving = ref(false)
 const diaries = ref([])
 const diaryId = ref(null)
-const date = ref(dayKey(new Date()))
+// Пикер держит Date, серверу уезжает ключ дня — переводит dayKey (локальные
+// части, без UTC-сдвига).
+const day = ref(new Date())
 const title = ref('')
 const description = ref('')
 
@@ -64,7 +67,7 @@ watch(() => props.modelValue, async (open) => {
   const firstLine = props.text.split('\n').map((s) => s.trim()).find(Boolean) || ''
   title.value = firstLine.slice(0, 300)
   description.value = props.text.trim() !== firstLine ? props.text.trim() : ''
-  date.value = dayKey(new Date())
+  day.value = new Date()
   loading.value = true
   try {
     const { diaries: list } = await getDiaries('mine')
@@ -85,7 +88,7 @@ async function save() {
   saving.value = true
   try {
     await createEntry(diaryId.value, {
-      entry_date: date.value,
+      entry_date: dayKey(day.value || new Date()),
       start_min: null,
       end_min: null,
       title: t,
@@ -125,6 +128,8 @@ async function save() {
   font-size: 14px;
 }
 .ntd-input:focus { outline: none; border-color: var(--color-primary); }
+
+.ntd-date { width: 100%; }
 
 .ntd-area {
   height: auto;

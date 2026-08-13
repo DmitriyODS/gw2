@@ -92,6 +92,27 @@
             </ul>
           </div>
 
+          <!-- Теги: чипы над таблицей записей строятся по одному списковому
+               полю — его варианты и становятся тегами. -->
+          <AppRow
+            class="rm-tags"
+            title="Теги над таблицей"
+            :hint="selectFields.length
+              ? 'Варианты выбранного поля станут чипами-фильтрами записей.'
+              : 'Нужно поле типа «Список выбора» — по нему и строятся теги.'"
+          >
+            <Select
+              class="rm-tags-select"
+              :model-value="tagFieldKey"
+              :options="tagOptionsList"
+              option-label="label"
+              option-value="value"
+              :disabled="!selectFields.length"
+              placeholder="Без тегов"
+              @update:model-value="pickTagField"
+            />
+          </AppRow>
+
           <div class="rm-detail-foot">
             <button v-if="editFields.length" class="rm-btn-tonal" @click="openField(-1)">
               <span class="material-symbols-outlined">add</span> Добавить поле
@@ -247,6 +268,7 @@ import { computed, onMounted, reactive, ref } from 'vue'
 import Select from 'primevue/select'
 import Checkbox from 'primevue/checkbox'
 import AppDialog from '@/components/ui/AppDialog.vue'
+import AppRow from '@/components/ui/AppRow.vue'
 import ConfirmDialog from '@/components/ui/ConfirmDialog.vue'
 import * as api from '@/api/registries.js'
 import { useRegistriesStore } from '@/stores/registries.js'
@@ -266,6 +288,19 @@ const saving = ref(false)
 const creating = ref(false)
 const newName = ref('')
 const confirmDelete = ref(false)
+const tagFieldKey = ref(0)   // _k поля-источника тегов; 0 — тегов нет
+
+// Теги строятся только по списковому полю: у остальных типов нет заранее
+// известного набора значений.
+const selectFields = computed(() => editFields.value.filter((f) => f.type === 'select'))
+const tagOptionsList = computed(() => [
+  { label: 'Без тегов', value: 0 },
+  ...selectFields.value.map((f) => ({ label: f.label || 'Без названия', value: f._k })),
+])
+function pickTagField(key) {
+  tagFieldKey.value = key || 0
+  dirty.value = true
+}
 
 let keySeq = 0
 const current = computed(() => store.registries.find((r) => r.id === editId.value) || null)
@@ -274,6 +309,9 @@ function selectRegistry(r) {
   editId.value = r.id
   editName.value = r.name
   editFields.value = (r.fields || []).map((f) => normalizeField(f))
+  // Поле-источник тегов держим по внутреннему ключу строки, а не по id: только
+  // что добавленное поле id получит лишь после сохранения.
+  tagFieldKey.value = editFields.value.find((f) => f.id === r.tag_field_id)?._k ?? 0
   dirty.value = false
 }
 
@@ -379,13 +417,17 @@ async function save() {
   }
   saving.value = true
   try {
-    if (editName.value.trim() !== current.value.name) {
-      await api.updateRegistry(editId.value, editName.value.trim())
-    }
-    await api.replaceFields(editId.value, editFields.value.map((f) => ({
+    // Поля сохраняем ПЕРВЫМИ: только что добавленное поле получает id здесь, и
+    // без него тегами его не назначить.
+    const tagIndex = editFields.value.findIndex((f) => f._k === tagFieldKey.value)
+    const saved = await api.replaceFields(editId.value, editFields.value.map((f) => ({
       id: f.id || 0, label: f.label.trim(), type: f.type, config: f.config,
       col_span: f.col_span, row_span: f.row_span, show_in_table: f.show_in_table,
     })))
+    const tagFieldId = tagIndex === -1 ? null : (saved?.fields?.[tagIndex]?.id ?? null)
+    if (editName.value.trim() !== current.value.name || tagFieldId !== (current.value.tag_field_id ?? null)) {
+      await api.updateRegistry(editId.value, { name: editName.value.trim(), tag_field_id: tagFieldId })
+    }
     notif.success('Реестр сохранён')
     await store.fetchRegistries()
     const again = store.registries.find((r) => r.id === editId.value)
@@ -532,6 +574,9 @@ onMounted(() => store.fetchRegistries())
 }
 .rm-fields-empty .material-symbols-outlined { font-size: 44px; }
 .rm-fields-empty p { margin: 0; font-size: 14px; }
+
+.rm-tags { flex: none; margin: 0 14px; }
+.rm-tags-select { min-width: 220px; }
 
 .rm-detail-foot {
   flex: none; display: flex; align-items: center; gap: 12px;

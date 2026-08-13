@@ -62,6 +62,8 @@ const props = defineProps({
   selectedIds: { type: Array, default: () => [] },
   /** Текущий поиск: им ограничена выгрузка «всех записей». */
   search: { type: String, default: '' },
+  /** Активный чип-тег: выгрузка «всех» идёт тем же фильтром, что и экран. */
+  tag: { type: String, default: '' },
   /** Имя файла без расширения. */
   filename: { type: String, default: 'registry' },
   /** (params) => Promise<Response> — ручка выгрузки (своя / по коду ссылки). */
@@ -83,7 +85,7 @@ watch(() => props.modelValue, (open) => {
 })
 
 const scopeTabs = computed(() => [
-  { value: 'all', label: props.search ? 'Все по фильтру' : 'Все записи' },
+  { value: 'all', label: props.search || props.tag ? 'Все по фильтру' : 'Все записи' },
   { value: 'selected', label: `Выбранные (${props.selectedIds.length})` },
 ])
 
@@ -101,8 +103,12 @@ async function run() {
   busy.value = true
   try {
     const params = { fields: [...chosen.value] }
-    if (scope.value === 'selected' && props.selectedIds.length) params.ids = [...props.selectedIds]
-    else params.search = props.search
+    if (scope.value === 'selected' && props.selectedIds.length) {
+      params.ids = [...props.selectedIds]
+    } else {
+      params.search = props.search
+      params.tag = props.tag
+    }
     const resp = await props.request(params)
     if (!resp.ok) {
       let msg = 'Не удалось выгрузить'

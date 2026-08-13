@@ -62,16 +62,40 @@ func (s *Service) CreateRegistry(ctx context.Context, companyID, userID int64, n
 	return reg, nil
 }
 
-// UpdateRegistry — переименование (позиция не меняется).
-func (s *Service) UpdateRegistry(ctx context.Context, companyID, id int64, name string) (*domain.Registry, error) {
+// RegistryPatch — правка реестра. Поле-источник тегов меняется, только если
+// TagFieldSet: без флага «ключа нет» не отличить от «выключить теги», и обычное
+// переименование сбрасывало бы настройку.
+type RegistryPatch struct {
+	Name        string
+	TagFieldID  *int64
+	TagFieldSet bool
+}
+
+// UpdateRegistry — название и поле-источник тегов (позиция не меняется).
+func (s *Service) UpdateRegistry(ctx context.Context, companyID, id int64, p RegistryPatch) (*domain.Registry, error) {
 	reg, err := s.requireRegistry(ctx, companyID, id)
 	if err != nil {
 		return nil, err
 	}
-	if err := s.repo.UpdateRegistry(ctx, id, name, reg.Position); err != nil {
+	name, tagFieldID := p.Name, reg.TagFieldID
+	if p.TagFieldSet {
+		tagFieldID = p.TagFieldID
+	}
+	if tagFieldID != nil {
+		fields, err := s.repo.ListFields(ctx, id)
+		if err != nil {
+			return nil, err
+		}
+		field := findField(fields, *tagFieldID)
+		if field == nil || field.Type != domain.FieldSelect {
+			return nil, domain.ErrTagFieldInvalid
+		}
+	}
+	if err := s.repo.UpdateRegistry(ctx, id, name, reg.Position, tagFieldID); err != nil {
 		return nil, err
 	}
 	reg.Name = name
+	reg.TagFieldID = tagFieldID
 	s.bus.Publish(ctx, "registry:updated", []string{roomAll}, registryPayload(reg))
 	return reg, nil
 }
@@ -110,6 +134,11 @@ func (s *Service) ReplaceFields(ctx context.Context, companyID, id int64, fields
 		}
 	}
 	reg.Fields = fields
+	// Поле-источник тегов могли удалить: в БД ссылку обнулил каскад
+	// (ON DELETE SET NULL), в снимке для события обнуляем её сами.
+	if reg.TagFieldID != nil && findField(fields, *reg.TagFieldID) == nil {
+		reg.TagFieldID = nil
+	}
 	s.bus.Publish(ctx, "registry:updated", []string{roomAll}, registryPayload(reg))
 	return reg, nil
 }
@@ -148,6 +177,6 @@ func (s *Service) stripRemovedFields(ctx context.Context, companyID, registryID 
 func registryPayload(r *domain.Registry) map[string]any {
 	return map[string]any{
 		"id": r.ID, "company_id": r.CompanyID, "name": r.Name,
-		"position": r.Position, "fields": r.Fields,
+		"position": r.Position, "tag_field_id": r.TagFieldID, "fields": r.Fields,
 	}
 }

@@ -32,13 +32,17 @@ var FieldTypes = records.FieldTypes
 
 // Registry — реестр компании (таблица-справочник).
 type Registry struct {
-	ID        int64     `json:"id"`
-	CompanyID int64     `json:"company_id"`
-	Name      string    `json:"name"`
-	Position  int       `json:"position"`
-	CreatedBy *int64    `json:"created_by"`
-	CreatedAt time.Time `json:"created_at"`
-	UpdatedAt time.Time `json:"updated_at"`
+	ID        int64  `json:"id"`
+	CompanyID int64  `json:"company_id"`
+	Name      string `json:"name"`
+	Position  int    `json:"position"`
+	// TagFieldID — поле-источник тегов: его варианты показываются чипами над
+	// таблицей и фильтруют записи. Только поле типа select и только своего
+	// реестра; nil — теги выключены.
+	TagFieldID *int64    `json:"tag_field_id"`
+	CreatedBy  *int64    `json:"created_by"`
+	CreatedAt  time.Time `json:"created_at"`
+	UpdatedAt  time.Time `json:"updated_at"`
 	// Fields — заполняется при чтении одного реестра / списка с полями.
 	// Без omitempty: реестр без полей должен отдавать [] (а не отсутствующий
 	// ключ), иначе на клиенте reg.fields === undefined.
@@ -90,9 +94,27 @@ type RecordListFilter struct {
 	SortFieldID int64
 	// SortKind — приведение типа при сортировке по полю: "number" | "date" | "text".
 	SortKind string
-	Desc     bool
-	Page     int
-	PerPage  int
+	// TagFieldID/TagValue — фильтр чипом-тегом: значение поля-источника тегов.
+	// Поле спискового типа бывает и множественным, поэтому значение ищется и
+	// как скаляр, и как элемент массива.
+	TagFieldID int64
+	TagValue   string
+	Desc       bool
+	Page       int
+	PerPage    int
+}
+
+// ExportFilter — набор записей под массовую операцию (выгрузка, удаление).
+// Либо явно перечисленные IDs, либо ВСЁ по фильтру экрана (поиск и чип-тег)
+// за вычетом Exclude: выбор «отметить всё» переживает страницы, и гонять на
+// клиент тысячи id ради него не нужно — их множество описывается фильтром.
+type ExportFilter struct {
+	RegistryID int64
+	Search     string
+	IDs        []int64
+	Exclude    []int64
+	TagFieldID int64
+	TagValue   string
 }
 
 // Уровни доступа внешней ссылки. Свойство САМОЙ ссылки: владелец раздаёт

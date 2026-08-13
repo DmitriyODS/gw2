@@ -64,6 +64,10 @@ type UpdateRegistryReq struct {
 	CompanyID int64
 	ID        int64
 	Name      string
+	// TagFieldID — поле-источник тегов (nil выключает их); учитывается только
+	// вместе с TagFieldSet.
+	TagFieldID  *int64
+	TagFieldSet bool
 }
 
 type ReplaceFieldsReq struct {
@@ -102,15 +106,13 @@ type WriteRecordReq struct {
 type DeleteRecordsReq struct {
 	CompanyID  int64
 	RegistryID int64
-	IDs        []int64
+	Params     service.BulkParams
 }
 
 type ExportReq struct {
 	CompanyID  int64
 	RegistryID int64
-	FieldIDs   []int64
-	Search     string
-	IDs        []int64
+	Params     service.ExportParams
 }
 
 type ExportResp struct {
@@ -140,10 +142,8 @@ type SharedRecordsReq struct {
 }
 
 type SharedExportReq struct {
-	Code     string
-	FieldIDs []int64
-	Search   string
-	IDs      []int64
+	Code   string
+	Params service.ExportParams
 }
 
 type SharedWriteReq struct {
@@ -175,7 +175,9 @@ func New(s *service.Service) Endpoints {
 		},
 		UpdateRegistry: func(ctx context.Context, request any) (any, error) {
 			r := request.(UpdateRegistryReq)
-			return s.UpdateRegistry(ctx, r.CompanyID, r.ID, r.Name)
+			return s.UpdateRegistry(ctx, r.CompanyID, r.ID, service.RegistryPatch{
+				Name: r.Name, TagFieldID: r.TagFieldID, TagFieldSet: r.TagFieldSet,
+			})
 		},
 		DeleteRegistry: func(ctx context.Context, request any) (any, error) {
 			r := request.(RegistryReq)
@@ -211,11 +213,11 @@ func New(s *service.Service) Endpoints {
 		},
 		DeleteRecords: func(ctx context.Context, request any) (any, error) {
 			r := request.(DeleteRecordsReq)
-			return s.DeleteRecords(ctx, r.CompanyID, r.RegistryID, r.IDs)
+			return s.DeleteRecords(ctx, r.CompanyID, r.RegistryID, r.Params)
 		},
 		ExportRecords: func(ctx context.Context, request any) (any, error) {
 			r := request.(ExportReq)
-			data, name, err := s.ExportRecords(ctx, r.CompanyID, r.RegistryID, r.FieldIDs, r.Search, r.IDs)
+			data, name, err := s.ExportRecords(ctx, r.CompanyID, r.RegistryID, r.Params)
 			if err != nil {
 				return nil, err
 			}
@@ -246,7 +248,7 @@ func New(s *service.Service) Endpoints {
 		},
 		SharedExport: func(ctx context.Context, request any) (any, error) {
 			r := request.(SharedExportReq)
-			data, name, err := s.SharedExport(ctx, r.Code, r.FieldIDs, r.Search, r.IDs)
+			data, name, err := s.SharedExport(ctx, r.Code, r.Params)
 			if err != nil {
 				return nil, err
 			}

@@ -32,7 +32,7 @@
         </label>
         <label class="field">
           <span class="field-label">Действует до</span>
-          <InputText v-model="form.expires_at" type="date" />
+          <DatePicker v-model="form.expires_at" date-format="dd.mm.yy" show-button-bar />
         </label>
         <AppButton label="Создать" icon="add" variant="filled" @click="create" />
       </div>
@@ -56,6 +56,7 @@
 <script setup>
 import { computed, onMounted, ref } from 'vue'
 import InputText from 'primevue/inputtext'
+import DatePicker from 'primevue/datepicker'
 import InputNumber from 'primevue/inputnumber'
 import InputSwitch from 'primevue/inputswitch'
 import Dropdown from 'primevue/dropdown'
@@ -66,6 +67,7 @@ import AppStack from '@/components/ui/AppStack.vue'
 import EmptyState from '@/components/common/EmptyState.vue'
 import * as api from '@/api/billing.js'
 import { formatPrice, formatUntil } from '@/utils/money.js'
+import { dayString } from '@/utils/dates.js'
 
 const KINDS = [
   { value: 'percent', label: 'Скидка, %' },
@@ -90,7 +92,7 @@ onMounted(load)
 function emptyForm() {
   return {
     code: '', kind: 'percent', value: 20, plan_code: 'middle',
-    applies_to: 'any', max_uses: 0, per_user_limit: 1, expires_at: '', is_active: true, comment: '',
+    applies_to: 'any', max_uses: 0, per_user_limit: 1, expires_at: null, is_active: true, comment: '',
   }
 }
 
@@ -111,6 +113,9 @@ async function create() {
   const body = { ...form.value }
   // Скидка в рублях приходит в копейках — сервер считает деньги только в них.
   if (body.kind === 'amount') body.value = Math.round(body.value * 100)
+  // Срок сервер ждёт днём YYYY-MM-DD; берём локальные части даты, иначе
+  // восточнее Гринвича промокод протухал бы на сутки раньше.
+  body.expires_at = dayString(form.value.expires_at)
   try {
     await api.adminCreatePromo(body)
     form.value = emptyForm()

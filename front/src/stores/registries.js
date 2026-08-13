@@ -18,6 +18,7 @@ export const useRegistriesStore = defineStore('registries', () => {
     search: '',
     sort: 'created_at', // 'created_at' | '<field_id>'
     order: 'desc',
+    tag: '',            // выбранный чип-тег ('' — все записи)
     page: 1,
     per_page: 30,
   })
@@ -62,6 +63,7 @@ export const useRegistriesStore = defineStore('registries', () => {
     filters.search = ''
     filters.sort = 'created_at'
     filters.order = 'desc'
+    filters.tag = ''
     filters.page = 1
     records.value = []
     total.value = 0
@@ -98,6 +100,13 @@ export const useRegistriesStore = defineStore('registries', () => {
 
   function setSearch(value) {
     filters.search = value
+    filters.page = 1
+    fetchRecords()
+  }
+
+  // Чип-тег: повторный клик по активному снимает фильтр.
+  function setTag(value) {
+    filters.tag = filters.tag === value ? '' : (value || '')
     filters.page = 1
     fetchRecords()
   }
@@ -140,8 +149,10 @@ export const useRegistriesStore = defineStore('registries', () => {
     await fetchRecords({ silent: true })
   }
 
-  async function bulkDelete(ids) {
-    await api.bulkDeleteRecords(selectedId.value, ids)
+  async function bulkDelete(selection) {
+    await api.bulkDeleteRecords(selectedId.value, selection, {
+      search: filters.search, tag: filters.tag,
+    })
     await fetchRecords({ silent: true })
   }
 
@@ -179,6 +190,7 @@ export const useRegistriesStore = defineStore('registries', () => {
     filters.search = ''
     filters.sort = 'created_at'
     filters.order = 'desc'
+    filters.tag = ''
     filters.page = 1
     await fetchRegistries()
   }
@@ -187,7 +199,7 @@ export const useRegistriesStore = defineStore('registries', () => {
     registries, loadingList, selectedId, selected,
     records, total, loadingRecords, filters,
     fetchRegistries, select, reloadForCompany,
-    fetchRecords, applySort, setSearch, setPage,
+    fetchRecords, applySort, setSearch, setTag, setPage,
     createRecord, updateRecord, deleteRecord, bulkDelete,
     applyRegistrySocket, applyRecordSocket,
   }

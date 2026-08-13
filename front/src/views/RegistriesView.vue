@@ -101,36 +101,26 @@
           :loading="store.loadingRecords"
           :sort="store.filters.sort"
           :order="store.filters.order"
-          :selected="selectedIds"
+          :is-selected="isSelected"
           :all-selected="allSelected"
+          :selection-count="selectionCount"
+          :selection-all="selectionMode === 'all'"
+          :total="store.total"
           :narrow="narrow"
           :search="store.filters.search"
+          :tags="tags"
+          :tag="store.filters.tag"
           empty-hint="Добавьте первую запись — она появится в таблице."
           @update:sort="store.applySort"
+          @update:tag="store.setTag"
           @open="openRecord"
           @toggle="toggleRow"
           @toggle-all="toggleAll"
+          @select-all-matching="selectAllMatching"
+          @clear-selection="clearSelection"
         >
-          <template #selection>
-            <AppInfoBar
-              v-if="selectedIds.size"
-              class="rg-selbar"
-              tone="info"
-              icon="checklist"
-              :message="`Выбрано: ${selectedIds.size}`"
-              inline
-            >
-              <template #actions>
-                <AppButton
-                  size="sm"
-                  tone="danger"
-                  icon="delete"
-                  label="Удалить"
-                  @click="confirmBulk = true"
-                />
-                <AppButton size="sm" variant="text" label="Сбросить" @click="clearSelection" />
-              </template>
-            </AppInfoBar>
+          <template #selection-actions>
+            <AppButton size="sm" tone="danger" icon="delete" label="Удалить" @click="confirmBulk = true" />
           </template>
         </RegistryRecords>
 
@@ -160,7 +150,7 @@
     <RegistryQrPrintDialog
       v-model="qrPrintOpen"
       :registry="store.selected"
-      :selected-ids="selectedIds"
+      :selected-ids="pickedIds"
       :search="store.filters.search"
       :sort="store.filters.sort"
       :order="store.filters.order"
@@ -168,7 +158,7 @@
     <ConfirmDialog
       :visible="confirmBulk"
       header="Удалить выбранные записи?"
-      :message="`Будет удалено записей: ${selectedIds.size}. Действие необратимо.`"
+      :message="`Будет удалено записей: ${selectionCount}. Действие необратимо.`"
       confirm-label="Удалить" danger-confirm
       @confirm="doBulkDelete" @cancel="confirmBulk = false"
     />
@@ -252,8 +242,9 @@
     <RegistryExportDialog
       v-model="exportOpen"
       :fields="exportableFields"
-      :selected-ids="[...selectedIds]"
+      :selected-ids="pickedIds"
       :search="store.filters.search"
+      :tag="store.filters.tag"
       :filename="store.selected?.name || 'registry'"
       :request="exportRequest"
       @error="notif.error($event)"
@@ -279,7 +270,6 @@ import RegistryQrFindDialog from '@/components/registry/RegistryQrFindDialog.vue
 import RegistryQrPrintDialog from '@/components/registry/RegistryQrPrintDialog.vue'
 import AppButton from '@/components/ui/AppButton.vue'
 import AppChip from '@/components/ui/AppChip.vue'
-import AppInfoBar from '@/components/ui/AppInfoBar.vue'
 import AppListDetail from '@/components/ui/AppListDetail.vue'
 import AppPage from '@/components/ui/AppPage.vue'
 import AppRow from '@/components/ui/AppRow.vue'
@@ -294,7 +284,7 @@ import { useRegistriesStore } from '@/stores/registries.js'
 import { useAuthStore } from '@/stores/auth.js'
 import { exportRecords, getShares, createShare, revokeShare } from '@/api/registries.js'
 import { useNotificationsStore } from '@/stores/notifications.js'
-import { hasQr, isExportable } from '@/utils/registryFields.js'
+import { hasQr, isExportable, tagOptions } from '@/utils/registryFields.js'
 
 const store = useRegistriesStore()
 const route = useRoute()
@@ -325,7 +315,12 @@ const commands = computed(() => {
   if (!store.selected) return []
   const has = store.selected.fields.length
   return [
-    { key: 'add', label: 'Добавить', icon: 'add', variant: 'filled', primary: true, fab: true },
+    // Пока что-то выбрано, плавающая «Добавить» уступает место плашке выбора:
+    // на телефоне они занимают один и тот же угол.
+    {
+      key: 'add', label: 'Добавить', icon: 'add', variant: 'filled',
+      primary: true, fab: true, hidden: selectionCount.value > 0,
+    },
     ...(has && !narrow.value ? [{ key: 'cols', label: 'Колонки', icon: 'view_column' }] : []),
     ...(hasQrFields.value
       ? [
@@ -362,6 +357,9 @@ const confirmBulk = ref(false)
 
 const totalPages = computed(() => Math.max(1, Math.ceil(store.total / store.filters.per_page)))
 
+// Чипы-теги: варианты поля, назначенного источником тегов в настройках реестра.
+const tags = computed(() => tagOptions(store.selected))
+
 // Видимые колонки — per-реестр, в localStorage (тот же механизм, что и на
 // публичной странице внешней ссылки).
 const { visible: visibleCols, shown: shownFields, toggle: toggleCol } = useRegistryColumns(
@@ -369,9 +367,20 @@ const { visible: visibleCols, shown: shownFields, toggle: toggleCol } = useRegis
   () => (store.selectedId == null ? null : `gw_registry_cols_${store.selectedId}`),
 )
 
+/* Выбор живёт между страницами: смена реестра, поиска или тега — уже другая
+   выборка, поэтому она его сбрасывает (иначе «выбрано всё» означало бы не то,
+   что человек видел). */
 const {
-  selected: selectedIds, allSelected, toggle: toggleRow, toggleAll, clear: clearSelection,
-} = useRowSelection(() => store.records)
+  mode: selectionMode, picked, count: selectionCount, isSelected, allSelected,
+  toggle: toggleRow, toggleAll, selectAllMatching, clear: clearSelection, payload: selection,
+} = useRowSelection(() => store.records, {
+  total: () => store.total,
+  scope: () => `${store.selectedId}|${store.filters.search}|${store.filters.tag}`,
+})
+
+// Диалогам печати и выгрузки нужны именно отмеченные id (режим «все» они
+// передают фильтром, как и удаление).
+const pickedIds = computed(() => (selectionMode.value === 'all' ? [] : [...picked.value]))
 
 watch(() => store.selectedId, () => {
   searchInput.value = ''
@@ -396,9 +405,9 @@ const saveRecord = (data, record) => (
 
 async function doBulkDelete() {
   confirmBulk.value = false
-  const ids = [...selectedIds.value]
+  const sel = selection.value
   clearSelection()
-  await store.bulkDelete(ids)
+  await store.bulkDelete(sel)
 }
 
 // ── Внешние ссылки ──
@@ -469,7 +478,6 @@ watch(() => route.query, applySearchQuery)
    (AppListDetail / AppPage), записи и диалоги — components/registry/*.
    Здесь остаётся только то, что принадлежит самому разделу. */
 
-.rg-selbar { flex: none; margin: 10px 14px 0; }
 
 /* ── Футер: счётчик и пагинация ── */
 .rg-total { flex: 1; font-size: 13px; color: var(--color-text-dim); }

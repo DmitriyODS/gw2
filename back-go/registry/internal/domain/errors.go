@@ -17,4 +17,7 @@ var (
 	ErrRegistryNotFound = NewError("NOT_FOUND", "Реестр не найден", 404)
 	ErrRecordNotFound   = NewError("NOT_FOUND", "Запись не найдена", 404)
 	ErrNoCompany        = NewError("BAD_REQUEST", "Нет активной компании", 400)
+	// Теги строятся только по списковому полю самого реестра: у остальных типов
+	// нет заранее известного набора значений, из которого выйдут чипы.
+	ErrTagFieldInvalid = NewError("VALIDATION", "Теги строятся только по списковому полю этого реестра", 400)
 )

@@ -412,6 +412,199 @@ func TestRegistryUploadsAndFileCleanup(t *testing.T) {
 
 // ── Публичные ссылки ─────────────────────────────────────────────
 
+// Теги реестра: администратор назначает источником списковое поле, его варианты
+// становятся фильтром записей — в разделе и на публичной странице ссылки.
+func TestRegistryTags(t *testing.T) {
+	admin := newVerifiedUser(t)
+	companyID := admin.createCompany(t, uniq("Теги "))
+	employee := newMember(t, admin, companyID, roleEmployee)
+	regID := createRegistry(t, admin, "Изделия")
+	fields := putFields(t, registryAPI, "/api/registries", admin, regID, []map[string]any{
+		{"label": "Название", "type": "text", "show_in_table": true},
+		{"label": "Тип изделия", "type": "select",
+			"config": map[string]any{"options": []string{"болт", "гайка"}}, "show_in_table": true},
+		{"label": "Материалы", "type": "select",
+			"config": map[string]any{"options": []string{"сталь", "медь"}, "multiple": true}},
+	})
+	nameK := fieldKey(t, fields, "Название")
+	typeK := fieldKey(t, fields, "Тип изделия")
+	matK := fieldKey(t, fields, "Материалы")
+	typeID, _ := strconv.ParseInt(typeK, 10, 64)
+	nameID, _ := strconv.ParseInt(nameK, 10, 64)
+	matID, _ := strconv.ParseInt(matK, 10, 64)
+
+	patch := func(a *actor, body map[string]any) apiResp {
+		return registryAPI.doJSON(t, http.MethodPatch, fmt.Sprintf("/api/registries/%d", regID), a.Token, body)
+	}
+
+	// Тегами становится только списковое поле СВОЕГО реестра.
+	requireError(t, patch(admin, map[string]any{"name": "Изделия", "tag_field_id": nameID}),
+		400, "VALIDATION", "теги по текстовому полю")
+	requireError(t, patch(admin, map[string]any{"name": "Изделия", "tag_field_id": 999999}),
+		400, "VALIDATION", "теги по чужому полю")
+	// Структуру правит только администратор компании.
+	requireStatus(t, patch(employee, map[string]any{"name": "Изделия", "tag_field_id": typeID}),
+		403, "теги сотрудником")
+
+	r := patch(admin, map[string]any{"name": "Изделия", "tag_field_id": typeID})
+	requireStatus(t, r, 200, "назначение поля тегов")
+	if int64(r.Num("tag_field_id")) != typeID {
+		t.Fatalf("поле тегов не сохранилось: %s", r.Raw)
+	}
+
+	bolt := createRecord(t, employee, regID, map[string]any{
+		nameK: "Болт М8", typeK: "болт", matK: []string{"сталь", "медь"},
+	})
+	nut := createRecord(t, employee, regID, map[string]any{nameK: "Гайка М8", typeK: "гайка"})
+
+	// Чип фильтрует записи по назначенному полю.
+	r = registryAPI.doJSON(t, http.MethodGet,
+		fmt.Sprintf("/api/registries/%d/records?tag=%s", regID, urlQuery("болт")), employee.Token, nil)
+	requireStatus(t, r, 200, "записи по тегу")
+	if ids := recordIDs(r); len(ids) != 1 || ids[0] != bolt {
+		t.Fatalf("фильтр по тегу «болт»: %v", ids)
+	}
+	if int(r.Num("total")) != 1 {
+		t.Fatalf("total должен считать отфильтрованные: %s", r.Raw)
+	}
+	r = registryAPI.doJSON(t, http.MethodGet,
+		fmt.Sprintf("/api/registries/%d/records?tag=%s", regID, urlQuery("гайка")), employee.Token, nil)
+	if ids := recordIDs(r); len(ids) != 1 || ids[0] != nut {
+		t.Fatalf("фильтр по тегу «гайка»: %v", ids)
+	}
+	// Без тега — все записи.
+	r = registryAPI.doJSON(t, http.MethodGet,
+		fmt.Sprintf("/api/registries/%d/records", regID), employee.Token, nil)
+	if ids := recordIDs(r); len(ids) != 2 {
+		t.Fatalf("без тега ожидались обе записи: %v", ids)
+	}
+
+	// Публичная ссылка показывает те же теги и так же фильтрует.
+	r = registryAPI.doJSON(t, http.MethodPost, fmt.Sprintf("/api/registries/%d/shares", regID),
+		admin.Token, map[string]any{"access": "view"})
+	requireStatus(t, r, 201, "создание ссылки")
+	code := r.Str("code")
+	r = registryAPI.doJSON(t, http.MethodGet, "/api/registries/shared/"+code, "", nil)
+	requireStatus(t, r, 200, "реестр по ссылке")
+	if int64(r.Num("tag_field_id")) != typeID {
+		t.Fatalf("ссылка не отдала поле тегов: %s", r.Raw)
+	}
+	r = registryAPI.doJSON(t, http.MethodGet,
+		fmt.Sprintf("/api/registries/shared/%s/records?tag=%s", code, urlQuery("болт")), "", nil)
+	requireStatus(t, r, 200, "записи по ссылке с тегом")
+	if ids := recordIDs(r); len(ids) != 1 || ids[0] != bolt {
+		t.Fatalf("фильтр по тегу по ссылке: %v", ids)
+	}
+
+	// Множественное списковое поле фильтруется по элементу массива.
+	requireStatus(t, patch(admin, map[string]any{"name": "Изделия", "tag_field_id": matID}),
+		200, "теги по множественному полю")
+	r = registryAPI.doJSON(t, http.MethodGet,
+		fmt.Sprintf("/api/registries/%d/records?tag=%s", regID, urlQuery("медь")), employee.Token, nil)
+	if ids := recordIDs(r); len(ids) != 1 || ids[0] != bolt {
+		t.Fatalf("фильтр по элементу множественного списка: %v", ids)
+	}
+
+	// Переименование без ключа tag_field_id настройку не сбрасывает.
+	r = patch(admin, map[string]any{"name": "Изделия и детали"})
+	requireStatus(t, r, 200, "переименование реестра")
+	if int64(r.Num("tag_field_id")) != matID {
+		t.Fatalf("переименование сбросило теги: %s", r.Raw)
+	}
+
+	// Удалили поле-источник — теги отключились сами, фильтр больше не сужает.
+	putFields(t, registryAPI, "/api/registries", admin, regID, []map[string]any{
+		{"label": "Название", "type": "text", "id": nameID, "show_in_table": true},
+		{"label": "Тип изделия", "type": "select", "id": typeID,
+			"config": map[string]any{"options": []string{"болт", "гайка"}}, "show_in_table": true},
+	})
+	r = registryAPI.doJSON(t, http.MethodGet, fmt.Sprintf("/api/registries/%d", regID), admin.Token, nil)
+	requireStatus(t, r, 200, "реестр после удаления поля тегов")
+	if r.JSON["tag_field_id"] != nil {
+		t.Fatalf("теги должны отключиться вместе с полем: %s", r.Raw)
+	}
+	r = registryAPI.doJSON(t, http.MethodGet,
+		fmt.Sprintf("/api/registries/%d/records?tag=%s", regID, urlQuery("медь")), employee.Token, nil)
+	if ids := recordIDs(r); len(ids) != 2 {
+		t.Fatalf("после отключения тегов фильтр не должен сужать выдачу: %v", ids)
+	}
+}
+
+// Выбор записей переживает страницы, поэтому «выбрано всё» приезжает на сервер
+// фильтром экрана плюс снятые галочки — списка id на тысячу записей нет ни в
+// запросе, ни в памяти клиента.
+func TestRegistryBulkSelection(t *testing.T) {
+	admin := newVerifiedUser(t)
+	companyID := admin.createCompany(t, uniq("Массовый выбор "))
+	employee := newMember(t, admin, companyID, roleEmployee)
+	regID := createRegistry(t, admin, "Склад")
+	fields := putFields(t, registryAPI, "/api/registries", admin, regID, []map[string]any{
+		{"label": "Название", "type": "text", "show_in_table": true},
+		{"label": "Тип", "type": "select",
+			"config": map[string]any{"options": []string{"болт", "гайка"}}, "show_in_table": true},
+	})
+	nameK := fieldKey(t, fields, "Название")
+	typeK := fieldKey(t, fields, "Тип")
+	typeID, _ := strconv.ParseInt(typeK, 10, 64)
+	requireStatus(t, registryAPI.doJSON(t, http.MethodPatch, fmt.Sprintf("/api/registries/%d", regID),
+		admin.Token, map[string]any{"name": "Склад", "tag_field_id": typeID}), 200, "поле тегов")
+
+	bulk := func(body map[string]any) apiResp {
+		return registryAPI.doJSON(t, http.MethodPost,
+			fmt.Sprintf("/api/registries/%d/records/bulk-delete", regID), employee.Token, body)
+	}
+	count := func() int {
+		r := registryAPI.doJSON(t, http.MethodGet,
+			fmt.Sprintf("/api/registries/%d/records?per_page=200", regID), employee.Token, nil)
+		requireStatus(t, r, 200, "список записей")
+		return len(recordIDs(r))
+	}
+
+	b1 := createRecord(t, employee, regID, map[string]any{nameK: "Болт 1", typeK: "болт"})
+	createRecord(t, employee, regID, map[string]any{nameK: "Болт 2", typeK: "болт"})
+	nut := createRecord(t, employee, regID, map[string]any{nameK: "Гайка", typeK: "гайка"})
+
+	// «Выбрано всё» в пределах чипа-тега, одна галочка снята.
+	r := bulk(map[string]any{"all": true, "tag": "болт", "exclude": []int64{b1}})
+	requireStatus(t, r, 200, "удаление всего по тегу")
+	if int(r.Num("deleted")) != 1 {
+		t.Fatalf("ожидалось удаление одной записи: %s", r.Raw)
+	}
+	if n := count(); n != 2 {
+		t.Fatalf("после удаления по тегу осталось %d записей, ждали 2", n)
+	}
+
+	// Поиск — тот же фильтр экрана.
+	r = bulk(map[string]any{"all": true, "search": "Гайка"})
+	requireStatus(t, r, 200, "удаление всего по поиску")
+	if int(r.Num("deleted")) != 1 {
+		t.Fatalf("ожидалось удаление гайки: %s", r.Raw)
+	}
+	r = registryAPI.doJSON(t, http.MethodGet,
+		fmt.Sprintf("/api/registries/%d/records", regID), employee.Token, nil)
+	if ids := recordIDs(r); len(ids) != 1 || ids[0] != b1 {
+		t.Fatalf("после удаления по поиску: %v (ждали только %d)", ids, b1)
+	}
+	_ = nut
+
+	// Перечень id по-прежнему работает; чужие id молча игнорируются.
+	r = bulk(map[string]any{"ids": []int64{b1, 999999}})
+	requireStatus(t, r, 200, "удаление перечнем")
+	if int(r.Num("deleted")) != 1 {
+		t.Fatalf("ожидалось удаление одной записи по перечню: %s", r.Raw)
+	}
+	if n := count(); n != 0 {
+		t.Fatalf("реестр должен опустеть, осталось %d", n)
+	}
+
+	// Пустой запрос ничего не сносит (страховка от «выбрано всё» без фильтра).
+	r = bulk(map[string]any{"ids": []int64{}})
+	requireStatus(t, r, 200, "пустой перечень")
+	if int(r.Num("deleted")) != 0 {
+		t.Fatalf("пустой перечень не должен ничего удалять: %s", r.Raw)
+	}
+}
+
 func TestRegistrySharing(t *testing.T) {
 	admin := newVerifiedUser(t)
 	companyID := admin.createCompany(t, uniq("Шаринг "))
