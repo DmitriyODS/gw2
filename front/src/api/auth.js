@@ -98,3 +98,12 @@ export const unlockScreen = (secret) =>
 // при смене пароля — на сервере это одна операция.
 export const revokeOtherSessions = () =>
   apiRequest('/auth/sessions/revoke-others', { method: 'POST' })
+
+// ── Правовые документы (152-ФЗ) ──────────────────────────────────────────────
+// Состояние согласия: действующая редакция, что и когда принял пользователь.
+export const getLegalState = () => apiRequest('/auth/legal')
+
+// Принятие действующей редакции. В ответе — НОВАЯ сессия: прежний токен нёс
+// признак «документы не приняты», по которому все сервисы отвечали 403.
+export const acceptLegal = (version, documents) =>
+  apiRequest('/auth/legal/accept', { method: 'POST', body: { version, documents } })

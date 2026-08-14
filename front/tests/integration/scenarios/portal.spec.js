@@ -5,8 +5,9 @@
    пост чужой компании не виден, разделы правит только администратор, а
    лимит закреплённых не обходится. */
 import { it, expect } from 'vitest'
-import { describeIntegration, uniq } from '../setup/harness.js'
+import { describeIntegration, uniq, dbQuery, Session } from '../setup/harness.js'
 import { newCompanyAdmin, newMember, registerVerified } from '../setup/factory.js'
+import { useAuthStore } from '@/stores/auth.js'
 import * as api from '@/api/portal.js'
 
 async function expectStatus(promise, status) {
@@ -187,9 +188,18 @@ describeIntegration('portal API: разделы и права', () => {
     await expect(api.createPost({ body: '   ' })).rejects.toBeTruthy()
   })
 
+  /* Портал — раздел компании, и без активной компании он закрыт. Обычный
+     пользователь в это состояние не попадает (при первом входе ему заводится
+     личная компания), а супер-админ живёт в нём всегда: он видит платформу, но
+     к компанийному контенту доступа не имеет. */
   it('без активной компании портал недоступен', async () => {
     const u = await registerVerified()
-    u.session.use()
+    dbQuery(`UPDATE users SET is_super_admin = TRUE WHERE id = ${u.auth.userId}`)
+    const s = new Session('portal-super')
+    s.use()
+    const a = useAuthStore()
+    await a.login(u.login, u.password)
+    expect(a.companyId).toBeNull()
     await expect(api.getPosts({})).rejects.toBeTruthy()
   })
 

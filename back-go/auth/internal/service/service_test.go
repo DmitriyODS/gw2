@@ -17,10 +17,11 @@ import (
 // ── Фейки портов (без БД/Redis, как в callsvc) ───────────────────
 
 type fakeRepo struct {
-	users   map[int64]*domain.User
-	roles   map[int64]*domain.Role
-	members map[int64]map[int64]*domain.Membership // userID → companyID → членство
-	nextID  int64
+	users    map[int64]*domain.User
+	roles    map[int64]*domain.Role
+	members  map[int64]map[int64]*domain.Membership // userID → companyID → членство
+	consents []domain.Consent                       // журнал согласий с документами
+	nextID   int64
 }
 
 func newFakeRepo() *fakeRepo {
@@ -190,6 +191,17 @@ func (r *fakeRepo) UpdateFields(_ context.Context, id int64, fields map[string]a
 			} else if n, ok := v.(int); ok {
 				u.LockAfterMin = &n
 			}
+		case "legal_version":
+			u.LegalVersion = strPtr(v)
+		case "legal_accepted_at":
+			switch ts := v.(type) {
+			case time.Time:
+				u.LegalAcceptedAt = &ts
+			case *time.Time:
+				u.LegalAcceptedAt = ts
+			default:
+				u.LegalAcceptedAt = nil
+			}
 		}
 	}
 	return nil
@@ -230,6 +242,11 @@ func (r *fakeRepo) HashPassword(_ context.Context, password string) (string, err
 
 func (r *fakeRepo) VerifyPassword(_ context.Context, password, hash string) (bool, error) {
 	return hash == "hash:"+password, nil
+}
+
+func (r *fakeRepo) AddConsent(_ context.Context, c domain.Consent) error {
+	r.consents = append(r.consents, c)
+	return nil
 }
 
 // ── Членство (user_companies) ──

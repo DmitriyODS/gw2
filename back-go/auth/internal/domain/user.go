@@ -70,6 +70,10 @@ type User struct {
 	// Личные настройки рабочего стола (закреплённые разделы, размеры плиток,
 	// обои) — непрозрачный для сервера JSON, структуру ведёт фронт.
 	DesktopPrefs []byte
+	// Принятая редакция правовых документов и момент согласия (см. legal.go).
+	// Не совпала с LegalVersion — приложение закрыто до нового согласия.
+	LegalVersion    *string
+	LegalAcceptedAt *time.Time
 
 	CompanyID     *int64
 	Role          Role

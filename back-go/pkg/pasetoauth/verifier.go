@@ -3,7 +3,8 @@
 // Токены выпускает ТОЛЬКО authsvc (PASETO_PRIVATE_KEY); остальные сервисы
 // проверяют подпись по общему публичному ключу PASETO_PUBLIC_KEY —
 // скомпрометированный сервис-верификатор не может выпустить токен.
-// Клеймы: sub (id строкой), type=="access", exp/iat, force_change.
+// Клеймы: sub (id строкой), type=="access", exp/iat, force_change,
+// legal_required.
 package pasetoauth
 
 import (
@@ -26,12 +27,16 @@ import (
 // IsSuperAdmin — платформенный супер-админ: отдельный класс, видит все компании и
 // пользователей, но к компанийной функциональности (задачи, грувики, YouGile)
 // доступа не имеет.
+// LegalRequired — действующая редакция правовых документов пользователем ещё
+// не принята (152-ФЗ): работать нельзя, пока не согласится. Гейт серверный и
+// общий для всех сервисов — обойти его правкой браузерного состояния нельзя.
 type Claims struct {
-	UserID       int64
-	ForceChange  bool
-	IsSuperAdmin bool
-	CompanyID    *int64
-	RoleLevel    int
+	UserID        int64
+	ForceChange   bool
+	LegalRequired bool
+	IsSuperAdmin  bool
+	CompanyID     *int64
+	RoleLevel     int
 }
 
 // Verifier — проверка подписи и клеймов access-токена.
@@ -66,14 +71,15 @@ func (v *Verifier) ParseAccess(raw string) Claims {
 	if err != nil || id <= 0 {
 		return Claims{}
 	}
-	var fc, sa bool
+	var fc, lr, sa bool
 	var cid *int64
 	var rl int
 	_ = t.Get("force_change", &fc)
+	_ = t.Get("legal_required", &lr)
 	_ = t.Get("company_id", &cid)
 	_ = t.Get("role_level", &rl)
 	_ = t.Get("is_super_admin", &sa)
-	return Claims{UserID: id, ForceChange: fc, IsSuperAdmin: sa, CompanyID: cid, RoleLevel: rl}
+	return Claims{UserID: id, ForceChange: fc, LegalRequired: lr, IsSuperAdmin: sa, CompanyID: cid, RoleLevel: rl}
 }
 
 // FromRequest — клеймы из Bearer-заголовка Fiber-запроса.

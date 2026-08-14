@@ -77,6 +77,8 @@
 
         <AiSection v-else-if="activeSection === 'ai'" />
 
+        <LegalSection v-else-if="activeSection === 'legal'" />
+
         <AppStack v-else-if="activeSection === 'help'">
           <HelpCenter />
           <SupportCard />
@@ -178,6 +180,7 @@ const StorageSection = defineAsyncComponent(() => import('@/components/settings/
 const ThemesSection = defineAsyncComponent(() => import('@/components/settings/ThemesSection.vue'))
 const ChatsPortalSection = defineAsyncComponent(() => import('@/components/settings/ChatsPortalSection.vue'))
 const AboutSection = defineAsyncComponent(() => import('@/components/settings/AboutSection.vue'))
+const LegalSection = defineAsyncComponent(() => import('@/components/settings/LegalSection.vue'))
 const AuditSection = defineAsyncComponent(() => import('@/components/settings/AuditSection.vue'))
 const SupportCard = defineAsyncComponent(() => import('@/components/settings/SupportCard.vue'))
 const HelpCenter = defineAsyncComponent(() => import('@/components/settings/HelpCenter.vue'))

@@ -117,6 +117,15 @@ func (h *wsHandler) handle(conn *websocket.Conn) {
 			json.RawMessage(`{"code":"AUTH_FAILED"}`)))
 		return
 	}
+	// Правовые документы не приняты — доступа нет нигде, включая realtime
+	// (152-ФЗ): иначе события разделов продолжали бы приходить под плашкой
+	// согласия. Фронт в этом состоянии сокет и не поднимает.
+	if claims.LegalRequired {
+		log.Warn("ws.connect_rejected", "reason", "legal consent required", "user_id", claims.UserID)
+		_ = writeFrame(conn, hub.MarshalFrame("_error",
+			json.RawMessage(`{"code":"LEGAL_CONSENT_REQUIRED"}`)))
+		return
+	}
 	userID := claims.UserID
 
 	client := hub.NewClient(userID)

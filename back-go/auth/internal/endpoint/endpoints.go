@@ -42,6 +42,10 @@ type Endpoints struct {
 	UnlockScreen         endpoint.Endpoint
 	RevokeCurrentSession endpoint.Endpoint
 
+	// Правовые документы: состояние согласия и его принятие.
+	LegalState  endpoint.Endpoint
+	AcceptLegal endpoint.Endpoint
+
 	// OAuth-провайдер (связка аккаунтов навыка Алисы) и вход через Яндекс ID.
 	OAuthAuthorize   endpoint.Endpoint
 	OAuthToken       endpoint.Endpoint
@@ -139,6 +143,15 @@ type ScreenLockEpRequest struct {
 type UnlockEpRequest struct {
 	UserID int64
 	Secret string
+}
+
+// AcceptLegalEpRequest — принятие правовых документов. CompanyID — активная
+// компания из токена: перевыпущенная сессия должна остаться в ней.
+type AcceptLegalEpRequest struct {
+	UserID    int64
+	CompanyID *int64
+	Body      dto.LegalAcceptRequest
+	Meta      domain.Consent
 }
 
 // RevokeSessionEpRequest — завершение сеанса (только своего).
@@ -409,6 +422,13 @@ func New(svc service.AuthService) Endpoints {
 		UnlockScreen: func(ctx context.Context, request any) (any, error) {
 			req := request.(UnlockEpRequest)
 			return nil, svc.UnlockScreen(ctx, req.UserID, req.Secret)
+		},
+		LegalState: func(ctx context.Context, request any) (any, error) {
+			return svc.LegalState(ctx, request.(int64))
+		},
+		AcceptLegal: func(ctx context.Context, request any) (any, error) {
+			req := request.(AcceptLegalEpRequest)
+			return svc.AcceptLegal(ctx, req.UserID, req.CompanyID, req.Body, req.Meta)
 		},
 		RevokeOtherSessions: func(ctx context.Context, request any) (any, error) {
 			return svc.RevokeOtherSessions(ctx, request.(int64))

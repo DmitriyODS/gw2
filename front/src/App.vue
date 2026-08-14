@@ -36,6 +36,10 @@
         <router-view />
       </main>
     </template>
+    <!-- Правовые документы: пока действующая редакция не принята, приложение
+         закрыто (152-ФЗ) — все сервисы отвечают 403, плашка неотменяемая.
+         Ленивый чанк: тексты документов читают один раз в жизни аккаунта. -->
+    <LegalConsentOverlay v-if="LEGAL_CONSENT_VISIBLE && authStore.token && authStore.legalRequired" />
     <!-- Запертый экран поверх всего: сессия жива, но приложение закрыто до
          ввода пин-кода. Компонент ленивый — код блокировки не нужен тем, кто
          ею не пользуется. -->
@@ -73,6 +77,7 @@ import { useShellMode } from '@/composables/useShellMode.js'
 import { useCompanySettings } from '@/composables/useCompanySettings.js'
 import { connectSocket } from '@/socket/index.js'
 import { navProgress } from '@/composables/useNavProgress.js'
+import { LEGAL_CONSENT_VISIBLE } from '@/utils/release.js'
 import {
   registerNotifyServiceWorker, installNotifyUnlock, requestNotificationPermission,
   playNotifySound, focusAppWindow,
@@ -99,6 +104,7 @@ const IncomingCallOverlay = defineAsyncComponent(() => import('@/components/call
 const CallView = defineAsyncComponent(() => import('@/components/call/CallView.vue'))
 const ReturnCallBanner = defineAsyncComponent(() => import('@/components/call/ReturnCallBanner.vue'))
 const ScreenLockOverlay = defineAsyncComponent(() => import('@/components/common/ScreenLockOverlay.vue'))
+const LegalConsentOverlay = defineAsyncComponent(() => import('@/components/legal/LegalConsentOverlay.vue'))
 
 const authStore = useAuthStore()
 const themeStore = useThemeStore()
@@ -275,29 +281,40 @@ onMounted(async () => {
       life: 8000,
     }),
   })
-  if (authStore.token) {
-    connectSocket()
-    await unitsStore.fetchActiveUnit()
-    // Уведомления: регистрируем SW (нужен для OS-уведомлений на мобильных),
-    // сразу просим разрешение (Chrome/Firefox показывают prompt без жеста) и
-    // вешаем «разогрев» аудио + повторный запрос по первому жесту (для Safari).
-    registerNotifyServiceWorker()
-    requestNotificationPermission()
-    installNotifyUnlock()
-    // Список диалогов нужен сразу после входа: бейдж непрочитанных, мини-чат
-    // и корректный заголовок в push-уведомлении (иначе fio неизвестно).
-    await messengerStore.fetchConversations().catch(() => {})
-    // Личное оформление чатов (градиенты/узоры) — синхронно с бэкендом.
-    messengerStore.fetchChatBackgrounds()
-    // Бейдж непрочитанных постов портала — только при активной компании.
-    if (authStore.companyId != null) portalStore.fetchUnread()
-    // Личное оформление ленты портала (градиент/узор/картинка) — синк с бэкендом.
-    portalStore.fetchBackground()
-    // Если страницу перезагрузили во время звонка — звонок ещё «жив» на
-    // сервере (grace-окно). Предложим вернуться к нему.
-    callStore.checkRejoin()
-  }
+  // Пока правовые документы не приняты, сессионные службы не поднимаем: все
+  // API отвечают 403, а сокет сервер и вовсе не примет — вышли бы только
+  // бесполезные запросы и цикл переподключений под плашкой согласия.
+  if (authStore.token && !authStore.legalRequired) startSessionServices()
 })
+
+// Согласие принято в этом сеансе — доступ открылся, поднимаем то, что при
+// старте пропустили.
+watch(() => authStore.legalRequired, (required, prev) => {
+  if (prev && !required && authStore.token) startSessionServices()
+})
+
+async function startSessionServices() {
+  connectSocket()
+  await unitsStore.fetchActiveUnit()
+  // Уведомления: регистрируем SW (нужен для OS-уведомлений на мобильных),
+  // сразу просим разрешение (Chrome/Firefox показывают prompt без жеста) и
+  // вешаем «разогрев» аудио + повторный запрос по первому жесту (для Safari).
+  registerNotifyServiceWorker()
+  requestNotificationPermission()
+  installNotifyUnlock()
+  // Список диалогов нужен сразу после входа: бейдж непрочитанных, мини-чат
+  // и корректный заголовок в push-уведомлении (иначе fio неизвестно).
+  await messengerStore.fetchConversations().catch(() => {})
+  // Личное оформление чатов (градиенты/узоры) — синхронно с бэкендом.
+  messengerStore.fetchChatBackgrounds()
+  // Бейдж непрочитанных постов портала — только при активной компании.
+  if (authStore.companyId != null) portalStore.fetchUnread()
+  // Личное оформление ленты портала (градиент/узор/картинка) — синк с бэкендом.
+  portalStore.fetchBackground()
+  // Если страницу перезагрузили во время звонка — звонок ещё «жив» на
+  // сервере (grace-окно). Предложим вернуться к нему.
+  callStore.checkRejoin()
+}
 
 // Сброс данных при логауте, чтобы не утекли между сессиями.
 watch(() => authStore.user, (user) => {

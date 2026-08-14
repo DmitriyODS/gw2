@@ -9,6 +9,8 @@
  * (компании): «Настройки» служат им единой точкой входа, а сам он остаётся
  * отдельным окном со своим маршрутом.
  */
+import { LEGAL_CONSENT_VISIBLE } from '@/utils/release.js'
+
 export function settingsGroups(ctx = {}) {
   const { isMobile = false, hasCompany = false, isAdmin = false, isSuperAdmin = false } = ctx
   return [
@@ -62,6 +64,15 @@ export function settingsGroups(ctx = {}) {
           icon: 'auto_awesome',
           tone: 'primary',
         },
+        // Правовые документы придержаны до отдельного выпуска (см. release.js):
+        // пока флаг снят, раздела нет ни в списке, ни в поиске Hola.
+        ...(LEGAL_CONSENT_VISIBLE ? [{
+          key: 'legal',
+          title: 'Правовые документы',
+          desc: 'Лицензионное соглашение, политика конфиденциальности, согласие на обработку персональных данных',
+          icon: 'gavel',
+          tone: 'secondary',
+        }] : []),
         { key: 'help', title: 'Справка и поддержка', desc: 'Как пользоваться разделами, чат с разработчиками', icon: 'help', tone: 'secondary' },
         { key: 'about', title: 'О приложении', desc: 'Версия, что нового, приложения для устройств', icon: 'info', tone: 'tertiary' },
       ],

@@ -49,6 +49,11 @@ type AuthService interface {
 	DisableScreenLock(ctx context.Context, userID int64, secret string) error
 	UnlockScreen(ctx context.Context, userID int64, secret string) error
 
+	// Правовые документы (152-ФЗ): что принято и принятие действующей редакции.
+	LegalState(ctx context.Context, userID int64) (*dto.LegalState, error)
+	AcceptLegal(ctx context.Context, userID int64, activeCompanyID *int64,
+		req dto.LegalAcceptRequest, meta domain.Consent) (*dto.Session, error)
+
 	ListUsers(ctx context.Context) ([]dto.User, error)
 	CreateUser(ctx context.Context, actor *domain.User, req dto.CreateUserRequest) (*dto.User, error)
 	CreatePlatformUser(ctx context.Context, req dto.CreateUserRequest) (*dto.User, error)
@@ -217,9 +222,10 @@ func companyDisabledErr(name *string) error {
 // nil — активной компании нет (нормальное состояние: мессенджер/профиль).
 func (s *Service) session(ctx context.Context, u *domain.User, activeCompanyID *int64, withRefresh bool) (*dto.Session, error) {
 	claims := token.Claims{
-		UserID:       u.ID,
-		ForceChange:  u.IsDefaultPass,
-		IsSuperAdmin: u.IsSuperAdmin,
+		UserID:        u.ID,
+		ForceChange:   u.IsDefaultPass,
+		LegalRequired: domain.LegalRequiredFor(u),
+		IsSuperAdmin:  u.IsSuperAdmin,
 	}
 	if activeCompanyID != nil {
 		m, err := s.repo.GetMembership(ctx, u.ID, *activeCompanyID)
@@ -260,6 +266,7 @@ func (s *Service) session(ctx context.Context, u *domain.User, activeCompanyID *
 		RoleLevel:       claims.RoleLevel,
 		IsSuperAdmin:    u.IsSuperAdmin,
 		Companies:       dto.NewMemberships(memberships),
+		LegalRequired:   claims.LegalRequired,
 	}
 	if withRefresh {
 		sid := s.ensureSessionID(ctx, u.ID)

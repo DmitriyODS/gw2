@@ -5,7 +5,7 @@ import { login as apiLogin, logout as apiLogout, changeDefault as apiChangeDefau
   register as apiRegister, selectCompany as apiSelectCompany, switchCompany as apiSwitchCompany,
   verifyEmail as apiVerifyEmail, resendVerification as apiResendVerification,
   forgotPassword as apiForgotPassword, resetPassword as apiResetPassword,
-  yandexCallback as apiYandexCallback } from '@/api/auth.js'
+  yandexCallback as apiYandexCallback, acceptLegal as apiAcceptLegal } from '@/api/auth.js'
 import { joinCompanyByCode as apiJoinCompany, acceptCompanyInvite as apiAcceptInvite } from '@/api/companies.js'
 import router from '@/router/index.js'
 import { disconnectSocket, updateSocketAuth } from '@/socket/index.js'
@@ -40,6 +40,11 @@ export const useAuthStore = defineStore('auth', () => {
   // Сообщение от backend о блокировке компании. Если не null — глобальный
   // обработчик показывает экран блокировки вместо обычного приложения.
   const companyDisabled = ref(null)
+  /* Действующая редакция правовых документов не принята (152-ФЗ). Приходит в
+     теле каждой сессии и в 403 LEGAL_CONSENT_REQUIRED от любого сервиса:
+     App.vue показывает неотменяемую плашку согласия поверх приложения, а до
+     согласия все API отвечают отказом. */
+  const legalRequired = ref(false)
   let _restorePromise = null
 
   watch(token, (t) => {
@@ -75,6 +80,18 @@ export const useAuthStore = defineStore('auth', () => {
     }
     companies.value = data.companies ?? []
     forceChange.value = !!data.force_change
+    legalRequired.value = !!data.legal_required
+  }
+
+  /* Принять действующую редакцию правовых документов. Сервер фиксирует факт
+     согласия (редакция, документы, время, адрес, клиент) и возвращает НОВУЮ
+     сессию — без перевыпуска токена человек остался бы запертым до истечения
+     текущего (15 мин), потому что признак «не принято» живёт в самом токене. */
+  async function acceptLegal(version, documents) {
+    const data = await apiAcceptLegal(version, documents)
+    applySession(data)
+    // Профиль мог не загрузиться, пока API отвечали 403 — берём его сейчас.
+    if (!user.value) loadMe().catch(() => {})
   }
 
   // Локально подмешать изменённые настройки активной компании в клеймы сессии,
@@ -288,7 +305,10 @@ export const useAuthStore = defineStore('auth', () => {
       confirm_password: confirmPassword,
     })
     applySession(result)
-    await loadMe()
+    // Следующим гейтом может стоять согласие с правовыми документами — тогда
+    // /users/me ответит 403, и смена пароля «упала» бы уже после успеха.
+    // Профиль догрузит acceptLegal, когда человек примет документы.
+    if (!legalRequired.value) await loadMe()
   }
 
   function clearAuth() {
@@ -301,6 +321,7 @@ export const useAuthStore = defineStore('auth', () => {
     companies.value = []
     forceChange.value = false
     companyDisabled.value = null
+    legalRequired.value = false
   }
 
   // Пауза перед повторной попыткой восстановления: либо браузер сообщил
@@ -354,12 +375,13 @@ export const useAuthStore = defineStore('auth', () => {
   }
 
   return {
-    user, token, forceChange, isAuth, ready, connecting, loggingOut,
+    user, token, forceChange, legalRequired, isAuth, ready, connecting, loggingOut,
     userId, companyId, companyName, companySettings, isSuperAdmin, companyDisabled,
     companies, isMultiCompany, roleLevel,
     ensureReady, login, register, verifyEmail, resendVerification, yandexLogin,
     forgotPassword, resetPassword, acceptInvite,
     logout, loadMe, setVacation, clearAuth, applySession, applyLinkSession, patchCompanySettings,
+    acceptLegal,
     selectCompany, switchCompany, joinCompany,
     changeDefaultCredentials,
   }

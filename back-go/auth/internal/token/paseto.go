@@ -6,6 +6,7 @@
 // симметричным ключом: его читает только сам authsvc.
 //
 // Клеймы access-токена: sub (id строкой), type=access, force_change,
+// legal_required (правовые документы не приняты — см. domain/legal.go),
 // is_super_admin и опциональный контекст активной компании (company_id,
 // company_name, company_settings, role_level). «Нет активной компании» —
 // нормальное состояние (мессенджер/профиль), а не признак админа.
@@ -24,6 +25,7 @@ import (
 type Claims struct {
 	UserID          int64
 	ForceChange     bool
+	LegalRequired   bool
 	IsSuperAdmin    bool
 	CompanyID       *int64
 	CompanyName     *string
@@ -72,6 +74,7 @@ func (i *Issuer) AccessToken(c Claims) (string, error) {
 	t.SetString("type", "access")
 	if err := setAll(&t, map[string]any{
 		"force_change":     c.ForceChange,
+		"legal_required":   c.LegalRequired,
 		"is_super_admin":   c.IsSuperAdmin,
 		"company_id":       c.CompanyID,
 		"company_name":     c.CompanyName,

@@ -36,7 +36,8 @@ const SectionOther = "other"
 // каскадом FK, но не восстановлена (её данных нет в архиве раздела). Завёл
 // новую таблицу — впиши её в свой раздел; иначе она молча уедет в «Прочее».
 var BackupSections = []BackupSection{
-	{Key: "auth", Tables: []string{"roles", "users", "user_companies", "device_tokens"}},
+	{Key: "auth", Tables: []string{"roles", "users", "user_companies", "device_tokens",
+		"user_consents"}},
 	{Key: "companies", Tables: []string{"companies", "company_invites"}},
 	{Key: "tasks", Tables: []string{"departments", "stages", "unit_types", "tasks", "favorites",
 		"units", "comments", "user_task_colors", "tags", "task_tags", "task_comment_seen",

@@ -43,7 +43,10 @@ func (a *actor) applySession(t *testing.T, r apiResp) {
 func newVerifiedUser(t *testing.T) *actor {
 	t.Helper()
 	a := &actor{
-		FIO:      "Тестов Пользователь Апиевич",
+		// ФИО уникально: по нему называется личная компания («Фамилия Имя —
+		// личное»), а имена компаний уникальны — у сотни тёзок свободные
+		// варианты заканчиваются, и очередной новичок остаётся без компании.
+		FIO:      uniq("Тестов ") + " Пользователь Апиевич",
 		Login:    uniq("user_"),
 		Password: "secret-pass-123",
 	}
@@ -63,12 +66,37 @@ func newVerifiedUser(t *testing.T) *actor {
 	})
 	requireStatus(t, v, 200, "verify-email "+a.Email)
 	a.applySession(t, v)
+	acceptLegal(t, a)
 	// Тарифные лимиты проверяет отдельный набор тестов (billing_test.go), а
 	// остальным сценариям бесплатный «Джун» только мешает: они создают по
 	// несколько компаний, досок и задач. Поэтому актору сразу выдаём старший
 	// тариф — как реальному платящему пользователю.
 	grantPlan(t, a, "senior")
 	return a
+}
+
+/* acceptLegal — принять правовые документы, как это делает живой пользователь
+   первым делом после входа: до согласия RequireAuth всех сервисов отвечает 403
+   LEGAL_CONSENT_REQUIRED (152-ФЗ), и любой сценарий упрётся в гейт.
+
+   Редакцию и перечень документов берём с сервера, а не константой: смена
+   редакции не должна ломать харнесс. В ответе — новая сессия без клейма
+   legal_required, поэтому токен актора обновляем. */
+func acceptLegal(t *testing.T, a *actor) {
+	t.Helper()
+	state := authAPI.doJSON(t, http.MethodGet, "/api/auth/legal", a.Token, nil)
+	requireStatus(t, state, 200, "legal state "+a.Login)
+	// Гейт придержан до отдельного выпуска (domain.LegalGateEnabled): пока он
+	// снят, согласие никого не блокирует и шаг пропускаем — харнесс обязан
+	// работать в обоих режимах.
+	if state.JSON["required"] != true {
+		return
+	}
+	r := authAPI.doJSON(t, http.MethodPost, "/api/auth/legal/accept", a.Token, map[string]any{
+		"version": state.Str("version"), "documents": state.List("documents"),
+	})
+	requireStatus(t, r, 200, "legal accept "+a.Login)
+	a.applySession(t, r)
 }
 
 // grantPlan — выдать актору тариф напрямую в БД (быстрее и надёжнее, чем
@@ -170,6 +198,8 @@ func newSuperAdmin(t *testing.T) *actor {
 		t.Fatalf("бутстрап супер-админа: %v", err)
 	}
 	a.mustLogin(t)
+	// Правовые документы принимает и супер-админ: гейт общий для платформы.
+	acceptLegal(t, a)
 	return a
 }
 

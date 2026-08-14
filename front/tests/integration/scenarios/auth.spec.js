@@ -6,6 +6,7 @@ import { describeIntegration, Session, verificationCode, uniq } from '../setup/h
 import { useAuthStore } from '@/stores/auth.js'
 import * as companiesApi from '@/api/companies.js'
 import { refreshToken, login as apiLogin } from '@/api/auth.js'
+import { LEGAL_DOC_KEYS, LEGAL_VERSION } from '@/utils/legal.js'
 import { getMe } from '@/api/users.js'
 
 // Зарегистрировать и подтвердить нового пользователя в рамках его Session.
@@ -15,12 +16,18 @@ async function registerVerified(s) {
   const login = uniq('user_')
   const email = `${login}@apitest.local`
   const password = 'secret-pass-123'
-  const reg = await auth.register({ fio: 'Тестов Пользователь Апиевич', email, login, password })
+  // ФИО уникально — по нему называется личная компания, а имена компаний
+  // уникальны (см. factory.js).
+  const reg = await auth.register({ fio: `${uniq('Тестов ')} Пользователь Апиевич`, email, login, password })
   expect(reg.verificationRequired).toBe(true)
   expect(reg.email).toBe(email)
   const code = verificationCode(email)
   expect(code).toMatch(/^\d+$/)
   await auth.verifyEmail({ email, code })
+  // Правовые документы (152-ФЗ): пока гейт включён, до согласия все сервисы
+  // отвечают 403 — живой пользователь проходит этот шаг после первого входа.
+  // Гейт придержан до отдельного выпуска, поэтому шаг условный.
+  if (auth.legalRequired) await auth.acceptLegal(LEGAL_VERSION, LEGAL_DOC_KEYS)
   return { login, email, password, auth }
 }
 
@@ -33,9 +40,12 @@ describeIntegration('auth-flow: регистрация и сессия', () => {
     expect(auth.isAuth).toBe(true)
     expect(auth.token).toBeTruthy()
     expect(auth.userId).toBeGreaterThan(0)
-    // Новичок без компании — нормальное состояние (role_level 0, company_id null).
-    expect(auth.roleLevel).toBe(0)
-    expect(auth.companyId).toBeNull()
+    /* Новичок входит в СВОЮ личную компанию: без неё половина разделов
+       отвечала бы «нужна активная компания» (см. EnsurePersonalCompany).
+       Роль в ней — администратор, он же её создатель. */
+    expect(auth.companyId).toBeGreaterThan(0)
+    expect(auth.roleLevel).toBe(3)
+    expect(auth.companies).toHaveLength(1)
     // loadMe грузится в фоне — дождёмся и проверим профиль (/users/me парсится).
     await auth.loadMe()
     expect(auth.user?.login).toBe(login)
@@ -44,10 +54,11 @@ describeIntegration('auth-flow: регистрация и сессия', () => {
   it('создание компании + switch-company переносит активную компанию в claims', async () => {
     const s = new Session()
     const { auth } = await registerVerified(s)
+    const personal = auth.companyId // личная компания новичка
     const created = await companiesApi.createCompany({ name: uniq('ООО ') })
     expect(created.id).toBeGreaterThan(0)
     // created_by — сам создатель (полные права).
-    expect(auth.companyId).toBeNull() // до switch активной компании нет
+    expect(auth.companyId).toBe(personal) // до switch активной остаётся прежняя
     await auth.switchCompany(created.id)
     expect(auth.companyId).toBe(created.id)
     expect(auth.roleLevel).toBe(3) // создатель — администратор
@@ -56,25 +67,25 @@ describeIntegration('auth-flow: регистрация и сессия', () => {
   it('login после verify возвращает сессию; logout гасит; refresh поднимает по cookie', async () => {
     const s = new Session()
     const { login, password, auth } = await registerVerified(s)
-    // Заведём компанию, чтобы login был без gate (1 компания — автоактивна).
-    const created = await companiesApi.createCompany({ name: uniq('ООО ') })
-    await auth.switchCompany(created.id)
+    // У новичка ровно одна компания — личная, поэтому login идёт без gate.
+    const personal = auth.companyId
 
     // Явный login через стор.
     const res = await auth.login(login, password)
     expect(res.forceChange).toBe(false)
     expect(auth.isAuth).toBe(true)
-    expect(auth.companyId).toBe(created.id) // 1 компания — автоактивна
+    expect(auth.companyId).toBe(personal) // 1 компания — автоактивна
 
     // refresh по cookie (jar хранит refresh_token) возвращает новый access.
     const data = await refreshToken()
     expect(data.access_token).toBeTruthy()
-    expect(data.company_id).toBe(created.id)
+    expect(data.company_id).toBe(personal)
   })
 
   it('login-gate: две компании → needs_company_selection, select-company завершает вход', async () => {
     const s = new Session()
     const { login, password, auth } = await registerVerified(s)
+    // Личная компания уже есть — добавляем к ней ещё две.
     const c1 = await companiesApi.createCompany({ name: uniq('Компания-А ') })
     await auth.switchCompany(c1.id)
     const c2 = await companiesApi.createCompany({ name: uniq('Компания-Б ') })
@@ -84,7 +95,7 @@ describeIntegration('auth-flow: регистрация и сессия', () => {
     const raw = await apiLogin({ login, password })
     expect(raw.needs_company_selection).toBe(true)
     expect(Array.isArray(raw.companies)).toBe(true)
-    expect(raw.companies.length).toBe(2)
+    expect(raw.companies.length).toBe(3) // личная + две заведённые
     expect(raw.select_token).toBeTruthy()
 
     // Через стор: login отдаёт needsSelection, затем selectCompany завершает.

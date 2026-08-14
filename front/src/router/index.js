@@ -7,6 +7,7 @@ import { useCompanySettings } from '@/composables/useCompanySettings.js'
 import { startNavProgress, stopNavProgress } from '@/composables/useNavProgress.js'
 import { trackPageView } from '@/utils/metrika.js'
 import { inAppShell } from '@/utils/appShell.js'
+import { LEGAL_CONSENT_VISIBLE } from '@/utils/release.js'
 
 const routes = [
   // Корень — промо-лендинг платформы: публичный, без каркаса приложения.
@@ -38,6 +39,14 @@ const routes = [
     meta: { public: true, authScreen: true } },
   { path: '/reset-password', component: () => import('@/views/ResetPasswordView.vue'),
     meta: { public: true, authScreen: true } },
+  /* Правовые документы — ПУБЛИЧНАЯ страница: лицензию, политику и текст
+     согласия закон требует показывать до регистрации, а не только в плашке
+     согласия внутри приложения. Отдельный документ открывается якорем
+     /legal#privacy. Пока документы придержаны (LEGAL_CONSENT_VISIBLE), роута
+     нет вовсе — прямая ссылка не должна показывать текст с незаполненными
+     реквизитами. */
+  ...(LEGAL_CONSENT_VISIBLE ? [{ path: '/legal', component: () => import('@/views/LegalView.vue'),
+    meta: { public: true, authScreen: true } }] : []),
   // Принятие email-приглашения в компанию (нужна авторизация; гость сперва войдёт).
   { path: '/invite/:token', component: () => import('@/views/InviteAcceptView.vue'),
     meta: { requiresAuth: true, fullscreen: true }, props: true },

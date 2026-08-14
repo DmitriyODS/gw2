@@ -12,6 +12,7 @@ import { useAuthStore } from '@/stores/auth.js'
 import * as auth from '@/api/auth.js'
 import * as companies from '@/api/companies.js'
 import * as users from '@/api/users.js'
+import { LEGAL_DOC_KEYS, LEGAL_VERSION } from '@/utils/legal.js'
 
 async function expectStatus(promise, status) {
   await expect(promise).rejects.toMatchObject({ status })
@@ -154,6 +155,15 @@ describeIntegration('auth API: дефолтный пароль сотрудни�
     await expectStatus(users.getMe(), 403)
 
     await a.changeDefaultCredentials({ password: 'own-secret-123', confirmPassword: 'own-secret-123' })
+    /* Гейты идут по очереди: сменил пароль — упёрся в правовые документы.
+       Сотрудник, заведённый администратором, принимает их сам: согласие даёт
+       субъект персональных данных, а не работодатель за него. Гейт придержан
+       до отдельного выпуска (domain.LegalGateEnabled) — при снятом флаге шага
+       просто нет. */
+    if (a.legalRequired) {
+      await expectStatus(users.getMe(), 403)
+      await a.acceptLegal(LEGAL_VERSION, LEGAL_DOC_KEYS)
+    }
     expect((await users.getMe()).login).toBe(login)
   })
 

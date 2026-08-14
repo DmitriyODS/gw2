@@ -81,6 +81,15 @@
         </button>
         <RouterLink to="/login" class="rg-switch">уже есть аккаунт</RouterLink>
       </div>
+
+      <!-- Согласие берётся плашкой после подтверждения почты (там его нужно
+           прочитать и подтвердить галочками), здесь — только доступ к текстам:
+           закон требует, чтобы документы можно было прочитать ДО регистрации. -->
+      <p v-if="LEGAL_CONSENT_VISIBLE" class="rg-legal">
+        Продолжая, вы соглашаетесь принять
+        <RouterLink to="/legal">правовые документы</RouterLink>
+        при первом входе.
+      </p>
     </form>
 
     <template #actions>
@@ -111,6 +120,7 @@ import { useAuthStore } from '@/stores/auth.js'
 import { useThemeStore } from '@/stores/theme.js'
 import { suggestLogin, yandexConfig, yandexAuthURL } from '@/api/auth.js'
 import { inAppShell } from '@/utils/appShell.js'
+import { LEGAL_CONSENT_VISIBLE } from '@/utils/release.js'
 import { savePendingAvatar, clearPendingAvatar } from '@/utils/pendingAvatar.js'
 import AuthShell from '@/components/auth/AuthShell.vue'
 import AuthField from '@/components/auth/AuthField.vue'
@@ -348,6 +358,19 @@ async function handleRegister() {
 }
 
 .rg-switch:hover { color: var(--color-primary); }
+
+.rg-legal {
+  margin: 12px 0 0;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--color-text-dim);
+  text-align: center;
+}
+
+.rg-legal a {
+  color: var(--color-primary);
+  text-decoration: none;
+}
 
 .rg-submit {
   height: 40px;

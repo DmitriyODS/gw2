@@ -184,6 +184,9 @@ type Session struct {
 	RoleLevel       int             `json:"role_level"`
 	IsSuperAdmin    bool            `json:"is_super_admin"`
 	Companies       []MembershipDTO `json:"companies"`
+	// LegalRequired — действующая редакция правовых документов не принята:
+	// фронт показывает неотменяемую плашку согласия, API отвечают 403.
+	LegalRequired bool `json:"legal_required"`
 
 	NeedsCompanySelection bool   `json:"needs_company_selection,omitempty"`
 	SelectToken           string `json:"select_token,omitempty"`
@@ -293,6 +296,26 @@ type ScreenLockRequest struct {
 // UnlockRequest — снятие экрана: пин-код либо пароль аккаунта.
 type UnlockRequest struct {
 	Secret string `json:"secret"`
+}
+
+// LegalState — состояние согласия с правовыми документами. Version — редакция,
+// действующая сейчас; AcceptedVersion/AcceptedAt — что и когда принял человек
+// (null — не принимал). Required — приложение закрыто до согласия.
+type LegalState struct {
+	Version         string    `json:"version"`
+	Documents       []string  `json:"documents"`
+	Required        bool      `json:"required"`
+	AcceptedVersion *string   `json:"accepted_version"`
+	AcceptedAt      *JSONTime `json:"accepted_at"`
+}
+
+// LegalAcceptRequest — принятие документов. Documents перечисляет, с чем именно
+// согласился человек: согласие на обработку ПДн отделено от лицензии
+// (ч.1 ст.9 152-ФЗ — согласие конкретное и предметное), поэтому в плашке две
+// галочки, а сервер проверяет, что пришли обе.
+type LegalAcceptRequest struct {
+	Version   string   `json:"version"`
+	Documents []string `json:"documents"`
 }
 
 // UpdateMeRequest — PATCH /users/me. Должность — атрибут членства в компании,

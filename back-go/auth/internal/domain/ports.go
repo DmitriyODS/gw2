@@ -94,6 +94,9 @@ type UserRepository interface {
 	ListRoles(ctx context.Context) ([]*Role, error)
 	HashPassword(ctx context.Context, password string) (string, error)
 	VerifyPassword(ctx context.Context, password, hash string) (bool, error)
+	// AddConsent — строка журнала согласий с правовыми документами
+	// (доказательство факта получения согласия, ч.1 ст.9 152-ФЗ).
+	AddConsent(ctx context.Context, c Consent) error
 
 	// ── Членство в компаниях (user_companies) ──
 	// ListMemberships — все компании пользователя с ролью в каждой и активностью

@@ -224,12 +224,14 @@
     <footer class="pr-foot">
       <span>Groove Work</span>
       <RouterLink to="/welcome">Вход для команд</RouterLink>
+      <RouterLink v-if="LEGAL_CONSENT_VISIBLE" to="/legal">Правовые документы</RouterLink>
     </footer>
   </div>
 </template>
 
 <script setup>
 import { onBeforeUnmount, onMounted, ref } from 'vue'
+import { LEGAL_CONSENT_VISIBLE } from '@/utils/release.js'
 import Logo from '@/components/common/Logo.vue'
 import EmojiGlyph from '@/components/common/EmojiGlyph.vue'
 import { useAppDownloads } from '@/composables/useAppDownloads.js'

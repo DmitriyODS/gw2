@@ -32,7 +32,8 @@ const identityCols = `
 	u.is_default_pass, u.is_active, u.is_super_admin, u.email_verified,
 	u.created_at, u.last_seen_at, u.status_emoji, u.status_text,
 	u.notes_ai_proofread, u.notes_ai_autocomplete, u.desktop_prefs,
-	u.lock_pin_hash, u.lock_after_min`
+	u.lock_pin_hash, u.lock_after_min,
+	u.legal_version, u.legal_accepted_at`
 
 const identityFrom = ` FROM users u`
 
@@ -45,6 +46,7 @@ func scanIdentity(row pgx.Row) (*domain.User, error) {
 		&u.CreatedAt, &u.LastSeenAt, &u.StatusEmoji, &u.StatusText,
 		&u.NotesAIProofread, &u.NotesAIAutocomplete, &u.DesktopPrefs,
 		&u.LockPinHash, &u.LockAfterMin,
+		&u.LegalVersion, &u.LegalAcceptedAt,
 	)
 	if err != nil {
 		return nil, err
@@ -62,7 +64,8 @@ const memberCols = `
 	u.is_default_pass, u.is_active, u.is_super_admin, u.email_verified,
 	u.created_at, u.last_seen_at, u.status_emoji, u.status_text, uc.on_vacation,
 	u.notes_ai_proofread, u.notes_ai_autocomplete, u.desktop_prefs,
-	u.lock_pin_hash, u.lock_after_min`
+	u.lock_pin_hash, u.lock_after_min,
+	u.legal_version, u.legal_accepted_at`
 
 const memberFrom = `
 	FROM user_companies uc
@@ -84,6 +87,7 @@ func scanMember(row pgx.Row) (*domain.User, error) {
 		&u.CreatedAt, &u.LastSeenAt, &u.StatusEmoji, &u.StatusText, &u.OnVacation,
 		&u.NotesAIProofread, &u.NotesAIAutocomplete, &u.DesktopPrefs,
 		&u.LockPinHash, &u.LockAfterMin,
+		&u.LegalVersion, &u.LegalAcceptedAt,
 	)
 	if err != nil {
 		return nil, err
@@ -196,6 +200,7 @@ var allowedUserFields = map[string]bool{
 	"is_default_pass": true, "is_active": true, "email_verified": true,
 	"status_emoji": true, "status_text": true, "yandex_id": true,
 	"notes_ai_proofread": true, "notes_ai_autocomplete": true, "desktop_prefs": true,
+	"legal_version": true, "legal_accepted_at": true,
 }
 
 func (r *UserRepository) UpdateFields(ctx context.Context, id int64, fields map[string]any) error {

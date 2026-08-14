@@ -89,6 +89,11 @@ func NewServer(eps endpoint.Endpoints, verifier *pasetoauth.Verifier,
 	authAPI.Post("/lock/disable", auth.RequireToken, h.disableScreenLock)
 	authAPI.Post("/lock/unlock", auth.RequireToken, h.unlockScreen)
 
+	/* Правовые документы (152-ФЗ). RequireToken, а не RequireAuth: до
+	   согласия RequireAuth отвечает 403 — принять документы стало бы нечем. */
+	authAPI.Get("/legal", auth.RequireToken, h.legalState)
+	authAPI.Post("/legal/accept", auth.RequireToken, h.acceptLegal)
+
 	// Спаривание устройств (QR-вход + ТВ-код). start/claim — публичные
 	// (инициатор без входа); approve — авторизованный (нужна активная компания
 	// для ТВ-киоска, поэтому RequireAuth, а не RequireToken).

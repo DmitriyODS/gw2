@@ -57,21 +57,25 @@ func forbidden(c *fiber.Ctx, message string) error {
 	})
 }
 
-// RequireToken — только валидность токена, без force_change-гейта и похода
-// в БД (logout, change-default: ими пользуется и тот, кто обязан сменить
-// пароль).
+// RequireToken — только валидность токена, без гейтов force_change/legal и
+// похода в БД (logout, change-default, принятие правовых документов: ими
+// пользуется как раз тот, кого гейт не пускает дальше). Активную компанию из
+// токена кладёт в Locals — перевыпуск сессии на этих путях сохраняет её.
 func (m *Middleware) RequireToken(c *fiber.Ctx) error {
 	claims := m.verifier.FromRequest(c)
 	if claims.UserID == 0 {
 		return unauthorized(c, "Требуется авторизация")
 	}
 	c.Locals(localUserID, claims.UserID)
+	if claims.CompanyID != nil {
+		c.Locals(localCompanyID, *claims.CompanyID)
+	}
 	return c.Next()
 }
 
-// RequireAuth — полная авторизация: токен + force_change-гейт + сверка с БД
-// (активность аккаунта, активность выбранной компании). Кладёт UserID и
-// AuthInfo в Locals.
+// RequireAuth — полная авторизация: токен + гейты force_change и правовых
+// документов + сверка с БД (активность аккаунта, активность выбранной
+// компании). Кладёт UserID и AuthInfo в Locals.
 func (m *Middleware) RequireAuth(c *fiber.Ctx) error {
 	claims := m.verifier.FromRequest(c)
 	if claims.UserID == 0 {
@@ -79,6 +83,11 @@ func (m *Middleware) RequireAuth(c *fiber.Ctx) error {
 	}
 	if claims.ForceChange {
 		return forbidden(c, "FORCE_PASSWORD_CHANGE")
+	}
+	// Действующая редакция документов не принята — работать нельзя (152-ФЗ):
+	// фронт показывает неотменяемую плашку согласия поверх приложения.
+	if claims.LegalRequired {
+		return forbidden(c, "LEGAL_CONSENT_REQUIRED")
 	}
 	info, err := m.source(c.Context(), claims.UserID, claims)
 	if err != nil {
@@ -128,7 +137,7 @@ func (m *Middleware) RequireSuperAdmin(c *fiber.Ctx) error {
 // (вход по ссылке): невалидный/чужой токен не ошибка, просто гость (0).
 func (m *Middleware) OptionalUserID(c *fiber.Ctx) int64 {
 	claims := m.verifier.FromRequest(c)
-	if claims.UserID == 0 || claims.ForceChange {
+	if claims.UserID == 0 || claims.ForceChange || claims.LegalRequired {
 		return 0
 	}
 	info, err := m.source(c.Context(), claims.UserID, claims)

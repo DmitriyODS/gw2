@@ -11,6 +11,7 @@ import (
 	"github.com/DmitriyODS/gw2/back-go/auth/internal/domain"
 	"github.com/DmitriyODS/gw2/back-go/auth/internal/dto"
 	"github.com/DmitriyODS/gw2/back-go/auth/internal/endpoint"
+	"github.com/DmitriyODS/gw2/back-go/pkg/pasetoauth"
 )
 
 const (
@@ -317,6 +318,44 @@ func (h *handlers) unlockScreen(c *fiber.Ctx) error {
 		return h.respondError(c, err)
 	}
 	return c.JSON(fiber.Map{"status": "ok"})
+}
+
+// ── Правовые документы (152-ФЗ) ──────────────────────────────────
+
+func (h *handlers) legalState(c *fiber.Ctx) error {
+	state, err := h.eps.LegalState(c.Context(), tokenUserID(c))
+	if err != nil {
+		return h.respondError(c, err)
+	}
+	return c.JSON(state)
+}
+
+/* acceptLegal — принять действующую редакцию документов. Адрес и клиент
+   уезжают в журнал согласий: доказывать факт согласия обязан оператор.
+   В ответе — новая сессия: старый access-токен несёт клейм legal_required и
+   до истечения продолжал бы держать человека запертым. */
+func (h *handlers) acceptLegal(c *fiber.Ctx) error {
+	var body dto.LegalAcceptRequest
+	if err := c.BodyParser(&body); err != nil {
+		return badRequest(c, "Неверный формат запроса")
+	}
+	var companyID *int64
+	if id := pasetoauth.CompanyID(c); id != 0 {
+		companyID = &id
+	}
+	resp, err := h.eps.AcceptLegal(c.Context(), endpoint.AcceptLegalEpRequest{
+		UserID:    tokenUserID(c),
+		CompanyID: companyID,
+		Body:      body,
+		Meta: domain.Consent{
+			IP:        clientIP(c),
+			UserAgent: c.Get(fiber.HeaderUserAgent),
+		},
+	})
+	if err != nil {
+		return h.respondError(c, err)
+	}
+	return c.JSON(resp.(*dto.Session))
 }
 
 // ── Спаривание устройств: QR-вход и ТВ-код ───────────────────────
