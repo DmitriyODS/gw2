@@ -13,7 +13,9 @@ const AppDialogStub = {
   name: 'AppDialog',
   props: ['modelValue', 'title', 'subtitle', 'icon', 'tone', 'size', 'busy', 'closable'],
   emits: ['update:modelValue'],
-  template: `<div v-if="modelValue" class="app-dialog-stub"><slot /><slot name="footer" /></div>`,
+  template: `<div v-if="modelValue" class="app-dialog-stub">
+    <slot /><slot name="footer" /><slot name="footer-start" /><slot name="footer-end" />
+  </div>`,
 }
 
 const InputStub = (cls) => ({

@@ -7,6 +7,20 @@ import RegistryQrPrintDialog from './RegistryQrPrintDialog.vue'
 // Отрисовка кода не проверяется — она про картинку, а не про то, ЧТО печатаем.
 vi.mock('qrcode', () => ({ default: { toDataURL: vi.fn(async () => 'data:image/png;base64,x') } }))
 
+// Сборка PDF рисует лист в canvas — в jsdom его нет; проверяем, что диалог
+// зовёт её ровно теми кодами, что показал на экране.
+vi.mock('@/utils/qrSheet.js', async (importOriginal) => ({
+  ...await importOriginal(),
+  codesToPdf: vi.fn(async () => new Blob(['%PDF-1.4'], { type: 'application/pdf' })),
+}))
+vi.mock('@/utils/download.js', () => ({
+  saveBlob: vi.fn(),
+  safeFileName: (s, fallback) => String(s || fallback),
+}))
+
+const { codesToPdf } = await import('@/utils/qrSheet.js')
+const { saveBlob } = await import('@/utils/download.js')
+
 const registry = {
   id: 1,
   name: 'Склад',
@@ -71,6 +85,41 @@ describe('RegistryQrPrintDialog', () => {
     await w.findAll('.qp-radio input')[1].setValue()
     await flushPromises()
     expect(values(w)).toHaveLength(5)
+  })
+
+  /* Выход у листа два — принтер и файл. Печать остаётся главным действием,
+     PDF прячется под стрелкой: разделённая кнопка, а не две равноправных. */
+  it('в подвале — разделённая кнопка: печать и стрелка выбора', async () => {
+    const { w } = await factory()
+    const split = w.find('.qp-split')
+    expect(split.exists()).toBe(true)
+    expect(split.text()).toContain('Печать')
+    expect(w.find('.ctxm').exists()).toBe(false)
+
+    await split.findAll('button')[1].trigger('click')
+    const menu = w.findAll('.ctxm-item .ctxm-label').map((n) => n.text())
+    expect(menu).toEqual(['Печать', 'Сохранить как PDF'])
+  })
+
+  it('«Сохранить как PDF» собирает лист теми же кодами и отдаёт файл', async () => {
+    const { w } = await factory({ selectedIds: [2, 3], selectionCount: 2 })
+    await w.findAll('.qp-count-input')[0].setValue('2')
+    await w.find('.qp-split').findAll('button')[1].trigger('click')
+    await w.findAll('.ctxm-item')[1].trigger('click')
+    await flushPromises()
+
+    // Позиция с двумя копиями даёт два кода, вторая — один.
+    expect(codesToPdf.mock.calls[0][0].map((c) => c.value)).toEqual(['INV-2', 'INV-2', 'INV-3'])
+    expect(saveBlob).toHaveBeenCalledWith(expect.any(Blob), 'Склад — Инвентарный номер.pdf')
+    // Файл сохранён — диалогу больше нечего показывать.
+    expect(w.emitted('update:modelValue').at(-1)).toEqual([false])
+  })
+
+  it('печатать и сохранять нечего, пока не заказан ни один код', async () => {
+    const { w } = await factory()
+    for (const input of w.findAll('.qp-count-input')) await input.setValue('0')
+    const buttons = w.find('.qp-split').findAll('button')
+    expect(buttons.every((b) => b.attributes('disabled') !== undefined)).toBe(true)
   })
 
   it('количество копий задаётся по позиции и считается в итог', async () => {

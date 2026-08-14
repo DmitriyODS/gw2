@@ -4,14 +4,28 @@
     title="Печать QR-кодов"
     size="md"
     :busy="busy"
-    :actions="[
-      { kind: 'cancel', label: 'Отмена' },
-      { kind: 'confirm', label: 'Печать', icon: 'print', disabled: !fieldId || busy || !totalCodes },
-    ]"
+    :actions="[{ kind: 'cancel', label: 'Отмена' }]"
     @update:model-value="close"
     @cancel="close(false)"
-    @confirm="doPrint"
   >
+    <!-- Разделённая кнопка: слева привычная печать, справа стрелка с выбором —
+         тот же лист можно не печатать, а сохранить файлом. -->
+    <template #footer-end>
+      <div class="qp-split">
+        <AppButton
+          variant="glass" icon="print" label="Печать"
+          :loading="busy" :disabled="!canRun"
+          @click="run('print')"
+        />
+        <AppButton
+          ref="moreBtn"
+          variant="glass" icon="arrow_drop_down"
+          title="Другие действия" aria-label="Другие действия"
+          :disabled="!canRun || busy"
+          @click="toggleMenu"
+        />
+      </div>
+    </template>
     <div class="qp">
       <p v-if="!qrFields.length" class="qp-empty">
         В этом реестре нет полей с QR-кодом. Включите «Показывать QR-код значения»
@@ -102,11 +116,24 @@
         </p>
 
         <p class="qp-note">
-          Коды печатаются на листах A4 сеткой 4 × 6 — по 24 кода на страницу.
+          Листы A4 сеткой {{ SHEET.cols }} × {{ SHEET.rows }} — по {{ PER_PAGE }} кодов
+          на страницу. Тот же лист можно сохранить файлом PDF — стрелка у кнопки печати.
         </p>
       </template>
     </div>
   </AppDialog>
+
+  <!-- Меню разделённой кнопки. Живёт в body (как все меню у курсора), поэтому
+       не обрезается телом диалога. -->
+  <ContextMenu
+    :visible="menuOpen"
+    :x="menuX"
+    :y="menuY"
+    :items="menuItems"
+    :anchor="menuAnchor"
+    @select="run"
+    @close="menuOpen = false"
+  />
 </template>
 
 <script setup>
@@ -115,7 +142,10 @@ import Select from 'primevue/select'
 import QRCode from 'qrcode'
 import AppButton from '@/components/ui/AppButton.vue'
 import AppDialog from '@/components/ui/AppDialog.vue'
+import ContextMenu from '@/components/common/ContextMenu.vue'
 import { useNotificationsStore } from '@/stores/notifications.js'
+import { saveBlob, safeFileName } from '@/utils/download.js'
+import { MAX_CODES, PER_PAGE, SHEET, codesToPdf, expandCodes, pageCount } from '@/utils/qrSheet.js'
 import { hasQr, qrValue } from '@/utils/registryFields.js'
 
 const props = defineProps({
@@ -183,8 +213,9 @@ function setCount(item, raw) {
 }
 
 const totalCodes = computed(() => items.value.reduce((n, it) => n + (it.count || 0), 0))
-// Лист A4 сеткой 4 × 6 — 24 кода на страницу.
-const pages = computed(() => Math.max(1, Math.ceil(totalCodes.value / 24)))
+// Лист A4 сеткой 4 × 6 — PER_PAGE кодов на страницу (раскладка в utils/qrSheet).
+const pages = computed(() => pageCount(totalCodes.value))
+const canRun = computed(() => !!fieldId.value && totalCodes.value > 0)
 
 watch(() => props.modelValue, (open) => {
   if (!open) {
@@ -231,13 +262,7 @@ let previewSeq = 0
 
 async function renderPreview() {
   const seq = ++previewSeq
-  const cells = []
-  for (const it of items.value) {
-    for (let i = 0; i < (it.count || 0) && cells.length < PREVIEW_MAX; i++) {
-      cells.push(it.value)
-    }
-    if (cells.length >= PREVIEW_MAX) break
-  }
+  const cells = expandCodes(items.value, PREVIEW_MAX)
   const drawn = await Promise.all(cells.map(async (value) => ({ value, src: await qrImage(value) })))
   if (seq === previewSeq) preview.value = drawn
 }
@@ -300,32 +325,61 @@ async function collectRecords() {
   return out.slice(0, MAX_RECORDS)
 }
 
-async function doPrint() {
+/* Выходов у листа два — принтер и файл, — но лист ОДИН: коды, их количества и
+   раскладка считаются здесь, а способ выдачи выбирается последним шагом. */
+async function run(mode) {
+  menuOpen.value = false
   const field = qrFields.value.find((f) => f.id === fieldId.value)
-  if (!field || !totalCodes.value) return
+  if (!field || !canRun.value || busy.value) return
   busy.value = true
   try {
-    // Каждая позиция даёт СТОЛЬКО кодов, сколько для неё заказали.
-    const values = []
-    for (const it of items.value) {
-      for (let i = 0; i < (it.count || 0); i++) values.push(it.value)
-    }
-    if (values.length > MAX_CODES) {
-      notif.warn(`За раз печатается не больше ${MAX_CODES} кодов — остальное напечатайте отдельно.`)
-      values.length = MAX_CODES
+    const values = expandCodes(items.value)
+    if (totalCodes.value > MAX_CODES) {
+      notif.warn(`За раз выходит не больше ${MAX_CODES} кодов — остальные оформите отдельно.`)
     }
     const cells = await Promise.all(values.map(async (v) => ({ value: v, src: await qrImage(v) })))
-    printSheet(field.label, cells)
+    if (mode === 'pdf') await savePdf(field.label, cells)
+    else printSheet(field.label, cells)
     emit('update:modelValue', false)
   } catch (e) {
-    notif.error(e?.message || 'Не удалось подготовить печать')
+    notif.error(e?.message || (mode === 'pdf' ? 'Не удалось собрать PDF' : 'Не удалось подготовить печать'))
   } finally {
     busy.value = false
   }
 }
 
-// Потолок одного задания печати: дальше браузер захлёбывается на data-URI.
-const MAX_CODES = 1000
+const menuItems = [
+  { label: 'Печать', icon: 'print', action: 'print' },
+  { label: 'Сохранить как PDF', icon: 'picture_as_pdf', action: 'pdf' },
+]
+const menuOpen = ref(false)
+const menuX = ref(0)
+const menuY = ref(0)
+const menuAnchor = ref(null)
+const moreBtn = ref(null)
+
+// Меню раскрывается ПОД стрелкой (её левым краем), а не у курсора: кнопка
+// стоит в подвале, и меню у нижней кромки ContextMenu сам развернёт вверх.
+function toggleMenu() {
+  if (menuOpen.value) {
+    menuOpen.value = false
+    return
+  }
+  const el = moreBtn.value?.$el
+  const r = el?.getBoundingClientRect()
+  menuAnchor.value = el || null
+  menuX.value = r ? r.left : 0
+  menuY.value = r ? r.bottom + 6 : 0
+  menuOpen.value = true
+}
+
+// Файл называем реестром и полем — тем же, что стоит в заголовке печатного
+// листа: по имени должно быть понятно, что за коды внутри.
+async function savePdf(fieldLabel, cells) {
+  const blob = await codesToPdf(cells)
+  if (!blob) throw new Error('Не удалось собрать PDF')
+  saveBlob(blob, `${safeFileName(`${props.registry?.name || 'Реестр'} — ${fieldLabel}`, 'qr-коды')}.pdf`)
+}
 
 // Печать во ВРЕМЕННОМ iframe, а не в новом окне: popup-блокировщики окно
 // глушат, а iframe печатает и в мобильном WebView обёрток.
@@ -340,21 +394,30 @@ function printSheet(fieldLabel, cells) {
       <div class="cap">${esc(c.value)}</div>
     </div>`).join('')
 
-  // Печатный лист — самостоятельный документ: токены темы здесь неприменимы
-  // (QR обязан быть чёрным на белом, иначе сканеры его не читают).
+  /* Печатный лист — самостоятельный документ: токены темы здесь неприменимы
+     (QR обязан быть чёрным на белом, иначе сканеры его не читают). Размеры
+     сетки берём из SHEET — те же, по которым собирается PDF. */
+  const rowH = SHEET.pageH - SHEET.margin * 2
   const html = `<!doctype html><html lang="ru"><head><meta charset="utf-8">
 <title>${esc(title)}</title>
 <style>
-  @page { size: A4 portrait; margin: 10mm; }
+  @page { size: A4 portrait; margin: ${SHEET.margin}mm; }
   * { box-sizing: border-box; }
   body { margin: 0; font-family: Arial, Helvetica, sans-serif; color: #000; background: #fff; }
-  .grid { display: grid; grid-template-columns: repeat(4, 1fr); grid-auto-rows: calc(277mm / 6); }
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(${SHEET.cols}, 1fr);
+    grid-auto-rows: calc(${rowH}mm / ${SHEET.rows});
+  }
   .cell {
     display: flex; flex-direction: column; align-items: center; justify-content: center;
-    gap: 2mm; padding: 2mm; page-break-inside: avoid; break-inside: avoid; overflow: hidden;
+    gap: ${SHEET.gap}mm; padding: 2mm; page-break-inside: avoid; break-inside: avoid; overflow: hidden;
   }
-  .cell img { width: 30mm; height: 30mm; display: block; }
-  .cap { font-size: 8pt; line-height: 1.15; text-align: center; word-break: break-all; max-height: 10mm; overflow: hidden; }
+  .cell img { width: ${SHEET.code}mm; height: ${SHEET.code}mm; display: block; }
+  .cap {
+    font-size: ${SHEET.capSize}mm; line-height: 1.15; text-align: center; word-break: break-all;
+    max-height: ${(SHEET.capSize * 1.15 * SHEET.capLines).toFixed(1)}mm; overflow: hidden;
+  }
 </style></head><body><div class="grid">${body}</div></body></html>`
 
   const frame = document.createElement('iframe')
@@ -379,6 +442,34 @@ function printSheet(fieldLabel, cells) {
 
 <style scoped>
 .qp { display: flex; flex-direction: column; gap: 16px; }
+
+/* Разделённая кнопка — ОДНА стеклянная капсула: сегменты стоят вплотную,
+   внутренние углы не скруглены, а границей между ними служит левая кромка
+   стрелки. Фирменный градиент здесь не нужен: печать листа — рядовое действие
+   раздела, а не главный шаг сценария. */
+.qp-split {
+  display: inline-flex;
+  align-items: stretch;
+  /* Блик по кромке — у ГРУППЫ: у каждой половины он давал на стыке двойную
+     светлую линию, и капсула переставала читаться цельной. */
+  border-radius: var(--radius-full);
+  box-shadow: var(--glass-edge);
+}
+.qp-split :deep(.btn) { box-shadow: none; }
+.qp-split :deep(.btn:first-child) {
+  border-top-right-radius: 0;
+  border-bottom-right-radius: 0;
+  border-right: none;
+}
+.qp-split :deep(.btn:last-child) {
+  border-top-left-radius: 0;
+  border-bottom-left-radius: 0;
+  /* Высоту стрелке задаёт соседняя половина: у icon-only она прибита к 40px
+     всеми тремя свойствами (иначе мобильный `button{min-height}` плющит круг),
+     и рядом с текстовой кнопкой сегменты выходили разной высоты. */
+  height: auto; min-height: 0; max-height: none;
+  width: 34px; min-width: 34px; max-width: 34px;
+}
 .qp-field { display: flex; flex-direction: column; gap: 6px; }
 .qp-label { font-size: 13px; font-weight: 600; color: var(--color-text-dim); }
 .qp-hint, .qp-note { margin: 0; font-size: 12px; color: var(--color-text-dim); line-height: 1.5; }

@@ -17,6 +17,7 @@ import FolderEditDialog from '@/components/boards/FolderEditDialog.vue'
 import MoveToFolderDialog from '@/components/boards/MoveToFolderDialog.vue'
 import ShareDialog from '@/components/boards/ShareDialog.vue'
 import * as api from '@/api/boards.js'
+import { saveBlob } from '@/utils/download.js'
 import { timeAgo } from '@/utils/time.js'
 import { useAuthStore } from '@/stores/auth.js'
 import { useBoardsStore } from '@/stores/boards.js'
@@ -311,15 +312,6 @@ async function downloadFolder(f) {
   } catch (e) {
     notify.error(e?.message || 'Не удалось выгрузить папку')
   }
-}
-
-function saveBlob(blob, name) {
-  const url = URL.createObjectURL(blob)
-  const a = document.createElement('a')
-  a.href = url
-  a.download = name
-  a.click()
-  URL.revokeObjectURL(url)
 }
 
 async function onImportPick(e) {

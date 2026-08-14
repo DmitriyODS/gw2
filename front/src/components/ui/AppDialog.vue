@@ -65,6 +65,7 @@
             />
           </div>
           <div class="dlg-footer-end">
+            <slot name="footer-end" />
             <AppButton
               v-for="(a, i) in mainActions"
               :key="i"
