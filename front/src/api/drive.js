@@ -1,6 +1,6 @@
 // Ведётся вручную: REST «Диска» живёт в drivesvc (back-go/drive).
 import { apiRequest } from './client.js'
-import { useAuthStore } from '@/stores/auth.js'
+import { uploadFileTo } from '@/utils/chunkUpload.js'
 
 function qs(params = {}) {
   const sp = new URLSearchParams()
@@ -38,97 +38,21 @@ export const purgeFolder = (id) => apiRequest(`/drive/folders/${id}`, { method: 
 
 /* Загрузка.
 
-   Маленькие файлы уходят одним multipart-запросом. Большие — ЧАСТЯМИ: сотни
-   мегабайт одним запросом упираются в таймауты прокси и не переживают обрыв
-   сети, а прогресс по ним виден только «до отправки», без хода на сервере.
-   Куски идут по порядку сырыми байтами; сервер держит позицию и при
-   рассинхроне отвечает, с какого места продолжать.
-
-   С onProgress мелкий файл идёт через XHR — только он умеет отдавать ход
-   отправки; без него — обычным apiRequest, который проходит общую цепочку
-   (refresh токена, обработка ошибок). */
-
-// Больше этого размера — грузим частями.
-export const CHUNK_THRESHOLD = 8 * 1024 * 1024
-// Размер куска: компромисс между числом запросов и потерями при обрыве.
-export const CHUNK_SIZE = 4 * 1024 * 1024
+   Мелкое уходит одним multipart-запросом, крупное — ЧАСТЯМИ: сотни мегабайт
+   одним телом упираются в таймауты прокси и не переживают обрыв сети. Порог и
+   вся механика общие для платформы (utils/chunkUpload.js) — раздел лишь
+   называет свои ручки и контекст: папку назначения. */
+export { CHUNK_THRESHOLD, CHUNK_SIZE } from '@/utils/chunkUpload.js'
 
 export function uploadFile(file, folderId = null, { onProgress, signal } = {}) {
-  if (file.size > CHUNK_THRESHOLD) {
-    return uploadInChunks(file, folderId, { onProgress, signal })
-  }
-  const form = new FormData()
-  form.append('file', file)
-  const url = `/api/drive/files?${qs({ folder_id: folderId })}`
-  if (!onProgress) {
-    return apiRequest(`/drive/files?${qs({ folder_id: folderId })}`, { method: 'POST', body: form, signal })
-  }
-  const token = useAuthStore().token
-
-  return new Promise((resolve, reject) => {
-    const xhr = new XMLHttpRequest()
-    xhr.open('POST', url)
-    xhr.withCredentials = true
-    // Токен берём из стора — там же, где его держит apiRequest: своего
-    // интерцептора у XHR нет.
-    if (token) xhr.setRequestHeader('Authorization', `Bearer ${token}`)
-    xhr.upload.onprogress = (e) => {
-      if (e.lengthComputable) onProgress(e.loaded / e.total)
-    }
-    xhr.onload = () => {
-      let data = null
-      try { data = JSON.parse(xhr.responseText) } catch { /* пустой ответ */ }
-      if (xhr.status >= 200 && xhr.status < 300) resolve(data)
-      else reject(Object.assign(new Error(data?.message || 'Не удалось загрузить файл'), {
-        status: xhr.status, error: data?.error, ...data,
-      }))
-    }
-    xhr.onerror = () => reject(new Error('Не удалось загрузить файл'))
-    if (signal) signal.addEventListener('abort', () => xhr.abort(), { once: true })
-    xhr.send(form)
-  })
-}
-
-// Загрузка частями: завести → куски по порядку → собрать. Отмена и обрыв
-// убирают заготовку на сервере, чтобы куски не лежали мёртвым грузом.
-async function uploadInChunks(file, folderId, { onProgress, signal } = {}) {
-  const { upload_id: uploadId } = await apiRequest('/drive/uploads', {
-    method: 'POST',
-    body: { name: file.name, mime: file.type || '', size: file.size, folder_id: folderId },
+  return uploadFileTo({
+    file,
+    onProgress,
     signal,
+    directUrl: `/drive/files?${qs({ folder_id: folderId })}`,
+    chunkBase: '/drive/uploads',
+    scope: String(folderId ?? ''),
   })
-
-  try {
-    let offset = 0
-    while (offset < file.size) {
-      const end = Math.min(offset + CHUNK_SIZE, file.size)
-      const chunk = file.slice(offset, end)
-      try {
-        const res = await apiRequest(`/drive/uploads/${uploadId}?offset=${offset}`, {
-          method: 'PUT',
-          body: chunk,
-          headers: { 'Content-Type': 'application/octet-stream' },
-          // Кусок на медленной сети живёт дольше обычного запроса.
-          timeout: 120000,
-          signal,
-        })
-        offset = res.received
-      } catch (e) {
-        // Сервер знает, сколько принял: продолжаем с его отметки, а не с нуля.
-        if (e?.error === 'CHUNK_OFFSET' && typeof e.received === 'number') {
-          offset = e.received
-          continue
-        }
-        throw e
-      }
-      onProgress?.(offset / file.size)
-    }
-    // Сборка большого файла — запись в хранилище целиком: ждём дольше.
-    return await apiRequest(`/drive/uploads/${uploadId}/complete`, { method: 'POST', timeout: 180000 })
-  } catch (e) {
-    apiRequest(`/drive/uploads/${uploadId}`, { method: 'DELETE' }).catch(() => {})
-    throw e
-  }
 }
 
 export const getFile = (id) => apiRequest(`/drive/files/${id}`)

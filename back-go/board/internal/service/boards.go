@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"encoding/json"
+	"io"
 	"strings"
 	"time"
 
@@ -297,14 +298,40 @@ func (s *Service) CopyBoard(ctx context.Context, userID, id int64) (*domain.Boar
 	return cp, nil
 }
 
-// Upload — картинка на холст: владелец или адресат с правом правки.
-func (s *Service) Upload(ctx context.Context, userID, boardID int64, fileName string, data []byte) (string, error) {
+/*
+CheckUpload — можно ли класть на этот холст. Зовётся ДО первой части файла,
+
+	пришедшего чанками: отказывать на сборке поздно.
+*/
+func (s *Service) CheckUpload(ctx context.Context, userID, boardID int64) error {
 	_, access, err := s.requireReadable(ctx, userID, boardID)
+	if err != nil {
+		return err
+	}
+	if access != domain.AccessOwner && access != domain.AccessEdit {
+		return domain.ErrMemberReadOnly
+	}
+	return nil
+}
+
+// UploadStream — картинка холста, собранная из частей.
+func (s *Service) UploadStream(ctx context.Context, userID, boardID int64,
+	fileName string, r io.Reader, size int64) (string, error) {
+
+	if err := s.CheckUpload(ctx, userID, boardID); err != nil {
+		return "", err
+	}
+	key, err := s.files.SaveStreamFor(ctx, userID, 0, fileName, r, size)
 	if err != nil {
 		return "", err
 	}
-	if access != domain.AccessOwner && access != domain.AccessEdit {
-		return "", domain.ErrMemberReadOnly
+	return "/uploads/" + key, nil
+}
+
+// Upload — картинка на холст: владелец или адресат с правом правки.
+func (s *Service) Upload(ctx context.Context, userID, boardID int64, fileName string, data []byte) (string, error) {
+	if err := s.CheckUpload(ctx, userID, boardID); err != nil {
+		return "", err
 	}
 	key, err := s.files.SaveFor(ctx, userID, 0, fileName, data)
 	if err != nil {

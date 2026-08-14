@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"io"
 
 	"github.com/DmitriyODS/gw2/back-go/portal/internal/domain"
 )
@@ -20,9 +21,46 @@ func (s *Service) AddAttachment(ctx context.Context, companyID, postID, userID i
 	if err != nil {
 		return nil, err
 	}
+	return s.registerAttachment(ctx, companyID, postID, path, fileName, mime, int64(len(data)))
+}
+
+/*
+CheckAttachment — можно ли прикладывать к этому посту. Зовётся ДО первой
+
+	части: отказывать на сборке поздно.
+*/
+func (s *Service) CheckAttachment(ctx context.Context, companyID, postID, userID int64, roleLevel int) error {
+	p, err := s.requirePost(ctx, companyID, postID)
+	if err != nil {
+		return err
+	}
+	if !canManage(p, userID, roleLevel) {
+		return domain.ErrForbidden
+	}
+	return nil
+}
+
+// AddAttachmentStream — вложение поста, собранное из частей.
+func (s *Service) AddAttachmentStream(ctx context.Context, companyID, postID, userID int64,
+	roleLevel int, fileName, mime string, size int64, r io.Reader) (*domain.Attachment, error) {
+
+	if err := s.CheckAttachment(ctx, companyID, postID, userID, roleLevel); err != nil {
+		return nil, err
+	}
+	path, err := s.files.SaveStreamFor(ctx, userID, companyID, fileName, r, size)
+	if err != nil {
+		return nil, err
+	}
+	return s.registerAttachment(ctx, companyID, postID, path, fileName, mime, size)
+}
+
+// registerAttachment — завести запись о уже сохранённом объекте.
+func (s *Service) registerAttachment(ctx context.Context, companyID, postID int64,
+	path, fileName, mime string, size int64) (*domain.Attachment, error) {
+
 	a := &domain.Attachment{
 		PostID: postID, FilePath: path, Name: fileName,
-		Size: int64(len(data)), Mime: nonEmpty(mime),
+		Size: size, Mime: nonEmpty(mime),
 	}
 	if err := s.repo.AddAttachment(ctx, a); err != nil {
 		return nil, err

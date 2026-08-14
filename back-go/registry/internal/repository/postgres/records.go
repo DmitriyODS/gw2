@@ -3,7 +3,7 @@ package postgres
 import (
 	"context"
 	"errors"
-	"fmt"
+	"strconv"
 
 	"github.com/jackc/pgx/v5"
 
@@ -34,9 +34,38 @@ func scanRecord(row pgx.Row) (*domain.Record, error) {
 // то есть одна кривая ячейка роняла раздел целиком.
 const numericLiteral = `^[+-]?([0-9]+([.][0-9]*)?|[.][0-9]+)$`
 
-// orderBy — выражение сортировки. Поле по data->>'<id>' с приведением типа;
-// id поля — int64 (проверен на уровне домена), поэтому безопасно встраивается.
-func orderBy(f domain.RecordListFilter) string {
+/*
+Построение условий.
+
+	ИНВАРИАНТ: внешние данные в текст запроса не попадают НИКОГДА — ни значения,
+	ни идентификаторы полей. Ключ поля в JSONB тоже уезжает параметром
+	(data ->> $n), а не подстановкой: Postgres принимает параметр и в пути
+	json-оператора, и в выражении ORDER BY. В тексте остаются только номера
+	плейсхолдеров, ключевые слова и константы этого файла.
+
+	ph — добавить значение в аргументы и вернуть его плейсхолдер.
+*/
+func ph(args *[]any, v any) string {
+	*args = append(*args, v)
+	return "$" + strconv.Itoa(len(*args))
+}
+
+// fieldKey — текстовое значение поля записи: data ->> $n. Идентификатор поля
+// приезжает аргументом, поэтому строка запроса от него не зависит.
+func fieldKey(fieldID int64, args *[]any) string {
+	return "data ->> " + ph(args, strconv.FormatInt(fieldID, 10))
+}
+
+// numericOf — значение поля как число; нечисловая ячейка даёт NULL, а не роняет
+// весь запрос (см. numericLiteral).
+func numericOf(key string, args *[]any) string {
+	return "CASE WHEN btrim(" + key + ") ~ " + ph(args, numericLiteral) +
+		" THEN btrim(" + key + ")::numeric END"
+}
+
+// orderBy — выражение сортировки. Направление берётся из белого списка (два
+// значения), всё остальное — плейсхолдеры.
+func orderBy(f domain.RecordListFilter, args *[]any) string {
 	dir := "ASC"
 	if f.Desc {
 		dir = "DESC"
@@ -44,36 +73,114 @@ func orderBy(f domain.RecordListFilter) string {
 	if f.SortFieldID <= 0 {
 		return "created_at " + dir + ", id " + dir
 	}
-	key := fmt.Sprintf("data->>'%d'", f.SortFieldID)
+	key := fieldKey(f.SortFieldID, args)
 	switch f.SortKind {
 	case "number":
 		// Нечисловое значение — NULL: уезжает в конец списка, а не роняет запрос.
-		return fmt.Sprintf(
-			"CASE WHEN btrim(%s) ~ '%s' THEN btrim(%s)::numeric END %s NULLS LAST, id ASC",
-			key, numericLiteral, key, dir)
+		return numericOf(key, args) + " " + dir + " NULLS LAST, id ASC"
 	case "date":
-		return fmt.Sprintf("%s %s NULLS LAST, id ASC", key, dir)
+		return key + " " + dir + " NULLS LAST, id ASC"
 	default:
-		return fmt.Sprintf("lower(%s) %s NULLS LAST, id ASC", key, dir)
+		return "lower(" + key + ") " + dir + " NULLS LAST, id ASC"
+	}
+}
+
+// sectionWhere — условие вкладки-подраздела. Одно containment-условие
+// покрывает оба вида спискового поля: у одиночного значение — строка
+// ("А" @> "А"), у множественного — массив (["А","Б"] @> "А").
+func sectionWhere(fieldID int64, value string, args *[]any) string {
+	if fieldID <= 0 || value == "" {
+		return ""
+	}
+	return " AND data -> " + ph(args, strconv.FormatInt(fieldID, 10)) +
+		" @> to_jsonb(" + ph(args, value) + "::text)"
+}
+
+/*
+columnWhere — условия фильтров по колонкам таблицы.
+
+	Значение поля лежит в JSONB, поэтому сравнение идёт по data ->> <ключ>. Число
+	приводим к numeric только там, где значение к нему приводится: иначе одна
+	кривая ячейка роняла бы весь список (та же грабля, что у сортировки).
+*/
+func columnWhere(filters []domain.ColumnFilter, args *[]any) string {
+	var out string
+	for _, c := range filters {
+		if c.FieldID <= 0 {
+			continue
+		}
+		switch c.Op {
+		case "empty":
+			key := fieldKey(c.FieldID, args)
+			out += " AND (" + key + " IS NULL OR btrim(" + key + ") = '')"
+		case "filled":
+			key := fieldKey(c.FieldID, args)
+			out += " AND " + key + " IS NOT NULL AND btrim(" + key + ") <> ''"
+		case "equals":
+			if len(c.Values) == 0 {
+				continue
+			}
+			key := fieldKey(c.FieldID, args)
+			out += " AND lower(" + key + ") = lower(" + ph(args, c.Values[0]) + ")"
+		case "any":
+			// Список выбора: подходит любое из отмеченных значений, и поле
+			// бывает множественным — потому containment, а не равенство.
+			if len(c.Values) == 0 {
+				continue
+			}
+			var parts string
+			for _, v := range c.Values {
+				if parts != "" {
+					parts += " OR "
+				}
+				parts += "data -> " + ph(args, strconv.FormatInt(c.FieldID, 10)) +
+					" @> to_jsonb(" + ph(args, v) + "::text)"
+			}
+			out += " AND (" + parts + ")"
+		case "gt", "lt", "between":
+			out += numericRange(c, args)
+		default: // contains
+			if len(c.Values) == 0 || c.Values[0] == "" {
+				continue
+			}
+			out += " AND " + fieldKey(c.FieldID, args) +
+				" ILIKE '%' || " + ph(args, c.Values[0]) + " || '%'"
+		}
+	}
+	return out
+}
+
+// numericRange — сравнение «больше/меньше/между» по числовому значению поля.
+func numericRange(c domain.ColumnFilter, args *[]any) string {
+	if len(c.Values) == 0 {
+		return ""
+	}
+	num := numericOf(fieldKey(c.FieldID, args), args)
+	switch c.Op {
+	case "gt":
+		return " AND " + num + " >= " + ph(args, c.Values[0]) + "::numeric"
+	case "lt":
+		return " AND " + num + " <= " + ph(args, c.Values[0]) + "::numeric"
+	default: // between
+		if len(c.Values) < 2 {
+			return ""
+		}
+		return " AND " + num + " BETWEEN " + ph(args, c.Values[0]) + "::numeric AND " +
+			ph(args, c.Values[1]) + "::numeric"
 	}
 }
 
 func (r *Repo) ListRecords(ctx context.Context, f domain.RecordListFilter) ([]*domain.Record, int, error) {
-	where := `WHERE registry_id = $1`
-	args := []any{f.RegistryID}
+	args := []any{}
+	where := `WHERE registry_id = ` + ph(&args, f.RegistryID)
 	if f.Search != "" {
-		args = append(args, f.Search)
-		where += fmt.Sprintf(` AND search_text ILIKE '%%' || $%d || '%%'`, len(args))
+		where += ` AND search_text ILIKE '%' || ` + ph(&args, f.Search) + ` || '%'`
 	}
-	// Фильтр тегом. Одно containment-условие покрывает оба вида спискового
-	// поля: у одиночного значение — строка ("А" @> "А"), у множественного —
-	// массив (["А","Б"] @> "А"). id поля — int64 из домена, встраивается
-	// безопасно.
-	if f.TagFieldID > 0 && f.TagValue != "" {
-		args = append(args, f.TagValue)
-		where += fmt.Sprintf(` AND data->'%d' @> to_jsonb($%d::text)`, f.TagFieldID, len(args))
-	}
+	where += sectionWhere(f.SectionFieldID, f.SectionValue, &args)
+	where += columnWhere(f.Columns, &args)
 
+	// Счётчик считаем ДО того, как к аргументам добавятся сортировка и границы
+	// страницы: у него в запросе их нет, а нумерация плейсхолдеров сквозная.
 	var total int
 	if err := r.pool.QueryRow(ctx, `SELECT COUNT(*) FROM registry_records `+where, args...).Scan(&total); err != nil {
 		return nil, 0, err
@@ -87,10 +194,10 @@ func (r *Repo) ListRecords(ctx context.Context, f domain.RecordListFilter) ([]*d
 	if offset < 0 {
 		offset = 0
 	}
+	order := orderBy(f, &args)
 	q := `SELECT ` + recordCols + ` FROM registry_records ` + where +
-		` ORDER BY ` + orderBy(f) +
-		fmt.Sprintf(` LIMIT $%d OFFSET $%d`, len(args)+1, len(args)+2)
-	args = append(args, limit, offset)
+		` ORDER BY ` + order +
+		` LIMIT ` + ph(&args, limit) + ` OFFSET ` + ph(&args, offset)
 
 	rows, err := r.pool.Query(ctx, q, args...)
 	if err != nil {
@@ -136,28 +243,23 @@ func (r *Repo) DeleteRecord(ctx context.Context, id int64) error {
 // selectionWhere — условие набора записей под массовую операцию. Явный список
 // id бьёт фильтр: человек уже указал, что именно нужно.
 func selectionWhere(f domain.ExportFilter, args *[]any) string {
-	where := `WHERE registry_id = $1`
+	where := `WHERE registry_id = ` + ph(args, f.RegistryID)
 	if len(f.IDs) > 0 {
-		*args = append(*args, f.IDs)
-		return where + fmt.Sprintf(` AND id = ANY($%d)`, len(*args))
+		return where + ` AND id = ANY(` + ph(args, f.IDs) + `)`
 	}
 	if f.Search != "" {
-		*args = append(*args, f.Search)
-		where += fmt.Sprintf(` AND search_text ILIKE '%%' || $%d || '%%'`, len(*args))
+		where += ` AND search_text ILIKE '%' || ` + ph(args, f.Search) + ` || '%'`
 	}
-	if f.TagFieldID > 0 && f.TagValue != "" {
-		*args = append(*args, f.TagValue)
-		where += fmt.Sprintf(` AND data->'%d' @> to_jsonb($%d::text)`, f.TagFieldID, len(*args))
-	}
+	where += sectionWhere(f.SectionFieldID, f.SectionValue, args)
+	where += columnWhere(f.Columns, args)
 	if len(f.Exclude) > 0 {
-		*args = append(*args, f.Exclude)
-		where += fmt.Sprintf(` AND NOT (id = ANY($%d))`, len(*args))
+		where += ` AND NOT (id = ANY(` + ph(args, f.Exclude) + `))`
 	}
 	return where
 }
 
 func (r *Repo) DeleteRecords(ctx context.Context, f domain.ExportFilter) ([]*domain.Record, error) {
-	args := []any{f.RegistryID}
+	args := []any{}
 	where := selectionWhere(f, &args)
 	rows, err := r.pool.Query(ctx,
 		`DELETE FROM registry_records `+where+` RETURNING `+recordCols, args...)
@@ -177,7 +279,7 @@ func (r *Repo) DeleteRecords(ctx context.Context, f domain.ExportFilter) ([]*dom
 }
 
 func (r *Repo) RecordsForExport(ctx context.Context, f domain.ExportFilter) ([]*domain.Record, error) {
-	args := []any{f.RegistryID}
+	args := []any{}
 	where := selectionWhere(f, &args)
 	rows, err := r.pool.Query(ctx,
 		`SELECT `+recordCols+` FROM registry_records `+where+` ORDER BY created_at DESC, id DESC`, args...)
@@ -214,16 +316,24 @@ func (r *Repo) AllRecords(ctx context.Context, registryID int64) ([]*domain.Reco
 	return out, rows.Err()
 }
 
-// SearchRecords — глобальный поиск (Spotlight) по записям всех реестров
-// компании одним запросом: search_text уже поддержан триграммным индексом.
-func (r *Repo) SearchRecords(ctx context.Context, companyID int64, query string, limit int) ([]*domain.SearchHit, error) {
+// SearchRecords — глобальный поиск (Hola) по записям ВСЕХ доступных человеку
+// реестров одним запросом: свои, расшаренные лично и расшаренные его компаниям.
+// search_text поддержан триграммным индексом.
+func (r *Repo) SearchRecords(ctx context.Context, userID int64, companyIDs []int64, query string, limit int) ([]*domain.SearchHit, error) {
+	if companyIDs == nil {
+		companyIDs = []int64{}
+	}
 	rows, err := r.pool.Query(ctx, `
 		SELECT rec.registry_id, reg.name, rec.id, left(rec.search_text, 160)
 		FROM registry_records rec
 		JOIN registries reg ON reg.id = rec.registry_id
-		WHERE reg.company_id = $1 AND rec.search_text ILIKE '%' || $2 || '%'
+		WHERE rec.search_text ILIKE '%' || $3 || '%'
+		  AND (reg.owner_id = $1
+		       OR EXISTS (SELECT 1 FROM registry_user_shares sh
+		                   WHERE sh.registry_id = reg.id
+		                     AND (sh.user_id = $1 OR sh.company_id = ANY($2))))
 		ORDER BY rec.id DESC
-		LIMIT $3`, companyID, query, limit)
+		LIMIT $4`, userID, companyIDs, query, limit)
 	if err != nil {
 		return nil, err
 	}

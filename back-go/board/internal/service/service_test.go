@@ -149,7 +149,7 @@ func (f *fakeRepo) UpdateBoardScene(_ domain.Ctx, id int64, scene json.RawMessag
 	return nil
 }
 
-func (f *fakeRepo) DeleteBoard(_ domain.Ctx, id int64) error        { delete(f.boards, id); return nil }
+func (f *fakeRepo) DeleteBoard(_ domain.Ctx, id int64) error { delete(f.boards, id); return nil }
 func (f *fakeRepo) MoveBoard(_ domain.Ctx, id int64, folderID *int64) error {
 	if n := f.boards[id]; n != nil {
 		n.FolderID = folderID
@@ -501,6 +501,12 @@ func (nopBus) Publish(_ domain.Ctx, _ string, _ []string, _ any) {}
 type nopFiles struct{}
 
 func (nopFiles) SaveFor(_ context.Context, _, _ int64, _ string, _ []byte) (string, error) {
+	return "boards/x", nil
+}
+
+func (nopFiles) SaveStreamFor(_ context.Context, _, _ int64, _ string, r io.Reader, _ int64) (string, error) {
+	// Поток вычитываем целиком: незакрытая часть осталась бы висеть.
+	_, _ = io.Copy(io.Discard, r)
 	return "boards/x", nil
 }
 func (nopFiles) RemoveFor(_ context.Context, _, _ int64, _ []string) {}

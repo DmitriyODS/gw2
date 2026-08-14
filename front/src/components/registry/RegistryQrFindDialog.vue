@@ -39,13 +39,16 @@
 import { ref, watch } from 'vue'
 import AppDialog from '@/components/ui/AppDialog.vue'
 import QrScanDialog from '@/components/common/QrScanDialog.vue'
-import { getRecords } from '@/api/registries.js'
 import { useNotificationsStore } from '@/stores/notifications.js'
 import { hasQr, qrValue } from '@/utils/registryFields.js'
 
 const props = defineProps({
   modelValue: { type: Boolean, default: false },
   registry: { type: Object, default: null },
+  /* (params) => Promise<{items, total}> — страница записей. Раздел передаёт
+     свою ручку, публичная страница — выборку по коду ссылки; сам диалог про
+     это ничего не знает и потому годится обоим. */
+  fetchPage: { type: Function, required: true },
 })
 const emit = defineEmits(['update:modelValue', 'found'])
 
@@ -124,7 +127,7 @@ async function findRecord(value) {
   // Код-подстрока может встретиться в сотнях записей (и в чужих полях), поэтому
   // сужение по search_text перебираем страницами, а не смотрим только первую.
   for (let page = 1; page <= MAX_PAGES; page += 1) {
-    const data = await getRecords(props.registry.id, { search: value, per_page: PAGE_SIZE, page })
+    const data = await props.fetchPage({ search: value, per_page: PAGE_SIZE, page })
     const items = data.items ?? []
     const found = items.find(match)
     if (found) return found

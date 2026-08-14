@@ -78,6 +78,108 @@ func (s *s3Store) Put(ctx context.Context, key string, data []byte, contentType 
 	return nil
 }
 
+// s3PartSize — размер части multipart-загрузки. Столько же памяти держит
+// PutStream: части читаются по одной, а не весь объект целиком.
+const s3PartSize = 8 << 20
+
+// PutStream — потоковая запись через multipart upload. Гигабайтный файл нельзя
+// собрать в []byte, поэтому поток режется на части по s3PartSize и уходит
+// частями; объект короче одной части отправляется обычным Put.
+//
+// Незавершённая загрузка ОБРЫВАЕТСЯ явно (AbortMultipartUpload): брошенные
+// части остаются в бакете и занимают место, за которое платят.
+func (s *s3Store) PutStream(ctx context.Context, key string, r io.Reader, size int64, contentType string) error {
+	if contentType == "" {
+		contentType = "application/octet-stream"
+	}
+
+	first := make([]byte, s3PartSize)
+	n, err := io.ReadFull(r, first)
+	if err != nil && err != io.ErrUnexpectedEOF && err != io.EOF {
+		return err
+	}
+	if n < s3PartSize {
+		return s.Put(ctx, key, first[:n], contentType)
+	}
+
+	created, err := s.client.CreateMultipartUpload(ctx, &s3.CreateMultipartUploadInput{
+		Bucket:      aws.String(s.bucket),
+		Key:         aws.String(key),
+		ContentType: aws.String(contentType),
+		ACL:         types.ObjectCannedACLPublicRead,
+	})
+	if err != nil {
+		return err
+	}
+	uploadID := created.UploadId
+
+	abort := func(cause error) error {
+		if _, aerr := s.client.AbortMultipartUpload(ctx, &s3.AbortMultipartUploadInput{
+			Bucket: aws.String(s.bucket), Key: aws.String(key), UploadId: uploadID,
+		}); aerr != nil {
+			s.log.Warn("storage.multipart_abort_failed", "key", key, "error", aerr)
+		}
+		return cause
+	}
+
+	var (
+		parts   []types.CompletedPart
+		written int64
+		part    = first[:n]
+	)
+	for num := int32(1); ; num++ {
+		out, err := s.client.UploadPart(ctx, &s3.UploadPartInput{
+			Bucket:     aws.String(s.bucket),
+			Key:        aws.String(key),
+			UploadId:   uploadID,
+			PartNumber: aws.Int32(num),
+			Body:       bytes.NewReader(part),
+		})
+		if err != nil {
+			return abort(err)
+		}
+		parts = append(parts, types.CompletedPart{ETag: out.ETag, PartNumber: aws.Int32(num)})
+		written += int64(len(part))
+
+		buf := make([]byte, s3PartSize)
+		m, err := io.ReadFull(r, buf)
+		if m > 0 {
+			part = buf[:m]
+			continue
+		}
+		if err == nil || err == io.EOF || err == io.ErrUnexpectedEOF {
+			break
+		}
+		return abort(err)
+	}
+
+	if _, err := s.client.CompleteMultipartUpload(ctx, &s3.CompleteMultipartUploadInput{
+		Bucket:          aws.String(s.bucket),
+		Key:             aws.String(key),
+		UploadId:        uploadID,
+		MultipartUpload: &types.CompletedMultipartUpload{Parts: parts},
+	}); err != nil {
+		return abort(err)
+	}
+
+	// Та же сверка, что и у Put: хранилище отвечало «успех», не сохранив
+	// объект, и запись навсегда ссылалась на пустоту.
+	stored, err := s.Size(ctx, key)
+	if err != nil {
+		s.log.Error("storage.put_unverified", "key", key, "error", err)
+		return fmt.Errorf("объект %s не подтверждён хранилищем: %w", key, err)
+	}
+	want := written
+	if size > 0 {
+		want = size
+	}
+	if stored != want {
+		s.log.Error("storage.put_size_mismatch", "key", key, "want", want, "got", stored)
+		return fmt.Errorf("объект %s записан не полностью (%d из %d байт)", key, stored, want)
+	}
+	return nil
+}
+
 func (s *s3Store) Open(ctx context.Context, key string) (io.ReadCloser, error) {
 	out, err := s.client.GetObject(ctx, &s3.GetObjectInput{
 		Bucket: aws.String(s.bucket),

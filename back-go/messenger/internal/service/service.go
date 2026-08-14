@@ -7,6 +7,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"log/slog"
 	"time"
 
@@ -46,6 +47,11 @@ type MessengerService interface {
 	ForwardMessage(ctx context.Context, senderID, messageID int64, conversationIDs, userIDs []int64) ([]dto.ForwardResult, error)
 	MarkRead(ctx context.Context, convID, userID int64) (int, error)
 	UploadAttachment(ctx context.Context, uploaderID int64, fileName, mimeType string, data []byte) (*dto.Attachment, error)
+	// CheckUpload — можно ли принять такой файл (тип, размер, квота). Зовётся
+	// до приёма первой части: незачем принимать полгигабайта ради отказа.
+	CheckUpload(ctx context.Context, uploaderID int64, fileName, mimeType string, size int64) (string, string, error)
+	// UploadAttachmentStream — вложение, собранное из частей.
+	UploadAttachmentStream(ctx context.Context, uploaderID int64, fileName, mimeType string, size int64, r io.Reader) (*dto.Attachment, error)
 	DeleteMessage(ctx context.Context, messageID, userID int64, scope string) (bool, error)
 	EditMessage(ctx context.Context, messageID, userID int64, text string) (*dto.Message, error)
 	DeleteConversation(ctx context.Context, convID, userID int64, scope string) (bool, error)

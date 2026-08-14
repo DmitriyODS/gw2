@@ -1,5 +1,6 @@
 // Ведётся вручную: REST заметок живёт в notesvc (back-go/notes).
 import { apiRequest } from './client.js'
+import { uploadFileTo } from '@/utils/chunkUpload.js'
 
 function qs(params = {}) {
   const sp = new URLSearchParams()
@@ -97,10 +98,12 @@ export const sendCollab = (noteId, body) =>
   apiRequest(`/notes/${noteId}/collab`, { method: 'POST', body })
 
 // ── Картинки редактора ──
-export const uploadImage = (noteId, file) => {
-  const form = new FormData()
-  form.append('file', file)
-  return apiRequest(`/notes/${noteId}/uploads`, { method: 'POST', body: form })
+export const uploadImage = (noteId, file, { onProgress, signal } = {}) => {
+  return uploadFileTo({
+    file, onProgress, signal,
+    directUrl: `/notes/${noteId}/uploads`,
+    chunkBase: `/notes/${noteId}/uploads`,
+  })
 }
 
 // ── Экспорт/импорт ──

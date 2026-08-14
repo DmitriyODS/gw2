@@ -20,23 +20,32 @@ import (
 // Типы полей карточки. Набор продублирован во фронте
 // (front/src/utils/registryFields.js) — держать синхронным.
 const (
-	FieldImage    = "image"    // картинка (превью + полноэкранный просмотр)
+	FieldImage    = "image"    // обложка: картинка (превью + полноэкранный просмотр)
 	FieldFile     = "file"     // произвольный файл
-	FieldText     = "text"     // текстовое поле (config.multiline — textarea)
+	FieldText     = "text"     // короткий текст — одна строка
+	FieldTextarea = "textarea" // длинный текст — многострочное поле
 	FieldNumber   = "number"   // число (config.pattern — опц. regex шаблона)
-	FieldCheckbox = "checkbox" // галочка
+	FieldRegex    = "regex"    // текст с обязательной проверкой по config.pattern
+	FieldPhone    = "phone"    // телефон (config.country — код страны форматирования)
+	FieldEmail    = "email"    // адрес почты с проверкой формата
+	FieldCheckbox = "checkbox" // галочка (config.on_label/off_label — надписи)
 	FieldSelect   = "select"   // выбор из вариантов (config.options, config.multiple)
 	FieldLink     = "link"     // ссылка на сайт
-	FieldDatetime = "datetime" // дата/время (config.year/month_day/time — части)
+	FieldDatetime = "datetime" // дата/время (см. DateConfig — части включаются по одной)
 	// FieldStock — «Наличие»: позиция на месте, пока её не забрали. Значение —
 	// {taken: bool, until: "YYYY-MM-DD"}; пусто (и taken=false) означает «в
 	// наличии», поэтому у новых записей поле молчит и ничего не весит.
+	//
+	// УНАСЛЕДОВАННЫЙ тип: в реестрах его заменил режим «Учётный реестр» с
+	// историей выдач (миграция 00081 перенесла значения туда и убрала поля).
+	// Тип остаётся валидным — его данные могли уехать в бэкапы и календари.
 	FieldStock = "stock"
 )
 
 // FieldTypes — допустимые типы (для валидации структуры).
 var FieldTypes = map[string]bool{
-	FieldImage: true, FieldFile: true, FieldText: true, FieldNumber: true,
+	FieldImage: true, FieldFile: true, FieldText: true, FieldTextarea: true,
+	FieldNumber: true, FieldRegex: true, FieldPhone: true, FieldEmail: true,
 	FieldCheckbox: true, FieldSelect: true, FieldLink: true, FieldDatetime: true,
 	FieldStock: true,
 }
@@ -54,13 +63,17 @@ type FieldInfo struct {
 func FieldID(id int64) string { return strconv.FormatInt(id, 10) }
 
 // NormalizeSpans — привести span'ы раскладки к допустимым границам
-// (col 1..3, row ≥1) и гарантировать непустой config.
-func NormalizeSpans(colSpan, rowSpan *int, config *map[string]any) {
+// (col 1..maxCols, row ≥1) и гарантировать непустой config. Ширина сетки у
+// разделов разная: реестры делят карточку на четверти, календари — на трети.
+func NormalizeSpans(colSpan, rowSpan *int, config *map[string]any, maxCols int) {
+	if maxCols < 1 {
+		maxCols = 1
+	}
 	if *colSpan < 1 {
 		*colSpan = 1
 	}
-	if *colSpan > 3 {
-		*colSpan = 3
+	if *colSpan > maxCols {
+		*colSpan = maxCols
 	}
 	if *rowSpan < 1 {
 		*rowSpan = 1
@@ -135,6 +148,92 @@ func NumberBound(config map[string]any, key string) (float64, bool) {
 	return 0, false
 }
 
+// Pattern — регулярное выражение проверки из config ("" — проверки нет).
+// Общее для number (необязательная маска) и regex (смысл самого типа).
+func Pattern(config map[string]any) string {
+	s, _ := config["pattern"].(string)
+	return strings.TrimSpace(s)
+}
+
+// DateParts — какие части даты и времени показывает поле «Дата и время».
+// Каждая включается отдельно, поэтому поле бывает и «только год», и «только
+// часы с минутами».
+type DateParts struct {
+	Year, Month, Day        bool
+	Hours, Minutes, Seconds bool
+}
+
+// Any — включена ли хоть одна часть: поле без частей нечего ни показать, ни
+// разобрать, поэтому такой конфиг трактуем как полную дату со временем.
+func (p DateParts) Any() bool {
+	return p.Year || p.Month || p.Day || p.Hours || p.Minutes || p.Seconds
+}
+
+// DateConfig — части даты из config. Понимает и прежнюю тройку
+// year/month_day/time: конфиги календарей и старых реестров переписаны
+// миграцией, но архивные копии переживают её, а молча терять день из карточки
+// нельзя.
+func DateConfig(config map[string]any) DateParts {
+	flag := func(key string, def bool) bool {
+		if v, ok := config[key].(bool); ok {
+			return v
+		}
+		return def
+	}
+	if _, legacy := config["month_day"]; legacy {
+		md, tm := flag("month_day", true), flag("time", true)
+		return DateParts{Year: flag("year", true), Month: md, Day: md, Hours: tm, Minutes: tm}
+	}
+	p := DateParts{
+		Year: flag("year", true), Month: flag("month", true), Day: flag("day", true),
+		Hours: flag("hours", true), Minutes: flag("minutes", true), Seconds: flag("seconds", false),
+	}
+	if !p.Any() {
+		return DateParts{Year: true, Month: true, Day: true, Hours: true, Minutes: true}
+	}
+	return p
+}
+
+// CheckboxText — надпись галочки: составитель реестра задаёт свои слова для
+// установленной и снятой («Выдан» / «Не выдан»), по умолчанию — «Да» / «Нет».
+func CheckboxText(config map[string]any, on bool) string {
+	key, def := "off_label", "Нет"
+	if on {
+		key, def = "on_label", "Да"
+	}
+	if s, ok := config[key].(string); ok && strings.TrimSpace(s) != "" {
+		return strings.TrimSpace(s)
+	}
+	return def
+}
+
+// emailRe — проверка адреса: намеренно нестрогая (полный RFC 5322 отвергает
+// живые адреса чаще, чем ловит опечатки).
+var emailRe = regexp.MustCompile(`^[^@\s]+@[^@\s.]+(\.[^@\s.]+)+$`)
+
+// phoneRe — телефон после нормализации: плюс и 5..15 цифр. Разделители
+// (пробелы, скобки, дефисы) человек ставит как привык, храним без них.
+var phoneRe = regexp.MustCompile(`^\+?\d{5,15}$`)
+
+// ValidPhone — похоже ли на номер телефона (после нормализации). Пустая строка
+// номером не считается — «телефон не указан» проверяет вызывающий.
+func ValidPhone(s string) bool {
+	return phoneRe.MatchString(NormalizePhone(s))
+}
+
+// NormalizePhone — привести телефон к хранимому виду: только плюс и цифры.
+func NormalizePhone(s string) string {
+	var b strings.Builder
+	for i, r := range strings.TrimSpace(s) {
+		if r == '+' && i == 0 {
+			b.WriteRune(r)
+		} else if r >= '0' && r <= '9' {
+			b.WriteRune(r)
+		}
+	}
+	return b.String()
+}
+
 // Stock — значение поля «Наличие». Пустое значение = позиция на месте, поэтому
 // «в наличии» ничего в записи не занимает.
 type Stock struct {
@@ -186,7 +285,8 @@ func SearchContribution(fieldType string, value any) string {
 		return ""
 	}
 	switch fieldType {
-	case FieldText, FieldNumber, FieldLink, FieldDatetime:
+	case FieldText, FieldTextarea, FieldNumber, FieldRegex, FieldPhone, FieldEmail,
+		FieldLink, FieldDatetime:
 		return fmt.Sprintf("%v", value)
 	case FieldStock:
 		// В поиск попадает только «забрали»: пометка «в наличии» стоит у
@@ -240,6 +340,12 @@ func CoerceData(fields []FieldInfo, data map[string]any) (map[string]any, error)
 		if err := ValidateValue(f, v); err != nil {
 			return nil, err
 		}
+		// Телефон приводим к «+цифры» ЗДЕСЬ: иначе один и тот же номер,
+		// записанный со скобками и без, не находится поиском и не совпадает
+		// сам с собой при сверке.
+		if f.Type == FieldPhone {
+			v = NormalizePhone(valueString(v))
+		}
 		out[key] = v
 	}
 	return out, nil
@@ -274,6 +380,34 @@ func ValidateValue(f FieldInfo, v any) error {
 				return apierror.New("VALIDATION",
 					"Значение поля «"+f.Label+"» не соответствует шаблону", 400)
 			}
+		}
+	case FieldRegex:
+		s := strings.TrimSpace(valueString(v))
+		if s == "" {
+			return nil
+		}
+		// Кривой шаблон — вина составителя реестра, а не заполняющего запись:
+		// на нём поле ведёт себя как обычный текст, а не отвергает всё подряд.
+		if pat := Pattern(f.Config); pat != "" {
+			re, err := regexp.Compile(pat)
+			if err == nil && !re.MatchString(s) {
+				return apierror.New("VALIDATION",
+					"Значение поля «"+f.Label+"» не соответствует шаблону", 400)
+			}
+		}
+	case FieldEmail:
+		s := strings.TrimSpace(valueString(v))
+		if s != "" && !emailRe.MatchString(s) {
+			return apierror.New("VALIDATION",
+				"Поле «"+f.Label+"»: непохоже на адрес почты", 400)
+		}
+	case FieldPhone:
+		// Сверяем с ИСХОДНОЙ строкой, а не только с нормализованной: в тексте
+		// без единой цифры нормализация даёт пустоту, и такое значение молча
+		// сохранялось бы как «не заполнено», стирая написанное человеком.
+		if raw := strings.TrimSpace(valueString(v)); raw != "" && !ValidPhone(raw) {
+			return apierror.New("VALIDATION",
+				"Поле «"+f.Label+"»: непохоже на номер телефона", 400)
 		}
 	case FieldStock:
 		m, ok := v.(map[string]any)

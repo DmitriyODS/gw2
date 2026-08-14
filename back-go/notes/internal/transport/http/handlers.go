@@ -12,6 +12,7 @@ import (
 	"github.com/DmitriyODS/gw2/back-go/notes/internal/docx"
 	"github.com/DmitriyODS/gw2/back-go/notes/internal/domain"
 	"github.com/DmitriyODS/gw2/back-go/notes/internal/service"
+	"github.com/DmitriyODS/gw2/back-go/pkg/chunkupload"
 )
 
 func parseBody(c *fiber.Ctx, out any) { _ = json.Unmarshal(c.Body(), out) }
@@ -460,6 +461,34 @@ func (h *handlers) collab(c *fiber.Ctx) error {
 }
 
 // ── Картинки редактора, экспорт/импорт ───────────────────────────
+
+/* Приём файла заметки частями: право на запись проверяем ДО первого байта,
+   собираем потоком. Место — из квоты владельца заметки. */
+
+func (h *handlers) beginUpload(c *fiber.Ctx, in chunkupload.InitRequest, s *chunkupload.Session) error {
+	userID := currentUserID(c)
+	if err := h.svc.CheckUpload(c.Context(), userID, pathID(c)); err != nil {
+		return err
+	}
+	if in.Size > uploadMaxBytes {
+		return domain.NewError("FILE_TOO_BIG", "Файл слишком большой (макс. 25 МБ)", 413)
+	}
+	s.QuotaUserID = userID
+	// Заметку запоминаем: на сборке путь уже другой (там код загрузки).
+	s.Scope = strconv.FormatInt(pathID(c), 10)
+	return nil
+}
+
+func (h *handlers) finishUpload(c *fiber.Ctx, s chunkupload.Session, r io.Reader) (any, error) {
+	noteID, _ := strconv.ParseInt(s.Scope, 10, 64)
+	path, err := h.svc.UploadStream(c.Context(), currentUserID(c), noteID, s.FileName, r, s.TotalSize)
+	if err != nil {
+		return nil, err
+	}
+	// Форма ответа — та же, что у одиночной загрузки: она не должна зависеть
+	// от размера файла, иначе потребитель ломается ровно на больших.
+	return fiber.Map{"path": path}, nil
+}
 
 func (h *handlers) upload(c *fiber.Ctx) error {
 	fileHeader, err := c.FormFile("file")

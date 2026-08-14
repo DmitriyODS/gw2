@@ -1,5 +1,6 @@
 // Ведётся вручную: REST корпоративного портала живёт в portalsvc (back-go/portal).
 import { apiRequest } from './client.js'
+import { uploadFileTo } from '@/utils/chunkUpload.js'
 
 // ── Топики (разделы) ──
 export const getTopics = () => apiRequest('/portal/topics')
@@ -52,10 +53,12 @@ export const pinPost = (id, days = null) =>
 export const unpinPost = (id) => apiRequest(`/portal/posts/${id}/pin`, { method: 'DELETE' })
 
 // Загрузка вложения (multipart) → Attachment {id, name, size, mime, url, ...}.
-export const uploadAttachment = (postId, file) => {
-  const form = new FormData()
-  form.append('file', file)
-  return apiRequest(`/portal/posts/${postId}/attachments`, { method: 'POST', body: form })
+export const uploadAttachment = (postId, file, { onProgress, signal } = {}) => {
+  return uploadFileTo({
+    file, onProgress, signal,
+    directUrl: `/portal/posts/${postId}/attachments`,
+    chunkBase: `/portal/posts/${postId}/attachments`,
+  })
 }
 
 export const deleteAttachment = (attachmentId) =>

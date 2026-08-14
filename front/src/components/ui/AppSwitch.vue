@@ -1,12 +1,21 @@
 <template>
-  <span
-    class="switch"
-    :class="{ on: modelValue, disabled }"
-    role="switch"
-    :aria-checked="String(modelValue)"
-    :aria-disabled="disabled ? 'true' : undefined"
-    @click="toggle"
-  />
+  <!-- Без подписи — голый тумблер (его подписывает AppSwitchRow); с подписью —
+       компактная пара «текст + тумблер», по которой можно щёлкать целиком. -->
+  <component
+    :is="label ? 'label' : 'span'"
+    class="switch-wrap"
+    :class="{ bare: !label }"
+  >
+    <span v-if="label" class="switch-label">{{ label }}</span>
+    <span
+      class="switch"
+      :class="{ on: modelValue, disabled }"
+      role="switch"
+      :aria-checked="String(modelValue)"
+      :aria-disabled="disabled ? 'true' : undefined"
+      @click="toggle"
+    />
+  </component>
 </template>
 
 <script setup>
@@ -15,6 +24,8 @@
 const props = defineProps({
   modelValue: { type: Boolean, default: false },
   disabled: { type: Boolean, default: false },
+  /** Компактная подпись рядом с тумблером (для тулбаров и рядов настроек). */
+  label: { type: String, default: '' },
 })
 
 const emit = defineEmits(['update:modelValue'])
@@ -27,6 +38,19 @@ function toggle(e) {
 </script>
 
 <style scoped>
+/* Обёртка ничего не занимает у голого тумблера: он остаётся ровно тем же
+   элементом, что и раньше, — иначе поехали бы раскладки всех строк настроек. */
+.switch-wrap.bare { display: contents; }
+
+.switch-wrap:not(.bare) {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+}
+
+.switch-label { font-size: 13px; color: var(--color-text-dim); }
+
 .switch {
   position: relative;
   box-sizing: border-box;

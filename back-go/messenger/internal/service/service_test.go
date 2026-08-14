@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"fmt"
+	"io"
 	"log/slog"
 	"sort"
 	"strconv"
@@ -826,6 +827,12 @@ func (f *fakeFiles) Save(_ []byte, ext string) (string, error) {
 	p := fmt.Sprintf("messages/2026/06/file%d%s", f.n, ext)
 	f.saved = append(f.saved, p)
 	return p, nil
+}
+
+func (f *fakeFiles) SaveStream(r io.Reader, ext string, _ int64) (string, error) {
+	// Поток вычитываем целиком: иначе незакрытая часть осталась бы висеть.
+	_, _ = io.Copy(io.Discard, r)
+	return f.Save(nil, ext)
 }
 
 func (f *fakeFiles) Copy(src string) (string, error) {

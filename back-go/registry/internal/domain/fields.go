@@ -6,8 +6,21 @@ import "github.com/DmitriyODS/gw2/back-go/pkg/records"
 // общая с календарями, живёт в pkg/records; здесь — тонкие делегаты на
 // доменном типе Field.
 
-// Normalize — привести span'ы к допустимым границам (col 1..3, row ≥1).
-func (f *Field) Normalize() { records.NormalizeSpans(&f.ColSpan, &f.RowSpan, &f.Config) }
+// GridCols — ширина сетки карточки реестра: поле занимает от четверти строки
+// до всей строки.
+const GridCols = 4
+
+const (
+	// MaxFileSize — потолок поля «Файл». Такой файл едет частями
+	// (pkg/chunkupload), одним запросом его не принять.
+	MaxFileSize = 1 << 30
+	// MaxImageSize — потолок обложки. Клиент ужимает картинку до этого размера
+	// перед отправкой; проверка на сервере — на случай, если пришли мимо него.
+	MaxImageSize = 2 << 20
+)
+
+// Normalize — привести span'ы к допустимым границам (col 1..GridCols, row ≥1).
+func (f *Field) Normalize() { records.NormalizeSpans(&f.ColSpan, &f.RowSpan, &f.Config, GridCols) }
 
 // FieldOptions — варианты select-поля из config (пустой срез, если нет).
 func (f Field) FieldOptions() []string { return records.Options(f.Config) }

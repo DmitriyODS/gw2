@@ -27,6 +27,7 @@ import (
 	httptransport "github.com/DmitriyODS/gw2/back-go/notes/internal/transport/http"
 	"github.com/DmitriyODS/gw2/back-go/pkg/billingclient"
 	"github.com/DmitriyODS/gw2/back-go/pkg/bootstrap"
+	"github.com/DmitriyODS/gw2/back-go/pkg/chunkupload"
 	"github.com/DmitriyODS/gw2/back-go/pkg/events"
 	"github.com/DmitriyODS/gw2/back-go/pkg/gen/notespb"
 	"github.com/DmitriyODS/gw2/back-go/pkg/pasetoauth"
@@ -101,7 +102,11 @@ func main() {
 		Embedder: embedder,
 		Log:      log,
 	})
-	httpServer := httptransport.NewServer(svc, users, verifier, log)
+	// Приём файлов частями — общий движок платформы.
+	uploads := chunkupload.New(pool, fileStore, "notes", log)
+	go uploads.Sweep(ctx)
+
+	httpServer := httptransport.NewServer(svc, users, uploads, verifier, log)
 
 	// gRPC — голосовые операции навыка Алисы (зовёт alicesvc) и контракт
 	// владельца файлов для раздела «Настройки → Хранилище» (зовёт биллинг).

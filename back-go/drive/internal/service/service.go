@@ -17,7 +17,6 @@ type Deps struct {
 	Bus   domain.EventBus
 	Log   *slog.Logger
 	// TempDir — где копятся куски больших файлов (пусто — системный temp).
-	TempDir string
 }
 
 type Service struct {
@@ -26,15 +25,10 @@ type Service struct {
 	files domain.FileStore
 	bus   domain.EventBus
 	log   *slog.Logger
-	// Реестр загрузок по частям (большие файлы); временные куски — на диске.
-	uploads *Uploads
 }
 
 func New(d Deps) *Service {
-	return &Service{
-		repo: d.Repo, users: d.Users, files: d.Files, bus: d.Bus, log: d.Log,
-		uploads: NewUploads(d.TempDir),
-	}
+	return &Service{repo: d.Repo, users: d.Users, files: d.Files, bus: d.Bus, log: d.Log}
 }
 
 // rooms — события диска адресуются ПОИМЁННО: владельцу и тем, кому он открыл

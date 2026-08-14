@@ -96,6 +96,11 @@ func ImportCompany(ctx context.Context, pool *pgxpool.Pool, spec TableSpec, in c
 		r["id"] = setIDs[i]
 		r["company_id"] = in.CompanyID
 		remapUser(r, "created_by", in)
+		// Реестр принадлежит человеку — без переноса владельца он достался бы
+		// аккаунту из ЧУЖОЙ системы (у календарей такой колонки нет, и вызов
+		// ничего не делает). Несопоставленный владелец становится тем, кто
+		// импортирует, — колонка NOT NULL.
+		remapUser(r, "owner_id", in)
 	}
 
 	fieldIDs, err := reserveIDs(ctx, tx, spec.Fields, len(dump.Fields))

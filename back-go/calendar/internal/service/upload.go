@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"io"
 
 	"github.com/DmitriyODS/gw2/back-go/calendar/internal/domain"
 )
@@ -16,4 +17,16 @@ func (s *Service) SaveUpload(ctx context.Context, companyID, userID int64, fileN
 	return &domain.UploadedFile{
 		Path: path, Name: fileName, Mime: mime, Size: int64(len(data)),
 	}, nil
+}
+
+// SaveUploadStream — то же для файла, пришедшего ЧАСТЯМИ: содержимое приезжает
+// потоком, а размер известен заранее (его подтвердили принятые части).
+func (s *Service) SaveUploadStream(ctx context.Context, companyID, userID int64,
+	fileName, mime string, size int64, r io.Reader) (*domain.UploadedFile, error) {
+
+	path, err := s.files.SaveStreamFor(ctx, userID, companyID, fileName, r, size)
+	if err != nil {
+		return nil, err
+	}
+	return &domain.UploadedFile{Path: path, Name: fileName, Mime: mime, Size: size}, nil
 }

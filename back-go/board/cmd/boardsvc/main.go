@@ -27,6 +27,7 @@ import (
 	httptransport "github.com/DmitriyODS/gw2/back-go/board/internal/transport/http"
 	"github.com/DmitriyODS/gw2/back-go/pkg/billingclient"
 	"github.com/DmitriyODS/gw2/back-go/pkg/bootstrap"
+	"github.com/DmitriyODS/gw2/back-go/pkg/chunkupload"
 	"github.com/DmitriyODS/gw2/back-go/pkg/events"
 	"github.com/DmitriyODS/gw2/back-go/pkg/pasetoauth"
 	"github.com/DmitriyODS/gw2/back-go/pkg/records"
@@ -83,7 +84,11 @@ func main() {
 	})
 	svc.WithBilling(billing)
 
-	httpServer := httptransport.NewServer(svc, users, verifier, log)
+	// Приём файлов частями — общий движок платформы.
+	uploads := chunkupload.New(pool, fileStore, "boards", log)
+	go uploads.Sweep(ctx)
+
+	httpServer := httptransport.NewServer(svc, users, uploads, verifier, log)
 
 	// gRPC — единственный: биллинг спрашивает про файлы для раздела
 	// «Настройки → Хранилище» (картинки холста).

@@ -74,7 +74,7 @@ describeIntegration('registries API: записи, выгрузка, досту�
     const b = await reg.createRecord(id, { [field]: 'Б' })
     const c = await reg.createRecord(id, { [field]: 'В' })
 
-    await reg.bulkDeleteRecords(id, [a.id, b.id])
+    await reg.bulkDeleteRecords(id, { ids: [a.id, b.id] })
     const left = await reg.getRecords(id)
     expect(left.items.map((r) => r.id)).toEqual([c.id])
   })
@@ -83,7 +83,7 @@ describeIntegration('registries API: записи, выгрузка, досту�
     const admin = await newCompanyAdmin()
     admin.session.use()
     const r = await reg.createRegistry(uniq('Старое имя '))
-    await reg.updateRegistry(r.id, 'Новое имя')
+    await reg.updateRegistry(r.id, { name: 'Новое имя' })
     expect((await reg.getRegistry(r.id)).name).toBe('Новое имя')
 
     await reg.deleteRegistry(r.id)
@@ -110,7 +110,7 @@ describeIntegration('registries API: записи, выгрузка, досту�
     expect((none.items ?? none.records ?? []).length).toBe(0)
   })
 
-  it('реестр чужой компании не читается и не правится', async () => {
+  it('чужой реестр не читается и не правится', async () => {
     const a = await newCompanyAdmin('a')
     const { id, field } = await registryWithField(a)
     const rec = await reg.createRecord(id, { [field]: 'Секрет' })
@@ -123,18 +123,63 @@ describeIntegration('registries API: записи, выгрузка, досту�
     await expectClientError(reg.deleteRegistry(id))
   })
 
-  it('структуру правит администратор, записи ведёт любой участник', async () => {
+  it('уровни доступа вложены: смотрит, пишет, правит структуру', async () => {
     const admin = await newCompanyAdmin('admin')
     const { id, field } = await registryWithField(admin)
     const worker = await newMember(admin, admin.companyId, 1, 'worker')
 
+    // Реестр принадлежит человеку: пока им не поделились, коллега его не видит
+    // вовсе — и существование чужого реестра не раскрывается (404, не 403).
     worker.session.use()
-    // Записи — работа участника…
+    await expectClientError(reg.getRegistry(id))
+
+    // Просмотр: читает, но не пишет.
+    admin.session.use()
+    await reg.shareWith(id, [{ user_id: worker.auth.userId, access: 'view' }])
+    worker.session.use()
+    expect((await reg.getRegistry(id)).my_access).toBe('view')
+    await expectClientError(reg.createRecord(id, { [field]: 'Мимо' }))
+
+    // Правка: ведёт записи, но структуру не трогает.
+    admin.session.use()
+    await reg.shareWith(id, [{ user_id: worker.auth.userId, access: 'edit' }])
+    worker.session.use()
     const rec = await reg.createRecord(id, { [field]: 'Строка сотрудника' })
     expect(rec.id).toBeGreaterThan(0)
-    // …а структура справочника — дело администратора.
     await expectClientError(reg.replaceFields(id, [{ label: 'Своё поле', type: 'text' }]))
+
+    // Администрирование: правит структуру, но удалить реестр может только
+    // владелец — отдать его вместе с записями приглашённому нельзя.
+    admin.session.use()
+    await reg.shareWith(id, [{ user_id: worker.auth.userId, access: 'admin' }])
+    worker.session.use()
+    const put = await reg.replaceFields(id, [
+      { label: 'Название', type: 'text', show_in_table: true },
+      { label: 'Своё поле', type: 'text' },
+    ])
+    expect(put.fields.length).toBe(2)
     await expectClientError(reg.deleteRegistry(id))
+  })
+
+  it('доступ компании открывает реестр всем её участникам', async () => {
+    const admin = await newCompanyAdmin('cshare')
+    const { id, field } = await registryWithField(admin)
+    const worker = await newMember(admin, admin.companyId, 1, 'cworker')
+
+    worker.session.use()
+    await expectClientError(reg.getRegistry(id))
+
+    admin.session.use()
+    await reg.shareWith(id, [{ company_id: admin.companyId, access: 'edit' }])
+
+    worker.session.use()
+    expect((await reg.getRegistry(id)).my_access).toBe('edit')
+    const rec = await reg.createRecord(id, { [field]: 'Общая строка' })
+    expect(rec.id).toBeGreaterThan(0)
+
+    // Вкладка «Компания» показывает ровно такие реестры.
+    const list = await reg.getRegistries('company')
+    expect(list.registries.some((r) => r.id === id)).toBe(true)
   })
 
   it('публичная ссылка даёт чтение и гаснет при отзыве', async () => {
@@ -167,7 +212,7 @@ describeIntegration('registries API: записи, выгрузка, досту�
     const admin = await newCompanyAdmin()
     const { id, field } = await registryWithField(admin)
     const view = await reg.createShare(id)
-    const edit = await reg.createShare(id, 'edit')
+    const edit = await reg.createShare(id, { access: 'edit' })
     expect(view.access).toBe('view')
     expect(edit.access).toBe('edit')
 
@@ -191,6 +236,113 @@ describeIntegration('registries API: записи, выгрузка, досту�
     admin.session.use()
     const own = await reg.getRecords(id)
     expect(own.items.some((r) => r.data[field] === 'Правка гостя')).toBe(true)
+  })
+
+  it('учётный реестр: выдача, продление, возврат и история', async () => {
+    const admin = await newCompanyAdmin('acc')
+    admin.session.use()
+    const r = await reg.createRegistry(uniq('Инструмент '), true)
+    const put = await reg.replaceFields(r.id, [{ label: 'Название', type: 'text', show_in_table: true }])
+    const field = fieldId(put.fields, 'Название')
+    const rec = await reg.createRecord(r.id, { [field]: 'Перфоратор' })
+
+    const due = new Date(Date.now() + 3 * 86400000).toISOString()
+    const issue = await reg.issueRecord(r.id, rec.id, {
+      issued_to: 'Цех №2', holder_name: 'Иванов И.И.', holder_phone: '+79000000000',
+      due_at: due, comment: 'под роспись',
+    })
+    expect(issue.id).toBeGreaterThan(0)
+    expect(issue.issued_to).toBe('Цех №2')
+    expect(issue.holder_name).toBe('Иванов И.И.')
+
+    // Получатель, ответственный и телефон обязательны: выдача «неизвестно кому»
+    // не отвечает на главный вопрос учёта.
+    await expectClientError(reg.issueRecord(r.id, rec.id, { issued_to: 'Цех №3' }))
+    await expectClientError(reg.issueRecord(r.id, rec.id, {
+      issued_to: 'Цех №3', holder_name: 'Петров П.П.',
+    }))
+
+    // Открытая выдача у записи одна: вторая отбивается, а не задваивается.
+    await expectClientError(reg.issueRecord(r.id, rec.id, {
+      issued_to: 'Цех №3', holder_name: 'Петров П.П.', holder_phone: '+79000000001',
+    }))
+
+    // Состояние приезжает вместе со списком — плашка рисуется без второго запроса.
+    const list = await reg.getRecords(r.id)
+    expect(list.items[0].issue.issued_to).toBe('Цех №2')
+
+    const later = new Date(Date.now() + 10 * 86400000).toISOString()
+    await reg.extendIssue(r.id, rec.id, { due_at: later, comment: 'продлили' })
+    await reg.returnIssue(r.id, rec.id, 'принято')
+
+    // После возврата позиция снова на месте и выдаётся заново.
+    const back = await reg.getRecords(r.id)
+    expect(back.items[0].issue).toBeUndefined()
+    await expectClientError(reg.returnIssue(r.id, rec.id, ''))
+    expect((await reg.issueRecord(r.id, rec.id, {
+      issued_to: 'Склад', holder_name: 'Петров П.П.', holder_phone: '+79000000002',
+    })).id).toBeGreaterThan(0)
+
+    // История помнит все движения.
+    const { issues } = await reg.getIssues(r.id, rec.id)
+    expect(issues.length).toBe(2)
+    const kinds = (issues.find((i) => i.returned_at)?.events ?? []).map((e) => e.kind)
+    expect(kinds).toEqual(['issue', 'extend', 'return'])
+  })
+
+  it('ссылка «только для вошедших» не пускает гостя', async () => {
+    const admin = await newCompanyAdmin('authlink')
+    const { id, field } = await registryWithField(admin)
+    await reg.createRecord(id, { [field]: 'За порогом' })
+    const share = await reg.createShare(id, { access: 'view', require_auth: true, name: 'для своих' })
+
+    const guest = new Session('guest')
+    guest.use()
+    await expectClientError(reg.getSharedRegistry(share.code))
+
+    // Вошедшему та же ссылка открывается, и переход попадает в журнал.
+    const other = await newCompanyAdmin('authlink2')
+    other.session.use()
+    expect((await reg.getSharedRegistry(share.code)).fields.length).toBe(1)
+
+    admin.session.use()
+    const { visits } = await reg.getShareVisits(id, share.id)
+    expect(visits.length).toBeGreaterThan(0)
+    expect(visits[0].user_id).toBe(other.auth.userId)
+  })
+
+  it('подраздел и фильтр колонки сужают выборку одинаково для списка и выгрузки', async () => {
+    const admin = await newCompanyAdmin('sect')
+    admin.session.use()
+    const r = await reg.createRegistry(uniq('Каталог '))
+    const put = await reg.replaceFields(r.id, [
+      { label: 'Название', type: 'text', show_in_table: true },
+      { label: 'Тип', type: 'select', config: { options: ['новый', 'бу'] }, show_in_table: true },
+    ])
+    const nameId = fieldId(put.fields, 'Название')
+    const typeId = put.fields.find((f) => f.label === 'Тип').id
+    await reg.updateRegistry(r.id, { section_field_id: typeId })
+
+    await reg.createRecord(r.id, { [nameId]: 'Станок', [String(typeId)]: 'новый' })
+    await reg.createRecord(r.id, { [nameId]: 'Тиски', [String(typeId)]: 'бу' })
+
+    expect((await reg.getRecords(r.id)).items.length).toBe(2)
+    expect((await reg.getRecords(r.id, { section: 'бу' })).items.length).toBe(1)
+
+    // Фильтр колонки — то же сужение, но по любому полю.
+    const filtered = await reg.getRecords(r.id, {
+      filters: [{ field_id: Number(nameId), op: 'contains', values: ['Стан'] }],
+    })
+    expect(filtered.items.length).toBe(1)
+    expect(filtered.items[0].data[nameId]).toBe('Станок')
+
+    // Выгрузка идёт ТЕМ ЖЕ набором — файл не должен расходиться с экраном.
+    const res = await reg.exportRecords(r.id, {
+      fields: [Number(nameId)],
+      selection: { all: true },
+      filter: { section: 'бу' },
+    })
+    expect(res.ok).toBe(true)
   })
 
   it('числовое поле принимает только числа, а мусор в базе не роняет сортировку', async () => {

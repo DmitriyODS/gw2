@@ -16,6 +16,7 @@ import (
 	"github.com/DmitriyODS/gw2/back-go/notes/internal/domain"
 	"github.com/DmitriyODS/gw2/back-go/notes/internal/service"
 	"github.com/DmitriyODS/gw2/back-go/pkg/apierror"
+	"github.com/DmitriyODS/gw2/back-go/pkg/chunkupload"
 	"github.com/DmitriyODS/gw2/back-go/pkg/httpserver"
 	"github.com/DmitriyODS/gw2/back-go/pkg/pasetoauth"
 )
@@ -45,7 +46,7 @@ func authSource(users domain.UserReader) pasetoauth.AuthSource {
 	}
 }
 
-func NewServer(svc *service.Service, users domain.UserReader,
+func NewServer(svc *service.Service, users domain.UserReader, uploads *chunkupload.Manager,
 	verifier *pasetoauth.Verifier, log *slog.Logger) *Server {
 
 	app := httpserver.New(httpserver.Config{
@@ -102,6 +103,15 @@ func NewServer(svc *service.Service, users domain.UserReader,
 	api.Put("/:id<int>/tags", h.setTags)
 	api.Get("/:id<int>/export", h.exportNote)
 	api.Post("/:id<int>/uploads", h.upload)
+	/* Файл крупнее порога приезжает частями — общий движок платформы. Заметку
+	   берём из пути, как и у одиночной загрузки. */
+	chunkupload.Handlers{
+		Manager: uploads,
+		UserID:  currentUserID,
+		Begin:   h.beginUpload,
+		Finish:  h.finishUpload,
+		Respond: h.respondError,
+	}.Mount(api, "/:id<int>/uploads")
 
 	// Публичные ссылки (управление владельцем).
 	api.Get("/:id<int>/shares", h.listShares)

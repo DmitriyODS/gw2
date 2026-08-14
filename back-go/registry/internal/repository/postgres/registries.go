@@ -3,6 +3,7 @@ package postgres
 import (
 	"context"
 	"errors"
+	"strings"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -20,8 +21,8 @@ func NewRepo(pool *pgxpool.Pool) *Repo { return &Repo{pool: pool} }
 
 func scanRegistry(row pgx.Row) (*domain.Registry, error) {
 	var r domain.Registry
-	err := row.Scan(&r.ID, &r.CompanyID, &r.Name, &r.Position, &r.TagFieldID,
-		&r.CreatedBy, &r.CreatedAt, &r.UpdatedAt)
+	err := row.Scan(&r.ID, &r.OwnerID, &r.CompanyID, &r.Name, &r.Position,
+		&r.SectionFieldID, &r.Accounting, &r.CreatedBy, &r.CreatedAt, &r.UpdatedAt)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, nil
 	}
@@ -31,23 +32,73 @@ func scanRegistry(row pgx.Row) (*domain.Registry, error) {
 	return &r, nil
 }
 
-const registryCols = `id, company_id, name, position, tag_field_id, created_by, created_at, updated_at`
+const registryCols = `id, owner_id, company_id, name, position, section_field_id,
+	accounting, created_by, created_at, updated_at`
 
-func (r *Repo) ListRegistries(ctx context.Context, companyID int64) ([]*domain.Registry, error) {
-	rows, err := r.pool.Query(ctx,
-		`SELECT `+registryCols+` FROM registries WHERE company_id = $1 ORDER BY position, id`,
-		companyID)
+/*
+accessExpr — эффективный уровень доступа одним выражением.
+
+	Уровень приходит человеку тремя путями сразу (он владелец, ему выдали лично,
+	выдали его компании), и брать нужно СИЛЬНЕЙШИЙ. Порядок уровней задан здесь
+	числом, а не сравнением строк: 'view' > 'edit' лексикографически, и наивный
+	MAX(access) молча понижал бы права. Держать в паре с domain/access.go.
+*/
+const accessExpr = `
+	CASE WHEN reg.owner_id = $1 THEN 'owner' ELSE COALESCE((
+		SELECT CASE max(CASE sh.access
+		            WHEN 'admin' THEN 3 WHEN 'edit' THEN 2 ELSE 1 END)
+		         WHEN 3 THEN 'admin' WHEN 2 THEN 'edit' WHEN 1 THEN 'view' END
+		  FROM registry_user_shares sh
+		 WHERE sh.registry_id = reg.id
+		   AND (sh.user_id = $1 OR sh.company_id = ANY($2))
+	), '') END`
+
+// scopeCondition — условие вкладки раздела.
+func scopeCondition(scope string) string {
+	switch scope {
+	case domain.ScopeMine:
+		return `reg.owner_id = $1`
+	case domain.ScopeShared:
+		return `EXISTS (SELECT 1 FROM registry_user_shares sh
+		                 WHERE sh.registry_id = reg.id AND sh.user_id = $1)
+		        AND reg.owner_id <> $1`
+	case domain.ScopeCompany:
+		return `EXISTS (SELECT 1 FROM registry_user_shares sh
+		                 WHERE sh.registry_id = reg.id AND sh.company_id = ANY($2))
+		        AND reg.owner_id <> $1`
+	default:
+		return `(reg.owner_id = $1
+		         OR EXISTS (SELECT 1 FROM registry_user_shares sh
+		                     WHERE sh.registry_id = reg.id
+		                       AND (sh.user_id = $1 OR sh.company_id = ANY($2))))`
+	}
+}
+
+// ListRegistries — реестры выбранной области вместе с уровнем доступа и именем
+// владельца (вкладки «Поделились» и «Компания» обязаны называть хозяина).
+func (r *Repo) ListRegistries(ctx context.Context, userID int64, companyIDs []int64, scope string) ([]*domain.Registry, error) {
+	if companyIDs == nil {
+		companyIDs = []int64{}
+	}
+	rows, err := r.pool.Query(ctx, `
+		SELECT `+prefixed(registryCols, "reg")+`, `+accessExpr+`, COALESCE(u.fio, '')
+		  FROM registries reg
+		  LEFT JOIN users u ON u.id = reg.owner_id
+		 WHERE `+scopeCondition(scope)+`
+		 ORDER BY reg.position, reg.id`, userID, companyIDs)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
 	out := []*domain.Registry{}
 	for rows.Next() {
-		reg, err := scanRegistry(rows)
-		if err != nil {
+		var reg domain.Registry
+		if err := rows.Scan(&reg.ID, &reg.OwnerID, &reg.CompanyID, &reg.Name, &reg.Position,
+			&reg.SectionFieldID, &reg.Accounting, &reg.CreatedBy, &reg.CreatedAt, &reg.UpdatedAt,
+			&reg.MyAccess, &reg.OwnerName); err != nil {
 			return nil, err
 		}
-		out = append(out, reg)
+		out = append(out, &reg)
 	}
 	return out, rows.Err()
 }
@@ -57,26 +108,27 @@ func (r *Repo) GetRegistry(ctx context.Context, id int64) (*domain.Registry, err
 		`SELECT `+registryCols+` FROM registries WHERE id = $1`, id))
 }
 
-// CountRegistries — сколько реестров уже есть (лимит тарифа).
-func (r *Repo) CountRegistries(ctx context.Context, company_id int64) (int, error) {
+// CountOwned — сколько реестров завёл человек (лимит тарифа).
+func (r *Repo) CountOwned(ctx context.Context, ownerID int64) (int, error) {
 	var n int
-	err := r.pool.QueryRow(ctx, `SELECT count(*) FROM registries WHERE company_id = $1`, company_id).Scan(&n)
+	err := r.pool.QueryRow(ctx, `SELECT count(*) FROM registries WHERE owner_id = $1`, ownerID).Scan(&n)
 	return n, err
 }
 
 func (r *Repo) CreateRegistry(ctx context.Context, reg *domain.Registry) error {
 	return r.pool.QueryRow(ctx,
-		`INSERT INTO registries (company_id, name, position, created_by)
-		 VALUES ($1, $2, $3, $4) RETURNING id, created_at, updated_at`,
-		reg.CompanyID, reg.Name, reg.Position, reg.CreatedBy).
+		`INSERT INTO registries (owner_id, company_id, name, position, accounting, created_by)
+		 VALUES ($1, $2, $3, $4, $5, $6) RETURNING id, created_at, updated_at`,
+		reg.OwnerID, reg.CompanyID, reg.Name, reg.Position, reg.Accounting, reg.CreatedBy).
 		Scan(&reg.ID, &reg.CreatedAt, &reg.UpdatedAt)
 }
 
-func (r *Repo) UpdateRegistry(ctx context.Context, id int64, name string, position int, tagFieldID *int64) error {
+func (r *Repo) UpdateRegistry(ctx context.Context, id int64, name string, position int, sectionFieldID *int64, accounting bool) error {
 	_, err := r.pool.Exec(ctx,
-		`UPDATE registries SET name = $2, position = $3, tag_field_id = $4, updated_at = now()
+		`UPDATE registries
+		    SET name = $2, position = $3, section_field_id = $4, accounting = $5, updated_at = now()
 		  WHERE id = $1`,
-		id, name, position, tagFieldID)
+		id, name, position, sectionFieldID, accounting)
 	return err
 }
 
@@ -85,12 +137,22 @@ func (r *Repo) DeleteRegistry(ctx context.Context, id int64) error {
 	return err
 }
 
-func (r *Repo) NextRegistryPosition(ctx context.Context, companyID int64) (int, error) {
+func (r *Repo) NextRegistryPosition(ctx context.Context, ownerID int64) (int, error) {
 	var pos int
 	err := r.pool.QueryRow(ctx,
-		`SELECT COALESCE(MAX(position), 0) + 1 FROM registries WHERE company_id = $1`,
-		companyID).Scan(&pos)
+		`SELECT COALESCE(MAX(position), 0) + 1 FROM registries WHERE owner_id = $1`,
+		ownerID).Scan(&pos)
 	return pos, err
+}
+
+// prefixed — перечень колонок с алиасом таблицы: список полей один, а запросы
+// с JOIN требуют квалификации.
+func prefixed(cols, alias string) string {
+	parts := strings.Split(cols, ",")
+	for i, p := range parts {
+		parts[i] = alias + "." + strings.TrimSpace(p)
+	}
+	return strings.Join(parts, ", ")
 }
 
 // ── Поля ─────────────────────────────────────────────────────────

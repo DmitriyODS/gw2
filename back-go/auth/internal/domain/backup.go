@@ -41,7 +41,9 @@ var BackupSections = []BackupSection{
 	{Key: "tasks", Tables: []string{"departments", "stages", "unit_types", "tasks", "favorites",
 		"units", "comments", "user_task_colors", "tags", "task_tags", "task_comment_seen",
 		"task_mentions"}},
-	{Key: "registry", Tables: []string{"registries", "registry_fields", "registry_records", "registry_shares"}},
+	{Key: "registry", Tables: []string{"registries", "registry_fields", "registry_records",
+		"registry_shares", "registry_share_visits", "registry_user_shares",
+		"registry_issues", "registry_issue_events"}},
 	{Key: "calendar", Tables: []string{"calendars", "calendar_fields", "calendar_records", "calendar_shares"}},
 	{Key: "diary", Tables: []string{"diaries", "diary_records", "diary_shares", "diary_user_shares"}},
 	{Key: "notes", Tables: []string{"notes", "note_folders", "note_tags", "note_tag_items",
@@ -93,6 +95,9 @@ var BackupExcluded = map[string]bool{
 	"task_embeddings":     true,
 	"note_embeddings":     true,
 	"goose_db_version":    true,
+	// Незавершённые чанковые загрузки: их части живут во временном префиксе
+	// хранилища и переживают восстановление не дольше получаса.
+	"upload_sessions": true,
 }
 
 // AvatarFile — файл аватарки в архиве (avatars/<name>). Аватарки входят в раздел

@@ -16,6 +16,7 @@ import (
 	"github.com/DmitriyODS/gw2/back-go/drive/internal/domain"
 	"github.com/DmitriyODS/gw2/back-go/drive/internal/service"
 	"github.com/DmitriyODS/gw2/back-go/pkg/apierror"
+	"github.com/DmitriyODS/gw2/back-go/pkg/chunkupload"
 	"github.com/DmitriyODS/gw2/back-go/pkg/httpserver"
 	"github.com/DmitriyODS/gw2/back-go/pkg/pasetoauth"
 )
@@ -36,13 +37,15 @@ func authSource(users domain.UserReader) pasetoauth.AuthSource {
 	}
 }
 
-func NewServer(svc *service.Service, users domain.UserReader,
+func NewServer(svc *service.Service, users domain.UserReader, uploads *chunkupload.Manager,
 	verifier *pasetoauth.Verifier, log *slog.Logger) *Server {
 
 	app := httpserver.New(httpserver.Config{
 		AppName: "gw2-drivesvc", Log: log,
-		// Запас над лимитом файла: тело идёт multipart и несёт ещё поля формы.
-		BodyLimit: domain.MaxFileSize + 8<<20,
+		/* Потолок ОДНОГО запроса: сюда влезает мелкий файл целиком и любая
+		   часть крупного. Сам файл может быть куда больше — он приезжает
+		   частями (chunkupload), а не одним телом. */
+		BodyLimit: chunkupload.ChunkSize + 8<<20,
 	})
 	auth := pasetoauth.NewMiddleware(verifier, authSource(users))
 	h := &handlers{svc: svc, log: log}
@@ -81,11 +84,17 @@ func NewServer(svc *service.Service, users domain.UserReader,
 	// Корзина.
 	api.Delete("/trash", h.emptyTrash)
 
-	// Загрузка по частям (большие файлы) — литеральный префикс до "/files".
-	api.Post("/uploads", h.beginUpload)
-	api.Put("/uploads/:id", h.uploadChunk)
-	api.Post("/uploads/:id/complete", h.finishUpload)
-	api.Delete("/uploads/:id", h.cancelUpload)
+	/* Загрузка по частям (большие файлы) — литеральный префикс до "/files".
+	   Механика общая для всей платформы (pkg/chunkupload): сессия живёт в БД,
+	   части — объектами в хранилище, поэтому соседние куски могут попасть на
+	   разные инстансы, а сборка идёт потоком. */
+	chunkupload.Handlers{
+		Manager: uploads,
+		UserID:  currentUserID,
+		Begin:   h.beginUpload,
+		Finish:  h.finishUpload,
+		Respond: h.respondError,
+	}.Mount(api, "/uploads")
 
 	// Файлы.
 	api.Post("/files", h.upload)

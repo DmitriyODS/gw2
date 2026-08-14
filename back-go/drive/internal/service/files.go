@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"io"
 	"path/filepath"
 	"strings"
 
@@ -21,38 +22,74 @@ func (s *Service) Upload(ctx context.Context, userID int64, name string, data []
 	if len(data) > domain.MaxFileSize {
 		return nil, domain.ErrFileTooBig
 	}
-	name = strings.TrimSpace(filepath.Base(name))
-	if name == "" {
-		name = "файл"
+	ownerID, name, err := s.UploadTarget(ctx, userID, name, folderID)
+	if err != nil {
+		return nil, err
 	}
-
-	// Владелец файла — владелец папки: место тратит тот, у кого он лежит.
-	ownerID := userID
-	if folderID != nil {
-		folder, err := s.repo.GetFolder(ctx, *folderID)
-		if err != nil {
-			return nil, err
-		}
-		if folder == nil || folder.DeletedAt != nil {
-			return nil, domain.ErrNotFound
-		}
-		access, err := s.folderAccess(ctx, folder, userID)
-		if err != nil {
-			return nil, err
-		}
-		if !domain.AccessAtLeast(access, domain.AccessEdit) {
-			return nil, domain.ErrForbidden
-		}
-		ownerID = folder.OwnerID
-	}
-
 	key, err := s.files.SaveFor(ctx, ownerID, 0, name, data)
 	if err != nil {
 		return nil, err // сверх квоты биллинг вернёт понятную ошибку
 	}
+	return s.registerFile(ctx, userID, ownerID, folderID, name, mime, key, int64(len(data)))
+}
+
+// UploadStream — то же, но содержимое приезжает потоком: так собирается файл,
+// пришедший ЧАСТЯМИ (pkg/chunkupload). Размер известен заранее — его назвал
+// клиент при заведении загрузки и подтвердили принятые части.
+func (s *Service) UploadStream(ctx context.Context, userID int64, name string, r io.Reader,
+	mime string, size int64, folderID *int64) (*domain.File, error) {
+
+	if size <= 0 {
+		return nil, domain.ErrEmptyFile
+	}
+	if size > domain.MaxFileSize {
+		return nil, domain.ErrFileTooBig
+	}
+	ownerID, name, err := s.UploadTarget(ctx, userID, name, folderID)
+	if err != nil {
+		return nil, err
+	}
+	key, err := s.files.SaveStreamFor(ctx, ownerID, 0, name, r, size)
+	if err != nil {
+		return nil, err
+	}
+	return s.registerFile(ctx, userID, ownerID, folderID, name, mime, key, size)
+}
+
+/* UploadTarget — куда кладём файл и как он будет называться. Владелец файла —
+   владелец ПАПКИ: место тратит тот, у кого файл лежит, а не тот, кто принёс. */
+func (s *Service) UploadTarget(ctx context.Context, userID int64, name string, folderID *int64) (int64, string, error) {
+	name = strings.TrimSpace(filepath.Base(name))
+	if name == "" {
+		name = "файл"
+	}
+	if folderID == nil {
+		return userID, name, nil
+	}
+	folder, err := s.repo.GetFolder(ctx, *folderID)
+	if err != nil {
+		return 0, "", err
+	}
+	if folder == nil || folder.DeletedAt != nil {
+		return 0, "", domain.ErrNotFound
+	}
+	access, err := s.folderAccess(ctx, folder, userID)
+	if err != nil {
+		return 0, "", err
+	}
+	if !domain.AccessAtLeast(access, domain.AccessEdit) {
+		return 0, "", domain.ErrForbidden
+	}
+	return folder.OwnerID, name, nil
+}
+
+// registerFile — завести запись о уже сохранённом объекте.
+func (s *Service) registerFile(ctx context.Context, userID, ownerID int64, folderID *int64,
+	name, mime, key string, size int64) (*domain.File, error) {
+
 	file := &domain.File{
 		OwnerID: ownerID, FolderID: folderID, Name: name,
-		Key: key, Mime: mime, Size: int64(len(data)),
+		Key: key, Mime: mime, Size: size,
 	}
 	if err := s.repo.CreateFile(ctx, file); err != nil {
 		s.files.RemoveFor(ctx, ownerID, 0, []string{key}) // объект без записи — мусор

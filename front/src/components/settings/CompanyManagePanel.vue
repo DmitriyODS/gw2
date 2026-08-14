@@ -201,15 +201,6 @@
               />
             </div>
 
-            <div v-show="settingsTab === 'registries'" class="settings-fill">
-              <RegistriesManager v-if="company.id === auth.companyId" />
-              <AppInfoBar
-                v-else
-                tone="info"
-                message="Чтобы настроить реестры, переключитесь на эту компанию — настройки привязаны к активной сессии."
-              />
-            </div>
-
             <div v-show="settingsTab === 'calendars'" class="settings-fill">
               <CalendarsManager v-if="company.id === auth.companyId" />
               <AppInfoBar
@@ -539,7 +530,6 @@ import WeekendSettings from '@/components/settings/WeekendSettings.vue'
 import AiSettings from '@/components/settings/AiSettings.vue'
 import CompanyListsSettings from '@/components/settings/CompanyListsSettings.vue'
 import YougileCompanySettings from '@/components/settings/YougileCompanySettings.vue'
-import RegistriesManager from '@/components/registry/RegistriesManager.vue'
 import CalendarsManager from '@/components/calendar/CalendarsManager.vue'
 import { useAuthStore } from '@/stores/auth.js'
 import { useNotificationsStore } from '@/stores/notifications.js'
@@ -588,7 +578,10 @@ const mainTabs = computed(() => {
   return list
 })
 
-const SETTINGS_TAB_KEYS = ['features', 'lists', 'ai', 'schedule', 'groove', 'registries', 'calendars', 'yougile']
+/* Реестров здесь НЕТ намеренно: они принадлежат человеку, а не компании, и
+   настраиваются в самом разделе (структуру правит владелец или тот, кому выдан
+   уровень «администрирование»). */
+const SETTINGS_TAB_KEYS = ['features', 'lists', 'ai', 'schedule', 'groove', 'calendars', 'yougile']
 const settingsTab = ref(SETTINGS_TAB_KEYS.includes(route.query.settingsTab) ? route.query.settingsTab : 'features')
 const settingsTabs = [
   { value: 'features', label: 'Возможности', icon: 'tune' },
@@ -596,7 +589,6 @@ const settingsTabs = [
   { value: 'ai', label: 'ИИ', icon: 'smart_toy' },
   { value: 'schedule', label: 'Расписание', icon: 'weekend' },
   { value: 'groove', label: 'Мой Groove', icon: 'celebration' },
-  { value: 'registries', label: 'Реестры', icon: 'table' },
   { value: 'calendars', label: 'Календари', icon: 'calendar_month' },
   { value: 'yougile', label: 'YouGile', icon: 'link' },
 ]

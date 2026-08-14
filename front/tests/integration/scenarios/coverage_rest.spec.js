@@ -486,7 +486,9 @@ describeIntegration('прочие ручки', () => {
   it('файл реестра и календаря загружается в хранилище', async () => {
     const admin = await newCompanyAdmin()
     admin.session.use()
-    const regFile = await registries.uploadFile(new File([PNG()], 'doc.png', { type: 'image/png' }))
+    // Файл кладут В РЕЕСТР: от него зависят и право на загрузку, и чья квота.
+    const target = await registries.createRegistry(uniq('Для файлов '))
+    const regFile = await registries.uploadFile(target.id, new File([PNG()], 'doc.png', { type: 'image/png' }))
     expect(regFile.path).toContain('registry/')
     expect(regFile.name).toBe('doc.png')
     const calFile = await calendars.uploadFile(new File([PNG()], 'doc.png', { type: 'image/png' }))

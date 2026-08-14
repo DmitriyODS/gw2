@@ -26,16 +26,22 @@ type RecordListParams struct {
 	Search string
 	Sort   string // "" | "created_at" | "<field_id>"
 	Order  string // "asc" | "desc"
-	// Tag — значение поля-тега реестра (чип над таблицей); пусто — «все».
-	Tag     string
+	// Section — значение поля-источника подразделов (вкладка над таблицей);
+	// пусто — «Все».
+	Section string
+	// Columns — фильтры по колонкам таблицы.
+	Columns []domain.ColumnFilter
 	Page    int
 	PerPage int
 }
 
-// ListRecords — поиск/сортировка/пагинация записей. Сортировка по полю требует
-// его типа (для приведения в SQL) — берём из определения реестра.
-func (s *Service) ListRecords(ctx context.Context, companyID, registryID int64, p RecordListParams) (*RecordList, error) {
-	reg, err := s.requireRegistry(ctx, companyID, registryID)
+// ListRecords — поиск/фильтры/сортировка/пагинация записей.
+func (s *Service) ListRecords(ctx context.Context, userID, registryID int64, p RecordListParams) (*RecordList, error) {
+	a, err := s.actor(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	reg, err := s.require(ctx, a, registryID, domain.AccessView)
 	if err != nil {
 		return nil, err
 	}
@@ -43,8 +49,8 @@ func (s *Service) ListRecords(ctx context.Context, companyID, registryID int64, 
 }
 
 // listRecordsByRegistry — ядро выборки страницы записей (без проверки доступа;
-// вызывающий уже проверил права или resolveShare). Используется и authed, и
-// публичным доступом по ссылке.
+// вызывающий уже проверил права или resolveShare). Используется и авторизован-
+// ным доступом, и публичным по ссылке.
 func (s *Service) listRecordsByRegistry(ctx context.Context, reg *domain.Registry, p RecordListParams) (*RecordList, error) {
 	fields, err := s.repo.ListFields(ctx, reg.ID)
 	if err != nil {
@@ -55,6 +61,7 @@ func (s *Service) listRecordsByRegistry(ctx context.Context, reg *domain.Registr
 		RegistryID: reg.ID,
 		Search:     strings.TrimSpace(p.Search),
 		Desc:       strings.EqualFold(p.Order, "desc"),
+		Columns:    validColumns(fields, p.Columns),
 		Page:       p.Page,
 		PerPage:    p.PerPage,
 	}
@@ -66,13 +73,8 @@ func (s *Service) listRecordsByRegistry(ctx context.Context, reg *domain.Registr
 			}
 		}
 	}
-	// Тег фильтрует только по полю, назначенному тегами администратором: чужой
-	// или отключённый источник фильтром не становится.
-	if tag := strings.TrimSpace(p.Tag); tag != "" && reg.TagFieldID != nil {
-		if field := findField(fields, *reg.TagFieldID); field != nil && field.Type == domain.FieldSelect {
-			f.TagFieldID = field.ID
-			f.TagValue = tag
-		}
+	if fid, value := sectionFilter(reg, fields, p.Section); fid > 0 {
+		f.SectionFieldID, f.SectionValue = fid, value
 	}
 	if f.Page < 1 {
 		f.Page = 1
@@ -91,33 +93,103 @@ func (s *Service) listRecordsByRegistry(ctx context.Context, reg *domain.Registr
 	if err != nil {
 		return nil, err
 	}
+	if err := s.attachIssues(ctx, reg, items); err != nil {
+		return nil, err
+	}
 	return &RecordList{Items: items, Total: total, Page: f.Page, PerPage: f.PerPage}, nil
 }
 
-func (s *Service) GetRecord(ctx context.Context, companyID, registryID, recordID int64) (*domain.Record, error) {
-	if _, err := s.requireRegistry(ctx, companyID, registryID); err != nil {
+// validColumns — отсеять фильтры по чужим и несуществующим полям: id колонки
+// приходит от клиента, а фильтровать он вправе только по полям ЭТОГО реестра.
+func validColumns(fields []domain.Field, in []domain.ColumnFilter) []domain.ColumnFilter {
+	out := make([]domain.ColumnFilter, 0, len(in))
+	for _, c := range in {
+		if findField(fields, c.FieldID) != nil {
+			out = append(out, c)
+		}
+	}
+	return out
+}
+
+// sectionFilter — перевести вкладку-подраздел в условие по полю-источнику
+// (чужое или отключённое поле фильтром не становится). Общий для списка,
+// выгрузки и массовых операций — правило одно на всех.
+func sectionFilter(reg *domain.Registry, fields []domain.Field, value string) (int64, string) {
+	value = strings.TrimSpace(value)
+	if value == "" || reg.SectionFieldID == nil {
+		return 0, ""
+	}
+	if f := findField(fields, *reg.SectionFieldID); f != nil && f.Type == domain.FieldSelect {
+		return f.ID, value
+	}
+	return 0, ""
+}
+
+// attachIssues — подмешать открытые выдачи учётного реестра: плашка состояния
+// нужна всей странице сразу, поэтому один запрос на страницу, а не на запись.
+func (s *Service) attachIssues(ctx context.Context, reg *domain.Registry, items []*domain.Record) error {
+	if !reg.Accounting || len(items) == 0 {
+		return nil
+	}
+	ids := make([]int64, len(items))
+	for i, rec := range items {
+		ids[i] = rec.ID
+	}
+	issues, err := s.repo.OpenIssues(ctx, ids)
+	if err != nil {
+		return err
+	}
+	for _, rec := range items {
+		rec.Issue = issues[rec.ID]
+	}
+	return nil
+}
+
+func (s *Service) GetRecord(ctx context.Context, userID, registryID, recordID int64) (*domain.Record, error) {
+	a, err := s.actor(ctx, userID)
+	if err != nil {
 		return nil, err
 	}
+	reg, err := s.require(ctx, a, registryID, domain.AccessView)
+	if err != nil {
+		return nil, err
+	}
+	return s.recordIn(ctx, reg, recordID)
+}
+
+// recordIn — запись реестра с её открытой выдачей (доступ уже проверен).
+func (s *Service) recordIn(ctx context.Context, reg *domain.Registry, recordID int64) (*domain.Record, error) {
 	rec, err := s.repo.GetRecord(ctx, recordID)
 	if err != nil {
 		return nil, err
 	}
-	if rec == nil || rec.RegistryID != registryID {
+	if rec == nil || rec.RegistryID != reg.ID {
 		return nil, domain.ErrRecordNotFound
+	}
+	if err := s.attachIssues(ctx, reg, []*domain.Record{rec}); err != nil {
+		return nil, err
 	}
 	return rec, nil
 }
 
-func (s *Service) CreateRecord(ctx context.Context, companyID, registryID, userID int64, data map[string]any) (*domain.Record, error) {
-	reg, err := s.requireRegistry(ctx, companyID, registryID)
+func (s *Service) CreateRecord(ctx context.Context, userID, registryID int64, data map[string]any) (*domain.Record, error) {
+	a, err := s.actor(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	reg, err := s.require(ctx, a, registryID, domain.AccessEdit)
 	if err != nil {
 		return nil, err
 	}
 	return s.createRecordIn(ctx, reg, &userID, data)
 }
 
-func (s *Service) UpdateRecord(ctx context.Context, companyID, registryID, recordID int64, data map[string]any) (*domain.Record, error) {
-	reg, err := s.requireRegistry(ctx, companyID, registryID)
+func (s *Service) UpdateRecord(ctx context.Context, userID, registryID, recordID int64, data map[string]any) (*domain.Record, error) {
+	a, err := s.actor(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	reg, err := s.require(ctx, a, registryID, domain.AccessEdit)
 	if err != nil {
 		return nil, err
 	}
@@ -125,8 +197,7 @@ func (s *Service) UpdateRecord(ctx context.Context, companyID, registryID, recor
 }
 
 // createRecordIn / updateRecordIn — ядро записи БЕЗ проверки доступа: его уже
-// сделал вызывающий (участник компании либо ссылка уровня edit). Компания для
-// событий берётся у самого реестра — по коду ссылки её взять больше неоткуда.
+// сделал вызывающий (участник с уровнем edit либо ссылка того же уровня).
 func (s *Service) createRecordIn(ctx context.Context, reg *domain.Registry, createdBy *int64, data map[string]any) (*domain.Record, error) {
 	fields, err := s.repo.ListFields(ctx, reg.ID)
 	if err != nil {
@@ -140,7 +211,7 @@ func (s *Service) createRecordIn(ctx context.Context, reg *domain.Registry, crea
 	if err := s.repo.CreateRecord(ctx, rec, buildSearchText(fields, clean)); err != nil {
 		return nil, err
 	}
-	s.bus.Publish(ctx, "record:created", []string{roomAll}, recordPayload(reg.CompanyID, rec))
+	s.publish(ctx, reg.ID, "record:created", recordPayload(rec))
 	return rec, nil
 }
 
@@ -166,24 +237,32 @@ func (s *Service) updateRecordIn(ctx context.Context, reg *domain.Registry, reco
 		return nil, err
 	}
 	// Файлы и картинки, оставшиеся не у дел после правки, из хранилища убираем:
-	// иначе замена фотографии тихо копила бы мусор в квоте компании.
-	s.removeOrphanFiles(ctx, reg.CompanyID, old, clean)
+	// иначе замена фотографии тихо копила бы мусор в квоте.
+	s.removeOrphanFiles(ctx, reg, old, clean)
 	rec.Data = clean
-	s.bus.Publish(ctx, "record:updated", []string{roomAll}, recordPayload(reg.CompanyID, rec))
+	s.publish(ctx, reg.ID, "record:updated", recordPayload(rec))
 	return rec, nil
 }
 
-func (s *Service) DeleteRecord(ctx context.Context, companyID, registryID, recordID int64) error {
-	rec, err := s.GetRecord(ctx, companyID, registryID, recordID)
+func (s *Service) DeleteRecord(ctx context.Context, userID, registryID, recordID int64) error {
+	a, err := s.actor(ctx, userID)
+	if err != nil {
+		return err
+	}
+	reg, err := s.require(ctx, a, registryID, domain.AccessEdit)
+	if err != nil {
+		return err
+	}
+	rec, err := s.recordIn(ctx, reg, recordID)
 	if err != nil {
 		return err
 	}
 	if err := s.repo.DeleteRecord(ctx, recordID); err != nil {
 		return err
 	}
-	s.removeRecordFiles(ctx, companyID, rec)
-	s.bus.Publish(ctx, "record:deleted", []string{roomAll}, map[string]any{
-		"id": recordID, "registry_id": registryID, "company_id": companyID,
+	s.removeRecordFiles(ctx, reg, rec)
+	s.publish(ctx, registryID, "record:deleted", map[string]any{
+		"id": recordID, "registry_id": registryID,
 	})
 	return nil
 }
@@ -195,25 +274,27 @@ type BulkParams struct {
 	IDs     []int64
 	All     bool
 	Search  string
-	Tag     string
+	Section string
+	Columns []domain.ColumnFilter
 	Exclude []int64
 }
 
 // DeleteRecords — массовое удаление выбранных записей.
-func (s *Service) DeleteRecords(ctx context.Context, companyID, registryID int64, p BulkParams) (int64, error) {
-	reg, err := s.requireRegistry(ctx, companyID, registryID)
+func (s *Service) DeleteRecords(ctx context.Context, userID, registryID int64, p BulkParams) (int64, error) {
+	a, err := s.actor(ctx, userID)
+	if err != nil {
+		return 0, err
+	}
+	reg, err := s.require(ctx, a, registryID, domain.AccessEdit)
 	if err != nil {
 		return 0, err
 	}
 	if !p.All && len(p.IDs) == 0 {
 		return 0, nil
 	}
-	filter := domain.ExportFilter{RegistryID: registryID}
-	if p.All {
-		filter.Search, filter.Exclude = strings.TrimSpace(p.Search), p.Exclude
-		s.applyTagFilter(ctx, reg, p.Tag, &filter)
-	} else {
-		filter.IDs = p.IDs
+	filter, err := s.selectionFilter(ctx, reg, p)
+	if err != nil {
+		return 0, err
 	}
 	// Удаление возвращает сами записи: id — событию, data — чистке файлов.
 	recs, err := s.repo.DeleteRecords(ctx, filter)
@@ -227,34 +308,36 @@ func (s *Service) DeleteRecords(ctx context.Context, companyID, registryID int64
 	for _, rec := range recs {
 		ids = append(ids, rec.ID)
 	}
-	s.removeRecordFiles(ctx, companyID, recs...)
-	s.bus.Publish(ctx, "record:bulk-deleted", []string{roomAll}, map[string]any{
-		"ids": ids, "registry_id": registryID, "company_id": companyID,
+	s.removeRecordFiles(ctx, reg, recs...)
+	s.publish(ctx, registryID, "record:bulk-deleted", map[string]any{
+		"ids": ids, "registry_id": registryID,
 	})
 	return int64(len(recs)), nil
 }
 
-// applyTagFilter — перевести чип-тег в условие по полю-источнику тегов реестра
-// (чужое или отключённое поле фильтром не становится). Общий для списка,
-// выгрузки и массового удаления — правило одно на всех.
-func (s *Service) applyTagFilter(ctx context.Context, reg *domain.Registry, tag string, out *domain.ExportFilter) {
-	tag = strings.TrimSpace(tag)
-	if tag == "" || reg.TagFieldID == nil {
-		return
+// selectionFilter — набор записей под массовую операцию: явный список id либо
+// весь фильтр экрана за вычетом снятых. Общий для удаления, выгрузки и печати
+// QR — «выбрано» на всех экранах означает одно и то же.
+func (s *Service) selectionFilter(ctx context.Context, reg *domain.Registry, p BulkParams) (domain.ExportFilter, error) {
+	filter := domain.ExportFilter{RegistryID: reg.ID}
+	if !p.All {
+		filter.IDs = p.IDs
+		return filter, nil
 	}
 	fields, err := s.repo.ListFields(ctx, reg.ID)
 	if err != nil {
-		return
+		return filter, err
 	}
-	if f := findField(fields, *reg.TagFieldID); f != nil && f.Type == domain.FieldSelect {
-		out.TagFieldID, out.TagValue = f.ID, tag
-	}
+	filter.Search, filter.Exclude = strings.TrimSpace(p.Search), p.Exclude
+	filter.Columns = validColumns(fields, p.Columns)
+	filter.SectionFieldID, filter.SectionValue = sectionFilter(reg, fields, p.Section)
+	return filter, nil
 }
 
 // ── Хелперы ──────────────────────────────────────────────────────
 
 // removeRecordFiles — удалить из хранилища файлы/картинки удаляемых записей.
-func (s *Service) removeRecordFiles(ctx context.Context, companyID int64, recs ...*domain.Record) {
+func (s *Service) removeRecordFiles(ctx context.Context, reg *domain.Registry, recs ...*domain.Record) {
 	var paths []string
 	for _, rec := range recs {
 		if rec == nil {
@@ -265,13 +348,14 @@ func (s *Service) removeRecordFiles(ctx context.Context, companyID int64, recs .
 		}
 	}
 	if len(paths) > 0 {
-		s.files.RemoveFor(ctx, 0, companyID, paths)
+		userID, companyID := quotaScope(reg)
+		s.files.RemoveFor(ctx, userID, companyID, paths)
 	}
 }
 
 // removeOrphanFiles — файлы прежних значений, которых нет в новых: замена
-// картинки в записи иначе оставляла бы оригинал висеть в квоте компании.
-func (s *Service) removeOrphanFiles(ctx context.Context, companyID int64, old, next map[string]any) {
+// картинки в записи иначе оставляла бы оригинал висеть в квоте.
+func (s *Service) removeOrphanFiles(ctx context.Context, reg *domain.Registry, old, next map[string]any) {
 	kept := map[string]bool{}
 	for _, v := range next {
 		for _, p := range filePaths(v) {
@@ -287,7 +371,8 @@ func (s *Service) removeOrphanFiles(ctx context.Context, companyID int64, old, n
 		}
 	}
 	if len(gone) > 0 {
-		s.files.RemoveFor(ctx, 0, companyID, gone)
+		userID, companyID := quotaScope(reg)
+		s.files.RemoveFor(ctx, userID, companyID, gone)
 	}
 }
 
@@ -335,7 +420,7 @@ func buildSearchText(fields []domain.Field, data map[string]any) string {
 }
 
 // coerceData — оставить только значения определённых полей и проверить их по
-// типу (number-маска, варианты select). Неизвестные ключи отбрасываются.
+// типу. Неизвестные ключи отбрасываются.
 func coerceData(fields []domain.Field, data map[string]any) (map[string]any, error) {
 	return records.CoerceData(fieldInfos(fields), data)
 }
@@ -348,17 +433,18 @@ func fieldInfos(fields []domain.Field) []records.FieldInfo {
 	return out
 }
 
-func recordPayload(companyID int64, r *domain.Record) map[string]any {
+func recordPayload(r *domain.Record) map[string]any {
 	return map[string]any{
-		"id": r.ID, "registry_id": r.RegistryID, "company_id": companyID,
+		"id": r.ID, "registry_id": r.RegistryID,
 		"data": r.Data, "created_by": r.CreatedBy,
 		"created_at": r.CreatedAt, "updated_at": r.UpdatedAt,
 	}
 }
 
-// SearchRecords — глобальный поиск по записям всех реестров компании (строка
-// поиска рабочего стола). Пустой запрос ничего не ищет.
-func (s *Service) SearchRecords(ctx context.Context, companyID int64, query string, limit int) ([]*domain.SearchHit, error) {
+// SearchRecords — глобальный поиск по записям ВСЕХ доступных реестров (строка
+// поиска Hola): свои, расшаренные лично и расшаренные компаниям. Пустой запрос
+// ничего не ищет.
+func (s *Service) SearchRecords(ctx context.Context, userID int64, query string, limit int) ([]*domain.SearchHit, error) {
 	query = strings.TrimSpace(query)
 	if query == "" {
 		return []*domain.SearchHit{}, nil
@@ -366,5 +452,9 @@ func (s *Service) SearchRecords(ctx context.Context, companyID int64, query stri
 	if limit <= 0 || limit > 50 {
 		limit = 20
 	}
-	return s.repo.SearchRecords(ctx, companyID, query, limit)
+	a, err := s.actor(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	return s.repo.SearchRecords(ctx, a.UserID, a.Companies, query, limit)
 }

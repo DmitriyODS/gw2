@@ -37,6 +37,86 @@ func (r *UserReader) GetUser(ctx context.Context, id int64) (*domain.User, error
 	return &u, nil
 }
 
+// CompaniesOf — компании, где человек состоит: через них приходит доступ к
+// реестрам, раздаными компании целиком. Пустой срез, а не nil: он уезжает в SQL
+// как ANY($n), и nil там означал бы «сравнить не с чем».
+func (r *UserReader) CompaniesOf(ctx context.Context, userID int64) ([]int64, error) {
+	rows, err := r.pool.Query(ctx,
+		`SELECT company_id FROM user_companies WHERE user_id = $1`, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := []int64{}
+	for rows.Next() {
+		var id int64
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		out = append(out, id)
+	}
+	return out, rows.Err()
+}
+
+// CompanyMembers — участники компании: им адресуются события реестра, раздан-
+// ного компании целиком.
+func (r *UserReader) CompanyMembers(ctx context.Context, companyID int64) ([]int64, error) {
+	rows, err := r.pool.Query(ctx,
+		`SELECT user_id FROM user_companies WHERE company_id = $1`, companyID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := []int64{}
+	for rows.Next() {
+		var id int64
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		out = append(out, id)
+	}
+	return out, rows.Err()
+}
+
+// SearchDirectory — кандидаты в адресаты шаринга. Список ограничен компаниями
+// спрашивающего: делиться реестром можно с коллегами, а не с каталогом всей
+// платформы. Пустой запрос отдаёт начало списка — модалка показывает его сразу.
+func (r *UserReader) SearchDirectory(ctx context.Context, companyIDs []int64, query string, limit int) ([]*domain.User, error) {
+	if len(companyIDs) == 0 {
+		return []*domain.User{}, nil
+	}
+	rows, err := r.pool.Query(ctx, `
+		SELECT DISTINCT u.id, u.fio, u.avatar_path, u.is_active, u.is_super_admin
+		  FROM users u
+		  JOIN user_companies uc ON uc.user_id = u.id
+		 WHERE uc.company_id = ANY($1) AND u.is_active
+		   AND ($2 = '' OR u.fio ILIKE '%' || $2 || '%' OR u.login ILIKE '%' || $2 || '%')
+		 ORDER BY u.fio
+		 LIMIT $3`, companyIDs, query, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := []*domain.User{}
+	for rows.Next() {
+		var u domain.User
+		if err := rows.Scan(&u.ID, &u.FIO, &u.AvatarPath, &u.IsActive, &u.IsSuperAdmin); err != nil {
+			return nil, err
+		}
+		out = append(out, &u)
+	}
+	return out, rows.Err()
+}
+
+func (r *UserReader) CompanyName(ctx context.Context, companyID int64) (string, error) {
+	var name string
+	err := r.pool.QueryRow(ctx, `SELECT name FROM companies WHERE id = $1`, companyID).Scan(&name)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return "", nil
+	}
+	return name, err
+}
+
 // CompanyActive — активность ИМЕННО выбранной (активной) компании сессии.
 func (r *UserReader) CompanyActive(ctx context.Context, companyID *int64) (bool, error) {
 	if companyID == nil {

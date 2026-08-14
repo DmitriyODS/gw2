@@ -124,7 +124,7 @@
     <!-- Тесная панель: главное действие уходит из шапки на плавающую кнопку,
          остальные команды сворачиваются в меню «ещё». -->
     <AppFab
-      v-if="fabCommand && narrowPage"
+      v-if="fabCommand"
       :icon="fabCommand.icon || 'add'"
       :label="fabCommand.label"
       :aria-label="fabCommand.label"
@@ -248,12 +248,16 @@ const compactSearch = computed(() =>
    содержимого — а слот-проп доступен лишь внутри тела (см. AppListDetail). */
 watch(narrowPage, (v) => emit('narrow-change', v))
 
-const fabCommand = computed(() => props.commands.find((c) => c.fab && !c.hidden) || null)
+/* Плавающая кнопка — приём ТЕЛЕФОНА, как и свёрнутый поиск: на рабочем столе
+   окно бывает уже 640px сколько угодно, но там она просто накрывает содержимое
+   собой, а главное действие и так стоит в шапке. Поэтому решает устройство, а
+   не ширина панели. */
+const fabCommand = computed(() =>
+  (isMobile.value && props.commands.find((c) => c.fab && !c.hidden)) || null,
+)
 
 const barCommands = computed(() =>
-  narrowPage.value && fabCommand.value
-    ? props.commands.filter((c) => c !== fabCommand.value)
-    : props.commands,
+  fabCommand.value ? props.commands.filter((c) => c !== fabCommand.value) : props.commands,
 )
 
 /* Отдельная строка нужна только главной команде: одинокое меню «ещё» на всю

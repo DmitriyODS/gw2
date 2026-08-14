@@ -1,8 +1,9 @@
 <template>
   <div class="fi">
-    <!-- Текст -->
+    <!-- Текст. Длинный — самостоятельный тип; флаг config.multiline остаётся у
+         полей, заведённых до его появления. -->
     <textarea
-      v-if="field.type === 'text' && field.config?.multiline"
+      v-if="field.type === 'textarea' || (field.type === 'text' && field.config?.multiline)"
       class="ctl" rows="3" :value="modelValue || ''"
       @input="emit('update:modelValue', $event.target.value)"
     />
@@ -11,6 +12,35 @@
       class="ctl" type="text" :value="modelValue || ''"
       @input="emit('update:modelValue', $event.target.value)"
     />
+
+    <!-- Телефон: разделители человек ставит как привык, храним «+цифры». -->
+    <input
+      v-else-if="field.type === 'phone'"
+      class="ctl" type="tel" inputmode="tel" placeholder="+7 (900) 000-00-00"
+      :value="modelValue || ''"
+      @input="emit('update:modelValue', $event.target.value)"
+      @blur="emit('update:modelValue', normalizePhone($event.target.value))"
+    />
+
+    <!-- Почта -->
+    <template v-else-if="field.type === 'email'">
+      <input
+        class="ctl" type="email" inputmode="email" placeholder="name@example.com"
+        :value="modelValue || ''"
+        @input="emit('update:modelValue', $event.target.value)"
+      />
+      <span v-if="emailError" class="fi-error">{{ emailError }}</span>
+    </template>
+
+    <!-- Текст по шаблону: проверку задаёт составитель реестра регуляркой. -->
+    <template v-else-if="field.type === 'regex'">
+      <input
+        class="ctl" type="text" :placeholder="cfg.hint || ''"
+        :value="modelValue || ''"
+        @input="emit('update:modelValue', $event.target.value)"
+      />
+      <span v-if="regexError" class="fi-error">{{ regexError }}</span>
+    </template>
 
     <!-- Число: буквы не набираются вовсе (иначе они доезжали до базы и роняли
          сортировку по этому полю), границы и подсказка — из настроек поля. -->
@@ -44,10 +74,10 @@
       <span v-else class="fi-stock-hint">Позиция в наличии.</span>
     </div>
 
-    <!-- Галочка -->
+    <!-- Флажок: надписи для установленного и снятого задаёт составитель. -->
     <label v-else-if="field.type === 'checkbox'" class="fi-check">
       <Checkbox :model-value="!!modelValue" binary @update:model-value="emit('update:modelValue', $event)" />
-      <span>{{ field.label }}</span>
+      <span>{{ checkboxText(field, !!modelValue) }}</span>
     </label>
 
     <!-- Список -->
@@ -75,7 +105,8 @@
     <DatePicker
       v-else-if="field.type === 'datetime'"
       :model-value="dateValue"
-      :show-time="!!field.config?.time"
+      :show-time="showTime"
+      :show-seconds="parts.seconds"
       :time-only="isTimeOnly"
       :view="dateView"
       :date-format="dateFormat"
@@ -111,6 +142,7 @@ import FieldValue from './FieldValue.vue'
 import { useNotificationsStore } from '@/stores/notifications.js'
 import { compressImage } from '@/utils/imageCompress.js'
 import { dayString, parseDay } from '@/utils/dates.js'
+import { checkboxText, dateParts, normalizePhone } from '@/utils/registryFields.js'
 
 const props = defineProps({
   field: { type: Object, required: true },
@@ -154,6 +186,28 @@ function onNumberInput(e) {
   emit('update:modelValue', raw)
 }
 
+/* ── Почта и шаблон ──
+   Проверяем на лету, но НЕ мешаем набирать: недописанный адрес — это ещё не
+   ошибка человека, а половина ввода. Отказ, если что, придёт с сервера. */
+const emailError = computed(() => {
+  const s = String(props.modelValue ?? '').trim()
+  if (!s) return ''
+  return /^[^@\s]+@[^@\s.]+(\.[^@\s.]+)+$/.test(s) ? '' : 'Непохоже на адрес почты'
+})
+
+const regexError = computed(() => {
+  const s = String(props.modelValue ?? '').trim()
+  const pattern = cfg.value.pattern
+  if (!s || !pattern) return ''
+  try {
+    // Кривой шаблон — недосмотр составителя реестра, а не заполняющего: на нём
+    // поле ведёт себя как обычный текст.
+    return new RegExp(pattern).test(s) ? '' : (cfg.value.hint || 'Не соответствует шаблону')
+  } catch {
+    return ''
+  }
+})
+
 function onNumberBlur() {
   const s = String(props.modelValue ?? '').trim()
   if (s === '') { numberError.value = ''; return }
@@ -179,9 +233,22 @@ function setUntil(date) {
 }
 
 // ── Дата ──
-const isTimeOnly = computed(() => !!cfg.value.time && !cfg.value.month_day && !cfg.value.year)
-const dateView = computed(() => (cfg.value.year && !cfg.value.month_day ? 'year' : 'date'))
-const dateFormat = computed(() => (cfg.value.year && !cfg.value.month_day ? 'yy' : 'dd.mm.yy'))
+// Части включаются по одной; dateParts понимает и прежнюю тройку
+// year/month_day/time, поэтому поля календарей продолжают работать как были.
+const parts = computed(() => dateParts(cfg.value))
+const showTime = computed(() => parts.value.hours || parts.value.minutes || parts.value.seconds)
+const hasDate = computed(() => parts.value.day || parts.value.month || parts.value.year)
+const isTimeOnly = computed(() => showTime.value && !hasDate.value)
+const yearOnly = computed(() => parts.value.year && !parts.value.day && !parts.value.month)
+const dateView = computed(() => {
+  if (yearOnly.value) return 'year'
+  return parts.value.month && !parts.value.day ? 'month' : 'date'
+})
+const dateFormat = computed(() => {
+  if (yearOnly.value) return 'yy'
+  if (parts.value.month && !parts.value.day) return 'mm.yy'
+  return parts.value.year ? 'dd.mm.yy' : 'dd.mm'
+})
 const dateValue = computed(() => {
   if (!props.modelValue) return null
   const d = new Date(props.modelValue)

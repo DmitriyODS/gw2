@@ -21,9 +21,10 @@
       variant="icon"
       icon="more_horiz"
       :size="size"
+      ref="moreBtn"
       aria-label="Ещё действия"
       title="Ещё действия"
-      @click="openMenu"
+      @click="toggleMenu"
     />
 
     <ContextMenu
@@ -31,6 +32,7 @@
       :x="menuX"
       :y="menuY"
       :items="menuItems"
+      :anchor="moreEl"
       @select="onSelect"
       @close="menuOpen = false"
     />
@@ -77,7 +79,18 @@ const menuItems = computed(() =>
   })),
 )
 
-function openMenu(e) {
+/* Кнопка «ещё» — переключатель: повторное нажатие закрывает меню. Чтобы это
+   работало, ContextMenu знает про якорь и не принимает нажатие по нему за
+   «клик мимо» — иначе меню закрывалось бы на pointerdown и тут же открывалось
+   обратно на click. */
+const moreBtn = ref(null)
+const moreEl = computed(() => moreBtn.value?.$el || moreBtn.value || null)
+
+function toggleMenu(e) {
+  if (menuOpen.value) {
+    menuOpen.value = false
+    return
+  }
   const r = e.currentTarget.getBoundingClientRect()
   menuX.value = r.left
   menuY.value = r.bottom + 6

@@ -8,6 +8,8 @@ import (
 
 	"github.com/gofiber/fiber/v2"
 
+	"github.com/DmitriyODS/gw2/back-go/pkg/chunkupload"
+	"github.com/DmitriyODS/gw2/back-go/portal/internal/domain"
 	"github.com/DmitriyODS/gw2/back-go/portal/internal/endpoint"
 	"github.com/DmitriyODS/gw2/back-go/portal/internal/service"
 )
@@ -265,6 +267,34 @@ func (h *handlers) unpinPost(c *fiber.Ctx) error {
 }
 
 // ── Вложения ─────────────────────────────────────────────────────
+
+/* Приём вложения поста частями: право проверяем ДО первого байта, собираем
+   потоком. Место тратится из квоты компании — пост принадлежит ей. */
+
+func (h *handlers) beginUpload(c *fiber.Ctx, in chunkupload.InitRequest, s *chunkupload.Session) error {
+	companyID, ok := companyScope(c)
+	if !ok {
+		return domain.NewError("BAD_REQUEST", "Нет активной компании", 400)
+	}
+	u := currentUser(c)
+	if err := h.svc.CheckAttachment(c.Context(), companyID, pathID(c), u.ID, u.RoleLevel); err != nil {
+		return err
+	}
+	if in.Size > uploadMaxBytes {
+		return domain.NewError("FILE_TOO_BIG", "Файл слишком большой (макс. 25 МБ)", 413)
+	}
+	s.CompanyID = companyID
+	// Пост запоминаем: на сборке путь уже другой (там код загрузки).
+	s.Scope = strconv.FormatInt(pathID(c), 10)
+	return nil
+}
+
+func (h *handlers) finishUpload(c *fiber.Ctx, s chunkupload.Session, r io.Reader) (any, error) {
+	postID, _ := strconv.ParseInt(s.Scope, 10, 64)
+	u := currentUser(c)
+	return h.svc.AddAttachmentStream(c.Context(), s.CompanyID, postID, u.ID, u.RoleLevel,
+		s.FileName, s.Mime, s.TotalSize, r)
+}
 
 func (h *handlers) upload(c *fiber.Ctx) error {
 	companyID, ok := companyScope(c)

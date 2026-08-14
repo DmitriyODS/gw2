@@ -132,10 +132,13 @@ describeIntegration('devicelink API: ТВ-киоск', () => {
     const started = await devicelink.linkStart('tv')
     expect(started.kind).toBe('tv')
 
-    // Без активной компании подтверждать нечего: табло показывает данные
-    // конкретной компании.
-    const nobody = await registerVerified('nobody')
-    nobody.session.use()
+    /* Без активной компании подтверждать нечего: табло показывает данные
+       КОНКРЕТНОЙ компании. Берём супер-админа — сессия без компании бывает
+       только у него: остальным вход заводит личную компанию, если своих нет
+       (см. startSession), и «человек без компании» через регистрацию больше не
+       воспроизводится. */
+    const root = await superAdmin('tvroot')
+    root.session.use()
     await expect(devicelink.linkApprove(started.code)).rejects.toBeTruthy()
 
     const admin = await newCompanyAdmin('admin')

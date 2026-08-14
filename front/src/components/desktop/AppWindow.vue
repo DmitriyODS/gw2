@@ -30,7 +30,20 @@
       >
         <span class="material-symbols-outlined">arrow_back</span>
       </button>
-      <span class="win-icon material-symbols-outlined">{{ app?.icon || 'web_asset' }}</span>
+      <!-- Значок раздела — кнопка, если раздел объявил свою версию: «О разделе»
+           должно быть доступно всегда, а не только при выбранном содержимом. -->
+      <button
+        v-if="app?.about"
+        class="win-icon as-button"
+        type="button"
+        title="О разделе"
+        aria-label="О разделе"
+        @pointerdown.stop
+        @click="aboutOpen = true"
+      >
+        <span class="material-symbols-outlined">{{ app.icon || 'web_asset' }}</span>
+      </button>
+      <span v-else class="win-icon material-symbols-outlined">{{ app?.icon || 'web_asset' }}</span>
       <h2 class="win-title">{{ title }}</h2>
       <div class="win-btns">
         <button class="win-btn" type="button" title="Свернуть" @click="desktop.minimize(win.id)">
@@ -51,6 +64,14 @@
         </button>
       </div>
     </header>
+
+    <SectionAboutDialog
+      v-if="app?.about"
+      v-model="aboutOpen"
+      :name="app.title"
+      :version="app.about.version"
+      :date="app.about.date"
+    />
 
     <!-- Тело окна — оно же хост модалок раздела: диалоги телепортируются сюда,
          а не в body, поэтому накрывают своё окно, а не весь рабочий стол.
@@ -86,6 +107,7 @@ import { appById, windowTitle } from '@/desktop/apps.js'
 import { snapZoneAt } from '@/desktop/geometry.js'
 import { provideWindowHost } from '@/desktop/windowHost.js'
 import WindowContent from './WindowContent.vue'
+import SectionAboutDialog from '@/components/common/SectionAboutDialog.vue'
 
 const props = defineProps({
   win: { type: Object, required: true },
@@ -96,6 +118,7 @@ const RESIZE_DIRS = ['n', 's', 'e', 'w', 'ne', 'nw', 'se', 'sw']
 const TEAR_OFF = 8
 
 const desktop = useDesktopStore()
+const aboutOpen = ref(false)
 
 const app = computed(() => appById(props.win.appId))
 const title = computed(() => windowTitle(app.value, router.resolve(props.win.path)))
@@ -305,6 +328,30 @@ function onResizeDown(dir, e) {
   font-size: 20px;
   color: var(--color-primary);
   flex-shrink: 0;
+}
+
+/* Значок-кнопка ведёт себя как остальные кнопки заголовка (те же габариты и
+   подсветка), но остаётся ЗНАЧКОМ РАЗДЕЛА: цвет фирменный, а не приглушённый,
+   и подсветка появляется только под курсором — иначе в ряду с «свернуть» и
+   «закрыть» он читался бы как ещё одна системная кнопка. */
+.win-icon.as-button {
+  display: grid;
+  place-items: center;
+  width: 28px; min-width: 28px; max-width: 28px;
+  height: 28px; min-height: 28px; max-height: 28px;
+  margin-left: -4px;
+  padding: 0;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.win-icon.as-button .material-symbols-outlined { font-size: 20px; }
+
+.win-icon.as-button:hover {
+  background: color-mix(in oklch, var(--color-primary) 12%, transparent);
 }
 
 .win-title {

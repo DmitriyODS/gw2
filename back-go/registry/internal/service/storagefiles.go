@@ -65,7 +65,7 @@ func (s *Service) DeleteStorageFiles(ctx context.Context, _ int64, companyIDs []
 		}
 		deleted = append(deleted, removed...)
 		sc.Record.Data = data
-		s.bus.Publish(ctx, "record:updated", []string{roomAll}, recordPayload(sc.CompanyID, sc.Record))
+		s.publish(ctx, sc.RegistryID, "record:updated", recordPayload(sc.Record))
 	}
 	if len(deleted) > 0 {
 		s.files.Remove(deleted)

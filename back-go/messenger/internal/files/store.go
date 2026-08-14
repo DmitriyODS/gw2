@@ -5,6 +5,7 @@ package files
 import (
 	"context"
 	"fmt"
+	"io"
 	"mime"
 	"path/filepath"
 	"strings"
@@ -44,6 +45,31 @@ func (s *Store) Save(data []byte, ext string) (string, error) {
 }
 
 // Copy — серверная копия (пересылка): удаление одной копии не задевает другую.
+// SaveStream — запись потоком: вложение в сотни мегабайт нельзя подержать в
+// памяти целиком. Размер известен заранее (его подтвердили принятые части).
+func (s *Store) SaveStream(r io.Reader, ext string, size int64) (string, error) {
+	key := s.newKey(ext)
+	if err := s.st.PutStream(context.Background(), key, r, size, contentType(ext)); err != nil {
+		return "", err
+	}
+	return key, nil
+}
+
+/* Приём файла частями (pkg/chunkupload.Store): части лежат обычными объектами
+   во временном префиксе и собираются в поток на завершении. */
+
+func (s *Store) PutRaw(ctx context.Context, key string, data []byte) error {
+	return s.st.Put(ctx, key, data, "application/octet-stream")
+}
+
+func (s *Store) OpenStream(ctx context.Context, key string) (io.ReadCloser, error) {
+	return s.st.Open(ctx, key)
+}
+
+func (s *Store) RemoveKeys(ctx context.Context, keys ...string) {
+	s.st.Remove(ctx, keys...)
+}
+
 func (s *Store) Copy(srcRelPath string) (string, error) {
 	ext := strings.ToLower(filepath.Ext(srcRelPath))
 	if len(ext) > 16 {

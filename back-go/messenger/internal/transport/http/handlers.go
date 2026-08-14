@@ -15,6 +15,7 @@ import (
 	"github.com/DmitriyODS/gw2/back-go/messenger/internal/endpoint"
 	"github.com/DmitriyODS/gw2/back-go/messenger/internal/service"
 	"github.com/DmitriyODS/gw2/back-go/pkg/apierror"
+	"github.com/DmitriyODS/gw2/back-go/pkg/chunkupload"
 	"github.com/DmitriyODS/gw2/back-go/pkg/pasetoauth"
 )
 
@@ -257,6 +258,23 @@ func (h *handlers) upload(c *fiber.Ctx) error {
 		return h.respondError(c, err)
 	}
 	return c.Status(fiber.StatusCreated).JSON(resp)
+}
+
+/* Приём вложения частями: раздел проверяет тип и размер ДО первого байта и
+   собирает файл потоком. Место тратится из квоты загружающего. */
+
+func (h *handlers) beginUpload(c *fiber.Ctx, in chunkupload.InitRequest, s *chunkupload.Session) error {
+	userID := currentUserID(c)
+	if _, _, err := h.svc.CheckUpload(c.Context(), userID, in.FileName, in.Mime, in.Size); err != nil {
+		return err
+	}
+	s.QuotaUserID = userID
+	return nil
+}
+
+func (h *handlers) finishUpload(c *fiber.Ctx, s chunkupload.Session, r io.Reader) (any, error) {
+	return h.svc.UploadAttachmentStream(c.Context(), currentUserID(c),
+		s.FileName, s.Mime, s.TotalSize, r)
 }
 
 func (h *handlers) deleteMessage(c *fiber.Ctx) error {

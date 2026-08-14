@@ -2,6 +2,7 @@ package storage
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"io/fs"
 	"log/slog"
@@ -32,6 +33,42 @@ func (s *localStore) Put(_ context.Context, key string, data []byte, _ string) e
 		return err
 	}
 	return os.WriteFile(abs, data, 0o644)
+}
+
+// PutStream — запись потоком через временный файл рядом с целевым: битый
+// объект не должен оказаться под рабочим ключом, поэтому переименование
+// происходит только после успешного копирования.
+func (s *localStore) PutStream(_ context.Context, key string, r io.Reader, size int64, _ string) error {
+	abs := s.abs(key)
+	if err := os.MkdirAll(filepath.Dir(abs), 0o755); err != nil {
+		return err
+	}
+	tmp, err := os.CreateTemp(filepath.Dir(abs), ".upload-*")
+	if err != nil {
+		return err
+	}
+	written, err := io.Copy(tmp, r)
+	if err == nil && size > 0 && written != size {
+		err = fmt.Errorf("объект %s записан не полностью (%d из %d байт)", key, written, size)
+	}
+	if err == nil {
+		err = tmp.Close()
+	} else {
+		tmp.Close()
+	}
+	if err != nil {
+		os.Remove(tmp.Name())
+		return err
+	}
+	if err := os.Chmod(tmp.Name(), 0o644); err != nil {
+		os.Remove(tmp.Name())
+		return err
+	}
+	if err := os.Rename(tmp.Name(), abs); err != nil {
+		os.Remove(tmp.Name())
+		return err
+	}
+	return nil
 }
 
 func (s *localStore) Open(_ context.Context, key string) (io.ReadCloser, error) {

@@ -3,6 +3,7 @@ package domain
 import (
 	"context"
 	"encoding/json"
+	"io"
 )
 
 // Ctx — алиас, чтобы сигнатуры портов не разбухали.
@@ -144,6 +145,9 @@ type FileStore interface {
 	// SaveFor — записать файл в квоту ВЛАДЕЛЬЦА (личный раздел): сверх лимита
 	// тарифа файл не сохраняется.
 	SaveFor(ctx context.Context, userID, companyID int64, fileName string, data []byte) (string, error)
+	// SaveStreamFor — то же потоком: файл, пришедший частями, нельзя подержать
+	// в памяти целиком.
+	SaveStreamFor(ctx context.Context, userID, companyID int64, fileName string, r io.Reader, size int64) (string, error)
 	// RemoveFor — удаление с возвратом места в квоту владельца.
 	RemoveFor(ctx context.Context, userID, companyID int64, paths []string)
 	// Remove — удаление БЕЗ учёта: так чистит раздел «Хранилище», где место

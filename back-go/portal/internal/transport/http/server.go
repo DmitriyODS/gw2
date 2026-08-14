@@ -10,6 +10,7 @@ import (
 	"github.com/gofiber/fiber/v2"
 
 	"github.com/DmitriyODS/gw2/back-go/pkg/apierror"
+	"github.com/DmitriyODS/gw2/back-go/pkg/chunkupload"
 	"github.com/DmitriyODS/gw2/back-go/pkg/httpserver"
 	"github.com/DmitriyODS/gw2/back-go/pkg/pasetoauth"
 	"github.com/DmitriyODS/gw2/back-go/portal/internal/domain"
@@ -49,7 +50,7 @@ func authSource(users domain.UserReader) pasetoauth.AuthSource {
 }
 
 func NewServer(eps endpoint.Endpoints, svc *service.Service, users domain.UserReader,
-	verifier *pasetoauth.Verifier, log *slog.Logger) *Server {
+	uploads *chunkupload.Manager, verifier *pasetoauth.Verifier, log *slog.Logger) *Server {
 
 	app := httpserver.New(httpserver.Config{
 		AppName: "gw2-portalsvc", Log: log, BodyLimit: uploadMaxBytes + 1024*1024,
@@ -77,6 +78,14 @@ func NewServer(eps endpoint.Endpoints, svc *service.Service, users domain.UserRe
 	api.Post("/posts/:id<int>/pin", employee, h.pinPost)
 	api.Delete("/posts/:id<int>/pin", employee, h.unpinPost)
 	api.Post("/posts/:id<int>/attachments", employee, h.upload)
+	// Вложение крупнее порога приезжает частями — общий движок платформы.
+	chunkupload.Handlers{
+		Manager: uploads,
+		UserID:  func(c *fiber.Ctx) int64 { return currentUser(c).ID },
+		Begin:   h.beginUpload,
+		Finish:  h.finishUpload,
+		Respond: h.respondError,
+	}.Mount(api.Group("", employee), "/posts/:id<int>/attachments")
 	api.Delete("/attachments/:id<int>", employee, h.removeAttachment)
 	api.Post("/posts/:id<int>/forward", employee, h.forwardPost)
 

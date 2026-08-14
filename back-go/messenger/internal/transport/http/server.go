@@ -15,6 +15,7 @@ import (
 	"github.com/DmitriyODS/gw2/back-go/messenger/internal/domain"
 	"github.com/DmitriyODS/gw2/back-go/messenger/internal/endpoint"
 	"github.com/DmitriyODS/gw2/back-go/messenger/internal/service"
+	"github.com/DmitriyODS/gw2/back-go/pkg/chunkupload"
 	"github.com/DmitriyODS/gw2/back-go/pkg/httpserver"
 	"github.com/DmitriyODS/gw2/back-go/pkg/pasetoauth"
 )
@@ -51,11 +52,12 @@ func authSource(users domain.UserReader) pasetoauth.AuthSource {
 }
 
 func NewServer(eps endpoint.Endpoints, svc service.MessengerService, users domain.UserReader,
-	verifier *pasetoauth.Verifier, log *slog.Logger) *Server {
+	uploads *chunkupload.Manager, verifier *pasetoauth.Verifier, log *slog.Logger) *Server {
 
-	// Вложения ≤500МБ проверяются в сервисе; лимит тела — с запасом.
+	/* Потолок ОДНОГО запроса: мелкое вложение целиком и любая часть крупного.
+	   Само вложение бывает до 500 МБ — оно приезжает частями, а не телом. */
 	app := httpserver.New(httpserver.Config{
-		AppName: "gw2-msgsvc", Log: log, BodyLimit: 520 * 1024 * 1024,
+		AppName: "gw2-msgsvc", Log: log, BodyLimit: chunkupload.ChunkSize + 8<<20,
 	})
 	auth := pasetoauth.NewMiddleware(verifier, authSource(users))
 	h := &handlers{eps: eps, svc: svc, log: log}
@@ -68,6 +70,16 @@ func NewServer(eps endpoint.Endpoints, svc service.MessengerService, users domai
 	api.Post("/forward", h.forward)
 	api.Post("/conversations/:id<int>/read", h.markRead)
 	api.Post("/uploads", h.upload)
+	/* Вложение крупнее порога приезжает ЧАСТЯМИ (общий движок платформы):
+	   полгигабайта одним телом не переживают ни таймауты прокси, ни обрыв
+	   сети, и прогресса по ним не видно. */
+	chunkupload.Handlers{
+		Manager: uploads,
+		UserID:  currentUserID,
+		Begin:   h.beginUpload,
+		Finish:  h.finishUpload,
+		Respond: h.respondError,
+	}.Mount(api, "/uploads")
 	api.Delete("/messages/:id<int>", h.deleteMessage)
 	api.Patch("/messages/:id<int>", h.editMessage)
 	api.Delete("/conversations/:id<int>", h.deleteConversation)

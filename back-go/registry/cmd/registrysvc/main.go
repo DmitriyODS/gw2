@@ -1,9 +1,9 @@
 // registrysvc — микросервис реестров Groove Work.
 //
-// Владеет реестрами компаний (настраиваемыми таблицами-справочниками): их
-// структурой (поля разных типов с раскладкой карточки) и записями. Структуру
-// правит администратор компании, записи — любой её участник. Схему таблиц ведёт
-// migrate-контейнер (goose, back-go/migrate).
+// Владеет реестрами (настраиваемыми таблицами-справочниками): их структурой
+// (поля разных типов с раскладкой карточки), записями, учётом выдач и шарингом.
+// Реестр принадлежит ЧЕЛОВЕКУ, а коллеги и компании получают доступ трёх
+// уровней адресно. Схему таблиц ведёт migrate-контейнер (goose, back-go/migrate).
 //
 // Транспорт: HTTP/Fiber (HTTP_ADDR) — REST /api/registries/* (за nginx).
 // Сокет-события клиентам — Redis-канал gw2:registry:events (доставляет
@@ -19,13 +19,13 @@ import (
 
 	"github.com/DmitriyODS/gw2/back-go/pkg/billingclient"
 	"github.com/DmitriyODS/gw2/back-go/pkg/bootstrap"
+	"github.com/DmitriyODS/gw2/back-go/pkg/chunkupload"
 	"github.com/DmitriyODS/gw2/back-go/pkg/companydata"
 	"github.com/DmitriyODS/gw2/back-go/pkg/events"
 	"github.com/DmitriyODS/gw2/back-go/pkg/pasetoauth"
 	"github.com/DmitriyODS/gw2/back-go/pkg/records"
 	"github.com/DmitriyODS/gw2/back-go/pkg/storage"
 	"github.com/DmitriyODS/gw2/back-go/pkg/storagefiles"
-	"github.com/DmitriyODS/gw2/back-go/registry/internal/endpoint"
 	"github.com/DmitriyODS/gw2/back-go/registry/internal/repository/postgres"
 	"github.com/DmitriyODS/gw2/back-go/registry/internal/service"
 	httptransport "github.com/DmitriyODS/gw2/back-go/registry/internal/transport/http"
@@ -68,17 +68,24 @@ func main() {
 	fileStore := records.NewFileStore(storage.FromEnv(log, uploadFolder), "registry").
 		WithQuota(billing, "registry")
 
+	// Приём больших файлов частями — общий движок платформы: сессии в БД,
+	// части объектами в хранилище (переживает несколько инстансов сервиса).
+	uploads := chunkupload.New(pool, fileStore, "registry", log)
+
 	svc := service.New(service.Deps{
-		Repo:  repo,
-		Files: fileStore,
-		Bus:   events.NewPublisher(rdb, log, "gw2:registry:events"),
-		Log:   log,
+		Repo:    repo,
+		Users:   users,
+		Files:   fileStore,
+		Bus:     events.NewPublisher(rdb, log, "gw2:registry:events"),
+		Uploads: uploads,
+		Log:     log,
 	})
 	svc.WithBilling(billing)
 
-	eps := endpoint.New(svc)
+	// Брошенные загрузки (закрытая вкладка) не должны копить части в хранилище.
+	go uploads.Sweep(ctx)
 
-	httpServer := httptransport.NewServer(eps, users, verifier, log)
+	httpServer := httptransport.NewServer(svc, users, verifier, log)
 
 	// gRPC — единственный: биллинг спрашивает про файлы для раздела
 	// «Настройки → Хранилище» (файлы записей).

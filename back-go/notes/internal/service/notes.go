@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"encoding/json"
+	"io"
 	"strings"
 	"time"
 
@@ -335,6 +336,36 @@ func (s *Service) Upload(ctx context.Context, userID, noteID int64, fileName str
 		return "", domain.ErrMemberReadOnly
 	}
 	key, err := s.files.SaveFor(ctx, userID, 0, fileName, data)
+	if err != nil {
+		return "", err
+	}
+	return "/uploads/" + key, nil
+}
+
+/*
+CheckUpload — можно ли писать в заметку. Зовётся ДО приёма первой части
+
+	файла, пришедшего чанками: отказывать на сборке поздно.
+*/
+func (s *Service) CheckUpload(ctx context.Context, userID, noteID int64) error {
+	_, access, err := s.requireReadable(ctx, userID, noteID)
+	if err != nil {
+		return err
+	}
+	if access != domain.AccessOwner && access != domain.AccessEdit {
+		return domain.ErrMemberReadOnly
+	}
+	return nil
+}
+
+// UploadStream — файл заметки, собранный из частей.
+func (s *Service) UploadStream(ctx context.Context, userID, noteID int64,
+	fileName string, r io.Reader, size int64) (string, error) {
+
+	if err := s.CheckUpload(ctx, userID, noteID); err != nil {
+		return "", err
+	}
+	key, err := s.files.SaveStreamFor(ctx, userID, 0, fileName, r, size)
 	if err != nil {
 		return "", err
 	}

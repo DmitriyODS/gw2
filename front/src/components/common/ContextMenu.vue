@@ -62,6 +62,10 @@ const props = defineProps({
   y: { type: Number, default: 0 },
   // Пункты: { label, icon?, action?, danger?, disabled?, divider?, children?: [...] }.
   items: { type: Array, default: () => [] },
+  /* Кнопка, из которой меню открыли. Нажатие по ней НЕ считается кликом мимо:
+     иначе повторное нажатие сперва закрывало меню обработчиком документа, а
+     затем сам клик открывал его заново — и переключателем оно не работало. */
+  anchor: { type: Object, default: null },
 })
 const emit = defineEmits(['select', 'close'])
 
@@ -138,6 +142,7 @@ function pick(item) {
 function onDocDown(e) {
   if (!props.visible) return
   if (menuEl.value?.contains(e.target) || subEl.value?.contains(e.target)) return
+  if (props.anchor?.contains?.(e.target)) return
   emit('close')
 }
 function onScroll(e) {

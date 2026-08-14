@@ -2,6 +2,7 @@ package domain
 
 import (
 	"context"
+	"io"
 	"time"
 
 	"github.com/DmitriyODS/gw2/back-go/pkg/storagefiles"
@@ -190,6 +191,9 @@ type FileStore interface {
 	// Save — сохранить под messages/YYYY/MM/{uuid32hex}{ext}; возвращает
 	// относительный путь (file_path).
 	Save(data []byte, ext string) (string, error)
+	// SaveStream — то же потоком: вложение, пришедшее частями, нельзя
+	// подержать в памяти целиком.
+	SaveStream(r io.Reader, ext string, size int64) (string, error)
 	// Copy — физическая копия файла (пересылка): удаление одной копии не
 	// задевает другую. Возвращает путь новой копии.
 	Copy(srcRelPath string) (string, error)

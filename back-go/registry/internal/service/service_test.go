@@ -7,8 +7,14 @@ import (
 	"slices"
 	"sort"
 	"testing"
+	"time"
 
 	"github.com/DmitriyODS/gw2/back-go/registry/internal/domain"
+)
+
+const (
+	ownerID   = 42 // владелец тестового реестра
+	companyID = 7  // компания, в которой он заведён
 )
 
 func discardLogger() *slog.Logger {
@@ -21,6 +27,8 @@ type fakeRepo struct {
 	share      *domain.Share
 	fields     []domain.Field
 	records    map[int64]*domain.Record
+	userShares []*domain.UserShare
+	issues     map[int64]*domain.Issue
 	lastSearch string
 	lastFilter domain.RecordListFilter
 	lastExport domain.ExportFilter
@@ -28,7 +36,7 @@ type fakeRepo struct {
 	nextID     int64
 }
 
-func (f *fakeRepo) ListRegistries(_ domain.Ctx, _ int64) ([]*domain.Registry, error) {
+func (f *fakeRepo) ListRegistries(_ domain.Ctx, _ int64, _ []int64, _ string) ([]*domain.Registry, error) {
 	return []*domain.Registry{f.reg}, nil
 }
 func (f *fakeRepo) GetRegistry(_ domain.Ctx, id int64) (*domain.Registry, error) {
@@ -37,9 +45,45 @@ func (f *fakeRepo) GetRegistry(_ domain.Ctx, id int64) (*domain.Registry, error)
 	}
 	return nil, nil
 }
+
+// AccessOf — владелец получает всё, остальные — по своим шарам.
+func (f *fakeRepo) AccessOf(_ domain.Ctx, registryID, userID int64, companyIDs []int64) (string, error) {
+	if f.reg == nil || f.reg.ID != registryID {
+		return domain.AccessNone, nil
+	}
+	if f.reg.OwnerID == userID {
+		return domain.AccessOwner, nil
+	}
+	best := domain.AccessNone
+	for _, sh := range f.userShares {
+		if sh.RegistryID != registryID {
+			continue
+		}
+		if (sh.UserID != nil && *sh.UserID == userID) ||
+			(sh.CompanyID != nil && slices.Contains(companyIDs, *sh.CompanyID)) {
+			best = domain.BestAccess(best, sh.Access)
+		}
+	}
+	return best, nil
+}
+
+func (f *fakeRepo) Audience(_ domain.Ctx, _ int64) ([]int64, error) {
+	return []int64{ownerID}, nil
+}
+func (f *fakeRepo) ListUserShares(_ domain.Ctx, _ int64) ([]*domain.UserShare, error) {
+	return f.userShares, nil
+}
+func (f *fakeRepo) PutUserShare(_ domain.Ctx, s *domain.UserShare) error {
+	f.userShares = append(f.userShares, s)
+	return nil
+}
+func (f *fakeRepo) DeleteUserShare(_ domain.Ctx, _ int64, _, _ *int64) error { return nil }
+
 func (f *fakeRepo) CreateRegistry(_ domain.Ctx, r *domain.Registry) error { r.ID = 1; return nil }
-func (f *fakeRepo) UpdateRegistry(_ domain.Ctx, _ int64, _ string, _ int, tagFieldID *int64) error {
-	f.reg.TagFieldID = tagFieldID
+func (f *fakeRepo) UpdateRegistry(_ domain.Ctx, _ int64, name string, _ int, sectionFieldID *int64, accounting bool) error {
+	f.reg.Name = name
+	f.reg.SectionFieldID = sectionFieldID
+	f.reg.Accounting = accounting
 	return nil
 }
 func (f *fakeRepo) DeleteRegistry(_ domain.Ctx, _ int64) error               { return nil }
@@ -56,7 +100,7 @@ func (f *fakeRepo) ListRecords(_ domain.Ctx, filter domain.RecordListFilter) ([]
 	f.lastFilter = filter
 	return nil, 0, nil
 }
-func (f *fakeRepo) SearchRecords(_ domain.Ctx, _ int64, _ string, _ int) ([]*domain.SearchHit, error) {
+func (f *fakeRepo) SearchRecords(_ domain.Ctx, _ int64, _ []int64, _ string, _ int) ([]*domain.SearchHit, error) {
 	return nil, nil
 }
 func (f *fakeRepo) GetRecord(_ domain.Ctx, id int64) (*domain.Record, error) {
@@ -119,7 +163,12 @@ func (f *fakeRepo) GetShareByCode(_ domain.Ctx, code string) (*domain.Share, err
 	}
 	return nil, nil
 }
-func (f *fakeRepo) DeleteShare(_ domain.Ctx, _, _ int64) error { return nil }
+func (f *fakeRepo) UpdateShare(_ domain.Ctx, _, _ int64, _, _ string, _ bool) error { return nil }
+func (f *fakeRepo) DeleteShare(_ domain.Ctx, _, _ int64) error                      { return nil }
+func (f *fakeRepo) LogVisit(_ domain.Ctx, _ *domain.ShareVisit) error               { return nil }
+func (f *fakeRepo) ListVisits(_ domain.Ctx, _ int64, _ int) ([]*domain.ShareVisit, error) {
+	return nil, nil
+}
 func (f *fakeRepo) AllRecords(_ domain.Ctx, _ int64) ([]*domain.Record, error) {
 	out := []*domain.Record{}
 	for _, r := range f.records {
@@ -128,19 +177,70 @@ func (f *fakeRepo) AllRecords(_ domain.Ctx, _ int64) ([]*domain.Record, error) {
 	return out, nil
 }
 
+// ── Учётные выдачи ──
+
+func (f *fakeRepo) OpenIssues(_ domain.Ctx, recordIDs []int64) (map[int64]*domain.Issue, error) {
+	out := map[int64]*domain.Issue{}
+	for _, id := range recordIDs {
+		if issue := f.issues[id]; issue != nil && issue.ReturnedAt == nil {
+			out[id] = issue
+		}
+	}
+	return out, nil
+}
+func (f *fakeRepo) IssueHistory(_ domain.Ctx, recordID int64) ([]*domain.Issue, error) {
+	if issue := f.issues[recordID]; issue != nil {
+		return []*domain.Issue{issue}, nil
+	}
+	return nil, nil
+}
+func (f *fakeRepo) CreateIssue(_ domain.Ctx, i *domain.Issue, _ string) error {
+	if f.issues == nil {
+		f.issues = map[int64]*domain.Issue{}
+	}
+	if open := f.issues[i.RecordID]; open != nil && open.ReturnedAt == nil {
+		return domain.ErrAlreadyIssued
+	}
+	i.ID = i.RecordID
+	i.IssuedAt = time.Now()
+	f.issues[i.RecordID] = i
+	return nil
+}
+func (f *fakeRepo) ExtendIssue(_ domain.Ctx, issueID int64, dueAt *time.Time, _ string, _ *int64) error {
+	if issue := f.issues[issueID]; issue != nil {
+		issue.DueAt = dueAt
+	}
+	return nil
+}
+func (f *fakeRepo) ReturnIssue(_ domain.Ctx, issueID int64, at time.Time, _ string, _ *int64) (bool, error) {
+	issue := f.issues[issueID]
+	if issue == nil || issue.ReturnedAt != nil {
+		return false, nil
+	}
+	issue.ReturnedAt = &at
+	return true, nil
+}
+
 // Раздел «Хранилище»: записи отбираются по компании их реестра.
 func (f *fakeRepo) RecordsOfCompanies(_ domain.Ctx, companyIDs []int64) ([]*domain.RecordScope, error) {
 	out := []*domain.RecordScope{}
-	if f.reg == nil || !slices.Contains(companyIDs, f.reg.CompanyID) {
+	if f.reg == nil || f.reg.CompanyID == nil || !slices.Contains(companyIDs, *f.reg.CompanyID) {
 		return out, nil
 	}
 	for _, r := range f.records {
 		out = append(out, &domain.RecordScope{
-			Record: r, RegistryID: f.reg.ID, RegistryName: f.reg.Name, CompanyID: f.reg.CompanyID,
+			Record: r, RegistryID: f.reg.ID, RegistryName: f.reg.Name, CompanyID: *f.reg.CompanyID,
 		})
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].Record.ID < out[j].Record.ID })
 	return out, nil
+}
+
+func (f *fakeRepo) CountOwned(_ domain.Ctx, _ int64) (int, error) {
+	if f.reg == nil {
+		return 0, nil
+	}
+	return 1, nil
 }
 
 type fakeBus struct{ events []string }
@@ -155,6 +255,11 @@ func (f *fakeFiles) SaveFor(_ context.Context, _, _ int64, _ string, _ []byte) (
 	return "registry/x", nil
 }
 
+func (f *fakeFiles) SaveStreamFor(_ context.Context, _, _ int64, _ string, r io.Reader, _ int64) (string, error) {
+	_, _ = io.Copy(io.Discard, r)
+	return "registry/stream", nil
+}
+
 func (f *fakeFiles) RemoveFor(_ context.Context, _, _ int64, paths []string) {
 	f.removed = append(f.removed, paths...)
 }
@@ -163,13 +268,37 @@ func (f *fakeFiles) Remove(paths []string) {
 	f.removed = append(f.removed, paths...)
 }
 
+// fakeUsers — идентичность: владелец состоит в компании companyID.
+type fakeUsers struct{ companies map[int64][]int64 }
+
+func (u *fakeUsers) GetUser(_ domain.Ctx, id int64) (*domain.User, error) {
+	return &domain.User{ID: id, IsActive: true}, nil
+}
+func (u *fakeUsers) CompanyActive(_ domain.Ctx, _ *int64) (bool, error) { return true, nil }
+func (u *fakeUsers) CompaniesOf(_ domain.Ctx, userID int64) ([]int64, error) {
+	if u.companies == nil {
+		return []int64{}, nil
+	}
+	return u.companies[userID], nil
+}
+func (u *fakeUsers) CompanyMembers(_ domain.Ctx, _ int64) ([]int64, error) { return nil, nil }
+func (u *fakeUsers) SearchDirectory(_ domain.Ctx, _ []int64, _ string, _ int) ([]*domain.User, error) {
+	return nil, nil
+}
+func (u *fakeUsers) CompanyName(_ domain.Ctx, _ int64) (string, error) {
+	return "Компания", nil
+}
+
 func newTestService(fields []domain.Field) (*Service, *fakeRepo, *fakeBus) {
+	company := int64(companyID)
 	repo := &fakeRepo{
-		reg:    &domain.Registry{ID: 1, CompanyID: 7, Name: "Тест"},
+		reg:    &domain.Registry{ID: 1, OwnerID: ownerID, CompanyID: &company, Name: "Тест"},
 		fields: fields,
 	}
 	bus := &fakeBus{}
-	return New(Deps{Repo: repo, Files: &fakeFiles{}, Bus: bus, Log: discardLogger()}), repo, bus
+	users := &fakeUsers{companies: map[int64][]int64{ownerID: {companyID}}}
+	svc := New(Deps{Repo: repo, Users: users, Files: &fakeFiles{}, Bus: bus, Log: discardLogger()})
+	return svc, repo, bus
 }
 
 func TestCreateRecord_BuildsSearchTextAndValidates(t *testing.T) {
@@ -177,11 +306,11 @@ func TestCreateRecord_BuildsSearchTextAndValidates(t *testing.T) {
 		{ID: 10, Label: "Имя", Type: domain.FieldText},
 		{ID: 11, Label: "Код", Type: domain.FieldNumber, Config: map[string]any{"pattern": `^\d{3}$`}},
 		{ID: 12, Label: "Категория", Type: domain.FieldSelect, Config: map[string]any{"options": []any{"A", "B"}}},
-		{ID: 13, Label: "Фото", Type: domain.FieldImage},
+		{ID: 13, Label: "Обложка", Type: domain.FieldImage},
 	}
 	svc, repo, bus := newTestService(fields)
 
-	rec, err := svc.CreateRecord(context.Background(), 7, 1, 42, map[string]any{
+	rec, err := svc.CreateRecord(context.Background(), ownerID, 1, map[string]any{
 		"10": "Привет",
 		"11": "123",
 		"12": "A",
@@ -209,7 +338,7 @@ func TestCreateRecord_NumberPatternRejected(t *testing.T) {
 		{ID: 11, Label: "Код", Type: domain.FieldNumber, Config: map[string]any{"pattern": `^\d{3}$`}},
 	}
 	svc, _, _ := newTestService(fields)
-	_, err := svc.CreateRecord(context.Background(), 7, 1, 42, map[string]any{"11": "abc"})
+	_, err := svc.CreateRecord(context.Background(), ownerID, 1, map[string]any{"11": "abc"})
 	if err == nil {
 		t.Fatal("ожидалась ошибка валидации по маске числа")
 	}
@@ -223,7 +352,7 @@ func TestCreateRecord_SelectOptionRejected(t *testing.T) {
 		{ID: 12, Label: "Категория", Type: domain.FieldSelect, Config: map[string]any{"options": []any{"A", "B"}}},
 	}
 	svc, _, _ := newTestService(fields)
-	_, err := svc.CreateRecord(context.Background(), 7, 1, 42, map[string]any{"12": "Z"})
+	_, err := svc.CreateRecord(context.Background(), ownerID, 1, map[string]any{"12": "Z"})
 	if err == nil {
 		t.Fatal("ожидалась ошибка: вариант вне options")
 	}
@@ -236,7 +365,7 @@ func TestReplaceFields_StripsRemovedFieldData(t *testing.T) {
 		5: {ID: 5, RegistryID: 1, Data: map[string]any{"10": "Аня", "99": "удалится"}},
 	}
 
-	_, err := svc.ReplaceFields(context.Background(), 7, 1, []domain.Field{
+	_, err := svc.ReplaceFields(context.Background(), ownerID, 1, []domain.Field{
 		{ID: 10, Label: "Имя", Type: domain.FieldText},
 	})
 	if err != nil {
@@ -265,7 +394,7 @@ func TestListRecords_PerPageClampedNotReset(t *testing.T) {
 		{asked: -5, want: 30},
 	}
 	for _, c := range cases {
-		if _, err := svc.ListRecords(context.Background(), 7, 1, RecordListParams{PerPage: c.asked}); err != nil {
+		if _, err := svc.ListRecords(context.Background(), ownerID, 1, RecordListParams{PerPage: c.asked}); err != nil {
 			t.Fatalf("ListRecords(per_page=%d): %v", c.asked, err)
 		}
 		if repo.lastFilter.PerPage != c.want {
@@ -275,7 +404,7 @@ func TestListRecords_PerPageClampedNotReset(t *testing.T) {
 	}
 }
 
-func TestTagFieldOnlySelect(t *testing.T) {
+func TestSectionFieldOnlySelect(t *testing.T) {
 	fields := []domain.Field{
 		{ID: 10, Label: "Имя", Type: domain.FieldText},
 		{ID: 12, Label: "Тип изделия", Type: domain.FieldSelect, Config: map[string]any{"options": []any{"A", "B"}}},
@@ -284,69 +413,181 @@ func TestTagFieldOnlySelect(t *testing.T) {
 	ctx := context.Background()
 	id := func(v int64) *int64 { return &v }
 
-	// Тегами становится только списковое поле своего реестра.
+	// Подразделами становится только списковое поле своего реестра.
 	for _, bad := range []*int64{id(10), id(777)} {
-		if _, err := svc.UpdateRegistry(ctx, 7, 1, RegistryPatch{
-			Name: "Тест", TagFieldID: bad, TagFieldSet: true,
-		}); err != domain.ErrTagFieldInvalid {
-			t.Fatalf("поле %d тегами быть не должно, получено %v", *bad, err)
+		if _, err := svc.UpdateRegistry(ctx, ownerID, 1, RegistryPatch{
+			Name: "Тест", SectionFieldID: bad, SectionFieldSet: true,
+		}); err != domain.ErrSectionFieldInvalid {
+			t.Fatalf("поле %d подразделами быть не должно, получено %v", *bad, err)
 		}
 	}
 
-	reg, err := svc.UpdateRegistry(ctx, 7, 1, RegistryPatch{
-		Name: "Тест", TagFieldID: id(12), TagFieldSet: true,
+	reg, err := svc.UpdateRegistry(ctx, ownerID, 1, RegistryPatch{
+		Name: "Тест", SectionFieldID: id(12), SectionFieldSet: true,
 	})
-	if err != nil || reg.TagFieldID == nil || *reg.TagFieldID != 12 {
-		t.Fatalf("списковое поле должно стать источником тегов: %v %+v", err, reg)
+	if err != nil || reg.SectionFieldID == nil || *reg.SectionFieldID != 12 {
+		t.Fatalf("списковое поле должно стать источником подразделов: %v %+v", err, reg)
 	}
 
-	// Переименование без ключа tag_field_id настройку не сбрасывает.
-	reg, err = svc.UpdateRegistry(ctx, 7, 1, RegistryPatch{Name: "Другое имя"})
-	if err != nil || reg.TagFieldID == nil || *reg.TagFieldID != 12 {
-		t.Fatalf("переименование сбросило теги: %v %+v", err, reg)
+	// Переименование без ключа section_field_id настройку не сбрасывает.
+	reg, err = svc.UpdateRegistry(ctx, ownerID, 1, RegistryPatch{Name: "Другое имя"})
+	if err != nil || reg.SectionFieldID == nil || *reg.SectionFieldID != 12 {
+		t.Fatalf("переименование сбросило подразделы: %v %+v", err, reg)
 	}
 
-	// Фильтр чипом уходит в репозиторий как условие по этому полю.
-	if _, err := svc.ListRecords(ctx, 7, 1, RecordListParams{Tag: "A"}); err != nil {
-		t.Fatalf("ListRecords с тегом: %v", err)
+	// Вкладка уходит в репозиторий как условие по этому полю.
+	if _, err := svc.ListRecords(ctx, ownerID, 1, RecordListParams{Section: "A"}); err != nil {
+		t.Fatalf("ListRecords с подразделом: %v", err)
 	}
-	if repo.lastFilter.TagFieldID != 12 || repo.lastFilter.TagValue != "A" {
-		t.Errorf("фильтр тега не доехал: %+v", repo.lastFilter)
+	if repo.lastFilter.SectionFieldID != 12 || repo.lastFilter.SectionValue != "A" {
+		t.Errorf("фильтр подраздела не доехал: %+v", repo.lastFilter)
 	}
 
 	// Выгрузка идёт тем же фильтром — файл не должен расходиться с экраном.
-	if _, _, err := svc.ExportRecords(ctx, 7, 1, ExportParams{
-		FieldIDs: []int64{12}, Tag: "A",
+	if _, _, err := svc.ExportRecords(ctx, ownerID, 1, ExportParams{
+		FieldIDs:  []int64{12},
+		Selection: BulkParams{All: true, Section: "A"},
 	}); err != nil {
-		t.Fatalf("выгрузка с тегом: %v", err)
+		t.Fatalf("выгрузка с подразделом: %v", err)
 	}
-	if repo.lastExport.TagFieldID != 12 || repo.lastExport.TagValue != "A" {
-		t.Errorf("тег не доехал до выгрузки: %+v", repo.lastExport)
+	if repo.lastExport.SectionFieldID != 12 || repo.lastExport.SectionValue != "A" {
+		t.Errorf("подраздел не доехал до выгрузки: %+v", repo.lastExport)
 	}
 
-	// Теги выключили — чип больше не фильтрует.
-	if _, err := svc.UpdateRegistry(ctx, 7, 1, RegistryPatch{Name: "Тест", TagFieldSet: true}); err != nil {
-		t.Fatalf("выключение тегов: %v", err)
+	// Подразделы выключили — вкладка больше не фильтрует.
+	if _, err := svc.UpdateRegistry(ctx, ownerID, 1, RegistryPatch{Name: "Тест", SectionFieldSet: true}); err != nil {
+		t.Fatalf("выключение подразделов: %v", err)
 	}
-	if _, err := svc.ListRecords(ctx, 7, 1, RecordListParams{Tag: "A"}); err != nil {
-		t.Fatalf("ListRecords без тегов: %v", err)
+	if _, err := svc.ListRecords(ctx, ownerID, 1, RecordListParams{Section: "A"}); err != nil {
+		t.Fatalf("ListRecords без подразделов: %v", err)
 	}
-	if repo.lastFilter.TagFieldID != 0 {
-		t.Errorf("после выключения тегов фильтр остался: %+v", repo.lastFilter)
+	if repo.lastFilter.SectionFieldID != 0 {
+		t.Errorf("после выключения подразделов фильтр остался: %+v", repo.lastFilter)
 	}
 }
 
-func TestRegistryScopedToCompany(t *testing.T) {
+// Посторонний реестра не видит вовсе, а его существование не раскрывается:
+// на чтение отвечаем «не найден», а не «нет прав».
+func TestAccess_StrangerSeesNothing(t *testing.T) {
 	svc, _, _ := newTestService(nil)
-	// Реестр принадлежит компании 7 — чужая компания 99 не видит его.
-	if _, err := svc.GetRegistry(context.Background(), 99, 1); err != domain.ErrRegistryNotFound {
-		t.Errorf("ожидалась ErrRegistryNotFound для чужой компании, получено %v", err)
+	const stranger = 999
+	if _, err := svc.GetRegistry(context.Background(), stranger, 1); err != domain.ErrRegistryNotFound {
+		t.Errorf("ожидалась ErrRegistryNotFound для постороннего, получено %v", err)
 	}
 }
 
-func (f *fakeRepo) CountRegistries(_ domain.Ctx, _ int64) (int, error) {
-	if f.reg == nil {
-		return 0, nil
+// Уровни доступа вложены друг в друга: смотрящий не пишет, пишущий не правит
+// структуру, а удалить реестр может только владелец.
+func TestAccess_LevelsAreNested(t *testing.T) {
+	ctx := context.Background()
+	const guest = 1000
+
+	cases := []struct {
+		access                       string
+		canRead, canWrite, canStruct bool
+	}{
+		{domain.AccessView, true, false, false},
+		{domain.AccessEdit, true, true, false},
+		{domain.AccessAdmin, true, true, true},
 	}
-	return 1, nil
+	for _, c := range cases {
+		t.Run(c.access, func(t *testing.T) {
+			svc, repo, _ := newTestService([]domain.Field{{ID: 10, Label: "Имя", Type: domain.FieldText}})
+			user := int64(guest)
+			repo.userShares = []*domain.UserShare{{RegistryID: 1, UserID: &user, Access: c.access}}
+
+			_, err := svc.GetRegistry(ctx, guest, 1)
+			if (err == nil) != c.canRead {
+				t.Errorf("чтение при %s: %v", c.access, err)
+			}
+			_, err = svc.CreateRecord(ctx, guest, 1, map[string]any{"10": "Х"})
+			if (err == nil) != c.canWrite {
+				t.Errorf("запись при %s: %v", c.access, err)
+			}
+			_, err = svc.ReplaceFields(ctx, guest, 1, []domain.Field{{ID: 10, Label: "Имя", Type: domain.FieldText}})
+			if (err == nil) != c.canStruct {
+				t.Errorf("правка структуры при %s: %v", c.access, err)
+			}
+			// Удаление реестра — только владельцу, даже администратору нельзя.
+			if err := svc.DeleteRegistry(ctx, guest, 1); err != domain.ErrOwnerOnly {
+				t.Errorf("удаление при %s должно требовать владельца, получено %v", c.access, err)
+			}
+		})
+	}
+}
+
+// Доступ приходит человеку несколькими путями сразу — берётся сильнейший.
+func TestAccess_BestOfPersonalAndCompany(t *testing.T) {
+	svc, repo, _ := newTestService(nil)
+	const guest = 1001
+	user, company := int64(guest), int64(companyID)
+	repo.userShares = []*domain.UserShare{
+		{RegistryID: 1, CompanyID: &company, Access: domain.AccessView},
+		{RegistryID: 1, UserID: &user, Access: domain.AccessEdit},
+	}
+	svc.users.(*fakeUsers).companies[guest] = []int64{companyID}
+
+	reg, err := svc.GetRegistry(context.Background(), guest, 1)
+	if err != nil {
+		t.Fatalf("чтение: %v", err)
+	}
+	if reg.MyAccess != domain.AccessEdit {
+		t.Errorf("личная шара сильнее компанийной: получено %q", reg.MyAccess)
+	}
+}
+
+// Учётный реестр: позицию нельзя выдать дважды, а после возврата — можно снова.
+func TestAccounting_IssueReturnCycle(t *testing.T) {
+	ctx := context.Background()
+	svc, repo, _ := newTestService([]domain.Field{{ID: 10, Label: "Имя", Type: domain.FieldText}})
+	repo.reg.Accounting = true
+	repo.records = map[int64]*domain.Record{5: {ID: 5, RegistryID: 1, Data: map[string]any{}}}
+
+	due := time.Now().Add(48 * time.Hour)
+	if _, err := svc.Issue(ctx, ownerID, 1, 5, IssueParams{HolderName: "Иванов", DueAt: &due}); err != nil {
+		t.Fatalf("выдача: %v", err)
+	}
+	if _, err := svc.Issue(ctx, ownerID, 1, 5, IssueParams{HolderName: "Петров"}); err != domain.ErrAlreadyIssued {
+		t.Errorf("повторная выдача должна отбиваться, получено %v", err)
+	}
+	if _, err := svc.Return(ctx, ownerID, 1, 5, ""); err != nil {
+		t.Fatalf("возврат: %v", err)
+	}
+	if _, err := svc.Return(ctx, ownerID, 1, 5, ""); err != domain.ErrNotIssued {
+		t.Errorf("повторный возврат должен отбиваться, получено %v", err)
+	}
+	if _, err := svc.Issue(ctx, ownerID, 1, 5, IssueParams{HolderName: "Петров"}); err != nil {
+		t.Errorf("после возврата позицию можно выдать снова: %v", err)
+	}
+}
+
+// Состояние позиции считает сервер: просрочка не должна зависеть от часов
+// клиента.
+func TestIssueState(t *testing.T) {
+	now := time.Date(2026, 8, 13, 12, 0, 0, 0, time.UTC)
+	past := now.Add(-72 * time.Hour)
+	future := now.Add(24 * time.Hour)
+
+	cases := []struct {
+		name  string
+		issue *domain.Issue
+		want  string
+		days  int
+	}{
+		{"на месте", nil, domain.StockIn, 0},
+		{"выдана", &domain.Issue{DueAt: &future}, domain.StockIssued, 0},
+		{"без срока", &domain.Issue{}, domain.StockNoDue, 0},
+		{"просрочена", &domain.Issue{DueAt: &past}, domain.StockOverdue, 4},
+		{"вернули", &domain.Issue{DueAt: &past, ReturnedAt: &now}, domain.StockIn, 0},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			if got := c.issue.State(now); got != c.want {
+				t.Errorf("State = %q, want %q", got, c.want)
+			}
+			if got := c.issue.OverdueDays(now); got != c.days {
+				t.Errorf("OverdueDays = %d, want %d", got, c.days)
+			}
+		})
+	}
 }

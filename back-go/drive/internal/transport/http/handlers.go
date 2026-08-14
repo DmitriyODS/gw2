@@ -1,18 +1,18 @@
 package http
 
 import (
-	"bytes"
-	"errors"
 	"io"
 	"mime"
 	"net/url"
 	"path/filepath"
+	"strconv"
 	"strings"
 
 	"github.com/gofiber/fiber/v2"
 
 	"github.com/DmitriyODS/gw2/back-go/drive/internal/domain"
 	"github.com/DmitriyODS/gw2/back-go/drive/internal/service"
+	"github.com/DmitriyODS/gw2/back-go/pkg/chunkupload"
 )
 
 // ── Обзор ────────────────────────────────────────────────────────────────────
@@ -155,55 +155,36 @@ func (h *handlers) upload(c *fiber.Ctx) error {
    multipart: обёртка формы на каждый кусок — лишние проценты трафика и лишний
    разбор. */
 
-func (h *handlers) beginUpload(c *fiber.Ctx) error {
-	var req struct {
-		Name     string `json:"name"`
-		Mime     string `json:"mime"`
-		Size     int64  `json:"size"`
-		FolderID *int64 `json:"folder_id"`
-	}
-	if err := c.BodyParser(&req); err != nil {
-		return h.respondError(c, domain.ErrValidation)
-	}
-	if req.Mime == "" {
-		req.Mime = mime.TypeByExtension(strings.ToLower(filepath.Ext(req.Name)))
-	}
-	id, err := h.svc.BeginUpload(c.Context(), currentUserID(c), req.Name, req.Mime, req.Size, req.FolderID)
+/* Приём файла частями. Общая механика — в pkg/chunkupload; разделу остаётся
+   сказать, куда кладём (и можно ли) и как собрать файл. */
+
+func (h *handlers) beginUpload(c *fiber.Ctx, in chunkupload.InitRequest, s *chunkupload.Session) error {
+	folderID := parseFolderScope(in.Scope)
+	// Право на запись в папку и владельца квоты выясняем ДО первого байта:
+	// незачем принимать полгигабайта, чтобы отказать на сборке.
+	ownerID, _, err := h.svc.UploadTarget(c.Context(), currentUserID(c), in.FileName, folderID)
 	if err != nil {
-		return h.respondError(c, err)
+		return err
 	}
-	return c.Status(fiber.StatusCreated).JSON(fiber.Map{"upload_id": id})
+	if in.Size > domain.MaxFileSize {
+		return domain.ErrFileTooBig
+	}
+	s.QuotaUserID = ownerID
+	return nil
 }
 
-func (h *handlers) uploadChunk(c *fiber.Ctx) error {
-	offset := int64(c.QueryInt("offset", 0))
-	received, err := h.svc.WriteChunk(currentUserID(c), c.Params("id"), offset, bytes.NewReader(c.Body()))
-	if err != nil {
-		// Рассинхрон позиции — не ошибка клиента вслепую: отдаём принятый
-		// объём, чтобы он продолжил ровно с него.
-		if errors.Is(err, domain.ErrChunkOffset) {
-			return c.Status(fiber.StatusConflict).JSON(fiber.Map{
-				"error": "CHUNK_OFFSET", "message": "Кусок пришёл не по порядку", "received": received,
-			})
-		}
-		return h.respondError(c, err)
-	}
-	return c.JSON(fiber.Map{"received": received})
+func (h *handlers) finishUpload(c *fiber.Ctx, s chunkupload.Session, r io.Reader) (any, error) {
+	return h.svc.UploadStream(c.Context(), currentUserID(c), s.FileName, r,
+		s.Mime, s.TotalSize, parseFolderScope(s.Scope))
 }
 
-func (h *handlers) finishUpload(c *fiber.Ctx) error {
-	out, err := h.svc.FinishUpload(c.Context(), currentUserID(c), c.Params("id"))
-	if err != nil {
-		return h.respondError(c, err)
+// parseFolderScope — папка назначения из контекста сессии ("" — корень диска).
+func parseFolderScope(scope string) *int64 {
+	id, err := strconv.ParseInt(scope, 10, 64)
+	if err != nil || id <= 0 {
+		return nil
 	}
-	return c.Status(fiber.StatusCreated).JSON(out)
-}
-
-func (h *handlers) cancelUpload(c *fiber.Ctx) error {
-	if err := h.svc.CancelUpload(currentUserID(c), c.Params("id")); err != nil {
-		return h.respondError(c, err)
-	}
-	return c.JSON(fiber.Map{"status": "ok"})
+	return &id
 }
 
 func (h *handlers) getFile(c *fiber.Ctx) error {

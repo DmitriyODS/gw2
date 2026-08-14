@@ -9,7 +9,7 @@ describe('reactions', () => {
   })
 
   it('часто поставленные выходят вперёд', () => {
-    rememberReaction('🤣') // последний в наборе
+    rememberReaction('🤣')
     rememberReaction('🤣')
     rememberReaction('👀')
 

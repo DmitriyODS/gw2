@@ -562,6 +562,12 @@ type nopFiles struct{}
 func (nopFiles) SaveFor(_ context.Context, _, _ int64, _ string, _ []byte) (string, error) {
 	return "notes/x", nil
 }
+
+func (nopFiles) SaveStreamFor(_ context.Context, _, _ int64, _ string, r io.Reader, _ int64) (string, error) {
+	// Поток вычитываем целиком: незакрытая часть осталась бы висеть.
+	_, _ = io.Copy(io.Discard, r)
+	return "notes/x", nil
+}
 func (nopFiles) RemoveFor(_ context.Context, _, _ int64, _ []string) {}
 func (nopFiles) Remove(_ []string)                                   {}
 func (nopFiles) Open(_ string) ([]byte, error)                       { return nil, nil }

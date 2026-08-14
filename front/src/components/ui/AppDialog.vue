@@ -35,8 +35,15 @@
       </header>
 
       <!-- Тело: дефолтный слот. Скроллится при переполнении. -->
-      <div class="dlg-body" :class="{ 'no-padding': bodyNoPadding }">
-        <slot />
+      <!-- Тела может не быть вовсе: у диалога-подтверждения весь текст живёт в
+           подзаголовке, и пустая вставленная карточка выглядела бы белой
+           полосой ни о чём. Прокручивается ОБОЛОЧКА, а не сама карточка: тогда
+           ползунок идёт по краю стекла, снаружи от неё, и не режет скруглённый
+           угол. -->
+      <div v-if="$slots.default" class="dlg-scroll">
+        <div class="dlg-body" :class="{ 'no-padding': bodyNoPadding }">
+          <slot />
+        </div>
       </div>
 
       <!-- Подвал: кастомный (slot=footer), слоты footer-start/footer-end или
@@ -239,7 +246,7 @@ function actionTone(a) {
   display: flex;
   align-items: center;
   gap: 16px;
-  padding: 24px 24px 8px;
+  padding: 20px 24px 14px;
 }
 
 .dlg-title-wrap {
@@ -286,33 +293,53 @@ function actionTone(a) {
 .dlg-close .material-symbols-outlined { font-size: 20px; }
 
 /* Тело. */
-.dlg-body {
-  padding: 12px 24px 4px;
-  overflow-y: auto;
+/* Область прокрутки: ползунок остаётся на стекле, у самой кромки диалога.
+   Правое поле у карточки меньше — его добирает сам ползунок. */
+.dlg-scroll {
   flex: 1;
   min-height: 0;
+  overflow-y: auto;
+  scrollbar-gutter: stable;
+}
+
+/* Тело — ПЛОТНАЯ карточка, ВСТАВЛЕННАЯ в стеклянную оболочку: у неё свои
+   скруглённые края и поля от кромок диалога, поэтому стекло остаётся видно
+   рамкой вокруг — в шапке, подвале и по бокам. Просвечивающее насквозь тело
+   читалось плохо: сквозь него проступал интерфейс под диалогом. */
+.dlg-body {
+  margin: 0 7px;
+  padding: 16px 18px 14px;
+  border: 1px solid var(--acrylic-border);
+  border-radius: var(--radius-lg, 20px);
+  background: var(--color-surface);
   color: var(--color-text);
   font-size: 14px;
   line-height: 1.5;
 }
 
-.dlg-body.no-padding { padding: 0; }
+/* Содержимое во всю карточку (таблицы, холсты) — поля снимаются, но вставка
+   и скругление остаются: иначе край содержимого торчал бы из-под стекла. */
+.dlg-body.no-padding { padding: 0; overflow: hidden; }
 
-/* Когда шапки нет — тело не должно «лепиться» к верху. */
-.app-dialog:not(:has(.dlg-header)) .dlg-body { padding-top: 24px; }
+/* Без шапки и без подвала вставка всё равно нужна: карточка не должна
+   срастаться с кромкой стекла. */
+.app-dialog:not(:has(.dlg-header)) .dlg-scroll { padding-top: 14px; }
 
-/* Когда футера нет — тело не должно «лепиться» к низу: его 4px рассчитаны
-   на футер. Вложенные AppDialog в :has() не попадают (PrimeVue телепортирует
-   каждый диалог в body). */
-.app-dialog:not(:has(.dlg-footer)) .dlg-body:not(.no-padding) { padding-bottom: 20px; }
+/* Вложенные AppDialog в :has() не попадают (PrimeVue телепортирует каждый
+   диалог в body). */
+.app-dialog:not(:has(.dlg-footer)) .dlg-scroll { padding-bottom: 14px; }
 
-/* Подвал. */
+/* Без тела шапка сливалась бы с кнопками — держим их на расстоянии. */
+.app-dialog:not(:has(.dlg-scroll)) .dlg-header { padding-bottom: 4px; }
+.app-dialog:not(:has(.dlg-scroll)) .dlg-footer { padding-top: 16px; }
+
+/* Подвал — на стекле, как и шапка: действия обрамляют вставленную карточку. */
 .dlg-footer {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 8px;
-  padding: 16px 24px 20px;
+  padding: 10px 24px 14px;
 }
 
 .dlg-footer-start { display: flex; gap: 8px; }
@@ -332,8 +359,8 @@ function actionTone(a) {
     max-height: 90dvh;
   }
   .dlg-header { padding: 20px 20px 4px; }
-  .dlg-body { padding-left: 20px; padding-right: 20px; }
-  .dlg-footer { padding: 16px 20px calc(20px + env(safe-area-inset-bottom, 0px)); }
+  .dlg-body { margin-left: 5px; margin-right: 5px; padding-left: 14px; padding-right: 14px; }
+  .dlg-footer { padding: 10px 20px calc(14px + env(safe-area-inset-bottom, 0px)); }
   .dlg-footer-end { flex-wrap: wrap; justify-content: flex-end; }
 }
 </style>
@@ -416,8 +443,8 @@ function actionTone(a) {
   }
   /* Sheet прижат к нижней кромке экрана: телу без футера нужен ещё
      и запас под home-индикатор. */
-  .app-dialog-root:is(.mobile-auto, .mobile-sheet) .app-dialog:not(:has(.dlg-footer)) .dlg-body:not(.no-padding) {
-    padding-bottom: calc(20px + env(safe-area-inset-bottom, 0px));
+  .app-dialog-root:is(.mobile-auto, .mobile-sheet) .app-dialog:not(:has(.dlg-footer)) .dlg-scroll {
+    padding-bottom: calc(14px + env(safe-area-inset-bottom, 0px));
   }
   /* Внутренний контейнер в full-режиме не ограничен sheet-высотой 90dvh —
      иначе под футером остаётся пустая полоса в 10% экрана. */

@@ -1,5 +1,6 @@
 // Ведётся вручную: REST досок живёт в boardsvc (back-go/board).
 import { apiRequest } from './client.js'
+import { uploadFileTo } from '@/utils/chunkUpload.js'
 
 function qs(params = {}) {
   const sp = new URLSearchParams()
@@ -85,10 +86,12 @@ export const sendCollab = (boardId, body) =>
   apiRequest(`/boards/${boardId}/collab`, { method: 'POST', body })
 
 // ── Картинки холста и превью плитки ──
-export const uploadImage = (boardId, file) => {
-  const form = new FormData()
-  form.append('file', file)
-  return apiRequest(`/boards/${boardId}/uploads`, { method: 'POST', body: form })
+export const uploadImage = (boardId, file, { onProgress, signal } = {}) => {
+  return uploadFileTo({
+    file, onProgress, signal,
+    directUrl: `/boards/${boardId}/uploads`,
+    chunkBase: `/boards/${boardId}/uploads`,
+  })
 }
 
 // Миниатюра холста (png-снимок делает сам редактор).

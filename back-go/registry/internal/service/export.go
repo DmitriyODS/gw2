@@ -12,29 +12,30 @@ import (
 	"github.com/DmitriyODS/gw2/back-go/registry/internal/domain"
 )
 
-// ExportRecords — xlsx с выбранными полями. ids != nil → только эти записи,
-// иначе все записи реестра по фильтру search. Экспортируются только текстовые
-// типы полей (картинки/файлы исключаются). Возвращает байты файла и имя реестра.
-// ExportParams — что выгружаем: колонки плюс фильтр экрана (или явно
-// выбранные записи).
+// ExportParams — что выгружаем: колонки плюс набор записей (фильтр экрана либо
+// явно выбранные). Набор описывается так же, как у массового удаления и печати
+// QR: «выбрано» на всех экранах означает одно и то же.
 type ExportParams struct {
-	FieldIDs []int64
-	Search   string
-	IDs      []int64
-	Exclude  []int64
-	Tag      string
+	FieldIDs  []int64
+	Selection BulkParams
 }
 
-func (s *Service) ExportRecords(ctx context.Context, companyID, registryID int64, p ExportParams) ([]byte, string, error) {
-	reg, err := s.requireRegistry(ctx, companyID, registryID)
+// ExportRecords — xlsx с выбранными полями. Экспортируются только сводимые к
+// ячейке типы (картинки и файлы исключаются). Возвращает байты и имя реестра.
+func (s *Service) ExportRecords(ctx context.Context, userID, registryID int64, p ExportParams) ([]byte, string, error) {
+	a, err := s.actor(ctx, userID)
+	if err != nil {
+		return nil, "", err
+	}
+	reg, err := s.require(ctx, a, registryID, domain.AccessView)
 	if err != nil {
 		return nil, "", err
 	}
 	return s.buildExport(ctx, reg, p)
 }
 
-// buildExport — формирование xlsx по уже проверенному реестру (authed или
-// публичный доступ по ссылке).
+// buildExport — формирование xlsx по уже проверенному реестру (авторизованный
+// доступ или публичный по ссылке).
 func (s *Service) buildExport(ctx context.Context, reg *domain.Registry, p ExportParams) ([]byte, string, error) {
 	allFields, err := s.repo.ListFields(ctx, reg.ID)
 	if err != nil {
@@ -56,13 +57,17 @@ func (s *Service) buildExport(ctx context.Context, reg *domain.Registry, p Expor
 		return nil, "", domain.NewError("VALIDATION", "Выберите хотя бы одно поле для экспорта", 400)
 	}
 
-	// Фильтр — тот же, что и на экране: выгружаем видимое (или явно выбранное).
-	filter := domain.ExportFilter{
-		RegistryID: reg.ID, Search: p.Search, IDs: p.IDs, Exclude: p.Exclude,
-	}
-	s.applyTagFilter(ctx, reg, p.Tag, &filter)
-	records, err := s.repo.RecordsForExport(ctx, filter)
+	filter, err := s.selectionFilter(ctx, reg, p.Selection)
 	if err != nil {
+		return nil, "", err
+	}
+	recs, err := s.repo.RecordsForExport(ctx, filter)
+	if err != nil {
+		return nil, "", err
+	}
+	// В учётном реестре состояние позиции — такая же колонка отчёта, как
+	// остальные: выгрузка без неё отвечает на половину вопросов.
+	if err := s.attachIssues(ctx, reg, recs); err != nil {
 		return nil, "", err
 	}
 
@@ -71,14 +76,23 @@ func (s *Service) buildExport(ctx context.Context, reg *domain.Registry, p Expor
 	const sheet = "Реестр"
 	f.SetSheetName(f.GetSheetName(0), sheet)
 
+	now := time.Now()
 	for ci, col := range cols {
 		cell, _ := excelize.CoordinatesToCellName(ci+1, 1)
 		f.SetCellStr(sheet, cell, col.Label)
 	}
-	for ri, rec := range records {
+	if reg.Accounting {
+		cell, _ := excelize.CoordinatesToCellName(len(cols)+1, 1)
+		f.SetCellStr(sheet, cell, "Состояние")
+	}
+	for ri, rec := range recs {
 		for ci, col := range cols {
 			cell, _ := excelize.CoordinatesToCellName(ci+1, ri+2)
 			f.SetCellStr(sheet, cell, exportValue(col, rec.Data[domain.FieldID(col.ID)]))
+		}
+		if reg.Accounting {
+			cell, _ := excelize.CoordinatesToCellName(len(cols)+1, ri+2)
+			f.SetCellStr(sheet, cell, issueText(rec.Issue, now))
 		}
 	}
 
@@ -89,18 +103,31 @@ func (s *Service) buildExport(ctx context.Context, reg *domain.Registry, p Expor
 	return buf.Bytes(), reg.Name, nil
 }
 
+// issueText — состояние позиции строкой (зеркало плашки в таблице).
+func issueText(issue *domain.Issue, now time.Time) string {
+	switch issue.State(now) {
+	case domain.StockOverdue:
+		return fmt.Sprintf("Просрочено на %d дн. (%s)", issue.OverdueDays(now), issue.HolderName)
+	case domain.StockIssued:
+		return fmt.Sprintf("Выдано до %s (%s)", issue.DueAt.Format("02.01.2006"), issue.HolderName)
+	case domain.StockNoDue:
+		return fmt.Sprintf("Выдано без срока (%s)", issue.HolderName)
+	default:
+		return "В наличии"
+	}
+}
+
 // exportValue — текстовое представление значения для ячейки (зеркало
-// front textValue): галочка → Да/Нет, список → через запятую, дата → по конфигу.
+// front textValue): галочка → свои надписи, список → через запятую,
+// дата → по включённым частям.
 func exportValue(field domain.Field, v any) string {
 	if v == nil {
 		return ""
 	}
 	switch field.Type {
 	case domain.FieldCheckbox:
-		if b, ok := v.(bool); ok && b {
-			return "Да"
-		}
-		return "Нет"
+		b, _ := v.(bool)
+		return records.CheckboxText(field.Config, b)
 	case domain.FieldSelect:
 		switch x := v.(type) {
 		case string:
@@ -115,13 +142,12 @@ func exportValue(field domain.Field, v any) string {
 		return ""
 	case domain.FieldDatetime:
 		return formatDateTime(v, field.Config)
-	case domain.FieldStock:
-		return records.StockText(v)
 	default:
 		return fmt.Sprintf("%v", v)
 	}
 }
 
+// formatDateTime — дата по включённым частям (зеркало utils/registryFields.js).
 func formatDateTime(v any, cfg map[string]any) string {
 	s, ok := v.(string)
 	if !ok || s == "" {
@@ -131,32 +157,36 @@ func formatDateTime(v any, cfg map[string]any) string {
 	if err != nil {
 		return s
 	}
+	p := records.DateConfig(cfg)
 	pad := func(n int) string { return fmt.Sprintf("%02d", n) }
-	year := cfgBool(cfg, "year", true)
-	monthDay := cfgBool(cfg, "month_day", true)
-	withTime := cfgBool(cfg, "time", false)
+
+	date := []string{}
+	if p.Day {
+		date = append(date, pad(t.Day()))
+	}
+	if p.Month {
+		date = append(date, pad(int(t.Month())))
+	}
+	if p.Year {
+		date = append(date, fmt.Sprintf("%d", t.Year()))
+	}
+	clock := []string{}
+	if p.Hours {
+		clock = append(clock, pad(t.Hour()))
+	}
+	if p.Minutes {
+		clock = append(clock, pad(t.Minute()))
+	}
+	if p.Seconds {
+		clock = append(clock, pad(t.Second()))
+	}
 
 	parts := []string{}
-	switch {
-	case monthDay && year:
-		parts = append(parts, fmt.Sprintf("%s.%s.%d", pad(t.Day()), pad(int(t.Month())), t.Year()))
-	case monthDay:
-		parts = append(parts, fmt.Sprintf("%s.%s", pad(t.Day()), pad(int(t.Month()))))
-	case year:
-		parts = append(parts, fmt.Sprintf("%d", t.Year()))
+	if len(date) > 0 {
+		parts = append(parts, strings.Join(date, "."))
 	}
-	if withTime {
-		parts = append(parts, fmt.Sprintf("%s:%s", pad(t.Hour()), pad(t.Minute())))
+	if len(clock) > 0 {
+		parts = append(parts, strings.Join(clock, ":"))
 	}
 	return strings.Join(parts, " ")
-}
-
-func cfgBool(cfg map[string]any, key string, def bool) bool {
-	if cfg == nil {
-		return def
-	}
-	if b, ok := cfg[key].(bool); ok {
-		return b
-	}
-	return def
 }

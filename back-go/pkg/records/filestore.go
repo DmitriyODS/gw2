@@ -57,6 +57,18 @@ func (s *FileStore) WithQuota(quota QuotaTracker, service string) *FileStore {
 // Save — записать файл под случайным ключом с сохранением расширения исходного
 // файла. Возвращает относительный путь <subdir>/<hex><ext>.
 func (s *FileStore) Save(fileName string, data []byte) (string, error) {
+	key, err := s.key(fileName)
+	if err != nil {
+		return "", err
+	}
+	if err := s.st.Put(context.Background(), key, data, contentType(filepath.Ext(key))); err != nil {
+		return "", err
+	}
+	return key, nil
+}
+
+// key — случайный ключ хранилища с сохранением расширения исходного файла.
+func (s *FileStore) key(fileName string) (string, error) {
 	name := make([]byte, 16)
 	if _, err := rand.Read(name); err != nil {
 		return "", err
@@ -65,11 +77,7 @@ func (s *FileStore) Save(fileName string, data []byte) (string, error) {
 	if len(ext) > 16 {
 		ext = "" // защита от мусорного «расширения»
 	}
-	key := s.subdir + "/" + hex.EncodeToString(name) + ext
-	if err := s.st.Put(context.Background(), key, data, contentType(ext)); err != nil {
-		return "", err
-	}
-	return key, nil
+	return s.subdir + "/" + hex.EncodeToString(name) + ext, nil
 }
 
 // SaveFor — то же, что Save, но с учётом квоты владельца: файл сверх лимита
@@ -98,6 +106,51 @@ func (s *FileStore) SaveFor(ctx context.Context, userID, companyID int64, fileNa
 		})
 	}
 	return key, nil
+}
+
+// SaveStreamFor — то же, что SaveFor, но содержимое приезжает потоком: файл в
+// гигабайт нельзя подержать в памяти ради проверки квоты и записи. Размер
+// известен заранее (его назвал клиент при инициализации загрузки и подтвердили
+// принятые чанки), поэтому квота проверяется ДО первого байта в хранилище.
+func (s *FileStore) SaveStreamFor(ctx context.Context, userID, companyID int64, fileName string, r io.Reader, size int64) (string, error) {
+	if s.quota != nil {
+		if err := s.quota.EnsureStorage(ctx, userID, companyID, size); err != nil {
+			return "", err
+		}
+	}
+	key, err := s.key(fileName)
+	if err != nil {
+		return "", err
+	}
+	if err := s.st.PutStream(ctx, key, r, size, contentType(filepath.Ext(key))); err != nil {
+		return "", err
+	}
+	if s.quota != nil {
+		s.quota.TrackStorage(ctx, userID, companyID, billingclient.StorageChange{
+			Service: s.service,
+			Added:   []billingclient.StoredFile{{Key: key, Name: fileName, Size: size}},
+		})
+	}
+	return key, nil
+}
+
+// PutRaw — записать служебный объект под ЗАДАННЫМ ключом мимо учёта квоты:
+// части незавершённой загрузки живут во временном префиксе и либо станут
+// файлом (тогда место посчитает SaveStreamFor), либо будут убраны уборщиком.
+func (s *FileStore) PutRaw(ctx context.Context, key string, data []byte) error {
+	return s.st.Put(ctx, key, data, "application/octet-stream")
+}
+
+// OpenStream — объект на чтение потоком (сборка файла из частей). Закрыть
+// вызывающему.
+func (s *FileStore) OpenStream(ctx context.Context, key string) (io.ReadCloser, error) {
+	return s.st.Open(ctx, key)
+}
+
+// RemoveKeys — убрать служебные объекты мимо учёта квоты (части загрузки:
+// в журнале хранилища их нет, считать нечего).
+func (s *FileStore) RemoveKeys(ctx context.Context, keys ...string) {
+	s.st.Remove(ctx, keys...)
 }
 
 func (s *FileStore) Remove(paths []string) {

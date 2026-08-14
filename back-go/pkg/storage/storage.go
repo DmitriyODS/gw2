@@ -22,6 +22,11 @@ import (
 type Storage interface {
 	// Put — записать объект; contentType важен для корректной отдачи из S3.
 	Put(ctx context.Context, key string, data []byte, contentType string) error
+	// PutStream — записать объект потоком, не держа его в памяти целиком.
+	// Нужен большим файлам (гигабайтное вложение реестра собирается из
+	// чанков): size — ожидаемый размер для сверки записи, 0 — размер заранее
+	// неизвестен.
+	PutStream(ctx context.Context, key string, r io.Reader, size int64, contentType string) error
 	// Open — открыть объект на чтение (бэкап/копирование). Закрыть вызывающему.
 	Open(ctx context.Context, key string) (io.ReadCloser, error)
 	// Size — размер объекта в байтах (учёт занятого места при удалении файла:

@@ -13,6 +13,7 @@ import (
 	"github.com/DmitriyODS/gw2/back-go/calendar/internal/domain"
 	"github.com/DmitriyODS/gw2/back-go/calendar/internal/endpoint"
 	"github.com/DmitriyODS/gw2/back-go/calendar/internal/service"
+	"github.com/DmitriyODS/gw2/back-go/pkg/chunkupload"
 )
 
 const xlsxMime = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
@@ -183,8 +184,11 @@ func (h *handlers) listEntries(c *fiber.Ctx) error {
 	return c.JSON(resp)
 }
 
-/* agenda — ближайшие события всех календарей компании (живая плитка рабочего
-   стола). Период присылает клиент: границы дня считаются в его зоне. */
+/*
+agenda — ближайшие события всех календарей компании (живая плитка рабочего
+
+	стола). Период присылает клиент: границы дня считаются в его зоне.
+*/
 func (h *handlers) agenda(c *fiber.Ctx) error {
 	companyID, ok := companyScope(c)
 	if !ok {
@@ -318,6 +322,26 @@ func (h *handlers) exportEntries(c *fiber.Ctx) error {
 }
 
 // ── Загрузка файла ───────────────────────────────────────────────
+
+/* Приём файла частями: право и потолок проверяем ДО первого байта, собираем
+   потоком. Место тратится из квоты компании — она владеет календарём. */
+
+func (h *handlers) beginUpload(c *fiber.Ctx, in chunkupload.InitRequest, s *chunkupload.Session) error {
+	companyID, ok := companyScope(c)
+	if !ok {
+		return domain.ErrNoCompany
+	}
+	if in.Size > uploadMaxBytes {
+		return domain.NewError("FILE_TOO_BIG", "Файл слишком большой (макс. 25 МБ)", 413)
+	}
+	s.CompanyID = companyID
+	return nil
+}
+
+func (h *handlers) finishUpload(c *fiber.Ctx, s chunkupload.Session, r io.Reader) (any, error) {
+	return h.svc.SaveUploadStream(c.Context(), s.CompanyID, currentUser(c).ID,
+		s.FileName, s.Mime, s.TotalSize, r)
+}
 
 func (h *handlers) upload(c *fiber.Ctx) error {
 	companyID, ok := companyScope(c)

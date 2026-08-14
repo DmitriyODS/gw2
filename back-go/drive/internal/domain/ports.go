@@ -2,6 +2,7 @@ package domain
 
 import (
 	"context"
+	"io"
 
 	"github.com/DmitriyODS/gw2/back-go/pkg/storagefiles"
 )
@@ -90,6 +91,9 @@ type FileStore interface {
 	// SaveFor — записать файл в квоту владельца: сверх лимита файл не
 	// сохраняется вовсе.
 	SaveFor(ctx context.Context, userID, companyID int64, fileName string, data []byte) (string, error)
+	// SaveStreamFor — то же потоком: файл в сотни мегабайт нельзя подержать в
+	// памяти ради проверки квоты и записи.
+	SaveStreamFor(ctx context.Context, userID, companyID int64, fileName string, r io.Reader, size int64) (string, error)
 	// RemoveFor — удаление с возвратом места в квоту.
 	RemoveFor(ctx context.Context, userID, companyID int64, paths []string)
 	// Remove — удаление БЕЗ учёта: так чистит раздел «Настройки → Хранилище»,

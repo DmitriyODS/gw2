@@ -16,6 +16,7 @@ import (
 	"github.com/DmitriyODS/gw2/back-go/board/internal/domain"
 	"github.com/DmitriyODS/gw2/back-go/board/internal/service"
 	"github.com/DmitriyODS/gw2/back-go/pkg/apierror"
+	"github.com/DmitriyODS/gw2/back-go/pkg/chunkupload"
 	"github.com/DmitriyODS/gw2/back-go/pkg/httpserver"
 	"github.com/DmitriyODS/gw2/back-go/pkg/pasetoauth"
 )
@@ -49,7 +50,7 @@ func authSource(users domain.UserReader) pasetoauth.AuthSource {
 	}
 }
 
-func NewServer(svc *service.Service, users domain.UserReader,
+func NewServer(svc *service.Service, users domain.UserReader, uploads *chunkupload.Manager,
 	verifier *pasetoauth.Verifier, log *slog.Logger) *Server {
 
 	app := httpserver.New(httpserver.Config{
@@ -99,6 +100,14 @@ func NewServer(svc *service.Service, users domain.UserReader,
 	api.Post("/:id<int>/copy", h.copyBoard)
 	api.Get("/:id<int>/export", h.exportBoard)
 	api.Post("/:id<int>/uploads", h.upload)
+	// Картинка крупнее порога приезжает частями — общий движок платформы.
+	chunkupload.Handlers{
+		Manager: uploads,
+		UserID:  currentUserID,
+		Begin:   h.beginUpload,
+		Finish:  h.finishUpload,
+		Respond: h.respondError,
+	}.Mount(api, "/:id<int>/uploads")
 	api.Put("/:id<int>/preview", h.setPreview)
 
 	// Публичные ссылки (управление владельцем).

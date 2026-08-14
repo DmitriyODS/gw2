@@ -13,14 +13,6 @@
     @command="onCommand"
     @narrow-change="narrow = $event"
   >
-    <template v-if="registry" #status>
-      <AppChip
-        :icon="canEdit ? 'edit' : 'visibility'"
-        :tone="canEdit ? 'primary' : 'neutral'"
-        :label="canEdit ? 'просмотр и правка' : 'только просмотр'"
-      />
-    </template>
-
     <!-- Поиск слотом шапки: в тесной панели он сам сворачивается в лупу. -->
     <template v-if="registry" #search="{ narrow: tight }">
       <SearchField
@@ -57,8 +49,24 @@
     </template>
 
     <template #default="{ narrow: tight }">
+      <!-- Ссылка «только для своих»: реестра гость не увидит, пока не войдёт.
+           Это не поломка, поэтому и вид другой — не отказ, а приглашение. -->
       <EmptyState
-        v-if="error"
+        v-if="needAuth"
+        class="sr-error"
+        icon="lock"
+        tone="soft"
+        title="Нужен вход в аккаунт"
+        subtitle="Владелец открыл этот реестр только для тех, кто вошёл в Groove Work. Войдите или заведите аккаунт — и ссылка откроется."
+      >
+        <AppStack row :gap="8">
+          <AppButton variant="filled" icon="login" label="Войти" @click="goAuth('/login')" />
+          <AppButton variant="glass" icon="person_add" label="Регистрация" @click="goAuth('/register')" />
+        </AppStack>
+      </EmptyState>
+
+      <EmptyState
+        v-else-if="error"
         class="sr-error"
         icon="link_off"
         tone="error"
@@ -67,7 +75,7 @@
       />
 
       <RegistryRecords
-        v-else
+        v-else-if="registry"
         :fields="shownFields"
         :records="records"
         :loading="loading"
@@ -80,21 +88,26 @@
         :total="total"
         :narrow="tight"
         :search="filters.search"
-        :tags="tags"
-        :tag="filters.tag"
+        :sections="sections"
+        :section="filters.section"
+        :widths="colWidths"
         empty-hint="Владелец ссылки пока не добавил ни одной записи."
         @update:sort="applySort"
-        @update:tag="setTag"
+        @update:section="setSection"
         @open="openRecord"
+        @edit="editRecord"
+        @remove="askDeleteRecord"
+        @move-column="moveCol"
+        @resize-columns="setColWidths"
+        @reset-widths="resetColWidths"
         @toggle="toggleRow"
         @toggle-all="toggleAll"
         @select-all-matching="selectAllMatching"
         @clear-selection="clearSelection"
-      >
-        <template #selection-actions>
-          <AppButton size="sm" icon="download" label="Выгрузить" @click="exportOpen = true" />
-        </template>
-      </RegistryRecords>
+        :registry="registry"
+        :can-edit="canEdit"
+        @manage="openIssue"
+      />
     </template>
   </AppPage>
 
@@ -103,9 +116,11 @@
     :registry="registry"
     :record="activeRecord"
     :readonly="!canEdit"
+    :start-editing="startEditing"
     :save="saveRecord"
     :upload="uploadRecordFile"
     @saved="fetchRecords"
+    @manage="openIssueFromCard"
   />
 
   <RegistryColumnsDialog
@@ -115,12 +130,55 @@
     @toggle="toggleCol"
   />
 
+  <ConfirmDialog
+    :visible="!!recordToDelete"
+    header="Удалить запись?"
+    message="Запись и её файлы будут удалены безвозвратно."
+    confirm-label="Удалить" danger-confirm
+    @confirm="doDeleteRecord" @cancel="recordToDelete = null"
+  />
+
+  <RegistryIssueDialog
+    v-model="issueOpen"
+    :record="issueRecord"
+    :title="issueTitle"
+    :issue="issueSharedRecordFn"
+    :extend="extendSharedIssueFn"
+    :back="returnSharedIssueFn"
+    :history="fetchSharedIssues"
+    @error="notif.error($event)"
+  />
+
+  <RegistryStructureDialog
+    v-model="structureOpen"
+    :registry="registry"
+    :save="saveStructure"
+    @error="notif.error($event)"
+  />
+
+  <RegistryQrFindDialog
+    v-model="qrFindOpen"
+    :registry="registry"
+    :fetch-page="fetchRecordsPage"
+    @found="openRecord"
+  />
+  <RegistryQrPrintDialog
+    v-model="qrPrintOpen"
+    :registry="registry"
+    :fetch-page="fetchRecordsPage"
+    :selected-ids="pickedIds"
+    :search="filters.search"
+    :section="filters.section"
+    :filters="filters.filters"
+    :sort="filters.sort"
+    :order="filters.order"
+  />
+
   <RegistryExportDialog
     v-model="exportOpen"
     :fields="exportableFields"
     :selected-ids="pickedIds"
-    :search="filters.search"
-    :tag="filters.tag"
+    :filter="{ search: filters.search, section: filters.section, filters: filters.filters }"
     :filename="registry?.name || 'registry'"
     :request="exportRequest"
   />
@@ -128,9 +186,9 @@
 
 <script setup>
 import { computed, onMounted, reactive, ref } from 'vue'
-import { useRoute } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import AppButton from '@/components/ui/AppButton.vue'
-import AppChip from '@/components/ui/AppChip.vue'
+import AppStack from '@/components/ui/AppStack.vue'
 import AppPage from '@/components/ui/AppPage.vue'
 import BrandWordmark from '@/components/common/BrandWordmark.vue'
 import EmptyState from '@/components/common/EmptyState.vue'
@@ -138,16 +196,26 @@ import SearchField from '@/components/common/SearchField.vue'
 import RegistryColumnsDialog from '@/components/registry/RegistryColumnsDialog.vue'
 import RegistryExportDialog from '@/components/registry/RegistryExportDialog.vue'
 import RegistryRecordDialog from '@/components/registry/RegistryRecordDialog.vue'
+import ConfirmDialog from '@/components/ui/ConfirmDialog.vue'
+import RegistryQrFindDialog from '@/components/registry/RegistryQrFindDialog.vue'
+import RegistryIssueDialog from '@/components/registry/RegistryIssueDialog.vue'
+import RegistryStructureDialog from '@/components/registry/RegistryStructureDialog.vue'
+import RegistryQrPrintDialog from '@/components/registry/RegistryQrPrintDialog.vue'
 import RegistryRecords from '@/components/registry/RegistryRecords.vue'
+import { useNotificationsStore } from '@/stores/notifications.js'
 import { useRegistryColumns } from '@/composables/useRegistryColumns.js'
 import { useRowSelection } from '@/composables/useRowSelection.js'
 import {
   createSharedRecord, exportSharedRecords, getSharedRecords, getSharedRegistry,
-  updateSharedRecord, uploadSharedFile,
+  updateSharedRecord, uploadSharedFile, deleteSharedRecord,
+  updateSharedRegistry, replaceSharedFields,
+  getSharedIssues, issueSharedRecord, extendSharedIssue, returnSharedIssue,
 } from '@/api/registries.js'
-import { isExportable, tagOptions } from '@/utils/registryFields.js'
+import { hasQr, isExportable, sectionOptions, textValue } from '@/utils/registryFields.js'
 
 const route = useRoute()
+const router = useRouter()
+const notif = useNotificationsStore()
 const code = route.params.code
 
 const registry = ref(null)
@@ -156,14 +224,16 @@ const records = ref([])
 const total = ref(0)
 const loading = ref(false)
 const booting = ref(true)
+// Ссылка требует входа: отдельное состояние, а не текст ошибки — вид у него свой.
+const needAuth = ref(false)
 const narrow = ref(false)
 
-const filters = reactive({ search: '', sort: 'created_at', order: 'desc', tag: '', page: 1, per_page: 30 })
+const filters = reactive({ search: '', sort: 'created_at', order: 'desc', section: '', filters: [], page: 1, per_page: 30 })
 
-// Теги — те же, что в разделе: варианты поля, назначенного владельцем реестра.
-const tags = computed(() => tagOptions(registry.value))
-function setTag(value) {
-  filters.tag = filters.tag === value ? '' : (value || '')
+// Подразделы — те же, что в разделе: варианты поля-источника.
+const sections = computed(() => sectionOptions(registry.value))
+function setSection(value) {
+  filters.section = filters.section === value ? '' : (value || '')
   filters.page = 1
   fetchRecords()
 }
@@ -173,7 +243,8 @@ const exportableFields = computed(() => (registry.value?.fields || []).filter((f
 
 /* Колонки — личная настройка устройства, ключ по коду ссылки: аккаунта у гостя
    нет, а разные ссылки ведут в разные реестры. */
-const { visible: visibleCols, shown: shownFields, toggle: toggleCol } = useRegistryColumns(
+const { visible: visibleCols, shown: shownFields, toggle: toggleCol, move: moveCol,
+  widths: colWidths, setWidths: setColWidths, resetWidths: resetColWidths } = useRegistryColumns(
   () => registry.value?.fields || [],
   () => `gw_shared_cols_${code}`,
 )
@@ -185,15 +256,16 @@ const {
   toggle: toggleRow, toggleAll, selectAllMatching, clear: clearSelection,
 } = useRowSelection(() => records.value, {
   total: () => total.value,
-  scope: () => `${filters.search}|${filters.tag}`,
+  scope: () => `${filters.search}|${filters.section}`,
 })
 
-// Выгрузке нужны отмеченные id; режим «все» уходит фильтром (search + tag).
+// Выгрузке нужны отмеченные id; режим «все» уходит фильтром экрана.
 const pickedIds = computed(() => (selectionMode.value === 'all' ? [] : [...picked.value]))
 
 /* Ссылка бывает двух видов: только просмотр и просмотр с правкой записей.
    Уровень решает сервер — здесь по нему лишь показываем или прячем правку. */
-const canEdit = computed(() => registry.value?.access === 'edit')
+const canEdit = computed(() => ['edit', 'admin'].includes(registry.value?.access))
+const canManage = computed(() => registry.value?.access === 'admin')
 
 /* Команды шапки. На ссылке с правкой главное действие — добавить запись (на
    телефоне уезжает на плавающую кнопку), иначе — выгрузка. */
@@ -208,14 +280,22 @@ const commands = computed(() => {
         primary: true, fab: true, hidden: selectionCount.value > 0,
       }]
       : []),
+    /* Выгрузка — обычная команда панели: как `primary` она забирала на телефоне
+       целую строку под себя, хотя ей место в «ещё», в одном ряду с поиском. */
     ...(exportableFields.value.length
-      ? [{
-          key: 'export',
-          label: 'Экспорт в XLSX',
-          icon: 'download',
-          variant: 'glass',
-          primary: !canEdit.value,
-        }]
+      ? [{ key: 'export', label: 'Выгрузить в Excel', icon: 'download', variant: 'glass' }]
+      : []),
+    // «Администрирование» тем и отличается от правки, что позволяет менять сам
+    // реестр, а не только его записи.
+    ...(canManage.value
+      ? [{ key: 'structure', label: 'Настроить реестр', icon: 'tune' }]
+      : []),
+    // Печать и поиск по QR — часть ПРОСМОТРА: ссылка на чтение их тоже даёт.
+    ...(hasQrFields.value
+      ? [
+          { key: 'qr-find', label: 'Найти по QR-коду', icon: 'qr_code_scanner' },
+          { key: 'qr-print', label: 'Печать QR-кодов', icon: 'print' },
+        ]
       : []),
     ...(hasFields && !narrow.value
       ? [{ key: 'cols', label: 'Колонки', icon: 'view_column' }]
@@ -227,20 +307,116 @@ function onCommand(key) {
   if (key === 'add') openCreate()
   else if (key === 'export') exportOpen.value = true
   else if (key === 'cols') colsOpen.value = true
+  else if (key === 'qr-find') qrFindOpen.value = true
+  else if (key === 'qr-print') qrPrintOpen.value = true
+  else if (key === 'structure') structureOpen.value = true
 }
+
+// Ссылка уровня admin правит структуру теми же формами, что и раздел: сама
+// форма про источник ничего не знает, ей отдают функцию сохранения.
+const structureOpen = ref(false)
+
+async function saveStructure({ name, accounting, section_field_id, fields }) {
+  await replaceSharedFields(code, fields)
+  const updated = await updateSharedRegistry(code, { name, accounting, section_field_id })
+  registry.value = { ...registry.value, ...updated }
+  await fetchRecords()
+}
+
+const qrFindOpen = ref(false)
+const qrPrintOpen = ref(false)
+const hasQrFields = computed(() => (registry.value?.fields || []).some(hasQr))
+
+// Записи по коду ссылки — тем же постраничным контрактом, что и в разделе.
+const fetchRecordsPage = (params) => getSharedRecords(code, params)
 
 const colsOpen = ref(false)
 const exportOpen = ref(false)
 const dialogOpen = ref(false)
 const activeRecord = ref(null)
+const startEditing = ref(false)
+const recordToDelete = ref(null)
 
 function openRecord(rec) {
   activeRecord.value = rec
+  startEditing.value = false
   dialogOpen.value = true
 }
+
+// «Редактировать» из меню записи — та же карточка, но сразу в правке.
+function editRecord(rec) {
+  activeRecord.value = rec
+  startEditing.value = true
+  dialogOpen.value = true
+}
+
 function openCreate() {
   activeRecord.value = null
+  startEditing.value = false
   dialogOpen.value = true
+}
+
+/* Учётный режим по ссылке: те же формы, но ручки по коду. Открытую выдачу
+   после действия перечитываем вместе со списком — плашка состояния приезжает
+   вместе с записями. */
+const issueOpen = ref(false)
+const issueRecordRef = ref(null)
+const issueRecord = computed(() =>
+  records.value.find((r) => r.id === issueRecordRef.value?.id) || issueRecordRef.value)
+
+const issueTitle = computed(() => {
+  const rec = issueRecord.value
+  if (!rec) return ''
+  for (const f of registry.value?.fields || []) {
+    const v = textValue(f, rec.data?.[String(f.id)])
+    if (v) return v
+  }
+  return `Запись №${rec.id}`
+})
+
+function openIssue(rec) {
+  issueRecordRef.value = rec
+  issueOpen.value = true
+}
+
+// Из карточки записи: её закрываем, иначе два диалога встают друг на друга.
+function openIssueFromCard(rec) {
+  dialogOpen.value = false
+  openIssue(rec)
+}
+
+const fetchSharedIssues = (recordId) => getSharedIssues(code, recordId)
+
+async function issueSharedRecordFn(recordId, body) {
+  const issue = await issueSharedRecord(code, recordId, body)
+  await fetchRecords()
+  return issue
+}
+
+async function extendSharedIssueFn(recordId, body) {
+  const issue = await extendSharedIssue(code, recordId, body)
+  await fetchRecords()
+  return issue
+}
+
+async function returnSharedIssueFn(recordId, comment) {
+  await returnSharedIssue(code, recordId, comment)
+  await fetchRecords()
+}
+
+function askDeleteRecord(rec) {
+  recordToDelete.value = rec
+}
+
+async function doDeleteRecord() {
+  const rec = recordToDelete.value
+  recordToDelete.value = null
+  try {
+    await deleteSharedRecord(code, rec.id)
+    await fetchRecords()
+  } catch (e) {
+    notif.error(e?.message || 'Не удалось удалить запись')
+  }
 }
 
 const exportRequest = (params) => exportSharedRecords(code, params)
@@ -252,12 +428,20 @@ const saveRecord = (data, record) => (
 )
 const uploadRecordFile = (file) => uploadSharedFile(code, file)
 
+/* Вход по ссылке возвращает сюда же: человек нажал «Войти» из-за ЭТОГО
+   реестра, и после входа он должен оказаться в нём, а не на пустом столе. */
+function goAuth(path) {
+  router.push({ path, query: { redirect: route.fullPath } })
+}
+
 async function load() {
   try {
     registry.value = await getSharedRegistry(code)
     await fetchRecords()
   } catch (e) {
-    error.value = e?.message || 'Ссылка не найдена или была отозвана'
+    // 401 у публичной ссылки означает ровно одно: она требует входа.
+    if (e?.status === 401 || e?.error === 'SHARE_AUTH_REQUIRED') needAuth.value = true
+    else error.value = e?.message || 'Ссылка не найдена или была отозвана'
   } finally {
     booting.value = false
   }

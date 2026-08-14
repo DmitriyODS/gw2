@@ -396,6 +396,12 @@ func (b *fakeBus) Publish(_ domain.Ctx, event string, _ []string, _ any) {
 
 type fakeFiles struct{ removed []string }
 
+func (f *fakeFiles) SaveStreamFor(_ context.Context, _, _ int64, _ string, r io.Reader, _ int64) (string, error) {
+	// Поток вычитываем целиком: незакрытая часть осталась бы висеть.
+	_, _ = io.Copy(io.Discard, r)
+	return "portal/x", nil
+}
+
 func (f *fakeFiles) SaveFor(_ context.Context, _, _ int64, _ string, _ []byte) (string, error) {
 	return "portal/x", nil
 }

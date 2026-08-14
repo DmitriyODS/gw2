@@ -1,5 +1,6 @@
 // Ведётся вручную: REST календарей живёт в calendarsvc (back-go/calendar).
 import { apiRequest } from './client.js'
+import { uploadFileTo } from '@/utils/chunkUpload.js'
 
 // ── Календари (структура) ──
 export const getCalendars = (options = {}) => apiRequest('/calendars', options)
@@ -64,11 +65,14 @@ export const exportEntries = (calendarId, { fields = [], from = '', to = '', sea
 }
 
 // Загрузка файла/картинки записи (multipart) → { path, name, mime, size }.
-export const uploadFile = (file) => {
-  const form = new FormData()
-  form.append('file', file)
-  return apiRequest('/calendars/uploads', { method: 'POST', body: form })
-}
+/* Файл крупнее порога уходит частями — общий загрузчик платформы
+   (utils/chunkUpload.js). */
+export const uploadFile = (file, { onProgress, signal } = {}) =>
+  uploadFileTo({
+    file, onProgress, signal,
+    directUrl: '/calendars/uploads',
+    chunkBase: '/calendars/uploads',
+  })
 
 // ── Публичные ссылки (управление, требует прав участника) ──
 export const getShares = (calendarId) => apiRequest(`/calendars/${calendarId}/shares`)

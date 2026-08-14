@@ -6,8 +6,11 @@ import "github.com/DmitriyODS/gw2/back-go/pkg/records"
 // общая с реестрами, живёт в pkg/records; здесь — тонкие делегаты на
 // доменном типе Field.
 
-// Normalize — привести span'ы к допустимым границам (col 1..3, row ≥1).
-func (f *Field) Normalize() { records.NormalizeSpans(&f.ColSpan, &f.RowSpan, &f.Config) }
+// GridCols — ширина сетки карточки календаря в колонках.
+const GridCols = 3
+
+// Normalize — привести span'ы к допустимым границам (col 1..GridCols, row ≥1).
+func (f *Field) Normalize() { records.NormalizeSpans(&f.ColSpan, &f.RowSpan, &f.Config, GridCols) }
 
 // FieldOptions — варианты select-поля из config (пустой срез, если нет).
 func (f Field) FieldOptions() []string { return records.Options(f.Config) }

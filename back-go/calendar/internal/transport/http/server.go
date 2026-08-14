@@ -12,7 +12,9 @@ import (
 
 	"github.com/DmitriyODS/gw2/back-go/calendar/internal/domain"
 	"github.com/DmitriyODS/gw2/back-go/calendar/internal/endpoint"
+	"github.com/DmitriyODS/gw2/back-go/calendar/internal/service"
 	"github.com/DmitriyODS/gw2/back-go/pkg/apierror"
+	"github.com/DmitriyODS/gw2/back-go/pkg/chunkupload"
 	"github.com/DmitriyODS/gw2/back-go/pkg/httpserver"
 	"github.com/DmitriyODS/gw2/back-go/pkg/pasetoauth"
 )
@@ -48,14 +50,14 @@ func authSource(users domain.UserReader) pasetoauth.AuthSource {
 	}
 }
 
-func NewServer(eps endpoint.Endpoints, users domain.UserReader,
-	verifier *pasetoauth.Verifier, log *slog.Logger) *Server {
+func NewServer(eps endpoint.Endpoints, svc *service.Service, users domain.UserReader,
+	uploads *chunkupload.Manager, verifier *pasetoauth.Verifier, log *slog.Logger) *Server {
 
 	app := httpserver.New(httpserver.Config{
 		AppName: "gw2-calendarsvc", Log: log, BodyLimit: uploadMaxBytes + 1024*1024,
 	})
 	auth := pasetoauth.NewMiddleware(verifier, authSource(users))
-	h := &handlers{eps: eps, log: log}
+	h := &handlers{eps: eps, svc: svc, log: log}
 
 	employee := auth.RequireRole(domain.LevelEmployee)
 	admin := auth.RequireRole(domain.LevelAdmin)
@@ -78,6 +80,14 @@ func NewServer(eps endpoint.Endpoints, users domain.UserReader,
 	// Загрузка файла/картинки записи (любой участник). "/uploads" не конфликтует
 	// с "/:id<int>" — параметр матчит только числа.
 	api.Post("/uploads", employee, h.upload)
+	// Файл крупнее порога приезжает частями — общий движок платформы.
+	chunkupload.Handlers{
+		Manager: uploads,
+		UserID:  func(c *fiber.Ctx) int64 { return currentUser(c).ID },
+		Begin:   h.beginUpload,
+		Finish:  h.finishUpload,
+		Respond: h.respondError,
+	}.Mount(api.Group("", employee), "/uploads")
 
 	// Повестка дня для живой плитки: "/agenda" не конфликтует с "/:id<int>".
 	api.Get("/agenda", employee, h.agenda)
@@ -109,6 +119,9 @@ func (s *Server) Shutdown() error          { return s.app.Shutdown() }
 
 type handlers struct {
 	eps endpoint.Endpoints
+	// svc — прямой доступ нужен приёму частей: там своя сборка, и заводить ради
+	// неё ещё три endpoint-обёртки незачем.
+	svc *service.Service
 	log *slog.Logger
 }
 

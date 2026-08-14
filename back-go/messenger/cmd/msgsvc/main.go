@@ -26,6 +26,7 @@ import (
 	httptransport "github.com/DmitriyODS/gw2/back-go/messenger/internal/transport/http"
 	"github.com/DmitriyODS/gw2/back-go/pkg/billingclient"
 	"github.com/DmitriyODS/gw2/back-go/pkg/bootstrap"
+	"github.com/DmitriyODS/gw2/back-go/pkg/chunkupload"
 	"github.com/DmitriyODS/gw2/back-go/pkg/events"
 	"github.com/DmitriyODS/gw2/back-go/pkg/gen/messengerpb"
 	"github.com/DmitriyODS/gw2/back-go/pkg/pasetoauth"
@@ -103,7 +104,12 @@ func main() {
 		os.Exit(1)
 	}
 
-	httpServer := httptransport.NewServer(eps, svc, users, verifier, log)
+	// Приём больших вложений частями — общий движок платформы: сессии в БД,
+	// части объектами в хранилище (переживает несколько инстансов сервиса).
+	uploads := chunkupload.New(pool, store, "messenger", log)
+	go uploads.Sweep(ctx)
+
+	httpServer := httptransport.NewServer(eps, svc, users, uploads, verifier, log)
 
 	log.Info("listening", "grpc", grpcAddr, "http", httpAddr)
 	bootstrap.Run(ctx, log,

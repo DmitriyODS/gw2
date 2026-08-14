@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"encoding/json"
+	"io"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -512,16 +513,20 @@ func (s *Service) MarkRead(ctx context.Context, convID, userID int64) (int, erro
 	return n, nil
 }
 
-// UploadAttachment — сохранить файл и зарегистрировать вложение.
-func (s *Service) UploadAttachment(ctx context.Context, uploaderID int64,
-	fileName, mimeType string, data []byte) (*dto.Attachment, error) {
+/*
+CheckUpload — можно ли принять такой файл: тип и размер. Зовётся ДО первого
 
-	if len(data) == 0 {
-		return nil, domain.NewError("EMPTY_FILE", "Пустой файл", 400)
+	байта у загрузки частями — незачем принимать полгигабайта, чтобы отказать на
+	сборке. Возвращает нормализованный mime и расширение.
+*/
+func (s *Service) CheckUpload(ctx context.Context, uploaderID int64,
+	fileName, mimeType string, size int64) (string, string, error) {
+
+	if size <= 0 {
+		return "", "", domain.NewError("EMPTY_FILE", "Пустой файл", 400)
 	}
-	if len(data) > MaxAttachmentSize {
-		return nil, domain.NewError("FILE_TOO_LARGE",
-			"Файл превышает 500 МБ", 400)
+	if size > MaxAttachmentSize {
+		return "", "", domain.NewError("FILE_TOO_LARGE", "Файл превышает 500 МБ", 400)
 	}
 	// Только сам тип, без параметров ("; charset=...") — как
 	// werkzeug FileStorage.mimetype.
@@ -537,16 +542,54 @@ func (s *Service) UploadAttachment(ctx context.Context, uploaderID int64,
 		}
 	}
 	if !allowed {
-		return nil, domain.NewError("BAD_MIME", "Неподдерживаемый тип файла", 400)
+		return "", "", domain.NewError("BAD_MIME", "Неподдерживаемый тип файла", 400)
 	}
-
 	original := fileName
 	if original == "" {
 		original = "file"
 	}
 	ext := truncateString(strings.ToLower(filepath.Ext(original)), 16)
-	if err := s.ensureUploadSpace(ctx, uploaderID, int64(len(data))); err != nil {
+	if err := s.ensureUploadSpace(ctx, uploaderID, size); err != nil {
+		return "", "", err
+	}
+	return mime, ext, nil
+}
+
+/*
+UploadAttachmentStream — вложение, пришедшее ЧАСТЯМИ. Превью здесь не
+
+	делаем: такие размеры — это видео и архивы, а не картинки ленты, и держать
+	ради превью весь файл в памяти значило бы потерять весь смысл частей.
+*/
+func (s *Service) UploadAttachmentStream(ctx context.Context, uploaderID int64,
+	fileName, mimeType string, size int64, r io.Reader) (*dto.Attachment, error) {
+
+	mime, ext, err := s.CheckUpload(ctx, uploaderID, fileName, mimeType, size)
+	if err != nil {
 		return nil, err
+	}
+	relPath, err := s.files.SaveStream(r, ext, size)
+	if err != nil {
+		return nil, err
+	}
+	original := fileName
+	if original == "" {
+		original = "file"
+	}
+	return s.registerAttachment(ctx, uploaderID, relPath, nil, 0, original, mime, size)
+}
+
+// UploadAttachment — сохранить файл и зарегистрировать вложение.
+func (s *Service) UploadAttachment(ctx context.Context, uploaderID int64,
+	fileName, mimeType string, data []byte) (*dto.Attachment, error) {
+
+	mime, ext, err := s.CheckUpload(ctx, uploaderID, fileName, mimeType, int64(len(data)))
+	if err != nil {
+		return nil, err
+	}
+	original := fileName
+	if original == "" {
+		original = "file"
 	}
 	relPath, err := s.files.Save(data, ext)
 	if err != nil {
@@ -564,13 +607,22 @@ func (s *Service) UploadAttachment(ctx context.Context, uploaderID int64,
 			}
 		}
 	}
+	return s.registerAttachment(ctx, uploaderID, relPath, thumbPath, thumbSize,
+		original, mime, int64(len(data)))
+}
+
+// registerAttachment — завести запись о уже сохранённом объекте и учесть место.
+func (s *Service) registerAttachment(ctx context.Context, uploaderID int64,
+	relPath string, thumbPath *string, thumbSize int64,
+	original, mime string, size int64) (*dto.Attachment, error) {
+
 	att := &domain.Attachment{
 		UploaderID: uploaderID,
 		FilePath:   relPath,
 		ThumbPath:  thumbPath,
 		FileName:   truncateString(original, 255),
 		MimeType:   truncateString(mime, 120),
-		SizeBytes:  int64(len(data)),
+		SizeBytes:  size,
 	}
 	if err := s.repo.CreateAttachment(ctx, att); err != nil {
 		return nil, err

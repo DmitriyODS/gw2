@@ -1,4 +1,5 @@
 import { apiRequest } from './client.js'
+import { uploadFileTo } from '@/utils/chunkUpload.js'
 
 export const listConversations = (options = {}) =>
   apiRequest('/messenger/conversations', options)
@@ -27,13 +28,17 @@ export const forwardMessage = (messageId, { conversationIds = [], userIds = [] }
 export const markRead = (conversationId) =>
   apiRequest(`/messenger/conversations/${conversationId}/read`, { method: 'POST' })
 
-export const uploadAttachment = (file) => {
-  const form = new FormData()
-  form.append('file', file)
-  // Стандартный таймаут apiRequest (8с) обрывает загрузку больших файлов
-  // на середине — даём вложениям до 3 минут.
-  return apiRequest('/messenger/uploads', { method: 'POST', body: form, timeout: 180000 })
-}
+/* Вложение крупнее порога уезжает ЧАСТЯМИ: полгигабайта одним запросом не
+   переживают ни таймауты прокси, ни обрыв сети. Порог и вся механика — общие
+   для платформы (utils/chunkUpload.js). */
+export const uploadAttachment = (file, { onProgress, signal } = {}) =>
+  uploadFileTo({
+    file,
+    onProgress,
+    signal,
+    directUrl: '/messenger/uploads',
+    chunkBase: '/messenger/uploads',
+  })
 
 export const getUnreadCount = () =>
   apiRequest('/messenger/unread')

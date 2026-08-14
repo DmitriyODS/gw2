@@ -195,16 +195,17 @@ describeIntegration('drive API: доступ', () => {
     u.session.use()
 
     const before = (await api.browse({})).files.length
-    const started = await apiRequest('/drive/uploads', {
+    // Загрузка частями — общий контракт платформы: init → chunk → finish.
+    const started = await apiRequest('/drive/uploads/init', {
       method: 'POST',
-      body: { name: 'брошенный.bin', size: 1024, mime: 'application/octet-stream' },
+      body: { file_name: 'брошенный.bin', size: 1024, mime: 'application/octet-stream' },
     })
-    expect(started.upload_id).toBeTruthy()
+    expect(started.code).toBeTruthy()
 
-    await apiRequest(`/drive/uploads/${started.upload_id}`, { method: 'DELETE' })
+    await apiRequest(`/drive/uploads/${started.code}`, { method: 'DELETE' })
     // Отменённую загрузку не собрать: заготовки больше нет.
     await expectStatus(
-      apiRequest(`/drive/uploads/${started.upload_id}/complete`, { method: 'POST' }),
+      apiRequest(`/drive/uploads/${started.code}/finish`, { method: 'POST' }),
       404,
     )
     expect((await api.browse({})).files.length).toBe(before)

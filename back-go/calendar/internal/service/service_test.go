@@ -121,6 +121,12 @@ func (f *fakeFiles) SaveFor(_ context.Context, _, _ int64, _ string, _ []byte) (
 	return "calendar/x", nil
 }
 
+func (f *fakeFiles) SaveStreamFor(_ context.Context, _, _ int64, _ string, r io.Reader, _ int64) (string, error) {
+	// Поток вычитываем целиком: незакрытая часть осталась бы висеть.
+	_, _ = io.Copy(io.Discard, r)
+	return "calendar/x", nil
+}
+
 func (f *fakeFiles) RemoveFor(_ context.Context, _, _ int64, paths []string) {
 	f.removed = append(f.removed, paths...)
 }

@@ -37,6 +37,37 @@
           </p>
         </div>
       </AppStack>
+
+      <!-- Предпросмотр: тот же порядок колонок и то же представление значений,
+           что уедут в файл. Строки берём с текущей страницы — показать все
+           записи всё равно негде, а понять «что получится» хватает первых. -->
+      <AppStack :gap="8">
+        <div class="rx-head">
+          <span class="rx-title">Как будет выглядеть файл</span>
+          <span class="rx-note">{{ previewNote }}</span>
+        </div>
+
+        <div v-if="previewCols.length" class="rx-preview">
+          <table class="rx-sheet">
+            <thead>
+              <tr>
+                <th class="rx-sheet-num" />
+                <th v-for="c in previewCols" :key="c.id">{{ c.label }}</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="(row, i) in previewRows" :key="i">
+                <td class="rx-sheet-num">{{ i + 1 }}</td>
+                <td v-for="c in previewCols" :key="c.id">{{ row[c.id] }}</td>
+              </tr>
+            </tbody>
+          </table>
+          <p v-if="!previewRows.length" class="rx-empty">
+            Под выгрузку не попало ни одной записи с этой страницы.
+          </p>
+        </div>
+        <p v-else class="rx-empty">Отметьте хотя бы одно поле — тогда появится предпросмотр.</p>
+      </AppStack>
     </AppStack>
   </AppDialog>
 </template>
@@ -52,7 +83,7 @@ import AppButton from '@/components/ui/AppButton.vue'
 import AppDialog from '@/components/ui/AppDialog.vue'
 import AppStack from '@/components/ui/AppStack.vue'
 import AppTabs from '@/components/ui/AppTabs.vue'
-import { fieldIcon } from '@/utils/registryFields.js'
+import { fieldIcon, textValue } from '@/utils/registryFields.js'
 
 const props = defineProps({
   modelValue: { type: Boolean, default: false },
@@ -60,10 +91,15 @@ const props = defineProps({
   fields: { type: Array, default: () => [] },
   /** Отмеченные записи — с ними появляется выбор области выгрузки. */
   selectedIds: { type: Array, default: () => [] },
-  /** Текущий поиск: им ограничена выгрузка «всех записей». */
-  search: { type: String, default: '' },
-  /** Активный чип-тег: выгрузка «всех» идёт тем же фильтром, что и экран. */
-  tag: { type: String, default: '' },
+  /** Набор «выбрано всё по фильтру» из useRowSelection. */
+  selection: { type: Object, default: () => ({}) },
+  /** Фильтр экрана: выгрузка «всех» идёт ровно им — файл не должен
+      расходиться с тем, что человек видит. */
+  filter: { type: Object, default: () => ({}) },
+  /** Записи текущей страницы — из них строится предпросмотр. */
+  records: { type: Array, default: () => [] },
+  /** Учётный реестр: в файл добавляется колонка состояния позиции. */
+  accounting: { type: Boolean, default: false },
   /** Имя файла без расширения. */
   filename: { type: String, default: 'registry' },
   /** (params) => Promise<Response> — ручка выгрузки (своя / по коду ссылки). */
@@ -95,6 +131,58 @@ function toggle(id) {
   else next.add(id)
   chosen.value = next
 }
+/* ── Предпросмотр ──
+   Колонки идут в порядке РЕЕСТРА (как в файле), а не в порядке отмечания, и
+   значения проходят через тот же textValue, что и таблица, — зеркало серверного
+   exportValue. Совпадения «символ в символ» здесь не требуется: предпросмотр
+   отвечает на вопрос «что и в каком порядке окажется в файле». */
+const previewCols = computed(() => {
+  const cols = props.fields.filter((f) => chosen.value.has(f.id))
+    .map((f) => ({ id: String(f.id), label: f.label, field: f }))
+  if (cols.length && props.accounting) {
+    cols.push({ id: '__state', label: 'Состояние', field: null })
+  }
+  return cols
+})
+
+const PREVIEW_ROWS_MAX = 6
+
+// Что именно попадёт в файл: отмеченные записи либо всё по фильтру экрана.
+const previewSource = computed(() => {
+  if (scope.value !== 'selected' || !props.selectedIds.length) return props.records
+  const picked = new Set(props.selectedIds)
+  return props.records.filter((r) => picked.has(r.id))
+})
+
+const previewRows = computed(() => previewSource.value.slice(0, PREVIEW_ROWS_MAX).map((rec) => {
+  const row = {}
+  for (const c of previewCols.value) {
+    row[c.id] = c.field
+      ? textValue(c.field, rec.data?.[String(c.field.id)])
+      : stateText(rec.issue)
+  }
+  return row
+}))
+
+const previewNote = computed(() => {
+  const total = previewSource.value.length
+  if (!total) return ''
+  return total > PREVIEW_ROWS_MAX
+    ? `первые ${PREVIEW_ROWS_MAX} строк из ${total} на этой странице`
+    : `строк на этой странице: ${total}`
+})
+
+// Зеркало issueText на сервере: состояние позиции такой же колонкой отчёта.
+function stateText(issue) {
+  if (!issue) return 'В наличии'
+  const who = issue.issued_to || issue.holder_name
+  if (!issue.due_at) return `Выдано без срока (${who})`
+  const overdue = Math.ceil((Date.now() - new Date(issue.due_at).getTime()) / 86400000)
+  return overdue > 0
+    ? `Просрочено на ${overdue} дн. (${who})`
+    : `Выдано до ${new Date(issue.due_at).toLocaleDateString('ru-RU')} (${who})`
+}
+
 function selectAll() { chosen.value = new Set(props.fields.map((f) => f.id)) }
 function clearAll() { chosen.value = new Set() }
 
@@ -102,12 +190,12 @@ async function run() {
   if (!chosen.value.size) return
   busy.value = true
   try {
-    const params = { fields: [...chosen.value] }
-    if (scope.value === 'selected' && props.selectedIds.length) {
-      params.ids = [...props.selectedIds]
-    } else {
-      params.search = props.search
-      params.tag = props.tag
+    const params = {
+      fields: [...chosen.value],
+      selection: scope.value === 'selected'
+        ? (props.selectedIds.length ? { ids: [...props.selectedIds] } : props.selection)
+        : { all: true },
+      filter: props.filter,
     }
     const resp = await props.request(params)
     if (!resp.ok) {
@@ -163,5 +251,42 @@ async function run() {
 .rx-row:hover { background: var(--color-surface-high); }
 .rx-row .material-symbols-outlined { font-size: 20px; color: var(--color-text-dim); }
 .rx-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rx-note { font-size: 12px; color: var(--color-text-dim); }
+
+/* Предпросмотр листа: своя прокрутка по горизонтали — колонок бывает много, а
+   раздел уезжать вбок не должен. */
+.rx-preview {
+  overflow-x: auto;
+  border: 1px solid var(--acrylic-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-low);
+}
+
+.rx-sheet { border-collapse: collapse; width: 100%; font-size: 12.5px; }
+
+.rx-sheet th,
+.rx-sheet td {
+  padding: 6px 10px;
+  border-right: 1px solid var(--acrylic-border);
+  border-bottom: 1px solid var(--acrylic-border);
+  text-align: left;
+  white-space: nowrap;
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.rx-sheet th { background: var(--color-surface-high); font-weight: 700; }
+.rx-sheet tr:last-child td { border-bottom: none; }
+.rx-sheet th:last-child, .rx-sheet td:last-child { border-right: none; }
+
+/* Колонка номеров строк — как в самом Excel: она задаёт масштаб происходящего. */
+.rx-sheet-num {
+  width: 34px;
+  text-align: center !important;
+  color: var(--color-text-dim);
+  background: var(--color-surface-high);
+}
+
 .rx-empty { margin: 0; font-size: 14px; color: var(--color-text-dim); }
 </style>

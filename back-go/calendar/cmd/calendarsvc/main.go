@@ -24,6 +24,7 @@ import (
 	httptransport "github.com/DmitriyODS/gw2/back-go/calendar/internal/transport/http"
 	"github.com/DmitriyODS/gw2/back-go/pkg/billingclient"
 	"github.com/DmitriyODS/gw2/back-go/pkg/bootstrap"
+	"github.com/DmitriyODS/gw2/back-go/pkg/chunkupload"
 	"github.com/DmitriyODS/gw2/back-go/pkg/companydata"
 	"github.com/DmitriyODS/gw2/back-go/pkg/events"
 	"github.com/DmitriyODS/gw2/back-go/pkg/pasetoauth"
@@ -79,7 +80,12 @@ func main() {
 
 	eps := endpoint.New(svc)
 
-	httpServer := httptransport.NewServer(eps, users, verifier, log)
+	// Приём файлов частями — общий движок платформы (сессии в БД, части
+	// объектами в хранилище).
+	uploads := chunkupload.New(pool, fileStore, "calendar", log)
+	go uploads.Sweep(ctx)
+
+	httpServer := httptransport.NewServer(eps, svc, users, uploads, verifier, log)
 
 	// gRPC — единственный: биллинг спрашивает про файлы для раздела
 	// «Настройки → Хранилище» (файлы записей).

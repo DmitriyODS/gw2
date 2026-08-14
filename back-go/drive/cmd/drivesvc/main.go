@@ -26,6 +26,7 @@ import (
 	httptransport "github.com/DmitriyODS/gw2/back-go/drive/internal/transport/http"
 	"github.com/DmitriyODS/gw2/back-go/pkg/billingclient"
 	"github.com/DmitriyODS/gw2/back-go/pkg/bootstrap"
+	"github.com/DmitriyODS/gw2/back-go/pkg/chunkupload"
 	"github.com/DmitriyODS/gw2/back-go/pkg/events"
 	"github.com/DmitriyODS/gw2/back-go/pkg/pasetoauth"
 	"github.com/DmitriyODS/gw2/back-go/pkg/records"
@@ -77,10 +78,13 @@ func main() {
 		Files: fileStore,
 		Bus:   events.NewPublisher(rdb, log, "gw2:drive:events"),
 		Log:   log,
-		// Куски больших файлов копятся на диске; пусто — системный temp.
-		TempDir: bootstrap.Env("UPLOAD_TEMP_DIR", ""),
 	})
-	httpServer := httptransport.NewServer(svc, users, verifier, log)
+
+	// Приём больших файлов частями — общий движок платформы: сессии в БД,
+	// части объектами в хранилище (переживает несколько инстансов сервиса).
+	uploads := chunkupload.New(pool, fileStore, "drive", log)
+
+	httpServer := httptransport.NewServer(svc, users, uploads, verifier, log)
 
 	grpcServer := googrpc.NewServer()
 	storagefiles.Register(grpcServer, svc)
@@ -94,8 +98,8 @@ func main() {
 	// объектами, и место возвращается владельцу.
 	go svc.RunTrashCleaner(ctx)
 	// Брошенные загрузки по частям: закрытая вкладка не должна оставлять
-	// куски на диске.
-	go svc.SweepUploads(ctx)
+	// куски в хранилище.
+	go uploads.Sweep(ctx)
 
 	log.Info("listening", "http", httpAddr, "grpc", grpcAddr)
 	bootstrap.Run(ctx, log,
