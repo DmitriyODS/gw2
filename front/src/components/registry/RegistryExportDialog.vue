@@ -14,8 +14,8 @@
   >
     <AppStack :gap="16">
       <!-- Область выгрузки появляется, только когда есть что противопоставить
-           «всем записям» — отмеченные строки. -->
-      <AppTabs v-if="selectedIds.length" v-model="scope" :tabs="scopeTabs" variant="tint" full-width />
+           «всем записям» — выбранные строки. -->
+      <AppTabs v-if="hasSelection" v-model="scope" :tabs="scopeTabs" variant="tint" full-width />
 
       <AppStack :gap="8">
         <div class="rx-head">
@@ -91,8 +91,10 @@ const props = defineProps({
   fields: { type: Array, default: () => [] },
   /** Отмеченные записи — с ними появляется выбор области выгрузки. */
   selectedIds: { type: Array, default: () => [] },
-  /** Набор «выбрано всё по фильтру» из useRowSelection. */
+  /** Набор «выбрано всё по фильтру» из useRowSelection: {all:true, exclude:[…]}. */
   selection: { type: Object, default: () => ({}) },
+  /** Сколько записей выбрано — в режиме «всё» это total минус снятые. */
+  selectionCount: { type: Number, default: 0 },
   /** Фильтр экрана: выгрузка «всех» идёт ровно им — файл не должен
       расходиться с тем, что человек видит. */
   filter: { type: Object, default: () => ({}) },
@@ -112,17 +114,25 @@ const scope = ref('all')
 const chosen = ref(new Set())
 const busy = ref(false)
 
+/* Выбор приходит двумя видами: перечнем отмеченных id либо «всё по фильтру
+   минус снятые» — второй экран на клиент id не тянет, поэтому он описывается
+   самим набором selection. Оба вида дают область «Выбранные». */
+const excluded = computed(() => new Set(props.selection?.exclude || []))
+const selectAllMode = computed(() => !!props.selection?.all)
+const selectedCount = computed(() => props.selectionCount || props.selectedIds.length)
+const hasSelection = computed(() => props.selectedIds.length > 0 || selectAllMode.value)
+
 // Открытие — всегда с чистого листа: поля отмечены все, область подсказана
 // текущим выбором записей.
 watch(() => props.modelValue, (open) => {
   if (!open) return
-  scope.value = props.selectedIds.length ? 'selected' : 'all'
+  scope.value = hasSelection.value ? 'selected' : 'all'
   chosen.value = new Set(props.fields.map((f) => f.id))
 })
 
 const scopeTabs = computed(() => [
-  { value: 'all', label: props.search || props.tag ? 'Все по фильтру' : 'Все записи' },
-  { value: 'selected', label: `Выбранные (${props.selectedIds.length})` },
+  { value: 'all', label: props.filter?.search || props.filter?.section ? 'Все по фильтру' : 'Все записи' },
+  { value: 'selected', label: `Выбранные (${selectedCount.value})` },
 ])
 
 function toggle(id) {
@@ -147,9 +157,10 @@ const previewCols = computed(() => {
 
 const PREVIEW_ROWS_MAX = 6
 
-// Что именно попадёт в файл: отмеченные записи либо всё по фильтру экрана.
+// Что именно попадёт в файл: выбранные записи либо всё по фильтру экрана.
 const previewSource = computed(() => {
-  if (scope.value !== 'selected' || !props.selectedIds.length) return props.records
+  if (scope.value !== 'selected' || !hasSelection.value) return props.records
+  if (!props.selectedIds.length) return props.records.filter((r) => !excluded.value.has(r.id))
   const picked = new Set(props.selectedIds)
   return props.records.filter((r) => picked.has(r.id))
 })

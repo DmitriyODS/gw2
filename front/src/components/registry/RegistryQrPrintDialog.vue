@@ -29,10 +29,10 @@
           <span class="qp-hint">Подписью под кодом печатается значение этого поля.</span>
         </div>
 
-        <div v-if="selectedIds.size" class="qp-scope">
+        <div v-if="hasSelection" class="qp-scope">
           <label class="qp-radio">
             <input type="radio" value="selected" v-model="scope" />
-            <span>Только выбранные записи ({{ selectedIds.size }})</span>
+            <span>Только выбранные записи ({{ selectedCount }})</span>
           </label>
           <label class="qp-radio">
             <input type="radio" value="all" v-model="scope" />
@@ -125,8 +125,16 @@ const props = defineProps({
      свою ручку, публичная страница — выборку по коду ссылки; сам диалог про
      это ничего не знает и потому годится обоим. */
   fetchPage: { type: Function, required: true },
-  // Записи, отмеченные галочками в таблице (может быть пусто → печатаем все).
-  selectedIds: { type: Object, default: () => new Set() },
+  /* Записи, отмеченные галочками в таблице (может быть пусто → печатаем все).
+     Именно ПЕРЕЧЕНЬ id, как и у выгрузки: раздел отдаёт массив, и Set здесь
+     молча превращал «выбранные» в «все» — у массива нет ни .size, ни .has. */
+  selectedIds: { type: Array, default: () => [] },
+  /* Набор «выбрано всё по фильтру» из useRowSelection: {all:true, exclude:[…]}.
+     Снятые галочки на клиент не приезжают перечнем, поэтому исключения
+     применяем к выборке сами. */
+  selection: { type: Object, default: () => ({}) },
+  // Сколько записей выбрано — в режиме «всё» это total минус снятые.
+  selectionCount: { type: Number, default: 0 },
   // Фильтр экрана — печать «всех» уважает его целиком: строку поиска,
   // выбранный подраздел и условия по колонкам.
   search: { type: String, default: '' },
@@ -154,6 +162,12 @@ const qrFields = computed(() => (props.registry?.fields || []).filter(hasQr))
 const filtered = computed(() =>
   !!(props.search || props.section || (props.filters || []).length))
 
+// Set строим сами — так диалог переживает и массив, и Set в пропе.
+const pickedIds = computed(() => new Set(props.selectedIds || []))
+const selectAllMode = computed(() => !!props.selection?.all)
+const selectedCount = computed(() => props.selectionCount || pickedIds.value.size)
+const hasSelection = computed(() => pickedIds.value.size > 0 || selectAllMode.value)
+
 // Сколько копий одной позиции разумно заказать за раз.
 const MAX_PER_ITEM = 99
 
@@ -179,7 +193,7 @@ watch(() => props.modelValue, (open) => {
     return
   }
   fieldId.value = qrFields.value[0]?.id ?? null
-  scope.value = props.selectedIds.size ? 'selected' : 'all'
+  scope.value = hasSelection.value ? 'selected' : 'all'
   reload()
 })
 
@@ -257,11 +271,14 @@ const PAGE_SIZE = 200
 // В списке видна лишь текущая страница, поэтому записи для печати догружаем
 // САМИ и СТРАНИЦАМИ: одним запросом реестр не забрать (сервер зажимает размер
 // страницы), а выбранная запись может лежать хоть в конце реестра.
-// Отмеченные записи ищем по всему реестру, без фильтра списка: галочки могли
-// быть проставлены до того, как список отфильтровали.
+// Отмеченные по одной ищем по всему реестру, без фильтра списка: галочки могли
+// быть проставлены до того, как список отфильтровали. Режим «выбрано всё»
+// описывается ТЕМ ЖЕ фильтром экрана — из его выдачи убираем снятые галочки.
 async function collectRecords() {
-  const onlySelected = scope.value === 'selected' && props.selectedIds.size > 0
-  const params = onlySelected
+  const onlySelected = scope.value === 'selected' && hasSelection.value
+  const ids = onlySelected && pickedIds.value.size ? pickedIds.value : null
+  const excluded = onlySelected && !ids ? new Set(props.selection?.exclude || []) : null
+  const params = ids
     ? { sort: props.sort, order: props.order, per_page: PAGE_SIZE }
     : {
         search: props.search,
@@ -274,10 +291,10 @@ async function collectRecords() {
   for (let page = 1; ; page += 1) {
     const data = await props.fetchPage({ ...params, page })
     const list = data.items ?? []
-    out.push(...(onlySelected ? list.filter((r) => props.selectedIds.has(r.id)) : list))
-    const enough = onlySelected
-      ? out.length >= props.selectedIds.size
-      : out.length >= MAX_RECORDS
+    if (ids) out.push(...list.filter((r) => ids.has(r.id)))
+    else if (excluded) out.push(...list.filter((r) => !excluded.has(r.id)))
+    else out.push(...list)
+    const enough = ids ? out.length >= ids.size : out.length >= MAX_RECORDS
     if (enough || list.length < PAGE_SIZE || page * PAGE_SIZE >= (data.total ?? 0)) break
   }
   return out.slice(0, MAX_RECORDS)

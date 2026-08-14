@@ -167,6 +167,8 @@
     :registry="registry"
     :fetch-page="fetchRecordsPage"
     :selected-ids="pickedIds"
+    :selection="selection"
+    :selection-count="selectionCount"
     :search="filters.search"
     :section="filters.section"
     :filters="filters.filters"
@@ -178,6 +180,10 @@
     v-model="exportOpen"
     :fields="exportableFields"
     :selected-ids="pickedIds"
+    :selection="selection"
+    :selection-count="selectionCount"
+    :records="records"
+    :accounting="!!registry?.accounting"
     :filter="{ search: filters.search, section: filters.section, filters: filters.filters }"
     :filename="registry?.name || 'registry'"
     :request="exportRequest"
@@ -253,7 +259,7 @@ const { visible: visibleCols, shown: shownFields, toggle: toggleCol, move: moveC
    поэтому она его сбрасывает. */
 const {
   mode: selectionMode, picked, count: selectionCount, isSelected, allSelected,
-  toggle: toggleRow, toggleAll, selectAllMatching, clear: clearSelection,
+  toggle: toggleRow, toggleAll, selectAllMatching, clear: clearSelection, payload: selection,
 } = useRowSelection(() => records.value, {
   total: () => total.value,
   scope: () => `${filters.search}|${filters.section}`,
