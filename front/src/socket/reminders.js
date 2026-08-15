@@ -2,6 +2,7 @@ import { useRemindersStore } from '@/stores/reminders.js'
 import { useNotificationsStore } from '@/stores/notifications.js'
 import { showSystemNotification } from '@/utils/systemNotify.js'
 import { pushNotification } from '@/composables/useDesktopNotifications.js'
+import { isSourceEnabled } from '@/utils/notifySettings.js'
 
 /* Напоминания приходят только в комнату владельца. reminder:fire — момент
    срабатывания: тост во вкладке, системное (в десктоп-обёртке — нативное ОС)
@@ -11,6 +12,9 @@ export function registerRemindersSocketHandlers(socket) {
   socket.on('reminder:fire', (p) => {
     const store = useRemindersStore()
     store.applyFire(p)
+    // Раздел выключен в «Настройки → Уведомления»: срабатывание видно в самих
+    // напоминаниях, но ни тоста, ни системного уведомления, ни звука.
+    if (!isSourceEnabled('reminders')) return
 
     const title = p?.title || 'Напоминание'
     const body = p?.note || 'Пора!'
@@ -25,7 +29,7 @@ export function registerRemindersSocketHandlers(socket) {
       path: '/reminders',
     })
     useNotificationsStore().notify({
-      severity: 'info', summary: `⏰ ${title}`, detail: body, life: 12_000, sound: 'alarm',
+      severity: 'info', summary: `⏰ ${title}`, detail: body, life: 12_000, sound: 'alarm', source: 'reminders',
     })
     showSystemNotification(`⏰ ${title}`, body, {
       data: { type: 'reminder', reminder_id: p?.id },

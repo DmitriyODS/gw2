@@ -45,7 +45,7 @@
          ею не пользуется. -->
     <ScreenLockOverlay v-if="screenLock.locked.value" />
 
-    <Toast :position="isMobile ? 'top-center' : 'top-right'" />
+    <AppToasts />
     <!-- Pull-to-refresh сенсорных каркасов — телефона и планшета (обновление
          страницы оттяжкой вниз у верха экрана). Отключён на fullscreen-роутах
          (там вертикальные жесты заняты) и в оконном каркасе, где обновление
@@ -61,7 +61,6 @@
 <script setup>
 import { ref, computed, watch, onMounted, onBeforeUnmount, defineAsyncComponent } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { useToast } from 'primevue/usetoast'
 import { useAuthStore } from '@/stores/auth.js'
 import { useThemeStore } from '@/stores/theme.js'
 import { useUnitsStore } from '@/stores/units.js'
@@ -72,7 +71,6 @@ import { useAssistantStore } from '@/stores/assistant.js'
 import { useCallStore } from '@/stores/call.js'
 import { useNotificationsStore } from '@/stores/notifications.js'
 import { useScreenLock } from '@/composables/useScreenLock.js'
-import { useBreakpoint } from '@/composables/useBreakpoint.js'
 import { useShellMode } from '@/composables/useShellMode.js'
 import { useCompanySettings } from '@/composables/useCompanySettings.js'
 import { connectSocket } from '@/socket/index.js'
@@ -92,7 +90,7 @@ import DesktopShell from '@/components/desktop/DesktopShell.vue'
 import MobileShell from '@/components/mobile/MobileShell.vue'
 import CompanyDisabledScreen from '@/components/layout/CompanyDisabledScreen.vue'
 import PullToRefresh from '@/components/common/PullToRefresh.vue'
-import Toast from 'primevue/toast'
+import AppToasts from '@/components/common/AppToasts.vue'
 import BrandLoader from '@/components/common/BrandLoader.vue'
 
 /* Глобальные оверлеи — ленивыми чанками: каждый рендерится по условию и до
@@ -117,7 +115,6 @@ const callStore = useCallStore()
 const notif = useNotificationsStore()
 const route = useRoute()
 const router = useRouter()
-const { isMobile } = useBreakpoint()
 const { usesGroove } = useCompanySettings()
 
 const isFullscreenRoute = computed(() => !!route.meta?.fullscreen && !!authStore.user)
@@ -227,10 +224,6 @@ watch(
   () => syncNativeSystemBars(),
   { immediate: true, flush: 'post', deep: true },
 )
-
-// useToast() требует setup-контекст — вызываем здесь, не в onMounted
-const toast = useToast()
-notif.setToast(toast)
 
 // Применяем тему сразу (без FOUC)
 themeStore.init()

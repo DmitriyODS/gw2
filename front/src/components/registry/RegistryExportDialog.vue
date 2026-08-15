@@ -84,6 +84,7 @@ import AppDialog from '@/components/ui/AppDialog.vue'
 import AppStack from '@/components/ui/AppStack.vue'
 import AppTabs from '@/components/ui/AppTabs.vue'
 import { fieldIcon, textValue } from '@/utils/registryFields.js'
+import { saveBlob } from '@/utils/download.js'
 
 const props = defineProps({
   modelValue: { type: Boolean, default: false },
@@ -214,14 +215,7 @@ async function run() {
       try { msg = (await resp.json()).message || msg } catch { /* тело не json */ }
       throw new Error(msg)
     }
-    const url = URL.createObjectURL(await resp.blob())
-    const a = document.createElement('a')
-    a.href = url
-    a.download = `${props.filename || 'registry'}.xlsx`
-    document.body.appendChild(a)
-    a.click()
-    a.remove()
-    URL.revokeObjectURL(url)
+    await saveBlob(await resp.blob(), `${props.filename || 'registry'}.xlsx`)
     emit('update:modelValue', false)
   } catch (e) {
     emit('error', e?.message || 'Не удалось выгрузить')

@@ -314,6 +314,7 @@ import { exportEntries, getShares, createShare, revokeShare } from '@/api/calend
 import { useNotificationsStore } from '@/stores/notifications.js'
 import { fieldIcon, isExportable, entryTitle, hhmm, cardFields } from '@/utils/calendarFields.js'
 import { periodViewCommand, parseViewCommand } from '@/utils/periodViews.js'
+import { saveBlob } from '@/utils/download.js'
 
 const route = useRoute()
 const store = useCalendarsStore()
@@ -548,15 +549,7 @@ async function doExport() {
       try { msg = (await resp.json()).message || msg } catch { /* ignore */ }
       throw new Error(msg)
     }
-    const blob = await resp.blob()
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url
-    a.download = `${store.selected?.name || 'calendar'}.xlsx`
-    document.body.appendChild(a)
-    a.click()
-    document.body.removeChild(a)
-    URL.revokeObjectURL(url)
+    await saveBlob(await resp.blob(), `${store.selected?.name || 'calendar'}.xlsx`)
     exportOpen.value = false
   } catch (e) {
     notif.error(e?.message || 'Не удалось выгрузить')

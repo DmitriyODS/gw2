@@ -63,6 +63,8 @@
       >
         <GeneralSection v-if="activeSection === 'general'" />
 
+        <NotificationsSection v-else-if="activeSection === 'notifications'" />
+
         <ThemesSection v-else-if="activeSection === 'theme'" />
 
         <DesktopSection v-else-if="activeSection === 'desktop'" />
@@ -85,6 +87,10 @@
         </AppStack>
 
         <AboutSection v-else-if="activeSection === 'about'" />
+
+        <!-- Скрытый раздел разработчика: открывается пятью нажатиями по номеру
+             сборки в «О приложении». -->
+        <DevToolsSection v-else-if="activeSection === 'devtools'" @close="openSection('about')" />
 
         <!-- Аудит платформы — единая точка управления для супер-админа. -->
         <AuditSection v-else-if="activeSection === 'audit'" />
@@ -185,8 +191,11 @@ const AuditSection = defineAsyncComponent(() => import('@/components/settings/Au
 const SupportCard = defineAsyncComponent(() => import('@/components/settings/SupportCard.vue'))
 const HelpCenter = defineAsyncComponent(() => import('@/components/settings/HelpCenter.vue'))
 const DesktopSection = defineAsyncComponent(() => import('@/components/settings/DesktopSection.vue'))
+const NotificationsSection = defineAsyncComponent(() => import('@/components/settings/NotificationsSection.vue'))
+const DevToolsSection = defineAsyncComponent(() => import('@/components/settings/DevToolsSection.vue'))
 import ConfirmDialog from '@/components/ui/ConfirmDialog.vue'
 import EmptyState from '@/components/common/EmptyState.vue'
+import { saveBlob } from '@/utils/download.js'
 
 const { isAtLeast } = usePermission()
 const notif = useNotificationsStore()
@@ -270,12 +279,7 @@ async function doExportBackup(sections) {
     if (response instanceof Blob) blob = response
     else if (response && typeof response.blob === 'function') blob = await response.blob()
     else blob = new Blob([JSON.stringify(response)], { type: 'application/json' })
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url
-    a.download = `backup_${new Date().toISOString().split('T')[0]}.zip`
-    document.body.appendChild(a); a.click(); document.body.removeChild(a)
-    URL.revokeObjectURL(url)
+    await saveBlob(blob, `backup_${new Date().toISOString().split('T')[0]}.zip`)
     notif.success('Резервная копия создана')
   } catch (e) { notif.error(e.message || 'Ошибка создания резервной копии') }
   finally { backupExporting.value = false }

@@ -97,6 +97,12 @@
     <!-- Обновление обёртки из «О приложении»: скачанный APK ставится
          системным установщиком (AppUpdater). -->
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
+    <!-- Сохранение выгрузок в «Загрузки» (NativeShell.saveFile). С Android 10
+         пишем через MediaStore, разрешение там не нужно и не запрашивается —
+         поэтому maxSdkVersion. -->
+    <uses-permission
+        android:name="android.permission.WRITE_EXTERNAL_STORAGE"
+        android:maxSdkVersion="28" />
     <!-- Звонки в WebView: getUserMedia требует разрешений приложения, их
          пробрасывает BridgeWebChromeClient. -->
     <uses-permission android:name="android.permission.CAMERA" />

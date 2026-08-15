@@ -3,6 +3,7 @@ import { ref, reactive, computed } from 'vue'
 import {
   storageGet, storageGetJSON, storageSet, storageSetJSON,
 } from '@/utils/storage.js'
+import { saveBlob } from '@/utils/download.js'
 
 /* ── Built-in presets ────────────────────────────────────────────
    primary / secondary / tertiary — три «ручки» интерфейса.
@@ -446,13 +447,12 @@ export const useThemeStore = defineStore('theme', () => {
     if (currentPreset.value === name) applyTheme('classic')
   }
 
+  // Промис отдаём наружу: в мобильной обёртке сохранение асинхронное и может
+  // упереться в отказ доступа к памяти — сообщить об этом должен экран.
   function exportTheme(name) {
     const vars = getVars(name)
     const blob = new Blob([JSON.stringify({ name, vars }, null, 2)], { type: 'application/json' })
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url; a.download = `${name}-theme.json`; a.click()
-    URL.revokeObjectURL(url)
+    return saveBlob(blob, `${name}-theme.json`)
   }
 
   function importTheme(json) {

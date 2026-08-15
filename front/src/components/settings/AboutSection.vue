@@ -38,7 +38,9 @@
             <strong>{{ appVersion }}</strong>
           </span>
         </span>
-        <span v-if="appBuild" class="ab-badge">
+        <!-- Номер сборки — вход в скрытый раздел разработчика: пять быстрых
+             нажатий открывают «Настройки → DevTools» (приём мобильных ОС). -->
+        <span v-if="appBuild" class="ab-badge ab-badge-tap" role="presentation" @click="onBuildTap">
           <span class="material-symbols-outlined">tag</span>
           <span class="ab-badge-text">
             <small>Сборка</small>
@@ -149,12 +151,22 @@ import { ref, computed, onMounted } from 'vue'
 import { getNativeBuild, checkNativeUpdate, installNativeUpdate } from '@/utils/nativeApp.js'
 import { useNotificationsStore } from '@/stores/notifications.js'
 import { useAppVersion } from '@/composables/useAppVersion.js'
+import { tapBuildNumber } from '@/utils/devTools.js'
 import { useAppDownloads } from '@/composables/useAppDownloads.js'
 import Logo from '@/components/common/Logo.vue'
 import AppRow from '@/components/ui/AppRow.vue'
 import { WAVE_PATH } from '@/utils/wavePath.js'
 
 const notif = useNotificationsStore()
+
+/* Пять быстрых нажатий по номеру сборки открывают скрытый раздел «DevTools».
+   Сообщаем об этом только в момент включения — иначе тап по номеру выглядел бы
+   как случайно сработавшая кнопка. */
+function onBuildTap() {
+  if (tapBuildNumber()) {
+    notif.success('Раздел появился в списке настроек', 'DevTools включены')
+  }
+}
 
 /* Версия, сборка и дата выпуска — только с сервера (data/changelog.json),
    не из бандла. */
@@ -400,6 +412,11 @@ async function onUpdateClick() {
   box-shadow: var(--glass-edge);
   color: var(--color-text);
 }
+
+/* Бейдж сборки нажимаемый (вход в DevTools), но выглядит так же: подсказывать
+   секретный ход курсором-указателем не надо. Снимаем только выделение текста —
+   пять быстрых кликов иначе выделяют номер. */
+.ab-badge-tap { user-select: none; -webkit-tap-highlight-color: transparent; }
 
 .ab-badge.primary {
   border-color: color-mix(in oklch, var(--color-primary) 40%, var(--acrylic-border));

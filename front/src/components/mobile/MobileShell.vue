@@ -74,6 +74,7 @@
  */
 import { computed, defineAsyncComponent, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useDesktopStore } from '@/stores/desktop.js'
+import { useEdgeSwipe } from '@/composables/useEdgeSwipe.js'
 import { useShellCore } from '@/desktop/shellCore.js'
 import {
   MOBILE_STATUSBAR_HEIGHT, MOBILE_TASKBAR_HEIGHT, TABLET_TASKBAR_HEIGHT,
@@ -214,6 +215,15 @@ function onSplitDown(e) {
   window.addEventListener('pointerup', onUp)
   window.addEventListener('pointercancel', onUp)
 }
+
+/* Hola вызывается жестом от правой кромки — кнопки в панели задач у неё нет:
+   на телефоне место в панели дороже, а ассистент нужен из любого раздела.
+   Панель выезжает справа, оттуда же, откуда пришёл палец. */
+useEdgeSwipe({
+  edge: 'right',
+  enabled: () => !desktop.holaOpen && !desktop.notifOpen,
+  onSwipe: () => { desktop.holaOpen = true },
+})
 
 // Открытый центр уведомлений накрывает раздел целиком — переключение экранов
 // его закрывает.

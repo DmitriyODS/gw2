@@ -3,9 +3,8 @@
        Тумблеры применяются мгновенно (IPC-мост GrooveDesktop). -->
   <AppCard
     v-if="desktop"
-    class="dac"
     title="Приложение для компьютера"
-    hint="Поведение окна, трея и уведомлений этой установки Groove Work."
+    hint="Поведение окна, трея и автозапуска этой установки Groove Work."
   >
     <AppSwitchRow
       :model-value="s.autostart"
@@ -69,7 +68,3 @@ async function set(key, value) {
   if (key === 'trayIcon' && !value && s.closeToTray) await set('closeToTray', false)
 }
 </script>
-
-<style scoped>
-.dac { margin-top: 16px; }
-</style>

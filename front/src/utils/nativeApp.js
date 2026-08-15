@@ -207,6 +207,31 @@ if (typeof window !== 'undefined') {
   })
 }
 
+/* ── Сохранение файлов, собранных в вебе ──
+   WebView скачивает только http(s)-ссылки (их ведёт нативный DownloadListener):
+   blob:/data: он игнорирует молча, поэтому в обёртке не сохранялось НИЧЕГО, что
+   фронт строит сам — выгрузки таблиц, документы, картинки досок, архив бэкапа.
+   Отдаём содержимое нативке, она кладёт файл в «Загрузки» (и просит доступ к
+   памяти на Android 9 и ниже). Возвращает true, если файл забрали. */
+export async function saveNativeFile(blob, name) {
+  const shell = nativeShell()
+  if (!isNativeApp() || !shell?.saveFile) return false
+  const data = await blobToBase64(blob)
+  if (!data) return false
+  await shell.saveFile({ name, mimeType: blob.type || 'application/octet-stream', data })
+  return true
+}
+
+function blobToBase64(blob) {
+  return new Promise((resolve) => {
+    const reader = new FileReader()
+    // data:<mime>;base64,<payload> — нативке нужен только сам payload.
+    reader.onload = () => resolve(String(reader.result || '').split(',')[1] || '')
+    reader.onerror = () => resolve('')
+    reader.readAsDataURL(blob)
+  })
+}
+
 // Номер установленной сборки обёртки (ГГММДДН) — для «О приложении».
 export async function getNativeBuild() {
   const shell = nativeShell()

@@ -43,6 +43,7 @@ import AppDialog from '@/components/ui/AppDialog.vue'
 import * as api from '@/api/drive.js'
 import { fileKind } from '@/utils/fileTypes.js'
 import { formatBytes } from '@/utils/money.js'
+import { saveUrl } from '@/utils/download.js'
 
 const props = defineProps({
   file: { type: Object, required: true },
@@ -83,13 +84,7 @@ onMounted(async () => {
 // Скачивание — ссылкой на тот же объект: имя файла задаёт атрибут download,
 // поэтому на диск он ложится под своим именем, а не под ключом хранилища.
 function download() {
-  const a = document.createElement('a')
-  a.href = src.value
-  a.download = props.file.name
-  a.rel = 'noopener'
-  document.body.appendChild(a)
-  a.click()
-  a.remove()
+  saveUrl(src.value, props.file.name)
 }
 </script>
 

@@ -404,6 +404,7 @@ import { docToMarkdown } from '@/utils/tiptapMarkdown.js'
 import { useAuthStore } from '@/stores/auth.js'
 import { useNotesStore } from '@/stores/notes.js'
 import { useNotificationsStore } from '@/stores/notifications.js'
+import { saveBlob } from '@/utils/download.js'
 
 const PostComposer = defineAsyncComponent(() => import('@/components/portal/PostComposer.vue'))
 
@@ -620,13 +621,7 @@ function moveItem(type, id) { moveType.value = type; moveId.value = id; moveOpen
 async function download(blobPromise, name, ext) {
   try {
     const resp = await blobPromise
-    const blob = await resp.blob()
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url
-    a.download = `${(name || 'file').slice(0, 100)}.${ext}`
-    a.click()
-    URL.revokeObjectURL(url)
+    await saveBlob(await resp.blob(), `${(name || 'file').slice(0, 100)}.${ext}`)
   } catch (e) { notif.error(e?.message || 'Не удалось скачать') }
 }
 function downloadNote(n, format) { download(api.exportNote(n.id, format), n.title || 'Заметка', format) }

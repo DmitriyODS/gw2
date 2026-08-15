@@ -15,7 +15,8 @@ import LayersPanel from '@/components/boards/LayersPanel.vue'
 import ShareDialog from '@/components/boards/ShareDialog.vue'
 import * as api from '@/api/boards.js'
 import { emptyScene, normalizeScene } from '@/utils/boardScene.js'
-import { saveBlob, sceneToJpeg, sceneToPdf, sceneToPng } from '@/utils/boardExport.js'
+import { sceneToPreview } from '@/utils/boardExport.js'
+import { BOARD_EXPORT_ITEMS, boardExportFormat, useBoardDownload } from '@/composables/useBoardDownload.js'
 import { useBoardCollab } from '@/composables/useBoardCollab.js'
 import { useBreakpoint } from '@/composables/useBreakpoint.js'
 import { useAuthStore } from '@/stores/auth.js'
@@ -27,6 +28,7 @@ const router = useRouter()
 const boards = useBoardsStore()
 const auth = useAuthStore()
 const notify = useNotificationsStore()
+const { downloadBoard } = useBoardDownload()
 
 const boardId = computed(() => Number(route.params.id))
 
@@ -191,7 +193,7 @@ function schedulePreview() {
   previewTimer = setTimeout(async () => {
     if (!canEdit.value) return
     try {
-      const blob = await sceneToPng(scene.value, { scale: 0.6 })
+      const blob = await sceneToPreview(scene.value)
       if (blob) await api.uploadPreview(boardId.value, blob)
     } catch { /* превью не критично */ }
   }, 4000)
@@ -295,38 +297,15 @@ function onBoardMenu(action) {
   }
 }
 
-const EXPORT_ITEMS = [
-  { label: 'Картинка PNG', icon: 'image', action: 'png' },
-  { label: 'Картинка JPG', icon: 'photo', action: 'jpg' },
-  { label: 'Документ PDF', icon: 'picture_as_pdf', action: 'pdf' },
-  { divider: true },
-  { label: 'Вектор SVG', icon: 'draft', action: 'svg' },
-  { label: 'Сцена JSON', icon: 'data_object', action: 'json' },
-]
-
 function openExportMenu(e) {
   exportMenu.value = { visible: true, x: e.clientX, y: e.clientY }
 }
 
-async function exportBoard(format) {
-  const name = title.value || 'Доска'
-  try {
-    // Растр и PDF рисует холст (в них попадают и картинки сцены), svg/json —
-    // сервер: он же кладёт в SVG сами файлы картинок.
-    if (format === 'png' || format === 'jpg' || format === 'pdf') {
-      const make = { png: sceneToPng, jpg: sceneToJpeg, pdf: sceneToPdf }[format]
-      const blob = await make(scene.value)
-      if (!blob) {
-        notify.warn('На доске пока нечего сохранять')
-        return
-      }
-      saveBlob(blob, `${name}.${format}`)
-      return
-    }
-    saveBlob(await api.exportBoard(boardId.value, format), `${name}.${format}`)
-  } catch {
-    notify.error('Не удалось выгрузить доску')
-  }
+// Сцену передаём свою: открытая доска правится прямо сейчас, и на сервере
+// может лежать состояние до последнего автосохранения.
+function exportBoard(action) {
+  const format = boardExportFormat(action)
+  if (format) downloadBoard({ id: boardId.value, title: title.value }, format, scene.value)
 }
 
 // ── Клавиатура ───────────────────────────────────────────────────
@@ -536,7 +515,7 @@ watch(title, () => {
       :visible="exportMenu.visible"
       :x="exportMenu.x"
       :y="exportMenu.y"
-      :items="EXPORT_ITEMS"
+      :items="BOARD_EXPORT_ITEMS"
       @select="exportBoard"
       @close="exportMenu.visible = false"
     />

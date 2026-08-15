@@ -66,6 +66,7 @@ import { ref, computed } from 'vue'
 import { useNotificationsStore } from '@/stores/notifications.js'
 import { useBreakpoint } from '@/composables/useBreakpoint.js'
 import { useStatsLayout } from '@/composables/useStatsLayout.js'
+import { saveBlob } from '@/utils/download.js'
 
 const props = defineProps({
   widgetId: {
@@ -162,14 +163,7 @@ async function handleExport() {
     } else {
       blob = new Blob([response])
     }
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url
-    a.download = `export_${Date.now()}.xlsx`
-    document.body.appendChild(a)
-    a.click()
-    document.body.removeChild(a)
-    URL.revokeObjectURL(url)
+    await saveBlob(blob, `export_${Date.now()}.xlsx`)
   } catch (e) {
     notif.error(e.message || 'Ошибка экспорта')
   }

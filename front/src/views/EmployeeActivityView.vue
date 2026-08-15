@@ -165,6 +165,7 @@ import AppPage from '@/components/ui/AppPage.vue'
 import AppTabs from '@/components/ui/AppTabs.vue'
 import BrandLoader from '@/components/common/BrandLoader.vue'
 import DateRangePicker from '@/components/common/DateRangePicker.vue'
+import { saveBlob } from '@/utils/download.js'
 
 const props = defineProps({ userId: { type: [String, Number], required: true } })
 
@@ -353,12 +354,7 @@ async function exportDocx() {
     // apiRequest({blob:true}) отдаёт Response — забираем из него сам Blob.
     const resp = await statsApi.exportEmployeeActivity(uid.value, r.from, r.to)
     const blob = resp instanceof Blob ? resp : await resp.blob()
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url
-    a.download = `Активность — ${employeeName.value}.docx`
-    a.click()
-    URL.revokeObjectURL(url)
+    await saveBlob(blob, `Активность — ${employeeName.value}.docx`)
   } catch (e) {
     notif.error(e?.message || 'Не удалось выгрузить отчёт')
   } finally {

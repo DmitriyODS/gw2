@@ -99,13 +99,6 @@ input[type="search"]::-ms-reveal {
   font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
 }
 
-/* Тосты всегда поверх всего — выше плашки активного юнита, мини-мессенджера
-   (10050), модалки питомца (10700) и диалогов над ней (above-pet-modal 10800).
-   Иначе уведомление прячется за ними. */
-.p-toast {
-  z-index: 11500 !important;
-}
-
 /* Диалоги поверх модалки питомца (её кастомный оверлей — 10700). Именно класс,
    а не base-z-index: PrimeVue с autoZIndex уважает baseZIndex только при
    пустом глобальном стеке слоёв (сразу после F5), а дальше выдаёт
@@ -836,16 +829,5 @@ textarea.ctl.invalid:focus {
   /* Увеличиваем минимальный размер tap target */
   button, a, [role="button"] {
     min-height: 36px;
-  }
-
-  /* На мобильном тосты показываем сверху — снизу их прятала панель задач.
-     Выходят под панелью статусов каркаса (её толщина — на корне документа) и
-     растянуты по ширине экрана. */
-  .p-toast.p-toast-top-center {
-    top: calc(var(--statusbar-height, 0px) + env(safe-area-inset-top, 0px) + 10px) !important;
-    left: 50% !important;
-    transform: translateX(-50%) !important;
-    width: calc(100vw - 24px) !important;
-    max-width: 420px !important;
   }
 }

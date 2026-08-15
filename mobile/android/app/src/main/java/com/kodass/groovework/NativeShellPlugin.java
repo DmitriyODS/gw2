@@ -1,5 +1,7 @@
 package com.kodass.groovework;
 
+import android.Manifest;
+import android.content.ContentValues;
 import android.content.Context;
 import android.content.Intent;
 import android.database.Cursor;
@@ -7,33 +9,52 @@ import android.graphics.Color;
 import android.media.AudioDeviceCallback;
 import android.media.AudioDeviceInfo;
 import android.media.AudioManager;
+import android.media.MediaScannerConnection;
 import android.net.Uri;
 import android.os.Build;
+import android.os.Environment;
 import android.os.PowerManager;
+import android.provider.MediaStore;
 import android.provider.OpenableColumns;
 import android.provider.Settings;
 import android.util.Base64;
 import android.view.Window;
+import android.widget.Toast;
 
 import androidx.core.view.WindowCompat;
 import androidx.core.view.WindowInsetsControllerCompat;
 
 import com.getcapacitor.JSArray;
 import com.getcapacitor.JSObject;
+import com.getcapacitor.PermissionState;
 import com.getcapacitor.Plugin;
 import com.getcapacitor.PluginCall;
 import com.getcapacitor.PluginMethod;
 import com.getcapacitor.annotation.CapacitorPlugin;
+import com.getcapacitor.annotation.Permission;
+import com.getcapacitor.annotation.PermissionCallback;
 
 import java.io.ByteArrayOutputStream;
+import java.io.File;
+import java.io.FileOutputStream;
 import java.io.InputStream;
+import java.io.OutputStream;
 import java.util.ArrayList;
 
 // Мост обёртки для веб-слоя (фронт зовёт через window.Capacitor.Plugins
 // .NativeShell, см. front/src/utils/nativeApp.js): принудительная проверка и
 // установка обновлений APK по кнопке в «О приложении» (без 6-часового троттла
-// автопроверки) и окраска системных панелей под текущую тему приложения.
-@CapacitorPlugin(name = "NativeShell")
+// автопроверки), сохранение созданных в браузере файлов и окраска системных
+// панелей под текущую тему приложения.
+@CapacitorPlugin(
+    name = "NativeShell",
+    permissions = {
+        // Только Android 9 и ниже: там запись в общие «Загрузки» идёт по
+        // файловому пути и требует разрешения. С Android 10 пишем через
+        // MediaStore — разрешение не нужно и не запрашивается.
+        @Permission(alias = "storage", strings = { Manifest.permission.WRITE_EXTERNAL_STORAGE })
+    }
+)
 public class NativeShellPlugin extends Plugin {
 
     private AudioManager am() {
@@ -316,6 +337,111 @@ public class NativeShellPlugin extends Plugin {
         f.put("mimeType", mime);
         f.put("tooLarge", true);
         return f;
+    }
+
+    // ── Сохранение файла, собранного в вебе (выгрузки, экспорты) ───────────
+    // WebView скачивает только http(s)-ссылки (их ведёт DownloadListener в
+    // MainActivity): blob:/data: он игнорирует МОЛЧА, поэтому любой файл,
+    // который фронт строит сам (xlsx, docx, png доски, архив бэкапа), в обёртке
+    // просто не сохранялся. Здесь принимаем его содержимое base64 и кладём в
+    // общие «Загрузки» — как это делает системный загрузчик.
+    @PluginMethod
+    public void saveFile(PluginCall call) {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q
+            && getPermissionState("storage") != PermissionState.GRANTED) {
+            requestPermissionForAlias("storage", call, "storagePermissionCallback");
+            return;
+        }
+        writeToDownloads(call);
+    }
+
+    @PermissionCallback
+    private void storagePermissionCallback(PluginCall call) {
+        if (getPermissionState("storage") != PermissionState.GRANTED) {
+            call.reject("Нет доступа к памяти устройства");
+            return;
+        }
+        writeToDownloads(call);
+    }
+
+    private void writeToDownloads(PluginCall call) {
+        final String name = safeName(call.getString("name", "file"));
+        final String mime = call.getString("mimeType", "application/octet-stream");
+        final String data = call.getString("data", "");
+        new Thread(() -> {
+            try {
+                byte[] bytes = Base64.decode(data, Base64.DEFAULT);
+                String saved = Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q
+                    ? saveViaMediaStore(name, mime, bytes)
+                    : saveViaFile(name, bytes);
+                toast("Сохранено в «Загрузки»: " + saved);
+                JSObject ret = new JSObject();
+                ret.put("name", saved);
+                call.resolve(ret);
+            } catch (Throwable e) {
+                call.reject("Не удалось сохранить файл");
+            }
+        }).start();
+    }
+
+    // Android 10+: файл создаёт MediaStore — он же разводит одинаковые имена
+    // («Отчёт(1).xlsx»). IS_PENDING держит запись скрытой, пока идёт запись:
+    // иначе менеджер файлов покажет недокачанный файл.
+    private String saveViaMediaStore(String name, String mime, byte[] bytes) throws Exception {
+        ContentValues values = new ContentValues();
+        values.put(MediaStore.Downloads.DISPLAY_NAME, name);
+        values.put(MediaStore.Downloads.MIME_TYPE, mime);
+        values.put(MediaStore.Downloads.IS_PENDING, 1);
+        Uri uri = getContext().getContentResolver()
+            .insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, values);
+        if (uri == null) throw new Exception("no uri");
+        try (OutputStream out = getContext().getContentResolver().openOutputStream(uri)) {
+            if (out == null) throw new Exception("no stream");
+            out.write(bytes);
+        }
+        values.clear();
+        values.put(MediaStore.Downloads.IS_PENDING, 0);
+        getContext().getContentResolver().update(uri, values, null, null);
+        return name;
+    }
+
+    // Android 9 и ниже: обычный файл в общей папке «Загрузки» + сканирование,
+    // иначе он не появится в менеджере файлов до перезагрузки.
+    private String saveViaFile(String name, byte[] bytes) throws Exception {
+        File dir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS);
+        if (!dir.exists() && !dir.mkdirs()) throw new Exception("no dir");
+        File file = uniqueFile(dir, name);
+        try (FileOutputStream out = new FileOutputStream(file)) {
+            out.write(bytes);
+        }
+        MediaScannerConnection.scanFile(getContext(), new String[] { file.getAbsolutePath() }, null, null);
+        return file.getName();
+    }
+
+    private static File uniqueFile(File dir, String name) {
+        File file = new File(dir, name);
+        if (!file.exists()) return file;
+        int dot = name.lastIndexOf('.');
+        String base = dot > 0 ? name.substring(0, dot) : name;
+        String ext = dot > 0 ? name.substring(dot) : "";
+        for (int i = 1; i < 1000; i++) {
+            file = new File(dir, base + "(" + i + ")" + ext);
+            if (!file.exists()) return file;
+        }
+        return file;
+    }
+
+    // Имя приходит из пользовательского текста (название доски, реестра): в нём
+    // не должно быть разделителей пути.
+    private static String safeName(String name) {
+        String clean = name == null ? "" : name.replaceAll("[\\\\/:*?\"<>|\\x00-\\x1f]", " ").trim();
+        return clean.isEmpty() ? "file" : clean;
+    }
+
+    private void toast(String text) {
+        if (getActivity() == null) return;
+        getActivity().runOnUiThread(() ->
+            Toast.makeText(getContext(), text, Toast.LENGTH_SHORT).show());
     }
 
     @PluginMethod

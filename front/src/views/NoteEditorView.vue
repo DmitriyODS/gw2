@@ -252,6 +252,7 @@ import { useNotesStore } from '@/stores/notes.js'
 import { useNotificationsStore } from '@/stores/notifications.js'
 import { useNoteCollab } from '@/composables/useNoteCollab.js'
 import { useNoteFind } from '@/composables/useNoteFind.js'
+import { saveBlob } from '@/utils/download.js'
 
 const props = defineProps({ id: { type: String, required: true } })
 
@@ -461,13 +462,7 @@ async function exportFile(format = 'txt') {
   await flush()
   try {
     const resp = await api.exportNote(noteId.value, format)
-    const blob = await resp.blob()
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url
-    a.download = `${(title.value || 'Заметка').slice(0, 100)}.${format}`
-    a.click()
-    URL.revokeObjectURL(url)
+    await saveBlob(await resp.blob(), `${(title.value || 'Заметка').slice(0, 100)}.${format}`)
   } catch (e) {
     notif.error(e?.message || 'Не удалось экспортировать')
   }

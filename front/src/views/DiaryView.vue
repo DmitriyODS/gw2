@@ -400,6 +400,7 @@ import { useDiariesStore, dayKey } from '@/stores/diaries.js'
 import { useAuthStore } from '@/stores/auth.js'
 import { exportEntries, getEntries } from '@/api/diaries.js'
 import { useNotificationsStore } from '@/stores/notifications.js'
+import { saveBlob } from '@/utils/download.js'
 
 const store = useDiariesStore()
 const route = useRoute()
@@ -800,13 +801,7 @@ async function doExport() {
     else params = { from: dayKey(store.range.from), to: dayKey(store.range.to), search: store.search }
     const resp = await exportEntries(store.selectedId, params)
     if (!resp.ok) throw new Error('export_failed')
-    const blob = await resp.blob()
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url
-    a.download = `${store.selected?.name || 'diary'}.xlsx`
-    document.body.appendChild(a); a.click(); document.body.removeChild(a)
-    URL.revokeObjectURL(url)
+    await saveBlob(await resp.blob(), `${store.selected?.name || 'diary'}.xlsx`)
   } catch (e) {
     notif.error(e?.message || 'Не удалось выгрузить')
   }

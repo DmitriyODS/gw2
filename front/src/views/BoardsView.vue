@@ -18,6 +18,7 @@ import MoveToFolderDialog from '@/components/boards/MoveToFolderDialog.vue'
 import ShareDialog from '@/components/boards/ShareDialog.vue'
 import * as api from '@/api/boards.js'
 import { saveBlob } from '@/utils/download.js'
+import { BOARD_EXPORT_ITEMS, boardExportFormat, useBoardDownload } from '@/composables/useBoardDownload.js'
 import { timeAgo } from '@/utils/time.js'
 import { useAuthStore } from '@/stores/auth.js'
 import { useBoardsStore } from '@/stores/boards.js'
@@ -26,6 +27,7 @@ import { useNotificationsStore } from '@/stores/notifications.js'
 const store = useBoardsStore()
 const auth = useAuthStore()
 const notify = useNotificationsStore()
+const { downloadBoard } = useBoardDownload()
 const route = useRoute()
 const router = useRouter()
 
@@ -191,14 +193,7 @@ function boardMenuItems(b) {
       { divider: true },
       { label: b.archived ? 'Вернуть из архива' : 'В архив', icon: 'inventory_2', action: 'archive' },
     ] : []),
-    {
-      label: 'Скачать',
-      icon: 'download',
-      children: [
-        { label: 'Картинкой (.svg)', icon: 'image', action: 'export-svg' },
-        { label: 'Сценой (.json)', icon: 'data_object', action: 'export-json' },
-      ],
-    },
+    { label: 'Скачать', icon: 'download', children: BOARD_EXPORT_ITEMS },
     ...(mine ? [
       { divider: true },
       { label: 'Удалить', icon: 'delete', danger: true, action: 'delete' },
@@ -245,6 +240,8 @@ function onMenuClose() {
 function boardAction(action) {
   const b = menuBoard.value
   if (!b) return
+  const format = boardExportFormat(action)
+  if (format) return void downloadBoard(b, format)
   switch (action) {
     case 'open': openBoard(b); break
     case 'pin': store.togglePinned(b); break
@@ -252,8 +249,6 @@ function boardAction(action) {
     case 'copy': store.copyBoard(b.id).catch(() => notify.error('Не удалось дублировать доску')); break
     case 'move': moveSubject.value = { type: 'board', id: b.id }; moveOpen.value = true; break
     case 'share': shareSubject.value = { type: 'board', id: b.id }; shareOpen.value = true; break
-    case 'export-svg': download(b, 'svg'); break
-    case 'export-json': download(b, 'json'); break
     case 'delete': confirmTarget.value = { kind: 'board', item: b }; break
     default: break
   }
@@ -298,17 +293,9 @@ async function confirmDelete() {
 
 // ── Выгрузка и импорт ────────────────────────────────────────────
 
-async function download(b, format) {
-  try {
-    saveBlob(await api.exportBoard(b.id, format), `${b.title || 'Доска'}.${format}`)
-  } catch {
-    notify.error('Не удалось выгрузить доску')
-  }
-}
-
 async function downloadFolder(f) {
   try {
-    saveBlob(await api.exportFolder(f.id, 'svg'), `${f.name}.zip`)
+    await saveBlob(await api.exportFolder(f.id, 'svg'), `${f.name}.zip`)
   } catch (e) {
     notify.error(e?.message || 'Не удалось выгрузить папку')
   }

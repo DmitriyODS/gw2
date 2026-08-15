@@ -10,6 +10,7 @@
  * отдельным окном со своим маршрутом.
  */
 import { LEGAL_CONSENT_VISIBLE } from '@/utils/release.js'
+import { devToolsOn } from '@/utils/devTools.js'
 
 export function settingsGroups(ctx = {}) {
   const { isMobile = false, hasCompany = false, isAdmin = false, isSuperAdmin = false } = ctx
@@ -23,8 +24,15 @@ export function settingsGroups(ctx = {}) {
           title: 'Общие',
           // desc в списке разделов не показывается (там только значок и
           // название) — это подсказка для поиска Hola и подзаголовок.
-          desc: 'Поиск в интернете, звук уведомлений и режим «не беспокоить»',
+          desc: 'Поиск в интернете, автозапуск приложения для компьютера',
           icon: 'home',
+          tone: 'primary',
+        },
+        {
+          key: 'notifications',
+          title: 'Уведомления',
+          desc: 'Звук и «не беспокоить», где всплывают и сколько висят, разделы-источники',
+          icon: 'notifications',
           tone: 'primary',
         },
         { key: 'theme', title: 'Темы и оформление', desc: 'Светлая и тёмная тема, палитры, свои цвета', icon: 'palette', tone: 'primary' },
@@ -32,7 +40,7 @@ export function settingsGroups(ctx = {}) {
         // на всех устройствах и видна на мобильном стартовом экране тоже
         // (панель задач и карточка десктоп-клиента там просто ни на что не
         // влияют, но менять их можно откуда угодно).
-        { key: 'desktop', title: 'Рабочий стол', desc: 'Панель задач и меню «Пуск», обои под окнами, живые плитки, приложение для компьютера', icon: 'desktop_windows', tone: 'tertiary' },
+        { key: 'desktop', title: 'Рабочий стол', desc: 'Панель задач и меню «Пуск», обои под окнами, живые плитки', icon: 'desktop_windows', tone: 'tertiary' },
         { key: 'chats', title: 'Чаты и портал', desc: 'Фон переписки и ленты корпоративного портала', icon: 'brush', tone: 'secondary' },
         {
           key: 'account',
@@ -75,6 +83,14 @@ export function settingsGroups(ctx = {}) {
         }] : []),
         { key: 'help', title: 'Справка и поддержка', desc: 'Как пользоваться разделами, чат с разработчиками', icon: 'help', tone: 'secondary' },
         { key: 'about', title: 'О приложении', desc: 'Версия, что нового, приложения для устройств', icon: 'info', tone: 'tertiary' },
+        // Раздела нет, пока его не позовут пятью нажатиями по номеру сборки.
+        ...(devToolsOn.value ? [{
+          key: 'devtools',
+          title: 'DevTools',
+          desc: 'Проверка самого приложения: тестовые уведомления',
+          icon: 'code',
+          tone: 'tertiary',
+        }] : []),
       ],
     },
     // Настройки компании (ИИ, выходные, питомцы, ссылка-приглашение, интеграция

@@ -3,6 +3,7 @@ import { useMessengerStore } from '@/stores/messenger.js'
 import { usePortalStore } from '@/stores/portal.js'
 import { usePetsStore } from '@/stores/pets.js'
 import { storageGetJSON, storageSetJSON } from '@/utils/storage.js'
+import { isSourceEnabled } from '@/utils/notifySettings.js'
 
 /* Центр уведомлений рабочего стола. Два рода строк:
 
@@ -42,8 +43,11 @@ const saveJournal = () => storageSetJSON(JOURNAL_KEY, journal.value)
  * рядом с тостом, который живёт лишь несколько секунд.
  * key — стабильный идентификатор события: повтор поднимает прежнюю строку
  * вместо дубля (например, то же напоминание после «отложить»).
+ * source — раздел-источник: выключенный в «Настройки → Уведомления» не пишет
+ * в журнал вовсе (иначе бейдж копил бы то, о чём просили не сообщать).
  */
-export function pushNotification({ key, icon = 'notifications', tone = 'primary', title, text, path }) {
+export function pushNotification({ key, icon = 'notifications', tone = 'primary', title, text, path, source }) {
+  if (!isSourceEnabled(source)) return
   const at = Date.now()
   const entry = { journal: true, key: key || `n-${at}`, icon, tone, title, text, path, at }
   journal.value = [entry, ...journal.value.filter((e) => e.key !== entry.key)].slice(0, JOURNAL_MAX)
@@ -61,10 +65,13 @@ export function useDesktopNotifications() {
   const portal = usePortalStore()
   const pets = usePetsStore()
 
+  /* Живые строки тоже слушают «Настройки → Уведомления»: выключенный раздел
+     не должен ни всплывать тостом, ни висеть в центре — иначе бейдж
+     продолжал бы звать туда, откуда просили не сообщать. */
   const live = computed(() => {
     const list = []
 
-    for (const c of messenger.conversations) {
+    for (const c of (isSourceEnabled('messenger') ? messenger.conversations : [])) {
       if (!c.unread_count) continue
       const title = c.is_group ? (c.title || 'Группа') : (c.other_user?.fio || 'Чат')
       list.push({
@@ -78,7 +85,7 @@ export function useDesktopNotifications() {
       })
     }
 
-    if (portal.unread) {
+    if (portal.unread && isSourceEnabled('portal')) {
       list.push({
         key: 'portal',
         sig: `${portal.unread}`,
@@ -91,7 +98,7 @@ export function useDesktopNotifications() {
     }
 
     const pet = pets.pet
-    if (pet?.sick) {
+    if (pet?.sick && isSourceEnabled('pets')) {
       list.push({
         key: 'pet-sick',
         sig: `sick-${pet.ailment || 'any'}`,

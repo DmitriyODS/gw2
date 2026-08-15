@@ -1,7 +1,8 @@
 <template>
   <!-- Панель задач мобильного каркаса: «Пуск» слева, открытые и закреплённые
-       разделы по центру, Hola справа. Юнит и уведомления живут в панели
-       статусов — она видна на стартовом экране. -->
+       разделы дальше. Юнит и уведомления живут в панели статусов — она видна
+       и на стартовом экране; Hola вызывается свайпом от правой кромки, своей
+       кнопки у неё нет (лента разделов забирала место у самой себя). -->
   <footer ref="barEl" class="mbar">
     <button
       class="mb-start"
@@ -34,17 +35,6 @@
       </button>
     </div>
 
-    <button
-      class="mb-hola"
-      type="button"
-      :class="{ active: desktop.holaOpen }"
-      title="Hola ассистент — поиск, команды и чат"
-      aria-label="Hola ассистент"
-      @click="desktop.holaOpen = !desktop.holaOpen"
-    >
-      <HolaIcon :size="20" />
-    </button>
-
     <ContextMenu
       :visible="menu.open"
       :x="menu.x"
@@ -66,7 +56,6 @@ import { usePermission } from '@/composables/usePermission.js'
 import { useCompanySettings } from '@/composables/useCompanySettings.js'
 import { appById, windowTitle } from '@/desktop/apps.js'
 import Logo from '@/components/common/Logo.vue'
-import HolaIcon from '@/components/common/HolaIcon.vue'
 import ContextMenu from '@/components/common/ContextMenu.vue'
 
 const props = defineProps({
@@ -304,28 +293,6 @@ onBeforeUnmount(() => {
 }
 
 .mb-app.active::after { background: var(--color-primary); }
-
-.mb-hola {
-  flex-shrink: 0;
-  margin-left: auto;
-  display: grid;
-  place-items: center;
-  width: 36px;
-  min-width: 36px;
-  height: 36px;
-  min-height: 36px;
-  padding: 0;
-  border-radius: 50%;
-  color: var(--color-text);
-  transition: background 0.15s ease, color 0.15s ease, scale 0.12s ease;
-}
-
-.mb-hola:active { scale: 0.9; }
-
-.mb-hola.active {
-  background: color-mix(in oklch, var(--color-primary) 18%, transparent);
-  color: var(--color-primary);
-}
 
 @media (prefers-reduced-motion: reduce) {
   .mbar button { transition: none; }

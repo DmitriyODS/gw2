@@ -2,7 +2,9 @@ package com.kodass.groovework;
 
 import android.content.ContentResolver;
 import android.content.Context;
+import android.graphics.Rect;
 import android.net.Uri;
+import android.os.Build;
 import android.util.AttributeSet;
 import android.util.Base64;
 import android.view.inputmethod.EditorInfo;
@@ -16,6 +18,7 @@ import com.getcapacitor.CapacitorWebView;
 
 import java.io.ByteArrayOutputStream;
 import java.io.InputStream;
+import java.util.Collections;
 
 // Наследник капаситоровского WebView, добавляющий приём КАРТИНОК С КЛАВИАТУРЫ
 // (GBoard «вставить картинку»/GIF/стикер, буфер обмена с изображением). Такой
@@ -38,6 +41,28 @@ public class GrooveWebView extends CapacitorWebView {
 
     public GrooveWebView(Context context, AttributeSet attrs) {
         super(context, attrs);
+    }
+
+    // Полоса у ПРАВОЙ кромки, где системный жест «назад» уступает жесту
+    // приложения: там веб-слой вызывает Hola свайпом внутрь экрана
+    // (front/src/composables/useEdgeSwipe.js). Система разрешает исключить не
+    // больше 200dp высоты на край, поэтому берём середину экрана — выше и ниже
+    // остаётся обычное «назад».
+    private static final int GESTURE_BAND_DP = 32;
+    private static final int GESTURE_HEIGHT_DP = 200;
+
+    @Override
+    protected void onSizeChanged(int w, int h, int oldW, int oldH) {
+        super.onSizeChanged(w, h, oldW, oldH);
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) return;
+        try {
+            float density = getResources().getDisplayMetrics().density;
+            int band = (int) (GESTURE_BAND_DP * density);
+            int tall = Math.min(h, (int) (GESTURE_HEIGHT_DP * density));
+            int top = Math.max(0, (h - tall) / 2);
+            setSystemGestureExclusionRects(
+                Collections.singletonList(new Rect(w - band, top, w, top + tall)));
+        } catch (Exception ignored) {}
     }
 
     @Override

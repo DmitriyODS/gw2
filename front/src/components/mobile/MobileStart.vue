@@ -53,10 +53,25 @@
     </aside>
 
     <div class="mstart-body" @contextmenu.self.prevent="openDeskMenu">
-      <!-- Марка — там же, где в меню «Пуск» рабочего стола: над плитками. -->
-      <button class="mst-brand" type="button" title="О приложении" @click="open('/settings?section=about')">
-        <BrandWordmark />
-      </button>
+      <!-- Марка — там же, где в меню «Пуск» рабочего стола: над плитками.
+           Справа — знак Hola: жест от правой кромки быстрее, но его надо знать,
+           поэтому видимый вход остаётся. Подложки у знака нет намеренно — он
+           стоит в строке марки, а не в ряду кнопок. -->
+      <header class="mst-brandrow">
+        <button class="mst-brand" type="button" title="О приложении" @click="open('/settings?section=about')">
+          <BrandWordmark />
+        </button>
+
+        <button
+          class="mst-hola"
+          type="button"
+          title="Hola ассистент — поиск, команды и чат"
+          aria-label="Hola ассистент"
+          @click="desktop.holaOpen = true"
+        >
+          <HolaIcon :size="26" />
+        </button>
+      </header>
 
       <section v-for="group in visibleGroups" :key="group.key" class="mst-group">
         <button class="mst-group-head" type="button" @click="prefs.toggleCollapsed(platform, group.key)">
@@ -145,6 +160,7 @@ import { tileFaces } from '@/desktop/liveTiles.js'
 import { avatarUrl } from '@/utils/pets.js'
 import { shortFio } from '@/utils/people.js'
 import BrandWordmark from '@/components/common/BrandWordmark.vue'
+import HolaIcon from '@/components/common/HolaIcon.vue'
 import ContextMenu from '@/components/common/ContextMenu.vue'
 import CompanySelect from '@/components/common/CompanySelect.vue'
 import LiveTile from '@/components/desktop/LiveTile.vue'
@@ -526,18 +542,47 @@ function onMenuSelect(action) {
 .mst-rail-btn.danger:hover .material-symbols-outlined { color: inherit; }
 
 /* Марка прокручивается вместе с плитками: панель статусов остаётся компактной,
-   а надпись стоит там же, где в меню «Пуск» на рабочем столе. */
+   а надпись стоит там же, где в меню «Пуск» на рабочем столе. Знак Hola —
+   в той же строке, прижат к правому краю. */
+.mst-brandrow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: -6px;
+}
+
 .mst-brand {
-  align-self: flex-start;
   display: flex;
   padding: 2px 4px;
-  margin-bottom: -6px;
   border: none;
   border-radius: var(--radius-md);
   background: none;
   cursor: pointer;
   -webkit-tap-highlight-color: transparent;
 }
+
+.mst-hola {
+  flex-shrink: 0;
+  display: grid;
+  place-items: center;
+  width: 34px;
+  min-width: 34px;
+  max-width: 34px;
+  height: 34px;
+  min-height: 34px;
+  max-height: 34px;
+  margin-right: 4px;
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--color-primary);
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  transition: scale 0.12s ease;
+}
+
+.mst-hola:active { scale: 0.9; }
 
 .mst-group-head {
   display: flex;

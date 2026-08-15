@@ -58,6 +58,7 @@ export function registerTaskSocketHandlers(socket) {
       severity: 'info',
       summary: 'Упоминание',
       detail: 'Вас отметили в комментарии к задаче',
+      source: 'tasks',
     })
     pushNotification({
       key: `mention-${task_id}`,
@@ -65,6 +66,7 @@ export function registerTaskSocketHandlers(socket) {
       title: 'Упоминание',
       text: 'Вас отметили в комментарии к задаче',
       path: `/tasks/${task_id}`,
+      source: 'tasks',
     })
   })
 

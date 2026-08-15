@@ -51,12 +51,24 @@ func (b *BackupStore) AllTables(ctx context.Context) ([]string, error) {
 }
 
 // ExportTables — для каждой таблицы выгружает все строки одним JSON-массивом.
+// Идёт в транзакции со снятым statement_timeout: на большой базе выгрузка
+// таблицы законно длится дольше общего потолка запроса (pkg/bootstrap), а
+// оборванный на середине бэкап — хуже долгого.
 func (b *BackupStore) ExportTables(ctx context.Context, tables []string) (map[string]json.RawMessage, error) {
+	tx, err := b.pool.Begin(ctx)
+	if err != nil {
+		return nil, err
+	}
+	defer tx.Rollback(ctx) //nolint:errcheck // read-only: откат — обычное завершение
+
+	if _, err := tx.Exec(ctx, `SET LOCAL statement_timeout = 0`); err != nil {
+		return nil, err
+	}
 	out := make(map[string]json.RawMessage, len(tables))
 	for _, t := range tables {
 		ident := pgx.Identifier{t}.Sanitize()
 		var raw []byte
-		err := b.pool.QueryRow(ctx,
+		err := tx.QueryRow(ctx,
 			fmt.Sprintf(`SELECT coalesce(jsonb_agg(to_jsonb(x)), '[]'::jsonb) FROM %s x`, ident)).
 			Scan(&raw)
 		if err != nil {
@@ -87,6 +99,13 @@ func (b *BackupStore) ImportTables(ctx context.Context, tables []string, data ma
 		return err
 	}
 	defer tx.Rollback(ctx) //nolint:errcheck
+
+	// Восстановление всей базы одной транзакцией дольше обычного запроса —
+	// общий statement_timeout здесь снимаем (SET LOCAL живёт до конца этой
+	// транзакции и на другие соединения не влияет).
+	if _, err := tx.Exec(ctx, `SET LOCAL statement_timeout = 0`); err != nil {
+		return err
+	}
 
 	idents := make([]string, len(ordered))
 	for i, t := range ordered {

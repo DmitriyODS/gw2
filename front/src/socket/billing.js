@@ -32,6 +32,7 @@ export function registerBillingSocketHandlers(socket) {
       title: 'Подписку пора продлить',
       text: 'Счёт на продление ждёт оплаты в разделе «Магазин».',
       path: '/store?tab=orders',
+      source: 'billing',
     })
   })
 
@@ -44,6 +45,7 @@ export function registerBillingSocketHandlers(socket) {
       title: 'Тариф закончился',
       text: 'Вернулись лимиты бесплатного тарифа — оформить подписку можно в магазине.',
       path: '/store?tab=subs',
+      source: 'billing',
     })
   })
 
@@ -54,6 +56,7 @@ export function registerBillingSocketHandlers(socket) {
       summary: 'Ваш товар купили',
       detail: 'Выручка зачислена в раздел «Мои товары».',
       life: 6000,
+      source: 'billing',
     })
     pushNotification({
       key: `billing-sale-${p?.product_id}-${Date.now()}`,
@@ -62,6 +65,7 @@ export function registerBillingSocketHandlers(socket) {
       title: 'Ваш товар купили',
       text: 'Выручка зачислена на кошелёк автора.',
       path: '/store?tab=mine',
+      source: 'billing',
     })
   })
 
@@ -72,6 +76,7 @@ export function registerBillingSocketHandlers(socket) {
       summary: approved ? 'Товар опубликован' : 'Товар отклонён',
       detail: approved ? 'Он появился на витрине магазина.' : (p?.reason || 'Проверьте замечания в разделе «Мои товары».'),
       life: 7000,
+      source: 'billing',
     })
   })
 }

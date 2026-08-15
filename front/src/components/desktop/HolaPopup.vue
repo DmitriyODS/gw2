@@ -1,9 +1,24 @@
 <template>
   <div class="hp-backdrop" :class="{ full }" @pointerdown.self="close">
-    <section class="hp" :class="{ full }" :style="style" role="dialog" aria-label="Hola ассистент">
+    <section
+      class="hp"
+      :class="{ full }"
+      :style="style"
+      role="dialog"
+      aria-label="Hola ассистент"
+      @touchstart.passive="onTouchStart"
+      @touchmove.passive="onTouchMove"
+      @touchend.passive="swipeX = null"
+      @touchcancel.passive="swipeX = null"
+    >
       <header class="hp-bar">
         <HolaIcon :size="full ? 26 : 20" class="hp-mark" />
         <h2 class="hp-title">Hola ассистент</h2>
+        <!-- Во весь экран мимо панели не ткнуть, а кнопки в панели задач у Hola
+             больше нет — закрывают крестиком или свайпом вправо. -->
+        <button v-if="full" type="button" class="hp-close" aria-label="Закрыть" @click="close">
+          <span class="material-symbols-outlined">close</span>
+        </button>
       </header>
 
       <HolaPanel ref="panelRef" class="hp-body" :roomy="full && wide" @navigate="close" />
@@ -68,6 +83,29 @@ const style = computed(() => (props.full ? {} : {
 
 function close() {
   emit('close')
+}
+
+/* Закрытие свайпом вправо — жест, обратный тому, которым панель открыли.
+   Только в полноэкранном виде: на рабочем столе сенсора может не быть вовсе, а
+   панель закрывается кликом мимо неё. */
+const SWIPE_BACK = 70
+const swipeX = ref(null)
+const swipeY = ref(0)
+
+function onTouchStart(e) {
+  if (!props.full || e.touches.length !== 1) return
+  swipeX.value = e.touches[0].clientX
+  swipeY.value = e.touches[0].clientY
+}
+
+function onTouchMove(e) {
+  if (swipeX.value === null) return
+  const t = e.touches[0]
+  // Вертикальный увод — это прокрутка выдачи, а не закрытие.
+  if (Math.abs(t.clientY - swipeY.value) > 40) { swipeX.value = null; return }
+  if (t.clientX - swipeX.value < SWIPE_BACK) return
+  swipeX.value = null
+  close()
 }
 
 function onKeydown(e) {
@@ -139,9 +177,9 @@ onBeforeUnmount(() => {
   box-shadow: none;
 }
 
-/* Панель во весь экран остаётся ПОД панелью задач (900): её кнопка Hola —
-   единственный способ закрыть панель на телефоне, и она обязана быть нажимаемой
-   (по высоте панель до панели задач и не достаёт). */
+/* Панель во весь экран остаётся ПОД панелями каркаса (900): она разворачивается
+   МЕЖДУ ними — панель статусов и лента разделов продолжают работать, как у
+   центра уведомлений. По высоте панель до них и не достаёт. */
 .hp-backdrop.full {
   background: none;
   z-index: 890;
@@ -178,6 +216,26 @@ onBeforeUnmount(() => {
 .hp.full .hp-title { font-size: 1.15rem; }
 
 .hp-mark { color: var(--color-primary); }
+
+.hp-close {
+  flex-shrink: 0;
+  display: grid;
+  place-items: center;
+  width: 36px;
+  min-width: 36px;
+  max-width: 36px;
+  height: 36px;
+  min-height: 36px;
+  max-height: 36px;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--color-text-dim);
+  cursor: pointer;
+}
+
+.hp-close:active { background: var(--color-surface-variant); }
 
 .hp-title {
   flex: 1;
@@ -217,5 +275,19 @@ onBeforeUnmount(() => {
   opacity: 0;
   translate: 0 -14px;
   scale: 0.97;
+}
+
+/* Во весь экран панель ВЫЕЗЖАЕТ СПРАВА — оттуда, откуда пришёл палец: её
+   вызывают свайпом от правой кромки, и движение продолжает жест. Подложка при
+   этом НЕ гаснет: её прозрачность накрыла бы и саму панель, и вместо выезда
+   вышло бы обычное растворение. */
+.hp-enter-from.full,
+.hp-leave-to.full { opacity: 1; }
+
+.hp-enter-from .hp.full,
+.hp-leave-to .hp.full {
+  opacity: 1;
+  translate: 100% 0;
+  scale: 1;
 }
 </style>

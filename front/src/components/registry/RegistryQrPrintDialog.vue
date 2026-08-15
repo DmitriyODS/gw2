@@ -378,7 +378,7 @@ function toggleMenu() {
 async function savePdf(fieldLabel, cells) {
   const blob = await codesToPdf(cells)
   if (!blob) throw new Error('Не удалось собрать PDF')
-  saveBlob(blob, `${safeFileName(`${props.registry?.name || 'Реестр'} — ${fieldLabel}`, 'qr-коды')}.pdf`)
+  await saveBlob(blob, `${safeFileName(`${props.registry?.name || 'Реестр'} — ${fieldLabel}`, 'qr-коды')}.pdf`)
 }
 
 // Печать во ВРЕМЕННОМ iframe, а не в новом окне: popup-блокировщики окно

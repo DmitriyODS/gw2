@@ -1,8 +1,9 @@
 <template>
-  <!-- Раздел собран ТРЕМЯ группами по смыслу: как экран устроен, как он
-       выглядит и настройки самой установки. Плоским списком карточек «панель
-       задач», «обои», «фон», «живые плитки» и «десктоп-клиент» читались как
-       случайный набор — рядом стояли вещи из разных миров. -->
+  <!-- Раздел собран ДВУМЯ группами по смыслу: как экран устроен и как он
+       выглядит. Плоским списком карточки «панель задач», «обои», «фон» и
+       «живые плитки» читались как случайный набор. Настройки самой
+       десктоп-обёртки живут в «Общих» — они про установленное приложение,
+       а не про раскладку разделов. -->
   <div class="dsec">
     <section class="dsec-group">
       <h3 class="dsec-title">Раскладка</h3>
@@ -22,16 +23,6 @@
         <AppGradientCard />
       </AppStack>
     </section>
-
-    <!-- Группа появляется только внутри десктоп-обёртки: в браузере настраивать
-         нечего, и пустой заголовок был бы враньём. -->
-    <section v-if="hasDesktopApp" class="dsec-group">
-      <h3 class="dsec-title">Приложение для компьютера</h3>
-      <p class="dsec-hint">Поведение этой установки: окно, трей и автозапуск.</p>
-      <AppStack>
-        <DesktopAppCard />
-      </AppStack>
-    </section>
   </div>
 </template>
 
@@ -43,7 +34,6 @@ import DesktopShellCard from './DesktopShellCard.vue'
 import DesktopTilesCard from './DesktopTilesCard.vue'
 import DesktopWallpaperCard from './DesktopWallpaperCard.vue'
 import AppGradientCard from './AppGradientCard.vue'
-import DesktopAppCard from './DesktopAppCard.vue'
 import { useShellMode } from '@/composables/useShellMode.js'
 
 const { shell } = useShellMode()
@@ -51,8 +41,6 @@ const { shell } = useShellMode()
 /* Сторона панели задач и режим меню «Пуск» — про ОКОННЫЙ каркас: у телефона и
    планшета панель всегда снизу, а «Пуск» и так во весь экран. */
 const windowsShell = computed(() => shell.value === 'windows')
-
-const hasDesktopApp = computed(() => !!window.GrooveDesktop)
 </script>
 
 <style scoped>

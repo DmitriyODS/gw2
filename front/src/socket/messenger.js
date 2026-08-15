@@ -1,6 +1,7 @@
 import { useAuthStore } from '@/stores/auth.js'
 import { useMessengerStore } from '@/stores/messenger.js'
 import { showSystemNotification, playNotifySound } from '@/utils/systemNotify.js'
+import { isSourceEnabled } from '@/utils/notifySettings.js'
 import { stripMarkdown } from '@/utils/markdown.js'
 
 export function registerMessengerSocketHandlers(socket) {
@@ -17,6 +18,8 @@ export function registerMessengerSocketHandlers(socket) {
     if (isActive) return
     // Системные плашки группы (вошёл/вышел/переименовал) не уведомляем.
     if (message.kind === 'system') return
+    // Раздел выключен в «Настройки → Уведомления» — сообщение придёт молча.
+    if (!isSourceEnabled('messenger')) return
     const conv = messenger.conversations.find(c => c.id === conversation_id)
     if (conv?.muted) return
     const heading = conv?.is_group ? (conv.title || 'Группа') : (conv?.other_user?.fio || 'Сотрудник')

@@ -24,6 +24,21 @@ func TestSearchRegexDetection(t *testing.T) {
 	}
 }
 
+// Длинное выражение движку Postgres не отдаём: он с бэктрекингом, и «(a+)+b»
+// на длинной строке занимает соединение целиком. Ищем подстрокой.
+func TestSearchRegexLengthLimit(t *testing.T) {
+	long := "(a+)+b"
+	for len(long) <= maxRegexLen {
+		long += "(a+)+b"
+	}
+	if _, ok := SearchRegex(long); ok {
+		t.Errorf("SearchRegex(len=%d) принял слишком длинное выражение", len(long))
+	}
+	if _, ok := SearchRegex("отчёт|акт"); !ok {
+		t.Error("обычное короткое выражение должно остаться регулярным")
+	}
+}
+
 // Служебные символы подстрочного поиска экранируются: «100%» — это про
 // проценты, а не «100 и что угодно».
 func TestEscapeLike(t *testing.T) {

@@ -67,6 +67,7 @@ import AppInfoBar from '@/components/ui/AppInfoBar.vue'
 import AppRow from '@/components/ui/AppRow.vue'
 import AppStack from '@/components/ui/AppStack.vue'
 import { exportCompany, importCompany } from '@/api/companies.js'
+import { saveBlob } from '@/utils/download.js'
 import { useNotificationsStore } from '@/stores/notifications.js'
 
 const props = defineProps({
@@ -88,16 +89,9 @@ async function download() {
   try {
     const res = await exportCompany(props.companyId)
     const blob = res instanceof Blob ? res : await res.blob()
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url
     // Имя из Content-Disposition знает сервер, но читать его из ответа не
     // обязательно: то же имя собирается здесь из названия компании и даты.
-    a.download = `${slug(props.companyName)}-${new Date().toISOString().slice(0, 10)}.gwcompany`
-    document.body.appendChild(a)
-    a.click()
-    a.remove()
-    URL.revokeObjectURL(url)
+    await saveBlob(blob, `${slug(props.companyName)}-${new Date().toISOString().slice(0, 10)}.gwcompany`)
     notif.success('Компания выгружена')
   } catch (e) {
     notif.error(e.message || 'Не удалось выгрузить компанию')

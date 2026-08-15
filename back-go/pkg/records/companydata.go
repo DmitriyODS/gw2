@@ -86,6 +86,12 @@ func ImportCompany(ctx context.Context, pool *pgxpool.Pool, spec TableSpec, in c
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 
+	// Перенос компании — заведомо долгая операция: общий statement_timeout
+	// (pkg/bootstrap) снимаем на время этой транзакции.
+	if _, err := tx.Exec(ctx, `SET LOCAL statement_timeout = 0`); err != nil {
+		return 0, err
+	}
+
 	setIDs, err := reserveIDs(ctx, tx, spec.Sets, len(dump.Sets))
 	if err != nil {
 		return 0, err

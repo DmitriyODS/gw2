@@ -71,6 +71,15 @@ func MustPostgres(ctx context.Context, log *slog.Logger, url string) *pgxpool.Po
 		os.Exit(1)
 	}
 	cfg.MaxConns = int32(EnvInt("DB_POOL_MAX_CONNS", 10))
+	/* statement_timeout — потолок на ОДИН запрос (DB_STATEMENT_TIMEOUT_MS, по
+	   умолчанию 30 с). Без него единственный тяжёлый запрос держит соединение
+	   бесконечно: поиск задач отдаёт пользовательское регулярное выражение
+	   движку Postgres, а тот с бэктрекингом — «(a+)+b» занимает коннект
+	   насовсем, и пул из десяти таких запросов кладёт сервис. Заведомо долгие
+	   операции (импорт бэкапа, перенос компании) снимают потолок у себя
+	   SET LOCAL внутри своей транзакции. */
+	cfg.ConnConfig.RuntimeParams["statement_timeout"] =
+		strconv.Itoa(EnvInt("DB_STATEMENT_TIMEOUT_MS", 30_000))
 	pool, err := pgxpool.NewWithConfig(ctx, cfg)
 	if err != nil {
 		log.Error("postgres.connect_failed", "error", err)

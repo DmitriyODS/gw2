@@ -44,6 +44,23 @@ export const SCENE_COLORS = [
 
 const COLOR_TOKENS = Object.fromEntries(SCENE_COLORS.map((c) => [c.key, c.token]))
 
+/* Палитра ФАЙЛОВ: зеркало domain.SceneColors (сервер теми же значениями рисует
+   SVG). Тема приложения тут ни при чём — файл уезжает наружу, а «чернила» в
+   тёмной теме светлые, и растр на белом листе выходил почти пустым. */
+export const EXPORT_COLORS = {
+  ink: '#1f2430',
+  chalk: '#f8fafc',
+  red: '#e05252',
+  orange: '#e07a3c',
+  amber: '#d9a520',
+  green: '#3fa45b',
+  teal: '#2b9b9b',
+  blue: '#3b74d6',
+  violet: '#7a5cd6',
+  pink: '#d65c9b',
+  __ph: '#c7ccd6', // рамка не загрузившейся картинки
+}
+
 // Толщины пера и размеры надписей — общий словарь для тулбара и рендера.
 export const STROKE_WIDTHS = [2, 4, 8, 16]
 export const TEXT_SIZES = [14, 18, 24, 32, 48]
@@ -287,9 +304,12 @@ export function drawBackground(ctx, { width, height, camera, background }) {
   ctx.restore()
 }
 
-/** Отрисовать один объект (ctx уже в координатах сцены). images — Map<src, Image>. */
-export function drawObject(ctx, o, images) {
-  const stroke = resolveColor(o.color || 'ink')
+/** Отрисовать один объект (ctx уже в координатах сцены). images — Map<src, Image>.
+    colors — готовая палитра (EXPORT_COLORS для файлов); без неё цвета берутся
+    из темы приложения, как на живом холсте. */
+export function drawObject(ctx, o, images, colors) {
+  const col = (key, token) => colors?.[key] || resolveColor(key, token)
+  const stroke = col(o.color || 'ink')
   const width = o.width || 3
   ctx.save()
   ctx.globalAlpha = o.opacity != null && o.opacity > 0 ? o.opacity : 1
@@ -319,16 +339,16 @@ export function drawObject(ctx, o, images) {
       break
     }
     case OBJ.rect:
-      fillAndStroke(ctx, o, () => roundRect(ctx, o.x, o.y, o.w, o.h, 8))
+      fillAndStroke(ctx, o, col, () => roundRect(ctx, o.x, o.y, o.w, o.h, 8))
       break
     case OBJ.ellipse:
-      fillAndStroke(ctx, o, () => {
+      fillAndStroke(ctx, o, col, () => {
         ctx.beginPath()
         ctx.ellipse(o.x + o.w / 2, o.y + o.h / 2, Math.abs(o.w / 2), Math.abs(o.h / 2), 0, 0, Math.PI * 2)
       })
       break
     case OBJ.diamond:
-      fillAndStroke(ctx, o, () => {
+      fillAndStroke(ctx, o, col, () => {
         ctx.beginPath()
         ctx.moveTo(o.x + o.w / 2, o.y)
         ctx.lineTo(o.x + o.w, o.y + o.h / 2)
@@ -338,20 +358,20 @@ export function drawObject(ctx, o, images) {
       })
       break
     case OBJ.sticky: {
-      const tint = resolveColor(o.color || 'amber')
+      const tint = col(o.color || 'amber')
       ctx.globalAlpha = 0.85
       ctx.fillStyle = tint
       roundRect(ctx, o.x, o.y, o.w, o.h, 6)
       ctx.fill()
       ctx.globalAlpha = 1
-      drawText(ctx, o.text, o.x + 12, o.y + 26, 16, resolveColor('ink'), o.w - 24)
+      drawText(ctx, o.text, o.x + 12, o.y + 26, 16, col('ink'), o.w - 24)
       break
     }
     case OBJ.text:
       drawText(ctx, o.text, o.x, o.y, o.size || 18, stroke)
       break
     case OBJ.comment: {
-      const tint = resolveColor(o.resolved ? 'green' : (o.color || 'amber'))
+      const tint = col(o.resolved ? 'green' : (o.color || 'amber'))
       const r = COMMENT_PIN / 2
       ctx.globalAlpha = o.resolved ? 0.55 : 1
       ctx.fillStyle = tint
@@ -364,7 +384,7 @@ export function drawObject(ctx, o, images) {
       ctx.closePath()
       ctx.fill()
       const count = 1 + (Array.isArray(o.replies) ? o.replies.length : 0)
-      ctx.fillStyle = resolveColor('chalk', '--color-surface')
+      ctx.fillStyle = col('chalk', '--color-surface')
       ctx.font = 'bold 14px Inter, system-ui, sans-serif'
       ctx.textAlign = 'center'
       ctx.textBaseline = 'middle'
@@ -377,7 +397,7 @@ export function drawObject(ctx, o, images) {
       if (img?.complete && img.naturalWidth) {
         ctx.drawImage(img, o.x, o.y, o.w, o.h)
       } else {
-        ctx.strokeStyle = resolveColor('__ph', '--color-outline-variant')
+        ctx.strokeStyle = col('__ph', '--color-outline-variant')
         ctx.strokeRect(o.x, o.y, o.w, o.h)
       }
       break
@@ -388,12 +408,12 @@ export function drawObject(ctx, o, images) {
   ctx.restore()
 }
 
-function fillAndStroke(ctx, o, path) {
+function fillAndStroke(ctx, o, col, path) {
   path()
   if (o.fill) {
     ctx.save()
     ctx.globalAlpha = (o.opacity || 1) * 0.35
-    ctx.fillStyle = resolveColor(o.fill)
+    ctx.fillStyle = col(o.fill)
     ctx.fill()
     ctx.restore()
   }
@@ -459,30 +479,12 @@ function wrapLine(ctx, text, maxWidth) {
 }
 
 /** Полная отрисовка сцены в контекст (общая для холста, превью и экспорта). */
-export function renderScene(ctx, scene, { width, height, camera, images, background = true }) {
+export function renderScene(ctx, scene, { width, height, camera, images, background = true, colors }) {
   const s = normalizeScene(scene)
   if (background) drawBackground(ctx, { width, height, camera, background: s.background })
   ctx.save()
   ctx.scale(camera.scale, camera.scale)
   ctx.translate(-camera.x, -camera.y)
-  for (const o of orderedObjects(s)) drawObject(ctx, o, images)
+  for (const o of orderedObjects(s)) drawObject(ctx, o, images, colors)
   ctx.restore()
-}
-
-/** PNG-миниатюра доски для плитки списка (Blob или null, если рисовать нечего). */
-export async function renderPreview(scene, { width = 640, height = 400, images } = {}) {
-  if (typeof document === 'undefined') return null
-  const s = normalizeScene(scene)
-  if (!s.objects.length) return null
-  const b = sceneBounds(s.objects) || { x: 0, y: 0, w: width, h: height }
-  const pad = 24
-  const scale = Math.min(width / (b.w + pad * 2 || width), height / (b.h + pad * 2 || height), 2)
-  const canvas = document.createElement('canvas')
-  canvas.width = width
-  canvas.height = height
-  const ctx = canvas.getContext('2d')
-  if (!ctx) return null
-  const camera = { x: b.x - pad, y: b.y - pad, scale }
-  renderScene(ctx, s, { width, height, camera, images })
-  return new Promise((resolve) => canvas.toBlob(resolve, 'image/png', 0.85))
 }

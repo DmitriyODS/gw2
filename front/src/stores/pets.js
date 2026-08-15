@@ -6,6 +6,7 @@ import { useCompaniesStore } from '@/stores/companies.js'
 import { useNotificationsStore } from '@/stores/notifications.js'
 import { playKudosReceived } from '@/utils/kudosSound.js'
 import { pushNotification } from '@/composables/useDesktopNotifications.js'
+import { isSourceEnabled } from '@/utils/notifySettings.js'
 
 export const usePetsStore = defineStore('pets', () => {
   const pet = ref(null)
@@ -52,9 +53,12 @@ export const usePetsStore = defineStore('pets', () => {
     }
   }
 
-  // notify — уведомление, которое не должно ронять вызывающего (вне
-  // Pinia-контекста, например в тестах, стор уведомлений недоступен).
+  /* notify — уведомление, которое не должно ронять вызывающего (вне
+     Pinia-контекста, например в тестах, стор уведомлений недоступен).
+     Раздел выключен в «Настройки → Уведомления» — молчим: состояние грувика
+     всё равно видно в самом разделе. */
   function notify(fn) {
+    if (!isSourceEnabled('pets')) return
     try { fn(useNotificationsStore()) } catch { /* уведомление не критично */ }
   }
 
@@ -398,7 +402,8 @@ export const usePetsStore = defineStore('pets', () => {
     try {
       // sound:false — у перевода своя мелодия, общий «бип» звучал бы вторым.
       useNotificationsStore().notify({
-        severity: 'success', summary: 'Успешно', detail: `+${data.amount} кудосов${from}${note}`, sound: false,
+        severity: 'success', summary: 'Успешно', detail: `+${data.amount} кудосов${from}${note}`,
+        sound: false, source: 'pets',
       })
       playKudosReceived()
       pushNotification({
@@ -407,6 +412,7 @@ export const usePetsStore = defineStore('pets', () => {
         title: `+${data.amount} кудосов${from}`,
         text: data.comment || 'Входящий перевод',
         path: '/pets/bank',
+        source: 'pets',
       })
     } catch { /* noop */ }
     // Баланс придёт авторитетным pet:update; сводку банка освежаем, если открыта.
@@ -440,7 +446,10 @@ export const usePetsStore = defineStore('pets', () => {
     notify((n) => n.error(text))
     // Побег — разовое событие: в состоянии питомца его уже не видно, поэтому
     // строка центра уведомлений живёт своим журналом.
-    pushNotification({ key: 'pet-runaway', icon: 'pets', tone: 'alert', title: 'Питомец сбежал', text, path: '/pets' })
+    pushNotification({
+      key: 'pet-runaway', icon: 'pets', tone: 'alert', title: 'Питомец сбежал', text,
+      path: '/pets', source: 'pets',
+    })
     fetchPet().catch(() => {})
   }
 

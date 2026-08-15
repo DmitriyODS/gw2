@@ -104,7 +104,7 @@
           Импортировать из файла
           <input type="file" accept=".json" @change="onImport" />
         </label>
-        <button class="ts-io-btn" type="button" @click="themeStore.exportTheme(themeStore.currentPreset)">
+        <button class="ts-io-btn" type="button" @click="exportCurrent">
           <span class="material-symbols-outlined">download</span>
           Сохранить текущую в файл
         </button>
@@ -179,6 +179,14 @@ function confirmRemove() {
   themeStore.deleteCustomTheme(removeTarget.value.name)
   notif.success(`Тема «${removeTarget.value.name}» удалена`)
   removeTarget.value = null
+}
+
+async function exportCurrent() {
+  try {
+    await themeStore.exportTheme(themeStore.currentPreset)
+  } catch {
+    notif.error('Не удалось сохранить тему в файл')
+  }
 }
 
 async function onImport(event) {

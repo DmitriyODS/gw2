@@ -172,6 +172,7 @@ import { getSharedCalendar, getSharedEntries, exportSharedEntries } from '@/api/
 import { fieldIcon, isExportable, entryTitle, hhmm, cardFields } from '@/utils/calendarFields.js'
 import { dayKey } from '@/stores/calendars.js'
 import { useBreakpoint } from '@/composables/useBreakpoint.js'
+import { saveBlob } from '@/utils/download.js'
 
 const { isMobile } = useBreakpoint()
 
@@ -317,13 +318,7 @@ async function doExport() {
       fields: [...exportFields.value], from: from.toISOString(), to: to.toISOString(), search: search.value,
     })
     if (!resp.ok) throw new Error('Не удалось выгрузить')
-    const blob = await resp.blob()
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url
-    a.download = `${calendar.value?.name || 'calendar'}.xlsx`
-    document.body.appendChild(a); a.click(); document.body.removeChild(a)
-    URL.revokeObjectURL(url)
+    await saveBlob(await resp.blob(), `${calendar.value?.name || 'calendar'}.xlsx`)
     exportOpen.value = false
   } catch {
     /* тихо: публичная страница без тостов */

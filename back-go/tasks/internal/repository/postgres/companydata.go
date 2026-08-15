@@ -223,6 +223,12 @@ func (r *Repo) ImportCompany(ctx context.Context, in companydata.Import) (int, e
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 
+	// Перенос компании тянет весь её контент — общий statement_timeout
+	// (pkg/bootstrap) снимаем на время этой транзакции.
+	if _, err := tx.Exec(ctx, `SET LOCAL statement_timeout = 0`); err != nil {
+		return 0, err
+	}
+
 	depts := map[int64]int64{}
 	for _, d := range dump.Departments {
 		var id int64
