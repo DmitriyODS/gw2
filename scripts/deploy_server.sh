@@ -163,7 +163,14 @@ if grep -qE '^STORAGE_BACKEND=s3' "$ENV_FILE"; then
   if ! grep -qE '^S3_BUCKET=..*' "$ENV_FILE" || ! grep -qE '^S3_ACCESS_KEY=..*' "$ENV_FILE" || ! grep -qE '^S3_SECRET_KEY=..*' "$ENV_FILE"; then
     warn "STORAGE_BACKEND=s3, но S3_BUCKET/S3_ACCESS_KEY/S3_SECRET_KEY пусты — заполните в $ENV_FILE"
   fi
-  warn "напоминание: подставьте имя бакета в nginx.prod.conf (location /uploads/) и выставьте бакету анонимный s3:GetObject"
+  # /uploads/ проксируется ПРЯМО в бакет, поэтому имя в nginx.prod.conf обязано
+  # совпадать с S3_BUCKET: расхождение молча уводит все картинки и файлы в чужой
+  # (или несуществующий) бакет. Раньше здесь стояло безусловное напоминание — оно
+  # ругалось и на верной настройке, и его перестали читать.
+  S3_BUCKET_VALUE="$(sed -n 's/^S3_BUCKET=//p' "$ENV_FILE" | head -1)"
+  if [ -n "$S3_BUCKET_VALUE" ] && ! grep -q "/$S3_BUCKET_VALUE/" deploy/nginx/nginx.prod.conf; then
+    warn "в nginx.prod.conf (location /uploads/) не тот бакет: в $ENV_FILE S3_BUCKET=$S3_BUCKET_VALUE — поправьте proxy_pass и убедитесь, что бакету выставлен анонимный s3:GetObject"
+  fi
 fi
 
 if [ "$ENV_CHANGED" -eq 1 ]; then
