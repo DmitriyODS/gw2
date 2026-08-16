@@ -76,6 +76,21 @@ export const APPS = [
     available: company,
   },
   {
+    id: 'forms',
+    title: 'Формы и опросы',
+    icon: 'assignment',
+    group: 'work',
+    tile: 'wide',
+    path: '/forms',
+    match: (p) => p.startsWith('/forms'),
+    size: [1280, 860],
+    min: [600, 460],
+    /* Компания не нужна: форма принадлежит человеку, а компании и коллеги
+       получают её назначением. */
+    available: always,
+    about: { version: '1.0.0', date: '2026-08-16' },
+  },
+  {
     id: 'diaries',
     title: 'Ежедневники',
     icon: 'event_list',

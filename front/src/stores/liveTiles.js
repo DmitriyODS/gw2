@@ -15,6 +15,7 @@ import { getBoards } from '@/api/boards.js'
 import { browse as browseDrive } from '@/api/drive.js'
 import { getUpcoming as getUpcomingReminders } from '@/api/reminders.js'
 import { getRegistries } from '@/api/registries.js'
+import { getForms } from '@/api/forms.js'
 import { getAgenda as getDiaryAgenda } from '@/api/diaries.js'
 import { getAgenda as getCalendarAgenda } from '@/api/calendars.js'
 import { getPosts } from '@/api/portal.js'
@@ -87,6 +88,20 @@ const SOURCES = {
     const data = await getUpcomingReminders(3)
     const items = data.items ?? []
     return { total: items.length, items }
+  },
+
+  forms: async () => {
+    const data = await getForms('all')
+    const items = data.forms ?? []
+    // «Ждут ответа» — назначенные лично, где человек ещё не отвечал: именно
+    // это плитка и должна показывать в первую очередь.
+    const pending = items.filter((f) => f.my_due_at && !f.my_responded)
+    return {
+      total: items.length,
+      pending: pending.length,
+      next: pending.sort((a, b) => new Date(a.my_due_at) - new Date(b.my_due_at))[0] || null,
+      responses: items.reduce((sum, f) => sum + (f.responses || 0), 0),
+    }
   },
 
   registries: async () => {

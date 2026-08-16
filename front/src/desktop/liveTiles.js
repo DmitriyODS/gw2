@@ -142,6 +142,19 @@ const FACES = {
     return out
   },
 
+  forms: ({ data }) => {
+    const f = data.forms
+    if (!f?.total) return []
+    return [
+      f.pending
+        ? face('pending', f.pending, plural(f.pending, 'форма ждёт ответа', 'формы ждут ответа', 'форм ждут ответа'), 'alert')
+        : null,
+      f.next ? face('next', 'Ответить', f.next.title) : null,
+      face('count', f.total, plural(f.total, 'форма', 'формы', 'форм')),
+      f.responses ? face('answers', f.responses, plural(f.responses, 'ответ собран', 'ответа собрано', 'ответов собрано')) : null,
+    ]
+  },
+
   registries: ({ data }) => {
     const r = data.registries
     if (!r?.total) return []

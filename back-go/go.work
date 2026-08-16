@@ -11,6 +11,7 @@ use (
 	./calls
 	./diary
 	./drive
+	./forms
 	./gateway
 	./mail
 	./messenger

@@ -246,6 +246,11 @@ public class MainActivity extends BridgeActivity {
         pets.setDescription("Грувик заболел или сбежал");
         nm.createNotificationChannel(pets);
 
+        NotificationChannel forms = new NotificationChannel(
+            "forms", "Формы и опросы", NotificationManager.IMPORTANCE_DEFAULT);
+        forms.setDescription("Назначенные формы и сроки ответа");
+        nm.createNotificationChannel(forms);
+
         // Канал обязан совпадать с channel_id сервера (pushsvc, domain.Channel*):
         // незнакомый идентификатор Android заменяет служебным «Прочее», и
         // сработавшее напоминание приходит тихо, мимо своей важности.

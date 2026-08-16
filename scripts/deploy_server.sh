@@ -391,6 +391,17 @@ if [ "$registry_code" = "401" ]; then
 else
   warn "маршрут /api/registries вернул $registry_code (ожидался 401) — проверьте nginx"
 fi
+if $COMPOSE exec -T forms wget -qO- --timeout=3 http://127.0.0.1:8109/healthz >/dev/null 2>&1; then
+  ok "formsvc отвечает (healthz)"
+else
+  warn "formsvc не отвечает — формы и опросы не работают: make logs s=forms"
+fi
+forms_code=$(curl -skL -o /dev/null -w '%{http_code}' --max-time 5 http://localhost/api/forms || true)
+if [ "$forms_code" = "401" ]; then
+  ok "маршрут /api/forms через nginx ведёт в formsvc"
+else
+  warn "маршрут /api/forms вернул $forms_code (ожидался 401) — проверьте nginx"
+fi
 
 # Микросервис календарей: healthz изнутри контейнера + маршрут /api/calendars
 # через nginx (без токена ожидаем 401, не 404/502).

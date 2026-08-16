@@ -90,6 +90,9 @@ services:
   drive:
     image: osipovskijdima/groove_work:${DRIVE_TAG:-drive}
 
+  forms:
+    image: osipovskijdima/groove_work:${FORMS_TAG:-forms}
+
   reminder:
     image: osipovskijdima/groove_work:${REMINDER_TAG:-reminder}
 

@@ -61,6 +61,7 @@ export const HTTP = {
   drive: 18208,
   reminder: 18206,
   billing: 18207,
+  forms: 18209,
 }
 
 // gRPC-порты (+10100).
@@ -80,6 +81,7 @@ export const GRPC = {
   board: 19205,
   drive: 19208,
   billing: 19207,
+  forms: 19209,
 }
 
 // Файл со статусом стенда: globalSetup пишет его, шим/сценарии читают
@@ -117,6 +119,7 @@ export function routeBase(path) {
     ['/api/yougile', HTTP.tasks],
     ['/api/push', HTTP.push],
     ['/api/registries', HTTP.registry],
+    ['/api/forms', HTTP.forms],
     ['/api/calendars', HTTP.calendar],
     ['/api/diaries', HTTP.diary],
     ['/api/portal', HTTP.portal],

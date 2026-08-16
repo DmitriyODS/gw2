@@ -257,6 +257,11 @@ export default async function setup() {
     UPLOAD_FOLDER: fs.mkdtempSync(path.join(process.env.TMPDIR || '/tmp', 'gw2-front-reg-')),
     GRPC_ADDR: `:${GRPC.registry}`, HTTP_ADDR: `:${HTTP.registry}`,
   })
+  startSvc('formsvc', repoRoot, 'back-go/forms', './cmd/formsvc', {
+    ...baseEnv,
+    UPLOAD_FOLDER: fs.mkdtempSync(path.join(process.env.TMPDIR || '/tmp', 'gw2-front-forms-')),
+    GRPC_ADDR: `:${GRPC.forms}`, HTTP_ADDR: `:${HTTP.forms}`,
+  })
   startSvc('calendarsvc', repoRoot, 'back-go/calendar', './cmd/calendarsvc', {
     ...baseEnv,
     UPLOAD_FOLDER: fs.mkdtempSync(path.join(process.env.TMPDIR || '/tmp', 'gw2-front-cal-')),
@@ -344,6 +349,7 @@ export default async function setup() {
     await Promise.all([
       waitHealthz(HTTP.mail), waitHealthz(HTTP.auth), waitHealthz(HTTP.diary),
       waitHealthz(HTTP.tasks), waitHealthz(HTTP.registry), waitHealthz(HTTP.calendar),
+      waitHealthz(HTTP.forms),
       waitHealthz(HTTP.messenger), waitHealthz(HTTP.pets),
       waitHealthz(HTTP.portal), waitHealthz(HTTP.notes), waitHealthz(HTTP.board), waitHealthz(HTTP.drive),
       waitHealthz(HTTP.reminder), waitHealthz(HTTP.billing),
@@ -358,7 +364,7 @@ export default async function setup() {
   }
 
   writeStatus({ ready: true, dbURL: PG.dbURL, pgContainer: PG.container })
-  console.log('[integration] бэкенд готов (auth/diary/tasks/registry/calendar/messenger/pets/portal/notes/board/drive/reminder/billing/push/ai/calls)')
+  console.log('[integration] бэкенд готов (auth/diary/tasks/registry/forms/calendar/messenger/pets/portal/notes/board/drive/reminder/billing/push/ai/calls)')
 
   return async () => {
     if (process.env.GW_DUMP_LOGS) dumpLogs()

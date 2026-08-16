@@ -8,6 +8,7 @@ import { registerMessengerSocketHandlers } from '@/socket/messenger.js'
 import { registerCallSocketHandlers } from '@/socket/calls.js'
 import { registerPetsSocketHandlers } from '@/socket/pets.js'
 import { registerRegistrySocketHandlers } from '@/socket/registry.js'
+import { registerFormsSocketHandlers } from '@/socket/forms.js'
 import { registerCalendarSocketHandlers } from '@/socket/calendar.js'
 import { registerDiarySocketHandlers } from '@/socket/diary.js'
 import { registerNotesSocketHandlers } from '@/socket/notes.js'
@@ -187,6 +188,7 @@ export function connectSocket() {
   registerCallSocketHandlers(socket)
   registerPetsSocketHandlers(socket)
   registerRegistrySocketHandlers(socket)
+  registerFormsSocketHandlers(socket)
   registerCalendarSocketHandlers(socket)
   registerDiarySocketHandlers(socket)
   registerNotesSocketHandlers(socket)

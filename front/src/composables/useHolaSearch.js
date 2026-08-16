@@ -34,6 +34,7 @@ import { browse as browseDrive } from '@/api/drive.js'
 import { fileIcon } from '@/utils/fileTypes.js'
 import { searchEntries } from '@/api/diaries.js'
 import { searchRecords } from '@/api/registries.js'
+import { searchForms } from '@/api/forms.js'
 import { getPosts } from '@/api/portal.js'
 import { getDirectory } from '@/api/users.js'
 import { useBreakpoint } from '@/composables/useBreakpoint.js'
@@ -47,7 +48,7 @@ const REPEAT_LABELS = {
 }
 
 function emptyHits() {
-  return { tasks: [], notes: [], boards: [], drive: [], diaries: [], registries: [], portal: [], people: [], messages: [] }
+  return { tasks: [], notes: [], boards: [], drive: [], diaries: [], registries: [], forms: [], portal: [], people: [], messages: [] }
 }
 
 export function useHolaSearch() {
@@ -470,6 +471,7 @@ export function useHolaSearch() {
     { key: 'drive', label: 'Диск', items: hits.value.drive },
     { key: 'diaries', label: 'Ежедневники', items: hits.value.diaries },
     { key: 'registries', label: 'Реестры', items: hits.value.registries },
+    { key: 'forms', label: 'Формы и опросы', items: hits.value.forms },
     { key: 'portal', label: 'Портал', items: hits.value.portal },
     { key: 'chats', label: 'Переписки', items: chatHits.value },
     { key: 'people', label: 'Сотрудники', items: hits.value.people },
@@ -513,13 +515,15 @@ export function useHolaSearch() {
     const stem = cmd?.kind === 'message' ? searchStem(cmd.rest) : ''
     const dirQuery = stem || q
 
-    const [tasks, noteHits, boardHits, driveHits, diaries, registries, portal, people] = await Promise.allSettled([
+    const [tasks, noteHits, boardHits, driveHits, diaries, registries, forms, portal, people] = await Promise.allSettled([
       withCompany ? getTasks({ search: q, per_page: LIMIT }, opt) : Promise.resolve(null),
       getNotes({ search: q }, opt),
       getBoards({ search: q }, opt),
       browseDrive({ search: q }, opt),
       searchEntries(q, LIMIT, opt),
       withCompany ? searchRecords(q, LIMIT, opt) : Promise.resolve(null),
+      // Формы личные: активная компания для поиска по ним не нужна.
+      searchForms(q, LIMIT, opt),
       withCompany ? getPosts({ search: q, limit: LIMIT }, opt) : Promise.resolve(null),
       withCompany && dirQuery ? getDirectory(dirQuery, true) : Promise.resolve(null),
     ])
@@ -579,6 +583,13 @@ export function useHolaSearch() {
         title: r.snippet || `Запись #${r.record_id}`,
         subtitle: r.registry_name,
         path: `/registries?registry=${r.registry_id}&q=${encodeURIComponent(q)}`,
+      })),
+      forms: (value(forms)?.items ?? []).map((f) => ({
+        key: `form-${f.form_id}`,
+        icon: 'assignment',
+        title: f.title || `Форма #${f.form_id}`,
+        subtitle: f.snippet || 'Форма',
+        path: `/forms?form=${f.form_id}`,
       })),
       // Лента отдаёт закреплённые отдельным списком — в поиске они такие же посты.
       portal: [...(value(portal)?.pinned ?? []), ...(value(portal)?.posts ?? [])]

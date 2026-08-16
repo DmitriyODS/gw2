@@ -31,6 +31,8 @@ func (s *Service) Dispatch(ctx context.Context, event string, payload json.RawMe
 		s.onPetState(ctx, event, payload, rooms)
 	case "reminder:fire":
 		s.onReminder(ctx, payload, rooms)
+	case "form:assigned", "form:due":
+		s.onForm(ctx, event, payload, rooms)
 	}
 }
 
@@ -64,6 +66,39 @@ func (s *Service) onReminder(ctx context.Context, payload json.RawMessage, rooms
 		Data: map[string]string{
 			"type":        "reminder",
 			"reminder_id": strconv.FormatInt(e.ID, 10),
+		},
+	})
+}
+
+// onForm — форму назначили либо подходит срок ответа: адресный пуш тем, кто
+// ещё не ответил (кого звать, решает formsvc — он же исключает ответивших).
+func (s *Service) onForm(ctx context.Context, event string, payload json.RawMessage, rooms []string) {
+	var e struct {
+		FormID int64  `json:"form_id"`
+		Title  string `json:"title"`
+	}
+	if err := json.Unmarshal(payload, &e); err != nil || e.FormID == 0 {
+		return
+	}
+	recipients := usersFromRooms(rooms)
+	if len(recipients) == 0 {
+		return
+	}
+	title := "Вам назначили форму"
+	if event == "form:due" {
+		title = "Скоро срок ответа"
+	}
+	body := strings.TrimSpace(e.Title)
+	if body == "" {
+		body = "Откройте раздел «Формы и опросы»"
+	}
+	s.deliver(ctx, recipients, domain.Notification{
+		Title:   title,
+		Body:    body,
+		Channel: domain.ChannelForms,
+		Data: map[string]string{
+			"type":    "form",
+			"form_id": strconv.FormatInt(e.FormID, 10),
 		},
 	})
 }

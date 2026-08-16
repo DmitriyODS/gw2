@@ -45,6 +45,10 @@ var BackupSections = []BackupSection{
 	{Key: "registry", Tables: []string{"registries", "registry_fields", "registry_records",
 		"registry_shares", "registry_share_visits", "registry_user_shares",
 		"registry_issues", "registry_issue_events"}},
+	// Формы и опросы целиком: сама форма со структурой, собранные ответы и оба
+	// вида доступа (внешние ссылки с журналом переходов и адресные назначения).
+	{Key: "forms", Tables: []string{"forms", "form_sections", "form_questions",
+		"form_responses", "form_shares", "form_share_visits", "form_user_shares"}},
 	{Key: "calendar", Tables: []string{"calendars", "calendar_fields", "calendar_records", "calendar_shares"}},
 	{Key: "diary", Tables: []string{"diaries", "diary_records", "diary_shares", "diary_user_shares"}},
 	{Key: "notes", Tables: []string{"notes", "note_folders", "note_tags", "note_tag_items",

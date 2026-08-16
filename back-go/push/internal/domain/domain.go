@@ -34,6 +34,8 @@ const (
 	ChannelPets     = "pets"
 	// ChannelReminders — сработавшие напоминания пользователя.
 	ChannelReminders = "reminders"
+	// ChannelForms — назначенные формы и напоминания об их сроке.
+	ChannelForms = "forms"
 )
 
 // TokenStore — хранилище токенов устройств.

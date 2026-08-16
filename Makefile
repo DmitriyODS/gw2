@@ -29,6 +29,7 @@ help:
 	@printf "  make dev-push     Go-микросервис пуш-уведомлений (HTTP :8097)\n"
 	@printf "  make dev-mail     Go-микросервис почты (gRPC :9098, HTTP :8098)\n"
 	@printf "  make dev-registry Go-микросервис реестров (HTTP :8099)\n"
+	@printf "  make dev-forms   Go-микросервис форм и опросов (HTTP :8109)\n"
 	@printf "  make dev-calendar Go-микросервис календарей (HTTP :8100)\n"
 	@printf "  make dev-diary    Go-микросервис ежедневников (HTTP :8101)\n"
 	@printf "  make dev-portal   Go-микросервис корпоративного портала (HTTP :8102)\n"
@@ -65,7 +66,7 @@ help:
 	@printf "\n\033[33mКонфигурация сервера:\033[0m cp .env.deploy.example .env.deploy\n\n"
 
 # ── Разработка ────────────────────────────────────────────────────
-.PHONY: dev-infra dev-migrate dev-front dev-calls dev-auth dev-messenger dev-ai dev-pets dev-tasks dev-gateway dev-push dev-mail dev-registry dev-calendar dev-diary dev-portal dev-notes dev-board dev-drive dev-reminder dev-billing dev-alice dev-stop dev-stack dev-stack-stop gen-proto
+.PHONY: dev-infra dev-migrate dev-front dev-calls dev-auth dev-messenger dev-ai dev-pets dev-tasks dev-gateway dev-push dev-mail dev-registry dev-forms dev-calendar dev-diary dev-portal dev-notes dev-board dev-drive dev-reminder dev-billing dev-alice dev-stop dev-stack dev-stack-stop gen-proto
 
 # Dev-ключи PASETO (синхронизированы с dev.sh и
 # deploy/docker-compose.override.yml): приватный — только у authsvc,
@@ -239,6 +240,19 @@ dev-registry: dev-infra
 	GRPC_ADDR=":9099" \
 	go run ./cmd/registrysvc
 
+# Go-микросервис форм и опросов: REST /api/forms/*. env синхронизированы с dev.sh.
+dev-forms: dev-infra
+	@printf "\033[1m▶ formsvc (Go)  HTTP :8109\033[0m\n"
+	cd back-go/forms && \
+	DATABASE_URL="postgresql://grovework:grovework_local@localhost:5432/grovework" \
+	REDIS_URL="redis://localhost:6379/0" \
+	PASETO_PUBLIC_KEY="$(PASETO_PUBLIC_KEY_DEV)" \
+	BILLING_GRPC_ADDR="localhost:9107" \
+	UPLOAD_FOLDER="$(PWD)/uploads" \
+	HTTP_ADDR=":8109" \
+	GRPC_ADDR=":9109" \
+	go run ./cmd/formsvc
+
 # Go-микросервис календарей: REST /api/calendars/*. env синхронизированы с dev.sh.
 dev-calendar: dev-infra
 	@printf "\033[1m▶ calendarsvc (Go)  HTTP :8100\033[0m\n"
@@ -339,7 +353,7 @@ dev-billing: dev-infra
 	HTTP_ADDR=":8107" \
 	GRPC_ADDR=":9107" \
 	UPLOAD_FOLDER="$(PWD)/uploads" \
-	FILE_OWNER_ADDRS="messenger=localhost:9092,notes=localhost:9103,boards=localhost:9105,registry=localhost:9099,calendar=localhost:9100,portal=localhost:9102,avatars=localhost:9091,drive=localhost:9108" \
+	FILE_OWNER_ADDRS="messenger=localhost:9092,notes=localhost:9103,boards=localhost:9105,registry=localhost:9099,calendar=localhost:9100,portal=localhost:9102,avatars=localhost:9091,drive=localhost:9108,forms=localhost:9109" \
 	go run ./cmd/billingsvc
 
 # Go-микросервис навыка Алисы: публичный вебхук /api/alice/webhook.

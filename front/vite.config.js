@@ -123,6 +123,11 @@ export default defineConfig({
         target: 'http://localhost:8099',
         changeOrigin: true
       },
+      // Формы и опросы — formsvc (конструктор форм, приём ответов, сводка).
+      '/api/forms': {
+        target: 'http://localhost:8109',
+        changeOrigin: true
+      },
       // Календари — calendarsvc (списки записей с датой/временем).
       '/api/calendars': {
         target: 'http://localhost:8100',

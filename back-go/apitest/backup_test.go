@@ -36,7 +36,7 @@ var backupExcluded = map[string]bool{
 // backupSectionKeys — разделы выбора (≡ domain.BackupSections + SectionOther;
 // подписи — на фронте, front/src/utils/backupSections.js).
 var backupSectionKeys = []string{
-	"auth", "companies", "tasks", "registry", "calendar", "diary", "notes",
+	"auth", "companies", "tasks", "registry", "forms", "calendar", "diary", "notes",
 	"boards", "drive", "reminders", "messenger", "calls", "groove", "portal", "ai", "billing", "integration",
 }
 

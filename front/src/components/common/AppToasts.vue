@@ -92,6 +92,16 @@ const hoverId = ref(null)
   pointer-events: none;
 }
 
+/* Сверху по центру: стопка выравнивается по середине экрана, поэтому ей нужны
+   оба края и авто-поля — фиксированной ширины с одним `right` тут мало. */
+.tst.at-top-center {
+  top: 16px;
+  right: 0;
+  left: 0;
+  margin: 0 auto;
+  align-items: center;
+}
+
 .tst.at-top-right { top: 16px; right: 16px; }
 .tst.at-top-left { top: 16px; left: 16px; }
 
@@ -106,6 +116,11 @@ const hoverId = ref(null)
   left: 16px;
   flex-direction: column-reverse;
 }
+
+.tst.at-top-center .tst-enter-from,
+.tst.at-top-center .tst-leave-to { transform: translateY(-16px) scale(0.98); }
+
+.tst.at-top-center .tst-leave-active { position: absolute; right: auto; left: auto; }
 
 .tst.at-top-left .tst-enter-from,
 .tst.at-top-left .tst-leave-to,

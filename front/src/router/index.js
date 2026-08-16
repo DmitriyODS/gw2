@@ -69,6 +69,8 @@ const routes = [
   // Активность сотрудника — доступ на бэке гардирован ролью Администратор компании.
   { path: '/employees/:userId(\\d+)/activity', component: () => import('@/views/EmployeeActivityView.vue'),
     meta: { requiresAuth: true, requiresCompany: true }, props: true },
+  { path: '/forms', component: () => import('@/views/FormsView.vue'),
+    meta: { requiresAuth: true } },
   { path: '/registries', component: () => import('@/views/RegistriesView.vue'),
     meta: { requiresAuth: true, requiresCompany: true } },
   { path: '/calendars', component: () => import('@/views/CalendarView.vue'),
@@ -139,6 +141,11 @@ const routes = [
   // и у вошедшего — каркас-«ОС» показывает только СВОИ разделы, и по ссылке
   // сотрудник видел пустой рабочий стол.
   { path: '/registry/:code', component: () => import('@/views/SharedRegistryView.vue'),
+    meta: { public: true, fullscreen: true } },
+  // Форма по внешней ссылке (заполняет и гость без аккаунта). Страница
+  // самостоятельная: fullscreen нужен, чтобы она открывалась и у вошедшего —
+  // каркас-«ОС» показывает только СВОИ разделы.
+  { path: '/form/:code', component: () => import('@/views/SharedFormView.vue'),
     meta: { public: true, fullscreen: true } },
   // Публичный просмотр календаря по внешней ссылке (read-only, без авторизации).
   { path: '/calendar/:code', component: () => import('@/views/SharedCalendarView.vue'),
