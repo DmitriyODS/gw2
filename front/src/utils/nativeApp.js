@@ -232,6 +232,19 @@ function blobToBase64(blob) {
   })
 }
 
+/* ── Ярлыки разделов на домашнем экране (Android) ──
+   Обёртка предлагает лаунчеру закрепить ярлык; подтверждает его сам лаунчер
+   своим диалогом, поэтому «ok» здесь означает лишь то, что предложение ушло.
+   supported=false — лаунчер закреплять ярлыки не умеет. Вне обёртки — no-op. */
+export function canPinShortcut() {
+  return isNativeApp() && !!nativeShell()?.pinShortcut
+}
+
+export async function pinAppShortcut({ path, label, icon }) {
+  if (!canPinShortcut()) return { supported: false }
+  return nativeShell().pinShortcut({ path, label, icon })
+}
+
 // Номер установленной сборки обёртки (ГГММДДН) — для «О приложении».
 export async function getNativeBuild() {
   const shell = nativeShell()

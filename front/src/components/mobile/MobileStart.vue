@@ -152,6 +152,7 @@ import { useTasksStore } from '@/stores/tasks.js'
 import { usePetsStore } from '@/stores/pets.js'
 import { useUnitsStore } from '@/stores/units.js'
 import { useLiveTilesStore } from '@/stores/liveTiles.js'
+import { useNotificationsStore } from '@/stores/notifications.js'
 import { usePermission } from '@/composables/usePermission.js'
 import { useCompanySettings } from '@/composables/useCompanySettings.js'
 import { useLongPress } from '@/composables/useLongPress.js'
@@ -159,6 +160,8 @@ import { menuGroups } from '@/desktop/apps.js'
 import { tileFaces } from '@/desktop/liveTiles.js'
 import { avatarUrl } from '@/utils/pets.js'
 import { shortFio } from '@/utils/people.js'
+import { canPinShortcut, pinAppShortcut } from '@/utils/nativeApp.js'
+import { renderShortcutIcon } from '@/utils/shortcutIcon.js'
 import BrandWordmark from '@/components/common/BrandWordmark.vue'
 import HolaIcon from '@/components/common/HolaIcon.vue'
 import ContextMenu from '@/components/common/ContextMenu.vue'
@@ -190,6 +193,7 @@ const tasks = useTasksStore()
 const pets = usePetsStore()
 const units = useUnitsStore()
 const live = useLiveTilesStore()
+const notif = useNotificationsStore()
 const { isSuperAdmin, hasActiveCompany } = usePermission()
 const { settings } = useCompanySettings()
 
@@ -303,6 +307,11 @@ const menuItems = computed(() => {
     prefs.isPinned(props.platform, id)
       ? { label: 'Открепить от панели задач', icon: 'keep_off', action: 'unpin' }
       : { label: 'Закрепить на панели задач', icon: 'keep', action: 'pin' },
+    // Ярлык на домашнем экране телефона — только в самой обёртке: в браузере
+    // закреплять нечего.
+    ...(canPinShortcut()
+      ? [{ divider: true }, { label: 'На экран телефона', icon: 'add_to_home_screen', action: 'shortcut' }]
+      : []),
   ]
 })
 
@@ -346,6 +355,23 @@ function onMenuSelect(action) {
   }
   if (action === 'pin') return prefs.pin(props.platform, id)
   if (action === 'unpin') return prefs.unpin(props.platform, id)
+  if (action === 'shortcut') return void addShortcut(appById.value.get(id))
+}
+
+/* Ярлык раздела на домашнем экране: значок рисуем сами (глиф раздела в цветах
+   темы), дальше лаунчер спрашивает подтверждение своим диалогом — своего тоста
+   об успехе не нужно, иначе человек увидит два сообщения об одном и том же. */
+async function addShortcut(app) {
+  if (!app) return
+  try {
+    const icon = await renderShortcutIcon(app)
+    const { supported } = await pinAppShortcut({ path: app.path, label: app.title, icon })
+    if (!supported) {
+      notif.warn('Главный экран этого телефона не умеет принимать ярлыки', 'Не получилось')
+    }
+  } catch {
+    notif.error('Не удалось создать ярлык раздела')
+  }
 }
 </script>
 

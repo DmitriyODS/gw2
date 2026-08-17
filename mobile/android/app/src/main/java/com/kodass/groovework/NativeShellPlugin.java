@@ -4,8 +4,13 @@ import android.Manifest;
 import android.content.ContentValues;
 import android.content.Context;
 import android.content.Intent;
+import android.content.pm.ShortcutInfo;
+import android.content.pm.ShortcutManager;
 import android.database.Cursor;
+import android.graphics.Bitmap;
+import android.graphics.BitmapFactory;
 import android.graphics.Color;
+import android.graphics.drawable.Icon;
 import android.media.AudioDeviceCallback;
 import android.media.AudioDeviceInfo;
 import android.media.AudioManager;
@@ -449,6 +454,60 @@ public class NativeShellPlugin extends Plugin {
         JSObject ret = new JSObject();
         ret.put("build", AppUpdater.ownBuild(getContext()));
         call.resolve(ret);
+    }
+
+    /* Ярлык раздела на домашнем экране телефона: система показывает свой
+       диалог подтверждения, поэтому «успех» здесь означает лишь то, что
+       предложение отправлено лаунчеру. Значок рисует веб-слой (глиф раздела в
+       цветах текущей темы) и передаёт сюда base64-PNG — держать копии иконок
+       двадцати разделов в ресурсах ради этого незачем.
+       supported=false — лаунчер закреплять ярлыки не умеет (бывает на старых
+       и нестандартных оболочках), и веб-слой объясняет это человеку. */
+    @PluginMethod
+    public void pinShortcut(PluginCall call) {
+        String path = call.getString("path", "");
+        String label = call.getString("label", "");
+        if (path == null || path.isEmpty() || label == null || label.isEmpty()) {
+            call.reject("Нужны путь раздела и название");
+            return;
+        }
+
+        ShortcutManager sm = getContext().getSystemService(ShortcutManager.class);
+        JSObject ret = new JSObject();
+        if (sm == null || !sm.isRequestPinShortcutSupported()) {
+            ret.put("supported", false);
+            call.resolve(ret);
+            return;
+        }
+
+        Intent intent = new Intent(getContext(), MainActivity.class)
+            .setAction(Intent.ACTION_VIEW)
+            .putExtra(MainActivity.EXTRA_PATH, path)
+            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TOP);
+
+        ShortcutInfo.Builder shortcut = new ShortcutInfo.Builder(getContext(), "gw:" + path)
+            .setShortLabel(label)
+            .setLongLabel(label)
+            .setIntent(intent)
+            .setIcon(shortcutIcon(call.getString("icon")));
+
+        sm.requestPinShortcut(shortcut.build(), null);
+        ret.put("supported", true);
+        call.resolve(ret);
+    }
+
+    // Значок ярлыка: рисунок веб-слоя, а если он не доехал — иконка приложения.
+    private Icon shortcutIcon(String base64Png) {
+        if (base64Png != null && !base64Png.isEmpty()) {
+            try {
+                byte[] png = Base64.decode(base64Png, Base64.DEFAULT);
+                Bitmap bmp = BitmapFactory.decodeByteArray(png, 0, png.length);
+                // Адаптивный значок: края съедает маска лаунчера, поэтому
+                // веб-слой рисует содержимое с запасом по краям.
+                if (bmp != null) return Icon.createWithAdaptiveBitmap(bmp);
+            } catch (Exception ignored) {}
+        }
+        return Icon.createWithResource(getContext(), R.mipmap.ic_launcher);
     }
 
     @PluginMethod

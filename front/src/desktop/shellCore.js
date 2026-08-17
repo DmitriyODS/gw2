@@ -101,6 +101,15 @@ export function useShellCore({
     if (!document.hidden) pulseLiveTiles()
   }
 
+  /* Ярлык раздела с домашнего экрана телефона в уже запущенном приложении:
+     нативная обёртка будит фронт событием, а не перезагружает страницу —
+     иначе открытые разделы и их состояние пропали бы (см. MainActivity
+     handleShortcut). На холодном старте обёртка просто грузит нужный адрес. */
+  function onOpenPath(e) {
+    const path = e.detail?.path
+    if (path) openForPath(path)
+  }
+
   /* ── Синхронизация адреса и разделов ─────────────────────────
      Адресная строка отражает АКТИВНЫЙ раздел: deep-link и клик по системному
      уведомлению открывают нужный раздел, а переключение — обновляет URL.
@@ -167,11 +176,13 @@ export function useShellCore({
     pulseLiveTiles()
     livePulse = setInterval(() => pulseLiveTiles({ force: true }), LIVE_PULSE)
     document.addEventListener('visibilitychange', onVisibility)
+    window.addEventListener('gw:open-path', onOpenPath)
   }
 
   onBeforeUnmount(() => {
     clearInterval(livePulse)
     document.removeEventListener('visibilitychange', onVisibility)
+    window.removeEventListener('gw:open-path', onOpenPath)
     shellActive.value = false
   })
 

@@ -30,6 +30,9 @@ public class MainActivity extends BridgeActivity {
     // capacitor.config.json), здесь адрес нужен каналу обновлений обёртки.
     static final String APP_URL = "https://gw.kodass.ru";
 
+    // Путь раздела в intent'е ярлыка с домашнего экрана (NativeShell.pinShortcut).
+    static final String EXTRA_PATH = "gw_path";
+
     // Почасовая проверка обновлений обёртки: onResume не срабатывает, пока
     // приложение постоянно открыто, — тикаем таймером (троттл в UpdateChecker).
     private final Handler updateHandler = new Handler(Looper.getMainLooper());
@@ -99,6 +102,10 @@ public class MainActivity extends BridgeActivity {
 
         // Холодный старт по deep link'у groovework:// (возврат OAuth Яндекса).
         handleDeepLink(getIntent());
+
+        // Запуск ярлыком раздела с домашнего экрана: приложение поднимается
+        // сразу на нужном адресе, а не на «/home».
+        handleShortcut(getIntent(), true);
     }
 
     // Уже запущенное приложение получило новый intent («Поделиться», звонок
@@ -110,6 +117,30 @@ public class MainActivity extends BridgeActivity {
         applyCallLaunch(intent);
         handleShareIntent(intent);
         handleDeepLink(intent);
+        handleShortcut(intent, false);
+    }
+
+    /* Ярлык раздела с домашнего экрана. На холодном старте грузим адрес в
+       WebView — веб-слой ещё не поднялся; в уже запущенном приложении шлём
+       фронту событие, чтобы он открыл раздел САМ: перезагрузка страницы стёрла
+       бы открытые разделы и их состояние.
+       Extra снимаем сразу: активность у нас singleTask, и тот же intent
+       вернулся бы при повороте экрана, снова уводя человека из раздела. */
+    private void handleShortcut(Intent intent, boolean coldStart) {
+        if (intent == null) return;
+        String path = intent.getStringExtra(EXTRA_PATH);
+        if (TextUtils.isEmpty(path)) return;
+        intent.removeExtra(EXTRA_PATH);
+
+        WebView web = bridge != null ? bridge.getWebView() : null;
+        if (web == null) return;
+        if (coldStart) {
+            web.loadUrl(APP_URL + path);
+            return;
+        }
+        String safe = path.replace("\\", "\\\\").replace("'", "\\'");
+        web.evaluateJavascript(
+            "window.dispatchEvent(new CustomEvent('gw:open-path',{detail:{path:'" + safe + "'}}));", null);
     }
 
     // Возврат OAuth Яндекса из системного браузера:
