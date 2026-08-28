@@ -1,13 +1,14 @@
 <template>
   <!--
     Фирменный фон экранов входа: светлый верх и три волны внизу — тот же мотив,
-    что и в логотипе. КАЖДАЯ волна — самостоятельное матовое стекло: свой
-    полупрозрачный тон из токенов темы поверх backdrop-размытия того, что уже
-    нарисовано под ней (фон и предыдущие волны), поэтому слои просвечивают друг
-    сквозь друга и дают глубину.
+    что и в логотипе. Каждая волна — свой полупрозрачный тон из токенов темы,
+    слои просвечивают друг сквозь друга и дают глубину.
 
     Форма задана маской-синусоидой в один период: маска повторяется по
-    горизонтали, а её сдвиг ровно на период делает ход волны бесшовным.
+    горизонтали, а сдвиг СЛОЯ ровно на период делает ход волны бесшовным.
+    Размытия под волнами нет намеренно: под ними лежит плавный градиент, от
+    его размытия картинка не менялась, а пересчёт стекла шёл каждый кадр
+    движения — на экране входа это впустую грузило видеопроцесс.
   -->
   <div class="aw" aria-hidden="true">
     <span class="aw-wave aw-far" />
@@ -53,77 +54,70 @@
 .aw-wave {
   position: absolute;
   left: 0;
-  right: 0;
   bottom: 0;
   display: block;
   height: clamp(300px, 56vh, 660px);
   -webkit-mask-repeat: repeat-x;
   mask-repeat: repeat-x;
-  will-change: mask-position;
+  /* Двигается СЛОЙ, а не маска: mask-position не композиторское свойство, и
+     его анимация заставляла браузер каждый кадр заново растрировать три
+     полноэкранных слоя — на экране входа это грузило видеопроцесс клиента
+     вхолостую. Слой шире экрана ровно на период маски, поэтому сдвиг на
+     период по-прежнему бесшовен (как у волн лендинга). */
+  will-change: transform;
 }
 
-/* Дальняя волна — самая тёмная и самая размытая (глубина). */
+/* Дальняя волна — самая тёмная и самая медленная (глубина). */
 .aw-far {
   background: color-mix(in oklch, var(--aw-far) 46%, transparent);
-  -webkit-backdrop-filter: blur(18px) saturate(1.25);
-  backdrop-filter: blur(18px) saturate(1.25);
   -webkit-mask-image: url("data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%20620%20300'%20preserveAspectRatio='none'%3E%3Cpath%20d='M0%2072%20q155%20-58%20310%200%20t310%200%20V300%20H0%20Z'%20fill='black'/%3E%3C/svg%3E");
   mask-image: url("data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%20620%20300'%20preserveAspectRatio='none'%3E%3Cpath%20d='M0%2072%20q155%20-58%20310%200%20t310%200%20V300%20H0%20Z'%20fill='black'/%3E%3C/svg%3E");
   -webkit-mask-size: 620px 100%;
   mask-size: 620px 100%;
+  width: calc(100% + 620px);
   animation: aw-roll-far 21s linear infinite;
 }
 
 /* Средняя волна — фирменный цвет. */
 .aw-mid {
   background: color-mix(in oklch, var(--aw-mid) 40%, transparent);
-  -webkit-backdrop-filter: blur(12px) saturate(1.2);
-  backdrop-filter: blur(12px) saturate(1.2);
   -webkit-mask-image: url("data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%20420%20300'%20preserveAspectRatio='none'%3E%3Cpath%20d='M0%20136%20q105%20-46%20210%200%20t210%200%20V300%20H0%20Z'%20fill='black'/%3E%3C/svg%3E");
   mask-image: url("data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%20420%20300'%20preserveAspectRatio='none'%3E%3Cpath%20d='M0%20136%20q105%20-46%20210%200%20t210%200%20V300%20H0%20Z'%20fill='black'/%3E%3C/svg%3E");
   -webkit-mask-size: 420px 100%;
   mask-size: 420px 100%;
+  width: calc(100% + 420px);
   animation: aw-roll-mid 14s linear infinite reverse;
 }
 
 /* Ближняя волна — светлая, почти прозрачная плёнка на переднем плане. */
 .aw-near {
   background: color-mix(in oklch, var(--aw-near) 38%, transparent);
-  -webkit-backdrop-filter: blur(8px) saturate(1.15);
-  backdrop-filter: blur(8px) saturate(1.15);
   -webkit-mask-image: url("data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%20840%20300'%20preserveAspectRatio='none'%3E%3Cpath%20d='M0%20212%20q210%20-62%20420%200%20t420%200%20V300%20H0%20Z'%20fill='black'/%3E%3C/svg%3E");
   mask-image: url("data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%20840%20300'%20preserveAspectRatio='none'%3E%3Cpath%20d='M0%20212%20q210%20-62%20420%200%20t420%200%20V300%20H0%20Z'%20fill='black'/%3E%3C/svg%3E");
   -webkit-mask-size: 840px 100%;
   mask-size: 840px 100%;
+  width: calc(100% + 840px);
   animation: aw-roll-near 27s linear infinite;
 }
 
-/* Ход волны: сдвиг маски ровно на её период — кадр в конце цикла совпадает
+/* Ход волны: сдвиг слоя ровно на период маски — кадр в конце цикла совпадает
    с начальным, стыка не видно. */
 @keyframes aw-roll-far {
-  from { -webkit-mask-position: 0 0; mask-position: 0 0; }
-  to { -webkit-mask-position: -620px 0; mask-position: -620px 0; }
+  from { transform: translate3d(0, 0, 0); }
+  to { transform: translate3d(-620px, 0, 0); }
 }
 
 @keyframes aw-roll-mid {
-  from { -webkit-mask-position: 0 0; mask-position: 0 0; }
-  to { -webkit-mask-position: -420px 0; mask-position: -420px 0; }
+  from { transform: translate3d(0, 0, 0); }
+  to { transform: translate3d(-420px, 0, 0); }
 }
 
 @keyframes aw-roll-near {
-  from { -webkit-mask-position: 0 0; mask-position: 0 0; }
-  to { -webkit-mask-position: -840px 0; mask-position: -840px 0; }
+  from { transform: translate3d(0, 0, 0); }
+  to { transform: translate3d(-840px, 0, 0); }
 }
 
 @media (prefers-reduced-motion: reduce) {
   .aw-wave { animation: none; }
-}
-
-/* Без backdrop-filter (заводской WebView старых Android) стекло имитируем
-   плотной заливкой — иначе волны выглядели бы выцветшими. */
-@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
-  .aw-far { background: color-mix(in oklch, var(--aw-far) 82%, transparent); }
-  .aw-mid { background: color-mix(in oklch, var(--aw-mid) 78%, transparent); }
-  .aw-near { background: color-mix(in oklch, var(--aw-near) 76%, transparent); }
 }
 </style>

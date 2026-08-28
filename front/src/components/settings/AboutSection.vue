@@ -349,15 +349,14 @@ async function onUpdateClick() {
   to { transform: translateX(-1440px); }
 }
 
-/* Акриловое стекло поверх волн: размывает их, оставляя мягкое свечение.
-   -webkit- ПЕРЕД стандартным — иначе минификатор выбросит стандартное. */
+/* Пелена поверх волн: приглушает их до мягкого свечения. Размытия здесь нет
+   намеренно — волны под ней ДВИЖУТСЯ, и backdrop-filter пересчитывался бы
+   каждый кадр всё время, пока раздел открыт. */
 .ab-frost {
   position: absolute;
   inset: 0;
   pointer-events: none;
   background: var(--glass-bg);
-  -webkit-backdrop-filter: blur(18px) saturate(1.3);
-  backdrop-filter: blur(18px) saturate(1.3);
 }
 
 @media (prefers-reduced-motion: reduce) {
