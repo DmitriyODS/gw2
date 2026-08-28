@@ -115,11 +115,12 @@ func (r *PetRepo) GetOrCreate(ctx context.Context, userID, companyID int64) (*do
 }
 
 // SavePet — полное сохранение изменяемых полей (по образу ORM-коммита Flask).
-// Поля престижа, домика и банка (generation/house_owned/house_placed/
-// bank_savings/bank_savings_accrued_at/bank_loan) сюда намеренно НЕ входят:
-// они меняются только своими узкими атомарными методами (Prestige/
-// BuyHouseDecor/Append*/SaveHousePlaced/BankRepo) — full-row запись из
-// конкурентного действия перетирала бы их устаревшим снимком.
+// Поля престижа, домика, банка (generation/house_owned/house_placed/
+// bank_savings/bank_savings_accrued_at/bank_loan) и БОЛЕЗНИ (sick_since/
+// ailment/recovery) сюда намеренно НЕ входят: они меняются только своими
+// узкими атомарными методами (Prestige/BuyHouseDecor/Append*/SaveHousePlaced/
+// BankRepo, FallSick/AddRecovery/RunAway) — full-row запись из конкурентного
+// действия перетирала бы их устаревшим снимком.
 func (r *PetRepo) SavePet(ctx context.Context, p *domain.Pet) error {
 	accessories, err := json.Marshal(p.Accessories)
 	if err != nil {
@@ -132,15 +133,14 @@ func (r *PetRepo) SavePet(ctx context.Context, p *domain.Pet) error {
 	_, err = r.pool.Exec(ctx, `
 		UPDATE pets SET name = $2, species = $3, stage = $4, xp = $5, kudos = $6,
 			hat = $7, accessories = $8, feed_streak = $9, last_fed_date = $10,
-			sick_since = $11, ailment = $12, recovery = $13, personality = $14,
-			unlocked_species = $15, quest_date = $16, quest_kind = $17,
-			quest_target = $18, quest_progress = $19, quest_claimed = $20,
-			adventure_until = $21, adventure_place = $22,
-			need_satiety = $23, need_energy = $24, need_hygiene = $25,
-			need_social = $26, needs_at = $27
+			personality = $11, unlocked_species = $12, quest_date = $13,
+			quest_kind = $14, quest_target = $15, quest_progress = $16,
+			quest_claimed = $17, adventure_until = $18, adventure_place = $19,
+			need_satiety = $20, need_energy = $21, need_hygiene = $22,
+			need_social = $23, needs_at = $24
 		WHERE user_id = $1`,
 		p.UserID, p.Name, p.Species, p.Stage, p.XP, p.Kudos, p.Hat, accessories,
-		p.FeedStreak, p.LastFedDate, p.SickSince, p.Ailment, p.Recovery, p.Personality,
+		p.FeedStreak, p.LastFedDate, p.Personality,
 		unlocked, p.QuestDate, p.QuestKind, p.QuestTarget, p.QuestProgress,
 		p.QuestClaimed, p.AdventureUntil, p.AdventurePlace,
 		p.Needs.Satiety, p.Needs.Energy, p.Needs.Hygiene, p.Needs.Social, p.NeedsAt)
@@ -149,16 +149,81 @@ func (r *PetRepo) SavePet(ctx context.Context, p *domain.Pet) error {
 
 // ───────────────────────── потребности ──────────────────────────────
 
-// SaveNeeds — только шкалы и состояние болезни: ленивый пересчёт убывания
-// живёт на read-пути, где full-row SavePet затирал бы конкурентные начисления.
+// SaveNeeds — только шкалы и needs_at: ленивый пересчёт убывания живёт на
+// read-пути, где full-row SavePet затирал бы конкурентные начисления. Поля
+// болезни отсюда убраны намеренно — см. FallSick/AddRecovery.
 func (r *PetRepo) SaveNeeds(ctx context.Context, p *domain.Pet) error {
 	_, err := r.pool.Exec(ctx, `
 		UPDATE pets SET need_satiety = $2, need_energy = $3, need_hygiene = $4,
-			need_social = $5, needs_at = $6, sick_since = $7, ailment = $8, recovery = $9
+			need_social = $5, needs_at = $6
 		WHERE user_id = $1`,
 		p.UserID, p.Needs.Satiety, p.Needs.Energy, p.Needs.Hygiene, p.Needs.Social,
-		p.NeedsAt, p.SickSince, p.Ailment, p.Recovery)
+		p.NeedsAt)
 	return err
+}
+
+// FallSick — уложить в болезнь одним UPDATE с guard'ом в WHERE: ленивый
+// read-путь владельца и часовой цикл заботы ходят сюда параллельно, и диагноз
+// должен поставить ровно один из них. Пустота шкалы-виновника проверяется по
+// БАЗЕ, а не по снимку вызывающего: пока он считал, шкалу мог поднять уход
+// владельца — и болезнь оказалась бы поставлена сытому питомцу.
+func (r *PetRepo) FallSick(ctx context.Context, userID int64, ailment string, now time.Time) (bool, error) {
+	guard := ""
+	if col, ok := needColumns[domain.NeedForAilment(ailment)]; ok {
+		guard = " AND " + col + " <= 0"
+	}
+	tag, err := r.pool.Exec(ctx, `
+		UPDATE pets SET sick_since = $3, ailment = $2, recovery = 0
+		WHERE user_id = $1 AND sick_since IS NULL`+guard, userID, ailment, now)
+	if err != nil {
+		return false, err
+	}
+	return tag.RowsAffected() == 1, nil
+}
+
+// PostponeSickness — сдвиг начала болезни (заморозка таймера побега в отпуске
+// владельца): узкий UPDATE, потому что поля болезни в SaveNeeds не входят.
+func (r *PetRepo) PostponeSickness(ctx context.Context, userID int64, sickSince time.Time) error {
+	_, err := r.pool.Exec(ctx, `
+		UPDATE pets SET sick_since = $2
+		WHERE user_id = $1 AND sick_since IS NOT NULL`, userID, sickSince)
+	return err
+}
+
+// AddRecovery — атомарное лечение: очки выздоровления и, по достижении
+// target, выздоровление тем же UPDATE — диагноз снимается, а шкалы-виновники
+// поднимаются до floor (зеркало domain.Pet.Cure: иначе вылеченный с пустой
+// шкалой слёг бы снова в ближайший пересчёт). Guard «болен» в WHERE:
+// действие владельца и хук работы приходят параллельно, и лечить обоим одну и
+// ту же болезнь дважды нельзя.
+func (r *PetRepo) AddRecovery(ctx context.Context, userID int64, points, target, floor int) (domain.RecoveryResult, error) {
+	// Условие выздоровления повторяется в каждом CASE — иначе пришлось бы
+	// заворачивать UPDATE в подзапрос ради одного вычисленного признака.
+	const cured = `recovery + $2 >= $3`
+	sets := `recovery = CASE WHEN ` + cured + ` THEN 0 ELSE LEAST($3, recovery + $2) END,
+		sick_since = CASE WHEN ` + cured + ` THEN NULL ELSE sick_since END,
+		ailment = CASE WHEN ` + cured + ` THEN NULL ELSE ailment END`
+	for _, n := range domain.Needs {
+		if n.Ailment == "" {
+			continue // шкала без своей болезни выздоровлением не поднимается
+		}
+		col := needColumns[n.Key]
+		sets += `, ` + col + ` = CASE WHEN ` + cured +
+			` THEN GREATEST(` + col + `, $4) ELSE ` + col + ` END`
+	}
+	var out domain.RecoveryResult
+	err := r.pool.QueryRow(ctx, `UPDATE pets SET `+sets+`
+		WHERE user_id = $1 AND sick_since IS NOT NULL
+		RETURNING recovery, sick_since IS NULL`,
+		userID, points, target, floor).Scan(&out.Recovery, &out.Cured)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return domain.RecoveryResult{}, nil // здоров — лечить нечего
+	}
+	if err != nil {
+		return domain.RecoveryResult{}, err
+	}
+	out.Applied = true
+	return out, nil
 }
 
 // needColumns — колонка шкалы по ключу домена (ключи приходят из кода, не от

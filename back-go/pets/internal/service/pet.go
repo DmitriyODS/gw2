@@ -408,20 +408,32 @@ func (s *Service) detectPersonality(ctx context.Context, userID int64) string {
 
 // ───────────────────────────── болезнь ─────────────────────────────
 
-// applyRecovery — прибавить recovery-очки больному питомцу (без сохранения).
-// true — выздоровел.
-func applyRecovery(pet *domain.Pet, amount int) bool {
-	if pet.SickSince == nil {
+// cureProgress — засчитать очки лечения и обновить снимок. Считает их БАЗА
+// (атомарный AddRecovery с guard'ом «болен» и выздоровлением в том же
+// UPDATE): к одному питомцу параллельно приходят действия владельца и хуки
+// работы, и локальный «прочитал–прибавил–записал» терял чужие очки, а то и
+// возвращал вылеченному его диагноз. true — выздоровел именно сейчас.
+func (s *Service) cureProgress(ctx context.Context, pet *domain.Pet, points int) bool {
+	if points <= 0 || !pet.Sick() {
 		return false
 	}
-	pet.Recovery = min(domain.RecoveryTarget, pet.Recovery+amount)
-	if pet.Recovery >= domain.RecoveryTarget {
-		// Именно Cure(), а не сброс SickSince: он же чистит вид болезни
-		// (инвариант «ailment ⟺ sick_since») и поднимает шкалу-виновника,
-		// чтобы питомец не слёг с той же болезнью в тот же миг.
+	res, err := s.pets.AddRecovery(ctx, pet.UserID, points,
+		domain.RecoveryTarget, domain.RecoveredNeedFloor)
+	if err != nil {
+		s.log.Warn("pets.recovery_failed", "user_id", pet.UserID, "error", err)
+		return false
+	}
+	if !res.Applied {
+		return false // конкурентный вызов уже вылечил
+	}
+	if res.Cured {
+		// Cure() — зеркало SQL: чистит вид болезни (инвариант «ailment ⟺
+		// sick_since») и поднимает шкалы-виновники, чтобы питомец не слёг
+		// снова в тот же миг.
 		pet.Cure()
 		return true
 	}
+	pet.Recovery = res.Recovery
 	return false
 }
 
@@ -437,13 +449,11 @@ func (s *Service) AddRecovery(ctx context.Context, userID, companyID int64, amou
 	if cure <= 0 {
 		return
 	}
-	recovered := applyRecovery(pet, amount*cure)
-	// Узкое сохранение: хук приходит параллельно действиям владельца, и
-	// full-row SavePet затирал бы их балансы устаревшим снимком.
-	if err := s.pets.SaveNeeds(ctx, pet); err != nil {
-		s.log.Warn("pets.recovery_failed", "user_id", userID, "error", err)
-		return
-	}
+	// Очки считает база: хук приходит параллельно действиям владельца, и
+	// локальный пересчёт по снимку терял их лечение (а то и воскрешал
+	// диагноз). Шкалы выздоровления поднимает тот же UPDATE, сохранять
+	// снимок здесь нечего.
+	recovered := s.cureProgress(ctx, pet, amount*cure)
 	if recovered {
 		s.appendActivity(ctx, userID, "recovered", nil)
 	}
@@ -504,11 +514,16 @@ func (s *Service) CheckSicknessForCompany(ctx context.Context, companyID int64) 
 		if workingDaysBetween(lastDate, today, weekend) < domain.SickAfterDays {
 			continue
 		}
-		pet.Fall(domain.AilmentBlues, time.Now().UTC())
-		if err := s.pets.SaveNeeds(ctx, pet); err != nil {
+		now := time.Now().UTC()
+		fresh, err := s.pets.FallSick(ctx, pet.UserID, domain.AilmentBlues, now)
+		if err != nil {
 			s.log.Warn("pets.sick_save_failed", "user_id", pet.UserID, "error", err)
 			continue
 		}
+		if !fresh {
+			continue // успел заболеть или вылечиться между чтением списка и записью
+		}
+		pet.Fall(domain.AilmentBlues, now)
 		sickCount++
 		s.onFellSick(ctx, pet, domain.AilmentBlues)
 		s.emitPetUpdate(ctx, pet)
@@ -598,7 +613,7 @@ func (s *Service) FeedPet(ctx context.Context, userID, companyID int64, foodKey 
 		}
 		pet.Kudos -= domain.SickFeedCost
 		pet.Needs.Add(domain.NeedSatiety, domain.SickFeedSatiety)
-		recovered := applyRecovery(pet, domain.CureFor(ailment, domain.ActionFeed))
+		recovered := s.cureProgress(ctx, pet, domain.CureFor(ailment, domain.ActionFeed))
 		if err := s.pets.SavePet(ctx, pet); err != nil {
 			return nil, err
 		}
@@ -724,12 +739,12 @@ func (s *Service) WalkPet(ctx context.Context, userID, companyID int64) (*dto.Pe
 	if pet.Sick() {
 		// Больному питомцу прогулка лечит, а не растит XP (тот и так заморожен),
 		// и помогает ровно настолько, насколько подходит его болезни.
-		recovered = s.applyAction(pet, domain.ActionWalk)
+		recovered = s.applyAction(ctx, pet, domain.ActionWalk)
 		if err := s.pets.SavePet(ctx, pet); err != nil {
 			return nil, err
 		}
 	} else {
-		s.applyAction(pet, domain.ActionWalk)
+		s.applyAction(ctx, pet, domain.ActionWalk)
 		pet.XP += domain.WalkXP
 		evolvedTo := s.applyEvolution(ctx, pet)
 		if err := s.pets.SavePet(ctx, pet); err != nil {
@@ -774,7 +789,7 @@ func (s *Service) HealPet(ctx context.Context, userID, companyID int64) (*dto.Pe
 		return nil, domain.NewError("HEALED_ENOUGH", "Лечение на сегодня исчерпано", 429)
 	}
 	pet.Kudos -= domain.HealCost
-	recovered := s.applyAction(pet, domain.ActionHeal)
+	recovered := s.applyAction(ctx, pet, domain.ActionHeal)
 	if err := s.pets.SavePet(ctx, pet); err != nil {
 		return nil, err
 	}

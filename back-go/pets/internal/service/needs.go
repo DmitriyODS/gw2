@@ -30,26 +30,44 @@ func (s *Service) refreshNeeds(ctx context.Context, pet *domain.Pet) bool {
 			s.log.Warn("pets.needs_save_failed", "user_id", pet.UserID, "error", err)
 			return false
 		}
+		// Отложенное начало болезни — своим узким методом: в SaveNeeds поля
+		// болезни не входят.
+		if pet.SickSince != nil {
+			if err := s.pets.PostponeSickness(ctx, pet.UserID, *pet.SickSince); err != nil {
+				s.log.Warn("pets.postpone_sickness_failed", "user_id", pet.UserID, "error", err)
+			}
+		}
 		return true
 	}
-	changed := pet.ApplyNeedsDecay(time.Now().UTC())
-	fell := ""
-	if !pet.Sick() {
-		if fell = pet.PendingAilment(); fell != "" {
-			pet.Fall(fell, time.Now().UTC())
-			changed = true
+	now := time.Now().UTC()
+	changed := pet.ApplyNeedsDecay(now)
+	if changed {
+		if err := s.pets.SaveNeeds(ctx, pet); err != nil {
+			s.log.Warn("pets.needs_save_failed", "user_id", pet.UserID, "error", err)
+			return false
 		}
 	}
-	if !changed {
-		return false
+	if pet.Sick() {
+		return changed
 	}
-	if err := s.pets.SaveNeeds(ctx, pet); err != nil {
-		s.log.Warn("pets.needs_save_failed", "user_id", pet.UserID, "error", err)
-		return false
+	fell := pet.PendingAilment()
+	if fell == "" {
+		return changed
 	}
-	if fell != "" {
-		s.onFellSick(ctx, pet, fell)
+	// Диагноз ставится атомарно: сюда параллельно приходят ленивый read-путь
+	// владельца и часовой цикл заботы, а с ними — лечение. Запись диагноза из
+	// устаревшего снимка откатывала прогресс лечения и воскрешала больным
+	// того, кого только что вылечили.
+	fresh, err := s.pets.FallSick(ctx, pet.UserID, fell, now)
+	if err != nil {
+		s.log.Warn("pets.fall_sick_failed", "user_id", pet.UserID, "error", err)
+		return changed
 	}
+	if !fresh {
+		return changed // уже болен — диагноз поставил конкурентный вызов
+	}
+	pet.Fall(fell, now)
+	s.onFellSick(ctx, pet, fell)
 	return true
 }
 
@@ -131,15 +149,15 @@ func (s *Service) adjustNeeds(ctx context.Context, pet *domain.Pet, action strin
 	pet.Needs = needs
 }
 
-// applyAction — общий эффект действия владельца на состояние питомца (без
-// сохранения): двигает потребности и лечит, если действие — верный рецепт от
+// applyAction — общий эффект действия владельца: двигает потребности в
+// снимке (сохранит вызывающий) и лечит, если действие — верный рецепт от
 // текущей болезни. Возвращает признак выздоровления.
-func (s *Service) applyAction(pet *domain.Pet, action string) bool {
+func (s *Service) applyAction(ctx context.Context, pet *domain.Pet, action string) bool {
 	pet.ApplyNeedGains(action)
 	if !pet.Sick() {
 		return false
 	}
-	return applyRecovery(pet, domain.CureFor(pet.AilmentKey(), action))
+	return s.cureProgress(ctx, pet, domain.CureFor(pet.AilmentKey(), action))
 }
 
 // ─────────────────────────────── сон ────────────────────────────────
@@ -159,7 +177,7 @@ func (s *Service) SleepPet(ctx context.Context, userID, companyID int64) (*dto.P
 	if s.daily.TakeBudget(ctx, userID, "sleeps", 1, domain.SleepDailyMax) <= 0 {
 		return nil, domain.NewError("SLEPT_ENOUGH", "Питомец выспался — больше сегодня не уснёт", 429)
 	}
-	recovered := s.applyAction(pet, domain.ActionSleep)
+	recovered := s.applyAction(ctx, pet, domain.ActionSleep)
 	if err := s.pets.SavePet(ctx, pet); err != nil {
 		return nil, err
 	}
@@ -193,7 +211,7 @@ func (s *Service) BathPet(ctx context.Context, userID, companyID int64) (*dto.Pe
 		return nil, domain.NewError("WASHED_ENOUGH", "Чище уже некуда — купаний на сегодня хватит", 429)
 	}
 	pet.Kudos -= domain.BathCost
-	recovered := s.applyAction(pet, domain.ActionBath)
+	recovered := s.applyAction(ctx, pet, domain.ActionBath)
 	if err := s.pets.SavePet(ctx, pet); err != nil {
 		return nil, err
 	}

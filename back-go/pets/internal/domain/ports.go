@@ -5,6 +5,13 @@ import (
 	"time"
 )
 
+// RecoveryResult — состояние лечения ПОСЛЕ атомарного AddRecovery.
+type RecoveryResult struct {
+	Applied  bool // питомец был болен, очки засчитаны
+	Cured    bool // выздоровел именно этим вызовом
+	Recovery int  // очки лечения после применения (0 у выздоровевшего)
+}
+
 // PetRepo — питомцы: профиль, эволюция, рейтинг признания, поглаживания.
 type PetRepo interface {
 	GetPet(ctx context.Context, userID int64) (*Pet, error)
@@ -19,11 +26,28 @@ type PetRepo interface {
 	// SaveEvolution — сохранить ТОЛЬКО поля эволюции (stage/species/
 	// personality/unlocked_species), не трогая балансы и квест.
 	SaveEvolution(ctx context.Context, pet *Pet) error
-	// SaveNeeds — узкое сохранение потребностей и состояния болезни (шкалы,
-	// needs_at, ailment/sick_since/recovery): ленивый пересчёт убывания идёт
-	// на READ-пути, и full-row SavePet затирал бы там конкурентные начисления
-	// хуков (та же причина, что у SaveEvolution).
+	// SaveNeeds — узкое сохранение ТОЛЬКО шкал и needs_at: ленивый пересчёт
+	// убывания идёт на READ-пути, и full-row SavePet затирал бы там
+	// конкурентные начисления хуков (та же причина, что у SaveEvolution).
+	// Поля болезни сюда НЕ входят — они меняются только своими атомарными
+	// методами (FallSick/AddRecovery/RunAway): read-путь владельца и фоновый
+	// цикл заботы ходят сюда параллельно, и запись диагноза из их снимков
+	// откатывала прогресс лечения, а вылеченного питомца воскрешала больным.
 	SaveNeeds(ctx context.Context, pet *Pet) error
+	// FallSick — уложить в болезнь атомарно: guard в WHERE — «сейчас здоров» и
+	// шкала-виновник всё ещё пуста (её мог поднять конкурентный уход, пока
+	// вызывающий считал по своему снимку). false — диагноз не поставлен,
+	// ошибки нет.
+	FallSick(ctx context.Context, userID int64, ailment string, now time.Time) (bool, error)
+	// PostponeSickness — сдвинуть начало болезни вперёд (отпуск владельца:
+	// таймер побега стоит вместе со шкалами). Узкий UPDATE — SaveNeeds полей
+	// болезни не касается.
+	PostponeSickness(ctx context.Context, userID int64, sickSince time.Time) error
+	// AddRecovery — атомарное лечение: прибавляет очки выздоровления больному
+	// питомцу и тем же UPDATE вылечивает, когда их набралось target — снимает
+	// диагноз и поднимает шкалы-виновники до floor (зеркало Pet.Cure).
+	// Applied=false — питомец здоров, лечить нечего.
+	AddRecovery(ctx context.Context, userID int64, points, target, floor int) (RecoveryResult, error)
 	// AdjustNeeds — атомарный сдвиг шкал (кламп 0..NeedMax) одним UPDATE;
 	// возвращает шкалы ПОСЛЕ применения (как AdjustBalances): вызывающий
 	// кладёт результат в свой снапшот, а не досчитывает дельту сам — иначе

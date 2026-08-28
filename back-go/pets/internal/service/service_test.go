@@ -60,23 +60,31 @@ func TestWorkingDaysBetween(t *testing.T) {
 	}
 }
 
-func TestApplyRecovery(t *testing.T) {
-	now := time.Now()
-	pet := &domain.Pet{SickSince: &now, Recovery: 0}
-	if applyRecovery(pet, 1) {
-		t.Error("выздоровел слишком рано")
+func TestCureProgress(t *testing.T) {
+	env := newEnv()
+	ctx := context.Background()
+	pet, _ := env.pets.GetOrCreate(ctx, 1, 10)
+	pet.Fall(domain.AilmentBlues, time.Now().UTC())
+
+	for i := 1; i < domain.RecoveryTarget; i++ {
+		if env.svc.cureProgress(ctx, pet, 1) {
+			t.Fatalf("выздоровел слишком рано, на %d-м очке", i)
+		}
+		if pet.Recovery != i {
+			t.Fatalf("recovery = %d, want %d", pet.Recovery, i)
+		}
 	}
-	if applyRecovery(pet, 1) {
-		t.Error("выздоровел слишком рано")
+	if !env.svc.cureProgress(ctx, pet, 1) {
+		t.Fatalf("должен был выздороветь на %d-м очке", domain.RecoveryTarget)
 	}
-	if !applyRecovery(pet, 1) {
-		t.Error("должен был выздороветь на 3-м очке")
+	if pet.SickSince != nil || pet.Ailment != nil || pet.Recovery != 0 {
+		t.Error("после выздоровления болезнь не снята в снимке")
 	}
-	if pet.SickSince != nil || pet.Recovery != 0 {
-		t.Error("после выздоровления болезнь не снята")
+	if stored := env.pets.byUser[1]; stored.SickSince != nil {
+		t.Error("после выздоровления болезнь не снята в хранилище")
 	}
 	// Здоровому recovery не идёт.
-	if applyRecovery(pet, 5) {
+	if env.svc.cureProgress(ctx, pet, 5) {
 		t.Error("здоровый питомец «выздоровел»")
 	}
 }
@@ -159,10 +167,62 @@ func (f *fakePets) SaveNeeds(_ context.Context, p *domain.Pet) error {
 	if cur == nil {
 		return errNoPet
 	}
+	// Как в SQL: поля болезни узкой записью потребностей не трогаются.
 	cur.Needs, cur.NeedsAt = p.Needs, p.NeedsAt
-	cur.SickSince, cur.Ailment, cur.Recovery = p.SickSince, p.Ailment, p.Recovery
 	f.needsSaves++
 	return nil
+}
+
+// FallSick — как в SQL: диагноз ставится только здоровому и только пока
+// шкала-виновник в хранилище всё ещё пуста.
+func (f *fakePets) FallSick(_ context.Context, userID int64, ailment string, now time.Time) (bool, error) {
+	p := f.byUser[userID]
+	if p == nil {
+		return false, errNoPet
+	}
+	if p.SickSince != nil {
+		return false, nil
+	}
+	if need := domain.NeedForAilment(ailment); need != "" && p.Needs.Get(need) > 0 {
+		return false, nil
+	}
+	p.Fall(ailment, now)
+	return true, nil
+}
+
+// PostponeSickness — как в SQL: сдвиг начала болезни у больного питомца.
+func (f *fakePets) PostponeSickness(_ context.Context, userID int64, sickSince time.Time) error {
+	p := f.byUser[userID]
+	if p == nil {
+		return errNoPet
+	}
+	if p.SickSince != nil {
+		p.SickSince = &sickSince
+	}
+	return nil
+}
+
+// AddRecovery — как в SQL: очки лечения больному, а по достижении target тем
+// же обновлением выздоровление с подъёмом шкал-виновников до floor.
+func (f *fakePets) AddRecovery(_ context.Context, userID int64, points, target, floor int) (domain.RecoveryResult, error) {
+	p := f.byUser[userID]
+	if p == nil {
+		return domain.RecoveryResult{}, errNoPet
+	}
+	if p.SickSince == nil {
+		return domain.RecoveryResult{}, nil
+	}
+	if p.Recovery+points >= target {
+		for _, n := range domain.Needs {
+			if n.Ailment != "" && p.Needs.Get(n.Key) < floor {
+				p.Needs.Set(n.Key, floor)
+			}
+		}
+		p.SickSince, p.Ailment, p.Recovery = nil, nil, 0
+		return domain.RecoveryResult{Applied: true, Cured: true}, nil
+	}
+	p.Recovery += points
+	return domain.RecoveryResult{Applied: true, Recovery: p.Recovery}, nil
 }
 func (f *fakePets) AdjustNeeds(_ context.Context, userID int64, deltas map[string]int) (domain.NeedValues, error) {
 	p := f.byUser[userID]

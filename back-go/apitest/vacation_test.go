@@ -182,9 +182,9 @@ func TestVacationFreezesPet(t *testing.T) {
 
 	setVacation(t, admin, companyID, m, true)
 
-	// Сутки с лишним без ухода — без отпуска сытость была бы в нуле и питомец
+	// Трое суток без ухода — без отпуска сытость была бы в нуле и питомец
 	// болел бы истощением; в отпуске шкалы стоят на месте.
-	agePetNeeds(t, m.ID, 30*60)
+	agePetNeeds(t, m.ID, 80*60)
 	r = petsAPI.doJSON(t, http.MethodGet, "/api/pets/pet", m.Token, nil)
 	requireStatus(t, r, 200, "GET /pet в отпуске")
 	if !r.Bool("on_vacation") {

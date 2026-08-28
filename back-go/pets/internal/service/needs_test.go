@@ -499,6 +499,93 @@ func TestSickFeedCureDoesNotRelapse(t *testing.T) {
 	}
 }
 
+// Болезнь останавливает убывание шкал: иначе за время лечения пустели
+// соседние потребности, и вылеченный питомец тут же слегал снова.
+func TestSicknessFreezesNeedDecay(t *testing.T) {
+	env := newEnv()
+	ctx := context.Background()
+	pet, _ := env.pets.GetOrCreate(ctx, 1, 10)
+	pet.Needs.Satiety = 0
+	pet.Fall(domain.AilmentHunger, time.Now().UTC().Add(-time.Hour))
+	pet.NeedsAt = time.Now().UTC().Add(-time.Duration(emptyTicks(domain.NeedEnergy)) * domain.NeedTick)
+
+	data, err := env.svc.GetMyPet(ctx, 1, 10)
+	if err != nil {
+		t.Fatalf("GetMyPet: %v", err)
+	}
+	if data.Needs.Energy != domain.NeedMax || data.Needs.Hygiene != domain.NeedMax {
+		t.Errorf("шкалы больного таяли: energy=%d hygiene=%d",
+			data.Needs.Energy, data.Needs.Hygiene)
+	}
+	// «Часы» при этом идут: после выздоровления убывание продолжится с текущего
+	// момента, а не отыграет весь пропущенный простой разом.
+	stored, _ := env.pets.GetPet(ctx, 1)
+	if time.Since(stored.NeedsAt) >= domain.NeedTick {
+		t.Errorf("needs_at не сдвинут: отстаёт на %v", time.Since(stored.NeedsAt))
+	}
+}
+
+// Выздоровление поднимает ВСЕ шкалы-виновники: соседняя пустая шкала не
+// должна укладывать питомца в новую болезнь сразу после лечения (каскад
+// «вылечил истощение — получил простуду, прогресс лечения с нуля»).
+func TestCureLiftsEveryRiskyNeed(t *testing.T) {
+	env := newEnv()
+	ctx := context.Background()
+	pet, _ := env.pets.GetOrCreate(ctx, 1, 10)
+	pet.Kudos = 100
+	pet.Needs.Satiety, pet.Needs.Energy, pet.Needs.Hygiene = 0, 0, 0
+	pet.Fall(domain.AilmentHunger, time.Now().UTC().Add(-time.Hour))
+	pet.Recovery = domain.RecoveryTarget - domain.CureFor(domain.AilmentHunger, domain.ActionFeed)
+
+	if _, err := env.svc.FeedPet(ctx, 1, 10, ""); err != nil {
+		t.Fatalf("FeedPet: %v", err)
+	}
+	cured, _ := env.pets.GetPet(ctx, 1)
+	if cured.Sick() {
+		t.Fatal("бульон должен вылечить истощение")
+	}
+	for _, n := range domain.Needs {
+		if n.Ailment == "" {
+			continue
+		}
+		if cured.Needs.Get(n.Key) < domain.RecoveredNeedFloor {
+			t.Errorf("шкала %s после выздоровления = %d, должна быть не ниже %d",
+				n.Key, cured.Needs.Get(n.Key), domain.RecoveredNeedFloor)
+		}
+	}
+	env.svc.refreshNeeds(ctx, cured)
+	if cured.Sick() {
+		t.Fatalf("вылеченный сразу заболел снова: %v", cured.AilmentKey())
+	}
+}
+
+// Устаревший снимок не воскрешает болезнь и не откатывает лечение: часовой
+// цикл заботы держит копию питомца, прочитанную ДО того, как владелец его
+// вылечил, и его запись потребностей не должна вернуть диагноз.
+func TestStaleSnapshotKeepsSicknessState(t *testing.T) {
+	env := newEnv()
+	ctx := context.Background()
+	pet, _ := env.pets.GetOrCreate(ctx, 1, 10)
+	pet.Needs.Energy = 0
+	pet.Fall(domain.AilmentCold, time.Now().UTC().Add(-time.Hour))
+	pet.Recovery = domain.RecoveryTarget - domain.CureFor(domain.AilmentCold, domain.ActionSleep)
+	stale := *pet // снимок фонового цикла: болен, лечение не закончено
+
+	if _, err := env.svc.SleepPet(ctx, 1, 10); err != nil {
+		t.Fatalf("SleepPet: %v", err)
+	}
+	stale.NeedsAt = time.Now().UTC().Add(-domain.NeedTick) // цикл дошёл до записи
+	env.svc.refreshNeeds(ctx, &stale)
+
+	stored, _ := env.pets.GetPet(ctx, 1)
+	if stored.Sick() {
+		t.Fatalf("устаревший снимок воскресил болезнь: %v", stored.AilmentKey())
+	}
+	if stored.Recovery != 0 {
+		t.Errorf("прогресс лечения = %d, want 0 у здорового", stored.Recovery)
+	}
+}
+
 // needDecay — скорость убывания шкалы из каталога (тесты не дублируют числа).
 func needDecay(key string) int {
 	for _, n := range domain.Needs {

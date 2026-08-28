@@ -66,21 +66,21 @@ func TestPetsNeedsDecayCausesHunger(t *testing.T) {
 		t.Fatalf("новый питомец не может быть больным: %s", r.Raw)
 	}
 
-	// Шаг шкал — 45 минут: за 5¼ часа это 7 тиков, сытость −14 (2 за тик),
+	// Шаг шкал — 90 минут: за 11¼ часа это 7 тиков, сытость −14 (2 за тик),
 	// энергия −7 (1 за тик).
-	agePetNeeds(t, m.ID, 5*60+15)
+	agePetNeeds(t, m.ID, 11*60+15)
 	r = petsAPI.doJSON(t, http.MethodGet, "/api/pets/pet", m.Token, nil)
 	needs = r.JSON["needs"].(map[string]any)
 	if needs["satiety"] != float64(86) || needs["energy"] != float64(93) {
 		t.Fatalf("потребности не убывают со временем: %s", r.Raw)
 	}
 	if r.Bool("sick") {
-		t.Fatalf("5 часов — ещё не болезнь: %s", r.Raw)
+		t.Fatalf("полсуток — ещё не болезнь: %s", r.Raw)
 	}
 
-	// Полтора суток без еды — истощение (шкала сытости в нуле): 50 тиков по
-	// 45 минут опустошают её полностью.
-	agePetNeeds(t, m.ID, 40*60)
+	// Трое суток без еды — истощение (шкала сытости в нуле): 50 тиков по
+	// 90 минут опустошают её полностью.
+	agePetNeeds(t, m.ID, 80*60)
 	r = petsAPI.doJSON(t, http.MethodGet, "/api/pets/pet", m.Token, nil)
 	needs = r.JSON["needs"].(map[string]any)
 	if needs["satiety"] != float64(0) {
@@ -231,6 +231,63 @@ func TestPetsWrongCureBarelyHelps(t *testing.T) {
 	requireStatus(t, r, 200, "бульон простуженному")
 	if r.Num("recovery") != 1 {
 		t.Fatalf("от простуды бульон помогает слабо: %s", r.Raw)
+	}
+}
+
+// Болезнь останавливает убывание шкал: пока питомца лечат, соседние
+// потребности не пустеют — иначе выздоровление сразу сменялось бы следующей
+// болезнью.
+func TestPetsSicknessFreezesNeeds(t *testing.T) {
+	_, m, _ := petsCompany(t)
+	petsAPI.doJSON(t, http.MethodGet, "/api/pets/pet", m.Token, nil)
+	setNeed(t, m.ID, "need_satiety", 0)
+	makeSick(t, m.ID, "hunger", 0)
+
+	agePetNeeds(t, m.ID, 80*60) // трое суток болезни
+	r := petsAPI.doJSON(t, http.MethodGet, "/api/pets/pet", m.Token, nil)
+	requireStatus(t, r, 200, "GET /pet у больного")
+	needs := r.JSON["needs"].(map[string]any)
+	if needs["energy"] != float64(100) || needs["hygiene"] != float64(100) {
+		t.Fatalf("шкалы больного не должны таять: %s", r.Raw)
+	}
+}
+
+// Выздоровление окончательно: последнее очко снимает диагноз, поднимает ВСЕ
+// шкалы-виновники и не даёт слечь снова ближайшим пересчётом (раньше
+// вылеченный от голода тут же получал простуду с прогрессом лечения с нуля).
+func TestPetsCureIsFinal(t *testing.T) {
+	_, m, _ := petsCompany(t)
+	petsAPI.doJSON(t, http.MethodGet, "/api/pets/pet", m.Token, nil)
+	grantKudos(t, m.ID, 100)
+	if _, err := db.Exec(dbCtx(t), `
+		UPDATE pets SET need_satiety=0, need_energy=0, need_hygiene=0, needs_at=now()
+		WHERE user_id=$1`, m.ID); err != nil {
+		t.Fatalf("опустошение шкал: %v", err)
+	}
+	makeSick(t, m.ID, "hunger", 0)
+
+	r := petsAPI.doJSON(t, http.MethodPost, "/api/pets/pet/feed", m.Token, nil)
+	requireStatus(t, r, 200, "первый бульон")
+	if r.Num("recovery") != 2 {
+		t.Fatalf("бульон — верный рецепт от истощения: %s", r.Raw)
+	}
+	r = petsAPI.doJSON(t, http.MethodPost, "/api/pets/pet/feed", m.Token, nil)
+	requireStatus(t, r, 200, "второй бульон")
+	if r.Bool("sick") {
+		t.Fatalf("второй бульон должен вылечить: %s", r.Raw)
+	}
+	needs := r.JSON["needs"].(map[string]any)
+	for _, key := range []string{"satiety", "energy", "hygiene"} {
+		if needs[key].(float64) < 50 {
+			t.Fatalf("шкала %s после выздоровления должна подняться: %s", key, r.Raw)
+		}
+	}
+
+	// Ближайший пересчёт не возвращает болезнь.
+	agePetNeeds(t, m.ID, 95)
+	r = petsAPI.doJSON(t, http.MethodGet, "/api/pets/pet", m.Token, nil)
+	if r.Bool("sick") {
+		t.Fatalf("вылеченный питомец заболел снова: %s", r.Raw)
 	}
 }
 

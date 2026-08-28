@@ -144,14 +144,15 @@ func (p *Pet) Fall(ailment string, now time.Time) {
 	p.Recovery = 0
 }
 
-// Cure — выздороветь (без сохранения). Шкала, из-за которой питомец слёг,
-// поднимается до RecoveredNeedFloor: иначе выздоровевший с нулевой шкалой
-// немедленно заболевал бы снова — ближайший пересчёт потребностей увидел бы
-// тот же ноль и поставил тот же диагноз.
+// Cure — выздороветь (без сохранения). ВСЕ шкалы, способные уложить в
+// болезнь, поднимаются до RecoveredNeedFloor: иначе выздоровевший с нулевой
+// шкалой немедленно заболевал бы снова — ближайший пересчёт потребностей
+// увидел бы ноль и поставил диагноз (сначала тот же, а после подъёма
+// виновника — соседний). Зеркало SQL-лечения (PetRepo.AddRecovery).
 func (p *Pet) Cure() {
-	if need := NeedForAilment(p.AilmentKey()); need != "" {
-		if p.Needs.Get(need) < RecoveredNeedFloor {
-			p.Needs.Set(need, RecoveredNeedFloor)
+	for _, n := range Needs {
+		if n.Ailment != "" && p.Needs.Get(n.Key) < RecoveredNeedFloor {
+			p.Needs.Set(n.Key, RecoveredNeedFloor)
 		}
 	}
 	p.SickSince = nil
@@ -174,6 +175,13 @@ func (p *Pet) ApplyNeedsDecay(now time.Time) bool {
 		return false
 	}
 	p.NeedsAt = p.NeedsAt.Add(time.Duration(ticks) * NeedTick)
+	// Больной питомец дальше не голодает: болезнь и так наказание (XP заморожен,
+	// впереди побег), а продолжающееся убывание опустошало соседние шкалы за
+	// время лечения — вылечив одну хворь, хозяин тут же получал следующую и
+	// прогресс лечения с нуля.
+	if p.Sick() {
+		return true
+	}
 	for _, n := range Needs {
 		p.Needs.Add(n.Key, -n.DecayPerTick*ticks)
 	}
