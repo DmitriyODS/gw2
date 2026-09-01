@@ -190,6 +190,10 @@ ClaimDueReminders — забрать наступившие сроки отве�
 	подзапросе), поэтому при нескольких инстансах сервиса напоминание уходит
 	ровно один раз. Напоминаем за сутки до срока — или сразу, если срок уже
 	ближе; тем, кто уже ответил, не напоминаем вовсе.
+
+	Момент времени уезжает с явным приведением: в выражении `$1 + interval`
+	Postgres выводит тип параметра как interval, и сравнение с timestamptz
+	падает ошибкой оператора — планировщик молча не забирал ни одного срока.
 */
 func (r *Repo) ClaimDueReminders(ctx context.Context, now time.Time, limit int) ([]domain.DueReminder, error) {
 	rows, err := r.pool.Query(ctx, `
@@ -198,7 +202,7 @@ func (r *Repo) ClaimDueReminders(ctx context.Context, now time.Time, limit int) 
 		 WHERE sh.id IN (
 		     SELECT id FROM form_user_shares
 		      WHERE access = 'respond' AND due_at IS NOT NULL AND reminded_at IS NULL
-		        AND due_at <= $1 + interval '24 hours'
+		        AND due_at <= $1::timestamptz + interval '24 hours'
 		      ORDER BY due_at
 		      FOR UPDATE SKIP LOCKED
 		      LIMIT $2)
