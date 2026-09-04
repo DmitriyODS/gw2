@@ -21,9 +21,9 @@
       v-for="(section, si) in draft"
       :key="section.key"
       class="fe-section"
-      :class="{ over: dropSection === si }"
-      @dragover.prevent="onDragOver(si)"
-      @drop.prevent="onDrop(si)"
+      :class="{ over: dropAt?.si === si }"
+      @dragover.prevent="onSectionOver(si)"
+      @drop.prevent="onDrop"
     >
       <AppCard class="fe-section-head" :gap="8">
         <div class="fe-inline">
@@ -95,19 +95,32 @@
       </AppCard>
 
       <AppStack :gap="10">
-        <FormQuestionEditor
+        <!-- Обёртка нужна ради места вставки: половина карточки, над которой
+             держат вопрос, решает, встанет он до неё или после. -->
+        <div
           v-for="(q, qi) in section.questions"
           :key="q.key"
-          :question="q"
-          :sections="draft"
-          :section-index="si"
-          :quiz="quiz"
-          @update="updateQuestion(si, qi, $event)"
-          @remove="removeQuestion(si, qi)"
-          @duplicate="duplicateQuestion(si, qi)"
-          @dragstart="onDragStart(si, qi, $event)"
-          @dragend="onDragEnd"
-        />
+          class="fe-q"
+          :class="{
+            before: isDropAt(si, qi),
+            after: isDropAt(si, qi + 1) && qi === section.questions.length - 1,
+          }"
+          @dragover.prevent.stop="onQuestionOver(si, qi, $event)"
+          @drop.prevent.stop="onDrop"
+        >
+          <FormQuestionEditor
+            :question="q"
+            :sections="draft"
+            :section-index="si"
+            :quiz="quiz"
+            :dragging="dragFrom?.si === si && dragFrom?.qi === qi"
+            @update="updateQuestion(si, qi, $event)"
+            @remove="removeQuestion(si, qi)"
+            @duplicate="duplicateQuestion(si, qi)"
+            @dragstart="onDragStart(si, qi, $event)"
+            @dragend="onDragEnd"
+          />
+        </div>
       </AppStack>
 
       <div class="fe-add">
@@ -330,9 +343,13 @@ function duplicateQuestion(si, qi) {
   draft.value[si].questions = list
 }
 
-// ── Перетаскивание вопросов (в том числе между разделами) ──
+/* ── Перетаскивание вопросов (в том числе между разделами) ──
+
+   Цель переноса — не раздел, а МЕСТО ВСТАВКИ: `dropAt = {si, index}`. Раньше
+   вопрос всегда дописывался в конец раздела, поэтому наверх он не двигался
+   вовсе, а порядок менялся не на тот, что показывал курсор. */
 const dragFrom = ref(null)
-const dropSection = ref(null)
+const dropAt = ref(null)
 
 function onDragStart(si, qi, e) {
   dragFrom.value = { si, qi }
@@ -341,23 +358,51 @@ function onDragStart(si, qi, e) {
   e.dataTransfer.setData('text/plain', `${si}:${qi}`)
 }
 
-function onDragOver(si) {
-  if (dragFrom.value) dropSection.value = si
+function onQuestionOver(si, qi, e) {
+  if (!dragFrom.value) return
+  const rect = e.currentTarget.getBoundingClientRect()
+  const after = e.clientY > rect.top + rect.height / 2
+  dropAt.value = { si, index: qi + (after ? 1 : 0) }
 }
 
-function onDrop(si) {
+// Мимо карточек (пустой раздел, шапка, место под последним вопросом) — в конец.
+function onSectionOver(si) {
+  if (dragFrom.value) dropAt.value = { si, index: draft.value[si].questions.length }
+}
+
+function isDropAt(si, index) {
+  const at = dropAt.value
+  if (!at || !dragFrom.value || at.si !== si || at.index !== index) return false
+  // Место, из которого вопрос взят, за перестановку не считается — линия там
+  // обещала бы перенос, которого не будет.
+  return !(si === dragFrom.value.si && (index === dragFrom.value.qi || index === dragFrom.value.qi + 1))
+}
+
+function onDrop() {
   const from = dragFrom.value
+  const to = dropAt.value
   onDragEnd()
-  if (!from) return
-  const source = draft.value[from.si]
-  const [moved] = source.questions.splice(from.qi, 1)
+  if (!from || !to) return
+
+  const source = [...draft.value[from.si].questions]
+  const [moved] = source.splice(from.qi, 1)
   if (!moved) return
-  draft.value[si].questions = [...draft.value[si].questions, moved]
+
+  if (to.si === from.si) {
+    // Изъятие вопроса сдвинуло на единицу все места ниже него.
+    source.splice(to.index > from.qi ? to.index - 1 : to.index, 0, moved)
+    draft.value[from.si].questions = source
+  } else {
+    draft.value[from.si].questions = source
+    const target = [...draft.value[to.si].questions]
+    target.splice(to.index, 0, moved)
+    draft.value[to.si].questions = target
+  }
 }
 
 function onDragEnd() {
   dragFrom.value = null
-  dropSection.value = null
+  dropAt.value = null
 }
 
 // payload — структура в том виде, в каком её ждёт сервер: ветвление позициями
@@ -429,6 +474,25 @@ defineExpose({ dirty, save, reset })
 }
 
 .fe-section.over { outline-color: var(--color-primary); }
+
+/* Место вставки — линия в промежутке между карточками. Обёртки смыкаются
+   (отрицательное поле гасит внутреннее, раскладка не меняется): иначе курсор в
+   зазоре стопки попадал на раздел, и линия прыгала в конец списка. */
+.fe-q { position: relative; padding: 5px 0; margin: -5px 0; }
+.fe-q::before,
+.fe-q::after {
+  content: '';
+  position: absolute;
+  inset-inline: 0;
+  height: 2px;
+  border-radius: 2px;
+  background: var(--color-primary);
+  opacity: 0;
+}
+.fe-q::before { top: 0; }
+.fe-q::after { bottom: 0; }
+.fe-q.before::before,
+.fe-q.after::after { opacity: 1; }
 .fe-section-head { border-left: 3px solid var(--color-primary); }
 
 .fe-inline { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }

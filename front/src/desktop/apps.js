@@ -88,7 +88,7 @@ export const APPS = [
     /* Компания не нужна: форма принадлежит человеку, а компании и коллеги
        получают её назначением. */
     available: always,
-    about: { version: '1.0.0', date: '2026-08-16' },
+    about: { version: '1.0.1', date: '2026-09-04' },
   },
   {
     id: 'diaries',

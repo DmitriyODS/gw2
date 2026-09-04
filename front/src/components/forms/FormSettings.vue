@@ -222,6 +222,9 @@ function toISO(date) {
 .fst-status { width: 220px; }
 .fst-date { width: 240px; }
 .fst-num { width: 150px; }
+/* Внутренний `input` меряется своим `size` и как flex-элемент не сжимается уже
+   min-content — без этого счётчик вылезал за заданную ширину и накрывал соседа. */
+.fst-num :deep(.p-inputnumber-input) { width: 100%; min-width: 0; }
 .fst-wide { width: 100%; }
 
 @container (max-width: 620px) {

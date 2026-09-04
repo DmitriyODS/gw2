@@ -1,5 +1,5 @@
 <template>
-  <AppCard class="qe" :gap="10">
+  <AppCard class="qe" :class="{ dragging }" :gap="10">
     <!-- Шапка вопроса: рукоятка переноса, текст, тип и действия. -->
     <div class="qe-head">
       <button
@@ -8,7 +8,7 @@
         draggable="true"
         title="Перетащить вопрос"
         aria-label="Перетащить вопрос"
-        @dragstart="$emit('dragstart', $event)"
+        @dragstart="onDragStart"
         @dragend="$emit('dragend')"
       >
         <span class="material-symbols-outlined">drag_indicator</span>
@@ -413,8 +413,21 @@ const props = defineProps({
   /** Индекс раздела, которому принадлежит вопрос. */
   sectionIndex: { type: Number, default: 0 },
   quiz: { type: Boolean, default: false },
+  /** Вопрос сейчас переносят — карточка гаснет, чтобы был виден его новый след. */
+  dragging: { type: Boolean, default: false },
 })
 const emit = defineEmits(['update', 'remove', 'duplicate', 'dragstart', 'dragend'])
+
+/* Тащим всю карточку, а не рукоятку: браузер по умолчанию снимает призрак с
+   самого draggable-элемента, и вопрос переносился еле заметной иконкой.
+   Карточку ищем от рукоятки — `$el` у AppCard не элемент: его шаблон начинается
+   с комментария, то есть корень компонента фрагмент, и `$el` указывает на
+   якорь-комментарий. */
+function onDragStart(e) {
+  const el = e.currentTarget.closest('.qe')
+  if (el) e.dataTransfer.setDragImage(el, 24, 24)
+  emit('dragstart', e)
+}
 
 const typeOptions = QUESTION_TYPES.map((q) => ({ label: q.label, value: q.type }))
 
@@ -566,6 +579,7 @@ function toCsv(text) {
 
 <style scoped>
 .qe { border: 1px solid var(--acrylic-border); }
+.qe.dragging { opacity: .45; }
 
 .qe-head { display: flex; gap: 8px; align-items: flex-start; }
 
@@ -623,6 +637,12 @@ function toCsv(text) {
 .qe-half { flex: 1; min-width: 160px; }
 .qe-small { width: 100px; flex: none; }
 .qe-num { width: 130px; flex: none; }
+
+/* `input` меряется своим `size` (~20 символов) и как flex-элемент не сжимается
+   уже min-content — при заданной ширине счётчика он вылезал за его край и
+   накрывал соседнюю кнопку: клик по «убрать вариант» попадал в поле мест. */
+.qe-num :deep(.p-inputnumber-input),
+.qe-slot-num :deep(.p-inputnumber-input) { width: 100%; min-width: 0; }
 
 .qe-quiz {
   padding: 10px;
