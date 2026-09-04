@@ -192,7 +192,8 @@ func (a *aggregate) add(v any) {
 	}
 	a.answered++
 	switch a.q.Type {
-	case domain.QRadio, domain.QDropdown:
+	// «Запись» хранит ответ так же, как одиночный выбор: одно название варианта.
+	case domain.QRadio, domain.QDropdown, domain.QBooking:
 		a.counts[domain.Text(v)]++
 	case domain.QCheckbox:
 		for _, item := range domain.List(v) {

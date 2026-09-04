@@ -631,6 +631,43 @@ func TestSummaryCounts(t *testing.T) {
 	}
 }
 
+// «Запись» — тот же одиночный выбор: сводка обязана считать её по вариантам,
+// а не показывать нули при пришедших ответах.
+func TestSummaryCountsBooking(t *testing.T) {
+	s := newStand()
+	s.repo.sections[0].Questions = append(s.repo.sections[0].Questions, domain.Question{
+		ID: 103, Type: domain.QBooking, Title: "Время",
+		Config: map[string]any{"options": []any{"08:30", "09:00"}},
+	})
+	s.repo.responses[1] = &domain.Response{ID: 1, FormID: 1, CreatedAt: time.Now(),
+		Answers: map[string]any{"103": "09:00"}}
+	s.repo.responses[2] = &domain.Response{ID: 2, FormID: 1, CreatedAt: time.Now(),
+		Answers: map[string]any{"103": "09:00"}}
+
+	sum, err := s.svc.Summary(ctx(), ownerID, 1)
+	if err != nil {
+		t.Fatalf("сводка: %v", err)
+	}
+	var booking *QuestionSummary
+	for i := range sum.Questions {
+		if sum.Questions[i].QuestionID == 103 {
+			booking = &sum.Questions[i]
+		}
+	}
+	if booking == nil {
+		t.Fatal("вопрос записи пропал из сводки")
+	}
+	if booking.Answered != 2 {
+		t.Fatalf("ответивших %d, ожидалось 2", booking.Answered)
+	}
+	if len(booking.Options) != 2 || booking.Options[0].Count != 0 || booking.Options[1].Count != 2 {
+		t.Fatalf("распределение записей: %#v", booking.Options)
+	}
+	if len(booking.Texts) != 0 {
+		t.Fatalf("ответы записи ушли в текстовые примеры: %#v", booking.Texts)
+	}
+}
+
 // mustErr — вернуть ошибку из пары (значение, ошибка) в проверках доступа.
 func mustErr[T any](_ T, err error) error { return err }
 
