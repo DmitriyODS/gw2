@@ -40,7 +40,7 @@ export const deleteCategory = (scheduleId, categoryId) =>
   apiRequest(`/schedules/${scheduleId}/categories/${categoryId}`, { method: 'DELETE' })
 
 // ── Поля карточки занятия ──
-// fields: [{ id?, label, type, config, col_span, row_span, show_on_block, show_in_card }].
+// fields: [{ id?, label, type, config, col_span, row_span, show_in_card }].
 // Известный id сохраняется: по нему лежат значения в занятиях.
 export const replaceFields = (scheduleId, fields) =>
   apiRequest(`/schedules/${scheduleId}/fields`, { method: 'PUT', body: { fields } })

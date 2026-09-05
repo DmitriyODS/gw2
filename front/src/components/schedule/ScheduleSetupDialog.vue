@@ -137,7 +137,6 @@
           option-label="label"
           option-value="value"
         />
-        <AppSwitch v-model="f.show_on_block" label="На шкале" />
         <div class="ss-field-tools">
           <AppButton variant="icon" icon="arrow_upward" label="Выше" :disabled="i === 0" @click="moveField(i, -1)" />
           <AppButton variant="icon" icon="arrow_downward" label="Ниже" :disabled="i === fields.length - 1" @click="moveField(i, 1)" />
@@ -311,7 +310,6 @@ watch(() => (props.modelValue ? props.schedule?.id ?? 0 : 0), (id) => {
     config: { ...(f.config || {}) },
     col_span: f.col_span || 1,
     row_span: f.row_span || 1,
-    show_on_block: !!f.show_on_block,
     show_in_card: f.show_in_card !== false,
     optionsText: (f.config?.options || []).join('\n'),
   }))
@@ -385,7 +383,7 @@ async function dropCategory(category) {
 function addField() {
   fields.value.push({
     key: `f${(fieldKeySeq += 1)}`, id: 0, label: '', type: 'text', config: {},
-    col_span: 1, row_span: 1, show_on_block: false, show_in_card: true, optionsText: '',
+    col_span: 1, row_span: 1, show_in_card: true, optionsText: '',
   })
 }
 
@@ -420,7 +418,6 @@ async function save() {
           : f.config,
         col_span: f.col_span,
         row_span: f.row_span,
-        show_on_block: f.show_on_block,
         show_in_card: f.show_in_card,
       })))
     close()
@@ -467,7 +464,7 @@ async function removeSchedule() {
 
 .ss-field-row {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 150px) auto auto;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 150px) auto;
   align-items: center;
   gap: 8px;
   padding: 8px;

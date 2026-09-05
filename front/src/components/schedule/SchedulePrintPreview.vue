@@ -130,7 +130,8 @@ function metaOf(item) {
   const parts = []
   const category = categories.value[item.category_id]
   if (category) parts.push(category.name)
-  ;(props.schedule?.fields || []).filter((f) => f.show_on_block).forEach((f) => {
+  // Те же значения, что и на экранной шкале: печать — её снимок.
+  ;(props.schedule?.fields || []).forEach((f) => {
     const value = item.data?.[String(f.id)]
     if (value != null && value !== '') parts.push(String(value))
   })

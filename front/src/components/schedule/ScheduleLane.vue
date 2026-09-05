@@ -96,9 +96,10 @@ const hours = computed(() => {
 const gaps = computed(() => gapsOf(props.items, props.gapMin))
 const groups = computed(() => clusters(props.items))
 
-// Поля, вынесенные на блок шкалы (аудитория, преподаватель): подпись под
-// названием — как «лекция · 2-3.10» в прототипе.
-const blockFields = computed(() => props.fields.filter((f) => f.show_on_block))
+/* Подпись под названием — категория и ЗАПОЛНЕННЫЕ поля занятия («лекция ·
+   ауд. 305 · Иванов»). Показываем все: заведённое и заполненное поле человек
+   хочет видеть, а не искать за отдельным тумблером — пустые не мешают, потому
+   что их в подписи нет вовсе. */
 
 function pct(minute) { return `${scalePercent(minute, props.bounds).toFixed(3)}%` }
 
@@ -124,7 +125,7 @@ function metaOf(item) {
   const parts = []
   const category = props.categories[item.category_id]
   if (category) parts.push(category.name)
-  blockFields.value.forEach((f) => {
+  props.fields.forEach((f) => {
     const value = item.data?.[String(f.id)]
     if (value != null && value !== '') parts.push(String(value))
   })
@@ -244,7 +245,16 @@ button.sl-block:hover {
   overflow-wrap: anywhere;
 }
 .dense .sl-title { font-size: 12px; }
-.dense .sl-meta { display: none; }
+/* В недельных колонках подпись остаётся, но не больше двух строк: блок короткого
+   занятия иначе распирало бы перечисление полей. Лишнее скрывает overflow
+   самого блока. */
+.dense .sl-meta {
+  font-size: 10.5px;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+}
 
 /* Накладка: рамка-предупреждение и строки-занятия внутри. */
 .clash {
