@@ -17,12 +17,15 @@
         @menu="toggle"
       >
         <template #subhead>
+          <!-- На телефоне вкладки занимают всю ширину: узкая пилюля по
+               содержимому оставляла справа пустую половину строки. -->
           <AppTabs
             :model-value="store.tab"
             :tabs="[
               { value: 'mine', label: 'Мои' },
               { value: 'shared', label: 'Поделились' },
             ]"
+            :full-width="narrow"
             @update:model-value="store.setTab($event)"
           />
         </template>
