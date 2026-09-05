@@ -183,7 +183,7 @@ const scaleStyle = computed(() => ({
   position: relative;
   display: grid;
   grid-template-columns: var(--st-rail) minmax(0, 1fr);
-  gap: 6px;
+  gap: 4px;
   flex: 1;
   min-height: 0;
   /* Шкала прокручивается сама: у раздела scroll=false, и без своей прокрутки
@@ -195,9 +195,12 @@ const scaleStyle = computed(() => ({
 }
 
 .st {
-  --st-rail: 52px;
+  --st-rail: 46px;
 }
-.st.day { --st-rail: 56px; }
+/* На телефоне рейка была ШИРЕ настольной (56px) — полоса пустоты в половину
+   пальца там, где место дороже всего. Подписи часов одинаковой ширины
+   («08:00»), поэтому рейке хватает их самих плюс узкий зазор. */
+.st.day { --st-rail: 36px; }
 
 /* Рейка часов и колонки дней растягиваются на всю высоту области, а
    --st-height остаётся МИНИМУМОМ: занятия и подписи часов позиционируются
@@ -210,7 +213,7 @@ const scaleStyle = computed(() => ({
 }
 .st-rail-hour {
   position: absolute;
-  right: 8px;
+  right: 5px;
   transform: translateY(-50%);
   font-size: 11px;
   line-height: 1;
@@ -239,4 +242,5 @@ const scaleStyle = computed(() => ({
   border-color: color-mix(in oklch, var(--color-primary) 35%, transparent);
 }
 .st.day .st-cols { grid-template-columns: minmax(0, 1fr); }
+.st.day .st-rail-hour { font-size: 10.5px; }
 </style>
