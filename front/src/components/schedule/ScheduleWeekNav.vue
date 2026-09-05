@@ -70,12 +70,16 @@ defineEmits(['step', 'today'])
 .swn.wide { flex: 1 1 100%; }
 .swn.wide .swn-range { flex: 1; }
 
+/* По ЦЕНТРУ, а не по базовой линии: диапазон и неделя цикла разного кегля, и
+   baseline прижимал обе строки к верху пилюли — снизу оставалось поля больше,
+   чем сверху. */
 .swn-range {
   display: inline-flex;
-  align-items: baseline;
+  align-items: center;
   justify-content: center;
   gap: 8px;
   min-width: 0;
+  line-height: 1.2;
   padding: 4px 10px;
   border: none;
   border-radius: var(--radius-full);
@@ -90,5 +94,5 @@ defineEmits(['step', 'today'])
 .swn-range:hover { background: var(--color-surface-high); }
 .swn-range.away { color: var(--color-primary); }
 
-.swn-cycle { font-size: 12px; font-weight: 600; color: var(--color-text-dim); }
+.swn-cycle { font-size: 12px; font-weight: 600; line-height: 1.2; color: var(--color-text-dim); }
 </style>
