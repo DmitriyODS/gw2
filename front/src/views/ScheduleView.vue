@@ -278,6 +278,7 @@ import ScheduleShareDialog from '@/components/schedule/ScheduleShareDialog.vue'
 import ScheduleSummary from '@/components/schedule/ScheduleSummary.vue'
 import ScheduleTimeline from '@/components/schedule/ScheduleTimeline.vue'
 import ScheduleWeekNav from '@/components/schedule/ScheduleWeekNav.vue'
+import { useBreakpoint } from '@/composables/useBreakpoint.js'
 import { useSchedulesStore } from '@/stores/schedules.js'
 import { useNotificationsStore } from '@/stores/notifications.js'
 import { exportSchedule, importInto } from '@/api/schedules.js'
@@ -287,6 +288,8 @@ import { saveBlob } from '@/utils/download.js'
 
 const route = useRoute()
 const store = useSchedulesStore()
+// Плавающая кнопка — приём ТЕЛЕФОНА, а не узкой панели: решает устройство.
+const { isMobile } = useBreakpoint()
 const notif = useNotificationsStore()
 
 // Узкая раскладка — свойство самой панели (раздел живёт окном рабочего стола),
@@ -372,7 +375,14 @@ const commands = computed(() => {
   if (!store.selected) return []
   const own = !store.readonly
   return [
-    ...(own ? [{ key: 'add', label: 'Занятие', icon: 'add', variant: 'filled', primary: true, fab: true }] : []),
+    /* На телефоне «Занятие» — обычный пункт меню: плавающая кнопка накрывала
+       шкалу, а занятие там и так заводится тапом по свободному месту в
+       конструкторе. На широком экране это главное действие раздела. */
+    ...(own
+      ? [isMobile.value
+          ? { key: 'add', label: 'Новое занятие', icon: 'add' }
+          : { key: 'add', label: 'Занятие', icon: 'add', variant: 'filled', primary: true }]
+      : []),
     /* Конструктор — режим редактирования, а не постоянный инструмент: в шапке
        он занимал место у каждого, кто просто смотрит расписание. */
     ...(own
