@@ -17,35 +17,40 @@
 
     <!-- Цикл: его длина и названия недель. -->
     <AppStack v-if="tab === 'cycle'" :gap="14" class="ss-pane">
-      <div class="ss-field">
-        <label class="ss-label">Название</label>
-        <input v-model="form.name" class="ctl" type="text" maxlength="120" />
-      </div>
+      <AppField v-slot="{ id }" label="Название" required>
+        <InputText :id="id" v-model="form.name" maxlength="120" />
+      </AppField>
 
       <div class="ss-row">
-        <div class="ss-field">
-          <label class="ss-label">Недель в цикле</label>
-          <select v-model.number="form.cycle_weeks" class="ctl">
-            <option v-for="n in MAX_CYCLE_WEEKS" :key="n" :value="n">{{ n }}</option>
-          </select>
-        </div>
-        <div class="ss-field">
-          <label class="ss-label">Первая неделя цикла</label>
-          <input v-model="form.cycle_anchor" class="ctl" type="date" />
-        </div>
+        <AppField v-slot="{ id }" label="Недель в цикле">
+          <Select
+            v-model="form.cycle_weeks"
+            :input-id="id"
+            :options="cycleOptions"
+            option-label="label"
+            option-value="value"
+          />
+        </AppField>
+        <AppField v-slot="{ id }" label="Первая неделя цикла" hint="Приводится к понедельнику">
+          <DatePicker
+            v-model="anchorDate"
+            :input-id="id"
+            date-format="dd.mm.yy"
+            show-icon
+            icon-display="input"
+            placeholder="Выберите"
+          />
+        </AppField>
       </div>
 
       <!-- Названия недель: «Числитель» и «Знаменатель» при цикле из двух,
            «А/Б/В» при трёх. Пустое поле подписывается «Неделя N». -->
-      <div v-if="form.cycle_weeks > 1" class="ss-field">
-        <label class="ss-label">Как называть недели</label>
+      <AppField v-if="form.cycle_weeks > 1" label="Как называть недели">
         <div class="ss-labels">
-          <input
+          <InputText
             v-for="n in form.cycle_weeks"
             :key="n"
             v-model="form.week_labels[n - 1]"
-            class="ctl"
-            type="text"
             maxlength="40"
             :placeholder="`Неделя ${n}`"
           />
@@ -56,15 +61,18 @@
           label="Числитель и знаменатель"
           @click="form.week_labels = ['Числитель', 'Знаменатель']"
         />
-      </div>
+      </AppField>
 
-      <div class="ss-field">
-        <label class="ss-label">Часовой пояс</label>
-        <select v-model="form.timezone" class="ctl">
-          <option v-for="tz in TIMEZONES" :key="tz.value" :value="tz.value">{{ tz.label }}</option>
-        </select>
-        <span class="ss-hint">По нему считаются «сегодня» и линия «сейчас».</span>
-      </div>
+      <AppField v-slot="{ id }" label="Часовой пояс" hint="По нему считаются «сегодня» и линия «сейчас»">
+        <Select
+          v-model="form.timezone"
+          :input-id="id"
+          :options="TIMEZONES"
+          option-label="label"
+          option-value="value"
+          filter
+        />
+      </AppField>
 
       <AppInfoBar
         v-if="cycleShrinks"
@@ -83,10 +91,8 @@
         subtitle="Категория красит занятие и собирает похожие вместе."
       />
       <div v-for="c in categories" :key="c.id" class="ss-cat">
-        <input
-          :value="c.name"
-          class="ctl"
-          type="text"
+        <InputText
+          :model-value="c.name"
           maxlength="80"
           @change="renameCategory(c, $event.target.value)"
         />
@@ -103,10 +109,8 @@
         />
       </div>
       <div class="ss-cat-new">
-        <input
+        <InputText
           v-model="newCategory"
-          class="ctl"
-          type="text"
           maxlength="80"
           placeholder="Например, Лекция"
           @keyup.enter="addCategory"
@@ -125,10 +129,14 @@
         subtitle="Поле показывает у занятия что-то ещё: аудиторию, преподавателя, ссылку."
       />
       <div v-for="(f, i) in fields" :key="f.key" class="ss-field-row">
-        <input v-model="f.label" class="ctl ss-field-label" type="text" maxlength="120" placeholder="Название поля" />
-        <select v-model="f.type" class="ctl ss-field-type">
-          <option v-for="t in FIELD_TYPES" :key="t.value" :value="t.value">{{ t.label }}</option>
-        </select>
+        <InputText v-model="f.label" class="ss-field-label" maxlength="120" placeholder="Название поля" />
+        <Select
+          v-model="f.type"
+          class="ss-field-type"
+          :options="FIELD_TYPES"
+          option-label="label"
+          option-value="value"
+        />
         <AppSwitch v-model="f.show_on_block" label="На шкале" />
         <div class="ss-field-tools">
           <AppButton variant="icon" icon="arrow_upward" label="Выше" :disabled="i === 0" @click="moveField(i, -1)" />
@@ -137,10 +145,10 @@
         </div>
         <!-- Варианты списка задаются построчно: их правит тот же человек, что
              и заводит поле, и отдельный экран здесь только мешает. -->
-        <textarea
+        <Textarea
           v-if="f.type === 'select'"
           v-model="f.optionsText"
-          class="ctl ss-field-options"
+          class="ss-field-options"
           rows="2"
           placeholder="Варианты, по одному на строку"
         />
@@ -148,7 +156,7 @@
       <AppButton variant="glass" icon="add" label="Добавить поле" @click="addField" />
     </AppStack>
 
-    <span v-if="error" class="ss-error">{{ error }}</span>
+    <AppInfoBar v-if="error" tone="error" :message="error" compact />
 
     <template #footer>
       <AppButton
@@ -178,8 +186,13 @@
 
 <script setup>
 import { computed, reactive, ref, watch } from 'vue'
+import DatePicker from 'primevue/datepicker'
+import InputText from 'primevue/inputtext'
+import Select from 'primevue/select'
+import Textarea from 'primevue/textarea'
 import AppButton from '@/components/ui/AppButton.vue'
 import AppDialog from '@/components/ui/AppDialog.vue'
+import AppField from '@/components/ui/AppField.vue'
 import AppInfoBar from '@/components/ui/AppInfoBar.vue'
 import AppStack from '@/components/ui/AppStack.vue'
 import AppSwitch from '@/components/ui/AppSwitch.vue'
@@ -187,7 +200,7 @@ import AppTabs from '@/components/ui/AppTabs.vue'
 import ConfirmDialog from '@/components/ui/ConfirmDialog.vue'
 import ColorSwatchPicker from '@/components/common/ColorSwatchPicker.vue'
 import EmptyState from '@/components/common/EmptyState.vue'
-import { MAX_CYCLE_WEEKS, dateKey } from '@/utils/scheduleCycle.js'
+import { MAX_CYCLE_WEEKS, dateKey, utcDay } from '@/utils/scheduleCycle.js'
 import { TASK_COLOR_IDS } from '@/utils/taskColors.js'
 
 // Палитра категорий — та же восьмёрка цветов-тегов (домен: domain.CategoryColors).
@@ -248,6 +261,13 @@ const form = reactive({
 const fields = ref([])
 
 const categories = computed(() => props.schedule?.categories || [])
+const cycleOptions = Array.from({ length: MAX_CYCLE_WEEKS }, (_, i) => ({ value: i + 1, label: String(i + 1) }))
+
+// DatePicker работает с Date, сервер — с днём «YYYY-MM-DD».
+const anchorDate = computed({
+  get: () => (form.cycle_anchor ? utcDay(form.cycle_anchor) : null),
+  set: (value) => { form.cycle_anchor = value ? dateKey(value) : '' },
+})
 const cycleShrinks = computed(() => form.cycle_weeks < (props.schedule?.cycle_weeks || 1))
 
 let fieldKeySeq = 0
@@ -383,9 +403,6 @@ async function removeSchedule() {
 
 <style scoped>
 .ss-pane { padding-top: 14px; }
-.ss-field { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
-.ss-label { font-size: 12px; color: var(--color-on-surface-variant); }
-.ss-hint { font-size: 12px; color: var(--color-on-surface-variant); }
 .ss-row {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(min(180px, 100%), 1fr));
@@ -402,7 +419,7 @@ async function removeSchedule() {
   align-items: center;
   gap: 8px;
 }
-.ss-cat .ctl, .ss-cat-new .ctl { flex: 1; min-width: 0; }
+.ss-cat > :deep(.p-inputtext), .ss-cat-new > :deep(.p-inputtext) { flex: 1; min-width: 0; }
 
 .ss-field-row {
   display: grid;
@@ -411,7 +428,7 @@ async function removeSchedule() {
   gap: 8px;
   padding: 8px;
   border-radius: var(--radius-sm);
-  background: var(--color-surface-container-lowest);
+  background: var(--color-surface-low);
 }
 .ss-field-options { grid-column: 1 / -1; }
 .ss-field-tools { display: flex; gap: 2px; }
@@ -420,6 +437,5 @@ async function removeSchedule() {
   .ss-field-type { grid-column: 1 / -1; }
 }
 
-.ss-error { display: block; padding-top: 10px; font-size: 13px; color: var(--color-error); }
 .ss-spacer { flex: 1; }
 </style>

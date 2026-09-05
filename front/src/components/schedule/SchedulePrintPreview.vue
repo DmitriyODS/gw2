@@ -200,7 +200,7 @@ function print() {
   overflow-x: auto;
   padding: 10px;
   border-radius: var(--radius-sm);
-  background: var(--color-surface-container-lowest);
+  background: var(--color-surface-low);
 }
 .pp-table {
   width: 100%;
@@ -208,14 +208,14 @@ function print() {
   font-size: 12px;
 }
 .pp-table th, .pp-table td {
-  border: 1px solid var(--color-outline-variant);
+  border: 1px solid var(--color-outline-dim);
   padding: 4px 6px;
   vertical-align: top;
   text-align: left;
   overflow-wrap: anywhere;
 }
-.pp-table th { background: var(--color-surface-container); font-weight: 600; }
+.pp-table th { background: var(--color-surface-high); font-weight: 600; }
 .pp-time { white-space: nowrap; font-variant-numeric: tabular-nums; }
-.pp-empty { margin: 0; padding-top: 8px; font-size: 13px; color: var(--color-on-surface-variant); }
+.pp-empty { margin: 0; padding-top: 8px; font-size: 13px; color: var(--color-text-dim); }
 .pp-spacer { flex: 1; }
 </style>

@@ -165,7 +165,7 @@ function onLaneClick(event) {
   position: absolute;
   left: 0;
   right: 0;
-  border-top: 1px solid var(--color-outline-variant);
+  border-top: 1px solid var(--color-outline-dim);
   opacity: 0.5;
   pointer-events: none;
 }
@@ -176,7 +176,7 @@ function onLaneClick(event) {
   display: grid;
   place-items: center;
   font-size: 12px;
-  color: var(--color-on-surface-variant);
+  color: var(--color-text-dim);
   opacity: 0.6;
   pointer-events: none;
 }
@@ -187,10 +187,10 @@ function onLaneClick(event) {
   right: 2px;
   display: grid;
   place-items: center;
-  border: 1px dashed var(--color-outline-variant);
+  border: 1px dashed var(--color-outline-dim);
   border-radius: var(--radius-sm);
   background: transparent;
-  color: var(--color-on-surface-variant);
+  color: var(--color-text-dim);
   font-size: 11px;
   padding: 0;
 }
@@ -212,9 +212,9 @@ button.sl-gap:hover {
   padding: 4px 6px;
   text-align: left;
   border-radius: var(--radius-sm);
-  border: 1px solid var(--sl-border, var(--color-outline-variant));
-  background: var(--sl-surface, var(--color-surface-container));
-  color: var(--color-on-surface);
+  border: 1px solid var(--sl-border, var(--color-outline-dim));
+  background: var(--sl-surface, var(--color-surface-high));
+  color: var(--color-text);
   font: inherit;
 }
 button.sl-block { cursor: pointer; }
@@ -223,7 +223,7 @@ button.sl-block:hover { filter: brightness(1.04); }
 .sl-time {
   font-size: 11px;
   font-variant-numeric: tabular-nums;
-  color: var(--sl-accent, var(--color-on-surface-variant));
+  color: var(--sl-accent, var(--color-text-dim));
 }
 .sl-title {
   font-size: 13px;
@@ -232,7 +232,7 @@ button.sl-block:hover { filter: brightness(1.04); }
 }
 .sl-meta {
   font-size: 11px;
-  color: var(--color-on-surface-variant);
+  color: var(--color-text-dim);
   overflow-wrap: anywhere;
 }
 .dense .sl-title { font-size: 12px; }
@@ -256,15 +256,15 @@ button.sl-block:hover { filter: brightness(1.04); }
   padding: 2px 4px;
   text-align: left;
   border-radius: var(--radius-xs);
-  border: 1px solid var(--sl-border, var(--color-outline-variant));
+  border: 1px solid var(--sl-border, var(--color-outline-dim));
   background: var(--sl-surface, var(--color-surface));
-  color: var(--color-on-surface);
+  color: var(--color-text);
   font: inherit;
   font-size: 11px;
 }
 button.sl-row { cursor: pointer; }
 .sl-row b { font-size: 12px; }
-.sl-row span { color: var(--color-on-surface-variant); }
+.sl-row span { color: var(--color-text-dim); }
 
 .sl-now {
   position: absolute;

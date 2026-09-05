@@ -137,12 +137,12 @@ const scaleStyle = computed(() => ({
   padding: 2px 6px;
   border-radius: var(--radius-sm);
   font-size: 12px;
-  color: var(--color-on-surface-variant);
+  color: var(--color-text-dim);
   overflow: hidden;
 }
 .st-col-head b {
   font-size: 13px;
-  color: var(--color-on-surface);
+  color: var(--color-text);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -182,7 +182,7 @@ const scaleStyle = computed(() => ({
   transform: translateY(-50%);
   font-size: 11px;
   font-variant-numeric: tabular-nums;
-  color: var(--color-on-surface-variant);
+  color: var(--color-text-dim);
 }
 
 .st-cols {
@@ -195,8 +195,8 @@ const scaleStyle = computed(() => ({
   position: relative;
   min-width: 0;
   border-radius: var(--radius-sm);
-  background: var(--color-surface-container-lowest);
+  background: var(--color-surface-low);
 }
-.st-col.today { background: var(--color-surface-container); }
+.st-col.today { background: var(--color-surface-high); }
 .st.day .st-cols { grid-template-columns: minmax(0, 1fr); }
 </style>

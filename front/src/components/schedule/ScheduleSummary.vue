@@ -37,11 +37,11 @@ const clashes = computed(() => clusters(props.items).filter((g) => g.length > 1)
   gap: 6px 14px;
   padding: 6px 10px;
   border-radius: var(--radius-sm);
-  background: var(--color-surface-container-lowest);
+  background: var(--color-surface-low);
   font-size: 12px;
-  color: var(--color-on-surface-variant);
+  color: var(--color-text-dim);
 }
-.ssum-day { font-weight: 600; color: var(--color-on-surface); }
+.ssum-day { font-weight: 600; color: var(--color-text); }
 .ssum-clash { color: var(--color-error); }
 .ssum-range { margin-left: auto; font-variant-numeric: tabular-nums; }
 </style>

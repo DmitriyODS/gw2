@@ -53,10 +53,15 @@
         </ul>
 
         <div v-if="companies.length" class="sh-add">
-          <select v-model="pickCompany" class="ctl">
-            <option :value="null">Компания целиком…</option>
-            <option v-for="c in companies" :key="c.id" :value="c.id">{{ c.name }}</option>
-          </select>
+          <Select
+            v-model="pickCompany"
+            :options="companies"
+            option-label="name"
+            option-value="id"
+            placeholder="Компания целиком…"
+            show-clear
+            class="sh-company"
+          />
           <AppButton
             variant="filled"
             icon="add"
@@ -86,15 +91,17 @@
         </div>
       </template>
 
-      <span v-if="error" class="sh-error">{{ error }}</span>
+      <AppInfoBar v-if="error" tone="error" :message="error" compact />
     </AppStack>
   </AppDialog>
 </template>
 
 <script setup>
 import { ref, watch } from 'vue'
+import Select from 'primevue/select'
 import AppButton from '@/components/ui/AppButton.vue'
 import AppDialog from '@/components/ui/AppDialog.vue'
+import AppInfoBar from '@/components/ui/AppInfoBar.vue'
 import AppStack from '@/components/ui/AppStack.vue'
 import AppTabs from '@/components/ui/AppTabs.vue'
 import EmptyState from '@/components/common/EmptyState.vue'
@@ -231,16 +238,15 @@ async function drop(share) {
   gap: 8px;
   padding: 6px 8px;
   border-radius: var(--radius-sm);
-  background: var(--color-surface-container-lowest);
+  background: var(--color-surface-low);
 }
-.sh-icon { font-size: 18px; color: var(--color-on-surface-variant); }
+.sh-icon { font-size: 18px; color: var(--color-text-dim); }
 .sh-name { min-width: 0; overflow-wrap: anywhere; font-size: 13px; }
-.sh-name small { color: var(--color-on-surface-variant); }
+.sh-name small { color: var(--color-text-dim); }
 .sh-spacer { flex: 1; }
 
 .sh-add { display: flex; align-items: center; gap: 8px; }
-.sh-search, .sh-add .ctl { flex: 1; min-width: 0; }
+.sh-search, .sh-company { flex: 1; min-width: 0; }
 .sh-current { display: flex; flex-direction: column; gap: 6px; }
-.sh-title { font-size: 12px; color: var(--color-on-surface-variant); }
-.sh-error { font-size: 13px; color: var(--color-error); }
+.sh-title { font-size: 12px; color: var(--color-text-dim); }
 </style>

@@ -9,52 +9,56 @@
     <AppStack :gap="14">
       <!-- Название и короткое имя: второе показывается в узких колонках недели
            и на телефоне, где полное название не умещается. -->
-      <div class="si-field">
-        <label class="si-label">Название<span class="si-req">*</span></label>
-        <input v-model="form.title" class="ctl" type="text" maxlength="200" placeholder="Например, Матанализ" />
+      <AppField v-slot="{ id }" label="Название" required>
+        <InputText :id="id" v-model="form.title" maxlength="200" placeholder="Например, Матанализ" />
+      </AppField>
+
+      <div class="si-row">
+        <AppField v-slot="{ id }" label="Коротко" hint="Показывается в узких колонках">
+          <InputText :id="id" v-model="form.short" maxlength="60" placeholder="Матан" />
+        </AppField>
+        <AppField v-slot="{ id }" label="Категория">
+          <Select
+            v-model="form.category_id"
+            :input-id="id"
+            :options="categoryOptions"
+            option-label="label"
+            option-value="value"
+            placeholder="Без категории"
+            show-clear
+          />
+        </AppField>
       </div>
 
       <div class="si-row">
-        <div class="si-field">
-          <label class="si-label">Коротко</label>
-          <input v-model="form.short" class="ctl" type="text" maxlength="60" placeholder="Матан" />
-        </div>
-        <div class="si-field">
-          <label class="si-label">Категория</label>
-          <select v-model="form.category_id" class="ctl">
-            <option :value="null">Без категории</option>
-            <option v-for="c in categories" :key="c.id" :value="c.id">{{ c.name }}</option>
-          </select>
-        </div>
-      </div>
-
-      <div class="si-row">
-        <div class="si-field">
-          <label class="si-label">День недели<span class="si-req">*</span></label>
-          <select v-model.number="form.weekday" class="ctl">
-            <option v-for="(d, i) in WEEKDAYS" :key="i" :value="i">{{ d.full }}</option>
-          </select>
-        </div>
-        <div class="si-field">
-          <label class="si-label">Начало<span class="si-req">*</span></label>
+        <AppField v-slot="{ id }" label="День недели" required>
+          <Select
+            v-model="form.weekday"
+            :input-id="id"
+            :options="weekdayOptions"
+            option-label="label"
+            option-value="value"
+          />
+        </AppField>
+        <AppField label="Начало" required>
           <TimePicker v-model="startTime" />
-        </div>
-        <div class="si-field">
-          <label class="si-label">Конец<span class="si-req">*</span></label>
+        </AppField>
+        <AppField label="Конец" required>
           <TimePicker v-model="endTime" />
-        </div>
+        </AppField>
       </div>
 
       <!-- Повтор: либо недели цикла, либо своё правило. Два описания одного
            занятия противоречили бы друг другу, поэтому переключатель один. -->
-      <div class="si-field">
-        <label class="si-label">Повторяется</label>
+      <AppField label="Повторяется">
         <AppTabs
           v-model="repeatMode"
           :tabs="[
             { value: 'cycle', label: cycleTabLabel },
             { value: 'own', label: 'Своё правило' },
           ]"
+          variant="tint"
+          dense
         />
 
         <div v-if="repeatMode === 'cycle'" class="si-weeks">
@@ -66,49 +70,55 @@
             interactive
             @click="toggleWeek(w)"
           />
-          <span class="si-hint">{{ weeksHint }}</span>
+          <span v-if="weeksHint" class="si-hint">{{ weeksHint }}</span>
         </div>
 
-        <div v-else class="si-own">
-          <div class="si-row">
-            <div class="si-field">
-              <label class="si-label">Каждые</label>
-              <div class="si-inline">
-                <input v-model.number="form.repeat_every" class="ctl si-num" type="number" min="1" max="52" />
-                <span>нед.</span>
-              </div>
-            </div>
-            <div class="si-field">
-              <label class="si-label">С недели</label>
-              <input v-model="form.repeat_from" class="ctl" type="date" />
-            </div>
-            <div class="si-field">
-              <label class="si-label">По неделю</label>
-              <input v-model="form.repeat_until" class="ctl" type="date" />
-            </div>
-          </div>
-          <span class="si-hint">Дата приводится к понедельнику своей недели.</span>
+        <div v-else class="si-row si-own">
+          <AppField v-slot="{ id }" label="Каждые (недель)">
+            <InputNumber v-model="form.repeat_every" :input-id="id" :min="1" :max="52" show-buttons />
+          </AppField>
+          <AppField v-slot="{ id }" label="С недели" hint="Приводится к понедельнику">
+            <DatePicker
+              v-model="repeatFrom"
+              :input-id="id"
+              date-format="dd.mm.yy"
+              show-icon
+              icon-display="input"
+              show-button-bar
+              placeholder="Выберите"
+            />
+          </AppField>
+          <AppField v-slot="{ id }" label="По неделю" hint="Можно не задавать">
+            <DatePicker
+              v-model="repeatUntil"
+              :input-id="id"
+              date-format="dd.mm.yy"
+              show-icon
+              icon-display="input"
+              show-button-bar
+              placeholder="Без конца"
+            />
+          </AppField>
         </div>
-      </div>
+      </AppField>
 
       <!-- Дополнительные поля карточки: их набор задаёт само расписание. -->
       <div v-if="fields.length" class="si-grid">
-        <div
+        <AppField
           v-for="f in fields"
           :key="f.id"
-          class="si-field"
+          :label="f.label"
           :style="{ gridColumn: `span ${Math.min(f.col_span || 1, 2)}` }"
         >
-          <label class="si-label">{{ f.label }}</label>
           <FieldInput
             :field="f"
             :model-value="form.data[String(f.id)] ?? null"
             @update:model-value="form.data[String(f.id)] = $event"
           />
-        </div>
+        </AppField>
       </div>
 
-      <span v-if="error" class="si-error">{{ error }}</span>
+      <AppInfoBar v-if="error" tone="error" :message="error" compact />
     </AppStack>
 
     <template #footer>
@@ -145,15 +155,21 @@
 
 <script setup>
 import { computed, reactive, ref, watch } from 'vue'
+import DatePicker from 'primevue/datepicker'
+import InputNumber from 'primevue/inputnumber'
+import InputText from 'primevue/inputtext'
+import Select from 'primevue/select'
 import AppButton from '@/components/ui/AppButton.vue'
 import AppChip from '@/components/ui/AppChip.vue'
 import AppDialog from '@/components/ui/AppDialog.vue'
+import AppField from '@/components/ui/AppField.vue'
+import AppInfoBar from '@/components/ui/AppInfoBar.vue'
 import AppStack from '@/components/ui/AppStack.vue'
 import AppTabs from '@/components/ui/AppTabs.vue'
 import ConfirmDialog from '@/components/ui/ConfirmDialog.vue'
 import FieldInput from '@/components/common/FieldInput.vue'
 import TimePicker from '@/components/common/TimePicker.vue'
-import { WEEKDAYS, hhmm, toMinutes, weekLabel } from '@/utils/scheduleCycle.js'
+import { WEEKDAYS, dateKey, hhmm, toMinutes, utcDay, weekLabel } from '@/utils/scheduleCycle.js'
 
 const props = defineProps({
   modelValue: { type: Boolean, default: false },
@@ -175,10 +191,13 @@ const confirmDelete = ref(false)
 const repeatMode = ref('cycle')
 
 const isNew = computed(() => !props.item)
-const categories = computed(() => props.schedule?.categories || [])
 const fields = computed(() => props.schedule?.fields || [])
 const cycleWeeks = computed(() =>
   Array.from({ length: props.schedule?.cycle_weeks || 1 }, (_, i) => i + 1))
+
+const weekdayOptions = WEEKDAYS.map((d, i) => ({ value: i, label: d.full }))
+const categoryOptions = computed(() =>
+  (props.schedule?.categories || []).map((c) => ({ value: c.id, label: c.name })))
 
 const cycleTabLabel = computed(() =>
   (props.schedule?.cycle_weeks || 1) > 1 ? 'Недели цикла' : 'Каждую неделю')
@@ -190,6 +209,18 @@ const form = reactive({
 })
 const startTime = ref('09:00')
 const endTime = ref('10:30')
+
+/* DatePicker работает с Date, а сервер обменивается днями «YYYY-MM-DD»:
+   границу типов держим здесь, чтобы дата не уехала через полночь в чужом
+   часовом поясе. */
+function dateModel(key) {
+  return computed({
+    get: () => (form[key] ? utcDay(form[key]) : null),
+    set: (value) => { form[key] = value ? dateKey(value) : '' },
+  })
+}
+const repeatFrom = dateModel('repeat_from')
+const repeatUntil = dateModel('repeat_until')
 
 const weeksHint = computed(() => {
   if ((props.schedule?.cycle_weeks || 1) === 1) return 'В расписании одна неделя цикла.'
@@ -272,15 +303,13 @@ async function removeItem() {
 </script>
 
 <style scoped>
-.si-field { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
-.si-label { font-size: 12px; color: var(--color-on-surface-variant); }
-.si-req { color: var(--color-error); margin-left: 2px; }
-
 .si-row {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(160px, 100%), 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(170px, 100%), 1fr));
   gap: 10px;
 }
+.si-own { padding-top: 10px; }
+
 .si-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -298,12 +327,8 @@ async function removeItem() {
   flex-wrap: wrap;
   align-items: center;
   gap: 8px;
-  padding-top: 8px;
+  padding-top: 10px;
 }
-.si-own { display: flex; flex-direction: column; gap: 8px; padding-top: 8px; }
-.si-inline { display: flex; align-items: center; gap: 8px; }
-.si-num { max-width: 90px; }
-.si-hint { font-size: 12px; color: var(--color-on-surface-variant); }
-.si-error { font-size: 13px; color: var(--color-error); }
+.si-hint { font-size: 0.8rem; color: var(--color-text-dim); }
 .si-spacer { flex: 1; }
 </style>

@@ -76,10 +76,8 @@
           <div class="sv-bar">
             <div class="sv-nav">
               <AppButton variant="icon" icon="chevron_left" label="Предыдущая неделя" @click="store.stepWeek(-1)" />
-              <button type="button" class="sv-week glass-hover" @click="store.today()">
-                <b>{{ weekRange }}</b>
-                <span v-if="store.selected.cycle_weeks > 1" class="sv-cycle">{{ store.cycleWeekLabel }}</span>
-              </button>
+              <AppButton variant="text" :label="weekRange" title="Вернуться к текущей неделе" @click="store.today()" />
+              <AppChip v-if="store.selected.cycle_weeks > 1" tone="primary" :label="store.cycleWeekLabel" />
               <AppButton variant="icon" icon="chevron_right" label="Следующая неделя" @click="store.stepWeek(1)" />
             </div>
 
@@ -110,19 +108,14 @@
           <div v-else class="sv-body">
             <!-- Телефон и тесная панель: один день и полоса дней. Неделя
                  колонками там нечитаема — колонка уже названия занятия. -->
-            <div v-if="narrow" class="sv-days">
-              <button
-                v-for="d in days"
-                :key="d"
-                type="button"
-                class="sv-day glass-hover"
-                :class="{ active: d === store.selectedWeekday, today: isToday(d) }"
-                @click="store.selectedWeekday = d"
-              >
-                <b>{{ WEEKDAYS[d].short }}</b>
-                <em>{{ dayNumber(d) }}</em>
-              </button>
-            </div>
+            <AppTabs
+              v-if="narrow"
+              :model-value="store.selectedWeekday"
+              :tabs="dayTabs"
+              variant="tint"
+              dense
+              @update:model-value="store.selectedWeekday = $event"
+            />
 
             <ScheduleTimeline
               :schedule="store.selected"
@@ -156,20 +149,30 @@
 
   <!-- Новое расписание -->
   <AppDialog v-model="createOpen" title="Новое расписание" size="sm" :busy="creating">
-    <AppStack :gap="12">
-      <div class="sv-field">
-        <label class="sv-label">Название</label>
-        <input v-model="createForm.name" class="ctl" type="text" maxlength="120" placeholder="Учёба" @keyup.enter="doCreate" />
-      </div>
-      <div class="sv-field">
-        <label class="sv-label">Недель в цикле</label>
-        <select v-model.number="createForm.cycle_weeks" class="ctl">
-          <option v-for="n in MAX_CYCLE_WEEKS" :key="n" :value="n">{{ n }}</option>
-        </select>
-        <span class="sv-hint">
-          Две недели — это числитель и знаменатель. Цикл можно изменить позже.
-        </span>
-      </div>
+    <AppStack :gap="14">
+      <AppField v-slot="{ id }" label="Название" required>
+        <InputText
+          :id="id"
+          v-model="createForm.name"
+          maxlength="120"
+          placeholder="Учёба"
+          autofocus
+          @keyup.enter="doCreate"
+        />
+      </AppField>
+      <AppField
+        v-slot="{ id }"
+        label="Недель в цикле"
+        hint="Две недели — это числитель и знаменатель. Цикл можно изменить позже."
+      >
+        <Select
+          :input-id="id"
+          v-model="createForm.cycle_weeks"
+          :options="cycleOptions"
+          option-label="label"
+          option-value="value"
+        />
+      </AppField>
     </AppStack>
     <template #footer>
       <span class="sv-spacer" />
@@ -222,8 +225,12 @@
 <script setup>
 import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
+import InputText from 'primevue/inputtext'
+import Select from 'primevue/select'
 import AppButton from '@/components/ui/AppButton.vue'
+import AppChip from '@/components/ui/AppChip.vue'
 import AppDialog from '@/components/ui/AppDialog.vue'
+import AppField from '@/components/ui/AppField.vue'
 import AppListDetail from '@/components/ui/AppListDetail.vue'
 import AppPage from '@/components/ui/AppPage.vue'
 import AppRow from '@/components/ui/AppRow.vue'
@@ -267,6 +274,15 @@ const printOpen = ref(false)
 const fileInput = ref(null)
 
 const days = computed(() => visibleDays(store.items, todayWeekday.value))
+// Длина цикла — выбор из готового набора: 1..MAX_CYCLE_WEEKS недель.
+const cycleOptions = Array.from({ length: MAX_CYCLE_WEEKS }, (_, i) => ({ value: i + 1, label: String(i + 1) }))
+
+// Дни недели на телефоне — вкладки: сегодняшний помечен точкой.
+const dayTabs = computed(() => days.value.map((d) => ({
+  value: d,
+  label: `${WEEKDAYS[d].short} ${dayNumber(d)}`,
+  badge: isToday(d) ? '•' : undefined,
+})))
 const todayWeekday = computed(() => (new Date().getDay() + 6) % 7)
 
 const weekRange = computed(() => {
@@ -442,38 +458,18 @@ watch(() => route.query.id, async (value) => {
   gap: 10px;
 }
 .sv-nav { display: flex; align-items: center; gap: 2px; }
-.sv-week {
-  display: flex;
-  align-items: baseline;
-  gap: 8px;
-  padding: 4px 10px;
-  border: none;
-  border-radius: var(--radius-sm);
-  background: transparent;
-  color: var(--color-on-surface);
-  font: inherit;
-  cursor: pointer;
-}
-.sv-week b { font-variant-numeric: tabular-nums; }
-.sv-cycle {
-  font-size: 12px;
-  padding: 1px 8px;
-  border-radius: var(--radius-pill);
-  background: var(--color-primary-container);
-  color: var(--color-on-primary-container);
-}
 
 .sv-gap {
   display: flex;
   align-items: center;
   gap: 2px;
   padding: 2px 4px;
-  border-radius: var(--radius-pill);
-  background: var(--color-surface-container-lowest);
+  border-radius: var(--radius-full);
+  background: var(--color-surface-low);
 }
 .sv-gap-value {
   font-size: 12px;
-  color: var(--color-on-surface-variant);
+  color: var(--color-text-dim);
   white-space: nowrap;
   font-variant-numeric: tabular-nums;
 }
@@ -487,35 +483,6 @@ watch(() => route.query.id, async (value) => {
 }
 .sv-loader { margin: auto; }
 
-.sv-days {
-  display: flex;
-  gap: 4px;
-  overflow-x: auto;
-  padding-bottom: 2px;
-}
-.sv-day {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 2px;
-  min-width: 44px;
-  padding: 6px 4px;
-  border: none;
-  border-radius: var(--radius-sm);
-  background: var(--color-surface-container-lowest);
-  color: var(--color-on-surface-variant);
-  font: inherit;
-  cursor: pointer;
-}
-.sv-day em { font-style: normal; font-variant-numeric: tabular-nums; font-size: 12px; }
-.sv-day.today { color: var(--color-primary); }
-.sv-day.active {
-  background: var(--color-primary-container);
-  color: var(--color-on-primary-container);
-}
 
-.sv-field { display: flex; flex-direction: column; gap: 6px; }
-.sv-label { font-size: 12px; color: var(--color-on-surface-variant); }
-.sv-hint { font-size: 12px; color: var(--color-on-surface-variant); }
 .sv-spacer { flex: 1; }
 </style>

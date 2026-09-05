@@ -21,10 +21,8 @@
     <div v-else-if="schedule" class="ss-shell">
       <div class="ss-toolbar">
         <AppButton variant="icon" icon="chevron_left" label="Предыдущая неделя" @click="step(-1)" />
-        <button type="button" class="ss-week" @click="goToday">
-          <b>{{ weekRange }}</b>
-          <span v-if="schedule.cycle_weeks > 1" class="ss-cycle">{{ cycleLabel }}</span>
-        </button>
+        <AppButton variant="text" :label="weekRange" title="Вернуться к текущей неделе" @click="goToday" />
+        <AppChip v-if="schedule.cycle_weeks > 1" tone="primary" :label="cycleLabel" />
         <AppButton variant="icon" icon="chevron_right" label="Следующая неделя" @click="step(1)" />
       </div>
 
@@ -42,18 +40,14 @@
       </div>
 
       <!-- Узкий экран: полоса дней вместо колонок недели. -->
-      <div v-if="narrow" class="ss-days">
-        <button
-          v-for="d in days"
-          :key="d"
-          type="button"
-          class="ss-day"
-          :class="{ active: d === weekday }"
-          @click="weekday = d"
-        >
-          <b>{{ WEEKDAYS[d].short }}</b>
-        </button>
-      </div>
+      <AppTabs
+        v-if="narrow"
+        :model-value="weekday"
+        :tabs="dayTabs"
+        variant="tint"
+        dense
+        @update:model-value="weekday = $event"
+      />
     </div>
   </div>
 </template>
@@ -65,6 +59,8 @@
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useRoute } from 'vue-router'
 import AppButton from '@/components/ui/AppButton.vue'
+import AppChip from '@/components/ui/AppChip.vue'
+import AppTabs from '@/components/ui/AppTabs.vue'
 import BrandLoader from '@/components/common/BrandLoader.vue'
 import ScheduleSummary from '@/components/schedule/ScheduleSummary.vue'
 import ScheduleTimeline from '@/components/schedule/ScheduleTimeline.vue'
@@ -89,6 +85,7 @@ const dayItems = computed(() => (schedule.value
   ? itemsOfDay(schedule.value, items.value, addDays(monday.value, weekday.value))
   : []))
 const dayLabel = computed(() => WEEKDAYS[weekday.value]?.full || '')
+const dayTabs = computed(() => days.value.map((d) => ({ value: d, label: WEEKDAYS[d].short })))
 
 const cycleLabel = computed(() => (schedule.value
   ? weekLabel(schedule.value, weekIndex(schedule.value.cycle_anchor, monday.value, schedule.value.cycle_weeks))
@@ -136,7 +133,7 @@ onBeforeUnmount(() => window.removeEventListener('resize', onResize))
   padding: 12px;
   gap: 10px;
   background: var(--color-surface);
-  color: var(--color-on-surface);
+  color: var(--color-text);
 }
 
 .ss-top {
@@ -154,14 +151,14 @@ onBeforeUnmount(() => window.removeEventListener('resize', onResize))
 }
 .ss-titlebox { display: flex; align-items: baseline; gap: 8px; min-width: 0; }
 .ss-title { margin: 0; font-size: 18px; overflow-wrap: anywhere; }
-.ss-owner { font-size: 13px; color: var(--color-on-surface-variant); }
+.ss-owner { font-size: 13px; color: var(--color-text-dim); }
 .ss-readonly {
   margin-left: auto;
   padding: 2px 10px;
-  border-radius: var(--radius-pill);
-  background: var(--color-surface-container);
+  border-radius: var(--radius-full);
+  background: var(--color-surface-high);
   font-size: 12px;
-  color: var(--color-on-surface-variant);
+  color: var(--color-text-dim);
 }
 
 .ss-state {
@@ -169,48 +166,13 @@ onBeforeUnmount(() => window.removeEventListener('resize', onResize))
   place-items: center;
   gap: 8px;
   flex: 1;
-  color: var(--color-on-surface-variant);
+  color: var(--color-text-dim);
 }
 .ss-loader { margin: auto; }
 
 .ss-shell { display: flex; flex-direction: column; gap: 8px; flex: 1; min-height: 0; }
 .ss-toolbar { display: flex; align-items: center; gap: 4px; }
-.ss-week {
-  display: flex;
-  align-items: baseline;
-  gap: 8px;
-  padding: 4px 10px;
-  border: none;
-  border-radius: var(--radius-sm);
-  background: transparent;
-  color: inherit;
-  font: inherit;
-  cursor: pointer;
-}
-.ss-week b { font-variant-numeric: tabular-nums; }
-.ss-cycle {
-  padding: 1px 8px;
-  border-radius: var(--radius-pill);
-  background: var(--color-primary-container);
-  color: var(--color-on-primary-container);
-  font-size: 12px;
-}
 
 .ss-body { display: flex; flex-direction: column; gap: 8px; flex: 1; min-height: 0; }
 
-.ss-days { display: flex; gap: 4px; overflow-x: auto; }
-.ss-day {
-  min-width: 44px;
-  padding: 6px 4px;
-  border: none;
-  border-radius: var(--radius-sm);
-  background: var(--color-surface-container-lowest);
-  color: var(--color-on-surface-variant);
-  font: inherit;
-  cursor: pointer;
-}
-.ss-day.active {
-  background: var(--color-primary-container);
-  color: var(--color-on-primary-container);
-}
 </style>
