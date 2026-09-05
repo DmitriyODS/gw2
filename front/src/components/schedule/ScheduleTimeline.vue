@@ -9,7 +9,8 @@
         class="st-col-head"
         :class="{ today: isToday(d) }"
       >
-        <b>{{ WEEKDAYS[d].full }}</b>
+        <b class="st-day-full">{{ WEEKDAYS[d].full }}</b>
+        <b class="st-day-short">{{ WEEKDAYS[d].short }}</b>
         <time>{{ dayNumber(d) }}</time>
         <span v-if="busyOfDay(d)" class="st-load">{{ duration(busyOfDay(d)) }}</span>
       </div>
@@ -139,21 +140,44 @@ const scaleStyle = computed(() => ({
   font-size: 12px;
   color: var(--color-text-dim);
   overflow: hidden;
+  /* Заголовок меряет СВОЮ ширину: сколько дней показано, столько и колонок, и
+     от их числа зависит, влезает ли полное имя дня и часы нагрузки. */
+  container-type: inline-size;
+  white-space: nowrap;
 }
 .st-col-head b {
+  min-width: 0;
   font-size: 13px;
   color: var(--color-text);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
-.st-col-head time { font-variant-numeric: tabular-nums; }
+/* Дата не сжимается: обрезать надо имя дня, а число дня — это то, ради чего
+   шапка и нужна. */
+.st-col-head time { flex: none; font-variant-numeric: tabular-nums; }
 .st-col-head.today {
   background: var(--color-primary-container);
   color: var(--color-on-primary-container);
 }
 .st-col-head.today b { color: inherit; }
-.st-load { margin-left: auto; font-variant-numeric: tabular-nums; opacity: 0.8; }
+/* Нагрузка дня («1 ч 30») рвалась на две строки и распирала шапку: в узкой
+   колонке её не показываем вовсе, имя дня сокращаем до «Пн». */
+.st-load {
+  margin-left: auto;
+  font-variant-numeric: tabular-nums;
+  opacity: 0.8;
+  white-space: nowrap;
+}
+.st-day-short { display: none; }
+
+@container (max-width: 132px) {
+  .st-load { display: none; }
+}
+@container (max-width: 96px) {
+  .st-day-full { display: none; }
+  .st-day-short { display: inline; }
+}
 
 .st-body {
   position: relative;

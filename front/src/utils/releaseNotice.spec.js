@@ -66,6 +66,19 @@ describe('уведомление о новом выпуске', () => {
     expect(after.center.count.value).toBe(1)
   })
 
+  // Кнопка в DevTools: карточку нужно увидеть, не дожидаясь следующего выката.
+  it('force показывает карточку на уже виденном выпуске', async () => {
+    changelog.get.mockResolvedValue(release('7.4.0', '2609051'))
+    await run()
+
+    vi.resetModules()
+    setActivePinia(createPinia())
+    const { announceRelease } = await import('@/utils/releaseNotice.js')
+    await announceRelease({ force: true })
+    const { useDesktopNotifications } = await import('@/composables/useDesktopNotifications.js')
+    expect(useDesktopNotifications().count.value).toBe(1)
+  })
+
   it('без ответа сервера ничего не показывает и отметку не портит', async () => {
     changelog.get.mockRejectedValue(new Error('нет сети'))
     const quiet = await run()

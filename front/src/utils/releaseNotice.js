@@ -27,8 +27,11 @@ function releaseStamp(release) {
 /**
  * Рассказать об обновлении, если оно случилось с прошлого запуска.
  * Зовёт каркас при старте — один раз на загрузку приложения.
+ *
+ * force — показать карточку, даже если выпуск уже виден: так её проверяют в
+ * скрытом разделе DevTools, не дожидаясь следующего выката.
  */
-export async function announceRelease() {
+export async function announceRelease({ force = false } = {}) {
   const { load } = useAppVersion()
   /* Спрашиваем сервер, а не кэш: кэш живёт шесть часов, и зашедший сразу
      после выката узнал бы об обновлении только к вечеру. Запрос один на
@@ -46,7 +49,7 @@ export async function announceRelease() {
 
   // Первый запуск на устройстве обновлением не считается: человек только
   // пришёл, и «что нового» ему не с чем сравнивать.
-  if (!seen || seen === stamp) return
+  if (!force && (!seen || seen === stamp)) return
 
   const title = `Обновление ${release.version}`
   const text = release.title || 'Посмотрите, что изменилось'

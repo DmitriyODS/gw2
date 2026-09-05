@@ -18,6 +18,15 @@
       </AppRow>
     </AppCard>
 
+    <AppCard title="Выпуск" hint="Карточка обновления показывается при первом запуске после выката.">
+      <AppRow
+        title="Показать уведомление о новой версии"
+        hint="Спрашивает выпуск у сервера и показывает карточку — как при первом входе после обновления."
+      >
+        <AppButton variant="glass" icon="auto_awesome" label="Проверить" @click="checkRelease" />
+      </AppRow>
+    </AppCard>
+
     <AppCard title="Раздел">
       <AppRow
         title="Скрыть DevTools"
@@ -38,6 +47,7 @@ import AppCard from '@/components/ui/AppCard.vue'
 import AppInfoBar from '@/components/ui/AppInfoBar.vue'
 import AppRow from '@/components/ui/AppRow.vue'
 import { hideDevTools } from '@/utils/devTools.js'
+import { announceRelease } from '@/utils/releaseNotice.js'
 import { useNotificationsStore } from '@/stores/notifications.js'
 
 const emit = defineEmits(['close'])
@@ -61,6 +71,13 @@ function showOne() {
 function showMany() {
   // Со звуком у каждой был бы залп сигналов — проверяем вид, а не голос.
   SAMPLES.forEach((s) => notif.notify({ ...s, sound: false }))
+}
+
+/* Карточку выпуска показывает вход, и дождаться её можно только следующим
+   выкатом — здесь она вызывается принудительно: та же проверка, что делает
+   каркас при запуске, но без правила «уже видели». */
+async function checkRelease() {
+  await announceRelease({ force: true })
 }
 
 /* Раздел исчезает из списка прямо под ногами — уводим туда, откуда его

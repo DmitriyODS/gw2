@@ -4,7 +4,7 @@
     title="Настройки расписания"
     size="lg"
     :busy="saving"
-    @update:model-value="close"
+    @update:model-value="dismiss"
   >
     <AppTabs
       v-model="tab"
@@ -168,9 +168,19 @@
         @click="confirmDelete = true"
       />
       <span class="ss-spacer" />
-      <AppButton label="Отмена" :disabled="saving" @click="close(false)" />
+      <AppButton label="Отмена" :disabled="saving" @click="dismiss" />
       <AppButton variant="filled" label="Сохранить" :loading="saving" @click="save" />
     </template>
+
+    <ConfirmDialog
+      :visible="confirmClose"
+      header="Закрыть без сохранения?"
+      message="Изменения настроек и полей потеряются."
+      confirm-label="Закрыть"
+      danger-confirm
+      @confirm="close"
+      @cancel="confirmClose = false"
+    />
 
     <ConfirmDialog
       :visible="confirmDelete"
@@ -253,7 +263,11 @@ const tab = ref('cycle')
 const saving = ref(false)
 const error = ref('')
 const confirmDelete = ref(false)
+const confirmClose = ref(false)
 const newCategory = ref('')
+/* Снимок черновика на момент открытия: по нему видно, менял ли человек что-то.
+   Категории сюда не входят — они сохраняются сразу, своими запросами. */
+const saved = ref('')
 
 const form = reactive({
   name: '', cycle_weeks: 1, cycle_anchor: '', week_labels: [], timezone: 'Europe/Moscow',
@@ -272,7 +286,11 @@ const cycleShrinks = computed(() => form.cycle_weeks < (props.schedule?.cycle_we
 
 let fieldKeySeq = 0
 
-watch(() => [props.modelValue, props.schedule], () => {
+/* Наполняем черновик при ОТКРЫТИИ диалога и при смене расписания — но не на
+   каждое обновление самого расписания. Сохранение настроек обновляет schedule
+   в сторе, watch по объекту срабатывал прямо посреди save() и возвращал набор
+   полей к серверному: только что добавленное поле пропадало, не успев уйти. */
+watch(() => [props.modelValue, props.schedule?.id], () => {
   if (!props.modelValue || !props.schedule) return
   error.value = ''
   tab.value = 'cycle'
@@ -293,11 +311,33 @@ watch(() => [props.modelValue, props.schedule], () => {
     show_in_card: f.show_in_card !== false,
     optionsText: (f.config?.options || []).join('\n'),
   }))
+  saved.value = snapshot()
 }, { immediate: true })
 
-function close(value = false) {
+// snapshot — сравнимый слепок черновика (ключи строк в него не входят: они
+// служебные и меняются при каждом открытии).
+function snapshot() {
+  return JSON.stringify({
+    form,
+    fields: fields.value.map(({ key, ...rest }) => rest),
+  })
+}
+
+const dirty = computed(() => !!saved.value && snapshot() !== saved.value)
+
+/* dismiss — попытка закрыть руками: во время сохранения игнорируется, а с
+   несохранёнными правками сперва спрашивает. close закрывает без вопросов —
+   им заканчиваются успешные операции (saving там ещё поднят, и общий guard
+   оставлял диалог висеть с уже сохранёнными настройками). */
+function dismiss() {
   if (saving.value) return
-  emit('update:modelValue', value)
+  if (dirty.value) { confirmClose.value = true; return }
+  close()
+}
+
+function close() {
+  confirmClose.value = false
+  emit('update:modelValue', false)
 }
 
 // ── Категории: правятся сразу, по одной — так же, как справочники в реестрах.
@@ -379,7 +419,7 @@ async function save() {
         show_on_block: f.show_on_block,
         show_in_card: f.show_in_card,
       })))
-    close(false)
+    close()
   } catch (e) {
     error.value = e?.message || 'Не удалось сохранить настройки'
   } finally {
@@ -392,7 +432,7 @@ async function removeSchedule() {
   saving.value = true
   try {
     await props.removeFn()
-    close(false)
+    close()
   } catch (e) {
     error.value = e?.message || 'Не удалось удалить расписание'
   } finally {

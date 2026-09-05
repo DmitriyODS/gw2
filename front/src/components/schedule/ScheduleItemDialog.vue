@@ -4,7 +4,7 @@
     :title="isNew ? 'Новое занятие' : 'Занятие'"
     size="lg"
     :busy="saving"
-    @update:model-value="close"
+    @update:model-value="dismiss"
   >
     <AppStack :gap="14">
       <!-- Название и короткое имя: второе показывается в узких колонках недели
@@ -132,7 +132,7 @@
         @click="confirmDelete = true"
       />
       <span class="si-spacer" />
-      <AppButton label="Отмена" :disabled="saving" @click="close(false)" />
+      <AppButton label="Отмена" :disabled="saving" @click="dismiss" />
       <AppButton
         variant="filled"
         :label="isNew ? 'Создать' : 'Сохранить'"
@@ -252,9 +252,16 @@ function toggleWeek(week) {
   form.weeks = isWeekOn(week) ? form.weeks.filter((w) => w !== week) : [...form.weeks, week].sort()
 }
 
-function close(value = false) {
-  if (saving.value) return
-  emit('update:modelValue', value)
+/* dismiss — попытка ЗАКРЫТЬ ДИАЛОГ РУКАМИ (крестик, фон, «Отмена»): пока идёт
+   сохранение, она игнорируется. Закрытие после успешной операции идёт мимо неё
+   (close): там saving ещё поднят, и общий guard оставлял диалог висеть с уже
+   сохранённым занятием. */
+function dismiss() {
+  if (!saving.value) close()
+}
+
+function close() {
+  emit('update:modelValue', false)
 }
 
 async function save() {
@@ -280,7 +287,7 @@ async function save() {
   error.value = ''
   try {
     await props.submit(body)
-    close(false)
+    close()
   } catch (e) {
     error.value = e?.message || 'Не удалось сохранить занятие'
   } finally {
@@ -293,7 +300,7 @@ async function removeItem() {
   saving.value = true
   try {
     await props.remove?.(props.item)
-    close(false)
+    close()
   } catch (e) {
     error.value = e?.message || 'Не удалось удалить занятие'
   } finally {
