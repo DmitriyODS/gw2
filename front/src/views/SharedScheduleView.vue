@@ -42,6 +42,7 @@
       <!-- Узкий экран: полоса дней вместо колонок недели. -->
       <AppTabs
         v-if="narrow"
+        class="ss-daystrip"
         :model-value="weekday"
         :tabs="dayTabs"
         variant="tint"
@@ -85,7 +86,11 @@ const dayItems = computed(() => (schedule.value
   ? itemsOfDay(schedule.value, items.value, addDays(monday.value, weekday.value))
   : []))
 const dayLabel = computed(() => WEEKDAYS[weekday.value]?.full || '')
-const dayTabs = computed(() => days.value.map((d) => ({ value: d, label: WEEKDAYS[d].short })))
+const todayWeekday = (new Date().getDay() + 6) % 7
+const dayTabs = computed(() => days.value.map((d) => ({
+  value: d,
+  label: d === todayWeekday ? 'Сегодня' : `${WEEKDAYS[d].short} ${addDays(monday.value, d).getUTCDate()}`,
+})))
 
 const cycleLabel = computed(() => (schedule.value
   ? weekLabel(schedule.value, weekIndex(schedule.value.cycle_anchor, monday.value, schedule.value.cycle_weeks))
@@ -170,9 +175,10 @@ onBeforeUnmount(() => window.removeEventListener('resize', onResize))
 }
 .ss-loader { margin: auto; }
 
-.ss-shell { display: flex; flex-direction: column; gap: 8px; flex: 1; min-height: 0; }
+.ss-shell { display: flex; flex-direction: column; gap: 12px; flex: 1; min-height: 0; }
 .ss-toolbar { display: flex; align-items: center; gap: 4px; }
 
-.ss-body { display: flex; flex-direction: column; gap: 8px; flex: 1; min-height: 0; }
+.ss-body { display: flex; flex-direction: column; gap: 12px; flex: 1; min-height: 0; }
+.ss-daystrip { flex: none; }
 
 </style>

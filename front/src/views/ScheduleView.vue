@@ -110,6 +110,7 @@
                  колонками там нечитаема — колонка уже названия занятия. -->
             <AppTabs
               v-if="narrow"
+              class="sv-days"
               :model-value="store.selectedWeekday"
               :tabs="dayTabs"
               variant="tint"
@@ -277,11 +278,11 @@ const days = computed(() => visibleDays(store.items, todayWeekday.value))
 // Длина цикла — выбор из готового набора: 1..MAX_CYCLE_WEEKS недель.
 const cycleOptions = Array.from({ length: MAX_CYCLE_WEEKS }, (_, i) => ({ value: i + 1, label: String(i + 1) }))
 
-// Дни недели на телефоне — вкладки: сегодняшний помечен точкой.
+// Дни недели на телефоне — вкладки. Сегодняшний подписан словом: значок-
+// счётчик тут читался бы как «непрочитанное», а день и так один.
 const dayTabs = computed(() => days.value.map((d) => ({
   value: d,
-  label: `${WEEKDAYS[d].short} ${dayNumber(d)}`,
-  badge: isToday(d) ? '•' : undefined,
+  label: isToday(d) ? 'Сегодня' : `${WEEKDAYS[d].short} ${dayNumber(d)}`,
 })))
 const todayWeekday = computed(() => (new Date().getDay() + 6) % 7)
 
@@ -477,10 +478,13 @@ watch(() => route.query.id, async (value) => {
 .sv-body {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 12px;
   height: 100%;
   min-height: 0;
 }
+/* Полоса дней не сжимается и не растягивается: место в колонке принадлежит
+   шкале, а прижатая к ней вплотную полоса читалась как её часть. */
+.sv-days { flex: none; }
 .sv-loader { margin: auto; }
 
 
