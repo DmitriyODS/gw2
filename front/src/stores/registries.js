@@ -5,10 +5,11 @@ import { useAuthStore } from '@/stores/auth.js'
 import { logActivity } from '@/utils/activityLog.js'
 import { sectionField, textValue } from '@/utils/registryFields.js'
 
-/* Реестр принадлежит ЧЕЛОВЕКУ, а не компании: список приходит областями
-   (вкладки «Все / Мои / Поделились / Компания»), а что можно делать — говорит
-   my_access, посчитанный сервером. Клиент его только показывает: решать права
-   на клиенте нельзя. */
+/* Реестр принадлежит ЧЕЛОВЕКУ, но живёт в компании, где заведён: в другой
+   компании его не видно, а шара компании действует, пока эта компания активна.
+   Список приходит областями (вкладки «Все / Мои / Поделились / Компания»), а
+   что можно делать — говорит my_access, посчитанный сервером. Клиент его
+   только показывает: решать права на клиенте нельзя. */
 export const useRegistriesStore = defineStore('registries', () => {
   const registries = ref([])          // [{id, name, my_access, fields:[...]}]
   const loadingList = ref(false)
@@ -313,9 +314,8 @@ export const useRegistriesStore = defineStore('registries', () => {
     fetchRecords({ silent: true })
   }
 
-  /* Смена активной компании: сам список реестров от неё больше не зависит
-     (они личные), но компанийные шары — да: в новой компании доступны другие
-     реестры. Поэтому список перечитываем, а выбор сохраняем, если он уцелел. */
+  /* Смена активной компании меняет сам набор реестров: в другой компании
+     открыты другие. Список перечитываем, а выбор сохраняем, если он уцелел. */
   async function reloadForCompany() {
     await fetchRegistries()
     if (selectedId.value != null && !registries.value.some((r) => r.id === selectedId.value)) {

@@ -316,24 +316,19 @@ func (r *Repo) AllRecords(ctx context.Context, registryID int64) ([]*domain.Reco
 	return out, rows.Err()
 }
 
-// SearchRecords — глобальный поиск (Hola) по записям ВСЕХ доступных человеку
-// реестров одним запросом: свои, расшаренные лично и расшаренные его компаниям.
-// search_text поддержан триграммным индексом.
-func (r *Repo) SearchRecords(ctx context.Context, userID int64, companyIDs []int64, query string, limit int) ([]*domain.SearchHit, error) {
-	if companyIDs == nil {
-		companyIDs = []int64{}
-	}
+// SearchRecords — глобальный поиск (Hola) по записям всех реестров, доступных
+// человеку в его активной компании, одним запросом. Набор тот же, что и в
+// списке раздела (scopeCondition): выдача поиска не должна показывать реестры,
+// которых в этой компании не видно. search_text поддержан триграммным индексом.
+func (r *Repo) SearchRecords(ctx context.Context, userID, companyID int64, query string, limit int) ([]*domain.SearchHit, error) {
 	rows, err := r.pool.Query(ctx, `
 		SELECT rec.registry_id, reg.name, rec.id, left(rec.search_text, 160)
 		FROM registry_records rec
 		JOIN registries reg ON reg.id = rec.registry_id
 		WHERE rec.search_text ILIKE '%' || $3 || '%'
-		  AND (reg.owner_id = $1
-		       OR EXISTS (SELECT 1 FROM registry_user_shares sh
-		                   WHERE sh.registry_id = reg.id
-		                     AND (sh.user_id = $1 OR sh.company_id = ANY($2))))
+		  AND (`+scopeCondition(domain.ScopeAll)+`)
 		ORDER BY rec.id DESC
-		LIMIT $4`, userID, companyIDs, query, limit)
+		LIMIT $4`, userID, companyID, query, limit)
 	if err != nil {
 		return nil, err
 	}

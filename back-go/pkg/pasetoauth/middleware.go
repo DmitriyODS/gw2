@@ -160,6 +160,34 @@ func CompanyID(c *fiber.Ctx) int64 {
 	return id
 }
 
+// CompanyFromContext — та же активная компания, но из контекста запроса: слой
+// сервиса про Fiber ничего не знает, а компания нужна ему на каждой проверке
+// доступа. Работает без проброса через сигнатуры, потому что Locals Fiber и
+// есть user values fasthttp-контекста, который хендлеры отдают как ctx.
+//
+// 0 означает «активной компании нет» — это нормальное состояние (человек не
+// состоит ни в одной компании либо запрос пришёл мимо RequireAuth).
+func CompanyFromContext(ctx context.Context) int64 {
+	if ctx == nil {
+		return 0
+	}
+	if id, ok := ctx.Value(companyKey{}).(int64); ok {
+		return id
+	}
+	id, _ := ctx.Value(localCompanyID).(int64)
+	return id
+}
+
+// companyKey — ключ активной компании в обычном контексте (WithCompany).
+// Отдельный от строкового ключа Fiber: тот приходит из user values запроса, а
+// этот кладут вручную — вызовы мимо HTTP и тесты.
+type companyKey struct{}
+
+// WithCompany — положить активную компанию в контекст напрямую.
+func WithCompany(ctx context.Context, companyID int64) context.Context {
+	return context.WithValue(ctx, companyKey{}, companyID)
+}
+
 // Current — AuthInfo из Locals (после RequireAuth; nil после RequireToken).
 func Current(c *fiber.Ctx) *AuthInfo {
 	info, _ := c.Locals(localUser).(*AuthInfo)

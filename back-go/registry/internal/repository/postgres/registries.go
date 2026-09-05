@@ -42,6 +42,10 @@ accessExpr — эффективный уровень доступа одним �
 	выдали его компании), и брать нужно СИЛЬНЕЙШИЙ. Порядок уровней задан здесь
 	числом, а не сравнением строк: 'view' > 'edit' лексикографически, и наивный
 	MAX(access) молча понижал бы права. Держать в паре с domain/access.go.
+
+	$2 — АКТИВНАЯ компания сессии (0 — её нет): шара, выданная другой компании
+	человека, в этой компании прав не даёт, иначе список и уровень доступа
+	расходились бы.
 */
 const accessExpr = `
 	CASE WHEN reg.owner_id = $1 THEN 'owner' ELSE COALESCE((
@@ -50,42 +54,48 @@ const accessExpr = `
 		         WHEN 3 THEN 'admin' WHEN 2 THEN 'edit' WHEN 1 THEN 'view' END
 		  FROM registry_user_shares sh
 		 WHERE sh.registry_id = reg.id
-		   AND (sh.user_id = $1 OR sh.company_id = ANY($2))
+		   AND (sh.user_id = $1 OR sh.company_id = $2)
 	), '') END`
+
+/* ownedCondition — свои реестры, видимые в активной компании ($2).
+
+   Реестр помнит компанию, в которой заведён, и в другой компании владельцу не
+   показывается: иначе переключение компании ничего не меняло бы. Заведённые вне
+   компаний (company_id IS NULL) остаются личными и видны всегда. */
+const ownedCondition = `reg.owner_id = $1
+	AND (reg.company_id IS NULL OR reg.company_id = $2)`
 
 // scopeCondition — условие вкладки раздела.
 func scopeCondition(scope string) string {
 	switch scope {
 	case domain.ScopeMine:
-		return `reg.owner_id = $1`
+		return ownedCondition
 	case domain.ScopeShared:
 		return `EXISTS (SELECT 1 FROM registry_user_shares sh
 		                 WHERE sh.registry_id = reg.id AND sh.user_id = $1)
 		        AND reg.owner_id <> $1`
 	case domain.ScopeCompany:
 		return `EXISTS (SELECT 1 FROM registry_user_shares sh
-		                 WHERE sh.registry_id = reg.id AND sh.company_id = ANY($2))
+		                 WHERE sh.registry_id = reg.id AND sh.company_id = $2)
 		        AND reg.owner_id <> $1`
 	default:
-		return `(reg.owner_id = $1
-		         OR EXISTS (SELECT 1 FROM registry_user_shares sh
-		                     WHERE sh.registry_id = reg.id
-		                       AND (sh.user_id = $1 OR sh.company_id = ANY($2))))`
+		return `((` + ownedCondition + `)
+		         OR (reg.owner_id <> $1
+		             AND EXISTS (SELECT 1 FROM registry_user_shares sh
+		                          WHERE sh.registry_id = reg.id
+		                            AND (sh.user_id = $1 OR sh.company_id = $2))))`
 	}
 }
 
 // ListRegistries — реестры выбранной области вместе с уровнем доступа и именем
 // владельца (вкладки «Поделились» и «Компания» обязаны называть хозяина).
-func (r *Repo) ListRegistries(ctx context.Context, userID int64, companyIDs []int64, scope string) ([]*domain.Registry, error) {
-	if companyIDs == nil {
-		companyIDs = []int64{}
-	}
+func (r *Repo) ListRegistries(ctx context.Context, userID, companyID int64, scope string) ([]*domain.Registry, error) {
 	rows, err := r.pool.Query(ctx, `
 		SELECT `+prefixed(registryCols, "reg")+`, `+accessExpr+`, COALESCE(u.fio, '')
 		  FROM registries reg
 		  LEFT JOIN users u ON u.id = reg.owner_id
 		 WHERE `+scopeCondition(scope)+`
-		 ORDER BY reg.position, reg.id`, userID, companyIDs)
+		 ORDER BY reg.position, reg.id`, userID, companyID)
 	if err != nil {
 		return nil, err
 	}

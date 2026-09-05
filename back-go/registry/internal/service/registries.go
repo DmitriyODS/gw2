@@ -13,7 +13,7 @@ func (s *Service) ListRegistries(ctx context.Context, userID int64, scope string
 	if err != nil {
 		return nil, err
 	}
-	regs, err := s.repo.ListRegistries(ctx, a.UserID, a.Companies, domain.NormalizeScope(scope))
+	regs, err := s.repo.ListRegistries(ctx, a.UserID, a.CompanyID, domain.NormalizeScope(scope))
 	if err != nil {
 		return nil, err
 	}

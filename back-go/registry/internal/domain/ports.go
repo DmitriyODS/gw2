@@ -13,9 +13,11 @@ type Ctx = context.Context
 // учётных выдач.
 type RegistryRepository interface {
 	// ── Реестры ──
-	// ListRegistries — реестры области: свои, расшаренные лично, расшаренные
-	// компаниям спрашивающего. Уровень доступа считается тем же запросом.
-	ListRegistries(ctx Ctx, userID int64, companyIDs []int64, scope string) ([]*Registry, error)
+	// ListRegistries — реестры области, видимые в АКТИВНОЙ компании: свои,
+	// заведённые в ней (плюс личные — вне компаний), расшаренные лично и
+	// расшаренные самой активной компании. Уровень доступа считается тем же
+	// запросом. companyID == 0 — активной компании нет.
+	ListRegistries(ctx Ctx, userID, companyID int64, scope string) ([]*Registry, error)
 	// GetRegistry — реестр без полей и без проверки доступа (её делает сервис).
 	GetRegistry(ctx Ctx, id int64) (*Registry, error)
 	// CountOwned — сколько реестров завёл человек (лимит тарифа).
@@ -27,8 +29,8 @@ type RegistryRepository interface {
 
 	// ── Доступ ──
 	// AccessOf — эффективный уровень человека к реестру (лучший из личной шары
-	// и шар его компаний; владельцу — AccessOwner).
-	AccessOf(ctx Ctx, registryID, userID int64, companyIDs []int64) (string, error)
+	// и шары его АКТИВНОЙ компании; владельцу — AccessOwner).
+	AccessOf(ctx Ctx, registryID, userID, companyID int64) (string, error)
 	// Audience — кому адресовать сокет-события реестра: владелец, адресаты
 	// личных шар и участники компаний, которым реестр раздан.
 	Audience(ctx Ctx, registryID int64) ([]int64, error)
@@ -49,9 +51,10 @@ type RegistryRepository interface {
 
 	// ── Записи ──
 	ListRecords(ctx Ctx, f RecordListFilter) (items []*Record, total int, err error)
-	// SearchRecords — глобальный поиск по записям ВСЕХ доступных человеку
-	// реестров (строка поиска Hola): один запрос, без обхода реестров.
-	SearchRecords(ctx Ctx, userID int64, companyIDs []int64, query string, limit int) ([]*SearchHit, error)
+	// SearchRecords — глобальный поиск по записям всех реестров, доступных
+	// человеку в его активной компании (строка поиска Hola): один запрос, без
+	// обхода реестров.
+	SearchRecords(ctx Ctx, userID, companyID int64, query string, limit int) ([]*SearchHit, error)
 	GetRecord(ctx Ctx, id int64) (*Record, error)
 	CreateRecord(ctx Ctx, r *Record, searchText string) error
 	UpdateRecord(ctx Ctx, id int64, data map[string]any, searchText string) error

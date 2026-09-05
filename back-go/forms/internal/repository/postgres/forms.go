@@ -45,6 +45,10 @@ accessExpr — эффективный уровень доступа одним �
 	лично, выдали его компании), и брать нужно СИЛЬНЕЙШИЙ. Порядок уровней задан
 	здесь числом, а не сравнением строк: 'view' > 'edit' лексикографически, и
 	наивный MAX(access) молча понижал бы права. Держать в паре с domain/access.go.
+
+	$2 — АКТИВНАЯ компания сессии (0 — её нет): назначение, выданное другой
+	компании человека, в этой компании прав не даёт, иначе список и уровень
+	доступа расходились бы.
 */
 const accessExpr = `
 	CASE WHEN f.owner_id = $1 THEN 'owner' ELSE COALESCE((
@@ -53,51 +57,57 @@ const accessExpr = `
 		         WHEN 3 THEN 'edit' WHEN 2 THEN 'view' WHEN 1 THEN 'respond' END
 		  FROM form_user_shares sh
 		 WHERE sh.form_id = f.id
-		   AND (sh.user_id = $1 OR sh.company_id = ANY($2))
+		   AND (sh.user_id = $1 OR sh.company_id = $2)
 	), '') END`
+
+/* ownedCondition — свои формы, видимые в активной компании ($2).
+
+   Форма помнит компанию, в которой заведена, и в другой компании владельцу не
+   показывается: иначе переключение компании ничего не меняло бы. Заведённые вне
+   компаний (company_id IS NULL) остаются личными и видны всегда. */
+const ownedCondition = `f.owner_id = $1
+	AND (f.company_id IS NULL OR f.company_id = $2)`
 
 // scopeCondition — условие вкладки раздела.
 func scopeCondition(scope string) string {
 	switch scope {
 	case domain.ScopeMine:
-		return `f.owner_id = $1`
+		return ownedCondition
 	case domain.ScopeAssigned:
 		return `f.owner_id <> $1
 		        AND EXISTS (SELECT 1 FROM form_user_shares sh
 		                     WHERE sh.form_id = f.id AND sh.access = 'respond'
-		                       AND (sh.user_id = $1 OR sh.company_id = ANY($2)))`
+		                       AND (sh.user_id = $1 OR sh.company_id = $2))`
 	case domain.ScopeShared:
 		return `f.owner_id <> $1
 		        AND EXISTS (SELECT 1 FROM form_user_shares sh
 		                     WHERE sh.form_id = f.id AND sh.access IN ('view', 'edit')
-		                       AND (sh.user_id = $1 OR sh.company_id = ANY($2)))`
+		                       AND (sh.user_id = $1 OR sh.company_id = $2))`
 	default:
-		return `(f.owner_id = $1
-		         OR EXISTS (SELECT 1 FROM form_user_shares sh
-		                     WHERE sh.form_id = f.id
-		                       AND (sh.user_id = $1 OR sh.company_id = ANY($2))))`
+		return `((` + ownedCondition + `)
+		         OR (f.owner_id <> $1
+		             AND EXISTS (SELECT 1 FROM form_user_shares sh
+		                          WHERE sh.form_id = f.id
+		                            AND (sh.user_id = $1 OR sh.company_id = $2))))`
 	}
 }
 
 // ListForms — формы области вместе с уровнем доступа, именем владельца, числом
 // собранных ответов и собственной обязанностью спрашивающего: карточка списка
 // показывает всё это сразу, поэтому и считается одним запросом.
-func (r *Repo) ListForms(ctx context.Context, userID int64, companyIDs []int64, scope string) ([]*domain.Form, error) {
-	if companyIDs == nil {
-		companyIDs = []int64{}
-	}
+func (r *Repo) ListForms(ctx context.Context, userID, companyID int64, scope string) ([]*domain.Form, error) {
 	rows, err := r.pool.Query(ctx, `
 		SELECT `+prefixed(formCols, "f")+`, `+accessExpr+`, COALESCE(u.fio, ''),
 		       (SELECT count(*) FROM form_responses fr WHERE fr.form_id = f.id),
 		       (SELECT min(sh.due_at) FROM form_user_shares sh
 		         WHERE sh.form_id = f.id AND sh.access = 'respond'
-		           AND (sh.user_id = $1 OR sh.company_id = ANY($2))),
+		           AND (sh.user_id = $1 OR sh.company_id = $2)),
 		       EXISTS (SELECT 1 FROM form_responses fr
 		                WHERE fr.form_id = f.id AND fr.user_id = $1)
 		  FROM forms f
 		  LEFT JOIN users u ON u.id = f.owner_id
 		 WHERE `+scopeCondition(scope)+`
-		 ORDER BY f.updated_at DESC, f.id DESC`, userID, companyIDs)
+		 ORDER BY f.updated_at DESC, f.id DESC`, userID, companyID)
 	if err != nil {
 		return nil, err
 	}
@@ -185,17 +195,14 @@ func (r *Repo) NextPosition(ctx context.Context, ownerID int64) (int, error) {
 }
 
 // SearchForms — строка поиска Hola: доступные формы по названию и описанию.
-func (r *Repo) SearchForms(ctx context.Context, userID int64, companyIDs []int64, query string, limit int) ([]*domain.SearchHit, error) {
-	if companyIDs == nil {
-		companyIDs = []int64{}
-	}
+func (r *Repo) SearchForms(ctx context.Context, userID, companyID int64, query string, limit int) ([]*domain.SearchHit, error) {
 	rows, err := r.pool.Query(ctx, `
 		SELECT f.id, f.title, left(f.description, 160), f.status
 		  FROM forms f
 		 WHERE `+scopeCondition(domain.ScopeAll)+`
 		   AND (f.title ILIKE '%' || $3 || '%' OR f.description ILIKE '%' || $3 || '%')
 		 ORDER BY f.updated_at DESC
-		 LIMIT $4`, userID, companyIDs, query, limit)
+		 LIMIT $4`, userID, companyID, query, limit)
 	if err != nil {
 		return nil, err
 	}

@@ -16,7 +16,7 @@ func (s *Service) ListForms(ctx context.Context, userID int64, scope string) ([]
 	if err != nil {
 		return nil, err
 	}
-	return s.repo.ListForms(ctx, a.UserID, a.Companies, domain.NormalizeScope(scope))
+	return s.repo.ListForms(ctx, a.UserID, a.CompanyID, domain.NormalizeScope(scope))
 }
 
 // GetForm — одна доступная форма со структурой. Ключи правильных ответов
@@ -439,5 +439,5 @@ func (s *Service) SearchForms(ctx context.Context, userID int64, query string, l
 	if err != nil {
 		return nil, err
 	}
-	return s.repo.SearchForms(ctx, a.UserID, a.Companies, query, limit)
+	return s.repo.SearchForms(ctx, a.UserID, a.CompanyID, query, limit)
 }

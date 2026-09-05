@@ -18,6 +18,7 @@ import (
 
 	"github.com/DmitriyODS/gw2/back-go/forms/internal/domain"
 	"github.com/DmitriyODS/gw2/back-go/pkg/chunkupload"
+	"github.com/DmitriyODS/gw2/back-go/pkg/pasetoauth"
 )
 
 type Service struct {
@@ -43,19 +44,35 @@ func New(d Deps) *Service {
 		uploads: d.Uploads, log: d.Log}
 }
 
-// Actor — кто выполняет операцию. Компании нужны для доступа через шары: их
-// список считается один раз на запрос, а не на каждую проверку.
+/*
+Actor — кто выполняет операцию.
+
+	Companies — ВСЕ компании человека: они нужны раздаче доступа (кому вообще
+	можно назначить форму) и справочнику коллег.
+
+	CompanyID — АКТИВНАЯ компания сессии (0 — её нет). Ею ограничены видимость и
+	права: форма живёт в компании, где заведена, а назначение компании действует,
+	пока эта компания выбрана. Иначе переключение компании не меняло бы ничего.
+*/
 type Actor struct {
 	UserID    int64
+	CompanyID int64
 	Companies []int64
 }
 
+// actor — собрать контекст выполняющего. Активная компания приезжает контекстом
+// запроса (её кладёт мидлварь pasetoauth), поэтому сигнатуры операций про неё
+// не знают — а знать её обязана каждая проверка доступа.
 func (s *Service) actor(ctx context.Context, userID int64) (Actor, error) {
 	companies, err := s.users.CompaniesOf(ctx, userID)
 	if err != nil {
 		return Actor{}, err
 	}
-	return Actor{UserID: userID, Companies: companies}, nil
+	return Actor{
+		UserID:    userID,
+		CompanyID: pasetoauth.CompanyFromContext(ctx),
+		Companies: companies,
+	}, nil
 }
 
 /*
@@ -74,7 +91,7 @@ func (s *Service) require(ctx context.Context, a Actor, formID int64, want strin
 	if form == nil {
 		return nil, domain.ErrFormNotFound
 	}
-	access, err := s.repo.AccessOf(ctx, formID, a.UserID, a.Companies)
+	access, err := s.repo.AccessOf(ctx, formID, a.UserID, a.CompanyID)
 	if err != nil {
 		return nil, err
 	}

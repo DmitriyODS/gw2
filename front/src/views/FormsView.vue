@@ -280,10 +280,10 @@ const tab = ref('editor')
 const editor = ref(null)
 const searchInput = ref('')
 
-/* Смена активной компании меняет не сами формы (они личные), а компанийные
-   назначения: в другой компании открыт другой набор. */
+/* Форма живёт в компании, где заведена, поэтому смена активной компании меняет
+   сам набор: перечитываем список и закрываем открытую, если её здесь нет. */
 watch(() => authStore.companyId, (id, prev) => {
-  if (id !== prev) store.fetchForms()
+  if (id !== prev) store.reloadForCompany()
 })
 
 const tabs = computed(() => {

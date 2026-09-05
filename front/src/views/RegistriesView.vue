@@ -281,8 +281,8 @@ const notif = useNotificationsStore()
 const narrow = ref(false)
 const detailOpen = ref(false)
 
-/* Смена активной компании меняет не сами реестры (они личные), а компанийные
-   шары: в другой компании открыт другой набор. */
+/* Реестр живёт в компании, где заведён, поэтому смена активной компании меняет
+   сам набор: в другой компании открыт другой. */
 watch(() => authStore.companyId, (id, prev) => {
   if (id !== prev) store.reloadForCompany()
 })

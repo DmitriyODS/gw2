@@ -25,14 +25,12 @@ func ignoreNoRows(err error) error {
    (accessExpr в registries.go) — правило одно на всех. */
 
 // AccessOf — эффективный уровень человека к реестру ("" — доступа нет).
-func (r *Repo) AccessOf(ctx context.Context, registryID, userID int64, companyIDs []int64) (string, error) {
-	if companyIDs == nil {
-		companyIDs = []int64{}
-	}
+// companyID — активная компания сессии (0 — её нет).
+func (r *Repo) AccessOf(ctx context.Context, registryID, userID, companyID int64) (string, error) {
 	var access string
 	err := r.pool.QueryRow(ctx,
 		`SELECT `+accessExpr+` FROM registries reg WHERE reg.id = $3`,
-		userID, companyIDs, registryID).Scan(&access)
+		userID, companyID, registryID).Scan(&access)
 	if err != nil {
 		return domain.AccessNone, ignoreNoRows(err)
 	}

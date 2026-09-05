@@ -3,10 +3,11 @@ import { computed, reactive, ref } from 'vue'
 import * as api from '@/api/forms.js'
 import { logActivity } from '@/utils/activityLog.js'
 
-/* Форма принадлежит ЧЕЛОВЕКУ, а не компании: список приходит областями
-   (вкладки «Все / Мои / Мне назначены / Совместные»), а что можно делать —
-   говорит my_access, посчитанный сервером. Клиент его только показывает:
-   решать права на клиенте нельзя. */
+/* Форма принадлежит ЧЕЛОВЕКУ, но живёт в компании, где заведена: в другой
+   компании её не видно, а назначение компании действует, пока эта компания
+   активна. Список приходит областями (вкладки «Все / Мои / Мне назначены /
+   Совместные»), а что можно делать — говорит my_access, посчитанный сервером.
+   Клиент его только показывает: решать права на клиенте нельзя. */
 export const useFormsStore = defineStore('forms', () => {
   const forms = ref([])            // карточки списка (без структуры)
   const loadingList = ref(false)
@@ -247,11 +248,21 @@ export const useFormsStore = defineStore('forms', () => {
     refreshResponses()
   }
 
+  /* Смена активной компании меняет сам набор форм: в другой компании открыты
+     другие. Открытую форму при этом закрываем, если её там нет — иначе на
+     экране остаётся форма компании, из которой человек уже ушёл. */
+  async function reloadForCompany() {
+    await fetchForms()
+    if (selectedId.value != null && !forms.value.some((f) => f.id === selectedId.value)) {
+      await select(null)
+    }
+  }
+
   return {
     forms, loadingList, selectedId, selected, loadingForm, scope,
     responses, responsesTotal, loadingResponses, summary, progress, filters,
     myAccess, canSeeResponses, canEdit, isOwner,
-    fetchForms, setScope, select, loadForm,
+    fetchForms, setScope, select, loadForm, reloadForCompany,
     createForm, updateForm, saveStructure, removeForm, duplicateForm,
     fetchResponses, setSearch, setPage, applySort, fetchSummary, fetchProgress,
     deleteResponse, clearResponses, publishGrades,

@@ -6,6 +6,7 @@ import { describeIntegration, uniq } from '../setup/harness.js'
 import { newCompanyAdmin } from '../setup/factory.js'
 import * as reg from '@/api/registries.js'
 import * as cal from '@/api/calendars.js'
+import * as companies from '@/api/companies.js'
 
 function fieldId(fields, label) {
   const f = fields.find((x) => x.label === label)
@@ -56,6 +57,22 @@ describeIntegration('registries api', () => {
     const all = await reg.getRegistries()
     const arr = all.registries ?? all.items ?? all
     expect(arr.some((x) => x.id === c.id)).toBe(true)
+  })
+
+  // Реестр живёт в компании, где заведён: переключение компании меняет набор.
+  it('реестр виден только в своей компании', async () => {
+    const admin = await newCompanyAdmin('regscope')
+    admin.session.use()
+    const created = await reg.createRegistry(uniq('Компанийный '))
+
+    const other = await companies.createCompany({ name: uniq('ООО ') })
+    await admin.auth.switchCompany(other.id)
+    const elsewhere = await reg.getRegistries()
+    expect((elsewhere.registries ?? []).some((x) => x.id === created.id)).toBe(false)
+
+    await admin.auth.switchCompany(admin.companyId)
+    const back = await reg.getRegistries()
+    expect((back.registries ?? []).some((x) => x.id === created.id)).toBe(true)
   })
 })
 

@@ -441,9 +441,9 @@ func recordPayload(r *domain.Record) map[string]any {
 	}
 }
 
-// SearchRecords — глобальный поиск по записям ВСЕХ доступных реестров (строка
-// поиска Hola): свои, расшаренные лично и расшаренные компаниям. Пустой запрос
-// ничего не ищет.
+// SearchRecords — глобальный поиск по записям реестров, доступных в АКТИВНОЙ
+// компании (строка поиска Hola): свои заведённые в ней и личные, расшаренные
+// лично и расшаренные самой компании. Пустой запрос ничего не ищет.
 func (s *Service) SearchRecords(ctx context.Context, userID int64, query string, limit int) ([]*domain.SearchHit, error) {
 	query = strings.TrimSpace(query)
 	if query == "" {
@@ -456,5 +456,5 @@ func (s *Service) SearchRecords(ctx context.Context, userID int64, query string,
 	if err != nil {
 		return nil, err
 	}
-	return s.repo.SearchRecords(ctx, a.UserID, a.Companies, query, limit)
+	return s.repo.SearchRecords(ctx, a.UserID, a.CompanyID, query, limit)
 }

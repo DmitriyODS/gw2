@@ -26,14 +26,12 @@ func ignoreNoRows(err error) error {
    (accessExpr в forms.go) — правило одно на всех. */
 
 // AccessOf — эффективный уровень человека к форме ("" — доступа нет).
-func (r *Repo) AccessOf(ctx context.Context, formID, userID int64, companyIDs []int64) (string, error) {
-	if companyIDs == nil {
-		companyIDs = []int64{}
-	}
+// companyID — активная компания сессии (0 — её нет).
+func (r *Repo) AccessOf(ctx context.Context, formID, userID, companyID int64) (string, error) {
 	var access string
 	err := r.pool.QueryRow(ctx,
 		`SELECT `+accessExpr+` FROM forms f WHERE f.id = $3`,
-		userID, companyIDs, formID).Scan(&access)
+		userID, companyID, formID).Scan(&access)
 	if err != nil {
 		return domain.AccessNone, ignoreNoRows(err)
 	}

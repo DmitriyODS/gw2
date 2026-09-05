@@ -13,10 +13,12 @@ type Ctx = context.Context
 // внешних ссылок.
 type FormRepository interface {
 	// ── Формы ──
-	// ListForms — формы области: свои, назначенные, совместные. Уровень
-	// доступа, число ответов и собственная обязанность считаются тем же
-	// запросом (список раздела показывает всё это сразу).
-	ListForms(ctx Ctx, userID int64, companyIDs []int64, scope string) ([]*Form, error)
+	// ListForms — формы области, видимые в АКТИВНОЙ компании: свои, заведённые
+	// в ней (плюс личные — вне компаний), назначенные лично и назначенные самой
+	// активной компании. Уровень доступа, число ответов и собственная
+	// обязанность считаются тем же запросом (список раздела показывает всё это
+	// сразу). companyID == 0 — активной компании нет.
+	ListForms(ctx Ctx, userID, companyID int64, scope string) ([]*Form, error)
 	// GetForm — форма без структуры и без проверки доступа (её делает сервис).
 	GetForm(ctx Ctx, id int64) (*Form, error)
 	CountOwned(ctx Ctx, ownerID int64) (int, error)
@@ -25,8 +27,8 @@ type FormRepository interface {
 	DeleteForm(ctx Ctx, id int64) error
 	NextPosition(ctx Ctx, ownerID int64) (int, error)
 	// SearchForms — глобальный поиск (строка Hola) по названиям и описаниям
-	// доступных форм.
-	SearchForms(ctx Ctx, userID int64, companyIDs []int64, query string, limit int) ([]*SearchHit, error)
+	// форм, доступных в активной компании.
+	SearchForms(ctx Ctx, userID, companyID int64, query string, limit int) ([]*SearchHit, error)
 
 	// ── Структура ──
 	// ListSections — разделы формы вместе с вопросами, в порядке показа.
@@ -73,8 +75,8 @@ type FormRepository interface {
 
 	// ── Доступ ──
 	// AccessOf — эффективный уровень человека к форме (лучший из личной шары и
-	// шар его компаний; владельцу — AccessOwner).
-	AccessOf(ctx Ctx, formID, userID int64, companyIDs []int64) (string, error)
+	// шары его АКТИВНОЙ компании; владельцу — AccessOwner).
+	AccessOf(ctx Ctx, formID, userID, companyID int64) (string, error)
 	// Audience — кому адресовать сокет-события формы.
 	Audience(ctx Ctx, formID int64) ([]int64, error)
 	ListUserShares(ctx Ctx, formID int64) ([]*UserShare, error)

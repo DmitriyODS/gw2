@@ -7,6 +7,7 @@ import { it, expect } from 'vitest'
 import { describeIntegration, uniq } from '../setup/harness.js'
 import { newCompanyAdmin, newMember } from '../setup/factory.js'
 import * as forms from '@/api/forms.js'
+import * as companies from '@/api/companies.js'
 
 // qid — id вопроса по его тексту (id выдаёт сервер при сохранении структуры).
 function qid(form, title) {
@@ -350,5 +351,21 @@ describeIntegration('forms api', () => {
     expect(row).toBeTruthy()
     expect(row.my_access).toBe('respond')
     expect(row.my_responded).toBe(false)
+  })
+
+  // Форма живёт в компании, где заведена: переключение компании меняет набор.
+  it('форма видна только в своей компании', async () => {
+    const admin = await newCompanyAdmin('formcompany')
+    admin.session.use()
+    const form = await branchingForm(uniq('Компанийная '))
+
+    const other = await companies.createCompany({ name: uniq('ООО ') })
+    await admin.auth.switchCompany(other.id)
+    const elsewhere = await forms.getForms('mine')
+    expect(elsewhere.forms.some((f) => f.id === form.id)).toBe(false)
+
+    await admin.auth.switchCompany(admin.companyId)
+    const back = await forms.getForms('mine')
+    expect(back.forms.some((f) => f.id === form.id)).toBe(true)
   })
 })

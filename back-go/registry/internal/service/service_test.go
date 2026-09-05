@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/DmitriyODS/gw2/back-go/pkg/pasetoauth"
 	"github.com/DmitriyODS/gw2/back-go/registry/internal/domain"
 )
 
@@ -36,7 +37,7 @@ type fakeRepo struct {
 	nextID     int64
 }
 
-func (f *fakeRepo) ListRegistries(_ domain.Ctx, _ int64, _ []int64, _ string) ([]*domain.Registry, error) {
+func (f *fakeRepo) ListRegistries(_ domain.Ctx, _, _ int64, _ string) ([]*domain.Registry, error) {
 	return []*domain.Registry{f.reg}, nil
 }
 func (f *fakeRepo) GetRegistry(_ domain.Ctx, id int64) (*domain.Registry, error) {
@@ -46,8 +47,9 @@ func (f *fakeRepo) GetRegistry(_ domain.Ctx, id int64) (*domain.Registry, error)
 	return nil, nil
 }
 
-// AccessOf — владелец получает всё, остальные — по своим шарам.
-func (f *fakeRepo) AccessOf(_ domain.Ctx, registryID, userID int64, companyIDs []int64) (string, error) {
+// AccessOf — владелец получает всё, остальные — по личной шаре и шаре активной
+// компании.
+func (f *fakeRepo) AccessOf(_ domain.Ctx, registryID, userID, companyID int64) (string, error) {
 	if f.reg == nil || f.reg.ID != registryID {
 		return domain.AccessNone, nil
 	}
@@ -60,7 +62,7 @@ func (f *fakeRepo) AccessOf(_ domain.Ctx, registryID, userID int64, companyIDs [
 			continue
 		}
 		if (sh.UserID != nil && *sh.UserID == userID) ||
-			(sh.CompanyID != nil && slices.Contains(companyIDs, *sh.CompanyID)) {
+			(sh.CompanyID != nil && companyID != 0 && *sh.CompanyID == companyID) {
 			best = domain.BestAccess(best, sh.Access)
 		}
 	}
@@ -100,7 +102,7 @@ func (f *fakeRepo) ListRecords(_ domain.Ctx, filter domain.RecordListFilter) ([]
 	f.lastFilter = filter
 	return nil, 0, nil
 }
-func (f *fakeRepo) SearchRecords(_ domain.Ctx, _ int64, _ []int64, _ string, _ int) ([]*domain.SearchHit, error) {
+func (f *fakeRepo) SearchRecords(_ domain.Ctx, _, _ int64, _ string, _ int) ([]*domain.SearchHit, error) {
 	return nil, nil
 }
 func (f *fakeRepo) GetRecord(_ domain.Ctx, id int64) (*domain.Record, error) {
@@ -522,17 +524,45 @@ func TestAccess_BestOfPersonalAndCompany(t *testing.T) {
 	const guest = 1001
 	user, company := int64(guest), int64(companyID)
 	repo.userShares = []*domain.UserShare{
-		{RegistryID: 1, CompanyID: &company, Access: domain.AccessView},
+		{RegistryID: 1, CompanyID: &company, Access: domain.AccessAdmin},
 		{RegistryID: 1, UserID: &user, Access: domain.AccessEdit},
 	}
 	svc.users.(*fakeUsers).companies[guest] = []int64{companyID}
 
-	reg, err := svc.GetRegistry(context.Background(), guest, 1)
+	ctx := pasetoauth.WithCompany(context.Background(), companyID)
+	reg, err := svc.GetRegistry(ctx, guest, 1)
 	if err != nil {
 		t.Fatalf("чтение: %v", err)
 	}
+	if reg.MyAccess != domain.AccessAdmin {
+		t.Errorf("сильнейший уровень: получено %q", reg.MyAccess)
+	}
+}
+
+/* Шара компании действует, только пока эта компания активна: реестр раздан
+   компании, а человек работает в другой — прав у него нет. Иначе привязка к
+   компании была бы фикцией: список её учитывает, а доступ нет. */
+func TestAccess_CompanyShareOnlyInActiveCompany(t *testing.T) {
+	svc, repo, _ := newTestService(nil)
+	const guest = 1001
+	company := int64(companyID)
+	repo.userShares = []*domain.UserShare{
+		{RegistryID: 1, CompanyID: &company, Access: domain.AccessEdit},
+	}
+	svc.users.(*fakeUsers).companies[guest] = []int64{companyID, companyID + 1}
+
+	inCompany := pasetoauth.WithCompany(context.Background(), companyID)
+	reg, err := svc.GetRegistry(inCompany, guest, 1)
+	if err != nil {
+		t.Fatalf("чтение в своей компании: %v", err)
+	}
 	if reg.MyAccess != domain.AccessEdit {
-		t.Errorf("личная шара сильнее компанийной: получено %q", reg.MyAccess)
+		t.Errorf("уровень в компании шары: получено %q", reg.MyAccess)
+	}
+
+	elsewhere := pasetoauth.WithCompany(context.Background(), companyID+1)
+	if _, err := svc.GetRegistry(elsewhere, guest, 1); err != domain.ErrRegistryNotFound {
+		t.Errorf("в другой компании реестра быть не должно, получено %v", err)
 	}
 }
 

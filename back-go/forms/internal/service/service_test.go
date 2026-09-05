@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/DmitriyODS/gw2/back-go/forms/internal/domain"
+	"github.com/DmitriyODS/gw2/back-go/pkg/pasetoauth"
 )
 
 const (
@@ -31,7 +32,7 @@ type fakeRepo struct {
 	nextID     int64
 }
 
-func (f *fakeRepo) ListForms(_ domain.Ctx, _ int64, _ []int64, _ string) ([]*domain.Form, error) {
+func (f *fakeRepo) ListForms(_ domain.Ctx, _, _ int64, _ string) ([]*domain.Form, error) {
 	return []*domain.Form{f.form}, nil
 }
 
@@ -55,7 +56,7 @@ func (f *fakeRepo) UpdateForm(_ domain.Ctx, form *domain.Form) error {
 }
 func (f *fakeRepo) DeleteForm(_ domain.Ctx, _ int64) error          { f.form = nil; return nil }
 func (f *fakeRepo) NextPosition(_ domain.Ctx, _ int64) (int, error) { return 1, nil }
-func (f *fakeRepo) SearchForms(_ domain.Ctx, _ int64, _ []int64, _ string, _ int) ([]*domain.SearchHit, error) {
+func (f *fakeRepo) SearchForms(_ domain.Ctx, _, _ int64, _ string, _ int) ([]*domain.SearchHit, error) {
 	return []*domain.SearchHit{}, nil
 }
 
@@ -181,8 +182,9 @@ func (f *fakeRepo) ResponsesOfOwner(_ domain.Ctx, _ int64, _ []int64) ([]*domain
 	return nil, nil
 }
 
-// AccessOf — владелец получает всё, остальные — по своим шарам.
-func (f *fakeRepo) AccessOf(_ domain.Ctx, formID, userID int64, companyIDs []int64) (string, error) {
+// AccessOf — владелец получает всё, остальные — по личной шаре и шаре активной
+// компании.
+func (f *fakeRepo) AccessOf(_ domain.Ctx, formID, userID, companyID int64) (string, error) {
 	if f.form == nil || f.form.ID != formID {
 		return domain.AccessNone, nil
 	}
@@ -195,7 +197,7 @@ func (f *fakeRepo) AccessOf(_ domain.Ctx, formID, userID int64, companyIDs []int
 			continue
 		}
 		if (sh.UserID != nil && *sh.UserID == userID) ||
-			(sh.CompanyID != nil && slices.Contains(companyIDs, *sh.CompanyID)) {
+			(sh.CompanyID != nil && companyID != 0 && *sh.CompanyID == companyID) {
 			best = domain.BestAccess(best, sh.Access)
 		}
 	}
@@ -550,6 +552,32 @@ func TestShareWithNotifiesAssignee(t *testing.T) {
 	}
 	if s.bus.has("form:assigned") {
 		t.Fatal("уведомление о назначении ушло при обычной выдаче доступа")
+	}
+}
+
+/* Назначение компании действует, только пока эта компания активна: форма
+   назначена компании, а человек работает в другой — обязанности у него нет.
+   Иначе привязка к компании была бы фикцией: список её учитывает, а доступ нет. */
+func TestCompanyShareOnlyInActiveCompany(t *testing.T) {
+	s := newStand()
+	company := int64(companyID)
+	s.repo.userShares = []*domain.UserShare{
+		{FormID: 1, CompanyID: &company, Access: domain.AccessRespond},
+	}
+	s.svc.users.(*fakeUsers).companies[assigneeID] = []int64{companyID, companyID + 1}
+
+	inCompany := pasetoauth.WithCompany(ctx(), companyID)
+	form, err := s.svc.GetForm(inCompany, assigneeID, 1)
+	if err != nil {
+		t.Fatalf("чтение в своей компании: %v", err)
+	}
+	if form.MyAccess != domain.AccessRespond {
+		t.Errorf("уровень в компании назначения: получено %q", form.MyAccess)
+	}
+
+	elsewhere := pasetoauth.WithCompany(ctx(), companyID+1)
+	if got := code(t, mustErr(s.svc.GetForm(elsewhere, assigneeID, 1))); got != "NOT_FOUND" {
+		t.Fatalf("в другой компании форма показалась (%s)", got)
 	}
 }
 
