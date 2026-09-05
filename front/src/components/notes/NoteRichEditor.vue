@@ -256,10 +256,17 @@ const editor = useEditor({
   onUpdate: ({ editor: ed }) => emit('change', ed.getJSON()),
   onBlur: () => emit('blur'),
   editorProps: {
-    /* Адрес из буфера поверх выделенного текста делает его ссылкой, а не
-       заменяет: привычка из редакторов. Пустое выделение и обычный текст
-       вставляются как всегда — возвращаем false, дальше работает TipTap. */
     handlePaste: (view, event) => {
+      // Скриншот из буфера — обычный сценарий заметки, а сам ProseMirror файлы
+      // не принимает: грузим картинку в заметку и вставляем узлом.
+      const picture = clipboardImage(event.clipboardData)
+      if (picture) {
+        insertImageFile(picture)
+        return true
+      }
+      /* Адрес из буфера поверх выделенного текста делает его ссылкой, а не
+         заменяет: привычка из редакторов. Пустое выделение и обычный текст
+         вставляются как всегда — возвращаем false, дальше работает TipTap. */
       const href = clipboardLink(event.clipboardData?.getData('text/plain'))
       if (!href || view.state.selection.empty) return false
       editor.value?.chain().focus().extendMarkRange('link').setLink({ href }).run()
@@ -416,6 +423,20 @@ async function runAutocomplete() {
 async function onImageFile(e) {
   const file = e.target.files?.[0]
   e.target.value = ''
+  await insertImageFile(file)
+}
+
+/* clipboardImage — картинка-файл из буфера обмена, если вставлять нужно именно
+   её. Текст в буфере означает скопированный фрагмент (Word, страница сайта):
+   там картинка идёт вместе с текстом, и подмена оставила бы от фрагмента одну
+   картинку — такой буфер разбирает сам TipTap. */
+function clipboardImage(data) {
+  if (!props.uploadImage || !data) return null
+  if (data.getData('text/plain')?.trim()) return null
+  return [...(data.files || [])].find((f) => f.type.startsWith('image/')) || null
+}
+
+async function insertImageFile(file) {
   if (!file || !props.uploadImage) return
   const url = await props.uploadImage(file)
   if (url) chain().setImage({ src: url }).run()
