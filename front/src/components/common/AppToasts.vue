@@ -83,8 +83,10 @@ const hoverId = ref(null)
    искать нужное место руками. */
 function go(t) {
   if (!t.path) return
-  openPath(t.path)
+  // Убираем карточку ПЕРЕД переходом: раздел может открыться не сразу (окно,
+  // ленивый чанк), и уведомление не должно висеть поверх того, куда оно увело.
   notif.dismiss(t.id)
+  openPath(t.path)
 }
 </script>
 
