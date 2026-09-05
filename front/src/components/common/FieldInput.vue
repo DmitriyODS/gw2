@@ -123,7 +123,7 @@
           <span class="material-symbols-outlined">close</span>
         </button>
       </div>
-      <label class="fi-upload" :class="{ busy: uploading }">
+      <label v-if="upload" class="fi-upload" :class="{ busy: uploading }">
         <input type="file" :accept="field.type === 'image' ? 'image/*' : undefined" hidden @change="onFile" />
         <span class="material-symbols-outlined">{{ uploading ? 'hourglass_top' : 'upload' }}</span>
         {{ uploading ? 'Загрузка…' : (modelValue?.path ? 'Заменить' : 'Загрузить') }}
@@ -147,8 +147,12 @@ import { checkboxText, dateParts, normalizePhone } from '@/utils/registryFields.
 const props = defineProps({
   field: { type: Object, required: true },
   modelValue: { default: null },
-  /* Загрузчик файла своего раздела: async (file) => метаданные { path, name, … } */
-  upload: { type: Function, required: true },
+  /* Загрузчик файла своего раздела: async (file) => метаданные { path, name, … }.
+     Не у всех разделов файлы есть вовсе (расписания их не держат), поэтому
+     загрузчик необязателен: без него поле-файл только показывает уже
+     записанное. Требовать его значило ругаться в консоль на каждое текстовое
+     поле раздела без файлов. */
+  upload: { type: Function, default: null },
 })
 const emit = defineEmits(['update:modelValue'])
 
@@ -262,7 +266,7 @@ function onDate(d) {
 const uploading = ref(false)
 async function onFile(e) {
   const picked = e.target.files?.[0]
-  if (!picked) return
+  if (!picked || !props.upload) return
   uploading.value = true
   try {
     const file = props.field.type === 'image' ? await compressImage(picked) : picked
