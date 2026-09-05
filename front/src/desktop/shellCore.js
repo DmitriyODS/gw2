@@ -21,6 +21,7 @@ import { useCompanySettings } from '@/composables/useCompanySettings.js'
 import { clearNotificationJournal } from '@/composables/useDesktopNotifications.js'
 import { appForPath, menuGroups } from '@/desktop/apps.js'
 import { TASKBAR_MARGIN, shellActive, taskbarHeight, taskbarMargin } from '@/desktop/layout.js'
+import { announceRelease } from '@/utils/releaseNotice.js'
 import { isBlankRecipe, normalizeRecipe } from '@/utils/chatBackgrounds.js'
 import { defaultWallpaperRecipe } from '@/utils/wallpapers.js'
 
@@ -172,6 +173,10 @@ export function useShellCore({
     // (deep-link важнее сохранённого состояния).
     desktop.restoreSession(isAvailable)
     openForPath(route.fullPath)
+
+    // Обновилось ли приложение с прошлого запуска — узнаём здесь: каркас
+    // поднимается один раз за вход, а карточка выпуска ведёт в настройки.
+    announceRelease()
 
     pulseLiveTiles()
     livePulse = setInterval(() => pulseLiveTiles({ force: true }), LIVE_PULSE)

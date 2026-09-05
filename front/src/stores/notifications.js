@@ -19,8 +19,10 @@ export const useNotificationsStore = defineStore('notifications', () => {
      source — раздел-источник СОБЫТИЯ (мессенджер, напоминания…): от него
      зависит, ждёт ли человек таких уведомлений вообще («Настройки →
      Уведомления»). Ответы на собственные действия источника не имеют и
-     приходят всегда. life — по умолчанию из настроек. */
-  function notify({ severity = 'info', summary = '', detail = '', life, sound, source }) {
+     приходят всегда. life — по умолчанию из настроек.
+     path — куда ведёт нажатие по карточке (раздел приложения); без него
+     карточка просто сообщает. */
+  function notify({ severity = 'info', summary = '', detail = '', life, sound, source, path }) {
     if (!isSourceEnabled(source)) return
     // При выходе/без активной сессии хвостовые запросы авторизованных экранов
     // отваливаются по 401 — это ожидаемо, поэтому не сыпем тостами ошибок
@@ -33,7 +35,7 @@ export const useNotificationsStore = defineStore('notifications', () => {
       if (auth.loggingOut || !auth.token) return
     }
     // Новое — сверху стопки; лишнее уходит с её хвоста.
-    toasts.value.unshift({ id: ++seq, severity, summary, detail, life: life ?? notifyPrefs.life })
+    toasts.value.unshift({ id: ++seq, severity, summary, detail, path, life: life ?? notifyPrefs.life })
     if (toasts.value.length > MAX) toasts.value.splice(MAX)
     if (sound !== false) playNotifySound(sound || severity)
   }

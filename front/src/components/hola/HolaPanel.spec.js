@@ -62,13 +62,17 @@ import * as messengerApi from '@/api/messenger.js'
 import * as aiApi from '@/api/ai.js'
 import { useMessengerStore } from '@/stores/messenger.js'
 
-/* Роутер панели — заглушка: на рабочем столе переходы уходят в оконный
-   менеджер, на мобильном каркасе — в router.push, и оба пути проверяем. */
-const router = {
+/* Роутер — заглушка: на рабочем столе переходы уходят в оконный менеджер, на
+   мобильном каркасе — в router.push, и оба пути проверяем. Подменяем сам
+   модуль роутера (его импортируют desktop-стор и общий openPath) и заодно
+   отдаём его компонентам через provide — useRoute/useRouter внутри панели
+   ждут инъекцию. */
+const router = vi.hoisted(() => ({
   push: vi.fn(),
   replace: vi.fn(),
   resolve: (p) => ({ path: String(p).split('?')[0], fullPath: String(p) }),
-}
+}))
+vi.mock('@/router/index.js', () => ({ default: router }))
 
 function setup({ shell = true } = {}) {
   setActivePinia(createPinia())

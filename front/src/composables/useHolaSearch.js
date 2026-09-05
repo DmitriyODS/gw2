@@ -7,8 +7,6 @@
  * от вью: этим же ядром пользуются вкладки «Поиск» и «Команды».
  */
 import { computed, ref } from 'vue'
-import { useRouter } from 'vue-router'
-import { useDesktopStore } from '@/stores/desktop.js'
 import { usePermission, ROLES } from '@/composables/usePermission.js'
 import { useCompanySettings } from '@/composables/useCompanySettings.js'
 import { useNotificationsStore } from '@/stores/notifications.js'
@@ -18,7 +16,7 @@ import { useNotesStore } from '@/stores/notes.js'
 import { useBoardsStore } from '@/stores/boards.js'
 import { useRemindersStore } from '@/stores/reminders.js'
 import { APPS, appById } from '@/desktop/apps.js'
-import { shellActive } from '@/desktop/layout.js'
+import { openPath } from '@/desktop/openPath.js'
 import { calculate, formatResult } from '@/utils/calc.js'
 import { parseQuickCommand } from '@/utils/quickCommands.js'
 import { humanWhen } from '@/utils/naturalDate.js'
@@ -54,8 +52,6 @@ function emptyHits() {
 }
 
 export function useHolaSearch() {
-  const router = useRouter()
-  const desktop = useDesktopStore()
   const notif = useNotificationsStore()
   const auth = useAuthStore()
   const messenger = useMessengerStore()
@@ -78,13 +74,6 @@ export function useHolaSearch() {
   }))
 
   const needle = computed(() => query.value.trim().toLowerCase())
-
-  /* Раздел рабочего стола открывается окном, а на мобильном каркасе (окон там
-     нет) — обычным переходом. */
-  function openPath(path) {
-    if (shellActive.value) desktop.open(path)
-    else router.push(path)
-  }
 
   /* ── Калькулятор ── */
   const calc = computed(() => calculate(query.value))

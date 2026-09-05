@@ -13,10 +13,11 @@
         v-for="t in notif.toasts"
         :key="t.id"
         class="tst-item"
-        :class="[`is-${t.severity}`, { paused: t.id === hoverId }]"
+        :class="[`is-${t.severity}`, { paused: t.id === hoverId, clickable: !!t.path }]"
         role="status"
         @pointerenter="hoverId = t.id"
         @pointerleave="hoverId = null"
+        @click="go(t)"
       >
         <span class="tst-ic material-symbols-outlined">{{ ICONS[t.severity] || ICONS.info }}</span>
 
@@ -25,7 +26,7 @@
           <p v-if="t.detail" class="tst-text">{{ t.detail }}</p>
         </div>
 
-        <button type="button" class="tst-close" aria-label="Закрыть" @click="notif.dismiss(t.id)">
+        <button type="button" class="tst-close" aria-label="Закрыть" @click.stop="notif.dismiss(t.id)">
           <span class="material-symbols-outlined">close</span>
         </button>
 
@@ -56,6 +57,7 @@ import { useBreakpoint } from '@/composables/useBreakpoint.js'
 import { useScreenLock } from '@/composables/useScreenLock.js'
 import { notifyPrefs } from '@/utils/notifySettings.js'
 import { useNotificationsStore } from '@/stores/notifications.js'
+import { openPath } from '@/desktop/openPath.js'
 
 const ICONS = {
   success: 'check_circle',
@@ -75,6 +77,15 @@ const visible = computed(() => notifyPrefs.onLockScreen || !screenLock.locked.va
 
 // Под курсором держим карточку открытой, пока указатель с неё не уйдёт.
 const hoverId = ref(null)
+
+/* Карточка с адресом ведёт в свой раздел (обновление приложения — в «О
+   приложении»): уведомление, о котором нельзя ничего сделать, заставляет
+   искать нужное место руками. */
+function go(t) {
+  if (!t.path) return
+  openPath(t.path)
+  notif.dismiss(t.id)
+}
 </script>
 
 <style scoped>
@@ -161,6 +172,9 @@ const hoverId = ref(null)
   color: var(--color-text);
   pointer-events: auto;
 }
+/* Карточка-ссылка: ведёт в свой раздел, поэтому и выглядит нажимаемой. */
+.tst-item.clickable { cursor: pointer; }
+.tst-item.clickable:hover { border-color: var(--color-primary); }
 
 .tst-item.is-success { --tone: var(--color-success); }
 .tst-item.is-error { --tone: var(--color-error); }
