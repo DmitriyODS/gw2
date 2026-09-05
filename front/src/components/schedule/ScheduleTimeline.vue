@@ -134,8 +134,8 @@ const scaleStyle = computed(() => ({
   display: flex;
   align-items: baseline;
   gap: 6px;
-  padding: 2px 6px;
-  border-radius: var(--radius-sm);
+  padding: 4px 8px;
+  border-radius: var(--radius-full);
   font-size: 12px;
   color: var(--color-text-dim);
   overflow: hidden;
@@ -159,11 +159,14 @@ const scaleStyle = computed(() => ({
   position: relative;
   display: grid;
   grid-template-columns: var(--st-rail) minmax(0, 1fr);
-  gap: 4px;
+  gap: 6px;
   flex: 1;
   min-height: 0;
   /* Шкала прокручивается сама: у раздела scroll=false, и без своей прокрутки
-     содержимое молча обрезалось бы. */
+     содержимое молча обрезалось бы. Отступ сверху — подписи часов стоят по
+     центру своей линии, и у самой верхней половина уезжала под кромку. */
+  padding-top: 9px;
+  padding-bottom: 4px;
   overflow-y: auto;
 }
 
@@ -178,11 +181,13 @@ const scaleStyle = computed(() => ({
 }
 .st-rail-hour {
   position: absolute;
-  right: 6px;
+  right: 8px;
   transform: translateY(-50%);
   font-size: 11px;
+  line-height: 1;
   font-variant-numeric: tabular-nums;
   color: var(--color-text-dim);
+  opacity: 0.75;
 }
 
 .st-cols {
@@ -194,9 +199,15 @@ const scaleStyle = computed(() => ({
 .st-col {
   position: relative;
   min-width: 0;
-  border-radius: var(--radius-sm);
-  background: var(--color-surface-low);
+  border-radius: var(--radius-md);
+  /* Колонка — подложка, а не карточка: сплошная плашка спорила с блоками
+     занятий, поэтому фон едва заметный, а форму держит рамка. */
+  background: color-mix(in oklch, var(--color-surface-low) 55%, transparent);
+  border: 1px solid var(--color-outline-dim);
 }
-.st-col.today { background: var(--color-surface-high); }
+.st-col.today {
+  background: color-mix(in oklch, var(--color-primary) 7%, transparent);
+  border-color: color-mix(in oklch, var(--color-primary) 35%, transparent);
+}
 .st.day .st-cols { grid-template-columns: minmax(0, 1fr); }
 </style>

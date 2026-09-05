@@ -8,7 +8,7 @@
       :style="{ top: pct(h * 60) }"
     />
 
-    <div v-if="!items.length" class="sl-free">свободно</div>
+    <div v-if="!items.length && !dense" class="sl-free">свободный день</div>
 
     <!-- Окна между занятиями: в конструкторе клик по окну заводит занятие
          ровно на него — приём прототипа, самый быстрый способ заполнить день. -->
@@ -166,7 +166,7 @@ function onLaneClick(event) {
   left: 0;
   right: 0;
   border-top: 1px solid var(--color-outline-dim);
-  opacity: 0.5;
+  opacity: 0.35;
   pointer-events: none;
 }
 
@@ -183,8 +183,8 @@ function onLaneClick(event) {
 
 .sl-gap {
   position: absolute;
-  left: 2px;
-  right: 2px;
+  left: 3px;
+  right: 3px;
   display: grid;
   place-items: center;
   border: 1px dashed var(--color-outline-dim);
@@ -203,25 +203,33 @@ button.sl-gap:hover {
 
 .sl-block {
   position: absolute;
-  left: 2px;
-  right: 2px;
+  left: 3px;
+  right: 3px;
   display: flex;
   flex-direction: column;
   gap: 1px;
   overflow: hidden;
-  padding: 4px 6px;
+  padding: 5px 8px;
   text-align: left;
-  border-radius: var(--radius-sm);
-  border: 1px solid var(--sl-border, var(--color-outline-dim));
-  background: var(--sl-surface, var(--color-surface-high));
+  border-radius: var(--radius-md);
+  /* Цвет категории держит левая кромка, а не вся рамка: так занятия читаются
+     как список, а не как набор разноцветных плашек. */
+  border: 1px solid color-mix(in oklch, var(--sl-border, var(--color-outline-dim)) 60%, transparent);
+  border-left: 3px solid var(--sl-accent, var(--color-primary));
+  background: var(--sl-surface, var(--color-surface-low));
   color: var(--color-text);
   font: inherit;
+  box-shadow: 0 1px 2px color-mix(in oklch, var(--color-scrim) 8%, transparent);
+  transition: box-shadow .15s, transform .15s;
 }
 button.sl-block { cursor: pointer; }
-button.sl-block:hover { filter: brightness(1.04); }
+button.sl-block:hover {
+  box-shadow: 0 3px 10px color-mix(in oklch, var(--color-scrim) 16%, transparent);
+}
 
 .sl-time {
   font-size: 11px;
+  font-weight: 600;
   font-variant-numeric: tabular-nums;
   color: var(--sl-accent, var(--color-text-dim));
 }
@@ -271,8 +279,10 @@ button.sl-row { cursor: pointer; }
   left: 0;
   right: 0;
   height: 2px;
-  background: var(--color-primary);
+  background: var(--color-error);
+  opacity: 0.85;
   pointer-events: none;
+  z-index: 2;
 }
 .sl-now::before {
   content: '';
@@ -282,7 +292,7 @@ button.sl-row { cursor: pointer; }
   width: 8px;
   height: 8px;
   border-radius: 50%;
-  background: var(--color-primary);
+  background: var(--color-error);
 }
 
 /* Цвет занятия — из палитры категорий (--tag-*), как у тегов задач. */

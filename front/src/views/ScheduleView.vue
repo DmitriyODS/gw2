@@ -25,6 +25,7 @@
               { value: 'mine', label: 'Мои' },
               { value: 'shared', label: 'Поделились' },
             ]"
+            class="sv-tabs"
             :full-width="narrow"
             @update:model-value="store.setTab($event)"
           />
@@ -77,7 +78,7 @@
       >
         <template v-if="store.selected" #subhead="{ narrow: tight }">
           <div class="sv-bar">
-            <div class="sv-nav">
+            <div class="sv-nav" :class="{ wide: narrow }">
               <AppButton variant="icon" icon="chevron_left" label="Предыдущая неделя" @click="store.stepWeek(-1)" />
               <AppButton variant="text" :label="weekRange" title="Вернуться к текущей неделе" @click="store.today()" />
               <AppChip v-if="store.selected.cycle_weeks > 1" tone="primary" :label="store.cycleWeekLabel" />
@@ -86,8 +87,10 @@
 
             <!-- Порог окна крутится прямо здесь: подобрать его на глаз проще,
                  чем угадать в настройках. Значение личное — гость по ссылке
-                 чужой порог менять не может. -->
+                 чужой порог менять не может. В тесной панели регулятор уезжает
+                 в меню «ещё»: строка управления там дороже. -->
             <div
+              v-if="!narrow"
               class="sv-gap"
               title="Промежуток, начиная с которого он считается окном"
               @wheel.prevent="onGapWheel"
@@ -107,7 +110,7 @@
         </template>
 
         <template v-if="store.selected">
-          <BrandLoader v-if="store.loadingItems" size="64" class="sv-loader" />
+          <BrandLoader v-if="store.loadingItems" :size="64" block />
           <div v-else class="sv-body">
             <!-- Телефон и тесная панель: один день и полоса дней. Неделя
                  колонками там нечитаема — колонка уже названия занятия. -->
@@ -118,6 +121,7 @@
               :tabs="dayTabs"
               variant="tint"
               dense
+              full-width
               @update:model-value="store.selectedWeekday = $event"
             />
 
@@ -281,11 +285,12 @@ const days = computed(() => visibleDays(store.items, todayWeekday.value))
 // Длина цикла — выбор из готового набора: 1..MAX_CYCLE_WEEKS недель.
 const cycleOptions = Array.from({ length: MAX_CYCLE_WEEKS }, (_, i) => ({ value: i + 1, label: String(i + 1) }))
 
-// Дни недели на телефоне — вкладки. Сегодняшний подписан словом: значок-
-// счётчик тут читался бы как «непрочитанное», а день и так один.
+/* Дни недели на телефоне — вкладки во всю ширину, поэтому подпись короткая:
+   при равных долях самая длинная задаёт предел, и «Сегодня» с числами резалось
+   бы у всех. Что день сегодняшний, говорит сводка под шкалой. */
 const dayTabs = computed(() => days.value.map((d) => ({
   value: d,
-  label: isToday(d) ? 'Сегодня' : `${WEEKDAYS[d].short} ${dayNumber(d)}`,
+  label: WEEKDAYS[d].short,
 })))
 const todayWeekday = computed(() => (new Date().getDay() + 6) % 7)
 
@@ -303,8 +308,24 @@ const summaryItems = computed(() => {
 
 const summaryLabel = computed(() => {
   const weekday = narrow.value ? store.selectedWeekday : todayWeekday.value
-  return WEEKDAYS[weekday]?.full || ''
+  const name = WEEKDAYS[weekday]?.full || ''
+  return isToday(weekday) ? `${name}, сегодня` : name
 })
+
+/* Порог окна в меню: набором готовых значений, а не шагом «плюс-минус» —
+   попадать пальцем в две мелкие кнопки на телефоне неудобно. */
+const GAP_STEPS = [10, 15, 20, 30, 45, 60]
+
+const gapCommand = computed(() => ({
+  key: 'gap',
+  label: `Окно от ${store.gapMin} мин`,
+  icon: 'timelapse',
+  children: GAP_STEPS.map((n) => ({
+    key: `gap:${n}`,
+    label: `от ${n} мин`,
+    icon: n === store.gapMin ? 'check' : 'timelapse',
+  })),
+}))
 
 const commands = computed(() => {
   if (!store.selected) return []
@@ -314,6 +335,7 @@ const commands = computed(() => {
     ...(own && narrow.value
       ? [{ key: 'editing', label: store.editing ? 'Выйти из конструктора' : 'Конструктор', icon: 'edit' }]
       : []),
+    ...(narrow.value ? [gapCommand.value] : []),
     ...(own ? [{ key: 'setup', label: 'Настройки расписания', icon: 'tune' }] : []),
     ...(own ? [{ key: 'share', label: 'Поделиться', icon: 'share' }] : []),
     {
@@ -428,6 +450,10 @@ function onGapWheel(event) {
 }
 
 function onCommand(key) {
+  if (typeof key === 'string' && key.startsWith('gap:')) {
+    store.setGap(Number(key.slice(4)))
+    return
+  }
   switch (key) {
     case 'add': startItem({ weekday: narrow.value ? store.selectedWeekday : todayWeekday.value }); break
     case 'editing': store.editing = !store.editing; break
@@ -461,7 +487,13 @@ watch(() => route.query.id, async (value) => {
   align-items: center;
   gap: 10px;
 }
-.sv-nav { display: flex; align-items: center; gap: 2px; }
+.sv-nav { display: flex; align-items: center; gap: 2px; min-width: 0; }
+/* Тесная панель: навигация и полоса дней занимают строку целиком — пилюля по
+   содержимому оставляла справа пустое место. В flex-СТРОКЕ ширину даёт доля,
+   а не align-self: stretch. */
+.sv-nav.wide { flex: 1 1 100%; justify-content: space-between; }
+.sv-nav.wide :deep(.btn.v-text) { flex: 1; min-width: 0; }
+.sv-tabs { flex: 1 1 100%; }
 
 .sv-gap {
   display: flex;
@@ -487,8 +519,7 @@ watch(() => route.query.id, async (value) => {
 }
 /* Полоса дней не сжимается и не растягивается: место в колонке принадлежит
    шкале, а прижатая к ней вплотную полоса читалась как её часть. */
-.sv-days { flex: none; }
-.sv-loader { margin: auto; }
+.sv-days { flex: 1 1 100%; }
 
 
 .sv-spacer { flex: 1; }

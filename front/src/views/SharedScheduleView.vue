@@ -16,7 +16,7 @@
       <p>Ссылка не найдена или отозвана.</p>
     </div>
 
-    <BrandLoader v-else-if="loading" size="88" class="ss-loader" />
+    <BrandLoader v-else-if="loading" :size="88" block />
 
     <div v-else-if="schedule" class="ss-shell">
       <div class="ss-toolbar">
@@ -47,6 +47,7 @@
         :tabs="dayTabs"
         variant="tint"
         dense
+        full-width
         @update:model-value="weekday = $event"
       />
     </div>
@@ -67,7 +68,7 @@ import ScheduleSummary from '@/components/schedule/ScheduleSummary.vue'
 import ScheduleTimeline from '@/components/schedule/ScheduleTimeline.vue'
 import { getSharedSchedule } from '@/api/schedules.js'
 import {
-  WEEKDAYS, addDays, itemsOfDay, mondayOf, weekIndex, weekLabel,
+  WEEKDAYS, addDays, dateKey, itemsOfDay, mondayOf, weekIndex, weekLabel,
 } from '@/utils/scheduleCycle.js'
 import { visibleDays } from '@/utils/scheduleLayout.js'
 
@@ -85,12 +86,14 @@ const days = computed(() => visibleDays(items.value, (new Date().getDay() + 6) %
 const dayItems = computed(() => (schedule.value
   ? itemsOfDay(schedule.value, items.value, addDays(monday.value, weekday.value))
   : []))
-const dayLabel = computed(() => WEEKDAYS[weekday.value]?.full || '')
+const dayLabel = computed(() => {
+  const name = WEEKDAYS[weekday.value]?.full || ''
+  const today = dateKey(addDays(monday.value, weekday.value)) === dateKey(new Date())
+  return today ? `${name}, сегодня` : name
+})
 const todayWeekday = (new Date().getDay() + 6) % 7
-const dayTabs = computed(() => days.value.map((d) => ({
-  value: d,
-  label: d === todayWeekday ? 'Сегодня' : `${WEEKDAYS[d].short} ${addDays(monday.value, d).getUTCDate()}`,
-})))
+// Подпись короткая: вкладки делят ширину поровну (см. ScheduleView).
+const dayTabs = computed(() => days.value.map((d) => ({ value: d, label: WEEKDAYS[d].short })))
 
 const cycleLabel = computed(() => (schedule.value
   ? weekLabel(schedule.value, weekIndex(schedule.value.cycle_anchor, monday.value, schedule.value.cycle_weeks))
@@ -173,7 +176,6 @@ onBeforeUnmount(() => window.removeEventListener('resize', onResize))
   flex: 1;
   color: var(--color-text-dim);
 }
-.ss-loader { margin: auto; }
 
 .ss-shell { display: flex; flex-direction: column; gap: 12px; flex: 1; min-height: 0; }
 .ss-toolbar { display: flex; align-items: center; gap: 4px; }
