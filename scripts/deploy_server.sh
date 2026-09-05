@@ -410,6 +410,34 @@ else
   warn "маршрут /api/forms вернул $forms_code (ожидался 401) — проверьте nginx"
 fi
 
+# Микросервис расписаний: healthz изнутри контейнера + маршрут /api/schedules
+# через nginx (без токена ожидаем 401, не 404/502).
+if $COMPOSE exec -T schedule wget -qO- --timeout=3 http://127.0.0.1:8110/healthz >/dev/null 2>&1; then
+  ok "schedulesvc отвечает (healthz)"
+else
+  warn "schedulesvc не отвечает — расписания не работают: make logs s=schedule"
+fi
+schedule_code=$(curl -skL -o /dev/null -w '%{http_code}' --max-time 5 http://localhost/api/schedules || true)
+if [ "$schedule_code" = "401" ]; then
+  ok "маршрут /api/schedules через nginx ведёт в schedulesvc"
+else
+  warn "маршрут /api/schedules вернул $schedule_code (ожидался 401) — проверьте nginx"
+fi
+
+# Микросервис диска: healthz изнутри контейнера + маршрут /api/drive через
+# nginx (без токена ожидаем 401, не 404/502).
+if $COMPOSE exec -T drive wget -qO- --timeout=3 http://127.0.0.1:8108/healthz >/dev/null 2>&1; then
+  ok "drivesvc отвечает (healthz)"
+else
+  warn "drivesvc не отвечает — «Диск» не работает: make logs s=drive"
+fi
+drive_code=$(curl -skL -o /dev/null -w '%{http_code}' --max-time 5 http://localhost/api/drive || true)
+if [ "$drive_code" = "401" ]; then
+  ok "маршрут /api/drive через nginx ведёт в drivesvc"
+else
+  warn "маршрут /api/drive вернул $drive_code (ожидался 401) — проверьте nginx"
+fi
+
 # Микросервис календарей: healthz изнутри контейнера + маршрут /api/calendars
 # через nginx (без токена ожидаем 401, не 404/502).
 if $COMPOSE exec -T calendar wget -qO- --timeout=3 http://127.0.0.1:8100/healthz >/dev/null 2>&1; then

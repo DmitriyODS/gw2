@@ -995,6 +995,12 @@ services:
         condition: service_healthy
       registry:
         condition: service_healthy
+      forms:
+        condition: service_healthy
+      schedule:
+        condition: service_healthy
+      drive:
+        condition: service_healthy
       calendar:
         condition: service_healthy
       diary:
