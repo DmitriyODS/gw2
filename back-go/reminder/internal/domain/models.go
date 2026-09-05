@@ -58,9 +58,13 @@ const (
 	LinkNone     = "none"
 	LinkDiary    = "diary"
 	LinkCalendar = "calendar"
+	// LinkSchedule — занятие расписания: напоминание повторяется вместе с ним
+	// (weekly с интервалом в длину цикла), снимок несёт название занятия.
+	LinkSchedule = "schedule"
 )
 
-var LinkKinds = map[string]bool{LinkNone: true, LinkDiary: true, LinkCalendar: true}
+var LinkKinds = map[string]bool{LinkNone: true, LinkDiary: true, LinkCalendar: true,
+	LinkSchedule: true}
 
 // Link — привязка к записи ежедневника или календаря: напоминание хранит
 // СНИМОК (время события уже учтено в RemindAt, название — для карточки) и

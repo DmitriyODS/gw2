@@ -62,6 +62,7 @@ export const HTTP = {
   reminder: 18206,
   billing: 18207,
   forms: 18209,
+  schedule: 18210,
 }
 
 // gRPC-порты (+10100).
@@ -120,6 +121,7 @@ export function routeBase(path) {
     ['/api/push', HTTP.push],
     ['/api/registries', HTTP.registry],
     ['/api/forms', HTTP.forms],
+    ['/api/schedules', HTTP.schedule],
     ['/api/calendars', HTTP.calendar],
     ['/api/diaries', HTTP.diary],
     ['/api/portal', HTTP.portal],

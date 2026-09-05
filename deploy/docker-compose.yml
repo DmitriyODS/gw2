@@ -762,6 +762,36 @@ services:
       retries: 5
       start_period: 10s
 
+  # Микросервис расписаний (Go, back-go/schedule): HTTP :8110 — регулярные
+  # расписания с циклом в 1..4 недели (занятия стоят на дне недели и времени,
+  # вхождений на конкретные даты в базе нет), их категории, поля карточки и
+  # шаринг на чтение. Файлов раздел не держит, межсервисных вызовов нет.
+  schedule:
+    build:
+      context: ../back-go
+      dockerfile: schedule/Dockerfile
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    environment:
+      DATABASE_URL: postgresql://${DB_USER}:${DB_PASSWORD}@db:5432/${DB_NAME}
+      REDIS_URL: redis://redis:6379/0
+      PASETO_PUBLIC_KEY: ${PASETO_PUBLIC_KEY}
+      HTTP_ADDR: ":8110"
+    expose:
+      - "8110"
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8110/healthz"]
+      interval: 15s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
+
   # Микросервис подписок и магазина (Go, back-go/billing): HTTP :8107 — REST
   # /api/billing (витрина тарифов и товаров, покупки, заказы, промокоды, раздел
   # «Аудит платформы») и публичный вебхук платёжного шлюза; gRPC :9107 —

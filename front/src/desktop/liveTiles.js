@@ -102,6 +102,18 @@ const FACES = {
     return out
   },
 
+  schedule: ({ data }) => {
+    const a = data.schedule
+    if (!a) return []
+    if (!a.total) return [face('empty', 'Свободный день', 'Занятий сегодня нет')]
+
+    const out = []
+    if (a.now) out.push(face('now', 'Сейчас', `${a.now.title} · до ${hhmm(a.now.end_min)}`))
+    if (a.next) out.push(face('next', `в ${hhmm(a.next.start_min)}`, a.next.title))
+    out.push(face('busy', duration(a.busy_min), a.gap_min ? `занято · ${duration(a.gap_min)} в окнах` : 'занято сегодня'))
+    return out
+  },
+
   calendars: ({ data }) => {
     const a = data.calendars
     if (!a) return []
@@ -242,6 +254,14 @@ function timeOf(iso) {
 /** Минуты от полуночи → ЧЧ:ММ (время записи ежедневника). */
 function hhmm(min) {
   return `${String(Math.floor(min / 60)).padStart(2, '0')}:${String(min % 60).padStart(2, '0')}`
+}
+
+/** Длительность занятости: «5 ч 40», «40 мин». */
+function duration(min) {
+  const h = Math.floor((min || 0) / 60)
+  const m = (min || 0) % 60
+  if (!h) return `${m} мин`
+  return m ? `${h} ч ${String(m).padStart(2, '0')}` : `${h} ч`
 }
 
 function hours(v) {

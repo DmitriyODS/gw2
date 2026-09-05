@@ -90,6 +90,9 @@ const routes = [
     meta: { requiresAuth: true }, props: true },
   { path: '/diaries', component: () => import('@/views/DiaryView.vue'),
     meta: { requiresAuth: true } },
+  // Раздел «Расписание» — регулярная сетка занятий с циклом недель.
+  { path: '/schedule', component: () => import('@/views/ScheduleView.vue'),
+    meta: { requiresAuth: true } },
   // Раздел «Доски» — личные холсты рисования (папки, метки, шаринг как у заметок).
   { path: '/boards', component: () => import('@/views/BoardsView.vue'),
     meta: { requiresAuth: true } },
@@ -152,6 +155,9 @@ const routes = [
     meta: { public: true } },
   // Публичный просмотр ежедневника по внешней ссылке (read-only, без авторизации).
   { path: '/diary/:code', component: () => import('@/views/SharedDiaryView.vue'),
+    meta: { public: true } },
+  // Публичный просмотр расписания по внешней ссылке (read-only, без авторизации).
+  { path: '/schedule/s/:code', component: () => import('@/views/SharedScheduleView.vue'),
     meta: { public: true } },
   // Публичная заметка по внешней ссылке (режим view/edit решает сервер).
   // Публичный доступ к доске по внешней ссылке (режим решает сервер: view|edit).

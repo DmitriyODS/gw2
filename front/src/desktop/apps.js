@@ -91,6 +91,20 @@ export const APPS = [
     about: { version: '1.0.1', date: '2026-09-04' },
   },
   {
+    id: 'schedule',
+    title: 'Расписание',
+    icon: 'calendar_view_week',
+    group: 'work',
+    tile: 'wide',
+    path: '/schedule',
+    match: (p) => p === '/schedule',
+    size: [1240, 840],
+    min: [560, 460],
+    /* Компания не нужна: расписание принадлежит человеку и переезжает за ним. */
+    available: always,
+    about: { version: '1.0.0', date: '2026-09-05' },
+  },
+  {
     id: 'diaries',
     title: 'Ежедневники',
     icon: 'event_list',

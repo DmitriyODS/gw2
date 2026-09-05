@@ -49,6 +49,10 @@ var BackupSections = []BackupSection{
 	// вида доступа (внешние ссылки с журналом переходов и адресные назначения).
 	{Key: "forms", Tables: []string{"forms", "form_sections", "form_questions",
 		"form_responses", "form_shares", "form_share_visits", "form_user_shares"}},
+	// Расписания целиком: настройки цикла, справочник категорий, поля карточки,
+	// занятия и оба вида доступа (публичные ссылки и адресная выдача).
+	{Key: "schedule", Tables: []string{"schedules", "schedule_categories", "schedule_fields",
+		"schedule_items", "schedule_shares", "schedule_user_shares"}},
 	{Key: "calendar", Tables: []string{"calendars", "calendar_fields", "calendar_records", "calendar_shares"}},
 	{Key: "diary", Tables: []string{"diaries", "diary_records", "diary_shares", "diary_user_shares"}},
 	{Key: "notes", Tables: []string{"notes", "note_folders", "note_tags", "note_tag_items",

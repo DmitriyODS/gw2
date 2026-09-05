@@ -33,6 +33,8 @@ import { getBoards } from '@/api/boards.js'
 import { browse as browseDrive } from '@/api/drive.js'
 import { fileIcon } from '@/utils/fileTypes.js'
 import { searchEntries } from '@/api/diaries.js'
+import { searchItems as searchScheduleItems } from '@/api/schedules.js'
+import { WEEKDAYS, hhmm } from '@/utils/scheduleCycle.js'
 import { searchRecords } from '@/api/registries.js'
 import { searchForms } from '@/api/forms.js'
 import { getPosts } from '@/api/portal.js'
@@ -48,7 +50,7 @@ const REPEAT_LABELS = {
 }
 
 function emptyHits() {
-  return { tasks: [], notes: [], boards: [], drive: [], diaries: [], registries: [], forms: [], portal: [], people: [], messages: [] }
+  return { tasks: [], notes: [], boards: [], drive: [], diaries: [], schedule: [], registries: [], forms: [], portal: [], people: [], messages: [] }
 }
 
 export function useHolaSearch() {
@@ -470,6 +472,7 @@ export function useHolaSearch() {
     { key: 'boards', label: 'Доски', items: hits.value.boards },
     { key: 'drive', label: 'Диск', items: hits.value.drive },
     { key: 'diaries', label: 'Ежедневники', items: hits.value.diaries },
+    { key: 'schedule', label: 'Расписание', items: hits.value.schedule },
     { key: 'registries', label: 'Реестры', items: hits.value.registries },
     { key: 'forms', label: 'Формы и опросы', items: hits.value.forms },
     { key: 'portal', label: 'Портал', items: hits.value.portal },
@@ -515,12 +518,14 @@ export function useHolaSearch() {
     const stem = cmd?.kind === 'message' ? searchStem(cmd.rest) : ''
     const dirQuery = stem || q
 
-    const [tasks, noteHits, boardHits, driveHits, diaries, registries, forms, portal, people] = await Promise.allSettled([
+    const [tasks, noteHits, boardHits, driveHits, diaries, scheduleHits, registries, forms, portal, people] = await Promise.allSettled([
       withCompany ? getTasks({ search: q, per_page: LIMIT }, opt) : Promise.resolve(null),
       getNotes({ search: q }, opt),
       getBoards({ search: q }, opt),
       browseDrive({ search: q }, opt),
       searchEntries(q, LIMIT, opt),
+      // Расписание личное: активная компания для поиска по занятиям не нужна.
+      searchScheduleItems(q, LIMIT, opt),
       withCompany ? searchRecords(q, LIMIT, opt) : Promise.resolve(null),
       // Формы личные: активная компания для поиска по ним не нужна.
       searchForms(q, LIMIT, opt),
@@ -576,6 +581,13 @@ export function useHolaSearch() {
         title: e.title,
         subtitle: `${e.diary_name} · ${e.entry_date}`,
         path: `/diaries?diary=${e.diary_id}&q=${encodeURIComponent(e.title)}`,
+      })),
+      schedule: (value(scheduleHits)?.items ?? []).map((i) => ({
+        key: `schedule-${i.item_id}`,
+        icon: 'calendar_view_week',
+        title: i.title,
+        subtitle: `${i.schedule_name} · ${WEEKDAYS[i.weekday]?.short || ''} ${hhmm(i.start_min)}`,
+        path: `/schedule?id=${i.schedule_id}`,
       })),
       registries: (value(registries)?.items ?? []).map((r) => ({
         key: `record-${r.record_id}`,

@@ -128,6 +128,11 @@ export default defineConfig({
         target: 'http://localhost:8109',
         changeOrigin: true
       },
+      // Расписания — schedulesvc (регулярная сетка занятий с циклом недель).
+      '/api/schedules': {
+        target: 'http://localhost:8110',
+        changeOrigin: true
+      },
       // Календари — calendarsvc (списки записей с датой/временем).
       '/api/calendars': {
         target: 'http://localhost:8100',

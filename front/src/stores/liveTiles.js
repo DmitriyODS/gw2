@@ -17,6 +17,7 @@ import { getUpcoming as getUpcomingReminders } from '@/api/reminders.js'
 import { getRegistries } from '@/api/registries.js'
 import { getForms } from '@/api/forms.js'
 import { getAgenda as getDiaryAgenda } from '@/api/diaries.js'
+import { getAgenda as getScheduleAgenda } from '@/api/schedules.js'
 import { getAgenda as getCalendarAgenda } from '@/api/calendars.js'
 import { getPosts } from '@/api/portal.js'
 import { getStatsProfile } from '@/api/stats.js'
@@ -53,6 +54,13 @@ const SOURCES = {
   diaries: async () => {
     const today = ymd(new Date())
     return getDiaryAgenda(today, today, 3)
+  },
+
+  schedule: async () => {
+    /* День и текущую минуту считает КЛИЕНТ: у расписаний свои зоны, а «сейчас»
+       у человека одно — сервер его не додумывает. */
+    const now = new Date()
+    return getScheduleAgenda(ymd(now), now.getHours() * 60 + now.getMinutes())
   },
 
   calendars: async () => {

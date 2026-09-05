@@ -23,6 +23,7 @@ use (
 	./push
 	./registry
 	./reminder
+	./schedule
 	./tasks
 )
 

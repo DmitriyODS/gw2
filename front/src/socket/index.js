@@ -11,6 +11,7 @@ import { registerRegistrySocketHandlers } from '@/socket/registry.js'
 import { registerFormsSocketHandlers } from '@/socket/forms.js'
 import { registerCalendarSocketHandlers } from '@/socket/calendar.js'
 import { registerDiarySocketHandlers } from '@/socket/diary.js'
+import { registerScheduleSocketHandlers } from '@/socket/schedule.js'
 import { registerNotesSocketHandlers } from '@/socket/notes.js'
 import { registerBoardsSocketHandlers } from '@/socket/boards.js'
 import { registerDriveSocketHandlers } from '@/socket/drive.js'
@@ -191,6 +192,7 @@ export function connectSocket() {
   registerFormsSocketHandlers(socket)
   registerCalendarSocketHandlers(socket)
   registerDiarySocketHandlers(socket)
+  registerScheduleSocketHandlers(socket)
   registerNotesSocketHandlers(socket)
   registerBoardsSocketHandlers(socket)
   registerDriveSocketHandlers(socket)

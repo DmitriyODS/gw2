@@ -41,6 +41,7 @@ PUSH_PID=""
 MAIL_PID=""
 REGISTRY_PID=""
 FORMS_PID=""
+SCHEDULE_PID=""
 CALENDAR_PID=""
 DIARY_PID=""
 PORTAL_PID=""
@@ -51,7 +52,7 @@ BILLING_PID=""
 ALICE_PID=""
 
 # Все Go-сервисы — по имени ловим осиротевшие процессы прошлого запуска.
-SVCS="callsvc authsvc msgsvc aisvc petsvc tasksvc gatewaysvc pushsvc mailsvc registrysvc formsvc calendarsvc diarysvc portalsvc notesvc boardsvc drivesvc remindersvc billingsvc alicesvc"
+SVCS="callsvc authsvc msgsvc aisvc petsvc tasksvc gatewaysvc pushsvc mailsvc registrysvc formsvc schedulesvc calendarsvc diarysvc portalsvc notesvc boardsvc drivesvc remindersvc billingsvc alicesvc"
 
 # Порты, которые занимает dev-стек (HTTP и gRPC сервисов + Vite). По ним и
 # освобождаем окружение при старте: имя бинаря в кеше `go build` зависит от его
@@ -103,6 +104,7 @@ cleanup() {
     if [ -n "$MAIL_PID" ]; then kill -TERM -- "-$MAIL_PID" 2>/dev/null || true; fi
     if [ -n "$REGISTRY_PID" ]; then kill -TERM -- "-$REGISTRY_PID" 2>/dev/null || true; fi
     if [ -n "$FORMS_PID" ]; then kill -TERM -- "-$FORMS_PID" 2>/dev/null || true; fi
+    if [ -n "$SCHEDULE_PID" ]; then kill -TERM -- "-$SCHEDULE_PID" 2>/dev/null || true; fi
     if [ -n "$CALENDAR_PID" ]; then kill -TERM -- "-$CALENDAR_PID" 2>/dev/null || true; fi
     if [ -n "$DIARY_PID" ]; then kill -TERM -- "-$DIARY_PID" 2>/dev/null || true; fi
     if [ -n "$PORTAL_PID" ]; then kill -TERM -- "-$PORTAL_PID" 2>/dev/null || true; fi
@@ -128,6 +130,7 @@ cleanup() {
     if [ -n "$MAIL_PID" ]; then kill -KILL -- "-$MAIL_PID" 2>/dev/null || true; fi
     if [ -n "$REGISTRY_PID" ]; then kill -KILL -- "-$REGISTRY_PID" 2>/dev/null || true; fi
     if [ -n "$FORMS_PID" ]; then kill -KILL -- "-$FORMS_PID" 2>/dev/null || true; fi
+    if [ -n "$SCHEDULE_PID" ]; then kill -KILL -- "-$SCHEDULE_PID" 2>/dev/null || true; fi
     if [ -n "$CALENDAR_PID" ]; then kill -KILL -- "-$CALENDAR_PID" 2>/dev/null || true; fi
     if [ -n "$DIARY_PID" ]; then kill -KILL -- "-$DIARY_PID" 2>/dev/null || true; fi
     if [ -n "$PORTAL_PID" ]; then kill -KILL -- "-$PORTAL_PID" 2>/dev/null || true; fi
@@ -194,7 +197,7 @@ ensure_front_deps
 #     go run ниже стартует мгновенно. `go build ./...` из корня workspace не
 #     работает (back-go без своего go.mod), поэтому обходим модули через -C.
 printf "\033[1m▶ Сборка Go-сервисов...\033[0m\n"
-for mod in pkg migrate calls auth messenger ai pets tasks gateway push mail registry forms calendar diary portal notes board drive reminder billing alice; do
+for mod in pkg migrate calls auth messenger ai pets tasks gateway push mail registry forms schedule calendar diary portal notes board drive reminder billing alice; do
     printf "  %s" "$mod"
     go build -C "$ROOT/back-go/$mod" ./...
     printf "\033[32m ✓\033[0m\n"
@@ -402,6 +405,20 @@ printf "\033[1m▶ formsvc (Go)  HTTP :8109...\033[0m\n"
 ) &
 FORMS_PID=$!
 
+# 12aa. Go-микросервис расписаний schedulesvc (HTTP :8110 — REST /api/schedules/*).
+#      Файлов раздел не держит, межсервисных вызовов нет: проверка токенов
+#      локальная (PASETO_PUBLIC_KEY).
+printf "\033[1m▶ schedulesvc (Go)  HTTP :8110...\033[0m\n"
+(
+  cd "$ROOT/back-go/schedule" && \
+  DATABASE_URL="postgresql://grovework:grovework_local@localhost:5432/grovework" \
+  REDIS_URL="redis://localhost:6379/0" \
+  PASETO_PUBLIC_KEY="$PASETO_PUBLIC_KEY_DEV" \
+  HTTP_ADDR=":8110" \
+  exec go run ./cmd/schedulesvc
+) &
+SCHEDULE_PID=$!
+
 # 12b. Go-микросервис календарей calendarsvc (HTTP :8100 — REST /api/calendars/*).
 #      Загруженные файлы календарей пишутся в общий uploads-том. Межсервисных
 #      вызовов нет: проверка токенов локальная (PASETO_PUBLIC_KEY).
@@ -578,6 +595,7 @@ printf "  ИИ:      \033[4mhttp://localhost:8093\033[0m (gRPC :9093)\n"
 printf "  Пуши:    \033[4mhttp://localhost:8097/api/push\033[0m\n"
 printf "  Реестры: \033[4mhttp://localhost:8099/api/registries\033[0m\n"
 printf "  Формы:   \033[4mhttp://localhost:8109/api/forms\033[0m\n"
+printf "  Расписание: \033[4mhttp://localhost:8110/api/schedules\033[0m\n"
 printf "  Календари: \033[4mhttp://localhost:8100/api/calendars\033[0m\n"
 printf "  Ежедневники: \033[4mhttp://localhost:8101/api/diaries\033[0m\n"
 printf "  Портал:  \033[4mhttp://localhost:8102/api/portal\033[0m\n"
