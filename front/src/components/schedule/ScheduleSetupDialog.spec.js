@@ -18,11 +18,11 @@ const schedule = {
   fields: [{ id: 7, label: 'Аудитория', type: 'text', config: {}, col_span: 1, row_span: 1, show_in_card: true }],
 }
 
-function setup({ submit, saveFields } = {}) {
+function setup({ submit, saveFields, schedule: sc = schedule } = {}) {
   return mount(ScheduleSetupDialog, {
     props: {
       modelValue: true,
-      schedule,
+      schedule: sc,
       submit: submit || vi.fn(async () => {}),
       saveFields: saveFields || vi.fn(async () => {}),
       addCategoryFn: vi.fn(),
@@ -45,9 +45,14 @@ function setup({ submit, saveFields } = {}) {
 describe('ScheduleSetupDialog', () => {
   it('сохраняет добавленное поле и закрывает диалог', async () => {
     const saveFields = vi.fn(async () => {})
-    // submit меняет расписание в сторе — прежний watch на этом месте затирал черновик.
-    const submit = vi.fn(async () => { schedule.name = 'Учёба (сохранено)' })
-    const wrapper = setup({ submit, saveFields })
+    /* Сохранение настроек ЗАМЕНЯЕТ расписание новым объектом — так делает стор
+       (applyView кладёт в список ответ сервера). Именно на этом месте watch
+       возвращал черновик к серверному набору, и новое поле пропадало. */
+    let wrapper
+    const submit = vi.fn(async () => {
+      await wrapper.setProps({ schedule: { ...schedule, name: 'Учёба (сохранено)' } })
+    })
+    wrapper = setup({ submit, saveFields })
 
     wrapper.vm.tab = 'fields'
     wrapper.vm.addField()

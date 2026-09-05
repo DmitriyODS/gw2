@@ -227,8 +227,15 @@ const weeksHint = computed(() => {
   return form.weeks.length ? '' : 'Ни одна не отмечена — занятие идёт каждую неделю.'
 })
 
-watch(() => [props.modelValue, props.item, props.preset], () => {
-  if (!props.modelValue) return
+/* Форма наполняется на ОТКРЫТИИ диалога и при смене занятия — но не на каждое
+   обновление самого объекта: занятие приходит из стора, и чужая правка по
+   сокету посреди набора стёрла бы то, что человек уже напечатал. Следить за
+   массивом-парой для этого нельзя: он каждый раз новый, и watch срабатывал на
+   любое обновление. */
+watch(() => props.modelValue, (open) => { if (open) fillForm() }, { immediate: true })
+watch(() => props.item?.id ?? 0, () => { if (props.modelValue) fillForm() })
+
+function fillForm() {
   error.value = ''
   confirmDelete.value = false
   const it = props.item
@@ -244,7 +251,7 @@ watch(() => [props.modelValue, props.item, props.preset], () => {
   startTime.value = hhmm(it?.start_min ?? props.preset?.start ?? 9 * 60)
   endTime.value = hhmm(it?.end_min ?? props.preset?.end ?? 10 * 60 + 30)
   repeatMode.value = it?.repeat_every > 0 ? 'own' : 'cycle'
-}, { immediate: true })
+}
 
 function isWeekOn(week) { return form.weeks.includes(week) }
 
