@@ -17,8 +17,9 @@
         @menu="toggle"
       >
         <template #subhead>
-          <!-- На телефоне вкладки занимают всю ширину: узкая пилюля по
-               содержимому оставляла справа пустую половину строки. -->
+          <!-- Вкладки делят строку поровну: колонка списка узка по замыслу, и
+               пилюля по содержимому оставляла справа пустое место, а сами
+               вкладки выходили разной ширины. -->
           <AppTabs
             :model-value="store.tab"
             :tabs="[
@@ -26,7 +27,7 @@
               { value: 'shared', label: 'Поделились' },
             ]"
             class="sv-tabs"
-            :full-width="narrow"
+            full-width
             @update:model-value="store.setTab($event)"
           />
         </template>
@@ -41,17 +42,27 @@
             : 'Здесь появятся расписания, которые вам открыли.'"
         />
         <AppStack v-else :gap="6">
-          <AppRow
-            v-for="s in store.schedules"
-            :key="s.id"
-            :title="s.name"
-            :hint="scheduleHint(s)"
-            icon="calendar_view_week"
-            dense
-            clickable
-            :selected="s.id === store.selectedId"
-            @click="openSchedule(s.id)"
-          />
+          <template v-for="s in store.schedules" :key="s.id">
+            <AppInlineEdit
+              v-if="renamingId === s.id"
+              :model-value="s.name"
+              placeholder="Название расписания"
+              :maxlength="120"
+              @save="applyRename(s, $event)"
+              @cancel="renamingId = null"
+            />
+            <AppRow
+              v-else
+              :title="s.name"
+              :hint="scheduleHint(s)"
+              icon="calendar_view_week"
+              dense
+              clickable
+              :selected="s.id === store.selectedId"
+              @click="openSchedule(s.id)"
+              @contextmenu.prevent="openRowMenu(s, $event)"
+            />
+          </template>
         </AppStack>
 
         <template v-if="store.tab === 'mine'" #footer>
@@ -219,6 +230,25 @@
     :days="days"
   />
 
+  <ContextMenu
+    :visible="rowMenuOpen"
+    :x="rowMenuX"
+    :y="rowMenuY"
+    :items="rowMenuItems"
+    @select="onRowMenu"
+    @close="rowMenuOpen = false"
+  />
+
+  <ConfirmDialog
+    :visible="!!scheduleToDelete"
+    header="Удалить расписание?"
+    :message="`«${scheduleToDelete?.name || ''}» удалится вместе со всеми занятиями и категориями. Действие необратимо.`"
+    confirm-label="Удалить"
+    danger-confirm
+    @confirm="doDeleteSchedule"
+    @cancel="scheduleToDelete = null"
+  />
+
   <!-- Импорт: файл выбирается системным диалогом, поэтому input скрытый. -->
   <input ref="fileInput" type="file" accept="application/json,.json" hidden @change="onImportFile" />
 </template>
@@ -229,6 +259,7 @@ import { useRoute } from 'vue-router'
 import InputText from 'primevue/inputtext'
 import Select from 'primevue/select'
 import AppButton from '@/components/ui/AppButton.vue'
+import AppInlineEdit from '@/components/ui/AppInlineEdit.vue'
 import AppDialog from '@/components/ui/AppDialog.vue'
 import AppField from '@/components/ui/AppField.vue'
 import AppListDetail from '@/components/ui/AppListDetail.vue'
@@ -237,6 +268,8 @@ import AppRow from '@/components/ui/AppRow.vue'
 import AppStack from '@/components/ui/AppStack.vue'
 import AppTabs from '@/components/ui/AppTabs.vue'
 import BrandLoader from '@/components/common/BrandLoader.vue'
+import ConfirmDialog from '@/components/ui/ConfirmDialog.vue'
+import ContextMenu from '@/components/common/ContextMenu.vue'
 import EmptyState from '@/components/common/EmptyState.vue'
 import ScheduleItemDialog from '@/components/schedule/ScheduleItemDialog.vue'
 import SchedulePrintPreview from '@/components/schedule/SchedulePrintPreview.vue'
@@ -272,6 +305,16 @@ const setupOpen = ref(false)
 const shareOpen = ref(false)
 const printOpen = ref(false)
 const fileInput = ref(null)
+
+/* Контекстное меню строки списка: те же действия, что и в шапке открытого
+   расписания, но над ЛЮБЫМ из списка — не открывая его ради переименования
+   или выгрузки. */
+const rowMenuOpen = ref(false)
+const rowMenuX = ref(0)
+const rowMenuY = ref(0)
+const rowMenuTarget = ref(null)
+const renamingId = ref(null)
+const scheduleToDelete = ref(null)
 
 const days = computed(() => visibleDays(store.items, todayWeekday.value))
 // Длина цикла — выбор из готового набора: 1..MAX_CYCLE_WEEKS недель.
@@ -356,6 +399,79 @@ const commands = computed(() => {
   ]
 })
 
+const rowMenuItems = computed(() => {
+  const s = rowMenuTarget.value
+  if (!s) return []
+  // Чужое расписание открыто только на чтение (уровней доступа у раздела нет).
+  const own = !s.shared
+  return [
+    { label: 'Переименовать', icon: 'edit', action: 'rename', disabled: !own },
+    { label: 'Настройки расписания', icon: 'tune', action: 'setup', disabled: !own },
+    { label: 'Поделиться', icon: 'share', action: 'share', disabled: !own },
+    {
+      label: 'Выгрузка',
+      icon: 'download',
+      children: [
+        { label: 'Таблица XLSX', icon: 'table', action: 'xlsx' },
+        { label: 'Файл переноса JSON', icon: 'data_object', action: 'json' },
+        { label: 'Печать недели', icon: 'print', action: 'print' },
+        ...(own ? [{ label: 'Загрузить из файла', icon: 'upload', action: 'import' }] : []),
+      ],
+    },
+    { divider: true },
+    { label: 'Удалить', icon: 'delete', danger: true, action: 'delete', disabled: !own },
+  ]
+})
+
+function openRowMenu(s, e) {
+  rowMenuTarget.value = s
+  rowMenuX.value = e.clientX
+  rowMenuY.value = e.clientY
+  rowMenuOpen.value = true
+}
+
+/* Диалоги настроек, ссылок и печати работают с ОТКРЫТЫМ расписанием (им нужны
+   его занятия), поэтому пункт меню сперва открывает своё. Переименование и
+   выгрузка идут по id — открывать ради них чужой экран незачем. */
+async function onRowMenu(action) {
+  const s = rowMenuTarget.value
+  rowMenuOpen.value = false
+  if (!s) return
+  switch (action) {
+    case 'rename': renamingId.value = s.id; break
+    case 'delete': scheduleToDelete.value = s; break
+    case 'xlsx': download('xlsx', s); break
+    case 'json': download('json', s); break
+    case 'setup': await openSchedule(s.id); setupOpen.value = true; break
+    case 'share': await openSchedule(s.id); shareOpen.value = true; break
+    case 'print': await openSchedule(s.id); printOpen.value = true; break
+    case 'import': await openSchedule(s.id); fileInput.value?.click(); break
+  }
+}
+
+async function applyRename(s, name) {
+  renamingId.value = null
+  const next = name.trim()
+  if (!next || next === s.name) return
+  try {
+    await store.updateSchedule(s.id, { name: next })
+  } catch (e) {
+    notif.error(e?.message || 'Ошибка сервера', 'Не переименовано')
+  }
+}
+
+async function doDeleteSchedule() {
+  const s = scheduleToDelete.value
+  scheduleToDelete.value = null
+  if (!s) return
+  try {
+    await store.removeSchedule(s.id)
+    if (store.selectedId === null) detailOpen.value = false
+  } catch (e) {
+    notif.error(e?.message || 'Ошибка сервера', 'Не удалено')
+  }
+}
+
 function scheduleHint(s) {
   const parts = [`${s.item_count || 0} занятий`]
   if (s.cycle_weeks > 1) parts.push(`цикл ${s.cycle_weeks} нед.`)
@@ -428,10 +544,11 @@ async function doCreate() {
   }
 }
 
-async function download(format) {
+async function download(format, target = null) {
+  const schedule = target || store.selected
   try {
-    const resp = await exportSchedule(store.selectedId, format)
-    await saveBlob(await resp.blob(), `${store.selected.name}.${format}`)
+    const resp = await exportSchedule(schedule.id, format)
+    await saveBlob(await resp.blob(), `${schedule.name}.${format}`)
   } catch (e) {
     notif.error(e?.message || 'Ошибка сервера', 'Не выгружено')
   }
