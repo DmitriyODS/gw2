@@ -19,12 +19,15 @@
     <BrandLoader v-else-if="loading" :size="88" block />
 
     <div v-else-if="schedule" class="ss-shell">
-      <div class="ss-toolbar">
-        <AppButton variant="icon" icon="chevron_left" label="Предыдущая неделя" @click="step(-1)" />
-        <AppButton variant="text" :label="weekRange" title="Вернуться к текущей неделе" @click="goToday" />
-        <AppChip v-if="schedule.cycle_weeks > 1" tone="primary" :label="cycleLabel" />
-        <AppButton variant="icon" icon="chevron_right" label="Следующая неделя" @click="step(1)" />
-      </div>
+      <ScheduleWeekNav
+        class="ss-toolbar"
+        :range="weekRange"
+        :cycle="schedule.cycle_weeks > 1 ? cycleLabel : ''"
+        :current="onCurrentWeek"
+        :wide="narrow"
+        @step="step"
+        @today="goToday"
+      />
 
       <div class="ss-body">
         <ScheduleTimeline
@@ -61,11 +64,11 @@
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useRoute } from 'vue-router'
 import AppButton from '@/components/ui/AppButton.vue'
-import AppChip from '@/components/ui/AppChip.vue'
 import AppTabs from '@/components/ui/AppTabs.vue'
 import BrandLoader from '@/components/common/BrandLoader.vue'
 import ScheduleSummary from '@/components/schedule/ScheduleSummary.vue'
 import ScheduleTimeline from '@/components/schedule/ScheduleTimeline.vue'
+import ScheduleWeekNav from '@/components/schedule/ScheduleWeekNav.vue'
 import { getSharedSchedule } from '@/api/schedules.js'
 import {
   WEEKDAYS, addDays, dateKey, itemsOfDay, mondayOf, weekIndex, weekLabel,
@@ -98,6 +101,9 @@ const dayTabs = computed(() => days.value.map((d) => ({ value: d, label: WEEKDAY
 const cycleLabel = computed(() => (schedule.value
   ? weekLabel(schedule.value, weekIndex(schedule.value.cycle_anchor, monday.value, schedule.value.cycle_weeks))
   : ''))
+
+// Диапазон служит кнопкой возврата — подсвечиваем, когда возвращаться есть куда.
+const onCurrentWeek = computed(() => dateKey(monday.value) === dateKey(mondayOf(new Date())))
 
 const weekRange = computed(() => {
   const to = addDays(monday.value, days.value[days.value.length - 1] ?? 6)
@@ -178,7 +184,6 @@ onBeforeUnmount(() => window.removeEventListener('resize', onResize))
 }
 
 .ss-shell { display: flex; flex-direction: column; gap: 12px; flex: 1; min-height: 0; }
-.ss-toolbar { display: flex; align-items: center; gap: 4px; }
 
 .ss-body { display: flex; flex-direction: column; gap: 12px; flex: 1; min-height: 0; }
 .ss-daystrip { flex: none; }

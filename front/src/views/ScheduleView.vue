@@ -76,37 +76,30 @@
         @menu="toggle"
         @command="onCommand"
       >
-        <template v-if="store.selected" #subhead="{ narrow: tight }">
-          <div class="sv-bar">
-            <div class="sv-nav" :class="{ wide: narrow }">
-              <AppButton variant="icon" icon="chevron_left" label="Предыдущая неделя" @click="store.stepWeek(-1)" />
-              <AppButton variant="text" :label="weekRange" title="Вернуться к текущей неделе" @click="store.today()" />
-              <AppChip v-if="store.selected.cycle_weeks > 1" tone="primary" :label="store.cycleWeekLabel" />
-              <AppButton variant="icon" icon="chevron_right" label="Следующая неделя" @click="store.stepWeek(1)" />
-            </div>
+        <!-- Управление шкалой стоит В СТРОКЕ НАЗВАНИЯ: своя строка ради
+             недельной пилюли и одной кнопки съедала у шкалы полсотни пикселей.
+             Не поместилось — строка переносит его сама. -->
+        <template v-if="store.selected && !narrow" #status>
+          <ScheduleWeekNav
+            :range="weekRange"
+            :cycle="store.selected.cycle_weeks > 1 ? store.cycleWeekLabel : ''"
+            :current="onCurrentWeek"
+            @step="store.stepWeek($event)"
+            @today="store.today()"
+          />
+        </template>
 
-            <!-- Порог окна крутится прямо здесь: подобрать его на глаз проще,
-                 чем угадать в настройках. Значение личное — гость по ссылке
-                 чужой порог менять не может. В тесной панели регулятор уезжает
-                 в меню «ещё»: строка управления там дороже. -->
-            <div
-              v-if="!narrow"
-              class="sv-gap"
-              title="Промежуток, начиная с которого он считается окном"
-              @wheel.prevent="onGapWheel"
-            >
-              <AppButton variant="icon" icon="remove" label="Короче окно" @click="store.setGap(store.gapMin - 5)" />
-              <span class="sv-gap-value">окно от {{ store.gapMin }} мин</span>
-              <AppButton variant="icon" icon="add" label="Длиннее окно" @click="store.setGap(store.gapMin + 5)" />
-            </div>
-
-            <AppSwitch
-              v-if="!store.readonly && !tight"
-              :model-value="store.editing"
-              label="Конструктор"
-              @update:model-value="store.editing = $event"
-            />
-          </div>
+        <!-- Тесная панель и телефон: название занимает строку целиком, поэтому
+             навигация уходит под него и растягивается на всю ширину. -->
+        <template v-if="store.selected && narrow" #subhead>
+          <ScheduleWeekNav
+            wide
+            :range="weekRange"
+            :cycle="store.selected.cycle_weeks > 1 ? store.cycleWeekLabel : ''"
+            :current="onCurrentWeek"
+            @step="store.stepWeek($event)"
+            @today="store.today()"
+          />
         </template>
 
         <template v-if="store.selected">
@@ -236,14 +229,12 @@ import { useRoute } from 'vue-router'
 import InputText from 'primevue/inputtext'
 import Select from 'primevue/select'
 import AppButton from '@/components/ui/AppButton.vue'
-import AppChip from '@/components/ui/AppChip.vue'
 import AppDialog from '@/components/ui/AppDialog.vue'
 import AppField from '@/components/ui/AppField.vue'
 import AppListDetail from '@/components/ui/AppListDetail.vue'
 import AppPage from '@/components/ui/AppPage.vue'
 import AppRow from '@/components/ui/AppRow.vue'
 import AppStack from '@/components/ui/AppStack.vue'
-import AppSwitch from '@/components/ui/AppSwitch.vue'
 import AppTabs from '@/components/ui/AppTabs.vue'
 import BrandLoader from '@/components/common/BrandLoader.vue'
 import EmptyState from '@/components/common/EmptyState.vue'
@@ -253,10 +244,11 @@ import ScheduleSetupDialog from '@/components/schedule/ScheduleSetupDialog.vue'
 import ScheduleShareDialog from '@/components/schedule/ScheduleShareDialog.vue'
 import ScheduleSummary from '@/components/schedule/ScheduleSummary.vue'
 import ScheduleTimeline from '@/components/schedule/ScheduleTimeline.vue'
+import ScheduleWeekNav from '@/components/schedule/ScheduleWeekNav.vue'
 import { useSchedulesStore } from '@/stores/schedules.js'
 import { useNotificationsStore } from '@/stores/notifications.js'
 import { exportSchedule, importInto } from '@/api/schedules.js'
-import { MAX_CYCLE_WEEKS, WEEKDAYS, addDays, dateKey, itemsOfDay } from '@/utils/scheduleCycle.js'
+import { MAX_CYCLE_WEEKS, WEEKDAYS, addDays, dateKey, itemsOfDay, mondayOf } from '@/utils/scheduleCycle.js'
 import { visibleDays } from '@/utils/scheduleLayout.js'
 import { saveBlob } from '@/utils/download.js'
 
@@ -300,6 +292,10 @@ const weekRange = computed(() => {
   return `${dayMonth(from)} — ${dayMonth(to)}`
 })
 
+/* На текущей ли мы неделе: диапазон служит кнопкой возврата, и подсветка
+   говорит, что возвращаться есть куда. */
+const onCurrentWeek = computed(() => dateKey(store.monday) === dateKey(mondayOf(new Date())))
+
 const summaryItems = computed(() => {
   if (!store.selected) return []
   const weekday = narrow.value ? store.selectedWeekday : todayWeekday.value
@@ -312,8 +308,10 @@ const summaryLabel = computed(() => {
   return isToday(weekday) ? `${name}, сегодня` : name
 })
 
-/* Порог окна в меню: набором готовых значений, а не шагом «плюс-минус» —
-   попадать пальцем в две мелкие кнопки на телефоне неудобно. */
+/* Порог окна живёт в меню «ещё» и набором готовых значений: настройка редкая
+   (выставил раз под свой день), а в строке управления она занимала место
+   постоянно. Набор вместо шага «плюс-минус» — по мелким кнопкам ещё и пальцем
+   попадать неудобно. */
 const GAP_STEPS = [10, 15, 20, 30, 45, 60]
 
 const gapCommand = computed(() => ({
@@ -332,10 +330,16 @@ const commands = computed(() => {
   const own = !store.readonly
   return [
     ...(own ? [{ key: 'add', label: 'Занятие', icon: 'add', variant: 'filled', primary: true, fab: true }] : []),
-    ...(own && narrow.value
-      ? [{ key: 'editing', label: store.editing ? 'Выйти из конструктора' : 'Конструктор', icon: 'edit' }]
+    /* Конструктор — режим редактирования, а не постоянный инструмент: в шапке
+       он занимал место у каждого, кто просто смотрит расписание. */
+    ...(own
+      ? [{
+          key: 'editing',
+          label: store.editing ? 'Выйти из конструктора' : 'Конструктор',
+          icon: store.editing ? 'edit_off' : 'edit',
+        }]
       : []),
-    ...(narrow.value ? [gapCommand.value] : []),
+    gapCommand.value,
     ...(own ? [{ key: 'setup', label: 'Настройки расписания', icon: 'tune' }] : []),
     ...(own ? [{ key: 'share', label: 'Поделиться', icon: 'share' }] : []),
     {
@@ -445,10 +449,6 @@ async function onImportFile(event) {
   }
 }
 
-function onGapWheel(event) {
-  store.setGap(store.gapMin + (event.deltaY < 0 ? 5 : -5))
-}
-
 function onCommand(key) {
   if (typeof key === 'string' && key.startsWith('gap:')) {
     store.setGap(Number(key.slice(4)))
@@ -481,34 +481,7 @@ watch(() => route.query.id, async (value) => {
 </script>
 
 <style scoped>
-.sv-bar {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 10px;
-}
-.sv-nav { display: flex; align-items: center; gap: 2px; min-width: 0; }
-/* Тесная панель: навигация и полоса дней занимают строку целиком — пилюля по
-   содержимому оставляла справа пустое место. В flex-СТРОКЕ ширину даёт доля,
-   а не align-self: stretch. */
-.sv-nav.wide { flex: 1 1 100%; justify-content: space-between; }
-.sv-nav.wide :deep(.btn.v-text) { flex: 1; min-width: 0; }
 .sv-tabs { flex: 1 1 100%; }
-
-.sv-gap {
-  display: flex;
-  align-items: center;
-  gap: 2px;
-  padding: 2px 4px;
-  border-radius: var(--radius-full);
-  background: var(--color-surface-low);
-}
-.sv-gap-value {
-  font-size: 12px;
-  color: var(--color-text-dim);
-  white-space: nowrap;
-  font-variant-numeric: tabular-nums;
-}
 
 .sv-body {
   display: flex;
