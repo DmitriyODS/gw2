@@ -199,9 +199,14 @@ const scaleStyle = computed(() => ({
 }
 .st.day { --st-rail: 56px; }
 
+/* Рейка часов и колонки дней растягиваются на всю высоту области, а
+   --st-height остаётся МИНИМУМОМ: занятия и подписи часов позиционируются
+   долями, поэтому растяжение просто укрупняет масштаб — а короткий день
+   (пара занятий подряд) больше не оставляет под шкалой пустую половину
+   экрана. Длинный день перерастает область и прокручивается, как раньше. */
 .st-rail {
   position: relative;
-  height: var(--st-height);
+  min-height: var(--st-height);
 }
 .st-rail-hour {
   position: absolute;
@@ -218,7 +223,7 @@ const scaleStyle = computed(() => ({
   display: grid;
   grid-template-columns: repeat(var(--st-cols), minmax(0, 1fr));
   gap: 4px;
-  height: var(--st-height);
+  min-height: var(--st-height);
 }
 .st-col {
   position: relative;
