@@ -471,6 +471,13 @@ func selectValues(v any) []string {
 type StoredValue struct {
 	Path string
 	Name string
+	// Thumb — ключ миниатюры картинки (пусто, если её нет). Спутник файла, а не
+	// самостоятельная сущность: живёт и умирает вместе с ним, но в хранилище это
+	// ОТДЕЛЬНЫЙ объект — и всякий, кто перечисляет или чистит файлы записи,
+	// обязан его назвать. Сверка биллинга удаляет объекты, которых владелец не
+	// назвал, и забытая здесь миниатюра исчезала из хранилища, оставляя в
+	// таблице битую картинку.
+	Thumb string
 }
 
 // FileValue — файл из значения поля; ok=false для всех прочих типов.
@@ -484,7 +491,16 @@ func FileValue(v any) (StoredValue, bool) {
 		return StoredValue{}, false
 	}
 	name, _ := m["name"].(string)
-	return StoredValue{Path: path, Name: name}, true
+	thumb, _ := m["thumb"].(string)
+	return StoredValue{Path: path, Name: name, Thumb: thumb}, true
+}
+
+// Keys — ключи хранилища этого значения: сам файл и его миниатюра.
+func (f StoredValue) Keys() []string {
+	if f.Thumb == "" {
+		return []string{f.Path}
+	}
+	return []string{f.Path, f.Thumb}
 }
 
 // DataFiles — все файлы записи (раздел «Настройки → Хранилище» и чистка
@@ -501,13 +517,14 @@ func DataFiles(data map[string]any) []StoredValue {
 
 // DataWithoutFiles — значения записи без файлов с перечисленными путями:
 // поле остаётся, но становится пустым. Второе значение — менялось ли
-// что-нибудь, третье — какие пути ушли.
+// что-нибудь, третье — какие пути ушли (вместе с миниатюрами: одна ссылалась
+// бы в пустоту, а место занимала).
 func DataWithoutFiles(data map[string]any, drop map[string]bool) (map[string]any, bool, []string) {
 	removed := []string{}
 	out := make(map[string]any, len(data))
 	for key, v := range data {
-		if f, ok := FileValue(v); ok && drop[f.Path] {
-			removed = append(removed, f.Path)
+		if f, ok := FileValue(v); ok && (drop[f.Path] || (f.Thumb != "" && drop[f.Thumb])) {
+			removed = append(removed, f.Keys()...)
 			continue
 		}
 		out[key] = v

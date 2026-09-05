@@ -25,12 +25,17 @@ func (s *Service) ListStorageFiles(ctx context.Context, _ int64, companyIDs []in
 	out := []storagefiles.File{}
 	for _, sc := range scopes {
 		for _, f := range records.DataFiles(sc.Record.Data) {
-			out = append(out, storagefiles.File{
-				Key: f.Path, Name: f.Name, Kind: "record",
-				ID:        strconv.FormatInt(sc.Record.ID, 10),
-				Title:     "Реестр: " + sc.RegistryName,
-				CompanyID: sc.CompanyID, CreatedAt: sc.Record.CreatedAt,
-			})
+			// Миниатюра — такой же объект хранилища, как и сама картинка:
+			// не названная здесь, она считалась сиротой и пропадала при
+			// ближайшей сверке, оставляя в таблице битую обложку.
+			for _, key := range f.Keys() {
+				out = append(out, storagefiles.File{
+					Key: key, Name: f.Name, Kind: "record",
+					ID:        strconv.FormatInt(sc.Record.ID, 10),
+					Title:     "Реестр: " + sc.RegistryName,
+					CompanyID: sc.CompanyID, CreatedAt: sc.Record.CreatedAt,
+				})
+			}
 		}
 	}
 	return out, nil

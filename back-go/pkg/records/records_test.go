@@ -137,3 +137,53 @@ func TestNewShareCode_UniqueHex(t *testing.T) {
 		t.Error("коды должны быть уникальными")
 	}
 }
+
+/* Миниатюра — отдельный объект хранилища, и всякий, кто перечисляет файлы
+   записи, обязан её назвать: сверка биллинга удаляет объекты, которых владелец
+   не назвал, и забытые миниатюры пропадали из хранилища, оставляя в таблице
+   битую обложку при живом оригинале. */
+func TestFileValue_KeysIncludeThumb(t *testing.T) {
+	data := map[string]any{
+		"10": map[string]any{"path": "registry/a.jpg", "name": "Фото", "thumb": "registry/a-thumb.jpg"},
+		"11": map[string]any{"path": "registry/b.pdf", "name": "Договор"},
+		"12": "просто текст",
+	}
+
+	keys := map[string]bool{}
+	for _, f := range DataFiles(data) {
+		for _, k := range f.Keys() {
+			keys[k] = true
+		}
+	}
+	for _, want := range []string{"registry/a.jpg", "registry/a-thumb.jpg", "registry/b.pdf"} {
+		if !keys[want] {
+			t.Errorf("ключ %s не перечислен: %v", want, keys)
+		}
+	}
+	if len(keys) != 3 {
+		t.Errorf("лишние ключи: %v", keys)
+	}
+}
+
+// Удаление обложки уносит и миниатюру: одна ссылалась бы в пустоту, а место
+// занимала. Ссылка на саму миниатюру тоже считается указанием на файл.
+func TestDataWithoutFiles_DropsThumbToo(t *testing.T) {
+	data := map[string]any{
+		"10": map[string]any{"path": "registry/a.jpg", "thumb": "registry/a-thumb.jpg"},
+		"11": map[string]any{"path": "registry/b.pdf"},
+	}
+
+	out, changed, removed := DataWithoutFiles(data, map[string]bool{"registry/a.jpg": true})
+	if !changed || len(out) != 1 || out["11"] == nil {
+		t.Fatalf("осталось не то: changed=%v out=%v", changed, out)
+	}
+	if len(removed) != 2 {
+		t.Fatalf("миниатюра не удалена вместе с картинкой: %v", removed)
+	}
+
+	// То же, если удалить попросили по ключу самой миниатюры.
+	_, changed, removed = DataWithoutFiles(data, map[string]bool{"registry/a-thumb.jpg": true})
+	if !changed || len(removed) != 2 {
+		t.Fatalf("удаление по ключу миниатюры: changed=%v removed=%v", changed, removed)
+	}
+}

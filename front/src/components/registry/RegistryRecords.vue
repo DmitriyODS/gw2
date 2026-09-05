@@ -148,6 +148,7 @@
                     :alt="rec.data?.[String(f.id)]?.name || ''"
                     loading="lazy"
                     decoding="async"
+                    @error="fallbackToOriginal($event, rec.data?.[String(f.id)])"
                   />
                 </button>
                 <span
@@ -198,7 +199,13 @@
                 title="Открыть картинку"
                 @click.stop="openImage(coverField, rec)"
               >
-                <img :src="coverOf(rec)" :alt="cardTitle(rec)" loading="lazy" decoding="async" />
+                <img
+                  :src="coverOf(rec)"
+                  :alt="cardTitle(rec)"
+                  loading="lazy"
+                  decoding="async"
+                  @error="fallbackToOriginal($event, rec.data?.[String(coverField.id)])"
+                />
               </button>
               <span v-else class="rr-card-cover-empty material-symbols-outlined">image</span>
             </div>
@@ -596,6 +603,18 @@ const lightboxSrc = ref('')
 const lightboxCaption = ref('')
 
 const thumbSrc = (value) => thumbUrl(value)
+
+/* Миниатюры может не оказаться на месте: у записей, переживших чистку
+   хранилища или переезд компании, ссылка на неё осталась, а объекта нет. Тогда
+   показываем оригинал — он тяжелее, но это лучше битой картинки. Флажок на
+   элементе не даёт зациклиться, если и оригинала нет. */
+function fallbackToOriginal(e, value) {
+  const full = fileUrl(value)
+  const img = e.target
+  if (!full || img.dataset.full || img.src.endsWith(full)) return
+  img.dataset.full = '1'
+  img.src = full
+}
 
 function openImage(field, rec) {
   const value = rec.data?.[String(field.id)]

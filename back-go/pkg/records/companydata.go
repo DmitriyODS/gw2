@@ -278,8 +278,12 @@ func remapData(v any, fields map[int64]int64, in companydata.Import) any {
 			continue // поле не доехало — значение без него не имеет смысла
 		}
 		if f, isFile := val.(map[string]any); isFile {
-			if path, ok := f["path"].(string); ok && path != "" {
-				f["path"] = in.FileKey(path)
+			// Картинка переезжает вместе со своей миниатюрой: оставленная со
+			// старым ключом, она ссылалась бы в чужое хранилище.
+			for _, k := range []string{"path", "thumb"} {
+				if key, ok := f[k].(string); ok && key != "" {
+					f[k] = in.FileKey(key)
+				}
 			}
 		}
 		out[strconv.FormatInt(id, 10)] = val
@@ -294,9 +298,7 @@ func dataFilesOf(r row) []string {
 	}
 	out := []string{}
 	for _, f := range DataFiles(data) {
-		if f.Path != "" {
-			out = append(out, f.Path)
-		}
+		out = append(out, f.Keys()...)
 	}
 	return out
 }

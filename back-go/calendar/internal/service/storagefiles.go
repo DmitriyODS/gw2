@@ -25,12 +25,16 @@ func (s *Service) ListStorageFiles(ctx context.Context, _ int64, companyIDs []in
 	out := []storagefiles.File{}
 	for _, sc := range scopes {
 		for _, f := range records.DataFiles(sc.Entry.Data) {
-			out = append(out, storagefiles.File{
-				Key: f.Path, Name: f.Name, Kind: "entry",
-				ID:        strconv.FormatInt(sc.Entry.ID, 10),
-				Title:     "Календарь: " + sc.CalendarName,
-				CompanyID: sc.CompanyID, CreatedAt: sc.Entry.CreatedAt,
-			})
+			// Вместе с миниатюрой, если она есть: не названный владельцем
+			// объект сверка биллинга считает сиротой и удаляет.
+			for _, key := range f.Keys() {
+				out = append(out, storagefiles.File{
+					Key: key, Name: f.Name, Kind: "entry",
+					ID:        strconv.FormatInt(sc.Entry.ID, 10),
+					Title:     "Календарь: " + sc.CalendarName,
+					CompanyID: sc.CompanyID, CreatedAt: sc.Entry.CreatedAt,
+				})
+			}
 		}
 	}
 	return out, nil
