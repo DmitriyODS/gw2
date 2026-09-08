@@ -25,6 +25,7 @@ export const WALLPAPERS = [
   wp('wave', 'Волна'),
   wp('star', 'Звезда'),
   wp('gw7', 'Groove Work 7'),
+  wp('surf', 'Прибой'),
 ]
 
 // Обои «из коробки»: их видит каждый, кто своих не выбирал.
